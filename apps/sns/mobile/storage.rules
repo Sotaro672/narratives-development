@@ -1,0 +1,16 @@
+﻿rules_version = '2';
+service firebase.storage {
+  match /b/{bucket}/o {
+    // Users can upload/read their own avatars
+    match /avatars/{userId}/{fileName} {
+      allow read: if true; // Anyone can read avatars
+      allow write: if request.auth != null && request.auth.uid == userId;
+    }
+    
+    // Users can upload/read their own post images
+    match /posts/{userId}/{fileName} {
+      allow read: if true; // Anyone can read post images
+      allow write: if request.auth != null && request.auth.uid == userId;
+    }
+  }
+}

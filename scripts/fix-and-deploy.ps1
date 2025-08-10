@@ -1,4 +1,22 @@
-﻿import 'package:flutter/material.dart';
+# Fix build errors and deploy to Firebase
+
+Write-Host "🔧 Fixing Build Errors and Deploying to Firebase" -ForegroundColor Green
+Write-Host "=================================================" -ForegroundColor Green
+
+Set-Location "apps\sns\mobile"
+
+Write-Host "1️⃣ Creating web assets..." -ForegroundColor Blue
+& "..\..\..\scripts\create-web-assets.ps1"
+
+Write-Host ""
+Write-Host "2️⃣ Creating simplified main.dart..." -ForegroundColor Blue
+
+# Create main.dart with proper encoding by writing to temp file first
+$tempFile = [System.IO.Path]::GetTempFileName()
+
+# Write the Dart code as UTF-8
+[System.IO.File]::WriteAllText($tempFile, @'
+import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:provider/provider.dart';
@@ -798,3 +816,51 @@ class _CreatePostDialogState extends State<CreatePostDialog> {
     super.dispose();
   }
 }
+
+Write-Host "=================================================" -ForegroundColor Green
+Write-Host "✅ Fix and deployment process completed!" -ForegroundColor Green
+Write-Host ""
+Write-Host "2️⃣ Building web app..." -ForegroundColor Blue
+flutter clean
+flutter pub get
+flutter build web --release
+
+if ($LASTEXITCODE -eq 0) {
+    Write-Host "✅ Build successful" -ForegroundColor Green
+} else {
+    Write-Host "❌ Build failed" -ForegroundColor Red
+    exit 1
+}
+
+Write-Host ""
+Write-Host "3️⃣ Deploying to Firebase..." -ForegroundColor Blue
+
+# Create firebase.json
+$firebaseConfig = @{
+    hosting = @{
+        public = "build/web"
+        ignore = @("firebase.json", "**/.*", "**/node_modules/**")
+        rewrites = @(@{source = "**"; destination = "/index.html"})
+        cleanUrls = $true
+        trailingSlash = $false
+    }
+} | ConvertTo-Json -Depth 10
+
+$firebaseConfig | Out-File -FilePath "firebase.json" -Encoding UTF8
+
+# Deploy hosting
+firebase deploy --only hosting --project narratives-development-26c2d
+
+if ($LASTEXITCODE -eq 0) {
+    Write-Host ""
+    Write-Host "🎉 Deployment successful!" -ForegroundColor Green
+    Write-Host "🌐 Live URL: https://narratives-development-26c2d.web.app" -ForegroundColor Cyan
+    Write-Host "🌐 Alt URL:  https://narratives-development-26c2d.firebaseapp.com" -ForegroundColor Cyan
+} else {
+    Write-Host "❌ Deployment failed" -ForegroundColor Red
+    exit 1
+}
+
+Set-Location "..\..\.."
+Write-Host ""
+Write-Host "✅ Deployment completed successfully!" -ForegroundColor Green

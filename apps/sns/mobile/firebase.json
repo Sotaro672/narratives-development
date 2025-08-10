@@ -1,27 +1,38 @@
-{
-  "hosting": {
-    "public": "build/web",
-    "ignore": [
-      "firebase.json",
-      "**/.*",
-      "**/node_modules/**"
-    ],
-    "rewrites": [
-      {
-        "source": "**",
-        "destination": "/index.html"
-      }
-    ],
-    "headers": [
-      {
-        "source": "**/*.@(js|css|map|json|woff2|woff|ttf|eot|svg|png|jpg|jpeg|gif|ico)",
-        "headers": [
-          {
-            "key": "Cache-Control",
-            "value": "max-age=31536000"
-          }
-        ]
-      }
-    ]
-  }
+﻿{
+    "hosting":  {
+                    "cleanUrls":  true,
+                    "ignore":  [
+                                   "firebase.json",
+                                   "**/.*",
+                                   "**/node_modules/**"
+                               ],
+                    "public":  "build/web",
+                    "trailingSlash":  false,
+                    "rewrites":  [
+                                     {
+                                         "destination":  "/index.html",
+                                         "source":  "**"
+                                     }
+                                 ],
+                    "headers":  [
+                                    {
+                                        "headers":  [
+                                                        {
+                                                            "key":  "Cache-Control",
+                                                            "value":  "max-age=31536000, immutable"
+                                                        }
+                                                    ],
+                                        "source":  "**/*.@(js|css|map|json|woff2|woff|ttf|eot|svg|png|jpg|jpeg|gif|ico|webp)"
+                                    },
+                                    {
+                                        "headers":  [
+                                                        {
+                                                            "key":  "Cache-Control",
+                                                            "value":  "max-age=0, must-revalidate"
+                                                        }
+                                                    ],
+                                        "source":  "**/*.@(html|json)"
+                                    }
+                                ]
+                }
 }

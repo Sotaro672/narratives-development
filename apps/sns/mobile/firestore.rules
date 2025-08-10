@@ -1,0 +1,24 @@
+﻿rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Users can read/write their own profile
+    match /users/{userId} {
+      allow read, write: if request.auth != null && request.auth.uid == userId;
+    }
+    
+    // Users can read/write their own avatar
+    match /avatars/{avatarId} {
+      allow read, write: if request.auth != null && 
+        request.auth.uid == resource.data.user_id;
+      allow read: if request.auth != null; // All users can read others' avatars
+    }
+    
+    // Posts are readable by all authenticated users
+    match /posts/{postId} {
+      allow read: if request.auth != null;
+      allow create: if request.auth != null;
+      allow update, delete: if request.auth != null && 
+        request.auth.uid == resource.data.avatar_id;
+    }
+  }
+}

@@ -1,0 +1,17 @@
+﻿{
+    "indexes":  [
+                    {
+                        "collectionGroup":  "posts",
+                        "queryScope":  "COLLECTION",
+                        "fields":  [
+                                       {
+                                           "fieldPath":  "created_at",
+                                           "order":  "DESCENDING"
+                                       }
+                                   ]
+                    }
+                ],
+    "fieldOverrides":  [
+
+                       ]
+}
