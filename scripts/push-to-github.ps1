@@ -1,7 +1,7 @@
-# Push current state to GitHub
+# Push current state to GitHub (simplified version)
 
-Write-Host "📤 Pushing Narratives SNS to GitHub" -ForegroundColor Green
-Write-Host "====================================" -ForegroundColor Green
+Write-Host "📤 Pushing to GitHub" -ForegroundColor Green
+Write-Host "===================" -ForegroundColor Green
 
 # Navigate to root directory
 Set-Location $PSScriptRoot
@@ -11,16 +11,15 @@ Write-Host "1️⃣ Checking Git status..." -ForegroundColor Blue
 
 # Check if we're in a Git repository
 if (!(Test-Path ".git")) {
-    Write-Host "❌ Not a Git repository! Initializing..." -ForegroundColor Red
-    git init
-    Write-Host "✅ Git repository initialized" -ForegroundColor Green
+    Write-Host "❌ Not a Git repository! Please run 'git init' first." -ForegroundColor Red
+    exit 1
 }
 
 # Check Git remote
 $remotes = git remote -v 2>$null
 if ([string]::IsNullOrEmpty($remotes)) {
-    Write-Host "⚠️ No remote repository configured" -ForegroundColor Yellow
-    Write-Host "Please configure your GitHub remote:" -ForegroundColor Yellow
+    Write-Host "❌ No remote repository configured" -ForegroundColor Red
+    Write-Host "Please add your GitHub remote:" -ForegroundColor Yellow
     Write-Host "git remote add origin https://github.com/YOUR_USERNAME/narratives-development.git" -ForegroundColor White
     exit 1
 }
@@ -35,10 +34,7 @@ $status = git status --porcelain
 if ([string]::IsNullOrEmpty($status)) {
     Write-Host "ℹ️ No changes to commit" -ForegroundColor Yellow
     
-    # Try to push anyway in case there are unpushed commits
-    Write-Host ""
-    Write-Host "3️⃣ Checking for unpushed commits..." -ForegroundColor Blue
-    
+    # Check for unpushed commits
     $unpushed = git log origin/main..HEAD --oneline 2>$null
     if ([string]::IsNullOrEmpty($unpushed)) {
         Write-Host "✅ Everything is up to date!" -ForegroundColor Green
@@ -61,49 +57,53 @@ Write-Host "📝 Found changes to commit:" -ForegroundColor Green
 git status --short
 
 Write-Host ""
-Write-Host "3️⃣ Creating comprehensive commit..." -ForegroundColor Blue
+Write-Host "3️⃣ Staging and committing changes..." -ForegroundColor Blue
 
-# Create .gitignore if it doesn't exist
-if (!(Test-Path ".gitignore")) {
-    Write-Host "📝 Creating .gitignore..." -ForegroundColor Blue
+# Add all changes
+git add .
+
+# Create simple commit message
+$timestamp = Get-Date -Format "yyyy-MM-dd HH:mm:ss"
+$commitMessage = "chore: update project files - $timestamp"
+
+# Commit changes
+git commit -m $commitMessage
+
+if ($LASTEXITCODE -ne 0) {
+    Write-Host "❌ Failed to commit changes" -ForegroundColor Red
+    exit 1
+}
+
+Write-Host "✅ Changes committed" -ForegroundColor Green
+
+Write-Host ""
+Write-Host "4️⃣ Pushing to GitHub..." -ForegroundColor Blue
+
+# Get current branch
+$branch = git rev-parse --abbrev-ref HEAD
+
+# Push to GitHub
+git push origin $branch
+
+if ($LASTEXITCODE -eq 0) {
+    Write-Host ""
+    Write-Host "🎉 Successfully pushed to GitHub!" -ForegroundColor Green
     
-    $gitignore = @'
-# Flutter/Dart
-apps/sns/mobile/.dart_tool/
-apps/sns/mobile/build/
-apps/sns/mobile/.flutter-plugins
-apps/sns/mobile/.flutter-plugins-dependencies
-apps/sns/mobile/.packages
-apps/sns/mobile/.pub-cache/
-apps/sns/mobile/.pub/
-apps/sns/mobile/pubspec.lock
+    $remoteUrl = git config --get remote.origin.url
+    Write-Host "📦 Repository: $remoteUrl" -ForegroundColor Cyan
+    Write-Host "🌿 Branch: $branch" -ForegroundColor Cyan
+    
+} else {
+    Write-Host ""
+    Write-Host "❌ Failed to push to GitHub!" -ForegroundColor Red
+    Write-Host ""
+    Write-Host "🔧 Try:" -ForegroundColor Yellow
+    Write-Host "   git push --set-upstream origin $branch" -ForegroundColor White
+    exit 1
+}
 
-# Go
-services/sns-backend/vendor/
-services/sns-backend/*.exe
-services/sns-backend/*.dll
-services/sns-backend/*.so
-services/sns-backend/*.dylib
-services/sns-backend/go.sum
-
-# IDE
-.vscode/
-.idea/
-*.swp
-*.swo
-*~
-
-# OS
-.DS_Store
-Thumbs.db
-
-# Firebase
-apps/sns/mobile/.firebase/
-apps/sns/mobile/firebase-debug.log
-apps/sns/mobile/firestore-debug.log
-
-# Environment variables
-.env
+Write-Host ""
+Write-Host "✅ Push completed" -ForegroundColor Green
 .env.local
 .env.production
 
@@ -119,11 +119,11 @@ node_modules/
 # Temporary files
 *.tmp
 *.temp
-'@
+*.bak
 
     $gitignore | Out-File -FilePath ".gitignore" -Encoding UTF8
     Write-Host "✅ .gitignore created" -ForegroundColor Green
-}
+
 
 # Add all changes
 Write-Host "📋 Staging changes..." -ForegroundColor Blue
