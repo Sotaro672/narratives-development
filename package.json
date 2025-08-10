@@ -1,0 +1,47 @@
+{
+  "name": "narratives-development",
+  "version": "1.0.0",
+  "private": true,
+  "workspaces": {
+    "packages": [
+      "apps/*",
+      "libs/*"
+    ]
+  },
+  "scripts": {
+    "dev": "concurrently \"npm run dev:sns-web\" \"npm run dev:crm-web\" \"npm run dev:admin\"",
+    "dev:sns-web": "cd apps/sns-web && npm run dev",
+    "dev:crm-web": "cd apps/crm-web && npm run dev",
+    "dev:admin": "cd apps/admin && npm run dev",
+    "build": "npm run build:sns-web && npm run build:crm-web && npm run build:admin",
+    "build:sns-web": "cd apps/sns-web && npm run build",
+    "build:crm-web": "cd apps/crm-web && npm run build",
+    "build:admin": "cd apps/admin && npm run build",
+    "lint": "npm run lint:sns-web && npm run lint:crm-web && npm run lint:admin",
+    "lint:sns-web": "cd apps/sns-web && npm run lint",
+    "lint:crm-web": "cd apps/crm-web && npm run lint",
+    "lint:admin": "cd apps/admin && npm run lint",
+    "type-check": "npm run type-check:sns-web && npm run type-check:crm-web && npm run type-check:admin",
+    "type-check:sns-web": "cd apps/sns-web && npm run type-check",
+    "type-check:crm-web": "cd apps/crm-web && npm run type-check",
+    "type-check:admin": "cd apps/admin && npm run type-check",
+    "mobile:flutter-clean": "cd apps/sns/mobile && flutter clean && flutter pub get",
+    "mobile:android-licenses": "flutter doctor --android-licenses",
+    "mobile:setup": "cd apps/sns/mobile && flutter pub get && flutter pub upgrade",
+    "mobile:run": "cd apps/sns/mobile && flutter run",
+    "mobile:build-android": "cd apps/sns/mobile && flutter build apk",
+    "mobile:build-ios": "cd apps/sns/mobile && flutter build ios",
+    "setup:install-pnpm": "npm install -g pnpm",
+    "setup:pnpm": "pnpm install",
+    "setup:android": "powershell -ExecutionPolicy Bypass -File scripts/fix-android-issues.ps1",
+    "setup:flutter": "powershell -ExecutionPolicy Bypass -File scripts/install-flutter-user.ps1",
+    "setup:complete": "powershell -ExecutionPolicy Bypass -File scripts/complete-setup.ps1"
+  },
+  "devDependencies": {
+    "concurrently": "^8.2.2"
+  },
+  "engines": {
+    "npm": ">=7.0.0",
+    "node": ">=16.0.0"
+  }
+}

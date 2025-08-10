@@ -1,0 +1,171 @@
+version: '3.8'
+
+services:
+  # Infrastructure
+  postgres:
+    image: postgres:15
+    environment:
+      POSTGRES_DB: narratives_dev
+      POSTGRES_USER: dev_user
+      POSTGRES_PASSWORD: dev_password
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+
+  rabbitmq:
+    image: rabbitmq:3-management
+    ports:
+      - "5672:5672"
+      - "15672:15672"
+    environment:
+      RABBITMQ_DEFAULT_USER: dev_user
+      RABBITMQ_DEFAULT_PASS: dev_password
+
+  # API Gateway
+  api-gateway:
+    build:
+      context: ./services/api-gateway
+    ports:
+      - "4000:4000"
+    environment:
+      - SNS_SERVICE_URL=http://sns-backend:8080/graphql
+      - CRM_SERVICE_URL=http://crm-backend:8081/graphql
+      - CATALOG_SERVICE_URL=http://catalog-backend:8082/graphql
+      - TOKEN_REGISTRY_URL=http://token-registry:8083/graphql
+    depends_on:
+      - sns-backend
+      - crm-backend
+      - catalog-backend
+      - token-registry
+
+  # Authentication Service
+  auth-service:
+    build:
+      context: ./services/auth-service
+    ports:
+      - "8084:8080"
+    environment:
+      - REDIS_URL=redis://redis:6379
+      - GOOGLE_APPLICATION_CREDENTIALS=/app/secrets/firebase-admin-key.json
+      - FIREBASE_PROJECT_ID=narratives-development-26c2d
+    volumes:
+      - ./infrastructure/terraform/secrets:/app/secrets:ro
+    depends_on:
+      - redis
+
+  # Core Services
+  sns-backend:
+    build:
+      context: ./services/sns-backend
+    ports:
+      - "8080:8080"
+    environment:
+      - DATABASE_URL=postgres://dev_user:dev_password@postgres:5432/narratives_dev?sslmode=disable
+      - REDIS_URL=redis://redis:6379
+      - AUTH_SERVICE_URL=http://auth-service:8080
+      - GOOGLE_APPLICATION_CREDENTIALS=/app/secrets/firebase-admin-key.json
+    volumes:
+      - ./infrastructure/terraform/secrets:/app/secrets:ro
+    depends_on:
+      - postgres
+      - redis
+      - auth-service
+
+  crm-backend:
+    build:
+      context: ./services/crm-backend
+    ports:
+      - "8081:8080"
+    environment:
+      - DATABASE_URL=postgres://dev_user:dev_password@postgres:5432/narratives_dev?sslmode=disable
+      - AUTH_SERVICE_URL=http://auth-service:8080
+    depends_on:
+      - postgres
+      - auth-service
+
+  catalog-backend:
+    build:
+      context: ./services/catalog-backend
+    ports:
+      - "8082:8080"
+    environment:
+      - DATABASE_URL=postgres://dev_user:dev_password@postgres:5432/narratives_dev?sslmode=disable
+    depends_on:
+      - postgres
+
+  token-registry:
+    build:
+      context: ./services/token-registry
+    ports:
+      - "8083:8080"
+    environment:
+      - DATABASE_URL=postgres://dev_user:dev_password@postgres:5432/narratives_dev?sslmode=disable
+    depends_on:
+      - postgres
+
+  # Specialized Services
+  solana-service:
+    build:
+      context: ./services/solana-service
+    ports:
+      - "8085:8080"
+    environment:
+      - DATABASE_URL=postgres://dev_user:dev_password@postgres:5432/narratives_dev?sslmode=disable
+    depends_on:
+      - postgres
+
+  notification-service:
+    build:
+      context: ./services/notification-service
+    ports:
+      - "8086:8080"
+    environment:
+      - RABBITMQ_URL=amqp://dev_user:dev_password@rabbitmq:5672/
+    depends_on:
+      - rabbitmq
+
+  shopify-integration:
+    build:
+      context: ./services/shopify-integration
+    ports:
+      - "8087:8080"
+    environment:
+      - DATABASE_URL=postgres://dev_user:dev_password@postgres:5432/narratives_dev?sslmode=disable
+      - RABBITMQ_URL=amqp://dev_user:dev_password@rabbitmq:5672/
+    depends_on:
+      - postgres
+      - rabbitmq
+
+  # Frontend Applications
+  sns-web:
+    build:
+      context: ./apps/sns-web
+    ports:
+      - "3000:3000"
+    environment:
+      - NEXT_PUBLIC_API_GATEWAY_URL=http://api-gateway:4000/graphql
+      - NEXT_PUBLIC_FIREBASE_PROJECT_ID=narratives-development-26c2d
+      - NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN=narratives-development-26c2d.firebaseapp.com
+    env_file:
+      - .secrets/.env.firebase
+    depends_on:
+      - api-gateway
+
+  crm-web:
+    build:
+      context: ./apps/crm-web
+    ports:
+      - "3002:3000"
+    environment:
+      - NEXT_PUBLIC_API_GATEWAY_URL=http://api-gateway:4000/graphql
+    depends_on:
+      - api-gateway
+
+volumes:
+  postgres_data:

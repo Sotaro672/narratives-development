@@ -1,0 +1,17 @@
+# Terraform files
+*.tfstate
+*.tfstate.*
+*.tfvars
+!*.tfvars.example
+.terraform/
+.terraform.lock.hcl
+
+# Secret files
+secrets/
+*.json
+*.pem
+*.key
+
+# Environment files
+.env
+.env.local

@@ -1,0 +1,47 @@
+name: narratives_sns_mobile
+description: Narratives SNS Mobile App
+publish_to: 'none'
+version: 1.0.0+1
+
+environment:
+  sdk: '>=3.0.0 <4.0.0'
+
+dependencies:
+  flutter:
+    sdk: flutter
+  cupertino_icons: ^1.0.8
+  
+  # Firebase - V2 embedding compatible versions only
+  firebase_core: ^2.27.0
+  firebase_auth: ^4.17.8
+  
+  # GraphQL
+  graphql_flutter: ^5.1.2
+  
+  # State Management
+  provider: ^6.1.5
+  
+  # Storage
+  shared_preferences: ^2.2.3
+  flutter_secure_storage: ^9.2.4
+  
+  # Basic HTTP for GraphQL
+  http: ^1.2.0
+  
+  # Remove all plugins that might cause V1 embedding warnings:
+  # - cached_network_image (has connectivity dependency)
+  # - image_picker
+  # - connectivity_plus
+  # - camera, geolocator, permission_handler, etc.
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^3.0.2
+
+flutter:
+  uses-material-design: true
+  # Remove assets temporarily to avoid path errors
+  # assets:
+  #   - assets/images/
+  #   - assets/icons/

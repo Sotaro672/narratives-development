@@ -1,0 +1,13 @@
+# Copy this file to terraform.tfvars and fill in your actual values
+# DO NOT commit terraform.tfvars to version control
+
+project_id = "narratives-development"
+region     = "asia-northeast1"
+
+# Firebase Configuration (get these from Firebase Console)
+firebase_api_key               = "your-firebase-api-key"
+firebase_auth_domain          = "narratives-development-26c2d.firebaseapp.com"
+firebase_project_id           = "narratives-development-26c2d"
+firebase_storage_bucket       = "narratives-development-26c2d.appspot.com"
+firebase_messaging_sender_id  = "your-messaging-sender-id"
+firebase_app_id               = "your-firebase-app-id"
