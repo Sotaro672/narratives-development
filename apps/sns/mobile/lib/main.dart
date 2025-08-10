@@ -4,25 +4,14 @@ import 'package:firebase_core/firebase_core.dart';
 import 'package:provider/provider.dart';
 import 'package:graphql_flutter/graphql_flutter.dart';
 
-// Services
+// Simple Services without external dependencies
 class AuthService {
   bool get isAuthenticated => false;
   Future<void> signOut() async {}
   Future<bool> signInWithEmailAndPassword(String email, String password) async => false;
 }
 
-class GraphQLService {
-  late ValueNotifier<GraphQLClient> client;
-  GraphQLService() {
-    final HttpLink httpLink = HttpLink('http://localhost:8080/graphql');
-    client = ValueNotifier(GraphQLClient(
-      cache: GraphQLCache(store: HiveStore()),
-      link: httpLink,
-    ));
-  }
-}
-
-// Providers
+// Simplified Providers without external dependencies
 class UserProvider extends ChangeNotifier {
   bool _isLoading = false;
   Map<String, dynamic>? _currentUser;
@@ -167,6 +156,37 @@ class PostProvider extends ChangeNotifier {
       _isLoading = false;
       notifyListeners();
     }
+  }
+}
+
+// GraphQL Service with proper implementation
+class GraphQLService {
+  late ValueNotifier<GraphQLClient> client;
+  
+  GraphQLService() {
+    final HttpLink httpLink = HttpLink('http://localhost:8080/graphql');
+    
+    client = ValueNotifier(GraphQLClient(
+      cache: GraphQLCache(store: HiveStore()),
+      link: httpLink,
+    ));
+  }
+  
+  // Add GraphQL operations
+  Future<QueryResult> query(String query, {Map<String, dynamic>? variables}) async {
+    final QueryOptions options = QueryOptions(
+      document: gql(query),
+      variables: variables ?? {},
+    );
+    return await client.value.query(options);
+  }
+  
+  Future<QueryResult> mutate(String mutation, {Map<String, dynamic>? variables}) async {
+    final MutationOptions options = MutationOptions(
+      document: gql(mutation),
+      variables: variables ?? {},
+    );
+    return await client.value.mutate(options);
   }
 }
 

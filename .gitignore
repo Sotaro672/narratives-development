@@ -23,6 +23,12 @@ firebase-debug.*.log
 **/.packages
 **/pubspec.lock
 
+# Flutter - Large build artifacts (GitHub 50MB+ files)
+**/.dart_tool/flutter_build/
+**/app.dill
+**/main.dart.js
+**/*.dill
+
 # Environment files
 .env
 .env.local
@@ -44,6 +50,12 @@ secrets/
 *firebase-adminsdk*.json
 firebase-config.json
 service-account-key.json
+
+# Firebase Admin SDK (SECURITY - Repository rule violations)
+*firebase-adminsdk*.json
+*-firebase-adminsdk-*.json
+narratives-development-26c2d-firebase-adminsdk-*.json
+narratives-development-26c2d-firebase-adminsdk-fbsvc-*.json
 
 # Terraform
 **/*.tfstate
@@ -88,4 +100,14 @@ yarn-error.log*
 
 # Web
 **/web/icons/
-**/build/web/
+
+# Large binary files (GitHub 50MB limit)
+*.wasm
+*.dill
+*.jar
+*.zip
+*.tar.gz
+
+# Canvas Kit (large files)
+**/canvaskit/*.wasm
+**/canvaskit/*.js

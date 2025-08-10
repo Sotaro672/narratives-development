@@ -1,5 +1,5 @@
-name: narratives_sns_mobile
-description: Narratives SNS Mobile App
+name: narratives_sns
+description: A social network application for stories
 publish_to: 'none'
 version: 1.0.0+1
 
@@ -9,48 +9,52 @@ environment:
 dependencies:
   flutter:
     sdk: flutter
-  cupertino_icons: ^1.0.8
+  cupertino_icons: ^1.0.2
   
-  # Firebase - V2 embedding compatible versions
-  firebase_core: ^2.27.0
-  firebase_auth: ^4.17.8
-  cloud_firestore: ^4.15.8
+  # Firebase
+  firebase_core: ^2.24.2
+  firebase_auth: ^4.15.3
+  cloud_firestore: ^4.13.6
   firebase_storage: ^11.6.0
   
-  # State management
+  # State Management
   provider: ^6.1.1
   
   # GraphQL
-  graphql_flutter: ^5.2.0-beta.7
+  graphql_flutter: ^5.1.2
   
-  # UI & Media
-  image_picker: ^1.0.7
-  cached_network_image: ^3.3.1
-  
-  # Utilities
-  uuid: ^4.3.3
+  # Image handling
+  image_picker: ^1.0.4
+  uuid: ^4.2.2
   
   # Storage
   shared_preferences: ^2.2.3
   flutter_secure_storage: ^9.2.4
   
-  # Basic HTTP for GraphQL
+  # HTTP
   http: ^1.2.0
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^2.0.0
+
+flutter:
+  uses-material-design: true
+  
+  assets:
+    - assets/images/
+    - assets/icons/
+
+  fonts:
+    - family: Roboto
+      fonts:
+        - asset: fonts/Roboto-Regular.ttf
+        - asset: fonts/Roboto-Bold.ttf
+          weight: 700
   
   # Remove all plugins that might cause V1 embedding warnings:
   # - cached_network_image (has connectivity dependency)
   # - image_picker
   # - connectivity_plus
   # - camera, geolocator, permission_handler, etc.
-
-dev_dependencies:
-  flutter_test:
-    sdk: flutter
-  flutter_lints: ^3.0.2
-
-flutter:
-  uses-material-design: true
-  # Remove assets temporarily to avoid path errors
-  # assets:
-  #   - assets/images/
-  #   - assets/icons/

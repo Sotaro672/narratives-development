@@ -1,12 +1,37 @@
 import 'dart:io';
+import 'dart:typed_data';
 import 'package:firebase_storage/firebase_storage.dart';
 import 'package:flutter/foundation.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:uuid/uuid.dart';
+import 'package:graphql_flutter/graphql_flutter.dart';
 
 class GCSService {
   final FirebaseStorage _storage = FirebaseStorage.instance;
   final Uuid _uuid = const Uuid();
+  GraphQLClient? _graphqlClient;
+  
+  // Set GraphQL client for API communication
+  void setGraphQLClient(GraphQLClient client) {
+    _graphqlClient = client;
+  }
+  
+  // GraphQL mutations for image upload
+  static const String uploadImageMutation = '''
+    mutation UploadImage(\$type: String!, \$url: String!, \$userId: String!, \$metadata: JSON) {
+      uploadImage(input: {
+        type: \$type
+        url: \$url
+        userId: \$userId
+        metadata: \$metadata
+      }) {
+        id
+        url
+        type
+        uploadedAt
+      }
+    }
+  ''';
   
   // Bucket configuration
   static const String bucketName = 'narratives-development.appspot.com';
@@ -36,6 +61,16 @@ class GCSService {
       final snapshot = await uploadTask;
       final downloadUrl = await snapshot.ref.getDownloadURL();
       
+      // Register upload in backend via GraphQL
+      if (_graphqlClient != null) {
+        await _registerImageUpload(
+          type: 'avatar',
+          url: downloadUrl,
+          userId: userId,
+          metadata: {'fileName': fileName, 'imageId': imageId},
+        );
+      }
+      
       if (kDebugMode) {
         print('Avatar uploaded successfully: $downloadUrl');
       }
@@ -54,6 +89,7 @@ class GCSService {
     required String userId,
     required dynamic imageSource, // File for mobile, Uint8List for web
     String? fileName,
+    String? postId,
   }) async {
     try {
       final imageId = fileName ?? '${_uuid.v4()}.jpg';
@@ -72,6 +108,20 @@ class GCSService {
       final snapshot = await uploadTask;
       final downloadUrl = await snapshot.ref.getDownloadURL();
       
+      // Register upload in backend via GraphQL
+      if (_graphqlClient != null) {
+        await _registerImageUpload(
+          type: 'post',
+          url: downloadUrl,
+          userId: userId,
+          metadata: {
+            'fileName': fileName,
+            'imageId': imageId,
+            'postId': postId,
+          },
+        );
+      }
+      
       if (kDebugMode) {
         print('Post image uploaded successfully: $downloadUrl');
       }
@@ -82,6 +132,44 @@ class GCSService {
         print('Error uploading post image: $e');
       }
       throw Exception('Failed to upload post image: $e');
+    }
+  }
+  
+  // Register image upload with GraphQL
+  Future<void> _registerImageUpload({
+    required String type,
+    required String url,
+    required String userId,
+    Map<String, dynamic>? metadata,
+  }) async {
+    try {
+      if (_graphqlClient == null) return;
+      
+      final MutationOptions options = MutationOptions(
+        document: gql(uploadImageMutation),
+        variables: {
+          'type': type,
+          'url': url,
+          'userId': userId,
+          'metadata': metadata ?? {},
+        },
+      );
+      
+      final QueryResult result = await _graphqlClient!.mutate(options);
+      
+      if (result.hasException) {
+        if (kDebugMode) {
+          print('GraphQL upload registration failed: ${result.exception}');
+        }
+      } else {
+        if (kDebugMode) {
+          print('Image upload registered successfully in backend');
+        }
+      }
+    } catch (e) {
+      if (kDebugMode) {
+        print('Error registering image upload: $e');
+      }
     }
   }
   
@@ -122,7 +210,7 @@ class GCSService {
   }
   
   // Pick and upload post image
-  Future<String?> pickAndUploadPostImage(String userId) async {
+  Future<String?> pickAndUploadPostImage(String userId, {String? postId}) async {
     try {
       final ImagePicker picker = ImagePicker();
       final XFile? image = await picker.pickImage(
@@ -140,6 +228,7 @@ class GCSService {
           userId: userId,
           imageSource: bytes,
           fileName: image.name,
+          postId: postId,
         );
       } else {
         final file = File(image.path);
@@ -147,6 +236,7 @@ class GCSService {
           userId: userId,
           imageSource: file,
           fileName: image.name,
+          postId: postId,
         );
       }
     } catch (e) {

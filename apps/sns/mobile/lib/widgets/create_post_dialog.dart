@@ -11,9 +11,9 @@ class CreatePostDialog extends StatefulWidget {
 
 class _CreatePostDialogState extends State<CreatePostDialog> {
   final _textController = TextEditingController();
-  final _mediaUrlController = TextEditingController();
   final _formKey = GlobalKey<FormState>();
   bool _isLoading = false;
+  bool _includeImage = false;
 
   @override
   Widget build(BuildContext context) {
@@ -28,7 +28,6 @@ class _CreatePostDialogState extends State<CreatePostDialog> {
           key: _formKey,
           child: Column(
             mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -70,24 +69,18 @@ class _CreatePostDialogState extends State<CreatePostDialog> {
               ),
               
               const SizedBox(height: 16),
-              
-              TextFormField(
-                controller: _mediaUrlController,
-                decoration: const InputDecoration(
-                  labelText: '画像URL（オプション）',
-                  border: OutlineInputBorder(),
-                  hintText: 'https://example.com/image.jpg',
-                  prefixIcon: Icon(Icons.image),
-                ),
-                validator: (value) {
-                  if (value != null && value.isNotEmpty) {
-                    final uri = Uri.tryParse(value);
-                    if (uri == null || !uri.hasScheme || (!uri.isScheme('http') && !uri.isScheme('https'))) {
-                      return '正しいURLを入力してください';
-                    }
-                  }
-                  return null;
-                },
+              Row(
+                children: [
+                  Checkbox(
+                    value: _includeImage,
+                    onChanged: (value) {
+                      setState(() {
+                        _includeImage = value ?? false;
+                      });
+                    },
+                  ),
+                  const Text('ギャラリーから画像を追加'),
+                ],
               ),
               
               const SizedBox(height: 20),
@@ -127,38 +120,45 @@ class _CreatePostDialogState extends State<CreatePostDialog> {
   }
 
   Future<void> _createPost() async {
-    if (!_formKey.currentState!.validate()) {
-      return;
-    }
-
-    setState(() {
-      _isLoading = true;
-    });
+    if (!_formKey.currentState!.validate()) return;
+    setState(() { _isLoading = true; });
 
     try {
       final postProvider = context.read<PostProvider>();
-      await postProvider.createPost(
-        text: _textController.text,
-        mediaUrl: _mediaUrlController.text.isNotEmpty ? _mediaUrlController.text : null,
-      );
-
+      
+      if (_includeImage) {
+        await postProvider.createPostWithImage(
+          text: _textController.text,
+          userId: 'current_user_id', // 認証サービスから取得
+          pickImage: true,
+        );
+      } else {
+        await postProvider.createPost(text: _textController.text);
+      }
+      
       if (mounted) {
         Navigator.pop(context);
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('投稿を作成しました'),
-            backgroundColor: Colors.green,
-          ),
+          const SnackBar(content: Text('投稿を作成しました'), backgroundColor: Colors.green),
         );
       }
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('投稿の作成に失敗しました: $e'),
-            backgroundColor: Colors.red,
-          ),
+          SnackBar(content: Text('投稿の作成に失敗しました: $e'), backgroundColor: Colors.red),
         );
+      }
+    } finally {
+      setState(() { _isLoading = false; });
+    }
+  }
+  
+  @override
+  void dispose() {
+    _textController.dispose();
+    super.dispose();
+  }
+}
       }
     } finally {
       setState(() {
