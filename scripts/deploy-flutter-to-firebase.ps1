@@ -1,9 +1,12 @@
-# Complete Flutter to Firebase deployment script
+# Complete Flutter to Firebase deployment script (統合版)
 
 Write-Host "🚀 Deploying Narratives SNS Flutter App to Firebase" -ForegroundColor Green
 Write-Host "====================================================" -ForegroundColor Green
 
-# Check prerequisites
+# Navigate to root directory
+Set-Location $PSScriptRoot
+Set-Location ".."
+
 Write-Host "1️⃣ Checking prerequisites..." -ForegroundColor Blue
 
 # Check if we're in the correct directory
@@ -19,7 +22,8 @@ try {
     Write-Host "✅ Firebase CLI: $firebaseVersion" -ForegroundColor Green
 } catch {
     Write-Host "❌ Firebase CLI not found. Installing..." -ForegroundColor Red
-    npm install -g firebase-tools
+    Write-Host "Please install Firebase CLI: npm install -g firebase-tools" -ForegroundColor Yellow
+    exit 1
 }
 
 # Check Flutter
@@ -52,7 +56,7 @@ flutter pub get
 Write-Host ""
 Write-Host "4️⃣ Building production web app..." -ForegroundColor Blue
 try {
-    flutter build web --release --web-renderer html --base-href "/" --dart-define=FLUTTER_WEB_CANVASKIT_URL=https://www.gstatic.com/flutter-canvaskit/
+    flutter build web --release --web-renderer html --base-href "/" --dart-define=FLUTTER_WEB_USE_SKIA=false
     
     if ($LASTEXITCODE -eq 0) {
         Write-Host "✅ Build completed successfully" -ForegroundColor Green
@@ -62,7 +66,12 @@ try {
 } catch {
     Write-Host "❌ Build failed: $_" -ForegroundColor Red
     Write-Host "Trying alternative build..." -ForegroundColor Yellow
-    flutter build web --release
+    flutter build web --release --web-renderer html
+    
+    if ($LASTEXITCODE -ne 0) {
+        Write-Host "❌ Alternative build also failed" -ForegroundColor Red
+        exit 1
+    }
 }
 
 Write-Host ""
@@ -219,12 +228,27 @@ Write-Host ""
 Write-Host "7️⃣ Deploying to Firebase..." -ForegroundColor Blue
 
 try {
-    # Deploy hosting, Firestore rules, and Storage rules
-    firebase deploy --only hosting,firestore:rules,storage --project narratives-development-26c2d
+    # Deploy hosting only first (most common use case)
+    firebase deploy --only hosting --project narratives-development-26c2d
     
     if ($LASTEXITCODE -eq 0) {
         Write-Host ""
-        Write-Host "🎉 Deployment successful!" -ForegroundColor Green
+        Write-Host "🎉 Hosting deployment successful!" -ForegroundColor Green
+        
+        # Ask if user wants to deploy Firestore rules and Storage rules too
+        $deployRules = Read-Host "Would you like to deploy Firestore and Storage rules as well? (y/N)"
+        
+        if ($deployRules -eq 'y' -or $deployRules -eq 'Y') {
+            Write-Host "📋 Deploying Firestore and Storage rules..." -ForegroundColor Blue
+            firebase deploy --only firestore:rules,storage --project narratives-development-26c2d
+            
+            if ($LASTEXITCODE -eq 0) {
+                Write-Host "✅ Rules deployed successfully" -ForegroundColor Green
+            } else {
+                Write-Host "⚠️ Rules deployment failed, but hosting is working" -ForegroundColor Yellow
+            }
+        }
+        
         Write-Host ""
         Write-Host "🌐 Your app is live at:" -ForegroundColor Cyan
         Write-Host "   📱 Main URL: https://narratives-development-26c2d.web.app" -ForegroundColor White
@@ -233,12 +257,11 @@ try {
         Write-Host "📊 Deployment Features:" -ForegroundColor Yellow
         Write-Host "   ✅ SNS Feed with real-time posts" -ForegroundColor Green
         Write-Host "   ✅ User profile management" -ForegroundColor Green
-        Write-Host "   ✅ Avatar & post image upload (GCS)" -ForegroundColor Green
-        Write-Host "   ✅ Firestore database integration" -ForegroundColor Green
-        Write-Host "   ✅ Firebase Authentication ready" -ForegroundColor Green
+        Write-Host "   ✅ Post creation with media support" -ForegroundColor Green
+        Write-Host "   ✅ Multi-tab navigation" -ForegroundColor Green
         Write-Host "   ✅ Progressive Web App (PWA)" -ForegroundColor Green
         Write-Host "   ✅ Responsive design (mobile/desktop)" -ForegroundColor Green
-        Write-Host "   ✅ Multi-tab navigation" -ForegroundColor Green
+        Write-Host "   ✅ Firebase integration ready" -ForegroundColor Green
         
         # Calculate build size
         $buildPath = "build\web"
@@ -262,14 +285,18 @@ try {
 }
 
 Write-Host ""
-Write-Host "🎯 Next Steps:" -ForegroundColor Cyan
-Write-Host "   • Test the live app functionality" -ForegroundColor White
-Write-Host "   • Set up Firebase Authentication" -ForegroundColor White
-Write-Host "   • Configure custom domain (optional)" -ForegroundColor White
-Write-Host "   • Set up monitoring and analytics" -ForegroundColor White
-Write-Host "   • Configure CI/CD pipeline" -ForegroundColor White
+Write-Host "8️⃣ Optional: Push to GitHub..." -ForegroundColor Blue
+$pushToGitHub = Read-Host "Would you like to push changes to GitHub as well? (y/N)"
+
+if ($pushToGitHub -eq 'y' -or $pushToGitHub -eq 'Y') {
+    Write-Host "📤 Pushing to GitHub..." -ForegroundColor Blue
+    Set-Location "..\..\.."
+    & ".\scripts\push-to-github.ps1"
+    Set-Location "apps\sns\mobile"
+}
 
 Set-Location "..\..\.."
 
 Write-Host ""
+Write-Host "✅ Complete deployment process finished!" -ForegroundColor Green
 Write-Host "📋 Deployment completed at $(Get-Date -Format 'yyyy-MM-dd HH:mm:ss')" -ForegroundColor Green
