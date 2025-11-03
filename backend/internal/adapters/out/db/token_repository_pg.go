@@ -19,9 +19,110 @@ func NewTokenRepositoryPG(db *sql.DB) *TokenRepositoryPG {
 	return &TokenRepositoryPG{DB: db}
 }
 
-// ========================
-// RepositoryPort impl
-// ========================
+// ======================================================================
+// TokenRepo facade for usecase.TokenRepo
+// (Make TokenRepositoryPG satisfy the interface expected by TokenUsecase.)
+// ======================================================================
+
+// GetByID(ctx, id) (tokendom.Token, error)
+// Here "id" from the usecase == mint_address in DB.
+func (r *TokenRepositoryPG) GetByID(ctx context.Context, id string) (tokendom.Token, error) {
+	return r.GetByMintAddress(ctx, id)
+}
+
+// Exists(ctx, id) (bool, error)
+// Check existence by mint_address.
+func (r *TokenRepositoryPG) Exists(ctx context.Context, id string) (bool, error) {
+	run := dbcommon.GetRunner(ctx, r.DB)
+	const q = `SELECT 1 FROM tokens WHERE mint_address = $1`
+	var dummy int
+	err := run.QueryRowContext(ctx, q, strings.TrimSpace(id)).Scan(&dummy)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return false, nil
+		}
+		return false, err
+	}
+	return true, nil
+}
+
+// Create(ctx, v tokendom.Token) (tokendom.Token, error)
+// Insert using the passed token fields directly.
+func (r *TokenRepositoryPG) Create(ctx context.Context, v tokendom.Token) (tokendom.Token, error) {
+	run := dbcommon.GetRunner(ctx, r.DB)
+
+	// We assume MintAddress, MintRequestID, Owner are all meaningful.
+	// In your current schema, mint_address is NOT generated automatically,
+	// so we use v.MintAddress as-is.
+	const q = `
+INSERT INTO tokens (mint_address, mint_request_id, owner)
+VALUES ($1, $2, $3)
+RETURNING mint_address, mint_request_id, owner
+`
+	row := run.QueryRowContext(ctx, q,
+		strings.TrimSpace(v.MintAddress),
+		strings.TrimSpace(v.MintRequestID),
+		strings.TrimSpace(v.Owner),
+	)
+	t, err := scanToken(row)
+	if err != nil {
+		if dbcommon.IsUniqueViolation(err) {
+			return tokendom.Token{}, tokendom.ErrConflict
+		}
+		return tokendom.Token{}, err
+	}
+	return t, nil
+}
+
+// Save(ctx, v tokendom.Token) (tokendom.Token, error)
+// Upsert-like: if token with MintAddress exists -> Update, else -> Create.
+func (r *TokenRepositoryPG) Save(ctx context.Context, v tokendom.Token) (tokendom.Token, error) {
+	mintAddress := strings.TrimSpace(v.MintAddress)
+	if mintAddress == "" {
+		// We cannot "upsert" without a key. In this domain, MintAddress is the key.
+		// We'll treat this as a hard error because silently generating addresses
+		// would break blockchain assumptions.
+		return tokendom.Token{}, errors.New("mint address required for Save")
+	}
+
+	exists, err := r.Exists(ctx, mintAddress)
+	if err != nil {
+		return tokendom.Token{}, err
+	}
+
+	if !exists {
+		// New row
+		return r.Create(ctx, v)
+	}
+
+	// Row exists -> build UpdateTokenInput then call Update
+	patch := tokendom.UpdateTokenInput{
+		MintRequestID: func(s string) *string {
+			if strings.TrimSpace(s) == "" {
+				return nil
+			}
+			x := strings.TrimSpace(s)
+			return &x
+		}(v.MintRequestID),
+		Owner: func(s string) *string {
+			if strings.TrimSpace(s) == "" {
+				return nil
+			}
+			x := strings.TrimSpace(s)
+			return &x
+		}(v.Owner),
+	}
+
+	return r.Update(ctx, mintAddress, patch)
+}
+
+// Delete(ctx, id) error
+// (Signature already matches usecase.TokenRepo.Delete; we just treat id as mint_address.)
+
+// ======================================================================
+// Lower-level / richer query methods
+// (List, Count, Transfer, GetStats, etc. are still available.)
+// ======================================================================
 
 func (r *TokenRepositoryPG) GetByMintAddress(ctx context.Context, mintAddress string) (tokendom.Token, error) {
 	run := dbcommon.GetRunner(ctx, r.DB)
@@ -159,29 +260,8 @@ ORDER BY minted_at DESC, mint_address DESC`
 	return out, rows.Err()
 }
 
-func (r *TokenRepositoryPG) Create(ctx context.Context, in tokendom.CreateTokenInput) (tokendom.Token, error) {
-	run := dbcommon.GetRunner(ctx, r.DB)
-
-	const q = `
-INSERT INTO tokens (mint_address, mint_request_id, owner)
-VALUES ($1, $2, $3)
-RETURNING mint_address, mint_request_id, owner
-`
-	row := run.QueryRowContext(ctx, q,
-		strings.TrimSpace(in.MintAddress),
-		strings.TrimSpace(in.MintRequestID),
-		strings.TrimSpace(in.Owner),
-	)
-	t, err := scanToken(row)
-	if err != nil {
-		if dbcommon.IsUniqueViolation(err) {
-			return tokendom.Token{}, tokendom.ErrConflict
-		}
-		return tokendom.Token{}, err
-	}
-	return t, nil
-}
-
+// Update is our lower-level UPDATE ... RETURNING.
+// It's used by Save().
 func (r *TokenRepositoryPG) Update(ctx context.Context, mintAddress string, in tokendom.UpdateTokenInput) (tokendom.Token, error) {
 	run := dbcommon.GetRunner(ctx, r.DB)
 
@@ -198,7 +278,7 @@ func (r *TokenRepositoryPG) Update(ctx context.Context, mintAddress string, in t
 		sets = append(sets, fmt.Sprintf("owner = $%d", i))
 		args = append(args, strings.TrimSpace(*in.Owner))
 		i++
-		// update last_transferred_at when owner changes
+		// bump last_transferred_at whenever owner changes
 		sets = append(sets, "last_transferred_at = NOW()")
 	}
 
@@ -313,7 +393,7 @@ func (r *TokenRepositoryPG) GetStats(ctx context.Context) (tokendom.TokenStats, 
 	}
 	_ = rows.Close()
 
-	// top owners (top 10)
+	// top owners
 	rows, err = run.QueryContext(ctx, `
 SELECT owner, COUNT(*) AS c
 FROM tokens
@@ -333,11 +413,14 @@ LIMIT 10`)
 		stats.TopOwners = append(stats.TopOwners, struct {
 			Owner string
 			Count int
-		}{Owner: strings.TrimSpace(owner), Count: cnt})
+		}{
+			Owner: strings.TrimSpace(owner),
+			Count: cnt,
+		})
 	}
 	_ = rows.Close()
 
-	// top mint requests (top 10)
+	// top mint requests
 	rows, err = run.QueryContext(ctx, `
 SELECT mint_request_id, COUNT(*) AS c
 FROM tokens
@@ -357,7 +440,10 @@ LIMIT 10`)
 		stats.TopMintRequests = append(stats.TopMintRequests, struct {
 			MintRequestID string
 			Count         int
-		}{MintRequestID: strings.TrimSpace(mr), Count: cnt})
+		}{
+			MintRequestID: strings.TrimSpace(mr),
+			Count:         cnt,
+		})
 	}
 	_ = rows.Close()
 
@@ -394,13 +480,15 @@ func (r *TokenRepositoryPG) Reset(ctx context.Context) error {
 	return err
 }
 
-// ========================
+// ======================================================================
 // Helpers
-// ========================
+// ======================================================================
 
 func scanToken(s dbcommon.RowScanner) (tokendom.Token, error) {
 	var (
-		mintAddress, mintRequestID, owner string
+		mintAddress   string
+		mintRequestID string
+		owner         string
 	)
 	if err := s.Scan(&mintAddress, &mintRequestID, &owner); err != nil {
 		return tokendom.Token{}, err
