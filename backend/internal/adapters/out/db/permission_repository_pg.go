@@ -21,9 +21,160 @@ func NewPermissionRepositoryPG(db *sql.DB) *PermissionRepositoryPG {
 	return &PermissionRepositoryPG{DB: db}
 }
 
-// ==============================
-// List (Filter + Sort + Page)
-// ==============================
+// ============================================================
+// Port (usecase.PermissionRepo) 実装
+// ============================================================
+
+// GetByID implements PermissionRepo.GetByID.
+func (r *PermissionRepositoryPG) GetByID(ctx context.Context, id string) (permission.Permission, error) {
+	const q = `
+SELECT
+  id,
+  name,
+  category,
+  description,
+  created_at
+FROM permissions
+WHERE id = $1
+`
+	row := r.DB.QueryRowContext(ctx, q, strings.TrimSpace(id))
+
+	p, err := scanPermission(row)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return permission.Permission{}, permission.ErrNotFound
+		}
+		return permission.Permission{}, err
+	}
+	return p, nil
+}
+
+// Exists implements PermissionRepo.Exists.
+func (r *PermissionRepositoryPG) Exists(ctx context.Context, id string) (bool, error) {
+	const q = `SELECT 1 FROM permissions WHERE id = $1`
+	var one int
+	err := r.DB.QueryRowContext(ctx, q, strings.TrimSpace(id)).Scan(&one)
+	if errors.Is(err, sql.ErrNoRows) {
+		return false, nil
+	}
+	if err != nil {
+		return false, err
+	}
+	return true, nil
+}
+
+// Create implements PermissionRepo.Create.
+//
+// v.ID が空なら DB 側で gen_random_uuid()::text に任せる。
+func (r *PermissionRepositoryPG) Create(ctx context.Context, v permission.Permission) (permission.Permission, error) {
+	const q = `
+INSERT INTO permissions (
+  id,
+  name,
+  category,
+  description,
+  created_at,
+  updated_at
+) VALUES (
+  COALESCE(NULLIF($1,''), gen_random_uuid()::text),
+  $2,
+  $3,
+  $4,
+  NOW(),
+  NOW()
+)
+RETURNING
+  id,
+  name,
+  category,
+  description,
+  created_at
+`
+	row := r.DB.QueryRowContext(ctx, q,
+		strings.TrimSpace(v.ID),
+		strings.TrimSpace(v.Name),
+		strings.TrimSpace(string(v.Category)),
+		strings.TrimSpace(v.Description),
+	)
+
+	p, err := scanPermission(row)
+	if err != nil {
+		var pqErr *pq.Error
+		if errors.As(err, &pqErr) && pqErr.Code == "23505" {
+			return permission.Permission{}, permission.ErrConflict
+		}
+		return permission.Permission{}, err
+	}
+	return p, nil
+}
+
+// Save implements PermissionRepo.Save.
+//
+// upsert動作: INSERT ... ON CONFLICT(id) DO UPDATE
+// created_at は古い方を維持する / updated_at は NOW() で更新。
+func (r *PermissionRepositoryPG) Save(ctx context.Context, v permission.Permission) (permission.Permission, error) {
+	const q = `
+INSERT INTO permissions (
+  id,
+  name,
+  category,
+  description,
+  created_at,
+  updated_at
+) VALUES (
+  COALESCE(NULLIF($1,''), gen_random_uuid()::text),
+  $2,
+  $3,
+  $4,
+  NOW(),
+  NOW()
+)
+ON CONFLICT (id) DO UPDATE SET
+  name        = EXCLUDED.name,
+  category    = EXCLUDED.category,
+  description = EXCLUDED.description,
+  created_at  = LEAST(permissions.created_at, EXCLUDED.created_at),
+  updated_at  = NOW()
+RETURNING
+  id,
+  name,
+  category,
+  description,
+  created_at
+`
+	row := r.DB.QueryRowContext(ctx, q,
+		strings.TrimSpace(v.ID),
+		strings.TrimSpace(v.Name),
+		strings.TrimSpace(string(v.Category)),
+		strings.TrimSpace(v.Description),
+	)
+
+	p, err := scanPermission(row)
+	if err != nil {
+		return permission.Permission{}, err
+	}
+	return p, nil
+}
+
+// Delete implements PermissionRepo.Delete.
+func (r *PermissionRepositoryPG) Delete(ctx context.Context, id string) error {
+	res, err := r.DB.ExecContext(ctx, `DELETE FROM permissions WHERE id = $1`, strings.TrimSpace(id))
+	if err != nil {
+		return err
+	}
+	aff, _ := res.RowsAffected()
+	if aff == 0 {
+		return permission.ErrNotFound
+	}
+	return nil
+}
+
+// ============================================================
+// 追加のクエリ系 (List / Update 等)
+// これらは usecase.PermissionRepo の必須ではないが便利なので保持
+// ============================================================
+
+// List はフィルタ+ソート+ページング。
 func (r *PermissionRepositoryPG) List(
 	ctx context.Context,
 	filter permission.Filter,
@@ -35,15 +186,17 @@ func (r *PermissionRepositoryPG) List(
 	args := []any{}
 	i := 1
 
-	// SearchQuery: id / name / description の部分一致
+	// 部分一致検索 (id, name, description)
 	if sq := strings.TrimSpace(filter.SearchQuery); sq != "" {
-		where = append(where, fmt.Sprintf("(id ILIKE $%d OR name ILIKE $%d OR description ILIKE $%d)", i, i+1, i+2))
+		where = append(where,
+			fmt.Sprintf("(id ILIKE $%d OR name ILIKE $%d OR description ILIKE $%d)", i, i+1, i+2),
+		)
 		like := "%" + sq + "%"
 		args = append(args, like, like, like)
 		i += 3
 	}
 
-	// Categories: = ANY($n)
+	// category IN (...)
 	if len(filter.Categories) > 0 {
 		where = append(where, fmt.Sprintf("category = ANY($%d)", i))
 		args = append(args, pq.Array(catToStrings(filter.Categories)))
@@ -55,25 +208,25 @@ func (r *PermissionRepositoryPG) List(
 		whereSQL = "WHERE " + strings.Join(where, " AND ")
 	}
 
-	// Sort
-	orderBy := "ORDER BY created_at DESC" // デフォルト
+	// ソート
+	orderBy := "ORDER BY created_at DESC"
 	if col := strings.TrimSpace(string(sort.Column)); col != "" {
-		order := strings.ToUpper(string(sort.Order))
-		if order != "ASC" && order != "DESC" {
-			order = "ASC"
+		dir := strings.ToUpper(string(sort.Order))
+		if dir != "ASC" && dir != "DESC" {
+			dir = "ASC"
 		}
 		switch col {
 		case "name", "category", "createdAt", "created_at":
 			if col == "createdAt" {
 				col = "created_at"
 			}
-			orderBy = fmt.Sprintf("ORDER BY %s %s", col, order)
+			orderBy = fmt.Sprintf("ORDER BY %s %s", col, dir)
 		default:
 			orderBy = "ORDER BY created_at DESC"
 		}
 	}
 
-	// Page
+	// ページネーション
 	perPage := page.PerPage
 	if perPage <= 0 {
 		perPage = 50
@@ -91,9 +244,14 @@ func (r *PermissionRepositoryPG) List(
 		return permission.PageResult[permission.Permission]{}, err
 	}
 
-	// Query
+	// 本体
 	q := fmt.Sprintf(`
-SELECT id, name, category, description, created_at
+SELECT
+  id,
+  name,
+  category,
+  description,
+  created_at
 FROM permissions
 %s
 %s
@@ -110,8 +268,8 @@ LIMIT $%d OFFSET $%d
 
 	items := make([]permission.Permission, 0, perPage)
 	for rows.Next() {
-		var p permission.Permission
-		if err := scanPermission(rows, &p); err != nil {
+		p, err := scanPermission(rows)
+		if err != nil {
 			return permission.PageResult[permission.Permission]{}, err
 		}
 		items = append(items, p)
@@ -121,6 +279,7 @@ LIMIT $%d OFFSET $%d
 	}
 
 	totalPages := (total + perPage - 1) / perPage
+
 	return permission.PageResult[permission.Permission]{
 		Items:      items,
 		TotalCount: total,
@@ -130,60 +289,7 @@ LIMIT $%d OFFSET $%d
 	}, nil
 }
 
-// ==============================
-// GetByID
-// ==============================
-func (r *PermissionRepositoryPG) GetByID(ctx context.Context, id string) (permission.Permission, error) {
-	const q = `
-SELECT id, name, category, description, created_at
-FROM permissions
-WHERE id = $1
-`
-	var p permission.Permission
-	row := r.DB.QueryRowContext(ctx, q, id)
-	if err := scanPermission(row, &p); err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
-			return permission.Permission{}, permission.ErrNotFound
-		}
-		return permission.Permission{}, err
-	}
-	return p, nil
-}
-
-// ==============================
-// Create
-// ==============================
-func (r *PermissionRepositoryPG) Create(ctx context.Context, p permission.Permission) (permission.Permission, error) {
-	// id が空なら DB 側で生成（gen_random_uuid）想定
-	const q = `
-INSERT INTO permissions (id, name, category, description, created_at, updated_at)
-VALUES (
-	COALESCE(NULLIF($1,''), gen_random_uuid()::text),
-	$2, $3, $4, NOW(), NOW()
-)
-RETURNING id, name, category, description, created_at
-`
-	var out permission.Permission
-	if err := r.DB.QueryRowContext(ctx, q,
-		p.ID,
-		p.Name,
-		p.Category,
-		p.Description,
-	).Scan(
-		&out.ID, &out.Name, &out.Category, &out.Description, new(sql.NullTime),
-	); err != nil {
-		var pqErr *pq.Error
-		if errors.As(err, &pqErr) && pqErr.Code == "23505" {
-			return permission.Permission{}, permission.ErrConflict
-		}
-		return permission.Permission{}, err
-	}
-	return out, nil
-}
-
-// ==============================
-// Update (PATCH)
-// ==============================
+// Update は部分更新用（usecase.PermissionRepo には含めていない）
 func (r *PermissionRepositoryPG) Update(ctx context.Context, id string, patch permission.PermissionPatch) (permission.Permission, error) {
 	sets := []string{}
 	args := []any{}
@@ -191,17 +297,17 @@ func (r *PermissionRepositoryPG) Update(ctx context.Context, id string, patch pe
 
 	if patch.Name != nil {
 		sets = append(sets, fmt.Sprintf("name = $%d", i))
-		args = append(args, *patch.Name)
+		args = append(args, strings.TrimSpace(*patch.Name))
 		i++
 	}
 	if patch.Category != nil {
 		sets = append(sets, fmt.Sprintf("category = $%d", i))
-		args = append(args, *patch.Category)
+		args = append(args, strings.TrimSpace(string(*patch.Category)))
 		i++
 	}
 	if patch.Description != nil {
 		sets = append(sets, fmt.Sprintf("description = $%d", i))
-		args = append(args, *patch.Description)
+		args = append(args, strings.TrimSpace(*patch.Description))
 		i++
 	}
 
@@ -210,18 +316,27 @@ func (r *PermissionRepositoryPG) Update(ctx context.Context, id string, patch pe
 		return r.GetByID(ctx, id)
 	}
 
+	// updated_at を必ず NOW() にする
+	sets = append(sets, fmt.Sprintf("updated_at = NOW()"))
+
+	args = append(args, strings.TrimSpace(id))
+
 	q := fmt.Sprintf(`
 UPDATE permissions
 SET %s
 WHERE id = $%d
-RETURNING id, name, category, description, created_at
+RETURNING
+  id,
+  name,
+  category,
+  description,
+  created_at
 `, strings.Join(sets, ", "), i)
-	args = append(args, id)
 
-	var out permission.Permission
-	if err := r.DB.QueryRowContext(ctx, q, args...).Scan(
-		&out.ID, &out.Name, &out.Category, &out.Description, new(sql.NullTime),
-	); err != nil {
+	row := r.DB.QueryRowContext(ctx, q, args...)
+
+	out, err := scanPermission(row)
+	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return permission.Permission{}, permission.ErrNotFound
 		}
@@ -230,43 +345,48 @@ RETURNING id, name, category, description, created_at
 	return out, nil
 }
 
-// ==============================
-// Delete
-// ==============================
-func (r *PermissionRepositoryPG) Delete(ctx context.Context, id string) error {
-	res, err := r.DB.ExecContext(ctx, `DELETE FROM permissions WHERE id = $1`, id)
-	if err != nil {
-		return err
-	}
-	aff, _ := res.RowsAffected()
-	if aff == 0 {
-		return permission.ErrNotFound
-	}
-	return nil
-}
+// ============================================================
+// ヘルパー
+// ============================================================
 
-// ==============================
-// scan helper
-// ==============================
-func scanPermission(s common.RowScanner, p *permission.Permission) error {
+func scanPermission(s common.RowScanner) (permission.Permission, error) {
 	var (
-		id, name, category, description sql.NullString
-		createdAt                       sql.NullTime
+		idNS          sql.NullString
+		nameNS        sql.NullString
+		categoryNS    sql.NullString
+		descriptionNS sql.NullString
+		createdAtNS   sql.NullTime
 	)
-	if err := s.Scan(&id, &name, &category, &description, &createdAt); err != nil {
-		return err
+
+	if err := s.Scan(
+		&idNS,
+		&nameNS,
+		&categoryNS,
+		&descriptionNS,
+		&createdAtNS,
+	); err != nil {
+		return permission.Permission{}, err
 	}
-	p.ID = id.String
-	p.Name = name.String
-	p.Category = permission.PermissionCategory(category.String)
-	p.Description = description.String
-	return nil
+
+	out := permission.Permission{
+		ID:          strings.TrimSpace(idNS.String),
+		Name:        strings.TrimSpace(nameNS.String),
+		Category:    permission.PermissionCategory(strings.TrimSpace(categoryNS.String)),
+		Description: strings.TrimSpace(descriptionNS.String),
+		// Permission ドメインに CreatedAt フィールドが無い前提なので何もしない
+	}
+
+	// createdAtNS はDB上は保持しているが、
+	// domain.Permission に CreatedAt が無いので代入しない。
+	_ = createdAtNS
+
+	return out, nil
 }
 
 func catToStrings(cs []permission.PermissionCategory) []string {
 	out := make([]string, 0, len(cs))
 	for _, c := range cs {
-		out = append(out, string(c))
+		out = append(out, strings.TrimSpace(string(c)))
 	}
 	return out
 }

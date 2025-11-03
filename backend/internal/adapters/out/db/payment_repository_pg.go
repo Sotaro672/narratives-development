@@ -20,38 +20,292 @@ func NewPaymentRepositoryPG(db *sql.DB) *PaymentRepositoryPG {
 	return &PaymentRepositoryPG{DB: db}
 }
 
-// ========================
-// RepositoryPort impl
-// ========================
+// ============================================================
+// PaymentRepo (usecase層が要求するPort) の実装
+// ============================================================
 
-func (r *PaymentRepositoryPG) GetByID(ctx context.Context, id string) (*paymentdom.Payment, error) {
+// GetByID implements PaymentRepo.GetByID.
+// 返り値は値型 (paymentdom.Payment) に揃える。
+func (r *PaymentRepositoryPG) GetByID(ctx context.Context, id string) (paymentdom.Payment, error) {
 	run := dbcommon.GetRunner(ctx, r.DB)
+
 	const q = `
 SELECT
-  id, invoice_id, billing_address_id, amount, status, error_type,
-  created_at, updated_at, deleted_at
+  id,
+  invoice_id,
+  billing_address_id,
+  amount,
+  status,
+  error_type,
+  created_at,
+  updated_at,
+  deleted_at
 FROM payments
-WHERE id = $1`
+WHERE id = $1
+`
 	row := run.QueryRowContext(ctx, q, strings.TrimSpace(id))
+
 	p, err := scanPayment(row)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
-			return nil, paymentdom.ErrNotFound
+			return paymentdom.Payment{}, paymentdom.ErrNotFound
 		}
-		return nil, err
+		return paymentdom.Payment{}, err
 	}
-	return &p, nil
+	return p, nil
 }
+
+// Exists implements PaymentRepo.Exists.
+func (r *PaymentRepositoryPG) Exists(ctx context.Context, id string) (bool, error) {
+	run := dbcommon.GetRunner(ctx, r.DB)
+
+	const q = `SELECT 1 FROM payments WHERE id = $1`
+	var one int
+	err := run.QueryRowContext(ctx, q, strings.TrimSpace(id)).Scan(&one)
+	if errors.Is(err, sql.ErrNoRows) {
+		return false, nil
+	}
+	if err != nil {
+		return false, err
+	}
+	return true, nil
+}
+
+// Create implements PaymentRepo.Create.
+//
+// usecase層は paymentdom.Payment を渡してくる想定。
+// ここでは v.ID が空なら DB 側で gen_random_uuid() 生成、
+// 入っていればそれを使います。
+func (r *PaymentRepositoryPG) Create(ctx context.Context, v paymentdom.Payment) (paymentdom.Payment, error) {
+	run := dbcommon.GetRunner(ctx, r.DB)
+
+	hasID := strings.TrimSpace(v.ID) != ""
+
+	// 作成時刻・更新時刻を整える
+	nowUTC := time.Now().UTC()
+	createdAt := v.CreatedAt
+	if createdAt.IsZero() {
+		createdAt = nowUTC
+	}
+	updatedAt := v.UpdatedAt
+	if updatedAt.IsZero() {
+		updatedAt = nowUTC
+	}
+
+	if hasID {
+		// IDを呼び出し側が決めているパターン
+		const q = `
+INSERT INTO payments (
+  id,
+  invoice_id,
+  billing_address_id,
+  amount,
+  status,
+  error_type,
+  created_at,
+  updated_at,
+  deleted_at
+) VALUES (
+  $1,$2,$3,$4,$5,$6,
+  $7,$8,$9
+)
+RETURNING
+  id,
+  invoice_id,
+  billing_address_id,
+  amount,
+  status,
+  error_type,
+  created_at,
+  updated_at,
+  deleted_at
+`
+		row := run.QueryRowContext(ctx, q,
+			strings.TrimSpace(v.ID),
+			strings.TrimSpace(v.InvoiceID),
+			strings.TrimSpace(v.BillingAddressID),
+			v.Amount,
+			strings.TrimSpace(string(v.Status)),
+			dbcommon.ToDBText(v.ErrorType),
+			createdAt.UTC(),
+			updatedAt.UTC(),
+			dbcommon.ToDBTime(v.DeletedAt),
+		)
+
+		out, err := scanPayment(row)
+		if err != nil {
+			if dbcommon.IsUniqueViolation(err) {
+				return paymentdom.Payment{}, paymentdom.ErrConflict
+			}
+			return paymentdom.Payment{}, err
+		}
+		return out, nil
+	}
+
+	// IDなしならDB側でUUID生成
+	const qNoID = `
+INSERT INTO payments (
+  id,
+  invoice_id,
+  billing_address_id,
+  amount,
+  status,
+  error_type,
+  created_at,
+  updated_at,
+  deleted_at
+) VALUES (
+  gen_random_uuid()::text,
+  $1,$2,$3,$4,$5,
+  $6,$7,$8
+)
+RETURNING
+  id,
+  invoice_id,
+  billing_address_id,
+  amount,
+  status,
+  error_type,
+  created_at,
+  updated_at,
+  deleted_at
+`
+	row := run.QueryRowContext(ctx, qNoID,
+		strings.TrimSpace(v.InvoiceID),
+		strings.TrimSpace(v.BillingAddressID),
+		v.Amount,
+		strings.TrimSpace(string(v.Status)),
+		dbcommon.ToDBText(v.ErrorType),
+		createdAt.UTC(),
+		updatedAt.UTC(),
+		dbcommon.ToDBTime(v.DeletedAt),
+	)
+
+	out, err := scanPayment(row)
+	if err != nil {
+		if dbcommon.IsUniqueViolation(err) {
+			return paymentdom.Payment{}, paymentdom.ErrConflict
+		}
+		return paymentdom.Payment{}, err
+	}
+	return out, nil
+}
+
+// Save implements PaymentRepo.Save.
+//
+// upsert 的な挙動: INSERT ... ON CONFLICT(id) DO UPDATE
+// ・created_at / created_by 系の取り扱いは最低限にしている
+// ・updated_at はここで必ず now() 相当を反映する
+func (r *PaymentRepositoryPG) Save(ctx context.Context, v paymentdom.Payment) (paymentdom.Payment, error) {
+	run := dbcommon.GetRunner(ctx, r.DB)
+
+	nowUTC := time.Now().UTC()
+	createdAt := v.CreatedAt
+	if createdAt.IsZero() {
+		createdAt = nowUTC
+	}
+	updatedAt := v.UpdatedAt
+	if updatedAt.IsZero() {
+		updatedAt = nowUTC
+	}
+
+	const q = `
+INSERT INTO payments (
+  id,
+  invoice_id,
+  billing_address_id,
+  amount,
+  status,
+  error_type,
+  created_at,
+  updated_at,
+  deleted_at
+) VALUES (
+  $1,$2,$3,$4,$5,$6,
+  $7,$8,$9
+)
+ON CONFLICT (id) DO UPDATE SET
+  invoice_id         = EXCLUDED.invoice_id,
+  billing_address_id = EXCLUDED.billing_address_id,
+  amount             = EXCLUDED.amount,
+  status             = EXCLUDED.status,
+  error_type         = EXCLUDED.error_type,
+  -- created_at は過去最古を維持
+  created_at         = LEAST(payments.created_at, EXCLUDED.created_at),
+  -- updated_at は新しい方を採用
+  updated_at         = GREATEST(payments.updated_at, EXCLUDED.updated_at),
+  deleted_at         = EXCLUDED.deleted_at
+RETURNING
+  id,
+  invoice_id,
+  billing_address_id,
+  amount,
+  status,
+  error_type,
+  created_at,
+  updated_at,
+  deleted_at
+`
+	row := run.QueryRowContext(ctx, q,
+		strings.TrimSpace(v.ID),
+		strings.TrimSpace(v.InvoiceID),
+		strings.TrimSpace(v.BillingAddressID),
+		v.Amount,
+		strings.TrimSpace(string(v.Status)),
+		dbcommon.ToDBText(v.ErrorType),
+		createdAt.UTC(),
+		updatedAt.UTC(),
+		dbcommon.ToDBTime(v.DeletedAt),
+	)
+
+	out, err := scanPayment(row)
+	if err != nil {
+		return paymentdom.Payment{}, err
+	}
+	return out, nil
+}
+
+// Delete implements PaymentRepo.Delete.
+func (r *PaymentRepositoryPG) Delete(ctx context.Context, id string) error {
+	run := dbcommon.GetRunner(ctx, r.DB)
+
+	res, err := run.ExecContext(ctx,
+		`DELETE FROM payments WHERE id = $1`,
+		strings.TrimSpace(id),
+	)
+	if err != nil {
+		return err
+	}
+	aff, _ := res.RowsAffected()
+	if aff == 0 {
+		return paymentdom.ErrNotFound
+	}
+	return nil
+}
+
+// ============================================================
+// 追加機能（ユースケースPort外）: List/Count/Update等
+// これらは使い勝手のために残してOK。インターフェース実装には影響しない。
+// ============================================================
 
 func (r *PaymentRepositoryPG) GetByInvoiceID(ctx context.Context, invoiceID string) ([]paymentdom.Payment, error) {
 	run := dbcommon.GetRunner(ctx, r.DB)
+
 	const q = `
 SELECT
-  id, invoice_id, billing_address_id, amount, status, error_type,
-  created_at, updated_at, deleted_at
+  id,
+  invoice_id,
+  billing_address_id,
+  amount,
+  status,
+  error_type,
+  created_at,
+  updated_at,
+  deleted_at
 FROM payments
 WHERE invoice_id = $1
-ORDER BY created_at ASC, id ASC`
+ORDER BY created_at ASC, id ASC
+`
 	rows, err := run.QueryContext(ctx, q, strings.TrimSpace(invoiceID))
 	if err != nil {
 		return nil, err
@@ -69,7 +323,13 @@ ORDER BY created_at ASC, id ASC`
 	return out, rows.Err()
 }
 
-func (r *PaymentRepositoryPG) List(ctx context.Context, filter paymentdom.Filter, sort paymentdom.Sort, page paymentdom.Page) (paymentdom.PageResult, error) {
+func (r *PaymentRepositoryPG) List(
+	ctx context.Context,
+	filter paymentdom.Filter,
+	sort paymentdom.Sort,
+	page paymentdom.Page,
+) (paymentdom.PageResult, error) {
+
 	run := dbcommon.GetRunner(ctx, r.DB)
 
 	where, args := buildPaymentWhere(filter)
@@ -85,17 +345,27 @@ func (r *PaymentRepositoryPG) List(ctx context.Context, filter paymentdom.Filter
 
 	pageNum, perPage, offset := dbcommon.NormalizePage(page.Number, page.PerPage, 50, 200)
 
-	// Count
+	// count
 	var total int
-	if err := run.QueryRowContext(ctx, "SELECT COUNT(*) FROM payments "+whereSQL, args...).Scan(&total); err != nil {
+	if err := run.QueryRowContext(ctx,
+		"SELECT COUNT(*) FROM payments "+whereSQL,
+		args...,
+	).Scan(&total); err != nil {
 		return paymentdom.PageResult{}, err
 	}
 
-	// Data
+	// page data
 	q := fmt.Sprintf(`
 SELECT
-  id, invoice_id, billing_address_id, amount, status, error_type,
-  created_at, updated_at, deleted_at
+  id,
+  invoice_id,
+  billing_address_id,
+  amount,
+  status,
+  error_type,
+  created_at,
+  updated_at,
+  deleted_at
 FROM payments
 %s
 %s
@@ -103,6 +373,7 @@ LIMIT $%d OFFSET $%d
 `, whereSQL, orderBy, len(args)+1, len(args)+2)
 
 	args = append(args, perPage, offset)
+
 	rows, err := run.QueryContext(ctx, q, args...)
 	if err != nil {
 		return paymentdom.PageResult{}, err
@@ -140,45 +411,17 @@ func (r *PaymentRepositoryPG) Count(ctx context.Context, filter paymentdom.Filte
 	}
 
 	var total int
-	if err := run.QueryRowContext(ctx, "SELECT COUNT(*) FROM payments "+whereSQL, args...).Scan(&total); err != nil {
+	if err := run.QueryRowContext(ctx,
+		"SELECT COUNT(*) FROM payments "+whereSQL,
+		args...,
+	).Scan(&total); err != nil {
 		return 0, err
 	}
 	return total, nil
 }
 
-func (r *PaymentRepositoryPG) Create(ctx context.Context, in paymentdom.CreatePaymentInput) (*paymentdom.Payment, error) {
-	run := dbcommon.GetRunner(ctx, r.DB)
-
-	const q = `
-INSERT INTO payments (
-  id, invoice_id, billing_address_id, amount, status, error_type,
-  created_at, updated_at, deleted_at
-) VALUES (
-  gen_random_uuid()::text, $1, $2, $3, $4, $5,
-  NOW(), NOW(), NULL
-)
-RETURNING
-  id, invoice_id, billing_address_id, amount, status, error_type,
-  created_at, updated_at, deleted_at
-`
-	row := run.QueryRowContext(ctx, q,
-		strings.TrimSpace(in.InvoiceID),
-		strings.TrimSpace(in.BillingAddressID),
-		in.Amount,
-		strings.TrimSpace(string(in.Status)),
-		dbcommon.ToDBText(in.ErrorType),
-	)
-	p, err := scanPayment(row)
-	if err != nil {
-		if dbcommon.IsUniqueViolation(err) {
-			return nil, paymentdom.ErrConflict
-		}
-		return nil, err
-	}
-	return &p, nil
-}
-
-func (r *PaymentRepositoryPG) Update(ctx context.Context, id string, patch paymentdom.UpdatePaymentInput) (*paymentdom.Payment, error) {
+// Update は便利関数として残す（ユースケースの Port には含めていない）
+func (r *PaymentRepositoryPG) Update(ctx context.Context, id string, patch paymentdom.UpdatePaymentInput) (paymentdom.Payment, error) {
 	run := dbcommon.GetRunner(ctx, r.DB)
 
 	sets := []string{}
@@ -192,6 +435,7 @@ func (r *PaymentRepositoryPG) Update(ctx context.Context, id string, patch payme
 			i++
 		}
 	}
+
 	if patch.InvoiceID != nil {
 		setText("invoice_id", patch.InvoiceID)
 	}
@@ -219,7 +463,7 @@ func (r *PaymentRepositoryPG) Update(ctx context.Context, id string, patch payme
 		}
 	}
 
-	// Touch updated_at
+	// always bump updated_at
 	sets = append(sets, fmt.Sprintf("updated_at = $%d", i))
 	args = append(args, time.Now().UTC())
 	i++
@@ -229,64 +473,70 @@ func (r *PaymentRepositoryPG) Update(ctx context.Context, id string, patch payme
 	}
 
 	args = append(args, strings.TrimSpace(id))
+
 	q := fmt.Sprintf(`
 UPDATE payments
 SET %s
 WHERE id = $%d
 RETURNING
-  id, invoice_id, billing_address_id, amount, status, error_type,
-  created_at, updated_at, deleted_at
+  id,
+  invoice_id,
+  billing_address_id,
+  amount,
+  status,
+  error_type,
+  created_at,
+  updated_at,
+  deleted_at
 `, strings.Join(sets, ", "), i)
 
 	row := run.QueryRowContext(ctx, q, args...)
-	p, err := scanPayment(row)
+	out, err := scanPayment(row)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
-			return nil, paymentdom.ErrNotFound
+			return paymentdom.Payment{}, paymentdom.ErrNotFound
 		}
 		if dbcommon.IsUniqueViolation(err) {
-			return nil, paymentdom.ErrConflict
+			return paymentdom.Payment{}, paymentdom.ErrConflict
 		}
-		return nil, err
+		return paymentdom.Payment{}, err
 	}
-	return &p, nil
+	return out, nil
 }
 
-func (r *PaymentRepositoryPG) Delete(ctx context.Context, id string) error {
-	run := dbcommon.GetRunner(ctx, r.DB)
-	res, err := run.ExecContext(ctx, `DELETE FROM payments WHERE id = $1`, strings.TrimSpace(id))
-	if err != nil {
-		return err
-	}
-	aff, _ := res.RowsAffected()
-	if aff == 0 {
-		return paymentdom.ErrNotFound
-	}
-	return nil
-}
-
+// Reset はテスト用ユーティリティ
 func (r *PaymentRepositoryPG) Reset(ctx context.Context) error {
 	run := dbcommon.GetRunner(ctx, r.DB)
 	_, err := run.ExecContext(ctx, `DELETE FROM payments`)
 	return err
 }
 
-// ========================
-// Helpers
-// ========================
+// ============================================================
+// 共通ヘルパー
+// ============================================================
 
 func scanPayment(s dbcommon.RowScanner) (paymentdom.Payment, error) {
 	var (
-		id, invoiceID, billingAddressID string
-		amount                          int
-		status                          string
-		errorTypeNS                     sql.NullString
-		createdAt, updatedAt            time.Time
-		deletedAtNS                     sql.NullTime
+		id               string
+		invoiceID        string
+		billingAddressID string
+		amount           int
+		status           string
+		errorTypeNS      sql.NullString
+		createdAt        time.Time
+		updatedAt        time.Time
+		deletedAtNS      sql.NullTime
 	)
 	if err := s.Scan(
-		&id, &invoiceID, &billingAddressID, &amount, &status, &errorTypeNS,
-		&createdAt, &updatedAt, &deletedAtNS,
+		&id,
+		&invoiceID,
+		&billingAddressID,
+		&amount,
+		&status,
+		&errorTypeNS,
+		&createdAt,
+		&updatedAt,
+		&deletedAtNS,
 	); err != nil {
 		return paymentdom.Payment{}, err
 	}
@@ -294,10 +544,9 @@ func scanPayment(s dbcommon.RowScanner) (paymentdom.Payment, error) {
 	toStrPtr := func(ns sql.NullString) *string {
 		if ns.Valid {
 			v := strings.TrimSpace(ns.String)
-			if v == "" {
-				return nil
+			if v != "" {
+				return &v
 			}
-			return &v
 		}
 		return nil
 	}
@@ -381,11 +630,15 @@ func buildPaymentWhere(f paymentdom.Filter) ([]string, []any) {
 		args = append(args, f.UpdatedTo.UTC())
 	}
 	if f.DeletedFrom != nil {
-		where = append(where, fmt.Sprintf("(deleted_at IS NOT NULL AND deleted_at >= $%d)", len(args)+1))
+		where = append(where,
+			fmt.Sprintf("(deleted_at IS NOT NULL AND deleted_at >= $%d)", len(args)+1),
+		)
 		args = append(args, f.DeletedFrom.UTC())
 	}
 	if f.DeletedTo != nil {
-		where = append(where, fmt.Sprintf("(deleted_at IS NOT NULL AND deleted_at < $%d)", len(args)+1))
+		where = append(where,
+			fmt.Sprintf("(deleted_at IS NOT NULL AND deleted_at < $%d)", len(args)+1),
+		)
 		args = append(args, f.DeletedTo.UTC())
 	}
 
@@ -415,9 +668,11 @@ func buildPaymentOrderBy(sort paymentdom.Sort) string {
 	default:
 		return ""
 	}
+
 	dir := strings.ToUpper(strings.TrimSpace(string(sort.Order)))
 	if dir != "ASC" && dir != "DESC" {
 		dir = "DESC"
 	}
+	// created_at DESC, id DESC のように複合で並べたいので id も合わせる
 	return fmt.Sprintf("ORDER BY %s %s, id %s", col, dir, dir)
 }

@@ -12,6 +12,8 @@ import (
 	listimagedom "narratives/internal/domain/listImage"
 )
 
+// ListImageRepositoryPG is the Postgres adapter for list_images.
+// This struct MUST be distinct from ListRepositoryPG (lists table).
 type ListImageRepositoryPG struct {
 	DB *sql.DB
 }
@@ -20,15 +22,18 @@ func NewListImageRepositoryPG(db *sql.DB) *ListImageRepositoryPG {
 	return &ListImageRepositoryPG{DB: db}
 }
 
-// =======================
+// ─────────────────────────────────
 // Queries
-// =======================
+// ─────────────────────────────────
 
-func (r *ListImageRepositoryPG) FindByID(ctx context.Context, imageID string) (*listimagedom.ListImage, error) {
+// GetByID satisfies usecase.ListImageByIDReader.
+// (usecase側インターフェース名は GetByID なので合わせる)
+func (r *ListImageRepositoryPG) GetByID(ctx context.Context, imageID string) (listimagedom.ListImage, error) {
 	const q = `
 SELECT
   id, list_id, url, file_name, size, display_order,
-  created_at, created_by, updated_at, updated_by, deleted_at, deleted_by
+  created_at, created_by, updated_at, updated_by,
+  deleted_at, deleted_by
 FROM list_images
 WHERE id = $1
 `
@@ -36,18 +41,21 @@ WHERE id = $1
 	img, err := scanListImage(row)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
-			return nil, listimagedom.ErrNotFound
+			return listimagedom.ListImage{}, listimagedom.ErrNotFound
 		}
-		return nil, err
+		return listimagedom.ListImage{}, err
 	}
-	return &img, nil
+	return img, nil
 }
 
-func (r *ListImageRepositoryPG) FindByListID(ctx context.Context, listID string) ([]listimagedom.ListImage, error) {
+// ListByListID satisfies usecase.ListImageReader.
+// (usecase側インターフェース名は ListByListID なので合わせる)
+func (r *ListImageRepositoryPG) ListByListID(ctx context.Context, listID string) ([]listimagedom.ListImage, error) {
 	const q = `
 SELECT
   id, list_id, url, file_name, size, display_order,
-  created_at, created_by, updated_at, updated_by, deleted_at, deleted_by
+  created_at, created_by, updated_at, updated_by,
+  deleted_at, deleted_by
 FROM list_images
 WHERE list_id = $1
 ORDER BY display_order ASC, created_at ASC, id ASC
@@ -92,14 +100,24 @@ func (r *ListImageRepositoryPG) Count(ctx context.Context, filter listimagedom.F
 		whereSQL = "WHERE " + strings.Join(where, " AND ")
 	}
 	var total int
-	if err := r.DB.QueryRowContext(ctx, `SELECT COUNT(*) FROM list_images li `+whereSQL, args...).Scan(&total); err != nil {
+	if err := r.DB.QueryRowContext(ctx,
+		`SELECT COUNT(*) FROM list_images li `+whereSQL,
+		args...,
+	).Scan(&total); err != nil {
 		return 0, err
 	}
 	return total, nil
 }
 
-func (r *ListImageRepositoryPG) List(ctx context.Context, filter listimagedom.Filter, sort listimagedom.Sort, page listimagedom.Page) (listimagedom.PageResult[listimagedom.ListImage], error) {
+func (r *ListImageRepositoryPG) List(
+	ctx context.Context,
+	filter listimagedom.Filter,
+	sort listimagedom.Sort,
+	page listimagedom.Page,
+) (listimagedom.PageResult[listimagedom.ListImage], error) {
+
 	where, args := buildListImageWhere(filter)
+
 	whereSQL := ""
 	if len(where) > 0 {
 		whereSQL = "WHERE " + strings.Join(where, " AND ")
@@ -129,7 +147,8 @@ func (r *ListImageRepositoryPG) List(ctx context.Context, filter listimagedom.Fi
 	q := fmt.Sprintf(`
 SELECT
   id, list_id, url, file_name, size, display_order,
-  created_at, created_by, updated_at, updated_by, deleted_at, deleted_by
+  created_at, created_by, updated_at, updated_by,
+  deleted_at, deleted_by
 FROM list_images li
 %s
 %s
@@ -157,6 +176,7 @@ LIMIT $%d OFFSET $%d
 	}
 
 	totalPages := (total + perPage - 1) / perPage
+
 	return listimagedom.PageResult[listimagedom.ListImage]{
 		Items:      items,
 		TotalCount: total,
@@ -166,10 +186,16 @@ LIMIT $%d OFFSET $%d
 	}, nil
 }
 
-func (r *ListImageRepositoryPG) ListByCursor(ctx context.Context, filter listimagedom.Filter, _ listimagedom.Sort, cpage listimagedom.CursorPage) (listimagedom.CursorPageResult[listimagedom.ListImage], error) {
+func (r *ListImageRepositoryPG) ListByCursor(
+	ctx context.Context,
+	filter listimagedom.Filter,
+	_ listimagedom.Sort,
+	cpage listimagedom.CursorPage,
+) (listimagedom.CursorPageResult[listimagedom.ListImage], error) {
+
 	where, args := buildListImageWhere(filter)
 
-	// Simple cursor on id ASC
+	// simple cursor on id ASC
 	if after := strings.TrimSpace(cpage.After); after != "" {
 		where = append(where, fmt.Sprintf("li.id > $%d", len(args)+1))
 		args = append(args, after)
@@ -188,7 +214,8 @@ func (r *ListImageRepositoryPG) ListByCursor(ctx context.Context, filter listima
 	q := fmt.Sprintf(`
 SELECT
   id, list_id, url, file_name, size, display_order,
-  created_at, created_by, updated_at, updated_by, deleted_at, deleted_by
+  created_at, created_by, updated_at, updated_by,
+  deleted_at, deleted_by
 FROM list_images li
 %s
 ORDER BY li.id ASC
@@ -230,22 +257,93 @@ LIMIT $%d
 	}, nil
 }
 
-// =======================
+// ─────────────────────────────────
 // Mutations
-// =======================
+// ─────────────────────────────────
+
+// SaveFromBucketObject satisfies usecase.ListImageObjectSaver.
+// GCS等からオブジェクトを登録する用途。
+func (r *ListImageRepositoryPG) SaveFromBucketObject(
+	ctx context.Context,
+	id string,
+	listID string,
+	bucket string,
+	objectPath string,
+	size int64,
+	displayOrder int,
+	createdBy string,
+	createdAt time.Time,
+) (listimagedom.ListImage, error) {
+
+	// URL の生成ポリシー: とりあえず "gs://bucket/objectPath" 的な形にしておく。
+	// あとで公開URLにするならここを差し替えればいい。
+	urlVal := buildGCSURL(bucket, objectPath)
+
+	const q = `
+INSERT INTO list_images (
+  id, list_id, url, file_name, size, display_order,
+  created_at, created_by, updated_at, updated_by,
+  deleted_at, deleted_by
+) VALUES (
+  $1,$2,$3,$4,$5,$6,
+  $7,$8,$9,$10,$11,$12
+)
+ON CONFLICT (id) DO UPDATE SET
+  list_id       = EXCLUDED.list_id,
+  url           = EXCLUDED.url,
+  file_name     = EXCLUDED.file_name,
+  size          = EXCLUDED.size,
+  display_order = EXCLUDED.display_order,
+  created_at    = LEAST(list_images.created_at, EXCLUDED.created_at),
+  created_by    = LEAST(list_images.created_by, EXCLUDED.created_by),
+  updated_at    = COALESCE(EXCLUDED.updated_at, list_images.updated_at),
+  updated_by    = EXCLUDED.updated_by,
+  deleted_at    = EXCLUDED.deleted_at,
+  deleted_by    = EXCLUDED.deleted_by
+RETURNING
+  id, list_id, url, file_name, size, display_order,
+  created_at, created_by, updated_at, updated_by,
+  deleted_at, deleted_by
+`
+
+	nowUTC := time.Now().UTC()
+
+	row := r.DB.QueryRowContext(ctx, q,
+		strings.TrimSpace(id),
+		strings.TrimSpace(listID),
+		strings.TrimSpace(urlVal),
+		strings.TrimSpace(objectPath), // file_nameはobjectPathをそのまま使う想定
+		size,
+		displayOrder,
+		createdAt.UTC(),
+		strings.TrimSpace(createdBy),
+		nowUTC,
+		strings.TrimSpace(createdBy),
+		nil,
+		nil,
+	)
+
+	out, err := scanListImage(row)
+	if err != nil {
+		return listimagedom.ListImage{}, err
+	}
+	return out, nil
+}
 
 func (r *ListImageRepositoryPG) Create(ctx context.Context, img listimagedom.ListImage) (listimagedom.ListImage, error) {
 	const q = `
 INSERT INTO list_images (
   id, list_id, url, file_name, size, display_order,
-  created_at, created_by, updated_at, updated_by, deleted_at, deleted_by
+  created_at, created_by, updated_at, updated_by,
+  deleted_at, deleted_by
 ) VALUES (
   $1,$2,$3,$4,$5,$6,
   $7,$8,$9,$10,$11,$12
 )
 RETURNING
   id, list_id, url, file_name, size, display_order,
-  created_at, created_by, updated_at, updated_by, deleted_at, deleted_by
+  created_at, created_by, updated_at, updated_by,
+  deleted_at, deleted_by
 `
 	row := r.DB.QueryRowContext(ctx, q,
 		strings.TrimSpace(img.ID),
@@ -303,7 +401,7 @@ func (r *ListImageRepositoryPG) Update(ctx context.Context, imageID string, patc
 	setInt64("size", patch.Size)
 	setInt("display_order", patch.DisplayOrder)
 
-	// Optional audit fields
+	// optional audit fields
 	if patch.UpdatedBy != nil {
 		sets = append(sets, fmt.Sprintf("updated_by = $%d", i))
 		args = append(args, dbcommon.ToDBText(patch.UpdatedBy))
@@ -320,7 +418,7 @@ func (r *ListImageRepositoryPG) Update(ctx context.Context, imageID string, patc
 		i++
 	}
 
-	// updated_at explicit or NOW() if any other fields changed
+	// updated_at explicit or NOW() if any field changed
 	if patch.UpdatedAt != nil {
 		sets = append(sets, fmt.Sprintf("updated_at = $%d", i))
 		args = append(args, patch.UpdatedAt.UTC())
@@ -332,22 +430,24 @@ func (r *ListImageRepositoryPG) Update(ctx context.Context, imageID string, patc
 	}
 
 	if len(sets) == 0 {
-		// Nothing to change, return current
-		got, err := r.FindByID(ctx, imageID)
+		// nothing to change → return current row
+		current, err := r.GetByID(ctx, imageID)
 		if err != nil {
 			return listimagedom.ListImage{}, err
 		}
-		return *got, nil
+		return current, nil
 	}
 
 	args = append(args, strings.TrimSpace(imageID))
+
 	q := fmt.Sprintf(`
 UPDATE list_images
 SET %s
 WHERE id = $%d
 RETURNING
   id, list_id, url, file_name, size, display_order,
-  created_at, created_by, updated_at, updated_by, deleted_at, deleted_by
+  created_at, created_by, updated_at, updated_by,
+  deleted_at, deleted_by
 `, strings.Join(sets, ", "), i)
 
 	row := r.DB.QueryRowContext(ctx, q, args...)
@@ -365,7 +465,8 @@ func (r *ListImageRepositoryPG) Save(ctx context.Context, img listimagedom.ListI
 	const q = `
 INSERT INTO list_images (
   id, list_id, url, file_name, size, display_order,
-  created_at, created_by, updated_at, updated_by, deleted_at, deleted_by
+  created_at, created_by, updated_at, updated_by,
+  deleted_at, deleted_by
 ) VALUES (
   $1,$2,$3,$4,$5,$6,
   $7,$8,$9,$10,$11,$12
@@ -384,8 +485,10 @@ ON CONFLICT (id) DO UPDATE SET
   deleted_by    = EXCLUDED.deleted_by
 RETURNING
   id, list_id, url, file_name, size, display_order,
-  created_at, created_by, updated_at, updated_by, deleted_at, deleted_by
+  created_at, created_by, updated_at, updated_by,
+  deleted_at, deleted_by
 `
+
 	row := r.DB.QueryRowContext(ctx, q,
 		strings.TrimSpace(img.ID),
 		strings.TrimSpace(img.ListID),
@@ -400,6 +503,7 @@ RETURNING
 		dbcommon.ToDBTime(img.DeletedAt),
 		dbcommon.ToDBText(img.DeletedBy),
 	)
+
 	out, err := scanListImage(row)
 	if err != nil {
 		return listimagedom.ListImage{}, err
@@ -407,13 +511,16 @@ RETURNING
 	return out, nil
 }
 
+// Upload is not implemented at DB layer (actual blob upload should happen in object storage adapter).
 func (r *ListImageRepositoryPG) Upload(ctx context.Context, _ listimagedom.UploadImageInput) (*listimagedom.ListImage, error) {
-	// Storage upload is out of scope for DB adapter — handled by service layer.
 	return nil, listimagedom.ErrUploadFailed
 }
 
 func (r *ListImageRepositoryPG) Delete(ctx context.Context, imageID string) error {
-	res, err := r.DB.ExecContext(ctx, `DELETE FROM list_images WHERE id = $1`, strings.TrimSpace(imageID))
+	res, err := r.DB.ExecContext(ctx,
+		`DELETE FROM list_images WHERE id = $1`,
+		strings.TrimSpace(imageID),
+	)
 	if err != nil {
 		return err
 	}
@@ -424,9 +531,9 @@ func (r *ListImageRepositoryPG) Delete(ctx context.Context, imageID string) erro
 	return nil
 }
 
-// =======================
+// ─────────────────────────────────
 // Helpers
-// =======================
+// ─────────────────────────────────
 
 func scanListImage(s dbcommon.RowScanner) (listimagedom.ListImage, error) {
 	var (
@@ -438,9 +545,11 @@ func scanListImage(s dbcommon.RowScanner) (listimagedom.ListImage, error) {
 		updatedAtNS                           sql.NullTime
 		deletedAtNS                           sql.NullTime
 	)
+
 	if err := s.Scan(
 		&idNS, &listIDNS, &urlNS, &fileNameNS, &size, &displayOrder,
-		&createdAt, &createdByNS, &updatedAtNS, &updatedByNS, &deletedAtNS, &deletedByNS,
+		&createdAt, &createdByNS, &updatedAtNS, &updatedByNS,
+		&deletedAtNS, &deletedByNS,
 	); err != nil {
 		return listimagedom.ListImage{}, err
 	}
@@ -482,9 +591,13 @@ func buildListImageWhere(f listimagedom.Filter) ([]string, []any) {
 	where := []string{}
 	args := []any{}
 
-	// Free text search
+	// free text search
 	if sq := strings.TrimSpace(f.SearchQuery); sq != "" {
-		where = append(where, fmt.Sprintf("(li.file_name ILIKE $%d OR li.url ILIKE $%d)", len(args)+1, len(args)+1))
+		where = append(where,
+			fmt.Sprintf("(li.file_name ILIKE $%d OR li.url ILIKE $%d)",
+				len(args)+1, len(args)+1,
+			),
+		)
 		args = append(args, "%"+sq+"%")
 	}
 
@@ -504,7 +617,7 @@ func buildListImageWhere(f listimagedom.Filter) ([]string, []any) {
 		}
 	}
 
-	// ListID equals / IN
+	// listID equals / IN
 	if f.ListID != nil && strings.TrimSpace(*f.ListID) != "" {
 		where = append(where, fmt.Sprintf("li.list_id = $%d", len(args)+1))
 		args = append(args, strings.TrimSpace(*f.ListID))
@@ -524,13 +637,13 @@ func buildListImageWhere(f listimagedom.Filter) ([]string, []any) {
 		}
 	}
 
-	// FileNameLike
+	// fileNameLike
 	if f.FileNameLike != nil && strings.TrimSpace(*f.FileNameLike) != "" {
 		where = append(where, fmt.Sprintf("li.file_name ILIKE $%d", len(args)+1))
 		args = append(args, "%"+strings.TrimSpace(*f.FileNameLike)+"%")
 	}
 
-	// Size range
+	// size range
 	if f.MinSize != nil {
 		where = append(where, fmt.Sprintf("li.size >= $%d", len(args)+1))
 		args = append(args, *f.MinSize)
@@ -540,7 +653,7 @@ func buildListImageWhere(f listimagedom.Filter) ([]string, []any) {
 		args = append(args, *f.MaxSize)
 	}
 
-	// Display order range
+	// display_order range
 	if f.MinDisplayOrd != nil {
 		where = append(where, fmt.Sprintf("li.display_order >= $%d", len(args)+1))
 		args = append(args, *f.MinDisplayOrd)
@@ -550,7 +663,7 @@ func buildListImageWhere(f listimagedom.Filter) ([]string, []any) {
 		args = append(args, *f.MaxDisplayOrd)
 	}
 
-	// CreatedBy / UpdatedBy / DeletedBy
+	// audit by user
 	if f.CreatedBy != nil && strings.TrimSpace(*f.CreatedBy) != "" {
 		where = append(where, fmt.Sprintf("li.created_by = $%d", len(args)+1))
 		args = append(args, strings.TrimSpace(*f.CreatedBy))
@@ -564,7 +677,7 @@ func buildListImageWhere(f listimagedom.Filter) ([]string, []any) {
 		args = append(args, strings.TrimSpace(*f.DeletedBy))
 	}
 
-	// Date ranges
+	// date ranges
 	if f.CreatedFrom != nil {
 		where = append(where, fmt.Sprintf("li.created_at >= $%d", len(args)+1))
 		args = append(args, f.CreatedFrom.UTC())
@@ -574,19 +687,27 @@ func buildListImageWhere(f listimagedom.Filter) ([]string, []any) {
 		args = append(args, f.CreatedTo.UTC())
 	}
 	if f.UpdatedFrom != nil {
-		where = append(where, fmt.Sprintf("(li.updated_at IS NOT NULL AND li.updated_at >= $%d)", len(args)+1))
+		where = append(where,
+			fmt.Sprintf("(li.updated_at IS NOT NULL AND li.updated_at >= $%d)", len(args)+1),
+		)
 		args = append(args, f.UpdatedFrom.UTC())
 	}
 	if f.UpdatedTo != nil {
-		where = append(where, fmt.Sprintf("(li.updated_at IS NOT NULL AND li.updated_at < $%d)", len(args)+1))
+		where = append(where,
+			fmt.Sprintf("(li.updated_at IS NOT NULL AND li.updated_at < $%d)", len(args)+1),
+		)
 		args = append(args, f.UpdatedTo.UTC())
 	}
 	if f.DeletedFrom != nil {
-		where = append(where, fmt.Sprintf("(li.deleted_at IS NOT NULL AND li.deleted_at >= $%d", len(args)+1))
+		where = append(where,
+			fmt.Sprintf("(li.deleted_at IS NOT NULL AND li.deleted_at >= $%d)", len(args)+1),
+		)
 		args = append(args, f.DeletedFrom.UTC())
 	}
 	if f.DeletedTo != nil {
-		where = append(where, fmt.Sprintf("(li.deleted_at IS NOT NULL AND li.deleted_at < $%d", len(args)+1))
+		where = append(where,
+			fmt.Sprintf("(li.deleted_at IS NOT NULL AND li.deleted_at < $%d)", len(args)+1),
+		)
 		args = append(args, f.DeletedTo.UTC())
 	}
 
@@ -632,9 +753,21 @@ func buildListImageOrderBy(sort listimagedom.Sort) string {
 	default:
 		return ""
 	}
+
 	dir := strings.ToUpper(string(sort.Order))
 	if dir != "ASC" && dir != "DESC" {
 		dir = "ASC"
 	}
 	return fmt.Sprintf("ORDER BY %s %s", col, dir)
+}
+
+// buildGCSURL is a tiny helper to form a URL string from bucket/object.
+// tailor this for your public URL scheme later.
+func buildGCSURL(bucket, objectPath string) string {
+	b := strings.TrimSpace(bucket)
+	if b == "" {
+		// もし listimagedom で DefaultBucket とか持ってるならここで fallback してOK
+		// b = listimagedom.DefaultBucket
+	}
+	return "gs://" + b + "/" + strings.TrimSpace(objectPath)
 }

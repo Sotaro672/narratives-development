@@ -42,7 +42,7 @@ type Member struct {
 	LastNameKana   string     `json:"last_name_kana,omitempty"`
 	Email          string     `json:"email,omitempty"` // optional in TS; empty string means unset
 	Role           MemberRole `json:"role"`
-	Permissions     []string   `json:"permissions"`
+	Permissions    []string   `json:"permissions"`
 	AssignedBrands []string   `json:"assignedBrands,omitempty"`
 
 	CreatedAt time.Time  `json:"createdAt"`
@@ -74,10 +74,10 @@ func New(
 	opts ...func(*Member),
 ) (Member, error) {
 	m := Member{
-		ID:             id,
-		Role:           role,
-		Permissions:     nil,
-		CreatedAt:      createdAt,
+		ID:          id,
+		Role:        role,
+		Permissions: nil,
+		CreatedAt:   createdAt,
 	}
 	for _, opt := range opts {
 		opt(&m)
@@ -347,7 +347,7 @@ type MemberPatch struct {
 	LastNameKana   *string
 	Email          *string
 	Role           *MemberRole
-	Authorizations *[]string
+	Permissions    *[]string
 	AssignedBrands *[]string
 
 	CreatedAt *time.Time
@@ -414,28 +414,28 @@ func (m *Member) SetPermissionsByName(names []string, catalog []permdom.Permissi
 
 // ValidatePermissions は現在の Permissions がカタログに含まれるか検証します。
 func (m Member) ValidatePermissions(catalog []permdom.Permission) error {
-    allow := make(map[string]struct{}, len(catalog))
-    for _, p := range catalog {
-        n := strings.TrimSpace(p.Name)
-        if n != "" {
-            allow[n] = struct{}{}
-        }
-    }
-    for _, n := range m.Permissions {
-        if _, ok := allow[strings.TrimSpace(n)]; !ok {
-            return errors.New("member: permission not found in catalog: " + n)
-        }
-    }
-    return nil
+	allow := make(map[string]struct{}, len(catalog))
+	for _, p := range catalog {
+		n := strings.TrimSpace(p.Name)
+		if n != "" {
+			allow[n] = struct{}{}
+		}
+	}
+	for _, n := range m.Permissions {
+		if _, ok := allow[strings.TrimSpace(n)]; !ok {
+			return errors.New("member: permission not found in catalog: " + n)
+		}
+	}
+	return nil
 }
 
 // HasPermission は指定 Permission.Name を保持しているかを返します。
 func (m Member) HasPermission(name string) bool {
-    name = strings.TrimSpace(name)
-    for _, n := range m.Permissions {
-        if strings.EqualFold(n, name) {
-            return true
-        }
-    }
-    return false
+	name = strings.TrimSpace(name)
+	for _, n := range m.Permissions {
+		if strings.EqualFold(n, name) {
+			return true
+		}
+	}
+	return false
 }
