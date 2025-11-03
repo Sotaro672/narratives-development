@@ -4,7 +4,7 @@ import "./Header.css";
 
 interface HeaderProps {
   /** 未読通知件数（赤バッジ） */
-  notificationsCount?: number;
+  announcementsCount?: number;
   /** 未読メッセージ件数（赤バッジ） */
   messagesCount?: number;
   /** サイドバー開閉トグル（オプション） */
@@ -14,7 +14,7 @@ interface HeaderProps {
 }
 
 export default function Header({
-  notificationsCount = 3,
+  announcementsCount = 3,
   messagesCount = 2,
   username = "Guest",
 }: HeaderProps) {
@@ -34,9 +34,9 @@ export default function Header({
         <button className="icon-btn" aria-label="通知">
           <span className="icon-wrap">
             <Bell className="icon" aria-hidden />
-            {notificationsCount > 0 && (
-              <span className="badge" aria-label={`${notificationsCount}件の通知`}>
-                {notificationsCount}
+            {announcementsCount > 0 && (
+              <span className="badge" aria-label={`${announcementsCount}件の通知`}>
+                {announcementsCount}
               </span>
             )}
           </span>
