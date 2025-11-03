@@ -38,17 +38,22 @@ export default function Sidebar({ isOpen }: SidebarProps) {
 
   const openInquiriesCount = OPEN_INQUIRIES_DUMMY;
 
-  // 第一階層（parent の path はアクティブ判定用に適当なルートを与える）
+  // 第一階層（親）
   const menuItems: MenuItem[] = useMemo(
     () => [
-      { label: "問い合わせ", path: "/inquiry", icon: MessageSquare, badgeCount: openInquiriesCount > 0 ? openInquiriesCount : null },
-      { label: "商品",       path: "/product",   icon: Box,       hasSubmenu: true },
-      { label: "トークン",   path: "/token",     icon: Coins,     hasSubmenu: true },
-      { label: "出品",       path: "/list",      icon: Store },
-      { label: "注文",       path: "/order",    icon: ShoppingCart },
-      { label: "広告",       path: "/ads",       icon: Target },
-      { label: "組織",       path: "/company",   icon: Building2, hasSubmenu: true },
-      { label: "財務",       path: "/finance",   icon: Wallet,    hasSubmenu: true },
+      {
+        label: "問い合わせ",
+        path: "/inquiry", // ← ここをクリックすると Main.tsx の /inquiry ルートに遷移
+        icon: MessageSquare,
+        badgeCount: openInquiriesCount > 0 ? openInquiriesCount : null,
+      },
+      { label: "商品", path: "/product", icon: Box, hasSubmenu: true },
+      { label: "トークン", path: "/token", icon: Coins, hasSubmenu: true },
+      { label: "出品", path: "/list", icon: Store },
+      { label: "注文", path: "/order", icon: ShoppingCart },
+      { label: "広告", path: "/ad", icon: Target },
+      { label: "組織", path: "/company", icon: Building2, hasSubmenu: true },
+      { label: "財務", path: "/finance", icon: Wallet, hasSubmenu: true },
     ],
     [openInquiriesCount]
   );
@@ -82,8 +87,8 @@ export default function Sidebar({ isOpen }: SidebarProps) {
 
   const financeSubItems: SubItem[] = useMemo(
     () => [
-      { label: "入出金履歴", path: "/transactions" },
-      { label: "口座",       path: "/accounts" },
+      { label: "入出金履歴", path: "/transaction" },
+      { label: "口座", path: "/accounts" },
     ],
     []
   );
@@ -130,26 +135,47 @@ export default function Sidebar({ isOpen }: SidebarProps) {
     <aside className="sidebar">
       <nav className="sidebar-nav">
         {menuItems.map(({ label, path, icon: Icon, hasSubmenu, badgeCount }) => {
-          const isActiveTop = location.pathname === path || location.pathname.startsWith(path + "/");
+          const isActiveTop =
+            location.pathname === path ||
+            location.pathname.startsWith(path + "/");
 
           if (label === "商品") {
             const isOpen = !!openMap.products;
             return (
               <div key={path} className={`group-block ${isOpen ? "group-open" : ""}`}>
-                <button type="button" onClick={() => toggleOpen("products")} className={`sidebar-item parent ${isActiveTop ? "active" : ""}`} aria-expanded={isOpen} aria-controls="submenu-products">
+                <button
+                  type="button"
+                  onClick={() => toggleOpen("products")}
+                  className={`sidebar-item parent ${isActiveTop ? "active" : ""}`}
+                  aria-expanded={isOpen}
+                  aria-controls="submenu-products"
+                >
                   <Icon className="icon-left" aria-hidden />
                   <span className="label">{label}</span>
                   <span className="right">
-                    {typeof badgeCount === "number" && badgeCount > 0 && <span className="badge">{badgeCount}</span>}
-                    {hasSubmenu && (isOpen ? <ChevronDown className="chevron" /> : <ChevronRight className="chevron" />)}
+                    {typeof badgeCount === "number" && badgeCount > 0 && (
+                      <span className="badge">{badgeCount}</span>
+                    )}
+                    {hasSubmenu &&
+                      (isOpen ? (
+                        <ChevronDown className="chevron" />
+                      ) : (
+                        <ChevronRight className="chevron" />
+                      ))}
                   </span>
                 </button>
                 {isOpen && (
                   <div id="submenu-products" className="submenu-container">
                     {productSubItems.map((si) => {
-                      const activeSub = location.pathname === si.path || location.pathname.startsWith(si.path + "/");
+                      const activeSub =
+                        location.pathname === si.path ||
+                        location.pathname.startsWith(si.path + "/");
                       return (
-                        <button key={si.path} onClick={() => navigate(si.path)} className={`submenu-item ${activeSub ? "active" : ""}`}>
+                        <button
+                          key={si.path}
+                          onClick={() => navigate(si.path)}
+                          className={`submenu-item ${activeSub ? "active" : ""}`}
+                        >
                           <span className="submenu-label">{si.label}</span>
                         </button>
                       );
@@ -164,20 +190,39 @@ export default function Sidebar({ isOpen }: SidebarProps) {
             const isOpen = !!openMap.tokens;
             return (
               <div key={path} className={`group-block ${isOpen ? "group-open" : ""}`}>
-                <button type="button" onClick={() => toggleOpen("tokens")} className={`sidebar-item parent ${isActiveTop ? "active" : ""}`} aria-expanded={isOpen} aria-controls="submenu-tokens">
+                <button
+                  type="button"
+                  onClick={() => toggleOpen("tokens")}
+                  className={`sidebar-item parent ${isActiveTop ? "active" : ""}`}
+                  aria-expanded={isOpen}
+                  aria-controls="submenu-tokens"
+                >
                   <Icon className="icon-left" aria-hidden />
                   <span className="label">{label}</span>
                   <span className="right">
-                    {typeof badgeCount === "number" && badgeCount > 0 && <span className="badge">{badgeCount}</span>}
-                    {hasSubmenu && (isOpen ? <ChevronDown className="chevron" /> : <ChevronRight className="chevron" />)}
+                    {typeof badgeCount === "number" && badgeCount > 0 && (
+                      <span className="badge">{badgeCount}</span>
+                    )}
+                    {hasSubmenu &&
+                      (isOpen ? (
+                        <ChevronDown className="chevron" />
+                      ) : (
+                        <ChevronRight className="chevron" />
+                      ))}
                   </span>
                 </button>
                 {isOpen && (
                   <div id="submenu-tokens" className="submenu-container">
                     {tokenSubItems.map((si) => {
-                      const activeSub = location.pathname === si.path || location.pathname.startsWith(si.path + "/");
+                      const activeSub =
+                        location.pathname === si.path ||
+                        location.pathname.startsWith(si.path + "/");
                       return (
-                        <button key={si.path} onClick={() => navigate(si.path)} className={`submenu-item ${activeSub ? "active" : ""}`}>
+                        <button
+                          key={si.path}
+                          onClick={() => navigate(si.path)}
+                          className={`submenu-item ${activeSub ? "active" : ""}`}
+                        >
                           <span className="submenu-label">{si.label}</span>
                         </button>
                       );
@@ -192,20 +237,39 @@ export default function Sidebar({ isOpen }: SidebarProps) {
             const isOpen = !!openMap.org;
             return (
               <div key={path} className={`group-block ${isOpen ? "group-open" : ""}`}>
-                <button type="button" onClick={() => toggleOpen("org")} className={`sidebar-item parent ${isActiveTop ? "active" : ""}`} aria-expanded={isOpen} aria-controls="submenu-org">
+                <button
+                  type="button"
+                  onClick={() => toggleOpen("org")}
+                  className={`sidebar-item parent ${isActiveTop ? "active" : ""}`}
+                  aria-expanded={isOpen}
+                  aria-controls="submenu-org"
+                >
                   <Icon className="icon-left" aria-hidden />
                   <span className="label">{label}</span>
                   <span className="right">
-                    {typeof badgeCount === "number" && badgeCount > 0 && <span className="badge">{badgeCount}</span>}
-                    {hasSubmenu && (isOpen ? <ChevronDown className="chevron" /> : <ChevronRight className="chevron" />)}
+                    {typeof badgeCount === "number" && badgeCount > 0 && (
+                      <span className="badge">{badgeCount}</span>
+                    )}
+                    {hasSubmenu &&
+                      (isOpen ? (
+                        <ChevronDown className="chevron" />
+                      ) : (
+                        <ChevronRight className="chevron" />
+                      ))}
                   </span>
                 </button>
                 {isOpen && (
                   <div id="submenu-org" className="submenu-container">
                     {orgSubItems.map((si) => {
-                      const activeSub = location.pathname === si.path || location.pathname.startsWith(si.path + "/");
+                      const activeSub =
+                        location.pathname === si.path ||
+                        location.pathname.startsWith(si.path + "/");
                       return (
-                        <button key={si.path} onClick={() => navigate(si.path)} className={`submenu-item ${activeSub ? "active" : ""}`}>
+                        <button
+                          key={si.path}
+                          onClick={() => navigate(si.path)}
+                          className={`submenu-item ${activeSub ? "active" : ""}`}
+                        >
                           <span className="submenu-label">{si.label}</span>
                         </button>
                       );
@@ -220,20 +284,39 @@ export default function Sidebar({ isOpen }: SidebarProps) {
             const isOpen = !!openMap.finance;
             return (
               <div key={path} className={`group-block ${isOpen ? "group-open" : ""}`}>
-                <button type="button" onClick={() => toggleOpen("finance")} className={`sidebar-item parent ${isActiveTop ? "active" : ""}`} aria-expanded={isOpen} aria-controls="submenu-finance">
+                <button
+                  type="button"
+                  onClick={() => toggleOpen("finance")}
+                  className={`sidebar-item parent ${isActiveTop ? "active" : ""}`}
+                  aria-expanded={isOpen}
+                  aria-controls="submenu-finance"
+                >
                   <Icon className="icon-left" aria-hidden />
                   <span className="label">{label}</span>
                   <span className="right">
-                    {typeof badgeCount === "number" && badgeCount > 0 && <span className="badge">{badgeCount}</span>}
-                    {hasSubmenu && (isOpen ? <ChevronDown className="chevron" /> : <ChevronRight className="chevron" />)}
+                    {typeof badgeCount === "number" && badgeCount > 0 && (
+                      <span className="badge">{badgeCount}</span>
+                    )}
+                    {hasSubmenu &&
+                      (isOpen ? (
+                        <ChevronDown className="chevron" />
+                      ) : (
+                        <ChevronRight className="chevron" />
+                      ))}
                   </span>
                 </button>
                 {isOpen && (
                   <div id="submenu-finance" className="submenu-container">
                     {financeSubItems.map((si) => {
-                      const activeSub = location.pathname === si.path || location.pathname.startsWith(si.path + "/");
+                      const activeSub =
+                        location.pathname === si.path ||
+                        location.pathname.startsWith(si.path + "/");
                       return (
-                        <button key={si.path} onClick={() => navigate(si.path)} className={`submenu-item ${activeSub ? "active" : ""}`}>
+                        <button
+                          key={si.path}
+                          onClick={() => navigate(si.path)}
+                          className={`submenu-item ${activeSub ? "active" : ""}`}
+                        >
                           <span className="submenu-label">{si.label}</span>
                         </button>
                       );
@@ -244,12 +327,20 @@ export default function Sidebar({ isOpen }: SidebarProps) {
             );
           }
 
+          // サブメニューがない一般行
           return (
-            <button key={path} onClick={() => navigate(path)} className={`sidebar-item ${isActiveTop ? "active" : ""}`} aria-current={isActiveTop ? "page" : undefined}>
+            <button
+              key={path}
+              onClick={() => navigate(path)} // ← ここで /inquiry などに遷移（Main.tsx が受ける）
+              className={`sidebar-item ${isActiveTop ? "active" : ""}`}
+              aria-current={isActiveTop ? "page" : undefined}
+            >
               <Icon className="icon-left" aria-hidden />
               <span className="label">{label}</span>
               <span className="right">
-                {typeof badgeCount === "number" && badgeCount > 0 && <span className="badge">{badgeCount}</span>}
+                {typeof badgeCount === "number" && badgeCount > 0 && (
+                  <span className="badge">{badgeCount}</span>
+                )}
                 {hasSubmenu && <ChevronRight className="chevron" aria-hidden />}
               </span>
             </button>
@@ -257,7 +348,7 @@ export default function Sidebar({ isOpen }: SidebarProps) {
         })}
       </nav>
 
-      {/* フッター（CSS .sidebar-footer と一致） */}
+      {/* フッター */}
       <div className="sidebar-footer">
         <div className="flex items-center gap-3">
           <h1 className="font-medium">Narratives</h1>

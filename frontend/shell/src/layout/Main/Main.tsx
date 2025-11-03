@@ -1,23 +1,17 @@
-// frontend/shell/src/layout/Main/Main.tsx
-import type { ReactNode } from "react";
-import "./Main.css"; // スタイルをCSSへ移譲
+import { Routes, Route } from "react-router-dom";
+import InquiryManagementPage from "../../../../inquiry/src/pages/InquiryManagementPage";
+import "./Main.css";
 
-/**
- * Main
- * 画面から Header と Sidebar を除いた表示領域。
- * CSS 変数でレイアウトを制御します（未定義時はデフォルト値を使用）。
- *  - --header-h  : ヘッダー高さ（既定 64px）
- *  - --sidebar-w : サイドバー幅（既定 280px）
- */
-type MainProps = {
-  children: ReactNode;
-  className?: string;
-};
-
-export default function Main({ children, className }: MainProps) {
+export default function Main() {
   return (
-    <main role="main" className={`main-area ${className ?? ""}`}>
-      <div className="p-6">{children}</div>
-    </main>
+    <div className="main-content">
+      <Routes>
+        {/* Sidebarの「問い合わせ」を押した時に表示されるページ */}
+        <Route path="/inquiry" element={<InquiryManagementPage />} />
+
+        {/* 必要に応じて他のページを追加 */}
+        {/* <Route path="/listings" element={<ListingsPage />} /> */}
+      </Routes>
+    </div>
   );
 }
