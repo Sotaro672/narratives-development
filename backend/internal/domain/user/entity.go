@@ -1,0 +1,294 @@
+package user
+
+import (
+	"errors"
+	"fmt"
+	"net/mail"
+	"regexp"
+	"strings"
+	"time"
+)
+
+// User mirrors web-app/src/shared/types/user.ts
+// TS fields:
+// - id: string
+// - first_name?: string
+// - first_name_kana?: string
+// - last_name_kana?: string
+// - last_name?: string
+// - email?: string
+// - phone_number?: string
+// - createdAt: Date | string
+// - updatedAt: Date | string
+// - deletedAt: Date | string
+type User struct {
+	ID             string     `json:"id"`
+	FirstName      *string    `json:"first_name,omitempty"`
+	FirstNameKana  *string    `json:"first_name_kana,omitempty"`
+	LastNameKana   *string    `json:"last_name_kana,omitempty"`
+	LastName       *string    `json:"last_name,omitempty"`
+	Email          *string    `json:"email,omitempty"`
+	PhoneNumber    *string    `json:"phone_number,omitempty"`
+	CreatedAt      time.Time  `json:"createdAt"`
+	UpdatedAt      time.Time  `json:"updatedAt"`
+	DeletedAt      time.Time  `json:"deletedAt"`
+}
+
+// Errors (single source)
+var (
+	ErrInvalidID            = errors.New("user: invalid id")
+	ErrInvalidFirstName     = errors.New("user: invalid first_name")
+	ErrInvalidFirstNameKana = errors.New("user: invalid first_name_kana")
+	ErrInvalidLastNameKana  = errors.New("user: invalid last_name_kana")
+	ErrInvalidLastName      = errors.New("user: invalid last_name")
+	ErrInvalidEmail         = errors.New("user: invalid email")
+	ErrInvalidPhone         = errors.New("user: invalid phone_number")
+	ErrInvalidCreatedAt     = errors.New("user: invalid createdAt")
+	ErrInvalidUpdatedAt     = errors.New("user: invalid updatedAt")
+	ErrInvalidDeletedAt     = errors.New("user: invalid deletedAt")
+)
+
+// Mutators
+func (u *User) SetFirstName(v *string) error {
+	v = normalizePtr(v)
+	if v != nil && len([]rune(*v)) > MaxNameLength {
+		return ErrInvalidFirstName
+	}
+	u.FirstName = v
+	return nil
+}
+
+func (u *User) SetFirstNameKana(v *string) error {
+	v = normalizePtr(v)
+	if v != nil && len([]rune(*v)) > MaxNameLength {
+		return ErrInvalidFirstNameKana
+	}
+	u.FirstNameKana = v
+	return nil
+}
+
+func (u *User) SetLastName(v *string) error {
+	v = normalizePtr(v)
+	if v != nil && len([]rune(*v)) > MaxNameLength {
+		return ErrInvalidLastName
+	}
+	u.LastName = v
+	return nil
+}
+
+func (u *User) SetLastNameKana(v *string) error {
+	v = normalizePtr(v)
+	if v != nil && len([]rune(*v)) > MaxNameLength {
+		return ErrInvalidLastNameKana
+	}
+	u.LastNameKana = v
+	return nil
+}
+
+func (u *User) SetEmail(v *string) error {
+	v = normalizePtr(v)
+	if v != nil && !emailValid(*v) {
+		return ErrInvalidEmail
+	}
+	u.Email = v
+	return nil
+}
+
+func (u *User) SetPhoneNumber(v *string) error {
+	v = normalizePtr(v)
+	if v != nil && !phoneValid(*v) {
+		return ErrInvalidPhone
+	}
+	u.PhoneNumber = v
+	return nil
+}
+
+func (u *User) TouchUpdatedAt(now time.Time) error {
+	if now.IsZero() {
+		return ErrInvalidUpdatedAt
+	}
+	u.UpdatedAt = now.UTC()
+	return nil
+}
+
+// Validation
+func (u User) validate() error {
+	if strings.TrimSpace(u.ID) == "" {
+		return ErrInvalidID
+	}
+	if u.FirstName != nil && len([]rune(*u.FirstName)) > MaxNameLength {
+		return ErrInvalidFirstName
+	}
+	if u.FirstNameKana != nil && len([]rune(*u.FirstNameKana)) > MaxNameLength {
+		return ErrInvalidFirstNameKana
+	}
+	if u.LastName != nil && len([]rune(*u.LastName)) > MaxNameLength {
+		return ErrInvalidLastName
+	}
+	if u.LastNameKana != nil && len([]rune(*u.LastNameKana)) > MaxNameLength {
+		return ErrInvalidLastNameKana
+	}
+	if u.Email != nil && !emailValid(*u.Email) {
+		return ErrInvalidEmail
+	}
+	if u.PhoneNumber != nil && !phoneValid(*u.PhoneNumber) {
+		return ErrInvalidPhone
+	}
+	if u.CreatedAt.IsZero() {
+		return ErrInvalidCreatedAt
+	}
+	if u.UpdatedAt.IsZero() || u.UpdatedAt.Before(u.CreatedAt) {
+		return ErrInvalidUpdatedAt
+	}
+	if u.DeletedAt.IsZero() || u.DeletedAt.Before(u.CreatedAt) {
+		return ErrInvalidDeletedAt
+	}
+	return nil
+}
+
+// Policy
+var (
+	// Accepts E.164 (+xxxxxxxxxxxx up to 15 digits) or simple local format digits/spaces/hyphens/paren
+	e164Re        = regexp.MustCompile(`^\+[1-9]\d{1,14}$`)
+	localTel      = regexp.MustCompile(`^[0-9\-\s()]{7,20}$`)
+	MaxNameLength = 100
+)
+
+// Constructors
+
+func New(
+	id string,
+	firstName, firstNameKana, lastNameKana, lastName, email, phone *string,
+	createdAt, updatedAt, deletedAt time.Time,
+) (User, error) {
+	u := User{
+		ID:            strings.TrimSpace(id),
+		FirstName:     normalizePtr(firstName),
+		FirstNameKana: normalizePtr(firstNameKana),
+		LastNameKana:  normalizePtr(lastNameKana),
+		LastName:      normalizePtr(lastName),
+		Email:         normalizePtr(email),
+		PhoneNumber:   normalizePtr(phone),
+		CreatedAt:     createdAt.UTC(),
+		UpdatedAt:     updatedAt.UTC(),
+		DeletedAt:     deletedAt.UTC(),
+	}
+	if err := u.validate(); err != nil {
+		return User{}, err
+	}
+	return u, nil
+}
+
+// NewWithNow is convenient for CreateUserInput (server sets created/updated).
+func NewWithNow(
+	id string,
+	firstName, firstNameKana, lastNameKana, lastName, email, phone *string,
+	now time.Time,
+	deletedAt time.Time,
+) (User, error) {
+	now = now.UTC()
+	return New(id, firstName, firstNameKana, lastNameKana, lastName, email, phone, now, now, deletedAt)
+}
+
+// NewFromStringTimes parses createdAt/updatedAt/deletedAt from RFC3339 strings.
+func NewFromStringTimes(
+	id string,
+	firstName, firstNameKana, lastNameKana, lastName, email, phone *string,
+	createdAt, updatedAt, deletedAt string,
+) (User, error) {
+	ct, err := parseTime(createdAt)
+	if err != nil {
+		return User{}, fmt.Errorf("%w: %v", ErrInvalidCreatedAt, err)
+	}
+	ut, err := parseTime(updatedAt)
+	if err != nil {
+		return User{}, fmt.Errorf("%w: %v", ErrInvalidUpdatedAt, err)
+	}
+	dt, err := parseTime(deletedAt)
+	if err != nil {
+		return User{}, fmt.Errorf("%w: %v", ErrInvalidDeletedAt, err)
+	}
+	return New(id, firstName, firstNameKana, lastNameKana, lastName, email, phone, ct, ut, dt)
+}
+
+// Helpers
+
+func normalizePtr(p *string) *string {
+	if p == nil {
+		return nil
+	}
+	s := strings.TrimSpace(*p)
+	if s == "" {
+		return nil
+	}
+	return &s
+}
+
+func emailValid(e string) bool {
+	// net/mail is permissive but good enough for domain validation
+	_, err := mail.ParseAddress(e)
+	return err == nil
+}
+
+func phoneValid(p string) bool {
+	return e164Re.MatchString(p) || localTel.MatchString(p)
+}
+
+func parseTime(s string) (time.Time, error) {
+	s = strings.TrimSpace(s)
+	if s == "" {
+		return time.Time{}, errors.New("empty time")
+	}
+	if t, err := time.Parse(time.RFC3339, s); err == nil {
+		return t.UTC(), nil
+	}
+	layouts := []string{
+		time.RFC3339Nano,
+		"2006-01-02T15:04:05Z07:00",
+		"2006-01-02 15:04:05",
+		"2006-01-02",
+	}
+	for _, l := range layouts {
+		if t, err := time.Parse(l, s); err == nil {
+			return t.UTC(), nil
+		}
+	}
+	return time.Time{}, fmt.Errorf("cannot parse time: %q", s)
+}
+
+// UsersTableDDL defines the SQL for the users table migration.
+const UsersTableDDL = `
+-- Migration: Initialize User domain
+-- Mirrors backend/internal/domain/user/entity.go
+
+BEGIN;
+
+CREATE TABLE IF NOT EXISTS users (
+  id               TEXT        PRIMARY KEY,
+  first_name       TEXT,
+  first_name_kana  TEXT,
+  last_name_kana   TEXT,
+  last_name        TEXT,
+  email            TEXT,
+  phone_number     TEXT,
+  created_at       TIMESTAMPTZ NOT NULL,
+  updated_at       TIMESTAMPTZ NOT NULL,
+  deleted_at       TIMESTAMPTZ NOT NULL,
+
+  -- Non-empty checks
+  CONSTRAINT chk_users_non_empty CHECK (char_length(trim(id)) > 0),
+
+  -- time order
+  CONSTRAINT chk_users_time_order CHECK (
+    updated_at >= created_at AND deleted_at >= created_at
+  )
+);
+
+-- Indexes
+CREATE INDEX IF NOT EXISTS idx_users_email       ON users(email);
+CREATE INDEX IF NOT EXISTS idx_users_created_at  ON users(created_at);
+CREATE INDEX IF NOT EXISTS idx_users_updated_at  ON users(updated_at);
+CREATE INDEX IF NOT EXISTS idx_users_deleted_at  ON users(deleted_at);
+
+COMMIT;
+`
