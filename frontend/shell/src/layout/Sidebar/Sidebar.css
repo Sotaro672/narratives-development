@@ -1,0 +1,126 @@
+/* ───────────────────────────────────────────────
+   Sidebar (uses tokens from global.css)
+   ─────────────────────────────────────────────── */
+
+:root{
+  --sb-bg: var(--color-sidebar);
+  --sb-fg: var(--color-sidebar-foreground);
+  --sb-border: var(--color-sidebar-border);
+  --sb-primary: var(--color-sidebar-primary);
+  --sb-primary-fg: var(--color-sidebar-primary-foreground);
+  --sb-accent: var(--color-sidebar-accent);
+  --sb-accent-fg: var(--color-sidebar-accent-foreground);
+  --sb-ring: var(--color-sidebar-ring);
+
+  --sb-fg-muted: color-mix(in oklch, var(--sb-fg) 60%, var(--sb-bg) 40%);
+  --sb-hover: color-mix(in oklch, var(--sb-accent) 65%, transparent);
+  --sb-active: color-mix(in oklch, var(--sb-accent) 85%, transparent);
+  --sb-chip: color-mix(in oklch, var(--sb-accent) 92%, white 8%);
+  --sb-badge: var(--color-destructive);
+}
+
+/* ─ Base / Layout ─ */
+.sidebar{
+  width:240px;
+  background:var(--sb-bg);
+  color:var(--sb-fg);
+  border-right:1px solid var(--sb-border);
+
+  /* ここが重要：フッターを押し出さず固定するための Flex コンテナ */
+  display:flex;
+  flex-direction:column;
+  height:100dvh;   /* 端末の実ビューポート高 */
+  min-height:0;    /* 子要素での overflow を有効化 */
+  box-sizing:border-box;
+}
+
+/* ナビ部分だけをスクロール領域にする（最重要） */
+.sidebar-nav{
+  display:flex;
+  flex-direction:column;
+  gap:6px;
+  padding:0px 8px;
+
+  flex:1 0 0;     /* 余白をすべて受け持つ（比率を強める） */
+  min-height:0;   /* これが無いと overflow が効かない場合がある */
+  overflow-y:auto;
+  overflow-x:auto;
+}
+
+/* フッターは縮ませない・常に下に居る */
+.sidebar-footer{
+  flex:0 0 auto;              /* つぶれ防止（決定打） */
+  padding:12px 16px;
+  font-weight:700;
+  color:var(--sb-fg);
+  background:var(--sb-bg);
+  border-top:1px solid var(--sb-border);
+}
+
+/* ─ Items ─ */
+.sidebar-item{
+  display:flex; align-items:center; width:100%;
+  border:0; background:transparent; cursor:pointer;
+  padding:12px 14px; border-radius:var(--radius-lg,10px);
+  text-align:left; font-size:14px; line-height:1; color:var(--sb-fg);
+}
+.sidebar-item:hover{ background:var(--sb-hover); }
+.sidebar-item.active{ background:transparent; font-weight:600; }
+
+.icon-left{ width:20px; height:20px; margin-right:10px; stroke-width:1.75; color:var(--sb-fg-muted); }
+.right{ margin-left:auto; display:inline-flex; align-items:center; gap:8px; }
+.chevron{
+  width:16px; height:16px; stroke-width:2; color:var(--sb-fg-muted);
+  transition:transform 160ms ease,color 120ms ease,opacity 120ms ease; opacity:.9;
+}
+.sidebar-item:hover .chevron{ color:color-mix(in oklch, var(--sb-fg) 78%, var(--sb-bg) 22%); opacity:1; }
+.sidebar-item:not(.has-children) .chevron{ display:none; }
+
+/* ─ Group (親の白い枠) ─ */
+.group-block{ border-radius:calc(var(--radius-xl,14px)); padding:2px; }
+.sidebar-item.parent{ border-radius:calc(var(--radius-xl,14px)); }
+.group-open .sidebar-item.parent{
+  outline:3px solid color-mix(in oklch, var(--sb-fg) 8%, transparent);
+  box-shadow:0 1px 0 rgba(0,0,0,.02);
+}
+.group-open .sidebar-item.parent .chevron{ transform:rotate(180deg); }
+
+/* ─ Submenu (pill) ─ */
+.submenu-container{
+  display:flex; flex-direction:column; gap:6px;
+  margin-top:8px; padding:0 6px 0 14px;
+}
+.submenu-item{
+  display:flex; align-items:center; width:100%;
+  border:0; background:transparent; cursor:pointer;
+  padding:10px 12px; border-radius:var(--radius-lg,10px);
+  text-align:left; font-size:14px; line-height:1; color:var(--sb-fg);
+}
+.submenu-item:hover{ background:var(--sb-hover); }
+.submenu-item.active{
+  background:var(--sb-chip); color:var(--sb-fg); font-weight:600;
+  box-shadow: inset 0 0 0 1px color-mix(in oklch, var(--sb-fg) 3%, transparent),
+              0 0 0 1px color-mix(in oklch, var(--sb-fg) 2%, transparent);
+}
+.submenu-label{ padding-left:2px; }
+
+/* ─ Badge ─ */
+.badge{
+  min-width:18px; height:18px; padding:0 6px; border-radius:999px;
+  background:var(--sb-badge); color:#fff; font-size:12px; line-height:18px; font-weight:700;
+}
+
+/* ─ A11y ─ */
+.sidebar-item:focus-visible,
+.submenu-item:focus-visible{
+  outline:2px solid var(--sb-ring);
+  outline-offset:2px;
+  border-radius:var(--radius-lg,10px);
+}
+
+/* ─（任意）白背景/黒文字を強制したい場合 ─ */
+.sidebar,
+.sidebar .submenu-container,
+.sidebar-footer{ background-color:#ffffff !important; }
+.sidebar, .sidebar .sidebar-item, .sidebar .submenu-item, .sidebar .sidebar-footer{ color:#111111 !important; }
+.sidebar .icon-left, .sidebar .chevron{ color:#111111 !important; stroke:#111111 !important; }

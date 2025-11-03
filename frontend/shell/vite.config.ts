@@ -1,12 +1,13 @@
-import { defineConfig } from "vite";
+// frontend/shell/vite.config.ts
+import { defineConfig, type PluginOption } from "vite";
 import react from "@vitejs/plugin-react";
-import federation from "@module-federation/vite";
-import mfConfig from "./module-federation.config";
+import { federation } from "@module-federation/vite";
+import mfOptions from "./module-federation.config";
 
 export default defineConfig({
   plugins: [
     react(),
-    federation(mfConfig), // ← federation設定を読み込み
+    federation(mfOptions) as unknown as PluginOption, // ← options を渡す
   ],
   server: {
     port: 4000,

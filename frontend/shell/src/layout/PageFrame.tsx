@@ -1,80 +1,116 @@
-import { useState } from "react";
-import { Outlet, useLocation, useNavigate } from "react-router-dom";
-import { Menu } from "lucide-react";
+import { Outlet, useLocation } from "react-router-dom";
+import Header from "./Header/Header";
+import Sidebar from "./Sidebar/Sidebar";
+import { Filter, RotateCw } from "lucide-react";
+import { useMemo } from "react";
 
 /**
- * Solid State Console Layout
- * -----------------------------------------------------------
- * 全ページで共通するレイアウト構造。
- * - Header（アプリタイトル、メニュー開閉ボタン）
- * - Sidebar（各モジュールへのナビゲーション）
- * - Main Content（Outletで各モジュールページを描画）
- * -----------------------------------------------------------
+ * 画像のレイアウトから「フレーム要素のみ」を抽出:
+ * - 上部ヘッダー
+ * - 左サイドバー
+ * - 右側のページタイトル行（例: 問い合わせ管理）
+ * - 角丸のカード（枠）
+ * - カラム見出しのみ（行データは描画しない）
+ * - 右上のリフレッシュボタン
+ *
+ * 行データや詳細UIは各ページが <Outlet /> に差し込む想定。
  */
-
-// サイドバーメニュー定義
-const menuItems = [
-  { label: "ダッシュボード", path: "/" },
-  { label: "問い合わせ", path: "/inquiries" },
-  { label: "出品", path: "/listings" },
-  { label: "運用", path: "/operations" },
-  { label: "プレビュー", path: "/preview" },
-  { label: "生産計画", path: "/production" },
-  { label: "設計", path: "/design" },
-  { label: "ミント申請", path: "/mint" },
-  { label: "注文管理", path: "/orders" },
-  { label: "広告", path: "/ads" },
-  { label: "口座", path: "/accounts" },
-  { label: "取引履歴", path: "/transactions" },
-  { label: "組織管理", path: "/org" },
-];
-
 export default function PageFrame() {
-  const [sidebarOpen, setSidebarOpen] = useState(true);
-  const navigate = useNavigate();
   const location = useLocation();
 
+  // シンプルにパスでページタイトルを決める（必要に応じて拡張）
+  const title = useMemo(() => {
+    if (location.pathname.startsWith("/inquiries")) return "問い合わせ管理";
+    if (location.pathname.startsWith("/listings")) return "商品管理";
+    if (location.pathname.startsWith("/mint")) return "トークン管理";
+    if (location.pathname.startsWith("/preview")) return "出品管理";
+    if (location.pathname.startsWith("/orders")) return "注文管理";
+    if (location.pathname.startsWith("/ads")) return "広告管理";
+    if (location.pathname.startsWith("/org")) return "組織管理";
+    if (location.pathname.startsWith("/accounts")) return "財務管理";
+    if (location.pathname.startsWith("/transactions")) return "入出金履歴";
+    return "";
+  }, [location.pathname]);
+
+  // 問い合わせ画面のカラム枠（画像の通り）
+  const inquiryColumns = [
+    { label: "問い合わせID", filterable: false },
+    { label: "件名", filterable: false },
+    { label: "ユーザー", filterable: false },
+    { label: "ステータス", filterable: true },
+    { label: "タイプ", filterable: false },
+    { label: "担当者", filterable: true },
+    { label: "問い合わせ日", filterable: false },
+    { label: "応答日", filterable: false },
+  ];
+
+  // 現在のページが「問い合わせ」なら上のカラム、他ページは空（枠のみ）
+  const columns =
+    location.pathname.startsWith("/inquiries") ? inquiryColumns : [];
+
   return (
-    <div className="app-container">
-      {/* ─────────────────────────────── Header ─────────────────────────────── */}
-      <header className="header">
-        <div className="flex items-center gap-3">
-          <button
-            onClick={() => setSidebarOpen(!sidebarOpen)}
-            className="p-2 rounded-md hover:bg-slate-700 focus:outline-none"
-          >
-            <Menu className="w-5 h-5 text-white" />
-          </button>
-          <h1 className="text-lg font-semibold tracking-wide">Solid State Console</h1>
-        </div>
-      </header>
+    <div className="frame">
+      <Header />
 
-      {/* ─────────────────────────────── Sidebar ─────────────────────────────── */}
-      {sidebarOpen && (
-        <aside className="sidebar">
-          <nav className="flex flex-col mt-2">
-            {menuItems.map((item) => {
-              const active = location.pathname.startsWith(item.path);
-              return (
-                <button
-                  key={item.path}
-                  onClick={() => navigate(item.path)}
-                  className={`sidebar-item text-left ${
-                    active ? "active" : "hover:bg-slate-700"
-                  }`}
-                >
-                  {item.label}
-                </button>
-              );
-            })}
-          </nav>
+      <div className="main">
+        <aside className="left">
+          <Sidebar isOpen />
         </aside>
-      )}
 
-      {/* ─────────────────────────────── Main Content ─────────────────────────────── */}
-      <main className="main-content">
-        <Outlet />
-      </main>
+        <section className="content">
+          {/* ページタイトル行 */}
+          {title && (
+            <div className="content-header">
+              <h2 className="content-title">{title}</h2>
+
+              <div className="content-actions">
+                <button
+                  type="button"
+                  className="icon-btn ghost"
+                  aria-label="更新"
+                  title="更新"
+                >
+                  <RotateCw className="icon-md" aria-hidden />
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* 角丸カード（枠のみ）。Outlet はボディ内に差し込まれる */}
+          <div className="card">
+            {/* テーブルヘッダー枠（カラム名のみ。行データは出さない） */}
+            {columns.length > 0 && (
+              <div className="table">
+                <div className="thead">
+                  <div className="tr">
+                    {columns.map((col) => (
+                      <div key={col.label} className="th">
+                        <span>{col.label}</span>
+                        {col.filterable && (
+                          <Filter className="icon-sm th-filter" aria-hidden />
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                {/* 行データは描画しない（枠のみ）。必要ならここに <Outlet /> で注入 */}
+                <div className="tbody empty">
+                  {/* 各ページが明細を描画したい場合はここに入る */}
+                  <Outlet />
+                </div>
+              </div>
+            )}
+
+            {/* カラムを持たないページの場合も、カード枠の中に Outlet を差し込む */}
+            {columns.length === 0 && (
+              <div className="card-body">
+                <Outlet />
+              </div>
+            )}
+          </div>
+        </section>
+      </div>
     </div>
   );
 }
