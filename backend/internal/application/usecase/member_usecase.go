@@ -39,7 +39,13 @@ func (u *MemberUsecase) Count(ctx context.Context, f memdom.Filter) (int, error)
 	return u.repo.Count(ctx, f)
 }
 
-func (u *MemberUsecase) List(ctx context.Context, f memdom.Filter, s common.Sort, p common.Page) (memdom.PageResult, error) {
+// ★戻り値型を common.PageResult[memdom.Member] に統一
+func (u *MemberUsecase) List(
+	ctx context.Context,
+	f memdom.Filter,
+	s common.Sort,
+	p common.Page,
+) (common.PageResult[memdom.Member], error) {
 	return u.repo.List(ctx, f, s, p)
 }
 
@@ -87,7 +93,8 @@ type UpdateMemberInput struct {
 	AssignedBrands *[]string
 }
 
-// Update は MemberPatch の実装有無に依存せず Save 互換で更新します。
+// Update は現在の Member を読み出して上書きし、repo.Save() に投げる。
+// UpdatedAt は repo.Save/upsert 側で NOW() に更新される前提。
 func (u *MemberUsecase) Update(ctx context.Context, in UpdateMemberInput) (memdom.Member, error) {
 	current, err := u.repo.GetByID(ctx, strings.TrimSpace(in.ID))
 	if err != nil {
@@ -113,7 +120,6 @@ func (u *MemberUsecase) Update(ctx context.Context, in UpdateMemberInput) (memdo
 		current.AssignedBrands = dedupStrings(*in.AssignedBrands)
 	}
 
-	// UpdatedAt は永続層で NOW() に更新されます（Save/Upsert 実装に準拠）
 	return u.repo.Save(ctx, current, nil)
 }
 

@@ -12,6 +12,7 @@ import (
 	productdom "narratives/internal/domain/product"
 )
 
+// ProductRepositoryPG implements usecase.ProductRepo
 type ProductRepositoryPG struct {
 	DB *sql.DB
 }
@@ -20,30 +21,235 @@ func NewProductRepositoryPG(db *sql.DB) *ProductRepositoryPG {
 	return &ProductRepositoryPG{DB: db}
 }
 
-// ========================
-// RepositoryPort impl
-// ========================
+// ============================================================
+// ProductRepo interface methods (must match usecase.ProductRepo)
+// ============================================================
 
-func (r *ProductRepositoryPG) GetByID(ctx context.Context, id string) (*productdom.Product, error) {
+// GetByID returns a single Product by ID (value return, not pointer)
+func (r *ProductRepositoryPG) GetByID(ctx context.Context, id string) (productdom.Product, error) {
 	run := dbcommon.GetRunner(ctx, r.DB)
+
 	const q = `
 SELECT
-  id, model_id, production_id, inspection_result, connected_token,
-  printed_at, printed_by, inspected_at, inspected_by,
-  updated_at, updated_by
+  id,
+  model_id,
+  production_id,
+  inspection_result,
+  connected_token,
+  printed_at,
+  printed_by,
+  inspected_at,
+  inspected_by,
+  updated_at,
+  updated_by
 FROM products
-WHERE id = $1`
+WHERE id = $1
+`
 	row := run.QueryRowContext(ctx, q, strings.TrimSpace(id))
+
 	p, err := scanProduct(row)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
-			return nil, productdom.ErrNotFound
+			return productdom.Product{}, productdom.ErrNotFound
 		}
-		return nil, err
+		return productdom.Product{}, err
 	}
-	return &p, nil
+	return p, nil
 }
 
+// Exists checks if a product with the given ID exists
+func (r *ProductRepositoryPG) Exists(ctx context.Context, id string) (bool, error) {
+	run := dbcommon.GetRunner(ctx, r.DB)
+
+	const q = `SELECT 1 FROM products WHERE id = $1`
+	var one int
+	err := run.QueryRowContext(ctx, q, strings.TrimSpace(id)).Scan(&one)
+	if errors.Is(err, sql.ErrNoRows) {
+		return false, nil
+	}
+	if err != nil {
+		return false, err
+	}
+	return true, nil
+}
+
+// Create inserts a new product using the fields of productdom.Product
+// and returns the created row (value, not pointer).
+//
+// ポイント:
+// - usecase側は Product をまるごと渡してくる想定
+// - ID が空なら DB 側で gen_random_uuid()::text を採番
+// - updated_at は NOW()
+// - updated_by は必須とする (v.UpdatedBy)
+// - inspection_result, connected_token, printed_at/by, inspected_at/by は NULL もあり得る
+func (r *ProductRepositoryPG) Create(ctx context.Context, v productdom.Product) (productdom.Product, error) {
+	run := dbcommon.GetRunner(ctx, r.DB)
+
+	const q = `
+INSERT INTO products (
+  id,
+  model_id,
+  production_id,
+  inspection_result,
+  connected_token,
+  printed_at,
+  printed_by,
+  inspected_at,
+  inspected_by,
+  updated_at,
+  updated_by
+) VALUES (
+  COALESCE(NULLIF($1,''), gen_random_uuid()::text),
+  $2,
+  $3,
+  $4,
+  $5,
+  $6,
+  $7,
+  $8,
+  $9,
+  NOW(),
+  $10
+)
+RETURNING
+  id,
+  model_id,
+  production_id,
+  inspection_result,
+  connected_token,
+  printed_at,
+  printed_by,
+  inspected_at,
+  inspected_by,
+  updated_at,
+  updated_by
+`
+	row := run.QueryRowContext(
+		ctx,
+		q,
+		strings.TrimSpace(v.ID),
+		strings.TrimSpace(v.ModelID),
+		strings.TrimSpace(v.ProductionID),
+		strings.TrimSpace(string(v.InspectionResult)),
+		dbcommon.ToDBText(v.ConnectedToken),
+		dbcommon.ToDBTime(v.PrintedAt),
+		dbcommon.ToDBText(v.PrintedBy),
+		dbcommon.ToDBTime(v.InspectedAt),
+		dbcommon.ToDBText(v.InspectedBy),
+		strings.TrimSpace(v.UpdatedBy),
+	)
+
+	out, err := scanProduct(row)
+	if err != nil {
+		if dbcommon.IsUniqueViolation(err) {
+			return productdom.Product{}, productdom.ErrConflict
+		}
+		return productdom.Product{}, err
+	}
+	return out, nil
+}
+
+// Save does an upsert-style write of Product by ID.
+// If the row doesn't exist, it's inserted.
+// If it exists, it's updated.
+// This matches the `Save(ctx, p productdom.Product) (productdom.Product, error)` signature.
+func (r *ProductRepositoryPG) Save(ctx context.Context, v productdom.Product) (productdom.Product, error) {
+	run := dbcommon.GetRunner(ctx, r.DB)
+
+	const q = `
+INSERT INTO products (
+  id,
+  model_id,
+  production_id,
+  inspection_result,
+  connected_token,
+  printed_at,
+  printed_by,
+  inspected_at,
+  inspected_by,
+  updated_at,
+  updated_by
+) VALUES (
+  COALESCE(NULLIF($1,''), gen_random_uuid()::text),
+  $2,
+  $3,
+  $4,
+  $5,
+  $6,
+  $7,
+  $8,
+  $9,
+  NOW(),
+  $10
+)
+ON CONFLICT (id) DO UPDATE SET
+  model_id          = EXCLUDED.model_id,
+  production_id     = EXCLUDED.production_id,
+  inspection_result = EXCLUDED.inspection_result,
+  connected_token   = EXCLUDED.connected_token,
+  printed_at        = EXCLUDED.printed_at,
+  printed_by        = EXCLUDED.printed_by,
+  inspected_at      = EXCLUDED.inspected_at,
+  inspected_by      = EXCLUDED.inspected_by,
+  updated_at        = NOW(),
+  updated_by        = EXCLUDED.updated_by
+RETURNING
+  id,
+  model_id,
+  production_id,
+  inspection_result,
+  connected_token,
+  printed_at,
+  printed_by,
+  inspected_at,
+  inspected_by,
+  updated_at,
+  updated_by
+`
+	row := run.QueryRowContext(
+		ctx,
+		q,
+		strings.TrimSpace(v.ID),
+		strings.TrimSpace(v.ModelID),
+		strings.TrimSpace(v.ProductionID),
+		strings.TrimSpace(string(v.InspectionResult)),
+		dbcommon.ToDBText(v.ConnectedToken),
+		dbcommon.ToDBTime(v.PrintedAt),
+		dbcommon.ToDBText(v.PrintedBy),
+		dbcommon.ToDBTime(v.InspectedAt),
+		dbcommon.ToDBText(v.InspectedBy),
+		strings.TrimSpace(v.UpdatedBy),
+	)
+
+	out, err := scanProduct(row)
+	if err != nil {
+		return productdom.Product{}, err
+	}
+	return out, nil
+}
+
+// Delete removes a product by ID
+func (r *ProductRepositoryPG) Delete(ctx context.Context, id string) error {
+	run := dbcommon.GetRunner(ctx, r.DB)
+
+	res, err := run.ExecContext(ctx, `DELETE FROM products WHERE id = $1`, strings.TrimSpace(id))
+	if err != nil {
+		return err
+	}
+	aff, _ := res.RowsAffected()
+	if aff == 0 {
+		return productdom.ErrNotFound
+	}
+	return nil
+}
+
+// ============================================================
+// Extra helper/query methods (not required by ProductRepo interface)
+// but still useful in handlers or admin tooling.
+// We keep them for you.
+// ============================================================
+
+// List with filter/sort/pagination. Not part of usecase.ProductRepo but handy.
 func (r *ProductRepositoryPG) List(ctx context.Context, filter productdom.Filter, sort productdom.Sort, page productdom.Page) (productdom.PageResult, error) {
 	run := dbcommon.GetRunner(ctx, r.DB)
 
@@ -69,9 +275,17 @@ func (r *ProductRepositoryPG) List(ctx context.Context, filter productdom.Filter
 	// Data
 	q := fmt.Sprintf(`
 SELECT
-  id, model_id, production_id, inspection_result, connected_token,
-  printed_at, printed_by, inspected_at, inspected_by,
-  updated_at, updated_by
+  id,
+  model_id,
+  production_id,
+  inspection_result,
+  connected_token,
+  printed_at,
+  printed_by,
+  inspected_at,
+  inspected_by,
+  updated_at,
+  updated_by
 FROM products
 %s
 %s
@@ -123,53 +337,8 @@ func (r *ProductRepositoryPG) Count(ctx context.Context, filter productdom.Filte
 	return total, nil
 }
 
-func (r *ProductRepositoryPG) Create(ctx context.Context, in productdom.CreateProductInput) (*productdom.Product, error) {
-	run := dbcommon.GetRunner(ctx, r.DB)
-
-	// Optional: inspectionResult defaults to 'notYet' when nil
-	var inspPtr *string
-	if in.InspectionResult != nil {
-		s := string(*in.InspectionResult)
-		inspPtr = &s
-	}
-
-	const q = `
-INSERT INTO products (
-  id, model_id, production_id, inspection_result, connected_token,
-  printed_at, printed_by, inspected_at, inspected_by,
-  updated_at, updated_by
-) VALUES (
-  gen_random_uuid()::text, $1, $2, COALESCE($3, 'notYet'), $4,
-  $5, $6, $7, $8,
-  NOW(), $9
-)
-RETURNING
-  id, model_id, production_id, inspection_result, connected_token,
-  printed_at, printed_by, inspected_at, inspected_by,
-  updated_at, updated_by
-`
-	row := run.QueryRowContext(ctx, q,
-		strings.TrimSpace(in.ModelID),
-		strings.TrimSpace(in.ProductionID),
-		dbcommon.ToDBText(inspPtr),
-		dbcommon.ToDBText(in.ConnectedToken),
-		dbcommon.ToDBTime(in.PrintedAt),
-		dbcommon.ToDBText(in.PrintedBy),
-		dbcommon.ToDBTime(in.InspectedAt),
-		dbcommon.ToDBText(in.InspectedBy),
-		strings.TrimSpace(in.UpdatedBy),
-	)
-	p, err := scanProduct(row)
-	if err != nil {
-		if dbcommon.IsUniqueViolation(err) {
-			return nil, productdom.ErrConflict
-		}
-		return nil, err
-	}
-	return &p, nil
-}
-
-func (r *ProductRepositoryPG) Update(ctx context.Context, id string, in productdom.UpdateProductInput) (*productdom.Product, error) {
+// Update: partial update patch API (not required by interface)
+func (r *ProductRepositoryPG) Update(ctx context.Context, id string, in productdom.UpdateProductInput) (productdom.Product, error) {
 	run := dbcommon.GetRunner(ctx, r.DB)
 
 	sets := []string{}
@@ -220,6 +389,7 @@ func (r *ProductRepositoryPG) Update(ctx context.Context, id string, in productd
 	if in.UpdatedBy != nil {
 		setText("updated_by", in.UpdatedBy)
 	}
+
 	// always bump updated_at
 	sets = append(sets, fmt.Sprintf("updated_at = $%d", i))
 	args = append(args, time.Now().UTC())
@@ -235,40 +405,35 @@ UPDATE products
 SET %s
 WHERE id = $%d
 RETURNING
-  id, model_id, production_id, inspection_result, connected_token,
-  printed_at, printed_by, inspected_at, inspected_by,
-  updated_at, updated_by
+  id,
+  model_id,
+  production_id,
+  inspection_result,
+  connected_token,
+  printed_at,
+  printed_by,
+  inspected_at,
+  inspected_by,
+  updated_at,
+  updated_by
 `, strings.Join(sets, ", "), i)
 
 	row := run.QueryRowContext(ctx, q, args...)
 	p, err := scanProduct(row)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
-			return nil, productdom.ErrNotFound
+			return productdom.Product{}, productdom.ErrNotFound
 		}
 		if dbcommon.IsUniqueViolation(err) {
-			return nil, productdom.ErrConflict
+			return productdom.Product{}, productdom.ErrConflict
 		}
-		return nil, err
+		return productdom.Product{}, err
 	}
-	return &p, nil
+	return p, nil
 }
 
-func (r *ProductRepositoryPG) Delete(ctx context.Context, id string) error {
-	run := dbcommon.GetRunner(ctx, r.DB)
-	res, err := run.ExecContext(ctx, `DELETE FROM products WHERE id = $1`, strings.TrimSpace(id))
-	if err != nil {
-		return err
-	}
-	aff, _ := res.RowsAffected()
-	if aff == 0 {
-		return productdom.ErrNotFound
-	}
-	return nil
-}
-
-// UpdateInspection: specialized update for inspection fields
-func (r *ProductRepositoryPG) UpdateInspection(ctx context.Context, id string, in productdom.UpdateInspectionInput) (*productdom.Product, error) {
+// UpdateInspection: convenience helper
+func (r *ProductRepositoryPG) UpdateInspection(ctx context.Context, id string, in productdom.UpdateInspectionInput) (productdom.Product, error) {
 	run := dbcommon.GetRunner(ctx, r.DB)
 
 	sets := []string{
@@ -299,9 +464,17 @@ UPDATE products
 SET %s
 WHERE id = $%d
 RETURNING
-  id, model_id, production_id, inspection_result, connected_token,
-  printed_at, printed_by, inspected_at, inspected_by,
-  updated_at, updated_by
+  id,
+  model_id,
+  production_id,
+  inspection_result,
+  connected_token,
+  printed_at,
+  printed_by,
+  inspected_at,
+  inspected_by,
+  updated_at,
+  updated_by
 `, strings.Join(sets, ", "), i)
 
 	args = append(args, strings.TrimSpace(id))
@@ -310,15 +483,15 @@ RETURNING
 	p, err := scanProduct(row)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
-			return nil, productdom.ErrNotFound
+			return productdom.Product{}, productdom.ErrNotFound
 		}
-		return nil, err
+		return productdom.Product{}, err
 	}
-	return &p, nil
+	return p, nil
 }
 
-// ConnectToken: connect or disconnect token (TokenID=nil or empty => disconnect)
-func (r *ProductRepositoryPG) ConnectToken(ctx context.Context, id string, in productdom.ConnectTokenInput) (*productdom.Product, error) {
+// ConnectToken: convenience helper
+func (r *ProductRepositoryPG) ConnectToken(ctx context.Context, id string, in productdom.ConnectTokenInput) (productdom.Product, error) {
 	run := dbcommon.GetRunner(ctx, r.DB)
 
 	sets := []string{"updated_at = NOW()"}
@@ -338,9 +511,17 @@ UPDATE products
 SET %s
 WHERE id = $%d
 RETURNING
-  id, model_id, production_id, inspection_result, connected_token,
-  printed_at, printed_by, inspected_at, inspected_by,
-  updated_at, updated_by
+  id,
+  model_id,
+  production_id,
+  inspection_result,
+  connected_token,
+  printed_at,
+  printed_by,
+  inspected_at,
+  inspected_by,
+  updated_at,
+  updated_by
 `, strings.Join(sets, ", "), i)
 
 	args = append(args, strings.TrimSpace(id))
@@ -349,16 +530,16 @@ RETURNING
 	p, err := scanProduct(row)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
-			return nil, productdom.ErrNotFound
+			return productdom.Product{}, productdom.ErrNotFound
 		}
-		return nil, err
+		return productdom.Product{}, err
 	}
-	return &p, nil
+	return p, nil
 }
 
-// ========================
+// ============================================================
 // Helpers
-// ========================
+// ============================================================
 
 func scanProduct(s dbcommon.RowScanner) (productdom.Product, error) {
 	var (
@@ -368,10 +549,19 @@ func scanProduct(s dbcommon.RowScanner) (productdom.Product, error) {
 		updatedAt                                   time.Time
 		updatedBy                                   string
 	)
+
 	if err := s.Scan(
-		&id, &modelID, &productionID, &inspectionResult, &connectedNS,
-		&printedAtNT, &printedByNS, &inspectedAtNT, &inspectedByNS,
-		&updatedAt, &updatedBy,
+		&id,
+		&modelID,
+		&productionID,
+		&inspectionResult,
+		&connectedNS,
+		&printedAtNT,
+		&printedByNS,
+		&inspectedAtNT,
+		&inspectedByNS,
+		&updatedAt,
+		&updatedBy,
 	); err != nil {
 		return productdom.Product{}, err
 	}
@@ -491,10 +681,12 @@ func buildProductOrderBy(sort productdom.Sort) string {
 	default:
 		return ""
 	}
+
 	dir := strings.ToUpper(strings.TrimSpace(string(sort.Order)))
 	if dir != "ASC" && dir != "DESC" {
 		dir = "DESC"
 	}
-	// Tie-breaker by id for stability
+
+	// tie-break by id for deterministic results
 	return fmt.Sprintf("ORDER BY %s %s, id %s", col, dir, dir)
 }

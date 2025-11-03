@@ -1,4 +1,3 @@
-// backend/internal/adapters/out/db/member_repository_pg.go
 package db
 
 import (
@@ -9,6 +8,7 @@ import (
 	"strings"
 
 	dbcommon "narratives/internal/adapters/out/db/common"
+	common "narratives/internal/domain/common"
 	memdom "narratives/internal/domain/member"
 
 	"github.com/lib/pq"
@@ -27,7 +27,13 @@ func NewMemberRepositoryPG(db *sql.DB) *MemberRepositoryPG {
 // List (filter + sort + pagination)
 // ========================================
 // List は共通ユーティリティ（NormalizePage/BuildOrderBy/QueryCount/ComputeTotalPages）を使用します。
-func (r *MemberRepositoryPG) List(ctx context.Context, filter memdom.Filter, sort memdom.Sort, page memdom.Page) (memdom.PageResult, error) {
+func (r *MemberRepositoryPG) List(
+	ctx context.Context,
+	filter memdom.Filter,
+	sort common.Sort,
+	page common.Page,
+) (common.PageResult[memdom.Member], error) {
+
 	where, args := buildWhere(filter)
 
 	whereSQL := ""
@@ -41,7 +47,10 @@ func (r *MemberRepositoryPG) List(ctx context.Context, filter memdom.Filter, sor
 	switch colKey {
 	case "name":
 		// 名字→名前で並べ替え（空は最後）
-		orderBy = fmt.Sprintf("ORDER BY COALESCE(last_name,'') %s, COALESCE(first_name,'') %s", dir, dir)
+		orderBy = fmt.Sprintf(
+			"ORDER BY COALESCE(last_name,'') %s, COALESCE(first_name,'') %s",
+			dir, dir,
+		)
 	case "email":
 		orderBy = fmt.Sprintf("ORDER BY email %s", dir)
 	case "createdat", "joinedat":
@@ -49,7 +58,10 @@ func (r *MemberRepositoryPG) List(ctx context.Context, filter memdom.Filter, sor
 	case "updatedat":
 		orderBy = fmt.Sprintf("ORDER BY updated_at %s", dir)
 	case "permissions":
-		orderBy = fmt.Sprintf("ORDER BY array_length(permissions, 1) %s NULLS LAST", dir)
+		orderBy = fmt.Sprintf(
+			"ORDER BY array_length(permissions, 1) %s NULLS LAST",
+			dir,
+		)
 	}
 
 	// ページング
@@ -59,7 +71,7 @@ func (r *MemberRepositoryPG) List(ctx context.Context, filter memdom.Filter, sor
 	countSQL := fmt.Sprintf("SELECT COUNT(*) FROM members %s", whereSQL)
 	total, err := dbcommon.QueryCount(ctx, r.DB, countSQL, args...)
 	if err != nil {
-		return memdom.PageResult{}, err
+		return common.PageResult[memdom.Member]{}, err
 	}
 
 	// 本体（id は text キャストで取得）
@@ -83,7 +95,7 @@ LIMIT $%d OFFSET $%d
 
 	rows, err := r.DB.QueryContext(ctx, q, args...)
 	if err != nil {
-		return memdom.PageResult{}, err
+		return common.PageResult[memdom.Member]{}, err
 	}
 	defer rows.Close()
 
@@ -91,15 +103,15 @@ LIMIT $%d OFFSET $%d
 	for rows.Next() {
 		var m memdom.Member
 		if err := scanMember(rows, &m); err != nil {
-			return memdom.PageResult{}, err
+			return common.PageResult[memdom.Member]{}, err
 		}
 		items = append(items, m)
 	}
 	if err := rows.Err(); err != nil {
-		return memdom.PageResult{}, err
+		return common.PageResult[memdom.Member]{}, err
 	}
 
-	return memdom.PageResult{
+	return common.PageResult[memdom.Member]{
 		Items:      items,
 		TotalCount: total,
 		TotalPages: dbcommon.ComputeTotalPages(total, limit),
@@ -111,7 +123,13 @@ LIMIT $%d OFFSET $%d
 // ========================================
 // ListByCursor (simple id-based cursor)
 // ========================================
-func (r *MemberRepositoryPG) ListByCursor(ctx context.Context, filter memdom.Filter, sort memdom.Sort, cpage memdom.CursorPage) (memdom.CursorPageResult, error) {
+func (r *MemberRepositoryPG) ListByCursor(
+	ctx context.Context,
+	filter memdom.Filter,
+	sort memdom.Sort,
+	cpage memdom.CursorPage,
+) (memdom.CursorPageResult, error) {
+
 	where, args := buildWhere(filter)
 
 	// 固定: id 昇順
@@ -269,7 +287,10 @@ func (r *MemberRepositoryPG) Count(ctx context.Context, filter memdom.Filter) (i
 		whereSQL = "WHERE " + strings.Join(where, " AND ")
 	}
 	var total int
-	if err := r.DB.QueryRowContext(ctx, `SELECT COUNT(*) FROM members `+whereSQL, args...).Scan(&total); err != nil {
+	if err := r.DB.QueryRowContext(ctx,
+		`SELECT COUNT(*) FROM members `+whereSQL,
+		args...,
+	).Scan(&total); err != nil {
 		return 0, err
 	}
 	return total, nil
@@ -404,7 +425,10 @@ RETURNING
 // Delete
 // ========================================
 func (r *MemberRepositoryPG) Delete(ctx context.Context, id string) error {
-	res, err := r.DB.ExecContext(ctx, `DELETE FROM members WHERE id::text = $1`, id)
+	res, err := r.DB.ExecContext(ctx,
+		`DELETE FROM members WHERE id::text = $1`,
+		id,
+	)
 	if err != nil {
 		return err
 	}
@@ -419,7 +443,9 @@ func (r *MemberRepositoryPG) Delete(ctx context.Context, id string) error {
 // Reset (development/testing)
 // ========================================
 func (r *MemberRepositoryPG) Reset(ctx context.Context) error {
-	_, err := r.DB.ExecContext(ctx, `TRUNCATE TABLE members RESTART IDENTITY CASCADE`)
+	_, err := r.DB.ExecContext(ctx,
+		`TRUNCATE TABLE members RESTART IDENTITY CASCADE`,
+	)
 	return err
 }
 
@@ -434,8 +460,17 @@ func scanMember(s dbcommon.RowScanner, m *memdom.Member) error {
 		createdAt, updatedAt                 sql.NullTime
 	)
 
-	if err := s.Scan(&id, &firstName, &lastName, &email, &role,
-		&perms, &brands, &createdAt, &updatedAt); err != nil {
+	if err := s.Scan(
+		&id,
+		&firstName,
+		&lastName,
+		&email,
+		&role,
+		&perms,
+		&brands,
+		&createdAt,
+		&updatedAt,
+	); err != nil {
 		return err
 	}
 
@@ -459,7 +494,7 @@ func scanMember(s dbcommon.RowScanner, m *memdom.Member) error {
 }
 
 // 例: ソート指定の正規化
-func normalizeSort(sort memdom.Sort) (column string, direction string) {
+func normalizeSort(sort common.Sort) (column string, direction string) {
 	column = dbcommon.ToLowerString(sort.Column)
 	direction = dbcommon.ToUpperString(sort.Order)
 	if direction != "ASC" && direction != "DESC" {
@@ -476,7 +511,13 @@ func buildWhere(f memdom.Filter) ([]string, []any) {
 
 	// SearchQuery: 部分一致（first/last/kana/email）
 	if sq := strings.TrimSpace(f.SearchQuery); sq != "" {
-		where = append(where, fmt.Sprintf("(first_name ILIKE $%d OR last_name ILIKE $%d OR first_name_kana ILIKE $%d OR last_name_kana ILIKE $%d OR email ILIKE $%d)", i, i, i, i, i))
+		where = append(
+			where,
+			fmt.Sprintf(
+				"(first_name ILIKE $%d OR last_name ILIKE $%d OR first_name_kana ILIKE $%d OR last_name_kana ILIKE $%d OR email ILIKE $%d)",
+				i, i, i, i, i,
+			),
+		)
 		like := "%" + sq + "%"
 		args = append(args, like)
 		i++
@@ -534,4 +575,105 @@ func buildWhere(f memdom.Filter) ([]string, []any) {
 	}
 
 	return where, args
+}
+
+// ========================================
+// Update (partial update / patch)
+// ========================================
+func (r *MemberRepositoryPG) Update(
+	ctx context.Context,
+	id string,
+	patch memdom.MemberPatch,
+) (memdom.Member, error) {
+
+	sets := []string{}
+	args := []any{}
+	i := 1
+
+	// first_name
+	if patch.FirstName != nil {
+		sets = append(sets, fmt.Sprintf("first_name = $%d", i))
+		args = append(args, strings.TrimSpace(*patch.FirstName))
+		i++
+	}
+
+	// last_name
+	if patch.LastName != nil {
+		sets = append(sets, fmt.Sprintf("last_name = $%d", i))
+		args = append(args, strings.TrimSpace(*patch.LastName))
+		i++
+	}
+
+	// email
+	if patch.Email != nil {
+		sets = append(sets, fmt.Sprintf("email = $%d", i))
+		args = append(args, strings.TrimSpace(*patch.Email))
+		i++
+	}
+
+	// role
+	if patch.Role != nil {
+		sets = append(sets, fmt.Sprintf("role = $%d", i))
+		args = append(args, memdom.MemberRole(strings.TrimSpace(*patch.Role)))
+		i++
+	}
+
+	// permissions
+	if patch.Permissions != nil {
+		sets = append(sets, fmt.Sprintf("permissions = $%d", i))
+		args = append(args, pq.Array(dedupTrimStrings(*patch.Permissions)))
+		i++
+	}
+
+	// assigned_brands
+	if patch.AssignedBrands != nil {
+		sets = append(sets, fmt.Sprintf("assigned_brands = $%d", i))
+		args = append(args, pq.Array(dedupTrimStrings(*patch.AssignedBrands)))
+		i++
+	}
+
+	// updated_at は NOW() にする（明示指定がある場合はそれを使う）
+	if patch.UpdatedAt != nil {
+		sets = append(sets, fmt.Sprintf("updated_at = $%d", i))
+		args = append(args, patch.UpdatedAt.UTC())
+		i++
+	} else if len(sets) > 0 {
+		sets = append(sets, "updated_at = NOW()")
+	}
+
+	// もし何も変更指定がなければ現在のレコードをそのまま返す
+	if len(sets) == 0 {
+		return r.GetByID(ctx, id)
+	}
+
+	// WHERE句のために id を最後に追加
+	args = append(args, strings.TrimSpace(id))
+
+	q := fmt.Sprintf(`
+UPDATE members
+SET %s
+WHERE id::text = $%d
+RETURNING
+  id::text,
+  first_name,
+  last_name,
+  email,
+  role,
+  permissions,
+  assigned_brands,
+  created_at,
+  updated_at
+`, strings.Join(sets, ", "), i)
+
+	row := r.DB.QueryRowContext(ctx, q, args...)
+
+	var out memdom.Member
+	if err := scanMember(row, &out); err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return memdom.Member{}, memdom.ErrNotFound
+		}
+		return memdom.Member{}, err
+	}
+
+	return out, nil
 }

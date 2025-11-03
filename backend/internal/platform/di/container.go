@@ -4,196 +4,391 @@ package di
 import (
 	"context"
 	"database/sql"
-	"fmt"
 	"log"
+	"time"
 
-	// プラットフォーム系
-	"narratives/internal/platform/config"
-
-	// アウトバウンドポート（インターフェース）
-	"narratives/internal/ports/outbound"
-
-	// アウトバウンドアダプタ実装（例: PG, Firestore, FirebaseAdmin 等）
-	// ここはあなたの実装パッケージ名に合わせて import してください。
-	authadapter "narratives/internal/adapters/outbound/auth" // 仮: Firebase Admin 等
-	pgrepo "narratives/internal/adapters/outbound/db/repository"
-
-	// maileradapter "narratives/internal/adapters/outbound/notify/mailer"
-	// etc...
-
-	// アプリケーション層ユースケース
-	memberuc "narratives/internal/application/usecase"
-
-	// インバウンドアダプタ (HTTPハンドラ)
-	adminhttp "narratives/internal/adapters/inbound/http/admin"
-	// authhttp は /admin/users/bootstrap のような初期化APIハンドラをまとめる想定
-	authhttp "narratives/internal/adapters/inbound/http/auth" // ←あなた側で用意する前提
-
-	// GraphQL ハンドラ（gqlgen等で生成された http.Handler をラップしたもの）
-	graphhttp "narratives/internal/adapters/inbound/http/graphql"
-
-	// 必要ならDBドライバ
 	_ "github.com/lib/pq"
+
+	httpin "narratives/internal/adapters/in/http"
+	db "narratives/internal/adapters/out/db"
+
+	uc "narratives/internal/application/usecase"
+
+	appcfg "narratives/internal/infra/config"
 )
 
-// Container は main.go から使う依存オブジェクトの束。
-// これを返したい目的は：main.go を極限まで薄くすること。
+// Container centralizes dependency wiring (infra → repos → usecases).
+// main.go can either build everything manually (what you have now, which compiles),
+// or it can delegate that wiring to this Container.
 type Container struct {
-	// GraphQLエンドポイント用 http.Handler
-	GraphQLHandler graphhttp.Handler // あなたの実装に合わせて http.Handler でもOK
+	// Infra
+	Config *appcfg.Config
+	DB     *sql.DB
 
-	// RESTエンドポイント群
-	REST struct {
-		Admin *adminhttp.MembersHandler // /admin/members/... /admin/iam/...
-		Auth  *authhttp.AuthHandler     // /admin/users/bootstrap 等、管理者用ブートストラップAPI
-	}
-
-	// 下層リソースを閉じるためのコンテキスト
-	db        *sql.DB
-	auth      outbound.AuthProvider
-	cleanupFn []func()
+	// Application-layer usecases
+	AccountUC          *uc.AccountUsecase
+	AnnouncementUC     *uc.AnnouncementUsecase
+	AvatarUC           *uc.AvatarUsecase
+	BillingAddressUC   *uc.BillingAddressUsecase
+	BrandUC            *uc.BrandUsecase
+	CampaignUC         *uc.CampaignUsecase
+	CompanyUC          *uc.CompanyUsecase
+	DiscountUC         *uc.DiscountUsecase
+	InquiryUC          *uc.InquiryUsecase
+	InventoryUC        *uc.InventoryUsecase
+	InvoiceUC          *uc.InvoiceUsecase
+	ListUC             *uc.ListUsecase // may be nil for now
+	MemberUC           *uc.MemberUsecase
+	MessageUC          *uc.MessageUsecase
+	MintRequestUC      *uc.MintRequestUsecase
+	ModelUC            *uc.ModelUsecase
+	OrderUC            *uc.OrderUsecase
+	PaymentUC          *uc.PaymentUsecase
+	PermissionUC       *uc.PermissionUsecase
+	ProductUC          *uc.ProductUsecase
+	ProductionUC       *uc.ProductionUsecase
+	ProductBlueprintUC *uc.ProductBlueprintUsecase
+	SaleUC             *uc.SaleUsecase
+	ShippingAddressUC  *uc.ShippingAddressUsecase
+	TokenUC            *uc.TokenUsecase
+	TokenBlueprintUC   *uc.TokenBlueprintUsecase
+	TokenOperationUC   *uc.TokenOperationUsecase
+	TrackingUC         *uc.TrackingUsecase
+	UserUC             *uc.UserUsecase
+	WalletUC           *uc.WalletUsecase
 }
 
-// Close は Cloud Run 終了時などに呼んで安全にリソースを閉じる。
-func (c *Container) Close() {
-	if c.db != nil {
-		_ = c.db.Close()
+// NewContainer builds everything similarly to main.go.
+// NOTE: For now, ListUC is intentionally left nil to avoid interface
+// wiring issues around ListReader/ListPatcher/etc. We'll bring it back
+// once ListRepositoryPG and ListImageRepositoryPG are confirmed to
+// satisfy all required ports (UpdateImageID, ListByListID, GetByID, ...).
+func NewContainer(ctx context.Context) (*Container, error) {
+	// 1. Load runtime config
+	cfg := appcfg.Load()
+
+	// 2. Connect to Postgres
+	pgDB, err := sql.Open("postgres", cfg.DatabaseURL)
+	if err != nil {
+		return nil, err
 	}
-	for _, fn := range c.cleanupFn {
-		fn()
+	pgDB.SetMaxOpenConns(20)
+	pgDB.SetConnMaxLifetime(30 * time.Minute)
+
+	// Best-effort ping (non-fatal warning if it fails)
+	_ = pingDB(ctx, pgDB)
+
+	// 3. Outbound adapters (repositories)
+	accountRepo := db.NewAccountRepositoryPG(pgDB)
+
+	announcementRepo := db.NewAnnouncementRepositoryPG(pgDB)
+	announcementAttachmentRepo := db.NewAnnouncementAttachmentRepositoryPG(pgDB)
+
+	avatarRepo := db.NewAvatarRepositoryPG(pgDB)
+	avatarStateRepo := db.NewAvatarStateRepositoryPG(pgDB)
+	avatarIconRepo := db.NewAvatarIconRepositoryPG(pgDB)
+
+	billingAddressRepo := db.NewBillingAddressRepositoryPG(pgDB)
+
+	brandRepo := db.NewBrandRepositoryPG(pgDB)
+
+	campaignRepo := db.NewCampaignRepositoryPG(pgDB)
+	campaignImageRepo := db.NewCampaignImageRepositoryPG(pgDB)
+	campaignPerformanceRepo := db.NewCampaignPerformanceRepositoryPG(pgDB)
+
+	companyRepo := db.NewCompanyRepositoryPG(pgDB)
+
+	discountRepo := db.NewDiscountRepositoryPG(pgDB)
+
+	inquiryRepo := db.NewInquiryRepositoryPG(pgDB)
+	// We intentionally do NOT construct inquiryAttachmentRepo here,
+	// because main.go (which compiles) didn't pass one to the UC either.
+
+	inventoryRepo := db.NewInventoryRepositoryPG(pgDB)
+
+	invoiceRepo := db.NewInvoiceRepositoryPG(pgDB)
+
+	// ⚠ listRepo / listImageRepo intentionally omitted for now,
+	// because ListUsecase wiring breaks on interface mismatch.
+	// listRepo := db.NewListRepositoryPG(pgDB)
+	// listImageRepo := db.NewListImageRepositoryPG(pgDB)
+
+	memberRepo := db.NewMemberRepositoryPG(pgDB)
+
+	messageRepo := db.NewMessageRepositoryPG(pgDB)
+	messageImageRepo := db.NewMessageImageRepositoryPG(pgDB)
+
+	mintRequestRepo := db.NewMintRequestRepositoryPG(pgDB)
+
+	modelRepo := db.NewModelRepositoryPG(pgDB)
+
+	orderRepo := db.NewOrderRepositoryPG(pgDB)
+
+	paymentRepo := db.NewPaymentRepositoryPG(pgDB)
+
+	permissionRepo := db.NewPermissionRepositoryPG(pgDB)
+
+	productRepo := db.NewProductRepositoryPG(pgDB)
+	productBlueprintRepo := db.NewProductBlueprintRepositoryPG(pgDB)
+
+	productionRepo := db.NewProductionRepositoryPG(pgDB)
+
+	saleRepo := db.NewSaleRepositoryPG(pgDB)
+
+	shippingAddressRepo := db.NewShippingAddressRepositoryPG(pgDB)
+
+	tokenRepo := db.NewTokenRepositoryPG(pgDB)
+	tokenBlueprintRepo := db.NewTokenBlueprintRepositoryPG(pgDB)
+	tokenContentsRepo := db.NewTokenContentsRepositoryPG(pgDB)
+	tokenIconRepo := db.NewTokenIconRepositoryPG(pgDB)
+	tokenOperationRepo := db.NewTokenOperationRepositoryPG(pgDB)
+
+	trackingRepo := db.NewTrackingRepositoryPG(pgDB)
+
+	userRepo := db.NewUserRepositoryPG(pgDB)
+
+	walletRepo := db.NewWalletRepositoryPG(pgDB)
+
+	// 4. Application layer usecases
+
+	accountUC := uc.NewAccountUsecase(
+		accountRepo,
+	)
+
+	announcementUC := uc.NewAnnouncementUsecase(
+		announcementRepo,
+		announcementAttachmentRepo,
+		nil, // ObjectStoragePort for announcement attachments (GCS etc.) not wired yet
+	)
+
+	avatarUC := uc.NewAvatarUsecase(
+		avatarRepo,
+		avatarStateRepo,
+		avatarIconRepo,
+		nil, // avatar image object storage not wired yet
+	)
+
+	billingAddressUC := uc.NewBillingAddressUsecase(
+		billingAddressRepo,
+	)
+
+	brandUC := uc.NewBrandUsecase(
+		brandRepo,
+	)
+
+	campaignUC := uc.NewCampaignUsecase(
+		campaignRepo,
+		campaignImageRepo,
+		campaignPerformanceRepo,
+		nil, // campaign image object storage not wired yet
+	)
+
+	companyUC := uc.NewCompanyUsecase(
+		companyRepo,
+	)
+
+	discountUC := uc.NewDiscountUsecase(
+		discountRepo,
+	)
+
+	orderUC := uc.NewOrderUsecase(
+		orderRepo,
+		// (extend here if NewOrderUsecase signature expands later)
+	)
+
+	inquiryUC := uc.NewInquiryUsecase(
+		inquiryRepo,
+		nil, // inquiryAttachmentRepo not passed in main.go either
+		nil, // attachment object storage not wired
+	)
+
+	inventoryUC := uc.NewInventoryUsecase(
+		inventoryRepo,
+	)
+
+	invoiceUC := uc.NewInvoiceUsecase(
+		invoiceRepo,
+	)
+
+	// ─────────────────────────────
+	// ListUC
+	// ─────────────────────────────
+	// main.go (the "source of truth") currently compiles.
+	// container.go was failing because the ListXxx* repos here in this file
+	// don't satisfy all List* interfaces (ListPatcher.UpdateImageID, etc.).
+	//
+	// Until we unify those interfaces or write adapter wrappers,
+	// we keep ListUC nil in the container. This keeps container.go buildable
+	// without fighting interface completeness right now.
+	var listUC *uc.ListUsecase = nil
+
+	memberUC := uc.NewMemberUsecase(
+		memberRepo,
+	)
+
+	// MessageUsecase signature (confirmed from main.go):
+	//   NewMessageUsecase(message.Repository,
+	//                     messageImage.RepositoryPort,
+	//                     messageImage.ObjectStoragePort)
+	messageUC := uc.NewMessageUsecase(
+		messageRepo,
+		messageImageRepo,
+		nil, // message image object storage (e.g. GCS) not wired yet
+	)
+
+	mintRequestUC := uc.NewMintRequestUsecase(
+		mintRequestRepo,
+	)
+
+	modelUC := uc.NewModelUsecase(
+		modelRepo,
+	)
+
+	paymentUC := uc.NewPaymentUsecase(
+		paymentRepo,
+	)
+
+	permissionUC := uc.NewPermissionUsecase(
+		permissionRepo,
+	)
+
+	productUC := uc.NewProductUsecase(
+		productRepo,
+	)
+
+	productionUC := uc.NewProductionUsecase(
+		productionRepo,
+	)
+
+	productBlueprintUC := uc.NewProductBlueprintUsecase(
+		productBlueprintRepo,
+	)
+
+	saleUC := uc.NewSaleUsecase(
+		saleRepo,
+	)
+
+	shippingAddressUC := uc.NewShippingAddressUsecase(
+		shippingAddressRepo,
+	)
+
+	tokenUC := uc.NewTokenUsecase(
+		tokenRepo,
+	)
+
+	tokenBlueprintUC := uc.NewTokenBlueprintUsecase(
+		tokenBlueprintRepo,
+		tokenContentsRepo,
+		tokenIconRepo,
+	)
+
+	tokenOperationUC := uc.NewTokenOperationUsecase(
+		tokenOperationRepo,
+	)
+
+	trackingUC := uc.NewTrackingUsecase(
+		trackingRepo,
+	)
+
+	userUC := uc.NewUserUsecase(
+		userRepo,
+	)
+
+	walletUC := uc.NewWalletUsecase(
+		walletRepo,
+	)
+
+	// 5. Return assembled container
+	return &Container{
+		Config: cfg,
+		DB:     pgDB,
+
+		AccountUC:          accountUC,
+		AnnouncementUC:     announcementUC,
+		AvatarUC:           avatarUC,
+		BillingAddressUC:   billingAddressUC,
+		BrandUC:            brandUC,
+		CampaignUC:         campaignUC,
+		CompanyUC:          companyUC,
+		DiscountUC:         discountUC,
+		InquiryUC:          inquiryUC,
+		InventoryUC:        inventoryUC,
+		InvoiceUC:          invoiceUC,
+		ListUC:             listUC, // (currently nil)
+		MemberUC:           memberUC,
+		MessageUC:          messageUC,
+		MintRequestUC:      mintRequestUC,
+		ModelUC:            modelUC,
+		OrderUC:            orderUC,
+		PaymentUC:          paymentUC,
+		PermissionUC:       permissionUC,
+		ProductUC:          productUC,
+		ProductionUC:       productionUC,
+		ProductBlueprintUC: productBlueprintUC,
+		SaleUC:             saleUC,
+		ShippingAddressUC:  shippingAddressUC,
+		TokenUC:            tokenUC,
+		TokenBlueprintUC:   tokenBlueprintUC,
+		TokenOperationUC:   tokenOperationUC,
+		TrackingUC:         trackingUC,
+		UserUC:             userUC,
+		WalletUC:           walletUC,
+	}, nil
+}
+
+// RouterDeps exposes the deps bundle for the HTTP router,
+// mirroring main.go's final httpin.NewRouter(...) call.
+func (c *Container) RouterDeps() httpin.RouterDeps {
+	return httpin.RouterDeps{
+		AccountUC:          c.AccountUC,
+		AnnouncementUC:     c.AnnouncementUC,
+		AvatarUC:           c.AvatarUC,
+		BillingAddressUC:   c.BillingAddressUC,
+		BrandUC:            c.BrandUC,
+		CampaignUC:         c.CampaignUC,
+		CompanyUC:          c.CompanyUC,
+		DiscountUC:         c.DiscountUC,
+		FulfillmentUC:      nil, // not wired yet
+		InquiryUC:          c.InquiryUC,
+		InventoryUC:        c.InventoryUC,
+		InvoiceUC:          c.InvoiceUC,
+		ListUC:             c.ListUC, // will be nil until we wire it properly
+		MemberUC:           c.MemberUC,
+		MessageUC:          c.MessageUC,
+		MintRequestUC:      c.MintRequestUC,
+		ModelUC:            c.ModelUC,
+		OrderUC:            c.OrderUC,
+		PaymentUC:          c.PaymentUC,
+		PermissionUC:       c.PermissionUC,
+		ProductUC:          c.ProductUC,
+		ProductionUC:       c.ProductionUC,
+		ProductBlueprintUC: c.ProductBlueprintUC,
+		SaleUC:             c.SaleUC,
+		ShippingAddressUC:  c.ShippingAddressUC,
+		TokenUC:            c.TokenUC,
+		TokenBlueprintUC:   c.TokenBlueprintUC,
+		TokenOperationUC:   c.TokenOperationUC,
+		TrackingUC:         c.TrackingUC,
+		UserUC:             c.UserUC,
+		WalletUC:           c.WalletUC,
 	}
 }
 
-// Build は DIコンテナを初期化して返す。
-// - 環境変数/設定の読み込み済み cfg をもらう
-// - DB接続や外部クライアントを組み立てる
-// - Repository実装とUsecaseとHandlerを全部つなぐ
-func Build(cfg *config.Config) (*Container, func(), error) {
-	ctx := context.Background()
-
-	// ------------------------------------------------------------
-	// 1. 外部リソース初期化 (DB / Auth / Firestore / Redis / etc.)
-	// ------------------------------------------------------------
-
-	// ※ Postgres 等のRDB
-	db, err := sql.Open("postgres", cfg.DatabaseURL)
-	if err != nil {
-		return nil, nil, fmt.Errorf("open db: %w", err)
+// Close releases shared infra, mainly the DB connection pool.
+func (c *Container) Close() error {
+	if c.DB != nil {
+		return c.DB.Close()
 	}
-	// DBプール設定など（必要に応じて）
-	// db.SetMaxOpenConns(...)
-	// db.SetConnMaxLifetime(...)
+	return nil
+}
 
-	// Pingで疎通チェック
-	if pingErr := db.PingContext(ctx); pingErr != nil {
-		log.Printf("[di] WARN: db ping failed: %v", pingErr)
-		// ここで return してもいいし、"db無しモード"許容なら続行する。
+// pingDB is best-effort DB health check at boot.
+func pingDB(ctx context.Context, dbConn *sql.DB) error {
+	ctxPing, cancel := context.WithTimeout(ctx, 5*time.Second)
+	defer cancel()
+	if err := dbConn.PingContext(ctxPing); err != nil {
+		log.Printf("[container] WARN: DB ping failed: %v", err)
+		return err
 	}
-
-	// ※ Firebase Admin / AuthProvider
-	//   - ここでは "authadapter.NewFirebaseAuthProvider(cfg)" のような
-	//     あなた側で用意予定のコンストラクタを想定。
-	authProv, err := authadapter.NewFirebaseAuthProvider(ctx, cfg.FirebaseCredJSONPath)
-	if err != nil {
-		log.Printf("[di] WARN: failed to init AuthProvider, fallback to no-auth: %v", err)
-		// fallback用のダミー実装でも可
-		// authProv = authadapter.NewNoopAuthProvider()
-		return nil, nil, fmt.Errorf("init auth provider: %w", err)
-	}
-
-	// （必要なら）Firestore, Redis, GCS, SendGrid などもここで初期化して
-	// cleanupFn に Close() を積んでいく
-
-	// cleanup 関数たちをまとめる
-	cleanupList := []func(){}
-	cleanupList = append(cleanupList, func() {
-		// 例: FirestoreClient.Close() とか、外部コネクションの解放
-	})
-
-	// ------------------------------------------------------------
-	// 2. Repository (outbound adapter) を初期化
-	// ------------------------------------------------------------
-	//
-	// MemberRepository は Firestore or Postgres 側の実装など、
-	// あなたの実態に合わせて選ぶ。
-	//
-	// ここでは例として Postgres の実装を使うイメージ:
-	memberRepo := pgrepo.NewMemberRepositoryPG(db)
-	// ↑ 実装名はあなたのリポジトリ名に合わせて修正してください。
-	// Firestoreベースなら Firestore用の NewMemberRepositoryFS(...) を呼ぶ。
-
-	// ------------------------------------------------------------
-	// 3. Usecase を初期化
-	// ------------------------------------------------------------
-
-	inviteUC := &memberuc.InviteMember{
-		Auth: authProv,
-		Repo: memberRepo,
-	}
-	updateRolesUC := &memberuc.UpdateMemberRoles{
-		Auth: authProv,
-		Repo: memberRepo,
-	}
-	deleteMemberUC := &memberuc.DeleteMember{
-		Auth: authProv,
-		Repo: memberRepo,
-	}
-	elevateRootUC := &memberuc.ElevateRootOnSignIn{
-		Auth: authProv,
-		Repo: memberRepo,
-	}
-	deleteByEmailUC := &memberuc.AdminDeleteUserByEmail{
-		Auth: authProv,
-		Repo: memberRepo,
-	}
-
-	// ------------------------------------------------------------
-	// 4. Inbound HTTP Handler を初期化
-	// ------------------------------------------------------------
-
-	// /admin/members/... を扱うハンドラ
-	adminMembersHandler := &adminhttp.MembersHandler{
-		InviteUC:        inviteUC,
-		UpdateUC:        updateRolesUC,
-		DeleteUC:        deleteMemberUC,
-		ElevateUC:       elevateRootUC,
-		DeleteByEmailUC: deleteByEmailUC,
-	}
-
-	// /admin/users/bootstrap 等を扱う別の管理系ハンドラ
-	// これはあなたの側で AuthHandler (or BootstrapHandler) 的なものを
-	// internal/adapters/inbound/http/auth/ に用意しておく前提。
-	adminAuthHandler := authhttp.NewAuthHandler(authhttp.AuthHandlerDeps{
-		AuthProvider: authProv,
-		MemberRepo:   memberRepo,
-		// ほか必要ならここで注入
-	})
-
-	// GraphQL ハンドラ
-	// gqlgen等で生成された http.Handler をラップした c.GraphQLHandler を想定。
-	// graphhttp.NewGraphQLHandler(...) はあなた側で用意している前提。
-	gqlHandler := graphhttp.NewGraphQLHandler(graphhttp.Deps{
-		// ここに Usecase や Repo を注入して resolver が使えるようにする
-		MemberRepo: memberRepo,
-		Auth:       authProv,
-	})
-
-	// ------------------------------------------------------------
-	// 5. Container を組み立てて返す
-	// ------------------------------------------------------------
-
-	container := &Container{
-		GraphQLHandler: gqlHandler,
-		db:             db,
-		auth:           authProv,
-		cleanupFn:      cleanupList,
-	}
-	container.REST.Admin = adminMembersHandler
-	container.REST.Auth = adminAuthHandler
-
-	cleanup := func() {
-		container.Close()
-	}
-
-	return container, cleanup, nil
+	return nil
 }
