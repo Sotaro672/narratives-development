@@ -1,7 +1,7 @@
 import React from "react";
 import ReactDOM from "react-dom/client";
 import App from "./App";
-import "../index.css"; // Tailwindやreset.cssなどの全体スタイル
+import "../assets/styles/global.css"; // Tailwindやreset.cssなどの全体スタイル
 
 // ============================================================================
 // Vite + React 18 Entry Point

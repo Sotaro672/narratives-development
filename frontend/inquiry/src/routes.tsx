@@ -1,7 +1,5 @@
 import { Routes, Route, Navigate } from "react-router-dom";
-import InquiryListPage from "./pages/InquiryListPage";
-import InquiryDetailPage from "./pages/InquiryDetailPage";
-import InquiryAssignPage from "./pages/InquiryAssignPage";
+import InquiryListPage from "./pages/InquiryManagementPage";
 
 /**
  * InquiriesRoutes
@@ -12,8 +10,6 @@ export default function InquiriesRoutes() {
   return (
     <Routes>
       <Route path="/" element={<InquiryListPage />} />
-      <Route path="/:id" element={<InquiryDetailPage />} />
-      <Route path="/assign/:id" element={<InquiryAssignPage />} />
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
   );

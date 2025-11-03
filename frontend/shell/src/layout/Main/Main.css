@@ -1,0 +1,20 @@
+/* 画面から Header/Sidebar を引いた可視領域 */
+.main-area {
+  position: fixed;
+  top: var(--header-h, 64px);
+  left: var(--sidebar-w, 280px);
+  right: 0;
+  bottom: 0;
+
+  /* スクロール設定 */
+  overflow-y: auto;
+  overflow-x: hidden;
+
+  /* テーマ変数（未定義時はデフォルト） */
+  background: var(--background, #ffffff);
+  color: var(--foreground, #111111);
+
+  /* レイアウト安定化 */
+  min-width: 0;
+  min-height: 0;
+}

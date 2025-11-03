@@ -1,8 +1,9 @@
 import { useState } from "react";
-import { BrowserRouter } from "react-router-dom"; // ← 追加
+import { BrowserRouter, Routes, Route } from "react-router-dom"; // ← 追加
 import Header from "../layout/Header/Header";
 import Sidebar from "../layout/Sidebar/Sidebar";
 import PageFrame from "../layout/PageFrame";
+import InquiryManagementPage from "../../../inquiry/src/pages/InquiryManagementPage";
 
 export default function App() {
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
@@ -22,6 +23,14 @@ export default function App() {
           </main>
         </div>
       </div>
+      <Routes>
+        {/* ...existing routes... */}
+
+        {/* Sidebarの「問い合わせ」が遷移するパスに対応させる */}
+        <Route path="/inquiry" element={<InquiryManagementPage />} /> {/* 予備ルート */}
+
+        {/* ...existing routes... */}
+      </Routes>
     </BrowserRouter>
   );
 }

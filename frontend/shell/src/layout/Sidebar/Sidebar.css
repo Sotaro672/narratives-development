@@ -17,6 +17,7 @@
   --sb-active: color-mix(in oklch, var(--sb-accent) 85%, transparent);
   --sb-chip: color-mix(in oklch, var(--sb-accent) 92%, white 8%);
   --sb-badge: var(--color-destructive);
+  --sb-footer-h: 64px;
 }
 
 /* ─ Base / Layout ─ */
@@ -25,7 +26,7 @@
   background:var(--sb-bg);
   color:var(--sb-fg);
   border-right:1px solid var(--sb-border);
-
+  padding-top: 0 !important;
   /* ここが重要：フッターを押し出さず固定するための Flex コンテナ */
   display:flex;
   flex-direction:column;
@@ -34,27 +35,32 @@
   box-sizing:border-box;
 }
 
-/* ナビ部分だけをスクロール領域にする（最重要） */
+/* ナビ部分だけをスクロール領域にし、フッター分の高さを差し引く */
 .sidebar-nav{
   display:flex;
   flex-direction:column;
   gap:6px;
-  padding:0px 8px;
-
-  flex:1 0 0;     /* 余白をすべて受け持つ（比率を強める） */
-  min-height:0;   /* これが無いと overflow が効かない場合がある */
+  padding:0 8px;
+  margin-top:0 !important;
+  flex:1 1 auto;                 /* 取りすぎを抑えつつ余白を受け持つ */
+  min-height:0;                  /* overflow を効かせるため必須 */
+  max-height:calc(100dvh - var(--sb-footer-h)); /* フッター分を差し引く */
   overflow-y:auto;
   overflow-x:auto;
 }
 
-/* フッターは縮ませない・常に下に居る */
-.sidebar-footer{
-  flex:0 0 auto;              /* つぶれ防止（決定打） */
-  padding:12px 16px;
-  font-weight:700;
-  color:var(--sb-fg);
-  background:var(--sb-bg);
-  border-top:1px solid var(--sb-border);
+/* 下部のフッターブロックを常時見えるように固定＋高さ基準を適用 */
+.sidebar > .p-6.border-t.border-border{
+  position:sticky;
+  bottom:0;
+  background:#ffffff;
+  z-index:2;
+  min-height:var(--sb-footer-h);
+  display:flex;
+  align-items:center;
+
+  /* 任意: 黒枠を残す場合 */
+  border:1px solid #000000 !important;
 }
 
 /* ─ Items ─ */
@@ -121,6 +127,38 @@
 /* ─（任意）白背景/黒文字を強制したい場合 ─ */
 .sidebar,
 .sidebar .submenu-container,
-.sidebar-footer{ background-color:#ffffff !important; }
 .sidebar, .sidebar .sidebar-item, .sidebar .submenu-item, .sidebar .sidebar-footer{ color:#111111 !important; }
 .sidebar .icon-left, .sidebar .chevron{ color:#111111 !important; stroke:#111111 !important; }
+
+/* Sidebar as full-height column */
+.sidebar {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  background: #ffffff;
+  color: #111111;
+}
+
+/* Fix the bottom block as a sticky footer */
+.sidebar > .p-6.border-t.border-border {
+  position: sticky;
+  bottom: 0;
+  background: #ffffff;
+  z-index: 2;             /* above scrolling content */
+}
+
+/* Sticky footer block at the bottom of the sidebar */
+.sidebar > .p-6.border-t.border-border {
+  position: sticky;
+  bottom: 0;
+  background: #ffffff;
+  z-index: 2;
+
+  /* Black border around the block */
+  border: 1px solid #000000 !important;
+}
+
+/* Optional: ensure border color is visible if using custom tokens */
+.border-border {
+  border-color: #e5e7eb;
+}

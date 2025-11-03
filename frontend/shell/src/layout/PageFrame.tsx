@@ -1,38 +1,78 @@
+// frontend/shell/src/layout/PageFrame.tsx
 import { Outlet, useLocation } from "react-router-dom";
 import Header from "./Header/Header";
 import Sidebar from "./Sidebar/Sidebar";
+import Main from "./Main/Main";
 import { Filter, RotateCw } from "lucide-react";
 import { useMemo } from "react";
 
 /**
- * 画像のレイアウトから「フレーム要素のみ」を抽出:
+ * フレーム要素のみ（データは各ページが <Outlet /> で差し込む）
  * - 上部ヘッダー
  * - 左サイドバー
- * - 右側のページタイトル行（例: 問い合わせ管理）
- * - 角丸のカード（枠）
- * - カラム見出しのみ（行データは描画しない）
- * - 右上のリフレッシュボタン
- *
- * 行データや詳細UIは各ページが <Outlet /> に差し込む想定。
+ * - 右側のページタイトル行
+ * - 角丸カード（枠）
+ * - 問い合わせページのみカラム見出し
+ * - 右上リフレッシュボタン
  */
 export default function PageFrame() {
   const location = useLocation();
+  const p = location.pathname;
 
-  // シンプルにパスでページタイトルを決める（必要に応じて拡張）
+  // Sidebar.tsx の定義に完全準拠（全て単数形に統一）
   const title = useMemo(() => {
-    if (location.pathname.startsWith("/inquiries")) return "問い合わせ管理";
-    if (location.pathname.startsWith("/listings")) return "商品管理";
-    if (location.pathname.startsWith("/mint")) return "トークン管理";
-    if (location.pathname.startsWith("/preview")) return "出品管理";
-    if (location.pathname.startsWith("/orders")) return "注文管理";
-    if (location.pathname.startsWith("/ads")) return "広告管理";
-    if (location.pathname.startsWith("/org")) return "組織管理";
-    if (location.pathname.startsWith("/accounts")) return "財務管理";
-    if (location.pathname.startsWith("/transactions")) return "入出金履歴";
-    return "";
-  }, [location.pathname]);
+    if (p.startsWith("/inquiry")) return "問い合わせ管理";
 
-  // 問い合わせ画面のカラム枠（画像の通り）
+    // 商品グループ: /product, /productBlueprint, /production, /inventory
+    if (
+      p.startsWith("/product") ||
+      p.startsWith("/productBlueprint") ||
+      p.startsWith("/production") ||
+      p.startsWith("/inventory")
+    ) {
+      return "商品管理";
+    }
+
+    // トークングループ: /token, /tokenBlueprint, /mint, /operations
+    if (
+      p.startsWith("/token") ||
+      p.startsWith("/tokenBlueprint") ||
+      p.startsWith("/mint") ||
+      p.startsWith("/operation")
+    ) {
+      return "トークン管理";
+    }
+
+    // 出品: /list
+    if (p.startsWith("/list")) return "出品管理";
+
+    // 注文: /order
+    if (p.startsWith("/order")) return "注文管理";
+
+    // 広告: /ads
+    if (p.startsWith("/ads")) return "広告管理";
+
+    // 組織グループ: /company, /member, /brand, /permission
+    if (
+      p.startsWith("/company") ||
+      p.startsWith("/member") ||
+      p.startsWith("/brand") ||
+      p.startsWith("/permission")
+    ) {
+      return "組織管理";
+    }
+
+    // 財務: /finance（トップ）
+    if (p.startsWith("/finance")) return "財務管理";
+
+    // 財務サブ: /transaction, /account
+    if (p.startsWith("/transaction")) return "入出金履歴";
+    if (p.startsWith("/account")) return "口座";
+
+    return "";
+  }, [p]);
+
+  // 問い合わせ画面のカラム枠（行データは描画しない）
   const inquiryColumns = [
     { label: "問い合わせID", filterable: false },
     { label: "件名", filterable: false },
@@ -44,9 +84,7 @@ export default function PageFrame() {
     { label: "応答日", filterable: false },
   ];
 
-  // 現在のページが「問い合わせ」なら上のカラム、他ページは空（枠のみ）
-  const columns =
-    location.pathname.startsWith("/inquiries") ? inquiryColumns : [];
+  const showInquiryTableHead = p.startsWith("/inquiry");
 
   return (
     <div className="frame">
@@ -57,7 +95,7 @@ export default function PageFrame() {
           <Sidebar isOpen />
         </aside>
 
-        <section className="content">
+        <Main>
           {/* ページタイトル行 */}
           {title && (
             <div className="content-header">
@@ -76,14 +114,13 @@ export default function PageFrame() {
             </div>
           )}
 
-          {/* 角丸カード（枠のみ）。Outlet はボディ内に差し込まれる */}
+          {/* 角丸カード（枠）。Outlet はボディ内へ差し込み */}
           <div className="card">
-            {/* テーブルヘッダー枠（カラム名のみ。行データは出さない） */}
-            {columns.length > 0 && (
+            {showInquiryTableHead ? (
               <div className="table">
                 <div className="thead">
                   <div className="tr">
-                    {columns.map((col) => (
+                    {inquiryColumns.map((col) => (
                       <div key={col.label} className="th">
                         <span>{col.label}</span>
                         {col.filterable && (
@@ -94,22 +131,18 @@ export default function PageFrame() {
                   </div>
                 </div>
 
-                {/* 行データは描画しない（枠のみ）。必要ならここに <Outlet /> で注入 */}
+                {/* 明細は描画しない。必要時は各ページが Outlet で挿入 */}
                 <div className="tbody empty">
-                  {/* 各ページが明細を描画したい場合はここに入る */}
                   <Outlet />
                 </div>
               </div>
-            )}
-
-            {/* カラムを持たないページの場合も、カード枠の中に Outlet を差し込む */}
-            {columns.length === 0 && (
+            ) : (
               <div className="card-body">
                 <Outlet />
               </div>
             )}
           </div>
-        </section>
+        </Main>
       </div>
     </div>
   );
