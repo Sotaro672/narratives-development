@@ -1,4 +1,5 @@
 //frontend\operation\src\pages\tokenOperation.tsx
+import List from "../../../shell/src/layout/List/List";
 export default function TokenOperationPage() {
-  return <h1 className="text-2xl font-semibold">トークン運用</h1>;
+  return <List title="トークン運用" />;
 }

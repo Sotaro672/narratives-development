@@ -1,4 +1,5 @@
 //frontend\tokenBlueprint\src\pages\tokenBlueprintManagement.tsx
+import List from "../../../shell/src/layout/List/List";
 export default function TokenBlueprintManagementPage() {
-  return <h1 className="text-2xl font-semibold">トークン設計管理</h1>;
+  return <List title="トークン設計管理" />;
 }

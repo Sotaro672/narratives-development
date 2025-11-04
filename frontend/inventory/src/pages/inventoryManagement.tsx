@@ -1,4 +1,5 @@
 //frontend\inventory\src\pages\inventoryManagement.tsx
+import List from "../../../shell/src/layout/List/List";
 export default function InventoryManagementPage() {
-  return <h1 className="text-2xl font-semibold">在庫管理</h1>;
+  return <List title="在庫管理" />;
 }
