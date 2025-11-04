@@ -92,6 +92,13 @@ export default function Sidebar({ isOpen }: SidebarProps) {
   // ✅ 排他開閉用のキーを1つだけ保持
   const [openKey, setOpenKey] = useState<OpenKey>(null);
 
+  // ✅ 初期表示でルート("/")なら問い合わせへ誘導（デフォルト選択）
+  useEffect(() => {
+    if (location.pathname === "/" || location.pathname === "") {
+      navigate("/inquiry", { replace: true });
+    }
+  }, [location.pathname, navigate]);
+
   // ルートに応じて自動的に該当グループを開く（他は閉じる）
   useEffect(() => {
     const p = location.pathname;

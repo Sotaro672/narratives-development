@@ -1,10 +1,232 @@
+/* ========================================
+   共通レイアウト（リストページ用）
+   ======================================== */
+
 .list-container {
-  padding: 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+  padding: 1.5rem;
+  background-color: var(--background, #f9f9fb);
+  min-height: 100%;
 }
 
+/* タイトル */
 .list-title {
-  font-size: 20px;
+  font-size: 1.25rem;
   font-weight: 600;
+  color: var(--text-primary, #222);
+  margin: 0;
+}
+
+/* ========================================
+   アクションエリア（ボタン群）
+   ======================================== */
+.list-actions {
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+}
+
+.list-actions-right {
+  display: flex;
+  gap: 0.75rem;
+}
+
+/* ボタン: 通常 / プライマリ */
+.lp-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.4rem;
+  font-size: 0.9rem;
+  font-weight: 500;
+  border-radius: 6px;
+  border: 1px solid #ccc;
+  background: #fff;
+  color: #333;
+  padding: 0.45rem 0.9rem;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.lp-btn:hover {
+  background-color: #f3f3f3;
+}
+
+.lp-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.lp-btn-primary {
+  background-color: #2563eb;
+  color: #fff;
+  border-color: #2563eb;
+}
+
+.lp-btn-primary:hover {
+  background-color: #1d4ed8;
+}
+
+.lp-btn-icon {
+  width: 16px;
+  height: 16px;
+}
+
+/* アイコンボタン（リセットなど） */
+.lp-icon-btn {
+  display: inline-flex;
+  justify-content: center;
+  align-items: center;
+  width: 32px;
+  height: 32px;
+  border-radius: 6px;
+  border: 1px solid #ccc;
+  background: #fff;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.lp-icon-btn:hover {
+  background-color: #f3f3f3;
+}
+
+.lp-icon-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* 回転アニメーション */
+.lp-rotate {
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
+
+/* ========================================
+   テーブルスタイル
+   ======================================== */
+
+.lp-card {
+  border: 1px solid #ddd;
+  border-radius: 8px;
+  background: #fff;
+  overflow: hidden;
+}
+
+.lp-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.lp-thead {
+  background-color: #f6f7fb;
+  text-align: left;
+  border-bottom: 1px solid #ddd;
+}
+
+.lp-row-head {
+  height: 40px;
+}
+
+.lp-th {
+  padding: 0.75rem 1rem;
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: #333;
+  border-bottom: 1px solid #e3e3e3;
+}
+
+.lp-tbody tr {
+  transition: background-color 0.2s ease;
+}
+
+.lp-tbody tr:hover {
+  background-color: #f9fafb;
+}
+
+.lp-tbody td {
+  padding: 0.75rem 1rem;
+  border-bottom: 1px solid #eee;
+  font-size: 0.9rem;
+  color: #444;
+}
+
+/* ========================================
+   カテゴリラベル
+   ======================================== */
+.lp-brand-pill {
+  display: inline-block;
+  background-color: #eef2ff;
+  color: #3730a3;
+  font-size: 0.75rem;
+  font-weight: 500;
+  padding: 0.2rem 0.6rem;
+  border-radius: 9999px;
+}
+
+/* ========================================
+   テーブル列内フィルターボタン
+   ======================================== */
+.lp-th-filter {
+  margin-left: 0.4rem;
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  color: #666;
+  transition: color 0.2s ease;
+}
+
+.lp-th-filter:hover {
   color: #111;
-  margin-bottom: 16px;
+}
+.list-pagination {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 12px;
+  margin-top: 1.25rem;
+}
+
+.lp-page-info {
+  font-size: 0.85rem;
+  color: #666;
+}
+
+/* ─────────────────────────────────────────
+   ヘッダー（タイトル＋右寄せボタン）を一段で横並び
+   ───────────────────────────────────────── */
+.list-header {
+  display: flex;
+  align-items: center;   /* 高さを揃える */
+  gap: 12px;
+  flex-wrap: nowrap;     /* 折り返し禁止 */
+  margin-bottom: 12px;
+}
+
+.list-header.one-line {
+  /* クラス指定が来たときも同じ振る舞いに */
+  display: flex;
+  align-items: center;
+}
+
+.list-header-spacer {
+  flex: 1 1 auto;        /* 右側ボタンを右端へ押し出す */
+}
+
+/* 右側のボタン群 */
+.list-actions-right {
+  display: flex;
+  align-items: center;   /* ボタンの縦位置を中央に */
+  gap: 12px;
+}
+
+/* ヘッダー内のタイトルを一行に保つ（必要に応じて縮む） */
+.list-title {
+  white-space: nowrap;
+  line-height: 1.1;
 }

@@ -1,0 +1,61 @@
+/* ドロップダウン本体のみ（トリガーやアイコンのCSSは削除） */
+.admin-dropdown {
+  position: absolute;
+  top: 44px;     /* ヘッダー内のトリガー直下想定 */
+  right: 0;
+  width: 280px;
+  background: #fff;
+  border: 1px solid #E8E8EE;
+  border-radius: 14px;
+  box-shadow: 0 20px 40px rgba(0,0,0,0.08);
+  padding: 10px 0;
+  z-index: 1000;
+}
+
+/* ヘッダー（名前/メール） */
+.admin-dropdown-header {
+  padding: 10px 16px 6px;
+}
+.admin-dropdown-title {
+  font-weight: 700;
+  color: #111319;
+  margin-bottom: 2px;
+}
+.admin-dropdown-email {
+  font-size: 13px;
+  color: #6b6b77;
+}
+
+/* 仕切り線 */
+.admin-dropdown-sep {
+  height: 1px;
+  background: #F1F1F5;
+  margin: 8px 0;
+}
+
+/* メニュー項目 */
+.admin-dropdown-item {
+  width: 100%;
+  background: transparent;
+  border: none;
+  text-align: left;
+  padding: 10px 16px;
+  font-size: 14px;
+  color: #1a1a22;
+  cursor: pointer;
+}
+.admin-dropdown-item:hover {
+  background: #F7F7FB;
+}
+
+/* ログアウト（赤文字） */
+.admin-dropdown-item.logout {
+  color: #DC2626; /* red-600 */
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.logout-icon {
+  width: 16px;
+  height: 16px;
+}

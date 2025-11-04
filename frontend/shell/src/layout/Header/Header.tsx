@@ -1,34 +1,60 @@
-import { useState } from "react";
-import { Bell, MessageSquare, User } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
+import { Bell, MessageSquare, UserRound, ChevronDown } from "lucide-react";
 import "./Header.css";
+import AdminPanel from "./AdminPanel";
 
 interface HeaderProps {
-  /** 未読通知件数（赤バッジ） */
-  announcementsCount?: number;
-  /** 未読メッセージ件数（赤バッジ） */
-  messagesCount?: number;
-  /** サイドバー開閉トグル（オプション） */
+  /** サイドバー開閉トグル（任意） */
   onToggleSidebar?: () => void;
-  /** ログイン中ユーザー名 */
-  username?: string;
+
+  /** ユーザー情報 */
+  username?: string; // 表示名（AdminPanelのタイトルに利用）
+  email?: string;    // メール表示（ドロップダウン内のみ使用）
+  announcementsCount?: number;
+  messagesCount?: number;
 }
 
 export default function Header({
+  username = "管理者",
+  email = "admin@narratives.com",
   announcementsCount = 3,
   messagesCount = 2,
-  username = "Guest",
 }: HeaderProps) {
-  const [showProfileMenu, setShowProfileMenu] = useState(false);
+  const [openAdmin, setOpenAdmin] = useState(false);
+
+  const panelContainerRef = useRef<HTMLDivElement | null>(null);
+  const triggerRef = useRef<HTMLButtonElement | null>(null);
+
+  // 外側クリックで閉じる
+  useEffect(() => {
+    const onDocClick = (e: MouseEvent) => {
+      const t = e.target as Node;
+      if (!panelContainerRef.current) return;
+      if (panelContainerRef.current.contains(t)) return;
+      setOpenAdmin(false);
+    };
+    document.addEventListener("mousedown", onDocClick);
+    return () => document.removeEventListener("mousedown", onDocClick);
+  }, []);
+
+  // Esc キーで閉じる
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setOpenAdmin(false);
+    };
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, []);
 
   return (
     <header className="app-header">
-      {/* ───────────── Left: Brand / Menu ───────────── */}
+      {/* Left: Brand */}
       <div className="brand">
         <span className="brand-main">Solid State</span>
         <span className="brand-sub">Console</span>
       </div>
 
-      {/* ───────────── Right: Actions ───────────── */}
+      {/* Right: Actions */}
       <div className="actions">
         {/* 通知 */}
         <button className="icon-btn" aria-label="通知">
@@ -54,23 +80,29 @@ export default function Header({
           </span>
         </button>
 
-        {/* プロフィール */}
-        <div className="relative">
+        {/* ユーザー（トリガー & ドロップダウン） */}
+        <div className="relative" ref={panelContainerRef}>
           <button
-            className="icon-btn"
-            aria-label="プロフィール"
-            onClick={() => setShowProfileMenu((v) => !v)}
+            ref={triggerRef}
+            className="icon-btn user-trigger"
+            aria-haspopup="menu"
+            aria-expanded={openAdmin}
+            aria-controls="admin-dropdown"
+            onClick={() => setOpenAdmin((v) => !v)} // toggle
           >
-            <User className="icon" aria-hidden />
-            <span className="username">{username}</span>
+            <UserRound className="icon" aria-hidden />
+            <ChevronDown className={`caret ${openAdmin ? "open" : ""}`} aria-hidden />
           </button>
 
-          {showProfileMenu && (
-            <div className="profile-menu">
-              <button className="menu-item">設定</button>
-              <button className="menu-item">ログアウト</button>
-            </div>
-          )}
+          <AdminPanel
+            open={openAdmin}
+            displayName={username}
+            email={email}
+            onEditProfile={() => console.log("プロフィール変更")}
+            onChangeEmail={() => console.log("メールアドレス変更")}
+            onChangePassword={() => console.log("パスワード変更")}
+            onLogout={() => console.log("ログアウト")}
+          />
         </div>
       </div>
     </header>
