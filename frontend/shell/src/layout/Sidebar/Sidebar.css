@@ -44,7 +44,6 @@
   margin-top:0 !important;
   flex:1 1 auto;                 /* 取りすぎを抑えつつ余白を受け持つ */
   min-height:0;                  /* overflow を効かせるため必須 */
-  max-height:calc(100dvh - var(--sb-footer-h)); /* フッター分を差し引く */
   overflow-y:auto;
   overflow-x:auto;
 }
@@ -125,16 +124,18 @@
 }
 
 /* ─（任意）白背景/黒文字を強制したい場合 ─ */
-.sidebar,
-.sidebar .submenu-container,
-.sidebar, .sidebar .sidebar-item, .sidebar .submenu-item, .sidebar .sidebar-footer{ color:#111111 !important; }
+.sidebar-footer {
+  height: 50px;
+  border-color: #000000,2px;
+}
 .sidebar .icon-left, .sidebar .chevron{ color:#111111 !important; stroke:#111111 !important; }
 
 /* Sidebar as full-height column */
 .sidebar {
   display: flex;
   flex-direction: column;
-  height: 100vh;
+  height: calc(100vh - 100px);
+  width: 240px;
   background: #ffffff;
   color: #111111;
 }

@@ -10,7 +10,6 @@ export default function Main() {
         {/* Sidebarの「問い合わせ」を押した時に表示されるページ */}
         {<Route path="/inquiry" element={<InquiryManagementPage />} />}
       </Routes>
-      <h1 className="text-2xl font-semibold">問い合わせ管理</h1>
       {/* 必要に応じて他のページを追加 */}
       {/* <Route path="/listings" element={<ListingsPage />} /> */}
     </div>

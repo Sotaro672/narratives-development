@@ -10,8 +10,7 @@ import {
   Target,
   Building2,
   Wallet,
-  ChevronRight,
-  ChevronDown,
+  ChevronRight, // ← これだけ使う（回転で下向き表示）
 } from "lucide-react";
 
 const OPEN_INQUIRIES_DUMMY = 1;
@@ -32,21 +31,18 @@ type MenuItem = {
 
 type SubItem = { label: string; path: string };
 
+// 開く可能性がある親キー
+type OpenKey = "products" | "tokens" | "org" | "finance" | null;
+
 export default function Sidebar({ isOpen }: SidebarProps) {
   const navigate = useNavigate();
   const location = useLocation();
 
   const openInquiriesCount = OPEN_INQUIRIES_DUMMY;
 
-  // 第一階層（親）
   const menuItems: MenuItem[] = useMemo(
     () => [
-      {
-        label: "問い合わせ",
-        path: "/inquiry", // ← ここをクリックすると Main.tsx の /inquiry ルートに遷移
-        icon: MessageSquare,
-        badgeCount: openInquiriesCount > 0 ? openInquiriesCount : null,
-      },
+      { label: "問い合わせ", path: "/inquiry", icon: MessageSquare, badgeCount: openInquiriesCount > 0 ? openInquiriesCount : null },
       { label: "商品", path: "/product", icon: Box, hasSubmenu: true },
       { label: "トークン", path: "/token", icon: Coins, hasSubmenu: true },
       { label: "出品", path: "/list", icon: Store },
@@ -93,41 +89,54 @@ export default function Sidebar({ isOpen }: SidebarProps) {
     []
   );
 
-  const [openMap, setOpenMap] = useState<Record<string, boolean>>({
-    products: false,
-    tokens: false,
-    org: false,
-    finance: true,
-  });
+  // ✅ 排他開閉用のキーを1つだけ保持
+  const [openKey, setOpenKey] = useState<OpenKey>(null);
 
+  // ルートに応じて自動的に該当グループを開く（他は閉じる）
   useEffect(() => {
     const p = location.pathname;
-    const next: Record<string, boolean> = {
-      products:
-        p.startsWith("/product") ||
-        p.startsWith("/productBlueprint") ||
-        p.startsWith("/production") ||
-        p.startsWith("/inventory"),
-      tokens:
-        p.startsWith("/token") ||
-        p.startsWith("/tokenBlueprint") ||
-        p.startsWith("/mint") ||
-        p.startsWith("/operation"),
-      org:
-        p.startsWith("/company") ||
-        p.startsWith("/member") ||
-        p.startsWith("/brand") ||
-        p.startsWith("/permission"),
-      finance:
-        p.startsWith("/finance") ||
-        p.startsWith("/transaction") ||
-        p.startsWith("/account"),
-    };
-    if (Object.values(next).some(Boolean)) setOpenMap(next);
+    if (
+      p.startsWith("/product") ||
+      p.startsWith("/productBlueprint") ||
+      p.startsWith("/production") ||
+      p.startsWith("/inventory")
+    ) {
+      setOpenKey("products");
+    } else if (
+      p.startsWith("/token") ||
+      p.startsWith("/tokenBlueprint") ||
+      p.startsWith("/mint") ||
+      p.startsWith("/operation")
+    ) {
+      setOpenKey("tokens");
+    } else if (
+      p.startsWith("/company") ||
+      p.startsWith("/member") ||
+      p.startsWith("/brand") ||
+      p.startsWith("/permission")
+    ) {
+      setOpenKey("org");
+    } else if (
+      p.startsWith("/finance") ||
+      p.startsWith("/transaction") ||
+      p.startsWith("/account")
+    ) {
+      setOpenKey("finance");
+    } else {
+      // それ以外（問い合わせ/出品/注文/広告など）はすべて閉じる
+      setOpenKey(null);
+    }
   }, [location.pathname]);
 
-  const toggleOpen = (key: keyof typeof openMap) =>
-    setOpenMap((s) => ({ ...s, [key]: !s[key] }));
+  // 親クリック時：同じキーなら閉じる、別キーならそれを開いて他は閉じる
+  const toggleExclusive = (key: Exclude<OpenKey, null>) =>
+    setOpenKey((curr) => (curr === key ? null : key));
+
+  // 汎用：サブメニュー無しの行をクリックしたらすべて閉じる
+  const navigateAndCloseAll = (path: string) => {
+    setOpenKey(null);
+    navigate(path);
+  };
 
   if (!isOpen) return null;
 
@@ -136,16 +145,22 @@ export default function Sidebar({ isOpen }: SidebarProps) {
       <nav className="sidebar-nav">
         {menuItems.map(({ label, path, icon: Icon, hasSubmenu, badgeCount }) => {
           const isActiveTop =
-            location.pathname === path ||
-            location.pathname.startsWith(path + "/");
+            location.pathname === path || location.pathname.startsWith(path + "/");
 
+          // 各グループのオープン判定
+          const isProductsOpen = openKey === "products";
+          const isTokensOpen   = openKey === "tokens";
+          const isOrgOpen      = openKey === "org";
+          const isFinanceOpen  = openKey === "finance";
+
+          // 商品
           if (label === "商品") {
-            const isOpen = !!openMap.products;
+            const isOpen = isProductsOpen;
             return (
               <div key={path} className={`group-block ${isOpen ? "group-open" : ""}`}>
                 <button
                   type="button"
-                  onClick={() => toggleOpen("products")}
+                  onClick={() => toggleExclusive("products")}
                   className={`sidebar-item parent ${isActiveTop ? "active" : ""}`}
                   aria-expanded={isOpen}
                   aria-controls="submenu-products"
@@ -156,12 +171,8 @@ export default function Sidebar({ isOpen }: SidebarProps) {
                     {typeof badgeCount === "number" && badgeCount > 0 && (
                       <span className="badge">{badgeCount}</span>
                     )}
-                    {hasSubmenu &&
-                      (isOpen ? (
-                        <ChevronDown className="chevron" />
-                      ) : (
-                        <ChevronRight className="chevron" />
-                      ))}
+                    {/* ▶ を回転させて ▼ を表現 */}
+                    <ChevronRight className="chevron" aria-hidden />
                   </span>
                 </button>
                 {isOpen && (
@@ -186,13 +197,14 @@ export default function Sidebar({ isOpen }: SidebarProps) {
             );
           }
 
+          // トークン
           if (label === "トークン") {
-            const isOpen = !!openMap.tokens;
+            const isOpen = isTokensOpen;
             return (
               <div key={path} className={`group-block ${isOpen ? "group-open" : ""}`}>
                 <button
                   type="button"
-                  onClick={() => toggleOpen("tokens")}
+                  onClick={() => toggleExclusive("tokens")}
                   className={`sidebar-item parent ${isActiveTop ? "active" : ""}`}
                   aria-expanded={isOpen}
                   aria-controls="submenu-tokens"
@@ -203,12 +215,7 @@ export default function Sidebar({ isOpen }: SidebarProps) {
                     {typeof badgeCount === "number" && badgeCount > 0 && (
                       <span className="badge">{badgeCount}</span>
                     )}
-                    {hasSubmenu &&
-                      (isOpen ? (
-                        <ChevronDown className="chevron" />
-                      ) : (
-                        <ChevronRight className="chevron" />
-                      ))}
+                    <ChevronRight className="chevron" aria-hidden />
                   </span>
                 </button>
                 {isOpen && (
@@ -233,13 +240,14 @@ export default function Sidebar({ isOpen }: SidebarProps) {
             );
           }
 
+          // 組織
           if (label === "組織") {
-            const isOpen = !!openMap.org;
+            const isOpen = isOrgOpen;
             return (
               <div key={path} className={`group-block ${isOpen ? "group-open" : ""}`}>
                 <button
                   type="button"
-                  onClick={() => toggleOpen("org")}
+                  onClick={() => toggleExclusive("org")}
                   className={`sidebar-item parent ${isActiveTop ? "active" : ""}`}
                   aria-expanded={isOpen}
                   aria-controls="submenu-org"
@@ -250,12 +258,7 @@ export default function Sidebar({ isOpen }: SidebarProps) {
                     {typeof badgeCount === "number" && badgeCount > 0 && (
                       <span className="badge">{badgeCount}</span>
                     )}
-                    {hasSubmenu &&
-                      (isOpen ? (
-                        <ChevronDown className="chevron" />
-                      ) : (
-                        <ChevronRight className="chevron" />
-                      ))}
+                    <ChevronRight className="chevron" aria-hidden />
                   </span>
                 </button>
                 {isOpen && (
@@ -280,13 +283,14 @@ export default function Sidebar({ isOpen }: SidebarProps) {
             );
           }
 
+          // 財務
           if (label === "財務") {
-            const isOpen = !!openMap.finance;
+            const isOpen = isFinanceOpen;
             return (
               <div key={path} className={`group-block ${isOpen ? "group-open" : ""}`}>
                 <button
                   type="button"
-                  onClick={() => toggleOpen("finance")}
+                  onClick={() => toggleExclusive("finance")}
                   className={`sidebar-item parent ${isActiveTop ? "active" : ""}`}
                   aria-expanded={isOpen}
                   aria-controls="submenu-finance"
@@ -297,12 +301,7 @@ export default function Sidebar({ isOpen }: SidebarProps) {
                     {typeof badgeCount === "number" && badgeCount > 0 && (
                       <span className="badge">{badgeCount}</span>
                     )}
-                    {hasSubmenu &&
-                      (isOpen ? (
-                        <ChevronDown className="chevron" />
-                      ) : (
-                        <ChevronRight className="chevron" />
-                      ))}
+                    <ChevronRight className="chevron" aria-hidden />
                   </span>
                 </button>
                 {isOpen && (
@@ -331,7 +330,7 @@ export default function Sidebar({ isOpen }: SidebarProps) {
           return (
             <button
               key={path}
-              onClick={() => navigate(path)} // ← ここで /inquiry などに遷移（Main.tsx が受ける）
+              onClick={() => navigateAndCloseAll(path)} // ← クリック時に全て閉じる
               className={`sidebar-item ${isActiveTop ? "active" : ""}`}
               aria-current={isActiveTop ? "page" : undefined}
             >
@@ -348,11 +347,8 @@ export default function Sidebar({ isOpen }: SidebarProps) {
         })}
       </nav>
 
-      {/* フッター */}
       <div className="sidebar-footer">
-        <div className="flex items-center gap-3">
-          <h1 className="font-medium">Narratives</h1>
-        </div>
+        <h2>Narratives</h2>
       </div>
     </aside>
   );
