@@ -5,10 +5,10 @@
   align-items: stretch;
 }
 
-/* Sidebar は固定幅 240px */
+/* Sidebar は固定幅 180px */
 .flex.flex-1.flex-row > .sidebar {
-  flex: 0 0 240px;
-  width: 240px;
+  flex: 0 0 180px;
+  width: 180px;
   display: flex; /* 子の高さを満たす */
 }
 
