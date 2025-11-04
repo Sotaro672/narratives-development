@@ -1,15 +1,14 @@
 import { Routes, Route, Navigate } from "react-router-dom";
-import InquiryListPage from "./pages/InquiryManagementPage";
+import InquiryManagementPage from "./pages/InquiryManagementPage";
 
 /**
  * InquiriesRoutes
  * 問い合わせモジュールのルート構成。
- * shell から import("inquiries/routes") でロードされる。
  */
-export default function InquiriesRoutes() {
+export default function InquiryRoutes() {
   return (
     <Routes>
-      <Route path="/" element={<InquiryListPage />} />
+      <Route path="/" element={<InquiryManagementPage />} />
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
   );

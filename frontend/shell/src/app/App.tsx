@@ -1,3 +1,4 @@
+// frontend/shell/src/app/App.tsx
 import { useState } from "react";
 import { BrowserRouter } from "react-router-dom";
 import Header from "../layout/Header/Header";

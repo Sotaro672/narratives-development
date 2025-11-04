@@ -1,31 +1,28 @@
+// frontend/shell/src/main.tsx
 import React from "react";
 import ReactDOM from "react-dom/client";
 import App from "./App";
-import "../assets/styles/global.css"; // Tailwindやreset.cssなどの全体スタイル
+import "../assets/styles/global.css"; // Tailwind・reset.css など全体スタイル
 
 // ============================================================================
 // Vite + React 18 Entry Point
 // ============================================================================
-//
-// このファイルは「アプリのエントリーポイント」です。
 // App.tsx（ルート構成）をブラウザの <div id="root"> にマウントします。
-// ここ以外ではReactDOMを呼び出しません。
+// ここ以外では ReactDOM を呼び出しません。
 // ============================================================================
 
-// HTML側のroot要素を取得
 const container = document.getElementById("root");
-
 if (!container) {
   throw new Error(
-    "Root element not found. Ensure index.html includes <div id='root'></div>."
+    "Root element not found. Please ensure index.html includes <div id='root'></div>."
   );
 }
 
-// React 18 の createRoot API を使用
+// React 18 の createRoot API
 const root = ReactDOM.createRoot(container);
 
 // -----------------------------------------------------------------------------
-// StrictMode: 開発中の副作用チェック（本番では無効）
+// StrictMode: 開発時の副作用検出（本番では無効）
 // -----------------------------------------------------------------------------
 root.render(
   <React.StrictMode>
@@ -42,9 +39,9 @@ if (import.meta.hot) {
 }
 
 // -----------------------------------------------------------------------------
-// 今後の拡張ポイント例：
+// 拡張ポイント（例）
 // -----------------------------------------------------------------------------
-// 1. Firebase AppCheck や Analytics の初期化
+// 1. Firebase AppCheck / Analytics 初期化
 // 2. Sentry.init({ dsn: "...", environment: import.meta.env.MODE });
-// 3. Cloud Run 環境変数の初期ロード
+// 3. Cloud Run 環境変数のロード
 // -----------------------------------------------------------------------------
