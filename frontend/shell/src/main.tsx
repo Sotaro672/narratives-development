@@ -1,8 +1,8 @@
 // frontend/shell/src/main.tsx
 import React from "react";
 import ReactDOM from "react-dom/client";
-import App from "./App";
-import "../assets/styles/global.css"; // Tailwind・reset.css など全体スタイル
+import App from "./app/App";
+import "./assets/styles/global.css"; // Tailwind・reset.css など全体スタイル
 
 // ============================================================================
 // Vite + React 18 Entry Point

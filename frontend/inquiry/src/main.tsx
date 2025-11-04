@@ -1,4 +1,4 @@
-import React from "react";
+// frontend/inquiry/src/main.tsx
 import { createRoot } from "react-dom/client";
 import InquiryManagementPage from "./pages/InquiryManagementPage";
 

@@ -1,3 +1,4 @@
+<!-- frontend/shell/index.html -->
 <!DOCTYPE html>
 <html lang="ja">
   <head>
@@ -6,7 +7,10 @@
       name="viewport"
       content="width=device-width, initial-scale=1.0, maximum-scale=1.0"
     />
-    <meta name="description" content="Solid State Console – Unified Brand Console" />
+    <meta
+      name="description"
+      content="Solid State Console – Unified Brand Console"
+    />
     <meta name="theme-color" content="#0f172a" />
 
     <!-- Favicon -->
@@ -25,16 +29,14 @@
       href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap"
       rel="stylesheet"
     />
-
-    <!-- TailwindCSS / index.css は Vite が自動注入 -->
   </head>
 
-  <body class="bg-gray-50 text-gray-900 font-inter antialiased">
+  <body class="bg-slate-900 text-white font-inter antialiased">
     <!-- React root -->
     <div id="root"></div>
 
     <!-- Entry point for Vite -->
-    <script type="module" src="/src/app/main.tsx"></script>
+    <script type="module" src="/src/main.tsx"></script>
 
     <!-- Module Federation Manifest (自動生成) -->
     <!-- vite build 時に manifest.json が生成される -->

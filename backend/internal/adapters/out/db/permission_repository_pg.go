@@ -316,9 +316,6 @@ func (r *PermissionRepositoryPG) Update(ctx context.Context, id string, patch pe
 		return r.GetByID(ctx, id)
 	}
 
-	// updated_at を必ず NOW() にする
-	sets = append(sets, fmt.Sprintf("updated_at = NOW()"))
-
 	args = append(args, strings.TrimSpace(id))
 
 	q := fmt.Sprintf(`

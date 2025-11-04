@@ -71,7 +71,7 @@ export default function Sidebar({ isOpen }: SidebarProps) {
     () => [
       { label: "設計", path: "/tokenBlueprint" },
       { label: "ミント", path: "/mint" },
-      { label: "運用", path: "/operations" },
+      { label: "運用", path: "/operation" },
     ],
     []
   );
@@ -88,7 +88,7 @@ export default function Sidebar({ isOpen }: SidebarProps) {
   const financeSubItems: SubItem[] = useMemo(
     () => [
       { label: "入出金履歴", path: "/transaction" },
-      { label: "口座", path: "/accounts" },
+      { label: "口座", path: "/account" },
     ],
     []
   );
@@ -112,7 +112,7 @@ export default function Sidebar({ isOpen }: SidebarProps) {
         p.startsWith("/token") ||
         p.startsWith("/tokenBlueprint") ||
         p.startsWith("/mint") ||
-        p.startsWith("/operations"),
+        p.startsWith("/operation"),
       org:
         p.startsWith("/company") ||
         p.startsWith("/member") ||
@@ -120,8 +120,8 @@ export default function Sidebar({ isOpen }: SidebarProps) {
         p.startsWith("/permission"),
       finance:
         p.startsWith("/finance") ||
-        p.startsWith("/transactions") ||
-        p.startsWith("/accounts"),
+        p.startsWith("/transaction") ||
+        p.startsWith("/account"),
     };
     if (Object.values(next).some(Boolean)) setOpenMap(next);
   }, [location.pathname]);
