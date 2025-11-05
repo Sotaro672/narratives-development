@@ -1,8 +1,8 @@
-// frontend/shell/src/layout/List/List.tsx
 import { Children, useEffect, useMemo, useState } from "react";
 import type { ReactNode } from "react";
-import { Plus, RotateCw } from "lucide-react";
+import { Plus } from "lucide-react";
 import Pagination from "../../../../shared/ui/pagination";
+import RefreshButton from "../../../../shared/ui/refresh";
 import "./List.css";
 
 interface ListProps {
@@ -47,7 +47,9 @@ export default function List({
 
   return (
     <div className="list-container">
-      {/* 1段：左にタイトル、右にボタン群（同じ高さで横並び） */}
+      {/* ───────────────────────────────────────
+          上部ヘッダー: タイトル + ボタン群
+      ─────────────────────────────────────── */}
       <div className="list-header one-line">
         <h1 className="list-title">{title}</h1>
         <div className="list-header-spacer" />
@@ -59,20 +61,19 @@ export default function List({
             </button>
           )}
           {showResetButton && (
-            <button
-              className="lp-icon-btn"
-              aria-label="リフレッシュ"
-              title="リフレッシュ"
+            <RefreshButton
               onClick={onReset}
-              disabled={isResetting}
-            >
-              <RotateCw size={18} className={isResetting ? "lp-rotate" : ""} aria-hidden />
-            </button>
+              loading={isResetting}
+              title="リフレッシュ"
+              ariaLabel="リフレッシュ"
+            />
           )}
         </div>
       </div>
 
-      {/* テーブル */}
+      {/* ───────────────────────────────────────
+          テーブル領域
+      ─────────────────────────────────────── */}
       <div className="lp-card">
         <table className="lp-table" role="table" aria-label={`${title} 一覧`}>
           <thead className="lp-thead">
@@ -88,12 +89,14 @@ export default function List({
         </table>
       </div>
 
-      {/* ページネーション */}
+      {/* ───────────────────────────────────────
+          ページネーション
+      ─────────────────────────────────────── */}
       <Pagination currentPage={page} totalPages={totalPages} onPageChange={setPage} />
     </div>
   );
 }
 
-/** ← 未使用エラーが出ないように、import せずに再エクスポートだけ行う */
+/** ← 未使用エラーが出ないように、import せずに再エクスポートのみ行う */
 export { default as FilterableTableHeader } from "../../../../shared/ui/filterable-table-header";
 export { default as SortableTableHeader } from "../../../../shared/ui/sortable-table-header";

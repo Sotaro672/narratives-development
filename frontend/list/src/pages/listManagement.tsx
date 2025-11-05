@@ -1,12 +1,9 @@
 // frontend/list/src/pages/listManagement.tsx
-import * as React from "react";
-import List from "../../../shell/src/layout/List/List";
-import { Filter } from "lucide-react";
-
-// Lucideアイコンの型をReact汎用コンポーネントにキャスト（TS2786対策）
-const IconFilter = Filter as unknown as React.ComponentType<
-  React.SVGProps<SVGSVGElement>
->;
+import React, { useMemo, useState } from "react";
+import List, {
+  FilterableTableHeader,
+  SortableTableHeader,
+} from "../../../shell/src/layout/List/List";
 
 type ListingRow = {
   id: string;
@@ -48,71 +45,168 @@ const LISTINGS: ListingRow[] = [
   },
 ];
 
+type SortKey = "id" | "stock" | null;
+
 export default function ListManagementPage() {
-  const [sortAsc, setSortAsc] = React.useState(true);
+  // ── Filter states ─────────────────────────────────────────
+  const [productFilter, setProductFilter] = useState<string[]>([]);
+  const [brandFilter, setBrandFilter] = useState<string[]>([]);
+  const [tokenFilter, setTokenFilter] = useState<string[]>([]);
+  const [managerFilter, setManagerFilter] = useState<string[]>([]);
+  const [statusFilter, setStatusFilter] = useState<string[]>([]);
 
-  const rows = React.useMemo(() => {
-    const data = [...LISTINGS];
-    data.sort((a, b) =>
-      sortAsc ? a.id.localeCompare(b.id) : b.id.localeCompare(a.id)
+  // options for each filter
+  const productOptions = useMemo(
+    () =>
+      Array.from(new Set(LISTINGS.map((r) => r.product))).map((v) => ({
+        value: v,
+        label: v,
+      })),
+    []
+  );
+  const brandOptions = useMemo(
+    () =>
+      Array.from(new Set(LISTINGS.map((r) => r.brand))).map((v) => ({
+        value: v,
+        label: v,
+      })),
+    []
+  );
+  const tokenOptions = useMemo(
+    () =>
+      Array.from(new Set(LISTINGS.map((r) => r.token))).map((v) => ({
+        value: v,
+        label: v,
+      })),
+    []
+  );
+  const managerOptions = useMemo(
+    () =>
+      Array.from(new Set(LISTINGS.map((r) => r.manager))).map((v) => ({
+        value: v,
+        label: v,
+      })),
+    []
+  );
+  const statusOptions = useMemo(
+    () =>
+      Array.from(new Set(LISTINGS.map((r) => r.status))).map((v) => ({
+        value: v,
+        label: v,
+      })),
+    []
+  );
+
+  // ── Sort state ────────────────────────────────────────────
+  const [activeKey, setActiveKey] = useState<SortKey>("id");
+  const [direction, setDirection] = useState<"asc" | "desc" | null>("asc");
+
+  // ── Build rows (filter → sort) ────────────────────────────
+  const rows = useMemo(() => {
+    let data = LISTINGS.filter(
+      (r) =>
+        (productFilter.length === 0 || productFilter.includes(r.product)) &&
+        (brandFilter.length === 0 || brandFilter.includes(r.brand)) &&
+        (tokenFilter.length === 0 || tokenFilter.includes(r.token)) &&
+        (managerFilter.length === 0 || managerFilter.includes(r.manager)) &&
+        (statusFilter.length === 0 || statusFilter.includes(r.status))
     );
-    return data;
-  }, [sortAsc]);
 
+    if (activeKey && direction) {
+      data = [...data].sort((a, b) => {
+        if (activeKey === "id") {
+          const cmp = a.id.localeCompare(b.id);
+          return direction === "asc" ? cmp : -cmp;
+        }
+        // stock
+        return direction === "asc" ? a.stock - b.stock : b.stock - a.stock;
+        // add more numeric keys here if needed
+      });
+    }
+
+    return data;
+  }, [
+    productFilter,
+    brandFilter,
+    tokenFilter,
+    managerFilter,
+    statusFilter,
+    activeKey,
+    direction,
+  ]);
+
+  // ── Headers ───────────────────────────────────────────────
   const headers: React.ReactNode[] = [
-    <>
-      <span className="inline-flex items-center gap-2">
-        <span>出品ID</span>
-        <button
-          className="lp-th-filter"
-          aria-label="出品IDでソート"
-          onClick={() => setSortAsc((v) => !v)}
-        >
-          {sortAsc ? "▲" : "▼"}
-        </button>
-      </span>
-    </>,
-    <>
-      <span className="inline-flex items-center gap-2">
-        <span>プロダクト</span>
-        <button className="lp-th-filter" aria-label="プロダクトで絞り込む">
-          <IconFilter width={16} height={16} />
-        </button>
-      </span>
-    </>,
-    <>
-      <span className="inline-flex items-center gap-2">
-        <span>ブランド</span>
-        <button className="lp-th-filter" aria-label="ブランドで絞り込む">
-          <IconFilter width={16} height={16} />
-        </button>
-      </span>
-    </>,
-    <>
-      <span className="inline-flex items-center gap-2">
-        <span>トークン</span>
-        <button className="lp-th-filter" aria-label="トークンで絞り込む">
-          <IconFilter width={16} height={16} />
-        </button>
-      </span>
-    </>,
-    "総在庫数",
-    <>
-      <span className="inline-flex items-center gap-2">
-        <span>担当者</span>
-        <button className="lp-th-filter" aria-label="担当者で絞り込む">
-          <IconFilter width={16} height={16} />
-        </button>
-      </span>
-    </>,
-    <>
-      <span className="inline-flex items-center gap-2">
-        <span>ステータス</span>
-        <button className="lp-th-filter" aria-label="ステータスで絞り込む">
-          <IconFilter width={16} height={16} />
-        </button>
-      </span>
-    </>,
+    // 出品ID ← Sortable
+    <SortableTableHeader
+      key="id"
+      label="出品ID"
+      sortKey="id"
+      activeKey={activeKey}
+      direction={direction}
+      onChange={(key, dir) => {
+        setActiveKey(key as SortKey);
+        setDirection(dir);
+      }}
+    />,
+
+    // プロダクト ← Filterable
+    <FilterableTableHeader
+      key="product"
+      label="プロダクト"
+      options={productOptions}
+      selected={productFilter}
+      onChange={setProductFilter}
+    />,
+
+    // ブランド ← Filterable
+    <FilterableTableHeader
+      key="brand"
+      label="ブランド"
+      options={brandOptions}
+      selected={brandFilter}
+      onChange={setBrandFilter}
+    />,
+
+    // トークン ← Filterable
+    <FilterableTableHeader
+      key="token"
+      label="トークン"
+      options={tokenOptions}
+      selected={tokenFilter}
+      onChange={setTokenFilter}
+    />,
+
+    // 総在庫数 ← Sortable
+    <SortableTableHeader
+      key="stock"
+      label="総在庫数"
+      sortKey="stock"
+      activeKey={activeKey}
+      direction={direction}
+      onChange={(key, dir) => {
+        setActiveKey(key as SortKey);
+        setDirection(dir);
+      }}
+    />,
+
+    // 担当者 ← Filterable
+    <FilterableTableHeader
+      key="manager"
+      label="担当者"
+      options={managerOptions}
+      selected={managerFilter}
+      onChange={setManagerFilter}
+    />,
+
+    // ステータス ← Filterable
+    <FilterableTableHeader
+      key="status"
+      label="ステータス"
+      options={statusOptions}
+      selected={statusFilter}
+      onChange={setStatusFilter}
+    />,
   ];
 
   return (
@@ -123,7 +217,16 @@ export default function ListManagementPage() {
         showCreateButton
         createLabel="出品を作成"
         showResetButton
-        onReset={() => console.log("出品リスト更新")}
+        onReset={() => {
+          setProductFilter([]);
+          setBrandFilter([]);
+          setTokenFilter([]);
+          setManagerFilter([]);
+          setStatusFilter([]);
+          setActiveKey("id");
+          setDirection("asc");
+          console.log("出品リスト更新");
+        }}
       >
         {rows.map((l) => (
           <tr key={l.id}>

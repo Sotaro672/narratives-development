@@ -1,18 +1,20 @@
 // frontend/operation/src/pages/tokenOperation.tsx
-import { useMemo, useState } from "react";
-import List from "../../../shell/src/layout/List/List";
-import { Filter } from "lucide-react";
+import React, { useMemo, useState } from "react";
+import List, {
+  FilterableTableHeader,
+  SortableTableHeader,
+} from "../../../shell/src/layout/List/List";
 
 type TokenOperation = {
   tokenName: string;
   symbol: string;
   brand: string;
-  linkedProducts: number;
+  linkedProducts: number; // 連携商品種類数
   manager: string;
-  planned: number;
-  requested: number;
-  issued: number;
-  distributionRate: string;
+  planned: number;   // 計画量
+  requested: number; // 申請量
+  issued: number;    // 発行量
+  distributionRate: string; // "100.0%" のような文字列
 };
 
 const TOKEN_OPERATIONS: TokenOperation[] = [
@@ -73,56 +75,154 @@ const TOKEN_OPERATIONS: TokenOperation[] = [
   },
 ];
 
+// "100.0%" → 100.0
+const rateToNumber = (v: string) => Number(v.replace("%", "") || 0);
+
+type SortKey =
+  | "linkedProducts"
+  | "planned"
+  | "requested"
+  | "issued"
+  | "distributionRate"
+  | null;
+
 export default function TokenOperationPage() {
-  const [sortKey, setSortKey] = useState<keyof TokenOperation>("tokenName");
-  const [sortAsc, setSortAsc] = useState(true);
+  // ── Filter state（ブランド・担当者） ─────────────────────────────
+  const [brandFilter, setBrandFilter] = useState<string[]>([]);
+  const [managerFilter, setManagerFilter] = useState<string[]>([]);
 
-  const sortedRows = useMemo(() => {
-    const data = [...TOKEN_OPERATIONS];
-    data.sort((a, b) => {
-      const valA = a[sortKey];
-      const valB = b[sortKey];
-      if (typeof valA === "number" && typeof valB === "number")
-        return sortAsc ? valA - valB : valB - valA;
-      return sortAsc
-        ? String(valA).localeCompare(String(valB))
-        : String(valB).localeCompare(String(valA));
-    });
+  const brandOptions = useMemo(
+    () =>
+      Array.from(new Set(TOKEN_OPERATIONS.map((r) => r.brand))).map((v) => ({
+        value: v,
+        label: v,
+      })),
+    []
+  );
+  const managerOptions = useMemo(
+    () =>
+      Array.from(new Set(TOKEN_OPERATIONS.map((r) => r.manager))).map((v) => ({
+        value: v,
+        label: v,
+      })),
+    []
+  );
+
+  // ── Sort state ─────────────────────────────────────────────
+  const [activeKey, setActiveKey] = useState<SortKey>(null);
+  const [direction, setDirection] = useState<"asc" | "desc" | null>(null);
+
+  // ── Build rows (filter → sort) ────────────────────────────
+  const rows = useMemo(() => {
+    let data = TOKEN_OPERATIONS.filter(
+      (r) =>
+        (brandFilter.length === 0 || brandFilter.includes(r.brand)) &&
+        (managerFilter.length === 0 || managerFilter.includes(r.manager))
+    );
+
+    if (activeKey && direction) {
+      data = [...data].sort((a, b) => {
+        if (activeKey === "distributionRate") {
+          const av = rateToNumber(a.distributionRate);
+          const bv = rateToNumber(b.distributionRate);
+          return direction === "asc" ? av - bv : bv - av;
+        }
+        const av = a[activeKey] as number;
+        const bv = b[activeKey] as number;
+        return direction === "asc" ? av - bv : bv - av;
+      });
+    }
+
     return data;
-  }, [sortKey, sortAsc]);
+  }, [brandFilter, managerFilter, activeKey, direction]);
 
-  const headers = [
+  // ── Table headers ─────────────────────────────────────────
+  const headers: React.ReactNode[] = [
     "トークン名",
     "シンボル",
-    <>
-      <span className="inline-flex items-center gap-2">
-        <span>ブランド</span>
-        <button
-          className="lp-th-filter"
-          aria-label="ブランドで絞り込む"
-          onClick={() => setSortKey("brand")}
-        >
-          <Filter size={16} />
-        </button>
-      </span>
-    </>,
-    "連携商品種類数",
-    <>
-      <span className="inline-flex items-center gap-2">
-        <span>担当者</span>
-        <button
-          className="lp-th-filter"
-          aria-label="担当者で絞り込む"
-          onClick={() => setSortKey("manager")}
-        >
-          <Filter size={16} />
-        </button>
-      </span>
-    </>,
-    "計画量",
-    "申請量",
-    "発行量",
-    "配布率",
+
+    // ブランド ← Filterable
+    <FilterableTableHeader
+      key="brand"
+      label="ブランド"
+      options={brandOptions}
+      selected={brandFilter}
+      onChange={setBrandFilter}
+    />,
+
+    // 連携商品種類数 ← Sortable
+    <SortableTableHeader
+      key="linkedProducts"
+      label="連携商品種類数"
+      sortKey="linkedProducts"
+      activeKey={activeKey ?? null}
+      direction={direction ?? null}
+      onChange={(key, dir) => {
+        setActiveKey(key as SortKey);
+        setDirection(dir);
+      }}
+    />,
+
+    // 担当者 ← Filterable
+    <FilterableTableHeader
+      key="manager"
+      label="担当者"
+      options={managerOptions}
+      selected={managerFilter}
+      onChange={setManagerFilter}
+    />,
+
+    // 計画量 ← Sortable
+    <SortableTableHeader
+      key="planned"
+      label="計画量"
+      sortKey="planned"
+      activeKey={activeKey ?? null}
+      direction={direction ?? null}
+      onChange={(key, dir) => {
+        setActiveKey(key as SortKey);
+        setDirection(dir);
+      }}
+    />,
+
+    // 申請量 ← Sortable
+    <SortableTableHeader
+      key="requested"
+      label="申請量"
+      sortKey="requested"
+      activeKey={activeKey ?? null}
+      direction={direction ?? null}
+      onChange={(key, dir) => {
+        setActiveKey(key as SortKey);
+        setDirection(dir);
+      }}
+    />,
+
+    // 発行量 ← Sortable
+    <SortableTableHeader
+      key="issued"
+      label="発行量"
+      sortKey="issued"
+      activeKey={activeKey ?? null}
+      direction={direction ?? null}
+      onChange={(key, dir) => {
+        setActiveKey(key as SortKey);
+        setDirection(dir);
+      }}
+    />,
+
+    // 配布率 ← Sortable（% を数値化して比較）
+    <SortableTableHeader
+      key="distributionRate"
+      label="配布率"
+      sortKey="distributionRate"
+      activeKey={activeKey ?? null}
+      direction={direction ?? null}
+      onChange={(key, dir) => {
+        setActiveKey(key as SortKey);
+        setDirection(dir);
+      }}
+    />,
   ];
 
   return (
@@ -132,9 +232,14 @@ export default function TokenOperationPage() {
         headerCells={headers}
         showCreateButton={false}
         showResetButton
-        onReset={() => console.log("リスト更新")}
+        onReset={() => {
+          setBrandFilter([]);
+          setManagerFilter([]);
+          setActiveKey(null);
+          setDirection(null);
+        }}
       >
-        {sortedRows.map((t, i) => (
+        {rows.map((t, i) => (
           <tr key={i}>
             <td>{t.tokenName}</td>
             <td>{t.symbol}</td>

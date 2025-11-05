@@ -1,6 +1,9 @@
 // frontend/production/src/pages/productionManagement.tsx
-import List from "../../../shell/src/layout/List/List";
-import { Filter } from "lucide-react";
+import React, { useMemo, useState } from "react";
+import List, {
+  FilterableTableHeader,
+  SortableTableHeader,
+} from "../../../shell/src/layout/List/List";
 
 type Production = {
   id: string;
@@ -9,8 +12,8 @@ type Production = {
   manager: string;
   quantity: number;
   productId: string;
-  printedAt: string;
-  createdAt: string;
+  printedAt: string; // YYYY/M/D or "-"
+  createdAt: string; // YYYY/M/D
 };
 
 const PRODUCTIONS: Production[] = [
@@ -66,51 +69,164 @@ const PRODUCTIONS: Production[] = [
   },
 ];
 
+// 日付を数値へ変換（"-" は 0 として最小扱い）
+const toTs = (yyyyMd: string) => {
+  if (!yyyyMd || yyyyMd === "-") return 0;
+  const [y, m, d] = yyyyMd.split("/").map((v) => parseInt(v, 10));
+  return new Date(y, (m || 1) - 1, d || 1).getTime();
+};
+
 export default function ProductionManagement() {
-  const headers = [
+  // ===== フィルタ状態 =====
+  const [productFilter, setProductFilter] = useState<string[]>([]);
+  const [brandFilter, setBrandFilter] = useState<string[]>([]);
+  const [managerFilter, setManagerFilter] = useState<string[]>([]);
+  const [productIdFilter, setProductIdFilter] = useState<string[]>([]);
+
+  // ユニーク候補
+  const productOptions = useMemo(
+    () =>
+      Array.from(new Set(PRODUCTIONS.map((p) => p.product))).map((v) => ({
+        value: v,
+        label: v,
+      })),
+    []
+  );
+  const brandOptions = useMemo(
+    () =>
+      Array.from(new Set(PRODUCTIONS.map((p) => p.brand))).map((v) => ({
+        value: v,
+        label: v,
+      })),
+    []
+  );
+  const managerOptions = useMemo(
+    () =>
+      Array.from(new Set(PRODUCTIONS.map((p) => p.manager))).map((v) => ({
+        value: v,
+        label: v,
+      })),
+    []
+  );
+  const productIdOptions = useMemo(
+    () =>
+      Array.from(new Set(PRODUCTIONS.map((p) => p.productId))).map((v) => ({
+        value: v,
+        label: v,
+      })),
+    []
+  );
+
+  // ===== ソート状態 =====
+  type SortKey = "printedAt" | "createdAt" | "quantity" | null;
+  const [sortKey, setSortKey] = useState<SortKey>(null);
+  const [sortDir, setSortDir] = useState<"asc" | "desc" | null>(null);
+
+  // ===== データ生成（フィルタ → ソート） =====
+  const rows = useMemo(() => {
+    let data = PRODUCTIONS.filter(
+      (p) =>
+        (productFilter.length === 0 || productFilter.includes(p.product)) &&
+        (brandFilter.length === 0 || brandFilter.includes(p.brand)) &&
+        (managerFilter.length === 0 || managerFilter.includes(p.manager)) &&
+        (productIdFilter.length === 0 || productIdFilter.includes(p.productId))
+    );
+
+    if (sortKey && sortDir) {
+      data = [...data].sort((a, b) => {
+        if (sortKey === "quantity") {
+          const av = a.quantity;
+          const bv = b.quantity;
+          return sortDir === "asc" ? av - bv : bv - av;
+        }
+        const av = toTs(a[sortKey]);
+        const bv = toTs(b[sortKey]);
+        return sortDir === "asc" ? av - bv : bv - av;
+        }
+      );
+    }
+
+    return data;
+  }, [productFilter, brandFilter, managerFilter, productIdFilter, sortKey, sortDir]);
+
+  // ===== ヘッダー =====
+  const headers: React.ReactNode[] = [
     "生産計画",
-    <>
-      <span className="inline-flex items-center gap-2">
-        <span>プロダクト</span>
-        <button className="lp-th-filter" aria-label="プロダクトで絞り込む">
-          <Filter size={16} />
-        </button>
-      </span>
-    </>,
-    <>
-      <span className="inline-flex items-center gap-2">
-        <span>ブランド</span>
-        <button className="lp-th-filter" aria-label="ブランドで絞り込む">
-          <Filter size={16} />
-        </button>
-      </span>
-    </>,
-    <>
-      <span className="inline-flex items-center gap-2">
-        <span>担当者</span>
-        <button className="lp-th-filter" aria-label="担当者で絞り込む">
-          <Filter size={16} />
-        </button>
-      </span>
-    </>,
-    <>
-      <span className="inline-flex items-center gap-2">
-        <span>生産数</span>
-        <button className="lp-th-filter" aria-label="生産数で絞り込む">
-          <Filter size={16} />
-        </button>
-      </span>
-    </>,
-    <>
-      <span className="inline-flex items-center gap-2">
-        <span>商品ID</span>
-        <button className="lp-th-filter" aria-label="商品IDで絞り込む">
-          <Filter size={16} />
-        </button>
-      </span>
-    </>,
-    "印刷日",
-    "作成日",
+
+    // プロダクト（フィルタ）
+    <FilterableTableHeader
+      key="product"
+      label="プロダクト"
+      options={productOptions}
+      selected={productFilter}
+      onChange={(vals: string[]) => setProductFilter(vals)}
+    />,
+
+    // ブランド（フィルタ）
+    <FilterableTableHeader
+      key="brand"
+      label="ブランド"
+      options={brandOptions}
+      selected={brandFilter}
+      onChange={(vals: string[]) => setBrandFilter(vals)}
+    />,
+
+    // 担当者（フィルタ）
+    <FilterableTableHeader
+      key="manager"
+      label="担当者"
+      options={managerOptions}
+      selected={managerFilter}
+      onChange={(vals: string[]) => setManagerFilter(vals)}
+    />,
+
+    // 生産数（ソート）
+    <SortableTableHeader
+      key="quantity"
+      label="生産数"
+      sortKey="quantity"
+      activeKey={sortKey}
+      direction={sortDir ?? null}
+      onChange={(key, dir) => {
+        setSortKey(key as SortKey);
+        setSortDir(dir);
+      }}
+    />,
+
+    // 商品ID（フィルタ）
+    <FilterableTableHeader
+      key="productId"
+      label="商品ID"
+      options={productIdOptions}
+      selected={productIdFilter}
+      onChange={(vals: string[]) => setProductIdFilter(vals)}
+    />,
+
+    // 印刷日（ソート）
+    <SortableTableHeader
+      key="printedAt"
+      label="印刷日"
+      sortKey="printedAt"
+      activeKey={sortKey}
+      direction={sortDir ?? null}
+      onChange={(key, dir) => {
+        setSortKey(key as SortKey);
+        setSortDir(dir);
+      }}
+    />,
+
+    // 作成日（ソート）
+    <SortableTableHeader
+      key="createdAt"
+      label="作成日"
+      sortKey="createdAt"
+      activeKey={sortKey}
+      direction={sortDir ?? null}
+      onChange={(key, dir) => {
+        setSortKey(key as SortKey);
+        setSortDir(dir);
+      }}
+    />,
   ];
 
   return (
@@ -118,13 +234,21 @@ export default function ProductionManagement() {
       <List
         title="商品生産"
         headerCells={headers}
-        showCreateButton={true}
+        showCreateButton
         createLabel="生産計画を作成"
-        showResetButton={true}
+        showResetButton
         onCreate={() => console.log("新規生産計画作成")}
-        onReset={() => console.log("リスト更新")}
+        onReset={() => {
+          setProductFilter([]);
+          setBrandFilter([]);
+          setManagerFilter([]);
+          setProductIdFilter([]);
+          setSortKey(null);
+          setSortDir(null);
+          console.log("リスト更新");
+        }}
       >
-        {PRODUCTIONS.map((p) => (
+        {rows.map((p) => (
           <tr key={p.id}>
             <td>
               <a href="#" className="text-blue-600 hover:underline">

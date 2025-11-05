@@ -1,18 +1,9 @@
 // frontend/inquiry/src/pages/InquiryManagementPage.tsx
 import * as React from "react";
-import List from "../../../shell/src/layout/List/List";
-import { Filter, ChevronDown, ChevronUp } from "lucide-react";
-
-// Lucide を React の汎用 SVG コンポーネントにキャスト（型不整合の暫定回避）
-const IconFilter = Filter as unknown as React.ComponentType<
-  React.SVGProps<SVGSVGElement>
->;
-const IconChevronDown = ChevronDown as unknown as React.ComponentType<
-  React.SVGProps<SVGSVGElement>
->;
-const IconChevronUp = ChevronUp as unknown as React.ComponentType<
-  React.SVGProps<SVGSVGElement>
->;
+import List, {
+  FilterableTableHeader,
+  SortableTableHeader,
+} from "../../../shell/src/layout/List/List";
 
 type InquiryRow = {
   id: string;
@@ -51,50 +42,86 @@ const INQUIRIES: InquiryRow[] = [
   },
 ];
 
+// "YYYY/M/D" → number（タイムスタンプ）
+// "-" など空は 0（最小）扱いにして末尾になるようにしています
+const toTs = (yyyyMd: string) => {
+  if (!yyyyMd || yyyyMd === "-") return 0;
+  const [y, m, d] = yyyyMd.split("/").map((v) => parseInt(v, 10));
+  return new Date(y, (m || 1) - 1, d || 1).getTime();
+};
+
 export default function InquiryManagementPage() {
-  const [sortAsc, setSortAsc] = React.useState(false);
+  // 担当者フィルタ
+  const [ownerFilter, setOwnerFilter] = React.useState<string[]>([]);
+
+  // ソート状態（どの列を/どの方向で）
+  const [sortKey, setSortKey] = React.useState<"inquiredAt" | "answeredAt" | null>(null);
+  const [sortDirection, setSortDirection] = React.useState<"asc" | "desc" | null>(null);
 
   const rows = React.useMemo(() => {
-    const data = [...INQUIRIES];
-    data.sort((a, b) =>
-      sortAsc
-        ? a.inquiredAt.localeCompare(b.inquiredAt)
-        : b.inquiredAt.localeCompare(a.inquiredAt)
-    );
+    let data = [...INQUIRIES];
+
+    // フィルタ
+    if (ownerFilter.length > 0) {
+      data = data.filter((q) => ownerFilter.includes(q.owner));
+    }
+
+    // ソート
+    if (sortKey && sortDirection) {
+      data.sort((a, b) => {
+        const av = toTs(a[sortKey]);
+        const bv = toTs(b[sortKey]);
+        return sortDirection === "asc" ? av - bv : bv - av;
+      });
+    }
+
     return data;
-  }, [sortAsc]);
+  }, [ownerFilter, sortKey, sortDirection]);
 
   const headers: React.ReactNode[] = [
     "問い合わせID",
     "件名",
     "ユーザー",
-    <>ステータス</>,
-    <>タイプ</>,
-    <>
-      <span className="inline-flex items-center gap-2">
-        <span>担当者</span>
-        <button className="lp-th-filter" aria-label="担当者で絞り込む">
-          <IconFilter width={16} height={16} />
-        </button>
-      </span>
-    </>,
-    <>
-      <span className="inline-flex items-center gap-2">
-        <span>問い合わせ日</span>
-        <button
-          className="lp-th-filter"
-          aria-label={`問い合わせ日でソート（${sortAsc ? "昇順" : "降順"}）`}
-          onClick={() => setSortAsc((v) => !v)}
-        >
-          {sortAsc ? (
-            <IconChevronUp width={16} height={16} />
-          ) : (
-            <IconChevronDown width={16} height={16} />
-          )}
-        </button>
-      </span>
-    </>,
-    "応答日",
+    "ステータス",
+    "タイプ",
+
+    // 担当者フィルタ（ポップオーバー/チェックボックス）
+    <FilterableTableHeader
+      key="owner"
+      label="担当者"
+      options={[
+        { value: "佐藤 美咲", label: "佐藤 美咲" },
+        { value: "田中 雄太", label: "田中 雄太" },
+      ]}
+      selected={ownerFilter}
+      onChange={(next: string[]) => setOwnerFilter(next)}
+    />,
+
+    // 問い合わせ日（ソート可能）
+    <SortableTableHeader
+      key="inquiredAt"
+      label="問い合わせ日"
+      sortKey="inquiredAt"
+      activeKey={sortKey}
+      direction={sortDirection ?? null}
+      onChange={(key, dir) => {
+        setSortKey(key as "inquiredAt" | "answeredAt");
+        setSortDirection(dir);
+      }}
+    />,
+
+    // 応答日（ソート可能）
+    <SortableTableHeader
+      key="answeredAt"
+      label="応答日"
+      sortKey="answeredAt"
+      activeKey={sortKey}
+      direction={sortDirection ?? null}
+      onChange={(key, dir) => {
+        setSortKey(key as "inquiredAt" | "answeredAt");
+        setSortDirection(dir);
+      }}
+    />,
   ];
 
   return (
@@ -104,7 +131,12 @@ export default function InquiryManagementPage() {
         headerCells={headers}
         showCreateButton={false}
         showResetButton
-        onReset={() => console.log("問い合わせ一覧を更新")}
+        onReset={() => {
+          setOwnerFilter([]);
+          setSortKey(null);
+          setSortDirection(null);
+          console.log("問い合わせ一覧を更新");
+        }}
       >
         {rows.map((q) => (
           <tr key={q.id}>
