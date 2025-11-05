@@ -15,6 +15,9 @@ type Fit =
   | "オーバーサイズ";
 
 export default function ProductBlueprintDetail() {
+  // ─────────────────────────────────────────
+  // モックデータ（画面表示用にコード内へ直書き）
+  // ─────────────────────────────────────────
   // 基本情報
   const [productName, setProductName] = React.useState("シルクブラウス プレミアムライン");
   const [brand] = React.useState("LUMINA Fashion");
@@ -48,7 +51,7 @@ export default function ProductBlueprintDetail() {
     { size: "L", color: "ネイビー", code: "LM-SB-L-NVY" },
   ]);
 
-  // 管理情報
+  // 管理情報（AdminCard 用）
   const [assignee, setAssignee] = React.useState("佐藤 美咲");
   const [creator] = React.useState("佐藤 美咲");
   const [createdAt] = React.useState("2024/1/15");
@@ -104,12 +107,15 @@ export default function ProductBlueprintDetail() {
           <ModelNumberCard sizes={sizes} colors={colors} modelNumbers={modelNumbers} />
         </div>
 
-        {/* 右ペイン */}
+        {/* 右ペイン（AdminCard は admin/src/pages/AdminCard.tsx の Props に合わせる） */}
         <AdminCard
-          assignee={assignee}
-          creator={creator}
+          title="管理情報"
+          assigneeName={assignee}
+          createdByName={creator}
           createdAt={createdAt}
-          onEditAssignee={(next) => setAssignee(next)}
+          onEditAssignee={() => setAssignee("新担当者")}
+          onClickAssignee={() => console.log("assignee clicked:", assignee)}
+          onClickCreatedBy={() => console.log("createdBy clicked:", creator)}
         />
       </div>
     </div>
