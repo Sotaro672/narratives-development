@@ -1,0 +1,49 @@
+/* frontend/productBlueprint/src/pages/ModelNumberCard.css
+   モデルナンバー（サイズ x カラー）表 専用スタイル
+   既存の --pbp-* 変数と .box 系ユーティリティを使用
+*/
+
+.mnc {
+  background: var(--pbp-surface);
+  border: 1px solid var(--pbp-border);
+  border-radius: 12px;
+  overflow: hidden;
+}
+
+.mnc__table {
+  width: 100%;
+  border-collapse: collapse;
+  border-spacing: 0;
+}
+
+.mnc__table th,
+.mnc__table td {
+  border-bottom: 1px solid var(--pbp-border-soft);
+  padding: 8px 10px;
+  text-align: left;
+  font-size: 0.875rem;
+  color: var(--pbp-text);
+}
+
+.mnc__table th {
+  font-weight: 600;
+  color: var(--pbp-text-dim);
+  background: var(--pbp-muted-bg);
+}
+
+.mnc__table tr:last-child td {
+  border-bottom: none;
+}
+
+.mnc__size {
+  width: 120px;
+  font-weight: 600;
+  color: var(--pbp-text-dim);
+}
+
+.mnc__empty {
+  text-align: center;
+  font-size: 0.875rem;
+  color: var(--pbp-text-soft);
+  padding: 16px 0;
+}

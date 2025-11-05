@@ -1,0 +1,59 @@
+/* frontend/productBlueprint/src/pages/VariationCard.css
+   カラーバリエーションカード専用
+   ※ 変数は productBlueprintDetail.css の --pbp-* を使用
+*/
+
+.vc {
+  background: var(--pbp-surface);
+  border: 1px solid var(--pbp-border);
+  border-radius: 12px;
+  overflow: hidden;
+}
+
+/* chips 行の余白最適化 */
+.vc__chips {
+  margin-bottom: 8px;
+}
+
+/* chip のアイコンボタン */
+.vc__chip {
+  position: relative;
+}
+.vc__chip-close {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  height: 18px;
+  width: 18px;
+  border-radius: 6px;
+  margin-left: 2px;
+  color: inherit;
+  opacity: 0.85;
+}
+.vc__chip-close:hover {
+  opacity: 1;
+}
+
+/* 入力行 */
+.vc__row {
+  display: flex;
+  align-items: center;
+  gap: 8px; /* 既存の gap-8 に相当 */
+}
+
+/* 入力の幅最適化（隣のアイコンボタンと並ぶ） */
+.vc__input {
+  flex: 1;
+}
+
+/* 追加ボタンのわずかなホバー演出を強める（既存btnに足し込み） */
+.vc__add:hover {
+  box-shadow: 0 0 0 3px var(--pbp-ring);
+}
+
+/* 空状態の文言 */
+.vc__empty {
+  font-size: 12px;
+  color: var(--pbp-text-soft);
+  padding: 6px 0;
+}

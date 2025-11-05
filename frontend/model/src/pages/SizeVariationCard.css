@@ -1,0 +1,53 @@
+/* frontend/productBlueprint/src/pages/SizeVariationCard.css
+   サイズバリエーションカード専用
+   productBlueprintDetail.css と同系統トーンで統一
+*/
+
+.svc {
+  background: var(--pbp-surface);
+  border: 1px solid var(--pbp-border);
+  border-radius: 12px;
+  overflow: hidden;
+}
+
+.svc__table {
+  width: 100%;
+  border-collapse: collapse;
+  border-spacing: 0;
+}
+
+.svc__table th,
+.svc__table td {
+  border-bottom: 1px solid var(--pbp-border-soft);
+  padding: 8px 10px;
+  text-align: left;
+  font-size: 0.875rem;
+  color: var(--pbp-text);
+}
+
+.svc__table th {
+  font-weight: 600;
+  color: var(--pbp-text-dim);
+  background: var(--pbp-muted-bg);
+}
+
+.svc__table tr:last-child td {
+  border-bottom: none;
+}
+
+.svc__remove {
+  opacity: 0.8;
+  transition: opacity 0.15s ease, transform 0.1s ease;
+}
+
+.svc__remove:hover {
+  opacity: 1;
+  transform: scale(1.1);
+}
+
+.svc__empty {
+  text-align: center;
+  font-size: 0.875rem;
+  color: var(--pbp-text-soft);
+  padding: 16px 0;
+}

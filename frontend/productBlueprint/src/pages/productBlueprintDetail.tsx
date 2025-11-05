@@ -1,8 +1,11 @@
+// frontend/productBlueprint/src/pages/productBlueprintDetail.tsx
 import * as React from "react";
-import { Plus, X, Palette, Trash2, Tags } from "lucide-react";
 import PageHeader from "./PageHeader";
-import AdminCard from "./AdminCard";
+import AdminCard from "../../../admin/src/pages/AdminCard";
 import ProductBlueprintCard from "./productBlueprintCard";
+import VariationCard from "../../../model/src/pages/ColorVariationCard";
+import SizeVariationCard, { type SizeRow } from "../../../model/src/pages/SizeVariationCard";
+import ModelNumberCard, { type ModelNumber } from "../../../model/src/pages/ModelNumberCard";
 import "./productBlueprintDetail.css";
 
 type Fit =
@@ -11,16 +14,8 @@ type Fit =
   | "リラックスフィット"
   | "オーバーサイズ";
 
-type SizeRow = {
-  id: string;
-  sizeLabel: string;
-  chest?: number;
-  waist?: number;
-  length?: number;
-  shoulder?: number;
-};
-
-export default function ProductBlueprintDetailPage() {
+export default function ProductBlueprintDetail() {
+  // 基本情報
   const [productName, setProductName] = React.useState("シルクブラウス プレミアムライン");
   const [brand] = React.useState("LUMINA Fashion");
   const [fit, setFit] = React.useState<Fit>("レギュラーフィット");
@@ -28,26 +23,47 @@ export default function ProductBlueprintDetailPage() {
   const [weight, setWeight] = React.useState<number>(180);
   const [washTags, setWashTags] = React.useState<string[]>(["手洗い", "ドライクリーニング", "陰干し"]);
   const [productIdTag, setProductIdTag] = React.useState("QRコード");
+
+  // カラー
   const [colorInput, setColorInput] = React.useState("");
   const [colors, setColors] = React.useState<string[]>(["ホワイト", "ブラック", "ネイビー"]);
+
+  // サイズ
   const [sizes, setSizes] = React.useState<SizeRow[]>([
     { id: "1", sizeLabel: "S", chest: 48, waist: 58, length: 60, shoulder: 38 },
     { id: "2", sizeLabel: "M", chest: 50, waist: 60, length: 62, shoulder: 40 },
     { id: "3", sizeLabel: "L", chest: 52, waist: 62, length: 64, shoulder: 42 },
   ]);
 
+  // モデルナンバー（サイズ×カラーのマトリクス）
+  const [modelNumbers] = React.useState<ModelNumber[]>([
+    { size: "S", color: "ホワイト", code: "LM-SB-S-WHT" },
+    { size: "S", color: "ブラック", code: "MN-001" },
+    { size: "S", color: "ネイビー", code: "MN-001" },
+    { size: "M", color: "ホワイト", code: "LM-SB-M-WHT" },
+    { size: "M", color: "ブラック", code: "LM-SB-M-BLK" },
+    { size: "M", color: "ネイビー", code: "LM-SB-M-NVY" },
+    { size: "L", color: "ホワイト", code: "LM-SB-L-WHT" },
+    { size: "L", color: "ブラック", code: "LM-SB-L-BLK" },
+    { size: "L", color: "ネイビー", code: "LM-SB-L-NVY" },
+  ]);
+
+  // 管理情報
   const [assignee, setAssignee] = React.useState("佐藤 美咲");
   const [creator] = React.useState("佐藤 美咲");
   const [createdAt] = React.useState("2024/1/15");
 
   const onSave = () => alert("保存しました（ダミー）");
 
+  // VariationCard handlers
   const addColor = () => {
-    if (!colorInput.trim()) return;
-    setColors((prev) => [...prev, colorInput.trim()]);
+    const v = colorInput.trim();
+    if (!v || colors.includes(v)) return;
+    setColors((prev) => [...prev, v]);
     setColorInput("");
   };
-  const removeColor = (name: string) => setColors((prev) => prev.filter((c) => c !== name));
+  const removeColor = (name: string) =>
+    setColors((prev) => prev.filter((c) => c !== name));
 
   return (
     <div className="pbp">
@@ -72,70 +88,20 @@ export default function ProductBlueprintDetailPage() {
             onChangeProductIdTag={setProductIdTag}
           />
 
-          <section className="box">
-            <header className="box__header">
-              <Palette size={16} /> <h2 className="box__title">カラーバリエーション</h2>
-            </header>
-            <div className="box__body">
-              <div className="chips">
-                {colors.map((c) => (
-                  <span key={c} className="chip">
-                    {c}
-                    <button onClick={() => removeColor(c)}>
-                      <X size={14} />
-                    </button>
-                  </span>
-                ))}
-              </div>
-              <div className="flex gap-8">
-                <input
-                  className="input"
-                  placeholder="カラーを入力"
-                  value={colorInput}
-                  onChange={(e) => setColorInput(e.target.value)}
-                  onKeyDown={(e) => e.key === "Enter" && addColor()}
-                />
-                <button className="btn btn--icon" onClick={addColor}>
-                  <Plus size={18} />
-                </button>
-              </div>
-            </div>
-          </section>
+          <VariationCard
+            colors={colors}
+            colorInput={colorInput}
+            onChangeColorInput={setColorInput}
+            onAddColor={addColor}
+            onRemoveColor={removeColor}
+          />
 
-          <section className="box">
-            <header className="box__header">
-              <Tags size={16} /> <h2 className="box__title">サイズバリエーション</h2>
-            </header>
-            <div className="box__body">
-              <table>
-                <thead>
-                  <tr>
-                    <th>サイズ</th>
-                    <th>胸囲(cm)</th>
-                    <th>ウエスト(cm)</th>
-                    <th>着丈(cm)</th>
-                    <th>肩幅(cm)</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {sizes.map((row) => (
-                    <tr key={row.id}>
-                      <td><input className="readonly" value={row.sizeLabel} readOnly /></td>
-                      <td><input className="readonly" value={row.chest ?? ""} readOnly /></td>
-                      <td><input className="readonly" value={row.waist ?? ""} readOnly /></td>
-                      <td><input className="readonly" value={row.length ?? ""} readOnly /></td>
-                      <td><input className="readonly" value={row.shoulder ?? ""} readOnly /></td>
-                      <td>
-                        <button className="btn btn--icon" onClick={() => setSizes(sizes.filter((s) => s.id !== row.id))}>
-                          <Trash2 size={16} />
-                        </button>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </section>
+          <SizeVariationCard
+            sizes={sizes}
+            onRemove={(id) => setSizes((prev) => prev.filter((s) => s.id !== id))}
+          />
+
+          <ModelNumberCard sizes={sizes} colors={colors} modelNumbers={modelNumbers} />
         </div>
 
         {/* 右ペイン */}
