@@ -1,6 +1,6 @@
 import type { RouteObject } from "react-router-dom";
-import ProductBlueprintManagementPage from "./pages/ProductBlueprintManagementPage";
-import ProductBlueprintDetailPage from "./pages/ProductBlueprintDetailPage";
+import ProductBlueprintManagement from "./pages/productBlueprintManagement";
+import ProductBlueprintDetail from "./pages/productBlueprintDetail";
 
 /**
  * Product Blueprint Module Routes
@@ -8,8 +8,8 @@ import ProductBlueprintDetailPage from "./pages/ProductBlueprintDetailPage";
  * - /product-blueprint/:blueprintId
  */
 const routes: RouteObject[] = [
-  { path: "", element: <ProductBlueprintManagementPage /> },
-  { path: ":blueprintId", element: <ProductBlueprintDetailPage /> },
+  { path: "", element: <ProductBlueprintManagement /> },
+  { path: ":blueprintId", element: <ProductBlueprintDetail /> },
 ];
 
 export default routes;

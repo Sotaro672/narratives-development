@@ -4,13 +4,14 @@ import List, {
   SortableTableHeader,
 } from "../../../shell/src/layout/List/List";
 import { useMemo, useState } from "react";
+import { useNavigate } from "react-router-dom"; // ← 追加
 
 type Row = {
   product: string;
   brand: "LUMINA Fashion" | "NEXUS Street";
   owner: string;
   productId: string;
-  createdAtA: string; // 例: "2024/1/15"
+  createdAtA: string;
   createdAtB: string;
 };
 
@@ -39,14 +40,14 @@ const toTs = (yyyyMd: string) => {
 };
 
 export default function ProductBlueprintManagement() {
-  // フィルタ（ブランド）
-  const [brandFilter, setBrandFilter] = useState<string[]>([]);
+  const navigate = useNavigate(); // ← 遷移用フック
 
-  // ソート状態を 1 組に統一
+  // フィルタ状態
+  const [brandFilter, setBrandFilter] = useState<string[]>([]);
   const [sortedKey, setSortedKey] = useState<"createdAtA" | "createdAtB" | null>(null);
   const [sortedDir, setSortedDir] = useState<"asc" | "desc" | null>(null);
 
-  // フィルタ → ソート
+  // フィルタとソート
   const rows = useMemo(() => {
     let work = RAW_ROWS.filter(
       (r) => brandFilter.length === 0 || brandFilter.includes(r.brand)
@@ -64,7 +65,6 @@ export default function ProductBlueprintManagement() {
 
   const headers = [
     "プロダクト",
-
     <FilterableTableHeader
       key="brand"
       label="ブランド"
@@ -75,11 +75,8 @@ export default function ProductBlueprintManagement() {
       selected={brandFilter}
       onChange={(values: string[]) => setBrandFilter(values)}
     />,
-
     "担当者",
     "商品ID",
-
-    // 作成日A（左）
     <SortableTableHeader
       key="createdA"
       label="作成日"
@@ -91,8 +88,6 @@ export default function ProductBlueprintManagement() {
         setSortedDir(dir);
       }}
     />,
-
-    // 作成日B（右）
     <SortableTableHeader
       key="createdB"
       label="作成日"
@@ -106,6 +101,12 @@ export default function ProductBlueprintManagement() {
     />,
   ];
 
+  // 行クリックで遷移
+  const handleRowClick = (r: Row) => {
+    // product名などをクエリで渡す
+    navigate(`/productBlueprint/detail?product=${encodeURIComponent(r.product)}`);
+  };
+
   return (
     <List
       title="商品設計"
@@ -118,15 +119,16 @@ export default function ProductBlueprintManagement() {
         setBrandFilter([]);
         setSortedKey(null);
         setSortedDir(null);
-        console.log("reset");
       }}
     >
       {rows.map((r) => (
-        <tr key={`${r.product}-${r.createdAtA}`}>
+        <tr
+          key={`${r.product}-${r.createdAtA}`}
+          className="cursor-pointer hover:bg-[rgba(0,0,0,0.03)] transition"
+          onClick={() => handleRowClick(r)} // ← 各行をクリックで詳細へ遷移
+        >
           <td>{r.product}</td>
-          <td>
-            <span className="lp-brand-pill">{r.brand}</span>
-          </td>
+          <td><span className="lp-brand-pill">{r.brand}</span></td>
           <td>{r.owner}</td>
           <td>{r.productId}</td>
           <td>{r.createdAtA}</td>

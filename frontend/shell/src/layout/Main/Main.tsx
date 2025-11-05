@@ -3,6 +3,7 @@ import { Routes, Route } from "react-router-dom";
 import InquiryManagementPage from "../../../../inquiry/src/pages/InquiryManagementPage";
 import ProductBlueprintManagementPage from "../../../../productBlueprint/src/pages/productBlueprintManagement";
 import ProductionManagementPage from "../../../../production/src/pages/productionManagement";
+import ProductBlueprintDetailPage from "../../../../productBlueprint/src/pages/productBlueprintDetail";
 import InventoryManagementPage from "../../../../inventory/src/pages/inventoryManagement";
 import TokenBlueprintManagementPage from "../../../../tokenBlueprint/src/pages/tokenBlueprintManagement";
 import MintRequestManagementPage from "../../../../mintRequest/src/pages/mintRequestManagement";
@@ -23,6 +24,7 @@ export default function Main() {
       <Routes>
         {<Route path="/inquiry" element={<InquiryManagementPage />} />}
         {<Route path="/productBlueprint" element={<ProductBlueprintManagementPage />} />}
+        {<Route path="/productBlueprint/detail" element={<ProductBlueprintDetailPage />} />}
         {<Route path="/production" element={<ProductionManagementPage />} />}
         {<Route path="/inventory" element={<InventoryManagementPage />} />}
         {<Route path="/tokenBlueprint" element={<TokenBlueprintManagementPage />} />}

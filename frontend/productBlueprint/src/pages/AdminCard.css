@@ -1,0 +1,89 @@
+/* frontend/productBlueprint/src/pages/AdminCard.css
+   管理情報カード専用のスタイル
+   ※ productBlueprintDetail.css のトーンに統一
+*/
+
+.admin-card {
+  background: var(--pbp-surface);
+  border: 1px solid var(--pbp-border);
+  border-radius: 12px;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+.admin-card__header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 16px 20px;
+  border-bottom: 1px solid var(--pbp-border-soft);
+}
+
+.admin-card__title {
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: var(--pbp-text-dim);
+}
+
+.admin-card__body {
+  padding: 20px;
+}
+
+.admin-card__label {
+  font-size: 12px;
+  color: var(--pbp-text-soft);
+  margin-bottom: 6px;
+  margin-top: 12px;
+}
+
+.admin-card__row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 8px;
+}
+
+.admin-card__readonly {
+  flex: 1;
+  height: 40px;
+  padding: 0 12px;
+  border-radius: 10px;
+  border: 1px solid var(--pbp-border-soft);
+  background: var(--pbp-muted-bg);
+  color: var(--pbp-text-dim);
+  cursor: not-allowed;
+}
+
+.admin-card__btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  height: 40px;
+  width: 40px;
+  border-radius: 10px;
+  border: 1px solid var(--pbp-border);
+  background: color-mix(in oklab, var(--pbp-surface) 80%, transparent);
+  color: var(--pbp-text);
+  transition: background 0.15s ease, transform 0.05s ease;
+}
+
+.admin-card__btn:hover {
+  background: color-mix(in oklab, var(--pbp-surface) 95%, transparent);
+}
+
+.admin-card__btn:active {
+  transform: translateY(1px);
+}
+
+.admin-card__pill {
+  height: 40px;
+  display: inline-flex;
+  align-items: center;
+  padding: 0 12px;
+  border-radius: 10px;
+  border: 1px solid var(--pbp-border-soft);
+  background: var(--pbp-muted-bg);
+  color: var(--pbp-text-dim);
+  gap: 6px;
+}

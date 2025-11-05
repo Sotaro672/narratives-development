@@ -1,0 +1,48 @@
+/* frontend/productBlueprint/src/pages/PageHeader.css */
+/* productBlueprintDetail.css と同系統のトーンで統一 */
+
+.page-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 16px;
+  padding: 0 4px;
+}
+
+.page-header__title {
+  font-size: 1.125rem;
+  font-weight: 600;
+  color: var(--pbp-text);
+  margin: 0;
+}
+
+.page-header__actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+/* 保存ボタン（btn--primaryに準拠） */
+.page-header__btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  height: 36px;
+  padding: 0 14px;
+  border-radius: 10px;
+  border: none;
+  background: var(--pbp-primary);
+  color: #fff;
+  font-size: 0.875rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background 0.15s ease;
+}
+
+.page-header__btn:hover {
+  background: var(--pbp-primary-hover);
+}
+
+.page-header__btn:active {
+  transform: translateY(1px);
+}
