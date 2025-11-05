@@ -10,7 +10,7 @@ type Row = {
   brand: "LUMINA Fashion" | "NEXUS Street";
   owner: string;
   productId: string;
-  createdAtA: string;
+  createdAtA: string; // 例: "2024/1/15"
   createdAtB: string;
 };
 
@@ -42,13 +42,9 @@ export default function ProductBlueprintManagement() {
   // フィルタ（ブランド）
   const [brandFilter, setBrandFilter] = useState<string[]>([]);
 
-  // ソート方向
-  const [createdADirection, setCreatedADirection] = useState<"asc" | "desc" | undefined>(
-    undefined
-  );
-  const [createdBDirection, setCreatedBDirection] = useState<"asc" | "desc" | undefined>(
-    undefined
-  );
+  // ソート状態を 1 組に統一
+  const [sortedKey, setSortedKey] = useState<"createdAtA" | "createdAtB" | null>(null);
+  const [sortedDir, setSortedDir] = useState<"asc" | "desc" | null>(null);
 
   // フィルタ → ソート
   const rows = useMemo(() => {
@@ -56,26 +52,19 @@ export default function ProductBlueprintManagement() {
       (r) => brandFilter.length === 0 || brandFilter.includes(r.brand)
     );
 
-    if (createdADirection) {
+    if (sortedKey && sortedDir) {
       work = [...work].sort((a, b) => {
-        const da = toTs(a.createdAtA);
-        const db = toTs(b.createdAtA);
-        return createdADirection === "asc" ? da - db : db - da;
-      });
-    } else if (createdBDirection) {
-      work = [...work].sort((a, b) => {
-        const da = toTs(a.createdAtB);
-        const db = toTs(b.createdAtB);
-        return createdBDirection === "asc" ? da - db : db - da;
+        const da = toTs(a[sortedKey]);
+        const db = toTs(b[sortedKey]);
+        return sortedDir === "asc" ? da - db : db - da;
       });
     }
     return work;
-  }, [brandFilter, createdADirection, createdBDirection]);
+  }, [brandFilter, sortedKey, sortedDir]);
 
   const headers = [
     "プロダクト",
 
-    // ▼ filterable-table-header の Option は { value, label }
     <FilterableTableHeader
       key="brand"
       label="ブランド"
@@ -83,31 +72,36 @@ export default function ProductBlueprintManagement() {
         { value: "LUMINA Fashion", label: "LUMINA Fashion" },
         { value: "NEXUS Street", label: "NEXUS Street" },
       ]}
-      selectedValues={brandFilter}
-      onChange={(values) => setBrandFilter(values)}
+      selected={brandFilter}
+      onChange={(values: string[]) => setBrandFilter(values)}
     />,
 
     "担当者",
     "商品ID",
 
-    // ▼ sortable-table-header は { direction, onDirectionChange }
+    // 作成日A（左）
     <SortableTableHeader
       key="createdA"
       label="作成日"
-      direction={createdADirection}
-      onDirectionChange={(dir: "asc" | "desc" | undefined) => {
-        setCreatedADirection(dir);
-        if (dir) setCreatedBDirection(undefined);
+      sortKey="createdAtA"
+      activeKey={sortedKey}
+      direction={sortedDir ?? null}
+      onChange={(key, dir) => {
+        setSortedKey(key as "createdAtA" | "createdAtB");
+        setSortedDir(dir);
       }}
     />,
 
+    // 作成日B（右）
     <SortableTableHeader
       key="createdB"
       label="作成日"
-      direction={createdBDirection}
-      onDirectionChange={(dir: "asc" | "desc" | undefined) => {
-        setCreatedBDirection(dir);
-        if (dir) setCreatedADirection(undefined);
+      sortKey="createdAtB"
+      activeKey={sortedKey}
+      direction={sortedDir ?? null}
+      onChange={(key, dir) => {
+        setSortedKey(key as "createdAtA" | "createdAtB");
+        setSortedDir(dir);
       }}
     />,
   ];
@@ -122,8 +116,8 @@ export default function ProductBlueprintManagement() {
       showResetButton
       onReset={() => {
         setBrandFilter([]);
-        setCreatedADirection(undefined);
-        setCreatedBDirection(undefined);
+        setSortedKey(null);
+        setSortedDir(null);
         console.log("reset");
       }}
     >

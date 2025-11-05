@@ -1,5 +1,4 @@
-// frontend/shared/ui/sortable-table-header.tsx
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { ChevronDown, ChevronUp } from "lucide-react";
 
 export type SortDirection = "asc" | "desc" | null;
@@ -11,12 +10,14 @@ export interface SortableTableHeaderProps {
   sortKey: string;
   /** 現在ソート中のキー（親から） */
   activeKey?: string | null;
-  /** 現在のソート方向（親から） */
+  /**
+   * 現在のソート方向（親から）。
+   * 省略された場合は「非制御モード」としてローカルで方向を保持します。
+   */
   direction?: SortDirection;
   /** クリック時に親へ通知（キーと次の方向を返す） */
   onChange: (key: string, nextDirection: Exclude<SortDirection, null>) => void;
 
-  /** 見た目調整（任意） */
   className?: string;
 }
 
@@ -24,28 +25,50 @@ export interface SortableTableHeaderProps {
  * ソート可能なテーブルヘッダー
  * - ホバーで矢印が表示
  * - クリックで asc ⇄ desc をトグル
- * - 状態は親が保持（制御コンポーネント）
+ * - direction 未指定時は内部状態でトグル（制御/非制御の両対応）
  */
 export default function SortableTableHeader({
   label,
   sortKey,
   activeKey = null,
-  direction = null,
+  direction, // ← undefined を許容（未指定なら非制御）
   onChange,
   className,
 }: SortableTableHeaderProps) {
   const [hovered, setHovered] = useState(false);
 
+  // 非制御用のローカル方向
+  const [localDir, setLocalDir] = useState<SortDirection>(null);
+  const isControlled = direction !== undefined;
+
   const isActive = activeKey === sortKey;
+
+  // 実際に表示・判定に使う方向（制御なら props、非制御なら local）
+  const effectiveDir: SortDirection = isControlled ? direction! : localDir;
+
+  // activeKey が他列に移ったらローカル方向はリセット
+  useEffect(() => {
+    if (!isActive && !isControlled) setLocalDir(null);
+  }, [isActive, isControlled]);
+
   const icon = useMemo(() => {
     if (!isActive) return <ChevronDown size={16} />;
-    return direction === "asc" ? <ChevronUp size={16} /> : <ChevronDown size={16} />;
-  }, [isActive, direction]);
+    return effectiveDir === "asc" ? (
+      <ChevronUp size={16} />
+    ) : (
+      <ChevronDown size={16} />
+    );
+  }, [isActive, effectiveDir]);
 
   const handleClick = () => {
     // 未ソート → asc、asc → desc、desc → asc
     const next: Exclude<SortDirection, null> =
-      isActive ? (direction === "asc" ? "desc" : "asc") : "asc";
+      isActive ? (effectiveDir === "asc" ? "desc" : "asc") : "asc";
+
+    // 非制御時は内部状態を更新
+    if (!isControlled) setLocalDir(next);
+
+    // 親にも通知（制御時はこちらを受けて方向を更新してください）
     onChange(sortKey, next);
   };
 
@@ -66,7 +89,8 @@ export default function SortableTableHeader({
         borderRadius: 10,
         lineHeight: 1,
         fontWeight: 700,
-        border: hovered || isActive ? "1px solid #d9dde3" : "1px solid transparent",
+        border:
+          hovered || isActive ? "1px solid #d9dde3" : "1px solid transparent",
         background: hovered || isActive ? "#eef1f4" : "transparent",
         color: "#0f172a",
         cursor: "pointer",
@@ -88,9 +112,7 @@ export default function SortableTableHeader({
   );
 }
 
-/* --- おまけ：数値ソートのための小ユーティリティ（必要なら使用） --- */
-
-/** 文字列に含まれる通貨記号・カンマ・% を除去して数値化 */
+/* --- おまけユーティリティはそのまま --- */
 export function toNumberLoose(v: unknown): number {
   if (typeof v === "number") return v;
   if (typeof v !== "string") return Number(v);
@@ -99,7 +121,6 @@ export function toNumberLoose(v: unknown): number {
   return Number.isNaN(n) ? 0 : n;
 }
 
-/** 数値列のソート用コンパレータ（asc/desc） */
 export function numericComparator<T>(key: keyof T, dir: Exclude<SortDirection, null>) {
   return (a: T, b: T) => {
     const av = toNumberLoose((a as any)[key]);
