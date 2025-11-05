@@ -1,105 +1,101 @@
-/* 管理情報カード（画像準拠：中央寄せ・青文字リンク風） */
-
+/* 管理情報カード（画像の期待値準拠） */
 .admin-card {
   background: var(--pbp-surface);
   border: 1px solid var(--pbp-border);
   border-radius: 12px;
   overflow: hidden;
-  display: flex;
-  flex-direction: column;
-  align-items: stretch;
 }
 
 /* ─ Header ─ */
 .admin-card__header {
   display: flex;
   align-items: center;
-  gap: 8px;
   padding: 16px 20px;
   border-bottom: 1px solid var(--pbp-border-soft);
 }
 
 .admin-card__title {
-  font-size: 0.875rem;
+  font-size: 14px;
   font-weight: 600;
   color: var(--pbp-text-dim);
 }
 
 /* ─ Body ─ */
 .admin-card__body {
-  padding: 20px;
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
+  padding: 16px 20px 18px 20px;
 }
 
-/* ラベル */
-.admin-card__label {
-  font-size: 12px;
-  font-weight: 600;
-  color: var(--pbp-text);
-  margin-bottom: 4px;
-}
-
-/* ─ 各行 ─ */
+/* 上段：担当者ラベル + 編集ボタン（右寄せアイコン） */
 .admin-card__row {
   display: flex;
   align-items: center;
-  justify-content: center;
-  gap: 8px;
+  justify-content: space-between;
+  gap: 12px;
 }
 
-/* 中央寄せした小さめの幅を持つ枠 */
-.admin-card__readonly {
-  width: 160px;
-  text-align: center;
-  border: none;
-  background: var(--pbp-muted-bg);
-  border-radius: 8px;
-  height: 36px;
-  line-height: 36px;
-  color: #2563eb; /* 青いリンク色 */
-  font-weight: 500;
-  cursor: pointer;
+.admin-card__label {
+  font-size: 14px;
+  font-weight: 700; /* 画像の強調に寄せる */
+  color: var(--pbp-text);
 }
 
-/* 担当者編集ボタン */
+/* 右側の小さなアイコンボタン */
 .admin-card__btn {
-  height: 32px;
-  width: 32px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  height: 28px;
+  width: 28px;
   border-radius: 8px;
   border: 1px solid var(--pbp-border);
   background: var(--pbp-surface);
   color: var(--pbp-text);
-  display: flex;
-  align-items: center;
-  justify-content: center;
   transition: background 0.15s ease, transform 0.05s ease;
 }
-.admin-card__btn:hover {
-  background: var(--pbp-muted-bg);
+.admin-card__btn:hover { background: var(--pbp-muted-bg); }
+.admin-card__btn:active { transform: translateY(1px); }
+
+/* 担当者名・作成者名：青いリンク風 */
+.admin-card__link {
+  display: inline-block;
+  margin-top: 8px;
+  color: #2563eb; /* link-blue */
+  text-decoration: none;
+  cursor: default;
 }
-.admin-card__btn:active {
-  transform: translateY(1px);
+.admin-card__link:hover {
+  text-decoration: underline;
+  cursor: pointer;
 }
 
-/* 作成者・作成日時行も中央寄せ */
-.admin-card__center {
+/* 区切り線 */
+.admin-card__divider {
+  height: 1px;
+  margin: 16px 0;
+  background: var(--pbp-border-soft);
+}
+
+/* 下段メタ情報：2カラム */
+.admin-card__meta {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px 24px;
+}
+
+.admin-card__metaCol {
   display: flex;
-  justify-content: center;
+  flex-direction: column;
+  gap: 6px;
 }
 
-.admin-card__pill {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  height: 36px;
-  border-radius: 8px;
-  border: 1px solid var(--pbp-border-soft);
-  background: var(--pbp-muted-bg);
-  color: var(--pbp-text-dim);
-  gap: 6px;
-  width: fit-content;
-  margin: 0 auto; /* 中央寄せ */
-  padding: 0 10px;
+/* 小見出し（薄いグレー） */
+.admin-card__subLabel {
+  font-size: 14px;
+  color: var(--pbp-text-soft);
+}
+
+/* 日付の文字サイズ */
+.admin-card__date {
+  font-size: 16px;
+  color: var(--pbp-text);
 }

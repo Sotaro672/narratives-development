@@ -1,8 +1,9 @@
+//frontend\model\src\pages\ColorVariationCard.tsx
 import * as React from "react";
 import { Palette, Plus, X } from "lucide-react";
 import "./colorVariationCard.css";
 
-type colorVariationCardProps = {
+type ColorVariationCardProps = {
   /** 現在のカラー一覧 */
   colors: string[];
   /** 入力中のカラー名 */
@@ -15,7 +16,7 @@ type colorVariationCardProps = {
   onRemoveColor: (color: string) => void;
 };
 
-const colorVariationCard: React.FC<colorVariationCardProps> = ({
+const ColorVariationCard: React.FC<ColorVariationCardProps> = ({
   colors,
   colorInput,
   onChangeColorInput,
@@ -68,4 +69,4 @@ const colorVariationCard: React.FC<colorVariationCardProps> = ({
   );
 };
 
-export default colorVariationCard;
+export default ColorVariationCard;

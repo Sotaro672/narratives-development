@@ -1,16 +1,13 @@
-// frontend/admin/src/pages/AdminCard.tsx
+import * as React from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "../../../shared/ui/card";
-import { Label } from "../../../shared/ui/label";
-import { Separator } from "../../../shared/ui/separator";
-import { Button } from "../../../shared/ui/button";
 import { Edit2 } from "lucide-react";
 import "./AdminCard.css";
 
 type Props = {
   title?: string;
-  assigneeName: string;     // 例: "佐藤 美咲"
-  createdByName: string;    // 例: "山田 太郎"
-  createdAt: string;        // 例: "2024/1/20"
+  assigneeName: string;   // 例: "佐藤 美咲"
+  createdByName: string;  // 例: "山田 太郎"
+  createdAt: string;      // 例: "2024/1/20"
   onEditAssignee?: () => void;
   onClickAssignee?: () => void;
   onClickCreatedBy?: () => void;
@@ -26,60 +23,61 @@ export default function AdminCard({
   onClickCreatedBy,
 }: Props) {
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle className="text-base">{title}</CardTitle>
+    <Card className="admin-card">
+      {/* ヘッダー */}
+      <CardHeader className="admin-card__header">
+        <CardTitle className="admin-card__title">{title}</CardTitle>
       </CardHeader>
 
-      <CardContent className="space-y-4">
-        {/* 担当者 */}
-        <div>
-          <div className="flex items-center justify-between">
-            <Label className="font-semibold">担当者</Label>
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={onEditAssignee}
-              aria-label="担当者を編集"
-            >
-              <Edit2 className="w-4 h-4" />
-            </Button>
-          </div>
-
-          <p
-            className={`mt-3 text-blue-600 ${
-              onClickAssignee ? "cursor-pointer hover:underline" : ""
-            }`}
-            onClick={onClickAssignee}
+      {/* 本体 */}
+      <CardContent className="admin-card__body">
+        {/* 担当者 行 */}
+        <div className="admin-card__row">
+          <div className="admin-card__label">担当者</div>
+          <button
+            type="button"
+            className="admin-card__btn"
+            onClick={onEditAssignee}
+            aria-label="担当者を編集"
+            title="担当者を編集"
           >
-            {assigneeName}
-          </p>
+            <Edit2 size={16} />
+          </button>
         </div>
 
-        <Separator />
+        {/* 担当者名（リンク風） */}
+        <div>
+          <span
+            className="admin-card__link"
+            onClick={onClickAssignee}
+            role={onClickAssignee ? "button" : undefined}
+          >
+            {assigneeName}
+          </span>
+        </div>
 
-        {/* 作成者・作成日時（2カラム） */}
-        <div className="grid grid-cols-2 gap-4">
-          <div className="space-y-2">
-            {/* v4: ユーティリティ生成していないため HSL 直指定に変更 */}
-            <p className="text-sm text-[hsl(var(--muted-foreground))]">作成者</p>
-            <p
-              className={`text-blue-600 ${
-                onClickCreatedBy ? "cursor-pointer hover:underline" : ""
-              }`}
+        {/* セパレータ */}
+        <div className="admin-card__divider" />
+
+        {/* 作成者 / 作成日時 2カラム */}
+        <div className="admin-card__meta">
+          <div className="admin-card__metaCol">
+            <div className="admin-card__subLabel">作成者</div>
+            <span
+              className="admin-card__link"
               onClick={onClickCreatedBy}
+              role={onClickCreatedBy ? "button" : undefined}
             >
               {createdByName}
-            </p>
+            </span>
           </div>
 
-          <div className="space-y-2">
-            <p className="text-sm text-[hsl(var(--muted-foreground))]">作成日時</p>
-            <p className="text-base">{createdAt}</p>
+          <div className="admin-card__metaCol">
+            <div className="admin-card__subLabel">作成日時</div>
+            <div className="admin-card__date">{createdAt}</div>
           </div>
         </div>
       </CardContent>
     </Card>
   );
 }
-

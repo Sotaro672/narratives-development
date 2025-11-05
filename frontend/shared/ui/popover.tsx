@@ -1,3 +1,4 @@
+// frontend/shared/ui/popover.tsx
 import React, { createContext, useContext, useEffect, useRef, useState } from "react";
 import type { CSSProperties, ReactNode } from "react";
 
@@ -73,11 +74,13 @@ export function PopoverTrigger({ children }: { children: ReactNode }) {
 export function PopoverContent({
   children,
   align = "start",
+  offset = 8,
   style,
   className = "",
 }: {
   children: ReactNode;
   align?: "start" | "center" | "end";
+  offset?: number;
   style?: CSSProperties;
   className?: string;
 }) {
@@ -88,15 +91,42 @@ export function PopoverContent({
     width: 0,
   });
 
-  useEffect(() => {
-    if (!open) return;
+  // 座標をビューポート基準で算出（fixed 用）
+  const recalc = () => {
     const rect = triggerRef.current?.getBoundingClientRect();
     if (!rect) return;
     let left = rect.left;
     if (align === "center") left = rect.left + rect.width / 2;
     if (align === "end") left = rect.right;
-    setPos({ top: rect.bottom + window.scrollY + 8, left, width: rect.width });
-  }, [open, align, triggerRef]);
+    setPos({ top: rect.bottom + offset, left, width: rect.width });
+  };
+
+  useEffect(() => {
+    if (!open) return;
+    recalc();
+    const onScroll = () => recalc(); // メイン領域スクロール時も再計算
+    const onResize = () => recalc();
+    window.addEventListener("scroll", onScroll, { passive: true });
+    window.addEventListener("resize", onResize, { passive: true });
+    // 祖先に overflow: auto な要素がある場合も念のため捕捉
+    const parents: Element[] = [];
+    let el: Element | null = triggerRef.current || null;
+    while (el && el.parentElement) {
+      el = el.parentElement;
+      if (!el) break;
+      const style = getComputedStyle(el);
+      if (/(auto|scroll)/.test(style.overflow + style.overflowY + style.overflowX)) {
+        parents.push(el);
+        el.addEventListener("scroll", onScroll, { passive: true });
+      }
+    }
+    return () => {
+      window.removeEventListener("scroll", onScroll);
+      window.removeEventListener("resize", onResize);
+      parents.forEach((p) => p.removeEventListener("scroll", onScroll));
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, align, offset]);
 
   if (!open) return null;
 
@@ -106,7 +136,7 @@ export function PopoverContent({
       role="dialog"
       className={className}
       style={{
-        position: "absolute",
+        position: "fixed", // ★ ビューポート基準
         top: pos.top,
         left: align === "start" ? pos.left : undefined,
         transform:
@@ -121,7 +151,7 @@ export function PopoverContent({
         borderRadius: 10,
         padding: 12,
         boxShadow: "0 8px 24px rgba(15,23,42,0.08)",
-        zIndex: 60,
+        zIndex: 1000,
         ...style,
       }}
     >
@@ -129,3 +159,4 @@ export function PopoverContent({
     </div>
   );
 }
+

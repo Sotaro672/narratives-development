@@ -353,10 +353,6 @@ export default function Sidebar({ isOpen }: SidebarProps) {
           );
         })}
       </nav>
-
-      <div className="sidebar-footer">
-        <h2>Narratives</h2>
-      </div>
     </aside>
   );
 }

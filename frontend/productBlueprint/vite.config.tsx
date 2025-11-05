@@ -10,7 +10,5 @@ const plugins: PluginOption[] = [
 ];
 
 export default defineConfig({
-  plugins,
-  server: { port: 4018 },
-  build: { target: "esnext" },
-});
+  plugins: [react(), tailwind()],
+})

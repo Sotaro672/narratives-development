@@ -1,3 +1,4 @@
+// frontend/shared/ui/badge.tsx
 import React from "react";
 import type { CSSProperties, ReactNode } from "react";
 

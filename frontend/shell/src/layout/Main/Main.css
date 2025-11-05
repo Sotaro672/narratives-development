@@ -1,20 +1,49 @@
-/* 画面から Header/Sidebar を引いた可視領域 */
+/* frontend/shell/src/layout/Main/Main.css */
+
+/* 
+  Main領域のスクロール制御
+  - Header/Sidebarを除いた残り領域を固定配置
+  - 内部のみをスクロール可能に
+*/
+
 .main-area {
   position: fixed;
-  top: var(--header-h, 64px);
-  left: var(--sidebar-w, 280px);
+  top: var(--header-h, 56px);     /* 上部ヘッダー分の高さを確保 */
+  left: var(--sidebar-w, 180px);  /* 左サイドバー分の幅を確保 */
   right: 0;
   bottom: 0;
 
-  /* スクロール設定 */
-  overflow-y: auto;
-  overflow-x: hidden;
-
-  /* テーマ変数（未定義時はデフォルト） */
-  background: var(--background, #ffffff);
-  color: var(--foreground, #111111);
+  /* スクロール制御 */
+  overflow-y: auto;               /* 垂直スクロールのみ許可 */
+  overflow-x: hidden;             /* 横スクロール禁止 */
 
   /* レイアウト安定化 */
   min-width: 0;
   min-height: 0;
+
+  /* 背景・文字色（テーマ変数に追従） */
+  background: var(--background, #ffffff);
+  color: var(--foreground, #111111);
+
+  /* スクロール時の滑らかさと余白 */
+  scroll-behavior: smooth;
+  box-sizing: border-box;
+}
+
+/* 内部のコンテンツ領域（カードやフォーム）を中央寄せに近づけたい場合 */
+.main-area > * {
+  max-width: 1400px;
+  margin: 0 auto;
+}
+
+/* スクロールバーを控えめにする（Chrome/Edge対応） */
+.main-area::-webkit-scrollbar {
+  width: 8px;
+}
+.main-area::-webkit-scrollbar-thumb {
+  background-color: rgba(0, 0, 0, 0.15);
+  border-radius: 4px;
+}
+.main-area::-webkit-scrollbar-thumb:hover {
+  background-color: rgba(0, 0, 0, 0.25);
 }

@@ -17,7 +17,6 @@
   --sb-active: color-mix(in oklch, var(--sb-accent) 85%, transparent);
   --sb-chip: color-mix(in oklch, var(--sb-accent) 92%, white 8%);
   --sb-badge: var(--color-destructive);
-  --sb-footer-h: 64px;
 }
 
 /* ─ Base / Layout ─ */
@@ -30,7 +29,7 @@
   /* ここが重要：フッターを押し出さず固定するための Flex コンテナ */
   display:flex;
   flex-direction:column;
-  height:100dvh;   /* 端末の実ビューポート高 */
+  height:calc(100dvh - 56px);   /* 端末の実ビューポート高 */
   min-height:0;    /* 子要素での overflow を有効化 */
   box-sizing:border-box;
 }
@@ -123,11 +122,6 @@
   border-radius:var(--radius-lg,10px);
 }
 
-/* ─（任意）白背景/黒文字を強制したい場合 ─ */
-.sidebar-footer {
-  height: 50px;
-  border-color: #000000,2px;
-}
 .sidebar .icon-left, .sidebar .chevron{ color:#111111 !important; stroke:#111111 !important; }
 
 /* Sidebar as full-height column */

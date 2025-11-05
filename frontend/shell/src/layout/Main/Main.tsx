@@ -1,21 +1,22 @@
 // frontend/shell/src/layout/Main/Main.tsx
-import { Routes, Route } from "react-router-dom";
-import routes from "../../app/routes";
+import { useRoutes } from "react-router-dom";
+import routes from "../../app/routes"; // ルーティング定義をインポート
 import "./Main.css";
 
 /**
- * Main Layout
- * - スタイル/レイアウトの責務のみ保持
- * - 実際のルーティングは app/routes.tsx に委譲
+ * Main
+ * - Sidebar・Header を除いた「右側のメインエリア」
+ * - routes.tsx に定義されたルーティングをここで描画
+ * - Main領域のみスクロール可能（全体は固定）
  */
 export default function Main() {
+  // react-router-dom の useRoutes でルート配列を解釈
+  const element = useRoutes(routes);
+
   return (
-    <div className="main-content">
-      <Routes>
-        {routes.map(({ path, element }) => (
-          <Route key={path} path={path} element={element} />
-        ))}
-      </Routes>
+    // Main.css の .main-area でスクロール制御
+    <div className="main-area">
+      {element}
     </div>
   );
 }
