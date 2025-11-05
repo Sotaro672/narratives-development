@@ -1,47 +1,36 @@
-// ※ 型importはしない（ModuleFederationOptions は未エクスポートのため）
-import pkg from "../../package.json";
+// frontend/shell/module-federation.config.ts
+// 型は import しない（@module-federation/vite は ModuleFederationOptions を export していないため）
+import { federation } from "@module-federation/vite";
 
-const deps = (pkg as any).dependencies as Record<string, string>;
-
+// ここで "shared" の requiredVersion: false のような boolean は NG です
+// 必要なら文字列にする（"^18.0.0" など）or 配列にするのが安全
 const mfOptions = {
   name: "shell",
   remotes: {
     member: "http://localhost:4001/assets/remoteEntry.js",
     brand: "http://localhost:4002/assets/remoteEntry.js",
     permission: "http://localhost:4003/assets/remoteEntry.js",
-    inquiry: "http://localhost:4004/assets/remoteEntry.js",
-
-    list: "http://localhost:4005/assets/remoteEntry.js",
-    operation: "http://localhost:4006/assets/remoteEntry.js",
-    preview: "http://localhost:4007/assets/remoteEntry.js",
-    production: "http://localhost:4008/assets/remoteEntry.js",
-
-    tokenBlueprint: "http://localhost:4009/assets/remoteEntry.js",
-    mint: "http://localhost:4010/assets/remoteEntry.js",
-    order: "http://localhost:4011/assets/remoteEntry.js",
-    ads: "http://localhost:4012/assets/remoteEntry.js",
-    account: "http://localhost:4013/assets/remoteEntry.js",
-    transaction: "http://localhost:4014/assets/remoteEntry.js",
-    inventory: "http://localhost:4015/assets/remoteEntry.js",
-    message: "http://localhost:4016/assets/remoteEntry.js",
-    announce: "http://localhost:4017/assets/remoteEntry.js",
-    productBlueprint: "http://localhost:4018/assets/remoteEntry.js",
+    // ... 略 ...
     company: "http://localhost:4019/assets/remoteEntry.js",
   },
 
-  // shared をこうする（requiredVersion を外す or false に）
-shared: {
-  react: { singleton: true, requiredVersion: false },
-  "react-dom": { singleton: true, requiredVersion: false },
-  "react-router-dom": { singleton: true, requiredVersion: false },
-  "@tanstack/react-query": { singleton: true, requiredVersion: false },
-  "@apollo/client": { singleton: true, requiredVersion: false },
-},
+  // ① シンプルに配列で共有（型的に一番安全）
+  shared: [
+    "react",
+    "react-dom",
+    "react-router-dom",
+    "@tanstack/react-query",
+    "@apollo/client",
+  ],
 
-  exposes: {},
-  filename: "remoteEntry.js",
-  manifest: true,
-  dts: false,
-} as const;
+  // ② もし詳細指定したい場合は下記のように（requiredVersion は string で）
+  // shared: {
+  //   react: { singleton: true, requiredVersion: "^18.0.0" },
+  //   "react-dom": { singleton: true, requiredVersion: "^18.0.0" },
+  //   "react-router-dom": { singleton: true, requiredVersion: "^6.0.0" },
+  //   "@tanstack/react-query": { singleton: true },
+  //   "@apollo/client": { singleton: true },
+  // },
+} satisfies Parameters<typeof federation>[0]; // ← federation() の第1引数の型に適合させる
 
 export default mfOptions;
