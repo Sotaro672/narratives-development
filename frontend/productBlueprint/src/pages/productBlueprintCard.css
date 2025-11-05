@@ -1,0 +1,104 @@
+/* frontend/productBlueprint/src/pages/productBlueprintCard.css
+   基本情報カード（ProductBlueprintCard）用スタイル
+   productBlueprintDetail.css の設計トーンを踏襲
+*/
+
+.pbc {
+  background: var(--pbp-surface);
+  border: 1px solid var(--pbp-border);
+  border-radius: 12px;
+  overflow: hidden;
+}
+
+.pbc .box__header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 16px 20px;
+  border-bottom: 1px solid var(--pbp-border-soft);
+}
+
+.pbc .box__title {
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: var(--pbp-text-dim);
+}
+
+.pbc .box__body {
+  padding: 20px;
+}
+
+.pbc .label {
+  font-size: 12px;
+  color: var(--pbp-text-soft);
+  margin-bottom: 6px;
+  margin-top: 12px;
+}
+
+.pbc .input,
+.pbc .select,
+.pbc .readonly {
+  height: 40px;
+  width: 100%;
+  border-radius: 10px;
+  padding: 0 12px;
+  border: 1px solid var(--pbp-border-strong);
+  background: var(--pbp-input-bg);
+  color: var(--pbp-text);
+}
+
+.pbc .readonly {
+  background: var(--pbp-muted-bg);
+  border-color: var(--pbp-border-soft);
+  color: var(--pbp-text-dim);
+  cursor: not-allowed;
+}
+
+.pbc .suffix {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  height: 40px;
+  padding: 0 12px;
+  border-radius: 10px;
+  border: 1px solid var(--pbp-border-strong);
+  background: var(--pbp-input-bg);
+  color: var(--pbp-text-dim);
+}
+
+.pbc .chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.pbc .chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 28px;
+  padding: 0 8px;
+  border-radius: 999px;
+  background: var(--pbp-chip-bg);
+  color: var(--pbp-chip-fg);
+  font-size: 12px;
+}
+
+.pbc .btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  height: 36px;
+  padding: 0 12px;
+  border-radius: 10px;
+  border: 1px solid var(--pbp-border);
+  background: var(--pbp-surface);
+  color: var(--pbp-text);
+  cursor: pointer;
+}
+
+.pbc .btn:hover {
+  background: var(--pbp-muted-bg);
+}

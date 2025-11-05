@@ -46,6 +46,7 @@
   gap: 20px;
 }
 
+/* Box Base */
 .box {
   background: var(--pbp-surface);
   border: 1px solid var(--pbp-border);
@@ -71,6 +72,7 @@
   padding: 20px;
 }
 
+/* Controls */
 .label {
   font-size: 12px;
   color: var(--pbp-text-soft);
@@ -103,37 +105,7 @@
   cursor: not-allowed;
 }
 
-.suffix {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  height: 40px;
-  padding: 0 12px;
-  border-radius: 10px;
-  border: 1px solid var(--pbp-border-strong);
-  background: var(--pbp-input-bg);
-  color: var(--pbp-text-dim);
-}
-
-.chips {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-  margin-bottom: 8px;
-}
-
-.chip {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  height: 28px;
-  padding: 0 8px;
-  border-radius: 999px;
-  background: var(--pbp-chip-bg);
-  color: var(--pbp-chip-fg);
-  font-size: 12px;
-}
-
+/* Buttons */
 .btn {
   display: inline-flex;
   align-items: center;
@@ -166,6 +138,39 @@
   width: 40px;
   padding: 0;
   justify-content: center;
+}
+
+/* Chips */
+.chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 28px;
+  padding: 0 8px;
+  border-radius: 999px;
+  background: var(--pbp-chip-bg);
+  color: var(--pbp-chip-fg);
+  font-size: 12px;
+}
+
+/* Misc */
+.suffix {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  height: 40px;
+  padding: 0 12px;
+  border-radius: 10px;
+  border: 1px solid var(--pbp-border-strong);
+  background: var(--pbp-input-bg);
+  color: var(--pbp-text-dim);
 }
 
 .pill {

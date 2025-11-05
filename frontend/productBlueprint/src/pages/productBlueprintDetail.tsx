@@ -1,19 +1,8 @@
 import * as React from "react";
-import {
-  Pencil,
-  Plus,
-  X,
-  Search,
-  Tag,
-  ShieldCheck,
-  Package2,
-  Ruler,
-  Palette,
-  Trash2,
-  Tags,
-} from "lucide-react";
+import { Plus, X, Palette, Trash2, Tags } from "lucide-react";
 import PageHeader from "./PageHeader";
 import AdminCard from "./AdminCard";
+import ProductBlueprintCard from "./productBlueprintCard";
 import "./productBlueprintDetail.css";
 
 type Fit =
@@ -67,60 +56,21 @@ export default function ProductBlueprintDetailPage() {
       <div className="grid-2">
         {/* 左ペイン */}
         <div>
-          <section className="box">
-            <header className="box__header">
-              <Package2 size={16} /> <h2 className="box__title">基本情報</h2>
-            </header>
-            <div className="box__body">
-              <div className="label">プロダクト名</div>
-              <input className="input" value={productName} onChange={(e) => setProductName(e.target.value)} />
-
-              <div className="label">ブランド</div>
-              <input className="readonly" value={brand} readOnly />
-
-              <div className="label">フィット</div>
-              <select className="select" value={fit} onChange={(e) => setFit(e.target.value as Fit)}>
-                <option>レギュラーフィット</option>
-                <option>スリムフィット</option>
-                <option>リラックスフィット</option>
-                <option>オーバーサイズ</option>
-              </select>
-
-              <div className="label">素材</div>
-              <input className="input" value={materials} onChange={(e) => setMaterials(e.target.value)} />
-
-              <div className="label">重さ</div>
-              <div className="flex gap-8">
-                <input
-                  className="input"
-                  type="number"
-                  value={weight}
-                  onChange={(e) => setWeight(Number(e.target.value))}
-                />
-                <span className="suffix">g</span>
-              </div>
-
-              <div className="label">品質保証（洗濯方法タグ）</div>
-              <div className="chips">
-                {washTags.map((t) => (
-                  <span key={t} className="chip">
-                    <ShieldCheck size={14} />
-                    {t}
-                    <button onClick={() => setWashTags((prev) => prev.filter((x) => x !== t))}>
-                      <X size={14} />
-                    </button>
-                  </span>
-                ))}
-                <button className="btn" onClick={() => setWashTags([...washTags, "新タグ"])}>+ 追加</button>
-              </div>
-
-              <div className="label">商品IDタグ</div>
-              <select className="select" value={productIdTag} onChange={(e) => setProductIdTag(e.target.value)}>
-                <option>QRコード</option>
-                <option>バーコード</option>
-              </select>
-            </div>
-          </section>
+          <ProductBlueprintCard
+            productName={productName}
+            brand={brand}
+            fit={fit}
+            materials={materials}
+            weight={weight}
+            washTags={washTags}
+            productIdTag={productIdTag}
+            onChangeProductName={setProductName}
+            onChangeFit={setFit}
+            onChangeMaterials={setMaterials}
+            onChangeWeight={setWeight}
+            onChangeWashTags={setWashTags}
+            onChangeProductIdTag={setProductIdTag}
+          />
 
           <section className="box">
             <header className="box__header">
