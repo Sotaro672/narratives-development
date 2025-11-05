@@ -1,23 +1,22 @@
 // frontend/ad/src/pages/adManagement.tsx
-import * as React from "react";
-import List from "../../../shell/src/layout/List/List";
-import { Filter } from "lucide-react";
+import React, { useMemo, useState } from "react";
+import List, {
+  FilterableTableHeader,
+  SortableTableHeader,
+} from "../../../shell/src/layout/List/List";
 
-// lucide-react の型ずれ対策用キャスト
-const IconFilter = Filter as unknown as React.ComponentType<
-  React.SVGProps<SVGSVGElement>
->;
-
+// ─────────────────────────────────────────────────────────────
+// Types & Mock
+// ─────────────────────────────────────────────────────────────
 type AdRow = {
   campaign: string;
   brand: string;
   owner: string;
-  format: string;
-  period: string;
+  period: string;      // "YYYY/M/D - YYYY/M/D"
   status: "実行中";
-  spendRate: string; // "66.0%" など
-  spend: string;     // "¥198,000"
-  budget: string;    // "¥300,000"
+  spendRate: string;   // "66.0%"
+  spend: string;       // "¥198,000"
+  budget: string;      // "¥300,000"
 };
 
 const ADS: AdRow[] = [
@@ -25,7 +24,6 @@ const ADS: AdRow[] = [
     campaign: "NEXUS Street デニムジャケット新作",
     brand: "NEXUS Street",
     owner: "渡辺 花子",
-    format: "動画広告",
     period: "2024/3/10 - 2024/4/10",
     status: "実行中",
     spendRate: "66.0%",
@@ -36,7 +34,6 @@ const ADS: AdRow[] = [
     campaign: "LUMINA Fashion 春コレクション",
     brand: "LUMINA Fashion",
     owner: "佐藤 美咲",
-    format: "カルーセル広告",
     period: "2024/3/1 - 2024/3/31",
     status: "実行中",
     spendRate: "68.4%",
@@ -45,63 +42,172 @@ const ADS: AdRow[] = [
   },
 ];
 
+// ─────────────────────────────────────────────────────────────
+// Utils
+// ─────────────────────────────────────────────────────────────
+const toTs = (yyyyMd: string) => {
+  const [y, m, d] = yyyyMd.split("/").map((v) => parseInt(v.trim(), 10));
+  return new Date(y, (m || 1) - 1, d || 1).getTime();
+};
+const periodStartTs = (period: string) => {
+  const start = period.split("-")[0]?.trim() ?? "";
+  return toTs(start);
+};
+const percentToNumber = (v: string) => {
+  const n = Number(v.replace("%", ""));
+  return Number.isNaN(n) ? 0 : n;
+};
+const yenToNumber = (v: string) => {
+  const n = Number(v.replace(/[^\d.-]/g, ""));
+  return Number.isNaN(n) ? 0 : n;
+};
+
+type SortKey = "period" | "spendRate" | "spend" | "budget" | null;
+
+// ─────────────────────────────────────────────────────────────
+// Page
+// ─────────────────────────────────────────────────────────────
 export default function AdManagementPage() {
-  const [sortAsc, setSortAsc] = React.useState(false);
+  // Filters
+  const [brandFilter, setBrandFilter] = useState<string[]>([]);
+  const [ownerFilter, setOwnerFilter] = useState<string[]>([]);
+  const [statusFilter, setStatusFilter] = useState<string[]>([]);
 
-  const rows = React.useMemo(() => {
-    const data = [...ADS];
-    // 期間の開始日でソート（YYYY/M/D 形式前提）
-    const startDate = (p: string) => p.split("-")[0].trim();
-    data.sort((a, b) =>
-      sortAsc
-        ? startDate(a.period).localeCompare(startDate(b.period))
-        : startDate(b.period).localeCompare(startDate(a.period))
+  const brandOptions = useMemo(
+    () => Array.from(new Set(ADS.map((a) => a.brand))).map((v) => ({ value: v, label: v })),
+    []
+  );
+  const ownerOptions = useMemo(
+    () => Array.from(new Set(ADS.map((a) => a.owner))).map((v) => ({ value: v, label: v })),
+    []
+  );
+  const statusOptions = useMemo(
+    () => Array.from(new Set(ADS.map((a) => a.status))).map((v) => ({ value: v, label: v })),
+    []
+  );
+
+  // Sort
+  const [activeKey, setActiveKey] = useState<SortKey>("period");
+  const [direction, setDirection] = useState<"asc" | "desc" | null>("desc");
+
+  // Data (filter -> sort)
+  const rows = useMemo(() => {
+    let data = ADS.filter(
+      (a) =>
+        (brandFilter.length === 0 || brandFilter.includes(a.brand)) &&
+        (ownerFilter.length === 0 || ownerFilter.includes(a.owner)) &&
+        (statusFilter.length === 0 || statusFilter.includes(a.status))
     );
-    return data;
-  }, [sortAsc]);
 
+    if (activeKey && direction) {
+      data = [...data].sort((a, b) => {
+        if (activeKey === "period") {
+          const av = periodStartTs(a.period);
+          const bv = periodStartTs(b.period);
+          return direction === "asc" ? av - bv : bv - av;
+        }
+        if (activeKey === "spendRate") {
+          const av = percentToNumber(a.spendRate);
+          const bv = percentToNumber(b.spendRate);
+          return direction === "asc" ? av - bv : bv - av;
+        }
+        if (activeKey === "spend") {
+          const av = yenToNumber(a.spend);
+          const bv = yenToNumber(b.spend);
+          return direction === "asc" ? av - bv : bv - av;
+        }
+        // budget
+        const av = yenToNumber(a.budget);
+        const bv = yenToNumber(b.budget);
+        return direction === "asc" ? av - bv : bv - av;
+      });
+    }
+
+    return data;
+  }, [brandFilter, ownerFilter, statusFilter, activeKey, direction]);
+
+  // Headers
   const headers: React.ReactNode[] = [
     "キャンペーン名",
-    <>
-      <span className="inline-flex items-center gap-2">
-        <span>ブランド</span>
-        <button className="lp-th-filter" aria-label="ブランドで絞り込む">
-          <IconFilter width={16} height={16} />
-        </button>
-      </span>
-    </>,
-    <>
-      <span className="inline-flex items-center gap-2">
-        <span>担当者</span>
-        <button className="lp-th-filter" aria-label="担当者で絞り込む">
-          <IconFilter width={16} height={16} />
-        </button>
-      </span>
-    </>,
-    "広告形式",
-    <>
-      <span className="inline-flex items-center gap-2">
-        <span>広告期間</span>
-        <button
-          className="lp-th-filter"
-          aria-label={`広告期間でソート（${sortAsc ? "昇順" : "降順"}）`}
-          onClick={() => setSortAsc((v) => !v)}
-        >
-          {sortAsc ? "▲" : "▼"}
-        </button>
-      </span>
-    </>,
-    <>
-      <span className="inline-flex items-center gap-2">
-        <span>ステータス</span>
-        <button className="lp-th-filter" aria-label="ステータスで絞り込む">
-          <IconFilter width={16} height={16} />
-        </button>
-      </span>
-    </>,
-    "消化率",
-    "消化",
-    "予算",
+
+    // ブランド（Filterable）
+    <FilterableTableHeader
+      key="brand"
+      label="ブランド"
+      options={brandOptions}
+      selected={brandFilter}
+      onChange={setBrandFilter}
+    />,
+
+    // 担当者（Filterable）
+    <FilterableTableHeader
+      key="owner"
+      label="担当者"
+      options={ownerOptions}
+      selected={ownerFilter}
+      onChange={setOwnerFilter}
+    />,
+
+    // 広告期間（Sortable／開始日で比較）
+    <SortableTableHeader
+      key="period"
+      label="広告期間"
+      sortKey="period"
+      activeKey={activeKey}
+      direction={direction}
+      onChange={(key, dir) => {
+        setActiveKey(key as SortKey);
+        setDirection(dir);
+      }}
+    />,
+
+    // ステータス（Filterable）
+    <FilterableTableHeader
+      key="status"
+      label="ステータス"
+      options={statusOptions}
+      selected={statusFilter}
+      onChange={setStatusFilter}
+    />,
+
+    // 消化率（Sortable）
+    <SortableTableHeader
+      key="spendRate"
+      label="消化率"
+      sortKey="spendRate"
+      activeKey={activeKey}
+      direction={direction}
+      onChange={(key, dir) => {
+        setActiveKey(key as SortKey);
+        setDirection(dir);
+      }}
+    />,
+
+    // 消化（Sortable）
+    <SortableTableHeader
+      key="spend"
+      label="消化"
+      sortKey="spend"
+      activeKey={activeKey}
+      direction={direction}
+      onChange={(key, dir) => {
+        setActiveKey(key as SortKey);
+        setDirection(dir);
+      }}
+    />,
+
+    // 予算（Sortable）
+    <SortableTableHeader
+      key="budget"
+      label="予算"
+      sortKey="budget"
+      activeKey={activeKey}
+      direction={direction}
+      onChange={(key, dir) => {
+        setActiveKey(key as SortKey);
+        setDirection(dir);
+      }}
+    />,
   ];
 
   return (
@@ -111,7 +217,14 @@ export default function AdManagementPage() {
         headerCells={headers}
         showCreateButton={false}
         showResetButton
-        onReset={() => console.log("広告一覧を更新")}
+        onReset={() => {
+          setBrandFilter([]);
+          setOwnerFilter([]);
+          setStatusFilter([]);
+          setActiveKey("period");
+          setDirection("desc");
+          console.log("広告一覧を更新");
+        }}
       >
         {rows.map((ad) => (
           <tr key={ad.campaign}>
@@ -120,7 +233,6 @@ export default function AdManagementPage() {
               <span className="lp-brand-pill">{ad.brand}</span>
             </td>
             <td>{ad.owner}</td>
-            <td>{ad.format}</td>
             <td>{ad.period}</td>
             <td>
               <span

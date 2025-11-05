@@ -1,32 +1,27 @@
 // frontend/order/src/pages/orderManagement.tsx
-import * as React from "react";
-import List from "../../../shell/src/layout/List/List";
-import { Filter } from "lucide-react";
-
-// LucideアイコンをReactコンポーネントにキャスト（型エラー対策）
-const IconFilter = Filter as unknown as React.ComponentType<
-  React.SVGProps<SVGSVGElement>
->;
+import React, { useMemo, useState } from "react";
+import List, {
+  FilterableTableHeader,
+  SortableTableHeader,
+} from "../../../shell/src/layout/List/List";
 
 type OrderRow = {
   id: string;
   customerName: string;
-  customerEmail: string;
   productName: string;
   additionalItems: string;
   status: "支払済" | "移譲完了";
   paymentMethod: string;
-  amount: string;
-  quantityInfo: string;
+  amount: string;          // e.g. "¥32,700"
+  quantityInfo: string;    // e.g. "3点"
   purchaseLocation: string;
-  orderDate: string;
+  orderDate: string;       // YYYY/M/D
 };
 
 const ORDERS: OrderRow[] = [
   {
     id: "ORD-2024-0002",
     customerName: "山本 由紀",
-    customerEmail: "yuki.yamamoto@example.com",
     productName: "デニムジャケット ヴィンテージ加工",
     additionalItems: "他1点",
     status: "支払済",
@@ -39,7 +34,6 @@ const ORDERS: OrderRow[] = [
   {
     id: "ORD-2024-0001",
     customerName: "Creator Alice",
-    customerEmail: "alice@example.com",
     productName: "シルクブラウス プレミアムライン",
     additionalItems: "他1点",
     status: "移譲完了",
@@ -51,60 +45,140 @@ const ORDERS: OrderRow[] = [
   },
 ];
 
+// utils
+const toTs = (yyyyMd: string) => {
+  const [y, m, d] = yyyyMd.split("/").map((v) => parseInt(v, 10));
+  return new Date(y, (m || 1) - 1, d || 1).getTime();
+};
+const yenToNumber = (v: string) => {
+  const n = Number(v.replace(/[^\d.-]/g, ""));
+  return Number.isNaN(n) ? 0 : n;
+};
+
+type SortKey = "id" | "amount" | "orderDate" | null;
+
 export default function OrderManagementPage() {
-  const [sortAsc, setSortAsc] = React.useState(false);
+  // ── filters ───────────────────────────────────────────────
+  const [statusFilter, setStatusFilter] = useState<string[]>([]);
+  const [methodFilter, setMethodFilter] = useState<string[]>([]);
+  const [placeFilter, setPlaceFilter] = useState<string[]>([]);
 
-  const rows = React.useMemo(() => {
-    const data = [...ORDERS];
-    data.sort((a, b) =>
-      sortAsc
-        ? a.orderDate.localeCompare(b.orderDate)
-        : b.orderDate.localeCompare(a.orderDate)
+  const statusOptions = useMemo(
+    () => Array.from(new Set(ORDERS.map((o) => o.status))).map((v) => ({ value: v, label: v })),
+    []
+  );
+  const methodOptions = useMemo(
+    () => Array.from(new Set(ORDERS.map((o) => o.paymentMethod))).map((v) => ({ value: v, label: v })),
+    []
+  );
+  const placeOptions = useMemo(
+    () => Array.from(new Set(ORDERS.map((o) => o.purchaseLocation))).map((v) => ({ value: v, label: v })),
+    []
+  );
+
+  // ── sort ─────────────────────────────────────────────────
+  const [activeKey, setActiveKey] = useState<SortKey>("orderDate");
+  const [direction, setDirection] = useState<"asc" | "desc" | null>("desc");
+
+  // ── data (filter → sort) ─────────────────────────────────
+  const rows = useMemo(() => {
+    let data = ORDERS.filter(
+      (o) =>
+        (statusFilter.length === 0 || statusFilter.includes(o.status)) &&
+        (methodFilter.length === 0 || methodFilter.includes(o.paymentMethod)) &&
+        (placeFilter.length === 0 || placeFilter.includes(o.purchaseLocation))
     );
-    return data;
-  }, [sortAsc]);
 
+    if (activeKey && direction) {
+      data = [...data].sort((a, b) => {
+        if (activeKey === "id") {
+          const cmp = a.id.localeCompare(b.id);
+          return direction === "asc" ? cmp : -cmp;
+        }
+        if (activeKey === "amount") {
+          const av = yenToNumber(a.amount);
+          const bv = yenToNumber(b.amount);
+          return direction === "asc" ? av - bv : bv - av;
+        }
+        // orderDate
+        const av = toTs(a.orderDate);
+        const bv = toTs(b.orderDate);
+        return direction === "asc" ? av - bv : bv - av;
+      });
+    }
+
+    return data;
+  }, [statusFilter, methodFilter, placeFilter, activeKey, direction]);
+
+  // ── headers ──────────────────────────────────────────────
   const headers: React.ReactNode[] = [
-    <>
-      <span className="inline-flex items-center gap-2">
-        <span>注文番号</span>
-        <button
-          className="lp-th-filter"
-          aria-label="注文番号でソート"
-          onClick={() => setSortAsc((v) => !v)}
-        >
-          {sortAsc ? "▲" : "▼"}
-        </button>
-      </span>
-    </>,
+    // 注文番号（Sortable）
+    <SortableTableHeader
+      key="id"
+      label="注文番号"
+      sortKey="id"
+      activeKey={activeKey}
+      direction={direction}
+      onChange={(key, dir) => {
+        setActiveKey(key as SortKey);
+        setDirection(dir);
+      }}
+    />,
     "お客様",
     "商品",
-    <>
-      <span className="inline-flex items-center gap-2">
-        <span>ステータス</span>
-        <button className="lp-th-filter" aria-label="ステータスで絞り込む">
-          <IconFilter width={16} height={16} />
-        </button>
-      </span>
-    </>,
-    <>
-      <span className="inline-flex items-center gap-2">
-        <span>支払方法</span>
-        <button className="lp-th-filter" aria-label="支払方法で絞り込む">
-          <IconFilter width={16} height={16} />
-        </button>
-      </span>
-    </>,
-    "金額",
-    <>
-      <span className="inline-flex items-center gap-2">
-        <span>購入場所</span>
-        <button className="lp-th-filter" aria-label="購入場所で絞り込む">
-          <IconFilter width={16} height={16} />
-        </button>
-      </span>
-    </>,
-    "注文日",
+
+    // ステータス（Filterable）
+    <FilterableTableHeader
+      key="status"
+      label="ステータス"
+      options={statusOptions}
+      selected={statusFilter}
+      onChange={setStatusFilter}
+    />,
+
+    // 支払方法（Filterable）
+    <FilterableTableHeader
+      key="paymentMethod"
+      label="支払方法"
+      options={methodOptions}
+      selected={methodFilter}
+      onChange={setMethodFilter}
+    />,
+
+    // 金額（Sortable）
+    <SortableTableHeader
+      key="amount"
+      label="金額"
+      sortKey="amount"
+      activeKey={activeKey}
+      direction={direction}
+      onChange={(key, dir) => {
+        setActiveKey(key as SortKey);
+        setDirection(dir);
+      }}
+    />,
+
+    // 購入場所（Filterable）
+    <FilterableTableHeader
+      key="purchaseLocation"
+      label="購入場所"
+      options={placeOptions}
+      selected={placeFilter}
+      onChange={setPlaceFilter}
+    />,
+
+    // 注文日（Sortable）
+    <SortableTableHeader
+      key="orderDate"
+      label="注文日"
+      sortKey="orderDate"
+      activeKey={activeKey}
+      direction={direction}
+      onChange={(key, dir) => {
+        setActiveKey(key as SortKey);
+        setDirection(dir);
+      }}
+    />,
   ];
 
   return (
@@ -114,16 +188,20 @@ export default function OrderManagementPage() {
         headerCells={headers}
         showCreateButton={false}
         showResetButton
-        onReset={() => console.log("注文一覧を更新")}
+        onReset={() => {
+          setStatusFilter([]);
+          setMethodFilter([]);
+          setPlaceFilter([]);
+          setActiveKey("orderDate");
+          setDirection("desc");
+          console.log("注文一覧を更新");
+        }}
       >
         {rows.map((o) => (
           <tr key={o.id}>
             <td>{o.id}</td>
             <td>
               <div className="font-medium">{o.customerName}</div>
-              <div style={{ color: "#6b7280", fontSize: "0.85rem" }}>
-                {o.customerEmail}
-              </div>
             </td>
             <td>
               <div>{o.productName}</div>

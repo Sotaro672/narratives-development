@@ -1,7 +1,9 @@
 // frontend/brand/src/pages/brandManagement.tsx
-import { useMemo, useState } from "react";
-import List from "../../../shell/src/layout/List/List";
-import { Filter, ChevronDown, ChevronUp } from "lucide-react";
+import React, { useMemo, useState } from "react";
+import List, {
+  FilterableTableHeader,
+  SortableTableHeader,
+} from "../../../shell/src/layout/List/List";
 
 type BrandRow = {
   name: string;
@@ -12,40 +14,98 @@ type BrandRow = {
 
 // ダミーデータ（必要に応じてAPI結果に置き換え）
 const ALL_BRANDS: BrandRow[] = [
-  { name: "NEXUS Street",    status: "active",   owner: "渡辺 花子", registeredAt: "2024/2/1" },
-  { name: "LUMINA Fashion",  status: "active",   owner: "佐藤 美咲", registeredAt: "2024/1/1" },
+  { name: "NEXUS Street", status: "active", owner: "渡辺 花子", registeredAt: "2024/2/1" },
+  { name: "LUMINA Fashion", status: "active", owner: "佐藤 美咲", registeredAt: "2024/1/1" },
 ];
 
+// Utility
+const toTs = (yyyyMd: string) => {
+  const [y, m, d] = yyyyMd.split("/").map((v) => parseInt(v, 10));
+  return new Date(y, (m || 1) - 1, d || 1).getTime();
+};
+
+type SortKey = "registeredAt" | null;
+
 export default function BrandManagementPage() {
-  // 登録日の昇降ソート
-  const [sortAsc, setSortAsc] = useState<boolean>(false);
+  // Filter states
+  const [statusFilter, setStatusFilter] = useState<string[]>([]);
+  const [ownerFilter, setOwnerFilter] = useState<string[]>([]);
 
-  const sorted = useMemo(() => {
-    const data = [...ALL_BRANDS];
-    // 文字列日付の単純比較（表示例に合わせて文字列のまま）
-    data.sort((a, b) => (sortAsc ? a.registeredAt.localeCompare(b.registeredAt) : b.registeredAt.localeCompare(a.registeredAt)));
+  const statusOptions = useMemo(
+    () => Array.from(new Set(ALL_BRANDS.map((b) => b.status))).map((v) => ({
+      value: v,
+      label: v === "active" ? "アクティブ" : "停止",
+    })),
+    []
+  );
+  const ownerOptions = useMemo(
+    () => Array.from(new Set(ALL_BRANDS.map((b) => b.owner))).map((v) => ({
+      value: v,
+      label: v,
+    })),
+    []
+  );
+
+  // Sort state
+  const [activeKey, setActiveKey] = useState<SortKey>("registeredAt");
+  const [direction, setDirection] = useState<"asc" | "desc" | null>("desc");
+
+  // Data
+  const rows = useMemo(() => {
+    let data = ALL_BRANDS.filter(
+      (b) =>
+        (statusFilter.length === 0 || statusFilter.includes(b.status)) &&
+        (ownerFilter.length === 0 || ownerFilter.includes(b.owner))
+    );
+
+    if (activeKey && direction) {
+      data = [...data].sort((a, b) => {
+        if (activeKey === "registeredAt") {
+          const av = toTs(a.registeredAt);
+          const bv = toTs(b.registeredAt);
+          return direction === "asc" ? av - bv : bv - av;
+        }
+        return 0;
+      });
+    }
+
     return data;
-  }, [sortAsc]);
+  }, [statusFilter, ownerFilter, activeKey, direction]);
 
-  const headers = [
+  // Headers
+  const headers: React.ReactNode[] = [
     "ブランド名",
-    <>
-      <span>ステータス</span>
-      <button className="lp-th-filter" aria-label="ステータスで絞り込む">
-        <Filter size={16} />
-      </button>
-    </>,
-    "責任者",
-    <>
-      <span>登録日</span>
-      <button
-        className="lp-th-filter"
-        aria-label={`登録日でソート（${sortAsc ? "昇順" : "降順"}）`}
-        onClick={() => setSortAsc((v) => !v)}
-      >
-        {sortAsc ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
-      </button>
-    </>,
+
+    // ステータス（Filterable）
+    <FilterableTableHeader
+      key="status"
+      label="ステータス"
+      options={statusOptions}
+      selected={statusFilter}
+      onChange={setStatusFilter}
+    />,
+
+    // 責任者（Filterable）
+    <FilterableTableHeader
+      key="owner"
+      label="責任者"
+      options={ownerOptions}
+      selected={ownerFilter}
+      onChange={setOwnerFilter}
+    />,
+
+    // 登録日（Sortable）
+    <SortableTableHeader
+      key="registeredAt"
+      label="登録日"
+      sortKey="registeredAt"
+      activeKey={activeKey}
+      direction={direction}
+      onChange={(key, dir) => {
+        setActiveKey(key as SortKey);
+        setDirection(dir);
+      }}
+    />,
   ];
 
   return (
@@ -57,13 +117,18 @@ export default function BrandManagementPage() {
         createLabel="ブランド追加"
         onCreate={() => console.log("ブランド追加")}
         showResetButton
-        onReset={() => console.log("リセット")}
+        onReset={() => {
+          setStatusFilter([]);
+          setOwnerFilter([]);
+          setActiveKey("registeredAt");
+          setDirection("desc");
+          console.log("リセット");
+        }}
       >
-        {sorted.map((b) => (
+        {rows.map((b) => (
           <tr key={b.name}>
             <td>{b.name}</td>
             <td>
-              {/* ピル表示（既存の薄青ピルを流用） */}
               <span className="lp-brand-pill">
                 {b.status === "active" ? "アクティブ" : "停止"}
               </span>

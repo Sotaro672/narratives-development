@@ -1,12 +1,9 @@
 // frontend/member/src/pages/memberManagement.tsx
-import * as React from "react";
-import List from "../../../shell/src/layout/List/List";
-import { Filter } from "lucide-react";
-
-// Lucideアイコン型エラー対策
-const IconFilter = Filter as unknown as React.ComponentType<
-  React.SVGProps<SVGSVGElement>
->;
+import React, { useMemo, useState } from "react";
+import List, {
+  FilterableTableHeader,
+  SortableTableHeader,
+} from "../../../shell/src/layout/List/List";
 
 type MemberRow = {
   name: string;
@@ -102,29 +99,121 @@ const MEMBERS: MemberRow[] = [
   },
 ];
 
+// Utility
+const toTs = (yyyyMd: string) => {
+  const [y, m, d] = yyyyMd.split("/").map((v) => parseInt(v, 10));
+  return new Date(y, (m || 1) - 1, d || 1).getTime();
+};
+
+type SortKey = "taskCount" | "permissionCount" | "registeredAt" | null;
+
 export default function MemberManagementPage() {
+  // Filters
+  const [roleFilter, setRoleFilter] = useState<string[]>([]);
+  const [brandFilter, setBrandFilter] = useState<string[]>([]);
+
+  const roleOptions = useMemo(
+    () => Array.from(new Set(MEMBERS.map((m) => m.role))).map((v) => ({ value: v, label: v })),
+    []
+  );
+  const brandOptions = useMemo(
+    () =>
+      Array.from(new Set(MEMBERS.flatMap((m) => m.brand))).map((v) => ({
+        value: v,
+        label: v,
+      })),
+    []
+  );
+
+  // Sort
+  const [activeKey, setActiveKey] = useState<SortKey>("registeredAt");
+  const [direction, setDirection] = useState<"asc" | "desc" | null>("desc");
+
+  // Data
+  const rows = useMemo(() => {
+    let data = MEMBERS.filter(
+      (m) =>
+        (roleFilter.length === 0 || roleFilter.includes(m.role)) &&
+        (brandFilter.length === 0 || m.brand.some((b) => brandFilter.includes(b)))
+    );
+
+    if (activeKey && direction) {
+      data = [...data].sort((a, b) => {
+        if (activeKey === "registeredAt") {
+          const av = toTs(a.registeredAt);
+          const bv = toTs(b.registeredAt);
+          return direction === "asc" ? av - bv : bv - av;
+        }
+        const av = a[activeKey];
+        const bv = b[activeKey];
+        return direction === "asc" ? (av as number) - (bv as number) : (bv as number) - (av as number);
+      });
+    }
+
+    return data;
+  }, [roleFilter, brandFilter, activeKey, direction]);
+
+  // Headers
   const headers: React.ReactNode[] = [
     "氏名",
     "メールアドレス",
-    <>
-      <span className="inline-flex items-center gap-2">
-        <span>ロール</span>
-        <button className="lp-th-filter" aria-label="ロールで絞り込む">
-          <IconFilter width={16} height={16} />
-        </button>
-      </span>
-    </>,
-    <>
-      <span className="inline-flex items-center gap-2">
-        <span>所属ブランド</span>
-        <button className="lp-th-filter" aria-label="ブランドで絞り込む">
-          <IconFilter width={16} height={16} />
-        </button>
-      </span>
-    </>,
-    "担当数",
-    "権限数",
-    "登録日",
+
+    // ロール（Filterable）
+    <FilterableTableHeader
+      key="role"
+      label="ロール"
+      options={roleOptions}
+      selected={roleFilter}
+      onChange={setRoleFilter}
+    />,
+
+    // 所属ブランド（Filterable）
+    <FilterableTableHeader
+      key="brand"
+      label="所属ブランド"
+      options={brandOptions}
+      selected={brandFilter}
+      onChange={setBrandFilter}
+    />,
+
+    // 担当数（Sortable）
+    <SortableTableHeader
+      key="taskCount"
+      label="担当数"
+      sortKey="taskCount"
+      activeKey={activeKey}
+      direction={direction}
+      onChange={(key, dir) => {
+        setActiveKey(key as SortKey);
+        setDirection(dir);
+      }}
+    />,
+
+    // 権限数（Sortable）
+    <SortableTableHeader
+      key="permissionCount"
+      label="権限数"
+      sortKey="permissionCount"
+      activeKey={activeKey}
+      direction={direction}
+      onChange={(key, dir) => {
+        setActiveKey(key as SortKey);
+        setDirection(dir);
+      }}
+    />,
+
+    // 登録日（Sortable）
+    <SortableTableHeader
+      key="registeredAt"
+      label="登録日"
+      sortKey="registeredAt"
+      activeKey={activeKey}
+      direction={direction}
+      onChange={(key, dir) => {
+        setActiveKey(key as SortKey);
+        setDirection(dir);
+      }}
+    />,
   ];
 
   return (
@@ -135,9 +224,15 @@ export default function MemberManagementPage() {
         showCreateButton
         createLabel="メンバー追加"
         showResetButton
-        onReset={() => console.log("メンバーリスト更新")}
+        onReset={() => {
+          setRoleFilter([]);
+          setBrandFilter([]);
+          setActiveKey("registeredAt");
+          setDirection("desc");
+          console.log("メンバーリスト更新");
+        }}
       >
-        {MEMBERS.map((m) => (
+        {rows.map((m) => (
           <tr key={m.email}>
             <td>{m.name}</td>
             <td>{m.email}</td>
