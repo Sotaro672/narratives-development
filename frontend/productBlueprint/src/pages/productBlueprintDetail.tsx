@@ -1,6 +1,6 @@
 // frontend/productBlueprint/src/pages/productBlueprintDetail.tsx
 import * as React from "react";
-import PageHeader from "./PageHeader";
+import PageHeader from "../../../shell/src/layout/PageHeader/PageHeader";
 import AdminCard from "../../../admin/src/pages/AdminCard";
 import ProductBlueprintCard from "./productBlueprintCard";
 import VariationCard from "../../../model/src/pages/ColorVariationCard";
