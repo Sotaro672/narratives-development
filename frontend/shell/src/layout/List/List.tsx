@@ -1,6 +1,8 @@
+// frontend/shell/src/layout/List/List.tsx
 import { Children, useEffect, useMemo, useState } from "react";
 import type { ReactNode } from "react";
 import { Plus, RotateCw } from "lucide-react";
+import Pagination from "../../../../shared/ui/pagination";
 import "./List.css";
 
 interface ListProps {
@@ -42,8 +44,6 @@ export default function List({
     const start = (page - 1) * ITEMS_PER_PAGE;
     return rows.slice(start, start + ITEMS_PER_PAGE);
   }, [rows, totalItems, page]);
-
-  const showPagination = totalItems > ITEMS_PER_PAGE;
 
   return (
     <div className="list-container">
@@ -88,28 +88,12 @@ export default function List({
         </table>
       </div>
 
-      {/* ページネーション（11件以上のみ） */}
-      {showPagination && (
-        <div className="list-pagination">
-          <button
-            className="lp-btn"
-            onClick={() => setPage((v) => Math.max(1, v - 1))}
-            disabled={page === 1}
-          >
-            前へ
-          </button>
-          <span className="lp-page-info">
-            {page} / {totalPages} ページ
-          </span>
-          <button
-            className="lp-btn"
-            onClick={() => setPage((v) => Math.min(totalPages, v + 1))}
-            disabled={page === totalPages}
-          >
-            次へ
-          </button>
-        </div>
-      )}
+      {/* ページネーション */}
+      <Pagination currentPage={page} totalPages={totalPages} onPageChange={setPage} />
     </div>
   );
 }
+
+/** ← 未使用エラーが出ないように、import せずに再エクスポートだけ行う */
+export { default as FilterableTableHeader } from "../../../../shared/ui/filterable-table-header";
+export { default as SortableTableHeader } from "../../../../shared/ui/sortable-table-header";
