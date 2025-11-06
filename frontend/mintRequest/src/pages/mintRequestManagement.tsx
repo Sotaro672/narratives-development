@@ -4,6 +4,7 @@ import List, {
   FilterableTableHeader,
   SortableTableHeader,
 } from "../../../shell/src/layout/List/List";
+import "./mintRequestManagement.css";
 
 type MintStatus = "リクエスト済み" | "Mint完了" | "計画中";
 
@@ -111,7 +112,7 @@ export default function MintRequestManagementPage() {
         const av = toTs(a[sortKey]);
         const bv = toTs(b[sortKey]);
         return sortDir === "asc" ? av - bv : bv - av;
-        });
+      });
     }
 
     return data;
@@ -210,47 +211,11 @@ export default function MintRequestManagementPage() {
             <td>{r.quantity}</td>
             <td>
               {r.status === "Mint完了" ? (
-                <span
-                  style={{
-                    display: "inline-block",
-                    background: "#ef4444",
-                    color: "#fff",
-                    fontSize: "0.75rem",
-                    fontWeight: 700,
-                    padding: "0.25rem 0.6rem",
-                    borderRadius: 9999,
-                  }}
-                >
-                  Mint完了
-                </span>
+                <span className="mint-badge is-done">Mint完了</span>
               ) : r.status === "リクエスト済み" ? (
-                <span
-                  style={{
-                    display: "inline-block",
-                    background: "#0b0f1a",
-                    color: "#fff",
-                    fontSize: "0.75rem",
-                    fontWeight: 700,
-                    padding: "0.25rem 0.6rem",
-                    borderRadius: 9999,
-                  }}
-                >
-                  リクエスト済み
-                </span>
+                <span className="mint-badge is-requested">リクエスト済み</span>
               ) : (
-                <span
-                  style={{
-                    display: "inline-block",
-                    background: "#e5e7eb",
-                    color: "#0f172a",
-                    fontSize: "0.75rem",
-                    fontWeight: 700,
-                    padding: "0.25rem 0.6rem",
-                    borderRadius: 9999,
-                  }}
-                >
-                  計画中
-                </span>
+                <span className="mint-badge is-planned">計画中</span>
               )}
             </td>
             <td>{r.requester}</td>

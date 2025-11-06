@@ -1,6 +1,7 @@
+// frontend/tokenBlueprint/src/routes.tsx
 import type { RouteObject } from "react-router-dom";
-import TokenBlueprintManagementPage from "./pages/TokenBlueprintManagementPage";
-import TokenBlueprintDetailPage from "./pages/TokenBlueprintDetailPage";
+import TokenBlueprintManagement from "./pages/TokenBlueprintManagement";
+//import TokenBlueprintDetail from "./pages/TokenBlueprintDetail";
 
 /**
  * Token Blueprint Module Routes
@@ -8,8 +9,8 @@ import TokenBlueprintDetailPage from "./pages/TokenBlueprintDetailPage";
  * - /token-blueprint/:blueprintId
  */
 const routes: RouteObject[] = [
-  { path: "", element: <TokenBlueprintManagementPage /> },
-  { path: ":blueprintId", element: <TokenBlueprintDetailPage /> },
+  { path: "", element: <TokenBlueprintManagement /> },
+  //{ path: ":blueprintId", element: <TokenBlueprintDetail /> },
 ];
 
 export default routes;

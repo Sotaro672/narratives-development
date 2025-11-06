@@ -1,22 +1,16 @@
-import { Routes, Route, Navigate } from "react-router-dom";
-import MintDashboardPage from "./pages/MintDashboardPage";
-import MintTokenPage from "./pages/MintTokenPage";
-import MintHistoryPage from "./pages/MintHistoryPage";
-import MintDetailPage from "./pages/MintDetailPage";
+// frontend/mintRequest/src/routes.tsx
+import type { RouteObject } from "react-router-dom";
+import MintRequestManagement from "./pages/mintRequestManagement";
+//import MintRequestDetail from "./pages/mintRequestDetail";
 
 /**
  * MintRoutes
  * トークンミントモジュールのルーティング構成。
  * shell から import("mint/routes") でロードされる。
  */
-export default function MintRoutes() {
-  return (
-    <Routes>
-      <Route path="/" element={<MintDashboardPage />} />
-      <Route path="/token" element={<MintTokenPage />} />
-      <Route path="/history" element={<MintHistoryPage />} />
-      <Route path="/:id" element={<MintDetailPage />} />
-      <Route path="*" element={<Navigate to="/" replace />} />
-    </Routes>
-  );
-}
+const routes: RouteObject[] = [
+  { path: "", element: <MintRequestManagement /> },
+  //{ path: ":blueprintId", element: <TokenBlueprintDetail /> },
+];
+
+export default routes;

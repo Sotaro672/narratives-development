@@ -2,9 +2,6 @@
 import type { RouteObject } from "react-router-dom";
 
 // 単ページのインポート
-import TokenBlueprintManagementPage from "../../../tokenBlueprint/src/pages/tokenBlueprintManagement";
-import MintRequestManagementPage from "../../../mintRequest/src/pages/mintRequestManagement";
-import TokenOperationPage from "../../../operation/src/pages/tokenOperation";
 import ListManagementPage from "../../../list/src/pages/listManagement";
 import OrderManagementPage from "../../../order/src/pages/orderManagement";
 import MemberManagementPage from "../../../member/src/pages/memberManagement";
@@ -26,6 +23,16 @@ const productionRoutes = productionRoutesRaw as unknown as RouteObject[];
 
 import inventoryRoutesRaw from "../../../inventory/src/routes";
 const inventoryRoutes = inventoryRoutesRaw as unknown as RouteObject[];
+
+import tokenBlueprintRoutesRaw from "../../../tokenBlueprint/src/routes";
+const tokenBlueprintRoutes = tokenBlueprintRoutesRaw as unknown as RouteObject[];
+
+import mintRequestRoutesRaw from "../../../mintRequest/src/routes";
+const mintRequestRoutes = mintRequestRoutesRaw as unknown as RouteObject[];
+
+import operationRoutesRaw from "../../../operation/src/routes";
+const operationRoutes = operationRoutesRaw as unknown as RouteObject[];
+
 /**
  * Shell全体で使用するルーティング定義
  * - Layout (Main.tsx) からインポートされる
@@ -54,9 +61,22 @@ export const routes: RouteObject[] = [
     path: "/inventory",
     children: inventoryRoutes,
   },
-  { path: "/tokenBlueprint", element: <TokenBlueprintManagementPage /> },
-  { path: "/mintRequest", element: <MintRequestManagementPage /> },
-  { path: "/operation", element: <TokenOperationPage /> },
+  // TokenBlueprint モジュール
+  {
+    path: "/tokenBlueprint",
+    children: tokenBlueprintRoutes,
+  },
+  // MintRequest モジュール
+  {
+    path: "/mintRequest",
+    children: mintRequestRoutes,
+  },
+  // TokenOperation モジュール
+  {
+    path: "/operation",
+    children: operationRoutes,
+  },
+
   { path: "/list", element: <ListManagementPage /> },
   { path: "/order", element: <OrderManagementPage /> },
   { path: "/member", element: <MemberManagementPage /> },

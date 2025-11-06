@@ -1,20 +1,14 @@
-import { Routes, Route, Navigate } from "react-router-dom";
-import OperationDashboardPage from "./pages/OperationDashboardPage";
-import OperationTaskListPage from "./pages/OperationTaskListPage";
-import OperationDetailPage from "./pages/OperationDetailPage";
+// frontend/operation/src/routes.tsx
+import type { RouteObject } from "react-router-dom";
+import TokenOperation from "./pages/tokenOperation";
 
 /**
  * OperationsRoutes
  * 運用モジュールのルーティング定義。
- * shell から import("operations/routes") でロードされる。
  */
-export default function OperationsRoutes() {
-  return (
-    <Routes>
-      <Route path="/" element={<OperationDashboardPage />} />
-      <Route path="/tasks" element={<OperationTaskListPage />} />
-      <Route path="/:id" element={<OperationDetailPage />} />
-      <Route path="*" element={<Navigate to="/" replace />} />
-    </Routes>
-  );
-}
+const routes: RouteObject[] = [
+  { path: "", element: <TokenOperation /> },
+  // 他のルート定義
+];
+
+export default routes;
