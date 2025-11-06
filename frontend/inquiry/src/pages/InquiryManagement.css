@@ -1,0 +1,48 @@
+/* 問い合わせ一覧（InquiryManagement） */
+
+.inq__link {
+  color: #2563eb;
+  text-decoration: none;
+}
+.inq__link:hover {
+  text-decoration: underline;
+}
+
+.inq__excerpt {
+  color: #6b7280;
+  font-size: 0.85rem;
+}
+
+.inq__badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: #fff;
+  font-size: 0.75rem;
+  font-weight: 700;
+  padding: 0.25rem 0.6rem;
+  border-radius: 9999px;
+}
+.inq__badge--danger {
+  background: #ef4444; /* 未対応 */
+}
+.inq__badge--neutral {
+  background: #0b0f1a; /* 対応中 */
+}
+.inq__dot {
+  width: 12px;
+  height: 12px;
+  border-radius: 9999px;
+  background: #111827;
+  display: inline-block;
+}
+
+.inq__chip {
+  display: inline-block;
+  background: #0b0f1a;
+  color: #fff;
+  font-size: 0.75rem;
+  font-weight: 700;
+  padding: 0.25rem 0.6rem;
+  border-radius: 9999px;
+}

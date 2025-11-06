@@ -2,8 +2,6 @@
 import type { RouteObject } from "react-router-dom";
 
 // 単ページのインポート
-import InquiryManagementPage from "../../../inquiry/src/pages/InquiryManagementPage";
-import InventoryManagementPage from "../../../inventory/src/pages/inventoryManagement";
 import TokenBlueprintManagementPage from "../../../tokenBlueprint/src/pages/tokenBlueprintManagement";
 import MintRequestManagementPage from "../../../mintRequest/src/pages/mintRequestManagement";
 import TokenOperationPage from "../../../operation/src/pages/tokenOperation";
@@ -17,19 +15,27 @@ import AccountManagementPage from "../../../account/src/pages/accountManagement"
 import TransactionListPage from "../../../transaction/src/pages/transactionList";
 
 // モジュールのルート定義（型衝突を避けるため unknown→RouteObject[] にキャスト）
+import inquiryRoutesRaw from "../../../inquiry/src/routes";
+const inquiryRoutes = inquiryRoutesRaw as unknown as RouteObject[];
+
 import productBlueprintRoutesRaw from "../../../productBlueprint/src/routes";
 const productBlueprintRoutes = productBlueprintRoutesRaw as unknown as RouteObject[];
 
 import productionRoutesRaw from "../../../production/src/routes";
 const productionRoutes = productionRoutesRaw as unknown as RouteObject[];
 
+import inventoryRoutesRaw from "../../../inventory/src/routes";
+const inventoryRoutes = inventoryRoutesRaw as unknown as RouteObject[];
 /**
  * Shell全体で使用するルーティング定義
  * - Layout (Main.tsx) からインポートされる
  * - 各モジュールの routes.tsx を children として統合
  */
+// Inquiry モジュール
 export const routes: RouteObject[] = [
-  { path: "/inquiry", element: <InquiryManagementPage /> },
+  { path: "/inquiry", 
+    children: inquiryRoutes 
+  },
 
   // ProductBlueprint モジュール
   {
@@ -43,7 +49,11 @@ export const routes: RouteObject[] = [
     children: productionRoutes,
   },
 
-  { path: "/inventory", element: <InventoryManagementPage /> },
+  // Inventory モジュール
+  {
+    path: "/inventory",
+    children: inventoryRoutes,
+  },
   { path: "/tokenBlueprint", element: <TokenBlueprintManagementPage /> },
   { path: "/mintRequest", element: <MintRequestManagementPage /> },
   { path: "/operation", element: <TokenOperationPage /> },

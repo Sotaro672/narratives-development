@@ -1,6 +1,6 @@
 // frontend/inquiry/src/main.tsx
 import { createRoot } from "react-dom/client";
-import InquiryManagementPage from "./pages/InquiryManagementPage";
+import InquiryManagement from "./pages/InquiryManagement";
 
 const rootEl = document.getElementById("root")!;
-createRoot(rootEl).render(<InquiryManagementPage />);
+createRoot(rootEl).render(<InquiryManagement />);

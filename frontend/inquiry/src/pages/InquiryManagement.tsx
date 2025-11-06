@@ -1,9 +1,10 @@
-// frontend/inquiry/src/pages/InquiryManagementPage.tsx
+// frontend/inquiry/src/pages/InquiryManagement.tsx
 import * as React from "react";
 import List, {
   FilterableTableHeader,
   SortableTableHeader,
 } from "../../../shell/src/layout/List/List";
+import "./InquiryManagement.css";
 
 type InquiryRow = {
   id: string;
@@ -141,82 +142,30 @@ export default function InquiryManagementPage() {
         {rows.map((q) => (
           <tr key={q.id}>
             <td>
-              <a href="#" className="text-blue-600 hover:underline">
+              <a href="#" className="inq__link">
                 {q.id}
               </a>
             </td>
             <td>
               <div className="font-medium">{q.title}</div>
-              <div style={{ color: "#6b7280", fontSize: "0.85rem" }}>{q.body}</div>
+              <div className="inq__excerpt">{q.body}</div>
             </td>
             <td>{q.user}</td>
             <td>
               {q.status === "未対応" ? (
-                <span
-                  style={{
-                    display: "inline-flex",
-                    alignItems: "center",
-                    gap: 6,
-                    background: "#ef4444",
-                    color: "#fff",
-                    fontSize: "0.75rem",
-                    fontWeight: 700,
-                    padding: "0.25rem 0.6rem",
-                    borderRadius: 9999,
-                  }}
-                >
-                  <span
-                    style={{
-                      width: 12,
-                      height: 12,
-                      borderRadius: 9999,
-                      background: "#111827",
-                      display: "inline-block",
-                    }}
-                  />
+                <span className="inq__badge inq__badge--danger">
+                  <span className="inq__dot" />
                   未対応
                 </span>
               ) : (
-                <span
-                  style={{
-                    display: "inline-flex",
-                    alignItems: "center",
-                    gap: 6,
-                    background: "#0b0f1a",
-                    color: "#fff",
-                    fontSize: "0.75rem",
-                    fontWeight: 700,
-                    padding: "0.25rem 0.6rem",
-                    borderRadius: 9999,
-                  }}
-                >
-                  <span
-                    style={{
-                      width: 12,
-                      height: 12,
-                      borderRadius: 9999,
-                      background: "#111827",
-                      display: "inline-block",
-                    }}
-                  />
+                <span className="inq__badge inq__badge--neutral">
+                  <span className="inq__dot" />
                   対応中
                 </span>
               )}
             </td>
             <td>
-              <span
-                style={{
-                  display: "inline-block",
-                  background: "#0b0f1a",
-                  color: "#fff",
-                  fontSize: "0.75rem",
-                  fontWeight: 700,
-                  padding: "0.25rem 0.6rem",
-                  borderRadius: 9999,
-                }}
-              >
-                {q.type}
-              </span>
+              <span className="inq__chip">{q.type}</span>
             </td>
             <td>{q.owner}</td>
             <td>{q.inquiredAt}</td>

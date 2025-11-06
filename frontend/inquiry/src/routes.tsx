@@ -1,15 +1,8 @@
-import { Routes, Route, Navigate } from "react-router-dom";
-import InquiryManagementPage from "./pages/InquiryManagementPage";
+import type { RouteObject } from "react-router-dom";
+import InquiryManagement from "./pages/InquiryManagement";
 
-/**
- * InquiriesRoutes
- * 問い合わせモジュールのルート構成。
- */
-export default function InquiryRoutes() {
-  return (
-    <Routes>
-      <Route path="/" element={<InquiryManagementPage />} />
-      <Route path="*" element={<Navigate to="/" replace />} />
-    </Routes>
-  );
-}
+const routes: RouteObject[] = [
+  { path: "", element: <InquiryManagement /> },
+];
+
+export default routes;
