@@ -2,9 +2,8 @@
 /* productBlueprintDetail.css と同系統のトーンで統一 */
 
 .page-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
+  /* 枠の見た目と位置だけを管理する（レイアウトは中のflexに任せる） */
+  width: 100%;
   border-bottom: 1px solid var(--pbp-border);
   background-color: var(--pbp-surface);
   position: sticky;
@@ -12,7 +11,7 @@
   z-index: 10;
 }
 
-/* 左側：タイトル＋戻るボタン */
+/* 左側：タイトル＋戻るボタン（必要ならコンポーネント側で使用） */
 .page-header__left {
   display: flex;
   align-items: center;
@@ -33,9 +32,11 @@
   display: flex;
   align-items: center;
   gap: 8px;
+  /* もし右寄せが必要な場面で親にjustify-betweenが無い場合の保険 */
+  /* margin-left: auto; */
 }
 
-/* 保存ボタン（btn--primaryに準拠） */
+/* 保存ボタン（btn--primaryに準拠、見た目は白ボタン） */
 .page-header__btn {
   display: inline-flex;
   align-items: center;

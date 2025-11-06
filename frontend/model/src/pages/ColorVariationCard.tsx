@@ -32,7 +32,7 @@ const ColorVariationCard: React.FC<ColorVariationCardProps> = ({
   onRemoveColor,
 }) => {
   return (
-    <Card className="vc">
+    <Card className="vc box">
       <CardHeader className="box__header">
         <Palette size={16} />
         <CardTitle className="box__title">カラーバリエーション</CardTitle>
@@ -43,7 +43,10 @@ const ColorVariationCard: React.FC<ColorVariationCardProps> = ({
         <div className="chips vc__chips">
           {colors.map((c) => (
             <span key={c} title={c}>
-              <Badge className="vc__chip inline-flex items-center gap-1.5 px-2 py-1" variant="secondary">
+              <Badge
+                className="vc__chip inline-flex items-center gap-1.5 px-2 py-1"
+                variant="secondary"
+              >
                 {c}
                 <button
                   className="vc__chip-close"
@@ -82,12 +85,12 @@ const ColorVariationCard: React.FC<ColorVariationCardProps> = ({
               if (e.key === "Enter") onAddColor();
             }}
           />
-          {/* ✅ Button に変更 */}
           <Button
             variant="secondary"
             size="icon"
             onClick={onAddColor}
             aria-label="カラーを追加"
+            className="vc__add"
           >
             <Plus size={18} />
           </Button>

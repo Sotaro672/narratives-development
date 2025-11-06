@@ -1,0 +1,77 @@
+/* PageStyle.css — 画面全体レイアウト（共通） */
+
+/* カラートークン（ライト／ダーク） */
+:root {
+  --pbp-bg: #f8f8f8;
+  --pbp-surface: #ffffff;
+  --pbp-border: rgba(0, 0, 0, 0.08);
+  --pbp-border-soft: rgba(0, 0, 0, 0.06);
+  --pbp-border-strong: rgba(0, 0, 0, 0.12);
+  --pbp-text: rgba(0, 0, 0, 0.86);
+  --pbp-text-dim: rgba(0, 0, 0, 0.70);
+  --pbp-text-soft: rgba(0, 0, 0, 0.55);
+  --pbp-muted-bg: rgba(0, 0, 0, 0.02);
+  --pbp-primary: #4f46e5;
+  --pbp-primary-hover: #6366f1;
+}
+
+/* ダーク */
+@media (prefers-color-scheme: dark) {
+  :root {
+    --pbp-bg: #0c0c0c;
+    --pbp-surface: #161616;
+    --pbp-border: rgba(255, 255, 255, 0.12);
+    --pbp-border-soft: rgba(255, 255, 255, 0.08);
+    --pbp-border-strong: rgba(255, 255, 255, 0.16);
+    --pbp-text: rgba(255, 255, 255, 0.92);
+    --pbp-text-dim: rgba(255, 255, 255, 0.78);
+    --pbp-text-soft: rgba(255, 255, 255, 0.60);
+    --pbp-muted-bg: rgba(255, 255, 255, 0.04);
+  }
+}
+
+/* ページ背景・文字色・高さ */
+.pbp {
+  background: var(--pbp-bg);
+  color: var(--pbp-text);
+  min-height: calc(100vh - 56px);
+}
+
+/* ページ内の水平パディングとセンタリング */
+.page-container {
+  padding: 16px 24px;
+}
+
+/* 画面幅広い時は少しだけ内側に寄せる（期待値の“ゆとり”） */
+@media (min-width: 1360px) {
+  .page-container {
+    padding-left: 32px;
+    padding-right: 32px;
+  }
+}
+
+/* コンテンツを左右2カラムで分割（左メイン / 右サイド） */
+.content-grid {
+  display: grid;
+  gap: 20px;
+  align-items: start;
+  grid-template-columns: 1.8fr 1fr; /* 左広め、右細め（期待値寄せ） */
+}
+
+/* もう少し左を広げたい場合の上書き（大画面） */
+@media (min-width: 1440px) {
+  .content-grid {
+    grid-template-columns: 2fr 1fr;
+  }
+}
+
+/* 右ペインのカードをスクロール追従させる */
+.sticky-aside {
+  position: sticky;
+  top: 84px; /* ヘッダー高さ＋余白に合わせて調整 */
+}
+
+/* 上下の区切り余白 */
+.section-gap {
+  margin-top: 12px;
+}

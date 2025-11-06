@@ -23,6 +23,7 @@ export const Card = React.forwardRef<
       "rounded-xl border bg-[hsl(var(--card))] text-[hsl(var(--card-foreground))]",
       "border-[hsl(var(--border))] shadow-sm",
       "p-0", // 内側余白は Header/Content 側で付与
+      "m-[3px]", // ← 4辺に3pxのmarginを付与
       className
     )}
     {...props}

@@ -1,3 +1,4 @@
+// frontend/shell/src/layout/PageHeader/PageHeader.tsx
 import type { ReactNode } from "react";
 import { Button } from "../../../../shared/ui/button";
 import { ArrowLeft, Save } from "lucide-react";

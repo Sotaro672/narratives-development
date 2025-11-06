@@ -1,13 +1,12 @@
 // frontend/productBlueprint/src/pages/productBlueprintDetail.tsx
 import * as React from "react";
 import { useNavigate } from "react-router-dom";
-import PageHeader from "../../../shell/src/layout/PageHeader/PageHeader";
+import PageStyle from "../../../shell/src/layout/PageStyle/PageStyle";
 import AdminCard from "../../../admin/src/pages/AdminCard";
 import ProductBlueprintCard from "./productBlueprintCard";
-import VariationCard from "../../../model/src/pages/ColorVariationCard";
+import ColorVariationCard from "../../../model/src/pages/ColorVariationCard";
 import SizeVariationCard, { type SizeRow } from "../../../model/src/pages/SizeVariationCard";
 import ModelNumberCard, { type ModelNumber } from "../../../model/src/pages/ModelNumberCard";
-import "./productBlueprintDetail.css";
 
 type Fit =
   | "レギュラーフィット"
@@ -19,9 +18,8 @@ export default function ProductBlueprintDetail() {
   const navigate = useNavigate();
 
   // ─────────────────────────────────────────
-  // モックデータ（画面表示用にコード内へ直書き）
+  // モックデータ
   // ─────────────────────────────────────────
-  // 基本情報
   const [productName, setProductName] = React.useState("シルクブラウス プレミアムライン");
   const [brand] = React.useState("LUMINA Fashion");
   const [fit, setFit] = React.useState<Fit>("レギュラーフィット");
@@ -41,7 +39,7 @@ export default function ProductBlueprintDetail() {
     { id: "3", sizeLabel: "L", chest: 52, waist: 62, length: 64, shoulder: 42 },
   ]);
 
-  // モデルナンバー（サイズ×カラーのマトリクス）
+  // モデルナンバー
   const [modelNumbers] = React.useState<ModelNumber[]>([
     { size: "S", color: "ホワイト", code: "LM-SB-S-WHT" },
     { size: "S", color: "ブラック", code: "MN-001" },
@@ -54,13 +52,12 @@ export default function ProductBlueprintDetail() {
     { size: "L", color: "ネイビー", code: "LM-SB-L-NVY" },
   ]);
 
-  // 管理情報（AdminCard 用）
+  // 管理情報
   const [assignee, setAssignee] = React.useState("佐藤 美咲");
   const [creator] = React.useState("佐藤 美咲");
   const [createdAt] = React.useState("2024/1/15");
 
   const onSave = () => alert("保存しました（ダミー）");
-
   const onBack = React.useCallback(() => {
     navigate(-1);
   }, [navigate]);
@@ -76,55 +73,57 @@ export default function ProductBlueprintDetail() {
     setColors((prev) => prev.filter((c) => c !== name));
 
   return (
-    <div className="pbp">
-      <PageHeader title="商品設計詳細" onBack={onBack} onSave={onSave} />
-
-      <div className="grid-2">
-        {/* 左ペイン */}
-        <div>
-          <ProductBlueprintCard
-            productName={productName}
-            brand={brand}
-            fit={fit}
-            materials={materials}
-            weight={weight}
-            washTags={washTags}
-            productIdTag={productIdTag}
-            onChangeProductName={setProductName}
-            onChangeFit={setFit}
-            onChangeMaterials={setMaterials}
-            onChangeWeight={setWeight}
-            onChangeWashTags={setWashTags}
-            onChangeProductIdTag={setProductIdTag}
-          />
-
-          <VariationCard
-            colors={colors}
-            colorInput={colorInput}
-            onChangeColorInput={setColorInput}
-            onAddColor={addColor}
-            onRemoveColor={removeColor}
-          />
-
-          <SizeVariationCard
-            sizes={sizes}
-            onRemove={(id) => setSizes((prev) => prev.filter((s) => s.id !== id))}
-          />
-
-          <ModelNumberCard sizes={sizes} colors={colors} modelNumbers={modelNumbers} />
-        </div>
-
-        {/* 右ペイン（AdminCard は admin/src/pages/AdminCard.tsx の Props に合わせる） */}
-        <AdminCard
-          title="管理情報"
-          assigneeName={assignee}
-          createdByName={creator}
-          createdAt={createdAt}
-          onEditAssignee={() => setAssignee("新担当者")}
-          onClickAssignee={() => console.log("assignee clicked:", assignee)}
-          onClickCreatedBy={() => console.log("createdBy clicked:", creator)}
+    <PageStyle
+      layout="grid-2"
+      title="商品設計詳細"
+      onBack={onBack}
+      onSave={onSave}
+      // badge や actions があればここに渡す
+    >
+      {/* --- 左ペイン --- */}
+      <div>
+        <ProductBlueprintCard
+          productName={productName}
+          brand={brand}
+          fit={fit}
+          materials={materials}
+          weight={weight}
+          washTags={washTags}
+          productIdTag={productIdTag}
+          onChangeProductName={setProductName}
+          onChangeFit={setFit}
+          onChangeMaterials={setMaterials}
+          onChangeWeight={setWeight}
+          onChangeWashTags={setWashTags}
+          onChangeProductIdTag={setProductIdTag}
         />
+
+        <ColorVariationCard
+          colors={colors}
+          colorInput={colorInput}
+          onChangeColorInput={setColorInput}
+          onAddColor={addColor}
+          onRemoveColor={removeColor}
+        />
+
+        <SizeVariationCard
+          sizes={sizes}
+          onRemove={(id) => setSizes((prev) => prev.filter((s) => s.id !== id))}
+        />
+
+        <ModelNumberCard sizes={sizes} colors={colors} modelNumbers={modelNumbers} />
       </div>
-    </div>
+
+      {/* --- 右ペイン（管理情報） --- */}
+      <AdminCard
+        title="管理情報"
+        assigneeName={assignee}
+        createdByName={creator}
+        createdAt={createdAt}
+        onEditAssignee={() => setAssignee("新担当者")}
+        onClickAssignee={() => console.log("assignee clicked:", assignee)}
+        onClickCreatedBy={() => console.log("createdBy clicked:", creator)}
+      />
+    </PageStyle>
   );
 }
