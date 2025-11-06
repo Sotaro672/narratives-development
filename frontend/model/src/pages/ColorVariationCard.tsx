@@ -5,6 +5,7 @@ import {Card,CardHeader,CardTitle,CardContent} from "../../../shared/ui";
 import { Badge } from "../../../shared/ui/badge";
 import { Button } from "../../../shared/ui/button";
 import "./ColorVariationCard.css";
+import "./Card.css"
 
 type ColorVariationCardProps = {
   /** 現在のカラー一覧 */

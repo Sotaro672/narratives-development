@@ -17,6 +17,7 @@ import {
   TableCell,
 } from "../../../shared/ui/table";
 import "./ModelNumberCard.css";
+import "./Card.css"
 
 export type ModelNumber = {
   size: string; // 例: "S" | "M" | "L"

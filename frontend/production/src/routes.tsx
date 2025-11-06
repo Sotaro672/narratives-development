@@ -1,22 +1,19 @@
-import { Routes, Route, Navigate } from "react-router-dom";
-import ProductionDashboardPage from "./pages/ProductionDashboardPage";
-import ProductionPlanPage from "./pages/ProductionPlanPage";
-import ProductionProgressPage from "./pages/ProductionProgressPage";
-import ProductionDetailPage from "./pages/ProductionDetailPage";
+// frontend/production/src/routes.tsx
+import type { RouteObject } from "react-router-dom";
+import ProductionManagement from "./pages/productionManagement";
+//import ProductionDetail from "./pages/productionDetail";
 
 /**
- * ProductionRoutes
- * 生産計画モジュールのルーティング構成。
- * shell から import("production/routes") でロードされる。
+ * Production Module Routes
+ * - /production
+ * - /production/plans
+ * Shell 側で:
+ *   { path: "/production", children: productionRoutes }
+ * のように取り込みます。
  */
-export default function ProductionRoutes() {
-  return (
-    <Routes>
-      <Route path="/" element={<ProductionDashboardPage />} />
-      <Route path="/plans" element={<ProductionPlanPage />} />
-      <Route path="/progress" element={<ProductionProgressPage />} />
-      <Route path="/:id" element={<ProductionDetailPage />} />
-      <Route path="*" element={<Navigate to="/" replace />} />
-    </Routes>
-  );
-}
+const routes: RouteObject[] = [
+  { path: "", element: <ProductionManagement /> },
+  //{ path: "plans", element: <ProductionDetail /> },
+];
+
+export default routes;

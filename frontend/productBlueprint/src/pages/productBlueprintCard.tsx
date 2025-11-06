@@ -9,7 +9,6 @@ import {
 import { Badge } from "../../../shared/ui/badge";
 import { Button } from "../../../shared/ui/button";
 import { Input } from "../../../shared/ui/input";
-import { Select } from "../../../shared/ui/select";
 import {
   Popover,
   PopoverTrigger,

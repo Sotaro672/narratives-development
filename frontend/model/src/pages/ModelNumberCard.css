@@ -1,49 +1,37 @@
-/* frontend/productBlueprint/src/pages/ModelNumberCard.css
-   モデルナンバー（サイズ x カラー）表 専用スタイル
-   既存の --pbp-* 変数と .box 系ユーティリティを使用
+/* frontend/model/src/pages/ModelNumberCard.css
+   モデルナンバーカード専用
+   共通スタイルは Card.css に委譲（--pbp-* 変数使用）
 */
 
-.mnc {
-  background: var(--pbp-surface);
-  border: 1px solid var(--pbp-border);
-  border-radius: 12px;
-  overflow: hidden;
-}
+@import "./Card.css";
 
+/* テーブル */
 .mnc__table {
   width: 100%;
-  border-collapse: collapse;
-  border-spacing: 0;
+  border-collapse: separate;
+  border-spacing: 0 8px; /* 行間に余白を出す */
 }
 
-.mnc__table th,
-.mnc__table td {
-  border-bottom: 1px solid var(--pbp-border-soft);
-  padding: 8px 10px;
+.mnc__table thead th {
   text-align: left;
-  font-size: 0.875rem;
-  color: var(--pbp-text);
+  font-size: 12px;
+  color: var(--pbp-text-soft);
+  padding: 0 8px 8px 0;
 }
 
-.mnc__table th {
-  font-weight: 600;
-  color: var(--pbp-text-dim);
-  background: var(--pbp-muted-bg);
-}
-
-.mnc__table tr:last-child td {
-  border-bottom: none;
+.mnc__table tbody td {
+  padding: 0 8px 8px 0;
 }
 
 .mnc__size {
-  width: 120px;
   font-weight: 600;
-  color: var(--pbp-text-dim);
+  color: var(--pbp-text);
 }
 
+/* 空状態 */
 .mnc__empty {
-  text-align: center;
-  font-size: 0.875rem;
+  font-size: 12px;
   color: var(--pbp-text-soft);
-  padding: 16px 0;
+  padding: 6px 0;
+  text-align: center;
 }

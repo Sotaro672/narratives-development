@@ -1,11 +1,8 @@
 // frontend/shell/src/app/routes.tsx
 import type { RouteObject } from "react-router-dom";
 
-// 各サブアプリのページをインポート
+// 単ページのインポート
 import InquiryManagementPage from "../../../inquiry/src/pages/InquiryManagementPage";
-import ProductBlueprintManagementPage from "../../../productBlueprint/src/pages/productBlueprintManagement";
-import ProductBlueprintDetailPage from "../../../productBlueprint/src/pages/productBlueprintDetail";
-import ProductionManagementPage from "../../../production/src/pages/productionManagement";
 import InventoryManagementPage from "../../../inventory/src/pages/inventoryManagement";
 import TokenBlueprintManagementPage from "../../../tokenBlueprint/src/pages/tokenBlueprintManagement";
 import MintRequestManagementPage from "../../../mintRequest/src/pages/mintRequestManagement";
@@ -19,15 +16,33 @@ import AdManagementPage from "../../../ad/src/pages/adManagement";
 import AccountManagementPage from "../../../account/src/pages/accountManagement";
 import TransactionListPage from "../../../transaction/src/pages/transactionList";
 
+// モジュールのルート定義（型衝突を避けるため unknown→RouteObject[] にキャスト）
+import productBlueprintRoutesRaw from "../../../productBlueprint/src/routes";
+const productBlueprintRoutes = productBlueprintRoutesRaw as unknown as RouteObject[];
+
+import productionRoutesRaw from "../../../production/src/routes";
+const productionRoutes = productionRoutesRaw as unknown as RouteObject[];
+
 /**
  * Shell全体で使用するルーティング定義
  * - Layout (Main.tsx) からインポートされる
+ * - 各モジュールの routes.tsx を children として統合
  */
 export const routes: RouteObject[] = [
   { path: "/inquiry", element: <InquiryManagementPage /> },
-  { path: "/productBlueprint", element: <ProductBlueprintManagementPage /> },
-  { path: "/productBlueprint/detail", element: <ProductBlueprintDetailPage /> },
-  { path: "/production", element: <ProductionManagementPage /> },
+
+  // ProductBlueprint モジュール
+  {
+    path: "/productBlueprint",
+    children: productBlueprintRoutes,
+  },
+
+  // Production モジュール
+  {
+    path: "/production",
+    children: productionRoutes,
+  },
+
   { path: "/inventory", element: <InventoryManagementPage /> },
   { path: "/tokenBlueprint", element: <TokenBlueprintManagementPage /> },
   { path: "/mintRequest", element: <MintRequestManagementPage /> },

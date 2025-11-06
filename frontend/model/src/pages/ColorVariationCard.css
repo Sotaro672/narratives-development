@@ -1,14 +1,7 @@
-/* frontend/productBlueprint/src/pages/VariationCard.css
+/* frontend/model/src/pages/ColorVariationCard.css
    カラーバリエーションカード専用
-   ※ 変数は productBlueprintDetail.css の --pbp-* を使用
+   ※ 共通スタイルは Card.css に委譲（--pbp-* 変数使用）
 */
-
-.vc {
-  background: var(--pbp-surface);
-  border: 1px solid var(--pbp-border);
-  border-radius: 12px;
-  overflow: hidden;
-}
 
 /* chips 行の余白最適化 */
 .vc__chips {
@@ -19,6 +12,7 @@
 .vc__chip {
   position: relative;
 }
+
 .vc__chip-close {
   display: inline-flex;
   align-items: center;
@@ -30,6 +24,7 @@
   color: inherit;
   opacity: 0.85;
 }
+
 .vc__chip-close:hover {
   opacity: 1;
 }
@@ -46,7 +41,7 @@
   flex: 1;
 }
 
-/* 追加ボタンのわずかなホバー演出を強める（既存btnに足し込み） */
+/* 追加ボタンのわずかなホバー演出を強める */
 .vc__add:hover {
   box-shadow: 0 0 0 3px var(--pbp-ring);
 }

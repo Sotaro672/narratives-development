@@ -1,53 +1,43 @@
-/* frontend/productBlueprint/src/pages/SizeVariationCard.css
+/* frontend/model/src/pages/SizeVariationCard.css
    サイズバリエーションカード専用
-   productBlueprintDetail.css と同系統トーンで統一
+   共通スタイルは Card.css に委譲（--pbp-* 変数使用）
 */
 
-.svc {
-  background: var(--pbp-surface);
-  border: 1px solid var(--pbp-border);
-  border-radius: 12px;
-  overflow: hidden;
-}
+@import "./Card.css";
 
+/* テーブル */
 .svc__table {
   width: 100%;
-  border-collapse: collapse;
-  border-spacing: 0;
+  border-collapse: separate;
+  border-spacing: 0 8px; /* 行間に余白を出す */
 }
 
-.svc__table th,
-.svc__table td {
-  border-bottom: 1px solid var(--pbp-border-soft);
-  padding: 8px 10px;
+.svc__table thead th {
   text-align: left;
-  font-size: 0.875rem;
-  color: var(--pbp-text);
-}
-
-.svc__table th {
-  font-weight: 600;
-  color: var(--pbp-text-dim);
-  background: var(--pbp-muted-bg);
-}
-
-.svc__table tr:last-child td {
-  border-bottom: none;
-}
-
-.svc__remove {
-  opacity: 0.8;
-  transition: opacity 0.15s ease, transform 0.1s ease;
-}
-
-.svc__remove:hover {
-  opacity: 1;
-  transform: scale(1.1);
-}
-
-.svc__empty {
-  text-align: center;
-  font-size: 0.875rem;
+  font-size: 12px;
   color: var(--pbp-text-soft);
-  padding: 16px 0;
+  padding: 0 8px 8px 0;
+}
+
+.svc__table tbody tr {
+  background: transparent; /* 行ごと枠はセル側で表現 */
+}
+
+.svc__table tbody td {
+  padding: 0 8px 8px 0;
+}
+
+/* 空状態 */
+.svc__empty {
+  font-size: 12px;
+  color: var(--pbp-text-soft);
+  padding: 6px 0;
+  text-align: center;
+}
+
+/* 削除ボタン（微調整。Button 自体の見た目は shared/ui/button.tsx に依存） */
+.svc__remove {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
 }
