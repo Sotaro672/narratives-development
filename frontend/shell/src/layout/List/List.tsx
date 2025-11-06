@@ -1,8 +1,23 @@
+// frontend/shell/src/layout/List/List.tsx
 import { Children, useEffect, useMemo, useState } from "react";
 import type { ReactNode } from "react";
 import { Plus } from "lucide-react";
 import Pagination from "../../../../shared/ui/pagination";
 import RefreshButton from "../../../../shared/ui/refresh";
+import {
+  Card,
+  CardHeader,
+  CardTitle,
+  CardContent,
+} from "../../../../shared/ui/card";
+import {
+  Table,
+  TableHeader,
+  TableBody,
+  TableHead,
+  TableRow,
+  TableCaption,
+} from "../../../../shared/ui/table";
 import "./List.css";
 
 interface ListProps {
@@ -72,27 +87,44 @@ export default function List({
       </div>
 
       {/* ───────────────────────────────────────
-          テーブル領域
+          テーブル領域 (Card + Table化)
       ─────────────────────────────────────── */}
-      <div className="lp-card">
-        <table className="lp-table" role="table" aria-label={`${title} 一覧`}>
-          <thead className="lp-thead">
-            <tr className="lp-row-head" role="row">
-              {headerCells.map((cell, i) => (
-                <th key={i} className="lp-th" scope="col" role="columnheader">
-                  {cell}
-                </th>
-              ))}
-            </tr>
-          </thead>
-          <tbody className="lp-tbody">{paginatedRows}</tbody>
-        </table>
-      </div>
+      <Card className="lp-card">
+        <CardHeader className="sr-only">
+          <CardTitle>{title} 一覧</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <Table role="table" aria-label={`${title} 一覧`} className="lp-table">
+            <TableHeader className="lp-thead">
+              <TableRow className="lp-row-head" role="row">
+                {headerCells.map((cell, i) => (
+                  <TableHead
+                    key={i}
+                    className="lp-th"
+                    scope="col"
+                    role="columnheader"
+                  >
+                    {cell}
+                  </TableHead>
+                ))}
+              </TableRow>
+            </TableHeader>
+            <TableBody className="lp-tbody">{paginatedRows}</TableBody>
+            <TableCaption className="sr-only">
+              {title} の一覧テーブル
+            </TableCaption>
+          </Table>
+        </CardContent>
+      </Card>
 
       {/* ───────────────────────────────────────
           ページネーション
       ─────────────────────────────────────── */}
-      <Pagination currentPage={page} totalPages={totalPages} onPageChange={setPage} />
+      <Pagination
+        currentPage={page}
+        totalPages={totalPages}
+        onPageChange={setPage}
+      />
     </div>
   );
 }

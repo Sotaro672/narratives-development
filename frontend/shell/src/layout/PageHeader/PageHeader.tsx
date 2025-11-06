@@ -1,22 +1,55 @@
-import * as React from "react";
-import { Save } from "lucide-react";
+import type { ReactNode } from "react";
+import { Button } from "../../../../shared/ui/button";
+import { ArrowLeft, Save } from "lucide-react";
 import "./PageHeader.css";
 
-type PageHeaderProps = {
+interface PageHeaderProps {
   /** ページタイトル */
   title: string;
-  /** 保存時のクリックハンドラ */
+  /** 戻るボタン押下時ハンドラ */
+  onBack: () => void;
+  /** 保存ボタン押下時ハンドラ（任意） */
   onSave?: () => void;
-};
+  /** 右側の追加アクション（任意） */
+  actions?: ReactNode;
+  /** タイトル横に表示するバッジ（任意） */
+  badge?: ReactNode;
+}
 
-const PageHeader: React.FC<PageHeaderProps> = ({ title, onSave }) => {
+const PageHeader = ({
+  title,
+  onBack,
+  onSave,
+  actions,
+  badge,
+}: PageHeaderProps) => {
   return (
-    <div className="page-header">
-      <h1 className="page-header__title">{title}</h1>
-      <div className="page-header__actions">
-        <button className="page-header__btn" onClick={onSave}>
-          <Save size={16} /> 保存
-        </button>
+    <div className="sticky top-0 z-10 border-b bg-card/95 backdrop-blur supports-[backdrop-filter]:bg-card/60 page-header">
+      <div className="px-4 py-3">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-4">
+            <Button variant="ghost" size="sm" onClick={onBack}>
+              <ArrowLeft className="w-4 h-4" />
+            </Button>
+            <div className="flex items-center gap-2">
+              <h1 className="page-header__title">{title}</h1>
+              {badge}
+            </div>
+          </div>
+          <div className="flex items-center gap-2 page-header__actions">
+            {onSave && (
+              <Button
+                variant="default"
+                size="sm"
+                className="page-header__btn"
+                onClick={onSave}
+              >
+                <Save size={16} className="mr-1" /> 保存
+              </Button>
+            )}
+            {actions}
+          </div>
+        </div>
       </div>
     </div>
   );

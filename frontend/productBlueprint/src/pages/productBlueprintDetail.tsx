@@ -1,5 +1,6 @@
 // frontend/productBlueprint/src/pages/productBlueprintDetail.tsx
 import * as React from "react";
+import { useNavigate } from "react-router-dom";
 import PageHeader from "../../../shell/src/layout/PageHeader/PageHeader";
 import AdminCard from "../../../admin/src/pages/AdminCard";
 import ProductBlueprintCard from "./productBlueprintCard";
@@ -15,6 +16,8 @@ type Fit =
   | "オーバーサイズ";
 
 export default function ProductBlueprintDetail() {
+  const navigate = useNavigate();
+
   // ─────────────────────────────────────────
   // モックデータ（画面表示用にコード内へ直書き）
   // ─────────────────────────────────────────
@@ -58,6 +61,10 @@ export default function ProductBlueprintDetail() {
 
   const onSave = () => alert("保存しました（ダミー）");
 
+  const onBack = React.useCallback(() => {
+    navigate(-1);
+  }, [navigate]);
+
   // VariationCard handlers
   const addColor = () => {
     const v = colorInput.trim();
@@ -70,7 +77,7 @@ export default function ProductBlueprintDetail() {
 
   return (
     <div className="pbp">
-      <PageHeader title="商品設計詳細" onSave={onSave} />
+      <PageHeader title="商品設計詳細" onBack={onBack} onSave={onSave} />
 
       <div className="grid-2">
         {/* 左ペイン */}

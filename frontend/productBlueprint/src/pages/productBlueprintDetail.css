@@ -37,7 +37,6 @@
   background: var(--pbp-bg);
   color: var(--pbp-text);
   min-height: calc(100vh - 56px);
-  padding: 24px;
 }
 
 .grid-2 {

@@ -1,7 +1,15 @@
-//frontend\model\src\pages\ColorVariationCard.tsx
+// frontend/model/src/pages/ColorVariationCard.tsx
 import * as React from "react";
 import { Palette, Plus, X } from "lucide-react";
-import "./colorVariationCard.css";
+import {
+  Card,
+  CardHeader,
+  CardTitle,
+  CardContent,
+} from "../../../shared/ui";
+import { Badge } from "../../../shared/ui/badge";
+import { Button } from "../../../shared/ui/button";
+import "./ColorVariationCard.css";
 
 type ColorVariationCardProps = {
   /** 現在のカラー一覧 */
@@ -24,28 +32,42 @@ const ColorVariationCard: React.FC<ColorVariationCardProps> = ({
   onRemoveColor,
 }) => {
   return (
-    <section className="vc box">
-      <header className="box__header">
-        <Palette size={16} /> <h2 className="box__title">カラーバリエーション</h2>
-      </header>
+    <Card className="vc">
+      <CardHeader className="box__header">
+        <Palette size={16} />
+        <CardTitle className="box__title">カラーバリエーション</CardTitle>
+      </CardHeader>
 
-      <div className="box__body">
+      <CardContent className="box__body">
         {/* カラー chips */}
         <div className="chips vc__chips">
           {colors.map((c) => (
-            <span key={c} className="chip vc__chip" title={c}>
-              {c}
-              <button
-                className="vc__chip-close"
-                onClick={() => onRemoveColor(c)}
-                aria-label={`${c} を削除`}
-              >
-                <X size={14} />
-              </button>
+            <span key={c} title={c}>
+              <Badge className="vc__chip inline-flex items-center gap-1.5 px-2 py-1" variant="secondary">
+                {c}
+                <button
+                  className="vc__chip-close"
+                  onClick={() => onRemoveColor(c)}
+                  aria-label={`${c} を削除`}
+                  style={{
+                    background: "transparent",
+                    border: "none",
+                    cursor: "pointer",
+                    display: "inline-flex",
+                    alignItems: "center",
+                    padding: 0,
+                  }}
+                >
+                  <X size={12} />
+                </button>
+              </Badge>
             </span>
           ))}
+
           {colors.length === 0 && (
-            <span className="vc__empty">まだカラーがありません。右で追加してください。</span>
+            <span className="vc__empty">
+              まだカラーがありません。右で追加してください。
+            </span>
           )}
         </div>
 
@@ -60,12 +82,18 @@ const ColorVariationCard: React.FC<ColorVariationCardProps> = ({
               if (e.key === "Enter") onAddColor();
             }}
           />
-          <button className="btn btn--icon vc__add" onClick={onAddColor} aria-label="カラーを追加">
+          {/* ✅ Button に変更 */}
+          <Button
+            variant="secondary"
+            size="icon"
+            onClick={onAddColor}
+            aria-label="カラーを追加"
+          >
             <Plus size={18} />
-          </button>
+          </Button>
         </div>
-      </div>
-    </section>
+      </CardContent>
+    </Card>
   );
 };
 
