@@ -1,10 +1,9 @@
 import type { RouteObject } from "react-router-dom";
-import BrandManagementPage from "./pages/BrandManagementPage";
-import BrandDetailPage from "./pages/BrandDetailPage";
+import BrandManagement from "./pages/brandManagement";
 
 const routes: RouteObject[] = [
-  { path: "", element: <BrandManagementPage /> },
-  { path: ":brandId", element: <BrandDetailPage /> },
+  { path: "", element: <BrandManagement /> },
+  // 他のルート定義
 ];
 
 export default routes;

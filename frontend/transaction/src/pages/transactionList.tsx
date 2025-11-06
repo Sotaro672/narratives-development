@@ -1,10 +1,10 @@
-// frontend/transaction/src/pages/transactionList.tsx
 import React, { useMemo, useState } from "react";
 import List, {
   FilterableTableHeader,
   SortableTableHeader,
 } from "../../../shell/src/layout/List/List";
 import { ArrowDownLeft, ArrowUpRight } from "lucide-react";
+import "./transactionList.css";
 
 // Lucide型エラー対策（TS2786）
 const IconIn = ArrowDownLeft as unknown as React.ComponentType<
@@ -91,7 +91,7 @@ export default function TransactionListPage() {
         const av = toTs(a.datetime);
         const bv = toTs(b.datetime);
         return sortDir === "asc" ? av - bv : bv - av;
-        }
+      }
       // amount
       const av = a.amount;
       const bv = b.amount;
@@ -158,42 +158,27 @@ export default function TransactionListPage() {
     />,
   ];
 
-  const renderTypeBadge = (type: Transaction["type"]) => {
-    const isReceive = type === "受取";
-    const color = isReceive ? "#0a8a4b" : "#d72e2e";
-    const bg = isReceive ? "#e6f9ee" : "#ffecec";
-    const Icon = isReceive ? IconIn : IconOut;
+  const typeClass = (type: Transaction["type"]) =>
+    `transaction-type-badge ${type === "受取" ? "is-receive" : "is-send"}`;
 
+  const renderTypeBadge = (type: Transaction["type"]) => {
+    const Icon = type === "受取" ? IconIn : IconOut;
     return (
-      <span
-        style={{
-          display: "inline-flex",
-          alignItems: "center",
-          gap: 6,
-          background: bg,
-          color,
-          padding: "0.2rem 0.6rem",
-          borderRadius: 9999,
-          fontWeight: 600,
-          fontSize: "0.85rem",
-        }}
-      >
+      <span className={typeClass(type)}>
         <Icon width={16} height={16} />
         {type}
       </span>
     );
   };
 
+  const amountClass = (amt: number) =>
+    `transaction-amount ${amt >= 0 ? "is-plus" : "is-minus"}`;
+
   const renderAmount = (amt: number) => {
     const isPlus = amt >= 0;
     const n = Math.abs(amt).toLocaleString();
     return (
-      <span
-        style={{
-          fontWeight: 700,
-          color: isPlus ? "#0a8a4b" : "#d72e2e",
-        }}
-      >
+      <span className={amountClass(amt)}>
         {isPlus ? "+" : "-"}
         {n} 円
       </span>
@@ -222,7 +207,7 @@ export default function TransactionListPage() {
             <tr key={`${t.datetime}-${idx}`}>
               <td>
                 <div>{date}</div>
-                <div style={{ fontSize: "0.85rem", color: "#6b7280" }}>{time}</div>
+                <div className="transaction-time-sub">{time}</div>
               </td>
               <td>
                 <span className="lp-brand-pill">{t.brand}</span>

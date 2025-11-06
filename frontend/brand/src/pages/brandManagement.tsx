@@ -1,9 +1,9 @@
-// frontend/brand/src/pages/brandManagement.tsx
 import React, { useMemo, useState } from "react";
 import List, {
   FilterableTableHeader,
   SortableTableHeader,
 } from "../../../shell/src/layout/List/List";
+import "./brandManagement.css";
 
 type BrandRow = {
   name: string;
@@ -32,17 +32,19 @@ export default function BrandManagementPage() {
   const [ownerFilter, setOwnerFilter] = useState<string[]>([]);
 
   const statusOptions = useMemo(
-    () => Array.from(new Set(ALL_BRANDS.map((b) => b.status))).map((v) => ({
-      value: v,
-      label: v === "active" ? "アクティブ" : "停止",
-    })),
+    () =>
+      Array.from(new Set(ALL_BRANDS.map((b) => b.status))).map((v) => ({
+        value: v,
+        label: v === "active" ? "アクティブ" : "停止",
+      })),
     []
   );
   const ownerOptions = useMemo(
-    () => Array.from(new Set(ALL_BRANDS.map((b) => b.owner))).map((v) => ({
-      value: v,
-      label: v,
-    })),
+    () =>
+      Array.from(new Set(ALL_BRANDS.map((b) => b.owner))).map((v) => ({
+        value: v,
+        label: v,
+      })),
     []
   );
 
@@ -108,6 +110,9 @@ export default function BrandManagementPage() {
     />,
   ];
 
+  const statusBadgeClass = (status: BrandRow["status"]) =>
+    `brand-status-badge ${status === "active" ? "is-active" : "is-inactive"}`;
+
   return (
     <div className="p-0">
       <List
@@ -129,7 +134,7 @@ export default function BrandManagementPage() {
           <tr key={b.name}>
             <td>{b.name}</td>
             <td>
-              <span className="lp-brand-pill">
+              <span className={statusBadgeClass(b.status)}>
                 {b.status === "active" ? "アクティブ" : "停止"}
               </span>
             </td>

@@ -1,0 +1,24 @@
+/* Account Management styles */
+
+.account-role-badge {
+  display: inline-block;
+  font-size: 0.75rem;
+  font-weight: 700;
+  padding: 0.3rem 0.6rem;
+  border-radius: 9999px;
+}
+
+.account-role-badge.is-admin {
+  background-color: #ef4444; /* 管理者 */
+  color: #ffffff;
+}
+
+.account-role-badge.is-brand {
+  background-color: #0b0f1a; /* ブランド管理者 */
+  color: #ffffff;
+}
+
+.account-role-badge.is-default {
+  background-color: #e5e7eb; /* その他 */
+  color: #111111;
+}

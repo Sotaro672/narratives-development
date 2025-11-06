@@ -1,15 +1,9 @@
 import type { RouteObject } from "react-router-dom";
-import PermissionManagementPage from "./pages/PermissionManagementPage";
-import RoleDetailPage from "./pages/RoleDetailPage";
+import PermissionList from "./pages/PermissionList";
 
-/**
- * Permission module routes
- * - /permission
- * - /permission/:roleId
- */
 const routes: RouteObject[] = [
-  { path: "", element: <PermissionManagementPage /> },
-  { path: ":roleId", element: <RoleDetailPage /> },
+  { path: "", element: <PermissionList /> },
+  // 他のルート定義
 ];
 
 export default routes;

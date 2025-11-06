@@ -1,0 +1,18 @@
+/* Brand Management styles */
+
+.brand-status-badge {
+  display: inline-block;
+  font-size: 0.75rem;
+  font-weight: 700;
+  padding: 0.3rem 0.6rem;
+  border-radius: 9999px;
+  color: #fff;
+}
+
+.brand-status-badge.is-active {
+  background: #0b0f1a; /* アクティブ */
+}
+
+.brand-status-badge.is-inactive {
+  background: #ef4444; /* 停止 */
+}

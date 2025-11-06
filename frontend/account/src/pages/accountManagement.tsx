@@ -1,7 +1,7 @@
-// frontend/account/src/pages/accountManagement.tsx
 import * as React from "react";
 import List from "../../../shell/src/layout/List/List";
 import { Filter } from "lucide-react";
+import "./accountManagement.css";
 
 // Lucide型エラー対策
 const IconFilter = Filter as unknown as React.ComponentType<
@@ -60,33 +60,10 @@ export default function AccountManagementPage() {
     "登録日",
   ];
 
-  const renderRoleBadge = (role: string) => {
-    let bg = "#e5e7eb";
-    let color = "#111";
-
-    if (role === "管理者") {
-      bg = "#ef4444";
-      color = "#fff";
-    } else if (role.includes("ブランド")) {
-      bg = "#0b0f1a";
-      color = "#fff";
-    }
-
-    return (
-      <span
-        style={{
-          display: "inline-block",
-          backgroundColor: bg,
-          color,
-          fontSize: "0.75rem",
-          fontWeight: 700,
-          padding: "0.3rem 0.6rem",
-          borderRadius: "9999px",
-        }}
-      >
-        {role}
-      </span>
-    );
+  const roleClass = (role: string) => {
+    if (role === "管理者") return "account-role-badge is-admin";
+    if (role.includes("ブランド")) return "account-role-badge is-brand";
+    return "account-role-badge is-default";
   };
 
   return (
@@ -105,7 +82,9 @@ export default function AccountManagementPage() {
             <td>{acc.id}</td>
             <td>{acc.name}</td>
             <td>{acc.email}</td>
-            <td>{renderRoleBadge(acc.role)}</td>
+            <td>
+              <span className={roleClass(acc.role)}>{acc.role}</span>
+            </td>
             <td>
               <span className="lp-brand-pill">{acc.brand}</span>
             </td>

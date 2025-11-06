@@ -1,13 +1,6 @@
 // frontend/shell/src/app/routes.tsx
 import type { RouteObject } from "react-router-dom";
 
-// 単ページのインポート
-import BrandManagementPage from "../../../brand/src/pages/brandManagement";
-import PermissionListPage from "../../../permission/src/pages/permissionList";
-import AdManagementPage from "../../../ad/src/pages/adManagement";
-import AccountManagementPage from "../../../account/src/pages/accountManagement";
-import TransactionListPage from "../../../transaction/src/pages/transactionList";
-
 // モジュールのルート定義（型衝突を避けるため unknown→RouteObject[] にキャスト）
 import inquiryRoutesRaw from "../../../inquiry/src/routes";
 const inquiryRoutes = inquiryRoutesRaw as unknown as RouteObject[];
@@ -36,9 +29,23 @@ const listRoutes = listRoutesRaw as unknown as RouteObject[];
 import orderRoutesRaw from "../../../order/src/routes";
 const orderRoutes = orderRoutesRaw as unknown as RouteObject[];
 
+import adRtoutesRaw from "../../../ad/src/routes";
+const adRoutes = adRtoutesRaw as unknown as RouteObject[];
+
 import memberRoutesRaw from "../../../member/src/routes";
 const memberRoutes = memberRoutesRaw as unknown as RouteObject[];
 
+import brandRoutesRaw from "../../../brand/src/routes";
+const brandRoutes = brandRoutesRaw as unknown as RouteObject[];
+
+import permissionRoutesRaw from "../../../permission/src/routes";
+const permissionRoutes = permissionRoutesRaw as unknown as RouteObject[];
+
+import accountRoutesRaw from "../../../account/src/routes";
+const accountRoutes = accountRoutesRaw as unknown as RouteObject[];
+
+import transactionRoutesRaw from "../../../transaction/src/routes";
+const transactionRoutes = transactionRoutesRaw as unknown as RouteObject[];
 /**
  * Shell全体で使用するルーティング定義
  * - Layout (Main.tsx) からインポートされる
@@ -92,17 +99,36 @@ export const routes: RouteObject[] = [
     path: "/order",
     children: orderRoutes,
   },
+  // Ads モジュール
+  {
+    path: "/ad",
+    children: adRoutes,
+  },
   // Members モジュール
   {
     path: "/member",
     children: memberRoutes,
   },
-
-  { path: "/brand", element: <BrandManagementPage /> },
-  { path: "/permission", element: <PermissionListPage /> },
-  { path: "/ad", element: <AdManagementPage /> },
-  { path: "/account", element: <AccountManagementPage /> },
-  { path: "/transaction", element: <TransactionListPage /> },
+  // Brands モジュール
+  {
+    path: "/brand",
+    children: brandRoutes,
+  },
+  // Permissions モジュール
+  {
+    path: "/permission",
+    children: permissionRoutes,
+  },
+  // Accounts モジュール
+  {
+    path: "/account",
+    children: accountRoutes,
+  },
+// Transactions モジュール
+  {
+    path: "/transaction",
+    children: transactionRoutes,
+  },
 ];
 
 export default routes;

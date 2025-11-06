@@ -1,9 +1,9 @@
-// frontend/ad/src/pages/adManagement.tsx
 import React, { useMemo, useState } from "react";
 import List, {
   FilterableTableHeader,
   SortableTableHeader,
 } from "../../../shell/src/layout/List/List";
+import "./adManagement.css";
 
 // ─────────────────────────────────────────────────────────────
 // Types & Mock
@@ -235,19 +235,7 @@ export default function AdManagementPage() {
             <td>{ad.owner}</td>
             <td>{ad.period}</td>
             <td>
-              <span
-                style={{
-                  display: "inline-block",
-                  background: "#d1fae5",
-                  color: "#065f46",
-                  fontSize: "0.75rem",
-                  fontWeight: 700,
-                  padding: "0.25rem 0.6rem",
-                  borderRadius: 9999,
-                }}
-              >
-                {ad.status}
-              </span>
+              <span className="ad-status-badge">{ad.status}</span>
             </td>
             <td>{ad.spendRate}</td>
             <td>{ad.spend}</td>

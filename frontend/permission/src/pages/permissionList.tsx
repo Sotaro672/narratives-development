@@ -1,5 +1,5 @@
 // frontend/permission/src/pages/permissionList.tsx
-import React, { useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import List, { FilterableTableHeader } from "../../../shell/src/layout/List/List";
 import { Shield } from "lucide-react";
 
