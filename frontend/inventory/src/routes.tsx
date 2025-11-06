@@ -1,7 +1,7 @@
 // frontend/inventory/src/routes.tsx
 import type { RouteObject } from "react-router-dom";
-import InventoryManagement from "./pages/InventoryManagement";
-//import InventoryDetail from "./pages/InventoryDetail";
+import InventoryManagement from "./pages/inventoryManagement";
+import InventoryDetail from "./pages/inventoryDetail";
 
 /**
  * Inventory Module Routes
@@ -9,7 +9,7 @@ import InventoryManagement from "./pages/InventoryManagement";
  */
 const routes: RouteObject[] = [
   { path: "", element: <InventoryManagement /> },
-  //{ path: ":inventoryId", element: <InventoryDetail /> },
+  { path: ":inventoryId", element: <InventoryDetail /> },
 ];
 
 export default routes;

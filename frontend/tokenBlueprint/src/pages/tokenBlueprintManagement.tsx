@@ -1,5 +1,6 @@
 // frontend/tokenBlueprint/src/pages/tokenBlueprintManagement.tsx
 import React, { useMemo, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import List, {
   FilterableTableHeader,
   SortableTableHeader,
@@ -27,6 +28,8 @@ const toTs = (yyyyMd: string) => {
 };
 
 export default function TokenBlueprintManagementPage() {
+  const navigate = useNavigate();
+
   // フィルタ状態
   const [brandFilter, setBrandFilter] = useState<string[]>([]);
   const [managerFilter, setManagerFilter] = useState<string[]>([]);
@@ -71,6 +74,11 @@ export default function TokenBlueprintManagementPage() {
 
     return data;
   }, [brandFilter, managerFilter, sortKey, sortDir]);
+
+  // 行クリックで詳細へ遷移（symbol を ID として使用）
+  const goDetail = (symbol: string) => {
+    navigate(`/tokenBlueprint/${encodeURIComponent(symbol)}`);
+  };
 
   const headers: React.ReactNode[] = [
     "トークン名",
@@ -120,7 +128,19 @@ export default function TokenBlueprintManagementPage() {
         }}
       >
         {rows.map((t) => (
-          <tr key={`${t.symbol}-${t.createdAt}`}>
+          <tr
+            key={`${t.symbol}-${t.createdAt}`}
+            role="button"
+            tabIndex={0}
+            className="cursor-pointer"
+            onClick={() => goDetail(t.symbol)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" || e.key === " ") {
+                e.preventDefault();
+                goDetail(t.symbol);
+              }
+            }}
+          >
             <td>{t.name}</td>
             <td>{t.symbol}</td>
             <td>
@@ -134,3 +154,4 @@ export default function TokenBlueprintManagementPage() {
     </div>
   );
 }
+
