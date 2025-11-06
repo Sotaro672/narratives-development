@@ -10,8 +10,13 @@ import ColorVariationCard from "../../../model/src/pages/ColorVariationCard";
 import SizeVariationCard, { type SizeRow } from "../../../model/src/pages/SizeVariationCard";
 import ModelNumberCard, { type ModelNumber } from "../../../model/src/pages/ModelNumberCard";
 
-// 追加: 生産数カード（編集モードで使用）
+// 生産数カード（編集モードで使用）
 import ProductionQuantityCard, { type QuantityCell } from "./productionQuantityCard";
+
+// 追加：印刷ボタンに使用
+import { Card, CardContent } from "../../../shared/ui/card";
+import { Button } from "../../../shared/ui/button";
+import { Printer } from "lucide-react";
 
 type Fit =
   | "レギュラーフィット"
@@ -21,10 +26,10 @@ type Fit =
 
 export default function ProductionDetail() {
   const navigate = useNavigate();
-  const { productionId } = useParams<{ productionId: string }>(); // ルート: /production/:productionId などを想定
+  const { productionId } = useParams<{ productionId: string }>();
 
   // ─────────────────────────────────────────
-  // モックデータ（閲覧専用でも表示のために保持）
+  // モックデータ
   // ─────────────────────────────────────────
   const [productName] = React.useState("シルクブラウス プレミアムライン");
   const [brand] = React.useState("LUMINA Fashion");
@@ -36,7 +41,7 @@ export default function ProductionDetail() {
 
   // カラー
   const [colors] = React.useState<string[]>(["ホワイト", "ブラック", "ネイビー"]);
-  const [colorInput] = React.useState(""); // 閲覧モードなので未使用
+  const [colorInput] = React.useState("");
 
   // サイズ
   const [sizes] = React.useState<SizeRow[]>([
@@ -67,14 +72,13 @@ export default function ProductionDetail() {
     navigate(-1);
   }, [navigate]);
 
-  // 閲覧モード用 no-op ハンドラ
+  // 閲覧モード用 no-op
   const noop = () => {};
   const noopStr = (_v: string) => {};
   const noopRemove = (_id: string) => {};
 
   // ─────────────────────────────────────────
   // 生産数（編集可能）
-  // 初期値はサンプル：S(2,0,0) / M(1,1,1) / L(1,1,1)
   // ─────────────────────────────────────────
   const sizeLabels = React.useMemo(() => sizes.map((s) => s.sizeLabel), [sizes]);
   const [quantities, setQuantities] = React.useState<QuantityCell[]>([
@@ -93,11 +97,7 @@ export default function ProductionDetail() {
     (size: string, color: string, nextQty: number) => {
       setQuantities((prev) => {
         const idx = prev.findIndex((q) => q.size === size && q.color === color);
-        if (idx === -1) {
-          // 無い場合は追加
-          return [...prev, { size, color, qty: nextQty }];
-        }
-        // 既存を更新（イミュータブル）
+        if (idx === -1) return [...prev, { size, color, qty: nextQty }];
         const next = prev.slice();
         next[idx] = { ...next[idx], qty: nextQty };
         return next;
@@ -106,12 +106,36 @@ export default function ProductionDetail() {
     []
   );
 
+  // 総数（保存・印刷の際に使用）
+  const grandTotal = React.useMemo(
+    () => quantities.reduce((sum, q) => sum + (q.qty ?? 0), 0),
+    [quantities]
+  );
+
+  // 保存（PageHeader の action）
+  const handleSave = React.useCallback(() => {
+    // TODO: 実際の保存 API 連携へ差し替え
+    console.log("保存:", {
+      productionId,
+      productName,
+      quantities,
+      grandTotal,
+    });
+    alert("生産計画を保存しました（ダミー）");
+  }, [productionId, productName, quantities, grandTotal]);
+
+  // 印刷
+  const handlePrint = React.useCallback(() => {
+    // TODO: 実際の印刷処理に差し替え
+    console.log("商品IDを印刷する:", { productionId, productName, quantities });
+  }, [productionId, productName, quantities]);
+
   return (
     <PageStyle
       layout="grid-2"
-      title={`${productionId ?? "不明ID"}`} // ← productionId をタイトルに反映
+      title={`${productionId ?? "不明ID"}`}
       onBack={onBack}
-      onSave={undefined} // このページは閲覧主体。必要なら保存を有効化してください。
+      onSave={handleSave}  // ← PageHeader の action に「保存」を追加
     >
       {/* --- 左ペイン --- */}
       <div>
@@ -149,7 +173,7 @@ export default function ProductionDetail() {
         {/* モデルナンバー：閲覧モード */}
         <ModelNumberCard mode="view" sizes={sizes} colors={colors} modelNumbers={modelNumbers} />
 
-        {/* ▼ 生産数：編集モード（この行を追加） */}
+        {/* 生産数：編集モード */}
         <ProductionQuantityCard
           mode="edit"
           sizes={sizeLabels}
@@ -157,6 +181,19 @@ export default function ProductionDetail() {
           quantities={quantities}
           onChangeQty={handleChangeQty}
         />
+
+        {/* ▼ 印刷ボタンカード */}
+        <Card className="mt-2">
+          <CardContent className="py-6">
+            <Button
+              onClick={handlePrint}
+              className="w-full h-12 text-base flex items-center justify-center gap-2"
+            >
+              <Printer size={18} />
+              商品IDを印刷する
+            </Button>
+          </CardContent>
+        </Card>
       </div>
 
       {/* --- 右ペイン（管理情報） --- */}
@@ -165,7 +202,6 @@ export default function ProductionDetail() {
         assigneeName={assignee}
         createdByName={creator}
         createdAt={createdAt}
-        // 閲覧用なので onEdit は一旦ダミーに
         onEditAssignee={() => setAssignee("新担当者")}
         onClickAssignee={() => console.log("assignee clicked:", assignee)}
         onClickCreatedBy={() => console.log("createdBy clicked:", creator)}

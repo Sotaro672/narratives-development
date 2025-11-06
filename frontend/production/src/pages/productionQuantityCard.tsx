@@ -1,6 +1,6 @@
 // frontend/production/src/pages/productionQuantityCard.tsx
 import * as React from "react";
-import { BarChart2 } from "lucide-react";
+import { BarChart3 } from "lucide-react";
 import { Card, CardHeader, CardTitle, CardContent } from "../../../shared/ui/card";
 import {
   Table,
@@ -10,6 +10,7 @@ import {
   TableHead,
   TableCell,
 } from "../../../shared/ui/table";
+import { Input } from "../../../shared/ui/input";
 import "./productionQuantityCard.css";
 
 export type QuantityCell = {
@@ -19,150 +20,199 @@ export type QuantityCell = {
 };
 
 type ProductionQuantityCardProps = {
-  /** 表示するサイズの並び順 */
+  /** 表示するサイズ（順序を保持） */
   sizes: string[];
-  /** 表示するカラーの並び順 */
+  /** 表示するカラー（順序を保持） */
   colors: string[];
   /** (size, color) ごとの数量 */
   quantities: QuantityCell[];
-  className?: string;
 
-  /** 表示モード（既定: "edit"） */
-  mode?: "edit" | "view";
-  /**
-   * 数量変更ハンドラ（編集モード時のみ有効）
-   * 未指定の場合、編集モードでも読み取り専用表示になります
-   */
-  onChangeQty?: (size: string, color: string, nextQty: number) => void;
+  /** 編集モード or 閲覧モード（従来） */
+  mode?: "view" | "edit";
+  /** Figmaコード互換の編集フラグ（指定があればこちらを優先） */
+  editable?: boolean;
+  /** 変更ハンドラ（編集時のみ使用） */
+  onChangeQty?: (size: string, color: string, qty: number) => void;
+
+  className?: string;
 };
+
+/** 数量取得（存在しない組み合わせは 0 ） */
+function getQuantityAtSizeColor(
+  quantities: QuantityCell[],
+  size: string,
+  color: string
+): number {
+  const hit = quantities.find((q) => q.size === size && q.color === color);
+  return hit ? hit.qty ?? 0 : 0;
+}
+
+/** 行合計（サイズごと） */
+function calculateSizeTotal(
+  quantities: QuantityCell[],
+  size: string,
+  colors: string[]
+): number {
+  return colors.reduce((acc, c) => acc + getQuantityAtSizeColor(quantities, size, c), 0);
+}
+
+/** 列合計（カラーごと） */
+function calculateColorTotal(
+  quantities: QuantityCell[],
+  color: string,
+  sizes: string[]
+): number {
+  return sizes.reduce((acc, s) => acc + getQuantityAtSizeColor(quantities, s, color), 0);
+}
+
+/** 総合計 */
+function calculateGrandTotal(
+  quantities: QuantityCell[],
+  sizes: string[],
+  colors: string[]
+): number {
+  return sizes.reduce(
+    (sum, s) => sum + calculateSizeTotal(quantities, s, colors),
+    0
+  );
+}
+
+/** 無効値を除いたサイズ/カラー配列 */
+function filterValidSizes(sizes: string[]): string[] {
+  return (sizes ?? []).filter((s) => !!s && s.trim().length > 0);
+}
+function filterValidColors(colors: string[]): string[] {
+  return (colors ?? []).filter((c) => !!c && c.trim().length > 0);
+}
+
+/** サイズ×カラーのどれか1つでも成立すれば true（行/列ヘッダが空でないことが肝） */
+function hasValidSizeColorCombination(sizes: string[], colors: string[]): boolean {
+  return filterValidSizes(sizes).length > 0 && filterValidColors(colors).length > 0;
+}
 
 export default function ProductionQuantityCard({
   sizes,
   colors,
   quantities,
-  className,
-  mode = "edit",
+  mode = "view",
+  editable,
   onChangeQty,
+  className,
 }: ProductionQuantityCardProps) {
-  const isEdit = mode === "edit";
-  const canEdit = isEdit && typeof onChangeQty === "function";
+  // Figma互換: editable が指定されていればそれを優先、なければ mode で判断
+  const isEditable = typeof editable === "boolean" ? editable : mode === "edit";
 
-  // Map を用意: size -> color -> qty
-  const matrix: Record<string, Record<string, number>> = React.useMemo(() => {
-    const m: Record<string, Record<string, number>> = {};
-    for (const s of sizes) m[s] = {};
-    for (const { size, color, qty } of quantities) {
-      if (!m[size]) m[size] = {};
-      m[size][color] = (typeof qty === "number" ? qty : 0) ?? 0;
-    }
-    return m;
-  }, [sizes, quantities]);
+  const validSizes = React.useMemo(() => filterValidSizes(sizes), [sizes]);
+  const validColors = React.useMemo(() => filterValidColors(colors), [colors]);
+  const hasValid = React.useMemo(
+    () => hasValidSizeColorCombination(validSizes, validColors),
+    [validSizes, validColors]
+  );
 
-  // 行合計・列合計・総合計
-  const rowSums = React.useMemo(() => {
-    return sizes.map((s) =>
-      colors.reduce((acc, c) => acc + (matrix[s]?.[c] ?? 0), 0)
-    );
-  }, [sizes, colors, matrix]);
-
-  const colSums = React.useMemo(() => {
-    return colors.map((c) =>
-      sizes.reduce((acc, s) => acc + (matrix[s]?.[c] ?? 0), 0)
-    );
-  }, [sizes, colors, matrix]);
-
+  // 行合計 / 列合計 / 総合計
+  const rowSums = React.useMemo(
+    () => validSizes.map((s) => calculateSizeTotal(quantities, s, validColors)),
+    [validSizes, validColors, quantities]
+  );
+  const colSums = React.useMemo(
+    () => validColors.map((c) => calculateColorTotal(quantities, c, validSizes)),
+    [validColors, validSizes, quantities]
+  );
   const grandTotal = React.useMemo(
-    () => rowSums.reduce((a, b) => a + b, 0),
-    [rowSums]
+    () => calculateGrandTotal(quantities, validSizes, validColors),
+    [quantities, validSizes, validColors]
   );
 
   // 入力変更
-  const handleChange =
-    (size: string, color: string) =>
-    (e: React.ChangeEvent<HTMLInputElement>) => {
-      if (!canEdit) return;
-      const raw = e.target.value;
-      // 空文字は 0 と解釈、負値は 0 に丸め、少数は切り捨て
-      const n = Math.max(0, Math.floor(Number(raw || "0")));
-      onChangeQty!(size, color, Number.isFinite(n) ? n : 0);
-    };
+  const handleQuantityChange = React.useCallback(
+    (size: string, color: string, value: string) => {
+      if (!isEditable || !onChangeQty) return;
+      // 空文字は 0、負値/NaN は 0、少数は切り捨て
+      const n = Math.max(0, Math.floor(Number(value || "0")));
+      onChangeQty(size, color, Number.isFinite(n) ? n : 0);
+    },
+    [isEditable, onChangeQty]
+  );
 
   return (
     <Card className={`mqc ${className ?? ""}`}>
       <CardHeader className="mqc__header">
         <div className="mqc__header-inner">
-          <BarChart2 size={16} />
+          <BarChart3 size={16} />
           <CardTitle className="mqc__title">
-            生産数{mode === "view" && <span className="ml-2 text-xs text-[hsl(var(--muted-foreground))]">（閲覧）</span>}
+            生産数{!isEditable && <span className="ml-2 text-xs text-[hsl(var(--muted-foreground))]">（閲覧）</span>}
           </CardTitle>
         </div>
       </CardHeader>
 
       <CardContent className="mqc__body">
-        <Table className="mqc__table">
-          <TableHeader>
-            <TableRow>
-              <TableHead className="mqc__th mqc__th--left">サイズ / カラー</TableHead>
-              {colors.map((color) => (
-                <TableHead key={color} className="mqc__th">{color}</TableHead>
-              ))}
-              <TableHead className="mqc__th">合計</TableHead>
-            </TableRow>
-          </TableHeader>
+        {hasValid ? (
+          <div className="overflow-x-auto">
+            <Table className="mqc__table">
+              <TableHeader>
+                <TableRow>
+                  <TableHead className="mqc__th mqc__th--left">サイズ / カラー</TableHead>
+                  {validColors.map((color) => (
+                    <TableHead key={color} className="mqc__th">{color}</TableHead>
+                  ))}
+                  <TableHead className="mqc__th">合計</TableHead>
+                </TableRow>
+              </TableHeader>
 
-          <TableBody>
-            {sizes.map((s, rIdx) => (
-              <TableRow key={s}>
-                <TableCell className="mqc__size">{s}</TableCell>
+              <TableBody>
+                {validSizes.map((s, rIdx) => (
+                  <TableRow key={s}>
+                    <TableCell className="mqc__size">{s}</TableCell>
 
-                {colors.map((c) => {
-                  const v = matrix[s]?.[c] ?? 0;
+                    {validColors.map((c) => {
+                      const v = getQuantityAtSizeColor(quantities, s, c);
+                      return (
+                        <TableCell key={`${s}-${c}`} className="mqc__cell">
+                          {isEditable ? (
+                            <Input
+                              type="number"
+                              min={0}
+                              step={1}
+                              value={v}
+                              onChange={(e) => handleQuantityChange(s, c, e.target.value)}
+                              aria-label={`${s} / ${c} の数量`}
+                              className="mqc__input w-16 text-center"
+                            />
+                          ) : (
+                            v
+                          )}
+                        </TableCell>
+                      );
+                    })}
 
-                  // 編集モード + onChangeQty あり → number input
-                  if (canEdit) {
-                    return (
-                      <TableCell key={`${s}-${c}`} className="mqc__cell">
-                        <input
-                          type="number"
-                          min={0}
-                          step={1}
-                          value={v}
-                          onChange={handleChange(s, c)}
-                          aria-label={`${s} / ${c} の数量`}
-                          className="mqc__input w-16 text-center border rounded-md px-2 py-1"
-                        />
-                      </TableCell>
-                    );
-                  }
+                    <TableCell className="mqc__sum">
+                      <span className="mqc__pill">{rowSums[rIdx]}</span>
+                    </TableCell>
+                  </TableRow>
+                ))}
 
-                  // 閲覧 or 編集でも onChangeQty 未指定 → 値だけ表示
-                  return (
-                    <TableCell key={`${s}-${c}`} className="mqc__cell">{v}</TableCell>
-                  );
-                })}
+                {/* フッター合計行 */}
+                <TableRow className="mqc__footer-row">
+                  <TableCell className="mqc__footer-label">合計</TableCell>
 
-                <TableCell className="mqc__sum">
-                  <span className="mqc__pill">{rowSums[rIdx]}</span>
-                </TableCell>
-              </TableRow>
-            ))}
+                  {colSums.map((sum, i) => (
+                    <TableCell key={`colsum-${i}`} className="mqc__footer-cell">
+                      <span className="mqc__pill">{sum}</span>
+                    </TableCell>
+                  ))}
 
-            {/* フッター合計行 */}
-            <TableRow className="mqc__footer-row">
-              <TableCell className="mqc__footer-label">合計</TableCell>
-
-              {colSums.map((sum, i) => (
-                <TableCell key={`colsum-${i}`} className="mqc__footer-cell">
-                  <span className="mqc__pill">{sum}</span>
-                </TableCell>
-              ))}
-
-              <TableCell className="mqc__footer-cell">
-                <span className="mqc__pill mqc__pill--total">{grandTotal}</span>
-              </TableCell>
-            </TableRow>
-          </TableBody>
-        </Table>
+                  <TableCell className="mqc__footer-cell">
+                    <span className="mqc__pill mqc__pill--total">{grandTotal}</span>
+                  </TableCell>
+                </TableRow>
+              </TableBody>
+            </Table>
+          </div>
+        ) : (
+          <div className="text-center py-8 text-[hsl(var(--muted-foreground))]">
+            <p>サイズとカラーを設定すると生産数を入力できます</p>
+          </div>
+        )}
       </CardContent>
     </Card>
   );

@@ -4,6 +4,7 @@ import List, {
   FilterableTableHeader,
   SortableTableHeader,
 } from "../../../shell/src/layout/List/List";
+import "./inventoryManagement.css";
 
 type InventoryRow = {
   product: string;
@@ -119,7 +120,7 @@ export default function InventoryManagementPage() {
   ];
 
   return (
-    <div className="p-0">
+    <div className="p-0 inv-page">
       <List
         title="在庫管理"
         headerCells={headers}
@@ -142,21 +143,7 @@ export default function InventoryManagementPage() {
               <span className="lp-brand-pill">{row.token}</span>
             </td>
             <td>
-              <span
-                style={{
-                  display: "inline-block",
-                  background: "#0b0f1a",
-                  color: "#fff",
-                  fontSize: "0.8rem",
-                  fontWeight: 600,
-                  padding: "0.2rem 0.6rem",
-                  borderRadius: "9999px",
-                  minWidth: "2.25rem",
-                  textAlign: "center",
-                }}
-              >
-                {row.total}
-              </span>
+              <span className="inv__total-pill">{row.total}</span>
             </td>
           </tr>
         ))}

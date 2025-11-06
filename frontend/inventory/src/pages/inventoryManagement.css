@@ -1,0 +1,24 @@
+/* frontend/inventory/src/pages/inventoryManagement.css */
+
+/* Total count pill (moved from inline styles) */
+.inv__total-pill {
+  display: inline-block;
+  min-width: 2.25rem;
+  text-align: center;
+
+  padding: 0.2rem 0.6rem;
+  border-radius: 9999px;
+
+  font-size: 0.8rem;
+  font-weight: 600;
+
+  /* Use theme tokens when available; fallback to the previous hard-coded colors */
+  background: hsl(var(--foreground, 222 47% 11%)); /* fallback ~#0b0f1a */
+  color: hsl(var(--card, 0 0% 100%));               /* fallback ~#ffffff */
+
+  /* If you prefer a bordered style, uncomment:
+  border: 1px solid hsl(var(--border));
+  background: hsl(var(--muted));
+  color: hsl(var(--muted-foreground));
+  */
+}
