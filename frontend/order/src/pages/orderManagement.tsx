@@ -4,6 +4,7 @@ import List, {
   FilterableTableHeader,
   SortableTableHeader,
 } from "../../../shell/src/layout/List/List";
+import "./orderManagement.css";
 
 type OrderRow = {
   id: string;
@@ -205,47 +206,19 @@ export default function OrderManagementPage() {
             </td>
             <td>
               <div>{o.productName}</div>
-              <div style={{ color: "#6b7280", fontSize: "0.85rem" }}>
-                {o.additionalItems}
-              </div>
+              <div className="order-subtext">{o.additionalItems}</div>
             </td>
             <td>
               {o.status === "支払済" ? (
-                <span
-                  style={{
-                    display: "inline-block",
-                    background: "#e5e7eb",
-                    color: "#111827",
-                    fontSize: "0.75rem",
-                    fontWeight: 700,
-                    padding: "0.3rem 0.6rem",
-                    borderRadius: 9999,
-                  }}
-                >
-                  支払済
-                </span>
+                <span className="order-badge is-paid">支払済</span>
               ) : (
-                <span
-                  style={{
-                    display: "inline-block",
-                    background: "#0b0f1a",
-                    color: "#fff",
-                    fontSize: "0.75rem",
-                    fontWeight: 700,
-                    padding: "0.3rem 0.6rem",
-                    borderRadius: 9999,
-                  }}
-                >
-                  移譲完了
-                </span>
+                <span className="order-badge is-transferred">移譲完了</span>
               )}
             </td>
             <td>{o.paymentMethod}</td>
             <td>
               <div className="font-medium">{o.amount}</div>
-              <div style={{ color: "#6b7280", fontSize: "0.85rem" }}>
-                {o.quantityInfo}
-              </div>
+              <div className="order-subtext">{o.quantityInfo}</div>
             </td>
             <td>{o.purchaseLocation}</td>
             <td>{o.orderDate}</td>
@@ -255,3 +228,4 @@ export default function OrderManagementPage() {
     </div>
   );
 }
+

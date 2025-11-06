@@ -2,8 +2,6 @@
 import type { RouteObject } from "react-router-dom";
 
 // 単ページのインポート
-import ListManagementPage from "../../../list/src/pages/listManagement";
-import OrderManagementPage from "../../../order/src/pages/orderManagement";
 import MemberManagementPage from "../../../member/src/pages/memberManagement";
 import BrandManagementPage from "../../../brand/src/pages/brandManagement";
 import PermissionListPage from "../../../permission/src/pages/permissionList";
@@ -33,6 +31,11 @@ const mintRequestRoutes = mintRequestRoutesRaw as unknown as RouteObject[];
 import operationRoutesRaw from "../../../operation/src/routes";
 const operationRoutes = operationRoutesRaw as unknown as RouteObject[];
 
+import listRoutesRaw from "../../../list/src/routes";
+const listRoutes = listRoutesRaw as unknown as RouteObject[];
+
+import orderRoutesRaw from "../../../order/src/routes";
+const orderRoutes = orderRoutesRaw as unknown as RouteObject[];
 /**
  * Shell全体で使用するルーティング定義
  * - Layout (Main.tsx) からインポートされる
@@ -76,9 +79,17 @@ export const routes: RouteObject[] = [
     path: "/operation",
     children: operationRoutes,
   },
+  // Listings モジュール
+  {
+    path: "/list",
+    children: listRoutes,
+  },
+  // Orders モジュール
+  {
+    path: "/order",
+    children: orderRoutes,
+  },
 
-  { path: "/list", element: <ListManagementPage /> },
-  { path: "/order", element: <OrderManagementPage /> },
   { path: "/member", element: <MemberManagementPage /> },
   { path: "/brand", element: <BrandManagementPage /> },
   { path: "/permission", element: <PermissionListPage /> },

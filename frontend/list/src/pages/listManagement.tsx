@@ -1,9 +1,9 @@
-// frontend/list/src/pages/listManagement.tsx
 import React, { useMemo, useState } from "react";
 import List, {
   FilterableTableHeader,
   SortableTableHeader,
 } from "../../../shell/src/layout/List/List";
+import "./listManagement.css";
 
 type ListingRow = {
   id: string;
@@ -120,7 +120,6 @@ export default function ListManagementPage() {
         }
         // stock
         return direction === "asc" ? a.stock - b.stock : b.stock - a.stock;
-        // add more numeric keys here if needed
       });
     }
 
@@ -239,51 +238,14 @@ export default function ListManagementPage() {
               <span className="lp-brand-pill">{l.token}</span>
             </td>
             <td>
-              <span
-                style={{
-                  display: "inline-block",
-                  minWidth: 36,
-                  background: "#0b0f1a",
-                  color: "#fff",
-                  fontWeight: 600,
-                  textAlign: "center",
-                  borderRadius: 12,
-                  padding: "0.2rem 0.6rem",
-                }}
-              >
-                {l.stock}
-              </span>
+              <span className="list-stock-pill">{l.stock}</span>
             </td>
             <td>{l.manager}</td>
             <td>
               {l.status === "出品中" ? (
-                <span
-                  style={{
-                    display: "inline-block",
-                    background: "#0b0f1a",
-                    color: "#fff",
-                    fontSize: "0.75rem",
-                    fontWeight: 700,
-                    padding: "0.3rem 0.6rem",
-                    borderRadius: 9999,
-                  }}
-                >
-                  出品中
-                </span>
+                <span className="list-status-badge is-active">出品中</span>
               ) : (
-                <span
-                  style={{
-                    display: "inline-block",
-                    background: "#ef4444",
-                    color: "#fff",
-                    fontSize: "0.75rem",
-                    fontWeight: 700,
-                    padding: "0.3rem 0.6rem",
-                    borderRadius: 9999,
-                  }}
-                >
-                  停止中
-                </span>
+                <span className="list-status-badge is-paused">停止中</span>
               )}
             </td>
           </tr>
