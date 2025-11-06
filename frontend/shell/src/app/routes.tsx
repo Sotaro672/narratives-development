@@ -2,7 +2,6 @@
 import type { RouteObject } from "react-router-dom";
 
 // 単ページのインポート
-import MemberManagementPage from "../../../member/src/pages/memberManagement";
 import BrandManagementPage from "../../../brand/src/pages/brandManagement";
 import PermissionListPage from "../../../permission/src/pages/permissionList";
 import AdManagementPage from "../../../ad/src/pages/adManagement";
@@ -36,6 +35,10 @@ const listRoutes = listRoutesRaw as unknown as RouteObject[];
 
 import orderRoutesRaw from "../../../order/src/routes";
 const orderRoutes = orderRoutesRaw as unknown as RouteObject[];
+
+import memberRoutesRaw from "../../../member/src/routes";
+const memberRoutes = memberRoutesRaw as unknown as RouteObject[];
+
 /**
  * Shell全体で使用するルーティング定義
  * - Layout (Main.tsx) からインポートされる
@@ -89,8 +92,12 @@ export const routes: RouteObject[] = [
     path: "/order",
     children: orderRoutes,
   },
+  // Members モジュール
+  {
+    path: "/member",
+    children: memberRoutes,
+  },
 
-  { path: "/member", element: <MemberManagementPage /> },
   { path: "/brand", element: <BrandManagementPage /> },
   { path: "/permission", element: <PermissionListPage /> },
   { path: "/ad", element: <AdManagementPage /> },

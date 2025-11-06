@@ -1,9 +1,9 @@
-// frontend/member/src/pages/memberManagement.tsx
 import React, { useMemo, useState } from "react";
 import List, {
   FilterableTableHeader,
   SortableTableHeader,
 } from "../../../shell/src/layout/List/List";
+import "./memberManagement.css";
 
 type MemberRow = {
   name: string;
@@ -146,7 +146,9 @@ export default function MemberManagementPage() {
         }
         const av = a[activeKey];
         const bv = b[activeKey];
-        return direction === "asc" ? (av as number) - (bv as number) : (bv as number) - (av as number);
+        return direction === "asc"
+          ? (av as number) - (bv as number)
+          : (bv as number) - (av as number);
       });
     }
 
@@ -216,6 +218,14 @@ export default function MemberManagementPage() {
     />,
   ];
 
+  const roleClass = (role: string) => {
+    if (role === "管理者") return "member-role-badge is-admin";
+    if (role.includes("ブランド")) return "member-role-badge is-brand";
+    if (role.includes("生産")) return "member-role-badge is-production";
+    if (role.includes("トークン")) return "member-role-badge is-token";
+    return "member-role-badge is-default";
+  };
+
   return (
     <div className="p-0">
       <List
@@ -237,37 +247,11 @@ export default function MemberManagementPage() {
             <td>{m.name}</td>
             <td>{m.email}</td>
             <td>
-              <span
-                style={{
-                  display: "inline-block",
-                  backgroundColor:
-                    m.role === "管理者"
-                      ? "#ef4444"
-                      : m.role.includes("ブランド")
-                      ? "#0b0f1a"
-                      : m.role.includes("生産")
-                      ? "#0b0f1a"
-                      : m.role.includes("トークン")
-                      ? "#e5e7eb"
-                      : "#e5e7eb",
-                  color:
-                    m.role === "管理者"
-                      ? "#fff"
-                      : m.role.includes("トークン")
-                      ? "#111"
-                      : "#fff",
-                  fontSize: "0.75rem",
-                  fontWeight: 700,
-                  padding: "0.3rem 0.6rem",
-                  borderRadius: "9999px",
-                }}
-              >
-                {m.role}
-              </span>
+              <span className={roleClass(m.role)}>{m.role}</span>
             </td>
             <td>
               {m.brand.map((b) => (
-                <span key={b} className="lp-brand-pill" style={{ marginRight: 6 }}>
+                <span key={b} className="lp-brand-pill mm-brand-tag">
                   {b}
                 </span>
               ))}

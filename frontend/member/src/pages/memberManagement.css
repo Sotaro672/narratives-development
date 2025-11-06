@@ -1,0 +1,36 @@
+/* Member Management styles */
+
+.member-role-badge {
+  display: inline-block;
+  font-size: 0.75rem;
+  font-weight: 700;
+  padding: 0.3rem 0.6rem;
+  border-radius: 9999px;
+}
+
+/* ロール別の色分け */
+.member-role-badge.is-admin {
+  background-color: #ef4444; /* 管理者 */
+  color: #ffffff;
+}
+.member-role-badge.is-brand {
+  background-color: #0b0f1a; /* ブランド管理者 */
+  color: #ffffff;
+}
+.member-role-badge.is-production {
+  background-color: #0b0f1a; /* 生産設計責任者 */
+  color: #ffffff;
+}
+.member-role-badge.is-token {
+  background-color: #e5e7eb; /* トークン管理者 */
+  color: #111111;
+}
+.member-role-badge.is-default {
+  background-color: #e5e7eb; /* その他 */
+  color: #ffffff;
+}
+
+/* 所属ブランドの並び用（既存の lp-brand-pill に余白だけ付与） */
+.mm-brand-tag {
+  margin-right: 6px;
+}
