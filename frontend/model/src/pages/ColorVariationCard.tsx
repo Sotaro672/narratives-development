@@ -1,12 +1,7 @@
 // frontend/model/src/pages/ColorVariationCard.tsx
 import * as React from "react";
 import { Palette, Plus, X } from "lucide-react";
-import {
-  Card,
-  CardHeader,
-  CardTitle,
-  CardContent,
-} from "../../../shared/ui";
+import {Card,CardHeader,CardTitle,CardContent} from "../../../shared/ui";
 import { Badge } from "../../../shared/ui/badge";
 import { Button } from "../../../shared/ui/button";
 import "./ColorVariationCard.css";
@@ -32,7 +27,7 @@ const ColorVariationCard: React.FC<ColorVariationCardProps> = ({
   onRemoveColor,
 }) => {
   return (
-    <Card className="vc box">
+    <Card className="vc">
       <CardHeader className="box__header">
         <Palette size={16} />
         <CardTitle className="box__title">カラーバリエーション</CardTitle>

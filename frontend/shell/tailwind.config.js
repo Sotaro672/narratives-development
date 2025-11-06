@@ -14,7 +14,8 @@ export default {
     // ★ 各 “擬似 MF” アプリを明示的に追加（最低限 admin は必須）
     r("../admin/src/**/*.{ts,tsx,js,jsx}"),
     // 必要なら他も：
-    // r("../productBlueprint/src/**/*.{ts,tsx,js,jsx}"),
+    r("../productBlueprint/src/**/*.{ts,tsx,js,jsx}"),
+    r("../model/src/**/*.{ts,tsx,js,jsx}"),
     // r("../member/src/**/*.{ts,tsx,js,jsx}"),
     // r("../**/src/**/*.{ts,tsx,js,jsx}"), // ←ワイルドカードで一括も可
   ],

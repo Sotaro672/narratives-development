@@ -6,8 +6,8 @@ import {
   CardHeader,
   CardTitle,
   CardContent,
-} from "../../../shared/ui"; // ✅ Card系コンポーネント導入
-import { Input } from "../../../shared/ui/input"; // ✅ Input導入
+} from "../../../shared/ui";
+import { Input } from "../../../shared/ui/input";
 import {
   Table,
   TableHeader,
@@ -15,8 +15,7 @@ import {
   TableHead,
   TableRow,
   TableCell,
-  TableCaption,
-} from "../../../shared/ui/table"; // ✅ Table導入
+} from "../../../shared/ui/table";
 import "./ModelNumberCard.css";
 
 export type ModelNumber = {

@@ -1,32 +1,20 @@
-/// <reference types="node" />
-
-import { defineConfig, type PluginOption } from "vite";
+// frontend/shell/vite.config.ts
+import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
-import mf from "./module-federation.config";
-import tailwind from "@tailwindcss/vite";
-
-import path from "path";
-import { fileURLToPath } from "url";
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
-
-const plugins: PluginOption[] = [
-  react(),
-  tailwind(),
-  mf as unknown as PluginOption
-];
+import tailwindcss from "@tailwindcss/vite";
 
 export default defineConfig({
-  plugins,
+  plugins: [
+    react(),
+    tailwindcss(),
+  ],
   server: {
-    fs: {
-      allow: [path.resolve(__dirname, "..")]
-    }
+    port: 4000,
+    open: true,
   },
-  resolve: {
-    alias: {
-      "@shared": path.resolve(__dirname, "../shared")
-    }
-  }
+  build: {
+    target: "esnext",
+    modulePreload: false,
+    outDir: "dist",
+  },
 });
-
