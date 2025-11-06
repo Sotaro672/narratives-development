@@ -1,6 +1,6 @@
-// frontend/productBlueprint/src/pages/productBlueprintDetail.tsx
+//frontend/productBlueprint/src/pages/productBlueprintDetail.tsx
 import * as React from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useParams } from "react-router-dom";
 import PageStyle from "../../../shell/src/layout/PageStyle/PageStyle";
 import AdminCard from "../../../admin/src/pages/AdminCard";
 import ProductBlueprintCard from "./productBlueprintCard";
@@ -16,6 +16,7 @@ type Fit =
 
 export default function ProductBlueprintDetail() {
   const navigate = useNavigate();
+  const { blueprintId } = useParams<{ blueprintId: string }>(); // ← URLパラメータ取得
 
   // ─────────────────────────────────────────
   // モックデータ
@@ -75,14 +76,14 @@ export default function ProductBlueprintDetail() {
   return (
     <PageStyle
       layout="grid-2"
-      title="商品設計詳細"
+      title={`${blueprintId ?? "不明ID"}`} // ← blueprintIdをタイトルに反映
       onBack={onBack}
       onSave={onSave}
-      // badge や actions があればここに渡す
     >
       {/* --- 左ペイン --- */}
       <div>
         <ProductBlueprintCard
+          mode="view"  // ← 閲覧モードで呼び出し
           productName={productName}
           brand={brand}
           fit={fit}
@@ -108,7 +109,7 @@ export default function ProductBlueprintDetail() {
 
         <SizeVariationCard
           sizes={sizes}
-          onRemove={(id) => setSizes((prev) => prev.filter((s) => s.id !== id))}
+          onRemove={(id: string) => setSizes((prev) => prev.filter((s) => s.id !== id))}
         />
 
         <ModelNumberCard sizes={sizes} colors={colors} modelNumbers={modelNumbers} />

@@ -1,5 +1,6 @@
 // frontend/production/src/pages/productionManagement.tsx
 import React, { useMemo, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import List, {
   FilterableTableHeader,
   SortableTableHeader,
@@ -77,13 +78,20 @@ const toTs = (yyyyMd: string) => {
 };
 
 export default function ProductionManagement() {
+  const navigate = useNavigate();
+
   // ===== フィルタ状態 =====
   const [productFilter, setProductFilter] = useState<string[]>([]);
   const [brandFilter, setBrandFilter] = useState<string[]>([]);
   const [managerFilter, setManagerFilter] = useState<string[]>([]);
   const [productIdFilter, setProductIdFilter] = useState<string[]>([]);
 
-  // ユニーク候補
+  // ===== ソート状態 =====
+  type SortKey = "printedAt" | "createdAt" | "quantity" | null;
+  const [sortKey, setSortKey] = useState<SortKey>(null);
+  const [sortDir, setSortDir] = useState<"asc" | "desc" | null>(null);
+
+  // ===== オプション =====
   const productOptions = useMemo(
     () =>
       Array.from(new Set(PRODUCTIONS.map((p) => p.product))).map((v) => ({
@@ -117,11 +125,6 @@ export default function ProductionManagement() {
     []
   );
 
-  // ===== ソート状態 =====
-  type SortKey = "printedAt" | "createdAt" | "quantity" | null;
-  const [sortKey, setSortKey] = useState<SortKey>(null);
-  const [sortDir, setSortDir] = useState<"asc" | "desc" | null>(null);
-
   // ===== データ生成（フィルタ → ソート） =====
   const rows = useMemo(() => {
     let data = PRODUCTIONS.filter(
@@ -142,8 +145,7 @@ export default function ProductionManagement() {
         const av = toTs(a[sortKey]);
         const bv = toTs(b[sortKey]);
         return sortDir === "asc" ? av - bv : bv - av;
-        }
-      );
+      });
     }
 
     return data;
@@ -152,35 +154,27 @@ export default function ProductionManagement() {
   // ===== ヘッダー =====
   const headers: React.ReactNode[] = [
     "生産計画",
-
-    // プロダクト（フィルタ）
     <FilterableTableHeader
       key="product"
       label="プロダクト"
       options={productOptions}
       selected={productFilter}
-      onChange={(vals: string[]) => setProductFilter(vals)}
+      onChange={setProductFilter}
     />,
-
-    // ブランド（フィルタ）
     <FilterableTableHeader
       key="brand"
       label="ブランド"
       options={brandOptions}
       selected={brandFilter}
-      onChange={(vals: string[]) => setBrandFilter(vals)}
+      onChange={setBrandFilter}
     />,
-
-    // 担当者（フィルタ）
     <FilterableTableHeader
       key="manager"
       label="担当者"
       options={managerOptions}
       selected={managerFilter}
-      onChange={(vals: string[]) => setManagerFilter(vals)}
+      onChange={setManagerFilter}
     />,
-
-    // 生産数（ソート）
     <SortableTableHeader
       key="quantity"
       label="生産数"
@@ -192,17 +186,13 @@ export default function ProductionManagement() {
         setSortDir(dir);
       }}
     />,
-
-    // 商品ID（フィルタ）
     <FilterableTableHeader
       key="productId"
       label="商品ID"
       options={productIdOptions}
       selected={productIdFilter}
-      onChange={(vals: string[]) => setProductIdFilter(vals)}
+      onChange={setProductIdFilter}
     />,
-
-    // 印刷日（ソート）
     <SortableTableHeader
       key="printedAt"
       label="印刷日"
@@ -214,8 +204,6 @@ export default function ProductionManagement() {
         setSortDir(dir);
       }}
     />,
-
-    // 作成日（ソート）
     <SortableTableHeader
       key="createdAt"
       label="作成日"
@@ -249,12 +237,12 @@ export default function ProductionManagement() {
         }}
       >
         {rows.map((p) => (
-          <tr key={p.id}>
-            <td>
-              <a href="#" className="text-blue-600 hover:underline">
-                {p.id}
-              </a>
-            </td>
+          <tr
+            key={p.id}
+            className="cursor-pointer hover:bg-blue-50 transition-colors"
+            onClick={() => navigate(`/production/${p.id}`)} // ← クリックで詳細へ遷移
+          >
+            <td className="text-blue-600 underline">{p.id}</td>
             <td>{p.product}</td>
             <td>
               <span className="lp-brand-pill">{p.brand}</span>

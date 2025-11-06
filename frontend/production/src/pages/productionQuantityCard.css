@@ -1,0 +1,80 @@
+/* Header */
+.mqc__header {
+  border-bottom: 1px solid hsl(var(--border));
+  background: hsl(var(--card));
+  padding: 16px 20px;
+}
+
+.mqc__header-inner {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.mqc__title {
+  font-size: 0.95rem;
+  font-weight: 600;
+  color: hsl(var(--foreground));
+}
+
+/* Body */
+.mqc__body {
+  padding: 16px 20px;
+}
+
+/* Table */
+.mqc__table {
+  font-size: 0.95rem;
+}
+
+.mqc__th {
+  text-align: center;
+  color: hsl(var(--foreground));
+}
+
+.mqc__th--left {
+  text-align: left;
+}
+
+.mqc__size {
+  font-weight: 500;
+  color: hsl(var(--foreground));
+}
+
+.mqc__cell,
+.mqc__sum,
+.mqc__footer-cell {
+  text-align: center;
+}
+
+.mqc__footer-row {
+  background: hsl(var(--muted) / 0.35);
+}
+
+.mqc__footer-label {
+  font-weight: 600;
+  color: hsl(var(--muted-foreground));
+}
+
+/* ピル (合計用) */
+.mqc__pill {
+  display: inline-flex;
+  min-width: 1.75rem;
+  justify-content: center;
+  align-items: center;
+  height: 1.5rem;
+  padding: 0 0.5rem;
+  border-radius: 9999px;
+  font-size: 0.8rem;
+  line-height: 1;
+  border: 1px solid hsl(var(--border));
+  background: hsl(var(--muted));
+  color: hsl(var(--muted-foreground));
+}
+
+/* 総合計を強調（濃色） */
+.mqc__pill--total {
+  background: hsl(var(--foreground));
+  color: hsl(var(--card));
+  border-color: transparent;
+}
