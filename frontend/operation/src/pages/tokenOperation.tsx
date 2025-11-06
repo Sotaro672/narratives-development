@@ -1,5 +1,6 @@
 // frontend/operation/src/pages/tokenOperation.tsx
 import React, { useMemo, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import List, {
   FilterableTableHeader,
   SortableTableHeader,
@@ -11,9 +12,9 @@ type TokenOperation = {
   brand: string;
   linkedProducts: number; // 連携商品種類数
   manager: string;
-  planned: number;   // 計画量
+  planned: number; // 計画量
   requested: number; // 申請量
-  issued: number;    // 発行量
+  issued: number; // 発行量
   distributionRate: string; // "100.0%" のような文字列
 };
 
@@ -87,6 +88,8 @@ type SortKey =
   | null;
 
 export default function TokenOperationPage() {
+  const navigate = useNavigate();
+
   // ── Filter state（ブランド・担当者） ─────────────────────────────
   const [brandFilter, setBrandFilter] = useState<string[]>([]);
   const [managerFilter, setManagerFilter] = useState<string[]>([]);
@@ -225,6 +228,11 @@ export default function TokenOperationPage() {
     />,
   ];
 
+  // 詳細ページへ遷移（symbol を ID として使用）
+  const goDetail = (symbol: string) => {
+    navigate(`/operation/${encodeURIComponent(symbol)}`);
+  };
+
   return (
     <div className="p-0">
       <List
@@ -240,7 +248,19 @@ export default function TokenOperationPage() {
         }}
       >
         {rows.map((t, i) => (
-          <tr key={i}>
+          <tr
+            key={i}
+            role="button"
+            tabIndex={0}
+            className="cursor-pointer"
+            onClick={() => goDetail(t.symbol)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" || e.key === " ") {
+                e.preventDefault();
+                goDetail(t.symbol);
+              }
+            }}
+          >
             <td>{t.tokenName}</td>
             <td>{t.symbol}</td>
             <td>

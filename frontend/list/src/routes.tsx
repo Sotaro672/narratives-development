@@ -1,6 +1,7 @@
 // frontend/list/src/routes.tsx
 import type { RouteObject } from "react-router-dom";
 import ListManagement from "./pages/listManagement";
+import ListDetail from "./pages/listDetail";
 
 /**
  * ListingsRoutes
@@ -9,6 +10,7 @@ import ListManagement from "./pages/listManagement";
  */
 const routes: RouteObject[] = [
   { path: "", element: <ListManagement /> },
+  { path: ":listId", element: <ListDetail /> },
   // 他のルート定義
 ];
 

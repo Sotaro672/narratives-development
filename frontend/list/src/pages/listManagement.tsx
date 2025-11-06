@@ -1,4 +1,6 @@
+// frontend/list/src/pages/listManagement.tsx
 import React, { useMemo, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import List, {
   FilterableTableHeader,
   SortableTableHeader,
@@ -48,6 +50,8 @@ const LISTINGS: ListingRow[] = [
 type SortKey = "id" | "stock" | null;
 
 export default function ListManagementPage() {
+  const navigate = useNavigate();
+
   // ── Filter states ─────────────────────────────────────────
   const [productFilter, setProductFilter] = useState<string[]>([]);
   const [brandFilter, setBrandFilter] = useState<string[]>([]);
@@ -208,6 +212,11 @@ export default function ListManagementPage() {
     />,
   ];
 
+  // 詳細ページへ遷移
+  const goDetail = (id: string) => {
+    navigate(`/list/${encodeURIComponent(id)}`);
+  };
+
   return (
     <div className="p-0">
       <List
@@ -228,7 +237,19 @@ export default function ListManagementPage() {
         }}
       >
         {rows.map((l) => (
-          <tr key={l.id}>
+          <tr
+            key={l.id}
+            role="button"
+            tabIndex={0}
+            className="cursor-pointer"
+            onClick={() => goDetail(l.id)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" || e.key === " ") {
+                e.preventDefault();
+                goDetail(l.id);
+              }
+            }}
+          >
             <td>{l.id}</td>
             <td>{l.product}</td>
             <td>

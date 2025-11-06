@@ -1,5 +1,6 @@
 // frontend/mintRequest/src/pages/mintRequestManagement.tsx
 import React, { useMemo, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import List, {
   FilterableTableHeader,
   SortableTableHeader,
@@ -65,6 +66,8 @@ const ROWS: Row[] = [
 const toTs = (s: string) => (s === "-" ? -1 : new Date(s.replace(/-/g, "/")).getTime());
 
 export default function MintRequestManagementPage() {
+  const navigate = useNavigate();
+
   // ── Filters ───────────────────────────────────────────────
   const [tokenFilter, setTokenFilter] = useState<string[]>([]);
   const [productFilter, setProductFilter] = useState<string[]>([]);
@@ -183,6 +186,12 @@ export default function MintRequestManagementPage() {
     />,
   ];
 
+  // 行クリックで詳細へ遷移
+  const goDetail = (requestId: string) => {
+    // ルートは /mintRequest/:requestId を想定（mintRequestDetail.tsx で useParams を使用）
+    navigate(`/mintRequest/${encodeURIComponent(requestId)}`);
+  };
+
   return (
     <div className="p-0">
       <List
@@ -200,8 +209,28 @@ export default function MintRequestManagementPage() {
         }}
       >
         {rows.map((r) => (
-          <tr key={r.planId}>
-            <td>{r.planId}</td>
+          <tr
+            key={r.planId}
+            onClick={() => goDetail(r.planId)}
+            style={{ cursor: "pointer" }}
+            tabIndex={0}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" || e.key === " ") goDetail(r.planId);
+            }}
+            aria-label={`ミント申請 ${r.planId} の詳細へ`}
+          >
+            <td>
+              <a
+                href="#"
+                onClick={(e) => {
+                  e.preventDefault();
+                  goDetail(r.planId);
+                }}
+                className="text-blue-600 hover:underline"
+              >
+                {r.planId}
+              </a>
+            </td>
             <td>
               <span className="lp-brand-pill">{r.tokenDesign}</span>
             </td>

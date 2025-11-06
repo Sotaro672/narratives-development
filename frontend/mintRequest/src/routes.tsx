@@ -1,7 +1,7 @@
 // frontend/mintRequest/src/routes.tsx
 import type { RouteObject } from "react-router-dom";
 import MintRequestManagement from "./pages/mintRequestManagement";
-//import MintRequestDetail from "./pages/mintRequestDetail";
+import MintRequestDetail from "./pages/mintRequestDetail";
 
 /**
  * MintRoutes
@@ -10,7 +10,7 @@ import MintRequestManagement from "./pages/mintRequestManagement";
  */
 const routes: RouteObject[] = [
   { path: "", element: <MintRequestManagement /> },
-  //{ path: ":blueprintId", element: <TokenBlueprintDetail /> },
+  { path: ":requestId", element: <MintRequestDetail /> },
 ];
 
 export default routes;

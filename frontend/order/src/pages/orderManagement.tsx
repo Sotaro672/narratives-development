@@ -1,5 +1,6 @@
 // frontend/order/src/pages/orderManagement.tsx
 import React, { useMemo, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import List, {
   FilterableTableHeader,
   SortableTableHeader,
@@ -59,6 +60,8 @@ const yenToNumber = (v: string) => {
 type SortKey = "id" | "amount" | "orderDate" | null;
 
 export default function OrderManagementPage() {
+  const navigate = useNavigate();
+
   // ── filters ───────────────────────────────────────────────
   const [statusFilter, setStatusFilter] = useState<string[]>([]);
   const [methodFilter, setMethodFilter] = useState<string[]>([]);
@@ -69,11 +72,19 @@ export default function OrderManagementPage() {
     []
   );
   const methodOptions = useMemo(
-    () => Array.from(new Set(ORDERS.map((o) => o.paymentMethod))).map((v) => ({ value: v, label: v })),
+    () =>
+      Array.from(new Set(ORDERS.map((o) => o.paymentMethod))).map((v) => ({
+        value: v,
+        label: v,
+      })),
     []
   );
   const placeOptions = useMemo(
-    () => Array.from(new Set(ORDERS.map((o) => o.purchaseLocation))).map((v) => ({ value: v, label: v })),
+    () =>
+      Array.from(new Set(ORDERS.map((o) => o.purchaseLocation))).map((v) => ({
+        value: v,
+        label: v,
+      })),
     []
   );
 
@@ -182,6 +193,11 @@ export default function OrderManagementPage() {
     />,
   ];
 
+  // 詳細ページへ遷移
+  const goDetail = (orderId: string) => {
+    navigate(`/orders/${encodeURIComponent(orderId)}`);
+  };
+
   return (
     <div className="p-0">
       <List
@@ -199,8 +215,26 @@ export default function OrderManagementPage() {
         }}
       >
         {rows.map((o) => (
-          <tr key={o.id}>
-            <td>{o.id}</td>
+          <tr
+            key={o.id}
+            onClick={() => goDetail(o.id)}
+            className="is-rowlink"
+            style={{ cursor: "pointer" }}
+            tabIndex={0}
+            role="button"
+          >
+            <td>
+              <a
+                href="#"
+                onClick={(e) => {
+                  e.preventDefault();
+                  goDetail(o.id);
+                }}
+                className="text-blue-600 hover:underline"
+              >
+                {o.id}
+              </a>
+            </td>
             <td>
               <div className="font-medium">{o.customerName}</div>
             </td>
@@ -228,4 +262,3 @@ export default function OrderManagementPage() {
     </div>
   );
 }
-

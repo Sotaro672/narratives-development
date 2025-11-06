@@ -1,6 +1,7 @@
 // frontend/operation/src/routes.tsx
 import type { RouteObject } from "react-router-dom";
 import TokenOperation from "./pages/tokenOperation";
+import TokenOperationDetail from "./pages/tokenOperationDetail";
 
 /**
  * OperationsRoutes
@@ -8,6 +9,7 @@ import TokenOperation from "./pages/tokenOperation";
  */
 const routes: RouteObject[] = [
   { path: "", element: <TokenOperation /> },
+  { path: ":tokenOperationId", element: <TokenOperationDetail /> },
   // 他のルート定義
 ];
 

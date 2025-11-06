@@ -1,5 +1,6 @@
 // frontend/inquiry/src/pages/InquiryManagement.tsx
 import * as React from "react";
+import { useNavigate } from "react-router-dom";
 import List, {
   FilterableTableHeader,
   SortableTableHeader,
@@ -52,6 +53,14 @@ const toTs = (yyyyMd: string) => {
 };
 
 export default function InquiryManagementPage() {
+  const navigate = useNavigate();
+
+  // 詳細ページへ遷移
+  const goDetail = (inquiryId: string) => {
+    // ルートは /inquiry/:inquiryId を想定（inquiryDetail.tsx 側で useParams を使用）
+    navigate(`/inquiry/${encodeURIComponent(inquiryId)}`);
+  };
+
   // 担当者フィルタ
   const [ownerFilter, setOwnerFilter] = React.useState<string[]>([]);
 
@@ -140,9 +149,25 @@ export default function InquiryManagementPage() {
         }}
       >
         {rows.map((q) => (
-          <tr key={q.id}>
+          <tr
+            key={q.id}
+            onClick={() => goDetail(q.id)}
+            style={{ cursor: "pointer" }}
+            tabIndex={0}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" || e.key === " ") goDetail(q.id);
+            }}
+            aria-label={`問い合わせ ${q.id} の詳細へ`}
+          >
             <td>
-              <a href="#" className="inq__link">
+              <a
+                href="#"
+                className="inq__link"
+                onClick={(e) => {
+                  e.preventDefault();
+                  goDetail(q.id);
+                }}
+              >
                 {q.id}
               </a>
             </td>
@@ -176,3 +201,4 @@ export default function InquiryManagementPage() {
     </div>
   );
 }
+
