@@ -225,7 +225,7 @@ export default function ProductionManagement() {
         showCreateButton
         createLabel="生産計画を作成"
         showResetButton
-        onCreate={() => console.log("新規生産計画作成")}
+        onCreate={() => navigate("/production/create")} // ← 作成ボタンで新規作成ページへ遷移
         onReset={() => {
           setProductFilter([]);
           setBrandFilter([]);
@@ -240,7 +240,7 @@ export default function ProductionManagement() {
           <tr
             key={p.id}
             className="cursor-pointer hover:bg-blue-50 transition-colors"
-            onClick={() => navigate(`/production/${p.id}`)} // ← クリックで詳細へ遷移
+            onClick={() => navigate(`/production/${p.id}`)} // ← 行クリックで詳細へ遷移
           >
             <td className="text-blue-600 underline">{p.id}</td>
             <td>{p.product}</td>

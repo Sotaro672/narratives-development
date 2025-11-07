@@ -1,4 +1,6 @@
+// frontend/ad/src/pages/adManagement.tsx
 import React, { useMemo, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import List, {
   FilterableTableHeader,
   SortableTableHeader,
@@ -12,11 +14,11 @@ type AdRow = {
   campaign: string;
   brand: string;
   owner: string;
-  period: string;      // "YYYY/M/D - YYYY/M/D"
+  period: string; // "YYYY/M/D - YYYY/M/D"
   status: "実行中";
-  spendRate: string;   // "66.0%"
-  spend: string;       // "¥198,000"
-  budget: string;      // "¥300,000"
+  spendRate: string; // "66.0%"
+  spend: string; // "¥198,000"
+  budget: string; // "¥300,000"
 };
 
 const ADS: AdRow[] = [
@@ -68,21 +70,35 @@ type SortKey = "period" | "spendRate" | "spend" | "budget" | null;
 // Page
 // ─────────────────────────────────────────────────────────────
 export default function AdManagementPage() {
+  const navigate = useNavigate();
+
   // Filters
   const [brandFilter, setBrandFilter] = useState<string[]>([]);
   const [ownerFilter, setOwnerFilter] = useState<string[]>([]);
   const [statusFilter, setStatusFilter] = useState<string[]>([]);
 
   const brandOptions = useMemo(
-    () => Array.from(new Set(ADS.map((a) => a.brand))).map((v) => ({ value: v, label: v })),
+    () =>
+      Array.from(new Set(ADS.map((a) => a.brand))).map((v) => ({
+        value: v,
+        label: v,
+      })),
     []
   );
   const ownerOptions = useMemo(
-    () => Array.from(new Set(ADS.map((a) => a.owner))).map((v) => ({ value: v, label: v })),
+    () =>
+      Array.from(new Set(ADS.map((a) => a.owner))).map((v) => ({
+        value: v,
+        label: v,
+      })),
     []
   );
   const statusOptions = useMemo(
-    () => Array.from(new Set(ADS.map((a) => a.status))).map((v) => ({ value: v, label: v })),
+    () =>
+      Array.from(new Set(ADS.map((a) => a.status))).map((v) => ({
+        value: v,
+        label: v,
+      })),
     []
   );
 
@@ -129,8 +145,6 @@ export default function AdManagementPage() {
   // Headers
   const headers: React.ReactNode[] = [
     "キャンペーン名",
-
-    // ブランド（Filterable）
     <FilterableTableHeader
       key="brand"
       label="ブランド"
@@ -138,8 +152,6 @@ export default function AdManagementPage() {
       selected={brandFilter}
       onChange={setBrandFilter}
     />,
-
-    // 担当者（Filterable）
     <FilterableTableHeader
       key="owner"
       label="担当者"
@@ -147,8 +159,6 @@ export default function AdManagementPage() {
       selected={ownerFilter}
       onChange={setOwnerFilter}
     />,
-
-    // 広告期間（Sortable／開始日で比較）
     <SortableTableHeader
       key="period"
       label="広告期間"
@@ -160,8 +170,6 @@ export default function AdManagementPage() {
         setDirection(dir);
       }}
     />,
-
-    // ステータス（Filterable）
     <FilterableTableHeader
       key="status"
       label="ステータス"
@@ -169,8 +177,6 @@ export default function AdManagementPage() {
       selected={statusFilter}
       onChange={setStatusFilter}
     />,
-
-    // 消化率（Sortable）
     <SortableTableHeader
       key="spendRate"
       label="消化率"
@@ -182,8 +188,6 @@ export default function AdManagementPage() {
         setDirection(dir);
       }}
     />,
-
-    // 消化（Sortable）
     <SortableTableHeader
       key="spend"
       label="消化"
@@ -195,8 +199,6 @@ export default function AdManagementPage() {
         setDirection(dir);
       }}
     />,
-
-    // 予算（Sortable）
     <SortableTableHeader
       key="budget"
       label="予算"
@@ -210,13 +212,20 @@ export default function AdManagementPage() {
     />,
   ];
 
+  // 行クリックで詳細ページへ遷移
+  const goDetail = (campaign: string) => {
+    navigate(`/ad/${encodeURIComponent(campaign)}`);
+  };
+
   return (
     <div className="p-0">
       <List
         title="広告管理"
         headerCells={headers}
-        showCreateButton={false}
+        showCreateButton
+        createLabel="キャンペーンを作成"
         showResetButton
+        onCreate={() => navigate("/ad/create")}
         onReset={() => {
           setBrandFilter([]);
           setOwnerFilter([]);
@@ -227,8 +236,12 @@ export default function AdManagementPage() {
         }}
       >
         {rows.map((ad) => (
-          <tr key={ad.campaign}>
-            <td>{ad.campaign}</td>
+          <tr
+            key={ad.campaign}
+            className="cursor-pointer hover:bg-blue-50 transition"
+            onClick={() => goDetail(ad.campaign)}
+          >
+            <td className="text-blue-600 underline">{ad.campaign}</td>
             <td>
               <span className="lp-brand-pill">{ad.brand}</span>
             </td>

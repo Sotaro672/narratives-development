@@ -217,6 +217,11 @@ export default function ListManagementPage() {
     navigate(`/list/${encodeURIComponent(id)}`);
   };
 
+  // 作成ページへ遷移（出品を作成ボタン）
+  const goCreate = () => {
+    navigate("/list/create");
+  };
+
   return (
     <div className="p-0">
       <List
@@ -225,6 +230,7 @@ export default function ListManagementPage() {
         showCreateButton
         createLabel="出品を作成"
         showResetButton
+        onCreate={goCreate}
         onReset={() => {
           setProductFilter([]);
           setBrandFilter([]);

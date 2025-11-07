@@ -1,7 +1,7 @@
 // frontend/mintRequest/src/pages/mintRequestDetail.tsx
 import * as React from "react";
 import { useNavigate, useParams } from "react-router-dom";
-import PageHeader from "../../../shell/src/layout/PageHeader/PageHeader";
+import PageStyle from "../../../shell/src/layout/PageStyle/PageStyle";
 import { Card, CardHeader, CardTitle, CardContent } from "../../../shared/ui/card";
 
 export default function MintRequestDetail() {
@@ -20,17 +20,17 @@ export default function MintRequestDetail() {
   const [status] = React.useState<"承認待ち" | "承認済み" | "却下">("承認待ち");
   const [remarks] = React.useState("VIP会員向け初回発行分として申請。");
 
-  // ─────────────────────────────────────────
   // 戻るボタン
-  // ─────────────────────────────────────────
   const onBack = React.useCallback(() => {
     navigate(-1);
   }, [navigate]);
 
   return (
-    <div className="p-6">
-      <PageHeader title={`ミント申請詳細：${requestId ?? "不明ID"}`} onBack={onBack} />
-
+    <PageStyle
+      layout="single"
+      title={`ミント申請詳細：${requestId ?? "不明ID"}`}
+      onBack={onBack}
+    >
       <Card className="mt-4">
         <CardHeader>
           <CardTitle>申請情報</CardTitle>
@@ -106,6 +106,6 @@ export default function MintRequestDetail() {
           </table>
         </CardContent>
       </Card>
-    </div>
+    </PageStyle>
   );
 }

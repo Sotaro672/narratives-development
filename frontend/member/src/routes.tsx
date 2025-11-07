@@ -3,9 +3,11 @@ import type { RouteObject } from "react-router-dom";
 import React from "react";
 
 import MemberManagement from "./pages/memberManagement";
+import MemberDetail from "./pages/memberDetail";
 
 const routes: RouteObject[] = [
   { path: "", element: <MemberManagement /> },
+  { path: "member/:id", element: <MemberDetail /> },
   // 他のルート定義
 ];
 

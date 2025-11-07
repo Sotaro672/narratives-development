@@ -1,7 +1,7 @@
 // frontend/order/src/pages/orderDetail.tsx
 import * as React from "react";
 import { useNavigate, useParams } from "react-router-dom";
-import PageHeader from "../../../shell/src/layout/PageHeader/PageHeader";
+import PageStyle from "../../../shell/src/layout/PageStyle/PageStyle";
 
 export default function OrderDetail() {
   const navigate = useNavigate();
@@ -25,8 +25,87 @@ export default function OrderDetail() {
   }, [navigate]);
 
   return (
-    <div className="p-6">
-      <PageHeader title={`注文詳細：${orderId ?? "不明ID"}`} onBack={onBack} />
-    </div>
+    <PageStyle
+      layout="single"
+      title={`注文詳細：${orderId ?? "不明ID"}`}
+      onBack={onBack}
+    >
+      <div className="p-6">
+        <table className="w-full text-sm">
+          <tbody>
+            <tr>
+              <th className="text-muted-foreground font-medium pr-4 py-2 align-top whitespace-nowrap">
+                注文番号
+              </th>
+              <td className="py-2">{orderNumber}</td>
+            </tr>
+            <tr>
+              <th className="text-muted-foreground font-medium pr-4 py-2 align-top whitespace-nowrap">
+                顧客名
+              </th>
+              <td className="py-2">{customer}</td>
+            </tr>
+            <tr>
+              <th className="text-muted-foreground font-medium pr-4 py-2 align-top whitespace-nowrap">
+                ブランド
+              </th>
+              <td className="py-2">{brand}</td>
+            </tr>
+            <tr>
+              <th className="text-muted-foreground font-medium pr-4 py-2 align-top whitespace-nowrap">
+                商品
+              </th>
+              <td className="py-2">{product}</td>
+            </tr>
+            <tr>
+              <th className="text-muted-foreground font-medium pr-4 py-2 align-top whitespace-nowrap">
+                数量
+              </th>
+              <td className="py-2">{quantity}</td>
+            </tr>
+            <tr>
+              <th className="text-muted-foreground font-medium pr-4 py-2 align-top whitespace-nowrap">
+                価格
+              </th>
+              <td className="py-2">¥{price.toLocaleString()}</td>
+            </tr>
+            <tr>
+              <th className="text-muted-foreground font-medium pr-4 py-2 align-top whitespace-nowrap">
+                ステータス
+              </th>
+              <td className="py-2">
+                {status === "出荷済み" && (
+                  <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-semibold bg-green-100 text-green-800">
+                    出荷済み
+                  </span>
+                )}
+                {status === "処理中" && (
+                  <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-semibold bg-yellow-100 text-yellow-800">
+                    処理中
+                  </span>
+                )}
+                {status === "キャンセル済み" && (
+                  <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-semibold bg-red-100 text-red-800">
+                    キャンセル済み
+                  </span>
+                )}
+              </td>
+            </tr>
+            <tr>
+              <th className="text-muted-foreground font-medium pr-4 py-2 align-top whitespace-nowrap">
+                注文日
+              </th>
+              <td className="py-2">{orderedAt}</td>
+            </tr>
+            <tr>
+              <th className="text-muted-foreground font-medium pr-4 py-2 align-top whitespace-nowrap">
+                出荷日
+              </th>
+              <td className="py-2">{shippedAt}</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </PageStyle>
   );
 }

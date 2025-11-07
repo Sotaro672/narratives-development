@@ -1,4 +1,6 @@
+// frontend/member/src/pages/memberManagement.tsx
 import React, { useMemo, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import List, {
   FilterableTableHeader,
   SortableTableHeader,
@@ -108,12 +110,18 @@ const toTs = (yyyyMd: string) => {
 type SortKey = "taskCount" | "permissionCount" | "registeredAt" | null;
 
 export default function MemberManagementPage() {
+  const navigate = useNavigate();
+
   // Filters
   const [roleFilter, setRoleFilter] = useState<string[]>([]);
   const [brandFilter, setBrandFilter] = useState<string[]>([]);
 
   const roleOptions = useMemo(
-    () => Array.from(new Set(MEMBERS.map((m) => m.role))).map((v) => ({ value: v, label: v })),
+    () =>
+      Array.from(new Set(MEMBERS.map((m) => m.role))).map((v) => ({
+        value: v,
+        label: v,
+      })),
     []
   );
   const brandOptions = useMemo(
@@ -134,7 +142,8 @@ export default function MemberManagementPage() {
     let data = MEMBERS.filter(
       (m) =>
         (roleFilter.length === 0 || roleFilter.includes(m.role)) &&
-        (brandFilter.length === 0 || m.brand.some((b) => brandFilter.includes(b)))
+        (brandFilter.length === 0 ||
+          m.brand.some((b) => brandFilter.includes(b)))
     );
 
     if (activeKey && direction) {
@@ -226,6 +235,11 @@ export default function MemberManagementPage() {
     return "member-role-badge is-default";
   };
 
+  // 詳細ページへ遷移（email を ID として利用）
+  const goDetail = (email: string) => {
+    navigate(`/member/${encodeURIComponent(email)}`);
+  };
+
   return (
     <div className="p-0">
       <List
@@ -243,7 +257,19 @@ export default function MemberManagementPage() {
         }}
       >
         {rows.map((m) => (
-          <tr key={m.email}>
+          <tr
+            key={m.email}
+            role="button"
+            tabIndex={0}
+            className="cursor-pointer"
+            onClick={() => goDetail(m.email)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" || e.key === " ") {
+                e.preventDefault();
+                goDetail(m.email);
+              }
+            }}
+          >
             <td>{m.name}</td>
             <td>{m.email}</td>
             <td>

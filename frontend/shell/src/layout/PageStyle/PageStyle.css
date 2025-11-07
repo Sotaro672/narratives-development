@@ -1,4 +1,4 @@
-/* PageStyle.css — 画面全体レイアウト（共通） */
+/* PageStyle + PageHeader 共通スタイル */
 
 /* カラートークン（ライト／ダーク） */
 :root {
@@ -15,7 +15,7 @@
   --pbp-primary-hover: #6366f1;
 }
 
-/* ダーク */
+/* ダークテーマ */
 @media (prefers-color-scheme: dark) {
   :root {
     --pbp-bg: #0c0c0c;
@@ -42,7 +42,7 @@
   padding: 16px 24px;
 }
 
-/* 画面幅広い時は少しだけ内側に寄せる（期待値の“ゆとり”） */
+/* 画面幅広い時は少しだけ内側に寄せる */
 @media (min-width: 1360px) {
   .page-container {
     padding-left: 32px;
@@ -50,15 +50,14 @@
   }
 }
 
-/* コンテンツを左右2カラムで分割（左メイン / 右サイド） */
+/* コンテンツ 2カラム（左メイン / 右サイド） */
 .content-grid {
   display: grid;
   gap: 20px;
   align-items: start;
-  grid-template-columns: 1.8fr 1fr; /* 左広め、右細め（期待値寄せ） */
+  grid-template-columns: 1.8fr 1fr; /* 左広め、右細め */
 }
 
-/* もう少し左を広げたい場合の上書き（大画面） */
 @media (min-width: 1440px) {
   .content-grid {
     grid-template-columns: 2fr 1fr;
@@ -68,9 +67,96 @@
 /* 右ペインのカードをスクロール追従させる */
 .sticky-aside {
   position: sticky;
+  top: 0;
 }
 
-/* 上下の区切り余白 */
+/* セクション間の余白 */
 .section-gap {
   margin-top: 12px;
+}
+
+/* =========================
+ * PageHeader
+ * ========================= */
+
+/* ヘッダー全体 */
+.page-header {
+  width: 100%;
+  border-bottom: 1px solid var(--pbp-border);
+  background-color: var(--pbp-surface);
+  position: sticky;
+  top: 0;
+  z-index: 10;
+}
+
+/* 左側：タイトル＋戻るボタン */
+.page-header__left {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+/* タイトル */
+.page-header__title {
+  font-size: 1rem;
+  font-weight: 600;
+  color: var(--pbp-text);
+  margin: 0;
+  letter-spacing: 0.02em;
+}
+
+/* 右側：保存ボタンやその他アクション */
+.page-header__actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+/* 保存ボタン */
+.page-header__btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  height: 32px;
+  padding: 0 12px;
+  border-radius: 8px;
+  border: 1px solid var(--pbp-border);
+  background: #fff;
+  color: var(--pbp-text-strong);
+  font-size: 0.875rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background 0.15s ease, box-shadow 0.15s ease, transform 0.05s ease;
+}
+
+.page-header__btn:hover {
+  background: var(--pbp-hover);
+}
+
+.page-header__btn:active {
+  transform: translateY(1px);
+}
+
+/* 戻るボタン */
+.page-header__back {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 6px;
+  border: none;
+  background: transparent;
+  color: var(--pbp-text);
+  cursor: pointer;
+  transition: background 0.15s ease, transform 0.05s ease;
+}
+
+.page-header__back:hover {
+  background: var(--pbp-hover);
+}
+
+.page-header__back:active {
+  transform: translateY(1px);
 }
