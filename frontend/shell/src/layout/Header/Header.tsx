@@ -4,9 +4,6 @@ import "./Header.css";
 import AdminPanel from "./AdminPanel";
 
 interface HeaderProps {
-  /** サイドバー開閉トグル（任意） */
-  onToggleSidebar?: () => void;
-
   /** ユーザー情報 */
   username?: string; // 表示名（AdminPanelのタイトルに利用）
   email?: string;    // メール表示（ドロップダウン内のみ使用）

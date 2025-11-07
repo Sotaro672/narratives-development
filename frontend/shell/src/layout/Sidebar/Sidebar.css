@@ -2,7 +2,7 @@
    Sidebar (uses tokens from global.css)
    ─────────────────────────────────────────────── */
 
-:root{
+:root {
   --sb-bg: var(--color-sidebar);
   --sb-fg: var(--color-sidebar-foreground);
   --sb-border: var(--color-sidebar-border);
@@ -20,109 +20,191 @@
 }
 
 /* ─ Base / Layout ─ */
-.sidebar{
-  width:240px;
-  background:var(--sb-bg);
-  color:var(--sb-fg);
-  border-right:1px solid var(--sb-border);
+.sidebar {
+  width: 240px;
+  background: var(--sb-bg);
+  color: var(--sb-fg);
+  border-right: 1px solid var(--sb-border);
   padding-top: 0 !important;
-  /* ここが重要：フッターを押し出さず固定するための Flex コンテナ */
-  display:flex;
-  flex-direction:column;
-  height:calc(100dvh - 56px);   /* 端末の実ビューポート高 */
-  min-height:0;    /* 子要素での overflow を有効化 */
-  box-sizing:border-box;
+  display: flex;
+  flex-direction: column;
+  height: calc(100dvh - 56px);
+  min-height: 0;
+  box-sizing: border-box;
 }
 
 /* ナビ部分だけをスクロール領域にし、フッター分の高さを差し引く */
-.sidebar-nav{
-  display:flex;
-  flex-direction:column;
-  gap:6px;
-  padding:0 8px;
-  margin-top:0 !important;
-  flex:1 1 auto;                 /* 取りすぎを抑えつつ余白を受け持つ */
-  min-height:0;                  /* overflow を効かせるため必須 */
-  overflow-y:auto;
-  overflow-x:auto;
+.sidebar-nav {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 0 8px;
+  margin-top: 0 !important;
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  overflow-x: auto;
 }
 
-/* 下部のフッターブロックを常時見えるように固定＋高さ基準を適用 */
-.sidebar > .p-6.border-t.border-border{
-  position:sticky;
-  bottom:0;
-  background:#ffffff;
-  z-index:2;
-  min-height:var(--sb-footer-h);
-  display:flex;
-  align-items:center;
-
-  /* 任意: 黒枠を残す場合 */
-  border:1px solid #000000 !important;
+/* 下部のフッターブロックを常時見えるように固定 */
+.sidebar > .p-6.border-t.border-border {
+  position: sticky;
+  bottom: 0;
+  background: #ffffff;
+  z-index: 2;
+  min-height: var(--sb-footer-h);
+  display: flex;
+  align-items: center;
+  border: 1px solid #000000 !important;
 }
 
 /* ─ Items ─ */
-.sidebar-item{
-  display:flex; align-items:center; width:100%;
-  border:0; background:transparent; cursor:pointer;
-  padding:12px 14px; border-radius:var(--radius-lg,10px);
-  text-align:left; font-size:14px; line-height:1; color:var(--sb-fg);
+.sidebar-item {
+  display: flex;
+  align-items: center;
+  width: 100%;
+  border: 0;
+  background: transparent;
+  cursor: pointer;
+  padding: 12px 14px;
+  border-radius: var(--radius-lg, 10px);
+  text-align: left;
+  font-size: 14px;
+  line-height: 1;
+  color: var(--sb-fg);
+  position: relative; /* ← 追加：バッジ位置の基準枠 */
 }
-.sidebar-item:hover{ background:var(--sb-hover); }
-.sidebar-item.active{ background:transparent; font-weight:600; }
 
-.icon-left{ width:20px; height:20px; margin-right:10px; stroke-width:1.75; color:var(--sb-fg-muted); }
-.right{ margin-left:auto; display:inline-flex; align-items:center; gap:8px; }
-.chevron{
-  width:16px; height:16px; stroke-width:2; color:var(--sb-fg-muted);
-  transition:transform 160ms ease,color 120ms ease,opacity 120ms ease; opacity:.9;
+.sidebar-item:hover {
+  background: var(--sb-hover);
 }
-.sidebar-item:hover .chevron{ color:color-mix(in oklch, var(--sb-fg) 78%, var(--sb-bg) 22%); opacity:1; }
-.sidebar-item:not(.has-children) .chevron{ display:none; }
+.sidebar-item.active {
+  background: transparent;
+  font-weight: 600;
+}
+
+.icon-left {
+  width: 20px;
+  height: 20px;
+  margin-right: 10px;
+  stroke-width: 1.75;
+  color: var(--sb-fg-muted);
+}
+
+.right {
+  margin-left: auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.chevron {
+  width: 16px;
+  height: 16px;
+  stroke-width: 2;
+  color: var(--sb-fg-muted);
+  transition: transform 160ms ease, color 120ms ease, opacity 120ms ease;
+  opacity: 0.9;
+}
+
+.sidebar-item:hover .chevron {
+  color: color-mix(in oklch, var(--sb-fg) 78%, var(--sb-bg) 22%);
+  opacity: 1;
+}
+.sidebar-item:not(.has-children) .chevron {
+  display: none;
+}
 
 /* ─ Group (親の白い枠) ─ */
-.group-block{ border-radius:calc(var(--radius-xl,14px)); padding:2px; }
-.sidebar-item.parent{ border-radius:calc(var(--radius-xl,14px)); }
-.group-open .sidebar-item.parent{
-  outline:3px solid color-mix(in oklch, var(--sb-fg) 8%, transparent);
-  box-shadow:0 1px 0 rgba(0,0,0,.02);
+.group-block {
+  border-radius: calc(var(--radius-xl, 14px));
+  padding: 2px;
 }
-.group-open .sidebar-item.parent .chevron{ transform:rotate(180deg); }
+.sidebar-item.parent {
+  border-radius: calc(var(--radius-xl, 14px));
+}
+.group-open .sidebar-item.parent {
+  outline: 3px solid color-mix(in oklch, var(--sb-fg) 8%, transparent);
+  box-shadow: 0 1px 0 rgba(0, 0, 0, 0.02);
+}
+.group-open .sidebar-item.parent .chevron {
+  transform: rotate(180deg);
+}
 
 /* ─ Submenu (pill) ─ */
-.submenu-container{
-  display:flex; flex-direction:column; gap:6px;
-  margin-top:8px; padding:0 6px 0 14px;
+.submenu-container {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 8px;
+  padding: 0 6px 0 14px;
 }
-.submenu-item{
-  display:flex; align-items:center; width:100%;
-  border:0; background:transparent; cursor:pointer;
-  padding:10px 12px; border-radius:var(--radius-lg,10px);
-  text-align:left; font-size:14px; line-height:1; color:var(--sb-fg);
+
+.submenu-item {
+  display: flex;
+  align-items: center;
+  width: 100%;
+  border: 0;
+  background: transparent;
+  cursor: pointer;
+  padding: 10px 12px;
+  border-radius: var(--radius-lg, 10px);
+  text-align: left;
+  font-size: 14px;
+  line-height: 1;
+  color: var(--sb-fg);
 }
-.submenu-item:hover{ background:var(--sb-hover); }
-.submenu-item.active{
-  background:var(--sb-chip); color:var(--sb-fg); font-weight:600;
-  box-shadow: inset 0 0 0 1px color-mix(in oklch, var(--sb-fg) 3%, transparent),
-              0 0 0 1px color-mix(in oklch, var(--sb-fg) 2%, transparent);
+
+.submenu-item:hover {
+  background: var(--sb-hover);
 }
-.submenu-label{ padding-left:2px; }
+.submenu-item.active {
+  background: var(--sb-chip);
+  color: var(--sb-fg);
+  font-weight: 600;
+  box-shadow:
+    inset 0 0 0 1px color-mix(in oklch, var(--sb-fg) 3%, transparent),
+    0 0 0 1px color-mix(in oklch, var(--sb-fg) 2%, transparent);
+}
+
+.submenu-label {
+  padding-left: 2px;
+}
 
 /* ─ Badge ─ */
-.badge{
-  min-width:18px; height:18px; padding:0 6px; border-radius:999px;
-  background:var(--sb-badge); color:#fff; font-size:12px; line-height:18px; font-weight:700;
+.badge {
+  min-width: 18px;
+  height: 18px;
+  padding: 0 6px;
+  border-radius: 999px;
+  background: var(--sb-badge);
+  color: #fff;
+  font-size: 12px;
+  line-height: 18px;
+  font-weight: 700;
+}
+
+/* ▼ サイドバー内バッジ位置を右上に固定 */
+.sidebar .sidebar-item .badge {
+  position: absolute;
+  top: 6px;
+  right: 10px;
+  z-index: 1;
 }
 
 /* ─ A11y ─ */
 .sidebar-item:focus-visible,
-.submenu-item:focus-visible{
-  outline:2px solid var(--sb-ring);
-  outline-offset:2px;
-  border-radius:var(--radius-lg,10px);
+.submenu-item:focus-visible {
+  outline: 2px solid var(--sb-ring);
+  outline-offset: 2px;
+  border-radius: var(--radius-lg, 10px);
 }
 
-.sidebar .icon-left, .sidebar .chevron{ color:#111111 !important; stroke:#111111 !important; }
+.sidebar .icon-left,
+.sidebar .chevron {
+  color: #111111 !important;
+  stroke: #111111 !important;
+}
 
 /* Sidebar as full-height column */
 .sidebar {
@@ -139,17 +221,7 @@
   position: sticky;
   bottom: 0;
   background: #ffffff;
-  z-index: 2;             /* above scrolling content */
-}
-
-/* Sticky footer block at the bottom of the sidebar */
-.sidebar > .p-6.border-t.border-border {
-  position: sticky;
-  bottom: 0;
-  background: #ffffff;
   z-index: 2;
-
-  /* Black border around the block */
   border: 1px solid #000000 !important;
 }
 

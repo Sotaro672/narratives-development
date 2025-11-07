@@ -1,20 +1,29 @@
-/* 横並びのメインレイアウト */
+/* 横並びのメインレイアウト（ヘッダー直下を画面いっぱいに使う） */
 .flex.flex-1.flex-row {
   display: flex;
   flex-direction: row;
   align-items: stretch;
+  flex: 1 1 auto;
+  min-height: 0;      /* 子要素が高さを押し広げないように */
+  overflow: hidden;   /* スクロールは main / sidebar に任せる */
 }
 
 /* Sidebar は固定幅 180px */
 .flex.flex-1.flex-row > .sidebar {
   flex: 0 0 180px;
   width: 180px;
-  display: flex; /* 子の高さを満たす */
+  display: flex;
+  flex-direction: column;
+  min-height: 100%;
+  overflow-y: auto;   /* 必要な場合のみ縦スクロール */
+  overflow-x: hidden; /* 横スクロールは出さない */
 }
 
-/* Main は残り幅を占有 */
+/* Main は残り幅を占有し、縦方向のみスクロール */
 .flex.flex-1.flex-row > main {
   flex: 1 1 auto;
-  min-width: 0;     /* コンテンツ幅が大きい場合のはみ出し抑制 */
-  overflow: auto;   /* 必要に応じてスクロール */
+  min-width: 0;       /* コンテンツ幅が大きい場合のはみ出し抑制 */
+  min-height: 0;
+  overflow-y: auto;   /* コンテンツが縦に溢れたときだけスクロール */
+  overflow-x: hidden; /* 横スクロールは出さない */
 }

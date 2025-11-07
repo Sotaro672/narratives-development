@@ -6,13 +6,12 @@ import Main from "../layout/Main/Main";
 import "./MainPage.css";
 
 export default function MainPage() {
-  const [isSidebarOpen, setIsSidebarOpen] = useState(true);
+  const [isSidebarOpen, ] = useState(true);
 
   return (
     <div className="min-h-screen flex flex-col">
       <Header
         username="Demo User"
-        onToggleSidebar={() => setIsSidebarOpen((v) => !v)}
       />
 
       {/* 横並びにするFlexコンテナ */}
