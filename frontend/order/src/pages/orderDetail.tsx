@@ -2,7 +2,6 @@
 import * as React from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import PageHeader from "../../../shell/src/layout/PageHeader/PageHeader";
-import { Card, CardHeader, CardTitle, CardContent } from "../../../shared/ui/card";
 
 export default function OrderDetail() {
   const navigate = useNavigate();
@@ -28,7 +27,6 @@ export default function OrderDetail() {
   return (
     <div className="p-6">
       <PageHeader title={`注文詳細：${orderId ?? "不明ID"}`} onBack={onBack} />
-
     </div>
   );
 }
