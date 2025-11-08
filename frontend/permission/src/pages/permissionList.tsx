@@ -1,11 +1,12 @@
-// frontend/permission/src/pages/permissionList.tsx
-
 import { useMemo, useState } from "react";
+import { useNavigate } from "react-router-dom"; // ← 追加
 import List, { FilterableTableHeader } from "../../../shell/src/layout/List/List";
 import { Shield } from "lucide-react";
 import { ALL_PERMISSIONS, type Permission } from "../../mockdata";
 
 export default function PermissionList() {
+  const navigate = useNavigate(); // ← 追加
+
   // カテゴリフィルタ
   const [categoryFilter, setCategoryFilter] = useState<string[]>([]);
 
@@ -23,6 +24,11 @@ export default function PermissionList() {
     if (categoryFilter.length === 0) return ALL_PERMISSIONS;
     return ALL_PERMISSIONS.filter((p) => categoryFilter.includes(p.category));
   }, [categoryFilter]);
+
+  // 行クリック時の遷移関数
+  const goDetail = (permissionId: string) => {
+    navigate(`/permission/${encodeURIComponent(permissionId)}`);
+  };
 
   const headers = [
     <>
@@ -57,7 +63,19 @@ export default function PermissionList() {
         }}
       >
         {filteredRows.map((p: Permission) => (
-          <tr key={p.name}>
+          <tr
+            key={p.name}
+            role="button"
+            tabIndex={0}
+            className="cursor-pointer hover:bg-slate-50 transition-colors"
+            onClick={() => goDetail(p.name)} // ← 行クリックで遷移
+            onKeyDown={(e) => {
+              if (e.key === "Enter" || e.key === " ") {
+                e.preventDefault();
+                goDetail(p.name);
+              }
+            }}
+          >
             <td>{p.name}</td>
             <td>
               <span className="lp-brand-pill">{p.category}</span>

@@ -1,18 +1,14 @@
-// frontend/transaction/src/pages/transactionList.tsx
-
 import React, { useMemo, useState } from "react";
+import { useNavigate } from "react-router-dom"; // ← 追加
 import List, {
   FilterableTableHeader,
   SortableTableHeader,
 } from "../../../shell/src/layout/List/List";
 import { ArrowDownLeft, ArrowUpRight } from "lucide-react";
 import "./transactionList.css";
-import {
-  TRANSACTIONS,
-  type Transaction,
-} from "../../mockdata";
+import { TRANSACTIONS, type Transaction } from "../../mockdata";
 
-// Lucide型エラー対策（TS2786）
+// Lucide型エラー対策
 const IconIn = ArrowDownLeft as unknown as React.ComponentType<
   React.SVGProps<SVGSVGElement>
 >;
@@ -20,20 +16,22 @@ const IconOut = ArrowUpRight as unknown as React.ComponentType<
   React.SVGProps<SVGSVGElement>
 >;
 
-// 文字列日時をタイムスタンプに（"YYYY/M/D HH:mm:ss" 想定）
+// 日時文字列 → タイムスタンプ変換
 const toTs = (s: string) => new Date(s.replace(/-/g, "/")).getTime();
 
 export default function TransactionListPage() {
+  const navigate = useNavigate(); // ← 追加
+
   // ---- フィルタ状態 ----
   const [brandFilter, setBrandFilter] = useState<string[]>([]);
   const [typeFilter, setTypeFilter] = useState<string[]>([]);
   const [counterpartyFilter, setCounterpartyFilter] = useState<string[]>([]);
 
-  // ---- ソート状態（日時/金額）----
+  // ---- ソート状態 ----
   const [sortKey, setSortKey] = useState<"datetime" | "amount">("datetime");
   const [sortDir, setSortDir] = useState<"asc" | "desc">("desc");
 
-  // ヘッダー用オプション
+  // ---- オプション ----
   const brandOptions = useMemo(
     () =>
       Array.from(new Set(TRANSACTIONS.map((t) => t.brand))).map((v) => ({
@@ -54,16 +52,14 @@ export default function TransactionListPage() {
 
   const counterpartyOptions = useMemo(
     () =>
-      Array.from(new Set(TRANSACTIONS.map((t) => t.counterparty))).map(
-        (v) => ({
-          value: v,
-          label: v,
-        })
-      ),
+      Array.from(new Set(TRANSACTIONS.map((t) => t.counterparty))).map((v) => ({
+        value: v,
+        label: v,
+      })),
     []
   );
 
-  // フィルタ → ソート
+  // ---- フィルタ + ソート ----
   const rows = useMemo(() => {
     let work = TRANSACTIONS.filter(
       (t) =>
@@ -79,23 +75,20 @@ export default function TransactionListPage() {
         const bv = toTs(b.datetime);
         return sortDir === "asc" ? av - bv : bv - av;
       }
-      // amount
       const av = a.amount;
       const bv = b.amount;
       return sortDir === "asc" ? av - bv : bv - av;
     });
 
     return work;
-  }, [
-    brandFilter,
-    typeFilter,
-    counterpartyFilter,
-    sortKey,
-    sortDir,
-  ]);
+  }, [brandFilter, typeFilter, counterpartyFilter, sortKey, sortDir]);
+
+  // ---- 行クリック時の遷移処理 ----
+  const goDetail = (transactionId: string) => {
+    navigate(`/transaction/${encodeURIComponent(transactionId)}`);
+  };
 
   const headers: React.ReactNode[] = [
-    // 日時（Sortable）
     <SortableTableHeader
       key="h-datetime"
       label="日時"
@@ -107,8 +100,6 @@ export default function TransactionListPage() {
         setSortDir(dir);
       }}
     />,
-
-    // ブランド（Filterable）
     <FilterableTableHeader
       key="h-brand"
       label="ブランド"
@@ -116,8 +107,6 @@ export default function TransactionListPage() {
       selected={brandFilter}
       onChange={setBrandFilter}
     />,
-
-    // 種別（Filterable）
     <FilterableTableHeader
       key="h-type"
       label="種別"
@@ -125,10 +114,7 @@ export default function TransactionListPage() {
       selected={typeFilter}
       onChange={setTypeFilter}
     />,
-
     "説明",
-
-    // 金額（Sortable）
     <SortableTableHeader
       key="h-amount"
       label="金額"
@@ -140,8 +126,6 @@ export default function TransactionListPage() {
         setSortDir(dir);
       }}
     />,
-
-    // 取引先（Filterable）
     <FilterableTableHeader
       key="h-counterparty"
       label="取引先"
@@ -152,9 +136,7 @@ export default function TransactionListPage() {
   ];
 
   const typeClass = (type: Transaction["type"]) =>
-    `transaction-type-badge ${
-      type === "受取" ? "is-receive" : "is-send"
-    }`;
+    `transaction-type-badge ${type === "受取" ? "is-receive" : "is-send"}`;
 
   const renderTypeBadge = (type: Transaction["type"]) => {
     const Icon = type === "受取" ? IconIn : IconOut;
@@ -199,7 +181,19 @@ export default function TransactionListPage() {
         {rows.map((t, idx) => {
           const [date, time] = t.datetime.split(" ");
           return (
-            <tr key={`${t.datetime}-${idx}`}>
+            <tr
+              key={`${t.datetime}-${idx}`}
+              role="button"
+              tabIndex={0}
+              className="cursor-pointer hover:bg-slate-50 transition-colors"
+              onClick={() => goDetail(t.datetime)} // ← 行クリックで遷移
+              onKeyDown={(e) => {
+                if (e.key === "Enter" || e.key === " ") {
+                  e.preventDefault();
+                  goDetail(t.datetime);
+                }
+              }}
+            >
               <td>
                 <div>{date}</div>
                 <div className="transaction-time-sub">{time}</div>

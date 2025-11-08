@@ -1,6 +1,5 @@
-// frontend/brand/src/pages/brandManagement.tsx
-
 import React, { useMemo, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import List, {
   FilterableTableHeader,
   SortableTableHeader,
@@ -17,9 +16,15 @@ const toTs = (yyyyMd: string) => {
 type SortKey = "registeredAt" | null;
 
 export default function BrandManagementPage() {
-  // Filter states
+  const navigate = useNavigate();
+
+  // ────────────────────────────────
+  // フィルタ・ソート状態
+  // ────────────────────────────────
   const [statusFilter, setStatusFilter] = useState<string[]>([]);
   const [ownerFilter, setOwnerFilter] = useState<string[]>([]);
+  const [activeKey, setActiveKey] = useState<SortKey>("registeredAt");
+  const [direction, setDirection] = useState<"asc" | "desc" | null>("desc");
 
   const statusOptions = useMemo(
     () =>
@@ -39,11 +44,9 @@ export default function BrandManagementPage() {
     []
   );
 
-  // Sort state
-  const [activeKey, setActiveKey] = useState<SortKey>("registeredAt");
-  const [direction, setDirection] = useState<"asc" | "desc" | null>("desc");
-
-  // Data
+  // ────────────────────────────────
+  // データフィルタリング＋ソート
+  // ────────────────────────────────
   const rows = useMemo(() => {
     let data = ALL_BRANDS.filter(
       (b) =>
@@ -65,11 +68,8 @@ export default function BrandManagementPage() {
     return data;
   }, [statusFilter, ownerFilter, activeKey, direction]);
 
-  // Headers
   const headers: React.ReactNode[] = [
     "ブランド名",
-
-    // ステータス（Filterable）
     <FilterableTableHeader
       key="status"
       label="ステータス"
@@ -77,8 +77,6 @@ export default function BrandManagementPage() {
       selected={statusFilter}
       onChange={setStatusFilter}
     />,
-
-    // 責任者（Filterable）
     <FilterableTableHeader
       key="owner"
       label="責任者"
@@ -86,8 +84,6 @@ export default function BrandManagementPage() {
       selected={ownerFilter}
       onChange={setOwnerFilter}
     />,
-
-    // 登録日（Sortable）
     <SortableTableHeader
       key="registeredAt"
       label="登録日"
@@ -104,6 +100,20 @@ export default function BrandManagementPage() {
   const statusBadgeClass = (status: BrandRow["status"]) =>
     `brand-status-badge ${status === "active" ? "is-active" : "is-inactive"}`;
 
+  // ────────────────────────────────
+  // ブランド追加ボタン押下 → brandCreateへ遷移
+  // ────────────────────────────────
+  const handleCreateBrand = () => {
+    navigate("/brand/create");
+  };
+
+  // ────────────────────────────────
+  // 行クリック → brandDetailへ遷移
+  // ────────────────────────────────
+  const goDetail = (brandId: string) => {
+    navigate(`/brand/${encodeURIComponent(brandId)}`);
+  };
+
   return (
     <div className="p-0">
       <List
@@ -111,7 +121,7 @@ export default function BrandManagementPage() {
         headerCells={headers}
         showCreateButton
         createLabel="ブランド追加"
-        onCreate={() => console.log("ブランド追加")}
+        onCreate={handleCreateBrand}
         showResetButton
         onReset={() => {
           setStatusFilter([]);
@@ -122,7 +132,19 @@ export default function BrandManagementPage() {
         }}
       >
         {rows.map((b) => (
-          <tr key={b.name}>
+          <tr
+            key={b.name}
+            role="button"
+            tabIndex={0}
+            className="cursor-pointer hover:bg-slate-50 transition-colors"
+            onClick={() => goDetail(b.name)} // ← 行クリックで brandDetail へ遷移
+            onKeyDown={(e) => {
+              if (e.key === "Enter" || e.key === " ") {
+                e.preventDefault();
+                goDetail(b.name);
+              }
+            }}
+          >
             <td>{b.name}</td>
             <td>
               <span className={statusBadgeClass(b.status)}>
