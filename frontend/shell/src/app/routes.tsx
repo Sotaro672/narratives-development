@@ -5,6 +5,9 @@ import type { RouteObject } from "react-router-dom";
 import announcementRoutesRaw from "../../../announcement/src/routes";
 const announcementRoutes = announcementRoutesRaw as unknown as RouteObject[];
 
+import messageRouteRaw from "../../../message/src/routes";
+const messageRoutes = messageRouteRaw as unknown as RouteObject[];
+
 import inquiryRoutesRaw from "../../../inquiry/src/routes";
 const inquiryRoutes = inquiryRoutesRaw as unknown as RouteObject[];
 
@@ -62,13 +65,15 @@ export const routes: RouteObject[] = [
     path: "/announcement",
     children: announcementRoutes
   },
+  // Message モジュール
+  {
+    path: "/message",
+    children: messageRoutes,
+  },
   // Inquiry モジュール  
   { path: "/inquiry", 
     children: inquiryRoutes 
   },
-
-
-
   // ProductBlueprint モジュール
   {
     path: "/productBlueprint",

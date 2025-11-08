@@ -24,7 +24,9 @@ export default function Header({
   const panelContainerRef = useRef<HTMLDivElement | null>(null);
   const triggerRef = useRef<HTMLButtonElement | null>(null);
 
+  // ─────────────────────────────────────────────
   // 外側クリックで閉じる
+  // ─────────────────────────────────────────────
   useEffect(() => {
     const onDocClick = (e: MouseEvent) => {
       const t = e.target as Node;
@@ -36,7 +38,9 @@ export default function Header({
     return () => document.removeEventListener("mousedown", onDocClick);
   }, []);
 
+  // ─────────────────────────────────────────────
   // Esc キーで閉じる
+  // ─────────────────────────────────────────────
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.key === "Escape") setOpenAdmin(false);
@@ -45,11 +49,20 @@ export default function Header({
     return () => document.removeEventListener("keydown", onKey);
   }, []);
 
-  // 通知ボタン押下時の遷移処理
+  // ─────────────────────────────────────────────
+  // ボタン押下時の遷移処理
+  // ─────────────────────────────────────────────
   const handleNotificationClick = () => {
-    navigate("/announcement");
+    navigate("/announcement"); // 通知一覧ページ
   };
 
+  const handleMessageClick = () => {
+    navigate("/message"); // メッセージ一覧ページ
+  };
+
+  // ─────────────────────────────────────────────
+  // JSX
+  // ─────────────────────────────────────────────
   return (
     <header className="app-header">
       {/* Left: Brand */}
@@ -64,7 +77,7 @@ export default function Header({
         <button
           className="icon-btn"
           aria-label="通知"
-          onClick={handleNotificationClick} // ← 遷移を追加
+          onClick={handleNotificationClick}
         >
           <span className="icon-wrap">
             <Bell className="icon" aria-hidden />
@@ -77,7 +90,11 @@ export default function Header({
         </button>
 
         {/* メッセージ */}
-        <button className="icon-btn" aria-label="メッセージ">
+        <button
+          className="icon-btn"
+          aria-label="メッセージ"
+          onClick={handleMessageClick} // ← 追加
+        >
           <span className="icon-wrap">
             <MessageSquare className="icon" aria-hidden />
             {messagesCount > 0 && (
@@ -88,7 +105,7 @@ export default function Header({
           </span>
         </button>
 
-        {/* ユーザー（トリガー & ドロップダウン） */}
+        {/* ユーザードロップダウン */}
         <div className="relative" ref={panelContainerRef}>
           <button
             ref={triggerRef}
@@ -99,7 +116,10 @@ export default function Header({
             onClick={() => setOpenAdmin((v) => !v)}
           >
             <UserRound className="icon" aria-hidden />
-            <ChevronDown className={`caret ${openAdmin ? "open" : ""}`} aria-hidden />
+            <ChevronDown
+              className={`caret ${openAdmin ? "open" : ""}`}
+              aria-hidden
+            />
           </button>
 
           <AdminPanel
