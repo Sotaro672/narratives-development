@@ -1,0 +1,154 @@
+/* frontend/tokenContents/src/pages/tokenContentsCard.css */
+
+.token-contents-card {
+  width: 100%;
+  max-width: 1120px;
+  margin: 16px auto 0;
+  border-radius: 16px;
+}
+
+/* Header */
+
+.token-contents-card__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 18px 20px;
+  border-bottom: 1px solid rgba(15, 23, 42, 0.06);
+}
+
+.token-contents-card__title-wrap {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.token-contents-card__title-icon {
+  width: 22px;
+  height: 22px;
+  border-radius: 999px;
+  background-color: #f3f4f6;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.token-contents-card__title-icon-svg {
+  width: 14px;
+  height: 14px;
+  color: #6b7280;
+}
+
+.token-contents-card__title {
+  font-size: 0.95rem;
+  font-weight: 600;
+  color: #111827;
+}
+
+/* ファイル追加ボタン（右上） */
+
+.token-contents-card__add-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0 14px;
+  height: 34px;
+  border-radius: 999px;
+  background: #ffffff;
+  border: 1px solid rgba(148, 163, 253, 0.6);
+  font-size: 0.8rem;
+  font-weight: 500;
+  color: #4f46e5;
+  box-shadow: 0 2px 5px rgba(15, 23, 42, 0.06);
+}
+
+.token-contents-card__add-btn:hover {
+  background-color: #f5f5ff;
+}
+
+.token-contents-card__add-btn-icon {
+  width: 16px;
+  height: 16px;
+}
+
+/* Viewer */
+
+.token-contents-card__viewer {
+  margin-top: 4px;
+  padding: 24px;
+  border-radius: 18px;
+  background-color: #f3f4f6;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  position: relative;
+  min-height: 420px;
+}
+
+/* 中央画像 */
+
+.token-contents-card__image-slot {
+  flex: 0 0 auto;
+  margin: 0 auto;
+  max-width: 36%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.token-contents-card__image {
+  width: 100%;
+  max-height: 520px;
+  object-fit: cover;
+  border-radius: 0;
+  box-shadow: 0 8px 18px rgba(15, 23, 42, 0.12);
+}
+
+/* 矢印ナビゲーション */
+
+.token-contents-card__nav {
+  width: 40px;
+  height: 40px;
+  border-radius: 999px;
+  border: none;
+  background-color: #ffffff;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 4px 10px rgba(148, 163, 253, 0.25);
+  cursor: pointer;
+  transition: transform 0.12s ease, box-shadow 0.12s ease,
+    background-color 0.12s ease;
+}
+
+.token-contents-card__nav--left {
+  position: absolute;
+  left: 40px;
+  top: 50%;
+  transform: translateY(-50%);
+}
+
+.token-contents-card__nav--right {
+  position: absolute;
+  right: 40px;
+  top: 50%;
+  transform: translateY(-50%);
+}
+
+.token-contents-card__nav:hover {
+  background-color: #f9fafb;
+  box-shadow: 0 6px 14px rgba(148, 163, 253, 0.35);
+  transform: translateY(-50%) scale(1.03);
+}
+
+.token-contents-card__nav:active {
+  box-shadow: 0 3px 6px rgba(148, 163, 253, 0.26);
+  transform: translateY(-50%) scale(0.97);
+}
+
+.token-contents-card__nav-icon {
+  width: 18px;
+  height: 18px;
+  color: #6b7280;
+}

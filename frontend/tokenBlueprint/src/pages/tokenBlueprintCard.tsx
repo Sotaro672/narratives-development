@@ -1,3 +1,4 @@
+// frontend/tokenBlueprint/src/pages/tokenBlueprintCard.tsx
 import * as React from "react";
 import { Link2, Upload, Calendar, Pencil, Save } from "lucide-react";
 
@@ -79,25 +80,7 @@ export default function TokenBlueprintCard({
           トークン：{tokenBlueprintId}
         </CardTitle>
         <Badge className="token-blueprint-card__header-badge">設計情報</Badge>
-
-        {/* 編集モード切替ボタン */}
-        <button
-          type="button"
-          onClick={() => (isEditMode ? handleSave() : setIsEditMode(true))}
-          className="token-blueprint-card__edit-toggle-btn"
-        >
-          {isEditMode ? (
-            <>
-              <Save className="w-4 h-4 mr-1" /> 保存
-            </>
-          ) : (
-            <>
-              <Pencil className="w-4 h-4 mr-1" /> 編集
-            </>
-          )}
-        </button>
       </CardHeader>
-
       <CardContent>
         {/* 上部：左にアイコン、右に縦並びフィールド */}
         <div className="token-blueprint-card__top">
