@@ -47,7 +47,7 @@ export default function Header({
 
   // 通知ボタン押下時の遷移処理
   const handleNotificationClick = () => {
-    navigate("/announce");
+    navigate("/announcement");
   };
 
   return (
