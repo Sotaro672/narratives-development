@@ -195,7 +195,7 @@ export default function OrderManagementPage() {
 
   // 詳細ページへ遷移
   const goDetail = (orderId: string) => {
-    navigate(`/orders/${encodeURIComponent(orderId)}`);
+    navigate(`/order/${encodeURIComponent(orderId)}`);
   };
 
   return (

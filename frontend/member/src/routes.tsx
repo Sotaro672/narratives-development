@@ -7,7 +7,7 @@ import MemberDetail from "./pages/memberDetail";
 
 const routes: RouteObject[] = [
   { path: "", element: <MemberManagement /> },
-  { path: "member/:id", element: <MemberDetail /> },
+  { path: ":email", element: <MemberDetail /> },
   // 他のルート定義
 ];
 

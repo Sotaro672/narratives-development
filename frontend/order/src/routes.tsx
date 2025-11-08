@@ -5,7 +5,7 @@ import OrderDetail from "./pages/orderDetail";
 
 const routes: RouteObject[] = [
   { path: "", element: <OrderManagement /> },
-  { path: "order/:orderId", element: <OrderDetail /> },
+  { path: ":orderId", element: <OrderDetail /> },
   // 他のルート定義
 ];
 
