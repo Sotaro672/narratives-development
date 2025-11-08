@@ -1,4 +1,5 @@
 // frontend/ad/src/pages/adManagement.tsx
+
 import React, { useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import List, {
@@ -6,43 +7,7 @@ import List, {
   SortableTableHeader,
 } from "../../../shell/src/layout/List/List";
 import "./adManagement.css";
-
-// ─────────────────────────────────────────────────────────────
-// Types & Mock
-// ─────────────────────────────────────────────────────────────
-type AdRow = {
-  campaign: string;
-  brand: string;
-  owner: string;
-  period: string; // "YYYY/M/D - YYYY/M/D"
-  status: "実行中";
-  spendRate: string; // "66.0%"
-  spend: string; // "¥198,000"
-  budget: string; // "¥300,000"
-};
-
-const ADS: AdRow[] = [
-  {
-    campaign: "NEXUS Street デニムジャケット新作",
-    brand: "NEXUS Street",
-    owner: "渡辺 花子",
-    period: "2024/3/10 - 2024/4/10",
-    status: "実行中",
-    spendRate: "66.0%",
-    spend: "¥198,000",
-    budget: "¥300,000",
-  },
-  {
-    campaign: "LUMINA Fashion 春コレクション",
-    brand: "LUMINA Fashion",
-    owner: "佐藤 美咲",
-    period: "2024/3/1 - 2024/3/31",
-    status: "実行中",
-    spendRate: "68.4%",
-    spend: "¥342,000",
-    budget: "¥500,000",
-  },
-];
+import { ADS, type AdRow } from "../../mockdata";
 
 // ─────────────────────────────────────────────────────────────
 // Utils
@@ -51,14 +16,17 @@ const toTs = (yyyyMd: string) => {
   const [y, m, d] = yyyyMd.split("/").map((v) => parseInt(v.trim(), 10));
   return new Date(y, (m || 1) - 1, d || 1).getTime();
 };
+
 const periodStartTs = (period: string) => {
   const start = period.split("-")[0]?.trim() ?? "";
   return toTs(start);
 };
+
 const percentToNumber = (v: string) => {
   const n = Number(v.replace("%", ""));
   return Number.isNaN(n) ? 0 : n;
 };
+
 const yenToNumber = (v: string) => {
   const n = Number(v.replace(/[^\d.-]/g, ""));
   return Number.isNaN(n) ? 0 : n;
@@ -85,6 +53,7 @@ export default function AdManagementPage() {
       })),
     []
   );
+
   const ownerOptions = useMemo(
     () =>
       Array.from(new Set(ADS.map((a) => a.owner))).map((v) => ({
@@ -93,6 +62,7 @@ export default function AdManagementPage() {
       })),
     []
   );
+
   const statusOptions = useMemo(
     () =>
       Array.from(new Set(ADS.map((a) => a.status))).map((v) => ({
@@ -235,7 +205,7 @@ export default function AdManagementPage() {
           console.log("広告一覧を更新");
         }}
       >
-        {rows.map((ad) => (
+        {rows.map((ad: AdRow) => (
           <tr
             key={ad.campaign}
             className="cursor-pointer hover:bg-blue-50 transition"

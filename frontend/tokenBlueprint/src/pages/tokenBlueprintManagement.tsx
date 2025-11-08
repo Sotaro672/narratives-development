@@ -1,56 +1,12 @@
 // frontend/tokenBlueprint/src/pages/tokenBlueprintManagement.tsx
+
 import React, { useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import List, {
   FilterableTableHeader,
   SortableTableHeader,
 } from "../../../shell/src/layout/List/List";
-
-type TokenBlueprint = {
-  name: string;
-  symbol: string;
-  brand: string;
-  manager: string;
-  createdAt: string; // YYYY/M/D
-};
-
-const TOKEN_BLUEPRINTS: TokenBlueprint[] = [
-  {
-    name: "SILK Premium Token",
-    symbol: "SILK",
-    brand: "LUMINA Fashion",
-    manager: "佐藤 美咲",
-    createdAt: "2024/1/20",
-  },
-  {
-    name: "NEXUS Street Token",
-    symbol: "NEXUS",
-    brand: "NEXUS Street",
-    manager: "高橋 健太",
-    createdAt: "2024/1/18",
-  },
-  {
-    name: "LUMINA VIP Token",
-    symbol: "LVIP",
-    brand: "LUMINA Fashion",
-    manager: "山田 太郎",
-    createdAt: "2024/1/15",
-  },
-  {
-    name: "NEXUS Community Token",
-    symbol: "NXCOM",
-    brand: "NEXUS Street",
-    manager: "佐藤 美咲",
-    createdAt: "2024/1/12",
-  },
-  {
-    name: "SILK Limited Edition",
-    symbol: "SLKED",
-    brand: "LUMINA Fashion",
-    manager: "高橋 健太",
-    createdAt: "2024/1/10",
-  },
-];
+import { TOKEN_BLUEPRINTS, type TokenBlueprint } from "../../mockdata";
 
 const toTs = (yyyyMd: string) => {
   const [y, m, d] = yyyyMd.split("/").map((v) => parseInt(v, 10));
@@ -77,6 +33,7 @@ export default function TokenBlueprintManagementPage() {
       })),
     []
   );
+
   const managerOptions = useMemo(
     () =>
       Array.from(new Set(TOKEN_BLUEPRINTS.map((r) => r.manager))).map((v) => ({
@@ -148,7 +105,6 @@ export default function TokenBlueprintManagementPage() {
         showCreateButton
         createLabel="トークン設計を作成"
         showResetButton
-        // ▼ 作成ボタン押下で作成ページへ遷移
         onCreate={() => navigate("/tokenBlueprint/create")}
         onReset={() => {
           setBrandFilter([]);
@@ -158,7 +114,7 @@ export default function TokenBlueprintManagementPage() {
           console.log("リスト更新");
         }}
       >
-        {rows.map((t) => (
+        {rows.map((t: TokenBlueprint) => (
           <tr
             key={`${t.symbol}-${t.createdAt}`}
             role="button"

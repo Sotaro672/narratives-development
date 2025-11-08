@@ -1,38 +1,15 @@
 // frontend/productBlueprint/src/pages/productBlueprintManagement.tsx
+
 import List, {
   FilterableTableHeader,
   SortableTableHeader,
 } from "../../../shell/src/layout/List/List";
 import { useMemo, useState } from "react";
-import { useNavigate } from "react-router-dom"; // ← 追加
-
-type Row = {
-  product: string;
-  brand: "LUMINA Fashion" | "NEXUS Street";
-  owner: string;
-  productId: string;
-  createdAtA: string;
-  createdAtB: string;
-};
-
-const RAW_ROWS: Row[] = [
-  {
-    product: "シルクブラウス プレミアムライン",
-    brand: "LUMINA Fashion",
-    owner: "佐藤 美咲",
-    productId: "QR",
-    createdAtA: "2024/1/15",
-    createdAtB: "2024/1/15",
-  },
-  {
-    product: "デニムジャケット ヴィンテージ加工",
-    brand: "NEXUS Street",
-    owner: "高橋 健太",
-    productId: "QR",
-    createdAtA: "2024/1/10",
-    createdAtB: "2024/1/10",
-  },
-];
+import { useNavigate } from "react-router-dom";
+import {
+  RAW_ROWS,
+  type ProductBlueprintRow,
+} from "../../mockdata";
 
 const toTs = (yyyyMd: string) => {
   const [y, m, d] = yyyyMd.split("/").map((v) => parseInt(v, 10));
@@ -40,11 +17,13 @@ const toTs = (yyyyMd: string) => {
 };
 
 export default function ProductBlueprintManagement() {
-  const navigate = useNavigate(); // ← 遷移用フック
+  const navigate = useNavigate();
 
   // フィルタ状態
   const [brandFilter, setBrandFilter] = useState<string[]>([]);
-  const [sortedKey, setSortedKey] = useState<"createdAtA" | "createdAtB" | null>(null);
+  const [sortedKey, setSortedKey] = useState<"createdAtA" | "createdAtB" | null>(
+    null
+  );
   const [sortedDir, setSortedDir] = useState<"asc" | "desc" | null>(null);
 
   // フィルタとソート
@@ -102,8 +81,10 @@ export default function ProductBlueprintManagement() {
   ];
 
   // 行クリックで詳細ページへ遷移
-  const handleRowClick = (r: Row) => {
-    navigate(`/productBlueprint/detail?product=${encodeURIComponent(r.product)}`);
+  const handleRowClick = (r: ProductBlueprintRow) => {
+    navigate(
+      `/productBlueprint/detail?product=${encodeURIComponent(r.product)}`
+    );
   };
 
   // 作成ボタン押下で作成ページへ遷移
@@ -117,7 +98,7 @@ export default function ProductBlueprintManagement() {
       headerCells={headers}
       showCreateButton
       createLabel="商品設計を作成"
-      onCreate={handleCreate} // ← 遷移をここに設定
+      onCreate={handleCreate}
       showResetButton
       onReset={() => {
         setBrandFilter([]);

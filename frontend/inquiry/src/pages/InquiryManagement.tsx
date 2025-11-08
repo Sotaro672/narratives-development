@@ -1,4 +1,5 @@
 // frontend/inquiry/src/pages/InquiryManagement.tsx
+
 import * as React from "react";
 import { useNavigate } from "react-router-dom";
 import List, {
@@ -6,43 +7,7 @@ import List, {
   SortableTableHeader,
 } from "../../../shell/src/layout/List/List";
 import "./InquiryManagement.css";
-
-type InquiryRow = {
-  id: string;
-  title: string;
-  body: string;
-  user: string;
-  status: "対応中" | "未対応";
-  type: "商品説明" | "交換";
-  owner: string;
-  inquiredAt: string; // YYYY/M/D
-  answeredAt: string; // YYYY/M/D or "-"
-};
-
-const INQUIRIES: InquiryRow[] = [
-  {
-    id: "inquiry_002",
-    title: "デニムジャケットの色落ちについて",
-    body: "NEXUS Streetのデニムジャケットを洗濯したら色落ちし…",
-    user: "Style Yuki",
-    status: "対応中",
-    type: "商品説明",
-    owner: "田中 雄太",
-    inquiredAt: "2024/9/24",
-    answeredAt: "2024/9/25",
-  },
-  {
-    id: "inquiry_001",
-    title: "シルクブラウスのサイズ交換について",
-    body: "LUMINA Fashionのプレミアムシルクブラウスを購入しまし…",
-    user: "Creator Alice",
-    status: "未対応",
-    type: "交換",
-    owner: "佐藤 美咲",
-    inquiredAt: "2024/9/20",
-    answeredAt: "2024/9/20",
-  },
-];
+import { INQUIRIES, type InquiryRow } from "../../mockdata";
 
 // "YYYY/M/D" → number（タイムスタンプ）
 // "-" など空は 0（最小）扱いにして末尾になるようにしています
@@ -64,9 +29,21 @@ export default function InquiryManagementPage() {
   // 担当者フィルタ
   const [ownerFilter, setOwnerFilter] = React.useState<string[]>([]);
 
-  // ソート状態（どの列を/どの方向で）
-  const [sortKey, setSortKey] = React.useState<"inquiredAt" | "answeredAt" | null>(null);
-  const [sortDirection, setSortDirection] = React.useState<"asc" | "desc" | null>(null);
+  // ソート状態
+  type SortKey = "inquiredAt" | "answeredAt" | null;
+  const [sortKey, setSortKey] = React.useState<SortKey>(null);
+  const [sortDirection, setSortDirection] =
+    React.useState<"asc" | "desc" | null>(null);
+
+  // 担当者候補はモックデータからユニーク抽出
+  const ownerOptions = React.useMemo(
+    () =>
+      Array.from(new Set(INQUIRIES.map((q) => q.owner))).map((v) => ({
+        value: v,
+        label: v,
+      })),
+    []
+  );
 
   const rows = React.useMemo(() => {
     let data = [...INQUIRIES];
@@ -95,14 +72,11 @@ export default function InquiryManagementPage() {
     "ステータス",
     "タイプ",
 
-    // 担当者フィルタ（ポップオーバー/チェックボックス）
+    // 担当者フィルタ
     <FilterableTableHeader
       key="owner"
       label="担当者"
-      options={[
-        { value: "佐藤 美咲", label: "佐藤 美咲" },
-        { value: "田中 雄太", label: "田中 雄太" },
-      ]}
+      options={ownerOptions}
       selected={ownerFilter}
       onChange={(next: string[]) => setOwnerFilter(next)}
     />,
@@ -115,7 +89,7 @@ export default function InquiryManagementPage() {
       activeKey={sortKey}
       direction={sortDirection ?? null}
       onChange={(key, dir) => {
-        setSortKey(key as "inquiredAt" | "answeredAt");
+        setSortKey(key as SortKey);
         setSortDirection(dir);
       }}
     />,
@@ -128,7 +102,7 @@ export default function InquiryManagementPage() {
       activeKey={sortKey}
       direction={sortDirection ?? null}
       onChange={(key, dir) => {
-        setSortKey(key as "inquiredAt" | "answeredAt");
+        setSortKey(key as SortKey);
         setSortDirection(dir);
       }}
     />,
@@ -148,7 +122,7 @@ export default function InquiryManagementPage() {
           console.log("問い合わせ一覧を更新");
         }}
       >
-        {rows.map((q) => (
+        {rows.map((q: InquiryRow) => (
           <tr
             key={q.id}
             onClick={() => goDetail(q.id)}
@@ -201,4 +175,3 @@ export default function InquiryManagementPage() {
     </div>
   );
 }
-

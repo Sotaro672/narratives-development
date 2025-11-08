@@ -1,4 +1,5 @@
 // frontend/inventory/src/pages/inventoryManagement.tsx
+
 import React, { useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import List, {
@@ -6,28 +7,9 @@ import List, {
   SortableTableHeader,
 } from "../../../shell/src/layout/List/List";
 import "./inventoryManagement.css";
+import { INVENTORIES, type InventoryRow } from "../../mockdata";
 
-type InventoryRow = {
-  product: string;
-  brand: string;
-  token: string;
-  total: number;
-};
-
-const INVENTORIES: InventoryRow[] = [
-  {
-    product: "シルクブラウス プレミアムライン",
-    brand: "LUMINA Fashion",
-    token: "LUMINA VIP Token",
-    total: 221,
-  },
-  {
-    product: "デニムジャケット ヴィンテージ加工",
-    brand: "NEXUS Street",
-    token: "NEXUS Community Token",
-    total: 222,
-  },
-];
+type SortKey = "total" | null;
 
 export default function InventoryManagementPage() {
   const navigate = useNavigate();
@@ -64,7 +46,6 @@ export default function InventoryManagementPage() {
   );
 
   // ===== ソート状態（総在庫数） =====
-  type SortKey = "total" | null;
   const [sortKey, setSortKey] = useState<SortKey>(null);
   const [sortDir, setSortDir] = useState<"asc" | "desc" | null>(null);
 
@@ -163,9 +144,9 @@ function headers(
     setProductFilter: (v: string[]) => void;
     setBrandFilter: (v: string[]) => void;
     setTokenFilter: (v: string[]) => void;
-    sortKey: "total" | null;
+    sortKey: SortKey;
     sortDir: "asc" | "desc" | null;
-    setSortKey: (k: "total" | null) => void;
+    setSortKey: (k: SortKey) => void;
     setSortDir: (d: "asc" | "desc" | null) => void;
   }
 ): React.ReactNode[] {
@@ -198,7 +179,7 @@ function headers(
       activeKey={ctx.sortKey}
       direction={ctx.sortDir ?? null}
       onChange={(key, dir) => {
-        ctx.setSortKey(key as "total");
+        ctx.setSortKey(key as SortKey);
         ctx.setSortDir(dir);
       }}
     />,

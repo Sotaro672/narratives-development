@@ -1,4 +1,5 @@
 // frontend/order/src/pages/orderManagement.tsx
+
 import React, { useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import List, {
@@ -6,52 +7,14 @@ import List, {
   SortableTableHeader,
 } from "../../../shell/src/layout/List/List";
 import "./orderManagement.css";
-
-type OrderRow = {
-  id: string;
-  customerName: string;
-  productName: string;
-  additionalItems: string;
-  status: "支払済" | "移譲完了";
-  paymentMethod: string;
-  amount: string;          // e.g. "¥32,700"
-  quantityInfo: string;    // e.g. "3点"
-  purchaseLocation: string;
-  orderDate: string;       // YYYY/M/D
-};
-
-const ORDERS: OrderRow[] = [
-  {
-    id: "ORD-2024-0002",
-    customerName: "山本 由紀",
-    productName: "デニムジャケット ヴィンテージ加工",
-    additionalItems: "他1点",
-    status: "支払済",
-    paymentMethod: "デジタルウォレット",
-    amount: "¥32,700",
-    quantityInfo: "3点",
-    purchaseLocation: "オンライン",
-    orderDate: "2024/3/21",
-  },
-  {
-    id: "ORD-2024-0001",
-    customerName: "Creator Alice",
-    productName: "シルクブラウス プレミアムライン",
-    additionalItems: "他1点",
-    status: "移譲完了",
-    paymentMethod: "クレジットカード",
-    amount: "¥45,900",
-    quantityInfo: "2点",
-    purchaseLocation: "オンライン",
-    orderDate: "2024/3/20",
-  },
-];
+import { ORDERS, type OrderRow } from "../../mockdata";
 
 // utils
 const toTs = (yyyyMd: string) => {
   const [y, m, d] = yyyyMd.split("/").map((v) => parseInt(v, 10));
   return new Date(y, (m || 1) - 1, d || 1).getTime();
 };
+
 const yenToNumber = (v: string) => {
   const n = Number(v.replace(/[^\d.-]/g, ""));
   return Number.isNaN(n) ? 0 : n;
@@ -68,9 +31,14 @@ export default function OrderManagementPage() {
   const [placeFilter, setPlaceFilter] = useState<string[]>([]);
 
   const statusOptions = useMemo(
-    () => Array.from(new Set(ORDERS.map((o) => o.status))).map((v) => ({ value: v, label: v })),
+    () =>
+      Array.from(new Set(ORDERS.map((o) => o.status))).map((v) => ({
+        value: v,
+        label: v,
+      })),
     []
   );
+
   const methodOptions = useMemo(
     () =>
       Array.from(new Set(ORDERS.map((o) => o.paymentMethod))).map((v) => ({
@@ -79,6 +47,7 @@ export default function OrderManagementPage() {
       })),
     []
   );
+
   const placeOptions = useMemo(
     () =>
       Array.from(new Set(ORDERS.map((o) => o.purchaseLocation))).map((v) => ({
@@ -97,8 +66,10 @@ export default function OrderManagementPage() {
     let data = ORDERS.filter(
       (o) =>
         (statusFilter.length === 0 || statusFilter.includes(o.status)) &&
-        (methodFilter.length === 0 || methodFilter.includes(o.paymentMethod)) &&
-        (placeFilter.length === 0 || placeFilter.includes(o.purchaseLocation))
+        (methodFilter.length === 0 ||
+          methodFilter.includes(o.paymentMethod)) &&
+        (placeFilter.length === 0 ||
+          placeFilter.includes(o.purchaseLocation))
     );
 
     if (activeKey && direction) {
@@ -214,7 +185,7 @@ export default function OrderManagementPage() {
           console.log("注文一覧を更新");
         }}
       >
-        {rows.map((o) => (
+        {rows.map((o: OrderRow) => (
           <tr
             key={o.id}
             onClick={() => goDetail(o.id)}

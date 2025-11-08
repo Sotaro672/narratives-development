@@ -1,80 +1,15 @@
 // frontend/operation/src/pages/tokenOperation.tsx
+
 import React, { useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import List, {
   FilterableTableHeader,
   SortableTableHeader,
 } from "../../../shell/src/layout/List/List";
-
-type TokenOperation = {
-  tokenName: string;
-  symbol: string;
-  brand: string;
-  linkedProducts: number; // 連携商品種類数
-  manager: string;
-  planned: number; // 計画量
-  requested: number; // 申請量
-  issued: number; // 発行量
-  distributionRate: string; // "100.0%" のような文字列
-};
-
-const TOKEN_OPERATIONS: TokenOperation[] = [
-  {
-    tokenName: "LUMINA VIP Token",
-    symbol: "LVIP",
-    brand: "LUMINA Fashion",
-    linkedProducts: 1,
-    manager: "山田 太郎",
-    planned: 0,
-    requested: 0,
-    issued: 10,
-    distributionRate: "100.0%",
-  },
-  {
-    tokenName: "SILK Premium Token",
-    symbol: "SILK",
-    brand: "LUMINA Fashion",
-    linkedProducts: 1,
-    manager: "佐藤 美咲",
-    planned: 10,
-    requested: 0,
-    issued: 0,
-    distributionRate: "0.0%",
-  },
-  {
-    tokenName: "NEXUS Community Token",
-    symbol: "NXCOM",
-    brand: "NEXUS Street",
-    linkedProducts: 1,
-    manager: "佐藤 美咲",
-    planned: 0,
-    requested: 0,
-    issued: 12,
-    distributionRate: "100.0%",
-  },
-  {
-    tokenName: "NEXUS Street Token",
-    symbol: "NEXUS",
-    brand: "NEXUS Street",
-    linkedProducts: 1,
-    manager: "高橋 健太",
-    planned: 0,
-    requested: 5,
-    issued: 0,
-    distributionRate: "0.0%",
-  },
-  {
-    tokenName: "SILK Limited Edition",
-    symbol: "SLKED",
-    brand: "LUMINA Fashion",
-    linkedProducts: 0,
-    manager: "高橋 健太",
-    planned: 0,
-    requested: 0,
-    issued: 0,
-    distributionRate: "0.0%",
-  },
-];
+import {
+  TOKEN_OPERATIONS,
+  type TokenOperation,
+} from "../../mockdata";
 
 // "100.0%" → 100.0
 const rateToNumber = (v: string) => Number(v.replace("%", "") || 0);
@@ -102,6 +37,7 @@ export default function TokenOperationPage() {
       })),
     []
   );
+
   const managerOptions = useMemo(
     () =>
       Array.from(new Set(TOKEN_OPERATIONS.map((r) => r.manager))).map((v) => ({
@@ -214,7 +150,7 @@ export default function TokenOperationPage() {
       }}
     />,
 
-    // 配布率 ← Sortable（% を数値化して比較）
+    // 配布率 ← Sortable
     <SortableTableHeader
       key="distributionRate"
       label="配布率"

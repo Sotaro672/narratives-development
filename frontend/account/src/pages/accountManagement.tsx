@@ -1,40 +1,14 @@
+// frontend/account/src/pages/accountManagement.tsx
 import * as React from "react";
 import List from "../../../shell/src/layout/List/List";
 import { Filter } from "lucide-react";
 import "./accountManagement.css";
+import { ACCOUNTS, type Account } from "../../mockdata";
 
 // Lucide型エラー対策
 const IconFilter = Filter as unknown as React.ComponentType<
   React.SVGProps<SVGSVGElement>
 >;
-
-type Account = {
-  id: string;
-  name: string;
-  email: string;
-  role: string;
-  brand: string;
-  createdAt: string;
-};
-
-const ACCOUNTS: Account[] = [
-  {
-    id: "acc_001",
-    name: "山田 太郎",
-    email: "admin@narratives.com",
-    role: "管理者",
-    brand: "LUMINA Fashion",
-    createdAt: "2024/05/20",
-  },
-  {
-    id: "acc_002",
-    name: "佐藤 美咲",
-    email: "manager.lumina@narratives.com",
-    role: "ブランド管理者",
-    brand: "LUMINA Fashion",
-    createdAt: "2024/06/01",
-  },
-];
 
 export default function AccountManagementPage() {
   const headers: React.ReactNode[] = [
@@ -77,7 +51,7 @@ export default function AccountManagementPage() {
         showResetButton
         onReset={() => console.log("リスト更新")}
       >
-        {ACCOUNTS.map((acc) => (
+        {ACCOUNTS.map((acc: Account) => (
           <tr key={acc.id}>
             <td>{acc.id}</td>
             <td>{acc.name}</td>

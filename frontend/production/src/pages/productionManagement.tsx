@@ -1,74 +1,12 @@
 // frontend/production/src/pages/productionManagement.tsx
+
 import React, { useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import List, {
   FilterableTableHeader,
   SortableTableHeader,
 } from "../../../shell/src/layout/List/List";
-
-type Production = {
-  id: string;
-  product: string;
-  brand: string;
-  manager: string;
-  quantity: number;
-  productId: string;
-  printedAt: string; // YYYY/M/D or "-"
-  createdAt: string; // YYYY/M/D
-};
-
-const PRODUCTIONS: Production[] = [
-  {
-    id: "production_001",
-    product: "シルクブラウス プレミアムライン",
-    brand: "LUMINA Fashion",
-    manager: "佐藤 美咲",
-    quantity: 10,
-    productId: "QR",
-    printedAt: "2025/11/3",
-    createdAt: "2025/11/5",
-  },
-  {
-    id: "production_002",
-    product: "デニムジャケット ヴィンテージ加工",
-    brand: "NEXUS Street",
-    manager: "高橋 健太",
-    quantity: 9,
-    productId: "QR",
-    printedAt: "2025/11/4",
-    createdAt: "2025/11/5",
-  },
-  {
-    id: "production_003",
-    product: "シルクブラウス プレミアムライン",
-    brand: "LUMINA Fashion",
-    manager: "佐藤 美咲",
-    quantity: 7,
-    productId: "QR",
-    printedAt: "2025/11/1",
-    createdAt: "2025/10/31",
-  },
-  {
-    id: "production_004",
-    product: "デニムジャケット ヴィンテージ加工",
-    brand: "NEXUS Street",
-    manager: "高橋 健太",
-    quantity: 4,
-    productId: "QR",
-    printedAt: "2025/10/30",
-    createdAt: "2025/10/29",
-  },
-  {
-    id: "production_005",
-    product: "シルクブラウス プレミアムライン",
-    brand: "LUMINA Fashion",
-    manager: "佐藤 美咲",
-    quantity: 2,
-    productId: "QR",
-    printedAt: "-",
-    createdAt: "2025/11/4",
-  },
-];
+import { PRODUCTIONS, type Production } from "../../mockdata";
 
 // 日付を数値へ変換（"-" は 0 として最小扱い）
 const toTs = (yyyyMd: string) => {
@@ -76,6 +14,8 @@ const toTs = (yyyyMd: string) => {
   const [y, m, d] = yyyyMd.split("/").map((v) => parseInt(v, 10));
   return new Date(y, (m || 1) - 1, d || 1).getTime();
 };
+
+type SortKey = "printedAt" | "createdAt" | "quantity" | null;
 
 export default function ProductionManagement() {
   const navigate = useNavigate();
@@ -87,7 +27,6 @@ export default function ProductionManagement() {
   const [productIdFilter, setProductIdFilter] = useState<string[]>([]);
 
   // ===== ソート状態 =====
-  type SortKey = "printedAt" | "createdAt" | "quantity" | null;
   const [sortKey, setSortKey] = useState<SortKey>(null);
   const [sortDir, setSortDir] = useState<"asc" | "desc" | null>(null);
 
@@ -100,6 +39,7 @@ export default function ProductionManagement() {
       })),
     []
   );
+
   const brandOptions = useMemo(
     () =>
       Array.from(new Set(PRODUCTIONS.map((p) => p.brand))).map((v) => ({
@@ -108,6 +48,7 @@ export default function ProductionManagement() {
       })),
     []
   );
+
   const managerOptions = useMemo(
     () =>
       Array.from(new Set(PRODUCTIONS.map((p) => p.manager))).map((v) => ({
@@ -116,6 +57,7 @@ export default function ProductionManagement() {
       })),
     []
   );
+
   const productIdOptions = useMemo(
     () =>
       Array.from(new Set(PRODUCTIONS.map((p) => p.productId))).map((v) => ({
@@ -132,7 +74,8 @@ export default function ProductionManagement() {
         (productFilter.length === 0 || productFilter.includes(p.product)) &&
         (brandFilter.length === 0 || brandFilter.includes(p.brand)) &&
         (managerFilter.length === 0 || managerFilter.includes(p.manager)) &&
-        (productIdFilter.length === 0 || productIdFilter.includes(p.productId))
+        (productIdFilter.length === 0 ||
+          productIdFilter.includes(p.productId))
     );
 
     if (sortKey && sortDir) {
@@ -149,7 +92,14 @@ export default function ProductionManagement() {
     }
 
     return data;
-  }, [productFilter, brandFilter, managerFilter, productIdFilter, sortKey, sortDir]);
+  }, [
+    productFilter,
+    brandFilter,
+    managerFilter,
+    productIdFilter,
+    sortKey,
+    sortDir,
+  ]);
 
   // ===== ヘッダー =====
   const headers: React.ReactNode[] = [
@@ -225,7 +175,7 @@ export default function ProductionManagement() {
         showCreateButton
         createLabel="生産計画を作成"
         showResetButton
-        onCreate={() => navigate("/production/create")} // ← 作成ボタンで新規作成ページへ遷移
+        onCreate={() => navigate("/production/create")}
         onReset={() => {
           setProductFilter([]);
           setBrandFilter([]);
@@ -236,11 +186,11 @@ export default function ProductionManagement() {
           console.log("リスト更新");
         }}
       >
-        {rows.map((p) => (
+        {rows.map((p: Production) => (
           <tr
             key={p.id}
             className="cursor-pointer hover:bg-blue-50 transition-colors"
-            onClick={() => navigate(`/production/${p.id}`)} // ← 行クリックで詳細へ遷移
+            onClick={() => navigate(`/production/${p.id}`)}
           >
             <td className="text-blue-600 underline">{p.id}</td>
             <td>{p.product}</td>
