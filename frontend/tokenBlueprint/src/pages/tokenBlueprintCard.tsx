@@ -1,6 +1,5 @@
-// frontend/tokenBlueprint/src/pages/tokenBlueprintCard.tsx
 import * as React from "react";
-import { Link2, Upload, Calendar } from "lucide-react";
+import { Link2, Upload, Calendar, Pencil, Save } from "lucide-react";
 
 import {
   Card,
@@ -17,25 +16,56 @@ import {
   PopoverContent,
 } from "../../../shared/ui/popover";
 
+import { TOKEN_BLUEPRINTS } from "../../mockdata";
 import "./tokenBlueprintCard.css";
 
-export default function TokenBlueprintCard() {
-  const [tokenId] = React.useState("token_blueprint_001");
-  const [tokenName, setTokenName] = React.useState("SILK Premium Token");
-  const [symbol, setSymbol] = React.useState("SILK");
-  const [brand, setBrand] = React.useState("LUMINA Fashion");
-  const [description, setDescription] = React.useState(
-    "プレミアムシルクブラウスの購入者限定トークン。限定コンテンツと特別割引をご利用いただけます。"
-  );
-  const [burnAt, setBurnAt] = React.useState("2025-12-31");
-  const [iconUrl] = React.useState(
-    "https://images.pexels.com/photos/8437005/pexels-photo-8437005.jpeg?auto=compress&cs=tinysrgb&w=300"
-  );
+// ✅ initialEditMode を受け取れるようにする
+type TokenBlueprintCardProps = {
+  initialEditMode?: boolean;
+};
 
-  const brandOptions = ["LUMINA Fashion", "NEXUS Street"];
+export default function TokenBlueprintCard({
+  initialEditMode = false,
+}: TokenBlueprintCardProps) {
+  // ─────────────────────────────────────────────
+  // モックデータを利用（ここでは 0 件目を利用）
+  // ─────────────────────────────────────────────
+  const blueprint = TOKEN_BLUEPRINTS[0];
+
+  // ─────────────────────────────────────────────
+  // 状態管理
+  // ─────────────────────────────────────────────
+  const [tokenBlueprintId] = React.useState(blueprint.tokenBlueprintId);
+  const [tokenName, setTokenName] = React.useState(blueprint.name);
+  const [symbol, setSymbol] = React.useState(blueprint.symbol);
+  const [brand, setBrand] = React.useState(blueprint.brand);
+  const [description, setDescription] = React.useState(blueprint.description);
+  const [burnAt, setBurnAt] = React.useState(blueprint.burnAt);
+  const [iconUrl, setIconUrl] = React.useState(blueprint.iconUrl);
+  const [isEditMode, setIsEditMode] = React.useState(initialEditMode);
+
+  const brandOptions = Array.from(
+    new Set(TOKEN_BLUEPRINTS.map((b) => b.brand))
+  );
 
   const handleUploadClick = () => {
+    if (!isEditMode) return;
     alert("トークンアイコンのアップロード（モック）");
+  };
+
+  const handleSave = () => {
+    // 実際はここで API に送信する想定
+    console.log("保存内容:", {
+      tokenBlueprintId,
+      tokenName,
+      symbol,
+      brand,
+      description,
+      burnAt,
+      iconUrl,
+    });
+    alert("変更を保存しました（モック）");
+    setIsEditMode(false);
   };
 
   return (
@@ -46,13 +76,30 @@ export default function TokenBlueprintCard() {
           <Link2 className="token-blueprint-card__link-icon" />
         </span>
         <CardTitle className="token-blueprint-card__header-title">
-          トークン：{tokenId}
+          トークン：{tokenBlueprintId}
         </CardTitle>
         <Badge className="token-blueprint-card__header-badge">設計情報</Badge>
+
+        {/* 編集モード切替ボタン */}
+        <button
+          type="button"
+          onClick={() => (isEditMode ? handleSave() : setIsEditMode(true))}
+          className="token-blueprint-card__edit-toggle-btn"
+        >
+          {isEditMode ? (
+            <>
+              <Save className="w-4 h-4 mr-1" /> 保存
+            </>
+          ) : (
+            <>
+              <Pencil className="w-4 h-4 mr-1" /> 編集
+            </>
+          )}
+        </button>
       </CardHeader>
 
       <CardContent>
-        {/* 上部：左にアイコン、右(=spacer)に縦並びフィールド */}
+        {/* 上部：左にアイコン、右に縦並びフィールド */}
         <div className="token-blueprint-card__top">
           {/* 左：アイコン＋アップロード */}
           <div className="token-blueprint-card__icon-area">
@@ -61,15 +108,18 @@ export default function TokenBlueprintCard() {
             </div>
             <button
               type="button"
-              className="token-blueprint-card__upload-btn"
+              className={`token-blueprint-card__upload-btn ${
+                !isEditMode ? "disabled" : ""
+              }`}
               onClick={handleUploadClick}
+              disabled={!isEditMode}
             >
               <Upload className="token-blueprint-card__upload-icon" />
               アップロード
             </button>
           </div>
 
-          {/* 右：トークン名 / シンボル（縦並び） */}
+          {/* 右：トークン名 / シンボル / ブランド */}
           <div className="token-blueprint-card__spacer">
             {/* トークン名 */}
             <div className="token-blueprint-card__field-col">
@@ -78,7 +128,10 @@ export default function TokenBlueprintCard() {
                 <Input
                   value={tokenName}
                   onChange={(e) => setTokenName(e.target.value)}
-                  className="token-blueprint-card__readonly-input"
+                  readOnly={!isEditMode}
+                  className={`token-blueprint-card__readonly-input ${
+                    !isEditMode ? "readonly" : ""
+                  }`}
                 />
               </div>
             </div>
@@ -90,49 +143,60 @@ export default function TokenBlueprintCard() {
                 <Input
                   value={symbol}
                   onChange={(e) => setSymbol(e.target.value)}
-                  className="token-blueprint-card__readonly-input"
+                  readOnly={!isEditMode}
+                  className={`token-blueprint-card__readonly-input ${
+                    !isEditMode ? "readonly" : ""
+                  }`}
                 />
               </div>
             </div>
-            {/* ブランド（アイコン右側の行：input + popover の両方） */}
+
+            {/* ブランド：Input + Popover */}
             <div className="token-blueprint-card__brand-label-cell">
-                <Label className="token-blueprint-card__label">ブランド</Label>
+              <Label className="token-blueprint-card__label">ブランド</Label>
+              {isEditMode ? (
                 <Popover>
-                    <PopoverTrigger>
-                    {/* Input風の見た目 + caret */}
-                        <div className="token-blueprint-card__select">
-                            <Input
-                                readOnly
-                                value={brand}
-                                className="token-blueprint-card__select-input"
-                            />
-                            <span className="token-blueprint-card__select-caret">▾</span>
-                        </div>
-                    </PopoverTrigger>
-                    <PopoverContent
-                        align="start"
-                        className="token-blueprint-card__popover"
-                    >
-                        {brandOptions.map((b) => (
-                            <button
-                  key={b}
-                  type="button"
-                  className={
-                    "token-blueprint-card__popover-item" +
-                    (b === brand ? " is-active" : "")
-                  }
-                  onClick={() => setBrand(b)}
-                >
-                  {b}
-                </button>
-              ))}
-            </PopoverContent>
-          </Popover>
-        </div>
+                  <PopoverTrigger>
+                    <div className="token-blueprint-card__select">
+                      <Input
+                        readOnly
+                        value={brand}
+                        className="token-blueprint-card__select-input"
+                      />
+                      <span className="token-blueprint-card__select-caret">
+                        ▾
+                      </span>
+                    </div>
+                  </PopoverTrigger>
+                  <PopoverContent
+                    align="start"
+                    className="token-blueprint-card__popover"
+                  >
+                    {brandOptions.map((b) => (
+                      <button
+                        key={b}
+                        type="button"
+                        className={
+                          "token-blueprint-card__popover-item" +
+                          (b === brand ? " is-active" : "")
+                        }
+                        onClick={() => setBrand(b)}
+                      >
+                        {b}
+                      </button>
+                    ))}
+                  </PopoverContent>
+                </Popover>
+              ) : (
+                <Input
+                  readOnly
+                  value={brand}
+                  className="token-blueprint-card__readonly-input readonly"
+                />
+              )}
+            </div>
           </div>
         </div>
-
-
 
         {/* 説明：カード幅いっぱい */}
         <div className="token-blueprint-card__description">
@@ -141,7 +205,10 @@ export default function TokenBlueprintCard() {
             <textarea
               value={description}
               onChange={(e) => setDescription(e.target.value)}
-              className="token-blueprint-card__description-input"
+              readOnly={!isEditMode}
+              className={`token-blueprint-card__description-input ${
+                !isEditMode ? "readonly" : ""
+              }`}
             />
           </div>
         </div>
@@ -154,7 +221,10 @@ export default function TokenBlueprintCard() {
               type="date"
               value={burnAt}
               onChange={(e) => setBurnAt(e.target.value)}
-              className="token-blueprint-card__expires-input"
+              readOnly={!isEditMode}
+              className={`token-blueprint-card__expires-input ${
+                !isEditMode ? "readonly" : ""
+              }`}
             />
             <div className="token-blueprint-card__calendar-icon">
               <Calendar className="token-blueprint-card__calendar-icon-svg" />
