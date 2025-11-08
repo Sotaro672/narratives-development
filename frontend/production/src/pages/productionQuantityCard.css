@@ -1,8 +1,6 @@
 /* frontend/production/src/pages/productionQuantityCard.css
    生産数カード（期待見た目に合わせてテーブル罫線・フッター行を調整）
 */
-@import "../../../model/src/pages/Card.css";
-
 .mqc{
   background-color: white;
 }

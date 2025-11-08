@@ -3,7 +3,6 @@
    共通スタイルは Card.css に委譲（--pbp-* 変数使用）
 */
 
-@import "./Card.css";
 
 /* テーブル */
 .svc__table {
