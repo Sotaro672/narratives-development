@@ -13,7 +13,6 @@ import {
   TableCell,
 } from "../../../shared/ui/table";
 import "./SizeVariationCard.css";
-import "./Card.css";
 
 export type SizeRow = {
   id: string;
