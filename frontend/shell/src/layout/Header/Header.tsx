@@ -1,12 +1,13 @@
+// frontend/shell/src/layout/Header/Header.tsx
 import { useEffect, useRef, useState } from "react";
+import { useNavigate } from "react-router-dom"; // ← 追加
 import { Bell, MessageSquare, UserRound, ChevronDown } from "lucide-react";
 import "./Header.css";
 import AdminPanel from "./AdminPanel";
 
 interface HeaderProps {
-  /** ユーザー情報 */
-  username?: string; // 表示名（AdminPanelのタイトルに利用）
-  email?: string;    // メール表示（ドロップダウン内のみ使用）
+  username?: string;
+  email?: string;
   announcementsCount?: number;
   messagesCount?: number;
 }
@@ -18,6 +19,7 @@ export default function Header({
   messagesCount = 2,
 }: HeaderProps) {
   const [openAdmin, setOpenAdmin] = useState(false);
+  const navigate = useNavigate(); // ← 追加
 
   const panelContainerRef = useRef<HTMLDivElement | null>(null);
   const triggerRef = useRef<HTMLButtonElement | null>(null);
@@ -43,6 +45,11 @@ export default function Header({
     return () => document.removeEventListener("keydown", onKey);
   }, []);
 
+  // 通知ボタン押下時の遷移処理
+  const handleNotificationClick = () => {
+    navigate("/announce");
+  };
+
   return (
     <header className="app-header">
       {/* Left: Brand */}
@@ -54,7 +61,11 @@ export default function Header({
       {/* Right: Actions */}
       <div className="actions">
         {/* 通知 */}
-        <button className="icon-btn" aria-label="通知">
+        <button
+          className="icon-btn"
+          aria-label="通知"
+          onClick={handleNotificationClick} // ← 遷移を追加
+        >
           <span className="icon-wrap">
             <Bell className="icon" aria-hidden />
             {announcementsCount > 0 && (
@@ -85,7 +96,7 @@ export default function Header({
             aria-haspopup="menu"
             aria-expanded={openAdmin}
             aria-controls="admin-dropdown"
-            onClick={() => setOpenAdmin((v) => !v)} // toggle
+            onClick={() => setOpenAdmin((v) => !v)}
           >
             <UserRound className="icon" aria-hidden />
             <ChevronDown className={`caret ${openAdmin ? "open" : ""}`} aria-hidden />

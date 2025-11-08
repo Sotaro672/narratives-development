@@ -2,6 +2,9 @@
 import type { RouteObject } from "react-router-dom";
 
 // モジュールのルート定義（型衝突を避けるため unknown→RouteObject[] にキャスト）
+import announcementRoutesRaw from "../../../announcement/src/routes";
+const announcementRoutes = announcementRoutesRaw as unknown as RouteObject[];
+
 import inquiryRoutesRaw from "../../../inquiry/src/routes";
 const inquiryRoutes = inquiryRoutesRaw as unknown as RouteObject[];
 
@@ -51,11 +54,20 @@ const transactionRoutes = transactionRoutesRaw as unknown as RouteObject[];
  * - Layout (Main.tsx) からインポートされる
  * - 各モジュールの routes.tsx を children として統合
  */
-// Inquiry モジュール
+
+
 export const routes: RouteObject[] = [
+  // Announcement モジュール
+  {
+    path: "/announcement",
+    children: announcementRoutes
+  },
+  // Inquiry モジュール  
   { path: "/inquiry", 
     children: inquiryRoutes 
   },
+
+
 
   // ProductBlueprint モジュール
   {
