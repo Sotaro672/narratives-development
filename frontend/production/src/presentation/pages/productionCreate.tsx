@@ -1,34 +1,34 @@
 // frontend/production/src/pages/productionCreate.tsx
 import * as React from "react";
 import { useNavigate } from "react-router-dom";
-import PageStyle from "../../../shell/src/layout/PageStyle/PageStyle";
-import AdminCard from "../../../admin/src/presentation/components/AdminCard";
+import PageStyle from "../../../../shell/src/layout/PageStyle/PageStyle";
+import AdminCard from "../../../../admin/src/presentation/components/AdminCard";
 import {
   Card,
   CardHeader,
   CardTitle,
   CardContent,
-} from "../../../shared/ui/card";
-import { Input } from "../../../shared/ui/input";
+} from "../../../../shared/ui/card";
+import { Input } from "../../../../shared/ui/input";
 import { Search, Package2 } from "lucide-react";
 import {
   Popover,
   PopoverTrigger,
   PopoverContent,
-} from "../../../shared/ui/popover";
+} from "../../../../shared/ui/popover";
 
-import ColorVariationCard from "../../../model/src/pages/ColorVariationCard";
+import ColorVariationCard from "../../../../model/src/pages/ColorVariationCard";
 import SizeVariationCard, {
   type SizeRow,
-} from "../../../model/src/pages/SizeVariationCard";
+} from "../../../../model/src/pages/SizeVariationCard";
 import ModelNumberCard, {
   type ModelNumber,
-} from "../../../model/src/pages/ModelNumberCard";
+} from "../../../../model/src/pages/ModelNumberCard";
 import ProductionQuantityCard, {
   type QuantityCell,
-} from "./productionQuantityCard";
+} from "../components/productionQuantityCard";
 
-import "./productionCreate.css";
+import "../styles/production.css";
 
 /**
  * ProductionCreate

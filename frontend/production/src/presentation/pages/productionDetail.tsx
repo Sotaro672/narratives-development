@@ -1,27 +1,27 @@
 // frontend/production/src/pages/productionDetail.tsx
 import * as React from "react";
 import { useNavigate, useParams } from "react-router-dom";
-import PageStyle from "../../../shell/src/layout/PageStyle/PageStyle";
-import AdminCard from "../../../admin/src/presentation/components/AdminCard";
+import PageStyle from "../../../../shell/src/layout/PageStyle/PageStyle";
+import AdminCard from "../../../../admin/src/presentation/components/AdminCard";
 
 // 閲覧モードで呼び出す対象
-import ProductBlueprintCard from "../../../productBlueprint/src/presentation/components/productBlueprintCard";
-import ColorVariationCard from "../../../model/src/pages/ColorVariationCard";
+import ProductBlueprintCard from "../../../../productBlueprint/src/presentation/components/productBlueprintCard";
+import ColorVariationCard from "../../../../model/src/pages/ColorVariationCard";
 import SizeVariationCard, {
   type SizeRow,
-} from "../../../model/src/pages/SizeVariationCard";
+} from "../../../../model/src/pages/SizeVariationCard";
 import ModelNumberCard, {
   type ModelNumber,
-} from "../../../model/src/pages/ModelNumberCard";
+} from "../../../../model/src/pages/ModelNumberCard";
 
 // 生産数カード（編集モードで使用）
 import ProductionQuantityCard, {
   type QuantityCell,
-} from "./productionQuantityCard";
+} from "../components/productionQuantityCard";
 
 // 印刷ボタン用
-import { Card, CardContent } from "../../../shared/ui/card";
-import { Button } from "../../../shared/ui/button";
+import { Card, CardContent } from "../../../../shared/ui/card";
+import { Button } from "../../../../shared/ui/button";
 import { Printer } from "lucide-react";
 
 type Fit =

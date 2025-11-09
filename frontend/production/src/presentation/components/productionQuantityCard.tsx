@@ -1,7 +1,7 @@
 // frontend/production/src/pages/productionQuantityCard.tsx
 import * as React from "react";
 import { BarChart3 } from "lucide-react";
-import { Card, CardHeader, CardTitle, CardContent } from "../../../shared/ui/card";
+import { Card, CardHeader, CardTitle, CardContent } from "../../../../shared/ui/card";
 import {
   Table,
   TableHeader,
@@ -9,9 +9,9 @@ import {
   TableRow,
   TableHead,
   TableCell,
-} from "../../../shared/ui/table";
-import { Input } from "../../../shared/ui/input";
-import "./productionQuantityCard.css";
+} from "../../../../shared/ui/table";
+import { Input } from "../../../../shared/ui/input";
+import "../styles/production.css";
 
 export type QuantityCell = {
   size: string;   // 例: "S" | "M" | "L"

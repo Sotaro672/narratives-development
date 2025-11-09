@@ -5,8 +5,8 @@ import { useNavigate } from "react-router-dom";
 import List, {
   FilterableTableHeader,
   SortableTableHeader,
-} from "../../../shell/src/layout/List/List";
-import { PRODUCTIONS, type Production } from "../../mockdata";
+} from "../../../../shell/src/layout/List/List";
+import { PRODUCTIONS, type Production } from "../../../mockdata";
 
 // 日付を数値へ変換（"-" は 0 として最小扱い）
 const toTs = (yyyyMd: string) => {
