@@ -20,7 +20,7 @@ const productionRoutes = productionRoutesRaw as unknown as RouteObject[];
 import inventoryRoutesRaw from "../../../inventory/src/presentation/routes/routes";
 const inventoryRoutes = inventoryRoutesRaw as unknown as RouteObject[];
 
-import tokenBlueprintRoutesRaw from "../../../tokenBlueprint/src/routes";
+import tokenBlueprintRoutesRaw from "../../../tokenBlueprint/src/presentation/routes/routes";
 const tokenBlueprintRoutes = tokenBlueprintRoutesRaw as unknown as RouteObject[];
 
 import mintRequestRoutesRaw from "../../../mintRequest/src/routes";

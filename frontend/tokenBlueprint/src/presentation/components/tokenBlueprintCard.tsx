@@ -7,17 +7,17 @@ import {
   CardHeader,
   CardTitle,
   CardContent,
-} from "../../../shared/ui/card";
-import { Input } from "../../../shared/ui/input";
-import { Badge } from "../../../shared/ui/badge";
-import { Label } from "../../../shared/ui/label";
+} from "../../../../shared/ui/card";
+import { Input } from "../../../../shared/ui/input";
+import { Badge } from "../../../../shared/ui/badge";
+import { Label } from "../../../../shared/ui/label";
 import {
   Popover,
   PopoverTrigger,
   PopoverContent,
-} from "../../../shared/ui/popover";
+} from "../../../../shared/ui/popover";
 
-import "./tokenBlueprintCard.css";
+import "../styles/tokenBlueprint.css";
 
 type TokenBlueprintCardProps = {
   initialEditMode?: boolean;
@@ -48,7 +48,7 @@ export default function TokenBlueprintCard({
     initialDescription ?? ""
   );
   const [burnAt, setBurnAt] = React.useState(initialBurnAt ?? "");
-  const [iconUrl, setIconUrl] = React.useState(initialIconUrl ?? "");
+  const [iconUrl] = React.useState(initialIconUrl ?? "");
   const [isEditMode] = React.useState(initialEditMode);
 
   const brandOptions: string[] = [];

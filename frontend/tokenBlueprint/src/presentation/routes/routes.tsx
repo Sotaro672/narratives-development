@@ -1,8 +1,8 @@
 // frontend/tokenBlueprint/src/routes.tsx
 import type { RouteObject } from "react-router-dom";
-import TokenBlueprintManagement from "./pages/TokenBlueprintManagement";
-import TokenBlueprintDetail from "./pages/tokenBlueprintDetail";
-import TokenBlueprintCreate from "./pages/tokenBlueprintCreate";
+import TokenBlueprintManagement from "../pages/TokenBlueprintManagement";
+import TokenBlueprintDetail from "../pages/tokenBlueprintDetail";
+import TokenBlueprintCreate from "../pages/tokenBlueprintCreate";
 
 /**
  * Token Blueprint Module Routes
