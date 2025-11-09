@@ -13,11 +13,11 @@ import {
   CardHeader,
   CardTitle,
   CardContent,
-} from "../../../shared/ui/card";
-import { Button } from "../../../shared/ui/button";
+} from "../../../../shared/ui/card";
+import { Button } from "../../../../shared/ui/button";
 
-import { MOCK_IMAGES } from "../../mockdata";
-import "./tokenContentsCard.css";
+import { MOCK_IMAGES } from "../../../mockdata";
+import "../styles/tokenContents.css";
 
 type Mode = "edit" | "view";
 
