@@ -18,7 +18,7 @@ export default function TokenBlueprintManagementPage() {
 
   // フィルタ状態
   const [brandFilter, setBrandFilter] = useState<string[]>([]);
-  const [managerFilter, setManagerFilter] = useState<string[]>([]);
+  const [assigneeFilter, setAssigneeFilter] = useState<string[]>([]);
 
   // ソート状態
   const [sortKey, setSortKey] = useState<"createdAt" | null>(null);
@@ -34,12 +34,14 @@ export default function TokenBlueprintManagementPage() {
     []
   );
 
-  const managerOptions = useMemo(
+  const assigneeOptions = useMemo(
     () =>
-      Array.from(new Set(TOKEN_BLUEPRINTS.map((r) => r.manager))).map((v) => ({
-        value: v,
-        label: v,
-      })),
+      Array.from(new Set(TOKEN_BLUEPRINTS.map((r) => r.assignee))).map(
+        (v) => ({
+          value: v,
+          label: v,
+        })
+      ),
     []
   );
 
@@ -48,7 +50,7 @@ export default function TokenBlueprintManagementPage() {
     let data = TOKEN_BLUEPRINTS.filter(
       (r) =>
         (brandFilter.length === 0 || brandFilter.includes(r.brand)) &&
-        (managerFilter.length === 0 || managerFilter.includes(r.manager))
+        (assigneeFilter.length === 0 || assigneeFilter.includes(r.assignee))
     );
 
     if (sortKey && sortDir) {
@@ -60,7 +62,7 @@ export default function TokenBlueprintManagementPage() {
     }
 
     return data;
-  }, [brandFilter, managerFilter, sortKey, sortDir]);
+  }, [brandFilter, assigneeFilter, sortKey, sortDir]);
 
   // 行クリックで詳細へ遷移（symbol を ID として使用）
   const goDetail = (symbol: string) => {
@@ -78,11 +80,11 @@ export default function TokenBlueprintManagementPage() {
       onChange={(vals: string[]) => setBrandFilter(vals)}
     />,
     <FilterableTableHeader
-      key="manager"
+      key="assignee"
       label="担当者"
-      options={managerOptions}
-      selected={managerFilter}
-      onChange={(vals: string[]) => setManagerFilter(vals)}
+      options={assigneeOptions}
+      selected={assigneeFilter}
+      onChange={(vals: string[]) => setAssigneeFilter(vals)}
     />,
     <SortableTableHeader
       key="createdAt"
@@ -108,7 +110,7 @@ export default function TokenBlueprintManagementPage() {
         onCreate={() => navigate("/tokenBlueprint/create")}
         onReset={() => {
           setBrandFilter([]);
-          setManagerFilter([]);
+          setAssigneeFilter([]);
           setSortKey(null);
           setSortDir(null);
           console.log("リスト更新");
@@ -133,7 +135,7 @@ export default function TokenBlueprintManagementPage() {
             <td>
               <span className="lp-brand-pill">{t.brand}</span>
             </td>
-            <td>{t.manager}</td>
+            <td>{t.assignee}</td>
             <td>{t.createdAt}</td>
           </tr>
         ))}

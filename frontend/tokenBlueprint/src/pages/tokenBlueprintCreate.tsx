@@ -1,111 +1,68 @@
 // frontend/tokenBlueprint/src/pages/tokenBlueprintCreate.tsx
 import * as React from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useParams } from "react-router-dom";
 import PageStyle from "../../../shell/src/layout/PageStyle/PageStyle";
 import AdminCard from "../../../admin/src/pages/AdminCard";
+import TokenBlueprintCard from "./tokenBlueprintCard";
+import TokenContentsCard from "../../../tokenContents/src/pages/tokenContentsCard";
+import { TOKEN_BLUEPRINTS } from "../../mockdata";
 
-/**
- * TokenBlueprintCreate
- * - トークン設計の新規作成ページ
- * - 左ペイン: トークン情報入力フォーム
- * - 右ペイン: 管理情報(AdminCard)
- */
 export default function TokenBlueprintCreate() {
   const navigate = useNavigate();
+  const { tokenBlueprintId } = useParams<{ tokenBlueprintId: string }>();
 
-  // ──────────────────────────────────────────────
-  // 入力フォーム状態（プリフィルは空）
-  // ──────────────────────────────────────────────
-  const [tokenName, setTokenName] = React.useState("");
-  const [symbol, setSymbol] = React.useState("");
-  const [brand, setBrand] = React.useState("");
-  const [manager, setManager] = React.useState("");
-  const [description, setDescription] = React.useState("");
+  // ─────────────────────────────────────────────
+  // 該当するトークン設計データを取得（ID一致で検索）
+  // ─────────────────────────────────────────────
+  const blueprint = React.useMemo(() => {
+    return (
+      TOKEN_BLUEPRINTS.find(
+        (b) => b.tokenBlueprintId === tokenBlueprintId
+      ) || TOKEN_BLUEPRINTS[0]
+    );
+  }, [tokenBlueprintId]);
 
-  // 管理情報
-  const [assignee, setAssignee] = React.useState("未設定");
-  const [creator] = React.useState("現在のユーザー");
-  const [createdAt] = React.useState(new Date().toLocaleDateString());
+  // 管理情報（右カラム用）
+  const [assignee, setAssignee] = React.useState(blueprint.assignee);
+  const [createdBy] = React.useState(blueprint.createdBy);
+  const [createdAt] = React.useState(blueprint.createdAt);
 
-  // ハンドラ
-  const onCreate = () => {
-    alert("トークン設計を作成しました（ダミー）");
-    navigate("/tokenBlueprint");
-  };
+  // 戻るボタン
+  const handleBack = React.useCallback(() => {
+    navigate(-1);
+  }, [navigate]);
 
-  const onBack = () => navigate(-1);
+  // 保存ボタン（PageHeader / PageStyle 用）
+  const handleSave = React.useCallback(() => {
+    // 実際は TokenBlueprintCard 内の状態を集約して保存APIを叩く想定
+    console.log("トークン設計を保存しました（モック）");
+    alert("トークン設計を保存しました（モック）");
+  }, []);
 
   return (
     <PageStyle
       layout="grid-2"
-      title="トークン設計の作成"
-      onBack={onBack}
-      onSave={onCreate} // 保存ボタン → 作成ボタンとして利用
+      title={`トークン設計：${blueprint.tokenBlueprintId}`}
+      onBack={handleBack}
+      onSave={handleSave} // ← PageHeader に保存ボタンを表示
     >
-      {/* --- 左ペイン（トークン設計フォーム） --- */}
-      <div className="token-blueprint-form">
-        <h2 className="section-title">トークン情報</h2>
-
-        <div className="form-group">
-          <label>トークン名</label>
-          <input
-            type="text"
-            value={tokenName}
-            onChange={(e) => setTokenName(e.target.value)}
-            placeholder="例: SILK Premium Token"
-          />
-        </div>
-
-        <div className="form-group">
-          <label>シンボル</label>
-          <input
-            type="text"
-            value={symbol}
-            onChange={(e) => setSymbol(e.target.value)}
-            placeholder="例: SILK"
-          />
-        </div>
-
-        <div className="form-group">
-          <label>ブランド</label>
-          <input
-            type="text"
-            value={brand}
-            onChange={(e) => setBrand(e.target.value)}
-            placeholder="例: LUMINA Fashion"
-          />
-        </div>
-
-        <div className="form-group">
-          <label>担当者</label>
-          <input
-            type="text"
-            value={manager}
-            onChange={(e) => setManager(e.target.value)}
-            placeholder="例: 佐藤 美咲"
-          />
-        </div>
-
-        <div className="form-group">
-          <label>説明</label>
-          <textarea
-            rows={4}
-            value={description}
-            onChange={(e) => setDescription(e.target.value)}
-            placeholder="トークンの用途や概要を入力"
-          />
+      {/* 左カラム：トークン設計カード＋コンテンツビューア */}
+      <div>
+        <TokenBlueprintCard initialEditMode />
+        <div style={{ marginTop: 16 }}>
+          <TokenContentsCard />
         </div>
       </div>
 
-      {/* --- 右ペイン（管理情報カード） --- */}
+      {/* 右カラム：管理情報 */}
       <AdminCard
         title="管理情報"
         assigneeName={assignee}
-        createdByName={creator}
+        createdByName={createdBy}
         createdAt={createdAt}
-        onEditAssignee={() => setAssignee("変更済み担当者")}
-        onClickAssignee={() => console.log("Assignee clicked:", assignee)}
-        onClickCreatedBy={() => console.log("CreatedBy clicked:", creator)}
+        onEditAssignee={() => setAssignee("新担当者")}
+        onClickAssignee={() => console.log("assignee clicked:", assignee)}
+        onClickCreatedBy={() => console.log("createdBy clicked:", createdBy)}
       />
     </PageStyle>
   );

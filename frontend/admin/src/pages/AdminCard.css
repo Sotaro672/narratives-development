@@ -4,6 +4,7 @@
   border: 1px solid var(--pbp-border);
   border-radius: 12px;
   overflow: hidden;
+  position: 60px;
 }
 
 /* ─ Header ─ */

@@ -1,8 +1,10 @@
+// frontend/tokenBlueprint/src/pages/tokenBlueprintDetail.tsx
 import * as React from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import PageStyle from "../../../shell/src/layout/PageStyle/PageStyle";
 import AdminCard from "../../../admin/src/pages/AdminCard";
 import TokenBlueprintCard from "./tokenBlueprintCard";
+import TokenContentsCard from "../../../tokenContents/src/pages/tokenContentsCard";
 import { TOKEN_BLUEPRINTS } from "../../mockdata";
 
 export default function TokenBlueprintDetail() {
@@ -44,9 +46,12 @@ export default function TokenBlueprintDetail() {
       onBack={handleBack}
       onSave={handleSave} // ← PageHeader に保存ボタンを表示
     >
-      {/* 左カラム：トークン設計カード（編集モードで呼び出し） */}
+      {/* 左カラム：トークン設計カード＋コンテンツビューア */}
       <div>
         <TokenBlueprintCard initialEditMode />
+        <div style={{ marginTop: 16 }}>
+          <TokenContentsCard />
+        </div>
       </div>
 
       {/* 右カラム：管理情報 */}

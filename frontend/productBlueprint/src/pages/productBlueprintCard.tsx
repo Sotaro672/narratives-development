@@ -1,4 +1,4 @@
-//frontend/productBlueprint/src/pages/productBlueprintCard.tsx
+// frontend/productBlueprint/src/pages/productBlueprintCard.tsx
 import * as React from "react";
 import { ShieldCheck, X, Package2 } from "lucide-react";
 import {
@@ -24,19 +24,19 @@ type Fit =
   | "オーバーサイズ";
 
 type ProductBlueprintCardProps = {
-  productName: string;
-  brand: string;
-  fit: Fit;
-  materials: string;
-  weight: number;
-  washTags: string[];
-  productIdTag: string;
-  onChangeProductName: (v: string) => void;
-  onChangeFit: (v: Fit) => void;
-  onChangeMaterials: (v: string) => void;
-  onChangeWeight: (v: number) => void;
-  onChangeWashTags: (nextTags: string[]) => void;
-  onChangeProductIdTag: (v: string) => void;
+  productName?: string;
+  brand?: string;
+  fit?: Fit;
+  materials?: string;
+  weight?: number;
+  washTags?: string[];
+  productIdTag?: string;
+  onChangeProductName?: (v: string) => void;
+  onChangeFit?: (v: Fit) => void;
+  onChangeMaterials?: (v: string) => void;
+  onChangeWeight?: (v: number) => void;
+  onChangeWashTags?: (nextTags: string[]) => void;
+  onChangeProductIdTag?: (v: string) => void;
   /** 表示モード（既定: "edit"） */
   mode?: "edit" | "view";
 };
@@ -59,6 +59,16 @@ const ProductBlueprintCard: React.FC<ProductBlueprintCardProps> = ({
 }) => {
   const isEdit = mode === "edit";
 
+  // モックデータが無い場合でも空欄で安全に表示できるようサニタイズ
+  const safeProductName = productName ?? "";
+  const safeBrand = brand ?? "";
+  const safeMaterials = materials ?? "";
+  const safeWeight =
+    typeof weight === "number" && !Number.isNaN(weight) ? weight : 0;
+  const safeWashTags = Array.isArray(washTags) ? washTags : [];
+  const safeProductIdTag = productIdTag ?? "";
+  const safeFit = fit ?? ("" as Fit);
+
   const fitOptions = [
     { value: "レギュラーフィット", label: "レギュラーフィット" },
     { value: "スリムフィット", label: "スリムフィット" },
@@ -78,7 +88,9 @@ const ProductBlueprintCard: React.FC<ProductBlueprintCardProps> = ({
         <CardTitle className="box__title">
           基本情報
           {mode === "view" && (
-            <span className="ml-2 text-xs text-[var(--pbp-text-soft)]">（閲覧）</span>
+            <span className="ml-2 text-xs text-[var(--pbp-text-soft)]">
+              （閲覧）
+            </span>
           )}
         </CardTitle>
       </CardHeader>
@@ -88,25 +100,39 @@ const ProductBlueprintCard: React.FC<ProductBlueprintCardProps> = ({
         <div className="label">プロダクト名</div>
         {isEdit ? (
           <Input
-            value={productName}
-            onChange={(e) => onChangeProductName(e.target.value)}
+            value={safeProductName}
+            onChange={(e) => onChangeProductName?.(e.target.value)}
             aria-label="プロダクト名"
           />
         ) : (
-          <Input value={productName} variant="readonly" readOnly aria-label="プロダクト名" />
+          <Input
+            value={safeProductName}
+            variant="readonly"
+            readOnly
+            aria-label="プロダクト名"
+          />
         )}
 
-        {/* ブランド（常に読み取り専用） */}
+        {/* ブランド（常に読み取り専用 / 値が無ければ空欄） */}
         <div className="label">ブランド</div>
-        <Input value={brand} variant="readonly" readOnly aria-label="ブランド" />
+        <Input
+          value={safeBrand}
+          variant="readonly"
+          readOnly
+          aria-label="ブランド"
+        />
 
         {/* フィット */}
         <div className="label">フィット</div>
         {isEdit ? (
           <Popover>
             <PopoverTrigger>
-              <Button variant="outline" className="w-full justify-between" aria-label="フィットを選択">
-                {fit || "選択してください"}
+              <Button
+                variant="outline"
+                className="w-full justify-between"
+                aria-label="フィットを選択"
+              >
+                {safeFit || "選択してください"}
               </Button>
             </PopoverTrigger>
             <PopoverContent align="start" className="p-1">
@@ -114,9 +140,11 @@ const ProductBlueprintCard: React.FC<ProductBlueprintCardProps> = ({
                 <div
                   key={opt.value}
                   className={`px-3 py-2 rounded-md cursor-pointer hover:bg-blue-50 ${
-                    fit === opt.value ? "bg-blue-100 text-blue-700 font-medium" : ""
+                    safeFit === opt.value
+                      ? "bg-blue-100 text-blue-700 font-medium"
+                      : ""
                   }`}
-                  onClick={() => onChangeFit(opt.value as Fit)}
+                  onClick={() => onChangeFit?.(opt.value as Fit)}
                 >
                   {opt.label}
                 </div>
@@ -124,19 +152,29 @@ const ProductBlueprintCard: React.FC<ProductBlueprintCardProps> = ({
             </PopoverContent>
           </Popover>
         ) : (
-          <Input value={fit} variant="readonly" readOnly aria-label="フィット" />
+          <Input
+            value={safeFit}
+            variant="readonly"
+            readOnly
+            aria-label="フィット"
+          />
         )}
 
         {/* 素材 */}
         <div className="label">素材</div>
         {isEdit ? (
           <Input
-            value={materials}
-            onChange={(e) => onChangeMaterials(e.target.value)}
+            value={safeMaterials}
+            onChange={(e) => onChangeMaterials?.(e.target.value)}
             aria-label="素材"
           />
         ) : (
-          <Input value={materials} variant="readonly" readOnly aria-label="素材" />
+          <Input
+            value={safeMaterials}
+            variant="readonly"
+            readOnly
+            aria-label="素材"
+          />
         )}
 
         {/* 重さ */}
@@ -146,8 +184,10 @@ const ProductBlueprintCard: React.FC<ProductBlueprintCardProps> = ({
             <>
               <Input
                 type="number"
-                value={Number.isFinite(weight) ? weight : 0}
-                onChange={(e) => onChangeWeight(Number(e.target.value))}
+                value={safeWeight}
+                onChange={(e) =>
+                  onChangeWeight?.(Number(e.target.value) || 0)
+                }
                 aria-label="重さ"
               />
               <span className="suffix">g</span>
@@ -155,7 +195,7 @@ const ProductBlueprintCard: React.FC<ProductBlueprintCardProps> = ({
           ) : (
             <>
               <Input
-                value={`${weight ?? ""}`}
+                value={safeWeight ? `${safeWeight}` : ""}
                 variant="readonly"
                 readOnly
                 aria-label="重さ"
@@ -168,17 +208,17 @@ const ProductBlueprintCard: React.FC<ProductBlueprintCardProps> = ({
         {/* 品質保証タグ（洗濯方法タグ） */}
         <div className="label">品質保証（洗濯方法タグ）</div>
         <div className="chips flex flex-wrap gap-2">
-          {washTags.map((t) => (
+          {safeWashTags.map((t) => (
             <Badge
               key={t}
               className="chip inline-flex items-center gap-1.5 px-2 py-1"
             >
               <ShieldCheck size={14} />
               {t}
-              {isEdit && (
+              {isEdit && onChangeWashTags && (
                 <button
                   onClick={() =>
-                    onChangeWashTags(washTags.filter((x) => x !== t))
+                    onChangeWashTags(safeWashTags.filter((x) => x !== t))
                   }
                   style={{
                     background: "transparent",
@@ -196,11 +236,13 @@ const ProductBlueprintCard: React.FC<ProductBlueprintCardProps> = ({
             </Badge>
           ))}
 
-          {isEdit && (
+          {isEdit && onChangeWashTags && (
             <Button
               variant="secondary"
               size="sm"
-              onClick={() => onChangeWashTags([...washTags, "新タグ"])}
+              onClick={() =>
+                onChangeWashTags([...safeWashTags, "新タグ"])
+              }
               className="btn"
             >
               + 追加
@@ -213,8 +255,12 @@ const ProductBlueprintCard: React.FC<ProductBlueprintCardProps> = ({
         {isEdit ? (
           <Popover>
             <PopoverTrigger>
-              <Button variant="outline" className="w-full justify-between" aria-label="商品IDタグを選択">
-                {productIdTag || "選択してください"}
+              <Button
+                variant="outline"
+                className="w-full justify-between"
+                aria-label="商品IDタグを選択"
+              >
+                {safeProductIdTag || "選択してください"}
               </Button>
             </PopoverTrigger>
             <PopoverContent align="start" className="p-1">
@@ -222,9 +268,11 @@ const ProductBlueprintCard: React.FC<ProductBlueprintCardProps> = ({
                 <div
                   key={opt.value}
                   className={`px-3 py-2 rounded-md cursor-pointer hover:bg-blue-50 ${
-                    productIdTag === opt.value ? "bg-blue-100 text-blue-700 font-medium" : ""
+                    safeProductIdTag === opt.value
+                      ? "bg-blue-100 text-blue-700 font-medium"
+                      : ""
                   }`}
-                  onClick={() => onChangeProductIdTag(opt.value)}
+                  onClick={() => onChangeProductIdTag?.(opt.value)}
                 >
                   {opt.label}
                 </div>
@@ -232,7 +280,12 @@ const ProductBlueprintCard: React.FC<ProductBlueprintCardProps> = ({
             </PopoverContent>
           </Popover>
         ) : (
-          <Input value={productIdTag} variant="readonly" readOnly aria-label="商品IDタグ" />
+          <Input
+            value={safeProductIdTag}
+            variant="readonly"
+            readOnly
+            aria-label="商品IDタグ"
+          />
         )}
       </CardContent>
     </Card>

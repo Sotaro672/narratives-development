@@ -15,23 +15,30 @@ import {
 } from "../../../shared/ui/card";
 import { Button } from "../../../shared/ui/button";
 
+import { MOCK_IMAGES } from "../../mockdata";
 import "./tokenContentsCard.css";
 
-const MOCK_IMAGES = [
-  "https://images.pexels.com/photos/373883/pexels-photo-373883.jpeg?auto=compress&cs=tinysrgb&w=800",
-  "https://images.pexels.com/photos/1036856/pexels-photo-1036856.jpeg?auto=compress&cs=tinysrgb&w=800",
-  "https://images.pexels.com/photos/3965545/pexels-photo-3965545.jpeg?auto=compress&cs=tinysrgb&w=800",
-];
+type TokenContentsCardProps = {
+  /** 初期表示する画像リスト。指定がなければモック、[]なら空表示。 */
+  images?: string[];
+};
 
-export default function TokenContentsCard() {
+export default function TokenContentsCard({ images }: TokenContentsCardProps) {
+  const useExternal = images !== undefined;
+  const list = useExternal ? images! : MOCK_IMAGES;
+
   const [index, setIndex] = React.useState(0);
 
+  const hasImages = list.length > 0;
+
   const prev = () => {
-    setIndex((i) => (i - 1 + MOCK_IMAGES.length) % MOCK_IMAGES.length);
+    if (!hasImages) return;
+    setIndex((i) => (i - 1 + list.length) % list.length);
   };
 
   const next = () => {
-    setIndex((i) => (i + 1) % MOCK_IMAGES.length);
+    if (!hasImages) return;
+    setIndex((i) => (i + 1) % list.length);
   };
 
   const handleUpload = () => {
@@ -40,13 +47,14 @@ export default function TokenContentsCard() {
 
   return (
     <Card className="token-contents-card">
-      {/* ヘッダー */}
       <CardHeader className="token-contents-card__header">
         <div className="token-contents-card__title-wrap">
           <span className="token-contents-card__title-icon">
             <FileText className="token-contents-card__title-icon-svg" />
           </span>
-          <CardTitle className="token-contents-card__title">コンテンツ</CardTitle>
+          <CardTitle className="token-contents-card__title">
+            コンテンツ
+          </CardTitle>
         </div>
 
         <Button
@@ -59,7 +67,6 @@ export default function TokenContentsCard() {
         </Button>
       </CardHeader>
 
-      {/* ビューア */}
       <CardContent>
         <div className="token-contents-card__viewer">
           {/* 左矢印 */}
@@ -68,17 +75,24 @@ export default function TokenContentsCard() {
             className="token-contents-card__nav token-contents-card__nav--left"
             onClick={prev}
             aria-label="前のコンテンツ"
+            disabled={!hasImages}
           >
             <ChevronLeft className="token-contents-card__nav-icon" />
           </button>
 
           {/* 中央イメージスロット */}
           <div className="token-contents-card__image-slot">
-            <img
-              src={MOCK_IMAGES[index]}
-              alt={`コンテンツ ${index + 1}`}
-              className="token-contents-card__image"
-            />
+            {hasImages ? (
+              <img
+                src={list[index]}
+                alt={`コンテンツ ${index + 1}`}
+                className="token-contents-card__image"
+              />
+            ) : (
+              <div className="token-contents-card__placeholder">
+                コンテンツがまだ登録されていません
+              </div>
+            )}
           </div>
 
           {/* 右矢印 */}
@@ -87,6 +101,7 @@ export default function TokenContentsCard() {
             className="token-contents-card__nav token-contents-card__nav--right"
             onClick={next}
             aria-label="次のコンテンツ"
+            disabled={!hasImages}
           >
             <ChevronRight className="token-contents-card__nav-icon" />
           </button>

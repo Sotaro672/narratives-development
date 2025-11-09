@@ -3,9 +3,8 @@ import * as React from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import PageStyle from "../../../shell/src/layout/PageStyle/PageStyle";
 import AdminCard from "../../../admin/src/pages/AdminCard";
-
-// ProductBlueprintCard をインポート
 import ProductBlueprintCard from "../../../productBlueprint/src/pages/productBlueprintCard";
+import TokenBlueprintCard from "../../../tokenBlueprint/src/pages/tokenBlueprintCard";
 
 type Fit =
   | "レギュラーフィット"
@@ -76,6 +75,11 @@ export default function InventoryDetail() {
           onChangeWashTags={noop as (next: string[]) => void}
           onChangeProductIdTag={noopStr}
         />
+
+        {/* トークン設計カード（閲覧モード：initialEditMode デフォルト false） */}
+        <div style={{ marginTop: 16 }}>
+          <TokenBlueprintCard />
+        </div>
 
         {/* 在庫情報（簡易テーブル） */}
         <div className="inv-detail-card">

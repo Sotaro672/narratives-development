@@ -1,7 +1,4 @@
 /* frontend/tokenBlueprint/src/pages/tokenBlueprintCard.css */
-/* トークン設計詳細カード専用スタイル
-   PageStyle / shared/ui/card のトーンに合わせて調整
-*/
 
 .token-blueprint-card {
   width: 100%;
@@ -13,15 +10,22 @@
   box-sizing: border-box;
 }
 
-/* ヘッダー（「トークン：token_blueprint_001」） */
+/* ヘッダー：タイトル + プレビューボタンを横並び */
 .token-blueprint-card__header {
   display: flex;
   align-items: center;
+  justify-content: space-between;
   gap: 10px;
   margin-bottom: 20px;
 }
 
-.token-blueprint-card__icon-inline {
+.token-blueprint-card__header-left {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.token-blueprint-card__header-icon {
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -32,16 +36,48 @@
   color: var(--pbp-text-soft, rgba(0, 0, 0, 0.5));
 }
 
-.token-blueprint-card__title {
+.token-blueprint-card__header-title {
   font-size: 0.95rem;
   font-weight: 600;
   color: var(--pbp-text, rgba(0, 0, 0, 0.86));
 }
 
+.token-blueprint-card__header-badge {
+  font-size: 0.7rem;
+}
+
+/* プレビューボタン（右上／アイコンのみ） */
+.token-blueprint-card__preview-btn {
+  width: 30px;
+  height: 30px;
+  border-radius: 999px;
+  border: none;
+  background-color: #ffffff;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 2px 6px rgba(15, 23, 42, 0.12);
+  cursor: pointer;
+  transition: background-color 0.15s ease, box-shadow 0.15s ease,
+    transform 0.12s ease;
+}
+
+.token-blueprint-card__preview-btn:hover {
+  background-color: #f9fafb;
+  box-shadow: 0 3px 10px rgba(148, 163, 253, 0.35);
+  transform: translateY(-1px);
+}
+
+.token-blueprint-card__preview-icon {
+  width: 16px;
+  height: 16px;
+  color: #4f46e5;
+}
+
 /* 上部レイアウト：左アイコン + 右フィールド群 */
 .token-blueprint-card__top {
   display: grid;
-  grid-template-columns: 180px minmax(0, 1.5fr) minmax(0, 1fr);
+  grid-template-columns: 180px minmax(0, 1.5fr);
   gap: 24px;
   align-items: flex-start;
 }
@@ -73,6 +109,14 @@
   object-fit: cover;
 }
 
+/* アイコンプレースホルダ（中央寄せで2行） */
+.token-blueprint-card__icon-placeholder {
+  font-size: 0.8rem;
+  color: var(--pbp-text-soft, rgba(0, 0, 0, 0.55));
+  text-align: center;
+  line-height: 1.4;
+}
+
 /* アップロードボタン */
 .token-blueprint-card__upload-btn {
   display: inline-flex;
@@ -102,7 +146,7 @@
   margin-bottom: 6px;
 }
 
-/* 読み取り専用フィールド（グレーの大きなボックス） */
+/* 読み取り専用風フィールド */
 .token-blueprint-card__readonly {
   display: flex;
   align-items: center;
@@ -111,21 +155,17 @@
   padding: 10px 14px;
   border-radius: 10px;
   background: #f6f7f9;
-  color: var(--pbp-text, rgba(0, 0, 0, 0.86));
   font-size: 0.9rem;
   box-sizing: border-box;
 }
 
-/* トークン名 / シンボルのセル */
+/* トークン名 / シンボル列 */
 .token-blueprint-card__field-col {
   display: flex;
   flex-direction: column;
 }
 
-/* ブランド行（1カラム全面） */
-.token-blueprint-card__brand-row {
-  margin-top: 18px;
-}
+/* ブランド選択 */
 .token-blueprint-card__select {
   display: flex;
   align-items: center;
@@ -139,10 +179,14 @@
   border: none;
   background: #f6f7f9;
   font-size: 0.9rem;
-  color: var(--pbp-text, rgba(0, 0, 0, 0.86));
 }
 
-/* 説明エリア（広いグレー枠） */
+.token-blueprint-card__select-caret {
+  font-size: 0.7rem;
+  color: var(--pbp-text-soft, rgba(0, 0, 0, 0.5));
+}
+
+/* 説明エリア */
 .token-blueprint-card__description {
   margin-top: 18px;
 }
@@ -152,18 +196,18 @@
   padding: 16px 18px;
   border-radius: 10px;
   background: #f6f7f9;
-  color: var(--pbp-text, rgba(0, 0, 0, 0.86));
   font-size: 0.9rem;
   line-height: 1.7;
 }
-.token-blueprint-card__description-input{
-    width: 100%;
-    height: 100px;
-    border: none;
-    background: #f6f7f9;
-    font-size: 0.9rem;
-    color: var(--pbp-text, rgba(0, 0, 0, 0.86));
-    resize: none;
+
+.token-blueprint-card__description-input {
+  width: 100%;
+  height: 100px;
+  border: none;
+  background: #f6f7f9;
+  font-size: 0.9rem;
+  color: var(--pbp-text, rgba(0, 0, 0, 0.86));
+  resize: none;
 }
 
 /* 焼却予定日 */
@@ -185,10 +229,8 @@
   border: none;
   background: #f6f7f9;
   font-size: 0.9rem;
-  color: var(--pbp-text, rgba(0, 0, 0, 0.86));
 }
 
-/* カレンダーアイコン風の枠 */
 .token-blueprint-card__calendar-icon {
   width: 28px;
   height: 28px;
@@ -197,9 +239,14 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 0.8rem;
-  color: var(--pbp-text-soft, rgba(0, 0, 0, 0.5));
   background: #ffffff;
+  color: var(--pbp-text-soft, rgba(0, 0, 0, 0.5));
+}
+
+.token-blueprint-card__expires-hint {
+  margin-top: 4px;
+  font-size: 0.75rem;
+  color: var(--pbp-text-soft, rgba(0, 0, 0, 0.55));
 }
 
 /* スマホ等では縦積み */

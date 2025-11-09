@@ -4,6 +4,8 @@ import { useNavigate } from "react-router-dom";
 import PageStyle from "../../../shell/src/layout/PageStyle/PageStyle";
 import AdminCard from "../../../admin/src/pages/AdminCard";
 import ProductBlueprintCard from "./productBlueprintCard";
+import TokenBlueprintCard from "../../../tokenBlueprint/src/pages/tokenBlueprintCard";
+import TokenContentsCard from "../../../tokenContents/src/pages/tokenContentsCard";
 import ColorVariationCard from "../../../model/src/pages/ColorVariationCard";
 import SizeVariationCard, { type SizeRow } from "../../../model/src/pages/SizeVariationCard";
 import ModelNumberCard, { type ModelNumber } from "../../../model/src/pages/ModelNumberCard";
@@ -72,6 +74,7 @@ export default function ProductBlueprintCreate() {
     >
       {/* --- 左ペイン --- */}
       <div>
+        {/* 商品設計カード（編集モード・プリフィルなし） */}
         <ProductBlueprintCard
           mode="edit"
           productName={productName}
@@ -89,6 +92,16 @@ export default function ProductBlueprintCreate() {
           onChangeProductIdTag={setProductIdTag}
         />
 
+        {/* トークン設計カード（編集モード・プリフィルなし） */}
+        <div style={{ marginTop: 16 }}>
+          <TokenBlueprintCard initialEditMode />
+        </div>
+
+        {/* コンテンツカード（編集モード・プリフィルなし） */}
+        <div style={{ marginTop: 16 }}>
+          <TokenContentsCard />
+        </div>
+
         <ColorVariationCard
           colors={colors}
           colorInput={colorInput}
@@ -104,7 +117,11 @@ export default function ProductBlueprintCreate() {
           }
         />
 
-        <ModelNumberCard sizes={sizes} colors={colors} modelNumbers={modelNumbers} />
+        <ModelNumberCard
+          sizes={sizes}
+          colors={colors}
+          modelNumbers={modelNumbers}
+        />
       </div>
 
       {/* --- 右ペイン（管理情報） --- */}
