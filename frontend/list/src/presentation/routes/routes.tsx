@@ -1,8 +1,8 @@
 // frontend/list/src/routes.tsx
 import type { RouteObject } from "react-router-dom";
-import ListManagement from "./pages/listManagement";
-import ListDetail from "./pages/listDetail";
-import ListCreate from "./pages/listCreate";
+import ListManagement from "../../presentation/pages/listManagement";
+import ListDetail from "../../presentation/pages/listDetail";
+import ListCreate from "../../presentation/pages/listCreate";
 
 /**
  * ListingsRoutes

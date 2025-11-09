@@ -1,8 +1,8 @@
 // frontend/list/src/pages/listCreate.tsx
 import * as React from "react";
 import { useNavigate } from "react-router-dom";
-import PageStyle from "../../../shell/src/layout/PageStyle/PageStyle";
-import AdminCard from "../../../admin/src/presentation/components/AdminCard";
+import PageStyle from "../../../../shell/src/layout/PageStyle/PageStyle";
+import AdminCard from "../../../../admin/src/presentation/components/AdminCard";
 
 /**
  * ListCreate

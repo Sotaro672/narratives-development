@@ -1,25 +1,25 @@
 // frontend/list/src/pages/listDetail.tsx
 import * as React from "react";
 import { useNavigate, useParams } from "react-router-dom";
-import PageStyle from "../../../shell/src/layout/PageStyle/PageStyle";
-import AdminCard from "../../../admin/src/presentation/components/AdminCard";
+import PageStyle from "../../../../shell/src/layout/PageStyle/PageStyle";
+import AdminCard from "../../../../admin/src/presentation/components/AdminCard";
 import {
   Card,
   CardHeader,
   CardTitle,
   CardContent,
-} from "../../../shared/ui/card";
-import ProductBlueprintCard from "../../../productBlueprint/src/presentation/components/productBlueprintCard";
+} from "../../../../shared/ui/card";
+import ProductBlueprintCard from "../../../../productBlueprint/src/presentation/components/productBlueprintCard";
 import InventoryCard, {
   type InventoryRow,
-} from "../../../inventory/src/presentation/components/inventoryCard";
-import TokenBlueprintCard from "../../../tokenBlueprint/src/presentation/components/tokenBlueprintCard";
+} from "../../../../inventory/src/presentation/components/inventoryCard";
+import TokenBlueprintCard from "../../../../tokenBlueprint/src/presentation/components/tokenBlueprintCard";
 import {
   Popover,
   PopoverTrigger,
   PopoverContent,
-} from "../../../shared/ui/popover";
-import "./listDetail.css";
+} from "../../../../shared/ui/popover";
+import "../styles/list.css";
 
 type InventoryItem = {
   id: string;
