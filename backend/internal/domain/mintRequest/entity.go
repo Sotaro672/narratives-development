@@ -1,3 +1,4 @@
+// backend\internal\domain\mintRequest\entity.go
 package mintrequest
 
 import (

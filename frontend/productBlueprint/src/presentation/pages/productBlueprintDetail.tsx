@@ -6,14 +6,14 @@ import PageStyle from "../../../../shell/src/layout/PageStyle/PageStyle";
 import AdminCard from "../../../../admin/src/presentation/components/AdminCard";
 import ProductBlueprintCard from "../components/productBlueprintCard";
 import ColorVariationCard from "../../../../model/src/presentation/components/ColorVariationCard";
-import SizeVariationCard, {
-  type SizeRow,
-} from "../../../../model/src/presentation/components/SizeVariationCard";
-import ModelNumberCard, {
-  type ModelNumber,
-} from "../../../../model/src/presentation/components/ModelNumberCard";
+import SizeVariationCard from "../../../../model/src/presentation/components/SizeVariationCard";
+import ModelNumberCard from "../../../../model/src/presentation/components/ModelNumberCard";
 
 import { PRODUCT_BLUEPRINTS } from "../../infrastructure/mockdata/mockdata";
+import {
+  MODEL_NUMBERS,
+  SIZE_VARIATIONS,
+} from "../../../../model/src/infrastructure/mockdata/mockdata";
 import type {
   ProductBlueprint,
   ProductIDTagType,
@@ -88,7 +88,7 @@ export default function ProductBlueprintDetail() {
     () => productIdTagLabel(blueprint?.productIdTag?.type),
   );
 
-  // カラー（本来は blueprint.variations から導出する想定・ここでは従来モックを維持）
+  // カラー
   const [colorInput, setColorInput] = React.useState("");
   const [colors, setColors] = React.useState<string[]>([
     "ホワイト",
@@ -96,25 +96,26 @@ export default function ProductBlueprintDetail() {
     "ネイビー",
   ]);
 
-  // サイズ
-  const [sizes, setSizes] = React.useState<SizeRow[]>([
-    { id: "1", sizeLabel: "S", chest: 48, waist: 58, length: 60, shoulder: 38 },
-    { id: "2", sizeLabel: "M", chest: 50, waist: 60, length: 62, shoulder: 40 },
-    { id: "3", sizeLabel: "L", chest: 52, waist: 62, length: 64, shoulder: 42 },
-  ]);
+  // サイズ（mockdata.ts からインポート）
+  const [sizes, setSizes] = React.useState(() =>
+    SIZE_VARIATIONS.map((v, i) => ({
+      id: String(i + 1),
+      sizeLabel: v.size,
+      chest: v.measurements["身幅"] ?? 0,
+      waist: v.measurements["ウエスト"] ?? 0,
+      length: v.measurements["着丈"] ?? 0,
+      shoulder: v.measurements["肩幅"] ?? 0,
+    })),
+  );
 
-  // モデルナンバー
-  const [modelNumbers] = React.useState<ModelNumber[]>([
-    { size: "S", color: "ホワイト", code: "LM-SB-S-WHT" },
-    { size: "S", color: "ブラック", code: "MN-001" },
-    { size: "S", color: "ネイビー", code: "MN-001" },
-    { size: "M", color: "ホワイト", code: "LM-SB-M-WHT" },
-    { size: "M", color: "ブラック", code: "LM-SB-M-BLK" },
-    { size: "M", color: "ネイビー", code: "LM-SB-M-NVY" },
-    { size: "L", color: "ホワイト", code: "LM-SB-L-WHT" },
-    { size: "L", color: "ブラック", code: "LM-SB-L-BLK" },
-    { size: "L", color: "ネイビー", code: "LM-SB-L-NVY" },
-  ]);
+  // モデルナンバー（mockdata.ts からインポート）
+  const [modelNumbers] = React.useState(() =>
+    MODEL_NUMBERS.map((m) => ({
+      size: m.size,
+      color: m.color,
+      code: m.modelNumber,
+    })),
+  );
 
   // 管理情報
   const [assignee, setAssignee] = React.useState(
@@ -128,7 +129,6 @@ export default function ProductBlueprintDetail() {
   );
 
   const onSave = () => {
-    // TODO: 後で usecase 経由で API 呼び出しに差し替え
     alert("保存しました（ダミー）");
   };
 
@@ -155,7 +155,6 @@ export default function ProductBlueprintDetail() {
     >
       {/* --- 左ペイン --- */}
       <div>
-        {/* 商品設計カード：編集モード（Shared Types に準拠した値を渡す） */}
         <ProductBlueprintCard
           mode="edit"
           productName={productName}
@@ -173,7 +172,6 @@ export default function ProductBlueprintDetail() {
           onChangeProductIdTag={setProductIdTag}
         />
 
-        {/* カラー：編集モード */}
         <ColorVariationCard
           mode="edit"
           colors={colors}
@@ -183,7 +181,6 @@ export default function ProductBlueprintDetail() {
           onRemoveColor={removeColor}
         />
 
-        {/* サイズ：編集モード */}
         <SizeVariationCard
           mode="edit"
           sizes={sizes}
@@ -192,7 +189,6 @@ export default function ProductBlueprintDetail() {
           }
         />
 
-        {/* モデルナンバー：編集モード */}
         <ModelNumberCard
           mode="edit"
           sizes={sizes}

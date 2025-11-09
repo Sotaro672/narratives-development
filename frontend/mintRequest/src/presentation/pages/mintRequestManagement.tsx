@@ -1,4 +1,4 @@
-// frontend/mintRequest/src/pages/mintRequestManagement.tsx
+// frontend/mintRequest/src/presentation/pages/mintRequestManagement.tsx
 
 import React, { useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
@@ -8,80 +8,113 @@ import List, {
 } from "../../../../shell/src/layout/List/List";
 import "../styles/mintRequest.css";
 import {
-  ROWS,
-  type MintRequestRow,
-  type MintStatus,
-} from "../../../mockdata";
+  MINT_REQUESTS,
+} from "../../infrastructure/mockdata/mockdata";
+import type {
+  MintRequest,
+  MintRequestStatus,
+} from "../../../../shell/src/shared/types/mintRequest";
 
-const toTs = (s: string) =>
-  s === "-" ? -1 : new Date(s.replace(/-/g, "/")).getTime();
+// 日時文字列をタイムスタンプに変換（不正 or null は -1）
+const toTs = (s: string | null | undefined): number => {
+  if (!s) return -1;
+  const t = Date.parse(s);
+  return Number.isNaN(t) ? -1 : t;
+};
+
+// ステータス表示用ラベル
+const statusLabel = (s: MintRequestStatus): string => {
+  switch (s) {
+    case "minted":
+      return "Mint完了";
+    case "requested":
+      return "リクエスト済み";
+    case "planning":
+    default:
+      return "計画中";
+  }
+};
+
+type SortKey = "requestedAt" | "mintedAt" | "mintQuantity" | null;
 
 export default function MintRequestManagementPage() {
   const navigate = useNavigate();
 
-  // ── Filters ───────────────────────────────────────────────
+  // Filters
   const [tokenFilter, setTokenFilter] = useState<string[]>([]);
-  const [productFilter, setProductFilter] = useState<string[]>([]);
+  const [productionFilter, setProductionFilter] = useState<string[]>([]);
   const [requesterFilter, setRequesterFilter] = useState<string[]>([]);
-  const [statusFilter, setStatusFilter] = useState<MintStatus[] | string[]>([]);
+  const [statusFilter, setStatusFilter] = useState<MintRequestStatus[] | string[]>([]);
 
-  // ── Sorting ───────────────────────────────────────────────
-  const [sortKey, setSortKey] =
-    useState<"requestAt" | "executedAt" | "quantity" | null>("requestAt");
+  // Sorting
+  const [sortKey, setSortKey] = useState<SortKey>("requestedAt");
   const [sortDir, setSortDir] = useState<"asc" | "desc" | null>("desc");
 
-  // options for filters
+  // Filter options
   const tokenOptions = useMemo(
     () =>
-      Array.from(new Set(ROWS.map((r) => r.tokenDesign))).map((v) => ({
-        value: v,
-        label: v,
-      })),
-    []
-  );
-  const productOptions = useMemo(
-    () =>
-      Array.from(new Set(ROWS.map((r) => r.productName))).map((v) => ({
-        value: v,
-        label: v,
-      })),
-    []
-  );
-  const requesterOptions = useMemo(
-    () =>
-      Array.from(new Set(ROWS.map((r) => r.requester))).map((v) => ({
-        value: v,
-        label: v,
-      })),
-    []
-  );
-  const statusOptions = useMemo(
-    () =>
-      Array.from(new Set(ROWS.map((r) => r.status))).map((v) => ({
-        value: v,
-        label: v,
-      })),
-    []
+      Array.from(new Set(MINT_REQUESTS.map((r) => r.tokenBlueprintId))).map(
+        (v) => ({ value: v, label: v }),
+      ),
+    [],
   );
 
-  // filter + sort
+  const productionOptions = useMemo(
+    () =>
+      Array.from(new Set(MINT_REQUESTS.map((r) => r.productionId))).map(
+        (v) => ({ value: v, label: v }),
+      ),
+    [],
+  );
+
+  const requesterOptions = useMemo(
+    () =>
+      Array.from(
+        new Set(
+          MINT_REQUESTS.map((r) => r.requestedBy).filter(
+            (v): v is string => !!v && !!v.trim(),
+          ),
+        ),
+      ).map((v) => ({ value: v, label: v })),
+    [],
+  );
+
+  const statusOptions = useMemo(
+    () =>
+      Array.from(new Set(MINT_REQUESTS.map((r) => r.status))).map((v) => ({
+        value: v,
+        label: statusLabel(v),
+      })),
+    [],
+  );
+
+  // Filter + sort rows
   const rows = useMemo(() => {
-    let data = ROWS.filter(
-      (r) =>
-        (tokenFilter.length === 0 || tokenFilter.includes(r.tokenDesign)) &&
-        (productFilter.length === 0 || productFilter.includes(r.productName)) &&
-        (requesterFilter.length === 0 ||
-          requesterFilter.includes(r.requester)) &&
-        (statusFilter.length === 0 || statusFilter.includes(r.status))
-    );
+    let data = MINT_REQUESTS.filter((r) => {
+      const tokenOk =
+        tokenFilter.length === 0 ||
+        tokenFilter.includes(r.tokenBlueprintId);
+      const productionOk =
+        productionFilter.length === 0 ||
+        productionFilter.includes(r.productionId);
+      const requesterOk =
+        requesterFilter.length === 0 ||
+        requesterFilter.includes(r.requestedBy ?? "");
+      const statusOk =
+        statusFilter.length === 0 ||
+        statusFilter.includes(r.status);
+
+      return tokenOk && productionOk && requesterOk && statusOk;
+    });
 
     if (sortKey && sortDir) {
       data = [...data].sort((a, b) => {
-        if (sortKey === "quantity") {
+        if (sortKey === "mintQuantity") {
           return sortDir === "asc"
-            ? a.quantity - b.quantity
-            : b.quantity - a.quantity;
+            ? a.mintQuantity - b.mintQuantity
+            : b.mintQuantity - a.mintQuantity;
         }
+
         const av = toTs(a[sortKey]);
         const bv = toTs(b[sortKey]);
         return sortDir === "asc" ? av - bv : bv - av;
@@ -91,37 +124,42 @@ export default function MintRequestManagementPage() {
     return data;
   }, [
     tokenFilter,
-    productFilter,
+    productionFilter,
     requesterFilter,
     statusFilter,
     sortKey,
     sortDir,
   ]);
 
+  // 行クリックで詳細へ遷移（id を利用）
+  const goDetail = (requestId: string) => {
+    navigate(`/mintRequest/${encodeURIComponent(requestId)}`);
+  };
+
   const headers: React.ReactNode[] = [
-    "生産計画ID",
+    "ミント申請ID",
     <FilterableTableHeader
-      key="token"
-      label="トークン設計"
+      key="tokenBlueprintId"
+      label="トークン設計ID"
       options={tokenOptions}
       selected={tokenFilter}
       onChange={setTokenFilter}
     />,
     <FilterableTableHeader
-      key="product"
-      label="商品名"
-      options={productOptions}
-      selected={productFilter}
-      onChange={setProductFilter}
+      key="productionId"
+      label="生産ID"
+      options={productionOptions}
+      selected={productionFilter}
+      onChange={setProductionFilter}
     />,
     <SortableTableHeader
-      key="quantity"
+      key="mintQuantity"
       label="Mint数量"
-      sortKey="quantity"
+      sortKey="mintQuantity"
       activeKey={sortKey}
       direction={sortDir ?? null}
       onChange={(key, dir) => {
-        setSortKey(key as "quantity");
+        setSortKey(key as SortKey);
         setSortDir(dir);
       }}
     />,
@@ -131,7 +169,7 @@ export default function MintRequestManagementPage() {
       options={statusOptions}
       selected={statusFilter}
       onChange={(next: string[]) =>
-        setStatusFilter(next as MintStatus[] | string[])
+        setStatusFilter(next as MintRequestStatus[] | string[])
       }
     />,
     <FilterableTableHeader
@@ -142,34 +180,28 @@ export default function MintRequestManagementPage() {
       onChange={setRequesterFilter}
     />,
     <SortableTableHeader
-      key="requestAt"
+      key="requestedAt"
       label="リクエスト日時"
-      sortKey="requestAt"
+      sortKey="requestedAt"
       activeKey={sortKey}
       direction={sortDir ?? null}
       onChange={(key, dir) => {
-        setSortKey(key as "requestAt");
+        setSortKey(key as SortKey);
         setSortDir(dir);
       }}
     />,
     <SortableTableHeader
-      key="executedAt"
+      key="mintedAt"
       label="Mint実行日時"
-      sortKey="executedAt"
+      sortKey="mintedAt"
       activeKey={sortKey}
       direction={sortDir ?? null}
       onChange={(key, dir) => {
-        setSortKey(key as "executedAt");
+        setSortKey(key as SortKey);
         setSortDir(dir);
       }}
     />,
   ];
-
-  // 行クリックで詳細へ遷移
-  const goDetail = (requestId: string) => {
-    // ルートは /mintRequest/:requestId を想定（mintRequestDetail.tsx で useParams を使用）
-    navigate(`/mintRequest/${encodeURIComponent(requestId)}`);
-  };
 
   return (
     <div className="p-0">
@@ -180,57 +212,61 @@ export default function MintRequestManagementPage() {
         showResetButton
         onReset={() => {
           setTokenFilter([]);
-          setProductFilter([]);
+          setProductionFilter([]);
           setRequesterFilter([]);
           setStatusFilter([]);
-          setSortKey("requestAt");
+          setSortKey("requestedAt");
           setSortDir("desc");
         }}
       >
-        {rows.map((r: MintRequestRow) => (
+        {rows.map((r: MintRequest) => (
           <tr
-            key={r.planId}
-            onClick={() => goDetail(r.planId)}
+            key={r.id}
+            onClick={() => goDetail(r.id)}
             style={{ cursor: "pointer" }}
             tabIndex={0}
             onKeyDown={(e) => {
-              if (e.key === "Enter" || e.key === " ") goDetail(r.planId);
+              if (e.key === "Enter" || e.key === " ") goDetail(r.id);
             }}
-            aria-label={`ミント申請 ${r.planId} の詳細へ`}
+            aria-label={`ミント申請 ${r.id} の詳細へ`}
           >
             <td>
               <a
                 href="#"
                 onClick={(e) => {
                   e.preventDefault();
-                  goDetail(r.planId);
+                  goDetail(r.id);
                 }}
                 className="text-blue-600 hover:underline"
               >
-                {r.planId}
+                {r.id}
               </a>
             </td>
             <td>
-              <span className="lp-brand-pill">{r.tokenDesign}</span>
+              <span className="lp-brand-pill">{r.tokenBlueprintId}</span>
             </td>
             <td>
-              <span className="lp-brand-pill">{r.productName}</span>
+              <span className="lp-brand-pill">{r.productionId}</span>
             </td>
-            <td>{r.quantity}</td>
+            <td>{r.mintQuantity}</td>
             <td>
-              {r.status === "Mint完了" ? (
-                <span className="mint-badge is-done">Mint完了</span>
-              ) : r.status === "リクエスト済み" ? (
+              {r.status === "minted" ? (
+                <span className="mint-badge is-done">
+                  {statusLabel(r.status)}
+                </span>
+              ) : r.status === "requested" ? (
                 <span className="mint-badge is-requested">
-                  リクエスト済み
+                  {statusLabel(r.status)}
                 </span>
               ) : (
-                <span className="mint-badge is-planned">計画中</span>
+                <span className="mint-badge is-planned">
+                  {statusLabel(r.status)}
+                </span>
               )}
             </td>
-            <td>{r.requester}</td>
-            <td>{r.requestAt}</td>
-            <td>{r.executedAt}</td>
+            <td>{r.requestedBy ?? "-"}</td>
+            <td>{r.requestedAt ?? "-"}</td>
+            <td>{r.mintedAt ?? "-"}</td>
           </tr>
         ))}
       </List>
