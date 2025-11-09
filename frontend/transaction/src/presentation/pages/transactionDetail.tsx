@@ -1,7 +1,7 @@
 // frontend/transaction/src/pages/transactionDetail.tsx
 import * as React from "react";
 import { useNavigate, useParams } from "react-router-dom";
-import PageStyle from "../../../shell/src/layout/PageStyle/PageStyle";
+import PageStyle from "../../../../shell/src/layout/PageStyle/PageStyle";
 import {
   Card,
   CardHeader,
@@ -9,7 +9,7 @@ import {
   CardContent,
   CardLabel,
   CardReadonly,
-} from "../../../shared/ui/card";
+} from "../../../../shared/ui/card";
 
 /**
  * 取引詳細ページ

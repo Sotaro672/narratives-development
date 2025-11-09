@@ -1,12 +1,12 @@
 import React, { useMemo, useState } from "react";
-import { useNavigate } from "react-router-dom"; // ← 追加
+import { useNavigate } from "react-router-dom";
 import List, {
   FilterableTableHeader,
   SortableTableHeader,
-} from "../../../shell/src/layout/List/List";
+} from "../../../../shell/src/layout/List/List";
 import { ArrowDownLeft, ArrowUpRight } from "lucide-react";
-import "./transactionList.css";
-import { TRANSACTIONS, type Transaction } from "../../mockdata";
+import "../styles/transaction.css";
+import { TRANSACTIONS, type Transaction } from "../../../mockdata";
 
 // Lucide型エラー対策
 const IconIn = ArrowDownLeft as unknown as React.ComponentType<

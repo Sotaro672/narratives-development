@@ -50,7 +50,7 @@ const permissionRoutes = permissionRoutesRaw as unknown as RouteObject[];
 import accountRoutesRaw from "../../../account/src/routes";
 const accountRoutes = accountRoutesRaw as unknown as RouteObject[];
 
-import transactionRoutesRaw from "../../../transaction/src/routes";
+import transactionRoutesRaw from "../../../transaction/src/presentation/routes/routes";
 const transactionRoutes = transactionRoutesRaw as unknown as RouteObject[];
 /**
  * Shell全体で使用するルーティング定義

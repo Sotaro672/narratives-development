@@ -7,7 +7,7 @@ import InventoryCard, {
   type InventoryRow,
 } from "../../../../inventory/src/presentation/components/inventoryCard";
 import TokenBlueprintCard from "../../../../tokenBlueprint/src/presentation/components/tokenBlueprintCard";
-import TokenContentsCard from "../../../../tokenContents/src/pages/tokenContentsCard";
+import TokenContentsCard from "../../../../tokenContents/src/presentation/components/tokenContentsCard";
 import { TOKEN_BLUEPRINTS } from "../../../../tokenBlueprint/mockdata";
 import { MOCK_IMAGES } from "../../../../tokenContents/mockdata";
 import { Card, CardContent } from "../../../../shared/ui/card";
