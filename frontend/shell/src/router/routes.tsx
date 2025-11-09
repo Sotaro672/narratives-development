@@ -1,4 +1,4 @@
-// frontend/shell/src/app/routes.tsx
+//frontend\shell\src\router\routes.tsx
 import type { RouteObject } from "react-router-dom";
 
 // モジュールのルート定義（型衝突を避けるため unknown→RouteObject[] にキャスト）

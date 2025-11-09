@@ -1,6 +1,6 @@
 // frontend/shell/src/layout/Main/Main.tsx
 import { useRoutes } from "react-router-dom";
-import routes from "../../app/routes"; // ルーティング定義をインポート
+import routes from "../../router/routes"; // ルーティング定義をインポート
 import "./Main.css";
 
 /**
