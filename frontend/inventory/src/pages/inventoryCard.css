@@ -1,0 +1,151 @@
+/* モデル別在庫一覧カード */
+.ivc {
+  background-color: var(--pbp-surface, #ffffff);
+  border-radius: 18px;
+  border: 1px solid var(--pbp-border, rgba(15, 23, 42, 0.08));
+  box-shadow: 0 2px 4px rgba(15, 23, 42, 0.03);
+  padding: 0;
+  box-sizing: border-box;
+}
+
+/* Header */
+.ivc__header {
+  padding: 16px 20px 10px;
+  border-bottom: none;
+}
+
+.ivc__header-inner {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.ivc__icon {
+  color: var(--pbp-text-soft, rgba(15, 23, 42, 0.55));
+}
+
+.ivc__title {
+  font-size: 1rem;
+  font-weight: 600;
+  color: var(--pbp-text, #111827);
+}
+
+/* Body */
+.ivc__body {
+  padding: 0 20px 16px;
+}
+
+.ivc__table-wrap {
+  margin-top: 8px;
+  border-radius: 16px;
+  border: 1px solid var(--pbp-border-soft, rgba(148, 163, 253, 0.16));
+  padding: 4px 0;
+  background-color: #ffffff;
+}
+
+/* Table */
+.ivc__table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.9rem;
+}
+
+.ivc__th {
+  padding: 10px 16px;
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--pbp-text-soft, #6b7280);
+  border-bottom: 1px solid var(--pbp-border-soft, #e5e7eb);
+}
+
+.ivc__th--left {
+  text-align: left;
+}
+.ivc__th--right {
+  text-align: right;
+}
+
+.ivc__tr {
+  border-bottom: 1px solid var(--pbp-border-soft, #f1f5f9);
+}
+
+.ivc__tr:last-of-type {
+  border-bottom: none;
+}
+
+.ivc__model {
+  padding: 10px 16px;
+  color: var(--pbp-text, #111827);
+  white-space: nowrap;
+}
+
+.ivc__size {
+  padding: 10px 16px;
+  color: var(--pbp-text, #111827);
+  white-space: nowrap;
+}
+
+.ivc__color-cell {
+  padding: 10px 16px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--pbp-text, #111827);
+  white-space: nowrap;
+}
+
+.ivc__color-dot {
+  width: 14px;
+  height: 14px;
+  border-radius: 999px;
+  display: inline-block;
+}
+
+.ivc__color-label {
+  font-size: 0.9rem;
+}
+
+/* 在庫数（右寄せ＋グリーン） */
+.ivc__stock {
+  padding: 10px 16px;
+  text-align: right;
+}
+
+.ivc__stock-number {
+  color: #16a34a;
+  font-weight: 600;
+}
+
+/* 空行 */
+.ivc__empty {
+  padding: 18px 16px;
+  text-align: center;
+  font-size: 0.85rem;
+  color: var(--pbp-text-soft, #9ca3af);
+}
+
+/* 行ホバー */
+.ivc__tr:hover {
+  background-color: rgba(249, 250, 251, 0.7);
+}
+
+/* ✅ 合計行 */
+.ivc__total-row {
+  border-top: 1px solid var(--pbp-border-soft, #e5e7eb);
+  background-color: rgba(249, 250, 251, 0.7);
+}
+
+.ivc__total-label {
+  padding: 10px 16px;
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--pbp-text-soft, #6b7280);
+  text-align: right;
+}
+
+.ivc__total-value {
+  padding: 10px 16px;
+  text-align: right; /* ✅ 合計値を右寄せ */
+  font-weight: 700;
+  color: var(--pbp-text, #111827);
+}

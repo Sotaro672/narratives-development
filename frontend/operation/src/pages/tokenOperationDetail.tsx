@@ -38,7 +38,7 @@ export default function TokenOperationDetail() {
       onBack={onBack}
       onSave={handleSave}
     >
-      {/* 左カラム：トークン設計＋コンテンツ（いずれもモックでプリフィル） */}
+      {/* 左カラム：トークン設計＋コンテンツ（モックでプリフィル） */}
       <div>
         <TokenBlueprintCard
           initialTokenBlueprintId={blueprint.tokenBlueprintId}
@@ -52,8 +52,8 @@ export default function TokenOperationDetail() {
         />
 
         <div style={{ marginTop: 16 }}>
-          {/* ✅ コンテンツは閲覧モードで表示 */}
-          <TokenContentsCard images={contentImages} mode="view" />
+          {/* ✅ コンテンツを編集モードで表示 */}
+          <TokenContentsCard images={contentImages} mode="edit" />
         </div>
       </div>
 

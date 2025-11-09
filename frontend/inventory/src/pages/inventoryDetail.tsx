@@ -1,10 +1,12 @@
-// frontend/inventory/src/pages/inventoryDetail.tsx
 import * as React from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import PageStyle from "../../../shell/src/layout/PageStyle/PageStyle";
 import AdminCard from "../../../admin/src/pages/AdminCard";
 import ProductBlueprintCard from "../../../productBlueprint/src/pages/productBlueprintCard";
 import TokenBlueprintCard from "../../../tokenBlueprint/src/pages/tokenBlueprintCard";
+import InventoryCard, {
+  type InventoryRow,
+} from "./inventoryCard";
 
 type Fit =
   | "レギュラーフィット"
@@ -34,6 +36,17 @@ export default function InventoryDetail() {
   // 在庫情報
   const [token] = React.useState("LUMINA VIP Token");
   const [total] = React.useState(221);
+
+  // モデル別在庫データ
+  const [inventoryRows] = React.useState<InventoryRow[]>([
+    { modelCode: "LM-SB-S-WHT", size: "S", colorName: "ホワイト", colorCode: "#ffffff", stock: 25 },
+    { modelCode: "LM-SB-M-WHT", size: "M", colorName: "ホワイト", colorCode: "#ffffff", stock: 42 },
+    { modelCode: "LM-SB-L-WHT", size: "L", colorName: "ホワイト", colorCode: "#ffffff", stock: 38 },
+    { modelCode: "LM-SB-M-BLK", size: "M", colorName: "ブラック", colorCode: "#000000", stock: 35 },
+    { modelCode: "LM-SB-L-BLK", size: "L", colorName: "ブラック", colorCode: "#000000", stock: 28 },
+    { modelCode: "LM-SB-M-NVY", size: "M", colorName: "ネイビー", colorCode: "#1e3a8a", stock: 31 },
+    { modelCode: "LM-SB-L-NVY", size: "L", colorName: "ネイビー", colorCode: "#1e3a8a", stock: 22 },
+  ]);
 
   // 管理情報
   const [assignee, setAssignee] = React.useState("佐藤 美咲");
@@ -76,28 +89,14 @@ export default function InventoryDetail() {
           onChangeProductIdTag={noopStr}
         />
 
-        {/* トークン設計カード（閲覧モード：initialEditMode デフォルト false） */}
+        {/* トークン設計カード（閲覧モード） */}
         <div style={{ marginTop: 16 }}>
           <TokenBlueprintCard />
         </div>
 
-        {/* 在庫情報（簡易テーブル） */}
-        <div className="inv-detail-card">
-          <h2 className="inv-detail-title">在庫情報</h2>
-          <table className="inv-detail-table">
-            <tbody>
-              <tr>
-                <th>トークン</th>
-                <td>{token}</td>
-              </tr>
-              <tr>
-                <th>総在庫数</th>
-                <td>
-                  <span className="inv__total-pill">{total}</span>
-                </td>
-              </tr>
-            </tbody>
-          </table>
+        {/* モデル別在庫カード */}
+        <div style={{ marginTop: 16 }}>
+          <InventoryCard rows={inventoryRows} />
         </div>
       </div>
 

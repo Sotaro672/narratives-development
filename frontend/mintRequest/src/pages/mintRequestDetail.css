@@ -1,0 +1,38 @@
+/* ミント申請カード（シンプル版） */
+.mint-request-card {
+  background: var(--pbp-surface, #ffffff);
+  border: 1px solid var(--pbp-border, rgba(15, 23, 42, 0.08));
+  border-radius: 16px;
+  padding: 0;
+  box-shadow: 0 2px 6px rgba(15, 23, 42, 0.04);
+  margin: 6px 0;
+}
+
+.mint-request-card__body {
+  padding: 20px;
+}
+
+.mint-request-card__actions {
+  display: flex;
+  align-items: center;
+  gap: 24px; /* ✅ ボタンとミント数の間に余白を追加 */
+  justify-content: flex-start;
+}
+
+.mint-request-card__button {
+  background-color: #2563eb;
+  color: #fff;
+  font-weight: 600;
+  padding: 10px 18px;
+  border-radius: 10px;
+  transition: background-color 0.2s ease-in-out;
+}
+
+.mint-request-card__button:hover {
+  background-color: #1d4ed8;
+}
+
+.mint-request-card__total {
+  font-size: 0.9rem;
+  color: var(--pbp-text-soft, #6b7280);
+}

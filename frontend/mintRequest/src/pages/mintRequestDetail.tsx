@@ -2,110 +2,118 @@
 import * as React from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import PageStyle from "../../../shell/src/layout/PageStyle/PageStyle";
-import { Card, CardHeader, CardTitle, CardContent } from "../../../shared/ui/card";
+import AdminCard from "../../../admin/src/pages/AdminCard";
+import InventoryCard, {
+  type InventoryRow,
+} from "../../../inventory/src/pages/inventoryCard";
+import TokenBlueprintCard from "../../../tokenBlueprint/src/pages/tokenBlueprintCard";
+import TokenContentsCard from "../../../tokenContents/src/pages/tokenContentsCard";
+import { TOKEN_BLUEPRINTS } from "../../../tokenBlueprint/mockdata";
+import { MOCK_IMAGES } from "../../../tokenContents/mockdata";
+import { Card, CardContent } from "../../../shared/ui/card";
+import { Button } from "../../../shared/ui/button";
+import { Coins } from "lucide-react";
+
+import "./mintRequestDetail.css";
 
 export default function MintRequestDetail() {
   const navigate = useNavigate();
   const { requestId } = useParams<{ requestId: string }>();
 
   // ─────────────────────────────────────────
-  // モックデータ（ミント申請詳細）
+  // モックデータ
   // ─────────────────────────────────────────
-  const [tokenName] = React.useState("LUMINA VIP Token");
-  const [brand] = React.useState("LUMINA Fashion");
-  const [symbol] = React.useState("LVIP");
-  const [requestedBy] = React.useState("山田 太郎");
-  const [requestDate] = React.useState("2025/11/05 14:30");
-  const [quantity] = React.useState(1000);
-  const [status] = React.useState<"承認待ち" | "承認済み" | "却下">("承認待ち");
-  const [remarks] = React.useState("VIP会員向け初回発行分として申請。");
+  const [assignee, setAssignee] = React.useState("佐藤 美咲");
+  const [creator] = React.useState("山田 太郎");
+  const [createdAt] = React.useState("2025/11/05");
+
+  // 在庫データ（モデル別在庫一覧）
+  const [inventoryRows] = React.useState<InventoryRow[]>([
+    { modelCode: "LM-SB-S-WHT", size: "S", colorName: "ホワイト", colorCode: "#ffffff", stock: 25 },
+    { modelCode: "LM-SB-M-WHT", size: "M", colorName: "ホワイト", colorCode: "#ffffff", stock: 42 },
+    { modelCode: "LM-SB-L-WHT", size: "L", colorName: "ホワイト", colorCode: "#ffffff", stock: 38 },
+    { modelCode: "LM-SB-M-BLK", size: "M", colorName: "ブラック", colorCode: "#000000", stock: 35 },
+    { modelCode: "LM-SB-L-BLK", size: "L", colorName: "ブラック", colorCode: "#000000", stock: 28 },
+    { modelCode: "LM-SB-M-NVY", size: "M", colorName: "ネイビー", colorCode: "#1e3a8a", stock: 31 },
+    { modelCode: "LM-SB-L-NVY", size: "L", colorName: "ネイビー", colorCode: "#1e3a8a", stock: 22 },
+  ]);
+
+  // 在庫数合計（ミント数）
+  const totalStock = React.useMemo(
+    () => inventoryRows.reduce((sum, r) => sum + (r.stock || 0), 0),
+    [inventoryRows]
+  );
+
+  // トークン設計 & コンテンツ（閲覧用）
+  const blueprint = TOKEN_BLUEPRINTS[0];
+  const contentImages = MOCK_IMAGES;
 
   // 戻るボタン
   const onBack = React.useCallback(() => {
     navigate(-1);
   }, [navigate]);
 
+  // ミント申請ボタン
+  const handleMint = React.useCallback(() => {
+    alert(`ミント申請を実行しました（申請ID: ${requestId ?? "不明"} / ミント数: ${totalStock}）`);
+  }, [requestId, totalStock]);
+
   return (
     <PageStyle
-      layout="single"
+      layout="grid-2"
       title={`ミント申請詳細：${requestId ?? "不明ID"}`}
       onBack={onBack}
     >
-      <Card className="mt-4">
-        <CardHeader>
-          <CardTitle>申請情報</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <table className="w-full text-sm">
-            <tbody>
-              <tr>
-                <th className="text-muted-foreground font-medium pr-4 py-2 align-top whitespace-nowrap">
-                  トークン名
-                </th>
-                <td className="py-2">{tokenName}</td>
-              </tr>
-              <tr>
-                <th className="text-muted-foreground font-medium pr-4 py-2 align-top whitespace-nowrap">
-                  ブランド
-                </th>
-                <td className="py-2">{brand}</td>
-              </tr>
-              <tr>
-                <th className="text-muted-foreground font-medium pr-4 py-2 align-top whitespace-nowrap">
-                  シンボル
-                </th>
-                <td className="py-2">{symbol}</td>
-              </tr>
-              <tr>
-                <th className="text-muted-foreground font-medium pr-4 py-2 align-top whitespace-nowrap">
-                  申請者
-                </th>
-                <td className="py-2">{requestedBy}</td>
-              </tr>
-              <tr>
-                <th className="text-muted-foreground font-medium pr-4 py-2 align-top whitespace-nowrap">
-                  申請日時
-                </th>
-                <td className="py-2">{requestDate}</td>
-              </tr>
-              <tr>
-                <th className="text-muted-foreground font-medium pr-4 py-2 align-top whitespace-nowrap">
-                  申請数量
-                </th>
-                <td className="py-2">{quantity.toLocaleString()}</td>
-              </tr>
-              <tr>
-                <th className="text-muted-foreground font-medium pr-4 py-2 align-top whitespace-nowrap">
-                  ステータス
-                </th>
-                <td className="py-2">
-                  {status === "承認待ち" && (
-                    <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-semibold bg-yellow-100 text-yellow-800">
-                      承認待ち
-                    </span>
-                  )}
-                  {status === "承認済み" && (
-                    <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-semibold bg-green-100 text-green-800">
-                      承認済み
-                    </span>
-                  )}
-                  {status === "却下" && (
-                    <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-semibold bg-red-100 text-red-800">
-                      却下
-                    </span>
-                  )}
-                </td>
-              </tr>
-              <tr>
-                <th className="text-muted-foreground font-medium pr-4 py-2 align-top whitespace-nowrap">
-                  備考
-                </th>
-                <td className="py-2">{remarks}</td>
-              </tr>
-            </tbody>
-          </table>
-        </CardContent>
-      </Card>
+      {/* 左カラム：モデル別在庫一覧 → TokenBlueprintCard → TokenContentsCard → ミント申請ボタンカード */}
+      <div className="space-y-4 mt-4">
+        <InventoryCard rows={inventoryRows} />
+
+        {blueprint && (
+          <TokenBlueprintCard
+            initialTokenBlueprintId={blueprint.tokenBlueprintId}
+            initialTokenName={blueprint.name}
+            initialSymbol={blueprint.symbol}
+            initialBrand={blueprint.brand}
+            initialDescription={blueprint.description}
+            initialBurnAt={blueprint.burnAt}
+            initialIconUrl={blueprint.iconUrl}
+            initialEditMode={false}
+          />
+        )}
+
+        <TokenContentsCard images={contentImages} mode="view" />
+
+        {/* ✅ ミント申請カード（シンプル版） */}
+        <Card className="mint-request-card">
+          <CardContent className="mint-request-card__body">
+            <div className="mint-request-card__actions">
+              <Button
+                onClick={handleMint}
+                className="mint-request-card__button flex items-center gap-2"
+              >
+                <Coins size={16} />
+                ミント申請を実行
+              </Button>
+              <span className="mint-request-card__total">
+                ミント数: <strong>{totalStock}</strong>
+              </span>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* 右カラム：管理情報カード */}
+      <div className="space-y-4 mt-4">
+        <AdminCard
+          title="管理情報"
+          assigneeName={assignee}
+          createdByName={creator}
+          createdAt={createdAt}
+          onEditAssignee={() => setAssignee("新担当者")}
+          onClickAssignee={() => console.log("assignee clicked:", assignee)}
+          onClickCreatedBy={() => console.log("createdBy clicked:", creator)}
+        />
+      </div>
     </PageStyle>
   );
 }
