@@ -1,0 +1,67 @@
+/* frontend/member/src/pages/memberDetail.css */
+
+.member-card {
+  border-radius: 12px;
+  overflow: hidden;
+}
+
+.member-card__header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  border-bottom: 1px solid hsl(var(--border));
+  padding: 14px 18px;
+  background-color: hsl(var(--muted));
+}
+
+.member-card__icon {
+  color: hsl(var(--muted-foreground));
+}
+
+.member-card__title {
+  font-size: 0.95rem;
+  font-weight: 600;
+  color: hsl(var(--foreground));
+}
+
+.member-card__body {
+  padding: 16px 20px 20px;
+}
+
+.member-card__grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 24px 32px;
+}
+
+.member-card__section {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.member-card__label {
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: hsl(var(--muted-foreground));
+}
+
+.member-card__value {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.88rem;
+  color: hsl(var(--foreground));
+}
+
+.icon-inline {
+  color: hsl(var(--muted-foreground));
+}
+
+.member-card__value .icon-inline {
+  flex-shrink: 0;
+}
+
+.member-card__value:hover {
+  color: hsl(var(--accent-foreground));
+}

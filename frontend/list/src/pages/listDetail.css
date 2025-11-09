@@ -1,0 +1,116 @@
+/* frontend/list/src/pages/listDetail.css */
+
+.inventory-select-card {
+  border-radius: 16px;
+  overflow: hidden;
+}
+
+.inventory-select-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 16px 18px;
+  border-bottom: 1px solid hsl(var(--border));
+}
+
+.inventory-select-title {
+  font-size: 0.95rem;
+  font-weight: 600;
+  color: hsl(var(--muted-foreground));
+}
+
+.inventory-select-summary {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+}
+
+.summary-label {
+  font-size: 0.75rem;
+  color: hsl(var(--muted-foreground));
+}
+
+.summary-value {
+  font-size: 1rem;
+  font-weight: 700;
+}
+
+.inventory-select-body {
+  padding: 14px 16px 16px;
+}
+
+.inventory-select-table-wrapper {
+  max-height: 360px;
+  overflow: auto;
+}
+
+.inventory-select-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.8rem;
+}
+
+.inventory-select-table thead tr {
+  background-color: hsl(var(--muted));
+}
+
+.inventory-select-table th,
+.inventory-select-table td {
+  padding: 8px 6px;
+  border-bottom: 1px solid hsl(var(--border));
+  text-align: left;
+  white-space: nowrap;
+}
+
+.inventory-select-table th {
+  font-weight: 600;
+  font-size: 0.7rem;
+  color: hsl(var(--muted-foreground));
+}
+
+.inventory-select-table .cell-main-text {
+  font-weight: 500;
+}
+
+.inventory-select-table .cell-sub-text {
+  font-size: 0.68rem;
+  color: hsl(var(--muted-foreground));
+}
+
+.col-select {
+  width: 28px;
+}
+
+.col-qty {
+  width: 72px;
+}
+
+.qty-input {
+  width: 100%;
+  padding: 4px 6px;
+  font-size: 0.72rem;
+  border-radius: 6px;
+  border: 1px solid hsl(var(--border));
+  background-color: hsl(var(--background));
+}
+
+.inventory-select-table tr.is-selected {
+  background-color: hsl(var(--accent));
+}
+
+.inventory-select-actions {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 10px;
+}
+
+.primary-button {
+  padding: 8px 16px;
+  border-radius: 999px;
+  border: none;
+  font-size: 0.78rem;
+  font-weight: 600;
+  cursor: pointer;
+  background-color: hsl(var(--primary));
+  color: hsl(var(--primary-foreground));
+}

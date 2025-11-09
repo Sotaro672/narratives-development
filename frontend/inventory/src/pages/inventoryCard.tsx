@@ -1,3 +1,4 @@
+// frontend/inventory/src/pages/inventoryCard.tsx
 import * as React from "react";
 import { Palette } from "lucide-react";
 import {

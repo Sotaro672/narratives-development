@@ -2,18 +2,21 @@
 import * as React from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import PageStyle from "../../../shell/src/layout/PageStyle/PageStyle";
+import { Card, CardHeader, CardTitle, CardContent } from "../../../shared/ui/card";
+import { User, Mail, Calendar } from "lucide-react";
+import "./memberDetail.css";
 
 export default function MemberDetail() {
   const navigate = useNavigate();
   const { memberId } = useParams<{ memberId: string }>();
 
+  // モックデータ（将来API連携に置き換え）
   const [member] = React.useState({
-    name: "佐藤 美咲",
-    email: "misaki.sato@example.com",
-    role: "ブランドマネージャー",
-    organization: "LUMINA Fashion",
-    joinedAt: "2024/04/10",
-    status: "アクティブ",
+    name: "小林 静香",
+    kana: "コバヤシ シズカ",
+    email: "designer.lumina@narratives.com",
+    updatedAt: "2024年9月27日",
+    joinedAt: "2024年6月25日",
   });
 
   const handleBack = React.useCallback(() => {
@@ -22,49 +25,60 @@ export default function MemberDetail() {
 
   return (
     <PageStyle
-      layout="single"
+      layout="grid-2"
       title={`メンバー詳細：${memberId ?? "不明ID"}`}
       onBack={handleBack}
     >
-      <div className="member-detail">
-        <h2 className="member-detail__title">メンバー情報</h2>
-        <table className="member-detail__table">
-          <tbody>
-            <tr>
-              <th>氏名</th>
-              <td>{member.name}</td>
-            </tr>
-            <tr>
-              <th>メールアドレス</th>
-              <td>{member.email}</td>
-            </tr>
-            <tr>
-              <th>役職 / 権限</th>
-              <td>{member.role}</td>
-            </tr>
-            <tr>
-              <th>所属組織</th>
-              <td>{member.organization}</td>
-            </tr>
-            <tr>
-              <th>登録日</th>
-              <td>{member.joinedAt}</td>
-            </tr>
-            <tr>
-              <th>ステータス</th>
-              <td>
-                <span
-                  className={`status-badge ${
-                    member.status === "アクティブ" ? "active" : "inactive"
-                  }`}
-                >
-                  {member.status}
-                </span>
-              </td>
-            </tr>
-          </tbody>
-        </table>
+      {/* 左カラム：基本情報カード */}
+      <div>
+        <Card className="member-card">
+          <CardHeader className="member-card__header">
+            <User className="member-card__icon" size={18} />
+            <CardTitle className="member-card__title">基本情報</CardTitle>
+          </CardHeader>
+
+          <CardContent className="member-card__body">
+            <div className="member-card__grid">
+              <div className="member-card__section">
+                <div className="member-card__label">氏名</div>
+                <div className="member-card__value">
+                  <User size={14} className="icon-inline" />
+                  {member.name}
+                </div>
+
+                <div className="member-card__label">メールアドレス</div>
+                <div className="member-card__value">
+                  <Mail size={14} className="icon-inline" />
+                  {member.email}
+                </div>
+
+                <div className="member-card__label">更新日</div>
+                <div className="member-card__value">
+                  <Calendar size={14} className="icon-inline" />
+                  {member.updatedAt}
+                </div>
+              </div>
+
+              <div className="member-card__section">
+                <div className="member-card__label">読み仮名</div>
+                <div className="member-card__value">
+                  <User size={14} className="icon-inline" />
+                  {member.kana}
+                </div>
+
+                <div className="member-card__label">参加日</div>
+                <div className="member-card__value">
+                  <Calendar size={14} className="icon-inline" />
+                  {member.joinedAt}
+                </div>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
       </div>
+
+      {/* 右カラム：将来拡張用プレースホルダー */}
+      <div></div>
     </PageStyle>
   );
 }
