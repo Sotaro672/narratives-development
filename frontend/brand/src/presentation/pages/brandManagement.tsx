@@ -1,3 +1,5 @@
+// frontend/brand/src/presentation/pages/brandManagement.tsx
+
 import React, { useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import List, {
@@ -5,57 +7,85 @@ import List, {
   SortableTableHeader,
 } from "../../../../shell/src/layout/List/List";
 import "../styles/brand.css";
-import { ALL_BRANDS, type BrandRow } from "../../../mockdata";
+import {
+  ALL_BRANDS,
+  toBrandRows,
+  type BrandRow,
+} from "../../infrastructure/mockdata/mockdata";
 
-// Utility
+// Utility: "YYYY/MM/DD" → timestamp
 const toTs = (yyyyMd: string) => {
   const [y, m, d] = yyyyMd.split("/").map((v) => parseInt(v, 10));
   return new Date(y, (m || 1) - 1, d || 1).getTime();
 };
 
 type SortKey = "registeredAt" | null;
+type StatusFilterValue = "active" | "inactive";
 
 export default function BrandManagementPage() {
   const navigate = useNavigate();
 
+  // モックBrand → 一覧表示用Rowへ変換
+  const baseRows = useMemo<BrandRow[]>(() => toBrandRows(ALL_BRANDS), []);
+
   // ────────────────────────────────
   // フィルタ・ソート状態
   // ────────────────────────────────
-  const [statusFilter, setStatusFilter] = useState<string[]>([]);
+  const [statusFilter, setStatusFilter] = useState<StatusFilterValue[]>([]);
   const [ownerFilter, setOwnerFilter] = useState<string[]>([]);
   const [activeKey, setActiveKey] = useState<SortKey>("registeredAt");
   const [direction, setDirection] = useState<"asc" | "desc" | null>("desc");
 
+  // ステータス絞り込みオプション
   const statusOptions = useMemo(
-    () =>
-      Array.from(new Set(ALL_BRANDS.map((b) => b.status))).map((v) => ({
-        value: v,
-        label: v === "active" ? "アクティブ" : "停止",
-      })),
-    []
+    () => {
+      const values = Array.from(
+        new Set<StatusFilterValue>(
+          baseRows.map((b) => (b.isActive ? "active" : "inactive"))
+        )
+      );
+      return values.map(
+        (v): { value: string; label: string } => ({
+          value: v,
+          label: v === "active" ? "アクティブ" : "停止",
+        })
+      );
+    },
+    [baseRows]
   );
 
+  // 責任者絞り込みオプション
   const ownerOptions = useMemo(
-    () =>
-      Array.from(new Set(ALL_BRANDS.map((b) => b.owner))).map((v) => ({
-        value: v,
-        label: v,
-      })),
-    []
+    () => {
+      const values = Array.from(new Set(baseRows.map((b) => b.owner)));
+      return values.map(
+        (v): { value: string; label: string } => ({
+          value: v,
+          label: v,
+        })
+      );
+    },
+    [baseRows]
   );
 
   // ────────────────────────────────
   // データフィルタリング＋ソート
   // ────────────────────────────────
   const rows = useMemo(() => {
-    let data = ALL_BRANDS.filter(
-      (b) =>
-        (statusFilter.length === 0 || statusFilter.includes(b.status)) &&
-        (ownerFilter.length === 0 || ownerFilter.includes(b.owner))
-    );
+    let data = baseRows.filter((b: BrandRow) => {
+      const statusValue: StatusFilterValue = b.isActive ? "active" : "inactive";
+
+      const statusOk =
+        statusFilter.length === 0 || statusFilter.includes(statusValue);
+
+      const ownerOk =
+        ownerFilter.length === 0 || ownerFilter.includes(b.owner);
+
+      return statusOk && ownerOk;
+    });
 
     if (activeKey && direction) {
-      data = [...data].sort((a, b) => {
+      data = [...data].sort((a: BrandRow, b: BrandRow) => {
         if (activeKey === "registeredAt") {
           const av = toTs(a.registeredAt);
           const bv = toTs(b.registeredAt);
@@ -66,8 +96,9 @@ export default function BrandManagementPage() {
     }
 
     return data;
-  }, [statusFilter, ownerFilter, activeKey, direction]);
+  }, [baseRows, statusFilter, ownerFilter, activeKey, direction]);
 
+  // ヘッダー定義
   const headers: React.ReactNode[] = [
     "ブランド名",
     <FilterableTableHeader
@@ -75,7 +106,9 @@ export default function BrandManagementPage() {
       label="ステータス"
       options={statusOptions}
       selected={statusFilter}
-      onChange={setStatusFilter}
+      onChange={(values) =>
+        setStatusFilter(values as StatusFilterValue[])
+      }
     />,
     <FilterableTableHeader
       key="owner"
@@ -97,19 +130,15 @@ export default function BrandManagementPage() {
     />,
   ];
 
-  const statusBadgeClass = (status: BrandRow["status"]) =>
-    `brand-status-badge ${status === "active" ? "is-active" : "is-inactive"}`;
+  const statusBadgeClass = (isActive: boolean) =>
+    `brand-status-badge ${isActive ? "is-active" : "is-inactive"}`;
 
-  // ────────────────────────────────
-  // ブランド追加ボタン押下 → brandCreateへ遷移
-  // ────────────────────────────────
+  // ブランド追加ボタン押下 → /brand/create へ遷移
   const handleCreateBrand = () => {
     navigate("/brand/create");
   };
 
-  // ────────────────────────────────
-  // 行クリック → brandDetailへ遷移
-  // ────────────────────────────────
+  // 行クリック → /brand/:id へ遷移
   const goDetail = (brandId: string) => {
     navigate(`/brand/${encodeURIComponent(brandId)}`);
   };
@@ -128,27 +157,27 @@ export default function BrandManagementPage() {
           setOwnerFilter([]);
           setActiveKey("registeredAt");
           setDirection("desc");
-          console.log("リセット");
+          console.log("ブランドリストをリセット");
         }}
       >
-        {rows.map((b) => (
+        {rows.map((b: BrandRow) => (
           <tr
-            key={b.name}
+            key={b.id}
             role="button"
             tabIndex={0}
             className="cursor-pointer hover:bg-slate-50 transition-colors"
-            onClick={() => goDetail(b.name)} // ← 行クリックで brandDetail へ遷移
+            onClick={() => goDetail(b.id)}
             onKeyDown={(e) => {
               if (e.key === "Enter" || e.key === " ") {
                 e.preventDefault();
-                goDetail(b.name);
+                goDetail(b.id);
               }
             }}
           >
             <td>{b.name}</td>
             <td>
-              <span className={statusBadgeClass(b.status)}>
-                {b.status === "active" ? "アクティブ" : "停止"}
+              <span className={statusBadgeClass(b.isActive)}>
+                {b.isActive ? "アクティブ" : "停止"}
               </span>
             </td>
             <td>{b.owner}</td>

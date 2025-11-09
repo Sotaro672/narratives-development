@@ -1,3 +1,4 @@
+// backend\internal\domain\brand\entity.go
 package brand
 
 import (
