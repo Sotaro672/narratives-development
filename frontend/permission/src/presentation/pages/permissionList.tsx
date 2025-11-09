@@ -1,8 +1,8 @@
 import { useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom"; // ← 追加
-import List, { FilterableTableHeader } from "../../../shell/src/layout/List/List";
+import List, { FilterableTableHeader } from "../../../../shell/src/layout/List/List";
 import { Shield } from "lucide-react";
-import { ALL_PERMISSIONS, type Permission } from "../../mockdata";
+import { ALL_PERMISSIONS, type Permission } from "../../../mockdata";
 
 export default function PermissionList() {
   const navigate = useNavigate(); // ← 追加

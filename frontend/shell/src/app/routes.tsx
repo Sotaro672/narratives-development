@@ -44,7 +44,7 @@ const memberRoutes = memberRoutesRaw as unknown as RouteObject[];
 import brandRoutesRaw from "../../../brand/src/presentation/routes/routes";
 const brandRoutes = brandRoutesRaw as unknown as RouteObject[];
 
-import permissionRoutesRaw from "../../../permission/src/routes";
+import permissionRoutesRaw from "../../../permission/src/presentation/routes/routes";
 const permissionRoutes = permissionRoutesRaw as unknown as RouteObject[];
 
 import accountRoutesRaw from "../../../account/src/routes";

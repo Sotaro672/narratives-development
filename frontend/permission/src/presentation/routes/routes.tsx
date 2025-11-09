@@ -1,6 +1,6 @@
 import type { RouteObject } from "react-router-dom";
-import PermissionList from "./pages/permissionList";
-import PermissionDetail from "./pages/permissionDetail";
+import PermissionList from "../../presentation/pages/permissionList";
+import PermissionDetail from "../../presentation/pages/permissionDetail";
 
 const routes: RouteObject[] = [
   { path: "", element: <PermissionList /> },
