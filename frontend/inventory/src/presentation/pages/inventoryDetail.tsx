@@ -3,7 +3,7 @@ import { useNavigate, useParams } from "react-router-dom";
 import PageStyle from "../../../../shell/src/layout/PageStyle/PageStyle";
 import AdminCard from "../../../../admin/src/presentation/components/AdminCard";
 import ProductBlueprintCard from "../../../../productBlueprint/src/presentation/components/productBlueprintCard";
-import TokenBlueprintCard from "../../../../tokenBlueprint/src/pages/tokenBlueprintCard";
+import TokenBlueprintCard from "../../../../tokenBlueprint/src/presentation/components/tokenBlueprintCard";
 import InventoryCard, {
   type InventoryRow,
 } from "../components/inventoryCard";

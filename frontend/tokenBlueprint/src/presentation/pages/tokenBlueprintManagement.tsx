@@ -5,8 +5,8 @@ import { useNavigate } from "react-router-dom";
 import List, {
   FilterableTableHeader,
   SortableTableHeader,
-} from "../../../shell/src/layout/List/List";
-import { TOKEN_BLUEPRINTS, type TokenBlueprint } from "../../mockdata";
+} from "../../../../shell/src/layout/List/List";
+import { TOKEN_BLUEPRINTS, type TokenBlueprint } from "../../../mockdata";
 
 const toTs = (yyyyMd: string) => {
   const [y, m, d] = yyyyMd.split("/").map((v) => parseInt(v, 10));

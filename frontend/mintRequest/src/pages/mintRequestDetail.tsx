@@ -6,7 +6,7 @@ import AdminCard from "../../../admin/src/presentation/components/AdminCard";
 import InventoryCard, {
   type InventoryRow,
 } from "../../../inventory/src/presentation/components/inventoryCard";
-import TokenBlueprintCard from "../../../tokenBlueprint/src/pages/tokenBlueprintCard";
+import TokenBlueprintCard from "../../../tokenBlueprint/src/presentation/components/tokenBlueprintCard";
 import TokenContentsCard from "../../../tokenContents/src/pages/tokenContentsCard";
 import { TOKEN_BLUEPRINTS } from "../../../tokenBlueprint/mockdata";
 import { MOCK_IMAGES } from "../../../tokenContents/mockdata";

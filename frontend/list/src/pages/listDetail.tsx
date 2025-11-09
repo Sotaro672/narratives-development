@@ -13,7 +13,7 @@ import ProductBlueprintCard from "../../../productBlueprint/src/presentation/com
 import InventoryCard, {
   type InventoryRow,
 } from "../../../inventory/src/presentation/components/inventoryCard";
-import TokenBlueprintCard from "../../../tokenBlueprint/src/pages/tokenBlueprintCard";
+import TokenBlueprintCard from "../../../tokenBlueprint/src/presentation/components/tokenBlueprintCard";
 import {
   Popover,
   PopoverTrigger,
