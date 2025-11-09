@@ -1,3 +1,4 @@
+// backend/internal/domain/production/entity.go
 package production
 
 import (
