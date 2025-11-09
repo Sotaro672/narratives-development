@@ -29,7 +29,7 @@ const mintRequestRoutes = mintRequestRoutesRaw as unknown as RouteObject[];
 import operationRoutesRaw from "../../../operation/src/routes";
 const operationRoutes = operationRoutesRaw as unknown as RouteObject[];
 
-import listRoutesRaw from "../../../list/src/routes";
+import listRoutesRaw from "../../../list/src/presentation/routes/routes";
 const listRoutes = listRoutesRaw as unknown as RouteObject[];
 
 import orderRoutesRaw from "../../../order/src/routes";
