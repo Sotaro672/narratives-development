@@ -5,9 +5,9 @@ import { useNavigate } from "react-router-dom";
 import List, {
   FilterableTableHeader,
   SortableTableHeader,
-} from "../../../shell/src/layout/List/List";
-import "./inventoryManagement.css";
-import { INVENTORIES, type InventoryRow } from "../../mockdata";
+} from "../../../../shell/src/layout/List/List";
+import "../styles/inventory.css";
+import { INVENTORIES, type InventoryRow } from "../../../mockdata";
 
 type SortKey = "total" | null;
 

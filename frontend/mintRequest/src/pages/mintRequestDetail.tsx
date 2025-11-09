@@ -5,7 +5,7 @@ import PageStyle from "../../../shell/src/layout/PageStyle/PageStyle";
 import AdminCard from "../../../admin/src/pages/AdminCard";
 import InventoryCard, {
   type InventoryRow,
-} from "../../../inventory/src/pages/inventoryCard";
+} from "../../../inventory/src/presentation/components/inventoryCard";
 import TokenBlueprintCard from "../../../tokenBlueprint/src/pages/tokenBlueprintCard";
 import TokenContentsCard from "../../../tokenContents/src/pages/tokenContentsCard";
 import { TOKEN_BLUEPRINTS } from "../../../tokenBlueprint/mockdata";

@@ -1,12 +1,12 @@
 import * as React from "react";
 import { useNavigate, useParams } from "react-router-dom";
-import PageStyle from "../../../shell/src/layout/PageStyle/PageStyle";
-import AdminCard from "../../../admin/src/pages/AdminCard";
-import ProductBlueprintCard from "../../../productBlueprint/src/pages/productBlueprintCard";
-import TokenBlueprintCard from "../../../tokenBlueprint/src/pages/tokenBlueprintCard";
+import PageStyle from "../../../../shell/src/layout/PageStyle/PageStyle";
+import AdminCard from "../../../../admin/src/pages/AdminCard";
+import ProductBlueprintCard from "../../../../productBlueprint/src/pages/productBlueprintCard";
+import TokenBlueprintCard from "../../../../tokenBlueprint/src/pages/tokenBlueprintCard";
 import InventoryCard, {
   type InventoryRow,
-} from "./inventoryCard";
+} from "../components/inventoryCard";
 
 type Fit =
   | "レギュラーフィット"
@@ -32,10 +32,6 @@ export default function InventoryDetail() {
     "陰干し",
   ]);
   const [productIdTag] = React.useState("QRコード");
-
-  // 在庫情報
-  const [token] = React.useState("LUMINA VIP Token");
-  const [total] = React.useState(221);
 
   // モデル別在庫データ
   const [inventoryRows] = React.useState<InventoryRow[]>([

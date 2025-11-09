@@ -17,7 +17,7 @@ const productBlueprintRoutes = productBlueprintRoutesRaw as unknown as RouteObje
 import productionRoutesRaw from "../../../production/src/routes";
 const productionRoutes = productionRoutesRaw as unknown as RouteObject[];
 
-import inventoryRoutesRaw from "../../../inventory/src/routes";
+import inventoryRoutesRaw from "../../../inventory/src/presentation/routes/routes";
 const inventoryRoutes = inventoryRoutesRaw as unknown as RouteObject[];
 
 import tokenBlueprintRoutesRaw from "../../../tokenBlueprint/src/routes";

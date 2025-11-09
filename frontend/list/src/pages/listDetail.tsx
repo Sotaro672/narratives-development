@@ -12,7 +12,7 @@ import {
 import ProductBlueprintCard from "../../../productBlueprint/src/pages/productBlueprintCard";
 import InventoryCard, {
   type InventoryRow,
-} from "../../../inventory/src/pages/inventoryCard";
+} from "../../../inventory/src/presentation/components/inventoryCard";
 import TokenBlueprintCard from "../../../tokenBlueprint/src/pages/tokenBlueprintCard";
 import {
   Popover,

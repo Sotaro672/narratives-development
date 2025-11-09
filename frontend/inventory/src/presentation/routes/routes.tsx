@@ -1,7 +1,7 @@
 // frontend/inventory/src/routes.tsx
 import type { RouteObject } from "react-router-dom";
-import InventoryManagement from "./pages/inventoryManagement";
-import InventoryDetail from "./pages/inventoryDetail";
+import InventoryManagement from "../pages/inventoryManagement";
+import InventoryDetail from "../pages/inventoryDetail";
 
 /**
  * Inventory Module Routes

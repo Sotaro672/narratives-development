@@ -6,7 +6,7 @@ import {
   CardHeader,
   CardTitle,
   CardContent,
-} from "../../../shared/ui/card";
+} from "../../../../shared/ui/card";
 import {
   Table,
   TableHeader,
@@ -14,9 +14,9 @@ import {
   TableHead,
   TableRow,
   TableCell,
-} from "../../../shared/ui/table";
+} from "../../../../shared/ui/table";
 
-import "./inventoryCard.css";
+import "../styles/inventory.css";
 
 export type InventoryRow = {
   /** 型番 (例: "LM-SB-S-WHT") */
