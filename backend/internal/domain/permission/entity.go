@@ -1,3 +1,4 @@
+// backend\internal\domain\permission\entity.go
 package permission
 
 import (
