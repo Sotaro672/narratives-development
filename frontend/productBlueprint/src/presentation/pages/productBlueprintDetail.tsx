@@ -1,4 +1,5 @@
 // frontend/productBlueprint/src/pages/productBlueprintDetail.tsx
+
 import * as React from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import PageStyle from "../../../../shell/src/layout/PageStyle/PageStyle";
@@ -12,36 +13,82 @@ import ModelNumberCard, {
   type ModelNumber,
 } from "../../../../model/src/presentation/components/ModelNumberCard";
 
+import { PRODUCT_BLUEPRINTS } from "../../infrastructure/mockdata/mockdata";
+import type {
+  ProductBlueprint,
+  ProductIDTagType,
+} from "../../../../shell/src/shared/types/productBlueprint";
+
 type Fit =
   | "レギュラーフィット"
   | "スリムフィット"
   | "リラックスフィット"
   | "オーバーサイズ";
 
+// BrandID → 表示名（モック用）
+const brandLabelFromId = (brandId: string): string => {
+  switch (brandId) {
+    case "brand_lumina":
+      return "LUMINA Fashion";
+    case "brand_nexus":
+      return "NEXUS Street";
+    default:
+      return brandId || "不明ブランド";
+  }
+};
+
+// ISO8601 → "YYYY/M/D" 表示
+const formatDate = (iso?: string | null): string => {
+  if (!iso) return "";
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return iso;
+  const y = d.getFullYear();
+  const m = d.getMonth() + 1;
+  const day = d.getDate();
+  return `${y}/${m}/${day}`;
+};
+
+// ProductIDTagType → 表示用ラベル
+const productIdTagLabel = (type?: ProductIDTagType): string => {
+  if (type === "qr") return "QRコード";
+  if (type === "nfc") return "NFCタグ";
+  return "未設定";
+};
+
 export default function ProductBlueprintDetail() {
   const navigate = useNavigate();
   const { blueprintId } = useParams<{ blueprintId: string }>();
 
+  // 対象 Blueprint をモックから取得
+  const blueprint: ProductBlueprint | undefined = React.useMemo(
+    () => PRODUCT_BLUEPRINTS.find((pb) => pb.id === blueprintId),
+    [blueprintId],
+  );
+
   // ─────────────────────────────────────────
-  // モックデータ
+  // 初期値（存在しない場合はダミー）
   // ─────────────────────────────────────────
   const [productName, setProductName] = React.useState(
-    "シルクブラウス プレミアムライン",
+    () => blueprint?.productName ?? "シルクブラウス プレミアムライン",
   );
-  const [brand] = React.useState("LUMINA Fashion");
+  const [brand] = React.useState(
+    () => (blueprint ? brandLabelFromId(blueprint.brandId) : "LUMINA Fashion"),
+  );
   const [fit, setFit] = React.useState<Fit>("レギュラーフィット");
   const [materials, setMaterials] = React.useState(
-    "シルク100%、裏地:ポリエステル100%",
+    () => blueprint?.material ?? "シルク100%、裏地:ポリエステル100%",
   );
-  const [weight, setWeight] = React.useState<number>(180);
-  const [washTags, setWashTags] = React.useState<string[]>([
-    "手洗い",
-    "ドライクリーニング",
-    "陰干し",
-  ]);
-  const [productIdTag, setProductIdTag] = React.useState("QRコード");
+  const [weight, setWeight] = React.useState<number>(
+    () => blueprint?.weight ?? 180,
+  );
+  const [washTags, setWashTags] = React.useState<string[]>(
+    () => blueprint?.qualityAssurance ?? ["手洗い", "ドライクリーニング", "陰干し"],
+  );
+  const [productIdTag, setProductIdTag] = React.useState<string>(
+    () => productIdTagLabel(blueprint?.productIdTag?.type),
+  );
 
-  // カラー
+  // カラー（本来は blueprint.variations から導出する想定・ここでは従来モックを維持）
   const [colorInput, setColorInput] = React.useState("");
   const [colors, setColors] = React.useState<string[]>([
     "ホワイト",
@@ -70,11 +117,20 @@ export default function ProductBlueprintDetail() {
   ]);
 
   // 管理情報
-  const [assignee, setAssignee] = React.useState("佐藤 美咲");
-  const [creator] = React.useState("佐藤 美咲");
-  const [createdAt] = React.useState("2024/1/15");
+  const [assignee, setAssignee] = React.useState(
+    () => blueprint?.assigneeId ?? "担当者未設定",
+  );
+  const [creator] = React.useState(
+    () => blueprint?.createdBy ?? "作成者未設定",
+  );
+  const [createdAt] = React.useState(
+    () => formatDate(blueprint?.createdAt) || "2024/1/15",
+  );
 
-  const onSave = () => alert("保存しました（ダミー）");
+  const onSave = () => {
+    // TODO: 後で usecase 経由で API 呼び出しに差し替え
+    alert("保存しました（ダミー）");
+  };
 
   const onBack = React.useCallback(() => {
     navigate(-1);
@@ -93,13 +149,13 @@ export default function ProductBlueprintDetail() {
   return (
     <PageStyle
       layout="grid-2"
-      title={blueprintId ?? "不明ID"}
+      title={blueprint?.productName ?? blueprintId ?? "不明ID"}
       onBack={onBack}
       onSave={onSave}
     >
       {/* --- 左ペイン --- */}
       <div>
-        {/* 商品設計カード：編集モード */}
+        {/* 商品設計カード：編集モード（Shared Types に準拠した値を渡す） */}
         <ProductBlueprintCard
           mode="edit"
           productName={productName}

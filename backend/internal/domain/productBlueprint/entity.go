@@ -1,3 +1,4 @@
+// backend\internal\domain\productBlueprint\entity.go
 package productBlueprint
 
 import (
