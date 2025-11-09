@@ -10,7 +10,7 @@ import (
 	"time"
 
 	dbcommon "narratives/internal/adapters/out/db/common"
-	announcement "narratives/internal/domain/announcement"
+	announcement "narratives/internal/domain/announcement" // ← 修正: annoucement -> announcement
 	common "narratives/internal/domain/common"
 
 	"github.com/lib/pq"
@@ -104,7 +104,7 @@ WHERE id = $1
 	a, err := scanAnnouncementRow(row)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
-			return announcement.Announcement{}, announcement.ErrNotFound
+			return announcement.Announcement{}, announcement.ErrNotFound // ← 修正
 		}
 		return announcement.Announcement{}, err
 	}
@@ -123,8 +123,8 @@ func (r *AnnouncementRepositoryPG) Exists(ctx context.Context, id string) (bool,
 	return true, nil
 }
 
-func (r *AnnouncementRepositoryPG) Count(ctx context.Context, filter announcement.Filter) (int, error) {
-	where, args := buildAnnouncementWhere(filter)
+func (r *AnnouncementRepositoryPG) Count(ctx context.Context, f announcement.Filter) (int, error) {
+	where, args := buildAnnouncementWhere(f)
 	q := fmt.Sprintf(`SELECT COUNT(*) FROM announcements %s`, where)
 	var cnt int
 	if err := r.db.QueryRowContext(ctx, q, args...).Scan(&cnt); err != nil {
@@ -220,94 +220,94 @@ RETURNING
 	return out, nil
 }
 
-func (r *AnnouncementRepositoryPG) Update(ctx context.Context, id string, patch announcement.AnnouncementPatch) (announcement.Announcement, error) {
+func (r *AnnouncementRepositoryPG) Update(ctx context.Context, id string, p announcement.AnnouncementPatch) (announcement.Announcement, error) {
 	set := make([]string, 0, 12)
 	args := make([]any, 0, 16)
 	i := 1
 
-	if patch.Title != nil {
+	if p.Title != nil {
 		set = append(set, fmt.Sprintf("title = $%d", i))
-		args = append(args, strings.TrimSpace(*patch.Title))
+		args = append(args, strings.TrimSpace(*p.Title))
 		i++
 	}
-	if patch.Content != nil {
+	if p.Content != nil {
 		set = append(set, fmt.Sprintf("content = $%d", i))
-		args = append(args, strings.TrimSpace(*patch.Content))
+		args = append(args, strings.TrimSpace(*p.Content))
 		i++
 	}
-	if patch.Category != nil {
+	if p.Category != nil {
 		set = append(set, fmt.Sprintf("category = $%d", i))
-		args = append(args, string(*patch.Category))
+		args = append(args, string(*p.Category))
 		i++
 	}
-	if patch.TargetAudience != nil {
+	if p.TargetAudience != nil {
 		set = append(set, fmt.Sprintf("target_audience = $%d", i))
-		args = append(args, string(*patch.TargetAudience))
+		args = append(args, string(*p.TargetAudience))
 		i++
 	}
-	if patch.TargetToken != nil {
+	if p.TargetToken != nil {
 		set = append(set, fmt.Sprintf("target_token = $%d", i))
-		if strings.TrimSpace(*patch.TargetToken) == "" {
+		if strings.TrimSpace(*p.TargetToken) == "" {
 			args = append(args, nil) // clear
 		} else {
-			args = append(args, strings.TrimSpace(*patch.TargetToken))
+			args = append(args, strings.TrimSpace(*p.TargetToken))
 		}
 		i++
 	}
-	if patch.TargetProducts != nil {
+	if p.TargetProducts != nil {
 		set = append(set, fmt.Sprintf("target_products = $%d", i))
-		args = append(args, pq.Array(*patch.TargetProducts))
+		args = append(args, pq.Array(*p.TargetProducts))
 		i++
 	}
-	if patch.TargetAvatars != nil {
+	if p.TargetAvatars != nil {
 		set = append(set, fmt.Sprintf("target_avatars = $%d", i))
-		args = append(args, pq.Array(*patch.TargetAvatars))
+		args = append(args, pq.Array(*p.TargetAvatars))
 		i++
 	}
-	if patch.IsPublished != nil {
+	if p.IsPublished != nil {
 		set = append(set, fmt.Sprintf("is_published = $%d", i))
-		args = append(args, *patch.IsPublished)
+		args = append(args, *p.IsPublished)
 		i++
 	}
-	if patch.PublishedAt != nil {
+	if p.PublishedAt != nil {
 		set = append(set, fmt.Sprintf("published_at = $%d", i))
-		if patch.PublishedAt.IsZero() {
+		if p.PublishedAt.IsZero() {
 			args = append(args, nil)
 		} else {
-			args = append(args, patch.PublishedAt.UTC())
+			args = append(args, p.PublishedAt.UTC())
 		}
 		i++
 	}
-	if patch.Attachments != nil {
+	if p.Attachments != nil {
 		set = append(set, fmt.Sprintf("attachments = $%d", i))
-		args = append(args, pq.Array(*patch.Attachments))
+		args = append(args, pq.Array(*p.Attachments))
 		i++
 	}
-	if patch.Status != nil {
+	if p.Status != nil {
 		set = append(set, fmt.Sprintf("status = $%d", i))
-		args = append(args, string(*patch.Status))
+		args = append(args, string(*p.Status))
 		i++
 	}
-	if patch.UpdatedBy != nil {
+	if p.UpdatedBy != nil {
 		set = append(set, fmt.Sprintf("updated_by = $%d", i))
-		args = append(args, strings.TrimSpace(*patch.UpdatedBy))
+		args = append(args, strings.TrimSpace(*p.UpdatedBy))
 		i++
 	}
-	if patch.DeletedAt != nil {
+	if p.DeletedAt != nil {
 		set = append(set, fmt.Sprintf("deleted_at = $%d", i))
-		if patch.DeletedAt.IsZero() {
+		if p.DeletedAt.IsZero() {
 			args = append(args, nil)
 		} else {
-			args = append(args, patch.DeletedAt.UTC())
+			args = append(args, p.DeletedAt.UTC())
 		}
 		i++
 	}
-	if patch.DeletedBy != nil {
+	if p.DeletedBy != nil {
 		set = append(set, fmt.Sprintf("deleted_by = $%d", i))
-		if strings.TrimSpace(*patch.DeletedBy) == "" {
+		if strings.TrimSpace(*p.DeletedBy) == "" {
 			args = append(args, nil)
 		} else {
-			args = append(args, strings.TrimSpace(*patch.DeletedBy))
+			args = append(args, strings.TrimSpace(*p.DeletedBy))
 		}
 		i++
 	}

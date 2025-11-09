@@ -1,4 +1,4 @@
-package annoucement
+package announcement
 
 import (
 	"context"

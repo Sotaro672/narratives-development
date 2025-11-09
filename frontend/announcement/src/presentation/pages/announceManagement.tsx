@@ -1,14 +1,23 @@
-// frontend/announcement/src/pages/announceManagement.tsx
+// frontend/announcement/src/presentation/pages/announceManagement.tsx
+
 import * as React from "react";
 import { useNavigate } from "react-router-dom";
 import PageStyle from "../../../../shell/src/layout/PageStyle/PageStyle";
-import { MOCK_ANNOUNCES, type Announce } from "../../../mockdata";
+import {
+  MOCK_ANNOUNCEMENTS,
+  toAnnouncementRows,
+  type AnnouncementRow,
+} from "../../infrastructure/mockdata/mockdata";
 
 export default function AnnounceManagementPage() {
   const navigate = useNavigate();
-  const [rows] = React.useState<Announce[]>(MOCK_ANNOUNCES);
 
-  // 戻るボタンの処理
+  // shell/shared/types/announcement.ts 準拠の MOCK_ANNOUNCEMENTS を
+  // 一覧表示用の AnnouncementRow に変換して保持
+  const [rows] = React.useState<AnnouncementRow[]>(() =>
+    toAnnouncementRows(MOCK_ANNOUNCEMENTS)
+  );
+
   const onBack = React.useCallback(() => {
     navigate(-1);
   }, [navigate]);
@@ -17,7 +26,7 @@ export default function AnnounceManagementPage() {
     <PageStyle
       layout="single"
       title="お知らせ管理"
-      onBack={onBack} // ✅ PageHeaderに戻るボタンを追加
+      onBack={onBack}
     >
       <div className="announce-list">
         <table className="w-full text-sm">
@@ -36,9 +45,7 @@ export default function AnnounceManagementPage() {
                 <td className="py-2 px-2 text-xs text-blue-600">{a.id}</td>
                 <td className="py-2 px-2">
                   <div className="font-medium">{a.title}</div>
-                  <div className="text-xs text-muted-foreground line-clamp-1">
-                    {a.body}
-                  </div>
+                  {/* 詳細本文は AnnouncementRow には含めていないため省略 */}
                 </td>
                 <td className="py-2 px-2 text-xs">
                   <span className="inline-flex items-center px-2 py-1 rounded-full bg-slate-100 text-slate-700">

@@ -1,11 +1,12 @@
-package annoucement
+// backend\internal\domain\announcement\entity.go
+package announcement
 
 import (
 	"errors"
 	"fmt"
+	annatt "narratives/internal/domain/announcementAttachment"
 	"strings"
 	"time"
-	annatt "narratives/internal/domain/announcementAttachment"
 )
 
 // Types (mirror TS)
@@ -303,7 +304,8 @@ COMMIT;
 // 呼び出し側で announcementAttachment を import してください。
 //
 // 例:
-//  a.Attachments = AttachmentIDsFromFiles(files)
+//
+//	a.Attachments = AttachmentIDsFromFiles(files)
 func AttachmentIDsFromFiles(files []annatt.AttachmentFile) []string {
 	ids := make([]string, 0, len(files))
 	for _, f := range files {
