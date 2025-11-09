@@ -1,4 +1,5 @@
-// frontend/operation/src/pages/tokenOperationDetail.tsx
+// frontend/operation/src/presentation/pages/tokenOperationDetail.tsx
+
 import * as React from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import PageStyle from "../../../../shell/src/layout/PageStyle/PageStyle";
@@ -6,21 +7,20 @@ import AdminCard from "../../../../admin/src/presentation/components/AdminCard";
 import TokenBlueprintCard from "../../../../tokenBlueprint/src/presentation/components/tokenBlueprintCard";
 import TokenContentsCard from "../../../../tokenContents/src/presentation/components/tokenContentsCard";
 import { TOKEN_BLUEPRINTS } from "../../../../tokenBlueprint/src/infrastructure/mockdata/mockdata";
-import { MOCK_IMAGES } from "../../../../tokenContents/mockdata";
 
 export default function TokenOperationDetail() {
   const navigate = useNavigate();
   const { tokenOperationId } = useParams<{ tokenOperationId: string }>();
 
   // ─────────────────────────────────────────
-  // モックデータ（トークン設計 & コンテンツ）
+  // モックデータ（トークン設計）
+  // 本来は tokenOperationId と紐付いた TokenBlueprint を取得する想定
   // ─────────────────────────────────────────
   const blueprint = TOKEN_BLUEPRINTS[0];
-  const contentImages = MOCK_IMAGES;
 
-  // 管理情報（右カラム）
-  const [assignee, setAssignee] = React.useState("佐藤 美咲");
-  const [creator] = React.useState("山田 太郎");
+  // 管理情報（右カラム：モック）
+  const [assignee, setAssignee] = React.useState("member_sato");
+  const [creator] = React.useState("member_yamada");
   const [createdAt] = React.useState("2025/11/06 20:55");
 
   // 戻る
@@ -40,20 +40,24 @@ export default function TokenOperationDetail() {
     >
       {/* 左カラム：トークン設計＋コンテンツ（モックでプリフィル） */}
       <div>
-        <TokenBlueprintCard
-          initialTokenBlueprintId={blueprint.tokenBlueprintId}
-          initialTokenName={blueprint.name}
-          initialSymbol={blueprint.symbol}
-          initialBrand={blueprint.brand}
-          initialDescription={blueprint.description}
-          initialBurnAt={blueprint.burnAt}
-          initialIconUrl={blueprint.iconUrl}
-          initialEditMode={false}
-        />
+        {blueprint && (
+          <TokenBlueprintCard
+            initialTokenBlueprintId={blueprint.id}
+            initialTokenName={blueprint.name}
+            initialSymbol={blueprint.symbol}
+            initialBrand={blueprint.brandId}
+            initialDescription={blueprint.description}
+            // burnAt は TokenBlueprint 型に存在しないため空文字で渡す
+            initialBurnAt=""
+            // iconId は URL モックをそのまま格納している想定なのでそのまま利用（なければ空）
+            initialIconUrl={blueprint.iconId ?? ""}
+            initialEditMode={false}
+          />
+        )}
 
         <div style={{ marginTop: 16 }}>
-          {/* ✅ コンテンツを編集モードで表示 */}
-          <TokenContentsCard images={contentImages} mode="edit" />
+          {/* TokenContentsCard は内部モックを利用（images は渡さない） */}
+          <TokenContentsCard mode="edit" />
         </div>
       </div>
 
@@ -63,7 +67,7 @@ export default function TokenOperationDetail() {
         assigneeName={assignee}
         createdByName={creator}
         createdAt={createdAt}
-        onEditAssignee={() => setAssignee("新担当者")}
+        onEditAssignee={() => setAssignee("member_new")}
         onClickAssignee={() => console.log("assignee clicked:", assignee)}
         onClickCreatedBy={() => console.log("createdBy clicked:", creator)}
       />

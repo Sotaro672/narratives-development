@@ -1,4 +1,4 @@
-// frontend/tokenContents/src/pages/tokenContentsCard.tsx
+// frontend/tokenContents/src/presentation/components/tokenContentsCard.tsx
 import * as React from "react";
 import {
   FileText,
@@ -16,37 +16,75 @@ import {
 } from "../../../../shell/src/shared/ui/card";
 import { Button } from "../../../../shell/src/shared/ui/button";
 
-import { MOCK_IMAGES } from "../../../mockdata";
+import { MOCK_TOKEN_CONTENTS } from "../../infrastructure/mockdata/mockdata";
+import type { GCSTokenContent } from "../../../../shell/src/shared/types/tokenContents";
 import "../styles/tokenContents.css";
 
 type Mode = "edit" | "view";
 
 type TokenContentsCardProps = {
-  /** 初期表示する画像リスト。指定がなければモック、[]なら空表示。 */
+  /**
+   * 表示するコンテンツ一覧。
+   * 未指定の場合は MOCK_TOKEN_CONTENTS を使用。
+   */
+  contents?: GCSTokenContent[];
+  /**
+   * 互換用: 画像URL配列として渡された場合も扱えるようにしておく。
+   * 新規実装では contents の利用を推奨。
+   */
   images?: string[];
   /** 表示モード（edit: 追加/削除可, view: 閲覧専用）。既定: "edit" */
   mode?: Mode;
 };
 
 export default function TokenContentsCard({
+  contents,
   images,
   mode = "edit",
 }: TokenContentsCardProps) {
   const isEditMode = mode === "edit";
 
-  const useExternal = images !== undefined;
-  const initialList = useExternal ? images! : MOCK_IMAGES;
+  // 初期リストを props / モックから構築（GCSTokenContent[] に正規化）
+  const [items, setItems] = React.useState<GCSTokenContent[]>(() => {
+    if (contents && contents.length > 0) {
+      return contents;
+    }
+    if (images) {
+      return images.map((url, i) => ({
+        id: `image_${i + 1}`,
+        name: `image_${i + 1}`,
+        type: "image",
+        url,
+        size: 0,
+      }));
+    }
+    return MOCK_TOKEN_CONTENTS;
+  });
 
-  // 表示用リストを state 管理（編集モードで削除できるように）
-  const [items, setItems] = React.useState<string[]>(initialList);
   const [index, setIndex] = React.useState(0);
 
-  // 外部 props / モックが変わった場合に同期
+  // 外部 props の変化に追従
   React.useEffect(() => {
-    const next = useExternal ? images! : MOCK_IMAGES;
-    setItems(next);
+    if (contents && contents.length > 0) {
+      setItems(contents);
+      setIndex(0);
+      return;
+    }
+    if (images) {
+      const mapped = images.map((url, i) => ({
+        id: `image_${i + 1}`,
+        name: `image_${i + 1}`,
+        type: "image" as const,
+        url,
+        size: 0,
+      }));
+      setItems(mapped);
+      setIndex(0);
+      return;
+    }
+    setItems(MOCK_TOKEN_CONTENTS);
     setIndex(0);
-  }, [useExternal, images]);
+  }, [contents, images]);
 
   const hasImages = items.length > 0;
 
@@ -69,16 +107,19 @@ export default function TokenContentsCard({
     if (!isEditMode) return;
     setItems((prev) => {
       if (prev.length === 0) return prev;
-      const next = prev.filter((_, i) => i !== targetIndex);
-      if (next.length === 0) {
+
+      const nextItems = prev.filter((_, i) => i !== targetIndex);
+
+      if (nextItems.length === 0) {
         setIndex(0);
       } else if (targetIndex === index || targetIndex < index) {
         const newIndex = Math.max(0, index - 1);
-        setIndex(Math.min(newIndex, next.length - 1));
-      } else if (index >= next.length) {
-        setIndex(next.length - 1);
+        setIndex(Math.min(newIndex, nextItems.length - 1));
+      } else if (index >= nextItems.length) {
+        setIndex(nextItems.length - 1);
       }
-      return next;
+
+      return nextItems;
     });
   };
 
@@ -126,8 +167,8 @@ export default function TokenContentsCard({
             {hasImages ? (
               <div className="token-contents-card__image-main-wrap">
                 <img
-                  src={items[index]}
-                  alt={`コンテンツ ${index + 1}`}
+                  src={items[index].url}
+                  alt={items[index].name || `コンテンツ ${index + 1}`}
                   className="token-contents-card__image"
                 />
                 {/* 編集モード時のみメイン画像に削除アイコン表示 */}
@@ -136,7 +177,7 @@ export default function TokenContentsCard({
                     type="button"
                     className="token-contents-card__delete-btn"
                     onClick={() => handleDelete(index)}
-                    aria-label="この画像を削除"
+                    aria-label="このコンテンツを削除"
                   >
                     <Trash2 className="token-contents-card__delete-icon" />
                   </button>
@@ -161,12 +202,12 @@ export default function TokenContentsCard({
           </button>
         </div>
 
-        {/* サムネイル一覧（2枚目以降を1/9サイズで下に並べる） */}
+        {/* サムネイル一覧 */}
         {hasImages && items.length > 1 && (
           <div className="token-contents-card__thumbs">
-            {items.map((src, i) => (
+            {items.map((item, i) => (
               <div
-                key={`${src}-${i}`}
+                key={`${item.id}-${i}`}
                 className={`token-contents-card__thumb-wrap${
                   i === index ? " is-active" : ""
                 }`}
@@ -178,8 +219,8 @@ export default function TokenContentsCard({
                   aria-label={`コンテンツ ${i + 1} を表示`}
                 >
                   <img
-                    src={src}
-                    alt={`コンテンツ サムネイル ${i + 1}`}
+                    src={item.url}
+                    alt={item.name || `コンテンツ サムネイル ${i + 1}`}
                     className="token-contents-card__thumb-image"
                   />
                 </button>

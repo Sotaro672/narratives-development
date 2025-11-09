@@ -1,3 +1,4 @@
+// backend\internal\domain\tokenContents\entity.go
 package tokenContents
 
 import (
