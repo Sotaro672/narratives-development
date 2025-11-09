@@ -1,8 +1,8 @@
 // frontend/announcement/src/pages/announceManagement.tsx
 import * as React from "react";
 import { useNavigate } from "react-router-dom";
-import PageStyle from "../../../shell/src/layout/PageStyle/PageStyle";
-import { MOCK_ANNOUNCES, type Announce } from "../../mockdata";
+import PageStyle from "../../../../shell/src/layout/PageStyle/PageStyle";
+import { MOCK_ANNOUNCES, type Announce } from "../../../mockdata";
 
 export default function AnnounceManagementPage() {
   const navigate = useNavigate();
