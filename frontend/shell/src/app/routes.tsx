@@ -8,7 +8,7 @@ const announcementRoutes = announcementRoutesRaw as unknown as RouteObject[];
 import messageRouteRaw from "../../../message/src/routes";
 const messageRoutes = messageRouteRaw as unknown as RouteObject[];
 
-import inquiryRoutesRaw from "../../../inquiry/src/routes";
+import inquiryRoutesRaw from "../../../inquiry/src/presentation/routes/routes";
 const inquiryRoutes = inquiryRoutesRaw as unknown as RouteObject[];
 
 import productBlueprintRoutesRaw from "../../../productBlueprint/src/routes";
@@ -41,7 +41,7 @@ const adRoutes = adRtoutesRaw as unknown as RouteObject[];
 import memberRoutesRaw from "../../../member/src/routes";
 const memberRoutes = memberRoutesRaw as unknown as RouteObject[];
 
-import brandRoutesRaw from "../../../brand/src/routes";
+import brandRoutesRaw from "../../../brand/src/presentation/routes/routes";
 const brandRoutes = brandRoutesRaw as unknown as RouteObject[];
 
 import permissionRoutesRaw from "../../../permission/src/routes";

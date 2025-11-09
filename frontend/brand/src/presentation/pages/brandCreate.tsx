@@ -1,7 +1,7 @@
 //frontend\brand\src\pages\brandCreate.tsx
 import * as React from "react";
 import { useNavigate } from "react-router-dom"; // ← 追加
-import PageStyle from "../../../shell/src/layout/PageStyle/PageStyle";
+import PageStyle from "../../../../shell/src/layout/PageStyle/PageStyle";
 import {
   Card,
   CardHeader,
@@ -10,8 +10,7 @@ import {
   CardLabel,
   CardInput,
   CardSelect,
-CardButton,
-} from "../../../shared/ui/card";
+} from "../../../../shared/ui/card";
 
 export default function BrandCreate() {
   const navigate = useNavigate(); // ← 追加

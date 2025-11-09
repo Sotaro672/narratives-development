@@ -3,9 +3,9 @@ import { useNavigate } from "react-router-dom";
 import List, {
   FilterableTableHeader,
   SortableTableHeader,
-} from "../../../shell/src/layout/List/List";
-import "./brandManagement.css";
-import { ALL_BRANDS, type BrandRow } from "../../mockdata";
+} from "../../../../shell/src/layout/List/List";
+import "../styles/brand.css";
+import { ALL_BRANDS, type BrandRow } from "../../../mockdata";
 
 // Utility
 const toTs = (yyyyMd: string) => {

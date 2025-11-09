@@ -1,7 +1,7 @@
 // frontend/inquiry/src/routes.tsx
 import type { RouteObject } from "react-router-dom";
-import InquiryManagement from "./pages/inquiryManagement";
-import InquiryDetail from "./pages/inquiryDetail";
+import InquiryManagement from "../../presentation/pages/inquiryManagement";
+import InquiryDetail from "../../presentation/pages/inquiryDetail";
 
 const routes: RouteObject[] = [
   { path: "", element: <InquiryManagement /> },

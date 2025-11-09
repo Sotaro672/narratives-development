@@ -5,9 +5,9 @@ import { useNavigate } from "react-router-dom";
 import List, {
   FilterableTableHeader,
   SortableTableHeader,
-} from "../../../shell/src/layout/List/List";
-import "./InquiryManagement.css";
-import { INQUIRIES, type InquiryRow } from "../../mockdata";
+} from "../../../../shell/src/layout/List/List";
+import "../styles/inquiry.css";
+import { INQUIRIES, type InquiryRow } from "../../../mockdata";
 
 // "YYYY/M/D" → number（タイムスタンプ）
 // "-" など空は 0（最小）扱いにして末尾になるようにしています
