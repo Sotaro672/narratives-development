@@ -1,16 +1,23 @@
 // frontend/announcement/src/pages/announceManagement.tsx
 import * as React from "react";
+import { useNavigate } from "react-router-dom";
 import PageStyle from "../../../shell/src/layout/PageStyle/PageStyle";
 import { MOCK_ANNOUNCES, type Announce } from "../../mockdata";
 
 export default function AnnounceManagementPage() {
+  const navigate = useNavigate();
   const [rows] = React.useState<Announce[]>(MOCK_ANNOUNCES);
+
+  // 戻るボタンの処理
+  const onBack = React.useCallback(() => {
+    navigate(-1);
+  }, [navigate]);
 
   return (
     <PageStyle
       layout="single"
       title="お知らせ管理"
-      // 管理トップ想定のため戻るボタンなし（必要なら onBack を渡してください）
+      onBack={onBack} // ✅ PageHeaderに戻るボタンを追加
     >
       <div className="announce-list">
         <table className="w-full text-sm">

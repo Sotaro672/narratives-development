@@ -1,16 +1,23 @@
 // frontend/message/src/pages/messageManagement.tsx
 import * as React from "react";
+import { useNavigate } from "react-router-dom";
 import PageStyle from "../../../shell/src/layout/PageStyle/PageStyle";
 import { MOCK_MESSAGES, type Message } from "../../mockdata";
 
 export default function MessageManagementPage() {
+  const navigate = useNavigate();
   const [rows] = React.useState<Message[]>(MOCK_MESSAGES);
+
+  // 戻るボタンの処理
+  const onBack = React.useCallback(() => {
+    navigate(-1);
+  }, [navigate]);
 
   return (
     <PageStyle
       layout="single"
       title="メッセージ管理"
-      // トップレベルのため onBack は不要（必要なら追加可）
+      onBack={onBack} // ✅ PageHeaderに「戻る」ボタンを追加
     >
       <div className="message-list">
         <table className="w-full text-sm">
