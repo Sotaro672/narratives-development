@@ -7,15 +7,15 @@ import {
   CardHeader,
   CardTitle,
   CardContent,
-} from "../../../../shared/ui/card";
-import { Input } from "../../../../shared/ui/input";
-import { Badge } from "../../../../shared/ui/badge";
-import { Label } from "../../../../shared/ui/label";
+} from "../../../../shell/src/shared/ui/card";
+import { Input } from "../../../../shell/src/shared/ui/input";
+import { Badge } from "../../../../shell/src/shared/ui/badge";
+import { Label } from "../../../../shell/src/shared/ui/label";
 import {
   Popover,
   PopoverTrigger,
   PopoverContent,
-} from "../../../../shared/ui/popover";
+} from "../../../../shell/src/shared/ui/popover";
 
 import "../styles/tokenBlueprint.css";
 

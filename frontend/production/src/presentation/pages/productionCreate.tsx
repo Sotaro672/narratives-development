@@ -8,14 +8,14 @@ import {
   CardHeader,
   CardTitle,
   CardContent,
-} from "../../../../shared/ui/card";
-import { Input } from "../../../../shared/ui/input";
+} from "../../../../shell/src/shared/ui/card";
+import { Input } from "../../../../shell/src/shared/ui/input";
 import { Search, Package2 } from "lucide-react";
 import {
   Popover,
   PopoverTrigger,
   PopoverContent,
-} from "../../../../shared/ui/popover";
+} from "../../../../shell/src/shared/ui/popover";
 
 import ColorVariationCard from "../../../../model/src/presentation/components/ColorVariationCard";
 import SizeVariationCard, {

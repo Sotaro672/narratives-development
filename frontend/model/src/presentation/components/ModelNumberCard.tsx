@@ -1,7 +1,7 @@
 import * as React from "react";
 import { Tags } from "lucide-react";
-import { Card, CardHeader, CardTitle, CardContent } from "../../../../shared/ui";
-import { Input } from "../../../../shared/ui/input";
+import { Card, CardHeader, CardTitle, CardContent } from "../../../../shell/src/shared/ui";
+import { Input } from "../../../../shell/src/shared/ui/input";
 import {
   Table,
   TableHeader,
@@ -9,9 +9,9 @@ import {
   TableHead,
   TableRow,
   TableCell,
-} from "../../../../shared/ui/table";
+} from "../../../../shell/src/shared/ui/table";
 import "../styles/model.css";
-import "../../../../shared/ui/card.css";
+import "../../../../shell/src/shared/ui/card.css";
 
 export type ModelNumber = {
   size: string;  // 例: "S" | "M" | "L"

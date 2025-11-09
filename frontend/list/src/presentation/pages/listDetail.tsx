@@ -8,7 +8,7 @@ import {
   CardHeader,
   CardTitle,
   CardContent,
-} from "../../../../shared/ui/card";
+} from "../../../../shell/src/shared/ui/card";
 import ProductBlueprintCard from "../../../../productBlueprint/src/presentation/components/productBlueprintCard";
 import InventoryCard, {
   type InventoryRow,
@@ -18,7 +18,7 @@ import {
   Popover,
   PopoverTrigger,
   PopoverContent,
-} from "../../../../shared/ui/popover";
+} from "../../../../shell/src/shared/ui/popover";
 import "../styles/list.css";
 
 type InventoryItem = {

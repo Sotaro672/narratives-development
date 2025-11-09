@@ -5,15 +5,15 @@ import {
   CardHeader,
   CardTitle,
   CardContent,
-} from "../../../../shared/ui";
-import { Badge } from "../../../../shared/ui/badge";
-import { Button } from "../../../../shared/ui/button";
-import { Input } from "../../../../shared/ui/input";
+} from "../../../../shell/src/shared/ui";
+import { Badge } from "../../../../shell/src/shared/ui/badge";
+import { Button } from "../../../../shell/src/shared/ui/button";
+import { Input } from "../../../../shell/src/shared/ui/input";
 import {
   Popover,
   PopoverTrigger,
   PopoverContent,
-} from "../../../../shared/ui/popover";
+} from "../../../../shell/src/shared/ui/popover";
 import "../styles/productBlueprint.css";
 
 type Fit =

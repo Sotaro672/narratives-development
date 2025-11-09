@@ -10,7 +10,7 @@ import {
   CardContent,
   CardReadonly,
   CardLabel,
-} from "../../../../shared/ui/card";
+} from "../../../../shell/src/shared/ui/card";
 
 export default function BrandDetail() {
   const navigate = useNavigate();

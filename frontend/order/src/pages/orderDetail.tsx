@@ -2,7 +2,7 @@
 import * as React from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import PageStyle from "../../../shell/src/layout/PageStyle/PageStyle";
-import { Card, CardHeader, CardTitle, CardContent } from "../../../shared/ui/card";
+import { Card, CardHeader, CardTitle, CardContent } from "../../../shell/src/shared/ui/card";
 
 export default function OrderDetail() {
   const navigate = useNavigate();

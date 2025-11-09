@@ -10,8 +10,8 @@ import TokenBlueprintCard from "../../../../tokenBlueprint/src/presentation/comp
 import TokenContentsCard from "../../../../tokenContents/src/presentation/components/tokenContentsCard";
 import { TOKEN_BLUEPRINTS } from "../../../../tokenBlueprint/mockdata";
 import { MOCK_IMAGES } from "../../../../tokenContents/mockdata";
-import { Card, CardContent } from "../../../../shared/ui/card";
-import { Button } from "../../../../shared/ui/button";
+import { Card, CardContent } from "../../../../shell/src/shared/ui/card";
+import { Button } from "../../../../shell/src/shared/ui/button";
 import { Coins } from "lucide-react";
 
 import "../styles/mintRequest.css";

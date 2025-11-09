@@ -10,7 +10,7 @@ import {
   CardLabel,
   CardInput,
   CardSelect,
-} from "../../../../shared/ui/card";
+} from "../../../../shell/src/shared/ui/card";
 
 export default function BrandCreate() {
   const navigate = useNavigate(); // ← 追加

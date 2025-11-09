@@ -1,6 +1,6 @@
 // frontend/admin/src/pages/AdminCard.tsx
 import * as React from "react";
-import { Card, CardContent, CardHeader, CardTitle } from "../../../../shared/ui/card";
+import { Card, CardContent, CardHeader, CardTitle } from "../../../../shell/src/shared/ui/card";
 import { Edit2 } from "lucide-react";
 import "../styles/admin.css";
 

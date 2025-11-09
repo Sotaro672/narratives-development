@@ -20,8 +20,8 @@ import ProductionQuantityCard, {
 } from "../components/productionQuantityCard";
 
 // 印刷ボタン用
-import { Card, CardContent } from "../../../../shared/ui/card";
-import { Button } from "../../../../shared/ui/button";
+import { Card, CardContent } from "../../../../shell/src/shared/ui/card";
+import { Button } from "../../../../shell/src/shared/ui/button";
 import { Printer } from "lucide-react";
 
 type Fit =

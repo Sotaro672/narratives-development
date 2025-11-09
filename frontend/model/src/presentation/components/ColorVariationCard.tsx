@@ -1,11 +1,11 @@
 // frontend/model/src/pages/ColorVariationCard.tsx
 import * as React from "react";
 import { Palette, Plus, X } from "lucide-react";
-import { Card, CardHeader, CardTitle, CardContent } from "../../../../shared/ui";
-import { Badge } from "../../../../shared/ui/badge";
-import { Button } from "../../../../shared/ui/button";
+import { Card, CardHeader, CardTitle, CardContent } from "../../../../shell/src/shared/ui";
+import { Badge } from "../../../../shell/src/shared/ui/badge";
+import { Button } from "../../../../shell/src/shared/ui/button";
 import "../styles/model.css";
-import "../../../../shared/ui/card.css";
+import "../../../../shell/src/shared/ui/card.css";
 
 type ColorVariationCardProps = {
   /** 現在のカラー一覧 */

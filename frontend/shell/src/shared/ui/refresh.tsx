@@ -1,4 +1,4 @@
-import React from "react";
+// frontend/shell/src/shared/ui/refresh.tsx
 import { RotateCw } from "lucide-react";
 
 type RefreshButtonProps = {

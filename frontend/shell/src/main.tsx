@@ -1,7 +1,7 @@
 // frontend/shell/src/main.tsx
 
 // ① Tailwind v4 + 共有トークンを最優先で読み込む（超重要）
-import "../../shared/index.css";
+import "../../shell/src/shared/index.css";
 
 import React from "react";
 import ReactDOM from "react-dom/client";

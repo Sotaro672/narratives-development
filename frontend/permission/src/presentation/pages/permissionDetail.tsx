@@ -9,7 +9,7 @@ import {
   CardContent,
   CardLabel,
   CardReadonly,
-} from "../../../../shared/ui/card";
+} from "../../../../shell/src/shared/ui/card";
 
 /**
  * 権限詳細ページ

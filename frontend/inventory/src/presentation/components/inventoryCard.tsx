@@ -6,7 +6,7 @@ import {
   CardHeader,
   CardTitle,
   CardContent,
-} from "../../../../shared/ui/card";
+} from "../../../../shell/src/shared/ui/card";
 import {
   Table,
   TableHeader,
@@ -14,7 +14,7 @@ import {
   TableHead,
   TableRow,
   TableCell,
-} from "../../../../shared/ui/table";
+} from "../../../../shell/src/shared/ui/table";
 
 import "../styles/inventory.css";
 

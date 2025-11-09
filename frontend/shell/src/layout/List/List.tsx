@@ -2,14 +2,14 @@
 import { Children, useEffect, useMemo, useState } from "react";
 import type { ReactNode } from "react";
 import { Plus } from "lucide-react";
-import Pagination from "../../../../shared/ui/pagination";
-import RefreshButton from "../../../../shared/ui/refresh";
+import Pagination from "../../shared/ui/pagination";
+import RefreshButton from "../../shared/ui/refresh";
 import {
   Card,
   CardHeader,
   CardTitle,
   CardContent,
-} from "../../../../shared/ui/card";
+} from "../../shared/ui/card";
 import {
   Table,
   TableHeader,
@@ -17,7 +17,7 @@ import {
   TableHead,
   TableRow,
   TableCaption,
-} from "../../../../shared/ui/table";
+} from "../../shared/ui/table";
 import "./List.css";
 
 interface ListProps {
@@ -130,5 +130,5 @@ export default function List({
 }
 
 /** ← 未使用エラーが出ないように、import せずに再エクスポートのみ行う */
-export { default as FilterableTableHeader } from "../../../../shared/ui/filterable-table-header";
-export { default as SortableTableHeader } from "../../../../shared/ui/sortable-table-header";
+export { default as FilterableTableHeader } from "../../shared/ui/filterable-table-header";
+export { default as SortableTableHeader } from "../../shared/ui/sortable-table-header";
