@@ -4,13 +4,13 @@ import { useNavigate, useParams } from "react-router-dom";
 import PageStyle from "../../../../shell/src/layout/PageStyle/PageStyle";
 import AdminCard from "../../../../admin/src/presentation/components/AdminCard";
 import ProductBlueprintCard from "../components/productBlueprintCard";
-import ColorVariationCard from "../../../../model/src/pages/ColorVariationCard";
+import ColorVariationCard from "../../../../model/src/presentation/components/ColorVariationCard";
 import SizeVariationCard, {
   type SizeRow,
-} from "../../../../model/src/pages/SizeVariationCard";
+} from "../../../../model/src/presentation/components/SizeVariationCard";
 import ModelNumberCard, {
   type ModelNumber,
-} from "../../../../model/src/pages/ModelNumberCard";
+} from "../../../../model/src/presentation/components/ModelNumberCard";
 
 type Fit =
   | "レギュラーフィット"

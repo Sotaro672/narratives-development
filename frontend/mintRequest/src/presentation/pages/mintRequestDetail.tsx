@@ -1,20 +1,20 @@
 // frontend/mintRequest/src/pages/mintRequestDetail.tsx
 import * as React from "react";
 import { useNavigate, useParams } from "react-router-dom";
-import PageStyle from "../../../shell/src/layout/PageStyle/PageStyle";
-import AdminCard from "../../../admin/src/presentation/components/AdminCard";
+import PageStyle from "../../../../shell/src/layout/PageStyle/PageStyle";
+import AdminCard from "../../../../admin/src/presentation/components/AdminCard";
 import InventoryCard, {
   type InventoryRow,
-} from "../../../inventory/src/presentation/components/inventoryCard";
-import TokenBlueprintCard from "../../../tokenBlueprint/src/presentation/components/tokenBlueprintCard";
-import TokenContentsCard from "../../../tokenContents/src/pages/tokenContentsCard";
-import { TOKEN_BLUEPRINTS } from "../../../tokenBlueprint/mockdata";
-import { MOCK_IMAGES } from "../../../tokenContents/mockdata";
-import { Card, CardContent } from "../../../shared/ui/card";
-import { Button } from "../../../shared/ui/button";
+} from "../../../../inventory/src/presentation/components/inventoryCard";
+import TokenBlueprintCard from "../../../../tokenBlueprint/src/presentation/components/tokenBlueprintCard";
+import TokenContentsCard from "../../../../tokenContents/src/pages/tokenContentsCard";
+import { TOKEN_BLUEPRINTS } from "../../../../tokenBlueprint/mockdata";
+import { MOCK_IMAGES } from "../../../../tokenContents/mockdata";
+import { Card, CardContent } from "../../../../shared/ui/card";
+import { Button } from "../../../../shared/ui/button";
 import { Coins } from "lucide-react";
 
-import "./mintRequestDetail.css";
+import "../styles/mintRequest.css";
 
 export default function MintRequestDetail() {
   const navigate = useNavigate();

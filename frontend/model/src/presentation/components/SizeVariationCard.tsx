@@ -1,8 +1,8 @@
 import * as React from "react";
 import { Tags, Trash2 } from "lucide-react";
-import { Card, CardHeader, CardTitle, CardContent } from "../../../shared/ui";
-import { Button } from "../../../shared/ui/button";
-import { Input } from "../../../shared/ui/input";
+import { Card, CardHeader, CardTitle, CardContent } from "../../../../shared/ui";
+import { Button } from "../../../../shared/ui/button";
+import { Input } from "../../../../shared/ui/input";
 import {
   Table,
   TableHeader,
@@ -10,8 +10,8 @@ import {
   TableHead,
   TableRow,
   TableCell,
-} from "../../../shared/ui/table";
-import "./SizeVariationCard.css";
+} from "../../../../shared/ui/table";
+import "../styles/model.css";
 import "../../../shared/ui/card.css";
 
 export type SizeRow = {

@@ -5,13 +5,13 @@ import { useNavigate } from "react-router-dom";
 import List, {
   FilterableTableHeader,
   SortableTableHeader,
-} from "../../../shell/src/layout/List/List";
-import "./mintRequestManagement.css";
+} from "../../../../shell/src/layout/List/List";
+import "../styles/mintRequest.css";
 import {
   ROWS,
   type MintRequestRow,
   type MintStatus,
-} from "../../mockdata";
+} from "../../../mockdata";
 
 const toTs = (s: string) =>
   s === "-" ? -1 : new Date(s.replace(/-/g, "/")).getTime();

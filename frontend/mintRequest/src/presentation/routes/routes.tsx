@@ -1,7 +1,7 @@
 // frontend/mintRequest/src/routes.tsx
 import type { RouteObject } from "react-router-dom";
-import MintRequestManagement from "./pages/mintRequestManagement";
-import MintRequestDetail from "./pages/mintRequestDetail";
+import MintRequestManagement from "../../presentation/pages/mintRequestManagement";
+import MintRequestDetail from "../../presentation/pages/mintRequestDetail";
 
 /**
  * MintRoutes

@@ -6,13 +6,13 @@ import AdminCard from "../../../../admin/src/presentation/components/AdminCard";
 
 // 閲覧モードで呼び出す対象
 import ProductBlueprintCard from "../../../../productBlueprint/src/presentation/components/productBlueprintCard";
-import ColorVariationCard from "../../../../model/src/pages/ColorVariationCard";
+import ColorVariationCard from "../../../../model/src/presentation/components/ColorVariationCard";
 import SizeVariationCard, {
   type SizeRow,
-} from "../../../../model/src/pages/SizeVariationCard";
+} from "../../../../model/src/presentation/components/SizeVariationCard";
 import ModelNumberCard, {
   type ModelNumber,
-} from "../../../../model/src/pages/ModelNumberCard";
+} from "../../../../model/src/presentation/components/ModelNumberCard";
 
 // 生産数カード（編集モードで使用）
 import ProductionQuantityCard, {

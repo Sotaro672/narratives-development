@@ -1,0 +1,198 @@
+/* frontend/model/src/pages/ColorVariationCard.css
+   カラーバリエーションカード専用
+   ※ 共通スタイルは Card.css に委譲（--pbp-* 変数使用）
+*/
+
+/* chips 行の余白最適化 */
+.vc__chips {
+  margin-bottom: 8px;
+}
+
+/* chip のアイコンボタン */
+.vc__chip {
+  position: relative;
+}
+
+.vc__chip-close {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  height: 18px;
+  width: 18px;
+  border-radius: 6px;
+  margin-left: 2px;
+  color: inherit;
+  opacity: 0.85;
+}
+
+.vc__chip-close:hover {
+  opacity: 1;
+}
+
+/* 入力行 */
+.vc__row {
+  display: flex;
+  align-items: center;
+  gap: 8px; /* 既存の gap-8 に相当 */
+}
+
+/* 入力の幅最適化（隣のアイコンボタンと並ぶ） */
+.vc__input {
+  flex: 1;
+}
+
+/* 追加ボタンのわずかなホバー演出を強める */
+.vc__add:hover {
+  box-shadow: 0 0 0 3px var(--pbp-ring);
+}
+
+/* 空状態の文言 */
+.vc__empty {
+  font-size: 12px;
+  color: var(--pbp-text-soft);
+  padding: 6px 0;
+}
+
+/* frontend/model/src/pages/ModelNumberCard.css
+   モデルナンバーカード専用
+   共通スタイルは Card.css に委譲（--pbp-* 変数使用）
+*/
+
+/* デフォルト: 編集モード用（行間に余白 & ピル風） */
+.mnc__table {
+  width: 100%;
+  border-collapse: separate;
+  border-spacing: 0 8px; /* 行間に余白を出す */
+}
+
+.mnc__table thead th {
+  text-align: left;
+  font-size: 12px;
+  color: var(--pbp-text-soft);
+  padding: 0 8px 8px 0;
+}
+
+.mnc__table tbody td {
+  padding: 0 8px 8px 0;
+}
+
+.mnc__size {
+  font-weight: 600;
+  color: var(--pbp-text);
+}
+
+/* 空状態 */
+.mnc__empty {
+  font-size: 12px;
+  color: var(--pbp-text-soft);
+  padding: 6px 0;
+  text-align: center;
+}
+
+/* =========================
+   閲覧モード（.view-mode）
+   テーブルをフラットにし、行ごとに下線を引く
+   ========================= */
+
+.mnc.view-mode .mnc__table {
+  border-collapse: collapse;
+  border-spacing: 0;
+}
+
+.mnc.view-mode .mnc__table thead th {
+  padding: 12px 8px;
+  border-bottom: 1px solid var(--pbp-border-soft, #e5e7eb);
+}
+
+.mnc.view-mode .mnc__table tbody td {
+  padding: 12px 8px;
+}
+
+/* 各行の下辺に灰色ライン */
+.mnc.view-mode .mnc__table tbody tr {
+  border-bottom: 1px solid var(--pbp-border-soft, #e5e7eb);
+}
+
+/* 閲覧モードの入力は枠線・背景を消してテキスト風に */
+.mnc.view-mode .mnc__table input[readonly] {
+  border: none;
+  background: transparent;
+  box-shadow: none;
+  padding: 0;
+  height: auto;
+}
+
+/* frontend/model/src/pages/SizeVariationCard.css
+   サイズバリエーションカード専用
+   共通スタイルは Card.css に委譲（--pbp-* 変数使用）
+*/
+
+/* テーブル（編集モード基準） */
+.svc__table {
+  width: 100%;
+  border-collapse: separate;
+  border-spacing: 0 8px; /* 行間に余白を出す */
+}
+
+.svc__table thead th {
+  text-align: left;
+  font-size: 12px;
+  color: var(--pbp-text-soft);
+  padding: 0 8px 8px 0;
+}
+
+.svc__table tbody tr {
+  background: transparent;
+}
+
+.svc__table tbody td {
+  padding: 0 8px 8px 0;
+}
+
+/* 空状態 */
+.svc__empty {
+  font-size: 12px;
+  color: var(--pbp-text-soft);
+  padding: 6px 0;
+  text-align: center;
+}
+
+/* 削除ボタン */
+.svc__remove {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* =========================
+   閲覧モード（.view-mode）
+   テーブルをフラットにし、行ごとに下線を引く
+   ========================= */
+
+.svc.view-mode .svc__table {
+  border-collapse: collapse;
+  border-spacing: 0;
+}
+
+.svc.view-mode .svc__table thead th {
+  padding: 12px 8px;
+  border-bottom: 1px solid var(--pbp-border-soft, #e5e7eb);
+}
+
+.svc.view-mode .svc__table tbody td {
+  padding: 12px 8px;
+}
+
+/* 各行の下辺に薄い灰色ライン */
+.svc.view-mode .svc__table tbody tr {
+  border-bottom: 1px solid var(--pbp-border-soft, #e5e7eb);
+}
+
+/* 閲覧モードの入力は枠線・背景を消してテキスト風に */
+.svc.view-mode .svc__table input[readonly] {
+  border: none;
+  background: transparent;
+  box-shadow: none;
+  padding: 0;
+  height: auto;
+}

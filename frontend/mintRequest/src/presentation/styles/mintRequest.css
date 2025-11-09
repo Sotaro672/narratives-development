@@ -1,3 +1,28 @@
+/* Mint Request Management styles */
+
+.mint-badge {
+  display: inline-block;
+  color: #fff;
+  font-size: 0.75rem;
+  font-weight: 700;
+  padding: 0.25rem 0.6rem;
+  border-radius: 9999px;
+}
+
+/* ステータス別 */
+.mint-badge.is-done {
+  background: #ef4444; /* Mint完了 */
+}
+
+.mint-badge.is-requested {
+  background: #0b0f1a; /* リクエスト済み */
+}
+
+.mint-badge.is-planned {
+  background: #e5e7eb; /* 計画中 */
+  color: #0f172a;
+}
+
 /* ミント申請カード（シンプル版） */
 .mint-request-card {
   background: var(--pbp-surface, #ffffff);

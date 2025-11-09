@@ -17,13 +17,13 @@ import {
   PopoverContent,
 } from "../../../../shared/ui/popover";
 
-import ColorVariationCard from "../../../../model/src/pages/ColorVariationCard";
+import ColorVariationCard from "../../../../model/src/presentation/components/ColorVariationCard";
 import SizeVariationCard, {
   type SizeRow,
-} from "../../../../model/src/pages/SizeVariationCard";
+} from "../../../../model/src/presentation/components/SizeVariationCard";
 import ModelNumberCard, {
   type ModelNumber,
-} from "../../../../model/src/pages/ModelNumberCard";
+} from "../../../../model/src/presentation/components/ModelNumberCard";
 import ProductionQuantityCard, {
   type QuantityCell,
 } from "../components/productionQuantityCard";
