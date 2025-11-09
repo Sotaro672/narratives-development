@@ -12,7 +12,7 @@ import {
   TableCell,
 } from "../../../../shared/ui/table";
 import "../styles/model.css";
-import "../../../shared/ui/card.css";
+import "../../../../shared/ui/card.css";
 
 export type SizeRow = {
   id: string;

@@ -38,7 +38,7 @@ const orderRoutes = orderRoutesRaw as unknown as RouteObject[];
 import adRtoutesRaw from "../../../ad/src/presentation/routes/routes";
 const adRoutes = adRtoutesRaw as unknown as RouteObject[];
 
-import memberRoutesRaw from "../../../member/src/routes";
+import memberRoutesRaw from "../../../member/src/presentation/routes/routes";
 const memberRoutes = memberRoutesRaw as unknown as RouteObject[];
 
 import brandRoutesRaw from "../../../brand/src/presentation/routes/routes";

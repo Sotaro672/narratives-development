@@ -5,9 +5,9 @@ import { useNavigate } from "react-router-dom";
 import List, {
   FilterableTableHeader,
   SortableTableHeader,
-} from "../../../shell/src/layout/List/List";
-import "./memberManagement.css";
-import { MEMBERS, type MemberRow } from "../../mockdata";
+} from "../../../../shell/src/layout/List/List";
+import "../styles/member.css";
+import { MEMBERS, type MemberRow } from "../../../mockdata";
 
 // Utility
 const toTs = (yyyyMd: string) => {

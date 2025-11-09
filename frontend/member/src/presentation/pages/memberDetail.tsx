@@ -1,10 +1,10 @@
 // frontend/member/src/pages/memberDetail.tsx
 import * as React from "react";
 import { useNavigate, useParams } from "react-router-dom";
-import PageStyle from "../../../shell/src/layout/PageStyle/PageStyle";
-import { Card, CardHeader, CardTitle, CardContent } from "../../../shared/ui/card";
+import PageStyle from "../../../../shell/src/layout/PageStyle/PageStyle";
+import { Card, CardHeader, CardTitle, CardContent } from "../../../../shared/ui/card";
 import { User, Mail, Calendar } from "lucide-react";
-import "./memberDetail.css";
+import "../styles/member.css";
 
 export default function MemberDetail() {
   const navigate = useNavigate();
