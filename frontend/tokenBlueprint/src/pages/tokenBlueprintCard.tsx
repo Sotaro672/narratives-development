@@ -1,301 +1,285 @@
-// frontend/tokenBlueprint/src/pages/tokenBlueprintCard.tsx
+//frontend\tokenBlueprint\src\pages\tokenBlueprintCard.tsx
 import * as React from "react";
-import { ShieldCheck, X, Package2 } from "lucide-react";
+import { Link2, Upload, Calendar, Eye } from "lucide-react";
+
 import {
   Card,
   CardHeader,
   CardTitle,
   CardContent,
-} from "../../../shared/ui";
-import { Badge } from "../../../shared/ui/badge";
-import { Button } from "../../../shared/ui/button";
+} from "../../../shared/ui/card";
 import { Input } from "../../../shared/ui/input";
+import { Badge } from "../../../shared/ui/badge";
+import { Label } from "../../../shared/ui/label";
 import {
   Popover,
   PopoverTrigger,
   PopoverContent,
 } from "../../../shared/ui/popover";
-import "./productBlueprintCard.css";
 
-type Fit =
-  | "レギュラーフィット"
-  | "スリムフィット"
-  | "リラックスフィット"
-  | "オーバーサイズ";
+import "./tokenBlueprintCard.css";
 
-type ProductBlueprintCardProps = {
-  productName?: string;
-  brand?: string;
-  fit?: Fit;
-  materials?: string;
-  weight?: number;
-  washTags?: string[];
-  productIdTag?: string;
-  onChangeProductName?: (v: string) => void;
-  onChangeFit?: (v: Fit) => void;
-  onChangeMaterials?: (v: string) => void;
-  onChangeWeight?: (v: number) => void;
-  onChangeWashTags?: (nextTags: string[]) => void;
-  onChangeProductIdTag?: (v: string) => void;
-  /** 表示モード（既定: "edit"） */
-  mode?: "edit" | "view";
+type TokenBlueprintCardProps = {
+  initialEditMode?: boolean;
+  initialTokenBlueprintId?: string;
+  initialTokenName?: string;
+  initialSymbol?: string;
+  initialBrand?: string;
+  initialDescription?: string;
+  initialBurnAt?: string;
+  initialIconUrl?: string;
 };
 
-const ProductBlueprintCard: React.FC<ProductBlueprintCardProps> = ({
-  productName,
-  brand,
-  fit,
-  materials,
-  weight,
-  washTags,
-  productIdTag,
-  onChangeProductName,
-  onChangeFit,
-  onChangeMaterials,
-  onChangeWeight,
-  onChangeWashTags,
-  onChangeProductIdTag,
-  mode = "edit",
-}) => {
-  const isEdit = mode === "edit";
+export default function TokenBlueprintCard({
+  initialEditMode = false,
+  initialTokenBlueprintId,
+  initialTokenName,
+  initialSymbol,
+  initialBrand,
+  initialDescription,
+  initialBurnAt,
+  initialIconUrl,
+}: TokenBlueprintCardProps) {
+  const [tokenBlueprintId] = React.useState(initialTokenBlueprintId ?? "");
+  const [tokenName, setTokenName] = React.useState(initialTokenName ?? "");
+  const [symbol, setSymbol] = React.useState(initialSymbol ?? "");
+  const [brand, setBrand] = React.useState(initialBrand ?? "");
+  const [description, setDescription] = React.useState(
+    initialDescription ?? ""
+  );
+  const [burnAt, setBurnAt] = React.useState(initialBurnAt ?? "");
+  const [iconUrl, setIconUrl] = React.useState(initialIconUrl ?? "");
+  const [isEditMode] = React.useState(initialEditMode);
 
-  // モックデータが無い場合でも空欄で安全に表示できるようサニタイズ
-  const safeProductName = productName ?? "";
-  const safeBrand = brand ?? "";
-  const safeMaterials = materials ?? "";
-  const safeWeight =
-    typeof weight === "number" && !Number.isNaN(weight) ? weight : 0;
-  const safeWashTags = Array.isArray(washTags) ? washTags : [];
-  const safeProductIdTag = productIdTag ?? "";
-  const safeFit = fit ?? ("" as Fit);
+  const brandOptions: string[] = [];
 
-  const fitOptions = [
-    { value: "レギュラーフィット", label: "レギュラーフィット" },
-    { value: "スリムフィット", label: "スリムフィット" },
-    { value: "リラックスフィット", label: "リラックスフィット" },
-    { value: "オーバーサイズ", label: "オーバーサイズ" },
-  ];
+  // 説明欄の自動リサイズ
+  const descriptionRef = React.useRef<HTMLTextAreaElement | null>(null);
 
-  const tagOptions = [
-    { value: "QRコード", label: "QRコード" },
-    { value: "バーコード", label: "バーコード" },
-  ];
+  const autoResizeDescription = React.useCallback(() => {
+    const el = descriptionRef.current;
+    if (!el) return;
+    el.style.height = "auto";
+    el.style.height = `${el.scrollHeight}px`;
+  }, []);
+
+  React.useEffect(() => {
+    autoResizeDescription();
+  }, [description, autoResizeDescription]);
+
+  const handleUploadClick = () => {
+    if (!isEditMode) return;
+    alert("トークンアイコンのアップロード（モック）");
+  };
+
+  const handlePreview = () => {
+    alert("プレビュー画面を開きます（モック）");
+  };
 
   return (
-    <Card className={`pbc ${!isEdit ? "view-mode" : ""}`}>
-      <CardHeader className="box__header">
-        <Package2 size={16} />
-        <CardTitle className="box__title">
-          基本情報
-          {/* （閲覧）の文言は表示しない */}
-        </CardTitle>
+    <Card className="token-blueprint-card">
+      <CardHeader className="token-blueprint-card__header">
+        <div className="token-blueprint-card__header-left">
+          <span className="token-blueprint-card__header-icon">
+            <Link2 className="token-blueprint-card__link-icon" />
+          </span>
+          <CardTitle className="token-blueprint-card__header-title">
+            {tokenBlueprintId
+              ? `トークン：${tokenBlueprintId}`
+              : "トークン：新規トークン設計"}
+          </CardTitle>
+          <Badge className="token-blueprint-card__header-badge">
+            設計情報
+          </Badge>
+        </div>
+
+        <button
+          type="button"
+          className="token-blueprint-card__preview-btn"
+          onClick={handlePreview}
+          aria-label="プレビュー"
+        >
+          <Eye className="token-blueprint-card__preview-icon" />
+        </button>
       </CardHeader>
 
-      <CardContent className="box__body">
-        {/* プロダクト名 */}
-        <div className="label">プロダクト名</div>
-        {isEdit ? (
-          <Input
-            value={safeProductName}
-            onChange={(e) => onChangeProductName?.(e.target.value)}
-            aria-label="プロダクト名"
-          />
-        ) : (
-          <Input
-            value={safeProductName}
-            variant="readonly"
-            readOnly
-            aria-label="プロダクト名"
-          />
-        )}
-
-        {/* ブランド（値が無ければ空欄） */}
-        <div className="label">ブランド</div>
-        {isEdit ? (
-          <Input
-            value={safeBrand}
-            onChange={(e) => {
-              /* 将来編集対応する場合ここで onChange を呼ぶ */
-            }}
-            aria-label="ブランド"
-          />
-        ) : (
-          <Input
-            value={safeBrand}
-            variant="readonly"
-            readOnly
-            aria-label="ブランド"
-          />
-        )}
-
-        {/* フィット */}
-        <div className="label">フィット</div>
-        {isEdit ? (
-          <Popover>
-            <PopoverTrigger>
-              <Button
-                variant="outline"
-                className="w-full justify-between"
-                aria-label="フィットを選択"
-              >
-                {safeFit || "選択してください"}
-              </Button>
-            </PopoverTrigger>
-            <PopoverContent align="start" className="p-1">
-              {fitOptions.map((opt) => (
-                <div
-                  key={opt.value}
-                  className={`px-3 py-2 rounded-md cursor-pointer hover:bg-blue-50 ${
-                    safeFit === opt.value
-                      ? "bg-blue-100 text-blue-700 font-medium"
-                      : ""
-                  }`}
-                  onClick={() => onChangeFit?.(opt.value as Fit)}
-                >
-                  {opt.label}
+      <CardContent>
+        <div className="token-blueprint-card__top">
+          {/* アイコン */}
+          <div className="token-blueprint-card__icon-area">
+            <div className="token-blueprint-card__icon-wrap">
+              {iconUrl ? (
+                <img src={iconUrl} alt="Token Icon" />
+              ) : (
+                <div className="token-blueprint-card__icon-placeholder">
+                  アイコン画像を
+                  <br />
+                  アップロード
                 </div>
-              ))}
-            </PopoverContent>
-          </Popover>
-        ) : (
-          <Input
-            value={safeFit}
-            variant="readonly"
-            readOnly
-            aria-label="フィット"
-          />
-        )}
-
-        {/* 素材 */}
-        <div className="label">素材</div>
-        {isEdit ? (
-          <Input
-            value={safeMaterials}
-            onChange={(e) => onChangeMaterials?.(e.target.value)}
-            aria-label="素材"
-          />
-        ) : (
-          <Input
-            value={safeMaterials}
-            variant="readonly"
-            readOnly
-            aria-label="素材"
-          />
-        )}
-
-        {/* 重さ */}
-        <div className="label">重さ</div>
-        <div className="flex gap-8 items-center">
-          {isEdit ? (
-            <>
-              <Input
-                type="number"
-                value={safeWeight}
-                onChange={(e) =>
-                  onChangeWeight?.(Number(e.target.value) || 0)
-                }
-                aria-label="重さ"
-              />
-              <span className="suffix">g</span>
-            </>
-          ) : (
-            <>
-              <Input
-                value={safeWeight ? `${safeWeight}` : ""}
-                variant="readonly"
-                readOnly
-                aria-label="重さ"
-              />
-              <span className="suffix">g</span>
-            </>
-          )}
-        </div>
-
-        {/* 品質保証タグ（洗濯方法タグ） */}
-        <div className="label">品質保証（洗濯方法タグ）</div>
-        <div className="chips flex flex-wrap gap-2">
-          {safeWashTags.map((t) => (
-            <Badge
-              key={t}
-              className="chip inline-flex items-center gap-1.5 px-2 py-1"
-            >
-              <ShieldCheck size={14} />
-              {t}
-              {isEdit && onChangeWashTags && (
-                <button
-                  onClick={() =>
-                    onChangeWashTags(safeWashTags.filter((x) => x !== t))
-                  }
-                  style={{
-                    background: "transparent",
-                    border: "none",
-                    cursor: "pointer",
-                    display: "inline-flex",
-                    alignItems: "center",
-                    padding: 0,
-                  }}
-                  aria-label={`${t} を削除`}
-                >
-                  <X size={12} />
-                </button>
               )}
-            </Badge>
-          ))}
+            </div>
 
-          {isEdit && onChangeWashTags && (
-            <Button
-              variant="secondary"
-              size="sm"
-              onClick={() =>
-                onChangeWashTags([...safeWashTags, "新タグ"])
-              }
-              className="btn"
-            >
-              + 追加
-            </Button>
-          )}
+            {/* 編集モードのみアップロードボタン表示 */}
+            {isEditMode && (
+              <button
+                type="button"
+                className="token-blueprint-card__upload-btn"
+                onClick={handleUploadClick}
+              >
+                <Upload className="token-blueprint-card__upload-icon" />
+                アップロード
+              </button>
+            )}
+          </div>
+
+          {/* 右側フィールド */}
+          <div className="token-blueprint-card__spacer">
+            {/* トークン名 */}
+            <div className="token-blueprint-card__field-col">
+              <Label className="token-blueprint-card__label">トークン名</Label>
+              <div
+                className={`token-blueprint-card__readonly ${
+                  !isEditMode ? "readonly-mode" : ""
+                }`}
+              >
+                <Input
+                  value={tokenName}
+                  placeholder="例：LUMINA VIP 会員トークン"
+                  onChange={(e) =>
+                    isEditMode && setTokenName(e.target.value)
+                  }
+                  readOnly={!isEditMode}
+                  className={`token-blueprint-card__readonly-input ${
+                    !isEditMode ? "readonly" : ""
+                  }`}
+                />
+              </div>
+            </div>
+
+            {/* シンボル */}
+            <div className="token-blueprint-card__field-col">
+              <Label className="token-blueprint-card__label">シンボル</Label>
+              <div
+                className={`token-blueprint-card__readonly ${
+                  !isEditMode ? "readonly-mode" : ""
+                }`}
+              >
+                <Input
+                  value={symbol}
+                  placeholder="例：LUMI"
+                  onChange={(e) => isEditMode && setSymbol(e.target.value)}
+                  readOnly={!isEditMode}
+                  className={`token-blueprint-card__readonly-input ${
+                    !isEditMode ? "readonly" : ""
+                  }`}
+                />
+              </div>
+            </div>
+
+            {/* ブランド */}
+            <div className="token-blueprint-card__brand-label-cell">
+              <Label className="token-blueprint-card__label">ブランド</Label>
+              {isEditMode ? (
+                <Popover>
+                  <PopoverTrigger>
+                    <div className="token-blueprint-card__select">
+                      <Input
+                        readOnly
+                        value={brand}
+                        placeholder="ブランドを選択"
+                        className="token-blueprint-card__select-input"
+                      />
+                      <span className="token-blueprint-card__select-caret">
+                        ▾
+                      </span>
+                    </div>
+                  </PopoverTrigger>
+                  <PopoverContent
+                    align="start"
+                    className="token-blueprint-card__popover"
+                  >
+                    {brandOptions.length === 0 && (
+                      <div className="token-blueprint-card__popover-empty">
+                        ブランド候補が未設定です
+                      </div>
+                    )}
+                    {brandOptions.map((b) => (
+                      <button
+                        key={b}
+                        type="button"
+                        className={
+                          "token-blueprint-card__popover-item" +
+                          (b === brand ? " is-active" : "")
+                        }
+                        onClick={() => setBrand(b)}
+                      >
+                        {b}
+                      </button>
+                    ))}
+                  </PopoverContent>
+                </Popover>
+              ) : (
+                <Input
+                  readOnly
+                  value={brand}
+                  placeholder="ブランド未設定"
+                  className="token-blueprint-card__readonly-input readonly"
+                />
+              )}
+            </div>
+          </div>
         </div>
 
-        {/* 商品IDタグ */}
-        <div className="label">商品IDタグ</div>
-        {isEdit ? (
-          <Popover>
-            <PopoverTrigger>
-              <Button
-                variant="outline"
-                className="w-full justify-between"
-                aria-label="商品IDタグを選択"
-              >
-                {safeProductIdTag || "選択してください"}
-              </Button>
-            </PopoverTrigger>
-            <PopoverContent align="start" className="p-1">
-              {tagOptions.map((opt) => (
-                <div
-                  key={opt.value}
-                  className={`px-3 py-2 rounded-md cursor-pointer hover:bg-blue-50 ${
-                    safeProductIdTag === opt.value
-                      ? "bg-blue-100 text-blue-700 font-medium"
-                      : ""
-                  }`}
-                  onClick={() => onChangeProductIdTag?.(opt.value)}
-                >
-                  {opt.label}
-                </div>
-              ))}
-            </PopoverContent>
-          </Popover>
-        ) : (
-          <Input
-            value={safeProductIdTag}
-            variant="readonly"
-            readOnly
-            aria-label="商品IDタグ"
-          />
-        )}
+        {/* 説明（自動高さ） */}
+        <div className="token-blueprint-card__description">
+          <Label className="token-blueprint-card__label">説明</Label>
+          <div
+            className={`token-blueprint-card__description-box ${
+              !isEditMode ? "readonly-mode" : ""
+            }`}
+          >
+            <textarea
+              ref={descriptionRef}
+              value={description}
+              placeholder="このトークンで付与する権利・特典、利用条件などを記載してください。"
+              onChange={(e) => {
+                if (!isEditMode) return;
+                setDescription(e.target.value);
+              }}
+              readOnly={!isEditMode}
+              className={`token-blueprint-card__description-input ${
+                !isEditMode ? "readonly" : ""
+              }`}
+            />
+          </div>
+        </div>
+
+        {/* 焼却予定日 */}
+        <div className="token-blueprint-card__expires">
+          <Label className="token-blueprint-card__label">焼却予定日</Label>
+          <div className="token-blueprint-card__expires-row">
+            <Input
+              type="date"
+              value={burnAt}
+              onChange={(e) =>
+                isEditMode && setBurnAt(e.target.value)
+              }
+              readOnly={!isEditMode}
+              className={`token-blueprint-card__expires-input ${
+                !isEditMode ? "readonly" : ""
+              }`}
+            />
+            <div className="token-blueprint-card__calendar-icon">
+              <Calendar className="token-blueprint-card__calendar-icon-svg" />
+            </div>
+          </div>
+          {!burnAt && (
+            <div className="token-blueprint-card__expires-hint">
+              任意。キャンペーン終了日など、トークンの有効期限がある場合のみ設定します。
+            </div>
+          )}
+        </div>
       </CardContent>
     </Card>
   );
-};
-
-export default ProductBlueprintCard;
+}

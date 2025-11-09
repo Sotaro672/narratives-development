@@ -1,9 +1,10 @@
 /* frontend/production/src/pages/productionQuantityCard.css
    生産数カード（期待見た目に合わせてテーブル罫線・フッター行を調整）
 */
-.mqc{
-  background-color: white;
+.mqc {
+  background-color: #ffffff;
 }
+
 /* Header */
 .mqc__header {
   border-bottom: 1px solid hsl(var(--border));
@@ -28,10 +29,10 @@
   padding: 16px 20px;
 }
 
-/* ===== Table（行の下線、ヘッダーとフッターのトーンを期待値に合わせる） ===== */
+/* ===== Table ===== */
 .mqc__table {
   width: 100%;
-  border-collapse: collapse;   /* ← 行間の余白をなくし下線で区切る */
+  border-collapse: collapse;
   border-spacing: 0;
   font-size: 0.95rem;
 }
@@ -45,15 +46,19 @@
   border-bottom: 1px solid var(--pbp-border-soft, hsl(var(--border)));
 }
 
-.mqc__th--left { text-align: left; }
-.mqc__th { color: var(--pbp-text); }
+.mqc__th--left {
+  text-align: left;
+}
+.mqc__th {
+  color: var(--pbp-text);
+}
 
 /* ボディ行 */
 .mqc__table tbody tr {
-  border-bottom: 1px solid var(--pbp-border-soft, hsl(var(--border))); /* ← 行の下線 */
+  border-bottom: 1px solid var(--pbp-border-soft, hsl(var(--border)));
 }
 .mqc__table tbody td {
-  padding: 12px 8px;  /* ← 期待値に近い余白 */
+  padding: 12px 8px;
 }
 
 /* 先頭列（サイズ） */
@@ -62,12 +67,14 @@
   color: var(--pbp-text);
 }
 
-/* 数値セル・合計セルの基本揃え */
+/* 数値セル・合計セル */
 .mqc__cell,
 .mqc__sum,
-.mqc__footer-cell { text-align: center; }
+.mqc__footer-cell {
+  text-align: center;
+}
 
-/* フッター合計行（背景を薄くして強調） */
+/* フッター合計行 */
 .mqc__footer-row {
   background: var(--pbp-surface-soft, hsl(var(--muted) / 0.35));
   border-top: 1px solid var(--pbp-border-soft, hsl(var(--border)));
@@ -77,7 +84,9 @@
   color: var(--pbp-text-soft);
   padding: 12px 8px;
 }
-.mqc__footer-cell { padding: 12px 8px; }
+.mqc__footer-cell {
+  padding: 12px 8px;
+}
 
 /* ピル（合計バッジ） */
 .mqc__pill {
@@ -102,5 +111,24 @@
   border-color: transparent;
 }
 
-/* 編集モードの入力 */
-.mqc__input { font-size: 0.9rem; text-align: center; width: 4rem; }
+/* ===== 編集モードの入力欄（セル内ピル風） ===== */
+.mqc__input {
+  width: 100%;
+  max-width: 5.5rem;
+  padding: 0.45rem 0.9rem;
+  border-radius: 999px;
+  background-color: #f7f8fb; /* 薄いグレー */
+  border: 1px solid transparent;
+  font-size: 0.9rem;
+  text-align: center;
+  color: var(--pbp-text, hsl(var(--foreground)));
+  box-shadow: none;
+  outline: none;
+}
+
+/* フォーカス時はほんのり強調 */
+.mqc__input:focus {
+  background-color: #ffffff;
+  border-color: rgba(148, 163, 253, 0.9);
+  box-shadow: 0 0 0 1px rgba(148, 163, 253, 0.16);
+}

@@ -1,4 +1,3 @@
-// frontend/productBlueprint/src/pages/productBlueprintCard.tsx
 import * as React from "react";
 import { ShieldCheck, X, Package2 } from "lucide-react";
 import {
@@ -59,7 +58,7 @@ const ProductBlueprintCard: React.FC<ProductBlueprintCardProps> = ({
 }) => {
   const isEdit = mode === "edit";
 
-  // モックデータが無い場合でも空欄で安全に表示できるようサニタイズ
+  // サニタイズ
   const safeProductName = productName ?? "";
   const safeBrand = brand ?? "";
   const safeMaterials = materials ?? "";
@@ -82,16 +81,12 @@ const ProductBlueprintCard: React.FC<ProductBlueprintCardProps> = ({
   ];
 
   return (
-    <Card className="pbc">
+    <Card className={`pbc ${!isEdit ? "view-mode" : ""}`}>
       <CardHeader className="box__header">
         <Package2 size={16} />
         <CardTitle className="box__title">
           基本情報
-          {mode === "view" && (
-            <span className="ml-2 text-xs text-[var(--pbp-text-soft)]">
-              （閲覧）
-            </span>
-          )}
+          {/* 閲覧モードでも（閲覧）の文言は表示しない */}
         </CardTitle>
       </CardHeader>
 
@@ -113,14 +108,24 @@ const ProductBlueprintCard: React.FC<ProductBlueprintCardProps> = ({
           />
         )}
 
-        {/* ブランド（常に読み取り専用 / 値が無ければ空欄） */}
+        {/* ブランド */}
         <div className="label">ブランド</div>
-        <Input
-          value={safeBrand}
-          variant="readonly"
-          readOnly
-          aria-label="ブランド"
-        />
+        {isEdit ? (
+          <Input
+            value={safeBrand}
+            onChange={() => {
+              /* 必要になったら onChange を繋ぐ */
+            }}
+            aria-label="ブランド"
+          />
+        ) : (
+          <Input
+            value={safeBrand}
+            variant="readonly"
+            readOnly
+            aria-label="ブランド"
+          />
+        )}
 
         {/* フィット */}
         <div className="label">フィット</div>
@@ -129,7 +134,7 @@ const ProductBlueprintCard: React.FC<ProductBlueprintCardProps> = ({
             <PopoverTrigger>
               <Button
                 variant="outline"
-                className="w-full justify-between"
+                className="w-full justify-between pbc-select-trigger"
                 aria-label="フィットを選択"
               >
                 {safeFit || "選択してください"}
@@ -218,16 +223,11 @@ const ProductBlueprintCard: React.FC<ProductBlueprintCardProps> = ({
               {isEdit && onChangeWashTags && (
                 <button
                   onClick={() =>
-                    onChangeWashTags(safeWashTags.filter((x) => x !== t))
+                    onChangeWashTags(
+                      safeWashTags.filter((x) => x !== t)
+                    )
                   }
-                  style={{
-                    background: "transparent",
-                    border: "none",
-                    cursor: "pointer",
-                    display: "inline-flex",
-                    alignItems: "center",
-                    padding: 0,
-                  }}
+                  className="chip-remove"
                   aria-label={`${t} を削除`}
                 >
                   <X size={12} />
@@ -257,7 +257,7 @@ const ProductBlueprintCard: React.FC<ProductBlueprintCardProps> = ({
             <PopoverTrigger>
               <Button
                 variant="outline"
-                className="w-full justify-between"
+                className="w-full justify-between pbc-select-trigger"
                 aria-label="商品IDタグを選択"
               >
                 {safeProductIdTag || "選択してください"}

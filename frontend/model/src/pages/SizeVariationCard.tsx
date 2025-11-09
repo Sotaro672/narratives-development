@@ -1,4 +1,3 @@
-// frontend/model/src/pages/SizeVariationCard.tsx
 import * as React from "react";
 import { Tags, Trash2 } from "lucide-react";
 import { Card, CardHeader, CardTitle, CardContent } from "../../../shared/ui";
@@ -40,30 +39,39 @@ const SizeVariationCard: React.FC<SizeVariationCardProps> = ({
   mode = "edit",
 }) => {
   const isEdit = mode === "edit";
-  const canEditFields = isEdit && typeof onChangeSize === "function";
 
   const handleChange =
     (id: string, key: keyof Omit<SizeRow, "id">) =>
     (e: React.ChangeEvent<HTMLInputElement>) => {
-      if (!canEditFields) return;
+      if (!isEdit || !onChangeSize) return;
+
       const v = e.target.value;
+
       if (key === "sizeLabel") {
-        onChangeSize!(id, { sizeLabel: v });
+        onChangeSize(id, { sizeLabel: v });
       } else {
-        onChangeSize!(id, { [key]: v === "" ? undefined : Number(v) } as SizePatch);
+        onChangeSize(id, {
+          [key]: v === "" ? undefined : Number(v),
+        } as SizePatch);
       }
     };
 
-  const readonlyProps = { variant: "readonly" as const, readOnly: true };
+  // 閲覧モードのみ readOnly スタイルを適用
+  const readonlyProps =
+    !isEdit
+      ? ({ variant: "readonly" as const, readOnly: true } as const)
+      : ({} as const);
 
   return (
-    <Card className="svc">
+    <Card className={`svc ${mode === "view" ? "view-mode" : ""}`}>
       <CardHeader className="box__header">
         <Tags size={16} />
         <CardTitle className="box__title">
           サイズバリエーション
           {mode === "view" && (
-            <span className="ml-2 text-xs text-[var(--pbp-text-soft)]">（閲覧）</span>
+            <span className="ml-2 text-xs text-[var(--pbp-text-soft)]">
+              （閲覧）
+            </span>
           )}
         </CardTitle>
       </CardHeader>
@@ -85,7 +93,7 @@ const SizeVariationCard: React.FC<SizeVariationCardProps> = ({
               <TableRow key={row.id}>
                 <TableCell>
                   <Input
-                    {...(canEditFields ? {} : readonlyProps)}
+                    {...readonlyProps}
                     value={row.sizeLabel}
                     onChange={handleChange(row.id, "sizeLabel")}
                     aria-label={`${row.sizeLabel} サイズ名`}
@@ -93,7 +101,7 @@ const SizeVariationCard: React.FC<SizeVariationCardProps> = ({
                 </TableCell>
                 <TableCell>
                   <Input
-                    {...(canEditFields ? {} : readonlyProps)}
+                    {...readonlyProps}
                     type="number"
                     inputMode="decimal"
                     value={row.chest ?? ""}
@@ -103,7 +111,7 @@ const SizeVariationCard: React.FC<SizeVariationCardProps> = ({
                 </TableCell>
                 <TableCell>
                   <Input
-                    {...(canEditFields ? {} : readonlyProps)}
+                    {...readonlyProps}
                     type="number"
                     inputMode="decimal"
                     value={row.waist ?? ""}
@@ -113,7 +121,7 @@ const SizeVariationCard: React.FC<SizeVariationCardProps> = ({
                 </TableCell>
                 <TableCell>
                   <Input
-                    {...(canEditFields ? {} : readonlyProps)}
+                    {...readonlyProps}
                     type="number"
                     inputMode="decimal"
                     value={row.length ?? ""}
@@ -123,7 +131,7 @@ const SizeVariationCard: React.FC<SizeVariationCardProps> = ({
                 </TableCell>
                 <TableCell>
                   <Input
-                    {...(canEditFields ? {} : readonlyProps)}
+                    {...readonlyProps}
                     type="number"
                     inputMode="decimal"
                     value={row.shoulder ?? ""}

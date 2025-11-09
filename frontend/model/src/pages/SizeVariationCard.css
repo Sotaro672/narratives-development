@@ -3,8 +3,7 @@
    共通スタイルは Card.css に委譲（--pbp-* 変数使用）
 */
 
-
-/* テーブル */
+/* テーブル（編集モード基準） */
 .svc__table {
   width: 100%;
   border-collapse: separate;
@@ -19,7 +18,7 @@
 }
 
 .svc__table tbody tr {
-  background: transparent; /* 行ごと枠はセル側で表現 */
+  background: transparent;
 }
 
 .svc__table tbody td {
@@ -34,9 +33,42 @@
   text-align: center;
 }
 
-/* 削除ボタン（微調整。Button 自体の見た目は shared/ui/button.tsx に依存） */
+/* 削除ボタン */
 .svc__remove {
   display: inline-flex;
   align-items: center;
   justify-content: center;
+}
+
+/* =========================
+   閲覧モード（.view-mode）
+   テーブルをフラットにし、行ごとに下線を引く
+   ========================= */
+
+.svc.view-mode .svc__table {
+  border-collapse: collapse;
+  border-spacing: 0;
+}
+
+.svc.view-mode .svc__table thead th {
+  padding: 12px 8px;
+  border-bottom: 1px solid var(--pbp-border-soft, #e5e7eb);
+}
+
+.svc.view-mode .svc__table tbody td {
+  padding: 12px 8px;
+}
+
+/* 各行の下辺に薄い灰色ライン */
+.svc.view-mode .svc__table tbody tr {
+  border-bottom: 1px solid var(--pbp-border-soft, #e5e7eb);
+}
+
+/* 閲覧モードの入力は枠線・背景を消してテキスト風に */
+.svc.view-mode .svc__table input[readonly] {
+  border: none;
+  background: transparent;
+  box-shadow: none;
+  padding: 0;
+  height: auto;
 }

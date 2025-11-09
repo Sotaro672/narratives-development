@@ -7,13 +7,19 @@ import AdminCard from "../../../admin/src/pages/AdminCard";
 // 閲覧モードで呼び出す対象
 import ProductBlueprintCard from "../../../productBlueprint/src/pages/productBlueprintCard";
 import ColorVariationCard from "../../../model/src/pages/ColorVariationCard";
-import SizeVariationCard, { type SizeRow } from "../../../model/src/pages/SizeVariationCard";
-import ModelNumberCard, { type ModelNumber } from "../../../model/src/pages/ModelNumberCard";
+import SizeVariationCard, {
+  type SizeRow,
+} from "../../../model/src/pages/SizeVariationCard";
+import ModelNumberCard, {
+  type ModelNumber,
+} from "../../../model/src/pages/ModelNumberCard";
 
 // 生産数カード（編集モードで使用）
-import ProductionQuantityCard, { type QuantityCell } from "./productionQuantityCard";
+import ProductionQuantityCard, {
+  type QuantityCell,
+} from "./productionQuantityCard";
 
-// 追加：印刷ボタンに使用
+// 印刷ボタン用
 import { Card, CardContent } from "../../../shared/ui/card";
 import { Button } from "../../../shared/ui/button";
 import { Printer } from "lucide-react";
@@ -36,11 +42,19 @@ export default function ProductionDetail() {
   const [fit] = React.useState<Fit>("レギュラーフィット");
   const [materials] = React.useState("シルク100%、裏地:ポリエステル100%");
   const [weight] = React.useState<number>(180);
-  const [washTags] = React.useState<string[]>(["手洗い", "ドライクリーニング", "陰干し"]);
+  const [washTags] = React.useState<string[]>([
+    "手洗い",
+    "ドライクリーニング",
+    "陰干し",
+  ]);
   const [productIdTag] = React.useState("QRコード");
 
   // カラー
-  const [colors] = React.useState<string[]>(["ホワイト", "ブラック", "ネイビー"]);
+  const [colors] = React.useState<string[]>([
+    "ホワイト",
+    "ブラック",
+    "ネイビー",
+  ]);
   const [colorInput] = React.useState("");
 
   // サイズ
@@ -80,7 +94,11 @@ export default function ProductionDetail() {
   // ─────────────────────────────────────────
   // 生産数（編集可能）
   // ─────────────────────────────────────────
-  const sizeLabels = React.useMemo(() => sizes.map((s) => s.sizeLabel), [sizes]);
+  const sizeLabels = React.useMemo(
+    () => sizes.map((s) => s.sizeLabel),
+    [sizes],
+  );
+
   const [quantities, setQuantities] = React.useState<QuantityCell[]>([
     { size: "S", color: "ホワイト", qty: 2 },
     { size: "S", color: "ブラック", qty: 0 },
@@ -96,25 +114,28 @@ export default function ProductionDetail() {
   const handleChangeQty = React.useCallback(
     (size: string, color: string, nextQty: number) => {
       setQuantities((prev) => {
-        const idx = prev.findIndex((q) => q.size === size && q.color === color);
-        if (idx === -1) return [...prev, { size, color, qty: nextQty }];
+        const idx = prev.findIndex(
+          (q) => q.size === size && q.color === color,
+        );
+        if (idx === -1) {
+          return [...prev, { size, color, qty: nextQty }];
+        }
         const next = prev.slice();
         next[idx] = { ...next[idx], qty: nextQty };
         return next;
       });
     },
-    []
+    [],
   );
 
-  // 総数（保存・印刷の際に使用）
+  // 総数
   const grandTotal = React.useMemo(
     () => quantities.reduce((sum, q) => sum + (q.qty ?? 0), 0),
-    [quantities]
+    [quantities],
   );
 
   // 保存（PageHeader の action）
   const handleSave = React.useCallback(() => {
-    // TODO: 実際の保存 API 連携へ差し替え
     console.log("保存:", {
       productionId,
       productName,
@@ -126,16 +147,19 @@ export default function ProductionDetail() {
 
   // 印刷
   const handlePrint = React.useCallback(() => {
-    // TODO: 実際の印刷処理に差し替え
-    console.log("商品IDを印刷する:", { productionId, productName, quantities });
+    console.log("商品IDを印刷する:", {
+      productionId,
+      productName,
+      quantities,
+    });
   }, [productionId, productName, quantities]);
 
   return (
     <PageStyle
       layout="grid-2"
-      title={`${productionId ?? "不明ID"}`}
+      title={productionId ?? "不明ID"}
       onBack={onBack}
-      onSave={handleSave}  // ← PageHeader の action に「保存」を追加
+      onSave={handleSave}
     >
       {/* --- 左ペイン --- */}
       <div>
@@ -168,10 +192,19 @@ export default function ProductionDetail() {
         />
 
         {/* サイズバリエーション：閲覧モード */}
-        <SizeVariationCard mode="view" sizes={sizes} onRemove={noopRemove} />
+        <SizeVariationCard
+          mode="view"
+          sizes={sizes}
+          onRemove={noopRemove}
+        />
 
         {/* モデルナンバー：閲覧モード */}
-        <ModelNumberCard mode="view" sizes={sizes} colors={colors} modelNumbers={modelNumbers} />
+        <ModelNumberCard
+          mode="view"
+          sizes={sizes}
+          colors={colors}
+          modelNumbers={modelNumbers}
+        />
 
         {/* 生産数：編集モード */}
         <ProductionQuantityCard
@@ -182,7 +215,7 @@ export default function ProductionDetail() {
           onChangeQty={handleChangeQty}
         />
 
-        {/* ▼ 印刷ボタンカード */}
+        {/* 印刷ボタンカード */}
         <Card className="mt-2">
           <CardContent className="py-6">
             <Button

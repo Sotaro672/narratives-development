@@ -3,7 +3,7 @@
    共通スタイルは Card.css に委譲（--pbp-* 変数使用）
 */
 
-/* テーブル */
+/* デフォルト: 編集モード用（行間に余白 & ピル風） */
 .mnc__table {
   width: 100%;
   border-collapse: separate;
@@ -32,4 +32,37 @@
   color: var(--pbp-text-soft);
   padding: 6px 0;
   text-align: center;
+}
+
+/* =========================
+   閲覧モード（.view-mode）
+   テーブルをフラットにし、行ごとに下線を引く
+   ========================= */
+
+.mnc.view-mode .mnc__table {
+  border-collapse: collapse;
+  border-spacing: 0;
+}
+
+.mnc.view-mode .mnc__table thead th {
+  padding: 12px 8px;
+  border-bottom: 1px solid var(--pbp-border-soft, #e5e7eb);
+}
+
+.mnc.view-mode .mnc__table tbody td {
+  padding: 12px 8px;
+}
+
+/* 各行の下辺に灰色ライン */
+.mnc.view-mode .mnc__table tbody tr {
+  border-bottom: 1px solid var(--pbp-border-soft, #e5e7eb);
+}
+
+/* 閲覧モードの入力は枠線・背景を消してテキスト風に */
+.mnc.view-mode .mnc__table input[readonly] {
+  border: none;
+  background: transparent;
+  box-shadow: none;
+  padding: 0;
+  height: auto;
 }

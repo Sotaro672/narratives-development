@@ -1,12 +1,16 @@
-//frontend/productBlueprint/src/pages/productBlueprintDetail.tsx
+// frontend/productBlueprint/src/pages/productBlueprintDetail.tsx
 import * as React from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import PageStyle from "../../../shell/src/layout/PageStyle/PageStyle";
 import AdminCard from "../../../admin/src/pages/AdminCard";
 import ProductBlueprintCard from "./productBlueprintCard";
 import ColorVariationCard from "../../../model/src/pages/ColorVariationCard";
-import SizeVariationCard, { type SizeRow } from "../../../model/src/pages/SizeVariationCard";
-import ModelNumberCard, { type ModelNumber } from "../../../model/src/pages/ModelNumberCard";
+import SizeVariationCard, {
+  type SizeRow,
+} from "../../../model/src/pages/SizeVariationCard";
+import ModelNumberCard, {
+  type ModelNumber,
+} from "../../../model/src/pages/ModelNumberCard";
 
 type Fit =
   | "レギュラーフィット"
@@ -16,22 +20,34 @@ type Fit =
 
 export default function ProductBlueprintDetail() {
   const navigate = useNavigate();
-  const { blueprintId } = useParams<{ blueprintId: string }>(); // ← URLパラメータ取得
+  const { blueprintId } = useParams<{ blueprintId: string }>();
 
   // ─────────────────────────────────────────
   // モックデータ
   // ─────────────────────────────────────────
-  const [productName, setProductName] = React.useState("シルクブラウス プレミアムライン");
+  const [productName, setProductName] = React.useState(
+    "シルクブラウス プレミアムライン",
+  );
   const [brand] = React.useState("LUMINA Fashion");
   const [fit, setFit] = React.useState<Fit>("レギュラーフィット");
-  const [materials, setMaterials] = React.useState("シルク100%、裏地:ポリエステル100%");
+  const [materials, setMaterials] = React.useState(
+    "シルク100%、裏地:ポリエステル100%",
+  );
   const [weight, setWeight] = React.useState<number>(180);
-  const [washTags, setWashTags] = React.useState<string[]>(["手洗い", "ドライクリーニング", "陰干し"]);
+  const [washTags, setWashTags] = React.useState<string[]>([
+    "手洗い",
+    "ドライクリーニング",
+    "陰干し",
+  ]);
   const [productIdTag, setProductIdTag] = React.useState("QRコード");
 
   // カラー
   const [colorInput, setColorInput] = React.useState("");
-  const [colors, setColors] = React.useState<string[]>(["ホワイト", "ブラック", "ネイビー"]);
+  const [colors, setColors] = React.useState<string[]>([
+    "ホワイト",
+    "ブラック",
+    "ネイビー",
+  ]);
 
   // サイズ
   const [sizes, setSizes] = React.useState<SizeRow[]>([
@@ -59,6 +75,7 @@ export default function ProductBlueprintDetail() {
   const [createdAt] = React.useState("2024/1/15");
 
   const onSave = () => alert("保存しました（ダミー）");
+
   const onBack = React.useCallback(() => {
     navigate(-1);
   }, [navigate]);
@@ -76,14 +93,15 @@ export default function ProductBlueprintDetail() {
   return (
     <PageStyle
       layout="grid-2"
-      title={`${blueprintId ?? "不明ID"}`} // ← blueprintIdをタイトルに反映
+      title={blueprintId ?? "不明ID"}
       onBack={onBack}
       onSave={onSave}
     >
       {/* --- 左ペイン --- */}
       <div>
+        {/* 商品設計カード：編集モード */}
         <ProductBlueprintCard
-          mode="view"  // ← 閲覧モードで呼び出し
+          mode="edit"
           productName={productName}
           brand={brand}
           fit={fit}
@@ -99,7 +117,9 @@ export default function ProductBlueprintDetail() {
           onChangeProductIdTag={setProductIdTag}
         />
 
+        {/* カラー：編集モード */}
         <ColorVariationCard
+          mode="edit"
           colors={colors}
           colorInput={colorInput}
           onChangeColorInput={setColorInput}
@@ -107,12 +127,22 @@ export default function ProductBlueprintDetail() {
           onRemoveColor={removeColor}
         />
 
+        {/* サイズ：編集モード */}
         <SizeVariationCard
+          mode="edit"
           sizes={sizes}
-          onRemove={(id: string) => setSizes((prev) => prev.filter((s) => s.id !== id))}
+          onRemove={(id: string) =>
+            setSizes((prev) => prev.filter((s) => s.id !== id))
+          }
         />
 
-        <ModelNumberCard sizes={sizes} colors={colors} modelNumbers={modelNumbers} />
+        {/* モデルナンバー：編集モード */}
+        <ModelNumberCard
+          mode="edit"
+          sizes={sizes}
+          colors={colors}
+          modelNumbers={modelNumbers}
+        />
       </div>
 
       {/* --- 右ペイン（管理情報） --- */}

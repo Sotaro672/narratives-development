@@ -4,11 +4,13 @@ import { useNavigate } from "react-router-dom";
 import PageStyle from "../../../shell/src/layout/PageStyle/PageStyle";
 import AdminCard from "../../../admin/src/pages/AdminCard";
 import ProductBlueprintCard from "./productBlueprintCard";
-import TokenBlueprintCard from "../../../tokenBlueprint/src/pages/tokenBlueprintCard";
-import TokenContentsCard from "../../../tokenContents/src/pages/tokenContentsCard";
 import ColorVariationCard from "../../../model/src/pages/ColorVariationCard";
-import SizeVariationCard, { type SizeRow } from "../../../model/src/pages/SizeVariationCard";
-import ModelNumberCard, { type ModelNumber } from "../../../model/src/pages/ModelNumberCard";
+import SizeVariationCard, {
+  type SizeRow,
+} from "../../../model/src/pages/SizeVariationCard";
+import ModelNumberCard, {
+  type ModelNumber,
+} from "../../../model/src/pages/ModelNumberCard";
 
 type Fit =
   | "レギュラーフィット"
@@ -92,16 +94,7 @@ export default function ProductBlueprintCreate() {
           onChangeProductIdTag={setProductIdTag}
         />
 
-        {/* トークン設計カード（編集モード・プリフィルなし） */}
-        <div style={{ marginTop: 16 }}>
-          <TokenBlueprintCard initialEditMode />
-        </div>
-
-        {/* コンテンツカード（編集モード・プリフィルなし） */}
-        <div style={{ marginTop: 16 }}>
-          <TokenContentsCard />
-        </div>
-
+        {/* カラー variation */}
         <ColorVariationCard
           colors={colors}
           colorInput={colorInput}
@@ -110,6 +103,7 @@ export default function ProductBlueprintCreate() {
           onRemoveColor={removeColor}
         />
 
+        {/* サイズ variation */}
         <SizeVariationCard
           sizes={sizes}
           onRemove={(id: string) =>
@@ -117,6 +111,7 @@ export default function ProductBlueprintCreate() {
           }
         />
 
+        {/* モデルナンバー */}
         <ModelNumberCard
           sizes={sizes}
           colors={colors}

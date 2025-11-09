@@ -1,4 +1,3 @@
-// frontend/model/src/pages/ModelNumberCard.tsx
 import * as React from "react";
 import { Tags } from "lucide-react";
 import { Card, CardHeader, CardTitle, CardContent } from "../../../shared/ui";
@@ -30,11 +29,13 @@ type ModelNumberCardProps = {
   /** "edit" | "view"（既定: "edit"） */
   mode?: "edit" | "view";
   /**
-   * モデルナンバーの変更コールバック（編集モード時のみ有効）
-   * 未指定の場合、編集モードでも入力は読み取り専用のまま
+   * モデルナンバーの変更コールバック（編集モード時）
+   * 指定されている場合は、入力変更時に呼び出される
    */
   onChangeCode?: (sizeLabel: string, color: string, nextCode: string) => void;
 };
+
+const makeKey = (sizeLabel: string, color: string) => `${sizeLabel}__${color}`;
 
 const ModelNumberCard: React.FC<ModelNumberCardProps> = ({
   sizes,
@@ -45,28 +46,68 @@ const ModelNumberCard: React.FC<ModelNumberCardProps> = ({
   onChangeCode,
 }) => {
   const isEdit = mode === "edit";
-  const canEdit = isEdit && typeof onChangeCode === "function";
 
-  const findCode = (sizeLabel: string, color: string) =>
-    modelNumbers.find((m) => m.size === sizeLabel && m.color === color)?.code ?? "";
+  // props から初期マップを作成し、編集モードではローカル state を編集可能にする
+  const [codeMap, setCodeMap] = React.useState<Record<string, string>>({});
+
+  React.useEffect(() => {
+    const next: Record<string, string> = {};
+    sizes.forEach((s) => {
+      colors.forEach((c) => {
+        const found =
+          modelNumbers.find(
+            (m) => m.size === s.sizeLabel && m.color === c,
+          )?.code ?? "";
+        const key = makeKey(s.sizeLabel, c);
+        next[key] = found;
+      });
+    });
+    setCodeMap(next);
+  }, [sizes, colors, modelNumbers]);
+
+  const findCodeFromProps = (sizeLabel: string, color: string) =>
+    modelNumbers.find((m) => m.size === sizeLabel && m.color === color)?.code ??
+    "";
+
+  const getValue = (sizeLabel: string, color: string) => {
+    const key = makeKey(sizeLabel, color);
+    return isEdit ? codeMap[key] ?? "" : findCodeFromProps(sizeLabel, color);
+  };
 
   const handleChange =
     (sizeLabel: string, color: string) =>
     (e: React.ChangeEvent<HTMLInputElement>) => {
-      if (!canEdit) return;
-      onChangeCode!(sizeLabel, color, e.target.value);
+      if (!isEdit) return;
+
+      const nextCode = e.target.value;
+      const key = makeKey(sizeLabel, color);
+
+      setCodeMap((prev) => ({
+        ...prev,
+        [key]: nextCode,
+      }));
+
+      if (onChangeCode) {
+        onChangeCode(sizeLabel, color, nextCode);
+      }
     };
 
   const readonlyProps = { variant: "readonly" as const, readOnly: true };
 
   return (
-    <Card className={`mnc ${className ?? ""}`}>
+    <Card
+      className={`mnc ${className ?? ""} ${
+        mode === "view" ? "view-mode" : ""
+      }`}
+    >
       <CardHeader className="box__header">
         <Tags size={16} />
         <CardTitle className="box__title">
           モデルナンバー
           {mode === "view" && (
-            <span className="ml-2 text-xs text-[var(--pbp-text-soft)]">（閲覧）</span>
+            <span className="ml-2 text-xs text-[var(--pbp-text-soft)]">
+              （閲覧）
+            </span>
           )}
         </CardTitle>
       </CardHeader>
@@ -85,20 +126,17 @@ const ModelNumberCard: React.FC<ModelNumberCardProps> = ({
             {sizes.map((s) => (
               <TableRow key={s.id}>
                 <TableCell className="mnc__size">{s.sizeLabel}</TableCell>
-                {colors.map((c) => {
-                  const value = findCode(s.sizeLabel, c);
-                  return (
-                    <TableCell key={c}>
-                      <Input
-                        {...(canEdit ? {} : readonlyProps)}
-                        value={value}
-                        onChange={handleChange(s.sizeLabel, c)}
-                        placeholder="例: LM-SB-S-WHT"
-                        aria-label={`${s.sizeLabel} / ${c} のモデルナンバー`}
-                      />
-                    </TableCell>
-                  );
-                })}
+                {colors.map((c) => (
+                  <TableCell key={c}>
+                    <Input
+                      {...(!isEdit ? readonlyProps : {})}
+                      value={getValue(s.sizeLabel, c)}
+                      onChange={handleChange(s.sizeLabel, c)}
+                      placeholder="例: LM-SB-S-WHT"
+                      aria-label={`${s.sizeLabel} / ${c} のモデルナンバー`}
+                    />
+                  </TableCell>
+                ))}
               </TableRow>
             ))}
 

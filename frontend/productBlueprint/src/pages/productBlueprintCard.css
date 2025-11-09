@@ -1,25 +1,32 @@
-/* 基本情報カード（ProductBlueprintCard）用スタイル */
+/* 基本情報カード（ProductBlueprintCard） */
 
 .pbc {
-  background: var(--pbp-surface);
-  border: 1px solid var(--pbp-border);
-  border-radius: 12px;
+  width: 100%;
+  background: var(--pbp-surface, #ffffff);
+  border: 1px solid var(--pbp-border, rgba(0, 0, 0, 0.08));
+  border-radius: 18px;
+  box-shadow: 0 2px 4px rgba(15, 23, 42, 0.03);
+  box-sizing: border-box;
   overflow: hidden;
 }
+
+/* Header */
 
 .pbc .box__header {
   display: flex;
   align-items: center;
   gap: 8px;
   padding: 16px 20px;
-  border-bottom: 1px solid var(--pbp-border-soft);
+  border-bottom: 1px solid var(--pbp-border, rgba(0, 0, 0, 0.06));
 }
 
 .pbc .box__title {
-  font-size: 0.875rem;
+  font-size: 0.95rem;
   font-weight: 600;
-  color: var(--pbp-text-dim);
+  color: var(--pbp-text-dim, rgba(0, 0, 0, 0.7));
 }
+
+/* Body */
 
 .pbc .box__body {
   padding: 20px;
@@ -27,25 +34,102 @@
 
 .pbc .label {
   font-size: 12px;
-  color: var(--pbp-text-soft);
+  color: var(--pbp-text-soft, rgba(0, 0, 0, 0.6));
   margin-bottom: 6px;
   margin-top: 12px;
 }
 
-/* 通常入力見た目（編集モード） */
-.pbc .suffix {
+/* すべての input / textarea はカード幅いっぱい */
+
+.pbc .box__body input,
+.pbc .box__body textarea {
+  width: 100%;
+  box-sizing: border-box;
+}
+
+/* =========================
+   編集モード（.view-mode なし）
+   TokenBlueprintCard と同トーン
+   ========================= */
+
+.pbc:not(.view-mode) .box__body input:not([readonly]),
+.pbc:not(.view-mode) .box__body textarea:not([readonly]) {
+  padding: 10px 14px;
+  min-height: 40px;
+  border-radius: 10px;
+  background: #f6f7f9;
+  border: 1px solid rgba(0, 0, 0, 0.12); /* 黒系の枠線 */
+  color: var(--pbp-text, rgba(0, 0, 0, 0.86));
+}
+
+/* select トリガー(Button) も同じ見た目に */
+
+.pbc:not(.view-mode) .pbc-select-trigger {
+  padding: 10px 14px;
+  width: 100%;
+  border-radius: 10px;
+  background: #f6f7f9;
+  border: 1px solid rgba(0, 0, 0, 0.12);
+  color: var(--pbp-text, rgba(0, 0, 0, 0.86));
+  box-shadow: none;
+}
+
+/* 重さの単位ラベル（編集モード） */
+
+.pbc:not(.view-mode) .suffix {
   display: inline-flex;
   align-items: center;
   justify-content: center;
   height: 40px;
   padding: 0 12px;
+  margin-left: 4px;
   border-radius: 10px;
-  border: 1px solid var(--pbp-border-strong);
-  background: var(--pbp-input-bg);
-  color: var(--pbp-text-dim);
+  background: #f6f7f9;
+  border: 1px solid rgba(15, 23, 42, 0.3);
+  color: var(--pbp-text-soft, rgba(0, 0, 0, 0.6));
 }
 
-/* チップ・ボタン */
+/* =========================
+   閲覧モード（.view-mode）
+   TokenBlueprintCard の閲覧スタイルに合わせる
+   ========================= */
+
+.pbc.view-mode .box__body input,
+.pbc.view-mode .box__body textarea {
+  padding: 10px 14px;
+  min-height: 40px;
+  border-radius: 10px;
+  background: #ffffff !important;
+  border-color: #ffffff !important;
+  box-shadow: none !important;
+  color: var(--pbp-text, rgba(0, 0, 0, 0.86)) !important;
+}
+
+/* select 風表示や単位ラベルも白に */
+
+.pbc.view-mode .pbc-select-trigger,
+.pbc.view-mode .suffix {
+  background: #ffffff !important;
+  border-color: #ffffff !important;
+  box-shadow: none !important;
+  color: var(--pbp-text, rgba(0, 0, 0, 0.86)) !important;
+}
+
+/* shadcn Input の muted / readonly クラスを上書き */
+
+.pbc.view-mode .bg-muted,
+.pbc.view-mode .bg-slate-50,
+.pbc.view-mode .border-muted,
+.pbc.view-mode .border-slate-200 {
+  background-color: #ffffff !important;
+  border-color: #ffffff !important;
+  box-shadow: none !important;
+}
+
+/* =========================
+   チップ・ボタンなど
+   ========================= */
+
 .pbc .chips {
   display: flex;
   flex-wrap: wrap;
@@ -60,9 +144,18 @@
   height: 28px;
   padding: 0 8px;
   border-radius: 999px;
-  background: var(--pbp-chip-bg);
-  color: var(--pbp-chip-fg);
+  background: var(--pbp-chip-bg, #eff6ff);
+  color: var(--pbp-chip-fg, #1d4ed8);
   font-size: 12px;
+}
+
+.pbc .chip-remove {
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  padding: 0;
 }
 
 .pbc .btn {
@@ -73,47 +166,13 @@
   height: 36px;
   padding: 0 12px;
   border-radius: 10px;
-  border: 1px solid var(--pbp-border);
-  background: var(--pbp-surface);
-  color: var(--pbp-text);
+  border: 1px solid var(--pbp-border, rgba(0, 0, 0, 0.12));
+  background: var(--pbp-surface, #ffffff);
+  color: var(--pbp-text, rgba(0, 0, 0, 0.86));
   cursor: pointer;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.06);
 }
 
 .pbc .btn:hover {
-  background: var(--pbp-muted-bg);
+  background: var(--pbp-muted-bg, rgba(0, 0, 0, 0.03));
 }
-
-/* ──────────────────────────────
-   閲覧モードのスタイル
-   Card に .view-mode が付与されている場合、
-   すべての input / suffix を白背景＆白枠線にする
-   （tokenBlueprintCard とトーンを合わせる）
-   ────────────────────────────── */
-
-.pbc.view-mode input[readonly],
-.pbc.view-mode input[disabled],
-.pbc.view-mode .suffix {
-  background: #ffffff !important;
-  border-color: #ffffff !important;
-  box-shadow: none !important;
-  color: var(--pbp-text) !important;
-}
-
-/* shadcn Input の variant=readonly に対しても上書き */
-.pbc.view-mode .border,
-.pbc.view-mode .bg-muted,
-.pbc.view-mode .bg-slate-50 {
-  background-color: #ffffff !important;
-  border-color: #ffffff !important;
-  box-shadow: none !important;
-}
-
-/* フィットや商品IDの read-only Input も含めたいので汎用指定 */
-.pbc.view-mode input,
-.pbc.view-mode textarea {
-  background-color: #ffffff !important;
-  border-color: #ffffff !important;
-  box-shadow: none !important;
-}
-
-/* ポップオーバートリガー等のボタンはそのまま（編集時のみ使用） */
