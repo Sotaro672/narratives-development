@@ -1,8 +1,8 @@
 // frontend/productBlueprint/src/routes.tsx
 import type { RouteObject } from "react-router-dom";
-import ProductBlueprintManagement from "./pages/productBlueprintManagement";
-import ProductBlueprintDetail from "./pages/productBlueprintDetail";
-import ProductBlueprintCreate from "./pages/productBlueprintCreate";
+import ProductBlueprintManagement from "../../presentation/pages/productBlueprintManagement";
+import ProductBlueprintDetail from "../../presentation/pages/productBlueprintDetail";
+import ProductBlueprintCreate from "../../presentation/pages/productBlueprintCreate";
 
 /**
  * Product Blueprint Module Routes

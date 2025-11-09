@@ -9,7 +9,7 @@ import {
   CardTitle,
   CardContent,
 } from "../../../shared/ui/card";
-import ProductBlueprintCard from "../../../productBlueprint/src/pages/productBlueprintCard";
+import ProductBlueprintCard from "../../../productBlueprint/src/presentation/components/productBlueprintCard";
 import InventoryCard, {
   type InventoryRow,
 } from "../../../inventory/src/presentation/components/inventoryCard";

@@ -5,7 +5,7 @@ import PageStyle from "../../../shell/src/layout/PageStyle/PageStyle";
 import AdminCard from "../../../admin/src/presentation/components/AdminCard";
 
 // 閲覧モードで呼び出す対象
-import ProductBlueprintCard from "../../../productBlueprint/src/pages/productBlueprintCard";
+import ProductBlueprintCard from "../../../productBlueprint/src/presentation/components/productBlueprintCard";
 import ColorVariationCard from "../../../model/src/pages/ColorVariationCard";
 import SizeVariationCard, {
   type SizeRow,

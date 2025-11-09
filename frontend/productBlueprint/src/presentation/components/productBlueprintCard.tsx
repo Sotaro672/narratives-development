@@ -5,16 +5,16 @@ import {
   CardHeader,
   CardTitle,
   CardContent,
-} from "../../../shared/ui";
-import { Badge } from "../../../shared/ui/badge";
-import { Button } from "../../../shared/ui/button";
-import { Input } from "../../../shared/ui/input";
+} from "../../../../shared/ui";
+import { Badge } from "../../../../shared/ui/badge";
+import { Button } from "../../../../shared/ui/button";
+import { Input } from "../../../../shared/ui/input";
 import {
   Popover,
   PopoverTrigger,
   PopoverContent,
-} from "../../../shared/ui/popover";
-import "./productBlueprintCard.css";
+} from "../../../../shared/ui/popover";
+import "../styles/productBlueprint.css";
 
 type Fit =
   | "レギュラーフィット"
