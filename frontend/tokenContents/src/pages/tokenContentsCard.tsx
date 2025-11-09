@@ -68,6 +68,7 @@ export default function TokenContentsCard({ images }: TokenContentsCardProps) {
       </CardHeader>
 
       <CardContent>
+        {/* メイン画像カルーセル */}
         <div className="token-contents-card__viewer">
           {/* 左矢印 */}
           <button
@@ -106,6 +107,29 @@ export default function TokenContentsCard({ images }: TokenContentsCardProps) {
             <ChevronRight className="token-contents-card__nav-icon" />
           </button>
         </div>
+
+        {/* サムネイル一覧（2枚目以降を1/9サイズで下に並べる） */}
+        {hasImages && list.length > 1 && (
+          <div className="token-contents-card__thumbs">
+            {list.map((src, i) => {
+              if (i === index) return null; // メイン表示中の画像は除外
+              return (
+                <button
+                  key={`${src}-${i}`}
+                  type="button"
+                  className="token-contents-card__thumb-wrap"
+                  onClick={() => setIndex(i)}
+                >
+                  <img
+                    src={src}
+                    alt={`コンテンツ サムネイル ${i + 1}`}
+                    className="token-contents-card__thumb-image"
+                  />
+                </button>
+              );
+            })}
+          </div>
+        )}
       </CardContent>
     </Card>
   );

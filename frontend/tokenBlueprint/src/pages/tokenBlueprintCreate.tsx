@@ -13,6 +13,7 @@ export default function TokenBlueprintCreate() {
 
   // ─────────────────────────────────────────────
   // 該当するトークン設計データを取得（ID一致で検索）
+  // （※既存ロジックはそのまま）
   // ─────────────────────────────────────────────
   const blueprint = React.useMemo(() => {
     return (
@@ -44,13 +45,15 @@ export default function TokenBlueprintCreate() {
       layout="grid-2"
       title={`トークン設計：${blueprint.tokenBlueprintId}`}
       onBack={handleBack}
-      onSave={handleSave} // ← PageHeader に保存ボタンを表示
+      onSave={handleSave}
     >
       {/* 左カラム：トークン設計カード＋コンテンツビューア */}
       <div>
         <TokenBlueprintCard initialEditMode />
+
+        {/* コンテンツカード：モック画像を使わず、空の状態で表示 */}
         <div style={{ marginTop: 16 }}>
-          <TokenContentsCard />
+          <TokenContentsCard images={[]} />
         </div>
       </div>
 

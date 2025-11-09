@@ -5,10 +5,18 @@ import PageStyle from "../../../shell/src/layout/PageStyle/PageStyle";
 import AdminCard from "../../../admin/src/pages/AdminCard";
 import TokenBlueprintCard from "../../../tokenBlueprint/src/pages/tokenBlueprintCard";
 import TokenContentsCard from "../../../tokenContents/src/pages/tokenContentsCard";
+import { TOKEN_BLUEPRINTS } from "../../../tokenBlueprint/mockdata";
+import { MOCK_IMAGES } from "../../../tokenContents/mockdata";
 
 export default function TokenOperationDetail() {
   const navigate = useNavigate();
   const { tokenOperationId } = useParams<{ tokenOperationId: string }>();
+
+  // ─────────────────────────────────────────
+  // モックデータ（トークン設計 & コンテンツ）
+  // ─────────────────────────────────────────
+  const blueprint = TOKEN_BLUEPRINTS[0];
+  const contentImages = MOCK_IMAGES;
 
   // 管理情報（右カラム）
   const [assignee, setAssignee] = React.useState("佐藤 美咲");
@@ -28,16 +36,23 @@ export default function TokenOperationDetail() {
       layout="grid-2"
       title={`トークン運用：${tokenOperationId ?? "不明ID"}`}
       onBack={onBack}
-      onSave={handleSave} // ✅ 保存ボタンをPageHeaderに追加
+      onSave={handleSave}
     >
-      {/* 左カラム：トークン設計＋コンテンツ */}
+      {/* 左カラム：トークン設計＋コンテンツ（いずれもモックでプリフィル） */}
       <div>
-        {/* トークン設計カード（閲覧用。初期値は空でプレースホルダ表示） */}
-        <TokenBlueprintCard />
+        <TokenBlueprintCard
+          initialTokenBlueprintId={blueprint.tokenBlueprintId}
+          initialTokenName={blueprint.name}
+          initialSymbol={blueprint.symbol}
+          initialBrand={blueprint.brand}
+          initialDescription={blueprint.description}
+          initialBurnAt={blueprint.burnAt}
+          initialIconUrl={blueprint.iconUrl}
+          initialEditMode={false}
+        />
 
-        {/* コンテンツカード（空状態で表示） */}
         <div style={{ marginTop: 16 }}>
-          <TokenContentsCard images={[]} />
+          <TokenContentsCard images={contentImages} />
         </div>
       </div>
 

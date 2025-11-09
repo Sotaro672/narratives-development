@@ -100,9 +100,25 @@
   width: 100%;
   height: 100%;
   max-height: 520px;
-  object-fit: cover; /* カード内いっぱいに表示し、上下左右をトリミング */
+  object-fit: cover;
   border-radius: 0;
   box-shadow: 0 8px 18px rgba(15, 23, 42, 0.12);
+}
+
+/* プレースホルダ */
+
+.token-contents-card__placeholder {
+  width: 100%;
+  max-width: 480px;
+  min-height: 220px;
+  border-radius: 14px;
+  border: 1px dashed rgba(148, 163, 253, 0.6);
+  background-color: #f9fafb;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.85rem;
+  color: #9ca3af;
 }
 
 /* 矢印ナビゲーション */
@@ -138,19 +154,81 @@
   transform: translateY(-50%);
 }
 
-.token-contents-card__nav:hover {
+.token-contents-card__nav:hover:not(:disabled) {
   background-color: #f9fafb;
   box-shadow: 0 6px 14px rgba(148, 163, 253, 0.35);
   transform: translateY(-50%) scale(1.03);
 }
 
-.token-contents-card__nav:active {
+.token-contents-card__nav:active:not(:disabled) {
   box-shadow: 0 3px 6px rgba(148, 163, 253, 0.26);
   transform: translateY(-50%) scale(0.97);
+}
+
+.token-contents-card__nav:disabled {
+  opacity: 0.4;
+  cursor: default;
 }
 
 .token-contents-card__nav-icon {
   width: 18px;
   height: 18px;
   color: #6b7280;
+}
+
+/* サムネイルエリア（2枚目以降を1/9サイズで並べる） */
+
+.token-contents-card__thumbs {
+  display: flex;
+  gap: 8px;
+  margin: 12px auto 4px;
+  padding: 0 72px;
+  box-sizing: border-box;
+}
+
+.token-contents-card__thumb-wrap {
+  flex: 0 0 calc(100% / 9);
+  max-width: 96px;
+  aspect-ratio: 4 / 3;
+  border-radius: 8px;
+  border: 1px solid rgba(148, 163, 253, 0.35);
+  overflow: hidden;
+  padding: 0;
+  background: #f9fafb;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition:
+    transform 0.12s ease,
+    box-shadow 0.12s ease,
+    border-color 0.12s ease;
+}
+
+.token-contents-card__thumb-wrap:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 10px rgba(148, 163, 253, 0.25);
+  border-color: rgba(79, 70, 229, 0.7);
+}
+
+.token-contents-card__thumb-image {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+/* レスポンシブ（幅が狭い場合は少し広めに） */
+
+@media (max-width: 768px) {
+  .token-contents-card__viewer {
+    padding: 20px 16px;
+  }
+
+  .token-contents-card__thumbs {
+    padding: 0 16px;
+  }
+
+  .token-contents-card__thumb-wrap {
+    flex: 0 0 calc(100% / 6);
+  }
 }
