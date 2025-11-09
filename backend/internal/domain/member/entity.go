@@ -1,3 +1,4 @@
+// backend/internal/domain/member/entity.go
 package member
 
 import (

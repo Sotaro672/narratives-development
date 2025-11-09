@@ -1,4 +1,4 @@
-// frontend/member/src/pages/memberManagement.tsx
+// frontend/member/src/presentation/pages/memberManagement.tsx
 
 import React, { useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
@@ -7,9 +7,10 @@ import List, {
   SortableTableHeader,
 } from "../../../../shell/src/layout/List/List";
 import "../styles/member.css";
-import { MEMBERS, type MemberRow } from "../../../mockdata";
+import { MOCK_MEMBERS } from "../../infrastructure/mock/mockdata";
+import type { Member } from "../../../../shell/src/shared/types/member";
 
-// Utility
+// Utility: "YYYY/MM/DD" → timestamp
 const toTs = (yyyyMd: string) => {
   const [y, m, d] = yyyyMd.split("/").map((v) => parseInt(v, 10));
   return new Date(y, (m || 1) - 1, d || 1).getTime();
@@ -17,8 +18,69 @@ const toTs = (yyyyMd: string) => {
 
 type SortKey = "taskCount" | "permissionCount" | "registeredAt" | null;
 
+type MemberRow = {
+  id: string;
+  name: string;
+  email: string;
+  role: string; // 表示用（日本語）
+  brands: string[];
+  taskCount: number;
+  permissionCount: number;
+  registeredAt: string; // "YYYY/MM/DD"
+};
+
+// Role表示用に MemberRole をマッピング
+const toDisplayRole = (role: Member["role"]): string => {
+  switch (role) {
+    case "admin":
+      return "管理者";
+    case "brand-manager":
+      return "ブランド管理者";
+    case "token-manager":
+      return "トークン管理者";
+    case "inquiry-handler":
+      return "問い合わせ担当者";
+    case "production-designer":
+      return "生産設計責任者";
+    default:
+      return role;
+  }
+};
+
+// Member → 一覧表示用 MemberRow へ変換
+const toMemberRow = (m: Member): MemberRow => {
+  const name =
+    `${m.lastName ?? ""} ${m.firstName ?? ""}`.trim() ||
+    m.email ||
+    m.id;
+
+  // createdAt(ISO8601) → "YYYY/MM/DD"
+  const registeredAt =
+    m.createdAt && m.createdAt.length >= 10
+      ? m.createdAt.slice(0, 10).replace(/-/g, "/")
+      : "";
+
+  return {
+    id: m.id,
+    name,
+    email: m.email ?? "",
+    role: toDisplayRole(m.role),
+    brands: m.assignedBrands ?? [],
+    // TODO: taskCount は実データ導入時に差し替え
+    taskCount: 0,
+    permissionCount: m.permissions?.length ?? 0,
+    registeredAt,
+  };
+};
+
 export default function MemberManagementPage() {
   const navigate = useNavigate();
+
+  // 一覧の元データ（モック）
+  const baseRows = useMemo<MemberRow[]>(
+    () => MOCK_MEMBERS.map(toMemberRow),
+    []
+  );
 
   // Filters
   const [roleFilter, setRoleFilter] = useState<string[]>([]);
@@ -26,33 +88,38 @@ export default function MemberManagementPage() {
 
   const roleOptions = useMemo(
     () =>
-      Array.from(new Set(MEMBERS.map((m) => m.role))).map((v) => ({
+      Array.from(new Set(baseRows.map((m) => m.role))).map((v): {
+        value: string;
+        label: string;
+      } => ({
         value: v,
         label: v,
       })),
-    []
+    [baseRows]
   );
 
   const brandOptions = useMemo(
     () =>
-      Array.from(new Set(MEMBERS.flatMap((m) => m.brand))).map((v) => ({
+      Array.from(
+        new Set(baseRows.flatMap((m) => m.brands))
+      ).map((v): { value: string; label: string } => ({
         value: v,
         label: v,
       })),
-    []
+    [baseRows]
   );
 
   // Sort
   const [activeKey, setActiveKey] = useState<SortKey>("registeredAt");
   const [direction, setDirection] = useState<"asc" | "desc" | null>("desc");
 
-  // Data
+  // Filter + Sort 適用後の行
   const rows = useMemo(() => {
-    let data = MEMBERS.filter(
+    let data = baseRows.filter(
       (m) =>
         (roleFilter.length === 0 || roleFilter.includes(m.role)) &&
         (brandFilter.length === 0 ||
-          m.brand.some((b) => brandFilter.includes(b)))
+          m.brands.some((b) => brandFilter.includes(b)))
     );
 
     if (activeKey && direction) {
@@ -62,16 +129,14 @@ export default function MemberManagementPage() {
           const bv = toTs(b.registeredAt);
           return direction === "asc" ? av - bv : bv - av;
         }
-        const av = a[activeKey];
-        const bv = b[activeKey];
-        return direction === "asc"
-          ? (av as number) - (bv as number)
-          : (bv as number) - (av as number);
+        const av = a[activeKey] as number;
+        const bv = b[activeKey] as number;
+        return direction === "asc" ? av - bv : bv - av;
       });
     }
 
     return data;
-  }, [roleFilter, brandFilter, activeKey, direction]);
+  }, [baseRows, roleFilter, brandFilter, activeKey, direction]);
 
   // Headers
   const headers: React.ReactNode[] = [
@@ -144,8 +209,9 @@ export default function MemberManagementPage() {
     return "member-role-badge is-default";
   };
 
-  // 詳細ページへ遷移（email を ID として利用）
+  // 詳細ページへ遷移（email を ID として利用／当面のモック運用）
   const goDetail = (email: string) => {
+    if (!email) return;
     navigate(`/member/${encodeURIComponent(email)}`);
   };
 
@@ -165,9 +231,9 @@ export default function MemberManagementPage() {
           console.log("メンバーリスト更新");
         }}
       >
-        {rows.map((m) => (
+        {rows.map((m: MemberRow) => (
           <tr
-            key={m.email}
+            key={m.email || m.id}
             role="button"
             tabIndex={0}
             className="cursor-pointer"
@@ -185,7 +251,7 @@ export default function MemberManagementPage() {
               <span className={roleClass(m.role)}>{m.role}</span>
             </td>
             <td>
-              {m.brand.map((b) => (
+              {m.brands.map((b: string) => (
                 <span key={b} className="lp-brand-pill mm-brand-tag">
                   {b}
                 </span>
