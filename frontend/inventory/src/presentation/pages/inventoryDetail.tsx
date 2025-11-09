@@ -1,7 +1,7 @@
 import * as React from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import PageStyle from "../../../../shell/src/layout/PageStyle/PageStyle";
-import AdminCard from "../../../../admin/src/pages/AdminCard";
+import AdminCard from "../../../../admin/src/presentation/components/AdminCard";
 import ProductBlueprintCard from "../../../../productBlueprint/src/pages/productBlueprintCard";
 import TokenBlueprintCard from "../../../../tokenBlueprint/src/pages/tokenBlueprintCard";
 import InventoryCard, {

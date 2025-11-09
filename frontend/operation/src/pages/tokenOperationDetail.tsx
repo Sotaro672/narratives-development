@@ -2,7 +2,7 @@
 import * as React from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import PageStyle from "../../../shell/src/layout/PageStyle/PageStyle";
-import AdminCard from "../../../admin/src/pages/AdminCard";
+import AdminCard from "../../../admin/src/presentation/components/AdminCard";
 import TokenBlueprintCard from "../../../tokenBlueprint/src/pages/tokenBlueprintCard";
 import TokenContentsCard from "../../../tokenContents/src/pages/tokenContentsCard";
 import { TOKEN_BLUEPRINTS } from "../../../tokenBlueprint/mockdata";
