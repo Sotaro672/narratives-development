@@ -6,57 +6,65 @@ import List, {
   FilterableTableHeader,
   SortableTableHeader,
 } from "../../../../shell/src/layout/List/List";
-import { TOKEN_BLUEPRINTS, type TokenBlueprint } from "../../../mockdata";
+import { TOKEN_BLUEPRINTS } from "../../infrastructure/mockdata/mockdata";
+import type { TokenBlueprint } from "../../../../shell/src/shared/types/tokenBlueprint";
 
-const toTs = (yyyyMd: string) => {
-  const [y, m, d] = yyyyMd.split("/").map((v) => parseInt(v, 10));
-  return new Date(y, (m || 1) - 1, d || 1).getTime();
+/** ISO8601 → timestamp（不正値は 0 扱い） */
+const toTs = (iso: string): number => {
+  if (!iso) return 0;
+  const t = Date.parse(iso);
+  return Number.isNaN(t) ? 0 : t;
 };
+
+type SortKey = "createdAt" | null;
 
 export default function TokenBlueprintManagementPage() {
   const navigate = useNavigate();
 
-  // フィルタ状態
+  // フィルタ状態（brandId / assigneeId ベース）
   const [brandFilter, setBrandFilter] = useState<string[]>([]);
   const [assigneeFilter, setAssigneeFilter] = useState<string[]>([]);
 
   // ソート状態
-  const [sortKey, setSortKey] = useState<"createdAt" | null>(null);
+  const [sortKey, setSortKey] = useState<SortKey>(null);
   const [sortDir, setSortDir] = useState<"asc" | "desc" | null>(null);
 
-  // オプション
+  // オプション（brandId / assigneeId から算出）
   const brandOptions = useMemo(
     () =>
-      Array.from(new Set(TOKEN_BLUEPRINTS.map((r) => r.brand))).map((v) => ({
-        value: v,
-        label: v,
-      })),
-    []
+      Array.from(new Set(TOKEN_BLUEPRINTS.map((r) => r.brandId))).map(
+        (v) => ({
+          value: v,
+          label: v,
+        }),
+      ),
+    [],
   );
 
   const assigneeOptions = useMemo(
     () =>
-      Array.from(new Set(TOKEN_BLUEPRINTS.map((r) => r.assignee))).map(
+      Array.from(new Set(TOKEN_BLUEPRINTS.map((r) => r.assigneeId))).map(
         (v) => ({
           value: v,
           label: v,
-        })
+        }),
       ),
-    []
+    [],
   );
 
-  // フィルタ + ソート
-  const rows = useMemo(() => {
+  // フィルタ + ソート適用
+  const rows: TokenBlueprint[] = useMemo(() => {
     let data = TOKEN_BLUEPRINTS.filter(
       (r) =>
-        (brandFilter.length === 0 || brandFilter.includes(r.brand)) &&
-        (assigneeFilter.length === 0 || assigneeFilter.includes(r.assignee))
+        (brandFilter.length === 0 || brandFilter.includes(r.brandId)) &&
+        (assigneeFilter.length === 0 ||
+          assigneeFilter.includes(r.assigneeId)),
     );
 
     if (sortKey && sortDir) {
       data = [...data].sort((a, b) => {
-        const av = toTs(a.createdAt);
-        const bv = toTs(b.createdAt);
+        const av = toTs(a[sortKey]);
+        const bv = toTs(b[sortKey]);
         return sortDir === "asc" ? av - bv : bv - av;
       });
     }
@@ -64,9 +72,9 @@ export default function TokenBlueprintManagementPage() {
     return data;
   }, [brandFilter, assigneeFilter, sortKey, sortDir]);
 
-  // 行クリックで詳細へ遷移（symbol を ID として使用）
-  const goDetail = (symbol: string) => {
-    navigate(`/tokenBlueprint/${encodeURIComponent(symbol)}`);
+  // 行クリックで詳細へ（id を使用）
+  const goDetail = (id: string) => {
+    navigate(`/tokenBlueprint/${encodeURIComponent(id)}`);
   };
 
   const headers: React.ReactNode[] = [
@@ -93,7 +101,7 @@ export default function TokenBlueprintManagementPage() {
       activeKey={sortKey}
       direction={sortDir ?? null}
       onChange={(key, dir) => {
-        setSortKey(key as "createdAt");
+        setSortKey(key as SortKey);
         setSortDir(dir);
       }}
     />,
@@ -113,29 +121,29 @@ export default function TokenBlueprintManagementPage() {
           setAssigneeFilter([]);
           setSortKey(null);
           setSortDir(null);
-          console.log("リスト更新");
+          console.log("トークン設計一覧リセット");
         }}
       >
-        {rows.map((t: TokenBlueprint) => (
+        {rows.map((t) => (
           <tr
-            key={`${t.symbol}-${t.createdAt}`}
+            key={t.id}
             role="button"
             tabIndex={0}
-            className="cursor-pointer"
-            onClick={() => goDetail(t.symbol)}
+            className="cursor-pointer hover:bg-slate-50 transition-colors"
+            onClick={() => goDetail(t.id)}
             onKeyDown={(e) => {
               if (e.key === "Enter" || e.key === " ") {
                 e.preventDefault();
-                goDetail(t.symbol);
+                goDetail(t.id);
               }
             }}
           >
             <td>{t.name}</td>
             <td>{t.symbol}</td>
             <td>
-              <span className="lp-brand-pill">{t.brand}</span>
+              <span className="lp-brand-pill">{t.brandId}</span>
             </td>
-            <td>{t.assignee}</td>
+            <td>{t.assigneeId}</td>
             <td>{t.createdAt}</td>
           </tr>
         ))}

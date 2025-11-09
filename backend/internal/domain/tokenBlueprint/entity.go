@@ -1,3 +1,4 @@
+// backend\internal\domain\tokenBlueprint\entity.go
 package tokenBlueprint
 
 import (
@@ -155,12 +156,12 @@ var (
 	ErrInvalidDescription = errors.New("tokenBlueprint: invalid description")
 	ErrInvalidAssigneeID  = errors.New("tokenBlueprint: invalid assigneeId")
 	// 置換: IconURL -> IconID
-	ErrInvalidIconID       = errors.New("tokenBlueprint: invalid iconId")
-	ErrInvalidCreatedAt    = errors.New("tokenBlueprint: invalid createdAt")
-	ErrInvalidCreatedBy    = errors.New("tokenBlueprint: invalid createdBy")
+	ErrInvalidIconID    = errors.New("tokenBlueprint: invalid iconId")
+	ErrInvalidCreatedAt = errors.New("tokenBlueprint: invalid createdAt")
+	ErrInvalidCreatedBy = errors.New("tokenBlueprint: invalid createdBy")
 	// 追加: UpdatedBy/DeletedBy のリンク検証用
-	ErrInvalidUpdatedBy    = errors.New("tokenBlueprint: invalid updatedBy")
-	ErrInvalidDeletedBy    = errors.New("tokenBlueprint: invalid deletedBy")
+	ErrInvalidUpdatedBy = errors.New("tokenBlueprint: invalid updatedBy")
+	ErrInvalidDeletedBy = errors.New("tokenBlueprint: invalid deletedBy")
 
 	// 追加: ContentFiles/ContentFile 用のエラー
 	ErrInvalidContentFiles = errors.New("tokenBlueprint: invalid contentFiles")
