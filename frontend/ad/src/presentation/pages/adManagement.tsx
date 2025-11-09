@@ -5,9 +5,9 @@ import { useNavigate } from "react-router-dom";
 import List, {
   FilterableTableHeader,
   SortableTableHeader,
-} from "../../../shell/src/layout/List/List";
-import "./adManagement.css";
-import { ADS, type AdRow } from "../../mockdata";
+} from "../../../../shell/src/layout/List/List";
+import "../styles/ad.css";
+import { ADS, type AdRow } from "../../../mockdata";
 
 // ─────────────────────────────────────────────────────────────
 // Utils

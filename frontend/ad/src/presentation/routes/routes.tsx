@@ -1,7 +1,7 @@
 import type { RouteObject } from "react-router-dom";
-import AdManagement from "./pages/adManagement";
-import AdDetail from "./pages/adDetail";
-import AdCreate from "./pages/adCreate";
+import AdManagement from "../../presentation/pages/adManagement";
+import AdDetail from "../../presentation/pages/adDetail";
+import AdCreate from "../../presentation/pages/adCreate";
 
 const routes: RouteObject[] = [
   { path: "", element: <AdManagement /> },

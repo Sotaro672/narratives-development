@@ -35,7 +35,7 @@ const listRoutes = listRoutesRaw as unknown as RouteObject[];
 import orderRoutesRaw from "../../../order/src/routes";
 const orderRoutes = orderRoutesRaw as unknown as RouteObject[];
 
-import adRtoutesRaw from "../../../ad/src/routes";
+import adRtoutesRaw from "../../../ad/src/presentation/routes/routes";
 const adRoutes = adRtoutesRaw as unknown as RouteObject[];
 
 import memberRoutesRaw from "../../../member/src/routes";
