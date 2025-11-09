@@ -52,7 +52,8 @@ export default function TokenOperationDetail() {
         />
 
         <div style={{ marginTop: 16 }}>
-          <TokenContentsCard images={contentImages} />
+          {/* ✅ コンテンツは閲覧モードで表示 */}
+          <TokenContentsCard images={contentImages} mode="view" />
         </div>
       </div>
 

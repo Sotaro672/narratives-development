@@ -1,7 +1,4 @@
-/* frontend/productBlueprint/src/pages/productBlueprintCard.css
-   基本情報カード（ProductBlueprintCard）用スタイル
-   productBlueprintDetail.css の設計トーンを踏襲
-*/
+/* 基本情報カード（ProductBlueprintCard）用スタイル */
 
 .pbc {
   background: var(--pbp-surface);
@@ -35,25 +32,7 @@
   margin-top: 12px;
 }
 
-.pbc .input,
-.pbc .select,
-.pbc .readonly {
-  height: 40px;
-  width: 100%;
-  border-radius: 10px;
-  padding: 0 12px;
-  border: 1px solid var(--pbp-border-strong);
-  background: var(--pbp-input-bg);
-  color: var(--pbp-text);
-}
-
-.pbc .readonly {
-  background: var(--pbp-muted-bg);
-  border-color: var(--pbp-border-soft);
-  color: var(--pbp-text-dim);
-  cursor: not-allowed;
-}
-
+/* 通常入力見た目（編集モード） */
 .pbc .suffix {
   display: inline-flex;
   align-items: center;
@@ -66,6 +45,7 @@
   color: var(--pbp-text-dim);
 }
 
+/* チップ・ボタン */
 .pbc .chips {
   display: flex;
   flex-wrap: wrap;
@@ -102,3 +82,38 @@
 .pbc .btn:hover {
   background: var(--pbp-muted-bg);
 }
+
+/* ──────────────────────────────
+   閲覧モードのスタイル
+   Card に .view-mode が付与されている場合、
+   すべての input / suffix を白背景＆白枠線にする
+   （tokenBlueprintCard とトーンを合わせる）
+   ────────────────────────────── */
+
+.pbc.view-mode input[readonly],
+.pbc.view-mode input[disabled],
+.pbc.view-mode .suffix {
+  background: #ffffff !important;
+  border-color: #ffffff !important;
+  box-shadow: none !important;
+  color: var(--pbp-text) !important;
+}
+
+/* shadcn Input の variant=readonly に対しても上書き */
+.pbc.view-mode .border,
+.pbc.view-mode .bg-muted,
+.pbc.view-mode .bg-slate-50 {
+  background-color: #ffffff !important;
+  border-color: #ffffff !important;
+  box-shadow: none !important;
+}
+
+/* フィットや商品IDの read-only Input も含めたいので汎用指定 */
+.pbc.view-mode input,
+.pbc.view-mode textarea {
+  background-color: #ffffff !important;
+  border-color: #ffffff !important;
+  box-shadow: none !important;
+}
+
+/* ポップオーバートリガー等のボタンはそのまま（編集時のみ使用） */
