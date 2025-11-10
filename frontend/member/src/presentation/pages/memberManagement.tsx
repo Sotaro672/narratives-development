@@ -7,7 +7,7 @@ import List, {
   SortableTableHeader,
 } from "../../../../shell/src/layout/List/List";
 import "../styles/member.css";
-import { MOCK_MEMBERS } from "../../infrastructure/mock/mockdata";
+import { MOCK_MEMBERS } from "../../infrastructure/mock/member_mockdata";
 import type { Member } from "../../../../shell/src/shared/types/member";
 
 // Utility: "YYYY/MM/DD" → timestamp

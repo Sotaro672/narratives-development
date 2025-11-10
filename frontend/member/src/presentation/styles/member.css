@@ -35,13 +35,15 @@
   margin-right: 6px;
 }
 
-/* frontend/member/src/pages/memberDetail.css */
+/* frontend/member/src/presentation/styles/member.css */
 
+/* 基本情報カード全体 */
 .member-card {
   border-radius: 12px;
   overflow: hidden;
 }
 
+/* ヘッダー（「基本情報」行） */
 .member-card__header {
   display: flex;
   align-items: center;
@@ -51,38 +53,47 @@
   background-color: hsl(var(--muted));
 }
 
+/* ヘッダー内アイコン */
 .member-card__icon {
   color: hsl(var(--muted-foreground));
 }
 
+/* ヘッダー内タイトル */
 .member-card__title {
   font-size: 0.95rem;
   font-weight: 600;
   color: hsl(var(--foreground));
 }
 
+/* カード本文 */
 .member-card__body {
   padding: 16px 20px 20px;
 }
 
+/* 2カラムレイアウト（期待値の左右配置） */
 .member-card__grid {
   display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 24px 32px;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  column-gap: 56px;
+  row-gap: 24px;
+  align-items: flex-start;
 }
 
+/* 各カラム内の縦並び */
 .member-card__section {
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 16px;
 }
 
+/* ラベル（「氏名」「読み仮名」など） */
 .member-card__label {
   font-size: 0.75rem;
   font-weight: 600;
   color: hsl(var(--muted-foreground));
 }
 
+/* 値（テキスト＋アイコン横並び） */
 .member-card__value {
   display: flex;
   align-items: center;
@@ -91,6 +102,7 @@
   color: hsl(var(--foreground));
 }
 
+/* インラインアイコン */
 .icon-inline {
   color: hsl(var(--muted-foreground));
 }
@@ -99,6 +111,14 @@
   flex-shrink: 0;
 }
 
+/* ホバーで色は変えない（期待値準拠） */
 .member-card__value:hover {
-  color: hsl(var(--accent-foreground));
+  color: hsl(var(--foreground));
+}
+
+/* スマホなど狭い幅では1カラムに落とす */
+@media (max-width: 640px) {
+  .member-card__grid {
+    grid-template-columns: 1fr;
+  }
 }

@@ -1,14 +1,20 @@
-// frontend/member/src/routes.tsx
-import type { RouteObject } from "react-router-dom";
-import React from "react";
+// frontend/member/src/presentation/routes/routes.tsx
 
+import React from "react";
+import type { RouteObject } from "react-router-dom";
 import MemberManagement from "../pages/memberManagement";
 import MemberDetail from "../pages/memberDetail";
 
 const routes: RouteObject[] = [
-  { path: "", element: <MemberManagement /> },
-  { path: ":email", element: <MemberDetail /> },
-  // 他のルート定義
+  {
+    path: "",
+    element: <MemberManagement />,
+  },
+  {
+    // Member.id を URL パラメータとして利用
+    path: ":memberId",
+    element: <MemberDetail />,
+  },
 ];
 
 export default routes;
