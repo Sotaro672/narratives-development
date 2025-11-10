@@ -1,3 +1,4 @@
+// backend\internal\domain\campaignPerformance\entity.go
 package campaignPerformance
 
 import (
