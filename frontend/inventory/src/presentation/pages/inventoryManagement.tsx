@@ -1,4 +1,4 @@
-// frontend/inventory/src/pages/inventoryManagement.tsx
+// frontend/inventory/src/presentation/pages/inventoryManagement.tsx
 
 import React, { useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
@@ -7,9 +7,12 @@ import List, {
   SortableTableHeader,
 } from "../../../../shell/src/layout/List/List";
 import "../styles/inventory.css";
-import { INVENTORIES, type InventoryRow } from "../../../mockdata";
+import {
+  INVENTORIES,
+  type InventoryRow,
+} from "../../infrastructure/mockdata/mockdata";
 
-type SortKey = "total" | null;
+type SortKey = "totalQuantity" | null;
 
 export default function InventoryManagementPage() {
   const navigate = useNavigate();
@@ -22,76 +25,106 @@ export default function InventoryManagementPage() {
   // ヘッダー用の候補（ユニーク化）
   const productOptions = useMemo(
     () =>
-      Array.from(new Set(INVENTORIES.map((r) => r.product))).map((v) => ({
+      Array.from(
+        new Set(INVENTORIES.map((r) => r.productName)),
+      ).map((v) => ({
         value: v,
         label: v,
       })),
-    []
+    [],
   );
+
   const brandOptions = useMemo(
     () =>
-      Array.from(new Set(INVENTORIES.map((r) => r.brand))).map((v) => ({
+      Array.from(
+        new Set(INVENTORIES.map((r) => r.brandName)),
+      ).map((v) => ({
         value: v,
         label: v,
       })),
-    []
+    [],
   );
+
   const tokenOptions = useMemo(
     () =>
-      Array.from(new Set(INVENTORIES.map((r) => r.token))).map((v) => ({
+      Array.from(
+        new Set(
+          INVENTORIES.map((r) => r.tokenName).filter(
+            (t): t is string => !!t,
+          ),
+        ),
+      ).map((v) => ({
         value: v,
         label: v,
       })),
-    []
+    [],
   );
 
   // ===== ソート状態（総在庫数） =====
   const [sortKey, setSortKey] = useState<SortKey>(null);
-  const [sortDir, setSortDir] = useState<"asc" | "desc" | null>(null);
+  const [sortDir, setSortDir] = useState<"asc" | "desc" | null>(
+    null,
+  );
 
   // ===== データ生成（フィルタ → ソート） =====
   const rows = useMemo(() => {
-    let data = INVENTORIES.filter(
-      (r) =>
-        (productFilter.length === 0 || productFilter.includes(r.product)) &&
-        (brandFilter.length === 0 || brandFilter.includes(r.brand)) &&
-        (tokenFilter.length === 0 || tokenFilter.includes(r.token))
-    );
+    let data = INVENTORIES.filter((r) => {
+      const productOk =
+        productFilter.length === 0 ||
+        productFilter.includes(r.productName);
+      const brandOk =
+        brandFilter.length === 0 ||
+        brandFilter.includes(r.brandName);
+      const tokenOk =
+        tokenFilter.length === 0 ||
+        (r.tokenName != null &&
+          tokenFilter.includes(r.tokenName));
+      return productOk && brandOk && tokenOk;
+    });
 
     if (sortKey && sortDir) {
-      data = [...data].sort((a, b) =>
-        sortDir === "asc" ? a.total - b.total : b.total - a.total
-      );
+      data = [...data].sort((a, b) => {
+        const av = a.totalQuantity;
+        const bv = b.totalQuantity;
+        return sortDir === "asc" ? av - bv : bv - av;
+      });
     }
 
     return data;
-  }, [productFilter, brandFilter, tokenFilter, sortKey, sortDir]);
+  }, [
+    productFilter,
+    brandFilter,
+    tokenFilter,
+    sortKey,
+    sortDir,
+  ]);
 
-  // 詳細ページへの遷移用ID（ブランド:商品 でエンコード）
-  const toInventoryId = (r: InventoryRow) =>
-    encodeURIComponent(`${r.brand}:${r.product}`);
-
-  // 行クリック時の遷移
+  // 詳細ページへの遷移
   const handleRowClick = (row: InventoryRow) => {
-    navigate(`/inventory/${toInventoryId(row)}`);
+    navigate(`/inventory/${encodeURIComponent(row.id)}`);
   };
 
   return (
     <div className="p-0 inv-page">
       <List
         title="在庫管理"
-        headerCells={headers(productOptions, brandOptions, tokenOptions, {
-          productFilter,
-          brandFilter,
-          tokenFilter,
-          setProductFilter,
-          setBrandFilter,
-          setTokenFilter,
-          sortKey,
-          sortDir,
-          setSortKey,
-          setSortDir,
-        })}
+        headerCells={headers(
+          productOptions,
+          brandOptions,
+          tokenOptions,
+          {
+            productFilter,
+            brandFilter,
+            tokenFilter,
+            setProductFilter,
+            setBrandFilter,
+            setTokenFilter,
+            sortKey,
+            sortDir,
+            setSortKey,
+            setSortDir,
+          },
+        )}
         showCreateButton={false}
         showResetButton
         onReset={() => {
@@ -103,9 +136,9 @@ export default function InventoryManagementPage() {
           console.log("在庫リストを更新");
         }}
       >
-        {rows.map((row, i) => (
+        {rows.map((row) => (
           <tr
-            key={`${row.product}-${row.token}-${i}`}
+            key={row.id}
             className="inv__clickable-row"
             role="button"
             tabIndex={0}
@@ -117,13 +150,21 @@ export default function InventoryManagementPage() {
               }
             }}
           >
-            <td>{row.product}</td>
-            <td>{row.brand}</td>
+            <td>{row.productName}</td>
+            <td>{row.brandName}</td>
             <td>
-              <span className="lp-brand-pill">{row.token}</span>
+              {row.tokenName ? (
+                <span className="lp-brand-pill">
+                  {row.tokenName}
+                </span>
+              ) : (
+                "-"
+              )}
             </td>
             <td>
-              <span className="inv__total-pill">{row.total}</span>
+              <span className="inv__total-pill">
+                {row.totalQuantity}
+              </span>
             </td>
           </tr>
         ))}
@@ -148,7 +189,7 @@ function headers(
     sortDir: "asc" | "desc" | null;
     setSortKey: (k: SortKey) => void;
     setSortDir: (d: "asc" | "desc" | null) => void;
-  }
+  },
 ): React.ReactNode[] {
   return [
     <FilterableTableHeader
@@ -173,9 +214,9 @@ function headers(
       onChange={(vals: string[]) => ctx.setTokenFilter(vals)}
     />,
     <SortableTableHeader
-      key="total"
+      key="totalQuantity"
       label="総在庫数"
-      sortKey="total"
+      sortKey="totalQuantity"
       activeKey={ctx.sortKey}
       direction={ctx.sortDir ?? null}
       onChange={(key, dir) => {

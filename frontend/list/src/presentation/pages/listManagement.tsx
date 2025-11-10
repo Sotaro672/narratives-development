@@ -1,4 +1,4 @@
-// frontend/list/src/pages/listManagement.tsx
+// frontend/list/src/presentation/pages/listManagement.tsx
 
 import React, { useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
@@ -7,7 +7,12 @@ import List, {
   SortableTableHeader,
 } from "../../../../shell/src/layout/List/List";
 import "../styles/list.css";
-import { LISTINGS, type ListingRow } from "../../../mockdata";
+import {
+  LISTINGS,
+  type ListingRow,
+  getListStatusLabel,
+} from "../../infrastructure/mockdata/mockdata";
+import type { ListStatus } from "../../../../shell/src/shared/types/list";
 
 type SortKey = "id" | "stock" | null;
 
@@ -19,48 +24,54 @@ export default function ListManagementPage() {
   const [brandFilter, setBrandFilter] = useState<string[]>([]);
   const [tokenFilter, setTokenFilter] = useState<string[]>([]);
   const [managerFilter, setManagerFilter] = useState<string[]>([]);
-  const [statusFilter, setStatusFilter] = useState<string[]>([]);
+  const [statusFilter, setStatusFilter] = useState<string[]>([]); // holds ListStatus as string
 
   // options for each filter
   const productOptions = useMemo(
     () =>
-      Array.from(new Set(LISTINGS.map((r) => r.product))).map((v) => ({
+      Array.from(new Set(LISTINGS.map((r) => r.productName))).map((v) => ({
         value: v,
         label: v,
       })),
-    []
+    [],
   );
+
   const brandOptions = useMemo(
     () =>
-      Array.from(new Set(LISTINGS.map((r) => r.brand))).map((v) => ({
+      Array.from(new Set(LISTINGS.map((r) => r.brandName))).map((v) => ({
         value: v,
         label: v,
       })),
-    []
+    [],
   );
+
   const tokenOptions = useMemo(
     () =>
-      Array.from(new Set(LISTINGS.map((r) => r.token))).map((v) => ({
+      Array.from(new Set(LISTINGS.map((r) => r.tokenName))).map((v) => ({
         value: v,
         label: v,
       })),
-    []
+    [],
   );
+
   const managerOptions = useMemo(
     () =>
-      Array.from(new Set(LISTINGS.map((r) => r.manager))).map((v) => ({
+      Array.from(new Set(LISTINGS.map((r) => r.assigneeName))).map((v) => ({
         value: v,
         label: v,
       })),
-    []
+    [],
   );
+
   const statusOptions = useMemo(
     () =>
-      Array.from(new Set(LISTINGS.map((r) => r.status))).map((v) => ({
-        value: v,
-        label: v,
+      Array.from(
+        new Set<ListStatus>(LISTINGS.map((r) => r.status)),
+      ).map((status) => ({
+        value: status,
+        label: getListStatusLabel(status),
       })),
-    []
+    [],
   );
 
   // ── Sort state ────────────────────────────────────────────
@@ -71,11 +82,16 @@ export default function ListManagementPage() {
   const rows = useMemo(() => {
     let data = LISTINGS.filter(
       (r) =>
-        (productFilter.length === 0 || productFilter.includes(r.product)) &&
-        (brandFilter.length === 0 || brandFilter.includes(r.brand)) &&
-        (tokenFilter.length === 0 || tokenFilter.includes(r.token)) &&
-        (managerFilter.length === 0 || managerFilter.includes(r.manager)) &&
-        (statusFilter.length === 0 || statusFilter.includes(r.status))
+        (productFilter.length === 0 ||
+          productFilter.includes(r.productName)) &&
+        (brandFilter.length === 0 ||
+          brandFilter.includes(r.brandName)) &&
+        (tokenFilter.length === 0 ||
+          tokenFilter.includes(r.tokenName)) &&
+        (managerFilter.length === 0 ||
+          managerFilter.includes(r.assigneeName)) &&
+        (statusFilter.length === 0 ||
+          statusFilter.includes(r.status)),
     );
 
     if (activeKey && direction) {
@@ -85,7 +101,9 @@ export default function ListManagementPage() {
           return direction === "asc" ? cmp : -cmp;
         }
         // stock
-        return direction === "asc" ? a.stock - b.stock : b.stock - a.stock;
+        return direction === "asc"
+          ? a.stock - b.stock
+          : b.stock - a.stock;
       });
     }
 
@@ -204,7 +222,7 @@ export default function ListManagementPage() {
           console.log("出品リスト更新");
         }}
       >
-        {rows.map((l) => (
+        {rows.map((l: ListingRow) => (
           <tr
             key={l.id}
             role="button"
@@ -219,22 +237,32 @@ export default function ListManagementPage() {
             }}
           >
             <td>{l.id}</td>
-            <td>{l.product}</td>
+            <td>{l.productName}</td>
             <td>
-              <span className="lp-brand-pill">{l.brand}</span>
+              <span className="lp-brand-pill">{l.brandName}</span>
             </td>
             <td>
-              <span className="lp-brand-pill">{l.token}</span>
+              <span className="lp-brand-pill">{l.tokenName}</span>
             </td>
             <td>
               <span className="list-stock-pill">{l.stock}</span>
             </td>
-            <td>{l.manager}</td>
+            <td>{l.assigneeName}</td>
             <td>
-              {l.status === "出品中" ? (
-                <span className="list-status-badge is-active">出品中</span>
-              ) : (
-                <span className="list-status-badge is-paused">停止中</span>
+              {l.status === "listing" && (
+                <span className="list-status-badge is-active">
+                  出品中
+                </span>
+              )}
+              {l.status === "suspended" && (
+                <span className="list-status-badge is-paused">
+                  停止中
+                </span>
+              )}
+              {l.status === "deleted" && (
+                <span className="list-status-badge is-paused">
+                  削除済み
+                </span>
               )}
             </td>
           </tr>
