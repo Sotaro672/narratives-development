@@ -1,3 +1,4 @@
+// backend\internal\domain\tokenIcon\entity.go
 package tokenIcon
 
 import (
