@@ -1,3 +1,4 @@
+// backend\internal\domain\announcementAttachment\entity.go
 package announcementAttachment
 
 import (

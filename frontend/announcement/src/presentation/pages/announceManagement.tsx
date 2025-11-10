@@ -7,7 +7,7 @@ import {
   MOCK_ANNOUNCEMENTS,
   toAnnouncementRows,
   type AnnouncementRow,
-} from "../../infrastructure/mockdata/mockdata";
+} from "../../infrastructure/mockdata/announcement_mockdata";
 
 export default function AnnounceManagementPage() {
   const navigate = useNavigate();
