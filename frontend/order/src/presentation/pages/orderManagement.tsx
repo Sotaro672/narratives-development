@@ -5,9 +5,9 @@ import { useNavigate } from "react-router-dom";
 import List, {
   FilterableTableHeader,
   SortableTableHeader,
-} from "../../../shell/src/layout/List/List";
-import "./orderManagement.css";
-import { ORDERS, type OrderRow } from "../../mockdata";
+} from "../../../../shell/src/layout/List/List";
+import "../styles/order.css";
+import { ORDERS, type OrderRow } from "../../../mockdata";
 
 // utils
 const toTs = (yyyyMd: string) => {

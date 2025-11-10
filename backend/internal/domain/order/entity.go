@@ -1,3 +1,4 @@
+// backend/internal/domain/order/entity.go
 package order
 
 import (
