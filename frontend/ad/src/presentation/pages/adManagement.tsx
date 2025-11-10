@@ -7,7 +7,7 @@ import List, {
   SortableTableHeader,
 } from "../../../../shell/src/layout/List/List";
 import "../styles/ad.css";
-import { ADS, type AdRow } from "../../../mockdata";
+import { ADS, type AdRow } from "../../infrastructure/mockdata/mockdata";
 
 // ─────────────────────────────────────────────────────────────
 // Utils

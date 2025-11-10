@@ -1,3 +1,4 @@
+// backend\internal\domain\inquiryImage\entity.go
 package inquiryimage
 
 import (
