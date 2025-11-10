@@ -1,3 +1,4 @@
+// backend\internal\domain\invoice\entity.go
 package invoice
 
 import (
@@ -11,17 +12,17 @@ import (
 // Invoice mirrors web-app/src/shared/types/invoice.ts
 // all amounts are integers. currency is a 3-letter code (e.g., JPY).
 type Invoice struct {
-	OrderID           string              `json:"orderId"`
-	OrderItemInvoices []OrderItemInvoice  `json:"orderItemInvoices"`
-	Subtotal          int                 `json:"subtotal"`
-	DiscountAmount    int                 `json:"discountAmount"`
-	TaxAmount         int                 `json:"taxAmount"`
-	ShippingCost      int                 `json:"shippingCost"`
-	TotalAmount       int                 `json:"totalAmount"`
-	Currency          string              `json:"currency"`
-	CreatedAt         time.Time           `json:"createdAt"`
-	UpdatedAt         time.Time           `json:"updatedAt"`
-	BillingAddressID  string              `json:"billingAddressId"`
+	OrderID           string             `json:"orderId"`
+	OrderItemInvoices []OrderItemInvoice `json:"orderItemInvoices"`
+	Subtotal          int                `json:"subtotal"`
+	DiscountAmount    int                `json:"discountAmount"`
+	TaxAmount         int                `json:"taxAmount"`
+	ShippingCost      int                `json:"shippingCost"`
+	TotalAmount       int                `json:"totalAmount"`
+	Currency          string             `json:"currency"`
+	CreatedAt         time.Time          `json:"createdAt"`
+	UpdatedAt         time.Time          `json:"updatedAt"`
+	BillingAddressID  string             `json:"billingAddressId"`
 }
 
 // OrderItemInvoice mirrors web-app/src/shared/types/invoice.ts (OrderItemInvoice)
@@ -57,15 +58,15 @@ var ErrPriceNotFound = errors.New("price not found")
 
 // Errors
 var (
-	ErrInvalidAmount            = errors.New("invoice: invalid amount")
-	ErrInvalidTotal             = errors.New("invoice: invalid totalAmount (does not match components)")
-	ErrInvalidOrderID           = errors.New("invoice: invalid orderId")
-	ErrInvalidBillingAddressID  = errors.New("invoice: invalid billingAddressId")
-	ErrInvalidCurrency          = errors.New("invoice: invalid currency")
-	ErrInvalidID                = errors.New("invoice: invalid id")
-	ErrInvalidOrderItemID       = errors.New("invoice: invalid orderItemId")
-	ErrInvalidCreatedAt         = errors.New("invoice: invalid createdAt")
-	ErrInvalidUpdatedAt         = errors.New("invoice: invalid updatedAt")
+	ErrInvalidAmount           = errors.New("invoice: invalid amount")
+	ErrInvalidTotal            = errors.New("invoice: invalid totalAmount (does not match components)")
+	ErrInvalidOrderID          = errors.New("invoice: invalid orderId")
+	ErrInvalidBillingAddressID = errors.New("invoice: invalid billingAddressId")
+	ErrInvalidCurrency         = errors.New("invoice: invalid currency")
+	ErrInvalidID               = errors.New("invoice: invalid id")
+	ErrInvalidOrderItemID      = errors.New("invoice: invalid orderItemId")
+	ErrInvalidCreatedAt        = errors.New("invoice: invalid createdAt")
+	ErrInvalidUpdatedAt        = errors.New("invoice: invalid updatedAt")
 )
 
 // Policy (align with invoiceConstants.ts as needed)
