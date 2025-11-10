@@ -1,3 +1,4 @@
+// backend\internal\domain\campaign\entity.go
 package campaign
 
 import (
