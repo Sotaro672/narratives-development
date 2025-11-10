@@ -1,3 +1,4 @@
+// backend\internal\domain\tokenOperation\entity.go
 package tokenOperation
 
 import (

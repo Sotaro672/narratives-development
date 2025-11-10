@@ -1,7 +1,7 @@
-// frontend/operation/src/routes.tsx
+// frontend\tokenOperation\src\presentation\routes\routes.tsx
 import type { RouteObject } from "react-router-dom";
-import TokenOperation from "../../presentation/pages/tokenOperation";
-import TokenOperationDetail from "../../presentation/pages/tokenOperationDetail";
+import TokenOperation from "../pages/tokenOperation";
+import TokenOperationDetail from "../pages/tokenOperationDetail";
 
 /**
  * OperationsRoutes
