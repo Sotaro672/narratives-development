@@ -1,4 +1,5 @@
 // frontend/mintRequest/src/presentation/pages/mintRequestDetail.tsx
+
 import * as React from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import PageStyle from "../../../../shell/src/layout/PageStyle/PageStyle";
@@ -8,7 +9,8 @@ import InventoryCard, {
 } from "../../../../inventory/src/presentation/components/inventoryCard";
 import TokenBlueprintCard from "../../../../tokenBlueprint/src/presentation/components/tokenBlueprintCard";
 import TokenContentsCard from "../../../../tokenContents/src/presentation/components/tokenContentsCard";
-import { TOKEN_BLUEPRINTS } from "../../../../tokenBlueprint/src/infrastructure/mockdata/mockdata";
+import { TOKEN_BLUEPRINTS } from "../../../../tokenBlueprint/src/infrastructure/mockdata/tokenBlueprint_mockdata";
+import type { TokenBlueprint } from "../../../../tokenBlueprint/src/domain/entity/tokenBlueprint";
 import { Card, CardContent } from "../../../../shell/src/shared/ui/card";
 import { Button } from "../../../../shell/src/shared/ui/button";
 import { Coins } from "lucide-react";
@@ -22,7 +24,7 @@ export default function MintRequestDetail() {
   // 管理情報（モック）
   const [assignee, setAssignee] = React.useState("member_sato");
   const [creator] = React.useState("member_yamada");
-  const [createdAt] = React.useState("2025/11/05");
+  const [createdAt] = React.useState("2025-11-05T00:00:00Z");
 
   // 在庫データ（モデル別在庫一覧：モック）
   const [inventoryRows] = React.useState<InventoryRow[]>([
@@ -83,8 +85,8 @@ export default function MintRequestDetail() {
     [inventoryRows],
   );
 
-  // トークン設計（暫定: 先頭を利用 / 本来は requestId に紐付け）
-  const blueprint = TOKEN_BLUEPRINTS[0];
+  // トークン設計（暫定: 先頭 / 本来は requestId に紐付け）
+  const blueprint: TokenBlueprint | undefined = TOKEN_BLUEPRINTS[0];
 
   // 戻るボタン
   const onBack = React.useCallback(() => {
@@ -112,21 +114,19 @@ export default function MintRequestDetail() {
 
         {blueprint && (
           <TokenBlueprintCard
-            // TokenBlueprint は shell/shared/types/tokenBlueprint.ts 準拠
-            initialTokenBlueprintId={blueprint.id}
-            initialTokenName={blueprint.name}
-            initialSymbol={blueprint.symbol}
-            initialBrand={blueprint.brandId}
-            initialDescription={blueprint.description}
-            // burnAt/iconUrl は型にないのでダミー/既存 iconId を利用
+            initialEditMode={false}
+            initialTokenBlueprint={blueprint}
+            // ドメイン外拡張フィールド（任意・モック）
             initialBurnAt=""
             initialIconUrl={blueprint.iconId ?? ""}
-            initialEditMode={false}
           />
         )}
 
-        {/* TokenContentsCard: 内部モック(MOCK_TOKEN_CONTENTS)を使用 */}
-        <TokenContentsCard mode="view" />
+        {/* TokenContentsCard: TokenBlueprint.contentFiles（ID配列）と連動させる想定 */}
+        <TokenContentsCard
+          mode="view"
+          images={blueprint?.contentFiles ?? []}
+        />
 
         <Card className="mint-request-card">
           <CardContent className="mint-request-card__body">

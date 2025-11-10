@@ -10,7 +10,7 @@ import "../styles/inventory.css";
 import {
   INVENTORIES,
   type InventoryRow,
-} from "../../infrastructure/mockdata/mockdata";
+} from "../../infrastructure/mockdata/inventory_mockdata";
 
 type SortKey = "totalQuantity" | null;
 

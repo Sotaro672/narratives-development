@@ -1,3 +1,4 @@
+//frontend\inventory\src\presentation\pages\inventoryDetail.tsx
 import * as React from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import PageStyle from "../../../../shell/src/layout/PageStyle/PageStyle";

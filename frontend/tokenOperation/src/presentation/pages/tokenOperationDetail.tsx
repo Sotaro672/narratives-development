@@ -1,4 +1,4 @@
-// frontend/operation/src/presentation/pages/tokenOperationDetail.tsx
+// frontend/tokenOperation/src/presentation/pages/tokenOperationDetail.tsx
 
 import * as React from "react";
 import { useNavigate, useParams } from "react-router-dom";
@@ -6,7 +6,8 @@ import PageStyle from "../../../../shell/src/layout/PageStyle/PageStyle";
 import AdminCard from "../../../../admin/src/presentation/components/AdminCard";
 import TokenBlueprintCard from "../../../../tokenBlueprint/src/presentation/components/tokenBlueprintCard";
 import TokenContentsCard from "../../../../tokenContents/src/presentation/components/tokenContentsCard";
-import { TOKEN_BLUEPRINTS } from "../../../../tokenBlueprint/src/infrastructure/mockdata/mockdata";
+import { TOKEN_BLUEPRINTS } from "../../../../tokenBlueprint/src/infrastructure/mockdata/tokenBlueprint_mockdata";
+import type { TokenBlueprint } from "../../../../tokenBlueprint/src/domain/entity/tokenBlueprint";
 
 export default function TokenOperationDetail() {
   const navigate = useNavigate();
@@ -16,12 +17,12 @@ export default function TokenOperationDetail() {
   // モックデータ（トークン設計）
   // 本来は tokenOperationId と紐付いた TokenBlueprint を取得する想定
   // ─────────────────────────────────────────
-  const blueprint = TOKEN_BLUEPRINTS[0];
+  const blueprint: TokenBlueprint | undefined = TOKEN_BLUEPRINTS[0];
 
   // 管理情報（右カラム：モック）
   const [assignee, setAssignee] = React.useState("member_sato");
   const [creator] = React.useState("member_yamada");
-  const [createdAt] = React.useState("2025/11/06 20:55");
+  const [createdAt] = React.useState("2025-11-06T20:55:00Z"); // ISO8601 形式に寄せる
 
   // 戻る
   const onBack = React.useCallback(() => navigate(-1), [navigate]);
@@ -42,22 +43,21 @@ export default function TokenOperationDetail() {
       <div>
         {blueprint && (
           <TokenBlueprintCard
-            initialTokenBlueprintId={blueprint.id}
-            initialTokenName={blueprint.name}
-            initialSymbol={blueprint.symbol}
-            initialBrand={blueprint.brandId}
-            initialDescription={blueprint.description}
-            // burnAt は TokenBlueprint 型に存在しないため空文字で渡す
-            initialBurnAt=""
-            // iconId は URL モックをそのまま格納している想定なのでそのまま利用（なければ空）
-            initialIconUrl={blueprint.iconId ?? ""}
             initialEditMode={false}
+            // TokenBlueprint スキーマ準拠の初期値をそのまま渡す
+            initialTokenBlueprint={blueprint}
+            // ドメイン外拡張フィールド（任意の表示用）
+            initialBurnAt=""
+            initialIconUrl={blueprint.iconId ?? ""}
           />
         )}
 
         <div style={{ marginTop: 16 }}>
-          {/* TokenContentsCard は内部モックを利用（images は渡さない） */}
-          <TokenContentsCard mode="edit" />
+          {/* TokenContentsCard: TokenBlueprint.contentFiles（ID配列）と連動させる想定 */}
+          <TokenContentsCard
+            mode="edit"
+            images={blueprint?.contentFiles ?? []}
+          />
         </div>
       </div>
 
