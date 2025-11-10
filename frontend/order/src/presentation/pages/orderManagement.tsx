@@ -7,7 +7,7 @@ import List, {
   SortableTableHeader,
 } from "../../../../shell/src/layout/List/List";
 import "../styles/order.css";
-import { ORDERS } from "../../infrastructure/mockdata/mockdata";
+import { ORDERS } from "../../infrastructure/mockdata/order_mockdata";
 import type {
   Order,
   LegacyOrderStatus,
@@ -129,13 +129,13 @@ export default function OrderManagementPage() {
         setDirection(dir as SortDir);
       }}
     />,
-    // 移譲日（transferedDate, Sortable）
+    // 移譲日（transferredDate, Sortable）
     <SortableTableHeader
-      key="transferedDate"
+      key="transferredDate"
       label="移譲日"
-      sortKey="transferedDate"
+      sortKey="transferredDate"
       activeKey={activeKey}
-      direction={activeKey === "transferedDate" ? direction : null}
+      direction={activeKey === "transferredDate" ? direction : null}
       onChange={(key, dir) => {
         setActiveKey(key as SortKey);
         setDirection(dir as SortDir);

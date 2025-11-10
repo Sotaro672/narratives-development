@@ -1,3 +1,4 @@
+// backend\internal\domain\shippingAddress\entity.go
 package shippingAddress
 
 import (
