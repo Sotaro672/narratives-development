@@ -1,3 +1,4 @@
+// backend\internal\domain\user\entity.go
 package user
 
 import (
@@ -22,16 +23,16 @@ import (
 // - updatedAt: Date | string
 // - deletedAt: Date | string
 type User struct {
-	ID             string     `json:"id"`
-	FirstName      *string    `json:"first_name,omitempty"`
-	FirstNameKana  *string    `json:"first_name_kana,omitempty"`
-	LastNameKana   *string    `json:"last_name_kana,omitempty"`
-	LastName       *string    `json:"last_name,omitempty"`
-	Email          *string    `json:"email,omitempty"`
-	PhoneNumber    *string    `json:"phone_number,omitempty"`
-	CreatedAt      time.Time  `json:"createdAt"`
-	UpdatedAt      time.Time  `json:"updatedAt"`
-	DeletedAt      time.Time  `json:"deletedAt"`
+	ID            string    `json:"id"`
+	FirstName     *string   `json:"first_name,omitempty"`
+	FirstNameKana *string   `json:"first_name_kana,omitempty"`
+	LastNameKana  *string   `json:"last_name_kana,omitempty"`
+	LastName      *string   `json:"last_name,omitempty"`
+	Email         *string   `json:"email,omitempty"`
+	PhoneNumber   *string   `json:"phone_number,omitempty"`
+	CreatedAt     time.Time `json:"createdAt"`
+	UpdatedAt     time.Time `json:"updatedAt"`
+	DeletedAt     time.Time `json:"deletedAt"`
 }
 
 // Errors (single source)

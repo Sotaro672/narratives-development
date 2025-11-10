@@ -1,3 +1,4 @@
+// backend\internal\domain\avatar\entity.go
 package avatar
 
 import (
@@ -15,17 +16,17 @@ import (
 // Avatar - ドメインエンティティ
 // web 側の Avatar に準拠しつつ、avatarState は別ドメインのエンティティ型を参照します。
 type Avatar struct {
-	ID            string                      `json:"id"`
-	UserID        string                      `json:"userId"`
-	AvatarName    string                      `json:"avatarName"`
-	AvatarIconID  *string                     `json:"avatarIconId,omitempty"`
-	AvatarState   avatarstate.AvatarState     `json:"avatarState"`             // avatarState パッケージの型を使用
-	WalletAddress *string                     `json:"walletAddress,omitempty"` // wallet ドメインへの外部キー
-	Bio           *string                     `json:"bio,omitempty"`
-	Website       *string                     `json:"website,omitempty"`
-	CreatedAt     time.Time                   `json:"createdAt"`
-	UpdatedAt     time.Time                   `json:"updatedAt"`
-	DeletedAt     *time.Time                  `json:"deletedAt,omitempty"` // null 許容
+	ID            string                  `json:"id"`
+	UserID        string                  `json:"userId"`
+	AvatarName    string                  `json:"avatarName"`
+	AvatarIconID  *string                 `json:"avatarIconId,omitempty"`
+	AvatarState   avatarstate.AvatarState `json:"avatarState"`             // avatarState パッケージの型を使用
+	WalletAddress *string                 `json:"walletAddress,omitempty"` // wallet ドメインへの外部キー
+	Bio           *string                 `json:"bio,omitempty"`
+	Website       *string                 `json:"website,omitempty"`
+	CreatedAt     time.Time               `json:"createdAt"`
+	UpdatedAt     time.Time               `json:"updatedAt"`
+	DeletedAt     *time.Time              `json:"deletedAt,omitempty"` // null 許容
 }
 
 // Policy
