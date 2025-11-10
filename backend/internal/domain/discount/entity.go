@@ -1,3 +1,4 @@
+// backend\internal\domain\discount\entity.go
 package discount
 
 import (
@@ -15,16 +16,17 @@ type DiscountItem struct {
 }
 
 // Discount mirrors web-app/src/shared/types/discount.ts
-// export interface Discount {
-//   id: string;              // 主キー（discount_xxx）
-//   listId: string;          // 出品ID
-//   discounts: DiscountItem[]; // modelNumberごとの割引率配列
-//   description?: string;    // 割引の説明
-//   discountedBy: string;    // 割引設定者のメンバーID
-//   discountedAt: string;    // 割引設定日時（ISO文字列）
-//   updatedAt: string;       // 最終更新日時（ISO文字列）
-//   updatedBy: string;       // 最終更新者のメンバーID
-// }
+//
+//	export interface Discount {
+//	  id: string;              // 主キー（discount_xxx）
+//	  listId: string;          // 出品ID
+//	  discounts: DiscountItem[]; // modelNumberごとの割引率配列
+//	  description?: string;    // 割引の説明
+//	  discountedBy: string;    // 割引設定者のメンバーID
+//	  discountedAt: string;    // 割引設定日時（ISO文字列）
+//	  updatedAt: string;       // 最終更新日時（ISO文字列）
+//	  updatedBy: string;       // 最終更新者のメンバーID
+//	}
 type Discount struct {
 	ID           string         `json:"id"`
 	ListID       string         `json:"listId"`

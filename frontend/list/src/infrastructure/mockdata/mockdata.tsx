@@ -1,6 +1,14 @@
-// frontend/list/mockdata.tsx
+// frontend/list/src/infrastructure/mockdata/mockdata.tsx
 
 import type { List, ListStatus } from "../../../../shell/src/shared/types/list";
+import type {
+  Discount,
+  DiscountItem,
+} from "../../../../shell/src/shared/types/discount";
+import type {
+  Sale,
+  SalePrice,
+} from "../../../../shell/src/shared/types/sale";
 
 /**
  * モックデータ用 ListingRow。
@@ -47,6 +55,81 @@ export const LISTINGS: ListingRow[] = [
     stock: 221,
     assigneeName: "山田 太郎",
     status: "suspended",
+  },
+];
+
+/**
+ * モック用 DiscountItem データ
+ * backend/internal/domain/discount/entity.go に準拠。
+ */
+export const DISCOUNT_ITEMS: DiscountItem[] = [
+  { modelNumber: "model_001", discount: 10 },
+  { modelNumber: "model_002", discount: 15 },
+  { modelNumber: "model_003", discount: 5 },
+];
+
+/**
+ * モック用 Discount データ
+ * frontend/shell/src/shared/types/discount.ts に準拠。
+ */
+export const DISCOUNTS: Discount[] = [
+  {
+    id: "discount_001",
+    listId: "list_001",
+    discounts: [DISCOUNT_ITEMS[0], DISCOUNT_ITEMS[1]],
+    description: "春の新作キャンペーン割引（最大15%OFF）",
+    discountedBy: "member_001",
+    discountedAt: "2024-03-10T10:00:00Z",
+    updatedAt: "2024-03-10T10:00:00Z",
+    updatedBy: "member_001",
+  },
+  {
+    id: "discount_002",
+    listId: "list_002",
+    discounts: [DISCOUNT_ITEMS[2]],
+    description: "数量限定セール（5%OFF）",
+    discountedBy: "member_002",
+    discountedAt: "2024-03-12T09:30:00Z",
+    updatedAt: "2024-03-12T09:30:00Z",
+    updatedBy: "member_002",
+  },
+];
+
+/**
+ * モック用 SalePrice データ
+ * frontend/shell/src/shared/types/sale.ts に準拠。
+ */
+export const SALE_PRICES: SalePrice[] = [
+  { modelNumber: "model_001", price: 12000 },
+  { modelNumber: "model_002", price: 15000 },
+  { modelNumber: "model_003", price: 9800 },
+];
+
+/**
+ * モック用 Sale データ
+ * frontend/shell/src/shared/types/sale.ts に準拠。
+ *
+ * - listId は LISTINGS / DISCOUNTS と対応
+ * - discountId は存在する Discount.id を参照（または null）
+ */
+export const SALES: Sale[] = [
+  {
+    id: "sale_001",
+    listId: "list_001",
+    discountId: "discount_001",
+    prices: [SALE_PRICES[0], SALE_PRICES[1]],
+  },
+  {
+    id: "sale_002",
+    listId: "list_002",
+    discountId: "discount_002",
+    prices: [SALE_PRICES[2]],
+  },
+  {
+    id: "sale_003",
+    listId: "list_003",
+    discountId: null,
+    prices: [SALE_PRICES[0]],
   },
 ];
 

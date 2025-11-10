@@ -1,3 +1,4 @@
+// backend\internal\domain\sale\entity.go
 package sale
 
 import (
