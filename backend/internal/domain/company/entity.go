@@ -1,3 +1,4 @@
+// backend\internal\domain\company\entity.go
 package company
 
 import (
@@ -8,35 +9,36 @@ import (
 
 // Domain errors
 var (
-	ErrInvalidID         = errors.New("company: invalid id")
-	ErrInvalidName       = errors.New("company: invalid name")
-	ErrInvalidAdmin      = errors.New("company: invalid admin")
-	ErrInvalidCreatedAt  = errors.New("company: invalid createdAt")
-	ErrInvalidUpdatedAt  = errors.New("company: invalid updatedAt")
-	ErrInvalidDeletedAt  = errors.New("company: invalid deletedAt")
-	ErrInvalidCreatedBy  = errors.New("company: invalid createdBy")
-	ErrInvalidUpdatedBy  = errors.New("company: invalid updatedBy")
-	ErrInvalidDeletedBy  = errors.New("company: invalid deletedBy")
+	ErrInvalidID        = errors.New("company: invalid id")
+	ErrInvalidName      = errors.New("company: invalid name")
+	ErrInvalidAdmin     = errors.New("company: invalid admin")
+	ErrInvalidCreatedAt = errors.New("company: invalid createdAt")
+	ErrInvalidUpdatedAt = errors.New("company: invalid updatedAt")
+	ErrInvalidDeletedAt = errors.New("company: invalid deletedAt")
+	ErrInvalidCreatedBy = errors.New("company: invalid createdBy")
+	ErrInvalidUpdatedBy = errors.New("company: invalid updatedBy")
+	ErrInvalidDeletedBy = errors.New("company: invalid deletedBy")
 )
 
 // Company mirrors web-app/src/shared/types
-// export interface Company {
-//   id: string;
-//   name: string;
-//   admin: string; //root権限を持ったmemberId
-//   isActive: boolean;
-//   createdAt: Date | string;
-//   createdBy: string;
-//   updatedAt: Date | string;
-//   updatedBy: string;
-//   deletedAt?: Date | string;
-//   deletedBy?: string;
-// }
+//
+//	export interface Company {
+//	  id: string;
+//	  name: string;
+//	  admin: string; //root権限を持ったmemberId
+//	  isActive: boolean;
+//	  createdAt: Date | string;
+//	  createdBy: string;
+//	  updatedAt: Date | string;
+//	  updatedBy: string;
+//	  deletedAt?: Date | string;
+//	  deletedBy?: string;
+//	}
 type Company struct {
-	ID        string     `json:"id"`
-	Name      string     `json:"name"`
-	Admin     string     `json:"admin"` // root権限を持ったmemberId
-	IsActive  bool       `json:"isActive"`
+	ID       string `json:"id"`
+	Name     string `json:"name"`
+	Admin    string `json:"admin"` // root権限を持ったmemberId
+	IsActive bool   `json:"isActive"`
 
 	CreatedAt time.Time  `json:"createdAt"`
 	CreatedBy string     `json:"createdBy"`
