@@ -1,0 +1,66 @@
+// frontend/order/src/infrastructure/mockdata/billingAddress_mockdata.ts
+import type { BillingAddress } from "../../../../shell/src/shared/types/billingAddress";
+
+/**
+ * モック用 BillingAddress データ
+ * frontend/shell/src/shared/types/billingAddress.ts に準拠。
+ */
+export const BILLING_ADDRESSES: BillingAddress[] = [
+  {
+    id: "11111111-1111-1111-1111-111111111111",
+    userId: "user_001",
+    nameOnAccount: "山田 太郎",
+    billingType: "credit_card",
+    cardBrand: "Visa",
+    cardLast4: "4242",
+    cardExpMonth: 12,
+    cardExpYear: 2026,
+    cardToken: "tok_test_visa",
+    postalCode: 1500001,
+    state: "東京都",
+    city: "渋谷区神宮前",
+    street: "1-2-3",
+    country: "日本",
+    isDefault: true,
+    createdAt: "2024-03-10T09:00:00Z",
+    updatedAt: "2024-03-10T09:00:00Z",
+  },
+  {
+    id: "22222222-2222-2222-2222-222222222222",
+    userId: "user_002",
+    nameOnAccount: "佐藤 美咲",
+    billingType: "bank_transfer",
+    cardBrand: null,
+    cardLast4: null,
+    cardExpMonth: null,
+    cardExpYear: null,
+    cardToken: null,
+    postalCode: 5300001,
+    state: "大阪府",
+    city: "大阪市北区梅田",
+    street: "2-5-8",
+    country: "日本",
+    isDefault: false,
+    createdAt: "2024-03-11T10:00:00Z",
+    updatedAt: "2024-03-11T10:00:00Z",
+  },
+  {
+    id: "33333333-3333-3333-3333-333333333333",
+    userId: "user_003",
+    nameOnAccount: "John Smith",
+    billingType: "credit_card",
+    cardBrand: "Mastercard",
+    cardLast4: "5555",
+    cardExpMonth: 6,
+    cardExpYear: 2027,
+    cardToken: "tok_test_master",
+    postalCode: 10001,
+    state: "California",
+    city: "Los Angeles",
+    street: "Sunset Blvd 1234",
+    country: "USA",
+    isDefault: true,
+    createdAt: "2024-04-01T08:30:00Z",
+    updatedAt: "2024-04-01T08:30:00Z",
+  },
+];

@@ -1,3 +1,4 @@
+// backend\internal\domain\transfer\entity.go
 package transfer
 
 import (

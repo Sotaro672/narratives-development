@@ -1,3 +1,4 @@
+// backend\internal\domain\tracking\entity.go
 package tracking
 
 import (
