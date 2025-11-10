@@ -33,7 +33,7 @@ func (r *OrderRepositoryPG) GetByID(ctx context.Context, id string) (orderdom.Or
 	const q = `
 SELECT
   id, order_number, status, user_id, shipping_address_id, billing_address_id, list_id,
-  items, invoice_id, payment_id, fulfillment_id, tracking_id, transffered_date,
+  items, invoice_id, payment_id, fulfillment_id, tracking_id, transfered_date,
   created_at, updated_at, updated_by, deleted_at, deleted_by
 FROM orders
 WHERE id = $1`
@@ -89,7 +89,7 @@ func (r *OrderRepositoryPG) List(ctx context.Context, filter uc.OrderFilter, sor
 	q := fmt.Sprintf(`
 SELECT
   id, order_number, status, user_id, shipping_address_id, billing_address_id, list_id,
-  items, invoice_id, payment_id, fulfillment_id, tracking_id, transffered_date,
+  items, invoice_id, payment_id, fulfillment_id, tracking_id, transfered_date,
   created_at, updated_at, updated_by, deleted_at, deleted_by
 FROM orders
 %s
@@ -149,7 +149,7 @@ func (r *OrderRepositoryPG) ListByCursor(ctx context.Context, filter uc.OrderFil
 	q := fmt.Sprintf(`
 SELECT
   id, order_number, status, user_id, shipping_address_id, billing_address_id, list_id,
-  items, invoice_id, payment_id, fulfillment_id, tracking_id, transffered_date,
+  items, invoice_id, payment_id, fulfillment_id, tracking_id, transfered_date,
   created_at, updated_at, updated_by, deleted_at, deleted_by
 FROM orders
 %s
@@ -213,7 +213,7 @@ func (r *OrderRepositoryPG) Create(ctx context.Context, o orderdom.Order) (order
 	const q = `
 INSERT INTO orders (
   id, order_number, status, user_id, shipping_address_id, billing_address_id, list_id,
-  items, invoice_id, payment_id, fulfillment_id, tracking_id, transffered_date,
+  items, invoice_id, payment_id, fulfillment_id, tracking_id, ed_date,
   created_at, updated_at, updated_by, deleted_at, deleted_by
 ) VALUES (
   $1, $2, $3, $4, $5, $6, $7,
@@ -222,7 +222,7 @@ INSERT INTO orders (
 )
 RETURNING
   id, order_number, status, user_id, shipping_address_id, billing_address_id, list_id,
-  items, invoice_id, payment_id, fulfillment_id, tracking_id, transffered_date,
+  items, invoice_id, payment_id, fulfillment_id, tracking_id, transfered_date,
   created_at, updated_at, updated_by, deleted_at, deleted_by
 `
 	row := run.QueryRowContext(ctx, q,
@@ -238,7 +238,7 @@ RETURNING
 		strings.TrimSpace(o.PaymentID),
 		strings.TrimSpace(o.FulfillmentID),
 		dbcommon.ToDBText(o.TrackingID),
-		dbcommon.ToDBTime(o.TransfferedDate),
+		dbcommon.ToDBTime(o.TransferedDate),
 		o.CreatedAt.UTC(),
 		o.UpdatedAt.UTC(),
 		dbcommon.ToDBText(o.UpdatedBy),
@@ -266,7 +266,7 @@ func (r *OrderRepositoryPG) Save(ctx context.Context, o orderdom.Order, _ *commo
 	const q = `
 INSERT INTO orders (
   id, order_number, status, user_id, shipping_address_id, billing_address_id, list_id,
-  items, invoice_id, payment_id, fulfillment_id, tracking_id, transffered_date,
+  items, invoice_id, payment_id, fulfillment_id, tracking_id, transfered_date,
   created_at, updated_at, updated_by, deleted_at, deleted_by
 ) VALUES (
   $1, $2, $3, $4, $5, $6, $7,
@@ -285,7 +285,7 @@ ON CONFLICT (id) DO UPDATE SET
   payment_id         = EXCLUDED.payment_id,
   fulfillment_id     = EXCLUDED.fulfillment_id,
   tracking_id        = EXCLUDED.tracking_id,
-  transffered_date   = EXCLUDED.transffered_date,
+  transfered_date   = EXCLUDED.transfered_date,
   created_at         = EXCLUDED.created_at,
   updated_at         = EXCLUDED.updated_at,
   updated_by         = EXCLUDED.updated_by,
@@ -293,7 +293,7 @@ ON CONFLICT (id) DO UPDATE SET
   deleted_by         = EXCLUDED.deleted_by
 RETURNING
   id, order_number, status, user_id, shipping_address_id, billing_address_id, list_id,
-  items, invoice_id, payment_id, fulfillment_id, tracking_id, transffered_date,
+  items, invoice_id, payment_id, fulfillment_id, tracking_id, transfered_date,
   created_at, updated_at, updated_by, deleted_at, deleted_by
 `
 	row := run.QueryRowContext(ctx, q,
@@ -309,7 +309,7 @@ RETURNING
 		strings.TrimSpace(o.PaymentID),
 		strings.TrimSpace(o.FulfillmentID),
 		dbcommon.ToDBText(o.TrackingID),
-		dbcommon.ToDBTime(o.TransfferedDate),
+		dbcommon.ToDBTime(o.TransferedDate),
 		o.CreatedAt.UTC(),
 		o.UpdatedAt.UTC(),
 		dbcommon.ToDBText(o.UpdatedBy),
@@ -353,12 +353,12 @@ func scanOrder(s dbcommon.RowScanner) (orderdom.Order, error) {
 		listID, invoiceID, paymentID, fulfillmentID string
 		itemsRaw                                    []byte
 		trackingIDNS, updatedByNS, deletedByNS      sql.NullString
-		transfferedDateNS, deletedAtNS              sql.NullTime
+		transferedDateNS, deletedAtNS               sql.NullTime
 		createdAt, updatedAt                        time.Time
 	)
 	if err := s.Scan(
 		&id, &orderNumber, &status, &userID, &shippingAddressID, &billingAddressID, &listID,
-		&itemsRaw, &invoiceID, &paymentID, &fulfillmentID, &trackingIDNS, &transfferedDateNS,
+		&itemsRaw, &invoiceID, &paymentID, &fulfillmentID, &trackingIDNS, &transferedDateNS,
 		&createdAt, &updatedAt, &updatedByNS, &deletedAtNS, &deletedByNS,
 	); err != nil {
 		return orderdom.Order{}, err
@@ -402,7 +402,7 @@ func scanOrder(s dbcommon.RowScanner) (orderdom.Order, error) {
 		PaymentID:         strings.TrimSpace(paymentID),
 		FulfillmentID:     strings.TrimSpace(fulfillmentID),
 		TrackingID:        toStrPtr(trackingIDNS),
-		TransfferedDate:   toTimePtr(transfferedDateNS),
+		TransferedDate:    toTimePtr(transferedDateNS),
 		CreatedAt:         createdAt.UTC(),
 		UpdatedAt:         updatedAt.UTC(),
 		UpdatedBy:         toStrPtr(updatedByNS),
@@ -457,19 +457,19 @@ func buildOrderWhere(f uc.OrderFilter) ([]string, []any) {
 		where = append(where, fmt.Sprintf("updated_at < $%d", len(args)+1))
 		args = append(args, f.UpdatedTo.UTC())
 	}
-	if f.TransfferedFrom != nil {
-		where = append(where, fmt.Sprintf("(transffered_date IS NOT NULL AND transffered_date >= $%d)", len(args)+1))
-		args = append(args, f.TransfferedFrom.UTC())
+	if f.TransferedFrom != nil {
+		where = append(where, fmt.Sprintf("(transfered_date IS NOT NULL AND transfered_date >= $%d)", len(args)+1))
+		args = append(args, f.TransferedFrom.UTC())
 	}
-	if f.TransfferedTo != nil {
-		where = append(where, fmt.Sprintf("(transffered_date IS NOT NULL AND transffered_date < $%d)", len(args)+1))
-		args = append(args, f.TransfferedTo.UTC())
+	if f.TransferedTo != nil {
+		where = append(where, fmt.Sprintf("(transfered_date IS NOT NULL AND transfered_date < $%d)", len(args)+1))
+		args = append(args, f.TransferedTo.UTC())
 	}
-	if f.HasTransfferedDate != nil {
-		if *f.HasTransfferedDate {
-			where = append(where, "transffered_date IS NOT NULL")
+	if f.HasTransferedDate != nil {
+		if *f.HasTransferedDate {
+			where = append(where, "transfered_date IS NOT NULL")
 		} else {
-			where = append(where, "transffered_date IS NULL")
+			where = append(where, "transfered_date IS NULL")
 		}
 	}
 
@@ -489,8 +489,8 @@ func buildOrderOrderBy(sort common.Sort) string {
 		col = "updated_at"
 	case "ordernumber", "order_number":
 		col = "order_number"
-	case "transffereddate", "transffered_date":
-		col = "transffered_date"
+	case "transfereddate", "transfered_date":
+		col = "transfered_date"
 	default:
 		return ""
 	}

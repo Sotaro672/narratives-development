@@ -48,7 +48,6 @@ import (
 	tokenoperation "narratives/internal/domain/tokenOperation"
 	trackingdom "narratives/internal/domain/tracking"
 	trdom "narratives/internal/domain/transaction"
-	transfferdom "narratives/internal/domain/transffer"
 	userdomain "narratives/internal/domain/user"
 	walletdom "narratives/internal/domain/wallet"
 )
@@ -252,9 +251,6 @@ func main() {
 
 	mustWrite(filepath.Join(outDir, "init_transactions.sql"), trdom.TransactionsTableDDL)
 	fmt.Println("✅ Generated:", filepath.Join("backend", outDir, "init_transactions.sql"))
-
-	mustWrite(filepath.Join(outDir, "init_transffers.sql"), transfferdom.TransffersTableDDL)
-	fmt.Println("✅ Generated:", filepath.Join("backend", outDir, "init_transffers.sql"))
 
 	mustWrite(filepath.Join(outDir, "init_users.sql"), userdomain.UsersTableDDL)
 	fmt.Println("✅ Generated:", filepath.Join("backend", outDir, "init_users.sql"))

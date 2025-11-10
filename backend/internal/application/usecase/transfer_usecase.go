@@ -7,7 +7,7 @@ import (
 	txdom "narratives/internal/domain/transaction"
 )
 
-// TransfferRepo defines the minimal persistence port needed by TransfferUsecase.
+// TransferRepo defines the minimal persistence port needed by TransferUsecase.
 type TransferRepo interface {
 	GetByID(ctx context.Context, id string) (txdom.Transaction, error)
 	Exists(ctx context.Context, id string) (bool, error)

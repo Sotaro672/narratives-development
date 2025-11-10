@@ -13,7 +13,7 @@ import type {
   LegacyOrderStatus,
 } from "../../../../shell/src/shared/types/order";
 
-type SortKey = "orderNumber" | "createdAt" | "transfferedDate" | null;
+type SortKey = "orderNumber" | "createdAt" | "transferredDate" | null;
 type SortDir = "asc" | "desc" | null;
 
 // 日付フォーマット (YYYY/MM/DD)
@@ -129,13 +129,13 @@ export default function OrderManagementPage() {
         setDirection(dir as SortDir);
       }}
     />,
-    // 移譲日（transfferedDate, Sortable）
+    // 移譲日（transferedDate, Sortable）
     <SortableTableHeader
-      key="transfferedDate"
+      key="transferedDate"
       label="移譲日"
-      sortKey="transfferedDate"
+      sortKey="transferedDate"
       activeKey={activeKey}
-      direction={activeKey === "transfferedDate" ? direction : null}
+      direction={activeKey === "transferedDate" ? direction : null}
       onChange={(key, dir) => {
         setActiveKey(key as SortKey);
         setDirection(dir as SortDir);
@@ -212,7 +212,7 @@ export default function OrderManagementPage() {
             <td>{formatDate(o.createdAt)}</td>
 
             {/* 移譲日 */}
-            <td>{formatDate(o.transfferedDate ?? null)}</td>
+            <td>{formatDate(o.transferredDate ?? null)}</td>
           </tr>
         ))}
       </List>

@@ -1,4 +1,4 @@
-package transffer
+package transfer
 
 import (
 	"context"
@@ -6,24 +6,21 @@ import (
 	"time"
 )
 
-// Backward-compat alias for legacy service signatures.
-type Transfer = Transffer
-
 // ========================================
 // Create/Update inputs (contract only)
 // ========================================
 
-type CreateTransfferInput struct {
+type CreateTransferInput struct {
 	MintAddress string    `json:"mintAddress"`
 	FromAddress string    `json:"fromAddress"`
 	ToAddress   string    `json:"toAddress"`
 	RequestedAt time.Time `json:"requestedAt"` // usually now (UTC)
 }
 
-type UpdateTransfferInput struct {
-	Status        *TransfferStatus    `json:"status,omitempty"`        // requested | fulfilled | error
-	ErrorType     *TransfferErrorType `json:"errorType,omitempty"`     // when status=error
-	TransfferedAt *time.Time          `json:"transfferedAt,omitempty"` // when status=fulfilled
+type UpdateTransferInput struct {
+	Status        *TransferStatus    `json:"status,omitempty"`        // requested | fulfilled | error
+	ErrorType     *TransferErrorType `json:"errorType,omitempty"`     // when status=error
+	TransferredAt *time.Time         `json:"transferredAt,omitempty"` // when status=fulfilled
 }
 
 // ========================================
@@ -38,15 +35,15 @@ type Filter struct {
 	ToAddress   string
 
 	// status/error
-	Statuses   []TransfferStatus
-	ErrorTypes []TransfferErrorType
+	Statuses   []TransferStatus
+	ErrorTypes []TransferErrorType
 	HasError   *bool // nil: all, true: only errors, false: only non-errors
 
 	// time ranges
-	RequestedFrom   *time.Time
-	RequestedTo     *time.Time
-	TransfferedFrom *time.Time
-	TransfferedTo   *time.Time
+	RequestedFrom  *time.Time
+	RequestedTo    *time.Time
+	TransferedFrom *time.Time
+	TransferedTo   *time.Time
 }
 
 type Sort struct {
@@ -57,9 +54,9 @@ type Sort struct {
 type SortColumn string
 
 const (
-	SortByRequestedAt   SortColumn = "requestedAt"
-	SortByTransfferedAt SortColumn = "transfferedAt"
-	SortByStatus        SortColumn = "status"
+	SortByRequestedAt  SortColumn = "requestedAt"
+	SortByTransferedAt SortColumn = "transferedAt"
+	SortByStatus       SortColumn = "status"
 )
 
 type SortOrder string
@@ -75,7 +72,7 @@ type Page struct {
 }
 
 type PageResult struct {
-	Items      []Transffer
+	Items      []Transfer
 	TotalCount int
 	TotalPages int
 	Page       int
@@ -88,13 +85,13 @@ type PageResult struct {
 
 type RepositoryPort interface {
 	// Generic queries
-	GetByID(ctx context.Context, id string) (*Transffer, error)
+	GetByID(ctx context.Context, id string) (*Transfer, error)
 	List(ctx context.Context, filter Filter, sort Sort, page Page) (PageResult, error)
 	Count(ctx context.Context, filter Filter) (int, error)
 
 	// Mutations
-	Create(ctx context.Context, in CreateTransfferInput) (*Transffer, error)
-	Update(ctx context.Context, id string, in UpdateTransfferInput) (*Transffer, error)
+	Create(ctx context.Context, in CreateTransferInput) (*Transfer, error)
+	Update(ctx context.Context, id string, in UpdateTransferInput) (*Transfer, error)
 	Delete(ctx context.Context, id string) error
 
 	// Transaction boundary (optional)
@@ -110,14 +107,14 @@ type RepositoryPort interface {
 	GetTransfersByToAddress(ctx context.Context, toAddress string) ([]*Transfer, error)
 	GetTransfersByMintAddress(ctx context.Context, mintAddress string) ([]*Transfer, error)
 	GetTransfersByStatus(ctx context.Context, status string) ([]*Transfer, error)
-	CreateTransfer(ctx context.Context, in CreateTransfferInput) (*Transfer, error)
-	UpdateTransfer(ctx context.Context, id string, in UpdateTransfferInput) (*Transfer, error)
+	CreateTransfer(ctx context.Context, in CreateTransferInput) (*Transfer, error)
+	UpdateTransfer(ctx context.Context, id string, in UpdateTransferInput) (*Transfer, error)
 	DeleteTransfer(ctx context.Context, id string) error
 	ResetTransfers(ctx context.Context) error
 }
 
 // Common repository errors (contract)
 var (
-	ErrNotFound = errors.New("transffer: not found")
-	ErrConflict = errors.New("transffer: conflict")
+	ErrNotFound = errors.New("transfer: not found")
+	ErrConflict = errors.New("transfer: conflict")
 )

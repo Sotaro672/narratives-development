@@ -16,7 +16,7 @@ CREATE TABLE IF NOT EXISTS orders (
   payment_id           TEXT        NOT NULL,
   fulfillment_id       TEXT        NOT NULL,
   tracking_id          TEXT        NULL,
-  transffered_date     TIMESTAMPTZ NULL,                          -- note: TS field uses this spelling
+  transfered_date     TIMESTAMPTZ NULL,                          -- note: TS field uses this spelling
   last_update          TIMESTAMPTZ NOT NULL,
   created_at           TIMESTAMPTZ NOT NULL,
   updated_at           TIMESTAMPTZ NOT NULL,
@@ -47,7 +47,7 @@ CREATE TABLE IF NOT EXISTS orders (
     updated_at >= created_at
     AND last_update >= created_at
     AND last_update >= updated_at
-    AND (transffered_date IS NULL OR transffered_date >= created_at)
+    AND (transfered_date IS NULL OR transfered_date >= created_at)
     AND (deleted_at IS NULL OR deleted_at >= created_at)
   ),
 
@@ -65,7 +65,7 @@ CREATE TABLE IF NOT EXISTS orders (
 CREATE UNIQUE INDEX IF NOT EXISTS uq_orders_order_number ON orders(order_number);
 CREATE INDEX IF NOT EXISTS idx_orders_status            ON orders(status);
 CREATE INDEX IF NOT EXISTS idx_orders_user_id           ON orders(user_id);
-CREATE INDEX IF NOT EXISTS idx_orders_transffered_date  ON orders(transffered_date);
+CREATE INDEX IF NOT EXISTS idx_orders_transfered_date  ON orders(transfered_date);
 CREATE INDEX IF NOT EXISTS idx_orders_last_update       ON orders(last_update);
 CREATE INDEX IF NOT EXISTS idx_orders_created_at        ON orders(created_at);
 CREATE INDEX IF NOT EXISTS idx_orders_updated_at        ON orders(updated_at);

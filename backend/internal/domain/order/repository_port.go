@@ -11,13 +11,13 @@ import (
 // Filter aligns with entity fields (no LastUpdate).
 type Filter struct {
 	// Exact matches
-	ID             string
-	UserID         string
-	ListID         string
-	InvoiceID      string
-	PaymentID      string
-	FulfillmentID  string
-	TrackingID     *string
+	ID            string
+	UserID        string
+	ListID        string
+	InvoiceID     string
+	PaymentID     string
+	FulfillmentID string
+	TrackingID    *string
 
 	// Status filtering
 	Statuses []LegacyOrderStatus
@@ -26,12 +26,12 @@ type Filter struct {
 	OrderNumberLike string
 
 	// Time ranges
-	CreatedFrom     *time.Time
-	CreatedTo       *time.Time
-	UpdatedFrom     *time.Time
-	UpdatedTo       *time.Time
-	TransfferedFrom *time.Time // spelling per TS
-	TransfferedTo   *time.Time // spelling per TS
+	CreatedFrom    *time.Time
+	CreatedTo      *time.Time
+	UpdatedFrom    *time.Time
+	UpdatedTo      *time.Time
+	TransferedFrom *time.Time // spelling per TS
+	TransferedTo   *time.Time // spelling per TS
 
 	// Deletion flag: nil=all, true=only deleted, false=only not deleted
 	Deleted *bool
@@ -48,10 +48,10 @@ const (
 
 // Allowed sort columns
 const (
-	SortByCreatedAt       string = "createdAt"
-	SortByUpdatedAt       string = "updatedAt"
-	SortByOrderNumber     string = "orderNumber"
-	SortByTransfferedDate string = "transfferedDate" // spelling per TS
+	SortByCreatedAt      string = "createdAt"
+	SortByUpdatedAt      string = "updatedAt"
+	SortByOrderNumber    string = "orderNumber"
+	SortByTransferedDate string = "transferedDate" // spelling per TS
 )
 
 // Paging aliases

@@ -9,33 +9,33 @@ import (
 	"time"
 
 	dbcommon "narratives/internal/adapters/out/db/common"
-	trdom "narratives/internal/domain/transffer"
+	trdom "narratives/internal/domain/transfer"
 )
 
-// TransfferRepositoryPG implements transffer.RepositoryPort with PostgreSQL.
-type TransfferRepositoryPG struct {
+// TransferRepositoryPG implements transfer.RepositoryPort with PostgreSQL.
+type TransferRepositoryPG struct {
 	DB *sql.DB
 }
 
-func NewTransfferRepositoryPG(db *sql.DB) *TransfferRepositoryPG {
-	return &TransfferRepositoryPG{DB: db}
+func NewTransferRepositoryPG(db *sql.DB) *TransferRepositoryPG {
+	return &TransferRepositoryPG{DB: db}
 }
 
 // ===============================
 // RepositoryPort impl
 // ===============================
 
-func (r *TransfferRepositoryPG) GetByID(ctx context.Context, id string) (*trdom.Transffer, error) {
+func (r *TransferRepositoryPG) GetByID(ctx context.Context, id string) (*trdom.Transfer, error) {
 	run := dbcommon.GetRunner(ctx, r.DB)
 	const q = `
 SELECT
   id, mint_address, from_address, to_address,
-  requested_at, transffered_at, status, error_type
-FROM transffers
+  requested_at, transferred_at, status, error_type
+FROM transfers
 WHERE id = $1
 LIMIT 1`
 	row := run.QueryRowContext(ctx, q, strings.TrimSpace(id))
-	tr, err := scanTransffer(row)
+	tr, err := scanTransfer(row)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return nil, trdom.ErrNotFound
@@ -45,16 +45,16 @@ LIMIT 1`
 	return &tr, nil
 }
 
-func (r *TransfferRepositoryPG) List(ctx context.Context, filter trdom.Filter, sort trdom.Sort, page trdom.Page) (trdom.PageResult, error) {
+func (r *TransferRepositoryPG) List(ctx context.Context, filter trdom.Filter, sort trdom.Sort, page trdom.Page) (trdom.PageResult, error) {
 	run := dbcommon.GetRunner(ctx, r.DB)
 
-	where, args := buildTransfferWhere(filter)
+	where, args := buildTransferWhere(filter)
 	whereSQL := ""
 	if len(where) > 0 {
 		whereSQL = "WHERE " + strings.Join(where, " AND ")
 	}
 
-	orderBy := buildTransfferOrderBy(sort)
+	orderBy := buildTransferOrderBy(sort)
 	if orderBy == "" {
 		orderBy = "ORDER BY requested_at DESC, id DESC"
 	}
@@ -63,7 +63,7 @@ func (r *TransfferRepositoryPG) List(ctx context.Context, filter trdom.Filter, s
 
 	// Count
 	var total int
-	if err := run.QueryRowContext(ctx, "SELECT COUNT(*) FROM transffers "+whereSQL, args...).Scan(&total); err != nil {
+	if err := run.QueryRowContext(ctx, "SELECT COUNT(*) FROM transfers "+whereSQL, args...).Scan(&total); err != nil {
 		return trdom.PageResult{}, err
 	}
 
@@ -71,8 +71,8 @@ func (r *TransfferRepositoryPG) List(ctx context.Context, filter trdom.Filter, s
 	q := fmt.Sprintf(`
 SELECT
   id, mint_address, from_address, to_address,
-  requested_at, transffered_at, status, error_type
-FROM transffers
+  requested_at, transferred_at, status, error_type
+FROM transfers
 %s
 %s
 LIMIT $%d OFFSET $%d`, whereSQL, orderBy, len(args)+1, len(args)+2)
@@ -84,9 +84,9 @@ LIMIT $%d OFFSET $%d`, whereSQL, orderBy, len(args)+1, len(args)+2)
 	}
 	defer rows.Close()
 
-	items := make([]trdom.Transffer, 0, perPage)
+	items := make([]trdom.Transfer, 0, perPage)
 	for rows.Next() {
-		tr, err := scanTransffer(rows)
+		tr, err := scanTransfer(rows)
 		if err != nil {
 			return trdom.PageResult{}, err
 		}
@@ -105,40 +105,40 @@ LIMIT $%d OFFSET $%d`, whereSQL, orderBy, len(args)+1, len(args)+2)
 	}, nil
 }
 
-func (r *TransfferRepositoryPG) Count(ctx context.Context, filter trdom.Filter) (int, error) {
+func (r *TransferRepositoryPG) Count(ctx context.Context, filter trdom.Filter) (int, error) {
 	run := dbcommon.GetRunner(ctx, r.DB)
-	where, args := buildTransfferWhere(filter)
+	where, args := buildTransferWhere(filter)
 	whereSQL := ""
 	if len(where) > 0 {
 		whereSQL = "WHERE " + strings.Join(where, " AND ")
 	}
 	var total int
-	if err := run.QueryRowContext(ctx, "SELECT COUNT(*) FROM transffers "+whereSQL, args...).Scan(&total); err != nil {
+	if err := run.QueryRowContext(ctx, "SELECT COUNT(*) FROM transfers "+whereSQL, args...).Scan(&total); err != nil {
 		return 0, err
 	}
 	return total, nil
 }
 
-func (r *TransfferRepositoryPG) Create(ctx context.Context, in trdom.CreateTransfferInput) (*trdom.Transffer, error) {
+func (r *TransferRepositoryPG) Create(ctx context.Context, in trdom.CreateTransferInput) (*trdom.Transfer, error) {
 	run := dbcommon.GetRunner(ctx, r.DB)
 	const q = `
-INSERT INTO transffers (
+INSERT INTO transfers (
   id, mint_address, from_address, to_address,
-  requested_at, transffered_at, status, error_type
+  requested_at, transferred_at, status, error_type
 ) VALUES (
   gen_random_uuid()::text, $1, $2, $3,
   $4, NULL, 'requested', NULL
 )
 RETURNING
   id, mint_address, from_address, to_address,
-  requested_at, transffered_at, status, error_type`
+  requested_at, transferred_at, status, error_type`
 	row := run.QueryRowContext(ctx, q,
 		strings.TrimSpace(in.MintAddress),
 		strings.TrimSpace(in.FromAddress),
 		strings.TrimSpace(in.ToAddress),
 		in.RequestedAt.UTC(),
 	)
-	tr, err := scanTransffer(row)
+	tr, err := scanTransfer(row)
 	if err != nil {
 		if dbcommon.IsUniqueViolation(err) {
 			return nil, trdom.ErrConflict
@@ -148,7 +148,7 @@ RETURNING
 	return &tr, nil
 }
 
-func (r *TransfferRepositoryPG) Update(ctx context.Context, id string, in trdom.UpdateTransfferInput) (*trdom.Transffer, error) {
+func (r *TransferRepositoryPG) Update(ctx context.Context, id string, in trdom.UpdateTransferInput) (*trdom.Transfer, error) {
 	run := dbcommon.GetRunner(ctx, r.DB)
 
 	sets := []string{}
@@ -172,13 +172,13 @@ func (r *TransfferRepositoryPG) Update(ctx context.Context, id string, in trdom.
 			i++
 		}
 	}
-	// transffered_at: if provided and zero => NULL, else set
-	if in.TransfferedAt != nil {
-		if in.TransfferedAt.IsZero() {
-			sets = append(sets, "transffered_at = NULL")
+	// transferred_at: if provided and zero => NULL, else set
+	if in.TransferredAt != nil {
+		if in.TransferredAt.IsZero() {
+			sets = append(sets, "transferred_at = NULL")
 		} else {
-			sets = append(sets, fmt.Sprintf("transffered_at = $%d", i))
-			args = append(args, in.TransfferedAt.UTC())
+			sets = append(sets, fmt.Sprintf("transferred_at = $%d", i))
+			args = append(args, in.TransferredAt.UTC())
 			i++
 		}
 	}
@@ -189,16 +189,16 @@ func (r *TransfferRepositoryPG) Update(ctx context.Context, id string, in trdom.
 
 	args = append(args, strings.TrimSpace(id))
 	q := fmt.Sprintf(`
-UPDATE transffers
+UPDATE transfers
 SET %s
 WHERE id = $%d
 RETURNING
   id, mint_address, from_address, to_address,
-  requested_at, transffered_at, status, error_type
+  requested_at, transferred_at, status, error_type
 `, strings.Join(sets, ", "), i)
 
 	row := run.QueryRowContext(ctx, q, args...)
-	tr, err := scanTransffer(row)
+	tr, err := scanTransfer(row)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return nil, trdom.ErrNotFound
@@ -211,9 +211,9 @@ RETURNING
 	return &tr, nil
 }
 
-func (r *TransfferRepositoryPG) Delete(ctx context.Context, id string) error {
+func (r *TransferRepositoryPG) Delete(ctx context.Context, id string) error {
 	run := dbcommon.GetRunner(ctx, r.DB)
-	res, err := run.ExecContext(ctx, `DELETE FROM transffers WHERE id = $1`, strings.TrimSpace(id))
+	res, err := run.ExecContext(ctx, `DELETE FROM transfers WHERE id = $1`, strings.TrimSpace(id))
 	if err != nil {
 		return err
 	}
@@ -224,7 +224,7 @@ func (r *TransfferRepositoryPG) Delete(ctx context.Context, id string) error {
 	return nil
 }
 
-func (r *TransfferRepositoryPG) WithTx(ctx context.Context, fn func(ctx context.Context) error) error {
+func (r *TransferRepositoryPG) WithTx(ctx context.Context, fn func(ctx context.Context) error) error {
 	tx, err := r.DB.BeginTx(ctx, nil)
 	if err != nil {
 		return err
@@ -245,9 +245,9 @@ func (r *TransfferRepositoryPG) WithTx(ctx context.Context, fn func(ctx context.
 	return tx.Commit()
 }
 
-func (r *TransfferRepositoryPG) Reset(ctx context.Context) error {
+func (r *TransferRepositoryPG) Reset(ctx context.Context) error {
 	run := dbcommon.GetRunner(ctx, r.DB)
-	_, err := run.ExecContext(ctx, `DELETE FROM transffers`)
+	_, err := run.ExecContext(ctx, `DELETE FROM transfers`)
 	return err
 }
 
@@ -255,13 +255,13 @@ func (r *TransfferRepositoryPG) Reset(ctx context.Context) error {
 // Compatibility methods
 // ===============================
 
-func (r *TransfferRepositoryPG) GetAllTransfers(ctx context.Context) ([]*trdom.Transfer, error) {
+func (r *TransferRepositoryPG) GetAllTransfers(ctx context.Context) ([]*trdom.Transfer, error) {
 	run := dbcommon.GetRunner(ctx, r.DB)
 	const q = `
 SELECT
   id, mint_address, from_address, to_address,
-  requested_at, transffered_at, status, error_type
-FROM transffers
+  requested_at, transferred_at, status, error_type
+FROM transfers
 ORDER BY requested_at DESC, id DESC`
 	rows, err := run.QueryContext(ctx, q)
 	if err != nil {
@@ -271,7 +271,7 @@ ORDER BY requested_at DESC, id DESC`
 
 	var out []*trdom.Transfer
 	for rows.Next() {
-		t, err := scanTransffer(rows)
+		t, err := scanTransfer(rows)
 		if err != nil {
 			return nil, err
 		}
@@ -281,7 +281,7 @@ ORDER BY requested_at DESC, id DESC`
 	return out, rows.Err()
 }
 
-func (r *TransfferRepositoryPG) GetTransferByID(ctx context.Context, id string) (*trdom.Transfer, error) {
+func (r *TransferRepositoryPG) GetTransferByID(ctx context.Context, id string) (*trdom.Transfer, error) {
 	tr, err := r.GetByID(ctx, id)
 	if err != nil {
 		return nil, err
@@ -290,23 +290,23 @@ func (r *TransfferRepositoryPG) GetTransferByID(ctx context.Context, id string) 
 	return &tt, nil
 }
 
-func (r *TransfferRepositoryPG) GetTransfersByFromAddress(ctx context.Context, fromAddress string) ([]*trdom.Transfer, error) {
+func (r *TransferRepositoryPG) GetTransfersByFromAddress(ctx context.Context, fromAddress string) ([]*trdom.Transfer, error) {
 	return r.getTransfersByColumn(ctx, "from_address", strings.TrimSpace(fromAddress))
 }
 
-func (r *TransfferRepositoryPG) GetTransfersByToAddress(ctx context.Context, toAddress string) ([]*trdom.Transfer, error) {
+func (r *TransferRepositoryPG) GetTransfersByToAddress(ctx context.Context, toAddress string) ([]*trdom.Transfer, error) {
 	return r.getTransfersByColumn(ctx, "to_address", strings.TrimSpace(toAddress))
 }
 
-func (r *TransfferRepositoryPG) GetTransfersByMintAddress(ctx context.Context, mintAddress string) ([]*trdom.Transfer, error) {
+func (r *TransferRepositoryPG) GetTransfersByMintAddress(ctx context.Context, mintAddress string) ([]*trdom.Transfer, error) {
 	return r.getTransfersByColumn(ctx, "mint_address", strings.TrimSpace(mintAddress))
 }
 
-func (r *TransfferRepositoryPG) GetTransfersByStatus(ctx context.Context, status string) ([]*trdom.Transfer, error) {
+func (r *TransferRepositoryPG) GetTransfersByStatus(ctx context.Context, status string) ([]*trdom.Transfer, error) {
 	return r.getTransfersByColumn(ctx, "status", strings.TrimSpace(status))
 }
 
-func (r *TransfferRepositoryPG) CreateTransfer(ctx context.Context, in trdom.CreateTransfferInput) (*trdom.Transfer, error) {
+func (r *TransferRepositoryPG) CreateTransfer(ctx context.Context, in trdom.CreateTransferInput) (*trdom.Transfer, error) {
 	tr, err := r.Create(ctx, in)
 	if err != nil {
 		return nil, err
@@ -315,7 +315,7 @@ func (r *TransfferRepositoryPG) CreateTransfer(ctx context.Context, in trdom.Cre
 	return &tt, nil
 }
 
-func (r *TransfferRepositoryPG) UpdateTransfer(ctx context.Context, id string, in trdom.UpdateTransfferInput) (*trdom.Transfer, error) {
+func (r *TransferRepositoryPG) UpdateTransfer(ctx context.Context, id string, in trdom.UpdateTransferInput) (*trdom.Transfer, error) {
 	tr, err := r.Update(ctx, id, in)
 	if err != nil {
 		return nil, err
@@ -324,22 +324,22 @@ func (r *TransfferRepositoryPG) UpdateTransfer(ctx context.Context, id string, i
 	return &tt, nil
 }
 
-func (r *TransfferRepositoryPG) DeleteTransfer(ctx context.Context, id string) error {
+func (r *TransferRepositoryPG) DeleteTransfer(ctx context.Context, id string) error {
 	return r.Delete(ctx, id)
 }
 
-func (r *TransfferRepositoryPG) ResetTransfers(ctx context.Context) error {
+func (r *TransferRepositoryPG) ResetTransfers(ctx context.Context) error {
 	return r.Reset(ctx)
 }
 
 // helper for compatibility listing by one column
-func (r *TransfferRepositoryPG) getTransfersByColumn(ctx context.Context, col, val string) ([]*trdom.Transfer, error) {
+func (r *TransferRepositoryPG) getTransfersByColumn(ctx context.Context, col, val string) ([]*trdom.Transfer, error) {
 	run := dbcommon.GetRunner(ctx, r.DB)
 	q := fmt.Sprintf(`
 SELECT
   id, mint_address, from_address, to_address,
-  requested_at, transffered_at, status, error_type
-FROM transffers
+  requested_at, transferred_at, status, error_type
+FROM transfers
 WHERE %s = $1
 ORDER BY requested_at DESC, id DESC`, col)
 	rows, err := run.QueryContext(ctx, q, val)
@@ -350,7 +350,7 @@ ORDER BY requested_at DESC, id DESC`, col)
 
 	var out []*trdom.Transfer
 	for rows.Next() {
-		t, err := scanTransffer(rows)
+		t, err := scanTransfer(rows)
 		if err != nil {
 			return nil, err
 		}
@@ -364,7 +364,7 @@ ORDER BY requested_at DESC, id DESC`, col)
 // Scanners and builders
 // ===============================
 
-func scanTransffer(s dbcommon.RowScanner) (trdom.Transffer, error) {
+func scanTransfer(s dbcommon.RowScanner) (trdom.Transfer, error) {
 	var (
 		id, mint, from, to, status string
 		errTypeNS                  sql.NullString
@@ -372,7 +372,7 @@ func scanTransffer(s dbcommon.RowScanner) (trdom.Transffer, error) {
 		trAtNS                     sql.NullTime
 	)
 	if err := s.Scan(&id, &mint, &from, &to, &reqAt, &trAtNS, &status, &errTypeNS); err != nil {
-		return trdom.Transffer{}, err
+		return trdom.Transfer{}, err
 	}
 
 	var trAt *time.Time
@@ -380,32 +380,32 @@ func scanTransffer(s dbcommon.RowScanner) (trdom.Transffer, error) {
 		t := trAtNS.Time.UTC()
 		trAt = &t
 	}
-	var eType *trdom.TransfferErrorType
+	var eType *trdom.TransferErrorType
 	if errTypeNS.Valid {
 		v := strings.TrimSpace(errTypeNS.String)
 		if v != "" {
-			x := trdom.TransfferErrorType(v)
+			x := trdom.TransferErrorType(v)
 			eType = &x
 		}
 	}
 
-	return trdom.Transffer{
+	return trdom.Transfer{
 		ID:            strings.TrimSpace(id),
 		MintAddress:   strings.TrimSpace(mint),
 		FromAddress:   strings.TrimSpace(from),
 		ToAddress:     strings.TrimSpace(to),
 		RequestedAt:   reqAt.UTC(),
-		TransfferedAt: trAt,
-		Status:        trdom.TransfferStatus(strings.TrimSpace(status)),
+		TransferredAt: trAt,
+		Status:        trdom.TransferStatus(strings.TrimSpace(status)),
 		ErrorType:     eType,
 	}, nil
 }
 
-func buildTransfferWhere(f trdom.Filter) ([]string, []any) {
+func buildTransferWhere(f trdom.Filter) ([]string, []any) {
 	where := []string{}
 	args := []any{}
 
-	addInStatus := func(col string, vals []trdom.TransfferStatus) {
+	addInStatus := func(col string, vals []trdom.TransferStatus) {
 		if len(vals) == 0 {
 			return
 		}
@@ -417,7 +417,7 @@ func buildTransfferWhere(f trdom.Filter) ([]string, []any) {
 		}
 		where = append(where, fmt.Sprintf("%s IN (%s)", col, strings.Join(ph, ",")))
 	}
-	addInErrType := func(col string, vals []trdom.TransfferErrorType) {
+	addInErrType := func(col string, vals []trdom.TransferErrorType) {
 		if len(vals) == 0 {
 			return
 		}
@@ -470,25 +470,25 @@ func buildTransfferWhere(f trdom.Filter) ([]string, []any) {
 		where = append(where, fmt.Sprintf("requested_at < $%d", len(args)+1))
 		args = append(args, f.RequestedTo.UTC())
 	}
-	if f.TransfferedFrom != nil {
-		where = append(where, fmt.Sprintf("transffered_at >= $%d", len(args)+1))
-		args = append(args, f.TransfferedFrom.UTC())
+	if f.TransferedFrom != nil {
+		where = append(where, fmt.Sprintf("transferred_at >= $%d", len(args)+1))
+		args = append(args, f.TransferedFrom.UTC())
 	}
-	if f.TransfferedTo != nil {
-		where = append(where, fmt.Sprintf("transffered_at < $%d", len(args)+1))
-		args = append(args, f.TransfferedTo.UTC())
+	if f.TransferedTo != nil {
+		where = append(where, fmt.Sprintf("transferred_at < $%d", len(args)+1))
+		args = append(args, f.TransferedTo.UTC())
 	}
 
 	return where, args
 }
 
-func buildTransfferOrderBy(s trdom.Sort) string {
+func buildTransferOrderBy(s trdom.Sort) string {
 	col := strings.ToLower(strings.TrimSpace(string(s.Column)))
 	switch col {
 	case "requestedat", "requested_at":
 		col = "requested_at"
-	case "transfferedat", "transffered_at":
-		col = "transffered_at"
+	case "transferredat", "transferred_at":
+		col = "transferred_at"
 	case "status":
 		col = "status"
 	default:

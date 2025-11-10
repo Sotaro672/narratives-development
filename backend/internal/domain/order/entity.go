@@ -47,7 +47,7 @@ type Order struct {
 	PaymentID         string
 	FulfillmentID     string
 	TrackingID        *string
-	TransfferedDate   *time.Time // note: mirrors TS: transfferedDate
+	TransferedDate    *time.Time // note: mirrors TS: transferedDate
 	CreatedAt         time.Time
 	UpdatedAt         time.Time
 	UpdatedBy         *string
@@ -69,7 +69,7 @@ type OrderPatch struct {
 	PaymentID         *string
 	FulfillmentID     *string
 	TrackingID        *string
-	TransfferedDate   *time.Time
+	TransferedDate    *time.Time
 	UpdatedBy         *string
 	DeletedAt         *time.Time
 	DeletedBy         *string
@@ -128,7 +128,7 @@ func New(
 	paymentID string,
 	fulfillmentID string,
 	trackingID *string,
-	transfferedDate *time.Time,
+	transferedDate *time.Time,
 	createdAt time.Time,
 	updatedAt time.Time,
 	updatedBy *string,
@@ -148,7 +148,7 @@ func New(
 		PaymentID:         strings.TrimSpace(paymentID),
 		FulfillmentID:     strings.TrimSpace(fulfillmentID),
 		TrackingID:        normalizePtr(trackingID),
-		TransfferedDate:   normalizeTimePtr(transfferedDate),
+		TransferedDate:    normalizeTimePtr(transferedDate),
 		CreatedAt:         createdAt.UTC(),
 		UpdatedAt:         updatedAt.UTC(),
 		UpdatedBy:         normalizePtr(updatedBy),
@@ -174,7 +174,7 @@ func NewFromStringTimes(
 	paymentID string,
 	fulfillmentID string,
 	trackingID *string,
-	transfferedDateStr *string,
+	transferedDateStr *string,
 	createdAtStr string,
 	updatedAtStr string,
 	updatedBy *string,
@@ -190,8 +190,8 @@ func NewFromStringTimes(
 		return Order{}, err
 	}
 	var td, dd *time.Time
-	if transfferedDateStr != nil && strings.TrimSpace(*transfferedDateStr) != "" {
-		t, err := parseTime(*transfferedDateStr, ErrInvalidTransferredDate)
+	if transferedDateStr != nil && strings.TrimSpace(*transferedDateStr) != "" {
+		t, err := parseTime(*transferedDateStr, ErrInvalidTransferredDate)
 		if err != nil {
 			return Order{}, err
 		}
@@ -325,20 +325,20 @@ func (o *Order) UpdateFulfillment(fulfillmentID string, now time.Time) error {
 	return o.Touch(now)
 }
 
-// New name to mirror TS field "transfferedDate"
-func (o *Order) SetTransffered(at time.Time, now time.Time) error {
+// New name to mirror TS field "edDate"
+func (o *Order) SetTransfered(at time.Time, now time.Time) error {
 	if at.IsZero() {
 		return ErrInvalidTransferredDate
 	}
 	utc := at.UTC()
-	o.TransfferedDate = &utc
+	o.TransferedDate = &utc
 	o.Status = LegacyTransferred
 	return o.Touch(now)
 }
 
 // Backward-compat: keep old method name delegating to new one
 func (o *Order) SetTransferred(at time.Time, now time.Time) error {
-	return o.SetTransffered(at, now)
+	return o.SetTransfered(at, now)
 }
 
 // ========================================
@@ -395,7 +395,7 @@ func (o Order) validate() error {
 	if o.UpdatedAt.Before(o.CreatedAt) {
 		return ErrInvalidUpdatedAt
 	}
-	if o.TransfferedDate != nil && (o.TransfferedDate.IsZero() || o.TransfferedDate.Before(o.CreatedAt)) {
+	if o.TransferedDate != nil && (o.TransferedDate.IsZero() || o.TransferedDate.Before(o.CreatedAt)) {
 		return ErrInvalidTransferredDate
 	}
 	// UpdatedBy optional but if set must be non-empty
@@ -538,7 +538,7 @@ CREATE TABLE IF NOT EXISTS orders (
   payment_id           TEXT        NOT NULL,
   fulfillment_id       TEXT        NOT NULL,
   tracking_id          TEXT        NULL,
-  transffered_date     TIMESTAMPTZ NULL,                          -- note: TS field uses this spelling
+  transfered_date      TIMESTAMPTZ NULL,                          -- note: TS field uses this spelling
   created_at           TIMESTAMPTZ NOT NULL,
   updated_at           TIMESTAMPTZ NOT NULL,
   updated_by           TEXT        NULL,
@@ -566,7 +566,7 @@ CREATE TABLE IF NOT EXISTS orders (
   -- Time order coherence
   CONSTRAINT chk_orders_time_order CHECK (
     updated_at >= created_at
-    AND (transffered_date IS NULL OR transffered_date >= created_at)
+    AND (transfered_date IS NULL OR transfered_date >= created_at)
     AND (deleted_at IS NULL OR deleted_at >= created_at)
   ),
 
@@ -584,7 +584,7 @@ CREATE TABLE IF NOT EXISTS orders (
 CREATE UNIQUE INDEX IF NOT EXISTS uq_orders_order_number ON orders(order_number);
 CREATE INDEX IF NOT EXISTS idx_orders_status            ON orders(status);
 CREATE INDEX IF NOT EXISTS idx_orders_user_id           ON orders(user_id);
-CREATE INDEX IF NOT EXISTS idx_orders_transffered_date  ON orders(transffered_date);
+CREATE INDEX IF NOT EXISTS idx_orders_transfered_date  ON orders(transfered_date);
 CREATE INDEX IF NOT EXISTS idx_orders_created_at        ON orders(created_at);
 CREATE INDEX IF NOT EXISTS idx_orders_updated_at        ON orders(updated_at);
 CREATE INDEX IF NOT EXISTS idx_orders_deleted_at        ON orders(deleted_at);

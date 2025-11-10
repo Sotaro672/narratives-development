@@ -20,9 +20,9 @@ export function isValidLegacyStatus(s: string): s is LegacyOrderStatus {
  * frontend/order/src/domain/entity/order.ts の Order に対応。
  *
  * - 日付は ISO8601 文字列（例: "2025-01-10T00:00:00Z"）を想定
- * - items は orderItem の ID 配列
- * - trackingId, transfferedDate, updatedBy, deletedAt, deletedBy は任意
- * - プロパティ名は backend 実装に合わせて `transfferedDate`（綴り注意）
+ * - items は orderItem の ID配列
+ * - trackingId, transferredDate, updatedBy, deletedAt, deletedBy は任意
+ * - プロパティ名は backend 実装に合わせて `transferredDate`（綴り注意）
  */
 export interface Order {
   id: string;
@@ -37,7 +37,7 @@ export interface Order {
   paymentId: string;
   fulfillmentId: string;
   trackingId?: string | null;
-  transfferedDate?: string | null;
+  transferredDate?: string | null;
   createdAt: string;
   updatedAt: string;
   updatedBy?: string | null;
@@ -62,7 +62,7 @@ export interface OrderPatch {
   paymentId?: string | null;
   fulfillmentId?: string | null;
   trackingId?: string | null;
-  transfferedDate?: string | null;
+  transferredDate?: string | null;
   updatedBy?: string | null;
   deletedAt?: string | null;
   deletedBy?: string | null;
@@ -123,9 +123,9 @@ export function validateOrder(o: Order): boolean {
   if (!created || !updated) return false;
   if (updated.getTime() < created.getTime()) return false;
 
-  // transfferedDate: 任意だが、ある場合は createdAt 以降
-  if (o.transfferedDate != null && o.transfferedDate !== "") {
-    const td = parseIso(o.transfferedDate);
+  // transferredDate: 任意だが、ある場合は createdAt 以降
+  if (o.transferredDate != null && o.transferredDate !== "") {
+    const td = parseIso(o.transferredDate);
     if (!td || td.getTime() < created.getTime()) return false;
   }
 
