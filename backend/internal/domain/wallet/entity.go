@@ -1,3 +1,4 @@
+// backend\internal\domain\wallet\entity.go
 package wallet
 
 import (
