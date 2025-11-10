@@ -1,3 +1,4 @@
+// backend/internal/domain/avatarState/entity.go
 package avatarState
 
 import (
@@ -8,15 +9,16 @@ import (
 )
 
 // AvatarState mirrors web-app/src/shared/types/avatarState.ts
-// export interface AvatarState {
-//   id?: string;
-//   avatarId: string;
-//   followerCount?: number;
-//   followingCount?: number;
-//   postCount?: number;
-//   lastActiveAt: Date | string;
-//   updatedAt?: Date | string;
-// }
+//
+//	export interface AvatarState {
+//	  id?: string;
+//	  avatarId: string;
+//	  followerCount?: number;
+//	  followingCount?: number;
+//	  postCount?: number;
+//	  lastActiveAt: Date | string;
+//	  updatedAt?: Date | string;
+//	}
 type AvatarState struct {
 	ID             string     `json:"id,omitempty"`
 	AvatarID       string     `json:"avatarId"`

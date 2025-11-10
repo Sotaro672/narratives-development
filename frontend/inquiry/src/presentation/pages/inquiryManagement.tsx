@@ -7,7 +7,7 @@ import List, {
   SortableTableHeader,
 } from "../../../../shell/src/layout/List/List";
 import "../styles/inquiry.css";
-import { INQUIRIES } from "../../infrastructure/mockdata/mockdata";
+import { INQUIRIES } from "../../infrastructure/mockdata/inquiry_mockdata";
 import type {
   Inquiry,
   InquiryStatus,

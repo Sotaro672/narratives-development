@@ -1,3 +1,4 @@
+// backend\internal\domain\avatarIcon\entity.go
 package avatarIcon
 
 import (
