@@ -5,7 +5,7 @@ import type { RouteObject } from "react-router-dom";
 import announcementRoutesRaw from "../../../announcement/src/presentation/routes/routes";
 const announcementRoutes = announcementRoutesRaw as unknown as RouteObject[];
 
-import messageRouteRaw from "../../../message/src/routes";
+import messageRouteRaw from "../../../message/src/presentation/routes/routes";
 const messageRoutes = messageRouteRaw as unknown as RouteObject[];
 
 import inquiryRoutesRaw from "../../../inquiry/src/presentation/routes/routes";
