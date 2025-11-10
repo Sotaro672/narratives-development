@@ -6,7 +6,7 @@ import List, {
   FilterableTableHeader,
   SortableTableHeader,
 } from "../../../../shell/src/layout/List/List";
-import { TOKEN_BLUEPRINTS } from "../../infrastructure/mockdata/mockdata";
+import { TOKEN_BLUEPRINTS } from "../../infrastructure/mockdata/tokenBlueprint_mockdata";
 import type { TokenBlueprint } from "../../../../shell/src/shared/types/tokenBlueprint";
 
 /** ISO8601 → timestamp（不正値は 0 扱い） */

@@ -1,4 +1,4 @@
-// frontend/tokenBlueprint/src/domain/entity/tokenBlueprint.tsx
+// frontend\tokenBlueprint\src\domain\entity\tokenBlueprint.tsx
 
 /**
  * ContentFileType

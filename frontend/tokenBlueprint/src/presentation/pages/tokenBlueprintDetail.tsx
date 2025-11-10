@@ -6,8 +6,8 @@ import PageStyle from "../../../../shell/src/layout/PageStyle/PageStyle";
 import AdminCard from "../../../../admin/src/presentation/components/AdminCard";
 import TokenBlueprintCard from "../components/tokenBlueprintCard";
 import TokenContentsCard from "../../../../tokenContents/src/presentation/components/tokenContentsCard";
-import { TOKEN_BLUEPRINTS } from "../../infrastructure/mockdata/mockdata";
-import type { TokenBlueprint } from "../../../../shell/src/shared/types/tokenBlueprint";
+import { TOKEN_BLUEPRINTS } from "../../infrastructure/mockdata/tokenBlueprint_mockdata";
+import type { TokenBlueprint } from "../../domain/entity/tokenBlueprint";
 
 export default function TokenBlueprintDetail() {
   const navigate = useNavigate();
@@ -17,9 +17,7 @@ export default function TokenBlueprintDetail() {
   const blueprint: TokenBlueprint | undefined = React.useMemo(() => {
     if (!TOKEN_BLUEPRINTS.length) return undefined;
     if (tokenBlueprintId) {
-      const found = TOKEN_BLUEPRINTS.find(
-        (b) => b.id === tokenBlueprintId,
-      );
+      const found = TOKEN_BLUEPRINTS.find((b) => b.id === tokenBlueprintId);
       if (found) return found;
     }
     // パラメータ不一致時は先頭をフォールバック表示（モック用）
@@ -36,6 +34,17 @@ export default function TokenBlueprintDetail() {
     alert("トークン設計を保存しました（モック）");
   }, []);
 
+  // 管理情報表示用（blueprint が無い場合は空文字フォールバック）
+  const [assignee, setAssignee] = React.useState(
+    () => blueprint?.assigneeId ?? "",
+  );
+  const [createdBy] = React.useState(
+    () => blueprint?.createdBy ?? "",
+  );
+  const [createdAt] = React.useState(
+    () => blueprint?.createdAt ?? "",
+  );
+
   // モックが無い場合の簡易フォールバック
   if (!blueprint) {
     return (
@@ -51,11 +60,6 @@ export default function TokenBlueprintDetail() {
     );
   }
 
-  // 管理情報表示用（ID をそのまま表示しておく：実運用では名前解決する想定）
-  const [assignee, setAssignee] = React.useState(blueprint.assigneeId);
-  const [createdBy] = React.useState(blueprint.createdBy);
-  const [createdAt] = React.useState(blueprint.createdAt);
-
   return (
     <PageStyle
       layout="grid-2"
@@ -65,19 +69,27 @@ export default function TokenBlueprintDetail() {
     >
       {/* 左カラム：トークン設計カード＋コンテンツビューア */}
       <div>
-        {/* TokenBlueprintCard は内部で必要な情報を取得するモック想定 */}
-        <TokenBlueprintCard initialEditMode />
+        {/* TokenBlueprintCard に TokenBlueprint スキーマ準拠の初期値を渡す */}
+        <TokenBlueprintCard
+          initialEditMode
+          initialTokenBlueprint={blueprint}
+        />
+
+        {/* contentFiles（ID配列）と整合。
+            TokenContentsCard 側で ID → 実ファイル等を解決する想定。 */}
         <div style={{ marginTop: 16 }}>
-          <TokenContentsCard />
+          <TokenContentsCard
+            images={blueprint.contentFiles ?? []}
+          />
         </div>
       </div>
 
-      {/* 右カラム：管理情報 */}
+      {/* 右カラム：管理情報（TokenBlueprint のメタ情報に対応） */}
       <AdminCard
         title="管理情報"
-        assigneeName={assignee}
-        createdByName={createdBy}
-        createdAt={createdAt}
+        assigneeName={assignee || blueprint.assigneeId}
+        createdByName={createdBy || blueprint.createdBy}
+        createdAt={createdAt || blueprint.createdAt}
         onEditAssignee={() => setAssignee("new-assignee-id")}
         onClickAssignee={() => console.log("assignee clicked:", assignee)}
         onClickCreatedBy={() => console.log("createdBy clicked:", createdBy)}

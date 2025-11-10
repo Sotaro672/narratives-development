@@ -1,4 +1,4 @@
-// frontend/productBlueprint/src/pages/productBlueprintCreate.tsx
+// frontend/productBlueprint/src/presentation/pages/productBlueprintCreate.tsx
 import * as React from "react";
 import { useNavigate } from "react-router-dom";
 import PageStyle from "../../../../shell/src/layout/PageStyle/PageStyle";
@@ -11,6 +11,10 @@ import SizeVariationCard, {
 import ModelNumberCard, {
   type ModelNumber,
 } from "../../../../model/src/presentation/components/ModelNumberCard";
+import {
+  type ItemType,
+  type ProductIDTagType,
+} from "../../domain/entity/productBlueprint";
 
 type Fit =
   | "レギュラーフィット"
@@ -21,34 +25,34 @@ type Fit =
 export default function ProductBlueprintCreate() {
   const navigate = useNavigate();
 
-  // ─────────────────────────────────────────
-  // 初期値はすべて空（プリフィルなし）
-  // ─────────────────────────────────────────
   const [productName, setProductName] = React.useState("");
-  const [brand] = React.useState("");
-  const [fit, setFit] = React.useState<Fit>("レギュラーフィット");
-  const [materials, setMaterials] = React.useState("");
-  const [weight, setWeight] = React.useState<number>(0);
-  const [washTags, setWashTags] = React.useState<string[]>([]);
-  const [productIdTag, setProductIdTag] = React.useState("");
+  const [brandId, setBrandId] = React.useState("");
+  const [itemType, setItemType] = React.useState<ItemType>("tops");
 
-  // カラー
+  const [fit, setFit] = React.useState<Fit>("レギュラーフィット");
+  const [material, setMaterial] = React.useState("");
+  const [weight, setWeight] = React.useState<number>(0);
+
+  const [qualityAssurance, setQualityAssurance] = React.useState<string[]>([]);
+  const [productIdTagType, setProductIdTagType] =
+    React.useState<ProductIDTagType>("qr");
+
   const [colorInput, setColorInput] = React.useState("");
   const [colors, setColors] = React.useState<string[]>([]);
-
-  // サイズ
   const [sizes, setSizes] = React.useState<SizeRow[]>([]);
-
-  // モデルナンバー
   const [modelNumbers] = React.useState<ModelNumber[]>([]);
 
-  // 管理情報（新規作成では空）
-  const [assignee, setAssignee] = React.useState("");
-  const [creator] = React.useState("");
+  const [assigneeId, setAssigneeId] = React.useState("");
+  const [createdBy] = React.useState("");
   const [createdAt] = React.useState("");
 
-  // 作成ボタン押下時
+  // brandId -> brandName は後で brandService で解決予定
+  const brandName = React.useMemo(() => {
+    return brandId || "";
+  }, [brandId]);
+
   const onCreate = () => {
+    // TODO: variations生成＋API呼び出し
     alert("商品設計を作成しました（ダミー）");
     navigate(-1);
   };
@@ -57,7 +61,6 @@ export default function ProductBlueprintCreate() {
     navigate(-1);
   }, [navigate]);
 
-  // カラー追加/削除ハンドラ
   const addColor = () => {
     const v = colorInput.trim();
     if (!v || colors.includes(v)) return;
@@ -72,29 +75,29 @@ export default function ProductBlueprintCreate() {
       layout="grid-2"
       title="商品設計を作成"
       onBack={onBack}
-      onSave={onCreate} // 保存ボタン → 「作成ボタン」扱い
+      onSave={onCreate}
     >
-      {/* --- 左ペイン --- */}
       <div>
-        {/* 商品設計カード（編集モード・プリフィルなし） */}
         <ProductBlueprintCard
           mode="edit"
           productName={productName}
-          brand={brand}
+          brand={brandName}
           fit={fit}
-          materials={materials}
+          materials={material}
           weight={weight}
-          washTags={washTags}
-          productIdTag={productIdTag}
+          washTags={qualityAssurance}
+          productIdTag={productIdTagType}
           onChangeProductName={setProductName}
+          // brandId 選択UI実装時に onChangeBrandId を追加して brandId を更新予定
           onChangeFit={setFit}
-          onChangeMaterials={setMaterials}
+          onChangeMaterials={setMaterial}
           onChangeWeight={setWeight}
-          onChangeWashTags={setWashTags}
-          onChangeProductIdTag={setProductIdTag}
+          onChangeWashTags={setQualityAssurance}
+          onChangeProductIdTag={(v: string) =>
+            setProductIdTagType(v as ProductIDTagType)
+          }
         />
 
-        {/* カラー variation */}
         <ColorVariationCard
           colors={colors}
           colorInput={colorInput}
@@ -103,7 +106,6 @@ export default function ProductBlueprintCreate() {
           onRemoveColor={removeColor}
         />
 
-        {/* サイズ variation */}
         <SizeVariationCard
           sizes={sizes}
           onRemove={(id: string) =>
@@ -111,7 +113,6 @@ export default function ProductBlueprintCreate() {
           }
         />
 
-        {/* モデルナンバー */}
         <ModelNumberCard
           sizes={sizes}
           colors={colors}
@@ -119,15 +120,18 @@ export default function ProductBlueprintCreate() {
         />
       </div>
 
-      {/* --- 右ペイン（管理情報） --- */}
       <AdminCard
         title="管理情報"
-        assigneeName={assignee || "未設定"}
-        createdByName={creator || "未設定"}
+        assigneeName={assigneeId || "未設定"}
+        createdByName={createdBy || "未設定"}
         createdAt={createdAt || "未設定"}
-        onEditAssignee={() => setAssignee("担当者A")}
-        onClickAssignee={() => console.log("assignee clicked:", assignee)}
-        onClickCreatedBy={() => console.log("createdBy clicked:", creator)}
+        onEditAssignee={() => setAssigneeId("担当者A")}
+        onClickAssignee={() =>
+          console.log("assigneeId clicked:", assigneeId)
+        }
+        onClickCreatedBy={() =>
+          console.log("createdBy clicked:", createdBy)
+        }
       />
     </PageStyle>
   );

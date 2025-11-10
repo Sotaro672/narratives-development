@@ -1,4 +1,5 @@
-//frontend\tokenBlueprint\src\pages\tokenBlueprintCard.tsx
+// frontend/tokenBlueprint/src/presentation/components/tokenBlueprintCard.tsx
+
 import * as React from "react";
 import { Link2, Upload, Calendar, Eye } from "lucide-react";
 
@@ -17,41 +18,50 @@ import {
   PopoverContent,
 } from "../../../../shell/src/shared/ui/popover";
 
+import type { TokenBlueprint } from "../../domain/entity/tokenBlueprint";
 import "../styles/tokenBlueprint.css";
 
 type TokenBlueprintCardProps = {
+  /** 初期表示モード（true: 編集、false: 閲覧） */
   initialEditMode?: boolean;
-  initialTokenBlueprintId?: string;
-  initialTokenName?: string;
-  initialSymbol?: string;
-  initialBrand?: string;
-  initialDescription?: string;
+
+  /**
+   * TokenBlueprint エンティティに対応した初期値。
+   * brandName は brandId をブランドマスタから解決した表示用ラベル想定。
+   */
+  initialTokenBlueprint?: Partial<TokenBlueprint> & {
+    brandName?: string;
+  };
+
+  /** ドメイン外の追加表示項目（例: 焼却予定日） */
   initialBurnAt?: string;
+
+  /** 表示用アイコンURL（iconId から解決済みを想定。任意） */
   initialIconUrl?: string;
 };
 
 export default function TokenBlueprintCard({
   initialEditMode = false,
-  initialTokenBlueprintId,
-  initialTokenName,
-  initialSymbol,
-  initialBrand,
-  initialDescription,
+  initialTokenBlueprint,
   initialBurnAt,
   initialIconUrl,
 }: TokenBlueprintCardProps) {
-  const [tokenBlueprintId] = React.useState(initialTokenBlueprintId ?? "");
-  const [tokenName, setTokenName] = React.useState(initialTokenName ?? "");
-  const [symbol, setSymbol] = React.useState(initialSymbol ?? "");
-  const [brand, setBrand] = React.useState(initialBrand ?? "");
-  const [description, setDescription] = React.useState(
-    initialDescription ?? ""
-  );
+  const tb = initialTokenBlueprint ?? {};
+
+  // TokenBlueprint スキーマに対応した状態
+  const [id] = React.useState(tb.id ?? "");
+  const [name, setName] = React.useState(tb.name ?? "");
+  const [symbol, setSymbol] = React.useState(tb.symbol ?? "");
+  const [brandId, setBrandId] = React.useState(tb.brandId ?? "");
+  const [brandName, setBrandName] = React.useState(tb.brandName ?? "");
+  const [description, setDescription] = React.useState(tb.description ?? "");
   const [burnAt, setBurnAt] = React.useState(initialBurnAt ?? "");
   const [iconUrl] = React.useState(initialIconUrl ?? "");
   const [isEditMode] = React.useState(initialEditMode);
 
-  const brandOptions: string[] = [];
+  // brandId/brandName は本来 brandService 等で解決する想定。
+  // ここではプレースホルダとして空配列。
+  const brandOptions: { id: string; name: string }[] = [];
 
   // 説明欄の自動リサイズ
   const descriptionRef = React.useRef<HTMLTextAreaElement | null>(null);
@@ -76,6 +86,8 @@ export default function TokenBlueprintCard({
     alert("プレビュー画面を開きます（モック）");
   };
 
+  const displayBrand = brandName || brandId || "ブランド未設定";
+
   return (
     <Card className="token-blueprint-card">
       <CardHeader className="token-blueprint-card__header">
@@ -84,9 +96,7 @@ export default function TokenBlueprintCard({
             <Link2 className="token-blueprint-card__link-icon" />
           </span>
           <CardTitle className="token-blueprint-card__header-title">
-            {tokenBlueprintId
-              ? `トークン：${tokenBlueprintId}`
-              : "トークン：新規トークン設計"}
+            {id ? `トークン：${id}` : "トークン：新規トークン設計"}
           </CardTitle>
           <Badge className="token-blueprint-card__header-badge">
             設計情報
@@ -134,7 +144,7 @@ export default function TokenBlueprintCard({
 
           {/* 右側フィールド */}
           <div className="token-blueprint-card__spacer">
-            {/* トークン名 */}
+            {/* トークン名 (TokenBlueprint.name) */}
             <div className="token-blueprint-card__field-col">
               <Label className="token-blueprint-card__label">トークン名</Label>
               <div
@@ -143,10 +153,10 @@ export default function TokenBlueprintCard({
                 }`}
               >
                 <Input
-                  value={tokenName}
+                  value={name}
                   placeholder="例：LUMINA VIP 会員トークン"
                   onChange={(e) =>
-                    isEditMode && setTokenName(e.target.value)
+                    isEditMode && setName(e.target.value)
                   }
                   readOnly={!isEditMode}
                   className={`token-blueprint-card__readonly-input ${
@@ -156,7 +166,7 @@ export default function TokenBlueprintCard({
               </div>
             </div>
 
-            {/* シンボル */}
+            {/* シンボル (TokenBlueprint.symbol) */}
             <div className="token-blueprint-card__field-col">
               <Label className="token-blueprint-card__label">シンボル</Label>
               <div
@@ -167,7 +177,9 @@ export default function TokenBlueprintCard({
                 <Input
                   value={symbol}
                   placeholder="例：LUMI"
-                  onChange={(e) => isEditMode && setSymbol(e.target.value)}
+                  onChange={(e) =>
+                    isEditMode && setSymbol(e.target.value.toUpperCase())
+                  }
                   readOnly={!isEditMode}
                   className={`token-blueprint-card__readonly-input ${
                     !isEditMode ? "readonly" : ""
@@ -176,7 +188,7 @@ export default function TokenBlueprintCard({
               </div>
             </div>
 
-            {/* ブランド */}
+            {/* ブランド (TokenBlueprint.brandId → 表示名) */}
             <div className="token-blueprint-card__brand-label-cell">
               <Label className="token-blueprint-card__label">ブランド</Label>
               {isEditMode ? (
@@ -185,7 +197,7 @@ export default function TokenBlueprintCard({
                     <div className="token-blueprint-card__select">
                       <Input
                         readOnly
-                        value={brand}
+                        value={displayBrand}
                         placeholder="ブランドを選択"
                         className="token-blueprint-card__select-input"
                       />
@@ -205,15 +217,18 @@ export default function TokenBlueprintCard({
                     )}
                     {brandOptions.map((b) => (
                       <button
-                        key={b}
+                        key={b.id}
                         type="button"
                         className={
                           "token-blueprint-card__popover-item" +
-                          (b === brand ? " is-active" : "")
+                          (b.id === brandId ? " is-active" : "")
                         }
-                        onClick={() => setBrand(b)}
+                        onClick={() => {
+                          setBrandId(b.id);
+                          setBrandName(b.name);
+                        }}
                       >
-                        {b}
+                        {b.name}
                       </button>
                     ))}
                   </PopoverContent>
@@ -221,7 +236,7 @@ export default function TokenBlueprintCard({
               ) : (
                 <Input
                   readOnly
-                  value={brand}
+                  value={displayBrand}
                   placeholder="ブランド未設定"
                   className="token-blueprint-card__readonly-input readonly"
                 />
@@ -230,7 +245,7 @@ export default function TokenBlueprintCard({
           </div>
         </div>
 
-        {/* 説明（自動高さ） */}
+        {/* 説明 (TokenBlueprint.description) */}
         <div className="token-blueprint-card__description">
           <Label className="token-blueprint-card__label">説明</Label>
           <div
@@ -254,7 +269,7 @@ export default function TokenBlueprintCard({
           </div>
         </div>
 
-        {/* 焼却予定日 */}
+        {/* 焼却予定日（ドメイン外拡張。任意） */}
         <div className="token-blueprint-card__expires">
           <Label className="token-blueprint-card__label">焼却予定日</Label>
           <div className="token-blueprint-card__expires-row">

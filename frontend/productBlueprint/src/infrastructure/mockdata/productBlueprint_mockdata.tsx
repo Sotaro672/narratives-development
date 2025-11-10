@@ -1,4 +1,4 @@
-// frontend/productBlueprint/mockdata.tsx
+// frontend/productBlueprint/src/infrastructure/mockdata/mockdata.tsx
 import type {
   ProductBlueprint,
   ProductIDTagType,
@@ -11,7 +11,7 @@ import type {
  */
 export type ProductBlueprintRow = Pick<
   ProductBlueprint,
-  "id" | "productName" | "brandId" | "assigneeId" | "createdAt" | "productIdTag"
+  "id" | "productName" | "brandId" | "assigneeId" | "createdAt" | "productIdTagType"
 > & {
   brandName: string;
   assigneeName: string;
@@ -29,7 +29,7 @@ export const RAW_ROWS: ProductBlueprintRow[] = [
     brandName: "LUMINA Fashion",
     assigneeId: "member_001",
     assigneeName: "佐藤 美咲",
-    productIdTag: { type: "qr" satisfies ProductIDTagType },
+    productIdTagType: "qr" satisfies ProductIDTagType,
     createdAt: "2024-01-15T00:00:00Z",
   },
   {
@@ -39,7 +39,7 @@ export const RAW_ROWS: ProductBlueprintRow[] = [
     brandName: "NEXUS Street",
     assigneeId: "member_002",
     assigneeName: "高橋 健太",
-    productIdTag: { type: "qr" satisfies ProductIDTagType },
+    productIdTagType: "qr" satisfies ProductIDTagType,
     createdAt: "2024-01-10T00:00:00Z",
   },
 ];
@@ -62,11 +62,12 @@ export const PRODUCT_BLUEPRINTS: ProductBlueprint[] = [
     material: "シルク100%",
     weight: 0.32,
     qualityAssurance: ["検品済み", "防シワ加工"],
-    productIdTag: { type: "qr" },
+    productIdTagType: "qr",
     assigneeId: "member_001",
     createdBy: "member_001",
     createdAt: "2024-01-15T00:00:00Z",
-    lastModifiedAt: "2024-01-15T00:00:00Z",
+    updatedBy: "member_001",
+    updatedAt: "2024-01-15T00:00:00Z",
   },
   {
     id: "pb_002",
@@ -81,10 +82,11 @@ export const PRODUCT_BLUEPRINTS: ProductBlueprint[] = [
     material: "コットン100%",
     weight: 1.05,
     qualityAssurance: ["色落ちテスト済み"],
-    productIdTag: { type: "qr" },
+    productIdTagType: "qr",
     assigneeId: "member_002",
     createdBy: "member_002",
     createdAt: "2024-01-10T00:00:00Z",
-    lastModifiedAt: "2024-01-10T00:00:00Z",
+    updatedBy: "member_002",
+    updatedAt: "2024-01-10T00:00:00Z",
   },
 ];

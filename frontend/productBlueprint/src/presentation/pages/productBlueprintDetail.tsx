@@ -1,4 +1,4 @@
-// frontend/productBlueprint/src/pages/productBlueprintDetail.tsx
+// frontend/productBlueprint/src/presentation/pages/productBlueprintDetail.tsx
 
 import * as React from "react";
 import { useNavigate, useParams } from "react-router-dom";
@@ -9,7 +9,7 @@ import ColorVariationCard from "../../../../model/src/presentation/components/Co
 import SizeVariationCard from "../../../../model/src/presentation/components/SizeVariationCard";
 import ModelNumberCard from "../../../../model/src/presentation/components/ModelNumberCard";
 
-import { PRODUCT_BLUEPRINTS } from "../../infrastructure/mockdata/mockdata";
+import { PRODUCT_BLUEPRINTS } from "../../infrastructure/mockdata/productBlueprint_mockdata";
 import {
   MODEL_NUMBERS,
   SIZE_VARIATIONS,
@@ -48,7 +48,7 @@ const formatDate = (iso?: string | null): string => {
   return `${y}/${m}/${day}`;
 };
 
-// ProductIDTagType → 表示用ラベル
+// ProductIDTagType → 表示用ラベル（必要な場面で使用）
 const productIdTagLabel = (type?: ProductIDTagType): string => {
   if (type === "qr") return "QRコード";
   if (type === "nfc") return "NFCタグ";
@@ -67,28 +67,42 @@ export default function ProductBlueprintDetail() {
 
   // ─────────────────────────────────────────
   // 初期値（存在しない場合はダミー）
+  // backend/internal/domain/productBlueprint/entity.go に合わせたフィールドを使用
   // ─────────────────────────────────────────
   const [productName, setProductName] = React.useState(
     () => blueprint?.productName ?? "シルクブラウス プレミアムライン",
   );
+
   const [brand] = React.useState(
     () => (blueprint ? brandLabelFromId(blueprint.brandId) : "LUMINA Fashion"),
   );
+
   const [fit, setFit] = React.useState<Fit>("レギュラーフィット");
+
   const [materials, setMaterials] = React.useState(
     () => blueprint?.material ?? "シルク100%、裏地:ポリエステル100%",
   );
+
   const [weight, setWeight] = React.useState<number>(
     () => blueprint?.weight ?? 180,
   );
+
   const [washTags, setWashTags] = React.useState<string[]>(
-    () => blueprint?.qualityAssurance ?? ["手洗い", "ドライクリーニング", "陰干し"],
-  );
-  const [productIdTag, setProductIdTag] = React.useState<string>(
-    () => productIdTagLabel(blueprint?.productIdTag?.type),
+    () =>
+      blueprint?.qualityAssurance ?? [
+        "手洗い",
+        "ドライクリーニング",
+        "陰干し",
+      ],
   );
 
-  // カラー
+  // Tag は entity.go / shared types 準拠で productIdTagType のみを扱う
+  const [productIdTagType, setProductIdTagType] =
+    React.useState<ProductIDTagType | "">(
+      () => blueprint?.productIdTagType ?? "",
+    );
+
+  // カラー（本来は blueprint.variations から復元するが、現状モック固定）
   const [colorInput, setColorInput] = React.useState("");
   const [colors, setColors] = React.useState<string[]>([
     "ホワイト",
@@ -163,13 +177,16 @@ export default function ProductBlueprintDetail() {
           materials={materials}
           weight={weight}
           washTags={washTags}
-          productIdTag={productIdTag}
+          // カードにはコード値("qr" | "nfc")を渡す
+          productIdTag={productIdTagType || ""}
           onChangeProductName={setProductName}
           onChangeFit={setFit}
           onChangeMaterials={setMaterials}
           onChangeWeight={setWeight}
           onChangeWashTags={setWashTags}
-          onChangeProductIdTag={setProductIdTag}
+          onChangeProductIdTag={(v: string) =>
+            setProductIdTagType(v as ProductIDTagType)
+          }
         />
 
         <ColorVariationCard

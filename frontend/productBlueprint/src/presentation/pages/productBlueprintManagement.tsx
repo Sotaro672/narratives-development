@@ -6,10 +6,9 @@ import List, {
   FilterableTableHeader,
   SortableTableHeader,
 } from "../../../../shell/src/layout/List/List";
-import { PRODUCT_BLUEPRINTS } from "../../infrastructure/mockdata/mockdata";
+import { PRODUCT_BLUEPRINTS } from "../../infrastructure/mockdata/productBlueprint_mockdata";
 import type {
   ProductBlueprint,
-  ItemType,
 } from "../../../../shell/src/shared/types/productBlueprint";
 
 // "YYYY/MM/DD" → timestamp
@@ -74,11 +73,13 @@ export default function ProductBlueprintManagement() {
         productName: pb.productName,
         brandLabel: brandLabelFromId(pb.brandId),
         assigneeLabel: assigneeLabelFromId(pb.assigneeId),
-        tagLabel: pb.productIdTag?.type
-          ? pb.productIdTag.type.toUpperCase()
+        // entity.go 準拠: Tag は productIdTagType のみ保持
+        tagLabel: pb.productIdTagType
+          ? pb.productIdTagType.toUpperCase()
           : "-",
         createdAt: toDisplayDate(pb.createdAt),
-        lastModifiedAt: toDisplayDate(pb.lastModifiedAt),
+        // entity.go 準拠: 最終更新日時は UpdatedAt
+        lastModifiedAt: toDisplayDate(pb.updatedAt),
       })
     );
 
@@ -100,7 +101,7 @@ export default function ProductBlueprintManagement() {
   }, [brandFilter, sortedKey, sortedDir]);
 
   // ヘッダー定義
-  const headers: React.ReactNode[] = [
+  const headers = [
     "プロダクト",
     <FilterableTableHeader
       key="brand"
