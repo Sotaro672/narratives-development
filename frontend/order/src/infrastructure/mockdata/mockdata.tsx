@@ -1,21 +1,64 @@
 // frontend/order/src/infrastructure/mockdata/mockdata.tsx
 
-import type { Order, LegacyOrderStatus } from "../../../../shell/src/shared/types/order";
+import type { Order } from "../../../../shell/src/shared/types/order";
+import type { OrderItem } from "../../../../shell/src/shared/types/orderItem";
+
+/**
+ * モック用 OrderItem データ
+ * backend/internal/domain/orderItem/entity.go に準拠。
+ *
+ * - quantity は 1 以上
+ * - 各 ID は非空文字列
+ */
+export const ORDER_ITEMS: OrderItem[] = [
+  {
+    id: "item_001",
+    modelId: "model_001",
+    saleId: "sale_001",
+    inventoryId: "inv_001",
+    quantity: 2,
+  },
+  {
+    id: "item_002",
+    modelId: "model_002",
+    saleId: "sale_001",
+    inventoryId: "inv_002",
+    quantity: 1,
+  },
+  {
+    id: "item_003",
+    modelId: "model_003",
+    saleId: "sale_002",
+    inventoryId: "inv_003",
+    quantity: 1,
+  },
+  {
+    id: "item_004",
+    modelId: "model_004",
+    saleId: "sale_002",
+    inventoryId: "inv_004",
+    quantity: 3,
+  },
+  {
+    id: "item_005",
+    modelId: "model_005",
+    saleId: "sale_002",
+    inventoryId: "inv_005",
+    quantity: 1,
+  },
+];
 
 /**
  * モック用 Order データ
- * backend/internal/domain/order/entity.go および
  * frontend/shell/src/shared/types/order.ts に準拠。
  *
- * - orderNumber は ORDER_NUMBER_REGEX (/^[A-Z0-9\-]{1,32}$/) に準拠
- * - status は "paid"（支払済）または "transferred"（移譲完了）
- * - createdAt, updatedAt は ISO8601 形式
+ * - items は OrderItem の「ID文字列配列」
  */
 export const ORDERS: Order[] = [
   {
     id: "order_0001",
     orderNumber: "ORD-2024-0001",
-    status: "paid" as LegacyOrderStatus,
+    status: "paid",
     userId: "user_001",
     shippingAddressId: "ship_001",
     billingAddressId: "bill_001",
@@ -35,7 +78,7 @@ export const ORDERS: Order[] = [
   {
     id: "order_0002",
     orderNumber: "ORD-2024-0002",
-    status: "transferred" as LegacyOrderStatus,
+    status: "transferred",
     userId: "user_002",
     shippingAddressId: "ship_002",
     billingAddressId: "bill_002",

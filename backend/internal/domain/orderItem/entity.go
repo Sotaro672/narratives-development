@@ -1,3 +1,4 @@
+// backend\internal\domain\orderItem\entity.go
 package orderitem
 
 import (
