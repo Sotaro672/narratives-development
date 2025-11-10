@@ -1,3 +1,5 @@
+// frontend/transaction/src/presentation/pages/transactionList.tsx
+
 import React, { useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import List, {
@@ -6,7 +8,11 @@ import List, {
 } from "../../../../shell/src/layout/List/List";
 import { ArrowDownLeft, ArrowUpRight } from "lucide-react";
 import "../styles/transaction.css";
-import { TRANSACTIONS, type Transaction } from "../../../mockdata";
+import { TRANSACTIONS } from "../../infrastructure/mockdata/mockdata";
+import type {
+  Transaction,
+  TransactionType,
+} from "../../../../shell/src/shared/types/transaction";
 
 // Lucide型エラー対策
 const IconIn = ArrowDownLeft as unknown as React.ComponentType<
@@ -16,25 +22,36 @@ const IconOut = ArrowUpRight as unknown as React.ComponentType<
   React.SVGProps<SVGSVGElement>
 >;
 
-// 日時文字列 → タイムスタンプ変換
-const toTs = (s: string) => new Date(s.replace(/-/g, "/")).getTime();
+// ISO8601 → タイムスタンプ
+const toTs = (s: string) => new Date(s).getTime();
+
+// 取引先表示用: 受取 = fromAccount / 送金 = toAccount
+const getCounterparty = (t: Transaction): string =>
+  t.type === "receive" ? t.fromAccount : t.toAccount;
+
+// 一覧表示用: type -> 日本語ラベル
+const getTypeLabel = (type: TransactionType): string =>
+  type === "receive" ? "受取" : "送金";
+
+type SortKey = "timestamp" | "amount";
+type SortDir = "asc" | "desc";
 
 export default function TransactionListPage() {
-  const navigate = useNavigate(); // ← 追加
+  const navigate = useNavigate();
 
   // ---- フィルタ状態 ----
   const [brandFilter, setBrandFilter] = useState<string[]>([]);
-  const [typeFilter, setTypeFilter] = useState<string[]>([]);
+  const [typeFilter, setTypeFilter] = useState<TransactionType[]>([]);
   const [counterpartyFilter, setCounterpartyFilter] = useState<string[]>([]);
 
   // ---- ソート状態 ----
-  const [sortKey, setSortKey] = useState<"datetime" | "amount">("datetime");
-  const [sortDir, setSortDir] = useState<"asc" | "desc">("desc");
+  const [sortKey, setSortKey] = useState<SortKey>("timestamp");
+  const [sortDir, setSortDir] = useState<SortDir>("desc");
 
   // ---- オプション ----
   const brandOptions = useMemo(
     () =>
-      Array.from(new Set(TRANSACTIONS.map((t) => t.brand))).map((v) => ({
+      Array.from(new Set(TRANSACTIONS.map((t) => t.brandName))).map((v) => ({
         value: v,
         label: v,
       })),
@@ -43,16 +60,20 @@ export default function TransactionListPage() {
 
   const typeOptions = useMemo(
     () =>
-      Array.from(new Set(TRANSACTIONS.map((t) => t.type))).map((v) => ({
+      Array.from(
+        new Set<TransactionType>(TRANSACTIONS.map((t) => t.type))
+      ).map((v) => ({
         value: v,
-        label: v,
+        label: getTypeLabel(v),
       })),
     []
   );
 
   const counterpartyOptions = useMemo(
     () =>
-      Array.from(new Set(TRANSACTIONS.map((t) => t.counterparty))).map((v) => ({
+      Array.from(
+        new Set(TRANSACTIONS.map((t) => getCounterparty(t)))
+      ).map((v) => ({
         value: v,
         label: v,
       })),
@@ -61,20 +82,22 @@ export default function TransactionListPage() {
 
   // ---- フィルタ + ソート ----
   const rows = useMemo(() => {
-    let work = TRANSACTIONS.filter(
-      (t) =>
-        (brandFilter.length === 0 || brandFilter.includes(t.brand)) &&
+    let work = TRANSACTIONS.filter((t) => {
+      const cp = getCounterparty(t);
+      return (
+        (brandFilter.length === 0 || brandFilter.includes(t.brandName)) &&
         (typeFilter.length === 0 || typeFilter.includes(t.type)) &&
-        (counterpartyFilter.length === 0 ||
-          counterpartyFilter.includes(t.counterparty))
-    );
+        (counterpartyFilter.length === 0 || counterpartyFilter.includes(cp))
+      );
+    });
 
     work = [...work].sort((a, b) => {
-      if (sortKey === "datetime") {
-        const av = toTs(a.datetime);
-        const bv = toTs(b.datetime);
+      if (sortKey === "timestamp") {
+        const av = toTs(a.timestamp);
+        const bv = toTs(b.timestamp);
         return sortDir === "asc" ? av - bv : bv - av;
       }
+      // amount: 値は常に正。direction は type を問わず数値でソート。
       const av = a.amount;
       const bv = b.amount;
       return sortDir === "asc" ? av - bv : bv - av;
@@ -90,13 +113,13 @@ export default function TransactionListPage() {
 
   const headers: React.ReactNode[] = [
     <SortableTableHeader
-      key="h-datetime"
+      key="h-timestamp"
       label="日時"
-      sortKey="datetime"
+      sortKey="timestamp"
       activeKey={sortKey}
-      direction={sortKey === "datetime" ? sortDir : undefined}
+      direction={sortKey === "timestamp" ? sortDir : undefined}
       onChange={(_, dir) => {
-        setSortKey("datetime");
+        setSortKey("timestamp");
         setSortDir(dir);
       }}
     />,
@@ -112,7 +135,7 @@ export default function TransactionListPage() {
       label="種別"
       options={typeOptions}
       selected={typeFilter}
-      onChange={setTypeFilter}
+      onChange={(vals) => setTypeFilter(vals as TransactionType[])}
     />,
     "説明",
     <SortableTableHeader
@@ -135,31 +158,46 @@ export default function TransactionListPage() {
     />,
   ];
 
-  const typeClass = (type: Transaction["type"]) =>
-    `transaction-type-badge ${type === "受取" ? "is-receive" : "is-send"}`;
+  const typeClass = (type: TransactionType) =>
+    `transaction-type-badge ${
+      type === "receive" ? "is-receive" : "is-send"
+    }`;
 
-  const renderTypeBadge = (type: Transaction["type"]) => {
-    const Icon = type === "受取" ? IconIn : IconOut;
+  const renderTypeBadge = (type: TransactionType) => {
+    const Icon = type === "receive" ? IconIn : IconOut;
     return (
       <span className={typeClass(type)}>
         <Icon width={16} height={16} />
-        {type}
+        {getTypeLabel(type)}
       </span>
     );
   };
 
-  const amountClass = (amt: number) =>
-    `transaction-amount ${amt >= 0 ? "is-plus" : "is-minus"}`;
+  const amountClass = (isPlus: boolean) =>
+    `transaction-amount ${isPlus ? "is-plus" : "is-minus"}`;
 
-  const renderAmount = (amt: number) => {
-    const isPlus = amt >= 0;
-    const n = Math.abs(amt).toLocaleString();
+  const renderAmount = (t: Transaction) => {
+    const isPlus = t.type === "receive";
+    const sign = isPlus ? "+" : "-";
+    const n = t.amount.toLocaleString();
     return (
-      <span className={amountClass(amt)}>
-        {isPlus ? "+" : "-"}
+      <span className={amountClass(isPlus)}>
+        {sign}
         {n} 円
       </span>
     );
+  };
+
+  const formatDateTime = (iso: string) => {
+    const d = new Date(iso);
+    if (Number.isNaN(d.getTime())) return { date: iso, time: "" };
+    const yyyy = d.getFullYear();
+    const mm = String(d.getMonth() + 1).padStart(2, "0");
+    const dd = String(d.getDate()).padStart(2, "0");
+    const hh = String(d.getHours()).padStart(2, "0");
+    const mi = String(d.getMinutes()).padStart(2, "0");
+    const ss = String(d.getSeconds()).padStart(2, "0");
+    return { date: `${yyyy}/${mm}/${dd}`, time: `${hh}:${mi}:${ss}` };
   };
 
   return (
@@ -173,24 +211,25 @@ export default function TransactionListPage() {
           setBrandFilter([]);
           setTypeFilter([]);
           setCounterpartyFilter([]);
-          setSortKey("datetime");
+          setSortKey("timestamp");
           setSortDir("desc");
           console.log("取引履歴リセット");
         }}
       >
-        {rows.map((t, idx) => {
-          const [date, time] = t.datetime.split(" ");
+        {rows.map((t) => {
+          const { date, time } = formatDateTime(t.timestamp);
+          const counterparty = getCounterparty(t);
           return (
             <tr
-              key={`${t.datetime}-${idx}`}
+              key={t.id}
               role="button"
               tabIndex={0}
               className="cursor-pointer hover:bg-slate-50 transition-colors"
-              onClick={() => goDetail(t.datetime)} // ← 行クリックで遷移
+              onClick={() => goDetail(t.id)}
               onKeyDown={(e) => {
                 if (e.key === "Enter" || e.key === " ") {
                   e.preventDefault();
-                  goDetail(t.datetime);
+                  goDetail(t.id);
                 }
               }}
             >
@@ -199,12 +238,12 @@ export default function TransactionListPage() {
                 <div className="transaction-time-sub">{time}</div>
               </td>
               <td>
-                <span className="lp-brand-pill">{t.brand}</span>
+                <span className="lp-brand-pill">{t.brandName}</span>
               </td>
               <td>{renderTypeBadge(t.type)}</td>
               <td>{t.description}</td>
-              <td>{renderAmount(t.amount)}</td>
-              <td>{t.counterparty}</td>
+              <td>{renderAmount(t)}</td>
+              <td>{counterparty}</td>
             </tr>
           );
         })}

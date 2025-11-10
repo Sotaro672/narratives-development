@@ -1,3 +1,4 @@
+// backend\internal\domain\transaction\entity.go
 package transaction
 
 import (
@@ -45,8 +46,8 @@ var (
 
 // Policy (align with TS; keep minimal)
 var (
-	MinAmount  = 0                 // >= 0
-	MaxAmount  = 0                 // 0 disables upper-bound check
+	MinAmount  = 0 // >= 0
+	MaxAmount  = 0 // 0 disables upper-bound check
 	CurrencyRe = regexp.MustCompile(`^[A-Z]{3}$`)
 	// Optional allow-list (empty map = allow all that match CurrencyRe)
 	AllowedCurrencies = map[string]struct{}{}
