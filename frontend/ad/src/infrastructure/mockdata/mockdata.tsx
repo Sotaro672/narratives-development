@@ -1,5 +1,4 @@
-// frontend/ad/mockdata.tsx
-// frontend/shell/src/shared/types/campaign.ts を正として更新
+// frontend\shell\src\shared\types\campaginImage.ts
 
 import type { Campaign, CampaignStatus, AdType } from "../../../../shell/src/shared/types/campaign";
 

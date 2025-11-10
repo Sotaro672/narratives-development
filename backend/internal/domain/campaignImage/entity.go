@@ -1,3 +1,4 @@
+// backend\internal\domain\campaignImage\entity.go
 package campaignImage
 
 import (
