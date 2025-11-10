@@ -1,3 +1,4 @@
+// backend\internal\domain\inquiry\entity.go
 package inquiry
 
 import (
