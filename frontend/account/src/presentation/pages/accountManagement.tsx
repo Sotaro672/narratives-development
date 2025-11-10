@@ -1,9 +1,9 @@
 // frontend/account/src/pages/accountManagement.tsx
 import * as React from "react";
-import List from "../../../shell/src/layout/List/List";
+import List from "../../../../shell/src/layout/List/List";
 import { Filter } from "lucide-react";
-import "./accountManagement.css";
-import { ACCOUNTS, type Account } from "../../mockdata";
+import "../styles/account.css";
+import { ACCOUNTS, type Account } from "../../../mockdata";
 
 // Lucide型エラー対策
 const IconFilter = Filter as unknown as React.ComponentType<

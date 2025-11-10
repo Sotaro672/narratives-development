@@ -1,3 +1,4 @@
+// backend\internal\domain\account\entity.go
 package account
 
 import (

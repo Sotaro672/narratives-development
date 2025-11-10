@@ -1,5 +1,5 @@
 import type { RouteObject } from "react-router-dom";
-import AccountManagement from "./pages/accountManagement";
+import AccountManagement from "../pages/accountManagement";
 
 const routes: RouteObject[] = [
   { path: "", element: <AccountManagement /> },
