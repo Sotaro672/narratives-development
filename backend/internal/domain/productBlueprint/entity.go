@@ -1,4 +1,3 @@
-// backend\internal\domain\productBlueprint\entity.go
 package productBlueprint
 
 import (
@@ -124,7 +123,7 @@ type ProductBlueprint struct {
 	ProductName      string
 	BrandID          string
 	ItemType         ItemType
-	Variations       []model.ModelVariation // <- replaced Colors []string
+	Variations       []model.ModelVariation
 	Fit              string
 	Material         string
 	Weight           float64
@@ -133,7 +132,8 @@ type ProductBlueprint struct {
 	AssigneeID       string
 	CreatedBy        *string   // TS: string | null
 	CreatedAt        time.Time // TS: Date | string
-	LastModifiedAt   time.Time // domain convenience (not in TS)
+	UpdatedBy        *string   // TS: string | null
+	UpdatedAt        time.Time // TS: Date | string
 }
 
 // Errors
@@ -152,7 +152,7 @@ var (
 func New(
 	id, productName, brandID string,
 	itemType ItemType,
-	variations []model.ModelVariation, // <- replaced colors []string
+	variations []model.ModelVariation,
 	fit, material string,
 	weight float64,
 	qualityAssurance []string,
@@ -166,7 +166,7 @@ func New(
 		ProductName:      strings.TrimSpace(productName),
 		BrandID:          strings.TrimSpace(brandID),
 		ItemType:         itemType,
-		Variations:       dedupVariationsByID(variations), // <- normalize by ID
+		Variations:       dedupVariationsByID(variations),
 		Fit:              strings.TrimSpace(fit),
 		Material:         strings.TrimSpace(material),
 		Weight:           weight,
@@ -175,7 +175,8 @@ func New(
 		AssigneeID:       strings.TrimSpace(assigneeID),
 		CreatedBy:        createdBy,
 		CreatedAt:        createdAt,
-		LastModifiedAt:   createdAt,
+		UpdatedBy:        createdBy,
+		UpdatedAt:        createdAt,
 	}
 	if err := pb.validate(); err != nil {
 		return ProductBlueprint{}, err
@@ -186,7 +187,7 @@ func New(
 func NewFromStringTime(
 	id, productName, brandID string,
 	itemType ItemType,
-	variations []model.ModelVariation, // <- replaced colors []string
+	variations []model.ModelVariation,
 	fit, material string,
 	weight float64,
 	qualityAssurance []string,
@@ -201,41 +202,41 @@ func NewFromStringTime(
 	}
 	return New(
 		id, productName, brandID,
-		itemType, variations, // <- pass variations
+		itemType, variations,
 		fit, material, weight,
 		qualityAssurance, productIDTag,
 		assigneeID, createdBy, t,
 	)
 }
 
-func (p *ProductBlueprint) UpdateAssignee(assigneeID string, now time.Time) error {
+// 更新系メソッド
+func (p *ProductBlueprint) UpdateAssignee(assigneeID string, now time.Time, updatedBy *string) error {
 	assigneeID = strings.TrimSpace(assigneeID)
 	if assigneeID == "" {
 		return ErrInvalidAssignee
 	}
 	p.AssigneeID = assigneeID
-	p.touch(now)
+	p.touch(now, updatedBy)
 	return nil
 }
 
-func (p *ProductBlueprint) UpdateQualityAssurance(items []string, now time.Time) {
+func (p *ProductBlueprint) UpdateQualityAssurance(items []string, now time.Time, updatedBy *string) {
 	p.QualityAssurance = dedupTrim(items)
-	p.touch(now)
+	p.touch(now, updatedBy)
 }
 
-func (p *ProductBlueprint) UpdateTag(tag ProductIDTag, now time.Time) error {
+func (p *ProductBlueprint) UpdateTag(tag ProductIDTag, now time.Time, updatedBy *string) error {
 	if err := tag.validate(); err != nil {
 		return err
 	}
 	p.ProductIdTag = tag
-	p.touch(now)
+	p.touch(now, updatedBy)
 	return nil
 }
 
-// UpdateVariations replaces variations; IDs are deduplicated and trimmed.
-func (p *ProductBlueprint) UpdateVariations(vars []model.ModelVariation, now time.Time) {
+func (p *ProductBlueprint) UpdateVariations(vars []model.ModelVariation, now time.Time, updatedBy *string) {
 	p.Variations = dedupVariationsByID(vars)
-	p.touch(now)
+	p.touch(now, updatedBy)
 }
 
 // Validation
@@ -261,27 +262,16 @@ func (p ProductBlueprint) validate() error {
 	if p.CreatedAt.IsZero() {
 		return ErrInvalidCreatedAt
 	}
-	// basic variations check: non-empty, unique IDs
-	seen := make(map[string]struct{}, len(p.Variations))
-	for _, v := range p.Variations {
-		id := strings.TrimSpace(v.ID)
-		if id == "" {
-			return fmt.Errorf("productBlueprint: empty variation id")
-		}
-		if _, dup := seen[id]; dup {
-			return fmt.Errorf("productBlueprint: duplicate variation id: %s", id)
-		}
-		seen[id] = struct{}{}
-	}
 	return nil
 }
 
 // Helpers
-func (p *ProductBlueprint) touch(now time.Time) {
+func (p *ProductBlueprint) touch(now time.Time, updatedBy *string) {
 	if now.IsZero() {
 		now = time.Now().UTC()
 	}
-	p.LastModifiedAt = now
+	p.UpdatedAt = now
+	p.UpdatedBy = updatedBy
 }
 
 func parseTime(s string) (time.Time, error) {
@@ -322,7 +312,6 @@ func dedupTrim(xs []string) []string {
 	return out
 }
 
-// helper: deduplicate variations by trimmed ID
 func dedupVariationsByID(vars []model.ModelVariation) []model.ModelVariation {
 	seen := make(map[string]struct{}, len(vars))
 	out := make([]model.ModelVariation, 0, len(vars))
@@ -340,11 +329,8 @@ func dedupVariationsByID(vars []model.ModelVariation) []model.ModelVariation {
 	return out
 }
 
-// ProductBlueprintsTableDDL defines the SQL for the product_blueprints table migration.
+// ProductBlueprintsTableDDL defines the SQL for migration.
 const ProductBlueprintsTableDDL = `
--- Migration: Initialize ProductBlueprint domain
--- Mirrors backend/internal/domain/productBlueprint/entity.go
-
 BEGIN;
 
 CREATE TABLE IF NOT EXISTS product_blueprints (
@@ -357,32 +343,26 @@ CREATE TABLE IF NOT EXISTS product_blueprints (
   weight                 DOUBLE PRECISION NOT NULL CHECK (weight >= 0),
   quality_assurance      TEXT[]      NOT NULL DEFAULT '{}',
   product_id_tag_type    TEXT        NOT NULL CHECK (product_id_tag_type IN ('qr','nfc')),
-  model_variations       JSONB       NOT NULL DEFAULT '[]'::jsonb, -- TS: ModelVariation[]
+  model_variations       JSONB       NOT NULL DEFAULT '[]'::jsonb,
   assignee_id            TEXT        NOT NULL,
   created_by             TEXT,
   created_at             TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_by             TEXT,
   updated_at             TIMESTAMPTZ NOT NULL DEFAULT NOW(),
 
-  -- Non-empty checks
   CONSTRAINT chk_pb_non_empty CHECK (
     char_length(trim(id)) > 0
     AND char_length(trim(product_name)) > 0
     AND char_length(trim(brand_id)) > 0
     AND char_length(trim(assignee_id)) > 0
   ),
-
-  -- quality_assurance: no empty items
   CONSTRAINT chk_pb_qa_no_empty CHECK (
     NOT EXISTS (SELECT 1 FROM unnest(quality_assurance) t(x) WHERE x = '')
   ),
-
-  -- model_variations must be a JSON array
   CONSTRAINT chk_pb_model_variations_array CHECK (jsonb_typeof(model_variations) = 'array'),
-
   CHECK (updated_at >= created_at)
 );
 
--- Optional FKs (adjust to your schema)
 ALTER TABLE product_blueprints
   ADD CONSTRAINT fk_pb_brand
   FOREIGN KEY (brand_id) REFERENCES brands(id) ON DELETE RESTRICT;
@@ -391,7 +371,6 @@ ALTER TABLE product_blueprints
   ADD CONSTRAINT fk_pb_assignee
   FOREIGN KEY (assignee_id) REFERENCES members(id) ON DELETE RESTRICT;
 
--- Indexes
 CREATE INDEX IF NOT EXISTS idx_pb_brand_id   ON product_blueprints(brand_id);
 CREATE INDEX IF NOT EXISTS idx_pb_created_at ON product_blueprints(created_at);
 

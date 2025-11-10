@@ -1,3 +1,4 @@
+// backend/internal/adapters/out/db/productBlueprint_repository_pg.go
 package db
 
 import (
@@ -36,7 +37,8 @@ SELECT
   id, product_name, brand_id, item_type,
   model_variations, fit, material, weight, quality_assurance,
   product_id_tag_type, assignee_id,
-  created_by, created_at, updated_at
+  created_by, created_at,
+  updated_by, updated_at
 FROM product_blueprints
 WHERE id = $1
 `
@@ -67,19 +69,37 @@ func (r *ProductBlueprintRepositoryPG) Exists(ctx context.Context, id string) (b
 }
 
 // Create inserts a new ProductBlueprint row.
-// NOTE: usecase passes a domain.ProductBlueprint, not CreateInput.
-// We'll map from the domain entity to INSERT columns.
 func (r *ProductBlueprintRepositoryPG) Create(ctx context.Context, v pbdom.ProductBlueprint) (pbdom.ProductBlueprint, error) {
 	run := dbcommon.GetRunner(ctx, r.DB)
 
 	// Serialize variations to JSON for DB.
-	// We assume v.Variations is JSON-marshalable. If it's nil, we'll store "[]".
 	varsJSON, err := json.Marshal(v.Variations)
 	if err != nil {
 		return pbdom.ProductBlueprint{}, err
 	}
 
 	tagType := strings.TrimSpace(string(v.ProductIdTag.Type))
+
+	// Ensure timestamps
+	createdAt := v.CreatedAt
+	if createdAt.IsZero() {
+		createdAt = time.Now().UTC()
+	}
+
+	updatedAt := v.UpdatedAt
+	if updatedAt.IsZero() {
+		updatedAt = createdAt
+	}
+
+	// UpdatedBy が未指定の場合は CreatedBy を引き継ぐ（あれば）
+	createdByPtr := v.CreatedBy
+	updatedByPtr := v.UpdatedBy
+	if updatedByPtr == nil && createdByPtr != nil {
+		updatedByPtr = createdByPtr
+	}
+
+	createdByNS := dbcommon.ToDBText(createdByPtr)
+	updatedByNS := dbcommon.ToDBText(updatedByPtr)
 
 	const q = `
 INSERT INTO product_blueprints (
@@ -96,9 +116,10 @@ INSERT INTO product_blueprints (
   assignee_id,
   created_by,
   created_at,
+  updated_by,
   updated_at
 ) VALUES (
-  $1,              -- id (we expect caller to have set v.ID; if empty, DB-side gen would require different contract)
+  $1,              -- id
   $2,              -- product_name
   $3,              -- brand_id
   $4,              -- item_type
@@ -106,29 +127,21 @@ INSERT INTO product_blueprints (
   $6,              -- fit
   $7,              -- material
   $8,              -- weight
-  $9,              -- quality_assurance (text[])
+  $9,              -- quality_assurance
   $10,             -- product_id_tag_type
   $11,             -- assignee_id
-  $12,             -- created_by (nullable)
+  $12,             -- created_by
   $13,             -- created_at
-  $14              -- updated_at
+  $14,             -- updated_by
+  $15              -- updated_at
 )
 RETURNING
   id, product_name, brand_id, item_type,
   model_variations, fit, material, weight, quality_assurance,
   product_id_tag_type, assignee_id,
-  created_by, created_at, updated_at
+  created_by, created_at,
+  updated_by, updated_at
 `
-
-	// If caller didn't fill timestamps, default them here.
-	createdAt := v.CreatedAt
-	if createdAt.IsZero() {
-		createdAt = time.Now().UTC()
-	}
-	updatedAt := v.LastModifiedAt
-	if updatedAt.IsZero() {
-		updatedAt = createdAt
-	}
 
 	row := run.QueryRowContext(
 		ctx,
@@ -144,8 +157,9 @@ RETURNING
 		pq.Array(dedupTrimStrings(v.QualityAssurance)),
 		tagType,
 		strings.TrimSpace(v.AssigneeID),
-		dbcommon.ToDBText(v.CreatedBy),
+		createdByNS,
 		createdAt,
+		updatedByNS,
 		updatedAt,
 	)
 
@@ -159,12 +173,10 @@ RETURNING
 	return out, nil
 }
 
-// Save updates an existing ProductBlueprint row (upsert-style "update only").
-// We treat the incoming domain entity v as the source of truth.
+// Save updates an existing ProductBlueprint row.
 func (r *ProductBlueprintRepositoryPG) Save(ctx context.Context, v pbdom.ProductBlueprint) (pbdom.ProductBlueprint, error) {
 	run := dbcommon.GetRunner(ctx, r.DB)
 
-	// serialize variations
 	varsJSON, err := json.Marshal(v.Variations)
 	if err != nil {
 		return pbdom.ProductBlueprint{}, err
@@ -172,9 +184,16 @@ func (r *ProductBlueprintRepositoryPG) Save(ctx context.Context, v pbdom.Product
 
 	tagType := strings.TrimSpace(string(v.ProductIdTag.Type))
 
-	updatedAt := v.LastModifiedAt
+	updatedAt := v.UpdatedAt
 	if updatedAt.IsZero() {
 		updatedAt = time.Now().UTC()
+	}
+
+	updatedByNS := dbcommon.ToDBText(v.UpdatedBy)
+
+	createdAt := v.CreatedAt
+	if createdAt.IsZero() {
+		createdAt = time.Now().UTC()
 	}
 
 	const q = `
@@ -192,13 +211,15 @@ SET
   assignee_id          = $11,
   created_by           = $12,
   created_at           = $13,
-  updated_at           = $14
+  updated_by           = $14,
+  updated_at           = $15
 WHERE id = $1
 RETURNING
   id, product_name, brand_id, item_type,
   model_variations, fit, material, weight, quality_assurance,
   product_id_tag_type, assignee_id,
-  created_by, created_at, updated_at
+  created_by, created_at,
+  updated_by, updated_at
 `
 
 	row := run.QueryRowContext(
@@ -216,14 +237,8 @@ RETURNING
 		tagType,
 		strings.TrimSpace(v.AssigneeID),
 		dbcommon.ToDBText(v.CreatedBy),
-		// v.CreatedAt should be kept stable;
-		// if empty, fallback to now so NOT NULL passes.
-		func() time.Time {
-			if v.CreatedAt.IsZero() {
-				return time.Now().UTC()
-			}
-			return v.CreatedAt.UTC()
-		}(),
+		createdAt.UTC(),
+		updatedByNS,
 		updatedAt,
 	)
 
@@ -256,7 +271,7 @@ func (r *ProductBlueprintRepositoryPG) Delete(ctx context.Context, id string) er
 }
 
 // ------------------------
-// Extra helper methods (not in interface but still useful internally)
+// Extra helper methods
 // ------------------------
 
 func (r *ProductBlueprintRepositoryPG) List(ctx context.Context, filter pbdom.Filter, sort pbdom.Sort, page pbdom.Page) (pbdom.PageResult, error) {
@@ -284,7 +299,8 @@ SELECT
   id, product_name, brand_id, item_type,
   model_variations, fit, material, weight, quality_assurance,
   product_id_tag_type, assignee_id,
-  created_by, created_at, updated_at
+  created_by, created_at,
+  updated_by, updated_at
 FROM product_blueprints
 %s
 %s
@@ -354,7 +370,7 @@ func scanProductBlueprint(s dbcommon.RowScanner) (pbdom.ProductBlueprint, error)
 		qa                                                []string
 		tagType                                           string
 		assigneeID                                        string
-		createdByNS                                       sql.NullString
+		createdByNS, updatedByNS                          sql.NullString
 		createdAt, updatedAt                              time.Time
 	)
 
@@ -362,7 +378,8 @@ func scanProductBlueprint(s dbcommon.RowScanner) (pbdom.ProductBlueprint, error)
 		&id, &productName, &brandID, &itemType,
 		&varsRaw, &fit, &material, &weight, pq.Array(&qa),
 		&tagType, &assigneeID,
-		&createdByNS, &createdAt, &updatedAt,
+		&createdByNS, &createdAt,
+		&updatedByNS, &updatedAt,
 	); err != nil {
 		return pbdom.ProductBlueprint{}, err
 	}
@@ -375,13 +392,20 @@ func scanProductBlueprint(s dbcommon.RowScanner) (pbdom.ProductBlueprint, error)
 		}
 	}
 
+	var updatedByPtr *string
+	if updatedByNS.Valid {
+		v := strings.TrimSpace(updatedByNS.String)
+		if v != "" {
+			updatedByPtr = &v
+		}
+	}
+
 	return pbdom.ProductBlueprint{
-		ID:          strings.TrimSpace(id),
-		ProductName: strings.TrimSpace(productName),
-		BrandID:     strings.TrimSpace(brandID),
-		ItemType:    pbdom.ItemType(strings.TrimSpace(itemType)),
-		// We don't reconstruct Variations here. Leave nil.
-		Variations:       nil,
+		ID:               strings.TrimSpace(id),
+		ProductName:      strings.TrimSpace(productName),
+		BrandID:          strings.TrimSpace(brandID),
+		ItemType:         pbdom.ItemType(strings.TrimSpace(itemType)),
+		Variations:       nil, // 必要なら varsRaw を Unmarshal
 		Fit:              strings.TrimSpace(fit),
 		Material:         strings.TrimSpace(material),
 		Weight:           weight,
@@ -389,10 +413,11 @@ func scanProductBlueprint(s dbcommon.RowScanner) (pbdom.ProductBlueprint, error)
 		ProductIdTag: pbdom.ProductIDTag{
 			Type: pbdom.ProductIDTagType(strings.TrimSpace(tagType)),
 		},
-		AssigneeID:     strings.TrimSpace(assigneeID),
-		CreatedBy:      createdByPtr,
-		CreatedAt:      createdAt.UTC(),
-		LastModifiedAt: updatedAt.UTC(),
+		AssigneeID: strings.TrimSpace(assigneeID),
+		CreatedBy:  createdByPtr,
+		CreatedAt:  createdAt.UTC(),
+		UpdatedBy:  updatedByPtr,
+		UpdatedAt:  updatedAt.UTC(),
 	}, nil
 }
 

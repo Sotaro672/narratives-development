@@ -13,24 +13,6 @@ export type ItemType = "tops" | "bottoms" | "other";
 export type ProductIDTagType = "qr" | "nfc";
 
 /**
- * LogoDesignFile
- * backend/internal/domain/productBlueprint/entity.go の LogoDesignFile に対応。
- */
-export interface LogoDesignFile {
-  name: string;
-  url: string;
-}
-
-/**
- * ProductIDTag
- * backend/internal/domain/productBlueprint/entity.go の ProductIDTag に対応。
- */
-export interface ProductIDTag {
-  type: ProductIDTagType;
-  logoDesignFile?: LogoDesignFile | null;
-}
-
-/**
  * ModelVariation
  * backend/internal/domain/model/ModelVariation に対応する共通定義。
  * 最低限 id が必須。それ以外は API スキーマに応じて拡張。
@@ -47,7 +29,7 @@ export interface ModelVariation {
  * backend/internal/domain/productBlueprint/entity.go に対応する共通型。
  *
  * - 日付は ISO8601 文字列
- * - lastModifiedAt は backend の LastModifiedAt に対応
+ * - updatedAt / updatedBy は backend の UpdatedAt / UpdatedBy に対応
  */
 export interface ProductBlueprint {
   id: string;
@@ -68,8 +50,8 @@ export interface ProductBlueprint {
   /** 品質保証に関するメモ／タグ一覧（空文字なし） */
   qualityAssurance: string[];
 
-  /** 製品IDタグ情報（必須, type は qr/nfc） */
-  productIdTag: ProductIDTag;
+  /** 製品IDタグタイプ（qr / nfc） */
+  productIdTagType: ProductIDTagType;
 
   /** 担当者 Member ID（必須） */
   assigneeId: string;
@@ -80,8 +62,11 @@ export interface ProductBlueprint {
   /** 作成日時 (ISO8601) */
   createdAt: string;
 
+  /** 最終更新者 Member ID（任意） */
+  updatedBy?: string | null;
+
   /** 最終更新日時 (ISO8601) */
-  lastModifiedAt: string;
+  updatedAt: string;
 }
 
 /* =========================================================
@@ -98,32 +83,6 @@ export function isValidProductIDTagType(
   value: string
 ): value is ProductIDTagType {
   return value === "qr" || value === "nfc";
-}
-
-/** LogoDesignFile の簡易バリデーション */
-export function validateLogoDesignFile(file: LogoDesignFile): string[] {
-  const errors: string[] = [];
-  if (!file.name?.trim()) {
-    errors.push("logoDesignFile.name is required");
-  }
-  try {
-    new URL(file.url);
-  } catch {
-    errors.push("logoDesignFile.url must be a valid URL");
-  }
-  return errors;
-}
-
-/** ProductIDTag の簡易バリデーション */
-export function validateProductIDTag(tag: ProductIDTag): string[] {
-  const errors: string[] = [];
-  if (!isValidProductIDTagType(tag.type)) {
-    errors.push("productIdTag.type must be 'qr' or 'nfc'");
-  }
-  if (tag.logoDesignFile) {
-    errors.push(...validateLogoDesignFile(tag.logoDesignFile));
-  }
-  return errors;
 }
 
 /** variations 配列を id でユニーク化＆trim する */
@@ -173,7 +132,9 @@ export function validateProductBlueprint(pb: ProductBlueprint): string[] {
     errors.push("weight must be >= 0");
   }
 
-  errors.push(...validateProductIDTag(pb.productIdTag));
+  if (!isValidProductIDTagType(pb.productIdTagType)) {
+    errors.push("productIdTagType must be 'qr' or 'nfc'");
+  }
 
   if (!pb.assigneeId?.trim()) {
     errors.push("assigneeId is required");
@@ -207,11 +168,12 @@ export function validateProductBlueprint(pb: ProductBlueprint): string[] {
 export function createProductBlueprint(
   input: Omit<
     ProductBlueprint,
-    "variations" | "qualityAssurance" | "lastModifiedAt"
+    "variations" | "qualityAssurance" | "updatedAt" | "updatedBy"
   > & {
     variations?: ModelVariation[];
     qualityAssurance?: string[];
-    lastModifiedAt?: string;
+    updatedAt?: string;
+    updatedBy?: string | null;
   }
 ): ProductBlueprint {
   const variations = normalizeVariations(input.variations ?? []);
@@ -219,15 +181,21 @@ export function createProductBlueprint(
     input.qualityAssurance ?? []
   );
 
-  const lastModifiedAt =
-    input.lastModifiedAt && input.lastModifiedAt.trim()
-      ? input.lastModifiedAt
+  const updatedAt =
+    input.updatedAt && input.updatedAt.trim()
+      ? input.updatedAt
       : input.createdAt;
+
+  const updatedBy =
+    input.updatedBy !== undefined
+      ? input.updatedBy
+      : input.createdBy ?? null;
 
   return {
     ...input,
     variations,
     qualityAssurance,
-    lastModifiedAt,
+    updatedAt,
+    updatedBy,
   };
 }

@@ -48,7 +48,7 @@ export interface ModelVariation {
  * backend/internal/domain/productBlueprint/entity.go の ProductBlueprint に対応。
  *
  * - 日付は ISO8601 文字列として扱う
- * - LastModifiedAt は backend の LastModifiedAt と対応
+ * - updatedAt / updatedBy は backend の UpdatedAt / UpdatedBy に対応
  */
 export interface ProductBlueprint {
   id: string;
@@ -81,8 +81,11 @@ export interface ProductBlueprint {
   /** 作成日時 (ISO8601) */
   createdAt: string;
 
+  /** 最終更新者 Member ID（任意） */
+  updatedBy?: string | null;
+
   /** 最終更新日時 (ISO8601) */
-  lastModifiedAt: string;
+  updatedAt: string;
 }
 
 /* =========================================================
@@ -102,9 +105,7 @@ export function isValidProductIDTagType(
 }
 
 /** LogoDesignFile の簡易バリデーション */
-export function validateLogoDesignFile(
-  file: LogoDesignFile
-): string[] {
+export function validateLogoDesignFile(file: LogoDesignFile): string[] {
   const errors: string[] = [];
   if (!file.name?.trim()) {
     errors.push("logoDesignFile.name is required");
@@ -213,11 +214,12 @@ export function validateProductBlueprint(
 export function createProductBlueprint(
   input: Omit<
     ProductBlueprint,
-    "variations" | "qualityAssurance" | "lastModifiedAt"
+    "variations" | "qualityAssurance" | "updatedAt" | "updatedBy"
   > & {
     variations?: ModelVariation[];
     qualityAssurance?: string[];
-    lastModifiedAt?: string;
+    updatedAt?: string;
+    updatedBy?: string | null;
   }
 ): ProductBlueprint {
   const variations = normalizeVariations(input.variations ?? []);
@@ -225,15 +227,21 @@ export function createProductBlueprint(
     input.qualityAssurance ?? []
   );
 
-  const lastModifiedAt =
-    input.lastModifiedAt && input.lastModifiedAt.trim()
-      ? input.lastModifiedAt
+  const updatedAt =
+    input.updatedAt && input.updatedAt.trim()
+      ? input.updatedAt
       : input.createdAt;
+
+  const updatedBy =
+    input.updatedBy !== undefined
+      ? input.updatedBy
+      : input.createdBy ?? null;
 
   return {
     ...input,
     variations,
     qualityAssurance,
-    lastModifiedAt,
+    updatedAt,
+    updatedBy,
   };
 }
