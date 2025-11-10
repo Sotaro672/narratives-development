@@ -1,3 +1,4 @@
+// backend\internal\domain\payment\entity.go
 package payment
 
 import (
