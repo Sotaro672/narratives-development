@@ -1,3 +1,4 @@
+// backend/internal/domain/wallet/repository_port.go
 package wallet
 
 import (
@@ -39,12 +40,12 @@ type CreateWalletInput struct {
 
 type UpdateWalletInput struct {
 	// walletAddress はURL等で指定される想定
-	Tokens        *[]string      `json:"tokens,omitempty"`        // 完全置換
-	AddTokens     []string       `json:"addTokens,omitempty"`     // 追加
-	RemoveTokens  []string       `json:"removeTokens,omitempty"`  // 削除
-	Status        *WalletStatus  `json:"status,omitempty"`
-	UpdatedAt     *time.Time     `json:"updatedAt,omitempty"`
-	LastUpdatedAt *time.Time     `json:"lastUpdatedAt,omitempty"` // 任意で上書き（通常はトークン変更時に実装側で更新）
+	Tokens        *[]string     `json:"tokens,omitempty"`       // 完全置換
+	AddTokens     []string      `json:"addTokens,omitempty"`    // 追加
+	RemoveTokens  []string      `json:"removeTokens,omitempty"` // 削除
+	Status        *WalletStatus `json:"status,omitempty"`
+	UpdatedAt     *time.Time    `json:"updatedAt,omitempty"`
+	LastUpdatedAt *time.Time    `json:"lastUpdatedAt,omitempty"` // 任意で上書き（通常はトークン変更時に実装側で更新）
 }
 
 // バッチ関連
@@ -105,13 +106,13 @@ type TokenTierDefinition struct {
 }
 
 type WalletFilter struct {
-	SearchQuery       string         `json:"searchQuery,omitempty"` // 部分一致: walletAddress など実装依存
-	HasTokensOnly     bool           `json:"hasTokensOnly,omitempty"`
-	MinTokenCount     *int           `json:"minTokenCount,omitempty"`
-	MaxTokenCount     *int           `json:"maxTokenCount,omitempty"`
-	TokenIDs          []string       `json:"tokenIds,omitempty"` // 所持トークンに含まれるウォレット
-	Tiers             []TokenTier    `json:"tiers,omitempty"`
-	Statuses          []WalletStatus `json:"statuses,omitempty"`
+	SearchQuery   string         `json:"searchQuery,omitempty"` // 部分一致: walletAddress など実装依存
+	HasTokensOnly bool           `json:"hasTokensOnly,omitempty"`
+	MinTokenCount *int           `json:"minTokenCount,omitempty"`
+	MaxTokenCount *int           `json:"maxTokenCount,omitempty"`
+	TokenIDs      []string       `json:"tokenIds,omitempty"` // 所持トークンに含まれるウォレット
+	Tiers         []TokenTier    `json:"tiers,omitempty"`
+	Statuses      []WalletStatus `json:"statuses,omitempty"`
 
 	LastUpdatedAfter  *time.Time `json:"lastUpdatedAfter,omitempty"`
 	LastUpdatedBefore *time.Time `json:"lastUpdatedBefore,omitempty"`

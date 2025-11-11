@@ -37,7 +37,7 @@ type Container struct {
 	InquiryUC          *uc.InquiryUsecase
 	InventoryUC        *uc.InventoryUsecase
 	InvoiceUC          *uc.InvoiceUsecase
-	ListUC             *uc.ListUsecase // may be nil for now
+	ListUC             *uc.ListUsecase
 	MemberUC           *uc.MemberUsecase
 	MessageUC          *uc.MessageUsecase
 	MintRequestUC      *uc.MintRequestUsecase

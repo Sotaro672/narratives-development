@@ -541,14 +541,19 @@ func (r *AvatarRepositoryFS) ListTopByFollowers(ctx context.Context, limit int) 
 }
 
 // ==============================
-// Reset (development/testing)
+// Reset (development/testing) - use Transaction instead of deprecated Batch
 // ==============================
 
 func (r *AvatarRepositoryFS) Reset(ctx context.Context) error {
-	iter := r.col().Documents(ctx)
-	batch := r.Client.Batch()
-	count := 0
+	if r.Client == nil {
+		return errors.New("firestore client is nil")
+	}
 
+	// まず全ドキュメントIDを取得
+	iter := r.col().Documents(ctx)
+	defer iter.Stop()
+
+	var ids []string
 	for {
 		doc, err := iter.Next()
 		if errors.Is(err, iterator.Done) {
@@ -557,21 +562,42 @@ func (r *AvatarRepositoryFS) Reset(ctx context.Context) error {
 		if err != nil {
 			return err
 		}
-		batch.Delete(doc.Ref)
-		count++
-		if count%400 == 0 {
-			if _, err := batch.Commit(ctx); err != nil {
-				return err
-			}
-			batch = r.Client.Batch()
-		}
+		ids = append(ids, doc.Ref.ID)
 	}
-	if count > 0 {
-		if _, err := batch.Commit(ctx); err != nil {
+
+	if len(ids) == 0 {
+		log.Printf("[firestore] Reset avatars: deleted 0 docs\n")
+		return nil
+	}
+
+	const chunkSize = 400
+	deleted := 0
+
+	for start := 0; start < len(ids); start += chunkSize {
+		end := start + chunkSize
+		if end > len(ids) {
+			end = len(ids)
+		}
+		chunk := ids[start:end]
+
+		// 各チャンクをトランザクションで削除
+		err := r.Client.RunTransaction(ctx, func(ctx context.Context, tx *firestore.Transaction) error {
+			for _, id := range chunk {
+				ref := r.col().Doc(id)
+				if err := tx.Delete(ref); err != nil {
+					return err
+				}
+			}
+			return nil
+		})
+		if err != nil {
 			return err
 		}
+
+		deleted += len(chunk)
 	}
-	log.Printf("[firestore] Reset avatars: deleted %d docs\n", count)
+
+	log.Printf("[firestore] Reset avatars: deleted %d docs\n", deleted)
 	return nil
 }
 

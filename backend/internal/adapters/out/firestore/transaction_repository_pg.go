@@ -1,462 +1,708 @@
-// backend\internal\adapters\out\firestore\transaction_repository_pg.go
+// backend/internal/adapters/out/firestore/transaction_repository_fs.go
 package firestore
 
 import (
 	"context"
-	"database/sql"
 	"errors"
 	"fmt"
+	"sort"
 	"strings"
 	"time"
+
+	"cloud.google.com/go/firestore"
+	"google.golang.org/api/iterator"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 
 	dbcommon "narratives/internal/adapters/out/firestore/common"
 	tr "narratives/internal/domain/transaction"
 )
 
-type TransactionRepositoryPG struct {
-	DB *sql.DB
+// =====================================================
+// Firestore Transaction Repository
+// (PostgreSQL 実装相当のインターフェースを Firestore で提供)
+// =====================================================
+
+type TransactionRepositoryFS struct {
+	Client *firestore.Client
 }
 
-func NewTransactionRepositoryPG(db *sql.DB) *TransactionRepositoryPG {
-	return &TransactionRepositoryPG{DB: db}
+func NewTransactionRepositoryFS(client *firestore.Client) *TransactionRepositoryFS {
+	return &TransactionRepositoryFS{Client: client}
 }
 
-// ==========================
-// RepositoryPort impl
-// ==========================
+func (r *TransactionRepositoryFS) col() *firestore.CollectionRef {
+	return r.Client.Collection("transactions")
+}
 
-func (r *TransactionRepositoryPG) GetAllTransactions(ctx context.Context) ([]*tr.Transaction, error) {
-	run := dbcommon.GetRunner(ctx, r.DB)
-	const q = `
-SELECT
-  id, account_id, brand_name, type, amount, currency, from_account, to_account, timestamp, description
-FROM transactions
-ORDER BY timestamp DESC, id DESC`
-	rows, err := run.QueryContext(ctx, q)
-	if err != nil {
-		return nil, err
+// =====================================================
+// RepositoryPort impl 相当
+// =====================================================
+
+// GetAllTransactions returns all transactions ordered by timestamp desc, id desc.
+func (r *TransactionRepositoryFS) GetAllTransactions(ctx context.Context) ([]*tr.Transaction, error) {
+	if r.Client == nil {
+		return nil, errors.New("firestore client is nil")
 	}
-	defer rows.Close()
+
+	it := r.col().
+		OrderBy("timestamp", firestore.Desc).
+		OrderBy(firestore.DocumentID, firestore.Desc).
+		Documents(ctx)
+	defer it.Stop()
 
 	var out []*tr.Transaction
-	for rows.Next() {
-		t, err := scanTransaction(rows)
+	for {
+		snap, err := it.Next()
+		if errors.Is(err, iterator.Done) {
+			break
+		}
+		if err != nil {
+			return nil, err
+		}
+		t, err := docToTransaction(snap)
 		if err != nil {
 			return nil, err
 		}
 		tt := t
 		out = append(out, &tt)
 	}
-	return out, rows.Err()
+	return out, nil
 }
 
-func (r *TransactionRepositoryPG) GetTransactionByID(ctx context.Context, id string) (*tr.Transaction, error) {
-	run := dbcommon.GetRunner(ctx, r.DB)
-	const q = `
-SELECT
-  id, account_id, brand_name, type, amount, currency, from_account, to_account, timestamp, description
-FROM transactions
-WHERE id = $1
-LIMIT 1`
-	row := run.QueryRowContext(ctx, q, strings.TrimSpace(id))
-	t, err := scanTransaction(row)
+// GetTransactionByID returns a single transaction by ID.
+func (r *TransactionRepositoryFS) GetTransactionByID(ctx context.Context, id string) (*tr.Transaction, error) {
+	if r.Client == nil {
+		return nil, errors.New("firestore client is nil")
+	}
+
+	id = strings.TrimSpace(id)
+	if id == "" {
+		return nil, tr.ErrNotFound
+	}
+
+	snap, err := r.col().Doc(id).Get(ctx)
+	if status.Code(err) == codes.NotFound {
+		return nil, tr.ErrNotFound
+	}
 	if err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
-			return nil, tr.ErrNotFound
-		}
+		return nil, err
+	}
+
+	t, err := docToTransaction(snap)
+	if err != nil {
 		return nil, err
 	}
 	return &t, nil
 }
 
-func (r *TransactionRepositoryPG) GetTransactionsByBrand(ctx context.Context, brandName string) ([]*tr.Transaction, error) {
-	run := dbcommon.GetRunner(ctx, r.DB)
-	const q = `
-SELECT
-  id, account_id, brand_name, type, amount, currency, from_account, to_account, timestamp, description
-FROM transactions
-WHERE brand_name = $1
-ORDER BY timestamp DESC, id DESC`
-	rows, err := run.QueryContext(ctx, q, strings.TrimSpace(brandName))
-	if err != nil {
-		return nil, err
+// GetTransactionsByBrand retrieves transactions filtered by brandName.
+func (r *TransactionRepositoryFS) GetTransactionsByBrand(ctx context.Context, brandName string) ([]*tr.Transaction, error) {
+	if r.Client == nil {
+		return nil, errors.New("firestore client is nil")
 	}
-	defer rows.Close()
+
+	brandName = strings.TrimSpace(brandName)
+	if brandName == "" {
+		return []*tr.Transaction{}, nil
+	}
+
+	q := r.col().
+		Where("brandName", "==", brandName).
+		OrderBy("timestamp", firestore.Desc).
+		OrderBy(firestore.DocumentID, firestore.Desc)
+
+	it := q.Documents(ctx)
+	defer it.Stop()
 
 	var out []*tr.Transaction
-	for rows.Next() {
-		t, err := scanTransaction(rows)
+	for {
+		snap, err := it.Next()
+		if errors.Is(err, iterator.Done) {
+			break
+		}
+		if err != nil {
+			return nil, err
+		}
+		t, err := docToTransaction(snap)
 		if err != nil {
 			return nil, err
 		}
 		tt := t
 		out = append(out, &tt)
 	}
-	return out, rows.Err()
+	return out, nil
 }
 
-func (r *TransactionRepositoryPG) GetTransactionsByAccount(ctx context.Context, accountID string) ([]*tr.Transaction, error) {
-	run := dbcommon.GetRunner(ctx, r.DB)
-	const q = `
-SELECT
-  id, account_id, brand_name, type, amount, currency, from_account, to_account, timestamp, description
-FROM transactions
-WHERE account_id = $1
-ORDER BY timestamp DESC, id DESC`
-	rows, err := run.QueryContext(ctx, q, strings.TrimSpace(accountID))
-	if err != nil {
-		return nil, err
+// GetTransactionsByAccount retrieves transactions filtered by accountID.
+func (r *TransactionRepositoryFS) GetTransactionsByAccount(ctx context.Context, accountID string) ([]*tr.Transaction, error) {
+	if r.Client == nil {
+		return nil, errors.New("firestore client is nil")
 	}
-	defer rows.Close()
+
+	accountID = strings.TrimSpace(accountID)
+	if accountID == "" {
+		return []*tr.Transaction{}, nil
+	}
+
+	q := r.col().
+		Where("accountId", "==", accountID).
+		OrderBy("timestamp", firestore.Desc).
+		OrderBy(firestore.DocumentID, firestore.Desc)
+
+	it := q.Documents(ctx)
+	defer it.Stop()
 
 	var out []*tr.Transaction
-	for rows.Next() {
-		t, err := scanTransaction(rows)
+	for {
+		snap, err := it.Next()
+		if errors.Is(err, iterator.Done) {
+			break
+		}
+		if err != nil {
+			return nil, err
+		}
+		t, err := docToTransaction(snap)
 		if err != nil {
 			return nil, err
 		}
 		tt := t
 		out = append(out, &tt)
 	}
-	return out, rows.Err()
+	return out, nil
 }
 
-func (r *TransactionRepositoryPG) SearchTransactions(ctx context.Context, criteria tr.TransactionSearchCriteria) (txs []*tr.Transaction, total int, err error) {
-	run := dbcommon.GetRunner(ctx, r.DB)
-
-	where, args := buildTxWhere(criteria)
-	whereSQL := ""
-	if len(where) > 0 {
-		whereSQL = "WHERE " + strings.Join(where, " AND ")
+// SearchTransactions performs search with TransactionSearchCriteria.
+// Firestore では制約があるため、全件取得してメモリ上でフィルタ/ソート/ページングする。
+func (r *TransactionRepositoryFS) SearchTransactions(
+	ctx context.Context,
+	criteria tr.TransactionSearchCriteria,
+) (txs []*tr.Transaction, total int, err error) {
+	if r.Client == nil {
+		return nil, 0, errors.New("firestore client is nil")
 	}
 
-	// Count
-	if err := run.QueryRowContext(ctx, "SELECT COUNT(*) FROM transactions "+whereSQL, args...).Scan(&total); err != nil {
-		return nil, 0, err
-	}
+	it := r.col().Documents(ctx)
+	defer it.Stop()
 
-	// Sorting
-	orderBy := buildTxOrderBy(criteria.Sort)
-	if orderBy == "" {
-		orderBy = "ORDER BY timestamp DESC, id DESC"
-	}
-
-	// Paging
-	perPage := 50
-	offset := 0
-	if criteria.Pagination != nil {
-		_, perPage, offset = dbcommon.NormalizePage(criteria.Pagination.Page, criteria.Pagination.PerPage, 50, 200)
-	}
-
-	// Data
-	q := fmt.Sprintf(`
-SELECT
-  id, account_id, brand_name, type, amount, currency, from_account, to_account, timestamp, description
-FROM transactions
-%s
-%s
-LIMIT $%d OFFSET $%d
-`, whereSQL, orderBy, len(args)+1, len(args)+2)
-	args = append(args, perPage, offset)
-
-	rows, err := run.QueryContext(ctx, q, args...)
-	if err != nil {
-		return nil, 0, err
-	}
-	defer rows.Close()
-
-	out := make([]*tr.Transaction, 0, perPage)
-	for rows.Next() {
-		t, err := scanTransaction(rows)
+	var all []tr.Transaction
+	for {
+		snap, err := it.Next()
+		if errors.Is(err, iterator.Done) {
+			break
+		}
 		if err != nil {
 			return nil, 0, err
 		}
+		t, err := docToTransaction(snap)
+		if err != nil {
+			return nil, 0, err
+		}
+		if matchTxCriteria(t, criteria) {
+			all = append(all, t)
+		}
+	}
+
+	// sort
+	sortTransactions(all, criteria.Sort)
+
+	total = len(all)
+
+	// paging
+	perPage := 50
+	offset := 0
+	if criteria.Pagination != nil {
+		_, perPage, offset = dbcommon.NormalizePage(
+			criteria.Pagination.Page,
+			criteria.Pagination.PerPage,
+			50,
+			200,
+		)
+	}
+
+	if offset > total {
+		offset = total
+	}
+	end := offset + perPage
+	if end > total {
+		end = total
+	}
+
+	out := make([]*tr.Transaction, 0, end-offset)
+	for _, t := range all[offset:end] {
 		tt := t
 		out = append(out, &tt)
 	}
-	return out, total, rows.Err()
+
+	return out, total, nil
 }
 
-func (r *TransactionRepositoryPG) CreateTransaction(ctx context.Context, in tr.CreateTransactionInput) (*tr.Transaction, error) {
-	run := dbcommon.GetRunner(ctx, r.DB)
-	const q = `
-INSERT INTO transactions (
-  id, account_id, brand_name, type, amount, currency, from_account, to_account, timestamp, description
-) VALUES (
-  gen_random_uuid()::text, $1, $2, $3, $4, $5, $6, $7, $8, $9
-)
-RETURNING
-  id, account_id, brand_name, type, amount, currency, from_account, to_account, timestamp, description
-`
-	row := run.QueryRowContext(ctx, q,
-		strings.TrimSpace(in.AccountID),
-		strings.TrimSpace(in.BrandName),
-		strings.TrimSpace(string(in.Type)),
-		in.Amount,
-		strings.ToUpper(strings.TrimSpace(in.Currency)),
-		strings.TrimSpace(in.FromAccount),
-		strings.TrimSpace(in.ToAccount),
-		in.Timestamp.UTC(),
-		in.Description,
-	)
-	t, err := scanTransaction(row)
-	if err != nil {
-		if dbcommon.IsUniqueViolation(err) {
+// CreateTransaction inserts a new transaction document.
+func (r *TransactionRepositoryFS) CreateTransaction(ctx context.Context, in tr.CreateTransactionInput) (*tr.Transaction, error) {
+	if r.Client == nil {
+		return nil, errors.New("firestore client is nil")
+	}
+
+	ref := r.col().NewDoc()
+
+	data := map[string]any{
+		"accountId":   strings.TrimSpace(in.AccountID),
+		"brandName":   strings.TrimSpace(in.BrandName),
+		"type":        strings.TrimSpace(string(in.Type)),
+		"amount":      in.Amount,
+		"currency":    strings.ToUpper(strings.TrimSpace(in.Currency)),
+		"fromAccount": strings.TrimSpace(in.FromAccount),
+		"toAccount":   strings.TrimSpace(in.ToAccount),
+		"timestamp":   in.Timestamp.UTC(),
+		"description": in.Description,
+	}
+
+	if _, err := ref.Create(ctx, data); err != nil {
+		if status.Code(err) == codes.AlreadyExists {
 			return nil, tr.ErrConflict
 		}
+		return nil, err
+	}
+
+	snap, err := ref.Get(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	t, err := docToTransaction(snap)
+	if err != nil {
 		return nil, err
 	}
 	return &t, nil
 }
 
-func (r *TransactionRepositoryPG) UpdateTransaction(ctx context.Context, id string, in tr.UpdateTransactionInput) (*tr.Transaction, error) {
-	run := dbcommon.GetRunner(ctx, r.DB)
-
-	sets := []string{}
-	args := []any{}
-	i := 1
-
-	setStr := func(col string, p *string) {
-		if p != nil {
-			sets = append(sets, fmt.Sprintf("%s = $%d", col, i))
-			args = append(args, strings.TrimSpace(*p))
-			i++
-		}
-	}
-	setEnum := func(col string, p *tr.TransactionType) {
-		if p != nil {
-			sets = append(sets, fmt.Sprintf("%s = $%d", col, i))
-			args = append(args, strings.TrimSpace(string(*p)))
-			i++
-		}
-	}
-	setInt := func(col string, p *int) {
-		if p != nil {
-			sets = append(sets, fmt.Sprintf("%s = $%d", col, i))
-			args = append(args, *p)
-			i++
-		}
-	}
-	setTime := func(col string, p *time.Time) {
-		if p != nil {
-			sets = append(sets, fmt.Sprintf("%s = $%d", col, i))
-			args = append(args, p.UTC())
-			i++
-		}
+// UpdateTransaction applies partial updates to a transaction document.
+func (r *TransactionRepositoryFS) UpdateTransaction(
+	ctx context.Context,
+	id string,
+	in tr.UpdateTransactionInput,
+) (*tr.Transaction, error) {
+	if r.Client == nil {
+		return nil, errors.New("firestore client is nil")
 	}
 
-	setStr("account_id", in.AccountID)
-	setStr("brand_name", in.BrandName)
+	id = strings.TrimSpace(id)
+	if id == "" {
+		return nil, tr.ErrNotFound
+	}
+
+	ref := r.col().Doc(id)
+
+	// ensure exists
+	if _, err := ref.Get(ctx); status.Code(err) == codes.NotFound {
+		return nil, tr.ErrNotFound
+	} else if err != nil {
+		return nil, err
+	}
+
+	var updates []firestore.Update
+
+	setStr := func(path string, p *string) {
+		if p != nil {
+			updates = append(updates, firestore.Update{
+				Path:  path,
+				Value: strings.TrimSpace(*p),
+			})
+		}
+	}
+	setEnum := func(path string, p *tr.TransactionType) {
+		if p != nil {
+			updates = append(updates, firestore.Update{
+				Path:  path,
+				Value: strings.TrimSpace(string(*p)),
+			})
+		}
+	}
+	setInt := func(path string, p *int) {
+		if p != nil {
+			updates = append(updates, firestore.Update{
+				Path:  path,
+				Value: *p,
+			})
+		}
+	}
+	setTime := func(path string, p *time.Time) {
+		if p != nil {
+			updates = append(updates, firestore.Update{
+				Path:  path,
+				Value: p.UTC(),
+			})
+		}
+	}
+
+	setStr("accountId", in.AccountID)
+	setStr("brandName", in.BrandName)
 	setEnum("type", in.Type)
 	setInt("amount", in.Amount)
+
 	if in.Currency != nil {
-		sets = append(sets, fmt.Sprintf("currency = $%d", i))
-		args = append(args, strings.ToUpper(strings.TrimSpace(*in.Currency)))
-		i++
+		updates = append(updates, firestore.Update{
+			Path:  "currency",
+			Value: strings.ToUpper(strings.TrimSpace(*in.Currency)),
+		})
 	}
-	setStr("from_account", in.FromAccount)
-	setStr("to_account", in.ToAccount)
+
+	setStr("fromAccount", in.FromAccount)
+	setStr("toAccount", in.ToAccount)
 	setTime("timestamp", in.Timestamp)
 	setStr("description", in.Description)
 
-	if len(sets) == 0 {
+	if len(updates) == 0 {
+		// no-op => just reload
 		return r.GetTransactionByID(ctx, id)
 	}
 
-	args = append(args, strings.TrimSpace(id))
-	q := fmt.Sprintf(`
-UPDATE transactions
-SET %s
-WHERE id = $%d
-RETURNING
-  id, account_id, brand_name, type, amount, currency, from_account, to_account, timestamp, description
-`, strings.Join(sets, ", "), i)
-
-	row := run.QueryRowContext(ctx, q, args...)
-	t, err := scanTransaction(row)
-	if err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
+	if _, err := ref.Update(ctx, updates); err != nil {
+		if status.Code(err) == codes.NotFound {
 			return nil, tr.ErrNotFound
 		}
-		if dbcommon.IsUniqueViolation(err) {
+		if status.Code(err) == codes.AlreadyExists {
 			return nil, tr.ErrConflict
 		}
 		return nil, err
 	}
-	return &t, nil
+
+	return r.GetTransactionByID(ctx, id)
 }
 
-func (r *TransactionRepositoryPG) DeleteTransaction(ctx context.Context, id string) error {
-	run := dbcommon.GetRunner(ctx, r.DB)
-	res, err := run.ExecContext(ctx, `DELETE FROM transactions WHERE id = $1`, strings.TrimSpace(id))
-	if err != nil {
+// DeleteTransaction deletes a transaction by ID.
+func (r *TransactionRepositoryFS) DeleteTransaction(ctx context.Context, id string) error {
+	if r.Client == nil {
+		return errors.New("firestore client is nil")
+	}
+
+	id = strings.TrimSpace(id)
+	if id == "" {
+		return tr.ErrNotFound
+	}
+
+	ref := r.col().Doc(id)
+	if _, err := ref.Get(ctx); status.Code(err) == codes.NotFound {
+		return tr.ErrNotFound
+	} else if err != nil {
 		return err
 	}
-	n, _ := res.RowsAffected()
-	if n == 0 {
-		return tr.ErrNotFound
+
+	if _, err := ref.Delete(ctx); err != nil {
+		return err
 	}
 	return nil
 }
 
-func (r *TransactionRepositoryPG) ResetTransactions(ctx context.Context) error {
-	run := dbcommon.GetRunner(ctx, r.DB)
-	_, err := run.ExecContext(ctx, `DELETE FROM transactions`)
-	return err
-}
-
-func (r *TransactionRepositoryPG) WithTx(ctx context.Context, fn func(ctx context.Context) error) error {
-	tx, err := r.DB.BeginTx(ctx, nil)
-	if err != nil {
-		return err
+// ResetTransactions deletes all transaction documents (dev/test use).
+func (r *TransactionRepositoryFS) ResetTransactions(ctx context.Context) error {
+	if r.Client == nil {
+		return errors.New("firestore client is nil")
 	}
-	txCtx := dbcommon.CtxWithTx(ctx, tx)
 
-	defer func() {
-		if p := recover(); p != nil {
-			_ = tx.Rollback()
-			panic(p)
+	it := r.col().Documents(ctx)
+	batch := r.Client.Batch()
+	count := 0
+
+	for {
+		snap, err := it.Next()
+		if errors.Is(err, iterator.Done) {
+			break
 		}
-	}()
-
-	if err := fn(txCtx); err != nil {
-		_ = tx.Rollback()
-		return err
+		if err != nil {
+			return err
+		}
+		batch.Delete(snap.Ref)
+		count++
+		if count%400 == 0 {
+			if _, err := batch.Commit(ctx); err != nil {
+				return err
+			}
+			batch = r.Client.Batch()
+		}
 	}
-	return tx.Commit()
+	if count > 0 {
+		if _, err := batch.Commit(ctx); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
-// ==========================
-// Helpers
-// ==========================
-
-func scanTransaction(s dbcommon.RowScanner) (tr.Transaction, error) {
-	var (
-		id, accountID, brandName, typStr, currency, fromAcc, toAcc, desc string
-		amount                                                           int64
-		ts                                                               time.Time
-	)
-	if err := s.Scan(
-		&id, &accountID, &brandName, &typStr, &amount, &currency, &fromAcc, &toAcc, &ts, &desc,
-	); err != nil {
-		return tr.Transaction{}, err
+// WithTx is a simple wrapper; if multi-doc Tx is needed, use Client.RunTransaction.
+func (r *TransactionRepositoryFS) WithTx(ctx context.Context, fn func(ctx context.Context) error) error {
+	if r.Client == nil {
+		return errors.New("firestore client is nil")
 	}
+	return fn(ctx)
+}
+
+// =====================================================
+// Helpers: Firestore -> Domain
+// =====================================================
+
+func docToTransaction(doc *firestore.DocumentSnapshot) (tr.Transaction, error) {
+	data := doc.Data()
+	if data == nil {
+		return tr.Transaction{}, tr.ErrNotFound
+	}
+
+	getStr := func(keys ...string) string {
+		for _, k := range keys {
+			if v, ok := data[k].(string); ok {
+				return strings.TrimSpace(v)
+			}
+		}
+		return ""
+	}
+	getInt64 := func(keys ...string) int64 {
+		for _, k := range keys {
+			switch v := data[k].(type) {
+			case int64:
+				return v
+			case int:
+				return int64(v)
+			case float64:
+				return int64(v)
+			}
+		}
+		return 0
+	}
+	getTime := func(keys ...string) time.Time {
+		for _, k := range keys {
+			if v, ok := data[k].(time.Time); ok {
+				return v.UTC()
+			}
+		}
+		return time.Time{}
+	}
+
+	amount := getInt64("amount")
 	return tr.Transaction{
-		ID:          strings.TrimSpace(id),
-		AccountID:   strings.TrimSpace(accountID),
-		BrandName:   strings.TrimSpace(brandName),
-		Type:        tr.TransactionType(strings.TrimSpace(typStr)),
+		ID:          strings.TrimSpace(doc.Ref.ID),
+		AccountID:   getStr("accountId", "account_id"),
+		BrandName:   getStr("brandName", "brand_name"),
+		Type:        tr.TransactionType(getStr("type")),
 		Amount:      int(amount),
-		Currency:    strings.ToUpper(strings.TrimSpace(currency)),
-		FromAccount: strings.TrimSpace(fromAcc),
-		ToAccount:   strings.TrimSpace(toAcc),
-		Timestamp:   ts.UTC(),
-		Description: desc,
+		Currency:    strings.ToUpper(getStr("currency")),
+		FromAccount: getStr("fromAccount", "from_account"),
+		ToAccount:   getStr("toAccount", "to_account"),
+		Timestamp:   getTime("timestamp"),
+		Description: getStr("description"),
 	}, nil
 }
 
-func buildTxWhere(c tr.TransactionSearchCriteria) ([]string, []any) {
-	where := []string{}
-	args := []any{}
+// =====================================================
+// Helpers: Filter / Sort (in-memory, PG版 buildTxWhere/buildTxOrderBy 相当)
+// =====================================================
 
-	addIn := func(col string, vals []string) {
-		clean := make([]string, 0, len(vals))
-		for _, v := range vals {
-			if v = strings.TrimSpace(v); v != "" {
-				clean = append(clean, v)
+func matchTxCriteria(t tr.Transaction, c tr.TransactionSearchCriteria) bool {
+	f := c.Filters
+
+	// AccountIDs
+	if len(f.AccountIDs) > 0 {
+		ok := false
+		for _, v := range f.AccountIDs {
+			if strings.TrimSpace(v) == t.AccountID {
+				ok = true
+				break
 			}
 		}
-		if len(clean) == 0 {
-			return
+		if !ok {
+			return false
 		}
-		base := len(args)
-		ph := make([]string, len(clean))
-		for i, v := range clean {
-			args = append(args, v)
-			ph[i] = fmt.Sprintf("$%d", base+i+1)
-		}
-		where = append(where, fmt.Sprintf("%s IN (%s)", col, strings.Join(ph, ",")))
-	}
-	addInEnum := func(col string, vals []tr.TransactionType) {
-		if len(vals) == 0 {
-			return
-		}
-		base := len(args)
-		ph := make([]string, len(vals))
-		for i, v := range vals {
-			args = append(args, strings.TrimSpace(string(v)))
-			ph[i] = fmt.Sprintf("$%d", base+i+1)
-		}
-		where = append(where, fmt.Sprintf("%s IN (%s)", col, strings.Join(ph, ",")))
 	}
 
-	// Arrays
-	addIn("account_id", c.Filters.AccountIDs)
-	addIn("brand_name", c.Filters.Brands)
-	addIn("currency", c.Filters.Currencies)
-	addIn("from_account", c.Filters.FromAccounts)
-	addIn("to_account", c.Filters.ToAccounts)
-	addInEnum("type", c.Filters.Types)
-
-	// Ranges
-	if c.Filters.DateFrom != nil {
-		where = append(where, fmt.Sprintf("timestamp >= $%d", len(args)+1))
-		args = append(args, c.Filters.DateFrom.UTC())
-	}
-	if c.Filters.DateTo != nil {
-		where = append(where, fmt.Sprintf("timestamp < $%d", len(args)+1))
-		args = append(args, c.Filters.DateTo.UTC())
-	}
-	if c.Filters.AmountMin != nil {
-		where = append(where, fmt.Sprintf("amount >= $%d", len(args)+1))
-		args = append(args, *c.Filters.AmountMin)
-	}
-	if c.Filters.AmountMax != nil {
-		where = append(where, fmt.Sprintf("amount <= $%d", len(args)+1))
-		args = append(args, *c.Filters.AmountMax)
+	// Brands
+	if len(f.Brands) > 0 {
+		ok := false
+		for _, v := range f.Brands {
+			if strings.TrimSpace(v) == t.BrandName {
+				ok = true
+				break
+			}
+		}
+		if !ok {
+			return false
+		}
 	}
 
-	// Description like
-	if v := strings.TrimSpace(c.Filters.DescriptionLike); v != "" {
-		where = append(where, fmt.Sprintf("description ILIKE $%d", len(args)+1))
-		args = append(args, "%"+v+"%")
+	// Currencies
+	if len(f.Currencies) > 0 {
+		cur := strings.ToUpper(strings.TrimSpace(t.Currency))
+		if cur == "" {
+			return false
+		}
+		ok := false
+		for _, v := range f.Currencies {
+			if strings.ToUpper(strings.TrimSpace(v)) == cur {
+				ok = true
+				break
+			}
+		}
+		if !ok {
+			return false
+		}
 	}
 
-	// SearchTerm across several columns
+	// FromAccounts
+	if len(f.FromAccounts) > 0 {
+		ok := false
+		for _, v := range f.FromAccounts {
+			if strings.TrimSpace(v) == t.FromAccount {
+				ok = true
+				break
+			}
+		}
+		if !ok {
+			return false
+		}
+	}
+
+	// ToAccounts
+	if len(f.ToAccounts) > 0 {
+		ok := false
+		for _, v := range f.ToAccounts {
+			if strings.TrimSpace(v) == t.ToAccount {
+				ok = true
+				break
+			}
+		}
+		if !ok {
+			return false
+		}
+	}
+
+	// Types
+	if len(f.Types) > 0 {
+		ok := false
+		for _, tp := range f.Types {
+			if t.Type == tp {
+				ok = true
+				break
+			}
+		}
+		if !ok {
+			return false
+		}
+	}
+
+	// DateFrom / DateTo
+	if f.DateFrom != nil && t.Timestamp.Before(f.DateFrom.UTC()) {
+		return false
+	}
+	if f.DateTo != nil && !t.Timestamp.Before(f.DateTo.UTC()) {
+		return false
+	}
+
+	// AmountMin / AmountMax
+	if f.AmountMin != nil && int64(t.Amount) < int64(*f.AmountMin) {
+		return false
+	}
+	if f.AmountMax != nil && int64(t.Amount) > int64(*f.AmountMax) {
+		return false
+	}
+
+	// DescriptionLike
+	if v := strings.TrimSpace(f.DescriptionLike); v != "" {
+		if !strings.Contains(
+			strings.ToLower(t.Description),
+			strings.ToLower(v),
+		) {
+			return false
+		}
+	}
+
+	// SearchTerm across brandName, currency, fromAccount, toAccount, description
 	if v := strings.TrimSpace(c.SearchTerm); v != "" {
-		or := []string{
-			fmt.Sprintf("brand_name ILIKE $%d", len(args)+1),
-			fmt.Sprintf("currency ILIKE $%d", len(args)+2),
-			fmt.Sprintf("from_account ILIKE $%d", len(args)+3),
-			fmt.Sprintf("to_account ILIKE $%d", len(args)+4),
-			fmt.Sprintf("description ILIKE $%d", len(args)+5),
+		p := strings.ToLower(v)
+		if !(strings.Contains(strings.ToLower(t.BrandName), p) ||
+			strings.Contains(strings.ToLower(t.Currency), p) ||
+			strings.Contains(strings.ToLower(t.FromAccount), p) ||
+			strings.Contains(strings.ToLower(t.ToAccount), p) ||
+			strings.Contains(strings.ToLower(t.Description), p)) {
+			return false
 		}
-		for i := 0; i < 5; i++ {
-			args = append(args, "%"+v+"%")
-		}
-		where = append(where, "("+strings.Join(or, " OR ")+")")
 	}
 
-	return where, args
+	return true
 }
 
-func buildTxOrderBy(s tr.TransactionSort) string {
+func sortTransactions(items []tr.Transaction, s tr.TransactionSort) {
 	col := strings.ToLower(strings.TrimSpace(string(s.Column)))
-	switch col {
-	case "timestamp":
-		col = "timestamp"
-	case "amount":
-		col = "amount"
-	case "brandname", "brand_name":
-		col = "brand_name"
-	case "accountid", "account_id":
-		col = "account_id"
-	default:
-		return ""
-	}
 	dir := strings.ToUpper(strings.TrimSpace(string(s.Order)))
 	if dir != "ASC" && dir != "DESC" {
 		dir = "DESC"
 	}
-	return fmt.Sprintf("ORDER BY %s %s, id %s", col, dir, dir)
+	asc := dir == "ASC"
+
+	less := func(i, j int) bool {
+		a := items[i]
+		b := items[j]
+
+		switch col {
+		case "timestamp":
+			if a.Timestamp.Equal(b.Timestamp) {
+				if asc {
+					return a.ID < b.ID
+				}
+				return a.ID > b.ID
+			}
+			if asc {
+				return a.Timestamp.Before(b.Timestamp)
+			}
+			return a.Timestamp.After(b.Timestamp)
+
+		case "amount":
+			if a.Amount == b.Amount {
+				if asc {
+					return a.ID < b.ID
+				}
+				return a.ID > b.ID
+			}
+			if asc {
+				return a.Amount < b.Amount
+			}
+			return a.Amount > b.Amount
+
+		case "brandname", "brand_name":
+			if a.BrandName == b.BrandName {
+				if asc {
+					return a.ID < b.ID
+				}
+				return a.ID > b.ID
+			}
+			if asc {
+				return a.BrandName < b.BrandName
+			}
+			return a.BrandName > b.BrandName
+
+		case "accountid", "account_id":
+			if a.AccountID == b.AccountID {
+				if asc {
+					return a.ID < b.ID
+				}
+				return a.ID > b.ID
+			}
+			if asc {
+				return a.AccountID < b.AccountID
+			}
+			return a.AccountID > b.AccountID
+
+		default:
+			// デフォルト: timestamp DESC, id DESC
+			if a.Timestamp.Equal(b.Timestamp) {
+				return a.ID > b.ID
+			}
+			return a.Timestamp.After(b.Timestamp)
+		}
+	}
+
+	sort.SliceStable(items, less)
 }
+
+// =====================================================
+// (Optional) no-op to avoid unused warnings in some setups
+// =====================================================
+
+func _tx_unused(_ ...any) { fmt.Sprint() }
