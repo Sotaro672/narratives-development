@@ -1,3 +1,4 @@
+// backend\internal\domain\inventory\repository_port.go
 package inventory
 
 import (
