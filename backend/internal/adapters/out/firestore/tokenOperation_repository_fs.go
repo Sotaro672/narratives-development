@@ -119,7 +119,6 @@ func (r *TokenOperationRepositoryFS) Create(ctx context.Context, v tod.TokenOper
 		ref = r.colOps().Doc(id)
 	} else {
 		ref = r.colOps().NewDoc()
-		id = ref.ID
 	}
 
 	data := map[string]any{
@@ -612,28 +611,58 @@ func (r *TokenOperationRepositoryFS) ResetTokenOperations(ctx context.Context) e
 
 	clearCol := func(col *firestore.CollectionRef) error {
 		it := col.Documents(ctx)
-		batch := r.Client.Batch()
-		count := 0
+		var snaps []*firestore.DocumentSnapshot
 		for {
-			doc, err := it.Next()
+			snap, err := it.Next()
 			if errors.Is(err, iterator.Done) {
 				break
 			}
 			if err != nil {
 				return err
 			}
-			batch.Delete(doc.Ref)
-			count++
-			if count%400 == 0 {
-				if _, err := batch.Commit(ctx); err != nil {
-					return err
+			snaps = append(snaps, snap)
+
+			// batch commit
+			if len(snaps) >= 500 {
+				// delete snapshots via transaction (chunked)
+				const chunkSize = 400
+				for i := 0; i < len(snaps); i += chunkSize {
+					end := i + chunkSize
+					if end > len(snaps) {
+						end = len(snaps)
+					}
+					if err := r.Client.RunTransaction(ctx, func(ctx context.Context, tx *firestore.Transaction) error {
+						for _, s := range snaps[i:end] {
+							if err := tx.Delete(s.Ref); err != nil {
+								return err
+							}
+						}
+						return nil
+					}); err != nil {
+						return err
+					}
 				}
-				batch = r.Client.Batch()
+				snaps = nil
 			}
 		}
-		if count > 0 {
-			if _, err := batch.Commit(ctx); err != nil {
-				return err
+		if len(snaps) > 0 {
+			// delete snapshots via transaction (chunked)
+			const chunkSize = 400
+			for i := 0; i < len(snaps); i += chunkSize {
+				end := i + chunkSize
+				if end > len(snaps) {
+					end = len(snaps)
+				}
+				if err := r.Client.RunTransaction(ctx, func(ctx context.Context, tx *firestore.Transaction) error {
+					for _, s := range snaps[i:end] {
+						if err := tx.Delete(s.Ref); err != nil {
+							return err
+						}
+					}
+					return nil
+				}); err != nil {
+					return err
+				}
 			}
 		}
 		return nil

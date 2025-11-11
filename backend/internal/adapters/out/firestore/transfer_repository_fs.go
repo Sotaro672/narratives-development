@@ -301,11 +301,8 @@ func (r *TransferRepositoryFS) Reset(ctx context.Context) error {
 	if r.Client == nil {
 		return errors.New("firestore client is nil")
 	}
-
 	it := r.col().Documents(ctx)
-	batch := r.Client.Batch()
-	count := 0
-
+	var refs []*firestore.DocumentRef
 	for {
 		doc, err := it.Next()
 		if errors.Is(err, iterator.Done) {
@@ -314,17 +311,25 @@ func (r *TransferRepositoryFS) Reset(ctx context.Context) error {
 		if err != nil {
 			return err
 		}
-		batch.Delete(doc.Ref)
-		count++
-		if count%400 == 0 {
-			if _, err := batch.Commit(ctx); err != nil {
-				return err
-			}
-			batch = r.Client.Batch()
-		}
+		refs = append(refs, doc.Ref)
 	}
-	if count > 0 {
-		if _, err := batch.Commit(ctx); err != nil {
+	if len(refs) == 0 {
+		return nil
+	}
+	const chunkSize = 400
+	for i := 0; i < len(refs); i += chunkSize {
+		end := i + chunkSize
+		if end > len(refs) {
+			end = len(refs)
+		}
+		if err := r.Client.RunTransaction(ctx, func(ctx context.Context, tx *firestore.Transaction) error {
+			for _, ref := range refs[i:end] {
+				if err := tx.Delete(ref); err != nil {
+					return err
+				}
+			}
+			return nil
+		}); err != nil {
 			return err
 		}
 	}

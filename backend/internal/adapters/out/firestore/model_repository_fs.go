@@ -27,10 +27,6 @@ func NewModelRepositoryFS(client *firestore.Client) *ModelRepositoryFS {
 	return &ModelRepositoryFS{Client: client}
 }
 
-func (r *ModelRepositoryFS) modelsCol() *firestore.CollectionRef {
-	return r.Client.Collection("models")
-}
-
 func (r *ModelRepositoryFS) modelSetsCol() *firestore.CollectionRef {
 	return r.Client.Collection("model_sets")
 }

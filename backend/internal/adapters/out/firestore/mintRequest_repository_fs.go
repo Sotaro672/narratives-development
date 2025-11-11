@@ -169,7 +169,6 @@ func (r *MintRequestRepositoryFS) Save(ctx context.Context, v mrdom.MintRequest)
 			}
 
 			// deletedAt / deletedBy / requestedAt などは「新しい値で上書き」方針とする。
-			// PG 実装では EXCLUDED 側で上書きしていたので、それに合わせる。
 		}
 
 		data := mintRequestToDoc(out)
@@ -215,7 +214,6 @@ func (r *MintRequestRepositoryFS) Delete(ctx context.Context, id string) error {
 // ============================================================
 
 // List returns paginated MintRequests applying filter/sort in a Firestore-friendly way.
-// Firestoreクエリ＋アプリ側フィルタ（PG版の buildMintRequestWhere 相当を in-memory 実装）。
 func (r *MintRequestRepositoryFS) List(
 	ctx context.Context,
 	filter mrdom.Filter,
@@ -418,7 +416,7 @@ func (r *MintRequestRepositoryFS) Count(ctx context.Context, filter mrdom.Filter
 	return total, nil
 }
 
-// Reset deletes all MintRequests (mainly for admin/testing usage).
+// Reset deletes all MintRequests (mainly for admin/testing usage) using Transactions instead of WriteBatch.
 func (r *MintRequestRepositoryFS) Reset(ctx context.Context) error {
 	if r.Client == nil {
 		return errors.New("firestore client is nil")
@@ -427,9 +425,7 @@ func (r *MintRequestRepositoryFS) Reset(ctx context.Context) error {
 	it := r.col().Documents(ctx)
 	defer it.Stop()
 
-	batch := r.Client.Batch()
-	count := 0
-
+	var refs []*firestore.DocumentRef
 	for {
 		doc, err := it.Next()
 		if errors.Is(err, iterator.Done) {
@@ -438,22 +434,35 @@ func (r *MintRequestRepositoryFS) Reset(ctx context.Context) error {
 		if err != nil {
 			return err
 		}
-		batch.Delete(doc.Ref)
-		count++
-		// Commit periodically to avoid large batches
-		if count >= 400 {
-			if _, err := batch.Commit(ctx); err != nil {
-				return err
-			}
-			batch = r.Client.Batch()
-			count = 0
-		}
+		refs = append(refs, doc.Ref)
 	}
-	if count > 0 {
-		if _, err := batch.Commit(ctx); err != nil {
+
+	if len(refs) == 0 {
+		return nil
+	}
+
+	const chunkSize = 400
+
+	for start := 0; start < len(refs); start += chunkSize {
+		end := start + chunkSize
+		if end > len(refs) {
+			end = len(refs)
+		}
+		chunk := refs[start:end]
+
+		err := r.Client.RunTransaction(ctx, func(ctx context.Context, tx *firestore.Transaction) error {
+			for _, ref := range chunk {
+				if err := tx.Delete(ref); err != nil {
+					return err
+				}
+			}
+			return nil
+		})
+		if err != nil {
 			return err
 		}
 	}
+
 	return nil
 }
 
@@ -623,10 +632,9 @@ func matchMintRequestFilter(m mrdom.MintRequest, f mrdom.Filter) bool {
 	// Helper for time ranges
 	inRange := func(t *time.Time, from, to *time.Time, useZero bool) bool {
 		if t == nil {
-			if !useZero {
-				return false
-			}
-			return true
+			// if !useZero { return false }
+			// return true
+			return useZero
 		}
 		tv := t.UTC()
 		if from != nil && tv.Before(from.UTC()) {

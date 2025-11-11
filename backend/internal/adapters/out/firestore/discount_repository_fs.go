@@ -288,7 +288,8 @@ func (r *DiscountRepositoryFS) Create(ctx context.Context, in ddom.Discount) (dd
 	if err == nil {
 		return ddom.Discount{}, ddom.ErrConflict
 	}
-	if err != nil && status.Code(err) != codes.NotFound {
+	// nilness: after err == nil branch, err is guaranteed non-nil. Drop redundant check.
+	if status.Code(err) != codes.NotFound {
 		return ddom.Discount{}, err
 	}
 

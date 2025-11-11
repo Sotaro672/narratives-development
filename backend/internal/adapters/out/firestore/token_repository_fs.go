@@ -494,56 +494,67 @@ func (r *TokenRepositoryFS) GetStats(ctx context.Context) (tokendom.TokenStats, 
 		})
 	}
 
-	// NOTE: For brevity, we don't sort TopOwners/TopMintRequests here.
-	// If strict ordering is required, add sorting logic.
+	// NOTE: Sorting for TopOwners/TopMintRequests can be added if needed.
 
 	return stats, nil
 }
 
-// WithTx: Firestore transactions require a different model.
-// For now, we simply run fn(ctx) without transactional guarantees.
+// WithTx uses Firestore RunTransaction to execute fn with transactional context.
+// Note: the current repository methods do not accept a *firestore.Transaction;
+// callers that need strict transactional semantics should ensure fn only uses
+// operations that are compatible with this pattern.
 func (r *TokenRepositoryFS) WithTx(ctx context.Context, fn func(ctx context.Context) error) error {
 	if r.Client == nil {
 		return errors.New("firestore client is nil")
 	}
-	// If you need real Firestore transactions, wire them here and
-	// ensure underlying calls use the transaction handle.
-	return fn(ctx)
+
+	return r.Client.RunTransaction(ctx, func(txCtx context.Context, _ *firestore.Transaction) error {
+		return fn(txCtx)
+	})
 }
 
-// Reset deletes all tokens (for tests/dev).
+// Reset deletes all tokens (for tests/dev) using transactions instead of the
+// deprecated WriteBatch API.
 func (r *TokenRepositoryFS) Reset(ctx context.Context) error {
 	if r.Client == nil {
 		return errors.New("firestore client is nil")
 	}
 
-	it := r.col().Documents(ctx)
-	batch := r.Client.Batch()
-	count := 0
-
 	for {
-		doc, err := it.Next()
-		if errors.Is(err, iterator.Done) {
+		// Fetch a chunk of documents to delete.
+		it := r.col().Limit(400).Documents(ctx)
+		var refs []*firestore.DocumentRef
+
+		for {
+			doc, err := it.Next()
+			if errors.Is(err, iterator.Done) {
+				break
+			}
+			if err != nil {
+				return err
+			}
+			refs = append(refs, doc.Ref)
+		}
+
+		if len(refs) == 0 {
+			// No more documents to delete.
 			break
 		}
+
+		// Delete this chunk within a transaction.
+		err := r.Client.RunTransaction(ctx, func(txCtx context.Context, tx *firestore.Transaction) error {
+			for _, ref := range refs {
+				if err := tx.Delete(ref); err != nil {
+					return err
+				}
+			}
+			return nil
+		})
 		if err != nil {
 			return err
 		}
-		batch.Delete(doc.Ref)
-		count++
-		if count%400 == 0 {
-			if _, err := batch.Commit(ctx); err != nil {
-				return err
-			}
-			batch = r.Client.Batch()
-		}
 	}
 
-	if count > 0 {
-		if _, err := batch.Commit(ctx); err != nil {
-			return err
-		}
-	}
 	return nil
 }
 
@@ -569,18 +580,15 @@ func tokenToDocData(v tokendom.Token) map[string]any {
 		"mintRequestId": strings.TrimSpace(v.MintRequestID),
 		"owner":         strings.TrimSpace(v.Owner),
 	}
-	// MintAddress is encoded as document ID; we do not duplicate unless desired:
-	// m["mintAddress"] = strings.TrimSpace(v.MintAddress)
+	// MintAddress is encoded as document ID; we do not duplicate unless desired.
 	return m
 }
 
 // matchTokenFilterFS applies tokendom.Filter using document data + domain fields.
-// This mimics buildTokenWhere behavior in the PG implementation as much as feasible.
 func matchTokenFilterFS(doc *firestore.DocumentSnapshot, t tokendom.Token, f tokendom.Filter) bool {
 	trim := func(s string) string { return strings.TrimSpace(s) }
 	data := doc.Data()
 
-	// Helpers
 	inList := func(v string, xs []string) bool {
 		if len(xs) == 0 {
 			return true
@@ -650,7 +658,6 @@ func applyTokenOrderByFS(q firestore.Query, s tokendom.Sort) firestore.Query {
 
 	switch col {
 	case "mintaddress", "mint_address":
-		// Use document ID
 		field = firestore.DocumentID
 	case "mintrequestid", "mint_request_id":
 		field = "mintRequestId"

@@ -179,7 +179,7 @@ func (r *OrderRepositoryFS) ListByCursor(
 		last  string
 	)
 	for {
-		if len(items) > limit { // already have more than needed for next cursor
+		if len(items) > limit {
 			break
 		}
 		doc, err := it.Next()
@@ -360,15 +360,16 @@ func (r *OrderRepositoryFS) Delete(ctx context.Context, id string) error {
 	return nil
 }
 
+// Reset deletes all orders using Transactions instead of WriteBatch.
 func (r *OrderRepositoryFS) Reset(ctx context.Context) error {
 	if r.Client == nil {
 		return errors.New("firestore client is nil")
 	}
 
 	it := r.ordersCol().Documents(ctx)
-	b := r.Client.Batch()
-	count := 0
+	defer it.Stop()
 
+	var refs []*firestore.DocumentRef
 	for {
 		doc, err := it.Next()
 		if err == iterator.Done {
@@ -377,20 +378,35 @@ func (r *OrderRepositoryFS) Reset(ctx context.Context) error {
 		if err != nil {
 			return err
 		}
-		b.Delete(doc.Ref)
-		count++
-		if count%400 == 0 {
-			if _, err := b.Commit(ctx); err != nil {
-				return err
-			}
-			b = r.Client.Batch()
-		}
+		refs = append(refs, doc.Ref)
 	}
-	if count > 0 {
-		if _, err := b.Commit(ctx); err != nil {
+
+	if len(refs) == 0 {
+		return nil
+	}
+
+	const chunkSize = 400
+
+	for start := 0; start < len(refs); start += chunkSize {
+		end := start + chunkSize
+		if end > len(refs) {
+			end = len(refs)
+		}
+		chunk := refs[start:end]
+
+		err := r.Client.RunTransaction(ctx, func(ctx context.Context, tx *firestore.Transaction) error {
+			for _, ref := range chunk {
+				if err := tx.Delete(ref); err != nil {
+					return err
+				}
+			}
+			return nil
+		})
+		if err != nil {
 			return err
 		}
 	}
+
 	return nil
 }
 
@@ -454,7 +470,6 @@ func docToOrder(doc *firestore.DocumentSnapshot) (orderdom.Order, error) {
 				case string:
 					out = append(out, s)
 				default:
-					// best-effort stringify
 					out = append(out, fmt.Sprint(s))
 				}
 			}

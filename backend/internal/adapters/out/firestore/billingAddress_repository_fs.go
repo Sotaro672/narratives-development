@@ -455,12 +455,13 @@ func (r *BillingAddressRepositoryFS) WithTx(ctx context.Context, fn func(ctx con
 	})
 }
 
-// Reset (development/testing): 全削除
+// Reset (development/testing):
+// WriteBatch を使用せず、トランザクションを用いて全ドキュメント削除
 func (r *BillingAddressRepositoryFS) Reset(ctx context.Context) error {
 	iter := r.col().Documents(ctx)
-	batch := r.Client.Batch()
-	count := 0
+	defer iter.Stop()
 
+	var refs []*firestore.DocumentRef
 	for {
 		doc, err := iter.Next()
 		if errors.Is(err, iterator.Done) {
@@ -469,21 +470,40 @@ func (r *BillingAddressRepositoryFS) Reset(ctx context.Context) error {
 		if err != nil {
 			return err
 		}
-		batch.Delete(doc.Ref)
-		count++
-		if count%400 == 0 {
-			if _, err := batch.Commit(ctx); err != nil {
-				return err
-			}
-			batch = r.Client.Batch()
-		}
+		refs = append(refs, doc.Ref)
 	}
-	if count > 0 {
-		if _, err := batch.Commit(ctx); err != nil {
+
+	if len(refs) == 0 {
+		log.Printf("[firestore] Reset billing_addresses: no docs to delete\n")
+		return nil
+	}
+
+	const chunkSize = 400
+	deletedCount := 0
+
+	for start := 0; start < len(refs); start += chunkSize {
+		end := start + chunkSize
+		if end > len(refs) {
+			end = len(refs)
+		}
+		chunk := refs[start:end]
+
+		err := r.Client.RunTransaction(ctx, func(ctx context.Context, tx *firestore.Transaction) error {
+			for _, ref := range chunk {
+				if err := tx.Delete(ref); err != nil {
+					return err
+				}
+			}
+			return nil
+		})
+		if err != nil {
 			return err
 		}
+
+		deletedCount += len(chunk)
 	}
-	log.Printf("[firestore] Reset billing_addresses: deleted %d docs\n", count)
+
+	log.Printf("[firestore] Reset billing_addresses (transactional): deleted %d docs\n", deletedCount)
 	return nil
 }
 

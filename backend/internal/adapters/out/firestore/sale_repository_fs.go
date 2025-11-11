@@ -132,8 +132,7 @@ func (r *SaleRepositoryFS) Save(ctx context.Context, v saledom.Sale) (saledom.Sa
 	}
 
 	if !exists {
-		// PG版では Create() が新IDを採番していたが、
-		// Firestore 版では指定IDで新規作成して問題ない想定。
+		// Firestore版では指定IDで新規作成して問題ない想定。
 		ref := r.col().Doc(id)
 		v.ID = id
 		data := saleToDocData(v)
@@ -164,8 +163,7 @@ func (r *SaleRepositoryFS) Save(ctx context.Context, v saledom.Sale) (saledom.Sa
 				return nil
 			}
 			s := strings.TrimSpace(*p)
-			// empty string: means clear (handled in Update)
-			return &s
+			return &s // empty string handled in Update
 		}(v.DiscountID),
 		Prices: func(prices []saledom.SalePrice) *[]saledom.SalePrice {
 			cp := make([]saledom.SalePrice, len(prices))
@@ -210,16 +208,16 @@ func (r *SaleRepositoryFS) Delete(ctx context.Context, id string) error {
 	return nil
 }
 
-// Reset deletes all sales (for tests/dev).
+// Reset deletes all sales (for tests/dev), using Transactions instead of WriteBatch.
 func (r *SaleRepositoryFS) Reset(ctx context.Context) error {
 	if r.Client == nil {
 		return errors.New("firestore client is nil")
 	}
 
 	it := r.col().Documents(ctx)
-	batch := r.Client.Batch()
-	count := 0
+	defer it.Stop()
 
+	var refs []*firestore.DocumentRef
 	for {
 		doc, err := it.Next()
 		if errors.Is(err, iterator.Done) {
@@ -228,21 +226,33 @@ func (r *SaleRepositoryFS) Reset(ctx context.Context) error {
 		if err != nil {
 			return err
 		}
-		batch.Delete(doc.Ref)
-		count++
-		if count%400 == 0 {
-			if _, err := batch.Commit(ctx); err != nil {
-				return err
-			}
-			batch = r.Client.Batch()
-		}
+		refs = append(refs, doc.Ref)
 	}
 
-	if count > 0 {
-		if _, err := batch.Commit(ctx); err != nil {
+	if len(refs) == 0 {
+		return nil
+	}
+
+	const chunkSize = 400
+	for start := 0; start < len(refs); start += chunkSize {
+		end := start + chunkSize
+		if end > len(refs) {
+			end = len(refs)
+		}
+		chunk := refs[start:end]
+
+		if err := r.Client.RunTransaction(ctx, func(ctx context.Context, tx *firestore.Transaction) error {
+			for _, ref := range chunk {
+				if err := tx.Delete(ref); err != nil {
+					return err
+				}
+			}
+			return nil
+		}); err != nil {
 			return err
 		}
 	}
+
 	return nil
 }
 
@@ -260,7 +270,7 @@ func (r *SaleRepositoryFS) List(
 		return saledom.PageResult{}, errors.New("firestore client is nil")
 	}
 
-	// Base query: we don't push complex JSON conditions to Firestore; filter in-memory.
+	// Base query: filter mostly in-memory.
 	q := r.col().Query
 	q = applySaleOrderBy(q, sort)
 
@@ -376,8 +386,7 @@ func (r *SaleRepositoryFS) Update(
 	if in.ListID != nil {
 		v := strings.TrimSpace(*in.ListID)
 		if v == "" {
-			// listIdは必須想定なので空文字にするケースは通常無い想定だが、
-			// 念のため nil クリアにしておく。
+			// listId は必須想定だが、念のため nil クリア。
 			updates = append(updates, firestore.Update{Path: "listId", Value: nil})
 		} else {
 			updates = append(updates, firestore.Update{Path: "listId", Value: v})
@@ -387,7 +396,7 @@ func (r *SaleRepositoryFS) Update(
 	if in.DiscountID != nil {
 		v := strings.TrimSpace(*in.DiscountID)
 		if v == "" {
-			// empty string => NULL (clear)
+			// empty string => clear
 			updates = append(updates, firestore.Update{Path: "discountId", Value: nil})
 		} else {
 			updates = append(updates, firestore.Update{Path: "discountId", Value: v})
@@ -554,8 +563,6 @@ func matchSaleFilter(s saledom.Sale, f saledom.Filter) bool {
 }
 
 // applySaleOrderBy maps saledom.Sort to Firestore orderBy.
-// Firestore cannot order by multiple fields arbitrarily without indexes,
-// but we follow the PG semantics as closely as possible.
 func applySaleOrderBy(q firestore.Query, s saledom.Sort) firestore.Query {
 	col := strings.ToLower(strings.TrimSpace(string(s.Column)))
 	var field string

@@ -4,7 +4,6 @@ package firestore
 import (
 	"context"
 	"errors"
-	"fmt"
 	"sort"
 	"strings"
 	"time"
@@ -401,9 +400,9 @@ func (r *TransactionRepositoryFS) ResetTransactions(ctx context.Context) error {
 	}
 
 	it := r.col().Documents(ctx)
-	batch := r.Client.Batch()
-	count := 0
+	defer it.Stop()
 
+	var refs []*firestore.DocumentRef
 	for {
 		snap, err := it.Next()
 		if errors.Is(err, iterator.Done) {
@@ -412,17 +411,27 @@ func (r *TransactionRepositoryFS) ResetTransactions(ctx context.Context) error {
 		if err != nil {
 			return err
 		}
-		batch.Delete(snap.Ref)
-		count++
-		if count%400 == 0 {
-			if _, err := batch.Commit(ctx); err != nil {
-				return err
-			}
-			batch = r.Client.Batch()
-		}
+		refs = append(refs, snap.Ref)
 	}
-	if count > 0 {
-		if _, err := batch.Commit(ctx); err != nil {
+
+	if len(refs) == 0 {
+		return nil
+	}
+
+	const chunkSize = 400
+	for i := 0; i < len(refs); i += chunkSize {
+		end := i + chunkSize
+		if end > len(refs) {
+			end = len(refs)
+		}
+		if err := r.Client.RunTransaction(ctx, func(ctx context.Context, tx *firestore.Transaction) error {
+			for _, ref := range refs[i:end] {
+				if err := tx.Delete(ref); err != nil {
+					return err
+				}
+			}
+			return nil
+		}); err != nil {
 			return err
 		}
 	}
@@ -700,9 +709,3 @@ func sortTransactions(items []tr.Transaction, s tr.TransactionSort) {
 
 	sort.SliceStable(items, less)
 }
-
-// =====================================================
-// (Optional) no-op to avoid unused warnings in some setups
-// =====================================================
-
-func _tx_unused(_ ...any) { fmt.Sprint() }

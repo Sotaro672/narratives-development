@@ -432,13 +432,14 @@ func (r *BrandRepositoryFS) Save(ctx context.Context, b branddom.Brand, _ *brand
 
 // ========================================
 // Reset (development/testing)
+// Transaction-based bulk delete instead of WriteBatch
 // ========================================
 
 func (r *BrandRepositoryFS) Reset(ctx context.Context) error {
 	iter := r.col().Documents(ctx)
-	batch := r.Client.Batch()
-	count := 0
+	defer iter.Stop()
 
+	var refs []*firestore.DocumentRef
 	for {
 		doc, err := iter.Next()
 		if errors.Is(err, iterator.Done) {
@@ -447,21 +448,41 @@ func (r *BrandRepositoryFS) Reset(ctx context.Context) error {
 		if err != nil {
 			return err
 		}
-		batch.Delete(doc.Ref)
-		count++
-		if count%400 == 0 {
-			if _, err := batch.Commit(ctx); err != nil {
-				return err
-			}
-			batch = r.Client.Batch()
-		}
+		refs = append(refs, doc.Ref)
 	}
-	if count > 0 {
-		if _, err := batch.Commit(ctx); err != nil {
+
+	if len(refs) == 0 {
+		log.Printf("[firestore] Reset brands: no docs to delete\n")
+		return nil
+	}
+
+	// Firestore の制限を考慮し、トランザクション内の書き込み数を制限
+	const chunkSize = 400
+
+	deletedCount := 0
+
+	for start := 0; start < len(refs); start += chunkSize {
+		end := start + chunkSize
+		if end > len(refs) {
+			end = len(refs)
+		}
+		chunk := refs[start:end]
+
+		err := r.Client.RunTransaction(ctx, func(ctx context.Context, tx *firestore.Transaction) error {
+			for _, ref := range chunk {
+				if err := tx.Delete(ref); err != nil {
+					return err
+				}
+			}
+			return nil
+		})
+		if err != nil {
 			return err
 		}
+		deletedCount += len(chunk)
 	}
-	log.Printf("[firestore] Reset brands: deleted %d docs\n", count)
+
+	log.Printf("[firestore] Reset brands (transactional): deleted %d docs\n", deletedCount)
 	return nil
 }
 

@@ -141,9 +141,11 @@ func (r *ShippingAddressRepositoryFS) Save(ctx context.Context, v shipdom.Shippi
 	}
 	if !exists {
 		// Create new with given ID
+		now := time.Now().UTC()
 		if v.CreatedAt.IsZero() {
-			now := time.Now().UTC()
 			v.CreatedAt = now
+		}
+		if v.UpdatedAt.IsZero() {
 			v.UpdatedAt = now
 		}
 		ref := r.col().Doc(id)
@@ -182,7 +184,7 @@ func (r *ShippingAddressRepositoryFS) Save(ctx context.Context, v shipdom.Shippi
 // Delete performs hard delete.
 func (r *ShippingAddressRepositoryFS) Delete(ctx context.Context, id string) error {
 	if r.Client == nil {
-		return shipdom.ErrNotFound
+		return errors.New("firestore client is nil")
 	}
 
 	id = strings.TrimSpace(id)
@@ -212,9 +214,7 @@ func (r *ShippingAddressRepositoryFS) Reset(ctx context.Context) error {
 	}
 
 	it := r.col().Documents(ctx)
-	batch := r.Client.Batch()
-	count := 0
-
+	var snaps []*firestore.DocumentSnapshot
 	for {
 		doc, err := it.Next()
 		if errors.Is(err, iterator.Done) {
@@ -223,20 +223,39 @@ func (r *ShippingAddressRepositoryFS) Reset(ctx context.Context) error {
 		if err != nil {
 			return err
 		}
-		batch.Delete(doc.Ref)
-		count++
-		if count%400 == 0 {
-			if _, err := batch.Commit(ctx); err != nil {
-				return err
-			}
-			batch = r.Client.Batch()
-		}
+		snaps = append(snaps, doc)
 	}
-	if count > 0 {
-		if _, err := batch.Commit(ctx); err != nil {
+
+	// OLD (deprecated):
+	// b := r.Client.Batch()
+	// for i, snap := range snaps {
+	//   b.Delete(snap.Ref)
+	//   if (i+1)%400 == 0 {
+	//     if _, err := b.Commit(ctx); err != nil { return err }
+	//     b = r.Client.Batch()
+	//   }
+	// }
+	// if _, err := b.Commit(ctx); err != nil { return err }
+
+	// NEW (transaction, chunked):
+	const chunkSize = 400
+	for i := 0; i < len(snaps); i += chunkSize {
+		end := i + chunkSize
+		if end > len(snaps) {
+			end = len(snaps)
+		}
+		if err := r.Client.RunTransaction(ctx, func(ctx context.Context, tx *firestore.Transaction) error {
+			for _, s := range snaps[i:end] {
+				if err := tx.Delete(s.Ref); err != nil {
+					return err
+				}
+			}
+			return nil
+		}); err != nil {
 			return err
 		}
 	}
+
 	return nil
 }
 
@@ -436,6 +455,15 @@ func docToShippingAddress(doc *firestore.DocumentSnapshot) (shipdom.ShippingAddr
 		return shipdom.ShippingAddress{}, err
 	}
 
+	createdAt := raw.CreatedAt.UTC()
+	if raw.CreatedAt.IsZero() {
+		createdAt = time.Time{}
+	}
+	updatedAt := raw.UpdatedAt.UTC()
+	if raw.UpdatedAt.IsZero() {
+		updatedAt = createdAt
+	}
+
 	return shipdom.ShippingAddress{
 		ID:        strings.TrimSpace(doc.Ref.ID),
 		UserID:    strings.TrimSpace(raw.UserID),
@@ -444,22 +472,28 @@ func docToShippingAddress(doc *firestore.DocumentSnapshot) (shipdom.ShippingAddr
 		State:     strings.TrimSpace(raw.State),
 		ZipCode:   strings.TrimSpace(raw.ZipCode),
 		Country:   strings.TrimSpace(raw.Country),
-		CreatedAt: raw.CreatedAt.UTC(),
-		UpdatedAt: raw.UpdatedAt.UTC(),
+		CreatedAt: createdAt,
+		UpdatedAt: updatedAt,
 	}, nil
 }
 
 func shippingAddressToDocData(v shipdom.ShippingAddress) map[string]any {
 	data := map[string]any{
-		"userId":    strings.TrimSpace(v.UserID),
-		"street":    strings.TrimSpace(v.Street),
-		"city":      strings.TrimSpace(v.City),
-		"state":     strings.TrimSpace(v.State),
-		"zipCode":   strings.TrimSpace(v.ZipCode),
-		"country":   strings.TrimSpace(v.Country),
-		"createdAt": v.CreatedAt.UTC(),
-		"updatedAt": v.UpdatedAt.UTC(),
+		"userId":  strings.TrimSpace(v.UserID),
+		"street":  strings.TrimSpace(v.Street),
+		"city":    strings.TrimSpace(v.City),
+		"state":   strings.TrimSpace(v.State),
+		"zipCode": strings.TrimSpace(v.ZipCode),
+		"country": strings.TrimSpace(v.Country),
 	}
+
+	if !v.CreatedAt.IsZero() {
+		data["createdAt"] = v.CreatedAt.UTC()
+	}
+	if !v.UpdatedAt.IsZero() {
+		data["updatedAt"] = v.UpdatedAt.UTC()
+	}
+
 	return data
 }
 
@@ -512,6 +546,8 @@ func applyAddrOrderByFS(q firestore.Query, s shipdom.Sort) firestore.Query {
 	var field string
 
 	switch col {
+	case "id":
+		field = firestore.DocumentID
 	case "createdat", "created_at":
 		field = "createdAt"
 	case "updatedat", "updated_at":
@@ -523,7 +559,7 @@ func applyAddrOrderByFS(q firestore.Query, s shipdom.Sort) firestore.Query {
 	case "zipcode", "zip_code":
 		field = "zipCode"
 	default:
-		// default: updatedAt DESC, id DESC-ish
+		// default: updatedAt DESC, id DESC
 		return q.OrderBy("updatedAt", firestore.Desc).
 			OrderBy(firestore.DocumentID, firestore.Desc)
 	}

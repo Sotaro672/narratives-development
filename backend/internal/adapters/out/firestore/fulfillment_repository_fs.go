@@ -18,9 +18,8 @@ import (
 )
 
 const (
-	fulfillmentsCol   = "fulfillments"
-	defaultPageSize   = 50
-	maxCursorPageSize = 200
+	fulfillmentsCol = "fulfillments"
+	defaultPageSize = 50
 )
 
 // FulfillmentRepositoryFS implements fulfillment repository using Firestore.
@@ -130,12 +129,12 @@ func (r *FulfillmentRepositoryFS) List(
 	sortSpec fdom.Sort,
 	page fdom.Page,
 ) (fdom.PageResult, error) {
-	// NOTE: For simplicity (and Firestore's query limitations), we:
-	//  1. Load all docs (or a sorted stream),
+	// NOTE:
+	// For simplicity (and Firestore query limitations):
+	//  1. Load docs with a base sort,
 	//  2. Filter in-memory,
 	//  3. Sort in-memory,
 	//  4. Apply offset pagination.
-	// Optimize with indexed where-clauses if needed.
 
 	q := r.col().Query
 	q = applyFulfillmentSortToQuery(q, sortSpec)
@@ -340,12 +339,17 @@ func (r *FulfillmentRepositoryFS) Delete(ctx context.Context, id string) error {
 	return nil
 }
 
-// Reset clears all fulfillments in Firestore (best-effort; mainly for tests/tools).
+// Reset clears all fulfillments in chunks using Firestore Transactions
+// (instead of WriteBatch), mainly for tests/tools.
 func (r *FulfillmentRepositoryFS) Reset(ctx context.Context) error {
-	it := r.col().Documents(ctx)
-	batch := r.Client.Batch()
-	count := 0
+	if r.Client == nil {
+		return errors.New("firestore client is nil")
+	}
 
+	it := r.col().Documents(ctx)
+	defer it.Stop()
+
+	var refs []*firestore.DocumentRef
 	for {
 		doc, err := it.Next()
 		if err == iterator.Done {
@@ -354,22 +358,33 @@ func (r *FulfillmentRepositoryFS) Reset(ctx context.Context) error {
 		if err != nil {
 			return err
 		}
-		batch.Delete(doc.Ref)
-		count++
-		// Commit periodically to avoid huge batches (limit ~500)
-		if count >= 450 {
-			if _, err := batch.Commit(ctx); err != nil {
-				return err
-			}
-			batch = r.Client.Batch()
-			count = 0
-		}
+		refs = append(refs, doc.Ref)
 	}
-	if count > 0 {
-		if _, err := batch.Commit(ctx); err != nil {
+
+	if len(refs) == 0 {
+		return nil
+	}
+
+	const chunkSize = 400
+	for start := 0; start < len(refs); start += chunkSize {
+		end := start + chunkSize
+		if end > len(refs) {
+			end = len(refs)
+		}
+		chunk := refs[start:end]
+
+		if err := r.Client.RunTransaction(ctx, func(ctx context.Context, tx *firestore.Transaction) error {
+			for _, ref := range chunk {
+				if err := tx.Delete(ref); err != nil {
+					return err
+				}
+			}
+			return nil
+		}); err != nil {
 			return err
 		}
 	}
+
 	return nil
 }
 
@@ -401,7 +416,7 @@ func docToFulfillment(doc *firestore.DocumentSnapshot) (fdom.Fulfillment, error)
 		return ""
 	}
 	getTime := func(key string) time.Time {
-		if v, ok := data[key].(time.Time); ok {
+		if v, ok := data[key].(time.Time); ok && !v.IsZero() {
 			return v.UTC()
 		}
 		return time.Time{}

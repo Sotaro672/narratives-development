@@ -475,9 +475,9 @@ func (r *UserRepositoryFS) Reset(ctx context.Context) error {
 	}
 
 	it := r.col().Documents(ctx)
-	batch := r.Client.Batch()
-	count := 0
+	defer it.Stop()
 
+	var snaps []*firestore.DocumentSnapshot
 	for {
 		snap, err := it.Next()
 		if errors.Is(err, iterator.Done) {
@@ -486,17 +486,24 @@ func (r *UserRepositoryFS) Reset(ctx context.Context) error {
 		if err != nil {
 			return err
 		}
-		batch.Delete(snap.Ref)
-		count++
-		if count%400 == 0 {
-			if _, err := batch.Commit(ctx); err != nil {
-				return err
-			}
-			batch = r.Client.Batch()
-		}
+		snaps = append(snaps, snap)
 	}
-	if count > 0 {
-		if _, err := batch.Commit(ctx); err != nil {
+
+	// transaction, chunked
+	const chunkSize = 400
+	for i := 0; i < len(snaps); i += chunkSize {
+		end := i + chunkSize
+		if end > len(snaps) {
+			end = len(snaps)
+		}
+		if err := r.Client.RunTransaction(ctx, func(ctx context.Context, tx *firestore.Transaction) error {
+			for _, s := range snaps[i:end] {
+				if err := tx.Delete(s.Ref); err != nil {
+					return err
+				}
+			}
+			return nil
+		}); err != nil {
 			return err
 		}
 	}

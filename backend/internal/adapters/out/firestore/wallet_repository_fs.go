@@ -4,7 +4,6 @@ package firestore
 import (
 	"context"
 	"errors"
-	"fmt"
 	"sort"
 	"strings"
 	"time"
@@ -1074,31 +1073,42 @@ func (r *WalletRepositoryFS) ResetWallets(ctx context.Context) error {
 	}
 
 	it := r.col().Documents(ctx)
-	batch := r.Client.Batch()
-	count := 0
+	defer it.Stop()
 
+	var snaps []*firestore.DocumentSnapshot
 	for {
-		doc, err := it.Next()
+		snap, err := it.Next()
 		if errors.Is(err, iterator.Done) {
 			break
 		}
 		if err != nil {
 			return err
 		}
-		batch.Delete(doc.Ref)
-		count++
-		if count%400 == 0 {
-			if _, err := batch.Commit(ctx); err != nil {
-				return err
-			}
-			batch = r.Client.Batch()
-		}
+		snaps = append(snaps, snap)
 	}
-	if count > 0 {
-		if _, err := batch.Commit(ctx); err != nil {
+
+	// ~L1077 旧Batch削除処理を置換
+	// b := r.Client.Batch()
+	// for _, s := range snaps { b.Delete(s.Ref) }
+	// if _, err := b.Commit(ctx); err != nil { return err }
+	const chunkSize = 400
+	for i := 0; i < len(snaps); i += chunkSize {
+		end := i + chunkSize
+		if end > len(snaps) {
+			end = len(snaps)
+		}
+		if err := r.Client.RunTransaction(ctx, func(ctx context.Context, tx *firestore.Transaction) error {
+			for _, s := range snaps[i:end] {
+				if err := tx.Delete(s.Ref); err != nil {
+					return err
+				}
+			}
+			return nil
+		}); err != nil {
 			return err
 		}
 	}
+
 	return nil
 }
 
@@ -1445,6 +1455,3 @@ func tierFromCount(c int) wdom.TokenTier {
 		return wdom.TierEmpty
 	}
 }
-
-// to avoid unused import warnings in some setups
-func _wallet_unused(...any) { fmt.Sprint() }

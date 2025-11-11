@@ -164,7 +164,6 @@ func (r *ProductionRepositoryFS) Save(ctx context.Context, p proddom.Production)
 
 	snap, err := ref.Get(ctx)
 	if status.Code(err) == codes.NotFound {
-		// unlikely right after Set, but keep symmetry
 		return proddom.Production{}, proddom.ErrNotFound
 	}
 	if err != nil {
@@ -200,8 +199,6 @@ func (r *ProductionRepositoryFS) Delete(ctx context.Context, id string) error {
 
 // ============================================================
 // Extra methods (List / Count / Update / Marks / Reset ...)
-// These mirror the PG repo behavior as reasonably as possible
-// under Firestore constraints.
 // ============================================================
 
 // GetByModelID returns productions that include given modelID in Models.
@@ -240,8 +237,7 @@ func (r *ProductionRepositoryFS) GetByModelID(ctx context.Context, modelID strin
 	return out, nil
 }
 
-// List runs a Firestore query, then applies Filter/Sort/Paging in-memory
-// (similar semantics to PG版; for large collections consider refining).
+// List runs a Firestore query, then applies Filter/Sort/Paging in-memory.
 func (r *ProductionRepositoryFS) List(
 	ctx context.Context,
 	filter proddom.Filter,
@@ -252,7 +248,6 @@ func (r *ProductionRepositoryFS) List(
 		return proddom.PageResult{}, errors.New("firestore client is nil")
 	}
 
-	// Base query; we keep it simple and push minimal equality filters if desired.
 	q := r.col().Query
 	q = applyProductionOrderBy(q, sort)
 
@@ -308,7 +303,7 @@ func (r *ProductionRepositoryFS) List(
 	}, nil
 }
 
-// Count counts productions matching Filter (by scanning; for large sets consider optimizing).
+// Count counts productions matching Filter.
 func (r *ProductionRepositoryFS) Count(ctx context.Context, filter proddom.Filter) (int, error) {
 	if r.Client == nil {
 		return 0, errors.New("firestore client is nil")
@@ -388,7 +383,6 @@ func (r *ProductionRepositoryFS) Update(
 	if patch.Status != nil {
 		v := strings.TrimSpace(string(*patch.Status))
 		if v == "" {
-			// If explicitly empty, clear or set default; here we clear.
 			updates = append(updates, firestore.Update{Path: "status", Value: nil})
 		} else {
 			updates = append(updates, firestore.Update{Path: "status", Value: v})
@@ -422,7 +416,7 @@ func (r *ProductionRepositoryFS) Update(
 		setStr("updatedBy", patch.UpdatedBy)
 	}
 
-	// Always bump updatedAt if not explicitly controlled
+	// Always bump updatedAt if not explicitly controlled.
 	hasUpdatedAt := false
 	for _, u := range updates {
 		if u.Path == "updatedAt" {
@@ -438,7 +432,7 @@ func (r *ProductionRepositoryFS) Update(
 	}
 
 	if len(updates) == 0 {
-		// Nothing to update; just return current
+		// Nothing to update; just return current.
 		snap, err := ref.Get(ctx)
 		if status.Code(err) == codes.NotFound {
 			return nil, proddom.ErrNotFound
@@ -582,16 +576,16 @@ func (r *ProductionRepositoryFS) ResetToManufacturing(ctx context.Context, id st
 	return &p, nil
 }
 
-// Reset is mainly for tests; deletes all documents in the collection.
+// Reset deletes all documents in the collection using chunked transactions.
 func (r *ProductionRepositoryFS) Reset(ctx context.Context) error {
 	if r.Client == nil {
 		return errors.New("firestore client is nil")
 	}
 
 	it := r.col().Documents(ctx)
-	batch := r.Client.Batch()
-	count := 0
+	defer it.Stop()
 
+	var refs []*firestore.DocumentRef
 	for {
 		doc, err := it.Next()
 		if errors.Is(err, iterator.Done) {
@@ -600,32 +594,44 @@ func (r *ProductionRepositoryFS) Reset(ctx context.Context) error {
 		if err != nil {
 			return err
 		}
-		batch.Delete(doc.Ref)
-		count++
-		if count%400 == 0 {
-			if _, err := batch.Commit(ctx); err != nil {
-				return err
-			}
-			batch = r.Client.Batch()
-		}
+		refs = append(refs, doc.Ref)
 	}
-	if count > 0 {
-		if _, err := batch.Commit(ctx); err != nil {
+
+	if len(refs) == 0 {
+		return nil
+	}
+
+	const chunkSize = 400
+	for start := 0; start < len(refs); start += chunkSize {
+		end := start + chunkSize
+		if end > len(refs) {
+			end = len(refs)
+		}
+		chunk := refs[start:end]
+
+		if err := r.Client.RunTransaction(ctx, func(ctx context.Context, tx *firestore.Transaction) error {
+			for _, ref := range chunk {
+				if err := tx.Delete(ref); err != nil {
+					return err
+				}
+			}
+			return nil
+		}); err != nil {
 			return err
 		}
 	}
+
 	return nil
 }
 
-// WithTx: Firestore版は簡易対応としてそのまま fn(ctx) を実行。
-// （PG版のような SQL Tx 互換用ヘルパー呼び出し箇所と整合させるためのダミー実装）
+// WithTx wraps fn in a Firestore transaction to keep interface compatibility.
 func (r *ProductionRepositoryFS) WithTx(ctx context.Context, fn func(ctx context.Context) error) error {
 	if r.Client == nil {
 		return errors.New("firestore client is nil")
 	}
-	// For real Firestore transactions, you'd wrap fn inside Client.RunTransaction.
-	// Here we call fn directly to keep interface compatibility.
-	return fn(ctx)
+	return r.Client.RunTransaction(ctx, func(txCtx context.Context, _ *firestore.Transaction) error {
+		return fn(txCtx)
+	})
 }
 
 // ============================================================
@@ -652,7 +658,6 @@ func docToProduction(doc *firestore.DocumentSnapshot) (proddom.Production, error
 		return proddom.Production{}, err
 	}
 
-	// Normalize status
 	statusStr := strings.TrimSpace(raw.Status)
 	if statusStr == "" {
 		statusStr = "manufacturing"
@@ -674,9 +679,7 @@ func docToProduction(doc *firestore.DocumentSnapshot) (proddom.Production, error
 
 	if raw.UpdatedAt != nil && !raw.UpdatedAt.IsZero() {
 		out.UpdatedAt = raw.UpdatedAt.UTC()
-	}
-	if raw.UpdatedAt == nil || raw.UpdatedAt.IsZero() {
-		// fallback to CreatedAt if missing
+	} else {
 		out.UpdatedAt = out.CreatedAt
 	}
 	if raw.DeletedAt != nil && !raw.DeletedAt.IsZero() {
@@ -731,10 +734,7 @@ func productionToDoc(p proddom.Production) map[string]any {
 }
 
 func normalizeTimePtr(t *time.Time) *time.Time {
-	if t == nil {
-		return nil
-	}
-	if t.IsZero() {
+	if t == nil || t.IsZero() {
 		return nil
 	}
 	tt := t.UTC()
@@ -742,10 +742,9 @@ func normalizeTimePtr(t *time.Time) *time.Time {
 }
 
 // ============================================================
-// Filter / Sort Helpers (Firestore analogue of build* helpers)
+// Filter / Sort Helpers
 // ============================================================
 
-// matchProductionFilter applies proddom.Filter in-memory.
 func matchProductionFilter(p proddom.Production, f proddom.Filter) bool {
 	trimEq := func(a, b string) bool {
 		return strings.TrimSpace(a) == strings.TrimSpace(b)
@@ -761,7 +760,6 @@ func matchProductionFilter(p proddom.Production, f proddom.Filter) bool {
 		return false
 	}
 
-	// ModelID containment
 	if v := strings.TrimSpace(f.ModelID); v != "" {
 		found := false
 		for _, mq := range p.Models {
@@ -775,7 +773,6 @@ func matchProductionFilter(p proddom.Production, f proddom.Filter) bool {
 		}
 	}
 
-	// Status IN
 	if len(f.Statuses) > 0 {
 		cur := strings.TrimSpace(string(p.Status))
 		ok := false
@@ -859,7 +856,6 @@ func matchProductionFilter(p proddom.Production, f proddom.Filter) bool {
 }
 
 // applyProductionOrderBy maps proddom.Sort to Firestore orderBy.
-// Firestore requires we chain orderBy fields; we also tie-break by DocumentID.
 func applyProductionOrderBy(q firestore.Query, s proddom.Sort) firestore.Query {
 	col := strings.ToLower(strings.TrimSpace(string(s.Column)))
 	var field string
@@ -888,7 +884,6 @@ func applyProductionOrderBy(q firestore.Query, s proddom.Sort) firestore.Query {
 		dir = firestore.Asc
 	}
 
-	// tie-break by ID with same direction for determinism
 	if field == firestore.DocumentID {
 		return q.OrderBy(field, dir)
 	}

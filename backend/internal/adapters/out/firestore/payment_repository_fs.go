@@ -401,16 +401,16 @@ func (r *PaymentRepositoryFS) Update(ctx context.Context, id string, patch payme
 	return r.GetByID(ctx, id)
 }
 
-// Reset is a test utility that deletes all payments.
+// Reset is a test utility that deletes all payments using Transactions instead of WriteBatch.
 func (r *PaymentRepositoryFS) Reset(ctx context.Context) error {
 	if r.Client == nil {
 		return errors.New("firestore client is nil")
 	}
 
 	it := r.col().Documents(ctx)
-	b := r.Client.Batch()
-	count := 0
+	defer it.Stop()
 
+	var refs []*firestore.DocumentRef
 	for {
 		doc, err := it.Next()
 		if err == iterator.Done {
@@ -419,20 +419,33 @@ func (r *PaymentRepositoryFS) Reset(ctx context.Context) error {
 		if err != nil {
 			return err
 		}
-		b.Delete(doc.Ref)
-		count++
-		if count%400 == 0 {
-			if _, err := b.Commit(ctx); err != nil {
-				return err
-			}
-			b = r.Client.Batch()
-		}
+		refs = append(refs, doc.Ref)
 	}
-	if count > 0 {
-		if _, err := b.Commit(ctx); err != nil {
+
+	if len(refs) == 0 {
+		return nil
+	}
+
+	const chunkSize = 400
+	for start := 0; start < len(refs); start += chunkSize {
+		end := start + chunkSize
+		if end > len(refs) {
+			end = len(refs)
+		}
+		chunk := refs[start:end]
+
+		if err := r.Client.RunTransaction(ctx, func(ctx context.Context, tx *firestore.Transaction) error {
+			for _, ref := range chunk {
+				if err := tx.Delete(ref); err != nil {
+					return err
+				}
+			}
+			return nil
+		}); err != nil {
 			return err
 		}
 	}
+
 	return nil
 }
 
