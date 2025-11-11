@@ -8,7 +8,7 @@ import (
 	"fmt"
 	"strings"
 
-	dbcommon "narratives/internal/adapters/out/db/common"
+	dbcommon "narratives/internal/adapters/out/firestore/common"
 	tokendom "narratives/internal/domain/token"
 )
 

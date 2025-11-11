@@ -13,6 +13,7 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
+	fscommon "narratives/internal/adapters/out/firestore/common"
 	branddom "narratives/internal/domain/brand"
 )
 
@@ -496,12 +497,12 @@ func (r *BrandRepositoryFS) docToDomain(doc *firestore.DocumentSnapshot) (brandd
 		Description:   strings.TrimSpace(raw.Description),
 		URL:           strings.TrimSpace(raw.WebsiteURL),
 		IsActive:      raw.IsActive,
-		ManagerID:     trimPtr(raw.ManagerID),
+		ManagerID:     fscommon.TrimPtr(raw.ManagerID),
 		WalletAddress: strings.TrimSpace(raw.WalletAddress),
 		CreatedAt:     raw.CreatedAt.UTC(),
-		CreatedBy:     trimPtr(raw.CreatedBy),
-		UpdatedBy:     trimPtr(raw.UpdatedBy),
-		DeletedBy:     trimPtr(raw.DeletedBy),
+		CreatedBy:     fscommon.TrimPtr(raw.CreatedBy),
+		UpdatedBy:     fscommon.TrimPtr(raw.UpdatedBy),
+		DeletedBy:     fscommon.TrimPtr(raw.DeletedBy),
 	}
 
 	if raw.UpdatedAt != nil && !raw.UpdatedAt.IsZero() {
@@ -578,10 +579,9 @@ func applyBrandFilterToQuery(q firestore.Query, f branddom.Filter) firestore.Que
 	if f.Deleted != nil {
 		if *f.Deleted {
 			// 削除済のみ: deletedAt != nil 的な表現はクエリで難しいため、
-			// deletedAt フィールド存在チェックなどの別設計が必要。
-			// ここでは簡易に deletedAt > 0 を想定する場合など、要件に応じて調整。
+			// 設計に応じてフラグフィールドを導入するなどの対応が必要。
 		} else {
-			// 未削除のみ: deletedAt == nil を明示するには設計が必要。
+			// 未削除のみ: 同上。
 		}
 	}
 
@@ -617,17 +617,6 @@ func mapBrandSort(s branddom.Sort) (field string, dir firestore.Direction) {
 // ========================================
 // Small utilities
 // ========================================
-
-func trimPtr(p *string) *string {
-	if p == nil {
-		return nil
-	}
-	s := strings.TrimSpace(*p)
-	if s == "" {
-		return nil
-	}
-	return &s
-}
 
 func optionalStringValue(p *string) any {
 	if p == nil {

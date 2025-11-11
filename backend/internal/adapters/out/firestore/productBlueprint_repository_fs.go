@@ -15,10 +15,11 @@ import (
 	"google.golang.org/grpc/status"
 
 	fscommon "narratives/internal/adapters/out/firestore/common"
+	modeldom "narratives/internal/domain/model"
 	pbdom "narratives/internal/domain/productBlueprint"
 )
 
-// ProductBlueprintRepositoryFS implements usecase.ProductBlueprintRepo using Firestore.
+// ProductBlueprintRepositoryFS implements productBlueprint.Repository using Firestore.
 type ProductBlueprintRepositoryFS struct {
 	Client *firestore.Client
 }
@@ -32,7 +33,7 @@ func (r *ProductBlueprintRepositoryFS) col() *firestore.CollectionRef {
 }
 
 // ========================
-// usecase.ProductBlueprintRepo impl
+// Repository impl
 // ========================
 
 // GetByID returns a single ProductBlueprint by ID.
@@ -60,157 +61,6 @@ func (r *ProductBlueprintRepositoryFS) GetByID(ctx context.Context, id string) (
 	}
 	return pb, nil
 }
-
-// Exists checks if a ProductBlueprint with the given ID exists.
-func (r *ProductBlueprintRepositoryFS) Exists(ctx context.Context, id string) (bool, error) {
-	if r.Client == nil {
-		return false, errors.New("firestore client is nil")
-	}
-
-	id = strings.TrimSpace(id)
-	if id == "" {
-		return false, nil
-	}
-
-	_, err := r.col().Doc(id).Get(ctx)
-	if err != nil {
-		if status.Code(err) == codes.NotFound {
-			return false, nil
-		}
-		return false, err
-	}
-	return true, nil
-}
-
-// Create inserts a new ProductBlueprint document.
-func (r *ProductBlueprintRepositoryFS) Create(ctx context.Context, v pbdom.ProductBlueprint) (pbdom.ProductBlueprint, error) {
-	if r.Client == nil {
-		return pbdom.ProductBlueprint{}, errors.New("firestore client is nil")
-	}
-
-	now := time.Now().UTC()
-
-	// Ensure timestamps
-	createdAt := v.CreatedAt
-	if createdAt.IsZero() {
-		createdAt = now
-	}
-	updatedAt := v.UpdatedAt
-	if updatedAt.IsZero() {
-		updatedAt = createdAt
-	}
-
-	// If UpdatedBy is nil and CreatedBy is set, mirror it (same semantics as PG impl)
-	if v.UpdatedBy == nil && v.CreatedBy != nil {
-		v.UpdatedBy = v.CreatedBy
-	}
-
-	// Prepare data map
-	data, err := productBlueprintToDoc(v, createdAt, updatedAt)
-	if err != nil {
-		return pbdom.ProductBlueprint{}, err
-	}
-
-	id := strings.TrimSpace(v.ID)
-	var docRef *firestore.DocumentRef
-	if id == "" {
-		docRef = r.col().NewDoc()
-	} else {
-		docRef = r.col().Doc(id)
-		data["id"] = id
-	}
-
-	_, err = docRef.Create(ctx, data)
-	if err != nil {
-		if status.Code(err) == codes.AlreadyExists {
-			return pbdom.ProductBlueprint{}, pbdom.ErrConflict
-		}
-		return pbdom.ProductBlueprint{}, err
-	}
-
-	snap, err := docRef.Get(ctx)
-	if err != nil {
-		return pbdom.ProductBlueprint{}, err
-	}
-
-	out, err := docToProductBlueprint(snap)
-	if err != nil {
-		return pbdom.ProductBlueprint{}, err
-	}
-	return out, nil
-}
-
-// Save updates an existing ProductBlueprint document (no upsert without id).
-func (r *ProductBlueprintRepositoryFS) Save(ctx context.Context, v pbdom.ProductBlueprint) (pbdom.ProductBlueprint, error) {
-	if r.Client == nil {
-		return pbdom.ProductBlueprint{}, errors.New("firestore client is nil")
-	}
-
-	id := strings.TrimSpace(v.ID)
-	if id == "" {
-		// If no ID, treat as Create with auto-ID.
-		return r.Create(ctx, v)
-	}
-
-	now := time.Now().UTC()
-	if v.CreatedAt.IsZero() {
-		v.CreatedAt = now
-	}
-	if v.UpdatedAt.IsZero() {
-		v.UpdatedAt = now
-	}
-
-	data, err := productBlueprintToDoc(v, v.CreatedAt, v.UpdatedAt)
-	if err != nil {
-		return pbdom.ProductBlueprint{}, err
-	}
-	data["id"] = id
-
-	docRef := r.col().Doc(id)
-	_, err = docRef.Set(ctx, data, firestore.MergeAll)
-	if err != nil {
-		return pbdom.ProductBlueprint{}, err
-	}
-
-	snap, err := docRef.Get(ctx)
-	if err != nil {
-		if status.Code(err) == codes.NotFound {
-			return pbdom.ProductBlueprint{}, pbdom.ErrNotFound
-		}
-		return pbdom.ProductBlueprint{}, err
-	}
-
-	out, err := docToProductBlueprint(snap)
-	if err != nil {
-		return pbdom.ProductBlueprint{}, err
-	}
-	return out, nil
-}
-
-// Delete removes a ProductBlueprint by ID.
-func (r *ProductBlueprintRepositoryFS) Delete(ctx context.Context, id string) error {
-	if r.Client == nil {
-		return errors.New("firestore client is nil")
-	}
-
-	id = strings.TrimSpace(id)
-	if id == "" {
-		return pbdom.ErrNotFound
-	}
-
-	_, err := r.col().Doc(id).Delete(ctx)
-	if err != nil {
-		if status.Code(err) == codes.NotFound {
-			return pbdom.ErrNotFound
-		}
-		return err
-	}
-	return nil
-}
-
-// ------------------------
-// Extra helper methods
-// ------------------------
 
 // List applies filter/sort/paging using Firestore query + in-memory filtering.
 func (r *ProductBlueprintRepositoryFS) List(
@@ -278,6 +128,7 @@ func (r *ProductBlueprintRepositoryFS) List(
 	}, nil
 }
 
+// Count returns number of ProductBlueprints matching the filter.
 func (r *ProductBlueprintRepositoryFS) Count(ctx context.Context, filter pbdom.Filter) (int, error) {
 	if r.Client == nil {
 		return 0, errors.New("firestore client is nil")
@@ -305,6 +156,183 @@ func (r *ProductBlueprintRepositoryFS) Count(ctx context.Context, filter pbdom.F
 		}
 	}
 	return total, nil
+}
+
+// Create inserts a new ProductBlueprint document from CreateInput.
+func (r *ProductBlueprintRepositoryFS) Create(ctx context.Context, in pbdom.CreateInput) (pbdom.ProductBlueprint, error) {
+	if r.Client == nil {
+		return pbdom.ProductBlueprint{}, errors.New("firestore client is nil")
+	}
+
+	now := time.Now().UTC()
+	createdAt := now
+	if in.CreatedAt != nil && !in.CreatedAt.IsZero() {
+		createdAt = in.CreatedAt.UTC()
+	}
+
+	// Build domain entity
+	pb := pbdom.ProductBlueprint{
+		ProductName:      strings.TrimSpace(in.ProductName),
+		BrandID:          strings.TrimSpace(in.BrandID),
+		ItemType:         in.ItemType,
+		Variations:       in.Variations,
+		Fit:              strings.TrimSpace(in.Fit),
+		Material:         strings.TrimSpace(in.Material),
+		Weight:           in.Weight,
+		QualityAssurance: dedupTrimStrings(in.QualityAssurance),
+		ProductIdTag:     in.ProductIdTag,
+		AssigneeID:       strings.TrimSpace(in.AssigneeID),
+		CreatedBy:        trimPtr(in.CreatedBy),
+		CreatedAt:        createdAt,
+		UpdatedBy:        trimPtr(in.CreatedBy),
+		UpdatedAt:        createdAt,
+	}
+
+	docRef := r.col().NewDoc()
+	pb.ID = docRef.ID
+
+	data, err := productBlueprintToDoc(pb, pb.CreatedAt, pb.UpdatedAt)
+	if err != nil {
+		return pbdom.ProductBlueprint{}, err
+	}
+	data["id"] = pb.ID
+
+	if _, err := docRef.Create(ctx, data); err != nil {
+		if status.Code(err) == codes.AlreadyExists {
+			return pbdom.ProductBlueprint{}, pbdom.ErrConflict
+		}
+		return pbdom.ProductBlueprint{}, err
+	}
+
+	snap, err := docRef.Get(ctx)
+	if err != nil {
+		return pbdom.ProductBlueprint{}, err
+	}
+
+	out, err := docToProductBlueprint(snap)
+	if err != nil {
+		return pbdom.ProductBlueprint{}, err
+	}
+	return out, nil
+}
+
+// Update applies a Patch to an existing ProductBlueprint.
+func (r *ProductBlueprintRepositoryFS) Update(ctx context.Context, id string, patch pbdom.Patch) (pbdom.ProductBlueprint, error) {
+	if r.Client == nil {
+		return pbdom.ProductBlueprint{}, errors.New("firestore client is nil")
+	}
+
+	id = strings.TrimSpace(id)
+	if id == "" {
+		return pbdom.ProductBlueprint{}, pbdom.ErrNotFound
+	}
+
+	// Load existing
+	current, err := r.GetByID(ctx, id)
+	if err != nil {
+		return pbdom.ProductBlueprint{}, err
+	}
+
+	changed := false
+
+	if patch.ProductName != nil {
+		current.ProductName = strings.TrimSpace(*patch.ProductName)
+		changed = true
+	}
+	if patch.BrandID != nil {
+		current.BrandID = strings.TrimSpace(*patch.BrandID)
+		changed = true
+	}
+	if patch.ItemType != nil {
+		current.ItemType = *patch.ItemType
+		changed = true
+	}
+	if patch.Variations != nil {
+		current.Variations = *patch.Variations
+		changed = true
+	}
+	if patch.Fit != nil {
+		current.Fit = strings.TrimSpace(*patch.Fit)
+		changed = true
+	}
+	if patch.Material != nil {
+		current.Material = strings.TrimSpace(*patch.Material)
+		changed = true
+	}
+	if patch.Weight != nil {
+		current.Weight = *patch.Weight
+		changed = true
+	}
+	if patch.QualityAssurance != nil {
+		current.QualityAssurance = dedupTrimStrings(*patch.QualityAssurance)
+		changed = true
+	}
+	if patch.ProductIdTag != nil {
+		current.ProductIdTag = *patch.ProductIdTag
+		changed = true
+	}
+	if patch.AssigneeID != nil {
+		current.AssigneeID = strings.TrimSpace(*patch.AssigneeID)
+		changed = true
+	}
+
+	if !changed {
+		// No-op patch: just return current
+		return current, nil
+	}
+
+	// Always bump UpdatedAt
+	current.UpdatedAt = time.Now().UTC()
+
+	docRef := r.col().Doc(id)
+	data, err := productBlueprintToDoc(current, current.CreatedAt, current.UpdatedAt)
+	if err != nil {
+		return pbdom.ProductBlueprint{}, err
+	}
+	data["id"] = id
+
+	_, err = docRef.Set(ctx, data, firestore.MergeAll)
+	if err != nil {
+		if status.Code(err) == codes.NotFound {
+			return pbdom.ProductBlueprint{}, pbdom.ErrNotFound
+		}
+		return pbdom.ProductBlueprint{}, err
+	}
+
+	snap, err := docRef.Get(ctx)
+	if err != nil {
+		if status.Code(err) == codes.NotFound {
+			return pbdom.ProductBlueprint{}, pbdom.ErrNotFound
+		}
+		return pbdom.ProductBlueprint{}, err
+	}
+
+	out, err := docToProductBlueprint(snap)
+	if err != nil {
+		return pbdom.ProductBlueprint{}, err
+	}
+	return out, nil
+}
+
+// Delete removes a ProductBlueprint by ID.
+func (r *ProductBlueprintRepositoryFS) Delete(ctx context.Context, id string) error {
+	if r.Client == nil {
+		return errors.New("firestore client is nil")
+	}
+
+	id = strings.TrimSpace(id)
+	if id == "" {
+		return pbdom.ErrNotFound
+	}
+
+	_, err := r.col().Doc(id).Delete(ctx)
+	if err != nil {
+		if status.Code(err) == codes.NotFound {
+			return pbdom.ErrNotFound
+		}
+		return err
+	}
+	return nil
 }
 
 // Reset is mainly for tests.
@@ -379,31 +407,31 @@ func docToProductBlueprint(doc *firestore.DocumentSnapshot) (pbdom.ProductBluepr
 		}
 		return time.Time{}
 	}
-	getStringSlice := func(key string) []string {
-		raw, ok := data[key]
-		if !ok || raw == nil {
-			return nil
-		}
-		switch vv := raw.(type) {
-		case []interface{}:
-			out := make([]string, 0, len(vv))
-			for _, x := range vv {
-				if s, ok := x.(string); ok {
-					s = strings.TrimSpace(s)
-					if s != "" {
-						out = append(out, s)
+	getStringSlice := func(keys ...string) []string {
+		for _, key := range keys {
+			raw, ok := data[key]
+			if !ok || raw == nil {
+				continue
+			}
+			switch vv := raw.(type) {
+			case []interface{}:
+				out := make([]string, 0, len(vv))
+				for _, x := range vv {
+					if s, ok := x.(string); ok {
+						s = strings.TrimSpace(s)
+						if s != "" {
+							out = append(out, s)
+						}
 					}
 				}
+				return dedupTrimStrings(out)
+			case []string:
+				return dedupTrimStrings(vv)
 			}
-			return dedupTrimStrings(out)
-		case []string:
-			return dedupTrimStrings(vv)
-		default:
-			return nil
 		}
+		return nil
 	}
-	getVariations := func() any {
-		// Store-agnostic: variations may be array/map or JSON string.
+	getVariations := func() []modeldom.ModelVariation {
 		raw, ok := data["modelVariations"]
 		if !ok || raw == nil {
 			raw, ok = data["model_variations"]
@@ -413,44 +441,38 @@ func docToProductBlueprint(doc *firestore.DocumentSnapshot) (pbdom.ProductBluepr
 		}
 		switch vv := raw.(type) {
 		case []interface{}, map[string]interface{}:
-			// Caller domain defines exact type; we just JSON round-trip.
 			b, err := json.Marshal(vv)
 			if err != nil {
 				return nil
 			}
-			var dest any
-			if err := json.Unmarshal(b, &dest); err != nil {
+			var out []modeldom.ModelVariation
+			if err := json.Unmarshal(b, &out); err != nil {
 				return nil
 			}
-			return dest
+			return out
 		case string:
 			if strings.TrimSpace(vv) == "" {
 				return nil
 			}
-			var dest any
-			if err := json.Unmarshal([]byte(vv), &dest); err != nil {
+			var out []modeldom.ModelVariation
+			if err := json.Unmarshal([]byte(vv), &out); err != nil {
 				return nil
 			}
-			return dest
+			return out
 		default:
 			return nil
 		}
 	}
 
-	qas := getStringSlice("qualityAssurance")
-	if len(qas) == 0 {
-		qas = getStringSlice("quality_assurance")
-	}
-
+	qas := getStringSlice("qualityAssurance", "quality_assurance")
 	tagTypeStr := getStr("productIdTagType", "product_id_tag_type")
 	itemTypeStr := getStr("itemType", "item_type")
 
 	pb := pbdom.ProductBlueprint{
-		ID:          doc.Ref.ID,
-		ProductName: getStr("productName", "product_name"),
-		BrandID:     getStr("brandId", "brand_id"),
-		ItemType:    pbdom.ItemType(itemTypeStr),
-		// We keep variations as-is via generic loader; caller's struct should match.
+		ID:               doc.Ref.ID,
+		ProductName:      getStr("productName", "product_name"),
+		BrandID:          getStr("brandId", "brand_id"),
+		ItemType:         pbdom.ItemType(itemTypeStr),
 		Variations:       getVariations(),
 		Fit:              getStr("fit"),
 		Material:         getStr("material"),
@@ -482,7 +504,7 @@ func productBlueprintToDoc(v pbdom.ProductBlueprint, createdAt, updatedAt time.T
 		"updatedAt":   updatedAt.UTC(),
 	}
 
-	// Variations: store as modelVariations if present; keep raw JSON structure
+	// Variations: store as modelVariations if present; keep as structured JSON.
 	if v.Variations != nil {
 		b, err := json.Marshal(v.Variations)
 		if err != nil {
@@ -534,9 +556,20 @@ func getFloat64(v any) float64 {
 	}
 }
 
+func trimPtr(p *string) *string {
+	if p == nil {
+		return nil
+	}
+	s := strings.TrimSpace(*p)
+	if s == "" {
+		return nil
+	}
+	return &s
+}
+
 // matchPBFilter applies pbdom.Filter in-memory (Firestore analogue of buildPBWhere).
 func matchPBFilter(pb pbdom.ProductBlueprint, f pbdom.Filter) bool {
-	// SearchTerm on product name (and optionally brand)
+	// SearchTerm on product name (and brand)
 	if s := strings.TrimSpace(f.SearchTerm); s != "" {
 		ls := strings.ToLower(s)
 		hay := strings.ToLower(pb.ProductName + " " + pb.BrandID)
@@ -545,18 +578,17 @@ func matchPBFilter(pb pbdom.ProductBlueprint, f pbdom.Filter) bool {
 		}
 	}
 
-	if len(f.BrandIDs) > 0 {
-		if !containsStr(f.BrandIDs, pb.BrandID) {
-			return false
-		}
+	// BrandIDs
+	if len(f.BrandIDs) > 0 && !containsStr(f.BrandIDs, pb.BrandID) {
+		return false
 	}
 
-	if len(f.AssigneeIDs) > 0 {
-		if !containsStr(f.AssigneeIDs, pb.AssigneeID) {
-			return false
-		}
+	// AssigneeIDs
+	if len(f.AssigneeIDs) > 0 && !containsStr(f.AssigneeIDs, pb.AssigneeID) {
+		return false
 	}
 
+	// ItemTypes
 	if len(f.ItemTypes) > 0 {
 		ok := false
 		for _, it := range f.ItemTypes {
@@ -570,6 +602,7 @@ func matchPBFilter(pb pbdom.ProductBlueprint, f pbdom.Filter) bool {
 		}
 	}
 
+	// TagTypes
 	if len(f.TagTypes) > 0 {
 		ok := false
 		for _, tt := range f.TagTypes {
@@ -583,21 +616,48 @@ func matchPBFilter(pb pbdom.ProductBlueprint, f pbdom.Filter) bool {
 		}
 	}
 
-	// NOTE: VariationIDs-based filtering is non-trivial without a fixed schema for Variations.
-	// To avoid breaking builds, we intentionally skip it here.
+	// VariationIDs: true if any variation ID matches one of the filter IDs.
+	if len(f.VariationIDs) > 0 {
+		want := make(map[string]struct{}, len(f.VariationIDs))
+		for _, vid := range f.VariationIDs {
+			if s := strings.TrimSpace(vid); s != "" {
+				want[s] = struct{}{}
+			}
+		}
+		if len(want) > 0 {
+			found := false
+			for _, v := range pb.Variations {
+				if _, ok := want[strings.TrimSpace(v.ID)]; ok {
+					found = true
+					break
+				}
+			}
+			if !found {
+				return false
+			}
+		}
+	}
 
 	// CreatedAt / UpdatedAt ranges
-	if f.CreatedFrom != nil && (pb.CreatedAt.IsZero() || pb.CreatedAt.Before(f.CreatedFrom.UTC())) {
-		return false
+	if f.CreatedFrom != nil {
+		if pb.CreatedAt.IsZero() || pb.CreatedAt.Before(f.CreatedFrom.UTC()) {
+			return false
+		}
 	}
-	if f.CreatedTo != nil && (pb.CreatedAt.IsZero() || !pb.CreatedAt.Before(f.CreatedTo.UTC())) {
-		return false
+	if f.CreatedTo != nil {
+		if pb.CreatedAt.IsZero() || !pb.CreatedAt.Before(f.CreatedTo.UTC()) {
+			return false
+		}
 	}
-	if f.UpdatedFrom != nil && (pb.UpdatedAt.IsZero() || pb.UpdatedAt.Before(f.UpdatedFrom.UTC())) {
-		return false
+	if f.UpdatedFrom != nil {
+		if pb.UpdatedAt.IsZero() || pb.UpdatedAt.Before(f.UpdatedFrom.UTC()) {
+			return false
+		}
 	}
-	if f.UpdatedTo != nil && (pb.UpdatedAt.IsZero() || !pb.UpdatedAt.Before(f.UpdatedTo.UTC())) {
-		return false
+	if f.UpdatedTo != nil {
+		if pb.UpdatedAt.IsZero() || !pb.UpdatedAt.Before(f.UpdatedTo.UTC()) {
+			return false
+		}
 	}
 
 	return true
