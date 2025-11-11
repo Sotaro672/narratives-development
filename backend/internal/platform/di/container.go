@@ -1,4 +1,4 @@
-// internal/platform/di/container.go
+// backend/internal/platform/di/container.go
 package di
 
 import (
@@ -18,8 +18,7 @@ import (
 // ========================================
 // Container (Firestore edition)
 // ========================================
-// 依存性注入コンテナ：Firestoreクライアントを中心に、
-// 各RepositoryとUsecaseを初期化して束ねる。
+// Firestore クライアントを中心に、各 Repository と Usecase を初期化して束ねる。
 type Container struct {
 	// Infra
 	Config    *appcfg.Config
@@ -61,20 +60,20 @@ type Container struct {
 // ========================================
 // NewContainer
 // ========================================
-// Firestoreクライアントを初期化し、各Usecaseを構築して返す。
+// Firestore クライアントを初期化し、各 Usecase を構築して返す。
 func NewContainer(ctx context.Context) (*Container, error) {
 	// 1. Load config
 	cfg := appcfg.Load()
 
 	// 2. Initialize Firestore client
-	fsClient, err := firestore.NewClient(ctx, cfg.GCPProjectID)
+	fsClient, err := firestore.NewClient(ctx, cfg.FirestoreProjectID)
 	if err != nil {
 		return nil, err
 	}
 
-	log.Println("[container] Firestore connected to project:", cfg.GCPProjectID)
+	log.Println("[container] Firestore connected to project:", cfg.FirestoreProjectID)
 
-	// 3. Outbound adapters (repositories) — Firestore版
+	// 3. Outbound adapters (repositories) — Firestore 版
 	accountRepo := fs.NewAccountRepositoryFS(fsClient)
 	announcementRepo := fs.NewAnnouncementRepositoryFS(fsClient)
 	avatarRepo := fs.NewAvatarRepositoryFS(fsClient)

@@ -1,3 +1,4 @@
+// backend/internal/infra/config/config.go
 package config
 
 import (
@@ -32,6 +33,12 @@ func Load() *Config {
 	}
 
 	return cfg
+}
+
+// GetFirestoreProjectID は Firestore/GCP プロジェクト ID を返します。
+// container.go からは cfg.GetFirestoreProjectID() を使用できます。
+func (c *Config) GetFirestoreProjectID() string {
+	return c.FirestoreProjectID
 }
 
 // getenvDefault は環境変数が未設定のときにデフォルト値を返します。

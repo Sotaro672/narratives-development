@@ -587,18 +587,26 @@ func (r *ModelRepositoryFS) ReplaceModelVariations(ctx context.Context, productI
 		toDelete = append(toDelete, doc.Ref)
 	}
 	if len(toDelete) > 0 {
-		b := r.Client.Batch()
-		for i, ref := range toDelete {
-			b.Delete(ref)
-			if (i+1)%400 == 0 {
-				if _, err := b.Commit(ctx); err != nil {
-					return nil, err
-				}
-				b = r.Client.Batch()
+		// batch := r.Client.Batch()
+		// for _, snap := range snaps { batch.Delete(snap.Ref) }
+		// if _, err := batch.Commit(ctx); err != nil { return err }
+		// NEW (transaction, chunked) — 元のロジックに合わせて Update/Set を使用
+		const chunkSize = 400
+		for i := 0; i < len(toDelete); i += chunkSize {
+			end := i + chunkSize
+			if end > len(toDelete) {
+				end = len(toDelete)
 			}
-		}
-		if _, err := b.Commit(ctx); err != nil {
-			return nil, err
+			if err := r.Client.RunTransaction(ctx, func(ctx context.Context, tx *firestore.Transaction) error {
+				for _, s := range toDelete[i:end] {
+					if err := tx.Delete(s); err != nil {
+						return err
+					}
+				}
+				return nil
+			}); err != nil {
+				return nil, err // ★ 戻り値2つに修正
+			}
 		}
 	}
 
