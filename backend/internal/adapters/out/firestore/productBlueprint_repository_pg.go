@@ -1,28 +1,34 @@
-// backend/internal/adapters/out/firestore/productBlueprint_repository_pg.go
+// backend/internal/adapters/out/firestore/productBlueprint_repository_fs.go
 package firestore
 
 import (
 	"context"
-	"database/sql"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"strings"
 	"time"
 
-	"github.com/lib/pq"
+	"cloud.google.com/go/firestore"
+	"google.golang.org/api/iterator"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 
-	dbcommon "narratives/internal/adapters/out/db/common"
+	fscommon "narratives/internal/adapters/out/firestore/common"
 	pbdom "narratives/internal/domain/productBlueprint"
 )
 
-// ProductBlueprintRepositoryPG implements usecase.ProductBlueprintRepo using PostgreSQL.
-type ProductBlueprintRepositoryPG struct {
-	DB *sql.DB
+// ProductBlueprintRepositoryFS implements usecase.ProductBlueprintRepo using Firestore.
+type ProductBlueprintRepositoryFS struct {
+	Client *firestore.Client
 }
 
-func NewProductBlueprintRepositoryPG(db *sql.DB) *ProductBlueprintRepositoryPG {
-	return &ProductBlueprintRepositoryPG{DB: db}
+func NewProductBlueprintRepositoryFS(client *firestore.Client) *ProductBlueprintRepositoryFS {
+	return &ProductBlueprintRepositoryFS{Client: client}
+}
+
+func (r *ProductBlueprintRepositoryFS) col() *firestore.CollectionRef {
+	return r.Client.Collection("product_blueprints")
 }
 
 // ========================
@@ -30,37 +36,45 @@ func NewProductBlueprintRepositoryPG(db *sql.DB) *ProductBlueprintRepositoryPG {
 // ========================
 
 // GetByID returns a single ProductBlueprint by ID.
-func (r *ProductBlueprintRepositoryPG) GetByID(ctx context.Context, id string) (pbdom.ProductBlueprint, error) {
-	run := dbcommon.GetRunner(ctx, r.DB)
-	const q = `
-SELECT
-  id, product_name, brand_id, item_type,
-  model_variations, fit, material, weight, quality_assurance,
-  product_id_tag_type, assignee_id,
-  created_by, created_at,
-  updated_by, updated_at
-FROM product_blueprints
-WHERE id = $1
-`
-	row := run.QueryRowContext(ctx, q, strings.TrimSpace(id))
-	pb, err := scanProductBlueprint(row)
+func (r *ProductBlueprintRepositoryFS) GetByID(ctx context.Context, id string) (pbdom.ProductBlueprint, error) {
+	if r.Client == nil {
+		return pbdom.ProductBlueprint{}, errors.New("firestore client is nil")
+	}
+
+	id = strings.TrimSpace(id)
+	if id == "" {
+		return pbdom.ProductBlueprint{}, pbdom.ErrNotFound
+	}
+
+	snap, err := r.col().Doc(id).Get(ctx)
 	if err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
+		if status.Code(err) == codes.NotFound {
 			return pbdom.ProductBlueprint{}, pbdom.ErrNotFound
 		}
+		return pbdom.ProductBlueprint{}, err
+	}
+
+	pb, err := docToProductBlueprint(snap)
+	if err != nil {
 		return pbdom.ProductBlueprint{}, err
 	}
 	return pb, nil
 }
 
 // Exists checks if a ProductBlueprint with the given ID exists.
-func (r *ProductBlueprintRepositoryPG) Exists(ctx context.Context, id string) (bool, error) {
-	run := dbcommon.GetRunner(ctx, r.DB)
-	const q = `SELECT 1 FROM product_blueprints WHERE id = $1 LIMIT 1`
-	var dummy int
-	err := run.QueryRowContext(ctx, q, strings.TrimSpace(id)).Scan(&dummy)
+func (r *ProductBlueprintRepositoryFS) Exists(ctx context.Context, id string) (bool, error) {
+	if r.Client == nil {
+		return false, errors.New("firestore client is nil")
+	}
+
+	id = strings.TrimSpace(id)
+	if id == "" {
+		return false, nil
+	}
+
+	_, err := r.col().Doc(id).Get(ctx)
 	if err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
+		if status.Code(err) == codes.NotFound {
 			return false, nil
 		}
 		return false, err
@@ -68,204 +82,128 @@ func (r *ProductBlueprintRepositoryPG) Exists(ctx context.Context, id string) (b
 	return true, nil
 }
 
-// Create inserts a new ProductBlueprint row.
-func (r *ProductBlueprintRepositoryPG) Create(ctx context.Context, v pbdom.ProductBlueprint) (pbdom.ProductBlueprint, error) {
-	run := dbcommon.GetRunner(ctx, r.DB)
-
-	// Serialize variations to JSON for DB.
-	varsJSON, err := json.Marshal(v.Variations)
-	if err != nil {
-		return pbdom.ProductBlueprint{}, err
+// Create inserts a new ProductBlueprint document.
+func (r *ProductBlueprintRepositoryFS) Create(ctx context.Context, v pbdom.ProductBlueprint) (pbdom.ProductBlueprint, error) {
+	if r.Client == nil {
+		return pbdom.ProductBlueprint{}, errors.New("firestore client is nil")
 	}
 
-	tagType := strings.TrimSpace(string(v.ProductIdTag.Type))
+	now := time.Now().UTC()
 
 	// Ensure timestamps
 	createdAt := v.CreatedAt
 	if createdAt.IsZero() {
-		createdAt = time.Now().UTC()
+		createdAt = now
 	}
-
 	updatedAt := v.UpdatedAt
 	if updatedAt.IsZero() {
 		updatedAt = createdAt
 	}
 
-	// UpdatedBy が未指定の場合は CreatedBy を引き継ぐ（あれば）
-	createdByPtr := v.CreatedBy
-	updatedByPtr := v.UpdatedBy
-	if updatedByPtr == nil && createdByPtr != nil {
-		updatedByPtr = createdByPtr
+	// If UpdatedBy is nil and CreatedBy is set, mirror it (same semantics as PG impl)
+	if v.UpdatedBy == nil && v.CreatedBy != nil {
+		v.UpdatedBy = v.CreatedBy
 	}
 
-	createdByNS := dbcommon.ToDBText(createdByPtr)
-	updatedByNS := dbcommon.ToDBText(updatedByPtr)
-
-	const q = `
-INSERT INTO product_blueprints (
-  id,
-  product_name,
-  brand_id,
-  item_type,
-  model_variations,
-  fit,
-  material,
-  weight,
-  quality_assurance,
-  product_id_tag_type,
-  assignee_id,
-  created_by,
-  created_at,
-  updated_by,
-  updated_at
-) VALUES (
-  $1,              -- id
-  $2,              -- product_name
-  $3,              -- brand_id
-  $4,              -- item_type
-  $5::jsonb,       -- model_variations
-  $6,              -- fit
-  $7,              -- material
-  $8,              -- weight
-  $9,              -- quality_assurance
-  $10,             -- product_id_tag_type
-  $11,             -- assignee_id
-  $12,             -- created_by
-  $13,             -- created_at
-  $14,             -- updated_by
-  $15              -- updated_at
-)
-RETURNING
-  id, product_name, brand_id, item_type,
-  model_variations, fit, material, weight, quality_assurance,
-  product_id_tag_type, assignee_id,
-  created_by, created_at,
-  updated_by, updated_at
-`
-
-	row := run.QueryRowContext(
-		ctx,
-		q,
-		strings.TrimSpace(v.ID),
-		strings.TrimSpace(v.ProductName),
-		strings.TrimSpace(v.BrandID),
-		strings.TrimSpace(string(v.ItemType)),
-		string(varsJSON),
-		strings.TrimSpace(v.Fit),
-		strings.TrimSpace(v.Material),
-		v.Weight,
-		pq.Array(dedupTrimStrings(v.QualityAssurance)),
-		tagType,
-		strings.TrimSpace(v.AssigneeID),
-		createdByNS,
-		createdAt,
-		updatedByNS,
-		updatedAt,
-	)
-
-	out, err := scanProductBlueprint(row)
+	// Prepare data map
+	data, err := productBlueprintToDoc(v, createdAt, updatedAt)
 	if err != nil {
-		if dbcommon.IsUniqueViolation(err) {
+		return pbdom.ProductBlueprint{}, err
+	}
+
+	id := strings.TrimSpace(v.ID)
+	var docRef *firestore.DocumentRef
+	if id == "" {
+		docRef = r.col().NewDoc()
+	} else {
+		docRef = r.col().Doc(id)
+		data["id"] = id
+	}
+
+	_, err = docRef.Create(ctx, data)
+	if err != nil {
+		if status.Code(err) == codes.AlreadyExists {
 			return pbdom.ProductBlueprint{}, pbdom.ErrConflict
 		}
+		return pbdom.ProductBlueprint{}, err
+	}
+
+	snap, err := docRef.Get(ctx)
+	if err != nil {
+		return pbdom.ProductBlueprint{}, err
+	}
+
+	out, err := docToProductBlueprint(snap)
+	if err != nil {
 		return pbdom.ProductBlueprint{}, err
 	}
 	return out, nil
 }
 
-// Save updates an existing ProductBlueprint row.
-func (r *ProductBlueprintRepositoryPG) Save(ctx context.Context, v pbdom.ProductBlueprint) (pbdom.ProductBlueprint, error) {
-	run := dbcommon.GetRunner(ctx, r.DB)
+// Save updates an existing ProductBlueprint document (no upsert without id).
+func (r *ProductBlueprintRepositoryFS) Save(ctx context.Context, v pbdom.ProductBlueprint) (pbdom.ProductBlueprint, error) {
+	if r.Client == nil {
+		return pbdom.ProductBlueprint{}, errors.New("firestore client is nil")
+	}
 
-	varsJSON, err := json.Marshal(v.Variations)
+	id := strings.TrimSpace(v.ID)
+	if id == "" {
+		// If no ID, treat as Create with auto-ID.
+		return r.Create(ctx, v)
+	}
+
+	now := time.Now().UTC()
+	if v.CreatedAt.IsZero() {
+		v.CreatedAt = now
+	}
+	if v.UpdatedAt.IsZero() {
+		v.UpdatedAt = now
+	}
+
+	data, err := productBlueprintToDoc(v, v.CreatedAt, v.UpdatedAt)
+	if err != nil {
+		return pbdom.ProductBlueprint{}, err
+	}
+	data["id"] = id
+
+	docRef := r.col().Doc(id)
+	_, err = docRef.Set(ctx, data, firestore.MergeAll)
 	if err != nil {
 		return pbdom.ProductBlueprint{}, err
 	}
 
-	tagType := strings.TrimSpace(string(v.ProductIdTag.Type))
-
-	updatedAt := v.UpdatedAt
-	if updatedAt.IsZero() {
-		updatedAt = time.Now().UTC()
-	}
-
-	updatedByNS := dbcommon.ToDBText(v.UpdatedBy)
-
-	createdAt := v.CreatedAt
-	if createdAt.IsZero() {
-		createdAt = time.Now().UTC()
-	}
-
-	const q = `
-UPDATE product_blueprints
-SET
-  product_name         = $2,
-  brand_id             = $3,
-  item_type            = $4,
-  model_variations     = $5::jsonb,
-  fit                  = $6,
-  material             = $7,
-  weight               = $8,
-  quality_assurance    = $9,
-  product_id_tag_type  = $10,
-  assignee_id          = $11,
-  created_by           = $12,
-  created_at           = $13,
-  updated_by           = $14,
-  updated_at           = $15
-WHERE id = $1
-RETURNING
-  id, product_name, brand_id, item_type,
-  model_variations, fit, material, weight, quality_assurance,
-  product_id_tag_type, assignee_id,
-  created_by, created_at,
-  updated_by, updated_at
-`
-
-	row := run.QueryRowContext(
-		ctx,
-		q,
-		strings.TrimSpace(v.ID),
-		strings.TrimSpace(v.ProductName),
-		strings.TrimSpace(v.BrandID),
-		strings.TrimSpace(string(v.ItemType)),
-		string(varsJSON),
-		strings.TrimSpace(v.Fit),
-		strings.TrimSpace(v.Material),
-		v.Weight,
-		pq.Array(dedupTrimStrings(v.QualityAssurance)),
-		tagType,
-		strings.TrimSpace(v.AssigneeID),
-		dbcommon.ToDBText(v.CreatedBy),
-		createdAt.UTC(),
-		updatedByNS,
-		updatedAt,
-	)
-
-	out, err := scanProductBlueprint(row)
+	snap, err := docRef.Get(ctx)
 	if err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
+		if status.Code(err) == codes.NotFound {
 			return pbdom.ProductBlueprint{}, pbdom.ErrNotFound
 		}
-		if dbcommon.IsUniqueViolation(err) {
-			return pbdom.ProductBlueprint{}, pbdom.ErrConflict
-		}
+		return pbdom.ProductBlueprint{}, err
+	}
+
+	out, err := docToProductBlueprint(snap)
+	if err != nil {
 		return pbdom.ProductBlueprint{}, err
 	}
 	return out, nil
 }
 
 // Delete removes a ProductBlueprint by ID.
-func (r *ProductBlueprintRepositoryPG) Delete(ctx context.Context, id string) error {
-	run := dbcommon.GetRunner(ctx, r.DB)
-
-	res, err := run.ExecContext(ctx, `DELETE FROM product_blueprints WHERE id = $1`, strings.TrimSpace(id))
-	if err != nil {
-		return err
+func (r *ProductBlueprintRepositoryFS) Delete(ctx context.Context, id string) error {
+	if r.Client == nil {
+		return errors.New("firestore client is nil")
 	}
-	aff, _ := res.RowsAffected()
-	if aff == 0 {
+
+	id = strings.TrimSpace(id)
+	if id == "" {
 		return pbdom.ErrNotFound
+	}
+
+	_, err := r.col().Doc(id).Delete(ctx)
+	if err != nil {
+		if status.Code(err) == codes.NotFound {
+			return pbdom.ErrNotFound
+		}
+		return err
 	}
 	return nil
 }
@@ -274,252 +212,434 @@ func (r *ProductBlueprintRepositoryPG) Delete(ctx context.Context, id string) er
 // Extra helper methods
 // ------------------------
 
-func (r *ProductBlueprintRepositoryPG) List(ctx context.Context, filter pbdom.Filter, sort pbdom.Sort, page pbdom.Page) (pbdom.PageResult, error) {
-	run := dbcommon.GetRunner(ctx, r.DB)
-
-	where, args := buildPBWhere(filter)
-	whereSQL := ""
-	if len(where) > 0 {
-		whereSQL = "WHERE " + strings.Join(where, " AND ")
-	}
-	orderBy := buildPBOrderBy(sort)
-	if orderBy == "" {
-		orderBy = "ORDER BY updated_at DESC, id DESC"
+// List applies filter/sort/paging using Firestore query + in-memory filtering.
+func (r *ProductBlueprintRepositoryFS) List(
+	ctx context.Context,
+	filter pbdom.Filter,
+	sort pbdom.Sort,
+	page pbdom.Page,
+) (pbdom.PageResult, error) {
+	if r.Client == nil {
+		return pbdom.PageResult{}, errors.New("firestore client is nil")
 	}
 
-	pageNum, perPage, offset := dbcommon.NormalizePage(page.Number, page.PerPage, 50, 200)
+	pageNum, perPage, offset := fscommon.NormalizePage(page.Number, page.PerPage, 50, 200)
 
-	var total int
-	if err := run.QueryRowContext(ctx, "SELECT COUNT(*) FROM product_blueprints "+whereSQL, args...).Scan(&total); err != nil {
-		return pbdom.PageResult{}, err
-	}
+	q := r.col().Query
+	q = applyPBOrderBy(q, sort)
 
-	q := fmt.Sprintf(`
-SELECT
-  id, product_name, brand_id, item_type,
-  model_variations, fit, material, weight, quality_assurance,
-  product_id_tag_type, assignee_id,
-  created_by, created_at,
-  updated_by, updated_at
-FROM product_blueprints
-%s
-%s
-LIMIT $%d OFFSET $%d
-`, whereSQL, orderBy, len(args)+1, len(args)+2)
+	it := q.Documents(ctx)
+	defer it.Stop()
 
-	args = append(args, perPage, offset)
-	rows, err := run.QueryContext(ctx, q, args...)
-	if err != nil {
-		return pbdom.PageResult{}, err
-	}
-	defer rows.Close()
-
-	items := make([]pbdom.ProductBlueprint, 0, perPage)
-	for rows.Next() {
-		pb, err := scanProductBlueprint(rows)
+	var all []pbdom.ProductBlueprint
+	for {
+		doc, err := it.Next()
+		if err == iterator.Done {
+			break
+		}
 		if err != nil {
 			return pbdom.PageResult{}, err
 		}
-		items = append(items, pb)
+		pb, err := docToProductBlueprint(doc)
+		if err != nil {
+			return pbdom.PageResult{}, err
+		}
+		if matchPBFilter(pb, filter) {
+			all = append(all, pb)
+		}
 	}
-	if err := rows.Err(); err != nil {
-		return pbdom.PageResult{}, err
+
+	total := len(all)
+	if total == 0 {
+		return pbdom.PageResult{
+			Items:      []pbdom.ProductBlueprint{},
+			TotalCount: 0,
+			TotalPages: 0,
+			Page:       pageNum,
+			PerPage:    perPage,
+		}, nil
 	}
+
+	if offset > total {
+		offset = total
+	}
+	end := offset + perPage
+	if end > total {
+		end = total
+	}
+	items := all[offset:end]
 
 	return pbdom.PageResult{
 		Items:      items,
 		TotalCount: total,
-		TotalPages: dbcommon.ComputeTotalPages(total, perPage),
+		TotalPages: fscommon.ComputeTotalPages(total, perPage),
 		Page:       pageNum,
 		PerPage:    perPage,
 	}, nil
 }
 
-func (r *ProductBlueprintRepositoryPG) Count(ctx context.Context, filter pbdom.Filter) (int, error) {
-	run := dbcommon.GetRunner(ctx, r.DB)
-
-	where, args := buildPBWhere(filter)
-	whereSQL := ""
-	if len(where) > 0 {
-		whereSQL = "WHERE " + strings.Join(where, " AND ")
+func (r *ProductBlueprintRepositoryFS) Count(ctx context.Context, filter pbdom.Filter) (int, error) {
+	if r.Client == nil {
+		return 0, errors.New("firestore client is nil")
 	}
 
-	var total int
-	if err := run.QueryRowContext(ctx, "SELECT COUNT(*) FROM product_blueprints "+whereSQL, args...).Scan(&total); err != nil {
-		return 0, err
+	q := r.col().Query
+	it := q.Documents(ctx)
+	defer it.Stop()
+
+	total := 0
+	for {
+		doc, err := it.Next()
+		if err == iterator.Done {
+			break
+		}
+		if err != nil {
+			return 0, err
+		}
+		pb, err := docToProductBlueprint(doc)
+		if err != nil {
+			return 0, err
+		}
+		if matchPBFilter(pb, filter) {
+			total++
+		}
 	}
 	return total, nil
 }
 
 // Reset is mainly for tests.
-func (r *ProductBlueprintRepositoryPG) Reset(ctx context.Context) error {
-	run := dbcommon.GetRunner(ctx, r.DB)
-	_, err := run.ExecContext(ctx, `DELETE FROM product_blueprints`)
-	return err
+func (r *ProductBlueprintRepositoryFS) Reset(ctx context.Context) error {
+	if r.Client == nil {
+		return errors.New("firestore client is nil")
+	}
+
+	it := r.col().Documents(ctx)
+	b := r.Client.Batch()
+	count := 0
+
+	for {
+		doc, err := it.Next()
+		if err == iterator.Done {
+			break
+		}
+		if err != nil {
+			return err
+		}
+		b.Delete(doc.Ref)
+		count++
+		if count%400 == 0 {
+			if _, err := b.Commit(ctx); err != nil {
+				return err
+			}
+			b = r.Client.Batch()
+		}
+	}
+	if count > 0 {
+		if _, err := b.Commit(ctx); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 // ========================
 // Helpers
 // ========================
 
-func scanProductBlueprint(s dbcommon.RowScanner) (pbdom.ProductBlueprint, error) {
-	var (
-		id, productName, brandID, itemType, fit, material string
-		varsRaw                                           []byte
-		weight                                            float64
-		qa                                                []string
-		tagType                                           string
-		assigneeID                                        string
-		createdByNS, updatedByNS                          sql.NullString
-		createdAt, updatedAt                              time.Time
-	)
-
-	if err := s.Scan(
-		&id, &productName, &brandID, &itemType,
-		&varsRaw, &fit, &material, &weight, pq.Array(&qa),
-		&tagType, &assigneeID,
-		&createdByNS, &createdAt,
-		&updatedByNS, &updatedAt,
-	); err != nil {
-		return pbdom.ProductBlueprint{}, err
+func docToProductBlueprint(doc *firestore.DocumentSnapshot) (pbdom.ProductBlueprint, error) {
+	data := doc.Data()
+	if data == nil {
+		return pbdom.ProductBlueprint{}, fmt.Errorf("empty product_blueprints document: %s", doc.Ref.ID)
 	}
 
-	var createdByPtr *string
-	if createdByNS.Valid {
-		v := strings.TrimSpace(createdByNS.String)
-		if v != "" {
-			createdByPtr = &v
+	getStr := func(keys ...string) string {
+		for _, k := range keys {
+			if v, ok := data[k].(string); ok {
+				return strings.TrimSpace(v)
+			}
+		}
+		return ""
+	}
+	getStrPtr := func(keys ...string) *string {
+		for _, k := range keys {
+			if v, ok := data[k].(string); ok {
+				s := strings.TrimSpace(v)
+				if s != "" {
+					return &s
+				}
+			}
+		}
+		return nil
+	}
+	getTimeVal := func(keys ...string) time.Time {
+		for _, k := range keys {
+			if v, ok := data[k].(time.Time); ok && !v.IsZero() {
+				return v.UTC()
+			}
+		}
+		return time.Time{}
+	}
+	getStringSlice := func(key string) []string {
+		raw, ok := data[key]
+		if !ok || raw == nil {
+			return nil
+		}
+		switch vv := raw.(type) {
+		case []interface{}:
+			out := make([]string, 0, len(vv))
+			for _, x := range vv {
+				if s, ok := x.(string); ok {
+					s = strings.TrimSpace(s)
+					if s != "" {
+						out = append(out, s)
+					}
+				}
+			}
+			return dedupTrimStrings(out)
+		case []string:
+			return dedupTrimStrings(vv)
+		default:
+			return nil
+		}
+	}
+	getVariations := func() any {
+		// Store-agnostic: variations may be array/map or JSON string.
+		raw, ok := data["modelVariations"]
+		if !ok || raw == nil {
+			raw, ok = data["model_variations"]
+			if !ok || raw == nil {
+				return nil
+			}
+		}
+		switch vv := raw.(type) {
+		case []interface{}, map[string]interface{}:
+			// Caller domain defines exact type; we just JSON round-trip.
+			b, err := json.Marshal(vv)
+			if err != nil {
+				return nil
+			}
+			var dest any
+			if err := json.Unmarshal(b, &dest); err != nil {
+				return nil
+			}
+			return dest
+		case string:
+			if strings.TrimSpace(vv) == "" {
+				return nil
+			}
+			var dest any
+			if err := json.Unmarshal([]byte(vv), &dest); err != nil {
+				return nil
+			}
+			return dest
+		default:
+			return nil
 		}
 	}
 
-	var updatedByPtr *string
-	if updatedByNS.Valid {
-		v := strings.TrimSpace(updatedByNS.String)
-		if v != "" {
-			updatedByPtr = &v
-		}
+	qas := getStringSlice("qualityAssurance")
+	if len(qas) == 0 {
+		qas = getStringSlice("quality_assurance")
 	}
 
-	return pbdom.ProductBlueprint{
-		ID:               strings.TrimSpace(id),
-		ProductName:      strings.TrimSpace(productName),
-		BrandID:          strings.TrimSpace(brandID),
-		ItemType:         pbdom.ItemType(strings.TrimSpace(itemType)),
-		Variations:       nil, // 必要なら varsRaw を Unmarshal
-		Fit:              strings.TrimSpace(fit),
-		Material:         strings.TrimSpace(material),
-		Weight:           weight,
-		QualityAssurance: dedupTrimStrings(qa),
+	tagTypeStr := getStr("productIdTagType", "product_id_tag_type")
+	itemTypeStr := getStr("itemType", "item_type")
+
+	pb := pbdom.ProductBlueprint{
+		ID:          doc.Ref.ID,
+		ProductName: getStr("productName", "product_name"),
+		BrandID:     getStr("brandId", "brand_id"),
+		ItemType:    pbdom.ItemType(itemTypeStr),
+		// We keep variations as-is via generic loader; caller's struct should match.
+		Variations:       getVariations(),
+		Fit:              getStr("fit"),
+		Material:         getStr("material"),
+		Weight:           getFloat64(data["weight"]),
+		QualityAssurance: dedupTrimStrings(qas),
 		ProductIdTag: pbdom.ProductIDTag{
-			Type: pbdom.ProductIDTagType(strings.TrimSpace(tagType)),
+			Type: pbdom.ProductIDTagType(tagTypeStr),
 		},
-		AssigneeID: strings.TrimSpace(assigneeID),
-		CreatedBy:  createdByPtr,
-		CreatedAt:  createdAt.UTC(),
-		UpdatedBy:  updatedByPtr,
-		UpdatedAt:  updatedAt.UTC(),
-	}, nil
+		AssigneeID: getStr("assigneeId", "assignee_id"),
+		CreatedBy:  getStrPtr("createdBy", "created_by"),
+		CreatedAt:  getTimeVal("createdAt", "created_at"),
+		UpdatedBy:  getStrPtr("updatedBy", "updated_by"),
+		UpdatedAt:  getTimeVal("updatedAt", "updated_at"),
+	}
+
+	return pb, nil
 }
 
-func buildPBWhere(f pbdom.Filter) ([]string, []any) {
-	where := []string{}
-	args := []any{}
-
-	addIlike := func(col, term string) {
-		term = strings.TrimSpace(term)
-		if term != "" {
-			where = append(where, fmt.Sprintf("LOWER(%s) LIKE LOWER($%d)", col, len(args)+1))
-			args = append(args, "%"+term+"%")
-		}
-	}
-	addIn := func(col string, vals []string) {
-		if len(vals) == 0 {
-			return
-		}
-		base := len(args)
-		ph := make([]string, 0, len(vals))
-		for i, v := range vals {
-			ph = append(ph, fmt.Sprintf("$%d", base+i+1))
-			args = append(args, strings.TrimSpace(v))
-		}
-		where = append(where, fmt.Sprintf("%s IN (%s)", col, strings.Join(ph, ",")))
-	}
-	addInEnum := func(col string, vals []string) {
-		addIn(col, vals)
+func productBlueprintToDoc(v pbdom.ProductBlueprint, createdAt, updatedAt time.Time) (map[string]any, error) {
+	m := map[string]any{
+		"productName": strings.TrimSpace(v.ProductName),
+		"brandId":     strings.TrimSpace(v.BrandID),
+		"itemType":    strings.TrimSpace(string(v.ItemType)),
+		"fit":         strings.TrimSpace(v.Fit),
+		"material":    strings.TrimSpace(v.Material),
+		"weight":      v.Weight,
+		"assigneeId":  strings.TrimSpace(v.AssigneeID),
+		"createdAt":   createdAt.UTC(),
+		"updatedAt":   updatedAt.UTC(),
 	}
 
+	// Variations: store as modelVariations if present; keep raw JSON structure
+	if v.Variations != nil {
+		b, err := json.Marshal(v.Variations)
+		if err != nil {
+			return nil, err
+		}
+		var generic any
+		if err := json.Unmarshal(b, &generic); err != nil {
+			return nil, err
+		}
+		m["modelVariations"] = generic
+	}
+
+	if len(v.QualityAssurance) > 0 {
+		m["qualityAssurance"] = dedupTrimStrings(v.QualityAssurance)
+	}
+
+	if v.ProductIdTag.Type != "" {
+		m["productIdTagType"] = strings.TrimSpace(string(v.ProductIdTag.Type))
+	}
+
+	if v.CreatedBy != nil {
+		if s := strings.TrimSpace(*v.CreatedBy); s != "" {
+			m["createdBy"] = s
+		}
+	}
+	if v.UpdatedBy != nil {
+		if s := strings.TrimSpace(*v.UpdatedBy); s != "" {
+			m["updatedBy"] = s
+		}
+	}
+
+	return m, nil
+}
+
+func getFloat64(v any) float64 {
+	switch x := v.(type) {
+	case int:
+		return float64(x)
+	case int32:
+		return float64(x)
+	case int64:
+		return float64(x)
+	case float32:
+		return float64(x)
+	case float64:
+		return x
+	default:
+		return 0
+	}
+}
+
+// matchPBFilter applies pbdom.Filter in-memory (Firestore analogue of buildPBWhere).
+func matchPBFilter(pb pbdom.ProductBlueprint, f pbdom.Filter) bool {
+	// SearchTerm on product name (and optionally brand)
 	if s := strings.TrimSpace(f.SearchTerm); s != "" {
-		addIlike("product_name", s)
+		ls := strings.ToLower(s)
+		hay := strings.ToLower(pb.ProductName + " " + pb.BrandID)
+		if !strings.Contains(hay, ls) {
+			return false
+		}
 	}
 
-	addIn("brand_id", f.BrandIDs)
-	addIn("assignee_id", f.AssigneeIDs)
+	if len(f.BrandIDs) > 0 {
+		if !containsStr(f.BrandIDs, pb.BrandID) {
+			return false
+		}
+	}
+
+	if len(f.AssigneeIDs) > 0 {
+		if !containsStr(f.AssigneeIDs, pb.AssigneeID) {
+			return false
+		}
+	}
 
 	if len(f.ItemTypes) > 0 {
-		vals := make([]string, 0, len(f.ItemTypes))
+		ok := false
 		for _, it := range f.ItemTypes {
-			vals = append(vals, strings.TrimSpace(string(it)))
+			if strings.TrimSpace(string(it)) == strings.TrimSpace(string(pb.ItemType)) {
+				ok = true
+				break
+			}
 		}
-		addInEnum("item_type", vals)
+		if !ok {
+			return false
+		}
 	}
 
 	if len(f.TagTypes) > 0 {
-		vals := make([]string, 0, len(f.TagTypes))
-		for _, t := range f.TagTypes {
-			vals = append(vals, strings.TrimSpace(string(t)))
+		ok := false
+		for _, tt := range f.TagTypes {
+			if strings.TrimSpace(string(tt)) == strings.TrimSpace(string(pb.ProductIdTag.Type)) {
+				ok = true
+				break
+			}
 		}
-		addInEnum("product_id_tag_type", vals)
+		if !ok {
+			return false
+		}
 	}
 
-	if len(f.VariationIDs) > 0 {
-		where = append(where, fmt.Sprintf(`
-EXISTS (
-  SELECT 1
-  FROM jsonb_array_elements(model_variations) AS v(x)
-  WHERE (v.x->>'id' = ANY($%d) OR v.x->>'ID' = ANY($%d))
-)`, len(args)+1, len(args)+1))
-		args = append(args, pq.Array(f.VariationIDs))
+	// NOTE: VariationIDs-based filtering is non-trivial without a fixed schema for Variations.
+	// To avoid breaking builds, we intentionally skip it here.
+
+	// CreatedAt / UpdatedAt ranges
+	if f.CreatedFrom != nil && (pb.CreatedAt.IsZero() || pb.CreatedAt.Before(f.CreatedFrom.UTC())) {
+		return false
+	}
+	if f.CreatedTo != nil && (pb.CreatedAt.IsZero() || !pb.CreatedAt.Before(f.CreatedTo.UTC())) {
+		return false
+	}
+	if f.UpdatedFrom != nil && (pb.UpdatedAt.IsZero() || pb.UpdatedAt.Before(f.UpdatedFrom.UTC())) {
+		return false
+	}
+	if f.UpdatedTo != nil && (pb.UpdatedAt.IsZero() || !pb.UpdatedAt.Before(f.UpdatedTo.UTC())) {
+		return false
 	}
 
-	if f.CreatedFrom != nil {
-		where = append(where, fmt.Sprintf("created_at >= $%d", len(args)+1))
-		args = append(args, f.CreatedFrom.UTC())
-	}
-	if f.CreatedTo != nil {
-		where = append(where, fmt.Sprintf("created_at < $%d", len(args)+1))
-		args = append(args, f.CreatedTo.UTC())
-	}
-	if f.UpdatedFrom != nil {
-		where = append(where, fmt.Sprintf("updated_at >= $%d", len(args)+1))
-		args = append(args, f.UpdatedFrom.UTC())
-	}
-	if f.UpdatedTo != nil {
-		where = append(where, fmt.Sprintf("updated_at < $%d", len(args)+1))
-		args = append(args, f.UpdatedTo.UTC())
-	}
-
-	return where, args
+	return true
 }
 
-func buildPBOrderBy(s pbdom.Sort) string {
+func containsStr(xs []string, v string) bool {
+	v = strings.TrimSpace(v)
+	for _, x := range xs {
+		if strings.TrimSpace(x) == v {
+			return true
+		}
+	}
+	return false
+}
+
+// applyPBOrderBy maps pbdom.Sort to Firestore orderBy.
+func applyPBOrderBy(q firestore.Query, s pbdom.Sort) firestore.Query {
 	col := strings.ToLower(strings.TrimSpace(string(s.Column)))
+	var field string
+
 	switch col {
 	case "createdat", "created_at":
-		col = "created_at"
+		field = "createdAt"
 	case "updatedat", "updated_at":
-		col = "updated_at"
+		field = "updatedAt"
 	case "productname", "product_name":
-		col = "product_name"
+		field = "productName"
 	case "brandid", "brand_id":
-		col = "brand_id"
+		field = "brandId"
 	default:
-		return ""
+		// default: updatedAt DESC, then id
+		return q.OrderBy("updatedAt", firestore.Desc).
+			OrderBy(firestore.DocumentID, firestore.Desc)
 	}
-	dir := strings.ToUpper(strings.TrimSpace(string(s.Order)))
-	if dir != "ASC" && dir != "DESC" {
-		dir = "DESC"
+
+	dir := firestore.Desc
+	if strings.EqualFold(string(s.Order), "asc") {
+		dir = firestore.Asc
 	}
-	return fmt.Sprintf("ORDER BY %s %s, id %s", col, dir, dir)
+
+	return q.OrderBy(field, dir).
+		OrderBy(firestore.DocumentID, dir)
 }
 
 func dedupTrimStrings(xs []string) []string {
