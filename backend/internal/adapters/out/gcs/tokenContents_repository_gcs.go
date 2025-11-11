@@ -602,13 +602,13 @@ func applyTokenContentSort(items []tcdom.TokenContent, s tcdom.Sort) {
 	col := strings.ToLower(strings.TrimSpace(string(s.Column)))
 	dir := strings.ToUpper(strings.TrimSpace(string(s.Order)))
 	if dir != "ASC" && dir != "DESC" {
-		// Default (PG版互換): updated_at DESC, id DESC
-		// updated_at は保持していないため、ここでは id DESC のみ再現
+		// Default (PG互換): updated_at DESC, id DESC
 		dir = "DESC"
 		col = "id"
 	}
 
-	less := func(i, j int) bool { return false }
+	// SA4006 fix: declare and assign in switch
+	var less func(i, j int) bool
 
 	switch col {
 	case "size":
@@ -626,8 +626,8 @@ func applyTokenContentSort(items []tcdom.TokenContent, s tcdom.Sort) {
 
 	for i := 0; i < len(items)-1; i++ {
 		for j := i + 1; j < len(items); j++ {
-			swap := less(j, i)
-			if dir == "DESC" {
+			swap := less(j, i) // ASC: swap if items[j] < items[i]
+			if dir == "DESC" { // DESC: swap if items[i] < items[j]
 				swap = less(i, j)
 			}
 			if swap {
