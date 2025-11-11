@@ -1,4 +1,4 @@
-package db
+package gcs
 
 import (
 	"context"
@@ -7,7 +7,7 @@ import (
 	"fmt"
 	"strings"
 
-	dbcommon "narratives/internal/adapters/out/db/common"
+	dbcommon "narratives/internal/adapters/out/firestore/common"
 	avicon "narratives/internal/domain/avatarIcon"
 )
 

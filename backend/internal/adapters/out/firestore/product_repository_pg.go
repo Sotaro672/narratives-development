@@ -1,4 +1,5 @@
-package db
+// backend\internal\adapters\out\firestore\product_repository_pg.go
+package firestore
 
 import (
 	"context"

@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"cloud.google.com/go/firestore"
+	"google.golang.org/api/iterator"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
@@ -147,7 +148,7 @@ func (r *AccountRepositoryFS) Update(ctx context.Context, id string, patch accdo
 		updates = append(updates, firestore.Update{Path: "updatedBy", Value: *patch.UpdatedBy})
 	}
 	if patch.DeletedAt != nil {
-		updates = append(updates, firestore.Update{Path: "deletedAt", Value: patch.DeletedAt})
+		updates = append(updates, firestore.Update{Path: "deletedAt", Value: *patch.DeletedAt})
 	}
 	if patch.DeletedBy != nil {
 		updates = append(updates, firestore.Update{Path: "deletedBy", Value: *patch.DeletedBy})
@@ -198,15 +199,15 @@ func (r *AccountRepositoryFS) Delete(ctx context.Context, id string) error {
 // ========================================
 // Count / List / ListByCursor
 // ========================================
-// Firestoreでは複雑なページング・フィルタを行う場合、
-// Aggregationまたは別インデックス設計が必要。
-// ここでは簡易な stub を置く。
+
 func (r *AccountRepositoryFS) Count(ctx context.Context, _ accdom.Filter) (int, error) {
 	iter := r.Client.Collection("accounts").Documents(ctx)
+	defer iter.Stop()
+
 	count := 0
 	for {
 		_, err := iter.Next()
-		if err == firestore.Done {
+		if err == iterator.Done {
 			break
 		}
 		if err != nil {
@@ -218,11 +219,15 @@ func (r *AccountRepositoryFS) Count(ctx context.Context, _ accdom.Filter) (int, 
 }
 
 func (r *AccountRepositoryFS) List(ctx context.Context, _ accdom.Filter, _ common.Sort, _ common.Page) (common.PageResult[accdom.Account], error) {
-	iter := r.Client.Collection("accounts").OrderBy("createdAt", firestore.Desc).Documents(ctx)
+	iter := r.Client.Collection("accounts").
+		OrderBy("createdAt", firestore.Desc).
+		Documents(ctx)
+	defer iter.Stop()
+
 	var items []accdom.Account
 	for {
 		doc, err := iter.Next()
-		if err == firestore.Done {
+		if err == iterator.Done {
 			break
 		}
 		if err != nil {
@@ -230,13 +235,21 @@ func (r *AccountRepositoryFS) List(ctx context.Context, _ accdom.Filter, _ commo
 		}
 		var a accdom.Account
 		if err := doc.DataTo(&a); err == nil {
-			a.ID = doc.Ref.ID
+			if a.ID == "" {
+				a.ID = doc.Ref.ID
+			}
 			items = append(items, a)
 		}
 	}
-	return common.PageResult[accdom.Account]{Items: items, TotalCount: len(items), Page: 1, PerPage: len(items)}, nil
+	return common.PageResult[accdom.Account]{
+		Items:      items,
+		TotalCount: len(items),
+		Page:       1,
+		PerPage:    len(items),
+	}, nil
 }
 
 func (r *AccountRepositoryFS) ListByCursor(ctx context.Context, _ accdom.Filter, _ common.Sort, _ common.CursorPage) (common.CursorPageResult[accdom.Account], error) {
+	// 必要になったらカーソル実装を追加
 	return common.CursorPageResult[accdom.Account]{}, nil
 }

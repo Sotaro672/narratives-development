@@ -9,11 +9,11 @@ import (
 	"narratives/internal/adapters/in/http/handlers"
 
 	// MessageHandler だけは repo も必要なので、router で受け取って渡す
-	msgrepo "narratives/internal/adapters/out/db"
+	msgrepo "narratives/internal/adapters/out/firestore"
 	// ↑ MessageRepositoryPG がいるパッケージを alias import
-	// もし MessageRepositoryPG が db/message_repository_pg.go にあり、
-	// パッケージ宣言が `package db` ならこの import は
-	//    "narratives/internal/adapters/out/db"
+	// もし MessageRepositoryPG が firestore/message_repository_pg.go にあり、
+	// パッケージ宣言が `package firestore` ならこの import は
+	//    "narratives/internal/adapters/out/firestore"
 	// でOKです。上の msgrepo は読みやすさのための別名です。
 )
 

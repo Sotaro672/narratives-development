@@ -1,4 +1,5 @@
-package db
+// backend\internal\adapters\out\firestore\listImage_repository_pg.go
+package gcs
 
 import (
 	"context"
@@ -8,7 +9,7 @@ import (
 	"strings"
 	"time"
 
-	dbcommon "narratives/internal/adapters/out/db/common"
+	dbcommon "narratives/internal/adapters/out/firestore/common"
 	listimagedom "narratives/internal/domain/listImage"
 )
 

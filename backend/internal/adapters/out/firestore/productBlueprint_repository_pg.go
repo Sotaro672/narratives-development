@@ -1,5 +1,5 @@
-// backend/internal/adapters/out/db/productBlueprint_repository_pg.go
-package db
+// backend/internal/adapters/out/firestore/productBlueprint_repository_pg.go
+package firestore
 
 import (
 	"context"

@@ -1,4 +1,5 @@
-package db
+// backend\internal\adapters\out\firestore\messageImage_repository_gcs.go
+package gcs
 
 import (
 	"context"
@@ -8,9 +9,10 @@ import (
 	"strings"
 	"time"
 
-	"cloud.google.com/go/storage"
-	dbcommon "narratives/internal/adapters/out/db/common"
+	dbcommon "narratives/internal/adapters/out/firestore/common"
 	midom "narratives/internal/domain/messageImage"
+
+	"cloud.google.com/go/storage"
 )
 
 type MessageImageRepositoryPG struct {

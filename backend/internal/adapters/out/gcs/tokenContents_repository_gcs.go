@@ -1,4 +1,5 @@
-package db
+// backend\internal\adapters\out\gcs\tokenContents_repository_gcs.go
+package gcs
 
 import (
 	"context"
@@ -9,7 +10,7 @@ import (
 	"strings"
 	"time"
 
-	dbcommon "narratives/internal/adapters/out/db/common"
+	dbcommon "narratives/internal/adapters/out/firestore/common"
 	tcdom "narratives/internal/domain/tokenContents"
 )
 

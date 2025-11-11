@@ -1,4 +1,4 @@
-package db
+package gcs
 
 import (
 	"context"
@@ -10,7 +10,7 @@ import (
 	"strings"
 	"time"
 
-	dbcommon "narratives/internal/adapters/out/db/common"
+	dbcommon "narratives/internal/adapters/out/firestore/common"
 	cimgdom "narratives/internal/domain/campaignImage"
 )
 
