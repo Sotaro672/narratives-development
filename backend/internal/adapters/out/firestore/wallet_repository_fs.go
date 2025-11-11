@@ -19,7 +19,8 @@ import (
 
 // =====================================================
 // Firestore Wallet Repository
-// Implements wallet.RepositoryPort over Firestore.
+// Implements WalletUsecase.WalletRepo (minimal port)
+// + legacy/extended wallet operations over Firestore.
 // =====================================================
 
 type WalletRepositoryFS struct {
@@ -35,7 +36,7 @@ func (r *WalletRepositoryFS) col() *firestore.CollectionRef {
 }
 
 // =====================================================
-// Core helpers (not part of interface)
+// Minimal WalletRepo methods (used by WalletUsecase)
 // =====================================================
 
 // GetByID treats id as walletAddress (document ID).
@@ -81,8 +82,110 @@ func (r *WalletRepositoryFS) Exists(ctx context.Context, id string) (bool, error
 	return true, nil
 }
 
+// Create implements WalletRepo.Create using Wallet as input.
+func (r *WalletRepositoryFS) Create(ctx context.Context, v wdom.Wallet) (wdom.Wallet, error) {
+	if r.Client == nil {
+		return wdom.Wallet{}, errors.New("firestore client is nil")
+	}
+
+	addr := strings.TrimSpace(v.WalletAddress)
+	if addr == "" {
+		return wdom.Wallet{}, errors.New("wallet: walletAddress is required")
+	}
+
+	now := time.Now().UTC()
+
+	if v.CreatedAt.IsZero() {
+		v.CreatedAt = now
+	}
+	if v.UpdatedAt.IsZero() {
+		v.UpdatedAt = now
+	}
+	if v.LastUpdatedAt.IsZero() {
+		v.LastUpdatedAt = v.CreatedAt
+	}
+	if strings.TrimSpace(string(v.Status)) == "" {
+		v.Status = wdom.WalletStatus("active")
+	}
+	v.Tokens = dedupStrings(v.Tokens)
+
+	ref := r.col().Doc(addr)
+	data := map[string]any{
+		"tokens":        v.Tokens,
+		"status":        string(v.Status),
+		"createdAt":     v.CreatedAt.UTC(),
+		"updatedAt":     v.UpdatedAt.UTC(),
+		"lastUpdatedAt": v.LastUpdatedAt.UTC(),
+	}
+
+	if _, err := ref.Create(ctx, data); err != nil {
+		if grpcstatus.Code(err) == codes.AlreadyExists {
+			return wdom.Wallet{}, wdom.ErrConflict
+		}
+		return wdom.Wallet{}, err
+	}
+
+	snap, err := ref.Get(ctx)
+	if err != nil {
+		return wdom.Wallet{}, err
+	}
+	return docToWallet(snap)
+}
+
+// Save implements WalletRepo.Save as an upsert.
+func (r *WalletRepositoryFS) Save(ctx context.Context, v wdom.Wallet) (wdom.Wallet, error) {
+	if r.Client == nil {
+		return wdom.Wallet{}, errors.New("firestore client is nil")
+	}
+
+	addr := strings.TrimSpace(v.WalletAddress)
+	if addr == "" {
+		return wdom.Wallet{}, errors.New("wallet: walletAddress is required")
+	}
+
+	now := time.Now().UTC()
+
+	if v.CreatedAt.IsZero() {
+		v.CreatedAt = now
+	}
+	if v.UpdatedAt.IsZero() {
+		v.UpdatedAt = now
+	}
+	if v.LastUpdatedAt.IsZero() {
+		v.LastUpdatedAt = v.CreatedAt
+	}
+	if strings.TrimSpace(string(v.Status)) == "" {
+		v.Status = wdom.WalletStatus("active")
+	}
+	v.Tokens = dedupStrings(v.Tokens)
+
+	ref := r.col().Doc(addr)
+	data := map[string]any{
+		"tokens":        v.Tokens,
+		"status":        string(v.Status),
+		"createdAt":     v.CreatedAt.UTC(),
+		"updatedAt":     v.UpdatedAt.UTC(),
+		"lastUpdatedAt": v.LastUpdatedAt.UTC(),
+	}
+
+	if _, err := ref.Set(ctx, data); err != nil {
+		return wdom.Wallet{}, err
+	}
+
+	snap, err := ref.Get(ctx)
+	if err != nil {
+		return wdom.Wallet{}, err
+	}
+	return docToWallet(snap)
+}
+
+// Delete implements WalletRepo.Delete.
+func (r *WalletRepositoryFS) Delete(ctx context.Context, id string) error {
+	return r.DeleteWallet(ctx, id)
+}
+
 // =====================================================
-// RepositoryPort methods
+// Existing/extended RepositoryPort-style methods
 // =====================================================
 
 // GetAllWallets returns all wallets ordered similarly to the PG implementation.
@@ -141,7 +244,7 @@ func (r *WalletRepositoryFS) GetWalletByAddress(ctx context.Context, walletAddre
 	return &w, nil
 }
 
-// CreateWallet implements RepositoryPort.CreateWallet.
+// CreateWallet: legacy-style creation from CreateWalletInput.
 func (r *WalletRepositoryFS) CreateWallet(ctx context.Context, in wdom.CreateWalletInput) (*wdom.Wallet, error) {
 	if r.Client == nil {
 		return nil, errors.New("firestore client is nil")
@@ -204,7 +307,6 @@ func (r *WalletRepositoryFS) CreateWallet(ctx context.Context, in wdom.CreateWal
 }
 
 // UpdateWallet: 差分更新API向け。
-// Firestore トランザクションで現在値を読み出し、ロジックを適用して書き戻す。
 func (r *WalletRepositoryFS) UpdateWallet(ctx context.Context, walletAddress string, in wdom.UpdateWalletInput) (*wdom.Wallet, error) {
 	if r.Client == nil {
 		return nil, errors.New("firestore client is nil")
@@ -235,13 +337,11 @@ func (r *WalletRepositoryFS) UpdateWallet(ctx context.Context, walletAddress str
 		changedTokens := false
 		now := time.Now().UTC()
 
-		// tokens 全置き換え
 		if in.Tokens != nil {
 			cur.Tokens = dedupStrings(*in.Tokens)
 			changedTokens = true
 		}
 
-		// AddTokens
 		if len(in.AddTokens) > 0 {
 			set := make(map[string]struct{}, len(cur.Tokens))
 			for _, t := range cur.Tokens {
@@ -256,7 +356,6 @@ func (r *WalletRepositoryFS) UpdateWallet(ctx context.Context, walletAddress str
 			changedTokens = true
 		}
 
-		// RemoveTokens
 		if len(in.RemoveTokens) > 0 {
 			rm := make(map[string]struct{}, len(in.RemoveTokens))
 			for _, t := range dedupStrings(in.RemoveTokens) {
@@ -274,19 +373,16 @@ func (r *WalletRepositoryFS) UpdateWallet(ctx context.Context, walletAddress str
 			}
 		}
 
-		// Status
 		if in.Status != nil {
 			cur.Status = *in.Status
 		}
 
-		// UpdatedAt
 		if in.UpdatedAt != nil {
 			cur.UpdatedAt = in.UpdatedAt.UTC()
 		} else {
 			cur.UpdatedAt = now
 		}
 
-		// LastUpdatedAt
 		if in.LastUpdatedAt != nil {
 			cur.LastUpdatedAt = in.LastUpdatedAt.UTC()
 		} else if changedTokens {
@@ -318,7 +414,7 @@ func (r *WalletRepositoryFS) UpdateWallet(ctx context.Context, walletAddress str
 	return result, nil
 }
 
-// DeleteWallet implements RepositoryPort.DeleteWallet.
+// DeleteWallet: legacy-style delete.
 func (r *WalletRepositoryFS) DeleteWallet(ctx context.Context, walletAddress string) error {
 	if r.Client == nil {
 		return errors.New("firestore client is nil")
@@ -342,8 +438,7 @@ func (r *WalletRepositoryFS) DeleteWallet(ctx context.Context, walletAddress str
 	return nil
 }
 
-// SearchWallets: Firestore 上では柔軟な複合条件が難しいため、
-// 現状は全件取得してメモリ上でフィルタ・ソート・ページングする。
+// SearchWallets: 全件取得してメモリ上でフィルタ・ソート・ページング。
 func (r *WalletRepositoryFS) SearchWallets(ctx context.Context, opts wdom.WalletSearchOptions) (wdom.WalletPaginationResult, error) {
 	if r.Client == nil {
 		return wdom.WalletPaginationResult{}, errors.New("firestore client is nil")
@@ -400,9 +495,8 @@ func (r *WalletRepositoryFS) SearchWallets(ctx context.Context, opts wdom.Wallet
 	}, nil
 }
 
-// トークン操作系
+// トークン操作系など
 
-// AddTokenToWallet: 1トークン追加。
 func (r *WalletRepositoryFS) AddTokenToWallet(ctx context.Context, walletAddress, mintAddress string) (*wdom.Wallet, error) {
 	if r.Client == nil {
 		return nil, errors.New("firestore client is nil")
@@ -464,7 +558,6 @@ func (r *WalletRepositoryFS) AddTokenToWallet(ctx context.Context, walletAddress
 	return result, nil
 }
 
-// RemoveTokenFromWallet: 1トークン削除。
 func (r *WalletRepositoryFS) RemoveTokenFromWallet(ctx context.Context, walletAddress, mintAddress string) (*wdom.Wallet, error) {
 	if r.Client == nil {
 		return nil, errors.New("firestore client is nil")
@@ -602,7 +695,7 @@ func (r *WalletRepositoryFS) GetWalletsBatch(ctx context.Context, req wdom.Batch
 	return resp, nil
 }
 
-// UpdateWalletsBatch: 複数ウォレットの簡易バッチ更新（Firestoreでは 1件ずつ処理）。
+// UpdateWalletsBatch: 1件ずつTx更新。
 func (r *WalletRepositoryFS) UpdateWalletsBatch(ctx context.Context, updates []wdom.BatchWalletUpdate) (wdom.BatchWalletUpdateResponse, error) {
 	if r.Client == nil {
 		return wdom.BatchWalletUpdateResponse{}, errors.New("firestore client is nil")
@@ -610,10 +703,7 @@ func (r *WalletRepositoryFS) UpdateWalletsBatch(ctx context.Context, updates []w
 
 	res := wdom.BatchWalletUpdateResponse{
 		Succeeded: []*wdom.Wallet{},
-		Failed: []struct {
-			WalletAddress string `json:"walletAddress"`
-			Error         string `json:"error"`
-		}{},
+		Failed:    nil, // append時に正しい型の匿名structを使う
 	}
 
 	for _, u := range updates {
@@ -622,7 +712,10 @@ func (r *WalletRepositoryFS) UpdateWalletsBatch(ctx context.Context, updates []w
 			res.Failed = append(res.Failed, struct {
 				WalletAddress string `json:"walletAddress"`
 				Error         string `json:"error"`
-			}{WalletAddress: u.WalletAddress, Error: "empty walletAddress"})
+			}{
+				WalletAddress: u.WalletAddress,
+				Error:         "empty walletAddress",
+			})
 			continue
 		}
 
@@ -685,7 +778,10 @@ func (r *WalletRepositoryFS) UpdateWalletsBatch(ctx context.Context, updates []w
 			res.Failed = append(res.Failed, struct {
 				WalletAddress string `json:"walletAddress"`
 				Error         string `json:"error"`
-			}{WalletAddress: u.WalletAddress, Error: err.Error()})
+			}{
+				WalletAddress: u.WalletAddress,
+				Error:         err.Error(),
+			})
 			continue
 		}
 		if updated != nil {
@@ -696,7 +792,7 @@ func (r *WalletRepositoryFS) UpdateWalletsBatch(ctx context.Context, updates []w
 	return res, nil
 }
 
-// GetWalletStats: 全ウォレットを読み込み、統計値をメモリ上で計算。
+// GetWalletStats: 全ウォレットを読み込み、統計値を計算。
 func (r *WalletRepositoryFS) GetWalletStats(ctx context.Context) (wdom.WalletStats, error) {
 	if r.Client == nil {
 		return wdom.WalletStats{}, errors.New("firestore client is nil")
@@ -867,7 +963,7 @@ func (r *WalletRepositoryFS) GetTokenHoldingStats(ctx context.Context, tokenID s
 		}
 		if has {
 			res.HolderCount++
-			res.TotalHoldings++ // 1ウォレットあたり1保有としてカウント
+			res.TotalHoldings++
 			holders = append(holders, holder{addr: w.WalletAddress, cnt: cnt})
 		}
 	}
@@ -899,7 +995,7 @@ func (r *WalletRepositoryFS) GetTokenHoldingStats(ctx context.Context, tokenID s
 	return res, nil
 }
 
-// GetWalletRanking: トークン数ベースのランキングを計算。
+// GetWalletRanking: トークン数ベースのランキング。
 func (r *WalletRepositoryFS) GetWalletRanking(ctx context.Context, req wdom.WalletRankingRequest) (wdom.WalletRankingResponse, error) {
 	if r.Client == nil {
 		return wdom.WalletRankingResponse{}, errors.New("firestore client is nil")
@@ -987,7 +1083,7 @@ func (r *WalletRepositoryFS) GetWalletRanking(ctx context.Context, req wdom.Wall
 			Wallet:     info.w,
 			Rank:       rank,
 			TokenCount: info.cnt,
-			TierInfo:   wdom.TokenTierDefinition{}, // 必要なら別ロジックで設定
+			TierInfo:   wdom.TokenTierDefinition{},
 		})
 	}
 
@@ -1087,10 +1183,6 @@ func (r *WalletRepositoryFS) ResetWallets(ctx context.Context) error {
 		snaps = append(snaps, snap)
 	}
 
-	// ~L1077 旧Batch削除処理を置換
-	// b := r.Client.Batch()
-	// for _, s := range snaps { b.Delete(s.Ref) }
-	// if _, err := b.Commit(ctx); err != nil { return err }
 	const chunkSize = 400
 	for i := 0; i < len(snaps); i += chunkSize {
 		end := i + chunkSize
@@ -1141,7 +1233,6 @@ func docToWallet(doc *firestore.DocumentSnapshot) (wdom.Wallet, error) {
 		if v, ok := data[key].(string); ok {
 			return wdom.WalletStatus(strings.TrimSpace(v))
 		}
-		// default fallback
 		return wdom.WalletStatus("active")
 	}
 
@@ -1184,19 +1275,16 @@ func matchWalletFilter(w *wdom.Wallet, f *wdom.WalletFilter) bool {
 		return true
 	}
 
-	// SearchQuery (wallet_address 部分一致)
 	if v := strings.TrimSpace(f.SearchQuery); v != "" {
 		if !strings.Contains(strings.ToLower(w.WalletAddress), strings.ToLower(v)) {
 			return false
 		}
 	}
 
-	// hasTokensOnly
 	if f.HasTokensOnly && len(w.Tokens) == 0 {
 		return false
 	}
 
-	// token count range
 	if f.MinTokenCount != nil && len(w.Tokens) < *f.MinTokenCount {
 		return false
 	}
@@ -1204,7 +1292,6 @@ func matchWalletFilter(w *wdom.Wallet, f *wdom.WalletFilter) bool {
 		return false
 	}
 
-	// tokenIDs overlap
 	if len(f.TokenIDs) > 0 {
 		want := map[string]struct{}{}
 		for _, t := range dedupStrings(f.TokenIDs) {
@@ -1222,7 +1309,6 @@ func matchWalletFilter(w *wdom.Wallet, f *wdom.WalletFilter) bool {
 		}
 	}
 
-	// statuses
 	if len(f.Statuses) > 0 {
 		ok := false
 		for _, s := range f.Statuses {
@@ -1236,7 +1322,6 @@ func matchWalletFilter(w *wdom.Wallet, f *wdom.WalletFilter) bool {
 		}
 	}
 
-	// tiers
 	if len(f.Tiers) > 0 {
 		okTier := false
 		c := len(w.Tokens)
@@ -1272,7 +1357,6 @@ func matchWalletFilter(w *wdom.Wallet, f *wdom.WalletFilter) bool {
 		}
 	}
 
-	// time ranges
 	checkTime := func(t time.Time, from, to *time.Time) bool {
 		if !t.IsZero() {
 			if from != nil && t.Before(from.UTC()) {
@@ -1300,7 +1384,6 @@ func matchWalletFilter(w *wdom.Wallet, f *wdom.WalletFilter) bool {
 
 func sortWallets(items []*wdom.Wallet, sortCfg *wdom.WalletSortConfig) {
 	if sortCfg == nil {
-		// デフォルト: updatedAt DESC, walletAddress ASC
 		sort.SliceStable(items, func(i, j int) bool {
 			a, b := items[i], items[j]
 			if a.UpdatedAt.Equal(b.UpdatedAt) {
@@ -1395,7 +1478,6 @@ func sortWallets(items []*wdom.Wallet, sortCfg *wdom.WalletSortConfig) {
 			return string(a.Status) > string(b.Status)
 
 		default:
-			// デフォルト: updatedAt DESC, walletAddress ASC
 			if a.UpdatedAt.Equal(b.UpdatedAt) {
 				return a.WalletAddress < b.WalletAddress
 			}

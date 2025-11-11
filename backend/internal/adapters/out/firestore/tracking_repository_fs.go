@@ -17,7 +17,8 @@ import (
 
 // =====================================================
 // Firestore Tracking Repository
-// implements tracking.RepositoryPort
+// implements usecase.TrackingRepo (minimal port)
+// + additional helper methods for legacy usages
 // =====================================================
 
 type TrackingRepositoryFS struct {
@@ -33,7 +34,192 @@ func (r *TrackingRepositoryFS) col() *firestore.CollectionRef {
 }
 
 // =====================================================
-// RepositoryPort 実装
+// Minimal TrackingRepo implementation
+// (backend/internal/application/usecase/tracking_usecase.go)
+// =====================================================
+
+// GetByID implements TrackingRepo.GetByID.
+func (r *TrackingRepositoryFS) GetByID(ctx context.Context, id string) (trdom.Tracking, error) {
+	if r.Client == nil {
+		return trdom.Tracking{}, errors.New("firestore client is nil")
+	}
+
+	id = strings.TrimSpace(id)
+	if id == "" {
+		return trdom.Tracking{}, status.Error(codes.InvalidArgument, "tracking id is required")
+	}
+
+	snap, err := r.col().Doc(id).Get(ctx)
+	if err != nil {
+		if status.Code(err) == codes.NotFound {
+			return trdom.Tracking{}, status.Error(codes.NotFound, "tracking not found")
+		}
+		return trdom.Tracking{}, err
+	}
+
+	t, err := docToTracking(snap)
+	if err != nil {
+		return trdom.Tracking{}, err
+	}
+	return t, nil
+}
+
+// Exists implements TrackingRepo.Exists.
+func (r *TrackingRepositoryFS) Exists(ctx context.Context, id string) (bool, error) {
+	if r.Client == nil {
+		return false, errors.New("firestore client is nil")
+	}
+
+	id = strings.TrimSpace(id)
+	if id == "" {
+		return false, nil
+	}
+
+	_, err := r.col().Doc(id).Get(ctx)
+	if err != nil {
+		if status.Code(err) == codes.NotFound {
+			return false, nil
+		}
+		return false, err
+	}
+	return true, nil
+}
+
+// Create implements TrackingRepo.Create.
+// If v.ID is empty, a new document ID is generated and set back to v.ID.
+func (r *TrackingRepositoryFS) Create(ctx context.Context, v trdom.Tracking) (trdom.Tracking, error) {
+	if r.Client == nil {
+		return trdom.Tracking{}, errors.New("firestore client is nil")
+	}
+
+	id := strings.TrimSpace(v.ID)
+	var ref *firestore.DocumentRef
+	if id == "" {
+		ref = r.col().NewDoc()
+		v.ID = ref.ID
+	} else {
+		ref = r.col().Doc(id)
+	}
+
+	now := time.Now().UTC()
+	if v.CreatedAt.IsZero() {
+		v.CreatedAt = now
+	}
+	v.UpdatedAt = now
+
+	data := map[string]any{
+		"orderId":        strings.TrimSpace(v.OrderID),
+		"carrier":        strings.TrimSpace(v.Carrier),
+		"trackingNumber": strings.TrimSpace(v.TrackingNumber),
+		"createdAt":      v.CreatedAt,
+		"updatedAt":      v.UpdatedAt,
+	}
+
+	if v.SpecialInstructions != nil {
+		if s := strings.TrimSpace(*v.SpecialInstructions); s != "" {
+			data["specialInstructions"] = s
+		}
+	}
+
+	if _, err := ref.Create(ctx, data); err != nil {
+		if status.Code(err) == codes.AlreadyExists {
+			return trdom.Tracking{}, status.Error(codes.AlreadyExists, "tracking already exists")
+		}
+		return trdom.Tracking{}, err
+	}
+
+	snap, err := ref.Get(ctx)
+	if err != nil {
+		return trdom.Tracking{}, err
+	}
+
+	created, err := docToTracking(snap)
+	if err != nil {
+		return trdom.Tracking{}, err
+	}
+	return created, nil
+}
+
+// Save implements TrackingRepo.Save as an upsert.
+func (r *TrackingRepositoryFS) Save(ctx context.Context, v trdom.Tracking) (trdom.Tracking, error) {
+	if r.Client == nil {
+		return trdom.Tracking{}, errors.New("firestore client is nil")
+	}
+
+	id := strings.TrimSpace(v.ID)
+	var ref *firestore.DocumentRef
+	if id == "" {
+		ref = r.col().NewDoc()
+		v.ID = ref.ID
+	} else {
+		ref = r.col().Doc(id)
+	}
+
+	now := time.Now().UTC()
+	if v.CreatedAt.IsZero() {
+		v.CreatedAt = now
+	}
+	v.UpdatedAt = now
+
+	data := map[string]any{
+		"orderId":        strings.TrimSpace(v.OrderID),
+		"carrier":        strings.TrimSpace(v.Carrier),
+		"trackingNumber": strings.TrimSpace(v.TrackingNumber),
+		"createdAt":      v.CreatedAt,
+		"updatedAt":      v.UpdatedAt,
+	}
+
+	if v.SpecialInstructions != nil {
+		if s := strings.TrimSpace(*v.SpecialInstructions); s != "" {
+			data["specialInstructions"] = s
+		} else {
+			data["specialInstructions"] = firestore.Delete
+		}
+	}
+
+	if _, err := ref.Set(ctx, data); err != nil {
+		return trdom.Tracking{}, err
+	}
+
+	snap, err := ref.Get(ctx)
+	if err != nil {
+		return trdom.Tracking{}, err
+	}
+	saved, err := docToTracking(snap)
+	if err != nil {
+		return trdom.Tracking{}, err
+	}
+	return saved, nil
+}
+
+// Delete implements TrackingRepo.Delete.
+func (r *TrackingRepositoryFS) Delete(ctx context.Context, id string) error {
+	if r.Client == nil {
+		return errors.New("firestore client is nil")
+	}
+
+	id = strings.TrimSpace(id)
+	if id == "" {
+		return status.Error(codes.InvalidArgument, "tracking id is required")
+	}
+
+	ref := r.col().Doc(id)
+	_, err := ref.Get(ctx)
+	if err != nil {
+		if status.Code(err) == codes.NotFound {
+			return status.Error(codes.NotFound, "tracking not found")
+		}
+		return err
+	}
+
+	if _, err := ref.Delete(ctx); err != nil {
+		return err
+	}
+	return nil
+}
+
+// =====================================================
+// Additional helpers (legacy/administration)
 // =====================================================
 
 // GetAllTrackings: 全件取得（管理/一覧用途）
@@ -65,32 +251,6 @@ func (r *TrackingRepositoryFS) GetAllTrackings(ctx context.Context) ([]*trdom.Tr
 		out = append(out, &tt)
 	}
 	return out, nil
-}
-
-// GetTrackingByID: ID で1件取得
-func (r *TrackingRepositoryFS) GetTrackingByID(ctx context.Context, id string) (*trdom.Tracking, error) {
-	if r.Client == nil {
-		return nil, errors.New("firestore client is nil")
-	}
-
-	id = strings.TrimSpace(id)
-	if id == "" {
-		return nil, status.Error(codes.InvalidArgument, "tracking id is required")
-	}
-
-	snap, err := r.col().Doc(id).Get(ctx)
-	if status.Code(err) == codes.NotFound {
-		return nil, status.Error(codes.NotFound, "tracking not found")
-	}
-	if err != nil {
-		return nil, err
-	}
-
-	t, err := docToTracking(snap)
-	if err != nil {
-		return nil, err
-	}
-	return &t, nil
 }
 
 // GetTrackingsByOrderID: 注文IDで複数件取得
@@ -131,144 +291,6 @@ func (r *TrackingRepositoryFS) GetTrackingsByOrderID(ctx context.Context, orderI
 	return out, nil
 }
 
-// CreateTracking: CreateTrackingInput から新規作成
-func (r *TrackingRepositoryFS) CreateTracking(ctx context.Context, in trdom.CreateTrackingInput) (*trdom.Tracking, error) {
-	if r.Client == nil {
-		return nil, errors.New("firestore client is nil")
-	}
-
-	now := time.Now().UTC()
-
-	ref := r.col().NewDoc()
-
-	data := map[string]any{
-		"orderId":        strings.TrimSpace(in.OrderID),
-		"carrier":        strings.TrimSpace(in.Carrier),
-		"trackingNumber": strings.TrimSpace(in.TrackingNumber),
-		"createdAt":      now,
-		"updatedAt":      now,
-	}
-
-	if in.SpecialInstructions != nil {
-		if s := strings.TrimSpace(*in.SpecialInstructions); s != "" {
-			data["specialInstructions"] = s
-		}
-	}
-
-	if _, err := ref.Create(ctx, data); err != nil {
-		// 呼び出し側で一意制約相当を気にする場合は status.Code(err) を見る想定
-		if status.Code(err) == codes.AlreadyExists {
-			return nil, err
-		}
-		return nil, err
-	}
-
-	snap, err := ref.Get(ctx)
-	if err != nil {
-		return nil, err
-	}
-
-	t, err := docToTracking(snap)
-	if err != nil {
-		return nil, err
-	}
-	return &t, nil
-}
-
-// UpdateTracking: 差分更新
-func (r *TrackingRepositoryFS) UpdateTracking(ctx context.Context, id string, in trdom.UpdateTrackingInput) (*trdom.Tracking, error) {
-	if r.Client == nil {
-		return nil, errors.New("firestore client is nil")
-	}
-
-	id = strings.TrimSpace(id)
-	if id == "" {
-		return nil, status.Error(codes.InvalidArgument, "tracking id is required")
-	}
-
-	ref := r.col().Doc(id)
-
-	// 存在確認
-	if _, err := ref.Get(ctx); status.Code(err) == codes.NotFound {
-		return nil, status.Error(codes.NotFound, "tracking not found")
-	} else if err != nil {
-		return nil, err
-	}
-
-	var updates []firestore.Update
-
-	if in.Carrier != nil {
-		updates = append(updates, firestore.Update{
-			Path:  "carrier",
-			Value: strings.TrimSpace(*in.Carrier),
-		})
-	}
-	if in.TrackingNumber != nil {
-		updates = append(updates, firestore.Update{
-			Path:  "trackingNumber",
-			Value: strings.TrimSpace(*in.TrackingNumber),
-		})
-	}
-	if in.SpecialInstructions != nil {
-		v := strings.TrimSpace(*in.SpecialInstructions)
-		if v == "" {
-			updates = append(updates, firestore.Update{
-				Path:  "specialInstructions",
-				Value: firestore.Delete,
-			})
-		} else {
-			updates = append(updates, firestore.Update{
-				Path:  "specialInstructions",
-				Value: v,
-			})
-		}
-	}
-
-	// 変更がない場合はそのまま返す
-	if len(updates) == 0 {
-		return r.GetTrackingByID(ctx, id)
-	}
-
-	// 常に updatedAt は更新
-	updates = append(updates, firestore.Update{
-		Path:  "updatedAt",
-		Value: time.Now().UTC(),
-	})
-
-	if _, err := ref.Update(ctx, updates); err != nil {
-		if status.Code(err) == codes.NotFound {
-			return nil, status.Error(codes.NotFound, "tracking not found")
-		}
-		return nil, err
-	}
-
-	return r.GetTrackingByID(ctx, id)
-}
-
-// DeleteTracking: 1件削除
-func (r *TrackingRepositoryFS) DeleteTracking(ctx context.Context, id string) error {
-	if r.Client == nil {
-		return errors.New("firestore client is nil")
-	}
-
-	id = strings.TrimSpace(id)
-	if id == "" {
-		return status.Error(codes.InvalidArgument, "tracking id is required")
-	}
-
-	ref := r.col().Doc(id)
-	if _, err := ref.Get(ctx); status.Code(err) == codes.NotFound {
-		return status.Error(codes.NotFound, "tracking not found")
-	} else if err != nil {
-		return err
-	}
-
-	if _, err := ref.Delete(ctx); err != nil {
-		return err
-	}
-	return nil
-}
-
 // ResetTrackings: 全削除 (開発/テスト用途)
 func (r *TrackingRepositoryFS) ResetTrackings(ctx context.Context) error {
 	if r.Client == nil {
@@ -288,15 +310,6 @@ func (r *TrackingRepositoryFS) ResetTrackings(ctx context.Context) error {
 		snaps = append(snaps, snap)
 	}
 
-	// ~L279 OLD (WriteBatch delete)
-	// batch := r.Client.Batch()
-	// for _, snap := range snaps {
-	//   batch.Delete(snap.Ref)
-	// }
-	// if _, err := batch.Commit(ctx); err != nil {
-	//   return err
-	// }
-	// NEW (transaction chunked)
 	const chunkSize = 400
 	for i := 0; i < len(snaps); i += chunkSize {
 		end := i + chunkSize
@@ -319,13 +332,13 @@ func (r *TrackingRepositoryFS) ResetTrackings(ctx context.Context) error {
 }
 
 // WithTx: Firestore用の簡易トランザクションヘルパー。
-// （必要であれば RunTransaction に差し替え可能）
 func (r *TrackingRepositoryFS) WithTx(ctx context.Context, fn func(ctx context.Context) error) error {
 	if r.Client == nil {
 		return errors.New("firestore client is nil")
 	}
-	// 現状はそのまま実行（複数ドキュメントTxが必要になったら拡張）
-	return fn(ctx)
+	return r.Client.RunTransaction(ctx, func(txCtx context.Context, _ *firestore.Transaction) error {
+		return fn(txCtx)
+	})
 }
 
 // =====================================================

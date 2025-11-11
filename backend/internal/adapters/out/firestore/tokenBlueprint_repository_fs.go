@@ -443,7 +443,6 @@ func (r *TokenBlueprintRepositoryFS) IsSymbolUnique(ctx context.Context, symbol 
 		if strings.TrimSpace(excludeID) != "" && doc.Ref.ID == strings.TrimSpace(excludeID) {
 			continue
 		}
-		// another doc with same symbol
 		return false, nil
 	}
 	return true, nil
@@ -475,7 +474,6 @@ func (r *TokenBlueprintRepositoryFS) IsNameUnique(ctx context.Context, name stri
 		if strings.TrimSpace(excludeID) != "" && doc.Ref.ID == strings.TrimSpace(excludeID) {
 			continue
 		}
-		// another doc with same name
 		return false, nil
 	}
 	return true, nil
@@ -490,25 +488,25 @@ func (r *TokenBlueprintRepositoryFS) UploadContentFile(ctx context.Context, file
 	return "", fmt.Errorf("UploadContentFile: not implemented in Firestore repository")
 }
 
-// WithTx: Firestore transactions are different; we expose a no-op wrapper here.
+// WithTx: Firestore transactions wrapper (simple passthrough).
 func (r *TokenBlueprintRepositoryFS) WithTx(ctx context.Context, fn func(ctx context.Context) error) error {
 	if r.Client == nil {
 		return errors.New("firestore client is nil")
 	}
-	// For real transactional behavior, use Client.RunTransaction and adapt repository calls.
+	// For more complex cases, adapt fn to use RunTransaction.
 	return fn(ctx)
 }
 
-// Reset: delete all docs (for tests/dev).
+// Reset: delete all docs (for tests/dev) using transactions instead of deprecated Batch.
 func (r *TokenBlueprintRepositoryFS) Reset(ctx context.Context) error {
 	if r.Client == nil {
 		return errors.New("firestore client is nil")
 	}
 
 	it := r.col().Documents(ctx)
-	batch := r.Client.Batch()
-	count := 0
+	defer it.Stop()
 
+	var snaps []*firestore.DocumentSnapshot
 	for {
 		doc, err := it.Next()
 		if errors.Is(err, iterator.Done) {
@@ -517,20 +515,28 @@ func (r *TokenBlueprintRepositoryFS) Reset(ctx context.Context) error {
 		if err != nil {
 			return err
 		}
-		batch.Delete(doc.Ref)
-		count++
-		if count%400 == 0 {
-			if _, err := batch.Commit(ctx); err != nil {
-				return err
-			}
-			batch = r.Client.Batch()
-		}
+		snaps = append(snaps, doc)
 	}
-	if count > 0 {
-		if _, err := batch.Commit(ctx); err != nil {
+
+	const chunkSize = 400
+	for i := 0; i < len(snaps); i += chunkSize {
+		end := i + chunkSize
+		if end > len(snaps) {
+			end = len(snaps)
+		}
+
+		if err := r.Client.RunTransaction(ctx, func(ctx context.Context, tx *firestore.Transaction) error {
+			for _, s := range snaps[i:end] {
+				if err := tx.Delete(s.Ref); err != nil {
+					return err
+				}
+			}
+			return nil
+		}); err != nil {
 			return err
 		}
 	}
+
 	return nil
 }
 
@@ -591,7 +597,7 @@ func docToTokenBlueprint(doc *firestore.DocumentSnapshot) (tbdom.TokenBlueprint,
 	return tb, nil
 }
 
-// matchTBFilter applies tbdom.Filter in-memory (Firestore analogue of buildTBWhere).
+// matchTBFilter applies tbdom.Filter in-memory.
 func matchTBFilter(tb tbdom.TokenBlueprint, f tbdom.Filter) bool {
 	trim := func(s string) string { return strings.TrimSpace(s) }
 
@@ -608,7 +614,6 @@ func matchTBFilter(tb tbdom.TokenBlueprint, f tbdom.Filter) bool {
 		return false
 	}
 
-	// ID / BrandID / AssigneeID / Symbol sets
 	if len(f.IDs) > 0 && !inList(tb.ID, f.IDs) {
 		return false
 	}
@@ -622,21 +627,17 @@ func matchTBFilter(tb tbdom.TokenBlueprint, f tbdom.Filter) bool {
 		return false
 	}
 
-	// NameLike
 	if v := trim(f.NameLike); v != "" {
 		if !strings.Contains(strings.ToLower(tb.Name), strings.ToLower(v)) {
 			return false
 		}
 	}
-
-	// SymbolLike
 	if v := trim(f.SymbolLike); v != "" {
 		if !strings.Contains(strings.ToLower(tb.Symbol), strings.ToLower(v)) {
 			return false
 		}
 	}
 
-	// HasIcon
 	if f.HasIcon != nil {
 		has := tb.IconID != nil && trim(*tb.IconID) != ""
 		if *f.HasIcon && !has {
@@ -647,7 +648,6 @@ func matchTBFilter(tb tbdom.TokenBlueprint, f tbdom.Filter) bool {
 		}
 	}
 
-	// CreatedAt / UpdatedAt ranges
 	if f.CreatedFrom != nil && tb.CreatedAt.Before(f.CreatedFrom.UTC()) {
 		return false
 	}

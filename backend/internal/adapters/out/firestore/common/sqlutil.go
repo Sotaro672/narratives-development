@@ -1,4 +1,3 @@
-// backend\internal\adapters\out\firestore\common\sqlutil.go
 package common
 
 import (
@@ -265,4 +264,64 @@ func TrimPtr(p *string) *string {
 		return nil
 	}
 	return &s
+}
+
+// ========================
+// 共通: スライス/文字列ユーティリティ
+// ========================
+
+// ContainsString は、v(Trim済) が slice 内(各要素 Trim済)に含まれているかを判定します。
+func ContainsString(slice []string, v string) bool {
+	v = strings.TrimSpace(v)
+	if v == "" {
+		return false
+	}
+	for _, s := range slice {
+		if strings.TrimSpace(s) == v {
+			return true
+		}
+	}
+	return false
+}
+
+// IntersectsStrings は、2つのスライスに共通要素(Trim済/空文字除外)があるかどうかを返します。
+func IntersectsStrings(a, b []string) bool {
+	if len(a) == 0 || len(b) == 0 {
+		return false
+	}
+	set := make(map[string]struct{}, len(a))
+	for _, v := range a {
+		if s := strings.TrimSpace(v); s != "" {
+			set[s] = struct{}{}
+		}
+	}
+	for _, v := range b {
+		if s := strings.TrimSpace(v); s != "" {
+			if _, ok := set[s]; ok {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+// HasAllStrings は、need の各要素(Trim済/空文字除外)がすべて have に含まれているかを判定します。
+func HasAllStrings(have, need []string) bool {
+	if len(need) == 0 {
+		return true
+	}
+	set := make(map[string]struct{}, len(have))
+	for _, v := range have {
+		if s := strings.TrimSpace(v); s != "" {
+			set[s] = struct{}{}
+		}
+	}
+	for _, v := range need {
+		if s := strings.TrimSpace(v); s != "" {
+			if _, ok := set[s]; !ok {
+				return false
+			}
+		}
+	}
+	return true
 }

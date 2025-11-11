@@ -18,13 +18,18 @@ import (
 	modeldom "narratives/internal/domain/model"
 )
 
-// ModelRepositoryFS is a Firestore-based implementation of model.RepositoryPort.
+// ModelRepositoryFS is a Firestore-based implementation used by ModelUsecase and
+// various model/variation related use cases.
 type ModelRepositoryFS struct {
 	Client *firestore.Client
 }
 
 func NewModelRepositoryFS(client *firestore.Client) *ModelRepositoryFS {
 	return &ModelRepositoryFS{Client: client}
+}
+
+func (r *ModelRepositoryFS) modelsCol() *firestore.CollectionRef {
+	return r.Client.Collection("models")
 }
 
 func (r *ModelRepositoryFS) modelSetsCol() *firestore.CollectionRef {
@@ -35,9 +40,121 @@ func (r *ModelRepositoryFS) variationsCol() *firestore.CollectionRef {
 	return r.Client.Collection("model_variations")
 }
 
-// WithTx executes fn "within a transaction".
-// For Firestore, we use RunTransaction, but most methods work on the client
-// directly, so this is a best-effort wrapper that only propagates context.
+// ==========================
+// Minimal ModelRepo (for ModelUsecase)
+// ==========================
+
+// GetByID implements ModelRepo.GetByID.
+// It reads from the "models" collection using document ID.
+func (r *ModelRepositoryFS) GetByID(ctx context.Context, id string) (modeldom.Model, error) {
+	if r.Client == nil {
+		return modeldom.Model{}, errors.New("firestore client is nil")
+	}
+
+	id = strings.TrimSpace(id)
+	if id == "" {
+		return modeldom.Model{}, modeldom.ErrNotFound
+	}
+
+	snap, err := r.modelsCol().Doc(id).Get(ctx)
+	if err != nil {
+		if status.Code(err) == codes.NotFound {
+			return modeldom.Model{}, modeldom.ErrNotFound
+		}
+		return modeldom.Model{}, err
+	}
+
+	var m modeldom.Model
+	if err := snap.DataTo(&m); err != nil {
+		return modeldom.Model{}, err
+	}
+	return m, nil
+}
+
+// Exists implements ModelRepo.Exists.
+func (r *ModelRepositoryFS) Exists(ctx context.Context, id string) (bool, error) {
+	if r.Client == nil {
+		return false, errors.New("firestore client is nil")
+	}
+
+	id = strings.TrimSpace(id)
+	if id == "" {
+		return false, nil
+	}
+
+	_, err := r.modelsCol().Doc(id).Get(ctx)
+	if err != nil {
+		if status.Code(err) == codes.NotFound {
+			return false, nil
+		}
+		return false, err
+	}
+	return true, nil
+}
+
+// Create implements ModelRepo.Create.
+// NOTE: Domain上の Model は ID フィールドを持たないため、
+// Firestore のドキュメントIDは自動採番し、その値は戻り値 m には反映しません。
+func (r *ModelRepositoryFS) Create(ctx context.Context, m modeldom.Model) (modeldom.Model, error) {
+	if r.Client == nil {
+		return modeldom.Model{}, errors.New("firestore client is nil")
+	}
+
+	docRef := r.modelsCol().NewDoc()
+	if _, err := docRef.Create(ctx, m); err != nil {
+		if status.Code(err) == codes.AlreadyExists {
+			return modeldom.Model{}, modeldom.ErrConflict
+		}
+		return modeldom.Model{}, err
+	}
+	return m, nil
+}
+
+// Save implements ModelRepo.Save as an upsert-like operation.
+// ID フィールドが無いため、新規ドキュメントとして保存します。
+func (r *ModelRepositoryFS) Save(ctx context.Context, m modeldom.Model) (modeldom.Model, error) {
+	if r.Client == nil {
+		return modeldom.Model{}, errors.New("firestore client is nil")
+	}
+
+	docRef := r.modelsCol().NewDoc()
+	if _, err := docRef.Set(ctx, m); err != nil {
+		return modeldom.Model{}, err
+	}
+	return m, nil
+}
+
+// Delete implements ModelRepo.Delete.
+func (r *ModelRepositoryFS) Delete(ctx context.Context, id string) error {
+	if r.Client == nil {
+		return errors.New("firestore client is nil")
+	}
+
+	id = strings.TrimSpace(id)
+	if id == "" {
+		return modeldom.ErrNotFound
+	}
+
+	docRef := r.modelsCol().Doc(id)
+	_, err := docRef.Get(ctx)
+	if err != nil {
+		if status.Code(err) == codes.NotFound {
+			return modeldom.ErrNotFound
+		}
+		return err
+	}
+
+	if _, err := docRef.Delete(ctx); err != nil {
+		return err
+	}
+	return nil
+}
+
+// ==========================
+// Tx helper
+// ==========================
+
+// WithTx executes fn within a Firestore transaction.
 func (r *ModelRepositoryFS) WithTx(ctx context.Context, fn func(ctx context.Context) error) error {
 	if r.Client == nil {
 		return errors.New("firestore client is nil")
@@ -238,8 +355,6 @@ func (r *ModelRepositoryFS) ListVariations(
 	q := r.variationsCol().Query
 	q = applyVariationSort(q, sort)
 
-	// We fetch and then apply the full VariationFilter in-memory
-	// (some conditions are not directly expressible in a single Firestore query).
 	it := q.Documents(ctx)
 	defer it.Stop()
 
@@ -477,7 +592,6 @@ func (r *ModelRepositoryFS) UpdateModelVariation(ctx context.Context, variationI
 			Value: strings.TrimSpace(*updates.ModelNumber),
 		})
 	}
-	// Measurements is a map alias; nil means "no update".
 	if updates.Measurements != nil {
 		fsUpdates = append(fsUpdates, firestore.Update{
 			Path:  "measurements",
@@ -539,6 +653,8 @@ func (r *ModelRepositoryFS) DeleteModelVariation(ctx context.Context, variationI
 	return &v, nil
 }
 
+// ReplaceModelVariations replaces all variations for the product's blueprint
+// using Firestore transactions (no deprecated WriteBatch).
 func (r *ModelRepositoryFS) ReplaceModelVariations(ctx context.Context, productID string, variations []modeldom.NewModelVariation) ([]modeldom.ModelVariation, error) {
 	if r.Client == nil {
 		return nil, errors.New("firestore client is nil")
@@ -571,7 +687,7 @@ func (r *ModelRepositoryFS) ReplaceModelVariations(ctx context.Context, productI
 		return nil, fmt.Errorf("model_set missing productBlueprintId: %s", snap.Ref.ID)
 	}
 
-	// Delete existing variations for blueprintID.
+	// 1. Delete existing variations for this blueprintId in chunks via transactions.
 	var toDelete []*firestore.DocumentRef
 	it := r.variationsCol().
 		Where("productBlueprintId", "==", blueprintID).
@@ -587,63 +703,64 @@ func (r *ModelRepositoryFS) ReplaceModelVariations(ctx context.Context, productI
 		toDelete = append(toDelete, doc.Ref)
 	}
 	if len(toDelete) > 0 {
-		// batch := r.Client.Batch()
-		// for _, snap := range snaps { batch.Delete(snap.Ref) }
-		// if _, err := batch.Commit(ctx); err != nil { return err }
-		// NEW (transaction, chunked) — 元のロジックに合わせて Update/Set を使用
 		const chunkSize = 400
 		for i := 0; i < len(toDelete); i += chunkSize {
 			end := i + chunkSize
 			if end > len(toDelete) {
 				end = len(toDelete)
 			}
+			chunk := toDelete[i:end]
+
 			if err := r.Client.RunTransaction(ctx, func(ctx context.Context, tx *firestore.Transaction) error {
-				for _, s := range toDelete[i:end] {
-					if err := tx.Delete(s); err != nil {
+				for _, ref := range chunk {
+					if err := tx.Delete(ref); err != nil {
 						return err
 					}
 				}
 				return nil
 			}); err != nil {
-				return nil, err // ★ 戻り値2つに修正
+				return nil, err
 			}
 		}
 	}
 
-	// Insert new variations.
-	now := time.Now().UTC()
-	var out []modeldom.ModelVariation
+	// 2. Insert new variations via transactions in chunks.
 	if len(variations) > 0 {
-		b := r.Client.Batch()
-		count := 0
-		for _, nv := range variations {
-			docRef := r.variationsCol().NewDoc()
-			mv := modeldom.ModelVariation{
-				ID:                 docRef.ID,
-				ProductBlueprintID: blueprintID,
-				ModelNumber:        strings.TrimSpace(nv.ModelNumber),
-				Size:               strings.TrimSpace(nv.Size),
-				Color:              strings.TrimSpace(nv.Color),
-				Measurements:       nv.Measurements,
-				CreatedAt:          &now,
-				UpdatedAt:          &now,
+		const chunkSize = 400
+		now := time.Now().UTC()
+
+		for i := 0; i < len(variations); i += chunkSize {
+			end := i + chunkSize
+			if end > len(variations) {
+				end = len(variations)
 			}
-			b.Set(docRef, modelVariationToDoc(mv))
-			out = append(out, mv)
-			count++
-			if count%400 == 0 {
-				if _, err := b.Commit(ctx); err != nil {
-					return nil, err
+			chunk := variations[i:end]
+
+			if err := r.Client.RunTransaction(ctx, func(ctx context.Context, tx *firestore.Transaction) error {
+				for _, nv := range chunk {
+					docRef := r.variationsCol().NewDoc()
+					mv := modeldom.ModelVariation{
+						ID:                 docRef.ID,
+						ProductBlueprintID: blueprintID,
+						ModelNumber:        strings.TrimSpace(nv.ModelNumber),
+						Size:               strings.TrimSpace(nv.Size),
+						Color:              strings.TrimSpace(nv.Color),
+						Measurements:       nv.Measurements,
+						CreatedAt:          &now,
+						UpdatedAt:          &now,
+					}
+					if err := tx.Set(docRef, modelVariationToDoc(mv)); err != nil {
+						return err
+					}
 				}
-				b = r.Client.Batch()
+				return nil
+			}); err != nil {
+				return nil, err
 			}
-		}
-		if _, err := b.Commit(ctx); err != nil {
-			return nil, err
 		}
 	}
 
-	// Reload from Firestore for canonical state.
+	// 3. Reload from Firestore for canonical state.
 	return r.listVariationsByBlueprintID(ctx, blueprintID)
 }
 
@@ -864,13 +981,8 @@ func modelVariationToDoc(v modeldom.ModelVariation) map[string]any {
 // matchVariationFilter applies VariationFilter in-memory
 // (Firestore-friendly mirror of the PG implementation).
 func matchVariationFilter(v modeldom.ModelVariation, f modeldom.VariationFilter) bool {
-	// ProductID: in PG this is via join; here, callers that rely on ProductID
-	// should generally go through GetModelVariations/ReplaceModelVariations which
-	// resolve via model_sets. For List/Count with ProductID set, this helper
-	// currently does not resolve joins.
+	// ProductID filter is not resolved here (would require join).
 	if pid := strings.TrimSpace(f.ProductID); pid != "" {
-		// Cannot verify without an extra lookup; reject by default to avoid
-		// returning incorrect rows.
 		return false
 	}
 
@@ -999,5 +1111,6 @@ func applyVariationSort(q firestore.Query, sort modeldom.VariationSort) firestor
 	}
 
 	// Stable secondary sort by document ID.
-	return q.OrderBy(field, dir).OrderBy(firestore.DocumentID, dir)
+	return q.OrderBy(field, dir).
+		OrderBy(firestore.DocumentID, dir)
 }
