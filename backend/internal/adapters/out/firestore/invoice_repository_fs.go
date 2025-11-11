@@ -14,10 +14,11 @@ import (
 	"google.golang.org/grpc/status"
 
 	fscommon "narratives/internal/adapters/out/firestore/common"
+	usecase "narratives/internal/application/usecase"
 	invdom "narratives/internal/domain/invoice"
 )
 
-// InvoiceRepositoryFS implements invoice.Repository using Firestore.
+// InvoiceRepositoryFS implements usecase.InvoiceRepo using Firestore.
 type InvoiceRepositoryFS struct {
 	Client *firestore.Client
 }
@@ -34,14 +35,15 @@ func (r *InvoiceRepositoryFS) orderItemInvoiceCol() *firestore.CollectionRef {
 	return r.Client.Collection("order_item_invoices")
 }
 
-// Compile-time check
-var _ invdom.Repository = (*InvoiceRepositoryFS)(nil)
+// Compile-time check: ensure InvoiceRepositoryFS satisfies usecase.InvoiceRepo.
+var _ usecase.InvoiceRepo = (*InvoiceRepositoryFS)(nil)
 
 // =======================
 // Queries (Invoice)
 // =======================
 
-// 非インターフェース補助: GetByID は orderID をそのまま使う
+// GetByID は InvoiceRepo インターフェース準拠用。
+// 本実装では orderID をそのままドキュメントIDとして扱う。
 func (r *InvoiceRepositoryFS) GetByID(ctx context.Context, id string) (invdom.Invoice, error) {
 	return r.GetByOrderID(ctx, id)
 }
@@ -67,12 +69,12 @@ func (r *InvoiceRepositoryFS) GetByOrderID(ctx context.Context, orderID string) 
 	return docToInvoice(snap)
 }
 
-func (r *InvoiceRepositoryFS) Exists(ctx context.Context, orderID string) (bool, error) {
+func (r *InvoiceRepositoryFS) Exists(ctx context.Context, id string) (bool, error) {
 	if r.Client == nil {
 		return false, errors.New("firestore client is nil")
 	}
 
-	orderID = strings.TrimSpace(orderID)
+	orderID := strings.TrimSpace(id)
 	if orderID == "" {
 		return false, nil
 	}
@@ -258,7 +260,7 @@ func (r *InvoiceRepositoryFS) ListByCursor(
 }
 
 // =======================
-// Mutations (Invoice)
+// Mutations (InvoiceRepo required methods)
 // =======================
 
 func (r *InvoiceRepositoryFS) Create(ctx context.Context, inv invdom.Invoice) (invdom.Invoice, error) {
@@ -299,110 +301,10 @@ func (r *InvoiceRepositoryFS) Create(ctx context.Context, inv invdom.Invoice) (i
 	return docToInvoice(snap)
 }
 
-func (r *InvoiceRepositoryFS) Update(
-	ctx context.Context,
-	orderID string,
-	patch invdom.InvoicePatch,
-) (invdom.Invoice, error) {
-	if r.Client == nil {
-		return invdom.Invoice{}, errors.New("firestore client is nil")
-	}
-
-	orderID = strings.TrimSpace(orderID)
-	if orderID == "" {
-		return invdom.Invoice{}, invdom.ErrNotFound
-	}
-
-	docRef := r.col().Doc(orderID)
-	var updates []firestore.Update
-
-	setInt := func(path string, p *int) {
-		if p != nil {
-			updates = append(updates, firestore.Update{
-				Path:  path,
-				Value: *p,
-			})
-		}
-	}
-	setStr := func(path string, p *string) {
-		if p != nil {
-			updates = append(updates, firestore.Update{
-				Path:  path,
-				Value: strings.TrimSpace(*p),
-			})
-		}
-	}
-
-	setInt("subtotal", patch.Subtotal)
-	setInt("discountAmount", patch.DiscountAmount)
-	setInt("taxAmount", patch.TaxAmount)
-	setInt("shippingCost", patch.ShippingCost)
-	setInt("totalAmount", patch.TotalAmount)
-
-	setStr("currency", patch.Currency)
-	setStr("billingAddressId", patch.BillingAddressID)
-
-	// updatedAt explicit or NOW()
-	if patch.UpdatedAt != nil {
-		if patch.UpdatedAt.IsZero() {
-			updates = append(updates, firestore.Update{
-				Path:  "updatedAt",
-				Value: firestore.Delete,
-			})
-		} else {
-			updates = append(updates, firestore.Update{
-				Path:  "updatedAt",
-				Value: patch.UpdatedAt.UTC(),
-			})
-		}
-	} else if len(updates) > 0 {
-		updates = append(updates, firestore.Update{
-			Path:  "updatedAt",
-			Value: time.Now().UTC(),
-		})
-	}
-
-	if len(updates) == 0 {
-		// no-op
-		return r.GetByOrderID(ctx, orderID)
-	}
-
-	_, err := docRef.Update(ctx, updates)
-	if err != nil {
-		if status.Code(err) == codes.NotFound {
-			return invdom.Invoice{}, invdom.ErrNotFound
-		}
-		return invdom.Invoice{}, err
-	}
-
-	return r.GetByOrderID(ctx, orderID)
-}
-
-func (r *InvoiceRepositoryFS) Delete(ctx context.Context, orderID string) error {
-	if r.Client == nil {
-		return errors.New("firestore client is nil")
-	}
-
-	orderID = strings.TrimSpace(orderID)
-	if orderID == "" {
-		return invdom.ErrNotFound
-	}
-
-	_, err := r.col().Doc(orderID).Delete(ctx)
-	if err != nil {
-		if status.Code(err) == codes.NotFound {
-			return invdom.ErrNotFound
-		}
-		return err
-	}
-	return nil
-}
-
-// Save upserts an Invoice. opts は現在特に使用しないが、インターフェース互換のため受け取る。
+// Save upserts an Invoice. (Matches usecase.InvoiceRepo.Save)
 func (r *InvoiceRepositoryFS) Save(
 	ctx context.Context,
 	inv invdom.Invoice,
-	_ *invdom.SaveOptions,
 ) (invdom.Invoice, error) {
 	if r.Client == nil {
 		return invdom.Invoice{}, errors.New("firestore client is nil")
@@ -438,8 +340,28 @@ func (r *InvoiceRepositoryFS) Save(
 	return docToInvoice(snap)
 }
 
+func (r *InvoiceRepositoryFS) Delete(ctx context.Context, id string) error {
+	if r.Client == nil {
+		return errors.New("firestore client is nil")
+	}
+
+	orderID := strings.TrimSpace(id)
+	if orderID == "" {
+		return invdom.ErrNotFound
+	}
+
+	_, err := r.col().Doc(orderID).Delete(ctx)
+	if err != nil {
+		if status.Code(err) == codes.NotFound {
+			return invdom.ErrNotFound
+		}
+		return err
+	}
+	return nil
+}
+
 // =======================
-// Order item level invoices
+// Order item level invoices (extra helpers)
 // =======================
 
 func (r *InvoiceRepositoryFS) GetOrderItemInvoiceByOrderItemID(

@@ -3,6 +3,8 @@ package firestore
 
 import (
 	"context"
+	"errors"
+	"strings"
 	"time"
 
 	"cloud.google.com/go/firestore"
@@ -10,6 +12,7 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
+	fscommon "narratives/internal/adapters/out/firestore/common"
 	announcement "narratives/internal/domain/announcement"
 	common "narratives/internal/domain/common"
 )
@@ -22,6 +25,9 @@ type AnnouncementRepositoryFS struct {
 func NewAnnouncementRepositoryFS(client *firestore.Client) *AnnouncementRepositoryFS {
 	return &AnnouncementRepositoryFS{Client: client}
 }
+
+// Compile-time check: ensure this satisfies announcement.Repository.
+var _ announcement.Repository = (*AnnouncementRepositoryFS)(nil)
 
 // GetByID retrieves an announcement by ID from Firestore.
 func (r *AnnouncementRepositoryFS) GetByID(ctx context.Context, id string) (announcement.Announcement, error) {
@@ -77,7 +83,11 @@ func (r *AnnouncementRepositoryFS) Create(ctx context.Context, a announcement.An
 }
 
 // Save upserts an announcement.
-func (r *AnnouncementRepositoryFS) Save(ctx context.Context, a announcement.Announcement, _ *common.SaveOptions) (announcement.Announcement, error) {
+func (r *AnnouncementRepositoryFS) Save(
+	ctx context.Context,
+	a announcement.Announcement,
+	_ *common.SaveOptions,
+) (announcement.Announcement, error) {
 	ref := r.Client.Collection("announcements").Doc(a.ID)
 	if a.ID == "" {
 		ref = r.Client.Collection("announcements").NewDoc()
@@ -99,7 +109,11 @@ func (r *AnnouncementRepositoryFS) Save(ctx context.Context, a announcement.Anno
 }
 
 // Update applies a patch to an existing announcement.
-func (r *AnnouncementRepositoryFS) Update(ctx context.Context, id string, p announcement.AnnouncementPatch) (announcement.Announcement, error) {
+func (r *AnnouncementRepositoryFS) Update(
+	ctx context.Context,
+	id string,
+	p announcement.AnnouncementPatch,
+) (announcement.Announcement, error) {
 	ref := r.Client.Collection("announcements").Doc(id)
 
 	updates := []firestore.Update{}
@@ -184,13 +198,17 @@ func (r *AnnouncementRepositoryFS) Delete(ctx context.Context, id string) error 
 	return nil
 }
 
-// List returns announcements (simple implementation; filter/sort/page are minimally used).
+// List returns announcements with simple pagination.
 func (r *AnnouncementRepositoryFS) List(
 	ctx context.Context,
 	_ announcement.Filter,
 	_ common.Sort,
-	_ common.Page,
+	page common.Page,
 ) (common.PageResult[announcement.Announcement], error) {
+	if r.Client == nil {
+		return common.PageResult[announcement.Announcement]{}, errors.New("firestore client is nil")
+	}
+
 	iter := r.Client.Collection("announcements").
 		OrderBy("createdAt", firestore.Desc).
 		Documents(ctx)
@@ -213,16 +231,118 @@ func (r *AnnouncementRepositoryFS) List(
 		}
 	}
 
+	total := len(items)
+	if total == 0 {
+		return common.PageResult[announcement.Announcement]{
+			Items:      []announcement.Announcement{},
+			TotalCount: 0,
+			Page:       1,
+			PerPage:    0,
+		}, nil
+	}
+
+	// Use Firestore adapter helper for page normalization.
+	pageNum, perPage, _ := fscommon.NormalizePage(page.Number, page.PerPage, 50, 0)
+
+	offset := (pageNum - 1) * perPage
+	if offset > total {
+		offset = total
+	}
+	end := offset + perPage
+	if end > total {
+		end = total
+	}
+
 	return common.PageResult[announcement.Announcement]{
-		Items:      items,
-		TotalCount: len(items),
-		Page:       1,
-		PerPage:    len(items),
+		Items:      items[offset:end],
+		TotalCount: total,
+		Page:       pageNum,
+		PerPage:    perPage,
 	}, nil
 }
 
-// Count returns the number of announcements (simple full scan).
+// ListByCursor returns announcements using a simple ID-based cursor.
+func (r *AnnouncementRepositoryFS) ListByCursor(
+	ctx context.Context,
+	_ announcement.Filter,
+	_ common.Sort,
+	cpage common.CursorPage,
+) (common.CursorPageResult[announcement.Announcement], error) {
+	if r.Client == nil {
+		return common.CursorPageResult[announcement.Announcement]{}, errors.New("firestore client is nil")
+	}
+
+	limit := cpage.Limit
+	if limit <= 0 || limit > 200 {
+		limit = 50
+	}
+
+	q := r.Client.Collection("announcements").
+		OrderBy("createdAt", firestore.Desc).
+		OrderBy("id", firestore.Desc)
+
+	it := q.Documents(ctx)
+	defer it.Stop()
+
+	after := strings.TrimSpace(cpage.After)
+	skipping := after != ""
+
+	var (
+		items []announcement.Announcement
+		last  string
+	)
+
+	for {
+		doc, err := it.Next()
+		if err == iterator.Done {
+			break
+		}
+		if err != nil {
+			return common.CursorPageResult[announcement.Announcement]{}, err
+		}
+
+		var a announcement.Announcement
+		if err := doc.DataTo(&a); err != nil {
+			return common.CursorPageResult[announcement.Announcement]{}, err
+		}
+		if a.ID == "" {
+			a.ID = doc.Ref.ID
+		}
+
+		if skipping {
+			if a.ID >= after {
+				continue
+			}
+			skipping = false
+		}
+
+		items = append(items, a)
+		last = a.ID
+
+		if len(items) >= limit+1 {
+			break
+		}
+	}
+
+	var next *string
+	if len(items) > limit {
+		items = items[:limit]
+		next = &last
+	}
+
+	return common.CursorPageResult[announcement.Announcement]{
+		Items:      items,
+		NextCursor: next,
+		Limit:      limit,
+	}, nil
+}
+
+// Count returns the number of announcements (full scan).
 func (r *AnnouncementRepositoryFS) Count(ctx context.Context, _ announcement.Filter) (int, error) {
+	if r.Client == nil {
+		return 0, errors.New("firestore client is nil")
+	}
+
 	iter := r.Client.Collection("announcements").Documents(ctx)
 	count := 0
 	for {
@@ -240,6 +360,10 @@ func (r *AnnouncementRepositoryFS) Count(ctx context.Context, _ announcement.Fil
 
 // Search performs a simple contains-based search on title and content.
 func (r *AnnouncementRepositoryFS) Search(ctx context.Context, query string) ([]announcement.Announcement, error) {
+	if r.Client == nil {
+		return nil, errors.New("firestore client is nil")
+	}
+
 	iter := r.Client.Collection("announcements").Documents(ctx)
 	var results []announcement.Announcement
 	for {

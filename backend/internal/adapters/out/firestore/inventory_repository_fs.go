@@ -15,10 +15,11 @@ import (
 	"google.golang.org/grpc/status"
 
 	fscommon "narratives/internal/adapters/out/firestore/common"
+	usecase "narratives/internal/application/usecase"
 	invdom "narratives/internal/domain/inventory"
 )
 
-// InventoryRepositoryFS implements inventory.Repository with Firestore.
+// InventoryRepositoryFS implements InventoryRepo with Firestore.
 type InventoryRepositoryFS struct {
 	Client *firestore.Client
 }
@@ -31,8 +32,8 @@ func (r *InventoryRepositoryFS) col() *firestore.CollectionRef {
 	return r.Client.Collection("inventories")
 }
 
-// Compile-time check
-var _ invdom.Repository = (*InventoryRepositoryFS)(nil)
+// Compile-time check: InventoryRepositoryFS satisfies usecase.InventoryRepo.
+var _ usecase.InventoryRepo = (*InventoryRepositoryFS)(nil)
 
 // =======================
 // Queries
@@ -78,6 +79,10 @@ func (r *InventoryRepositoryFS) Exists(ctx context.Context, id string) (bool, er
 	}
 	return true, nil
 }
+
+// =======================
+// Additional query helpers
+// =======================
 
 // Count: best-effort via scanning and applying Filter in-memory.
 func (r *InventoryRepositoryFS) Count(ctx context.Context, filter invdom.Filter) (int, error) {
@@ -250,7 +255,7 @@ func (r *InventoryRepositoryFS) ListByCursor(
 }
 
 // =======================
-// Mutations
+// Mutations (InventoryRepo required methods)
 // =======================
 
 func (r *InventoryRepositoryFS) Create(
@@ -294,132 +299,10 @@ func (r *InventoryRepositoryFS) Create(
 	return docToInventory(snap)
 }
 
-func (r *InventoryRepositoryFS) Update(
-	ctx context.Context,
-	id string,
-	patch invdom.InventoryPatch,
-) (invdom.Inventory, error) {
-	if r.Client == nil {
-		return invdom.Inventory{}, errors.New("firestore client is nil")
-	}
-
-	id = strings.TrimSpace(id)
-	if id == "" {
-		return invdom.Inventory{}, invdom.ErrNotFound
-	}
-
-	docRef := r.col().Doc(id)
-
-	var updates []firestore.Update
-
-	if patch.Models != nil {
-		updates = append(updates, firestore.Update{
-			Path:  "models",
-			Value: *patch.Models,
-		})
-	}
-	if patch.Location != nil {
-		updates = append(updates, firestore.Update{
-			Path:  "location",
-			Value: strings.TrimSpace(*patch.Location),
-		})
-	}
-	if patch.Status != nil {
-		updates = append(updates, firestore.Update{
-			Path:  "status",
-			Value: string(*patch.Status),
-		})
-	}
-	if patch.ConnectedToken != nil {
-		v := strings.TrimSpace(*patch.ConnectedToken)
-		if v == "" {
-			updates = append(updates, firestore.Update{
-				Path:  "connectedToken",
-				Value: firestore.Delete,
-			})
-		} else {
-			updates = append(updates, firestore.Update{
-				Path:  "connectedToken",
-				Value: v,
-			})
-		}
-	}
-	if patch.UpdatedBy != nil {
-		v := strings.TrimSpace(*patch.UpdatedBy)
-		if v == "" {
-			updates = append(updates, firestore.Update{
-				Path:  "updatedBy",
-				Value: firestore.Delete,
-			})
-		} else {
-			updates = append(updates, firestore.Update{
-				Path:  "updatedBy",
-				Value: v,
-			})
-		}
-	}
-
-	// updatedAt: explicit or NOW() when there are updates
-	if patch.UpdatedAt != nil {
-		if patch.UpdatedAt.IsZero() {
-			updates = append(updates, firestore.Update{
-				Path:  "updatedAt",
-				Value: firestore.Delete,
-			})
-		} else {
-			updates = append(updates, firestore.Update{
-				Path:  "updatedAt",
-				Value: patch.UpdatedAt.UTC(),
-			})
-		}
-	} else if len(updates) > 0 {
-		updates = append(updates, firestore.Update{
-			Path:  "updatedAt",
-			Value: time.Now().UTC(),
-		})
-	}
-
-	if len(updates) == 0 {
-		// no-op
-		return r.GetByID(ctx, id)
-	}
-
-	_, err := docRef.Update(ctx, updates)
-	if err != nil {
-		if status.Code(err) == codes.NotFound {
-			return invdom.Inventory{}, invdom.ErrNotFound
-		}
-		return invdom.Inventory{}, err
-	}
-
-	return r.GetByID(ctx, id)
-}
-
-func (r *InventoryRepositoryFS) Delete(ctx context.Context, id string) error {
-	if r.Client == nil {
-		return errors.New("firestore client is nil")
-	}
-
-	id = strings.TrimSpace(id)
-	if id == "" {
-		return invdom.ErrNotFound
-	}
-
-	_, err := r.col().Doc(id).Delete(ctx)
-	if err != nil {
-		if status.Code(err) == codes.NotFound {
-			return invdom.ErrNotFound
-		}
-		return err
-	}
-	return nil
-}
-
-// Save upserts an Inventory.
+// Save upserts an Inventory. (Matches usecase.InventoryRepo.Save)
 func (r *InventoryRepositoryFS) Save(
 	ctx context.Context,
 	inv invdom.Inventory,
-	_ *invdom.SaveOptions,
 ) (invdom.Inventory, error) {
 	if r.Client == nil {
 		return invdom.Inventory{}, errors.New("firestore client is nil")
@@ -453,6 +336,26 @@ func (r *InventoryRepositoryFS) Save(
 		return invdom.Inventory{}, err
 	}
 	return docToInventory(snap)
+}
+
+func (r *InventoryRepositoryFS) Delete(ctx context.Context, id string) error {
+	if r.Client == nil {
+		return errors.New("firestore client is nil")
+	}
+
+	id = strings.TrimSpace(id)
+	if id == "" {
+		return invdom.ErrNotFound
+	}
+
+	_, err := r.col().Doc(id).Delete(ctx)
+	if err != nil {
+		if status.Code(err) == codes.NotFound {
+			return invdom.ErrNotFound
+		}
+		return err
+	}
+	return nil
 }
 
 // =======================

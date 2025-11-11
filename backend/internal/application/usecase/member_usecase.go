@@ -1,3 +1,4 @@
+// backend\internal\application\usecase\member_usecase.go
 package usecase
 
 import (

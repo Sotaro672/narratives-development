@@ -57,7 +57,7 @@ type RouterDeps struct {
 	//   MessageRepo message.Repository
 	// みたいにしてもいいですが、
 	// 現状は concrete でも問題ないので PG 実装をそのまま持たせる。
-	MessageRepo *msgrepo.MessageRepositoryPG
+	MessageRepo *msgrepo.MessageRepositoryFS
 }
 
 // NewRouter sets up HTTP routing for all domain endpoints.
