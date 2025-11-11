@@ -8,7 +8,7 @@ import (
 	"fmt"
 	"strings"
 
-	common "narratives/internal/adapters/out/db/common"
+	common "narratives/internal/adapters/out/firestore/common"
 	permission "narratives/internal/domain/permission"
 
 	"github.com/lib/pq"
