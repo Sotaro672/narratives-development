@@ -1,3 +1,4 @@
+// backend\internal\adapters\out\firestore\common\sqlutil.go
 package common
 
 import (
@@ -223,32 +224,45 @@ func ToDBTime(p *time.Time) any {
 // NullableTrim returns nil for nil/blank pointers, otherwise the trimmed string.
 // Useful for INSERT/UPDATE args to produce SQL NULLs.
 func NullableTrim(p *string) any {
-    if p == nil {
-        return nil
-    }
-    v := strings.TrimSpace(*p)
-    if v == "" {
-        return nil
-    }
-    return v
+	if p == nil {
+		return nil
+	}
+	v := strings.TrimSpace(*p)
+	if v == "" {
+		return nil
+	}
+	return v
 }
 
 // JoinErrors aggregates multiple errors into one error.
 // If errs is empty it returns nil; if it has one element it returns that element.
 func JoinErrors(errs []error) error {
-    if len(errs) == 0 {
-        return nil
-    }
-    if len(errs) == 1 {
-        return errs[0]
-    }
-    var b strings.Builder
-    b.WriteString("multiple errors: ")
-    for i, e := range errs {
-        if i > 0 {
-            b.WriteString("; ")
-        }
-        b.WriteString(e.Error())
-    }
-    return errors.New(b.String())
+	if len(errs) == 0 {
+		return nil
+	}
+	if len(errs) == 1 {
+		return errs[0]
+	}
+	var b strings.Builder
+	b.WriteString("multiple errors: ")
+	for i, e := range errs {
+		if i > 0 {
+			b.WriteString("; ")
+		}
+		b.WriteString(e.Error())
+	}
+	return errors.New(b.String())
+}
+
+// TrimPtr returns a trimmed *string, or nil if the pointer is nil or empty.
+// This is useful for Firestore or SQL repositories.
+func TrimPtr(p *string) *string {
+	if p == nil {
+		return nil
+	}
+	s := strings.TrimSpace(*p)
+	if s == "" {
+		return nil
+	}
+	return &s
 }

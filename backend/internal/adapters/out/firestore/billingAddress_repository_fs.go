@@ -30,7 +30,10 @@ func (r *BillingAddressRepositoryFS) col() *firestore.CollectionRef {
 	return r.Client.Collection("billing_addresses")
 }
 
-// ========== Public API (implements badom.RepositoryPort) ==========
+// Compile-time check (任意)
+var _ badom.RepositoryPort = (*BillingAddressRepositoryFS)(nil)
+
+// ========== Public API ==========
 
 func (r *BillingAddressRepositoryFS) GetByID(ctx context.Context, id string) (*badom.BillingAddress, error) {
 	doc, err := r.col().Doc(id).Get(ctx)
@@ -110,7 +113,7 @@ func (r *BillingAddressRepositoryFS) List(
 	q := r.col().Query
 	q = applyBillingAddressFilterToQuery(q, filter)
 
-	// --- Sort ---
+	// Sort
 	orderField, orderDir := mapSort(sort)
 	if orderField == "" {
 		orderField = "updatedAt"
@@ -118,7 +121,7 @@ func (r *BillingAddressRepositoryFS) List(
 	}
 	q = q.OrderBy(orderField, orderDir).OrderBy("id", firestore.Desc)
 
-	// --- Paging (offset ベースの簡易実装) ---
+	// Paging (offset ベースの簡易実装)
 	perPage := page.PerPage
 	if perPage <= 0 {
 		perPage = 50
@@ -156,20 +159,16 @@ func (r *BillingAddressRepositoryFS) List(
 		items = append(items, ba)
 	}
 
-	// Count: フィルタを適用した正確な件数はコストが高いので、
-	// ここでは簡易に「取得件数のみ」を TotalCount に設定。
-	// 必要であれば別途集計コレクションなどで対応してください。
 	return badom.PageResult{
 		Items:      items,
-		TotalCount: len(items),
-		TotalPages: number, // 厳密ではないがインターフェース維持用
+		TotalCount: len(items), // 簡易。正確な件数が必要なら別途対応。
+		TotalPages: number,
 		Page:       number,
 		PerPage:    perPage,
 	}, nil
 }
 
 func (r *BillingAddressRepositoryFS) Count(ctx context.Context, filter badom.Filter) (int, error) {
-	// Firestore では COUNT 専用 API もあるが、ここでは全件走査のシンプル実装に留める。
 	q := r.col().Query
 	q = applyBillingAddressFilterToQuery(q, filter)
 
@@ -190,26 +189,32 @@ func (r *BillingAddressRepositoryFS) Count(ctx context.Context, filter badom.Fil
 	return cnt, nil
 }
 
+// Create implements RepositoryPort.Create.
 func (r *BillingAddressRepositoryFS) Create(ctx context.Context, in badom.CreateBillingAddressInput) (*badom.BillingAddress, error) {
 	now := time.Now().UTC()
 
-	// Firestore では ID を自動採番
 	ref := r.col().NewDoc()
 
-	createdAt := in.CreatedAt
-	if createdAt.IsZero() {
+	// 実際に保存する CreatedAt / UpdatedAt の値を決定
+	var createdAt time.Time
+	if in.CreatedAt != nil && !in.CreatedAt.IsZero() {
+		createdAt = in.CreatedAt.UTC()
+	} else {
 		createdAt = now
 	}
-	updatedAt := in.UpdatedAt
-	if updatedAt.IsZero() {
+
+	var updatedAt time.Time
+	if in.UpdatedAt != nil && !in.UpdatedAt.IsZero() {
+		updatedAt = in.UpdatedAt.UTC()
+	} else {
 		updatedAt = createdAt
 	}
 
 	ba := badom.BillingAddress{
 		ID:            ref.ID,
 		UserID:        strings.TrimSpace(in.UserID),
-		NameOnAccount: trimPtr(in.NameOnAccount),
 		BillingType:   strings.TrimSpace(in.BillingType),
+		NameOnAccount: trimPtr(in.NameOnAccount),
 		CardBrand:     trimPtr(in.CardBrand),
 		CardLast4:     trimPtr(in.CardLast4),
 		CardExpMonth:  in.CardExpMonth,
@@ -221,29 +226,25 @@ func (r *BillingAddressRepositoryFS) Create(ctx context.Context, in badom.Create
 		Street:        trimPtr(in.Street),
 		Country:       trimPtr(in.Country),
 		IsDefault:     in.IsDefault,
-		CreatedAt:     createdAt.UTC(),
-		UpdatedAt:     updatedAt.UTC(),
+		CreatedAt:     createdAt,
+		UpdatedAt:     updatedAt,
 	}
 
-	_, err := ref.Create(ctx, r.domainToDocData(ba))
-	if err != nil {
-		// Firestore ではユニーク制約はないので、必要であればアプリ側で検出する。
+	if _, err := ref.Create(ctx, r.domainToDocData(ba)); err != nil {
 		return nil, err
 	}
 
-	// IsDefault=true の場合は SetDefault 相当の処理をここで行ってもよい（要件次第）。
 	return &ba, nil
 }
 
 func (r *BillingAddressRepositoryFS) Update(ctx context.Context, id string, in badom.UpdateBillingAddressInput) (*badom.BillingAddress, error) {
 	ref := r.col().Doc(id)
 
-	// まず存在確認
-	_, err := ref.Get(ctx)
-	if status.Code(err) == codes.NotFound {
-		return nil, badom.ErrNotFound
-	}
-	if err != nil {
+	// 存在確認
+	if _, err := ref.Get(ctx); err != nil {
+		if status.Code(err) == codes.NotFound {
+			return nil, badom.ErrNotFound
+		}
 		return nil, err
 	}
 
@@ -332,21 +333,19 @@ func (r *BillingAddressRepositoryFS) Update(ctx context.Context, id string, in b
 
 func (r *BillingAddressRepositoryFS) Delete(ctx context.Context, id string) error {
 	ref := r.col().Doc(id)
-	_, err := ref.Get(ctx)
-	if status.Code(err) == codes.NotFound {
-		return badom.ErrNotFound
-	}
-	if err != nil {
+	if _, err := ref.Get(ctx); err != nil {
+		if status.Code(err) == codes.NotFound {
+			return badom.ErrNotFound
+		}
 		return err
 	}
-	_, err = ref.Delete(ctx)
+	_, err := ref.Delete(ctx)
 	return err
 }
 
 // SetDefault sets the specified billing address as default for its user (and unsets others).
 func (r *BillingAddressRepositoryFS) SetDefault(ctx context.Context, id string) error {
 	return r.Client.RunTransaction(ctx, func(ctx context.Context, tx *firestore.Transaction) error {
-		// 対象ドキュメント取得
 		ref := r.col().Doc(id)
 		snap, err := tx.Get(ref)
 		if status.Code(err) == codes.NotFound {
@@ -381,7 +380,6 @@ func (r *BillingAddressRepositoryFS) SetDefault(ctx context.Context, id string) 
 			if err != nil {
 				return err
 			}
-			// 対象と同じIDは後で上書きするので一旦無視
 			if doc.Ref.ID == id {
 				continue
 			}
@@ -402,6 +400,13 @@ func (r *BillingAddressRepositoryFS) SetDefault(ctx context.Context, id string) 
 		}
 
 		return nil
+	})
+}
+
+// WithTx: Firestore のトランザクションを使った境界（単純実装）
+func (r *BillingAddressRepositoryFS) WithTx(ctx context.Context, fn func(ctx context.Context) error) error {
+	return r.Client.RunTransaction(ctx, func(txCtx context.Context, _ *firestore.Transaction) error {
+		return fn(txCtx)
 	})
 }
 
@@ -531,33 +536,21 @@ func (r *BillingAddressRepositoryFS) domainToDocData(ba badom.BillingAddress) ma
 	return data
 }
 
-// applyBillingAddressFilterToQuery applies a subset of Filter to Firestore query.
-// Firestoreの制約上、範囲条件やLIKEは限定的に対応。
+// 部分的に Filter を Firestore クエリへ反映
 func applyBillingAddressFilterToQuery(q firestore.Query, f badom.Filter) firestore.Query {
-	// IDs: Firestore では OR/IN 複合が難しいため、ここでは未対応または呼び出し側で分割想定。
-	// UserIDs
 	if len(f.UserIDs) == 1 {
 		q = q.Where("userId", "==", strings.TrimSpace(f.UserIDs[0]))
 	}
-
-	// BillingTypes (単一 or IN 最大10件までなど、要件に応じて拡張可)
 	if len(f.BillingTypes) == 1 {
 		q = q.Where("billingType", "==", strings.TrimSpace(f.BillingTypes[0]))
 	}
-
-	// CardBrands (同上)
 	if len(f.CardBrands) == 1 {
 		q = q.Where("cardBrand", "==", strings.TrimSpace(f.CardBrands[0]))
 	}
-
-	// IsDefault
 	if f.IsDefault != nil {
 		q = q.Where("isDefault", "==", *f.IsDefault)
 	}
-
-	// PostalCode range / CreatedAt / UpdatedAt range / Like系は
-	// Firestoreのクエリ制約により全てを安全に表現しづらいため、
-	// 必要に応じて別インデックス設計 or アプリ側フィルタを検討。
+	// 他の範囲・LIKE 条件は必要に応じてアプリ側フィルタ or 別設計
 	return q
 }
 
@@ -575,7 +568,6 @@ func mapSort(sort badom.Sort) (field string, dir firestore.Direction) {
 	case "updatedat", "updated_at":
 		fallthrough
 	default:
-		// デフォルトは updatedAt
 		field = "updatedAt"
 	}
 
@@ -586,4 +578,16 @@ func mapSort(sort badom.Sort) (field string, dir firestore.Direction) {
 		dir = firestore.Desc
 	}
 	return
+}
+
+// trimPtr: 文字列ポインタをトリムし、空なら nil にする
+func trimPtr(p *string) *string {
+	if p == nil {
+		return nil
+	}
+	s := strings.TrimSpace(*p)
+	if s == "" {
+		return nil
+	}
+	return &s
 }
