@@ -6,32 +6,31 @@ import type {
   MemberRepository,
   MemberFilter,
 } from "../domain/repository/memberRepository";
-import type {
-  Page,
+import type { Page } from "../../../shell/src/shared/types/common/common";
+import {
+  DEFAULT_PAGE,
+  DEFAULT_PAGE_LIMIT,
 } from "../../../shell/src/shared/types/common/common";
-import { getMemberRepository } from "../infrastructure/firestore/memberRepositoryFS";
+import { MemberRepositoryFS } from "../infrastructure/firestore/memberRepositoryFS";
+
+/**
+ * Repository 実装をここで束ねる
+ * 将来別実装（REST / GraphQL 等）に差し替える場合もこの1行を変更すればOK。
+ */
+const repository: MemberRepository = new MemberRepositoryFS();
 
 /**
  * メンバー一覧取得用フック
  * - MemberRepository.list(page, filter) を利用
- * - シンプルなページング + フィルタ管理
+ * - limit/offset ベースのシンプルなページング + フィルタ管理
  */
 export function useMemberList(
   initialFilter: MemberFilter = {},
   initialPage?: Page
 ) {
-  const repo: MemberRepository = getMemberRepository();
-
   const [members, setMembers] = useState<Member[]>([]);
   const [filter, setFilter] = useState<MemberFilter>(initialFilter);
-  const [page, setPage] = useState<Page>(
-    // Page の実体形は shared 側に依存するため any で初期値を与える
-    (initialPage ??
-      ({
-        page: 1,
-        perPage: 20,
-      } as any)) as Page
-  );
+  const [page, setPage] = useState<Page>(initialPage ?? DEFAULT_PAGE);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<Error | null>(null);
 
@@ -42,7 +41,7 @@ export function useMemberList(
       try {
         const usePage = override?.page ?? page;
         const useFilter = override?.filter ?? filter;
-        const result = await repo.list(usePage, useFilter);
+        const result = await repository.list(usePage, useFilter);
         setMembers(result.items);
       } catch (e: any) {
         setError(e);
@@ -50,13 +49,24 @@ export function useMemberList(
         setLoading(false);
       }
     },
-    [repo, page, filter]
+    [page, filter]
   );
 
   useEffect(() => {
     // 初回 & 条件変更時にロード
     void load();
   }, [load]);
+
+  /**
+   * 1始まりのページ番号を受けて Page(offset) を更新
+   */
+  const setPageNumber = (pageNumber: number) => {
+    const safe = pageNumber > 0 ? pageNumber : 1;
+    setPage((prev) => ({
+      ...prev,
+      offset: (safe - 1) * (prev.limit || DEFAULT_PAGE_LIMIT),
+    }));
+  };
 
   return {
     members,
@@ -67,14 +77,6 @@ export function useMemberList(
     page,
     setPage,
     reload: () => load(),
-    // ページ変更のユーティリティ（Page の実装に依存するので any 経由）
-    setPageNumber: (pageNumber: number) =>
-      setPage((prev) => {
-        const p: any = { ...prev };
-        if ("page" in p) p.page = pageNumber;
-        if ("number" in p) p.number = pageNumber;
-        // offset 系の場合は呼び出し側で調整
-        return p as Page;
-      }),
+    setPageNumber,
   };
 }

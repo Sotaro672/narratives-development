@@ -18,7 +18,7 @@ import {
   type DocumentSnapshot,
 } from "firebase/firestore";
 
-import { firestore } from "../../adapter/outbound/firestoreClient";
+import { getFirestoreClient } from "../../adapter/outbound/firestoreClient";
 
 import type {
   MemberRepository,
@@ -41,7 +41,7 @@ import { DEFAULT_PAGE_LIMIT } from "../../../../shell/src/shared/types/common/co
  * 実運用では backend API 経由が本命で、これは POC / 開発用の簡易実装想定。
  */
 export class MemberRepositoryFS implements MemberRepository {
-  private readonly col = collection(firestore, "members");
+  private readonly col = collection(getFirestoreClient(), "members");
 
   // ======================
   // CRUD / List
@@ -55,7 +55,6 @@ export class MemberRepositoryFS implements MemberRepository {
   }
 
   async list(page: Page, filter?: MemberFilter): Promise<PageResult<Member>> {
-    // Page: { limit, offset }
     const perPage =
       page && typeof page.limit === "number" && page.limit > 0
         ? page.limit
@@ -65,7 +64,6 @@ export class MemberRepositoryFS implements MemberRepository {
         ? page.offset
         : 0;
 
-    // Firestore クエリ（代表的な条件のみ反映）
     let q = query(this.col, orderBy("createdAt", "desc"));
 
     if (filter?.roleIds && filter.roleIds.length === 1) {
@@ -75,13 +73,11 @@ export class MemberRepositoryFS implements MemberRepository {
       q = query(q, where("companyId", "==", filter.companyId));
     }
 
-    // offset 対応のため offset+limit 件取得してクライアント側で slice
     const fetchSize = offset + perPage;
     const snap = await getDocs(query(q, fsLimit(fetchSize)));
 
     let items = snap.docs.map((d) => this.docToDomain(d));
 
-    // searchQuery, permissions, brandIds などはクライアント側フィルタ
     if (filter) {
       items = this.applyPostFilter(items, filter);
     }
@@ -160,7 +156,7 @@ export class MemberRepositoryFS implements MemberRepository {
       sort?.column === "updatedAt"
         ? "updatedAt"
         : sort?.column === "name" || sort?.column === "email"
-        ? "createdAt" // name/email の専用 index が無ければ createdAt で代用
+        ? "createdAt"
         : "createdAt";
     const orderDir = sort?.order === "asc" ? "asc" : "desc";
 
@@ -170,7 +166,6 @@ export class MemberRepositoryFS implements MemberRepository {
       q = query(q, where("role", "==", filter.roleIds[0]));
     }
 
-    // cursorPage.cursor は前回の nextCursor (docId) を前提
     if (cursorPage?.cursor) {
       const cursorSnap = await getDoc(doc(this.col, cursorPage.cursor));
       if (cursorSnap.exists()) {
@@ -198,9 +193,9 @@ export class MemberRepositoryFS implements MemberRepository {
     const result: CursorPageResult<Member> = {
       items,
       nextCursor,
-      prevCursor: undefined, // 今回は next のみサポートする簡易実装
+      prevCursor: undefined,
       hasNext,
-      hasPrev: Boolean(cursorPage?.cursor), // cursor があれば「前がある」扱い（簡易）
+      hasPrev: Boolean(cursorPage?.cursor),
     };
 
     return result;
@@ -330,7 +325,6 @@ export class MemberRepositoryFS implements MemberRepository {
     return next;
   }
 
-  /** Firestore で表現しきれない filter をクライアント側で適用 */
   private applyPostFilter(items: Member[], filter?: MemberFilter): Member[] {
     if (!filter) return items;
     let result = items;
@@ -339,8 +333,7 @@ export class MemberRepositoryFS implements MemberRepository {
       const q = filter.searchQuery.trim().toLowerCase();
       if (q) {
         result = result.filter((m) => {
-          const fullName = `${m.lastName ?? ""}${m.firstName ?? ""}`
-            .toLowerCase();
+          const fullName = `${m.lastName ?? ""}${m.firstName ?? ""}`.toLowerCase();
           const email = (m.email ?? "").toLowerCase();
           return (
             fullName.includes(q) ||
