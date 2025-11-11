@@ -1,127 +1,215 @@
-// backend\internal\adapters\out\firestore\messageImage_repository_gcs.go
+// backend/internal/adapters/out/gcs/messageImage_repository_gcs.go
 package gcs
 
 import (
 	"context"
-	"database/sql"
 	"errors"
 	"fmt"
 	"strings"
 	"time"
 
-	dbcommon "narratives/internal/adapters/out/firestore/common"
-	midom "narratives/internal/domain/messageImage"
-
 	"cloud.google.com/go/storage"
+	"google.golang.org/api/iterator"
+
+	dbcommon "narratives/internal/adapters/out/firestore/common"
+	gcscommon "narratives/internal/adapters/out/gcs/common"
+	midom "narratives/internal/domain/messageImage"
 )
 
-type MessageImageRepositoryPG struct {
-	DB *sql.DB
+// GCS ベースの MessageImage リポジトリ。
+// - 画像本体は GCS に保存されている前提
+// - メタ情報は GCS ObjectAttrs / Metadata から構成
+// - object 名の規約: 通常は "<messageID>/<fileName>" を想定
+type MessageImageRepositoryGCS struct {
+	Client *storage.Client
+	Bucket string
 }
 
-func NewMessageImageRepositoryPG(db *sql.DB) *MessageImageRepositoryPG {
-	return &MessageImageRepositoryPG{DB: db}
-}
+// デフォルトバケット（midom.DefaultBucket があればそれを利用）
+const defaultMessageImageBucket = "narratives_development_message_image"
 
-// ========================================
-// RepositoryPort impl
-// ========================================
-
-func (r *MessageImageRepositoryPG) ListByMessageID(ctx context.Context, messageID string) ([]midom.ImageFile, error) {
-	run := dbcommon.GetRunner(ctx, r.DB)
-	const q = `
-SELECT
-  message_id, file_name, file_url, file_size, mime_type, width, height,
-  created_at, updated_at, deleted_at
-FROM message_images
-WHERE message_id = $1 AND deleted_at IS NULL
-ORDER BY created_at ASC, file_name ASC`
-	rows, err := run.QueryContext(ctx, q, strings.TrimSpace(messageID))
-	if err != nil {
-		return nil, err
+func NewMessageImageRepositoryGCS(client *storage.Client, bucket string) *MessageImageRepositoryGCS {
+	b := strings.TrimSpace(bucket)
+	if b == "" {
+		if strings.TrimSpace(midom.DefaultBucket) != "" {
+			b = midom.DefaultBucket
+		} else {
+			b = defaultMessageImageBucket
+		}
 	}
-	defer rows.Close()
+	return &MessageImageRepositoryGCS{
+		Client: client,
+		Bucket: b,
+	}
+}
+
+func (r *MessageImageRepositoryGCS) bucket() string {
+	b := strings.TrimSpace(r.Bucket)
+	if b == "" {
+		if strings.TrimSpace(midom.DefaultBucket) != "" {
+			return midom.DefaultBucket
+		}
+		return defaultMessageImageBucket
+	}
+	return b
+}
+
+// ========================================
+// RepositoryPort impl (GCS版)
+// ========================================
+
+// ListByMessageID:
+// - messageID に紐づくオブジェクトを列挙（プレフィックス/metadata から判定）
+// - 削除フラグ付き(deleted_at)は除外
+// - created_at ASC, file_name ASC 相当でソート
+func (r *MessageImageRepositoryGCS) ListByMessageID(ctx context.Context, messageID string) ([]midom.ImageFile, error) {
+	if r.Client == nil {
+		return nil, errors.New("MessageImageRepositoryGCS: nil storage client")
+	}
+	messageID = strings.TrimSpace(messageID)
+	if messageID == "" {
+		return []midom.ImageFile{}, nil
+	}
+
+	bucket := r.bucket()
+	it := r.Client.Bucket(bucket).Objects(ctx, &storage.Query{
+		Prefix: messageID + "/",
+	})
 
 	var out []midom.ImageFile
-	for rows.Next() {
-		img, err := scanMessageImage(rows)
+	for {
+		attrs, err := it.Next()
+		if errors.Is(err, iterator.Done) {
+			break
+		}
 		if err != nil {
 			return nil, err
 		}
-		out = append(out, img)
+		img := buildMessageImageFromAttrs(bucket, attrs)
+		if img.MessageID == messageID && img.DeletedAt == nil {
+			out = append(out, img)
+		}
 	}
-	return out, rows.Err()
+
+	// created_at ASC, file_name ASC
+	for i := 0; i < len(out)-1; i++ {
+		for j := i + 1; j < len(out); j++ {
+			swap := false
+			if out[i].CreatedAt.After(out[j].CreatedAt) {
+				swap = true
+			} else if out[i].CreatedAt.Equal(out[j].CreatedAt) &&
+				out[i].FileName > out[j].FileName {
+				swap = true
+			}
+			if swap {
+				out[i], out[j] = out[j], out[i]
+			}
+		}
+	}
+
+	return out, nil
 }
 
-func (r *MessageImageRepositoryPG) Get(ctx context.Context, messageID, fileName string) (*midom.ImageFile, error) {
-	run := dbcommon.GetRunner(ctx, r.DB)
-	const q = `
-SELECT
-  message_id, file_name, file_url, file_size, mime_type, width, height,
-  created_at, updated_at, deleted_at
-FROM message_images
-WHERE message_id = $1 AND file_name = $2`
-	row := run.QueryRowContext(ctx, q, strings.TrimSpace(messageID), strings.TrimSpace(fileName))
-	img, err := scanMessageImage(row)
+// Get:
+// - messageID と fileName から単一画像を取得
+// - 規約: objectPath = "<messageID>/<fileName>" を優先的に見る
+// - 合致オブジェクトがなければ ErrNotFound
+func (r *MessageImageRepositoryGCS) Get(ctx context.Context, messageID, fileName string) (*midom.ImageFile, error) {
+	if r.Client == nil {
+		return nil, errors.New("MessageImageRepositoryGCS: nil storage client")
+	}
+	messageID = strings.TrimSpace(messageID)
+	fileName = strings.TrimSpace(fileName)
+	if messageID == "" || fileName == "" {
+		return nil, midom.ErrNotFound
+	}
+
+	bucket := r.bucket()
+	objName := messageID + "/" + fileName
+
+	attrs, err := r.Client.Bucket(bucket).Object(objName).Attrs(ctx)
 	if err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
+		if errors.Is(err, storage.ErrObjectNotExist) {
+			// 念のため metadata ベースでの fallback 探索
+			it := r.Client.Bucket(bucket).Objects(ctx, &storage.Query{})
+			for {
+				oa, e := it.Next()
+				if errors.Is(e, iterator.Done) {
+					break
+				}
+				if e != nil {
+					return nil, e
+				}
+				img := buildMessageImageFromAttrs(bucket, oa)
+				if img.MessageID == messageID && img.FileName == fileName {
+					return &img, nil
+				}
+			}
 			return nil, midom.ErrNotFound
 		}
 		return nil, err
 	}
+
+	img := buildMessageImageFromAttrs(bucket, attrs)
+	if img.MessageID != messageID || img.FileName != fileName {
+		return nil, midom.ErrNotFound
+	}
 	return &img, nil
 }
 
-func (r *MessageImageRepositoryPG) List(ctx context.Context, filter midom.Filter, sort midom.Sort, page midom.Page) (midom.PageResult, error) {
-	run := dbcommon.GetRunner(ctx, r.DB)
-
-	where, args := buildMessageImageWhere(filter)
-	whereSQL := ""
-	if len(where) > 0 {
-		whereSQL = "WHERE " + strings.Join(where, " AND ")
+// List:
+// - 全オブジェクトを列挙して Filter/Sort/Page をメモリ上で適用
+func (r *MessageImageRepositoryGCS) List(
+	ctx context.Context,
+	filter midom.Filter,
+	sort midom.Sort,
+	page midom.Page,
+) (midom.PageResult, error) {
+	if r.Client == nil {
+		return midom.PageResult{}, errors.New("MessageImageRepositoryGCS: nil storage client")
 	}
 
-	orderBy := buildMessageImageOrderBy(sort)
-	if orderBy == "" {
-		orderBy = "ORDER BY created_at ASC, file_name ASC"
-	}
+	bucket := r.bucket()
+	it := r.Client.Bucket(bucket).Objects(ctx, &storage.Query{})
 
-	pageNum, perPage, offset := dbcommon.NormalizePage(page.Number, page.PerPage, 50, 200)
-
-	var total int
-	if err := run.QueryRowContext(ctx, "SELECT COUNT(*) FROM message_images "+whereSQL, args...).Scan(&total); err != nil {
-		return midom.PageResult{}, err
-	}
-
-	q := fmt.Sprintf(`
-SELECT
-  message_id, file_name, file_url, file_size, mime_type, width, height,
-  created_at, updated_at, deleted_at
-FROM message_images
-%s
-%s
-LIMIT $%d OFFSET $%d
-`, whereSQL, orderBy, len(args)+1, len(args)+2)
-
-	args = append(args, perPage, offset)
-
-	rows, err := run.QueryContext(ctx, q, args...)
-	if err != nil {
-		return midom.PageResult{}, err
-	}
-	defer rows.Close()
-
-	items := make([]midom.ImageFile, 0, perPage)
-	for rows.Next() {
-		img, err := scanMessageImage(rows)
+	all := make([]midom.ImageFile, 0)
+	for {
+		attrs, err := it.Next()
+		if errors.Is(err, iterator.Done) {
+			break
+		}
 		if err != nil {
 			return midom.PageResult{}, err
 		}
-		items = append(items, img)
+		img := buildMessageImageFromAttrs(bucket, attrs)
+		if matchMessageImageFilter(img, filter) {
+			all = append(all, img)
+		}
 	}
-	if err := rows.Err(); err != nil {
-		return midom.PageResult{}, err
+
+	applyMessageImageSort(all, sort)
+
+	pageNum, perPage, offset := dbcommon.NormalizePage(page.Number, page.PerPage, 50, 200)
+	total := len(all)
+
+	if total == 0 {
+		return midom.PageResult{
+			Items:      []midom.ImageFile{},
+			TotalCount: 0,
+			TotalPages: 0,
+			Page:       pageNum,
+			PerPage:    perPage,
+		}, nil
 	}
+
+	if offset > total {
+		offset = total
+	}
+	end := offset + perPage
+	if end > total {
+		end = total
+	}
+	items := all[offset:end]
 
 	return midom.PageResult{
 		Items:      items,
@@ -132,318 +220,553 @@ LIMIT $%d OFFSET $%d
 	}, nil
 }
 
-func (r *MessageImageRepositoryPG) Count(ctx context.Context, filter midom.Filter) (int, error) {
-	run := dbcommon.GetRunner(ctx, r.DB)
-	where, args := buildMessageImageWhere(filter)
-	whereSQL := ""
-	if len(where) > 0 {
-		whereSQL = "WHERE " + strings.Join(where, " AND ")
+func (r *MessageImageRepositoryGCS) Count(ctx context.Context, filter midom.Filter) (int, error) {
+	if r.Client == nil {
+		return 0, errors.New("MessageImageRepositoryGCS: nil storage client")
 	}
-	var total int
-	if err := run.QueryRowContext(ctx, "SELECT COUNT(*) FROM message_images "+whereSQL, args...).Scan(&total); err != nil {
-		return 0, err
+	bucket := r.bucket()
+	it := r.Client.Bucket(bucket).Objects(ctx, &storage.Query{})
+
+	total := 0
+	for {
+		attrs, err := it.Next()
+		if errors.Is(err, iterator.Done) {
+			break
+		}
+		if err != nil {
+			return 0, err
+		}
+		img := buildMessageImageFromAttrs(bucket, attrs)
+		if matchMessageImageFilter(img, filter) {
+			total++
+		}
 	}
 	return total, nil
 }
 
-func (r *MessageImageRepositoryPG) Add(ctx context.Context, img midom.ImageFile) (midom.ImageFile, error) {
-	run := dbcommon.GetRunner(ctx, r.DB)
-	const q = `
-INSERT INTO message_images (
-  message_id, file_name, file_url, file_size, mime_type, width, height,
-  created_at, updated_at, deleted_at
-) VALUES (
-  $1,$2,$3,$4,$5,$6,$7,
-  $8,$9,$10
-)
-RETURNING
-  message_id, file_name, file_url, file_size, mime_type, width, height,
-  created_at, updated_at, deleted_at
-`
-	row := run.QueryRowContext(ctx, q,
-		strings.TrimSpace(img.MessageID),
-		strings.TrimSpace(img.FileName),
-		strings.TrimSpace(img.FileURL),
-		img.FileSize,
-		strings.TrimSpace(img.MimeType),
-		dbcommon.ToDBInt(img.Width),
-		dbcommon.ToDBInt(img.Height),
-		img.CreatedAt.UTC(),
-		dbcommon.ToDBTime(img.UpdatedAt),
-		dbcommon.ToDBTime(img.DeletedAt),
-	)
-	out, err := scanMessageImage(row)
+// Add:
+// - 規約に基づき対象オブジェクトを解決し、メタ情報を更新して保存
+// - 実際のアップロードは別レイヤーで完了済みとする
+func (r *MessageImageRepositoryGCS) Add(ctx context.Context, img midom.ImageFile) (midom.ImageFile, error) {
+	return r.Save(ctx, img, nil)
+}
+
+// Save:
+// - ImageFile から対象 GCS オブジェクトを解決し、メタデータを更新して再構築した ImageFile を返す
+func (r *MessageImageRepositoryGCS) Save(
+	ctx context.Context,
+	img midom.ImageFile,
+	_ *midom.SaveOptions,
+) (midom.ImageFile, error) {
+	if r.Client == nil {
+		return midom.ImageFile{}, errors.New("MessageImageRepositoryGCS: nil storage client")
+	}
+
+	defaultBucket := r.bucket()
+	var bucket, objectPath string
+
+	// 1) FileURL が GCS URL ならそれを優先
+	if u := strings.TrimSpace(img.FileURL); u != "" {
+		if b, obj, ok := gcscommon.ParseGCSURL(u); ok {
+			bucket = b
+			objectPath = obj
+		}
+	}
+
+	// 2) messageID / fileName から組み立て
+	if bucket == "" || objectPath == "" {
+		mid := strings.TrimSpace(img.MessageID)
+		fn := strings.TrimSpace(img.FileName)
+		if mid != "" && fn != "" {
+			bucket = defaultBucket
+			objectPath = mid + "/" + fn
+		}
+	}
+
+	if bucket == "" || strings.TrimSpace(objectPath) == "" {
+		return midom.ImageFile{}, fmt.Errorf("messageImage: cannot resolve object path from input")
+	}
+
+	objectPath = strings.TrimLeft(strings.TrimSpace(objectPath), "/")
+	obj := r.Client.Bucket(bucket).Object(objectPath)
+
+	attrs, err := obj.Attrs(ctx)
 	if err != nil {
-		if dbcommon.IsUniqueViolation(err) {
-			return midom.ImageFile{}, midom.ErrConflict
+		if errors.Is(err, storage.ErrObjectNotExist) {
+			return midom.ImageFile{}, midom.ErrNotFound
 		}
 		return midom.ImageFile{}, err
 	}
-	return out, nil
+
+	ua := storage.ObjectAttrsToUpdate{}
+	meta := map[string]string{}
+	for k, v := range attrs.Metadata {
+		meta[k] = v
+	}
+
+	if m := strings.TrimSpace(img.MessageID); m != "" {
+		meta["message_id"] = m
+	}
+	if fn := strings.TrimSpace(img.FileName); fn != "" {
+		meta["file_name"] = fn
+	}
+	if u := strings.TrimSpace(img.FileURL); u != "" {
+		meta["file_url"] = u
+	}
+	if img.FileSize > 0 {
+		meta["file_size"] = fmt.Sprint(img.FileSize)
+	}
+	if mt := strings.TrimSpace(img.MimeType); mt != "" {
+		ua.ContentType = mt
+		meta["mime_type"] = mt
+	}
+	if img.Width != nil {
+		meta["width"] = fmt.Sprint(*img.Width)
+	}
+	if img.Height != nil {
+		meta["height"] = fmt.Sprint(*img.Height)
+	}
+
+	// DeletedAt
+	if img.DeletedAt != nil {
+		meta["deleted_at"] = img.DeletedAt.UTC().Format(time.RFC3339Nano)
+	} else {
+		delete(meta, "deleted_at")
+	}
+
+	// UpdatedAt
+	if img.UpdatedAt != nil {
+		meta["updated_at"] = img.UpdatedAt.UTC().Format(time.RFC3339Nano)
+	} else {
+		meta["updated_at"] = time.Now().UTC().Format(time.RFC3339Nano)
+	}
+
+	if len(meta) > 0 {
+		ua.Metadata = meta
+	}
+
+	newAttrs, err := obj.Update(ctx, ua)
+	if err != nil {
+		return midom.ImageFile{}, err
+	}
+
+	return buildMessageImageFromAttrs(bucket, newAttrs), nil
 }
 
-func (r *MessageImageRepositoryPG) ReplaceAll(ctx context.Context, messageID string, images []midom.ImageFile) ([]midom.ImageFile, error) {
-	// Use TX for atomic replace
-	tx, err := r.DB.BeginTx(ctx, nil)
-	if err != nil {
-		return nil, err
+// ReplaceAll:
+// - 指定 messageID の配下オブジェクトを全削除し、新たな配列を Add
+func (r *MessageImageRepositoryGCS) ReplaceAll(ctx context.Context, messageID string, images []midom.ImageFile) ([]midom.ImageFile, error) {
+	if r.Client == nil {
+		return nil, errors.New("MessageImageRepositoryGCS: nil storage client")
 	}
-	ctxTx := dbcommon.CtxWithTx(ctx, tx)
+	messageID = strings.TrimSpace(messageID)
+	if messageID == "" {
+		return nil, fmt.Errorf("messageImage: empty messageID")
+	}
 
-	if err := r.DeleteAll(ctxTx, messageID); err != nil {
-		_ = tx.Rollback()
+	// 既存削除
+	if err := r.DeleteAll(ctx, messageID); err != nil {
 		return nil, err
 	}
 
 	out := make([]midom.ImageFile, 0, len(images))
 	for _, img := range images {
-		img.MessageID = strings.TrimSpace(messageID)
-		saved, err := r.Add(ctxTx, img)
+		img.MessageID = messageID
+		saved, err := r.Add(ctx, img)
 		if err != nil {
-			_ = tx.Rollback()
 			return nil, err
 		}
 		out = append(out, saved)
 	}
-
-	return out, tx.Commit()
+	return out, nil
 }
 
-func (r *MessageImageRepositoryPG) Update(ctx context.Context, messageID, fileName string, patch midom.ImageFilePatch) (midom.ImageFile, error) {
-	run := dbcommon.GetRunner(ctx, r.DB)
-
-	sets := []string{}
-	args := []any{}
-	i := 1
-
-	setStr := func(col string, p *string) {
-		if p != nil {
-			sets = append(sets, fmt.Sprintf("%s = $%d", col, i))
-			args = append(args, strings.TrimSpace(*p))
-			i++
-		}
-	}
-	setInt64 := func(col string, p *int64) {
-		if p != nil {
-			sets = append(sets, fmt.Sprintf("%s = $%d", col, i))
-			args = append(args, *p)
-			i++
-		}
-	}
-	setInt := func(col string, p *int) {
-		if p != nil {
-			sets = append(sets, fmt.Sprintf("%s = $%d", col, i))
-			args = append(args, *p)
-			i++
-		}
-	}
-	setTime := func(col string, p *time.Time) {
-		if p != nil {
-			sets = append(sets, fmt.Sprintf("%s = $%d", col, i))
-			args = append(args, p.UTC())
-			i++
-		}
+// Update:
+// - 対象オブジェクトを特定し、patch の内容を metadata に反映
+func (r *MessageImageRepositoryGCS) Update(ctx context.Context, messageID, fileName string, patch midom.ImageFilePatch) (midom.ImageFile, error) {
+	if r.Client == nil {
+		return midom.ImageFile{}, errors.New("MessageImageRepositoryGCS: nil storage client")
 	}
 
-	// Updatable columns
+	messageID = strings.TrimSpace(messageID)
+	fileName = strings.TrimSpace(fileName)
+	if messageID == "" || fileName == "" {
+		return midom.ImageFile{}, midom.ErrNotFound
+	}
+
+	bucket := r.bucket()
+	objName := messageID + "/" + fileName
+	obj := r.Client.Bucket(bucket).Object(objName)
+
+	attrs, err := obj.Attrs(ctx)
+	if err != nil {
+		if errors.Is(err, storage.ErrObjectNotExist) {
+			return midom.ImageFile{}, midom.ErrNotFound
+		}
+		return midom.ImageFile{}, err
+	}
+
+	ua := storage.ObjectAttrsToUpdate{}
+	meta := map[string]string{}
+	for k, v := range attrs.Metadata {
+		meta[k] = v
+	}
+
+	setStr := func(key string, p *string) {
+		if p != nil {
+			v := strings.TrimSpace(*p)
+			if v != "" {
+				meta[key] = v
+			} else {
+				delete(meta, key)
+			}
+		}
+	}
+	setInt := func(key string, p *int) {
+		if p != nil {
+			meta[key] = fmt.Sprint(*p)
+		}
+	}
+	setInt64 := func(key string, p *int64) {
+		if p != nil {
+			meta[key] = fmt.Sprint(*p)
+		}
+	}
+
+	// Updatable fields
 	setStr("file_name", patch.FileName)
 	setStr("file_url", patch.FileURL)
 	setInt64("file_size", patch.FileSize)
 	setStr("mime_type", patch.MimeType)
 	setInt("width", patch.Width)
 	setInt("height", patch.Height)
-	setTime("updated_at", patch.UpdatedAt)
-	setTime("deleted_at", patch.DeletedAt)
 
-	// Auto touch updated_at if anything changed and UpdatedAt not explicitly set
-	if patch.UpdatedAt == nil && len(sets) > 0 {
-		sets = append(sets, fmt.Sprintf("updated_at = $%d", i))
-		args = append(args, time.Now().UTC())
-		i++
-	}
-
-	if len(sets) == 0 {
-		// nothing to update; return current
-		got, err := r.Get(ctx, messageID, fileName)
-		if err != nil {
-			return midom.ImageFile{}, err
+	if patch.MimeType != nil {
+		mt := strings.TrimSpace(*patch.MimeType)
+		if mt != "" {
+			ua.ContentType = mt
 		}
-		return *got, nil
 	}
 
-	args = append(args, strings.TrimSpace(messageID), strings.TrimSpace(fileName))
-	q := fmt.Sprintf(`
-UPDATE message_images
-SET %s
-WHERE message_id = $%d AND file_name = $%d
-RETURNING
-  message_id, file_name, file_url, file_size, mime_type, width, height,
-  created_at, updated_at, deleted_at
-`, strings.Join(sets, ", "), i, i+1)
+	if patch.DeletedAt != nil {
+		t := patch.DeletedAt.UTC()
+		meta["deleted_at"] = t.Format(time.RFC3339Nano)
+	}
 
-	row := run.QueryRowContext(ctx, q, args...)
-	out, err := scanMessageImage(row)
+	// UpdatedAt 明示 or 自動
+	if patch.UpdatedAt != nil {
+		if !patch.UpdatedAt.IsZero() {
+			meta["updated_at"] = patch.UpdatedAt.UTC().Format(time.RFC3339Nano)
+		}
+	} else if patch.FileName != nil || patch.FileURL != nil ||
+		patch.FileSize != nil || patch.MimeType != nil ||
+		patch.Width != nil || patch.Height != nil || patch.DeletedAt != nil {
+		meta["updated_at"] = time.Now().UTC().Format(time.RFC3339Nano)
+	}
+
+	if len(meta) > 0 {
+		ua.Metadata = meta
+	}
+
+	newAttrs, err := obj.Update(ctx, ua)
 	if err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
-			return midom.ImageFile{}, midom.ErrNotFound
-		}
-		if dbcommon.IsUniqueViolation(err) {
-			return midom.ImageFile{}, midom.ErrConflict
-		}
 		return midom.ImageFile{}, err
 	}
-	return out, nil
+
+	return buildMessageImageFromAttrs(bucket, newAttrs), nil
 }
 
-func (r *MessageImageRepositoryPG) Delete(ctx context.Context, messageID, fileName string) error {
-	run := dbcommon.GetRunner(ctx, r.DB)
-	res, err := run.ExecContext(ctx, `DELETE FROM message_images WHERE message_id = $1 AND file_name = $2`, strings.TrimSpace(messageID), strings.TrimSpace(fileName))
-	if err != nil {
-		return err
+func (r *MessageImageRepositoryGCS) Delete(ctx context.Context, messageID, fileName string) error {
+	if r.Client == nil {
+		return errors.New("MessageImageRepositoryGCS: nil storage client")
 	}
-	aff, _ := res.RowsAffected()
-	if aff == 0 {
+	messageID = strings.TrimSpace(messageID)
+	fileName = strings.TrimSpace(fileName)
+	if messageID == "" || fileName == "" {
 		return midom.ErrNotFound
+	}
+
+	bucket := r.bucket()
+	objName := messageID + "/" + fileName
+	err := r.Client.Bucket(bucket).Object(objName).Delete(ctx)
+	if errors.Is(err, storage.ErrObjectNotExist) {
+		return midom.ErrNotFound
+	}
+	return err
+}
+
+// DeleteAll:
+// - messageID/ prefix の全オブジェクト削除
+func (r *MessageImageRepositoryGCS) DeleteAll(ctx context.Context, messageID string) error {
+	if r.Client == nil {
+		return errors.New("MessageImageRepositoryGCS: nil storage client")
+	}
+	messageID = strings.TrimSpace(messageID)
+	if messageID == "" {
+		return nil
+	}
+
+	bucket := r.bucket()
+	prefix := messageID + "/"
+
+	it := r.Client.Bucket(bucket).Objects(ctx, &storage.Query{
+		Prefix: prefix,
+	})
+
+	var errs []error
+	for {
+		attrs, err := it.Next()
+		if errors.Is(err, iterator.Done) {
+			break
+		}
+		if err != nil {
+			return err
+		}
+		if err := r.Client.Bucket(bucket).Object(attrs.Name).Delete(ctx); err != nil && !errors.Is(err, storage.ErrObjectNotExist) {
+			errs = append(errs, fmt.Errorf("%s: %w", attrs.Name, err))
+		}
+	}
+	if len(errs) > 0 {
+		return dbcommon.JoinErrors(errs)
 	}
 	return nil
 }
 
-func (r *MessageImageRepositoryPG) DeleteAll(ctx context.Context, messageID string) error {
-	run := dbcommon.GetRunner(ctx, r.DB)
-	_, err := run.ExecContext(ctx, `DELETE FROM message_images WHERE message_id = $1`, strings.TrimSpace(messageID))
-	return err
-}
-
 // ========================================
-// Helpers
+// Helpers (GCSメタ → midom.ImageFile)
 // ========================================
 
-func scanMessageImage(s dbcommon.RowScanner) (midom.ImageFile, error) {
-	var (
-		messageID, fileName, fileURL, mimeType string
-		fileSize                               int64
-		widthNS, heightNS                      sql.NullInt64
-		createdAt                              time.Time
-		updatedAtNS, deletedAtNS               sql.NullTime
-	)
-	if err := s.Scan(
-		&messageID, &fileName, &fileURL, &fileSize, &mimeType, &widthNS, &heightNS,
-		&createdAt, &updatedAtNS, &deletedAtNS,
-	); err != nil {
-		return midom.ImageFile{}, err
+func buildMessageImageFromAttrs(bucket string, attrs *storage.ObjectAttrs) midom.ImageFile {
+	name := strings.TrimSpace(attrs.Name)
+
+	// MessageID:
+	// 1. Metadata "message_id"
+	// 2. "<messageID>/..." のパス先頭
+	var messageID string
+	if v, ok := attrs.Metadata["message_id"]; ok && strings.TrimSpace(v) != "" {
+		messageID = strings.TrimSpace(v)
+	} else if name != "" {
+		if parts := strings.SplitN(name, "/", 2); len(parts) == 2 {
+			messageID = strings.TrimSpace(parts[0])
+		}
 	}
 
+	// FileName: パス末尾
+	fileName := name
+	if idx := strings.LastIndex(name, "/"); idx >= 0 && idx < len(name)-1 {
+		fileName = name[idx+1:]
+	}
+
+	// 公開 URL（共通ユーティリティ利用）
+	publicURL := gcscommon.GCSPublicURL(bucket, name, defaultMessageImageBucket)
+
+	// file_size
+	var fileSize int64
+	if sz, ok := gcscommon.ParseInt64Meta(attrs.Metadata, "file_size"); ok {
+		fileSize = sz
+	} else if attrs.Size > 0 {
+		fileSize = attrs.Size
+	}
+
+	// mime_type
+	mimeType := strings.TrimSpace(attrs.ContentType)
+	if mimeType == "" {
+		if mt, ok := attrs.Metadata["mime_type"]; ok {
+			mimeType = strings.TrimSpace(mt)
+		}
+	}
+
+	// width / height
 	var widthPtr, heightPtr *int
-	if widthNS.Valid {
-		w := int(widthNS.Int64)
+	if w, ok := gcscommon.ParseIntMeta(attrs.Metadata, "width"); ok {
 		widthPtr = &w
 	}
-	if heightNS.Valid {
-		h := int(heightNS.Int64)
+	if h, ok := gcscommon.ParseIntMeta(attrs.Metadata, "height"); ok {
 		heightPtr = &h
 	}
 
-	toPtrTime := func(nt sql.NullTime) *time.Time {
-		if nt.Valid {
-			t := nt.Time.UTC()
-			return &t
+	// created / updated
+	createdAt := attrs.Created
+	if createdAt.IsZero() {
+		createdAt = attrs.Updated
+	}
+	if createdAt.IsZero() {
+		createdAt = time.Now()
+	}
+	createdAt = createdAt.UTC()
+
+	var updatedAtPtr *time.Time
+	if !attrs.Updated.IsZero() {
+		u := attrs.Updated.UTC()
+		updatedAtPtr = &u
+	}
+
+	// deleted_at (metadata)
+	var deletedAtPtr *time.Time
+	if v := strings.TrimSpace(attrs.Metadata["deleted_at"]); v != "" {
+		if t, err := time.Parse(time.RFC3339Nano, v); err == nil {
+			tu := t.UTC()
+			deletedAtPtr = &tu
 		}
-		return nil
 	}
 
 	return midom.ImageFile{
-		MessageID: strings.TrimSpace(messageID),
-		FileName:  strings.TrimSpace(fileName),
-		FileURL:   strings.TrimSpace(fileURL),
+		MessageID: messageID,
+		FileName:  fileName,
+		FileURL:   publicURL,
 		FileSize:  fileSize,
-		MimeType:  strings.TrimSpace(mimeType),
+		MimeType:  mimeType,
 		Width:     widthPtr,
 		Height:    heightPtr,
-
-		CreatedAt: createdAt.UTC(),
-		UpdatedAt: toPtrTime(updatedAtNS),
-		DeletedAt: toPtrTime(deletedAtNS),
-	}, nil
+		CreatedAt: createdAt,
+		UpdatedAt: updatedAtPtr,
+		DeletedAt: deletedAtPtr,
+	}
 }
 
-func buildMessageImageWhere(f midom.Filter) ([]string, []any) {
-	where := []string{}
-	args := []any{}
-
-	if v := strings.TrimSpace(f.MessageID); v != "" {
-		where = append(where, fmt.Sprintf("message_id = $%d", len(args)+1))
-		args = append(args, v)
+// Filter: GCSベース ImageFile に対して midom.Filter を適用
+func matchMessageImageFilter(img midom.ImageFile, f midom.Filter) bool {
+	if v := strings.TrimSpace(f.MessageID); v != "" && img.MessageID != v {
+		return false
 	}
 	if v := strings.TrimSpace(f.FileNameLike); v != "" {
-		where = append(where, fmt.Sprintf("file_name ILIKE $%d", len(args)+1))
-		args = append(args, "%"+v+"%")
+		lv := strings.ToLower(v)
+		if !strings.Contains(strings.ToLower(img.FileName), lv) {
+			return false
+		}
 	}
 	if f.MimeType != nil {
 		mt := strings.TrimSpace(*f.MimeType)
-		if mt != "" {
-			where = append(where, fmt.Sprintf("mime_type = $%d", len(args)+1))
-			args = append(args, mt)
+		if mt != "" && !strings.EqualFold(img.MimeType, mt) {
+			return false
 		}
 	}
-	if f.MinSize != nil {
-		where = append(where, fmt.Sprintf("file_size >= $%d", len(args)+1))
-		args = append(args, *f.MinSize)
+	if f.MinSize != nil && img.FileSize < *f.MinSize {
+		return false
 	}
-	if f.MaxSize != nil {
-		where = append(where, fmt.Sprintf("file_size <= $%d", len(args)+1))
-		args = append(args, *f.MaxSize)
+	if f.MaxSize != nil && img.FileSize > *f.MaxSize {
+		return false
 	}
 
-	if f.CreatedFrom != nil {
-		where = append(where, fmt.Sprintf("created_at >= $%d", len(args)+1))
-		args = append(args, f.CreatedFrom.UTC())
+	if f.CreatedFrom != nil && img.CreatedAt.Before(f.CreatedFrom.UTC()) {
+		return false
 	}
-	if f.CreatedTo != nil {
-		where = append(where, fmt.Sprintf("created_at < $%d", len(args)+1))
-		args = append(args, f.CreatedTo.UTC())
+	if f.CreatedTo != nil && !img.CreatedAt.Before(f.CreatedTo.UTC()) {
+		return false
 	}
 	if f.UpdatedFrom != nil {
-		where = append(where, fmt.Sprintf("(updated_at IS NOT NULL AND updated_at >= $%d)", len(args)+1))
-		args = append(args, f.UpdatedFrom.UTC())
+		if img.UpdatedAt == nil || img.UpdatedAt.Before(f.UpdatedFrom.UTC()) {
+			return false
+		}
 	}
 	if f.UpdatedTo != nil {
-		where = append(where, fmt.Sprintf("(updated_at IS NOT NULL AND updated_at < $%d", len(args)+1))
-		args = append(args, f.UpdatedTo.UTC())
-	}
-
-	if f.Deleted != nil {
-		if *f.Deleted {
-			where = append(where, "deleted_at IS NOT NULL")
-		} else {
-			where = append(where, "deleted_at IS NULL")
+		if img.UpdatedAt == nil || !img.UpdatedAt.Before(f.UpdatedTo.UTC()) {
+			return false
 		}
 	}
 
-	return where, args
+	// Deleted tri-state
+	if f.Deleted != nil {
+		if *f.Deleted {
+			if img.DeletedAt == nil {
+				return false
+			}
+		} else {
+			if img.DeletedAt != nil {
+				return false
+			}
+		}
+	}
+
+	return true
 }
 
-func buildMessageImageOrderBy(sort midom.Sort) string {
+// ソート: buildMessageImageOrderBy 相当を in-memory で実現
+func applyMessageImageSort(items []midom.ImageFile, sort midom.Sort) {
 	col := strings.ToLower(strings.TrimSpace(string(sort.Column)))
-	switch col {
-	case "createdat", "created_at":
-		col = "created_at"
-	case "filename", "file_name":
-		col = "file_name"
-	case "filesize", "file_size":
-		col = "file_size"
-	case "updatedat", "updated_at":
-		col = "updated_at"
-	default:
-		return ""
-	}
 	dir := strings.ToUpper(strings.TrimSpace(string(sort.Order)))
 	if dir != "ASC" && dir != "DESC" {
 		dir = "ASC"
 	}
-	return fmt.Sprintf("ORDER BY %s %s, file_name %s", col, dir, dir)
+
+	// デフォルト: created_at ASC, file_name ASC
+	if col == "" {
+		for i := 0; i < len(items)-1; i++ {
+			for j := i + 1; j < len(items); j++ {
+				swap := false
+				if items[i].CreatedAt.After(items[j].CreatedAt) {
+					swap = true
+				} else if items[i].CreatedAt.Equal(items[j].CreatedAt) &&
+					items[i].FileName > items[j].FileName {
+					swap = true
+				}
+				if swap {
+					items[i], items[j] = items[j], items[i]
+				}
+			}
+		}
+		return
+	}
+
+	var less func(i, j int) bool
+
+	switch col {
+	case "createdat", "created_at":
+		less = func(i, j int) bool { return items[i].CreatedAt.Before(items[j].CreatedAt) }
+	case "filename", "file_name":
+		less = func(i, j int) bool { return items[i].FileName < items[j].FileName }
+	case "filesize", "file_size":
+		less = func(i, j int) bool { return items[i].FileSize < items[j].FileSize }
+	case "updatedat", "updated_at":
+		less = func(i, j int) bool {
+			a, b := items[i].UpdatedAt, items[j].UpdatedAt
+			switch {
+			case a == nil && b == nil:
+				return items[i].FileName < items[j].FileName
+			case a == nil:
+				return true
+			case b == nil:
+				return false
+			default:
+				return a.Before(*b)
+			}
+		}
+	default:
+		// 不明カラム -> デフォルトへフォールバック
+		for i := 0; i < len(items)-1; i++ {
+			for j := i + 1; j < len(items); j++ {
+				swap := false
+				if items[i].CreatedAt.After(items[j].CreatedAt) {
+					swap = true
+				} else if items[i].CreatedAt.Equal(items[j].CreatedAt) &&
+					items[i].FileName > items[j].FileName {
+					swap = true
+				}
+				if swap {
+					items[i], items[j] = items[j], items[i]
+				}
+			}
+		}
+		return
+	}
+
+	for i := 0; i < len(items)-1; i++ {
+		for j := i + 1; j < len(items); j++ {
+			swap := less(j, i)
+			if dir == "DESC" {
+				swap = less(i, j)
+			}
+			if swap {
+				items[i], items[j] = items[j], items[i]
+			}
+		}
+	}
 }
 
-// MessageImageStorageGCS implements messageImage.ObjectStoragePort using Google Cloud Storage.
+// ========================================
+// MessageImageStorageGCS (削除用オブジェクトストレージアダプタ)
+// ========================================
+
 type MessageImageStorageGCS struct {
 	Client          *storage.Client
 	Bucket          string
@@ -451,11 +774,15 @@ type MessageImageStorageGCS struct {
 }
 
 // NewMessageImageStorageGCS creates a storage adapter with the provided client.
-// If bucket is empty, it falls back to midom.DefaultBucket ("narratives_development_message_image").
+// If bucket is empty, it falls back to midom.DefaultBucket / defaultMessageImageBucket.
 func NewMessageImageStorageGCS(client *storage.Client, bucket string) *MessageImageStorageGCS {
 	b := strings.TrimSpace(bucket)
 	if b == "" {
-		b = midom.DefaultBucket
+		if strings.TrimSpace(midom.DefaultBucket) != "" {
+			b = midom.DefaultBucket
+		} else {
+			b = defaultMessageImageBucket
+		}
 	}
 	return &MessageImageStorageGCS{
 		Client:          client,
@@ -464,34 +791,42 @@ func NewMessageImageStorageGCS(client *storage.Client, bucket string) *MessageIm
 	}
 }
 
+func (s *MessageImageStorageGCS) bucket() string {
+	b := strings.TrimSpace(s.Bucket)
+	if b == "" {
+		if strings.TrimSpace(midom.DefaultBucket) != "" {
+			return midom.DefaultBucket
+		}
+		return defaultMessageImageBucket
+	}
+	return b
+}
+
 // DeleteObject deletes a single GCS object.
-// bucket or objectPath can be empty/relative; bucket falls back to adapter's default, objectPath gets trimmed.
 func (s *MessageImageStorageGCS) DeleteObject(ctx context.Context, bucket, objectPath string) error {
 	if s.Client == nil {
 		return errors.New("MessageImageStorageGCS: nil storage client")
 	}
 	b := strings.TrimSpace(bucket)
 	if b == "" {
-		b = s.Bucket
+		b = s.bucket()
 	}
 	obj := strings.TrimLeft(strings.TrimSpace(objectPath), "/")
 	if b == "" || obj == "" {
 		return fmt.Errorf("invalid bucket/objectPath: bucket=%q, objectPath=%q", b, objectPath)
 	}
 	err := s.Client.Bucket(b).Object(obj).Delete(ctx)
-	if err != nil {
-		if errors.Is(err, storage.ErrObjectNotExist) {
-			// Treat as success (idempotent delete)
-			return nil
-		}
+	if err != nil && !errors.Is(err, storage.ErrObjectNotExist) {
 		return err
 	}
 	return nil
 }
 
 // DeleteObjects deletes multiple GCS objects best-effort.
-// It continues on errors and returns a combined error if any failures occurred.
 func (s *MessageImageStorageGCS) DeleteObjects(ctx context.Context, ops []midom.GCSDeleteOp) error {
+	if s.Client == nil {
+		return errors.New("MessageImageStorageGCS: nil storage client")
+	}
 	if len(ops) == 0 {
 		return nil
 	}
@@ -499,10 +834,14 @@ func (s *MessageImageStorageGCS) DeleteObjects(ctx context.Context, ops []midom.
 	for _, op := range ops {
 		b := strings.TrimSpace(op.Bucket)
 		if b == "" {
-			b = s.Bucket
+			b = s.bucket()
 		}
-		if err := s.DeleteObject(ctx, b, op.ObjectPath); err != nil {
-			errs = append(errs, fmt.Errorf("%s/%s: %w", b, op.ObjectPath, err))
+		obj := strings.TrimLeft(strings.TrimSpace(op.ObjectPath), "/")
+		if obj == "" {
+			continue
+		}
+		if err := s.Client.Bucket(b).Object(obj).Delete(ctx); err != nil && !errors.Is(err, storage.ErrObjectNotExist) {
+			errs = append(errs, fmt.Errorf("%s/%s: %w", b, obj, err))
 		}
 	}
 	if len(errs) > 0 {

@@ -1,26 +1,53 @@
-// backend\internal\adapters\out\firestore\listImage_repository_pg.go
+// backend/internal/adapters/out/gcs/listImage_repository_gcs.go
 package gcs
 
 import (
 	"context"
-	"database/sql"
 	"errors"
 	"fmt"
+	"sort"
 	"strings"
 	"time"
 
+	"cloud.google.com/go/storage"
+	"google.golang.org/api/iterator"
+
 	dbcommon "narratives/internal/adapters/out/firestore/common"
+	gcscommon "narratives/internal/adapters/out/gcs/common"
 	listimagedom "narratives/internal/domain/listImage"
 )
 
-// ListImageRepositoryPG is the Postgres adapter for list_images.
-// This struct MUST be distinct from ListRepositoryPG (lists table).
-type ListImageRepositoryPG struct {
-	DB *sql.DB
+// GCS-based implementation for ListImageRepository.
+// 元の ListImageRepositoryPG (PostgreSQL) を、GCS 上のオブジェクトメタ情報を前提とした実装に置き換えたもの。
+// - 画像本体は GCS に保存されている前提
+// - メタ情報は GCS ObjectAttrs / Metadata から構成
+// - ListImage.ID は GCS の object 名（パス）として扱う
+type ListImageRepositoryGCS struct {
+	Client *storage.Client
+	Bucket string
 }
 
-func NewListImageRepositoryPG(db *sql.DB) *ListImageRepositoryPG {
-	return &ListImageRepositoryPG{DB: db}
+// デフォルトバケット（必要に応じて環境に合わせて変更）
+const defaultListImageBucket = "narratives_development_list_image"
+
+// コンストラクタ
+func NewListImageRepositoryGCS(client *storage.Client, bucket string) *ListImageRepositoryGCS {
+	b := strings.TrimSpace(bucket)
+	if b == "" {
+		b = defaultListImageBucket
+	}
+	return &ListImageRepositoryGCS{
+		Client: client,
+		Bucket: b,
+	}
+}
+
+func (r *ListImageRepositoryGCS) bucket() string {
+	b := strings.TrimSpace(r.Bucket)
+	if b == "" {
+		return defaultListImageBucket
+	}
+	return b
 }
 
 // ─────────────────────────────────
@@ -28,227 +55,237 @@ func NewListImageRepositoryPG(db *sql.DB) *ListImageRepositoryPG {
 // ─────────────────────────────────
 
 // GetByID satisfies usecase.ListImageByIDReader.
-// (usecase側インターフェース名は GetByID なので合わせる)
-func (r *ListImageRepositoryPG) GetByID(ctx context.Context, imageID string) (listimagedom.ListImage, error) {
-	const q = `
-SELECT
-  id, list_id, url, file_name, size, display_order,
-  created_at, created_by, updated_at, updated_by,
-  deleted_at, deleted_by
-FROM list_images
-WHERE id = $1
-`
-	row := r.DB.QueryRowContext(ctx, q, strings.TrimSpace(imageID))
-	img, err := scanListImage(row)
+// ID は GCS object 名として扱う。
+func (r *ListImageRepositoryGCS) GetByID(ctx context.Context, imageID string) (listimagedom.ListImage, error) {
+	if r.Client == nil {
+		return listimagedom.ListImage{}, errors.New("ListImageRepositoryGCS: nil storage client")
+	}
+	id := strings.TrimSpace(imageID)
+	if id == "" {
+		return listimagedom.ListImage{}, listimagedom.ErrNotFound
+	}
+
+	bucket := r.bucket()
+	attrs, err := r.Client.Bucket(bucket).Object(id).Attrs(ctx)
 	if err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
+		if errors.Is(err, storage.ErrObjectNotExist) {
 			return listimagedom.ListImage{}, listimagedom.ErrNotFound
 		}
 		return listimagedom.ListImage{}, err
 	}
-	return img, nil
+
+	return buildListImageFromAttrs(bucket, attrs), nil
 }
 
 // ListByListID satisfies usecase.ListImageReader.
-// (usecase側インターフェース名は ListByListID なので合わせる)
-func (r *ListImageRepositoryPG) ListByListID(ctx context.Context, listID string) ([]listimagedom.ListImage, error) {
-	const q = `
-SELECT
-  id, list_id, url, file_name, size, display_order,
-  created_at, created_by, updated_at, updated_by,
-  deleted_at, deleted_by
-FROM list_images
-WHERE list_id = $1
-ORDER BY display_order ASC, created_at ASC, id ASC
-`
-	rows, err := r.DB.QueryContext(ctx, q, strings.TrimSpace(listID))
-	if err != nil {
-		return nil, err
+// listID に紐づく GCS オブジェクト（パス prefix または metadata）を列挙。
+func (r *ListImageRepositoryGCS) ListByListID(ctx context.Context, listID string) ([]listimagedom.ListImage, error) {
+	if r.Client == nil {
+		return nil, errors.New("ListImageRepositoryGCS: nil storage client")
 	}
-	defer rows.Close()
+	listID = strings.TrimSpace(listID)
+	if listID == "" {
+		return nil, nil
+	}
+
+	bucket := r.bucket()
+	it := r.Client.Bucket(bucket).Objects(ctx, &storage.Query{})
 
 	var out []listimagedom.ListImage
-	for rows.Next() {
-		img, err := scanListImage(rows)
+	for {
+		attrs, err := it.Next()
+		if errors.Is(err, iterator.Done) {
+			break
+		}
 		if err != nil {
 			return nil, err
 		}
-		out = append(out, img)
+		img := buildListImageFromAttrs(bucket, attrs)
+		if img.ListID == listID {
+			out = append(out, img)
+		}
 	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
+
+	// display_order ASC, created_at ASC, id ASC に揃える
+	applyListImageSortForListID(out)
+
 	return out, nil
 }
 
-func (r *ListImageRepositoryPG) Exists(ctx context.Context, imageID string) (bool, error) {
-	const q = `SELECT 1 FROM list_images WHERE id = $1`
-	var one int
-	err := r.DB.QueryRowContext(ctx, q, strings.TrimSpace(imageID)).Scan(&one)
-	if errors.Is(err, sql.ErrNoRows) {
+func (r *ListImageRepositoryGCS) Exists(ctx context.Context, imageID string) (bool, error) {
+	if r.Client == nil {
+		return false, errors.New("ListImageRepositoryGCS: nil storage client")
+	}
+	id := strings.TrimSpace(imageID)
+	if id == "" {
 		return false, nil
 	}
+	bucket := r.bucket()
+	_, err := r.Client.Bucket(bucket).Object(id).Attrs(ctx)
 	if err != nil {
+		if errors.Is(err, storage.ErrObjectNotExist) {
+			return false, nil
+		}
 		return false, err
 	}
 	return true, nil
 }
 
-func (r *ListImageRepositoryPG) Count(ctx context.Context, filter listimagedom.Filter) (int, error) {
-	where, args := buildListImageWhere(filter)
-	whereSQL := ""
-	if len(where) > 0 {
-		whereSQL = "WHERE " + strings.Join(where, " AND ")
+func (r *ListImageRepositoryGCS) Count(ctx context.Context, filter listimagedom.Filter) (int, error) {
+	if r.Client == nil {
+		return 0, errors.New("ListImageRepositoryGCS: nil storage client")
 	}
-	var total int
-	if err := r.DB.QueryRowContext(ctx,
-		`SELECT COUNT(*) FROM list_images li `+whereSQL,
-		args...,
-	).Scan(&total); err != nil {
-		return 0, err
+	bucket := r.bucket()
+	it := r.Client.Bucket(bucket).Objects(ctx, &storage.Query{})
+
+	total := 0
+	for {
+		attrs, err := it.Next()
+		if errors.Is(err, iterator.Done) {
+			break
+		}
+		if err != nil {
+			return 0, err
+		}
+		img := buildListImageFromAttrs(bucket, attrs)
+		if matchListImageFilter(img, filter) {
+			total++
+		}
 	}
 	return total, nil
 }
 
-func (r *ListImageRepositoryPG) List(
+// List:
+// - GCS オブジェクトを全走査して Filter/Sort/Page をメモリ上で適用
+func (r *ListImageRepositoryGCS) List(
 	ctx context.Context,
 	filter listimagedom.Filter,
 	sort listimagedom.Sort,
 	page listimagedom.Page,
 ) (listimagedom.PageResult[listimagedom.ListImage], error) {
-
-	where, args := buildListImageWhere(filter)
-
-	whereSQL := ""
-	if len(where) > 0 {
-		whereSQL = "WHERE " + strings.Join(where, " AND ")
+	if r.Client == nil {
+		return listimagedom.PageResult[listimagedom.ListImage]{}, errors.New("ListImageRepositoryGCS: nil storage client")
 	}
 
-	orderBy := buildListImageOrderBy(sort)
-	if orderBy == "" {
-		orderBy = "ORDER BY li.display_order ASC, li.created_at ASC, li.id ASC"
-	}
+	bucket := r.bucket()
+	it := r.Client.Bucket(bucket).Objects(ctx, &storage.Query{})
 
-	perPage := page.PerPage
-	if perPage <= 0 {
-		perPage = 50
-	}
-	number := page.Number
-	if number <= 0 {
-		number = 1
-	}
-	offset := (number - 1) * perPage
-
-	var total int
-	countSQL := fmt.Sprintf("SELECT COUNT(*) FROM list_images li %s", whereSQL)
-	if err := r.DB.QueryRowContext(ctx, countSQL, args...).Scan(&total); err != nil {
-		return listimagedom.PageResult[listimagedom.ListImage]{}, err
-	}
-
-	q := fmt.Sprintf(`
-SELECT
-  id, list_id, url, file_name, size, display_order,
-  created_at, created_by, updated_at, updated_by,
-  deleted_at, deleted_by
-FROM list_images li
-%s
-%s
-LIMIT $%d OFFSET $%d
-`, whereSQL, orderBy, len(args)+1, len(args)+2)
-
-	args = append(args, perPage, offset)
-
-	rows, err := r.DB.QueryContext(ctx, q, args...)
-	if err != nil {
-		return listimagedom.PageResult[listimagedom.ListImage]{}, err
-	}
-	defer rows.Close()
-
-	var items []listimagedom.ListImage
-	for rows.Next() {
-		img, err := scanListImage(rows)
+	var all []listimagedom.ListImage
+	for {
+		attrs, err := it.Next()
+		if errors.Is(err, iterator.Done) {
+			break
+		}
 		if err != nil {
 			return listimagedom.PageResult[listimagedom.ListImage]{}, err
 		}
-		items = append(items, img)
-	}
-	if err := rows.Err(); err != nil {
-		return listimagedom.PageResult[listimagedom.ListImage]{}, err
+		img := buildListImageFromAttrs(bucket, attrs)
+		if matchListImageFilter(img, filter) {
+			all = append(all, img)
+		}
 	}
 
-	totalPages := (total + perPage - 1) / perPage
+	applyListImageSort(all, sort)
+
+	pageNum, perPage, offset := dbcommon.NormalizePage(page.Number, page.PerPage, 50, 200)
+	total := len(all)
+
+	if total == 0 {
+		return listimagedom.PageResult[listimagedom.ListImage]{
+			Items:      []listimagedom.ListImage{},
+			TotalCount: 0,
+			TotalPages: 0,
+			Page:       pageNum,
+			PerPage:    perPage,
+		}, nil
+	}
+
+	if offset > total {
+		offset = total
+	}
+	end := offset + perPage
+	if end > total {
+		end = total
+	}
+	items := all[offset:end]
 
 	return listimagedom.PageResult[listimagedom.ListImage]{
 		Items:      items,
 		TotalCount: total,
-		TotalPages: totalPages,
-		Page:       number,
+		TotalPages: dbcommon.ComputeTotalPages(total, perPage),
+		Page:       pageNum,
 		PerPage:    perPage,
 	}, nil
 }
 
-func (r *ListImageRepositoryPG) ListByCursor(
+// ListByCursor:
+// - ID 昇順を前提に CursorPage.After 以降を返す。
+func (r *ListImageRepositoryGCS) ListByCursor(
 	ctx context.Context,
 	filter listimagedom.Filter,
 	_ listimagedom.Sort,
 	cpage listimagedom.CursorPage,
 ) (listimagedom.CursorPageResult[listimagedom.ListImage], error) {
-
-	where, args := buildListImageWhere(filter)
-
-	// simple cursor on id ASC
-	if after := strings.TrimSpace(cpage.After); after != "" {
-		where = append(where, fmt.Sprintf("li.id > $%d", len(args)+1))
-		args = append(args, after)
+	if r.Client == nil {
+		return listimagedom.CursorPageResult[listimagedom.ListImage]{}, errors.New("ListImageRepositoryGCS: nil storage client")
 	}
 
-	whereSQL := ""
-	if len(where) > 0 {
-		whereSQL = "WHERE " + strings.Join(where, " AND ")
+	bucket := r.bucket()
+	it := r.Client.Bucket(bucket).Objects(ctx, &storage.Query{})
+
+	var all []listimagedom.ListImage
+	for {
+		attrs, err := it.Next()
+		if errors.Is(err, iterator.Done) {
+			break
+		}
+		if err != nil {
+			return listimagedom.CursorPageResult[listimagedom.ListImage]{}, err
+		}
+		img := buildListImageFromAttrs(bucket, attrs)
+		if matchListImageFilter(img, filter) {
+			all = append(all, img)
+		}
 	}
+
+	// ID 昇順
+	applyListImageSortByIDAsc(all)
 
 	limit := cpage.Limit
 	if limit <= 0 || limit > 200 {
 		limit = 50
 	}
+	after := strings.TrimSpace(cpage.After)
 
-	q := fmt.Sprintf(`
-SELECT
-  id, list_id, url, file_name, size, display_order,
-  created_at, created_by, updated_at, updated_by,
-  deleted_at, deleted_by
-FROM list_images li
-%s
-ORDER BY li.id ASC
-LIMIT $%d
-`, whereSQL, len(args)+1)
-
-	args = append(args, limit+1)
-
-	rows, err := r.DB.QueryContext(ctx, q, args...)
-	if err != nil {
-		return listimagedom.CursorPageResult[listimagedom.ListImage]{}, err
-	}
-	defer rows.Close()
-
-	var items []listimagedom.ListImage
-	var lastID string
-	for rows.Next() {
-		img, err := scanListImage(rows)
-		if err != nil {
-			return listimagedom.CursorPageResult[listimagedom.ListImage]{}, err
+	start := 0
+	if after != "" {
+		for i, img := range all {
+			if img.ID > after {
+				start = i
+				break
+			}
 		}
-		items = append(items, img)
-		lastID = img.ID
 	}
-	if err := rows.Err(); err != nil {
-		return listimagedom.CursorPageResult[listimagedom.ListImage]{}, err
+
+	if start >= len(all) {
+		return listimagedom.CursorPageResult[listimagedom.ListImage]{
+			Items:      []listimagedom.ListImage{},
+			NextCursor: nil,
+			Limit:      limit,
+		}, nil
 	}
+
+	end := start + limit
+	if end > len(all) {
+		end = len(all)
+	}
+
+	items := all[start:end]
 
 	var next *string
-	if len(items) > limit {
-		items = items[:limit]
-		next = &lastID
+	if end < len(all) {
+		n := items[len(items)-1].ID
+		next = &n
 	}
 
 	return listimagedom.CursorPageResult[listimagedom.ListImage]{
@@ -262,9 +299,11 @@ LIMIT $%d
 // Mutations
 // ─────────────────────────────────
 
-// SaveFromBucketObject satisfies usecase.ListImageObjectSaver.
-// GCS等からオブジェクトを登録する用途。
-func (r *ListImageRepositoryPG) SaveFromBucketObject(
+// SaveFromBucketObject satisfies usecase.ListImageObjectSaver in a GCS world.
+// - 実際のアップロードは別レイヤーで済んでいる前提で、ここでは既存オブジェクトのメタ情報を更新して ListImage を返す。
+// - bucket が空ならデフォルトバケット使用
+// - objectPath を ID として採用し、公開 URL を構築
+func (r *ListImageRepositoryGCS) SaveFromBucketObject(
 	ctx context.Context,
 	id string,
 	listID string,
@@ -275,500 +314,630 @@ func (r *ListImageRepositoryPG) SaveFromBucketObject(
 	createdBy string,
 	createdAt time.Time,
 ) (listimagedom.ListImage, error) {
+	if r.Client == nil {
+		return listimagedom.ListImage{}, errors.New("ListImageRepositoryGCS: nil storage client")
+	}
 
-	// URL の生成ポリシー: とりあえず "gs://bucket/objectPath" 的な形にしておく。
-	// あとで公開URLにするならここを差し替えればいい。
-	urlVal := buildGCSURL(bucket, objectPath)
+	b := strings.TrimSpace(bucket)
+	if b == "" {
+		b = r.bucket()
+	}
+	objName := strings.TrimLeft(strings.TrimSpace(objectPath), "/")
+	if objName == "" {
+		return listimagedom.ListImage{}, fmt.Errorf("listImage: empty objectPath")
+	}
 
-	const q = `
-INSERT INTO list_images (
-  id, list_id, url, file_name, size, display_order,
-  created_at, created_by, updated_at, updated_by,
-  deleted_at, deleted_by
-) VALUES (
-  $1,$2,$3,$4,$5,$6,
-  $7,$8,$9,$10,$11,$12
-)
-ON CONFLICT (id) DO UPDATE SET
-  list_id       = EXCLUDED.list_id,
-  url           = EXCLUDED.url,
-  file_name     = EXCLUDED.file_name,
-  size          = EXCLUDED.size,
-  display_order = EXCLUDED.display_order,
-  created_at    = LEAST(list_images.created_at, EXCLUDED.created_at),
-  created_by    = LEAST(list_images.created_by, EXCLUDED.created_by),
-  updated_at    = COALESCE(EXCLUDED.updated_at, list_images.updated_at),
-  updated_by    = EXCLUDED.updated_by,
-  deleted_at    = EXCLUDED.deleted_at,
-  deleted_by    = EXCLUDED.deleted_by
-RETURNING
-  id, list_id, url, file_name, size, display_order,
-  created_at, created_by, updated_at, updated_by,
-  deleted_at, deleted_by
-`
+	obj := r.Client.Bucket(b).Object(objName)
 
-	nowUTC := time.Now().UTC()
-
-	row := r.DB.QueryRowContext(ctx, q,
-		strings.TrimSpace(id),
-		strings.TrimSpace(listID),
-		strings.TrimSpace(urlVal),
-		strings.TrimSpace(objectPath), // file_nameはobjectPathをそのまま使う想定
-		size,
-		displayOrder,
-		createdAt.UTC(),
-		strings.TrimSpace(createdBy),
-		nowUTC,
-		strings.TrimSpace(createdBy),
-		nil,
-		nil,
-	)
-
-	out, err := scanListImage(row)
+	// オブジェクトが存在する前提
+	attrs, err := obj.Attrs(ctx)
 	if err != nil {
-		return listimagedom.ListImage{}, err
-	}
-	return out, nil
-}
-
-func (r *ListImageRepositoryPG) Create(ctx context.Context, img listimagedom.ListImage) (listimagedom.ListImage, error) {
-	const q = `
-INSERT INTO list_images (
-  id, list_id, url, file_name, size, display_order,
-  created_at, created_by, updated_at, updated_by,
-  deleted_at, deleted_by
-) VALUES (
-  $1,$2,$3,$4,$5,$6,
-  $7,$8,$9,$10,$11,$12
-)
-RETURNING
-  id, list_id, url, file_name, size, display_order,
-  created_at, created_by, updated_at, updated_by,
-  deleted_at, deleted_by
-`
-	row := r.DB.QueryRowContext(ctx, q,
-		strings.TrimSpace(img.ID),
-		strings.TrimSpace(img.ListID),
-		strings.TrimSpace(img.URL),
-		strings.TrimSpace(img.FileName),
-		img.Size,
-		img.DisplayOrder,
-		img.CreatedAt.UTC(),
-		strings.TrimSpace(img.CreatedBy),
-		dbcommon.ToDBTime(img.UpdatedAt),
-		dbcommon.ToDBText(img.UpdatedBy),
-		dbcommon.ToDBTime(img.DeletedAt),
-		dbcommon.ToDBText(img.DeletedBy),
-	)
-	out, err := scanListImage(row)
-	if err != nil {
-		if dbcommon.IsUniqueViolation(err) {
-			return listimagedom.ListImage{}, listimagedom.ErrConflict
-		}
-		return listimagedom.ListImage{}, err
-	}
-	return out, nil
-}
-
-func (r *ListImageRepositoryPG) Update(ctx context.Context, imageID string, patch listimagedom.ListImagePatch) (listimagedom.ListImage, error) {
-	sets := []string{}
-	args := []any{}
-	i := 1
-
-	setStr := func(col string, p *string) {
-		if p != nil {
-			sets = append(sets, fmt.Sprintf("%s = $%d", col, i))
-			args = append(args, strings.TrimSpace(*p))
-			i++
-		}
-	}
-	setInt64 := func(col string, p *int64) {
-		if p != nil {
-			sets = append(sets, fmt.Sprintf("%s = $%d", col, i))
-			args = append(args, *p)
-			i++
-		}
-	}
-	setInt := func(col string, p *int) {
-		if p != nil {
-			sets = append(sets, fmt.Sprintf("%s = $%d", col, i))
-			args = append(args, *p)
-			i++
-		}
-	}
-
-	setStr("url", patch.URL)
-	setStr("file_name", patch.FileName)
-	setInt64("size", patch.Size)
-	setInt("display_order", patch.DisplayOrder)
-
-	// optional audit fields
-	if patch.UpdatedBy != nil {
-		sets = append(sets, fmt.Sprintf("updated_by = $%d", i))
-		args = append(args, dbcommon.ToDBText(patch.UpdatedBy))
-		i++
-	}
-	if patch.DeletedAt != nil {
-		sets = append(sets, fmt.Sprintf("deleted_at = $%d", i))
-		args = append(args, dbcommon.ToDBTime(patch.DeletedAt))
-		i++
-	}
-	if patch.DeletedBy != nil {
-		sets = append(sets, fmt.Sprintf("deleted_by = $%d", i))
-		args = append(args, dbcommon.ToDBText(patch.DeletedBy))
-		i++
-	}
-
-	// updated_at explicit or NOW() if any field changed
-	if patch.UpdatedAt != nil {
-		sets = append(sets, fmt.Sprintf("updated_at = $%d", i))
-		args = append(args, patch.UpdatedAt.UTC())
-		i++
-	} else if len(sets) > 0 {
-		sets = append(sets, fmt.Sprintf("updated_at = $%d", i))
-		args = append(args, time.Now().UTC())
-		i++
-	}
-
-	if len(sets) == 0 {
-		// nothing to change → return current row
-		current, err := r.GetByID(ctx, imageID)
-		if err != nil {
-			return listimagedom.ListImage{}, err
-		}
-		return current, nil
-	}
-
-	args = append(args, strings.TrimSpace(imageID))
-
-	q := fmt.Sprintf(`
-UPDATE list_images
-SET %s
-WHERE id = $%d
-RETURNING
-  id, list_id, url, file_name, size, display_order,
-  created_at, created_by, updated_at, updated_by,
-  deleted_at, deleted_by
-`, strings.Join(sets, ", "), i)
-
-	row := r.DB.QueryRowContext(ctx, q, args...)
-	out, err := scanListImage(row)
-	if err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
+		if errors.Is(err, storage.ErrObjectNotExist) {
 			return listimagedom.ListImage{}, listimagedom.ErrNotFound
 		}
 		return listimagedom.ListImage{}, err
 	}
-	return out, nil
-}
 
-func (r *ListImageRepositoryPG) Save(ctx context.Context, img listimagedom.ListImage, _ *listimagedom.SaveOptions) (listimagedom.ListImage, error) {
-	const q = `
-INSERT INTO list_images (
-  id, list_id, url, file_name, size, display_order,
-  created_at, created_by, updated_at, updated_by,
-  deleted_at, deleted_by
-) VALUES (
-  $1,$2,$3,$4,$5,$6,
-  $7,$8,$9,$10,$11,$12
-)
-ON CONFLICT (id) DO UPDATE SET
-  list_id       = EXCLUDED.list_id,
-  url           = EXCLUDED.url,
-  file_name     = EXCLUDED.file_name,
-  size          = EXCLUDED.size,
-  display_order = EXCLUDED.display_order,
-  created_at    = LEAST(list_images.created_at, EXCLUDED.created_at),
-  created_by    = LEAST(list_images.created_by, EXCLUDED.created_by),
-  updated_at    = COALESCE(EXCLUDED.updated_at, list_images.updated_at),
-  updated_by    = EXCLUDED.updated_by,
-  deleted_at    = EXCLUDED.deleted_at,
-  deleted_by    = EXCLUDED.deleted_by
-RETURNING
-  id, list_id, url, file_name, size, display_order,
-  created_at, created_by, updated_at, updated_by,
-  deleted_at, deleted_by
-`
+	ua := storage.ObjectAttrsToUpdate{}
+	meta := map[string]string{}
+	for k, v := range attrs.Metadata {
+		meta[k] = v
+	}
 
-	row := r.DB.QueryRowContext(ctx, q,
-		strings.TrimSpace(img.ID),
-		strings.TrimSpace(img.ListID),
-		strings.TrimSpace(img.URL),
-		strings.TrimSpace(img.FileName),
-		img.Size,
-		img.DisplayOrder,
-		img.CreatedAt.UTC(),
-		strings.TrimSpace(img.CreatedBy),
-		dbcommon.ToDBTime(img.UpdatedAt),
-		dbcommon.ToDBText(img.UpdatedBy),
-		dbcommon.ToDBTime(img.DeletedAt),
-		dbcommon.ToDBText(img.DeletedBy),
-	)
+	if list := strings.TrimSpace(listID); list != "" {
+		meta["list_id"] = list
+	}
+	if displayOrder > 0 {
+		meta["display_order"] = fmt.Sprint(displayOrder)
+	}
+	if size > 0 {
+		meta["size"] = fmt.Sprint(size)
+	}
+	if cb := strings.TrimSpace(createdBy); cb != "" {
+		meta["created_by"] = cb
+	}
+	if !createdAt.IsZero() {
+		meta["created_at"] = createdAt.UTC().Format(time.RFC3339Nano)
+	}
 
-	out, err := scanListImage(row)
+	if len(meta) > 0 {
+		ua.Metadata = meta
+	}
+
+	newAttrs, err := obj.Update(ctx, ua)
 	if err != nil {
 		return listimagedom.ListImage{}, err
 	}
+
+	img := buildListImageFromAttrs(b, newAttrs)
+
+	// 明示 ID が指定されていれば上書き（通常は objName=ID）
+	if strings.TrimSpace(id) != "" {
+		img.ID = strings.TrimSpace(id)
+	}
+
+	return img, nil
+}
+
+// Create:
+// - GCSでは実オブジェクト作成は別レイヤーなので、Save と同様にメタ更新扱い。
+func (r *ListImageRepositoryGCS) Create(ctx context.Context, img listimagedom.ListImage) (listimagedom.ListImage, error) {
+	return r.Save(ctx, img, nil)
+}
+
+// Update:
+// - ID で対象オブジェクトを取得し、patch を metadata に反映して保存。
+func (r *ListImageRepositoryGCS) Update(ctx context.Context, imageID string, patch listimagedom.ListImagePatch) (listimagedom.ListImage, error) {
+	if r.Client == nil {
+		return listimagedom.ListImage{}, errors.New("ListImageRepositoryGCS: nil storage client")
+	}
+
+	id := strings.TrimSpace(imageID)
+	if id == "" {
+		return listimagedom.ListImage{}, listimagedom.ErrNotFound
+	}
+
+	bucket := r.bucket()
+	obj := r.Client.Bucket(bucket).Object(id)
+
+	attrs, err := obj.Attrs(ctx)
+	if err != nil {
+		if errors.Is(err, storage.ErrObjectNotExist) {
+			return listimagedom.ListImage{}, listimagedom.ErrNotFound
+		}
+		return listimagedom.ListImage{}, err
+	}
+
+	ua := storage.ObjectAttrsToUpdate{}
+	meta := map[string]string{}
+	for k, v := range attrs.Metadata {
+		meta[k] = v
+	}
+
+	if patch.URL != nil {
+		meta["url"] = strings.TrimSpace(*patch.URL)
+	}
+	if patch.FileName != nil {
+		meta["file_name"] = strings.TrimSpace(*patch.FileName)
+	}
+	if patch.Size != nil {
+		meta["size"] = fmt.Sprint(*patch.Size)
+	}
+	if patch.DisplayOrder != nil {
+		meta["display_order"] = fmt.Sprint(*patch.DisplayOrder)
+	}
+	if patch.UpdatedBy != nil {
+		meta["updated_by"] = strings.TrimSpace(*patch.UpdatedBy)
+	}
+	if patch.DeletedBy != nil {
+		meta["deleted_by"] = strings.TrimSpace(*patch.DeletedBy)
+	}
+	if patch.DeletedAt != nil {
+		// Save削除時刻（nilの場合は「変更なし」扱いとし、明示クリアは別仕様で必要なら拡張）
+		t := patch.DeletedAt.UTC()
+		meta["deleted_at"] = t.Format(time.RFC3339Nano)
+	}
+
+	// updated_at
+	if patch.UpdatedAt != nil {
+		if !patch.UpdatedAt.IsZero() {
+			meta["updated_at"] = patch.UpdatedAt.UTC().Format(time.RFC3339Nano)
+		}
+	} else if len(meta) > 0 {
+		meta["updated_at"] = time.Now().UTC().Format(time.RFC3339Nano)
+	}
+
+	if len(meta) > 0 {
+		ua.Metadata = meta
+	}
+
+	newAttrs, err := obj.Update(ctx, ua)
+	if err != nil {
+		return listimagedom.ListImage{}, err
+	}
+
+	return buildListImageFromAttrs(bucket, newAttrs), nil
+}
+
+// Save:
+// - ID or URL から対象オブジェクトを解決し、指定内容を metadata として反映。
+func (r *ListImageRepositoryGCS) Save(
+	ctx context.Context,
+	img listimagedom.ListImage,
+	_ *listimagedom.SaveOptions,
+) (listimagedom.ListImage, error) {
+	if r.Client == nil {
+		return listimagedom.ListImage{}, errors.New("ListImageRepositoryGCS: nil storage client")
+	}
+
+	defaultBucket := r.bucket()
+	objName, bucket, err := r.resolveObjectFromImage(img, defaultBucket)
+	if err != nil {
+		return listimagedom.ListImage{}, err
+	}
+
+	obj := r.Client.Bucket(bucket).Object(objName)
+	attrs, err := obj.Attrs(ctx)
+	if err != nil {
+		if errors.Is(err, storage.ErrObjectNotExist) {
+			return listimagedom.ListImage{}, listimagedom.ErrNotFound
+		}
+		return listimagedom.ListImage{}, err
+	}
+
+	ua := storage.ObjectAttrsToUpdate{}
+	meta := map[string]string{}
+	for k, v := range attrs.Metadata {
+		meta[k] = v
+	}
+
+	if strings.TrimSpace(img.ListID) != "" {
+		meta["list_id"] = strings.TrimSpace(img.ListID)
+	}
+	if strings.TrimSpace(img.FileName) != "" {
+		meta["file_name"] = strings.TrimSpace(img.FileName)
+	}
+	if img.Size > 0 {
+		meta["size"] = fmt.Sprint(img.Size)
+	}
+	if img.DisplayOrder > 0 {
+		meta["display_order"] = fmt.Sprint(img.DisplayOrder)
+	}
+	if strings.TrimSpace(img.CreatedBy) != "" {
+		meta["created_by"] = strings.TrimSpace(img.CreatedBy)
+	}
+	if img.UpdatedBy != nil && strings.TrimSpace(*img.UpdatedBy) != "" {
+		meta["updated_by"] = strings.TrimSpace(*img.UpdatedBy)
+	}
+	if img.DeletedBy != nil && strings.TrimSpace(*img.DeletedBy) != "" {
+		meta["deleted_by"] = strings.TrimSpace(*img.DeletedBy)
+	}
+	if img.DeletedAt != nil {
+		meta["deleted_at"] = img.DeletedAt.UTC().Format(time.RFC3339Nano)
+	}
+	if !img.CreatedAt.IsZero() {
+		meta["created_at"] = img.CreatedAt.UTC().Format(time.RFC3339Nano)
+	}
+	if img.UpdatedAt != nil {
+		meta["updated_at"] = img.UpdatedAt.UTC().Format(time.RFC3339Nano)
+	}
+
+	if len(meta) > 0 {
+		ua.Metadata = meta
+	}
+
+	newAttrs, err := obj.Update(ctx, ua)
+	if err != nil {
+		return listimagedom.ListImage{}, err
+	}
+
+	out := buildListImageFromAttrs(bucket, newAttrs)
+
+	// img.URL が明示されていれば、それも優先して上書き（メタとは独立した表示用）
+	if strings.TrimSpace(img.URL) != "" {
+		out.URL = strings.TrimSpace(img.URL)
+	}
+
+	// img.ID が明示されていれば上書き
+	if strings.TrimSpace(img.ID) != "" {
+		out.ID = strings.TrimSpace(img.ID)
+	}
+
 	return out, nil
 }
 
-// Upload is not implemented at DB layer (actual blob upload should happen in object storage adapter).
-func (r *ListImageRepositoryPG) Upload(ctx context.Context, _ listimagedom.UploadImageInput) (*listimagedom.ListImage, error) {
+// Upload はこのレイヤーでは実ファイルを扱わないため未実装。
+func (r *ListImageRepositoryGCS) Upload(ctx context.Context, _ listimagedom.UploadImageInput) (*listimagedom.ListImage, error) {
+	_ = ctx
 	return nil, listimagedom.ErrUploadFailed
 }
 
-func (r *ListImageRepositoryPG) Delete(ctx context.Context, imageID string) error {
-	res, err := r.DB.ExecContext(ctx,
-		`DELETE FROM list_images WHERE id = $1`,
-		strings.TrimSpace(imageID),
-	)
-	if err != nil {
-		return err
+func (r *ListImageRepositoryGCS) Delete(ctx context.Context, imageID string) error {
+	if r.Client == nil {
+		return errors.New("ListImageRepositoryGCS: nil storage client")
 	}
-	aff, _ := res.RowsAffected()
-	if aff == 0 {
+	id := strings.TrimSpace(imageID)
+	if id == "" {
 		return listimagedom.ErrNotFound
 	}
-	return nil
+	bucket := r.bucket()
+	err := r.Client.Bucket(bucket).Object(id).Delete(ctx)
+	if errors.Is(err, storage.ErrObjectNotExist) {
+		return listimagedom.ErrNotFound
+	}
+	return err
 }
 
 // ─────────────────────────────────
 // Helpers
 // ─────────────────────────────────
 
-func scanListImage(s dbcommon.RowScanner) (listimagedom.ListImage, error) {
-	var (
-		idNS, listIDNS, urlNS, fileNameNS     sql.NullString
-		createdByNS, updatedByNS, deletedByNS sql.NullString
-		size                                  int64
-		displayOrder                          int
-		createdAt                             time.Time
-		updatedAtNS                           sql.NullTime
-		deletedAtNS                           sql.NullTime
-	)
+// GCS ObjectAttrs -> ListImage 変換
+func buildListImageFromAttrs(bucket string, attrs *storage.ObjectAttrs) listimagedom.ListImage {
+	name := strings.TrimSpace(attrs.Name)
 
-	if err := s.Scan(
-		&idNS, &listIDNS, &urlNS, &fileNameNS, &size, &displayOrder,
-		&createdAt, &createdByNS, &updatedAtNS, &updatedByNS,
-		&deletedAtNS, &deletedByNS,
-	); err != nil {
-		return listimagedom.ListImage{}, err
+	// ListID の決定:
+	// 1. metadata["list_id"]
+	// 2. "listID/xxx" のパスプレフィックス
+	var listID string
+	if v, ok := attrs.Metadata["list_id"]; ok && strings.TrimSpace(v) != "" {
+		listID = strings.TrimSpace(v)
+	} else if name != "" {
+		if parts := strings.SplitN(name, "/", 2); len(parts) == 2 {
+			listID = strings.TrimSpace(parts[0])
+		}
 	}
 
-	toPtrStr := func(ns sql.NullString) *string {
-		if ns.Valid {
-			v := strings.TrimSpace(ns.String)
-			if v != "" {
-				return &v
-			}
-		}
-		return nil
+	// 公開URL（共通ユーティリティ利用）
+	publicURL := gcscommon.GCSPublicURL(bucket, name, defaultListImageBucket)
+
+	// FileName: パスの末尾
+	fileName := name
+	if idx := strings.LastIndex(name, "/"); idx >= 0 && idx < len(name)-1 {
+		fileName = name[idx+1:]
 	}
-	toPtrTime := func(nt sql.NullTime) *time.Time {
-		if nt.Valid {
-			t := nt.Time.UTC()
-			return &t
+
+	// Size: metadata["size"] or attrs.Size
+	var size int64
+	if sz, ok := gcscommon.ParseInt64Meta(attrs.Metadata, "size"); ok {
+		size = sz
+	} else if attrs.Size > 0 {
+		size = attrs.Size
+	}
+
+	// DisplayOrder: metadata["display_order"]
+	var displayOrder int
+	if v, ok := gcscommon.ParseIntMeta(attrs.Metadata, "display_order"); ok {
+		displayOrder = v
+	}
+
+	// CreatedAt / UpdatedAt: GCSのCreated/Updatedフィールドを利用
+	createdAt := attrs.Created
+	if createdAt.IsZero() {
+		createdAt = attrs.Updated
+	}
+	if createdAt.IsZero() {
+		createdAt = time.Now()
+	}
+	createdAt = createdAt.UTC()
+
+	var updatedAtPtr *time.Time
+	if !attrs.Updated.IsZero() {
+		u := attrs.Updated.UTC()
+		updatedAtPtr = &u
+	}
+
+	// audit fields from metadata
+	createdBy := strings.TrimSpace(attrs.Metadata["created_by"])
+	if createdBy == "" {
+		createdBy = "system"
+	}
+
+	var updatedByPtr *string
+	if v := strings.TrimSpace(attrs.Metadata["updated_by"]); v != "" {
+		updatedByPtr = &v
+	}
+	var deletedAtPtr *time.Time
+	if v := strings.TrimSpace(attrs.Metadata["deleted_at"]); v != "" {
+		if t, err := time.Parse(time.RFC3339Nano, v); err == nil {
+			tu := t.UTC()
+			deletedAtPtr = &tu
 		}
-		return nil
+	}
+	var deletedByPtr *string
+	if v := strings.TrimSpace(attrs.Metadata["deleted_by"]); v != "" {
+		deletedByPtr = &v
 	}
 
 	return listimagedom.ListImage{
-		ID:           strings.TrimSpace(idNS.String),
-		ListID:       strings.TrimSpace(listIDNS.String),
-		URL:          strings.TrimSpace(urlNS.String),
-		FileName:     strings.TrimSpace(fileNameNS.String),
+		ID:           name,
+		ListID:       listID,
+		URL:          publicURL,
+		FileName:     fileName,
 		Size:         size,
 		DisplayOrder: displayOrder,
-		CreatedAt:    createdAt.UTC(),
-		CreatedBy:    strings.TrimSpace(createdByNS.String),
-		UpdatedAt:    toPtrTime(updatedAtNS),
-		UpdatedBy:    toPtrStr(updatedByNS),
-		DeletedAt:    toPtrTime(deletedAtNS),
-		DeletedBy:    toPtrStr(deletedByNS),
-	}, nil
+		CreatedAt:    createdAt,
+		CreatedBy:    createdBy,
+		UpdatedAt:    updatedAtPtr,
+		UpdatedBy:    updatedByPtr,
+		DeletedAt:    deletedAtPtr,
+		DeletedBy:    deletedByPtr,
+	}
 }
 
-func buildListImageWhere(f listimagedom.Filter) ([]string, []any) {
-	where := []string{}
-	args := []any{}
-
-	// free text search
+// Filter: GCSベース ListImage に対して、元の Filter と同様の条件を適用
+func matchListImageFilter(img listimagedom.ListImage, f listimagedom.Filter) bool {
+	// SearchQuery: file_name / url に対する部分一致
 	if sq := strings.TrimSpace(f.SearchQuery); sq != "" {
-		where = append(where,
-			fmt.Sprintf("(li.file_name ILIKE $%d OR li.url ILIKE $%d)",
-				len(args)+1, len(args)+1,
-			),
-		)
-		args = append(args, "%"+sq+"%")
+		lq := strings.ToLower(sq)
+		if !strings.Contains(strings.ToLower(img.FileName), lq) &&
+			!strings.Contains(strings.ToLower(img.URL), lq) {
+			return false
+		}
 	}
 
-	// IDs IN (...)
+	// IDs
 	if len(f.IDs) > 0 {
-		ph := []string{}
-		for _, v := range f.IDs {
-			v = strings.TrimSpace(v)
-			if v == "" {
-				continue
+		ok := false
+		for _, id := range f.IDs {
+			if strings.TrimSpace(id) == img.ID {
+				ok = true
+				break
 			}
-			ph = append(ph, fmt.Sprintf("$%d", len(args)+1))
-			args = append(args, v)
 		}
-		if len(ph) > 0 {
-			where = append(where, "li.id IN ("+strings.Join(ph, ",")+")")
+		if !ok {
+			return false
 		}
 	}
 
-	// listID equals / IN
+	// ListID
 	if f.ListID != nil && strings.TrimSpace(*f.ListID) != "" {
-		where = append(where, fmt.Sprintf("li.list_id = $%d", len(args)+1))
-		args = append(args, strings.TrimSpace(*f.ListID))
+		if img.ListID != strings.TrimSpace(*f.ListID) {
+			return false
+		}
 	}
 	if len(f.ListIDs) > 0 {
-		ph := []string{}
-		for _, v := range f.ListIDs {
-			v = strings.TrimSpace(v)
-			if v == "" {
-				continue
+		ok := false
+		for _, lid := range f.ListIDs {
+			if img.ListID == strings.TrimSpace(lid) && img.ListID != "" {
+				ok = true
+				break
 			}
-			ph = append(ph, fmt.Sprintf("$%d", len(args)+1))
-			args = append(args, v)
 		}
-		if len(ph) > 0 {
-			where = append(where, "li.list_id IN ("+strings.Join(ph, ",")+")")
+		if !ok {
+			return false
 		}
 	}
 
-	// fileNameLike
+	// FileNameLike
 	if f.FileNameLike != nil && strings.TrimSpace(*f.FileNameLike) != "" {
-		where = append(where, fmt.Sprintf("li.file_name ILIKE $%d", len(args)+1))
-		args = append(args, "%"+strings.TrimSpace(*f.FileNameLike)+"%")
+		like := strings.ToLower(strings.TrimSpace(*f.FileNameLike))
+		if !strings.Contains(strings.ToLower(img.FileName), like) {
+			return false
+		}
 	}
 
 	// size range
-	if f.MinSize != nil {
-		where = append(where, fmt.Sprintf("li.size >= $%d", len(args)+1))
-		args = append(args, *f.MinSize)
+	if f.MinSize != nil && img.Size < *f.MinSize {
+		return false
 	}
-	if f.MaxSize != nil {
-		where = append(where, fmt.Sprintf("li.size <= $%d", len(args)+1))
-		args = append(args, *f.MaxSize)
+	if f.MaxSize != nil && img.Size > *f.MaxSize {
+		return false
 	}
 
 	// display_order range
-	if f.MinDisplayOrd != nil {
-		where = append(where, fmt.Sprintf("li.display_order >= $%d", len(args)+1))
-		args = append(args, *f.MinDisplayOrd)
+	if f.MinDisplayOrd != nil && img.DisplayOrder < *f.MinDisplayOrd {
+		return false
 	}
-	if f.MaxDisplayOrd != nil {
-		where = append(where, fmt.Sprintf("li.display_order <= $%d", len(args)+1))
-		args = append(args, *f.MaxDisplayOrd)
+	if f.MaxDisplayOrd != nil && img.DisplayOrder > *f.MaxDisplayOrd {
+		return false
 	}
 
 	// audit by user
 	if f.CreatedBy != nil && strings.TrimSpace(*f.CreatedBy) != "" {
-		where = append(where, fmt.Sprintf("li.created_by = $%d", len(args)+1))
-		args = append(args, strings.TrimSpace(*f.CreatedBy))
+		if img.CreatedBy != strings.TrimSpace(*f.CreatedBy) {
+			return false
+		}
 	}
 	if f.UpdatedBy != nil && strings.TrimSpace(*f.UpdatedBy) != "" {
-		where = append(where, fmt.Sprintf("li.updated_by = $%d", len(args)+1))
-		args = append(args, strings.TrimSpace(*f.UpdatedBy))
+		if img.UpdatedBy == nil || *img.UpdatedBy != strings.TrimSpace(*f.UpdatedBy) {
+			return false
+		}
 	}
 	if f.DeletedBy != nil && strings.TrimSpace(*f.DeletedBy) != "" {
-		where = append(where, fmt.Sprintf("li.deleted_by = $%d", len(args)+1))
-		args = append(args, strings.TrimSpace(*f.DeletedBy))
+		if img.DeletedBy == nil || *img.DeletedBy != strings.TrimSpace(*f.DeletedBy) {
+			return false
+		}
 	}
 
-	// date ranges
-	if f.CreatedFrom != nil {
-		where = append(where, fmt.Sprintf("li.created_at >= $%d", len(args)+1))
-		args = append(args, f.CreatedFrom.UTC())
+	// date ranges (Created/Updated/Deleted)
+	if f.CreatedFrom != nil && img.CreatedAt.Before(f.CreatedFrom.UTC()) {
+		return false
 	}
-	if f.CreatedTo != nil {
-		where = append(where, fmt.Sprintf("li.created_at < $%d", len(args)+1))
-		args = append(args, f.CreatedTo.UTC())
+	if f.CreatedTo != nil && !img.CreatedAt.Before(f.CreatedTo.UTC()) {
+		return false
 	}
 	if f.UpdatedFrom != nil {
-		where = append(where,
-			fmt.Sprintf("(li.updated_at IS NOT NULL AND li.updated_at >= $%d)", len(args)+1),
-		)
-		args = append(args, f.UpdatedFrom.UTC())
+		if img.UpdatedAt == nil || img.UpdatedAt.Before(f.UpdatedFrom.UTC()) {
+			return false
+		}
 	}
 	if f.UpdatedTo != nil {
-		where = append(where,
-			fmt.Sprintf("(li.updated_at IS NOT NULL AND li.updated_at < $%d)", len(args)+1),
-		)
-		args = append(args, f.UpdatedTo.UTC())
+		if img.UpdatedAt == nil || !img.UpdatedAt.Before(f.UpdatedTo.UTC()) {
+			return false
+		}
 	}
 	if f.DeletedFrom != nil {
-		where = append(where,
-			fmt.Sprintf("(li.deleted_at IS NOT NULL AND li.deleted_at >= $%d)", len(args)+1),
-		)
-		args = append(args, f.DeletedFrom.UTC())
+		if img.DeletedAt == nil || img.DeletedAt.Before(f.DeletedFrom.UTC()) {
+			return false
+		}
 	}
 	if f.DeletedTo != nil {
-		where = append(where,
-			fmt.Sprintf("(li.deleted_at IS NOT NULL AND li.deleted_at < $%d)", len(args)+1),
-		)
-		args = append(args, f.DeletedTo.UTC())
+		if img.DeletedAt == nil || !img.DeletedAt.Before(f.DeletedTo.UTC()) {
+			return false
+		}
 	}
 
 	// Deleted tri-state
 	if f.Deleted != nil {
 		if *f.Deleted {
-			where = append(where, "li.deleted_at IS NOT NULL")
+			if img.DeletedAt == nil {
+				return false
+			}
 		} else {
-			where = append(where, "li.deleted_at IS NULL")
+			if img.DeletedAt != nil {
+				return false
+			}
 		}
 	}
 
-	return where, args
+	return true
 }
 
-func buildListImageOrderBy(sort listimagedom.Sort) string {
-	col := strings.ToLower(string(sort.Column))
-	switch col {
-	case "id":
-		col = "li.id"
-	case "listid", "list_id":
-		col = "li.list_id"
-	case "url":
-		col = "li.url"
-	case "filename", "file_name":
-		col = "li.file_name"
-	case "size":
-		col = "li.size"
-	case "displayorder", "display_order":
-		col = "li.display_order"
-	case "createdat", "created_at":
-		col = "li.created_at"
-	case "updatedat", "updated_at":
-		col = "li.updated_at"
-	case "deletedat", "deleted_at":
-		col = "li.deleted_at"
-	case "createdby", "created_by":
-		col = "li.created_by"
-	case "updatedby", "updated_by":
-		col = "li.updated_by"
-	case "deletedby", "deleted_by":
-		col = "li.deleted_by"
-	default:
-		return ""
-	}
-
-	dir := strings.ToUpper(string(sort.Order))
+// ソート: 元の buildListImageOrderBy の意味を GCS上の in-memory slice に適用
+func applyListImageSort(items []listimagedom.ListImage, sortOpt listimagedom.Sort) {
+	col := strings.ToLower(string(sortOpt.Column))
+	dir := strings.ToUpper(string(sortOpt.Order))
 	if dir != "ASC" && dir != "DESC" {
 		dir = "ASC"
 	}
-	return fmt.Sprintf("ORDER BY %s %s", col, dir)
+
+	// default composite order: display_order ASC, created_at ASC, id ASC
+	if col == "" {
+		applyListImageSortForListID(items)
+		return
+	}
+
+	// comparator
+	less := func(i, j int) bool {
+		switch col {
+		case "id":
+			if dir == "ASC" {
+				return items[i].ID < items[j].ID
+			}
+			return items[i].ID > items[j].ID
+		case "listid", "list_id":
+			if items[i].ListID == items[j].ListID {
+				if dir == "ASC" {
+					return items[i].ID < items[j].ID
+				}
+				return items[i].ID > items[j].ID
+			}
+			if dir == "ASC" {
+				return items[i].ListID < items[j].ListID
+			}
+			return items[i].ListID > items[j].ListID
+		case "url":
+			if dir == "ASC" {
+				return items[i].URL < items[j].URL
+			}
+			return items[i].URL > items[j].URL
+		case "filename", "file_name":
+			if dir == "ASC" {
+				return items[i].FileName < items[j].FileName
+			}
+			return items[i].FileName > items[j].FileName
+		case "size":
+			if dir == "ASC" {
+				return items[i].Size < items[j].Size
+			}
+			return items[i].Size > items[j].Size
+		case "displayorder", "display_order":
+			if items[i].DisplayOrder == items[j].DisplayOrder {
+				if dir == "ASC" {
+					return items[i].ID < items[j].ID
+				}
+				return items[i].ID > items[j].ID
+			}
+			if dir == "ASC" {
+				return items[i].DisplayOrder < items[j].DisplayOrder
+			}
+			return items[i].DisplayOrder > items[j].DisplayOrder
+		case "createdat", "created_at":
+			if dir == "ASC" {
+				return items[i].CreatedAt.Before(items[j].CreatedAt)
+			}
+			return items[j].CreatedAt.Before(items[i].CreatedAt)
+		case "updatedat", "updated_at":
+			ui := items[i].UpdatedAt
+			uj := items[j].UpdatedAt
+			// nils first for ASC
+			if ui == nil && uj == nil {
+				if dir == "ASC" {
+					return items[i].ID < items[j].ID
+				}
+				return items[i].ID > items[j].ID
+			}
+			if ui == nil {
+				return dir == "ASC"
+			}
+			if uj == nil {
+				return dir != "ASC"
+			}
+			if dir == "ASC" {
+				return ui.Before(*uj)
+			}
+			return uj.Before(*ui)
+		default:
+			// fallback: display_order ASC, created_at ASC, id ASC
+			if items[i].DisplayOrder != items[j].DisplayOrder {
+				return items[i].DisplayOrder < items[j].DisplayOrder
+			}
+			if !items[i].CreatedAt.Equal(items[j].CreatedAt) {
+				return items[i].CreatedAt.Before(items[j].CreatedAt)
+			}
+			return items[i].ID < items[j].ID
+		}
+	}
+
+	sort.SliceStable(items, less)
 }
 
-// buildGCSURL is a tiny helper to form a URL string from bucket/object.
-// tailor this for your public URL scheme later.
-func buildGCSURL(bucket, objectPath string) string {
-	b := strings.TrimSpace(bucket)
-	if b == "" {
-		// もし listimagedom で DefaultBucket とか持ってるならここで fallback してOK
-		// b = listimagedom.DefaultBucket
+// list_id 単位のデフォルト順序: display_order ASC, created_at ASC, id ASC
+func applyListImageSortForListID(items []listimagedom.ListImage) {
+	for i := 0; i < len(items)-1; i++ {
+		for j := i + 1; j < len(items); j++ {
+			a, b := items[i], items[j]
+			swap := false
+			if a.DisplayOrder != b.DisplayOrder {
+				swap = a.DisplayOrder > b.DisplayOrder
+			} else if !a.CreatedAt.Equal(b.CreatedAt) {
+				swap = a.CreatedAt.After(b.CreatedAt)
+			} else {
+				swap = a.ID > b.ID
+			}
+			if swap {
+				items[i], items[j] = items[j], items[i]
+			}
+		}
 	}
-	return "gs://" + b + "/" + strings.TrimSpace(objectPath)
+}
+
+// ID 昇順ソート
+func applyListImageSortByIDAsc(items []listimagedom.ListImage) {
+	for i := 0; i < len(items)-1; i++ {
+		for j := i + 1; j < len(items); j++ {
+			if items[i].ID > items[j].ID {
+				items[i], items[j] = items[j], items[i]
+			}
+		}
+	}
+}
+
+// resolveObjectFromImage:
+// - URL が GCS URL ならそこから bucket/object を解決
+// - それ以外は ID を object 名として扱う
+func (r *ListImageRepositoryGCS) resolveObjectFromImage(
+	img listimagedom.ListImage,
+	defaultBucket string,
+) (objectPath, bucket string, err error) {
+	if strings.TrimSpace(img.URL) != "" {
+		if b, obj, ok := gcscommon.ParseGCSURL(img.URL); ok {
+			return strings.TrimLeft(obj, "/"), b, nil
+		}
+	}
+	if id := strings.TrimSpace(img.ID); id != "" {
+		return strings.TrimLeft(id, "/"), defaultBucket, nil
+	}
+	return "", "", fmt.Errorf("listImage: cannot resolve object path from input")
 }

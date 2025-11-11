@@ -5,7 +5,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"net/url"
 	"strconv"
 	"strings"
 	"time"
@@ -14,6 +13,7 @@ import (
 	"google.golang.org/api/iterator"
 
 	dbcommon "narratives/internal/adapters/out/firestore/common"
+	gcscommon "narratives/internal/adapters/out/gcs/common"
 	cimgdom "narratives/internal/domain/campaignImage"
 )
 
@@ -299,8 +299,6 @@ func (r *CampaignImageRepositoryGCS) Update(ctx context.Context, id string, patc
 	}
 
 	if patch.CampaignID != nil {
-		// CampaignID はパス先頭要素から推測しているため、
-		// ここでは GCS パス自体は変更しない（必要なら別レイヤーで rename）。
 		meta["campaign_id"] = strings.TrimSpace(*patch.CampaignID)
 	}
 	if patch.Width != nil {
@@ -313,7 +311,10 @@ func (r *CampaignImageRepositoryGCS) Update(ctx context.Context, id string, patc
 		meta["file_size"] = strconv.FormatInt(*patch.FileSize, 10)
 	}
 	if patch.MimeType != nil {
-		ua.ContentType = strings.TrimSpace(*patch.MimeType)
+		mt := strings.TrimSpace(*patch.MimeType)
+		if mt != "" {
+			ua.ContentType = mt
+		}
 	}
 
 	if len(meta) > 0 {
@@ -379,11 +380,9 @@ func (r *CampaignImageRepositoryGCS) Save(
 		meta[k] = v
 	}
 
-	// CampaignID はパス先頭要素から推測するが、明示された場合は metadata にも保持
 	if strings.TrimSpace(img.CampaignID) != "" {
 		meta["campaign_id"] = strings.TrimSpace(img.CampaignID)
 	}
-
 	if img.Width != nil {
 		meta["width"] = strconv.Itoa(*img.Width)
 	}
@@ -393,8 +392,11 @@ func (r *CampaignImageRepositoryGCS) Save(
 	if img.FileSize != nil {
 		meta["file_size"] = strconv.FormatInt(*img.FileSize, 10)
 	}
-	if img.MimeType != nil && strings.TrimSpace(*img.MimeType) != "" {
-		ua.ContentType = strings.TrimSpace(*img.MimeType)
+	if img.MimeType != nil {
+		mt := strings.TrimSpace(*img.MimeType)
+		if mt != "" {
+			ua.ContentType = mt
+		}
 	}
 
 	if len(meta) > 0 {
@@ -438,7 +440,6 @@ func (r *CampaignImageRepositoryGCS) SaveFromBucketObject(
 
 	handle := r.Client.Bucket(b).Object(obj)
 
-	// 既存 attrs を取得
 	attrs, err := handle.Attrs(ctx)
 	if err != nil {
 		if errors.Is(err, storage.ErrObjectNotExist) {
@@ -465,8 +466,11 @@ func (r *CampaignImageRepositoryGCS) SaveFromBucketObject(
 	if fileSize != nil {
 		meta["file_size"] = strconv.FormatInt(*fileSize, 10)
 	}
-	if mimeType != nil && strings.TrimSpace(*mimeType) != "" {
-		ua.ContentType = strings.TrimSpace(*mimeType)
+	if mimeType != nil {
+		mt := strings.TrimSpace(*mimeType)
+		if mt != "" {
+			ua.ContentType = mt
+		}
 	}
 
 	if len(meta) > 0 {
@@ -494,9 +498,7 @@ func (r *CampaignImageRepositoryGCS) SaveFromBucketObject(
 
 // BuildDeleteOps:
 // - 渡された ID / URL から削除対象オブジェクトを推定
-func (r *CampaignImageRepositoryGCS) BuildDeleteOps(ctx context.Context, ids []string) ([]cimgdom.GCSDeleteOp, error) {
-	_ = ctx
-
+func (r *CampaignImageRepositoryGCS) BuildDeleteOps(_ context.Context, ids []string) ([]cimgdom.GCSDeleteOp, error) {
 	if len(ids) == 0 {
 		return nil, nil
 	}
@@ -507,7 +509,7 @@ func (r *CampaignImageRepositoryGCS) BuildDeleteOps(ctx context.Context, ids []s
 		if id == "" {
 			continue
 		}
-		if b, obj, ok := parseGCSURL(id); ok {
+		if b, obj, ok := gcscommon.ParseGCSURL(id); ok {
 			ops = append(ops, cimgdom.GCSDeleteOp{Bucket: b, ObjectPath: obj})
 			continue
 		}
@@ -559,37 +561,6 @@ func (r *CampaignImageRepositoryGCS) BuildDeleteOpsByCampaignID(ctx context.Cont
 // Helpers
 // =======================
 
-func gcsPublicURL(bucket, objectPath string) string {
-	b := strings.TrimSpace(bucket)
-	if b == "" {
-		b = defaultCampaignImageBucket
-	}
-	obj := strings.TrimLeft(strings.TrimSpace(objectPath), "/")
-	return fmt.Sprintf("https://storage.googleapis.com/%s/%s", b, obj)
-}
-
-func parseGCSURL(u string) (string, string, bool) {
-	parsed, err := url.Parse(strings.TrimSpace(u))
-	if err != nil {
-		return "", "", false
-	}
-	host := strings.ToLower(parsed.Host)
-	if host != "storage.googleapis.com" && host != "storage.cloud.google.com" {
-		return "", "", false
-	}
-	p := strings.TrimLeft(parsed.EscapedPath(), "/")
-	if p == "" {
-		return "", "", false
-	}
-	parts := strings.SplitN(p, "/", 2)
-	if len(parts) < 2 {
-		return "", "", false
-	}
-	bucket := parts[0]
-	objectPath, _ := url.PathUnescape(parts[1])
-	return bucket, objectPath, true
-}
-
 // buildCampaignImageFromAttrs converts GCS ObjectAttrs -> CampaignImage.
 func buildCampaignImageFromAttrs(bucket string, attrs *storage.ObjectAttrs) cimgdom.CampaignImage {
 	name := strings.TrimSpace(attrs.Name)
@@ -602,18 +573,18 @@ func buildCampaignImageFromAttrs(bucket string, attrs *storage.ObjectAttrs) cimg
 		}
 	}
 
-	publicURL := gcsPublicURL(bucket, name)
+	publicURL := gcscommon.GCSPublicURL(bucket, name, defaultCampaignImageBucket)
 
 	var widthPtr, heightPtr *int
-	if w, ok := parseIntMeta(attrs.Metadata, "width"); ok {
+	if w, ok := gcscommon.ParseIntMeta(attrs.Metadata, "width"); ok {
 		widthPtr = &w
 	}
-	if h, ok := parseIntMeta(attrs.Metadata, "height"); ok {
+	if h, ok := gcscommon.ParseIntMeta(attrs.Metadata, "height"); ok {
 		heightPtr = &h
 	}
 
 	var sizePtr *int64
-	if sz, ok := parseInt64Meta(attrs.Metadata, "file_size"); ok {
+	if sz, ok := gcscommon.ParseInt64Meta(attrs.Metadata, "file_size"); ok {
 		sizePtr = &sz
 	} else if attrs.Size > 0 {
 		sz := attrs.Size
@@ -639,53 +610,18 @@ func buildCampaignImageFromAttrs(bucket string, attrs *storage.ObjectAttrs) cimg
 	}
 }
 
-func parseIntMeta(md map[string]string, key string) (int, bool) {
-	if md == nil {
-		return 0, false
-	}
-	if v, ok := md[key]; ok {
-		v = strings.TrimSpace(v)
-		if v == "" {
-			return 0, false
-		}
-		n, err := strconv.Atoi(v)
-		if err == nil {
-			return n, true
-		}
-	}
-	return 0, false
-}
-
-func parseInt64Meta(md map[string]string, key string) (int64, bool) {
-	if md == nil {
-		return 0, false
-	}
-	if v, ok := md[key]; ok {
-		v = strings.TrimSpace(v)
-		if v == "" {
-			return 0, false
-		}
-		n, err := strconv.ParseInt(v, 10, 64)
-		if err == nil {
-			return n, true
-		}
-	}
-	return 0, false
-}
-
 // Filter in-memory (GCS オブジェクトから構成された CampaignImage に対して適用)
 func matchCampaignImageFilter(img cimgdom.CampaignImage, f cimgdom.Filter) bool {
 	// SearchQuery: imageURL / mimeType に対する部分一致
 	if sq := strings.TrimSpace(f.SearchQuery); sq != "" {
 		lq := strings.ToLower(sq)
-		if !strings.Contains(strings.ToLower(img.ImageURL), lq) {
-			mt := ""
-			if img.MimeType != nil {
-				mt = *img.MimeType
-			}
-			if !strings.Contains(strings.ToLower(mt), lq) {
-				return false
-			}
+		mt := ""
+		if img.MimeType != nil {
+			mt = *img.MimeType
+		}
+		if !strings.Contains(strings.ToLower(img.ImageURL), lq) &&
+			!strings.Contains(strings.ToLower(mt), lq) {
+			return false
 		}
 	}
 
@@ -802,7 +738,7 @@ func (r *CampaignImageRepositoryGCS) resolveObjectFromImage(
 	defaultBucket string,
 ) (objectPath, bucket string, err error) {
 	if strings.TrimSpace(img.ImageURL) != "" {
-		if b, obj, ok := parseGCSURL(img.ImageURL); ok {
+		if b, obj, ok := gcscommon.ParseGCSURL(img.ImageURL); ok {
 			return strings.TrimLeft(obj, "/"), b, nil
 		}
 	}

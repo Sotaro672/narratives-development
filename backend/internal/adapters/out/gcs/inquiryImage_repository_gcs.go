@@ -449,7 +449,6 @@ func (r *InquiryImageRepositoryGCS) PatchImage(
 				return nil, err
 			}
 			obj = obj2
-			objName = objName2
 		} else {
 			return nil, err
 		}
