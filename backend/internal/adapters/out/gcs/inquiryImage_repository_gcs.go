@@ -1,219 +1,274 @@
-// backend\internal\adapters\out\firestore\inquiryImage_repository_gcs.go
+// backend/internal/adapters/out/firestore/inquiryImage_repository_gcs.go
 package gcs
 
 import (
 	"context"
-	"database/sql"
 	"errors"
 	"fmt"
+	"net/url"
 	"path"
+	"strconv"
 	"strings"
 	"time"
+
+	"cloud.google.com/go/storage"
+	"google.golang.org/api/iterator"
 
 	dbcommon "narratives/internal/adapters/out/firestore/common"
 	idom "narratives/internal/domain/inquiryImage"
 )
 
-// InquiryImageRepositoryPG implements inquiryimage.Repository using PostgreSQL.
-type InquiryImageRepositoryPG struct {
-	DB *sql.DB
+// GCS-based implementation of inquiryImage.Repository.
+//
+// - 画像本体は GCS に保存されている前提
+// - メタ情報も GCS Object の属性/Metadata を元に構築する
+// - InquiryID/ファイル名はオブジェクト名やメタデータから復元する
+type InquiryImageRepositoryGCS struct {
+	Client *storage.Client
+	Bucket string
 }
 
-func NewInquiryImageRepositoryPG(db *sql.DB) *InquiryImageRepositoryPG {
-	return &InquiryImageRepositoryPG{DB: db}
+// デフォルトバケット（domain 側の定義を優先）
+const defaultInquiryImageBucket = idom.DefaultBucket
+
+func NewInquiryImageRepositoryGCS(client *storage.Client, bucket string) *InquiryImageRepositoryGCS {
+	b := strings.TrimSpace(bucket)
+	if b == "" {
+		b = defaultInquiryImageBucket
+	}
+	return &InquiryImageRepositoryGCS{
+		Client: client,
+		Bucket: b,
+	}
 }
 
-type runner interface {
-	QueryContext(ctx context.Context, q string, args ...any) (*sql.Rows, error)
-	QueryRowContext(ctx context.Context, q string, args ...any) *sql.Row
-	ExecContext(ctx context.Context, q string, args ...any) (sql.Result, error)
+func (r *InquiryImageRepositoryGCS) bucket() string {
+	b := strings.TrimSpace(r.Bucket)
+	if b == "" {
+		return defaultInquiryImageBucket
+	}
+	return b
 }
 
-// =======================================
+// =======================
 // Aggregate queries
-// =======================================
+// =======================
 
-func (r *InquiryImageRepositoryPG) GetImagesByInquiryID(ctx context.Context, inquiryID string) (*idom.InquiryImage, error) {
+// GetImagesByInquiryID:
+// - 対象 inquiryID にひもづく GCS オブジェクトを列挙し、InquiryImage を組み立てる
+// - 紐付け判定は以下いずれか:
+//   - Metadata["inquiry_id"] == inquiryID
+//   - オブジェクト名が "<inquiryID>/" で始まる
+//   - オブジェクト名が "inquiry_images/<inquiryID>/" で始まる（後方互換）
+func (r *InquiryImageRepositoryGCS) GetImagesByInquiryID(ctx context.Context, inquiryID string) (*idom.InquiryImage, error) {
+	if r.Client == nil {
+		return nil, errors.New("InquiryImageRepositoryGCS: nil storage client")
+	}
 	inquiryID = strings.TrimSpace(inquiryID)
-	const q = `
-SELECT
-  inquiry_id, file_name, file_url, file_size, mime_type,
-  width, height, created_at, created_by, updated_at, updated_by, deleted_at, deleted_by
-FROM inquiry_image_files
-WHERE inquiry_id = $1
-ORDER BY created_at ASC, file_name ASC
-`
-	rows, err := r.DB.QueryContext(ctx, q, inquiryID)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-
-	agg := idom.InquiryImage{ID: inquiryID, Images: []idom.ImageFile{}}
-	for rows.Next() {
-		im, err := scanImageFile(rows)
-		if err != nil {
-			return nil, err
-		}
-		agg.Images = append(agg.Images, im)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
+	if inquiryID == "" {
+		return nil, idom.ErrNotFound
 	}
 
-	// If no files, ensure header exists; otherwise NotFound
-	if len(agg.Images) == 0 {
-		var one int
-		err := r.DB.QueryRowContext(ctx, `SELECT 1 FROM inquiry_images WHERE id = $1`, inquiryID).Scan(&one)
-		if errors.Is(err, sql.ErrNoRows) {
-			return nil, idom.ErrNotFound
+	bucket := r.bucket()
+	it := r.Client.Bucket(bucket).Objects(ctx, &storage.Query{})
+
+	var images []idom.ImageFile
+	for {
+		attrs, err := it.Next()
+		if errors.Is(err, iterator.Done) {
+			break
 		}
 		if err != nil {
 			return nil, err
 		}
+		if belongsToInquiry(inquiryID, attrs) {
+			images = append(images, buildImageFileFromAttrs(bucket, inquiryID, attrs))
+		}
 	}
-	return &agg, nil
+
+	if len(images) == 0 {
+		return nil, idom.ErrNotFound
+	}
+
+	// created_at ASC, file_name ASC 的な並びに揃える
+	sortImagesByCreatedAndName(images)
+
+	return &idom.InquiryImage{
+		ID:     inquiryID,
+		Images: images,
+	}, nil
 }
 
-func (r *InquiryImageRepositoryPG) Exists(ctx context.Context, inquiryID, fileName string) (bool, error) {
-	const q = `SELECT 1 FROM inquiry_image_files WHERE inquiry_id = $1 AND file_name = $2`
-	var one int
-	err := r.DB.QueryRowContext(ctx, q, strings.TrimSpace(inquiryID), strings.TrimSpace(fileName)).Scan(&one)
-	if errors.Is(err, sql.ErrNoRows) {
+// Exists checks if an image exists for given (inquiryID, fileName).
+// - 主に以下を試行:
+//   - オブジェクト名: "inquiry_images/<inquiryID>/<fileName>"
+//   - オブジェクト名: "<inquiryID>/<fileName>"
+//   - いずれも無ければ false
+func (r *InquiryImageRepositoryGCS) Exists(ctx context.Context, inquiryID, fileName string) (bool, error) {
+	if r.Client == nil {
+		return false, errors.New("InquiryImageRepositoryGCS: nil storage client")
+	}
+	inquiryID = strings.TrimSpace(inquiryID)
+	fileName = strings.TrimSpace(fileName)
+	if inquiryID == "" || fileName == "" {
 		return false, nil
 	}
-	if err != nil {
-		return false, err
+	bucket := r.bucket()
+
+	candidates := []string{
+		path.Join("inquiry_images", inquiryID, fileName),
+		path.Join(inquiryID, fileName),
 	}
-	return true, nil
+
+	for _, objName := range candidates {
+		_, err := r.Client.Bucket(bucket).Object(objName).Attrs(ctx)
+		if err == nil {
+			return true, nil
+		}
+		if !errors.Is(err, storage.ErrObjectNotExist) {
+			// 本当のエラー
+			return false, err
+		}
+	}
+	return false, nil
 }
 
-// =======================================
+// =======================
 // Listing
-// =======================================
+// =======================
 
-func (r *InquiryImageRepositoryPG) ListImages(ctx context.Context, filter idom.Filter, sort idom.Sort, page idom.Page) (idom.PageResult[idom.ImageFile], error) {
-	where, args := buildImageWhere(filter)
-	whereSQL := ""
-	if len(where) > 0 {
-		whereSQL = "WHERE " + strings.Join(where, " AND ")
-	}
-	orderBy := buildImageOrderBy(sort)
-	if orderBy == "" {
-		orderBy = "ORDER BY iif.created_at DESC, iif.inquiry_id DESC, iif.file_name DESC"
-	}
-
-	perPage := page.PerPage
-	if perPage <= 0 {
-		perPage = 50
-	}
-	number := page.Number
-	if number <= 0 {
-		number = 1
-	}
-	offset := (number - 1) * perPage
-
-	var total int
-	countSQL := fmt.Sprintf("SELECT COUNT(*) FROM inquiry_image_files iif %s", whereSQL)
-	if err := r.DB.QueryRowContext(ctx, countSQL, args...).Scan(&total); err != nil {
-		return idom.PageResult[idom.ImageFile]{}, err
+// ListImages:
+// - バケット内を走査し、Filter/Sort/Page をメモリ上で適用
+func (r *InquiryImageRepositoryGCS) ListImages(
+	ctx context.Context,
+	filter idom.Filter,
+	sort idom.Sort,
+	page idom.Page,
+) (idom.PageResult[idom.ImageFile], error) {
+	if r.Client == nil {
+		return idom.PageResult[idom.ImageFile]{}, errors.New("InquiryImageRepositoryGCS: nil storage client")
 	}
 
-	q := fmt.Sprintf(`
-SELECT
-  iif.inquiry_id, iif.file_name, iif.file_url, iif.file_size, iif.mime_type,
-  iif.width, iif.height, iif.created_at, iif.created_by, iif.updated_at, iif.updated_by, iif.deleted_at, iif.deleted_by
-FROM inquiry_image_files iif
-%s
-%s
-LIMIT $%d OFFSET $%d
-`, whereSQL, orderBy, len(args)+1, len(args)+2)
+	bucket := r.bucket()
+	it := r.Client.Bucket(bucket).Objects(ctx, &storage.Query{})
 
-	args = append(args, perPage, offset)
-
-	rows, err := r.DB.QueryContext(ctx, q, args...)
-	if err != nil {
-		return idom.PageResult[idom.ImageFile]{}, err
-	}
-	defer rows.Close()
-
-	var items []idom.ImageFile
-	for rows.Next() {
-		im, err := scanImageFile(rows)
+	var all []idom.ImageFile
+	for {
+		attrs, err := it.Next()
+		if errors.Is(err, iterator.Done) {
+			break
+		}
 		if err != nil {
 			return idom.PageResult[idom.ImageFile]{}, err
 		}
-		items = append(items, im)
-	}
-	if err := rows.Err(); err != nil {
-		return idom.PageResult[idom.ImageFile]{}, err
+		img := buildImageFileFromAttrs(bucket, "", attrs)
+		if matchImageFilter(img, filter) {
+			all = append(all, img)
+		}
 	}
 
-	totalPages := (total + perPage - 1) / perPage
+	applyImageSort(all, sort)
+
+	pageNum, perPage, offset := dbcommon.NormalizePage(page.Number, page.PerPage, 50, 200)
+	total := len(all)
+
+	if total == 0 {
+		return idom.PageResult[idom.ImageFile]{
+			Items:      []idom.ImageFile{},
+			TotalCount: 0,
+			TotalPages: 0,
+			Page:       pageNum,
+			PerPage:    perPage,
+		}, nil
+	}
+
+	if offset > total {
+		offset = total
+	}
+	end := offset + perPage
+	if end > total {
+		end = total
+	}
+	items := all[offset:end]
+
 	return idom.PageResult[idom.ImageFile]{
 		Items:      items,
 		TotalCount: total,
-		TotalPages: totalPages,
-		Page:       number,
+		TotalPages: dbcommon.ComputeTotalPages(total, perPage),
+		Page:       pageNum,
 		PerPage:    perPage,
 	}, nil
 }
 
-func (r *InquiryImageRepositoryPG) ListImagesByCursor(ctx context.Context, filter idom.Filter, _ idom.Sort, cpage idom.CursorPage) (idom.CursorPageResult[idom.ImageFile], error) {
-	where, args := buildImageWhere(filter)
-
-	// Cursor: encoded as "inquiry_id|file_name"
-	if after := strings.TrimSpace(cpage.After); after != "" {
-		aid, afn := splitCursor(after)
-		where = append(where, fmt.Sprintf("(iif.inquiry_id, iif.file_name) > ($%d, $%d)", len(args)+1, len(args)+2))
-		args = append(args, aid, afn)
+// ListImagesByCursor:
+// - (inquiry_id, file_name) 昇順でソートし、CursorPage.After から先を返す
+// - Cursor は "inquiryID|fileName"
+func (r *InquiryImageRepositoryGCS) ListImagesByCursor(
+	ctx context.Context,
+	filter idom.Filter,
+	_ idom.Sort,
+	cpage idom.CursorPage,
+) (idom.CursorPageResult[idom.ImageFile], error) {
+	if r.Client == nil {
+		return idom.CursorPageResult[idom.ImageFile]{}, errors.New("InquiryImageRepositoryGCS: nil storage client")
 	}
 
-	whereSQL := ""
-	if len(where) > 0 {
-		whereSQL = "WHERE " + strings.Join(where, " AND ")
+	bucket := r.bucket()
+	it := r.Client.Bucket(bucket).Objects(ctx, &storage.Query{})
+
+	var all []idom.ImageFile
+	for {
+		attrs, err := it.Next()
+		if errors.Is(err, iterator.Done) {
+			break
+		}
+		if err != nil {
+			return idom.CursorPageResult[idom.ImageFile]{}, err
+		}
+		img := buildImageFileFromAttrs(bucket, "", attrs)
+		if matchImageFilter(img, filter) {
+			all = append(all, img)
+		}
 	}
+
+	// (inquiryID, fileName) ASC でソート
+	sortImagesByInquiryAndName(all)
+
 	limit := cpage.Limit
 	if limit <= 0 || limit > 200 {
 		limit = 50
 	}
 
-	q := fmt.Sprintf(`
-SELECT
-  iif.inquiry_id, iif.file_name, iif.file_url, iif.file_size, iif.mime_type,
-  iif.width, iif.height, iif.created_at, iif.created_by, iif.updated_at, iif.updated_by, iif.deleted_at, iif.deleted_by
-FROM inquiry_image_files iif
-%s
-ORDER BY iif.inquiry_id ASC, iif.file_name ASC
-LIMIT $%d
-`, whereSQL, len(args)+1)
-
-	args = append(args, limit+1)
-
-	rows, err := r.DB.QueryContext(ctx, q, args...)
-	if err != nil {
-		return idom.CursorPageResult[idom.ImageFile]{}, err
-	}
-	defer rows.Close()
-
-	var items []idom.ImageFile
-	var lastAid, lastFn string
-	for rows.Next() {
-		im, err := scanImageFile(rows)
-		if err != nil {
-			return idom.CursorPageResult[idom.ImageFile]{}, err
+	after := strings.TrimSpace(cpage.After)
+	start := 0
+	if after != "" {
+		aid, fn := splitCursor(after)
+		for i, im := range all {
+			if compareInquiryFileKey(im.InquiryID, im.FileName, aid, fn) > 0 {
+				start = i
+				break
+			}
 		}
-		items = append(items, im)
-		lastAid, lastFn = im.InquiryID, im.FileName
 	}
-	if err := rows.Err(); err != nil {
-		return idom.CursorPageResult[idom.ImageFile]{}, err
+
+	if start >= len(all) {
+		return idom.CursorPageResult[idom.ImageFile]{
+			Items:      []idom.ImageFile{},
+			NextCursor: nil,
+			Limit:      limit,
+		}, nil
 	}
+
+	end := start + limit
+	if end > len(all) {
+		end = len(all)
+	}
+	items := all[start:end]
 
 	var next *string
-	if len(items) > limit {
-		items = items[:limit]
-		cur := makeCursor(lastAid, lastFn)
+	if end < len(all) {
+		last := items[len(items)-1]
+		cur := makeCursor(last.InquiryID, last.FileName)
 		next = &cur
 	}
 
@@ -224,249 +279,319 @@ LIMIT $%d
 	}, nil
 }
 
-func (r *InquiryImageRepositoryPG) Count(ctx context.Context, filter idom.Filter) (int, error) {
-	where, args := buildImageWhere(filter)
-	whereSQL := ""
-	if len(where) > 0 {
-		whereSQL = "WHERE " + strings.Join(where, " AND ")
+func (r *InquiryImageRepositoryGCS) Count(ctx context.Context, filter idom.Filter) (int, error) {
+	if r.Client == nil {
+		return 0, errors.New("InquiryImageRepositoryGCS: nil storage client")
 	}
-	var total int
-	if err := r.DB.QueryRowContext(ctx, `SELECT COUNT(*) FROM inquiry_image_files iif `+whereSQL, args...).Scan(&total); err != nil {
-		return 0, err
+
+	bucket := r.bucket()
+	it := r.Client.Bucket(bucket).Objects(ctx, &storage.Query{})
+
+	total := 0
+	for {
+		attrs, err := it.Next()
+		if errors.Is(err, iterator.Done) {
+			break
+		}
+		if err != nil {
+			return 0, err
+		}
+		img := buildImageFileFromAttrs(bucket, "", attrs)
+		if matchImageFilter(img, filter) {
+			total++
+		}
 	}
 	return total, nil
 }
 
-// =======================================
+// =======================
 // Mutations
-// =======================================
+// =======================
 
-func (r *InquiryImageRepositoryPG) AddImage(ctx context.Context, inquiryID string, req idom.AddImageRequest) (*idom.InquiryImage, error) {
-	tx, err := r.DB.BeginTx(ctx, nil)
-	if err != nil {
-		return nil, err
-	}
-	defer tx.Rollback()
-
+// AddImage:
+// - AddImageRequest で指定された GCS オブジェクトに inquiry 用メタデータを付与し、InquiryImage 全体を返す。
+// - 実ファイルのアップロードは別レイヤーで完了している前提。
+func (r *InquiryImageRepositoryGCS) AddImage(
+	ctx context.Context,
+	inquiryID string,
+	req idom.AddImageRequest,
+) (*idom.InquiryImage, error) {
 	inquiryID = strings.TrimSpace(inquiryID)
-	if err := ensureInquiryHeader(ctx, tx, inquiryID); err != nil {
-		return nil, err
+	if inquiryID == "" {
+		return nil, fmt.Errorf("inquiryImage: empty inquiryID")
+	}
+	if r.Client == nil {
+		return nil, errors.New("InquiryImageRepositoryGCS: nil storage client")
 	}
 
-	const q = `
-INSERT INTO inquiry_image_files (
-  inquiry_id, file_name, file_url, file_size, mime_type, width, height,
-  created_at, created_by, updated_at, updated_by, deleted_at, deleted_by
-) VALUES (
-  $1,$2,$3,$4,$5,$6,$7,
-  NOW(), $8, NULL, NULL, NULL, NULL
-)
-`
-	// created_by: fallback to 'system' if no actor available
-	createdBy := "system"
-	if _, err := tx.ExecContext(ctx, q,
+	// URL から bucket/object を解決。失敗したらデフォルトバケット + 慣習パス。
+	var bucket, objectPath string
+	if b, obj, ok := parseGCSURL(req.FileURL); ok {
+		bucket, objectPath = b, obj
+	} else {
+		bucket = r.bucket()
+		if strings.TrimSpace(req.FileName) != "" {
+			objectPath = path.Join("inquiry_images", inquiryID, strings.TrimSpace(req.FileName))
+		} else {
+			return nil, fmt.Errorf("inquiryImage: cannot resolve objectPath from request")
+		}
+	}
+
+	_, err := r.SaveImageFromBucketObject(
+		ctx,
 		inquiryID,
 		strings.TrimSpace(req.FileName),
-		strings.TrimSpace(req.FileURL),
+		bucket,
+		objectPath,
 		req.FileSize,
 		strings.TrimSpace(req.MimeType),
-		dbcommon.ToDBInt(req.Width),
-		dbcommon.ToDBInt(req.Height),
-		createdBy,
-	); err != nil {
-		if dbcommon.IsUniqueViolation(err) {
-			return nil, idom.ErrConflict
-		}
-		return nil, err
-	}
-
-	if err := tx.Commit(); err != nil {
+		req.Width,
+		req.Height,
+		time.Now().UTC(),
+		"system",
+	)
+	if err != nil {
 		return nil, err
 	}
 	return r.GetImagesByInquiryID(ctx, inquiryID)
 }
 
-func (r *InquiryImageRepositoryPG) UpdateImages(ctx context.Context, inquiryID string, req idom.UpdateImagesRequest) (*idom.InquiryImage, error) {
-	tx, err := r.DB.BeginTx(ctx, nil)
+// UpdateImages:
+//   - 既存（該当 inquiryID の）画像オブジェクトを論理的に「全削除」とみなし、指定 Images に置き換えるイメージ。
+//   - 実際には BuildDeleteOpsByInquiryID + DeleteObjects で GCS オブジェクトを削除し、
+//     新しいオブジェクトは SaveImageFromBucketObject でメタ更新する前提。
+func (r *InquiryImageRepositoryGCS) UpdateImages(
+	ctx context.Context,
+	inquiryID string,
+	req idom.UpdateImagesRequest,
+) (*idom.InquiryImage, error) {
+	if r.Client == nil {
+		return nil, errors.New("InquiryImageRepositoryGCS: nil storage client")
+	}
+	inquiryID = strings.TrimSpace(inquiryID)
+	if inquiryID == "" {
+		return nil, fmt.Errorf("inquiryImage: empty inquiryID")
+	}
+
+	// 既存削除ターゲットを作って削除（best-effort）
+	ops, err := r.BuildDeleteOpsByInquiryID(ctx, inquiryID)
 	if err != nil {
 		return nil, err
 	}
-	defer tx.Rollback()
-
-	inquiryID = strings.TrimSpace(inquiryID)
-	if err := ensureInquiryHeader(ctx, tx, inquiryID); err != nil {
+	if err := r.DeleteObjects(ctx, ops); err != nil {
 		return nil, err
 	}
 
-	if _, err := tx.ExecContext(ctx, `DELETE FROM inquiry_image_files WHERE inquiry_id = $1`, inquiryID); err != nil {
-		return nil, err
-	}
-
-	if len(req.Images) > 0 {
-		if err := bulkInsertImages(ctx, tx, inquiryID, req.Images); err != nil {
+	// 新規群を保存（各 ImageFile の FileURL からオブジェクト解決する前提）
+	for _, im := range req.Images {
+		fn := strings.TrimSpace(im.FileName)
+		if fn == "" {
+			continue
+		}
+		b, obj, ok := parseGCSURL(im.FileURL)
+		if !ok {
+			// URL から取れない場合は慣習パスを使う
+			b = r.bucket()
+			obj = path.Join("inquiry_images", inquiryID, fn)
+		}
+		_, err := r.SaveImageFromBucketObject(
+			ctx,
+			inquiryID,
+			fn,
+			b,
+			obj,
+			im.FileSize,
+			im.MimeType,
+			im.Width,
+			im.Height,
+			im.CreatedAt,
+			im.CreatedBy,
+		)
+		if err != nil {
 			return nil, err
 		}
 	}
 
-	if err := tx.Commit(); err != nil {
-		return nil, err
-	}
 	return r.GetImagesByInquiryID(ctx, inquiryID)
 }
 
-func (r *InquiryImageRepositoryPG) PatchImage(ctx context.Context, inquiryID, fileName string, patch idom.ImagePatch) (*idom.ImageFile, error) {
-	sets := []string{}
-	args := []any{}
-	i := 1
-
-	if patch.FileName != nil {
-		sets = append(sets, fmt.Sprintf("file_name = $%d", i))
-		args = append(args, strings.TrimSpace(*patch.FileName))
-		i++
+// PatchImage:
+// - (inquiryID, fileName) に対応するオブジェクトのメタデータをパッチ更新
+func (r *InquiryImageRepositoryGCS) PatchImage(
+	ctx context.Context,
+	inquiryID, fileName string,
+	patch idom.ImagePatch,
+) (*idom.ImageFile, error) {
+	if r.Client == nil {
+		return nil, errors.New("InquiryImageRepositoryGCS: nil storage client")
 	}
-	if patch.FileURL != nil {
-		sets = append(sets, fmt.Sprintf("file_url = $%d", i))
-		args = append(args, strings.TrimSpace(*patch.FileURL))
-		i++
+	inquiryID = strings.TrimSpace(inquiryID)
+	fileName = strings.TrimSpace(fileName)
+	if inquiryID == "" || fileName == "" {
+		return nil, idom.ErrNotFound
+	}
+
+	bucket := r.bucket()
+	objName := path.Join("inquiry_images", inquiryID, fileName)
+	obj := r.Client.Bucket(bucket).Object(objName)
+
+	attrs, err := obj.Attrs(ctx)
+	if err != nil {
+		if errors.Is(err, storage.ErrObjectNotExist) {
+			// fallback: "<inquiryID>/<fileName>"
+			objName2 := path.Join(inquiryID, fileName)
+			obj2 := r.Client.Bucket(bucket).Object(objName2)
+			attrs, err = obj2.Attrs(ctx)
+			if err != nil {
+				if errors.Is(err, storage.ErrObjectNotExist) {
+					return nil, idom.ErrNotFound
+				}
+				return nil, err
+			}
+			obj = obj2
+			objName = objName2
+		} else {
+			return nil, err
+		}
+	}
+
+	ua := storage.ObjectAttrsToUpdate{}
+	meta := cloneMetadata(attrs.Metadata)
+
+	if patch.FileName != nil && strings.TrimSpace(*patch.FileName) != "" {
+		meta["file_name"] = strings.TrimSpace(*patch.FileName)
+	}
+	if patch.FileURL != nil && strings.TrimSpace(*patch.FileURL) != "" {
+		meta["file_url"] = strings.TrimSpace(*patch.FileURL)
 	}
 	if patch.FileSize != nil {
-		sets = append(sets, fmt.Sprintf("file_size = $%d", i))
-		args = append(args, *patch.FileSize)
-		i++
+		meta["file_size"] = strconv.FormatInt(*patch.FileSize, 10)
 	}
 	if patch.MimeType != nil {
-		sets = append(sets, fmt.Sprintf("mime_type = $%d", i))
-		args = append(args, strings.TrimSpace(*patch.MimeType))
-		i++
+		mt := strings.TrimSpace(*patch.MimeType)
+		if mt != "" {
+			ua.ContentType = mt
+			meta["mime_type"] = mt
+		}
 	}
 	if patch.Width != nil {
-		sets = append(sets, fmt.Sprintf("width = $%d", i))
-		args = append(args, dbcommon.ToDBInt(patch.Width))
-		i++
+		meta["width"] = strconv.Itoa(*patch.Width)
 	}
 	if patch.Height != nil {
-		sets = append(sets, fmt.Sprintf("height = $%d", i))
-		args = append(args, dbcommon.ToDBInt(patch.Height))
-		i++
+		meta["height"] = strconv.Itoa(*patch.Height)
 	}
 	if patch.UpdatedBy != nil {
-		sets = append(sets, fmt.Sprintf("updated_by = $%d", i))
-		args = append(args, dbcommon.ToDBText(patch.UpdatedBy))
-		i++
+		if v := strings.TrimSpace(*patch.UpdatedBy); v != "" {
+			meta["updated_by"] = v
+		}
 	}
-	// updated_at explicit or NOW()
 	if patch.UpdatedAt != nil {
-		sets = append(sets, fmt.Sprintf("updated_at = $%d", i))
-		args = append(args, patch.UpdatedAt.UTC())
-		i++
-	} else if len(sets) > 0 {
-		sets = append(sets, fmt.Sprintf("updated_at = $%d", i))
-		args = append(args, time.Now().UTC())
-		i++
+		meta["updated_at"] = patch.UpdatedAt.UTC().Format(time.RFC3339Nano)
+	} else if len(meta) > 0 {
+		meta["updated_at"] = time.Now().UTC().Format(time.RFC3339Nano)
 	}
 	if patch.DeletedAt != nil {
-		sets = append(sets, fmt.Sprintf("deleted_at = $%d", i))
-		args = append(args, dbcommon.ToDBTime(patch.DeletedAt))
-		i++
+		if patch.DeletedAt.IsZero() {
+			delete(meta, "deleted_at")
+		} else {
+			meta["deleted_at"] = patch.DeletedAt.UTC().Format(time.RFC3339Nano)
+		}
 	}
 	if patch.DeletedBy != nil {
-		sets = append(sets, fmt.Sprintf("deleted_by = $%d", i))
-		args = append(args, dbcommon.ToDBText(patch.DeletedBy))
-		i++
-	}
-
-	if len(sets) == 0 {
-		// Return the current row
-		const sel = `
-SELECT inquiry_id, file_name, file_url, file_size, mime_type,
-       width, height, created_at, created_by, updated_at, updated_by, deleted_at, deleted_by
-FROM inquiry_image_files
-WHERE inquiry_id = $1 AND file_name = $2
-`
-		row := r.DB.QueryRowContext(ctx, sel, strings.TrimSpace(inquiryID), strings.TrimSpace(fileName))
-		im, err := scanImageFile(row)
-		if err != nil {
-			if errors.Is(err, sql.ErrNoRows) {
-				return nil, idom.ErrNotFound
-			}
-			return nil, err
+		if v := strings.TrimSpace(*patch.DeletedBy); v == "" {
+			delete(meta, "deleted_by")
+		} else {
+			meta["deleted_by"] = v
 		}
-		return &im, nil
 	}
 
-	args = append(args, strings.TrimSpace(inquiryID), strings.TrimSpace(fileName))
-	q := fmt.Sprintf(`
-UPDATE inquiry_image_files
-SET %s
-WHERE inquiry_id = $%d AND file_name = $%d
-RETURNING inquiry_id, file_name, file_url, file_size, mime_type,
-          width, height, created_at, created_by, updated_at, updated_by, deleted_at, deleted_by
-`, strings.Join(sets, ", "), i, i+1)
+	if len(meta) > 0 {
+		ua.Metadata = meta
+	}
 
-	row := r.DB.QueryRowContext(ctx, q, args...)
-	im, err := scanImageFile(row)
+	newAttrs, err := obj.Update(ctx, ua)
 	if err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
-			return nil, idom.ErrNotFound
-		}
 		return nil, err
 	}
+
+	im := buildImageFileFromAttrs(bucket, "", newAttrs)
+
+	// cursor 用 key にもなるので InquiryID / FileName を補正
+	if im.InquiryID == "" {
+		im.InquiryID = inquiryID
+	}
+	if im.FileName == "" {
+		im.FileName = fileName
+	}
+
 	return &im, nil
 }
 
-func (r *InquiryImageRepositoryPG) DeleteImage(ctx context.Context, inquiryID, fileName string) (*idom.InquiryImage, error) {
-	res, err := r.DB.ExecContext(ctx, `DELETE FROM inquiry_image_files WHERE inquiry_id = $1 AND file_name = $2`, strings.TrimSpace(inquiryID), strings.TrimSpace(fileName))
-	if err != nil {
-		return nil, err
+func (r *InquiryImageRepositoryGCS) DeleteImage(
+	ctx context.Context,
+	inquiryID, fileName string,
+) (*idom.InquiryImage, error) {
+	if r.Client == nil {
+		return nil, errors.New("InquiryImageRepositoryGCS: nil storage client")
 	}
-	aff, _ := res.RowsAffected()
-	if aff == 0 {
+	inquiryID = strings.TrimSpace(inquiryID)
+	fileName = strings.TrimSpace(fileName)
+	if inquiryID == "" || fileName == "" {
 		return nil, idom.ErrNotFound
 	}
-	// return aggregate
-	return r.GetImagesByInquiryID(ctx, strings.TrimSpace(inquiryID))
-}
 
-func (r *InquiryImageRepositoryPG) DeleteAllImages(ctx context.Context, inquiryID string) error {
-	_, err := r.DB.ExecContext(ctx, `DELETE FROM inquiry_image_files WHERE inquiry_id = $1`, strings.TrimSpace(inquiryID))
-	return err
-}
-
-func (r *InquiryImageRepositoryPG) Save(ctx context.Context, agg idom.InquiryImage, _ *idom.SaveOptions) (*idom.InquiryImage, error) {
-	tx, err := r.DB.BeginTx(ctx, nil)
+	ops, err := r.BuildDeleteOps(ctx, []idom.ImageKey{
+		{InquiryID: inquiryID, FileName: fileName},
+	})
 	if err != nil {
 		return nil, err
 	}
-	defer tx.Rollback()
-
-	id := strings.TrimSpace(agg.ID)
-	if err := ensureInquiryHeader(ctx, tx, id); err != nil {
+	if len(ops) == 0 {
+		return nil, idom.ErrNotFound
+	}
+	if err := r.DeleteObjects(ctx, ops); err != nil {
 		return nil, err
 	}
 
-	if _, err := tx.ExecContext(ctx, `DELETE FROM inquiry_image_files WHERE inquiry_id = $1`, id); err != nil {
-		return nil, err
-	}
-	if len(agg.Images) > 0 {
-		if err := bulkInsertImages(ctx, tx, id, agg.Images); err != nil {
-			return nil, err
-		}
-	}
-
-	if err := tx.Commit(); err != nil {
-		return nil, err
-	}
-	return r.GetImagesByInquiryID(ctx, id)
+	// 残りの画像を返す（無ければ ErrNotFound）
+	return r.GetImagesByInquiryID(ctx, inquiryID)
 }
 
-// =======================================
-// GCS-friendly helpers (implements inquiryimage.GCSObjectSaver, GCSDeleteOpsProvider)
-// =======================================
+func (r *InquiryImageRepositoryGCS) DeleteAllImages(ctx context.Context, inquiryID string) error {
+	if r.Client == nil {
+		return errors.New("InquiryImageRepositoryGCS: nil storage client")
+	}
+	inquiryID = strings.TrimSpace(inquiryID)
+	if inquiryID == "" {
+		return nil
+	}
+	ops, err := r.BuildDeleteOpsByInquiryID(ctx, inquiryID)
+	if err != nil {
+		return err
+	}
+	return r.DeleteObjects(ctx, ops)
+}
+
+func (r *InquiryImageRepositoryGCS) Save(
+	ctx context.Context,
+	agg idom.InquiryImage,
+	_ *idom.SaveOptions,
+) (*idom.InquiryImage, error) {
+	// シンプルに UpdateImages 相当: 全削除 -> 全追加（Metadata 更新）
+	req := idom.UpdateImagesRequest{
+		Images: agg.Images,
+	}
+	return r.UpdateImages(ctx, agg.ID, req)
+}
+
+// =======================
+// GCSObjectSaver / GCSDeleteOpsProvider
+// =======================
 
 // SaveImageFromBucketObject implements idom.GCSObjectSaver.
-// - bucket が空なら idom.DefaultBucket (narratives_development_inquiry_image) を使用
-// - objectPath から公開URLを構築して保存（存在すれば upsert）
-func (r *InquiryImageRepositoryPG) SaveImageFromBucketObject(
+// - bucket が空なら defaultInquiryImageBucket
+// - objectPath の既存オブジェクトにメタデータを設定し、ImageFile を返す
+func (r *InquiryImageRepositoryGCS) SaveImageFromBucketObject(
 	ctx context.Context,
 	inquiryID string,
 	fileName string,
@@ -478,286 +603,458 @@ func (r *InquiryImageRepositoryPG) SaveImageFromBucketObject(
 	createdAt time.Time,
 	createdBy string,
 ) (*idom.ImageFile, error) {
+	if r.Client == nil {
+		return nil, errors.New("InquiryImageRepositoryGCS: nil storage client")
+	}
+
 	inquiryID = strings.TrimSpace(inquiryID)
 	fileName = strings.TrimSpace(fileName)
-
 	if inquiryID == "" || fileName == "" {
 		return nil, fmt.Errorf("inquiryImage: empty inquiryID or fileName")
 	}
 
 	b := strings.TrimSpace(bucket)
 	if b == "" {
-		b = idom.DefaultBucket
+		b = r.bucket()
 	}
 	obj := strings.TrimLeft(strings.TrimSpace(objectPath), "/")
 	if obj == "" {
 		return nil, fmt.Errorf("inquiryImage: empty objectPath")
 	}
 
-	// 公開URLを組み立て（entity 側の PublicURL があれば利用）
-	publicURL := fmt.Sprintf("https://storage.googleapis.com/%s/%s", b, obj)
-	if fn := getPublicURLFunc(); fn != nil {
-		publicURL = fn(b, obj)
-	}
-
-	tx, err := r.DB.BeginTx(ctx, nil)
+	handle := r.Client.Bucket(b).Object(obj)
+	attrs, err := handle.Attrs(ctx)
 	if err != nil {
-		return nil, err
-	}
-	defer tx.Rollback()
-
-	// ヘッダ確保
-	if err := ensureInquiryHeader(ctx, tx, inquiryID); err != nil {
+		if errors.Is(err, storage.ErrObjectNotExist) {
+			return nil, idom.ErrNotFound
+		}
 		return nil, err
 	}
 
-	// upsert（inquiry_id, file_name に一意制約想定）
-	const q = `
-INSERT INTO inquiry_image_files (
-  inquiry_id, file_name, file_url, file_size, mime_type, width, height,
-  created_at, created_by, updated_at, updated_by, deleted_at, deleted_by
-) VALUES (
-  $1,$2,$3,$4,$5,$6,$7,
-  $8,$9, NULL, NULL, NULL, NULL
-)
-ON CONFLICT (inquiry_id, file_name) DO UPDATE SET
-  file_url  = EXCLUDED.file_url,
-  file_size = EXCLUDED.file_size,
-  mime_type = EXCLUDED.mime_type,
-  width     = EXCLUDED.width,
-  height    = EXCLUDED.height,
-  updated_at= GREATEST(COALESCE(inquiry_image_files.updated_at, EXCLUDED.created_at), EXCLUDED.created_at),
-  updated_by= EXCLUDED.created_by
-RETURNING inquiry_id, file_name, file_url, file_size, mime_type,
-          width, height, created_at, created_by, updated_at, updated_by, deleted_at, deleted_by
-`
+	ua := storage.ObjectAttrsToUpdate{}
+	meta := cloneMetadata(attrs.Metadata)
 
-	// created_by のフォールバック
+	meta["inquiry_id"] = inquiryID
+	meta["file_name"] = fileName
+	meta["file_url"] = gcsPublicURL(b, obj)
+
+	if fileSize > 0 {
+		meta["file_size"] = strconv.FormatInt(fileSize, 10)
+	}
+	if mt := strings.TrimSpace(mimeType); mt != "" {
+		ua.ContentType = mt
+		meta["mime_type"] = mt
+	}
+	if width != nil {
+		meta["width"] = strconv.Itoa(*width)
+	}
+	if height != nil {
+		meta["height"] = strconv.Itoa(*height)
+	}
+
 	cb := strings.TrimSpace(createdBy)
 	if cb == "" {
 		cb = "system"
 	}
+	meta["created_by"] = cb
+
 	ca := createdAt.UTC()
 	if ca.IsZero() {
 		ca = time.Now().UTC()
 	}
+	meta["created_at"] = ca.Format(time.RFC3339Nano)
 
-	row := tx.QueryRowContext(ctx, q,
-		inquiryID,
-		fileName,
-		publicURL,
-		fileSize,
-		strings.TrimSpace(mimeType),
-		dbcommon.ToDBInt(width),
-		dbcommon.ToDBInt(height),
-		ca,
-		cb,
-	)
-	im, err := scanImageFile(row)
+	ua.Metadata = meta
+
+	newAttrs, err := handle.Update(ctx, ua)
 	if err != nil {
 		return nil, err
 	}
 
-	if err := tx.Commit(); err != nil {
-		return nil, err
-	}
+	im := buildImageFileFromAttrs(b, inquiryID, newAttrs)
 	return &im, nil
 }
 
-// BuildDeleteOps implements idom.GCSDeleteOpsProvider.
-// 指定キー群のファイルURLから GCS 削除ターゲットを導出します。
-func (r *InquiryImageRepositoryPG) BuildDeleteOps(ctx context.Context, keys []idom.ImageKey) ([]idom.GCSDeleteOp, error) {
-	cleaned := make([]idom.ImageKey, 0, len(keys))
+// BuildDeleteOps: 指定キー群の file_url から GCS 削除ターゲットを導出。
+// - URL が GCS 形式ならそこから
+// - そうでなければ "inquiry_images/<inquiryID>/<fileName>" を fallback に使う
+func (r *InquiryImageRepositoryGCS) BuildDeleteOps(
+	ctx context.Context,
+	keys []idom.ImageKey,
+) ([]idom.GCSDeleteOp, error) {
+	_ = ctx
+
+	if len(keys) == 0 {
+		return nil, nil
+	}
+
+	ops := make([]idom.GCSDeleteOp, 0, len(keys))
 	for _, k := range keys {
 		aid := strings.TrimSpace(k.InquiryID)
 		fn := strings.TrimSpace(k.FileName)
-		if aid != "" && fn != "" {
-			cleaned = append(cleaned, idom.ImageKey{InquiryID: aid, FileName: fn})
+		if aid == "" || fn == "" {
+			continue
 		}
-	}
-	if len(cleaned) == 0 {
-		return nil, nil
-	}
-
-	// WHERE (inquiry_id, file_name) IN ((...),(...),...)
-	pairs := make([]string, 0, len(cleaned))
-	args := make([]any, 0, len(cleaned)*2)
-	for _, k := range cleaned {
-		pairs = append(pairs, fmt.Sprintf("($%d,$%d)", len(args)+1, len(args)+2))
-		args = append(args, k.InquiryID, k.FileName)
-	}
-
-	q := fmt.Sprintf(`
-SELECT inquiry_id, file_name, file_url
-FROM inquiry_image_files
-WHERE (inquiry_id, file_name) IN (%s)
-`, strings.Join(pairs, ","))
-
-	rows, err := r.DB.QueryContext(ctx, q, args...)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-
-	ops := make([]idom.GCSDeleteOp, 0, len(cleaned))
-	for rows.Next() {
-		var aid, fn, urlStr string
-		if err := rows.Scan(&aid, &fn, &urlStr); err != nil {
-			return nil, err
-		}
-		// was: ops = append(ops, toGCSDeleteOpFromURL(urlStr, aid, fn))
-		ops = append(ops, toInquiryImageGCSDeleteOpFromURL(urlStr, aid, fn))
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
+		// file_url が直接指定されているケース向けに構造を保持している場合、
+		// 呼び出し側で URL を渡してくることを想定しているが、
+		// この Repository ではキーしか知らないので fallback のみ行う。
+		ops = append(ops, toInquiryImageGCSDeleteOpFromURL("", aid, fn))
 	}
 	return ops, nil
 }
 
-// BuildDeleteOpsByInquiryID implements idom.GCSDeleteOpsProvider.
-// inquiryID 配下のファイルURLから GCS 削除ターゲットを導出します。
-func (r *InquiryImageRepositoryPG) BuildDeleteOpsByInquiryID(ctx context.Context, inquiryID string) ([]idom.GCSDeleteOp, error) {
-	aid := strings.TrimSpace(inquiryID)
-	if aid == "" {
+// BuildDeleteOpsByInquiryID:
+// - inquiryID 配下の慣習パスオブジェクトを全て削除対象とする
+func (r *InquiryImageRepositoryGCS) BuildDeleteOpsByInquiryID(
+	ctx context.Context,
+	inquiryID string,
+) ([]idom.GCSDeleteOp, error) {
+	if r.Client == nil {
+		return nil, errors.New("InquiryImageRepositoryGCS: nil storage client")
+	}
+	inquiryID = strings.TrimSpace(inquiryID)
+	if inquiryID == "" {
 		return nil, nil
 	}
-	const q = `SELECT file_name, file_url FROM inquiry_image_files WHERE inquiry_id = $1`
-	rows, err := r.DB.QueryContext(ctx, q, aid)
-	if err != nil {
-		return nil, err
+
+	bucket := r.bucket()
+	// 主に "inquiry_images/<inquiryID>/" プレフィックスを見る
+	prefixes := []string{
+		path.Join("inquiry_images", inquiryID) + "/",
+		inquiryID + "/",
 	}
-	defer rows.Close()
 
 	var ops []idom.GCSDeleteOp
-	for rows.Next() {
-		var fn, urlStr string
-		if err := rows.Scan(&fn, &urlStr); err != nil {
-			return nil, err
+	for _, pfx := range prefixes {
+		it := r.Client.Bucket(bucket).Objects(ctx, &storage.Query{
+			Prefix: pfx,
+		})
+		for {
+			attrs, err := it.Next()
+			if errors.Is(err, iterator.Done) {
+				break
+			}
+			if err != nil {
+				return nil, err
+			}
+			ops = append(ops, idom.GCSDeleteOp{
+				Bucket:     bucket,
+				ObjectPath: attrs.Name,
+			})
 		}
-		// was: ops = append(ops, toGCSDeleteOpFromURL(urlStr, aid, fn))
-		ops = append(ops, toInquiryImageGCSDeleteOpFromURL(urlStr, aid, fn))
 	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
+
 	return ops, nil
 }
 
-// =======================================
-// Helpers
-// =======================================
+// =======================
+// DeleteObjects helper
+// =======================
 
-func ensureInquiryHeader(ctx context.Context, ex runner, inquiryID string) error {
-	_, err := ex.ExecContext(ctx, `INSERT INTO inquiry_images (id) VALUES ($1) ON CONFLICT (id) DO NOTHING`, inquiryID)
-	return err
-}
-
-func bulkInsertImages(ctx context.Context, ex runner, inquiryID string, items []idom.ImageFile) error {
-	if len(items) == 0 {
+func (r *InquiryImageRepositoryGCS) DeleteObjects(ctx context.Context, ops []idom.GCSDeleteOp) error {
+	if r.Client == nil {
+		return errors.New("InquiryImageRepositoryGCS: nil storage client")
+	}
+	if len(ops) == 0 {
 		return nil
 	}
-	sb := strings.Builder{}
-	sb.WriteString(`INSERT INTO inquiry_image_files (
-  inquiry_id, file_name, file_url, file_size, mime_type,
-  width, height, created_at, created_by, updated_at, updated_by, deleted_at, deleted_by
-) VALUES `)
-	args := make([]any, 0, len(items)*13)
-	for i, it := range items {
-		if i > 0 {
-			sb.WriteString(",")
+
+	var errs []error
+	for _, op := range ops {
+		b := strings.TrimSpace(op.Bucket)
+		if b == "" {
+			b = r.bucket()
 		}
-		sb.WriteString(fmt.Sprintf("($%d,$%d,$%d,$%d,$%d,$%d,$%d,$%d,$%d,$%d,$%d,$%d,$%d)",
-			len(args)+1, len(args)+2, len(args)+3, len(args)+4, len(args)+5,
-			len(args)+6, len(args)+7, len(args)+8, len(args)+9, len(args)+10,
-			len(args)+11, len(args)+12, len(args)+13,
-		))
-		args = append(args,
-			inquiryID,
-			strings.TrimSpace(it.FileName),
-			strings.TrimSpace(it.FileURL),
-			it.FileSize,
-			strings.TrimSpace(it.MimeType),
-			dbcommon.ToDBInt(it.Width),
-			dbcommon.ToDBInt(it.Height),
-			it.CreatedAt.UTC(),
-			strings.TrimSpace(it.CreatedBy),
-			dbcommon.ToDBTime(it.UpdatedAt),
-			dbcommon.ToDBText(it.UpdatedBy),
-			dbcommon.ToDBTime(it.DeletedAt),
-			dbcommon.ToDBText(it.DeletedBy),
-		)
+		obj := strings.TrimLeft(strings.TrimSpace(op.ObjectPath), "/")
+		if obj == "" {
+			continue
+		}
+		err := r.Client.Bucket(b).Object(obj).Delete(ctx)
+		if err != nil && !errors.Is(err, storage.ErrObjectNotExist) {
+			errs = append(errs, fmt.Errorf("%s/%s: %w", b, obj, err))
+		}
 	}
-	_, err := ex.ExecContext(ctx, sb.String(), args...)
-	if dbcommon.IsUniqueViolation(err) {
-		return idom.ErrConflict
+
+	if len(errs) > 0 {
+		return dbcommon.JoinErrors(errs)
 	}
-	return err
+	return nil
 }
 
-func scanImageFile(s dbcommon.RowScanner) (idom.ImageFile, error) {
-	var (
-		inquiryIDNS, fileNameNS, fileURLNS, mimeNS, createdByNS, updatedByNS, deletedByNS sql.NullString
-		fileSize                                                                          int64
-		widthNS, heightNS                                                                 sql.NullInt64
-		createdAt                                                                         time.Time
-		updatedAtNS, deletedAtNS                                                          sql.NullTime
-	)
-	if err := s.Scan(
-		&inquiryIDNS, &fileNameNS, &fileURLNS, &fileSize, &mimeNS,
-		&widthNS, &heightNS, &createdAt, &createdByNS, &updatedAtNS, &updatedByNS, &deletedAtNS, &deletedByNS,
-	); err != nil {
-		return idom.ImageFile{}, err
+// =======================
+// Helpers
+// =======================
+
+func gcsPublicURL(bucket, objectPath string) string {
+	b := strings.TrimSpace(bucket)
+	if b == "" {
+		b = defaultInquiryImageBucket
+	}
+	obj := strings.TrimLeft(strings.TrimSpace(objectPath), "/")
+	return fmt.Sprintf("https://storage.googleapis.com/%s/%s", b, obj)
+}
+
+func parseGCSURL(u string) (string, string, bool) {
+	parsed, err := url.Parse(strings.TrimSpace(u))
+	if err != nil {
+		return "", "", false
+	}
+	host := strings.ToLower(parsed.Host)
+	if host != "storage.googleapis.com" && host != "storage.cloud.google.com" {
+		return "", "", false
+	}
+	p := strings.TrimLeft(parsed.EscapedPath(), "/")
+	if p == "" {
+		return "", "", false
+	}
+	parts := strings.SplitN(p, "/", 2)
+	if len(parts) < 2 {
+		return "", "", false
+	}
+	bucket := parts[0]
+	objectPath, _ := url.PathUnescape(parts[1])
+	return bucket, objectPath, true
+}
+
+func belongsToInquiry(inquiryID string, attrs *storage.ObjectAttrs) bool {
+	if attrs == nil {
+		return false
+	}
+	inq := strings.TrimSpace(inquiryID)
+	if inq == "" {
+		return false
+	}
+	// metadata
+	if v, ok := attrs.Metadata["inquiry_id"]; ok && strings.TrimSpace(v) == inq {
+		return true
+	}
+	// path prefix: "inquiry_images/<inq>/" or "<inq>/"
+	name := strings.TrimSpace(attrs.Name)
+	if strings.HasPrefix(name, path.Join("inquiry_images", inq)+"/") {
+		return true
+	}
+	if strings.HasPrefix(name, inq+"/") {
+		return true
+	}
+	return false
+}
+
+// buildImageFileFromAttrs:
+// inquiryID が空なら metadata / パスから推測する
+func buildImageFileFromAttrs(bucket, inquiryID string, attrs *storage.ObjectAttrs) idom.ImageFile {
+	if attrs == nil {
+		return idom.ImageFile{}
 	}
 
-	toPtrInt := func(ns sql.NullInt64) *int {
-		if ns.Valid {
-			v := int(ns.Int64)
-			if v > 0 {
-				return &v
+	md := attrs.Metadata
+	name := strings.TrimSpace(attrs.Name)
+
+	inq := strings.TrimSpace(inquiryID)
+	if inq == "" {
+		if v, ok := md["inquiry_id"]; ok && strings.TrimSpace(v) != "" {
+			inq = strings.TrimSpace(v)
+		} else if strings.HasPrefix(name, "inquiry_images/") {
+			parts := strings.SplitN(strings.TrimPrefix(name, "inquiry_images/"), "/", 2)
+			if len(parts) == 2 {
+				inq = strings.TrimSpace(parts[0])
+			}
+		} else {
+			parts := strings.SplitN(name, "/", 2)
+			if len(parts) == 2 {
+				inq = strings.TrimSpace(parts[0])
 			}
 		}
-		return nil
 	}
-	toPtrTime := func(ns sql.NullTime) *time.Time {
-		if ns.Valid {
-			t := ns.Time.UTC()
-			return &t
+
+	// fileName
+	var fn string
+	if v, ok := md["file_name"]; ok && strings.TrimSpace(v) != "" {
+		fn = strings.TrimSpace(v)
+	} else {
+		if idx := strings.LastIndex(name, "/"); idx >= 0 && idx+1 < len(name) {
+			fn = name[idx+1:]
+		} else {
+			fn = name
 		}
-		return nil
 	}
-	toPtrStr := func(ns sql.NullString) *string {
-		if ns.Valid {
-			v := strings.TrimSpace(ns.String)
-			return &v
+
+	publicURL := gcsPublicURL(bucket, name)
+	if v, ok := md["file_url"]; ok && strings.TrimSpace(v) != "" {
+		publicURL = strings.TrimSpace(v)
+	}
+
+	// size
+	var size int64
+	if sz, ok := parseInt64Meta(md, "file_size"); ok {
+		size = sz
+	} else if attrs.Size > 0 {
+		size = attrs.Size
+	}
+
+	// mime
+	mt := strings.TrimSpace(attrs.ContentType)
+	if v, ok := md["mime_type"]; ok && strings.TrimSpace(v) != "" {
+		mt = strings.TrimSpace(v)
+	}
+
+	// width/height
+	var widthPtr, heightPtr *int
+	if w, ok := parseIntMeta(md, "width"); ok {
+		widthPtr = &w
+	}
+	if h, ok := parseIntMeta(md, "height"); ok {
+		heightPtr = &h
+	}
+
+	// created/updated/deleted
+	createdAt := attrs.Created
+	if v, ok := md["created_at"]; ok {
+		if t, err := time.Parse(time.RFC3339Nano, v); err == nil {
+			createdAt = t
 		}
-		return nil
 	}
+	createdBy := strings.TrimSpace(md["created_by"])
+
+	var updatedAtPtr *time.Time
+	if v, ok := md["updated_at"]; ok {
+		if t, err := time.Parse(time.RFC3339Nano, v); err == nil {
+			tu := t.UTC()
+			updatedAtPtr = &tu
+		}
+	}
+	updatedByPtr := ptrString(trimOrEmpty(md["updated_by"]))
+
+	var deletedAtPtr *time.Time
+	if v, ok := md["deleted_at"]; ok {
+		if t, err := time.Parse(time.RFC3339Nano, v); err == nil {
+			tu := t.UTC()
+			deletedAtPtr = &tu
+		}
+	}
+	deletedByPtr := ptrString(trimOrEmpty(md["deleted_by"]))
 
 	return idom.ImageFile{
-		InquiryID: strings.TrimSpace(inquiryIDNS.String),
-		FileName:  strings.TrimSpace(fileNameNS.String),
-		FileURL:   strings.TrimSpace(fileURLNS.String),
-		FileSize:  fileSize,
-		MimeType:  strings.TrimSpace(mimeNS.String),
-		Width:     toPtrInt(widthNS),
-		Height:    toPtrInt(heightNS),
+		InquiryID: inq,
+		FileName:  fn,
+		FileURL:   publicURL,
+		FileSize:  size,
+		MimeType:  mt,
+		Width:     widthPtr,
+		Height:    heightPtr,
 		CreatedAt: createdAt.UTC(),
-		CreatedBy: strings.TrimSpace(createdByNS.String),
-		UpdatedAt: toPtrTime(updatedAtNS),
-		UpdatedBy: toPtrStr(updatedByNS), // fix: was toPtrTime(updatedByNS)
-		DeletedAt: toPtrTime(deletedAtNS),
-		DeletedBy: toPtrStr(deletedByNS), // fix: was toPtrTime(deletedByNS)
-	}, nil
+		CreatedBy: createdBy,
+		UpdatedAt: updatedAtPtr,
+		UpdatedBy: updatedByPtr,
+		DeletedAt: deletedAtPtr,
+		DeletedBy: deletedByPtr,
+	}
 }
 
-func buildImageWhere(_ idom.Filter) ([]string, []any) {
-	// 最小実装: フィルタ未使用（安全に空条件を返す）
-	return []string{}, []any{}
+// matchImageFilter: GCS ベースの ImageFile に対して最低限の Filter を適用
+func matchImageFilter(im idom.ImageFile, f idom.Filter) bool {
+	// InquiryID
+	if f.InquiryID != nil && strings.TrimSpace(*f.InquiryID) != "" {
+		if im.InquiryID != strings.TrimSpace(*f.InquiryID) {
+			return false
+		}
+	}
+
+	// SearchQuery: FileName / FileURL / MimeType 対象
+	if sq := strings.TrimSpace(f.SearchQuery); sq != "" {
+		lq := strings.ToLower(sq)
+		if !strings.Contains(strings.ToLower(im.FileName), lq) &&
+			!strings.Contains(strings.ToLower(im.FileURL), lq) &&
+			!strings.Contains(strings.ToLower(im.MimeType), lq) {
+			return false
+		}
+	}
+
+	return true
 }
 
-func buildImageOrderBy(_ idom.Sort) string {
-	// 呼び出し側のデフォルト ORDER BY を利用
-	return ""
+// applyImageSort: 最低限 idom.Sort を解釈（未指定時は created_at DESC 相当）
+func applyImageSort(items []idom.ImageFile, sort idom.Sort) {
+	col := strings.ToLower(string(sort.Column))
+	dir := strings.ToUpper(string(sort.Order))
+	if dir != "ASC" && dir != "DESC" {
+		dir = "DESC"
+	}
+
+	switch col {
+	case "inquiryid", "inquiry_id":
+		sortImagesByInquiryAndName(items)
+		if dir == "DESC" {
+			reverseImages(items)
+		}
+	case "filename", "file_name":
+		sortImagesByFileName(items)
+		if dir == "DESC" {
+			reverseImages(items)
+		}
+	default:
+		// デフォルト: created_at DESC, inquiry_id DESC, file_name DESC
+		sortImagesByCreatedAndName(items)
+		if dir == "ASC" {
+			reverseImages(items)
+		}
+	}
+}
+
+func sortImagesByInquiryAndName(items []idom.ImageFile) {
+	for i := 0; i < len(items)-1; i++ {
+		for j := i + 1; j < len(items); j++ {
+			if compareInquiryFileKey(items[i].InquiryID, items[i].FileName, items[j].InquiryID, items[j].FileName) > 0 {
+				items[i], items[j] = items[j], items[i]
+			}
+		}
+	}
+}
+
+func sortImagesByFileName(items []idom.ImageFile) {
+	for i := 0; i < len(items)-1; i++ {
+		for j := i + 1; j < len(items); j++ {
+			if items[i].FileName > items[j].FileName {
+				items[i], items[j] = items[j], items[i]
+			}
+		}
+	}
+}
+
+func sortImagesByCreatedAndName(items []idom.ImageFile) {
+	for i := 0; i < len(items)-1; i++ {
+		for j := i + 1; j < len(items); j++ {
+			li, lj := items[i], items[j]
+			if li.CreatedAt.After(lj.CreatedAt) {
+				items[i], items[j] = items[j], items[i]
+			} else if li.CreatedAt.Equal(lj.CreatedAt) {
+				if compareInquiryFileKey(li.InquiryID, li.FileName, lj.InquiryID, lj.FileName) > 0 {
+					items[i], items[j] = items[j], items[i]
+				}
+			}
+		}
+	}
+}
+
+func reverseImages(items []idom.ImageFile) {
+	for i, j := 0, len(items)-1; i < j; i, j = i+1, j-1 {
+		items[i], items[j] = items[j], items[i]
+	}
+}
+
+func compareInquiryFileKey(aInq, aFn, bInq, bFn string) int {
+	if aInq < bInq {
+		return -1
+	}
+	if aInq > bInq {
+		return 1
+	}
+	if aFn < bFn {
+		return -1
+	}
+	if aFn > bFn {
+		return 1
+	}
+	return 0
 }
 
 func makeCursor(inquiryID, fileName string) string {
@@ -772,27 +1069,71 @@ func splitCursor(cur string) (string, string) {
 	return parts[0], parts[1]
 }
 
-// ===== GCS helpers for delete ops =====
-
-// rename to avoid collision with campaignImage's helper
+// toInquiryImageGCSDeleteOpFromURL:
+// - fileURL が GCS URL の場合はそこから
+// - それ以外は "inquiry_images/<inquiryID>/<fileName>" fallback
 func toInquiryImageGCSDeleteOpFromURL(fileURL, inquiryID, fileName string) idom.GCSDeleteOp {
-	if parse := getParseGCSURLFunc(); parse != nil {
-		if b, obj, ok := parse(fileURL); ok {
-			return idom.GCSDeleteOp{Bucket: b, ObjectPath: obj}
-		}
+	if b, obj, ok := parseGCSURL(fileURL); ok {
+		return idom.GCSDeleteOp{Bucket: b, ObjectPath: obj}
 	}
 	return idom.GCSDeleteOp{
-		Bucket:     idom.DefaultBucket,
+		Bucket:     defaultInquiryImageBucket,
 		ObjectPath: path.Join("inquiry_images", strings.TrimSpace(inquiryID), strings.TrimSpace(fileName)),
 	}
 }
 
-// オプショナル: entity 側の関数が未実装でもビルド通るように間接参照する
-func getPublicURLFunc() func(bucket, objectPath string) string {
-	// entity に PublicURL がない場合は nil を返し、呼び出し側でフォールバック実装を使用
-	return nil
+func cloneMetadata(src map[string]string) map[string]string {
+	if src == nil {
+		return map[string]string{}
+	}
+	dst := make(map[string]string, len(src))
+	for k, v := range src {
+		dst[k] = v
+	}
+	return dst
 }
-func getParseGCSURLFunc() func(u string) (string, string, bool) {
-	// entity に ParseGCSURL がない場合は nil を返し、呼び出し側でフォールバック実装を使用
-	return nil
+
+func parseIntMeta(md map[string]string, key string) (int, bool) {
+	if md == nil {
+		return 0, false
+	}
+	if v, ok := md[key]; ok {
+		v = strings.TrimSpace(v)
+		if v == "" {
+			return 0, false
+		}
+		n, err := strconv.Atoi(v)
+		if err == nil {
+			return n, true
+		}
+	}
+	return 0, false
+}
+
+func parseInt64Meta(md map[string]string, key string) (int64, bool) {
+	if md == nil {
+		return 0, false
+	}
+	if v, ok := md[key]; ok {
+		v = strings.TrimSpace(v)
+		if v == "" {
+			return 0, false
+		}
+		n, err := strconv.ParseInt(v, 10, 64)
+		if err == nil {
+			return n, true
+		}
+	}
+	return 0, false
+}
+
+func ptrString(s string) *string {
+	if s == "" {
+		return nil
+	}
+	return &s
+}
+
+func trimOrEmpty(s string) string {
+	return strings.TrimSpace(s)
 }

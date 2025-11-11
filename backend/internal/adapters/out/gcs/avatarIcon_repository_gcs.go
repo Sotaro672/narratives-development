@@ -1,145 +1,210 @@
+// backend/internal/adapters/out/gcs/avatarIcon_repository_gcs.go
 package gcs
 
 import (
 	"context"
-	"database/sql"
 	"errors"
 	"fmt"
+	"sort"
 	"strings"
+
+	"cloud.google.com/go/storage"
+	"google.golang.org/api/iterator"
 
 	dbcommon "narratives/internal/adapters/out/firestore/common"
 	avicon "narratives/internal/domain/avatarIcon"
 )
 
-// AvatarIconRepositoryPG implements avatarIcon.Repository with PostgreSQL.
-type AvatarIconRepositoryPG struct {
-	DB *sql.DB
+// AvatarIconRepositoryGCS implements avatarIcon.Repository backed by Google Cloud Storage.
+//
+// 想定:
+// - アイコンファイル本体は GCS バケットに保存される。
+// - Repository は GCS オブジェクト情報から AvatarIcon ドメインモデルを構築する。
+// - オブジェクト名は以下いずれか:
+//  1. "<avatarID>/<fileName>"
+//  2. 任意のパス文字列（この場合 ID = objectName, AvatarID/FileName はパース可能な範囲で解決）
+//
+// アップロード自体（書き込み）は別レイヤーで行い、ここでは主に
+// 一覧取得・参照・削除などの読み取り/管理を担当する。
+type AvatarIconRepositoryGCS struct {
+	Client *storage.Client
+	Bucket string
 }
 
-func NewAvatarIconRepositoryPG(db *sql.DB) *AvatarIconRepositoryPG {
-	return &AvatarIconRepositoryPG{DB: db}
+// NewAvatarIconRepositoryGCS creates a new GCS-based avatar icon repository.
+// bucket が空の場合はそのまま保持し、利用時にエラーとします。
+// （必要なら設定側で必須指定してください）
+func NewAvatarIconRepositoryGCS(client *storage.Client, bucket string) *AvatarIconRepositoryGCS {
+	return &AvatarIconRepositoryGCS{
+		Client: client,
+		Bucket: strings.TrimSpace(bucket),
+	}
 }
 
-// List returns paginated results with filter and sort.
-func (r *AvatarIconRepositoryPG) List(ctx context.Context, filter avicon.Filter, sort avicon.Sort, page avicon.Page) (avicon.PageResult[avicon.AvatarIcon], error) {
-	where, args := buildAvatarIconWhere(filter)
-
-	whereSQL := ""
-	if len(where) > 0 {
-		whereSQL = "WHERE " + strings.Join(where, " AND ")
+// effectiveBucket resolves the bucket name or returns error if empty.
+func (r *AvatarIconRepositoryGCS) effectiveBucket() (string, error) {
+	b := strings.TrimSpace(r.Bucket)
+	if b == "" {
+		return "", errors.New("AvatarIconRepositoryGCS: bucket is empty")
 	}
+	return b, nil
+}
 
-	orderBy := buildAvatarIconOrderBy(sort)
-	if orderBy == "" {
-		orderBy = "ORDER BY id DESC"
+// ==============================
+// List (page-based)
+// ==============================
+
+func (r *AvatarIconRepositoryGCS) List(
+	ctx context.Context,
+	filter avicon.Filter,
+	sortCfg avicon.Sort,
+	page avicon.Page,
+) (avicon.PageResult[avicon.AvatarIcon], error) {
+	if r.Client == nil {
+		return avicon.PageResult[avicon.AvatarIcon]{}, errors.New("AvatarIconRepositoryGCS: nil storage client")
 	}
-
-	perPage := page.PerPage
-	if perPage <= 0 {
-		perPage = 50
-	}
-	number := page.Number
-	if number <= 0 {
-		number = 1
-	}
-	offset := (number - 1) * perPage
-
-	var total int
-	countSQL := fmt.Sprintf("SELECT COUNT(*) FROM avatar_icons %s", whereSQL)
-	if err := r.DB.QueryRowContext(ctx, countSQL, args...).Scan(&total); err != nil {
-		return avicon.PageResult[avicon.AvatarIcon]{}, err
-	}
-
-	q := fmt.Sprintf(`
-SELECT
-  id, avatar_id, url, file_name, size
-FROM avatar_icons
-%s
-%s
-LIMIT $%d OFFSET $%d
-`, whereSQL, orderBy, len(args)+1, len(args)+2)
-
-	args = append(args, perPage, offset)
-
-	rows, err := r.DB.QueryContext(ctx, q, args...)
+	bucketName, err := r.effectiveBucket()
 	if err != nil {
 		return avicon.PageResult[avicon.AvatarIcon]{}, err
 	}
-	defer rows.Close()
 
-	var items []avicon.AvatarIcon
-	for rows.Next() {
-		a, err := scanAvatarIcon(rows)
+	q := &storage.Query{}
+	// AvatarID が指定されている場合は prefix を絞る
+	if filter.AvatarID != nil {
+		if v := strings.TrimSpace(*filter.AvatarID); v != "" {
+			q.Prefix = v + "/"
+		}
+	}
+
+	it := r.Client.Bucket(bucketName).Objects(ctx, q)
+
+	var all []avicon.AvatarIcon
+	for {
+		attrs, err := it.Next()
+		if err == iterator.Done {
+			break
+		}
 		if err != nil {
 			return avicon.PageResult[avicon.AvatarIcon]{}, err
 		}
-		items = append(items, a)
-	}
-	if err := rows.Err(); err != nil {
-		return avicon.PageResult[avicon.AvatarIcon]{}, err
+		icon := buildAvatarIconFromAttrs(bucketName, attrs)
+		if matchAvatarIconFilter(icon, filter) {
+			all = append(all, icon)
+		}
 	}
 
-	totalPages := (total + perPage - 1) / perPage
+	sortAvatarIcons(all, sortCfg)
+
+	pageNum, perPage, offset := dbcommon.NormalizePage(page.Number, page.PerPage, 50, 200)
+	total := len(all)
+
+	if total == 0 {
+		return avicon.PageResult[avicon.AvatarIcon]{
+			Items:      []avicon.AvatarIcon{},
+			TotalCount: 0,
+			TotalPages: 0,
+			Page:       pageNum,
+			PerPage:    perPage,
+		}, nil
+	}
+
+	if offset > total {
+		offset = total
+	}
+	end := offset + perPage
+	if end > total {
+		end = total
+	}
+
+	items := all[offset:end]
+	totalPages := dbcommon.ComputeTotalPages(total, perPage)
+
 	return avicon.PageResult[avicon.AvatarIcon]{
 		Items:      items,
 		TotalCount: total,
 		TotalPages: totalPages,
-		Page:       number,
+		Page:       pageNum,
 		PerPage:    perPage,
 	}, nil
 }
 
-// ListByCursor returns cursor-based page. Order by id ASC, use id > after.
-func (r *AvatarIconRepositoryPG) ListByCursor(ctx context.Context, filter avicon.Filter, _ avicon.Sort, cpage avicon.CursorPage) (avicon.CursorPageResult[avicon.AvatarIcon], error) {
-	where, args := buildAvatarIconWhere(filter)
-	if after := strings.TrimSpace(cpage.After); after != "" {
-		where = append(where, fmt.Sprintf("id > $%d", len(args)+1))
-		args = append(args, after)
+// ==============================
+// ListByCursor (cursor-based)
+// ==============================
+
+func (r *AvatarIconRepositoryGCS) ListByCursor(
+	ctx context.Context,
+	filter avicon.Filter,
+	_ avicon.Sort, // for now we fix ordering by ID ASC (object name)
+	cpage avicon.CursorPage,
+) (avicon.CursorPageResult[avicon.AvatarIcon], error) {
+	if r.Client == nil {
+		return avicon.CursorPageResult[avicon.AvatarIcon]{}, errors.New("AvatarIconRepositoryGCS: nil storage client")
 	}
-	whereSQL := ""
-	if len(where) > 0 {
-		whereSQL = "WHERE " + strings.Join(where, " AND ")
+	bucketName, err := r.effectiveBucket()
+	if err != nil {
+		return avicon.CursorPageResult[avicon.AvatarIcon]{}, err
 	}
+
+	q := &storage.Query{}
+	if filter.AvatarID != nil {
+		if v := strings.TrimSpace(*filter.AvatarID); v != "" {
+			q.Prefix = v + "/"
+		}
+	}
+
+	it := r.Client.Bucket(bucketName).Objects(ctx, q)
+
+	var all []avicon.AvatarIcon
+	for {
+		attrs, err := it.Next()
+		if err == iterator.Done {
+			break
+		}
+		if err != nil {
+			return avicon.CursorPageResult[avicon.AvatarIcon]{}, err
+		}
+		icon := buildAvatarIconFromAttrs(bucketName, attrs)
+		if matchAvatarIconFilter(icon, filter) {
+			all = append(all, icon)
+		}
+	}
+
+	// 並び順は ID (object 名) 昇順
+	sort.SliceStable(all, func(i, j int) bool {
+		return all[i].ID < all[j].ID
+	})
 
 	limit := cpage.Limit
 	if limit <= 0 || limit > 200 {
 		limit = 50
 	}
 
-	q := fmt.Sprintf(`
-SELECT
-  id, avatar_id, url, file_name, size
-FROM avatar_icons
-%s
-ORDER BY id ASC
-LIMIT $%d
-`, whereSQL, len(args)+1)
-
-	args = append(args, limit+1) // +1 to detect next page
-
-	rows, err := r.DB.QueryContext(ctx, q, args...)
-	if err != nil {
-		return avicon.CursorPageResult[avicon.AvatarIcon]{}, err
-	}
-	defer rows.Close()
-
-	var items []avicon.AvatarIcon
-	var lastID string
-	for rows.Next() {
-		a, err := scanAvatarIcon(rows)
-		if err != nil {
-			return avicon.CursorPageResult[avicon.AvatarIcon]{}, err
+	after := strings.TrimSpace(cpage.After)
+	start := 0
+	if after != "" {
+		for i, v := range all {
+			if v.ID > after {
+				start = i
+				break
+			}
 		}
-		items = append(items, a)
-		lastID = a.ID
 	}
-	if err := rows.Err(); err != nil {
-		return avicon.CursorPageResult[avicon.AvatarIcon]{}, err
+
+	if start > len(all) {
+		start = len(all)
 	}
+
+	end := start + limit
+	if end > len(all) {
+		end = len(all)
+	}
+
+	items := all[start:end]
 
 	var next *string
-	if len(items) > limit {
-		items = items[:limit]
+	if end < len(all) && len(items) > 0 {
+		lastID := items[len(items)-1].ID
 		next = &lastID
 	}
 
@@ -150,325 +215,401 @@ LIMIT $%d
 	}, nil
 }
 
-// GetByID fetches a single avatar icon by id.
-func (r *AvatarIconRepositoryPG) GetByID(ctx context.Context, id string) (avicon.AvatarIcon, error) {
-	const q = `
-SELECT
-  id, avatar_id, url, file_name, size
-FROM avatar_icons
-WHERE id = $1
-`
-	row := r.DB.QueryRowContext(ctx, q, id)
-	a, err := scanAvatarIcon(row)
+// ==============================
+// Getters
+// ==============================
+
+// GetByID fetches a single avatar icon by its ID (object name).
+func (r *AvatarIconRepositoryGCS) GetByID(ctx context.Context, id string) (avicon.AvatarIcon, error) {
+	if r.Client == nil {
+		return avicon.AvatarIcon{}, errors.New("AvatarIconRepositoryGCS: nil storage client")
+	}
+	bucketName, err := r.effectiveBucket()
 	if err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
+		return avicon.AvatarIcon{}, err
+	}
+
+	id = strings.TrimSpace(id)
+	if id == "" {
+		return avicon.AvatarIcon{}, avicon.ErrNotFound
+	}
+
+	attrs, err := r.Client.Bucket(bucketName).Object(id).Attrs(ctx)
+	if err != nil {
+		if errors.Is(err, storage.ErrObjectNotExist) {
 			return avicon.AvatarIcon{}, avicon.ErrNotFound
 		}
 		return avicon.AvatarIcon{}, err
 	}
-	return a, nil
+
+	return buildAvatarIconFromAttrs(bucketName, attrs), nil
 }
 
-// GetByAvatarID fetches all icons linked to an avatar.
-func (r *AvatarIconRepositoryPG) GetByAvatarID(ctx context.Context, avatarID string) ([]avicon.AvatarIcon, error) {
-	const q = `
-SELECT
-  id, avatar_id, url, file_name, size
-FROM avatar_icons
-WHERE avatar_id = $1
-ORDER BY id DESC
-`
-	rows, err := r.DB.QueryContext(ctx, q, avatarID)
+// GetByAvatarID lists icons under "<avatarID>/" prefix.
+func (r *AvatarIconRepositoryGCS) GetByAvatarID(ctx context.Context, avatarID string) ([]avicon.AvatarIcon, error) {
+	if r.Client == nil {
+		return nil, errors.New("AvatarIconRepositoryGCS: nil storage client")
+	}
+	bucketName, err := r.effectiveBucket()
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
+
+	avatarID = strings.TrimSpace(avatarID)
+	if avatarID == "" {
+		return []avicon.AvatarIcon{}, nil
+	}
+
+	q := &storage.Query{Prefix: avatarID + "/"}
+	it := r.Client.Bucket(bucketName).Objects(ctx, q)
 
 	var items []avicon.AvatarIcon
-	for rows.Next() {
-		a, err := scanAvatarIcon(rows)
+	for {
+		attrs, err := it.Next()
+		if err == iterator.Done {
+			break
+		}
 		if err != nil {
 			return nil, err
 		}
-		items = append(items, a)
+		icon := buildAvatarIconFromAttrs(bucketName, attrs)
+		if icon.AvatarID != nil && *icon.AvatarID == avatarID {
+			items = append(items, icon)
+		}
 	}
-	return items, rows.Err()
+	return items, nil
 }
 
-// Create inserts a new avatar icon. Returns ErrConflict on unique violation.
-func (r *AvatarIconRepositoryPG) Create(ctx context.Context, a avicon.AvatarIcon) (avicon.AvatarIcon, error) {
-	const q = `
-INSERT INTO avatar_icons (
-  id, avatar_id, url, file_name, size
-) VALUES (
-  $1, $2, $3, $4, $5
-)
-RETURNING
-  id, avatar_id, url, file_name, size
-`
-	var (
-		avatarID any = toDBText(a.AvatarID)
-		fileName any = toDBText(a.FileName)
-		sizeVal  any = toDBInt64(a.Size)
-	)
+// ==============================
+// Mutations
+// ==============================
 
-	row := r.DB.QueryRowContext(ctx, q,
-		strings.TrimSpace(a.ID), avatarID, strings.TrimSpace(a.URL), fileName, sizeVal,
-	)
-	out, err := scanAvatarIcon(row)
+// Create "registers" an avatar icon based on an existing GCS object.
+//
+// 実ファイルのアップロードは別途行われている前提で、ここでは指定情報から
+// 対応するオブジェクトが存在するか確認し、存在すれば AvatarIcon を返します。
+func (r *AvatarIconRepositoryGCS) Create(ctx context.Context, a avicon.AvatarIcon) (avicon.AvatarIcon, error) {
+	if r.Client == nil {
+		return avicon.AvatarIcon{}, errors.New("AvatarIconRepositoryGCS: nil storage client")
+	}
+	bucketName, err := r.effectiveBucket()
 	if err != nil {
-		if dbcommon.IsUniqueViolation(err) {
-			return avicon.AvatarIcon{}, avicon.ErrConflict
-		}
 		return avicon.AvatarIcon{}, err
 	}
-	return out, nil
-}
 
-// Update applies a partial update by id.
-func (r *AvatarIconRepositoryPG) Update(ctx context.Context, id string, patch avicon.AvatarIconPatch) (avicon.AvatarIcon, error) {
-	sets := []string{}
-	args := []any{}
-	i := 1
-
-	if patch.AvatarID != nil {
-		sets = append(sets, fmt.Sprintf("avatar_id = $%d", i))
-		args = append(args, toDBText(patch.AvatarID))
-		i++
-	}
-	if patch.URL != nil {
-		sets = append(sets, fmt.Sprintf("url = $%d", i))
-		args = append(args, strings.TrimSpace(*patch.URL))
-		i++
-	}
-	if patch.FileName != nil {
-		sets = append(sets, fmt.Sprintf("file_name = $%d", i))
-		args = append(args, toDBText(patch.FileName))
-		i++
-	}
-	if patch.Size != nil {
-		sets = append(sets, fmt.Sprintf("size = $%d", i))
-		args = append(args, toDBInt64(patch.Size))
-		i++
-	}
-
-	if len(sets) == 0 {
-		return r.GetByID(ctx, id)
-	}
-
-	args = append(args, id)
-	q := fmt.Sprintf(`
-UPDATE avatar_icons
-SET %s
-WHERE id = $%d
-RETURNING
-  id, avatar_id, url, file_name, size
-`, strings.Join(sets, ", "), i)
-
-	row := r.DB.QueryRowContext(ctx, q, args...)
-	out, err := scanAvatarIcon(row)
+	path, err := r.objectPathFromAvatarIcon(a)
 	if err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
+		return avicon.AvatarIcon{}, err
+	}
+
+	attrs, err := r.Client.Bucket(bucketName).Object(path).Attrs(ctx)
+	if err != nil {
+		if errors.Is(err, storage.ErrObjectNotExist) {
 			return avicon.AvatarIcon{}, avicon.ErrNotFound
 		}
 		return avicon.AvatarIcon{}, err
 	}
-	return out, nil
+
+	return buildAvatarIconFromAttrs(bucketName, attrs), nil
 }
 
-// Delete removes a record by id.
-func (r *AvatarIconRepositoryPG) Delete(ctx context.Context, id string) error {
-	res, err := r.DB.ExecContext(ctx, `DELETE FROM avatar_icons WHERE id = $1`, id)
+// Update currently does not mutate GCS objects; it just returns the latest state.
+// （アイコンメタ情報は GCS オブジェクト名/サイズから導出するのみとする簡易実装）
+func (r *AvatarIconRepositoryGCS) Update(ctx context.Context, id string, _ avicon.AvatarIconPatch) (avicon.AvatarIcon, error) {
+	return r.GetByID(ctx, id)
+}
+
+// Delete removes the underlying GCS object by id (object name).
+func (r *AvatarIconRepositoryGCS) Delete(ctx context.Context, id string) error {
+	if r.Client == nil {
+		return errors.New("AvatarIconRepositoryGCS: nil storage client")
+	}
+	bucketName, err := r.effectiveBucket()
 	if err != nil {
 		return err
 	}
-	aff, _ := res.RowsAffected()
-	if aff == 0 {
+
+	id = strings.TrimSpace(id)
+	if id == "" {
 		return avicon.ErrNotFound
+	}
+
+	err = r.Client.Bucket(bucketName).Object(id).Delete(ctx)
+	if err != nil {
+		if errors.Is(err, storage.ErrObjectNotExist) {
+			return avicon.ErrNotFound
+		}
+		return err
 	}
 	return nil
 }
 
-// Count returns count for the given filter.
-func (r *AvatarIconRepositoryPG) Count(ctx context.Context, filter avicon.Filter) (int, error) {
-	where, args := buildAvatarIconWhere(filter)
-	whereSQL := ""
-	if len(where) > 0 {
-		whereSQL = "WHERE " + strings.Join(where, " AND ")
+// Count counts icons matching the filter by scanning objects.
+func (r *AvatarIconRepositoryGCS) Count(ctx context.Context, filter avicon.Filter) (int, error) {
+	if r.Client == nil {
+		return 0, errors.New("AvatarIconRepositoryGCS: nil storage client")
 	}
-	var total int
-	if err := r.DB.QueryRowContext(ctx, `SELECT COUNT(*) FROM avatar_icons `+whereSQL, args...).Scan(&total); err != nil {
+	bucketName, err := r.effectiveBucket()
+	if err != nil {
 		return 0, err
 	}
-	return total, nil
+
+	q := &storage.Query{}
+	if filter.AvatarID != nil {
+		if v := strings.TrimSpace(*filter.AvatarID); v != "" {
+			q.Prefix = v + "/"
+		}
+	}
+
+	it := r.Client.Bucket(bucketName).Objects(ctx, q)
+
+	count := 0
+	for {
+		attrs, err := it.Next()
+		if err == iterator.Done {
+			break
+		}
+		if err != nil {
+			return 0, err
+		}
+		icon := buildAvatarIconFromAttrs(bucketName, attrs)
+		if matchAvatarIconFilter(icon, filter) {
+			count++
+		}
+	}
+	return count, nil
 }
 
-// Save performs upsert on id. (opts is currently unused)
-func (r *AvatarIconRepositoryPG) Save(
+// Save behaves as an upsert-like "refresh" based on existing GCS object.
+// opts は現状未使用。
+func (r *AvatarIconRepositoryGCS) Save(
 	ctx context.Context,
 	a avicon.AvatarIcon,
-	opts *avicon.SaveOptions,
+	_ *avicon.SaveOptions,
 ) (avicon.AvatarIcon, error) {
-
-	_ = opts // unused for now
-
-	const q = `
-INSERT INTO avatar_icons (
-  id, avatar_id, url, file_name, size
-) VALUES (
-  $1,$2,$3,$4,$5
-)
-ON CONFLICT (id) DO UPDATE SET
-  avatar_id = EXCLUDED.avatar_id,
-  url       = EXCLUDED.url,
-  file_name = EXCLUDED.file_name,
-  size      = EXCLUDED.size
-RETURNING
-  id, avatar_id, url, file_name, size
-`
-
-	var (
-		avatarID any = toDBText(a.AvatarID)
-		fileName any = toDBText(a.FileName)
-		sizeVal  any = toDBInt64(a.Size)
-	)
-
-	row := r.DB.QueryRowContext(ctx, q,
-		strings.TrimSpace(a.ID),
-		avatarID,
-		strings.TrimSpace(a.URL),
-		fileName,
-		sizeVal,
-	)
-
-	out, err := scanAvatarIcon(row)
+	if r.Client == nil {
+		return avicon.AvatarIcon{}, errors.New("AvatarIconRepositoryGCS: nil storage client")
+	}
+	bucketName, err := r.effectiveBucket()
 	if err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
+		return avicon.AvatarIcon{}, err
+	}
+
+	path, err := r.objectPathFromAvatarIcon(a)
+	if err != nil {
+		return avicon.AvatarIcon{}, err
+	}
+
+	attrs, err := r.Client.Bucket(bucketName).Object(path).Attrs(ctx)
+	if err != nil {
+		if errors.Is(err, storage.ErrObjectNotExist) {
 			return avicon.AvatarIcon{}, avicon.ErrNotFound
 		}
-		if dbcommon.IsUniqueViolation(err) {
-			return avicon.AvatarIcon{}, avicon.ErrConflict
-		}
 		return avicon.AvatarIcon{}, err
 	}
-	return out, nil
+
+	return buildAvatarIconFromAttrs(bucketName, attrs), nil
 }
 
-// ========== Helpers ==========
+// ==============================
+// Helpers
+// ==============================
 
-func scanAvatarIcon(s dbcommon.RowScanner) (avicon.AvatarIcon, error) {
-	var (
-		idNS, avatarIDNS, urlNS, fileNameNS sql.NullString
-		sizeNI64                            sql.NullInt64
-	)
-
-	if err := s.Scan(
-		&idNS, &avatarIDNS, &urlNS, &fileNameNS, &sizeNI64,
-	); err != nil {
-		return avicon.AvatarIcon{}, err
+// objectPathFromAvatarIcon 推論:
+// - a.ID が非空ならそれを object path とみなす
+// - そうでなければ AvatarID/FileName から "<avatarID>/<fileName>" を構築
+func (r *AvatarIconRepositoryGCS) objectPathFromAvatarIcon(a avicon.AvatarIcon) (string, error) {
+	if id := strings.TrimSpace(a.ID); id != "" {
+		return strings.TrimLeft(id, "/"), nil
 	}
-
-	var (
-		avatarIDPtr, fileNamePtr *string
-		sizePtr                  *int64
-	)
-
-	if avatarIDNS.Valid {
-		v := strings.TrimSpace(avatarIDNS.String)
-		if v != "" {
-			avatarIDPtr = &v
+	if a.AvatarID != nil && a.FileName != nil {
+		aid := strings.TrimSpace(*a.AvatarID)
+		fn := strings.TrimSpace(*a.FileName)
+		if aid != "" && fn != "" {
+			return fmt.Sprintf("%s/%s", aid, fn), nil
 		}
 	}
-	if fileNameNS.Valid {
-		v := strings.TrimSpace(fileNameNS.String)
-		if v != "" {
-			fileNamePtr = &v
+	return "", errors.New("avatar icon: missing id or (avatarID, fileName)")
+}
+
+// buildAvatarIconFromAttrs converts GCS ObjectAttrs into AvatarIcon.
+func buildAvatarIconFromAttrs(bucket string, attrs *storage.ObjectAttrs) avicon.AvatarIcon {
+	name := strings.TrimSpace(attrs.Name)
+
+	var avatarIDPtr *string
+	var fileNamePtr *string
+
+	if name != "" {
+		parts := strings.SplitN(name, "/", 2)
+		if len(parts) == 2 {
+			if v := strings.TrimSpace(parts[0]); v != "" {
+				vCopy := v
+				avatarIDPtr = &vCopy
+			}
+			if v := strings.TrimSpace(parts[1]); v != "" {
+				vCopy := v
+				fileNamePtr = &vCopy
+			}
+		} else {
+			// パスに / が無い場合は fileName のみとみなす
+			if v := strings.TrimSpace(name); v != "" {
+				vCopy := v
+				fileNamePtr = &vCopy
+			}
 		}
 	}
-	if sizeNI64.Valid {
-		v := sizeNI64.Int64
-		sizePtr = &v
+
+	var sizePtr *int64
+	if attrs.Size > 0 {
+		s := attrs.Size
+		sizePtr = &s
 	}
+
+	url := fmt.Sprintf("gs://%s/%s", bucket, attrs.Name)
 
 	return avicon.AvatarIcon{
-		ID:       strings.TrimSpace(idNS.String),
+		ID:       name,
 		AvatarID: avatarIDPtr,
-		URL:      strings.TrimSpace(urlNS.String),
+		URL:      url,
 		FileName: fileNamePtr,
 		Size:     sizePtr,
-	}, nil
+	}
 }
 
-func buildAvatarIconWhere(f avicon.Filter) ([]string, []any) {
-	where := []string{}
-	args := []any{}
-
+// matchAvatarIconFilter applies avicon.Filter in-memory.
+func matchAvatarIconFilter(a avicon.AvatarIcon, f avicon.Filter) bool {
+	// SearchQuery: ID / URL / FileName 部分一致
 	if sq := strings.TrimSpace(f.SearchQuery); sq != "" {
-		where = append(where, fmt.Sprintf("(id ILIKE $%d OR url ILIKE $%d OR file_name ILIKE $%d)", len(args)+1, len(args)+1, len(args)+1))
-		args = append(args, "%"+sq+"%")
-	}
-
-	if f.AvatarID != nil {
-		where = append(where, fmt.Sprintf("avatar_id = $%d", len(args)+1))
-		args = append(args, strings.TrimSpace(*f.AvatarID))
-	}
-
-	if f.HasAvatarID != nil {
-		if *f.HasAvatarID {
-			where = append(where, "avatar_id IS NOT NULL")
-		} else {
-			where = append(where, "avatar_id IS NULL")
+		lq := strings.ToLower(sq)
+		fn := ""
+		if a.FileName != nil {
+			fn = *a.FileName
+		}
+		haystack := strings.ToLower(a.ID + " " + a.URL + " " + fn)
+		if !strings.Contains(haystack, lq) {
+			return false
 		}
 	}
 
+	// AvatarID
+	if f.AvatarID != nil {
+		want := strings.TrimSpace(*f.AvatarID)
+		got := ""
+		if a.AvatarID != nil {
+			got = strings.TrimSpace(*a.AvatarID)
+		}
+		if want != "" && want != got {
+			return false
+		}
+	}
+
+	// HasAvatarID
+	if f.HasAvatarID != nil {
+		has := a.AvatarID != nil && strings.TrimSpace(*a.AvatarID) != ""
+		if *f.HasAvatarID && !has {
+			return false
+		}
+		if !*f.HasAvatarID && has {
+			return false
+		}
+	}
+
+	// Size range
 	if f.SizeMin != nil {
-		where = append(where, fmt.Sprintf("size >= $%d", len(args)+1))
-		args = append(args, *f.SizeMin)
+		if a.Size == nil || *a.Size < *f.SizeMin {
+			return false
+		}
 	}
 	if f.SizeMax != nil {
-		where = append(where, fmt.Sprintf("size <= $%d", len(args)+1))
-		args = append(args, *f.SizeMax)
+		if a.Size == nil || *a.Size > *f.SizeMax {
+			return false
+		}
 	}
 
-	return where, args
+	return true
 }
 
-func buildAvatarIconOrderBy(sort avicon.Sort) string {
-	col := strings.ToLower(string(sort.Column))
-	switch col {
-	case "id":
-		col = "id"
-	case "size":
-		col = "size"
-	case "filename", "file_name":
-		col = "file_name"
-	case "url":
-		col = "url"
-	default:
-		return ""
+// sortAvatarIcons orders icons based on avicon.Sort (id/size/file_name/url).
+func sortAvatarIcons(items []avicon.AvatarIcon, sortCfg avicon.Sort) {
+	if len(items) == 0 {
+		return
 	}
 
-	dir := strings.ToUpper(string(sort.Order))
+	col := strings.ToLower(string(sortCfg.Column))
+	dir := strings.ToUpper(string(sortCfg.Order))
 	if dir != "ASC" && dir != "DESC" {
 		dir = "ASC"
 	}
-	return fmt.Sprintf("ORDER BY %s %s", col, dir)
-}
+	asc := dir == "ASC"
 
-func toDBText(p *string) any {
-	if p == nil {
-		return nil
-	}
-	s := strings.TrimSpace(*p)
-	if s == "" {
-		return nil
-	}
-	return s
-}
+	less := func(i, j int) bool {
+		a, b := items[i], items[j]
 
-func toDBInt64(p *int64) any {
-	if p == nil {
-		return nil
+		switch col {
+		case "id":
+			if asc {
+				return a.ID < b.ID
+			}
+			return a.ID > b.ID
+
+		case "size":
+			var sa, sb int64
+			if a.Size != nil {
+				sa = *a.Size
+			}
+			if b.Size != nil {
+				sb = *b.Size
+			}
+			if sa == sb {
+				if asc {
+					return a.ID < b.ID
+				}
+				return a.ID > b.ID
+			}
+			if asc {
+				return sa < sb
+			}
+			return sa > sb
+
+		case "filename", "file_name":
+			var fa, fb string
+			if a.FileName != nil {
+				fa = *a.FileName
+			}
+			if b.FileName != nil {
+				fb = *b.FileName
+			}
+			if fa == fb {
+				if asc {
+					return a.ID < b.ID
+				}
+				return a.ID > b.ID
+			}
+			if asc {
+				return fa < fb
+			}
+			return fa > fb
+
+		case "url":
+			if a.URL == b.URL {
+				if asc {
+					return a.ID < b.ID
+				}
+				return a.ID > b.ID
+			}
+			if asc {
+				return a.URL < b.URL
+			}
+			return a.URL > b.URL
+
+		default:
+			// デフォルトは ID ASC
+			if asc {
+				return a.ID < b.ID
+			}
+			return a.ID > b.ID
+		}
 	}
-	return *p
+
+	sort.SliceStable(items, less)
 }
