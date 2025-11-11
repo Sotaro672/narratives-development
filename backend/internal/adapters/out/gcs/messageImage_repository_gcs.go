@@ -19,13 +19,13 @@ import (
 // GCS ベースの MessageImage リポジトリ。
 // - 画像本体は GCS に保存されている前提
 // - メタ情報は GCS ObjectAttrs / Metadata から構成
-// - object 名の規約: 通常は "<messageID>/<fileName>" を想定
+// - オブジェクト名の規約: 通常は "<messageID>/<fileName>" を想定
 type MessageImageRepositoryGCS struct {
 	Client *storage.Client
 	Bucket string
 }
 
-// デフォルトバケット（midom.DefaultBucket があればそれを利用）
+// デフォルトバケット（midom.DefaultBucket があればそれを優先）
 const defaultMessageImageBucket = "narratives_development_message_image"
 
 func NewMessageImageRepositoryGCS(client *storage.Client, bucket string) *MessageImageRepositoryGCS {
@@ -59,8 +59,8 @@ func (r *MessageImageRepositoryGCS) bucket() string {
 // ========================================
 
 // ListByMessageID:
-// - messageID に紐づくオブジェクトを列挙（プレフィックス/metadata から判定）
-// - 削除フラグ付き(deleted_at)は除外
+// - messageID に紐づくオブジェクトを列挙（Prefix ベース）
+// - deleted_at があるものは除外
 // - created_at ASC, file_name ASC 相当でソート
 func (r *MessageImageRepositoryGCS) ListByMessageID(ctx context.Context, messageID string) ([]midom.ImageFile, error) {
 	if r.Client == nil {
@@ -111,9 +111,9 @@ func (r *MessageImageRepositoryGCS) ListByMessageID(ctx context.Context, message
 }
 
 // Get:
-// - messageID と fileName から単一画像を取得
-// - 規約: objectPath = "<messageID>/<fileName>" を優先的に見る
-// - 合致オブジェクトがなければ ErrNotFound
+// - messageID / fileName から単一画像を取得
+// - 規約 "<messageID>/<fileName>" のオブジェクトを参照
+// - 見つからない場合は ErrNotFound
 func (r *MessageImageRepositoryGCS) Get(ctx context.Context, messageID, fileName string) (*midom.ImageFile, error) {
 	if r.Client == nil {
 		return nil, errors.New("MessageImageRepositoryGCS: nil storage client")
@@ -130,7 +130,7 @@ func (r *MessageImageRepositoryGCS) Get(ctx context.Context, messageID, fileName
 	attrs, err := r.Client.Bucket(bucket).Object(objName).Attrs(ctx)
 	if err != nil {
 		if errors.Is(err, storage.ErrObjectNotExist) {
-			// 念のため metadata ベースでの fallback 探索
+			// 念のため metadata ベースの fallback も試す
 			it := r.Client.Bucket(bucket).Objects(ctx, &storage.Query{})
 			for {
 				oa, e := it.Next()
@@ -245,19 +245,8 @@ func (r *MessageImageRepositoryGCS) Count(ctx context.Context, filter midom.Filt
 }
 
 // Add:
-// - 規約に基づき対象オブジェクトを解決し、メタ情報を更新して保存
-// - 実際のアップロードは別レイヤーで完了済みとする
+// - 実際の GCS アップロードが完了している前提で、該当オブジェクトのメタデータを更新して ImageFile を返す。
 func (r *MessageImageRepositoryGCS) Add(ctx context.Context, img midom.ImageFile) (midom.ImageFile, error) {
-	return r.Save(ctx, img, nil)
-}
-
-// Save:
-// - ImageFile から対象 GCS オブジェクトを解決し、メタデータを更新して再構築した ImageFile を返す
-func (r *MessageImageRepositoryGCS) Save(
-	ctx context.Context,
-	img midom.ImageFile,
-	_ *midom.SaveOptions,
-) (midom.ImageFile, error) {
 	if r.Client == nil {
 		return midom.ImageFile{}, errors.New("MessageImageRepositoryGCS: nil storage client")
 	}
@@ -265,7 +254,7 @@ func (r *MessageImageRepositoryGCS) Save(
 	defaultBucket := r.bucket()
 	var bucket, objectPath string
 
-	// 1) FileURL が GCS URL ならそれを優先
+	// 1) FileURL が GCS URL なら最優先
 	if u := strings.TrimSpace(img.FileURL); u != "" {
 		if b, obj, ok := gcscommon.ParseGCSURL(u); ok {
 			bucket = b
@@ -273,7 +262,7 @@ func (r *MessageImageRepositoryGCS) Save(
 		}
 	}
 
-	// 2) messageID / fileName から組み立て
+	// 2) messageID / fileName から推測
 	if bucket == "" || objectPath == "" {
 		mid := strings.TrimSpace(img.MessageID)
 		fn := strings.TrimSpace(img.FileName)
@@ -304,6 +293,7 @@ func (r *MessageImageRepositoryGCS) Save(
 		meta[k] = v
 	}
 
+	// 基本メタ設定
 	if m := strings.TrimSpace(img.MessageID); m != "" {
 		meta["message_id"] = m
 	}
@@ -354,7 +344,7 @@ func (r *MessageImageRepositoryGCS) Save(
 }
 
 // ReplaceAll:
-// - 指定 messageID の配下オブジェクトを全削除し、新たな配列を Add
+// - 該当 messageID の prefix オブジェクトを全削除し、渡された一覧を Add して差し替える
 func (r *MessageImageRepositoryGCS) ReplaceAll(ctx context.Context, messageID string, images []midom.ImageFile) ([]midom.ImageFile, error) {
 	if r.Client == nil {
 		return nil, errors.New("MessageImageRepositoryGCS: nil storage client")
@@ -364,7 +354,6 @@ func (r *MessageImageRepositoryGCS) ReplaceAll(ctx context.Context, messageID st
 		return nil, fmt.Errorf("messageImage: empty messageID")
 	}
 
-	// 既存削除
 	if err := r.DeleteAll(ctx, messageID); err != nil {
 		return nil, err
 	}
@@ -382,7 +371,7 @@ func (r *MessageImageRepositoryGCS) ReplaceAll(ctx context.Context, messageID st
 }
 
 // Update:
-// - 対象オブジェクトを特定し、patch の内容を metadata に反映
+// - "<messageID>/<fileName>" オブジェクトのメタデータを patch で更新
 func (r *MessageImageRepositoryGCS) Update(ctx context.Context, messageID, fileName string, patch midom.ImageFilePatch) (midom.ImageFile, error) {
 	if r.Client == nil {
 		return midom.ImageFile{}, errors.New("MessageImageRepositoryGCS: nil storage client")
@@ -448,6 +437,7 @@ func (r *MessageImageRepositoryGCS) Update(ctx context.Context, messageID, fileN
 		}
 	}
 
+	// DeletedAt
 	if patch.DeletedAt != nil {
 		t := patch.DeletedAt.UTC()
 		meta["deleted_at"] = t.Format(time.RFC3339Nano)
@@ -496,7 +486,7 @@ func (r *MessageImageRepositoryGCS) Delete(ctx context.Context, messageID, fileN
 }
 
 // DeleteAll:
-// - messageID/ prefix の全オブジェクト削除
+// - messageID/ prefix の全オブジェクトを削除
 func (r *MessageImageRepositoryGCS) DeleteAll(ctx context.Context, messageID string) error {
 	if r.Client == nil {
 		return errors.New("MessageImageRepositoryGCS: nil storage client")
@@ -533,7 +523,7 @@ func (r *MessageImageRepositoryGCS) DeleteAll(ctx context.Context, messageID str
 }
 
 // ========================================
-// Helpers (GCSメタ → midom.ImageFile)
+// Helpers (GCS ObjectAttrs -> midom.ImageFile)
 // ========================================
 
 func buildMessageImageFromAttrs(bucket string, attrs *storage.ObjectAttrs) midom.ImageFile {
@@ -624,7 +614,7 @@ func buildMessageImageFromAttrs(bucket string, attrs *storage.ObjectAttrs) midom
 	}
 }
 
-// Filter: GCSベース ImageFile に対して midom.Filter を適用
+// Filter: GCS ベース ImageFile に対して midom.Filter を適用
 func matchMessageImageFilter(img midom.ImageFile, f midom.Filter) bool {
 	if v := strings.TrimSpace(f.MessageID); v != "" && img.MessageID != v {
 		return false
@@ -681,7 +671,7 @@ func matchMessageImageFilter(img midom.ImageFile, f midom.Filter) bool {
 	return true
 }
 
-// ソート: buildMessageImageOrderBy 相当を in-memory で実現
+// ソート: DB版 buildMessageImageOrderBy と同等の意味を in-memory で再現
 func applyMessageImageSort(items []midom.ImageFile, sort midom.Sort) {
 	col := strings.ToLower(strings.TrimSpace(string(sort.Column)))
 	dir := strings.ToUpper(strings.TrimSpace(string(sort.Order)))
@@ -764,7 +754,7 @@ func applyMessageImageSort(items []midom.ImageFile, sort midom.Sort) {
 }
 
 // ========================================
-// MessageImageStorageGCS (削除用オブジェクトストレージアダプタ)
+// MessageImageStorageGCS (削除用アダプタ)
 // ========================================
 
 type MessageImageStorageGCS struct {
