@@ -28,7 +28,7 @@ func (r *CampaignPerformanceRepositoryFS) col() *firestore.CollectionRef {
 	return r.Client.Collection("campaign_performances")
 }
 
-// Compile-time check (if the interface exists as expected).
+// Compile-time check
 var _ cperfdom.Repository = (*CampaignPerformanceRepositoryFS)(nil)
 
 // =======================
@@ -106,7 +106,7 @@ func (r *CampaignPerformanceRepositoryFS) List(
 func (r *CampaignPerformanceRepositoryFS) ListByCursor(
 	ctx context.Context,
 	filter cperfdom.Filter,
-	_ cperfdom.Sort,
+	sort cperfdom.Sort,
 	cpage cperfdom.CursorPage,
 ) (cperfdom.CursorPageResult[cperfdom.CampaignPerformance], error) {
 
@@ -115,8 +115,9 @@ func (r *CampaignPerformanceRepositoryFS) ListByCursor(
 		limit = 50
 	}
 
-	// Emulate keyset pagination by id ASC.
+	// Keyset pagination: default order by id ASC (plus sort if needed later)
 	q := r.col().OrderBy("id", firestore.Asc)
+	q = applyCampaignPerformanceSort(q, sort)
 
 	it := q.Documents(ctx)
 	defer it.Stop()
@@ -185,36 +186,32 @@ func (r *CampaignPerformanceRepositoryFS) GetByID(ctx context.Context, id string
 	return docToCampaignPerformance(snap)
 }
 
-// ListByCampaignID is a thin adapter matching usecase expectations.
-func (r *CampaignPerformanceRepositoryFS) ListByCampaignID(
+// GetByCampaignID implements the interface method:
+// GetByCampaignID(ctx, campaignID string, sort Sort, page Page) (PageResult[CampaignPerformance], error)
+func (r *CampaignPerformanceRepositoryFS) GetByCampaignID(
 	ctx context.Context,
 	campaignID string,
-) ([]cperfdom.CampaignPerformance, error) {
+	sort cperfdom.Sort,
+	page cperfdom.Page,
+) (cperfdom.PageResult[cperfdom.CampaignPerformance], error) {
 
-	// Start with a simple query on campaignId and sort by lastUpdatedAt DESC.
-	q := r.col().
-		Where("campaignId", "==", strings.TrimSpace(campaignID)).
-		OrderBy("lastUpdatedAt", firestore.Desc)
-
-	it := q.Documents(ctx)
-	defer it.Stop()
-
-	var list []cperfdom.CampaignPerformance
-	for {
-		doc, err := it.Next()
-		if err == iterator.Done {
-			break
-		}
-		if err != nil {
-			return nil, err
-		}
-		cp, err := docToCampaignPerformance(doc)
-		if err != nil {
-			return nil, err
-		}
-		list = append(list, cp)
+	cid := strings.TrimSpace(campaignID)
+	if cid == "" {
+		// 空なら空ページを返す
+		return cperfdom.PageResult[cperfdom.CampaignPerformance]{
+			Items:      []cperfdom.CampaignPerformance{},
+			TotalCount: 0,
+			TotalPages: 0,
+			Page:       page.Number,
+			PerPage:    page.PerPage,
+		}, nil
 	}
-	return list, nil
+
+	// Filter に詰めて List を利用して挙動を統一
+	filter := cperfdom.Filter{
+		CampaignID: &cid,
+	}
+	return r.List(ctx, filter, sort, page)
 }
 
 func (r *CampaignPerformanceRepositoryFS) Exists(ctx context.Context, id string) (bool, error) {
@@ -231,7 +228,6 @@ func (r *CampaignPerformanceRepositoryFS) Exists(ctx context.Context, id string)
 func (r *CampaignPerformanceRepositoryFS) Count(ctx context.Context, filter cperfdom.Filter) (int, error) {
 	q := r.col().Query
 
-	// For simplicity and to avoid composite index complexity, we fetch and filter in memory.
 	it := q.Documents(ctx)
 	defer it.Stop()
 
@@ -469,7 +465,6 @@ func docToCampaignPerformance(doc *firestore.DocumentSnapshot) (cperfdom.Campaig
 }
 
 // matchCampaignPerformanceFilter applies the Filter conditions in-memory.
-// This mirrors buildCampaignPerformanceWhere from the PostgreSQL implementation.
 func matchCampaignPerformanceFilter(cp cperfdom.CampaignPerformance, f cperfdom.Filter) bool {
 	// CampaignID exact
 	if f.CampaignID != nil && strings.TrimSpace(*f.CampaignID) != "" {
@@ -511,7 +506,7 @@ func matchCampaignPerformanceFilter(cp cperfdom.CampaignPerformance, f cperfdom.
 		return false
 	}
 
-	// Date ranges (last_updated_at)
+	// Date ranges (lastUpdatedAt)
 	if f.LastUpdatedFrom != nil && cp.LastUpdatedAt.Before(f.LastUpdatedFrom.UTC()) {
 		return false
 	}

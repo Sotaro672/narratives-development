@@ -14,6 +14,7 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
+	fscmn "narratives/internal/adapters/out/firestore/common"
 	badom "narratives/internal/domain/billingAddress"
 )
 
@@ -30,7 +31,7 @@ func (r *BillingAddressRepositoryFS) col() *firestore.CollectionRef {
 	return r.Client.Collection("billing_addresses")
 }
 
-// Compile-time check (任意)
+// Compile-time check
 var _ badom.RepositoryPort = (*BillingAddressRepositoryFS)(nil)
 
 // ========== Public API ==========
@@ -109,7 +110,6 @@ func (r *BillingAddressRepositoryFS) List(
 	sort badom.Sort,
 	page badom.Page,
 ) (badom.PageResult, error) {
-
 	q := r.col().Query
 	q = applyBillingAddressFilterToQuery(q, filter)
 
@@ -121,7 +121,7 @@ func (r *BillingAddressRepositoryFS) List(
 	}
 	q = q.OrderBy(orderField, orderDir).OrderBy("id", firestore.Desc)
 
-	// Paging (offset ベースの簡易実装)
+	// Paging (offset ベース)
 	perPage := page.PerPage
 	if perPage <= 0 {
 		perPage = 50
@@ -161,7 +161,7 @@ func (r *BillingAddressRepositoryFS) List(
 
 	return badom.PageResult{
 		Items:      items,
-		TotalCount: len(items), // 簡易。正確な件数が必要なら別途対応。
+		TotalCount: len(items), // 簡易。正確な件数が必要なら別途集計。
 		TotalPages: number,
 		Page:       number,
 		PerPage:    perPage,
@@ -192,10 +192,9 @@ func (r *BillingAddressRepositoryFS) Count(ctx context.Context, filter badom.Fil
 // Create implements RepositoryPort.Create.
 func (r *BillingAddressRepositoryFS) Create(ctx context.Context, in badom.CreateBillingAddressInput) (*badom.BillingAddress, error) {
 	now := time.Now().UTC()
-
 	ref := r.col().NewDoc()
 
-	// 実際に保存する CreatedAt / UpdatedAt の値を決定
+	// CreatedAt
 	var createdAt time.Time
 	if in.CreatedAt != nil && !in.CreatedAt.IsZero() {
 		createdAt = in.CreatedAt.UTC()
@@ -203,6 +202,7 @@ func (r *BillingAddressRepositoryFS) Create(ctx context.Context, in badom.Create
 		createdAt = now
 	}
 
+	// UpdatedAt
 	var updatedAt time.Time
 	if in.UpdatedAt != nil && !in.UpdatedAt.IsZero() {
 		updatedAt = in.UpdatedAt.UTC()
@@ -214,17 +214,17 @@ func (r *BillingAddressRepositoryFS) Create(ctx context.Context, in badom.Create
 		ID:            ref.ID,
 		UserID:        strings.TrimSpace(in.UserID),
 		BillingType:   strings.TrimSpace(in.BillingType),
-		NameOnAccount: trimPtr(in.NameOnAccount),
-		CardBrand:     trimPtr(in.CardBrand),
-		CardLast4:     trimPtr(in.CardLast4),
+		NameOnAccount: fscmn.TrimPtr(in.NameOnAccount),
+		CardBrand:     fscmn.TrimPtr(in.CardBrand),
+		CardLast4:     fscmn.TrimPtr(in.CardLast4),
 		CardExpMonth:  in.CardExpMonth,
 		CardExpYear:   in.CardExpYear,
-		CardToken:     trimPtr(in.CardToken),
+		CardToken:     fscmn.TrimPtr(in.CardToken),
 		PostalCode:    in.PostalCode,
-		State:         trimPtr(in.State),
-		City:          trimPtr(in.City),
-		Street:        trimPtr(in.Street),
-		Country:       trimPtr(in.Country),
+		State:         fscmn.TrimPtr(in.State),
+		City:          fscmn.TrimPtr(in.City),
+		Street:        fscmn.TrimPtr(in.Street),
+		Country:       fscmn.TrimPtr(in.Country),
 		IsDefault:     in.IsDefault,
 		CreatedAt:     createdAt,
 		UpdatedAt:     updatedAt,
@@ -251,50 +251,95 @@ func (r *BillingAddressRepositoryFS) Update(ctx context.Context, id string, in b
 	var updates []firestore.Update
 
 	if in.BillingType != nil {
-		updates = append(updates, firestore.Update{Path: "billingType", Value: strings.TrimSpace(*in.BillingType)})
+		updates = append(updates, firestore.Update{
+			Path:  "billingType",
+			Value: strings.TrimSpace(*in.BillingType),
+		})
 	}
 	if in.NameOnAccount != nil {
-		updates = append(updates, firestore.Update{Path: "nameOnAccount", Value: trimPtr(in.NameOnAccount)})
+		updates = append(updates, firestore.Update{
+			Path:  "nameOnAccount",
+			Value: fscmn.TrimPtr(in.NameOnAccount),
+		})
 	}
 	if in.CardBrand != nil {
-		updates = append(updates, firestore.Update{Path: "cardBrand", Value: trimPtr(in.CardBrand)})
+		updates = append(updates, firestore.Update{
+			Path:  "cardBrand",
+			Value: fscmn.TrimPtr(in.CardBrand),
+		})
 	}
 	if in.CardLast4 != nil {
-		updates = append(updates, firestore.Update{Path: "cardLast4", Value: trimPtr(in.CardLast4)})
+		updates = append(updates, firestore.Update{
+			Path:  "cardLast4",
+			Value: fscmn.TrimPtr(in.CardLast4),
+		})
 	}
 	if in.CardExpMonth != nil {
-		updates = append(updates, firestore.Update{Path: "cardExpMonth", Value: in.CardExpMonth})
+		updates = append(updates, firestore.Update{
+			Path:  "cardExpMonth",
+			Value: in.CardExpMonth,
+		})
 	}
 	if in.CardExpYear != nil {
-		updates = append(updates, firestore.Update{Path: "cardExpYear", Value: in.CardExpYear})
+		updates = append(updates, firestore.Update{
+			Path:  "cardExpYear",
+			Value: in.CardExpYear,
+		})
 	}
 	if in.CardToken != nil {
-		updates = append(updates, firestore.Update{Path: "cardToken", Value: trimPtr(in.CardToken)})
+		updates = append(updates, firestore.Update{
+			Path:  "cardToken",
+			Value: fscmn.TrimPtr(in.CardToken),
+		})
 	}
 	if in.PostalCode != nil {
-		updates = append(updates, firestore.Update{Path: "postalCode", Value: in.PostalCode})
+		updates = append(updates, firestore.Update{
+			Path:  "postalCode",
+			Value: in.PostalCode,
+		})
 	}
 	if in.State != nil {
-		updates = append(updates, firestore.Update{Path: "state", Value: trimPtr(in.State)})
+		updates = append(updates, firestore.Update{
+			Path:  "state",
+			Value: fscmn.TrimPtr(in.State),
+		})
 	}
 	if in.City != nil {
-		updates = append(updates, firestore.Update{Path: "city", Value: trimPtr(in.City)})
+		updates = append(updates, firestore.Update{
+			Path:  "city",
+			Value: fscmn.TrimPtr(in.City),
+		})
 	}
 	if in.Street != nil {
-		updates = append(updates, firestore.Update{Path: "street", Value: trimPtr(in.Street)})
+		updates = append(updates, firestore.Update{
+			Path:  "street",
+			Value: fscmn.TrimPtr(in.Street),
+		})
 	}
 	if in.Country != nil {
-		updates = append(updates, firestore.Update{Path: "country", Value: trimPtr(in.Country)})
+		updates = append(updates, firestore.Update{
+			Path:  "country",
+			Value: fscmn.TrimPtr(in.Country),
+		})
 	}
 	if in.IsDefault != nil {
-		updates = append(updates, firestore.Update{Path: "isDefault", Value: *in.IsDefault})
+		updates = append(updates, firestore.Update{
+			Path:  "isDefault",
+			Value: *in.IsDefault,
+		})
 	}
 
 	// updatedAt
 	if in.UpdatedAt != nil && !in.UpdatedAt.IsZero() {
-		updates = append(updates, firestore.Update{Path: "updatedAt", Value: in.UpdatedAt.UTC()})
+		updates = append(updates, firestore.Update{
+			Path:  "updatedAt",
+			Value: in.UpdatedAt.UTC(),
+		})
 	} else {
-		updates = append(updates, firestore.Update{Path: "updatedAt", Value: time.Now().UTC()})
+		updates = append(updates, firestore.Update{
+			Path:  "updatedAt",
+			Value: time.Now().UTC(),
+		})
 	}
 
 	if len(updates) == 0 {
@@ -403,7 +448,7 @@ func (r *BillingAddressRepositoryFS) SetDefault(ctx context.Context, id string) 
 	})
 }
 
-// WithTx: Firestore のトランザクションを使った境界（単純実装）
+// WithTx: Firestore のトランザクション境界（シンプルラッパ）
 func (r *BillingAddressRepositoryFS) WithTx(ctx context.Context, fn func(ctx context.Context) error) error {
 	return r.Client.RunTransaction(ctx, func(txCtx context.Context, _ *firestore.Transaction) error {
 		return fn(txCtx)
@@ -471,18 +516,18 @@ func (r *BillingAddressRepositoryFS) docToDomain(doc *firestore.DocumentSnapshot
 	ba := badom.BillingAddress{
 		ID:            doc.Ref.ID,
 		UserID:        strings.TrimSpace(raw.UserID),
-		NameOnAccount: trimPtr(raw.NameOnAccount),
+		NameOnAccount: fscmn.TrimPtr(raw.NameOnAccount),
 		BillingType:   strings.TrimSpace(raw.BillingType),
-		CardBrand:     trimPtr(raw.CardBrand),
-		CardLast4:     trimPtr(raw.CardLast4),
+		CardBrand:     fscmn.TrimPtr(raw.CardBrand),
+		CardLast4:     fscmn.TrimPtr(raw.CardLast4),
 		CardExpMonth:  raw.CardExpMonth,
 		CardExpYear:   raw.CardExpYear,
-		CardToken:     trimPtr(raw.CardToken),
+		CardToken:     fscmn.TrimPtr(raw.CardToken),
 		PostalCode:    raw.PostalCode,
-		State:         trimPtr(raw.State),
-		City:          trimPtr(raw.City),
-		Street:        trimPtr(raw.Street),
-		Country:       trimPtr(raw.Country),
+		State:         fscmn.TrimPtr(raw.State),
+		City:          fscmn.TrimPtr(raw.City),
+		Street:        fscmn.TrimPtr(raw.Street),
+		Country:       fscmn.TrimPtr(raw.Country),
 		IsDefault:     raw.IsDefault,
 		CreatedAt:     raw.CreatedAt.UTC(),
 		UpdatedAt:     raw.UpdatedAt.UTC(),
@@ -550,7 +595,7 @@ func applyBillingAddressFilterToQuery(q firestore.Query, f badom.Filter) firesto
 	if f.IsDefault != nil {
 		q = q.Where("isDefault", "==", *f.IsDefault)
 	}
-	// 他の範囲・LIKE 条件は必要に応じてアプリ側フィルタ or 別設計
+	// 他条件は必要に応じてアプリ側でフィルタ
 	return q
 }
 
@@ -578,16 +623,4 @@ func mapSort(sort badom.Sort) (field string, dir firestore.Direction) {
 		dir = firestore.Desc
 	}
 	return
-}
-
-// trimPtr: 文字列ポインタをトリムし、空なら nil にする
-func trimPtr(p *string) *string {
-	if p == nil {
-		return nil
-	}
-	s := strings.TrimSpace(*p)
-	if s == "" {
-		return nil
-	}
-	return &s
 }

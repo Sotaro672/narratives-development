@@ -12,6 +12,7 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
+	fscommon "narratives/internal/adapters/out/firestore/common"
 	ddom "narratives/internal/domain/discount"
 )
 
@@ -25,10 +26,10 @@ func NewDiscountRepositoryFS(client *gfs.Client) *DiscountRepositoryFS {
 }
 
 const (
-	discountsCol      = "discounts"
-	discountItemsSub  = "items" // subcollection under each discount doc
-	defaultPerPage    = 50
-	maxCursorPageSize = 200
+	discountsCol         = "discounts"
+	discountItemsSub     = "items" // subcollection under each discount doc
+	discountDefaultPage  = 50
+	discountMaxCursorLim = 200
 )
 
 // =======================
@@ -45,18 +46,17 @@ func (r *DiscountRepositoryFS) List(
 		return ddom.PageResult[ddom.Discount]{}, errors.New("firestore client is nil")
 	}
 
-	if page.PerPage <= 0 {
-		page.PerPage = defaultPerPage
-	}
-	if page.Number <= 0 {
-		page.Number = 1
-	}
-	offset := (page.Number - 1) * page.PerPage
+	pageNum, perPage, offset := fscommon.NormalizePage(
+		page.Number,
+		page.PerPage,
+		discountDefaultPage,
+		0, // no explicit maxPerPage limit here
+	)
 
 	q := r.Client.Collection(discountsCol).Query
 	q = applyDiscountFilterToQuery(q, filter)
 	q = applyDiscountSortToQuery(q, sort)
-	q = q.Offset(offset).Limit(page.PerPage)
+	q = q.Offset(offset).Limit(perPage)
 
 	iter := q.Documents(ctx)
 	defer iter.Stop()
@@ -88,17 +88,14 @@ func (r *DiscountRepositoryFS) List(
 		return ddom.PageResult[ddom.Discount]{}, err
 	}
 
-	totalPages := 0
-	if page.PerPage > 0 && total > 0 {
-		totalPages = (total + page.PerPage - 1) / page.PerPage
-	}
+	totalPages := fscommon.ComputeTotalPages(total, perPage)
 
 	return ddom.PageResult[ddom.Discount]{
 		Items:      items,
 		TotalCount: total,
 		TotalPages: totalPages,
-		Page:       page.Number,
-		PerPage:    page.PerPage,
+		Page:       pageNum,
+		PerPage:    perPage,
 	}, nil
 }
 
@@ -113,8 +110,11 @@ func (r *DiscountRepositoryFS) ListByCursor(
 	}
 
 	limit := cpage.Limit
-	if limit <= 0 || limit > maxCursorPageSize {
-		limit = defaultPerPage
+	if limit <= 0 {
+		limit = discountDefaultPage
+	}
+	if limit > discountMaxCursorLim {
+		limit = discountMaxCursorLim
 	}
 
 	q := r.Client.Collection(discountsCol).Query
@@ -281,7 +281,7 @@ func (r *DiscountRepositoryFS) Create(ctx context.Context, in ddom.Discount) (dd
 		in.UpdatedAt = now
 	}
 
-	ref := r.Client.Collection(discountsCol).Doc(in.ID)
+	ref := r.Client.Collection(discountsCol).Doc(strings.TrimSpace(in.ID))
 
 	// conflict check
 	_, err := ref.Get(ctx)
@@ -339,7 +339,8 @@ func (r *DiscountRepositoryFS) Update(ctx context.Context, id string, patch ddom
 			cur.ListID = strings.TrimSpace(*patch.ListID)
 		}
 		if patch.Description != nil {
-			if patch.Description == nil {
+			// allow nil/blank -> unset
+			if *patch.Description == "" {
 				cur.Description = nil
 			} else {
 				desc := strings.TrimSpace(*patch.Description)
@@ -453,7 +454,7 @@ func (r *DiscountRepositoryFS) Save(ctx context.Context, d ddom.Discount) (ddom.
 		d.UpdatedAt = now
 	}
 
-	ref := r.Client.Collection(discountsCol).Doc(d.ID)
+	ref := r.Client.Collection(discountsCol).Doc(strings.TrimSpace(d.ID))
 
 	err := r.Client.RunTransaction(ctx, func(ctx context.Context, tx *gfs.Transaction) error {
 		if err := tx.Set(ref, encodeDiscountDoc(d), gfs.MergeAll); err != nil {
@@ -490,13 +491,7 @@ func decodeDiscountDoc(doc *gfs.DocumentSnapshot) (ddom.Discount, error) {
 	discBy := strings.TrimSpace(raw.DiscountedBy)
 	updBy := strings.TrimSpace(raw.UpdatedBy)
 
-	var descPtr *string
-	if raw.Description != nil {
-		v := strings.TrimSpace(*raw.Description)
-		if v != "" {
-			descPtr = &v
-		}
-	}
+	descPtr := fscommon.TrimPtr(raw.Description)
 
 	return ddom.Discount{
 		ID:           id,
@@ -519,9 +514,8 @@ func encodeDiscountDoc(d ddom.Discount) map[string]any {
 		"updated_at":    d.UpdatedAt.UTC(),
 	}
 	if d.Description != nil {
-		desc := strings.TrimSpace(*d.Description)
-		if desc != "" {
-			m["description"] = desc
+		if v := strings.TrimSpace(*d.Description); v != "" {
+			m["description"] = v
 		} else {
 			m["description"] = gfs.Delete
 		}

@@ -12,6 +12,7 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
+	fscommon "narratives/internal/adapters/out/firestore/common"
 	camdom "narratives/internal/domain/campaign"
 )
 
@@ -196,7 +197,6 @@ func (r *CampaignRepositoryFS) Exists(ctx context.Context, id string) (bool, err
 
 func (r *CampaignRepositoryFS) Count(ctx context.Context, filter camdom.Filter) (int, error) {
 	q := r.col().Query
-	// Sort 不要なので applyCampaignSort は呼ばない
 	it := q.Documents(ctx)
 	defer it.Stop()
 
@@ -237,8 +237,7 @@ func (r *CampaignRepositoryFS) Create(ctx context.Context, c camdom.Campaign) (c
 	if c.CreatedAt.IsZero() {
 		c.CreatedAt = now
 	}
-	// UpdatedAt は nil または指定値を尊重。未指定なら CreatedAt と同じでもよいが、
-	// ここでは nil のままにしておき、必要なら上位で設定してもらう。
+
 	data := campaignToDocData(c)
 	data["id"] = c.ID
 
@@ -369,7 +368,7 @@ func (r *CampaignRepositoryFS) Delete(ctx context.Context, id string) error {
 	_, err := r.col().Doc(id).Delete(ctx)
 	if err != nil {
 		if status.Code(err) == codes.NotFound {
-			return camdom.Campaign.ErrNotFound
+			return camdom.ErrNotFound
 		}
 		return err
 	}
@@ -432,17 +431,17 @@ func campaignToDocData(c camdom.Campaign) map[string]any {
 		"createdAt":      c.CreatedAt.UTC(),
 	}
 
-	if v := strings.TrimSpace(ptrOrEmpty(c.PerformanceID)); v != "" {
-		m["performanceId"] = v
+	if v := fscommon.TrimPtr(c.PerformanceID); v != nil {
+		m["performanceId"] = *v
 	}
-	if v := strings.TrimSpace(ptrOrEmpty(c.ImageID)); v != "" {
-		m["imageId"] = v
+	if v := fscommon.TrimPtr(c.ImageID); v != nil {
+		m["imageId"] = *v
 	}
-	if v := strings.TrimSpace(ptrOrEmpty(c.CreatedBy)); v != "" {
-		m["createdBy"] = v
+	if v := fscommon.TrimPtr(c.CreatedBy); v != nil {
+		m["createdBy"] = *v
 	}
-	if v := strings.TrimSpace(ptrOrEmpty(c.UpdatedBy)); v != "" {
-		m["updatedBy"] = v
+	if v := fscommon.TrimPtr(c.UpdatedBy); v != nil {
+		m["updatedBy"] = *v
 	}
 	if c.UpdatedAt != nil && !c.UpdatedAt.IsZero() {
 		m["updatedAt"] = c.UpdatedAt.UTC()
@@ -450,8 +449,8 @@ func campaignToDocData(c camdom.Campaign) map[string]any {
 	if c.DeletedAt != nil && !c.DeletedAt.IsZero() {
 		m["deletedAt"] = c.DeletedAt.UTC()
 	}
-	if v := strings.TrimSpace(ptrOrEmpty(c.DeletedBy)); v != "" {
-		m["deletedBy"] = v
+	if v := fscommon.TrimPtr(c.DeletedBy); v != nil {
+		m["deletedBy"] = *v
 	}
 
 	return m
@@ -625,7 +624,14 @@ func matchCampaignFilter(c camdom.Campaign, f camdom.Filter) bool {
 		}
 	}
 	if len(f.BrandIDs) > 0 {
-		if !containsString(f.BrandIDs, c.BrandID) {
+		matched := false
+		for _, id := range f.BrandIDs {
+			if strings.TrimSpace(id) == strings.TrimSpace(c.BrandID) {
+				matched = true
+				break
+			}
+		}
+		if !matched {
 			return false
 		}
 	}
@@ -637,7 +643,14 @@ func matchCampaignFilter(c camdom.Campaign, f camdom.Filter) bool {
 		}
 	}
 	if len(f.AssigneeIDs) > 0 {
-		if !containsString(f.AssigneeIDs, c.AssigneeID) {
+		matched := false
+		for _, id := range f.AssigneeIDs {
+			if strings.TrimSpace(id) == strings.TrimSpace(c.AssigneeID) {
+				matched = true
+				break
+			}
+		}
+		if !matched {
 			return false
 		}
 	}
@@ -649,7 +662,14 @@ func matchCampaignFilter(c camdom.Campaign, f camdom.Filter) bool {
 		}
 	}
 	if len(f.ListIDs) > 0 {
-		if !containsString(f.ListIDs, c.ListID) {
+		matched := false
+		for _, id := range f.ListIDs {
+			if strings.TrimSpace(id) == strings.TrimSpace(c.ListID) {
+				matched = true
+				break
+			}
+		}
+		if !matched {
 			return false
 		}
 	}
@@ -715,11 +735,15 @@ func matchCampaignFilter(c camdom.Campaign, f camdom.Filter) bool {
 	if f.CreatedTo != nil && !c.CreatedAt.Before(f.CreatedTo.UTC()) {
 		return false
 	}
-	if f.UpdatedFrom != nil && (c.UpdatedAt == nil || c.UpdatedAt.Before(f.UpdatedFrom.UTC())) {
-		return false
+	if f.UpdatedFrom != nil {
+		if c.UpdatedAt == nil || c.UpdatedAt.Before(f.UpdatedFrom.UTC()) {
+			return false
+		}
 	}
-	if f.UpdatedTo != nil && (c.UpdatedAt == nil || !c.UpdatedAt.Before(f.UpdatedTo.UTC())) {
-		return false
+	if f.UpdatedTo != nil {
+		if c.UpdatedAt == nil || !c.UpdatedAt.Before(f.UpdatedTo.UTC()) {
+			return false
+		}
 	}
 	if f.DeletedFrom != nil {
 		if c.DeletedAt == nil || c.DeletedAt.Before(f.DeletedFrom.UTC()) {
@@ -762,23 +786,4 @@ func matchCampaignFilter(c camdom.Campaign, f camdom.Filter) bool {
 	}
 
 	return true
-}
-
-// ========== Small Utilities ==========
-
-func ptrOrEmpty(p *string) string {
-	if p == nil {
-		return ""
-	}
-	return *p
-}
-
-func containsString(list []string, v string) bool {
-	v = strings.TrimSpace(v)
-	for _, s := range list {
-		if strings.TrimSpace(s) == v {
-			return true
-		}
-	}
-	return false
 }
