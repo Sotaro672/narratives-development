@@ -16,7 +16,7 @@ import (
 	avatarstate "narratives/internal/domain/avatarState"
 )
 
-// AvatarStateRepositoryFS is the Firestore implementation of avatarstate.Repository.
+// Firestore implementation of avatarState.Repository
 type AvatarStateRepositoryFS struct {
 	Client *firestore.Client
 }
@@ -25,16 +25,14 @@ func NewAvatarStateRepositoryFS(client *firestore.Client) *AvatarStateRepository
 	return &AvatarStateRepositoryFS{Client: client}
 }
 
-// collection name
 func (r *AvatarStateRepositoryFS) col() *firestore.CollectionRef {
 	return r.Client.Collection("avatar_states")
 }
 
-// ========== Queries ==========
+// ==============================
+// List (Filter + Sort + Paging)
+// ==============================
 
-// List:
-// Firestore では複雑な WHERE / LIKE / 複数範囲指定が制限されるため、
-// ここでは代表的な条件のみクエリに反映し、それ以外は簡易運用または将来対応とします。
 func (r *AvatarStateRepositoryFS) List(
 	ctx context.Context,
 	filter avatarstate.Filter,
@@ -44,12 +42,9 @@ func (r *AvatarStateRepositoryFS) List(
 
 	q := r.col().Query
 
-	// --- Filter: AvatarID (完全一致) ---
 	if filter.AvatarID != nil && strings.TrimSpace(*filter.AvatarID) != "" {
 		q = q.Where("avatarId", "==", strings.TrimSpace(*filter.AvatarID))
 	}
-
-	// --- Filter: AvatarIDs (IN) ---
 	if len(filter.AvatarIDs) > 0 {
 		ids := make([]string, 0, len(filter.AvatarIDs))
 		for _, v := range filter.AvatarIDs {
@@ -57,49 +52,38 @@ func (r *AvatarStateRepositoryFS) List(
 				ids = append(ids, s)
 			}
 		}
-		// Firestore IN は最大 10 要素制限あり。超える場合は呼び出し側で分割すべき。
 		if len(ids) > 0 && len(ids) <= 10 {
 			q = q.Where("avatarId", "in", ids)
 		}
 	}
 
-	// NOTE:
-	// SearchQuery や follower/post の範囲などは、
-	// 要件次第で「全件取得後にアプリ側で絞り込み」を検討。
-	// ここではシンプルに未対応（将来拡張）とする。
-
-	// --- Sort ---
+	// Sort
 	orderField := "lastActiveAt"
 	switch strings.ToLower(string(sort.Column)) {
-	case "id":
-		orderField = "id"
-	case "avatarid", "avatar_id":
+	case "avatarid":
 		orderField = "avatarId"
-	case "followercount", "follower_count":
+	case "followercount":
 		orderField = "followerCount"
-	case "followingcount", "following_count":
+	case "followingcount":
 		orderField = "followingCount"
-	case "postcount", "post_count":
+	case "postcount":
 		orderField = "postCount"
-	case "updatedat", "updated_at":
+	case "updatedat":
 		orderField = "updatedAt"
-	case "lastactiveat", "last_active_at":
+	case "lastactiveat":
 		orderField = "lastActiveAt"
 	default:
-		// デフォルト: lastActiveAt DESC
 		orderField = "lastActiveAt"
 	}
-
 	dir := strings.ToUpper(string(sort.Order))
 	desc := dir != "" && dir != "ASC"
-
 	if desc {
 		q = q.OrderBy(orderField, firestore.Desc)
 	} else {
 		q = q.OrderBy(orderField, firestore.Asc)
 	}
 
-	// --- Paging ---
+	// Paging
 	perPage := page.PerPage
 	if perPage <= 0 {
 		perPage = 50
@@ -111,8 +95,6 @@ func (r *AvatarStateRepositoryFS) List(
 	if number <= 0 {
 		number = 1
 	}
-
-	// Firestoreは offset が重いので、ここでは簡易に offset を使用
 	offset := (number - 1) * perPage
 	if offset > 0 {
 		q = q.Offset(offset)
@@ -138,17 +120,18 @@ func (r *AvatarStateRepositoryFS) List(
 		items = append(items, st)
 	}
 
-	// TotalCount は正確に数えると全スキャンになるため、
-	// 運用/要件に応じて別途集計 or 近似にすることも検討。
-	// ここでは簡易に「取得件数のみ / TotalPages=number」で返す。
 	return avatarstate.PageResult[avatarstate.AvatarState]{
 		Items:      items,
 		TotalCount: len(items),
-		TotalPages: number, // 厳密ではないがインターフェース維持用
+		TotalPages: number,
 		Page:       number,
 		PerPage:    perPage,
 	}, nil
 }
+
+// ==============================
+// ListByCursor
+// ==============================
 
 func (r *AvatarStateRepositoryFS) ListByCursor(
 	ctx context.Context,
@@ -159,12 +142,10 @@ func (r *AvatarStateRepositoryFS) ListByCursor(
 
 	q := r.col().Query
 
-	// 簡易フィルタ: AvatarID
 	if filter.AvatarID != nil && strings.TrimSpace(*filter.AvatarID) != "" {
 		q = q.Where("avatarId", "==", strings.TrimSpace(*filter.AvatarID))
 	}
 
-	// ソートは lastActiveAt DESC を基本とする
 	orderField := "lastActiveAt"
 	dir := strings.ToUpper(string(sort.Order))
 	desc := dir != "" && dir != "ASC"
@@ -178,23 +159,21 @@ func (r *AvatarStateRepositoryFS) ListByCursor(
 	if limit <= 0 || limit > 200 {
 		limit = 50
 	}
-
-	// Cursor: After を docID として扱う
 	if after := strings.TrimSpace(cpage.After); after != "" {
 		snap, err := r.col().Doc(after).Get(ctx)
 		if err == nil {
 			q = q.StartAfter(snap.Data()[orderField])
 		}
 	}
-
 	q = q.Limit(limit + 1)
 
 	iter := q.Documents(ctx)
 	defer iter.Stop()
 
-	var items []avatarstate.AvatarState
-	var lastID string
-
+	var (
+		items  []avatarstate.AvatarState
+		lastID string
+	)
 	for {
 		doc, err := iter.Next()
 		if errors.Is(err, iterator.Done) {
@@ -224,6 +203,10 @@ func (r *AvatarStateRepositoryFS) ListByCursor(
 	}, nil
 }
 
+// ==============================
+// GetByID / GetByAvatarID
+// ==============================
+
 func (r *AvatarStateRepositoryFS) GetByID(ctx context.Context, id string) (avatarstate.AvatarState, error) {
 	doc, err := r.col().Doc(id).Get(ctx)
 	if err != nil {
@@ -236,10 +219,7 @@ func (r *AvatarStateRepositoryFS) GetByID(ctx context.Context, id string) (avata
 }
 
 func (r *AvatarStateRepositoryFS) GetByAvatarID(ctx context.Context, avatarID string) (avatarstate.AvatarState, error) {
-	iter := r.col().
-		Where("avatarId", "==", avatarID).
-		Limit(1).
-		Documents(ctx)
+	iter := r.col().Where("avatarId", "==", avatarID).Limit(1).Documents(ctx)
 	defer iter.Stop()
 
 	doc, err := iter.Next()
@@ -249,9 +229,12 @@ func (r *AvatarStateRepositoryFS) GetByAvatarID(ctx context.Context, avatarID st
 	if err != nil {
 		return avatarstate.AvatarState{}, err
 	}
-
 	return r.docToDomain(doc)
 }
+
+// ==============================
+// Exists / Count
+// ==============================
 
 func (r *AvatarStateRepositoryFS) Exists(ctx context.Context, id string) (bool, error) {
 	_, err := r.col().Doc(id).Get(ctx)
@@ -265,7 +248,6 @@ func (r *AvatarStateRepositoryFS) Exists(ctx context.Context, id string) (bool, 
 }
 
 func (r *AvatarStateRepositoryFS) Count(ctx context.Context, _ avatarstate.Filter) (int, error) {
-	// NOTE: 正確な件数取得は全スキャンになるため、必要に応じて別集計を推奨。
 	iter := r.col().Documents(ctx)
 	defer iter.Stop()
 
@@ -283,7 +265,9 @@ func (r *AvatarStateRepositoryFS) Count(ctx context.Context, _ avatarstate.Filte
 	return count, nil
 }
 
-// ========== Mutations ==========
+// ==============================
+// Create / Update / Delete / Save
+// ==============================
 
 func (r *AvatarStateRepositoryFS) Create(ctx context.Context, s avatarstate.AvatarState) (avatarstate.AvatarState, error) {
 	now := time.Now().UTC()
@@ -294,23 +278,19 @@ func (r *AvatarStateRepositoryFS) Create(ctx context.Context, s avatarstate.Avat
 		s.LastActiveAt = now
 	}
 
-	var ref *firestore.DocumentRef
-	if s.ID != "" {
-		ref = r.col().Doc(s.ID)
-	} else {
+	ref := r.col().Doc(s.ID)
+	if s.ID == "" {
 		ref = r.col().NewDoc()
 		s.ID = ref.ID
 	}
 
 	_, err := ref.Create(ctx, r.domainToDocData(s))
 	if err != nil {
-		// 既存IDとの衝突など
 		if status.Code(err) == codes.AlreadyExists {
 			return avatarstate.AvatarState{}, avatarstate.ErrConflict
 		}
 		return avatarstate.AvatarState{}, err
 	}
-
 	return s, nil
 }
 
@@ -319,11 +299,7 @@ func (r *AvatarStateRepositoryFS) Update(ctx context.Context, id string, patch a
 }
 
 func (r *AvatarStateRepositoryFS) UpdateByAvatarID(ctx context.Context, avatarID string, patch avatarstate.AvatarStatePatch) (avatarstate.AvatarState, error) {
-	// avatarId で 1件取得して Update
-	iter := r.col().
-		Where("avatarId", "==", avatarID).
-		Limit(1).
-		Documents(ctx)
+	iter := r.col().Where("avatarId", "==", avatarID).Limit(1).Documents(ctx)
 	defer iter.Stop()
 
 	doc, err := iter.Next()
@@ -333,7 +309,6 @@ func (r *AvatarStateRepositoryFS) UpdateByAvatarID(ctx context.Context, avatarID
 	if err != nil {
 		return avatarstate.AvatarState{}, err
 	}
-
 	return r.updateBy(ctx, doc.Ref, patch)
 }
 
@@ -346,27 +321,44 @@ func (r *AvatarStateRepositoryFS) updateBy(
 	var updates []firestore.Update
 
 	if patch.FollowerCount != nil {
-		updates = append(updates, firestore.Update{Path: "followerCount", Value: *patch.FollowerCount})
+		updates = append(updates, firestore.Update{
+			Path:  "followerCount",
+			Value: *patch.FollowerCount,
+		})
 	}
 	if patch.FollowingCount != nil {
-		updates = append(updates, firestore.Update{Path: "followingCount", Value: *patch.FollowingCount})
+		updates = append(updates, firestore.Update{
+			Path:  "followingCount",
+			Value: *patch.FollowingCount,
+		})
 	}
 	if patch.PostCount != nil {
-		updates = append(updates, firestore.Update{Path: "postCount", Value: *patch.PostCount})
+		updates = append(updates, firestore.Update{
+			Path:  "postCount",
+			Value: *patch.PostCount,
+		})
 	}
 	if patch.LastActiveAt != nil {
-		updates = append(updates, firestore.Update{Path: "lastActiveAt", Value: patch.LastActiveAt.UTC()})
+		updates = append(updates, firestore.Update{
+			Path:  "lastActiveAt",
+			Value: patch.LastActiveAt.UTC(),
+		})
 	}
 
-	// updatedAt: 明示指定があればそれを優先、なければ現在時刻
+	now := time.Now().UTC()
 	if patch.UpdatedAt != nil {
-		updates = append(updates, firestore.Update{Path: "updatedAt", Value: patch.UpdatedAt.UTC()})
+		updates = append(updates, firestore.Update{
+			Path:  "updatedAt",
+			Value: patch.UpdatedAt.UTC(),
+		})
 	} else {
-		updates = append(updates, firestore.Update{Path: "updatedAt", Value: time.Now().UTC()})
+		updates = append(updates, firestore.Update{
+			Path:  "updatedAt",
+			Value: now,
+		})
 	}
 
 	if len(updates) == 0 {
-		// 変更指定がなければ現状値を返す
 		snap, err := ref.Get(ctx)
 		if err != nil {
 			if status.Code(err) == codes.NotFound {
@@ -377,8 +369,7 @@ func (r *AvatarStateRepositoryFS) updateBy(
 		return r.docToDomain(snap)
 	}
 
-	_, err := ref.Update(ctx, updates)
-	if err != nil {
+	if _, err := ref.Update(ctx, updates); err != nil {
 		if status.Code(err) == codes.NotFound {
 			return avatarstate.AvatarState{}, avatarstate.ErrNotFound
 		}
@@ -394,23 +385,19 @@ func (r *AvatarStateRepositoryFS) updateBy(
 
 func (r *AvatarStateRepositoryFS) Delete(ctx context.Context, id string) error {
 	ref := r.col().Doc(id)
-	_, err := ref.Get(ctx)
-	if status.Code(err) == codes.NotFound {
+	if _, err := ref.Get(ctx); status.Code(err) == codes.NotFound {
 		return avatarstate.ErrNotFound
 	}
-	_, err = ref.Delete(ctx)
+	_, err := ref.Delete(ctx)
 	return err
 }
 
 func (r *AvatarStateRepositoryFS) DeleteByAvatarID(ctx context.Context, avatarID string) error {
-	iter := r.col().
-		Where("avatarId", "==", avatarID).
-		Documents(ctx)
+	iter := r.col().Where("avatarId", "==", avatarID).Documents(ctx)
 	defer iter.Stop()
 
 	batch := r.Client.Batch()
 	var count int
-
 	for {
 		doc, err := iter.Next()
 		if errors.Is(err, iterator.Done) {
@@ -422,7 +409,6 @@ func (r *AvatarStateRepositoryFS) DeleteByAvatarID(ctx context.Context, avatarID
 		batch.Delete(doc.Ref)
 		count++
 	}
-
 	if count == 0 {
 		return avatarstate.ErrNotFound
 	}
@@ -432,9 +418,6 @@ func (r *AvatarStateRepositoryFS) DeleteByAvatarID(ctx context.Context, avatarID
 
 func (r *AvatarStateRepositoryFS) Save(ctx context.Context, s avatarstate.AvatarState, _ *avatarstate.SaveOptions) (avatarstate.AvatarState, error) {
 	now := time.Now().UTC()
-	if s.CreatedAt.IsZero() {
-		s.CreatedAt = now
-	}
 	if s.UpdatedAt == nil {
 		s.UpdatedAt = &now
 	}
@@ -455,12 +438,9 @@ func (r *AvatarStateRepositoryFS) Save(ctx context.Context, s avatarstate.Avatar
 	return s, nil
 }
 
-// Upsert: domainインターフェース互換用ヘルパ
-func (r *AvatarStateRepositoryFS) Upsert(ctx context.Context, s avatarstate.AvatarState) (avatarstate.AvatarState, error) {
-	return r.Save(ctx, s, nil)
-}
-
-// ========== Helpers ==========
+// ==============================
+// Helpers
+// ==============================
 
 func (r *AvatarStateRepositoryFS) docToDomain(doc *firestore.DocumentSnapshot) (avatarstate.AvatarState, error) {
 	var raw struct {
@@ -471,13 +451,10 @@ func (r *AvatarStateRepositoryFS) docToDomain(doc *firestore.DocumentSnapshot) (
 		LastActiveAt   time.Time  `firestore:"lastActiveAt"`
 		UpdatedAt      *time.Time `firestore:"updatedAt"`
 	}
-
 	if err := doc.DataTo(&raw); err != nil {
 		return avatarstate.AvatarState{}, err
 	}
-
-	// avatarstate.New でドメインバリデーションを通す前提
-	st, err := avatarstate.New(
+	return avatarstate.New(
 		doc.Ref.ID,
 		strings.TrimSpace(raw.AvatarID),
 		raw.FollowerCount,
@@ -486,10 +463,6 @@ func (r *AvatarStateRepositoryFS) docToDomain(doc *firestore.DocumentSnapshot) (
 		raw.LastActiveAt.UTC(),
 		raw.UpdatedAt,
 	)
-	if err != nil {
-		return avatarstate.AvatarState{}, err
-	}
-	return st, nil
 }
 
 func (r *AvatarStateRepositoryFS) domainToDocData(s avatarstate.AvatarState) map[string]any {
@@ -497,7 +470,6 @@ func (r *AvatarStateRepositoryFS) domainToDocData(s avatarstate.AvatarState) map
 		"avatarId":     s.AvatarID,
 		"lastActiveAt": s.LastActiveAt,
 	}
-
 	if s.FollowerCount != nil {
 		data["followerCount"] = *s.FollowerCount
 	}
@@ -510,16 +482,17 @@ func (r *AvatarStateRepositoryFS) domainToDocData(s avatarstate.AvatarState) map
 	if s.UpdatedAt != nil {
 		data["updatedAt"] = s.UpdatedAt.UTC()
 	}
-
 	return data
 }
 
-// Reset (development/testing): 全削除
+// ==============================
+// Reset (for testing)
+// ==============================
+
 func (r *AvatarStateRepositoryFS) Reset(ctx context.Context) error {
 	iter := r.col().Documents(ctx)
 	batch := r.Client.Batch()
 	count := 0
-
 	for {
 		doc, err := iter.Next()
 		if errors.Is(err, iterator.Done) {
@@ -537,7 +510,6 @@ func (r *AvatarStateRepositoryFS) Reset(ctx context.Context) error {
 			batch = r.Client.Batch()
 		}
 	}
-
 	if count > 0 {
 		if _, err := batch.Commit(ctx); err != nil {
 			return err

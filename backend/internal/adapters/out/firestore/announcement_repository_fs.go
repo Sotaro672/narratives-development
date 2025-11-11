@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"cloud.google.com/go/firestore"
+	"google.golang.org/api/iterator"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
@@ -13,21 +14,16 @@ import (
 	common "narratives/internal/domain/common"
 )
 
-// ========================================
 // Firestore implementation of announcement.Repository
-// ========================================
 type AnnouncementRepositoryFS struct {
 	Client *firestore.Client
 }
 
-// NewAnnouncementRepositoryFS creates a Firestore-backed repository.
 func NewAnnouncementRepositoryFS(client *firestore.Client) *AnnouncementRepositoryFS {
 	return &AnnouncementRepositoryFS{Client: client}
 }
 
-// ========================================
-// GetByID
-// ========================================
+// GetByID retrieves an announcement by ID from Firestore.
 func (r *AnnouncementRepositoryFS) GetByID(ctx context.Context, id string) (announcement.Announcement, error) {
 	doc, err := r.Client.Collection("announcements").Doc(id).Get(ctx)
 	if err != nil {
@@ -42,7 +38,6 @@ func (r *AnnouncementRepositoryFS) GetByID(ctx context.Context, id string) (anno
 		return announcement.Announcement{}, err
 	}
 
-	// FirestoreのドキュメントIDを補完
 	if a.ID == "" {
 		a.ID = doc.Ref.ID
 	}
@@ -50,9 +45,7 @@ func (r *AnnouncementRepositoryFS) GetByID(ctx context.Context, id string) (anno
 	return a, nil
 }
 
-// ========================================
-// Exists
-// ========================================
+// Exists checks if an announcement with the given ID exists.
 func (r *AnnouncementRepositoryFS) Exists(ctx context.Context, id string) (bool, error) {
 	_, err := r.Client.Collection("announcements").Doc(id).Get(ctx)
 	if err != nil {
@@ -64,9 +57,7 @@ func (r *AnnouncementRepositoryFS) Exists(ctx context.Context, id string) (bool,
 	return true, nil
 }
 
-// ========================================
-// Create
-// ========================================
+// Create inserts a new announcement.
 func (r *AnnouncementRepositoryFS) Create(ctx context.Context, a announcement.Announcement) (announcement.Announcement, error) {
 	ref := r.Client.Collection("announcements").Doc(a.ID)
 	if a.ID == "" {
@@ -85,9 +76,7 @@ func (r *AnnouncementRepositoryFS) Create(ctx context.Context, a announcement.An
 	return a, nil
 }
 
-// ========================================
-// Save (upsert)
-// ========================================
+// Save upserts an announcement.
 func (r *AnnouncementRepositoryFS) Save(ctx context.Context, a announcement.Announcement, _ *common.SaveOptions) (announcement.Announcement, error) {
 	ref := r.Client.Collection("announcements").Doc(a.ID)
 	if a.ID == "" {
@@ -109,9 +98,7 @@ func (r *AnnouncementRepositoryFS) Save(ctx context.Context, a announcement.Anno
 	return a, nil
 }
 
-// ========================================
-// Update (partial update)
-// ========================================
+// Update applies a patch to an existing announcement.
 func (r *AnnouncementRepositoryFS) Update(ctx context.Context, id string, p announcement.AnnouncementPatch) (announcement.Announcement, error) {
 	ref := r.Client.Collection("announcements").Doc(id)
 
@@ -179,9 +166,7 @@ func (r *AnnouncementRepositoryFS) Update(ctx context.Context, id string, p anno
 	return r.GetByID(ctx, id)
 }
 
-// ========================================
-// Delete
-// ========================================
+// Delete removes an announcement by ID.
 func (r *AnnouncementRepositoryFS) Delete(ctx context.Context, id string) error {
 	ref := r.Client.Collection("announcements").Doc(id)
 	_, err := ref.Get(ctx)
@@ -199,16 +184,21 @@ func (r *AnnouncementRepositoryFS) Delete(ctx context.Context, id string) error 
 	return nil
 }
 
-// ========================================
-// List (simple query)
-// ========================================
-// Firestoreではfilterの一部のみを簡易対応。
-func (r *AnnouncementRepositoryFS) List(ctx context.Context, _ announcement.Filter, _ common.Sort, _ common.Page) (common.PageResult[announcement.Announcement], error) {
-	iter := r.Client.Collection("announcements").OrderBy("createdAt", firestore.Desc).Documents(ctx)
+// List returns announcements (simple implementation; filter/sort/page are minimally used).
+func (r *AnnouncementRepositoryFS) List(
+	ctx context.Context,
+	_ announcement.Filter,
+	_ common.Sort,
+	_ common.Page,
+) (common.PageResult[announcement.Announcement], error) {
+	iter := r.Client.Collection("announcements").
+		OrderBy("createdAt", firestore.Desc).
+		Documents(ctx)
+
 	var items []announcement.Announcement
 	for {
 		doc, err := iter.Next()
-		if err == firestore.Done {
+		if err == iterator.Done {
 			break
 		}
 		if err != nil {
@@ -216,22 +206,28 @@ func (r *AnnouncementRepositoryFS) List(ctx context.Context, _ announcement.Filt
 		}
 		var a announcement.Announcement
 		if err := doc.DataTo(&a); err == nil {
-			a.ID = doc.Ref.ID
+			if a.ID == "" {
+				a.ID = doc.Ref.ID
+			}
 			items = append(items, a)
 		}
 	}
-	return common.PageResult[announcement.Announcement]{Items: items, TotalCount: len(items), Page: 1, PerPage: len(items)}, nil
+
+	return common.PageResult[announcement.Announcement]{
+		Items:      items,
+		TotalCount: len(items),
+		Page:       1,
+		PerPage:    len(items),
+	}, nil
 }
 
-// ========================================
-// Count
-// ========================================
+// Count returns the number of announcements (simple full scan).
 func (r *AnnouncementRepositoryFS) Count(ctx context.Context, _ announcement.Filter) (int, error) {
 	iter := r.Client.Collection("announcements").Documents(ctx)
 	count := 0
 	for {
 		_, err := iter.Next()
-		if err == firestore.Done {
+		if err == iterator.Done {
 			break
 		}
 		if err != nil {
@@ -242,15 +238,13 @@ func (r *AnnouncementRepositoryFS) Count(ctx context.Context, _ announcement.Fil
 	return count, nil
 }
 
-// ========================================
-// Search (title/content contains keyword)
-// ========================================
+// Search performs a simple contains-based search on title and content.
 func (r *AnnouncementRepositoryFS) Search(ctx context.Context, query string) ([]announcement.Announcement, error) {
 	iter := r.Client.Collection("announcements").Documents(ctx)
 	var results []announcement.Announcement
 	for {
 		doc, err := iter.Next()
-		if err == firestore.Done {
+		if err == iterator.Done {
 			break
 		}
 		if err != nil {
@@ -259,7 +253,9 @@ func (r *AnnouncementRepositoryFS) Search(ctx context.Context, query string) ([]
 		var a announcement.Announcement
 		if err := doc.DataTo(&a); err == nil {
 			if contains(a.Title, query) || contains(a.Content, query) {
-				a.ID = doc.Ref.ID
+				if a.ID == "" {
+					a.ID = doc.Ref.ID
+				}
 				results = append(results, a)
 			}
 		}
@@ -267,36 +263,44 @@ func (r *AnnouncementRepositoryFS) Search(ctx context.Context, query string) ([]
 	return results, nil
 }
 
-// ========================================
-// Utility: contains
-// ========================================
+// Utility: case-insensitive substring check.
 func contains(s, sub string) bool {
 	if s == "" || sub == "" {
 		return false
 	}
-	return len(s) >= len(sub) && (stringContainsInsensitive(s, sub))
+	return len(s) >= len(sub) && stringContainsInsensitive(s, sub)
 }
 
 func stringContainsInsensitive(s, sub string) bool {
-	sLower := []rune{}
-	subLower := []rune{}
+	sLower := toLowerASCII(s)
+	subLower := toLowerASCII(sub)
+	return stringContains(sLower, subLower)
+}
+
+func toLowerASCII(s string) string {
+	out := make([]rune, 0, len(s))
 	for _, r := range s {
 		if r >= 'A' && r <= 'Z' {
-			sLower = append(sLower, r+'a'-'A')
+			out = append(out, r+'a'-'A')
 		} else {
-			sLower = append(sLower, r)
+			out = append(out, r)
 		}
 	}
-	for _, r := range sub {
-		if r >= 'A' && r <= 'Z' {
-			subLower = append(subLower, r+'a'-'A')
-		} else {
-			subLower = append(subLower, r)
-		}
-	}
-	return string(sLower) == string(subLower) || (len(sLower) > len(subLower) && stringContains(string(sLower[1:]), string(subLower)))
+	return string(out)
 }
 
 func stringContains(s, sub string) bool {
-	return len(s) >= len(sub) && (len(sub) == 0 || (len(s) > 0 && (s[:len(sub)] == sub || stringContains(s[1:], sub))))
+	ls, lsub := len(s), len(sub)
+	if lsub == 0 {
+		return true
+	}
+	if lsub > ls {
+		return false
+	}
+	for i := 0; i <= ls-lsub; i++ {
+		if s[i:i+lsub] == sub {
+			return true
+		}
+	}
+	return false
 }

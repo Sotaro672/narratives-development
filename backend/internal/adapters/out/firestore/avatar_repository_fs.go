@@ -14,9 +14,10 @@ import (
 	"google.golang.org/grpc/status"
 
 	avdom "narratives/internal/domain/avatar"
+	common "narratives/internal/domain/common"
 )
 
-// Firestore implementation of avatar.Repository (avatar domain).
+// Firestore implementation of avatar.Repository.
 type AvatarRepositoryFS struct {
 	Client *firestore.Client
 }
@@ -29,22 +30,13 @@ func (r *AvatarRepositoryFS) col() *firestore.CollectionRef {
 	return r.Client.Collection("avatars")
 }
 
-// Ensure interface compatibility at compile time (if defined).
-var _ interface {
-	List(ctx context.Context, filter avdom.Filter, sort avdom.Sort, page avdom.Page) (avdom.PageResult, error)
-	ListByCursor(ctx context.Context, filter avdom.Filter, sort avdom.Sort, cpage avdom.CursorPage) (avdom.CursorPageResult, error)
-	GetByID(ctx context.Context, id string) (avdom.Avatar, error)
-	GetByWalletAddress(ctx context.Context, wallet string) (avdom.Avatar, error)
-	Exists(ctx context.Context, id string) (bool, error)
-	Count(ctx context.Context, filter avdom.Filter) (int, error)
-	Create(ctx context.Context, a avdom.Avatar) (avdom.Avatar, error)
-	Update(ctx context.Context, id string, patch avdom.AvatarPatch) (avdom.Avatar, error)
-	Delete(ctx context.Context, id string) error
-	Save(ctx context.Context, a avdom.Avatar, opts *avdom.SaveOptions) (avdom.Avatar, error)
-	Search(ctx context.Context, query string) ([]avdom.Avatar, error)
-	ListTopByFollowers(ctx context.Context, limit int) ([]avdom.Avatar, error)
-	Reset(ctx context.Context) error
-} = (*AvatarRepositoryFS)(nil)
+// Compile-time check: ensure AvatarRepositoryFS satisfies avatar.Repository.
+var _ avdom.Repository = (*AvatarRepositoryFS)(nil)
+
+var (
+	errNotFound = errors.New("avatar: not found")
+	errConflict = errors.New("avatar: conflict")
+)
 
 // ==============================
 // List (filter + sort + pagination)
@@ -53,17 +45,15 @@ var _ interface {
 func (r *AvatarRepositoryFS) List(
 	ctx context.Context,
 	filter avdom.Filter,
-	sort avdom.Sort,
-	page avdom.Page,
-) (avdom.PageResult, error) {
-
+	sort common.Sort,
+	page common.Page,
+) (common.PageResult[avdom.Avatar], error) {
 	q := r.col().Query
 	q = applyAvatarFilterToQuery(q, filter)
 
 	field, dir := mapAvatarSort(sort)
 	q = q.OrderBy(field, dir).OrderBy("id", firestore.Asc)
 
-	// offset/limit based pagination (simple)
 	perPage := page.PerPage
 	if perPage <= 0 {
 		perPage = 50
@@ -92,22 +82,27 @@ func (r *AvatarRepositoryFS) List(
 			break
 		}
 		if err != nil {
-			return avdom.PageResult{}, err
+			return common.PageResult[avdom.Avatar]{}, err
 		}
 		a, err := r.docToDomain(doc)
 		if err != nil {
-			return avdom.PageResult{}, err
+			return common.PageResult[avdom.Avatar]{}, err
+		}
+		// SearchQuery / Deleted / CreatedFrom/To / UpdatedFrom/To は
+		// Firestore クエリで表現しきれないのでアプリ側で best-effort 絞り込み
+		if !matchFilterPostLoad(a, filter) {
+			continue
 		}
 		items = append(items, a)
 	}
 
-	// Firestore には簡単な COUNT がないので、ここでは「取得件数のみ」を TotalCount に設定
+	// NOTE: 厳密な TotalCount を取るには別クエリ or 集計が必要。
 	totalCount := len(items)
 
-	return avdom.PageResult{
+	return common.PageResult[avdom.Avatar]{
 		Items:      items,
 		TotalCount: totalCount,
-		TotalPages: number, // 厳密ではないがインターフェース互換用の値
+		TotalPages: number, // best-effort
 		Page:       number,
 		PerPage:    perPage,
 	}, nil
@@ -120,10 +115,9 @@ func (r *AvatarRepositoryFS) List(
 func (r *AvatarRepositoryFS) ListByCursor(
 	ctx context.Context,
 	filter avdom.Filter,
-	sort avdom.Sort,
-	cpage avdom.CursorPage,
-) (avdom.CursorPageResult, error) {
-
+	sort common.Sort,
+	cpage common.CursorPage,
+) (common.CursorPageResult[avdom.Avatar], error) {
 	q := r.col().Query
 	q = applyAvatarFilterToQuery(q, filter)
 
@@ -135,10 +129,8 @@ func (r *AvatarRepositoryFS) ListByCursor(
 		limit = 50
 	}
 
-	// Use id as cursor if provided
 	if after := strings.TrimSpace(cpage.After); after != "" {
-		// カーソルを id ベースにする設計の場合、ここでは id で StartAfter。
-		// 厳密にやるなら、直前ドキュメントのスナップショットを使う。
+		// 単純に id をカーソルとする実装（厳密にやる場合は Snapshot ベースにする）
 		q = q.StartAfter(after)
 	}
 
@@ -157,11 +149,14 @@ func (r *AvatarRepositoryFS) ListByCursor(
 			break
 		}
 		if err != nil {
-			return avdom.CursorPageResult{}, err
+			return common.CursorPageResult[avdom.Avatar]{}, err
 		}
 		a, err := r.docToDomain(doc)
 		if err != nil {
-			return avdom.CursorPageResult{}, err
+			return common.CursorPageResult[avdom.Avatar]{}, err
+		}
+		if !matchFilterPostLoad(a, filter) {
+			continue
 		}
 		items = append(items, a)
 		lastID = a.ID
@@ -173,7 +168,7 @@ func (r *AvatarRepositoryFS) ListByCursor(
 		next = &lastID
 	}
 
-	return avdom.CursorPageResult{
+	return common.CursorPageResult[avdom.Avatar]{
 		Items:      items,
 		NextCursor: next,
 		Limit:      limit,
@@ -187,12 +182,12 @@ func (r *AvatarRepositoryFS) ListByCursor(
 func (r *AvatarRepositoryFS) GetByID(ctx context.Context, id string) (avdom.Avatar, error) {
 	id = strings.TrimSpace(id)
 	if id == "" {
-		return avdom.Avatar{}, errors.New("avatar: empty id")
+		return avdom.Avatar{}, errNotFound
 	}
 
 	snap, err := r.col().Doc(id).Get(ctx)
 	if status.Code(err) == codes.NotFound {
-		return avdom.Avatar{}, errors.New("avatar: not found")
+		return avdom.Avatar{}, errNotFound
 	}
 	if err != nil {
 		return avdom.Avatar{}, err
@@ -207,7 +202,7 @@ func (r *AvatarRepositoryFS) GetByID(ctx context.Context, id string) (avdom.Avat
 func (r *AvatarRepositoryFS) GetByWalletAddress(ctx context.Context, wallet string) (avdom.Avatar, error) {
 	wallet = strings.TrimSpace(wallet)
 	if wallet == "" {
-		return avdom.Avatar{}, errors.New("avatar: wallet address is empty")
+		return avdom.Avatar{}, errNotFound
 	}
 
 	q := r.col().Where("walletAddress", "==", wallet).Limit(1)
@@ -216,7 +211,7 @@ func (r *AvatarRepositoryFS) GetByWalletAddress(ctx context.Context, wallet stri
 
 	doc, err := iter.Next()
 	if errors.Is(err, iterator.Done) {
-		return avdom.Avatar{}, errors.New("avatar: not found")
+		return avdom.Avatar{}, errNotFound
 	}
 	if err != nil {
 		return avdom.Avatar{}, err
@@ -256,14 +251,20 @@ func (r *AvatarRepositoryFS) Count(ctx context.Context, filter avdom.Filter) (in
 
 	count := 0
 	for {
-		_, err := iter.Next()
+		doc, err := iter.Next()
 		if errors.Is(err, iterator.Done) {
 			break
 		}
 		if err != nil {
 			return 0, err
 		}
-		count++
+		a, err := r.docToDomain(doc)
+		if err != nil {
+			return 0, err
+		}
+		if matchFilterPostLoad(a, filter) {
+			count++
+		}
 	}
 	return count, nil
 }
@@ -293,7 +294,7 @@ func (r *AvatarRepositoryFS) Create(ctx context.Context, a avdom.Avatar) (avdom.
 
 	if _, err := ref.Create(ctx, data); err != nil {
 		if status.Code(err) == codes.AlreadyExists {
-			return avdom.Avatar{}, errors.New("avatar: conflict")
+			return avdom.Avatar{}, errConflict
 		}
 		return avdom.Avatar{}, err
 	}
@@ -312,13 +313,13 @@ func (r *AvatarRepositoryFS) Create(ctx context.Context, a avdom.Avatar) (avdom.
 func (r *AvatarRepositoryFS) Update(ctx context.Context, id string, patch avdom.AvatarPatch) (avdom.Avatar, error) {
 	id = strings.TrimSpace(id)
 	if id == "" {
-		return avdom.Avatar{}, errors.New("avatar: empty id")
+		return avdom.Avatar{}, errNotFound
 	}
 	ref := r.col().Doc(id)
 
 	// Ensure exists
 	if _, err := ref.Get(ctx); status.Code(err) == codes.NotFound {
-		return avdom.Avatar{}, errors.New("avatar: not found")
+		return avdom.Avatar{}, errNotFound
 	} else if err != nil {
 		return avdom.Avatar{}, err
 	}
@@ -355,12 +356,6 @@ func (r *AvatarRepositoryFS) Update(ctx context.Context, id string, patch avdom.
 			Value: optionalString(*patch.Website),
 		})
 	}
-	if patch.UserID != nil {
-		updates = append(updates, firestore.Update{
-			Path:  "userId",
-			Value: strings.TrimSpace(*patch.UserID),
-		})
-	}
 	if patch.DeletedAt != nil {
 		if patch.DeletedAt.IsZero() {
 			updates = append(updates, firestore.Update{
@@ -375,19 +370,19 @@ func (r *AvatarRepositoryFS) Update(ctx context.Context, id string, patch avdom.
 		}
 	}
 
-	// Always bump updatedAt if something to update
 	if len(updates) == 0 {
 		// no-op: return current
 		snap, err := ref.Get(ctx)
 		if err != nil {
 			if status.Code(err) == codes.NotFound {
-				return avdom.Avatar{}, errors.New("avatar: not found")
+				return avdom.Avatar{}, errNotFound
 			}
 			return avdom.Avatar{}, err
 		}
 		return r.docToDomain(snap)
 	}
 
+	// Always bump updatedAt
 	updates = append(updates, firestore.Update{
 		Path:  "updatedAt",
 		Value: time.Now().UTC(),
@@ -395,7 +390,7 @@ func (r *AvatarRepositoryFS) Update(ctx context.Context, id string, patch avdom.
 
 	if _, err := ref.Update(ctx, updates); err != nil {
 		if status.Code(err) == codes.NotFound {
-			return avdom.Avatar{}, errors.New("avatar: not found")
+			return avdom.Avatar{}, errNotFound
 		}
 		return avdom.Avatar{}, err
 	}
@@ -414,11 +409,11 @@ func (r *AvatarRepositoryFS) Update(ctx context.Context, id string, patch avdom.
 func (r *AvatarRepositoryFS) Delete(ctx context.Context, id string) error {
 	id = strings.TrimSpace(id)
 	if id == "" {
-		return errors.New("avatar: empty id")
+		return errNotFound
 	}
 	ref := r.col().Doc(id)
 	if _, err := ref.Get(ctx); status.Code(err) == codes.NotFound {
-		return errors.New("avatar: not found")
+		return errNotFound
 	} else if err != nil {
 		return err
 	}
@@ -470,9 +465,7 @@ func (r *AvatarRepositoryFS) Search(ctx context.Context, query string) ([]avdom.
 		return []avdom.Avatar{}, nil
 	}
 
-	// Firestore で部分一致は難しいため、全件/限定件取得→アプリ側フィルタ
-	fsQuery := r.col().Limit(200)
-
+	fsQuery := r.col().Limit(500)
 	iter := fsQuery.Documents(ctx)
 	defer iter.Stop()
 
@@ -496,7 +489,19 @@ func (r *AvatarRepositoryFS) Search(ctx context.Context, query string) ([]avdom.
 		if a.WalletAddress != nil {
 			wallet = strings.ToLower(strings.TrimSpace(*a.WalletAddress))
 		}
-		if strings.Contains(name, lowerQ) || strings.Contains(wallet, lowerQ) {
+		bio := ""
+		if a.Bio != nil {
+			bio = strings.ToLower(strings.TrimSpace(*a.Bio))
+		}
+		website := ""
+		if a.Website != nil {
+			website = strings.ToLower(strings.TrimSpace(*a.Website))
+		}
+
+		if strings.Contains(name, lowerQ) ||
+			strings.Contains(wallet, lowerQ) ||
+			strings.Contains(bio, lowerQ) ||
+			strings.Contains(website, lowerQ) {
 			list = append(list, a)
 		}
 	}
@@ -504,12 +509,11 @@ func (r *AvatarRepositoryFS) Search(ctx context.Context, query string) ([]avdom.
 }
 
 // ==============================
-// ListTopByFollowers
+// ListTopByFollowers (placeholder impl)
 // ==============================
 
 func (r *AvatarRepositoryFS) ListTopByFollowers(ctx context.Context, limit int) ([]avdom.Avatar, error) {
-	// AvatarState と連携しない限り follower_count は持っていない想定なので、
-	// ここでは createdAt DESC のシンプルな代替実装とする。
+	// follower 情報が別にある前提なので、ここでは createdAt DESC を代用。
 	if limit <= 0 || limit > 200 {
 		limit = 50
 	}
@@ -656,25 +660,84 @@ func (r *AvatarRepositoryFS) domainToDocData(a avdom.Avatar) map[string]any {
 // ==============================
 
 func applyAvatarFilterToQuery(q firestore.Query, f avdom.Filter) firestore.Query {
-	// NOTE: Firestore の制約により、ここでは代表的なもののみクエリに反映。
-	// SearchQuery などの部分一致はアプリ側でフィルタする想定。
-
+	// Firestore 制約のため、代表的な条件のみをクエリに反映。
 	if f.UserID != nil && strings.TrimSpace(*f.UserID) != "" {
 		q = q.Where("userId", "==", strings.TrimSpace(*f.UserID))
 	}
-
-	// JoinedFrom/JoinedTo → createdAt range
+	if f.WalletAddress != nil && strings.TrimSpace(*f.WalletAddress) != "" {
+		q = q.Where("walletAddress", "==", strings.TrimSpace(*f.WalletAddress))
+	}
 	if f.JoinedFrom != nil {
 		q = q.Where("createdAt", ">=", f.JoinedFrom.UTC())
 	}
 	if f.JoinedTo != nil {
 		q = q.Where("createdAt", "<", f.JoinedTo.UTC())
 	}
-
+	// Deleted / SearchQuery / CreatedFrom/To / UpdatedFrom/To は post-load で対応
 	return q
 }
 
-func mapAvatarSort(s avdom.Sort) (field string, dir firestore.Direction) {
+// Firestoreで表現しなかった条件を post-load で絞り込み
+func matchFilterPostLoad(a avdom.Avatar, f avdom.Filter) bool {
+	// Deleted
+	if f.Deleted != nil {
+		if *f.Deleted {
+			if a.DeletedAt == nil {
+				return false
+			}
+		} else {
+			if a.DeletedAt != nil {
+				return false
+			}
+		}
+	}
+
+	// Created/Updated ranges
+	if f.CreatedFrom != nil && a.CreatedAt.Before(f.CreatedFrom.UTC()) {
+		return false
+	}
+	if f.CreatedTo != nil && a.CreatedAt.After(f.CreatedTo.UTC()) {
+		return false
+	}
+	if f.UpdatedFrom != nil && a.UpdatedAt.Before(f.UpdatedFrom.UTC()) {
+		return false
+	}
+	if f.UpdatedTo != nil && a.UpdatedAt.After(f.UpdatedTo.UTC()) {
+		return false
+	}
+
+	// SearchQuery: id, avatarName, bio, website, walletAddress の部分一致
+	sq := strings.TrimSpace(f.SearchQuery)
+	if sq != "" {
+		q := strings.ToLower(sq)
+		id := strings.ToLower(strings.TrimSpace(a.ID))
+		name := strings.ToLower(strings.TrimSpace(a.AvatarName))
+		wallet := ""
+		if a.WalletAddress != nil {
+			wallet = strings.ToLower(strings.TrimSpace(*a.WalletAddress))
+		}
+		bio := ""
+		if a.Bio != nil {
+			bio = strings.ToLower(strings.TrimSpace(*a.Bio))
+		}
+		website := ""
+		if a.Website != nil {
+			website = strings.ToLower(strings.TrimSpace(*a.Website))
+		}
+
+		if !strings.Contains(id, q) &&
+			!strings.Contains(name, q) &&
+			!strings.Contains(wallet, q) &&
+			!strings.Contains(bio, q) &&
+			!strings.Contains(website, q) {
+			return false
+		}
+	}
+
+	return true
+}
+
+func mapAvatarSort(s common.Sort) (field string, dir firestore.Direction) {
 	col := strings.ToLower(string(s.Column))
 	switch col {
 	case "avatarname":
