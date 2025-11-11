@@ -3,8 +3,8 @@
 import * as React from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import PageStyle from "../../../../shell/src/layout/PageStyle/PageStyle";
-import MemberDetailCard from "../components/MemberDetailCard";
-import { MOCK_MEMBERS } from "../../infrastructure/mock/member_mockdata";
+import MemberDetailCard from "../components/MemberCard";
+import { MOCK_MEMBERS } from "../../infrastructure/mockdata/member_mockdata";
 
 export default function MemberDetail() {
   const navigate = useNavigate();

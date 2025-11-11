@@ -1,25 +1,38 @@
-// frontend/shell/src/shared/types/member.ts
+// frontend/member/src/domain/entity/member.ts
 
 /**
  * MemberRole
- * backend/internal/domain/member/entity.go の MemberRole / RoleXXX と対応
+ * backend/internal/domain/member/entity.go の MemberRole / 定数群に対応。
  */
-export const MEMBER_ROLES = [
+export type MemberRole =
+  | "admin"
+  | "brand-manager"
+  | "token-manager"
+  | "inquiry-handler"
+  | "production-designer";
+
+export const MEMBER_ROLES: MemberRole[] = [
   "admin",
   "brand-manager",
   "token-manager",
   "inquiry-handler",
   "production-designer",
-] as const;
+];
 
-export type MemberRole = (typeof MEMBER_ROLES)[number];
+/** MemberRole の妥当性チェック（backend: IsValidRole と同等） */
+export function isValidMemberRole(role: string): role is MemberRole {
+  return MEMBER_ROLES.includes(role as MemberRole);
+}
+
+/** Email バリデーション（backend の emailRe 相当） */
+const emailRe = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 /**
  * Member
- * backend の Member 構造体に対応したフロントエンド用モデル
+ * backend/internal/domain/member/entity.go の Member に対応。
  *
- * - 日付は ISO8601 文字列として扱う想定
- * - フロント側では camelCase を採用
+ * - 日付は ISO8601 文字列（例: "2025-01-10T00:00:00Z"）を想定
+ * - Firestore/GraphQL とのやり取りを考慮し、undefined / null を許容
  */
 export interface Member {
   id: string;
@@ -29,37 +42,29 @@ export interface Member {
   firstNameKana?: string;
   lastNameKana?: string;
 
-  /**
-   * 空文字 or undefined の場合は「未設定」とみなす
-   */
+  /** 空文字 or undefined の場合は「未設定」扱い（backend と同様の解釈） */
   email?: string;
 
   role: MemberRole;
 
-  /**
-   * backend: Permissions []string
-   * Permission.Name の配列
-   */
+  /** Permission.Name の配列（backend: Permissions）*/
   permissions: string[];
 
-  /**
-   * backend: AssignedBrands []string
-   * ブランドID（やスラッグ）配列
-   */
+  /** 割当ブランドIDの配列（backend: AssignedBrands） */
   assignedBrands?: string[];
 
-  createdAt: string;          // ISO8601
-  updatedAt?: string | null;  // ISO8601 or null
+  createdAt: string; // ISO8601
+  updatedAt?: string | null;
   updatedBy?: string | null;
-  deletedAt?: string | null;  // ISO8601 or null
+  deletedAt?: string | null;
   deletedBy?: string | null;
 }
 
 /**
  * MemberPatch
- * 部分更新用（backend の MemberPatch に対応）
- * - undefined: 変更なし
- * - null: サーバ側実装次第だが、多くは「クリア」を意味させる場合に使用
+ * backend/internal/domain/member/entity.go の MemberPatch に対応。
+ * - usecase / repository レイヤで部分更新時に利用
+ * - undefined は「この項目は更新しない」、null は「null に更新する」意図で利用可能
  */
 export interface MemberPatch {
   firstName?: string | null;
@@ -67,7 +72,7 @@ export interface MemberPatch {
   firstNameKana?: string | null;
   lastNameKana?: string | null;
   email?: string | null;
-  role?: MemberRole;
+  role?: MemberRole | null;
   permissions?: string[] | null;
   assignedBrands?: string[] | null;
 
@@ -78,20 +83,172 @@ export interface MemberPatch {
   deletedBy?: string | null;
 }
 
-/**
- * ユーティリティ
- */
+/** Domain 相当のエラー種別（必要に応じて Error クラス化してもよい） */
+export const MemberError = {
+  InvalidID: "member: invalid id",
+  InvalidRole: "member: invalid role",
+  InvalidEmail: "member: invalid email",
+  InvalidCreatedAt: "member: invalid createdAt",
+  InvalidUpdatedAt: "member: invalid updatedAt",
+  InvalidUpdatedBy: "member: invalid updatedBy",
+  InvalidDeletedAt: "member: invalid deletedAt",
+  InvalidDeletedBy: "member: invalid deletedBy",
+  NotFound: "member: not found",
+  Conflict: "member: conflict",
+  PreconditionFailed: "member: precondition failed",
+} as const;
 
-/** 文字列が定義済み MemberRole か判定 */
-export function isMemberRole(value: string): value is MemberRole {
-  return (MEMBER_ROLES as readonly string[]).includes(value);
+export type MemberErrorCode = (typeof MemberError)[keyof typeof MemberError];
+
+/** Permission カタログ用の最小型（backend: permdom.Permission の Name フィールド対応） */
+export interface PermissionCatalogItem {
+  name: string;
 }
 
-/** メンバーが指定の Permission.Name を保持しているか簡易チェック */
-export function hasPermission(member: Member, permissionName: string): boolean {
-  const target = permissionName.trim().toLowerCase();
+/**
+ * Member生成用ヘルパ
+ * - backend の New / NewFromStringsTime の簡略版
+ * - createdAt/updatedAt は ISO8601 文字列想定
+ */
+export function createMember(params: {
+  id: string;
+  role: MemberRole;
+  createdAt: string;
+  firstName?: string;
+  lastName?: string;
+  firstNameKana?: string;
+  lastNameKana?: string;
+  email?: string;
+  permissions?: string[];
+  assignedBrands?: string[];
+  updatedAt?: string | null;
+  updatedBy?: string | null;
+  deletedAt?: string | null;
+  deletedBy?: string | null;
+}): Member {
+  const member: Member = {
+    id: params.id,
+    role: params.role,
+    createdAt: params.createdAt,
+    firstName: params.firstName,
+    lastName: params.lastName,
+    firstNameKana: params.firstNameKana,
+    lastNameKana: params.lastNameKana,
+    email: params.email,
+    permissions: dedup(params.permissions ?? []),
+    assignedBrands:
+      params.assignedBrands && params.assignedBrands.length > 0
+        ? dedup(params.assignedBrands)
+        : undefined,
+    updatedAt: params.updatedAt ?? null,
+    updatedBy: params.updatedBy ?? null,
+    deletedAt: params.deletedAt ?? null,
+    deletedBy: params.deletedBy ?? null,
+  };
+
+  const error = validateMember(member);
+  if (error) {
+    throw new Error(error);
+  }
+
+  return member;
+}
+
+/**
+ * Member の妥当性検証
+ * - 問題なければ null を返す
+ * - 問題があれば MemberErrorCode を返す
+ */
+export function validateMember(member: Member): MemberErrorCode | null {
+  if (!member.id) {
+    return MemberError.InvalidID;
+  }
+  if (!isValidMemberRole(member.role)) {
+    return MemberError.InvalidRole;
+  }
+  if (member.email && !emailRe.test(member.email)) {
+    return MemberError.InvalidEmail;
+  }
+  if (!member.createdAt) {
+    return MemberError.InvalidCreatedAt;
+  }
+
+  // updatedAt / deletedAt の整合性チェック（可能な範囲で軽く）
+  if (member.updatedBy !== undefined && member.updatedBy === "") {
+    return MemberError.InvalidUpdatedBy;
+  }
+  if (member.deletedBy !== undefined && member.deletedBy === "") {
+    return MemberError.InvalidDeletedBy;
+  }
+
+  return null;
+}
+
+/**
+ * Permission カタログに基づいて Permissions を設定（backend: SetPermissionsByName 相当）
+ * - 存在しない Permission 名は無視
+ * - 重複排除 & ソート
+ */
+export function setPermissionsByName(
+  member: Member,
+  names: string[],
+  catalog: PermissionCatalogItem[]
+): Member {
+  const allow = new Set(
+    catalog
+      .map((p) => p.name.trim())
+      .filter((n) => n.length > 0)
+  );
+
+  const seen = new Set<string>();
+  const out: string[] = [];
+
+  for (const raw of names) {
+    const n = raw.trim();
+    if (!n || !allow.has(n) || seen.has(n)) continue;
+    seen.add(n);
+    out.push(n);
+  }
+
+  out.sort();
+  return {
+    ...member,
+    permissions: out,
+  };
+}
+
+/** 現在の Permissions がカタログに含まれるか検証（backend: ValidatePermissions 相当） */
+export function validatePermissionsWithCatalog(
+  member: Member,
+  catalog: PermissionCatalogItem[]
+): boolean {
+  const allow = new Set(
+    catalog
+      .map((p) => p.name.trim())
+      .filter((n) => n.length > 0)
+  );
+
+  return member.permissions.every((raw) => allow.has(raw.trim()));
+}
+
+/** 指定 Permission.Name を保持しているか（backend: HasPermission 相当） */
+export function hasPermission(member: Member, name: string): boolean {
+  const target = name.trim().toLowerCase();
   if (!target) return false;
   return member.permissions.some(
-    (p) => p.trim().toLowerCase() === target,
+    (p) => p.trim().toLowerCase() === target
   );
+}
+
+/** 配列の重複排除 + 空文字除去 */
+function dedup(xs: string[]): string[] {
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const raw of xs) {
+    const v = raw.trim();
+    if (!v || seen.has(v)) continue;
+    seen.add(v);
+    out.push(v);
+  }
+  return out;
 }

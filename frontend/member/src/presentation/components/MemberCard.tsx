@@ -9,7 +9,7 @@ import {
   CardContent,
 } from "../../../../shell/src/shared/ui/card";
 import { User, Mail, Calendar } from "lucide-react";
-import { MOCK_MEMBERS } from "../../infrastructure/mock/member_mockdata";
+import { MOCK_MEMBERS } from "../../infrastructure/mockdata/member_mockdata";
 
 const IconUser = User as unknown as React.ComponentType<
   React.SVGProps<SVGSVGElement>

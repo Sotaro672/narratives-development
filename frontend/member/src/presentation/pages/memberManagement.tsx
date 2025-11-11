@@ -7,8 +7,8 @@ import List, {
   SortableTableHeader,
 } from "../../../../shell/src/layout/List/List";
 import "../styles/member.css";
-import { MOCK_MEMBERS } from "../../infrastructure/mock/member_mockdata";
-import type { Member } from "../../../../shell/src/shared/types/member";
+import { MOCK_MEMBERS } from "../../infrastructure/mockdata/member_mockdata";
+import type { Member } from "../../domain/entity/member";
 
 // Utility: "YYYY/MM/DD" → timestamp
 const toTs = (yyyyMd: string) => {
@@ -66,8 +66,7 @@ const toMemberRow = (m: Member): MemberRow => {
     email: m.email ?? "",
     role: toDisplayRole(m.role),
     brands: m.assignedBrands ?? [],
-    // TODO: taskCount は実データ導入時に差し替え
-    taskCount: 0,
+    taskCount: 0, // TODO: 実データ導入時に差し替え
     permissionCount: m.permissions?.length ?? 0,
     registeredAt,
   };
@@ -88,10 +87,7 @@ export default function MemberManagementPage() {
 
   const roleOptions = useMemo(
     () =>
-      Array.from(new Set(baseRows.map((m) => m.role))).map((v): {
-        value: string;
-        label: string;
-      } => ({
+      Array.from(new Set(baseRows.map((m) => m.role))).map((v) => ({
         value: v,
         label: v,
       })),
@@ -100,9 +96,7 @@ export default function MemberManagementPage() {
 
   const brandOptions = useMemo(
     () =>
-      Array.from(
-        new Set(baseRows.flatMap((m) => m.brands))
-      ).map((v): { value: string; label: string } => ({
+      Array.from(new Set(baseRows.flatMap((m) => m.brands))).map((v) => ({
         value: v,
         label: v,
       })),
@@ -138,12 +132,9 @@ export default function MemberManagementPage() {
     return data;
   }, [baseRows, roleFilter, brandFilter, activeKey, direction]);
 
-  // Headers
   const headers: React.ReactNode[] = [
     "氏名",
     "メールアドレス",
-
-    // ロール（Filterable）
     <FilterableTableHeader
       key="role"
       label="ロール"
@@ -151,8 +142,6 @@ export default function MemberManagementPage() {
       selected={roleFilter}
       onChange={setRoleFilter}
     />,
-
-    // 所属ブランド（Filterable）
     <FilterableTableHeader
       key="brand"
       label="所属ブランド"
@@ -160,8 +149,6 @@ export default function MemberManagementPage() {
       selected={brandFilter}
       onChange={setBrandFilter}
     />,
-
-    // 担当数（Sortable）
     <SortableTableHeader
       key="taskCount"
       label="担当数"
@@ -173,8 +160,6 @@ export default function MemberManagementPage() {
         setDirection(dir);
       }}
     />,
-
-    // 権限数（Sortable）
     <SortableTableHeader
       key="permissionCount"
       label="権限数"
@@ -186,8 +171,6 @@ export default function MemberManagementPage() {
         setDirection(dir);
       }}
     />,
-
-    // 登録日（Sortable）
     <SortableTableHeader
       key="registeredAt"
       label="登録日"
@@ -209,10 +192,9 @@ export default function MemberManagementPage() {
     return "member-role-badge is-default";
   };
 
-  // 詳細ページへ遷移（email を ID として利用／当面のモック運用）
-  const goDetail = (email: string) => {
-    if (!email) return;
-    navigate(`/member/${encodeURIComponent(email)}`);
+  const goDetail = (id: string) => {
+    if (!id) return;
+    navigate(`/member/${encodeURIComponent(id)}`);
   };
 
   return (
@@ -231,17 +213,17 @@ export default function MemberManagementPage() {
           console.log("メンバーリスト更新");
         }}
       >
-        {rows.map((m: MemberRow) => (
+        {rows.map((m) => (
           <tr
-            key={m.email || m.id}
+            key={m.id}
             role="button"
             tabIndex={0}
             className="cursor-pointer"
-            onClick={() => goDetail(m.email)}
+            onClick={() => goDetail(m.id)}
             onKeyDown={(e) => {
               if (e.key === "Enter" || e.key === " ") {
                 e.preventDefault();
-                goDetail(m.email);
+                goDetail(m.id);
               }
             }}
           >
@@ -251,7 +233,7 @@ export default function MemberManagementPage() {
               <span className={roleClass(m.role)}>{m.role}</span>
             </td>
             <td>
-              {m.brands.map((b: string) => (
+              {m.brands.map((b) => (
                 <span key={b} className="lp-brand-pill mm-brand-tag">
                   {b}
                 </span>
