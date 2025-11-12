@@ -111,3 +111,15 @@
     flex-direction: column;
   }
 }
+
+/* 役割ボタン（Permission Category） */
+.role-button {
+  background-color: #ffffff !important; /* 白背景 */
+  color: #1f2937; /* テキストはグレー（Tailwind: text-gray-800） */
+  border: 1px solid #cbd5e1; /* 枠線を明示（Tailwind: border-slate-300） */
+  transition: background-color 0.2s ease, color 0.2s ease;
+}
+
+.role-button:hover {
+  background-color: #f1f5f9; /* hover 時に薄いグレー（Tailwind: slate-100） */
+}

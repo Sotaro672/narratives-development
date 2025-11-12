@@ -1,6 +1,6 @@
 // frontend/member/src/hooks/useMemberCreate.ts
 import { useCallback, useMemo, useState } from "react";
-import type { Member, MemberRole } from "../domain/entity/member";
+import type { Member } from "../domain/entity/member";
 import { MemberRepositoryFS } from "../infrastructure/firestore/memberRepositoryFS";
 
 // 権限モックデータの取り込み
@@ -14,6 +14,13 @@ import type {
   Permission,
   PermissionCategory,
 } from "../../../shell/src/shared/types/permission";
+
+// ブランドのモックデータをインポート（UIでの選択/表示に備える）
+import {
+  ALL_BRANDS,
+  toBrandRows,
+} from "../../../brand/src/infrastructure/mockdata/mockdata";
+import type { BrandRow } from "../../../brand/src/infrastructure/mockdata/mockdata";
 
 export type UseMemberCreateOptions = {
   /** 作成成功時に呼ばれます（呼び出し元で navigate などを実施） */
@@ -30,14 +37,7 @@ export function useMemberCreate(options?: UseMemberCreateOptions) {
   const [lastNameKana, setLastNameKana] = useState("");
   const [email, setEmail] = useState("");
 
-  /**
-   * ▼ ここが変更点：
-   *   旧: role: MemberRole ("admin" | "brand-manager" | ...)
-   *   新: category: PermissionCategory ("wallet" | "brand" | ...)
-   *
-   * ※ backend との互換のため、作成時には member.role に category をそのまま入れます
-   *    （MemberRole は PermissionCategory の別名に置き換え済み）
-   */
+  // 新: PermissionCategory が「役割」相当
   const [category, setCategory] = useState<PermissionCategory>("brand");
 
   const [permissionsText, setPermissionsText] = useState(""); // カンマ区切り
@@ -71,6 +71,10 @@ export function useMemberCreate(options?: UseMemberCreateOptions) {
     [permissionsByCategory]
   );
 
+  // ===== ブランド（UI 連携用に公開しておく） =====
+  const allBrands = ALL_BRANDS;
+  const brandRows: BrandRow[] = useMemo(() => toBrandRows(ALL_BRANDS), []);
+
   const toArray = (s: string) =>
     s
       .split(",")
@@ -93,10 +97,6 @@ export function useMemberCreate(options?: UseMemberCreateOptions) {
           firstNameKana: firstNameKana.trim() || undefined,
           lastNameKana: lastNameKana.trim() || undefined,
           email: email.trim() || undefined,
-
-          // ▼ backend 互換のため、role に PermissionCategory を格納
-          role: category as MemberRole,
-
           permissions: toArray(permissionsText),
           assignedBrands: (() => {
             const arr = toArray(brandsText);
@@ -124,7 +124,6 @@ export function useMemberCreate(options?: UseMemberCreateOptions) {
       firstNameKana,
       lastNameKana,
       email,
-      category,
       permissionsText,
       brandsText,
       options,
@@ -133,13 +132,7 @@ export function useMemberCreate(options?: UseMemberCreateOptions) {
 
   // ─────────────────────────────────────────────────────────────
   // 戻り値
-  //   ・category / setCategory を公開（新）
-  //   ・role / setRole は互換用エイリアス（必要なら UI 側で置換を進めてください）
   // ─────────────────────────────────────────────────────────────
-  const role: MemberRole = category as MemberRole;
-  const setRole = (next: MemberRole | PermissionCategory) =>
-    setCategory(next as PermissionCategory);
-
   return {
     // 値
     firstName,
@@ -147,13 +140,7 @@ export function useMemberCreate(options?: UseMemberCreateOptions) {
     firstNameKana,
     lastNameKana,
     email,
-
-    // ▼ 新：permission category ベース
     category,
-
-    // 互換（従来の変数名を使っている呼び出し側のため）
-    role,
-
     permissionsText,
     brandsText,
     submitting,
@@ -161,9 +148,13 @@ export function useMemberCreate(options?: UseMemberCreateOptions) {
 
     // 権限データ（カテゴリ表示用）
     allPermissions,
-    permissionsByCategory,   // { [category]: Permission[] }
-    permissionCategories,    // [{ key, count, permissions }]
-    permissionCategoryList,  // PermissionCategory[]
+    permissionsByCategory,
+    permissionCategories,
+    permissionCategoryList,
+
+    // ブランド（UI での表示・選択に利用可能）
+    allBrands,
+    brandRows,
 
     // セッター
     setFirstName,
@@ -171,18 +162,12 @@ export function useMemberCreate(options?: UseMemberCreateOptions) {
     setFirstNameKana,
     setLastNameKana,
     setEmail,
-
-    // ▼ 新：カテゴリのセッター
     setCategory,
-
-    // 互換：従来 API
-    setRole,
-
     setPermissionsText,
     setBrandsText,
+    setError,
 
     // 動作
     handleSubmit,
-    setError,
   };
 }

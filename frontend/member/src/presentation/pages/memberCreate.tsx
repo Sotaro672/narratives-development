@@ -25,20 +25,21 @@ export default function MemberCreatePage() {
   const formRef = React.useRef<HTMLFormElement>(null);
 
   const {
-    // 氏名/かなは InvitationPage に移譲したため UI からは削除
-    firstName, lastName, firstNameKana, lastNameKana,
     email,
     // ▼ 役割（Permission Category）
-    category, setCategory,
-    submitting, error,
-    setFirstName, setLastName, setFirstNameKana, setLastNameKana,
+    category,
+    setCategory,
+    submitting,
+    error,
     setEmail,
     handleSubmit,
-    // ▼ hooks に選択権限（name のカンマ区切り）を渡す
+    // ▼ hooks に選択権限（name のカンマ区切り）/ ブランドID（カンマ区切り）を渡す
     setPermissionsText,
+    setBrandsText,
     // ▼ 表示用
     permissionCategories,
     permissionCategoryList,
+    brandRows,
   } = useMemberCreate({
     onSuccess: () => navigate("/member"),
   });
@@ -50,15 +51,14 @@ export default function MemberCreatePage() {
   const closePopover = () =>
     document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape" }));
 
+  // ========= 権限カテゴリ ==========
   const selectedCategory = React.useMemo(
     () => permissionCategories.find((x) => x.key === category),
     [permissionCategories, category]
   );
   const currentPerms = selectedCategory?.permissions ?? [];
 
-  // ▼ 権限のチェック状態（IDベース）
   const [selectedPermIds, setSelectedPermIds] = React.useState<Set<string>>(new Set());
-
   const togglePerm = (permId: string, checked: boolean) => {
     setSelectedPermIds((prev) => {
       const next = new Set(prev);
@@ -67,27 +67,17 @@ export default function MemberCreatePage() {
       return next;
     });
   };
-
-  // ▼ カテゴリ配下の全権限が選択されているか
   const allSelectedInCategory =
-    currentPerms.length > 0 &&
-    currentPerms.every((p) => selectedPermIds.has(p.id));
-
-  // ▼ ヘッダーの全選択チェックボックス切り替え
+    currentPerms.length > 0 && currentPerms.every((p) => selectedPermIds.has(p.id));
   const toggleAllInCategory = (checked: boolean) => {
     if (currentPerms.length === 0) return;
     setSelectedPermIds((prev) => {
       const next = new Set(prev);
-      if (checked) {
-        currentPerms.forEach((p) => next.add(p.id));
-      } else {
-        currentPerms.forEach((p) => next.delete(p.id));
-      }
+      if (checked) currentPerms.forEach((p) => next.add(p.id));
+      else currentPerms.forEach((p) => next.delete(p.id));
       return next;
     });
   };
-
-  // ▼ 画面下部に並べる「選択済み権限バッジ」用（全カテゴリ横断）
   const allPerms = React.useMemo(
     () => permissionCategories.flatMap((c) => c.permissions),
     [permissionCategories]
@@ -97,10 +87,23 @@ export default function MemberCreatePage() {
     [allPerms, selectedPermIds]
   );
 
-  // 送信時に hooks 側へ "name" のカンマ区切りで渡す
+  // ========= ブランド選択（Popover 内にチェックボックス） ==========
+  const [selectedBrandIds, setSelectedBrandIds] = React.useState<Set<string>>(new Set());
+  const toggleBrand = (id: string, explicit?: boolean) => {
+    setSelectedBrandIds((prev) => {
+      const next = new Set(prev);
+      const willCheck = explicit ?? !next.has(id);
+      if (willCheck) next.add(id);
+      else next.delete(id);
+      return next;
+    });
+  };
+
+  // ========= 送信処理 ==========
   const onSubmit = (e: React.FormEvent) => {
     const names = selectedPerms.map((p) => p.name);
     setPermissionsText(names.join(","));
+    setBrandsText(Array.from(selectedBrandIds).join(","));
     handleSubmit(e);
   };
 
@@ -110,11 +113,66 @@ export default function MemberCreatePage() {
         {error && <div className="mb-3 text-red-500">エラー: {error}</div>}
 
         <form ref={formRef} onSubmit={onSubmit} className="space-y-4" noValidate>
-          {/* 氏名/かなの入力欄は InvitationPage に移譲 */}
-
-          {/* メールアドレス（必須） */}
+          {/* ===== ブランド選択（Popover + Checkbox、ボタンは固定表示） ===== */}
           <div>
-            <label className="block text-sm text-slate-300 mb-1">メールアドレス（必須）</label>
+            <label className="block text-sm text-slate-300 mb-1">
+              ブランド（任意・複数選択可）
+            </label>
+            <Popover>
+              <PopoverTrigger>
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="w-full justify-start text-left"
+                >
+                  ブランドを選択
+                </Button>
+              </PopoverTrigger>
+              <PopoverContent className="w-[320px] max-h-[400px] overflow-y-auto text-sm">
+                <ul className="space-y-2">
+                  {brandRows.map((b) => {
+                    const checked = selectedBrandIds.has(b.id);
+                    const inputId = `brand_${b.id}`;
+                    return (
+                      <li key={b.id} className="flex items-center gap-2">
+                        <Checkbox
+                          id={inputId}
+                          checked={checked}
+                          onCheckedChange={(v) => toggleBrand(b.id, v)}
+                        />
+                        <label
+                          id={inputId}
+                          className="cursor-pointer select-none"
+                          onClick={() => toggleBrand(b.id)}
+                        >
+                          {b.name}
+                        </label>
+                      </li>
+                    );
+                  })}
+                </ul>
+              </PopoverContent>
+            </Popover>
+
+            {/* 選択済みブランドのバッジ表示 */}
+            <div className="mt-2 flex flex-wrap gap-2">
+              {Array.from(selectedBrandIds).length === 0 ? (
+                <span className="text-xs text-[hsl(var(--muted-foreground))]">
+                  選択したブランドがここに表示されます。
+                </span>
+              ) : (
+                brandRows
+                  .filter((b) => selectedBrandIds.has(b.id))
+                  .map((b) => <Badge key={`brand_badge_${b.id}`}>{b.name}</Badge>)
+              )}
+            </div>
+          </div>
+
+          {/* ===== メールアドレス（必須） ===== */}
+          <div>
+            <label className="block text-sm text-slate-300 mb-1">
+              メールアドレス（必須）
+            </label>
             <Input
               type="email"
               required
@@ -127,18 +185,17 @@ export default function MemberCreatePage() {
             />
           </div>
 
-          {/* 役割 + 権限カード（横並び） */}
+          {/* ===== 役割 + 権限カード ===== */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4 items-start">
-            {/* 役割ボタン（Permission Category） */}
+            {/* 役割選択 */}
             <div>
               <label className="block text-sm text-slate-300 mb-1">役割（必須）</label>
-
               <Popover>
                 <PopoverTrigger>
                   <Button
                     type="button"
                     variant="outline"
-                    className="w-full justify-start border-slate-600 bg-slate-800 text-left"
+                    className="role-button w-full justify-start text-left"
                   >
                     {category ? (
                       categoryLabel(category)
@@ -147,7 +204,6 @@ export default function MemberCreatePage() {
                     )}
                   </Button>
                 </PopoverTrigger>
-
                 <PopoverContent className="text-sm max-h-[320px] overflow-y-auto">
                   <div className="flex flex-col gap-1">
                     {permissionCategoryList.map((c) => (
@@ -169,31 +225,9 @@ export default function MemberCreatePage() {
                   </div>
                 </PopoverContent>
               </Popover>
-
-              {/* hidden select for HTML バリデーション互換 */}
-              <select
-                aria-hidden="true"
-                tabIndex={-1}
-                required
-                value={category}
-                onChange={(e) => setCategory(e.target.value as typeof category)}
-                style={{
-                  position: "absolute",
-                  opacity: 0,
-                  pointerEvents: "none",
-                  height: 0,
-                  width: 0,
-                }}
-              >
-                {permissionCategoryList.map((c) => (
-                  <option key={c} value={c}>
-                    {categoryLabel(c)}
-                  </option>
-                ))}
-              </select>
             </div>
 
-            {/* 権限カード（選択中の permissionCategory に属する権限を表示 + チェックボックス） */}
+            {/* 権限一覧 */}
             <div>
               <Card>
                 <CardHeader>
@@ -241,7 +275,7 @@ export default function MemberCreatePage() {
                 </CardContent>
               </Card>
 
-              {/* ▼ 選択した権限をバッジで一覧表示（全カテゴリ横断） */}
+              {/* 選択済み権限バッジ */}
               <div className="mt-3 flex flex-wrap gap-2">
                 {selectedPerms.length === 0 ? (
                   <span className="text-xs text-[hsl(var(--muted-foreground))]">

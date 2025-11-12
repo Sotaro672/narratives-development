@@ -22,29 +22,10 @@ type MemberRow = {
   id: string;
   name: string;
   email: string;
-  role: string; // 表示用（日本語）
   brands: string[];
   taskCount: number;
   permissionCount: number;
   registeredAt: string; // "YYYY/MM/DD"
-};
-
-// Role表示用に MemberRole をマッピング
-const toDisplayRole = (role: Member["role"]): string => {
-  switch (role) {
-    case "admin":
-      return "管理者";
-    case "brand-manager":
-      return "ブランド管理者";
-    case "token-manager":
-      return "トークン管理者";
-    case "inquiry-handler":
-      return "問い合わせ担当者";
-    case "production-designer":
-      return "生産設計責任者";
-    default:
-      return role;
-  }
 };
 
 // Member → 一覧表示用 MemberRow へ変換
@@ -63,7 +44,6 @@ const toMemberRow = (m: Member): MemberRow => {
     id: m.id,
     name,
     email: m.email ?? "",
-    role: toDisplayRole(m.role),
     brands: m.assignedBrands ?? [],
     taskCount: 0,
     permissionCount: m.permissions?.length ?? 0,
@@ -83,17 +63,7 @@ export default function MemberManagementPage() {
   }, [members]);
 
   // Filters
-  const [roleFilter, setRoleFilter] = useState<string[]>([]);
   const [brandFilter, setBrandFilter] = useState<string[]>([]);
-
-  const roleOptions = useMemo(
-    () =>
-      Array.from(new Set(baseRows.map((m) => m.role))).map((v) => ({
-        value: v,
-        label: v,
-      })),
-    [baseRows]
-  );
 
   const brandOptions = useMemo(
     () =>
@@ -112,9 +82,8 @@ export default function MemberManagementPage() {
   const rows = useMemo(() => {
     let data = baseRows.filter(
       (m) =>
-        (roleFilter.length === 0 || roleFilter.includes(m.role)) &&
-        (brandFilter.length === 0 ||
-          m.brands.some((b) => brandFilter.includes(b)))
+        brandFilter.length === 0 ||
+        m.brands.some((b) => brandFilter.includes(b))
     );
 
     if (activeKey && direction) {
@@ -131,18 +100,11 @@ export default function MemberManagementPage() {
     }
 
     return data;
-  }, [baseRows, roleFilter, brandFilter, activeKey, direction]);
+  }, [baseRows, brandFilter, activeKey, direction]);
 
   const headers: React.ReactNode[] = [
     "氏名",
     "メールアドレス",
-    <FilterableTableHeader
-      key="role"
-      label="ロール"
-      options={roleOptions}
-      selected={roleFilter}
-      onChange={setRoleFilter}
-    />,
     <FilterableTableHeader
       key="brand"
       label="所属ブランド"
@@ -185,14 +147,6 @@ export default function MemberManagementPage() {
     />,
   ];
 
-  const roleClass = (role: string) => {
-    if (role === "管理者") return "member-role-badge is-admin";
-    if (role.includes("ブランド")) return "member-role-badge is-brand";
-    if (role.includes("生産")) return "member-role-badge is-production";
-    if (role.includes("トークン")) return "member-role-badge is-token";
-    return "member-role-badge is-default";
-  };
-
   const goDetail = (id: string) => {
     if (!id) return;
     navigate(`/member/${encodeURIComponent(id)}`);
@@ -217,7 +171,6 @@ export default function MemberManagementPage() {
         // ✅ メンバー追加ボタン押下時の遷移
         onCreate={() => navigate("/member/create")}
         onReset={() => {
-          setRoleFilter([]);
           setBrandFilter([]);
           setActiveKey("registeredAt");
           setDirection("desc");
@@ -240,9 +193,6 @@ export default function MemberManagementPage() {
           >
             <td>{m.name}</td>
             <td>{m.email}</td>
-            <td>
-              <span className={roleClass(m.role)}>{m.role}</span>
-            </td>
             <td>
               {m.brands.map((b) => (
                 <span key={b} className="lp-brand-pill mm-brand-tag">

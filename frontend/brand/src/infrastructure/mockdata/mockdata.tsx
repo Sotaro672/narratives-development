@@ -1,4 +1,4 @@
-// frontend/brand/src/infrastructure/mock/mockdata.tsx
+// frontend\brand\src\infrastructure\mockdata\mockdata.tsx
 
 import type { Brand } from "../../../../shell/src/shared/types/brand";
 

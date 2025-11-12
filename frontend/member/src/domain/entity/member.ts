@@ -1,38 +1,5 @@
 // frontend/member/src/domain/entity/member.ts
 
-import type { PermissionCategory } from "../../../../shell/src/shared/types/permission";
-
-/**
- * MemberRole
- * これまでの「アプリ独自ロール」を廃止し、permission の category を採用します。
- * backend/internal/domain/permission/entity.go の Category に対応。
- *
- * 例: "wallet" | "inquiry" | "organization" | "brand" | "token" | ...
- */
-export type MemberRole = PermissionCategory;
-
-/**
- * 利用可能なロール（= Permission のカテゴリ一覧）
- * 必要に応じて backend 側のカテゴリ追加に追従してください。
- */
-export const MEMBER_ROLES: MemberRole[] = [
-  "wallet",
-  "inquiry",
-  "organization",
-  "brand",
-  "token",
-  "order",
-  "member",
-  "inventory",
-  "production",
-  "system",
-];
-
-/** MemberRole の妥当性チェック */
-export function isValidMemberRole(role: string): role is MemberRole {
-  return MEMBER_ROLES.includes(role as MemberRole);
-}
-
 /** Email バリデーション（backend の emailRe 相当） */
 const emailRe = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
@@ -42,6 +9,7 @@ const emailRe = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
  *
  * - 日付は ISO8601 文字列（例: "2025-01-10T00:00:00Z"）を想定
  * - Firestore/GraphQL とのやり取りを考慮し、undefined / null を許容
+ * - 役割（role）は廃止。権限は permissions で表現。
  */
 export interface Member {
   id: string;
@@ -53,9 +21,6 @@ export interface Member {
 
   /** 空文字 or undefined の場合は「未設定」扱い（backend と同様の解釈） */
   email?: string;
-
-  /** 役割は Permission カテゴリで表現 */
-  role: MemberRole;
 
   /** Permission.Name の配列（backend: Permissions）*/
   permissions: string[];
@@ -75,6 +40,7 @@ export interface Member {
  * backend/internal/domain/member/entity.go の MemberPatch に対応。
  * - usecase / repository レイヤで部分更新時に利用
  * - undefined は「この項目は更新しない」、null は「null に更新する」意図で利用可能
+ * - 役割（role）は廃止済み
  */
 export interface MemberPatch {
   firstName?: string | null;
@@ -82,7 +48,6 @@ export interface MemberPatch {
   firstNameKana?: string | null;
   lastNameKana?: string | null;
   email?: string | null;
-  role?: MemberRole | null;
   permissions?: string[] | null;
   assignedBrands?: string[] | null;
 
@@ -96,7 +61,6 @@ export interface MemberPatch {
 /** Domain 相当のエラー種別（必要に応じて Error クラス化してもよい） */
 export const MemberError = {
   InvalidID: "member: invalid id",
-  InvalidRole: "member: invalid role",
   InvalidEmail: "member: invalid email",
   InvalidCreatedAt: "member: invalid createdAt",
   InvalidUpdatedAt: "member: invalid updatedAt",
@@ -119,10 +83,10 @@ export interface PermissionCatalogItem {
  * Member生成用ヘルパ
  * - backend の New / NewFromStringsTime の簡略版
  * - createdAt/updatedAt は ISO8601 文字列想定
+ * - 役割（role）は廃止済み
  */
 export function createMember(params: {
   id: string;
-  role: MemberRole;
   createdAt: string;
   firstName?: string;
   lastName?: string;
@@ -138,7 +102,6 @@ export function createMember(params: {
 }): Member {
   const member: Member = {
     id: params.id,
-    role: params.role,
     createdAt: params.createdAt,
     firstName: params.firstName,
     lastName: params.lastName,
@@ -168,13 +131,11 @@ export function createMember(params: {
  * Member の妥当性検証
  * - 問題なければ null を返す
  * - 問題があれば MemberErrorCode を返す
+ * - 役割（role）検証は削除済み
  */
 export function validateMember(member: Member): MemberErrorCode | null {
   if (!member.id) {
     return MemberError.InvalidID;
-  }
-  if (!isValidMemberRole(member.role)) {
-    return MemberError.InvalidRole;
   }
   if (member.email && !emailRe.test(member.email)) {
     return MemberError.InvalidEmail;

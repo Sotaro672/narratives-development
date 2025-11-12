@@ -20,8 +20,6 @@ export interface MemberFilter {
   /** 名前 / フリガナ / メール等の部分一致検索 */
   searchQuery?: string;
 
-  /** ロールID（名称ではなくコード想定、後方互換の Roles と同義） */
-  roleIds?: string[];
   /** 割当ブランドID（後方互換の Brands と同義） */
   brandIds?: string[];
 
@@ -33,15 +31,14 @@ export interface MemberFilter {
 
   /** 作成日時範囲 (from/to) */
   createdFrom?: string; // ISO8601
-  createdTo?: string; // ISO8601
+  createdTo?: string;   // ISO8601
 
   /** 更新日時範囲 (from/to) */
   updatedFrom?: string; // ISO8601
-  updatedTo?: string; // ISO8601
+  updatedTo?: string;   // ISO8601
 
   /** 権限名（Member.permissions と対応） */
   permissions?: string[];
-
 }
 
 /**
@@ -90,29 +87,19 @@ export interface MemberRepository {
    * - page: limit/offset 等を含む共通ページ情報
    * - filter: MemberFilter
    */
-  list(
-    page: Page,
-    filter?: MemberFilter
-  ): Promise<PageResult<Member>>;
+  list(page: Page, filter?: MemberFilter): Promise<PageResult<Member>>;
 
   /**
    * 作成
    * - SaveOptions は楽観ロック / upsert など実装側で利用
    */
-  create(
-    member: Member,
-    opts?: SaveOptions
-  ): Promise<Member>;
+  create(member: Member, opts?: SaveOptions): Promise<Member>;
 
   /**
    * 更新（部分更新）
    * - patch の undefined は「変更なし」
    */
-  update(
-    id: string,
-    patch: MemberPatch,
-    opts?: SaveOptions
-  ): Promise<Member>;
+  update(id: string, patch: MemberPatch, opts?: SaveOptions): Promise<Member>;
 
   /**
    * 論理削除 or 物理削除（実装依存）
@@ -153,10 +140,7 @@ export interface MemberRepository {
    * - 新規/更新の双方を内包可能な high-level API
    * - infrastructure 側で upsert 的に扱う実装も可
    */
-  save(
-    member: Member,
-    opts?: SaveOptions
-  ): Promise<Member>;
+  save(member: Member, opts?: SaveOptions): Promise<Member>;
 
   /**
    * Reset
