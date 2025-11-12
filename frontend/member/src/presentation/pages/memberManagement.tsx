@@ -214,6 +214,8 @@ export default function MemberManagementPage() {
         showCreateButton
         createLabel="メンバー追加"
         showResetButton
+        // ✅ メンバー追加ボタン押下時の遷移
+        onCreate={() => navigate("/member/create")}
         onReset={() => {
           setRoleFilter([]);
           setBrandFilter([]);

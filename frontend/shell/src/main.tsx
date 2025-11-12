@@ -1,18 +1,21 @@
 // frontend/shell/src/main.tsx
 
-// ① Tailwind v4 + 共有トークンを最優先で読み込む（超重要）
+// ============================================================================
+// ① グローバルスタイル: Tailwind v4 + 共通トークンを最優先で読み込む
+// ============================================================================
 import "../../shell/src/shared/index.css";
 
 import React from "react";
 import ReactDOM from "react-dom/client";
-import App from "./app/App";
+import App from "./app/App"; // ← App.tsx 経由で MainPage を呼び出す
 
-// （任意）Shell 固有のグローバルCSS（reset 等）
-// ※ 共有トークンの上書きが必要なら、このファイルで行う
+// ============================================================================
+// ② Shell 固有のグローバルCSS（reset, overridesなど）
+// ============================================================================
 import "./assets/styles/global.css";
 
 // ============================================================================
-// Vite + React 18 Entry Point
+// ③ React 18 + Vite エントリポイント
 // ============================================================================
 const container = document.getElementById("root");
 if (!container) {
@@ -23,25 +26,35 @@ if (!container) {
 
 const root = ReactDOM.createRoot(container);
 
-// -----------------------------------------------------------------------------
-// StrictMode: 開発時の副作用検出（本番では無効）
-// -----------------------------------------------------------------------------
+// StrictMode は開発時のみ有効（本番では自動的に最適化）
 root.render(
   <React.StrictMode>
     <App />
   </React.StrictMode>
 );
 
-// -----------------------------------------------------------------------------
-// HMR (Hot Module Replacement): Viteの開発サーバでホットリロードを有効化
-// -----------------------------------------------------------------------------
+// ============================================================================
+// ④ Hot Module Replacement (HMR)
+// ============================================================================
 if (import.meta.hot) {
   import.meta.hot.accept();
 }
 
-// -----------------------------------------------------------------------------
-// 拡張ポイント（例）
-// 1. Firebase AppCheck / Analytics 初期化
-// 2. Sentry.init({ dsn: "...", environment: import.meta.env.MODE });
-// 3. Cloud Run 環境変数のロード
-// -----------------------------------------------------------------------------
+// ============================================================================
+// ⑤ 拡張ポイント（Firebase / Sentry / Analytics などの初期化）
+// ----------------------------------------------------------------------------
+// 例：
+// import { initializeApp } from "firebase/app";
+// import { getAnalytics } from "firebase/analytics";
+// const firebaseConfig = {
+//   apiKey: "AIzaSyDTetB8PcVlSHhXbItMZv2thd5lY4d5nIQ",
+//   authDomain: "narratives-development-26c2d.firebaseapp.com",
+//   projectId: "narratives-development-26c2d",
+//   storageBucket: "narratives-development-26c2d.firebasestorage.app",
+//   messagingSenderId: "871263659099",
+//   appId: "1:871263659099:web:0d4bbdc36e59d7ed8d4b7e",
+//   measurementId: "G-T77JW1DF4V",
+// };
+// const app = initializeApp(firebaseConfig);
+// const analytics = getAnalytics(app);
+// ============================================================================

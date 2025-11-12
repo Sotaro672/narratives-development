@@ -4,6 +4,7 @@ import React from "react";
 import type { RouteObject } from "react-router-dom";
 import MemberManagement from "../pages/memberManagement";
 import MemberDetail from "../pages/memberDetail";
+import MemberCreate from "../pages/memberCreate";
 
 const routes: RouteObject[] = [
   {
@@ -14,6 +15,10 @@ const routes: RouteObject[] = [
     // Member.id を URL パラメータとして利用
     path: ":memberId",
     element: <MemberDetail />,
+  },
+  {
+    path: "create",
+    element: <MemberCreate />,
   },
 ];
 
