@@ -7,8 +7,8 @@ import List, {
   SortableTableHeader,
 } from "../../../../shell/src/layout/List/List";
 import "../styles/member.css";
-import { MOCK_MEMBERS } from "../../infrastructure/mockdata/member_mockdata";
 import type { Member } from "../../domain/entity/member";
+import { useMemberList } from "../../hooks/useMemberList";
 
 // Utility: "YYYY/MM/DD" → timestamp
 const toTs = (yyyyMd: string) => {
@@ -54,7 +54,6 @@ const toMemberRow = (m: Member): MemberRow => {
     m.email ||
     m.id;
 
-  // createdAt(ISO8601) → "YYYY/MM/DD"
   const registeredAt =
     m.createdAt && m.createdAt.length >= 10
       ? m.createdAt.slice(0, 10).replace(/-/g, "/")
@@ -66,7 +65,7 @@ const toMemberRow = (m: Member): MemberRow => {
     email: m.email ?? "",
     role: toDisplayRole(m.role),
     brands: m.assignedBrands ?? [],
-    taskCount: 0, // TODO: 実データ導入時に差し替え
+    taskCount: 0,
     permissionCount: m.permissions?.length ?? 0,
     registeredAt,
   };
@@ -75,11 +74,13 @@ const toMemberRow = (m: Member): MemberRow => {
 export default function MemberManagementPage() {
   const navigate = useNavigate();
 
-  // 一覧の元データ（モック）
-  const baseRows = useMemo<MemberRow[]>(
-    () => MOCK_MEMBERS.map(toMemberRow),
-    []
-  );
+  // Firestoreからメンバー一覧を取得（useMemberListフック）
+  const { members, loading, error, reload } = useMemberList();
+
+  // FirestoreデータをMemberRowに変換
+  const baseRows = useMemo<MemberRow[]>(() => {
+    return members.map(toMemberRow);
+  }, [members]);
 
   // Filters
   const [roleFilter, setRoleFilter] = useState<string[]>([]);
@@ -197,6 +198,14 @@ export default function MemberManagementPage() {
     navigate(`/member/${encodeURIComponent(id)}`);
   };
 
+  if (loading) return <div className="p-4">読み込み中...</div>;
+  if (error)
+    return (
+      <div className="p-4 text-red-500">
+        データ取得エラー: {error.message}
+      </div>
+    );
+
   return (
     <div className="p-0">
       <List
@@ -210,7 +219,7 @@ export default function MemberManagementPage() {
           setBrandFilter([]);
           setActiveKey("registeredAt");
           setDirection("desc");
-          console.log("メンバーリスト更新");
+          reload();
         }}
       >
         {rows.map((m) => (
