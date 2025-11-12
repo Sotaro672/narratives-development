@@ -1,4 +1,4 @@
-// frontend/permission/src/infrastructure/mock/mockdata.tsx
+// frontend\permission\src\infrastructure\mockdata\mockdata.tsx
 
 import type {
   Permission,

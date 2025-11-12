@@ -3,6 +3,18 @@ import { useCallback, useMemo, useState } from "react";
 import type { Member, MemberRole } from "../domain/entity/member";
 import { MemberRepositoryFS } from "../infrastructure/firestore/memberRepositoryFS";
 
+// 権限モックデータの取り込み
+import {
+  ALL_PERMISSIONS,
+  groupPermissionsByCategory,
+} from "../../../permission/src/infrastructure/mockdata/mockdata";
+
+// Permission のカテゴリ型（＝新しい「役割」概念）
+import type {
+  Permission,
+  PermissionCategory,
+} from "../../../shell/src/shared/types/permission";
+
 export type UseMemberCreateOptions = {
   /** 作成成功時に呼ばれます（呼び出し元で navigate などを実施） */
   onSuccess?: (created: Member) => void;
@@ -17,12 +29,47 @@ export function useMemberCreate(options?: UseMemberCreateOptions) {
   const [firstNameKana, setFirstNameKana] = useState("");
   const [lastNameKana, setLastNameKana] = useState("");
   const [email, setEmail] = useState("");
-  const [role, setRole] = useState<MemberRole>("brand-manager");
+
+  /**
+   * ▼ ここが変更点：
+   *   旧: role: MemberRole ("admin" | "brand-manager" | ...)
+   *   新: category: PermissionCategory ("wallet" | "brand" | ...)
+   *
+   * ※ backend との互換のため、作成時には member.role に category をそのまま入れます
+   *    （MemberRole は PermissionCategory の別名に置き換え済み）
+   */
+  const [category, setCategory] = useState<PermissionCategory>("brand");
+
   const [permissionsText, setPermissionsText] = useState(""); // カンマ区切り
   const [brandsText, setBrandsText] = useState(""); // カンマ区切り
 
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  // ===== 権限カテゴリ情報（カテゴリ選択の Popover で利用） =====
+  const allPermissions: Permission[] = ALL_PERMISSIONS;
+
+  const permissionsByCategory = useMemo(
+    () => groupPermissionsByCategory(ALL_PERMISSIONS),
+    []
+  );
+
+  // UIで扱いやすい配列形式（カテゴリ名・件数・配列）
+  const permissionCategories = useMemo(
+    () =>
+      (Object.keys(permissionsByCategory) as PermissionCategory[]).map((cat) => ({
+        key: cat,
+        count: permissionsByCategory[cat]?.length ?? 0,
+        permissions: permissionsByCategory[cat] ?? [],
+      })),
+    [permissionsByCategory]
+  );
+
+  // 選択肢としてのカテゴリ一覧
+  const permissionCategoryList = useMemo(
+    () => Object.keys(permissionsByCategory) as PermissionCategory[],
+    [permissionsByCategory]
+  );
 
   const toArray = (s: string) =>
     s
@@ -30,66 +77,112 @@ export function useMemberCreate(options?: UseMemberCreateOptions) {
       .map((x) => x.trim())
       .filter(Boolean);
 
-  const handleSubmit = useCallback(async (e?: React.FormEvent) => {
-    e?.preventDefault?.();
-    setError(null);
-    setSubmitting(true);
-    try {
-      const id = crypto.randomUUID();
-      const now = new Date().toISOString();
+  const handleSubmit = useCallback(
+    async (e?: React.FormEvent) => {
+      e?.preventDefault?.();
+      setError(null);
+      setSubmitting(true);
+      try {
+        const id = crypto.randomUUID();
+        const now = new Date().toISOString();
 
-      const member: Member = {
-        id,
-        firstName: firstName.trim() || undefined,
-        lastName: lastName.trim() || undefined,
-        firstNameKana: firstNameKana.trim() || undefined,
-        lastNameKana: lastNameKana.trim() || undefined,
-        email: email.trim() || undefined,
-        role,
-        permissions: toArray(permissionsText),
-        assignedBrands: (() => {
-          const arr = toArray(brandsText);
-          return arr.length ? arr : undefined;
-        })(),
-        createdAt: now,
-        updatedAt: now,
-        updatedBy: "console",
-        deletedAt: null,
-        deletedBy: null,
-      };
+        const member: Member = {
+          id,
+          firstName: firstName.trim() || undefined,
+          lastName: lastName.trim() || undefined,
+          firstNameKana: firstNameKana.trim() || undefined,
+          lastNameKana: lastNameKana.trim() || undefined,
+          email: email.trim() || undefined,
 
-      const created = await repo.create(member);
-      options?.onSuccess?.(created);
-    } catch (err: any) {
-      setError(err?.message ?? String(err));
-    } finally {
-      setSubmitting(false);
-    }
-  }, [
-    repo,
+          // ▼ backend 互換のため、role に PermissionCategory を格納
+          role: category as MemberRole,
+
+          permissions: toArray(permissionsText),
+          assignedBrands: (() => {
+            const arr = toArray(brandsText);
+            return arr.length ? arr : undefined;
+          })(),
+          createdAt: now,
+          updatedAt: now,
+          updatedBy: "console",
+          deletedAt: null,
+          deletedBy: null,
+        };
+
+        const created = await repo.create(member);
+        options?.onSuccess?.(created);
+      } catch (err: any) {
+        setError(err?.message ?? String(err));
+      } finally {
+        setSubmitting(false);
+      }
+    },
+    [
+      repo,
+      firstName,
+      lastName,
+      firstNameKana,
+      lastNameKana,
+      email,
+      category,
+      permissionsText,
+      brandsText,
+      options,
+    ]
+  );
+
+  // ─────────────────────────────────────────────────────────────
+  // 戻り値
+  //   ・category / setCategory を公開（新）
+  //   ・role / setRole は互換用エイリアス（必要なら UI 側で置換を進めてください）
+  // ─────────────────────────────────────────────────────────────
+  const role: MemberRole = category as MemberRole;
+  const setRole = (next: MemberRole | PermissionCategory) =>
+    setCategory(next as PermissionCategory);
+
+  return {
+    // 値
     firstName,
     lastName,
     firstNameKana,
     lastNameKana,
     email,
+
+    // ▼ 新：permission category ベース
+    category,
+
+    // 互換（従来の変数名を使っている呼び出し側のため）
     role,
+
     permissionsText,
     brandsText,
-    options,
-  ]);
+    submitting,
+    error,
 
-  return {
-    // 値
-    firstName, lastName, firstNameKana, lastNameKana, email, role,
-    permissionsText, brandsText,
-    submitting, error,
+    // 権限データ（カテゴリ表示用）
+    allPermissions,
+    permissionsByCategory,   // { [category]: Permission[] }
+    permissionCategories,    // [{ key, count, permissions }]
+    permissionCategoryList,  // PermissionCategory[]
 
     // セッター
-    setFirstName, setLastName, setFirstNameKana, setLastNameKana,
-    setEmail, setRole, setPermissionsText, setBrandsText,
+    setFirstName,
+    setLastName,
+    setFirstNameKana,
+    setLastNameKana,
+    setEmail,
+
+    // ▼ 新：カテゴリのセッター
+    setCategory,
+
+    // 互換：従来 API
+    setRole,
+
+    setPermissionsText,
+    setBrandsText,
 
     // 動作
     handleSubmit,
-    setError, // 呼び出し側で明示的に消したい時用
+    setError,
   };
 }

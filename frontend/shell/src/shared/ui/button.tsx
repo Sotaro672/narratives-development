@@ -1,4 +1,4 @@
-// frontend/shared/ui/button.tsx
+// frontend\shell\src\shared\ui\button.tsx
 import * as React from "react";
 
 /** className helper */

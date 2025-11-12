@@ -1,6 +1,6 @@
 // frontend/shell/src/layout/PageStyle/PageStyle.tsx
 import type { ReactNode } from "react";
-import { ArrowLeft, Save } from "lucide-react";
+import { ArrowLeft, Save, Plus } from "lucide-react"; // ← Plus を追加
 import "./PageStyle.css";
 
 function cn(...classes: Array<string | undefined | false | null>) {
@@ -13,6 +13,7 @@ interface PageStyleProps {
   className?: string;
   onBack?: () => void;
   onSave?: () => void;
+  onCreate?: () => void; // ← 追加
   title?: string;
   badge?: ReactNode;
   actions?: ReactNode;
@@ -25,6 +26,7 @@ export default function PageStyle({
   className,
   onBack,
   onSave,
+  onCreate, // ← 追加
   title,
   badge,
   actions,
@@ -56,6 +58,16 @@ export default function PageStyle({
           </div>
 
           <div className="page-header__actions">
+            {onCreate && ( // ← 追加
+              <button
+                type="button"
+                className="page-header__btn"
+                onClick={onCreate}
+              >
+                <Plus size={16} style={{ marginRight: 4 }} />
+                作成
+              </button>
+            )}
             {onSave && (
               <button
                 type="button"

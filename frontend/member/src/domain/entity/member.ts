@@ -1,25 +1,34 @@
 // frontend/member/src/domain/entity/member.ts
 
+import type { PermissionCategory } from "../../../../shell/src/shared/types/permission";
+
 /**
  * MemberRole
- * backend/internal/domain/member/entity.go の MemberRole / 定数群に対応。
+ * これまでの「アプリ独自ロール」を廃止し、permission の category を採用します。
+ * backend/internal/domain/permission/entity.go の Category に対応。
+ *
+ * 例: "wallet" | "inquiry" | "organization" | "brand" | "token" | ...
  */
-export type MemberRole =
-  | "admin"
-  | "brand-manager"
-  | "token-manager"
-  | "inquiry-handler"
-  | "production-designer";
+export type MemberRole = PermissionCategory;
 
+/**
+ * 利用可能なロール（= Permission のカテゴリ一覧）
+ * 必要に応じて backend 側のカテゴリ追加に追従してください。
+ */
 export const MEMBER_ROLES: MemberRole[] = [
-  "admin",
-  "brand-manager",
-  "token-manager",
-  "inquiry-handler",
-  "production-designer",
+  "wallet",
+  "inquiry",
+  "organization",
+  "brand",
+  "token",
+  "order",
+  "member",
+  "inventory",
+  "production",
+  "system",
 ];
 
-/** MemberRole の妥当性チェック（backend: IsValidRole と同等） */
+/** MemberRole の妥当性チェック */
 export function isValidMemberRole(role: string): role is MemberRole {
   return MEMBER_ROLES.includes(role as MemberRole);
 }
@@ -45,6 +54,7 @@ export interface Member {
   /** 空文字 or undefined の場合は「未設定」扱い（backend と同様の解釈） */
   email?: string;
 
+  /** 役割は Permission カテゴリで表現 */
   role: MemberRole;
 
   /** Permission.Name の配列（backend: Permissions）*/

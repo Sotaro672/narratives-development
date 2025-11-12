@@ -1,4 +1,4 @@
-// frontend/shared/ui/popover.tsx
+// frontend\shell\src\shared\ui\popover.tsx
 import React, { createContext, useContext, useEffect, useRef, useState } from "react";
 import type { CSSProperties, ReactNode } from "react";
 

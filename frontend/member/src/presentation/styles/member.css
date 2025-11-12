@@ -35,8 +35,6 @@
   margin-right: 6px;
 }
 
-/* frontend/member/src/presentation/styles/member.css */
-
 /* 基本情報カード全体 */
 .member-card {
   border-radius: 12px;
@@ -120,5 +118,28 @@
 @media (max-width: 640px) {
   .member-card__grid {
     grid-template-columns: 1fr;
+  }
+}
+/* ────────────────────────────────
+   姓・名入力欄の横並び指定
+──────────────────────────────── */
+
+/* 全体の行（姓＋姓かな／名＋名かな） */
+.name-row {
+  display: flex;
+  gap: 12px;
+}
+
+/* 各入力欄ブロック */
+.name-row .name-field {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+}
+
+/* スマホでは縦並び */
+@media (max-width: 640px) {
+  .name-row {
+    flex-direction: column;
   }
 }
