@@ -1,78 +1,22 @@
 // frontend/member/src/presentation/pages/memberCreate.tsx
 import * as React from "react";
 import { useNavigate } from "react-router-dom";
+import { MEMBER_ROLES, type MemberRole } from "../../domain/entity/member";
+import { useMemberCreate } from "../../hooks/useMemberCreate";
 
-import { MEMBER_ROLES, type MemberRole, type Member } from "../../domain/entity/member";
-import { MemberRepositoryFS } from "../../infrastructure/firestore/memberRepositoryFS";
-import type { MemberPatch } from "../../domain/entity/member";
-
-/**
- * シンプルなメンバー作成フォーム
- * - 必須: role
- * - 任意: 氏名 / かな / email / permissions / assignedBrands
- * - id は crypto.randomUUID() で生成
- * - createdAt / updatedAt は ISO8601
- */
 export default function MemberCreatePage() {
   const navigate = useNavigate();
-  const repo = React.useMemo(() => new MemberRepositoryFS(), []);
 
-  // ---- フォーム状態 ----
-  const [firstName, setFirstName] = React.useState("");
-  const [lastName, setLastName] = React.useState("");
-  const [firstNameKana, setFirstNameKana] = React.useState("");
-  const [lastNameKana, setLastNameKana] = React.useState("");
-  const [email, setEmail] = React.useState("");
-  const [role, setRole] = React.useState<MemberRole>("brand-manager");
-  const [permissionsText, setPermissionsText] = React.useState(""); // カンマ区切り
-  const [brandsText, setBrandsText] = React.useState(""); // カンマ区切り
-
-  const [submitting, setSubmitting] = React.useState(false);
-  const [error, setError] = React.useState<string | null>(null);
-
-  const toArray = (s: string) =>
-    s
-      .split(",")
-      .map((x) => x.trim())
-      .filter(Boolean);
-
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setError(null);
-    setSubmitting(true);
-    try {
-      const id = crypto.randomUUID();
-      const now = new Date().toISOString();
-
-      const member: Member = {
-        id,
-        firstName: firstName.trim() || undefined,
-        lastName: lastName.trim() || undefined,
-        firstNameKana: firstNameKana.trim() || undefined,
-        lastNameKana: lastNameKana.trim() || undefined,
-        email: email.trim() || undefined,
-        role,
-        permissions: toArray(permissionsText),
-        assignedBrands: (() => {
-          const arr = toArray(brandsText);
-          return arr.length ? arr : undefined;
-        })(),
-        createdAt: now,
-        updatedAt: now,
-        updatedBy: "console", // 必要に応じてログインユーザーIDへ
-        deletedAt: null,
-        deletedBy: null,
-      };
-
-      await repo.create(member);
-      // 作成後は一覧へ戻る
-      navigate("/member");
-    } catch (err: any) {
-      setError(err?.message ?? String(err));
-    } finally {
-      setSubmitting(false);
-    }
-  };
+  const {
+    firstName, lastName, firstNameKana, lastNameKana, email, role,
+    permissionsText, brandsText,
+    submitting, error,
+    setFirstName, setLastName, setFirstNameKana, setLastNameKana,
+    setEmail, setRole, setPermissionsText, setBrandsText,
+    handleSubmit,
+  } = useMemberCreate({
+    onSuccess: () => navigate("/member"),
+  });
 
   const cancel = () => navigate(-1);
 
