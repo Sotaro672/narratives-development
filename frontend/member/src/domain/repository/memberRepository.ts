@@ -42,11 +42,6 @@ export interface MemberFilter {
   /** 権限名（Member.permissions と対応） */
   permissions?: string[];
 
-  // --- 後方互換フィールド（backend のコメントに準拠）---
-  /** 旧: Roles -> roleIds と同義 */
-  roles?: string[];
-  /** 旧: Brands -> brandIds と同義 */
-  brands?: string[];
 }
 
 /**
