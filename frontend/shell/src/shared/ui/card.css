@@ -1,4 +1,4 @@
-/* frontend/model/src/pages/Card.css Model 配下カードの共通スタイル 対象: 
+/* frontend\shell\src\shared\ui\card.css
 .vc (Color), .mnc (ModelNumber), .svc (Size) 変数は productBlueprintDetail.css の --pbp-* を使用 */ 
 /* ====== カード外観（共通） ====== */ 
 .vc, .mnc, .svc { 

@@ -1,4 +1,4 @@
-// frontend/shared/ui/badge.tsx
+// frontend\shell\src\shared\ui\badge.tsx
 import type { CSSProperties, ReactNode } from "react";
 
 interface BadgeProps {

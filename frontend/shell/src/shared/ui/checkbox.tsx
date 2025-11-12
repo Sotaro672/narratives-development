@@ -1,4 +1,4 @@
-// frontend/shell/src/shared/ui/checkbox.tsx
+// frontend\shell\src\shared\ui\checkbox.tsx
 import { Check } from "lucide-react";
 
 interface CheckboxProps {

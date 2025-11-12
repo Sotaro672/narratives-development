@@ -1,4 +1,4 @@
-// frontend/shared/ui/card.tsx
+// frontend\shell\src\shared\ui\card.tsx
 import * as React from "react";
 
 /**
