@@ -12,39 +12,17 @@ import (
 	permdom "narratives/internal/domain/permission"
 )
 
-// MemberRole mirrors web-app/src/shared/types/member.ts
-// Use a type alias so string can be assigned directly from adapters.
-type MemberRole = string
-
-const (
-	RoleAdmin              MemberRole = "admin"
-	RoleBrandManager       MemberRole = "brand-manager"
-	RoleTokenManager       MemberRole = "token-manager"
-	RoleInquiryHandler     MemberRole = "inquiry-handler"
-	RoleProductionDesigner MemberRole = "production-designer"
-)
-
-func IsValidRole(r MemberRole) bool {
-	switch r {
-	case RoleAdmin, RoleBrandManager, RoleTokenManager, RoleInquiryHandler, RoleProductionDesigner:
-		return true
-	default:
-		return false
-	}
-}
-
 var emailRe = regexp.MustCompile(`^[^\s@]+@[^\s@]+\.[^\s@]+$`)
 
 type Member struct {
-	ID             string     `json:"id"`
-	FirstName      string     `json:"first_name,omitempty"`
-	LastName       string     `json:"last_name,omitempty"`
-	FirstNameKana  string     `json:"first_name_kana,omitempty"`
-	LastNameKana   string     `json:"last_name_kana,omitempty"`
-	Email          string     `json:"email,omitempty"` // optional in TS; empty string means unset
-	Role           MemberRole `json:"role"`
-	Permissions    []string   `json:"permissions"`
-	AssignedBrands []string   `json:"assignedBrands,omitempty"`
+	ID             string   `json:"id"`
+	FirstName      string   `json:"first_name,omitempty"`
+	LastName       string   `json:"last_name,omitempty"`
+	FirstNameKana  string   `json:"first_name_kana,omitempty"`
+	LastNameKana   string   `json:"last_name_kana,omitempty"`
+	Email          string   `json:"email,omitempty"` // optional; empty string means unset
+	Permissions    []string `json:"permissions"`
+	AssignedBrands []string `json:"assignedBrands,omitempty"`
 
 	CreatedAt time.Time  `json:"createdAt"`
 	UpdatedAt *time.Time `json:"updatedAt,omitempty"`
@@ -55,7 +33,6 @@ type Member struct {
 
 var (
 	ErrInvalidID          = errors.New("member: invalid id")
-	ErrInvalidRole        = errors.New("member: invalid role")
 	ErrInvalidEmail       = errors.New("member: invalid email")
 	ErrInvalidCreatedAt   = errors.New("member: invalid createdAt")
 	ErrInvalidUpdatedAt   = errors.New("member: invalid updatedAt")
@@ -70,13 +47,11 @@ var (
 // New constructs a Member with validation. Use empty strings/slices for optional fields.
 func New(
 	id string,
-	role MemberRole,
 	createdAt time.Time,
 	opts ...func(*Member),
 ) (Member, error) {
 	m := Member{
 		ID:          id,
-		Role:        role,
 		Permissions: nil,
 		CreatedAt:   createdAt,
 	}
@@ -93,7 +68,6 @@ func New(
 // NewFromStringsTime accepts createdAt/updatedAt as string (ISO8601). Empty updatedAt means unset.
 func NewFromStringsTime(
 	id string,
-	role MemberRole,
 	createdAt string,
 	updatedAt string, // optional; pass "" if none
 	opts ...func(*Member),
@@ -110,7 +84,7 @@ func NewFromStringsTime(
 			utPtr = nil
 		}
 	}
-	m, err := New(id, role, ct, opts...)
+	m, err := New(id, ct, opts...)
 	if err != nil {
 		return Member{}, err
 	}
@@ -179,15 +153,6 @@ func (m *Member) UpdateEmail(email string, now time.Time) error {
 	return nil
 }
 
-func (m *Member) UpdateRole(role MemberRole, now time.Time) error {
-	if !IsValidRole(role) {
-		return ErrInvalidRole
-	}
-	m.Role = role
-	m.touch(now)
-	return nil
-}
-
 func (m *Member) AssignBrand(id string, now time.Time) {
 	if id == "" {
 		return
@@ -249,9 +214,6 @@ func (m *Member) ClearDeleted() {
 func (m Member) validate() error {
 	if m.ID == "" {
 		return ErrInvalidID
-	}
-	if !IsValidRole(m.Role) {
-		return ErrInvalidRole
 	}
 	if m.Email != "" && !emailRe.MatchString(m.Email) {
 		return ErrInvalidEmail
@@ -347,7 +309,6 @@ type MemberPatch struct {
 	FirstNameKana  *string
 	LastNameKana   *string
 	Email          *string
-	Role           *MemberRole
 	Permissions    *[]string
 	AssignedBrands *[]string
 
@@ -367,8 +328,7 @@ CREATE TABLE members (
   first_name_kana VARCHAR(100),
   last_name_kana VARCHAR(100),
   email VARCHAR(255) UNIQUE,
-  role VARCHAR(50) NOT NULL,
-  authorizations TEXT[] NOT NULL,
+  permissions TEXT[] NOT NULL,
   assigned_brands TEXT[],
 
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),

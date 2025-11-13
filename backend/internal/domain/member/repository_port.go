@@ -1,4 +1,4 @@
-// backend\internal\domain\member\repository_port.go
+// backend/internal/domain/member/repository_port.go
 package member
 
 import (
@@ -8,13 +8,9 @@ import (
 	common "narratives/internal/domain/common"
 )
 
-// MemberRole は後方互換のため string のエイリアスとして公開。
-// adapter 側で string をそのまま代入可能にします。
-
 // Filter は一覧取得時のフィルタ条件です。
 type Filter struct {
 	SearchQuery string   // 名前/フリガナ/メールの部分一致など
-	RoleIDs     []string // ロールID（名称ではなくID/コードを推奨）
 	BrandIDs    []string // 担当ブランドID
 	CompanyID   string   // 所属会社フィルタ
 	Status      string   // "active" | "inactive" など、必要に応じて
@@ -27,8 +23,6 @@ type Filter struct {
 	Permissions []string
 
 	// --- 後方互換: 旧adapterが参照するフィールド名 ---
-	// f.Roles -> RoleIDs と同義
-	Roles []string
 	// f.Brands -> BrandIDs と同義
 	Brands []string
 }

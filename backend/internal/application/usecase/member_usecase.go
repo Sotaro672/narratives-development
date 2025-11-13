@@ -1,4 +1,4 @@
-// backend\internal\application\usecase\member_usecase.go
+// backend/internal/application/usecase/member_usecase.go
 package usecase
 
 import (
@@ -57,7 +57,6 @@ type CreateMemberInput struct {
 	FirstName      string
 	LastName       string
 	Email          string
-	Role           string
 	Permissions    []string
 	AssignedBrands []string
 	// CreatedAt を指定しない場合は現在時刻
@@ -75,7 +74,6 @@ func (u *MemberUsecase) Create(ctx context.Context, in CreateMemberInput) (memdo
 		FirstName:      strings.TrimSpace(in.FirstName),
 		LastName:       strings.TrimSpace(in.LastName),
 		Email:          strings.TrimSpace(in.Email),
-		Role:           memdom.MemberRole(strings.TrimSpace(in.Role)),
 		Permissions:    dedupStrings(in.Permissions),
 		AssignedBrands: dedupStrings(in.AssignedBrands),
 		CreatedAt:      *createdAt,
@@ -89,7 +87,6 @@ type UpdateMemberInput struct {
 	FirstName      *string
 	LastName       *string
 	Email          *string
-	Role           *string
 	Permissions    *[]string
 	AssignedBrands *[]string
 }
@@ -110,9 +107,6 @@ func (u *MemberUsecase) Update(ctx context.Context, in UpdateMemberInput) (memdo
 	}
 	if in.Email != nil {
 		current.Email = strings.TrimSpace(*in.Email)
-	}
-	if in.Role != nil {
-		current.Role = memdom.MemberRole(strings.TrimSpace(*in.Role))
 	}
 	if in.Permissions != nil {
 		current.Permissions = dedupStrings(*in.Permissions)

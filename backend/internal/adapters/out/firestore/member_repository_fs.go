@@ -455,14 +455,6 @@ func matchMemberFilter(m memdom.Member, f memdom.Filter) bool {
 		}
 	}
 
-	// RoleIDs / Roles
-	if len(f.RoleIDs) > 0 || len(f.Roles) > 0 {
-		want := append(append([]string{}, f.RoleIDs...), f.Roles...)
-		if !fscommon.ContainsString(want, string(m.Role)) {
-			return false
-		}
-	}
-
 	// BrandIDs / Brands
 	if len(f.BrandIDs) > 0 || len(f.Brands) > 0 {
 		want := append(append([]string{}, f.BrandIDs...), f.Brands...)
