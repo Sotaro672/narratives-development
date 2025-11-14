@@ -1,5 +1,15 @@
 {
   "projects": {
     "default": "narratives-development-26c2d"
-  }
+  },
+  "targets": {
+    "narratives-development-26c2d": {
+      "hosting": {
+        "narratives-console-dev": [
+          "narratives-console-dev"
+        ]
+      }
+    }
+  },
+  "etags": {}
 }
