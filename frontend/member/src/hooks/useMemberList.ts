@@ -42,7 +42,22 @@ export function useMemberList(
         const usePage = override?.page ?? page;
         const useFilter = override?.filter ?? filter;
         const result = await repository.list(usePage, useFilter);
-        setMembers(result.items);
+
+        // ★ 姓・名がどちらも未設定のときは firstName に「招待中」を入れて返す
+        const normalized: Member[] = result.items.map((m) => {
+          const noFirst = m.firstName === null || m.firstName === undefined || m.firstName === "";
+          const noLast  = m.lastName === null  || m.lastName === undefined  || m.lastName === "";
+
+          if (noFirst && noLast) {
+            return {
+              ...m,
+              firstName: "招待中",
+            };
+          }
+          return m;
+        });
+
+        setMembers(normalized);
       } catch (e: any) {
         setError(e);
       } finally {

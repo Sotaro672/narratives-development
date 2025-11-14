@@ -1,7 +1,6 @@
 // frontend/member/src/presentation/components/MemberDetailCard.tsx
 
 import * as React from "react";
-import type { Member } from "../../../../shell/src/shared/types/member";
 import {
   Card,
   CardHeader,
@@ -9,7 +8,7 @@ import {
   CardContent,
 } from "../../../../shell/src/shared/ui/card";
 import { User, Mail, Calendar } from "lucide-react";
-import { MOCK_MEMBERS } from "../../infrastructure/mockdata/member_mockdata";
+import { useMemberDetail } from "../../hooks/useMemberDetail";
 
 const IconUser = User as unknown as React.ComponentType<
   React.SVGProps<SVGSVGElement>
@@ -41,24 +40,54 @@ function formatDate(iso?: string | null): string {
 
 /**
  * メンバー詳細カード
- * - memberId からデータを検索し、各項目を表示
+ * - memberId から Firestore 経由でデータを取得し、各項目を表示
+ * - 氏名が null/空文字の場合は「氏名」欄を空欄にする（ID で埋めない）
  */
 export default function MemberDetailCard({ memberId }: MemberDetailCardProps) {
-  // ─────────────────────────────────────────────
-  // モックデータから対象メンバーを検索
-  // ─────────────────────────────────────────────
-  const member: Member | undefined = React.useMemo(() => {
-    return MOCK_MEMBERS.find((m) => m.id === memberId);
-  }, [memberId]);
+  const { member, loading, error } = useMemberDetail(memberId);
 
-  // 該当がない場合のフォールバック
+  // ローディング表示
+  if (loading) {
+    return (
+      <Card className="member-card w-full">
+        <CardHeader className="member-card__header">
+          <CardTitle className="member-card__title flex items-center gap-2">
+            <IconUser className="member-card__icon w-4 h-4" />
+            基本情報
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="p-6 text-sm text-[hsl(var(--muted-foreground))]">
+          読み込み中です…
+        </CardContent>
+      </Card>
+    );
+  }
+
+  // エラー表示
+  if (error) {
+    return (
+      <Card className="member-card w-full">
+        <CardHeader className="member-card__header">
+          <CardTitle className="member-card__title flex items-center gap-2">
+            <IconUser className="member-card__icon w-4 h-4" />
+            基本情報
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="p-6 text-sm text-red-500">
+          データ取得エラー: {error.message}
+        </CardContent>
+      </Card>
+    );
+  }
+
+  // メンバーが存在しない場合
   if (!member) {
     return (
       <Card className="member-card w-full">
         <CardHeader className="member-card__header">
           <CardTitle className="member-card__title flex items-center gap-2">
             <IconUser className="member-card__icon w-4 h-4" />
-            基本情報（ID: {memberId}）
+            基本情報
           </CardTitle>
         </CardHeader>
         <CardContent className="p-6 text-sm text-[hsl(var(--muted-foreground))]">
@@ -69,15 +98,27 @@ export default function MemberDetailCard({ memberId }: MemberDetailCardProps) {
   }
 
   // 氏名と読み仮名の組み立て
-  const fullName =
-    [member.lastName, member.firstName].filter(Boolean).join(" ") || "-";
-  const fullKana =
-    [member.lastNameKana, member.firstNameKana].filter(Boolean).join(" ") ||
-    "-";
+  const rawFullName = `${member.lastName ?? ""} ${member.firstName ?? ""}`.trim();
+  // ★ 氏名が null/空の場合は「空欄」にする（"-" や ID では埋めない）
+  const fullName = rawFullName || "";
+
+  const rawFullKana = `${member.lastNameKana ?? ""} ${
+    member.firstNameKana ?? ""
+  }`.trim();
+  const fullKana = rawFullKana || "";
 
   const email = member.email || "-";
   const joinedAt = formatDate(member.createdAt);
   const updatedAt = formatDate(member.updatedAt || member.createdAt);
+
+  // 氏名が設定されているか
+  const hasName = fullName !== "";
+
+  // Header のタイトル
+  // ★ name が null/空の場合は ID を表示しない（空欄扱い）
+  const headerTitle = hasName
+    ? `基本情報（ID: ${memberId}）`
+    : "基本情報";
 
   // ─────────────────────────────────────────────
   // 描画
@@ -88,7 +129,7 @@ export default function MemberDetailCard({ memberId }: MemberDetailCardProps) {
       <CardHeader className="member-card__header">
         <CardTitle className="member-card__title flex items-center gap-2">
           <IconUser className="member-card__icon w-4 h-4" />
-          基本情報（ID: {memberId}）
+          {headerTitle}
         </CardTitle>
       </CardHeader>
 

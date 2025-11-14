@@ -4,27 +4,14 @@ import * as React from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import PageStyle from "../../../../shell/src/layout/PageStyle/PageStyle";
 import MemberDetailCard from "../components/MemberCard";
-import { MOCK_MEMBERS } from "../../infrastructure/mockdata/member_mockdata";
+import { useMemberDetail } from "../../hooks/useMemberDetail";
 
 export default function MemberDetail() {
   const navigate = useNavigate();
   const { memberId } = useParams<{ memberId: string }>();
 
-  // ─────────────────────────────────────────────
-  // モックデータから対象メンバーを検索（PageHeader 表示用）
-  // ─────────────────────────────────────────────
-  const member = React.useMemo(() => {
-    if (!memberId) return undefined;
-    return MOCK_MEMBERS.find((m) => m.id === memberId);
-  }, [memberId]);
-
-  const memberName = React.useMemo(() => {
-    if (!member) return "不明なメンバー";
-    const fullName = [member.lastName, member.firstName]
-      .filter(Boolean)
-      .join(" ");
-    return fullName || "不明なメンバー";
-  }, [member]);
+  // Firestore から詳細取得（招待中判定含む）
+  const { memberName } = useMemberDetail(memberId);
 
   const handleBack = React.useCallback(() => {
     navigate(-1);
@@ -41,7 +28,7 @@ export default function MemberDetail() {
         <MemberDetailCard memberId={memberId ?? ""} />
       </div>
 
-      {/* 右カラム：将来拡張用プレースホルダー */}
+      {/* 右カラム：将来拡張用 */}
       <div></div>
     </PageStyle>
   );

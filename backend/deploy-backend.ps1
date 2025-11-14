@@ -1,7 +1,6 @@
-# backend/deploy-backend.ps1
 param(
   [Parameter(Mandatory = $true)]
-  [string]$Image,                   # 例: asia-northeast1-docker.pkg.dev/.../narratives-backend:20251113173405
+  [string]$Image,                   # 例: asia-northeast1-docker.pkg.dev/.../narratives-backend:TAG
   [string]$Region      = "asia-northeast1",
   [string]$ServiceName = "narratives-backend"
 )
@@ -16,6 +15,8 @@ $ProjectId = (gcloud config get-value project 2>$null).Trim()
 if (-not $ProjectId) {
   throw "gcloud config project が設定されていません。`n 例: gcloud config set project narratives-development-26c2d"
 }
+
+Write-Step "Using project: $ProjectId"
 
 # Cloud Run 実行用サービスアカウント
 $RunServiceAccount = "narratives-backend-sa@$ProjectId.iam.gserviceaccount.com"
@@ -51,6 +52,7 @@ $deployArgs = @(
   "--platform",       "managed",
   "--allow-unauthenticated",
   "--service-account", $RunServiceAccount,
+  "--set-env-vars",    "GOOGLE_CLOUD_PROJECT=$ProjectId",
   "--min-instances",  "0",
   "--max-instances",  "5",
   "--memory",         "512Mi",

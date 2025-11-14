@@ -30,9 +30,12 @@ type MemberRow = {
 
 // Member → 一覧表示用 MemberRow へ変換
 const toMemberRow = (m: Member): MemberRow => {
+  // Member は email?: string | null なので null/undefined をまとめて空文字に正規化
+  const safeEmail = m.email ?? "";
+
   const name =
     `${m.lastName ?? ""} ${m.firstName ?? ""}`.trim() ||
-    m.email ||
+    safeEmail ||
     m.id;
 
   const registeredAt =
@@ -40,11 +43,14 @@ const toMemberRow = (m: Member): MemberRow => {
       ? m.createdAt.slice(0, 10).replace(/-/g, "/")
       : "";
 
+  // assignedBrands?: string[] | null を一覧用には常に string[] に正規化
+  const brands = m.assignedBrands ?? [];
+
   return {
     id: m.id,
     name,
-    email: m.email ?? "",
-    brands: m.assignedBrands ?? [],
+    email: safeEmail,
+    brands,
     taskCount: 0,
     permissionCount: m.permissions?.length ?? 0,
     registeredAt,

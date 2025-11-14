@@ -1,3 +1,4 @@
+// backend/internal/adapters/in/http/handlers/member_handler.go
 package handlers
 
 import (
@@ -25,6 +26,8 @@ func (h *MemberHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 
 	switch {
+	case r.Method == http.MethodPost && r.URL.Path == "/members":
+		h.create(w, r)
 	case r.Method == http.MethodGet && r.URL.Path == "/members":
 		h.list(w, r)
 	case r.Method == http.MethodGet && strings.HasPrefix(r.URL.Path, "/members/"):
@@ -36,7 +39,57 @@ func (h *MemberHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+// ========================
+// POST /members
+// ========================
+
+type memberCreateRequest struct {
+	ID             string   `json:"id"`
+	FirstName      string   `json:"firstName"`
+	LastName       string   `json:"lastName"`
+	FirstNameKana  string   `json:"firstNameKana"`
+	LastNameKana   string   `json:"lastNameKana"`
+	Email          string   `json:"email"`
+	Permissions    []string `json:"permissions"`
+	AssignedBrands []string `json:"assignedBrands"`
+}
+
+func (h *MemberHandler) create(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+
+	var req memberCreateRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		w.WriteHeader(http.StatusBadRequest)
+		_ = json.NewEncoder(w).Encode(map[string]string{"error": "invalid json"})
+		return
+	}
+
+	input := memberuc.CreateMemberInput{
+		ID:             req.ID,
+		FirstName:      req.FirstName,
+		LastName:       req.LastName,
+		FirstNameKana:  req.FirstNameKana,
+		LastNameKana:   req.LastNameKana,
+		Email:          req.Email,
+		Permissions:    req.Permissions,
+		AssignedBrands: req.AssignedBrands,
+		CreatedAt:      nil,
+	}
+
+	m, err := h.uc.Create(ctx, input)
+	if err != nil {
+		writeMemberErr(w, err)
+		return
+	}
+
+	w.WriteHeader(http.StatusCreated)
+	_ = json.NewEncoder(w).Encode(m)
+}
+
+// ========================
 // GET /members
+// ========================
+
 func (h *MemberHandler) list(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 
@@ -53,7 +106,10 @@ func (h *MemberHandler) list(w http.ResponseWriter, r *http.Request) {
 	_ = json.NewEncoder(w).Encode(res.Items)
 }
 
+// ========================
 // GET /members/{id}
+// ========================
+
 func (h *MemberHandler) get(w http.ResponseWriter, r *http.Request, id string) {
 	ctx := r.Context()
 	id = strings.TrimSpace(id)
@@ -71,7 +127,10 @@ func (h *MemberHandler) get(w http.ResponseWriter, r *http.Request, id string) {
 	_ = json.NewEncoder(w).Encode(member)
 }
 
+// ========================
 // エラーハンドリング
+// ========================
+
 func writeMemberErr(w http.ResponseWriter, err error) {
 	code := http.StatusInternalServerError
 
@@ -80,6 +139,10 @@ func writeMemberErr(w http.ResponseWriter, err error) {
 		code = http.StatusBadRequest
 	case memberdom.ErrNotFound:
 		code = http.StatusNotFound
+	case memberdom.ErrInvalidEmail, memberdom.ErrInvalidCreatedAt:
+		code = http.StatusBadRequest
+	case memberdom.ErrConflict:
+		code = http.StatusConflict
 	}
 
 	w.WriteHeader(code)

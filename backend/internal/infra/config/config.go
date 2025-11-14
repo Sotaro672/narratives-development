@@ -6,8 +6,8 @@ import (
 )
 
 // Config はアプリケーション全体の環境変数設定を保持します。
+// Firestore / GCS 前提のため DATABASE_URL は削除してあります。
 type Config struct {
-	DatabaseURL              string
 	GCSBucket                string
 	GCPCreds                 string
 	Port                     string
@@ -16,21 +16,20 @@ type Config struct {
 }
 
 // Load は環境変数を読み込み Config を返します。
-// Firestore や GCS の設定も統一的に扱います。
+// Firestore と GCS の設定を統一的に管理します。
 func Load() *Config {
 	cfg := &Config{
 		GCSBucket:                os.Getenv("GCS_BUCKET"),
 		GCPCreds:                 os.Getenv("GOOGLE_APPLICATION_CREDENTIALS"),
 		Port:                     getenvDefault("PORT", "8080"),
 		FirestoreProjectID:       getenvDefault("FIRESTORE_PROJECT_ID", "narratives-development-26c2d"),
-		FirestoreCredentialsFile: os.Getenv("FIRESTORE_CREDENTIALS_FILE"), // 空文字ならADCを使う
+		FirestoreCredentialsFile: os.Getenv("FIRESTORE_CREDENTIALS_FILE"), // 空文字なら ADC を使用
 	}
 
 	return cfg
 }
 
 // GetFirestoreProjectID は Firestore/GCP プロジェクト ID を返します。
-// container.go からは cfg.GetFirestoreProjectID() を使用できます。
 func (c *Config) GetFirestoreProjectID() string {
 	return c.FirestoreProjectID
 }

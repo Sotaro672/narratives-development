@@ -90,24 +90,27 @@ export function useMemberCreate(options?: UseMemberCreateOptions) {
         const id = crypto.randomUUID();
         const now = new Date().toISOString();
 
+        const perms = toArray(permissionsText);
+        const brands = toArray(brandsText);
+
         const member: Member = {
           id,
-          firstName: firstName.trim() || undefined,
-          lastName: lastName.trim() || undefined,
-          firstNameKana: firstNameKana.trim() || undefined,
-          lastNameKana: lastNameKana.trim() || undefined,
-          email: email.trim() || undefined,
-          permissions: toArray(permissionsText),
-          assignedBrands: (() => {
-            const arr = toArray(brandsText);
-            return arr.length ? arr : undefined;
-          })(),
+          // 空なら null として保存（認証フロー上、一旦 null で招待状態を表現）
+          firstName: firstName.trim() || null,
+          lastName: lastName.trim() || null,
+          firstNameKana: firstNameKana.trim() || null,
+          lastNameKana: lastNameKana.trim() || null,
+          email: email.trim() || null,
+          permissions: perms,
           createdAt: now,
           updatedAt: now,
           updatedBy: "console",
           deletedAt: null,
           deletedBy: null,
         };
+
+        // ブランドは 1 件以上ある場合のみ配列で付与、それ以外は null
+        member.assignedBrands = brands.length > 0 ? brands : null;
 
         const created = await repo.create(member);
         options?.onSuccess?.(created);

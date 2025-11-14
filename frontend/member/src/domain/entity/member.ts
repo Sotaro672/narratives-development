@@ -8,25 +8,25 @@ const emailRe = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
  * backend/internal/domain/member/entity.go の Member に対応。
  *
  * - 日付は ISO8601 文字列（例: "2025-01-10T00:00:00Z"）を想定
- * - Firestore/GraphQL とのやり取りを考慮し、undefined / null を許容
+ * - Firestore/GraphQL とのやり取りを考慮し、文字列系フィールドは string | null を許容
  * - 役割（role）は廃止。権限は permissions で表現。
  */
 export interface Member {
   id: string;
 
-  firstName?: string;
-  lastName?: string;
-  firstNameKana?: string;
-  lastNameKana?: string;
+  firstName?: string | null;
+  lastName?: string | null;
+  firstNameKana?: string | null;
+  lastNameKana?: string | null;
 
   /** 空文字 or undefined の場合は「未設定」扱い（backend と同様の解釈） */
-  email?: string;
+  email?: string | null;
 
   /** Permission.Name の配列（backend: Permissions）*/
   permissions: string[];
 
   /** 割当ブランドIDの配列（backend: AssignedBrands） */
-  assignedBrands?: string[];
+  assignedBrands?: string[] | null;
 
   createdAt: string; // ISO8601
   updatedAt?: string | null;
@@ -39,7 +39,7 @@ export interface Member {
  * MemberPatch
  * backend/internal/domain/member/entity.go の MemberPatch に対応。
  * - usecase / repository レイヤで部分更新時に利用
- * - undefined は「この項目は更新しない」、null は「null に更新する」意図で利用可能
+ * - undefined は「この項目は更新しない」、null は「null に更新する」意図
  * - 役割（role）は廃止済み
  */
 export interface MemberPatch {
@@ -83,18 +83,18 @@ export interface PermissionCatalogItem {
  * Member生成用ヘルパ
  * - backend の New / NewFromStringsTime の簡略版
  * - createdAt/updatedAt は ISO8601 文字列想定
- * - 役割（role）は廃止済み
+ * - 「undefined は使わず、必要に応じて null を使う」方針
  */
 export function createMember(params: {
   id: string;
   createdAt: string;
-  firstName?: string;
-  lastName?: string;
-  firstNameKana?: string;
-  lastNameKana?: string;
-  email?: string;
+  firstName?: string | null;
+  lastName?: string | null;
+  firstNameKana?: string | null;
+  lastNameKana?: string | null;
+  email?: string | null;
   permissions?: string[];
-  assignedBrands?: string[];
+  assignedBrands?: string[] | null;
   updatedAt?: string | null;
   updatedBy?: string | null;
   deletedAt?: string | null;
@@ -103,21 +103,35 @@ export function createMember(params: {
   const member: Member = {
     id: params.id,
     createdAt: params.createdAt,
-    firstName: params.firstName,
-    lastName: params.lastName,
-    firstNameKana: params.firstNameKana,
-    lastNameKana: params.lastNameKana,
-    email: params.email,
     permissions: dedup(params.permissions ?? []),
-    assignedBrands:
-      params.assignedBrands && params.assignedBrands.length > 0
-        ? dedup(params.assignedBrands)
-        : undefined,
     updatedAt: params.updatedAt ?? null,
     updatedBy: params.updatedBy ?? null,
     deletedAt: params.deletedAt ?? null,
     deletedBy: params.deletedBy ?? null,
   };
+
+  member.firstName =
+    params.firstName !== undefined && params.firstName !== null
+      ? params.firstName
+      : null;
+  member.lastName =
+    params.lastName !== undefined && params.lastName !== null ? params.lastName : null;
+  member.firstNameKana =
+    params.firstNameKana !== undefined && params.firstNameKana !== null
+      ? params.firstNameKana
+      : null;
+  member.lastNameKana =
+    params.lastNameKana !== undefined && params.lastNameKana !== null
+      ? params.lastNameKana
+      : null;
+  member.email =
+    params.email !== undefined && params.email !== null ? params.email : null;
+
+  if (params.assignedBrands && params.assignedBrands.length > 0) {
+    member.assignedBrands = dedup(params.assignedBrands);
+  } else {
+    member.assignedBrands = null;
+  }
 
   const error = validateMember(member);
   if (error) {
@@ -144,7 +158,7 @@ export function validateMember(member: Member): MemberErrorCode | null {
     return MemberError.InvalidCreatedAt;
   }
 
-  // updatedAt / deletedAt の整合性チェック（可能な範囲で軽く）
+  // updatedBy / deletedBy の簡易チェック
   if (member.updatedBy !== undefined && member.updatedBy === "") {
     return MemberError.InvalidUpdatedBy;
   }

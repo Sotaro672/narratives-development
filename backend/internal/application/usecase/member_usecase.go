@@ -56,6 +56,8 @@ type CreateMemberInput struct {
 	ID             string
 	FirstName      string
 	LastName       string
+	FirstNameKana  string
+	LastNameKana   string
 	Email          string
 	Permissions    []string
 	AssignedBrands []string
@@ -73,6 +75,8 @@ func (u *MemberUsecase) Create(ctx context.Context, in CreateMemberInput) (memdo
 		ID:             strings.TrimSpace(in.ID),
 		FirstName:      strings.TrimSpace(in.FirstName),
 		LastName:       strings.TrimSpace(in.LastName),
+		FirstNameKana:  strings.TrimSpace(in.FirstNameKana),
+		LastNameKana:   strings.TrimSpace(in.LastNameKana),
 		Email:          strings.TrimSpace(in.Email),
 		Permissions:    dedupStrings(in.Permissions),
 		AssignedBrands: dedupStrings(in.AssignedBrands),
@@ -86,6 +90,8 @@ type UpdateMemberInput struct {
 	ID             string
 	FirstName      *string
 	LastName       *string
+	FirstNameKana  *string
+	LastNameKana   *string
 	Email          *string
 	Permissions    *[]string
 	AssignedBrands *[]string
@@ -104,6 +110,12 @@ func (u *MemberUsecase) Update(ctx context.Context, in UpdateMemberInput) (memdo
 	}
 	if in.LastName != nil {
 		current.LastName = strings.TrimSpace(*in.LastName)
+	}
+	if in.FirstNameKana != nil {
+		current.FirstNameKana = strings.TrimSpace(*in.FirstNameKana)
+	}
+	if in.LastNameKana != nil {
+		current.LastNameKana = strings.TrimSpace(*in.LastNameKana)
 	}
 	if in.Email != nil {
 		current.Email = strings.TrimSpace(*in.Email)
