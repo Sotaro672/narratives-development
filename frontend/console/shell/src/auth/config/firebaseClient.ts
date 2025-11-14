@@ -1,6 +1,9 @@
 // frontend/console/shell/src/auth/config/firebaseClient.ts
+/// <reference types="vite/client" />
+
 import { initializeApp, getApps } from "firebase/app";
 import { getAuth } from "firebase/auth";
+import { getFirestore } from "firebase/firestore";
 
 const firebaseConfig = {
   apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
@@ -15,4 +18,6 @@ const firebaseConfig = {
 // すでに初期化済みならそれを再利用（HMR対策）
 const app = getApps().length ? getApps()[0] : initializeApp(firebaseConfig);
 
+// Export Auth / Firestore
 export const auth = getAuth(app);
+export const db = getFirestore(app);

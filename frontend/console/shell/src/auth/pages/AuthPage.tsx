@@ -4,6 +4,10 @@ import { Button } from "../../shared/ui/button";
 import "../styles/AuthPage.css";
 import { useAuthActions } from "../application/useAuthActions";
 
+// 会社ドキュメント作成用（Firestore）
+import { db, auth } from "../config/firebaseClient";
+import { addDoc, collection, serverTimestamp } from "firebase/firestore";
+
 export default function AuthPage() {
   // signIn / signUp
   const { signUp, signIn, submitting, error, setError } = useAuthActions();
@@ -21,7 +25,7 @@ export default function AuthPage() {
   const [lastNameKana, setLastNameKana] = React.useState("");
   const [firstNameKana, setFirstNameKana] = React.useState("");
 
-  // 会社名・団体名（signup 時のみ使用）
+  // 会社名・団体名（signup 時のみ使用 / 任意入力）
   const [companyName, setCompanyName] = React.useState("");
 
   const resetForm = () => {
@@ -50,9 +54,32 @@ export default function AuthPage() {
         return;
       }
 
-      // まずは Firebase Auth のユーザー作成
-      await signUp(email, password);
-      // companyName / lastName などは後で Firestore に保存する想定
+      try {
+        // 1) Firebase Auth のユーザー作成
+        await signUp(email, password);
+
+        // 2) 会社名が入力されていれば companies に作成
+        const name = companyName.trim();
+        if (name.length > 0) {
+          const userIdOrEmail = auth.currentUser?.uid ?? email;
+
+          await addDoc(collection(db, "companies"), {
+            name,
+            admin: userIdOrEmail, // 管理者（とりあえず作成ユーザー）
+            isActive: true,
+            // 監査系
+            createdAt: serverTimestamp(),
+            updatedAt: serverTimestamp(),
+            createdBy: userIdOrEmail,
+            updatedBy: userIdOrEmail,
+            deletedAt: null,
+            deletedBy: null,
+          });
+        }
+      } catch (e: any) {
+        console.error("signup/create company error", e);
+        setError(e?.message ?? "登録処理に失敗しました。");
+      }
       return;
     }
 
@@ -135,16 +162,16 @@ export default function AuthPage() {
             />
           </label>
 
-          {/* 新規登録時のみ：会社名・団体名 */}
+          {/* 新規登録時のみ：会社名・団体名（任意） */}
           {mode === "signup" && (
             <label className="auth-label">
-              会社名・団体名
+              会社名・団体名（任意）
               <input
                 type="text"
                 className="auth-input"
                 value={companyName}
                 onChange={(e) => setCompanyName(e.target.value)}
-                required
+                placeholder="例）LUMINA Fashion"
               />
             </label>
           )}
@@ -181,7 +208,7 @@ export default function AuthPage() {
 
           {error && <p className="auth-error">{error}</p>}
 
-          <div className="auth-actions">
+          <div className="auth-actions" style={{ justifyContent: "center" }}>
             <Button
               type="submit"
               variant="solid"
