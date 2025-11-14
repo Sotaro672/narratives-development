@@ -1,3 +1,4 @@
+//frontend\console\shell\src\layout\Header\AdminPanel.tsx
 import { LogOut } from "lucide-react";
 import "./AdminPanel.css";
 

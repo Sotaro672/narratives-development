@@ -1,9 +1,10 @@
 // frontend/shell/src/layout/Header/Header.tsx
 import { useEffect, useRef, useState } from "react";
-import { useNavigate } from "react-router-dom"; // ← 追加
+import { useNavigate } from "react-router-dom";
 import { Bell, MessageSquare, UserRound, ChevronDown } from "lucide-react";
 import "./Header.css";
 import AdminPanel from "./AdminPanel";
+import { useAuthActions } from "../../auth/application/useAuthActions";
 
 interface HeaderProps {
   username?: string;
@@ -19,10 +20,13 @@ export default function Header({
   messagesCount = 2,
 }: HeaderProps) {
   const [openAdmin, setOpenAdmin] = useState(false);
-  const navigate = useNavigate(); // ← 追加
+  const navigate = useNavigate();
 
   const panelContainerRef = useRef<HTMLDivElement | null>(null);
   const triggerRef = useRef<HTMLButtonElement | null>(null);
+
+  // Auth 用アクション（ログアウトに使用）
+  const { signOut } = useAuthActions();
 
   // ─────────────────────────────────────────────
   // 外側クリックで閉じる
@@ -61,6 +65,20 @@ export default function Header({
   };
 
   // ─────────────────────────────────────────────
+  // ログアウト処理
+  // ─────────────────────────────────────────────
+  const handleLogout = async () => {
+    try {
+      await signOut();
+      setOpenAdmin(false);
+      // ルーティングは App.tsx 側で user=null を検知して AuthPage に戻る想定
+      // 必要ならここで navigate("/") などを追加してもよい
+    } catch (e) {
+      console.error("logout failed", e);
+    }
+  };
+
+  // ─────────────────────────────────────────────
   // JSX
   // ─────────────────────────────────────────────
   return (
@@ -93,7 +111,7 @@ export default function Header({
         <button
           className="icon-btn"
           aria-label="メッセージ"
-          onClick={handleMessageClick} // ← 追加
+          onClick={handleMessageClick}
         >
           <span className="icon-wrap">
             <MessageSquare className="icon" aria-hidden />
@@ -129,7 +147,7 @@ export default function Header({
             onEditProfile={() => console.log("プロフィール変更")}
             onChangeEmail={() => console.log("メールアドレス変更")}
             onChangePassword={() => console.log("パスワード変更")}
-            onLogout={() => console.log("ログアウト")}
+            onLogout={handleLogout}
           />
         </div>
       </div>
