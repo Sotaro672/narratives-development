@@ -66,7 +66,6 @@ export class MemberRepositoryFS implements MemberRepository {
 
     let q = query(this.col, orderBy("createdAt", "desc"));
 
-    // role / roleIds フィルタは Member 型から除外されたため廃止
     if (filter?.companyId) {
       q = query(q, where("companyId", "==", filter.companyId));
     }

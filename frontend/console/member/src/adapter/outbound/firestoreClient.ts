@@ -1,3 +1,4 @@
+// frontend/console/member/src/adapter/outbound/firestoreClient.ts
 import { initializeApp, getApps, FirebaseApp } from "firebase/app";
 import { getFirestore, Firestore } from "firebase/firestore";
 
