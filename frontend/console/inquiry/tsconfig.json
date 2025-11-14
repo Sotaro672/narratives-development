@@ -1,7 +1,8 @@
 {
-  // 共通設定を継承（frontend 配下を明示）
+  // 共通設定を継承
   "extends": "../tsconfig.base.json",
 
+  // 各モジュール個別設定
   "compilerOptions": {
     "target": "ESNext",
     "lib": ["DOM", "DOM.Iterable", "ESNext"],
@@ -16,9 +17,17 @@
     "noEmit": true,
     "resolveJsonModule": true,
     "allowSyntheticDefaultImports": true,
+
+    // 各モジュール src 配下をベースにする
     "baseUrl": "./src",
-    "paths": { "@/*": ["./*"] },
+    "paths": {
+      "@/*": ["./*"]
+    },
+
+    // Module Federation・Vite 向け補助
     "types": ["vite/client"]
   },
+
+  // 各モジュール配下のみ含める
   "include": ["src"]
 }

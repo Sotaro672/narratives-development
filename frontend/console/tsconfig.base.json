@@ -1,3 +1,28 @@
+// frontend/console/tsconfig.base.json
 {
-  "extends": "./frontend/tsconfig.base.json"
+  "compilerOptions": {
+    "target": "ESNext",
+    "lib": ["DOM", "DOM.Iterable", "ESNext"],
+    "module": "ESNext",
+    "moduleResolution": "Node",
+    "jsx": "react-jsx",
+    "strict": true,
+    "esModuleInterop": true,
+    "skipLibCheck": true,
+    "forceConsistentCasingInFileNames": true,
+    "isolatedModules": true,
+    "noEmit": true,
+    "resolveJsonModule": true,
+    "allowSyntheticDefaultImports": true,
+
+    // ここから下は必要なら調整
+    "baseUrl": ".",
+    "paths": {
+      "@shell/*": ["shell/src/*"],
+      "@shared/*": ["shell/src/shared/*"]
+    },
+
+    // Vite 用の型
+    "types": ["vite/client"]
+  }
 }

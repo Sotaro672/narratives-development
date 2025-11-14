@@ -1,6 +1,7 @@
+// frontend/console/list/tsconfig.json
 {
   // 共通設定を継承
-  "extends": "../../tsconfig.base.json",
+  "extends": "../tsconfig.base.json",
 
   // 各モジュール個別設定
   "compilerOptions": {

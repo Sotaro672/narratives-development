@@ -1,7 +1,7 @@
-// frontend/postcss.config.js
-export default {
+// frontend/console/postcss.config.js
+module.exports = {
   plugins: {
-    '@tailwindcss/postcss': {},
+    "@tailwindcss/postcss": {},
     autoprefixer: {},
   },
 };
