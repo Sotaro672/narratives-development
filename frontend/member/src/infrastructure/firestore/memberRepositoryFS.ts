@@ -66,9 +66,7 @@ export class MemberRepositoryFS implements MemberRepository {
 
     let q = query(this.col, orderBy("createdAt", "desc"));
 
-    if (filter?.roleIds && filter.roleIds.length === 1) {
-      q = query(q, where("role", "==", filter.roleIds[0]));
-    }
+    // role / roleIds フィルタは Member 型から除外されたため廃止
     if (filter?.companyId) {
       q = query(q, where("companyId", "==", filter.companyId));
     }
@@ -162,9 +160,7 @@ export class MemberRepositoryFS implements MemberRepository {
 
     let q = query(this.col, orderBy(orderField, orderDir));
 
-    if (filter?.roleIds && filter.roleIds.length === 1) {
-      q = query(q, where("role", "==", filter.roleIds[0]));
-    }
+    // roleIds フィルタは廃止（MemberFilter から削除されたため）
 
     if (cursorPage?.cursor) {
       const cursorSnap = await getDoc(doc(this.col, cursorPage.cursor));
@@ -219,9 +215,7 @@ export class MemberRepositoryFS implements MemberRepository {
 
   async count(filter: MemberFilter): Promise<number> {
     let q = query(this.col);
-    if (filter?.roleIds && filter.roleIds.length === 1) {
-      q = query(q, where("role", "==", filter.roleIds[0]));
-    }
+    // roleIds フィルタは廃止（MemberFilter から削除されたため）
     const snap = await getDocs(q);
     let items = snap.docs.map((d) => this.docToDomain(d));
     items = this.applyPostFilter(items, filter);
@@ -266,7 +260,7 @@ export class MemberRepositoryFS implements MemberRepository {
       firstNameKana: (data.firstNameKana ?? "").trim() || undefined,
       lastNameKana: (data.lastNameKana ?? "").trim() || undefined,
       email: (data.email ?? "").trim() || undefined,
-      role: data.role,
+      // role フィールドは Member 型から削除されたためマッピングしない
       permissions: Array.isArray(data.permissions)
         ? data.permissions.map((p: string) => String(p))
         : [],
@@ -305,7 +299,7 @@ export class MemberRepositoryFS implements MemberRepository {
     if ("lastNameKana" in patch)
       next.lastNameKana = patch.lastNameKana ?? undefined;
     if ("email" in patch) next.email = patch.email ?? undefined;
-    if ("role" in patch && patch.role) next.role = patch.role;
+    // role は Member / MemberPatch から削除されたためパッチ対象からも除外
     if ("permissions" in patch)
       next.permissions = patch.permissions ?? current.permissions;
     if ("assignedBrands" in patch)
