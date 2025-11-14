@@ -1,16 +1,37 @@
-// frontend/shell/src/app/App.tsx
+// src/app/App.tsx
+import * as React from "react";
 import { BrowserRouter } from "react-router-dom";
-import MainPage from "../pages/MainPage"; // ← MainPage をインポート
+import MainPage from "../pages/MainPage";
+import AuthPage from "../auth/pages/AuthPage";
+import { AuthProvider } from "../auth/application/AuthContext";
+import { useAuth } from "../auth/application/useAuth";
+
+function RootContent() {
+  const { user, loading } = useAuth();
+
+  if (loading) {
+    return <div style={{ padding: 24 }}>認証状態を確認しています...</div>;
+  }
+
+  // 未ログインなら AuthPage
+  if (!user) {
+    return <AuthPage />;
+  }
+
+  // ログイン済みなら Console メイン画面
+  return <MainPage />;
+}
 
 /**
  * App.tsx
- * - 画面全体のルート構成を管理
- * - BrowserRouter 配下で MainPage を呼び出す
+ * - Firebase Auth の状態に応じて AuthPage / MainPage を切り替える
  */
 export default function App() {
   return (
     <BrowserRouter>
-      <MainPage /> {/* ← これが全体レイアウトを表示 */}
+      <AuthProvider>
+        <RootContent />
+      </AuthProvider>
     </BrowserRouter>
   );
 }
