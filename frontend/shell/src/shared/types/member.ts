@@ -1,20 +1,6 @@
 // frontend/shell/src/shared/types/member.ts
 
 /**
- * MemberRole
- * backend/internal/domain/member/entity.go の MemberRole / RoleXXX と対応
- */
-export const MEMBER_ROLES = [
-  "admin",
-  "brand-manager",
-  "token-manager",
-  "inquiry-handler",
-  "production-designer",
-] as const;
-
-export type MemberRole = (typeof MEMBER_ROLES)[number];
-
-/**
  * Member
  * backend の Member 構造体に対応したフロントエンド用モデル
  *
@@ -33,8 +19,6 @@ export interface Member {
    * 空文字 or undefined の場合は「未設定」とみなす
    */
   email?: string;
-
-  role: MemberRole;
 
   /**
    * backend: Permissions []string
@@ -67,7 +51,7 @@ export interface MemberPatch {
   firstNameKana?: string | null;
   lastNameKana?: string | null;
   email?: string | null;
-  role?: MemberRole;
+
   permissions?: string[] | null;
   assignedBrands?: string[] | null;
 
@@ -81,11 +65,6 @@ export interface MemberPatch {
 /**
  * ユーティリティ
  */
-
-/** 文字列が定義済み MemberRole か判定 */
-export function isMemberRole(value: string): value is MemberRole {
-  return (MEMBER_ROLES as readonly string[]).includes(value);
-}
 
 /** メンバーが指定の Permission.Name を保持しているか簡易チェック */
 export function hasPermission(member: Member, permissionName: string): boolean {
