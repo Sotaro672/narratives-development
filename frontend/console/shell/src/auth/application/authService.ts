@@ -1,3 +1,4 @@
+//frontend\console\shell\src\auth\application\authService.ts
 /// <reference types="vite/client" />
 
 import { onAuthStateChanged, type User } from "firebase/auth";

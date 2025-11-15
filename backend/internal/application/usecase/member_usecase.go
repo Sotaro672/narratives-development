@@ -24,22 +24,14 @@ func NewMemberUsecase(repo memdom.Repository) *MemberUsecase {
 
 // ─────────────────────────────────────────────────────────────
 // Auth/Multitenancy: companyId の取得（ミドルウェアで注入された値を拾う）
-//
-// 依存方向を守るために adapters に依存せず、context から汎用キーで取得します。
-// ミドルウェア側では以下いずれかのキーで string を詰めてください。
-//   - "companyId"
-//   - "auth.companyId"
-//
-// 見つからない場合は空文字を返します（＝強制上書き不可）。
 // ─────────────────────────────────────────────────────────────
+
 func companyIDFromContext(ctx context.Context) string {
-	// 代表キー
 	if v := ctx.Value("companyId"); v != nil {
 		if s, ok := v.(string); ok {
 			return strings.TrimSpace(s)
 		}
 	}
-	// 互換キー
 	if v := ctx.Value("auth.companyId"); v != nil {
 		if s, ok := v.(string); ok {
 			return strings.TrimSpace(s)
@@ -65,21 +57,18 @@ func (u *MemberUsecase) Exists(ctx context.Context, id string) (bool, error) {
 }
 
 func (u *MemberUsecase) Count(ctx context.Context, f memdom.Filter) (int, error) {
-	// ★ クライアント指定は無視して、サーバが信頼する companyId を強制適用
 	if cid := companyIDFromContext(ctx); cid != "" {
 		f.CompanyID = cid
 	}
 	return u.repo.Count(ctx, f)
 }
 
-// ★戻り値型を common.PageResult[memdom.Member] に統一
 func (u *MemberUsecase) List(
 	ctx context.Context,
 	f memdom.Filter,
 	s common.Sort,
 	p common.Page,
 ) (common.PageResult[memdom.Member], error) {
-	// ★ クライアント指定は無視して、サーバが信頼する companyId を強制適用
 	if cid := companyIDFromContext(ctx); cid != "" {
 		f.CompanyID = cid
 	}
@@ -100,11 +89,10 @@ type CreateMemberInput struct {
 	Permissions    []string
 	AssignedBrands []string
 
-	// ★ 新規追加
-	CompanyID string // 所属会社ID（任意だが、サーバで強制上書き）
-	Status    string // "active" | "inactive"（任意、空なら未指定）
+	CompanyID   string
+	Status      string
+	FirebaseUID string // ★ 追加
 
-	// CreatedAt を指定しない場合は現在時刻
 	CreatedAt *time.Time
 }
 
@@ -115,7 +103,7 @@ func (u *MemberUsecase) Create(ctx context.Context, in CreateMemberInput) (memdo
 		createdAt = &t
 	}
 
-	// ★ クライアント指定は無視して、サーバが信頼する companyId を強制適用
+	// 強制 companyId
 	cid := companyIDFromContext(ctx)
 	companyID := strings.TrimSpace(in.CompanyID)
 	if cid != "" {
@@ -132,15 +120,18 @@ func (u *MemberUsecase) Create(ctx context.Context, in CreateMemberInput) (memdo
 		Permissions:    dedupStrings(in.Permissions),
 		AssignedBrands: dedupStrings(in.AssignedBrands),
 
-		// ★ 強制反映
-		CompanyID: companyID,
-		Status:    strings.TrimSpace(in.Status),
+		CompanyID:   companyID,
+		Status:      strings.TrimSpace(in.Status),
+		FirebaseUID: strings.TrimSpace(in.FirebaseUID), // ★ 追加
 
 		CreatedAt: *createdAt,
 		UpdatedAt: nil,
 	}
+
 	return u.repo.Create(ctx, m)
 }
+
+// ---------------------------- Update ----------------------------
 
 type UpdateMemberInput struct {
 	ID             string
@@ -151,14 +142,11 @@ type UpdateMemberInput struct {
 	Email          *string
 	Permissions    *[]string
 	AssignedBrands *[]string
-
-	// ★ 新規追加
-	CompanyID *string // クライアント指定は無視される（サーバ強制）
-	Status    *string
+	CompanyID      *string
+	Status         *string
+	FirebaseUID    *string // ★ 追加
 }
 
-// Update は現在の Member を読み出して上書きし、repo.Save() に投げる。
-// UpdatedAt は repo.Save/upsert 側で NOW() に更新される前提。
 func (u *MemberUsecase) Update(ctx context.Context, in UpdateMemberInput) (memdom.Member, error) {
 	current, err := u.repo.GetByID(ctx, strings.TrimSpace(in.ID))
 	if err != nil {
@@ -187,24 +175,30 @@ func (u *MemberUsecase) Update(ctx context.Context, in UpdateMemberInput) (memdo
 		current.AssignedBrands = dedupStrings(*in.AssignedBrands)
 	}
 
-	// ★ companyId はクライアント指定ではなくサーバが強制適用
+	// 強制 companyId
 	if cid := companyIDFromContext(ctx); cid != "" {
 		current.CompanyID = cid
 	}
-	// ステータスは任意更新（空指定は無視）
+
+	// Status
 	if in.Status != nil {
 		current.Status = strings.TrimSpace(*in.Status)
+	}
+
+	// ★ Firebase UID 更新
+	if in.FirebaseUID != nil {
+		current.FirebaseUID = strings.TrimSpace(*in.FirebaseUID)
 	}
 
 	return u.repo.Save(ctx, current, nil)
 }
 
+// ---------------------------- Save ----------------------------
+
 func (u *MemberUsecase) Save(ctx context.Context, m memdom.Member) (memdom.Member, error) {
-	// Save は Upsert。CreatedAt がゼロなら現在時刻を付与。
 	if m.CreatedAt.IsZero() {
 		m.CreatedAt = u.now().UTC()
 	}
-	// ★ Save 経由でも companyId をサーバ値で強制（セーフティネット）
 	if cid := companyIDFromContext(ctx); cid != "" {
 		m.CompanyID = cid
 	}
