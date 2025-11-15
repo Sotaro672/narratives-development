@@ -17,14 +17,14 @@ import { auth } from "../../../shell/src/auth/config/firebaseClient";
 // ─────────────────────────────────────────────
 const ENV_BASE =
   ((import.meta as any).env?.VITE_BACKEND_BASE_URL as string | undefined)?.replace(
-    /\/+$/,
+    /\/+$/g,
     "",
   ) ?? "";
 
 const FALLBACK_BASE =
   "https://narratives-backend-871263659099.asia-northeast1.run.app";
 
-const API_BASE = (ENV_BASE || FALLBACK_BASE).replace(/\/+$/, "");
+const API_BASE = (ENV_BASE || FALLBACK_BASE).replace(/\/+$/g, "");
 
 // ログ付き URL 組み立て
 function apiUrl(path: string, qs?: string) {
@@ -149,7 +149,10 @@ export function useMemberList(
 
         const res = await fetch(url, {
           method: "GET",
-          headers: { Authorization: `Bearer ${token}`, Accept: "application/json" },
+          headers: {
+            Authorization: `Bearer ${token}`,
+            Accept: "application/json",
+          },
         });
 
         const ct = res.headers.get("content-type") ?? "";
@@ -172,16 +175,16 @@ export function useMemberList(
 
         // 姓・名が未設定なら firstName を「招待中」に補正（UI用途）
         const normalized: Member[] = items.map((m) => {
-          const noFirst = !m.firstName?.trim();
-          const noLast = !m.lastName?.trim();
-          if (noFirst && noLast) return { ...m, firstName: "招待中" };
+          const noFirst = !String(m.firstName ?? "").trim();
+          const noLast = !String(m.lastName ?? "").trim();
+          if (noFirst && noLast) return { ...m, firstName: "招待中" } as Member;
           return m;
         });
 
         // 名前キャッシュ
         const cache = nameCacheRef.current;
         for (const m of items) {
-          const disp = formatLastFirst(m.lastName, m.firstName);
+          const disp = formatLastFirst(m.lastName as any, m.firstName as any);
           if (disp) cache.set(m.id, disp);
         }
 
@@ -219,7 +222,7 @@ export function useMemberList(
 
     const existing = members.find((m) => m.id === id);
     if (existing) {
-      const disp = formatLastFirst(existing.lastName, existing.firstName);
+      const disp = formatLastFirst(existing.lastName as any, existing.firstName as any);
       if (disp) cache.set(id, disp);
       return disp;
     }
@@ -229,7 +232,11 @@ export function useMemberList(
 
     const url = apiUrl(`/members/${encodeURIComponent(id)}`);
     const res = await fetch(url, {
-      headers: { Authorization: `Bearer ${token}`, Accept: "application/json" },
+      method: "GET",
+      headers: {
+        Authorization: `Bearer ${token}`,
+        Accept: "application/json",
+      },
     });
 
     const ct = res.headers.get("content-type") ?? "";
@@ -238,7 +245,7 @@ export function useMemberList(
     if (!res.ok) return "";
 
     const m = normalizeMemberWire(await res.json());
-    const disp = formatLastFirst(m.lastName, m.firstName);
+    const disp = formatLastFirst(m.lastName as any, m.firstName as any);
     if (disp) cache.set(id, disp);
     return disp;
   }, [members]);

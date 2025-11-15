@@ -99,6 +99,22 @@ func (r *MemberRepositoryFS) GetByEmail(ctx context.Context, email string) (memd
 	return m, nil
 }
 
+// Firebase UID から取得するメソッド（現在は ID = FirebaseUID 前提でラップ）
+func (r *MemberRepositoryFS) GetByFirebaseUID(ctx context.Context, firebaseUID string) (memdom.Member, error) {
+	if r.Client == nil {
+		return memdom.Member{}, errors.New("firestore client is nil")
+	}
+	uid := strings.TrimSpace(firebaseUID)
+	if uid == "" {
+		return memdom.Member{}, memdom.ErrNotFound
+	}
+
+	// 将来 firebaseUid フィールドを設けるなら:
+	// q := r.col().Where("firebaseUid", "==", uid).Limit(1) ...
+	// といった実装に差し替えればOK。
+	return r.GetByID(ctx, uid)
+}
+
 func (r *MemberRepositoryFS) Exists(ctx context.Context, id string) (bool, error) {
 	if r.Client == nil {
 		return false, errors.New("firestore client is nil")

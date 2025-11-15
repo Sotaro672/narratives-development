@@ -78,6 +78,10 @@ type Repository interface {
 	ListByCursor(ctx context.Context, filter Filter, sort Sort, cpage CursorPage) (CursorPageResult, error)
 	GetByID(ctx context.Context, id string) (Member, error)
 	GetByEmail(ctx context.Context, email string) (Member, error)
+
+	// NEW: resolve member from Firebase UID（認証ミドルウェア用）
+	GetByFirebaseUID(ctx context.Context, firebaseUID string) (Member, error)
+
 	Exists(ctx context.Context, id string) (bool, error)
 	Count(ctx context.Context, filter Filter) (int, error)
 	Save(ctx context.Context, m Member, opts *SaveOptions) (Member, error)

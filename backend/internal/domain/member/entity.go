@@ -29,6 +29,9 @@ type Member struct {
 	CompanyID string `json:"companyId,omitempty" firestore:"companyId"`
 	Status    string `json:"status,omitempty" firestore:"status"` // "active" | "inactive"
 
+	// Firebase user mapping（optional）
+	FirebaseUID string `json:"firebaseUid,omitempty" firestore:"firebaseUid"`
+
 	CreatedAt time.Time  `json:"createdAt" firestore:"createdAt"`
 	UpdatedAt *time.Time `json:"updatedAt,omitempty" firestore:"updatedAt"`
 	UpdatedBy *string    `json:"updatedBy,omitempty" firestore:"updatedBy"`
@@ -139,6 +142,13 @@ func WithCompanyID(companyID string) func(*Member) {
 func WithStatus(status string) func(*Member) {
 	return func(m *Member) {
 		m.Status = strings.TrimSpace(status) // expected: "", "active", "inactive"
+	}
+}
+
+// Firebase UID を設定するオプション
+func WithFirebaseUID(firebaseUID string) func(*Member) {
+	return func(m *Member) {
+		m.FirebaseUID = strings.TrimSpace(firebaseUID)
 	}
 }
 
@@ -336,8 +346,9 @@ type MemberPatch struct {
 	Permissions    *[]string
 	AssignedBrands *[]string
 
-	CompanyID *string
-	Status    *string
+	CompanyID   *string
+	Status      *string
+	FirebaseUID *string
 
 	CreatedAt *time.Time
 	UpdatedAt *time.Time
@@ -359,6 +370,7 @@ CREATE TABLE members (
   assigned_brands TEXT[],
   company_id TEXT,
   status TEXT,
+  firebase_uid TEXT,
 
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   updated_at TIMESTAMPTZ,
