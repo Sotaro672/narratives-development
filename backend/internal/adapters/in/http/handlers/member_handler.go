@@ -61,8 +61,6 @@ type memberCreateRequest struct {
 	Permissions    []string `json:"permissions"`
 	AssignedBrands []string `json:"assignedBrands"`
 	Status         string   `json:"status,omitempty"`
-	// ★ 追加: Firebase UID（必要に応じてフロントから渡す）
-	FirebaseUID string `json:"firebaseUid,omitempty"`
 }
 
 func (h *MemberHandler) create(w http.ResponseWriter, r *http.Request) {
@@ -95,7 +93,6 @@ func (h *MemberHandler) create(w http.ResponseWriter, r *http.Request) {
 		AssignedBrands: req.AssignedBrands,
 		CompanyID:      companyID,
 		Status:         req.Status,
-		// FirebaseUID は usecase 側にフィールドを追加したタイミングでここに渡す想定
 	}
 
 	m, err := h.uc.Create(ctx, input)

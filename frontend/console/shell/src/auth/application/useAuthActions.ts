@@ -1,3 +1,4 @@
+//frontend\console\shell\src\auth\application\useAuthActions.ts
 import { useState } from "react";
 import {
   createUserWithEmailAndPassword,

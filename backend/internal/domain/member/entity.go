@@ -29,9 +29,6 @@ type Member struct {
 	CompanyID string `json:"companyId,omitempty" firestore:"companyId"`
 	Status    string `json:"status,omitempty" firestore:"status"` // "active" | "inactive"
 
-	// Firebase user mapping（optional）
-	FirebaseUID string `json:"firebaseUid,omitempty" firestore:"firebaseUid"`
-
 	CreatedAt time.Time  `json:"createdAt" firestore:"createdAt"`
 	UpdatedAt *time.Time `json:"updatedAt,omitempty" firestore:"updatedAt"`
 	UpdatedBy *string    `json:"updatedBy,omitempty" firestore:"updatedBy"`
@@ -142,13 +139,6 @@ func WithCompanyID(companyID string) func(*Member) {
 func WithStatus(status string) func(*Member) {
 	return func(m *Member) {
 		m.Status = strings.TrimSpace(status) // expected: "", "active", "inactive"
-	}
-}
-
-// Firebase UID を設定するオプション
-func WithFirebaseUID(firebaseUID string) func(*Member) {
-	return func(m *Member) {
-		m.FirebaseUID = strings.TrimSpace(firebaseUID)
 	}
 }
 
@@ -345,40 +335,14 @@ type MemberPatch struct {
 	Email          *string
 	Permissions    *[]string
 	AssignedBrands *[]string
-
-	CompanyID   *string
-	Status      *string
-	FirebaseUID *string
-
-	CreatedAt *time.Time
-	UpdatedAt *time.Time
-	UpdatedBy *string
-	DeletedAt *time.Time
-	DeletedBy *string
+	CompanyID      *string
+	Status         *string
+	CreatedAt      *time.Time
+	UpdatedAt      *time.Time
+	UpdatedBy      *string
+	DeletedAt      *time.Time
+	DeletedBy      *string
 }
-
-// DDL reference (for schema alignment with migrations)
-const MembersTableDDL = `
-CREATE TABLE members (
-  id UUID PRIMARY KEY,
-  first_name VARCHAR(100),
-  last_name VARCHAR(100),
-  first_name_kana VARCHAR(100),
-  last_name_kana VARCHAR(100),
-  email VARCHAR(255) UNIQUE,
-  permissions TEXT[] NOT NULL,
-  assigned_brands TEXT[],
-  company_id TEXT,
-  status TEXT,
-  firebase_uid TEXT,
-
-  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-  updated_at TIMESTAMPTZ,
-  updated_by TEXT,
-  deleted_at TIMESTAMPTZ,
-  deleted_by TEXT
-);
-`
 
 // SetPermissionsByName validates and sets permission names (dedup & sorted).
 func (m *Member) SetPermissionsByName(names []string, catalog []permdom.Permission) error {
