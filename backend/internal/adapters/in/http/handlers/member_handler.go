@@ -7,6 +7,9 @@ import (
 	"net/http"
 	"strings"
 
+	// ★ currentMember を使うために追加
+	"narratives/internal/adapters/in/http/middleware"
+
 	memberuc "narratives/internal/application/usecase"
 	common "narratives/internal/domain/common"
 	memberdom "narratives/internal/domain/member"
@@ -147,6 +150,13 @@ func (h *MemberHandler) create(w http.ResponseWriter, r *http.Request) {
 	// 認証コンテキストから companyId を強制適用
 	ai := authFromContext(ctx)
 
+	// ★ currentMember（Firebase 認証ミドルウェア）優先
+	if me, ok := middleware.CurrentMember(r); ok {
+		if cid := strings.TrimSpace(me.CompanyID); cid != "" {
+			ai.CompanyID = cid
+		}
+	}
+
 	input := memberuc.CreateMemberInput{
 		ID:             req.ID,
 		FirstName:      req.FirstName,
@@ -187,9 +197,20 @@ func (h *MemberHandler) list(w http.ResponseWriter, r *http.Request) {
 	f.SearchQuery = strings.TrimSpace(qv.Get("q"))
 
 	// 認証コンテキストから companyId を強制適用
-	ai := authFromContext(ctx)
-	if ai.CompanyID != "" {
-		f.CompanyID = ai.CompanyID
+	// 1. Firebase Auth ミドルウェア（currentMember）を優先
+	var companyID string
+	if me, ok := middleware.CurrentMember(r); ok {
+		companyID = strings.TrimSpace(me.CompanyID)
+	}
+
+	// 2. 旧来の MiddlewareAuthCompany 由来の AuthInfo をフォールバックとして参照
+	if companyID == "" {
+		ai := authFromContext(ctx)
+		companyID = strings.TrimSpace(ai.CompanyID)
+	}
+
+	if companyID != "" {
+		f.CompanyID = companyID
 	} else {
 		// 開発時の便宜: 明示指定があれば拾うが、本番では無視される想定
 		f.CompanyID = strings.TrimSpace(qv.Get("companyId"))

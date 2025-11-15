@@ -79,7 +79,9 @@ type Repository interface {
 	GetByID(ctx context.Context, id string) (Member, error)
 	GetByEmail(ctx context.Context, email string) (Member, error)
 
-	// NEW: resolve member from Firebase UID（認証ミドルウェア用）
+	// ★ Firebase UID から Member を取得するメソッド
+	//   今回の実装では「members の DocumentID = Firebase UID」という前提で
+	//   GetByID を呼び出すラッパーにしています。
 	GetByFirebaseUID(ctx context.Context, firebaseUID string) (Member, error)
 
 	Exists(ctx context.Context, id string) (bool, error)

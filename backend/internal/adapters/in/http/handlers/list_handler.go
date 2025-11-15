@@ -9,6 +9,7 @@ import (
 
 	usecase "narratives/internal/application/usecase"
 	listdom "narratives/internal/domain/list"
+	commonhandlers "narratives/internal/adapters/in/http/handlers/common"
 )
 
 // ListHandler は /lists 関連のエンドポイントを担当します。
@@ -52,7 +53,7 @@ func (h *ListHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		switch parts[1] {
 		case "aggregate":
 			if r.Method != http.MethodGet {
-				methodNotAllowed(w)
+				commonhandlers.MethodNotAllowed(w)
 				return
 			}
 			h.getAggregate(w, r, id)
@@ -66,13 +67,13 @@ func (h *ListHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 				h.saveImageFromGCS(w, r, id)
 				return
 			default:
-				methodNotAllowed(w)
+				commonhandlers.MethodNotAllowed(w)
 				return
 			}
 		case "primary-image":
 			// 代表画像の設定
 			if r.Method != http.MethodPut && r.Method != http.MethodPost && r.Method != http.MethodPatch {
-				methodNotAllowed(w)
+				commonhandlers.MethodNotAllowed(w)
 				return
 			}
 			h.setPrimaryImage(w, r, id)
@@ -86,7 +87,7 @@ func (h *ListHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	// /lists/{id}
 	if r.Method != http.MethodGet {
-		methodNotAllowed(w)
+		commonhandlers.MethodNotAllowed(w)
 		return
 	}
 	h.get(w, r, id)
@@ -171,7 +172,7 @@ func (h *ListHandler) saveImageFromGCS(w http.ResponseWriter, r *http.Request, l
 		ca,
 	)
 	if err != nil {
-		if isNotSupported(err) {
+		if commonhandlers.IsNotSupported(err) {
 			w.WriteHeader(http.StatusNotImplemented)
 			_ = json.NewEncoder(w).Encode(map[string]string{"error": "not_implemented"})
 			return
@@ -218,9 +219,9 @@ func (h *ListHandler) setPrimaryImage(w http.ResponseWriter, r *http.Request, li
 		}
 	}
 
-	item, err := h.uc.SetPrimaryImage(ctx, listID, imageID, now, normalizeStrPtr(req.UpdatedBy))
+	item, err := h.uc.SetPrimaryImage(ctx, listID, imageID, now, commonhandlers.NormalizeStrPtr(req.UpdatedBy))
 	if err != nil {
-		if isNotSupported(err) {
+		if commonhandlers.IsNotSupported(err) {
 			w.WriteHeader(http.StatusNotImplemented)
 			_ = json.NewEncoder(w).Encode(map[string]string{"error": "not_implemented"})
 			return

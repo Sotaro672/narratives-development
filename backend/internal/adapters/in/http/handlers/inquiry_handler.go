@@ -9,6 +9,7 @@ import (
 
 	usecase "narratives/internal/application/usecase"
 	inquirydom "narratives/internal/domain/inquiry"
+	commonhandlers "narratives/internal/adapters/in/http/handlers/common"
 )
 
 // InquiryHandler は /inquiries 関連のエンドポイントを担当します。
@@ -45,7 +46,7 @@ func (h *InquiryHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		switch parts[1] {
 		case "aggregate":
 			if r.Method != http.MethodGet {
-				methodNotAllowed(w)
+				commonhandlers.MethodNotAllowed(w)
 				return
 			}
 			h.getAggregate(w, r, id)
@@ -59,7 +60,7 @@ func (h *InquiryHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 				h.saveImageFromGCS(w, r, id)
 				return
 			default:
-				methodNotAllowed(w)
+				commonhandlers.MethodNotAllowed(w)
 				return
 			}
 		default:
@@ -71,7 +72,7 @@ func (h *InquiryHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	// /inquiries/{id}
 	if r.Method != http.MethodGet {
-		methodNotAllowed(w)
+		commonhandlers.MethodNotAllowed(w)
 		return
 	}
 	h.get(w, r, id)
@@ -154,7 +155,7 @@ func (h *InquiryHandler) saveImageFromGCS(w http.ResponseWriter, r *http.Request
 		strings.TrimSpace(req.CreatedBy),
 	)
 	if err != nil {
-		if isNotSupported(err) {
+		if commonhandlers.IsNotSupported(err) {
 			w.WriteHeader(http.StatusNotImplemented)
 			_ = json.NewEncoder(w).Encode(map[string]string{"error": "not_implemented"})
 			return

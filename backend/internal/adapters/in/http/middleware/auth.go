@@ -6,7 +6,7 @@ import (
 	"net/http"
 	"strings"
 
-	"firebase.google.com/go/v4/auth"
+	fbAuth "firebase.google.com/go/v4/auth"
 
 	memdom "narratives/internal/domain/member"
 )
@@ -15,9 +15,11 @@ type ctxKey string
 
 const ctxKeyMember ctxKey = "currentMember"
 
+// AuthMiddleware は Firebase ID トークンを検証し、
+// 対応する Member をコンテキストに積むためのミドルウェアです。
 type AuthMiddleware struct {
-	FirebaseAuth *auth.Client
-	MemberRepo   memdom.Repository // Firestore 実装を渡す
+	FirebaseAuth *fbAuth.Client
+	MemberRepo   memdom.Repository // Firestore 実装（MemberRepositoryFS）を渡す
 }
 
 func (m *AuthMiddleware) Handler(next http.Handler) http.Handler {
@@ -37,7 +39,7 @@ func (m *AuthMiddleware) Handler(next http.Handler) http.Handler {
 
 		uid := token.UID
 
-		// ここで uid から Member を引く（実装はプロジェクト次第）
+		// Firebase UID から Member を取得（MemberRepositoryFS.GetByFirebaseUID）
 		member, err := m.MemberRepo.GetByFirebaseUID(r.Context(), uid)
 		if err != nil {
 			http.Error(w, "member not found", http.StatusForbidden)
@@ -49,7 +51,7 @@ func (m *AuthMiddleware) Handler(next http.Handler) http.Handler {
 	})
 }
 
-// どこからでも current member を取り出せる helper
+// CurrentMember はコンテキストからログイン中 Member を取り出すためのヘルパーです。
 func CurrentMember(r *http.Request) (*memdom.Member, bool) {
 	m, ok := r.Context().Value(ctxKeyMember).(memdom.Member)
 	if !ok {
