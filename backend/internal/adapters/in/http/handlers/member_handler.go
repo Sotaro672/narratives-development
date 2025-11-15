@@ -2,103 +2,32 @@
 package handlers
 
 import (
-	"context"
 	"encoding/json"
 	"net/http"
 	"strings"
 
-	// ★ currentMember を使うために追加
-	"narratives/internal/adapters/in/http/middleware"
-
+	httpmw "narratives/internal/adapters/in/http/middleware"
 	memberuc "narratives/internal/application/usecase"
 	common "narratives/internal/domain/common"
 	memberdom "narratives/internal/domain/member"
 )
 
-//
-// ──────────────────────────────────────────────────────────────────────────────
-// Auth コンテキスト注入（Inbound Adapter / Middleware）
-//  - リクエストの認証情報（uid）から、そのユーザーの companyId を解決して context に注入
-//  - 本番では ID トークン検証 → uid 取得を別ミドルウェアで行い、ここでは uid→companyId 解決のみを担当
-//  - 開発用に "X-Auth-UID" ヘッダー（なければクエリ uid）から uid を拾います
-// ──────────────────────────────────────────────────────────────────────────────
-//
+// -----------------------------------------------------------------------------
+// MemberHandler
+// -----------------------------------------------------------------------------
 
-type authCtxKey int
-
-const (
-	authKey authCtxKey = iota
-)
-
-// AuthInfo は下流で参照する最小限の認証情報
-type AuthInfo struct {
-	UID       string
-	CompanyID string
-}
-
-// authFromContext は AuthInfo を取り出します（無ければゼロ値）
-func authFromContext(ctx context.Context) AuthInfo {
-	v := ctx.Value(authKey)
-	if ai, ok := v.(AuthInfo); ok {
-		return ai
-	}
-	return AuthInfo{}
-}
-
-// withAuth は AuthInfo を context に詰めます
-func withAuth(ctx context.Context, ai AuthInfo) context.Context {
-	return context.WithValue(ctx, authKey, ai)
-}
-
-// MiddlewareAuthCompany は uid → member → companyId を解決して context に注入する HTTP ミドルウェア。
-// uid の取得は開発用に "X-Auth-UID" ヘッダ、無ければクエリ ?uid= を使用します。
-// 本番運用では別途トークン検証ミドルウェアで uid を埋め、その値をここで参照する形を推奨します。
-func MiddlewareAuthCompany(uc *memberuc.MemberUsecase) func(http.Handler) http.Handler {
-	return func(next http.Handler) http.Handler {
-		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			uid := strings.TrimSpace(r.Header.Get("X-Auth-UID"))
-			if uid == "" {
-				uid = strings.TrimSpace(r.URL.Query().Get("uid"))
-			}
-
-			ai := AuthInfo{UID: uid}
-
-			// uid があれば、member を引いて companyId を解決
-			if uid != "" && uc != nil {
-				if m, err := uc.GetByID(r.Context(), uid); err == nil {
-					ai.CompanyID = strings.TrimSpace(m.CompanyID)
-				}
-				// 取得失敗は致命ではない（下流でゼロ値扱い）
-			}
-
-			ctx := withAuth(r.Context(), ai)
-			next.ServeHTTP(w, r.WithContext(ctx))
-		})
-	}
-}
-
-//
-// ──────────────────────────────────────────────────────────────────────────────
-// /members Handler 本体
-// ──────────────────────────────────────────────────────────────────────────────
-//
-
-// MemberHandler は /members 関連のエンドポイントを担当します。
+// MemberHandler handles /members related endpoints.
 type MemberHandler struct {
 	uc *memberuc.MemberUsecase
 }
 
-// NewMemberHandler はHTTPハンドラを初期化します。
-// 実ルータに組み込む際は MiddlewareAuthCompany(uc) でラップしてください。
 func NewMemberHandler(uc *memberuc.MemberUsecase) http.Handler {
 	return &MemberHandler{uc: uc}
 }
 
-// ServeHTTP はHTTPルーティングの入口です。
 func (h *MemberHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 
-	// ★★★ 末尾スラッシュ正規化：/members と /members/ を同一視する
 	path := strings.TrimRight(r.URL.Path, "/")
 	if path == "" {
 		path = "/"
@@ -118,9 +47,9 @@ func (h *MemberHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-// ========================
+// -----------------------------------------------------------------------------
 // POST /members
-// ========================
+// -----------------------------------------------------------------------------
 
 type memberCreateRequest struct {
 	ID             string   `json:"id"`
@@ -131,10 +60,7 @@ type memberCreateRequest struct {
 	Email          string   `json:"email"`
 	Permissions    []string `json:"permissions"`
 	AssignedBrands []string `json:"assignedBrands"`
-
-	// 任意: 所属会社/ステータス（会社は下流でサーバ強制上書き）
-	CompanyID string `json:"companyId,omitempty"`
-	Status    string `json:"status,omitempty"` // 例: "active" | "inactive"
+	Status         string   `json:"status,omitempty"`
 }
 
 func (h *MemberHandler) create(w http.ResponseWriter, r *http.Request) {
@@ -147,15 +73,14 @@ func (h *MemberHandler) create(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// 認証コンテキストから companyId を強制適用
-	ai := authFromContext(ctx)
-
-	// ★ currentMember（Firebase 認証ミドルウェア）優先
-	if me, ok := middleware.CurrentMember(r); ok {
-		if cid := strings.TrimSpace(me.CompanyID); cid != "" {
-			ai.CompanyID = cid
-		}
+	// ----------- companyId は CurrentMember から強制適用（唯一の情報源） -----------
+	me, ok := httpmw.CurrentMember(r)
+	if !ok || strings.TrimSpace(me.CompanyID) == "" {
+		w.WriteHeader(http.StatusUnauthorized)
+		_ = json.NewEncoder(w).Encode(map[string]string{"error": "unauthorized"})
+		return
 	}
+	companyID := strings.TrimSpace(me.CompanyID)
 
 	input := memberuc.CreateMemberInput{
 		ID:             req.ID,
@@ -166,12 +91,8 @@ func (h *MemberHandler) create(w http.ResponseWriter, r *http.Request) {
 		Email:          req.Email,
 		Permissions:    req.Permissions,
 		AssignedBrands: req.AssignedBrands,
-
-		// ★ クライアント指定は無視してサーバで上書き
-		CompanyID: ai.CompanyID,
-		Status:    req.Status,
-
-		CreatedAt: nil, // サーバ側で now
+		CompanyID:      companyID,
+		Status:         req.Status,
 	}
 
 	m, err := h.uc.Create(ctx, input)
@@ -184,40 +105,27 @@ func (h *MemberHandler) create(w http.ResponseWriter, r *http.Request) {
 	_ = json.NewEncoder(w).Encode(m)
 }
 
-// ========================
+// -----------------------------------------------------------------------------
 // GET /members
-// ========================
+// -----------------------------------------------------------------------------
 
 func (h *MemberHandler) list(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	qv := r.URL.Query()
 
-	// --- Filter ---
 	var f memberdom.Filter
 	f.SearchQuery = strings.TrimSpace(qv.Get("q"))
 
-	// 認証コンテキストから companyId を強制適用
-	// 1. Firebase Auth ミドルウェア（currentMember）を優先
-	var companyID string
-	if me, ok := middleware.CurrentMember(r); ok {
-		companyID = strings.TrimSpace(me.CompanyID)
+	// ----------- companyId は CurrentMember から強制適用（唯一の情報源） -----------
+	me, ok := httpmw.CurrentMember(r)
+	if !ok || strings.TrimSpace(me.CompanyID) == "" {
+		w.WriteHeader(http.StatusUnauthorized)
+		_ = json.NewEncoder(w).Encode(map[string]string{"error": "unauthorized"})
+		return
 	}
-
-	// 2. 旧来の MiddlewareAuthCompany 由来の AuthInfo をフォールバックとして参照
-	if companyID == "" {
-		ai := authFromContext(ctx)
-		companyID = strings.TrimSpace(ai.CompanyID)
-	}
-
-	if companyID != "" {
-		f.CompanyID = companyID
-	} else {
-		// 開発時の便宜: 明示指定があれば拾うが、本番では無視される想定
-		f.CompanyID = strings.TrimSpace(qv.Get("companyId"))
-	}
+	f.CompanyID = strings.TrimSpace(me.CompanyID)
 
 	f.Status = strings.TrimSpace(qv.Get("status"))
-	// 既存互換: brandIds=, brands= のどちらでもカンマ区切り対応
 	if v := strings.TrimSpace(qv.Get("brandIds")); v != "" {
 		f.BrandIDs = splitCSV(v)
 	}
@@ -225,7 +133,7 @@ func (h *MemberHandler) list(w http.ResponseWriter, r *http.Request) {
 		f.Brands = splitCSV(v)
 	}
 
-	// --- Sort ---
+	// -------- Sort --------
 	var sort common.Sort
 	switch strings.ToLower(strings.TrimSpace(qv.Get("sort"))) {
 	case "name":
@@ -237,7 +145,6 @@ func (h *MemberHandler) list(w http.ResponseWriter, r *http.Request) {
 	case "updatedat":
 		sort.Column = "updatedAt"
 	default:
-		// 明示が無ければ updatedAt desc を想定
 		sort.Column = "updatedAt"
 	}
 	switch strings.ToLower(strings.TrimSpace(qv.Get("order"))) {
@@ -247,7 +154,7 @@ func (h *MemberHandler) list(w http.ResponseWriter, r *http.Request) {
 		sort.Order = "desc"
 	}
 
-	// --- Page ---
+	// -------- Page --------
 	var page common.Page
 	page.Number = clampInt(parseIntDefault(qv.Get("page"), 1), 1, 1_000_000)
 	page.PerPage = clampInt(parseIntDefault(qv.Get("perPage"), 50), 1, 200)
@@ -260,9 +167,9 @@ func (h *MemberHandler) list(w http.ResponseWriter, r *http.Request) {
 	_ = json.NewEncoder(w).Encode(res.Items)
 }
 
-// ========================
+// -----------------------------------------------------------------------------
 // GET /members/{id}
-// ========================
+// -----------------------------------------------------------------------------
 
 func (h *MemberHandler) get(w http.ResponseWriter, r *http.Request, id string) {
 	ctx := r.Context()
@@ -281,9 +188,9 @@ func (h *MemberHandler) get(w http.ResponseWriter, r *http.Request, id string) {
 	_ = json.NewEncoder(w).Encode(member)
 }
 
-// ========================
-// エラーハンドリング
-// ========================
+// -----------------------------------------------------------------------------
+// Error Response
+// -----------------------------------------------------------------------------
 
 func writeMemberErr(w http.ResponseWriter, err error) {
 	code := http.StatusInternalServerError
@@ -303,9 +210,9 @@ func writeMemberErr(w http.ResponseWriter, err error) {
 	_ = json.NewEncoder(w).Encode(map[string]string{"error": err.Error()})
 }
 
-// ========================
+// -----------------------------------------------------------------------------
 // Helpers
-// ========================
+// -----------------------------------------------------------------------------
 
 func splitCSV(s string) []string {
 	if s == "" {
@@ -321,7 +228,6 @@ func splitCSV(s string) []string {
 	return out
 }
 
-// 値 v を [min, max] に丸める
 func clampInt(v, min, max int) int {
 	if v < min {
 		return min

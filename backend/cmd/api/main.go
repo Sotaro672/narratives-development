@@ -16,12 +16,13 @@ import (
 )
 
 // withCORS wraps an http.Handler with simple CORS headers.
-// FRONTEND_ORIGIN env can narrow allowed origin; if empty, "*" is used.
-// NOTE: We don't use credentials; Authorization header is allowed with "*".
+// allowedOrigin には既に環境変数などから決めた値を渡す。
+// Authorization ヘッダを許可（Cookie 等の credentials は使っていない前提）。
 func withCORS(next http.Handler, allowedOrigin string) http.Handler {
 	allowedOrigin = strings.TrimSpace(allowedOrigin)
 	if allowedOrigin == "" {
-		allowedOrigin = "*" // dev-friendly; lock down in production as needed
+		// それでも空なら完全ワイルドカード（開発用）
+		allowedOrigin = "*"
 	}
 
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -85,10 +86,16 @@ func main() {
 
 	// ─────────────────────────────────────────────────────────────
 	// Global CORS wrapper (covers /healthz and app routes)
-	// Set FRONTEND_ORIGIN to your Hosting origin in production:
-	//   e.g. FRONTEND_ORIGIN=https://narratives-console-dev.web.app
+	// FRONTEND_ORIGIN が未指定なら、開発用に
+	//   https://narratives-console-dev.web.app
+	// をデフォルトとして使う。
 	// ─────────────────────────────────────────────────────────────
-	allowedOrigin := os.Getenv("FRONTEND_ORIGIN")
+	allowedOrigin := strings.TrimSpace(os.Getenv("FRONTEND_ORIGIN"))
+	if allowedOrigin == "" {
+		allowedOrigin = "https://narratives-console-dev.web.app"
+	}
+	log.Printf("[boot] CORS allowed origin: %s", allowedOrigin)
+
 	handler := withCORS(mux, allowedOrigin)
 
 	srv := &http.Server{

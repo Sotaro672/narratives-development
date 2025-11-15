@@ -6,52 +6,87 @@ import (
 	"net/http"
 	"strings"
 
-	fbAuth "firebase.google.com/go/v4/auth"
+	fbauth "firebase.google.com/go/v4/auth"
 
 	memdom "narratives/internal/domain/member"
 )
+
+// FirebaseAuthClient は firebase auth クライアントのエイリアス。
+// RouterDeps などからは *middleware.FirebaseAuthClient 型で受けられます。
+type FirebaseAuthClient = fbauth.Client
 
 type ctxKey string
 
 const ctxKeyMember ctxKey = "currentMember"
 
-// AuthMiddleware は Firebase ID トークンを検証し、
-// 対応する Member をコンテキストに積むためのミドルウェアです。
+// AuthMiddleware は
+//   - Authorization: Bearer <ID_TOKEN>
+//
+// で送られてきた Firebase ID トークンを検証し、
+//   - currentMember（memdom.Member）
+//   - companyId / auth.companyId（string）
+//
+// を context に詰めて下流ハンドラへ渡します。
 type AuthMiddleware struct {
-	FirebaseAuth *fbAuth.Client
-	MemberRepo   memdom.Repository // Firestore 実装（MemberRepositoryFS）を渡す
+	FirebaseAuth *FirebaseAuthClient
+	MemberRepo   memdom.Repository
 }
 
 func (m *AuthMiddleware) Handler(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		authHeader := r.Header.Get("Authorization")
-		if !strings.HasPrefix(authHeader, "Bearer ") {
-			http.Error(w, "missing token", http.StatusUnauthorized)
+		// 依存が nil の場合は 503 を返して早期終了
+		if m.FirebaseAuth == nil || m.MemberRepo == nil {
+			http.Error(w, "auth middleware not initialized", http.StatusServiceUnavailable)
 			return
 		}
 
-		idToken := strings.TrimPrefix(authHeader, "Bearer ")
+		authHeader := r.Header.Get("Authorization")
+		if !strings.HasPrefix(authHeader, "Bearer ") {
+			http.Error(w, "unauthorized: missing bearer token", http.StatusUnauthorized)
+			return
+		}
+
+		idToken := strings.TrimSpace(strings.TrimPrefix(authHeader, "Bearer "))
+		if idToken == "" {
+			http.Error(w, "unauthorized: empty bearer token", http.StatusUnauthorized)
+			return
+		}
+
+		// Firebase ID トークン検証
 		token, err := m.FirebaseAuth.VerifyIDToken(r.Context(), idToken)
 		if err != nil {
 			http.Error(w, "invalid token", http.StatusUnauthorized)
 			return
 		}
 
-		uid := token.UID
+		uid := strings.TrimSpace(token.UID)
+		if uid == "" {
+			http.Error(w, "invalid uid in token", http.StatusUnauthorized)
+			return
+		}
 
-		// Firebase UID から Member を取得（MemberRepositoryFS.GetByFirebaseUID）
+		// uid → Member 解決（現在は「id = FirebaseUID」前提のラッパ）
 		member, err := m.MemberRepo.GetByFirebaseUID(r.Context(), uid)
 		if err != nil {
 			http.Error(w, "member not found", http.StatusForbidden)
 			return
 		}
 
+		// ★ currentMember と companyId を context に詰める
 		ctx := context.WithValue(r.Context(), ctxKeyMember, member)
+
+		cid := strings.TrimSpace(member.CompanyID)
+		if cid != "" {
+			// MemberUsecase.companyIDFromContext が読むキー
+			ctx = context.WithValue(ctx, "companyId", cid)
+			ctx = context.WithValue(ctx, "auth.companyId", cid) // 互換キー
+		}
+
 		next.ServeHTTP(w, r.WithContext(ctx))
 	})
 }
 
-// CurrentMember はコンテキストからログイン中 Member を取り出すためのヘルパーです。
+// CurrentMember はミドルウェアで注入した現在ログイン中の Member を取得します。
 func CurrentMember(r *http.Request) (*memdom.Member, bool) {
 	m, ok := r.Context().Value(ctxKeyMember).(memdom.Member)
 	if !ok {

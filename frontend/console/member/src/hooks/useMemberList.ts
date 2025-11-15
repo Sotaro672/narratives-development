@@ -141,8 +141,14 @@ export function useMemberList(
         const usePage = override?.page ?? page;
         const useFilter = override?.filter ?? filter;
 
-        const token = await auth.currentUser?.getIdToken?.();
-        if (!token) throw new Error("未認証のためメンバー一覧を取得できません。（IDトークン未取得）");
+        // ★ Firebase Auth から ID トークンを取得
+        const currentUser = auth.currentUser;
+        if (!currentUser) {
+          throw new Error("未認証のためメンバー一覧を取得できません。（currentUser が null）");
+        }
+        const token = await currentUser.getIdToken();
+        // eslint-disable-next-line no-console
+        console.log("[useMemberList] currentUser.uid:", currentUser.uid);
 
         const qs = buildQuery(usePage, useFilter);
         const url = apiUrl("/members", qs);
@@ -155,18 +161,29 @@ export function useMemberList(
           },
         });
 
+        // eslint-disable-next-line no-console
+        console.log("[useMemberList] response", res.status, res.statusText);
+
         const ct = res.headers.get("content-type") ?? "";
         if (!ct.includes("application/json")) {
           const text = await res.text().catch(() => "");
           const head = text.slice(0, 160).replace(/\s+/g, " ");
-          throw new Error(`Unexpected content-type: ${ct} (url=${url}) body_head="${head}"`);
+          throw new Error(
+            `Unexpected content-type: ${ct} (url=${url}) body_head="${head}"`,
+          );
         }
         if (!res.ok) {
           const text = await res.text().catch(() => "");
           if (res.status === 401 || res.status === 403) {
-            throw new Error(`認証/認可エラー (${res.status}). 再ログイン後に再試行してください。 ${text || ""}`);
+            throw new Error(
+              `認証/認可エラー (${res.status}). 再ログイン後に再試行してください。 ${
+                text || ""
+              }`,
+            );
           }
-          throw new Error(`メンバー一覧の取得に失敗しました (status ${res.status}) ${text || ""}`);
+          throw new Error(
+            `メンバー一覧の取得に失敗しました (status ${res.status}) ${text || ""}`,
+          );
         }
 
         const raw = (await res.json()) as any[];
@@ -190,7 +207,10 @@ export function useMemberList(
 
         setMembers(normalized);
       } catch (e: any) {
-        setError(e instanceof Error ? e : new Error(String(e)));
+        const err = e instanceof Error ? e : new Error(String(e));
+        // eslint-disable-next-line no-console
+        console.error("[useMemberList] load error:", err);
+        setError(err);
       } finally {
         setLoading(false);
       }
@@ -212,43 +232,50 @@ export function useMemberList(
   };
 
   // ID → 「姓 名」を解決（member.Service.GetNameLastFirstByID 相当）
-  const getNameLastFirstByID = useCallback(async (memberId: string): Promise<string> => {
-    const id = String(memberId ?? "").trim();
-    if (!id) return "";
+  const getNameLastFirstByID = useCallback(
+    async (memberId: string): Promise<string> => {
+      const id = String(memberId ?? "").trim();
+      if (!id) return "";
 
-    const cache = nameCacheRef.current;
-    const cached = cache.get(id);
-    if (cached !== undefined) return cached;
+      const cache = nameCacheRef.current;
+      const cached = cache.get(id);
+      if (cached !== undefined) return cached;
 
-    const existing = members.find((m) => m.id === id);
-    if (existing) {
-      const disp = formatLastFirst(existing.lastName as any, existing.firstName as any);
+      const existing = members.find((m) => m.id === id);
+      if (existing) {
+        const disp = formatLastFirst(
+          existing.lastName as any,
+          existing.firstName as any,
+        );
+        if (disp) cache.set(id, disp);
+        return disp;
+      }
+
+      const currentUser = auth.currentUser;
+      if (!currentUser) return "";
+      const token = await currentUser.getIdToken();
+
+      const url = apiUrl(`/members/${encodeURIComponent(id)}`);
+      const res = await fetch(url, {
+        method: "GET",
+        headers: {
+          Authorization: `Bearer ${token}`,
+          Accept: "application/json",
+        },
+      });
+
+      const ct = res.headers.get("content-type") ?? "";
+      if (!ct.includes("application/json")) return "";
+      if (res.status === 404) return "";
+      if (!res.ok) return "";
+
+      const m = normalizeMemberWire(await res.json());
+      const disp = formatLastFirst(m.lastName as any, m.firstName as any);
       if (disp) cache.set(id, disp);
       return disp;
-    }
-
-    const token = await auth.currentUser?.getIdToken?.();
-    if (!token) return "";
-
-    const url = apiUrl(`/members/${encodeURIComponent(id)}`);
-    const res = await fetch(url, {
-      method: "GET",
-      headers: {
-        Authorization: `Bearer ${token}`,
-        Accept: "application/json",
-      },
-    });
-
-    const ct = res.headers.get("content-type") ?? "";
-    if (!ct.includes("application/json")) return "";
-    if (res.status === 404) return "";
-    if (!res.ok) return "";
-
-    const m = normalizeMemberWire(await res.json());
-    const disp = formatLastFirst(m.lastName as any, m.firstName as any);
-    if (disp) cache.set(id, disp);
-    return disp;
-  }, [members]);
+    },
+    [members],
+  );
 
   return {
     members,

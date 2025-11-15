@@ -22,6 +22,9 @@ type Filter struct {
 	CompanyID string // owning company to scope results
 	Status    string // "", "active", "inactive"
 
+	// Firebase user mapping（entity.Member.FirebaseUID と対応）
+	FirebaseUID string // optional exact match filter
+
 	// Ranges
 	CreatedFrom *time.Time
 	CreatedTo   *time.Time
@@ -79,9 +82,9 @@ type Repository interface {
 	GetByID(ctx context.Context, id string) (Member, error)
 	GetByEmail(ctx context.Context, email string) (Member, error)
 
-	// ★ Firebase UID から Member を取得するメソッド
-	//   今回の実装では「members の DocumentID = Firebase UID」という前提で
-	//   GetByID を呼び出すラッパーにしています。
+	// Firebase UID から Member を取得するメソッド
+	// 具体的な取得方法（Document ID か firestore フィールド firebaseUid か）は
+	// アダプタ層（Firestore / SQL 実装）側で実装する。
 	GetByFirebaseUID(ctx context.Context, firebaseUID string) (Member, error)
 
 	Exists(ctx context.Context, id string) (bool, error)

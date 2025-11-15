@@ -99,7 +99,8 @@ func (r *MemberRepositoryFS) GetByEmail(ctx context.Context, email string) (memd
 	return m, nil
 }
 
-// Firebase UID から取得するメソッド（現在は ID = FirebaseUID 前提でラップ）
+// Firebase UID から取得するメソッド
+// members コレクション内の `firebaseUid` フィールドに対してクエリします。
 func (r *MemberRepositoryFS) GetByFirebaseUID(ctx context.Context, firebaseUID string) (memdom.Member, error) {
 	if r.Client == nil {
 		return memdom.Member{}, errors.New("firestore client is nil")
@@ -109,10 +110,26 @@ func (r *MemberRepositoryFS) GetByFirebaseUID(ctx context.Context, firebaseUID s
 		return memdom.Member{}, memdom.ErrNotFound
 	}
 
-	// 将来 firebaseUid フィールドを設けるなら:
-	// q := r.col().Where("firebaseUid", "==", uid).Limit(1) ...
-	// といった実装に差し替えればOK。
-	return r.GetByID(ctx, uid)
+	q := r.col().Where("firebaseUid", "==", uid).Limit(1)
+	it := q.Documents(ctx)
+	defer it.Stop()
+
+	doc, err := it.Next()
+	if err == iterator.Done {
+		return memdom.Member{}, memdom.ErrNotFound
+	}
+	if err != nil {
+		return memdom.Member{}, err
+	}
+
+	m, err := readMemberSnapshot(doc)
+	if err != nil {
+		return memdom.Member{}, err
+	}
+	if m.ID == "" {
+		m.ID = doc.Ref.ID
+	}
+	return m, nil
 }
 
 func (r *MemberRepositoryFS) Exists(ctx context.Context, id string) (bool, error) {
@@ -345,7 +362,12 @@ func (r *MemberRepositoryFS) Create(ctx context.Context, m memdom.Member) (memdo
 		return memdom.Member{}, errors.New("firestore client is nil")
 	}
 
-	ref := r.col().Doc(strings.TrimSpace(m.ID))
+	// ID / FirebaseUID はあらかじめ usecase で詰める想定だが、
+	// ここでも一応 trim しておく
+	m.ID = strings.TrimSpace(m.ID)
+	m.FirebaseUID = strings.TrimSpace(m.FirebaseUID)
+
+	ref := r.col().Doc(m.ID)
 	if m.ID == "" {
 		ref = r.col().NewDoc()
 		m.ID = ref.ID
@@ -387,7 +409,10 @@ func (r *MemberRepositoryFS) Save(ctx context.Context, m memdom.Member, _ *memdo
 		return memdom.Member{}, errors.New("firestore client is nil")
 	}
 
-	if strings.TrimSpace(m.ID) == "" {
+	m.ID = strings.TrimSpace(m.ID)
+	m.FirebaseUID = strings.TrimSpace(m.FirebaseUID)
+
+	if m.ID == "" {
 		ref := r.col().NewDoc()
 		m.ID = ref.ID
 	}
@@ -560,6 +585,7 @@ func readMemberSnapshot(doc *firestore.DocumentSnapshot) (memdom.Member, error) 
 		AssignedBrands: asStringSlice(data["assignedBrands"]),
 		CompanyID:      asString(data["companyId"]),
 		Status:         asString(data["status"]),
+		FirebaseUID:    asString(data["firebaseUid"]),
 	}
 
 	// createdAt (required-ish): if missing or invalid, leave zero value
