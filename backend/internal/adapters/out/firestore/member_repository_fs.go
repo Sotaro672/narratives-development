@@ -455,7 +455,21 @@ func matchMemberFilter(m memdom.Member, f memdom.Filter) bool {
 		}
 	}
 
-	// BrandIDs / Brands
+	// Company filter (exact)
+	if cid := strings.TrimSpace(f.CompanyID); cid != "" {
+		if strings.TrimSpace(m.CompanyID) != cid {
+			return false
+		}
+	}
+
+	// Status filter (exact)
+	if st := strings.TrimSpace(f.Status); st != "" {
+		if strings.TrimSpace(m.Status) != st {
+			return false
+		}
+	}
+
+	// BrandIDs / Brands (alias)
 	if len(f.BrandIDs) > 0 || len(f.Brands) > 0 {
 		want := append(append([]string{}, f.BrandIDs...), f.Brands...)
 		if !fscommon.IntersectsStrings(want, m.AssignedBrands) {
@@ -502,6 +516,8 @@ func applyMemberSort(q firestore.Query, s common.Sort) firestore.Query {
 		field = "createdAt"
 	case "updatedat":
 		field = "updatedAt"
+	// 仕様上は permissions / assigneeCount などもあり得るが、
+	// Firestore の単純 OrderBy で表現困難なため安全なデフォルトにフォールバック
 	default:
 		return q.OrderBy("updatedAt", firestore.Desc).
 			OrderBy(firestore.DocumentID, firestore.Desc)

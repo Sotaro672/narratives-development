@@ -14,6 +14,7 @@ import (
 
 var emailRe = regexp.MustCompile(`^[^\s@]+@[^\s@]+\.[^\s@]+$`)
 
+// Member is the domain entity for a user/member.
 type Member struct {
 	ID             string   `json:"id"`
 	FirstName      string   `json:"first_name,omitempty"`
@@ -23,6 +24,10 @@ type Member struct {
 	Email          string   `json:"email,omitempty"` // optional; empty string means unset
 	Permissions    []string `json:"permissions"`
 	AssignedBrands []string `json:"assignedBrands,omitempty"`
+
+	// ★ Added for company-level filtering/ownership and status filtering
+	CompanyID string `json:"companyId,omitempty"` // owning company ID (optional for backward compatibility)
+	Status    string `json:"status,omitempty"`    // "active" | "inactive" (optional; empty means unspecified)
 
 	CreatedAt time.Time  `json:"createdAt"`
 	UpdatedAt *time.Time `json:"updatedAt,omitempty"`
@@ -39,9 +44,10 @@ var (
 	ErrInvalidUpdatedBy   = errors.New("member: invalid updatedBy")
 	ErrInvalidDeletedAt   = errors.New("member: invalid deletedAt")
 	ErrInvalidDeletedBy   = errors.New("member: invalid deletedBy")
+	ErrInvalidStatus      = errors.New("member: invalid status")
 	ErrNotFound           = errors.New("member: not found")
 	ErrConflict           = errors.New("member: conflict")
-	ErrPreconditionFailed = errors.New("member: precondition failed") // 競合（楽観ロック等）
+	ErrPreconditionFailed = errors.New("member: precondition failed")
 )
 
 // New constructs a Member with validation. Use empty strings/slices for optional fields.
@@ -92,7 +98,7 @@ func NewFromStringsTime(
 	return m, nil
 }
 
-// Option helpers to set optional fields
+/* ---------- Option helpers to set optional fields ---------- */
 
 func WithName(first, last string) func(*Member) {
 	return func(m *Member) {
@@ -124,6 +130,18 @@ func WithAssignedBrands(brands []string) func(*Member) {
 	}
 }
 
+func WithCompanyID(companyID string) func(*Member) {
+	return func(m *Member) {
+		m.CompanyID = strings.TrimSpace(companyID)
+	}
+}
+
+func WithStatus(status string) func(*Member) {
+	return func(m *Member) {
+		m.Status = strings.TrimSpace(status) // expected: "", "active", "inactive"
+	}
+}
+
 func WithUpdated(by string, at time.Time) func(*Member) {
 	return func(m *Member) {
 		b := by
@@ -142,7 +160,7 @@ func WithDeleted(by string, at time.Time) func(*Member) {
 	}
 }
 
-// Mutators
+/* ------------------------------ Mutators ------------------------------ */
 
 func (m *Member) UpdateEmail(email string, now time.Time) error {
 	if email != "" && !emailRe.MatchString(email) {
@@ -209,7 +227,7 @@ func (m *Member) ClearDeleted() {
 	m.DeletedBy = nil
 }
 
-// Validation and helpers
+/* --------------------- Validation and helpers --------------------- */
 
 func (m Member) validate() error {
 	if m.ID == "" {
@@ -217,6 +235,13 @@ func (m Member) validate() error {
 	}
 	if m.Email != "" && !emailRe.MatchString(m.Email) {
 		return ErrInvalidEmail
+	}
+	// Status is optional; if provided, restrict to known values.
+	switch strings.ToLower(strings.TrimSpace(m.Status)) {
+	case "", "active", "inactive":
+		// ok
+	default:
+		return ErrInvalidStatus
 	}
 	if m.CreatedAt.IsZero() {
 		return ErrInvalidCreatedAt
@@ -312,6 +337,10 @@ type MemberPatch struct {
 	Permissions    *[]string
 	AssignedBrands *[]string
 
+	// ★ Added fields for company/status updates
+	CompanyID *string
+	Status    *string
+
 	CreatedAt *time.Time
 	UpdatedAt *time.Time
 	UpdatedBy *string
@@ -330,6 +359,8 @@ CREATE TABLE members (
   email VARCHAR(255) UNIQUE,
   permissions TEXT[] NOT NULL,
   assigned_brands TEXT[],
+  company_id TEXT, -- owning company (nullable for back-compat)
+  status TEXT,     -- 'active' | 'inactive' (nullable for back-compat)
 
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   updated_at TIMESTAMPTZ,
@@ -339,7 +370,7 @@ CREATE TABLE members (
 );
 `
 
-// SetPermissionsByName はカタログに存在する Permission.Name のみを設定します（重複排除・整列）。
+// SetPermissionsByName validates and sets permission names (dedup & sorted).
 func (m *Member) SetPermissionsByName(names []string, catalog []permdom.Permission) error {
 	if m == nil {
 		return nil
@@ -359,7 +390,7 @@ func (m *Member) SetPermissionsByName(names []string, catalog []permdom.Permissi
 			continue
 		}
 		if _, ok := allow[n]; !ok {
-			// カタログ外はスキップ（必要であればエラーに変更可）
+			// skip names outside the catalog
 			continue
 		}
 		if _, dup := seen[n]; dup {
@@ -373,7 +404,7 @@ func (m *Member) SetPermissionsByName(names []string, catalog []permdom.Permissi
 	return nil
 }
 
-// ValidatePermissions は現在の Permissions がカタログに含まれるか検証します。
+// ValidatePermissions verifies current Permissions exist in the catalog.
 func (m Member) ValidatePermissions(catalog []permdom.Permission) error {
 	allow := make(map[string]struct{}, len(catalog))
 	for _, p := range catalog {
@@ -390,7 +421,7 @@ func (m Member) ValidatePermissions(catalog []permdom.Permission) error {
 	return nil
 }
 
-// HasPermission は指定 Permission.Name を保持しているかを返します。
+// HasPermission checks if member has the specified Permission.Name.
 func (m Member) HasPermission(name string) bool {
 	name = strings.TrimSpace(name)
 	for _, n := range m.Permissions {

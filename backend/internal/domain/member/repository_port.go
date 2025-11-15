@@ -68,6 +68,7 @@ type Repository interface {
 
 	// 追加要件（共通に無いものはここで定義）
 	ListByCursor(ctx context.Context, filter Filter, sort Sort, cpage CursorPage) (CursorPageResult, error)
+	GetByID(ctx context.Context, id string) (Member, error)
 	GetByEmail(ctx context.Context, email string) (Member, error)
 	Exists(ctx context.Context, id string) (bool, error)
 	Count(ctx context.Context, filter Filter) (int, error)
