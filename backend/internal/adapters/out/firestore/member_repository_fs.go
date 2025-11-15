@@ -127,7 +127,13 @@ func (r *MemberRepositoryFS) Count(ctx context.Context, f memdom.Filter) (int, e
 		return 0, errors.New("firestore client is nil")
 	}
 
-	it := r.col().Documents(ctx)
+	// ▼ 受け取った Filter.CompanyID を Firestore クエリに反映（実装責務）
+	q := r.col().Query
+	if cid := strings.TrimSpace(f.CompanyID); cid != "" {
+		q = q.Where("companyId", "==", cid)
+	}
+
+	it := q.Documents(ctx)
 	defer it.Stop()
 
 	total := 0
@@ -148,6 +154,7 @@ func (r *MemberRepositoryFS) Count(ctx context.Context, f memdom.Filter) (int, e
 			m.ID = doc.Ref.ID
 		}
 
+		// その他の条件は既存のローカルフィルタで最終判定
 		if matchMemberFilter(m, f) {
 			total++
 		}
@@ -167,7 +174,11 @@ func (r *MemberRepositoryFS) List(
 
 	pageNum, perPage, offset := fscommon.NormalizePage(p.Number, p.PerPage, 50, 200)
 
+	// ▼ companyId を Firestore クエリに適用
 	q := r.col().Query
+	if cid := strings.TrimSpace(f.CompanyID); cid != "" {
+		q = q.Where("companyId", "==", cid)
+	}
 	q = applyMemberSort(q, s)
 
 	it := q.Documents(ctx)
@@ -189,6 +200,7 @@ func (r *MemberRepositoryFS) List(
 		if m.ID == "" {
 			m.ID = doc.Ref.ID
 		}
+		// 最終判定はローカルフィルタ
 		if matchMemberFilter(m, f) {
 			all = append(all, m)
 		}
@@ -238,7 +250,11 @@ func (r *MemberRepositoryFS) ListByCursor(
 		limit = 50
 	}
 
+	// ▼ companyId を Firestore クエリに適用
 	q := r.col().Query
+	if cid := strings.TrimSpace(f.CompanyID); cid != "" {
+		q = q.Where("companyId", "==", cid)
+	}
 	q = applyMemberSortForCursor(q, s)
 
 	it := q.Documents(ctx)
@@ -269,6 +285,7 @@ func (r *MemberRepositoryFS) ListByCursor(
 			m.ID = doc.Ref.ID
 		}
 
+		// 追加条件はローカルフィルタ
 		if !matchMemberFilter(m, f) {
 			continue
 		}

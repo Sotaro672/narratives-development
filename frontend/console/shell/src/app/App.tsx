@@ -4,7 +4,7 @@ import { BrowserRouter } from "react-router-dom";
 import MainPage from "../pages/MainPage";
 import AuthPage from "../auth/pages/AuthPage";
 import { AuthProvider } from "../auth/application/AuthContext";
-import { useAuth } from "../auth/application/authRepository";
+import { useAuth } from "../auth/hook/useAuth";
 
 function RootContent() {
   const { user, loading } = useAuth();

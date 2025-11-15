@@ -2,6 +2,7 @@
 package handlers
 
 import (
+	"context"
 	"encoding/json"
 	"net/http"
 	"strings"
@@ -11,6 +12,75 @@ import (
 	memberdom "narratives/internal/domain/member"
 )
 
+//
+// ──────────────────────────────────────────────────────────────────────────────
+// Auth コンテキスト注入（Inbound Adapter / Middleware）
+//  - リクエストの認証情報（uid）から、そのユーザーの companyId を解決して context に注入
+//  - 本番では ID トークン検証 → uid 取得を別ミドルウェアで行い、ここでは uid→companyId 解決のみを担当
+//  - 開発用に "X-Auth-UID" ヘッダー（なければクエリ uid）から uid を拾います
+// ──────────────────────────────────────────────────────────────────────────────
+//
+
+type authCtxKey int
+
+const (
+	authKey authCtxKey = iota
+)
+
+// AuthInfo は下流で参照する最小限の認証情報
+type AuthInfo struct {
+	UID       string
+	CompanyID string
+}
+
+// authFromContext は AuthInfo を取り出します（無ければゼロ値）
+func authFromContext(ctx context.Context) AuthInfo {
+	v := ctx.Value(authKey)
+	if ai, ok := v.(AuthInfo); ok {
+		return ai
+	}
+	return AuthInfo{}
+}
+
+// withAuth は AuthInfo を context に詰めます
+func withAuth(ctx context.Context, ai AuthInfo) context.Context {
+	return context.WithValue(ctx, authKey, ai)
+}
+
+// MiddlewareAuthCompany は uid → member → companyId を解決して context に注入する HTTP ミドルウェア。
+// uid の取得は開発用に "X-Auth-UID" ヘッダ、無ければクエリ ?uid= を使用します。
+// 本番運用では別途トークン検証ミドルウェアで uid を埋め、その値をここで参照する形を推奨します。
+func MiddlewareAuthCompany(uc *memberuc.MemberUsecase) func(http.Handler) http.Handler {
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			uid := strings.TrimSpace(r.Header.Get("X-Auth-UID"))
+			if uid == "" {
+				uid = strings.TrimSpace(r.URL.Query().Get("uid"))
+			}
+
+			ai := AuthInfo{UID: uid}
+
+			// uid があれば、member を引いて companyId を解決
+			if uid != "" && uc != nil {
+				if m, err := uc.GetByID(r.Context(), uid); err == nil {
+					// Member エンティティに CompanyID フィールドがある前提（無い場合は "" になる）
+					ai.CompanyID = strings.TrimSpace(m.CompanyID)
+				}
+				// 取得に失敗しても致命的ではないため、そのまま続行（下流で 0 値扱い）
+			}
+
+			ctx := withAuth(r.Context(), ai)
+			next.ServeHTTP(w, r.WithContext(ctx))
+		})
+	}
+}
+
+//
+// ──────────────────────────────────────────────────────────────────────────────
+// /members Handler 本体
+// ──────────────────────────────────────────────────────────────────────────────
+//
+
 // MemberHandler は /members 関連のエンドポイントを担当します。
 type MemberHandler struct {
 	uc *memberuc.MemberUsecase
@@ -18,6 +88,8 @@ type MemberHandler struct {
 
 // NewMemberHandler はHTTPハンドラを初期化します。
 func NewMemberHandler(uc *memberuc.MemberUsecase) http.Handler {
+	// このハンドラ自体は ServeHTTP を実装する multiplexer です。
+	// 実際のルータで使う際は MiddlewareAuthCompany(uc) でラップしてください。
 	return &MemberHandler{uc: uc}
 }
 
@@ -53,9 +125,9 @@ type memberCreateRequest struct {
 	Permissions    []string `json:"permissions"`
 	AssignedBrands []string `json:"assignedBrands"`
 
-	// ★ 追加：所属会社とステータス（任意）
+	// 任意: 所属会社/ステータス（会社は下流でサーバ強制上書き）
 	CompanyID string `json:"companyId,omitempty"`
-	Status    string `json:"status,omitempty"` // "active" | "inactive" を想定
+	Status    string `json:"status,omitempty"` // 例: "active" | "inactive"
 }
 
 func (h *MemberHandler) create(w http.ResponseWriter, r *http.Request) {
@@ -68,6 +140,9 @@ func (h *MemberHandler) create(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// 認証コンテキストから companyId を強制適用
+	ai := authFromContext(ctx)
+
 	input := memberuc.CreateMemberInput{
 		ID:             req.ID,
 		FirstName:      req.FirstName,
@@ -77,9 +152,11 @@ func (h *MemberHandler) create(w http.ResponseWriter, r *http.Request) {
 		Email:          req.Email,
 		Permissions:    req.Permissions,
 		AssignedBrands: req.AssignedBrands,
-		// ★ 追加フィールド
-		CompanyID: req.CompanyID,
+
+		// ★ クライアント指定は無視してサーバで上書き
+		CompanyID: ai.CompanyID,
 		Status:    req.Status,
+
 		CreatedAt: nil, // サーバ側で now
 	}
 
@@ -104,7 +181,16 @@ func (h *MemberHandler) list(w http.ResponseWriter, r *http.Request) {
 	// --- Filter ---
 	var f memberdom.Filter
 	f.SearchQuery = strings.TrimSpace(qv.Get("q"))
-	f.CompanyID = strings.TrimSpace(qv.Get("companyId"))
+
+	// 認証コンテキストから companyId を強制適用
+	ai := authFromContext(ctx)
+	if ai.CompanyID != "" {
+		f.CompanyID = ai.CompanyID
+	} else {
+		// 開発時の便宜: 明示指定があれば拾うが、本番では無視される想定
+		f.CompanyID = strings.TrimSpace(qv.Get("companyId"))
+	}
+
 	f.Status = strings.TrimSpace(qv.Get("status"))
 	// 既存互換: brandIds=, brands= のどちらでもカンマ区切り対応
 	if v := strings.TrimSpace(qv.Get("brandIds")); v != "" {

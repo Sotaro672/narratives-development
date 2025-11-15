@@ -22,7 +22,35 @@ func NewMemberUsecase(repo memdom.Repository) *MemberUsecase {
 	}
 }
 
+// ─────────────────────────────────────────────────────────────
+// Auth/Multitenancy: companyId の取得（ミドルウェアで注入された値を拾う）
+//
+// 依存方向を守るために adapters に依存せず、context から汎用キーで取得します。
+// ミドルウェア側では以下いずれかのキーで string を詰めてください。
+//   - "companyId"
+//   - "auth.companyId"
+//
+// 見つからない場合は空文字を返します（＝強制上書き不可）。
+// ─────────────────────────────────────────────────────────────
+func companyIDFromContext(ctx context.Context) string {
+	// 代表キー
+	if v := ctx.Value("companyId"); v != nil {
+		if s, ok := v.(string); ok {
+			return strings.TrimSpace(s)
+		}
+	}
+	// 互換キー
+	if v := ctx.Value("auth.companyId"); v != nil {
+		if s, ok := v.(string); ok {
+			return strings.TrimSpace(s)
+		}
+	}
+	return ""
+}
+
+// ─────────────────────────────────────────────────────────────
 // Queries
+// ─────────────────────────────────────────────────────────────
 
 func (u *MemberUsecase) GetByID(ctx context.Context, id string) (memdom.Member, error) {
 	return u.repo.GetByID(ctx, strings.TrimSpace(id))
@@ -37,6 +65,10 @@ func (u *MemberUsecase) Exists(ctx context.Context, id string) (bool, error) {
 }
 
 func (u *MemberUsecase) Count(ctx context.Context, f memdom.Filter) (int, error) {
+	// ★ クライアント指定は無視して、サーバが信頼する companyId を強制適用
+	if cid := companyIDFromContext(ctx); cid != "" {
+		f.CompanyID = cid
+	}
 	return u.repo.Count(ctx, f)
 }
 
@@ -47,10 +79,16 @@ func (u *MemberUsecase) List(
 	s common.Sort,
 	p common.Page,
 ) (common.PageResult[memdom.Member], error) {
+	// ★ クライアント指定は無視して、サーバが信頼する companyId を強制適用
+	if cid := companyIDFromContext(ctx); cid != "" {
+		f.CompanyID = cid
+	}
 	return u.repo.List(ctx, f, s, p)
 }
 
+// ─────────────────────────────────────────────────────────────
 // Commands
+// ─────────────────────────────────────────────────────────────
 
 type CreateMemberInput struct {
 	ID             string
@@ -63,7 +101,7 @@ type CreateMemberInput struct {
 	AssignedBrands []string
 
 	// ★ 新規追加
-	CompanyID string // 所属会社ID（任意）
+	CompanyID string // 所属会社ID（任意だが、サーバで強制上書き）
 	Status    string // "active" | "inactive"（任意、空なら未指定）
 
 	// CreatedAt を指定しない場合は現在時刻
@@ -76,6 +114,14 @@ func (u *MemberUsecase) Create(ctx context.Context, in CreateMemberInput) (memdo
 		t := u.now().UTC()
 		createdAt = &t
 	}
+
+	// ★ クライアント指定は無視して、サーバが信頼する companyId を強制適用
+	cid := companyIDFromContext(ctx)
+	companyID := strings.TrimSpace(in.CompanyID)
+	if cid != "" {
+		companyID = cid
+	}
+
 	m := memdom.Member{
 		ID:             strings.TrimSpace(in.ID),
 		FirstName:      strings.TrimSpace(in.FirstName),
@@ -86,8 +132,8 @@ func (u *MemberUsecase) Create(ctx context.Context, in CreateMemberInput) (memdo
 		Permissions:    dedupStrings(in.Permissions),
 		AssignedBrands: dedupStrings(in.AssignedBrands),
 
-		// ★ 追加フィールドを反映
-		CompanyID: strings.TrimSpace(in.CompanyID),
+		// ★ 強制反映
+		CompanyID: companyID,
 		Status:    strings.TrimSpace(in.Status),
 
 		CreatedAt: *createdAt,
@@ -107,7 +153,7 @@ type UpdateMemberInput struct {
 	AssignedBrands *[]string
 
 	// ★ 新規追加
-	CompanyID *string
+	CompanyID *string // クライアント指定は無視される（サーバ強制）
 	Status    *string
 }
 
@@ -141,10 +187,11 @@ func (u *MemberUsecase) Update(ctx context.Context, in UpdateMemberInput) (memdo
 		current.AssignedBrands = dedupStrings(*in.AssignedBrands)
 	}
 
-	// ★ 追加フィールドの更新
-	if in.CompanyID != nil {
-		current.CompanyID = strings.TrimSpace(*in.CompanyID)
+	// ★ companyId はクライアント指定ではなくサーバが強制適用
+	if cid := companyIDFromContext(ctx); cid != "" {
+		current.CompanyID = cid
 	}
+	// ステータスは任意更新（空指定は無視）
 	if in.Status != nil {
 		current.Status = strings.TrimSpace(*in.Status)
 	}
@@ -156,6 +203,10 @@ func (u *MemberUsecase) Save(ctx context.Context, m memdom.Member) (memdom.Membe
 	// Save は Upsert。CreatedAt がゼロなら現在時刻を付与。
 	if m.CreatedAt.IsZero() {
 		m.CreatedAt = u.now().UTC()
+	}
+	// ★ Save 経由でも companyId をサーバ値で強制（セーフティネット）
+	if cid := companyIDFromContext(ctx); cid != "" {
+		m.CompanyID = cid
 	}
 	return u.repo.Save(ctx, m, nil)
 }

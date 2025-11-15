@@ -5,7 +5,7 @@ import { Bell, MessageSquare, UserRound, ChevronDown } from "lucide-react";
 import "./Header.css";
 import AdminPanel from "./AdminPanel";
 import { useAuthActions } from "../../auth/application/useAuthActions";
-import { useAuth } from "../../auth/application/authRepository";
+import { useAuth } from "../../auth/hook/useAuth";
 
 interface HeaderProps {
   username?: string;

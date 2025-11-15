@@ -2,10 +2,16 @@
 
 import { useCallback, useEffect, useState } from "react";
 import type { Member } from "../domain/entity/member";
-import type { MemberRepository } from "../domain/repository/memberRepository";
-import { MemberRepositoryFS } from "../infrastructure/firestore/memberRepositoryFS";
 
-const repository: MemberRepository = new MemberRepositoryFS();
+// ★ バックエンド呼び出し用：Firebase Auth の ID トークンを付与
+import { auth } from "../../../shell/src/auth/config/firebaseClient";
+
+// 環境変数からバックエンドのベースURLを取得（末尾スラッシュを除去）
+const API_BASE =
+  ((import.meta as any).env?.VITE_BACKEND_BASE_URL as string | undefined)?.replace(
+    /\/+$/,
+    ""
+  ) ?? "";
 
 export function useMemberDetail(memberId?: string) {
   const [member, setMember] = useState<Member | null>(null);
@@ -19,35 +25,47 @@ export function useMemberDetail(memberId?: string) {
     setError(null);
 
     try {
-      const raw = await repository.getById(memberId); // Member | null 期待
+      // 認証トークン
+      const token = await auth.currentUser?.getIdToken();
+      if (!token) {
+        throw new Error("未認証のためメンバー情報を取得できません。");
+      }
 
+      const res = await fetch(`${API_BASE}/members/${encodeURIComponent(memberId)}`, {
+        method: "GET",
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "application/json",
+        },
+      });
+
+      if (!res.ok) {
+        const text = await res.text().catch(() => "");
+        throw new Error(`メンバー取得に失敗しました (status ${res.status}) ${text || ""}`);
+      }
+
+      const raw = (await res.json()) as Member | null;
       if (!raw) {
         setMember(null);
         return;
       }
 
-      const item = raw as Member;
-
+      // 姓名が空の場合の正規化（ID にはフォールバックしない）
       const noFirst =
-        item.firstName === null ||
-        item.firstName === undefined ||
-        item.firstName === "";
+        raw.firstName === null || raw.firstName === undefined || raw.firstName === "";
       const noLast =
-        item.lastName === null ||
-        item.lastName === undefined ||
-        item.lastName === "";
+        raw.lastName === null || raw.lastName === undefined || raw.lastName === "";
 
-      // ★ 名前が無い場合も、id を名前としては使わない（id はあくまで識別子）
       const normalized: Member = {
-        ...item,
-        id: item.id ?? memberId,
-        firstName: noFirst ? null : item.firstName ?? null,
-        lastName: noLast ? null : item.lastName ?? null,
+        ...raw,
+        id: raw.id ?? memberId,
+        firstName: noFirst ? null : raw.firstName ?? null,
+        lastName: noLast ? null : raw.lastName ?? null,
       };
 
       setMember(normalized);
     } catch (e: any) {
-      setError(e);
+      setError(e instanceof Error ? e : new Error(String(e)));
     } finally {
       setLoading(false);
     }
@@ -60,10 +78,7 @@ export function useMemberDetail(memberId?: string) {
   // PageHeader 用の表示名
   const memberName = (() => {
     if (!member) return "不明なメンバー";
-
-    const full = `${member.lastName ?? ""} ${member.firstName ?? ""}`
-      .trim();
-
+    const full = `${member.lastName ?? ""} ${member.firstName ?? ""}`.trim();
     // ★ 氏名が無い場合は「招待中」と表示し、ID にはフォールバックしない
     return full || "招待中";
   })();

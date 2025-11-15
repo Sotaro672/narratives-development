@@ -1,9 +1,12 @@
 // frontend/member/src/hooks/useMemberCreate.ts
 import { useCallback, useMemo, useState } from "react";
 import type { Member } from "../domain/entity/member";
-import { MemberRepositoryFS } from "../infrastructure/firestore/memberRepositoryFS";
 
-// 権限モックデータの取り込み
+// ★ バックエンド呼び出し用：Firebase Auth & ログイン情報（companyId）
+import { auth } from "../../../shell/src/auth/config/firebaseClient";
+import { useAuthContext } from "../../../shell/src/auth/application/AuthContext";
+
+// 権限モックデータ
 import {
   ALL_PERMISSIONS,
   groupPermissionsByCategory,
@@ -15,12 +18,19 @@ import type {
   PermissionCategory,
 } from "../../../shell/src/shared/types/permission";
 
-// ブランドのモックデータをインポート（UIでの選択/表示に備える）
+// ブランドのモックデータ（UI 用）
 import {
   ALL_BRANDS,
   toBrandRows,
 } from "../../../brand/src/infrastructure/mockdata/mockdata";
 import type { BrandRow } from "../../../brand/src/infrastructure/mockdata/mockdata";
+
+// バックエンドのベースURL（末尾スラッシュ除去）
+const API_BASE =
+  ((import.meta as any).env?.VITE_BACKEND_BASE_URL as string | undefined)?.replace(
+    /\/+$/,
+    ""
+  ) ?? "";
 
 export type UseMemberCreateOptions = {
   /** 作成成功時に呼ばれます（呼び出し元で navigate などを実施） */
@@ -28,7 +38,9 @@ export type UseMemberCreateOptions = {
 };
 
 export function useMemberCreate(options?: UseMemberCreateOptions) {
-  const repo = useMemo(() => new MemberRepositoryFS(), []);
+  // 認証中ユーザ（companyId をフロントでも把握しておく）
+  const { user } = useAuthContext();
+  const authCompanyId = user?.companyId ?? null;
 
   // ---- フォーム状態 ----
   const [firstName, setFirstName] = useState("");
@@ -48,7 +60,6 @@ export function useMemberCreate(options?: UseMemberCreateOptions) {
 
   // ===== 権限カテゴリ情報（カテゴリ選択の Popover で利用） =====
   const allPermissions: Permission[] = ALL_PERMISSIONS;
-
   const permissionsByCategory = useMemo(
     () => groupPermissionsByCategory(ALL_PERMISSIONS),
     []
@@ -93,26 +104,66 @@ export function useMemberCreate(options?: UseMemberCreateOptions) {
         const perms = toArray(permissionsText);
         const brands = toArray(brandsText);
 
-        const member: Member = {
+        // API へ送るリクエストボディ（handler の memberCreateRequest に対応）
+        const body = {
           id,
-          // 空なら null として保存（認証フロー上、一旦 null で招待状態を表現）
-          firstName: firstName.trim() || null,
-          lastName: lastName.trim() || null,
-          firstNameKana: firstNameKana.trim() || null,
-          lastNameKana: lastNameKana.trim() || null,
-          email: email.trim() || null,
+          firstName: firstName.trim() || "",
+          lastName: lastName.trim() || "",
+          firstNameKana: firstNameKana.trim() || "",
+          lastNameKana: lastNameKana.trim() || "",
+          email: email.trim() || "",
           permissions: perms,
-          createdAt: now,
-          updatedAt: now,
-          updatedBy: "console",
-          deletedAt: null,
-          deletedBy: null,
+          assignedBrands: brands,
+          // ★ companyId はサーバ側で context から上書き適用される想定だが、
+          //    クライアントでも把握できている場合は一緒に送っておく（冪等）
+          ...(authCompanyId ? { companyId: authCompanyId } : {}),
+          status: "active",
         };
 
-        // ブランドは 1 件以上ある場合のみ配列で付与、それ以外は null
-        member.assignedBrands = brands.length > 0 ? brands : null;
+        // 認証トークン取得
+        const token = await auth.currentUser?.getIdToken();
+        if (!token) {
+          throw new Error("未認証のためメンバーを作成できません。");
+        }
 
-        const created = await repo.create(member);
+        const res = await fetch(`${API_BASE}/members`, {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${token}`,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify(body),
+        });
+
+        if (!res.ok) {
+          const text = await res.text().catch(() => "");
+          throw new Error(`メンバー作成に失敗しました (status ${res.status}) ${text || ""}`);
+        }
+
+        // バックエンド（usecase/repo）から返る Member をフロントの Member 型に整形
+        const apiMember = (await res.json()) as any;
+
+        const created: Member = {
+          id: apiMember.id ?? id,
+          firstName: apiMember.firstName ?? null,
+          lastName: apiMember.lastName ?? null,
+          firstNameKana: apiMember.firstNameKana ?? null,
+          lastNameKana: apiMember.lastNameKana ?? null,
+          email: apiMember.email ?? null,
+          permissions: Array.isArray(apiMember.permissions) ? apiMember.permissions : [],
+          assignedBrands: Array.isArray(apiMember.assignedBrands)
+            ? apiMember.assignedBrands
+            : null,
+          // ISO8601 を期待
+          createdAt: apiMember.createdAt ?? now,
+          updatedAt: apiMember.updatedAt ?? now,
+          updatedBy: apiMember.updatedBy ?? null,
+          deletedAt: apiMember.deletedAt ?? null,
+          deletedBy: apiMember.deletedBy ?? null,
+          // companyId を返してくれる場合は受け取り、無ければ auth の値を反映
+          ...(apiMember.companyId ? { companyId: apiMember.companyId } : authCompanyId ? { companyId: authCompanyId } : {}),
+        } as Member;
+
         options?.onSuccess?.(created);
       } catch (err: any) {
         setError(err?.message ?? String(err));
@@ -121,7 +172,6 @@ export function useMemberCreate(options?: UseMemberCreateOptions) {
       }
     },
     [
-      repo,
       firstName,
       lastName,
       firstNameKana,
@@ -129,6 +179,7 @@ export function useMemberCreate(options?: UseMemberCreateOptions) {
       email,
       permissionsText,
       brandsText,
+      authCompanyId,
       options,
     ]
   );
