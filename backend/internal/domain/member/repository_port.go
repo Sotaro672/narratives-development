@@ -8,26 +8,32 @@ import (
 	common "narratives/internal/domain/common"
 )
 
-// Filter は一覧取得時のフィルタ条件です。
+// Filter defines list conditions for members.
+// NOTE: Field names/semantics align with entity.Member (camelCase in JSON/Firestore).
 type Filter struct {
-	SearchQuery string   // 名前/フリガナ/メールの部分一致など
-	BrandIDs    []string // 担当ブランドID
-	CompanyID   string   // 所属会社フィルタ
-	Status      string   // "active" | "inactive" など、必要に応じて
+	// Free-text query for name/kana/email, etc.
+	SearchQuery string
+
+	// Brand filters (alias supported for backward compatibility).
+	BrandIDs []string // preferred
+	Brands   []string // legacy alias of BrandIDs
+
+	// Company scope & status
+	CompanyID string // owning company to scope results
+	Status    string // "", "active", "inactive"
+
+	// Ranges
 	CreatedFrom *time.Time
 	CreatedTo   *time.Time
 	UpdatedFrom *time.Time
 	UpdatedTo   *time.Time
 
-	// 権限（entity.Member.Permissions に準拠）
+	// Permission names (AND)
 	Permissions []string
-
-	// --- 後方互換: 旧adapterが参照するフィールド名 ---
-	// f.Brands -> BrandIDs と同義
-	Brands []string
 }
 
-// Sort は一覧取得時のソート条件です。
+// Sort describes ordering for list results.
+// Column uses symbolic names consumed by adapters/handlers.
 type Sort struct {
 	Column SortColumn
 	Order  SortOrder
@@ -36,11 +42,13 @@ type Sort struct {
 type SortColumn string
 
 const (
+	// Historical naming kept for compatibility with handlers/adapters.
+	// Handlers typically map "joinedAt" -> entity.CreatedAt.
 	SortByJoinedAt      SortColumn = "joinedAt"
 	SortByPermissions   SortColumn = "permissions"
 	SortByAssigneeCount SortColumn = "assigneeCount"
 
-	// よく使う列を追加で想定
+	// Common columns
 	SortByName      SortColumn = "name"
 	SortByEmail     SortColumn = "email"
 	SortByUpdatedAt SortColumn = "updatedAt"
@@ -53,20 +61,20 @@ const (
 	SortDesc SortOrder = "desc"
 )
 
-// 共通定義のエイリアス
+// Common aliases
 type Page = common.Page
 type PageResult = common.PageResult[Member]
 type CursorPage = common.CursorPage
 type CursorPageResult = common.CursorPageResult[Member]
 type SaveOptions = common.SaveOptions
 
-// Repository はメンバー集約の永続化ポートです。
+// Repository is the persistence port for the Member aggregate.
 type Repository interface {
-	// 共通CRUD/一覧（GetByID, Create, Update, Delete, List を共通側に委譲）
+	// Common CRUD/List
 	common.RepositoryCRUD[Member, MemberPatch]
 	common.RepositoryList[Member, Filter]
 
-	// 追加要件（共通に無いものはここで定義）
+	// Additional requirements
 	ListByCursor(ctx context.Context, filter Filter, sort Sort, cpage CursorPage) (CursorPageResult, error)
 	GetByID(ctx context.Context, id string) (Member, error)
 	GetByEmail(ctx context.Context, email string) (Member, error)

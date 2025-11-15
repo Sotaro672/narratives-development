@@ -9,8 +9,41 @@ import { useMemberList } from "../../hooks/useMemberList";
 export default function MemberManagementPage() {
   const navigate = useNavigate();
 
-  // データ取得はフックに委譲（companyId の補完や正規化もそちらで実施）
-  const { members, loading, error, reload } = useMemberList();
+  // フックから ID→氏名解決関数も受け取る
+  const { members, loading, error, reload, getNameLastFirstByID } = useMemberList();
+
+  // 非同期に解決した氏名を保持（id -> "姓 名"）
+  const [resolvedNames, setResolvedNames] = React.useState<Record<string, string>>({});
+
+  // 氏名が空の行だけ ID→氏名を解決してキャッシュ
+  React.useEffect(() => {
+    let disposed = false;
+
+    (async () => {
+      const entries = await Promise.all(
+        members.map(async (m) => {
+          const immediate = `${m.lastName ?? ""} ${m.firstName ?? ""}`.trim();
+          if (immediate) return [m.id, immediate] as const;
+
+          // 一覧に名前が無い場合だけバックエンドへ（useMemberList 側でキャッシュあり）
+          const resolved = await getNameLastFirstByID(m.id);
+          return [m.id, resolved] as const;
+        }),
+      );
+
+      if (!disposed) {
+        const next: Record<string, string> = {};
+        for (const [id, name] of entries) {
+          if (name) next[id] = name; // 空は保存しない（招待中やメールでフォールバック）
+        }
+        setResolvedNames(next);
+      }
+    })();
+
+    return () => {
+      disposed = true;
+    };
+  }, [members, getNameLastFirstByID]);
 
   const goDetail = (id: string) => {
     if (!id) return;
@@ -19,20 +52,21 @@ export default function MemberManagementPage() {
 
   const ymd = (createdAt: any): string => {
     if (!createdAt) return "";
-    // Firestore Timestamp (toDate) / seconds / ISO文字列対応の簡易表示
     if (typeof createdAt === "object" && createdAt !== null) {
       if (typeof (createdAt as any).toDate === "function") {
         return (createdAt as any).toDate().toISOString().slice(0, 10).replace(/-/g, "/");
       }
       if (typeof (createdAt as any).seconds === "number") {
-        return new Date((createdAt as any).seconds * 1000).toISOString().slice(0, 10).replace(/-/g, "/");
+        return new Date((createdAt as any).seconds * 1000)
+          .toISOString()
+          .slice(0, 10)
+          .replace(/-/g, "/");
       }
     }
     if (typeof createdAt === "string") {
       return createdAt.slice(0, 10).replace(/-/g, "/");
     }
     return "";
-    // ※ 体裁整形のみ。ロジックはフック側に集約済み。
   };
 
   if (loading) return <div className="p-4">読み込み中...</div>;
@@ -47,13 +81,7 @@ export default function MemberManagementPage() {
     <div className="p-0">
       <List
         title="メンバー管理"
-        headerCells={[
-          "氏名",
-          "メールアドレス",
-          "所属ブランド",
-          "権限数",
-          "登録日",
-        ]}
+        headerCells={["氏名", "メールアドレス", "所属ブランド", "権限数", "登録日"]}
         showCreateButton
         createLabel="メンバー追加"
         showResetButton
@@ -63,10 +91,10 @@ export default function MemberManagementPage() {
         }}
       >
         {members.map((m) => {
+          // 1) 解決済み氏名 2) その場の氏名 3) メール 4) ID の順でフォールバック
+          const inline = `${m.lastName ?? ""} ${m.firstName ?? ""}`.trim();
           const name =
-            `${m.lastName ?? ""} ${m.firstName ?? ""}`.trim() ||
-            (m.email ?? "") ||
-            m.id;
+            resolvedNames[m.id] || inline || (m.email ?? "") || m.id;
 
           const brands = m.assignedBrands ?? [];
           const permissionCount = m.permissions?.length ?? 0;
@@ -86,7 +114,7 @@ export default function MemberManagementPage() {
                 }
               }}
             >
-              <td>{name}</td>
+              <td>{name || "招待中"}</td>
               <td>{m.email ?? ""}</td>
               <td>
                 {brands.map((b) => (

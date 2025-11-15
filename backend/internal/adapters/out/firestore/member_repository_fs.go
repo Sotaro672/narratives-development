@@ -4,6 +4,7 @@ package firestore
 import (
 	"context"
 	"errors"
+	"fmt"
 	"strings"
 	"time"
 
@@ -56,8 +57,8 @@ func (r *MemberRepositoryFS) GetByID(ctx context.Context, id string) (memdom.Mem
 		return memdom.Member{}, err
 	}
 
-	var m memdom.Member
-	if err := doc.DataTo(&m); err != nil {
+	m, err := readMemberSnapshot(doc)
+	if err != nil {
 		return memdom.Member{}, err
 	}
 	if m.ID == "" {
@@ -88,8 +89,8 @@ func (r *MemberRepositoryFS) GetByEmail(ctx context.Context, email string) (memd
 		return memdom.Member{}, err
 	}
 
-	var m memdom.Member
-	if err := doc.DataTo(&m); err != nil {
+	m, err := readMemberSnapshot(doc)
+	if err != nil {
 		return memdom.Member{}, err
 	}
 	if m.ID == "" {
@@ -146,8 +147,8 @@ func (r *MemberRepositoryFS) Count(ctx context.Context, f memdom.Filter) (int, e
 			return 0, err
 		}
 
-		var m memdom.Member
-		if err := doc.DataTo(&m); err != nil {
+		m, err := readMemberSnapshot(doc)
+		if err != nil {
 			return 0, err
 		}
 		if m.ID == "" {
@@ -193,8 +194,9 @@ func (r *MemberRepositoryFS) List(
 		if err != nil {
 			return common.PageResult[memdom.Member]{}, err
 		}
-		var m memdom.Member
-		if err := doc.DataTo(&m); err != nil {
+
+		m, err := readMemberSnapshot(doc)
+		if err != nil {
 			return common.PageResult[memdom.Member]{}, err
 		}
 		if m.ID == "" {
@@ -277,8 +279,8 @@ func (r *MemberRepositoryFS) ListByCursor(
 			return memdom.CursorPageResult{}, err
 		}
 
-		var m memdom.Member
-		if err := doc.DataTo(&m); err != nil {
+		m, err := readMemberSnapshot(doc)
+		if err != nil {
 			return memdom.CursorPageResult{}, err
 		}
 		if m.ID == "" {
@@ -456,6 +458,108 @@ func (r *MemberRepositoryFS) Reset(ctx context.Context) error {
 		}
 	}
 	return nil
+}
+
+// ========================
+// Helper: decode with legacy string timestamps support
+// ========================
+
+func readMemberSnapshot(doc *firestore.DocumentSnapshot) (memdom.Member, error) {
+	// Fast path: native decode (when all timestamp fields are Firestore Timestamp)
+	var m memdom.Member
+	if err := doc.DataTo(&m); err == nil {
+		if m.ID == "" {
+			m.ID = doc.Ref.ID
+		}
+		return m, nil
+	}
+
+	// Fallback: decode from map and convert string/timestamp to time
+	data := doc.Data()
+	asString := func(v any) string {
+		if s, ok := v.(string); ok {
+			return s
+		}
+		return ""
+	}
+	asStringSlice := func(v any) []string {
+		if v == nil {
+			return nil
+		}
+		if ss, ok := v.([]string); ok {
+			return ss
+		}
+		arr, ok := v.([]interface{})
+		if !ok {
+			return nil
+		}
+		out := make([]string, 0, len(arr))
+		for _, x := range arr {
+			if s, ok := x.(string); ok && strings.TrimSpace(s) != "" {
+				out = append(out, s)
+			}
+		}
+		return out
+	}
+	asTimePtr := func(v any) (*time.Time, error) {
+		switch t := v.(type) {
+		case time.Time:
+			tt := t.UTC()
+			return &tt, nil
+		case *time.Time:
+			if t == nil {
+				return nil, nil
+			}
+			tt := t.UTC()
+			return &tt, nil
+		case string:
+			s := strings.TrimSpace(t)
+			if s == "" {
+				return nil, nil
+			}
+			// Try RFC3339 first
+			if parsed, err := time.Parse(time.RFC3339, s); err == nil {
+				tt := parsed.UTC()
+				return &tt, nil
+			}
+			// Loose fallback (e.g., "2006-01-02 15:04:05Z07:00")
+			if parsed, err := time.Parse("2006-01-02 15:04:05Z07:00", s); err == nil {
+				tt := parsed.UTC()
+				return &tt, nil
+			}
+			return nil, fmt.Errorf("invalid time string: %q", s)
+		default:
+			return nil, nil
+		}
+	}
+
+	m = memdom.Member{
+		ID:             doc.Ref.ID,
+		FirstName:      asString(data["firstName"]),
+		LastName:       asString(data["lastName"]),
+		FirstNameKana:  asString(data["firstNameKana"]),
+		LastNameKana:   asString(data["lastNameKana"]),
+		Email:          asString(data["email"]),
+		Permissions:    asStringSlice(data["permissions"]),
+		AssignedBrands: asStringSlice(data["assignedBrands"]),
+		CompanyID:      asString(data["companyId"]),
+		Status:         asString(data["status"]),
+	}
+
+	// createdAt (required-ish): if missing or invalid, leave zero value
+	if v, err := asTimePtr(data["createdAt"]); err == nil && v != nil {
+		m.CreatedAt = *v
+	}
+
+	// optional times
+	if v, _ := asTimePtr(data["updatedAt"]); v != nil {
+		m.UpdatedAt = v
+	}
+	if v, _ := asTimePtr(data["deletedAt"]); v != nil {
+		m.DeletedAt = v
+	}
+
+	return m, nil
 }
 
 // ========================

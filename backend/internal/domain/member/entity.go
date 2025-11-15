@@ -16,24 +16,24 @@ var emailRe = regexp.MustCompile(`^[^\s@]+@[^\s@]+\.[^\s@]+$`)
 
 // Member is the domain entity for a user/member.
 type Member struct {
-	ID             string   `json:"id"`
-	FirstName      string   `json:"first_name,omitempty"`
-	LastName       string   `json:"last_name,omitempty"`
-	FirstNameKana  string   `json:"first_name_kana,omitempty"`
-	LastNameKana   string   `json:"last_name_kana,omitempty"`
-	Email          string   `json:"email,omitempty"` // optional; empty string means unset
-	Permissions    []string `json:"permissions"`
-	AssignedBrands []string `json:"assignedBrands,omitempty"`
+	ID             string   `json:"id" firestore:"id"`
+	FirstName      string   `json:"firstName,omitempty" firestore:"firstName"`
+	LastName       string   `json:"lastName,omitempty" firestore:"lastName"`
+	FirstNameKana  string   `json:"firstNameKana,omitempty" firestore:"firstNameKana"`
+	LastNameKana   string   `json:"lastNameKana,omitempty" firestore:"lastNameKana"`
+	Email          string   `json:"email,omitempty" firestore:"email"` // optional; empty string means unset
+	Permissions    []string `json:"permissions" firestore:"permissions"`
+	AssignedBrands []string `json:"assignedBrands,omitempty" firestore:"assignedBrands"`
 
-	// ★ Added for company-level filtering/ownership and status filtering
-	CompanyID string `json:"companyId,omitempty"` // owning company ID (optional for backward compatibility)
-	Status    string `json:"status,omitempty"`    // "active" | "inactive" (optional; empty means unspecified)
+	// company / status
+	CompanyID string `json:"companyId,omitempty" firestore:"companyId"`
+	Status    string `json:"status,omitempty" firestore:"status"` // "active" | "inactive"
 
-	CreatedAt time.Time  `json:"createdAt"`
-	UpdatedAt *time.Time `json:"updatedAt,omitempty"`
-	UpdatedBy *string    `json:"updatedBy,omitempty"`
-	DeletedAt *time.Time `json:"deletedAt,omitempty"`
-	DeletedBy *string    `json:"deletedBy,omitempty"`
+	CreatedAt time.Time  `json:"createdAt" firestore:"createdAt"`
+	UpdatedAt *time.Time `json:"updatedAt,omitempty" firestore:"updatedAt"`
+	UpdatedBy *string    `json:"updatedBy,omitempty" firestore:"updatedBy"`
+	DeletedAt *time.Time `json:"deletedAt,omitempty" firestore:"deletedAt"`
+	DeletedBy *string    `json:"deletedBy,omitempty" firestore:"deletedBy"`
 }
 
 var (
@@ -239,7 +239,6 @@ func (m Member) validate() error {
 	// Status is optional; if provided, restrict to known values.
 	switch strings.ToLower(strings.TrimSpace(m.Status)) {
 	case "", "active", "inactive":
-		// ok
 	default:
 		return ErrInvalidStatus
 	}
@@ -337,7 +336,6 @@ type MemberPatch struct {
 	Permissions    *[]string
 	AssignedBrands *[]string
 
-	// ★ Added fields for company/status updates
 	CompanyID *string
 	Status    *string
 
@@ -359,8 +357,8 @@ CREATE TABLE members (
   email VARCHAR(255) UNIQUE,
   permissions TEXT[] NOT NULL,
   assigned_brands TEXT[],
-  company_id TEXT, -- owning company (nullable for back-compat)
-  status TEXT,     -- 'active' | 'inactive' (nullable for back-compat)
+  company_id TEXT,
+  status TEXT,
 
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   updated_at TIMESTAMPTZ,
@@ -390,7 +388,6 @@ func (m *Member) SetPermissionsByName(names []string, catalog []permdom.Permissi
 			continue
 		}
 		if _, ok := allow[n]; !ok {
-			// skip names outside the catalog
 			continue
 		}
 		if _, dup := seen[n]; dup {

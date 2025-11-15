@@ -63,10 +63,9 @@ func MiddlewareAuthCompany(uc *memberuc.MemberUsecase) func(http.Handler) http.H
 			// uid があれば、member を引いて companyId を解決
 			if uid != "" && uc != nil {
 				if m, err := uc.GetByID(r.Context(), uid); err == nil {
-					// Member エンティティに CompanyID フィールドがある前提（無い場合は "" になる）
 					ai.CompanyID = strings.TrimSpace(m.CompanyID)
 				}
-				// 取得に失敗しても致命的ではないため、そのまま続行（下流で 0 値扱い）
+				// 取得失敗は致命ではない（下流でゼロ値扱い）
 			}
 
 			ctx := withAuth(r.Context(), ai)
@@ -87,9 +86,8 @@ type MemberHandler struct {
 }
 
 // NewMemberHandler はHTTPハンドラを初期化します。
+// 実ルータに組み込む際は MiddlewareAuthCompany(uc) でラップしてください。
 func NewMemberHandler(uc *memberuc.MemberUsecase) http.Handler {
-	// このハンドラ自体は ServeHTTP を実装する multiplexer です。
-	// 実際のルータで使う際は MiddlewareAuthCompany(uc) でラップしてください。
 	return &MemberHandler{uc: uc}
 }
 
@@ -97,13 +95,19 @@ func NewMemberHandler(uc *memberuc.MemberUsecase) http.Handler {
 func (h *MemberHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 
+	// ★★★ 末尾スラッシュ正規化：/members と /members/ を同一視する
+	path := strings.TrimRight(r.URL.Path, "/")
+	if path == "" {
+		path = "/"
+	}
+
 	switch {
-	case r.Method == http.MethodPost && r.URL.Path == "/members":
+	case r.Method == http.MethodPost && path == "/members":
 		h.create(w, r)
-	case r.Method == http.MethodGet && r.URL.Path == "/members":
+	case r.Method == http.MethodGet && path == "/members":
 		h.list(w, r)
-	case r.Method == http.MethodGet && strings.HasPrefix(r.URL.Path, "/members/"):
-		id := strings.TrimPrefix(r.URL.Path, "/members/")
+	case r.Method == http.MethodGet && strings.HasPrefix(path, "/members/"):
+		id := strings.TrimPrefix(path, "/members/")
 		h.get(w, r, id)
 	default:
 		w.WriteHeader(http.StatusNotFound)
