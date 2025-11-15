@@ -1,4 +1,3 @@
-// frontend/console/shell/src/auth/application/useAuthActions.ts
 import { useState } from "react";
 import {
   createUserWithEmailAndPassword,
@@ -8,11 +7,14 @@ import {
 } from "firebase/auth";
 import { auth } from "../config/firebaseClient";
 
-// ▼ Firestore 追記分
+// Firestore
 import {
+  collection,
+  serverTimestamp,
   doc,
   setDoc,
-  serverTimestamp,
+  writeBatch,
+  getDoc,
 } from "firebase/firestore";
 import { db } from "../config/firebaseClient";
 
@@ -33,42 +35,110 @@ function messageForAuthError(code?: string): string {
   }
 }
 
+export type SignUpProfile = {
+  lastName?: string;
+  firstName?: string;
+  lastNameKana?: string;
+  firstNameKana?: string;
+  companyName?: string; // 任意
+};
+
 export function useAuthActions() {
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  async function signUp(email: string, password: string) {
+  /** 初期の members/{uid} 作成（companyId: null でOK。あとでバッチで上書き） */
+  async function initMember(uid: string, email: string, profile?: SignUpProfile) {
+    await setDoc(
+      doc(db, "members", uid),
+      {
+        id: uid,
+        firstName: (profile?.firstName ?? "").trim(),
+        lastName: (profile?.lastName ?? "").trim(),
+        firstNameKana: (profile?.firstNameKana ?? "").trim(),
+        lastNameKana: (profile?.lastNameKana ?? "").trim(),
+        email: email.trim(),
+        permissions: [],
+        assignedBrands: [],
+        companyId: null,
+        createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp(),
+      },
+      { merge: true }
+    );
+  }
+
+  /** 会社作成と members.companyId の付与を同一バッチで行う */
+  async function createCompanyAndLink(uid: string, companyName?: string | null) {
+    const name = (companyName ?? "").trim();
+    if (!name) return null;
+
+    // 事前に DocID を採番して、同じバッチで set できるようにする
+    const companyRef = doc(collection(db, "companies"));
+    const companyId = companyRef.id;
+
+    const memberRef = doc(db, "members", uid);
+
+    const batch = writeBatch(db);
+
+    // companies/{id} 作成（作成時に id を含める：ルールで許可されている前提）
+    batch.set(companyRef, {
+      id: companyId,
+      name,
+      admin: uid,
+      isActive: true,
+      createdAt: serverTimestamp(),
+      createdBy: uid,
+      updatedAt: serverTimestamp(),
+      updatedBy: uid,
+      deletedAt: null,
+      deletedBy: null,
+    });
+
+    // members/{uid} に companyId を同時付与（merge）
+    batch.set(
+      memberRef,
+      {
+        companyId: companyId,
+        updatedAt: serverTimestamp(),
+      },
+      { merge: true }
+    );
+
+    await batch.commit();
+
+    // 念のため検証して、未反映ならフォールバックで上書き
+    try {
+      const snap = await getDoc(memberRef);
+      const data = snap.data() as { companyId?: string | null } | undefined;
+      if (!data || data.companyId !== companyId) {
+        await setDoc(memberRef, { companyId, updatedAt: serverTimestamp() }, { merge: true });
+      }
+    } catch {
+      await setDoc(memberRef, { companyId, updatedAt: serverTimestamp() }, { merge: true });
+    }
+
+    return companyId;
+  }
+
+  /** サインアップ */
+  async function signUp(email: string, password: string, profile?: SignUpProfile) {
     setSubmitting(true);
     setError(null);
     try {
-      // 1) Firebase Auth にユーザー作成
+      // 1) Auth作成
       const cred = await createUserWithEmailAndPassword(auth, email, password);
-      const uid = cred.user.uid;
+      const uid = cred.user?.uid;
+      if (!uid) throw new Error("ユーザー作成後に uid を取得できませんでした。");
 
-      // 2) Firestore の members/{uid} を作成（初期プロフィール）
-      //    Member モデルに合わせて最低限の項目を保存します
-      const memberRef = doc(db, "members", uid);
-      await setDoc(
-        memberRef,
-        {
-          id: uid,
-          firstName: "",
-          lastName: "",
-          firstNameKana: "",
-          lastNameKana: "",
-          email: email,
-          permissions: [],       // 初期は空
-          assignedBrands: [],    // 初期は空
-          createdAt: serverTimestamp(),
-          updatedAt: serverTimestamp(),
-          // companyId を使う場合はここで null or 既定値を入れる:
-          // companyId: null,
-        },
-        { merge: true } // 既に存在していた場合も上書きしすぎないようにマージ
-      );
+      // 2) members/{uid} を先に初期化（companyId: null）
+      await initMember(uid, email, profile);
+
+      // 3) 会社名があれば、会社作成 + members.companyId を同一バッチで反映
+      await createCompanyAndLink(uid, profile?.companyName);
     } catch (e: any) {
       console.error("signUp error", e);
-      // もし Auth 作成後に Firestore だけ失敗した場合、後続の整合性を保つため削除する場合は下記
+      // 必要に応じてロールバック
       // if (auth.currentUser) { await deleteUser(auth.currentUser).catch(() => {}); }
       setError(messageForAuthError(e?.code));
     } finally {

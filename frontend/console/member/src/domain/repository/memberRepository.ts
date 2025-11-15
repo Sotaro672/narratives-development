@@ -15,6 +15,9 @@ import type {
  *
  * - 日付は ISO8601 文字列
  * - undefined は「条件指定なし」
+ * - 本アプリケーションでは **同一 companyId のメンバーのみ** を一覧表示する運用のため、
+ *   list()/count()/listByCursor() を呼ぶ際は必ず companyId を付与してください。
+ *   付与を簡単にするユーティリティ: scopedFilterByCompanyId()
  */
 export interface MemberFilter {
   /** 名前 / フリガナ / メール等の部分一致検索 */
@@ -23,7 +26,7 @@ export interface MemberFilter {
   /** 割当ブランドID（後方互換の Brands と同義） */
   brandIds?: string[];
 
-  /** 所属企業IDフィルタ */
+  /** 所属企業IDフィルタ（※運用上は必須。ユーティリティで補完推奨） */
   companyId?: string;
 
   /** "active" | "inactive" など論理ステータス */
@@ -39,6 +42,22 @@ export interface MemberFilter {
 
   /** 権限名（Member.permissions と対応） */
   permissions?: string[];
+}
+
+/**
+ * 呼び出し側で companyId を強制付与するためのユーティリティ。
+ * - base に companyId が未設定でも、必ず引数 companyId を上書きします。
+ * - 一覧を **同一 companyId にスコープ** させるために使用してください。
+ */
+export function scopedFilterByCompanyId(
+  companyId: string,
+  base: MemberFilter = {}
+): MemberFilter {
+  const id = (companyId ?? "").trim();
+  if (!id) {
+    throw new Error("scopedFilterByCompanyId: companyId is required");
+  }
+  return { ...base, companyId: id };
 }
 
 /**
@@ -75,6 +94,7 @@ export interface MemberSort {
  *
  * - context.Context は持たず、Promise ベースで表現。
  * - infrastructure 層（Firestore / GraphQL / REST など）が実装する。
+ * - 実装側は **companyId フィルタを厳密に適用** してください。
  */
 export interface MemberRepository {
   // ===== 共通 CRUD / List（RepositoryCRUD, RepositoryList 相当）=====
@@ -85,7 +105,7 @@ export interface MemberRepository {
   /**
    * 一覧取得（ページング版）
    * - page: limit/offset 等を含む共通ページ情報
-   * - filter: MemberFilter
+   * - filter: MemberFilter（※同一 companyId のみを返すようスコープ必須）
    */
   list(page: Page, filter?: MemberFilter): Promise<PageResult<Member>>;
 
@@ -112,6 +132,7 @@ export interface MemberRepository {
   /**
    * カーソルベース一覧取得
    * - filter + sort + cursorPage を指定
+   * - 実装側で companyId によるスコープを必ず適用
    */
   listByCursor(
     filter: MemberFilter,
@@ -132,6 +153,7 @@ export interface MemberRepository {
 
   /**
    * 件数カウント
+   * - 実装側で companyId によるスコープを必ず適用
    */
   count(filter: MemberFilter): Promise<number>;
 

@@ -28,6 +28,9 @@ export interface Member {
   /** 割当ブランドIDの配列（backend: AssignedBrands） */
   assignedBrands?: string[] | null;
 
+  /** 所属会社ID（backend と同期：存在しない/未設定なら null） */
+  companyId?: string | null;
+
   createdAt: string; // ISO8601
   updatedAt?: string | null;
   updatedBy?: string | null;
@@ -50,6 +53,9 @@ export interface MemberPatch {
   email?: string | null;
   permissions?: string[] | null;
   assignedBrands?: string[] | null;
+
+  /** 所属会社IDの部分更新 */
+  companyId?: string | null;
 
   createdAt?: string | null;
   updatedAt?: string | null;
@@ -95,6 +101,8 @@ export function createMember(params: {
   email?: string | null;
   permissions?: string[];
   assignedBrands?: string[] | null;
+  /** 所属会社ID（未設定は null） */
+  companyId?: string | null;
   updatedAt?: string | null;
   updatedBy?: string | null;
   deletedAt?: string | null;
@@ -108,6 +116,10 @@ export function createMember(params: {
     updatedBy: params.updatedBy ?? null,
     deletedAt: params.deletedAt ?? null,
     deletedBy: params.deletedBy ?? null,
+    companyId:
+      params.companyId !== undefined && params.companyId !== null
+        ? params.companyId
+        : null,
   };
 
   member.firstName =

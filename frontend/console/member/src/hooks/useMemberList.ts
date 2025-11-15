@@ -26,7 +26,8 @@ const repository: MemberRepository = new MemberRepositoryFS();
  * メンバー一覧取得用フック
  * - MemberRepository.list(page, filter) を利用
  * - limit/offset ベースのシンプルなページング + フィルタ管理
- * - ★ 未指定なら、ログインユーザーの companyId を自動で付与
+ * - ★ フィルタで companyId が未指定なら、ログインユーザーの companyId を自動で付与
+ * - ★ 姓・名がどちらも未設定のときは firstName に「招待中」を入れて返す
  */
 export function useMemberList(
   initialFilter: MemberFilter = {},
@@ -52,15 +53,25 @@ export function useMemberList(
         const baseFilter = override?.filter ?? filter;
         const useFilter: MemberFilter = {
           ...baseFilter,
-          ...(baseFilter.companyId ? {} : authCompanyId ? { companyId: authCompanyId } : {}),
+          ...(baseFilter.companyId
+            ? {}
+            : authCompanyId
+            ? { companyId: authCompanyId }
+            : {}),
         };
 
         const result = await repository.list(usePage, useFilter);
 
         // ★ 姓・名がどちらも未設定のときは firstName に「招待中」を入れて返す
         const normalized: Member[] = result.items.map((m) => {
-          const noFirst = m.firstName === null || m.firstName === undefined || m.firstName === "";
-          const noLast  = m.lastName === null  || m.lastName === undefined  || m.lastName === "";
+          const noFirst =
+            m.firstName === null ||
+            m.firstName === undefined ||
+            m.firstName === "";
+          const noLast =
+            m.lastName === null ||
+            m.lastName === undefined ||
+            m.lastName === "";
 
           if (noFirst && noLast) {
             return {

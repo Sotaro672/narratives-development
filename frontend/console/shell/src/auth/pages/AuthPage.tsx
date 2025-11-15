@@ -4,15 +4,9 @@ import { Button } from "../../shared/ui/button";
 import "../styles/AuthPage.css";
 import { useAuthActions } from "../application/useAuthActions";
 
-// 会社ドキュメント作成用（Firestore）
-import { db, auth } from "../config/firebaseClient";
-import { addDoc, collection, serverTimestamp } from "firebase/firestore";
-
 export default function AuthPage() {
-  // signIn / signUp
   const { signUp, signIn, submitting, error, setError } = useAuthActions();
 
-  // "signup" | "signin" ー デフォルトはログイン
   const [mode, setMode] = React.useState<"signup" | "signin">("signin");
 
   const [email, setEmail] = React.useState("");
@@ -54,32 +48,13 @@ export default function AuthPage() {
         return;
       }
 
-      try {
-        // 1) Firebase Auth のユーザー作成
-        await signUp(email, password);
-
-        // 2) 会社名が入力されていれば companies に作成
-        const name = companyName.trim();
-        if (name.length > 0) {
-          const userIdOrEmail = auth.currentUser?.uid ?? email;
-
-          await addDoc(collection(db, "companies"), {
-            name,
-            admin: userIdOrEmail, // 管理者（とりあえず作成ユーザー）
-            isActive: true,
-            // 監査系
-            createdAt: serverTimestamp(),
-            updatedAt: serverTimestamp(),
-            createdBy: userIdOrEmail,
-            updatedBy: userIdOrEmail,
-            deletedAt: null,
-            deletedBy: null,
-          });
-        }
-      } catch (e: any) {
-        console.error("signup/create company error", e);
-        setError(e?.message ?? "登録処理に失敗しました。");
-      }
+      await signUp(email, password, {
+        lastName,
+        firstName,
+        lastNameKana,
+        firstNameKana,
+        companyName, // ← ここで会社名を委譲
+      });
       return;
     }
 

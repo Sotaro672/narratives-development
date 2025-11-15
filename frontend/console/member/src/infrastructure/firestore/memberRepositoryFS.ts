@@ -104,9 +104,10 @@ export class MemberRepositoryFS implements MemberRepository {
       id,
       createdAt: member.createdAt || nowIso,
       updatedAt: member.updatedAt ?? nowIso,
+      // companyId は member に入っていればそのまま保存される
     };
 
-    await setDoc(doc(this.col, id), data);
+    await setDoc(doc(this.col, id), data as any);
     return data;
   }
 
@@ -159,7 +160,10 @@ export class MemberRepositoryFS implements MemberRepository {
 
     let q = query(this.col, orderBy(orderField, orderDir));
 
-    // roleIds フィルタは廃止（MemberFilter から削除されたため）
+    // companyId をサーバーサイドで絞り込み（可能なら）
+    if (filter?.companyId) {
+      q = query(q, where("companyId", "==", filter.companyId));
+    }
 
     if (cursorPage?.cursor) {
       const cursorSnap = await getDoc(doc(this.col, cursorPage.cursor));
@@ -213,8 +217,11 @@ export class MemberRepositoryFS implements MemberRepository {
   }
 
   async count(filter: MemberFilter): Promise<number> {
+    // 可能なら server-side で companyId を絞り込み
     let q = query(this.col);
-    // roleIds フィルタは廃止（MemberFilter から削除されたため）
+    if (filter?.companyId) {
+      q = query(q, where("companyId", "==", filter.companyId));
+    }
     const snap = await getDocs(q);
     let items = snap.docs.map((d) => this.docToDomain(d));
     items = this.applyPostFilter(items, filter);
@@ -266,6 +273,13 @@ export class MemberRepositoryFS implements MemberRepository {
       assignedBrands: Array.isArray(data.assignedBrands)
         ? data.assignedBrands.map((b: string) => String(b))
         : undefined,
+      // 会社ID（未設定や空文字は null に統一）
+      companyId:
+        typeof data.companyId === "string" && data.companyId.trim().length > 0
+          ? data.companyId
+          : data.companyId === null
+          ? null
+          : null,
       createdAt: data.createdAt ?? new Date().toISOString(),
       updatedAt:
         typeof data.updatedAt === "string"
@@ -303,6 +317,17 @@ export class MemberRepositoryFS implements MemberRepository {
       next.permissions = patch.permissions ?? current.permissions;
     if ("assignedBrands" in patch)
       next.assignedBrands = patch.assignedBrands ?? current.assignedBrands;
+
+    // ★ companyId の部分更新
+    if ("companyId" in patch) {
+      // 空文字は null に正規化
+      if (patch.companyId === "") {
+        next.companyId = null;
+      } else {
+        next.companyId =
+          patch.companyId !== undefined ? patch.companyId ?? null : current.companyId ?? null;
+      }
+    }
 
     if ("createdAt" in patch)
       next.createdAt = patch.createdAt ?? current.createdAt;
@@ -353,6 +378,12 @@ export class MemberRepositoryFS implements MemberRepository {
       );
     }
 
+    // ★ companyId のクライアントサイド絞り込み（listByCursor / count 用）
+    if (filter.companyId) {
+      const cid = String(filter.companyId);
+      result = result.filter((m) => (m.companyId ?? null) === cid);
+    }
+
     return result;
-  }
+    }
 }
