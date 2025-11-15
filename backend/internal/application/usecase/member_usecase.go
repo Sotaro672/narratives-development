@@ -61,6 +61,11 @@ type CreateMemberInput struct {
 	Email          string
 	Permissions    []string
 	AssignedBrands []string
+
+	// ★ 新規追加
+	CompanyID string // 所属会社ID（任意）
+	Status    string // "active" | "inactive"（任意、空なら未指定）
+
 	// CreatedAt を指定しない場合は現在時刻
 	CreatedAt *time.Time
 }
@@ -80,8 +85,13 @@ func (u *MemberUsecase) Create(ctx context.Context, in CreateMemberInput) (memdo
 		Email:          strings.TrimSpace(in.Email),
 		Permissions:    dedupStrings(in.Permissions),
 		AssignedBrands: dedupStrings(in.AssignedBrands),
-		CreatedAt:      *createdAt,
-		UpdatedAt:      nil,
+
+		// ★ 追加フィールドを反映
+		CompanyID: strings.TrimSpace(in.CompanyID),
+		Status:    strings.TrimSpace(in.Status),
+
+		CreatedAt: *createdAt,
+		UpdatedAt: nil,
 	}
 	return u.repo.Create(ctx, m)
 }
@@ -95,6 +105,10 @@ type UpdateMemberInput struct {
 	Email          *string
 	Permissions    *[]string
 	AssignedBrands *[]string
+
+	// ★ 新規追加
+	CompanyID *string
+	Status    *string
 }
 
 // Update は現在の Member を読み出して上書きし、repo.Save() に投げる。
@@ -125,6 +139,14 @@ func (u *MemberUsecase) Update(ctx context.Context, in UpdateMemberInput) (memdo
 	}
 	if in.AssignedBrands != nil {
 		current.AssignedBrands = dedupStrings(*in.AssignedBrands)
+	}
+
+	// ★ 追加フィールドの更新
+	if in.CompanyID != nil {
+		current.CompanyID = strings.TrimSpace(*in.CompanyID)
+	}
+	if in.Status != nil {
+		current.Status = strings.TrimSpace(*in.Status)
 	}
 
 	return u.repo.Save(ctx, current, nil)

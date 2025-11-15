@@ -52,6 +52,10 @@ type memberCreateRequest struct {
 	Email          string   `json:"email"`
 	Permissions    []string `json:"permissions"`
 	AssignedBrands []string `json:"assignedBrands"`
+
+	// ★ 追加：所属会社とステータス（任意）
+	CompanyID string `json:"companyId,omitempty"`
+	Status    string `json:"status,omitempty"` // "active" | "inactive" を想定
 }
 
 func (h *MemberHandler) create(w http.ResponseWriter, r *http.Request) {
@@ -73,7 +77,10 @@ func (h *MemberHandler) create(w http.ResponseWriter, r *http.Request) {
 		Email:          req.Email,
 		Permissions:    req.Permissions,
 		AssignedBrands: req.AssignedBrands,
-		CreatedAt:      nil,
+		// ★ 追加フィールド
+		CompanyID: req.CompanyID,
+		Status:    req.Status,
+		CreatedAt: nil, // サーバ側で now
 	}
 
 	m, err := h.uc.Create(ctx, input)
@@ -92,11 +99,47 @@ func (h *MemberHandler) create(w http.ResponseWriter, r *http.Request) {
 
 func (h *MemberHandler) list(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
+	qv := r.URL.Query()
 
-	// フィルタ（必要ならクエリから詰める）
+	// --- Filter ---
 	var f memberdom.Filter
+	f.SearchQuery = strings.TrimSpace(qv.Get("q"))
+	f.CompanyID = strings.TrimSpace(qv.Get("companyId"))
+	f.Status = strings.TrimSpace(qv.Get("status"))
+	// 既存互換: brandIds=, brands= のどちらでもカンマ区切り対応
+	if v := strings.TrimSpace(qv.Get("brandIds")); v != "" {
+		f.BrandIDs = splitCSV(v)
+	}
+	if v := strings.TrimSpace(qv.Get("brands")); v != "" {
+		f.Brands = splitCSV(v)
+	}
+
+	// --- Sort ---
 	var sort common.Sort
+	switch strings.ToLower(strings.TrimSpace(qv.Get("sort"))) {
+	case "name":
+		sort.Column = "name"
+	case "email":
+		sort.Column = "email"
+	case "joinedat":
+		sort.Column = "joinedAt"
+	case "updatedat":
+		sort.Column = "updatedAt"
+	default:
+		// 明示が無ければ updatedAt desc を想定
+		sort.Column = "updatedAt"
+	}
+	switch strings.ToLower(strings.TrimSpace(qv.Get("order"))) {
+	case "asc":
+		sort.Order = "asc"
+	default:
+		sort.Order = "desc"
+	}
+
+	// --- Page ---
 	var page common.Page
+	page.Number = clampInt(parseIntDefault(qv.Get("page"), 1), 1, 1_000_000)
+	page.PerPage = clampInt(parseIntDefault(qv.Get("perPage"), 50), 1, 200)
 
 	res, err := h.uc.List(ctx, f, sort, page)
 	if err != nil {
@@ -147,4 +190,33 @@ func writeMemberErr(w http.ResponseWriter, err error) {
 
 	w.WriteHeader(code)
 	_ = json.NewEncoder(w).Encode(map[string]string{"error": err.Error()})
+}
+
+// ========================
+// Helpers
+// ========================
+
+func splitCSV(s string) []string {
+	if s == "" {
+		return nil
+	}
+	parts := strings.Split(s, ",")
+	out := make([]string, 0, len(parts))
+	for _, p := range parts {
+		if t := strings.TrimSpace(p); t != "" {
+			out = append(out, t)
+		}
+	}
+	return out
+}
+
+// 値 v を [min, max] に丸める
+func clampInt(v, min, max int) int {
+	if v < min {
+		return min
+	}
+	if v > max {
+		return max
+	}
+	return v
 }
