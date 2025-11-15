@@ -5,6 +5,7 @@ import { Bell, MessageSquare, UserRound, ChevronDown } from "lucide-react";
 import "./Header.css";
 import AdminPanel from "./AdminPanel";
 import { useAuthActions } from "../../auth/application/useAuthActions";
+import { useAuth } from "../../auth/application/useAuth";
 
 interface HeaderProps {
   username?: string;
@@ -25,8 +26,10 @@ export default function Header({
   const panelContainerRef = useRef<HTMLDivElement | null>(null);
   const triggerRef = useRef<HTMLButtonElement | null>(null);
 
-  // Auth 用アクション（ログアウトに使用）
+  // Auth
   const { signOut } = useAuthActions();
+  // ← useAuth から companyName を受け取る
+  const { user, companyName } = useAuth();
 
   // ─────────────────────────────────────────────
   // 外側クリックで閉じる
@@ -57,11 +60,11 @@ export default function Header({
   // ボタン押下時の遷移処理
   // ─────────────────────────────────────────────
   const handleNotificationClick = () => {
-    navigate("/announcement"); // 通知一覧ページ
+    navigate("/announcement");
   };
 
   const handleMessageClick = () => {
-    navigate("/message"); // メッセージ一覧ページ
+    navigate("/message");
   };
 
   // ─────────────────────────────────────────────
@@ -71,21 +74,20 @@ export default function Header({
     try {
       await signOut();
       setOpenAdmin(false);
-      // ルーティングは App.tsx 側で user=null を検知して AuthPage に戻る想定
-      // 必要ならここで navigate("/") などを追加してもよい
     } catch (e) {
       console.error("logout failed", e);
     }
   };
 
-  // ─────────────────────────────────────────────
-  // JSX
-  // ─────────────────────────────────────────────
+  // 表示名（companyName が取れていればそれ、なければフォールバック）
+  const brandMain =
+    (companyName && companyName.trim().length > 0 ? companyName : "Company Name");
+
   return (
     <header className="app-header">
       {/* Left: Brand */}
       <div className="brand">
-        <span className="brand-main">Solid State</span>
+        <span className="brand-main">{brandMain}</span>
         <span className="brand-sub">Console</span>
       </div>
 
