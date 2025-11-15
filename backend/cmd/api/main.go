@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 	"time"
 
@@ -14,11 +15,37 @@ import (
 	"narratives/internal/platform/di"
 )
 
+// withCORS wraps an http.Handler with simple CORS headers.
+// FRONTEND_ORIGIN env can narrow allowed origin; if empty, "*" is used.
+// NOTE: We don't use credentials; Authorization header is allowed with "*".
+func withCORS(next http.Handler, allowedOrigin string) http.Handler {
+	allowedOrigin = strings.TrimSpace(allowedOrigin)
+	if allowedOrigin == "" {
+		allowedOrigin = "*" // dev-friendly; lock down in production as needed
+	}
+
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Access-Control-Allow-Origin", allowedOrigin)
+		w.Header().Set("Vary", "Origin")
+		w.Header().Set("Access-Control-Allow-Methods", "GET,POST,PUT,PATCH,DELETE,OPTIONS")
+		w.Header().Set("Access-Control-Allow-Headers", "Authorization,Content-Type")
+		w.Header().Set("Access-Control-Max-Age", "600")
+
+		// Preflight
+		if r.Method == http.MethodOptions {
+			w.WriteHeader(http.StatusNoContent)
+			return
+		}
+
+		next.ServeHTTP(w, r)
+	})
+}
+
 func main() {
 	ctx := context.Background()
 
 	// ─────────────────────────────────────────────────────────────
-	// 先に軽量ヘルスチェックを公開して、PORTがLISTENできる状態を確保
+	// Lightweight healthz first so PORT is LISTENed quickly
 	// ─────────────────────────────────────────────────────────────
 	mux := http.NewServeMux()
 	mux.HandleFunc("/healthz", func(w http.ResponseWriter, r *http.Request) {
@@ -27,8 +54,7 @@ func main() {
 	})
 
 	// ─────────────────────────────────────────────────────────────
-	// 重い依存初期化（DIコンテナ）
-	// 失敗しても /healthz は提供し続け、起動失敗を避ける
+	// DI container & heavy deps; keep /healthz even on failure
 	// ─────────────────────────────────────────────────────────────
 	var cont *di.Container
 	if c, err := di.NewContainer(ctx); err != nil {
@@ -37,13 +63,13 @@ func main() {
 		cont = c
 		defer cont.Close()
 
-		// アプリ本体のルータをマウント
+		// Attach app router under "/"
 		router := httpin.NewRouter(cont.RouterDeps())
 		mux.Handle("/", router)
 	}
 
 	// ─────────────────────────────────────────────────────────────
-	// Port 解決: config → env:PORT → 8080
+	// Port resolution: config → env:PORT → 8080
 	// ─────────────────────────────────────────────────────────────
 	port := ""
 	if cont != nil && cont.Config.Port != "" {
@@ -57,15 +83,23 @@ func main() {
 		}
 	}
 
+	// ─────────────────────────────────────────────────────────────
+	// Global CORS wrapper (covers /healthz and app routes)
+	// Set FRONTEND_ORIGIN to your Hosting origin in production:
+	//   e.g. FRONTEND_ORIGIN=https://narratives-console-dev.web.app
+	// ─────────────────────────────────────────────────────────────
+	allowedOrigin := os.Getenv("FRONTEND_ORIGIN")
+	handler := withCORS(mux, allowedOrigin)
+
 	srv := &http.Server{
 		Addr:         ":" + port,
-		Handler:      mux, // まず mux（/healthz を含む）を握らせる
+		Handler:      handler, // CORS applied here
 		ReadTimeout:  10 * time.Second,
 		WriteTimeout: 10 * time.Second,
 		IdleTimeout:  60 * time.Second,
 	}
 
-	// ── Graceful shutdown: Cloud Run の SIGTERM/SIGINT を捕捉
+	// Graceful shutdown for Cloud Run
 	idleConnsClosed := make(chan struct{})
 	go func() {
 		c := make(chan os.Signal, 1)

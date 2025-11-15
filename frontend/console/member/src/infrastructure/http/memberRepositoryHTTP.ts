@@ -1,3 +1,4 @@
+//frontend\console\member\src\infrastructure\http\memberRepositoryHTTP.ts
 /// <reference types="vite/client" />
 
 import type {
