@@ -399,7 +399,8 @@ func (r *MemberRepositoryFS) Save(ctx context.Context, m memdom.Member, _ *memdo
 	m.UpdatedAt = &now
 
 	ref := r.col().Doc(m.ID)
-	if _, err := ref.Set(ctx, m, firestore.MergeAll); err != nil {
+	// ★ MergeAll をやめて、構造体ごと上書き
+	if _, err := ref.Set(ctx, m); err != nil {
 		return memdom.Member{}, err
 	}
 	return m, nil

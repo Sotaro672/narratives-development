@@ -4,9 +4,6 @@
 import type { MemberDTO } from "../domain/entity/member";
 import { auth } from "../infrastructure/config/firebaseClient";
 
-// -------------------------------
-// Backend base URL（useMemberDetail と同じ構成）
-// -------------------------------
 const ENV_BASE =
   ((import.meta as any).env?.VITE_BACKEND_BASE_URL as string | undefined)?.replace(
     /\/+$/g,
@@ -16,12 +13,10 @@ const ENV_BASE =
 const FALLBACK_BASE =
   "https://narratives-backend-871263659099.asia-northeast1.run.app";
 
-// 最終的に使うベース URL
 const API_BASE = ENV_BASE || FALLBACK_BASE;
 
-// -------------------------------
-// Fetch currentMember（useMemberDetail と同じ API_BASE & 防御）
-// -------------------------------
+// 既存: fetchCurrentMember はそのまま
+
 export async function fetchCurrentMember(uid: string): Promise<MemberDTO | null> {
   const token = await auth.currentUser?.getIdToken();
   if (!token) return null;
@@ -48,7 +43,6 @@ export async function fetchCurrentMember(uid: string): Promise<MemberDTO | null>
     return null;
   }
 
-  // HTML が返ってきていないかチェック（env ミス検出用）
   const ct = res.headers.get("Content-Type") ?? "";
   if (!ct.includes("application/json")) {
     throw new Error(
@@ -60,17 +54,24 @@ export async function fetchCurrentMember(uid: string): Promise<MemberDTO | null>
   const raw = (await res.json()) as any;
   if (!raw) return null;
 
-  const noFirst =
-    raw.firstName === null ||
-    raw.firstName === undefined ||
-    raw.firstName === "";
-  const noLast =
-    raw.lastName === null ||
-    raw.lastName === undefined ||
-    raw.lastName === "";
+  const firstName =
+    raw.firstName && String(raw.firstName).trim() !== ""
+      ? String(raw.firstName)
+      : null;
+  const lastName =
+    raw.lastName && String(raw.lastName).trim() !== ""
+      ? String(raw.lastName)
+      : null;
 
-  const firstName = noFirst ? null : (raw.firstName as string);
-  const lastName = noLast ? null : (raw.lastName as string);
+  const firstNameKana =
+    raw.firstNameKana && String(raw.firstNameKana).trim() !== ""
+      ? String(raw.firstNameKana)
+      : null;
+
+  const lastNameKana =
+    raw.lastNameKana && String(raw.lastNameKana).trim() !== ""
+      ? String(raw.lastNameKana)
+      : null;
 
   const full = `${lastName ?? ""} ${firstName ?? ""}`.trim() || null;
 
@@ -78,6 +79,92 @@ export async function fetchCurrentMember(uid: string): Promise<MemberDTO | null>
     id: raw.id ?? uid,
     firstName,
     lastName,
+    firstNameKana,
+    lastNameKana,
+    email: raw.email ?? null,
+    companyId: raw.companyId ?? "",
+    fullName: full,
+  };
+}
+
+// ★ 追加: プロフィール更新
+export type UpdateMemberProfileInput = {
+  id: string;
+  firstName: string;
+  lastName: string;
+  firstNameKana: string;
+  lastNameKana: string;
+};
+
+export async function updateCurrentMemberProfile(
+  input: UpdateMemberProfileInput,
+): Promise<MemberDTO | null> {
+  const token = await auth.currentUser?.getIdToken();
+  if (!token) return null;
+
+  const url = `${API_BASE}/members/${encodeURIComponent(input.id)}`;
+  console.log("[memberService] updateCurrentMemberProfile PATCH", url, input);
+
+  const res = await fetch(url, {
+    method: "PATCH", // Backend 側のメソッドに合わせる（PUT なら PUT に変更）
+    headers: {
+      Authorization: `Bearer ${token}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      firstName: input.firstName,
+      lastName: input.lastName,
+      firstNameKana: input.firstNameKana,
+      lastNameKana: input.lastNameKana,
+    }),
+  });
+
+  if (!res.ok) {
+    const text = await res.text().catch(() => "");
+    console.warn(
+      "[memberService] updateCurrentMemberProfile failed:",
+      res.status,
+      res.statusText,
+      text,
+    );
+    return null;
+  }
+
+  const ct = res.headers.get("Content-Type") ?? "";
+  if (!ct.includes("application/json")) {
+    // 成功だけどボディ無し、などなら null でもよい
+    return null;
+  }
+
+  const raw = (await res.json()) as any;
+
+  const firstName =
+    raw.firstName && String(raw.firstName).trim() !== ""
+      ? String(raw.firstName)
+      : null;
+  const lastName =
+    raw.lastName && String(raw.lastName).trim() !== ""
+      ? String(raw.lastName)
+      : null;
+
+  const firstNameKana =
+    raw.firstNameKana && String(raw.firstNameKana).trim() !== ""
+      ? String(raw.firstNameKana)
+      : null;
+
+  const lastNameKana =
+    raw.lastNameKana && String(raw.lastNameKana).trim() !== ""
+      ? String(raw.lastNameKana)
+      : null;
+
+  const full = `${lastName ?? ""} ${firstName ?? ""}`.trim() || null;
+
+  return {
+    id: raw.id ?? input.id,
+    firstName,
+    lastName,
+    firstNameKana,
+    lastNameKana,
     email: raw.email ?? null,
     companyId: raw.companyId ?? "",
     fullName: full,

@@ -38,6 +38,10 @@ func (h *MemberHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		h.create(w, r)
 	case r.Method == http.MethodGet && path == "/members":
 		h.list(w, r)
+	case r.Method == http.MethodPatch && strings.HasPrefix(path, "/members/"):
+		// ★ 追加: PATCH /members/{id}
+		id := strings.TrimPrefix(path, "/members/")
+		h.update(w, r, id)
 	case r.Method == http.MethodGet && strings.HasPrefix(path, "/members/"):
 		id := strings.TrimPrefix(path, "/members/")
 		h.get(w, r, id)
@@ -102,6 +106,70 @@ func (h *MemberHandler) create(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.WriteHeader(http.StatusCreated)
+	_ = json.NewEncoder(w).Encode(m)
+}
+
+// -----------------------------------------------------------------------------
+// PATCH /members/{id}
+// -----------------------------------------------------------------------------
+
+// フロントからの PATCH ボディ用（すべて任意項目・部分更新）
+type memberUpdateRequest struct {
+	FirstName      *string   `json:"firstName,omitempty"`
+	LastName       *string   `json:"lastName,omitempty"`
+	FirstNameKana  *string   `json:"firstNameKana,omitempty"`
+	LastNameKana   *string   `json:"lastNameKana,omitempty"`
+	Email          *string   `json:"email,omitempty"`
+	Permissions    *[]string `json:"permissions,omitempty"`
+	AssignedBrands *[]string `json:"assignedBrands,omitempty"`
+	Status         *string   `json:"status,omitempty"`
+}
+
+func (h *MemberHandler) update(w http.ResponseWriter, r *http.Request, id string) {
+	ctx := r.Context()
+
+	id = strings.TrimSpace(id)
+	if id == "" {
+		w.WriteHeader(http.StatusBadRequest)
+		_ = json.NewEncoder(w).Encode(map[string]string{"error": "invalid id"})
+		return
+	}
+
+	// ----------- companyId は CurrentMember から強制適用（唯一の情報源） -----------
+	// Multi-tenant 制御と同じく、未ログイン / companyId 無しなら 401
+	me, ok := httpmw.CurrentMember(r)
+	if !ok || strings.TrimSpace(me.CompanyID) == "" {
+		w.WriteHeader(http.StatusUnauthorized)
+		_ = json.NewEncoder(w).Encode(map[string]string{"error": "unauthorized"})
+		return
+	}
+
+	var req memberUpdateRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		w.WriteHeader(http.StatusBadRequest)
+		_ = json.NewEncoder(w).Encode(map[string]string{"error": "invalid json"})
+		return
+	}
+
+	input := memberuc.UpdateMemberInput{
+		ID:             id,
+		FirstName:      req.FirstName,
+		LastName:       req.LastName,
+		FirstNameKana:  req.FirstNameKana,
+		LastNameKana:   req.LastNameKana,
+		Email:          req.Email,
+		Permissions:    req.Permissions,
+		AssignedBrands: req.AssignedBrands,
+		// CompanyID は usecase 側で context から強制上書きされる前提なのでここでは指定不要
+		Status: req.Status,
+	}
+
+	m, err := h.uc.Update(ctx, input)
+	if err != nil {
+		writeMemberErr(w, err)
+		return
+	}
+
 	_ = json.NewEncoder(w).Encode(m)
 }
 
