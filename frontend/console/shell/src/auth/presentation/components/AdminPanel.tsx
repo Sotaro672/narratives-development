@@ -2,7 +2,7 @@
 import * as React from "react";
 import { LogOut } from "lucide-react";
 import "./AdminPanel.css";
-import { Input } from "../../../../shell/src/shared/ui/input";
+import { Input } from "../../../shared/ui/input";
 
 interface AdminPanelProps {
   open: boolean;

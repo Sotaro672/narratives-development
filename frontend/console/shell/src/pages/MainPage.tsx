@@ -1,6 +1,6 @@
 // frontend/shell/src/pages/MainPage.tsx
 import { useState } from "react";
-import Header from "../layout/Header/Header";
+import Header from "../auth/presentation/components/Header";
 import Sidebar from "../layout/Sidebar/Sidebar";
 import Main from "../layout/Main/Main";
 import "./MainPage.css";
