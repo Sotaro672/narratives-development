@@ -1,66 +1,33 @@
-// frontend/console/shell/src/auth/pages/AuthPage.tsx
 import * as React from "react";
 import { Button } from "../../../shared/ui/button";
 import "../styles/auth.css";
-import { useAuthActions } from "../../application/useAuthActions";
+import { useAuthPage } from "../hook/useAuthPage";
 
 export default function AuthPage() {
-  const { signUp, signIn, submitting, error, setError } = useAuthActions();
-
-  const [mode, setMode] = React.useState<"signup" | "signin">("signin");
-
-  const [email, setEmail] = React.useState("");
-  const [password, setPassword] = React.useState("");
-  const [confirmPassword, setConfirmPassword] = React.useState("");
-
-  // 姓名＋かな
-  const [lastName, setLastName] = React.useState("");
-  const [firstName, setFirstName] = React.useState("");
-  const [lastNameKana, setLastNameKana] = React.useState("");
-  const [firstNameKana, setFirstNameKana] = React.useState("");
-
-  // 会社名・団体名（signup 時のみ使用 / 任意入力）
-  const [companyName, setCompanyName] = React.useState("");
-
-  const resetForm = () => {
-    setEmail("");
-    setPassword("");
-    setConfirmPassword("");
-    setLastName("");
-    setFirstName("");
-    setLastNameKana("");
-    setFirstNameKana("");
-    setCompanyName("");
-    setError(null);
-  };
-
-  const switchMode = (next: "signup" | "signin") => {
-    setMode(next);
-    resetForm();
-  };
-
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-
-    if (mode === "signup") {
-      if (password !== confirmPassword) {
-        setError("パスワードが一致していません。");
-        return;
-      }
-
-      await signUp(email, password, {
-        lastName,
-        firstName,
-        lastNameKana,
-        firstNameKana,
-        companyName, // ← ここで会社名を委譲
-      });
-      return;
-    }
-
-    // ログイン(Sign In)
-    await signIn(email, password);
-  };
+  const {
+    mode,
+    switchMode,
+    email,
+    setEmail,
+    password,
+    setPassword,
+    confirmPassword,
+    setConfirmPassword,
+    lastName,
+    setLastName,
+    firstName,
+    setFirstName,
+    lastNameKana,
+    setLastNameKana,
+    firstNameKana,
+    setFirstNameKana,
+    companyName,
+    setCompanyName,
+    submitting,
+    error,
+    setError,
+    handleSubmit,
+  } = useAuthPage();
 
   return (
     <div className="auth-page">

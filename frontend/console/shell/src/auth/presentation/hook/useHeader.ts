@@ -1,25 +1,23 @@
-// frontend/console/shell/src/layout/Header/Header.tsx
+// frontend/console/shell/src/auth/presentation/hook/useHeader.ts
 import { useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { Bell, MessageSquare, UserRound, ChevronDown } from "lucide-react";
-import "./Header.css";
-import AdminPanel from "../../auth/presentation/components/AdminPanel";
-import { useAuthActions } from "../../auth/application/useAuthActions";
-import { useAuth } from "../../auth/presentation/hook/useCurrentMember";
 
-interface HeaderProps {
+import { useAuthActions } from "../../application/useAuthActions";
+import { useAuth } from "./useCurrentMember";
+
+type UseHeaderParams = {
   username?: string;
   email?: string;
   announcementsCount?: number;
   messagesCount?: number;
-}
+};
 
-export default function Header({
+export function useHeader({
   username = "管理者",
   email = "admin@narratives.com",
   announcementsCount = 3,
   messagesCount = 2,
-}: HeaderProps) {
+}: UseHeaderParams) {
   const [openAdmin, setOpenAdmin] = useState(false);
   const navigate = useNavigate();
 
@@ -79,6 +77,10 @@ export default function Header({
     }
   };
 
+  const handleToggleAdmin = () => {
+    setOpenAdmin((v) => !v);
+  };
+
   // 表示名（companyName が取れていればそれ、なければフォールバック）
   const brandMain =
     companyName && companyName.trim().length > 0 ? companyName : "Company Name";
@@ -103,76 +105,23 @@ export default function Header({
     (user?.email ?? "").trim() ||
     email;
 
-  return (
-    <header className="app-header">
-      {/* Left: Brand */}
-      <div className="brand">
-        <span className="brand-main">{brandMain}</span>
-        <span className="brand-sub">Console</span>
-      </div>
+  return {
+    // state
+    openAdmin,
+    panelContainerRef,
+    triggerRef,
 
-      {/* Right: Actions */}
-      <div className="actions">
-        {/* 通知 */}
-        <button
-          className="icon-btn"
-          aria-label="通知"
-          onClick={handleNotificationClick}
-        >
-          <span className="icon-wrap">
-            <Bell className="icon" aria-hidden />
-            {announcementsCount > 0 && (
-              <span className="badge" aria-label={`${announcementsCount}件の通知`}>
-                {announcementsCount}
-              </span>
-            )}
-          </span>
-        </button>
+    // 表示用値
+    brandMain,
+    fullName,
+    displayEmail,
+    announcementsCount,
+    messagesCount,
 
-        {/* メッセージ */}
-        <button
-          className="icon-btn"
-          aria-label="メッセージ"
-          onClick={handleMessageClick}
-        >
-          <span className="icon-wrap">
-            <MessageSquare className="icon" aria-hidden />
-            {messagesCount > 0 && (
-              <span className="badge" aria-label={`${messagesCount}件の新着メッセージ`}>
-                {messagesCount}
-              </span>
-            )}
-          </span>
-        </button>
-
-        {/* ユーザードロップダウン */}
-        <div className="relative" ref={panelContainerRef}>
-          <button
-            ref={triggerRef}
-            className="icon-btn user-trigger"
-            aria-haspopup="menu"
-            aria-expanded={openAdmin}
-            aria-controls="admin-dropdown"
-            onClick={() => setOpenAdmin((v) => !v)}
-          >
-            <UserRound className="icon" aria-hidden />
-            <ChevronDown
-              className={`caret ${openAdmin ? "open" : ""}`}
-              aria-hidden
-            />
-          </button>
-
-          <AdminPanel
-            open={openAdmin}
-            fullName={fullName}
-            email={displayEmail}
-            onEditProfile={() => console.log("プロフィール変更")}
-            onChangeEmail={() => console.log("メールアドレス変更")}
-            onChangePassword={() => console.log("パスワード変更")}
-            onLogout={handleLogout}
-          />
-        </div>
-      </div>
-    </header>
-  );
+    // handlers
+    handleNotificationClick,
+    handleMessageClick,
+    handleToggleAdmin,
+    handleLogout,
+  };
 }
