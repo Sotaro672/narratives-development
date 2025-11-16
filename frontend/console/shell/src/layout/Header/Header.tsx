@@ -1,4 +1,4 @@
-// frontend/shell/src/layout/Header/Header.tsx
+// frontend/console/shell/src/layout/Header/Header.tsx
 import { useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Bell, MessageSquare, UserRound, ChevronDown } from "lucide-react";
@@ -28,8 +28,8 @@ export default function Header({
 
   // Auth
   const { signOut } = useAuthActions();
-  // ← useAuth から companyName を受け取る
-  const { user, companyName } = useAuth();
+  // useAuth から companyName / currentMember / user を受け取る
+  const { user, companyName, currentMember } = useAuth();
 
   // ─────────────────────────────────────────────
   // 外側クリックで閉じる
@@ -81,7 +81,27 @@ export default function Header({
 
   // 表示名（companyName が取れていればそれ、なければフォールバック）
   const brandMain =
-    (companyName && companyName.trim().length > 0 ? companyName : "Company Name");
+    companyName && companyName.trim().length > 0 ? companyName : "Company Name";
+
+  // ヘッダー右上のユーザー名表示:
+  // 1. currentMember.fullName（backend からの表示名）
+  // 2. currentMember.lastName + firstName（fullName が無い場合）
+  // 3. user.email
+  // 4. props.username
+  // 5. "ゲスト"
+  const fullName =
+    (currentMember?.fullName ?? "").trim() ||
+    `${currentMember?.lastName ?? ""} ${currentMember?.firstName ?? ""}`.trim() ||
+    user?.email ||
+    username ||
+    "ゲスト";
+
+  // メールアドレス表示:
+  // currentMember.email → user.email → props.email
+  const displayEmail =
+    (currentMember?.email ?? "").trim() ||
+    (user?.email ?? "").trim() ||
+    email;
 
   return (
     <header className="app-header">
@@ -144,8 +164,8 @@ export default function Header({
 
           <AdminPanel
             open={openAdmin}
-            displayName={username}
-            email={email}
+            fullName={fullName}
+            email={displayEmail}
             onEditProfile={() => console.log("プロフィール変更")}
             onChangeEmail={() => console.log("メールアドレス変更")}
             onChangePassword={() => console.log("パスワード変更")}

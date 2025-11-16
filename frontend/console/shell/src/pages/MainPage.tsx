@@ -12,7 +12,7 @@ export default function MainPage() {
   return (
     <div className="min-h-screen flex flex-col">
       {/* ヘッダー */}
-      <Header username="Demo User" />
+      <Header />
 
       {/* 横並びレイアウト */}
       <div className="flex flex-1 flex-row">

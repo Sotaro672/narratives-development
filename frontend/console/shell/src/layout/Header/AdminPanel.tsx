@@ -1,4 +1,3 @@
-//frontend\console\shell\src\layout\Header\AdminPanel.tsx
 import { LogOut } from "lucide-react";
 import "./AdminPanel.css";
 
@@ -7,8 +6,8 @@ interface AdminPanelProps {
   open: boolean;
 
   /** 表示名・メール */
-  displayName?: string; // 例: "管理者"
-  email?: string;       // 例: "admin@narratives.com"
+  fullName?: string; // 例: "管理者"
+  email?: string;    // 例: "admin@narratives.com"
 
   /** アクション */
   onEditProfile?: () => void;
@@ -27,7 +26,7 @@ interface AdminPanelProps {
  */
 export default function AdminPanel({
   open,
-  displayName = "管理者",
+  fullName = "管理者",
   email = "",
   onEditProfile,
   onChangeEmail,
@@ -38,9 +37,13 @@ export default function AdminPanel({
   if (!open) return null;
 
   return (
-    <div className={`admin-dropdown ${className || ""}`} role="menu" aria-label="アカウントメニュー">
+    <div
+      className={`admin-dropdown ${className || ""}`}
+      role="menu"
+      aria-label="アカウントメニュー"
+    >
       <div className="admin-dropdown-header">
-        <div className="admin-dropdown-title">{displayName}</div>
+        <div className="admin-dropdown-title">{fullName}</div>
         {email && <div className="admin-dropdown-email">{email}</div>}
       </div>
 
