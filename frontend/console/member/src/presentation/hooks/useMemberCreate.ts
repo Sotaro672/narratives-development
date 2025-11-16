@@ -1,29 +1,29 @@
 // frontend/member/src/hooks/useMemberCreate.ts
 import { useCallback, useMemo, useState } from "react";
-import type { Member } from "../domain/entity/member";
+import type { Member } from "../../domain/entity/member";
 
 // ★ バックエンド呼び出し用：Firebase Auth & ログイン情報（companyId）
-import { auth } from "../../../shell/src/auth/infrastructure/config/firebaseClient";
-import { useAuthContext } from "../../../shell/src/auth/application/AuthContext";
+import { auth } from "../../../../shell/src/auth/infrastructure/config/firebaseClient";
+import { useAuthContext } from "../../../../shell/src/auth/application/AuthContext";
 
 // 権限モックデータ
 import {
   ALL_PERMISSIONS,
   groupPermissionsByCategory,
-} from "../../../permission/src/infrastructure/mockdata/mockdata";
+} from "../../../../permission/src/infrastructure/mockdata/mockdata";
 
 // Permission のカテゴリ型（＝新しい「役割」概念）
 import type {
   Permission,
   PermissionCategory,
-} from "../../../shell/src/shared/types/permission";
+} from "../../../../shell/src/shared/types/permission";
 
 // ブランドのモックデータ（UI 用）
 import {
   ALL_BRANDS,
   toBrandRows,
-} from "../../../brand/src/infrastructure/mockdata/mockdata";
-import type { BrandRow } from "../../../brand/src/infrastructure/mockdata/mockdata";
+} from "../../../../brand/src/infrastructure/mockdata/mockdata";
+import type { BrandRow } from "../../../../brand/src/infrastructure/mockdata/mockdata";
 
 // ─────────────────────────────────────────────
 // Backend base URL（useMemberDetail と同じ構成）

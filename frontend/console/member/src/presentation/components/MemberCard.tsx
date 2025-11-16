@@ -8,7 +8,7 @@ import {
   CardContent,
 } from "../../../../shell/src/shared/ui/card";
 import { User, Mail, Calendar } from "lucide-react";
-import { useMemberDetail } from "../../hooks/useMemberDetail";
+import { useMemberDetail } from "../hooks/useMemberDetail";
 
 const IconUser = User as unknown as React.ComponentType<
   React.SVGProps<SVGSVGElement>

@@ -4,7 +4,7 @@ import * as React from "react";
 import { useNavigate } from "react-router-dom";
 import List from "../../../../shell/src/layout/List/List";
 import "../styles/member.css";
-import { useMemberList } from "../../hooks/useMemberList";
+import { useMemberList } from "../hooks/useMemberList";
 
 export default function MemberManagementPage() {
   const navigate = useNavigate();

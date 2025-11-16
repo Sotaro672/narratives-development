@@ -2,7 +2,7 @@
 import * as React from "react";
 import { useNavigate } from "react-router-dom";
 import PageStyle from "../../../../shell/src/layout/PageStyle/PageStyle";
-import { useMemberCreate } from "../../hooks/useMemberCreate";
+import { useMemberCreate } from "../hooks/useMemberCreate";
 import { Input } from "../../../../shell/src/shared/ui/input";
 import {
   Popover,
