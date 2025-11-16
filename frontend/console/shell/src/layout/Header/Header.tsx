@@ -2,10 +2,10 @@
 import { useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Bell, MessageSquare, UserRound, ChevronDown } from "lucide-react";
-import "../styles/auth.css";
-import AdminPanel from "./AdminPanel";
-import { useAuthActions } from "../../application/useAuthActions";
-import { useAuth } from "../hook/useAuth";
+import "./Header.css";
+import AdminPanel from "../../auth/presentation/components/AdminPanel";
+import { useAuthActions } from "../../auth/application/useAuthActions";
+import { useAuth } from "../../auth/presentation/hook/useAuth";
 
 interface HeaderProps {
   username?: string;
