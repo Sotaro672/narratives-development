@@ -4,7 +4,7 @@ import type { User } from "firebase/auth";
 import { onAuthStateChanged } from "firebase/auth";
 import { auth, db } from "../config/firebaseClient";
 import { doc, getDoc } from "firebase/firestore";
-import type { Auth } from "../domain/auth";
+import type { Auth } from "../domain/entity/auth";
 
 type AuthContextValue = {
   user: Auth | null;

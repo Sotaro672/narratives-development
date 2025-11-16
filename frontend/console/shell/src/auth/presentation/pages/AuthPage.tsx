@@ -1,7 +1,7 @@
 // frontend/console/shell/src/auth/pages/AuthPage.tsx
 import * as React from "react";
 import { Button } from "../../../shared/ui/button";
-import "../styles/AuthPage.css";
+import "../styles/auth.css";
 import { useAuthActions } from "../../application/useAuthActions";
 
 export default function AuthPage() {
