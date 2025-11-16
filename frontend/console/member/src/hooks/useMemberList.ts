@@ -10,7 +10,7 @@ import {
 } from "../../../shell/src/shared/types/common/common";
 
 // ★ 認証（IDトークンを付けてバックエンドに問い合わせる）
-import { auth } from "../../../shell/src/auth/config/firebaseClient";
+import { auth } from "../../../shell/src/auth/infrastructure/config/firebaseClient";
 
 // ─────────────────────────────────────────────
 // Backend base URL（.env 未設定でも Cloud Run にフォールバック）

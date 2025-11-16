@@ -2,7 +2,7 @@
 import * as React from "react";
 import type { User } from "firebase/auth";
 import { onAuthStateChanged } from "firebase/auth";
-import { auth, db } from "../config/firebaseClient";
+import { auth, db } from "../infrastructure/config/firebaseClient";
 import { doc, getDoc } from "firebase/firestore";
 import type { Auth } from "../domain/entity/auth";
 

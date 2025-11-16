@@ -2,7 +2,7 @@
 /// <reference types="vite/client" />
 
 import { onAuthStateChanged, type User } from "firebase/auth";
-import { auth, db } from "../config/firebaseClient";
+import { auth, db } from "../infrastructure/config/firebaseClient";
 import { doc, getDoc } from "firebase/firestore";
 
 /**

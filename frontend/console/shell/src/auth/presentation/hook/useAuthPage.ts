@@ -3,7 +3,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { useAuthContext } from "../../application/AuthContext";
-import { auth } from "../../config/firebaseClient";
+import { auth } from "../../infrastructure/config/firebaseClient";
 
 // -------------------------------
 // Backend base URL（useMemberDetail と同じ構成）

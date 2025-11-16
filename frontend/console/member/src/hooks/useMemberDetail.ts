@@ -4,7 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import type { Member } from "../domain/entity/member";
 
 // ★ バックエンド呼び出し用：Firebase Auth の ID トークンを付与
-import { auth } from "../../../shell/src/auth/config/firebaseClient";
+import { auth } from "../../../shell/src/auth/infrastructure/config/firebaseClient";
 
 // ─────────────────────────────────────────────
 // Backend base URL（.env 未設定でも Cloud Run にフォールバック）

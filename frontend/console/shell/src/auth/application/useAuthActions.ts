@@ -6,7 +6,7 @@ import {
   signOut,
   deleteUser,
 } from "firebase/auth";
-import { auth } from "../config/firebaseClient";
+import { auth } from "../infrastructure/config/firebaseClient";
 
 // Firestore
 import {
@@ -17,7 +17,7 @@ import {
   writeBatch,
   getDoc,
 } from "firebase/firestore";
-import { db } from "../config/firebaseClient";
+import { db } from "../infrastructure/config/firebaseClient";
 
 // ★ 追加: すべてのPermission定義（新規ユーザーにフル権限付与）
 import { ALL_PERMISSIONS } from "../../../../permission/src/infrastructure/mockdata/mockdata";

@@ -3,7 +3,7 @@ import { useCallback, useMemo, useState } from "react";
 import type { Member } from "../domain/entity/member";
 
 // ★ バックエンド呼び出し用：Firebase Auth & ログイン情報（companyId）
-import { auth } from "../../../shell/src/auth/config/firebaseClient";
+import { auth } from "../../../shell/src/auth/infrastructure/config/firebaseClient";
 import { useAuthContext } from "../../../shell/src/auth/application/AuthContext";
 
 // 権限モックデータ
