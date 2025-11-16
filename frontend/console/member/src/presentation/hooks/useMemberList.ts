@@ -9,82 +9,15 @@ import {
   DEFAULT_PAGE_LIMIT,
 } from "../../../../shell/src/shared/types/common/common";
 
-// ★ 認証（IDトークンを付けてバックエンドに問い合わせる）
+// 認証（IDトークン取得用）
 import { auth } from "../../../../shell/src/auth/infrastructure/config/firebaseClient";
 
-// ─────────────────────────────────────────────
-// Backend base URL（.env 未設定でも Cloud Run にフォールバック）
-// ─────────────────────────────────────────────
-const ENV_BASE =
-  ((import.meta as any).env?.VITE_BACKEND_BASE_URL as string | undefined)?.replace(
-    /\/+$/g,
-    "",
-  ) ?? "";
-
-const FALLBACK_BASE =
-  "https://narratives-backend-871263659099.asia-northeast1.run.app";
-
-const API_BASE = (ENV_BASE || FALLBACK_BASE).replace(/\/+$/g, "");
-
-// ログ付き URL 組み立て
-function apiUrl(path: string, qs?: string) {
-  const url = `${API_BASE}${path.startsWith("/") ? path : `/${path}`}`;
-  const full = qs ? `${url}?${qs}` : url;
-  // eslint-disable-next-line no-console
-  console.log("[useMemberList] GET", full);
-  return full;
-}
-
-// ─────────────────────────────────────────────
-// member.Service の挙動をTSで再現（FormatLastFirst）
-// ─────────────────────────────────────────────
-function formatLastFirst(lastName?: string | null, firstName?: string | null) {
-  const ln = String(lastName ?? "").trim();
-  const fn = String(firstName ?? "").trim();
-  if (ln && fn) return `${ln} ${fn}`;
-  if (ln) return ln;
-  if (fn) return fn;
-  return "";
-}
-
-// 受信JSONを camelCase に寄せるワイヤ正規化（PascalCase も吸収）
-function normalizeMemberWire(w: any): Member {
-  // まず候補を拾う（camelCase 優先、無ければ PascalCase）
-  const id = String(w.id ?? w.ID ?? "").trim();
-  const firstName = (w.firstName ?? w.FirstName ?? null) as string | null;
-  const lastName = (w.lastName ?? w.LastName ?? null) as string | null;
-  const firstNameKana = (w.firstNameKana ?? w.FirstNameKana ?? null) as string | null;
-  const lastNameKana = (w.lastNameKana ?? w.LastNameKana ?? null) as string | null;
-  const email = (w.email ?? w.Email ?? null) as string | null;
-  const companyId = (w.companyId ?? w.CompanyID ?? "") as string;
-  const permissions = (w.permissions ?? w.Permissions ?? []) as string[];
-  const assignedBrands =
-    (w.assignedBrands ?? w.AssignedBrands ?? null) as string[] | null;
-
-  // createdAt / updatedAt は文字列/秒/Firestore Timestamp など混在に対応
-  const createdAt = w.createdAt ?? w.CreatedAt ?? null;
-  const updatedAt = w.updatedAt ?? w.UpdatedAt ?? null;
-  const deletedAt = w.deletedAt ?? w.DeletedAt ?? null;
-  const deletedBy = w.deletedBy ?? w.DeletedBy ?? null;
-  const updatedBy = w.updatedBy ?? w.UpdatedBy ?? null;
-
-  return {
-    id,
-    firstName,
-    lastName,
-    firstNameKana,
-    lastNameKana,
-    email,
-    companyId,
-    permissions: Array.isArray(permissions) ? permissions : [],
-    assignedBrands: Array.isArray(assignedBrands) ? assignedBrands : null,
-    createdAt,
-    updatedAt,
-    deletedAt,
-    deletedBy,
-    updatedBy,
-  } as Member;
-}
+// ★ API 呼び出しロジックは infrastructure/query 側に委譲
+import {
+  fetchMemberListWithToken,
+  fetchMemberByIdWithToken,
+  formatLastFirst,
+} from "../../infrastructure/query/memberQuery";
 
 /**
  * メンバー一覧取得用フック（バックエンドAPI経由版）
@@ -106,33 +39,6 @@ export function useMemberList(
   // ID→表示名のキャッシュ（コンポーネント存続中は保持）
   const nameCacheRef = useRef<Map<string, string>>(new Map());
 
-  // クエリ文字列を作る（companyId は絶対に付けない）
-  function buildQuery(usePage: Page, useFilter: MemberFilter): string {
-    const perPage =
-      usePage && typeof usePage.limit === "number" && usePage.limit > 0
-        ? usePage.limit
-        : DEFAULT_PAGE_LIMIT;
-
-    const offset =
-      usePage && typeof usePage.offset === "number" && usePage.offset >= 0
-        ? usePage.offset
-        : 0;
-
-    const pageNumber = Math.floor(offset / perPage) + 1;
-
-    const params = new URLSearchParams();
-    params.set("page", String(pageNumber));
-    params.set("perPage", String(perPage));
-    params.set("sort", "updatedAt");
-    params.set("order", "desc");
-
-    if (useFilter.searchQuery?.trim()) params.set("q", useFilter.searchQuery.trim());
-    if (useFilter.brandIds?.length) params.set("brandIds", useFilter.brandIds.join(","));
-    if (useFilter.status?.trim()) params.set("status", useFilter.status.trim());
-
-    return params.toString();
-  }
-
   const load = useCallback(
     async (override?: { page?: Page; filter?: MemberFilter }) => {
       setLoading(true);
@@ -141,54 +47,19 @@ export function useMemberList(
         const usePage = override?.page ?? page;
         const useFilter = override?.filter ?? filter;
 
-        // ★ Firebase Auth から ID トークンを取得
+        // Firebase Auth から ID トークンを取得
         const currentUser = auth.currentUser;
         if (!currentUser) {
-          throw new Error("未認証のためメンバー一覧を取得できません。（currentUser が null）");
+          throw new Error(
+            "未認証のためメンバー一覧を取得できません。（currentUser が null）",
+          );
         }
         const token = await currentUser.getIdToken();
         // eslint-disable-next-line no-console
         console.log("[useMemberList] currentUser.uid:", currentUser.uid);
 
-        const qs = buildQuery(usePage, useFilter);
-        const url = apiUrl("/members", qs);
-
-        const res = await fetch(url, {
-          method: "GET",
-          headers: {
-            Authorization: `Bearer ${token}`,
-            Accept: "application/json",
-          },
-        });
-
-        // eslint-disable-next-line no-console
-        console.log("[useMemberList] response", res.status, res.statusText);
-
-        const ct = res.headers.get("content-type") ?? "";
-        if (!ct.includes("application/json")) {
-          const text = await res.text().catch(() => "");
-          const head = text.slice(0, 160).replace(/\s+/g, " ");
-          throw new Error(
-            `Unexpected content-type: ${ct} (url=${url}) body_head="${head}"`,
-          );
-        }
-        if (!res.ok) {
-          const text = await res.text().catch(() => "");
-          if (res.status === 401 || res.status === 403) {
-            throw new Error(
-              `認証/認可エラー (${res.status}). 再ログイン後に再試行してください。 ${
-                text || ""
-              }`,
-            );
-          }
-          throw new Error(
-            `メンバー一覧の取得に失敗しました (status ${res.status}) ${text || ""}`,
-          );
-        }
-
-        const raw = (await res.json()) as any[];
-        // ←★ ここで正規化して camelCase に寄せる
-        const items = raw.map(normalizeMemberWire);
+        // ★ API 呼び出しは infrastructure/query に委譲
+        const { items } = await fetchMemberListWithToken(token, usePage, useFilter);
 
         // 姓・名が未設定なら firstName を「招待中」に補正（UI用途）
         const normalized: Member[] = items.map((m) => {
@@ -255,22 +126,13 @@ export function useMemberList(
       if (!currentUser) return "";
       const token = await currentUser.getIdToken();
 
-      const url = apiUrl(`/members/${encodeURIComponent(id)}`);
-      const res = await fetch(url, {
-        method: "GET",
-        headers: {
-          Authorization: `Bearer ${token}`,
-          Accept: "application/json",
-        },
-      });
+      const member = await fetchMemberByIdWithToken(token, id);
+      if (!member) return "";
 
-      const ct = res.headers.get("content-type") ?? "";
-      if (!ct.includes("application/json")) return "";
-      if (res.status === 404) return "";
-      if (!res.ok) return "";
-
-      const m = normalizeMemberWire(await res.json());
-      const disp = formatLastFirst(m.lastName as any, m.firstName as any);
+      const disp = formatLastFirst(
+        member.lastName as any,
+        member.firstName as any,
+      );
       if (disp) cache.set(id, disp);
       return disp;
     },

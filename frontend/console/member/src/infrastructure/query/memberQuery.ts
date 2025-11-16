@@ -1,20 +1,14 @@
+// frontend/member/src/infrastructure/query/memberQuery.ts
 /// <reference types="vite/client" />
 
-/**
- * Member クエリ（REST API アダプタ）
- *
- * - Module Federation 前提:
- *   - 認証ヘッダは Shell 側の auth から取得する
- *   - currentMember の取得は Shell 側の useCurrentMember() に委譲
- *
- * このファイルは「メンバー一覧・詳細など、member bounded context の読み取り専用クエリ」を担当します。
- */
+import type { Member } from "../../domain/entity/member";
+import type { MemberFilter } from "../../domain/repository/memberRepository";
+import type { Page } from "../../../../shell/src/shared/types/common/common";
+import { DEFAULT_PAGE_LIMIT } from "../../../../shell/src/shared/types/common/common";
 
-import { getAuthHeaders } from "../../../../shell/src/auth/application/authService"; // Shell 側で再エクスポートしておく前提
-
-// -------------------------------
-// Backend base URL（他モジュールと同一ルール）
-// -------------------------------
+// ─────────────────────────────────────────────
+// Backend base URL（.env 未設定でも Cloud Run にフォールバック）
+// ─────────────────────────────────────────────
 const ENV_BASE =
   ((import.meta as any).env?.VITE_BACKEND_BASE_URL as string | undefined)?.replace(
     /\/+$/g,
@@ -24,218 +18,183 @@ const ENV_BASE =
 const FALLBACK_BASE =
   "https://narratives-backend-871263659099.asia-northeast1.run.app";
 
-const API_BASE = ENV_BASE || FALLBACK_BASE;
+export const API_BASE = (ENV_BASE || FALLBACK_BASE).replace(/\/+$/g, "");
 
-// -------------------------------
-// Types
-// -------------------------------
+// ログ付き URL 組み立て
+function apiUrl(path: string, qs?: string) {
+  const url = `${API_BASE}${path.startsWith("/") ? path : `/${path}`}`;
+  const full = qs ? `${url}?${qs}` : url;
+  // eslint-disable-next-line no-console
+  console.log("[memberQuery] GET", full);
+  return full;
+}
 
-/**
- * Backend の Member エンティティに対応する DTO
- * （必要に応じて backend/internal/domain/member/entity.go に合わせて拡張）
- */
-export type MemberDTO = {
-  id: string;
-  firstName?: string | null;
-  lastName?: string | null;
-  firstNameKana?: string | null;
-  lastNameKana?: string | null;
-  email?: string | null;
-  companyId: string;
-  permissions?: string[];
-  assignedBrands?: string[];
-  createdAt?: string | null; // ISO8601 文字列想定
-  updatedAt?: string | null; // ISO8601 文字列想定
+// クエリ文字列を作る（companyId は絶対に付けない）
+export function buildMemberQuery(usePage: Page, useFilter: MemberFilter): string {
+  const perPage =
+    usePage && typeof usePage.limit === "number" && usePage.limit > 0
+      ? usePage.limit
+      : DEFAULT_PAGE_LIMIT;
 
-  /** 表示用の結合済み氏名（backend が返す場合） */
-  fullName?: string | null;
-};
+  const offset =
+    usePage && typeof usePage.offset === "number" && usePage.offset >= 0
+      ? usePage.offset
+      : 0;
 
-/**
- * メンバー一覧取得用のフィルタ
- * （サーバ側の仕様に合わせて適宜パラメータを追加）
- */
-export type MemberListFilter = {
-  companyId?: string;  // 会社単位で絞り込みたい場合
-  keyword?: string;    // 氏名 / メール検索など
-  limit?: number;
-  offset?: number;
-};
-
-/**
- * ページングレスポンスの例（必要に応じて共通 Page 型と揃える）
- */
-export type MemberListResponse = {
-  items: MemberDTO[];
-  total: number;
-  limit: number;
-  offset: number;
-};
-
-// -------------------------------
-// Helper
-// -------------------------------
-
-function buildUrl(
-  path: string,
-  query?: Record<string, string | number | boolean | undefined>,
-): string {
-  const base = `${API_BASE.replace(/\/+$/g, "")}/${path.replace(/^\/+/g, "")}`;
-  if (!query) return base;
+  const pageNumber = Math.floor(offset / perPage) + 1;
 
   const params = new URLSearchParams();
-  Object.entries(query).forEach(([key, value]) => {
-    if (value === undefined || value === null || value === "") return;
-    params.set(key, String(value));
-  });
+  params.set("page", String(pageNumber));
+  params.set("perPage", String(perPage));
+  params.set("sort", "updatedAt");
+  params.set("order", "desc");
 
-  const qs = params.toString();
-  return qs ? `${base}?${qs}` : base;
+  if (useFilter.searchQuery?.trim()) {
+    params.set("q", useFilter.searchQuery.trim());
+  }
+  if (useFilter.brandIds?.length) {
+    params.set("brandIds", useFilter.brandIds.join(","));
+  }
+  if (useFilter.status?.trim()) {
+    params.set("status", useFilter.status.trim());
+  }
+
+  return params.toString();
 }
 
-// -------------------------------
-// Queries
-// -------------------------------
-
-/**
- * メンバー詳細取得（ID 指定）
- *
- * GET /members/{id}
- */
-export async function fetchMemberById(memberId: string): Promise<MemberDTO | null> {
-  const id = (memberId ?? "").trim();
-  if (!id) return null;
-
-  const headers: HeadersInit = {
-    "Content-Type": "application/json",
-    ...(await getAuthHeaders()),
-  };
-
-  const url = buildUrl(`/members/${encodeURIComponent(id)}`);
-  const res = await fetch(url, { method: "GET", headers });
-
-  if (!res.ok) {
-    const text = await res.text().catch(() => "");
-    console.warn("[memberQuery] fetchMemberById failed:", res.status, text);
-    return null;
-  }
-
-  const ct = res.headers.get("Content-Type") ?? "";
-  if (!ct.includes("application/json")) {
-    console.error(
-      `[memberQuery] fetchMemberById: unexpected content-type=${ct}. Check API_BASE=${API_BASE}`,
-    );
-    return null;
-  }
-
-  const raw = (await res.json()) as any;
-  if (!raw) return null;
-
-  return normalizeMember(raw);
+// ─────────────────────────────────────────────
+// member.Service の挙動をTSで再現（FormatLastFirst）
+// ─────────────────────────────────────────────
+export function formatLastFirst(
+  lastName?: string | null,
+  firstName?: string | null,
+) {
+  const ln = String(lastName ?? "").trim();
+  const fn = String(firstName ?? "").trim();
+  if (ln && fn) return `${ln} ${fn}`;
+  if (ln) return ln;
+  if (fn) return fn;
+  return "";
 }
 
-/**
- * メンバー一覧取得
- *
- * GET /members?companyId=...&keyword=...&limit=...&offset=...
- * （実際のクエリパラメータ名はサーバ仕様に合わせてください）
- */
-export async function fetchMemberList(
-  filter: MemberListFilter = {},
-): Promise<MemberListResponse> {
-  const headers: HeadersInit = {
-    "Content-Type": "application/json",
-    ...(await getAuthHeaders()),
-  };
+// 受信JSONを camelCase に寄せるワイヤ正規化（PascalCase も吸収）
+function normalizeMemberWire(w: any): Member {
+  const id = String(w.id ?? w.ID ?? "").trim();
+  const firstName = (w.firstName ?? w.FirstName ?? null) as string | null;
+  const lastName = (w.lastName ?? w.LastName ?? null) as string | null;
+  const firstNameKana = (w.firstNameKana ?? w.FirstNameKana ?? null) as string | null;
+  const lastNameKana = (w.lastNameKana ?? w.LastNameKana ?? null) as string | null;
+  const email = (w.email ?? w.Email ?? null) as string | null;
+  const companyId = (w.companyId ?? w.CompanyID ?? "") as string;
+  const permissions = (w.permissions ?? w.Permissions ?? []) as string[];
+  const assignedBrands =
+    (w.assignedBrands ?? w.AssignedBrands ?? null) as string[] | null;
 
-  const url = buildUrl("/members", {
-    companyId: filter.companyId,
-    keyword: filter.keyword,
-    limit: filter.limit ?? 20,
-    offset: filter.offset ?? 0,
-  });
-
-  const res = await fetch(url, { method: "GET", headers });
-
-  if (!res.ok) {
-    const text = await res.text().catch(() => "");
-    console.warn("[memberQuery] fetchMemberList failed:", res.status, text);
-    return {
-      items: [],
-      total: 0,
-      limit: filter.limit ?? 20,
-      offset: filter.offset ?? 0,
-    };
-  }
-
-  const ct = res.headers.get("Content-Type") ?? "";
-  if (!ct.includes("application/json")) {
-    console.error(
-      `[memberQuery] fetchMemberList: unexpected content-type=${ct}. Check API_BASE=${API_BASE}`,
-    );
-    return {
-      items: [],
-      total: 0,
-      limit: filter.limit ?? 20,
-      offset: filter.offset ?? 0,
-    };
-  }
-
-  const raw = (await res.json()) as any;
-
-  // サーバのレスポンス形状に合わせてパース
-  // 例:
-  // {
-  //   items: [...],
-  //   total: 123,
-  //   limit: 20,
-  //   offset: 0
-  // }
-  const items = Array.isArray(raw.items) ? raw.items.map(normalizeMember) : [];
-  const total = typeof raw.total === "number" ? raw.total : items.length;
-  const limit = typeof raw.limit === "number" ? raw.limit : filter.limit ?? 20;
-  const offset =
-    typeof raw.offset === "number" ? raw.offset : filter.offset ?? 0;
-
-  return { items, total, limit, offset };
-}
-
-// -------------------------------
-// Normalizer
-// -------------------------------
-
-function normalizeMember(raw: any): MemberDTO {
-  const noFirst =
-    raw.firstName === null ||
-    raw.firstName === undefined ||
-    raw.firstName === "";
-  const noLast =
-    raw.lastName === null ||
-    raw.lastName === undefined ||
-    raw.lastName === "";
-
-  const firstName = noFirst ? null : (raw.firstName as string);
-  const lastName = noLast ? null : (raw.lastName as string);
-
-  const full =
-    (raw.fullName as string | undefined | null)?.trim() ||
-    `${lastName ?? ""} ${firstName ?? ""}`.trim() ||
-    null;
+  const createdAt = w.createdAt ?? w.CreatedAt ?? null;
+  const updatedAt = w.updatedAt ?? w.UpdatedAt ?? null;
+  const deletedAt = w.deletedAt ?? w.DeletedAt ?? null;
+  const deletedBy = w.deletedBy ?? w.DeletedBy ?? null;
+  const updatedBy = w.updatedBy ?? w.UpdatedBy ?? null;
 
   return {
-    id: raw.id ?? "",
+    id,
     firstName,
     lastName,
-    firstNameKana: raw.firstNameKana ?? null,
-    lastNameKana: raw.lastNameKana ?? null,
-    email: raw.email ?? null,
-    companyId: raw.companyId ?? "",
-    permissions: Array.isArray(raw.permissions) ? raw.permissions : [],
-    assignedBrands: Array.isArray(raw.assignedBrands)
-      ? raw.assignedBrands
-      : [],
-    createdAt: raw.createdAt ?? null,
-    updatedAt: raw.updatedAt ?? null,
-    fullName: full,
-  };
+    firstNameKana,
+    lastNameKana,
+    email,
+    companyId,
+    permissions: Array.isArray(permissions) ? permissions : [],
+    assignedBrands: Array.isArray(assignedBrands) ? assignedBrands : null,
+    createdAt,
+    updatedAt,
+    deletedAt,
+    deletedBy,
+    updatedBy,
+  } as Member;
+}
+
+export type MemberListResult = {
+  items: Member[];
+};
+
+/**
+ * メンバー一覧取得（純粋なクエリ関数）
+ * - React Hook に依存しない
+ * - トークンは呼び出し側（Hookなど）から渡す
+ */
+export async function fetchMemberListWithToken(
+  token: string,
+  page: Page,
+  filter: MemberFilter,
+): Promise<MemberListResult> {
+  const qs = buildMemberQuery(page, filter);
+  const url = apiUrl("/members", qs);
+
+  const res = await fetch(url, {
+    method: "GET",
+    headers: {
+      Authorization: `Bearer ${token}`,
+      Accept: "application/json",
+    },
+  });
+
+  // eslint-disable-next-line no-console
+  console.log("[memberQuery] response", res.status, res.statusText);
+
+  const ct = res.headers.get("content-type") ?? "";
+  if (!ct.includes("application/json")) {
+    const text = await res.text().catch(() => "");
+    const head = text.slice(0, 160).replace(/\s+/g, " ");
+    throw new Error(
+      `Unexpected content-type: ${ct} (url=${url}) body_head="${head}"`,
+    );
+  }
+
+  if (!res.ok) {
+    const text = await res.text().catch(() => "");
+    if (res.status === 401 || res.status === 403) {
+      throw new Error(
+        `認証/認可エラー (${res.status}). 再ログイン後に再試行してください。 ${
+          text || ""
+        }`,
+      );
+    }
+    throw new Error(
+      `メンバー一覧の取得に失敗しました (status ${res.status}) ${text || ""}`,
+    );
+  }
+
+  const raw = (await res.json()) as any[];
+  const items = raw.map(normalizeMemberWire);
+  return { items };
+}
+
+/**
+ * 単一メンバー取得（ID指定）
+ * - useMemberList の getNameLastFirstByID から利用
+ */
+export async function fetchMemberByIdWithToken(
+  token: string,
+  memberId: string,
+): Promise<Member | null> {
+  const id = String(memberId ?? "").trim();
+  if (!id) return null;
+
+  const url = apiUrl(`/members/${encodeURIComponent(id)}`);
+  const res = await fetch(url, {
+    method: "GET",
+    headers: {
+      Authorization: `Bearer ${token}`,
+      Accept: "application/json",
+    },
+  });
+
+  const ct = res.headers.get("content-type") ?? "";
+  if (!ct.includes("application/json")) return null;
+  if (res.status === 404) return null;
+  if (!res.ok) return null;
+
+  const raw = await res.json();
+  return normalizeMemberWire(raw);
 }
