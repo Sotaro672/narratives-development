@@ -5,24 +5,32 @@ import (
 	"context"
 	"log"
 
-	httpin "narratives/internal/adapters/in/http"
-	fs "narratives/internal/adapters/out/firestore"
-
-	uc "narratives/internal/application/usecase"
-
-	appcfg "narratives/internal/infra/config"
+	firebase "firebase.google.com/go/v4"
+	firebaseauth "firebase.google.com/go/v4/auth"
 
 	"cloud.google.com/go/firestore"
+
+	httpin "narratives/internal/adapters/in/http"
+	fs "narratives/internal/adapters/out/firestore"
+	uc "narratives/internal/application/usecase"
+	memdom "narratives/internal/domain/member"
+	appcfg "narratives/internal/infra/config"
 )
 
 // ========================================
-// Container (Firestore edition)
+// Container (Firestore + Firebase edition)
 // ========================================
-// Firestore クライアントを中心に、各 Repository と Usecase を初期化して束ねる。
+// Firestore クライアントと Firebase Auth クライアントを中心に、
+// 各 Repository と Usecase を初期化して束ねる。
 type Container struct {
 	// Infra
-	Config    *appcfg.Config
-	Firestore *firestore.Client
+	Config       *appcfg.Config
+	Firestore    *firestore.Client
+	FirebaseApp  *firebase.App
+	FirebaseAuth *firebaseauth.Client
+
+	// Repositories（AuthMiddleware 用に memberRepo だけ保持）
+	MemberRepo memdom.Repository
 
 	// Application-layer usecases
 	AccountUC          *uc.AccountUsecase
@@ -60,20 +68,38 @@ type Container struct {
 // ========================================
 // NewContainer
 // ========================================
-// Firestore クライアントを初期化し、各 Usecase を構築して返す。
+// Firestore / Firebase クライアントを初期化し、各 Usecase を構築して返す。
 func NewContainer(ctx context.Context) (*Container, error) {
 	// 1. Load config
 	cfg := appcfg.Load()
 
-	// 2. Initialize Firestore client
+	// 2. Initialize Firestore client (Application Default Credentials 前提)
 	fsClient, err := firestore.NewClient(ctx, cfg.FirestoreProjectID)
 	if err != nil {
 		return nil, err
 	}
-
 	log.Println("[container] Firestore connected to project:", cfg.FirestoreProjectID)
 
-	// 3. Outbound adapters (repositories) — Firestore 版
+	// 3. Initialize Firebase App & Auth（AuthMiddleware 用）
+	var fbApp *firebase.App
+	var fbAuth *firebaseauth.Client
+
+	fbApp, err = firebase.NewApp(ctx, &firebase.Config{
+		ProjectID: cfg.FirestoreProjectID,
+	})
+	if err != nil {
+		log.Printf("[container] WARN: firebase app init failed: %v", err)
+	} else {
+		authClient, err := fbApp.Auth(ctx)
+		if err != nil {
+			log.Printf("[container] WARN: firebase auth init failed: %v", err)
+		} else {
+			fbAuth = authClient
+			log.Printf("[container] Firebase Auth initialized")
+		}
+	}
+
+	// 4. Outbound adapters (repositories) — Firestore 版
 	accountRepo := fs.NewAccountRepositoryFS(fsClient)
 	announcementRepo := fs.NewAnnouncementRepositoryFS(fsClient)
 	avatarRepo := fs.NewAvatarRepositoryFS(fsClient)
@@ -104,9 +130,7 @@ func NewContainer(ctx context.Context) (*Container, error) {
 	userRepo := fs.NewUserRepositoryFS(fsClient)
 	walletRepo := fs.NewWalletRepositoryFS(fsClient)
 
-	// ─────────────────────────────
-	// 4. Application-layer usecases
-	// ─────────────────────────────
+	// 5. Application-layer usecases
 	accountUC := uc.NewAccountUsecase(accountRepo)
 
 	announcementUC := uc.NewAnnouncementUsecase(
@@ -150,12 +174,14 @@ func NewContainer(ctx context.Context) (*Container, error) {
 	userUC := uc.NewUserUsecase(userRepo)
 	walletUC := uc.NewWalletUsecase(walletRepo)
 
-	// ─────────────────────────────
-	// 5. Assemble container
-	// ─────────────────────────────
+	// 6. Assemble container
 	return &Container{
-		Config:             cfg,
-		Firestore:          fsClient,
+		Config:       cfg,
+		Firestore:    fsClient,
+		FirebaseApp:  fbApp,
+		FirebaseAuth: fbAuth,
+		MemberRepo:   memberRepo,
+
 		AccountUC:          accountUC,
 		AnnouncementUC:     announcementUC,
 		AvatarUC:           avatarUC,
@@ -224,6 +250,10 @@ func (c *Container) RouterDeps() httpin.RouterDeps {
 		TrackingUC:         c.TrackingUC,
 		UserUC:             c.UserUC,
 		WalletUC:           c.WalletUC,
+
+		// AuthMiddleware 用
+		FirebaseAuth: c.FirebaseAuth,
+		MemberRepo:   c.MemberRepo,
 	}
 }
 

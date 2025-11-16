@@ -3,6 +3,7 @@ package middleware
 
 import (
 	"context"
+	"log"
 	"net/http"
 	"strings"
 
@@ -68,19 +69,17 @@ func (m *AuthMiddleware) Handler(next http.Handler) http.Handler {
 		// uid → Member 解決（現在は「id = FirebaseUID」前提のラッパ）
 		member, err := m.MemberRepo.GetByFirebaseUID(r.Context(), uid)
 		if err != nil {
+			// ★ 追加ログ
+			log.Printf("[auth] uid=%s member lookup error: %v", uid, err)
 			http.Error(w, "member not found", http.StatusForbidden)
 			return
 		}
 
+		// ★ 追加ログ（正常ケース）
+		log.Printf("[auth] uid=%s member.ID=%s companyId=%q", uid, member.ID, member.CompanyID)
+
 		// ★ currentMember と companyId を context に詰める
 		ctx := context.WithValue(r.Context(), ctxKeyMember, member)
-
-		cid := strings.TrimSpace(member.CompanyID)
-		if cid != "" {
-			// MemberUsecase.companyIDFromContext が読むキー
-			ctx = context.WithValue(ctx, "companyId", cid)
-			ctx = context.WithValue(ctx, "auth.companyId", cid) // 互換キー
-		}
 
 		next.ServeHTTP(w, r.WithContext(ctx))
 	})
