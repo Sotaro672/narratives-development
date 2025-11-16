@@ -2,9 +2,9 @@
 import * as React from "react";
 import { BrowserRouter } from "react-router-dom";
 import MainPage from "../pages/MainPage";
-import AuthPage from "../auth/pages/AuthPage";
+import AuthPage from "../auth/presentation/pages/AuthPage";
 import { AuthProvider } from "../auth/application/AuthContext";
-import { useAuth } from "../auth/hook/useAuth";
+import { useAuth } from "../auth/hook/useAuthPage";
 
 function RootContent() {
   const { user, loading } = useAuth();

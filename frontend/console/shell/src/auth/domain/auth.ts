@@ -3,7 +3,7 @@
 /**
  * 認証済みユーザー情報（Firebase Auth + Firestore/users/{uid} などの統合ビュー）
  */
-export interface AuthUser {
+export interface Auth {
   /** Firebase Auth の UID */
   uid: string;
 

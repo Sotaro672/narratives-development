@@ -4,16 +4,16 @@ import type { User } from "firebase/auth";
 import { onAuthStateChanged } from "firebase/auth";
 import { auth, db } from "../config/firebaseClient";
 import { doc, getDoc } from "firebase/firestore";
-import type { AuthUser } from "../domain/auth";
+import type { Auth } from "../domain/auth";
 
 type AuthContextValue = {
-  user: AuthUser | null;
+  user: Auth | null;
   loading: boolean;
 };
 
 const AuthContext = React.createContext<AuthContextValue | undefined>(undefined);
 
-function mapFirebaseUserBase(user: User | null): Omit<AuthUser, "companyId" | "permissions" | "assignedBrands"> | null {
+function mapFirebaseUserBase(user: User | null): Omit<Auth, "companyId" | "permissions" | "assignedBrands"> | null {
   if (!user) return null;
   return {
     uid: user.uid,
@@ -52,7 +52,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         const permissions: string[] = Array.isArray(data?.permissions) ? data.permissions : [];
         const assignedBrands: string[] = Array.isArray(data?.assignedBrands) ? data.assignedBrands : [];
 
-        const authUser: AuthUser = {
+        const authUser: Auth = {
           ...base,
           companyId,
           permissions,
@@ -64,7 +64,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         console.error("[AuthContext] failed to load user profile:", e);
         const base = mapFirebaseUserBase(firebaseUser)!;
         // 取得に失敗してもログインは継続。空配列でフォールバック
-        const fallback: AuthUser = {
+        const fallback: Auth = {
           ...base,
           companyId: null,
           permissions: [],

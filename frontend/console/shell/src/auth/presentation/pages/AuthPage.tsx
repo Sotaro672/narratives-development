@@ -1,8 +1,8 @@
 // frontend/console/shell/src/auth/pages/AuthPage.tsx
 import * as React from "react";
-import { Button } from "../../shared/ui/button";
+import { Button } from "../../../shared/ui/button";
 import "../styles/AuthPage.css";
-import { useAuthActions } from "../application/useAuthActions";
+import { useAuthActions } from "../../application/useAuthActions";
 
 export default function AuthPage() {
   const { signUp, signIn, submitting, error, setError } = useAuthActions();
