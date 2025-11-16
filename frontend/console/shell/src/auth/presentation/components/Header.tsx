@@ -2,7 +2,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Bell, MessageSquare, UserRound, ChevronDown } from "lucide-react";
-import "./Header.css";
+import "../styles/auth.css";
 import AdminPanel from "./AdminPanel";
 import { useAuthActions } from "../../application/useAuthActions";
 import { useAuth } from "../hook/useAuthPage";

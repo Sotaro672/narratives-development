@@ -1,7 +1,7 @@
 // frontend/console/shell/src/layout/Header/AdminPanel.tsx
 import * as React from "react";
 import { LogOut } from "lucide-react";
-import "./AdminPanel.css";
+import "../styles/auth.css";
 import { Input } from "../../../shared/ui/input";
 
 interface AdminPanelProps {

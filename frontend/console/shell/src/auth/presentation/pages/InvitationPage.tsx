@@ -1,7 +1,7 @@
 // frontend/shell/src/pages/InvitationPage.tsx
 import * as React from "react";
-import PageStyle from "../layout/PageStyle/PageStyle";
-import { Input } from "../../../shell/src/shared/ui/input";
+import PageStyle from "../../../layout/PageStyle/PageStyle";
+import { Input } from "../../../shared/ui/input";
 
 /**
  * 招待ページ（氏名・かなの入力を担当）
