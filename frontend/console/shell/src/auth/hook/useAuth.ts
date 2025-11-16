@@ -1,4 +1,4 @@
-// frontend\console\shell\src\auth\hook\useAuth.ts
+// frontend/console/shell/src/auth/hook/useAuth.ts
 /// <reference types="vite/client" />
 
 import { useEffect, useMemo, useState } from "react";
@@ -142,8 +142,7 @@ async function fetchCurrentMember(uid: string): Promise<MemberDTO | null> {
   const firstName = noFirst ? null : (raw.firstName as string);
   const lastName = noLast ? null : (raw.lastName as string);
 
-  const full =
-    `${lastName ?? ""} ${firstName ?? ""}`.trim() || null;
+  const full = `${lastName ?? ""} ${firstName ?? ""}`.trim() || null;
 
   return {
     id: raw.id ?? uid,
@@ -162,7 +161,7 @@ export function useAuth() {
   const ctx = useAuthContext();
 
   const uid = ctx.user?.uid ?? "";
-  const companyId = ctx.user?.companyId?.trim() ?? "";
+  const companyIdFromCtx = ctx.user?.companyId?.trim() ?? "";
 
   const [companyName, setCompanyName] = useState<string | null>(null);
   const [loadingCompanyName, setLoadingCompanyName] = useState(false);
@@ -174,12 +173,17 @@ export function useAuth() {
 
   // -------------------------------
   // Fetch companyName
+  //   - currentMember.companyId を最優先
+  //   - 無ければ Firebase Auth の companyId を使用
   // -------------------------------
   useEffect(() => {
     let disposed = false;
 
     async function run() {
-      if (!companyId) {
+      const effectiveCompanyId =
+        (currentMember?.companyId ?? "").trim() || companyIdFromCtx;
+
+      if (!effectiveCompanyId) {
         setCompanyName(null);
         setCompanyError(null);
         setLoadingCompanyName(false);
@@ -190,7 +194,7 @@ export function useAuth() {
       setCompanyError(null);
 
       try {
-        const name = await getCompanyNameByIdCached(companyId);
+        const name = await getCompanyNameByIdCached(effectiveCompanyId);
         if (!disposed) setCompanyName(name);
       } catch (e: any) {
         if (!disposed) {
@@ -206,11 +210,12 @@ export function useAuth() {
     return () => {
       disposed = true;
     };
-  }, [companyId]);
+    // currentMember.companyId or auth の companyId が変わったら再取得
+  }, [companyIdFromCtx, currentMember?.companyId]);
 
   // -------------------------------
   // Fetch currentMember (via backend)
-// -------------------------------
+  // -------------------------------
   useEffect(() => {
     let disposed = false;
 

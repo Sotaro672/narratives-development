@@ -1,4 +1,4 @@
-//frontend\console\shell\src\auth\application\useAuthActions.ts
+// frontend\console\shell\src\auth\application\useAuthActions.ts
 import { useState } from "react";
 import {
   createUserWithEmailAndPassword,
@@ -18,6 +18,9 @@ import {
   getDoc,
 } from "firebase/firestore";
 import { db } from "../config/firebaseClient";
+
+// ★ 追加: すべてのPermission定義（新規ユーザーにフル権限付与）
+import { ALL_PERMISSIONS } from "../../../../permission/src/infrastructure/mockdata/mockdata";
 
 function messageForAuthError(code?: string): string {
   switch (code) {
@@ -50,6 +53,9 @@ export function useAuthActions() {
 
   /** 初期の members/{uid} 作成（companyId: null でOK。あとでバッチで上書き） */
   async function initMember(uid: string, email: string, profile?: SignUpProfile) {
+    // ★ 新規ユーザーには全権限を付与
+    const initialPermissions = ALL_PERMISSIONS.map((p) => p.name);
+
     await setDoc(
       doc(db, "members", uid),
       {
@@ -59,13 +65,13 @@ export function useAuthActions() {
         firstNameKana: (profile?.firstNameKana ?? "").trim(),
         lastNameKana: (profile?.lastNameKana ?? "").trim(),
         email: email.trim(),
-        permissions: [],
+        permissions: initialPermissions, // ← ここを [] から変更
         assignedBrands: [],
         companyId: null,
         createdAt: serverTimestamp(),
         updatedAt: serverTimestamp(),
       },
-      { merge: true }
+      { merge: true },
     );
   }
 
@@ -103,7 +109,7 @@ export function useAuthActions() {
         companyId: companyId,
         updatedAt: serverTimestamp(),
       },
-      { merge: true }
+      { merge: true },
     );
 
     await batch.commit();
@@ -113,7 +119,11 @@ export function useAuthActions() {
       const snap = await getDoc(memberRef);
       const data = snap.data() as { companyId?: string | null } | undefined;
       if (!data || data.companyId !== companyId) {
-        await setDoc(memberRef, { companyId, updatedAt: serverTimestamp() }, { merge: true });
+        await setDoc(
+          memberRef,
+          { companyId, updatedAt: serverTimestamp() },
+          { merge: true },
+        );
       }
     } catch {
       await setDoc(memberRef, { companyId, updatedAt: serverTimestamp() }, { merge: true });

@@ -59,3 +59,79 @@
   width: 16px;
   height: 16px;
 }
+
+/* ========================= */
+/* ダイアログ共通スタイル     */
+/* ========================= */
+
+.admin-modal-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(15, 23, 42, 0.45);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1100; /* ドロップダウンより前面 */
+}
+
+.admin-modal {
+  width: 420px;
+  max-width: 90vw;
+  background: #ffffff;
+  border-radius: 16px;
+  box-shadow: 0 24px 60px rgba(15, 23, 42, 0.22);
+  padding: 20px 24px 18px;
+}
+
+.admin-modal-title {
+  font-size: 16px;
+  font-weight: 600;
+  margin-bottom: 16px;
+  color: #111319;
+}
+
+/* フォーム要素（簡易） */
+.admin-modal-field {
+  margin-bottom: 12px;
+}
+
+.admin-modal-label {
+  display: block;
+  font-size: 13px;
+  color: #4b5563;
+  margin-bottom: 4px;
+}
+
+.admin-modal-input {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 8px 10px;
+  border-radius: 8px;
+  border: 1px solid #d1d5db;
+  font-size: 14px;
+}
+
+.admin-modal-footer {
+  margin-top: 16px;
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.admin-modal-button {
+  border: none;
+  border-radius: 999px;
+  padding: 8px 14px;
+  font-size: 14px;
+  cursor: pointer;
+}
+
+.admin-modal-button.cancel {
+  background: #f3f4f6;
+  color: #374151;
+}
+
+.admin-modal-button.primary {
+  background: #111827;
+  color: #ffffff;
+}

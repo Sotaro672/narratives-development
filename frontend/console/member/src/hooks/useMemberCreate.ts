@@ -25,12 +25,20 @@ import {
 } from "../../../brand/src/infrastructure/mockdata/mockdata";
 import type { BrandRow } from "../../../brand/src/infrastructure/mockdata/mockdata";
 
-// バックエンドのベースURL（末尾スラッシュ除去）
-const API_BASE =
+// ─────────────────────────────────────────────
+// Backend base URL（useMemberDetail と同じ構成）
+// ─────────────────────────────────────────────
+const ENV_BASE =
   ((import.meta as any).env?.VITE_BACKEND_BASE_URL as string | undefined)?.replace(
-    /\/+$/,
-    ""
+    /\/+$/g,
+    "",
   ) ?? "";
+
+const FALLBACK_BASE =
+  "https://narratives-backend-871263659099.asia-northeast1.run.app";
+
+// 最終的に使うベース URL
+const API_BASE = ENV_BASE || FALLBACK_BASE;
 
 export type UseMemberCreateOptions = {
   /** 作成成功時に呼ばれます（呼び出し元で navigate などを実施） */
@@ -41,6 +49,7 @@ export function useMemberCreate(options?: UseMemberCreateOptions) {
   // 認証中ユーザ（companyId をフロントでも把握しておく）
   const { user } = useAuthContext();
   const authCompanyId = user?.companyId ?? null;
+  const currentMemberId = user?.uid ?? null;
 
   // ---- フォーム状態 ----
   const [firstName, setFirstName] = useState("");
@@ -62,7 +71,7 @@ export function useMemberCreate(options?: UseMemberCreateOptions) {
   const allPermissions: Permission[] = ALL_PERMISSIONS;
   const permissionsByCategory = useMemo(
     () => groupPermissionsByCategory(ALL_PERMISSIONS),
-    []
+    [],
   );
 
   // UIで扱いやすい配列形式（カテゴリ名・件数・配列）
@@ -73,13 +82,13 @@ export function useMemberCreate(options?: UseMemberCreateOptions) {
         count: permissionsByCategory[cat]?.length ?? 0,
         permissions: permissionsByCategory[cat] ?? [],
       })),
-    [permissionsByCategory]
+    [permissionsByCategory],
   );
 
   // 選択肢としてのカテゴリ一覧
   const permissionCategoryList = useMemo(
     () => Object.keys(permissionsByCategory) as PermissionCategory[],
-    [permissionsByCategory]
+    [permissionsByCategory],
   );
 
   // ===== ブランド（UI 連携用に公開しておく） =====
@@ -126,7 +135,10 @@ export function useMemberCreate(options?: UseMemberCreateOptions) {
           throw new Error("未認証のためメンバーを作成できません。");
         }
 
-        const res = await fetch(`${API_BASE}/members`, {
+        const url = `${API_BASE}/members`;
+        console.log("[useMemberCreate] POST", url, body);
+
+        const res = await fetch(url, {
           method: "POST",
           headers: {
             Authorization: `Bearer ${token}`,
@@ -137,7 +149,20 @@ export function useMemberCreate(options?: UseMemberCreateOptions) {
 
         if (!res.ok) {
           const text = await res.text().catch(() => "");
-          throw new Error(`メンバー作成に失敗しました (status ${res.status}) ${text || ""}`);
+          throw new Error(
+            `メンバー作成に失敗しました (status ${res.status}) ${text || ""}`,
+          );
+        }
+
+        // HTML が返ってきていないかチェック（env ミス検出用）
+        const ct = res.headers.get("Content-Type") ?? "";
+        if (!ct.includes("application/json")) {
+          const text = await res.text().catch(() => "");
+          throw new Error(
+            `サーバーから JSON ではないレスポンスが返却されました (content-type=${ct}). ` +
+              `VITE_BACKEND_BASE_URL または API_BASE=${API_BASE} を確認してください。\n` +
+              text.slice(0, 200),
+          );
         }
 
         // バックエンド（usecase/repo）から返る Member をフロントの Member 型に整形
@@ -150,18 +175,25 @@ export function useMemberCreate(options?: UseMemberCreateOptions) {
           firstNameKana: apiMember.firstNameKana ?? null,
           lastNameKana: apiMember.lastNameKana ?? null,
           email: apiMember.email ?? null,
-          permissions: Array.isArray(apiMember.permissions) ? apiMember.permissions : [],
+          permissions: Array.isArray(apiMember.permissions)
+            ? apiMember.permissions
+            : [],
           assignedBrands: Array.isArray(apiMember.assignedBrands)
             ? apiMember.assignedBrands
             : null,
-          // ISO8601 を期待
+          // 会社ID（サーバ優先 / なければログインユーザーの companyId）
+          ...(apiMember.companyId
+            ? { companyId: apiMember.companyId }
+            : authCompanyId
+              ? { companyId: authCompanyId }
+              : {}),
+          // 監査情報
           createdAt: apiMember.createdAt ?? now,
+          createdBy: apiMember.createdBy ?? currentMemberId ?? null,
           updatedAt: apiMember.updatedAt ?? now,
-          updatedBy: apiMember.updatedBy ?? null,
+          updatedBy: apiMember.updatedBy ?? currentMemberId ?? null,
           deletedAt: apiMember.deletedAt ?? null,
           deletedBy: apiMember.deletedBy ?? null,
-          // companyId を返してくれる場合は受け取り、無ければ auth の値を反映
-          ...(apiMember.companyId ? { companyId: apiMember.companyId } : authCompanyId ? { companyId: authCompanyId } : {}),
         } as Member;
 
         options?.onSuccess?.(created);
@@ -180,8 +212,9 @@ export function useMemberCreate(options?: UseMemberCreateOptions) {
       permissionsText,
       brandsText,
       authCompanyId,
+      currentMemberId,
       options,
-    ]
+    ],
   );
 
   // ─────────────────────────────────────────────────────────────
