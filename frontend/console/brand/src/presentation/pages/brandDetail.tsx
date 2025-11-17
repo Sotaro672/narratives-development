@@ -1,8 +1,7 @@
-// frontend/brand/src/pages/brandDetail.tsx
-import * as React from "react";
-import { useNavigate, useParams } from "react-router-dom";
+//frontend\console\brand\src\presentation\pages\brandDetail.tsx
 import PageStyle from "../../../../shell/src/layout/PageStyle/PageStyle";
 import AdminCard from "../../../../admin/src/presentation/components/AdminCard";
+
 import {
   Card,
   CardHeader,
@@ -12,47 +11,19 @@ import {
   CardLabel,
 } from "../../../../shell/src/shared/ui/card";
 
+import { useBrandDetail } from "../hook/useBrandDetail";
+
 export default function BrandDetail() {
-  const navigate = useNavigate();
-  const { brandId } = useParams<{ brandId: string }>();
+  const {
+    brand,
+    assignee,
+    creator,
+    createdAt,
+    setAssignee,
+    handleBack,
+    statusBadgeClass,
+  } = useBrandDetail();
 
-  // ─────────────────────────────────────────────
-  // モックデータ（API接続前）
-  // ─────────────────────────────────────────────
-  const [brand] = React.useState({
-    id: brandId ?? "brand_001",
-    name: "LUMINA Fashion",
-    code: "LUMINA01",
-    category: "ファッション",
-    description:
-      "上質な素材とサステナブルな生産体制を重視した女性向けファッションブランド。",
-    owner: "佐藤 美咲",
-    status: "アクティブ",
-    registeredAt: "2024/05/10",
-    updatedAt: "2025/11/01",
-  });
-
-  // ─────────────────────────────────────────────
-  // AdminCard用モックデータ
-  // ─────────────────────────────────────────────
-  const [assignee, setAssignee] = React.useState("高橋 健太");
-  const [creator] = React.useState("山田 太郎");
-  const [createdAt] = React.useState("2024/05/10");
-
-  // 戻るボタン処理
-  const handleBack = React.useCallback(() => {
-    navigate(-1);
-  }, [navigate]);
-
-  // ステータスの色分け
-  const statusBadgeClass =
-    brand.status === "アクティブ"
-      ? "inline-flex items-center px-2 py-1 rounded-full bg-emerald-50 text-emerald-700 text-xs font-semibold"
-      : "inline-flex items-center px-2 py-1 rounded-full bg-slate-50 text-slate-500 text-xs font-semibold";
-
-  // ─────────────────────────────────────────────
-  // JSX
-  // ─────────────────────────────────────────────
   return (
     <PageStyle
       layout="grid-2"
@@ -91,7 +62,9 @@ export default function BrandDetail() {
             <CardReadonly>{brand.owner}</CardReadonly>
 
             <CardLabel>ステータス</CardLabel>
-            <div>{<span className={statusBadgeClass}>{brand.status}</span>}</div>
+            <div>
+              <span className={statusBadgeClass}>{brand.status}</span>
+            </div>
 
             <CardLabel>登録日</CardLabel>
             <CardReadonly>{brand.registeredAt}</CardReadonly>
