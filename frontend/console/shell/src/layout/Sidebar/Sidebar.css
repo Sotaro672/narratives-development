@@ -21,14 +21,15 @@
 
 /* ─ Base / Layout ─ */
 .sidebar {
-  width: 240px;
-  background: var(--sb-bg);
-  color: var(--sb-fg);
+  width: 180px;
+  background: #ffffff;
+  color: #111111;
   border-right: 1px solid var(--sb-border);
   padding-top: 0 !important;
   display: flex;
   flex-direction: column;
-  height: calc(100dvh - 56px);
+  /* ★ 上下に余白を多めにとってスクロールバーを出さない */
+  height: calc(100dvh - 140px);
   min-height: 0;
   box-sizing: border-box;
 }
@@ -66,7 +67,7 @@
   border: 0;
   background: transparent;
   cursor: pointer;
-  padding: 12px 14px;
+  padding: 8px 14px;
   border-radius: var(--radius-lg, 10px);
   text-align: left;
   font-size: 14px;
@@ -204,25 +205,6 @@
 .sidebar .chevron {
   color: #111111 !important;
   stroke: #111111 !important;
-}
-
-/* Sidebar as full-height column */
-.sidebar {
-  display: flex;
-  flex-direction: column;
-  height: calc(100vh - 100px);
-  width: 180px;
-  background: #ffffff;
-  color: #111111;
-}
-
-/* Fix the bottom block as a sticky footer */
-.sidebar > .p-6.border-t.border-border {
-  position: sticky;
-  bottom: 0;
-  background: #ffffff;
-  z-index: 2;
-  border: 1px solid #000000 !important;
 }
 
 /* Optional: ensure border color is visible if using custom tokens */

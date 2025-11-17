@@ -42,7 +42,12 @@ export default function Sidebar({ isOpen }: SidebarProps) {
 
   const menuItems: MenuItem[] = useMemo(
     () => [
-      { label: "問い合わせ", path: "/inquiry", icon: MessageSquare, badgeCount: openInquiriesCount > 0 ? openInquiriesCount : null },
+      {
+        label: "問い合わせ",
+        path: "/inquiry",
+        icon: MessageSquare,
+        badgeCount: openInquiriesCount > 0 ? openInquiriesCount : null,
+      },
       { label: "商品", path: "/product", icon: Box, hasSubmenu: true },
       { label: "トークン", path: "/token", icon: Coins, hasSubmenu: true },
       { label: "出品", path: "/list", icon: Store },
@@ -51,7 +56,7 @@ export default function Sidebar({ isOpen }: SidebarProps) {
       { label: "組織", path: "/company", icon: Building2, hasSubmenu: true },
       { label: "財務", path: "/finance", icon: Wallet, hasSubmenu: true },
     ],
-    [openInquiriesCount]
+    [openInquiriesCount],
   );
 
   const productSubItems: SubItem[] = useMemo(
@@ -60,7 +65,7 @@ export default function Sidebar({ isOpen }: SidebarProps) {
       { label: "生産", path: "/production" },
       { label: "在庫", path: "/inventory" },
     ],
-    []
+    [],
   );
 
   const tokenSubItems: SubItem[] = useMemo(
@@ -69,7 +74,7 @@ export default function Sidebar({ isOpen }: SidebarProps) {
       { label: "ミント", path: "/mintRequest" },
       { label: "運用", path: "/operation" },
     ],
-    []
+    [],
   );
 
   const orgSubItems: SubItem[] = useMemo(
@@ -78,7 +83,7 @@ export default function Sidebar({ isOpen }: SidebarProps) {
       { label: "ブランド", path: "/brand" },
       { label: "権限", path: "/permission" },
     ],
-    []
+    [],
   );
 
   const financeSubItems: SubItem[] = useMemo(
@@ -86,7 +91,7 @@ export default function Sidebar({ isOpen }: SidebarProps) {
       { label: "入出金履歴", path: "/transaction" },
       { label: "口座", path: "/account" },
     ],
-    []
+    [],
   );
 
   // ✅ 排他開閉用のキーを1つだけ保持
@@ -148,27 +153,36 @@ export default function Sidebar({ isOpen }: SidebarProps) {
   if (!isOpen) return null;
 
   return (
-    <aside className="sidebar">
+    <aside
+      className="sidebar"
+      style={{ height: "calc(100vh - 103px)" }} // ← 親要素の高さを 3px 低く
+    >
       <nav className="sidebar-nav">
         {menuItems.map(({ label, path, icon: Icon, hasSubmenu, badgeCount }) => {
           const isActiveTop =
-            location.pathname === path || location.pathname.startsWith(path + "/");
+            location.pathname === path ||
+            location.pathname.startsWith(path + "/");
 
           // 各グループのオープン判定
           const isProductsOpen = openKey === "products";
-          const isTokensOpen   = openKey === "tokens";
-          const isOrgOpen      = openKey === "org";
-          const isFinanceOpen  = openKey === "finance";
+          const isTokensOpen = openKey === "tokens";
+          const isOrgOpen = openKey === "org";
+          const isFinanceOpen = openKey === "finance";
 
           // 商品
           if (label === "商品") {
             const isOpen = isProductsOpen;
             return (
-              <div key={path} className={`group-block ${isOpen ? "group-open" : ""}`}>
+              <div
+                key={path}
+                className={`group-block ${isOpen ? "group-open" : ""}`}
+              >
                 <button
                   type="button"
                   onClick={() => toggleExclusive("products")}
-                  className={`sidebar-item parent ${isActiveTop ? "active" : ""}`}
+                  className={`sidebar-item parent ${
+                    isActiveTop ? "active" : ""
+                  }`}
                   aria-expanded={isOpen}
                   aria-controls="submenu-products"
                 >
@@ -192,7 +206,9 @@ export default function Sidebar({ isOpen }: SidebarProps) {
                         <button
                           key={si.path}
                           onClick={() => navigate(si.path)}
-                          className={`submenu-item ${activeSub ? "active" : ""}`}
+                          className={`submenu-item ${
+                            activeSub ? "active" : ""
+                          }`}
                         >
                           <span className="submenu-label">{si.label}</span>
                         </button>
@@ -208,11 +224,16 @@ export default function Sidebar({ isOpen }: SidebarProps) {
           if (label === "トークン") {
             const isOpen = isTokensOpen;
             return (
-              <div key={path} className={`group-block ${isOpen ? "group-open" : ""}`}>
+              <div
+                key={path}
+                className={`group-block ${isOpen ? "group-open" : ""}`}
+              >
                 <button
                   type="button"
                   onClick={() => toggleExclusive("tokens")}
-                  className={`sidebar-item parent ${isActiveTop ? "active" : ""}`}
+                  className={`sidebar-item parent ${
+                    isActiveTop ? "active" : ""
+                  }`}
                   aria-expanded={isOpen}
                   aria-controls="submenu-tokens"
                 >
@@ -235,7 +256,9 @@ export default function Sidebar({ isOpen }: SidebarProps) {
                         <button
                           key={si.path}
                           onClick={() => navigate(si.path)}
-                          className={`submenu-item ${activeSub ? "active" : ""}`}
+                          className={`submenu-item ${
+                            activeSub ? "active" : ""
+                          }`}
                         >
                           <span className="submenu-label">{si.label}</span>
                         </button>
@@ -251,11 +274,16 @@ export default function Sidebar({ isOpen }: SidebarProps) {
           if (label === "組織") {
             const isOpen = isOrgOpen;
             return (
-              <div key={path} className={`group-block ${isOpen ? "group-open" : ""}`}>
+              <div
+                key={path}
+                className={`group-block ${isOpen ? "group-open" : ""}`}
+              >
                 <button
                   type="button"
                   onClick={() => toggleExclusive("org")}
-                  className={`sidebar-item parent ${isActiveTop ? "active" : ""}`}
+                  className={`sidebar-item parent ${
+                    isActiveTop ? "active" : ""
+                  }`}
                   aria-expanded={isOpen}
                   aria-controls="submenu-org"
                 >
@@ -278,7 +306,9 @@ export default function Sidebar({ isOpen }: SidebarProps) {
                         <button
                           key={si.path}
                           onClick={() => navigate(si.path)}
-                          className={`submenu-item ${activeSub ? "active" : ""}`}
+                          className={`submenu-item ${
+                            activeSub ? "active" : ""
+                          }`}
                         >
                           <span className="submenu-label">{si.label}</span>
                         </button>
@@ -294,11 +324,16 @@ export default function Sidebar({ isOpen }: SidebarProps) {
           if (label === "財務") {
             const isOpen = isFinanceOpen;
             return (
-              <div key={path} className={`group-block ${isOpen ? "group-open" : ""}`}>
+              <div
+                key={path}
+                className={`group-block ${isOpen ? "group-open" : ""}`}
+              >
                 <button
                   type="button"
                   onClick={() => toggleExclusive("finance")}
-                  className={`sidebar-item parent ${isActiveTop ? "active" : ""}`}
+                  className={`sidebar-item parent ${
+                    isActiveTop ? "active" : ""
+                  }`}
                   aria-expanded={isOpen}
                   aria-controls="submenu-finance"
                 >
@@ -321,7 +356,9 @@ export default function Sidebar({ isOpen }: SidebarProps) {
                         <button
                           key={si.path}
                           onClick={() => navigate(si.path)}
-                          className={`submenu-item ${activeSub ? "active" : ""}`}
+                          className={`submenu-item ${
+                            activeSub ? "active" : ""
+                          }`}
                         >
                           <span className="submenu-label">{si.label}</span>
                         </button>

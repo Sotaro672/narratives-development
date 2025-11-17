@@ -4,6 +4,7 @@ package di
 import (
 	"context"
 	"log"
+	"os"
 
 	firebase "firebase.google.com/go/v4"
 	firebaseauth "firebase.google.com/go/v4/auth"
@@ -200,12 +201,34 @@ func NewContainer(ctx context.Context) (*Container, error) {
 	userUC := uc.NewUserUsecase(userRepo)
 	walletUC := uc.NewWalletUsecase(walletRepo)
 
-	// ★ Invitation 用メールクライアント & メーラー（とりあえずログ出力実装）
-	logMailClient := &loggingEmailClient{}
+	// ★ Invitation 用メールクライアント & メーラー
+	//   SENDGRID_API_KEY / INVITATION_FROM_EMAIL / CONSOLE_BASE_URL が
+	//   そろっている場合は SendGrid を使い、足りない場合はログ出力のみ。
+	sendGridAPIKey := os.Getenv("SENDGRID_API_KEY")
+	fromAddress := os.Getenv("INVITATION_FROM_EMAIL")
+	consoleBaseURL := os.Getenv("CONSOLE_BASE_URL")
+
+	var emailClient mailadp.EmailClient
+
+	if sendGridAPIKey == "" || fromAddress == "" || consoleBaseURL == "" {
+		log.Printf("[container] WARN: SendGrid env not fully set; using loggingEmailClient only")
+		emailClient = &loggingEmailClient{}
+		// 開発用デフォルト値（万一 env が空でも動くように）
+		if fromAddress == "" {
+			fromAddress = "no-reply@example.com"
+		}
+		if consoleBaseURL == "" {
+			consoleBaseURL = "https://narratives-console-dev.web.app"
+		}
+	} else {
+		log.Printf("[container] SendGrid client enabled for invitations (from=%s)", fromAddress)
+		emailClient = mailadp.NewSendGridClient(sendGridAPIKey)
+	}
+
 	invitationMailer := mailadp.NewInvitationMailer(
-		logMailClient,
-		"no-reply@example.com",                   // 開発用 From
-		"https://narratives-console-dev.web.app", // 開発用 Console URL
+		emailClient,
+		fromAddress,
+		consoleBaseURL,
 	)
 
 	// ★ Invitation 用 Usecase（Query / Command）
