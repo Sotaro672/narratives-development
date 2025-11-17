@@ -1,4 +1,4 @@
-// backend\internal\adapters\out\firestore\invitation_repository_fs.go
+// backend/internal/adapters/out/firestore/invitation_repository_fs.go
 package firestore
 
 import (
@@ -23,14 +23,14 @@ import (
 // - コレクション: "invitationTokens"
 // - ドキュメントID: token (INV_xxx など)
 // - フィールド:
-//   - token        : string （任意。docID と重複してもよい）
-//   - memberId     : string
-//   - companyId    : string (任意)
+//   - token          : string （任意。docID と重複してもよい）
+//   - memberId       : string
+//   - companyId      : string (任意)
 //   - assignedBrands : []string (任意)
-//   - permissions  : []string (任意)
-//   - expiresAt    : timestamp/string (任意)
-//   - usedAt       : timestamp/string (任意)
-//   - createdAt    : timestamp/string
+//   - permissions    : []string (任意)
+//   - expiresAt      : timestamp/string (任意)
+//   - usedAt         : timestamp/string (任意)
+//   - createdAt      : timestamp/string
 type InvitationTokenRepositoryFS struct {
 	Client *firestore.Client
 }
@@ -45,6 +45,10 @@ func (r *InvitationTokenRepositoryFS) col() *firestore.CollectionRef {
 
 // Compile-time check（domain 側にインターフェースがある前提）
 // var _ itdom.InvitationTokenRepository = (*InvitationTokenRepositoryFS)(nil)
+
+// ============================================================
+// Domain ポート itdom.InvitationTokenRepository の実装
+// ============================================================
 
 // FindByToken retrieves an invitation token document by token string.
 // token は基本的にドキュメントIDとして扱う想定です。
@@ -105,8 +109,7 @@ func (r *InvitationTokenRepositoryFS) Save(
 	if t.CreatedAt.IsZero() {
 		t.CreatedAt = now
 	}
-	// UpdatedAt を InvitationToken に持たせるかは domain 側の定義次第だが、
-	// あればここで更新する運用にできる。
+	// UpdatedAt フィールドを持っていれば更新
 	if t.UpdatedAt != nil {
 		*t.UpdatedAt = now
 	}
@@ -141,6 +144,57 @@ func (r *InvitationTokenRepositoryFS) Delete(ctx context.Context, token string) 
 		return err
 	}
 	return nil
+}
+
+// ============================================================
+// Application ポート usecase.InvitationTokenRepository 用の実装
+// （ResolveMemberIDByToken / CreateInvitationToken）
+// ============================================================
+
+// ResolveMemberIDByToken は token → memberID の解決を行います。
+func (r *InvitationTokenRepositoryFS) ResolveMemberIDByToken(
+	ctx context.Context,
+	token string,
+) (string, error) {
+	it, err := r.FindByToken(ctx, token)
+	if err != nil {
+		return "", err
+	}
+	memberID := strings.TrimSpace(it.MemberID)
+	if memberID == "" {
+		return "", itdom.ErrInvitationTokenNotFound
+	}
+	return memberID, nil
+}
+
+// CreateInvitationToken は memberID に紐づく新しい招待トークンを作成し、
+// その token 文字列を返します。
+func (r *InvitationTokenRepositoryFS) CreateInvitationToken(
+	ctx context.Context,
+	memberID string,
+) (string, error) {
+	if r.Client == nil {
+		return "", errors.New("firestore client is nil")
+	}
+
+	memberID = strings.TrimSpace(memberID)
+	if memberID == "" {
+		return "", fmt.Errorf("memberID is empty")
+	}
+
+	now := time.Now().UTC()
+	t := itdom.InvitationToken{
+		Token:    "", // 空なら Save 側で NewDoc() により採番される
+		MemberID: memberID,
+		// companyId / brands / permissions は必要に応じて後で拡張
+		CreatedAt: now,
+	}
+
+	saved, err := r.Save(ctx, t)
+	if err != nil {
+		return "", err
+	}
+	return strings.TrimSpace(saved.Token), nil
 }
 
 // ========================

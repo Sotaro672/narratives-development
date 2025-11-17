@@ -2,6 +2,7 @@ package httpin
 
 import (
 	"net/http"
+	"strings"
 
 	firebaseauth "firebase.google.com/go/v4/auth"
 
@@ -50,7 +51,12 @@ type RouterDeps struct {
 	UserUC             *usecase.UserUsecase
 	WalletUC           *usecase.WalletUsecase
 
-	// Firebase 認証付きのメンバーハンドラ向け
+	// ★ 招待情報取得用 Usecase（InvitationQueryPort）
+	InvitationQuery usecase.InvitationQueryPort
+	// ★ 招待メール発行用 Usecase（InvitationCommandPort）
+	InvitationCommand usecase.InvitationCommandPort
+
+	// Firebase Auth + MemberRepo (認証)
 	FirebaseAuth *firebaseauth.Client
 	MemberRepo   memdom.Repository
 
@@ -58,18 +64,20 @@ type RouterDeps struct {
 	MessageRepo *msgrepo.MessageRepositoryFS
 }
 
-// NewRouter sets up HTTP routing for all domain endpoints.
+// ============================================================================
+// Router 本体
+// ============================================================================
 func NewRouter(deps RouterDeps) http.Handler {
 	mux := http.NewServeMux()
 
-	// Health check (always on)
+	// Health check
 	mux.HandleFunc("/healthz", func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusOK)
 		_, _ = w.Write([]byte("ok"))
 	})
 
 	// ============================================================
-	// Auth Middleware（Firebase + MemberRepo）セットアップ
+	// Auth Middleware
 	// ============================================================
 	var authMw *middleware.AuthMiddleware
 	if deps.FirebaseAuth != nil && deps.MemberRepo != nil {
@@ -80,22 +88,56 @@ func NewRouter(deps RouterDeps) http.Handler {
 	}
 
 	// ============================================================
-	// ルート定義（Usecase が nil のものはスキップ）
+	// Invitation (未ログインでアクセス可能)
+	// GET /api/invitation?token=xxx
 	// ============================================================
-
-	if deps.AccountUC != nil {
-		mux.Handle("/accounts/", handlers.NewAccountHandler(deps.AccountUC))
+	if deps.InvitationQuery != nil {
+		mux.Handle(
+			"/api/invitation",
+			handlers.NewInvitationHandler(deps.InvitationQuery),
+		)
 	}
 
-	// --- Member (認証必須にしたいので AuthMiddleware でラップ) ---
+	// ============================================================
+	// Members（認証必須）
+	// ============================================================
 	if deps.MemberUC != nil {
-		memberHandler := http.Handler(handlers.NewMemberHandler(deps.MemberUC))
+		// MemberHandler（招待も内包）
+		memberH := handlers.NewMemberHandler(
+			deps.MemberUC,
+			deps.InvitationCommand, // ★ sendInvitation 用
+		)
+
+		var securedMemberHandler http.Handler = memberH
 		if authMw != nil {
-			memberHandler = authMw.Handler(memberHandler)
+			securedMemberHandler = authMw.Handler(securedMemberHandler)
 		}
-		// /members と /members/ の両方を受ける
-		mux.Handle("/members", memberHandler)
-		mux.Handle("/members/", memberHandler)
+
+		// POST /members, GET /members
+		mux.Handle("/members", securedMemberHandler)
+
+		// /members/... (id, invitation 判定)
+		mux.Handle("/members/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			path := r.URL.Path
+
+			// POST /members/{id}/invitation → sendInvitation (MemberHandler 内部)
+			if r.Method == http.MethodPost &&
+				strings.HasPrefix(path, "/members/") &&
+				strings.HasSuffix(path, "/invitation") {
+				securedMemberHandler.ServeHTTP(w, r)
+				return
+			}
+
+			// GET /members/{id}, PATCH /members/{id}
+			securedMemberHandler.ServeHTTP(w, r)
+		}))
+	}
+
+	// ============================================================
+	// 他ドメインは変更なし
+	// ============================================================
+	if deps.AccountUC != nil {
+		mux.Handle("/accounts/", handlers.NewAccountHandler(deps.AccountUC))
 	}
 
 	if deps.AnnouncementUC != nil {
@@ -142,7 +184,6 @@ func NewRouter(deps RouterDeps) http.Handler {
 		mux.Handle("/token-blueprints/", handlers.NewTokenBlueprintHandler(deps.TokenBlueprintUC))
 	}
 
-	// MessageHandler は Usecase と Repository の両方が必要
 	if deps.MessageUC != nil && deps.MessageRepo != nil {
 		mux.Handle(
 			"/messages/",
@@ -157,8 +198,6 @@ func NewRouter(deps RouterDeps) http.Handler {
 	if deps.WalletUC != nil {
 		mux.Handle("/wallets/", handlers.NewWalletHandler(deps.WalletUC))
 	}
-
-	// 必要に応じて他の Handler もここに追加（既存コードを移植）
 
 	return mux
 }

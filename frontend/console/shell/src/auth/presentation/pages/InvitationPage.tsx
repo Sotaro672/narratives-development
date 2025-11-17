@@ -1,48 +1,42 @@
-// frontend/shell/src/pages/InvitationPage.tsx
+// frontend/console/shell/src/auth/presentation/pages/InvitationPage.tsx
 import * as React from "react";
 import PageStyle from "../../../layout/PageStyle/PageStyle";
 import { Input } from "../../../shared/ui/input";
+import { useInvitationPage } from "../hook/useInvitationPage";
 
 /**
- * 招待ページ（氏名・かな + パスワード入力）
- * - メンバー作成時に設定された companyId / assignedBrands / permissions の表示欄を追加
+ * 招待ページ（氏名・かな + パスワード + 割り当て情報）
  */
 export default function InvitationPage() {
-  const formRef = React.useRef<HTMLFormElement>(null);
+  const {
+    formRef,
 
-  const [lastName, setLastName] = React.useState("");
-  const [lastNameKana, setLastNameKana] = React.useState("");
-  const [firstName, setFirstName] = React.useState("");
-  const [firstNameKana, setFirstNameKana] = React.useState("");
+    // 氏名情報
+    lastName,
+    setLastName,
+    lastNameKana,
+    setLastNameKana,
+    firstName,
+    setFirstName,
+    firstNameKana,
+    setFirstNameKana,
 
-  // ★ 追加：パスワード
-  const [password, setPassword] = React.useState("");
-  const [passwordConfirm, setPasswordConfirm] = React.useState("");
+    // パスワード
+    password,
+    setPassword,
+    passwordConfirm,
+    setPasswordConfirm,
 
-  // ★ 追加：表示用の companyId / assignedBrandId / permissions
-  //   - 実際には API や AuthContext から取得して setXXX する想定
-  const [companyId] = React.useState<string>("");
-  const [assignedBrandIds] = React.useState<string>(""); // カンマ区切りなどで表示想定
-  const [permissions] = React.useState<string>(""); // カンマ区切りなどで表示想定
+    // 割り当て情報
+    companyId,
+    assignedBrandIds,
+    permissions,
 
-  const handleBack = () => history.back();
-  const handleCreate = () => formRef.current?.requestSubmit();
-
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    // ここで API 呼び出しなどを行う
-    // console.log({
-    //   lastName,
-    //   lastNameKana,
-    //   firstName,
-    //   firstNameKana,
-    //   password,
-    //   passwordConfirm,
-    //   companyId,
-    //   assignedBrandIds,
-    //   permissions,
-    // });
-  };
+    // Actions
+    handleBack,
+    handleCreate,
+    handleSubmit,
+  } = useInvitationPage();
 
   return (
     <PageStyle title="メンバー招待" onBack={handleBack} onCreate={handleCreate}>
@@ -96,7 +90,7 @@ export default function InvitationPage() {
             </div>
           </div>
 
-          {/* ★ 追加：パスワード */}
+          {/* パスワード */}
           <div className="grid grid-cols-2 gap-3">
             <div>
               <label className="block text-sm text-slate-300 mb-1">パスワード</label>
@@ -125,7 +119,7 @@ export default function InvitationPage() {
             </div>
           </div>
 
-          {/* ★ 追加：割り当て情報（companyId / assignedBrandId / permissions の表示） */}
+          {/* 割り当て情報 */}
           <div className="mt-4 space-y-3">
             <h2 className="text-sm font-semibold text-slate-200">割り当て情報</h2>
 

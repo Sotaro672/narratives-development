@@ -1,4 +1,3 @@
-// backend/internal/adapters/in/http/handlers/member_handler.go
 package handlers
 
 import (
@@ -15,16 +14,25 @@ import (
 // -----------------------------------------------------------------------------
 // MemberHandler
 // -----------------------------------------------------------------------------
-
-// MemberHandler handles /members related endpoints.
 type MemberHandler struct {
-	uc *memberuc.MemberUsecase
+	uc            *memberuc.MemberUsecase
+	invitationCmd memberuc.InvitationCommandPort // ★ 招待メール用
 }
 
-func NewMemberHandler(uc *memberuc.MemberUsecase) http.Handler {
-	return &MemberHandler{uc: uc}
+// NewMemberHandler — メンバーハンドラ
+func NewMemberHandler(
+	uc *memberuc.MemberUsecase,
+	invCmd memberuc.InvitationCommandPort, // ★ InvitationCommand を追加
+) http.Handler {
+	return &MemberHandler{
+		uc:            uc,
+		invitationCmd: invCmd,
+	}
 }
 
+// -----------------------------------------------------------------------------
+// ServeHTTP（ルーティング分岐）
+// -----------------------------------------------------------------------------
 func (h *MemberHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 
@@ -33,18 +41,36 @@ func (h *MemberHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		path = "/"
 	}
 
+	// -------------------------------------------------------------------------
+	// ★ Invitation: POST /members/{id}/invitation
+	// -------------------------------------------------------------------------
+	if r.Method == http.MethodPost &&
+		strings.HasPrefix(path, "/members/") &&
+		strings.HasSuffix(path, "/invitation") {
+
+		h.sendInvitation(w, r)
+		return
+	}
+
+	// -------------------------------------------------------------------------
+	// 通常のメンバー CRUD ルーティング
+	// -------------------------------------------------------------------------
 	switch {
+
 	case r.Method == http.MethodPost && path == "/members":
 		h.create(w, r)
+
 	case r.Method == http.MethodGet && path == "/members":
 		h.list(w, r)
+
 	case r.Method == http.MethodPatch && strings.HasPrefix(path, "/members/"):
-		// ★ 追加: PATCH /members/{id}
 		id := strings.TrimPrefix(path, "/members/")
 		h.update(w, r, id)
+
 	case r.Method == http.MethodGet && strings.HasPrefix(path, "/members/"):
 		id := strings.TrimPrefix(path, "/members/")
 		h.get(w, r, id)
+
 	default:
 		w.WriteHeader(http.StatusNotFound)
 		_ = json.NewEncoder(w).Encode(map[string]string{"error": "not_found"})
@@ -52,9 +78,50 @@ func (h *MemberHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 }
 
 // -----------------------------------------------------------------------------
-// POST /members
+// POST /members/{id}/invitation
 // -----------------------------------------------------------------------------
+func (h *MemberHandler) sendInvitation(w http.ResponseWriter, r *http.Request) {
+	if h.invitationCmd == nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		_ = json.NewEncoder(w).Encode(map[string]string{"error": "invitation command not configured"})
+		return
+	}
 
+	// 例: /members/abc123/invitation
+	path := strings.TrimPrefix(r.URL.Path, "/members/")
+	parts := strings.Split(path, "/")
+
+	if len(parts) < 2 || parts[1] != "invitation" {
+		w.WriteHeader(http.StatusNotFound)
+		_ = json.NewEncoder(w).Encode(map[string]string{"error": "not_found"})
+		return
+	}
+
+	memberID := strings.TrimSpace(parts[0])
+	if memberID == "" {
+		w.WriteHeader(http.StatusBadRequest)
+		_ = json.NewEncoder(w).Encode(map[string]string{"error": "invalid_member_id"})
+		return
+	}
+
+	token, err := h.invitationCmd.CreateInvitationAndSend(r.Context(), memberID)
+	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		_ = json.NewEncoder(w).Encode(map[string]string{"error": "cannot_send_invitation"})
+		return
+	}
+
+	resp := map[string]string{
+		"memberId": memberID,
+		"token":    token,
+	}
+
+	_ = json.NewEncoder(w).Encode(resp)
+}
+
+// -----------------------------------------------------------------------------
+// POST /members — Create
+// -----------------------------------------------------------------------------
 type memberCreateRequest struct {
 	ID             string   `json:"id"`
 	FirstName      string   `json:"firstName"`
@@ -77,14 +144,13 @@ func (h *MemberHandler) create(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// ----------- companyId は CurrentMember から強制適用（唯一の情報源） -----------
+	// AuthMiddleware から companyId 取得
 	me, ok := httpmw.CurrentMember(r)
 	if !ok || strings.TrimSpace(me.CompanyID) == "" {
 		w.WriteHeader(http.StatusUnauthorized)
 		_ = json.NewEncoder(w).Encode(map[string]string{"error": "unauthorized"})
 		return
 	}
-	companyID := strings.TrimSpace(me.CompanyID)
 
 	input := memberuc.CreateMemberInput{
 		ID:             req.ID,
@@ -95,7 +161,7 @@ func (h *MemberHandler) create(w http.ResponseWriter, r *http.Request) {
 		Email:          req.Email,
 		Permissions:    req.Permissions,
 		AssignedBrands: req.AssignedBrands,
-		CompanyID:      companyID,
+		CompanyID:      strings.TrimSpace(me.CompanyID),
 		Status:         req.Status,
 	}
 
@@ -112,8 +178,6 @@ func (h *MemberHandler) create(w http.ResponseWriter, r *http.Request) {
 // -----------------------------------------------------------------------------
 // PATCH /members/{id}
 // -----------------------------------------------------------------------------
-
-// フロントからの PATCH ボディ用（すべて任意項目・部分更新）
 type memberUpdateRequest struct {
 	FirstName      *string   `json:"firstName,omitempty"`
 	LastName       *string   `json:"lastName,omitempty"`
@@ -135,8 +199,6 @@ func (h *MemberHandler) update(w http.ResponseWriter, r *http.Request, id string
 		return
 	}
 
-	// ----------- companyId は CurrentMember から強制適用（唯一の情報源） -----------
-	// Multi-tenant 制御と同じく、未ログイン / companyId 無しなら 401
 	me, ok := httpmw.CurrentMember(r)
 	if !ok || strings.TrimSpace(me.CompanyID) == "" {
 		w.WriteHeader(http.StatusUnauthorized)
@@ -160,8 +222,7 @@ func (h *MemberHandler) update(w http.ResponseWriter, r *http.Request, id string
 		Email:          req.Email,
 		Permissions:    req.Permissions,
 		AssignedBrands: req.AssignedBrands,
-		// CompanyID は usecase 側で context から強制上書きされる前提なのでここでは指定不要
-		Status: req.Status,
+		Status:         req.Status,
 	}
 
 	m, err := h.uc.Update(ctx, input)
@@ -176,7 +237,6 @@ func (h *MemberHandler) update(w http.ResponseWriter, r *http.Request, id string
 // -----------------------------------------------------------------------------
 // GET /members
 // -----------------------------------------------------------------------------
-
 func (h *MemberHandler) list(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	qv := r.URL.Query()
@@ -184,7 +244,6 @@ func (h *MemberHandler) list(w http.ResponseWriter, r *http.Request) {
 	var f memberdom.Filter
 	f.SearchQuery = strings.TrimSpace(qv.Get("q"))
 
-	// ----------- companyId は CurrentMember から強制適用（唯一の情報源） -----------
 	me, ok := httpmw.CurrentMember(r)
 	if !ok || strings.TrimSpace(me.CompanyID) == "" {
 		w.WriteHeader(http.StatusUnauthorized)
@@ -201,7 +260,6 @@ func (h *MemberHandler) list(w http.ResponseWriter, r *http.Request) {
 		f.Brands = splitCSV(v)
 	}
 
-	// -------- Sort --------
 	var sort common.Sort
 	switch strings.ToLower(strings.TrimSpace(qv.Get("sort"))) {
 	case "name":
@@ -222,7 +280,6 @@ func (h *MemberHandler) list(w http.ResponseWriter, r *http.Request) {
 		sort.Order = "desc"
 	}
 
-	// -------- Page --------
 	var page common.Page
 	page.Number = clampInt(parseIntDefault(qv.Get("page"), 1), 1, 1_000_000)
 	page.PerPage = clampInt(parseIntDefault(qv.Get("perPage"), 50), 1, 200)
@@ -238,7 +295,6 @@ func (h *MemberHandler) list(w http.ResponseWriter, r *http.Request) {
 // -----------------------------------------------------------------------------
 // GET /members/{id}
 // -----------------------------------------------------------------------------
-
 func (h *MemberHandler) get(w http.ResponseWriter, r *http.Request, id string) {
 	ctx := r.Context()
 	id = strings.TrimSpace(id)
@@ -257,9 +313,8 @@ func (h *MemberHandler) get(w http.ResponseWriter, r *http.Request, id string) {
 }
 
 // -----------------------------------------------------------------------------
-// Error Response
+// Error responses
 // -----------------------------------------------------------------------------
-
 func writeMemberErr(w http.ResponseWriter, err error) {
 	code := http.StatusInternalServerError
 
@@ -281,7 +336,6 @@ func writeMemberErr(w http.ResponseWriter, err error) {
 // -----------------------------------------------------------------------------
 // Helpers
 // -----------------------------------------------------------------------------
-
 func splitCSV(s string) []string {
 	if s == "" {
 		return nil

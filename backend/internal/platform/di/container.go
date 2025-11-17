@@ -12,10 +12,28 @@ import (
 
 	httpin "narratives/internal/adapters/in/http"
 	fs "narratives/internal/adapters/out/firestore"
+	mailadp "narratives/internal/adapters/out/mail"
 	uc "narratives/internal/application/usecase"
 	memdom "narratives/internal/domain/member"
 	appcfg "narratives/internal/infra/config"
 )
+
+// ========================================
+// dev / stub EmailClient for InvitationMailer
+// ========================================
+
+type loggingEmailClient struct{}
+
+func (c *loggingEmailClient) Send(
+	_ context.Context,
+	from,
+	to,
+	subject,
+	body string,
+) error {
+	log.Printf("[mail] SEND from=%s to=%s subject=%s\n%s", from, to, subject, body)
+	return nil
+}
 
 // ========================================
 // Container (Firestore + Firebase edition)
@@ -30,7 +48,8 @@ type Container struct {
 	FirebaseAuth *firebaseauth.Client
 
 	// Repositories（AuthMiddleware 用に memberRepo だけ保持）
-	MemberRepo memdom.Repository
+	MemberRepo  memdom.Repository
+	MessageRepo *fs.MessageRepositoryFS
 
 	// Application-layer usecases
 	AccountUC          *uc.AccountUsecase
@@ -63,6 +82,10 @@ type Container struct {
 	TrackingUC         *uc.TrackingUsecase
 	UserUC             *uc.UserUsecase
 	WalletUC           *uc.WalletUsecase
+
+	// ★ 招待関連 Usecase
+	InvitationQuery   uc.InvitationQueryPort
+	InvitationCommand uc.InvitationCommandPort
 }
 
 // ========================================
@@ -130,6 +153,9 @@ func NewContainer(ctx context.Context) (*Container, error) {
 	userRepo := fs.NewUserRepositoryFS(fsClient)
 	walletRepo := fs.NewWalletRepositoryFS(fsClient)
 
+	// ★ 招待トークン用 Repository（Firestore 実装）
+	invitationTokenRepo := fs.NewInvitationTokenRepositoryFS(fsClient)
+
 	// 5. Application-layer usecases
 	accountUC := uc.NewAccountUsecase(accountRepo)
 
@@ -174,6 +200,22 @@ func NewContainer(ctx context.Context) (*Container, error) {
 	userUC := uc.NewUserUsecase(userRepo)
 	walletUC := uc.NewWalletUsecase(walletRepo)
 
+	// ★ Invitation 用メールクライアント & メーラー（とりあえずログ出力実装）
+	logMailClient := &loggingEmailClient{}
+	invitationMailer := mailadp.NewInvitationMailer(
+		logMailClient,
+		"no-reply@example.com",                   // 開発用 From
+		"https://narratives-console-dev.web.app", // 開発用 Console URL
+	)
+
+	// ★ Invitation 用 Usecase（Query / Command）
+	invitationQueryUC := uc.NewInvitationService(invitationTokenRepo, memberRepo)
+	invitationCommandUC := uc.NewInvitationCommandService(
+		invitationTokenRepo,
+		memberRepo,
+		invitationMailer,
+	)
+
 	// 6. Assemble container
 	return &Container{
 		Config:       cfg,
@@ -181,6 +223,7 @@ func NewContainer(ctx context.Context) (*Container, error) {
 		FirebaseApp:  fbApp,
 		FirebaseAuth: fbAuth,
 		MemberRepo:   memberRepo,
+		MessageRepo:  messageRepo,
 
 		AccountUC:          accountUC,
 		AnnouncementUC:     announcementUC,
@@ -212,6 +255,9 @@ func NewContainer(ctx context.Context) (*Container, error) {
 		TrackingUC:         trackingUC,
 		UserUC:             userUC,
 		WalletUC:           walletUC,
+
+		InvitationQuery:   invitationQueryUC,
+		InvitationCommand: invitationCommandUC,
 	}, nil
 }
 
@@ -251,9 +297,16 @@ func (c *Container) RouterDeps() httpin.RouterDeps {
 		UserUC:             c.UserUC,
 		WalletUC:           c.WalletUC,
 
+		// ★ 招待関連 Usecase を Router に渡す
+		InvitationQuery:   c.InvitationQuery,
+		InvitationCommand: c.InvitationCommand,
+
 		// AuthMiddleware 用
 		FirebaseAuth: c.FirebaseAuth,
 		MemberRepo:   c.MemberRepo,
+
+		// MessageHandler 用
+		MessageRepo: c.MessageRepo,
 	}
 }
 

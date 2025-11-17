@@ -1,10 +1,11 @@
-// frontend\console\shell\src\auth\application\useAuthActions.ts
+// frontend/console/shell/src/auth/application/useAuthActions.ts
 import { useState } from "react";
 import {
   createUserWithEmailAndPassword,
   signInWithEmailAndPassword,
   signOut,
   deleteUser,
+  sendEmailVerification,              // ★ 追加
 } from "firebase/auth";
 import { auth } from "../infrastructure/config/firebaseClient";
 
@@ -47,6 +48,13 @@ export type SignUpProfile = {
   companyName?: string; // 任意
 };
 
+// ★ 追加: 認証メールの actionCodeSettings
+// ここで「メールのリンクを踏んだあとに遷移させたいURL」を指定
+const actionCodeSettings = {
+  url: "https://narratives-development-26c2d.firebaseapp.com/post-verify",
+  handleCodeInApp: false,
+};
+
 export function useAuthActions() {
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -65,7 +73,7 @@ export function useAuthActions() {
         firstNameKana: (profile?.firstNameKana ?? "").trim(),
         lastNameKana: (profile?.lastNameKana ?? "").trim(),
         email: email.trim(),
-        permissions: initialPermissions, // ← ここを [] から変更
+        permissions: initialPermissions,
         assignedBrands: [],
         companyId: null,
         createdAt: serverTimestamp(),
@@ -88,7 +96,7 @@ export function useAuthActions() {
 
     const batch = writeBatch(db);
 
-    // companies/{id} 作成（作成時に id を含める：ルールで許可されている前提）
+    // companies/{id} 作成
     batch.set(companyRef, {
       id: companyId,
       name,
@@ -102,7 +110,7 @@ export function useAuthActions() {
       deletedBy: null,
     });
 
-    // members/{uid} に companyId を同時付与（merge）
+    // members/{uid} に companyId を同時付与
     batch.set(
       memberRef,
       {
@@ -114,7 +122,7 @@ export function useAuthActions() {
 
     await batch.commit();
 
-    // 念のため検証して、未反映ならフォールバックで上書き
+    // 念のため検証
     try {
       const snap = await getDoc(memberRef);
       const data = snap.data() as { companyId?: string | null } | undefined;
@@ -137,20 +145,21 @@ export function useAuthActions() {
     setSubmitting(true);
     setError(null);
     try {
-      // 1) Auth作成
+      // 1) Authユーザー作成
       const cred = await createUserWithEmailAndPassword(auth, email, password);
       const uid = cred.user?.uid;
       if (!uid) throw new Error("ユーザー作成後に uid を取得できませんでした。");
 
-      // 2) members/{uid} を先に初期化（companyId: null）
+      // 2) メールアドレス確認メールを送信  ★ここが今回のポイント
+      await sendEmailVerification(cred.user, actionCodeSettings);
+
+      // 3) members/{uid} を先に初期化（companyId: null）
       await initMember(uid, email, profile);
 
-      // 3) 会社名があれば、会社作成 + members.companyId を同一バッチで反映
+      // 4) 会社名があれば、会社作成 + members.companyId を同一バッチで反映
       await createCompanyAndLink(uid, profile?.companyName);
     } catch (e: any) {
       console.error("signUp error", e);
-      // 必要に応じてロールバック
-      // if (auth.currentUser) { await deleteUser(auth.currentUser).catch(() => {}); }
       setError(messageForAuthError(e?.code));
     } finally {
       setSubmitting(false);

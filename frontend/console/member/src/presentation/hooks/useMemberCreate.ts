@@ -114,8 +114,7 @@ export function useMemberCreate(options?: UseMemberCreateOptions) {
         const brands = toArray(brandsText);
 
         // API へ送るリクエストボディ（handler の memberCreateRequest に対応）
-        // email は、サインアップ → Firebase メールアドレス確認 →
-        // PostVerifyPage 経由で Invitation メール送信、という新フローで利用される前提。
+        // email は、招待メール送信・招待フローで利用される前提。
         const body = {
           id,
           firstName: firstName.trim() || "",
@@ -198,6 +197,44 @@ export function useMemberCreate(options?: UseMemberCreateOptions) {
           deletedBy: apiMember.deletedBy ?? null,
         } as Member;
 
+        // ─────────────────────────────────────
+        // ★ 招待メール送信トリガー
+        //   - バックエンド側の invitation usecase を叩いて、
+        //     InvitationMailerPort を通じてメールを送信してもらう
+        //   - エンドポイント例: POST /members/{memberId}/invitation
+        // ─────────────────────────────────────
+        if (created.email) {
+          const inviteUrl = `${API_BASE}/members/${encodeURIComponent(created.id)}/invitation`;
+          console.log("[useMemberCreate] POST (invitation)", inviteUrl);
+
+          try {
+            const inviteRes = await fetch(inviteUrl, {
+              method: "POST",
+              headers: {
+                Authorization: `Bearer ${token}`,
+                "Content-Type": "application/json",
+              },
+              // 必要に応じて body にオプションを渡してもよい
+              body: JSON.stringify({}),
+            });
+
+            if (!inviteRes.ok) {
+              const inviteText = await inviteRes.text().catch(() => "");
+              console.error(
+                `[useMemberCreate] 招待メール送信に失敗しました (status ${inviteRes.status}) ${inviteText}`,
+              );
+              // ここでエラー文言を UI に出したければ setError を使う
+              // setError("メンバーは作成されましたが、招待メールの送信に失敗しました。");
+            } else {
+              console.log("[useMemberCreate] 招待メール送信リクエスト成功");
+            }
+          } catch (invErr) {
+            console.error("[useMemberCreate] 招待メール送信中にエラーが発生しました", invErr);
+            // 必要なら setError(...)
+          }
+        }
+
+        // 呼び出し元へ通知
         options?.onSuccess?.(created);
       } catch (err: any) {
         setError(err?.message ?? String(err));
