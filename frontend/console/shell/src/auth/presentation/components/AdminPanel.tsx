@@ -1,8 +1,12 @@
-// frontend/console/shell/src/auth/presentation/components/AdminPanel.tsx
+//frontend\console\shell\src\auth\presentation\components\AdminPanel.tsx
 import { LogOut } from "lucide-react";
 import "../styles/auth.css";
 import { Input } from "../../../shared/ui/input";
 import { useAdminPanel } from "../hook/useAdminPanel";
+import {
+  changeEmail,
+  changePassword,
+} from "../../application/profileService";
 
 interface AdminPanelProps {
   open: boolean;
@@ -60,34 +64,93 @@ export default function AdminPanel({
     confirmPassword,
     setConfirmPassword,
 
-    // ★ 追加: 保存処理
+    // backend profile update
     saveProfile,
   } = useAdminPanel();
 
   if (!open) return null;
 
+  // ─────────────────────────────
+  // プロフィール更新（backend PATCH）
+  // ─────────────────────────────
   const handleProfileSave = async () => {
-    // Backend 経由でプロフィールを更新
-    await saveProfile();
-    // 追加で、親に「更新完了」を通知したければここで呼ぶ
-    onEditProfile?.();
+    try {
+      await saveProfile();
+      onEditProfile?.();
+      setShowProfileDialog(false);
+    } catch (e) {
+      console.error("[AdminPanel] handleProfileSave error:", e);
+      window.alert("プロフィールの更新に失敗しました。");
+    }
   };
 
-  const handleEmailSave = () => {
-    onChangeEmail?.();
-    setShowEmailDialog(false);
+  // ─────────────────────────────
+  // メールアドレス変更（Firebase Auth）
+  // ─────────────────────────────
+  const handleEmailSave = async () => {
+    try {
+      if (!newEmail.trim()) {
+        window.alert("新しいメールアドレスを入力してください。");
+        return;
+      }
+      if (!currentPasswordForEmail) {
+        window.alert("現在のパスワードを入力してください。");
+        return;
+      }
+
+      await changeEmail(currentPasswordForEmail, newEmail.trim());
+
+      onChangeEmail?.();
+      setShowEmailDialog(false);
+
+      // reset
+      setNewEmail("");
+      setCurrentPasswordForEmail("");
+    } catch (e) {
+      console.error("[AdminPanel] handleEmailSave error:", e);
+      window.alert("メールアドレス変更に失敗しました。");
+    }
   };
 
-  const handlePasswordSave = () => {
-    onChangePassword?.();
-    setShowPasswordDialog(false);
+  // ─────────────────────────────
+  // パスワード変更（Firebase Auth）
+  // ─────────────────────────────
+  const handlePasswordSave = async () => {
+    try {
+      if (!currentPassword) {
+        window.alert("現在のパスワードを入力してください。");
+        return;
+      }
+      if (!newPassword) {
+        window.alert("新しいパスワードを入力してください。");
+        return;
+      }
+      if (newPassword !== confirmPassword) {
+        window.alert("新しいパスワードと確認用パスワードが一致していません。");
+        return;
+      }
+
+      await changePassword(currentPassword, newPassword);
+
+      onChangePassword?.();
+      setShowPasswordDialog(false);
+
+      // reset
+      setCurrentPassword("");
+      setNewPassword("");
+      setConfirmPassword("");
+    } catch (e) {
+      console.error("[AdminPanel] handlePasswordSave error:", e);
+      window.alert("パスワード変更に失敗しました。");
+    }
   };
 
-  // 以下 JSX はそのままでOK（既に value に state をバインドしているので、
-  // useAdminPanel が currentMember でプリフィルしてくれている）
+  // ==================================================================
+  // JSX
+  // ==================================================================
   return (
     <>
-      {/* ドロップダウン本体 */}
+      {/* メニュー本体 */}
       <div
         className={`admin-dropdown ${className || ""}`}
         role="menu"
@@ -102,21 +165,20 @@ export default function AdminPanel({
 
         <button
           className="admin-dropdown-item"
-          role="menuitem"
           onClick={() => setShowProfileDialog(true)}
         >
           プロフィール変更
         </button>
+
         <button
           className="admin-dropdown-item"
-          role="menuitem"
           onClick={() => setShowEmailDialog(true)}
         >
           メールアドレス変更
         </button>
+
         <button
           className="admin-dropdown-item"
-          role="menuitem"
           onClick={() => setShowPasswordDialog(true)}
         >
           パスワード変更
@@ -126,38 +188,36 @@ export default function AdminPanel({
 
         <button
           className="admin-dropdown-item logout"
-          role="menuitem"
           onClick={onLogout}
         >
-          <LogOut className="logout-icon" aria-hidden />
+          <LogOut className="logout-icon" />
           ログアウト
         </button>
       </div>
 
+      {/* ---------------------------------- */}
       {/* プロフィール変更ダイアログ */}
+      {/* ---------------------------------- */}
       {showProfileDialog && (
-        <div className="admin-modal-backdrop" role="dialog" aria-modal="true">
+        <div className="admin-modal-backdrop" aria-modal="true">
           <div className="admin-modal">
             <div className="admin-modal-title">プロフィール変更</div>
 
             <div className="space-y-4">
-              {/* 姓 → 姓（かな） */}
+              {/* 姓 / 姓かな */}
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className="admin-modal-label">姓</label>
                   <Input
-                    variant="default"
                     className="admin-modal-input"
                     value={lastName}
                     onChange={(e) => setLastName(e.target.value)}
                     placeholder="山田"
                   />
                 </div>
-
                 <div>
                   <label className="admin-modal-label">姓（かな）</label>
                   <Input
-                    variant="default"
                     className="admin-modal-input"
                     value={lastNameKana}
                     onChange={(e) => setLastNameKana(e.target.value)}
@@ -166,23 +226,20 @@ export default function AdminPanel({
                 </div>
               </div>
 
-              {/* 名 → 名（かな） */}
+              {/* 名 / 名かな */}
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className="admin-modal-label">名</label>
                   <Input
-                    variant="default"
                     className="admin-modal-input"
                     value={firstName}
                     onChange={(e) => setFirstName(e.target.value)}
                     placeholder="太郎"
                   />
                 </div>
-
                 <div>
                   <label className="admin-modal-label">名（かな）</label>
                   <Input
-                    variant="default"
                     className="admin-modal-input"
                     value={firstNameKana}
                     onChange={(e) => setFirstNameKana(e.target.value)}
@@ -195,15 +252,12 @@ export default function AdminPanel({
             <div className="admin-modal-footer">
               <button
                 className="admin-modal-button cancel"
-                type="button"
                 onClick={() => setShowProfileDialog(false)}
               >
                 キャンセル
               </button>
-
               <button
                 className="admin-modal-button primary"
-                type="button"
                 onClick={handleProfileSave}
               >
                 保存
@@ -213,8 +267,126 @@ export default function AdminPanel({
         </div>
       )}
 
-      {/* メール・パスワード変更ダイアログはそのまま */}
-      {/* ... */}
+      {/* ---------------------------------- */}
+      {/* メールアドレス変更 */}
+      {/* ---------------------------------- */}
+      {showEmailDialog && (
+        <div className="admin-modal-backdrop" aria-modal="true">
+          <div className="admin-modal">
+            <div className="admin-modal-title">メールアドレス変更</div>
+
+            <div className="space-y-4">
+              <div>
+                <label className="admin-modal-label">新しいメールアドレス</label>
+                <Input
+                  className="admin-modal-input"
+                  type="email"
+                  value={newEmail}
+                  onChange={(e) => setNewEmail(e.target.value)}
+                  placeholder="new@example.com"
+                />
+              </div>
+
+              <div>
+                <label className="admin-modal-label">現在のパスワード</label>
+                <Input
+                  className="admin-modal-input"
+                  type="password"
+                  value={currentPasswordForEmail}
+                  onChange={(e) =>
+                    setCurrentPasswordForEmail(e.target.value)
+                  }
+                  placeholder="現在のパスワード"
+                />
+              </div>
+            </div>
+
+            <div className="admin-modal-footer">
+              <button
+                className="admin-modal-button cancel"
+                onClick={() => setShowEmailDialog(false)}
+              >
+                キャンセル
+              </button>
+              <button
+                className="admin-modal-button primary"
+                onClick={handleEmailSave}
+              >
+                保存
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ---------------------------------- */}
+      {/* パスワード変更 */}
+      {/* ---------------------------------- */}
+      {showPasswordDialog && (
+        <div className="admin-modal-backdrop" aria-modal="true">
+          <div className="admin-modal">
+            <div className="admin-modal-title">パスワード変更</div>
+
+            <div className="space-y-4">
+              <div>
+                <label className="admin-modal-label">現在のパスワード</label>
+                <Input
+                  className="admin-modal-input"
+                  type="password"
+                  value={currentPassword}
+                  onChange={(e) =>
+                    setCurrentPassword(e.target.value)
+                  }
+                  placeholder="現在のパスワード"
+                />
+              </div>
+
+              <div>
+                <label className="admin-modal-label">新しいパスワード</label>
+                <Input
+                  className="admin-modal-input"
+                  type="password"
+                  value={newPassword}
+                  onChange={(e) =>
+                    setNewPassword(e.target.value)
+                  }
+                  placeholder="新しいパスワード"
+                />
+              </div>
+
+              <div>
+                <label className="admin-modal-label">
+                  新しいパスワード（確認）
+                </label>
+                <Input
+                  className="admin-modal-input"
+                  type="password"
+                  value={confirmPassword}
+                  onChange={(e) =>
+                    setConfirmPassword(e.target.value)
+                  }
+                  placeholder="新しいパスワードを再入力"
+                />
+              </div>
+            </div>
+
+            <div className="admin-modal-footer">
+              <button
+                className="admin-modal-button cancel"
+                onClick={() => setShowPasswordDialog(false)}
+              >
+                キャンセル
+              </button>
+              <button
+                className="admin-modal-button primary"
+                onClick={handlePasswordSave}
+              >
+                保存
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </>
   );
 }

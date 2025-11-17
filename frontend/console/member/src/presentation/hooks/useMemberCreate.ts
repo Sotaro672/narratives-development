@@ -114,6 +114,8 @@ export function useMemberCreate(options?: UseMemberCreateOptions) {
         const brands = toArray(brandsText);
 
         // API へ送るリクエストボディ（handler の memberCreateRequest に対応）
+        // email は、サインアップ → Firebase メールアドレス確認 →
+        // PostVerifyPage 経由で Invitation メール送信、という新フローで利用される前提。
         const body = {
           id,
           firstName: firstName.trim() || "",

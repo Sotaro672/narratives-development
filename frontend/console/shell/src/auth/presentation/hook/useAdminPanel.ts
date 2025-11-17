@@ -5,6 +5,10 @@ import {
   fetchCurrentMember,
   updateCurrentMemberProfile,
 } from "../../application/memberService";
+import {
+  changeEmail,
+  changePassword,
+} from "../../application/profileService";
 
 export function useAdminPanel() {
   // dialog flags
@@ -12,7 +16,7 @@ export function useAdminPanel() {
   const [showEmailDialog, setShowEmailDialog] = useState(false);
   const [showPasswordDialog, setShowPasswordDialog] = useState(false);
 
-  // ★ 追加: currentMember の id
+  // ★ currentMember の id
   const [memberId, setMemberId] = useState<string | null>(null);
 
   // profile fields
@@ -57,7 +61,7 @@ export function useAdminPanel() {
   }, []);
 
   // ─────────────────────────────
-  // ★ プロフィール保存処理（Backend 経由で Firebase/DB 更新）
+  // プロフィール保存（Backend 経由で Firestore members を更新）
   // ─────────────────────────────
   const saveProfile = useCallback(async () => {
     if (!memberId) {
@@ -73,13 +77,53 @@ export function useAdminPanel() {
         firstNameKana,
         lastNameKana,
       });
-      // 成功したらダイアログを閉じる
       setShowProfileDialog(false);
     } catch (e) {
       console.error("[useAdminPanel] failed to update profile:", e);
-      // TODO: 必要ならエラー用 state を追加して UI に表示
     }
   }, [memberId, firstName, lastName, firstNameKana, lastNameKana]);
+
+  // ─────────────────────────────
+  // ★ メールアドレス変更 + Firebase メール送信トリガ
+  //   （profileService.changeEmail 内で Firebase Auth API を呼び、
+  //    コンソールで設定した「メールアドレスの変更」テンプレートが送信される想定）
+  // ─────────────────────────────
+  const saveEmail = useCallback(async () => {
+    if (!newEmail.trim()) {
+      throw new Error("EMAIL_REQUIRED");
+    }
+    if (!currentPasswordForEmail) {
+      throw new Error("PASSWORD_REQUIRED");
+    }
+
+    await changeEmail(currentPasswordForEmail, newEmail.trim());
+
+    // 成功後は入力をクリア（ダイアログを閉じるかどうかは呼び出し側で制御）
+    setNewEmail("");
+    setCurrentPasswordForEmail("");
+  }, [newEmail, currentPasswordForEmail]);
+
+  // ─────────────────────────────
+  // ★ パスワード変更（Firebase Auth + 再認証）
+  // ─────────────────────────────
+  const savePassword = useCallback(async () => {
+    if (!currentPassword) {
+      throw new Error("CURRENT_PASSWORD_REQUIRED");
+    }
+    if (!newPassword) {
+      throw new Error("NEW_PASSWORD_REQUIRED");
+    }
+    if (newPassword !== confirmPassword) {
+      throw new Error("PASSWORD_MISMATCH");
+    }
+
+    await changePassword(currentPassword, newPassword);
+
+    // 成功後は入力をクリア
+    setCurrentPassword("");
+    setNewPassword("");
+    setConfirmPassword("");
+  }, [currentPassword, newPassword, confirmPassword]);
 
   return {
     // dialog flags
@@ -116,6 +160,8 @@ export function useAdminPanel() {
     setConfirmPassword,
 
     // handlers
-    saveProfile,
+    saveProfile,   // backend /members PATCH
+    saveEmail,     // Firebase Auth でメール変更 & 変更メール送信
+    savePassword,  // Firebase Auth でパスワード変更
   };
 }
