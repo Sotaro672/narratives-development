@@ -3,9 +3,6 @@ import { useState, useCallback, useMemo, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 
 import { useAuth } from "../../../../shell/src/auth/presentation/hook/useCurrentMember";
-import type { BrandPatch } from "../../domain/entity/brand";
-
-// Member 取得用
 import { auth } from "../../../../shell/src/auth/infrastructure/config/firebaseClient";
 import {
   fetchMemberListWithToken,
@@ -14,41 +11,35 @@ import {
 import type { Member } from "../../../../member/src/domain/entity/member";
 import type { MemberFilter } from "../../../../member/src/domain/repository/memberRepository";
 import type { Page } from "../../../../shell/src/shared/types/common/common";
+import type { Brand } from "../../domain/entity/brand";
+import { brandRepositoryHTTP } from "../../infrastructure/http/brandRepositoryHTTP";
 
 export function useBrandCreate() {
   const navigate = useNavigate();
-
-  // useAuth から currentMember を取得（companyName 系は使わない）
   const { currentMember } = useAuth();
 
-  // Auth / currentMember から companyId を取得（入力させない）
   const companyId = useMemo(
     () => (currentMember?.companyId ?? "").trim(),
     [currentMember?.companyId],
   );
 
-  // BrandPatch に対応するフォーム状態（必要なものだけ）
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
   const [websiteUrl, setWebsiteUrl] = useState("");
 
-  // ブランド責任者（managerId）… 選択された Member の id を保持
   const [managerId, setManagerId] = useState<string | null>(null);
 
-  // メンバー選択用
+  const [nameError, setNameError] = useState<string | null>(null);
+  const [managerIdError, setManagerIdError] = useState<string | null>(null);
+
   const [managerOptions, setManagerOptions] = useState<Member[]>([]);
   const [loadingManagers, setLoadingManagers] = useState(false);
   const [managerError, setManagerError] = useState<string | null>(null);
 
-  // isActive は作成時は常に true
   const isActive = true;
 
-  // ---------------------------
-  // メンバー一覧取得（ブランド責任者候補）
-  // ---------------------------
   useEffect(() => {
     let cancelled = false;
-
     async function loadManagers() {
       try {
         setLoadingManagers(true);
@@ -59,105 +50,81 @@ export function useBrandCreate() {
           setManagerError("ログインユーザーが取得できませんでした。");
           return;
         }
-
         const token = await user.getIdToken();
 
         const page: Page = { limit: 50, offset: 0 };
         const filter: MemberFilter = {};
-
         const { items } = await fetchMemberListWithToken(token, page, filter);
 
         if (cancelled) return;
         setManagerOptions(items);
-
-        // 初期値として最初のメンバーを選択（任意）
-        if (!managerId && items.length > 0) {
-          setManagerId(items[0].id);
-        }
+        if (!managerId && items.length > 0) setManagerId(items[0].id);
       } catch (e: any) {
-        if (!cancelled) {
-          setManagerError(
-            e?.message ?? "ブランド責任者候補の取得に失敗しました。",
-          );
-        }
+        if (!cancelled) setManagerError(e?.message ?? "ブランド責任者候補の取得に失敗しました。");
       } finally {
-        if (!cancelled) {
-          setLoadingManagers(false);
-        }
+        if (!cancelled) setLoadingManagers(false);
       }
     }
-
     loadManagers();
-    return () => {
-      cancelled = true;
-    };
+    return () => { cancelled = true; };
   }, [managerId]);
 
-  // ---------------------------
-  // 戻る
-  // ---------------------------
-  const handleBack = useCallback(() => {
-    navigate(-1);
-  }, [navigate]);
+  const handleBack = useCallback(() => { navigate(-1); }, [navigate]);
 
-  // ---------------------------
-  // 保存処理（BrandPatch）
-  //  - ブランド名 (name) を必須
-  //  - ブランド責任者 (managerId) を必須
-  // ---------------------------
-  const handleSave = useCallback(() => {
+  // 実際に /brands へ POST
+  const handleSave = useCallback(async () => {
     const trimmedName = name.trim();
+    const trimmedManagerId = (managerId ?? "").trim();
 
-    if (!trimmedName) {
-      alert("ブランド名は必須です。");
-      return;
-    }
+    let hasError = false;
+    if (!trimmedName) { setNameError("ブランド名は必須です。"); hasError = true; } else setNameError(null);
+    if (!trimmedManagerId) { setManagerIdError("ブランド責任者は必須です。"); hasError = true; } else setManagerIdError(null);
+    if (hasError) { alert("ブランド名とブランド責任者を入力してください。"); return; }
 
-    if (!managerId) {
-      alert("ブランド責任者を選択してください。");
-      return;
-    }
+    if (!companyId) { alert("companyId が取得できません。"); return; }
 
-    const payload: BrandPatch = {
-      companyId: companyId || null,
+    // backend の Create は Brand 全体を受ける想定
+    const nowIso = new Date().toISOString();
+
+    const payload: Omit<Brand, "createdAt" | "updatedAt"> = {
+      id: "", // サーバ採番
+      companyId,
       name: trimmedName,
-      description: description || null,
-      websiteUrl: websiteUrl || null,
-      isActive: true, // 作成時は常に true
-      managerId,
-      // walletAddress は自動設定されるためフロントからは送らない
-    };
+      description: description || "",
+      websiteUrl: websiteUrl || "",
+      isActive: true,
+      manager: trimmedManagerId,
+      walletAddress: "pending", // サーバで正式値に更新される前提
+      createdBy: currentMember?.id ?? null as any, // TS 型の都合：サーバ側で上書き可
+      updatedBy: null as any,
+      deletedAt: null as any,
+      deletedBy: null as any,
+      // createdAt/updatedAt は除外（サーバで付与/無視）
+    } as any;
 
-    console.log("保存 payload:", payload);
-    alert("ブランド情報を保存しました（モック）");
-  }, [companyId, name, description, websiteUrl, managerId]);
+    try {
+      console.log("[brand] create payload", payload);
+      const created = await brandRepositoryHTTP.create(payload);
+      console.log("[brand] created", created);
+      alert("ブランドを登録しました。");
+      navigate("/brand"); // 一覧などへ遷移
+    } catch (e: any) {
+      console.error("[brand] create error:", e);
+      alert(`ブランド登録に失敗しました: ${e?.message ?? e}`);
+    }
+  }, [companyId, name, description, websiteUrl, managerId, currentMember?.id, navigate]);
 
   return {
-    // 会社情報
     companyId,
 
-    // ブランド基本情報
-    name,
-    setName,
+    name, setName, nameError,
+    description, setDescription,
+    websiteUrl, setWebsiteUrl,
 
-    description,
-    setDescription,
+    managerId, setManagerId, managerIdError,
+    managerOptions, loadingManagers, managerError, formatLastFirst,
 
-    websiteUrl,
-    setWebsiteUrl,
-
-    // ブランド責任者
-    managerId,
-    setManagerId,
-    managerOptions,
-    loadingManagers,
-    managerError,
-    formatLastFirst,
-
-    // ステータス（作成時は常に true）
     isActive,
-
-    // 操作
     handleBack,
     handleSave,
   };

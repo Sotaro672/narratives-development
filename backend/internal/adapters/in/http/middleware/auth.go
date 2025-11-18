@@ -16,18 +16,20 @@ import (
 // RouterDeps などからは *middleware.FirebaseAuthClient 型で受けられます。
 type FirebaseAuthClient = fbauth.Client
 
-type ctxKey string
+// ─────────────────────────────────────────────────────────────
+// context key は string を使わず、衝突回避のため独自型を用いる（SA1029 対策）
+// ─────────────────────────────────────────────────────────────
+type ctxKey struct{ name string }
 
-const ctxKeyMember ctxKey = "currentMember"
+var (
+	ctxKeyMember    = ctxKey{name: "currentMember"}
+	ctxKeyCompanyID = ctxKey{name: "companyId"}
+)
 
 // AuthMiddleware は
 //   - Authorization: Bearer <ID_TOKEN>
 //
-// で送られてきた Firebase ID トークンを検証し、
-//   - currentMember（memdom.Member）
-//   - companyId / auth.companyId（string）
-//
-// を context に詰めて下流ハンドラへ渡します。
+// を検証し、現在メンバーと companyId を context に詰めて次のハンドラへ渡します。
 type AuthMiddleware struct {
 	FirebaseAuth *FirebaseAuthClient
 	MemberRepo   memdom.Repository
@@ -69,27 +71,51 @@ func (m *AuthMiddleware) Handler(next http.Handler) http.Handler {
 		// uid → Member 解決（現在は「id = FirebaseUID」前提のラッパ）
 		member, err := m.MemberRepo.GetByFirebaseUID(r.Context(), uid)
 		if err != nil {
-			// ★ 追加ログ
 			log.Printf("[auth] uid=%s member lookup error: %v", uid, err)
 			http.Error(w, "member not found", http.StatusForbidden)
 			return
 		}
 
-		// ★ 追加ログ（正常ケース）
+		// 追加ログ
 		log.Printf("[auth] uid=%s member.ID=%s companyId=%q", uid, member.ID, member.CompanyID)
 
-		// ★ currentMember と companyId を context に詰める
+		// context に格納（currentMember は値として保持）
 		ctx := context.WithValue(r.Context(), ctxKeyMember, member)
+
+		// companyId が空でなければ同時に注入
+		if cid := strings.TrimSpace(member.CompanyID); cid != "" {
+			ctx = context.WithValue(ctx, ctxKeyCompanyID, cid)
+		}
 
 		next.ServeHTTP(w, r.WithContext(ctx))
 	})
 }
 
-// CurrentMember はミドルウェアで注入した現在ログイン中の Member を取得します。
+// CurrentMember は現在ログイン中の Member を取得します。
+// 取得できない場合は (nil, false)。
 func CurrentMember(r *http.Request) (*memdom.Member, bool) {
-	m, ok := r.Context().Value(ctxKeyMember).(memdom.Member)
+	v := r.Context().Value(ctxKeyMember)
+	if v == nil {
+		return nil, false
+	}
+	m, ok := v.(memdom.Member)
 	if !ok {
 		return nil, false
 	}
+	// 値からポインタを返す（呼び出し互換のため）
 	return &m, true
+}
+
+// CompanyID は context に注入された companyId を取得します。
+// 取得できない場合は ("", false)。
+func CompanyID(r *http.Request) (string, bool) {
+	v := r.Context().Value(ctxKeyCompanyID)
+	if v == nil {
+		return "", false
+	}
+	s, ok := v.(string)
+	if !ok || strings.TrimSpace(s) == "" {
+		return "", false
+	}
+	return s, true
 }
