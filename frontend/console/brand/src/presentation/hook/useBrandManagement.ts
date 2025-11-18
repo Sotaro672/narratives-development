@@ -1,3 +1,4 @@
+//frontend\console\brand\src\presentation\hook\useBrandManagement.ts
 import { useMemo, useState, useCallback } from "react";
 import {
   ALL_BRANDS,

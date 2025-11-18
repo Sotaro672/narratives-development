@@ -1,4 +1,4 @@
-import * as React from "react";
+// frontend/console/brand/src/ppresentation/pages/brandCreate.tsx
 import PageStyle from "../../../../shell/src/layout/PageStyle/PageStyle";
 
 import {
@@ -15,14 +15,22 @@ import { useBrandCreate } from "../hook/useBrandCreate";
 
 export default function BrandCreate() {
   const {
-    brandName,
-    setBrandName,
-    brandCode,
-    setBrandCode,
-    category,
-    setCategory,
+    companyId,
+    name,
+    setName,
     description,
     setDescription,
+    websiteUrl,
+    setWebsiteUrl,
+
+    // managerId 選択用
+    managerId,
+    setManagerId,
+    managerOptions,
+    loadingManagers,
+    managerError,
+    formatLastFirst,
+
     handleBack,
     handleSave,
   } = useBrandCreate();
@@ -36,38 +44,24 @@ export default function BrandCreate() {
     >
       <Card className="max-w-2xl">
         <CardHeader>
-          <CardTitle>基本情報</CardTitle>
+          <CardTitle>ブランド情報</CardTitle>
         </CardHeader>
 
         <CardContent>
-          <CardLabel htmlFor="brandName">ブランド名</CardLabel>
+          {/* ------------------------------- */}
+          {/* ブランド名 */}
+          {/* ------------------------------- */}
+          <CardLabel htmlFor="name">ブランド名</CardLabel>
           <CardInput
-            id="brandName"
+            id="name"
             placeholder="例：LUMINA Fashion"
-            value={brandName}
-            onChange={(e) => setBrandName(e.target.value)}
+            value={name}
+            onChange={(e) => setName(e.target.value)}
           />
 
-          <CardLabel htmlFor="brandCode">ブランドコード</CardLabel>
-          <CardInput
-            id="brandCode"
-            placeholder="例：LUMINA01"
-            value={brandCode}
-            onChange={(e) => setBrandCode(e.target.value)}
-          />
-
-          <CardLabel htmlFor="category">カテゴリ</CardLabel>
-          <CardSelect
-            id="category"
-            value={category}
-            onChange={(e) => setCategory(e.target.value)}
-          >
-            <option value="ファッション">ファッション</option>
-            <option value="アクセサリー">アクセサリー</option>
-            <option value="雑貨">雑貨</option>
-            <option value="その他">その他</option>
-          </CardSelect>
-
+          {/* ------------------------------- */}
+          {/* 説明 */}
+          {/* ------------------------------- */}
           <CardLabel htmlFor="description">説明</CardLabel>
           <textarea
             id="description"
@@ -76,6 +70,55 @@ export default function BrandCreate() {
             value={description}
             onChange={(e) => setDescription(e.target.value)}
           />
+
+          {/* ------------------------------- */}
+          {/* WebサイトURL */}
+          {/* ------------------------------- */}
+          <CardLabel htmlFor="websiteUrl">WebサイトURL</CardLabel>
+          <CardInput
+            id="websiteUrl"
+            placeholder="https://example.com"
+            value={websiteUrl}
+            onChange={(e) => setWebsiteUrl(e.target.value)}
+          />
+
+          {/* ======================================================== */}
+          {/*    ▼▼▼ ここから下：メンバー選択欄（最下部へ移動） ▼▼▼    */}
+          {/* ======================================================== */}
+
+          <CardLabel htmlFor="managerId" className="mt-6">
+            ブランド責任者（任意）
+          </CardLabel>
+
+          <CardSelect
+            id="managerId"
+            value={managerId ?? ""}
+            onChange={(e) => setManagerId(e.target.value || null)}
+          >
+            <option value="">未選択</option>
+
+            {loadingManagers && <option value="">読み込み中...</option>}
+
+            {!loadingManagers &&
+              managerOptions.map((m) => {
+                const label =
+                  formatLastFirst(m.lastName, m.firstName) ||
+                  m.email ||
+                  m.id;
+
+                return (
+                  <option key={m.id} value={m.id}>
+                    {label}
+                  </option>
+                );
+              })}
+          </CardSelect>
+
+          {managerError && (
+            <p className="mt-1 text-xs text-red-500">{managerError}</p>
+          )}
+
+          {/* isActive, walletAddress は自動設定のため入力欄なし */}
         </CardContent>
       </Card>
     </PageStyle>
