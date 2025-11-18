@@ -1,4 +1,8 @@
 {
+  "firestore": {
+    "indexes": "firestore.indexes.json",
+    "rules": "firestore.rules"
+  },
   "hosting": [
     {
       "target": "narratives-console-dev",

@@ -15,6 +15,7 @@ import (
 	fs "narratives/internal/adapters/out/firestore"
 	mailadp "narratives/internal/adapters/out/mail"
 	uc "narratives/internal/application/usecase"
+	authuc "narratives/internal/application/usecase/auth"
 	memdom "narratives/internal/domain/member"
 	appcfg "narratives/internal/infra/config"
 )
@@ -87,6 +88,9 @@ type Container struct {
 	// ★ 招待関連 Usecase
 	InvitationQuery   uc.InvitationQueryPort
 	InvitationCommand uc.InvitationCommandPort
+
+	// ★ Auth サインアップ後の初期化（member + company 作成）用 BootstrapService
+	AuthBootstrap *authuc.BootstrapService
 }
 
 // ========================================
@@ -201,6 +205,12 @@ func NewContainer(ctx context.Context) (*Container, error) {
 	userUC := uc.NewUserUsecase(userRepo)
 	walletUC := uc.NewWalletUsecase(walletRepo)
 
+	// ★ Auth サインアップ後の初期化用 BootstrapService
+	authBootstrap := &authuc.BootstrapService{
+		Members:   memberRepo,
+		Companies: companyRepo,
+	}
+
 	// ★ Invitation 用メールクライアント & メーラー
 	//   SENDGRID_API_KEY / INVITATION_FROM_EMAIL / CONSOLE_BASE_URL が
 	//   そろっている場合は SendGrid を使い、足りない場合はログ出力のみ。
@@ -281,12 +291,15 @@ func NewContainer(ctx context.Context) (*Container, error) {
 
 		InvitationQuery:   invitationQueryUC,
 		InvitationCommand: invitationCommandUC,
+
+		AuthBootstrap: authBootstrap,
 	}, nil
 }
 
 // ========================================
 // RouterDeps
 // ========================================
+// HTTP ルーターに必要な依存関係をまとめて返す。
 func (c *Container) RouterDeps() httpin.RouterDeps {
 	return httpin.RouterDeps{
 		AccountUC:          c.AccountUC,
@@ -323,6 +336,9 @@ func (c *Container) RouterDeps() httpin.RouterDeps {
 		// ★ 招待関連 Usecase を Router に渡す
 		InvitationQuery:   c.InvitationQuery,
 		InvitationCommand: c.InvitationCommand,
+
+		// ★ サインアップ後初期化（/auth/bootstrap 用）
+		AuthBootstrap: c.AuthBootstrap,
 
 		// AuthMiddleware 用
 		FirebaseAuth: c.FirebaseAuth,

@@ -24,12 +24,14 @@ type ctxKey struct{ name string }
 var (
 	ctxKeyMember    = ctxKey{name: "currentMember"}
 	ctxKeyCompanyID = ctxKey{name: "companyId"}
+	ctxKeyUID       = ctxKey{name: "uid"}
+	ctxKeyEmail     = ctxKey{name: "email"}
 )
 
 // AuthMiddleware は
 //   - Authorization: Bearer <ID_TOKEN>
 //
-// を検証し、現在メンバーと companyId を context に詰めて次のハンドラへ渡します。
+// を検証し、現在メンバーと companyId、uid/email を context に詰めて次のハンドラへ渡します。
 type AuthMiddleware struct {
 	FirebaseAuth *FirebaseAuthClient
 	MemberRepo   memdom.Repository
@@ -79,8 +81,19 @@ func (m *AuthMiddleware) Handler(next http.Handler) http.Handler {
 		// 追加ログ
 		log.Printf("[auth] uid=%s member.ID=%s companyId=%q", uid, member.ID, member.CompanyID)
 
-		// context に格納（currentMember は値として保持）
+		// context に格納
 		ctx := context.WithValue(r.Context(), ctxKeyMember, member)
+		ctx = context.WithValue(ctx, ctxKeyUID, uid)
+
+		// email クレームがあれば context にも入れておく
+		if emailRaw, ok := token.Claims["email"]; ok {
+			if emailStr, ok2 := emailRaw.(string); ok2 {
+				emailStr = strings.TrimSpace(emailStr)
+				if emailStr != "" {
+					ctx = context.WithValue(ctx, ctxKeyEmail, emailStr)
+				}
+			}
+		}
 
 		// companyId が空でなければ同時に注入
 		if cid := strings.TrimSpace(member.CompanyID); cid != "" {
@@ -98,12 +111,11 @@ func CurrentMember(r *http.Request) (*memdom.Member, bool) {
 	if v == nil {
 		return nil, false
 	}
-	m, ok := v.(memdom.Member)
-	if !ok {
+	m, ok := v.(*memdom.Member)
+	if !ok || m == nil {
 		return nil, false
 	}
-	// 値からポインタを返す（呼び出し互換のため）
-	return &m, true
+	return m, true
 }
 
 // CompanyID は context に注入された companyId を取得します。
@@ -118,4 +130,25 @@ func CompanyID(r *http.Request) (string, bool) {
 		return "", false
 	}
 	return s, true
+}
+
+// CurrentUIDAndEmail は middleware で検証された Firebase UID と email を返します。
+// email はトークンに含まれない場合、空文字になりえます。
+// どちらかが取得できない場合は ok=false。
+func CurrentUIDAndEmail(r *http.Request) (uid string, email string, ok bool) {
+	vUID := r.Context().Value(ctxKeyUID)
+	u, okUID := vUID.(string)
+	if !okUID || strings.TrimSpace(u) == "" {
+		return "", "", false
+	}
+
+	uid = strings.TrimSpace(u)
+
+	vEmail := r.Context().Value(ctxKeyEmail)
+	if vEmail != nil {
+		if e, okEmail := vEmail.(string); okEmail {
+			email = strings.TrimSpace(e)
+		}
+	}
+	return uid, email, true
 }

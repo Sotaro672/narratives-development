@@ -5,24 +5,13 @@ import {
   signInWithEmailAndPassword,
   signOut,
   deleteUser,
-  sendEmailVerification,              // ★ 追加
+  sendEmailVerification, // ★ 認証メール送信
 } from "firebase/auth";
 import { auth } from "../infrastructure/config/firebaseClient";
 
-// Firestore
-import {
-  collection,
-  serverTimestamp,
-  doc,
-  setDoc,
-  writeBatch,
-  getDoc,
-} from "firebase/firestore";
-import { db } from "../infrastructure/config/firebaseClient";
-
-// ★ 追加: すべてのPermission定義（新規ユーザーにフル権限付与）
-import { ALL_PERMISSIONS } from "../../../../permission/src/infrastructure/mockdata/mockdata";
-
+/**
+ * 認証エラーメッセージ
+ */
 function messageForAuthError(code?: string): string {
   switch (code) {
     case "auth/admin-restricted-operation":
@@ -48,99 +37,117 @@ export type SignUpProfile = {
   companyName?: string; // 任意
 };
 
-// ★ 追加: 認証メールの actionCodeSettings
+// ★ 認証メールの actionCodeSettings
 // ここで「メールのリンクを踏んだあとに遷移させたいURL」を指定
 const actionCodeSettings = {
   url: "https://narratives-development-26c2d.firebaseapp.com/post-verify",
   handleCodeInApp: false,
 };
 
+// ─────────────────────────────────────────────
+// Backend base URL（BrandRepositoryHTTP 等と同じ考え方に揃える）
+// ─────────────────────────────────────────────
+const RAW_ENV_BASE =
+  ((import.meta as any).env?.VITE_BACKEND_BASE_URL as string | undefined) ?? "";
+const FALLBACK_BASE =
+  "https://narratives-backend-871263659099.asia-northeast1.run.app";
+
+function sanitizeBase(u: string): string {
+  return (u || "").replace(/\/+$/g, "");
+}
+
+const ENV_BASE = sanitizeBase(RAW_ENV_BASE);
+const FINAL_BASE = sanitizeBase(ENV_BASE || FALLBACK_BASE);
+
+if (!FINAL_BASE) {
+  throw new Error(
+    "[useAuthActions] BACKEND BASE URL is empty. Set VITE_BACKEND_BASE_URL in .env.local",
+  );
+}
+
+// ★ auth/bootstrap 用エンドポイント（backend の bootstrap.go に処理を渡す）
+const BOOTSTRAP_URL = `${FINAL_BASE}/auth/bootstrap`;
+
+// 共通 HTTP ラッパ
+async function httpRequest<T>(input: string, init: RequestInit = {}): Promise<T> {
+  const res = await fetch(input, {
+    ...init,
+    headers: {
+      "Content-Type": "application/json",
+      ...(init.headers ?? {}),
+    },
+  });
+
+  if (res.status === 204) return undefined as unknown as T;
+
+  const text = await res.text().catch(() => "");
+
+  if (!res.ok) {
+    throw new Error(
+      `[useAuthActions] ${res.status} ${res.statusText} :: ${text?.slice(0, 300)}`,
+    );
+  }
+
+  try {
+    return text ? (JSON.parse(text) as T) : (undefined as unknown as T);
+  } catch {
+    throw new Error(
+      `[useAuthActions] JSON parse error. head: ${text.slice(0, 120)}`,
+    );
+  }
+}
+
+/**
+ * ★ Bootstrap API 呼び出し
+ * backend/internal/application/usecase/auth/bootstrap.go に処理を委譲する
+ *
+ * 期待する JSON ボディ例:
+ * {
+ *   "uid": "xxx",
+ *   "email": "user@example.com",
+ *   "profile": {
+ *     "lastName": "...",
+ *     "firstName": "...",
+ *     "lastNameKana": "...",
+ *     "firstNameKana": "...",
+ *     "companyName": "..."
+ *   }
+ * }
+ */
+async function callBootstrap(
+  uid: string,
+  email: string,
+  profile?: SignUpProfile,
+): Promise<void> {
+  const token = await auth.currentUser?.getIdToken();
+  if (!token) {
+    throw new Error("[useAuthActions] Not authenticated (no ID token).");
+  }
+
+  await httpRequest<void>(BOOTSTRAP_URL, {
+    method: "POST",
+    body: JSON.stringify({
+      uid,
+      email,
+      profile: {
+        lastName: (profile?.lastName ?? "").trim(),
+        firstName: (profile?.firstName ?? "").trim(),
+        lastNameKana: (profile?.lastNameKana ?? "").trim(),
+        firstNameKana: (profile?.firstNameKana ?? "").trim(),
+        companyName: (profile?.companyName ?? "").trim(),
+      },
+    }),
+    headers: {
+      Authorization: `Bearer ${token}`,
+    },
+  });
+}
+
 export function useAuthActions() {
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  /** 初期の members/{uid} 作成（companyId: null でOK。あとでバッチで上書き） */
-  async function initMember(uid: string, email: string, profile?: SignUpProfile) {
-    // ★ 新規ユーザーには全権限を付与
-    const initialPermissions = ALL_PERMISSIONS.map((p) => p.name);
-
-    await setDoc(
-      doc(db, "members", uid),
-      {
-        id: uid,
-        firstName: (profile?.firstName ?? "").trim(),
-        lastName: (profile?.lastName ?? "").trim(),
-        firstNameKana: (profile?.firstNameKana ?? "").trim(),
-        lastNameKana: (profile?.lastNameKana ?? "").trim(),
-        email: email.trim(),
-        permissions: initialPermissions,
-        assignedBrands: [],
-        companyId: null,
-        createdAt: serverTimestamp(),
-        updatedAt: serverTimestamp(),
-      },
-      { merge: true },
-    );
-  }
-
-  /** 会社作成と members.companyId の付与を同一バッチで行う */
-  async function createCompanyAndLink(uid: string, companyName?: string | null) {
-    const name = (companyName ?? "").trim();
-    if (!name) return null;
-
-    // 事前に DocID を採番して、同じバッチで set できるようにする
-    const companyRef = doc(collection(db, "companies"));
-    const companyId = companyRef.id;
-
-    const memberRef = doc(db, "members", uid);
-
-    const batch = writeBatch(db);
-
-    // companies/{id} 作成
-    batch.set(companyRef, {
-      id: companyId,
-      name,
-      admin: uid,
-      isActive: true,
-      createdAt: serverTimestamp(),
-      createdBy: uid,
-      updatedAt: serverTimestamp(),
-      updatedBy: uid,
-      deletedAt: null,
-      deletedBy: null,
-    });
-
-    // members/{uid} に companyId を同時付与
-    batch.set(
-      memberRef,
-      {
-        companyId: companyId,
-        updatedAt: serverTimestamp(),
-      },
-      { merge: true },
-    );
-
-    await batch.commit();
-
-    // 念のため検証
-    try {
-      const snap = await getDoc(memberRef);
-      const data = snap.data() as { companyId?: string | null } | undefined;
-      if (!data || data.companyId !== companyId) {
-        await setDoc(
-          memberRef,
-          { companyId, updatedAt: serverTimestamp() },
-          { merge: true },
-        );
-      }
-    } catch {
-      await setDoc(memberRef, { companyId, updatedAt: serverTimestamp() }, { merge: true });
-    }
-
-    return companyId;
-  }
-
-  /** サインアップ */
+  /** サインアップ（Firebase Auth のみ直接操作し、その後の Firestore 処理は Go の bootstrap に委譲） */
   async function signUp(email: string, password: string, profile?: SignUpProfile) {
     setSubmitting(true);
     setError(null);
@@ -150,14 +157,11 @@ export function useAuthActions() {
       const uid = cred.user?.uid;
       if (!uid) throw new Error("ユーザー作成後に uid を取得できませんでした。");
 
-      // 2) メールアドレス確認メールを送信  ★ここが今回のポイント
+      // 2) メールアドレス確認メールを送信
       await sendEmailVerification(cred.user, actionCodeSettings);
 
-      // 3) members/{uid} を先に初期化（companyId: null）
-      await initMember(uid, email, profile);
-
-      // 4) 会社名があれば、会社作成 + members.companyId を同一バッチで反映
-      await createCompanyAndLink(uid, profile?.companyName);
+      // 3) members / companies などの初期化は backend 側（bootstrap.go）に任せる
+      await callBootstrap(uid, email, profile);
     } catch (e: any) {
       console.error("signUp error", e);
       setError(messageForAuthError(e?.code));

@@ -7,6 +7,7 @@ import (
 	firebaseauth "firebase.google.com/go/v4/auth"
 
 	usecase "narratives/internal/application/usecase"
+	authuc "narratives/internal/application/usecase/auth" // ★ 追加
 
 	// ハンドラ群
 	"narratives/internal/adapters/in/http/handlers"
@@ -51,6 +52,9 @@ type RouterDeps struct {
 	UserUC             *usecase.UserUsecase
 	WalletUC           *usecase.WalletUsecase
 
+	// ★ Bootstrap 用サービス（auth/bootstrap 用）
+	AuthBootstrap *authuc.BootstrapService
+
 	// ★ 招待情報取得用 Usecase（InvitationQueryPort）
 	InvitationQuery usecase.InvitationQueryPort
 	// ★ 招待メール発行用 Usecase（InvitationCommandPort）
@@ -85,6 +89,22 @@ func NewRouter(deps RouterDeps) http.Handler {
 			FirebaseAuth: deps.FirebaseAuth,
 			MemberRepo:   deps.MemberRepo,
 		}
+	}
+
+	// ============================================================
+	// auth/bootstrap （サインアップ後の初期セットアップ）
+	// ============================================================
+	if deps.AuthBootstrap != nil {
+		bootstrapH := handlers.NewAuthBootstrapHandler(deps.AuthBootstrap)
+
+		var securedBootstrap http.Handler = bootstrapH
+		if authMw != nil {
+			// ★ ID トークン検証のため AuthMiddleware を通す
+			securedBootstrap = authMw.Handler(securedBootstrap)
+		}
+
+		// フロントが叩いているパスに合わせる: POST /auth/bootstrap
+		mux.Handle("/auth/bootstrap", securedBootstrap)
 	}
 
 	// ============================================================
