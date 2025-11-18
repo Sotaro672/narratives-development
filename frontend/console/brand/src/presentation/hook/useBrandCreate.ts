@@ -102,15 +102,29 @@ export function useBrandCreate() {
 
   // ---------------------------
   // 保存処理（BrandPatch）
+  //  - ブランド名 (name) を必須
+  //  - ブランド責任者 (managerId) を必須
   // ---------------------------
   const handleSave = useCallback(() => {
+    const trimmedName = name.trim();
+
+    if (!trimmedName) {
+      alert("ブランド名は必須です。");
+      return;
+    }
+
+    if (!managerId) {
+      alert("ブランド責任者を選択してください。");
+      return;
+    }
+
     const payload: BrandPatch = {
       companyId: companyId || null,
-      name: name || null,
+      name: trimmedName,
       description: description || null,
       websiteUrl: websiteUrl || null,
       isActive: true, // 作成時は常に true
-      managerId: managerId || null,
+      managerId,
       // walletAddress は自動設定されるためフロントからは送らない
     };
 

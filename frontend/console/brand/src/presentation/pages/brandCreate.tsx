@@ -51,10 +51,10 @@ export default function BrandCreate() {
           {/* ------------------------------- */}
           {/* ブランド名 */}
           {/* ------------------------------- */}
-          <CardLabel htmlFor="name">ブランド名</CardLabel>
+          <CardLabel htmlFor="name">ブランド名（必須）</CardLabel>
           <CardInput
             id="name"
-            placeholder="例：LUMINA Fashion"
+            placeholder="ブランド名"
             value={name}
             onChange={(e) => setName(e.target.value)}
           />
@@ -87,7 +87,7 @@ export default function BrandCreate() {
           {/* ======================================================== */}
 
           <CardLabel htmlFor="managerId" className="mt-6">
-            ブランド責任者（任意）
+            ブランド責任者（必須）
           </CardLabel>
 
           <CardSelect

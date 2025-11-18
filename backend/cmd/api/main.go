@@ -92,7 +92,7 @@ func main() {
 	// ─────────────────────────────────────────────────────────────
 	allowedOrigin := strings.TrimSpace(os.Getenv("FRONTEND_ORIGIN"))
 	if allowedOrigin == "" {
-		allowedOrigin = "https://narratives-console-dev.web.app"
+		allowedOrigin = "https://narratives.jp"
 	}
 	log.Printf("[boot] CORS allowed origin: %s", allowedOrigin)
 

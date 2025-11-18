@@ -218,7 +218,7 @@ func NewContainer(ctx context.Context) (*Container, error) {
 			fromAddress = "no-reply@example.com"
 		}
 		if consoleBaseURL == "" {
-			consoleBaseURL = "https://narratives-console-dev.web.app"
+			consoleBaseURL = "https://narratives.jp"
 		}
 	} else {
 		log.Printf("[container] SendGrid client enabled for invitations (from=%s)", fromAddress)
