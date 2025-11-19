@@ -57,12 +57,12 @@ export default function AuthPage() {
         </h1>
 
         <form className="auth-form" onSubmit={handleFormSubmit}>
-          {/* ▼ signup：姓名 + かな */}
+          {/* ▼ signup：姓名 + カタカナ */}
           {mode === "signup" && (
             <>
               <div className="auth-row">
                 <label className="auth-label auth-label-inline">
-                  姓
+                  姓（漢字）
                   <input
                     type="text"
                     className="auth-input"
@@ -73,12 +73,13 @@ export default function AuthPage() {
                 </label>
 
                 <label className="auth-label auth-label-inline">
-                  姓（かな）
+                  姓（カナ）
                   <input
                     type="text"
                     className="auth-input"
                     value={lastNameKana}
                     onChange={(e) => setLastNameKana(e.target.value)}
+                    placeholder="姓（セイ）"
                     required
                   />
                 </label>
@@ -86,7 +87,7 @@ export default function AuthPage() {
 
               <div className="auth-row">
                 <label className="auth-label auth-label-inline">
-                  名
+                  名（漢字）
                   <input
                     type="text"
                     className="auth-input"
@@ -97,12 +98,13 @@ export default function AuthPage() {
                 </label>
 
                 <label className="auth-label auth-label-inline">
-                  名（かな）
+                  名（カナ）
                   <input
                     type="text"
                     className="auth-input"
                     value={firstNameKana}
                     onChange={(e) => setFirstNameKana(e.target.value)}
+                    placeholder="名（メイ）"
                     required
                   />
                 </label>
@@ -128,7 +130,7 @@ export default function AuthPage() {
           {/* ▼ signup：会社名 */}
           {mode === "signup" && (
             <label className="auth-label">
-              会社名・団体名
+              会社名・団体名（アルファベット不可）
               <input
                 type="text"
                 className="auth-input"

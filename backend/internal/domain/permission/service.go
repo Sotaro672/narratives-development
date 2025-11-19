@@ -88,6 +88,8 @@ func (s *Service) SetManagementAdapter(a ManagementAdapterPort) { s.adapter = a 
 func (s *Service) SetMembersPort(m MembersPort)                 { s.members = m }
 
 // 一覧オプション（Filter/Sort/Page の束ね）
+// ========================================
+
 type ListPermissionsOptions struct {
 	Filter Filter
 	Sort   Sort

@@ -9,6 +9,7 @@ import (
 
 	companydom "narratives/internal/domain/company"
 	memberdom "narratives/internal/domain/member"
+	permdom "narratives/internal/domain/permission"
 )
 
 // -------------------------------------------------------
@@ -70,7 +71,12 @@ func (s *BootstrapService) Bootstrap(
 
 	//---------------------------------------------------------
 	// 1) Member 新規作成
+	//    - status = "active"
+	//    - permissions = 全権限（backend catalog 由来）
 	//---------------------------------------------------------
+
+	// backend の Permission カタログから name 一覧を取得
+	allPermNames := permdom.AllPermissionNames()
 
 	memberEntity, err := memberdom.New(
 		uid,
@@ -78,6 +84,8 @@ func (s *BootstrapService) Bootstrap(
 		memberdom.WithName(p.FirstName, p.LastName),
 		memberdom.WithNameKana(p.FirstNameKana, p.LastNameKana),
 		memberdom.WithEmail(email),
+		memberdom.WithStatus("active"),          // ★ ここで active にする
+		memberdom.WithPermissions(allPermNames), // ★ 全権限を付与
 	)
 	if err != nil {
 		log.Printf("[bootstrap] failed to create member entity: uid=%s err=%v", uid, err)
@@ -90,7 +98,8 @@ func (s *BootstrapService) Bootstrap(
 		return err
 	}
 
-	log.Printf("[bootstrap] member created: uid=%s", uid)
+	log.Printf("[bootstrap] member created: uid=%s, permissions=%d, status=%s",
+		uid, len(memberEntity.Permissions), memberEntity.Status)
 
 	//---------------------------------------------------------
 	// 2) 会社名が空ならここで終了（Company は作成しない）

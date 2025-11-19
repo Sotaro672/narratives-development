@@ -1,8 +1,8 @@
+// backend/internal/domain/permission/catalog.go
 package permission
 
-// Static catalog of all permissions.
-// This mirrors the frontend ALL_PERMISSIONS but backend is the true source of truth.
-var AllPermissions = []Permission{
+// static な権限カタログ（バックエンドが唯一の真実）
+var allPermissions = []Permission{
 	MustNew("perm_wallet_view", "wallet.view", "ウォレット情報の閲覧", CategoryWallet),
 	MustNew("perm_wallet_edit", "wallet.edit", "ウォレット設定の編集", CategoryWallet),
 
@@ -30,11 +30,18 @@ var AllPermissions = []Permission{
 	MustNew("perm_system_admin", "system.admin", "システム管理全般", CategorySystem),
 }
 
-// Helper to extract permission names (for member assignment).
-func AllPermissionNames() []string {
-	out := make([]string, 0, len(AllPermissions))
-	for _, p := range AllPermissions {
-		out = append(out, p.Name)
-	}
+// AllPermissions は定義済みの権限一覧をコピーして返す
+func AllPermissions() []Permission {
+	out := make([]Permission, len(allPermissions))
+	copy(out, allPermissions)
 	return out
+}
+
+// AllPermissionNames は name だけのスライスを返す（例: "wallet.view", ...）
+func AllPermissionNames() []string {
+	names := make([]string, 0, len(allPermissions))
+	for _, p := range allPermissions {
+		names = append(names, p.Name)
+	}
+	return names
 }

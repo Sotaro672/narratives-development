@@ -1,9 +1,50 @@
-// frontend/console/shell/src/auth/hook/useAuthPage.ts
+// frontend/console/shell/src/auth/presentation/hook/useAuthPage.ts
 import { useCallback, useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuthActions } from "../../application/useAuthActions";
 
 export type AuthMode = "signup" | "signin";
+
+// -------------------------
+// カナ関連ヘルパ
+// -------------------------
+
+// ひらがな・半角カナを全角カタカナに寄せる（削除はしない）
+function toKatakana(input: string): string {
+  if (!input) return "";
+
+  let s = input;
+
+  // ひらがな → カタカナ
+  s = s.replace(/[\u3041-\u3096]/g, (ch) =>
+    String.fromCharCode(ch.charCodeAt(0) + 0x60),
+  );
+
+  // 半角カナ → 全角カナ（簡易変換）
+  s = s.replace(/[\uff61-\uff9f]/g, (ch) => {
+    const code = ch.charCodeAt(0) - 0xff61 + 0x30a1;
+    return String.fromCharCode(code);
+  });
+
+  return s;
+}
+
+// 「全角カタカナ + 長音 + スペースのみか」をチェック
+function isKatakanaOnly(input: string): boolean {
+  if (!input) return false;
+  return /^[\u30A0-\u30FFー\s]+$/.test(input);
+}
+
+// -------------------------
+// 会社名からアルファベット除去
+// -------------------------
+function normalizeCompanyName(input: string): string {
+  if (!input) return "";
+
+  // 許可: 漢字・ひらがな・カタカナ・数字・スペース・長音
+  // アルファベットだけ除去
+  return input.replace(/[A-Za-z]/g, "");
+}
 
 export function useAuthPage() {
   const navigate = useNavigate();
@@ -26,7 +67,10 @@ export function useAuthPage() {
   const [lastNameKana, setLastNameKana] = useState("");
   const [firstNameKana, setFirstNameKana] = useState("");
 
-  const [companyName, setCompanyName] = useState("");
+  const [companyName, _setCompanyName] = useState("");
+
+  // 会社名アルファベット排除
+  const setCompanyName = (v: string) => _setCompanyName(normalizeCompanyName(v));
 
   // -------------------------
   // 新規登録フロー管理
@@ -44,7 +88,7 @@ export function useAuthPage() {
     setLastNameKana("");
     setFirstNameKana("");
 
-    setCompanyName("");
+    _setCompanyName("");
 
     setError(null);
   }, [setError]);
@@ -72,14 +116,26 @@ export function useAuthPage() {
           return;
         }
 
+        // カナ入力チェック（ひらがな/半角カナはカタカナ化してから判定）
+        const normalizedLastKana = toKatakana(lastNameKana.trim());
+        const normalizedFirstKana = toKatakana(firstNameKana.trim());
+
+        if (
+          !isKatakanaOnly(normalizedLastKana) ||
+          !isKatakanaOnly(normalizedFirstKana)
+        ) {
+          setError("姓・名のカナは全角カタカナのみで入力してください。");
+          return;
+        }
+
         setSignupRequested(true);
         setSignupCompleted(false);
 
         await signUp(email, password, {
           lastName,
           firstName,
-          lastNameKana,
-          firstNameKana,
+          lastNameKana: normalizedLastKana,
+          firstNameKana: normalizedFirstKana,
           companyName,
         });
         return;
@@ -106,16 +162,12 @@ export function useAuthPage() {
 
   // -------------------------
   // signup 完了判定
-  // signupRequested=true && submitting=false && error=null
-  // 完了後 → CertificationPage へ遷移
   // -------------------------
   useEffect(() => {
     if (mode !== "signup") return;
 
     if (signupRequested && !submitting && !error) {
       setSignupCompleted(true);
-
-      // フローをリセットして同ページ戻り時の無限リダイレクトを防止
       setSignupRequested(false);
     }
   }, [mode, signupRequested, submitting, error, navigate]);
@@ -141,10 +193,12 @@ export function useAuthPage() {
     setLastName,
     firstName,
     setFirstName,
+
     lastNameKana,
     setLastNameKana,
     firstNameKana,
     setFirstNameKana,
+
     companyName,
     setCompanyName,
 
