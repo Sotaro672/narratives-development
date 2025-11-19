@@ -4,34 +4,101 @@ import {
   reauthenticateWithCredential,
   updatePassword as fbUpdatePassword,
   verifyBeforeUpdateEmail,
+  sendPasswordResetEmail, // ★ 追加
 } from "firebase/auth";
 import { auth } from "../infrastructure/config/firebaseClient";
 
-export async function changeEmail(currentPassword: string, newEmail: string) {
-  const user = auth.currentUser;
-  if (!user || !user.email) {
-    throw new Error("ログイン情報が見つかりません。再ログインしてください。");
+// Firebase エラーコード → アプリ内コード
+function mapFirebaseErrorCode(code?: string): string {
+  switch (code) {
+    // 再認証系
+    case "auth/wrong-password":
+    case "auth/user-mismatch":
+    case "auth/user-not-found":
+    case "auth/user-disabled":
+    case "auth/invalid-credential":
+      return "AUTH_REAUTH_FAILED";
+
+    // メール重複
+    case "auth/email-already-in-use":
+      return "AUTH_EMAIL_IN_USE";
+
+    // パスワード強度不足
+    case "auth/weak-password":
+      return "AUTH_WEAK_PASSWORD";
+
+    default:
+      return "AUTH_UNKNOWN";
   }
-
-  // 1. 再認証
-  const cred = EmailAuthProvider.credential(user.email, currentPassword);
-  await reauthenticateWithCredential(user, cred);
-
-  // 2. 変更前に「新メールアドレス宛の確認メールを送る」
-  await verifyBeforeUpdateEmail(user, newEmail);
-
-  // ※ ここではまだ Auth 上の email は変わりません。
-  //    ユーザーが「新メールアドレスに届いたリンクをクリック」した時点で変更されます。
 }
 
-export async function changePassword(currentPassword: string, newPassword: string) {
+// ─────────────────────────────
+// メールアドレス変更
+// ─────────────────────────────
+export async function changeEmail(
+  currentPassword: string,
+  newEmail: string,
+): Promise<void> {
   const user = auth.currentUser;
   if (!user || !user.email) {
-    throw new Error("ログイン情報が見つかりません。再ログインしてください。");
+    throw new Error("AUTH_NO_USER");
   }
 
-  const cred = EmailAuthProvider.credential(user.email, currentPassword);
-  await reauthenticateWithCredential(user, cred);
+  try {
+    const cred = EmailAuthProvider.credential(user.email, currentPassword);
+    await reauthenticateWithCredential(user, cred);
 
-  await fbUpdatePassword(user, newPassword);
+    await verifyBeforeUpdateEmail(user, newEmail);
+  } catch (e: any) {
+    const code = e?.code as string | undefined;
+    const mapped = mapFirebaseErrorCode(code);
+    throw new Error(mapped);
+  }
+}
+
+// ─────────────────────────────
+// （旧）パスワード変更
+//   → 仕様変更により「再設定メール送信」を使うため、
+//     直接パスワードを更新する処理は今後は使わない想定。
+//   必要であれば残してもよいが、ここでは未使用。
+// ─────────────────────────────
+export async function changePassword(
+  currentPassword: string,
+  newPassword: string,
+): Promise<void> {
+  const user = auth.currentUser;
+  if (!user || !user.email) {
+    throw new Error("AUTH_NO_USER");
+  }
+
+  try {
+    const cred = EmailAuthProvider.credential(user.email, currentPassword);
+    await reauthenticateWithCredential(user, cred);
+
+    await fbUpdatePassword(user, newPassword);
+  } catch (e: any) {
+    const code = e?.code as string | undefined;
+    const mapped = mapFirebaseErrorCode(code);
+    throw new Error(mapped);
+  }
+}
+
+// ─────────────────────────────
+// ★ 追加: パスワード再設定メール送信
+//   Firebase のテンプレート
+//   「%APP_NAME% のパスワードを再設定してください」メールが送信される
+// ─────────────────────────────
+export async function sendPasswordResetForCurrentUser(): Promise<void> {
+  const user = auth.currentUser;
+  if (!user || !user.email) {
+    throw new Error("AUTH_NO_USER");
+  }
+
+  try {
+    await sendPasswordResetEmail(auth, user.email);
+  } catch (e: any) {
+    const code = e?.code as string | undefined;
+    const mapped = mapFirebaseErrorCode(code);
+    throw new Error(mapped);
+  }
 }

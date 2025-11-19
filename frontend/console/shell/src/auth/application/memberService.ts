@@ -15,8 +15,6 @@ const FALLBACK_BASE =
 
 const API_BASE = ENV_BASE || FALLBACK_BASE;
 
-// 既存: fetchCurrentMember はそのまま
-
 export async function fetchCurrentMember(uid: string): Promise<MemberDTO | null> {
   const token = await auth.currentUser?.getIdToken();
   if (!token) return null;
@@ -87,13 +85,14 @@ export async function fetchCurrentMember(uid: string): Promise<MemberDTO | null>
   };
 }
 
-// ★ 追加: プロフィール更新
+// ★ email を含められるようにする
 export type UpdateMemberProfileInput = {
   id: string;
   firstName: string;
   lastName: string;
   firstNameKana: string;
   lastNameKana: string;
+  email?: string | null; // ← 追加
 };
 
 export async function updateCurrentMemberProfile(
@@ -105,18 +104,24 @@ export async function updateCurrentMemberProfile(
   const url = `${API_BASE}/members/${encodeURIComponent(input.id)}`;
   console.log("[memberService] updateCurrentMemberProfile PATCH", url, input);
 
+  // PATCH の payload
+  const payload: any = {
+    firstName: input.firstName,
+    lastName: input.lastName,
+    firstNameKana: input.firstNameKana,
+    lastNameKana: input.lastNameKana,
+  };
+  if (input.email !== undefined) {
+    payload.email = input.email;
+  }
+
   const res = await fetch(url, {
-    method: "PATCH", // Backend 側のメソッドに合わせる（PUT なら PUT に変更）
+    method: "PATCH",
     headers: {
       Authorization: `Bearer ${token}`,
       "Content-Type": "application/json",
     },
-    body: JSON.stringify({
-      firstName: input.firstName,
-      lastName: input.lastName,
-      firstNameKana: input.firstNameKana,
-      lastNameKana: input.lastNameKana,
-    }),
+    body: JSON.stringify(payload),
   });
 
   if (!res.ok) {
@@ -132,7 +137,6 @@ export async function updateCurrentMemberProfile(
 
   const ct = res.headers.get("Content-Type") ?? "";
   if (!ct.includes("application/json")) {
-    // 成功だけどボディ無し、などなら null でもよい
     return null;
   }
 
@@ -165,7 +169,7 @@ export async function updateCurrentMemberProfile(
     lastName,
     firstNameKana,
     lastNameKana,
-    email: raw.email ?? null,
+    email: raw.email ?? payload.email ?? null,
     companyId: raw.companyId ?? "",
     fullName: full,
   };

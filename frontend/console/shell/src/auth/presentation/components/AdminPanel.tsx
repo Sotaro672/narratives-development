@@ -1,12 +1,8 @@
-//frontend\console\shell\src\auth\presentation\components\AdminPanel.tsx
+// frontend/console/shell/src/auth/presentation/components/AdminPanel.tsx
 import { LogOut } from "lucide-react";
 import "../styles/auth.css";
 import { Input } from "../../../shared/ui/input";
 import { useAdminPanel } from "../hook/useAdminPanel";
-import {
-  changeEmail,
-  changePassword,
-} from "../../application/profileService";
 
 interface AdminPanelProps {
   open: boolean;
@@ -56,25 +52,36 @@ export default function AdminPanel({
     currentPasswordForEmail,
     setCurrentPasswordForEmail,
 
-    // password fields
-    currentPassword,
-    setCurrentPassword,
-    newPassword,
-    setNewPassword,
-    confirmPassword,
-    setConfirmPassword,
-
-    // backend profile update
+    // handlers
     saveProfile,
+    saveEmail,
+    savePassword,
   } = useAdminPanel();
 
   if (!open) return null;
+
+  // ─────────────────────────────
+  // ユーティリティ: カタカナ判定
+  // ─────────────────────────────
+  const isKatakana = (value: string): boolean => {
+    const v = value.trim();
+    if (!v) return true; // 空は許可
+    // 全角カタカナ + 長音符 + スペース
+    const katakanaRegex = /^[\u30A0-\u30FFー\s]+$/;
+    return katakanaRegex.test(v);
+  };
 
   // ─────────────────────────────
   // プロフィール更新（backend PATCH）
   // ─────────────────────────────
   const handleProfileSave = async () => {
     try {
+      // カタカナバリデーション
+      if (!isKatakana(lastNameKana) || !isKatakana(firstNameKana)) {
+        window.alert("フリガナはカタカナで入力してください。");
+        return;
+      }
+
       await saveProfile();
       onEditProfile?.();
       setShowProfileDialog(false);
@@ -89,59 +96,64 @@ export default function AdminPanel({
   // ─────────────────────────────
   const handleEmailSave = async () => {
     try {
-      if (!newEmail.trim()) {
-        window.alert("新しいメールアドレスを入力してください。");
-        return;
-      }
-      if (!currentPasswordForEmail) {
-        window.alert("現在のパスワードを入力してください。");
-        return;
-      }
-
-      await changeEmail(currentPasswordForEmail, newEmail.trim());
+      await saveEmail();
 
       onChangeEmail?.();
       setShowEmailDialog(false);
 
-      // reset
-      setNewEmail("");
-      setCurrentPasswordForEmail("");
-    } catch (e) {
+      window.alert(
+        "メールアドレス変更用の認証メールを送信しました。メールに記載されたリンクから新しいメールアドレスを確認してください。",
+      );
+    } catch (e: any) {
       console.error("[AdminPanel] handleEmailSave error:", e);
-      window.alert("メールアドレス変更に失敗しました。");
+
+      const code = e?.message;
+      switch (code) {
+        case "EMAIL_REQUIRED":
+          window.alert("新しいメールアドレスを入力してください。");
+          break;
+        case "PASSWORD_REQUIRED":
+          window.alert("現在のパスワードを入力してください。");
+          break;
+        case "AUTH_REAUTH_FAILED":
+          window.alert("再認証に失敗しました。パスワードを確認してください。");
+          break;
+        case "AUTH_EMAIL_IN_USE":
+          window.alert("このメールアドレスは既に使用されています。");
+          break;
+        case "AUTH_NO_USER":
+          window.alert("ログイン情報が見つかりません。再ログインしてください。");
+          break;
+        default:
+          window.alert("認証メールの送信に失敗しました。");
+      }
     }
   };
 
   // ─────────────────────────────
-  // パスワード変更（Firebase Auth）
+  // パスワード再設定メール送信
   // ─────────────────────────────
   const handlePasswordSave = async () => {
     try {
-      if (!currentPassword) {
-        window.alert("現在のパスワードを入力してください。");
-        return;
-      }
-      if (!newPassword) {
-        window.alert("新しいパスワードを入力してください。");
-        return;
-      }
-      if (newPassword !== confirmPassword) {
-        window.alert("新しいパスワードと確認用パスワードが一致していません。");
-        return;
-      }
-
-      await changePassword(currentPassword, newPassword);
+      await savePassword();
 
       onChangePassword?.();
       setShowPasswordDialog(false);
 
-      // reset
-      setCurrentPassword("");
-      setNewPassword("");
-      setConfirmPassword("");
-    } catch (e) {
+      window.alert(
+        "パスワード再設定用のメールを送信しました。メールに記載のリンクから新しいパスワードを設定してください。",
+      );
+    } catch (e: any) {
       console.error("[AdminPanel] handlePasswordSave error:", e);
-      window.alert("パスワード変更に失敗しました。");
+
+      const code = e?.message;
+      switch (code) {
+        case "AUTH_NO_USER":
+          window.alert("ログイン情報が見つかりません。再ログインしてください。");
+          break;
+        default:
+          window.alert("パスワード再設定メールの送信に失敗しました。");
+      }
     }
   };
 
@@ -186,10 +198,7 @@ export default function AdminPanel({
 
         <div className="admin-dropdown-sep" />
 
-        <button
-          className="admin-dropdown-item logout"
-          onClick={onLogout}
-        >
+        <button className="admin-dropdown-item logout" onClick={onLogout}>
           <LogOut className="logout-icon" />
           ログアウト
         </button>
@@ -204,7 +213,7 @@ export default function AdminPanel({
             <div className="admin-modal-title">プロフィール変更</div>
 
             <div className="space-y-4">
-              {/* 姓 / 姓かな */}
+              {/* 姓 / 姓カナ */}
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className="admin-modal-label">姓</label>
@@ -216,17 +225,17 @@ export default function AdminPanel({
                   />
                 </div>
                 <div>
-                  <label className="admin-modal-label">姓（かな）</label>
+                  <label className="admin-modal-label">姓（カナ）</label>
                   <Input
                     className="admin-modal-input"
                     value={lastNameKana}
                     onChange={(e) => setLastNameKana(e.target.value)}
-                    placeholder="やまだ"
+                    placeholder="ヤマダ"
                   />
                 </div>
               </div>
 
-              {/* 名 / 名かな */}
+              {/* 名 / 名カナ */}
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className="admin-modal-label">名</label>
@@ -238,12 +247,12 @@ export default function AdminPanel({
                   />
                 </div>
                 <div>
-                  <label className="admin-modal-label">名（かな）</label>
+                  <label className="admin-modal-label">名（カナ）</label>
                   <Input
                     className="admin-modal-input"
                     value={firstNameKana}
                     onChange={(e) => setFirstNameKana(e.target.value)}
-                    placeholder="たろう"
+                    placeholder="タロウ"
                   />
                 </div>
               </div>
@@ -288,14 +297,12 @@ export default function AdminPanel({
               </div>
 
               <div>
-                <label className="admin-modal-label">現在のパスワード</label>
+                <label className="admin-modal-label">パスワード</label>
                 <Input
                   className="admin-modal-input"
                   type="password"
                   value={currentPasswordForEmail}
-                  onChange={(e) =>
-                    setCurrentPasswordForEmail(e.target.value)
-                  }
+                  onChange={(e) => setCurrentPasswordForEmail(e.target.value)}
                   placeholder="現在のパスワード"
                 />
               </div>
@@ -312,7 +319,7 @@ export default function AdminPanel({
                 className="admin-modal-button primary"
                 onClick={handleEmailSave}
               >
-                保存
+                認証メールを送信
               </button>
             </div>
           </div>
@@ -320,7 +327,7 @@ export default function AdminPanel({
       )}
 
       {/* ---------------------------------- */}
-      {/* パスワード変更 */}
+      {/* パスワード変更 → 再設定メール送信ダイアログ */}
       {/* ---------------------------------- */}
       {showPasswordDialog && (
         <div className="admin-modal-backdrop" aria-modal="true">
@@ -328,46 +335,11 @@ export default function AdminPanel({
             <div className="admin-modal-title">パスワード変更</div>
 
             <div className="space-y-4">
-              <div>
-                <label className="admin-modal-label">現在のパスワード</label>
-                <Input
-                  className="admin-modal-input"
-                  type="password"
-                  value={currentPassword}
-                  onChange={(e) =>
-                    setCurrentPassword(e.target.value)
-                  }
-                  placeholder="現在のパスワード"
-                />
-              </div>
-
-              <div>
-                <label className="admin-modal-label">新しいパスワード</label>
-                <Input
-                  className="admin-modal-input"
-                  type="password"
-                  value={newPassword}
-                  onChange={(e) =>
-                    setNewPassword(e.target.value)
-                  }
-                  placeholder="新しいパスワード"
-                />
-              </div>
-
-              <div>
-                <label className="admin-modal-label">
-                  新しいパスワード（確認）
-                </label>
-                <Input
-                  className="admin-modal-input"
-                  type="password"
-                  value={confirmPassword}
-                  onChange={(e) =>
-                    setConfirmPassword(e.target.value)
-                  }
-                  placeholder="新しいパスワードを再入力"
-                />
-              </div>
+              <p className="admin-modal-text">
+                現在ログイン中のメールアドレス宛に、
+                パスワード再設定用のメールを送信します。
+                メールに記載されたリンクから新しいパスワードを設定してください。
+              </p>
             </div>
 
             <div className="admin-modal-footer">
@@ -381,7 +353,7 @@ export default function AdminPanel({
                 className="admin-modal-button primary"
                 onClick={handlePasswordSave}
               >
-                保存
+                再設定メールを送信
               </button>
             </div>
           </div>

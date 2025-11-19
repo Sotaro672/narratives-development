@@ -7,7 +7,8 @@ import {
 } from "../../application/memberService";
 import {
   changeEmail,
-  changePassword,
+  // changePassword,  // ★ もう使わない
+  sendPasswordResetForCurrentUser, // ★ 追加
 } from "../../application/profileService";
 
 export function useAdminPanel() {
@@ -16,7 +17,7 @@ export function useAdminPanel() {
   const [showEmailDialog, setShowEmailDialog] = useState(false);
   const [showPasswordDialog, setShowPasswordDialog] = useState(false);
 
-  // ★ currentMember の id
+  // currentMember の id
   const [memberId, setMemberId] = useState<string | null>(null);
 
   // profile fields
@@ -29,39 +30,67 @@ export function useAdminPanel() {
   const [newEmail, setNewEmail] = useState("");
   const [currentPasswordForEmail, setCurrentPasswordForEmail] = useState("");
 
-  // password fields
-  const [currentPassword, setCurrentPassword] = useState("");
-  const [newPassword, setNewPassword] = useState("");
-  const [confirmPassword, setConfirmPassword] = useState("");
+  // ★ パスワード用の state は不要になったので削除
+  // const [currentPassword, setCurrentPassword] = useState("");
+  // const [newPassword, setNewPassword] = useState("");
+  // const [confirmPassword, setConfirmPassword] = useState("");
 
   // ─────────────────────────────
-  // currentMember を取得してフィールドにセット
+  // currentMember を取得 & Auth email と差分があれば同期
   // ─────────────────────────────
   useEffect(() => {
-    async function loadCurrentMember() {
-      const uid = auth.currentUser?.uid;
-      if (!uid) return;
+    async function loadAndSyncCurrentMember() {
+      const user = auth.currentUser;
+      const uid = user?.uid;
+      if (!uid) {
+        console.warn("[useAdminPanel] no currentUser, skip loadCurrentMember");
+        return;
+      }
 
       try {
         const member = await fetchCurrentMember(uid);
-        if (!member) return;
+        if (!member) {
+          console.warn("[useAdminPanel] fetchCurrentMember returned null");
+          return;
+        }
 
-        setMemberId(member.id ?? uid);
+        const memberIdResolved = member.id ?? uid;
+        setMemberId(memberIdResolved);
 
         setFirstName(member.firstName ?? "");
         setLastName(member.lastName ?? "");
         setFirstNameKana(member.firstNameKana ?? "");
         setLastNameKana(member.lastNameKana ?? "");
+
+        // Auth の email と members.email を比較して差分があれば同期
+        const authEmail = user.email ?? null;
+        const memberEmail = member.email ?? null;
+
+        if (authEmail && authEmail !== memberEmail) {
+          console.log(
+            "[useAdminPanel] email mismatch detected. Syncing Firestore members.email",
+            { authEmail, memberEmail },
+          );
+
+          await updateCurrentMemberProfile({
+            id: memberIdResolved,
+            firstName: member.firstName ?? "",
+            lastName: member.lastName ?? "",
+            firstNameKana: member.firstNameKana ?? "",
+            lastNameKana: member.lastNameKana ?? "",
+            email: authEmail,
+          });
+        }
       } catch (e) {
-        console.error("[useAdminPanel] failed to load currentMember:", e);
+        console.error("[useAdminPanel] failed to load/sync currentMember:", e);
       }
     }
 
-    void loadCurrentMember();
+    void loadAndSyncCurrentMember();
   }, []);
 
   // ─────────────────────────────
-  // プロフィール保存（Backend 経由で Firestore members を更新）
+  // プロフィール保存（名前系のみ更新）
   // ─────────────────────────────
   const saveProfile = useCallback(async () => {
     if (!memberId) {
@@ -84,9 +113,8 @@ export function useAdminPanel() {
   }, [memberId, firstName, lastName, firstNameKana, lastNameKana]);
 
   // ─────────────────────────────
-  // ★ メールアドレス変更 + Firebase メール送信トリガ
-  //   （profileService.changeEmail 内で Firebase Auth API を呼び、
-  //    コンソールで設定した「メールアドレスの変更」テンプレートが送信される想定）
+  // メールアドレス変更（verifyBeforeUpdateEmail まで）
+  // Firestore 同期は useEffect の auto sync に任せる
   // ─────────────────────────────
   const saveEmail = useCallback(async () => {
     if (!newEmail.trim()) {
@@ -96,34 +124,21 @@ export function useAdminPanel() {
       throw new Error("PASSWORD_REQUIRED");
     }
 
-    await changeEmail(currentPasswordForEmail, newEmail.trim());
+    const normalizedEmail = newEmail.trim();
+    await changeEmail(currentPasswordForEmail, normalizedEmail);
 
-    // 成功後は入力をクリア（ダイアログを閉じるかどうかは呼び出し側で制御）
     setNewEmail("");
     setCurrentPasswordForEmail("");
   }, [newEmail, currentPasswordForEmail]);
 
   // ─────────────────────────────
-  // ★ パスワード変更（Firebase Auth + 再認証）
+  // ★ パスワード再設定メール送信
+  //   - Firebase テンプレート「%APP_NAME% のパスワードを再設定してください」が送信される
+  //   - 新しいパスワードはメール先の画面で入力
   // ─────────────────────────────
   const savePassword = useCallback(async () => {
-    if (!currentPassword) {
-      throw new Error("CURRENT_PASSWORD_REQUIRED");
-    }
-    if (!newPassword) {
-      throw new Error("NEW_PASSWORD_REQUIRED");
-    }
-    if (newPassword !== confirmPassword) {
-      throw new Error("PASSWORD_MISMATCH");
-    }
-
-    await changePassword(currentPassword, newPassword);
-
-    // 成功後は入力をクリア
-    setCurrentPassword("");
-    setNewPassword("");
-    setConfirmPassword("");
-  }, [currentPassword, newPassword, confirmPassword]);
+    await sendPasswordResetForCurrentUser();
+  }, []);
 
   return {
     // dialog flags
@@ -151,17 +166,11 @@ export function useAdminPanel() {
     currentPasswordForEmail,
     setCurrentPasswordForEmail,
 
-    // password fields
-    currentPassword,
-    setCurrentPassword,
-    newPassword,
-    setNewPassword,
-    confirmPassword,
-    setConfirmPassword,
+    // password fields（UI 側ではもう使わないので返さない）
 
     // handlers
-    saveProfile,   // backend /members PATCH
-    saveEmail,     // Firebase Auth でメール変更 & 変更メール送信
-    savePassword,  // Firebase Auth でパスワード変更
+    saveProfile,
+    saveEmail,
+    savePassword, // ← これが「再設定メール送信」
   };
 }
