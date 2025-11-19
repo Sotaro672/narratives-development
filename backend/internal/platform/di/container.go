@@ -3,6 +3,7 @@ package di
 
 import (
 	"context"
+	"errors"
 	"log"
 	"os"
 
@@ -16,13 +17,16 @@ import (
 	mailadp "narratives/internal/adapters/out/mail"
 	uc "narratives/internal/application/usecase"
 	authuc "narratives/internal/application/usecase/auth"
+	companydom "narratives/internal/domain/company"
 	memdom "narratives/internal/domain/member"
 	appcfg "narratives/internal/infra/config"
 )
 
+//
 // ========================================
 // dev / stub EmailClient for InvitationMailer
 // ========================================
+//
 
 type loggingEmailClient struct{}
 
@@ -37,9 +41,71 @@ func (c *loggingEmailClient) Send(
 	return nil
 }
 
+//
+// ========================================
+// auth.BootstrapService 用アダプタ
+// ========================================
+//
+
+// memdom.Repository → auth.MemberRepository
+type authMemberRepoAdapter struct {
+	repo memdom.Repository
+}
+
+// Save: *member を memdom.Repository.Save に委譲
+func (a *authMemberRepoAdapter) Save(ctx context.Context, m *memdom.Member) error {
+	if m == nil {
+		return errors.New("authMemberRepoAdapter.Save: nil member")
+	}
+	saved, err := a.repo.Save(ctx, *m, nil)
+	if err != nil {
+		return err
+	}
+	// Save 側で CreatedAt / UpdatedAt などが上書きされた場合に反映しておく
+	*m = saved
+	return nil
+}
+
+// GetByID: 値戻りをポインタに変換
+func (a *authMemberRepoAdapter) GetByID(ctx context.Context, id string) (*memdom.Member, error) {
+	v, err := a.repo.GetByID(ctx, id)
+	if err != nil {
+		return nil, err
+	}
+	return &v, nil
+}
+
+// CompanyRepositoryFS → auth.CompanyRepository
+type authCompanyRepoAdapter struct {
+	repo *fs.CompanyRepositoryFS
+}
+
+// NewID: Firestore の companies コレクションから DocID を採番
+func (a *authCompanyRepoAdapter) NewID(ctx context.Context) (string, error) {
+	if a.repo == nil || a.repo.Client == nil {
+		return "", errors.New("authCompanyRepoAdapter.NewID: repo or client is nil")
+	}
+	doc := a.repo.Client.Collection("companies").NewDoc()
+	return doc.ID, nil
+}
+
+// Save: companydom.Company を CompanyRepositoryFS.Save に委譲
+func (a *authCompanyRepoAdapter) Save(ctx context.Context, c *companydom.Company) error {
+	if c == nil {
+		return errors.New("authCompanyRepoAdapter.Save: nil company")
+	}
+	saved, err := a.repo.Save(ctx, *c, nil)
+	if err != nil {
+		return err
+	}
+	*c = saved
+	return nil
+}
+
 // ========================================
 // Container (Firestore + Firebase edition)
 // ========================================
+//
 // Firestore クライアントと Firebase Auth クライアントを中心に、
 // 各 Repository と Usecase を初期化して束ねる。
 type Container struct {
@@ -89,13 +155,14 @@ type Container struct {
 	InvitationQuery   uc.InvitationQueryPort
 	InvitationCommand uc.InvitationCommandPort
 
-	// ★ Auth サインアップ後の初期化（member + company 作成）用 BootstrapService
+	// ★ auth/bootstrap 用 Usecase
 	AuthBootstrap *authuc.BootstrapService
 }
 
 // ========================================
 // NewContainer
 // ========================================
+//
 // Firestore / Firebase クライアントを初期化し、各 Usecase を構築して返す。
 func NewContainer(ctx context.Context) (*Container, error) {
 	// 1. Load config
@@ -205,15 +272,7 @@ func NewContainer(ctx context.Context) (*Container, error) {
 	userUC := uc.NewUserUsecase(userRepo)
 	walletUC := uc.NewWalletUsecase(walletRepo)
 
-	// ★ Auth サインアップ後の初期化用 BootstrapService
-	authBootstrap := &authuc.BootstrapService{
-		Members:   memberRepo,
-		Companies: companyRepo,
-	}
-
 	// ★ Invitation 用メールクライアント & メーラー
-	//   SENDGRID_API_KEY / INVITATION_FROM_EMAIL / CONSOLE_BASE_URL が
-	//   そろっている場合は SendGrid を使い、足りない場合はログ出力のみ。
 	sendGridAPIKey := os.Getenv("SENDGRID_API_KEY")
 	fromAddress := os.Getenv("INVITATION_FROM_EMAIL")
 	consoleBaseURL := os.Getenv("CONSOLE_BASE_URL")
@@ -223,7 +282,7 @@ func NewContainer(ctx context.Context) (*Container, error) {
 	if sendGridAPIKey == "" || fromAddress == "" || consoleBaseURL == "" {
 		log.Printf("[container] WARN: SendGrid env not fully set; using loggingEmailClient only")
 		emailClient = &loggingEmailClient{}
-		// 開発用デフォルト値（万一 env が空でも動くように）
+		// 開発用デフォルト値
 		if fromAddress == "" {
 			fromAddress = "no-reply@example.com"
 		}
@@ -248,6 +307,16 @@ func NewContainer(ctx context.Context) (*Container, error) {
 		memberRepo,
 		invitationMailer,
 	)
+
+	// ★ auth/bootstrap 用 Usecase
+	authBootstrapSvc := &authuc.BootstrapService{
+		Members: &authMemberRepoAdapter{
+			repo: memberRepo,
+		},
+		Companies: &authCompanyRepoAdapter{
+			repo: companyRepo,
+		},
+	}
 
 	// 6. Assemble container
 	return &Container{
@@ -292,14 +361,13 @@ func NewContainer(ctx context.Context) (*Container, error) {
 		InvitationQuery:   invitationQueryUC,
 		InvitationCommand: invitationCommandUC,
 
-		AuthBootstrap: authBootstrap,
+		AuthBootstrap: authBootstrapSvc,
 	}, nil
 }
 
 // ========================================
 // RouterDeps
 // ========================================
-// HTTP ルーターに必要な依存関係をまとめて返す。
 func (c *Container) RouterDeps() httpin.RouterDeps {
 	return httpin.RouterDeps{
 		AccountUC:          c.AccountUC,
@@ -337,7 +405,7 @@ func (c *Container) RouterDeps() httpin.RouterDeps {
 		InvitationQuery:   c.InvitationQuery,
 		InvitationCommand: c.InvitationCommand,
 
-		// ★ サインアップ後初期化（/auth/bootstrap 用）
+		// ★ auth/bootstrap 用
 		AuthBootstrap: c.AuthBootstrap,
 
 		// AuthMiddleware 用
@@ -352,6 +420,7 @@ func (c *Container) RouterDeps() httpin.RouterDeps {
 // ========================================
 // Close
 // ========================================
+//
 // Firestore クライアントを安全に閉じる。
 func (c *Container) Close() error {
 	if c.Firestore != nil {

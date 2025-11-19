@@ -4,8 +4,6 @@ import {
   createUserWithEmailAndPassword,
   signInWithEmailAndPassword,
   signOut,
-  deleteUser,
-  sendEmailVerification, // ★ 認証メール送信
 } from "firebase/auth";
 import { auth } from "../infrastructure/config/firebaseClient";
 
@@ -34,18 +32,11 @@ export type SignUpProfile = {
   firstName?: string;
   lastNameKana?: string;
   firstNameKana?: string;
-  companyName?: string; // 任意
-};
-
-// ★ 認証メールの actionCodeSettings
-// ここで「メールのリンクを踏んだあとに遷移させたいURL」を指定
-const actionCodeSettings = {
-  url: "https://narratives-development-26c2d.firebaseapp.com/post-verify",
-  handleCodeInApp: false,
+  companyName?: string; // 任意（会社名）
 };
 
 // ─────────────────────────────────────────────
-// Backend base URL（BrandRepositoryHTTP 等と同じ考え方に揃える）
+// Backend base URL
 // ─────────────────────────────────────────────
 const RAW_ENV_BASE =
   ((import.meta as any).env?.VITE_BACKEND_BASE_URL as string | undefined) ?? "";
@@ -65,7 +56,7 @@ if (!FINAL_BASE) {
   );
 }
 
-// ★ auth/bootstrap 用エンドポイント（backend の bootstrap.go に処理を渡す）
+// backend bootstrap endpoint
 const BOOTSTRAP_URL = `${FINAL_BASE}/auth/bootstrap`;
 
 // 共通 HTTP ラッパ
@@ -84,7 +75,10 @@ async function httpRequest<T>(input: string, init: RequestInit = {}): Promise<T>
 
   if (!res.ok) {
     throw new Error(
-      `[useAuthActions] ${res.status} ${res.statusText} :: ${text?.slice(0, 300)}`,
+      `[useAuthActions] ${res.status} ${res.statusText} :: ${text?.slice(
+        0,
+        300,
+      )}`,
     );
   }
 
@@ -99,24 +93,11 @@ async function httpRequest<T>(input: string, init: RequestInit = {}): Promise<T>
 
 /**
  * ★ Bootstrap API 呼び出し
- * backend/internal/application/usecase/auth/bootstrap.go に処理を委譲する
- *
- * 期待する JSON ボディ例:
- * {
- *   "uid": "xxx",
- *   "email": "user@example.com",
- *   "profile": {
- *     "lastName": "...",
- *     "firstName": "...",
- *     "lastNameKana": "...",
- *     "firstNameKana": "...",
- *     "companyName": "..."
- *   }
- * }
+ * backend に member / company の作成を委譲する
  */
 async function callBootstrap(
-  uid: string,
-  email: string,
+  uid: string, // 実際のリクエストボディには含めない
+  email: string, // 同上
   profile?: SignUpProfile,
 ): Promise<void> {
   const token = await auth.currentUser?.getIdToken();
@@ -124,19 +105,18 @@ async function callBootstrap(
     throw new Error("[useAuthActions] Not authenticated (no ID token).");
   }
 
+  // サーバが期待する形に合わせて「プロフィールだけ」を送る
+  const body = {
+    lastName: (profile?.lastName ?? "").trim(),
+    firstName: (profile?.firstName ?? "").trim(),
+    lastNameKana: (profile?.lastNameKana ?? "").trim(),
+    firstNameKana: (profile?.firstNameKana ?? "").trim(),
+    companyName: (profile?.companyName ?? "").trim(),
+  };
+
   await httpRequest<void>(BOOTSTRAP_URL, {
     method: "POST",
-    body: JSON.stringify({
-      uid,
-      email,
-      profile: {
-        lastName: (profile?.lastName ?? "").trim(),
-        firstName: (profile?.firstName ?? "").trim(),
-        lastNameKana: (profile?.lastNameKana ?? "").trim(),
-        firstNameKana: (profile?.firstNameKana ?? "").trim(),
-        companyName: (profile?.companyName ?? "").trim(),
-      },
-    }),
+    body: JSON.stringify(body),
     headers: {
       Authorization: `Bearer ${token}`,
     },
@@ -147,21 +127,29 @@ export function useAuthActions() {
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  /** サインアップ（Firebase Auth のみ直接操作し、その後の Firestore 処理は Go の bootstrap に委譲） */
+  /**
+   * サインアップ
+   * - Firebase Auth でユーザー作成
+   * - 認証メール送信は行わない
+   * - ログイン状態になったタイミングで backend.bootstrap を即呼び出す
+   */
   async function signUp(email: string, password: string, profile?: SignUpProfile) {
     setSubmitting(true);
     setError(null);
     try {
-      // 1) Authユーザー作成
       const cred = await createUserWithEmailAndPassword(auth, email, password);
-      const uid = cred.user?.uid;
-      if (!uid) throw new Error("ユーザー作成後に uid を取得できませんでした。");
+      const user = cred.user;
+      if (!user?.uid) {
+        throw new Error("ユーザー作成後に uid を取得できませんでした。");
+      }
 
-      // 2) メールアドレス確認メールを送信
-      await sendEmailVerification(cred.user, actionCodeSettings);
-
-      // 3) members / companies などの初期化は backend 側（bootstrap.go）に任せる
-      await callBootstrap(uid, email, profile);
+      // 新規登録直後に bootstrap を実行
+      try {
+        await callBootstrap(user.uid, user.email ?? email, profile);
+      } catch (e) {
+        console.error("[useAuthActions] bootstrap on signUp failed:", e);
+        // ここで失敗してもいったん新規登録自体は成功扱いにする
+      }
     } catch (e: any) {
       console.error("signUp error", e);
       setError(messageForAuthError(e?.code));
@@ -170,11 +158,24 @@ export function useAuthActions() {
     }
   }
 
-  async function signIn(email: string, password: string) {
+  /**
+   * サインイン
+   * - emailVerified チェックは行わない（管理アカウント用）
+   * - ログイン成功後に backend.bootstrap を呼び出す（冪等想定）
+   */
+  async function signIn(email: string, password: string, profile?: SignUpProfile) {
     setSubmitting(true);
     setError(null);
     try {
-      await signInWithEmailAndPassword(auth, email, password);
+      const cred = await signInWithEmailAndPassword(auth, email, password);
+      const user = cred.user;
+
+      try {
+        await callBootstrap(user.uid, user.email ?? email, profile);
+      } catch (e) {
+        console.error("[useAuthActions] bootstrap failed:", e);
+        // bootstrap 失敗してもログイン自体は成功とする
+      }
     } catch (e: any) {
       console.error("signIn error", e);
       setError(e?.message ?? "ログインに失敗しました");

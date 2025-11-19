@@ -1,13 +1,23 @@
-// backend\internal\domain\company\entity.go
 package company
 
 import (
 	"errors"
+	"regexp"
 	"strings"
 	"time"
 )
 
+// ---------------------------
+// 正規表現
+// ---------------------------
+
+// 会社名：漢字/ひらがな/カタカナ/英数字/長音/スペース
+var companyNameRe = regexp.MustCompile(`^[\p{Han}\p{Hiragana}\p{Katakana}A-Za-z0-9ー\s]+$`)
+
+// ---------------------------
 // Domain errors
+// ---------------------------
+
 var (
 	ErrInvalidID        = errors.New("company: invalid id")
 	ErrInvalidName      = errors.New("company: invalid name")
@@ -20,20 +30,10 @@ var (
 	ErrInvalidDeletedBy = errors.New("company: invalid deletedBy")
 )
 
-// Company mirrors web-app/src/shared/types
-//
-//	export interface Company {
-//	  id: string;
-//	  name: string;
-//	  admin: string; //root権限を持ったmemberId
-//	  isActive: boolean;
-//	  createdAt: Date | string;
-//	  createdBy: string;
-//	  updatedAt: Date | string;
-//	  updatedBy: string;
-//	  deletedAt?: Date | string;
-//	  deletedBy?: string;
-//	}
+// ----------------------------------------
+// Company entity
+// ----------------------------------------
+
 type Company struct {
 	ID       string `json:"id"`
 	Name     string `json:"name"`
@@ -48,11 +48,10 @@ type Company struct {
 	DeletedBy *string    `json:"deletedBy,omitempty"`
 }
 
-/*
-Constructors
-*/
+// ----------------------------------------
+// Constructor
+// ----------------------------------------
 
-// NewCompany constructs a Company with validation.
 func NewCompany(
 	id, name, admin, createdBy, updatedBy string,
 	createdAt, updatedAt time.Time,
@@ -72,13 +71,13 @@ func NewCompany(
 		DeletedAt: normalizeTimePtr(deletedAt),
 		DeletedBy: normalizeStrPtr(deletedBy),
 	}
+
 	if err := c.validate(); err != nil {
 		return Company{}, err
 	}
 	return c, nil
 }
 
-// NewCompanyWithNow sets createdAt/updatedAt to now (UTC).
 func NewCompanyWithNow(
 	id, name, admin, createdBy, updatedBy string,
 	isActive bool,
@@ -88,9 +87,9 @@ func NewCompanyWithNow(
 	return NewCompany(id, name, admin, createdBy, updatedBy, now, now, isActive, nil, nil)
 }
 
-/*
-Behavior
-*/
+// ----------------------------------------
+// Behavior
+// ----------------------------------------
 
 func (c *Company) Activate(now time.Time, updatedBy string) error {
 	c.IsActive = true
@@ -108,8 +107,8 @@ func (c *Company) Deactivate(now time.Time, updatedBy string) error {
 
 func (c *Company) UpdateName(name string, now time.Time, updatedBy string) error {
 	name = strings.TrimSpace(name)
-	if name == "" {
-		return ErrInvalidName
+	if err := validateCompanyName(name); err != nil {
+		return err
 	}
 	c.Name = name
 	c.UpdatedAt = now.UTC()
@@ -131,64 +130,79 @@ func (c *Company) UpdateAdmin(admin string, now time.Time, updatedBy string) err
 func (c *Company) SetDeleted(at *time.Time, by *string) error {
 	at = normalizeTimePtr(at)
 	by = normalizeStrPtr(by)
+
 	if at == nil {
 		c.DeletedAt = nil
 		c.DeletedBy = nil
 		return nil
 	}
+
 	if c.UpdatedAt.After(*at) {
 		return ErrInvalidDeletedAt
 	}
+
 	c.DeletedAt = at
 	c.DeletedBy = by
+
 	if c.DeletedBy != nil && strings.TrimSpace(*c.DeletedBy) == "" {
 		return ErrInvalidDeletedBy
 	}
 	return nil
 }
 
-/*
-Validation
-*/
+// ----------------------------------------
+// Validation
+// ----------------------------------------
 
 func (c Company) validate() error {
 	if strings.TrimSpace(c.ID) == "" {
 		return ErrInvalidID
 	}
-	if strings.TrimSpace(c.Name) == "" {
-		return ErrInvalidName
+
+	if err := validateCompanyName(strings.TrimSpace(c.Name)); err != nil {
+		return err
 	}
+
 	if strings.TrimSpace(c.Admin) == "" {
 		return ErrInvalidAdmin
 	}
+
 	if c.CreatedAt.IsZero() {
 		return ErrInvalidCreatedAt
 	}
+
 	if strings.TrimSpace(c.CreatedBy) == "" {
 		return ErrInvalidCreatedBy
 	}
+
 	if c.UpdatedAt.IsZero() {
 		return ErrInvalidUpdatedAt
 	}
+
 	if strings.TrimSpace(c.UpdatedBy) == "" {
 		return ErrInvalidUpdatedBy
 	}
+
 	if c.UpdatedAt.Before(c.CreatedAt) {
 		return ErrInvalidUpdatedAt
 	}
-	if c.DeletedAt != nil && c.DeletedAt.Before(c.CreatedAt) {
-		return ErrInvalidDeletedAt
+
+	if c.DeletedAt != nil {
+		if c.DeletedAt.Before(c.CreatedAt) {
+			return ErrInvalidDeletedAt
+		}
+		if c.UpdatedAt.After(*c.DeletedAt) {
+			return ErrInvalidDeletedAt
+		}
+		if c.DeletedBy != nil && strings.TrimSpace(*c.DeletedBy) == "" {
+			return ErrInvalidDeletedBy
+		}
 	}
-	if c.DeletedAt != nil && c.UpdatedAt.After(*c.DeletedAt) {
-		return ErrInvalidDeletedAt
-	}
-	if c.DeletedBy != nil && strings.TrimSpace(*c.DeletedBy) == "" {
-		return ErrInvalidDeletedBy
-	}
+
 	return nil
 }
 
-// validateUpdateOnly keeps update invariants minimal (used by mutators)
+// validateUpdateOnly keeps update invariants minimal
 func (c Company) validateUpdateOnly() error {
 	if strings.TrimSpace(c.UpdatedBy) == "" {
 		return ErrInvalidUpdatedBy
@@ -199,9 +213,22 @@ func (c Company) validateUpdateOnly() error {
 	return nil
 }
 
-/*
-Helpers
-*/
+// ----------------------------------------
+// Helpers
+// ----------------------------------------
+
+func validateCompanyName(name string) error {
+	if name == "" {
+		return ErrInvalidName
+	}
+	if len(name) > 100 {
+		return ErrInvalidName
+	}
+	if !companyNameRe.MatchString(name) {
+		return ErrInvalidName
+	}
+	return nil
+}
 
 func normalizeStrPtr(p *string) *string {
 	if p == nil {

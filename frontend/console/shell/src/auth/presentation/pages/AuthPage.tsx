@@ -1,4 +1,5 @@
-import * as React from "react";
+// frontend/console/shell/src/auth/presentation/pages/AuthPage.tsx
+import { useEffect } from "react";
 import { Button } from "../../../shared/ui/button";
 import "../styles/auth.css";
 import { useAuthPage } from "../hook/useAuthPage";
@@ -7,12 +8,14 @@ export default function AuthPage() {
   const {
     mode,
     switchMode,
+
     email,
     setEmail,
     password,
     setPassword,
     confirmPassword,
     setConfirmPassword,
+
     lastName,
     setLastName,
     firstName,
@@ -21,13 +24,30 @@ export default function AuthPage() {
     setLastNameKana,
     firstNameKana,
     setFirstNameKana,
+
     companyName,
     setCompanyName,
+
     submitting,
     error,
     setError,
-    handleSubmit,
+
+    signupCompleted,
+    resetSignupFlow,
+
+    handleFormSubmit,
   } = useAuthPage();
+
+  // ★ signup 完了時にダイアログを表示
+  useEffect(() => {
+    if (signupCompleted && mode === "signup") {
+      window.alert(
+        "ご登録のメールアドレス宛に確認メールを送信しました。\nメール内のリンクをクリックして認証を完了してください。"
+      );
+      // 再送信やログイン切り替え時に余計な発火を防ぐ
+      resetSignupFlow();
+    }
+  }, [signupCompleted, mode, resetSignupFlow]);
 
   return (
     <div className="auth-page">
@@ -36,8 +56,8 @@ export default function AuthPage() {
           {mode === "signup" ? "管理アカウントの新規登録" : "ログイン"}
         </h1>
 
-        <form className="auth-form" onSubmit={handleSubmit}>
-          {/* 新規登録モード：姓名 + かな（2カラム） */}
+        <form className="auth-form" onSubmit={handleFormSubmit}>
+          {/* ▼ signup：姓名 + かな */}
           {mode === "signup" && (
             <>
               <div className="auth-row">
@@ -90,6 +110,7 @@ export default function AuthPage() {
             </>
           )}
 
+          {/* ▼ メールアドレス */}
           <label className="auth-label">
             メールアドレス
             <input
@@ -104,20 +125,21 @@ export default function AuthPage() {
             />
           </label>
 
-          {/* 新規登録時のみ：会社名・団体名（任意） */}
+          {/* ▼ signup：会社名 */}
           {mode === "signup" && (
             <label className="auth-label">
-              会社名・団体名（任意）
+              会社名・団体名
               <input
                 type="text"
                 className="auth-input"
                 value={companyName}
                 onChange={(e) => setCompanyName(e.target.value)}
-                placeholder="例）LUMINA Fashion"
+                placeholder="会社名・団体名を入力してください"
               />
             </label>
           )}
 
+          {/* ▼ パスワード */}
           <label className="auth-label">
             パスワード
             <input
@@ -132,6 +154,7 @@ export default function AuthPage() {
             />
           </label>
 
+          {/* ▼ signup：パスワード確認 */}
           {mode === "signup" && (
             <label className="auth-label">
               パスワード（確認用）
@@ -150,6 +173,7 @@ export default function AuthPage() {
 
           {error && <p className="auth-error">{error}</p>}
 
+          {/* ▼ アクションボタン */}
           <div className="auth-actions" style={{ justifyContent: "center" }}>
             <Button
               type="submit"
@@ -168,17 +192,31 @@ export default function AuthPage() {
           </div>
         </form>
 
-        {/* モード切り替え */}
+        {/* ▼ モード切り替え */}
         <div className="auth-switch">
           {mode === "signup" ? (
             <p>
               すでにアカウントをお持ちの方{" "}
-              <button onClick={() => switchMode("signin")}>ログインする</button>
+              <button
+                onClick={() => {
+                  resetSignupFlow();
+                  switchMode("signin");
+                }}
+              >
+                ログインする
+              </button>
             </p>
           ) : (
             <p>
               アカウントをお持ちでない方{" "}
-              <button onClick={() => switchMode("signup")}>新規登録する</button>
+              <button
+                onClick={() => {
+                  resetSignupFlow();
+                  switchMode("signup");
+                }}
+              >
+                新規登録する
+              </button>
             </p>
           )}
         </div>

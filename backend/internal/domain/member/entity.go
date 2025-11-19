@@ -1,4 +1,3 @@
-// backend/internal/domain/member/entity.go
 package member
 
 import (
@@ -12,7 +11,18 @@ import (
 	permdom "narratives/internal/domain/permission"
 )
 
+// ---------------------------
+// 正規表現
+// ---------------------------
+
+// Email
 var emailRe = regexp.MustCompile(`^[^\s@]+@[^\s@]+\.[^\s@]+$`)
+
+// 氏名：漢字/ひらがな/カタカナ/英字/数字/長音/スペースのみ
+var nameRe = regexp.MustCompile(`^[\p{Han}\p{Hiragana}\p{Katakana}A-Za-z0-9ー\s]+$`)
+
+// 氏名かな：全角カタカナ・スペース・長音
+var kanaRe = regexp.MustCompile(`^[\p{Katakana}ー\s]+$`)
 
 // Member is the domain entity for a user/member.
 type Member struct {
@@ -21,13 +31,12 @@ type Member struct {
 	LastName       string   `json:"lastName,omitempty" firestore:"lastName"`
 	FirstNameKana  string   `json:"firstNameKana,omitempty" firestore:"firstNameKana"`
 	LastNameKana   string   `json:"lastNameKana,omitempty" firestore:"lastNameKana"`
-	Email          string   `json:"email,omitempty" firestore:"email"` // optional; empty string means unset
+	Email          string   `json:"email,omitempty" firestore:"email"`
 	Permissions    []string `json:"permissions" firestore:"permissions"`
 	AssignedBrands []string `json:"assignedBrands,omitempty" firestore:"assignedBrands"`
 
-	// company / status
 	CompanyID string `json:"companyId,omitempty" firestore:"companyId"`
-	Status    string `json:"status,omitempty" firestore:"status"` // "active" | "inactive"
+	Status    string `json:"status,omitempty" firestore:"status"`
 
 	CreatedAt time.Time  `json:"createdAt" firestore:"createdAt"`
 	UpdatedAt *time.Time `json:"updatedAt,omitempty" firestore:"updatedAt"`
@@ -39,6 +48,10 @@ type Member struct {
 var (
 	ErrInvalidID          = errors.New("member: invalid id")
 	ErrInvalidEmail       = errors.New("member: invalid email")
+	ErrInvalidFirstName   = errors.New("member: invalid firstName")
+	ErrInvalidLastName    = errors.New("member: invalid lastName")
+	ErrInvalidFirstKana   = errors.New("member: invalid firstNameKana")
+	ErrInvalidLastKana    = errors.New("member: invalid lastNameKana")
 	ErrInvalidCreatedAt   = errors.New("member: invalid createdAt")
 	ErrInvalidUpdatedAt   = errors.New("member: invalid updatedAt")
 	ErrInvalidUpdatedBy   = errors.New("member: invalid updatedBy")
@@ -50,7 +63,10 @@ var (
 	ErrPreconditionFailed = errors.New("member: precondition failed")
 )
 
-// New constructs a Member with validation. Use empty strings/slices for optional fields.
+// ----------------------
+// Constructor
+// ----------------------
+
 func New(
 	id string,
 	createdAt time.Time,
@@ -65,31 +81,31 @@ func New(
 		opt(&m)
 	}
 	m.dedupAll()
+
 	if err := m.validate(); err != nil {
 		return Member{}, err
 	}
 	return m, nil
 }
 
-// NewFromStringsTime accepts createdAt/updatedAt as string (ISO8601). Empty updatedAt means unset.
 func NewFromStringsTime(
 	id string,
 	createdAt string,
-	updatedAt string, // optional; pass "" if none
+	updatedAt string,
 	opts ...func(*Member),
 ) (Member, error) {
 	ct, err := parseTime(createdAt)
 	if err != nil {
 		return Member{}, fmt.Errorf("%w: %v", ErrInvalidCreatedAt, err)
 	}
+
 	var utPtr *time.Time
 	if updatedAt != "" {
 		if ut, err := parseTime(updatedAt); err == nil {
 			utPtr = &ut
-		} else {
-			utPtr = nil
 		}
 	}
+
 	m, err := New(id, ct, opts...)
 	if err != nil {
 		return Member{}, err
@@ -98,7 +114,9 @@ func NewFromStringsTime(
 	return m, nil
 }
 
-/* ---------- Option helpers to set optional fields ---------- */
+// -------------------------
+// Option helpers
+// -------------------------
 
 func WithName(first, last string) func(*Member) {
 	return func(m *Member) {
@@ -138,7 +156,7 @@ func WithCompanyID(companyID string) func(*Member) {
 
 func WithStatus(status string) func(*Member) {
 	return func(m *Member) {
-		m.Status = strings.TrimSpace(status) // expected: "", "active", "inactive"
+		m.Status = strings.TrimSpace(status)
 	}
 }
 
@@ -160,7 +178,9 @@ func WithDeleted(by string, at time.Time) func(*Member) {
 	}
 }
 
-/* ------------------------------ Mutators ------------------------------ */
+// ----------------------
+// Mutators
+// ----------------------
 
 func (m *Member) UpdateEmail(email string, now time.Time) error {
 	if email != "" && !emailRe.MatchString(email) {
@@ -189,7 +209,6 @@ func (m *Member) UnassignBrand(id string, now time.Time) {
 	m.touch(now)
 }
 
-// TouchUpdated sets UpdatedAt and optionally UpdatedBy.
 func (m *Member) TouchUpdated(now time.Time, by *string) error {
 	if now.IsZero() {
 		return ErrInvalidUpdatedAt
@@ -227,21 +246,49 @@ func (m *Member) ClearDeleted() {
 	m.DeletedBy = nil
 }
 
-/* --------------------- Validation and helpers --------------------- */
+// -------------------------
+// Validation
+// -------------------------
 
 func (m Member) validate() error {
 	if m.ID == "" {
 		return ErrInvalidID
 	}
+
 	if m.Email != "" && !emailRe.MatchString(m.Email) {
 		return ErrInvalidEmail
 	}
-	// Status is optional; if provided, restrict to known values.
+
+	// ---- 氏名 ----
+	if strings.TrimSpace(m.FirstName) == "" ||
+		!nameRe.MatchString(m.FirstName) || len(m.FirstName) > 50 {
+		return ErrInvalidFirstName
+	}
+
+	if strings.TrimSpace(m.LastName) == "" ||
+		!nameRe.MatchString(m.LastName) || len(m.LastName) > 50 {
+		return ErrInvalidLastName
+	}
+
+	// ---- 氏名かな ----
+	if strings.TrimSpace(m.FirstNameKana) == "" ||
+		!kanaRe.MatchString(m.FirstNameKana) || len(m.FirstNameKana) > 50 {
+		return ErrInvalidFirstKana
+	}
+
+	if strings.TrimSpace(m.LastNameKana) == "" ||
+		!kanaRe.MatchString(m.LastNameKana) || len(m.LastNameKana) > 50 {
+		return ErrInvalidLastKana
+	}
+
+	// ---- ステータス ----
 	switch strings.ToLower(strings.TrimSpace(m.Status)) {
 	case "", "active", "inactive":
 	default:
 		return ErrInvalidStatus
 	}
+
+	// ---- 時刻 ----
 	if m.CreatedAt.IsZero() {
 		return ErrInvalidCreatedAt
 	}
@@ -257,8 +304,13 @@ func (m Member) validate() error {
 	if m.DeletedBy != nil && *m.DeletedBy == "" {
 		return ErrInvalidDeletedBy
 	}
+
 	return nil
 }
+
+// -------------------------
+// Helpers
+// -------------------------
 
 func (m *Member) touch(now time.Time) {
 	m.UpdatedAt = &now
@@ -325,8 +377,10 @@ func parseTime(s string) (time.Time, error) {
 	return time.Time{}, fmt.Errorf("cannot parse time: %q", s)
 }
 
-// MemberPatch represents partial updates for Member.
-// nil fields are ignored by repositories.
+// --------------------------
+// MemberPatch
+// --------------------------
+
 type MemberPatch struct {
 	FirstName      *string
 	LastName       *string
@@ -344,7 +398,6 @@ type MemberPatch struct {
 	DeletedBy      *string
 }
 
-// SetPermissionsByName validates and sets permission names (dedup & sorted).
 func (m *Member) SetPermissionsByName(names []string, catalog []permdom.Permission) error {
 	if m == nil {
 		return nil
@@ -377,7 +430,6 @@ func (m *Member) SetPermissionsByName(names []string, catalog []permdom.Permissi
 	return nil
 }
 
-// ValidatePermissions verifies current Permissions exist in the catalog.
 func (m Member) ValidatePermissions(catalog []permdom.Permission) error {
 	allow := make(map[string]struct{}, len(catalog))
 	for _, p := range catalog {
@@ -394,7 +446,6 @@ func (m Member) ValidatePermissions(catalog []permdom.Permission) error {
 	return nil
 }
 
-// HasPermission checks if member has the specified Permission.Name.
 func (m Member) HasPermission(name string) bool {
 	name = strings.TrimSpace(name)
 	for _, n := range m.Permissions {

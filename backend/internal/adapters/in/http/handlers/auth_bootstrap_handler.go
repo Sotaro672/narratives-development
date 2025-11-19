@@ -25,7 +25,7 @@ func (h *AuthBootstrapHandler) ServeHTTP(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
-	// must be authenticated, but CurrentMemberは不要
+	// must be authenticated, but CurrentMember は不要
 	uid, email, ok := httpmw.CurrentUIDAndEmail(r)
 	if !ok {
 		w.WriteHeader(http.StatusUnauthorized)
@@ -33,6 +33,7 @@ func (h *AuthBootstrapHandler) ServeHTTP(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
+	// ★ SignUpProfile をルート JSON としてそのまま受け取る
 	var profile authuc.SignUpProfile
 	if err := json.NewDecoder(r.Body).Decode(&profile); err != nil {
 		w.WriteHeader(http.StatusBadRequest)
@@ -40,6 +41,7 @@ func (h *AuthBootstrapHandler) ServeHTTP(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
+	// Bootstrap 実行
 	if err := h.uc.Bootstrap(r.Context(), uid, email, &profile); err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
 		_ = json.NewEncoder(w).Encode(map[string]string{"error": err.Error()})

@@ -1,3 +1,4 @@
+// backend/internal/adapters/in/http/router.go
 package httpin
 
 import (
@@ -81,7 +82,7 @@ func NewRouter(deps RouterDeps) http.Handler {
 	})
 
 	// ============================================================
-	// Auth Middleware
+	// Auth Middleware（通常エンドポイント用）
 	// ============================================================
 	var authMw *middleware.AuthMiddleware
 	if deps.FirebaseAuth != nil && deps.MemberRepo != nil {
@@ -92,15 +93,27 @@ func NewRouter(deps RouterDeps) http.Handler {
 	}
 
 	// ============================================================
+	// Bootstrap 用 Auth Middleware（/auth/bootstrap 専用）
+	//   - Firebase ID トークン検証のみ
+	//   - MemberRepo は使わない
+	// ============================================================
+	var bootstrapAuthMw *middleware.BootstrapAuthMiddleware
+	if deps.FirebaseAuth != nil {
+		bootstrapAuthMw = &middleware.BootstrapAuthMiddleware{
+			FirebaseAuth: deps.FirebaseAuth,
+		}
+	}
+
+	// ============================================================
 	// auth/bootstrap （サインアップ後の初期セットアップ）
 	// ============================================================
 	if deps.AuthBootstrap != nil {
 		bootstrapH := handlers.NewAuthBootstrapHandler(deps.AuthBootstrap)
 
 		var securedBootstrap http.Handler = bootstrapH
-		if authMw != nil {
-			// ★ ID トークン検証のため AuthMiddleware を通す
-			securedBootstrap = authMw.Handler(securedBootstrap)
+		if bootstrapAuthMw != nil {
+			// ★ UID / email だけ検証するミドルウェア
+			securedBootstrap = bootstrapAuthMw.Handler(securedBootstrap)
 		}
 
 		// フロントが叩いているパスに合わせる: POST /auth/bootstrap
@@ -119,7 +132,7 @@ func NewRouter(deps RouterDeps) http.Handler {
 	}
 
 	// ============================================================
-	// Members（認証必須）
+	// Members（認証必須） ※こちらは従来どおり authMw を使う
 	// ============================================================
 	if deps.MemberUC != nil {
 		// MemberHandler（招待も内包）
