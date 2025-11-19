@@ -1,7 +1,9 @@
+// backend/internal/adapters/in/http/handlers/member_handler.go
 package handlers
 
 import (
 	"encoding/json"
+	"log"
 	"net/http"
 	"strings"
 
@@ -241,11 +243,25 @@ func (h *MemberHandler) list(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	qv := r.URL.Query()
 
+	log.Printf("[memberHandler.list] ENTER path=%s", r.URL.Path)
+
 	var f memberdom.Filter
 	f.SearchQuery = strings.TrimSpace(qv.Get("q"))
 
 	me, ok := httpmw.CurrentMember(r)
-	if !ok || strings.TrimSpace(me.CompanyID) == "" {
+	if !ok {
+		log.Printf("[memberHandler.list] CurrentMember not found in context")
+		w.WriteHeader(http.StatusUnauthorized)
+		_ = json.NewEncoder(w).Encode(map[string]string{"error": "unauthorized"})
+		return
+	}
+	log.Printf(
+		"[memberHandler.list] CurrentMember.ID=%s companyId=%q",
+		me.ID, me.CompanyID,
+	)
+
+	if strings.TrimSpace(me.CompanyID) == "" {
+		log.Printf("[memberHandler.list] companyId empty → 401")
 		w.WriteHeader(http.StatusUnauthorized)
 		_ = json.NewEncoder(w).Encode(map[string]string{"error": "unauthorized"})
 		return
@@ -284,11 +300,19 @@ func (h *MemberHandler) list(w http.ResponseWriter, r *http.Request) {
 	page.Number = clampInt(parseIntDefault(qv.Get("page"), 1), 1, 1_000_000)
 	page.PerPage = clampInt(parseIntDefault(qv.Get("perPage"), 50), 1, 200)
 
+	log.Printf(
+		"[memberHandler.list] calling Usecase.List companyId=%q search=%q status=%q page=%d perPage=%d",
+		f.CompanyID, f.SearchQuery, f.Status, page.Number, page.PerPage,
+	)
+
 	res, err := h.uc.List(ctx, f, sort, page)
 	if err != nil {
+		log.Printf("[memberHandler.list] Usecase.List error: %v", err)
 		writeMemberErr(w, err)
 		return
 	}
+
+	log.Printf("[memberHandler.list] OK items=%d", len(res.Items))
 	_ = json.NewEncoder(w).Encode(res.Items)
 }
 

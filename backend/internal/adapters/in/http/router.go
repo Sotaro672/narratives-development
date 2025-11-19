@@ -8,7 +8,7 @@ import (
 	firebaseauth "firebase.google.com/go/v4/auth"
 
 	usecase "narratives/internal/application/usecase"
-	authuc "narratives/internal/application/usecase/auth" // ★ 追加
+	authuc "narratives/internal/application/usecase/auth"
 
 	// ハンドラ群
 	"narratives/internal/adapters/in/http/handlers"

@@ -41,31 +41,40 @@ func (m *AuthMiddleware) Handler(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		// 依存が nil の場合は 503 を返して早期終了
 		if m.FirebaseAuth == nil || m.MemberRepo == nil {
+			log.Printf(
+				"[auth] middleware not initialized: FirebaseAuth=%v MemberRepo=%v (path=%s)",
+				m.FirebaseAuth, m.MemberRepo, r.URL.Path,
+			)
 			http.Error(w, "auth middleware not initialized", http.StatusServiceUnavailable)
 			return
 		}
 
 		authHeader := r.Header.Get("Authorization")
 		if !strings.HasPrefix(authHeader, "Bearer ") {
+			log.Printf("[auth] missing bearer token, header=%q path=%s", authHeader, r.URL.Path)
 			http.Error(w, "unauthorized: missing bearer token", http.StatusUnauthorized)
 			return
 		}
 
 		idToken := strings.TrimSpace(strings.TrimPrefix(authHeader, "Bearer "))
 		if idToken == "" {
+			log.Printf("[auth] empty bearer token path=%s", r.URL.Path)
 			http.Error(w, "unauthorized: empty bearer token", http.StatusUnauthorized)
 			return
 		}
 
 		// Firebase ID トークン検証
+		log.Printf("[auth] path=%s verifying ID token (len=%d)", r.URL.Path, len(idToken))
 		token, err := m.FirebaseAuth.VerifyIDToken(r.Context(), idToken)
 		if err != nil {
+			log.Printf("[auth] path=%s VerifyIDToken failed: %v", r.URL.Path, err)
 			http.Error(w, "invalid token", http.StatusUnauthorized)
 			return
 		}
 
 		uid := strings.TrimSpace(token.UID)
 		if uid == "" {
+			log.Printf("[auth] path=%s token UID is empty", r.URL.Path)
 			http.Error(w, "invalid uid in token", http.StatusUnauthorized)
 			return
 		}
@@ -73,13 +82,16 @@ func (m *AuthMiddleware) Handler(next http.Handler) http.Handler {
 		// uid → Member 解決（現在は「id = FirebaseUID」前提のラッパ）
 		member, err := m.MemberRepo.GetByFirebaseUID(r.Context(), uid)
 		if err != nil {
-			log.Printf("[auth] uid=%s member lookup error: %v", uid, err)
+			log.Printf("[auth] path=%s uid=%s member lookup error: %v", r.URL.Path, uid, err)
 			http.Error(w, "member not found", http.StatusForbidden)
 			return
 		}
 
 		// 追加ログ
-		log.Printf("[auth] uid=%s member.ID=%s companyId=%q", uid, member.ID, member.CompanyID)
+		log.Printf(
+			"[auth] OK path=%s uid=%s member.ID=%s companyId=%q",
+			r.URL.Path, uid, member.ID, member.CompanyID,
+		)
 
 		// context に格納
 		ctx := context.WithValue(r.Context(), ctxKeyMember, member)
@@ -100,22 +112,53 @@ func (m *AuthMiddleware) Handler(next http.Handler) http.Handler {
 			ctx = context.WithValue(ctx, ctxKeyCompanyID, cid)
 		}
 
+		// ★ next.ServeHTTP の直前に ctx から ctxKeyMember を読んでログする
+		if v := ctx.Value(ctxKeyMember); v != nil {
+			if m2, ok := v.(*memdom.Member); ok && m2 != nil {
+				log.Printf(
+					"[auth] DEBUG BEFORE next path=%s: ctxKeyMember type=%T id=%s companyId=%q",
+					r.URL.Path, m2, m2.ID, m2.CompanyID,
+				)
+			} else {
+				log.Printf(
+					"[auth] DEBUG BEFORE next path=%s: ctxKeyMember present but type=%T",
+					r.URL.Path, v,
+				)
+			}
+		} else {
+			log.Printf(
+				"[auth] DEBUG BEFORE next path=%s: ctxKeyMember is NOT set",
+				r.URL.Path,
+			)
+		}
+
 		next.ServeHTTP(w, r.WithContext(ctx))
 	})
 }
 
 // CurrentMember は現在ログイン中の Member を取得します。
+// context には *memdom.Member / memdom.Member どちらでも格納されている可能性があるため、両方に対応する。
 // 取得できない場合は (nil, false)。
 func CurrentMember(r *http.Request) (*memdom.Member, bool) {
 	v := r.Context().Value(ctxKeyMember)
 	if v == nil {
 		return nil, false
 	}
-	m, ok := v.(*memdom.Member)
-	if !ok || m == nil {
-		return nil, false
+
+	// パターン1: ポインタで入っている場合
+	if mPtr, ok := v.(*memdom.Member); ok && mPtr != nil {
+		return mPtr, true
 	}
-	return m, true
+
+	// パターン2: 値で入っている場合
+	if mVal, ok := v.(memdom.Member); ok {
+		m := mVal
+		return &m, true
+	}
+
+	// 想定外の型
+	log.Printf("[auth] CurrentMember: unexpected type %T for ctxKeyMember", v)
+	return nil, false
 }
 
 // CompanyID は context に注入された companyId を取得します。

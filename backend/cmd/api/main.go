@@ -64,8 +64,23 @@ func main() {
 		cont = c
 		defer cont.Close()
 
+		// RouterDeps を取得して FirebaseAuth / MemberRepo の状態をログ出力
+		deps := cont.RouterDeps()
+
+		if deps.FirebaseAuth == nil {
+			log.Printf("[boot] RouterDeps.FirebaseAuth is NIL")
+		} else {
+			log.Printf("[boot] RouterDeps.FirebaseAuth: %T", deps.FirebaseAuth)
+		}
+
+		if deps.MemberRepo == nil {
+			log.Printf("[boot] RouterDeps.MemberRepo is NIL")
+		} else {
+			log.Printf("[boot] RouterDeps.MemberRepo: %T", deps.MemberRepo)
+		}
+
 		// Attach app router under "/"
-		router := httpin.NewRouter(cont.RouterDeps())
+		router := httpin.NewRouter(deps)
 		mux.Handle("/", router)
 	}
 

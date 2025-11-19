@@ -153,13 +153,25 @@ export async function fetchMemberListWithToken(
 
   if (!res.ok) {
     const text = await res.text().catch(() => "");
-    if (res.status === 401 || res.status === 403) {
+    // 401 と 403 を明示的に区別
+    if (res.status === 401) {
+      // 認証エラー（トークン不正・未ログイン・期限切れなど）
       throw new Error(
-        `認証/認可エラー (${res.status}). 再ログイン後に再試行してください。 ${
+        `認証エラー (401: invalid token / not logged in). アカウントに再ログインしてから再試行してください。 ${
           text || ""
         }`,
       );
     }
+    if (res.status === 403) {
+      // 認可エラー（Member 未登録・権限不足など）
+      throw new Error(
+        `認可エラー (403: member not found or permission denied). 管理コンソールのユーザー登録や権限設定を確認してください。 ${
+          text || ""
+        }`,
+      );
+    }
+
+    // その他のステータス
     throw new Error(
       `メンバー一覧の取得に失敗しました (status ${res.status}) ${text || ""}`,
     );
