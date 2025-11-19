@@ -1,63 +1,10 @@
-// frontend/permission/src/presentation/pages/permissionList.tsx
+// frontend/console/permission/src/presentation/pages/permissionList.tsx
 
-import { useMemo, useState } from "react";
-import { useNavigate } from "react-router-dom";
-import List, {
-  FilterableTableHeader,
-} from "../../../../shell/src/layout/List/List";
-import { Shield } from "lucide-react";
-import { ALL_PERMISSIONS } from "../../infrastructure/mockdata/mockdata";
-import type { Permission } from "../../../../shell/src/shared/types/permission";
+import List from "../../../../shell/src/layout/List/List";
+import { usePermissionList } from "../hook/usePermissionList";
 
 export default function PermissionList() {
-  const navigate = useNavigate();
-
-  // カテゴリフィルタ
-  const [categoryFilter, setCategoryFilter] = useState<string[]>([]);
-
-  const categoryOptions = useMemo(
-    () =>
-      Array.from(new Set(ALL_PERMISSIONS.map((p) => p.category))).map(
-        (v): { value: string; label: string } => ({
-          value: v,
-          label: v,
-        })
-      ),
-    []
-  );
-
-  // フィルタ適用
-  const filteredRows = useMemo<Permission[]>(() => {
-    if (categoryFilter.length === 0) return ALL_PERMISSIONS;
-    return ALL_PERMISSIONS.filter((p) =>
-      categoryFilter.includes(p.category)
-    );
-  }, [categoryFilter]);
-
-  // 行クリック時の遷移関数（idベースで詳細へ）
-  const goDetail = (permissionId: string) => {
-    navigate(`/permission/${encodeURIComponent(permissionId)}`);
-  };
-
-  const headers: React.ReactNode[] = [
-    <>
-      <span className="inline-flex items-center gap-2">
-        <Shield size={16} />
-        <span>権限名</span>
-      </span>
-    </>,
-
-    // カテゴリ（Filterable）
-    <FilterableTableHeader
-      key="category"
-      label="カテゴリ"
-      options={categoryOptions}
-      selected={categoryFilter}
-      onChange={setCategoryFilter}
-    />,
-
-    "説明",
-  ];
+  const { headers, filteredRows, goDetail, handleReset } = usePermissionList();
 
   return (
     <div className="p-0">
@@ -66,10 +13,7 @@ export default function PermissionList() {
         headerCells={headers}
         showCreateButton={false}
         showResetButton
-        onReset={() => {
-          setCategoryFilter([]);
-          console.log("権限一覧リセット");
-        }}
+        onReset={handleReset}
       >
         {filteredRows.map((p) => (
           <tr

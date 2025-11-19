@@ -1,6 +1,5 @@
 // frontend/permission/src/pages/permissionDetail.tsx
 import * as React from "react";
-import { useNavigate, useParams } from "react-router-dom";
 import PageStyle from "../../../../shell/src/layout/PageStyle/PageStyle";
 import {
   Card,
@@ -11,42 +10,14 @@ import {
   CardReadonly,
 } from "../../../../shell/src/shared/ui/card";
 
-/**
- * 権限詳細ページ
- * layout="single" + PageStyle ヘッダー一体型
- */
+// Hook（抽出先）
+import { usePermissionDetail } from "../hook/usePermissionDetail";
+
 export default function PermissionDetail() {
-  const navigate = useNavigate();
-  const { permissionId } = useParams<{ permissionId: string }>();
-
-  // モックデータ（API接続前）
-  const [permission] = React.useState({
-    id: permissionId ?? "perm_brand_admin",
-    name: "ブランド管理者権限",
-    code: "BRAND_ADMIN",
-    description:
-      "ブランド情報の閲覧・編集、ブランドに紐づくメンバーやキャンペーン設定を行うことができます。",
-    scopes: [
-      "ブランド情報の閲覧/編集",
-      "メンバーのロール割り当て",
-      "キャンペーン設定の閲覧",
-      "通知設定の更新",
-    ],
-    assignedMembers: ["山田 太郎", "佐藤 美咲"],
-    createdAt: "2024/01/15",
-    updatedAt: "2025/10/30",
-  });
-
-  const handleBack = React.useCallback(() => {
-    navigate(-1);
-  }, [navigate]);
+  const { permission, title, handleBack } = usePermissionDetail();
 
   return (
-    <PageStyle
-      layout="single"
-      title={`権限詳細：${permission.name}`}
-      onBack={handleBack}
-    >
+    <PageStyle layout="single" title={title} onBack={handleBack}>
       <div className="space-y-4 max-w-3xl">
         {/* 基本情報 */}
         <Card>

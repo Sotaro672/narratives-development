@@ -6,7 +6,6 @@ import (
 	"errors"
 	"fmt"
 	"strings"
-	"time"
 
 	"cloud.google.com/go/firestore"
 	"google.golang.org/api/iterator"
@@ -17,7 +16,7 @@ import (
 	permission "narratives/internal/domain/permission"
 )
 
-// Firestore-based implementation of Permission repository.
+// Firestore-based implementation of permission.Repository (read-only).
 type PermissionRepositoryFS struct {
 	Client *firestore.Client
 }
@@ -31,10 +30,11 @@ func (r *PermissionRepositoryFS) col() *firestore.CollectionRef {
 }
 
 // ============================================================
-// Port (usecase.PermissionRepo) implementation
+// Port (domain permission.Repository) implementation
+//   - Read-only: List / GetByID のみを公開
 // ============================================================
 
-// GetByID implements PermissionRepo.GetByID.
+// GetByID implements permission.Repository.GetByID.
 func (r *PermissionRepositoryFS) GetByID(ctx context.Context, id string) (permission.Permission, error) {
 	if r.Client == nil {
 		return permission.Permission{}, errors.New("firestore client is nil")
@@ -60,137 +60,7 @@ func (r *PermissionRepositoryFS) GetByID(ctx context.Context, id string) (permis
 	return p, nil
 }
 
-// Exists implements PermissionRepo.Exists.
-func (r *PermissionRepositoryFS) Exists(ctx context.Context, id string) (bool, error) {
-	if r.Client == nil {
-		return false, errors.New("firestore client is nil")
-	}
-
-	id = strings.TrimSpace(id)
-	if id == "" {
-		return false, nil
-	}
-
-	_, err := r.col().Doc(id).Get(ctx)
-	if err != nil {
-		if status.Code(err) == codes.NotFound {
-			return false, nil
-		}
-		return false, err
-	}
-	return true, nil
-}
-
-// Create implements PermissionRepo.Create.
-//
-// If v.ID is empty, Firestore auto-ID is used.
-// createdAt/updatedAt are managed internally (stored in Firestore, not on domain object).
-func (r *PermissionRepositoryFS) Create(ctx context.Context, v permission.Permission) (permission.Permission, error) {
-	if r.Client == nil {
-		return permission.Permission{}, errors.New("firestore client is nil")
-	}
-
-	now := time.Now().UTC()
-
-	id := strings.TrimSpace(v.ID)
-	var docRef *firestore.DocumentRef
-	if id == "" {
-		docRef = r.col().NewDoc()
-		v.ID = docRef.ID
-	} else {
-		docRef = r.col().Doc(id)
-		v.ID = id
-	}
-
-	data := permissionToDoc(v, &now)
-
-	_, err := docRef.Create(ctx, data)
-	if err != nil {
-		if status.Code(err) == codes.AlreadyExists {
-			return permission.Permission{}, permission.ErrConflict
-		}
-		return permission.Permission{}, err
-	}
-
-	// Domain Permission has no CreatedAt, so we just return v with normalized fields.
-	return v, nil
-}
-
-// Save implements PermissionRepo.Save.
-//
-// Upsert behavior:
-// - If ID is empty: behaves like Create (new doc).
-// - If ID exists:
-//   - Updates name/category/description.
-//   - Preserves earliest createdAt (stored only in Firestore).
-//   - Updates updatedAt to now.
-func (r *PermissionRepositoryFS) Save(ctx context.Context, v permission.Permission) (permission.Permission, error) {
-	if r.Client == nil {
-		return permission.Permission{}, errors.New("firestore client is nil")
-	}
-
-	id := strings.TrimSpace(v.ID)
-	if id == "" {
-		return r.Create(ctx, v)
-	}
-
-	docRef := r.col().Doc(id)
-	now := time.Now().UTC()
-
-	// Load existing to preserve createdAt if present.
-	var createdAt time.Time
-	snap, err := docRef.Get(ctx)
-	if err == nil {
-		if data := snap.Data(); data != nil {
-			if t, ok := data["createdAt"].(time.Time); ok && !t.IsZero() {
-				createdAt = t.UTC()
-			}
-		}
-	} else if status.Code(err) != codes.NotFound {
-		return permission.Permission{}, err
-	}
-
-	if createdAt.IsZero() {
-		createdAt = now
-	}
-
-	v.ID = id
-	data := permissionToDoc(v, &createdAt)
-
-	_, err = docRef.Set(ctx, data, firestore.MergeAll)
-	if err != nil {
-		return permission.Permission{}, err
-	}
-
-	return v, nil
-}
-
-// Delete implements PermissionRepo.Delete.
-func (r *PermissionRepositoryFS) Delete(ctx context.Context, id string) error {
-	if r.Client == nil {
-		return errors.New("firestore client is nil")
-	}
-
-	id = strings.TrimSpace(id)
-	if id == "" {
-		return permission.ErrNotFound
-	}
-
-	_, err := r.col().Doc(id).Delete(ctx)
-	if err != nil {
-		if status.Code(err) == codes.NotFound {
-			return permission.ErrNotFound
-		}
-		return err
-	}
-	return nil
-}
-
-// ============================================================
-// Extra queries (List / Update) - convenience, not required by Port
-// ============================================================
-
-// List supports filter + sort + paging.
+// List implements permission.Repository.List and supports filter + sort + paging.
 func (r *PermissionRepositoryFS) List(
 	ctx context.Context,
 	filter permission.Filter,
@@ -257,60 +127,6 @@ func (r *PermissionRepositoryFS) List(
 	}, nil
 }
 
-// Update is a partial update helper (not part of the core Port).
-func (r *PermissionRepositoryFS) Update(ctx context.Context, id string, patch permission.PermissionPatch) (permission.Permission, error) {
-	if r.Client == nil {
-		return permission.Permission{}, errors.New("firestore client is nil")
-	}
-
-	id = strings.TrimSpace(id)
-	if id == "" {
-		return permission.Permission{}, permission.ErrNotFound
-	}
-
-	docRef := r.col().Doc(id)
-	var updates []firestore.Update
-
-	if patch.Name != nil {
-		updates = append(updates, firestore.Update{
-			Path:  "name",
-			Value: strings.TrimSpace(*patch.Name),
-		})
-	}
-	if patch.Category != nil {
-		updates = append(updates, firestore.Update{
-			Path:  "category",
-			Value: strings.TrimSpace(string(*patch.Category)),
-		})
-	}
-	if patch.Description != nil {
-		updates = append(updates, firestore.Update{
-			Path:  "description",
-			Value: strings.TrimSpace(*patch.Description),
-		})
-	}
-
-	if len(updates) == 0 {
-		return r.GetByID(ctx, id)
-	}
-
-	// bump updatedAt
-	updates = append(updates, firestore.Update{
-		Path:  "updatedAt",
-		Value: time.Now().UTC(),
-	})
-
-	_, err := docRef.Update(ctx, updates)
-	if err != nil {
-		if status.Code(err) == codes.NotFound {
-			return permission.Permission{}, permission.ErrNotFound
-		}
-		return permission.Permission{}, err
-	}
-
-	return r.GetByID(ctx, id)
-}
-
 // ============================================================
 // Helpers
 // ============================================================
@@ -338,24 +154,6 @@ func docToPermission(doc *firestore.DocumentSnapshot) (permission.Permission, er
 	}
 
 	return p, nil
-}
-
-func permissionToDoc(v permission.Permission, createdAt *time.Time) map[string]any {
-	m := map[string]any{
-		"name":     strings.TrimSpace(v.Name),
-		"category": strings.TrimSpace(string(v.Category)),
-	}
-
-	if s := strings.TrimSpace(v.Description); s != "" {
-		m["description"] = s
-	}
-
-	if createdAt != nil && !createdAt.IsZero() {
-		m["createdAt"] = createdAt.UTC()
-	}
-	m["updatedAt"] = time.Now().UTC()
-
-	return m
 }
 
 // matchPermissionFilter applies Filter in-memory (Firestore analogue of the SQL WHERE).

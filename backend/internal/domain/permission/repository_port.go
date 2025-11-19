@@ -8,14 +8,15 @@ import (
 )
 
 // ========================================
-// Entity Patch (contract only)
+// 読み取り専用 Permission コンテキスト
 // ========================================
-
-type PermissionPatch struct {
-	Name        *string
-	Category    *PermissionCategory
-	Description *string
-}
+//
+// Permission は「閲覧のみ」を前提としたドメインとして扱う。
+// そのため、このパッケージの Repository では
+//  - Create
+//  - Update
+//  - Delete
+// といった変更系の操作は公開しない（他の初期化処理や Seeder などでのみ管理する）。
 
 // ========================================
 // Common repository errors
@@ -23,6 +24,8 @@ type PermissionPatch struct {
 
 var (
 	ErrNotFound = errors.New("permission: not found")
+	// ErrConflict は書き込み系の共通エラーとして保持するが、
+	// Repository インターフェースでは利用しない（将来のSeeder等で利用する可能性を考慮）。
 	ErrConflict = errors.New("permission: conflict")
 )
 
@@ -56,13 +59,11 @@ type SaveOptions = dcommon.SaveOptions
 // ========================================
 // Repository Port (interface contracts only)
 // ========================================
-
+//
+// 「閲覧のみ」を前提としているため、List / GetByID のみ公開する。
 type Repository interface {
 	List(ctx context.Context, filter Filter, sort Sort, page Page) (PageResult[Permission], error)
 	GetByID(ctx context.Context, id string) (Permission, error)
-	Create(ctx context.Context, p Permission) (Permission, error)
-	Update(ctx context.Context, id string, patch PermissionPatch) (Permission, error)
-	Delete(ctx context.Context, id string) error
 }
 
 // Optional: expose common generic interfaces if your codebase uses them

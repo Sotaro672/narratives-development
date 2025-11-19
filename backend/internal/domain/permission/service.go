@@ -35,23 +35,6 @@ type LoadPermissionsResult struct {
 	Error       string
 }
 
-type CreatePermissionResult struct {
-	Success    bool
-	Permission *Permission
-	Error      string
-}
-
-type UpdatePermissionResult struct {
-	Success    bool
-	Permission *Permission
-	Error      string
-}
-
-type DeletePermissionResult struct {
-	Success bool
-	Error   string
-}
-
 type UpdateMemberPermissionsResult struct {
 	Success bool
 	Member  *Member
@@ -122,33 +105,6 @@ func (s *Service) HandleLoadPermissions(ctx context.Context) LoadPermissionsResu
 		Success:     true,
 		Permissions: data.Permissions,
 	}
-}
-
-// ========================================
-// CRUD
-// ========================================
-
-func (s *Service) HandleCreatePermission(ctx context.Context, p Permission) CreatePermissionResult {
-	created, err := s.repo.Create(ctx, p)
-	if err != nil {
-		return CreatePermissionResult{Success: false, Error: err.Error()}
-	}
-	return CreatePermissionResult{Success: true, Permission: &created}
-}
-
-func (s *Service) HandleUpdatePermission(ctx context.Context, id string, patch PermissionPatch) UpdatePermissionResult {
-	updated, err := s.repo.Update(ctx, id, patch)
-	if err != nil {
-		return UpdatePermissionResult{Success: false, Error: err.Error()}
-	}
-	return UpdatePermissionResult{Success: true, Permission: &updated}
-}
-
-func (s *Service) HandleDeletePermission(ctx context.Context, id string) DeletePermissionResult {
-	if err := s.repo.Delete(ctx, id); err != nil {
-		return DeletePermissionResult{Success: false, Error: err.Error()}
-	}
-	return DeletePermissionResult{Success: true}
 }
 
 // ========================================
