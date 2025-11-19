@@ -3,13 +3,11 @@ package handlers
 import (
 	"encoding/json"
 	"errors"
+	usecase "narratives/internal/application/usecase"
+	inquirydom "narratives/internal/domain/inquiry"
 	"net/http"
 	"strings"
 	"time"
-
-	usecase "narratives/internal/application/usecase"
-	inquirydom "narratives/internal/domain/inquiry"
-	commonhandlers "narratives/internal/adapters/in/http/handlers/common"
 )
 
 // InquiryHandler は /inquiries 関連のエンドポイントを担当します。
@@ -46,7 +44,7 @@ func (h *InquiryHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		switch parts[1] {
 		case "aggregate":
 			if r.Method != http.MethodGet {
-				commonhandlers.MethodNotAllowed(w)
+				methodNotAllowed(w)
 				return
 			}
 			h.getAggregate(w, r, id)
@@ -60,7 +58,7 @@ func (h *InquiryHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 				h.saveImageFromGCS(w, r, id)
 				return
 			default:
-				commonhandlers.MethodNotAllowed(w)
+				methodNotAllowed(w)
 				return
 			}
 		default:
@@ -72,7 +70,7 @@ func (h *InquiryHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	// /inquiries/{id}
 	if r.Method != http.MethodGet {
-		commonhandlers.MethodNotAllowed(w)
+		methodNotAllowed(w)
 		return
 	}
 	h.get(w, r, id)
@@ -155,7 +153,7 @@ func (h *InquiryHandler) saveImageFromGCS(w http.ResponseWriter, r *http.Request
 		strings.TrimSpace(req.CreatedBy),
 	)
 	if err != nil {
-		if commonhandlers.IsNotSupported(err) {
+		if isNotSupported(err) {
 			w.WriteHeader(http.StatusNotImplemented)
 			_ = json.NewEncoder(w).Encode(map[string]string{"error": "not_implemented"})
 			return
@@ -190,13 +188,3 @@ func writeInquiryErr(w http.ResponseWriter, err error) {
 	w.WriteHeader(code)
 	_ = json.NewEncoder(w).Encode(map[string]string{"error": err.Error()})
 }
-
-// func methodNotAllowed(w http.ResponseWriter) {
-//     w.WriteHeader(http.StatusMethodNotAllowed)
-//     _ = json.NewEncoder(w).Encode(map[string]string{"error": "method_not_allowed"})
-// }
-
-// func isNotSupported(err error) bool {
-//     // 共通の not supported エラー型は非公開のため、メッセージベースで判定
-//     return strings.Contains(strings.ToLower(err.Error()), "not supported")
-// }

@@ -9,7 +9,6 @@ import (
 
 	usecase "narratives/internal/application/usecase"
 	listdom "narratives/internal/domain/list"
-	commonhandlers "narratives/internal/adapters/in/http/handlers/common"
 )
 
 // ListHandler は /lists 関連のエンドポイントを担当します。
@@ -53,7 +52,7 @@ func (h *ListHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		switch parts[1] {
 		case "aggregate":
 			if r.Method != http.MethodGet {
-				commonhandlers.MethodNotAllowed(w)
+				methodNotAllowed(w)
 				return
 			}
 			h.getAggregate(w, r, id)
@@ -67,13 +66,13 @@ func (h *ListHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 				h.saveImageFromGCS(w, r, id)
 				return
 			default:
-				commonhandlers.MethodNotAllowed(w)
+				methodNotAllowed(w)
 				return
 			}
 		case "primary-image":
 			// 代表画像の設定
 			if r.Method != http.MethodPut && r.Method != http.MethodPost && r.Method != http.MethodPatch {
-				commonhandlers.MethodNotAllowed(w)
+				methodNotAllowed(w)
 				return
 			}
 			h.setPrimaryImage(w, r, id)
@@ -87,7 +86,7 @@ func (h *ListHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	// /lists/{id}
 	if r.Method != http.MethodGet {
-		commonhandlers.MethodNotAllowed(w)
+		methodNotAllowed(w)
 		return
 	}
 	h.get(w, r, id)
@@ -172,7 +171,7 @@ func (h *ListHandler) saveImageFromGCS(w http.ResponseWriter, r *http.Request, l
 		ca,
 	)
 	if err != nil {
-		if commonhandlers.IsNotSupported(err) {
+		if isNotSupported(err) {
 			w.WriteHeader(http.StatusNotImplemented)
 			_ = json.NewEncoder(w).Encode(map[string]string{"error": "not_implemented"})
 			return
@@ -219,9 +218,9 @@ func (h *ListHandler) setPrimaryImage(w http.ResponseWriter, r *http.Request, li
 		}
 	}
 
-	item, err := h.uc.SetPrimaryImage(ctx, listID, imageID, now, commonhandlers.NormalizeStrPtr(req.UpdatedBy))
+	item, err := h.uc.SetPrimaryImage(ctx, listID, imageID, now, normalizeStrPtr(req.UpdatedBy))
 	if err != nil {
-		if commonhandlers.IsNotSupported(err) {
+		if isNotSupported(err) {
 			w.WriteHeader(http.StatusNotImplemented)
 			_ = json.NewEncoder(w).Encode(map[string]string{"error": "not_implemented"})
 			return
@@ -254,4 +253,30 @@ func writeListErr(w http.ResponseWriter, err error) {
 	}
 	w.WriteHeader(code)
 	_ = json.NewEncoder(w).Encode(map[string]string{"error": err.Error()})
+}
+
+// ==============================
+// このファイル内の共通ヘルパー
+// ==============================
+
+func methodNotAllowed(w http.ResponseWriter) {
+	w.WriteHeader(http.StatusMethodNotAllowed)
+	_ = json.NewEncoder(w).Encode(map[string]string{"error": "method_not_allowed"})
+}
+
+// 共通の not supported エラー型は非公開のため、メッセージベースで判定
+func isNotSupported(err error) bool {
+	return strings.Contains(strings.ToLower(err.Error()), "not supported")
+}
+
+// 空白トリムして空なら nil、値があればポインタを返す
+func normalizeStrPtr(p *string) *string {
+	if p == nil {
+		return nil
+	}
+	s := strings.TrimSpace(*p)
+	if s == "" {
+		return nil
+	}
+	return &s
 }
