@@ -1,4 +1,3 @@
-// frontend/shell/src/layout/List/List.tsx
 import { Children, useEffect, useMemo, useState } from "react";
 import type { ReactNode } from "react";
 import { Plus } from "lucide-react";
@@ -60,6 +59,8 @@ export default function List({
     return rows.slice(start, start + ITEMS_PER_PAGE);
   }, [rows, totalItems, page]);
 
+  const colSpan = Math.max(1, headerCells.length);
+
   return (
     <div className="list-container">
       {/* ───────────────────────────────────────
@@ -109,7 +110,17 @@ export default function List({
                 ))}
               </TableRow>
             </TableHeader>
-            <TableBody className="lp-tbody">{paginatedRows}</TableBody>
+            <TableBody className="lp-tbody">
+              {totalItems === 0 ? (
+                <TableRow className="lp-empty-row">
+                  <td className="lp-empty-cell" colSpan={colSpan}>
+                    現在登録されている項目はございません。
+                  </td>
+                </TableRow>
+              ) : (
+                paginatedRows
+              )}
+            </TableBody>
             <TableCaption className="sr-only">
               {title} の一覧テーブル
             </TableCaption>

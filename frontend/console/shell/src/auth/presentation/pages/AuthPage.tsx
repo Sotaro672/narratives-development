@@ -9,6 +9,9 @@ export default function AuthPage() {
     mode,
     switchMode,
 
+    forgotPasswordMode,
+    setForgotPasswordMode,
+
     email,
     setEmail,
     password,
@@ -42,7 +45,7 @@ export default function AuthPage() {
   useEffect(() => {
     if (signupCompleted && mode === "signup") {
       window.alert(
-        "ご登録のメールアドレス宛に確認メールを送信しました。\nメール内のリンクをクリックして認証を完了してください。"
+        "ご登録のメールアドレス宛に確認メールを送信しました。\nメール内のリンクをクリックして認証を完了してください。",
       );
       // 再送信やログイン切り替え時に余計な発火を防ぐ
       resetSignupFlow();
@@ -53,7 +56,11 @@ export default function AuthPage() {
     <div className="auth-page">
       <div className="auth-card">
         <h1 className="auth-title">
-          {mode === "signup" ? "管理アカウントの新規登録" : "ログイン"}
+          {mode === "signup"
+            ? "管理アカウントの新規登録"
+            : forgotPasswordMode
+            ? "パスワード再設定"
+            : "ログイン"}
         </h1>
 
         <form className="auth-form" onSubmit={handleFormSubmit}>
@@ -141,20 +148,22 @@ export default function AuthPage() {
             </label>
           )}
 
-          {/* ▼ パスワード */}
-          <label className="auth-label">
-            パスワード
-            <input
-              type="password"
-              className="auth-input"
-              value={password}
-              onChange={(e) => {
-                setPassword(e.target.value);
-                if (error) setError(null);
-              }}
-              required
-            />
-          </label>
+          {/* ▼ パスワード（forgotPasswordMode 中は非表示） */}
+          {!(mode === "signin" && forgotPasswordMode) && (
+            <label className="auth-label">
+              パスワード
+              <input
+                type="password"
+                className="auth-input"
+                value={password}
+                onChange={(e) => {
+                  setPassword(e.target.value);
+                  if (error) setError(null);
+                }}
+                required
+              />
+            </label>
+          )}
 
           {/* ▼ signup：パスワード確認 */}
           {mode === "signup" && (
@@ -173,6 +182,38 @@ export default function AuthPage() {
             </label>
           )}
 
+          {/* ▼ signin 時の「パスワードをお忘れの方」リンク */}
+          {mode === "signin" && !forgotPasswordMode && (
+            <div className="auth-forgot">
+              <button
+                type="button"
+                className="auth-forgot-link"
+                onClick={() => {
+                  setError(null);
+                  setForgotPasswordMode(true);
+                }}
+              >
+                パスワードをお忘れの方はこちら
+              </button>
+            </div>
+          )}
+
+          {/* ▼ パスワード再設定モードの「ログインに戻る」 */}
+          {mode === "signin" && forgotPasswordMode && (
+            <div className="auth-forgot">
+              <button
+                type="button"
+                className="auth-forgot-link"
+                onClick={() => {
+                  setError(null);
+                  setForgotPasswordMode(false);
+                }}
+              >
+                ログイン画面に戻る
+              </button>
+            </div>
+          )}
+
           {error && <p className="auth-error">{error}</p>}
 
           {/* ▼ アクションボタン */}
@@ -186,9 +227,13 @@ export default function AuthPage() {
               {submitting
                 ? mode === "signup"
                   ? "登録中..."
+                  : forgotPasswordMode
+                  ? "送信中..."
                   : "ログイン中..."
                 : mode === "signup"
                 ? "管理アカウントを登録する"
+                : forgotPasswordMode
+                ? "パスワード再設定メールを送信"
                 : "ログインする"}
             </Button>
           </div>

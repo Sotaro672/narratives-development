@@ -2,6 +2,8 @@
 import { useCallback, useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuthActions } from "../../application/useAuthActions";
+import { sendPasswordResetEmail } from "firebase/auth";
+import { auth } from "../../infrastructure/config/firebaseClient";
 
 export type AuthMode = "signup" | "signin";
 
@@ -56,6 +58,11 @@ export function useAuthPage() {
   const [mode, setMode] = useState<AuthMode>("signin");
 
   // -------------------------
+  // 「パスワードをお忘れの方」モード
+  // -------------------------
+  const [forgotPasswordMode, setForgotPasswordMode] = useState(false);
+
+  // -------------------------
   // 入力値
   // -------------------------
   const [email, setEmail] = useState("");
@@ -90,6 +97,7 @@ export function useAuthPage() {
 
     _setCompanyName("");
 
+    setForgotPasswordMode(false);
     setError(null);
   }, [setError]);
 
@@ -109,6 +117,29 @@ export function useAuthPage() {
   const handleFormSubmit = useCallback(
     async (e: React.FormEvent) => {
       e.preventDefault();
+
+      // ▼ パスワードをお忘れの方（signin + forgotPasswordMode）
+      if (mode === "signin" && forgotPasswordMode) {
+        if (!email.trim()) {
+          setError("パスワード再設定メールを送るメールアドレスを入力してください。");
+          return;
+        }
+
+        try {
+          await sendPasswordResetEmail(auth, email.trim());
+          window.alert(
+            "パスワード再設定用のメールを送信しました。\nメールに記載されたリンクからパスワードを再設定してください。",
+          );
+          setForgotPasswordMode(false);
+          setError(null);
+        } catch (err: any) {
+          console.error("[useAuthPage] sendPasswordResetEmail error:", err);
+          setError(
+            "パスワード再設定メールの送信に失敗しました。メールアドレスをご確認ください。",
+          );
+        }
+        return;
+      }
 
       if (mode === "signup") {
         if (password !== confirmPassword) {
@@ -141,11 +172,12 @@ export function useAuthPage() {
         return;
       }
 
-      // login
+      // ▼ 通常ログイン
       await signIn(email, password);
     },
     [
       mode,
+      forgotPasswordMode,
       email,
       password,
       confirmPassword,
@@ -181,6 +213,10 @@ export function useAuthPage() {
     // モード
     mode,
     switchMode,
+
+    // 「パスワードをお忘れの方」モード
+    forgotPasswordMode,
+    setForgotPasswordMode,
 
     // 入力
     email,

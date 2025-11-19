@@ -156,6 +156,18 @@
   color: #444;
 }
 
+/* 空リスト用メッセージ */
+.lp-empty-row {
+  height: 180px; /* テーブル中央付近に見えるように少し高さを持たせる */
+}
+
+.lp-empty-cell {
+  text-align: center;
+  vertical-align: middle;
+  font-size: 0.95rem;
+  color: #777;
+}
+
 /* ========================================
    カテゴリラベル
    ======================================== */
@@ -184,6 +196,7 @@
 .lp-th-filter:hover {
   color: #111;
 }
+
 .list-pagination {
   display: flex;
   justify-content: center;
