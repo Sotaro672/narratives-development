@@ -9,9 +9,9 @@ export type BrandRow = {
   id: string;
   name: string;
   isActive: boolean;
-  managerId?: string | null;  // memberId
-  managerName?: string;       // ★ ここに「姓 名」を入れる
-  registeredAt: string;       // YYYY/MM/DD
+  managerId?: string | null; // memberId
+  managerName?: string; // 「姓 名」
+  registeredAt: string; // YYYY/MM/DD
 };
 
 // バックエンドから返ってくる Brand の最小形
@@ -19,9 +19,8 @@ type Brand = {
   id: string;
   name?: string | null;
   isActive?: boolean | null;
-  // ★ JSON 上は manager というキーで返ってくる
+  // JSON 上は manager / managerId どちらでも来る可能性を考慮
   manager?: string | null;
-  // 将来「managerId」に変える場合も想定して互換確保
   managerId?: string | null;
   createdAt?: string | null;
 };
@@ -103,8 +102,13 @@ async function fetchManagerName(memberId: string): Promise<string> {
   }
 }
 
+// backend brand.Service.FormatName と揃えた brand 名整形関数
+export function formatBrandName(name: string | null | undefined): string {
+  return (name ?? "").trim();
+}
+
 // ===========================
-// ブランド一覧取得
+// companyId のブランド一覧取得
 // ===========================
 export async function listBrands(companyId: string): Promise<BrandRow[]> {
   // eslint-disable-next-line no-console
@@ -115,27 +119,29 @@ export async function listBrands(companyId: string): Promise<BrandRow[]> {
   if (!companyId) return [];
 
   // ① brandRepository からブランド取得
-  const result = await brandRepositoryHTTP.list({
-    filter: { companyId },
+  const page = await brandRepositoryHTTP.list({
+    filter: {
+      companyId,
+      deleted: false,
+      isActive: true,
+    },
     sort: { column: "created_at", order: "desc" },
     page: 1,
     perPage: 200,
   });
-  // eslint-disable-next-line no-console
-  console.log("[brandService] brandRepositoryHTTP.list result =", result);
 
-  const brands = (result.items ?? []) as Brand[];
+  const brands = (page.items ?? []) as Brand[];
   // eslint-disable-next-line no-console
   console.log("[brandService] brands =", brands);
 
-  // ② Brand → BrandRow（まず managerId だけ詰める）
+  // ② Brand → BrandRow（まず managerId / name / registeredAt だけ詰める）
   const baseRows: BrandRow[] = brands.map((b) => {
     const rawManager =
       (b.manager ?? b.managerId ?? "").toString().trim() || null;
 
     const row: BrandRow = {
       id: b.id,
-      name: String(b.name ?? "").trim(),
+      name: formatBrandName(b.name ?? ""), // ★ backend FormatName と揃えた整形
       isActive: !!b.isActive,
       managerId: rawManager,
       registeredAt: formatDateYmd(b.createdAt),
@@ -176,7 +182,7 @@ export async function listBrands(companyId: string): Promise<BrandRow[]> {
     const mid = (r.managerId ?? "").trim();
     return {
       ...r,
-      managerName: idToName.get(mid) ?? "",
+      managerName: mid ? idToName.get(mid) ?? "" : "",
     };
   });
 

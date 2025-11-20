@@ -1,9 +1,8 @@
-// frontend/member/src/hooks/useMemberCreate.ts
-import { useCallback, useMemo, useState } from "react";
+// frontend/console/member/src/presentation/hooks/useMemberCreate.ts
+import { useCallback, useEffect, useMemo, useState } from "react";
 import type { Member } from "../../domain/entity/member";
 
-// ★ バックエンド呼び出し用：Firebase Auth & ログイン情報（companyId）
-import { auth } from "../../../../shell/src/auth/infrastructure/config/firebaseClient";
+// ★ ログイン情報（companyId）は AuthContext から取得
 import { useAuthContext } from "../../../../shell/src/auth/application/AuthContext";
 
 // Permission のカテゴリ型（＝新しい「役割」概念）
@@ -12,41 +11,53 @@ import type {
   PermissionCategory,
 } from "../../../../shell/src/shared/types/permission";
 
-// 権限一覧を backend (/permissions) から取得する HTTP リポジトリ
-import { PermissionRepositoryHTTP } from "../../../../permission/src/infrastructure/http/permissionRepositoryHTTP";
+// Brand ドメイン型
+import type { Brand } from "../../../../brand/src/domain/entity/brand";
 
-// ブランドのモックデータ（UI 用）
+// アプリケーションサービス（API 呼び出しロジックなど）
 import {
-  ALL_BRANDS,
-  toBrandRows,
-} from "../../../../brand/src/infrastructure/mockdata/mockdata";
-import type { BrandRow } from "../../../../brand/src/infrastructure/mockdata/mockdata";
+  createMember,
+  fetchAllPermissions,
+  fetchBrandsForCurrentMember,
+  groupPermissionsByCategory,
+} from "../../application/memberService";
 
-// ─────────────────────────────────────────────
-// Backend base URL（useMemberDetail と同じ構成）
-// ─────────────────────────────────────────────
-const ENV_BASE =
-  ((import.meta as any).env?.VITE_BACKEND_BASE_URL as string | undefined)?.replace(
-    /\/+$/g,
-    "",
-  ) ?? "";
-
-const FALLBACK_BASE =
-  "https://narratives-backend-871263659099.asia-northeast1.run.app";
-
-// 最終的に使うベース URL
-const API_BASE = ENV_BASE || FALLBACK_BASE;
-
-// Permission 一覧を取得するリポジトリ（シングルトン的に使う）
-const permissionRepo = new PermissionRepositoryHTTP();
+// UI 用 BrandRow 型（テーブル表示用）
+export type BrandRow = {
+  id: string;
+  name: string;
+  isActive: boolean;
+  registeredAt: string; // YYYY/MM/DD
+};
 
 export type UseMemberCreateOptions = {
   /** 作成成功時に呼ばれます（呼び出し元で navigate などを実施） */
   onSuccess?: (created: Member) => void;
 };
 
+// ISO → YYYY/MM/DD
+function formatDateYmd(iso?: string | null): string {
+  if (!iso) return "";
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return "";
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${y}/${m}/${day}`;
+}
+
+// Brand[] → BrandRow[]
+function toBrandRows(brands: Brand[]): BrandRow[] {
+  return brands.map((b) => ({
+    id: b.id,
+    name: String(b.name ?? "").trim(),
+    isActive: Boolean(b.isActive ?? true),
+    registeredAt: formatDateYmd(b.createdAt),
+  }));
+}
+
 export function useMemberCreate(options?: UseMemberCreateOptions) {
-  // 認証中ユーザ（companyId をフロントでも把握しておく）
+  // 認証中ユーザ（companyId / uid は AuthContext からも使える）
   const { user } = useAuthContext();
   const authCompanyId = user?.companyId ?? null;
   const currentMemberId = user?.uid ?? null;
@@ -68,44 +79,39 @@ export function useMemberCreate(options?: UseMemberCreateOptions) {
   const [error, setError] = useState<string | null>(null);
 
   // ===== 権限カテゴリ情報（カテゴリ選択の Popover で利用） =====
-  // backend/internal/domain/permission/catalog.go 経由で
-  // /permissions から取得した一覧をここに保持する
   const [allPermissions, setAllPermissions] = useState<Permission[]>([]);
 
   // 初回マウント時に backend から権限一覧を取得
-  // （/permissions → catalog.go → allPermissions）
-  useState(() => {
+  useEffect(() => {
     (async () => {
       try {
-        const pageResult = await permissionRepo.list(); // GET /permissions
-        setAllPermissions(pageResult.items);
+        const items = await fetchAllPermissions(); // Service 経由
+        setAllPermissions(items);
       } catch (e) {
+        // eslint-disable-next-line no-console
         console.error("[useMemberCreate] failed to load permissions", e);
         setAllPermissions([]);
       }
     })();
-  });
+  }, []);
 
   // カテゴリごとにグルーピング
   const permissionsByCategory: Record<PermissionCategory, Permission[]> =
-    useMemo(() => {
-      const map: Record<string, Permission[]> = {};
-      for (const p of allPermissions) {
-        const cat = (p.category || "brand") as PermissionCategory;
-        if (!map[cat]) map[cat] = [];
-        map[cat].push(p);
-      }
-      return map as Record<PermissionCategory, Permission[]>;
-    }, [allPermissions]);
+    useMemo(
+      () => groupPermissionsByCategory(allPermissions),
+      [allPermissions],
+    );
 
   // UIで扱いやすい配列形式（カテゴリ名・件数・配列）
   const permissionCategories = useMemo(
     () =>
-      (Object.keys(permissionsByCategory) as PermissionCategory[]).map((cat) => ({
-        key: cat,
-        count: permissionsByCategory[cat]?.length ?? 0,
-        permissions: permissionsByCategory[cat] ?? [],
-      })),
+      (Object.keys(permissionsByCategory) as PermissionCategory[]).map(
+        (cat) => ({
+          key: cat,
+          count: permissionsByCategory[cat]?.length ?? 0,
+          permissions: permissionsByCategory[cat] ?? [],
+        }),
+      ),
     [permissionsByCategory],
   );
 
@@ -115,15 +121,28 @@ export function useMemberCreate(options?: UseMemberCreateOptions) {
     [permissionsByCategory],
   );
 
-  // ===== ブランド（UI 連携用に公開しておく） =====
-  const allBrands = ALL_BRANDS;
-  const brandRows: BrandRow[] = useMemo(() => toBrandRows(ALL_BRANDS), []);
+  // ===== ブランド（currentMember.companyId ベースで取得） =====
+  const [allBrands, setAllBrands] = useState<Brand[]>([]);
+  const [brandRows, setBrandRows] = useState<BrandRow[]>([]);
 
-  const toArray = (s: string) =>
-    s
-      .split(",")
-      .map((x) => x.trim())
-      .filter(Boolean);
+  useEffect(() => {
+    (async () => {
+      try {
+        // ★ ここで memberService 経由で currentMember → companyId → brands を取得
+        const brands = await fetchBrandsForCurrentMember();
+        setAllBrands(brands);
+        setBrandRows(toBrandRows(brands));
+      } catch (e) {
+        // eslint-disable-next-line no-console
+        console.error(
+          "[useMemberCreate] failed to load brands via memberService",
+          e,
+        );
+        setAllBrands([]);
+        setBrandRows([]);
+      }
+    })();
+  }, []);
 
   const handleSubmit = useCallback(
     async (e?: React.FormEvent) => {
@@ -131,132 +150,17 @@ export function useMemberCreate(options?: UseMemberCreateOptions) {
       setError(null);
       setSubmitting(true);
       try {
-        const id = crypto.randomUUID();
-        const now = new Date().toISOString();
-
-        const perms = toArray(permissionsText);
-        const brands = toArray(brandsText);
-
-        // API へ送るリクエストボディ（handler の memberCreateRequest に対応）
-        // email は、招待メール送信・招待フローで利用される前提。
-        const body = {
-          id,
-          firstName: firstName.trim() || "",
-          lastName: lastName.trim() || "",
-          firstNameKana: firstNameKana.trim() || "",
-          lastNameKana: lastNameKana.trim() || "",
-          email: email.trim() || "",
-          permissions: perms,
-          assignedBrands: brands,
-          // ★ companyId はサーバ側で context から上書き適用される想定だが、
-          //    クライアントでも把握できている場合は一緒に送っておく（冪等）
-          ...(authCompanyId ? { companyId: authCompanyId } : {}),
-          status: "active",
-        };
-
-        // 認証トークン取得
-        const token = await auth.currentUser?.getIdToken();
-        if (!token) {
-          throw new Error("未認証のためメンバーを作成できません。");
-        }
-
-        const url = `${API_BASE}/members`;
-        console.log("[useMemberCreate] POST", url, body);
-
-        const res = await fetch(url, {
-          method: "POST",
-          headers: {
-            Authorization: `Bearer ${token}`,
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify(body),
+        const created = await createMember({
+          firstName,
+          lastName,
+          firstNameKana,
+          lastNameKana,
+          email,
+          permissionsText,
+          brandsText,
+          authCompanyId,
+          currentMemberId,
         });
-
-        if (!res.ok) {
-          const text = await res.text().catch(() => "");
-          throw new Error(
-            `メンバー作成に失敗しました (status ${res.status}) ${text || ""}`,
-          );
-        }
-
-        // HTML が返ってきていないかチェック（env ミス検出用）
-        const ct = res.headers.get("Content-Type") ?? "";
-        if (!ct.includes("application/json")) {
-          const text = await res.text().catch(() => "");
-          throw new Error(
-            `サーバーから JSON ではないレスポンスが返却されました (content-type=${ct}). ` +
-              `VITE_BACKEND_BASE_URL または API_BASE=${API_BASE} を確認してください。\n` +
-              text.slice(0, 200),
-          );
-        }
-
-        // バックエンド（usecase/repo）から返る Member をフロントの Member 型に整形
-        const apiMember = (await res.json()) as any;
-
-        const created: Member = {
-          id: apiMember.id ?? id,
-          firstName: apiMember.firstName ?? null,
-          lastName: apiMember.lastName ?? null,
-          firstNameKana: apiMember.firstNameKana ?? null,
-          lastNameKana: apiMember.lastNameKana ?? null,
-          email: apiMember.email ?? null,
-          permissions: Array.isArray(apiMember.permissions)
-            ? apiMember.permissions
-            : [],
-          assignedBrands: Array.isArray(apiMember.assignedBrands)
-            ? apiMember.assignedBrands
-            : null,
-          // 会社ID（サーバ優先 / なければログインユーザーの companyId）
-          ...(apiMember.companyId
-            ? { companyId: apiMember.companyId }
-            : authCompanyId
-              ? { companyId: authCompanyId }
-              : {}),
-          // 監査情報
-          createdAt: apiMember.createdAt ?? now,
-          createdBy: apiMember.createdBy ?? currentMemberId ?? null,
-          updatedAt: apiMember.updatedAt ?? now,
-          updatedBy: apiMember.updatedBy ?? currentMemberId ?? null,
-          deletedAt: apiMember.deletedAt ?? null,
-          deletedBy: apiMember.deletedBy ?? null,
-        } as Member;
-
-        // ─────────────────────────────────────
-        // ★ 招待メール送信トリガー
-        //   - バックエンド側の invitation usecase を叩いて、
-        //     InvitationMailerPort を通じてメールを送信してもらう
-        //   - エンドポイント例: POST /members/{memberId}/invitation
-        // ─────────────────────────────────────
-        if (created.email) {
-          const inviteUrl = `${API_BASE}/members/${encodeURIComponent(created.id)}/invitation`;
-          console.log("[useMemberCreate] POST (invitation)", inviteUrl);
-
-          try {
-            const inviteRes = await fetch(inviteUrl, {
-              method: "POST",
-              headers: {
-                Authorization: `Bearer ${token}`,
-                "Content-Type": "application/json",
-              },
-              // 必要に応じて body にオプションを渡してもよい
-              body: JSON.stringify({}),
-            });
-
-            if (!inviteRes.ok) {
-              const inviteText = await inviteRes.text().catch(() => "");
-              console.error(
-                `[useMemberCreate] 招待メール送信に失敗しました (status ${inviteRes.status}) ${inviteText}`,
-              );
-              // ここでエラー文言を UI に出したければ setError を使う
-              // setError("メンバーは作成されましたが、招待メールの送信に失敗しました。");
-            } else {
-              console.log("[useMemberCreate] 招待メール送信リクエスト成功");
-            }
-          } catch (invErr) {
-            console.error("[useMemberCreate] 招待メール送信中にエラーが発生しました", invErr);
-            // 必要なら setError(...)
-          }
-        }
 
         // 呼び出し元へ通知
         options?.onSuccess?.(created);

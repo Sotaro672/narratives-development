@@ -9,23 +9,33 @@ import { useMemberList } from "../hooks/useMemberList";
 export default function MemberManagementPage() {
   const navigate = useNavigate();
 
-  // フックから ID→氏名解決関数も受け取る
-  const { members, loading, error, reload, getNameLastFirstByID } = useMemberList();
+  // メンバー一覧 + 氏名解決関数 + brandId→brandName マップを hook から取得
+  const {
+    members,
+    loading,
+    error,
+    reload,
+    getNameLastFirstByID,
+    brandMap,
+  } = useMemberList();
 
-  // 非同期に解決した氏名を保持（id -> "姓 名"）
-  const [resolvedNames, setResolvedNames] = React.useState<Record<string, string>>({});
+  // 氏名キャッシュ（画面側で保持）
+  const [resolvedNames, setResolvedNames] = React.useState<
+    Record<string, string>
+  >({});
 
-  // 氏名が空の行だけ ID→氏名を解決してキャッシュ
+  // -------------------------
+  //  氏名補完
+  // -------------------------
   React.useEffect(() => {
     let disposed = false;
 
     (async () => {
       const entries = await Promise.all(
         members.map(async (m) => {
-          const immediate = `${m.lastName ?? ""} ${m.firstName ?? ""}`.trim();
-          if (immediate) return [m.id, immediate] as const;
+          const inline = `${m.lastName ?? ""} ${m.firstName ?? ""}`.trim();
+          if (inline) return [m.id, inline] as const;
 
-          // 一覧に名前が無い場合だけバックエンドへ（useMemberList 側でキャッシュあり）
           const resolved = await getNameLastFirstByID(m.id);
           return [m.id, resolved] as const;
         }),
@@ -34,7 +44,7 @@ export default function MemberManagementPage() {
       if (!disposed) {
         const next: Record<string, string> = {};
         for (const [id, name] of entries) {
-          if (name) next[id] = name; // 空は保存しない（招待中やメールでフォールバック）
+          if (name) next[id] = name;
         }
         setResolvedNames(next);
       }
@@ -54,7 +64,11 @@ export default function MemberManagementPage() {
     if (!createdAt) return "";
     if (typeof createdAt === "object" && createdAt !== null) {
       if (typeof (createdAt as any).toDate === "function") {
-        return (createdAt as any).toDate().toISOString().slice(0, 10).replace(/-/g, "/");
+        return (createdAt as any)
+          .toDate()
+          .toISOString()
+          .slice(0, 10)
+          .replace(/-/g, "/");
       }
       if (typeof (createdAt as any).seconds === "number") {
         return new Date((createdAt as any).seconds * 1000)
@@ -86,19 +100,14 @@ export default function MemberManagementPage() {
         createLabel="メンバー追加"
         showResetButton
         onCreate={() => navigate("/member/create")}
-        onReset={() => {
-          reload();
-        }}
+        onReset={() => reload()}
       >
         {members.map((m) => {
-          // 1) 解決済み氏名 2) その場の氏名 3) メール 4) ID の順でフォールバック
           const inline = `${m.lastName ?? ""} ${m.firstName ?? ""}`.trim();
           const name =
             resolvedNames[m.id] || inline || (m.email ?? "") || m.id;
 
-          const brands = m.assignedBrands ?? [];
-          const permissionCount = m.permissions?.length ?? 0;
-          const registeredAt = ymd((m as any).createdAt);
+          const assigned = m.assignedBrands ?? [];
 
           return (
             <tr
@@ -117,14 +126,20 @@ export default function MemberManagementPage() {
               <td>{name || "招待中"}</td>
               <td>{m.email ?? ""}</td>
               <td>
-                {brands.map((b) => (
-                  <span key={b} className="lp-brand-pill mm-brand-tag">
-                    {b}
-                  </span>
-                ))}
+                {assigned.map((brandId) => {
+                  const label = brandMap[brandId] ?? brandId;
+                  return (
+                    <span
+                      key={brandId}
+                      className="lp-brand-pill mm-brand-tag"
+                    >
+                      {label}
+                    </span>
+                  );
+                })}
               </td>
-              <td>{permissionCount}</td>
-              <td>{registeredAt}</td>
+              <td>{m.permissions?.length ?? 0}</td>
+              <td>{ymd((m as any).createdAt)}</td>
             </tr>
           );
         })}
