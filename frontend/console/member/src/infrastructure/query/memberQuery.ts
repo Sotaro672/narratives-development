@@ -1,4 +1,4 @@
-// frontend/member/src/infrastructure/query/memberQuery.ts
+// frontend/member/src/infrastructure/query/memberQuery.ts 
 /// <reference types="vite/client" />
 
 import type { Member } from "../../domain/entity/member";
@@ -31,17 +31,16 @@ function apiUrl(path: string, qs?: string) {
 
 // クエリ文字列を作る（companyId は絶対に付けない）
 export function buildMemberQuery(usePage: Page, useFilter: MemberFilter): string {
+  // Page.number / Page.perPage ベースに変更
   const perPage =
-    usePage && typeof usePage.limit === "number" && usePage.limit > 0
-      ? usePage.limit
+    usePage && typeof (usePage as any).perPage === "number" && (usePage as any).perPage > 0
+      ? (usePage as any).perPage
       : DEFAULT_PAGE_LIMIT;
 
-  const offset =
-    usePage && typeof usePage.offset === "number" && usePage.offset >= 0
-      ? usePage.offset
-      : 0;
-
-  const pageNumber = Math.floor(offset / perPage) + 1;
+  const pageNumber =
+    usePage && typeof (usePage as any).number === "number" && (usePage as any).number > 0
+      ? (usePage as any).number
+      : 1;
 
   const params = new URLSearchParams();
   params.set("page", String(pageNumber));

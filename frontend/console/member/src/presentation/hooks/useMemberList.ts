@@ -93,14 +93,15 @@ export function useMemberList(
     void load();
   }, [load]);
 
-  /** 1始まりのページ番号を受けて Page(offset) を更新 */
-  const setPageNumber = (pageNumber: number) => {
-    const safe = pageNumber > 0 ? pageNumber : 1;
-    setPage((prev) => ({
-      ...prev,
-      offset: (safe - 1) * (prev.limit || DEFAULT_PAGE_LIMIT),
-    }));
-  };
+const setPageNumber = (pageNumber: number) => {
+  const safe = pageNumber > 0 ? pageNumber : 1;
+  setPage((prev) => ({
+    ...prev,
+    number: safe,
+    perPage: prev.perPage ?? DEFAULT_PAGE_LIMIT,
+  }));
+};
+
 
   // ID → 「姓 名」を解決（member.Service.GetNameLastFirstByID 相当）
   const getNameLastFirstByID = useCallback(

@@ -75,7 +75,10 @@ async function httpRequest<T>(input: string, init: RequestInit = {}): Promise<T>
 
   if (!res.ok) {
     throw new Error(
-      `[BrandRepositoryHTTP] ${res.status} ${res.statusText} :: ${text?.slice(0, 300)}`,
+      `[BrandRepositoryHTTP] ${res.status} ${res.statusText} :: ${text?.slice(
+        0,
+        300,
+      )}`,
     );
   }
 
@@ -222,20 +225,43 @@ export class BrandRepositoryHTTP {
     const qs = params.toString();
     const url = qs ? `${this.baseUrl}?${qs}` : this.baseUrl;
 
-    const result = await authed<{
-      items: Brand[];
-      totalCount: number;
-      totalPages: number;
-      page: number;
-      perPage: number;
-    }>(url, { method: "GET" });
+    // ★ Go 側が Items / TotalCount ... のように先頭大文字で返してくるケースも考慮して正規化
+    const raw = (await authed<any>(url, { method: "GET" })) ?? {};
+
+    const rawItems = (raw.items ?? raw.Items ?? []) as any[];
+
+    const normalizedItems: Brand[] = rawItems.map((b) => ({
+      id: b.id ?? b.ID ?? "",
+      companyId: b.companyId ?? b.CompanyID ?? "",
+      name: b.name ?? b.Name ?? "",
+      description: b.description ?? b.Description ?? "",
+      websiteUrl: b.websiteUrl ?? b.URL ?? b.Url ?? "",
+      isActive: Boolean(b.isActive ?? b.IsActive ?? true),
+      manager: b.manager ?? b.Manager ?? b.managerId ?? b.ManagerID ?? undefined,
+      walletAddress: b.walletAddress ?? b.WalletAddress ?? "",
+      createdAt: b.createdAt ?? b.CreatedAt ?? "",
+      createdBy: b.createdBy ?? b.CreatedBy ?? undefined,
+      updatedAt: b.updatedAt ?? b.UpdatedAt ?? undefined,
+      updatedBy: b.updatedBy ?? b.UpdatedBy ?? undefined,
+      deletedAt: b.deletedAt ?? b.DeletedAt ?? undefined,
+      deletedBy: b.deletedBy ?? b.DeletedBy ?? undefined,
+    }));
+
+    const totalCount = Number(
+      raw.totalCount ?? raw.TotalCount ?? normalizedItems.length ?? 0,
+    );
+    const totalPages = Number(raw.totalPages ?? raw.TotalPages ?? 1);
+    const pageNum = Number(raw.page ?? raw.Page ?? page ?? 1);
+    const perPageNum = Number(
+      raw.perPage ?? raw.PerPage ?? perPage ?? normalizedItems.length ?? 0,
+    );
 
     return {
-      items: result.items ?? [],
-      totalCount: result.totalCount ?? result.items?.length ?? 0,
-      totalPages: result.totalPages ?? 1,
-      page: result.page ?? page ?? 1,
-      perPage: result.perPage ?? perPage ?? result.items?.length ?? 0,
+      items: normalizedItems,
+      totalCount,
+      totalPages,
+      page: pageNum,
+      perPage: perPageNum,
     };
   }
 

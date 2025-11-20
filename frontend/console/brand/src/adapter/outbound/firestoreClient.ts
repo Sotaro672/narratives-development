@@ -2,20 +2,25 @@
 import { initializeApp, getApps, FirebaseApp } from "firebase/app";
 import { getFirestore, Firestore } from "firebase/firestore";
 
-const env = import.meta.env as Record<string, string | undefined>;
+// Vite の import.meta.env を any キャストして扱う
+const env = ((import.meta as any).env ??
+  {}) as Record<string, string | undefined>;
 
 // .env（VITE_）優先＋既知値のフォールバック
 const firebaseConfig = {
   apiKey: env.VITE_FIREBASE_API_KEY || "AIzaSyDTetB8PcVlSHhXbItMZv2thd5lY4d5nIQ",
   authDomain:
-    env.VITE_FIREBASE_AUTH_DOMAIN || "narratives-development-26c2d.firebaseapp.com",
+    env.VITE_FIREBASE_AUTH_DOMAIN ||
+    "narratives-development-26c2d.firebaseapp.com",
   projectId: env.VITE_FIREBASE_PROJECT_ID || "narratives-development-26c2d",
   storageBucket:
-    env.VITE_FIREBASE_STORAGE_BUCKET || "narratives-development-26c2d.firebasestorage.app",
+    env.VITE_FIREBASE_STORAGE_BUCKET ||
+    "narratives-development-26c2d.firebasestorage.app",
   messagingSenderId:
     env.VITE_FIREBASE_MESSAGING_SENDER_ID || "871263659099",
   appId:
-    env.VITE_FIREBASE_APP_ID || "1:871263659099:web:0d4bbdc36e59d7ed8d4b7e",
+    env.VITE_FIREBASE_APP_ID ||
+    "1:871263659099:web:0d4bbdc36e59d7ed8d4b7e",
   // measurementId は不要なら未指定でもOK
   measurementId: env.VITE_FIREBASE_MEASUREMENT_ID || "G-T77JW1DF4V",
 };

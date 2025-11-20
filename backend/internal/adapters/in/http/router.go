@@ -169,68 +169,50 @@ func NewRouter(deps RouterDeps) http.Handler {
 	// ============================================================
 	// 他ドメインは変更なし
 	// ============================================================
-	if deps.AccountUC != nil {
-		mux.Handle("/accounts/", handlers.NewAccountHandler(deps.AccountUC))
-	}
+	mux.Handle("/accounts", handlers.NewAccountHandler(deps.AccountUC))
+	mux.Handle("/accounts/", handlers.NewAccountHandler(deps.AccountUC))
 
-	if deps.AnnouncementUC != nil {
-		mux.Handle("/announcements/", handlers.NewAnnouncementHandler(deps.AnnouncementUC))
-	}
+	mux.Handle("/announcements", handlers.NewAnnouncementHandler(deps.AnnouncementUC))
+	mux.Handle("/announcements/", handlers.NewAnnouncementHandler(deps.AnnouncementUC))
 
-	if deps.PermissionUC != nil {
-		mux.Handle("/permissions/", handlers.NewPermissionHandler(deps.PermissionUC))
-	}
+	mux.Handle("/permissions", handlers.NewPermissionHandler(deps.PermissionUC))
+	mux.Handle("/permissions/", handlers.NewPermissionHandler(deps.PermissionUC))
 
-	if deps.AvatarUC != nil {
-		mux.Handle("/avatars/", handlers.NewAvatarHandler(deps.AvatarUC))
-	}
+	mux.Handle("/avatars", handlers.NewAvatarHandler(deps.AvatarUC))
+	mux.Handle("/avatars/", handlers.NewAvatarHandler(deps.AvatarUC))
 
-	if deps.BrandUC != nil {
-		mux.Handle("/brands/", handlers.NewBrandHandler(deps.BrandUC))
-	}
+	mux.Handle("/brands", handlers.NewBrandHandler(deps.BrandUC))
+	mux.Handle("/brands/", handlers.NewBrandHandler(deps.BrandUC))
 
-	if deps.CompanyUC != nil {
-		mux.Handle("/companies/", handlers.NewCompanyHandler(deps.CompanyUC))
-	}
+	mux.Handle("/companies", handlers.NewCompanyHandler(deps.CompanyUC))
+	mux.Handle("/companies/", handlers.NewCompanyHandler(deps.CompanyUC))
 
-	if deps.InquiryUC != nil {
-		mux.Handle("/inquiries/", handlers.NewInquiryHandler(deps.InquiryUC))
-	}
+	mux.Handle("/inquiries", handlers.NewInquiryHandler(deps.InquiryUC))
+	mux.Handle("/inquiries/", handlers.NewInquiryHandler(deps.InquiryUC))
 
-	if deps.InventoryUC != nil {
-		mux.Handle("/inventories/", handlers.NewInventoryHandler(deps.InventoryUC))
-	}
+	mux.Handle("/inventories", handlers.NewInventoryHandler(deps.InventoryUC))
+	mux.Handle("/inventories/", handlers.NewInventoryHandler(deps.InventoryUC))
 
-	if deps.TokenUC != nil {
-		mux.Handle("/tokens/", handlers.NewTokenHandler(deps.TokenUC))
-	}
+	mux.Handle("/tokens", handlers.NewTokenHandler(deps.TokenUC))
+	mux.Handle("/tokens/", handlers.NewTokenHandler(deps.TokenUC))
 
-	if deps.ProductUC != nil {
-		mux.Handle("/products/", handlers.NewProductHandler(deps.ProductUC))
-	}
+	mux.Handle("/products", handlers.NewProductHandler(deps.ProductUC))
+	mux.Handle("/products/", handlers.NewProductHandler(deps.ProductUC))
 
-	if deps.ProductBlueprintUC != nil {
-		mux.Handle("/product-blueprints/", handlers.NewProductBlueprintHandler(deps.ProductBlueprintUC))
-	}
+	mux.Handle("/product-blueprints", handlers.NewProductBlueprintHandler(deps.ProductBlueprintUC))
+	mux.Handle("/product-blueprints/", handlers.NewProductBlueprintHandler(deps.ProductBlueprintUC))
 
-	if deps.TokenBlueprintUC != nil {
-		mux.Handle("/token-blueprints/", handlers.NewTokenBlueprintHandler(deps.TokenBlueprintUC))
-	}
+	mux.Handle("/token-blueprints", handlers.NewTokenBlueprintHandler(deps.TokenBlueprintUC))
+	mux.Handle("/token-blueprints/", handlers.NewTokenBlueprintHandler(deps.TokenBlueprintUC))
 
-	if deps.MessageUC != nil && deps.MessageRepo != nil {
-		mux.Handle(
-			"/messages/",
-			handlers.NewMessageHandler(deps.MessageUC, deps.MessageRepo),
-		)
-	}
+	mux.Handle("/messages", handlers.NewMessageHandler(deps.MessageUC, deps.MessageRepo))
+	mux.Handle("/messages/", handlers.NewMessageHandler(deps.MessageUC, deps.MessageRepo))
 
-	if deps.OrderUC != nil {
-		mux.Handle("/orders/", handlers.NewOrderHandler(deps.OrderUC))
-	}
+	mux.Handle("/orders", handlers.NewOrderHandler(deps.OrderUC))
+	mux.Handle("/orders/", handlers.NewOrderHandler(deps.OrderUC))
 
-	if deps.WalletUC != nil {
-		mux.Handle("/wallets/", handlers.NewWalletHandler(deps.WalletUC))
-	}
+	mux.Handle("/wallets", handlers.NewWalletHandler(deps.WalletUC))
+	mux.Handle("/wallets/", handlers.NewWalletHandler(deps.WalletUC))
 
 	return mux
 }

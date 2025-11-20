@@ -1,4 +1,4 @@
-// frontend/console/brand/src/presentation/hook/useBrandCreate.ts
+// frontend/console/brand/src/presentation/hook/useBrandCreate.ts 
 import { useState, useCallback, useMemo, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 
@@ -10,7 +10,8 @@ import {
 } from "../../../../member/src/infrastructure/query/memberQuery";
 import type { Member } from "../../../../member/src/domain/entity/member";
 import type { MemberFilter } from "../../../../member/src/domain/repository/memberRepository";
-import type { Page } from "../../../../shell/src/shared/types/common/common";
+// ❌ ページネーションを使わないので Page 型は不要
+// import type { Page } from "../../../../shell/src/shared/types/common/common";
 import type { Brand } from "../../domain/entity/brand";
 import { brandRepositoryHTTP } from "../../infrastructure/http/brandRepositoryHTTP";
 
@@ -52,24 +53,37 @@ export function useBrandCreate() {
         }
         const token = await user.getIdToken();
 
-        const page: Page = { limit: 50, offset: 0 };
+        // ページネーションはこの画面では使わないので、
+        // 「1ページ目だけ」を固定で取得する
         const filter: MemberFilter = {};
-        const { items } = await fetchMemberListWithToken(token, page, filter);
+        const { items } = await fetchMemberListWithToken(
+          token,
+          1 as any, // Page 型を要求されるが、この画面では 1 固定で十分
+          filter,
+        );
 
         if (cancelled) return;
         setManagerOptions(items);
         if (!managerId && items.length > 0) setManagerId(items[0].id);
       } catch (e: any) {
-        if (!cancelled) setManagerError(e?.message ?? "ブランド責任者候補の取得に失敗しました。");
+        if (!cancelled) {
+          setManagerError(
+            e?.message ?? "ブランド責任者候補の取得に失敗しました。",
+          );
+        }
       } finally {
         if (!cancelled) setLoadingManagers(false);
       }
     }
     loadManagers();
-    return () => { cancelled = true; };
+    return () => {
+      cancelled = true;
+    };
   }, [managerId]);
 
-  const handleBack = useCallback(() => { navigate(-1); }, [navigate]);
+  const handleBack = useCallback(() => {
+    navigate(-1);
+  }, [navigate]);
 
   // 実際に /brands へ POST
   const handleSave = useCallback(async () => {
@@ -77,11 +91,29 @@ export function useBrandCreate() {
     const trimmedManagerId = (managerId ?? "").trim();
 
     let hasError = false;
-    if (!trimmedName) { setNameError("ブランド名は必須です。"); hasError = true; } else setNameError(null);
-    if (!trimmedManagerId) { setManagerIdError("ブランド責任者は必須です。"); hasError = true; } else setManagerIdError(null);
-    if (hasError) { alert("ブランド名とブランド責任者を入力してください。"); return; }
+    if (!trimmedName) {
+      setNameError("ブランド名は必須です。");
+      hasError = true;
+    } else {
+      setNameError(null);
+    }
 
-    if (!companyId) { alert("companyId が取得できません。"); return; }
+    if (!trimmedManagerId) {
+      setManagerIdError("ブランド責任者は必須です。");
+      hasError = true;
+    } else {
+      setManagerIdError(null);
+    }
+
+    if (hasError) {
+      alert("ブランド名とブランド責任者を入力してください。");
+      return;
+    }
+
+    if (!companyId) {
+      alert("companyId が取得できません。");
+      return;
+    }
 
     // backend の Create は Brand 全体を受ける想定
     const nowIso = new Date().toISOString();
@@ -95,7 +127,7 @@ export function useBrandCreate() {
       isActive: true,
       manager: trimmedManagerId,
       walletAddress: "pending", // サーバで正式値に更新される前提
-      createdBy: currentMember?.id ?? null as any, // TS 型の都合：サーバ側で上書き可
+      createdBy: (currentMember?.id ?? null) as any, // TS 型の都合：サーバ側で上書き可
       updatedBy: null as any,
       deletedAt: null as any,
       deletedBy: null as any,
@@ -112,17 +144,34 @@ export function useBrandCreate() {
       console.error("[brand] create error:", e);
       alert(`ブランド登録に失敗しました: ${e?.message ?? e}`);
     }
-  }, [companyId, name, description, websiteUrl, managerId, currentMember?.id, navigate]);
+  }, [
+    companyId,
+    name,
+    description,
+    websiteUrl,
+    managerId,
+    currentMember?.id,
+    navigate,
+  ]);
 
   return {
     companyId,
 
-    name, setName, nameError,
-    description, setDescription,
-    websiteUrl, setWebsiteUrl,
+    name,
+    setName,
+    nameError,
+    description,
+    setDescription,
+    websiteUrl,
+    setWebsiteUrl,
 
-    managerId, setManagerId, managerIdError,
-    managerOptions, loadingManagers, managerError, formatLastFirst,
+    managerId,
+    setManagerId,
+    managerIdError,
+    managerOptions,
+    loadingManagers,
+    managerError,
+    formatLastFirst,
 
     isActive,
     handleBack,

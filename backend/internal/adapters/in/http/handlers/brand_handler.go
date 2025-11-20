@@ -1,4 +1,3 @@
-// backend/internal/adapters/in/http/handlers/brand_handler.go
 package handlers
 
 import (
@@ -22,23 +21,26 @@ func NewBrandHandler(uc *usecase.BrandUsecase) http.Handler {
 
 func (h *BrandHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
-	path := r.URL.Path
+
+	// ★★★★★ 重要：末尾スラッシュを強制的に除去して正規化 ★★★★★
+	path := strings.TrimSuffix(r.URL.Path, "/")
 
 	switch {
-	// 一覧
-	case r.Method == http.MethodGet && (path == "/brands" || path == "/brands/"):
+
+	// 一覧（GET /brands）
+	case r.Method == http.MethodGet && path == "/brands":
 		h.list(w, r)
 
-	// 作成: POST /brands
-	case r.Method == http.MethodPost && (path == "/brands" || path == "/brands/"):
+	// 作成（POST /brands）
+	case r.Method == http.MethodPost && path == "/brands":
 		h.create(w, r)
 
-	// 単一取得
+	// 単一取得（GET /brands/:id）
 	case r.Method == http.MethodGet && strings.HasPrefix(path, "/brands/"):
 		id := strings.TrimPrefix(path, "/brands/")
 		h.get(w, r, id)
 
-	// CORS preflight（必要なら）
+	// OPTIONS (CORS)
 	case r.Method == http.MethodOptions:
 		w.WriteHeader(http.StatusNoContent)
 
@@ -69,7 +71,6 @@ func (h *BrandHandler) get(w http.ResponseWriter, r *http.Request, id string) {
 func (h *BrandHandler) create(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 
-	// フロントから来る最小DTO
 	var in struct {
 		CompanyID   string  `json:"companyId"`
 		Name        string  `json:"name"`
@@ -86,7 +87,6 @@ func (h *BrandHandler) create(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// 必須の簡易バリデーション
 	if strings.TrimSpace(in.CompanyID) == "" || strings.TrimSpace(in.Name) == "" {
 		w.WriteHeader(http.StatusBadRequest)
 		_ = json.NewEncoder(w).Encode(map[string]string{"error": "companyId and name are required"})
@@ -98,18 +98,17 @@ func (h *BrandHandler) create(w http.ResponseWriter, r *http.Request) {
 		isActive = *in.IsActive
 	}
 
-	// walletAddress は当初空を許容しないドメインなので暫定で "pending" を設定
 	now := time.Now().UTC()
 	b, err := branddom.New(
-		"", // ID は repo 側で採番（FS）
+		"",
 		in.CompanyID,
 		in.Name,
 		in.Description,
-		"pending",     // walletAddress
-		in.WebsiteURL, // websiteUrl
-		isActive,      // isActive
-		in.ManagerID,  // manager
-		in.CreatedBy,  // createdBy
+		"pending",
+		in.WebsiteURL,
+		isActive,
+		in.ManagerID,
+		in.CreatedBy,
 		now,
 	)
 	if err != nil {
@@ -142,10 +141,11 @@ func (h *BrandHandler) list(w http.ResponseWriter, r *http.Request) {
 		f.WalletAddress = &v
 	}
 	if v := strings.TrimSpace(q.Get("isActive")); v != "" {
-		if v == "true" {
+		switch v {
+		case "true":
 			b := true
 			f.IsActive = &b
-		} else if v == "false" {
+		case "false":
 			b := false
 			f.IsActive = &b
 		}

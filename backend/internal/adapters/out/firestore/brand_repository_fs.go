@@ -49,7 +49,6 @@ func (r *BrandRepositoryFS) Create(ctx context.Context, b branddom.Brand) (brand
 		b.UpdatedAt = ptrTime(b.CreatedAt)
 	}
 
-	// Firestore: generate ID if empty
 	var ref *firestore.DocumentRef
 	if strings.TrimSpace(b.ID) == "" {
 		ref = r.col().NewDoc()
@@ -58,11 +57,9 @@ func (r *BrandRepositoryFS) Create(ctx context.Context, b branddom.Brand) (brand
 		ref = r.col().Doc(b.ID)
 	}
 
-	// DeletedAt/DeletedBy: keep as-is (may be nil)
 	data := r.domainToDocData(b)
 
 	if _, err := ref.Create(ctx, data); err != nil {
-		// If already exists, surface conflict-ish error
 		if status.Code(err) == codes.AlreadyExists {
 			return branddom.Brand{}, branddom.ErrConflict
 		}
@@ -151,7 +148,6 @@ func (r *BrandRepositoryFS) Update(ctx context.Context, id string, patch branddo
 	}
 	ref := r.col().Doc(id)
 
-	// ensure exists
 	if _, err := ref.Get(ctx); status.Code(err) == codes.NotFound {
 		return branddom.Brand{}, branddom.ErrNotFound
 	} else if err != nil {
@@ -209,7 +205,6 @@ func (r *BrandRepositoryFS) Update(ctx context.Context, id string, patch branddo
 		})
 	}
 	if patch.UpdatedAt != nil {
-		// if zero => clear, else set
 		if patch.UpdatedAt.IsZero() {
 			updates = append(updates, firestore.Update{
 				Path:  "updatedAt",
@@ -248,7 +243,6 @@ func (r *BrandRepositoryFS) Update(ctx context.Context, id string, patch branddo
 		})
 	}
 
-	// if nothing to update, just return current
 	if len(updates) == 0 {
 		snap, err := ref.Get(ctx)
 		if err != nil {
@@ -260,7 +254,6 @@ func (r *BrandRepositoryFS) Update(ctx context.Context, id string, patch branddo
 		return r.docToDomain(snap)
 	}
 
-	// always bump updatedAt if not explicitly controlled
 	hasUpdatedAt := false
 	for _, u := range updates {
 		if u.Path == "updatedAt" {
@@ -290,7 +283,7 @@ func (r *BrandRepositoryFS) Update(ctx context.Context, id string, patch branddo
 }
 
 // ========================================
-// Delete (hard delete)
+// Delete
 // ========================================
 
 func (r *BrandRepositoryFS) Delete(ctx context.Context, id string) error {
@@ -311,7 +304,7 @@ func (r *BrandRepositoryFS) Delete(ctx context.Context, id string) error {
 }
 
 // ========================================
-// List (filter/sort/pagination)
+// List
 // ========================================
 
 func (r *BrandRepositoryFS) List(
@@ -321,14 +314,17 @@ func (r *BrandRepositoryFS) List(
 	page branddom.Page,
 ) (branddom.PageResult[branddom.Brand], error) {
 
+	// Firestore.Client からは projectID が外部公開されていないので、
+	// ログにはフィルタ / ソート / ページ情報のみを出す
+	log.Printf("[BrandRepositoryFS] filter=%+v sort=%+v page=%+v",
+		filter, sort, page)
+
 	q := r.col().Query
 	q = applyBrandFilterToQuery(q, filter)
 
-	// sort
 	field, dir := mapBrandSort(sort)
-	q = q.OrderBy(field, dir).OrderBy("id", firestore.Asc) // secondary stable sort
+	q = q.OrderBy(field, dir)
 
-	// paging (offset-based; simple)
 	perPage := page.PerPage
 	if perPage <= 0 {
 		perPage = 50
@@ -366,22 +362,19 @@ func (r *BrandRepositoryFS) List(
 		items = append(items, b)
 	}
 
-	// NOTE:
-	// 正確な TotalCount / TotalPages を出すには COUNT クエリや別集計が必要。
-	// ここでは簡易に「取得件数 = TotalCount」として返し、ページ情報は呼び出し側で調整してください。
 	totalCount := len(items)
 
 	return branddom.PageResult[branddom.Brand]{
 		Items:      items,
 		TotalCount: totalCount,
-		TotalPages: number, // 厳密ではないがインターフェース互換のため設定
+		TotalPages: number,
 		Page:       number,
 		PerPage:    perPage,
 	}, nil
 }
 
 // ========================================
-// ListByCursor (not implemented for now)
+// ListByCursor
 // ========================================
 
 func (r *BrandRepositoryFS) ListByCursor(
@@ -394,11 +387,10 @@ func (r *BrandRepositoryFS) ListByCursor(
 }
 
 // ========================================
-// Save (Upsert)
+// Save
 // ========================================
 
 func (r *BrandRepositoryFS) Save(ctx context.Context, b branddom.Brand, _ *branddom.SaveOptions) (branddom.Brand, error) {
-	// If no ID, new doc; else upsert existing doc.
 	now := time.Now().UTC()
 
 	if b.CreatedAt.IsZero() {
@@ -431,8 +423,7 @@ func (r *BrandRepositoryFS) Save(ctx context.Context, b branddom.Brand, _ *brand
 }
 
 // ========================================
-// Reset (development/testing)
-// Transaction-based bulk delete instead of WriteBatch
+// Reset
 // ========================================
 
 func (r *BrandRepositoryFS) Reset(ctx context.Context) error {
@@ -456,7 +447,6 @@ func (r *BrandRepositoryFS) Reset(ctx context.Context) error {
 		return nil
 	}
 
-	// Firestore の制限を考慮し、トランザクション内の書き込み数を制限
 	const chunkSize = 400
 
 	deletedCount := 0
@@ -576,38 +566,19 @@ func (r *BrandRepositoryFS) domainToDocData(b branddom.Brand) map[string]any {
 // ========================================
 
 func applyBrandFilterToQuery(q firestore.Query, f branddom.Filter) firestore.Query {
-	// NOTE:
-	// Firestore のクエリ制約により、複雑な AND/OR, 部分一致, 多数の IN は制限されます。
-	// ここでは代表的な条件のみをサポートし、残りは呼び出し側で絞り込み想定。
 
-	// CompanyID
 	if f.CompanyID != nil && strings.TrimSpace(*f.CompanyID) != "" {
 		q = q.Where("companyId", "==", strings.TrimSpace(*f.CompanyID))
 	}
-	// ManagerID
 	if f.ManagerID != nil && strings.TrimSpace(*f.ManagerID) != "" {
 		q = q.Where("managerId", "==", strings.TrimSpace(*f.ManagerID))
 	}
-	// IsActive
 	if f.IsActive != nil {
 		q = q.Where("isActive", "==", *f.IsActive)
 	}
-	// WalletAddress
 	if f.WalletAddress != nil && strings.TrimSpace(*f.WalletAddress) != "" {
 		q = q.Where("walletAddress", "==", strings.TrimSpace(*f.WalletAddress))
 	}
-	// Deleted flag
-	if f.Deleted != nil {
-		if *f.Deleted {
-			// 削除済のみ: deletedAt != nil 的な表現はクエリで難しいため、
-			// 設計に応じてフラグフィールドを導入するなどの対応が必要。
-		} else {
-			// 未削除のみ: 同上。
-		}
-	}
-
-	// SearchQuery, 日付レンジなどは必要に応じて
-	// インデックス設計 or アプリ側フィルタで対応してください。
 
 	return q
 }
