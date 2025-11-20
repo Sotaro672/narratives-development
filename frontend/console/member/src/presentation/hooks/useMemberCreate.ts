@@ -6,17 +6,14 @@ import type { Member } from "../../domain/entity/member";
 import { auth } from "../../../../shell/src/auth/infrastructure/config/firebaseClient";
 import { useAuthContext } from "../../../../shell/src/auth/application/AuthContext";
 
-// 権限モックデータ
-import {
-  ALL_PERMISSIONS,
-  groupPermissionsByCategory,
-} from "../../../../permission/src/infrastructure/mockdata/mockdata";
-
 // Permission のカテゴリ型（＝新しい「役割」概念）
 import type {
   Permission,
   PermissionCategory,
 } from "../../../../shell/src/shared/types/permission";
+
+// 権限一覧を backend (/permissions) から取得する HTTP リポジトリ
+import { PermissionRepositoryHTTP } from "../../../../permission/src/infrastructure/http/permissionRepositoryHTTP";
 
 // ブランドのモックデータ（UI 用）
 import {
@@ -39,6 +36,9 @@ const FALLBACK_BASE =
 
 // 最終的に使うベース URL
 const API_BASE = ENV_BASE || FALLBACK_BASE;
+
+// Permission 一覧を取得するリポジトリ（シングルトン的に使う）
+const permissionRepo = new PermissionRepositoryHTTP();
 
 export type UseMemberCreateOptions = {
   /** 作成成功時に呼ばれます（呼び出し元で navigate などを実施） */
@@ -68,11 +68,35 @@ export function useMemberCreate(options?: UseMemberCreateOptions) {
   const [error, setError] = useState<string | null>(null);
 
   // ===== 権限カテゴリ情報（カテゴリ選択の Popover で利用） =====
-  const allPermissions: Permission[] = ALL_PERMISSIONS;
-  const permissionsByCategory = useMemo(
-    () => groupPermissionsByCategory(ALL_PERMISSIONS),
-    [],
-  );
+  // backend/internal/domain/permission/catalog.go 経由で
+  // /permissions から取得した一覧をここに保持する
+  const [allPermissions, setAllPermissions] = useState<Permission[]>([]);
+
+  // 初回マウント時に backend から権限一覧を取得
+  // （/permissions → catalog.go → allPermissions）
+  useState(() => {
+    (async () => {
+      try {
+        const pageResult = await permissionRepo.list(); // GET /permissions
+        setAllPermissions(pageResult.items);
+      } catch (e) {
+        console.error("[useMemberCreate] failed to load permissions", e);
+        setAllPermissions([]);
+      }
+    })();
+  });
+
+  // カテゴリごとにグルーピング
+  const permissionsByCategory: Record<PermissionCategory, Permission[]> =
+    useMemo(() => {
+      const map: Record<string, Permission[]> = {};
+      for (const p of allPermissions) {
+        const cat = (p.category || "brand") as PermissionCategory;
+        if (!map[cat]) map[cat] = [];
+        map[cat].push(p);
+      }
+      return map as Record<PermissionCategory, Permission[]>;
+    }, [allPermissions]);
 
   // UIで扱いやすい配列形式（カテゴリ名・件数・配列）
   const permissionCategories = useMemo(

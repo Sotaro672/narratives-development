@@ -1,4 +1,4 @@
-// frontend/member/src/types/common.ts
+// frontend/console/shell/src/shared/types/common/common.ts
 
 /**
  * 共通ページング / カーソル / SaveOptions 型定義
@@ -12,28 +12,32 @@ export const DEFAULT_PAGE_LIMIT = 10;
 
 /**
  * Page
- * - オフセット型ページングのリクエスト指定
- * - backend: common.Page 相当
+ * - オフセットではなく「ページ番号 + 件数」で指定するページング情報
+ * - backend: common.Page (Number / PerPage) 相当
  */
 export interface Page {
+  /** 現在のページ番号 (1 始まり) */
+  number: number;
   /** 1ページあたり取得件数 */
-  limit: number;
-  /** スキップ件数（0 起点） */
-  offset: number;
+  perPage: number;
 }
 
 /**
  * PageResult<T>
- * - オフセット型ページングのレスポンス
- * - backend: common.PageResult<T> 相当
+ * - ページング結果のレスポンス
+ * - backend: common.PageResult<T> (Items / TotalCount / TotalPages / Page / PerPage) 相当
  */
 export interface PageResult<T> {
   /** 取得結果 */
   items: T[];
   /** 条件にマッチする全件数 */
   totalCount: number;
-  /** この結果を得るために指定されたページ情報 */
-  page: Page;
+  /** 総ページ数 */
+  totalPages: number;
+  /** 現在のページ番号 (1 始まり) */
+  page: number;
+  /** 1ページあたり取得件数 */
+  perPage: number;
 }
 
 /**
@@ -108,12 +112,25 @@ export interface SaveOptions {
 }
 
 /**
- * デフォルトページ（limit: 10, offset: 0）
+ * SortOrder / Sort
+ * - backend: common.Sort / SortOrder に対応
+ */
+export type SortOrder = "asc" | "desc";
+
+export interface Sort {
+  /** ソート対象カラム名（例: "name", "createdAt" など） */
+  column?: string;
+  /** 昇順/降順 */
+  order?: SortOrder;
+}
+
+/**
+ * デフォルトページ（page: 1, perPage: DEFAULT_PAGE_LIMIT）
  * - Page オブジェクトを初期化する際に利用
  */
 export const DEFAULT_PAGE: Page = {
-  limit: DEFAULT_PAGE_LIMIT,
-  offset: 0,
+  number: 1,
+  perPage: DEFAULT_PAGE_LIMIT,
 };
 
 /**
@@ -132,8 +149,8 @@ export const DEFAULT_CURSOR_PAGE: CursorPage = {
 export function createPageFromCurrent(currentPage: number): Page {
   const safePage = currentPage > 0 ? currentPage : 1;
   return {
-    limit: DEFAULT_PAGE_LIMIT,
-    offset: (safePage - 1) * DEFAULT_PAGE_LIMIT,
+    number: safePage,
+    perPage: DEFAULT_PAGE_LIMIT,
   };
 }
 
@@ -143,8 +160,8 @@ export function createPageFromCurrent(currentPage: number): Page {
  */
 export function calcTotalPages(
   totalCount: number,
-  limit: number = DEFAULT_PAGE_LIMIT
+  perPage: number = DEFAULT_PAGE_LIMIT,
 ): number {
   if (!totalCount || totalCount <= 0) return 1;
-  return Math.max(1, Math.ceil(totalCount / limit));
+  return Math.max(1, Math.ceil(totalCount / perPage));
 }
