@@ -1,3 +1,4 @@
+// frontend/console/brand/src/presentation/pages/brandManagement.tsx
 import React from "react";
 import { useNavigate } from "react-router-dom";
 import List, {
@@ -11,7 +12,7 @@ import { useBrandManagement } from "../hook/useBrandManagement";
 // memberID → 「姓 名」を解決するフック
 import { useMemberList } from "../../../../member/src/presentation/hooks/useMemberList";
 
-// managerId から非同期で表示名を取得して表示するセル
+// managerId から非同期で名前を取得して表示するセル
 function ManagerNameCell({
   managerId,
   getNameLastFirstByID,
@@ -24,7 +25,7 @@ function ManagerNameCell({
   React.useEffect(() => {
     let cancelled = false;
 
-    const run = async () => {
+    const load = async () => {
       const id = (managerId ?? "").trim();
       if (!id) {
         setName("");
@@ -34,13 +35,12 @@ function ManagerNameCell({
         const disp = await getNameLastFirstByID(id);
         if (!cancelled) setName(disp);
       } catch (e) {
-        console.error("[ManagerNameCell] failed to resolve name:", e);
+        console.error("[ManagerNameCell] name resolve error:", e);
         if (!cancelled) setName("");
       }
     };
 
-    void run();
-
+    void load();
     return () => {
       cancelled = true;
     };
@@ -55,15 +55,15 @@ export default function BrandManagementPage() {
   const {
     rows,
     statusOptions,
-    ownerOptions,
+    managerOptions,        // ★ ownerOptions → managerOptions に変更
 
     statusFilter,
-    ownerFilter,
+    managerFilter,         // ★ ownerFilter → managerFilter
     activeKey,
     direction,
 
     setStatusFilter,
-    setOwnerFilter,
+    setManagerFilter,      // ★ setOwnerFilter → setManagerFilter
     setActiveKey,
     setDirection,
 
@@ -71,20 +71,18 @@ export default function BrandManagementPage() {
     resetFilters,
   } = useBrandManagement();
 
-  // member 用フックから ID→表示名 関数だけ借りる
+  // member 用フックから ID → 氏名変換関数を利用
   const { getNameLastFirstByID } = useMemberList();
 
-  // ブランド追加ボタン押下 → /brand/create へ遷移
   const handleCreateBrand = () => {
     navigate("/brand/create");
   };
 
-  // 行クリック → /brand/:id へ遷移
   const goDetail = (brandId: string) => {
     navigate(`/brand/${encodeURIComponent(brandId)}`);
   };
 
-  // ヘッダー
+  // ---------- テーブルヘッダー ----------
   const headers: React.ReactNode[] = [
     "ブランド名",
     <FilterableTableHeader
@@ -94,12 +92,13 @@ export default function BrandManagementPage() {
       selected={statusFilter}
       onChange={(values) => setStatusFilter(values as any)}
     />,
+    // ★ owner → manager に置き換え
     <FilterableTableHeader
-      key="owner"
+      key="manager"
       label="責任者"
-      options={ownerOptions}
-      selected={ownerFilter}
-      onChange={setOwnerFilter}
+      options={managerOptions}
+      selected={managerFilter}
+      onChange={setManagerFilter}
     />,
     <SortableTableHeader
       key="registeredAt"
@@ -140,17 +139,21 @@ export default function BrandManagementPage() {
             }}
           >
             <td>{b.name}</td>
+
             <td>
               <span className={statusBadgeClass(b.isActive)}>
                 {b.isActive ? "アクティブ" : "停止"}
               </span>
             </td>
+
+            {/* ★ ManagerName 表示 */}
             <td>
               <ManagerNameCell
                 managerId={b.managerId}
                 getNameLastFirstByID={getNameLastFirstByID}
               />
             </td>
+
             <td>{b.registeredAt}</td>
           </tr>
         ))}

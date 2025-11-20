@@ -125,7 +125,7 @@ export function useBrandCreate() {
       description: description || "",
       websiteUrl: websiteUrl || "",
       isActive: true,
-      manager: trimmedManagerId,
+      managerId: trimmedManagerId,
       walletAddress: "pending", // サーバで正式値に更新される前提
       createdBy: (currentMember?.id ?? null) as any, // TS 型の都合：サーバ側で上書き可
       updatedBy: null as any,

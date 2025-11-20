@@ -1,6 +1,6 @@
-//frontend\console\brand\src\presentation\pages\brandDetail.tsx
+// frontend/console/brand/src/presentation/pages/brandDetail.tsx
+
 import PageStyle from "../../../../shell/src/layout/PageStyle/PageStyle";
-import AdminCard from "../../../../admin/src/presentation/components/AdminCard";
 
 import {
   Card,
@@ -14,24 +14,16 @@ import {
 import { useBrandDetail } from "../hook/useBrandDetail";
 
 export default function BrandDetail() {
-  const {
-    brand,
-    assignee,
-    creator,
-    createdAt,
-    setAssignee,
-    handleBack,
-    statusBadgeClass,
-  } = useBrandDetail();
+  const { brand, handleBack, statusBadgeClass } = useBrandDetail();
 
   return (
     <PageStyle
-      layout="grid-2"
+      layout="single" // ★ singleレイアウト
       title={`ブランド詳細：${brand.name}`}
       onBack={handleBack}
     >
-      {/* 左ペイン：ブランド情報 */}
       <div className="brand-detail">
+        {/* 基本情報 */}
         <Card className="mb-4">
           <CardHeader>
             <CardTitle>基本情報</CardTitle>
@@ -40,11 +32,7 @@ export default function BrandDetail() {
             <CardLabel>ブランド名</CardLabel>
             <CardReadonly>{brand.name}</CardReadonly>
 
-            <CardLabel>ブランドコード</CardLabel>
-            <CardReadonly>{brand.code}</CardReadonly>
-
-            <CardLabel>カテゴリ</CardLabel>
-            <CardReadonly>{brand.category}</CardReadonly>
+            {/* カテゴリ・ブランドコードは不使用のため削除済み */}
 
             <CardLabel>説明</CardLabel>
             <div className="border rounded-lg px-3 py-2 text-sm bg-[hsl(var(--muted-bg))] text-[hsl(var(--muted-foreground))]">
@@ -53,13 +41,16 @@ export default function BrandDetail() {
           </CardContent>
         </Card>
 
+        {/* 管理情報 */}
         <Card>
           <CardHeader>
             <CardTitle>管理情報</CardTitle>
           </CardHeader>
           <CardContent>
             <CardLabel>責任者</CardLabel>
-            <CardReadonly>{brand.owner}</CardReadonly>
+            <CardReadonly>
+              {brand.managerName || brand.managerId || "（未設定）"}
+            </CardReadonly>
 
             <CardLabel>ステータス</CardLabel>
             <div>
@@ -73,19 +64,6 @@ export default function BrandDetail() {
             <CardReadonly>{brand.updatedAt}</CardReadonly>
           </CardContent>
         </Card>
-      </div>
-
-      {/* 右ペイン：AdminCard */}
-      <div>
-        <AdminCard
-          title="管理情報"
-          assigneeName={assignee}
-          createdByName={creator}
-          createdAt={createdAt}
-          onEditAssignee={() => setAssignee("新担当者")}
-          onClickAssignee={() => console.log("assignee clicked:", assignee)}
-          onClickCreatedBy={() => console.log("createdBy clicked:", creator)}
-        />
       </div>
     </PageStyle>
   );

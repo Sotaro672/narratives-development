@@ -390,7 +390,11 @@ func (r *BrandRepositoryFS) ListByCursor(
 // Save
 // ========================================
 
-func (r *BrandRepositoryFS) Save(ctx context.Context, b branddom.Brand, _ *branddom.SaveOptions) (branddom.Brand, error) {
+func (r *BrandRepositoryFS) Save(
+	ctx context.Context,
+	b branddom.Brand,
+	_ *branddom.SaveOptions,
+) (branddom.Brand, error) {
 	now := time.Now().UTC()
 
 	if b.CreatedAt.IsZero() {

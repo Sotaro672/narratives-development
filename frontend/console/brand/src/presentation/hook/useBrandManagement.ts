@@ -22,7 +22,10 @@ export function useBrandManagement() {
   const [error, setError] = useState<Error | null>(null);
 
   const [statusFilter, setStatusFilter] = useState<StatusFilterValue[]>([]);
-  const [ownerFilter, setOwnerFilter] = useState<string[]>([]);
+
+  // ★ owner → 完全削除 → managerId フィルタとして存続
+  const [managerFilter, setManagerFilter] = useState<string[]>([]);
+
   const [activeKey, setActiveKey] = useState<SortKey>("registeredAt");
   const [direction, setDirection] = useState<"asc" | "desc" | null>("desc");
 
@@ -75,14 +78,17 @@ export function useBrandManagement() {
     }));
   }, [baseRows]);
 
-  // owner は廃止 → ownerOptions は managerId ベース
-  const ownerOptions = useMemo(() => {
+  // ★ ownerOptions → 完全削除
+  //   managerId の一覧だけ返す（最低限）
+  const managerOptions = useMemo(() => {
     const ids = new Set(
-      baseRows.map((b) => (b.managerId ?? "").trim()).filter(Boolean)
+      baseRows
+        .map((b) => (b.managerId ?? "").trim())
+        .filter(Boolean)
     );
     return Array.from(ids).map((id) => ({
       value: id,
-      label: id, // 表示名もIDのみ
+      label: id, // 表示名はひとまず ID のまま
     }));
   }, [baseRows]);
 
@@ -95,11 +101,11 @@ export function useBrandManagement() {
         statusFilter.length === 0 || statusFilter.includes(statusValue);
 
       const managerValue = (b.managerId ?? "").trim();
-      const ownerOk =
-        ownerFilter.length === 0 ||
-        (managerValue !== "" && ownerFilter.includes(managerValue));
+      const managerOk =
+        managerFilter.length === 0 ||
+        (managerValue !== "" && managerFilter.includes(managerValue));
 
-      return statusOk && ownerOk;
+      return statusOk && managerOk;
     });
 
     if (activeKey && direction) {
@@ -113,11 +119,11 @@ export function useBrandManagement() {
       });
     }
     return data;
-  }, [baseRows, statusFilter, ownerFilter, activeKey, direction]);
+  }, [baseRows, statusFilter, managerFilter, activeKey, direction]);
 
   const resetFilters = useCallback(() => {
     setStatusFilter([]);
-    setOwnerFilter([]);
+    setManagerFilter([]);
     setActiveKey("registeredAt");
     setDirection("desc");
   }, []);
@@ -125,18 +131,18 @@ export function useBrandManagement() {
   return {
     rows,
     statusOptions,
-    ownerOptions,
+    managerOptions, // ★ ownerOptions 削除
 
     loading,
     error,
 
     statusFilter,
-    ownerFilter,
+    managerFilter,
     activeKey,
     direction,
 
     setStatusFilter,
-    setOwnerFilter,
+    setManagerFilter,
     setActiveKey,
     setDirection,
 

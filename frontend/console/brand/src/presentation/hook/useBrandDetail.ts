@@ -1,45 +1,114 @@
-//frontend\console\brand\src\presentation\hook\useBrandDetail.ts
-import { useCallback, useState } from "react";
+// frontend/console/brand/src/presentation/hook/useBrandDetail.ts
+import { useCallback, useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
+import { brandRepositoryHTTP } from "../../infrastructure/http/brandRepositoryHTTP";
+
+// ★ member 用のフックから ID → 「姓 名」を解決する関数を借りる
+import { useMemberList } from "../../../../member/src/presentation/hooks/useMemberList";
 
 export interface BrandDetailData {
   id: string;
   name: string;
-  code: string;
-  category: string;
   description: string;
-  owner: string;
+  managerId: string;      // manager の ID
+  managerName?: string;   // 取得した責任者名（姓 名）
   status: string;
   registeredAt: string;
   updatedAt: string;
 }
 
+// ISO8601 → YYYY/MM/DD
+const formatDateYmd = (iso?: string | null): string => {
+  if (!iso) return "";
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return "";
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${y}/${m}/${day}`;
+};
+
 export function useBrandDetail() {
   const navigate = useNavigate();
   const { brandId } = useParams<{ brandId: string }>();
 
-  // ─────────────────────────────────────────────
-  // モックデータ（API接続前）
-  // ─────────────────────────────────────────────
-  const [brand] = useState<BrandDetailData>({
-    id: brandId ?? "brand_001",
-    name: "LUMINA Fashion",
-    code: "LUMINA01",
-    category: "ファッション",
-    description:
-      "上質な素材とサステナブルな生産体制を重視した女性向けファッションブランド。",
-    owner: "佐藤 美咲",
-    status: "アクティブ",
-    registeredAt: "2024/05/10",
-    updatedAt: "2025/11/01",
-  });
+  // ★ ここで member 用フックを呼び、ID→表示名変換関数だけ使う
+  const { getNameLastFirstByID } = useMemberList();
 
-  // ─────────────────────────────────────────────
-  // AdminCard 用モックデータ
-  // ─────────────────────────────────────────────
-  const [assignee, setAssignee] = useState("高橋 健太");
-  const [creator] = useState("山田 太郎");
-  const [createdAt] = useState("2024/05/10");
+  const [brand, setBrand] = useState<BrandDetailData>(() => ({
+    id: brandId ?? "",
+    name: "",
+    description: "",
+    managerId: "",
+    managerName: "",
+    status: "",
+    registeredAt: "",
+    updatedAt: "",
+  }));
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<Error | null>(null);
+
+  // ブランド本体の取得＋責任者名の解決
+  useEffect(() => {
+    const load = async () => {
+      if (!brandId) return;
+      try {
+        setLoading(true);
+        setError(null);
+
+        // backend: GET /brands/:id
+        const data: any = await brandRepositoryHTTP.getById(brandId);
+
+        const isActive = !!data.isActive;
+        const managerId = String(data.manager ?? data.managerId ?? "").trim();
+
+        // まずブランドの基本情報だけセット
+        setBrand((prev) => ({
+          ...prev,
+          id: data.id,
+          name: String(data.name ?? "").trim(),
+          description: String(data.description ?? "").trim(),
+          managerId,
+          // managerName は後で更新
+          status: isActive ? "アクティブ" : "停止",
+          registeredAt: formatDateYmd(data.createdAt),
+          updatedAt: formatDateYmd(data.updatedAt),
+        }));
+
+        // つづいて managerId → 「姓 名」に解決（useMemberList 経由）
+        if (managerId) {
+          try {
+            const dispName = await getNameLastFirstByID(managerId);
+            // デバッグ用ログ
+            // eslint-disable-next-line no-console
+            console.log(
+              "[useBrandDetail] resolved manager name:",
+              managerId,
+              "→",
+              dispName,
+            );
+
+            setBrand((prev) => ({
+              ...prev,
+              managerName: dispName || prev.managerName || "",
+            }));
+          } catch (e) {
+            // eslint-disable-next-line no-console
+            console.error("[useBrandDetail] resolve managerName error:", e);
+          }
+        }
+      } catch (e: any) {
+        const err = e instanceof Error ? e : new Error(String(e));
+        // eslint-disable-next-line no-console
+        console.error("[useBrandDetail] load error:", err);
+        setError(err);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    void load();
+  }, [brandId, getNameLastFirstByID]);
 
   // 戻るボタン処理
   const handleBack = useCallback(() => {
@@ -54,11 +123,9 @@ export function useBrandDetail() {
 
   return {
     brand,
-    assignee,
-    creator,
-    createdAt,
-    setAssignee,
     handleBack,
     statusBadgeClass,
+    loading,
+    error,
   };
 }

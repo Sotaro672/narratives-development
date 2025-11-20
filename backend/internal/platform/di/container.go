@@ -245,7 +245,7 @@ func NewContainer(ctx context.Context) (*Container, error) {
 	)
 
 	billingAddressUC := uc.NewBillingAddressUsecase(billingAddressRepo)
-	brandUC := uc.NewBrandUsecase(brandRepo)
+	brandUC := uc.NewBrandUsecase(brandRepo, memberRepo)
 	campaignUC := uc.NewCampaignUsecase(campaignRepo, nil, nil, nil)
 	companyUC := uc.NewCompanyUsecase(companyRepo)
 	discountUC := uc.NewDiscountUsecase(discountRepo)

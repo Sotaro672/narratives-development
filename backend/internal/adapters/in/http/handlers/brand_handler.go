@@ -71,13 +71,14 @@ func (h *BrandHandler) get(w http.ResponseWriter, r *http.Request, id string) {
 func (h *BrandHandler) create(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 
+	// ★ フロントと合わせて JSON フィールド名を managerId に統一
 	var in struct {
 		CompanyID   string  `json:"companyId"`
 		Name        string  `json:"name"`
 		Description string  `json:"description"`
 		WebsiteURL  string  `json:"websiteUrl"`
 		IsActive    *bool   `json:"isActive"`
-		ManagerID   *string `json:"manager"`
+		ManagerID   *string `json:"managerId"`
 		CreatedBy   *string `json:"createdBy"`
 	}
 
