@@ -16,11 +16,11 @@ import type { Brand } from "../../../../brand/src/domain/entity/brand";
 
 // アプリケーションサービス（API 呼び出しロジックなど）
 import {
-  createMember,
   fetchAllPermissions,
   fetchBrandsForCurrentMember,
   groupPermissionsByCategory,
 } from "../../application/memberService";
+import { createMember } from "../../application/invitationService";
 
 // UI 用 BrandRow 型（テーブル表示用）
 export type BrandRow = {
@@ -125,6 +125,9 @@ export function useMemberCreate(options?: UseMemberCreateOptions) {
   const [allBrands, setAllBrands] = useState<Brand[]>([]);
   const [brandRows, setBrandRows] = useState<BrandRow[]>([]);
 
+  // ✅ 選択されたブランドID一覧
+  const [selectedBrandIds, setSelectedBrandIds] = useState<string[]>([]);
+
   useEffect(() => {
     (async () => {
       try {
@@ -144,6 +147,15 @@ export function useMemberCreate(options?: UseMemberCreateOptions) {
     })();
   }, []);
 
+  // ✅ ブランド選択のトグル
+  const toggleBrandSelection = useCallback((brandId: string) => {
+    setSelectedBrandIds((prev) =>
+      prev.includes(brandId)
+        ? prev.filter((id) => id !== brandId)
+        : [...prev, brandId],
+    );
+  }, []);
+
   const handleSubmit = useCallback(
     async (e?: React.FormEvent) => {
       e?.preventDefault?.();
@@ -160,6 +172,8 @@ export function useMemberCreate(options?: UseMemberCreateOptions) {
           brandsText,
           authCompanyId,
           currentMemberId,
+          // ✅ ここで選択されたブランドIDを渡す
+          assignedBrandIds: selectedBrandIds,
         });
 
         // 呼び出し元へ通知
@@ -180,6 +194,7 @@ export function useMemberCreate(options?: UseMemberCreateOptions) {
       brandsText,
       authCompanyId,
       currentMemberId,
+      selectedBrandIds,
       options,
     ],
   );
@@ -209,6 +224,7 @@ export function useMemberCreate(options?: UseMemberCreateOptions) {
     // ブランド（UI での表示・選択に利用可能）
     allBrands,
     brandRows,
+    selectedBrandIds,
 
     // セッター
     setFirstName,
@@ -220,8 +236,10 @@ export function useMemberCreate(options?: UseMemberCreateOptions) {
     setPermissionsText,
     setBrandsText,
     setError,
+    setSelectedBrandIds,
 
     // 動作
+    toggleBrandSelection,
     handleSubmit,
   };
 }
