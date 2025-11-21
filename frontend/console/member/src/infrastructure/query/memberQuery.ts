@@ -1,4 +1,4 @@
-// frontend/member/src/infrastructure/query/memberQuery.ts 
+//frontend\console\member\src\infrastructure\query\memberQuery.ts
 /// <reference types="vite/client" />
 
 import type { Member } from "../../domain/entity/member";
@@ -7,40 +7,34 @@ import type { Page } from "../../../../shell/src/shared/types/common/common";
 import { DEFAULT_PAGE_LIMIT } from "../../../../shell/src/shared/types/common/common";
 
 // ─────────────────────────────────────────────
-// Backend base URL（.env 未設定でも Cloud Run にフォールバック）
+// Backend base URL
 // ─────────────────────────────────────────────
 const ENV_BASE =
-  ((import.meta as any).env?.VITE_BACKEND_BASE_URL as string | undefined)?.replace(
-    /\/+$/g,
-    "",
-  ) ?? "";
+  ((import.meta as any).env?.VITE_BACKEND_BASE_URL as string | undefined)
+    ?.replace(/\/+$/g, "") ?? "";
 
 const FALLBACK_BASE =
   "https://narratives-backend-871263659099.asia-northeast1.run.app";
 
 export const API_BASE = (ENV_BASE || FALLBACK_BASE).replace(/\/+$/g, "");
 
-// ログ付き URL 組み立て
+// URL builder
 function apiUrl(path: string, qs?: string) {
   const url = `${API_BASE}${path.startsWith("/") ? path : `/${path}`}`;
   const full = qs ? `${url}?${qs}` : url;
-  // eslint-disable-next-line no-console
   console.log("[memberQuery] GET", full);
   return full;
 }
 
-// クエリ文字列を作る（companyId は絶対に付けない）
+// ─────────────────────────────────────────────
+// Query String Builder
+// ─────────────────────────────────────────────
 export function buildMemberQuery(usePage: Page, useFilter: MemberFilter): string {
-  // Page.number / Page.perPage ベースに変更
   const perPage =
-    usePage && typeof (usePage as any).perPage === "number" && (usePage as any).perPage > 0
-      ? (usePage as any).perPage
-      : DEFAULT_PAGE_LIMIT;
+    usePage?.perPage && usePage.perPage > 0 ? usePage.perPage : DEFAULT_PAGE_LIMIT;
 
   const pageNumber =
-    usePage && typeof (usePage as any).number === "number" && (usePage as any).number > 0
-      ? (usePage as any).number
-      : 1;
+    usePage?.number && usePage.number > 0 ? usePage.number : 1;
 
   const params = new URLSearchParams();
   params.set("page", String(pageNumber));
@@ -62,7 +56,7 @@ export function buildMemberQuery(usePage: Page, useFilter: MemberFilter): string
 }
 
 // ─────────────────────────────────────────────
-// member.Service の挙動をTSで再現（FormatLastFirst）
+// FormatLastFirst
 // ─────────────────────────────────────────────
 export function formatLastFirst(
   lastName?: string | null,
@@ -76,18 +70,24 @@ export function formatLastFirst(
   return "";
 }
 
-// 受信JSONを camelCase に寄せるワイヤ正規化（PascalCase も吸収）
+// ─────────────────────────────────────────────
+// Normalize Wire Format
+// ─────────────────────────────────────────────
 function normalizeMemberWire(w: any): Member {
   const id = String(w.id ?? w.ID ?? "").trim();
-  const firstName = (w.firstName ?? w.FirstName ?? null) as string | null;
-  const lastName = (w.lastName ?? w.LastName ?? null) as string | null;
-  const firstNameKana = (w.firstNameKana ?? w.FirstNameKana ?? null) as string | null;
-  const lastNameKana = (w.lastNameKana ?? w.LastNameKana ?? null) as string | null;
-  const email = (w.email ?? w.Email ?? null) as string | null;
-  const companyId = (w.companyId ?? w.CompanyID ?? "") as string;
-  const permissions = (w.permissions ?? w.Permissions ?? []) as string[];
+  const firstName = w.firstName ?? w.FirstName ?? null;
+  const lastName = w.lastName ?? w.LastName ?? null;
+  const firstNameKana = w.firstNameKana ?? w.FirstNameKana ?? null;
+  const lastNameKana = w.lastNameKana ?? w.LastNameKana ?? null;
+  const email = w.email ?? w.Email ?? null;
+  const companyId = w.companyId ?? w.CompanyID ?? "";
+  const permissions = Array.isArray(w.permissions ?? w.Permissions)
+    ? w.permissions ?? w.Permissions
+    : [];
   const assignedBrands =
-    (w.assignedBrands ?? w.AssignedBrands ?? null) as string[] | null;
+    Array.isArray(w.assignedBrands ?? w.AssignedBrands)
+      ? w.assignedBrands ?? w.AssignedBrands
+      : null;
 
   const createdAt = w.createdAt ?? w.CreatedAt ?? null;
   const updatedAt = w.updatedAt ?? w.UpdatedAt ?? null;
@@ -103,8 +103,8 @@ function normalizeMemberWire(w: any): Member {
     lastNameKana,
     email,
     companyId,
-    permissions: Array.isArray(permissions) ? permissions : [],
-    assignedBrands: Array.isArray(assignedBrands) ? assignedBrands : null,
+    permissions,
+    assignedBrands,
     createdAt,
     updatedAt,
     deletedAt,
@@ -113,20 +113,23 @@ function normalizeMemberWire(w: any): Member {
   } as Member;
 }
 
+// ─────────────────────────────────────────────
+// 型：PageResult<Member> 相当
+// ─────────────────────────────────────────────
 export type MemberListResult = {
   items: Member[];
+  totalPages: number;
 };
 
-/**
- * メンバー一覧取得（純粋なクエリ関数）
- * - React Hook に依存しない
- * - トークンは呼び出し側（Hookなど）から渡す
- */
+// ─────────────────────────────────────────────
+// fetchMemberListWithToken（ページング対応）
+// ─────────────────────────────────────────────
 export async function fetchMemberListWithToken(
   token: string,
   page: Page,
   filter: MemberFilter,
 ): Promise<MemberListResult> {
+
   const qs = buildMemberQuery(page, filter);
   const url = apiUrl("/members", qs);
 
@@ -138,53 +141,51 @@ export async function fetchMemberListWithToken(
     },
   });
 
-  // eslint-disable-next-line no-console
   console.log("[memberQuery] response", res.status, res.statusText);
 
   const ct = res.headers.get("content-type") ?? "";
   if (!ct.includes("application/json")) {
     const text = await res.text().catch(() => "");
-    const head = text.slice(0, 160).replace(/\s+/g, " ");
-    throw new Error(
-      `Unexpected content-type: ${ct} (url=${url}) body_head="${head}"`,
-    );
+    throw new Error(`Unexpected content-type: ${ct}\n${text}`);
   }
 
   if (!res.ok) {
     const text = await res.text().catch(() => "");
-    // 401 と 403 を明示的に区別
-    if (res.status === 401) {
-      // 認証エラー（トークン不正・未ログイン・期限切れなど）
-      throw new Error(
-        `認証エラー (401: invalid token / not logged in). アカウントに再ログインしてから再試行してください。 ${
-          text || ""
-        }`,
-      );
-    }
-    if (res.status === 403) {
-      // 認可エラー（Member 未登録・権限不足など）
-      throw new Error(
-        `認可エラー (403: member not found or permission denied). 管理コンソールのユーザー登録や権限設定を確認してください。 ${
-          text || ""
-        }`,
-      );
-    }
-
-    // その他のステータス
-    throw new Error(
-      `メンバー一覧の取得に失敗しました (status ${res.status}) ${text || ""}`,
-    );
+    if (res.status === 401)
+      throw new Error(`認証エラー (401): ${text}`);
+    if (res.status === 403)
+      throw new Error(`認可エラー (403): ${text}`);
+    throw new Error(`一覧取得に失敗: ${res.status} ${text}`);
   }
 
-  const raw = (await res.json()) as any[];
-  const items = raw.map(normalizeMemberWire);
-  return { items };
+  const raw = await res.json();
+
+  let rawItems: any[] = [];
+  let totalPages = 1;
+
+  if (Array.isArray(raw)) {
+    // 旧仕様
+    rawItems = raw;
+    totalPages = 1;
+  } else if (raw && Array.isArray(raw.items)) {
+    // PageResult<T>
+    rawItems = raw.items;
+    totalPages = Number(raw.totalPages ?? 1);
+  } else {
+    console.warn("[memberQuery] unexpected response shape:", raw);
+  }
+
+  const items = rawItems.map(normalizeMemberWire);
+
+  return {
+    items,
+    totalPages,
+  };
 }
 
-/**
- * 単一メンバー取得（ID指定）
- * - useMemberList の getNameLastFirstByID から利用
- */
+// ─────────────────────────────────────────────
+// 単一メンバー取得
+// ─────────────────────────────────────────────
 export async function fetchMemberByIdWithToken(
   token: string,
   memberId: string,
@@ -193,6 +194,7 @@ export async function fetchMemberByIdWithToken(
   if (!id) return null;
 
   const url = apiUrl(`/members/${encodeURIComponent(id)}`);
+
   const res = await fetch(url, {
     method: "GET",
     headers: {

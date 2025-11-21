@@ -1,4 +1,4 @@
-// frontend/shared/ui/pagination.tsx
+// frontend\console\shell\src\shared\ui\pagination.tsx
 
 export interface PaginationProps {
   /** 現在ページ (1始まり) */

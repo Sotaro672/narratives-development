@@ -1,3 +1,4 @@
+// frontend/console/shell/src/shared/ui/sortable-table-header.tsx
 import { useEffect, useMemo, useState } from "react";
 import { ChevronDown, ChevronUp } from "lucide-react";
 

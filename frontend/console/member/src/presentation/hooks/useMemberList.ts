@@ -16,14 +16,12 @@ import {
   DEFAULT_PAGE_LIMIT,
 } from "../../../../shell/src/shared/types/common/common";
 
-// ★ アプリケーションサービスへ処理を委譲
 import {
   fetchMemberList,
   fetchMemberNameLastFirstById,
+  fetchCurrentMember,
 } from "../../application/memberListService";
 
-// ★ ログイン情報（companyId）とブランド一覧取得用サービス
-import { useAuthContext } from "../../../../shell/src/auth/application/AuthContext";
 import {
   listBrands,
   type BrandRow,
@@ -31,124 +29,130 @@ import {
 
 type FilterOption = { value: string; label: string };
 
-/**
- * メンバー一覧取得用フック（バックエンドAPI経由版）
- * - /members?sort=updatedAt&order=desc&page=1&perPage=50&q=... などで取得
- * - companyId はクエリに付けず、サーバ（Usecase）が認証から強制スコープする
- * - 姓・名が両方未設定なら firstName に「招待中」を入れる（一覧表示の利便性）
- * - ★ 追加: memberID → 「姓 名」を解決する getNameLastFirstByID を提供
- * - ★ 追加: brandId -> brandName を解決する brandMap を提供
- * - ★ 追加: 所属ブランド／権限カテゴリのフィルタ状態と候補リストを提供
- */
 export function useMemberList(
   initialFilter: MemberFilter = {},
   initialPage?: Page,
 ) {
-  // 認証中ユーザ（companyId をフロントでも把握しておく）
-  const { user } = useAuthContext();
-  const authCompanyId = user?.companyId ?? null;
-
   const [members, setMembers] = useState<Member[]>([]);
   const [filter, setFilter] = useState<MemberFilter>(initialFilter);
-  const [page, setPage] = useState<Page>(initialPage ?? DEFAULT_PAGE);
+
+  // Page に totalPages を含めた構造
+  const [page, setPage] = useState<Page>({
+    ...DEFAULT_PAGE,
+    ...(initialPage ?? {}),
+    totalPages: 1,
+  });
+
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<Error | null>(null);
 
-  // ID→表示名のキャッシュ（コンポーネント存続中は保持）
   const nameCacheRef = useRef<Map<string, string>>(new Map());
 
-  // brandId -> brandName のマップ
+  // ブランドID→名称
   const [brandMap, setBrandMap] = useState<Record<string, string>>({});
 
-  // ▼ 所属ブランド列フィルタ state
   const [selectedBrandIds, setSelectedBrandIds] = useState<string[]>([]);
-  // ▼ 権限カテゴリ列フィルタ state
-  const [selectedPermissionCats, setSelectedPermissionCats] = useState<
-    string[]
-  >([]);
+  const [selectedPermissionCats, setSelectedPermissionCats] = useState<string[]>([]);
 
+  // ─────────────────────────────────────────────
+  // メンバー一覧ロード（無限ループを防ぐため、依存は空配列）
+  // ─────────────────────────────────────────────
   const load = useCallback(
-    async (override?: { page?: Page; filter?: MemberFilter }) => {
+    async (targetPage: Page, targetFilter: MemberFilter) => {
       setLoading(true);
       setError(null);
+
       try {
-        const usePage = override?.page ?? page;
-        const useFilter = override?.filter ?? filter;
+        const result = await fetchMemberList(targetPage, targetFilter);
 
-        // ★ アプリケーションサービスに委譲
-        const { members: normalized, nameMap } = await fetchMemberList(
-          usePage,
-          useFilter,
-        );
+        setMembers(result.members ?? []);
 
-        // 名前キャッシュ更新
+        // 氏名キャッシュ
         const cache = nameCacheRef.current;
-        for (const [id, disp] of Object.entries(nameMap)) {
+        for (const [id, disp] of Object.entries(result.nameMap ?? {})) {
           cache.set(id, disp);
         }
 
-        setMembers(normalized);
-      } catch (e: any) {
+        // ページング更新
+        setPage((prev) => ({
+          ...prev,
+          number: targetPage.number,
+          perPage: targetPage.perPage,
+          totalPages: result.totalPages ?? prev.totalPages,
+        }));
+      } catch (e) {
         const err = e instanceof Error ? e : new Error(String(e));
-        // eslint-disable-next-line no-console
         console.error("[useMemberList] load error:", err);
         setError(err);
       } finally {
         setLoading(false);
       }
     },
-    [page, filter],
+    [], // ← 無限ループ回避：page/filter に依存しない！
   );
 
+  // 初回ロード（1回だけ）
   useEffect(() => {
-    void load();
-  }, [load]);
+    void load(page, filter);
+  }, []); // ← load を依存に入れる必要なし（安定関数なので）
 
-  // マウント時 / companyId 変更時にブランド一覧を取得
+  // ─────────────────────────────────────────────
+  // ブランド一覧（初回のみ読込）
+  // ─────────────────────────────────────────────
   useEffect(() => {
-    if (!authCompanyId) return;
-
     (async () => {
       try {
-        // brandService.ts で既に動作確認済みの listBrands を利用
-        const rows: BrandRow[] = await listBrands(authCompanyId);
+        const current = await fetchCurrentMember();
+        const companyId = String(current?.companyId ?? "").trim();
+
+        if (!companyId) {
+          console.warn("[useMemberList] companyId が取得できませんでした");
+          setBrandMap({});
+          return;
+        }
+
+        const rows: BrandRow[] = await listBrands(companyId);
+
+        console.log("[useMemberList] brand rows for filter header =", rows);
 
         const map: Record<string, string> = {};
         for (const b of rows) {
           map[b.id] = b.name;
         }
-
-        // eslint-disable-next-line no-console
-        console.log("[useMemberList] brandMap =", map);
         setBrandMap(map);
       } catch (e) {
-        // eslint-disable-next-line no-console
         console.error("[useMemberList] failed to load brands", e);
         setBrandMap({});
       }
     })();
-  }, [authCompanyId]);
+  }, []); // ← 依存なし：初回一回だけ
 
+  // ─────────────────────────────────────────────
+  // ページ番号変更
+  // ─────────────────────────────────────────────
   const setPageNumber = (pageNumber: number) => {
-    const safe = pageNumber > 0 ? pageNumber : 1;
-    setPage((prev) => ({
-      ...prev,
+    const safe = Math.max(1, pageNumber);
+
+    const nextPage = {
+      ...page,
       number: safe,
-      perPage: prev.perPage ?? DEFAULT_PAGE_LIMIT,
-    }));
+    };
+
+    setPage(nextPage);
+    void load(nextPage, filter);
   };
 
-  // ID → 「姓 名」を解決（member.Service.GetNameLastFirstByID 相当）
+  // ─────────────────────────────────────────────
+  // MemberID → 氏名
+  // ─────────────────────────────────────────────
   const getNameLastFirstByID = useCallback(
     async (memberId: string): Promise<string> => {
-      const id = String(memberId ?? "").trim();
+      const id = memberId.trim();
       if (!id) return "";
 
       const cache = nameCacheRef.current;
-      const cached = cache.get(id);
-      if (cached !== undefined) return cached;
+      if (cache.has(id)) return cache.get(id)!;
 
-      // ★ 単体取得はアプリケーションサービスに委譲
       const disp = await fetchMemberNameLastFirstById(id);
       if (disp) cache.set(id, disp);
       return disp;
@@ -156,40 +160,44 @@ export function useMemberList(
     [],
   );
 
-  // permissions からカテゴリ名（先頭の `<category>` 部分）をユニークに抽出
-  const extractPermissionCategories = (perms?: string[] | null): string[] => {
+  // ─────────────────────────────────────────────
+  // 権限カテゴリ抽出
+  // ─────────────────────────────────────────────
+  const extractPermissionCategories = (perms?: string[]): string[] => {
     if (!perms || perms.length === 0) return [];
     const set = new Set<string>();
+
     for (const p of perms) {
-      const name = String(p ?? "").trim();
-      if (!name) continue;
-      const dot = name.indexOf(".");
-      const cat = dot > 0 ? name.slice(0, dot) : name;
-      if (!cat) continue;
-      set.add(cat);
+      const dot = p.indexOf(".");
+      const cat = dot > 0 ? p.slice(0, dot) : p;
+      if (cat) set.add(cat);
     }
     return Array.from(set);
   };
 
-  // 所属ブランドフィルタ用オプション
+  // ─────────────────────────────────────────────
+  // フィルタ候補（ブランド）
+  // ─────────────────────────────────────────────
   const brandFilterOptions: FilterOption[] = useMemo(
     () =>
-      Object.entries(brandMap).map(([id, label]) => ({
+      Object.entries(brandMap).map(([id, name]) => ({
         value: id,
-        label: label || id,
+        label: name || id,
       })),
     [brandMap],
   );
 
-  // 権限カテゴリフィルタ用オプション（一覧のメンバーから集計）
+  // ─────────────────────────────────────────────
+  // フィルタ候補（権限カテゴリ）
+  // ─────────────────────────────────────────────
   const permissionFilterOptions: FilterOption[] = useMemo(() => {
     const set = new Set<string>();
+
     for (const m of members) {
-      const cats = extractPermissionCategories(
-        (m.permissions ?? []) as string[],
-      );
+      const cats = extractPermissionCategories(m.permissions ?? []);
       for (const c of cats) set.add(c);
     }
+
     return Array.from(set).map((c) => ({ value: c, label: c }));
   }, [members]);
 
@@ -199,22 +207,26 @@ export function useMemberList(
     error,
     filter,
     setFilter,
+
+    // ページング
     page,
     setPage,
-    reload: () => load(),
     setPageNumber,
-    getNameLastFirstByID,
-    brandMap, // brandId -> brandName
 
-    // ★ 追加: フィルタ関連
+    // 氏名
+    getNameLastFirstByID,
+
+    // ブランド
+    brandMap,
+
     brandFilterOptions,
     permissionFilterOptions,
+
     selectedBrandIds,
     setSelectedBrandIds,
     selectedPermissionCats,
     setSelectedPermissionCats,
 
-    // 必要ならページ側でも使えるようにヘルパを返しておく
     extractPermissionCategories,
   };
 }

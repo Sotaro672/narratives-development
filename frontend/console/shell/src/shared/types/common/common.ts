@@ -1,5 +1,3 @@
-// frontend/console/shell/src/shared/types/common/common.ts
-
 /**
  * 共通ページング / カーソル / SaveOptions 型定義
  * backend/internal/domain/common 配下の型イメージに対応させたフロント側表現。
@@ -13,13 +11,17 @@ export const DEFAULT_PAGE_LIMIT = 10;
 /**
  * Page
  * - オフセットではなく「ページ番号 + 件数」で指定するページング情報
- * - backend: common.Page (Number / PerPage) 相当
+ * - backend: common.Page (Number / PerPage / TotalPages) 相当
  */
 export interface Page {
   /** 現在のページ番号 (1 始まり) */
   number: number;
+
   /** 1ページあたり取得件数 */
   perPage: number;
+
+  /** 総ページ数（backend の Page に合わせて追加） */
+  totalPages: number;
 }
 
 /**
@@ -30,12 +32,16 @@ export interface Page {
 export interface PageResult<T> {
   /** 取得結果 */
   items: T[];
+
   /** 条件にマッチする全件数 */
   totalCount: number;
+
   /** 総ページ数 */
   totalPages: number;
+
   /** 現在のページ番号 (1 始まり) */
   page: number;
+
   /** 1ページあたり取得件数 */
   perPage: number;
 }
@@ -46,18 +52,8 @@ export interface PageResult<T> {
  * - backend: common.CursorPage 相当（のフロント表現）
  */
 export interface CursorPage {
-  /** 1回の取得件数（デフォルト: 10件） */
   limit: number;
-  /**
-   * 前回レスポンスで渡された nextCursor / prevCursor を指定
-   * - 初回取得時は undefined / null
-   */
   cursor?: string | null;
-  /**
-   * 方向
-   * - "next": nextCursor を使って次ページへ進む
-   * - "prev": prevCursor を使って前ページへ戻る
-   */
   direction?: "next" | "prev";
 }
 
@@ -67,15 +63,10 @@ export interface CursorPage {
  * - backend: common.CursorPageResult<T> 相当
  */
 export interface CursorPageResult<T> {
-  /** 取得結果 */
   items: T[];
-  /** 次ページ取得用カーソル（なければ null/undefined） */
   nextCursor?: string | null;
-  /** 前ページ取得用カーソル（なければ null/undefined） */
   prevCursor?: string | null;
-  /** 次ページが存在するかどうか */
   hasNext: boolean;
-  /** 前ページが存在するかどうか */
   hasPrev: boolean;
 }
 
@@ -83,54 +74,34 @@ export interface CursorPageResult<T> {
  * SaveOptions
  * - Repository の save/create/update 時の挙動制御オプション
  * - backend: common.SaveOptions をフロント側で表現したもの
- *
- * 実装メモ:
- * - mode が指定されていればそれを優先し、
- *   ifExists / ifNotExists は補助的なヒントとして扱う実装でOK。
  */
 export interface SaveOptions {
-  /**
-   * 保存モード
-   * - "create": 新規作成のみ（既存IDがあればエラー）
-   * - "update": 既存更新のみ（存在しなければエラー）
-   * - "upsert": 存在すれば更新、なければ作成
-   */
   mode?: "create" | "update" | "upsert";
-
-  /**
-   * 追加条件オプション（backend側ポリシーに合わせて使用）
-   * - true の場合、その条件を満たさないとエラーにする実装などを想定
-   */
-  ifExists?: boolean; // 「存在する場合のみ処理を許可」
-  ifNotExists?: boolean; // 「存在しない場合のみ処理を許可」
-
-  /**
-   * 楽観ロック用の更新時刻条件（ISO8601）
-   * - backend の updatedAt と一致している場合のみ更新などに利用可能
-   */
+  ifExists?: boolean;
+  ifNotExists?: boolean;
   expectedUpdatedAt?: string;
 }
 
-/**
- * SortOrder / Sort
- * - backend: common.Sort / SortOrder に対応
- */
+/** 昇順/降順 */
 export type SortOrder = "asc" | "desc";
 
+/**
+ * Sort
+ * - backend: common.Sort に対応
+ */
 export interface Sort {
-  /** ソート対象カラム名（例: "name", "createdAt" など） */
   column?: string;
-  /** 昇順/降順 */
   order?: SortOrder;
 }
 
 /**
- * デフォルトページ（page: 1, perPage: DEFAULT_PAGE_LIMIT）
+ * デフォルトページ（page: 1, perPage: DEFAULT_PAGE_LIMIT, totalPages: 1）
  * - Page オブジェクトを初期化する際に利用
  */
 export const DEFAULT_PAGE: Page = {
   number: 1,
   perPage: DEFAULT_PAGE_LIMIT,
+  totalPages: 1, // ★ 追加
 };
 
 /**
@@ -151,6 +122,7 @@ export function createPageFromCurrent(currentPage: number): Page {
   return {
     number: safePage,
     perPage: DEFAULT_PAGE_LIMIT,
+    totalPages: 1, // ★ 初期値として 1 を付与
   };
 }
 

@@ -1,4 +1,5 @@
-//frontend\console\member\src\application\memberListService.ts
+// frontend/console/member/src/application/memberListService.ts
+
 import type { Member } from "../domain/entity/member";
 import type { MemberFilter } from "../domain/repository/memberRepository";
 import type { Page } from "../../../shell/src/shared/types/common/common";
@@ -15,19 +16,9 @@ import type {
 // Permission Repository (GET /permissions)
 import { PermissionRepositoryHTTP } from "../../../permission/src/infrastructure/http/permissionRepositoryHTTP";
 
-// ★ 追加: 権限名 → カテゴリ変換ヘルパ
-//    ※ ローカル定義の groupPermissionsByCategory と名前が被るため alias を付ける
-import {
-  CategoryFromPermissionName,
-  groupPermissionsByCategory as groupPermissionNamesByCategory,
-} from "../../../permission/src/application/permissionCatalog";
-
 // Brand Domain
 import type { Brand } from "../../../brand/src/domain/entity/brand";
 import { BrandRepositoryHTTP } from "../../../brand/src/infrastructure/http/brandRepositoryHTTP";
-
-// Brand 名フォーマッタ
-import { formatBrandName } from "../../../brand/src/application/brandService";
 
 // Query APIs
 import {
@@ -39,6 +30,8 @@ import {
 export type MemberListResult = {
   members: Member[];
   nameMap: Record<string, string>;
+  /** backend から受け取った総ページ数（Pagination 用） */
+  totalPages: number;
 };
 
 // ─────────────────────────────────────────────
@@ -65,7 +58,7 @@ export async function fetchAllPermissions(): Promise<Permission[]> {
   return pageResult.items;
 }
 
-// ※ 既存: Permission エンティティ配列 → カテゴリごとにグルーピング
+// カテゴリ別の Permission グルーピング
 export function groupPermissionsByCategory(
   allPermissions: Permission[],
 ): Record<PermissionCategory, Permission[]> {
@@ -109,7 +102,7 @@ export async function fetchCurrentMember(): Promise<Member | null> {
 }
 
 // ─────────────────────────────────────────────
-// Brand 関連サービス
+// Brand 関連サービス（他用途で使用、fetchMemberList では使用しない）
 // ─────────────────────────────────────────────
 export async function fetchBrandsForCurrentMember(): Promise<Brand[]> {
   const current = await fetchCurrentMember();
@@ -140,7 +133,6 @@ export async function fetchBrandsByCompany(
   });
 
   const items = (pageResult.items ?? []) as Brand[];
-
   const filtered = items.filter((b) => (b.companyId ?? "") === companyId);
 
   console.log(
@@ -152,7 +144,7 @@ export async function fetchBrandsByCompany(
 }
 
 // ─────────────────────────────────────────────
-// Member 一覧
+// Member 一覧（ブランド取得なし版）
 // ─────────────────────────────────────────────
 export async function fetchMemberList(
   page: Page,
@@ -165,40 +157,33 @@ export async function fetchMemberList(
 
   const token = await currentUser.getIdToken();
 
-  console.log("[memberService.fetchMemberList] currentUser.uid:", currentUser.uid);
+  console.log(
+    "[memberService.fetchMemberList] currentUser.uid:",
+    currentUser.uid,
+  );
 
-  const { items } = await fetchMemberListWithToken(token, page, filter);
+  // backend の PageResult<Member> 相当
+  const { items, totalPages } = await fetchMemberListWithToken(
+    token,
+    page,
+    filter,
+  );
 
-  // ブランド名マップ
-  let brandNameMap: Record<string, string> = {};
-  try {
-    const brands = await fetchBrandsForCurrentMember();
-    const map: Record<string, string> = {};
-    for (const b of brands) {
-      const id = (b.id ?? "").trim();
-      if (!id) continue;
-      map[id] = formatBrandName(b.name ?? "");
-    }
-    brandNameMap = map;
-  } catch (e) {
-    console.error("[memberService.fetchMemberList] failed to load brands", e);
-  }
+  // ★★ ブランド取得は完全に削除（無限ループ防止） ★★
+  // useMemberList がブランド一覧を管理する
 
   // 正規化
   const normalized: Member[] = items.map((m) => {
     const noFirst = !String(m.firstName ?? "").trim();
     const noLast = !String(m.lastName ?? "").trim();
 
-    let assignedBrandNames: string[] | null = null;
+    // Firestore → ID 配列のまま保持
+    let assignedBrandIds: string[] | null = null;
     if (Array.isArray(m.assignedBrands) && m.assignedBrands.length > 0) {
-      const names = m.assignedBrands
-        .map((id) => {
-          const key = String(id ?? "").trim();
-          if (!key) return "";
-          return brandNameMap[key] ?? key;
-        })
-        .filter((label) => label.length > 0);
-      assignedBrandNames = names.length > 0 ? names : null;
+      const ids = m.assignedBrands
+        .map((id) => String(id ?? "").trim())
+        .filter((id) => id.length > 0);
+      assignedBrandIds = ids.length > 0 ? ids : null;
     }
 
     const base: Member =
@@ -208,21 +193,26 @@ export async function fetchMemberList(
 
     return {
       ...base,
-      assignedBrands: assignedBrandNames,
+      assignedBrands: assignedBrandIds,
     };
   });
 
+  // 氏名キャッシュ
   const nameMap: Record<string, string> = {};
   for (const m of normalized) {
     const disp = formatLastFirst(m.lastName as any, m.firstName as any);
     if (disp) nameMap[m.id] = disp;
   }
 
-  return { members: normalized, nameMap };
+  return {
+    members: normalized,
+    nameMap,
+    totalPages: totalPages ?? 1,
+  };
 }
 
 // ─────────────────────────────────────────────
-// ★ 追加：単一メンバーの表示名取得（一覧から分離）
+// 単一メンバーの表示名取得
 // ─────────────────────────────────────────────
 export async function fetchMemberNameLastFirstById(
   memberId: string,

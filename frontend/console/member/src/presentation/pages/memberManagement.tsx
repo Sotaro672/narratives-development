@@ -1,39 +1,67 @@
 // frontend/console/member/src/presentation/pages/memberManagement.tsx
-
 import * as React from "react";
 import { useNavigate } from "react-router-dom";
 import List from "../../../../shell/src/layout/List/List";
 import "../styles/member.css";
 import { useMemberList } from "../hooks/useMemberList";
 
-// ★ 追加: フィルタ付きテーブルヘッダー
+// ★ フィルタ付きテーブルヘッダー
 import FilterableTableHeader from "../../../../shell/src/shared/ui/filterable-table-header";
+// ★ ソート可能テーブルヘッダー
+import SortableTableHeader, {
+  type SortDirection,
+} from "../../../../shell/src/shared/ui/sortable-table-header";
+
+// ★ ページネーション
+import Pagination from "../../../../shell/src/shared/ui/pagination";
 
 export default function MemberManagementPage() {
   const navigate = useNavigate();
 
-  // メンバー一覧 + 氏名解決関数 + brandId→brandName マップを hook から取得
   const {
     members,
     loading,
     error,
-    reload,
     getNameLastFirstByID,
     brandMap,
+    brandFilterOptions,
+    permissionFilterOptions,
+    selectedBrandIds,
+    setSelectedBrandIds,
+    selectedPermissionCats,
+    setSelectedPermissionCats,
+    extractPermissionCategories,
+
+    // ★ useMemberList からページ制御パラメータを取得
+    page,
+    setPageNumber,
   } = useMemberList();
 
-  // 氏名キャッシュ（画面側で保持）
   const [resolvedNames, setResolvedNames] = React.useState<
     Record<string, string>
   >({});
 
-  // 所属ブランド列のフィルタ状態（brandId の配列）
-  const [selectedBrandIds, setSelectedBrandIds] = React.useState<string[]>([]);
+  // ▼ ソート状態
+  const [sortKey, setSortKey] = React.useState<string | null>(null);
+  const [sortDirection, setSortDirection] =
+    React.useState<Exclude<SortDirection, null>>("desc");
 
-  // 権限列のフィルタ状態（permission category の配列）
-  const [selectedPermissionCats, setSelectedPermissionCats] = React.useState<
-    string[]
-  >([]);
+  const handleSortChange = React.useCallback(
+    (key: string, nextDirection: Exclude<SortDirection, null>) => {
+      setSortKey(key);
+      setSortDirection(nextDirection);
+    },
+    [],
+  );
+
+  // ▼ Reset ボタン押下時の処理
+  const handleReset = React.useCallback(() => {
+    setSelectedBrandIds([]);
+    setSelectedPermissionCats([]);
+    setSortKey(null);
+    setSortDirection("desc");
+    setPageNumber(1);
+  }, [setSelectedBrandIds, setSelectedPermissionCats, setPageNumber]);
 
   // -------------------------
   //  氏名補完
@@ -71,72 +99,63 @@ export default function MemberManagementPage() {
     navigate(`/member/${encodeURIComponent(id)}`);
   };
 
-  const ymd = (createdAt: any): string => {
-    if (!createdAt) return "";
-    if (typeof createdAt === "object" && createdAt !== null) {
-      if (typeof (createdAt as any).toDate === "function") {
-        return (createdAt as any)
+  const ymd = (date: any): string => {
+    if (!date) return "";
+    if (typeof date === "object" && date !== null) {
+      if (typeof (date as any).toDate === "function") {
+        return (date as any)
           .toDate()
           .toISOString()
           .slice(0, 10)
           .replace(/-/g, "/");
       }
-      if (typeof (createdAt as any).seconds === "number") {
-        return new Date((createdAt as any).seconds * 1000)
+      if (typeof (date as any).seconds === "number") {
+        return new Date((date as any).seconds * 1000)
           .toISOString()
           .slice(0, 10)
           .replace(/-/g, "/");
       }
     }
-    if (typeof createdAt === "string") {
-      return createdAt.slice(0, 10).replace(/-/g, "/");
+    if (typeof date === "string") {
+      return date.slice(0, 10).replace(/-/g, "/");
     }
     return "";
   };
 
-  // permissions からカテゴリ名（先頭の `<category>` 部分）をユニークに抽出
-  const extractPermissionCategories = (perms?: string[] | null): string[] => {
-    if (!perms || perms.length === 0) return [];
-    const set = new Set<string>();
-    for (const p of perms) {
-      const name = String(p ?? "").trim();
-      if (!name) continue;
-      const dot = name.indexOf(".");
-      const cat = dot > 0 ? name.slice(0, dot) : name;
-      if (!cat) continue;
-      set.add(cat);
-    }
-    return Array.from(set);
-  };
+  // ▼ ソート用：createdAt / updatedAt を number に変換
+  const getDateValue = React.useCallback(
+    (m: any): number => {
+      const raw =
+        sortKey === "updatedAt" ? (m as any).updatedAt : (m as any).createdAt;
+      if (!raw) return 0;
 
-  // ブランドフィルタの候補リスト
-  const brandFilterOptions = React.useMemo(
-    () =>
-      Object.entries(brandMap).map(([id, label]) => ({
-        value: id,
-        label: label || id,
-      })),
-    [brandMap],
+      if (typeof raw === "object" && raw !== null) {
+        if (typeof raw.toDate === "function") return raw.toDate().getTime();
+        if (typeof raw.seconds === "number") return raw.seconds * 1000;
+      }
+      if (typeof raw === "string") {
+        const t = new Date(raw).getTime();
+        return Number.isNaN(t) ? 0 : t;
+      }
+      return 0;
+    },
+    [sortKey],
   );
 
-  // 権限カテゴリフィルタの候補リスト（一覧中のメンバーから集計）
-  const permissionFilterOptions = React.useMemo(() => {
-    const set = new Set<string>();
-    for (const m of members) {
-      const cats = extractPermissionCategories(
-        (m.permissions ?? []) as string[],
-      );
-      for (const c of cats) set.add(c);
-    }
-    return Array.from(set).map((c) => ({ value: c, label: c }));
-  }, [members]);
+  const sortedMembers = React.useMemo(() => {
+    if (!sortKey) return members;
+
+    return [...members].sort((a, b) => {
+      const av = getDateValue(a);
+      const bv = getDateValue(b);
+      return sortDirection === "asc" ? av - bv : bv - av;
+    });
+  }, [members, sortKey, sortDirection, getDateValue]);
 
   if (loading) return <div className="p-4">読み込み中...</div>;
   if (error)
     return (
-      <div className="p-4 text-red-500">
-        データ取得エラー: {error.message}
-      </div>
+      <div className="p-4 text-red-500">データ取得エラー: {error.message}</div>
     );
 
   return (
@@ -146,7 +165,6 @@ export default function MemberManagementPage() {
         headerCells={[
           "氏名",
           "メールアドレス",
-          // 所属ブランド列ヘッダー（フィルタ付き）
           <FilterableTableHeader
             key="brand-header"
             label="所属ブランド"
@@ -155,7 +173,6 @@ export default function MemberManagementPage() {
             onChange={setSelectedBrandIds}
             dialogTitle="所属ブランドで絞り込み"
           />,
-          // 権限列ヘッダー（フィルタ付き）
           <FilterableTableHeader
             key="perm-header"
             label="権限"
@@ -164,15 +181,30 @@ export default function MemberManagementPage() {
             onChange={setSelectedPermissionCats}
             dialogTitle="権限カテゴリで絞り込み"
           />,
-          "登録日",
+          <SortableTableHeader
+            key="createdAt-header"
+            label="登録日"
+            sortKey="createdAt"
+            activeKey={sortKey}
+            direction={sortDirection}
+            onChange={handleSortChange}
+          />,
+          <SortableTableHeader
+            key="updatedAt-header"
+            label="更新日"
+            sortKey="updatedAt"
+            activeKey={sortKey}
+            direction={sortDirection}
+            onChange={handleSortChange}
+          />,
         ]}
         showCreateButton
         createLabel="メンバー追加"
         showResetButton
         onCreate={() => navigate("/member/create")}
-        onReset={() => reload()}
+        onReset={handleReset}
       >
-        {members.map((m) => {
+        {sortedMembers.map((m) => {
           const inline = `${m.lastName ?? ""} ${m.firstName ?? ""}`.trim();
           const name =
             resolvedNames[m.id] || inline || (m.email ?? "") || m.id;
@@ -182,7 +214,7 @@ export default function MemberManagementPage() {
             (m.permissions ?? []) as string[],
           );
 
-          // ── フィルタ適用 ──
+          // ▼ フィルタ適用
           const matchesBrandFilter =
             selectedBrandIds.length === 0 ||
             assigned.some((brandId) => selectedBrandIds.includes(brandId));
@@ -191,9 +223,7 @@ export default function MemberManagementPage() {
             selectedPermissionCats.length === 0 ||
             categories.some((cat) => selectedPermissionCats.includes(cat));
 
-          if (!matchesBrandFilter || !matchesPermissionFilter) {
-            return null;
-          }
+          if (!matchesBrandFilter || !matchesPermissionFilter) return null;
 
           return (
             <tr
@@ -211,42 +241,51 @@ export default function MemberManagementPage() {
             >
               <td>{name || "招待中"}</td>
               <td>{m.email ?? ""}</td>
+
+              {/* 所属ブランド */}
               <td>
                 {assigned.map((brandId) => {
                   const label = brandMap[brandId] ?? brandId;
                   return (
-                    <span
-                      key={brandId}
-                      className="lp-brand-pill mm-brand-tag"
-                    >
+                    <span key={brandId} className="lp-brand-pill mm-brand-tag">
                       {label}
                     </span>
                   );
                 })}
               </td>
-              <td>
-                <div className="mm-permission-col">
-                  {categories.length === 0 ? (
-                    <span className="text-sm text-[hsl(var(--muted-foreground))]">
-                      なし
+
+              {/* 権限 */}
+              <td className="mm-permission-col">
+                {categories.length === 0 ? (
+                  <span className="text-sm text-[hsl(var(--muted-foreground))]">
+                    なし
+                  </span>
+                ) : (
+                  categories.map((cat) => (
+                    <span key={cat} className="lp-brand-pill mm-brand-tag">
+                      {cat}
                     </span>
-                  ) : (
-                    categories.map((cat) => (
-                      <span
-                        key={cat}
-                        className="lp-brand-pill mm-brand-tag"
-                      >
-                        {cat}
-                      </span>
-                    ))
-                  )}
-                </div>
+                  ))
+                )}
               </td>
+
+              {/* 登録日 */}
               <td>{ymd((m as any).createdAt)}</td>
+
+              {/* 更新日 */}
+              <td>{ymd((m as any).updatedAt)}</td>
             </tr>
           );
         })}
       </List>
+
+      {/* ★ Pagination：現状は totalPages=1（今後 API から総件数を受け取るよう拡張可能） */}
+      <Pagination
+        currentPage={page.number}
+        totalPages={1}
+        onPageChange={(p) => setPageNumber(p)}
+        className="mt-4"
+      />
     </div>
   );
 }

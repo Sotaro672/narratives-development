@@ -24,9 +24,6 @@ type MemberDetailCardProps = {
   memberId: string;
 };
 
-/**
- * ISO8601 文字列を日本語の日付表記に変換
- */
 function formatDate(iso?: string | null): string {
   if (!iso) return "-";
   const d = new Date(iso);
@@ -38,15 +35,9 @@ function formatDate(iso?: string | null): string {
   });
 }
 
-/**
- * メンバー詳細カード
- * - memberId から Firestore 経由でデータを取得し、各項目を表示
- * - 氏名が null/空文字の場合は「氏名」欄を空欄にする（ID で埋めない）
- */
 export default function MemberDetailCard({ memberId }: MemberDetailCardProps) {
   const { member, loading, error } = useMemberDetail(memberId);
 
-  // ローディング表示
   if (loading) {
     return (
       <Card className="member-card w-full">
@@ -63,7 +54,6 @@ export default function MemberDetailCard({ memberId }: MemberDetailCardProps) {
     );
   }
 
-  // エラー表示
   if (error) {
     return (
       <Card className="member-card w-full">
@@ -80,7 +70,6 @@ export default function MemberDetailCard({ memberId }: MemberDetailCardProps) {
     );
   }
 
-  // メンバーが存在しない場合
   if (!member) {
     return (
       <Card className="member-card w-full">
@@ -97,35 +86,20 @@ export default function MemberDetailCard({ memberId }: MemberDetailCardProps) {
     );
   }
 
-  // 氏名と読み仮名の組み立て
   const rawFullName = `${member.lastName ?? ""} ${member.firstName ?? ""}`.trim();
-  // ★ 氏名が null/空の場合は「空欄」にする（"-" や ID では埋めない）
   const fullName = rawFullName || "";
-
-  const rawFullKana = `${member.lastNameKana ?? ""} ${
-    member.firstNameKana ?? ""
-  }`.trim();
+  const rawFullKana = `${member.lastNameKana ?? ""} ${member.firstNameKana ?? ""}`.trim();
   const fullKana = rawFullKana || "";
 
   const email = member.email || "-";
   const joinedAt = formatDate(member.createdAt);
   const updatedAt = formatDate(member.updatedAt || member.createdAt);
 
-  // 氏名が設定されているか
-  const hasName = fullName !== "";
+  // ★ ID 非表示のため headerTitle を固定
+  const headerTitle = "基本情報";
 
-  // Header のタイトル
-  // ★ name が null/空の場合は ID を表示しない（空欄扱い）
-  const headerTitle = hasName
-    ? `基本情報（ID: ${memberId}）`
-    : "基本情報";
-
-  // ─────────────────────────────────────────────
-  // 描画
-  // ─────────────────────────────────────────────
   return (
     <Card className="member-card w-full">
-      {/* Header */}
       <CardHeader className="member-card__header">
         <CardTitle className="member-card__title flex items-center gap-2">
           <IconUser className="member-card__icon w-4 h-4" />
@@ -133,7 +107,6 @@ export default function MemberDetailCard({ memberId }: MemberDetailCardProps) {
         </CardTitle>
       </CardHeader>
 
-      {/* Content */}
       <CardContent className="member-card__body space-y-6 text-sm">
         {/* 氏名・読み仮名 */}
         <div className="member-card__grid">
