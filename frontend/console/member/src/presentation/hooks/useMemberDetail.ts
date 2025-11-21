@@ -3,11 +3,15 @@
 import { useCallback, useEffect, useState } from "react";
 import type { Member } from "../../domain/entity/member";
 
-// アプリケーションサービスへ委譲
-import { fetchMemberDetail } from "../../application/memberListService";
+// ★ 正しいサービスを import
+import { fetchMemberDetail } from "../../application/memberDetailService";
+
+// ブランド一覧取得用（id → name 変換用）
+import { listBrands, type BrandRow } from "../../../../brand/src/application/brandService";
 
 export function useMemberDetail(memberId?: string) {
   const [member, setMember] = useState<Member | null>(null);
+  const [brandRows, setBrandRows] = useState<BrandRow[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<Error | null>(null);
 
@@ -31,11 +35,30 @@ export function useMemberDetail(memberId?: string) {
     void load();
   }, [load]);
 
+  // member.companyId からブランド一覧を取得して brandRows にセット
+  useEffect(() => {
+    const companyId = String(member?.companyId ?? "").trim();
+    if (!companyId) {
+      setBrandRows([]);
+      return;
+    }
+
+    (async () => {
+      try {
+        const rows = await listBrands(companyId);
+        setBrandRows(rows);
+      } catch (e) {
+        // eslint-disable-next-line no-console
+        console.error("[useMemberDetail] failed to load brands", e);
+        setBrandRows([]);
+      }
+    })();
+  }, [member?.companyId]);
+
   // PageHeader 用の表示名
   const memberName = (() => {
     if (!member) return "不明なメンバー";
     const full = `${member.lastName ?? ""} ${member.firstName ?? ""}`.trim();
-    // ★ 氏名が無い場合は「招待中」と表示し、ID にはフォールバックしない
     return full || "招待中";
   })();
 
@@ -51,6 +74,7 @@ export function useMemberDetail(memberId?: string) {
     memberName,
     assignedBrands,
     permissions,
+    brandRows,
     loading,
     error,
     reload: load,

@@ -1,4 +1,5 @@
-// frontend/member/src/hooks/useMemberList.ts
+// frontend/console/member/src/presentation/hooks/useMemberList.ts
+
 import { useEffect, useState, useCallback, useRef } from "react";
 
 import type { Member } from "../../domain/entity/member";

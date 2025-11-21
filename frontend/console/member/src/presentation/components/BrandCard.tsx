@@ -1,6 +1,6 @@
 // frontend/console/member/src/presentation/components/BrandCard.tsx
 
-import * as React from "react";
+import React from "react";
 import {
   Card,
   CardHeader,
@@ -8,12 +8,24 @@ import {
   CardContent,
 } from "../../../../shell/src/shared/ui/card";
 import { Badge } from "../../../../shell/src/shared/ui/badge";
+import type { BrandRow } from "../../../../brand/src/application/brandService";
 
-type BrandCardProps = {
+export function BrandCard({
+  assignedBrands,
+  brandRows,
+}: {
   assignedBrands: string[];
-};
+  brandRows: BrandRow[];
+}) {
+  // brandId -> brandName のマップを作る
+  const brandMap = React.useMemo(() => {
+    const map: Record<string, string> = {};
+    for (const b of brandRows) {
+      map[b.id] = b.name;
+    }
+    return map;
+  }, [brandRows]);
 
-export function BrandCard({ assignedBrands }: BrandCardProps) {
   return (
     <Card>
       <CardHeader>
@@ -27,7 +39,9 @@ export function BrandCard({ assignedBrands }: BrandCardProps) {
         ) : (
           <div className="flex flex-wrap gap-2">
             {assignedBrands.map((brandId) => (
-              <Badge key={brandId}>{brandId}</Badge>
+              <Badge key={brandId}>
+                {brandMap[brandId] ?? brandId /* fallback */}
+              </Badge>
             ))}
           </div>
         )}
