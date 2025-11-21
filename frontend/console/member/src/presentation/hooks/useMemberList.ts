@@ -13,7 +13,7 @@ import {
 import {
   fetchMemberList,
   fetchMemberNameLastFirstById,
-} from "../../application/memberService";
+} from "../../application/memberListService";
 
 // ★ ログイン情報（companyId）とブランド一覧取得用サービス
 import { useAuthContext } from "../../../../shell/src/auth/application/AuthContext";

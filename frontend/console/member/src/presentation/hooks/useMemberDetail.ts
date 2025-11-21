@@ -4,7 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import type { Member } from "../../domain/entity/member";
 
 // アプリケーションサービスへ委譲
-import { fetchMemberDetail } from "../../application/memberService";
+import { fetchMemberDetail } from "../../application/memberListService";
 
 export function useMemberDetail(memberId?: string) {
   const [member, setMember] = useState<Member | null>(null);
@@ -39,9 +39,18 @@ export function useMemberDetail(memberId?: string) {
     return full || "招待中";
   })();
 
+  // 所属ブランドID一覧（存在しない場合は空配列）
+  const assignedBrands: string[] =
+    (member?.assignedBrands as string[] | null | undefined) ?? [];
+
+  // 権限一覧（存在しない場合は空配列）
+  const permissions: string[] = member?.permissions ?? [];
+
   return {
     member,
     memberName,
+    assignedBrands,
+    permissions,
     loading,
     error,
     reload: load,

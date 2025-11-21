@@ -19,8 +19,11 @@ import {
   fetchAllPermissions,
   fetchBrandsForCurrentMember,
   groupPermissionsByCategory,
-} from "../../application/memberService";
-import { createMember } from "../../application/invitationService";
+} from "../../application/memberListService";
+
+// メンバー作成 & 招待メール送信
+import { createMember } from "../../application/memberCreateService";
+import { sendMemberInvitation } from "../../application/invitationService";
 
 // UI 用 BrandRow 型（テーブル表示用）
 export type BrandRow = {
@@ -56,6 +59,14 @@ function toBrandRows(brands: Brand[]): BrandRow[] {
   }));
 }
 
+// カンマ区切り → string[]
+function parseCommaSeparatedLocal(s: string): string[] {
+  return s
+    .split(",")
+    .map((x) => x.trim())
+    .filter(Boolean);
+}
+
 export function useMemberCreate(options?: UseMemberCreateOptions) {
   // 認証中ユーザ（companyId / uid は AuthContext からも使える）
   const { user } = useAuthContext();
@@ -72,6 +83,7 @@ export function useMemberCreate(options?: UseMemberCreateOptions) {
   // 新: PermissionCategory が「役割」相当
   const [category, setCategory] = useState<PermissionCategory>("brand");
 
+  // 任意：テキスト入力でも permissions / brands を指定できるよう残しておく
   const [permissionsText, setPermissionsText] = useState(""); // カンマ区切り
   const [brandsText, setBrandsText] = useState(""); // カンマ区切り
 
@@ -125,9 +137,6 @@ export function useMemberCreate(options?: UseMemberCreateOptions) {
   const [allBrands, setAllBrands] = useState<Brand[]>([]);
   const [brandRows, setBrandRows] = useState<BrandRow[]>([]);
 
-  // ✅ 選択されたブランドID一覧
-  const [selectedBrandIds, setSelectedBrandIds] = useState<string[]>([]);
-
   useEffect(() => {
     (async () => {
       try {
@@ -147,34 +156,86 @@ export function useMemberCreate(options?: UseMemberCreateOptions) {
     })();
   }, []);
 
-  // ✅ ブランド選択のトグル
-  const toggleBrandSelection = useCallback((brandId: string) => {
-    setSelectedBrandIds((prev) =>
-      prev.includes(brandId)
-        ? prev.filter((id) => id !== brandId)
-        : [...prev, brandId],
-    );
-  }, []);
-
+  /**
+   * メンバー作成 + 招待メール送信
+   * overrides で permissions / assignedBrandIds を画面側から上書き可能
+   */
   const handleSubmit = useCallback(
-    async (e?: React.FormEvent) => {
+    async (
+      e?: React.FormEvent,
+      overrides?: {
+        permissions?: string[];
+        assignedBrandIds?: string[];
+      },
+    ) => {
       e?.preventDefault?.();
       setError(null);
       setSubmitting(true);
       try {
+        // 役割カテゴリ由来の権限
+        const permissionsFromCategory =
+          permissionsByCategory[category]?.map((p) => (p as any).name) ?? [];
+
+        // テキスト入力由来の権限
+        const permissionsFromText = permissionsText
+          ? parseCommaSeparatedLocal(permissionsText)
+          : [];
+
+        // マージ & 重複除去
+        const mergedPermissions = Array.from(
+          new Set([...permissionsFromCategory, ...permissionsFromText]),
+        );
+
+        // 画面からの上書きがあればそちらを優先
+        const finalPermissions =
+          overrides?.permissions && overrides.permissions.length > 0
+            ? overrides.permissions
+            : mergedPermissions;
+
+        // brandsText からのフォールバック
+        const fallbackBrandIds = brandsText
+          ? parseCommaSeparatedLocal(brandsText)
+          : [];
+
+        const finalAssignedBrandIds =
+          overrides?.assignedBrandIds && overrides.assignedBrandIds.length > 0
+            ? overrides.assignedBrandIds
+            : fallbackBrandIds;
+
+        // デバッグログ
+        // eslint-disable-next-line no-console
+        console.log("[useMemberCreate] submit payload (frontend)", {
+          permissionsFromCategory,
+          permissionsFromText,
+          mergedPermissions,
+          finalPermissions,
+          fallbackBrandIds,
+          finalAssignedBrandIds,
+        });
+
+        // 1. メンバー作成
         const created = await createMember({
           firstName,
           lastName,
           firstNameKana,
           lastNameKana,
           email,
-          permissionsText,
-          brandsText,
+          permissions: finalPermissions,
+          assignedBrandIds: finalAssignedBrandIds,
           authCompanyId,
           currentMemberId,
-          // ✅ ここで選択されたブランドIDを渡す
-          assignedBrandIds: selectedBrandIds,
         });
+
+        // 2. 招待メール送信（失敗してもフォームエラーにはしない）
+        try {
+          await sendMemberInvitation(created.id, created.email ?? null);
+        } catch (inviteErr) {
+          // eslint-disable-next-line no-console
+          console.error(
+            "[useMemberCreate] 招待メール送信中にエラーが発生しました",
+            inviteErr,
+          );
+        }
 
         // 呼び出し元へ通知
         options?.onSuccess?.(created);
@@ -190,11 +251,12 @@ export function useMemberCreate(options?: UseMemberCreateOptions) {
       firstNameKana,
       lastNameKana,
       email,
+      permissionsByCategory,
+      category,
       permissionsText,
       brandsText,
       authCompanyId,
       currentMemberId,
-      selectedBrandIds,
       options,
     ],
   );
@@ -224,7 +286,6 @@ export function useMemberCreate(options?: UseMemberCreateOptions) {
     // ブランド（UI での表示・選択に利用可能）
     allBrands,
     brandRows,
-    selectedBrandIds,
 
     // セッター
     setFirstName,
@@ -236,10 +297,8 @@ export function useMemberCreate(options?: UseMemberCreateOptions) {
     setPermissionsText,
     setBrandsText,
     setError,
-    setSelectedBrandIds,
 
     // 動作
-    toggleBrandSelection,
     handleSubmit,
   };
 }
