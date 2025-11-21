@@ -1,3 +1,4 @@
+//frontend\console\member\src\infrastructure\http\memberRepositoryHTTP.ts 
 /// <reference types="vite/client" />
 
 import type {
@@ -87,7 +88,7 @@ export class MemberRepositoryHTTP implements MemberRepository {
         totalCount: (data as Member[]).length,
         page: pageNumber,
         perPage,
-        totalPages: 1, // ← ★追加：PageResult の必須フィールド
+        totalPages: 1, // ← ★ PageResult の必須フィールドを補完
       };
     }
 
@@ -120,7 +121,10 @@ export class MemberRepositoryHTTP implements MemberRepository {
     cursorPage: CursorPage,
   ): Promise<CursorPageResult<Member>> {
     const limit = cursorPage.limit && cursorPage.limit > 0 ? cursorPage.limit : 50;
-    const page: Page = { number: 1, perPage: limit };
+
+    // ★ Page 型に totalPages を追加
+    const page: Page = { number: 1, perPage: limit, totalPages: 1 };
+
     const res = await this.list(page, filter);
     return {
       items: res.items,
@@ -132,8 +136,9 @@ export class MemberRepositoryHTTP implements MemberRepository {
   }
 
   async getByEmail(email: string): Promise<Member | null> {
+    // ★ Page 型に totalPages を追加
     const res = await this.list(
-      { number: 1, perPage: 50 },
+      { number: 1, perPage: 50, totalPages: 1 },
       { searchQuery: email },
     );
     const hit = res.items.find(
@@ -147,7 +152,8 @@ export class MemberRepositoryHTTP implements MemberRepository {
   }
 
   async count(filter: MemberFilter): Promise<number> {
-    const res = await this.list({ number: 1, perPage: 100 }, filter);
+    // ★ Page 型に totalPages を追加
+    const res = await this.list({ number: 1, perPage: 100, totalPages: 1 }, filter);
     return res.totalCount ?? res.items.length;
   }
 

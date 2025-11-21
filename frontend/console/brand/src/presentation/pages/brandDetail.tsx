@@ -14,6 +14,7 @@ import {
 import { useBrandDetail } from "../hook/useBrandDetail";
 import { ManagerCard } from "./components/ManagerCard";
 import { WalletCard } from "./components/WalletCard";
+import { AssignedMemberCard } from "./components/AssignedMemberCard"; // ★ 追加
 
 export default function BrandDetail() {
   // ★ statusBadgeClass は使わなくなったので分解から削除
@@ -21,7 +22,7 @@ export default function BrandDetail() {
 
   return (
     <PageStyle layout="grid-2" title={`${brand.name}`} onBack={handleBack}>
-      {/* 左カラム：基本情報 */}
+      {/* 左カラム：基本情報 + AssignedMemberCard */}
       <div className="space-y-4">
         <Card>
           <CardHeader>
@@ -36,13 +37,18 @@ export default function BrandDetail() {
               {brand.description}
             </div>
 
-            {/* ★ 追加：Website URL */}
+            {/* ★ WebサイトURL */}
             <CardLabel>WebサイトURL</CardLabel>
             <CardReadonly>
               {brand.websiteUrl?.trim() ? brand.websiteUrl : "（未設定）"}
             </CardReadonly>
           </CardContent>
         </Card>
+
+        {/* ★ 追加：AssignedMemberCard（左カラムの2段目） */}
+        <AssignedMemberCard
+          assignedMembers={brand.assignedMembers ?? []}
+        />
       </div>
 
       {/* 右カラム：管理情報 ＋ ウォレット情報 */}
@@ -54,7 +60,6 @@ export default function BrandDetail() {
           updatedAt={brand.updatedAt}
         />
 
-        {/* ★ WalletCard を追加 */}
         <WalletCard walletAddress={brand.walletAddress} />
       </div>
     </PageStyle>

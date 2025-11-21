@@ -33,11 +33,17 @@ export function ManagerCard({
           {managerName || managerId || "（未設定）"}
         </CardReadonly>
 
-        <CardLabel>登録日</CardLabel>
-        <CardReadonly>{registeredAt}</CardReadonly>
-
-        <CardLabel>最終更新日</CardLabel>
-        <CardReadonly>{updatedAt}</CardReadonly>
+        {/* ★ 登録日＋更新日を横並びに配置 */}
+        <div className="brand-date-row">
+          <div className="brand-date-col">
+            <CardLabel>登録日</CardLabel>
+            <CardReadonly>{registeredAt}</CardReadonly>
+          </div>
+          <div className="brand-date-col">
+            <CardLabel>更新日</CardLabel>
+            <CardReadonly>{updatedAt}</CardReadonly>
+          </div>
+        </div>
       </CardContent>
     </Card>
   );

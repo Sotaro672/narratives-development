@@ -3,6 +3,9 @@ import { useCallback, useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { brandRepositoryHTTP } from "../../infrastructure/http/brandRepositoryHTTP";
 
+// ★ AssignedMember 取得サービス
+import { fetchAssignedMembers } from "../../application/assignedMemberService";
+
 // ★ member 用のフックから ID → 「姓 名」を解決する関数を借りる
 import { useMemberList } from "../../../../member/src/presentation/hooks/useMemberList";
 
@@ -40,6 +43,9 @@ export interface BrandDetailData {
   deletedAt?: string | null;
   /** 論理削除者（任意） */
   deletedBy?: string | null;
+
+  /** 割り当てメンバー一覧（AssignedMemberReader 結果をそのまま受ける） */
+  assignedMembers: any[];
 
   // ====== 画面用に追加した派生フィールド ======
   managerName?: string; // 取得した責任者名（姓 名）
@@ -91,6 +97,8 @@ export function useBrandDetail() {
     deletedAt: null,
     deletedBy: null,
 
+    assignedMembers: [],
+
     managerName: "",
     status: "",
     registeredAt: "",
@@ -99,7 +107,7 @@ export function useBrandDetail() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<Error | null>(null);
 
-  // ブランド本体の取得＋責任者名の解決
+  // ブランド本体の取得＋責任者名の解決＋AssignedMemberReader からの取得
   useEffect(() => {
     const load = async () => {
       if (!brandId) return;
@@ -135,11 +143,36 @@ export function useBrandDetail() {
           deletedAt: data.deletedAt ?? null,
           deletedBy: data.deletedBy ?? null,
 
+          // ひとまず brand ドキュメント側に assignedMembers があれば使う
+          assignedMembers: Array.isArray(data.assignedMembers)
+            ? data.assignedMembers
+            : [],
+
           // 画面表示用の派生フィールド
           status: isActive ? "アクティブ" : "停止",
           registeredAt: formatDateYmd(data.createdAt),
           updatedAt: formatDateYmd(data.updatedAt),
         }));
+
+        // ★ AssignedMemberReader 経由で「所属メンバー」を取得
+        try {
+          const assignedMembers = await fetchAssignedMembers(brandId);
+          // デバッグ用ログ
+          // eslint-disable-next-line no-console
+          console.log("[useBrandDetail] assignedMembers =", assignedMembers);
+
+          // 取得できた結果で上書き
+          setBrand((prev) => ({
+            ...prev,
+            assignedMembers,
+          }));
+        } catch (e) {
+          // eslint-disable-next-line no-console
+          console.error(
+            "[useBrandDetail] fetchAssignedMembers error:",
+            e,
+          );
+        }
 
         // つづいて managerId → 「姓 名」に解決（useMemberList 経由）
         if (managerId) {
@@ -181,7 +214,7 @@ export function useBrandDetail() {
     navigate(-1);
   }, [navigate]);
 
-  // ステータスの色分け
+  // ステータスの色分け（※ 現状使っていなくてもそのまま残しておく）
   const statusBadgeClass =
     brand.status === "アクティブ"
       ? "inline-flex items-center px-2 py-1 rounded-full bg-emerald-50 text-emerald-700 text-xs font-semibold"

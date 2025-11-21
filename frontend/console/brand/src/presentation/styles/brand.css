@@ -16,3 +16,15 @@
 .brand-status-badge.is-inactive {
   background: #ef4444; /* 停止 */
 }
+
+/* ★ 追加：ManagerCard 内の登録日・更新日を横並びにする */
+.brand-date-row {
+  display: flex;
+  gap: 12px;
+  margin-top: 4px;
+}
+
+.brand-date-col {
+  flex: 1;
+  min-width: 0;
+}
