@@ -17,18 +17,18 @@ import (
 // MemberHandler
 // -----------------------------------------------------------------------------
 type MemberHandler struct {
-	uc            *memberuc.MemberUsecase
-	invitationCmd memberuc.InvitationCommandPort // ★ 招待メール用
+	uc *memberuc.MemberUsecase
 }
 
 // NewMemberHandler — メンバーハンドラ
+// ※ 招待メール送信は /members/{id}/invitation 用の MemberInvitationHandler に委譲するため、
+//
+//	ここでは InvitationCommandPort は扱わない。
 func NewMemberHandler(
 	uc *memberuc.MemberUsecase,
-	invCmd memberuc.InvitationCommandPort, // ★ InvitationCommand を追加
 ) http.Handler {
 	return &MemberHandler{
-		uc:            uc,
-		invitationCmd: invCmd,
+		uc: uc,
 	}
 }
 
@@ -43,20 +43,7 @@ func (h *MemberHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		path = "/"
 	}
 
-	// -------------------------------------------------------------------------
-	// ★ Invitation: POST /members/{id}/invitation
-	// -------------------------------------------------------------------------
-	if r.Method == http.MethodPost &&
-		strings.HasPrefix(path, "/members/") &&
-		strings.HasSuffix(path, "/invitation") {
-
-		h.sendInvitation(w, r)
-		return
-	}
-
-	// -------------------------------------------------------------------------
 	// 通常のメンバー CRUD ルーティング
-	// -------------------------------------------------------------------------
 	switch {
 
 	case r.Method == http.MethodPost && path == "/members":
@@ -77,48 +64,6 @@ func (h *MemberHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusNotFound)
 		_ = json.NewEncoder(w).Encode(map[string]string{"error": "not_found"})
 	}
-}
-
-// -----------------------------------------------------------------------------
-// POST /members/{id}/invitation
-// -----------------------------------------------------------------------------
-func (h *MemberHandler) sendInvitation(w http.ResponseWriter, r *http.Request) {
-	if h.invitationCmd == nil {
-		w.WriteHeader(http.StatusInternalServerError)
-		_ = json.NewEncoder(w).Encode(map[string]string{"error": "invitation command not configured"})
-		return
-	}
-
-	// 例: /members/abc123/invitation
-	path := strings.TrimPrefix(r.URL.Path, "/members/")
-	parts := strings.Split(path, "/")
-
-	if len(parts) < 2 || parts[1] != "invitation" {
-		w.WriteHeader(http.StatusNotFound)
-		_ = json.NewEncoder(w).Encode(map[string]string{"error": "not_found"})
-		return
-	}
-
-	memberID := strings.TrimSpace(parts[0])
-	if memberID == "" {
-		w.WriteHeader(http.StatusBadRequest)
-		_ = json.NewEncoder(w).Encode(map[string]string{"error": "invalid_member_id"})
-		return
-	}
-
-	token, err := h.invitationCmd.CreateInvitationAndSend(r.Context(), memberID)
-	if err != nil {
-		w.WriteHeader(http.StatusInternalServerError)
-		_ = json.NewEncoder(w).Encode(map[string]string{"error": "cannot_send_invitation"})
-		return
-	}
-
-	resp := map[string]string{
-		"memberId": memberID,
-		"token":    token,
-	}
-
-	_ = json.NewEncoder(w).Encode(resp)
 }
 
 // -----------------------------------------------------------------------------

@@ -33,7 +33,7 @@ export default function MemberDetail() {
   return (
     <PageStyle
       layout="grid-2"
-      title={`メンバー詳細：${memberName}`}
+      title={`${memberName}`}
       onBack={handleBack}
     >
       {/* 左カラム：基本情報カード */}

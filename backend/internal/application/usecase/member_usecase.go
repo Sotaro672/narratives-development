@@ -1,8 +1,10 @@
-// backend/internal/application/usecase/member_usecase.go
 package usecase
 
 import (
 	"context"
+	"crypto/rand"
+	"errors"
+	"fmt"
 	"strings"
 	"time"
 
@@ -10,15 +12,43 @@ import (
 	memdom "narratives/internal/domain/member"
 )
 
-type MemberUsecase struct {
-	repo memdom.Repository
-	now  func() time.Time
+// ─────────────────────────────────────────────────────────────
+// Ports (依存性逆転: usecase が利用する外部サービスのインターフェース)
+// ─────────────────────────────────────────────────────────────
+
+// InvitationMailer は招待メール送信用のポートです。
+// adapters/out/mail.InvitationMailerPort と同じシグネチャにしておけば、
+// Go の構造的型付けによりそのまま差し込めます（import せずに済む）。
+type InvitationMailer interface {
+	SendInvitationEmail(ctx context.Context, toEmail string, token string, info memdom.InvitationInfo) error
 }
 
+// ─────────────────────────────────────────────────────────────
+// Usecase
+// ─────────────────────────────────────────────────────────────
+
+type MemberUsecase struct {
+	repo             memdom.Repository
+	now              func() time.Time
+	invitationMailer InvitationMailer // ★ 招待メール用ポート
+}
+
+// NewMemberUsecase は招待メールなしの最小構成コンストラクタ。
+// 既存の呼び出しコードとの互換性維持用。
 func NewMemberUsecase(repo memdom.Repository) *MemberUsecase {
 	return &MemberUsecase{
 		repo: repo,
 		now:  time.Now,
+	}
+}
+
+// NewMemberUsecaseWithMailer は招待メール機能付きのコンストラクタ。
+// adapters 側で SendGrid 付き InvitationMailer を生成して渡す想定。
+func NewMemberUsecaseWithMailer(repo memdom.Repository, mailer InvitationMailer) *MemberUsecase {
+	return &MemberUsecase{
+		repo:             repo,
+		now:              time.Now,
+		invitationMailer: mailer,
 	}
 }
 
@@ -217,4 +247,51 @@ func (u *MemberUsecase) Delete(ctx context.Context, id string) error {
 
 func (u *MemberUsecase) Reset(ctx context.Context) error {
 	return u.repo.Reset(ctx)
+}
+
+// ─────────────────────────────────────────────────────────────
+// Invitation (招待メール送信)
+// ─────────────────────────────────────────────────────────────
+
+// SendInvitation は、指定した memberID のメンバーに招待メールを送信します。
+// - メンバーを取得
+// - 招待トークンを生成（暫定実装）
+// - InvitationInfo を組み立てて InvitationMailer に委譲
+func (u *MemberUsecase) SendInvitation(ctx context.Context, memberID string) error {
+	if u.invitationMailer == nil {
+		return errors.New("invitation mailer is not configured")
+	}
+
+	m, err := u.repo.GetByID(ctx, strings.TrimSpace(memberID))
+	if err != nil {
+		return err
+	}
+	if strings.TrimSpace(m.Email) == "" {
+		return fmt.Errorf("member %s has no email", m.ID)
+	}
+
+	token, err := generateInvitationToken()
+	if err != nil {
+		return fmt.Errorf("failed to generate invitation token: %w", err)
+	}
+
+	info := memdom.InvitationInfo{
+		MemberID:         m.ID,
+		CompanyID:        m.CompanyID,
+		AssignedBrandIDs: append([]string(nil), m.AssignedBrands...),
+		Permissions:      append([]string(nil), m.Permissions...),
+	}
+
+	return u.invitationMailer.SendInvitationEmail(ctx, m.Email, token, info)
+}
+
+// generateInvitationToken は暫定的な招待トークン生成。
+// 将来的に専用のドメインサービスや永続化と組み合わせる前提。
+func generateInvitationToken() (string, error) {
+	buf := make([]byte, 16)
+	if _, err := rand.Read(buf); err != nil {
+		return "", err
+	}
+	// シンプルに 32 桁 hex に "INV_" プレフィックスを付与
+	return fmt.Sprintf("INV_%x", buf), nil
 }

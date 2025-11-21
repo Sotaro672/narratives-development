@@ -37,7 +37,7 @@ func (c *loggingEmailClient) Send(
 	subject,
 	body string,
 ) error {
-	log.Printf("[mail] SEND from=%s to=%s subject=%s\n%s", from, to, subject, body)
+	log.Printf("[mail] SEND (logging only) from=%s to=%s subject=%s\n%s", from, to, subject, body)
 	return nil
 }
 
@@ -273,39 +273,49 @@ func NewContainer(ctx context.Context) (*Container, error) {
 	walletUC := uc.NewWalletUsecase(walletRepo)
 
 	// ★ Invitation 用メールクライアント & メーラー
+	//
+	// 環境変数:
+	//   SENDGRID_API_KEY : SendGrid の API キー
+	//   SENDGRID_FROM    : 送信元メールアドレス (例: no-reply@narratives.jp)
+	//   CONSOLE_BASE_URL : https://narratives.jp
+	//
+	// すべて揃っていれば SendGrid を使い、足りなければ loggingEmailClient にフォールバック。
 	sendGridAPIKey := os.Getenv("SENDGRID_API_KEY")
-	fromAddress := os.Getenv("INVITATION_FROM_EMAIL")
+	sendGridFrom := os.Getenv("SENDGRID_FROM")
 	consoleBaseURL := os.Getenv("CONSOLE_BASE_URL")
 
-	var emailClient mailadp.EmailClient
+	var invitationMailer *mailadp.InvitationMailer
 
-	if sendGridAPIKey == "" || fromAddress == "" || consoleBaseURL == "" {
-		log.Printf("[container] WARN: SendGrid env not fully set; using loggingEmailClient only")
-		emailClient = &loggingEmailClient{}
-		// 開発用デフォルト値
-		if fromAddress == "" {
-			fromAddress = "no-reply@example.com"
+	if sendGridAPIKey == "" || sendGridFrom == "" {
+		log.Printf("[container] WARN: SENDGRID_API_KEY or SENDGRID_FROM not set; using loggingEmailClient for invitations")
+
+		from := sendGridFrom
+		if from == "" {
+			from = "no-reply@example.com"
 		}
-		if consoleBaseURL == "" {
-			consoleBaseURL = "https://narratives.jp"
+		baseURL := consoleBaseURL
+		if baseURL == "" {
+			baseURL = "https://narratives.jp"
 		}
+
+		// ログ出力のみ行うダミークライアント
+		emailClient := &loggingEmailClient{}
+		invitationMailer = mailadp.NewInvitationMailer(emailClient, from, baseURL)
 	} else {
-		log.Printf("[container] SendGrid client enabled for invitations (from=%s)", fromAddress)
-		emailClient = mailadp.NewSendGridClient(sendGridAPIKey)
+		// SendGrid バックエンドで InvitationMailer を構築
+		// NewInvitationMailerWithSendGrid 内部で:
+		//   - SENDGRID_API_KEY / SENDGRID_FROM / CONSOLE_BASE_URL
+		// を参照して SendGridClient を組み立てる。
+		log.Printf("[container] SendGrid client enabled for invitations (from=%s)", sendGridFrom)
+		invitationMailer = mailadp.NewInvitationMailerWithSendGrid()
 	}
-
-	invitationMailer := mailadp.NewInvitationMailer(
-		emailClient,
-		fromAddress,
-		consoleBaseURL,
-	)
 
 	// ★ Invitation 用 Usecase（Query / Command）
 	invitationQueryUC := uc.NewInvitationService(invitationTokenRepo, memberRepo)
 	invitationCommandUC := uc.NewInvitationCommandService(
 		invitationTokenRepo,
 		memberRepo,
-		invitationMailer,
+		invitationMailer, // ← ここから SendGrid 経由でメール送信
 	)
 
 	// ★ auth/bootstrap 用 Usecase

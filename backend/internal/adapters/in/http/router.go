@@ -132,13 +132,14 @@ func NewRouter(deps RouterDeps) http.Handler {
 	}
 
 	// ============================================================
-	// Members（認証必須） ※こちらは従来どおり authMw を使う
+	// Members（認証必須）
+	//   - MemberHandler: /members, /members/{id}
+	//   - MemberInvitationHandler: /members/{id}/invitation
 	// ============================================================
 	if deps.MemberUC != nil {
-		// MemberHandler（招待も内包）
+		// 通常の MemberHandler
 		memberH := handlers.NewMemberHandler(
 			deps.MemberUC,
-			deps.InvitationCommand, // ★ sendInvitation 用
 		)
 
 		var securedMemberHandler http.Handler = memberH
@@ -149,19 +150,30 @@ func NewRouter(deps RouterDeps) http.Handler {
 		// POST /members, GET /members
 		mux.Handle("/members", securedMemberHandler)
 
-		// /members/... (id, invitation 判定)
+		// 招待メール用ハンドラ（InvitationCommandPort 経由）
+		var securedInvitationHandler http.Handler
+		if deps.InvitationCommand != nil {
+			invH := handlers.NewMemberInvitationHandler(deps.InvitationCommand)
+			securedInvitationHandler = invH
+			if authMw != nil {
+				securedInvitationHandler = authMw.Handler(securedInvitationHandler)
+			}
+		}
+
+		// /members/... (id or invitation)
 		mux.Handle("/members/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			path := r.URL.Path
 
-			// POST /members/{id}/invitation → sendInvitation (MemberHandler 内部)
+			// POST /members/{id}/invitation → MemberInvitationHandler
 			if r.Method == http.MethodPost &&
 				strings.HasPrefix(path, "/members/") &&
-				strings.HasSuffix(path, "/invitation") {
-				securedMemberHandler.ServeHTTP(w, r)
+				strings.HasSuffix(path, "/invitation") &&
+				securedInvitationHandler != nil {
+				securedInvitationHandler.ServeHTTP(w, r)
 				return
 			}
 
-			// GET /members/{id}, PATCH /members/{id}
+			// GET /members/{id}, PATCH /members/{id} → MemberHandler
 			securedMemberHandler.ServeHTTP(w, r)
 		}))
 	}
