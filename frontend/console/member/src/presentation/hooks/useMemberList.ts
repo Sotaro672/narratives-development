@@ -1,6 +1,12 @@
 // frontend/console/member/src/presentation/hooks/useMemberList.ts
 
-import { useEffect, useState, useCallback, useRef } from "react";
+import {
+  useEffect,
+  useState,
+  useCallback,
+  useRef,
+  useMemo,
+} from "react";
 
 import type { Member } from "../../domain/entity/member";
 import type { MemberFilter } from "../../domain/repository/memberRepository";
@@ -23,6 +29,8 @@ import {
   type BrandRow,
 } from "../../../../brand/src/application/brandService";
 
+type FilterOption = { value: string; label: string };
+
 /**
  * メンバー一覧取得用フック（バックエンドAPI経由版）
  * - /members?sort=updatedAt&order=desc&page=1&perPage=50&q=... などで取得
@@ -30,6 +38,7 @@ import {
  * - 姓・名が両方未設定なら firstName に「招待中」を入れる（一覧表示の利便性）
  * - ★ 追加: memberID → 「姓 名」を解決する getNameLastFirstByID を提供
  * - ★ 追加: brandId -> brandName を解決する brandMap を提供
+ * - ★ 追加: 所属ブランド／権限カテゴリのフィルタ状態と候補リストを提供
  */
 export function useMemberList(
   initialFilter: MemberFilter = {},
@@ -50,6 +59,13 @@ export function useMemberList(
 
   // brandId -> brandName のマップ
   const [brandMap, setBrandMap] = useState<Record<string, string>>({});
+
+  // ▼ 所属ブランド列フィルタ state
+  const [selectedBrandIds, setSelectedBrandIds] = useState<string[]>([]);
+  // ▼ 権限カテゴリ列フィルタ state
+  const [selectedPermissionCats, setSelectedPermissionCats] = useState<
+    string[]
+  >([]);
 
   const load = useCallback(
     async (override?: { page?: Page; filter?: MemberFilter }) => {
@@ -140,6 +156,43 @@ export function useMemberList(
     [],
   );
 
+  // permissions からカテゴリ名（先頭の `<category>` 部分）をユニークに抽出
+  const extractPermissionCategories = (perms?: string[] | null): string[] => {
+    if (!perms || perms.length === 0) return [];
+    const set = new Set<string>();
+    for (const p of perms) {
+      const name = String(p ?? "").trim();
+      if (!name) continue;
+      const dot = name.indexOf(".");
+      const cat = dot > 0 ? name.slice(0, dot) : name;
+      if (!cat) continue;
+      set.add(cat);
+    }
+    return Array.from(set);
+  };
+
+  // 所属ブランドフィルタ用オプション
+  const brandFilterOptions: FilterOption[] = useMemo(
+    () =>
+      Object.entries(brandMap).map(([id, label]) => ({
+        value: id,
+        label: label || id,
+      })),
+    [brandMap],
+  );
+
+  // 権限カテゴリフィルタ用オプション（一覧のメンバーから集計）
+  const permissionFilterOptions: FilterOption[] = useMemo(() => {
+    const set = new Set<string>();
+    for (const m of members) {
+      const cats = extractPermissionCategories(
+        (m.permissions ?? []) as string[],
+      );
+      for (const c of cats) set.add(c);
+    }
+    return Array.from(set).map((c) => ({ value: c, label: c }));
+  }, [members]);
+
   return {
     members,
     loading,
@@ -152,5 +205,16 @@ export function useMemberList(
     setPageNumber,
     getNameLastFirstByID,
     brandMap, // brandId -> brandName
+
+    // ★ 追加: フィルタ関連
+    brandFilterOptions,
+    permissionFilterOptions,
+    selectedBrandIds,
+    setSelectedBrandIds,
+    selectedPermissionCats,
+    setSelectedPermissionCats,
+
+    // 必要ならページ側でも使えるようにヘルパを返しておく
+    extractPermissionCategories,
   };
 }

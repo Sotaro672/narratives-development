@@ -268,6 +268,56 @@ func FilterAndSortPermissions(list []Permission, f FilterOptions, s SortOptions)
 	return SortPermissions(FilterPermissions(list, f), s)
 }
 
+// ------------------------------------------------------------
+// 追加: 権限名からカテゴリを検索するヘルパ
+// ------------------------------------------------------------
+
+// CategoryFromPermissionName は、権限名から PermissionCategory を返します。
+// name は "<category>[.<subscope>].<action>" の形式を前提とし、
+// 1) カタログに登録済みの権限ならその Category
+// 2) 見つからない場合は name の先頭プレフィックスから推論
+func CategoryFromPermissionName(name string) (PermissionCategory, bool) {
+	name = strings.TrimSpace(name)
+	if name == "" {
+		return "", false
+	}
+
+	// 1) まず static カタログから探す
+	for _, p := range allPermissions {
+		if p.Name == name {
+			return p.Category, true
+		}
+	}
+
+	// 2) カタログに無い場合（例: 旧データ "wallet.edit" など）は
+	//    先頭の "<category>" 部分から推論する
+	//    "wallet.edit" → "wallet" → CategoryWallet
+	firstDot := strings.IndexByte(name, '.')
+	if firstDot <= 0 {
+		return "", false
+	}
+	catStr := name[:firstDot]
+	cat := PermissionCategory(catStr)
+	if !IsValidCategory(cat) {
+		return "", false
+	}
+	return cat, true
+}
+
+// GroupPermissionNamesByCategory は、権限名のスライスを Category ごとにまとめます。
+// 例: ["wallet.view","member.view"] → { "wallet": [...], "member": [...] }
+func GroupPermissionNamesByCategory(names []string) map[PermissionCategory][]string {
+	out := make(map[PermissionCategory][]string)
+	for _, n := range names {
+		cat, ok := CategoryFromPermissionName(n)
+		if !ok {
+			continue
+		}
+		out[cat] = append(out[cat], n)
+	}
+	return out
+}
+
 func GetUniqueCategories(list []Permission) []string {
 	seen := map[string]struct{}{}
 	for _, a := range list {

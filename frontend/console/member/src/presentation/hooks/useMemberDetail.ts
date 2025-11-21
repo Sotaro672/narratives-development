@@ -1,13 +1,22 @@
 // frontend/member/src/hooks/useMemberDetail.ts
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import type { Member } from "../../domain/entity/member";
 
-// ★ 正しいサービスを import
+// ★ メンバー詳細取得サービス
 import { fetchMemberDetail } from "../../application/memberDetailService";
 
 // ブランド一覧取得用（id → name 変換用）
-import { listBrands, type BrandRow } from "../../../../brand/src/application/brandService";
+import {
+  listBrands,
+  type BrandRow,
+} from "../../../../brand/src/application/brandService";
+
+// PermissionCategory 型（backend の PermissionCategory と対応）
+import type { PermissionCategory } from "../../../../shell/src/shared/types/permission";
+
+// ★ 権限名 → カテゴリ別グルーピング（TS 版カタログヘルパ）
+import { groupPermissionsByCategory } from "../../../../permission/src/application/permissionCatalog";
 
 export function useMemberDetail(memberId?: string) {
   const [member, setMember] = useState<Member | null>(null);
@@ -69,6 +78,31 @@ export function useMemberDetail(memberId?: string) {
   // 権限一覧（存在しない場合は空配列）
   const permissions: string[] = member?.permissions ?? [];
 
+  // ─────────────────────────────────────
+  // 権限名 → Category ごとにグルーピング
+  // Firestore には "wallet.view" 等しか入っていないため、
+  // TS 側の permissionCatalog の groupPermissionsByCategory を利用する。
+  // ─────────────────────────────────────
+
+  // PermissionCard 用のローディングフラグ
+  // ※ バックエンドへの追加フェッチは行わず、同期計算だけなので false 固定
+  const permissionsLoading = false;
+
+  const groupedPermissionsByCategory = useMemo(() => {
+    if (permissions.length === 0) {
+      return {} as Partial<Record<PermissionCategory, string[]>>;
+    }
+    // permissionCatalog のヘルパで
+    // { wallet: [...], brand: [...], ... } の形に変換
+    return groupPermissionsByCategory(
+      permissions,
+    ) as Partial<Record<PermissionCategory, string[]>>;
+  }, [permissions]);
+
+  const hasGroupedPermissions =
+    Object.keys(groupedPermissionsByCategory).length > 0 &&
+    permissions.length > 0;
+
   return {
     member,
     memberName,
@@ -78,5 +112,10 @@ export function useMemberDetail(memberId?: string) {
     loading,
     error,
     reload: load,
+
+    // ★ PermissionCard 用
+    permissionsLoading,
+    groupedPermissionsByCategory,
+    hasGroupedPermissions,
   };
 }

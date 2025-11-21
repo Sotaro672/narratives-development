@@ -1,3 +1,4 @@
+//frontend\console\member\src\application\memberListService.ts
 import type { Member } from "../domain/entity/member";
 import type { MemberFilter } from "../domain/repository/memberRepository";
 import type { Page } from "../../../shell/src/shared/types/common/common";
@@ -13,6 +14,13 @@ import type {
 
 // Permission Repository (GET /permissions)
 import { PermissionRepositoryHTTP } from "../../../permission/src/infrastructure/http/permissionRepositoryHTTP";
+
+// ★ 追加: 権限名 → カテゴリ変換ヘルパ
+//    ※ ローカル定義の groupPermissionsByCategory と名前が被るため alias を付ける
+import {
+  CategoryFromPermissionName,
+  groupPermissionsByCategory as groupPermissionNamesByCategory,
+} from "../../../permission/src/application/permissionCatalog";
 
 // Brand Domain
 import type { Brand } from "../../../brand/src/domain/entity/brand";
@@ -57,6 +65,7 @@ export async function fetchAllPermissions(): Promise<Permission[]> {
   return pageResult.items;
 }
 
+// ※ 既存: Permission エンティティ配列 → カテゴリごとにグルーピング
 export function groupPermissionsByCategory(
   allPermissions: Permission[],
 ): Record<PermissionCategory, Permission[]> {

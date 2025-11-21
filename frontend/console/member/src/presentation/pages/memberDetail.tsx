@@ -11,16 +11,20 @@ import {
   CardTitle,
   CardContent,
 } from "../../../../shell/src/shared/ui/card";
-import { Badge } from "../../../../shell/src/shared/ui/badge";
 import { BrandCard } from "../components/BrandCard";
 
 export default function MemberDetail() {
   const navigate = useNavigate();
   const { memberId } = useParams<{ memberId: string }>();
 
-  // ★ brandRows を追加
-  const { memberName, assignedBrands, permissions, brandRows } =
-    useMemberDetail(memberId);
+  const {
+    memberName,
+    assignedBrands,
+    brandRows,
+    permissions,
+    groupedPermissionsByCategory,
+    hasGroupedPermissions,
+  } = useMemberDetail(memberId);
 
   const handleBack = React.useCallback(() => {
     navigate(-1);
@@ -39,7 +43,7 @@ export default function MemberDetail() {
 
       {/* 右カラム：所属ブランドカード + 権限カード */}
       <div className="space-y-4">
-        {/* ★ brandRows を渡す */}
+        {/* 所属ブランド */}
         <BrandCard assignedBrands={assignedBrands} brandRows={brandRows} />
 
         {/* 権限カード */}
@@ -52,12 +56,28 @@ export default function MemberDetail() {
               <p className="text-sm text-[hsl(var(--muted-foreground))]">
                 権限は未設定です。
               </p>
+            ) : !hasGroupedPermissions ? (
+              <p className="text-sm text-[hsl(var(--muted-foreground))]">
+                権限情報を読み込み中です…
+              </p>
             ) : (
-              <ul className="text-sm space-y-1">
-                {permissions.map((perm) => (
-                  <li key={perm}>{perm}</li>
-                ))}
-              </ul>
+              <div className="space-y-3">
+                {Object.entries(groupedPermissionsByCategory).map(
+                  ([category, perms]) => (
+                    <div key={category}>
+                      <div className="text-xs font-semibold text-slate-500 mb-1">
+                        {category}
+                      </div>
+
+                      <ul className="text-sm space-y-1 ml-3 list-disc">
+                        {perms?.map((perm: string) => (
+                          <li key={`${category}:${perm}`}>{perm}</li>
+                        ))}
+                      </ul>
+                    </div>
+                  )
+                )}
+              </div>
             )}
           </CardContent>
         </Card>

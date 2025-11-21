@@ -88,6 +88,7 @@
     grid-template-columns: 1fr;
   }
 }
+
 /* ────────────────────────────────
    姓・名入力欄の横並び指定
 ──────────────────────────────── */
@@ -122,4 +123,20 @@
 
 .role-button:hover {
   background-color: #f1f5f9; /* hover 時に薄いグレー（Tailwind: slate-100） */
+}
+
+/* カテゴリ間の区切りバー（PermissionCard 用） */
+.permission-category-divider {
+  margin: 12px 0;        /* my-3 相当 */
+  height: 1px;           /* h-px 相当 */
+  width: 100%;
+  background-color: hsl(var(--border));
+}
+/* 権限バッジが並ぶ列用：最大幅 + 自動折り返し */
+.mm-permission-col {
+  max-width: 240px;        /* 横幅制限（調整可能） */
+  white-space: normal;     /* 折り返し許可 */
+  display: flex;
+  flex-wrap: wrap;         /* 自動折り返し */
+  gap: 6px;                /* バッジ間の余白 */
 }
