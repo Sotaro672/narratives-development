@@ -7,13 +7,50 @@ import { brandRepositoryHTTP } from "../../infrastructure/http/brandRepositoryHT
 import { useMemberList } from "../../../../member/src/presentation/hooks/useMemberList";
 
 export interface BrandDetailData {
+  // ====== Brand スキーマ由来のフィールド ======
   id: string;
+  companyId: string;
+
   name: string;
   description: string;
-  managerId: string;      // manager の ID
-  managerName?: string;   // 取得した責任者名（姓 名）
+
+  /** WebサイトURL。空文字 or undefined の場合は未設定扱い */
+  websiteUrl?: string;
+
+  /** 有効フラグ（status は持たない） */
+  isActive: boolean;
+
+  /** ブランド責任者 Member ID（任意） */
+  managerId: string;
+
+  /** ブロックチェーン上のウォレットアドレス（必須） */
+  walletAddress: string;
+
+  /** 作成日時（ISO8601） */
+  createdAt: string;
+  /** 作成者（任意） */
+  createdBy?: string | null;
+
+  /** 更新日時（任意, ISO8601） */
+  updatedAtRaw?: string | null;
+  /** 更新者（任意） */
+  updatedBy?: string | null;
+
+  /** 論理削除日時（任意, ISO8601） */
+  deletedAt?: string | null;
+  /** 論理削除者（任意） */
+  deletedBy?: string | null;
+
+  // ====== 画面用に追加した派生フィールド ======
+  managerName?: string; // 取得した責任者名（姓 名）
+
+  /** 画面表示用のステータス文字列（"アクティブ" / "停止"） */
   status: string;
+
+  /** 表示用にフォーマットした登録日（createdAt） */
   registeredAt: string;
+
+  /** 表示用にフォーマットした最終更新日（updatedAtRaw） */
   updatedAt: string;
 }
 
@@ -37,9 +74,23 @@ export function useBrandDetail() {
 
   const [brand, setBrand] = useState<BrandDetailData>(() => ({
     id: brandId ?? "",
+    companyId: "",
+
     name: "",
     description: "",
+    websiteUrl: "",
+
+    isActive: false,
     managerId: "",
+    walletAddress: "",
+
+    createdAt: "",
+    createdBy: null,
+    updatedAtRaw: null,
+    updatedBy: null,
+    deletedAt: null,
+    deletedBy: null,
+
     managerName: "",
     status: "",
     registeredAt: "",
@@ -60,16 +111,31 @@ export function useBrandDetail() {
         const data: any = await brandRepositoryHTTP.getById(brandId);
 
         const isActive = !!data.isActive;
+        // backend 側のフィールド名ゆらぎに対応（manager / managerId）
         const managerId = String(data.manager ?? data.managerId ?? "").trim();
 
-        // まずブランドの基本情報だけセット
+        // まずブランドの基本情報＋スキーマ全体をセット
         setBrand((prev) => ({
           ...prev,
-          id: data.id,
+          id: String(data.id ?? "").trim(),
+          companyId: String(data.companyId ?? "").trim(),
+
           name: String(data.name ?? "").trim(),
           description: String(data.description ?? "").trim(),
+          websiteUrl: data.websiteUrl ?? "",
+
+          isActive,
           managerId,
-          // managerName は後で更新
+          walletAddress: String(data.walletAddress ?? "").trim(),
+
+          createdAt: String(data.createdAt ?? ""),
+          createdBy: data.createdBy ?? null,
+          updatedAtRaw: data.updatedAt ?? null,
+          updatedBy: data.updatedBy ?? null,
+          deletedAt: data.deletedAt ?? null,
+          deletedBy: data.deletedBy ?? null,
+
+          // 画面表示用の派生フィールド
           status: isActive ? "アクティブ" : "停止",
           registeredAt: formatDateYmd(data.createdAt),
           updatedAt: formatDateYmd(data.updatedAt),

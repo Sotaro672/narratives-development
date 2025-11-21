@@ -10,8 +10,6 @@ import {
 } from "../../../../member/src/infrastructure/query/memberQuery";
 import type { Member } from "../../../../member/src/domain/entity/member";
 import type { MemberFilter } from "../../../../member/src/domain/repository/memberRepository";
-// ❌ ページネーションを使わないので Page 型は不要
-// import type { Page } from "../../../../shell/src/shared/types/common/common";
 import type { Brand } from "../../domain/entity/brand";
 import { brandRepositoryHTTP } from "../../infrastructure/http/brandRepositoryHTTP";
 

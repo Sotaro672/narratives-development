@@ -1,5 +1,3 @@
-// frontend/console/brand/src/application/brandService.ts
-
 /// <reference types="vite/client" />
 
 import { brandRepositoryHTTP } from "../infrastructure/http/brandRepositoryHTTP";
@@ -12,6 +10,7 @@ export type BrandRow = {
   managerId?: string | null; // memberId
   managerName?: string; // 「姓 名」
   registeredAt: string; // YYYY/MM/DD
+  updatedAt: string; // YYYY/MM/DD 追加
 };
 
 // バックエンドから返ってくる Brand の最小形
@@ -23,6 +22,7 @@ type Brand = {
   manager?: string | null;
   managerId?: string | null;
   createdAt?: string | null;
+  updatedAt?: string | null; // 追加
 };
 
 // ===========================
@@ -134,7 +134,7 @@ export async function listBrands(companyId: string): Promise<BrandRow[]> {
   // eslint-disable-next-line no-console
   console.log("[brandService] brands =", brands);
 
-  // ② Brand → BrandRow（まず managerId / name / registeredAt だけ詰める）
+  // ② Brand → BrandRow（まず managerId / name / registeredAt / updatedAt だけ詰める）
   const baseRows: BrandRow[] = brands.map((b) => {
     const rawManager =
       (b.manager ?? b.managerId ?? "").toString().trim() || null;
@@ -145,6 +145,7 @@ export async function listBrands(companyId: string): Promise<BrandRow[]> {
       isActive: !!b.isActive,
       managerId: rawManager,
       registeredAt: formatDateYmd(b.createdAt),
+      updatedAt: formatDateYmd(b.updatedAt), // ★ 追加
     };
 
     // eslint-disable-next-line no-console

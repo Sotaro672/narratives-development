@@ -12,19 +12,18 @@ import {
 } from "../../../../shell/src/shared/ui/card";
 
 import { useBrandDetail } from "../hook/useBrandDetail";
+import { ManagerCard } from "./components/ManagerCard";
+import { WalletCard } from "./components/WalletCard";
 
 export default function BrandDetail() {
-  const { brand, handleBack, statusBadgeClass } = useBrandDetail();
+  // ★ statusBadgeClass は使わなくなったので分解から削除
+  const { brand, handleBack } = useBrandDetail();
 
   return (
-    <PageStyle
-      layout="single" // ★ singleレイアウト
-      title={`ブランド詳細：${brand.name}`}
-      onBack={handleBack}
-    >
-      <div className="brand-detail">
-        {/* 基本情報 */}
-        <Card className="mb-4">
+    <PageStyle layout="grid-2" title={`${brand.name}`} onBack={handleBack}>
+      {/* 左カラム：基本情報 */}
+      <div className="space-y-4">
+        <Card>
           <CardHeader>
             <CardTitle>基本情報</CardTitle>
           </CardHeader>
@@ -32,38 +31,31 @@ export default function BrandDetail() {
             <CardLabel>ブランド名</CardLabel>
             <CardReadonly>{brand.name}</CardReadonly>
 
-            {/* カテゴリ・ブランドコードは不使用のため削除済み */}
-
             <CardLabel>説明</CardLabel>
             <div className="border rounded-lg px-3 py-2 text-sm bg-[hsl(var(--muted-bg))] text-[hsl(var(--muted-foreground))]">
               {brand.description}
             </div>
-          </CardContent>
-        </Card>
 
-        {/* 管理情報 */}
-        <Card>
-          <CardHeader>
-            <CardTitle>管理情報</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <CardLabel>責任者</CardLabel>
+            {/* ★ 追加：Website URL */}
+            <CardLabel>WebサイトURL</CardLabel>
             <CardReadonly>
-              {brand.managerName || brand.managerId || "（未設定）"}
+              {brand.websiteUrl?.trim() ? brand.websiteUrl : "（未設定）"}
             </CardReadonly>
-
-            <CardLabel>ステータス</CardLabel>
-            <div>
-              <span className={statusBadgeClass}>{brand.status}</span>
-            </div>
-
-            <CardLabel>登録日</CardLabel>
-            <CardReadonly>{brand.registeredAt}</CardReadonly>
-
-            <CardLabel>最終更新日</CardLabel>
-            <CardReadonly>{brand.updatedAt}</CardReadonly>
           </CardContent>
         </Card>
+      </div>
+
+      {/* 右カラム：管理情報 ＋ ウォレット情報 */}
+      <div className="space-y-4">
+        <ManagerCard
+          managerName={brand.managerName}
+          managerId={brand.managerId}
+          registeredAt={brand.registeredAt}
+          updatedAt={brand.updatedAt}
+        />
+
+        {/* ★ WalletCard を追加 */}
+        <WalletCard walletAddress={brand.walletAddress} />
       </div>
     </PageStyle>
   );

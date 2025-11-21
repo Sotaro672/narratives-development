@@ -2,13 +2,22 @@
 import { useMemo, useState, useCallback, useEffect } from "react";
 import { useAuth } from "../../../../shell/src/auth/presentation/hook/useCurrentMember";
 
-import type { BrandRow } from "../../application/brandService";
+import type { BrandRow as BrandRowBase } from "../../application/brandService";
 import { listBrands } from "../../application/brandService";
 
-export type SortKey = "registeredAt" | null;
+// ★ 共通型（SortOrder など）を導入
+import type { SortOrder } from "../../../../shell/src/shared/types/common/common";
+
+export type SortKey = "registeredAt" | "updatedAt" | null;
 export type StatusFilterValue = "active" | "inactive";
 
+// ★ BrandRow をローカルで拡張して updatedAt を必須にする
+export type BrandRow = BrandRowBase & {
+  updatedAt: string;
+};
+
 const toTs = (yyyyMd: string) => {
+  if (!yyyyMd) return 0;
   const [y, m, d] = yyyyMd.split("/").map((v) => parseInt(v, 10));
   return new Date(y, (m || 1) - 1, d || 1).getTime();
 };
@@ -27,9 +36,9 @@ export function useBrandManagement() {
   const [managerFilter, setManagerFilter] = useState<string[]>([]);
 
   const [activeKey, setActiveKey] = useState<SortKey>("registeredAt");
-  const [direction, setDirection] = useState<"asc" | "desc" | null>("desc");
+  const [direction, setDirection] = useState<SortOrder | null>("desc");
 
-  // ステータスバッジ className
+  // ステータスバッジ className（現状は使っていなくても残しておく）
   const statusBadgeClass = (isActive: boolean) =>
     `brand-status-badge ${isActive ? "is-active" : "is-inactive"}`;
 
@@ -47,11 +56,28 @@ export function useBrandManagement() {
           return;
         }
 
-        const rows = await listBrands(companyId);
+        const rawRows = await listBrands(companyId);
+
+        // ★ updatedAt を必須プロパティとして付与
+        const rows: BrandRow[] = (
+          rawRows as (BrandRowBase & { updatedAt?: string })[]
+        ).map((b) => {
+          const rawUpdated = (b.updatedAt ?? "").trim();
+          // backend から updatedAt が来ていればそれを使い、なければ registeredAt をフォールバック
+          const safeUpdated =
+            rawUpdated !== "" ? rawUpdated : (b as any).registeredAt ?? "";
+
+          return {
+            ...b,
+            updatedAt: safeUpdated,
+          };
+        });
+
         if (!cancelled) setBaseRows(rows);
       } catch (e: any) {
         if (!cancelled) {
-          setError(e instanceof Error ? e : new Error(String(e)));
+          const err = e instanceof Error ? e : new Error(String(e));
+          setError(err);
           setBaseRows([]);
         }
       } finally {
@@ -69,8 +95,8 @@ export function useBrandManagement() {
   const statusOptions = useMemo(() => {
     const values = Array.from(
       new Set<StatusFilterValue>(
-        baseRows.map((b) => (b.isActive ? "active" : "inactive"))
-      )
+        baseRows.map((b) => (b.isActive ? "active" : "inactive")),
+      ),
     );
     return values.map((v) => ({
       value: v,
@@ -84,7 +110,7 @@ export function useBrandManagement() {
     const ids = new Set(
       baseRows
         .map((b) => (b.managerId ?? "").trim())
-        .filter(Boolean)
+        .filter(Boolean),
     );
     return Array.from(ids).map((id) => ({
       value: id,
@@ -115,6 +141,11 @@ export function useBrandManagement() {
           const bv = toTs(b.registeredAt);
           return direction === "asc" ? av - bv : bv - av;
         }
+        if (activeKey === "updatedAt") {
+          const av = toTs(a.updatedAt);
+          const bv = toTs(b.updatedAt);
+          return direction === "asc" ? av - bv : bv - av;
+        }
         return 0;
       });
     }
@@ -131,7 +162,7 @@ export function useBrandManagement() {
   return {
     rows,
     statusOptions,
-    managerOptions, // ★ ownerOptions 削除
+    managerOptions,
 
     loading,
     error,

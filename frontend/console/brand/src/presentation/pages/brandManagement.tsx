@@ -3,11 +3,22 @@ import React from "react";
 import { useNavigate } from "react-router-dom";
 import List, {
   FilterableTableHeader,
-  SortableTableHeader,
 } from "../../../../shell/src/layout/List/List";
 import "../styles/brand.css";
 
 import { useBrandManagement } from "../hook/useBrandManagement";
+
+// 共通ページング型・ユーティリティ
+import {
+  DEFAULT_PAGE_LIMIT,
+  calcTotalPages,
+} from "../../../../shell/src/shared/types/common/common";
+
+// 共通ページネーションUI
+import Pagination from "../../../../shell/src/shared/ui/pagination";
+
+// ソート可能ヘッダ（shared/ui 版）
+import SortableTableHeader from "../../../../shell/src/shared/ui/sortable-table-header";
 
 // memberID → 「姓 名」を解決するフック
 import { useMemberList } from "../../../../member/src/presentation/hooks/useMemberList";
@@ -35,6 +46,7 @@ function ManagerNameCell({
         const disp = await getNameLastFirstByID(id);
         if (!cancelled) setName(disp);
       } catch (e) {
+        // eslint-disable-next-line no-console
         console.error("[ManagerNameCell] name resolve error:", e);
         if (!cancelled) setName("");
       }
@@ -54,20 +66,16 @@ export default function BrandManagementPage() {
 
   const {
     rows,
-    statusOptions,
-    managerOptions,        // ★ ownerOptions → managerOptions に変更
+    managerOptions, // ★ managerOptions のみ使用
 
-    statusFilter,
-    managerFilter,         // ★ ownerFilter → managerFilter
+    managerFilter,
     activeKey,
     direction,
 
-    setStatusFilter,
-    setManagerFilter,      // ★ setOwnerFilter → setManagerFilter
+    setManagerFilter,
     setActiveKey,
     setDirection,
 
-    statusBadgeClass,
     resetFilters,
   } = useBrandManagement();
 
@@ -82,17 +90,32 @@ export default function BrandManagementPage() {
     navigate(`/brand/${encodeURIComponent(brandId)}`);
   };
 
+  // ---------- ページング状態 ----------
+  const [currentPage, setCurrentPage] = React.useState(1);
+  const perPage = DEFAULT_PAGE_LIMIT;
+
+  // フィルタやソートが変わったら 1ページ目に戻す
+  React.useEffect(() => {
+    setCurrentPage(1);
+  }, [managerFilter, activeKey, direction]);
+
+  const totalPages = React.useMemo(
+    () => calcTotalPages(rows.length, perPage),
+    [rows.length, perPage],
+  );
+
+  const pagedRows = React.useMemo(() => {
+    const start = (currentPage - 1) * perPage;
+    const end = start + perPage;
+    return rows.slice(start, end);
+  }, [rows, currentPage, perPage]);
+
   // ---------- テーブルヘッダー ----------
   const headers: React.ReactNode[] = [
     "ブランド名",
-    <FilterableTableHeader
-      key="status"
-      label="ステータス"
-      options={statusOptions}
-      selected={statusFilter}
-      onChange={(values) => setStatusFilter(values as any)}
-    />,
-    // ★ owner → manager に置き換え
+    // ★ ステータス列削除済み
+
+    // 責任者フィルタ
     <FilterableTableHeader
       key="manager"
       label="責任者"
@@ -100,10 +123,25 @@ export default function BrandManagementPage() {
       selected={managerFilter}
       onChange={setManagerFilter}
     />,
+
+    // 登録日（ソート可能）
     <SortableTableHeader
       key="registeredAt"
       label="登録日"
       sortKey="registeredAt"
+      activeKey={activeKey}
+      direction={direction}
+      onChange={(key, dir) => {
+        setActiveKey(key as any);
+        setDirection(dir);
+      }}
+    />,
+
+    // ★ 更新日（ソート可能ヘッダを導入）
+    <SortableTableHeader
+      key="updatedAt"
+      label="更新日"
+      sortKey="updatedAt"
       activeKey={activeKey}
       direction={direction}
       onChange={(key, dir) => {
@@ -124,7 +162,7 @@ export default function BrandManagementPage() {
         showResetButton
         onReset={resetFilters}
       >
-        {rows.map((b) => (
+        {pagedRows.map((b) => (
           <tr
             key={b.id}
             role="button"
@@ -138,15 +176,10 @@ export default function BrandManagementPage() {
               }
             }}
           >
+            {/* ブランド名 */}
             <td>{b.name}</td>
 
-            <td>
-              <span className={statusBadgeClass(b.isActive)}>
-                {b.isActive ? "アクティブ" : "停止"}
-              </span>
-            </td>
-
-            {/* ★ ManagerName 表示 */}
+            {/* 責任者名 */}
             <td>
               <ManagerNameCell
                 managerId={b.managerId}
@@ -154,10 +187,21 @@ export default function BrandManagementPage() {
               />
             </td>
 
+            {/* 登録日 */}
             <td>{b.registeredAt}</td>
+
+            {/* 更新日 */}
+            <td>{b.updatedAt}</td>
           </tr>
         ))}
       </List>
+
+      {/* ★ 共通ページネーションUI */}
+      <Pagination
+        currentPage={currentPage}
+        totalPages={totalPages}
+        onPageChange={setCurrentPage}
+      />
     </div>
   );
 }

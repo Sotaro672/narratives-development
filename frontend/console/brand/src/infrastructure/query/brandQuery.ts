@@ -5,39 +5,47 @@ import {
   brandRepositoryHTTP,
   type BrandFilter,
   type BrandSort,
-  type PageParams,
-  type PageResult,
 } from "../http/brandRepositoryHTTP";
 
+// ★ 共通のページング型／定数を利用
+import {
+  DEFAULT_PAGE_LIMIT,
+  type PageResult,
+} from "../../../../shell/src/shared/types/common/common";
+
 /**
- * 現在の Member と同じ companyId のブランド一覧を取得するための
- * 共通クエリ関数。
- *
- * - backend/auth.go でスコープされている companyId を
- *   フロント側でも明示的に指定して同じ brands を取得したい場合に使う。
+ * Brand 一覧取得時のオプション
  */
+export type BrandListOptions = {
+  /** true の場合は isActive = true のみ */
+  isActive?: boolean;
+  /** ページ番号 (1 始まり) */
+  page?: number;
+  /** 1ページあたり件数 */
+  perPage?: number;
+  /** ソート条件 */
+  sort?: BrandSort;
+};
 
 /**
  * companyId を指定して Brand の PageResult を取得
  */
 export async function fetchBrandListByCompanyId(
   companyId: string,
-  options: {
-    isActive?: boolean;
-    page?: PageParams["page"];
-    perPage?: PageParams["perPage"];
-    sort?: BrandSort;
-  } = {},
+  options: BrandListOptions = {},
 ): Promise<PageResult<Brand>> {
   const trimmedCompanyId = companyId.trim();
+  const page = options.page ?? 1;
+  const perPage = options.perPage ?? DEFAULT_PAGE_LIMIT;
+
   if (!trimmedCompanyId) {
-    // companyId が空の場合は空配列を返しておく（エラーにはしない）
+    // companyId が空の場合は空配列を返す（エラーにはしない）
     return {
       items: [],
       totalCount: 0,
       totalPages: 1,
-      page: options.page ?? 1,
-      perPage: options.perPage ?? 0,
+      page,
+      perPage,
     };
   }
 
@@ -49,13 +57,8 @@ export async function fetchBrandListByCompanyId(
     filter.isActive = options.isActive;
   }
 
-  const sort: BrandSort = options.sort ?? {
-    column: "created_at",
-    order: "desc",
-  };
-
-  const page = options.page ?? 1;
-  const perPage = options.perPage ?? 200;
+  const sort: BrandSort =
+    options.sort ?? ({ column: "created_at", order: "desc" } as const);
 
   return brandRepositoryHTTP.list({
     filter,
