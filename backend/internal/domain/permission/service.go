@@ -1,3 +1,4 @@
+// backend\internal\domain\permission\service.go
 package permission
 
 import (
@@ -146,126 +147,27 @@ func (s *Service) HandleRemovePermissionsFromMember(ctx context.Context, memberI
 	return s.HandleUpdateMemberPermissions(ctx, memberID, next)
 }
 
-// ========================================
-// 表示/検索/フィルタ/ソート/統計ヘルパ
-// ========================================
+// ------------------------------------------------------------
+// 追加: 権限名から日本語名を取得するヘルパ
+// ------------------------------------------------------------
 
-func FindPermissionByID(list []Permission, id string) (Permission, bool) {
-	for _, a := range list {
-		if a.ID == id {
-			return a, true
+// DisplayNameJaFromPermissionName は、権限名から日本語表示名を返します。
+// - name は "wallet.view" などの Permission.Name
+// - allPermissions カタログに存在する場合、その Description（日本語名）を返す
+// - 見つからない場合は ("", false) を返す
+func DisplayNameJaFromPermissionName(name string) (string, bool) {
+	name = strings.TrimSpace(name)
+	if name == "" {
+		return "", false
+	}
+
+	for _, p := range allPermissions {
+		if p.Name == name {
+			// Permission の第3引数（Description）を日本語表示名として扱う
+			return strings.TrimSpace(p.Description), true
 		}
 	}
-	return Permission{}, false
-}
-
-func FindPermissionByName(list []Permission, name string) (Permission, bool) {
-	for _, a := range list {
-		if a.Name == name {
-			return a, true
-		}
-	}
-	return Permission{}, false
-}
-
-func IsValidPermissionID(list []Permission, id string) bool {
-	_, ok := FindPermissionByID(list, id)
-	return ok
-}
-
-func IsValidPermissionName(list []Permission, name string) bool {
-	_, ok := FindPermissionByName(list, name)
-	return ok
-}
-
-func IsPermissionCategoryExists(list []Permission, category string) bool {
-	for _, a := range list {
-		if string(a.Category) == category {
-			return true
-		}
-	}
-	return false
-}
-
-type FilterOptions struct {
-	SearchQuery    string
-	CategoryFilter []PermissionCategory
-}
-
-type SortColumn string
-
-const (
-	SortByName     SortColumn = "name"
-	SortByCategory SortColumn = "category"
-)
-
-type SortOptions struct {
-	Column SortColumn
-	Order  SortOrder // asc|desc (既存定義)
-}
-
-func FilterPermissions(list []Permission, opt FilterOptions) []Permission {
-	q := strings.ToLower(strings.TrimSpace(opt.SearchQuery))
-	hasQ := q != ""
-
-	catSet := make(map[PermissionCategory]struct{}, len(opt.CategoryFilter))
-	for _, c := range opt.CategoryFilter {
-		catSet[c] = struct{}{}
-	}
-	filterByCat := len(catSet) > 0
-
-	out := make([]Permission, 0, len(list))
-	for _, a := range list {
-		if filterByCat {
-			if _, ok := catSet[a.Category]; !ok {
-				continue
-			}
-		}
-		if hasQ {
-			name := strings.ToLower(a.Name)
-			cat := strings.ToLower(string(a.Category))
-			desc := strings.ToLower(a.Description)
-			if !(strings.Contains(name, q) || strings.Contains(cat, q) || strings.Contains(desc, q)) {
-				continue
-			}
-		}
-		out = append(out, a)
-	}
-	return out
-}
-
-func SortPermissions(list []Permission, opt SortOptions) []Permission {
-	if opt.Column == "" {
-		return list
-	}
-	out := append([]Permission(nil), list...)
-	asc := strings.ToLower(string(opt.Order)) == "asc"
-
-	less := func(i, j int) bool { return true }
-	switch opt.Column {
-	case SortByName:
-		less = func(i, j int) bool {
-			if asc {
-				return out[i].Name < out[j].Name
-			}
-			return out[j].Name < out[i].Name
-		}
-	case SortByCategory:
-		less = func(i, j int) bool {
-			ci := string(out[i].Category)
-			cj := string(out[j].Category)
-			if asc {
-				return ci < cj
-			}
-			return cj < ci
-		}
-	}
-	sort.Slice(out, less)
-	return out
-}
-
-func FilterAndSortPermissions(list []Permission, f FilterOptions, s SortOptions) []Permission {
-	return SortPermissions(FilterPermissions(list, f), s)
+	return "", false
 }
 
 // ------------------------------------------------------------
@@ -340,43 +242,11 @@ func GroupPermissionsByCategory(list []Permission) map[string][]Permission {
 	return out
 }
 
-func GetPermissionCountByCategory(list []Permission, category string) int {
-	c := 0
-	for _, a := range list {
-		if string(a.Category) == category {
-			c++
-		}
-	}
-	return c
-}
-
 type PermissionStatistics struct {
 	TotalPermissions   int
 	TotalCategories    int
 	CategoryCounts     map[string]int
 	MostCommonCategory string
-}
-
-func GetPermissionStatistics(list []Permission) PermissionStatistics {
-	cats := GetUniqueCategories(list)
-	counts := make(map[string]int, len(cats))
-	for _, c := range cats {
-		counts[c] = GetPermissionCountByCategory(list, c)
-	}
-	most := ""
-	max := -1
-	for c, n := range counts {
-		if n > max {
-			max = n
-			most = c
-		}
-	}
-	return PermissionStatistics{
-		TotalPermissions:   len(list),
-		TotalCategories:    len(cats),
-		CategoryCounts:     counts,
-		MostCommonCategory: most,
-	}
 }
 
 // ========================================

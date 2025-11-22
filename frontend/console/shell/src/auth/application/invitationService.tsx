@@ -4,29 +4,26 @@ import {
   sendEmailVerification,
 } from "firebase/auth";
 import { auth } from "../infrastructure/config/firebaseClient";
+import { mapPermissionNamesToDescriptionsJa } from "../../../../permission/src/application/permissionCatalog";
 
-// 🔙 BACKEND の BASE URL
-const ENV_BASE =
-  ((import.meta as any).env?.VITE_BACKEND_BASE_URL as string | undefined)?.replace(
-    /\/+$/g,
-    "",
-  ) ?? "";
-
-const FALLBACK_BASE =
-  "https://narratives-backend-871263659099.asia-northeast1.run.app";
-const API_BASE = ENV_BASE || FALLBACK_BASE;
+// API 呼び出し系は infra/api に委譲
+import {
+  fetchInvitationInfo as fetchInvitationInfoApi,
+  fetchCompanyNameById as fetchCompanyNameByIdApi,
+  fetchBrandNamesByIds as fetchBrandNamesByIdsApi,
+  validateInvitation,
+  completeInvitationOnBackend,
+} from "../infrastructure/api/invitationApi";
+import type {
+  InvitationInfo as InvitationInfoApi,
+} from "../infrastructure/api/invitationApi";
 
 // ------------------------------
 // 型定義
 // ------------------------------
 
-export type InvitationInfo = {
-  memberId: string;
-  companyId: string;
-  assignedBrandIds: string[];
-  permissions: string[];
-  email?: string; // ★ 追加（Firestore には email がある想定なので optional で受ける）
-};
+// API から返る InvitationInfo 型を application からも使えるように re-export
+export type InvitationInfo = InvitationInfoApi;
 
 export type CompleteInvitationParams = {
   token: string;
@@ -41,47 +38,22 @@ export type CompleteInvitationParams = {
   permissions: string[];
 };
 
-// validate API の戻り値想定
-type ValidateResponse = {
-  email: string;
-  memberId?: string;
-  companyId?: string;
-  assignedBrandIds?: string[];
-  permissions?: string[];
-};
+// ------------------------------
+// API ラッパー（従来の呼び出し口を維持）
+// ------------------------------
 
-// ------------------------------
-// 招待情報取得（GET /api/invitation）
-// ------------------------------
+// hook/useInvitationPage など既存コードからは、
+// これまで通り invitationService.fetchInvitationInfo を呼べるようにする。
 export async function fetchInvitationInfo(token: string): Promise<InvitationInfo> {
-  const url = `${API_BASE}/api/invitation?token=${encodeURIComponent(token)}`;
-
-  // eslint-disable-next-line no-console
-  console.log("[InvitationService] Fetching invitation info:", url);
-
-  const res = await fetch(url, {
-    method: "GET",
-    headers: {
-      "Content-Type": "application/json",
-    },
-  });
-
-  const text = await res.text();
-  // eslint-disable-next-line no-console
-  console.log("[InvitationService] raw response:", text);
-
-  if (!res.ok) {
-    throw new Error(`Failed to load invitation info (status ${res.status})`);
-  }
-
-  // email を含めてパース（無ければ undefined）
-  const data = JSON.parse(text) as InvitationInfo;
-
-  return data;
+  return fetchInvitationInfoApi(token);
 }
 
+// companyName / brandNames の解決は presentation からも使いたいので re-export
+export { fetchCompanyNameByIdApi as fetchCompanyNameById };
+export { fetchBrandNamesByIdsApi as fetchBrandNamesByIds };
+
 // ------------------------------
-// 招待の完了フロー
+// 招待の完了フロー（Firebase 認証 + backend API）
 // ------------------------------
 export async function completeInvitation(
   params: CompleteInvitationParams,
@@ -107,30 +79,7 @@ export async function completeInvitation(
   }
 
   // 1) backend: /api/invitation/validate(token)
-  const validateRes = await fetch(`${API_BASE}/api/invitation/validate`, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({ token }),
-  });
-
-  const validateText = await validateRes.text();
-  // eslint-disable-next-line no-console
-  console.log("[InvitationService] validate response:", validateText);
-
-  if (!validateRes.ok) {
-    let msg = `招待の検証に失敗しました (status ${validateRes.status})`;
-    try {
-      const errJson = JSON.parse(validateText) as { error?: string };
-      if (errJson.error) msg = errJson.error;
-    } catch {
-      // ignore
-    }
-    throw new Error(msg);
-  }
-
-  const validateData = JSON.parse(validateText) as ValidateResponse;
+  const validateData = await validateInvitation(token);
 
   const email = validateData.email;
   if (!email) {
@@ -141,6 +90,33 @@ export async function completeInvitation(
   const effectiveBrandIds = validateData.assignedBrandIds ?? assignedBrandIds;
   const effectivePermissions = validateData.permissions ?? permissions;
 
+  // ★ ここで「id は維持したまま」表示用の名前を取得する
+  //    - state や backend payload は ID / permission name のまま
+  //    - UI 表示やログで companyName / brandNames / 日本語権限名を使う
+  try {
+    const [companyName, brandNames, permissionDescriptions] = await Promise.all([
+      fetchCompanyNameByIdApi(effectiveCompanyId),
+      fetchBrandNamesByIdsApi(effectiveBrandIds),
+      Promise.resolve(
+        mapPermissionNamesToDescriptionsJa(effectivePermissions),
+      ),
+    ]);
+
+    // eslint-disable-next-line no-console
+    console.log("[InvitationService] display info:", {
+      companyId: effectiveCompanyId,
+      companyName,
+      brandIds: effectiveBrandIds,
+      brandNames,
+      permissionNames: effectivePermissions,
+      permissionDescriptionsJa: permissionDescriptions,
+    });
+  } catch (e) {
+    // 名前解決に失敗しても、招待完了処理自体は続行したいのでログのみ
+    // eslint-disable-next-line no-console
+    console.warn("[InvitationService] failed to resolve display names", e);
+  }
+
   // 2) Firebase: createUserWithEmailAndPassword
   const cred = await createUserWithEmailAndPassword(auth, email, password);
 
@@ -150,7 +126,7 @@ export async function completeInvitation(
   console.log("[InvitationService] verification email sent");
 
   // 4) backend: /api/invitation/complete(token, uid,...)
-  const completePayload = {
+  await completeInvitationOnBackend({
     token,
     uid: cred.user.uid,
     profile: {
@@ -159,34 +135,8 @@ export async function completeInvitation(
       firstName,
       firstNameKana,
     },
-    companyId: effectiveCompanyId,
-    assignedBrandIds: effectiveBrandIds,
-    permissions: effectivePermissions,
-  };
-
-  // eslint-disable-next-line no-console
-  console.log("[InvitationService] complete payload:", completePayload);
-
-  const completeRes = await fetch(`${API_BASE}/api/invitation/complete`, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify(completePayload),
+    companyId: effectiveCompanyId,       // ← ID をそのまま維持
+    assignedBrandIds: effectiveBrandIds, // ← ID をそのまま維持
+    permissions: effectivePermissions,   // ← permission name をそのまま維持
   });
-
-  const completeText = await completeRes.text();
-  // eslint-disable-next-line no-console
-  console.log("[InvitationService] complete response:", completeText);
-
-  if (!completeRes.ok) {
-    let msg = `招待の完了処理に失敗しました (status ${completeRes.status})`;
-    try {
-      const errJson = JSON.parse(completeText) as { error?: string };
-      if (errJson.error) msg = errJson.error;
-    } catch {
-      // ignore
-    }
-    throw new Error(msg);
-  }
 }

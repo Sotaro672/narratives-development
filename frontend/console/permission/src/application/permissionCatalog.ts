@@ -20,44 +20,110 @@ export type PermissionCategory =
 
 /**
  * backend の static allPermissions と同じ一覧（最終的な真実）
- * → front 側のカテゴリ判定の基準として使用する。
+ * → front 側のカテゴリ判定 & 日本語表示名の基準として使用する。
  */
-const permissionCatalog: { name: string; category: PermissionCategory }[] = [
+type PermissionCatalogItem = {
+  name: string;
+  category: PermissionCategory;
+  description: string; // 日本語表示名（backend catalog.go の Description と同じ）
+};
+
+const permissionCatalog: PermissionCatalogItem[] = [
   // Wallet
-  { name: "wallet.view", category: "wallet" },
-  { name: "wallet.settings.view", category: "wallet" },
+  { name: "wallet.view", category: "wallet", description: "ウォレット閲覧" },
+  {
+    name: "wallet.settings.view",
+    category: "wallet",
+    description: "ウォレット設定閲覧",
+  },
 
   // Inquiry
-  { name: "inquiry.view", category: "inquiry" },
-  { name: "inquiry.detail.view", category: "inquiry" },
+  {
+    name: "inquiry.view",
+    category: "inquiry",
+    description: "問い合わせ一覧閲覧",
+  },
+  {
+    name: "inquiry.detail.view",
+    category: "inquiry",
+    description: "問い合わせ詳細・履歴閲覧",
+  },
 
   // Organization
-  { name: "organization.settings.view", category: "organization" },
+  {
+    name: "organization.settings.view",
+    category: "organization",
+    description: "組織設定・構成情報閲覧",
+  },
 
   // Brand
-  { name: "brand.view", category: "brand" },
-  { name: "brand.detail.view", category: "brand" },
-  { name: "brand.archive.view", category: "brand" },
+  {
+    name: "brand.view",
+    category: "brand",
+    description: "ブランド一覧閲覧",
+  },
+  {
+    name: "brand.detail.view",
+    category: "brand",
+    description: "ブランド詳細閲覧",
+  },
+  {
+    name: "brand.archive.view",
+    category: "brand",
+    description: "アーカイブ済みブランド閲覧",
+  },
 
   // Token
-  { name: "token.view", category: "token" },
-  { name: "token.distribution.view", category: "token" },
+  {
+    name: "token.view",
+    category: "token",
+    description: "トークン一覧閲覧",
+  },
+  {
+    name: "token.distribution.view",
+    category: "token",
+    description: "トークン配布・割当状況閲覧",
+  },
 
   // Order
-  { name: "order.view", category: "order" },
+  {
+    name: "order.view",
+    category: "order",
+    description: "注文情報閲覧",
+  },
 
   // Member
-  { name: "member.view", category: "member" },
-  { name: "member.roles.view", category: "member" },
+  {
+    name: "member.view",
+    category: "member",
+    description: "メンバー一覧閲覧",
+  },
+  {
+    name: "member.roles.view",
+    category: "member",
+    description: "メンバー権限・ロール設定閲覧",
+  },
 
   // Inventory
-  { name: "inventory.view", category: "inventory" },
+  {
+    name: "inventory.view",
+    category: "inventory",
+    description: "在庫情報閲覧",
+  },
 
   // Production
-  { name: "production.status.view", category: "production" },
+  {
+    name: "production.status.view",
+    category: "production",
+    description: "生産工程ステータス閲覧",
+  },
 
   // System
-  { name: "system.admin.view", category: "system" },
+  {
+    name: "system.admin.view",
+    category: "system",
+    description: "システム設定・管理情報閲覧",
+  },
 ];
 
 /**
@@ -109,14 +175,6 @@ export function CategoryFromPermissionName(
 
 /**
  * 権限名一覧を Category → 権限配列 にグルーピングする
- *
- * 例:
- * ["wallet.view","brand.edit","brand.view"]
- * →
- * {
- *   wallet: ["wallet.view"],
- *   brand: ["brand.edit","brand.view"]
- * }
  */
 export function groupPermissionsByCategory(
   permissionNames: string[],
@@ -131,4 +189,31 @@ export function groupPermissionsByCategory(
   }
 
   return grouped;
+}
+
+/**
+ * 単一の permission name から日本語説明を取得
+ */
+export function getPermissionDescriptionJa(name: string): string {
+  const key = name.trim();
+  if (!key) return "";
+
+  const hit = permissionCatalog.find((p) => p.name === key);
+  if (!hit) {
+    // 見つからない場合は元の name をそのまま返す
+    return key;
+  }
+  return hit.description;
+}
+
+/**
+ * 複数 permission name を日本語説明リストに変換
+ */
+export function mapPermissionNamesToDescriptionsJa(
+  permissions: string[],
+): string[] {
+  return permissions
+    .map((p) => p.trim())
+    .filter((p) => p.length > 0)
+    .map((p) => getPermissionDescriptionJa(p));
 }

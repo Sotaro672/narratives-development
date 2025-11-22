@@ -3,6 +3,8 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import {
   fetchInvitationInfo,
   completeInvitation,
+  fetchCompanyNameById,
+  fetchBrandNamesByIds,
 } from "../../application/invitationService";
 
 export function useInvitationPage() {
@@ -29,10 +31,14 @@ export function useInvitationPage() {
   const [password, setPassword] = useState("");
   const [passwordConfirm, setPasswordConfirm] = useState("");
 
-  // ---- 招待トークンから取得する割り当て情報 ----
+  // ---- 招待トークンから取得する割り当て情報（ID） ----
   const [companyId, setCompanyId] = useState<string>("");
   const [assignedBrandIds, setAssignedBrandIds] = useState<string[]>([]);
   const [permissions, setPermissions] = useState<string[]>([]);
+
+  // ---- 表示用の名前 ----
+  const [companyName, setCompanyName] = useState<string>("");
+  const [assignedBrandNames, setAssignedBrandNames] = useState<string[]>([]);
 
   // ============================================================
   // 🔥 token が設定されたら backend から InvitationInfo を取得
@@ -47,19 +53,46 @@ export function useInvitationPage() {
       try {
         const data = await fetchInvitationInfo(token);
 
-        // 📨 email を state にセット
+        // 📨 email
         if (data.email) setEmail(data.email);
 
+        // ID はそのまま state に保持
         setCompanyId(data.companyId);
-        setAssignedBrandIds(data.assignedBrandIds || []);
-        setPermissions(data.permissions || []);
+        const brands = data.assignedBrandIds || [];
+        const perms = data.permissions || [];
+        setAssignedBrandIds(brands);
+        setPermissions(perms);
 
-        // --- ログに email 追記 ---
+        // 会社名・ブランド名を並列取得
+        try {
+          const [companyNameResolved, brandNamesResolved] = await Promise.all([
+            data.companyId
+              ? fetchCompanyNameById(data.companyId)
+              : Promise.resolve(""),
+            fetchBrandNamesByIds(brands),
+          ]);
+
+          if (companyNameResolved) {
+            setCompanyName(companyNameResolved);
+          } else {
+            setCompanyName("");
+          }
+          setAssignedBrandNames(brandNamesResolved);
+        } catch (nameErr) {
+          // eslint-disable-next-line no-console
+          console.warn("[InvitationPage] failed to resolve names", nameErr);
+          // 失敗した場合は名前は空・ID表示にフォールバックさせる
+          setCompanyName("");
+          setAssignedBrandNames([]);
+        }
+
+        // --- ログ ---
         // eslint-disable-next-line no-console
         console.log("[InvitationPage] Invitation info loaded:", {
           token,
           email: data.email,
           companyId: data.companyId,
+          companyName,
           assignedBrandIds: data.assignedBrandIds,
           permissions: data.permissions,
         });
@@ -73,6 +106,8 @@ export function useInvitationPage() {
     };
 
     run();
+    // companyName は run 内で更新されるので依存から外しておく
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [token]);
 
   // ---- Navigation ----
@@ -94,7 +129,7 @@ export function useInvitationPage() {
       // eslint-disable-next-line no-console
       console.log("[Invitation:create] payload:", {
         token,
-        email, // ← ★ 追加
+        email,
         lastName,
         lastNameKana,
         firstName,
@@ -148,7 +183,7 @@ export function useInvitationPage() {
     },
     [
       token,
-      email, // ← ★ 忘れずに依存へ追加
+      email,
       lastName,
       lastNameKana,
       firstName,
@@ -192,10 +227,14 @@ export function useInvitationPage() {
     passwordConfirm,
     setPasswordConfirm,
 
-    // 割り当て情報
+    // 割り当て情報（ID）
     companyId,
     assignedBrandIds,
     permissions,
+
+    // 表示用の名前
+    companyName,
+    assignedBrandNames,
 
     // Actions
     handleBack,

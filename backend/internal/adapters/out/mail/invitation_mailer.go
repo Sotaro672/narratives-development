@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	memdom "narratives/internal/domain/member"
+	permdom "narratives/internal/domain/permission"
 )
 
 // CompanyNameResolver は CompanyID から会社名を取得するためのポートです。
@@ -154,6 +155,30 @@ func (m *InvitationMailer) resolveBrandDisplayNames(ctx context.Context, brandID
 	return results
 }
 
+// resolvePermissionDisplayNamesJa は権限名スライスを日本語表示名に変換します。
+// - permdom.DisplayNameJaFromPermissionName を利用
+// - マッピングに失敗したものは元の name をフォールバック表示
+func (m *InvitationMailer) resolvePermissionDisplayNamesJa(permissionNames []string) []string {
+	if len(permissionNames) == 0 {
+		return nil
+	}
+
+	out := make([]string, 0, len(permissionNames))
+	for _, name := range permissionNames {
+		name = strings.TrimSpace(name)
+		if name == "" {
+			continue
+		}
+		if ja, ok := permdom.DisplayNameJaFromPermissionName(name); ok && ja != "" {
+			out = append(out, ja)
+		} else {
+			// カタログに無いものは key をそのまま表示
+			out = append(out, name)
+		}
+	}
+	return out
+}
+
 // SendInvitationEmail は、usecase から呼び出される招待メール送信処理です。
 //
 // 招待メール本文に「https://console.example.com/invitation?token=INV_xxx」を
@@ -174,6 +199,10 @@ func (m *InvitationMailer) SendInvitationEmail(
 	// AssignedBrandIDs → ブランド名に変換（失敗時はIDフォールバック）
 	brandNames := m.resolveBrandDisplayNames(ctx, info.AssignedBrandIDs)
 	brandsDisplay := strings.Join(brandNames, ", ")
+
+	// Permissions → 日本語権限名に変換（失敗時はキーをフォールバック表示）
+	permLabelsJa := m.resolvePermissionDisplayNamesJa(info.Permissions)
+	permsDisplay := strings.Join(permLabelsJa, ", ")
 
 	// メール本文（プレーンテキスト例）
 	// ★ 氏名行（「◯◯ 様」）は削除
@@ -196,7 +225,7 @@ Narratives Console`,
 		invitationURL,
 		strings.TrimSpace(companyDisplay),
 		brandsDisplay,
-		strings.Join(info.Permissions, ", "),
+		permsDisplay,
 	)
 
 	return m.client.Send(ctx, m.fromAddress, strings.TrimSpace(toEmail), subject, body)

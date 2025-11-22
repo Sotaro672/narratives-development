@@ -34,10 +34,14 @@ export default function InvitationPage() {
     passwordConfirm,
     setPasswordConfirm,
 
-    // 割り当て情報（メールに入っていた内容）
+    // 割り当て情報（ID）
     companyId,
     assignedBrandIds,
     permissions,
+
+    // 表示用名前
+    companyName,
+    assignedBrandNames,
 
     // Token setter
     setToken,
@@ -54,8 +58,14 @@ export default function InvitationPage() {
   }, [invitationToken, setToken]);
 
   // ---- 表示フォーマット ----
-  const assignedBrandIdsText =
-    assignedBrandIds.length > 0 ? assignedBrandIds.join(", ") : "-";
+  const companyText = companyName || companyId || "-";
+
+  const assignedBrandText =
+    assignedBrandNames.length > 0
+      ? assignedBrandNames.join(", ")
+      : assignedBrandIds.length > 0
+      ? assignedBrandIds.join(", ")
+      : "-";
 
   const permissionsText =
     permissions.length > 0 ? permissions.join(", ") : "-";
@@ -66,10 +76,19 @@ export default function InvitationPage() {
     console.log("[InvitationPage] invitation info", {
       token: invitationToken,
       companyId,
+      companyName,
       assignedBrandIds,
+      assignedBrandNames,
       permissions,
     });
-  }, [invitationToken, companyId, assignedBrandIds, permissions]);
+  }, [
+    invitationToken,
+    companyId,
+    companyName,
+    assignedBrandIds,
+    assignedBrandNames,
+    permissions,
+  ]);
 
   return (
     <div className="min-h-screen bg-white text-slate-900 flex flex-col">
@@ -93,10 +112,10 @@ export default function InvitationPage() {
 
             <div>
               <label className="block text-sm text-slate-600 mb-1">
-                Company ID
+                Company
               </label>
               <p className="text-sm text-slate-900 bg-white rounded px-3 py-2 border border-slate-300">
-                {companyId || "-"}
+                {companyText}
               </p>
             </div>
 
@@ -105,7 +124,7 @@ export default function InvitationPage() {
                 Assigned Brands
               </label>
               <p className="text-sm text-slate-900 bg-white rounded px-3 py-2 border border-slate-300 whitespace-pre-wrap break-all">
-                {assignedBrandIdsText}
+                {assignedBrandText}
               </p>
             </div>
 
