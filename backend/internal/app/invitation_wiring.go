@@ -75,9 +75,14 @@ func (a *invitationTokenRepoAdapter) CreateInvitationToken(
 
 // MemberRepo をどう作っているかはプロジェクトによりますが、
 // ここでは memdom.Repository を引数でもらう形にしておくと安全です。
+// companyResolver は CompanyID から会社名を取得する mailadapter.CompanyNameResolver
+// brandResolver は BrandID からブランド名を取得する mailadapter.BrandNameResolver
+// （例: company.Service / brand.Service）を渡してください。
 func NewInvitationCommandServiceWithSendGrid(
 	fsClient *firestore.Client,
 	memberRepo memdom.Repository,
+	companyResolver mailadapter.CompanyNameResolver,
+	brandResolver mailadapter.BrandNameResolver,
 ) (usecase.InvitationCommandPort, error) {
 	if fsClient == nil {
 		return nil, fmt.Errorf("firestore client is nil")
@@ -91,8 +96,11 @@ func NewInvitationCommandServiceWithSendGrid(
 		fsRepo: fsTokenRepo,
 	}
 
-	// 3) SendGrid バックエンドの InvitationMailer
-	mailer := mailadapter.NewInvitationMailerWithSendGrid()
+	// 3) SendGrid バックエンドの InvitationMailer（会社名・ブランド名リゾルバ付き）
+	mailer := mailadapter.NewInvitationMailerWithSendGrid(
+		companyResolver,
+		brandResolver,
+	)
 
 	// 4) InvitationCommandService を SendGrid 付きで生成
 	cmdSvc := usecase.NewInvitationCommandService(

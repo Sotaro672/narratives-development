@@ -1,3 +1,4 @@
+// backend\internal\platform\di\container.go
 package di
 
 import (
@@ -15,6 +16,7 @@ import (
 	mailadp "narratives/internal/adapters/out/mail"
 	uc "narratives/internal/application/usecase"
 	authuc "narratives/internal/application/usecase/auth"
+	branddom "narratives/internal/domain/brand" // ★ 追加: Brand 用ドメインサービス
 	companydom "narratives/internal/domain/company"
 	memdom "narratives/internal/domain/member"
 	appcfg "narratives/internal/infra/config"
@@ -305,16 +307,23 @@ func NewContainer(ctx context.Context) (*Container, error) {
 	userUC := uc.NewUserUsecase(userRepo)
 	walletUC := uc.NewWalletUsecase(walletRepo)
 
+	// ★ Company / Brand 用ドメインサービス（表示名解決用）
+	companySvc := companydom.NewService(companyRepo)
+	brandSvc := branddom.NewService(brandRepo)
+
 	// ★ Invitation 用メールクライアント & メーラー
-	//   → ここでのみ SendGrid を使用（logging-only クライアントは廃止）
-	invitationMailer := mailadp.NewInvitationMailerWithSendGrid()
+	//   → ここでのみ SendGrid を使用（会社名 + ブランド名表示）
+	invitationMailer := mailadp.NewInvitationMailerWithSendGrid(
+		companySvc, // CompanyNameResolver
+		brandSvc,   // BrandNameResolver
+	)
 
 	// ★ Invitation 用 Usecase（Query / Command）
 	invitationQueryUC := uc.NewInvitationService(invitationTokenUCRepo, memberRepo)
 	invitationCommandUC := uc.NewInvitationCommandService(
 		invitationTokenUCRepo,
 		memberRepo,
-		invitationMailer, // ← SendGrid 経由でメール送信
+		invitationMailer, // ← SendGrid 経由でメール送信（会社名 + ブランド名表示）
 	)
 
 	// ★ auth/bootstrap 用 Usecase

@@ -1,4 +1,4 @@
-// C:\Users\caota\narratives-development\backend\internal\adapters\out\mail\sendgrid_wire.go
+// backend/internal/adapters/out/mail/sendgrid_wire.go
 package mail
 
 import (
@@ -18,7 +18,13 @@ const (
 // - SENDGRID_API_KEY : SendGrid の API キー
 // - SENDGRID_FROM   : 送信元メールアドレス
 // - CONSOLE_BASE_URL: https://narratives.jp
-func NewInvitationMailerWithSendGrid() *InvitationMailer {
+//
+// companyResolver には CompanyID→会社名、brandResolver には BrandID→ブランド名を返す
+// ドメインサービス（company.Service / brand.Service など）を渡してください。
+func NewInvitationMailerWithSendGrid(
+	companyResolver CompanyNameResolver,
+	brandResolver BrandNameResolver,
+) *InvitationMailer {
 	apiKey := os.Getenv(envSendGridAPIKey)
 	fromAddr := os.Getenv(envSendGridFrom)
 	consoleBaseURL := os.Getenv(envConsoleBaseURL)
@@ -39,7 +45,13 @@ func NewInvitationMailerWithSendGrid() *InvitationMailer {
 
 	// InvitationMailer は InvitationMailerPort の実装で、
 	// usecase.InvitationMailerPort とシグネチャ互換なのでそのまま渡せる。
-	mailer := NewInvitationMailer(client, fromAddr, consoleBaseURL)
+	mailer := NewInvitationMailer(
+		client,
+		fromAddr,
+		consoleBaseURL,
+		companyResolver,
+		brandResolver,
+	)
 
 	log.Printf("[mail] InvitationMailerWithSendGrid initialized. from=%s baseURL=%s",
 		fromAddr, consoleBaseURL)

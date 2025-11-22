@@ -22,7 +22,7 @@ import {
 } from "../../application/memberListService";
 
 // メンバー作成 & 招待メール送信
-import { createMember } from "../../application/memberCreateService";
+import { createMember, parseCommaSeparated } from "../../application/memberCreateService";
 import { sendMemberInvitation } from "../../application/invitationService";
 
 // UI 用 BrandRow 型（テーブル表示用）
@@ -57,14 +57,6 @@ function toBrandRows(brands: Brand[]): BrandRow[] {
     isActive: Boolean(b.isActive ?? true),
     registeredAt: formatDateYmd(b.createdAt),
   }));
-}
-
-// カンマ区切り → string[]
-function parseCommaSeparatedLocal(s: string): string[] {
-  return s
-    .split(",")
-    .map((x) => x.trim())
-    .filter(Boolean);
 }
 
 export function useMemberCreate(options?: UseMemberCreateOptions) {
@@ -178,7 +170,7 @@ export function useMemberCreate(options?: UseMemberCreateOptions) {
 
         // テキスト入力由来の権限
         const permissionsFromText = permissionsText
-          ? parseCommaSeparatedLocal(permissionsText)
+          ? parseCommaSeparated(permissionsText)
           : [];
 
         // マージ & 重複除去
@@ -194,7 +186,7 @@ export function useMemberCreate(options?: UseMemberCreateOptions) {
 
         // brandsText からのフォールバック
         const fallbackBrandIds = brandsText
-          ? parseCommaSeparatedLocal(brandsText)
+          ? parseCommaSeparated(brandsText)
           : [];
 
         const finalAssignedBrandIds =
