@@ -1,4 +1,3 @@
-// backend/internal/adapters/in/http/handlers/invitation_handler.go
 package handlers
 
 import (
@@ -13,43 +12,30 @@ import (
 
 /*
 InvitationHandler
-
-招待メール内のリンク
-  https://console.example.com/invitation?token=INV_xxx
-
-からフロントエンドが叩くエンドポイント用ハンドラ。
-
-責務:
-  - クエリパラメータ token を受け取る
-  - usecase.InvitationQueryPort 経由で InvitationInfo を取得
-  - JSON 形式で companyId / assignedBrandIds / permissions / memberId を返す
-
-利用例（ルーティング側）:
-  invHandler := web.NewInvitationHandler(invitationUsecase)
-  mux.Handle("/api/invitation", invHandler)
+GET /api/invitation?token=INV_xxx
 */
 
 type InvitationHandler struct {
 	InvitationQuery usecase.InvitationQueryPort
 }
 
-// NewInvitationHandler は招待情報取得用ハンドラを生成します。
 func NewInvitationHandler(inv usecase.InvitationQueryPort) *InvitationHandler {
 	return &InvitationHandler{
 		InvitationQuery: inv,
 	}
 }
 
-// invitationInfoResponse はフロント向けのレスポンス DTO です。
 type invitationInfoResponse struct {
 	MemberID         string   `json:"memberId"`
 	CompanyID        string   `json:"companyId"`
 	AssignedBrandIDs []string `json:"assignedBrandIds"`
 	Permissions      []string `json:"permissions"`
+	Email            string   `json:"email,omitempty"`
 }
 
-// ServeHTTP implements http.Handler.
-// GET /api/invitation?token=INV_xxx
+// =====================================
+// GET /api/invitation?token=xxx
+// =====================================
 func (h *InvitationHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
 		w.Header().Set("Allow", http.MethodGet)
@@ -71,12 +57,10 @@ func (h *InvitationHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	info, err := h.InvitationQuery.GetInvitationInfo(ctx, token)
 	if err != nil {
-		// 招待トークンが不正 or 見つからない場合は 404
-		if errors.Is(err, memdom.ErrInvitationTokenNotFound) {
+		if errors.Is(err, memdom.ErrInvitationTokenNotFound) || errors.Is(err, memdom.ErrNotFound) {
 			http.Error(w, "invitation token not found", http.StatusNotFound)
 			return
 		}
-		// その他は 500
 		http.Error(w, "failed to resolve invitation token", http.StatusInternalServerError)
 		return
 	}
@@ -86,30 +70,81 @@ func (h *InvitationHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		CompanyID:        info.CompanyID,
 		AssignedBrandIDs: info.AssignedBrandIDs,
 		Permissions:      info.Permissions,
+		Email:            info.Email,
 	}
 
 	w.Header().Set("Content-Type", "application/json; charset=utf-8")
-	if err := json.NewEncoder(w).Encode(resp); err != nil {
-		http.Error(w, "failed to write response", http.StatusInternalServerError)
-		return
-	}
+	_ = json.NewEncoder(w).Encode(resp)
 }
 
 /*
+=====================================
+POST /api/invitation/complete
+（サインイン後の member 確定）
+=====================================
+*/
+
+type invitationCompleteRequest struct {
+	Token         string `json:"token"`
+	UID           string `json:"uid"`
+	LastName      string `json:"lastName"`
+	LastNameKana  string `json:"lastNameKana"`
+	FirstName     string `json:"firstName"`
+	FirstNameKana string `json:"firstNameKana"`
+	Email         string `json:"email"`
+}
+
+func (h *InvitationHandler) Complete(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		w.Header().Set("Allow", http.MethodPost)
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	if h.InvitationQuery == nil {
+		http.Error(w, "invitation usecase not configured", http.StatusInternalServerError)
+		return
+	}
+
+	var req invitationCompleteRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, "invalid body", http.StatusBadRequest)
+		return
+	}
+
+	token := strings.TrimSpace(req.Token)
+	if token == "" || strings.TrimSpace(req.UID) == "" {
+		http.Error(w, "token / uid required", http.StatusBadRequest)
+		return
+	}
+
+	ctx := r.Context()
+
+	// 1) token → InvitationInfo
+	info, err := h.InvitationQuery.GetInvitationInfo(ctx, token)
+	if err != nil {
+		if errors.Is(err, memdom.ErrInvitationTokenNotFound) {
+			http.Error(w, "invitation token not found", http.StatusNotFound)
+			return
+		}
+		http.Error(w, "failed to resolve invitation token", http.StatusInternalServerError)
+		return
+	}
+
+	// ★ 暫定対応：未実装でも「info を使った」扱いにする
+	_ = info.MemberID
+
+	// ★ ここに MemberUsecase.CompleteInvitation(...) を後で実装して呼び出す
+	// h.MemberUsecase.CompleteInvitation(ctx, *info, req)
+
+	w.WriteHeader(http.StatusNoContent)
+}
+
+/*
+=====================================
 MemberInvitationHandler
-
-メンバー作成後に「招待メール送信」を行うためのエンドポイント。
-
-責務:
-  - パス /members/{id}/invitation から memberId を抽出
-  - usecase.InvitationCommandPort 経由で
-      1) 招待トークンを発行
-      2) 招待メールを送信
-  - JSON 形式で memberId / token を返す
-
-利用例（ルーティング側）:
-  memberInvHandler := handlers.NewMemberInvitationHandler(invitationUsecase)
-  mux.Handle("/members/", memberInvHandler) // もしくは専用パスにマウント
+POST /members/{id}/invitation
+=====================================
 */
 
 type MemberInvitationHandler struct {
@@ -122,7 +157,6 @@ func NewMemberInvitationHandler(cmd usecase.InvitationCommandPort) *MemberInvita
 	}
 }
 
-// POST /members/{id}/invitation
 func (h *MemberInvitationHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		w.Header().Set("Allow", http.MethodPost)
@@ -130,8 +164,6 @@ func (h *MemberInvitationHandler) ServeHTTP(w http.ResponseWriter, r *http.Reque
 		return
 	}
 
-	// パスから memberId 抽出
-	// 例: /members/12345/invitation
 	path := strings.TrimPrefix(r.URL.Path, "/members/")
 	parts := strings.Split(path, "/")
 	if len(parts) < 2 || parts[1] != "invitation" {

@@ -12,11 +12,11 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
-	itdom "narratives/internal/domain/member" // InvitationToken / InvitationTokenRepository がここにある想定
+	itdom "narratives/internal/domain/member" // InvitationToken / InvitationInfo 定義元
 )
 
 // InvitationTokenRepositoryFS is a Firestore-based implementation of
-// itdom.InvitationTokenRepository.
+// InvitationTokenRepository.
 // Uses the "invitationTokens" collection.
 //
 // ドキュメント構造の想定：
@@ -25,6 +25,7 @@ import (
 // - フィールド:
 //   - token          : string （任意。docID と重複してもよい）
 //   - memberId       : string
+//   - email          : string
 //   - companyId      : string (任意)
 //   - assignedBrands : []string (任意)
 //   - permissions    : []string (任意)
@@ -43,11 +44,8 @@ func (r *InvitationTokenRepositoryFS) col() *firestore.CollectionRef {
 	return r.Client.Collection("invitationTokens")
 }
 
-// Compile-time check（domain 側にインターフェースがある前提）
-// var _ itdom.InvitationTokenRepository = (*InvitationTokenRepositoryFS)(nil)
-
 // ============================================================
-// Domain ポート itdom.InvitationTokenRepository の実装
+// Domain ポート itdom.InvitationTokenRepository 相当の実装
 // ============================================================
 
 // FindByToken retrieves an invitation token document by token string.
@@ -168,26 +166,28 @@ func (r *InvitationTokenRepositoryFS) ResolveMemberIDByToken(
 	return memberID, nil
 }
 
-// ★ New: ResolveInvitationInfoByToken
-// usecase.InvitationTokenRepository インターフェースに合わせて、
-// token → InvitationInfo（MemberID / CompanyID / AssignedBrandIDs / Permissions）
+// ResolveInvitationInfoByToken は token → InvitationInfo
+// （MemberID / Email / CompanyID / AssignedBrandIDs / Permissions）
 // を解決して返します。
+// usecase.InvitationTokenRepository インターフェースに対応。
+// 戻り値は値型（memdom.InvitationInfo, error）です。
 func (r *InvitationTokenRepositoryFS) ResolveInvitationInfoByToken(
 	ctx context.Context,
 	token string,
-) (*itdom.InvitationInfo, error) {
+) (itdom.InvitationInfo, error) {
 	if r.Client == nil {
-		return nil, errors.New("firestore client is nil")
+		return itdom.InvitationInfo{}, errors.New("firestore client is nil")
 	}
 
 	it, err := r.FindByToken(ctx, token)
 	if err != nil {
-		return nil, err
+		return itdom.InvitationInfo{}, err
 	}
 
 	// InvitationToken → InvitationInfo へ詰め替え
 	info := itdom.InvitationInfo{
 		MemberID:         strings.TrimSpace(it.MemberID),
+		Email:            strings.TrimSpace(it.Email),
 		CompanyID:        strings.TrimSpace(it.CompanyID),
 		AssignedBrandIDs: it.AssignedBrandIDs,
 		Permissions:      it.Permissions,
@@ -195,15 +195,15 @@ func (r *InvitationTokenRepositoryFS) ResolveInvitationInfoByToken(
 
 	// MemberID が空の場合は NotFound 相当扱い
 	if info.MemberID == "" {
-		return nil, itdom.ErrInvitationTokenNotFound
+		return itdom.InvitationInfo{}, itdom.ErrInvitationTokenNotFound
 	}
 
-	return &info, nil
+	return info, nil
 }
 
 // CreateInvitationToken は InvitationInfo に紐づく新しい招待トークンを作成し、
 // その token 文字列を返します。
-// info には memberID / companyId / assignedBrands / permissions が含まれます。
+// info には memberID / email / companyId / assignedBrands / permissions が含まれます。
 func (r *InvitationTokenRepositoryFS) CreateInvitationToken(
 	ctx context.Context,
 	info itdom.InvitationInfo,
@@ -221,6 +221,7 @@ func (r *InvitationTokenRepositoryFS) CreateInvitationToken(
 	t := itdom.InvitationToken{
 		Token:            "", // 空なら Save 側で NewDoc() により採番される
 		MemberID:         memberID,
+		Email:            strings.TrimSpace(info.Email),
 		CompanyID:        strings.TrimSpace(info.CompanyID),
 		AssignedBrandIDs: info.AssignedBrandIDs,
 		Permissions:      info.Permissions,
@@ -309,6 +310,7 @@ func readInvitationTokenSnapshot(doc *firestore.DocumentSnapshot) (itdom.Invitat
 	t = itdom.InvitationToken{
 		Token:            asString(data["token"]),
 		MemberID:         asString(data["memberId"]),
+		Email:            asString(data["email"]),
 		CompanyID:        asString(data["companyId"]),
 		AssignedBrandIDs: asStringSlice(data["assignedBrands"]),
 		Permissions:      asStringSlice(data["permissions"]),

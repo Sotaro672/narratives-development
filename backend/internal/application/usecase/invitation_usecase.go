@@ -14,7 +14,8 @@ import (
 // ==============================
 
 // InvitationQueryPort は、招待リンク（トークン）から
-// InvitationInfo（memberId / companyId / brand / permissions）を取得するユースケースです。
+// InvitationInfo（memberId / companyId / assignedBrandIds / permissions / email）
+// を取得するユースケースです。
 type InvitationQueryPort interface {
 	GetInvitationInfo(ctx context.Context, token string) (*memdom.InvitationInfo, error)
 }
@@ -25,39 +26,27 @@ type InvitationQueryPort interface {
 
 // InvitationTokenRepository は、招待トークンと InvitationInfo の対応を扱うアウトバウンドポート。
 //
-// - ResolveInvitationInfoByToken: 招待URLアクセス時に token → InvitationInfo を解決する
-// - CreateInvitationToken       : 招待メール送信時に InvitationInfo に紐づく新しい token を発行する
-//
-// これにより InvitationToken ドキュメント自体に
-// companyId / assignedBrandIDs / permissions を持たせることができます。
+// ResolveInvitationInfoByToken: token → InvitationInfo を解決
+// CreateInvitationToken       : InvitationInfo に紐づく token を生成
 type InvitationTokenRepository interface {
-	// ★ 戻り値を値型にする（adapter 側の実装と一致させる）
 	ResolveInvitationInfoByToken(ctx context.Context, token string) (memdom.InvitationInfo, error)
 	CreateInvitationToken(ctx context.Context, info memdom.InvitationInfo) (string, error)
 }
 
-// InvitationMailerPort は「招待メールを送るためのアウトバウンドポート」です。
-// adapters/out/mail.InvitationMailer がこれを実装する想定です。
+// 招待メール送信用ポート
 type InvitationMailerPort interface {
 	SendInvitationEmail(ctx context.Context, toEmail string, token string, info memdom.InvitationInfo) error
 }
-
-// memberRepo には memdom.Repository（= MemberRepositoryFS などの実装）がぶら下がる想定。
-// adapters 側の具体型（MemberRepositoryFS）には依存しません。
 
 // ==============================
 // Usecase / Service (Query)
 // ==============================
 
-// InvitationService は InvitationQueryPort の実装です。
 type InvitationService struct {
 	invitationTokenRepo InvitationTokenRepository
-	memberRepo          memdom.Repository // 既存の依存は保持（今は未使用）
+	memberRepo          memdom.Repository
 }
 
-// NewInvitationService はヘキサゴナルアーキテクチャにおける DI 用コンストラクタです。
-// - invitationTokenRepo: 招待トークン → InvitationInfo 解決用のアウトバウンドポート
-// - memberRepo:          将来的な拡張用に保持（現在の GetInvitationInfo では未使用）
 func NewInvitationService(
 	invitationTokenRepo InvitationTokenRepository,
 	memberRepo memdom.Repository,
@@ -68,21 +57,18 @@ func NewInvitationService(
 	}
 }
 
-// GetInvitationInfo は、招待トークンから InvitationInfo を取得します。
-// 1) トークンから InvitationInfo を解決（InvitationToken ドキュメントを参照）
-// 2) そのまま返却
+// GET /api/invitation?token=...
 func (s *InvitationService) GetInvitationInfo(
 	ctx context.Context,
 	token string,
 ) (*memdom.InvitationInfo, error) {
+
 	t := strings.TrimSpace(token)
 	if t == "" {
-		// 空トークンは NotFound 扱い（バリデーションエラーにしたい場合は別エラーを定義）
 		return nil, memdom.ErrNotFound
 	}
 
-	// ★ 招待トークンから InvitationInfo （memberId / companyId / brands / permissions）を解決
-	// Repository の戻り値は値型なので、ここでポインタに変換して返却する
+	// ★ 値型で返る → ポインタに変換して返却
 	info, err := s.invitationTokenRepo.ResolveInvitationInfoByToken(ctx, t)
 	if err != nil {
 		return nil, err
@@ -95,28 +81,21 @@ func (s *InvitationService) GetInvitationInfo(
 // Inbound Port (Command)
 // ==============================
 
-// InvitationCommandPort は、「メンバーIDを指定して招待トークンを発行し、
-// 招待メールを送信する」ユースケースのインバウンドポートです。
-//
-// handlers.MemberInvitationHandler がこのポートを呼び出します。
+// 招待メール送信ユースケース
 type InvitationCommandPort interface {
-	// memberID に紐づく招待トークンを発行し、招待メールを送信する。
-	// 正常終了時は発行された token を返す。
 	CreateInvitationAndSend(ctx context.Context, memberID string) (string, error)
 }
 
-// InvitationCommandService は InvitationCommandPort の実装です。
+// ==============================
+// Command Service
+// ==============================
+
 type InvitationCommandService struct {
 	invitationTokenRepo InvitationTokenRepository
 	memberRepo          memdom.Repository
 	mailer              InvitationMailerPort
 }
 
-// NewInvitationCommandService はコマンド用ユースケースのコンストラクタです。
-//
-//   - invitationTokenRepo: 招待トークンの発行・保存を行うリポジトリ
-//   - memberRepo         : メンバー情報を取得するリポジトリ
-//   - mailer             : 招待メール送信アウトバウンドポート
 func NewInvitationCommandService(
 	invitationTokenRepo InvitationTokenRepository,
 	memberRepo memdom.Repository,
@@ -129,43 +108,43 @@ func NewInvitationCommandService(
 	}
 }
 
-// CreateInvitationAndSend は、memberID に紐づく招待トークンを新規発行し、
-// メール送信を行うコマンドユースケースです。
 func (s *InvitationCommandService) CreateInvitationAndSend(
 	ctx context.Context,
 	memberID string,
 ) (string, error) {
+
 	id := strings.TrimSpace(memberID)
 	if id == "" {
 		return "", fmt.Errorf("memberID is empty")
 	}
 
-	// 1) メンバー取得（メールアドレス等を使う）
+	// 1) メンバー取得
 	m, err := s.memberRepo.GetByID(ctx, id)
 	if err != nil {
 		return "", err
 	}
-	if strings.TrimSpace(m.Email) == "" {
+	email := strings.TrimSpace(m.Email)
+	if email == "" {
 		return "", fmt.Errorf("member email is empty")
 	}
 
-	// 2) 招待トークンに紐づける InvitationInfo を組み立て
-	//    → InvitationToken ドキュメント側に companyId / assignedBrands / permissions を保持する
+	// 2) Token に保存する InvitationInfo を構築
 	info := memdom.InvitationInfo{
 		MemberID:         m.ID,
 		CompanyID:        m.CompanyID,
-		AssignedBrandIDs: m.AssignedBrands,
-		Permissions:      m.Permissions,
+		AssignedBrandIDs: append([]string(nil), m.AssignedBrands...),
+		Permissions:      append([]string(nil), m.Permissions...),
+		Email:            email, // ★ 新規追加
 	}
 
-	// 3) 招待トークン発行（InvitationInfo を一緒に保存）
+	// 3) Firestore に invitationToken を作成
 	token, err := s.invitationTokenRepo.CreateInvitationToken(ctx, info)
 	if err != nil {
 		return "", err
 	}
 
-	// 4) メール送信
-	if err := s.mailer.SendInvitationEmail(ctx, m.Email, token, info); err != nil {
+	// 4) 招待メール送信
+	if err := s.mailer.SendInvitationEmail(ctx, email, token, info); err != nil {
 		return "", err
 	}
 
