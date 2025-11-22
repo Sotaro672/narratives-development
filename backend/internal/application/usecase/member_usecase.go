@@ -13,17 +13,16 @@ import (
 )
 
 // -----------------------------------------------------------------------------
-// Ports (依存性逆転: usecase が利用する外部サービスのインターフェース)
+// Ports
 // -----------------------------------------------------------------------------
 
-// InvitationMailer は招待メール送信用のポートです。
-// adapters/out/mail.InvitationMailerPort と構造的互換があるため import は不要。
+// InvitationMailer は招待メール送信用ポート
 type InvitationMailer interface {
 	SendInvitationEmail(ctx context.Context, toEmail string, token string, info memdom.InvitationInfo) error
 }
 
 // -----------------------------------------------------------------------------
-// Usecase
+// Usecase 本体
 // -----------------------------------------------------------------------------
 
 type MemberUsecase struct {
@@ -32,7 +31,7 @@ type MemberUsecase struct {
 	invitationMailer InvitationMailer
 }
 
-// 既存互換の最小コンストラクタ
+// 既存互換の最小構成
 func NewMemberUsecase(repo memdom.Repository) *MemberUsecase {
 	return &MemberUsecase{
 		repo: repo,
@@ -40,7 +39,7 @@ func NewMemberUsecase(repo memdom.Repository) *MemberUsecase {
 	}
 }
 
-// 招待メール機能付きのコンストラクタ（SendGrid 用）
+// Mailer 付き構成
 func NewMemberUsecaseWithMailer(repo memdom.Repository, mailer InvitationMailer) *MemberUsecase {
 	return &MemberUsecase{
 		repo:             repo,
@@ -50,7 +49,7 @@ func NewMemberUsecaseWithMailer(repo memdom.Repository, mailer InvitationMailer)
 }
 
 // -----------------------------------------------------------------------------
-// Auth/Multitenancy: companyId の取得（context から）
+// Multitenancy: companyId 取得
 // -----------------------------------------------------------------------------
 
 func companyIDFromContext(ctx context.Context) string {
@@ -128,7 +127,7 @@ func (u *MemberUsecase) Create(ctx context.Context, in CreateMemberInput) (memdo
 		createdAt = &t
 	}
 
-	// companyId の強制上書き
+	// context から companyId を強制上書き
 	cid := companyIDFromContext(ctx)
 	companyID := strings.TrimSpace(in.CompanyID)
 	if cid != "" {
@@ -197,7 +196,7 @@ func (u *MemberUsecase) Update(ctx context.Context, in UpdateMemberInput) (memdo
 		current.AssignedBrands = dedupStrings(*in.AssignedBrands)
 	}
 
-	// companyId はクライアント指定を無視し、context 値を強制
+	// context の companyId を強制
 	if cid := companyIDFromContext(ctx); cid != "" {
 		current.CompanyID = cid
 	}
@@ -230,7 +229,6 @@ func (u *MemberUsecase) Reset(ctx context.Context) error {
 // Invitation (招待メール送信)
 // -----------------------------------------------------------------------------
 
-// SendInvitation は指定メンバーに SendGrid を利用して招待メールを送信する
 func (u *MemberUsecase) SendInvitation(ctx context.Context, memberID string) error {
 	if u.invitationMailer == nil {
 		return errors.New("invitation mailer is not configured")

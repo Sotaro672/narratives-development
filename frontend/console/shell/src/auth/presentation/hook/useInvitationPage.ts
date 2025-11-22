@@ -1,15 +1,9 @@
 // frontend/console/shell/src/auth/presentation/hook/useInvitationPage.ts
 import { useCallback, useEffect, useRef, useState } from "react";
-
-// 🔙 他のサービスと同様に BACKEND の BASE URL を決める
-const ENV_BASE =
-  ((import.meta as any).env?.VITE_BACKEND_BASE_URL as string | undefined)?.replace(
-    /\/+$/g,
-    "",
-  ) ?? "";
-
-const FALLBACK_BASE = "https://narratives-backend-871263659099.asia-northeast1.run.app";
-const API_BASE = ENV_BASE || FALLBACK_BASE;
+import {
+  fetchInvitationInfo,
+  completeInvitation,
+} from "../../application/invitationService";
 
 export function useInvitationPage() {
   // ---- フォーム ref ----
@@ -21,6 +15,9 @@ export function useInvitationPage() {
   // ---- ローディング / エラー ----
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  // ---- email（追加） ----
+  const [email, setEmail] = useState<string>("");
 
   // ---- 氏名系 ----
   const [lastName, setLastName] = useState("");
@@ -43,53 +40,39 @@ export function useInvitationPage() {
   useEffect(() => {
     if (!token) return;
 
-    const fetchInvitationInfo = async () => {
+    const run = async () => {
       setLoading(true);
       setError(null);
 
       try {
-        // ✅ ここを相対パスではなく BACKEND 直指定に変更
-        const url = `${API_BASE}/api/invitation?token=${encodeURIComponent(token)}`;
+        const data = await fetchInvitationInfo(token);
 
-        // eslint-disable-next-line no-console
-        console.log("[InvitationPage] Fetching invitation info:", url);
+        // 📨 email を state にセット
+        if (data.email) setEmail(data.email);
 
-        const res = await fetch(url, {
-          method: "GET",
-          headers: {
-            "Content-Type": "application/json",
-          },
-        });
-
-        const text = await res.text();
-        // eslint-disable-next-line no-console
-        console.log("[InvitationPage] raw response:", text);
-
-        if (!res.ok) {
-          throw new Error(`Failed to load invitation info (status ${res.status})`);
-        }
-
-        const data = JSON.parse(text) as {
-          memberId: string;
-          companyId: string;
-          assignedBrandIds: string[];
-          permissions: string[];
-        };
-
-        // ---- API の値を state に反映 ----
         setCompanyId(data.companyId);
         setAssignedBrandIds(data.assignedBrandIds || []);
         setPermissions(data.permissions || []);
+
+        // --- ログに email 追記 ---
+        // eslint-disable-next-line no-console
+        console.log("[InvitationPage] Invitation info loaded:", {
+          token,
+          email: data.email,
+          companyId: data.companyId,
+          assignedBrandIds: data.assignedBrandIds,
+          permissions: data.permissions,
+        });
       } catch (e: any) {
         // eslint-disable-next-line no-console
         console.error("[InvitationPage] failed to load invitation info", e);
-        setError(e.message ?? "Unknown error");
+        setError(e?.message ?? "Unknown error");
       } finally {
         setLoading(false);
       }
     };
 
-    fetchInvitationInfo();
+    run();
   }, [token]);
 
   // ---- Navigation ----
@@ -103,12 +86,15 @@ export function useInvitationPage() {
 
   // ---- Submit ----
   const handleSubmit = useCallback(
-    (e: React.FormEvent) => {
+    async (e: React.FormEvent) => {
       e.preventDefault();
+      setError(null);
 
+      // --- ログに email を追記 ---
       // eslint-disable-next-line no-console
       console.log("[Invitation:create] payload:", {
         token,
+        email, // ← ★ 追加
         lastName,
         lastNameKana,
         firstName,
@@ -120,14 +106,49 @@ export function useInvitationPage() {
         permissions,
       });
 
-      // ここに以下の処理を実装する：
-      // 1) backend: /invitation/validate(token)
-      // 2) auth.createUserWithEmailAndPassword
-      // 3) sendEmailVerification
-      // 4) backend: /invitation/complete(token, uid,...)
+      // バリデーション
+      if (!token) {
+        setError("招待トークンが無効です。招待リンクを再度ご確認ください。");
+        return;
+      }
+      if (!password || !passwordConfirm) {
+        setError("パスワードを入力してください。");
+        return;
+      }
+      if (password !== passwordConfirm) {
+        setError("パスワードが一致しません。");
+        return;
+      }
+
+      setLoading(true);
+
+      try {
+        await completeInvitation({
+          token,
+          lastName,
+          lastNameKana,
+          firstName,
+          firstNameKana,
+          password,
+          passwordConfirm,
+          companyId,
+          assignedBrandIds,
+          permissions,
+        });
+
+        // eslint-disable-next-line no-console
+        console.log("[Invitation:create] completed for:", email);
+      } catch (e: any) {
+        // eslint-disable-next-line no-console
+        console.error("[InvitationPage] handleSubmit error", e);
+        setError(e?.message ?? "Unexpected error");
+      } finally {
+        setLoading(false);
+      }
     },
     [
       token,
+      email, // ← ★ 忘れずに依存へ追加
       lastName,
       lastNameKana,
       firstName,
@@ -147,6 +168,9 @@ export function useInvitationPage() {
     // token
     token,
     setToken,
+
+    // email（UI 側で表示も可能）
+    email,
 
     // ローディング・エラー
     loading,
