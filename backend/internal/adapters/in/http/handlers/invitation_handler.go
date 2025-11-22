@@ -1,3 +1,4 @@
+// backend/internal/adapters/in/http/handlers/invitation_handler.go
 package handlers
 
 import (
@@ -12,7 +13,9 @@ import (
 
 /*
 InvitationHandler
-GET /api/invitation?token=INV_xxx
+- GET  /api/invitation?token=INV_xxx
+- POST /api/invitation/validate
+- POST /api/invitation/complete   （暫定スタブ）
 */
 
 type InvitationHandler struct {
@@ -25,6 +28,10 @@ func NewInvitationHandler(inv usecase.InvitationQueryPort) *InvitationHandler {
 	}
 }
 
+// --------------------------------------------------
+// 共通レスポンス型（GET 用）
+// --------------------------------------------------
+
 type invitationInfoResponse struct {
 	MemberID         string   `json:"memberId"`
 	CompanyID        string   `json:"companyId"`
@@ -33,10 +40,56 @@ type invitationInfoResponse struct {
 	Email            string   `json:"email,omitempty"`
 }
 
+// --------------------------------------------------
+// validate 用リクエスト / レスポンス
+// --------------------------------------------------
+
+type invitationValidateRequest struct {
+	Token string `json:"token"`
+}
+
+type invitationValidateResponse struct {
+	Email            string   `json:"email"`
+	MemberID         string   `json:"memberId,omitempty"`
+	CompanyID        string   `json:"companyId,omitempty"`
+	AssignedBrandIDs []string `json:"assignedBrandIds,omitempty"`
+	Permissions      []string `json:"permissions,omitempty"`
+}
+
+// =====================================
+// ルーティング分岐
+// =====================================
+
+func (h *InvitationHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	// /api/invitation の後ろのパスを取得
+	path := strings.TrimPrefix(r.URL.Path, "/api/invitation")
+
+	// 例:
+	//   /api/invitation           -> path = ""
+	//   /api/invitation/          -> path = "/"
+	//   /api/invitation/validate  -> path = "/validate"
+	//   /api/invitation/complete  -> path = "/complete"
+
+	if path == "" || path == "/" {
+		h.handleGetInfo(w, r)
+		return
+	}
+
+	switch path {
+	case "/validate":
+		h.handleValidate(w, r)
+	case "/complete":
+		h.handleComplete(w, r)
+	default:
+		http.NotFound(w, r)
+	}
+}
+
 // =====================================
 // GET /api/invitation?token=xxx
 // =====================================
-func (h *InvitationHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+
+func (h *InvitationHandler) handleGetInfo(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
 		w.Header().Set("Allow", http.MethodGet)
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
@@ -77,10 +130,62 @@ func (h *InvitationHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	_ = json.NewEncoder(w).Encode(resp)
 }
 
+// =====================================
+// POST /api/invitation/validate
+// body: { "token": "INV_xxx" }
+// =====================================
+
+func (h *InvitationHandler) handleValidate(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		w.Header().Set("Allow", http.MethodPost)
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	if h.InvitationQuery == nil {
+		http.Error(w, "invitation usecase not configured", http.StatusInternalServerError)
+		return
+	}
+
+	var req invitationValidateRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, "invalid body", http.StatusBadRequest)
+		return
+	}
+
+	token := strings.TrimSpace(req.Token)
+	if token == "" {
+		http.Error(w, "token required", http.StatusBadRequest)
+		return
+	}
+
+	ctx := r.Context()
+	info, err := h.InvitationQuery.GetInvitationInfo(ctx, token)
+	if err != nil {
+		if errors.Is(err, memdom.ErrInvitationTokenNotFound) || errors.Is(err, memdom.ErrNotFound) {
+			http.Error(w, "invitation token not found", http.StatusNotFound)
+			return
+		}
+		http.Error(w, "failed to resolve invitation token", http.StatusInternalServerError)
+		return
+	}
+
+	resp := invitationValidateResponse{
+		Email:            info.Email,
+		MemberID:         info.MemberID,
+		CompanyID:        info.CompanyID,
+		AssignedBrandIDs: info.AssignedBrandIDs,
+		Permissions:      info.Permissions,
+	}
+
+	w.Header().Set("Content-Type", "application/json; charset=utf-8")
+	_ = json.NewEncoder(w).Encode(resp)
+}
+
 /*
 =====================================
 POST /api/invitation/complete
-（サインイン後の member 確定）
+（サインイン後の member 確定） ※暫定スタブ
 =====================================
 */
 
@@ -94,7 +199,8 @@ type invitationCompleteRequest struct {
 	Email         string `json:"email"`
 }
 
-func (h *InvitationHandler) Complete(w http.ResponseWriter, r *http.Request) {
+// 内部用：/complete 用ハンドラ
+func (h *InvitationHandler) handleComplete(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		w.Header().Set("Allow", http.MethodPost)
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
@@ -134,7 +240,7 @@ func (h *InvitationHandler) Complete(w http.ResponseWriter, r *http.Request) {
 	// ★ 暫定対応：未実装でも「info を使った」扱いにする
 	_ = info.MemberID
 
-	// ★ ここに MemberUsecase.CompleteInvitation(...) を後で実装して呼び出す
+	// ★ TODO: MemberUsecase.CompleteInvitation(...) を実装して呼び出す
 	// h.MemberUsecase.CompleteInvitation(ctx, *info, req)
 
 	w.WriteHeader(http.StatusNoContent)

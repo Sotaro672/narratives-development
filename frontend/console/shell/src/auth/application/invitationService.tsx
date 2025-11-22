@@ -135,8 +135,8 @@ export async function completeInvitation(
       firstName,
       firstNameKana,
     },
-    companyId: effectiveCompanyId,       // ← ID をそのまま維持
-    assignedBrandIds: effectiveBrandIds, // ← ID をそのまま維持
-    permissions: effectivePermissions,   // ← permission name をそのまま維持
+    companyId: effectiveCompanyId,
+    assignedBrandIds: effectiveBrandIds,
+    permissions: effectivePermissions,
   });
 }

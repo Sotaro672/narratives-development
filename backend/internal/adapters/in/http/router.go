@@ -81,6 +81,7 @@ func NewRouter(deps RouterDeps) http.Handler {
 		_, _ = w.Write([]byte("ok"))
 	})
 	mux.Handle("/debug/sendgrid", http.HandlerFunc(DebugSendGridHandler))
+
 	// ============================================================
 	// Auth Middleware（通常エンドポイント用）
 	// ============================================================
@@ -122,13 +123,18 @@ func NewRouter(deps RouterDeps) http.Handler {
 
 	// ============================================================
 	// Invitation (未ログインでアクセス可能)
-	// GET /api/invitation?token=xxx
+	//   - GET /api/invitation?token=xxx
+	//   - POST /api/invitation/validate
+	//   - POST /api/invitation/complete
+	//   を 1 つのハンドラでまとめて扱う
 	// ============================================================
 	if deps.InvitationQuery != nil {
-		mux.Handle(
-			"/api/invitation",
-			handlers.NewInvitationHandler(deps.InvitationQuery),
-		)
+		invH := handlers.NewInvitationHandler(deps.InvitationQuery)
+
+		// クエリだけのパターン
+		mux.Handle("/api/invitation", invH)
+		// サブパス (/validate, /complete など) も同じハンドラで受ける
+		mux.Handle("/api/invitation/", invH)
 	}
 
 	// ============================================================

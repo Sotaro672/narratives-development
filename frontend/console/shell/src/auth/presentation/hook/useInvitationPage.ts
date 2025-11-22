@@ -3,9 +3,11 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import {
   fetchInvitationInfo,
   completeInvitation,
-  fetchCompanyNameById,
-  fetchBrandNamesByIds,
 } from "../../application/invitationService";
+
+// ★ サインイン用
+import { signInWithEmailAndPassword } from "firebase/auth";
+import { auth } from "../../infrastructure/config/firebaseClient";
 
 export function useInvitationPage() {
   // ---- フォーム ref ----
@@ -63,39 +65,18 @@ export function useInvitationPage() {
         setAssignedBrandIds(brands);
         setPermissions(perms);
 
-        // 会社名・ブランド名を並列取得
-        try {
-          const [companyNameResolved, brandNamesResolved] = await Promise.all([
-            data.companyId
-              ? fetchCompanyNameById(data.companyId)
-              : Promise.resolve(""),
-            fetchBrandNamesByIds(brands),
-          ]);
-
-          if (companyNameResolved) {
-            setCompanyName(companyNameResolved);
-          } else {
-            setCompanyName("");
-          }
-          setAssignedBrandNames(brandNamesResolved);
-        } catch (nameErr) {
-          // eslint-disable-next-line no-console
-          console.warn("[InvitationPage] failed to resolve names", nameErr);
-          // 失敗した場合は名前は空・ID表示にフォールバックさせる
-          setCompanyName("");
-          setAssignedBrandNames([]);
-        }
-
         // --- ログ ---
         // eslint-disable-next-line no-console
         console.log("[InvitationPage] Invitation info loaded:", {
           token,
           email: data.email,
           companyId: data.companyId,
-          companyName,
           assignedBrandIds: data.assignedBrandIds,
           permissions: data.permissions,
         });
+
+        // 会社名・ブランド名の解決は、必要であれば別途
+        // useInvitationPage から API を呼ぶ形で後から追加できます
       } catch (e: any) {
         // eslint-disable-next-line no-console
         console.error("[InvitationPage] failed to load invitation info", e);
@@ -106,7 +87,6 @@ export function useInvitationPage() {
     };
 
     run();
-    // companyName は run 内で更新されるので依存から外しておく
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [token]);
 
@@ -158,6 +138,7 @@ export function useInvitationPage() {
       setLoading(true);
 
       try {
+        // 1) 招待完了 (backend + Firebase createUser + verify mail)
         await completeInvitation({
           token,
           lastName,
@@ -171,8 +152,12 @@ export function useInvitationPage() {
           permissions,
         });
 
+        // 2) ★ Firebase Authentication へサインイン
+        //    （作成した email / password をそのまま使用）
+        await signInWithEmailAndPassword(auth, email, password);
+
         // eslint-disable-next-line no-console
-        console.log("[Invitation:create] completed for:", email);
+        console.log("[Invitation:create] completed & signed in for:", email);
       } catch (e: any) {
         // eslint-disable-next-line no-console
         console.error("[InvitationPage] handleSubmit error", e);
@@ -232,7 +217,7 @@ export function useInvitationPage() {
     assignedBrandIds,
     permissions,
 
-    // 表示用の名前
+    // 表示用の名前（今後使う場合に備えてそのまま残す）
     companyName,
     assignedBrandNames,
 
