@@ -80,7 +80,7 @@ func NewRouter(deps RouterDeps) http.Handler {
 		w.WriteHeader(http.StatusOK)
 		_, _ = w.Write([]byte("ok"))
 	})
-
+	mux.Handle("/debug/sendgrid", http.HandlerFunc(DebugSendGridHandler))
 	// ============================================================
 	// Auth Middleware（通常エンドポイント用）
 	// ============================================================

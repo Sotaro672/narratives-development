@@ -5,6 +5,9 @@ export function useInvitationPage() {
   // ---- フォーム ref ----
   const formRef = useRef<HTMLFormElement>(null);
 
+  // ---- 招待トークン ----
+  const [token, setToken] = useState<string>("");
+
   // ---- 氏名系 ----
   const [lastName, setLastName] = useState("");
   const [lastNameKana, setLastNameKana] = useState("");
@@ -16,7 +19,6 @@ export function useInvitationPage() {
   const [passwordConfirm, setPasswordConfirm] = useState("");
 
   // ---- 招待トークンから取得する割り当て情報 ----
-  // ※ InvitationPage.tsx と同じ初期値
   const [companyId, setCompanyId] = useState<string>("");
   const [assignedBrandIds, setAssignedBrandIds] = useState<string>("");
   const [permissions, setPermissions] = useState<string>("");
@@ -34,12 +36,15 @@ export function useInvitationPage() {
   const handleSubmit = useCallback(
     (e: React.FormEvent) => {
       e.preventDefault();
-      // ※このロジックは後で:
-      // 1) Firebase auth.createUserWithEmailAndPassword
-      // 2) sendEmailVerification
-      // 3) バックエンドに「招待完了」通知
-      // というフローに差し替える
+
+      // TODO:
+      // ここに「招待トークンを用いた会員作成フロー」を実装する
+      // 1) backend: /invitation/validate(token)
+      // 2) auth.createUserWithEmailAndPassword
+      // 3) sendEmailVerification
+      // 4) backend: /invitation/complete(token, uid,...)
       console.log({
+        token,
         lastName,
         lastNameKana,
         firstName,
@@ -52,6 +57,7 @@ export function useInvitationPage() {
       });
     },
     [
+      token,
       lastName,
       lastNameKana,
       firstName,
@@ -67,6 +73,10 @@ export function useInvitationPage() {
   // ---- return ----
   return {
     formRef,
+
+    // token
+    token,
+    setToken,
 
     // 氏名
     lastName,

@@ -148,10 +148,11 @@ func (r *InvitationTokenRepositoryFS) Delete(ctx context.Context, token string) 
 
 // ============================================================
 // Application ポート usecase.InvitationTokenRepository 用の実装
-// （ResolveMemberIDByToken / CreateInvitationToken）
+// （ResolveXXX / CreateInvitationToken）
 // ============================================================
 
 // ResolveMemberIDByToken は token → memberID の解決を行います。
+// ※ 既存コード互換用に残しています（不要であれば後で削除可）。
 func (r *InvitationTokenRepositoryFS) ResolveMemberIDByToken(
 	ctx context.Context,
 	token string,
@@ -167,27 +168,63 @@ func (r *InvitationTokenRepositoryFS) ResolveMemberIDByToken(
 	return memberID, nil
 }
 
-// CreateInvitationToken は memberID に紐づく新しい招待トークンを作成し、
+// ★ New: ResolveInvitationInfoByToken
+// usecase.InvitationTokenRepository インターフェースに合わせて、
+// token → InvitationInfo（MemberID / CompanyID / AssignedBrandIDs / Permissions）
+// を解決して返します。
+func (r *InvitationTokenRepositoryFS) ResolveInvitationInfoByToken(
+	ctx context.Context,
+	token string,
+) (*itdom.InvitationInfo, error) {
+	if r.Client == nil {
+		return nil, errors.New("firestore client is nil")
+	}
+
+	it, err := r.FindByToken(ctx, token)
+	if err != nil {
+		return nil, err
+	}
+
+	// InvitationToken → InvitationInfo へ詰め替え
+	info := itdom.InvitationInfo{
+		MemberID:         strings.TrimSpace(it.MemberID),
+		CompanyID:        strings.TrimSpace(it.CompanyID),
+		AssignedBrandIDs: it.AssignedBrandIDs,
+		Permissions:      it.Permissions,
+	}
+
+	// MemberID が空の場合は NotFound 相当扱い
+	if info.MemberID == "" {
+		return nil, itdom.ErrInvitationTokenNotFound
+	}
+
+	return &info, nil
+}
+
+// CreateInvitationToken は InvitationInfo に紐づく新しい招待トークンを作成し、
 // その token 文字列を返します。
+// info には memberID / companyId / assignedBrands / permissions が含まれます。
 func (r *InvitationTokenRepositoryFS) CreateInvitationToken(
 	ctx context.Context,
-	memberID string,
+	info itdom.InvitationInfo,
 ) (string, error) {
 	if r.Client == nil {
 		return "", errors.New("firestore client is nil")
 	}
 
-	memberID = strings.TrimSpace(memberID)
+	memberID := strings.TrimSpace(info.MemberID)
 	if memberID == "" {
 		return "", fmt.Errorf("memberID is empty")
 	}
 
 	now := time.Now().UTC()
 	t := itdom.InvitationToken{
-		Token:    "", // 空なら Save 側で NewDoc() により採番される
-		MemberID: memberID,
-		// companyId / brands / permissions は必要に応じて後で拡張
-		CreatedAt: now,
+		Token:            "", // 空なら Save 側で NewDoc() により採番される
+		MemberID:         memberID,
+		CompanyID:        strings.TrimSpace(info.CompanyID),
+		AssignedBrandIDs: info.AssignedBrandIDs,
+		Permissions:      info.Permissions,
+		CreatedAt:        now,
 	}
 
 	saved, err := r.Save(ctx, t)

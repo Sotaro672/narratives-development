@@ -1,5 +1,6 @@
 // frontend/console/shell/src/auth/presentation/pages/InvitationPage.tsx
 import * as React from "react";
+import { useSearchParams } from "react-router-dom";
 import PageStyle from "../../../layout/PageStyle/PageStyle";
 import { Input } from "../../../shared/ui/input";
 import { useInvitationPage } from "../hook/useInvitationPage";
@@ -8,6 +9,10 @@ import { useInvitationPage } from "../hook/useInvitationPage";
  * 招待ページ（氏名・かな + パスワード + 割り当て情報）
  */
 export default function InvitationPage() {
+  // ★ URL クエリ (?token=INV_xxx) を取得
+  const [searchParams] = useSearchParams();
+  const invitationToken = searchParams.get("token") ?? "";
+
   const {
     formRef,
 
@@ -27,16 +32,26 @@ export default function InvitationPage() {
     passwordConfirm,
     setPasswordConfirm,
 
-    // 割り当て情報
+    // 割り当て情報（メールと同じ内容を表示用に保持）
     companyId,
     assignedBrandIds,
     permissions,
+
+    // token setter（useInvitationPage 内に追加してある前提）
+    setToken,
 
     // Actions
     handleBack,
     handleCreate,
     handleSubmit,
   } = useInvitationPage();
+
+  // ★ 最初の一度だけ token をセット
+  React.useEffect(() => {
+    if (invitationToken) {
+      setToken(invitationToken);
+    }
+  }, [invitationToken, setToken]);
 
   return (
     <PageStyle title="メンバー招待" onBack={handleBack} onCreate={handleCreate}>
@@ -119,42 +134,29 @@ export default function InvitationPage() {
             </div>
           </div>
 
-          {/* 割り当て情報 */}
+          {/* 割り当て情報（表示専用） */}
           <div className="mt-4 space-y-3">
             <h2 className="text-sm font-semibold text-slate-200">割り当て情報</h2>
 
             <div>
-              <label className="block text-sm text-slate-300 mb-1">会社ID（companyId）</label>
-              <Input
-                variant="default"
-                className="w-full rounded border border-slate-600 bg-slate-900 px-3 py-2 text-slate-200"
-                value={companyId}
-                readOnly
-              />
+              <label className="block text-sm text-slate-300 mb-1">Company ID</label>
+              <p className="text-sm text-slate-100 bg-slate-900 rounded px-3 py-2 border border-slate-700">
+                {companyId || "-"}
+              </p>
             </div>
 
             <div>
-              <label className="block text-sm text-slate-300 mb-1">
-                割り当てブランドID（assignedBrandId）
-              </label>
-              <Input
-                variant="default"
-                className="w-full rounded border border-slate-600 bg-slate-900 px-3 py-2 text-slate-200"
-                value={assignedBrandIds}
-                readOnly
-                placeholder="例：brand-001, brand-002"
-              />
+              <label className="block text-sm text-slate-300 mb-1">Assigned Brands</label>
+              <p className="text-sm text-slate-100 bg-slate-900 rounded px-3 py-2 border border-slate-700 whitespace-pre-wrap break-all">
+                {assignedBrandIds || "-"}
+              </p>
             </div>
 
             <div>
-              <label className="block text-sm text-slate-300 mb-1">権限（permissions）</label>
-              <Input
-                variant="default"
-                className="w-full rounded border border-slate-600 bg-slate-900 px-3 py-2 text-slate-200"
-                value={permissions}
-                readOnly
-                placeholder="例：member.read, member.write ..."
-              />
+              <label className="block text-sm text-slate-300 mb-1">Permissions</label>
+              <p className="text-sm text-slate-100 bg-slate-900 rounded px-3 py-2 border border-slate-700 whitespace-pre-wrap break-all">
+                {permissions || "-"}
+              </p>
             </div>
           </div>
         </form>

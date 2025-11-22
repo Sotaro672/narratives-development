@@ -1,11 +1,9 @@
-// backend/internal/platform/di/container.go
 package di
 
 import (
 	"context"
 	"errors"
 	"log"
-	"os"
 
 	firebase "firebase.google.com/go/v4"
 	firebaseauth "firebase.google.com/go/v4/auth"
@@ -21,25 +19,6 @@ import (
 	memdom "narratives/internal/domain/member"
 	appcfg "narratives/internal/infra/config"
 )
-
-//
-// ========================================
-// dev / stub EmailClient for InvitationMailer
-// ========================================
-//
-
-type loggingEmailClient struct{}
-
-func (c *loggingEmailClient) Send(
-	_ context.Context,
-	from,
-	to,
-	subject,
-	body string,
-) error {
-	log.Printf("[mail] SEND (logging only) from=%s to=%s subject=%s\n%s", from, to, subject, body)
-	return nil
-}
 
 //
 // ========================================
@@ -100,6 +79,57 @@ func (a *authCompanyRepoAdapter) Save(ctx context.Context, c *companydom.Company
 	}
 	*c = saved
 	return nil
+}
+
+//
+// ========================================
+// InvitationTokenRepository 用アダプタ
+// ========================================
+//
+// Firestore 実装 (*fs.InvitationTokenRepositoryFS) を
+// usecase.InvitationTokenRepository に合わせてラップする。
+//   - ResolveInvitationInfoByToken
+//   - CreateInvitationToken
+//
+
+type invitationTokenRepoAdapter struct {
+	fsRepo *fs.InvitationTokenRepositoryFS
+}
+
+// ResolveInvitationInfoByToken は token から InvitationInfo を取得します。
+func (a *invitationTokenRepoAdapter) ResolveInvitationInfoByToken(
+	ctx context.Context,
+	token string,
+) (memdom.InvitationInfo, error) {
+	if a.fsRepo == nil {
+		return memdom.InvitationInfo{}, errors.New("invitationTokenRepoAdapter.ResolveInvitationInfoByToken: fsRepo is nil")
+	}
+
+	it, err := a.fsRepo.FindByToken(ctx, token)
+	if err != nil {
+		return memdom.InvitationInfo{}, err
+	}
+
+	return memdom.InvitationInfo{
+		MemberID:         it.MemberID,
+		CompanyID:        it.CompanyID,
+		AssignedBrandIDs: it.AssignedBrandIDs,
+		Permissions:      it.Permissions,
+	}, nil
+}
+
+// CreateInvitationToken は InvitationInfo を受け取り、
+// Firestore 側に招待トークンを作成して token 文字列を返します。
+func (a *invitationTokenRepoAdapter) CreateInvitationToken(
+	ctx context.Context,
+	info memdom.InvitationInfo,
+) (string, error) {
+	if a.fsRepo == nil {
+		return "", errors.New("invitationTokenRepoAdapter.CreateInvitationToken: fsRepo is nil")
+	}
+	// FS 実装は既に (ctx, member.InvitationInfo) を受け取るように
+	// 変更済みという前提で、そのまま委譲する。
+	return a.fsRepo.CreateInvitationToken(ctx, info)
 }
 
 // ========================================
@@ -225,8 +255,11 @@ func NewContainer(ctx context.Context) (*Container, error) {
 	userRepo := fs.NewUserRepositoryFS(fsClient)
 	walletRepo := fs.NewWalletRepositoryFS(fsClient)
 
-	// ★ 招待トークン用 Repository（Firestore 実装）
-	invitationTokenRepo := fs.NewInvitationTokenRepositoryFS(fsClient)
+	// ★ 招待トークン用 Repository（Firestore 実装）＋ Usecase 用アダプタ
+	invitationTokenFSRepo := fs.NewInvitationTokenRepositoryFS(fsClient)
+	invitationTokenUCRepo := &invitationTokenRepoAdapter{
+		fsRepo: invitationTokenFSRepo,
+	}
 
 	// 5. Application-layer usecases
 	accountUC := uc.NewAccountUsecase(accountRepo)
@@ -273,49 +306,15 @@ func NewContainer(ctx context.Context) (*Container, error) {
 	walletUC := uc.NewWalletUsecase(walletRepo)
 
 	// ★ Invitation 用メールクライアント & メーラー
-	//
-	// 環境変数:
-	//   SENDGRID_API_KEY : SendGrid の API キー
-	//   SENDGRID_FROM    : 送信元メールアドレス (例: no-reply@narratives.jp)
-	//   CONSOLE_BASE_URL : https://narratives.jp
-	//
-	// すべて揃っていれば SendGrid を使い、足りなければ loggingEmailClient にフォールバック。
-	sendGridAPIKey := os.Getenv("SENDGRID_API_KEY")
-	sendGridFrom := os.Getenv("SENDGRID_FROM")
-	consoleBaseURL := os.Getenv("CONSOLE_BASE_URL")
-
-	var invitationMailer *mailadp.InvitationMailer
-
-	if sendGridAPIKey == "" || sendGridFrom == "" {
-		log.Printf("[container] WARN: SENDGRID_API_KEY or SENDGRID_FROM not set; using loggingEmailClient for invitations")
-
-		from := sendGridFrom
-		if from == "" {
-			from = "no-reply@example.com"
-		}
-		baseURL := consoleBaseURL
-		if baseURL == "" {
-			baseURL = "https://narratives.jp"
-		}
-
-		// ログ出力のみ行うダミークライアント
-		emailClient := &loggingEmailClient{}
-		invitationMailer = mailadp.NewInvitationMailer(emailClient, from, baseURL)
-	} else {
-		// SendGrid バックエンドで InvitationMailer を構築
-		// NewInvitationMailerWithSendGrid 内部で:
-		//   - SENDGRID_API_KEY / SENDGRID_FROM / CONSOLE_BASE_URL
-		// を参照して SendGridClient を組み立てる。
-		log.Printf("[container] SendGrid client enabled for invitations (from=%s)", sendGridFrom)
-		invitationMailer = mailadp.NewInvitationMailerWithSendGrid()
-	}
+	//   → ここでのみ SendGrid を使用（logging-only クライアントは廃止）
+	invitationMailer := mailadp.NewInvitationMailerWithSendGrid()
 
 	// ★ Invitation 用 Usecase（Query / Command）
-	invitationQueryUC := uc.NewInvitationService(invitationTokenRepo, memberRepo)
+	invitationQueryUC := uc.NewInvitationService(invitationTokenUCRepo, memberRepo)
 	invitationCommandUC := uc.NewInvitationCommandService(
-		invitationTokenRepo,
+		invitationTokenUCRepo,
 		memberRepo,
-		invitationMailer, // ← ここから SendGrid 経由でメール送信
+		invitationMailer, // ← SendGrid 経由でメール送信
 	)
 
 	// ★ auth/bootstrap 用 Usecase

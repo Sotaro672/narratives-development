@@ -68,15 +68,16 @@ func (m *InvitationMailer) SendInvitationEmail(
 	token string,
 	info memdom.InvitationInfo,
 ) error {
+	_ = ctx // 将来的にログ出力などで使う場合を考慮して受け取っておく
+
 	invitationURL := m.buildInvitationURL(token)
 
 	subject := "【Narratives】メンバー招待のお知らせ"
 
 	// メール本文（プレーンテキスト例）
+	// ★ 氏名行（「◯◯ 様」）は削除
 	body := fmt.Sprintf(
-		`%s 様
-
-管理者から「Narratives Console」へのメンバー招待が届いています。
+		`管理者から「Narratives Console」へのメンバー招待が届いています。
 
 下記のリンクを開き、パスワード設定およびプロフィール情報の登録を行ってください。
 
@@ -91,8 +92,6 @@ func (m *InvitationMailer) SendInvitationEmail(
 
 -- 
 Narratives Console`,
-		// 宛名：ドメイン側で FirstName / LastName が取れない場合は MemberID 等でも可
-		strings.TrimSpace(info.MemberID),
 		invitationURL,
 		strings.TrimSpace(info.CompanyID),
 		strings.Join(info.AssignedBrandIDs, ", "),

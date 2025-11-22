@@ -23,12 +23,17 @@ type InvitationQueryPort interface {
 // Outbound Ports（Query / Command 共通）
 // ==============================
 
-// InvitationTokenRepository は、招待トークンと MemberID の対応を扱うアウトバウンドポート。
-// - ResolveMemberIDByToken: 招待URLアクセス時に token → memberID を解決する
-// - CreateInvitationToken  : 招待メール送信時に memberID に紐づく新しい token を発行する
+// InvitationTokenRepository は、招待トークンと InvitationInfo の対応を扱うアウトバウンドポート。
+//
+// - ResolveInvitationInfoByToken: 招待URLアクセス時に token → InvitationInfo を解決する
+// - CreateInvitationToken       : 招待メール送信時に InvitationInfo に紐づく新しい token を発行する
+//
+// これにより InvitationToken ドキュメント自体に
+// companyId / assignedBrandIDs / permissions を持たせることができます。
 type InvitationTokenRepository interface {
-	ResolveMemberIDByToken(ctx context.Context, token string) (string, error)
-	CreateInvitationToken(ctx context.Context, memberID string) (string, error)
+	// ★ 戻り値を値型にする（adapter 側の実装と一致させる）
+	ResolveInvitationInfoByToken(ctx context.Context, token string) (memdom.InvitationInfo, error)
+	CreateInvitationToken(ctx context.Context, info memdom.InvitationInfo) (string, error)
 }
 
 // InvitationMailerPort は「招待メールを送るためのアウトバウンドポート」です。
@@ -47,12 +52,12 @@ type InvitationMailerPort interface {
 // InvitationService は InvitationQueryPort の実装です。
 type InvitationService struct {
 	invitationTokenRepo InvitationTokenRepository
-	memberRepo          memdom.Repository
+	memberRepo          memdom.Repository // 既存の依存は保持（今は未使用）
 }
 
 // NewInvitationService はヘキサゴナルアーキテクチャにおける DI 用コンストラクタです。
-// - invitationTokenRepo: 招待トークン → MemberID 解決用のアウトバウンドポート
-// - memberRepo:          Member を取得するためのリポジトリ（memdom.Repository）
+// - invitationTokenRepo: 招待トークン → InvitationInfo 解決用のアウトバウンドポート
+// - memberRepo:          将来的な拡張用に保持（現在の GetInvitationInfo では未使用）
 func NewInvitationService(
 	invitationTokenRepo InvitationTokenRepository,
 	memberRepo memdom.Repository,
@@ -64,9 +69,8 @@ func NewInvitationService(
 }
 
 // GetInvitationInfo は、招待トークンから InvitationInfo を取得します。
-// 1) トークンから MemberID を解決
-// 2) MemberRepository から Member を取得
-// 3) InvitationInfo に詰め替えて返却
+// 1) トークンから InvitationInfo を解決（InvitationToken ドキュメントを参照）
+// 2) そのまま返却
 func (s *InvitationService) GetInvitationInfo(
 	ctx context.Context,
 	token string,
@@ -77,25 +81,14 @@ func (s *InvitationService) GetInvitationInfo(
 		return nil, memdom.ErrNotFound
 	}
 
-	// 1) 招待トークンから MemberID を解決
-	memberID, err := s.invitationTokenRepo.ResolveMemberIDByToken(ctx, t)
+	// ★ 招待トークンから InvitationInfo （memberId / companyId / brands / permissions）を解決
+	// Repository の戻り値は値型なので、ここでポインタに変換して返却する
+	info, err := s.invitationTokenRepo.ResolveInvitationInfoByToken(ctx, t)
 	if err != nil {
 		return nil, err
 	}
 
-	// 2) MemberRepository から Member を取得
-	m, err := s.memberRepo.GetByID(ctx, memberID)
-	if err != nil {
-		return nil, err
-	}
-
-	// 3) InvitationInfo を組み立てて返却
-	return &memdom.InvitationInfo{
-		MemberID:         m.ID,
-		CompanyID:        m.CompanyID,
-		AssignedBrandIDs: m.AssignedBrands,
-		Permissions:      m.Permissions,
-	}, nil
+	return &info, nil
 }
 
 // ==============================
@@ -156,18 +149,19 @@ func (s *InvitationCommandService) CreateInvitationAndSend(
 		return "", fmt.Errorf("member email is empty")
 	}
 
-	// 2) 招待トークン発行
-	token, err := s.invitationTokenRepo.CreateInvitationToken(ctx, id)
-	if err != nil {
-		return "", err
-	}
-
-	// 3) メール送信用の InvitationInfo を組み立て
+	// 2) 招待トークンに紐づける InvitationInfo を組み立て
+	//    → InvitationToken ドキュメント側に companyId / assignedBrands / permissions を保持する
 	info := memdom.InvitationInfo{
 		MemberID:         m.ID,
 		CompanyID:        m.CompanyID,
 		AssignedBrandIDs: m.AssignedBrands,
 		Permissions:      m.Permissions,
+	}
+
+	// 3) 招待トークン発行（InvitationInfo を一緒に保存）
+	token, err := s.invitationTokenRepo.CreateInvitationToken(ctx, info)
+	if err != nil {
+		return "", err
 	}
 
 	// 4) メール送信
