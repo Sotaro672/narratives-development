@@ -76,9 +76,9 @@ export default function AdminPanel({
   // ─────────────────────────────
   const handleProfileSave = async () => {
     try {
-      // カタカナバリデーション
+      // ひらがなバリデーション
       if (!isKatakana(lastNameKana) || !isKatakana(firstNameKana)) {
-        window.alert("フリガナはカタカナで入力してください。");
+        window.alert("フリガナはひらがなで入力してください。");
         return;
       }
 
@@ -213,7 +213,7 @@ export default function AdminPanel({
             <div className="admin-modal-title">プロフィール変更</div>
 
             <div className="space-y-4">
-              {/* 姓 / 姓カナ */}
+              {/* 姓 / 姓かな */}
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className="admin-modal-label">姓</label>
@@ -225,17 +225,17 @@ export default function AdminPanel({
                   />
                 </div>
                 <div>
-                  <label className="admin-modal-label">姓（カナ）</label>
+                  <label className="admin-modal-label">姓（かな）</label>
                   <Input
                     className="admin-modal-input"
                     value={lastNameKana}
                     onChange={(e) => setLastNameKana(e.target.value)}
-                    placeholder="ヤマダ"
+                    placeholder="やまだ"
                   />
                 </div>
               </div>
 
-              {/* 名 / 名カナ */}
+              {/* 名 / 名かな */}
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className="admin-modal-label">名</label>
@@ -247,12 +247,12 @@ export default function AdminPanel({
                   />
                 </div>
                 <div>
-                  <label className="admin-modal-label">名（カナ）</label>
+                  <label className="admin-modal-label">名（かな）</label>
                   <Input
                     className="admin-modal-input"
                     value={firstNameKana}
                     onChange={(e) => setFirstNameKana(e.target.value)}
-                    placeholder="タロウ"
+                    placeholder="たろう"
                   />
                 </div>
               </div>

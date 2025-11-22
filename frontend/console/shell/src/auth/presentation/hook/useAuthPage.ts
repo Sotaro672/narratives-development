@@ -1,4 +1,4 @@
-// frontend/console/shell/src/auth/presentation/hook/useAuthPage.ts
+//frontend\console\shell\src\auth\presentation\hook\useAuthPage.ts
 import { useCallback, useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuthActions } from "../../application/useAuthActions";
@@ -8,44 +8,44 @@ import { auth } from "../../infrastructure/config/firebaseClient";
 export type AuthMode = "signup" | "signin";
 
 // -------------------------
-// カナ関連ヘルパ
+// かな関連ヘルパ
 // -------------------------
 
-// ひらがな・半角カナを全角カタカナに寄せる（削除はしない）
-function toKatakana(input: string): string {
+// ひらがな・カタカナ・半角カナをひらがなに寄せる（削除はしない）
+function toHiragana(input: string): string {
   if (!input) return "";
 
   let s = input;
 
-  // ひらがな → カタカナ
-  s = s.replace(/[\u3041-\u3096]/g, (ch) =>
-    String.fromCharCode(ch.charCodeAt(0) + 0x60),
+  // 全角カタカナ → ひらがな
+  s = s.replace(/[\u30A1-\u30F6]/g, (ch) =>
+    String.fromCharCode(ch.charCodeAt(0) - 0x60),
   );
 
-  // 半角カナ → 全角カナ（簡易変換）
+  // 半角カナ → 全角カナ → ひらがな（簡易変換）
   s = s.replace(/[\uff61-\uff9f]/g, (ch) => {
-    const code = ch.charCodeAt(0) - 0xff61 + 0x30a1;
-    return String.fromCharCode(code);
+    const kataCode = ch.charCodeAt(0) - 0xff61 + 0x30a1;
+    const hiraCode = kataCode - 0x60;
+    return String.fromCharCode(hiraCode);
   });
 
   return s;
 }
 
-// 「全角カタカナ + 長音 + スペースのみか」をチェック
-function isKatakanaOnly(input: string): boolean {
+// 「ひらがな + スペースのみか」をチェック
+function isHiraganaOnly(input: string): boolean {
   if (!input) return false;
-  return /^[\u30A0-\u30FFー\s]+$/.test(input);
+  return /^[\u3041-\u3096\s]+$/.test(input);
 }
 
 // -------------------------
-// 会社名からアルファベット除去
+// 会社名の正規化
+//   ※ アルファベットも許可するので、ここでは不要な削除は行わない
 // -------------------------
 function normalizeCompanyName(input: string): string {
   if (!input) return "";
-
-  // 許可: 漢字・ひらがな・カタカナ・数字・スペース・長音
-  // アルファベットだけ除去
-  return input.replace(/[A-Za-z]/g, "");
+  // 必要ならここで trim や 連続スペースの正規化などだけを行う
+  return input;
 }
 
 export function useAuthPage() {
@@ -76,7 +76,7 @@ export function useAuthPage() {
 
   const [companyName, _setCompanyName] = useState("");
 
-  // 会社名アルファベット排除
+  // 会社名（アルファベットも含めそのまま保持・必要なら軽い正規化のみ）
   const setCompanyName = (v: string) => _setCompanyName(normalizeCompanyName(v));
 
   // -------------------------
@@ -147,15 +147,15 @@ export function useAuthPage() {
           return;
         }
 
-        // カナ入力チェック（ひらがな/半角カナはカタカナ化してから判定）
-        const normalizedLastKana = toKatakana(lastNameKana.trim());
-        const normalizedFirstKana = toKatakana(firstNameKana.trim());
+        // かな入力チェック（カタカナ/半角カナもひらがなへ正規化してから判定）
+        const normalizedLastKana = toHiragana(lastNameKana.trim());
+        const normalizedFirstKana = toHiragana(firstNameKana.trim());
 
         if (
-          !isKatakanaOnly(normalizedLastKana) ||
-          !isKatakanaOnly(normalizedFirstKana)
+          !isHiraganaOnly(normalizedLastKana) ||
+          !isHiraganaOnly(normalizedFirstKana)
         ) {
-          setError("姓・名のカナは全角カタカナのみで入力してください。");
+          setError("姓・名のかなはひらがなのみで入力してください。");
           return;
         }
 

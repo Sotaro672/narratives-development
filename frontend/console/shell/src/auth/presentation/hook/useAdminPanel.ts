@@ -11,6 +11,37 @@ import {
   sendPasswordResetForCurrentUser, // ★ 追加
 } from "../../application/profileService";
 
+// -------------------------
+// かな関連ヘルパ
+// -------------------------
+
+// ひらがな・カタカナ・半角カナをひらがなに寄せる（削除はしない）
+function toHiragana(input: string): string {
+  if (!input) return "";
+
+  let s = input;
+
+  // 全角カタカナ → ひらがな
+  s = s.replace(/[\u30A1-\u30F6]/g, (ch) =>
+    String.fromCharCode(ch.charCodeAt(0) - 0x60),
+  );
+
+  // 半角カナ → 全角カナ → ひらがな（簡易変換）
+  s = s.replace(/[\uff61-\uff9f]/g, (ch) => {
+    const kataCode = ch.charCodeAt(0) - 0xff61 + 0x30a1;
+    const hiraCode = kataCode - 0x60;
+    return String.fromCharCode(hiraCode);
+  });
+
+  return s;
+}
+
+// 「ひらがな + スペースのみか」をチェック
+function isHiraganaOnly(input: string): boolean {
+  if (!input) return false;
+  return /^[\u3041-\u3096\s]+$/.test(input);
+}
+
 export function useAdminPanel() {
   // dialog flags
   const [showProfileDialog, setShowProfileDialog] = useState(false);
@@ -98,14 +129,31 @@ export function useAdminPanel() {
       return;
     }
 
+    // かな入力をひらがなに正規化してからバリデーション
+    const normalizedLastKana = toHiragana(lastNameKana.trim());
+    const normalizedFirstKana = toHiragana(firstNameKana.trim());
+
+    if (
+      !isHiraganaOnly(normalizedLastKana) ||
+      !isHiraganaOnly(normalizedFirstKana)
+    ) {
+      window.alert("姓・名のかなはひらがなのみで入力してください。");
+      return;
+    }
+
     try {
       await updateCurrentMemberProfile({
         id: memberId,
         firstName,
         lastName,
-        firstNameKana,
-        lastNameKana,
+        firstNameKana: normalizedFirstKana,
+        lastNameKana: normalizedLastKana,
       });
+
+      // 正規化した値で state も更新しておくと UI と揃う
+      setFirstNameKana(normalizedFirstKana);
+      setLastNameKana(normalizedLastKana);
+
       setShowProfileDialog(false);
     } catch (e) {
       console.error("[useAdminPanel] failed to update profile:", e);
@@ -165,8 +213,6 @@ export function useAdminPanel() {
     setNewEmail,
     currentPasswordForEmail,
     setCurrentPasswordForEmail,
-
-    // password fields（UI 側ではもう使わないので返さない）
 
     // handlers
     saveProfile,

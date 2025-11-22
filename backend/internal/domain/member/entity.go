@@ -21,8 +21,8 @@ var emailRe = regexp.MustCompile(`^[^\s@]+@[^\s@]+\.[^\s@]+$`)
 // 氏名：漢字/ひらがな/カタカナ/英字/数字/長音/スペースのみ
 var nameRe = regexp.MustCompile(`^[\p{Han}\p{Hiragana}\p{Katakana}A-Za-z0-9ー\s]+$`)
 
-// 氏名かな：全角カタカナ・スペース・長音
-var kanaRe = regexp.MustCompile(`^[\p{Katakana}ー\s]+$`)
+// 氏名かな：ひらがな・スペースのみ
+var kanaRe = regexp.MustCompile(`^[\p{Hiragana}\s]+$`)
 
 // Member is the domain entity for a user/member.
 type Member struct {
@@ -270,7 +270,7 @@ func (m Member) validate() error {
 		return ErrInvalidLastName
 	}
 
-	// ---- 氏名かな ----
+	// ---- 氏名かな（ひらがなのみ） ----
 	if strings.TrimSpace(m.FirstNameKana) == "" ||
 		!kanaRe.MatchString(m.FirstNameKana) || len(m.FirstNameKana) > 50 {
 		return ErrInvalidFirstKana

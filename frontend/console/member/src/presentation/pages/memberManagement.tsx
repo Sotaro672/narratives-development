@@ -1,28 +1,27 @@
 // frontend/console/member/src/presentation/pages/memberManagement.tsx
+
 import * as React from "react";
 import { useNavigate } from "react-router-dom";
-import List from "../../../../shell/src/layout/List/List";
+import List, {
+  FilterableTableHeader,
+  SortableTableHeader,
+} from "../../../../shell/src/layout/List/List";
 import "../styles/member.css";
 import { useMemberList } from "../hooks/useMemberList";
 
-// ★ フィルタ付きテーブルヘッダー
-import FilterableTableHeader from "../../../../shell/src/shared/ui/filterable-table-header";
-// ★ ソート可能テーブルヘッダー
-import SortableTableHeader, {
-  type SortDirection,
-} from "../../../../shell/src/shared/ui/sortable-table-header";
-
-// ★ ページネーション
+// ★ ページネーション（バックエンドページング表示用）
 import Pagination from "../../../../shell/src/shared/ui/pagination";
 
 export default function MemberManagementPage() {
   const navigate = useNavigate();
 
   const {
+    // 一覧（フィルタ＆ソート済み）
     members,
     loading,
     error,
-    getNameLastFirstByID,
+
+    // フィルタ用データ
     brandMap,
     brandFilterOptions,
     permissionFilterOptions,
@@ -32,131 +31,35 @@ export default function MemberManagementPage() {
     setSelectedPermissionCats,
     extractPermissionCategories,
 
-    // ★ useMemberList からページ制御パラメータを取得
+    // ソート状態
+    sortKey,
+    sortDirection,
+    handleSortChange,
+
+    // Reset ボタン
+    handleReset,
+
+    // ページング（バックエンド）
     page,
     setPageNumber,
+
+    // 表示用氏名
+    resolvedNames,
+
+    // 日付フォーマッタ
+    formatYmd,
   } = useMemberList();
-
-  const [resolvedNames, setResolvedNames] = React.useState<
-    Record<string, string>
-  >({});
-
-  // ▼ ソート状態
-  const [sortKey, setSortKey] = React.useState<string | null>(null);
-  const [sortDirection, setSortDirection] =
-    React.useState<Exclude<SortDirection, null>>("desc");
-
-  const handleSortChange = React.useCallback(
-    (key: string, nextDirection: Exclude<SortDirection, null>) => {
-      setSortKey(key);
-      setSortDirection(nextDirection);
-    },
-    [],
-  );
-
-  // ▼ Reset ボタン押下時の処理
-  const handleReset = React.useCallback(() => {
-    setSelectedBrandIds([]);
-    setSelectedPermissionCats([]);
-    setSortKey(null);
-    setSortDirection("desc");
-    setPageNumber(1);
-  }, [setSelectedBrandIds, setSelectedPermissionCats, setPageNumber]);
-
-  // -------------------------
-  //  氏名補完
-  // -------------------------
-  React.useEffect(() => {
-    let disposed = false;
-
-    (async () => {
-      const entries = await Promise.all(
-        members.map(async (m) => {
-          const inline = `${m.lastName ?? ""} ${m.firstName ?? ""}`.trim();
-          if (inline) return [m.id, inline] as const;
-
-          const resolved = await getNameLastFirstByID(m.id);
-          return [m.id, resolved] as const;
-        }),
-      );
-
-      if (!disposed) {
-        const next: Record<string, string> = {};
-        for (const [id, name] of entries) {
-          if (name) next[id] = name;
-        }
-        setResolvedNames(next);
-      }
-    })();
-
-    return () => {
-      disposed = true;
-    };
-  }, [members, getNameLastFirstByID]);
-
-  const goDetail = (id: string) => {
-    if (!id) return;
-    navigate(`/member/${encodeURIComponent(id)}`);
-  };
-
-  const ymd = (date: any): string => {
-    if (!date) return "";
-    if (typeof date === "object" && date !== null) {
-      if (typeof (date as any).toDate === "function") {
-        return (date as any)
-          .toDate()
-          .toISOString()
-          .slice(0, 10)
-          .replace(/-/g, "/");
-      }
-      if (typeof (date as any).seconds === "number") {
-        return new Date((date as any).seconds * 1000)
-          .toISOString()
-          .slice(0, 10)
-          .replace(/-/g, "/");
-      }
-    }
-    if (typeof date === "string") {
-      return date.slice(0, 10).replace(/-/g, "/");
-    }
-    return "";
-  };
-
-  // ▼ ソート用：createdAt / updatedAt を number に変換
-  const getDateValue = React.useCallback(
-    (m: any): number => {
-      const raw =
-        sortKey === "updatedAt" ? (m as any).updatedAt : (m as any).createdAt;
-      if (!raw) return 0;
-
-      if (typeof raw === "object" && raw !== null) {
-        if (typeof raw.toDate === "function") return raw.toDate().getTime();
-        if (typeof raw.seconds === "number") return raw.seconds * 1000;
-      }
-      if (typeof raw === "string") {
-        const t = new Date(raw).getTime();
-        return Number.isNaN(t) ? 0 : t;
-      }
-      return 0;
-    },
-    [sortKey],
-  );
-
-  const sortedMembers = React.useMemo(() => {
-    if (!sortKey) return members;
-
-    return [...members].sort((a, b) => {
-      const av = getDateValue(a);
-      const bv = getDateValue(b);
-      return sortDirection === "asc" ? av - bv : bv - av;
-    });
-  }, [members, sortKey, sortDirection, getDateValue]);
 
   if (loading) return <div className="p-4">読み込み中...</div>;
   if (error)
     return (
       <div className="p-4 text-red-500">データ取得エラー: {error.message}</div>
     );
+
+  const goDetail = (id: string) => {
+    if (!id) return;
+    navigate(`/member/${encodeURIComponent(id)}`);
+  };
 
   return (
     <div className="p-0">
@@ -202,28 +105,17 @@ export default function MemberManagementPage() {
         createLabel="メンバー追加"
         showResetButton
         onCreate={() => navigate("/member/create")}
-        onReset={handleReset}
+        onReset={handleReset} // ← Reset ボタンでフィルタ＆ソート＆ページを初期化
       >
-        {sortedMembers.map((m) => {
-          const inline = `${m.lastName ?? ""} ${m.firstName ?? ""}`.trim();
-          const name =
-            resolvedNames[m.id] || inline || (m.email ?? "") || m.id;
+        {members.map((m) => {
+          const nameFromMap = resolvedNames[m.id];
+          const fallbackInline = `${m.lastName ?? ""} ${m.firstName ?? ""}`.trim();
+          const name = nameFromMap || fallbackInline || m.email || m.id;
 
           const assigned = m.assignedBrands ?? [];
           const categories = extractPermissionCategories(
             (m.permissions ?? []) as string[],
           );
-
-          // ▼ フィルタ適用
-          const matchesBrandFilter =
-            selectedBrandIds.length === 0 ||
-            assigned.some((brandId) => selectedBrandIds.includes(brandId));
-
-          const matchesPermissionFilter =
-            selectedPermissionCats.length === 0 ||
-            categories.some((cat) => selectedPermissionCats.includes(cat));
-
-          if (!matchesBrandFilter || !matchesPermissionFilter) return null;
 
           return (
             <tr
@@ -270,19 +162,19 @@ export default function MemberManagementPage() {
               </td>
 
               {/* 登録日 */}
-              <td>{ymd((m as any).createdAt)}</td>
+              <td>{formatYmd((m as any).createdAt)}</td>
 
               {/* 更新日 */}
-              <td>{ymd((m as any).updatedAt)}</td>
+              <td>{formatYmd((m as any).updatedAt)}</td>
             </tr>
           );
         })}
       </List>
 
-      {/* ★ Pagination：現状は totalPages=1（今後 API から総件数を受け取るよう拡張可能） */}
+      {/* ★ バックエンドページング用の UI（今後 totalPages を活用可能） */}
       <Pagination
         currentPage={page.number}
-        totalPages={1}
+        totalPages={page.totalPages ?? 1}
         onPageChange={(p) => setPageNumber(p)}
         className="mt-4"
       />

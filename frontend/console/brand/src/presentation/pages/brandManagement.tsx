@@ -1,4 +1,3 @@
-// frontend/console/brand/src/presentation/pages/brandManagement.tsx
 import React from "react";
 import { useNavigate } from "react-router-dom";
 import List, {
@@ -8,20 +7,10 @@ import "../styles/brand.css";
 
 import { useBrandManagement } from "../hook/useBrandManagement";
 
-// 共通ページング型・ユーティリティ
-import {
-  DEFAULT_PAGE_LIMIT,
-  calcTotalPages,
-} from "../../../../shell/src/shared/types/common/common";
-
-// 共通ページネーションUI
-import Pagination from "../../../../shell/src/shared/ui/pagination";
-
 // ソート可能ヘッダ（shared/ui 版）
 import SortableTableHeader from "../../../../shell/src/shared/ui/sortable-table-header";
 
-// memberID → 「姓 名」を解決するフック
-import { useMemberList } from "../../../../member/src/presentation/hooks/useMemberList";
+// ★ useMemberList の利用は hook 側に移譲したので削除済み
 
 // managerId から非同期で名前を取得して表示するセル
 function ManagerNameCell({
@@ -77,10 +66,10 @@ export default function BrandManagementPage() {
     setDirection,
 
     resetFilters,
-  } = useBrandManagement();
 
-  // member 用フックから ID → 氏名変換関数を利用
-  const { getNameLastFirstByID } = useMemberList();
+    // ★ hook 側に移譲した getNameLastFirstByID をここで受け取る
+    getNameLastFirstByID,
+  } = useBrandManagement();
 
   const handleCreateBrand = () => {
     navigate("/brand/create");
@@ -90,31 +79,9 @@ export default function BrandManagementPage() {
     navigate(`/brand/${encodeURIComponent(brandId)}`);
   };
 
-  // ---------- ページング状態 ----------
-  const [currentPage, setCurrentPage] = React.useState(1);
-  const perPage = DEFAULT_PAGE_LIMIT;
-
-  // フィルタやソートが変わったら 1ページ目に戻す
-  React.useEffect(() => {
-    setCurrentPage(1);
-  }, [managerFilter, activeKey, direction]);
-
-  const totalPages = React.useMemo(
-    () => calcTotalPages(rows.length, perPage),
-    [rows.length, perPage],
-  );
-
-  const pagedRows = React.useMemo(() => {
-    const start = (currentPage - 1) * perPage;
-    const end = start + perPage;
-    return rows.slice(start, end);
-  }, [rows, currentPage, perPage]);
-
   // ---------- テーブルヘッダー ----------
   const headers: React.ReactNode[] = [
     "ブランド名",
-    // ★ ステータス列削除済み
-
     // 責任者フィルタ
     <FilterableTableHeader
       key="manager"
@@ -160,9 +127,9 @@ export default function BrandManagementPage() {
         createLabel="ブランド追加"
         onCreate={handleCreateBrand}
         showResetButton
-        onReset={resetFilters}
+        onReset={resetFilters} // ← List 内蔵の RefreshButton を使用
       >
-        {pagedRows.map((b) => (
+        {rows.map((b) => (
           <tr
             key={b.id}
             role="button"
@@ -195,13 +162,8 @@ export default function BrandManagementPage() {
           </tr>
         ))}
       </List>
-
-      {/* ★ 共通ページネーションUI */}
-      <Pagination
-        currentPage={currentPage}
-        totalPages={totalPages}
-        onPageChange={setCurrentPage}
-      />
+      {/* ← List 自体が RefreshButton + Pagination を持っているので、
+           ここで独自 Pagination を出す必要はありません。 */}
     </div>
   );
 }

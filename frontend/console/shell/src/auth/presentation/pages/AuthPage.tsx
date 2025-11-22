@@ -1,4 +1,3 @@
-// frontend/console/shell/src/auth/presentation/pages/AuthPage.tsx
 import { useEffect } from "react";
 import { Button } from "../../../shared/ui/button";
 import "../styles/auth.css";
@@ -64,7 +63,7 @@ export default function AuthPage() {
         </h1>
 
         <form className="auth-form" onSubmit={handleFormSubmit}>
-          {/* ▼ signup：姓名 + カタカナ */}
+          {/* ▼ signup：姓名 + かな */}
           {mode === "signup" && (
             <>
               <div className="auth-row">
@@ -80,13 +79,13 @@ export default function AuthPage() {
                 </label>
 
                 <label className="auth-label auth-label-inline">
-                  姓（カナ）
+                  姓（かな）
                   <input
                     type="text"
                     className="auth-input"
                     value={lastNameKana}
                     onChange={(e) => setLastNameKana(e.target.value)}
-                    placeholder="姓（セイ）"
+                    placeholder="姓（せい）"
                     required
                   />
                 </label>
@@ -105,13 +104,13 @@ export default function AuthPage() {
                 </label>
 
                 <label className="auth-label auth-label-inline">
-                  名（カナ）
+                  名（かな）
                   <input
                     type="text"
                     className="auth-input"
                     value={firstNameKana}
                     onChange={(e) => setFirstNameKana(e.target.value)}
-                    placeholder="名（メイ）"
+                    placeholder="名（めい）"
                     required
                   />
                 </label>
@@ -137,7 +136,7 @@ export default function AuthPage() {
           {/* ▼ signup：会社名 */}
           {mode === "signup" && (
             <label className="auth-label">
-              会社名・団体名（アルファベット不可）
+              会社名・団体名
               <input
                 type="text"
                 className="auth-input"

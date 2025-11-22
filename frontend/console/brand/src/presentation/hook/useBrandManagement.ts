@@ -8,6 +8,9 @@ import { listBrands } from "../../application/brandService";
 // ★ 共通型（SortOrder など）を導入
 import type { SortOrder } from "../../../../shell/src/shared/types/common/common";
 
+// ★ memberID → 「姓 名」を解決するフックをここで利用
+import { useMemberList } from "../../../../member/src/presentation/hooks/useMemberList";
+
 export type SortKey = "registeredAt" | "updatedAt" | null;
 export type StatusFilterValue = "active" | "inactive";
 
@@ -32,11 +35,17 @@ export function useBrandManagement() {
 
   const [statusFilter, setStatusFilter] = useState<StatusFilterValue[]>([]);
 
-  // ★ owner → 完全削除 → managerId フィルタとして存続
+  // ★ managerId フィルタ
   const [managerFilter, setManagerFilter] = useState<string[]>([]);
 
   const [activeKey, setActiveKey] = useState<SortKey>("registeredAt");
   const [direction, setDirection] = useState<SortOrder | null>("desc");
+
+  // ★ リロード用キー（Refreshボタン押下で再読み込みさせる）
+  const [reloadKey, setReloadKey] = useState(0);
+
+  // ★ member 用フックから ID → 氏名変換関数をここで取得
+  const { getNameLastFirstByID } = useMemberList();
 
   // ステータスバッジ className（現状は使っていなくても残しておく）
   const statusBadgeClass = (isActive: boolean) =>
@@ -89,7 +98,7 @@ export function useBrandManagement() {
     return () => {
       cancelled = true;
     };
-  }, [companyId]);
+  }, [companyId, reloadKey]);
 
   // ステータスフィルタ
   const statusOptions = useMemo(() => {
@@ -104,8 +113,7 @@ export function useBrandManagement() {
     }));
   }, [baseRows]);
 
-  // ★ ownerOptions → 完全削除
-  //   managerId の一覧だけ返す（最低限）
+  // managerId の一覧だけ返す（最低限）
   const managerOptions = useMemo(() => {
     const ids = new Set(
       baseRows
@@ -152,11 +160,13 @@ export function useBrandManagement() {
     return data;
   }, [baseRows, statusFilter, managerFilter, activeKey, direction]);
 
+  // ▼ Refreshボタン用：フィルタとソートを初期化し、一覧も再取得
   const resetFilters = useCallback(() => {
     setStatusFilter([]);
     setManagerFilter([]);
     setActiveKey("registeredAt");
     setDirection("desc");
+    setReloadKey((k) => k + 1);
   }, []);
 
   return {
@@ -179,5 +189,8 @@ export function useBrandManagement() {
 
     statusBadgeClass,
     resetFilters,
+
+    // ★ ページ側でそのまま使えるように公開
+    getNameLastFirstByID,
   };
 }
