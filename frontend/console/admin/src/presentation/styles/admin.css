@@ -26,21 +26,21 @@
   padding: 16px 20px 18px 20px;
 }
 
-/* 上段：担当者ラベル + 編集ボタン（右寄せアイコン） */
+/* 上段：担当者ラベル + 担当者ボタン（中央寄せ） */
 .admin-card__row {
   display: flex;
   align-items: center;
-  justify-content: space-between;
+  justify-content: center;  /* ★ space-between → center に変更して中央寄せ */
   gap: 12px;
 }
 
 .admin-card__label {
   font-size: 14px;
-  font-weight: 700; /* 画像の強調に寄せる */
+  font-weight: 700;
   color: var(--pbp-text);
 }
 
-/* 右側の小さなアイコンボタン */
+/* 旧アイコンボタン（未使用なら消しても OK） */
 .admin-card__btn {
   display: inline-flex;
   align-items: center;
@@ -56,11 +56,44 @@
 .admin-card__btn:hover { background: var(--pbp-muted-bg); }
 .admin-card__btn:active { transform: translateY(1px); }
 
-/* 担当者名・作成者名：青いリンク風 */
+/* ▼ 新しい「担当者」プルダウンボタン */
+.admin-card__assigneeButton {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  border-radius: 9999px;              /* pill 形状 */
+  border: 1px solid var(--pbp-border);
+  background: var(--pbp-surface);
+  color: var(--pbp-text);
+  font-size: 14px;
+  line-height: 1.4;
+  cursor: pointer;
+  transition: background 0.15s ease, box-shadow 0.15s ease;
+}
+
+.admin-card__assigneeButton:hover {
+  background: var(--pbp-muted-bg);
+  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.08);
+}
+
+.admin-card__assigneeButtonText {
+  max-width: 160px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.admin-card__assigneeButtonCaret {
+  font-size: 10px;
+  color: var(--pbp-text-soft);
+}
+
+/* 担当者名・作成者名：青いリンク風（下の read-only 表示用。必要に応じて利用） */
 .admin-card__link {
   display: inline-block;
   margin-top: 8px;
-  color: #2563eb; /* link-blue */
+  color: #2563eb;
   text-decoration: none;
   cursor: default;
 }

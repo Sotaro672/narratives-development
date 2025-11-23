@@ -1,3 +1,5 @@
+// frontend/console/productBlueprint/src/presentation/hook/useProductBlueprintCreate.tsx
+
 import * as React from "react";
 import { useNavigate } from "react-router-dom";
 
@@ -6,20 +8,32 @@ import type {
   ProductIDTagType,
 } from "../../domain/entity/productBlueprint";
 
-// ★ Firestore brands（backend）から取得
+// Brand (domain)
 import type { Brand } from "../../../../brand/src/domain/entity/brand";
-import { brandRepositoryHTTP } from "../../../../brand/src/infrastructure/http/brandRepositoryHTTP";
+// ★ companyId フィルタ付きの安全なクエリを利用
+import { fetchAllBrandsForCompany } from "../../../../brand/src/infrastructure/query/brandQuery";
 
+// Size / ModelNumber の型だけ借りる
 import type { SizeRow } from "../../../../model/src/presentation/components/SizeVariationCard";
 import type { ModelNumber } from "../../../../model/src/presentation/components/ModelNumberCard";
 
+// Auth / currentMember
+import { useAuth } from "../../../../shell/src/auth/presentation/hook/useCurrentMember";
+
+// Fit は詳細画面と同じユニオン型
 export type Fit =
   | "レギュラーフィット"
   | "スリムフィット"
   | "リラックスフィット"
   | "オーバーサイズ";
 
+// -------------------------------
+// Hook が外に公開する ViewModel
+// -------------------------------
 export interface UseProductBlueprintCreateResult {
+  // Meta
+  title: string;
+
   // ブランド関連
   brandId: string;
   brandName: string;
@@ -37,12 +51,20 @@ export interface UseProductBlueprintCreateResult {
   qualityAssurance: string[];
   productIdTagType: ProductIDTagType;
 
-  // バリエーション
-  colorInput: string;
   colors: string[];
+  colorInput: string;
   sizes: SizeRow[];
   modelNumbers: ModelNumber[];
 
+  assigneeId: string;
+  createdBy: string;
+  createdAt: string;
+
+  // 画面全体アクション
+  onCreate: () => void;
+  onBack: () => void;
+
+  // 入力変更ハンドラ（ページから渡して使う）
   onChangeProductName: (v: string) => void;
   onChangeItemType: (v: ItemType) => void;
   onChangeFit: (v: Fit) => void;
@@ -56,28 +78,28 @@ export interface UseProductBlueprintCreateResult {
   onRemoveColor: (name: string) => void;
   onRemoveSize: (id: string) => void;
 
-  // 管理情報
-  assigneeId: string;
-  createdBy: string;
-  createdAt: string;
   onEditAssignee: () => void;
   onClickAssignee: () => void;
   onClickCreatedBy: () => void;
-
-  // 画面アクション
-  onCreate: () => void;
-  onBack: () => void;
 }
 
 /**
- * 商品設計作成画面のロジック・状態管理用カスタムフック
- * ページコンポーネント側にはスタイル/構造のみを残す。
+ * 商品設計作成画面用のロジック・状態をまとめたカスタムフック
+ * - brands は companyId でフィルタされた安全なクエリ(fetchAllBrandsForCompany)のみ利用
+ * - 担当者(assignee) は currentMember を元に自動設定
  */
 export function useProductBlueprintCreate(): UseProductBlueprintCreateResult {
   const navigate = useNavigate();
 
+  // Auth / currentMember から companyId を取得
+  const { currentMember, user } = useAuth();
+  const effectiveCompanyId = React.useMemo(
+    () => (currentMember?.companyId ?? user?.companyId ?? "").trim(),
+    [currentMember?.companyId, user?.companyId],
+  );
+
   // ───────────────────────
-  // ブランド一覧を取得（Firestore backend）
+  // ブランド一覧（companyId で必ず絞る）
   // ───────────────────────
   const [brandId, setBrandId] = React.useState("");
   const [brandOptions, setBrandOptions] = React.useState<Brand[]>([]);
@@ -87,62 +109,49 @@ export function useProductBlueprintCreate(): UseProductBlueprintCreateResult {
   React.useEffect(() => {
     let cancelled = false;
 
-    console.log(
-      "[ProductBlueprintCreate] useEffect(start) brand fetch. initial brandId:",
-      brandId,
-    );
+    async function loadBrands() {
+      // companyId がまだ取れていない間は何もしない
+      if (!effectiveCompanyId) {
+        console.log(
+          "[useProductBlueprintCreate] companyId is empty; skip brand fetch.",
+        );
+        setBrandOptions([]);
+        return;
+      }
 
-    const loadBrands = async () => {
+      console.log(
+        "[useProductBlueprintCreate] start fetchAllBrandsForCompany",
+        { companyId: effectiveCompanyId },
+      );
+
       setBrandLoading(true);
       setBrandError(null);
 
       try {
-        const filter = { isActive: true as const };
-        const page = 1;
-        const perPage = 100;
-
-        console.log(
-          "[ProductBlueprintCreate] calling brandRepositoryHTTP.list",
-          {
-            filter,
-            page,
-            perPage,
-          },
+        const items = await fetchAllBrandsForCompany(
+          effectiveCompanyId,
+          true, // isActiveOnly
         );
-
-        const result = await brandRepositoryHTTP.list({
-          filter,
-          page,
-          perPage,
-        });
-
         if (cancelled) {
           console.log(
-            "[ProductBlueprintCreate] brand fetch result ignored (effect cancelled)",
+            "[useProductBlueprintCreate] brand fetch result ignored (cancelled)",
           );
           return;
         }
 
         console.log(
-          "[ProductBlueprintCreate] brandRepositoryHTTP.list result snapshot",
+          "[useProductBlueprintCreate] fetchAllBrandsForCompany result",
           {
-            totalCount: result.totalCount,
-            totalPages: result.totalPages,
-            page: result.page,
-            perPage: result.perPage,
-            itemsSample: result.items?.slice(0, 3) ?? [],
+            count: items.length,
+            sample: items.slice(0, 3),
           },
         );
 
-        setBrandOptions(result.items ?? []);
+        setBrandOptions(items);
 
-        // brandId 未設定なら先頭要素を自動選択
-        if (!brandId && result.items && result.items.length > 0) {
-          console.log(
-            "[ProductBlueprintCreate] brandId is empty. auto-select first brand:",
-            result.items[0],
-          );
-          setBrandId(result.items[0].id);
+        // brandId 未設定なら先頭を自動選択
+        if (!brandId && items.length > 0) {
+          setBrandId(items[0].id);
         }
       } catch (e) {
         const err = e instanceof Error ? e : new Error(String(e));
@@ -150,47 +159,28 @@ export function useProductBlueprintCreate(): UseProductBlueprintCreateResult {
           setBrandError(err);
         }
         console.error(
-          "[ProductBlueprintCreate] failed to load brands via brandRepositoryHTTP.list",
+          "[useProductBlueprintCreate] failed to fetch brands for company:",
           err,
         );
       } finally {
         if (!cancelled) {
           setBrandLoading(false);
         }
-        console.log(
-          "[ProductBlueprintCreate] useEffect(end) brand fetch. cancelled:",
-          cancelled,
-        );
       }
-    };
+    }
 
     void loadBrands();
 
     return () => {
       cancelled = true;
-      console.log("[ProductBlueprintCreate] cleanup: cancel brand fetch effect");
     };
-    // brandId は初期値ログ用に参照しているだけなので依存に含めない（初回マウント時のみ実行）
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [effectiveCompanyId, brandId]);
 
   // 選択中ブランド名
   const brandName = React.useMemo(() => {
     const found = brandOptions.find((b) => b.id === brandId);
     return found?.name ?? "";
   }, [brandId, brandOptions]);
-
-  // ログ：brand 状態のスナップショット
-  React.useEffect(() => {
-    console.log("[ProductBlueprintCreate] state snapshot (brand)", {
-      brandId,
-      brandName,
-      brandOptionsCount: brandOptions.length,
-      brandOptionsSample: brandOptions.slice(0, 3),
-      brandLoading,
-      brandError,
-    });
-  }, [brandId, brandName, brandOptions, brandLoading, brandError]);
 
   // ───────────────────────
   // 商品設計フィールド
@@ -209,13 +199,35 @@ export function useProductBlueprintCreate(): UseProductBlueprintCreateResult {
   const [sizes, setSizes] = React.useState<SizeRow[]>([]);
   const [modelNumbers] = React.useState<ModelNumber[]>([]);
 
+  // ───────────────────────
+  // 管理情報
+  //   - assigneeId は currentMember を元に自動設定
+  //   - createdBy / createdAt は現状未使用だがフィールドとして保持
+  // ───────────────────────
   const [assigneeId, setAssigneeId] = React.useState("");
   const [createdBy] = React.useState("");
   const [createdAt] = React.useState("");
 
-  // 作成処理（ダミー）
+  // currentMember から担当者名を自動設定
+  React.useEffect(() => {
+    if (!currentMember) return;
+
+    // すでに手動で設定されている場合は上書きしない
+    if (assigneeId) return;
+
+    const label =
+      currentMember.fullName ||
+      currentMember.email ||
+      currentMember.id;
+
+    setAssigneeId(label);
+  }, [currentMember, assigneeId]);
+
+  // ───────────────────────
+  // アクション
+  // ───────────────────────
   const onCreate = React.useCallback(() => {
-    console.log("[ProductBlueprintCreate] onCreate payload snapshot", {
+    console.log("[useProductBlueprintCreate] onCreate payload snapshot", {
       productName,
       brandId,
       brandName,
@@ -231,6 +243,7 @@ export function useProductBlueprintCreate(): UseProductBlueprintCreateResult {
       assigneeId,
       createdBy,
       createdAt,
+      companyId: effectiveCompanyId,
     });
 
     alert("商品設計を作成しました（ダミー）");
@@ -251,12 +264,13 @@ export function useProductBlueprintCreate(): UseProductBlueprintCreateResult {
     assigneeId,
     createdBy,
     createdAt,
+    effectiveCompanyId,
     navigate,
   ]);
 
   const onBack = React.useCallback(() => navigate(-1), [navigate]);
 
-  // カラー追加・削除
+  // カラー追加/削除
   const onAddColor = React.useCallback(() => {
     const v = colorInput.trim();
     if (!v || colors.includes(v)) return;
@@ -273,33 +287,39 @@ export function useProductBlueprintCreate(): UseProductBlueprintCreateResult {
   }, []);
 
   const onEditAssignee = React.useCallback(() => {
-    setAssigneeId("担当者A");
-  }, []);
+    // 担当者編集時も currentMember を優先して再設定しておく
+    if (currentMember) {
+      const label =
+        currentMember.fullName ||
+        currentMember.email ||
+        currentMember.id;
+      setAssigneeId(label);
+    }
+  }, [currentMember]);
 
   const onClickAssignee = React.useCallback(() => {
-    console.log("assigneeId clicked:", assigneeId);
+    console.log("[useProductBlueprintCreate] assigneeId clicked:", assigneeId);
   }, [assigneeId]);
 
   const onClickCreatedBy = React.useCallback(() => {
-    console.log("createdBy clicked:", createdBy);
+    console.log("[useProductBlueprintCreate] createdBy clicked:", createdBy);
   }, [createdBy]);
 
+  // -------------------------------
+  // 返却する ViewModel
+  // -------------------------------
   return {
-    // ブランド
+    title: "商品設計を作成",
+
+    // brand
     brandId,
     brandName,
     brandOptions,
     brandLoading,
     brandError,
-    onChangeBrandId: (id: string) => {
-      console.log(
-        "[ProductBlueprintCreate] ProductBlueprintCard onChangeBrandId",
-        id,
-      );
-      setBrandId(id);
-    },
+    onChangeBrandId: (id: string) => setBrandId(id),
 
-    // 商品設計フィールド
+    // fields
     productName,
     itemType,
     fit,
@@ -308,12 +328,20 @@ export function useProductBlueprintCreate(): UseProductBlueprintCreateResult {
     qualityAssurance,
     productIdTagType,
 
-    // バリエーション
-    colorInput,
     colors,
+    colorInput,
     sizes,
     modelNumbers,
 
+    assigneeId,
+    createdBy,
+    createdAt,
+
+    // page actions
+    onCreate,
+    onBack,
+
+    // field handlers
     onChangeProductName: setProductName,
     onChangeItemType: setItemType,
     onChangeFit: setFit,
@@ -327,16 +355,8 @@ export function useProductBlueprintCreate(): UseProductBlueprintCreateResult {
     onRemoveColor,
     onRemoveSize,
 
-    // 管理情報
-    assigneeId,
-    createdBy,
-    createdAt,
     onEditAssignee,
     onClickAssignee,
     onClickCreatedBy,
-
-    // 画面アクション
-    onCreate,
-    onBack,
   };
 }

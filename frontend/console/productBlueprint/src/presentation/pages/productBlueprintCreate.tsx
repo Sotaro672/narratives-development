@@ -1,3 +1,5 @@
+// frontend/console/productBlueprint/src/presentation/pages/productBlueprintCreate.tsx
+
 import * as React from "react";
 import PageStyle from "../../../../shell/src/layout/PageStyle/PageStyle";
 import AdminCard from "../../../../admin/src/presentation/components/AdminCard";
@@ -42,13 +44,10 @@ export default function ProductBlueprintCreate() {
     onRemoveColor,
     onRemoveSize,
 
-    // 管理情報
+    // 管理情報（作成者・作成日時は削除）
     assigneeId,
-    createdBy,
-    createdAt,
     onEditAssignee,
     onClickAssignee,
-    onClickCreatedBy,
 
     // 画面アクション
     onCreate,
@@ -93,10 +92,7 @@ export default function ProductBlueprintCreate() {
           onRemoveColor={onRemoveColor}
         />
 
-        <SizeVariationCard
-          sizes={sizes}
-          onRemove={onRemoveSize}
-        />
+        <SizeVariationCard sizes={sizes} onRemove={onRemoveSize} />
 
         <ModelNumberCard
           sizes={sizes}
@@ -105,14 +101,11 @@ export default function ProductBlueprintCreate() {
         />
       </div>
 
+      {/* ★ createdBy / createdAt を削除した AdminCard */}
       <AdminCard
-        title="管理情報"
         assigneeName={assigneeId || "未設定"}
-        createdByName={createdBy || "未設定"}
-        createdAt={createdAt || "未設定"}
         onEditAssignee={onEditAssignee}
         onClickAssignee={onClickAssignee}
-        onClickCreatedBy={onClickCreatedBy}
       />
     </PageStyle>
   );
