@@ -101,10 +101,11 @@ export function useProductBlueprintDetail(): UseProductBlueprintDetailResult {
   );
 
   const [brand] = React.useState(
-    () => (blueprint ? brandLabelFromId(blueprint.brandId) : "LUMINA Fashion"),
+    () => (blueprint ? brandLabelFromId(blueprint.brandId) : ""),
   );
 
-  const [fit, setFit] = React.useState<Fit>("レギュラーフィット");
+  // ★ フィットは自動で「レギュラーフィット」にせず、空からスタート
+  const [fit, setFit] = React.useState<Fit>("" as Fit);
 
   const [materials, setMaterials] = React.useState(
     () => blueprint?.material ?? "シルク100%、裏地:ポリエステル100%",

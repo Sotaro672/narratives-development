@@ -1,8 +1,6 @@
 // frontend/console/productBlueprint/src/presentation/pages/productBlueprintCreate.tsx
-
-import * as React from "react";
 import PageStyle from "../../../../shell/src/layout/PageStyle/PageStyle";
-import AdminCard from "../../../../admin/src/presentation/components/AdminCard";
+import { AdminCard } from "../../../../admin/src/presentation/components/AdminCard";
 import ProductBlueprintCard from "../components/productBlueprintCard";
 import ColorVariationCard from "../../../../model/src/presentation/components/ColorVariationCard";
 import SizeVariationCard from "../../../../model/src/presentation/components/SizeVariationCard";

@@ -1,11 +1,15 @@
-// frontend/admin/src/presentation/components/AdminCard.tsx
+// frontend/console/admin/src/presentation/components/AdminCard.tsx
+
+import * as React from "react";
+
 import {
   Card,
-  CardContent,
   CardHeader,
   CardTitle,
+  CardContent,
 } from "../../../../shell/src/shared/ui/card";
-import "../styles/admin.css";
+
+import { Button } from "../../../../shell/src/shared/ui/button";
 
 import {
   Popover,
@@ -13,56 +17,74 @@ import {
   PopoverContent,
 } from "../../../../shell/src/shared/ui/popover";
 
+import "../styles/admin.css";
+
 export type AdminAssigneeCandidate = {
   id: string;
   name: string;
 };
 
 export type AdminCardProps = {
+  // タイトル
   title?: string;
-  assigneeName: string;
 
+  // 表示中の担当者名（スタイル側では文字列をそのまま表示するだけ）
+  assigneeName?: string;
+
+  // 担当者候補一覧（スタイル側では map してボタン表示するだけ）
   assigneeCandidates?: AdminAssigneeCandidate[];
   loadingMembers?: boolean;
 
-  // Popover の開閉状態（外から監視したい場合用。今回は実質未使用）
-  openAssigneePopover: boolean;
-  setOpenAssigneePopover: (v: boolean) => void;
+  // ポップオーバー開閉制御（必要なら上位から渡す。未指定なら AdminCard 側では特に制御しない）
+  openAssigneePopover?: boolean;
+  setOpenAssigneePopover?: (v: boolean) => void;
+  onSelectAssignee?: (id: string) => void;
 
-  onSelectAssignee: (id: string) => void;
-
+  // 作成 / 更新情報（あれば表示）
   createdByName?: string | null;
   createdAt?: string | null;
   updatedByName?: string | null;
   updatedAt?: string | null;
+
+  // クリックや編集操作を上位に通知するためのコールバック
+  onEditAssignee?: () => void;
+  onClickAssignee?: () => void;
 };
 
-export default function AdminCard(props: AdminCardProps) {
-  const {
-    title = "管理情報",
-    assigneeName,
-    assigneeCandidates,
-    loadingMembers,
-    // 今回の実装では Popover 側の内部 state に任せるので、実際には使わない
-    openAssigneePopover,
-    setOpenAssigneePopover,
-    onSelectAssignee,
-    createdByName,
-    createdAt,
-    updatedByName,
-    updatedAt,
-  } = props;
+export const AdminCard: React.FC<AdminCardProps> = ({
+  title = "管理情報",
+  assigneeName = "未設定",
+  assigneeCandidates,
+  loadingMembers,
 
-  // assigneeCandidates が undefined の場合でも map できるように安全化
-  const safeCandidates: AdminAssigneeCandidate[] = assigneeCandidates ?? [];
+  // controlled 用（必要なら上位が使う。AdminCard 側では open 値を直接は使わない）
+  openAssigneePopover,
+  setOpenAssigneePopover,
+  onSelectAssignee,
 
-  const safeCreatedBy = createdByName ?? "―";
-  const safeCreatedAt = createdAt ?? "―";
-  const safeUpdatedBy = updatedByName ?? "―";
-  const safeUpdatedAt = updatedAt ?? "―";
+  createdByName,
+  createdAt,
+  updatedByName,
+  updatedAt,
 
-  const hasMeta =
-    Boolean(createdByName || createdAt || updatedByName || updatedAt);
+  onEditAssignee,
+  onClickAssignee,
+}) => {
+  // スタイル側では「トリガーが押された」という事実だけ上位へ通知
+  const handleTriggerClick = () => {
+    onClickAssignee?.();
+    onEditAssignee?.();
+
+    // 上位が openAssigneePopover を使っている場合だけ補助的にトグル
+    if (typeof openAssigneePopover === "boolean" && setOpenAssigneePopover) {
+      setOpenAssigneePopover(!openAssigneePopover);
+    }
+  };
+
+  const handleSelect = (id: string) => {
+    onSelectAssignee?.(id);
+    // Popover の開閉自体はコンポーネント内では制御しない（Radix 側のデフォルト動作に任せる）
+  };
 
   return (
     <Card className="admin-card">
@@ -70,80 +92,79 @@ export default function AdminCard(props: AdminCardProps) {
         <CardTitle className="admin-card__title">{title}</CardTitle>
       </CardHeader>
 
-      <CardContent className="admin-card__body">
-        {/* 担当者（唯一の編集可フィールド） */}
-        <div className="admin-card__row">
-          <div className="admin-card__label">担当者</div>
+      <CardContent className="admin-card__body space-y-4">
+        {/* 担当者 */}
+        <div className="admin-card__section">
+          <div className="admin-card__label text-xs text-slate-500 mb-1">
+            担当者
+          </div>
 
-          {/* ▼ assigneeName 自体がプルダウンボタン */}
           <Popover>
             <PopoverTrigger>
-              <button
+              {/* asChild は使わず、Button をそのまま children に渡すだけ */}
+              <Button
                 type="button"
-                className="admin-card__assigneeButton"
+                variant="outline"
+                size="sm"
+                className="w-full justify-between admin-card__assignee-btn"
+                onClick={handleTriggerClick}
               >
-                <span className="admin-card__assigneeButtonText">
-                  {assigneeName}
-                </span>
-                <span className="admin-card__assigneeButtonCaret">▾</span>
-              </button>
+                <span>{assigneeName || "未設定"}</span>
+                <span className="text-[11px] text-slate-400" />
+              </Button>
             </PopoverTrigger>
 
-            <PopoverContent align="start">
-              {loadingMembers && <div>読み込み中...</div>}
-
-              {!loadingMembers && safeCandidates.length === 0 && (
-                <div className="admin-card__assigneeEmpty">
-                  メンバーが登録されていません
-                </div>
+            <PopoverContent className="p-2 space-y-1 admin-card__popover">
+              {loadingMembers && (
+                <p className="text-xs text-slate-400">
+                  担当者を読み込み中です…
+                </p>
               )}
 
-              {!loadingMembers && safeCandidates.length > 0 && (
-                <ul className="admin-card__assigneeList">
-                  {safeCandidates.map((c) => (
-                    <li
-                      key={c.id}
-                      className="admin-card__assigneeItem"
-                      onClick={() => onSelectAssignee(c.id)}
-                    >
-                      {c.name}
-                    </li>
-                  ))}
-                </ul>
-              )}
+              {!loadingMembers &&
+                assigneeCandidates &&
+                assigneeCandidates.length > 0 && (
+                  <div className="space-y-1">
+                    {assigneeCandidates.map((c) => (
+                      <button
+                        key={c.id}
+                        type="button"
+                        className="block w-full text-left px-2 py-1 rounded hover:bg-slate-100 text-sm"
+                        onClick={() => handleSelect(c.id)}
+                      >
+                        {c.name}
+                      </button>
+                    ))}
+                  </div>
+                )}
+
+              {!loadingMembers &&
+                (!assigneeCandidates || assigneeCandidates.length === 0) && (
+                  <p className="text-xs text-slate-400">
+                    担当者候補がありません。
+                  </p>
+                )}
             </PopoverContent>
           </Popover>
         </div>
 
-        {/* メタ情報が無ければ高さを縮める（担当者だけのカードになる） */}
-        {hasMeta && (
-          <>
-            <div className="admin-card__divider" />
-
-            <div className="admin-card__meta">
-              <div className="admin-card__metaCol">
-                <div className="admin-card__subLabel">作成者</div>
-                <span className="admin-card__readonly">{safeCreatedBy}</span>
-              </div>
-              <div className="admin-card__metaCol">
-                <div className="admin-card__subLabel">作成日時</div>
-                <span className="admin-card__readonly">{safeCreatedAt}</span>
-              </div>
-            </div>
-
-            <div className="admin-card__meta">
-              <div className="admin-card__metaCol">
-                <div className="admin-card__subLabel">更新者</div>
-                <span className="admin-card__readonly">{safeUpdatedBy}</span>
-              </div>
-              <div className="admin-card__metaCol">
-                <div className="admin-card__subLabel">更新日時</div>
-                <span className="admin-card__readonly">{safeUpdatedAt}</span>
-              </div>
-            </div>
-          </>
+        {/* 作成 / 更新情報（あれば表示） */}
+        {(createdByName || createdAt || updatedByName || updatedAt) && (
+          <div className="admin-card__section space-y-1 text-xs text-slate-500">
+            {createdByName && <div>作成者: {createdByName}</div>}
+            {createdAt && <div>作成日: {createdAt}</div>}
+            {updatedByName && <div>最終更新者: {updatedByName}</div>}
+            {updatedAt && <div>最終更新日: {updatedAt}</div>}
+          </div>
         )}
       </CardContent>
     </Card>
   );
-}
+};
+
+// default export も用意しておくと、
+// import AdminCard from ".../AdminCard"
+// でも
+// import { AdminCard } from ".../AdminCard"
+// でも利用可能
+export default AdminCard;

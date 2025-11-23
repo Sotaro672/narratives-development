@@ -149,10 +149,7 @@ export function useProductBlueprintCreate(): UseProductBlueprintCreateResult {
 
         setBrandOptions(items);
 
-        // brandId 未設定なら先頭を自動選択
-        if (!brandId && items.length > 0) {
-          setBrandId(items[0].id);
-        }
+        // ★ ここでは brandId を自動選択しない（初期状態は未選択のまま）
       } catch (e) {
         const err = e instanceof Error ? e : new Error(String(e));
         if (!cancelled) {
@@ -174,7 +171,7 @@ export function useProductBlueprintCreate(): UseProductBlueprintCreateResult {
     return () => {
       cancelled = true;
     };
-  }, [effectiveCompanyId, brandId]);
+  }, [effectiveCompanyId]);
 
   // 選択中ブランド名
   const brandName = React.useMemo(() => {
@@ -187,12 +184,17 @@ export function useProductBlueprintCreate(): UseProductBlueprintCreateResult {
   // ───────────────────────
   const [productName, setProductName] = React.useState("");
   const [itemType, setItemType] = React.useState<ItemType>("tops");
-  const [fit, setFit] = React.useState<Fit>("レギュラーフィット");
+
+  // ★ フィットは自動で既定値にせず、空からスタート
+  const [fit, setFit] = React.useState<Fit>("" as Fit);
+
   const [material, setMaterial] = React.useState("");
   const [weight, setWeight] = React.useState<number>(0);
   const [qualityAssurance, setQualityAssurance] = React.useState<string[]>([]);
+
+  // ★ 商品IDタグも自動選択せず、空からスタート
   const [productIdTagType, setProductIdTagType] =
-    React.useState<ProductIDTagType>("qr");
+    React.useState<ProductIDTagType>("" as ProductIDTagType);
 
   const [colorInput, setColorInput] = React.useState("");
   const [colors, setColors] = React.useState<string[]>([]);

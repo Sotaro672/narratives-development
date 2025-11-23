@@ -1,4 +1,4 @@
-// frontend/console/productBlueprint/src/presentation/components/productBlueprintCard.tsx
+// frontend/console/productBlueprint/src/presentation/components/productBlueprintCard.tsx 
 
 import * as React from "react";
 import { ShieldCheck, X, Package2 } from "lucide-react";
@@ -23,6 +23,12 @@ import {
 } from "../hook/useProductBlueprintDetail";
 import "../styles/productBlueprint.css";
 
+/**
+ * BrandOption:
+ * - brandOptions は useProductBlueprintCreate で
+ *   currentMember.companyId により絞り込まれている前提。
+ * - このコンポーネントでは追加の絞り込みは行わず、そのまま表示のみを担当する。
+ */
 type BrandOption = {
   id: string;
   name: string;
@@ -88,6 +94,10 @@ const ProductBlueprintCard: React.FC<ProductBlueprintCardProps> = ({
   const safeProductIdTag = productIdTag ?? "";
   const safeFit = fit ?? ("" as Fit);
 
+  // ブランド名の表示用（brandId から name を引く）
+  const selectedBrandName =
+    brandOptions?.find((b) => b.id === brandId)?.name ?? "";
+
   return (
     <Card className={`pbc ${!isEdit ? "view-mode" : ""}`}>
       <CardHeader className="box__header">
@@ -113,30 +123,36 @@ const ProductBlueprintCard: React.FC<ProductBlueprintCardProps> = ({
           />
         )}
 
-        {/* ブランド（ログ付きの選択欄に置き換え） */}
+        {/* ブランド（フィットと同じスタイルのポップオーバー選択） */}
         <div className="label">ブランド</div>
         {isEdit && brandOptions && onChangeBrandId ? (
           <div className="mb-2 space-y-1">
-            <select
-              className="w-full border rounded px-2 py-1 text-sm"
-              value={brandId ?? ""}
-              onChange={(e) => {
-                const next = e.target.value;
-                console.log(
-                  "[ProductBlueprintCard] brand <select> onChange",
-                  next,
-                );
-                onChangeBrandId(next);
-              }}
-              aria-label="ブランドを選択"
-            >
-              <option value="">選択してください</option>
-              {brandOptions.map((b) => (
-                <option key={b.id} value={b.id}>
-                  {b.name}
-                </option>
-              ))}
-            </select>
+            <Popover>
+              <PopoverTrigger>
+                <Button
+                  variant="outline"
+                  className="w-full justify-between pbc-select-trigger"
+                  aria-label="ブランドを選択"
+                >
+                  {selectedBrandName || "ブランドを選択してください。"}
+                </Button>
+              </PopoverTrigger>
+              <PopoverContent align="start" className="p-1">
+                {brandOptions.map((b) => (
+                  <div
+                    key={b.id}
+                    className={`px-3 py-2 rounded-md cursor-pointer hover:bg-blue-50 ${
+                      brandId === b.id
+                        ? "bg-blue-100 text-blue-700 font-medium"
+                        : ""
+                    }`}
+                    onClick={() => onChangeBrandId(b.id)}
+                  >
+                    {b.name}
+                  </div>
+                ))}
+              </PopoverContent>
+            </Popover>
 
             {brandLoading && (
               <p className="text-xs text-slate-400">ブランドを取得中…</p>
@@ -167,7 +183,7 @@ const ProductBlueprintCard: React.FC<ProductBlueprintCardProps> = ({
                 className="w-full justify-between pbc-select-trigger"
                 aria-label="フィットを選択"
               >
-                {safeFit || "選択してください"}
+                {safeFit || "フィットを選択してください。"}
               </Button>
             </PopoverTrigger>
             <PopoverContent align="start" className="p-1">
@@ -290,7 +306,7 @@ const ProductBlueprintCard: React.FC<ProductBlueprintCardProps> = ({
                 className="w-full justify-between pbc-select-trigger"
                 aria-label="商品IDタグを選択"
               >
-                {safeProductIdTag || "選択してください"}
+                {safeProductIdTag || "商品タグを選択してください。"}
               </Button>
             </PopoverTrigger>
             <PopoverContent align="start" className="p-1">

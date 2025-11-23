@@ -40,6 +40,10 @@ func (u *BrandUsecase) Exists(ctx context.Context, id string) (bool, error) {
 }
 
 func (u *BrandUsecase) Count(ctx context.Context, f branddom.Filter) (int, error) {
+	// currentMember (= context に載っている companyId) と同じ companyId に絞る
+	if cid := companyIDFromContext(ctx); cid != "" {
+		f.CompanyID = &cid
+	}
 	return u.brandRepo.Count(ctx, f)
 }
 
@@ -49,6 +53,10 @@ func (u *BrandUsecase) List(
 	s branddom.Sort,
 	p branddom.Page,
 ) (branddom.PageResult[branddom.Brand], error) {
+	// currentMember と同じ companyId の Brand のみを list
+	if cid := companyIDFromContext(ctx); cid != "" {
+		f.CompanyID = &cid
+	}
 	return u.brandRepo.List(ctx, f, s, p)
 }
 
@@ -58,6 +66,10 @@ func (u *BrandUsecase) ListByCursor(
 	s branddom.Sort,
 	c branddom.CursorPage,
 ) (branddom.CursorPageResult[branddom.Brand], error) {
+	// currentMember と同じ companyId に制限
+	if cid := companyIDFromContext(ctx); cid != "" {
+		f.CompanyID = &cid
+	}
 	return u.brandRepo.ListByCursor(ctx, f, s, c)
 }
 

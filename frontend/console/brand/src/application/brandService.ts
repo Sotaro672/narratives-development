@@ -1,3 +1,4 @@
+// frontend/console/brand/src/application/brandService.ts
 /// <reference types="vite/client" />
 
 import { brandRepositoryHTTP } from "../infrastructure/http/brandRepositoryHTTP";
@@ -109,6 +110,8 @@ export function formatBrandName(name: string | null | undefined): string {
 
 // ===========================
 // companyId のブランド一覧取得
+//   - 実際のフィルタリングは backend BrandUsecase.List + companyIDFromContext に統一
+//   - フロントでは companyId は「まだログイン情報が取れていない場合は呼ばない」ためのガード用途のみ
 // ===========================
 export async function listBrands(companyId: string): Promise<BrandRow[]> {
   // eslint-disable-next-line no-console
@@ -116,12 +119,14 @@ export async function listBrands(companyId: string): Promise<BrandRow[]> {
   // eslint-disable-next-line no-console
   console.log("[brandService] API_BASE =", API_BASE);
 
+  // companyId が空の間は呼ばない（認証コンテキスト未準備のガード）
   if (!companyId) return [];
 
   // ① brandRepository からブランド取得
+  //    ※ companyId での絞り込みは backend 側 (BrandUsecase.List + companyIDFromContext) が担当
   const page = await brandRepositoryHTTP.list({
     filter: {
-      companyId,
+      // companyId は渡さない（フロント側でのフィルタリングは削除）
       deleted: false,
       isActive: true,
     },
