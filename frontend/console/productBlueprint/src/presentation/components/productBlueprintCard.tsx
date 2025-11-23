@@ -16,11 +16,16 @@ import {
   PopoverTrigger,
   PopoverContent,
 } from "../../../../shell/src/shared/ui/popover";
+import { Checkbox } from "../../../../shell/src/shared/ui/checkbox";
 import {
   FIT_OPTIONS,
   PRODUCT_ID_TAG_OPTIONS,
   type Fit,
 } from "../hook/useProductBlueprintDetail";
+import {
+  WASH_TAG_OPTIONS,
+  type WashTagOption,
+} from "../../domain/entity/catalog";
 import "../styles/productBlueprint.css";
 
 /**
@@ -98,6 +103,30 @@ const ProductBlueprintCard: React.FC<ProductBlueprintCardProps> = ({
   const selectedBrandName =
     brandOptions?.find((b) => b.id === brandId)?.name ?? "";
 
+  // 品質保証タグをカテゴリごとにグルーピング
+  const washTagGroups = React.useMemo(() => {
+    const map = new Map<string, WashTagOption[]>();
+    for (const opt of WASH_TAG_OPTIONS) {
+      const cat = opt.category;
+      const list = map.get(cat) ?? [];
+      list.push(opt);
+      map.set(cat, list);
+    }
+    return Array.from(map.entries()); // [category, options[]][]
+  }, []);
+
+  const handleToggleWashTag = React.useCallback(
+    (value: string) => {
+      if (!onChangeWashTags) return;
+      if (safeWashTags.includes(value)) {
+        onChangeWashTags(safeWashTags.filter((t) => t !== value));
+      } else {
+        onChangeWashTags([...safeWashTags, value]);
+      }
+    },
+    [onChangeWashTags, safeWashTags],
+  );
+
   return (
     <Card className={`pbc ${!isEdit ? "view-mode" : ""}`}>
       <CardHeader className="box__header">
@@ -173,43 +202,88 @@ const ProductBlueprintCard: React.FC<ProductBlueprintCardProps> = ({
           />
         )}
 
-        {/* フィット */}
-        <div className="label">フィット</div>
-        {isEdit ? (
-          <Popover>
-            <PopoverTrigger>
-              <Button
-                variant="outline"
-                className="w-full justify-between pbc-select-trigger"
-                aria-label="フィットを選択"
-              >
-                {safeFit || "フィットを選択してください。"}
-              </Button>
-            </PopoverTrigger>
-            <PopoverContent align="start" className="p-1">
-              {FIT_OPTIONS.map((opt) => (
-                <div
-                  key={opt.value}
-                  className={`px-3 py-2 rounded-md cursor-pointer hover:bg-blue-50 ${
-                    safeFit === opt.value
-                      ? "bg-blue-100 text-blue-700 font-medium"
-                      : ""
-                  }`}
-                  onClick={() => onChangeFit?.(opt.value)}
-                >
-                  {opt.label}
-                </div>
-              ))}
-            </PopoverContent>
-          </Popover>
-        ) : (
-          <Input
-            value={safeFit}
-            variant="readonly"
-            readOnly
-            aria-label="フィット"
-          />
-        )}
+        {/* フィット & 商品IDタグ（横並び） */}
+        <div className="pbc-fit-row">
+          {/* フィット */}
+          <div className="flex-1">
+            <div className="label">フィット</div>
+            {isEdit ? (
+              <Popover>
+                <PopoverTrigger>
+                  <Button
+                    variant="outline"
+                    className="w-full justify-between pbc-select-trigger"
+                    aria-label="フィットを選択"
+                  >
+                    {safeFit || "フィットを選択してください。"}
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent align="start" className="p-1">
+                  {FIT_OPTIONS.map((opt) => (
+                    <div
+                      key={opt.value}
+                      className={`px-3 py-2 rounded-md cursor-pointer hover:bg-blue-50 ${
+                        safeFit === opt.value
+                          ? "bg-blue-100 text-blue-700 font-medium"
+                          : ""
+                      }`}
+                      onClick={() => onChangeFit?.(opt.value)}
+                    >
+                      {opt.label}
+                    </div>
+                  ))}
+                </PopoverContent>
+              </Popover>
+            ) : (
+              <Input
+                value={safeFit}
+                variant="readonly"
+                readOnly
+                aria-label="フィット"
+              />
+            )}
+          </div>
+
+          {/* 商品IDタグ */}
+          <div className="flex-1">
+            <div className="label">商品IDタグ</div>
+            {isEdit ? (
+              <Popover>
+                <PopoverTrigger>
+                  <Button
+                    variant="outline"
+                    className="w-full justify-between pbc-select-trigger"
+                    aria-label="商品IDタグを選択"
+                  >
+                    {safeProductIdTag || "商品タグを選択してください。"}
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent align="start" className="p-1">
+                  {PRODUCT_ID_TAG_OPTIONS.map((opt) => (
+                    <div
+                      key={opt.value}
+                      className={`px-3 py-2 rounded-md cursor-pointer hover:bg-blue-50 ${
+                        safeProductIdTag === opt.value
+                          ? "bg-blue-100 text-blue-700 font-medium"
+                          : ""
+                      }`}
+                      onClick={() => onChangeProductIdTag?.(opt.value)}
+                    >
+                      {opt.label}
+                    </div>
+                  ))}
+                </PopoverContent>
+              </Popover>
+            ) : (
+              <Input
+                value={safeProductIdTag}
+                variant="readonly"
+                readOnly
+                aria-label="商品IDタグ"
+              />
+            )}
+          </div>
+        </div>
 
         {/* 素材 */}
         <div className="label">素材</div>
@@ -281,57 +355,48 @@ const ProductBlueprintCard: React.FC<ProductBlueprintCardProps> = ({
               )}
             </Badge>
           ))}
-
-          {isEdit && onChangeWashTags && (
-            <Button
-              variant="secondary"
-              size="sm"
-              onClick={() =>
-                onChangeWashTags([...safeWashTags, "新タグ"])
-              }
-              className="btn"
-            >
-              + 追加
-            </Button>
-          )}
         </div>
 
-        {/* 商品IDタグ */}
-        <div className="label">商品IDタグ</div>
-        {isEdit ? (
-          <Popover>
-            <PopoverTrigger>
-              <Button
-                variant="outline"
-                className="w-full justify-between pbc-select-trigger"
-                aria-label="商品IDタグを選択"
-              >
-                {safeProductIdTag || "商品タグを選択してください。"}
-              </Button>
-            </PopoverTrigger>
-            <PopoverContent align="start" className="p-1">
-              {PRODUCT_ID_TAG_OPTIONS.map((opt) => (
-                <div
-                  key={opt.value}
-                  className={`px-3 py-2 rounded-md cursor-pointer hover:bg-blue-50 ${
-                    safeProductIdTag === opt.value
-                      ? "bg-blue-100 text-blue-700 font-medium"
-                      : ""
-                  }`}
-                  onClick={() => onChangeProductIdTag?.(opt.value)}
-                >
-                  {opt.label}
-                </div>
-              ))}
-            </PopoverContent>
-          </Popover>
-        ) : (
-          <Input
-            value={safeProductIdTag}
-            variant="readonly"
-            readOnly
-            aria-label="商品IDタグ"
-          />
+        {/* カテゴリー別の追加ボタン（横並び） */}
+        {isEdit && onChangeWashTags && (
+          <div className="mt-2 flex flex-wrap gap-2">
+            {washTagGroups.map(([category, options]) => (
+              <Popover key={category}>
+                <PopoverTrigger>
+                  <Button
+                    variant="secondary"
+                    size="sm"
+                    className="btn"
+                    aria-label={`${category} のタグを追加`}
+                  >
+                    {category}
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent align="start" className="p-2 space-y-1 w-64">
+                  {options.map((opt) => {
+                    const checked = safeWashTags.includes(opt.value);
+                    const checkboxId = `wash-tag-${opt.value}`;
+                    return (
+                      <label
+                        key={opt.value}
+                        htmlFor={checkboxId}
+                        className="flex items-center gap-2 text-sm cursor-pointer py-0.5"
+                      >
+                        <Checkbox
+                          id={checkboxId}
+                          checked={checked}
+                          onCheckedChange={() =>
+                            handleToggleWashTag(opt.value)
+                          }
+                        />
+                        <span>{opt.label}</span>
+                      </label>
+                    );
+                  })}
+                </PopoverContent>
+              </Popover>
+            ))}
+          </div>
         )}
       </CardContent>
     </Card>

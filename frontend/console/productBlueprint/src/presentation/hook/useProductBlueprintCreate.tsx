@@ -20,12 +20,15 @@ import type { ModelNumber } from "../../../../model/src/presentation/components/
 // Auth / currentMember
 import { useAuth } from "../../../../shell/src/auth/presentation/hook/useCurrentMember";
 
-// Fit は詳細画面と同じユニオン型
-export type Fit =
-  | "レギュラーフィット"
-  | "スリムフィット"
-  | "リラックスフィット"
-  | "オーバーサイズ";
+// Fit / 洗濯タグ のカタログをドメイン層から利用
+import {
+  FIT_OPTIONS,
+  WASH_TAG_OPTIONS,
+} from "../../domain/entity/catalog";
+import type { Fit } from "../../domain/entity/catalog";
+
+// 他プレゼン層からも使いやすいように再エクスポート
+export { FIT_OPTIONS, WASH_TAG_OPTIONS } from "../../domain/entity/catalog";
 
 // -------------------------------
 // Hook が外に公開する ViewModel

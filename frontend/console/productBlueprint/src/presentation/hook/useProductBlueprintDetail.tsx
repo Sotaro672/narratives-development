@@ -14,25 +14,21 @@ import {
   type ModelNumberRow,
 } from "../../infrastructure/api/productBlueprintApi";
 
-export type Fit =
-  | "レギュラーフィット"
-  | "スリムフィット"
-  | "リラックスフィット"
-  | "オーバーサイズ";
+// ▼ 選択肢などのカタログ情報をドメイン層から使用
+import {
+  FIT_OPTIONS,
+  PRODUCT_ID_TAG_OPTIONS,
+  WASH_TAG_OPTIONS,
+} from "../../domain/entity/catalog";
+import type { Fit, WashTagOption } from "../../domain/entity/catalog";
 
-// UI 用フィット選択肢
-export const FIT_OPTIONS: { value: Fit; label: string }[] = [
-  { value: "レギュラーフィット", label: "レギュラーフィット" },
-  { value: "スリムフィット", label: "スリムフィット" },
-  { value: "リラックスフィット", label: "リラックスフィット" },
-  { value: "オーバーサイズ", label: "オーバーサイズ" },
-];
-
-// 商品IDタグ選択肢（UI表示用）
-export const PRODUCT_ID_TAG_OPTIONS: { value: string; label: string }[] = [
-  { value: "QRコード", label: "QRコード" },
-  { value: "バーコード", label: "バーコード" },
-];
+// 他のプレゼン層からも使えるように再エクスポートしておく
+export {
+  FIT_OPTIONS,
+  PRODUCT_ID_TAG_OPTIONS,
+  WASH_TAG_OPTIONS,
+} from "../../domain/entity/catalog";
+export type { Fit, WashTagOption } from "../../domain/entity/catalog";
 
 export interface UseProductBlueprintDetailResult {
   pageTitle: string;
@@ -115,13 +111,8 @@ export function useProductBlueprintDetail(): UseProductBlueprintDetailResult {
     () => blueprint?.weight ?? 180,
   );
 
-  const [washTags, setWashTags] = React.useState<string[]>(
-    () =>
-      blueprint?.qualityAssurance ?? [
-        "手洗い",
-        "ドライクリーニング",
-        "陰干し",
-      ],
+  const [washTags, setWashTags] = React.useState<string[]>(() =>
+    blueprint?.qualityAssurance ?? ["手洗い", "ドライクリーニング", "陰干し"],
   );
 
   // Tag は entity.go / shared types 準拠で productIdTagType のみを扱う
