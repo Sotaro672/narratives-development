@@ -32,6 +32,9 @@ import type {
   MeasurementOption,
 } from "../../domain/entity/catalog";
 
+// ★ 商品設計作成 API 呼び出しサービス
+import { createProductBlueprint } from "../../application/productBlueprintCreateService";
+
 // 他プレゼン層からも使いやすいように再エクスポート
 export {
   FIT_OPTIONS,
@@ -321,16 +324,15 @@ export function useProductBlueprintCreate(): UseProductBlueprintCreateResult {
   // ───────────────────────
   // アクション
   // ───────────────────────
-  const onCreate = React.useCallback(() => {
+  const onCreate = React.useCallback(async () => {
     const errors = validate();
     if (errors.length > 0) {
-      // TODO: 将来的にはトースト or フォーム上のエラー表示に差し替え
       alert(`入力内容に不備があります。\n\n- ${errors.join("\n- ")}`);
       console.warn("[useProductBlueprintCreate] validation errors:", errors);
       return;
     }
 
-    console.log("[useProductBlueprintCreate] onCreate payload snapshot", {
+    const payload = {
       productName,
       brandId,
       brandName,
@@ -344,14 +346,28 @@ export function useProductBlueprintCreate(): UseProductBlueprintCreateResult {
       sizes,
       modelNumbers,
       assigneeId,
-      createdBy,
-      createdAt,
       companyId: effectiveCompanyId,
+      // backend で不要なら無視されるが、デバッグ用に含めておく
       measurementOptions,
-    });
+    };
 
-    alert("商品設計を作成しました（ダミー）");
-    navigate(-1);
+    console.log("[useProductBlueprintCreate] onCreate payload snapshot", payload);
+
+    try {
+      await createProductBlueprint(payload);
+      alert("商品設計を作成しました。");
+      navigate(-1);
+    } catch (e: any) {
+      console.error(
+        "[useProductBlueprintCreate] failed to create product blueprint:",
+        e,
+      );
+      alert(
+        e instanceof Error
+          ? e.message
+          : "商品設計の作成に失敗しました。時間をおいて再度お試しください。",
+      );
+    }
   }, [
     validate,
     productName,
@@ -367,8 +383,6 @@ export function useProductBlueprintCreate(): UseProductBlueprintCreateResult {
     sizes,
     modelNumbers,
     assigneeId,
-    createdBy,
-    createdAt,
     effectiveCompanyId,
     measurementOptions,
     navigate,

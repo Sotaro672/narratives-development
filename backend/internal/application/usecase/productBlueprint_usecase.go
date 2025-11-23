@@ -1,4 +1,4 @@
-// backend\internal\application\usecase\productBlueprint_usecase.go
+// backend/internal/application/usecase/productBlueprint_usecase.go
 package usecase
 
 import (
@@ -39,6 +39,14 @@ func (u *ProductBlueprintUsecase) Exists(ctx context.Context, id string) (bool, 
 // Commands
 
 func (u *ProductBlueprintUsecase) Create(ctx context.Context, v productbpdom.ProductBlueprint) (productbpdom.ProductBlueprint, error) {
+	return u.repo.Create(ctx, v)
+}
+
+// CreateWithVariations は Handler から呼ばれる拡張メソッドです。
+// 現状は Variations を含んだ ProductBlueprint を そのまま repo.Create に委譲します。
+// 将来的に「モデルテーブルの同時作成」などが必要になった場合は、ここで
+// 他の Usecase/Repo を呼び出す形に拡張できます。
+func (u *ProductBlueprintUsecase) CreateWithVariations(ctx context.Context, v productbpdom.ProductBlueprint) (productbpdom.ProductBlueprint, error) {
 	return u.repo.Create(ctx, v)
 }
 

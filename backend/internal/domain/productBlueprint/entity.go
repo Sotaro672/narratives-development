@@ -129,11 +129,15 @@ type ProductBlueprint struct {
 	Weight           float64
 	QualityAssurance []string
 	ProductIdTag     ProductIDTag `json:"-" db:"-"`
-	AssigneeID       string
-	CreatedBy        *string   // TS: string | null
-	CreatedAt        time.Time // TS: Date | string
-	UpdatedBy        *string   // TS: string | null
-	UpdatedAt        time.Time // TS: Date | string
+
+	// ★ 追加！
+	CompanyID string
+
+	AssigneeID string
+	CreatedBy  *string   // TS: string | null
+	CreatedAt  time.Time // TS: Date | string
+	UpdatedBy  *string   // TS: string | null
+	UpdatedAt  time.Time // TS: Date | string
 }
 
 // Errors
@@ -146,6 +150,7 @@ var (
 	ErrInvalidTagType   = errors.New("productBlueprint: invalid productIdTag.type")
 	ErrInvalidCreatedAt = errors.New("productBlueprint: invalid createdAt")
 	ErrInvalidAssignee  = errors.New("productBlueprint: invalid assigneeId")
+	ErrInvalidCompanyID = errors.New("productBlueprint: invalid companyId")
 )
 
 // Constructors
@@ -160,7 +165,9 @@ func New(
 	assigneeID string,
 	createdBy *string,
 	createdAt time.Time,
+	companyID string,
 ) (ProductBlueprint, error) {
+
 	pb := ProductBlueprint{
 		ID:               strings.TrimSpace(id),
 		ProductName:      strings.TrimSpace(productName),
@@ -173,14 +180,17 @@ func New(
 		QualityAssurance: dedupTrim(qualityAssurance),
 		ProductIdTag:     productIDTag,
 		AssigneeID:       strings.TrimSpace(assigneeID),
+		CompanyID:        strings.TrimSpace(companyID),
 		CreatedBy:        createdBy,
 		CreatedAt:        createdAt,
 		UpdatedBy:        createdBy,
 		UpdatedAt:        createdAt,
 	}
+
 	if err := pb.validate(); err != nil {
 		return ProductBlueprint{}, err
 	}
+
 	return pb, nil
 }
 
@@ -195,17 +205,21 @@ func NewFromStringTime(
 	assigneeID string,
 	createdBy *string,
 	createdAt string,
+	companyID string,
 ) (ProductBlueprint, error) {
+
 	t, err := parseTime(createdAt)
 	if err != nil {
 		return ProductBlueprint{}, fmt.Errorf("%w: %v", ErrInvalidCreatedAt, err)
 	}
+
 	return New(
 		id, productName, brandID,
 		itemType, variations,
 		fit, material, weight,
 		qualityAssurance, productIDTag,
 		assigneeID, createdBy, t,
+		companyID,
 	)
 }
 
@@ -255,6 +269,9 @@ func (p ProductBlueprint) validate() error {
 	}
 	if p.Weight < 0 {
 		return ErrInvalidWeight
+	}
+	if strings.TrimSpace(p.CompanyID) == "" {
+		return ErrInvalidCompanyID
 	}
 	if err := p.ProductIdTag.validate(); err != nil {
 		return err
@@ -328,51 +345,3 @@ func dedupVariationsByID(vars []model.ModelVariation) []model.ModelVariation {
 	}
 	return out
 }
-
-// ProductBlueprintsTableDDL defines the SQL for migration.
-const ProductBlueprintsTableDDL = `
-BEGIN;
-
-CREATE TABLE IF NOT EXISTS product_blueprints (
-  id                     TEXT        PRIMARY KEY,
-  product_name           TEXT        NOT NULL,
-  brand_id               TEXT        NOT NULL,
-  item_type              TEXT        NOT NULL CHECK (item_type IN ('tops','bottoms','other')),
-  fit                    TEXT        NOT NULL DEFAULT '',
-  material               TEXT        NOT NULL DEFAULT '',
-  weight                 DOUBLE PRECISION NOT NULL CHECK (weight >= 0),
-  quality_assurance      TEXT[]      NOT NULL DEFAULT '{}',
-  product_id_tag_type    TEXT        NOT NULL CHECK (product_id_tag_type IN ('qr','nfc')),
-  model_variations       JSONB       NOT NULL DEFAULT '[]'::jsonb,
-  assignee_id            TEXT        NOT NULL,
-  created_by             TEXT,
-  created_at             TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-  updated_by             TEXT,
-  updated_at             TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-
-  CONSTRAINT chk_pb_non_empty CHECK (
-    char_length(trim(id)) > 0
-    AND char_length(trim(product_name)) > 0
-    AND char_length(trim(brand_id)) > 0
-    AND char_length(trim(assignee_id)) > 0
-  ),
-  CONSTRAINT chk_pb_qa_no_empty CHECK (
-    NOT EXISTS (SELECT 1 FROM unnest(quality_assurance) t(x) WHERE x = '')
-  ),
-  CONSTRAINT chk_pb_model_variations_array CHECK (jsonb_typeof(model_variations) = 'array'),
-  CHECK (updated_at >= created_at)
-);
-
-ALTER TABLE product_blueprints
-  ADD CONSTRAINT fk_pb_brand
-  FOREIGN KEY (brand_id) REFERENCES brands(id) ON DELETE RESTRICT;
-
-ALTER TABLE product_blueprints
-  ADD CONSTRAINT fk_pb_assignee
-  FOREIGN KEY (assignee_id) REFERENCES members(id) ON DELETE RESTRICT;
-
-CREATE INDEX IF NOT EXISTS idx_pb_brand_id   ON product_blueprints(brand_id);
-CREATE INDEX IF NOT EXISTS idx_pb_created_at ON product_blueprints(created_at);
-
-COMMIT;
-`

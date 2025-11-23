@@ -1,4 +1,3 @@
-// backend\internal\domain\model\entity.go
 package model
 
 import (
@@ -20,7 +19,9 @@ var (
 	ErrVariationNotFound          = errors.New("variation not found")
 )
 
-// Validation (moved from entity.go)
+// ==========================
+// Validation
+// ==========================
 
 func (mv ModelVariation) validate() error {
 	if mv.ID == "" {
@@ -44,15 +45,15 @@ func (mv ModelVariation) validate() error {
 	if !colorAllowed(mv.Color) {
 		return ErrInvalidColor
 	}
+
 	for k, v := range mv.Measurements {
 		if strings.TrimSpace(k) == "" || math.IsNaN(v) || math.IsInf(v, 0) {
 			return ErrInvalidMeasurements
 		}
 	}
-	// Optional audit coherence
-	if mv.CreatedAt != nil && mv.UpdatedAt != nil && mv.UpdatedAt.Before(*mv.CreatedAt) {
-		return ErrInvalidUpdatedAt
-	}
+
+	// createdAt / updatedAt の検証は削除
+
 	return nil
 }
 
@@ -63,9 +64,12 @@ func (md ModelData) validate() error {
 	if md.ProductBlueprintID == "" {
 		return ErrInvalidBlueprintID
 	}
+
+	// UpdatedAt は必須のまま
 	if md.UpdatedAt.IsZero() {
 		return ErrInvalidUpdatedAt
 	}
+
 	seen := make(map[string]struct{}, len(md.Variations))
 	for _, v := range md.Variations {
 		if err := v.validate(); err != nil {
@@ -83,7 +87,7 @@ func (md ModelData) validate() error {
 }
 
 // ==========================
-// Types (mirror TS)
+// Types
 // ==========================
 
 type ModelVariation struct {
@@ -94,11 +98,8 @@ type ModelVariation struct {
 	Color              string
 	Measurements       map[string]float64
 
-	// Audit fields (optional, mirrors TS optional fields)
-	CreatedAt *time.Time
-	CreatedBy *string
-	UpdatedAt *time.Time
-	UpdatedBy *string
+	// 削除した: CreatedAt, CreatedBy, UpdatedAt, UpdatedBy
+	// 残す: DeletedAt / DeletedBy
 	DeletedAt *time.Time
 	DeletedBy *string
 }
@@ -110,14 +111,13 @@ type ModelData struct {
 	UpdatedAt          time.Time
 }
 
-// Alias to satisfy usecases expecting model.Model.
 type Model = ModelData
 
 type ItemSpec struct {
 	ModelNumber  string
 	Size         string
 	Color        string
-	Measurements map[string]float64 // nil means "unset"
+	Measurements map[string]float64
 }
 
 type SizeVariation struct {
@@ -152,14 +152,11 @@ var (
 	ErrInvalidMeasurements  = errors.New("model: invalid measurements")
 	ErrInvalidUpdatedAt     = errors.New("model: invalid updatedAt")
 	ErrDuplicateVariationID = errors.New("model: duplicate variation id")
-	// productBlueprintId の不一致に合わせてメッセージ更新
-	ErrProductMismatch = errors.New("model: variation.productBlueprintId mismatch")
+	ErrProductMismatch      = errors.New("model: variation.productBlueprintId mismatch")
 )
 
 // ==========================
-// Policy (optional)
-// If empty, any non-empty size/color is accepted.
-// You can populate these from modelConstants.ts if you want strict checking.
+// Policy
 // ==========================
 
 var AllowedSizes = map[string]struct{}{}
@@ -337,86 +334,3 @@ func cloneMeasurements(m map[string]float64) map[string]float64 {
 	}
 	return out
 }
-
-// ModelsTableDDL defines the SQL for the model domain migrations.
-const ModelsTableDDL = `
--- Migration: Initialize/Update Model domain (model_sets, model_variations)
--- Mirrors backend/internal/domain/model/entity.go
-
-BEGIN;
-
--- A set of variations for a product (tracks UpdatedAt at product scope)
-CREATE TABLE IF NOT EXISTS model_sets (
-  product_id           TEXT        PRIMARY KEY,
-  product_blueprint_id TEXT        NOT NULL,
-  updated_at           TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-
-  CONSTRAINT chk_model_sets_non_empty CHECK (
-    char_length(trim(product_id)) > 0
-    AND char_length(trim(product_blueprint_id)) > 0
-  )
-);
-
--- Ensure blueprint is unique to reference from variations
-CREATE UNIQUE INDEX IF NOT EXISTS uq_model_sets_product_blueprint_id
-  ON model_sets(product_blueprint_id);
-
--- Each concrete variation (measurements embedded as JSONB)
-CREATE TABLE IF NOT EXISTS model_variations (
-  id                   TEXT NOT NULL PRIMARY KEY,
-  product_blueprint_id TEXT NOT NULL, -- TS: ModelVariation.productBlueprintId
-  model_number         TEXT NOT NULL,
-  size                 TEXT NOT NULL,
-  color                TEXT NOT NULL,
-  measurements         JSONB NOT NULL DEFAULT '{}'::jsonb, -- TS: Record<string, number>
-
-  -- Audit (optional in TS)
-  created_at TIMESTAMPTZ NULL,
-  created_by UUID        NULL REFERENCES members(id) ON DELETE RESTRICT,
-  updated_at TIMESTAMPTZ NULL,
-  updated_by UUID        NULL REFERENCES members(id) ON DELETE RESTRICT,
-  deleted_at TIMESTAMPTZ NULL,
-  deleted_by UUID        NULL REFERENCES members(id) ON DELETE RESTRICT,
-
-  CONSTRAINT chk_model_variations_non_empty CHECK (
-    char_length(trim(id)) > 0
-    AND char_length(trim(product_blueprint_id)) > 0
-    AND char_length(trim(model_number)) > 0
-    AND char_length(trim(size)) > 0
-    AND char_length(trim(color)) > 0
-  ),
-  -- measurements must be a JSON object
-  CONSTRAINT chk_model_variations_measurements_object CHECK (jsonb_typeof(measurements) = 'object'),
-
-  -- Audit coherence (when provided)
-  CONSTRAINT chk_model_variations_time_order CHECK (
-    updated_at IS NULL OR created_at IS NULL OR updated_at >= created_at
-  )
-);
-
--- Relationships
-ALTER TABLE model_sets
-  ADD CONSTRAINT fk_model_sets_product
-  FOREIGN KEY (product_id) REFERENCES products(id) ON DELETE CASCADE;
-
--- variations -> sets by product_blueprint_id
-ALTER TABLE model_variations
-  ADD CONSTRAINT fk_model_variations_set_by_blueprint
-  FOREIGN KEY (product_blueprint_id) REFERENCES model_sets(product_blueprint_id) ON DELETE CASCADE;
-
--- Uniqueness to avoid duplicates per blueprint
-CREATE UNIQUE INDEX IF NOT EXISTS uq_model_variations_blueprint_modelnumber_size_color
-  ON model_variations(product_blueprint_id, model_number, size, color);
-
--- Helpful indexes
-CREATE INDEX IF NOT EXISTS idx_model_variations_product_blueprint_id  ON model_variations(product_blueprint_id);
-CREATE INDEX IF NOT EXISTS idx_model_variations_model_number          ON model_variations(model_number);
-CREATE INDEX IF NOT EXISTS idx_model_variations_size                  ON model_variations(size);
-CREATE INDEX IF NOT EXISTS idx_model_variations_color                 ON model_variations(color);
-CREATE INDEX IF NOT EXISTS idx_model_variations_measurements_gin      ON model_variations USING GIN (measurements);
-CREATE INDEX IF NOT EXISTS idx_model_variations_created_at            ON model_variations (created_at);
-CREATE INDEX IF NOT EXISTS idx_model_variations_updated_at            ON model_variations (updated_at);
-CREATE INDEX IF NOT EXISTS idx_model_variations_deleted_at            ON model_variations (deleted_at);
-
-COMMIT;
-`
