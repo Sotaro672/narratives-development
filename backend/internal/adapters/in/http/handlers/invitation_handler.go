@@ -4,6 +4,7 @@ package handlers
 import (
 	"encoding/json"
 	"errors"
+	"log"
 	"net/http"
 	"strings"
 
@@ -61,14 +62,7 @@ type invitationValidateResponse struct {
 // =====================================
 
 func (h *InvitationHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	// /api/invitation の後ろのパスを取得
 	path := strings.TrimPrefix(r.URL.Path, "/api/invitation")
-
-	// 例:
-	//   /api/invitation           -> path = ""
-	//   /api/invitation/          -> path = "/"
-	//   /api/invitation/validate  -> path = "/validate"
-	//   /api/invitation/complete  -> path = "/complete"
 
 	if path == "" || path == "/" {
 		h.handleGetInfo(w, r)
@@ -110,6 +104,8 @@ func (h *InvitationHandler) handleGetInfo(w http.ResponseWriter, r *http.Request
 
 	info, err := h.InvitationQuery.GetInvitationInfo(ctx, token)
 	if err != nil {
+		// ErrInvitationTokenNotFound は
+		// internal/domain/member/invitation_repository_port.go で定義されたものを利用
 		if errors.Is(err, memdom.ErrInvitationTokenNotFound) || errors.Is(err, memdom.ErrNotFound) {
 			http.Error(w, "invitation token not found", http.StatusNotFound)
 			return
@@ -117,6 +113,10 @@ func (h *InvitationHandler) handleGetInfo(w http.ResponseWriter, r *http.Request
 		http.Error(w, "failed to resolve invitation token", http.StatusInternalServerError)
 		return
 	}
+
+	// 🔥 DEBUG ログ
+	log.Printf("[DEBUG] InvitationInfo: member=%s email=%q company=%s brands=%v perms=%v",
+		info.MemberID, info.Email, info.CompanyID, info.AssignedBrandIDs, info.Permissions)
 
 	resp := invitationInfoResponse{
 		MemberID:         info.MemberID,
@@ -132,7 +132,6 @@ func (h *InvitationHandler) handleGetInfo(w http.ResponseWriter, r *http.Request
 
 // =====================================
 // POST /api/invitation/validate
-// body: { "token": "INV_xxx" }
 // =====================================
 
 func (h *InvitationHandler) handleValidate(w http.ResponseWriter, r *http.Request) {
@@ -185,7 +184,6 @@ func (h *InvitationHandler) handleValidate(w http.ResponseWriter, r *http.Reques
 /*
 =====================================
 POST /api/invitation/complete
-（サインイン後の member 確定） ※暫定スタブ
 =====================================
 */
 
@@ -199,7 +197,6 @@ type invitationCompleteRequest struct {
 	Email         string `json:"email"`
 }
 
-// 内部用：/complete 用ハンドラ
 func (h *InvitationHandler) handleComplete(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		w.Header().Set("Allow", http.MethodPost)
@@ -226,7 +223,6 @@ func (h *InvitationHandler) handleComplete(w http.ResponseWriter, r *http.Reques
 
 	ctx := r.Context()
 
-	// 1) token → InvitationInfo
 	info, err := h.InvitationQuery.GetInvitationInfo(ctx, token)
 	if err != nil {
 		if errors.Is(err, memdom.ErrInvitationTokenNotFound) {
@@ -237,11 +233,7 @@ func (h *InvitationHandler) handleComplete(w http.ResponseWriter, r *http.Reques
 		return
 	}
 
-	// ★ 暫定対応：未実装でも「info を使った」扱いにする
-	_ = info.MemberID
-
-	// ★ TODO: MemberUsecase.CompleteInvitation(...) を実装して呼び出す
-	// h.MemberUsecase.CompleteInvitation(ctx, *info, req)
+	_ = info.MemberID // TODO: 実装時に使用
 
 	w.WriteHeader(http.StatusNoContent)
 }
@@ -249,7 +241,6 @@ func (h *InvitationHandler) handleComplete(w http.ResponseWriter, r *http.Reques
 /*
 =====================================
 MemberInvitationHandler
-POST /members/{id}/invitation
 =====================================
 */
 

@@ -18,6 +18,9 @@ export default function InvitationPage() {
   const {
     formRef,
 
+    // email
+    email,
+
     // 氏名情報
     lastName,
     setLastName,
@@ -39,7 +42,7 @@ export default function InvitationPage() {
     assignedBrandIds,
     permissions,
 
-    // 表示用名前
+    // 表示用名前（今後使う可能性あり）
     companyName,
     assignedBrandNames,
 
@@ -70,6 +73,8 @@ export default function InvitationPage() {
   const permissionsText =
     permissions.length > 0 ? permissions.join(", ") : "-";
 
+  const emailText = email || "-";
+
   // ---- ログ出力（取得した招待情報の確認用）----
   React.useEffect(() => {
     // eslint-disable-next-line no-console
@@ -80,6 +85,7 @@ export default function InvitationPage() {
       assignedBrandIds,
       assignedBrandNames,
       permissions,
+      email,
     });
   }, [
     invitationToken,
@@ -88,6 +94,7 @@ export default function InvitationPage() {
     assignedBrandIds,
     assignedBrandNames,
     permissions,
+    email,
   ]);
 
   return (
@@ -134,6 +141,16 @@ export default function InvitationPage() {
               </label>
               <p className="text-sm text-slate-900 bg-white rounded px-3 py-2 border border-slate-300 whitespace-pre-wrap break-all">
                 {permissionsText}
+              </p>
+            </div>
+
+            {/* ★ email 表示欄（Permissions の下） */}
+            <div>
+              <label className="block text-sm text-slate-600 mb-1">
+                Email
+              </label>
+              <p className="text-sm text-slate-900 bg-white rounded px-3 py-2 border border-slate-300 break-all">
+                {emailText}
               </p>
             </div>
           </section>

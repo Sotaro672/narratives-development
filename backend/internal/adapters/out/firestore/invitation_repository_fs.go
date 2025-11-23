@@ -240,16 +240,6 @@ func (r *InvitationTokenRepositoryFS) CreateInvitationToken(
 // ========================
 
 func readInvitationTokenSnapshot(doc *firestore.DocumentSnapshot) (itdom.InvitationToken, error) {
-	// まずはそのまま構造体にマッピングを試みる
-	var t itdom.InvitationToken
-	if err := doc.DataTo(&t); err == nil {
-		if strings.TrimSpace(t.Token) == "" {
-			t.Token = doc.Ref.ID
-		}
-		return t, nil
-	}
-
-	// フォールバック: map から手動変換
 	data := doc.Data()
 
 	asString := func(v any) string {
@@ -258,6 +248,7 @@ func readInvitationTokenSnapshot(doc *firestore.DocumentSnapshot) (itdom.Invitat
 		}
 		return ""
 	}
+
 	asStringSlice := func(v any) []string {
 		if v == nil {
 			return nil
@@ -271,72 +262,20 @@ func readInvitationTokenSnapshot(doc *firestore.DocumentSnapshot) (itdom.Invitat
 		}
 		out := make([]string, 0, len(arr))
 		for _, x := range arr {
-			if s, ok := x.(string); ok && strings.TrimSpace(s) != "" {
+			if s, ok := x.(string); ok {
 				out = append(out, s)
 			}
 		}
 		return out
 	}
-	asTimePtr := func(v any) (*time.Time, error) {
-		switch tt := v.(type) {
-		case time.Time:
-			tu := tt.UTC()
-			return &tu, nil
-		case *time.Time:
-			if tt == nil {
-				return nil, nil
-			}
-			tu := tt.UTC()
-			return &tu, nil
-		case string:
-			s := strings.TrimSpace(tt)
-			if s == "" {
-				return nil, nil
-			}
-			if parsed, err := time.Parse(time.RFC3339, s); err == nil {
-				tu := parsed.UTC()
-				return &tu, nil
-			}
-			if parsed, err := time.Parse("2006-01-02 15:04:05Z07:00", s); err == nil {
-				tu := parsed.UTC()
-				return &tu, nil
-			}
-			return nil, fmt.Errorf("invalid time string: %q", s)
-		default:
-			return nil, nil
-		}
-	}
 
-	t = itdom.InvitationToken{
-		Token:            asString(data["token"]),
+	t := itdom.InvitationToken{
+		Token:            doc.Ref.ID,
 		MemberID:         asString(data["memberId"]),
 		Email:            asString(data["email"]),
 		CompanyID:        asString(data["companyId"]),
 		AssignedBrandIDs: asStringSlice(data["assignedBrands"]),
 		Permissions:      asStringSlice(data["permissions"]),
-	}
-
-	// createdAt
-	if v, err := asTimePtr(data["createdAt"]); err == nil && v != nil {
-		t.CreatedAt = *v
-	}
-
-	// expiresAt / usedAt はオプション
-	if v, _ := asTimePtr(data["expiresAt"]); v != nil {
-		t.ExpiresAt = v
-	}
-	if v, _ := asTimePtr(data["usedAt"]); v != nil {
-		t.UsedAt = v
-	}
-
-	// UpdatedAt があればセット（domain 定義に依存）
-	if v, _ := asTimePtr(data["updatedAt"]); v != nil {
-		t.UpdatedAt = v
-	}
-
-	// token が空なら docID を使う
-	if strings.TrimSpace(t.Token) == "" {
-		t.Token = doc.Ref.ID
 	}
 
 	return t, nil
