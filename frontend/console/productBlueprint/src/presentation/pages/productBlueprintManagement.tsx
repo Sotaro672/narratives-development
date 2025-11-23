@@ -1,106 +1,23 @@
 // frontend/productBlueprint/src/presentation/pages/productBlueprintManagement.tsx
 
-import { useMemo, useState } from "react";
-import { useNavigate } from "react-router-dom";
 import List, {
   FilterableTableHeader,
   SortableTableHeader,
 } from "../../../../shell/src/layout/List/List";
-import { PRODUCT_BLUEPRINTS } from "../../infrastructure/mockdata/productBlueprint_mockdata";
-import type {
-  ProductBlueprint,
-} from "../../../../shell/src/shared/types/productBlueprint";
-
-// "YYYY/MM/DD" → timestamp
-const toTs = (yyyyMd: string) => {
-  const [y, m, d] = yyyyMd.split("/").map((v) => parseInt(v, 10));
-  return new Date(y, (m || 1) - 1, d || 1).getTime();
-};
-
-// 一覧表示用のUI行モデル（ドメインとは分離）
-type UiRow = {
-  id: string;
-  productName: string;
-  brandLabel: string;
-  assigneeLabel: string;
-  tagLabel: string;
-  createdAt: string; // YYYY/MM/DD
-  lastModifiedAt: string; // YYYY/MM/DD
-};
-
-type SortKey = "createdAt" | "lastModifiedAt" | null;
-
-// ISO8601 → "YYYY/MM/DD"（壊れてたらそのまま返す）
-const toDisplayDate = (iso?: string | null): string => {
-  if (!iso) return "";
-  const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) return iso;
-  const y = d.getFullYear();
-  const m = String(d.getMonth() + 1).padStart(2, "0");
-  const day = String(d.getDate()).padStart(2, "0");
-  return `${y}/${m}/${day}`;
-};
-
-// BrandID → 表示名（モック用マッピング）
-const brandLabelFromId = (brandId: string): string => {
-  switch (brandId) {
-    case "brand_lumina":
-      return "LUMINA Fashion";
-    case "brand_nexus":
-      return "NEXUS Street";
-    default:
-      return brandId || "-";
-  }
-};
-
-// AssigneeID → 表示名（モックなのでIDそのまま or 簡易変換）
-const assigneeLabelFromId = (assigneeId: string): string =>
-  assigneeId || "-";
+import { useProductBlueprintManagement } from "../hook/useProductBlueprintManagement";
 
 export default function ProductBlueprintManagement() {
-  const navigate = useNavigate();
+  const {
+    rows,
+    brandFilter,
+    handleBrandFilterChange,
+    handleSortChange,
+    handleRowClick,
+    handleCreate,
+    handleReset,
+  } = useProductBlueprintManagement();
 
-  // フィルタ & ソート状態
-  const [brandFilter, setBrandFilter] = useState<string[]>([]);
-  const [sortedKey, setSortedKey] = useState<SortKey>(null);
-  const [sortedDir, setSortedDir] = useState<"asc" | "desc" | null>(null);
-
-  // ProductBlueprint → UiRow へ変換＋フィルタ＋ソート
-  const rows: UiRow[] = useMemo(() => {
-    const all: UiRow[] = (PRODUCT_BLUEPRINTS as ProductBlueprint[]).map(
-      (pb) => ({
-        id: pb.id,
-        productName: pb.productName,
-        brandLabel: brandLabelFromId(pb.brandId),
-        assigneeLabel: assigneeLabelFromId(pb.assigneeId),
-        // entity.go 準拠: Tag は productIdTagType のみ保持
-        tagLabel: pb.productIdTagType
-          ? pb.productIdTagType.toUpperCase()
-          : "-",
-        createdAt: toDisplayDate(pb.createdAt),
-        // entity.go 準拠: 最終更新日時は UpdatedAt
-        lastModifiedAt: toDisplayDate(pb.updatedAt),
-      })
-    );
-
-    let work = all;
-
-    if (brandFilter.length > 0) {
-      work = work.filter((r) => brandFilter.includes(r.brandLabel));
-    }
-
-    if (sortedKey && sortedDir) {
-      work = [...work].sort((a, b) => {
-        const av = toTs(a[sortedKey]);
-        const bv = toTs(b[sortedKey]);
-        return sortedDir === "asc" ? av - bv : bv - av;
-      });
-    }
-
-    return work;
-  }, [brandFilter, sortedKey, sortedDir]);
-
-  // ヘッダー定義
+  // ヘッダー定義（UI / スタイル側にのみ責務を残す）
   const headers = [
     "プロダクト",
     <FilterableTableHeader
@@ -111,7 +28,7 @@ export default function ProductBlueprintManagement() {
         { value: "NEXUS Street", label: "NEXUS Street" },
       ]}
       selected={brandFilter}
-      onChange={(values: string[]) => setBrandFilter(values)}
+      onChange={handleBrandFilterChange}
     />,
     "担当者",
     "タグ種別",
@@ -119,35 +36,19 @@ export default function ProductBlueprintManagement() {
       key="createdAt"
       label="作成日"
       sortKey="createdAt"
-      activeKey={sortedKey}
-      direction={sortedDir}
-      onChange={(key, dir) => {
-        setSortedKey(key as SortKey);
-        setSortedDir(dir);
-      }}
+      activeKey={null} // activeKey / direction は hook 内で管理＆判定させるため null を渡す
+      direction={null}
+      onChange={handleSortChange}
     />,
     <SortableTableHeader
       key="lastModifiedAt"
       label="最終更新日"
       sortKey="lastModifiedAt"
-      activeKey={sortedKey}
-      direction={sortedDir}
-      onChange={(key, dir) => {
-        setSortedKey(key as SortKey);
-        setSortedDir(dir);
-      }}
+      activeKey={null}
+      direction={null}
+      onChange={handleSortChange}
     />,
   ];
-
-  // 行クリックで詳細へ
-  const handleRowClick = (r: UiRow) => {
-    navigate(`/productBlueprint/detail/${encodeURIComponent(r.id)}`);
-  };
-
-  // 作成ボタン
-  const handleCreate = () => {
-    navigate("/productBlueprint/create");
-  };
 
   return (
     <List
@@ -157,11 +58,7 @@ export default function ProductBlueprintManagement() {
       createLabel="商品設計を作成"
       onCreate={handleCreate}
       showResetButton
-      onReset={() => {
-        setBrandFilter([]);
-        setSortedKey(null);
-        setSortedDir(null);
-      }}
+      onReset={handleReset}
     >
       {rows.map((r) => (
         <tr

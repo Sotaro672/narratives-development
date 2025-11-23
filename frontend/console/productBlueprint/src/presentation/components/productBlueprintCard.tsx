@@ -1,3 +1,5 @@
+// frontend/console/productBlueprint/src/presentation/components/productBlueprintCard.tsx
+
 import * as React from "react";
 import { ShieldCheck, X, Package2 } from "lucide-react";
 import {
@@ -14,17 +16,30 @@ import {
   PopoverTrigger,
   PopoverContent,
 } from "../../../../shell/src/shared/ui/popover";
+import {
+  FIT_OPTIONS,
+  PRODUCT_ID_TAG_OPTIONS,
+  type Fit,
+} from "../hook/useProductBlueprintDetail";
 import "../styles/productBlueprint.css";
 
-type Fit =
-  | "レギュラーフィット"
-  | "スリムフィット"
-  | "リラックスフィット"
-  | "オーバーサイズ";
+type BrandOption = {
+  id: string;
+  name: string;
+};
 
 type ProductBlueprintCardProps = {
   productName?: string;
+  /** 選択中ブランドの「表示名」（閲覧モードなどで使用） */
   brand?: string;
+
+  /** ▼ ブランド選択欄用 props（編集モード時） */
+  brandId?: string;
+  brandOptions?: BrandOption[];
+  brandLoading?: boolean;
+  brandError?: Error | null;
+  onChangeBrandId?: (id: string) => void;
+
   fit?: Fit;
   materials?: string;
   weight?: number;
@@ -43,6 +58,11 @@ type ProductBlueprintCardProps = {
 const ProductBlueprintCard: React.FC<ProductBlueprintCardProps> = ({
   productName,
   brand,
+  brandId,
+  brandOptions,
+  brandLoading,
+  brandError,
+  onChangeBrandId,
   fit,
   materials,
   weight,
@@ -58,7 +78,7 @@ const ProductBlueprintCard: React.FC<ProductBlueprintCardProps> = ({
 }) => {
   const isEdit = mode === "edit";
 
-  // サニタイズ
+  // サニタイズ（UI 用の安全値に整形）
   const safeProductName = productName ?? "";
   const safeBrand = brand ?? "";
   const safeMaterials = materials ?? "";
@@ -68,26 +88,11 @@ const ProductBlueprintCard: React.FC<ProductBlueprintCardProps> = ({
   const safeProductIdTag = productIdTag ?? "";
   const safeFit = fit ?? ("" as Fit);
 
-  const fitOptions = [
-    { value: "レギュラーフィット", label: "レギュラーフィット" },
-    { value: "スリムフィット", label: "スリムフィット" },
-    { value: "リラックスフィット", label: "リラックスフィット" },
-    { value: "オーバーサイズ", label: "オーバーサイズ" },
-  ];
-
-  const tagOptions = [
-    { value: "QRコード", label: "QRコード" },
-    { value: "バーコード", label: "バーコード" },
-  ];
-
   return (
     <Card className={`pbc ${!isEdit ? "view-mode" : ""}`}>
       <CardHeader className="box__header">
         <Package2 size={16} />
-        <CardTitle className="box__title">
-          基本情報
-          {/* 閲覧モードでも（閲覧）の文言は表示しない */}
-        </CardTitle>
+        <CardTitle className="box__title">基本情報</CardTitle>
       </CardHeader>
 
       <CardContent className="box__body">
@@ -108,17 +113,42 @@ const ProductBlueprintCard: React.FC<ProductBlueprintCardProps> = ({
           />
         )}
 
-        {/* ブランド */}
+        {/* ブランド（ログ付きの選択欄に置き換え） */}
         <div className="label">ブランド</div>
-        {isEdit ? (
-          <Input
-            value={safeBrand}
-            onChange={() => {
-              /* 必要になったら onChange を繋ぐ */
-            }}
-            aria-label="ブランド"
-          />
+        {isEdit && brandOptions && onChangeBrandId ? (
+          <div className="mb-2 space-y-1">
+            <select
+              className="w-full border rounded px-2 py-1 text-sm"
+              value={brandId ?? ""}
+              onChange={(e) => {
+                const next = e.target.value;
+                console.log(
+                  "[ProductBlueprintCard] brand <select> onChange",
+                  next,
+                );
+                onChangeBrandId(next);
+              }}
+              aria-label="ブランドを選択"
+            >
+              <option value="">選択してください</option>
+              {brandOptions.map((b) => (
+                <option key={b.id} value={b.id}>
+                  {b.name}
+                </option>
+              ))}
+            </select>
+
+            {brandLoading && (
+              <p className="text-xs text-slate-400">ブランドを取得中…</p>
+            )}
+            {brandError && (
+              <p className="text-xs text-red-500">
+                ブランド一覧の取得に失敗しました。
+              </p>
+            )}
+          </div>
         ) : (
+          // ブランド選択情報が無い場合や閲覧モード時は従来どおり読み取り専用表示
           <Input
             value={safeBrand}
             variant="readonly"
@@ -141,7 +171,7 @@ const ProductBlueprintCard: React.FC<ProductBlueprintCardProps> = ({
               </Button>
             </PopoverTrigger>
             <PopoverContent align="start" className="p-1">
-              {fitOptions.map((opt) => (
+              {FIT_OPTIONS.map((opt) => (
                 <div
                   key={opt.value}
                   className={`px-3 py-2 rounded-md cursor-pointer hover:bg-blue-50 ${
@@ -149,7 +179,7 @@ const ProductBlueprintCard: React.FC<ProductBlueprintCardProps> = ({
                       ? "bg-blue-100 text-blue-700 font-medium"
                       : ""
                   }`}
-                  onClick={() => onChangeFit?.(opt.value as Fit)}
+                  onClick={() => onChangeFit?.(opt.value)}
                 >
                   {opt.label}
                 </div>
@@ -224,7 +254,7 @@ const ProductBlueprintCard: React.FC<ProductBlueprintCardProps> = ({
                 <button
                   onClick={() =>
                     onChangeWashTags(
-                      safeWashTags.filter((x) => x !== t)
+                      safeWashTags.filter((x) => x !== t),
                     )
                   }
                   className="chip-remove"
@@ -264,7 +294,7 @@ const ProductBlueprintCard: React.FC<ProductBlueprintCardProps> = ({
               </Button>
             </PopoverTrigger>
             <PopoverContent align="start" className="p-1">
-              {tagOptions.map((opt) => (
+              {PRODUCT_ID_TAG_OPTIONS.map((opt) => (
                 <div
                   key={opt.value}
                   className={`px-3 py-2 rounded-md cursor-pointer hover:bg-blue-50 ${
