@@ -1,4 +1,4 @@
-// frontend/console/productBlueprint/src/presentation/hook/useProductBlueprintCreate.tsx
+// frontend/console/productBlueprint/src/presentation/hook/useProductBlueprintCreate.tsx 
 
 import * as React from "react";
 import { useNavigate } from "react-router-dom";
@@ -66,6 +66,7 @@ export interface UseProductBlueprintCreateResult {
   material: string;
   weight: number;
   qualityAssurance: string[];
+  /** UI 上は Tag の種別のみを扱う（backend では ProductIDTag struct にマッピング） */
   productIdTagType: ProductIDTagType;
 
   // アイテム種別から導出された採寸項目
@@ -120,11 +121,34 @@ export interface UseProductBlueprintCreateResult {
 
 /**
  * 商品設計作成画面用のロジック・状態をまとめたカスタムフック
+ *
+ * backend の ProductBlueprint 構造体に対応:
+ *
+ * type ProductBlueprint struct {
+ *   ID               string
+ *   ProductName      string
+ *   BrandID          string
+ *   ItemType         ItemType
+ *   VariationIDs     []string
+ *   Fit              string
+ *   Material         string
+ *   Weight           float64
+ *   QualityAssurance []string
+ *   ProductIdTag     ProductIDTag
+ *   CompanyID        string
+ *   AssigneeID       string
+ *   CreatedBy        *string
+ *   CreatedAt        time.Time
+ *   UpdatedBy        *string
+ *   UpdatedAt        time.Time
+ *   DeletedBy        *string
+ *   DeletedAt        *time.Time
+ * }
  */
 export function useProductBlueprintCreate(): UseProductBlueprintCreateResult {
   const navigate = useNavigate();
 
-  // Auth / currentMember から companyId を取得
+  // Auth / currentMember から companyId を取得（backend: CompanyID）
   const { currentMember, user } = useAuth();
   const effectiveCompanyId = React.useMemo(
     () => (currentMember?.companyId ?? user?.companyId ?? "").trim(),
@@ -251,6 +275,8 @@ export function useProductBlueprintCreate(): UseProductBlueprintCreateResult {
     if (!currentMember) return;
     if (assigneeId) return;
 
+    // TODO: backend の AssigneeID は本来 Member.ID を渡すべき。
+    // いったん既存挙動を維持してラベルを格納。
     const label =
       currentMember.fullName || currentMember.email || currentMember.id;
 
@@ -262,6 +288,11 @@ export function useProductBlueprintCreate(): UseProductBlueprintCreateResult {
   // ───────────────────────
   const validate = React.useCallback((): string[] => {
     const errors: string[] = [];
+
+    // 必須: companyId
+    if (!effectiveCompanyId) {
+      errors.push("companyId が取得できません。ログインし直してください。");
+    }
 
     // 必須: 商品名
     if (!productName.trim()) {
@@ -312,6 +343,7 @@ export function useProductBlueprintCreate(): UseProductBlueprintCreateResult {
 
     return errors;
   }, [
+    effectiveCompanyId,
     productName,
     brandId,
     itemType,
@@ -332,29 +364,51 @@ export function useProductBlueprintCreate(): UseProductBlueprintCreateResult {
       return;
     }
 
-    const payload = {
+    if (!effectiveCompanyId) {
+      // validate でも弾いているが、型上のガードとしてもう一度チェック
+      console.error(
+        "[useProductBlueprintCreate] effectiveCompanyId is empty at onCreate",
+      );
+      alert("companyId が取得できません。ログインし直してください。");
+      return;
+    }
+
+    // backend の ProductIDTag に対応する構造体
+    const productIdTag = {
+      type: productIdTagType,
+      // ロゴデザインファイルは現状 UI 未対応なため null で送信
+      logoDesignFile: null as null,
+    };
+
+    // backend/internal/domain/productBlueprint.ProductBlueprint に対応する
+    // CreateProductBlueprintParams を構成
+    const apiParams = {
       productName,
       brandId,
-      brandName,
       itemType,
       fit,
       material,
       weight,
       qualityAssurance,
-      productIdTagType,
+      productIdTag,
+      // VariationIDs はまだ存在しないため、初回は空配列で作成
+      variationIds: [] as string[],
+      companyId: effectiveCompanyId,
       colors,
       sizes,
       modelNumbers,
       assigneeId,
-      companyId: effectiveCompanyId,
-      // backend で不要なら無視されるが、デバッグ用に含めておく
-      measurementOptions,
     };
 
-    console.log("[useProductBlueprintCreate] onCreate payload snapshot", payload);
+    // デバッグ用スナップショット（brandName / measurementOptions も含めておく）
+    console.log("[useProductBlueprintCreate] onCreate payload snapshot", {
+      apiParams,
+      brandName,
+      measurementOptions,
+    });
 
     try {
-      await createProductBlueprint(payload);
+      await createProductBlueprint(apiParams);
       alert("商品設計を作成しました。");
       navigate(-1);
     } catch (e: any) {
@@ -370,6 +424,7 @@ export function useProductBlueprintCreate(): UseProductBlueprintCreateResult {
     }
   }, [
     validate,
+    effectiveCompanyId,
     productName,
     brandId,
     brandName,
@@ -383,7 +438,6 @@ export function useProductBlueprintCreate(): UseProductBlueprintCreateResult {
     sizes,
     modelNumbers,
     assigneeId,
-    effectiveCompanyId,
     measurementOptions,
     navigate,
   ]);
@@ -439,7 +493,7 @@ export function useProductBlueprintCreate(): UseProductBlueprintCreateResult {
         );
         const trimmed = nextCode.trim();
 
-        // 空文字の場合はエントリを削除（バリデーションで拾う）
+        // 空文字場合はエントリを削除（バリデーションで拾う）
         if (!trimmed) {
           if (idx === -1) return prev;
           const copy = [...prev];

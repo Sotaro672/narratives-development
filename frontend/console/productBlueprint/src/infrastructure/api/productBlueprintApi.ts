@@ -5,10 +5,7 @@ import {
   MODEL_NUMBERS,
   SIZE_VARIATIONS,
 } from "../../../../model/src/infrastructure/mockdata/mockdata";
-import type {
-  ProductBlueprint,
-  ProductIDTagType,
-} from "../../../../shell/src/shared/types/productBlueprint";
+import type { ProductBlueprint } from "../../../../shell/src/shared/types/productBlueprint";
 
 // BrandID → 表示名（モック用マッピング）
 export const brandLabelFromId = (brandId: string): string => {
@@ -75,30 +72,37 @@ export type ModelNumberRow = {
 /**
  * 商品設計一覧用の行データを取得する API（現在はモック）
  * - backend の ProductBlueprint エンティティを UI 用行データへ変換する責務を持つ
+ * - ソフトデリート済み（deletedAt が truthy）のものは一覧から除外
  */
 export function fetchProductBlueprintListRows(): ProductBlueprintListRow[] {
-  return (PRODUCT_BLUEPRINTS as ProductBlueprint[]).map((pb) => ({
-    id: pb.id,
-    productName: pb.productName,
-    brandLabel: brandLabelFromId(pb.brandId),
-    assigneeLabel: pb.assigneeId || "-",
-    // entity.go 準拠: Tag は productIdTagType のみ保持
-    tagLabel: pb.productIdTagType ? pb.productIdTagType.toUpperCase() : "-",
-    createdAt: toDisplayDate(pb.createdAt),
-    // entity.go 準拠: 最終更新日時は UpdatedAt
-    lastModifiedAt: toDisplayDate(pb.updatedAt),
-  }));
+  return (PRODUCT_BLUEPRINTS as ProductBlueprint[])
+    .filter((pb) => !pb.deletedAt) // deletedAt が設定されているものは除外
+    .map((pb) => ({
+      id: pb.id,
+      productName: pb.productName,
+      brandLabel: brandLabelFromId(pb.brandId),
+      assigneeLabel: pb.assigneeId || "-",
+      // entity.go 準拠: Tag は ProductIdTag (struct) を保持し、その type を表示
+      tagLabel:
+        pb.productIdTag && pb.productIdTag.type
+          ? pb.productIdTag.type.toUpperCase()
+          : "-",
+      createdAt: toDisplayDate(pb.createdAt),
+      // entity.go 準拠: 最終更新日時は UpdatedAt
+      lastModifiedAt: toDisplayDate(pb.updatedAt),
+    }));
 }
 
 /**
  * ID から ProductBlueprint を取得（現在はモック配列を探索）
+ * - ソフトデリート済み（deletedAt が truthy）のものは取得対象外
  */
 export function fetchProductBlueprintById(
   blueprintId?: string,
 ): ProductBlueprint | undefined {
   if (!blueprintId) return undefined;
   return (PRODUCT_BLUEPRINTS as ProductBlueprint[]).find(
-    (pb) => pb.id === blueprintId,
+    (pb) => pb.id === blueprintId && !pb.deletedAt,
   );
 }
 

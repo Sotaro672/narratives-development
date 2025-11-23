@@ -13,6 +13,24 @@ export type ItemType = "tops" | "bottoms" | "other";
 export type ProductIDTagType = "qr" | "nfc";
 
 /**
+ * LogoDesignFile
+ * backend/internal/domain/productBlueprint/entity.go の LogoDesignFile に対応。
+ */
+export interface LogoDesignFile {
+  name: string;
+  url: string;
+}
+
+/**
+ * ProductIDTag
+ * backend/internal/domain/productBlueprint/entity.go の ProductIDTag に対応。
+ */
+export interface ProductIDTag {
+  type: ProductIDTagType;
+  logoDesignFile?: LogoDesignFile | null;
+}
+
+/**
  * ModelVariation
  * backend/internal/domain/model/ModelVariation に対応する共通定義。
  * 最低限 id が必須。それ以外は API スキーマに応じて拡張。
@@ -30,6 +48,7 @@ export interface ModelVariation {
  *
  * - 日付は ISO8601 文字列
  * - updatedAt / updatedBy は backend の UpdatedAt / UpdatedBy に対応
+ * - deletedAt / deletedBy は backend の DeletedAt / DeletedBy に対応
  */
 export interface ProductBlueprint {
   id: string;
@@ -38,8 +57,8 @@ export interface ProductBlueprint {
 
   itemType: ItemType;
 
-  /** バリエーション（色・サイズ等） */
-  variations: ModelVariation[];
+  /** モデルIDの配列（backend: VariationIDs） */
+  variationIds: string[];
 
   fit: string;
   material: string;
@@ -50,8 +69,11 @@ export interface ProductBlueprint {
   /** 品質保証に関するメモ／タグ一覧（空文字なし） */
   qualityAssurance: string[];
 
-  /** 製品IDタグタイプ（qr / nfc） */
-  productIdTagType: ProductIDTagType;
+  /** 製品IDタグ（qr / nfc + ロゴファイル等） */
+  productIdTag: ProductIDTag;
+
+  /** 会社 ID （backend: CompanyID） */
+  companyId: string;
 
   /** 担当者 Member ID（必須） */
   assigneeId: string;
@@ -67,6 +89,12 @@ export interface ProductBlueprint {
 
   /** 最終更新日時 (ISO8601) */
   updatedAt: string;
+
+  /** 削除者 Member ID（任意, 未削除時は null/undefined） */
+  deletedBy?: string | null;
+
+  /** 削除日時 (ISO8601, 未削除時は null/undefined) */
+  deletedAt?: string | null;
 }
 
 /* =========================================================
@@ -80,14 +108,44 @@ export function isValidItemType(value: string): value is ItemType {
 
 /** ProductIDTagType の妥当性チェック */
 export function isValidProductIDTagType(
-  value: string
+  value: string,
 ): value is ProductIDTagType {
   return value === "qr" || value === "nfc";
 }
 
-/** variations 配列を id でユニーク化＆trim する */
+/** LogoDesignFile の簡易バリデーション */
+export function validateLogoDesignFile(file: LogoDesignFile): string[] {
+  const errors: string[] = [];
+  if (!file.name?.trim()) {
+    errors.push("logoDesignFile.name is required");
+  }
+  try {
+    // URL コンストラクタでざっくり検証
+    new URL(file.url);
+  } catch {
+    errors.push("logoDesignFile.url must be a valid URL");
+  }
+  return errors;
+}
+
+/** ProductIDTag の簡易バリデーション */
+export function validateProductIDTag(tag: ProductIDTag): string[] {
+  const errors: string[] = [];
+  if (!isValidProductIDTagType(tag.type)) {
+    errors.push("productIdTag.type must be 'qr' or 'nfc'");
+  }
+  if (tag.logoDesignFile) {
+    errors.push(...validateLogoDesignFile(tag.logoDesignFile));
+  }
+  return errors;
+}
+
+/**
+ * ModelVariation[] を id でユニーク化＆trim するユーティリティ。
+ * （Model 側の UI 等で引き続き利用可能）
+ */
 export function normalizeVariations(
-  vars: ModelVariation[]
+  vars: ModelVariation[],
 ): ModelVariation[] {
   const seen = new Set<string>();
   const out: ModelVariation[] = [];
@@ -100,7 +158,20 @@ export function normalizeVariations(
   return out;
 }
 
-/** qualityAssurance の重複/空文字を排除 */
+/** variationIds の重複/空文字を排除（backend の dedupTrim 相当） */
+export function normalizeVariationIds(ids: string[]): string[] {
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const raw of ids || []) {
+    const x = raw.trim();
+    if (!x || seen.has(x)) continue;
+    seen.add(x);
+    out.push(x);
+  }
+  return out;
+}
+
+/** qualityAssurance の重複/空文字を排除（backend の dedupTrim 相当） */
 export function normalizeQualityAssurance(xs: string[]): string[] {
   const seen = new Set<string>();
   const out: string[] = [];
@@ -132,9 +203,11 @@ export function validateProductBlueprint(pb: ProductBlueprint): string[] {
     errors.push("weight must be >= 0");
   }
 
-  if (!isValidProductIDTagType(pb.productIdTagType)) {
-    errors.push("productIdTagType must be 'qr' or 'nfc'");
+  if (!pb.companyId?.trim()) {
+    errors.push("companyId is required");
   }
+
+  errors.push(...validateProductIDTag(pb.productIdTag));
 
   if (!pb.assigneeId?.trim()) {
     errors.push("assigneeId is required");
@@ -144,12 +217,12 @@ export function validateProductBlueprint(pb: ProductBlueprint): string[] {
     errors.push("createdAt is required");
   }
 
-  // variations: id が空でない & 重複なし
+  // variationIds: id が空でない & 重複なし
   const seen = new Set<string>();
-  for (const v of pb.variations || []) {
-    const id = (v.id ?? "").trim();
+  for (const rawId of pb.variationIds || []) {
+    const id = rawId.trim();
     if (!id) {
-      errors.push("variation.id must not be empty");
+      errors.push("variationIds must not contain empty id");
       continue;
     }
     if (seen.has(id)) {
@@ -168,17 +241,24 @@ export function validateProductBlueprint(pb: ProductBlueprint): string[] {
 export function createProductBlueprint(
   input: Omit<
     ProductBlueprint,
-    "variations" | "qualityAssurance" | "updatedAt" | "updatedBy"
+    | "variationIds"
+    | "qualityAssurance"
+    | "updatedAt"
+    | "updatedBy"
+    | "deletedAt"
+    | "deletedBy"
   > & {
-    variations?: ModelVariation[];
+    variationIds?: string[];
     qualityAssurance?: string[];
     updatedAt?: string;
     updatedBy?: string | null;
-  }
+    deletedAt?: string | null;
+    deletedBy?: string | null;
+  },
 ): ProductBlueprint {
-  const variations = normalizeVariations(input.variations ?? []);
+  const variationIds = normalizeVariationIds(input.variationIds ?? []);
   const qualityAssurance = normalizeQualityAssurance(
-    input.qualityAssurance ?? []
+    input.qualityAssurance ?? [],
   );
 
   const updatedAt =
@@ -191,11 +271,19 @@ export function createProductBlueprint(
       ? input.updatedBy
       : input.createdBy ?? null;
 
+  const deletedAt =
+    input.deletedAt !== undefined ? input.deletedAt : null;
+
+  const deletedBy =
+    input.deletedBy !== undefined ? input.deletedBy : null;
+
   return {
     ...input,
-    variations,
+    variationIds,
     qualityAssurance,
     updatedAt,
     updatedBy,
+    deletedAt,
+    deletedBy,
   };
 }

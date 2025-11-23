@@ -33,8 +33,9 @@ export interface ProductIDTag {
 /**
  * ModelVariation
  * backend/internal/domain/model/ModelVariation に対応するフロント側定義。
- * Go側では ID を基準に重複排除しているため、最低限 id は必須。
- * それ以外の構造は backend/API スキーマに準拠して拡張する。
+ * Go側では ProductBlueprint には VariationIDs（string 配列）のみを保持し、
+ * 実体は Model 側で管理する想定。
+ * フロントでは必要に応じて ModelVariation[] を別 API から取得して組み合わせる。
  */
 export interface ModelVariation {
   id: string;
@@ -49,6 +50,7 @@ export interface ModelVariation {
  *
  * - 日付は ISO8601 文字列として扱う
  * - updatedAt / updatedBy は backend の UpdatedAt / UpdatedBy に対応
+ * - deletedAt / deletedBy は backend の DeletedAt / DeletedBy に対応（ソフトデリート）
  */
 export interface ProductBlueprint {
   id: string;
@@ -58,8 +60,11 @@ export interface ProductBlueprint {
   /** backend の ItemType に対応（tops / bottoms / other） */
   itemType: ItemType;
 
-  /** バリエーション（色・サイズ等） */
-  variations: ModelVariation[];
+  /**
+   * モデルIDの配列。
+   * backend の VariationIDs ([]string) に対応。
+   */
+  variationIds: string[];
 
   fit: string;
   material: string;
@@ -73,20 +78,29 @@ export interface ProductBlueprint {
   /** 製品IDタグ情報（必須, type は qr/nfc） */
   productIdTag: ProductIDTag;
 
+  /** 会社 ID （backend: CompanyID） */
+  companyId: string;
+
   /** 担当者 Member ID（必須） */
   assigneeId: string;
 
-  /** 作成者 Member ID（任意） */
+  /** 作成者 Member ID（任意, backend: CreatedBy） */
   createdBy?: string | null;
 
-  /** 作成日時 (ISO8601) */
+  /** 作成日時 (ISO8601, backend: CreatedAt) */
   createdAt: string;
 
-  /** 最終更新者 Member ID（任意） */
+  /** 最終更新者 Member ID（任意, backend: UpdatedBy） */
   updatedBy?: string | null;
 
-  /** 最終更新日時 (ISO8601) */
+  /** 最終更新日時 (ISO8601, backend: UpdatedAt) */
   updatedAt: string;
+
+  /** 削除者 Member ID（任意, backend: DeletedBy, 未削除時は null/undefined） */
+  deletedBy?: string | null;
+
+  /** 削除日時 (ISO8601, backend: DeletedAt, 未削除時は null/undefined) */
+  deletedAt?: string | null;
 }
 
 /* =========================================================
@@ -132,7 +146,10 @@ export function validateProductIDTag(tag: ProductIDTag): string[] {
   return errors;
 }
 
-/** variations 配列を id でユニーク化＆trim する */
+/**
+ * ModelVariation[] を id でユニーク化＆trim するユーティリティ。
+ * （Model 側の UI 等で引き続き利用可能）
+ */
 export function normalizeVariations(
   vars: ModelVariation[],
 ): ModelVariation[] {
@@ -147,7 +164,20 @@ export function normalizeVariations(
   return out;
 }
 
-/** qualityAssurance の重複/空文字を排除 */
+/** variationIds の重複/空文字を排除（backend の dedupTrim 相当） */
+export function normalizeVariationIds(ids: string[]): string[] {
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const raw of ids || []) {
+    const x = raw.trim();
+    if (!x || seen.has(x)) continue;
+    seen.add(x);
+    out.push(x);
+  }
+  return out;
+}
+
+/** qualityAssurance の重複/空文字を排除（backend の dedupTrim 相当） */
 export function normalizeQualityAssurance(xs: string[]): string[] {
   const seen = new Set<string>();
   const out: string[] = [];
@@ -181,6 +211,10 @@ export function validateProductBlueprint(
     errors.push("weight must be >= 0");
   }
 
+  if (!pb.companyId?.trim()) {
+    errors.push("companyId is required");
+  }
+
   errors.push(...validateProductIDTag(pb.productIdTag));
 
   if (!pb.assigneeId?.trim()) {
@@ -191,12 +225,12 @@ export function validateProductBlueprint(
     errors.push("createdAt is required");
   }
 
-  // variations: id が空でない & 重複なし（normalize前提だが念のためチェック）
+  // variationIds: 空文字でない & 重複なし（normalize前提だが念のためチェック）
   const seen = new Set<string>();
-  for (const v of pb.variations || []) {
-    const id = (v.id ?? "").trim();
+  for (const rawId of pb.variationIds || []) {
+    const id = rawId.trim();
     if (!id) {
-      errors.push("variation.id must not be empty");
+      errors.push("variationIds must not contain empty id");
       continue;
     }
     if (seen.has(id)) {
@@ -215,15 +249,22 @@ export function validateProductBlueprint(
 export function createProductBlueprint(
   input: Omit<
     ProductBlueprint,
-    "variations" | "qualityAssurance" | "updatedAt" | "updatedBy"
+    | "variationIds"
+    | "qualityAssurance"
+    | "updatedAt"
+    | "updatedBy"
+    | "deletedAt"
+    | "deletedBy"
   > & {
-    variations?: ModelVariation[];
+    variationIds?: string[];
     qualityAssurance?: string[];
     updatedAt?: string;
     updatedBy?: string | null;
+    deletedAt?: string | null;
+    deletedBy?: string | null;
   },
 ): ProductBlueprint {
-  const variations = normalizeVariations(input.variations ?? []);
+  const variationIds = normalizeVariationIds(input.variationIds ?? []);
   const qualityAssurance = normalizeQualityAssurance(
     input.qualityAssurance ?? [],
   );
@@ -238,11 +279,19 @@ export function createProductBlueprint(
       ? input.updatedBy
       : input.createdBy ?? null;
 
+  const deletedAt =
+    input.deletedAt !== undefined ? input.deletedAt : null;
+
+  const deletedBy =
+    input.deletedBy !== undefined ? input.deletedBy : null;
+
   return {
     ...input,
-    variations,
+    variationIds,
     qualityAssurance,
     updatedAt,
     updatedBy,
+    deletedAt,
+    deletedBy,
   };
 }

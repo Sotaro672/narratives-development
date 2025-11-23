@@ -132,20 +132,20 @@ type ProductBlueprint struct {
 	ProductName      string
 	BrandID          string
 	ItemType         ItemType
-	VariationIDs     []string // ★ Model の ID だけを保持する
+	VariationIDs     []string
 	Fit              string
 	Material         string
 	Weight           float64
 	QualityAssurance []string
 	ProductIdTag     ProductIDTag
-
-	CompanyID string
-
-	AssigneeID string
-	CreatedBy  *string
-	CreatedAt  time.Time
-	UpdatedBy  *string
-	UpdatedAt  time.Time
+	CompanyID        string
+	AssigneeID       string
+	CreatedBy        *string
+	CreatedAt        time.Time
+	UpdatedBy        *string
+	UpdatedAt        time.Time
+	DeletedBy        *string
+	DeletedAt        *time.Time
 }
 
 // ======================================
@@ -199,6 +199,8 @@ func New(
 		CreatedAt:        createdAt,
 		UpdatedBy:        createdBy,
 		UpdatedAt:        createdAt,
+		DeletedBy:        nil,
+		DeletedAt:        nil,
 	}
 
 	if err := pb.validate(); err != nil {
