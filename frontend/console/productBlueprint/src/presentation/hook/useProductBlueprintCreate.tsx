@@ -93,8 +93,23 @@ export interface UseProductBlueprintCreateResult {
   onChangeColorInput: (v: string) => void;
   onAddColor: () => void;
   onRemoveColor: (name: string) => void;
-  onRemoveSize: (id: string) => void;
 
+  // サイズ系
+  onAddSize: () => void;
+  onRemoveSize: (id: string) => void;
+  onChangeSize: (
+    id: string,
+    patch: Partial<Omit<SizeRow, "id">>,
+  ) => void;
+
+  // モデルナンバー系
+  onChangeModelNumber: (
+    sizeLabel: string,
+    color: string,
+    nextCode: string,
+  ) => void;
+
+  // 担当者系
   onEditAssignee: () => void;
   onClickAssignee: () => void;
   onClickCreatedBy: () => void;
@@ -211,7 +226,7 @@ export function useProductBlueprintCreate(): UseProductBlueprintCreateResult {
   const [colorInput, setColorInput] = React.useState("");
   const [colors, setColors] = React.useState<string[]>([]);
   const [sizes, setSizes] = React.useState<SizeRow[]>([]);
-  const [modelNumbers] = React.useState<ModelNumber[]>([]);
+  const [modelNumbers, setModelNumbers] = React.useState<ModelNumber[]>([]);
 
   // ───────────────────────
   // アイテム種別 → 採寸項目
@@ -234,17 +249,87 @@ export function useProductBlueprintCreate(): UseProductBlueprintCreateResult {
     if (assigneeId) return;
 
     const label =
-      currentMember.fullName ||
-      currentMember.email ||
-      currentMember.id;
+      currentMember.fullName || currentMember.email || currentMember.id;
 
     setAssigneeId(label);
   }, [currentMember, assigneeId]);
 
   // ───────────────────────
+  // バリデーション
+  // ───────────────────────
+  const validate = React.useCallback((): string[] => {
+    const errors: string[] = [];
+
+    // 必須: 商品名
+    if (!productName.trim()) {
+      errors.push("商品名は必須です。");
+    }
+
+    // 必須: ブランド
+    if (!brandId) {
+      errors.push("ブランドを選択してください。");
+    }
+
+    // 必須: アイテム種別
+    if (!itemType) {
+      errors.push("アイテム種別を選択してください。");
+    }
+
+    // 必須: 商品IDタグ種別
+    if (!productIdTagType) {
+      errors.push("商品IDタグを選択してください。");
+    }
+
+    // カラーバリエーションは1件以上
+    if (colors.length === 0) {
+      errors.push("カラーバリエーションを1つ以上登録してください。");
+    }
+
+    // サイズバリエーションは1件以上
+    if (sizes.length === 0) {
+      errors.push("サイズバリエーションを1つ以上登録してください。");
+    }
+
+    // モデルナンバー: 1件以上 & 空欄禁止
+    if (modelNumbers.length === 0) {
+      errors.push("モデルナンバーを1つ以上登録してください。");
+    } else {
+      const hasEmpty = modelNumbers.some((mn) => {
+        return Object.values(mn as any).some((v) => {
+          if (v == null) return true;
+          if (typeof v === "string" && v.trim() === "") return true;
+          return false;
+        });
+      });
+
+      if (hasEmpty) {
+        errors.push("モデルナンバー欄に空欄があります。すべて入力してください。");
+      }
+    }
+
+    return errors;
+  }, [
+    productName,
+    brandId,
+    itemType,
+    productIdTagType,
+    colors,
+    sizes,
+    modelNumbers,
+  ]);
+
+  // ───────────────────────
   // アクション
   // ───────────────────────
   const onCreate = React.useCallback(() => {
+    const errors = validate();
+    if (errors.length > 0) {
+      // TODO: 将来的にはトースト or フォーム上のエラー表示に差し替え
+      alert(`入力内容に不備があります。\n\n- ${errors.join("\n- ")}`);
+      console.warn("[useProductBlueprintCreate] validation errors:", errors);
+      return;
+    }
+
     console.log("[useProductBlueprintCreate] onCreate payload snapshot", {
       productName,
       brandId,
@@ -268,6 +353,7 @@ export function useProductBlueprintCreate(): UseProductBlueprintCreateResult {
     alert("商品設計を作成しました（ダミー）");
     navigate(-1);
   }, [
+    validate,
     productName,
     brandId,
     brandName,
@@ -301,16 +387,74 @@ export function useProductBlueprintCreate(): UseProductBlueprintCreateResult {
     setColors((prev) => prev.filter((c) => c !== name));
   }, []);
 
+  const onAddSize = React.useCallback(() => {
+    setSizes((prev) => [
+      ...prev,
+      {
+        id:
+          typeof crypto !== "undefined" && "randomUUID" in crypto
+            ? crypto.randomUUID()
+            : `size-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+        sizeLabel: "",
+        chest: undefined,
+        waist: undefined,
+        length: undefined,
+        shoulder: undefined,
+      },
+    ]);
+  }, []);
+
   const onRemoveSize = React.useCallback((id: string) => {
     setSizes((prev) => prev.filter((s) => s.id !== id));
   }, []);
 
+  const onChangeSize = React.useCallback(
+    (id: string, patch: Partial<Omit<SizeRow, "id">>) => {
+      setSizes((prev) =>
+        prev.map((s) => (s.id === id ? { ...s, ...patch } : s)),
+      );
+    },
+    [],
+  );
+
+  const onChangeModelNumber = React.useCallback(
+    (sizeLabel: string, color: string, nextCode: string) => {
+      setModelNumbers((prev) => {
+        const idx = prev.findIndex(
+          (m) => m.size === sizeLabel && m.color === color,
+        );
+        const trimmed = nextCode.trim();
+
+        // 空文字の場合はエントリを削除（バリデーションで拾う）
+        if (!trimmed) {
+          if (idx === -1) return prev;
+          const copy = [...prev];
+          copy.splice(idx, 1);
+          return copy;
+        }
+
+        const next: ModelNumber = {
+          size: sizeLabel,
+          color,
+          code: trimmed,
+        };
+
+        if (idx === -1) {
+          return [...prev, next];
+        }
+
+        const copy = [...prev];
+        copy[idx] = next;
+        return copy;
+      });
+    },
+    [],
+  );
+
   const onEditAssignee = React.useCallback(() => {
     if (currentMember) {
       const label =
-        currentMember.fullName ||
-        currentMember.email ||
-        currentMember.id;
+        currentMember.fullName || currentMember.email || currentMember.id;
       setAssigneeId(label);
     }
   }, [currentMember]);
@@ -369,7 +513,11 @@ export function useProductBlueprintCreate(): UseProductBlueprintCreateResult {
     onChangeColorInput: setColorInput,
     onAddColor,
     onRemoveColor,
+
+    onAddSize,
     onRemoveSize,
+    onChangeSize,
+    onChangeModelNumber,
 
     onEditAssignee,
     onClickAssignee,

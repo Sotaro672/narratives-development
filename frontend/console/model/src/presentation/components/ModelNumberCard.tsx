@@ -1,6 +1,13 @@
+// frontend/console/model/src/presentation/components/ModelNumberCard.tsx
+
 import * as React from "react";
 import { Tags } from "lucide-react";
-import { Card, CardHeader, CardTitle, CardContent } from "../../../../shell/src/shared/ui";
+import {
+  Card,
+  CardHeader,
+  CardTitle,
+  CardContent,
+} from "../../../../shell/src/shared/ui";
 import { Input } from "../../../../shell/src/shared/ui/input";
 import {
   Table,
@@ -15,7 +22,7 @@ import "../../../../shell/src/shared/ui/card.css";
 
 export type ModelNumber = {
   size: string;  // 例: "S" | "M" | "L"
-  color: string; // 例: "ホワイト" | "ブラック" | ...
+  color: string; // 例: "ホワイト" | "ブラック"
   code: string;  // 例: "LM-SB-S-WHT"
 };
 
@@ -26,16 +33,18 @@ type ModelNumberCardProps = {
   colors: string[];
   modelNumbers: ModelNumber[];
   className?: string;
-  /** "edit" | "view"（既定: "edit"） */
   mode?: "edit" | "view";
-  /**
-   * モデルナンバーの変更コールバック（編集モード時）
-   * 指定されている場合は、入力変更時に呼び出される
-   */
-  onChangeCode?: (sizeLabel: string, color: string, nextCode: string) => void;
+
+  /** hook に変更通知する */
+  onChangeModelNumber?: (
+    sizeLabel: string,
+    color: string,
+    nextCode: string,
+  ) => void;
 };
 
-const makeKey = (sizeLabel: string, color: string) => `${sizeLabel}__${color}`;
+const makeKey = (sizeLabel: string, color: string) =>
+  `${sizeLabel}__${color}`;
 
 const ModelNumberCard: React.FC<ModelNumberCardProps> = ({
   sizes,
@@ -43,35 +52,33 @@ const ModelNumberCard: React.FC<ModelNumberCardProps> = ({
   modelNumbers,
   className,
   mode = "edit",
-  onChangeCode,
+  onChangeModelNumber,
 }) => {
   const isEdit = mode === "edit";
 
-  // props から初期マップを作成し、編集モードではローカル state を編集可能にする
+  // 内部編集用の state
   const [codeMap, setCodeMap] = React.useState<Record<string, string>>({});
 
+  // props → state 反映
   React.useEffect(() => {
     const next: Record<string, string> = {};
+
     sizes.forEach((s) => {
       colors.forEach((c) => {
         const found =
           modelNumbers.find(
             (m) => m.size === s.sizeLabel && m.color === c,
           )?.code ?? "";
-        const key = makeKey(s.sizeLabel, c);
-        next[key] = found;
+        next[makeKey(s.sizeLabel, c)] = found;
       });
     });
+
     setCodeMap(next);
   }, [sizes, colors, modelNumbers]);
 
-  const findCodeFromProps = (sizeLabel: string, color: string) =>
-    modelNumbers.find((m) => m.size === sizeLabel && m.color === color)?.code ??
-    "";
-
   const getValue = (sizeLabel: string, color: string) => {
     const key = makeKey(sizeLabel, color);
-    return isEdit ? codeMap[key] ?? "" : findCodeFromProps(sizeLabel, color);
+    return codeMap[key] ?? "";
   };
 
   const handleChange =
@@ -82,13 +89,15 @@ const ModelNumberCard: React.FC<ModelNumberCardProps> = ({
       const nextCode = e.target.value;
       const key = makeKey(sizeLabel, color);
 
+      // ローカル state 更新
       setCodeMap((prev) => ({
         ...prev,
         [key]: nextCode,
       }));
 
-      if (onChangeCode) {
-        onChangeCode(sizeLabel, color, nextCode);
+      // hook に伝える
+      if (onChangeModelNumber) {
+        onChangeModelNumber(sizeLabel, color, nextCode);
       }
     };
 
@@ -117,15 +126,17 @@ const ModelNumberCard: React.FC<ModelNumberCardProps> = ({
           <TableHeader>
             <TableRow>
               <TableHead>サイズ / カラー</TableHead>
-              {colors.map((color) => (
-                <TableHead key={color}>{color}</TableHead>
+              {colors.map((c) => (
+                <TableHead key={c}>{c}</TableHead>
               ))}
             </TableRow>
           </TableHeader>
+
           <TableBody>
             {sizes.map((s) => (
               <TableRow key={s.id}>
                 <TableCell className="mnc__size">{s.sizeLabel}</TableCell>
+
                 {colors.map((c) => (
                   <TableCell key={c}>
                     <Input

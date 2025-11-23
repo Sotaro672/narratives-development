@@ -1,4 +1,5 @@
 // frontend/console/productBlueprint/src/presentation/pages/productBlueprintCreate.tsx
+
 import PageStyle from "../../../../shell/src/layout/PageStyle/PageStyle";
 import { AdminCard } from "../../../../admin/src/presentation/components/AdminCard";
 import ProductBlueprintCard from "../components/productBlueprintCard";
@@ -45,9 +46,16 @@ export default function ProductBlueprintCreate() {
     onChangeColorInput,
     onAddColor,
     onRemoveColor,
-    onRemoveSize,
 
-    // 管理情報（作成者・作成日時は削除）
+    // サイズ操作
+    onAddSize,
+    onRemoveSize,
+    onChangeSize,
+
+    // モデルナンバー操作 ★追加
+    onChangeModelNumber,
+
+    // 管理情報
     assigneeId,
     onEditAssignee,
     onClickAssignee,
@@ -74,7 +82,6 @@ export default function ProductBlueprintCreate() {
           brandLoading={brandLoading}
           brandError={brandError}
           onChangeBrandId={onChangeBrandId}
-          // ★ アイテム種別をカードに渡す
           itemType={itemType}
           fit={fit}
           materials={material}
@@ -82,7 +89,6 @@ export default function ProductBlueprintCreate() {
           washTags={qualityAssurance}
           productIdTag={productIdTagType}
           onChangeProductName={onChangeProductName}
-          // ★ アイテム種別変更ハンドラを渡す
           onChangeItemType={onChangeItemType}
           onChangeFit={onChangeFit}
           onChangeMaterials={onChangeMaterial}
@@ -102,18 +108,21 @@ export default function ProductBlueprintCreate() {
         <SizeVariationCard
           sizes={sizes}
           onRemove={onRemoveSize}
-          // ★ itemType から導出された採寸定義を渡す
+          onChangeSize={onChangeSize}   // ★ 入力を反映
           measurementOptions={measurementOptions}
+          mode="edit"
+          onAddSize={onAddSize}
         />
 
         <ModelNumberCard
           sizes={sizes}
           colors={colors}
           modelNumbers={modelNumbers}
+          onChangeModelNumber={onChangeModelNumber}
         />
+
       </div>
 
-      {/* ★ createdBy / createdAt を削除した AdminCard */}
       <AdminCard
         assigneeName={assigneeId || "未設定"}
         onEditAssignee={onEditAssignee}

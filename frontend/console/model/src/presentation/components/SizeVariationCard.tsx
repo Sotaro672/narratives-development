@@ -42,6 +42,9 @@ type SizeVariationCardProps = {
 
   /** 商品設計側から渡される採寸定義（itemType に連動） */
   measurementOptions?: MeasurementOption[];
+
+  /** ヘッダー右端の「サイズを追加」ボタン押下時のハンドラ */
+  onAddSize?: () => void;
 };
 
 const SizeVariationCard: React.FC<SizeVariationCardProps> = ({
@@ -50,6 +53,7 @@ const SizeVariationCard: React.FC<SizeVariationCardProps> = ({
   onChangeSize,
   mode = "edit",
   measurementOptions,
+  onAddSize,
 }) => {
   const isEdit = mode === "edit";
 
@@ -88,15 +92,29 @@ const SizeVariationCard: React.FC<SizeVariationCardProps> = ({
   return (
     <Card className={`svc ${mode === "view" ? "view-mode" : ""}`}>
       <CardHeader className="box__header">
-        <Tags size={16} />
-        <CardTitle className="box__title">
-          サイズバリエーション
-          {mode === "view" && (
-            <span className="ml-2 text-xs text-[var(--pbp-text-soft)]">
-              （閲覧）
-            </span>
-          )}
-        </CardTitle>
+        <div className="flex items-center gap-2">
+          <Tags size={16} />
+          <CardTitle className="box__title">
+            サイズバリエーション
+            {mode === "view" && (
+              <span className="ml-2 text-xs text-[var(--pbp-text-soft)]">
+                （閲覧）
+              </span>
+            )}
+          </CardTitle>
+        </div>
+
+        {isEdit && onAddSize && (
+          <Button
+            type="button"
+            size="sm"
+            variant="outline"
+            className="ml-auto"
+            onClick={onAddSize}
+          >
+            サイズを追加
+          </Button>
+        )}
       </CardHeader>
 
       <CardContent className="box__body">
