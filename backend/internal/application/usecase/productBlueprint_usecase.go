@@ -26,7 +26,9 @@ func NewProductBlueprintUsecase(repo ProductBlueprintRepo) *ProductBlueprintUsec
 	return &ProductBlueprintUsecase{repo: repo}
 }
 
+// ------------------------------------------------------------
 // Queries
+// ------------------------------------------------------------
 
 func (u *ProductBlueprintUsecase) GetByID(ctx context.Context, id string) (productbpdom.ProductBlueprint, error) {
 	return u.repo.GetByID(ctx, strings.TrimSpace(id))
@@ -36,17 +38,11 @@ func (u *ProductBlueprintUsecase) Exists(ctx context.Context, id string) (bool, 
 	return u.repo.Exists(ctx, strings.TrimSpace(id))
 }
 
-// Commands
+// ------------------------------------------------------------
+// Commands (単体)
+// ------------------------------------------------------------
 
 func (u *ProductBlueprintUsecase) Create(ctx context.Context, v productbpdom.ProductBlueprint) (productbpdom.ProductBlueprint, error) {
-	return u.repo.Create(ctx, v)
-}
-
-// CreateWithVariations は Handler から呼ばれる拡張メソッドです。
-// 現状は Variations を含んだ ProductBlueprint を そのまま repo.Create に委譲します。
-// 将来的に「モデルテーブルの同時作成」などが必要になった場合は、ここで
-// 他の Usecase/Repo を呼び出す形に拡張できます。
-func (u *ProductBlueprintUsecase) CreateWithVariations(ctx context.Context, v productbpdom.ProductBlueprint) (productbpdom.ProductBlueprint, error) {
 	return u.repo.Create(ctx, v)
 }
 
@@ -56,4 +52,84 @@ func (u *ProductBlueprintUsecase) Save(ctx context.Context, v productbpdom.Produ
 
 func (u *ProductBlueprintUsecase) Delete(ctx context.Context, id string) error {
 	return u.repo.Delete(ctx, strings.TrimSpace(id))
+}
+
+// ------------------------------------------------------------
+// Variations の紐付け専用ユースケース
+// ------------------------------------------------------------
+
+// AttachVariations は既存の ProductBlueprint に VariationIDs を紐付けます。
+// PATCH /product-blueprints/{id}/variations から呼ばれる想定です。
+func (u *ProductBlueprintUsecase) AttachVariations(
+	ctx context.Context,
+	id string,
+	variationIDs []string,
+) error {
+	id = strings.TrimSpace(id)
+	if id == "" {
+		return productbpdom.ErrInvalidID
+	}
+
+	pb, err := u.repo.GetByID(ctx, id)
+	if err != nil {
+		return err
+	}
+
+	pb.VariationIDs = normalizeVariationIDs(variationIDs)
+
+	_, err = u.repo.Save(ctx, pb)
+	return err
+}
+
+// CreateBlueprintAndModels は「Blueprint を作成し、その直後に VariationIDs を紐付ける」
+// 高レベルユースケースです。
+// - 先に ProductBlueprint を Create
+// - その結果得られた ID に対して VariationIDs をセットして Save
+// （Model ドキュメント自体の作成は別ユースケース／別リポジトリで行う前提）
+func (u *ProductBlueprintUsecase) CreateBlueprintAndModels(
+	ctx context.Context,
+	v productbpdom.ProductBlueprint,
+	variationIDs []string,
+) (productbpdom.ProductBlueprint, error) {
+	// 1. Blueprint 単体を作成
+	created, err := u.repo.Create(ctx, v)
+	if err != nil {
+		return productbpdom.ProductBlueprint{}, err
+	}
+
+	// Variation が無ければそのまま返す
+	if len(variationIDs) == 0 {
+		return created, nil
+	}
+
+	// 2. VariationIDs を紐付けて保存
+	created.VariationIDs = normalizeVariationIDs(variationIDs)
+
+	saved, err := u.repo.Save(ctx, created)
+	if err != nil {
+		return productbpdom.ProductBlueprint{}, err
+	}
+	return saved, nil
+}
+
+// ------------------------------------------------------------
+// Helpers
+// ------------------------------------------------------------
+
+func normalizeVariationIDs(ids []string) []string {
+	seen := make(map[string]struct{}, len(ids))
+	out := make([]string, 0, len(ids))
+
+	for _, id := range ids {
+		id = strings.TrimSpace(id)
+		if id == "" {
+			continue
+		}
+		if _, ok := seen[id]; ok {
+			continue
+		}
+		seen[id] = struct{}{}
+		out = append(out, id)
+	}
+	return out
 }

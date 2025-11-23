@@ -3,7 +3,6 @@ package productBlueprint
 import (
 	"errors"
 	"fmt"
-	model "narratives/internal/domain/model"
 	"net/url"
 	"strings"
 	"time"
@@ -19,7 +18,6 @@ var (
 	ErrInternal     = errors.New("productBlueprint: internal")
 )
 
-// 補助ヘルパー
 func IsNotFound(err error) bool     { return errors.Is(err, ErrNotFound) }
 func IsConflict(err error) bool     { return errors.Is(err, ErrConflict) }
 func IsInvalid(err error) bool      { return errors.Is(err, ErrInvalid) }
@@ -27,7 +25,6 @@ func IsUnauthorized(err error) bool { return errors.Is(err, ErrUnauthorized) }
 func IsForbidden(err error) bool    { return errors.Is(err, ErrForbidden) }
 func IsInternal(err error) bool     { return errors.Is(err, ErrInternal) }
 
-// ラップ用ヘルパー（原因を保持）
 func WrapInvalid(err error, msg string) error {
 	if err == nil {
 		return fmt.Errorf("%w: %s", ErrInvalid, msg)
@@ -49,7 +46,10 @@ func WrapNotFound(err error, msg string) error {
 	return fmt.Errorf("%w: %s: %v", ErrNotFound, msg, err)
 }
 
-// Enums (mirrors TS)
+// ======================================
+// Enums (ItemType)
+// ======================================
+
 type ItemType string
 
 const (
@@ -67,7 +67,10 @@ func IsValidItemType(v ItemType) bool {
 	}
 }
 
-// strings.ToLower にそのまま渡せるよう、型エイリアスに変更
+// ======================================
+// ProductIDTagType
+// ======================================
+
 type ProductIDTagType = string
 
 const (
@@ -84,7 +87,10 @@ func IsValidTagType(v ProductIDTagType) bool {
 	}
 }
 
+// ======================================
 // Value objects
+// ======================================
+
 type LogoDesignFile struct {
 	Name string
 	URL  string
@@ -102,7 +108,7 @@ func (f LogoDesignFile) validate() error {
 
 type ProductIDTag struct {
 	Type           ProductIDTagType
-	LogoDesignFile *LogoDesignFile // optional
+	LogoDesignFile *LogoDesignFile
 }
 
 func (t ProductIDTag) validate() error {
@@ -117,30 +123,35 @@ func (t ProductIDTag) validate() error {
 	return nil
 }
 
-// Entity
+// ======================================
+// Entity (Variations → VariationIDs に変更)
+// ======================================
+
 type ProductBlueprint struct {
 	ID               string
 	ProductName      string
 	BrandID          string
 	ItemType         ItemType
-	Variations       []model.ModelVariation
+	VariationIDs     []string // ★ Model の ID だけを保持する
 	Fit              string
 	Material         string
 	Weight           float64
 	QualityAssurance []string
-	ProductIdTag     ProductIDTag `json:"-" db:"-"`
+	ProductIdTag     ProductIDTag
 
-	// ★ 追加！
 	CompanyID string
 
 	AssigneeID string
-	CreatedBy  *string   // TS: string | null
-	CreatedAt  time.Time // TS: Date | string
-	UpdatedBy  *string   // TS: string | null
-	UpdatedAt  time.Time // TS: Date | string
+	CreatedBy  *string
+	CreatedAt  time.Time
+	UpdatedBy  *string
+	UpdatedAt  time.Time
 }
 
+// ======================================
 // Errors
+// ======================================
+
 var (
 	ErrInvalidID        = errors.New("productBlueprint: invalid id")
 	ErrInvalidProduct   = errors.New("productBlueprint: invalid productName")
@@ -153,11 +164,14 @@ var (
 	ErrInvalidCompanyID = errors.New("productBlueprint: invalid companyId")
 )
 
+// ======================================
 // Constructors
+// ======================================
+
 func New(
 	id, productName, brandID string,
 	itemType ItemType,
-	variations []model.ModelVariation,
+	variationIDs []string,
 	fit, material string,
 	weight float64,
 	qualityAssurance []string,
@@ -173,7 +187,7 @@ func New(
 		ProductName:      strings.TrimSpace(productName),
 		BrandID:          strings.TrimSpace(brandID),
 		ItemType:         itemType,
-		Variations:       dedupVariationsByID(variations),
+		VariationIDs:     dedupTrim(variationIDs),
 		Fit:              strings.TrimSpace(fit),
 		Material:         strings.TrimSpace(material),
 		Weight:           weight,
@@ -197,7 +211,7 @@ func New(
 func NewFromStringTime(
 	id, productName, brandID string,
 	itemType ItemType,
-	variations []model.ModelVariation,
+	variationIDs []string,
 	fit, material string,
 	weight float64,
 	qualityAssurance []string,
@@ -215,7 +229,7 @@ func NewFromStringTime(
 
 	return New(
 		id, productName, brandID,
-		itemType, variations,
+		itemType, variationIDs,
 		fit, material, weight,
 		qualityAssurance, productIDTag,
 		assigneeID, createdBy, t,
@@ -223,7 +237,10 @@ func NewFromStringTime(
 	)
 }
 
-// 更新系メソッド
+// ======================================
+// Update Methods
+// ======================================
+
 func (p *ProductBlueprint) UpdateAssignee(assigneeID string, now time.Time, updatedBy *string) error {
 	assigneeID = strings.TrimSpace(assigneeID)
 	if assigneeID == "" {
@@ -248,12 +265,15 @@ func (p *ProductBlueprint) UpdateTag(tag ProductIDTag, now time.Time, updatedBy 
 	return nil
 }
 
-func (p *ProductBlueprint) UpdateVariations(vars []model.ModelVariation, now time.Time, updatedBy *string) {
-	p.Variations = dedupVariationsByID(vars)
+func (p *ProductBlueprint) UpdateVariationIDs(ids []string, now time.Time, updatedBy *string) {
+	p.VariationIDs = dedupTrim(ids)
 	p.touch(now, updatedBy)
 }
 
+// ======================================
 // Validation
+// ======================================
+
 func (p ProductBlueprint) validate() error {
 	if p.ID == "" {
 		return ErrInvalidID
@@ -282,7 +302,10 @@ func (p ProductBlueprint) validate() error {
 	return nil
 }
 
+// ======================================
 // Helpers
+// ======================================
+
 func (p *ProductBlueprint) touch(now time.Time, updatedBy *string) {
 	if now.IsZero() {
 		now = time.Now().UTC()
@@ -325,23 +348,6 @@ func dedupTrim(xs []string) []string {
 		}
 		seen[x] = struct{}{}
 		out = append(out, x)
-	}
-	return out
-}
-
-func dedupVariationsByID(vars []model.ModelVariation) []model.ModelVariation {
-	seen := make(map[string]struct{}, len(vars))
-	out := make([]model.ModelVariation, 0, len(vars))
-	for _, v := range vars {
-		v.ID = strings.TrimSpace(v.ID)
-		if v.ID == "" {
-			continue
-		}
-		if _, ok := seen[v.ID]; ok {
-			continue
-		}
-		seen[v.ID] = struct{}{}
-		out = append(out, v)
 	}
 	return out
 }
