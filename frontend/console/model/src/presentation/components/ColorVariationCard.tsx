@@ -1,24 +1,34 @@
 // frontend/model/src/pages/ColorVariationCard.tsx
 import * as React from "react";
 import { Palette, Plus, X } from "lucide-react";
-import { Card, CardHeader, CardTitle, CardContent } from "../../../../shell/src/shared/ui";
+import {
+  Card,
+  CardHeader,
+  CardTitle,
+  CardContent,
+} from "../../../../shell/src/shared/ui";
 import { Badge } from "../../../../shell/src/shared/ui/badge";
 import { Button } from "../../../../shell/src/shared/ui/button";
 import "../styles/model.css";
 import "../../../../shell/src/shared/ui/card.css";
 
+import {
+  Table,
+  TableHeader,
+  TableBody,
+  TableRow,
+  TableHead,
+  TableCell,
+} from "../../../../shell/src/shared/ui/table";
+
+import { SketchPicker } from "react-color";
+
 type ColorVariationCardProps = {
-  /** 現在のカラー一覧 */
   colors: string[];
-  /** 入力中のカラー名（編集モード時のみ使用） */
   colorInput: string;
-  /** 入力変更（編集モード時のみ使用） */
   onChangeColorInput: (v: string) => void;
-  /** 追加ボタン or Enter で呼ばれる（編集モード時のみ使用） */
   onAddColor: () => void;
-  /** チップの×で呼ばれる（編集モード時のみ使用） */
   onRemoveColor: (color: string) => void;
-  /** 表示モード: "edit" | "view"（既定: "edit"） */
   mode?: "edit" | "view";
 };
 
@@ -32,6 +42,10 @@ const ColorVariationCard: React.FC<ColorVariationCardProps> = ({
 }) => {
   const isEdit = mode === "edit";
 
+  const [pickerColor, setPickerColor] = React.useState<string>(
+    colorInput || "#ffffff",
+  );
+
   return (
     <Card className="vc">
       <CardHeader className="box__header">
@@ -39,10 +53,7 @@ const ColorVariationCard: React.FC<ColorVariationCardProps> = ({
         <CardTitle className="box__title">
           カラーバリエーション
           {mode === "view" && (
-            <span
-              className="ml-2 text-xs text-[var(--pbp-text-soft)] align-middle"
-              aria-label="閲覧モード"
-            >
+            <span className="ml-2 text-xs text-[var(--pbp-text-soft)] align-middle">
               （閲覧）
             </span>
           )}
@@ -50,68 +61,127 @@ const ColorVariationCard: React.FC<ColorVariationCardProps> = ({
       </CardHeader>
 
       <CardContent className="box__body">
-        {/* カラー chips */}
-        <div className="chips vc__chips" role="list">
-          {colors.map((c) => (
-            <span key={c} title={c} role="listitem">
-              <Badge
-                className="vc__chip inline-flex items-center gap-1.5 px-2 py-1"
-                variant="secondary"
-              >
-                {c}
-                {isEdit && (
-                  <button
-                    className="vc__chip-close"
-                    onClick={() => onRemoveColor(c)}
-                    aria-label={`${c} を削除`}
-                    style={{
-                      background: "transparent",
-                      border: "none",
-                      cursor: "pointer",
-                      display: "inline-flex",
-                      alignItems: "center",
-                      padding: 0,
+        {/* カード内を左右 2 カラムに分割 */}
+        <div
+          className="vc__layout"
+          style={{
+            display: "grid",
+            gridTemplateColumns: isEdit
+              ? "minmax(0, 1.2fr) minmax(0, 2fr)"
+              : "minmax(0, 1fr)",
+            gap: 16,
+          }}
+        >
+          {/* 左カラム: カラーピッカー + 色名入力欄 + 追加ボタン */}
+          <div className="vc__left">
+            {isEdit && (
+              <div className="flex flex-col gap-4">
+                <div className="vc__picker">
+                  <SketchPicker
+                    color={pickerColor}
+                    onChange={(color: any) => {
+                      const hex = color?.hex ?? "#ffffff";
+                      setPickerColor(hex);
                     }}
+                  />
+                </div>
+
+                <div className="vc__input-wrap flex items-center gap-2">
+                  <input
+                    className="input vc__input"
+                    placeholder="例：White, Black, Navy..."
+                    value={colorInput}
+                    onChange={(e) => {
+                      onChangeColorInput(e.target.value);
+                    }}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") onAddColor();
+                    }}
+                  />
+                  <Button
+                    variant="secondary"
+                    size="icon"
+                    onClick={onAddColor}
+                    aria-label="カラーを追加"
+                    className="vc__add"
                   >
-                    <X size={12} />
-                  </button>
-                )}
-              </Badge>
-            </span>
-          ))}
-
-          {colors.length === 0 && (
-            <span className="vc__empty">
-              まだカラーがありません。
-              {isEdit ? " 右で追加してください。" : "（データがありません）"}
-            </span>
-          )}
-        </div>
-
-        {/* 入力 + 追加（編集モードのみ表示） */}
-        {isEdit && (
-          <div className="vc__row">
-            <input
-              className="input vc__input"
-              placeholder="カラーを入力（例：ホワイト、ブラック など）"
-              value={colorInput}
-              onChange={(e) => onChangeColorInput(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === "Enter") onAddColor();
-              }}
-              aria-label="カラー名を入力"
-            />
-            <Button
-              variant="secondary"
-              size="icon"
-              onClick={onAddColor}
-              aria-label="カラーを追加"
-              className="vc__add"
-            >
-              <Plus size={18} />
-            </Button>
+                    <Plus size={18} />
+                  </Button>
+                </div>
+              </div>
+            )}
           </div>
-        )}
+
+          {/* 右カラム: RGB / 色名 テーブル */}
+          <div className="vc__right">
+            <div className="vc__chips">
+              {colors.length > 0 ? (
+                <Table className="vc__table">
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead className="w-[120px]">RGB</TableHead>
+                      <TableHead>色名</TableHead>
+                      {isEdit && <TableHead className="w-[40px]" />}
+                    </TableRow>
+                  </TableHeader>
+
+                  <TableBody>
+                    {colors.map((c) => (
+                      <TableRow key={c}>
+                        {/* RGB列（色プレビュー + 値） */}
+                        <TableCell>
+                          <div className="flex items-center gap-2">
+                            <span
+                              className="inline-block w-4 h-4 rounded border"
+                              style={{ backgroundColor: pickerColor }}
+                            />
+                            {pickerColor}
+                          </div>
+                        </TableCell>
+
+                        {/* 色名列 */}
+                        <TableCell>
+                          <Badge
+                            className="vc__chip inline-flex items-center gap-1.5 px-2 py-1"
+                            variant="secondary"
+                          >
+                            {c}
+                          </Badge>
+                        </TableCell>
+
+                        {/* 削除ボタン */}
+                        {isEdit && (
+                          <TableCell className="text-right">
+                            <button
+                              className="vc__chip-close"
+                              onClick={() => onRemoveColor(c)}
+                              aria-label={`${c} を削除`}
+                              style={{
+                                background: "transparent",
+                                border: "none",
+                                cursor: "pointer",
+                                display: "inline-flex",
+                                alignItems: "center",
+                                padding: 0,
+                              }}
+                            >
+                              <X size={12} />
+                            </button>
+                          </TableCell>
+                        )}
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              ) : (
+                <span className="vc__empty">
+                  まだカラーがありません。
+                  {isEdit ? " 左で色を選んで追加してください。" : "（データなし）"}
+                </span>
+              )}
+            </div>
+          </div>
+        </div>
       </CardContent>
     </Card>
   );

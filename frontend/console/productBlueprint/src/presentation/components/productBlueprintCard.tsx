@@ -17,11 +17,16 @@ import {
   PopoverContent,
 } from "../../../../shell/src/shared/ui/popover";
 import { Checkbox } from "../../../../shell/src/shared/ui/checkbox";
+
+// ★ カタログからフィット・商品タグ・アイテム種別を取得
 import {
   FIT_OPTIONS,
   PRODUCT_ID_TAG_OPTIONS,
+  ITEM_TYPE_OPTIONS,
   type Fit,
-} from "../hook/useProductBlueprintDetail";
+  type ItemType,
+} from "../../domain/entity/catalog";
+
 import {
   WASH_TAG_OPTIONS,
   type WashTagOption,
@@ -51,12 +56,15 @@ type ProductBlueprintCardProps = {
   brandError?: Error | null;
   onChangeBrandId?: (id: string) => void;
 
+  /** アイテム種別（トップス / ボトムス） */
+  itemType?: ItemType;
   fit?: Fit;
   materials?: string;
   weight?: number;
   washTags?: string[];
   productIdTag?: string;
   onChangeProductName?: (v: string) => void;
+  onChangeItemType?: (v: ItemType) => void;
   onChangeFit?: (v: Fit) => void;
   onChangeMaterials?: (v: string) => void;
   onChangeWeight?: (v: number) => void;
@@ -74,12 +82,14 @@ const ProductBlueprintCard: React.FC<ProductBlueprintCardProps> = ({
   brandLoading,
   brandError,
   onChangeBrandId,
+  itemType,
   fit,
   materials,
   weight,
   washTags,
   productIdTag,
   onChangeProductName,
+  onChangeItemType,
   onChangeFit,
   onChangeMaterials,
   onChangeWeight,
@@ -98,6 +108,7 @@ const ProductBlueprintCard: React.FC<ProductBlueprintCardProps> = ({
   const safeWashTags = Array.isArray(washTags) ? washTags : [];
   const safeProductIdTag = productIdTag ?? "";
   const safeFit = fit ?? ("" as Fit);
+  const safeItemType = itemType ?? ("" as ItemType);
 
   // ブランド名の表示用（brandId から name を引く）
   const selectedBrandName =
@@ -202,8 +213,50 @@ const ProductBlueprintCard: React.FC<ProductBlueprintCardProps> = ({
           />
         )}
 
-        {/* フィット & 商品IDタグ（横並び） */}
+        {/* アイテム種別 & フィット & 商品IDタグ（横並び） */}
         <div className="pbc-fit-row">
+          {/* アイテム種別 */}
+          <div className="flex-1">
+            <div className="label">アイテム種別</div>
+            {isEdit ? (
+              <Popover>
+                <PopoverTrigger>
+                  <Button
+                    variant="outline"
+                    className="w-full justify-between pbc-select-trigger"
+                    aria-label="アイテム種別を選択"
+                  >
+                    {safeItemType || "アイテム種別を選択してください。"}
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent align="start" className="p-1">
+                  {ITEM_TYPE_OPTIONS.map(
+                    (opt: { value: ItemType; label: string }) => (
+                      <div
+                        key={opt.value}
+                        className={`px-3 py-2 rounded-md cursor-pointer hover:bg-blue-50 ${
+                          safeItemType === opt.value
+                            ? "bg-blue-100 text-blue-700 font-medium"
+                            : ""
+                        }`}
+                        onClick={() => onChangeItemType?.(opt.value)}
+                      >
+                        {opt.label}
+                      </div>
+                    ),
+                  )}
+                </PopoverContent>
+              </Popover>
+            ) : (
+              <Input
+                value={safeItemType}
+                variant="readonly"
+                readOnly
+                aria-label="アイテム種別"
+              />
+            )}
+          </div>
+
           {/* フィット */}
           <div className="flex-1">
             <div className="label">フィット</div>
@@ -343,9 +396,7 @@ const ProductBlueprintCard: React.FC<ProductBlueprintCardProps> = ({
               {isEdit && onChangeWashTags && (
                 <button
                   onClick={() =>
-                    onChangeWashTags(
-                      safeWashTags.filter((x) => x !== t),
-                    )
+                    onChangeWashTags(safeWashTags.filter((x) => x !== t))
                   }
                   className="chip-remove"
                   aria-label={`${t} を削除`}

@@ -3,10 +3,8 @@
 import * as React from "react";
 import { useNavigate } from "react-router-dom";
 
-import type {
-  ItemType,
-  ProductIDTagType,
-} from "../../domain/entity/productBlueprint";
+// ProductIDTagType だけ productBlueprint のエンティティから使う
+import type { ProductIDTagType } from "../../domain/entity/productBlueprint";
 
 // Brand (domain)
 import type { Brand } from "../../../../brand/src/domain/entity/brand";
@@ -20,15 +18,28 @@ import type { ModelNumber } from "../../../../model/src/presentation/components/
 // Auth / currentMember
 import { useAuth } from "../../../../shell/src/auth/presentation/hook/useCurrentMember";
 
-// Fit / 洗濯タグ のカタログをドメイン層から利用
+// catalog.ts から ItemType / Fit / measurement 系を集約して利用
 import {
   FIT_OPTIONS,
   WASH_TAG_OPTIONS,
+  ITEM_TYPE_OPTIONS,
+  PRODUCT_ID_TAG_OPTIONS,
+  ITEM_TYPE_MEASUREMENT_OPTIONS,
 } from "../../domain/entity/catalog";
-import type { Fit } from "../../domain/entity/catalog";
+import type {
+  Fit,
+  ItemType,
+  MeasurementOption,
+} from "../../domain/entity/catalog";
 
 // 他プレゼン層からも使いやすいように再エクスポート
-export { FIT_OPTIONS, WASH_TAG_OPTIONS } from "../../domain/entity/catalog";
+export {
+  FIT_OPTIONS,
+  WASH_TAG_OPTIONS,
+  ITEM_TYPE_OPTIONS,
+  PRODUCT_ID_TAG_OPTIONS,
+  ITEM_TYPE_MEASUREMENT_OPTIONS,
+} from "../../domain/entity/catalog";
 
 // -------------------------------
 // Hook が外に公開する ViewModel
@@ -54,6 +65,9 @@ export interface UseProductBlueprintCreateResult {
   qualityAssurance: string[];
   productIdTagType: ProductIDTagType;
 
+  // アイテム種別から導出された採寸項目
+  measurementOptions: MeasurementOption[];
+
   colors: string[];
   colorInput: string;
   sizes: SizeRow[];
@@ -67,7 +81,7 @@ export interface UseProductBlueprintCreateResult {
   onCreate: () => void;
   onBack: () => void;
 
-  // 入力変更ハンドラ（ページから渡して使う）
+  // 入力変更ハンドラ
   onChangeProductName: (v: string) => void;
   onChangeItemType: (v: ItemType) => void;
   onChangeFit: (v: Fit) => void;
@@ -88,8 +102,6 @@ export interface UseProductBlueprintCreateResult {
 
 /**
  * 商品設計作成画面用のロジック・状態をまとめたカスタムフック
- * - brands は companyId でフィルタされた安全なクエリ(fetchAllBrandsForCompany)のみ利用
- * - 担当者(assignee) は currentMember を元に自動設定
  */
 export function useProductBlueprintCreate(): UseProductBlueprintCreateResult {
   const navigate = useNavigate();
@@ -113,7 +125,6 @@ export function useProductBlueprintCreate(): UseProductBlueprintCreateResult {
     let cancelled = false;
 
     async function loadBrands() {
-      // companyId がまだ取れていない間は何もしない
       if (!effectiveCompanyId) {
         console.log(
           "[useProductBlueprintCreate] companyId is empty; skip brand fetch.",
@@ -151,8 +162,6 @@ export function useProductBlueprintCreate(): UseProductBlueprintCreateResult {
         );
 
         setBrandOptions(items);
-
-        // ★ ここでは brandId を自動選択しない（初期状態は未選択のまま）
       } catch (e) {
         const err = e instanceof Error ? e : new Error(String(e));
         if (!cancelled) {
@@ -176,7 +185,6 @@ export function useProductBlueprintCreate(): UseProductBlueprintCreateResult {
     };
   }, [effectiveCompanyId]);
 
-  // 選択中ブランド名
   const brandName = React.useMemo(() => {
     const found = brandOptions.find((b) => b.id === brandId);
     return found?.name ?? "";
@@ -186,16 +194,17 @@ export function useProductBlueprintCreate(): UseProductBlueprintCreateResult {
   // 商品設計フィールド
   // ───────────────────────
   const [productName, setProductName] = React.useState("");
-  const [itemType, setItemType] = React.useState<ItemType>("tops");
 
-  // ★ フィットは自動で既定値にせず、空からスタート
+  // アイテム種別は空（未選択）から
+  const [itemType, setItemType] = React.useState<ItemType>("" as ItemType);
+
+  // フィットは空（未選択）から
   const [fit, setFit] = React.useState<Fit>("" as Fit);
 
   const [material, setMaterial] = React.useState("");
   const [weight, setWeight] = React.useState<number>(0);
   const [qualityAssurance, setQualityAssurance] = React.useState<string[]>([]);
 
-  // ★ 商品IDタグも自動選択せず、空からスタート
   const [productIdTagType, setProductIdTagType] =
     React.useState<ProductIDTagType>("" as ProductIDTagType);
 
@@ -205,19 +214,23 @@ export function useProductBlueprintCreate(): UseProductBlueprintCreateResult {
   const [modelNumbers] = React.useState<ModelNumber[]>([]);
 
   // ───────────────────────
+  // アイテム種別 → 採寸項目
+  // ───────────────────────
+  const measurementOptions: MeasurementOption[] = React.useMemo(() => {
+    if (!itemType) return [];
+    // ★ ここで catalog.ts の ItemType と完全に一致していれば 7053 は発生しない
+    return ITEM_TYPE_MEASUREMENT_OPTIONS[itemType] ?? [];
+  }, [itemType]);
+
+  // ───────────────────────
   // 管理情報
-  //   - assigneeId は currentMember を元に自動設定
-  //   - createdBy / createdAt は現状未使用だがフィールドとして保持
   // ───────────────────────
   const [assigneeId, setAssigneeId] = React.useState("");
   const [createdBy] = React.useState("");
   const [createdAt] = React.useState("");
 
-  // currentMember から担当者名を自動設定
   React.useEffect(() => {
     if (!currentMember) return;
-
-    // すでに手動で設定されている場合は上書きしない
     if (assigneeId) return;
 
     const label =
@@ -249,6 +262,7 @@ export function useProductBlueprintCreate(): UseProductBlueprintCreateResult {
       createdBy,
       createdAt,
       companyId: effectiveCompanyId,
+      measurementOptions,
     });
 
     alert("商品設計を作成しました（ダミー）");
@@ -270,12 +284,12 @@ export function useProductBlueprintCreate(): UseProductBlueprintCreateResult {
     createdBy,
     createdAt,
     effectiveCompanyId,
+    measurementOptions,
     navigate,
   ]);
 
   const onBack = React.useCallback(() => navigate(-1), [navigate]);
 
-  // カラー追加/削除
   const onAddColor = React.useCallback(() => {
     const v = colorInput.trim();
     if (!v || colors.includes(v)) return;
@@ -292,7 +306,6 @@ export function useProductBlueprintCreate(): UseProductBlueprintCreateResult {
   }, []);
 
   const onEditAssignee = React.useCallback(() => {
-    // 担当者編集時も currentMember を優先して再設定しておく
     if (currentMember) {
       const label =
         currentMember.fullName ||
@@ -316,7 +329,6 @@ export function useProductBlueprintCreate(): UseProductBlueprintCreateResult {
   return {
     title: "商品設計を作成",
 
-    // brand
     brandId,
     brandName,
     brandOptions,
@@ -324,7 +336,6 @@ export function useProductBlueprintCreate(): UseProductBlueprintCreateResult {
     brandError,
     onChangeBrandId: (id: string) => setBrandId(id),
 
-    // fields
     productName,
     itemType,
     fit,
@@ -332,6 +343,8 @@ export function useProductBlueprintCreate(): UseProductBlueprintCreateResult {
     weight,
     qualityAssurance,
     productIdTagType,
+
+    measurementOptions,
 
     colors,
     colorInput,
@@ -342,11 +355,9 @@ export function useProductBlueprintCreate(): UseProductBlueprintCreateResult {
     createdBy,
     createdAt,
 
-    // page actions
     onCreate,
     onBack,
 
-    // field handlers
     onChangeProductName: setProductName,
     onChangeItemType: setItemType,
     onChangeFit: setFit,

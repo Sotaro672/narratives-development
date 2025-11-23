@@ -20,11 +20,15 @@ export default function ProductBlueprintCreate() {
 
     // 商品設計フィールド
     productName,
+    itemType,
     fit,
     material,
     weight,
     qualityAssurance,
     productIdTagType,
+
+    // アイテム種別から導出された採寸項目
+    measurementOptions,
 
     // バリエーション
     colorInput,
@@ -32,6 +36,7 @@ export default function ProductBlueprintCreate() {
     sizes,
     modelNumbers,
     onChangeProductName,
+    onChangeItemType,
     onChangeFit,
     onChangeMaterial,
     onChangeWeight,
@@ -69,12 +74,16 @@ export default function ProductBlueprintCreate() {
           brandLoading={brandLoading}
           brandError={brandError}
           onChangeBrandId={onChangeBrandId}
+          // ★ アイテム種別をカードに渡す
+          itemType={itemType}
           fit={fit}
           materials={material}
           weight={weight}
           washTags={qualityAssurance}
           productIdTag={productIdTagType}
           onChangeProductName={onChangeProductName}
+          // ★ アイテム種別変更ハンドラを渡す
+          onChangeItemType={onChangeItemType}
           onChangeFit={onChangeFit}
           onChangeMaterials={onChangeMaterial}
           onChangeWeight={onChangeWeight}
@@ -90,7 +99,12 @@ export default function ProductBlueprintCreate() {
           onRemoveColor={onRemoveColor}
         />
 
-        <SizeVariationCard sizes={sizes} onRemove={onRemoveSize} />
+        <SizeVariationCard
+          sizes={sizes}
+          onRemove={onRemoveSize}
+          // ★ itemType から導出された採寸定義を渡す
+          measurementOptions={measurementOptions}
+        />
 
         <ModelNumberCard
           sizes={sizes}

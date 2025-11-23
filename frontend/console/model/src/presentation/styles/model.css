@@ -3,32 +3,6 @@
    ※ 共通スタイルは Card.css に委譲（--pbp-* 変数使用）
 */
 
-/* chips 行の余白最適化 */
-.vc__chips {
-  margin-bottom: 8px;
-}
-
-/* chip のアイコンボタン */
-.vc__chip {
-  position: relative;
-}
-
-.vc__chip-close {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  height: 18px;
-  width: 18px;
-  border-radius: 6px;
-  margin-left: 2px;
-  color: inherit;
-  opacity: 0.85;
-}
-
-.vc__chip-close:hover {
-  opacity: 1;
-}
-
 /* 入力行 */
 .vc__row {
   display: flex;
@@ -44,6 +18,57 @@
 /* 追加ボタンのわずかなホバー演出を強める */
 .vc__add:hover {
   box-shadow: 0 0 0 3px var(--pbp-ring);
+}
+
+/* 入力欄の下に並ぶカラータブ全体のコンテナ */
+.vc__chips {
+  margin-top: 8px;
+}
+
+/* chip のアイコンボタン */
+.vc__chip {
+  position: relative;
+}
+
+.vc__chip-close {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  height: 18px;
+  width: 18px;
+  border-radius: 6px;
+  margin-left: 4px;
+  color: inherit;
+  opacity: 0.85;
+}
+
+.vc__chip-close:hover {
+  opacity: 1;
+}
+
+/* 縦並びテーブルのスタイル */
+.vc__table {
+  width: 100%;
+  border-collapse: collapse;
+  border-spacing: 0;
+}
+
+.vc__table tr {
+  border-bottom: 1px solid var(--pbp-border-soft, #e5e7eb);
+}
+
+.vc__table tr:last-child {
+  border-bottom: none;
+}
+
+.vc__table-color,
+.vc__table-actions {
+  padding: 4px 0;
+}
+
+.vc__table-actions {
+  width: 40px;
+  text-align: right;
 }
 
 /* 空状態の文言 */

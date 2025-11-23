@@ -1,6 +1,12 @@
+// frontend/console/model/src/presentation/components/SizeVariationCard.tsx
 import * as React from "react";
 import { Tags, Trash2 } from "lucide-react";
-import { Card, CardHeader, CardTitle, CardContent } from "../../../../shell/src/shared/ui";
+import {
+  Card,
+  CardHeader,
+  CardTitle,
+  CardContent,
+} from "../../../../shell/src/shared/ui";
 import { Button } from "../../../../shell/src/shared/ui/button";
 import { Input } from "../../../../shell/src/shared/ui/input";
 import {
@@ -13,6 +19,9 @@ import {
 } from "../../../../shell/src/shared/ui/table";
 import "../styles/model.css";
 import "../../../../shell/src/shared/ui/card.css";
+
+// ★ 商品設計側のカタログから採寸ラベルを受け取る
+import type { MeasurementOption } from "../../../../productBlueprint/src/domain/entity/catalog";
 
 export type SizeRow = {
   id: string;
@@ -30,6 +39,9 @@ type SizeVariationCardProps = {
   onRemove: (id: string) => void;
   onChangeSize?: (id: string, patch: SizePatch) => void;
   mode?: "edit" | "view";
+
+  /** 商品設計側から渡される採寸定義（itemType に連動） */
+  measurementOptions?: MeasurementOption[];
 };
 
 const SizeVariationCard: React.FC<SizeVariationCardProps> = ({
@@ -37,6 +49,7 @@ const SizeVariationCard: React.FC<SizeVariationCardProps> = ({
   onRemove,
   onChangeSize,
   mode = "edit",
+  measurementOptions,
 }) => {
   const isEdit = mode === "edit";
 
@@ -62,6 +75,16 @@ const SizeVariationCard: React.FC<SizeVariationCardProps> = ({
       ? ({ variant: "readonly" as const, readOnly: true } as const)
       : ({} as const);
 
+  // ★ カタログの measurement に応じてヘッダ名を切り替える
+  //   - 現在の実装は 4 列分の数値カラムを持っているため、最大 4 つまで使用
+  const measurementHeaders = React.useMemo(() => {
+    if (!measurementOptions || measurementOptions.length === 0) {
+      // フォールバック（従来のヘッダー）
+      return ["胸囲", "ウエスト", "着丈", "肩幅"];
+    }
+    return measurementOptions.map((m) => m.label).slice(0, 4);
+  }, [measurementOptions]);
+
   return (
     <Card className={`svc ${mode === "view" ? "view-mode" : ""}`}>
       <CardHeader className="box__header">
@@ -81,10 +104,10 @@ const SizeVariationCard: React.FC<SizeVariationCardProps> = ({
           <TableHeader>
             <TableRow>
               <TableHead>サイズ</TableHead>
-              <TableHead>胸囲(cm)</TableHead>
-              <TableHead>ウエスト(cm)</TableHead>
-              <TableHead>着丈(cm)</TableHead>
-              <TableHead>肩幅(cm)</TableHead>
+              {/* ★ 渡された measurement に応じて列名・列数を制御 */}
+              {measurementHeaders.map((label) => (
+                <TableHead key={label}>{label}(cm)</TableHead>
+              ))}
               {isEdit && <TableHead />} {/* 削除列（編集時のみ） */}
             </TableRow>
           </TableHeader>
@@ -99,46 +122,62 @@ const SizeVariationCard: React.FC<SizeVariationCardProps> = ({
                     aria-label={`${row.sizeLabel} サイズ名`}
                   />
                 </TableCell>
-                <TableCell>
-                  <Input
-                    {...readonlyProps}
-                    type="number"
-                    inputMode="decimal"
-                    value={row.chest ?? ""}
-                    onChange={handleChange(row.id, "chest")}
-                    aria-label={`${row.sizeLabel} 胸囲`}
-                  />
-                </TableCell>
-                <TableCell>
-                  <Input
-                    {...readonlyProps}
-                    type="number"
-                    inputMode="decimal"
-                    value={row.waist ?? ""}
-                    onChange={handleChange(row.id, "waist")}
-                    aria-label={`${row.sizeLabel} ウエスト`}
-                  />
-                </TableCell>
-                <TableCell>
-                  <Input
-                    {...readonlyProps}
-                    type="number"
-                    inputMode="decimal"
-                    value={row.length ?? ""}
-                    onChange={handleChange(row.id, "length")}
-                    aria-label={`${row.sizeLabel} 着丈`}
-                  />
-                </TableCell>
-                <TableCell>
-                  <Input
-                    {...readonlyProps}
-                    type="number"
-                    inputMode="decimal"
-                    value={row.shoulder ?? ""}
-                    onChange={handleChange(row.id, "shoulder")}
-                    aria-label={`${row.sizeLabel} 肩幅`}
-                  />
-                </TableCell>
+
+                {/* 1 列目（旧: chest） */}
+                {measurementHeaders[0] && (
+                  <TableCell>
+                    <Input
+                      {...readonlyProps}
+                      type="number"
+                      inputMode="decimal"
+                      value={row.chest ?? ""}
+                      onChange={handleChange(row.id, "chest")}
+                      aria-label={`${row.sizeLabel} ${measurementHeaders[0]}`}
+                    />
+                  </TableCell>
+                )}
+
+                {/* 2 列目（旧: waist） */}
+                {measurementHeaders[1] && (
+                  <TableCell>
+                    <Input
+                      {...readonlyProps}
+                      type="number"
+                      inputMode="decimal"
+                      value={row.waist ?? ""}
+                      onChange={handleChange(row.id, "waist")}
+                      aria-label={`${row.sizeLabel} ${measurementHeaders[1]}`}
+                    />
+                  </TableCell>
+                )}
+
+                {/* 3 列目（旧: length） */}
+                {measurementHeaders[2] && (
+                  <TableCell>
+                    <Input
+                      {...readonlyProps}
+                      type="number"
+                      inputMode="decimal"
+                      value={row.length ?? ""}
+                      onChange={handleChange(row.id, "length")}
+                      aria-label={`${row.sizeLabel} ${measurementHeaders[2]}`}
+                    />
+                  </TableCell>
+                )}
+
+                {/* 4 列目（旧: shoulder） */}
+                {measurementHeaders[3] && (
+                  <TableCell>
+                    <Input
+                      {...readonlyProps}
+                      type="number"
+                      inputMode="decimal"
+                      value={row.shoulder ?? ""}
+                      onChange={handleChange(row.id, "shoulder")}
+                      aria-label={`${row.sizeLabel} ${measurementHeaders[3]}`}
+                    />
+                  </TableCell>
+                )}
 
                 {isEdit && (
                   <TableCell>
@@ -158,7 +197,13 @@ const SizeVariationCard: React.FC<SizeVariationCardProps> = ({
 
             {sizes.length === 0 && (
               <TableRow>
-                <TableCell colSpan={isEdit ? 6 : 5} className="svc__empty">
+                <TableCell
+                  colSpan={
+                    // サイズ列 + measurement 列数 + 削除列（編集時のみ）
+                    1 + measurementHeaders.length + (isEdit ? 1 : 0)
+                  }
+                  className="svc__empty"
+                >
                   登録されているサイズはありません。
                 </TableCell>
               </TableRow>

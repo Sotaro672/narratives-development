@@ -55,6 +55,7 @@ export interface ProductBlueprint {
   productName: string;
   brandId: string;
 
+  /** backend の ItemType に対応（tops / bottoms / other） */
   itemType: ItemType;
 
   /** バリエーション（色・サイズ等） */
@@ -99,7 +100,7 @@ export function isValidItemType(value: string): value is ItemType {
 
 /** ProductIDTagType の妥当性チェック */
 export function isValidProductIDTagType(
-  value: string
+  value: string,
 ): value is ProductIDTagType {
   return value === "qr" || value === "nfc";
 }
@@ -133,7 +134,7 @@ export function validateProductIDTag(tag: ProductIDTag): string[] {
 
 /** variations 配列を id でユニーク化＆trim する */
 export function normalizeVariations(
-  vars: ModelVariation[]
+  vars: ModelVariation[],
 ): ModelVariation[] {
   const seen = new Set<string>();
   const out: ModelVariation[] = [];
@@ -164,7 +165,7 @@ export function normalizeQualityAssurance(xs: string[]): string[] {
  * backend の validate() ロジックと整合するようにチェック。
  */
 export function validateProductBlueprint(
-  pb: ProductBlueprint
+  pb: ProductBlueprint,
 ): string[] {
   const errors: string[] = [];
 
@@ -220,11 +221,11 @@ export function createProductBlueprint(
     qualityAssurance?: string[];
     updatedAt?: string;
     updatedBy?: string | null;
-  }
+  },
 ): ProductBlueprint {
   const variations = normalizeVariations(input.variations ?? []);
   const qualityAssurance = normalizeQualityAssurance(
-    input.qualityAssurance ?? []
+    input.qualityAssurance ?? [],
   );
 
   const updatedAt =
