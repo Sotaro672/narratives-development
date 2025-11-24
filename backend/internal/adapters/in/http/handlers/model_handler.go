@@ -26,19 +26,19 @@ func (h *ModelHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	switch {
 	// ------------------------------------------------------------
-	// POST /models/{productID}/variations
+	// POST /models/{productBlueprintID}/variations
 	//   → ModelUsecase.CreateModelVariation を呼び出す
 	// ------------------------------------------------------------
 	case r.Method == http.MethodPost && strings.HasPrefix(r.URL.Path, "/models/"):
-		// /models/{productID}/variations を分解
+		// /models/{productBlueprintID}/variations を分解
 		path := strings.TrimPrefix(r.URL.Path, "/models/")
 		path = strings.Trim(path, "/")
 		parts := strings.Split(path, "/")
 
-		// 期待する形式は {productID}/variations のみ
+		// 期待する形式は {productBlueprintID}/variations のみ
 		if len(parts) == 2 && parts[1] == "variations" {
-			productID := strings.TrimSpace(parts[0])
-			h.createVariation(w, r, productID)
+			productBlueprintID := strings.TrimSpace(parts[0])
+			h.createVariation(w, r, productBlueprintID)
 			return
 		}
 
@@ -81,7 +81,7 @@ func (h *ModelHandler) get(w http.ResponseWriter, r *http.Request, id string) {
 }
 
 /* ============================================================
- * POST /models/{productID}/variations 用のリクエスト型
+ * POST /models/{productBlueprintID}/variations 用のリクエスト型
  *   frontend/console/model/src/application/modelCreateService.tsx
  *   の CreateModelVariationRequest / NewModelVariationPayload に対応
  * ==========================================================*/
@@ -93,17 +93,17 @@ type createModelVariationRequest struct {
 	Measurements map[string]float64 `json:"measurements,omitempty"` // chest / shoulder / waist / length など
 }
 
-// POST /models/{productID}/variations
+// POST /models/{productBlueprintID}/variations
 //
 // Request Body: createModelVariationRequest JSON
 // Response    : 作成された ModelVariation を JSON で返す
-func (h *ModelHandler) createVariation(w http.ResponseWriter, r *http.Request, productID string) {
+func (h *ModelHandler) createVariation(w http.ResponseWriter, r *http.Request, productBlueprintID string) {
 	ctx := r.Context()
 
-	productID = strings.TrimSpace(productID)
-	if productID == "" {
+	productBlueprintID = strings.TrimSpace(productBlueprintID)
+	if productBlueprintID == "" {
 		w.WriteHeader(http.StatusBadRequest)
-		_ = json.NewEncoder(w).Encode(map[string]string{"error": "invalid productID"})
+		_ = json.NewEncoder(w).Encode(map[string]string{"error": "invalid productBlueprintID"})
 		return
 	}
 
@@ -116,8 +116,8 @@ func (h *ModelHandler) createVariation(w http.ResponseWriter, r *http.Request, p
 
 	// ログ: フロントから渡ってきた measurements を確認
 	log.Printf(
-		"[ModelHandler] createVariation productID=%s, body.ModelNumber=%s, size=%s, color=%s, measurements=%v",
-		productID,
+		"[ModelHandler] createVariation productBlueprintID=%s, body.ModelNumber=%s, size=%s, color=%s, measurements=%v",
+		productBlueprintID,
 		req.ModelNumber,
 		req.Size,
 		req.Color,
@@ -148,7 +148,7 @@ func (h *ModelHandler) createVariation(w http.ResponseWriter, r *http.Request, p
 	// ログ: NewModelVariation に measurements が詰め替えられているか確認
 	log.Printf("[ModelHandler] createVariation NewModelVariation=%+v", newVar)
 
-	// ★ ここで productID を渡さず、Usecase のシグネチャに合わせる
+	// ★ ここで productBlueprintID を渡さず、Usecase のシグネチャに合わせる
 	mv, err := h.uc.CreateModelVariation(ctx, newVar)
 	if err != nil {
 		log.Printf("[ModelHandler] error: %v", err)

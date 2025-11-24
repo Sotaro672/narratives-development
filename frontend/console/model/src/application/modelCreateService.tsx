@@ -7,6 +7,7 @@ import type * as React from "react";
 import type {
   MeasurementOption,
   SizeRow,
+  MeasurementKey,
 } from "../domain/entity/catalog";
 
 // ★ HTTP リポジトリ（CreateModelVariation 用）
@@ -28,9 +29,9 @@ import {
  * =======================================================*/
 
 export type ModelNumber = {
-  size: string;  // "S" | "M" | ...
+  size: string; // "S" | "M" | ...
   color: string; // "ホワイト" | ...
-  code: string;  // "LM-SB-S-WHT"
+  code: string; // "LM-SB-S-WHT"
 };
 
 export type SizeLike = { id: string; sizeLabel: string };
@@ -106,31 +107,25 @@ export type UseSizeVariationCardResult = {
 
 /**
  * measurements 部分の型
- * - productBlueprintCreateService 側の buildMeasurements が
- *   chest / shoulder / waist / length を埋め、ここではそれをそのまま受け取る想定。
+ *
+ * - catalog.ts 側の MeasurementKey（「着丈」「身幅」…）をキーとしたマップに変更
+ * - これにより、トップス／ボトムス両方の全採寸項目を表現できる
  */
-export type NewModelVariationMeasurements = {
-  // Top
-  chest?: number | null;
-  shoulder?: number | null;
-
-  // Bottom
-  waist?: number | null;
-  length?: number | null;
-
-  // 共通で他項目を追加したい場合はここに拡張可能
-  hip?: number | null;
-  thigh?: number | null;
-};
+export type NewModelVariationMeasurements = Partial<
+  Record<MeasurementKey, number | null>
+>;
 
 /**
  * 1 モデルバリエーション分の payload 型
  * - productBlueprintCreateService.ts で buildMeasurements 済みの JSON を構築し、
  *   その 1 要素分と対応する。
+ *
+ * rgb は ColorVariationCard 側から渡される想定の任意フィールド
  */
 export type NewModelVariationPayload = {
   sizeLabel: string;
-  color: string;
+  color: string;      // 色名（例: "グリーン"）
+  rgb?: number;       // RGB 整数（例: 0xRRGGBB）※任意
   modelNumber: string;
   createdBy: string;
   measurements: NewModelVariationMeasurements;
@@ -141,8 +136,8 @@ export type NewModelVariationPayload = {
  * - 作成済み productBlueprint の ID と、その ID に紐づく variations 一覧。
  */
 export type ModelVariationsFromProductBlueprint = {
-  /** backend の productBlueprint / model が共有する productId */
-  productId: string;
+  /** backend の productBlueprint / model が共有する productBlueprintId */
+  productBlueprintId: string;
   /** color × size × modelNumber × measurements の一覧 */
   variations: NewModelVariationPayload[];
 };
@@ -161,23 +156,17 @@ export async function createModelVariationsFromProductBlueprint(
   );
 
   // NewModelVariationPayload[] → CreateModelVariationRequest[] へ変換
+  // ★ ここで measurements と productBlueprintId / rgb を丸ごと渡す
   const requests: CreateModelVariationRequest[] = payload.variations.map(
     (v) => {
-      const m = v.measurements ?? {};
-
-      const measurements: Record<string, number | null | undefined> = {
-        chest: m.chest ?? null,
-        shoulder: m.shoulder ?? null,
-        waist: m.waist ?? null,
-        length: m.length ?? null,
-        hip: m.hip ?? null,
-        thigh: m.thigh ?? null,
-      };
+      const measurements = v.measurements ?? {};
 
       return {
+        productBlueprintId: payload.productBlueprintId,
         modelNumber: v.modelNumber,
         size: v.sizeLabel,
         color: v.color,
+        rgb: v.rgb,
         measurements,
       };
     },
@@ -186,11 +175,11 @@ export async function createModelVariationsFromProductBlueprint(
   console.log(
     "[modelCreateService] mapped CreateModelVariationRequest array:",
     {
-      productId: payload.productId,
+      productBlueprintId: payload.productBlueprintId,
       requests,
     },
   );
 
-  // 実際に backend (/models/{productId}/variations) を叩く
-  await createModelVariations(payload.productId, requests);
+  // 実際に backend (/models/{productBlueprintId}/variations) を叩く
+  await createModelVariations(payload.productBlueprintId, requests);
 }

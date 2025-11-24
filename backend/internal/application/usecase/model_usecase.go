@@ -65,12 +65,12 @@ func (u *ModelUsecase) GetModelData(ctx context.Context, id string) (*modeldom.M
 	return u.repo.GetModelData(ctx, id)
 }
 
-func (u *ModelUsecase) GetModelDataByBlueprintID(ctx context.Context, blueprintID string) (*modeldom.ModelData, error) {
-	blueprintID = strings.TrimSpace(blueprintID)
-	if blueprintID == "" {
+func (u *ModelUsecase) GetModelDataByProductBlueprintID(ctx context.Context, productBlueprintID string) (*modeldom.ModelData, error) {
+	productBlueprintID = strings.TrimSpace(productBlueprintID)
+	if productBlueprintID == "" {
 		return nil, modeldom.ErrInvalidBlueprintID
 	}
-	return u.repo.GetModelDataByBlueprintID(ctx, blueprintID)
+	return u.repo.GetModelDataByBlueprintID(ctx, productBlueprintID)
 }
 
 // ------------------------------------------------------------

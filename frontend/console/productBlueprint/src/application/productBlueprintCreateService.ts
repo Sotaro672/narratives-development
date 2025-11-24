@@ -4,7 +4,10 @@ import type { ItemType, Fit } from "../domain/entity/catalog";
 import type { ProductIDTag } from "../domain/entity/productBlueprint";
 
 // SizeRow / ModelNumber は model 側の型を利用
-import type { SizeRow } from "../../../model/src/domain/entity/catalog";
+import type {
+  SizeRow,
+  MeasurementKey,
+} from "../../../model/src/domain/entity/catalog";
 import type { ModelNumber } from "../../../model/src/application/modelCreateService";
 
 // HTTP 呼び出しは infrastructure 層に委譲
@@ -45,28 +48,17 @@ export type CreateProductBlueprintParams = {
 export type ProductBlueprintResponse = {
   ID?: string;
   id?: string;
-  productId?: string;
-  productID?: string;
+  productBlueprintId?: string;
   [key: string]: unknown;
 };
 
 /**
  * measurements 部分の型
- * - modelCreateService.tsx 側の NewModelVariationMeasurements と同じ構造
+ * - modelCreateService.tsx 側と同じく、MeasurementKey をキーにしたマップ
  */
-export type NewModelVariationMeasurements = {
-  // Top
-  chest?: number | null;
-  shoulder?: number | null;
-
-  // Bottom
-  waist?: number | null;
-  length?: number | null;
-
-  // 共通で他項目を追加したい場合はここに拡張可能
-  hip?: number | null;
-  thigh?: number | null;
-};
+export type NewModelVariationMeasurements = Partial<
+  Record<MeasurementKey, number | null>
+>;
 
 /**
  * ModelVariation 用 Payload
@@ -88,31 +80,32 @@ export type NewModelVariationPayload = {
 /**
  * itemType に応じて measurements を組み立てるユーティリティ
  *
- * chest / shoulder / waist / length の 4 項目だけを返す。
- * （hip / thigh は呼び出し側で null を詰める）
+ * - MeasurementKey（catalog.ts）をキーにしたマップを返す。
  */
 function buildMeasurements(
   itemType: ItemType,
   size: SizeRow,
-): Omit<NewModelVariationMeasurements, "hip" | "thigh"> {
-  // ボトムスの場合: ウエスト / 丈 を優先して埋める
+): NewModelVariationMeasurements {
+  const result: NewModelVariationMeasurements = {};
+
   if (itemType === "ボトムス") {
-    return {
-      // ボトムスでは胸囲・肩幅は使わないので null
-      chest: null,
-      shoulder: null,
-      waist: size.waist ?? null,
-      length: size.length ?? null,
-    };
+    // ボトムス用の採寸マッピング
+    result["ウエスト"] = size.waist ?? null;
+    result["ヒップ"] = size.hip ?? null;
+    result["股上"] = size.rise ?? null;
+    result["股下"] = size.inseam ?? null;
+    result["わたり幅"] = size.thighWidth ?? null;
+    result["裾幅"] = size.hemWidth ?? null;
+    return result;
   }
 
   // デフォルト（トップス想定）
-  return {
-    chest: size.chest ?? null,
-    shoulder: size.shoulder ?? null,
-    waist: size.waist ?? null,
-    length: size.length ?? null,
-  };
+  result["着丈"] = size.lengthTop ?? null;
+  result["身幅"] = size.bodyWidth ?? null;
+  result["肩幅"] = size.shoulderWidth ?? null;
+  result["袖丈"] = size.sleeveLength ?? null;
+
+  return result;
 }
 
 /**
@@ -129,31 +122,22 @@ function toNewModelVariationPayload(
     createdBy: string;
   },
 ): NewModelVariationPayload {
-  const baseMeasurements = buildMeasurements(itemType, sizeRow);
+  const measurements = buildMeasurements(itemType, sizeRow);
 
   // 🔍 buildMeasurements で組み立てた値をここでログ出力
-  console.log(
-    "[productBlueprintCreateService] buildMeasurements result",
-    {
-      itemType,
-      sizeRow,
-      base,
-      measurements: baseMeasurements,
-    },
-  );
+  console.log("[productBlueprintCreateService] buildMeasurements result", {
+    itemType,
+    sizeRow,
+    base,
+    measurements,
+  });
 
   return {
     sizeLabel: base.sizeLabel,
     color: base.color,
     modelNumber: base.modelNumber,
     createdBy: base.createdBy,
-    measurements: {
-      // chest / shoulder / waist / length は buildMeasurements に委譲
-      ...baseMeasurements,
-      // まだ未対応の採寸は null で固定
-      hip: null,
-      thigh: null,
-    },
+    measurements,
   };
 }
 
@@ -167,20 +151,20 @@ export async function createProductBlueprint(
   // 1. ProductBlueprint の作成（HTTP）
   const json = await createProductBlueprintHTTP(params);
 
-  // 2. productId 抽出（backend がどのキーで返してもある程度吸収する）
+  // 2. productBlueprintId 抽出（backend がどのキーで返してもある程度吸収する）
   const anyJson = json as any;
-  const productIdRaw =
-    anyJson.productId ??
-    anyJson.productID ??
+  const productBlueprintIdRaw =
+    anyJson.productBlueprintId ??
+    anyJson.productBlueprintID ??
     anyJson.id ??
     anyJson.ID;
 
-  const productId =
-    typeof productIdRaw === "string" ? productIdRaw.trim() : "";
+  const productBlueprintId =
+    typeof productBlueprintIdRaw === "string" ? productBlueprintIdRaw.trim() : "";
 
-  if (!productId) {
+  if (!productBlueprintId) {
     console.warn(
-      "[productBlueprintCreateService] productId not found in response; skip ModelVariation creation",
+      "[productBlueprintCreateService] productBlueprintId not found in response; skip ModelVariation creation",
       json,
     );
     return json;
@@ -214,11 +198,11 @@ export async function createProductBlueprint(
     }
   }
 
-  // 🔍 backend（/models/{productId}/variations）に渡す直前の payload 全体をログ出力
+  // 🔍 backend（/models/{productBlueprintId}/variations）に渡す直前の payload 全体をログ出力
   console.log(
     "[productBlueprintCreateService] variations payload for backend",
     {
-      productId,
+      productBlueprintId,
       variations,
     },
   );
@@ -228,7 +212,7 @@ export async function createProductBlueprint(
   //      model 作成（variations 作成）の起点となる payload を組み立てて渡す。
   if (variations.length > 0) {
     await createModelVariationsFromProductBlueprint({
-      productId,
+      productBlueprintId,
       variations,
     });
   } else {

@@ -3,9 +3,7 @@
 import * as React from "react";
 
 // 採寸系の型は model ドメインの catalog から
-import type {
-  SizeRow as CatalogSizeRow,
-} from "../../domain/entity/catalog";
+import type { SizeRow as CatalogSizeRow } from "../../domain/entity/catalog";
 
 // hook 用の型は application 層にまとめる
 import type {
@@ -33,6 +31,11 @@ const makeKey = (sizeLabel: string, color: string) =>
  */
 export function useModelCard(params: UseModelCardParams): UseModelCardResult {
   const { sizes, colors, modelNumbers } = params;
+  // ★ color名 → rgb(hex など) のマップを application 層から受け取れるようにする
+  //   - 型定義自体は modelCreateService.tsx 側の UseModelCardParams に
+  //     colorRgbMap?: Record<string, string> を追加しておく想定
+  const colorRgbMap: Record<string, string> =
+    (params as any).colorRgbMap ?? {};
 
   /** ローカル状態（サイズ×カラーごとのコード） */
   const [codeMap, setCodeMap] = React.useState<Record<string, string>>({});
@@ -87,6 +90,8 @@ export function useModelCard(params: UseModelCardParams): UseModelCardResult {
 
   /**
    * API送信などに使える平坦化された ModelNumber の配列
+   * - ここで color 名に紐づく rgb も一緒に詰めておく
+   *   （ModelNumber 側に rgb?: string を追加しておく前提）
    */
   const flatModelNumbers: ModelNumber[] = React.useMemo(() => {
     const result: ModelNumber[] = [];
@@ -94,16 +99,22 @@ export function useModelCard(params: UseModelCardParams): UseModelCardResult {
     sizes.forEach((s) => {
       colors.forEach((c) => {
         const key = makeKey(s.sizeLabel, c);
+        const code = codeMap[key] ?? "";
+        const rgb = colorRgbMap[c]; // 例: "#00ff00"
+
+        // rgb フィールドを持つ ModelNumber に対応させる
         result.push({
           size: s.sizeLabel,
           color: c,
-          code: codeMap[key] ?? "",
-        });
+          code,
+          // ModelNumber 型に rgb?: string を追加してあればそのまま入る
+          ...(rgb ? { rgb } : {}),
+        } as ModelNumber);
       });
     });
 
     return result;
-  }, [sizes, colors, codeMap]);
+  }, [sizes, colors, codeMap, colorRgbMap]);
 
   return {
     getCode,

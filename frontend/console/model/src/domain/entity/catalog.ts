@@ -76,8 +76,38 @@ export const ITEM_TYPE_MEASUREMENT_OPTIONS: Record<
 export type SizeRow = {
   id: string;
   sizeLabel: string;
-  chest?: number;
-  waist?: number;
+
+  // ───────── トップス系（正規フィールド）─────────
+  // 着丈
   length?: number;
+  // 身幅
+  chest?: number;
+  // 肩幅
   shoulder?: number;
+  // 袖丈
+  sleeveLength?: number;
+
+  // ───────── ボトムス系（正規フィールド）─────────
+  // ウエスト
+  waist?: number;
+  // ヒップ
+  hip?: number;
+  // 股上
+  rise?: number;
+  // 股下
+  inseam?: number;
+  // わたり幅
+  thigh?: number;
+  // 裾幅
+  hemWidth?: number;
+
+  // ───────── 旧／別名フィールド（型エラー回避用の alias）─────────
+  // lengthTop → length の alias 的フィールド
+  lengthTop?: number;
+  // bodyWidth → chest の alias
+  bodyWidth?: number;
+  // shoulderWidth → shoulder の alias
+  shoulderWidth?: number;
+  // thighWidth → thigh の alias
+  thighWidth?: number;
 };

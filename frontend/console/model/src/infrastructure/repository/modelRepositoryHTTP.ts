@@ -20,32 +20,24 @@ export const API_BASE = ENV_BASE || FALLBACK_BASE;
  * =======================================================*/
 
 /**
- * backend/internal/domain/model.NewModelVariation
- *
- * Go 側:
- *   type NewModelVariation struct {
- *     ModelNumber  string
- *     Size         string
- *     Color        string
- *     Measurements map[string]float64
- *   }
- *
- * ※ modelCreateService.tsx の NewModelVariationPayload と互換
+ * backend/internal/domain/model.NewModelVariation と互換 + rgb 追加
  */
 export type CreateModelVariationRequest = {
-  modelNumber: string; // "LM-SB-S-WHT"
-  size: string;        // "S" / "M" / ...
-  color: string;       // "ホワイト"
+  productBlueprintId: string; // Firestore 保存のため必須
+  modelNumber: string;
+  size: string;
+  color: string;
+  rgb?: number | null; // ★ 追加（カラーの RGB 値）
   measurements?: Record<string, number | null | undefined>;
 };
 
 /* =========================================================
  * 単一 ModelVariation 作成 API
- * POST /models/{productId}/variations
+ * POST /models/{productBlueprintId}/variations
  * =======================================================*/
 
 export async function createModelVariation(
-  productId: string,
+  productBlueprintId: string,
   payload: CreateModelVariationRequest,
 ): Promise<void> {
   const user = auth.currentUser;
@@ -63,7 +55,7 @@ export async function createModelVariation(
     );
 
   const res = await fetch(
-    `${API_BASE}/models/${encodeURIComponent(productId)}/variations`,
+    `${API_BASE}/models/${encodeURIComponent(productBlueprintId)}/variations`,
     {
       method: "POST",
       headers: {
@@ -71,9 +63,16 @@ export async function createModelVariation(
         Authorization: `Bearer ${idToken}`,
       },
       body: JSON.stringify({
+        // Firestore 書き込みに使う
+        productBlueprintId,
+
         modelNumber: payload.modelNumber,
         size: payload.size,
         color: payload.color,
+
+        // ★ 追加：RGB を backend に渡す
+        rgb: payload.rgb ?? null,
+
         measurements: cleanedMeasurements,
       }),
     },
@@ -105,10 +104,15 @@ export async function createModelVariation(
  * =======================================================*/
 
 export async function createModelVariations(
-  productId: string,
+  productBlueprintId: string,
   variations: CreateModelVariationRequest[],
 ): Promise<void> {
   for (const v of variations) {
-    await createModelVariation(productId, v);
+    // productBlueprintId を補完しつつ実行
+    const enriched: CreateModelVariationRequest = {
+      ...v,
+      productBlueprintId,
+    };
+    await createModelVariation(productBlueprintId, enriched);
   }
 }

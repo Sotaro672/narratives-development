@@ -39,16 +39,16 @@ func (r *ModelRepositoryFS) variationsCol() *firestore.CollectionRef {
 // model_sets 取得
 // ------------------------------------------------------------
 
-func (r *ModelRepositoryFS) GetModelData(ctx context.Context, productID string) (*modeldom.ModelData, error) {
+func (r *ModelRepositoryFS) GetModelData(ctx context.Context, productBlueprintID string) (*modeldom.ModelData, error) {
 	if r.Client == nil {
 		return nil, errors.New("firestore client is nil")
 	}
-	productID = strings.TrimSpace(productID)
-	if productID == "" {
+	productBlueprintID = strings.TrimSpace(productBlueprintID)
+	if productBlueprintID == "" {
 		return nil, modeldom.ErrNotFound
 	}
 
-	snap, err := r.modelSetsCol().Doc(productID).Get(ctx)
+	snap, err := r.modelSetsCol().Doc(productBlueprintID).Get(ctx)
 	if err != nil {
 		if status.Code(err) == codes.NotFound {
 			return nil, modeldom.ErrNotFound
@@ -61,11 +61,11 @@ func (r *ModelRepositoryFS) GetModelData(ctx context.Context, productID string) 
 		return nil, fmt.Errorf("empty model_set document: %s", snap.Ref.ID)
 	}
 
-	blueprintID := ""
+	// ★ ここを := ではなく = に変更（引数を上書きして使う）
 	if v, ok := data["productBlueprintId"].(string); ok {
-		blueprintID = strings.TrimSpace(v)
+		productBlueprintID = strings.TrimSpace(v)
 	}
-	if blueprintID == "" {
+	if productBlueprintID == "" {
 		return nil, fmt.Errorf("model_set missing productBlueprintId: %s", snap.Ref.ID)
 	}
 
@@ -74,28 +74,28 @@ func (r *ModelRepositoryFS) GetModelData(ctx context.Context, productID string) 
 		updatedAt = v.UTC()
 	}
 
-	vars, err := r.listVariationsByBlueprintID(ctx, blueprintID)
+	vars, err := r.listVariationsByProductBlueprintID(ctx, productBlueprintID)
 	if err != nil {
 		return nil, err
 	}
 
 	return &modeldom.ModelData{
-		ProductBlueprintID: blueprintID,
+		ProductBlueprintID: productBlueprintID,
 		Variations:         vars,
 		UpdatedAt:          updatedAt,
 	}, nil
 }
 
-func (r *ModelRepositoryFS) GetModelDataByBlueprintID(ctx context.Context, blueprintID string) (*modeldom.ModelData, error) {
+func (r *ModelRepositoryFS) GetModelDataByBlueprintID(ctx context.Context, productBlueprintID string) (*modeldom.ModelData, error) {
 	if r.Client == nil {
 		return nil, errors.New("firestore client is nil")
 	}
-	blueprintID = strings.TrimSpace(blueprintID)
-	if blueprintID == "" {
+	productBlueprintID = strings.TrimSpace(productBlueprintID)
+	if productBlueprintID == "" {
 		return nil, modeldom.ErrNotFound
 	}
 
-	q := r.modelSetsCol().Where("productBlueprintId", "==", blueprintID).Limit(1)
+	q := r.modelSetsCol().Where("productBlueprintId", "==", productBlueprintID).Limit(1)
 	it := q.Documents(ctx)
 	defer it.Stop()
 
@@ -116,13 +116,13 @@ func (r *ModelRepositoryFS) GetModelDataByBlueprintID(ctx context.Context, bluep
 		updatedAt = v.UTC()
 	}
 
-	vars, err := r.listVariationsByBlueprintID(ctx, blueprintID)
+	vars, err := r.listVariationsByProductBlueprintID(ctx, productBlueprintID)
 	if err != nil {
 		return nil, err
 	}
 
 	return &modeldom.ModelData{
-		ProductBlueprintID: blueprintID,
+		ProductBlueprintID: productBlueprintID,
 		Variations:         vars,
 		UpdatedAt:          updatedAt,
 	}, nil
@@ -132,17 +132,17 @@ func (r *ModelRepositoryFS) GetModelDataByBlueprintID(ctx context.Context, bluep
 // model_sets 更新
 // ------------------------------------------------------------
 
-func (r *ModelRepositoryFS) UpdateModelData(ctx context.Context, productID string, updates modeldom.ModelDataUpdate) (*modeldom.ModelData, error) {
+func (r *ModelRepositoryFS) UpdateModelData(ctx context.Context, productBlueprintID string, updates modeldom.ModelDataUpdate) (*modeldom.ModelData, error) {
 	if r.Client == nil {
 		return nil, errors.New("firestore client is nil")
 	}
 
-	productID = strings.TrimSpace(productID)
-	if productID == "" {
+	productBlueprintID = strings.TrimSpace(productBlueprintID)
+	if productBlueprintID == "" {
 		return nil, modeldom.ErrNotFound
 	}
 
-	docRef := r.modelSetsCol().Doc(productID)
+	docRef := r.modelSetsCol().Doc(productBlueprintID)
 	var fsUpdates []firestore.Update
 
 	if v, ok := updates["productBlueprintID"]; ok {
@@ -167,7 +167,7 @@ func (r *ModelRepositoryFS) UpdateModelData(ctx context.Context, productID strin
 		return nil, err
 	}
 
-	return r.GetModelData(ctx, productID)
+	return r.GetModelData(ctx, productBlueprintID)
 }
 
 // ------------------------------------------------------------
@@ -196,7 +196,7 @@ func (r *ModelRepositoryFS) GetModelVariationByID(ctx context.Context, variation
 	return &v, nil
 }
 
-// ★ ここからが重要: productID 引数を削除した CreateModelVariation
+// ★ CreateModelVariation（productBlueprintID は使わない）
 func (r *ModelRepositoryFS) CreateModelVariation(
 	ctx context.Context,
 	variation modeldom.NewModelVariation,
@@ -221,7 +221,6 @@ func (r *ModelRepositoryFS) CreateModelVariation(
 		Measurements: variation.Measurements,
 		CreatedAt:    now,
 		UpdatedAt:    now,
-		// CreatedBy / UpdatedBy / Deleted* はここでは未設定
 	}
 
 	if _, err := docRef.Create(ctx, modelVariationToDoc(mv)); err != nil {
@@ -339,22 +338,22 @@ func (r *ModelRepositoryFS) ReplaceModelVariations(
 	}
 
 	// NewModelVariation 側の ProductBlueprintID から紐付けキーを解決
-	blueprintID := strings.TrimSpace(vars[0].ProductBlueprintID)
-	if blueprintID == "" {
+	productBlueprintID := strings.TrimSpace(vars[0].ProductBlueprintID)
+	if productBlueprintID == "" {
 		return nil, modeldom.ErrInvalidBlueprintID
 	}
 
 	// 安全のため、全要素が同じ ProductBlueprintID を持っているか確認
 	for _, v := range vars {
-		if strings.TrimSpace(v.ProductBlueprintID) != blueprintID {
+		if strings.TrimSpace(v.ProductBlueprintID) != productBlueprintID {
 			return nil, fmt.Errorf("ReplaceModelVariations: mixed ProductBlueprintID is not allowed")
 		}
 	}
 
-	// 既存 variations を削除（blueprint 単位で）
+	// 既存 variations を削除（productBlueprint 単位で）
 	const chunkSize = 400
 
-	existing, err := r.listVariationsByBlueprintID(ctx, blueprintID)
+	existing, err := r.listVariationsByProductBlueprintID(ctx, productBlueprintID)
 	if err != nil {
 		return nil, err
 	}
@@ -391,7 +390,7 @@ func (r *ModelRepositoryFS) ReplaceModelVariations(
 
 				mv := modeldom.ModelVariation{
 					ID:                 docRef.ID,
-					ProductBlueprintID: blueprintID,
+					ProductBlueprintID: productBlueprintID,
 					ModelNumber:        strings.TrimSpace(nv.ModelNumber),
 					Size:               strings.TrimSpace(nv.Size),
 					Color: modeldom.Color{
@@ -415,16 +414,16 @@ func (r *ModelRepositoryFS) ReplaceModelVariations(
 	}
 
 	// 挿入後の最新 variations を返す
-	return r.listVariationsByBlueprintID(ctx, blueprintID)
+	return r.listVariationsByProductBlueprintID(ctx, productBlueprintID)
 }
 
 // ------------------------------------------------------------
 // Helpers
 // ------------------------------------------------------------
 
-func (r *ModelRepositoryFS) listVariationsByBlueprintID(ctx context.Context, blueprintID string) ([]modeldom.ModelVariation, error) {
+func (r *ModelRepositoryFS) listVariationsByProductBlueprintID(ctx context.Context, productBlueprintID string) ([]modeldom.ModelVariation, error) {
 	q := r.variationsCol().
-		Where("productBlueprintId", "==", blueprintID).
+		Where("productBlueprintId", "==", productBlueprintID).
 		OrderBy("modelNumber", firestore.Asc).
 		OrderBy("size", firestore.Asc).
 		OrderBy("color.name", firestore.Asc)
