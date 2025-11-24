@@ -94,7 +94,6 @@ async function httpRequest<T>(input: string, init: RequestInit = {}): Promise<T>
 /**
  * ★ Bootstrap API 呼び出し
  * backend に member / company の作成を委譲する
- * （初回サインアップ専用の想定）
  */
 async function callBootstrap(
   uid: string, // 実際のリクエストボディには含めない
@@ -164,15 +163,26 @@ export function useAuthActions() {
 
   /**
    * サインイン
-   * - email と password だけで Firebase Auth にログイン
-   * - ★ backend.bootstrap は呼び出さない（プロフィール不要）
+   * - email / password でログイン
+   * - ログイン成功後に backend.bootstrap を呼ぶ（冪等想定）
    */
-  async function signIn(email: string, password: string) {
+  async function signIn(
+    email: string,
+    password: string,
+    profile?: SignUpProfile,
+  ) {
     setSubmitting(true);
     setError(null);
     try {
-      await signInWithEmailAndPassword(auth, email, password);
-      // ログイン成功後の処理は、useAuth やルーティング側に任せる
+      const cred = await signInWithEmailAndPassword(auth, email, password);
+      const user = cred.user;
+
+      try {
+        await callBootstrap(user.uid, user.email ?? email, profile);
+      } catch (e) {
+        console.error("[useAuthActions] bootstrap failed:", e);
+        // bootstrap 失敗してもログイン自体は成功とする
+      }
     } catch (e: any) {
       console.error("signIn error", e);
       setError(e?.message ?? "ログインに失敗しました");

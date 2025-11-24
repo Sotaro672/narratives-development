@@ -9,6 +9,12 @@ import type {
   SizeRow,
 } from "../domain/entity/catalog";
 
+// ★ HTTP リポジトリ（CreateModelVariation 用）
+import {
+  createModelVariations,
+  type CreateModelVariationRequest,
+} from "../infrastructure/repository/modelRepositoryHTTP";
+
 /**
  * モデル作成（CreateModelVariation など）のための
  * アプリケーション層の型定義とユーティリティをまとめるファイル。
@@ -143,25 +149,48 @@ export type ModelVariationsFromProductBlueprint = {
 
 /**
  * productBlueprintCreateService.ts からの JSON を受け取り、
- * 将来的に CreateModelVariation API を叩くためのエントリポイント。
- *
- * 現時点では HTTP 呼び出しロジックは未実装で、
- * payload を受け取ってログ出力するだけにしてある。
- * 後で infrastructure/repository/modelRepositoryHTTP.ts を実装したら、
- * ここから呼び出す想定。
+ * CreateModelVariation API を叩くためのエントリポイント。
  */
 export async function createModelVariationsFromProductBlueprint(
   payload: ModelVariationsFromProductBlueprint,
 ): Promise<void> {
-  // TODO: infrastructure/repository/modelRepositoryHTTP.ts の
-  //       createModelVariationHTTP などを呼び出す実装を追加する。
+  // 受け取った payload のログ（採寸含む）
   console.log(
     "[modelCreateService] createModelVariationsFromProductBlueprint payload:",
     payload,
   );
 
-  // 例（将来のイメージ）:
-  // for (const v of payload.variations) {
-  //   await createModelVariationHTTP(payload.productId, v);
-  // }
+  // NewModelVariationPayload[] → CreateModelVariationRequest[] へ変換
+  const requests: CreateModelVariationRequest[] = payload.variations.map(
+    (v) => {
+      const m = v.measurements ?? {};
+
+      const measurements: Record<string, number | null | undefined> = {
+        chest: m.chest ?? null,
+        shoulder: m.shoulder ?? null,
+        waist: m.waist ?? null,
+        length: m.length ?? null,
+        hip: m.hip ?? null,
+        thigh: m.thigh ?? null,
+      };
+
+      return {
+        modelNumber: v.modelNumber,
+        size: v.sizeLabel,
+        color: v.color,
+        measurements,
+      };
+    },
+  );
+
+  console.log(
+    "[modelCreateService] mapped CreateModelVariationRequest array:",
+    {
+      productId: payload.productId,
+      requests,
+    },
+  );
+
+  // 実際に backend (/models/{productId}/variations) を叩く
+  await createModelVariations(payload.productId, requests);
 }
