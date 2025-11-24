@@ -57,8 +57,7 @@ type CreateProductBlueprintInput struct {
 	Colors           []string `json:"colors"`
 	AssigneeId       string   `json:"assigneeId"`
 	CompanyId        string   `json:"companyId"`
-	// ★ 追加: 作成者を JSON から受け取りたい場合
-	CreatedBy string `json:"createdBy,omitempty"`
+	CreatedBy        string   `json:"createdBy,omitempty"`
 }
 
 func (h *ProductBlueprintHandler) post(w http.ResponseWriter, r *http.Request) {
@@ -89,7 +88,6 @@ func (h *ProductBlueprintHandler) post(w http.ResponseWriter, r *http.Request) {
 		AssigneeID:       in.AssigneeId,
 		CompanyID:        in.CompanyId,
 		CreatedBy:        createdBy,
-		// VariationIDs はドメイン側から削除済みなので指定しない
 	}
 
 	created, err := h.uc.Create(ctx, pb)
