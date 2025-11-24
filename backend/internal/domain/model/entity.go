@@ -3,7 +3,6 @@ package model
 import (
 	"errors"
 	"fmt"
-	"math"
 	"strings"
 	"time"
 )
@@ -36,31 +35,35 @@ func (mv ModelVariation) validate() error {
 	if mv.Size == "" {
 		return ErrInvalidSize
 	}
-	if mv.Color == "" {
+	if mv.Color.Name == "" {
+		return ErrInvalidColor
+	}
+	if mv.Color.RGB < 0 {
 		return ErrInvalidColor
 	}
 	if !sizeAllowed(mv.Size) {
 		return ErrInvalidSize
 	}
-	if !colorAllowed(mv.Color) {
+	if !colorAllowed(mv.Color.Name) {
 		return ErrInvalidColor
 	}
 
 	for k, v := range mv.Measurements {
-		if strings.TrimSpace(k) == "" || math.IsNaN(v) || math.IsInf(v, 0) {
+		if strings.TrimSpace(k) == "" {
+			return ErrInvalidMeasurements
+		}
+		if v < 0 {
+			// 計測値が負数はドメイン的に不正とみなす
 			return ErrInvalidMeasurements
 		}
 	}
 
-	// createdAt / updatedAt の検証は削除
+	// CreatedAt / UpdatedAt はゼロ値許容（リポジトリや Usecase 側で設定）
 
 	return nil
 }
 
 func (md ModelData) validate() error {
-	if md.ProductID == "" {
-		return ErrInvalidProductID
-	}
 	if md.ProductBlueprintID == "" {
 		return ErrInvalidBlueprintID
 	}
@@ -90,22 +93,31 @@ func (md ModelData) validate() error {
 // Types
 // ==========================
 
+// Color はカラーバリエーションを表す値オブジェクト。
+// - Name: 表示名（例: "Green", "ネイビー"）
+// - RGB : 0xRRGGBB などの int 表現を想定
+type Color struct {
+	Name string
+	RGB  int
+}
+
 type ModelVariation struct {
 	ID                 string
 	ProductBlueprintID string
 	ModelNumber        string
 	Size               string
-	Color              string
-	Measurements       map[string]float64
+	Measurements       map[string]int // 各計測位置: 計測値(int)
+	Color              Color
 
-	// 削除した: CreatedAt, CreatedBy, UpdatedAt, UpdatedBy
-	// 残す: DeletedAt / DeletedBy
+	CreatedAt time.Time
+	CreatedBy *string
+	UpdatedAt time.Time
+	UpdatedBy *string
 	DeletedAt *time.Time
 	DeletedBy *string
 }
 
 type ModelData struct {
-	ProductID          string
 	ProductBlueprintID string
 	Variations         []ModelVariation
 	UpdatedAt          time.Time
@@ -117,25 +129,19 @@ type ItemSpec struct {
 	ModelNumber  string
 	Size         string
 	Color        string
-	Measurements map[string]float64
+	Measurements map[string]int
 }
 
 type SizeVariation struct {
 	ID           string
 	Size         string
-	Measurements map[string]float64
+	Measurements map[string]int
 }
 
 type ModelNumber struct {
 	Size        string
 	Color       string
 	ModelNumber string
-}
-
-type ProductionQuantity struct {
-	Size     string
-	Color    string
-	Quantity int
 }
 
 // ==========================
@@ -172,7 +178,6 @@ func NewModelData(
 	updatedAt time.Time,
 ) (ModelData, error) {
 	md := ModelData{
-		ProductID:          strings.TrimSpace(productID),
 		ProductBlueprintID: strings.TrimSpace(productBlueprintID),
 		Variations:         append([]ModelVariation(nil), variations...),
 		UpdatedAt:          updatedAt,
@@ -199,13 +204,13 @@ func NewModelDataFromStringTime(
 // Behavior
 // ==========================
 
-func (mv *ModelVariation) SetMeasurement(key string, value float64) error {
+func (mv *ModelVariation) SetMeasurement(key string, value int) error {
 	key = strings.TrimSpace(key)
-	if key == "" || math.IsNaN(value) || math.IsInf(value, 0) {
+	if key == "" || value < 0 {
 		return ErrInvalidMeasurements
 	}
 	if mv.Measurements == nil {
-		mv.Measurements = make(map[string]float64, 1)
+		mv.Measurements = make(map[string]int, 1)
 	}
 	mv.Measurements[key] = value
 	return nil
@@ -222,7 +227,7 @@ func (mv ModelVariation) ToItemSpec() ItemSpec {
 	return ItemSpec{
 		ModelNumber:  mv.ModelNumber,
 		Size:         mv.Size,
-		Color:        mv.Color,
+		Color:        mv.Color.Name, // 旧来の string ベース API とは Name を共有
 		Measurements: cloneMeasurements(mv.Measurements),
 	}
 }
@@ -316,19 +321,19 @@ func sizeAllowed(size string) bool {
 	return ok
 }
 
-func colorAllowed(color string) bool {
+func colorAllowed(colorName string) bool {
 	if len(AllowedColors) == 0 {
 		return true
 	}
-	_, ok := AllowedColors[color]
+	_, ok := AllowedColors[colorName]
 	return ok
 }
 
-func cloneMeasurements(m map[string]float64) map[string]float64 {
+func cloneMeasurements(m map[string]int) map[string]int {
 	if m == nil {
 		return nil
 	}
-	out := make(map[string]float64, len(m))
+	out := make(map[string]int, len(m))
 	for k, v := range m {
 		out[k] = v
 	}

@@ -20,22 +20,25 @@ import {
 import "../styles/model.css";
 import "../../../../shell/src/shared/ui/card.css";
 
-export type ModelNumber = {
-  size: string;  // 例: "S" | "M" | "L"
-  color: string; // 例: "ホワイト" | "ブラック"
-  code: string;  // 例: "LM-SB-S-WHT"
-};
-
+/**
+ * サイズ行の見た目用の最小情報
+ */
 type SizeLike = { id: string; sizeLabel: string };
 
 type ModelNumberCardProps = {
+  /** 行方向：サイズ一覧 */
   sizes: SizeLike[];
+
+  /** 列方向：カラー名一覧 */
   colors: string[];
-  modelNumbers: ModelNumber[];
+
+  /** 表示用：サイズ×カラーのコード値を取得する関数（ロジックは hook 側） */
+  getCode: (sizeLabel: string, color: string) => string;
+
   className?: string;
   mode?: "edit" | "view";
 
-  /** hook に変更通知する */
+  /** 変更通知（ロジックは hook 側に委譲） */
   onChangeModelNumber?: (
     sizeLabel: string,
     color: string,
@@ -43,65 +46,26 @@ type ModelNumberCardProps = {
   ) => void;
 };
 
-const makeKey = (sizeLabel: string, color: string) =>
-  `${sizeLabel}__${color}`;
-
 const ModelNumberCard: React.FC<ModelNumberCardProps> = ({
   sizes,
   colors,
-  modelNumbers,
+  getCode,
   className,
   mode = "edit",
   onChangeModelNumber,
 }) => {
   const isEdit = mode === "edit";
-
-  // 内部編集用の state
-  const [codeMap, setCodeMap] = React.useState<Record<string, string>>({});
-
-  // props → state 反映
-  React.useEffect(() => {
-    const next: Record<string, string> = {};
-
-    sizes.forEach((s) => {
-      colors.forEach((c) => {
-        const found =
-          modelNumbers.find(
-            (m) => m.size === s.sizeLabel && m.color === c,
-          )?.code ?? "";
-        next[makeKey(s.sizeLabel, c)] = found;
-      });
-    });
-
-    setCodeMap(next);
-  }, [sizes, colors, modelNumbers]);
-
-  const getValue = (sizeLabel: string, color: string) => {
-    const key = makeKey(sizeLabel, color);
-    return codeMap[key] ?? "";
-  };
+  const readonlyProps = { variant: "readonly" as const, readOnly: true };
 
   const handleChange =
     (sizeLabel: string, color: string) =>
     (e: React.ChangeEvent<HTMLInputElement>) => {
       if (!isEdit) return;
-
       const nextCode = e.target.value;
-      const key = makeKey(sizeLabel, color);
-
-      // ローカル state 更新
-      setCodeMap((prev) => ({
-        ...prev,
-        [key]: nextCode,
-      }));
-
-      // hook に伝える
       if (onChangeModelNumber) {
         onChangeModelNumber(sizeLabel, color, nextCode);
       }
     };
-
-  const readonlyProps = { variant: "readonly" as const, readOnly: true };
 
   return (
     <Card
@@ -141,7 +105,7 @@ const ModelNumberCard: React.FC<ModelNumberCardProps> = ({
                   <TableCell key={c}>
                     <Input
                       {...(!isEdit ? readonlyProps : {})}
-                      value={getValue(s.sizeLabel, c)}
+                      value={getCode(s.sizeLabel, c)}
                       onChange={handleChange(s.sizeLabel, c)}
                       placeholder="例: LM-SB-S-WHT"
                       aria-label={`${s.sizeLabel} / ${c} のモデルナンバー`}

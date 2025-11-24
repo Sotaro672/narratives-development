@@ -1,8 +1,8 @@
+// backend/internal/infrastructure/firestore/model_repository_fs.go
 package firestore
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"strings"
@@ -81,7 +81,6 @@ func (r *ModelRepositoryFS) GetModelData(ctx context.Context, productID string) 
 	}
 
 	return &modeldom.ModelData{
-		ProductID:          productID,
 		ProductBlueprintID: blueprintID,
 		Variations:         vars,
 		UpdatedAt:          updatedAt,
@@ -113,9 +112,6 @@ func (r *ModelRepositoryFS) GetModelDataByBlueprintID(ctx context.Context, bluep
 	if data == nil {
 		return nil, fmt.Errorf("empty model_set: %s", snap.Ref.ID)
 	}
-
-	productID := strings.TrimSpace(snap.Ref.ID)
-
 	var updatedAt time.Time
 	if v, ok := data["updatedAt"].(time.Time); ok {
 		updatedAt = v.UTC()
@@ -127,7 +123,6 @@ func (r *ModelRepositoryFS) GetModelDataByBlueprintID(ctx context.Context, bluep
 	}
 
 	return &modeldom.ModelData{
-		ProductID:          productID,
 		ProductBlueprintID: blueprintID,
 		Variations:         vars,
 		UpdatedAt:          updatedAt,
@@ -135,7 +130,7 @@ func (r *ModelRepositoryFS) GetModelDataByBlueprintID(ctx context.Context, bluep
 }
 
 // ------------------------------------------------------------
-// model_sets 更新（残す）
+// model_sets 更新
 // ------------------------------------------------------------
 
 func (r *ModelRepositoryFS) UpdateModelData(ctx context.Context, productID string, updates modeldom.ModelDataUpdate) (*modeldom.ModelData, error) {
@@ -214,7 +209,10 @@ func (r *ModelRepositoryFS) CreateModelVariation(ctx context.Context, productID 
 	// resolve blueprint
 	snap, err := r.modelSetsCol().Doc(productID).Get(ctx)
 	if err != nil {
-		return nil, modeldom.ErrNotFound
+		if status.Code(err) == codes.NotFound {
+			return nil, modeldom.ErrNotFound
+		}
+		return nil, err
 	}
 
 	data := snap.Data()
@@ -224,6 +222,7 @@ func (r *ModelRepositoryFS) CreateModelVariation(ctx context.Context, productID 
 		return nil, fmt.Errorf("model_set missing productBlueprintId")
 	}
 
+	now := time.Now().UTC()
 	docRef := r.variationsCol().NewDoc()
 
 	v := modeldom.ModelVariation{
@@ -231,8 +230,14 @@ func (r *ModelRepositoryFS) CreateModelVariation(ctx context.Context, productID 
 		ProductBlueprintID: blueprintID,
 		ModelNumber:        strings.TrimSpace(variation.ModelNumber),
 		Size:               strings.TrimSpace(variation.Size),
-		Color:              strings.TrimSpace(variation.Color),
-		Measurements:       variation.Measurements,
+		Color: modeldom.Color{
+			Name: strings.TrimSpace(variation.Color.Name),
+			RGB:  variation.Color.RGB,
+		},
+		Measurements: variation.Measurements,
+		CreatedAt:    now,
+		UpdatedAt:    now,
+		// CreatedBy / UpdatedBy / Deleted* はここでは設定しない（usecase で補完する前提でも OK）
 	}
 
 	if _, err := docRef.Create(ctx, modelVariationToDoc(v)); err != nil {
@@ -255,28 +260,46 @@ func (r *ModelRepositoryFS) UpdateModelVariation(ctx context.Context, variationI
 		return nil, errors.New("firestore client is nil")
 	}
 	variationID = strings.TrimSpace(variationID)
+	if variationID == "" {
+		return nil, modeldom.ErrNotFound
+	}
 
 	docRef := r.variationsCol().Doc(variationID)
 	var fsUpdates []firestore.Update
 
 	if updates.Size != nil {
-		fsUpdates = append(fsUpdates, firestore.Update{Path: "size", Value: *updates.Size})
+		fsUpdates = append(fsUpdates, firestore.Update{Path: "size", Value: strings.TrimSpace(*updates.Size)})
 	}
 	if updates.Color != nil {
-		fsUpdates = append(fsUpdates, firestore.Update{Path: "color", Value: *updates.Color})
+		fsUpdates = append(fsUpdates, firestore.Update{
+			Path: "color",
+			Value: map[string]any{
+				"name": strings.TrimSpace(updates.Color.Name),
+				"rgb":  updates.Color.RGB,
+			},
+		})
 	}
 	if updates.ModelNumber != nil {
-		fsUpdates = append(fsUpdates, firestore.Update{Path: "modelNumber", Value: *updates.ModelNumber})
+		fsUpdates = append(fsUpdates, firestore.Update{Path: "modelNumber", Value: strings.TrimSpace(*updates.ModelNumber)})
 	}
 	if updates.Measurements != nil {
 		fsUpdates = append(fsUpdates, firestore.Update{Path: "measurements", Value: updates.Measurements})
 	}
+
+	// updatedAt は必ず更新
+	fsUpdates = append(fsUpdates, firestore.Update{
+		Path:  "updatedAt",
+		Value: time.Now().UTC(),
+	})
 
 	if len(fsUpdates) == 0 {
 		return r.GetModelVariationByID(ctx, variationID)
 	}
 
 	if _, err := docRef.Update(ctx, fsUpdates); err != nil {
+		if status.Code(err) == codes.NotFound {
+			return nil, modeldom.ErrNotFound
+		}
 		return nil, err
 	}
 
@@ -288,9 +311,17 @@ func (r *ModelRepositoryFS) DeleteModelVariation(ctx context.Context, variationI
 		return nil, errors.New("firestore client is nil")
 	}
 
+	variationID = strings.TrimSpace(variationID)
+	if variationID == "" {
+		return nil, modeldom.ErrNotFound
+	}
+
 	snap, err := r.variationsCol().Doc(variationID).Get(ctx)
 	if err != nil {
-		return nil, modeldom.ErrNotFound
+		if status.Code(err) == codes.NotFound {
+			return nil, modeldom.ErrNotFound
+		}
+		return nil, err
 	}
 
 	v, err := docToModelVariation(snap)
@@ -298,6 +329,7 @@ func (r *ModelRepositoryFS) DeleteModelVariation(ctx context.Context, variationI
 		return nil, err
 	}
 
+	// ここでは物理削除のまま（論理削除にしたい場合は DeletedAt/DeletedBy を更新する実装に変更）
 	if _, err := snap.Ref.Delete(ctx); err != nil {
 		return nil, err
 	}
@@ -307,6 +339,7 @@ func (r *ModelRepositoryFS) DeleteModelVariation(ctx context.Context, variationI
 // ------------------------------------------------------------
 // ReplaceModelVariations（大量更新）
 // ------------------------------------------------------------
+
 func (r *ModelRepositoryFS) ReplaceModelVariations(
 	ctx context.Context,
 	productID string,
@@ -322,7 +355,7 @@ func (r *ModelRepositoryFS) ReplaceModelVariations(
 		return nil, modeldom.ErrNotFound
 	}
 
-	// 1. モデルセットから blueprintID を取得
+	// モデルセットから blueprintID を取得
 	snap, err := r.modelSetsCol().Doc(productID).Get(ctx)
 	if err != nil {
 		if status.Code(err) == codes.NotFound {
@@ -338,35 +371,40 @@ func (r *ModelRepositoryFS) ReplaceModelVariations(
 		return nil, fmt.Errorf("model_set missing productBlueprintId")
 	}
 
-	// 2. 古い variations を全取得
-	it := r.variationsCol().
-		Where("productBlueprintId", "==", blueprintID).
-		Documents(ctx)
-
-	var toDelete []*firestore.DocumentRef
-	for {
-		doc, err := it.Next()
-		if err == iterator.Done {
-			break
-		}
-		if err != nil {
-			return nil, err
-		}
-		toDelete = append(toDelete, doc.Ref)
-	}
-
-	// Delete & Insert は chunk に分けて安全に処理
+	// 既存 variations を削除（blueprint 単位で）
+	// Firestore のバッチ上限を考慮しつつ削除
 	const chunkSize = 400
 
-	// ------------------------------------------------------------
-	// 4. variations の新規挿入（トランザクション使用）
-	// ------------------------------------------------------------
+	existing, err := r.listVariationsByBlueprintID(ctx, blueprintID)
+	if err != nil {
+		return nil, err
+	}
+
+	for i := 0; i < len(existing); i += chunkSize {
+		end := i + chunkSize
+		if end > len(existing) {
+			end = len(existing)
+		}
+		chunk := existing[i:end]
+
+		batch := r.Client.Batch()
+		for _, v := range chunk {
+			ref := r.variationsCol().Doc(v.ID)
+			batch.Delete(ref)
+		}
+		if _, err := batch.Commit(ctx); err != nil {
+			return nil, err
+		}
+	}
+
+	// 新規 variations を挿入
 	for i := 0; i < len(variations); i += chunkSize {
 		end := i + chunkSize
 		if end > len(variations) {
 			end = len(variations)
 		}
 		chunk := variations[i:end]
+		now := time.Now().UTC()
 
 		err := r.Client.RunTransaction(ctx, func(ctx context.Context, tx *firestore.Transaction) error {
 			for _, nv := range chunk {
@@ -377,8 +415,13 @@ func (r *ModelRepositoryFS) ReplaceModelVariations(
 					ProductBlueprintID: blueprintID,
 					ModelNumber:        strings.TrimSpace(nv.ModelNumber),
 					Size:               strings.TrimSpace(nv.Size),
-					Color:              strings.TrimSpace(nv.Color),
-					Measurements:       nv.Measurements,
+					Color: modeldom.Color{
+						Name: strings.TrimSpace(nv.Color.Name),
+						RGB:  nv.Color.RGB,
+					},
+					Measurements: nv.Measurements,
+					CreatedAt:    now,
+					UpdatedAt:    now,
 				}
 
 				if err := tx.Set(docRef, modelVariationToDoc(mv)); err != nil {
@@ -392,7 +435,7 @@ func (r *ModelRepositoryFS) ReplaceModelVariations(
 		}
 	}
 
-	// 5. 挿入後の最新 variations を返す
+	// 挿入後の最新 variations を返す
 	return r.listVariationsByBlueprintID(ctx, blueprintID)
 }
 
@@ -405,7 +448,7 @@ func (r *ModelRepositoryFS) listVariationsByBlueprintID(ctx context.Context, blu
 		Where("productBlueprintId", "==", blueprintID).
 		OrderBy("modelNumber", firestore.Asc).
 		OrderBy("size", firestore.Asc).
-		OrderBy("color", firestore.Asc)
+		OrderBy("color.name", firestore.Asc)
 
 	it := q.Documents(ctx)
 	defer it.Stop()
@@ -415,6 +458,9 @@ func (r *ModelRepositoryFS) listVariationsByBlueprintID(ctx context.Context, blu
 		doc, err := it.Next()
 		if err == iterator.Done {
 			break
+		}
+		if err != nil {
+			return nil, err
 		}
 		v, err := docToModelVariation(doc)
 		if err != nil {
@@ -438,34 +484,95 @@ func docToModelVariation(doc *firestore.DocumentSnapshot) (modeldom.ModelVariati
 		return ""
 	}
 
+	// Color は { name, rgb } として保存されている前提
+	var color modeldom.Color
+	if raw, ok := data["color"]; ok && raw != nil {
+		switch v := raw.(type) {
+		case map[string]any:
+			if n, ok2 := v["name"].(string); ok2 {
+				color.Name = strings.TrimSpace(n)
+			}
+			switch rv := v["rgb"].(type) {
+			case int64:
+				color.RGB = int(rv)
+			case int:
+				color.RGB = rv
+			case float64:
+				color.RGB = int(rv)
+			}
+		default:
+			// 旧データ互換: color が string の場合は name として扱い rgb=0
+			if s, ok2 := raw.(string); ok2 {
+				color.Name = strings.TrimSpace(s)
+				color.RGB = 0
+			}
+		}
+	}
+
+	// measurements: map[string]int として扱う
 	getMeasurements := func() modeldom.Measurements {
 		raw, ok := data["measurements"]
 		if !ok || raw == nil {
 			return nil
 		}
+		out := make(modeldom.Measurements)
 		switch vv := raw.(type) {
 		case map[string]any:
-			out := make(modeldom.Measurements)
 			for k, v := range vv {
 				switch n := v.(type) {
-				case float64:
-					out[k] = n
 				case int64:
-					out[k] = float64(n)
+					out[k] = int(n)
 				case int:
-					out[k] = float64(n)
+					out[k] = n
+				case float64:
+					out[k] = int(n)
 				}
 			}
-			return out
-		case string:
-			if vv == "" {
-				return nil
+		case map[string]int:
+			for k, v := range vv {
+				out[k] = v
 			}
-			var m modeldom.Measurements
-			_ = json.Unmarshal([]byte(vv), &m)
-			return m
+		case map[string]int64:
+			for k, v := range vv {
+				out[k] = int(v)
+			}
 		}
-		return nil
+		if len(out) == 0 {
+			return nil
+		}
+		return out
+	}
+
+	var createdAt, updatedAt time.Time
+	if v, ok := data["createdAt"].(time.Time); ok {
+		createdAt = v.UTC()
+	}
+	if v, ok := data["updatedAt"].(time.Time); ok {
+		updatedAt = v.UTC()
+	}
+
+	var deletedAt *time.Time
+	if v, ok := data["deletedAt"].(time.Time); ok {
+		t := v.UTC()
+		deletedAt = &t
+	}
+
+	var createdBy *string
+	if v, ok := data["createdBy"].(string); ok && strings.TrimSpace(v) != "" {
+		s := strings.TrimSpace(v)
+		createdBy = &s
+	}
+
+	var updatedBy *string
+	if v, ok := data["updatedBy"].(string); ok && strings.TrimSpace(v) != "" {
+		s := strings.TrimSpace(v)
+		updatedBy = &s
+	}
+
+	var deletedBy *string
+	if v, ok := data["deletedBy"].(string); ok && strings.TrimSpace(v) != "" {
+		s := strings.TrimSpace(v)
+		deletedBy = &s
 	}
 
 	return modeldom.ModelVariation{
@@ -473,8 +580,14 @@ func docToModelVariation(doc *firestore.DocumentSnapshot) (modeldom.ModelVariati
 		ProductBlueprintID: getStr("productBlueprintId"),
 		ModelNumber:        getStr("modelNumber"),
 		Size:               getStr("size"),
-		Color:              getStr("color"),
+		Color:              color,
 		Measurements:       getMeasurements(),
+		CreatedAt:          createdAt,
+		CreatedBy:          createdBy,
+		UpdatedAt:          updatedAt,
+		UpdatedBy:          updatedBy,
+		DeletedAt:          deletedAt,
+		DeletedBy:          deletedBy,
 	}, nil
 }
 
@@ -483,12 +596,32 @@ func modelVariationToDoc(v modeldom.ModelVariation) map[string]any {
 		"productBlueprintId": v.ProductBlueprintID,
 		"modelNumber":        v.ModelNumber,
 		"size":               v.Size,
-		"color":              v.Color,
+		"color": map[string]any{
+			"name": v.Color.Name,
+			"rgb":  v.Color.RGB,
+		},
 	}
 
 	if v.Measurements != nil {
 		m["measurements"] = v.Measurements
 	}
-
+	if !v.CreatedAt.IsZero() {
+		m["createdAt"] = v.CreatedAt
+	}
+	if v.CreatedBy != nil {
+		m["createdBy"] = *v.CreatedBy
+	}
+	if !v.UpdatedAt.IsZero() {
+		m["updatedAt"] = v.UpdatedAt
+	}
+	if v.UpdatedBy != nil {
+		m["updatedBy"] = *v.UpdatedBy
+	}
+	if v.DeletedAt != nil {
+		m["deletedAt"] = *v.DeletedAt
+	}
+	if v.DeletedBy != nil {
+		m["deletedBy"] = *v.DeletedBy
+	}
 	return m
 }

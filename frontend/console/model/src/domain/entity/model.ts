@@ -14,6 +14,20 @@
  * =======================================================*/
 
 /**
+ * Go: Color struct
+ *   type Color struct {
+ *     Name string
+ *     RGB  int
+ *   }
+ */
+export interface Color {
+  /** カラー名（例: "グリーン"） */
+  name: string;
+  /** RGBを 0xRRGGBB などのintとして保持する想定 */
+  rgb: number;
+}
+
+/**
  * 1つの具体的なバリエーション（サイズ・カラー・実測値等）
  * Go: ModelVariation
  */
@@ -22,9 +36,14 @@ export interface ModelVariation {
   productBlueprintId: string;
   modelNumber: string;
   size: string;
-  color: string;
 
-  /** 各種寸法等の数値マップ（Record<string, number>） */
+  /** Go: Color struct */
+  color: Color;
+
+  /**
+   * 各種寸法等の数値マップ
+   * Go: map[string]int を number で表現
+   */
   measurements: Record<string, number>;
 
   /** 監査情報（任意, ISO8601） */
@@ -37,13 +56,16 @@ export interface ModelVariation {
 }
 
 /**
- * ある Product の全バリエーション集合
+ * ある ProductBlueprint の全バリエーション集合
  * Go: ModelData
+ *
+ *   type ModelData struct {
+ *     ProductBlueprintID string
+ *     Variations         []ModelVariation
+ *     UpdatedAt          time.Time
+ *   }
  */
 export interface ModelData {
-  /** Product.ID */
-  productId: string;
-
   /** ProductBlueprint.ID */
   productBlueprintId: string;
 
@@ -60,10 +82,12 @@ export type Model = ModelData;
 /**
  * Go: ItemSpec
  * （UI で単一アイテム仕様を扱うときなどに利用）
+ * Color は name だけあれば十分なケースが多いので string として扱う。
  */
 export interface ItemSpec {
   modelNumber: string;
   size: string;
+  /** カラー名（Color.name 相当） */
   color: string;
   measurements: Record<string, number>;
 }
@@ -106,6 +130,9 @@ export interface ProductionQuantity {
  * =======================================================*/
 
 export const AllowedSizes: Set<string> = new Set();
+/**
+ * Color.Name を対象にチェックする
+ */
 export const AllowedColors: Set<string> = new Set();
 
 export function isSizeAllowed(size: string): boolean {
@@ -113,13 +140,16 @@ export function isSizeAllowed(size: string): boolean {
   return AllowedSizes.has(size);
 }
 
-export function isColorAllowed(color: string): boolean {
-  if (!AllowedColors.size) return !!color.trim();
-  return AllowedColors.has(color);
+/**
+ * Color.name を対象にチェックする
+ */
+export function isColorAllowed(colorName: string): boolean {
+  if (!AllowedColors.size) return !!colorName.trim();
+  return AllowedColors.has(colorName);
 }
 
 /* =========================================================
- * バリデーション (Go の validate() と整合)
+ * バリデーション (Go の validate() と整合イメージ)
  * =======================================================*/
 
 export function validateModelVariation(mv: ModelVariation): string[] {
@@ -130,13 +160,17 @@ export function validateModelVariation(mv: ModelVariation): string[] {
     errors.push("productBlueprintId is required");
   if (!mv.modelNumber?.trim()) errors.push("modelNumber is required");
   if (!mv.size?.trim()) errors.push("size is required");
-  if (!mv.color?.trim()) errors.push("color is required");
+
+  const colorName = mv.color?.name ?? "";
+  if (!colorName.trim()) {
+    errors.push("color.name is required");
+  }
 
   if (!isSizeAllowed(mv.size)) {
     errors.push("size is not allowed");
   }
 
-  if (!isColorAllowed(mv.color)) {
+  if (!isColorAllowed(colorName)) {
     errors.push("color is not allowed");
   }
 
@@ -147,21 +181,23 @@ export function validateModelVariation(mv: ModelVariation): string[] {
         errors.push("measurements key must not be empty");
         break;
       }
-      if (typeof v !== "number" || !Number.isFinite(v)) {
-        errors.push(`measurements['${k}'] must be a finite number`);
+      if (
+        typeof v !== "number" ||
+        !Number.isFinite(v) ||
+        !Number.isInteger(v)
+      ) {
+        // Go 側は map[string]int 想定なので整数であることもチェック
+        errors.push(
+          `measurements['${k}'] must be a finite integer number`,
+        );
         break;
       }
     }
   }
 
-  // Audit coherence: updatedAt >= createdAt (ざっくりチェック)
-  if (mv.createdAt && mv.updatedAt) {
-    const ca = Date.parse(mv.createdAt);
-    const ua = Date.parse(mv.updatedAt);
-    if (!Number.isNaN(ca) && !Number.isNaN(ua) && ua < ca) {
-      errors.push("updatedAt must be >= createdAt");
-    }
-  }
+  // Go 側では createdAt / updatedAt の検証を削除しているので、
+  // こちらも必須にはしない（整合のため）
+  // 必要であれば UI 側の追加チェックとして拡張可能。
 
   return errors;
 }
@@ -169,7 +205,6 @@ export function validateModelVariation(mv: ModelVariation): string[] {
 export function validateModelData(md: ModelData): string[] {
   const errors: string[] = [];
 
-  if (!md.productId?.trim()) errors.push("productId is required");
   if (!md.productBlueprintId?.trim())
     errors.push("productBlueprintId is required");
   if (!md.updatedAt?.trim()) errors.push("updatedAt is required");
@@ -212,6 +247,14 @@ export function cloneMeasurements(
   return out;
 }
 
+/** Color を正規化 */
+export function normalizeColor(input: Color): Color {
+  return {
+    name: (input?.name ?? "").trim(),
+    rgb: Number.isFinite(input?.rgb as number) ? input.rgb : 0,
+  };
+}
+
 /** ModelVariation.from を意識した正規化ファクトリ */
 export function createModelVariation(
   input: ModelVariation,
@@ -222,7 +265,7 @@ export function createModelVariation(
     productBlueprintId: input.productBlueprintId.trim(),
     modelNumber: input.modelNumber.trim(),
     size: input.size.trim(),
-    color: input.color.trim(),
+    color: normalizeColor(input.color),
     measurements: cloneMeasurements(input.measurements),
     createdAt: input.createdAt ?? null,
     createdBy: input.createdBy ?? null,
@@ -243,7 +286,6 @@ export function createModelVariation(
 export function createModelData(input: ModelData): ModelData {
   const normalized: ModelData = {
     ...input,
-    productId: input.productId.trim(),
     productBlueprintId: input.productBlueprintId.trim(),
     updatedAt: input.updatedAt.trim(),
     variations: (input.variations || []).map(createModelVariation),
@@ -261,7 +303,7 @@ export function toItemSpec(mv: ModelVariation): ItemSpec {
   return {
     modelNumber: mv.modelNumber,
     size: mv.size,
-    color: mv.color,
+    color: mv.color.name,
     measurements: cloneMeasurements(mv.measurements),
   };
 }

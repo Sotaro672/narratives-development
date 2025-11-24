@@ -1,4 +1,4 @@
-// backend\internal\domain\model\repository_port.go
+// backend/internal/domain/model/repository_port.go
 package model
 
 import (
@@ -9,22 +9,26 @@ import (
 
 // Domain helper types (inputs/patches)
 
-type Measurements map[string]float64
+// Measurements は「各計測位置(string) → 計測値(int)」のマップ。
+// entity.go の ModelVariation.Measurements (map[string]int) に対応。
+type Measurements map[string]int
 
 // NewModelVariation corresponds to TS: Omit<ModelVariation, 'id'>
+// entity.go の ModelVariation に対応し、ID/CreatedAt/UpdatedAt などは除外。
+// Color は値オブジェクト Color{Name, RGB} をそのまま利用します。
 type NewModelVariation struct {
 	Size         string       `json:"size"`
-	Color        string       `json:"color"`
+	Color        Color        `json:"color"` // { name, rgb }
 	ModelNumber  string       `json:"modelNumber"`
-	Measurements Measurements `json:"measurements,omitempty"`
+	Measurements Measurements `json:"measurements,omitempty"` // 各計測位置: 計測値(int)
 }
 
 // ModelVariationUpdate corresponds to TS: Partial<Omit<ModelVariation, 'id'>>
 type ModelVariationUpdate struct {
 	Size         *string      `json:"size,omitempty"`
-	Color        *string      `json:"color,omitempty"`
+	Color        *Color       `json:"color,omitempty"` // 部分更新したい場合は構造に注意
 	ModelNumber  *string      `json:"modelNumber,omitempty"`
-	Measurements Measurements `json:"measurements,omitempty"` // nil to skip update
+	Measurements Measurements `json:"measurements,omitempty"` // nil なら更新スキップ
 }
 
 // ModelDataUpdate is free-form for product-level metadata updates
@@ -42,7 +46,7 @@ type VariationFilter struct {
 	ProductBlueprintID string
 
 	Sizes        []string
-	Colors       []string
+	Colors       []string // Color.Name を前提としたフィルタとして扱う想定
 	ModelNumbers []string
 
 	SearchQuery string // free text over modelNumber/size/color (implementation-defined)
@@ -99,8 +103,6 @@ type RepositoryPort interface {
 
 	// Variations (CRUD)
 	ListVariations(ctx context.Context, filter VariationFilter, sort VariationSort, page Page) (VariationPageResult, error)
-	CountVariations(ctx context.Context, filter VariationFilter) (int, error)
-
 	GetModelVariations(ctx context.Context, productID string) ([]ModelVariation, error)
 	GetModelVariationByID(ctx context.Context, variationID string) (*ModelVariation, error)
 	CreateModelVariation(ctx context.Context, productID string, variation NewModelVariation) (*ModelVariation, error)
@@ -112,12 +114,7 @@ type RepositoryPort interface {
 
 	// Convenience aggregations (resolver-style)
 	GetSizeVariations(ctx context.Context, productID string) ([]SizeVariation, error)
-	GetProductionQuantities(ctx context.Context, productID string) ([]ProductionQuantity, error)
 	GetModelNumbers(ctx context.Context, productID string) ([]ModelNumber, error)
-	GetModelVariationsWithQuantity(ctx context.Context, productID string) ([]ModelVariationWithQuantity, error)
-
-	// Transaction boundary (optional support)
-	WithTx(ctx context.Context, fn func(ctx context.Context) error) error
 }
 
 // Common repository errors
