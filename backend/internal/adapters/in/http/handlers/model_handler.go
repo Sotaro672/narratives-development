@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"encoding/json"
+	"log"
 	"net/http"
 	"strings"
 
@@ -113,6 +114,16 @@ func (h *ModelHandler) createVariation(w http.ResponseWriter, r *http.Request, p
 		return
 	}
 
+	// ★ 受信した measurements の生データをログ出力（float64 マップ）
+	log.Printf(
+		"[ModelHandler] received CreateModelVariationRequest: productID=%s, modelNumber=%s, size=%s, color=%s, measurements(raw)=%+v",
+		productID,
+		req.ModelNumber,
+		req.Size,
+		req.Color,
+		req.Measurements,
+	)
+
 	// frontend から来る measurements(map[string]float64) → domain 側の map[string]int へ変換
 	ms := make(map[string]int)
 	for k, v := range req.Measurements {
@@ -123,6 +134,16 @@ func (h *ModelHandler) createVariation(w http.ResponseWriter, r *http.Request, p
 		// 必要であれば 0 未満を弾くなどのバリデーションもここで可能
 		ms[key] = int(v)
 	}
+
+	// ★ 変換後の measurements（int マップ）もログ出力
+	log.Printf(
+		"[ModelHandler] converted measurements for domain: productID=%s, modelNumber=%s, size=%s, color=%s, measurements(int)=%+v",
+		productID,
+		strings.TrimSpace(req.ModelNumber),
+		strings.TrimSpace(req.Size),
+		strings.TrimSpace(req.Color),
+		ms,
+	)
 
 	newVar := modeldom.NewModelVariation{
 		ModelNumber: strings.TrimSpace(req.ModelNumber),

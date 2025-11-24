@@ -119,7 +119,6 @@ export interface UseProductBlueprintCreateResult {
   // 担当者系
   onEditAssignee: () => void;
   onClickAssignee: () => void;
-  onClickCreatedBy: () => void;
 }
 
 /**
@@ -272,8 +271,7 @@ export function useProductBlueprintCreate(): UseProductBlueprintCreateResult {
   // backend に送るのは memberId（AssigneeID）
   const [assigneeId, setAssigneeId] = React.useState("");
   // 表示用のラベル（氏名 / メールアドレスなど）
-  const [assigneeDisplayName, setAssigneeDisplayName] =
-    React.useState("");
+  const [assigneeDisplayName, setAssigneeDisplayName] = React.useState("");
   const [createdBy] = React.useState("");
   const [createdAt] = React.useState("");
 
@@ -423,7 +421,8 @@ export function useProductBlueprintCreate(): UseProductBlueprintCreateResult {
     try {
       await createProductBlueprint(apiParams);
       alert("商品設計を作成しました。");
-      navigate(-1);
+      // ★ 履歴の -1 ではなく、商品設計一覧の絶対パスに遷移
+      navigate("/productBlueprint");
     } catch (e: any) {
       console.error(
         "[useProductBlueprintCreate] failed to create product blueprint:",
@@ -575,10 +574,6 @@ export function useProductBlueprintCreate(): UseProductBlueprintCreateResult {
     });
   }, [assigneeId, assigneeDisplayName]);
 
-  const onClickCreatedBy = React.useCallback(() => {
-    console.log("[useProductBlueprintCreate] createdBy clicked:", createdBy);
-  }, [createdBy]);
-
   // -------------------------------
   // 返却する ViewModel
   // -------------------------------
@@ -634,6 +629,5 @@ export function useProductBlueprintCreate(): UseProductBlueprintCreateResult {
 
     onEditAssignee,
     onClickAssignee,
-    onClickCreatedBy,
   };
 }

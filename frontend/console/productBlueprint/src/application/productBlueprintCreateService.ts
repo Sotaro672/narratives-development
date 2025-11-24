@@ -91,7 +91,10 @@ export type NewModelVariationPayload = {
  * chest / shoulder / waist / length の 4 項目だけを返す。
  * （hip / thigh は呼び出し側で null を詰める）
  */
-function buildMeasurements(itemType: ItemType, size: SizeRow): Omit<NewModelVariationMeasurements, "hip" | "thigh"> {
+function buildMeasurements(
+  itemType: ItemType,
+  size: SizeRow,
+): Omit<NewModelVariationMeasurements, "hip" | "thigh"> {
   // ボトムスの場合: ウエスト / 丈 を優先して埋める
   if (itemType === "ボトムス") {
     return {
@@ -127,6 +130,17 @@ function toNewModelVariationPayload(
   },
 ): NewModelVariationPayload {
   const baseMeasurements = buildMeasurements(itemType, sizeRow);
+
+  // 🔍 buildMeasurements で組み立てた値をここでログ出力
+  console.log(
+    "[productBlueprintCreateService] buildMeasurements result",
+    {
+      itemType,
+      sizeRow,
+      base,
+      measurements: baseMeasurements,
+    },
+  );
 
   return {
     sizeLabel: base.sizeLabel,
@@ -199,6 +213,15 @@ export async function createProductBlueprint(
       variations.push(payload);
     }
   }
+
+  // 🔍 backend（/models/{productId}/variations）に渡す直前の payload 全体をログ出力
+  console.log(
+    "[productBlueprintCreateService] variations payload for backend",
+    {
+      productId,
+      variations,
+    },
+  );
 
   // 4. modelCreateService.tsx へ JSON を渡す
   //    - ここでは「productBlueprint を Create した結果」を元に
