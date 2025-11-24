@@ -124,21 +124,20 @@ func (t ProductIDTag) validate() error {
 }
 
 // ======================================
-// Entity (Variations → VariationIDs に変更)
+// Entity（★ VariationIDs は削除済み）
 // ======================================
 
 type ProductBlueprint struct {
 	ID               string
 	ProductName      string
+	CompanyID        string
 	BrandID          string
 	ItemType         ItemType
-	VariationIDs     []string
 	Fit              string
 	Material         string
 	Weight           float64
 	QualityAssurance []string
 	ProductIdTag     ProductIDTag
-	CompanyID        string
 	AssigneeID       string
 	CreatedBy        *string
 	CreatedAt        time.Time
@@ -171,7 +170,6 @@ var (
 func New(
 	id, productName, brandID string,
 	itemType ItemType,
-	variationIDs []string,
 	fit, material string,
 	weight float64,
 	qualityAssurance []string,
@@ -187,7 +185,6 @@ func New(
 		ProductName:      strings.TrimSpace(productName),
 		BrandID:          strings.TrimSpace(brandID),
 		ItemType:         itemType,
-		VariationIDs:     dedupTrim(variationIDs),
 		Fit:              strings.TrimSpace(fit),
 		Material:         strings.TrimSpace(material),
 		Weight:           weight,
@@ -213,7 +210,6 @@ func New(
 func NewFromStringTime(
 	id, productName, brandID string,
 	itemType ItemType,
-	variationIDs []string,
 	fit, material string,
 	weight float64,
 	qualityAssurance []string,
@@ -231,7 +227,7 @@ func NewFromStringTime(
 
 	return New(
 		id, productName, brandID,
-		itemType, variationIDs,
+		itemType,
 		fit, material, weight,
 		qualityAssurance, productIDTag,
 		assigneeID, createdBy, t,
@@ -265,11 +261,6 @@ func (p *ProductBlueprint) UpdateTag(tag ProductIDTag, now time.Time, updatedBy 
 	p.ProductIdTag = tag
 	p.touch(now, updatedBy)
 	return nil
-}
-
-func (p *ProductBlueprint) UpdateVariationIDs(ids []string, now time.Time, updatedBy *string) {
-	p.VariationIDs = dedupTrim(ids)
-	p.touch(now, updatedBy)
 }
 
 // ======================================

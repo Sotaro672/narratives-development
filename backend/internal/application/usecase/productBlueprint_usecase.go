@@ -75,8 +75,6 @@ func (u *ProductBlueprintUsecase) AttachVariations(
 		return err
 	}
 
-	pb.VariationIDs = normalizeVariationIDs(variationIDs)
-
 	_, err = u.repo.Save(ctx, pb)
 	return err
 }
@@ -102,34 +100,9 @@ func (u *ProductBlueprintUsecase) CreateBlueprintAndModels(
 		return created, nil
 	}
 
-	// 2. VariationIDs を紐付けて保存
-	created.VariationIDs = normalizeVariationIDs(variationIDs)
-
 	saved, err := u.repo.Save(ctx, created)
 	if err != nil {
 		return productbpdom.ProductBlueprint{}, err
 	}
 	return saved, nil
-}
-
-// ------------------------------------------------------------
-// Helpers
-// ------------------------------------------------------------
-
-func normalizeVariationIDs(ids []string) []string {
-	seen := make(map[string]struct{}, len(ids))
-	out := make([]string, 0, len(ids))
-
-	for _, id := range ids {
-		id = strings.TrimSpace(id)
-		if id == "" {
-			continue
-		}
-		if _, ok := seen[id]; ok {
-			continue
-		}
-		seen[id] = struct{}{}
-		out = append(out, id)
-	}
-	return out
 }

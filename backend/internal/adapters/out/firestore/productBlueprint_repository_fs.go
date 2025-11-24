@@ -266,14 +266,12 @@ func docToProductBlueprint(doc *firestore.DocumentSnapshot) (pbdom.ProductBluepr
 	qas := getStringSlice("qualityAssurance", "quality_assurance")
 	tagTypeStr := getStr("productIdTagType", "product_id_tag_type")
 	itemTypeStr := getStr("itemType", "item_type")
-	variationIDs := getStringSlice("variationIds", "variation_ids")
 
 	pb := pbdom.ProductBlueprint{
 		ID:               doc.Ref.ID,
 		ProductName:      getStr("productName", "product_name"),
 		BrandID:          getStr("brandId", "brand_id"),
 		ItemType:         pbdom.ItemType(itemTypeStr),
-		VariationIDs:     variationIDs,
 		Fit:              getStr("fit"),
 		Material:         getStr("material"),
 		Weight:           getFloat64(data["weight"]),
@@ -304,11 +302,6 @@ func productBlueprintToDoc(v pbdom.ProductBlueprint, createdAt, updatedAt time.T
 		"companyId":   strings.TrimSpace(v.CompanyID),
 		"createdAt":   createdAt.UTC(),
 		"updatedAt":   updatedAt.UTC(),
-	}
-
-	// Variation IDs: store as variationIds if present.
-	if len(v.VariationIDs) > 0 {
-		m["variationIds"] = dedupTrimStrings(v.VariationIDs)
 	}
 
 	if len(v.QualityAssurance) > 0 {

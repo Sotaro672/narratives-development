@@ -1,3 +1,4 @@
+// backend/internal/adapters/in/http/handlers/productBlueprint_handler.go
 package handlers
 
 import (
@@ -21,13 +22,15 @@ func (h *ProductBlueprintHandler) ServeHTTP(w http.ResponseWriter, r *http.Reque
 	w.Header().Set("Content-Type", "application/json")
 
 	switch {
+	// ----------------------------
+	// POST /product-blueprints
+	// ----------------------------
 	case r.Method == http.MethodPost && r.URL.Path == "/product-blueprints":
 		h.post(w, r)
 
-	case r.Method == http.MethodPatch && strings.HasPrefix(r.URL.Path, "/product-blueprints/") &&
-		strings.HasSuffix(r.URL.Path, "/variations"):
-		h.attachVariations(w, r)
-
+	// ----------------------------
+	// GET /product-blueprints/{id}
+	// ----------------------------
 	case r.Method == http.MethodGet && strings.HasPrefix(r.URL.Path, "/product-blueprints/"):
 		id := strings.TrimPrefix(r.URL.Path, "/product-blueprints/")
 		h.get(w, r, id)
@@ -41,6 +44,7 @@ func (h *ProductBlueprintHandler) ServeHTTP(w http.ResponseWriter, r *http.Reque
 // ----------------------------
 // POST /product-blueprints
 // ----------------------------
+
 type CreateProductBlueprintInput struct {
 	ProductName      string   `json:"productName"`
 	BrandId          string   `json:"brandId"`
@@ -53,6 +57,8 @@ type CreateProductBlueprintInput struct {
 	Colors           []string `json:"colors"`
 	AssigneeId       string   `json:"assigneeId"`
 	CompanyId        string   `json:"companyId"`
+	// ★ 追加: 作成者を JSON から受け取りたい場合
+	CreatedBy string `json:"createdBy,omitempty"`
 }
 
 func (h *ProductBlueprintHandler) post(w http.ResponseWriter, r *http.Request) {
@@ -63,6 +69,12 @@ func (h *ProductBlueprintHandler) post(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusBadRequest)
 		_ = json.NewEncoder(w).Encode(map[string]string{"error": "invalid json"})
 		return
+	}
+
+	// createdBy を *string に変換（空文字なら nil）
+	var createdBy *string
+	if v := strings.TrimSpace(in.CreatedBy); v != "" {
+		createdBy = &v
 	}
 
 	// ---------- Domain 変換 ----------
@@ -76,9 +88,8 @@ func (h *ProductBlueprintHandler) post(w http.ResponseWriter, r *http.Request) {
 		QualityAssurance: in.QualityAssurance,
 		AssigneeID:       in.AssigneeId,
 		CompanyID:        in.CompanyId,
-
-		// variations は POST では扱わない（後から PATCH で紐付け）
-		VariationIDs: []string{},
+		CreatedBy:        createdBy,
+		// VariationIDs はドメイン側から削除済みなので指定しない
 	}
 
 	created, err := h.uc.Create(ctx, pb)
@@ -92,45 +103,9 @@ func (h *ProductBlueprintHandler) post(w http.ResponseWriter, r *http.Request) {
 }
 
 // ----------------------------
-// PATCH /product-blueprints/{id}/variations
-// ----------------------------
-type AttachVariationsInput struct {
-	VariationIDs []string `json:"variationIds"`
-}
-
-func (h *ProductBlueprintHandler) attachVariations(w http.ResponseWriter, r *http.Request) {
-	ctx := r.Context()
-
-	id := strings.TrimPrefix(r.URL.Path, "/product-blueprints/")
-	id = strings.TrimSuffix(id, "/variations")
-	id = strings.TrimSpace(id)
-
-	if id == "" {
-		w.WriteHeader(http.StatusBadRequest)
-		_ = json.NewEncoder(w).Encode(map[string]string{"error": "invalid id"})
-		return
-	}
-
-	var in AttachVariationsInput
-	if err := json.NewDecoder(r.Body).Decode(&in); err != nil {
-		w.WriteHeader(http.StatusBadRequest)
-		_ = json.NewEncoder(w).Encode(map[string]string{"error": "invalid json"})
-		return
-	}
-
-	err := h.uc.AttachVariations(ctx, id, in.VariationIDs)
-	if err != nil {
-		writeProductBlueprintErr(w, err)
-		return
-	}
-
-	w.WriteHeader(http.StatusOK)
-	_ = json.NewEncoder(w).Encode(map[string]string{"status": "ok"})
-}
-
-// ----------------------------
 // GET /product-blueprints/{id}
 // ----------------------------
+
 func (h *ProductBlueprintHandler) get(w http.ResponseWriter, r *http.Request, id string) {
 	ctx := r.Context()
 
@@ -148,6 +123,10 @@ func (h *ProductBlueprintHandler) get(w http.ResponseWriter, r *http.Request, id
 	}
 	_ = json.NewEncoder(w).Encode(pb)
 }
+
+// ----------------------------
+// 共通エラーハンドラ
+// ----------------------------
 
 func writeProductBlueprintErr(w http.ResponseWriter, err error) {
 	code := http.StatusInternalServerError
