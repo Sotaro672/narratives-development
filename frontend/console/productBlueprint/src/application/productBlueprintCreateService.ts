@@ -3,6 +3,10 @@
 import type { ItemType, Fit } from "../domain/entity/catalog";
 import type { ProductIDTag } from "../domain/entity/productBlueprint";
 
+// ★ measurements を共通化するユーティリティ
+import { buildMeasurements } from "../../../model/src/application/buildMeasurements";
+import type { SizeRow } from "../../../model/src/domain/entity/catalog";
+
 // HTTP 呼び出しは infrastructure 層に委譲
 import {
   createProductBlueprintHTTP,
@@ -27,6 +31,12 @@ export type CreateProductBlueprintParams = {
   companyId: string;
   assigneeId?: string;
   createdBy?: string;
+
+  // ※ 実際の実装では colors / sizes / modelNumbers なども
+  //    ここに追加されている前提（useProductBlueprintCreate の apiParams と対応）
+  // colors?: string[];
+  // sizes?: SizeRow[];
+  // modelNumbers?: { size: string; color: string; code: string }[];
 };
 
 export type ProductBlueprintResponse = {
@@ -64,6 +74,37 @@ export type NewModelVariationPayload = {
   };
 };
 
+/**
+ * itemType / SizeRow / 各種コードから NewModelVariationPayload を組み立てる共通ヘルパー
+ * measurements 部分は buildMeasurements() を使って一元管理する。
+ */
+export function toNewModelVariationPayload(
+  itemType: ItemType,
+  sizeRow: SizeRow,
+  base: {
+    sizeLabel: string;
+    color: string;
+    modelNumber: string;
+    createdBy: string;
+  },
+): NewModelVariationPayload {
+  const baseMeasurements = buildMeasurements(itemType, sizeRow);
+
+  return {
+    sizeLabel: base.sizeLabel,
+    color: base.color,
+    modelNumber: base.modelNumber,
+    createdBy: base.createdBy,
+    measurements: {
+      // chest / shoulder / waist / length は buildMeasurements に委譲
+      ...baseMeasurements,
+      // まだ未対応の採寸は null で固定
+      hip: null,
+      thigh: null,
+    },
+  };
+}
+
 // ------------------------------
 // Service 本体（アプリケーション層）
 // ------------------------------
@@ -94,19 +135,22 @@ export async function createProductBlueprint(
   }
 
   // ★ ここで modelVariation を作るためのデータを組み立てる予定
-  // 例:
+  //    measurements の構築には toNewModelVariationPayload / buildMeasurements を利用する。
   //
-  // for (const v of params.modelNumbers) {
-  //   const payload: NewModelVariationPayload = {
-  //     sizeLabel: v.size,
-  //     color: v.color,
-  //     modelNumber: v.code,
-  //     createdBy: params.createdBy ?? "",
+  // if (params.modelNumbers && params.sizes) {
+  //   for (const v of params.modelNumbers) {
+  //     const sizeRow = params.sizes.find((s) => s.sizeLabel === v.size);
+  //     if (!sizeRow) continue;
   //
-  //     measurements: buildMeasurements(params.itemType, sizeRow),
-  //   };
+  //     const payload = toNewModelVariationPayload(params.itemType, sizeRow, {
+  //       sizeLabel: v.size,
+  //       color: v.color,
+  //       modelNumber: v.code,
+  //       createdBy: params.createdBy ?? "",
+  //     });
   //
-  //   await createModelVariationHTTP(productId, payload);
+  //     await createModelVariationHTTP(productId, payload);
+  //   }
   // }
 
   return json;

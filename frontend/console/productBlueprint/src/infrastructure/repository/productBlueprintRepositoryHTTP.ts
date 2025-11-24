@@ -6,7 +6,7 @@ import { auth } from "../../../../shell/src/auth/infrastructure/config/firebaseC
 import type {
   CreateProductBlueprintParams,
   ProductBlueprintResponse,
-  NewModelVariationPayload,
+  // ★ NewModelVariationPayload → 不要なので削除
 } from "../../application/productBlueprintCreateService";
 
 // 🔙 BACKEND の BASE URL
@@ -25,15 +25,6 @@ export const API_BASE = ENV_BASE || FALLBACK_BASE;
 // HTTP: ProductBlueprint 作成
 // ------------------------------
 
-/**
- * HTTP リポジトリ:
- *   POST /product-blueprints
- *
- * - Firebase Auth の ID トークンを自前で取得
- * - Backend からの JSON をそのまま返す
- * - productId の解釈や ModelVariation 生成などのビジネスロジックは
- *   application 層（productBlueprintCreateService）側に任せる。
- */
 export async function createProductBlueprintHTTP(
   params: CreateProductBlueprintParams,
 ): Promise<ProductBlueprintResponse> {
@@ -44,26 +35,19 @@ export async function createProductBlueprintHTTP(
 
   const idToken = await user.getIdToken();
 
-  // backend に渡すペイロード
-  // ここではフロントの状態をほぼそのまま JSON にして送る。
-  // backend 側の handler / adapter で domain.ProductBlueprint へマッピングする想定。
   const payload = {
     productName: params.productName,
     brandId: params.brandId,
     itemType: params.itemType,
-    // backend: Fit, Material, Weight, QualityAssurance
     fit: params.fit,
     material: params.material,
     weight: params.weight,
     qualityAssurance: params.qualityAssurance,
 
-    // backend の ProductIDTag 構造に合わせてそのまま送信
     productIdTag: params.productIdTag,
 
-    // backend: CompanyID に対応
     companyId: params.companyId,
 
-    // backend: AssigneeID（null の場合は usecase 側で補完してもよい）
     assigneeId: params.assigneeId ?? null,
     createdBy: params.createdBy ?? null,
   };
@@ -78,7 +62,6 @@ export async function createProductBlueprintHTTP(
   });
 
   if (!res.ok) {
-    // backend が { error: string } を返してくる想定
     let detail: unknown;
     try {
       detail = await res.json();
@@ -100,55 +83,4 @@ export async function createProductBlueprintHTTP(
 
   const json = (await res.json()) as ProductBlueprintResponse;
   return json;
-}
-
-// ------------------------------
-// HTTP: ModelVariation 作成（将来用）
-// ------------------------------
-
-/**
- * CreateModelVariation (POST /models/{productID}/variations) を叩く HTTP ヘルパー。
- *
- * - 現時点では application 層からは未使用だが、
- *   将来 ProductBlueprint 作成後にモデルも同時作成する際に利用する想定。
- */
-export async function createModelVariationHTTP(
-  productId: string,
-  variation: NewModelVariationPayload,
-): Promise<void> {
-  const user = auth.currentUser;
-  if (!user) {
-    throw new Error("ログイン情報が見つかりません（未ログイン）");
-  }
-
-  const idToken = await user.getIdToken();
-
-  const res = await fetch(`${API_BASE}/models/${productId}/variations`, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${idToken}`,
-    },
-    body: JSON.stringify(variation),
-  });
-
-  if (!res.ok) {
-    let detail: unknown;
-    try {
-      detail = await res.json();
-    } catch {
-      // ignore json parse error
-    }
-    console.error(
-      "[productBlueprintRepositoryHTTP] CreateModelVariation failed",
-      {
-        status: res.status,
-        statusText: res.statusText,
-        detail,
-      },
-    );
-    throw new Error(
-      `モデルバリエーションの作成に失敗しました（${res.status} ${res.statusText ?? ""}）`,
-    );
-  }
 }

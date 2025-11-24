@@ -420,24 +420,25 @@ export function useProductBlueprintCreate(): UseProductBlueprintCreateResult {
 
     // backend/internal/domain/productBlueprint.ProductBlueprint に対応する
     // CreateProductBlueprintParams を構成
-    const apiParams = {
-      productName,
-      brandId,
-      itemType,
-      fit,
-      material,
-      weight,
-      qualityAssurance,
-      productIdTag,
-      // VariationIDs はまだ存在しないため、初回は空配列で作成
-      variationIds: [] as string[],
-      companyId: effectiveCompanyId,
-      colors,
-      sizes,
-      modelNumbers,
-      // AssigneeID は memberId を渡す
-      assigneeId,
-    };
+// backend/internal/domain/productBlueprint.ProductBlueprint に対応する
+// CreateProductBlueprintParams を構成
+const apiParams = {
+  productName,
+  brandId,
+  itemType,
+  fit,
+  material,
+  weight,
+  qualityAssurance,
+  productIdTag,
+  companyId: effectiveCompanyId,
+  colors,
+  sizes,
+  modelNumbers,
+  assigneeId,
+  createdBy: currentMember?.id ?? "",
+};
+
 
     // デバッグ用スナップショット（brandName / measurementOptions / displayName も含めておく）
     console.log("[useProductBlueprintCreate] onCreate payload snapshot", {
