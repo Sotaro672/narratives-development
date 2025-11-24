@@ -93,3 +93,75 @@ export type UseSizeVariationCardResult = {
     key: keyof Omit<SizeRow, "id">,
   ) => (e: React.ChangeEvent<HTMLInputElement>) => void;
 };
+
+/* =========================================================
+ * ProductBlueprint Create 後に受け取る JSON 用の型
+ * =======================================================*/
+
+/**
+ * measurements 部分の型
+ * - productBlueprintCreateService 側の buildMeasurements が
+ *   chest / shoulder / waist / length を埋め、ここではそれをそのまま受け取る想定。
+ */
+export type NewModelVariationMeasurements = {
+  // Top
+  chest?: number | null;
+  shoulder?: number | null;
+
+  // Bottom
+  waist?: number | null;
+  length?: number | null;
+
+  // 共通で他項目を追加したい場合はここに拡張可能
+  hip?: number | null;
+  thigh?: number | null;
+};
+
+/**
+ * 1 モデルバリエーション分の payload 型
+ * - productBlueprintCreateService.ts で buildMeasurements 済みの JSON を構築し、
+ *   その 1 要素分と対応する。
+ */
+export type NewModelVariationPayload = {
+  sizeLabel: string;
+  color: string;
+  modelNumber: string;
+  createdBy: string;
+  measurements: NewModelVariationMeasurements;
+};
+
+/**
+ * productBlueprintCreateService.ts から渡される JSON 全体
+ * - 作成済み productBlueprint の ID と、その ID に紐づく variations 一覧。
+ */
+export type ModelVariationsFromProductBlueprint = {
+  /** backend の productBlueprint / model が共有する productId */
+  productId: string;
+  /** color × size × modelNumber × measurements の一覧 */
+  variations: NewModelVariationPayload[];
+};
+
+/**
+ * productBlueprintCreateService.ts からの JSON を受け取り、
+ * 将来的に CreateModelVariation API を叩くためのエントリポイント。
+ *
+ * 現時点では HTTP 呼び出しロジックは未実装で、
+ * payload を受け取ってログ出力するだけにしてある。
+ * 後で infrastructure/repository/modelRepositoryHTTP.ts を実装したら、
+ * ここから呼び出す想定。
+ */
+export async function createModelVariationsFromProductBlueprint(
+  payload: ModelVariationsFromProductBlueprint,
+): Promise<void> {
+  // TODO: infrastructure/repository/modelRepositoryHTTP.ts の
+  //       createModelVariationHTTP などを呼び出す実装を追加する。
+  console.log(
+    "[modelCreateService] createModelVariationsFromProductBlueprint payload:",
+    payload,
+  );
+
+  // 例（将来のイメージ）:
+  // for (const v of payload.variations) {
+  //   await createModelVariationHTTP(payload.productId, v);
+  // }
+}

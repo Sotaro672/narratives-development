@@ -15,8 +15,12 @@ const FALLBACK_BASE =
 
 export const API_BASE = ENV_BASE || FALLBACK_BASE;
 
+/* =========================================================
+ * backend/internal/domain/model.NewModelVariation に対応
+ * =======================================================*/
+
 /**
- * backend/internal/domain/model.NewModelVariation に対応する想定のペイロード。
+ * backend/internal/domain/model.NewModelVariation
  *
  * Go 側:
  *   type NewModelVariation struct {
@@ -25,19 +29,21 @@ export const API_BASE = ENV_BASE || FALLBACK_BASE;
  *     Color        string
  *     Measurements map[string]float64
  *   }
+ *
+ * ※ modelCreateService.tsx の NewModelVariationPayload と互換
  */
 export type CreateModelVariationRequest = {
-  modelNumber: string; // "LM-SB-S-WHT" など
+  modelNumber: string; // "LM-SB-S-WHT"
   size: string;        // "S" / "M" / ...
-  color: string;       // "ホワイト" など
+  color: string;       // "ホワイト"
   measurements?: Record<string, number | null | undefined>;
 };
 
-/**
- * 単一の ModelVariation を作成する HTTP 関数
- *
+/* =========================================================
+ * 単一 ModelVariation 作成 API
  * POST /models/{productId}/variations
- */
+ * =======================================================*/
+
 export async function createModelVariation(
   productId: string,
   payload: CreateModelVariationRequest,
@@ -47,6 +53,14 @@ export async function createModelVariation(
     throw new Error("ログイン情報が見つかりません（未ログイン）");
   }
   const idToken = await user.getIdToken();
+
+  const cleanedMeasurements =
+    payload.measurements &&
+    Object.fromEntries(
+      Object.entries(payload.measurements).filter(
+        ([, v]) => typeof v === "number",
+      ),
+    );
 
   const res = await fetch(
     `${API_BASE}/models/${encodeURIComponent(productId)}/variations`,
@@ -60,14 +74,7 @@ export async function createModelVariation(
         modelNumber: payload.modelNumber,
         size: payload.size,
         color: payload.color,
-        // null / undefined は JSON から落としたいので軽くフィルタ
-        measurements:
-          payload.measurements &&
-          Object.fromEntries(
-            Object.entries(payload.measurements).filter(
-              ([, v]) => typeof v === "number",
-            ),
-          ),
+        measurements: cleanedMeasurements,
       }),
     },
   );
@@ -77,7 +84,7 @@ export async function createModelVariation(
     try {
       detail = await res.json();
     } catch {
-      // ignore JSON parse error
+      /* ignore JSON parse error */
     }
     console.error("[modelRepositoryHTTP] createModelVariation failed", {
       status: res.status,
@@ -92,10 +99,11 @@ export async function createModelVariation(
   }
 }
 
-/**
- * 複数の ModelVariation をまとめて作成するヘルパー
- * - まとめて作りたいときに productBlueprintCreateService などから呼べるようにしておく
- */
+/* =========================================================
+ * 複数 ModelVariation の連続作成
+ * createModelVariationsFromProductBlueprint() 用
+ * =======================================================*/
+
 export async function createModelVariations(
   productId: string,
   variations: CreateModelVariationRequest[],

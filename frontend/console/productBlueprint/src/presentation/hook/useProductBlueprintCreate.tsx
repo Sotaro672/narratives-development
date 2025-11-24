@@ -14,9 +14,6 @@ import { fetchAllBrandsForCompany } from "../../../../brand/src/infrastructure/q
 import type { SizeRow } from "../../../../model/src/presentation/hook/useModelCard";
 import type { ModelNumber } from "../../../../model/src/application/modelCreateService";
 
-// ★ 採寸構築ユーティリティ（itemType に応じて measurements を組み立てる）
-import { buildMeasurements } from "../../../../model/src/application/buildMeasurements";
-
 // Auth / currentMember
 import { useAuth } from "../../../../shell/src/auth/presentation/hook/useCurrentMember";
 
@@ -135,7 +132,6 @@ export interface UseProductBlueprintCreateResult {
  *   ProductName      string
  *   BrandID          string
  *   ItemType         ItemType
- *   VariationIDs     []string
  *   Fit              string
  *   Material         string
  *   Weight           float64
@@ -330,27 +326,6 @@ export function useProductBlueprintCreate(): UseProductBlueprintCreateResult {
       errors.push("重さは 0 以上の値を入力してください。");
     }
 
-    // 採寸が 0 未満になっていないかチェック
-    if (sizes.length > 0) {
-      let hasNegativeMeasurement = false;
-      for (const s of sizes) {
-        // ★ itemType に応じて measurements を構築
-        const measurements = buildMeasurements(itemType, s);
-        const vals = Object.values(measurements);
-        if (
-          vals.some(
-            (v) => typeof v === "number" && !Number.isNaN(v) && v < 0,
-          )
-        ) {
-          hasNegativeMeasurement = true;
-          break;
-        }
-      }
-      if (hasNegativeMeasurement) {
-        errors.push("採寸には 0 未満の値を入力できません。");
-      }
-    }
-
     // カラーバリエーションは1件以上
     if (colors.length === 0) {
       errors.push("カラーバリエーションを1つ以上登録してください。");
@@ -420,25 +395,22 @@ export function useProductBlueprintCreate(): UseProductBlueprintCreateResult {
 
     // backend/internal/domain/productBlueprint.ProductBlueprint に対応する
     // CreateProductBlueprintParams を構成
-// backend/internal/domain/productBlueprint.ProductBlueprint に対応する
-// CreateProductBlueprintParams を構成
-const apiParams = {
-  productName,
-  brandId,
-  itemType,
-  fit,
-  material,
-  weight,
-  qualityAssurance,
-  productIdTag,
-  companyId: effectiveCompanyId,
-  colors,
-  sizes,
-  modelNumbers,
-  assigneeId,
-  createdBy: currentMember?.id ?? "",
-};
-
+    const apiParams = {
+      productName,
+      brandId,
+      itemType,
+      fit,
+      material,
+      weight,
+      qualityAssurance,
+      productIdTag,
+      companyId: effectiveCompanyId,
+      colors,
+      sizes,
+      modelNumbers,
+      assigneeId,
+      createdBy: currentMember?.id ?? "",
+    };
 
     // デバッグ用スナップショット（brandName / measurementOptions / displayName も含めておく）
     console.log("[useProductBlueprintCreate] onCreate payload snapshot", {
@@ -481,6 +453,7 @@ const apiParams = {
     assigneeId,
     assigneeDisplayName,
     measurementOptions,
+    currentMember?.id,
     navigate,
   ]);
 

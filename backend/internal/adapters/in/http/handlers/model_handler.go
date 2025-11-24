@@ -1,4 +1,3 @@
-// backend/internal/adapters/in/http/handlers/model_handler.go
 package handlers
 
 import (
@@ -80,10 +79,23 @@ func (h *ModelHandler) get(w http.ResponseWriter, r *http.Request, id string) {
 	_ = json.NewEncoder(w).Encode(m)
 }
 
+/* ============================================================
+ * POST /models/{productID}/variations 用のリクエスト型
+ *   frontend/console/model/src/application/modelCreateService.tsx
+ *   の CreateModelVariationRequest / NewModelVariationPayload に対応
+ * ==========================================================*/
+
+type createModelVariationRequest struct {
+	ModelNumber  string             `json:"modelNumber"`            // "LM-SB-S-WHT" など
+	Size         string             `json:"size"`                   // "S" / "M" / ...
+	Color        string             `json:"color"`                  // "ホワイト" など
+	Measurements map[string]float64 `json:"measurements,omitempty"` // chest / shoulder / waist / length など
+}
+
 // POST /models/{productID}/variations
 //
-//	Request Body: modeldom.NewModelVariation に対応する JSON
-//	Response    : 作成された ModelVariation を JSON で返す
+// Request Body: createModelVariationRequest JSON
+// Response    : 作成された ModelVariation を JSON で返す
 func (h *ModelHandler) createVariation(w http.ResponseWriter, r *http.Request, productID string) {
 	ctx := r.Context()
 
@@ -94,14 +106,35 @@ func (h *ModelHandler) createVariation(w http.ResponseWriter, r *http.Request, p
 		return
 	}
 
-	var v modeldom.NewModelVariation
-	if err := json.NewDecoder(r.Body).Decode(&v); err != nil {
+	var req createModelVariationRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		w.WriteHeader(http.StatusBadRequest)
 		_ = json.NewEncoder(w).Encode(map[string]string{"error": "invalid json"})
 		return
 	}
 
-	mv, err := h.uc.CreateModelVariation(ctx, productID, v)
+	// frontend から来る measurements(map[string]float64) → domain 側の map[string]int へ変換
+	ms := make(map[string]int)
+	for k, v := range req.Measurements {
+		key := strings.TrimSpace(k)
+		if key == "" {
+			continue
+		}
+		// 必要であれば 0 未満を弾くなどのバリデーションもここで可能
+		ms[key] = int(v)
+	}
+
+	newVar := modeldom.NewModelVariation{
+		ModelNumber: strings.TrimSpace(req.ModelNumber),
+		Size:        strings.TrimSpace(req.Size),
+		Color: modeldom.Color{
+			Name: strings.TrimSpace(req.Color),
+			RGB:  0, // RGB は現状フロントから来ていないため 0 で初期化
+		},
+		Measurements: ms,
+	}
+
+	mv, err := h.uc.CreateModelVariation(ctx, productID, newVar)
 	if err != nil {
 		writeModelErr(w, err)
 		return
