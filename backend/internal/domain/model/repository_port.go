@@ -13,16 +13,6 @@ import (
 // entity.go の ModelVariation.Measurements (map[string]int) に対応。
 type Measurements map[string]int
 
-// NewModelVariation corresponds to TS: Omit<ModelVariation, 'id'>
-// entity.go の ModelVariation に対応し、ID/CreatedAt/UpdatedAt などは除外。
-// Color は値オブジェクト Color{Name, RGB} をそのまま利用します。
-type NewModelVariation struct {
-	Size         string       `json:"size"`
-	Color        Color        `json:"color"` // { name, rgb }
-	ModelNumber  string       `json:"modelNumber"`
-	Measurements Measurements `json:"measurements,omitempty"` // 各計測位置: 計測値(int)
-}
-
 // ModelVariationUpdate corresponds to TS: Partial<Omit<ModelVariation, 'id'>>
 type ModelVariationUpdate struct {
 	Size         *string      `json:"size,omitempty"`
@@ -33,11 +23,6 @@ type ModelVariationUpdate struct {
 
 // ModelDataUpdate is free-form for product-level metadata updates
 type ModelDataUpdate map[string]any
-
-type ModelVariationWithQuantity struct {
-	ModelVariation
-	Quantity int `json:"quantity"`
-}
 
 // Listing contracts (filters/sort/page)
 
@@ -105,12 +90,16 @@ type RepositoryPort interface {
 	ListVariations(ctx context.Context, filter VariationFilter, sort VariationSort, page Page) (VariationPageResult, error)
 	GetModelVariations(ctx context.Context, productID string) ([]ModelVariation, error)
 	GetModelVariationByID(ctx context.Context, variationID string) (*ModelVariation, error)
-	CreateModelVariation(ctx context.Context, productID string, variation NewModelVariation) (*ModelVariation, error)
+
+	// ★ 新規作成では productID は使わず、NewModelVariation.ProductBlueprintID で紐付ける
+	CreateModelVariation(ctx context.Context, variation NewModelVariation) (*ModelVariation, error)
+
 	UpdateModelVariation(ctx context.Context, variationID string, updates ModelVariationUpdate) (*ModelVariation, error)
 	DeleteModelVariation(ctx context.Context, variationID string) (*ModelVariation, error)
 
-	// Batch replace all variations for a product (idempotent by modelNumber/size/color as defined by implementation)
-	ReplaceModelVariations(ctx context.Context, productID string, variations []NewModelVariation) ([]ModelVariation, error)
+	// ★ 一括置き換えも NewModelVariation 側の ProductBlueprintID から解決する
+	//   （全要素が同じ ProductBlueprintID を持つ前提）
+	ReplaceModelVariations(ctx context.Context, variations []NewModelVariation) ([]ModelVariation, error)
 
 	// Convenience aggregations (resolver-style)
 	GetSizeVariations(ctx context.Context, productID string) ([]SizeVariation, error)

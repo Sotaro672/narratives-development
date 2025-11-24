@@ -114,9 +114,9 @@ func (h *ModelHandler) createVariation(w http.ResponseWriter, r *http.Request, p
 		return
 	}
 
-	// ★ 受信した measurements の生データをログ出力（float64 マップ）
+	// ログ: フロントから渡ってきた measurements を確認
 	log.Printf(
-		"[ModelHandler] received CreateModelVariationRequest: productID=%s, modelNumber=%s, size=%s, color=%s, measurements(raw)=%+v",
+		"[ModelHandler] createVariation productID=%s, body.ModelNumber=%s, size=%s, color=%s, measurements=%v",
 		productID,
 		req.ModelNumber,
 		req.Size,
@@ -125,7 +125,7 @@ func (h *ModelHandler) createVariation(w http.ResponseWriter, r *http.Request, p
 	)
 
 	// frontend から来る measurements(map[string]float64) → domain 側の map[string]int へ変換
-	ms := make(map[string]int)
+	ms := make(modeldom.Measurements)
 	for k, v := range req.Measurements {
 		key := strings.TrimSpace(k)
 		if key == "" {
@@ -134,16 +134,6 @@ func (h *ModelHandler) createVariation(w http.ResponseWriter, r *http.Request, p
 		// 必要であれば 0 未満を弾くなどのバリデーションもここで可能
 		ms[key] = int(v)
 	}
-
-	// ★ 変換後の measurements（int マップ）もログ出力
-	log.Printf(
-		"[ModelHandler] converted measurements for domain: productID=%s, modelNumber=%s, size=%s, color=%s, measurements(int)=%+v",
-		productID,
-		strings.TrimSpace(req.ModelNumber),
-		strings.TrimSpace(req.Size),
-		strings.TrimSpace(req.Color),
-		ms,
-	)
 
 	newVar := modeldom.NewModelVariation{
 		ModelNumber: strings.TrimSpace(req.ModelNumber),
@@ -155,8 +145,13 @@ func (h *ModelHandler) createVariation(w http.ResponseWriter, r *http.Request, p
 		Measurements: ms,
 	}
 
-	mv, err := h.uc.CreateModelVariation(ctx, productID, newVar)
+	// ログ: NewModelVariation に measurements が詰め替えられているか確認
+	log.Printf("[ModelHandler] createVariation NewModelVariation=%+v", newVar)
+
+	// ★ ここで productID を渡さず、Usecase のシグネチャに合わせる
+	mv, err := h.uc.CreateModelVariation(ctx, newVar)
 	if err != nil {
+		log.Printf("[ModelHandler] error: %v", err)
 		writeModelErr(w, err)
 		return
 	}

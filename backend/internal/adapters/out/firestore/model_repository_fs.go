@@ -1,4 +1,3 @@
-// backend/internal/infrastructure/firestore/model_repository_fs.go
 package firestore
 
 import (
@@ -197,37 +196,22 @@ func (r *ModelRepositoryFS) GetModelVariationByID(ctx context.Context, variation
 	return &v, nil
 }
 
-func (r *ModelRepositoryFS) CreateModelVariation(ctx context.Context, productID string, variation modeldom.NewModelVariation) (*modeldom.ModelVariation, error) {
+// ★ ここからが重要: productID 引数を削除した CreateModelVariation
+func (r *ModelRepositoryFS) CreateModelVariation(
+	ctx context.Context,
+	variation modeldom.NewModelVariation,
+) (*modeldom.ModelVariation, error) {
 	if r.Client == nil {
 		return nil, errors.New("firestore client is nil")
 	}
-	productID = strings.TrimSpace(productID)
-	if productID == "" {
-		return nil, modeldom.ErrNotFound
-	}
 
-	// resolve blueprint
-	snap, err := r.modelSetsCol().Doc(productID).Get(ctx)
-	if err != nil {
-		if status.Code(err) == codes.NotFound {
-			return nil, modeldom.ErrNotFound
-		}
-		return nil, err
-	}
-
-	data := snap.Data()
-	blueprintID, _ := data["productBlueprintId"].(string)
-	blueprintID = strings.TrimSpace(blueprintID)
-	if blueprintID == "" {
-		return nil, fmt.Errorf("model_set missing productBlueprintId")
-	}
-
+	// NewModelVariation 側の ProductBlueprintID をそのまま利用する前提
 	now := time.Now().UTC()
 	docRef := r.variationsCol().NewDoc()
 
-	v := modeldom.ModelVariation{
+	mv := modeldom.ModelVariation{
 		ID:                 docRef.ID,
-		ProductBlueprintID: blueprintID,
+		ProductBlueprintID: strings.TrimSpace(variation.ProductBlueprintID),
 		ModelNumber:        strings.TrimSpace(variation.ModelNumber),
 		Size:               strings.TrimSpace(variation.Size),
 		Color: modeldom.Color{
@@ -237,18 +221,18 @@ func (r *ModelRepositoryFS) CreateModelVariation(ctx context.Context, productID 
 		Measurements: variation.Measurements,
 		CreatedAt:    now,
 		UpdatedAt:    now,
-		// CreatedBy / UpdatedBy / Deleted* はここでは設定しない（usecase で補完する前提でも OK）
+		// CreatedBy / UpdatedBy / Deleted* はここでは未設定
 	}
 
-	if _, err := docRef.Create(ctx, modelVariationToDoc(v)); err != nil {
+	if _, err := docRef.Create(ctx, modelVariationToDoc(mv)); err != nil {
 		return nil, err
 	}
 
-	savedSnap, err := docRef.Get(ctx)
+	snap, err := docRef.Get(ctx)
 	if err != nil {
 		return nil, err
 	}
-	saved, err := docToModelVariation(savedSnap)
+	saved, err := docToModelVariation(snap)
 	if err != nil {
 		return nil, err
 	}
@@ -329,7 +313,7 @@ func (r *ModelRepositoryFS) DeleteModelVariation(ctx context.Context, variationI
 		return nil, err
 	}
 
-	// ここでは物理削除のまま（論理削除にしたい場合は DeletedAt/DeletedBy を更新する実装に変更）
+	// ここでは物理削除のまま
 	if _, err := snap.Ref.Delete(ctx); err != nil {
 		return nil, err
 	}
@@ -342,37 +326,32 @@ func (r *ModelRepositoryFS) DeleteModelVariation(ctx context.Context, variationI
 
 func (r *ModelRepositoryFS) ReplaceModelVariations(
 	ctx context.Context,
-	productID string,
-	variations []modeldom.NewModelVariation,
+	vars []modeldom.NewModelVariation,
 ) ([]modeldom.ModelVariation, error) {
 
 	if r.Client == nil {
 		return nil, errors.New("firestore client is nil")
 	}
 
-	productID = strings.TrimSpace(productID)
-	if productID == "" {
-		return nil, modeldom.ErrNotFound
+	// 空なら何もしない（必要であればここをエラーに変えてもよい）
+	if len(vars) == 0 {
+		return []modeldom.ModelVariation{}, nil
 	}
 
-	// モデルセットから blueprintID を取得
-	snap, err := r.modelSetsCol().Doc(productID).Get(ctx)
-	if err != nil {
-		if status.Code(err) == codes.NotFound {
-			return nil, modeldom.ErrNotFound
-		}
-		return nil, err
-	}
-
-	data := snap.Data()
-	blueprintID, _ := data["productBlueprintId"].(string)
-	blueprintID = strings.TrimSpace(blueprintID)
+	// NewModelVariation 側の ProductBlueprintID から紐付けキーを解決
+	blueprintID := strings.TrimSpace(vars[0].ProductBlueprintID)
 	if blueprintID == "" {
-		return nil, fmt.Errorf("model_set missing productBlueprintId")
+		return nil, modeldom.ErrInvalidBlueprintID
+	}
+
+	// 安全のため、全要素が同じ ProductBlueprintID を持っているか確認
+	for _, v := range vars {
+		if strings.TrimSpace(v.ProductBlueprintID) != blueprintID {
+			return nil, fmt.Errorf("ReplaceModelVariations: mixed ProductBlueprintID is not allowed")
+		}
 	}
 
 	// 既存 variations を削除（blueprint 単位で）
-	// Firestore のバッチ上限を考慮しつつ削除
 	const chunkSize = 400
 
 	existing, err := r.listVariationsByBlueprintID(ctx, blueprintID)
@@ -398,12 +377,12 @@ func (r *ModelRepositoryFS) ReplaceModelVariations(
 	}
 
 	// 新規 variations を挿入
-	for i := 0; i < len(variations); i += chunkSize {
+	for i := 0; i < len(vars); i += chunkSize {
 		end := i + chunkSize
-		if end > len(variations) {
-			end = len(variations)
+		if end > len(vars) {
+			end = len(vars)
 		}
-		chunk := variations[i:end]
+		chunk := vars[i:end]
 		now := time.Now().UTC()
 
 		err := r.Client.RunTransaction(ctx, func(ctx context.Context, tx *firestore.Transaction) error {
@@ -487,8 +466,7 @@ func docToModelVariation(doc *firestore.DocumentSnapshot) (modeldom.ModelVariati
 	// Color は { name, rgb } として保存されている前提
 	var color modeldom.Color
 	if raw, ok := data["color"]; ok && raw != nil {
-		switch v := raw.(type) {
-		case map[string]any:
+		if v, ok := raw.(map[string]any); ok {
 			if n, ok2 := v["name"].(string); ok2 {
 				color.Name = strings.TrimSpace(n)
 			}
@@ -499,12 +477,6 @@ func docToModelVariation(doc *firestore.DocumentSnapshot) (modeldom.ModelVariati
 				color.RGB = rv
 			case float64:
 				color.RGB = int(rv)
-			}
-		default:
-			// 旧データ互換: color が string の場合は name として扱い rgb=0
-			if s, ok2 := raw.(string); ok2 {
-				color.Name = strings.TrimSpace(s)
-				color.RGB = 0
 			}
 		}
 	}

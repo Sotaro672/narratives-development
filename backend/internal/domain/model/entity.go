@@ -1,3 +1,4 @@
+// backend\internal\domain\model\entity.go
 package model
 
 import (
@@ -115,6 +116,16 @@ type ModelVariation struct {
 	UpdatedBy *string
 	DeletedAt *time.Time
 	DeletedBy *string
+}
+
+// NewModelVariation は新規作成時に使う入力モデル。
+// 既存の ModelVariation から ID や監査情報だけを省いた形。
+type NewModelVariation struct {
+	ProductBlueprintID string
+	ModelNumber        string
+	Size               string
+	Color              Color
+	Measurements       map[string]int
 }
 
 type ModelData struct {

@@ -35,7 +35,7 @@ type RouterDeps struct {
 	MemberUC           *usecase.MemberUsecase
 	MessageUC          *usecase.MessageUsecase
 	MintRequestUC      *usecase.MintRequestUsecase
-	ModelUC            *usecase.ModelUsecase // ★ これを使う
+	ModelUC            *usecase.ModelUsecase // ★ Models で使用
 	OrderUC            *usecase.OrderUsecase
 	PaymentUC          *usecase.PaymentUsecase
 	PermissionUC       *usecase.PermissionUsecase
@@ -51,21 +51,25 @@ type RouterDeps struct {
 	UserUC             *usecase.UserUsecase
 	WalletUC           *usecase.WalletUsecase
 
+	// 認証・招待まわり
 	AuthBootstrap     *authuc.BootstrapService
 	InvitationQuery   usecase.InvitationQueryPort
 	InvitationCommand usecase.InvitationCommandPort
 
+	// Firebase / MemberRepo
 	FirebaseAuth *firebaseauth.Client
 	MemberRepo   memdom.Repository
 
+	// Message 用の Firestore Repository
 	MessageRepo *msgrepo.MessageRepositoryFS
 }
 
 func NewRouter(deps RouterDeps) http.Handler {
 	mux := http.NewServeMux()
 
-	// healthz, debug/sendgrid などは省略（そのまま）
-
+	// ================================
+	// 共通 Auth ミドルウェア（Member 必須）
+	// ================================
 	var authMw *middleware.AuthMiddleware
 	if deps.FirebaseAuth != nil && deps.MemberRepo != nil {
 		authMw = &middleware.AuthMiddleware{
@@ -74,11 +78,32 @@ func NewRouter(deps RouterDeps) http.Handler {
 		}
 	}
 
-	// ... bootstrap, invitation, members 設定は現状のまま ...
+	// ================================
+	// /auth/bootstrap 専用ミドルウェア
+	// ================================
+	var bootstrapMw *middleware.BootstrapAuthMiddleware
+	if deps.FirebaseAuth != nil {
+		bootstrapMw = &middleware.BootstrapAuthMiddleware{
+			FirebaseAuth: deps.FirebaseAuth,
+		}
+	}
 
-	// ============================================================
-	// 既存ドメインの登録（そのまま）
-	// ============================================================
+	// ================================
+	// /auth/bootstrap
+	// ================================
+	if deps.AuthBootstrap != nil && bootstrapMw != nil {
+		// ★ 実際のハンドラ名に合わせてください
+		bootstrapHandler := handlers.NewAuthBootstrapHandler(deps.AuthBootstrap)
+
+		var h http.Handler = bootstrapHandler
+		h = bootstrapMw.Handler(h)
+
+		mux.Handle("/auth/bootstrap", h)
+	}
+
+	// ================================
+	// 既存ドメインの登録（元のまま＋α）
+	// ================================
 	mux.Handle("/accounts", handlers.NewAccountHandler(deps.AccountUC))
 	mux.Handle("/accounts/", handlers.NewAccountHandler(deps.AccountUC))
 
@@ -124,21 +149,34 @@ func NewRouter(deps RouterDeps) http.Handler {
 	mux.Handle("/wallets", handlers.NewWalletHandler(deps.WalletUC))
 	mux.Handle("/wallets/", handlers.NewWalletHandler(deps.WalletUC))
 
-	// ============================================================
-	// ★ Models エンドポイントを追加
-	//   - POST /models/{productID}/variations
-	//   - GET  /models/{id}
-	// ============================================================
+	// ================================
+	// Members エンドポイント追加
+	// ================================
+	if deps.MemberUC != nil {
+		memberH := handlers.NewMemberHandler(deps.MemberUC)
+
+		var h http.Handler = memberH
+		if authMw != nil {
+			h = authMw.Handler(h)
+		}
+
+		mux.Handle("/members", h)
+		mux.Handle("/members/", h)
+	}
+
+	// ================================
+	// Models エンドポイント（既存＋認証）
+	// ================================
 	if deps.ModelUC != nil {
 		modelH := handlers.NewModelHandler(deps.ModelUC)
 
-		var securedModelHandler http.Handler = modelH
+		var h http.Handler = modelH
 		if authMw != nil {
-			securedModelHandler = authMw.Handler(securedModelHandler)
+			h = authMw.Handler(h)
 		}
 
-		mux.Handle("/models", securedModelHandler)
-		mux.Handle("/models/", securedModelHandler)
+		mux.Handle("/models", h)
+		mux.Handle("/models/", h)
 	}
 
 	return mux
