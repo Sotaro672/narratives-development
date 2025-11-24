@@ -28,7 +28,6 @@ export const API_BASE = ENV_BASE || FALLBACK_BASE;
 
 /**
  * 商品設計作成で backend に渡すペイロード
- * （まずはフロントの状態をそのまま投げる DTO として定義）
  *
  * backend/internal/domain/productBlueprint.ProductBlueprint に対応:
  *
@@ -84,11 +83,74 @@ export type CreateProductBlueprintParams = {
 };
 
 export type ProductBlueprintResponse = {
-  id: string;
-  // backend の ProductBlueprint ドメインをそのまま返してくる想定なので、
-  // 他のフィールドはとりあえずゆるく許容しておく
+  // backend が Go のデフォルトエンコード（フィールド名そのまま）なので、
+  // 大文字の "ID" 等を含めて幅広く許容しておく
+  ID?: string;
+  id?: string;
+  productId?: string;
+  productID?: string;
   [key: string]: unknown;
 };
+
+/**
+ * CreateModelVariation 用のリクエストペイロード。
+ * 実際の backend の modeldom.NewModelVariation 構造に合わせて
+ * フィールド名は後から調整してください。
+ */
+export type NewModelVariationPayload = {
+  sizeLabel: string;
+  color: string;
+  modelNumber: string;
+  measurements: {
+    chest?: number | null;
+    waist?: number | null;
+    length?: number | null;
+    shoulder?: number | null;
+  };
+};
+
+// ------------------------------
+// 内部ヘルパー: ModelVariation 作成 API
+// ------------------------------
+
+/**
+ * CreateModelVariation (POST /models/{productID}/variations) を叩くヘルパー。
+ *
+ * backend 側:
+ *   func (u *ModelUsecase) CreateModelVariation(ctx context.Context, productID string, v modeldom.NewModelVariation)
+ * に対応。
+ */
+async function createModelVariation(
+  productId: string,
+  variation: NewModelVariationPayload,
+  idToken: string,
+): Promise<void> {
+  const res = await fetch(`${API_BASE}/models/${productId}/variations`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${idToken}`,
+    },
+    body: JSON.stringify(variation),
+  });
+
+  if (!res.ok) {
+    let detail: unknown;
+    try {
+      detail = await res.json();
+    } catch {
+      // ignore json parse error
+    }
+    console.error("[productBlueprintCreateService] CreateModelVariation failed", {
+      status: res.status,
+      statusText: res.statusText,
+      detail,
+    });
+    throw new Error(
+      `モデルバリエーションの作成に失敗しました（${res.status} ${res.statusText ?? ""}）`,
+    );
+  }
+}
 
 // ------------------------------
 // Service 本体
@@ -96,7 +158,13 @@ export type ProductBlueprintResponse = {
 
 /**
  * 商品設計を作成する HTTP サービス
- * - POST /product-blueprints
+ *
+ * フロー:
+ * 1. POST /product-blueprints で ProductBlueprint を作成
+ * 2. 返ってきた ID を ModelUsecase の productID とみなし、
+ *    POST /models/{productId}/variations で CreateModelVariation を
+ *    modelNumbers / sizes から組み立てて複数回叩く
+ *
  * - Firebase Auth の ID トークンを Authorization に付与
  */
 export async function createProductBlueprint(
@@ -132,7 +200,7 @@ export async function createProductBlueprint(
     companyId: params.companyId,
 
     // モデル生成用の補助情報（colors / sizes / modelNumbers）は
-    // backend の usecase 側で解釈して利用する想定
+    // ここでは直接 CreateModelVariation にも利用する
     colors: params.colors,
     sizes: params.sizes,
     modelNumbers: params.modelNumbers,
@@ -141,6 +209,7 @@ export async function createProductBlueprint(
     assigneeId: params.assigneeId ?? null,
   };
 
+  // 1. ProductBlueprint 作成
   const res = await fetch(`${API_BASE}/product-blueprints`, {
     method: "POST",
     headers: {
@@ -158,16 +227,100 @@ export async function createProductBlueprint(
     } catch {
       // ignore json parse error
     }
-    console.error("[productBlueprintCreateService] POST failed", {
+    console.error("[productBlueprintCreateService] POST /product-blueprints failed", {
       status: res.status,
       statusText: res.statusText,
       detail,
     });
     throw new Error(
-      `商品設計の作成に失敗しました（${res.status} ${res.statusText}）`,
+      `商品設計の作成に失敗しました（${res.status} ${res.statusText ?? ""}）`,
     );
   }
 
   const json = (await res.json()) as ProductBlueprintResponse;
+
+  // ★ backend のレスポンスから productId を推測する
+  //   あなたのログでは { ID: '6njrfelq2lU4T01Fe37t', ... } なので、
+  //   最後に大文字の ID も見るようにしている。
+  const anyJson = json as any;
+  const productIdRaw =
+    anyJson.productId ??
+    anyJson.productID ??
+    anyJson.id ??
+    anyJson.ID;
+
+  const productId =
+    typeof productIdRaw === "string" ? productIdRaw.trim() : "";
+
+  if (!productId) {
+    // ProductBlueprint 作成は成功しているが、Model 側の ID がわからないため
+    // CreateModelVariation はスキップしておく
+    console.warn(
+      "[productBlueprintCreateService] productId not found in response; skip CreateModelVariation",
+      json,
+    );
+    return json;
+  }
+
+  // 2. CreateModelVariation をサイズ・カラーごとに叩く
+  // modelNumbers と sizes から NewModelVariationPayload を組み立てる。
+  // - modelNumbers: { size, color, code }
+  // - sizes:        { id, sizeLabel, chest, waist, length, shoulder }
+  //
+  // 実際の modeldom.NewModelVariation の定義に合わせてマッピングは調整してください。
+  const sizeMap = new Map<string, SizeRow>();
+  for (const s of params.sizes ?? []) {
+    if (s.sizeLabel) {
+      sizeMap.set(s.sizeLabel, s);
+    }
+  }
+
+  const variations: NewModelVariationPayload[] = (params.modelNumbers ?? []).map(
+    (mn) => {
+      const size = sizeMap.get(mn.size);
+      return {
+        sizeLabel: mn.size,
+        color: mn.color,
+        modelNumber: mn.code,
+        measurements: {
+          chest:
+            typeof size?.chest === "number" && !Number.isNaN(size.chest)
+              ? size.chest
+              : null,
+          waist:
+            typeof size?.waist === "number" && !Number.isNaN(size.waist)
+              ? size.waist
+              : null,
+          length:
+            typeof size?.length === "number" && !Number.isNaN(size.length)
+              ? size.length
+              : null,
+          shoulder:
+            typeof size?.shoulder === "number" && !Number.isNaN(size.shoulder)
+              ? size.shoulder
+              : null,
+        },
+      };
+    },
+  );
+
+  if (variations.length > 0) {
+    try {
+      await Promise.all(
+        variations.map((v) => createModelVariation(productId, v, idToken)),
+      );
+    } catch (e) {
+      console.error(
+        "[productBlueprintCreateService] one or more CreateModelVariation calls failed",
+        e,
+      );
+      // ProductBlueprint の作成は成功しているので、ここでは例外をそのまま投げるか、
+      // 必要に応じてロールバック戦略を検討する。
+      throw e instanceof Error
+        ? e
+        : new Error("モデルバリエーションの作成に失敗しました。");
+    }
+  }
+
   return json;
 }

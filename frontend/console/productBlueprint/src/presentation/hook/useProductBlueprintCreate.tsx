@@ -1,5 +1,4 @@
 // frontend/console/productBlueprint/src/presentation/hook/useProductBlueprintCreate.tsx 
-
 import * as React from "react";
 import { useNavigate } from "react-router-dom";
 
@@ -77,7 +76,11 @@ export interface UseProductBlueprintCreateResult {
   sizes: SizeRow[];
   modelNumbers: ModelNumber[];
 
+  /** backend に送る担当者 ID（memberId） */
   assigneeId: string;
+  /** 表示用の担当者名（fullName / email など） */
+  assigneeDisplayName: string;
+
   createdBy: string;
   createdAt: string;
 
@@ -267,7 +270,11 @@ export function useProductBlueprintCreate(): UseProductBlueprintCreateResult {
   // ───────────────────────
   // 管理情報
   // ───────────────────────
+  // backend に送るのは memberId（AssigneeID）
   const [assigneeId, setAssigneeId] = React.useState("");
+  // 表示用のラベル（氏名 / メールアドレスなど）
+  const [assigneeDisplayName, setAssigneeDisplayName] =
+    React.useState("");
   const [createdBy] = React.useState("");
   const [createdAt] = React.useState("");
 
@@ -275,12 +282,13 @@ export function useProductBlueprintCreate(): UseProductBlueprintCreateResult {
     if (!currentMember) return;
     if (assigneeId) return;
 
-    // TODO: backend の AssigneeID は本来 Member.ID を渡すべき。
-    // いったん既存挙動を維持してラベルを格納。
+    // backend の AssigneeID は Member.ID を渡す
+    const memberId = currentMember.id;
     const label =
       currentMember.fullName || currentMember.email || currentMember.id;
 
-    setAssigneeId(label);
+    setAssigneeId(memberId);
+    setAssigneeDisplayName(label);
   }, [currentMember, assigneeId]);
 
   // ───────────────────────
@@ -312,6 +320,30 @@ export function useProductBlueprintCreate(): UseProductBlueprintCreateResult {
     // 必須: 商品IDタグ種別
     if (!productIdTagType) {
       errors.push("商品IDタグを選択してください。");
+    }
+
+    // 重さは 0 以上
+    if (weight < 0) {
+      errors.push("重さは 0 以上の値を入力してください。");
+    }
+
+    // 採寸が 0 未満になっていないかチェック
+    if (sizes.length > 0) {
+      let hasNegativeMeasurement = false;
+      for (const s of sizes) {
+        const vals = [s.chest, s.waist, s.length, s.shoulder];
+        if (
+          vals.some(
+            (v) => typeof v === "number" && !Number.isNaN(v) && v < 0,
+          )
+        ) {
+          hasNegativeMeasurement = true;
+          break;
+        }
+      }
+      if (hasNegativeMeasurement) {
+        errors.push("採寸には 0 未満の値を入力できません。");
+      }
     }
 
     // カラーバリエーションは1件以上
@@ -348,6 +380,7 @@ export function useProductBlueprintCreate(): UseProductBlueprintCreateResult {
     brandId,
     itemType,
     productIdTagType,
+    weight,
     colors,
     sizes,
     modelNumbers,
@@ -397,14 +430,16 @@ export function useProductBlueprintCreate(): UseProductBlueprintCreateResult {
       colors,
       sizes,
       modelNumbers,
+      // AssigneeID は memberId を渡す
       assigneeId,
     };
 
-    // デバッグ用スナップショット（brandName / measurementOptions も含めておく）
+    // デバッグ用スナップショット（brandName / measurementOptions / displayName も含めておく）
     console.log("[useProductBlueprintCreate] onCreate payload snapshot", {
       apiParams,
       brandName,
       measurementOptions,
+      assigneeDisplayName,
     });
 
     try {
@@ -438,6 +473,7 @@ export function useProductBlueprintCreate(): UseProductBlueprintCreateResult {
     sizes,
     modelNumbers,
     assigneeId,
+    assigneeDisplayName,
     measurementOptions,
     navigate,
   ]);
@@ -478,8 +514,23 @@ export function useProductBlueprintCreate(): UseProductBlueprintCreateResult {
 
   const onChangeSize = React.useCallback(
     (id: string, patch: Partial<Omit<SizeRow, "id">>) => {
+      // 採寸値は 0 未満にならないようにクランプ
+      const safePatch: Partial<Omit<SizeRow, "id">> = { ...patch };
+
+      const clampField = (key: keyof Omit<SizeRow, "id">) => {
+        const v = safePatch[key];
+        if (typeof v === "number") {
+          safePatch[key] = (v < 0 ? 0 : v) as any;
+        }
+      };
+
+      clampField("chest");
+      clampField("waist");
+      clampField("length");
+      clampField("shoulder");
+
       setSizes((prev) =>
-        prev.map((s) => (s.id === id ? { ...s, ...patch } : s)),
+        prev.map((s) => (s.id === id ? { ...s, ...safePatch } : s)),
       );
     },
     [],
@@ -519,17 +570,31 @@ export function useProductBlueprintCreate(): UseProductBlueprintCreateResult {
     [],
   );
 
+  // 重さを 0 未満にできないようにクランプ
+  const handleChangeWeight = React.useCallback((v: number) => {
+    if (Number.isNaN(v)) {
+      setWeight(0);
+      return;
+    }
+    setWeight(v < 0 ? 0 : v);
+  }, []);
+
   const onEditAssignee = React.useCallback(() => {
     if (currentMember) {
+      const memberId = currentMember.id;
       const label =
         currentMember.fullName || currentMember.email || currentMember.id;
-      setAssigneeId(label);
+      setAssigneeId(memberId);
+      setAssigneeDisplayName(label);
     }
   }, [currentMember]);
 
   const onClickAssignee = React.useCallback(() => {
-    console.log("[useProductBlueprintCreate] assigneeId clicked:", assigneeId);
-  }, [assigneeId]);
+    console.log("[useProductBlueprintCreate] assignee clicked:", {
+      assigneeId,
+      assigneeDisplayName,
+    });
+  }, [assigneeId, assigneeDisplayName]);
 
   const onClickCreatedBy = React.useCallback(() => {
     console.log("[useProductBlueprintCreate] createdBy clicked:", createdBy);
@@ -564,6 +629,7 @@ export function useProductBlueprintCreate(): UseProductBlueprintCreateResult {
     modelNumbers,
 
     assigneeId,
+    assigneeDisplayName,
     createdBy,
     createdAt,
 
@@ -574,7 +640,7 @@ export function useProductBlueprintCreate(): UseProductBlueprintCreateResult {
     onChangeItemType: setItemType,
     onChangeFit: setFit,
     onChangeMaterial: setMaterial,
-    onChangeWeight: setWeight,
+    onChangeWeight: handleChangeWeight,
     onChangeQualityAssurance: setQualityAssurance,
     onChangeProductIdTagType: setProductIdTagType,
 
