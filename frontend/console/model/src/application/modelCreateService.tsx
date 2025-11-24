@@ -14,7 +14,7 @@ import type {
  * アプリケーション層の型定義とユーティリティをまとめるファイル。
  *
  * - Presentation (hook) 層から参照される型をここに集約
- * - 将来的に HTTP 呼び出しロジックもここに追加していく想定
+ * - HTTP 呼び出しは infrastructure/repository/modelRepositoryHTTP.ts に移譲
  */
 
 /* =========================================================
@@ -93,10 +93,3 @@ export type UseSizeVariationCardResult = {
     key: keyof Omit<SizeRow, "id">,
   ) => (e: React.ChangeEvent<HTMLInputElement>) => void;
 };
-
-/* =========================================================
- * （今後追加用）CreateModelVariation 用の HTTP サービスなど
- * =======================================================*/
-
-// 例: 将来的にここに CreateModelVariation の HTTP 呼び出しを実装する
-// export async function createModelVariation(...) { ... }

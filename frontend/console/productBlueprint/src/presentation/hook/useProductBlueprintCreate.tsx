@@ -11,8 +11,11 @@ import type { Brand } from "../../../../brand/src/domain/entity/brand";
 import { fetchAllBrandsForCompany } from "../../../../brand/src/infrastructure/query/brandQuery";
 
 // Size / ModelNumber の型だけ借りる
-import type { SizeRow } from "../../../../model/src/presentation/components/SizeVariationCard";
-import type { ModelNumber } from "../../../../model/src/presentation/components/ModelNumberCard";
+import type { SizeRow } from "../../../../model/src/presentation/hook/useModelCard";
+import type { ModelNumber } from "../../../../model/src/application/modelCreateService";
+
+// ★ 採寸構築ユーティリティ（itemType に応じて measurements を組み立てる）
+import { buildMeasurements } from "../../../../model/src/application/buildMeasurements";
 
 // Auth / currentMember
 import { useAuth } from "../../../../shell/src/auth/presentation/hook/useCurrentMember";
@@ -331,7 +334,9 @@ export function useProductBlueprintCreate(): UseProductBlueprintCreateResult {
     if (sizes.length > 0) {
       let hasNegativeMeasurement = false;
       for (const s of sizes) {
-        const vals = [s.chest, s.waist, s.length, s.shoulder];
+        // ★ itemType に応じて measurements を構築
+        const measurements = buildMeasurements(itemType, s);
+        const vals = Object.values(measurements);
         if (
           vals.some(
             (v) => typeof v === "number" && !Number.isNaN(v) && v < 0,

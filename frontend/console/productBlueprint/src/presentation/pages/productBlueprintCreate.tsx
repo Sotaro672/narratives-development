@@ -1,4 +1,4 @@
-// frontend/console/productBlueprint/src/presentation/pages/productBlueprintCreate.tsx
+// frontend/console/productBlueprint/src/presentation/pages/productBlueprintCreate.tsx 
 
 import PageStyle from "../../../../shell/src/layout/PageStyle/PageStyle";
 import { AdminCard } from "../../../../admin/src/presentation/components/AdminCard";
@@ -6,6 +6,9 @@ import ProductBlueprintCard from "../components/productBlueprintCard";
 import ColorVariationCard from "../../../../model/src/presentation/components/ColorVariationCard";
 import SizeVariationCard from "../../../../model/src/presentation/components/SizeVariationCard";
 import ModelNumberCard from "../../../../model/src/presentation/components/ModelNumberCard";
+
+// ★ モデルナンバー用のロジックは model 側の hook を利用
+import { useModelCard } from "../../../../model/src/presentation/hook/useModelCard";
 
 import { useProductBlueprintCreate } from "../hook/useProductBlueprintCreate";
 
@@ -52,7 +55,7 @@ export default function ProductBlueprintCreate() {
     onRemoveSize,
     onChangeSize,
 
-    // モデルナンバー操作 ★追加
+    // モデルナンバー操作（アプリケーション層）
     onChangeModelNumber,
 
     // 管理情報
@@ -64,6 +67,25 @@ export default function ProductBlueprintCreate() {
     onCreate,
     onBack,
   } = useProductBlueprintCreate();
+
+  // -----------------------------
+  // モデルナンバー表示用の hook（model 側）
+  // -----------------------------
+  const { getCode, onChangeModelNumber: uiOnChangeModelNumber } = useModelCard({
+    sizes,
+    colors,
+    modelNumbers,
+  });
+
+  // UI 変更時に「model 側の内部状態」と「productBlueprintCreate の状態」の両方を更新
+  const handleChangeModelNumber = (
+    sizeLabel: string,
+    color: string,
+    nextCode: string,
+  ) => {
+    uiOnChangeModelNumber(sizeLabel, color, nextCode); // UI 側の codeMap を更新
+    onChangeModelNumber(sizeLabel, color, nextCode);   // 画面のアプリケーション状態を更新
+  };
 
   return (
     <PageStyle
@@ -108,7 +130,7 @@ export default function ProductBlueprintCreate() {
         <SizeVariationCard
           sizes={sizes}
           onRemove={onRemoveSize}
-          onChangeSize={onChangeSize}   // ★ 入力を反映
+          onChangeSize={onChangeSize}
           measurementOptions={measurementOptions}
           mode="edit"
           onAddSize={onAddSize}
@@ -117,10 +139,10 @@ export default function ProductBlueprintCreate() {
         <ModelNumberCard
           sizes={sizes}
           colors={colors}
-          modelNumbers={modelNumbers}
-          onChangeModelNumber={onChangeModelNumber}
+          // ★ model 側 hook から取得した getter / handler を渡す
+          getCode={getCode}
+          onChangeModelNumber={handleChangeModelNumber}
         />
-
       </div>
 
       <AdminCard

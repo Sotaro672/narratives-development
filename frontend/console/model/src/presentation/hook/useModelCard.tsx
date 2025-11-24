@@ -4,14 +4,12 @@ import * as React from "react";
 
 // 採寸系の型は model ドメインの catalog から
 import type {
-  MeasurementOption,
   SizeRow as CatalogSizeRow,
 } from "../../domain/entity/catalog";
 
 // hook 用の型は application 層にまとめる
 import type {
   ModelNumber,
-  SizeLike,
   UseModelCardParams,
   UseModelCardResult,
   UseSizeVariationCardParams,
