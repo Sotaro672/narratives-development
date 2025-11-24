@@ -4,8 +4,8 @@ import type { ItemType, Fit } from "../domain/entity/catalog";
 import type { ProductIDTag } from "../domain/entity/productBlueprint";
 
 // Size / ModelNumber の型だけ借りる
-import type { SizeRow } from "../../../model/src/presentation/components/SizeVariationCard";
-import type { ModelNumber } from "../../../model/src/presentation/components/ModelNumberCard";
+import type { SizeRow } from "../../../model/src/presentation/hook/useModelCard";
+import type { ModelNumber } from "../../../model/src/application/modelCreateService";
 
 // 認証（IDトークン取得用）
 import { auth } from "../../../shell/src/auth/infrastructure/config/firebaseClient";
