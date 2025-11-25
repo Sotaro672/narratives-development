@@ -11,7 +11,6 @@ import { useProductBlueprintDetail } from "../hook/useProductBlueprintDetail";
 export default function ProductBlueprintDetail() {
   const {
     pageTitle,
-    // left pane
     productName,
     brand,
     fit,
@@ -23,11 +22,10 @@ export default function ProductBlueprintDetail() {
     colorInput,
     sizes,
     modelNumbers,
-    // right pane (admin)
     assignee,
     creator,
     createdAt,
-    // handlers
+
     onBack,
     onSave,
     onChangeProductName,
@@ -42,7 +40,9 @@ export default function ProductBlueprintDetail() {
     onRemoveSize,
     onEditAssignee,
     onClickAssignee,
-    onClickCreatedBy,
+
+    // ★ 追加：hook 側で生成した getCode を受け取る
+    getCode,
   } = useProductBlueprintDetail();
 
   return (
@@ -90,7 +90,7 @@ export default function ProductBlueprintDetail() {
           mode="edit"
           sizes={sizes}
           colors={colors}
-          modelNumbers={modelNumbers}
+          getCode={getCode}
         />
       </div>
 
@@ -102,7 +102,6 @@ export default function ProductBlueprintDetail() {
         createdAt={createdAt}
         onEditAssignee={onEditAssignee}
         onClickAssignee={onClickAssignee}
-        onClickCreatedBy={onClickCreatedBy}
       />
     </PageStyle>
   );

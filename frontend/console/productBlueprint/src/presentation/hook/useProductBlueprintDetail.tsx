@@ -22,7 +22,6 @@ import {
 } from "../../domain/entity/catalog";
 import type { Fit, WashTagOption } from "../../domain/entity/catalog";
 
-// 他のプレゼン層からも使えるように再エクスポートしておく
 export {
   FIT_OPTIONS,
   PRODUCT_ID_TAG_OPTIONS,
@@ -45,6 +44,9 @@ export interface UseProductBlueprintDetailResult {
   colorInput: string;
   sizes: SizeRow[];
   modelNumbers: ModelNumberRow[];
+
+  // ★ 追加：ModelNumberCard 用
+  getCode: (sizeLabel: string, color: string) => string;
 
   assignee: string;
   creator: string;
@@ -71,15 +73,10 @@ export interface UseProductBlueprintDetailResult {
   onClickCreatedBy: () => void;
 }
 
-/**
- * 商品設計詳細画面のロジック・状態管理用カスタムフック
- * ページコンポーネント側にはスタイル/構造のみを残す。
- */
 export function useProductBlueprintDetail(): UseProductBlueprintDetailResult {
   const navigate = useNavigate();
   const { blueprintId } = useParams<{ blueprintId: string }>();
 
-  // 対象 Blueprint をモック API から取得
   const blueprint = React.useMemo(
     () => fetchProductBlueprintById(blueprintId),
     [blueprintId],
@@ -88,10 +85,6 @@ export function useProductBlueprintDetail(): UseProductBlueprintDetailResult {
   const pageTitle =
     blueprint?.productName ?? blueprintId ?? "不明ID";
 
-  // ─────────────────────────────────────────
-  // 初期値（存在しない場合はダミー）
-  // backend/internal/domain/productBlueprint/entity.go に合わせたフィールドを使用
-  // ─────────────────────────────────────────
   const [productName, setProductName] = React.useState(
     () => blueprint?.productName ?? "シルクブラウス プレミアムライン",
   );
@@ -100,7 +93,6 @@ export function useProductBlueprintDetail(): UseProductBlueprintDetailResult {
     () => (blueprint ? brandLabelFromId(blueprint.brandId) : ""),
   );
 
-  // ★ フィットは自動で「レギュラーフィット」にせず、空からスタート
   const [fit, setFit] = React.useState<Fit>("" as Fit);
 
   const [materials, setMaterials] = React.useState(
@@ -115,13 +107,11 @@ export function useProductBlueprintDetail(): UseProductBlueprintDetailResult {
     blueprint?.qualityAssurance ?? ["手洗い", "ドライクリーニング", "陰干し"],
   );
 
-  // Tag は entity.go / shared types 準拠で productIdTagType のみを扱う
   const [productIdTagType, setProductIdTagType] =
     React.useState<ProductIDTagType | "">(
-      () => blueprint?.productIdTagType ?? "",
+      () => (blueprint?.productIdTag as ProductIDTagType | undefined) ?? "",
     );
 
-  // カラー（本来は blueprint.variations から復元するが、現状モック固定）
   const [colorInput, setColorInput] = React.useState("");
   const [colors, setColors] = React.useState<string[]>([
     "ホワイト",
@@ -129,17 +119,14 @@ export function useProductBlueprintDetail(): UseProductBlueprintDetailResult {
     "ネイビー",
   ]);
 
-  // サイズ（API から取得）
   const [sizes, setSizes] = React.useState<SizeRow[]>(() =>
     fetchProductBlueprintSizeRows(),
   );
 
-  // モデルナンバー（API から取得）
   const [modelNumbers] = React.useState<ModelNumberRow[]>(() =>
     fetchProductBlueprintModelNumberRows(),
   );
 
-  // 管理情報
   const [assignee, setAssignee] = React.useState(
     () => blueprint?.assigneeId ?? "担当者未設定",
   );
@@ -150,6 +137,22 @@ export function useProductBlueprintDetail(): UseProductBlueprintDetailResult {
     () => formatProductBlueprintDate(blueprint?.createdAt) || "2024/1/15",
   );
 
+  // -----------------------------
+  // ★ getCode を追加
+  // -----------------------------
+  const getCode = React.useCallback(
+    (sizeLabel: string, color: string): string => {
+      const row = modelNumbers.find(
+        (m) => m.size === sizeLabel && m.color === color,
+      );
+      return row?.code ?? "";
+    },
+    [modelNumbers],
+  );
+
+  // -----------------------------
+  // Handlers
+  // -----------------------------
   const onSave = React.useCallback(() => {
     alert("保存しました（ダミー）");
   }, []);
@@ -158,7 +161,6 @@ export function useProductBlueprintDetail(): UseProductBlueprintDetailResult {
     navigate(-1);
   }, [navigate]);
 
-  // VariationCard handlers
   const onAddColor = React.useCallback(() => {
     const v = colorInput.trim();
     if (!v || colors.includes(v)) return;
@@ -201,6 +203,8 @@ export function useProductBlueprintDetail(): UseProductBlueprintDetailResult {
     colorInput,
     sizes,
     modelNumbers,
+
+    getCode, // ★ ModelNumberCard に渡す
 
     assignee,
     creator,
