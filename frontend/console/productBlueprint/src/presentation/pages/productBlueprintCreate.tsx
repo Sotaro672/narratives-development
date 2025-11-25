@@ -62,6 +62,8 @@ export default function ProductBlueprintCreate() {
 
     // 管理情報
     assigneeId,
+    assigneeName,
+
     onEditAssignee,
     onClickAssignee,
 
@@ -153,7 +155,7 @@ export default function ProductBlueprintCreate() {
       </div>
 
       <AdminCard
-        assigneeName={assigneeId || "未設定"}
+        assigneeName={assigneeName || "未設定"}
         onEditAssignee={onEditAssignee}
         onClickAssignee={onClickAssignee}
       />

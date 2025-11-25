@@ -1,16 +1,12 @@
+// frontend/console/brand/src/presentation/pages/brandManagement.tsx
 import React from "react";
 import { useNavigate } from "react-router-dom";
 import List, {
   FilterableTableHeader,
+  SortableTableHeader,
 } from "../../../../shell/src/layout/List/List";
 import "../styles/brand.css";
-
 import { useBrandManagement } from "../hook/useBrandManagement";
-
-// ソート可能ヘッダ（shared/ui 版）
-import SortableTableHeader from "../../../../shell/src/shared/ui/sortable-table-header";
-
-// ★ useMemberList の利用は hook 側に移譲したので削除済み
 
 // managerId から非同期で名前を取得して表示するセル
 function ManagerNameCell({
@@ -18,7 +14,7 @@ function ManagerNameCell({
   getNameLastFirstByID,
 }: {
   managerId?: string | null;
-  getNameLastFirstByID: (id: string) => Promise<string>;
+  getNameLastFirstByID: (id: string) => Promise<string>; // ★ Promise 版に戻す
 }) {
   const [name, setName] = React.useState("");
 
@@ -55,7 +51,7 @@ export default function BrandManagementPage() {
 
   const {
     rows,
-    managerOptions, // ★ managerOptions のみ使用
+    managerOptions, // ★ managerName 付き options
 
     managerFilter,
     activeKey,
@@ -82,7 +78,7 @@ export default function BrandManagementPage() {
   // ---------- テーブルヘッダー ----------
   const headers: React.ReactNode[] = [
     "ブランド名",
-    // 責任者フィルタ
+    // 責任者フィルタ（ラベルは managerName）
     <FilterableTableHeader
       key="manager"
       label="責任者"
@@ -104,7 +100,7 @@ export default function BrandManagementPage() {
       }}
     />,
 
-    // ★ 更新日（ソート可能ヘッダを導入）
+    // ★ 更新日（ソート可能ヘッダ）
     <SortableTableHeader
       key="updatedAt"
       label="更新日"
@@ -127,7 +123,7 @@ export default function BrandManagementPage() {
         createLabel="ブランド追加"
         onCreate={handleCreateBrand}
         showResetButton
-        onReset={resetFilters} // ← List 内蔵の RefreshButton を使用
+        onReset={resetFilters}
       >
         {rows.map((b) => (
           <tr
@@ -162,8 +158,6 @@ export default function BrandManagementPage() {
           </tr>
         ))}
       </List>
-      {/* ← List 自体が RefreshButton + Pagination を持っているので、
-           ここで独自 Pagination を出す必要はありません。 */}
     </div>
   );
 }

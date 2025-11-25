@@ -81,7 +81,7 @@ export interface UseProductBlueprintCreateResult {
   /** backend に送る担当者 ID（memberId） */
   assigneeId: string;
   /** 表示用の担当者名（fullName / email など） */
-  assigneeDisplayName: string;
+  assigneeName: string;
 
   createdBy: string;
   createdAt: string;
@@ -280,8 +280,7 @@ export function useProductBlueprintCreate(): UseProductBlueprintCreateResult {
   // backend に送るのは memberId（AssigneeID）
   const [assigneeId, setAssigneeId] = React.useState("");
   // 表示用のラベル（氏名 / メールアドレスなど）
-  const [assigneeDisplayName, setAssigneeDisplayName] =
-    React.useState("");
+  const [assigneeName, setAssigneeName] = React.useState("");
   const [createdBy] = React.useState("");
   const [createdAt] = React.useState("");
 
@@ -295,7 +294,7 @@ export function useProductBlueprintCreate(): UseProductBlueprintCreateResult {
       currentMember.fullName || currentMember.email || currentMember.id;
 
     setAssigneeId(memberId);
-    setAssigneeDisplayName(label);
+    setAssigneeName(label);
   }, [currentMember, assigneeId]);
 
   // ───────────────────────
@@ -422,12 +421,12 @@ export function useProductBlueprintCreate(): UseProductBlueprintCreateResult {
       createdBy: currentMember?.id ?? "",
     };
 
-    // デバッグ用スナップショット（brandName / measurementOptions / displayName も含めておく）
+    // デバッグ用スナップショット（brandName / measurementOptions / assigneeName も含めておく）
     console.log("[useProductBlueprintCreate] onCreate payload snapshot", {
       apiParams,
       brandName,
       measurementOptions,
-      assigneeDisplayName,
+      assigneeName,
     });
 
     try {
@@ -463,7 +462,7 @@ export function useProductBlueprintCreate(): UseProductBlueprintCreateResult {
     sizes,
     modelNumbers,
     assigneeId,
-    assigneeDisplayName,
+    assigneeName,
     measurementOptions,
     currentMember?.id,
     navigate,
@@ -600,16 +599,16 @@ export function useProductBlueprintCreate(): UseProductBlueprintCreateResult {
       const label =
         currentMember.fullName || currentMember.email || currentMember.id;
       setAssigneeId(memberId);
-      setAssigneeDisplayName(label);
+      setAssigneeName(label);
     }
   }, [currentMember]);
 
   const onClickAssignee = React.useCallback(() => {
     console.log("[useProductBlueprintCreate] assignee clicked:", {
       assigneeId,
-      assigneeDisplayName,
+      assigneeName,
     });
-  }, [assigneeId, assigneeDisplayName]);
+  }, [assigneeId, assigneeName]);
 
   // -------------------------------
   // 返却する ViewModel
@@ -641,7 +640,7 @@ export function useProductBlueprintCreate(): UseProductBlueprintCreateResult {
     modelNumbers,
 
     assigneeId,
-    assigneeDisplayName,
+    assigneeName,
     createdBy,
     createdAt,
 

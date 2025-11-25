@@ -28,25 +28,25 @@ export type AdminCardProps = {
   // タイトル
   title?: string;
 
-  // 表示中の担当者名（スタイル側では文字列をそのまま表示するだけ）
+  // 表示中の担当者名（画面表示用のみ）
   assigneeName?: string;
 
-  // 担当者候補一覧（スタイル側では map してボタン表示するだけ）
+  // 担当者候補一覧
   assigneeCandidates?: AdminAssigneeCandidate[];
   loadingMembers?: boolean;
 
-  // ポップオーバー開閉制御（必要なら上位から渡す。未指定なら AdminCard 側では特に制御しない）
+  // ポップオーバー開閉制御
   openAssigneePopover?: boolean;
   setOpenAssigneePopover?: (v: boolean) => void;
   onSelectAssignee?: (id: string) => void;
 
-  // 作成 / 更新情報（あれば表示）
+  // 作成 / 更新情報
   createdByName?: string | null;
   createdAt?: string | null;
   updatedByName?: string | null;
   updatedAt?: string | null;
 
-  // クリックや編集操作を上位に通知するためのコールバック
+  // 各種コールバック
   onEditAssignee?: () => void;
   onClickAssignee?: () => void;
 };
@@ -57,7 +57,6 @@ export const AdminCard: React.FC<AdminCardProps> = ({
   assigneeCandidates,
   loadingMembers,
 
-  // controlled 用（必要なら上位が使う。AdminCard 側では open 値を直接は使わない）
   openAssigneePopover,
   setOpenAssigneePopover,
   onSelectAssignee,
@@ -70,12 +69,10 @@ export const AdminCard: React.FC<AdminCardProps> = ({
   onEditAssignee,
   onClickAssignee,
 }) => {
-  // スタイル側では「トリガーが押された」という事実だけ上位へ通知
   const handleTriggerClick = () => {
     onClickAssignee?.();
     onEditAssignee?.();
 
-    // 上位が openAssigneePopover を使っている場合だけ補助的にトグル
     if (typeof openAssigneePopover === "boolean" && setOpenAssigneePopover) {
       setOpenAssigneePopover(!openAssigneePopover);
     }
@@ -83,7 +80,7 @@ export const AdminCard: React.FC<AdminCardProps> = ({
 
   const handleSelect = (id: string) => {
     onSelectAssignee?.(id);
-    // Popover の開閉自体はコンポーネント内では制御しない（Radix 側のデフォルト動作に任せる）
+    // Popover の open/close は親側に任せる
   };
 
   return (
@@ -101,7 +98,6 @@ export const AdminCard: React.FC<AdminCardProps> = ({
 
           <Popover>
             <PopoverTrigger>
-              {/* asChild は使わず、Button をそのまま children に渡すだけ */}
               <Button
                 type="button"
                 variant="outline"
@@ -109,6 +105,7 @@ export const AdminCard: React.FC<AdminCardProps> = ({
                 className="w-full justify-between admin-card__assignee-btn"
                 onClick={handleTriggerClick}
               >
+                {/* ▼ ここで assigneeId ではなく assigneeName を表示 */}
                 <span>{assigneeName || "未設定"}</span>
                 <span className="text-[11px] text-slate-400" />
               </Button>
@@ -148,7 +145,7 @@ export const AdminCard: React.FC<AdminCardProps> = ({
           </Popover>
         </div>
 
-        {/* 作成 / 更新情報（あれば表示） */}
+        {/* 作成 / 更新情報 */}
         {(createdByName || createdAt || updatedByName || updatedAt) && (
           <div className="admin-card__section space-y-1 text-xs text-slate-500">
             {createdByName && <div>作成者: {createdByName}</div>}
@@ -162,9 +159,4 @@ export const AdminCard: React.FC<AdminCardProps> = ({
   );
 };
 
-// default export も用意しておくと、
-// import AdminCard from ".../AdminCard"
-// でも
-// import { AdminCard } from ".../AdminCard"
-// でも利用可能
 export default AdminCard;

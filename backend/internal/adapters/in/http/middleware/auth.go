@@ -9,6 +9,7 @@ import (
 
 	fbauth "firebase.google.com/go/v4/auth"
 
+	usecase "narratives/internal/application/usecase"
 	memdom "narratives/internal/domain/member"
 )
 
@@ -109,6 +110,10 @@ func (m *AuthMiddleware) Handler(next http.Handler) http.Handler {
 
 		// companyId が空でなければ同時に注入
 		if cid := strings.TrimSpace(member.CompanyID); cid != "" {
+			// ★ usecase 層のヘルパーで注入（BrandUsecase, MemberUsecase などと必ず同じキーになる）
+			ctx = usecase.WithCompanyID(ctx, cid)
+
+			// 既存の struct key での保存も必要なら残しておいてよい（CompanyID(r *http.Request) 互換など）
 			ctx = context.WithValue(ctx, ctxKeyCompanyID, cid)
 		}
 
@@ -172,7 +177,7 @@ func CompanyID(r *http.Request) (string, bool) {
 	if !ok || strings.TrimSpace(s) == "" {
 		return "", false
 	}
-	return s, true
+	return strings.TrimSpace(s), true
 }
 
 // CurrentUIDAndEmail は middleware で検証された Firebase UID と email を返します。

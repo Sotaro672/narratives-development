@@ -19,6 +19,12 @@ export type BrandRow = BrandRowBase & {
   updatedAt: string;
 };
 
+// フィルタ用オプション型（FilterableTableHeader と互換）
+type ManagerOption = {
+  value: string;
+  label: string;
+};
+
 const toTs = (yyyyMd: string) => {
   if (!yyyyMd) return 0;
   const [y, m, d] = yyyyMd.split("/").map((v) => parseInt(v, 10));
@@ -44,8 +50,11 @@ export function useBrandManagement() {
   // ★ リロード用キー（Refreshボタン押下で再読み込みさせる）
   const [reloadKey, setReloadKey] = useState(0);
 
-  // ★ member 用フックから ID → 氏名変換関数をここで取得
+  // ★ member 用フックから ID → 氏名変換関数をここで取得（Promise<string> を返す想定）
   const { getNameLastFirstByID } = useMemberList();
+
+  // ★ 責任者フィルタ用オプション（ID→名前を解決したものを state で持つ）
+  const [managerOptions, setManagerOptions] = useState<ManagerOption[]>([]);
 
   // ステータスバッジ className（現状は使っていなくても残しておく）
   const statusBadgeClass = (isActive: boolean) =>
@@ -62,6 +71,7 @@ export function useBrandManagement() {
 
         if (!companyId) {
           setBaseRows([]);
+          setManagerOptions([]);
           return;
         }
 
@@ -82,12 +92,15 @@ export function useBrandManagement() {
           };
         });
 
-        if (!cancelled) setBaseRows(rows);
+        if (!cancelled) {
+          setBaseRows(rows);
+        }
       } catch (e: any) {
         if (!cancelled) {
           const err = e instanceof Error ? e : new Error(String(e));
           setError(err);
           setBaseRows([]);
+          setManagerOptions([]);
         }
       } finally {
         if (!cancelled) setLoading(false);
@@ -99,6 +112,44 @@ export function useBrandManagement() {
       cancelled = true;
     };
   }, [companyId, reloadKey]);
+
+  // ★ baseRows から managerId 一覧を取り出して「責任者名付きオプション」に変換
+  useEffect(() => {
+    let cancelled = false;
+
+    const buildManagerOptions = async () => {
+      const ids = Array.from(
+        new Set(
+          baseRows
+            .map((b) => (b.managerId ?? "").trim())
+            .filter((v) => v !== ""),
+        ),
+      );
+
+      const opts: ManagerOption[] = [];
+
+      for (const id of ids) {
+        try {
+          const name = (await getNameLastFirstByID(id)) || id;
+          opts.push({ value: id, label: name });
+        } catch (e) {
+          // eslint-disable-next-line no-console
+          console.error("[useBrandManagement] resolve manager name error:", e);
+          opts.push({ value: id, label: id });
+        }
+      }
+
+      if (!cancelled) {
+        setManagerOptions(opts);
+      }
+    };
+
+    void buildManagerOptions();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [baseRows, getNameLastFirstByID]);
 
   // ステータスフィルタ
   const statusOptions = useMemo(() => {
@@ -113,18 +164,7 @@ export function useBrandManagement() {
     }));
   }, [baseRows]);
 
-  // managerId の一覧だけ返す（最低限）
-  const managerOptions = useMemo(() => {
-    const ids = new Set(
-      baseRows
-        .map((b) => (b.managerId ?? "").trim())
-        .filter(Boolean),
-    );
-    return Array.from(ids).map((id) => ({
-      value: id,
-      label: id, // 表示名はひとまず ID のまま
-    }));
-  }, [baseRows]);
+  // managerOptions は上の useEffect で state 管理しているので useMemo は不要
 
   // フィルタ＋ソート
   const rows = useMemo(() => {
@@ -172,7 +212,7 @@ export function useBrandManagement() {
   return {
     rows,
     statusOptions,
-    managerOptions,
+    managerOptions, // ★ managerName 付きオプション
 
     loading,
     error,
@@ -190,7 +230,7 @@ export function useBrandManagement() {
     statusBadgeClass,
     resetFilters,
 
-    // ★ ページ側でそのまま使えるように公開
+    // ★ ページ側でそのまま使えるように公開（Promise<string>）
     getNameLastFirstByID,
   };
 }

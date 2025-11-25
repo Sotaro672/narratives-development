@@ -42,11 +42,27 @@ func (u *ProductBlueprintUsecase) Exists(ctx context.Context, id string) (bool, 
 // Commands (単体)
 // ------------------------------------------------------------
 
-func (u *ProductBlueprintUsecase) Create(ctx context.Context, v productbpdom.ProductBlueprint) (productbpdom.ProductBlueprint, error) {
+func (u *ProductBlueprintUsecase) Create(
+	ctx context.Context,
+	v productbpdom.ProductBlueprint,
+) (productbpdom.ProductBlueprint, error) {
+	// ★ BrandUsecase と同様:
+	//   context の companyId を優先して強制適用
+	if cid := companyIDFromContext(ctx); cid != "" {
+		v.CompanyID = strings.TrimSpace(cid)
+	}
 	return u.repo.Create(ctx, v)
 }
 
-func (u *ProductBlueprintUsecase) Save(ctx context.Context, v productbpdom.ProductBlueprint) (productbpdom.ProductBlueprint, error) {
+func (u *ProductBlueprintUsecase) Save(
+	ctx context.Context,
+	v productbpdom.ProductBlueprint,
+) (productbpdom.ProductBlueprint, error) {
+	// ★ BrandUsecase と同様:
+	//   context の companyId を優先して強制適用
+	if cid := companyIDFromContext(ctx); cid != "" {
+		v.CompanyID = strings.TrimSpace(cid)
+	}
 	return u.repo.Save(ctx, v)
 }
 
