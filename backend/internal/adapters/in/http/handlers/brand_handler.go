@@ -132,9 +132,9 @@ func (h *BrandHandler) list(w http.ResponseWriter, r *http.Request) {
 	q := r.URL.Query()
 
 	var f branddom.Filter
-	if v := strings.TrimSpace(q.Get("companyId")); v != "" {
-		f.CompanyID = &v
-	}
+
+	// ✅ companyId はクエリからは受け取らず、Usecase 側で
+	//    companyIDFromContext(ctx) によって必ず上書きされる前提。
 	if v := strings.TrimSpace(q.Get("managerId")); v != "" {
 		f.ManagerID = &v
 	}

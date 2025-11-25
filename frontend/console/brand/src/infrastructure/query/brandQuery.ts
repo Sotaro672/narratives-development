@@ -28,31 +28,21 @@ export type BrandListOptions = {
 };
 
 /**
- * companyId を指定して Brand の PageResult を取得
+ * currentMember.companyId に紐づく Brand の PageResult を取得。
+ *
+ * NOTE:
+ *  - 引数 companyId は互換性のために残しているが **中では使用しない**。
+ *  - 実際の companyId 絞り込みは backend 側の companyIDFromContext(ctx) に任せる。
  */
 export async function fetchBrandListByCompanyId(
-  companyId: string,
+  _companyId: string,
   options: BrandListOptions = {},
 ): Promise<PageResult<Brand>> {
-  const trimmedCompanyId = companyId.trim();
   const page = options.page ?? 1;
   const perPage = options.perPage ?? DEFAULT_PAGE_LIMIT;
 
-  if (!trimmedCompanyId) {
-    // companyId が空の場合は空配列を返す（エラーにはしない）
-    return {
-      items: [],
-      totalCount: 0,
-      totalPages: 1,
-      page,
-      perPage,
-    };
-  }
-
-  const filter: BrandFilter = {
-    companyId: trimmedCompanyId,
-  };
-
+  const filter: BrandFilter = {};
+  // isActive フィルタだけフロント側から渡す
   if (typeof options.isActive === "boolean") {
     filter.isActive = options.isActive;
   }
@@ -60,6 +50,7 @@ export async function fetchBrandListByCompanyId(
   const sort: BrandSort =
     options.sort ?? ({ column: "created_at", order: "desc" } as const);
 
+  // ★ companyId は送らず、backend が ctx の companyId で必ず絞る
   return brandRepositoryHTTP.list({
     filter,
     sort,
@@ -69,14 +60,18 @@ export async function fetchBrandListByCompanyId(
 }
 
 /**
- * companyId 単位で全ブランド（最大 200 件）だけ欲しい場合の薄いヘルパー。
+ * currentMember.companyId 単位で全ブランド（最大 200 件）だけ欲しい場合のヘルパー。
  * UI からはだいたいこちらを使う想定。
+ *
+ * NOTE:
+ *  - 第一引数 companyId は互換性のために残しているが **無視される**。
+ *  - backend が context.companyId を使ってフィルタする。
  */
 export async function fetchAllBrandsForCompany(
-  companyId: string,
+  _companyId: string,
   isActiveOnly = false,
 ): Promise<Brand[]> {
-  const result = await fetchBrandListByCompanyId(companyId, {
+  const result = await fetchBrandListByCompanyId("", {
     isActive: isActiveOnly ? true : undefined,
     page: 1,
     perPage: 200,
@@ -84,3 +79,4 @@ export async function fetchAllBrandsForCompany(
   });
   return result.items;
 }
+

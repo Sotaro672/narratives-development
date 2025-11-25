@@ -5,7 +5,8 @@ import {
   MODEL_NUMBERS,
   SIZE_VARIATIONS,
 } from "../../../../model/src/infrastructure/mockdata/mockdata";
-import type { ProductBlueprint } from "../../../../shell/src/shared/types/productBlueprint";
+// ProductBlueprint は frontend/productBlueprint のドメイン定義を正とする
+import type { ProductBlueprint } from "../../../../productBlueprint/src/domain/entity/productBlueprint";
 
 // BrandID → 表示名（モック用マッピング）
 export const brandLabelFromId = (brandId: string): string => {
@@ -82,13 +83,13 @@ export function fetchProductBlueprintListRows(): ProductBlueprintListRow[] {
       productName: pb.productName,
       brandLabel: brandLabelFromId(pb.brandId),
       assigneeLabel: pb.assigneeId || "-",
-      // entity.go 準拠: Tag は ProductIdTag (struct) を保持し、その type を表示
+      // ProductIDTag.type は "qr" | "nfc" を想定。表示上は大文字にしてラベル化。
       tagLabel:
         pb.productIdTag && pb.productIdTag.type
           ? pb.productIdTag.type.toUpperCase()
           : "-",
       createdAt: toDisplayDate(pb.createdAt),
-      // entity.go 準拠: 最終更新日時は UpdatedAt
+      // 最終更新日時は updatedAt
       lastModifiedAt: toDisplayDate(pb.updatedAt),
     }));
 }

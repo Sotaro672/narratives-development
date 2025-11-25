@@ -92,7 +92,6 @@ func NewRouter(deps RouterDeps) http.Handler {
 	// /auth/bootstrap
 	// ================================
 	if deps.AuthBootstrap != nil && bootstrapMw != nil {
-		// ★ 実際のハンドラ名に合わせてください
 		bootstrapHandler := handlers.NewAuthBootstrapHandler(deps.AuthBootstrap)
 
 		var h http.Handler = bootstrapHandler
@@ -102,55 +101,232 @@ func NewRouter(deps RouterDeps) http.Handler {
 	}
 
 	// ================================
-	// 既存ドメインの登録（元のまま＋α）
+	// Accounts
 	// ================================
-	mux.Handle("/accounts", handlers.NewAccountHandler(deps.AccountUC))
-	mux.Handle("/accounts/", handlers.NewAccountHandler(deps.AccountUC))
+	if deps.AccountUC != nil {
+		accountH := handlers.NewAccountHandler(deps.AccountUC)
 
-	mux.Handle("/announcements", handlers.NewAnnouncementHandler(deps.AnnouncementUC))
-	mux.Handle("/announcements/", handlers.NewAnnouncementHandler(deps.AnnouncementUC))
+		var h http.Handler = accountH
+		if authMw != nil {
+			h = authMw.Handler(h)
+		}
 
-	mux.Handle("/permissions", handlers.NewPermissionHandler(deps.PermissionUC))
-	mux.Handle("/permissions/", handlers.NewPermissionHandler(deps.PermissionUC))
-
-	mux.Handle("/avatars", handlers.NewAvatarHandler(deps.AvatarUC))
-	mux.Handle("/avatars/", handlers.NewAvatarHandler(deps.AvatarUC))
-
-	mux.Handle("/brands", handlers.NewBrandHandler(deps.BrandUC))
-	mux.Handle("/brands/", handlers.NewBrandHandler(deps.BrandUC))
-
-	mux.Handle("/companies", handlers.NewCompanyHandler(deps.CompanyUC))
-	mux.Handle("/companies/", handlers.NewCompanyHandler(deps.CompanyUC))
-
-	mux.Handle("/inquiries", handlers.NewInquiryHandler(deps.InquiryUC))
-	mux.Handle("/inquiries/", handlers.NewInquiryHandler(deps.InquiryUC))
-
-	mux.Handle("/inventories", handlers.NewInventoryHandler(deps.InventoryUC))
-	mux.Handle("/inventories/", handlers.NewInventoryHandler(deps.InventoryUC))
-
-	mux.Handle("/tokens", handlers.NewTokenHandler(deps.TokenUC))
-	mux.Handle("/tokens/", handlers.NewTokenHandler(deps.TokenUC))
-
-	mux.Handle("/products", handlers.NewProductHandler(deps.ProductUC))
-	mux.Handle("/products/", handlers.NewProductHandler(deps.ProductUC))
-
-	mux.Handle("/product-blueprints", handlers.NewProductBlueprintHandler(deps.ProductBlueprintUC))
-	mux.Handle("/product-blueprints/", handlers.NewProductBlueprintHandler(deps.ProductBlueprintUC))
-
-	mux.Handle("/token-blueprints", handlers.NewTokenBlueprintHandler(deps.TokenBlueprintUC))
-	mux.Handle("/token-blueprints/", handlers.NewTokenBlueprintHandler(deps.TokenBlueprintUC))
-
-	mux.Handle("/messages", handlers.NewMessageHandler(deps.MessageUC, deps.MessageRepo))
-	mux.Handle("/messages/", handlers.NewMessageHandler(deps.MessageUC, deps.MessageRepo))
-
-	mux.Handle("/orders", handlers.NewOrderHandler(deps.OrderUC))
-	mux.Handle("/orders/", handlers.NewOrderHandler(deps.OrderUC))
-
-	mux.Handle("/wallets", handlers.NewWalletHandler(deps.WalletUC))
-	mux.Handle("/wallets/", handlers.NewWalletHandler(deps.WalletUC))
+		mux.Handle("/accounts", h)
+		mux.Handle("/accounts/", h)
+	}
 
 	// ================================
-	// Members エンドポイント追加
+	// Announcements
+	// ================================
+	if deps.AnnouncementUC != nil {
+		announcementH := handlers.NewAnnouncementHandler(deps.AnnouncementUC)
+
+		var h http.Handler = announcementH
+		if authMw != nil {
+			h = authMw.Handler(h)
+		}
+
+		mux.Handle("/announcements", h)
+		mux.Handle("/announcements/", h)
+	}
+
+	// ================================
+	// Permissions
+	// ================================
+	if deps.PermissionUC != nil {
+		permissionH := handlers.NewPermissionHandler(deps.PermissionUC)
+
+		var h http.Handler = permissionH
+		if authMw != nil {
+			h = authMw.Handler(h)
+		}
+
+		mux.Handle("/permissions", h)
+		mux.Handle("/permissions/", h)
+	}
+
+	// ================================
+	// Avatars
+	// ================================
+	if deps.AvatarUC != nil {
+		avatarH := handlers.NewAvatarHandler(deps.AvatarUC)
+
+		var h http.Handler = avatarH
+		if authMw != nil {
+			h = authMw.Handler(h)
+		}
+
+		mux.Handle("/avatars", h)
+		mux.Handle("/avatars/", h)
+	}
+
+	// ================================
+	// Brands
+	// ================================
+	if deps.BrandUC != nil {
+		brandH := handlers.NewBrandHandler(deps.BrandUC)
+
+		var h http.Handler = brandH
+		if authMw != nil {
+			h = authMw.Handler(h)
+		}
+
+		mux.Handle("/brands", h)
+		mux.Handle("/brands/", h)
+	}
+
+	// ================================
+	// Companies
+	// ================================
+	if deps.CompanyUC != nil {
+		companyH := handlers.NewCompanyHandler(deps.CompanyUC)
+
+		var h http.Handler = companyH
+		if authMw != nil {
+			h = authMw.Handler(h)
+		}
+
+		mux.Handle("/companies", h)
+		mux.Handle("/companies/", h)
+	}
+
+	// ================================
+	// Inquiries
+	// ================================
+	if deps.InquiryUC != nil {
+		inquiryH := handlers.NewInquiryHandler(deps.InquiryUC)
+
+		var h http.Handler = inquiryH
+		if authMw != nil {
+			h = authMw.Handler(h)
+		}
+
+		mux.Handle("/inquiries", h)
+		mux.Handle("/inquiries/", h)
+	}
+
+	// ================================
+	// Inventories
+	// ================================
+	if deps.InventoryUC != nil {
+		inventoryH := handlers.NewInventoryHandler(deps.InventoryUC)
+
+		var h http.Handler = inventoryH
+		if authMw != nil {
+			h = authMw.Handler(h)
+		}
+
+		mux.Handle("/inventories", h)
+		mux.Handle("/inventories/", h)
+	}
+
+	// ================================
+	// Tokens
+	// ================================
+	if deps.TokenUC != nil {
+		tokenH := handlers.NewTokenHandler(deps.TokenUC)
+
+		var h http.Handler = tokenH
+		if authMw != nil {
+			h = authMw.Handler(h)
+		}
+
+		mux.Handle("/tokens", h)
+		mux.Handle("/tokens/", h)
+	}
+
+	// ================================
+	// Products
+	// ================================
+	if deps.ProductUC != nil {
+		productH := handlers.NewProductHandler(deps.ProductUC)
+
+		var h http.Handler = productH
+		if authMw != nil {
+			h = authMw.Handler(h)
+		}
+
+		mux.Handle("/products", h)
+		mux.Handle("/products/", h)
+	}
+
+	// ================================
+	// Product Blueprints
+	// ================================
+	if deps.ProductBlueprintUC != nil {
+		pbH := handlers.NewProductBlueprintHandler(deps.ProductBlueprintUC)
+
+		var h http.Handler = pbH
+		if authMw != nil {
+			h = authMw.Handler(h)
+		}
+
+		mux.Handle("/product-blueprints", h)
+		mux.Handle("/product-blueprints/", h)
+	}
+
+	// ================================
+	// Token Blueprints
+	// ================================
+	if deps.TokenBlueprintUC != nil {
+		tbH := handlers.NewTokenBlueprintHandler(deps.TokenBlueprintUC)
+
+		var h http.Handler = tbH
+		if authMw != nil {
+			h = authMw.Handler(h)
+		}
+
+		mux.Handle("/token-blueprints", h)
+		mux.Handle("/token-blueprints/", h)
+	}
+
+	// ================================
+	// Messages
+	// ================================
+	if deps.MessageUC != nil && deps.MessageRepo != nil {
+		messageH := handlers.NewMessageHandler(deps.MessageUC, deps.MessageRepo)
+
+		var h http.Handler = messageH
+		if authMw != nil {
+			h = authMw.Handler(h)
+		}
+
+		mux.Handle("/messages", h)
+		mux.Handle("/messages/", h)
+	}
+
+	// ================================
+	// Orders
+	// ================================
+	if deps.OrderUC != nil {
+		orderH := handlers.NewOrderHandler(deps.OrderUC)
+
+		var h http.Handler = orderH
+		if authMw != nil {
+			h = authMw.Handler(h)
+		}
+
+		mux.Handle("/orders", h)
+		mux.Handle("/orders/", h)
+	}
+
+	// ================================
+	// Wallets
+	// ================================
+	if deps.WalletUC != nil {
+		walletH := handlers.NewWalletHandler(deps.WalletUC)
+
+		var h http.Handler = walletH
+		if authMw != nil {
+			h = authMw.Handler(h)
+		}
+
+		mux.Handle("/wallets", h)
+		mux.Handle("/wallets/", h)
+	}
+
+	// ================================
+	// Members
 	// ================================
 	if deps.MemberUC != nil {
 		memberH := handlers.NewMemberHandler(deps.MemberUC)
@@ -165,7 +341,7 @@ func NewRouter(deps RouterDeps) http.Handler {
 	}
 
 	// ================================
-	// Models エンドポイント（既存＋認証）
+	// Models
 	// ================================
 	if deps.ModelUC != nil {
 		modelH := handlers.NewModelHandler(deps.ModelUC)

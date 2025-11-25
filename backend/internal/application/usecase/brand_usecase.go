@@ -80,6 +80,11 @@ func (u *BrandUsecase) ListByCursor(
 // Create
 // Brand を作成し、その後 ManagerID を元に member.assignedBrands を更新する
 func (u *BrandUsecase) Create(ctx context.Context, b branddom.Brand) (branddom.Brand, error) {
+	// context の companyId を優先して強制適用
+	if cid := companyIDFromContext(ctx); cid != "" {
+		b.CompanyID = strings.TrimSpace(cid)
+	}
+
 	if b.CreatedAt.IsZero() {
 		b.CreatedAt = u.now().UTC()
 	}
@@ -142,6 +147,11 @@ func (u *BrandUsecase) Update(
 
 // Save (upsert)
 func (u *BrandUsecase) Save(ctx context.Context, b branddom.Brand) (branddom.Brand, error) {
+	// context の companyId を優先して強制適用
+	if cid := companyIDFromContext(ctx); cid != "" {
+		b.CompanyID = strings.TrimSpace(cid)
+	}
+
 	if b.CreatedAt.IsZero() {
 		b.CreatedAt = u.now().UTC()
 	}

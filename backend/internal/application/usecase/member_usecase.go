@@ -49,24 +49,6 @@ func NewMemberUsecaseWithMailer(repo memdom.Repository, mailer InvitationMailer)
 }
 
 // -----------------------------------------------------------------------------
-// Multitenancy: companyId 取得
-// -----------------------------------------------------------------------------
-
-func companyIDFromContext(ctx context.Context) string {
-	if v := ctx.Value("companyId"); v != nil {
-		if s, ok := v.(string); ok {
-			return strings.TrimSpace(s)
-		}
-	}
-	if v := ctx.Value("auth.companyId"); v != nil {
-		if s, ok := v.(string); ok {
-			return strings.TrimSpace(s)
-		}
-	}
-	return ""
-}
-
-// -----------------------------------------------------------------------------
 // Queries
 // -----------------------------------------------------------------------------
 
