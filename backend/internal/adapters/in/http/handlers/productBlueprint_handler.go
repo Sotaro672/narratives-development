@@ -21,25 +21,28 @@ func NewProductBlueprintHandler(uc *usecase.ProductBlueprintUsecase) http.Handle
 func (h *ProductBlueprintHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 
+	// ★ 末尾のスラッシュを削ってから判定する
+	path := strings.TrimRight(r.URL.Path, "/")
+
 	switch {
 
 	// ----------------------------
 	// GET /product-blueprints  ← ★ NEW（一覧 API）
 	// ----------------------------
-	case r.Method == http.MethodGet && r.URL.Path == "/product-blueprints":
+	case r.Method == http.MethodGet && path == "/product-blueprints":
 		h.list(w, r)
 
 	// ----------------------------
 	// POST /product-blueprints
 	// ----------------------------
-	case r.Method == http.MethodPost && r.URL.Path == "/product-blueprints":
+	case r.Method == http.MethodPost && path == "/product-blueprints":
 		h.post(w, r)
 
 	// ----------------------------
 	// GET /product-blueprints/{id}
 	// ----------------------------
-	case r.Method == http.MethodGet && strings.HasPrefix(r.URL.Path, "/product-blueprints/"):
-		id := strings.TrimPrefix(r.URL.Path, "/product-blueprints/")
+	case r.Method == http.MethodGet && strings.HasPrefix(path, "/product-blueprints/"):
+		id := strings.TrimPrefix(path, "/product-blueprints/")
 		h.get(w, r, id)
 
 	default:

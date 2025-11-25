@@ -1,89 +1,68 @@
-// frontend/console/shell/src/auth/application/memberService.ts
 /// <reference types="vite/client" />
 
+// frontend/console/shell/src/auth/application/memberService.ts
+
 import type { MemberDTO } from "../domain/entity/member";
-import { auth } from "../infrastructure/config/firebaseClient";
+import {
+  fetchCurrentMemberRaw,
+  updateCurrentMemberProfileRaw,
+} from "../infrastructure/repository/authRepositoryHTTP";
 
-const ENV_BASE =
-  ((import.meta as any).env?.VITE_BACKEND_BASE_URL as string | undefined)?.replace(
-    /\/+$/g,
-    "",
-  ) ?? "";
-
-const FALLBACK_BASE =
-  "https://narratives-backend-871263659099.asia-northeast1.run.app";
-
-const API_BASE = ENV_BASE || FALLBACK_BASE;
-
-export async function fetchCurrentMember(uid: string): Promise<MemberDTO | null> {
-  const token = await auth.currentUser?.getIdToken();
-  if (!token) return null;
-
-  const url = `${API_BASE}/members/${encodeURIComponent(uid)}`;
-  console.log("[memberService] fetchCurrentMember uid:", uid, "GET", url);
-
-  const res = await fetch(url, {
-    method: "GET",
-    headers: {
-      Authorization: `Bearer ${token}`,
-      "Content-Type": "application/json",
-    },
-  });
-
-  if (!res.ok) {
-    const text = await res.text().catch(() => "");
-    console.warn(
-      "[memberService] fetchCurrentMember failed:",
-      res.status,
-      res.statusText,
-      text,
-    );
-    return null;
-  }
-
-  const ct = res.headers.get("Content-Type") ?? "";
-  if (!ct.includes("application/json")) {
-    throw new Error(
-      `currentMember API が JSON を返していません (content-type=${ct}). ` +
-        `VITE_BACKEND_BASE_URL または API_BASE=${API_BASE} を確認してください。`,
-    );
-  }
-
-  const raw = (await res.json()) as any;
-  if (!raw) return null;
-
+// -------------------------------
+// 共通: 生 JSON → MemberDTO 変換
+// -------------------------------
+function mapRawToMemberDTO(
+  raw: any,
+  fallbackId: string,
+  fallbackEmail?: string | null,
+): MemberDTO {
   const firstName =
-    raw.firstName && String(raw.firstName).trim() !== ""
+    raw?.firstName && String(raw.firstName).trim() !== ""
       ? String(raw.firstName)
       : null;
   const lastName =
-    raw.lastName && String(raw.lastName).trim() !== ""
+    raw?.lastName && String(raw.lastName).trim() !== ""
       ? String(raw.lastName)
       : null;
 
   const firstNameKana =
-    raw.firstNameKana && String(raw.firstNameKana).trim() !== ""
+    raw?.firstNameKana && String(raw.firstNameKana).trim() !== ""
       ? String(raw.firstNameKana)
       : null;
 
   const lastNameKana =
-    raw.lastNameKana && String(raw.lastNameKana).trim() !== ""
+    raw?.lastNameKana && String(raw.lastNameKana).trim() !== ""
       ? String(raw.lastNameKana)
       : null;
 
   const full = `${lastName ?? ""} ${firstName ?? ""}`.trim() || null;
 
   return {
-    id: raw.id ?? uid,
+    id: raw?.id ?? fallbackId,
     firstName,
     lastName,
     firstNameKana,
     lastNameKana,
-    email: raw.email ?? null,
-    companyId: raw.companyId ?? "",
+    email: raw?.email ?? fallbackEmail ?? null,
+    companyId: raw?.companyId ?? "",
     fullName: full,
   };
 }
+
+// -------------------------------
+// 現在メンバー取得
+// -------------------------------
+
+export async function fetchCurrentMember(uid: string): Promise<MemberDTO | null> {
+  const raw = await fetchCurrentMemberRaw(uid);
+  if (!raw) return null;
+
+  return mapRawToMemberDTO(raw, uid);
+}
+
+// -------------------------------
+// プロファイル更新
+// -------------------------------
 
 // ★ email を含められるようにする
 export type UpdateMemberProfileInput = {
@@ -98,13 +77,7 @@ export type UpdateMemberProfileInput = {
 export async function updateCurrentMemberProfile(
   input: UpdateMemberProfileInput,
 ): Promise<MemberDTO | null> {
-  const token = await auth.currentUser?.getIdToken();
-  if (!token) return null;
-
-  const url = `${API_BASE}/members/${encodeURIComponent(input.id)}`;
-  console.log("[memberService] updateCurrentMemberProfile PATCH", url, input);
-
-  // PATCH の payload
+  // PATCH の payload（HTTP レイヤは payload の中身を知らない）
   const payload: any = {
     firstName: input.firstName,
     lastName: input.lastName,
@@ -115,62 +88,8 @@ export async function updateCurrentMemberProfile(
     payload.email = input.email;
   }
 
-  const res = await fetch(url, {
-    method: "PATCH",
-    headers: {
-      Authorization: `Bearer ${token}`,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify(payload),
-  });
+  const raw = await updateCurrentMemberProfileRaw(input.id, payload);
+  if (!raw) return null;
 
-  if (!res.ok) {
-    const text = await res.text().catch(() => "");
-    console.warn(
-      "[memberService] updateCurrentMemberProfile failed:",
-      res.status,
-      res.statusText,
-      text,
-    );
-    return null;
-  }
-
-  const ct = res.headers.get("Content-Type") ?? "";
-  if (!ct.includes("application/json")) {
-    return null;
-  }
-
-  const raw = (await res.json()) as any;
-
-  const firstName =
-    raw.firstName && String(raw.firstName).trim() !== ""
-      ? String(raw.firstName)
-      : null;
-  const lastName =
-    raw.lastName && String(raw.lastName).trim() !== ""
-      ? String(raw.lastName)
-      : null;
-
-  const firstNameKana =
-    raw.firstNameKana && String(raw.firstNameKana).trim() !== ""
-      ? String(raw.firstNameKana)
-      : null;
-
-  const lastNameKana =
-    raw.lastNameKana && String(raw.lastNameKana).trim() !== ""
-      ? String(raw.lastNameKana)
-      : null;
-
-  const full = `${lastName ?? ""} ${firstName ?? ""}`.trim() || null;
-
-  return {
-    id: raw.id ?? input.id,
-    firstName,
-    lastName,
-    firstNameKana,
-    lastNameKana,
-    email: raw.email ?? payload.email ?? null,
-    companyId: raw.companyId ?? "",
-    fullName: full,
-  };
+  return mapRawToMemberDTO(raw, input.id, input.email ?? null);
 }
