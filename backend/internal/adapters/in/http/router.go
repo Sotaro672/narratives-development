@@ -254,7 +254,7 @@ func NewRouter(deps RouterDeps) http.Handler {
 	// Product Blueprints
 	// ================================
 	if deps.ProductBlueprintUC != nil {
-		pbH := handlers.NewProductBlueprintHandler(deps.ProductBlueprintUC)
+		pbH := handlers.NewProductBlueprintHandler(deps.ProductBlueprintUC, nil)
 
 		var h http.Handler = pbH
 		if authMw != nil {
@@ -264,7 +264,6 @@ func NewRouter(deps RouterDeps) http.Handler {
 		mux.Handle("/product-blueprints", h)
 		mux.Handle("/product-blueprints/", h)
 	}
-
 	// ================================
 	// Token Blueprints
 	// ================================

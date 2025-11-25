@@ -3,40 +3,13 @@
 import { useMemo, useState, useCallback, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 
-// ★ HTTP Repository から一覧を取得
-import { listProductBlueprintsHTTP } from "../../infrastructure/repository/productBlueprintRepositoryHTTP";
-
-// UI 一覧表示用の行モデル
-export type UiRow = {
-  id: string;
-  productName: string;
-  brandLabel: string;
-  assigneeLabel: string;
-  tagLabel: string;
-  createdAt: string;
-  lastModifiedAt: string;
-};
-
-// ★ backend /product-blueprints のレスポンス想定
-//   （すべて optional にしておいて UI 用に詰め直す）
-type RawProductBlueprintListRow = {
-  id?: string;
-  productName?: string;
-  brandLabel?: string;
-  assigneeLabel?: string;
-  tagLabel?: string;
-  createdAt?: string;
-  lastModifiedAt?: string;
-};
-
-// "YYYY/MM/DD" → timestamp（ソート用）
-const toTs = (yyyyMd: string) => {
-  if (!yyyyMd) return 0;
-  const [y, m, d] = yyyyMd.split("/").map((v) => parseInt(v, 10));
-  return new Date(y, (m || 1) - 1, d || 1).getTime();
-};
-
-type SortKey = "createdAt" | "lastModifiedAt" | null;
+import {
+  fetchProductBlueprintManagementRows,
+  filterAndSortProductBlueprintRows,
+  type UiRow,
+  type ProductBlueprintSortKey,
+  type SortDirection,
+} from "../../application/productBlueprintManagementService";
 
 export interface UseProductBlueprintManagementResult {
   rows: UiRow[];
@@ -53,7 +26,7 @@ export interface UseProductBlueprintManagementResult {
 
 /**
  * 商品設計一覧画面のロジック
- * - mockdata を廃止し、backend の /product-blueprints を参照
+ * - backend の /product-blueprints を参照
  * - フィルタ・ソート・画面遷移のみ担当
  */
 export function useProductBlueprintManagement(): UseProductBlueprintManagementResult {
@@ -64,8 +37,8 @@ export function useProductBlueprintManagement(): UseProductBlueprintManagementRe
 
   // フィルタ & ソート状態
   const [brandFilter, setBrandFilter] = useState<string[]>([]);
-  const [sortedKey, setSortedKey] = useState<SortKey>(null);
-  const [sortedDir, setSortedDir] = useState<"asc" | "desc" | null>(null);
+  const [sortedKey, setSortedKey] = useState<ProductBlueprintSortKey>(null);
+  const [sortedDir, setSortedDir] = useState<SortDirection>(null);
 
   // ---------------------------
   // 初回ロード: backend から取得
@@ -73,24 +46,13 @@ export function useProductBlueprintManagement(): UseProductBlueprintManagementRe
   useEffect(() => {
     (async () => {
       try {
-        const list = await listProductBlueprintsHTTP(); // ★ backend API 呼び出し
-
-        // 必要な UI 行構造に整形
-        const uiRows: UiRow[] = (list as RawProductBlueprintListRow[]).map(
-          (pb) => ({
-            id: pb.id ?? "",
-            productName: pb.productName ?? "",
-            brandLabel: pb.brandLabel ?? "",
-            assigneeLabel: pb.assigneeLabel ?? "",
-            tagLabel: pb.tagLabel ?? "",
-            createdAt: pb.createdAt ?? "",
-            lastModifiedAt: pb.lastModifiedAt ?? "",
-          }),
-        );
-
+        const uiRows = await fetchProductBlueprintManagementRows();
         setAllRows(uiRows);
       } catch (err) {
-        console.error("[useProductBlueprintManagement] list load failed", err);
+        console.error(
+          "[useProductBlueprintManagement] list load failed",
+          err,
+        );
         setAllRows([]);
       }
     })();
@@ -99,25 +61,16 @@ export function useProductBlueprintManagement(): UseProductBlueprintManagementRe
   // ---------------------------
   // フィルタ・ソート適用
   // ---------------------------
-  const rows: UiRow[] = useMemo(() => {
-    let work = allRows;
-
-    // ブランド絞り込み
-    if (brandFilter.length > 0) {
-      work = work.filter((r) => brandFilter.includes(r.brandLabel));
-    }
-
-    // ソート適用
-    if (sortedKey && sortedDir) {
-      work = [...work].sort((a, b) => {
-        const av = toTs(a[sortedKey]);
-        const bv = toTs(b[sortedKey]);
-        return sortedDir === "asc" ? av - bv : bv - av;
-      });
-    }
-
-    return work;
-  }, [allRows, brandFilter, sortedKey, sortedDir]);
+  const rows: UiRow[] = useMemo(
+    () =>
+      filterAndSortProductBlueprintRows({
+        allRows,
+        brandFilter,
+        sortedKey,
+        sortedDir,
+      }),
+    [allRows, brandFilter, sortedKey, sortedDir],
+  );
 
   // ---------------------------
   // ハンドラ群
@@ -128,8 +81,8 @@ export function useProductBlueprintManagement(): UseProductBlueprintManagementRe
 
   const handleSortChange = useCallback(
     (key: string | null, dir: "asc" | "desc" | null) => {
-      setSortedKey((key as SortKey) ?? null);
-      setSortedDir(dir);
+      setSortedKey((key as ProductBlueprintSortKey) ?? null);
+      setSortedDir(dir as SortDirection);
     },
     [],
   );

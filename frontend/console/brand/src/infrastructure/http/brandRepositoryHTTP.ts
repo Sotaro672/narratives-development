@@ -289,3 +289,24 @@ export class BrandRepositoryHTTP {
 }
 
 export const brandRepositoryHTTP = new BrandRepositoryHTTP();
+
+/**
+ * brandId → brandName 変換ヘルパー
+ * backend の brand.Service.GetNameByID と同等の役割
+ */
+export async function fetchBrandNameById(brandId: string): Promise<string> {
+  const id = brandId?.trim();
+  if (!id) return "";
+
+  try {
+    const b = await brandRepositoryHTTP.getById(id);
+    return (b.name ?? "").trim(); // formatBrandName 相当
+  } catch (err) {
+    console.warn("[fetchBrandNameById] failed to get brand name", {
+      brandId: id,
+      err,
+    });
+    // 失敗時は ID をそのまま表示するか、空文字にするかは運用ポリシー次第
+    return id;
+  }
+}

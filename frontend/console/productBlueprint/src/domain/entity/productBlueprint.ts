@@ -13,44 +13,28 @@ export type ItemType = "tops" | "bottoms" | "other";
 export type ProductIDTagType = "qr" | "nfc";
 
 /**
- * LogoDesignFile
- * backend/internal/domain/productBlueprint/entity.go の LogoDesignFile に対応。
- */
-export interface LogoDesignFile {
-  name: string;
-  url: string;
-}
-
-/**
  * ProductIDTag
  * backend/internal/domain/productBlueprint/entity.go の ProductIDTag に対応。
+ *
+ * LogoDesignFile を削除したため logoDesignFile も削除
  */
 export interface ProductIDTag {
   type: ProductIDTagType;
-  logoDesignFile?: LogoDesignFile | null;
 }
 
 /**
  * ModelVariation
  * backend/internal/domain/model/ModelVariation に対応するフロント側定義。
- * Go側では ProductBlueprint には VariationIDs（string 配列）のみを保持し、
- * 実体は Model 側で管理する想定。
- * フロントでは必要に応じて ModelVariation[] を別 API から取得して組み合わせる。
  */
 export interface ModelVariation {
   id: string;
   name?: string;
-  // 任意の追加プロパティ（色・サイズなど）は API に合わせて利用
   [key: string]: unknown;
 }
 
 /**
  * ProductBlueprint
  * backend/internal/domain/productBlueprint/entity.go の ProductBlueprint に対応。
- *
- * - 日付は ISO8601 文字列として扱う
- * - updatedAt / updatedBy は backend の UpdatedAt / UpdatedBy に対応
- * - deletedAt / deletedBy は backend の DeletedAt / DeletedBy に対応（ソフトデリート）
  */
 export interface ProductBlueprint {
   id: string;
@@ -60,11 +44,7 @@ export interface ProductBlueprint {
   /** backend の ItemType に対応（tops / bottoms / other） */
   itemType: ItemType;
 
-  /**
-   * モデルIDの配列。
-   * backend の VariationIDs ([]string) に対応。
-   */
-  variationIds: string[];
+  /** variationIds 削除に伴い該当要素も削除 */
 
   fit: string;
   material: string;
@@ -119,65 +99,16 @@ export function isValidProductIDTagType(
   return value === "qr" || value === "nfc";
 }
 
-/** LogoDesignFile の簡易バリデーション */
-export function validateLogoDesignFile(file: LogoDesignFile): string[] {
-  const errors: string[] = [];
-  if (!file.name?.trim()) {
-    errors.push("logoDesignFile.name is required");
-  }
-  try {
-    // URL コンストラクタでざっくり検証
-    new URL(file.url);
-  } catch {
-    errors.push("logoDesignFile.url must be a valid URL");
-  }
-  return errors;
-}
-
-/** ProductIDTag の簡易バリデーション */
+/** ProductIDTag の簡易バリデーション（LogoDesignFile 削除対応） */
 export function validateProductIDTag(tag: ProductIDTag): string[] {
   const errors: string[] = [];
   if (!isValidProductIDTagType(tag.type)) {
     errors.push("productIdTag.type must be 'qr' or 'nfc'");
   }
-  if (tag.logoDesignFile) {
-    errors.push(...validateLogoDesignFile(tag.logoDesignFile));
-  }
   return errors;
 }
 
-/**
- * ModelVariation[] を id でユニーク化＆trim するユーティリティ。
- * （Model 側の UI 等で引き続き利用可能）
- */
-export function normalizeVariations(
-  vars: ModelVariation[],
-): ModelVariation[] {
-  const seen = new Set<string>();
-  const out: ModelVariation[] = [];
-  for (const v of vars || []) {
-    const id = (v.id ?? "").trim();
-    if (!id || seen.has(id)) continue;
-    seen.add(id);
-    out.push({ ...v, id });
-  }
-  return out;
-}
-
-/** variationIds の重複/空文字を排除（backend の dedupTrim 相当） */
-export function normalizeVariationIds(ids: string[]): string[] {
-  const seen = new Set<string>();
-  const out: string[] = [];
-  for (const raw of ids || []) {
-    const x = raw.trim();
-    if (!x || seen.has(x)) continue;
-    seen.add(x);
-    out.push(x);
-  }
-  return out;
-}
-
-/** qualityAssurance の重複/空文字を排除（backend の dedupTrim 相当） */
+/** qualityAssurance の重複/空文字を排除 */
 export function normalizeQualityAssurance(xs: string[]): string[] {
   const seen = new Set<string>();
   const out: string[] = [];
@@ -192,7 +123,7 @@ export function normalizeQualityAssurance(xs: string[]): string[] {
 
 /**
  * ProductBlueprint の簡易バリデーション
- * backend の validate() ロジックと整合するようにチェック。
+ * variationIds 削除済みのため関連チェックも削除。
  */
 export function validateProductBlueprint(
   pb: ProductBlueprint,
@@ -225,38 +156,18 @@ export function validateProductBlueprint(
     errors.push("createdAt is required");
   }
 
-  // variationIds: 空文字でない & 重複なし（normalize前提だが念のためチェック）
-  const seen = new Set<string>();
-  for (const rawId of pb.variationIds || []) {
-    const id = rawId.trim();
-    if (!id) {
-      errors.push("variationIds must not contain empty id");
-      continue;
-    }
-    if (seen.has(id)) {
-      errors.push(`duplicate variation id: ${id}`);
-    }
-    seen.add(id);
-  }
-
   return errors;
 }
 
 /**
  * ファクトリ: 入力値を正規化しつつ ProductBlueprint を生成。
- * （フロント側でモック生成やフォーム初期値に利用）
+ * variationIds 削除に伴いロジックから除外。
  */
 export function createProductBlueprint(
   input: Omit<
     ProductBlueprint,
-    | "variationIds"
-    | "qualityAssurance"
-    | "updatedAt"
-    | "updatedBy"
-    | "deletedAt"
-    | "deletedBy"
+    "qualityAssurance" | "updatedAt" | "updatedBy" | "deletedAt" | "deletedBy"
   > & {
-    variationIds?: string[];
     qualityAssurance?: string[];
     updatedAt?: string;
     updatedBy?: string | null;
@@ -264,7 +175,6 @@ export function createProductBlueprint(
     deletedBy?: string | null;
   },
 ): ProductBlueprint {
-  const variationIds = normalizeVariationIds(input.variationIds ?? []);
   const qualityAssurance = normalizeQualityAssurance(
     input.qualityAssurance ?? [],
   );
@@ -287,7 +197,6 @@ export function createProductBlueprint(
 
   return {
     ...input,
-    variationIds,
     qualityAssurance,
     updatedAt,
     updatedBy,

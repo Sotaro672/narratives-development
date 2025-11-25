@@ -1,82 +1,24 @@
 // frontend/console/productBlueprint/src/application/productBlueprintCreateService.ts 
 
-import type { ItemType, Fit } from "../domain/entity/catalog";
-import type { ProductIDTag } from "../domain/entity/productBlueprint";
+import type { ItemType } from "../domain/entity/catalog";
 
-// SizeRow / ModelNumber は model 側の型を利用
+// SizeRow は model 側の型を利用
+import type { SizeRow } from "../../../model/src/domain/entity/catalog";
+
+// API 呼び出しは infrastructure 層（api）に委譲
+import { createProductBlueprintApi } from "../infrastructure/api/productBlueprintApi";
 import type {
-  SizeRow,
-  MeasurementKey,
-} from "../../../model/src/domain/entity/catalog";
-import type { ModelNumber } from "../../../model/src/application/modelCreateService";
+  CreateProductBlueprintParams,
+  ProductBlueprintResponse,
+  NewModelVariationPayload,
+  NewModelVariationMeasurements,
+} from "../infrastructure/api/productBlueprintApi";
 
-// HTTP 呼び出しは infrastructure 層に委譲
-import {
-  createProductBlueprintHTTP,
-  // 将来的に直接 HTTP で ModelVariation を作成したくなった場合に利用
-  // createModelVariationHTTP,
-} from "../infrastructure/repository/productBlueprintRepositoryHTTP";
-
-// ProductBlueprint 作成後の JSON を受け取るアプリケーション層サービス
-import { createModelVariationsFromProductBlueprint } from "../../../model/src/application/modelCreateService";
-
-// ------------------------------
-// 型定義
-// ------------------------------
-
-export type CreateProductBlueprintParams = {
-  productName: string;
-  brandId: string;
-  itemType: ItemType;
-  fit: Fit;
-  material: string;
-  weight: number;
-  qualityAssurance: string[];
-
-  productIdTag: ProductIDTag;
-
-  companyId: string;
-  assigneeId?: string;
-  createdBy?: string;
-
-  // 商品設計画面から渡されるバリエーション情報
-  colors: string[];
-  sizes: SizeRow[];
-  modelNumbers: ModelNumber[];
-
-  // ★ ColorVariationCard から渡される color 名 → HEX(RGB) のマップ
-  //   例: { "グリーン": "#417505" }
-  colorRgbMap?: Record<string, string>;
-};
-
-export type ProductBlueprintResponse = {
-  ID?: string;
-  id?: string;
-  productBlueprintId?: string;
-  [key: string]: unknown;
-};
-
-/**
- * measurements 部分の型
- * - modelCreateService.tsx 側と同じく、MeasurementKey をキーにしたマップ
- */
-export type NewModelVariationMeasurements = Partial<
-  Record<MeasurementKey, number | null>
->;
-
-/**
- * ModelVariation 用 Payload
- *
- * - modelCreateService.tsx 側の NewModelVariationPayload と構造互換
- */
-export type NewModelVariationPayload = {
-  sizeLabel: string;
-  color: string;
-  rgb?: number; // ★ 色の RGB 値（0xRRGGBB）
-  modelNumber: string;
-  createdBy: string;
-  measurements: NewModelVariationMeasurements;
-};
+// 他モジュールからも型を引き続きここ経由で参照できるように re-export
+export type {
+  CreateProductBlueprintParams,
+  ProductBlueprintResponse,
+} from "../infrastructure/api/productBlueprintApi";
 
 // ------------------------------
 // HEX → number(RGB) 変換ヘルパー
@@ -187,43 +129,27 @@ function toNewModelVariationPayload(
 // Service 本体（アプリケーション層）
 // ------------------------------
 
+/**
+ * アプリケーション層の createProductBlueprint
+ *
+ * - variations の計算（SizeRow / ModelNumber / itemType / colorRgbMap から構築）
+ * - その結果を infrastructure/api の createProductBlueprintApi に委譲
+ */
 export async function createProductBlueprint(
   params: CreateProductBlueprintParams,
 ): Promise<ProductBlueprintResponse> {
-  // 1. ProductBlueprint の作成（HTTP）
-  const json = await createProductBlueprintHTTP(params);
-
-  // 2. productBlueprintId 抽出（backend がどのキーで返してもある程度吸収する）
-  const anyJson = json as any;
-  const productBlueprintIdRaw =
-    anyJson.productBlueprintId ??
-    anyJson.productBlueprintID ??
-    anyJson.id ??
-    anyJson.ID;
-
-  const productBlueprintId =
-    typeof productBlueprintIdRaw === "string"
-      ? productBlueprintIdRaw.trim()
-      : "";
-
-  if (!productBlueprintId) {
-    console.warn(
-      "[productBlueprintCreateService] productBlueprintId not found in response; skip ModelVariation creation",
-      json,
-    );
-    return json;
-  }
-
-  // 3. color / size / modelNumber / measurements から
-  //    modelCreateService.tsx に渡す JSON を組み立てる
+  // 1. color / size / modelNumber / measurements から
+  //    modelCreateService.ts に渡す JSON を組み立てる
   const variations: NewModelVariationPayload[] = [];
 
   const colorRgbMap = params.colorRgbMap ?? {};
 
   if (params.modelNumbers && params.sizes) {
     for (const v of params.modelNumbers) {
-      // 該当サイズの SizeRow を取得
-      const sizeRow = params.sizes.find((s) => s.sizeLabel === v.size);
+      // 該当サイズの SizeRow を取得（コールバック引数に型を明示）
+      const sizeRow = params.sizes.find(
+        (s: SizeRow) => s.sizeLabel === v.size,
+      );
       if (!sizeRow) {
         // サイズ行が見つからない場合はスキップ
         console.warn(
@@ -233,7 +159,7 @@ export async function createProductBlueprint(
         continue;
       }
 
-      // ★ color 名から HEX を取得し、RGB(int) に変換
+      // color 名から HEX を取得し、RGB(int) に変換
       const hex = colorRgbMap[v.color];
       const rgbInt = hexToRgbInt(hex);
 
@@ -250,28 +176,14 @@ export async function createProductBlueprint(
     }
   }
 
-  // 🔍 backend（/models/{productBlueprintId}/variations）に渡す直前の payload 全体をログ出力
+  // 🔍 backend へ渡す variations 全体をログ出力（id 抽出前段階）
   console.log(
-    "[productBlueprintCreateService] variations payload for backend",
+    "[productBlueprintCreateService] variations payload (before API call)",
     {
-      productBlueprintId,
       variations,
     },
   );
 
-  // 4. modelCreateService.tsx へ JSON を渡す
-  //    - ここでは「productBlueprint を Create した結果」を元に
-  //      model 作成（variations 作成）の起点となる payload を組み立てて渡す。
-  if (variations.length > 0) {
-    await createModelVariationsFromProductBlueprint({
-      productBlueprintId,
-      variations,
-    });
-  } else {
-    console.log(
-      "[productBlueprintCreateService] no variations to create; variations array is empty",
-    );
-  }
-
-  return json;
+  // 2. API モジュールに委譲（ProductBlueprint 作成 + ModelVariations 作成）
+  return await createProductBlueprintApi(params, variations);
 }

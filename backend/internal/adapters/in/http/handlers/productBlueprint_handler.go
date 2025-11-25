@@ -7,40 +7,43 @@ import (
 	"strings"
 
 	usecase "narratives/internal/application/usecase"
+	brand "narratives/internal/domain/brand"
 	pbdom "narratives/internal/domain/productBlueprint"
 )
 
+// ProductBlueprintHandler は ProductBlueprint 用の HTTP ハンドラです。
 type ProductBlueprintHandler struct {
-	uc *usecase.ProductBlueprintUsecase
+	uc       *usecase.ProductBlueprintUsecase
+	brandSvc *brand.Service
 }
 
-func NewProductBlueprintHandler(uc *usecase.ProductBlueprintUsecase) http.Handler {
-	return &ProductBlueprintHandler{uc: uc}
+// DI コンテナ側で ProductBlueprintUsecase と brand.Service を渡してください。
+func NewProductBlueprintHandler(
+	uc *usecase.ProductBlueprintUsecase,
+	brandSvc *brand.Service,
+) http.Handler {
+	return &ProductBlueprintHandler{
+		uc:       uc,
+		brandSvc: brandSvc, // brandSvc は nil でも動作するようにしている
+	}
 }
 
 func (h *ProductBlueprintHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 
-	// ★ 末尾のスラッシュを削ってから判定する
+	// 末尾のスラッシュを削ってから判定
 	path := strings.TrimRight(r.URL.Path, "/")
 
 	switch {
-
-	// ----------------------------
-	// GET /product-blueprints  ← ★ NEW（一覧 API）
-	// ----------------------------
+	// GET /product-blueprints  ← 一覧 API
 	case r.Method == http.MethodGet && path == "/product-blueprints":
 		h.list(w, r)
 
-	// ----------------------------
 	// POST /product-blueprints
-	// ----------------------------
 	case r.Method == http.MethodPost && path == "/product-blueprints":
 		h.post(w, r)
 
-	// ----------------------------
 	// GET /product-blueprints/{id}
-	// ----------------------------
 	case r.Method == http.MethodGet && strings.HasPrefix(path, "/product-blueprints/"):
 		id := strings.TrimPrefix(path, "/product-blueprints/")
 		h.get(w, r, id)
@@ -85,7 +88,7 @@ func (h *ProductBlueprintHandler) post(w http.ResponseWriter, r *http.Request) {
 		createdBy = &v
 	}
 
-	// ---------- Domain 変換 ----------
+	// Domain 変換
 	pb := pbdom.ProductBlueprint{
 		ProductName:      in.ProductName,
 		BrandID:          in.BrandId,
@@ -110,15 +113,17 @@ func (h *ProductBlueprintHandler) post(w http.ResponseWriter, r *http.Request) {
 }
 
 // ---------------------------------------------------
-// GET /product-blueprints   ← ★ 一覧 API
+// GET /product-blueprints   ← 一覧 API
 // ---------------------------------------------------
 
 type ProductBlueprintListOutput struct {
-	ID             string `json:"id"`
-	ProductName    string `json:"productName"`
-	BrandLabel     string `json:"brandLabel"`
-	CreatedAt      string `json:"createdAt"`
-	LastModifiedAt string `json:"lastModifiedAt"`
+	ID           string `json:"id"`
+	ProductName  string `json:"productName"`
+	BrandName    string `json:"brandName"`
+	AssigneeName string `json:"assigneeName"`
+	ProductIdTag string `json:"productIdTag"`
+	CreatedAt    string `json:"createdAt"` // YYYY/MM/DD
+	UpdatedAt    string `json:"updatedAt"` // YYYY/MM/DD
 }
 
 func (h *ProductBlueprintHandler) list(w http.ResponseWriter, r *http.Request) {
@@ -132,14 +137,43 @@ func (h *ProductBlueprintHandler) list(w http.ResponseWriter, r *http.Request) {
 
 	out := make([]ProductBlueprintListOutput, 0, len(rows))
 	for _, pb := range rows {
+		// brandId → brandName 変換（brandSvc が nil の場合は ID のまま）
+		brandName := strings.TrimSpace(pb.BrandID)
+		if h.brandSvc != nil && brandName != "" {
+			if name, err := h.brandSvc.GetNameByID(ctx, pb.BrandID); err == nil {
+				if strings.TrimSpace(name) != "" {
+					brandName = name
+				}
+			}
+		}
+
+		// 担当者名（現状は ID をそのまま表示。将来 Member サービスと連携する想定）
+		assigneeName := strings.TrimSpace(pb.AssigneeID)
+		if assigneeName == "" {
+			assigneeName = "-"
+		}
+
+		// ProductIdTag.Type → 表示用ラベル
+		productIdTag := "-"
+		if pb.ProductIdTag.Type != "" { // ★ ここを ProductIDTag → ProductIdTag に修正
+			productIdTag = strings.ToUpper(string(pb.ProductIdTag.Type))
+		}
+
+		// 日付を "YYYY/MM/DD" に整形
+		createdAt := pb.CreatedAt.Format("2006/01/02")
+		updatedAt := pb.UpdatedAt.Format("2006/01/02")
+		if pb.UpdatedAt.IsZero() {
+			updatedAt = createdAt
+		}
+
 		out = append(out, ProductBlueprintListOutput{
-			ID:          pb.ID,
-			ProductName: pb.ProductName,
-			// ★ いまは BrandID をそのままラベルとして返す
-			//    （必要になったら Usecase で Brand 名を JOIN してここに入れる）
-			BrandLabel:     pb.BrandID,
-			CreatedAt:      pb.CreatedAt.Format("2006/01/02"),
-			LastModifiedAt: pb.UpdatedAt.Format("2006/01/02"),
+			ID:           pb.ID,
+			ProductName:  pb.ProductName,
+			BrandName:    brandName,
+			AssigneeName: assigneeName,
+			ProductIdTag: productIdTag,
+			CreatedAt:    createdAt,
+			UpdatedAt:    updatedAt,
 		})
 	}
 
