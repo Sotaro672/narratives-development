@@ -17,7 +17,7 @@ import type {
  * ModelVariation モック
  * =======================================================*/
 
-export const MODEL_VARIATIONS: ModelVariation[] = [
+export const MODELS: ModelVariation[] = [
   {
     id: "mv-001",
     productBlueprintId: "pb-001",
@@ -63,7 +63,7 @@ export const MODEL_VARIATIONS: ModelVariation[] = [
 export const MODEL_DATA: ModelData = {
   productId: "prod-001",
   productBlueprintId: "pb-001",
-  variations: MODEL_VARIATIONS,
+  variations: MODELS,
   updatedAt: "2024-04-12T00:00:00Z",
 };
 
@@ -103,7 +103,7 @@ export const MODEL_NUMBERS: ModelNumber[] = [
  * ItemSpec モック
  * =======================================================*/
 
-export const ITEM_SPECS: ItemSpec[] = MODEL_VARIATIONS.map((v) => ({
+export const ITEM_SPECS: ItemSpec[] = MODELS.map((v) => ({
   modelNumber: v.modelNumber,
   size: v.size,
   color: v.color,

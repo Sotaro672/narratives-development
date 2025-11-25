@@ -22,6 +22,13 @@ func (h *ProductBlueprintHandler) ServeHTTP(w http.ResponseWriter, r *http.Reque
 	w.Header().Set("Content-Type", "application/json")
 
 	switch {
+
+	// ----------------------------
+	// GET /product-blueprints  ← ★ NEW（一覧 API）
+	// ----------------------------
+	case r.Method == http.MethodGet && r.URL.Path == "/product-blueprints":
+		h.list(w, r)
+
 	// ----------------------------
 	// POST /product-blueprints
 	// ----------------------------
@@ -41,9 +48,9 @@ func (h *ProductBlueprintHandler) ServeHTTP(w http.ResponseWriter, r *http.Reque
 	}
 }
 
-// ----------------------------
+// ---------------------------------------------------
 // POST /product-blueprints
-// ----------------------------
+// ---------------------------------------------------
 
 type CreateProductBlueprintInput struct {
 	ProductName      string   `json:"productName"`
@@ -54,7 +61,6 @@ type CreateProductBlueprintInput struct {
 	Weight           float64  `json:"weight"`
 	QualityAssurance []string `json:"qualityAssurance"`
 	ProductIdTagType string   `json:"productIdTagType"`
-	Colors           []string `json:"colors"`
 	AssigneeId       string   `json:"assigneeId"`
 	CompanyId        string   `json:"companyId"`
 	CreatedBy        string   `json:"createdBy,omitempty"`
@@ -100,9 +106,46 @@ func (h *ProductBlueprintHandler) post(w http.ResponseWriter, r *http.Request) {
 	_ = json.NewEncoder(w).Encode(created)
 }
 
-// ----------------------------
+// ---------------------------------------------------
+// GET /product-blueprints   ← ★ 一覧 API
+// ---------------------------------------------------
+
+type ProductBlueprintListOutput struct {
+	ID             string `json:"id"`
+	ProductName    string `json:"productName"`
+	BrandLabel     string `json:"brandLabel"`
+	CreatedAt      string `json:"createdAt"`
+	LastModifiedAt string `json:"lastModifiedAt"`
+}
+
+func (h *ProductBlueprintHandler) list(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+
+	rows, err := h.uc.List(ctx)
+	if err != nil {
+		writeProductBlueprintErr(w, err)
+		return
+	}
+
+	out := make([]ProductBlueprintListOutput, 0, len(rows))
+	for _, pb := range rows {
+		out = append(out, ProductBlueprintListOutput{
+			ID:          pb.ID,
+			ProductName: pb.ProductName,
+			// ★ いまは BrandID をそのままラベルとして返す
+			//    （必要になったら Usecase で Brand 名を JOIN してここに入れる）
+			BrandLabel:     pb.BrandID,
+			CreatedAt:      pb.CreatedAt.Format("2006/01/02"),
+			LastModifiedAt: pb.UpdatedAt.Format("2006/01/02"),
+		})
+	}
+
+	_ = json.NewEncoder(w).Encode(out)
+}
+
+// ---------------------------------------------------
 // GET /product-blueprints/{id}
-// ----------------------------
+// ---------------------------------------------------
 
 func (h *ProductBlueprintHandler) get(w http.ResponseWriter, r *http.Request, id string) {
 	ctx := r.Context()
@@ -122,9 +165,9 @@ func (h *ProductBlueprintHandler) get(w http.ResponseWriter, r *http.Request, id
 	_ = json.NewEncoder(w).Encode(pb)
 }
 
-// ----------------------------
+// ---------------------------------------------------
 // 共通エラーハンドラ
-// ----------------------------
+// ---------------------------------------------------
 
 func writeProductBlueprintErr(w http.ResponseWriter, err error) {
 	code := http.StatusInternalServerError

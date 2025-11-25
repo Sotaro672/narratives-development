@@ -6,7 +6,6 @@ import { auth } from "../../../../shell/src/auth/infrastructure/config/firebaseC
 import type {
   CreateProductBlueprintParams,
   ProductBlueprintResponse,
-  // ★ NewModelVariationPayload → 不要なので削除
 } from "../../application/productBlueprintCreateService";
 
 // 🔙 BACKEND の BASE URL
@@ -82,5 +81,59 @@ export async function createProductBlueprintHTTP(
   }
 
   const json = (await res.json()) as ProductBlueprintResponse;
+  return json;
+}
+
+// ------------------------------
+// HTTP: ProductBlueprint 一覧取得
+// ------------------------------
+
+/**
+ * 現在ログインしているユーザーの companyId コンテキストで、
+ * 商品設計一覧を取得する GET /product-blueprints
+ *
+ * - companyId のフィルタリングは backend 側の Usecase が
+ *   コンテキストから強制適用する前提。
+ */
+export async function listProductBlueprintsHTTP(): Promise<
+  ProductBlueprintResponse[]
+> {
+  const user = auth.currentUser;
+  if (!user) {
+    throw new Error("ログイン情報が見つかりません（未ログイン）");
+  }
+
+  const idToken = await user.getIdToken();
+
+  const res = await fetch(`${API_BASE}/product-blueprints`, {
+    method: "GET",
+    headers: {
+      Authorization: `Bearer ${idToken}`,
+    },
+  });
+
+  if (!res.ok) {
+    let detail: unknown;
+    try {
+      detail = await res.json();
+    } catch {
+      // ignore json parse error
+    }
+
+    console.error(
+      "[productBlueprintRepositoryHTTP] GET /product-blueprints failed",
+      {
+        status: res.status,
+        statusText: res.statusText,
+        detail,
+      },
+    );
+
+    throw new Error(
+      `商品設計一覧の取得に失敗しました（${res.status} ${res.statusText ?? ""}）`,
+    );
+  }
+
+  const json = (await res.json()) as ProductBlueprintResponse[];
   return json;
 }

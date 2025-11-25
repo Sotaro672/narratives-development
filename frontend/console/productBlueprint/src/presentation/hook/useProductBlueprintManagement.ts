@@ -1,20 +1,40 @@
 // frontend/console/productBlueprint/src/presentation/hook/useProductBlueprintManagement.ts
 
-import { useMemo, useState, useCallback } from "react";
+import { useMemo, useState, useCallback, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
-import {
-  fetchProductBlueprintListRows,
-  type ProductBlueprintListRow,
-} from "../../infrastructure/api/productBlueprintApi";
 
-// "YYYY/MM/DD" → timestamp（ソート用・UI 側の責務）
+// ★ HTTP Repository から一覧を取得
+import { listProductBlueprintsHTTP } from "../../infrastructure/repository/productBlueprintRepositoryHTTP";
+
+// UI 一覧表示用の行モデル
+export type UiRow = {
+  id: string;
+  productName: string;
+  brandLabel: string;
+  assigneeLabel: string;
+  tagLabel: string;
+  createdAt: string;
+  lastModifiedAt: string;
+};
+
+// ★ backend /product-blueprints のレスポンス想定
+//   （すべて optional にしておいて UI 用に詰め直す）
+type RawProductBlueprintListRow = {
+  id?: string;
+  productName?: string;
+  brandLabel?: string;
+  assigneeLabel?: string;
+  tagLabel?: string;
+  createdAt?: string;
+  lastModifiedAt?: string;
+};
+
+// "YYYY/MM/DD" → timestamp（ソート用）
 const toTs = (yyyyMd: string) => {
+  if (!yyyyMd) return 0;
   const [y, m, d] = yyyyMd.split("/").map((v) => parseInt(v, 10));
   return new Date(y, (m || 1) - 1, d || 1).getTime();
 };
-
-// 一覧表示用のUI行モデル（API からの型に別名を付けて利用）
-export type UiRow = ProductBlueprintListRow;
 
 type SortKey = "createdAt" | "lastModifiedAt" | null;
 
@@ -32,28 +52,62 @@ export interface UseProductBlueprintManagementResult {
 }
 
 /**
- * 商品設計一覧画面用の状態管理・ロジックをまとめたフック
- * - API 呼び出し（fetchProductBlueprintListRows）は infrastructure/api に委譲
- * - ここではフィルタ・ソート・画面遷移のみを担当する
+ * 商品設計一覧画面のロジック
+ * - mockdata を廃止し、backend の /product-blueprints を参照
+ * - フィルタ・ソート・画面遷移のみ担当
  */
 export function useProductBlueprintManagement(): UseProductBlueprintManagementResult {
   const navigate = useNavigate();
+
+  // 一覧データ
+  const [allRows, setAllRows] = useState<UiRow[]>([]);
 
   // フィルタ & ソート状態
   const [brandFilter, setBrandFilter] = useState<string[]>([]);
   const [sortedKey, setSortedKey] = useState<SortKey>(null);
   const [sortedDir, setSortedDir] = useState<"asc" | "desc" | null>(null);
 
-  // ProductBlueprintListRow → UiRow へ変換＋フィルタ＋ソート
+  // ---------------------------
+  // 初回ロード: backend から取得
+  // ---------------------------
+  useEffect(() => {
+    (async () => {
+      try {
+        const list = await listProductBlueprintsHTTP(); // ★ backend API 呼び出し
+
+        // 必要な UI 行構造に整形
+        const uiRows: UiRow[] = (list as RawProductBlueprintListRow[]).map(
+          (pb) => ({
+            id: pb.id ?? "",
+            productName: pb.productName ?? "",
+            brandLabel: pb.brandLabel ?? "",
+            assigneeLabel: pb.assigneeLabel ?? "",
+            tagLabel: pb.tagLabel ?? "",
+            createdAt: pb.createdAt ?? "",
+            lastModifiedAt: pb.lastModifiedAt ?? "",
+          }),
+        );
+
+        setAllRows(uiRows);
+      } catch (err) {
+        console.error("[useProductBlueprintManagement] list load failed", err);
+        setAllRows([]);
+      }
+    })();
+  }, []);
+
+  // ---------------------------
+  // フィルタ・ソート適用
+  // ---------------------------
   const rows: UiRow[] = useMemo(() => {
-    const all: UiRow[] = fetchProductBlueprintListRows();
+    let work = allRows;
 
-    let work = all;
-
+    // ブランド絞り込み
     if (brandFilter.length > 0) {
       work = work.filter((r) => brandFilter.includes(r.brandLabel));
     }
 
+    // ソート適用
     if (sortedKey && sortedDir) {
       work = [...work].sort((a, b) => {
         const av = toTs(a[sortedKey]);
@@ -63,8 +117,11 @@ export function useProductBlueprintManagement(): UseProductBlueprintManagementRe
     }
 
     return work;
-  }, [brandFilter, sortedKey, sortedDir]);
+  }, [allRows, brandFilter, sortedKey, sortedDir]);
 
+  // ---------------------------
+  // ハンドラ群
+  // ---------------------------
   const handleBrandFilterChange = useCallback((values: string[]) => {
     setBrandFilter(values);
   }, []);
@@ -74,14 +131,14 @@ export function useProductBlueprintManagement(): UseProductBlueprintManagementRe
       setSortedKey((key as SortKey) ?? null);
       setSortedDir(dir);
     },
-    []
+    [],
   );
 
   const handleRowClick = useCallback(
     (row: UiRow) => {
       navigate(`/productBlueprint/detail/${encodeURIComponent(row.id)}`);
     },
-    [navigate]
+    [navigate],
   );
 
   const handleCreate = useCallback(() => {

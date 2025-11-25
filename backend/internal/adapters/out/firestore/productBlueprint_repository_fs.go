@@ -79,6 +79,36 @@ func (r *ProductBlueprintRepositoryFS) Exists(ctx context.Context, id string) (b
 	return true, nil
 }
 
+// List returns all ProductBlueprints (optionally filtered by companyId in context).
+func (r *ProductBlueprintRepositoryFS) List(ctx context.Context) ([]pbdom.ProductBlueprint, error) {
+	if r.Client == nil {
+		return nil, errors.New("firestore client is nil")
+	}
+
+	q := r.col().Query
+
+	// usecase.CompanyIDFromContext で context から companyId を取得し、
+	// 指定があればテナント単位で絞り込む
+	if cid := strings.TrimSpace(usecase.CompanyIDFromContext(ctx)); cid != "" {
+		q = q.Where("companyId", "==", cid)
+	}
+
+	snaps, err := q.Documents(ctx).GetAll()
+	if err != nil {
+		return nil, err
+	}
+
+	out := make([]pbdom.ProductBlueprint, 0, len(snaps))
+	for _, snap := range snaps {
+		pb, err := docToProductBlueprint(snap)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, pb)
+	}
+	return out, nil
+}
+
 // Create inserts a new ProductBlueprint (no upsert).
 // If ID is empty, it is auto-generated.
 // If CreatedAt/UpdatedAt are zero, they are set to now (UTC).

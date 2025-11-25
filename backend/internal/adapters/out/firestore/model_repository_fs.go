@@ -32,7 +32,7 @@ func (r *ModelRepositoryFS) modelSetsCol() *firestore.CollectionRef {
 }
 
 func (r *ModelRepositoryFS) variationsCol() *firestore.CollectionRef {
-	return r.Client.Collection("model_variations")
+	return r.Client.Collection("models")
 }
 
 // ------------------------------------------------------------

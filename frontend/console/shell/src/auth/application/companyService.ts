@@ -2,6 +2,8 @@
 /// <reference types="vite/client" />
 
 import type { CompanyDTO } from "../domain/entity/company";
+// 🔽 Firebase Auth クライアントを利用して ID トークンを取得
+import { auth } from "../infrastructure/config/firebaseClient";
 
 // -------------------------------
 // Backend base URL（useMemberDetail と同じ構成）
@@ -30,10 +32,31 @@ export async function getCompanyById(companyId: string): Promise<CompanyDTO | nu
   const id = (companyId ?? "").trim();
   if (!id) return null;
 
+  // ★ Firebase ログインユーザーから ID トークン取得
+  const user = auth.currentUser;
+  if (!user) {
+    console.warn("[companyService] getCompanyById called without logged-in user");
+    throw new Error("ログイン情報が見つかりません（未ログイン）");
+  }
+
+  const idToken = await user.getIdToken();
+
   const res = await fetch(`${API_BASE}/companies/${encodeURIComponent(id)}`, {
     method: "GET",
+    headers: {
+      Authorization: `Bearer ${idToken}`,
+      "Content-Type": "application/json",
+    },
   });
-  if (!res.ok) return null;
+
+  if (!res.ok) {
+    // 404 などはそのまま null で返してもいいし、エラーにしてもOK
+    console.error("[companyService] GET /companies failed", {
+      status: res.status,
+      statusText: res.statusText,
+    });
+    return null;
+  }
 
   const data = (await res.json()) as CompanyDTO;
   return data ?? null;
@@ -53,7 +76,8 @@ export function getCompanyNameByIdCached(companyId: string): Promise<string | nu
   const cached = nameCache.get(id);
   if (cached) return cached;
 
-  const p = getCompanyNameById(id).catch(() => {
+  const p = getCompanyNameById(id).catch((err) => {
+    console.error("[companyService] getCompanyNameByIdCached error", err);
     nameCache.delete(id);
     return null;
   });
