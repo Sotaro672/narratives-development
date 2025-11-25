@@ -13,16 +13,19 @@ export default function ProductBlueprintDetail() {
     pageTitle,
     productName,
     brand,
-    itemType,          // ★ ItemType | ""
+    itemType, // ItemType | ""
     fit,
     materials,
     weight,
     washTags,
     productIdTag,
+
+    // ★ backend/model_handler.go → listModelVariationsByProductBlueprintId の結果
     colors,
     colorInput,
     sizes,
     modelNumbers,
+
     assignee,
     creator,
     createdAt,
@@ -43,12 +46,12 @@ export default function ProductBlueprintDetail() {
     onEditAssignee,
     onClickAssignee,
 
-    // ★ ＋ ModelNumberCard 用
+    // ★ ModelNumberCard用
     getCode,
   } = useProductBlueprintDetail();
 
   // ------------------------------------
-  // ★ 現在取得しているデータ値のログ
+  // デバッグログ
   // ------------------------------------
   console.log("[ProductBlueprintDetail] Current values:", {
     pageTitle,
@@ -97,6 +100,7 @@ export default function ProductBlueprintDetail() {
           onChangeProductIdTag={onChangeProductIdTag}
         />
 
+        {/* ★ color variations from backend */}
         <ColorVariationCard
           mode="edit"
           colors={colors}
@@ -106,12 +110,14 @@ export default function ProductBlueprintDetail() {
           onRemoveColor={onRemoveColor}
         />
 
+        {/* ★ size variations from backend */}
         <SizeVariationCard
           mode="edit"
           sizes={sizes}
           onRemove={onRemoveSize}
         />
 
+        {/* ★ モデルナンバー（size × color × code） */}
         <ModelNumberCard
           mode="edit"
           sizes={sizes}

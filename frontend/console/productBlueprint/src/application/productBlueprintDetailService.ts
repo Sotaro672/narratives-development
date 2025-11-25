@@ -306,3 +306,98 @@ export async function updateProductBlueprint(
 
   return response;
 }
+
+// -----------------------------------------
+// ModelVariation list（productBlueprintId 毎）
+// backend/internal/adapters/in/http/handlers/model_handler.go の
+//   GET /models/by-blueprint/{productBlueprintID}/variations
+// を叩くフロント側のヘルパー
+// -----------------------------------------
+
+export type ModelVariationResponse = {
+  id: string;
+  productBlueprintId: string;
+  modelNumber: string;
+  size: string;
+  color: {
+    name: string;
+    rgb?: number | null;
+  };
+  measurements?: Record<string, number>;
+  createdAt?: string | null;
+  createdBy?: string | null;
+  updatedAt?: string | null;
+  updatedBy?: string | null;
+  deletedAt?: string | null;
+  deletedBy?: string | null;
+};
+
+/**
+ * 与えられた productBlueprintId に紐づく ModelVariation を一覧取得する。
+ * backend: GET /models/by-blueprint/{productBlueprintId}/variations
+ */
+export async function listModelVariationsByProductBlueprintId(
+  productBlueprintId: string,
+): Promise<ModelVariationResponse[]> {
+  const id = productBlueprintId.trim();
+  if (!id) {
+    throw new Error("productBlueprintId が空です");
+  }
+
+  const user = auth.currentUser;
+  if (!user) {
+    throw new Error("ログイン情報が見つかりません（未ログイン）");
+  }
+
+  const idToken = await user.getIdToken();
+
+  const url = `${API_BASE}/models/by-blueprint/${encodeURIComponent(
+    id,
+  )}/variations`;
+
+  console.log(
+    "[productBlueprintDetailService] listModelVariationsByProductBlueprintId GET",
+    url,
+  );
+
+  const res = await fetch(url, {
+    method: "GET",
+    headers: {
+      Authorization: `Bearer ${idToken}`,
+      Accept: "application/json",
+    },
+  });
+
+  if (!res.ok) {
+    let detail: unknown;
+    try {
+      detail = await res.json();
+    } catch {
+      /* ignore */
+    }
+    console.error(
+      "[productBlueprintDetailService] listModelVariationsByProductBlueprintId failed",
+      {
+        status: res.status,
+        statusText: res.statusText,
+        detail,
+      },
+    );
+    throw new Error(
+      `モデル一覧の取得に失敗しました（${res.status} ${res.statusText ?? ""}）`,
+    );
+  }
+
+  const raw = (await res.json()) as ModelVariationResponse[] | null;
+
+  if (!raw) {
+    return [];
+  }
+
+  console.log(
+    "[productBlueprintDetailService] listModelVariationsByProductBlueprintId result:",
+    raw,
+  );
+
+  return raw;
+}

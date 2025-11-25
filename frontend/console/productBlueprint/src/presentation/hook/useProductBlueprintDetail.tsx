@@ -11,7 +11,10 @@ import {
   type ModelNumberRow,
 } from "../../infrastructure/api/productBlueprintApi";
 
-import { getProductBlueprintDetail } from "../../application/productBlueprintDetailService";
+import {
+  getProductBlueprintDetail,
+  listModelVariationsByProductBlueprintId,
+} from "../../application/productBlueprintDetailService";
 
 import type { Fit, ItemType, WashTagOption } from "../../domain/entity/catalog";
 
@@ -96,7 +99,7 @@ export function useProductBlueprintDetail(): UseProductBlueprintDetailResult {
   const [createdAt, setCreatedAt] = React.useState("");
 
   // ---------------------------------
-  // service → 詳細データを反映
+  // service → 詳細データ + variations を反映
   // ---------------------------------
   React.useEffect(() => {
     if (!blueprintId) return;
@@ -118,7 +121,10 @@ export function useProductBlueprintDetail(): UseProductBlueprintDetailResult {
           | string
           | undefined;
 
-        setPageTitle(detail.productName ?? blueprintId);
+        // blueprintId / pageTitle
+        const productBlueprintId = detail.id ?? blueprintId;
+
+        setPageTitle(detail.productName ?? productBlueprintId);
         setProductName(detail.productName ?? "");
 
         // brand: service の brandName を優先、なければ従来の brandLabelFromId
@@ -137,10 +143,69 @@ export function useProductBlueprintDetail(): UseProductBlueprintDetailResult {
           (detail.productIdTag?.type as ProductIDTagType | undefined) ?? "";
         setProductIdTagType(tagType);
 
-        // variations から colors/sizes/modelNumbers を今後生成予定
-        setColors([]);
-        setSizes([]);
-        setModelNumbers([]);
+        // --------------------------------------------------
+        // ★ model_handler.go の
+        //   GET /models/by-blueprint/{productBlueprintID}/variations
+        // を叩いて、同じ productBlueprintId の ModelVariation を取得
+        // --------------------------------------------------
+        try {
+          const variations =
+            await listModelVariationsByProductBlueprintId(
+              productBlueprintId,
+            );
+
+          console.log(
+            "[useProductBlueprintDetail] model variations:",
+            variations,
+          );
+
+          // colors: variation の color.name のユニーク集合
+          const uniqueColors = Array.from(
+            new Set(
+              variations
+                .map((v) => v.color?.name?.trim())
+                .filter((c): c is string => !!c),
+            ),
+          );
+          setColors(uniqueColors);
+
+          // sizes: variation の size のユニーク集合から SizeRow を生成
+          const uniqueSizes = Array.from(
+            new Set(
+              variations
+                .map((v) => v.size?.trim())
+                .filter((s): s is string => !!s),
+            ),
+          );
+
+          const sizeRows: SizeRow[] = uniqueSizes.map((label, index) => {
+            // 必須項目だけ埋めて、他は undefined のままにしておく
+            return {
+              id: String(index + 1),
+              sizeLabel: label,
+            } as SizeRow;
+          });
+          setSizes(sizeRows);
+
+          // modelNumbers: size x color ごとの code として modelNumber をセット
+          const modelNumberRows: ModelNumberRow[] = variations.map((v) => {
+            return {
+              size: v.size,
+              color: v.color?.name ?? "",
+              code: v.modelNumber,
+            } as ModelNumberRow;
+          });
+          setModelNumbers(modelNumberRows);
+        } catch (e) {
+          console.error(
+            "[useProductBlueprintDetail] listModelVariationsByProductBlueprintId failed:",
+            e,
+          );
+          // variations が取れなくても画面全体は落とさない
+          setColors([]);
+          setSizes([]);
+          setModelNumbers([]);
+        }
 
         // assignee: service の assigneeName を優先
         setAssignee(

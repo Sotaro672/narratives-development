@@ -75,8 +75,8 @@ func (u *ModelUsecase) GetModelDataByProductBlueprintID(ctx context.Context, pro
 	return u.repo.GetModelDataByBlueprintID(ctx, productBlueprintID)
 }
 
-// ★ 追加: 与えられた productBlueprintID に紐づく ModelVariation を list する
-func (u *ModelUsecase) ListModelVariationsByBlueprintID(
+// ★ 与えられた productBlueprintID に紐づく ModelVariation を list する
+func (u *ModelUsecase) ListModelVariationsByProductBlueprintID(
 	ctx context.Context,
 	productBlueprintID string,
 ) ([]modeldom.ModelVariation, error) {

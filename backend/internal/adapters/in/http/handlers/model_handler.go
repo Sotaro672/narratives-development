@@ -3,6 +3,7 @@ package handlers
 
 import (
 	"encoding/json"
+	"errors"
 	"log"
 	"net/http"
 	"strings"
@@ -26,51 +27,62 @@ func (h *ModelHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 
 	switch {
+
+	// ------------------------------------------------------------
+	// GET /models/by-blueprint/{productBlueprintID}/variations
+	//   → ModelUsecase.ListModelVariationsByProductBlueprintID
+	// ------------------------------------------------------------
+	case r.Method == http.MethodGet &&
+		strings.HasPrefix(r.URL.Path, "/models/by-blueprint/"):
+
+		// /models/by-blueprint/{productBlueprintID}/variations
+		path := strings.TrimPrefix(r.URL.Path, "/models/by-blueprint/")
+		path = strings.Trim(path, "/")
+		parts := strings.Split(path, "/")
+
+		// 期待形式: {productBlueprintID}/variations
+		if len(parts) == 2 && parts[1] == "variations" {
+			productBlueprintID := strings.TrimSpace(parts[0])
+			h.listVariationsByProductBlueprintID(w, r, productBlueprintID)
+			return
+		}
+
+		w.WriteHeader(http.StatusNotFound)
+		_ = json.NewEncoder(w).Encode(map[string]string{"error": "not_found"})
+		return
+
 	// ------------------------------------------------------------
 	// POST /models/{productBlueprintID}/variations
-	//   → ModelUsecase.CreateModelVariation を呼び出す
+	//   → ModelUsecase.CreateModelVariation
 	// ------------------------------------------------------------
-	case r.Method == http.MethodPost && strings.HasPrefix(r.URL.Path, "/models/"):
+	case r.Method == http.MethodPost &&
+		strings.HasPrefix(r.URL.Path, "/models/"):
+
 		// /models/{productBlueprintID}/variations を分解
 		path := strings.TrimPrefix(r.URL.Path, "/models/")
 		path = strings.Trim(path, "/")
 		parts := strings.Split(path, "/")
 
-		// 期待する形式は {productBlueprintID}/variations のみ
+		// 期待形式: {productBlueprintID}/variations
 		if len(parts) == 2 && parts[1] == "variations" {
 			productBlueprintID := strings.TrimSpace(parts[0])
 			h.createVariation(w, r, productBlueprintID)
 			return
 		}
 
-		// 形式が違う場合は 404
 		w.WriteHeader(http.StatusNotFound)
 		_ = json.NewEncoder(w).Encode(map[string]string{"error": "not_found"})
 		return
 
 	// ------------------------------------------------------------
-	// GET /models/{productBlueprintID}/variations
-	//   → 指定した productBlueprintID の ModelVariation 一覧を取得
-	//
 	// GET /models/{id}
-	//   → ModelUsecase.GetByID を呼び出す（従来どおり）
+	//   → ModelUsecase.GetByID（既存仕様）
 	// ------------------------------------------------------------
-	case r.Method == http.MethodGet && strings.HasPrefix(r.URL.Path, "/models/"):
-		path := strings.TrimPrefix(r.URL.Path, "/models/")
-		path = strings.Trim(path, "/")
-		parts := strings.Split(path, "/")
+	case r.Method == http.MethodGet &&
+		strings.HasPrefix(r.URL.Path, "/models/"):
 
-		// /models/{productBlueprintID}/variations
-		if len(parts) == 2 && parts[1] == "variations" {
-			productBlueprintID := strings.TrimSpace(parts[0])
-			h.listVariationsByBlueprintID(w, r, productBlueprintID)
-			return
-		}
-
-		// それ以外は従来どおり /models/{id} として扱う
-		id := strings.TrimSpace(path)
+		id := strings.TrimPrefix(r.URL.Path, "/models/")
 		h.get(w, r, id)
-		return
 
 	default:
 		w.WriteHeader(http.StatusNotFound)
@@ -97,35 +109,10 @@ func (h *ModelHandler) get(w http.ResponseWriter, r *http.Request, id string) {
 	_ = json.NewEncoder(w).Encode(m)
 }
 
-// GET /models/{productBlueprintID}/variations
-// → 指定した productBlueprintID に紐づく ModelVariation を一覧で返す
-func (h *ModelHandler) listVariationsByBlueprintID(
-	w http.ResponseWriter,
-	r *http.Request,
-	productBlueprintID string,
-) {
-	ctx := r.Context()
-
-	productBlueprintID = strings.TrimSpace(productBlueprintID)
-	if productBlueprintID == "" {
-		w.WriteHeader(http.StatusBadRequest)
-		_ = json.NewEncoder(w).Encode(map[string]string{"error": "invalid productBlueprintID"})
-		return
-	}
-
-	vars, err := h.uc.ListModelVariationsByBlueprintID(ctx, productBlueprintID)
-	if err != nil {
-		writeModelErr(w, err)
-		return
-	}
-
-	_ = json.NewEncoder(w).Encode(vars)
-}
-
 /* ============================================================
  * POST /models/{productBlueprintID}/variations 用のリクエスト型
- *   frontend/console/model/src/infrastructure/repository/modelRepositoryHTTP.ts
- *   の CreateModelVariationRequest に対応
+ * frontend/console/model/src/infrastructure/repository/modelRepositoryHTTP.ts
+ * の CreateModelVariationRequest に対応
  * ==========================================================*/
 
 type createModelVariationRequest struct {
@@ -134,7 +121,7 @@ type createModelVariationRequest struct {
 	ModelNumber        string             `json:"modelNumber"`            // "LM-SB-S-WHT" など
 	Size               string             `json:"size"`                   // "S" / "M" / ...
 	Color              string             `json:"color"`                  // "ホワイト" など（名前）
-	RGB                int                `json:"rgb,omitempty"`          // ★ 追加: フロントから来る rgb 値（0xRRGGBB 想定）
+	RGB                int                `json:"rgb,omitempty"`          // rgb 値（0xRRGGBB 想定）
 	Measurements       map[string]float64 `json:"measurements,omitempty"` // 着丈/身幅/…など
 }
 
@@ -188,7 +175,7 @@ func (h *ModelHandler) createVariation(w http.ResponseWriter, r *http.Request, p
 		Size:               strings.TrimSpace(req.Size),
 		Color: modeldom.Color{
 			Name: strings.TrimSpace(req.Color),
-			RGB:  req.RGB, // ★ リクエストの rgb をそのまま利用
+			RGB:  req.RGB,
 		},
 		Measurements: ms,
 	}
@@ -207,12 +194,46 @@ func (h *ModelHandler) createVariation(w http.ResponseWriter, r *http.Request, p
 	_ = json.NewEncoder(w).Encode(mv)
 }
 
+// GET /models/by-blueprint/{productBlueprintID}/variations
+func (h *ModelHandler) listVariationsByProductBlueprintID(
+	w http.ResponseWriter,
+	r *http.Request,
+	productBlueprintID string,
+) {
+	ctx := r.Context()
+
+	productBlueprintID = strings.TrimSpace(productBlueprintID)
+	if productBlueprintID == "" {
+		w.WriteHeader(http.StatusBadRequest)
+		_ = json.NewEncoder(w).Encode(map[string]string{"error": "invalid productBlueprintID"})
+		return
+	}
+
+	vars, err := h.uc.ListModelVariationsByProductBlueprintID(ctx, productBlueprintID)
+	if err != nil {
+		writeModelErr(w, err)
+		return
+	}
+
+	// 0件でも 200 & [] を返す
+	w.WriteHeader(http.StatusOK)
+	_ = json.NewEncoder(w).Encode(vars)
+}
+
 // エラーハンドリング
 func writeModelErr(w http.ResponseWriter, err error) {
 	code := http.StatusInternalServerError
-	if err == modeldom.ErrInvalidID {
+
+	// バリデーション系
+	if errors.Is(err, modeldom.ErrInvalidID) ||
+		errors.Is(err, modeldom.ErrInvalidProductID) ||
+		errors.Is(err, modeldom.ErrInvalidBlueprintID) {
 		code = http.StatusBadRequest
+	} else if errors.Is(err, modeldom.ErrNotFound) {
+		// NotFound は 404 にする
+		code = http.StatusNotFound
 	}
+
 	w.WriteHeader(code)
 	_ = json.NewEncoder(w).Encode(map[string]string{"error": err.Error()})
 }
