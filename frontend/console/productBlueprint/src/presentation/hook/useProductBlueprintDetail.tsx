@@ -15,12 +15,7 @@ import {
 } from "../../infrastructure/api/productBlueprintApi";
 
 // ▼ 選択肢などのカタログ情報をドメイン層から使用
-import {
-  FIT_OPTIONS,
-  PRODUCT_ID_TAG_OPTIONS,
-  WASH_TAG_OPTIONS,
-} from "../../domain/entity/catalog";
-import type { Fit, WashTagOption } from "../../domain/entity/catalog";
+import type { Fit } from "../../domain/entity/catalog";
 
 export {
   FIT_OPTIONS,
@@ -104,7 +99,7 @@ export function useProductBlueprintDetail(): UseProductBlueprintDetailResult {
   );
 
   const [washTags, setWashTags] = React.useState<string[]>(() =>
-    blueprint?.qualityAssurance ?? ["手洗い", "ドライクリーニング", "陰干し"],
+    blueprint?.qualityAssurance ?? ["手洗い", "ドライクリーニング可", "日陰つり干し"],
   );
 
   const [productIdTagType, setProductIdTagType] =

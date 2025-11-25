@@ -41,9 +41,30 @@ export default function ProductBlueprintDetail() {
     onEditAssignee,
     onClickAssignee,
 
-    // ★ 追加：hook 側で生成した getCode を受け取る
+    // ★ ＋ ModelNumberCard 用
     getCode,
   } = useProductBlueprintDetail();
+
+  // ------------------------------------
+  // ★ 現在取得しているデータ値のログ
+  // ------------------------------------
+  console.log("[ProductBlueprintDetail] Current values:", {
+    pageTitle,
+    productName,
+    brand,
+    fit,
+    materials,
+    weight,
+    washTags,
+    productIdTag,
+    colors,
+    colorInput,
+    sizes,
+    modelNumbers,
+    assignee,
+    creator,
+    createdAt,
+  });
 
   return (
     <PageStyle

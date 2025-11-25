@@ -88,7 +88,12 @@ function toNewModelVariationPayload(
 export async function getProductBlueprintDetail(
   id: string,
 ): Promise<ProductBlueprintDetailResponse> {
-  return await getProductBlueprintDetailApi(id);
+  const response = await getProductBlueprintDetailApi(id);
+
+  // ★ 現在取得している詳細データのログ
+  console.log("[productBlueprintDetailService] GET detail response:", response);
+
+  return response;
 }
 
 // -----------------------------------------
@@ -122,7 +127,14 @@ export async function updateProductBlueprint(
     }
   }
 
-  console.log("[productBlueprintDetailService] update variations:", variations);
+  // ★ 現在送信しようとしているデータ全体をログ出力
+  console.log("[productBlueprintDetailService] UPDATE params:", params);
+  console.log("[productBlueprintDetailService] UPDATE variations payload:", variations);
 
-  return await updateProductBlueprintApi(params, variations);
+  const response = await updateProductBlueprintApi(params, variations);
+
+  // ★ 更新後の最新データもログ出力
+  console.log("[productBlueprintDetailService] UPDATE result response:", response);
+
+  return response;
 }

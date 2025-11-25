@@ -51,9 +51,6 @@ export async function createProductBlueprintHTTP(
     createdBy: params.createdBy ?? null,
   };
 
-  // 🔍 POST 直前ログ
-  console.log("[createProductBlueprintHTTP] POST payload:", payload);
-
   const res = await fetch(`${API_BASE}/product-blueprints`, {
     method: "POST",
     headers: {
@@ -63,34 +60,19 @@ export async function createProductBlueprintHTTP(
     body: JSON.stringify(payload),
   });
 
-  // 🔍 レスポンス RAW ログ
-  console.log("[createProductBlueprintHTTP] RAW response:", res);
-
   if (!res.ok) {
     let detail: unknown;
     try {
       detail = await res.json();
     } catch {
-      // ignore json parse error
+      /* ignore */
     }
-    console.error(
-      "[productBlueprintRepositoryHTTP] POST /product-blueprints failed",
-      {
-        status: res.status,
-        statusText: res.statusText,
-        detail,
-      },
-    );
     throw new Error(
       `商品設計の作成に失敗しました（${res.status} ${res.statusText ?? ""}）`,
     );
   }
 
   const json = (await res.json()) as ProductBlueprintResponse;
-
-  // 🔍 解析後 JSON ログ
-  console.log("[createProductBlueprintHTTP] parsed JSON:", json);
-
   return json;
 }
 
@@ -108,9 +90,6 @@ export async function listProductBlueprintsHTTP(): Promise<
 
   const idToken = await user.getIdToken();
 
-  // 🔍 リクエスト URL ログ
-  console.log("[listProductBlueprintsHTTP] Request:", `${API_BASE}/product-blueprints`);
-
   const res = await fetch(`${API_BASE}/product-blueprints`, {
     method: "GET",
     headers: {
@@ -118,25 +97,13 @@ export async function listProductBlueprintsHTTP(): Promise<
     },
   });
 
-  // 🔍 生レスポンスログ
-  console.log("[listProductBlueprintsHTTP] RAW response:", res);
-
   if (!res.ok) {
     let detail: unknown;
     try {
       detail = await res.json();
     } catch {
-      // ignore json parse error
+      /* ignore */
     }
-
-    console.error(
-      "[productBlueprintRepositoryHTTP] GET /product-blueprints failed",
-      {
-        status: res.status,
-        statusText: res.statusText,
-        detail,
-      },
-    );
 
     throw new Error(
       `商品設計一覧の取得に失敗しました（${res.status} ${res.statusText ?? ""}）`,
@@ -144,12 +111,5 @@ export async function listProductBlueprintsHTTP(): Promise<
   }
 
   const json = (await res.json()) as ProductBlueprintResponse[];
-
-  // 🔍 JSON の中身を完全出力
-  console.log(
-    "[listProductBlueprintsHTTP] parsed JSON:",
-    JSON.stringify(json, null, 2),
-  );
-
   return json;
 }
