@@ -1,4 +1,4 @@
-// frontend/productBlueprint/src/presentation/pages/productBlueprintManagement.tsx
+// frontend/console/productBlueprint/src/presentation/pages/productBlueprintManagement.tsx
 
 import List, {
   FilterableTableHeader,
@@ -10,40 +10,65 @@ export default function ProductBlueprintManagement() {
   const {
     rows,
     brandFilter,
+    assigneeFilter,
+    tagFilter,
     handleBrandFilterChange,
+    handleAssigneeFilterChange,
+    handleTagFilterChange,
     handleSortChange,
     handleRowClick,
     handleCreate,
     handleReset,
   } = useProductBlueprintManagement();
 
-  // ヘッダー定義（UI / スタイル側にのみ責務を残す）
+  // rows からオプションを動的生成
+  const brandOptions = Array.from(
+    new Set(rows.map((r) => r.brandName).filter(Boolean)),
+  ).map((name) => ({ value: name, label: name }));
+
+  const assigneeOptions = Array.from(
+    new Set(rows.map((r) => r.assigneeName).filter(Boolean)),
+  ).map((name) => ({ value: name, label: name }));
+
+  const tagOptions = Array.from(
+    new Set(rows.map((r) => r.productIdTag).filter(Boolean)),
+  ).map((tag) => ({ value: tag, label: tag }));
+
   const headers = [
     "プロダクト",
     <FilterableTableHeader
       key="brand"
       label="ブランド"
-      options={[
-        { value: "LUMINA Fashion", label: "LUMINA Fashion" },
-        { value: "NEXUS Street", label: "NEXUS Street" },
-      ]}
+      options={brandOptions}
       selected={brandFilter}
       onChange={handleBrandFilterChange}
     />,
-    "担当者",
-    "タグ種別",
+    <FilterableTableHeader
+      key="assignee"
+      label="担当者"
+      options={assigneeOptions}
+      selected={assigneeFilter}
+      onChange={handleAssigneeFilterChange}
+    />,
+    <FilterableTableHeader
+      key="tag"
+      label="タグ種別"
+      options={tagOptions}
+      selected={tagFilter}
+      onChange={handleTagFilterChange}
+    />,
     <SortableTableHeader
       key="createdAt"
       label="作成日"
       sortKey="createdAt"
-      activeKey={null} // activeKey / direction は hook 内で管理＆判定させるため null を渡す
+      activeKey={null}
       direction={null}
       onChange={handleSortChange}
     />,
     <SortableTableHeader
-      key="lastModifiedAt"
+      key="updatedAt"
       label="最終更新日"
-      sortKey="lastModifiedAt"
+      sortKey="updatedAt"
       activeKey={null}
       direction={null}
       onChange={handleSortChange}
@@ -68,12 +93,12 @@ export default function ProductBlueprintManagement() {
         >
           <td>{r.productName}</td>
           <td>
-            <span className="lp-brand-pill">{r.brandLabel}</span>
+            <span className="lp-brand-pill">{r.brandName}</span>
           </td>
-          <td>{r.assigneeLabel}</td>
-          <td>{r.tagLabel}</td>
+          <td>{r.assigneeName}</td>
+          <td>{r.productIdTag}</td>
           <td>{r.createdAt}</td>
-          <td>{r.lastModifiedAt}</td>
+          <td>{r.updatedAt}</td>
         </tr>
       ))}
     </List>

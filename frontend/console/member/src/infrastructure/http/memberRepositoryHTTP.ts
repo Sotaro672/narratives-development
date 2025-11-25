@@ -1,4 +1,4 @@
-//frontend\console\member\src\infrastructure\http\memberRepositoryHTTP.ts 
+// frontend/console/member/src/infrastructure/http/memberRepositoryHTTP.ts
 /// <reference types="vite/client" />
 
 import type {
@@ -17,11 +17,20 @@ import type { Member, MemberPatch } from "../../domain/entity/member";
 
 import { getAuthHeaders } from "../../../../shell/src/auth/application/authService";
 
-const API_BASE =
+// ===========================
+// BACKEND BASE URL
+// ===========================
+const ENV_BASE =
   ((import.meta as any).env?.VITE_BACKEND_BASE_URL as string | undefined)?.replace(
     /\/+$/,
     "",
   ) ?? "";
+
+// ★ Cloud Run の URL をフォールバックに追加
+const FALLBACK_BASE =
+  "https://narratives-backend-871263659099.asia-northeast1.run.app";
+
+const API_BASE = ENV_BASE || FALLBACK_BASE;
 
 function toQuery(params: Record<string, any>) {
   const sp = new URLSearchParams();
@@ -88,7 +97,7 @@ export class MemberRepositoryHTTP implements MemberRepository {
         totalCount: (data as Member[]).length,
         page: pageNumber,
         perPage,
-        totalPages: 1, // ← ★ PageResult の必須フィールドを補完
+        totalPages: 1,
       };
     }
 
@@ -108,11 +117,15 @@ export class MemberRepositoryHTTP implements MemberRepository {
   }
 
   async update(id: string, patch: MemberPatch, _opts?: SaveOptions): Promise<Member> {
-    throw new Error("MemberRepositoryHTTP.update: not supported by current backend API");
+    throw new Error(
+      "MemberRepositoryHTTP.update: not supported by current backend API",
+    );
   }
 
   async delete(id: string): Promise<void> {
-    throw new Error("MemberRepositoryHTTP.delete: not supported by current backend API");
+    throw new Error(
+      "MemberRepositoryHTTP.delete: not supported by current backend API",
+    );
   }
 
   async listByCursor(
@@ -120,9 +133,9 @@ export class MemberRepositoryHTTP implements MemberRepository {
     _sort: MemberSort,
     cursorPage: CursorPage,
   ): Promise<CursorPageResult<Member>> {
-    const limit = cursorPage.limit && cursorPage.limit > 0 ? cursorPage.limit : 50;
+    const limit =
+      cursorPage.limit && cursorPage.limit > 0 ? cursorPage.limit : 50;
 
-    // ★ Page 型に totalPages を追加
     const page: Page = { number: 1, perPage: limit, totalPages: 1 };
 
     const res = await this.list(page, filter);
@@ -136,7 +149,6 @@ export class MemberRepositoryHTTP implements MemberRepository {
   }
 
   async getByEmail(email: string): Promise<Member | null> {
-    // ★ Page 型に totalPages を追加
     const res = await this.list(
       { number: 1, perPage: 50, totalPages: 1 },
       { searchQuery: email },
@@ -152,14 +164,18 @@ export class MemberRepositoryHTTP implements MemberRepository {
   }
 
   async count(filter: MemberFilter): Promise<number> {
-    // ★ Page 型に totalPages を追加
-    const res = await this.list({ number: 1, perPage: 100, totalPages: 1 }, filter);
+    const res = await this.list(
+      { number: 1, perPage: 100, totalPages: 1 },
+      filter,
+    );
     return res.totalCount ?? res.items.length;
   }
 
   async save(member: Member, opts?: SaveOptions): Promise<Member> {
     if (opts?.mode === "update" || opts?.ifExists) {
-      throw new Error("MemberRepositoryHTTP.save(update): not supported by current backend API");
+      throw new Error(
+        "MemberRepositoryHTTP.save(update): not supported by current backend API",
+      );
     }
     if (opts?.mode === "create" || opts?.ifNotExists) {
       return this.create(member);
@@ -168,6 +184,78 @@ export class MemberRepositoryHTTP implements MemberRepository {
   }
 
   async reset(): Promise<void> {
-    throw new Error("MemberRepositoryHTTP.reset: not supported by current backend API");
+    throw new Error(
+      "MemberRepositoryHTTP.reset: not supported by current backend API",
+    );
+  }
+}
+
+/**
+ * assigneeId から画面表示用の担当者名を取得するヘルパー
+ * - 姓名があれば「姓 名」
+ * - なければ fullName
+ * - それもなければ email
+ * - それもなければ元の ID
+ */
+export async function fetchMemberDisplayNameById(
+  memberId: string,
+): Promise<string> {
+  const trimmed = memberId.trim();
+  if (!trimmed) return "-";
+
+  try {
+    const headers = await getAuthHeaders();
+    const url = `${API_BASE}/members/${encodeURIComponent(trimmed)}`;
+
+    console.log(
+      "[memberRepositoryHTTP] fetchMemberDisplayNameById request",
+      url,
+    );
+
+    const res = await fetch(url, { headers });
+
+    if (res.status === 404) {
+      console.warn(
+        "[memberRepositoryHTTP] fetchMemberDisplayNameById: member not found",
+        trimmed,
+      );
+      return trimmed;
+    }
+
+    const ct = res.headers.get("content-type") ?? "";
+    if (!ct.includes("application/json")) {
+      console.warn(
+        "[memberRepositoryHTTP] fetchMemberDisplayNameById: unexpected content-type",
+        ct,
+      );
+      return trimmed;
+    }
+
+    const m = (await res.json()) as Member;
+
+    const lastName = (m as any).lastName?.trim?.() ?? "";
+    const firstName = (m as any).firstName?.trim?.() ?? "";
+    const fullNameField = (m as any).fullName?.trim?.() ?? "";
+
+    const nameParts = [lastName, firstName].filter(Boolean);
+    const nameFromLF = nameParts.join(" ");
+
+    const email = (m as any).email?.trim?.() ?? "";
+
+    const display =
+      nameFromLF || fullNameField || email || trimmed;
+
+    console.log(
+      "[memberRepositoryHTTP] fetchMemberDisplayNameById result",
+      { memberId: trimmed, display },
+    );
+
+    return display;
+  } catch (e) {
+    console.error(
+      "[memberRepositoryHTTP] fetchMemberDisplayNameById error",
+      e,
+    );
+    return trimmed;
   }
 }

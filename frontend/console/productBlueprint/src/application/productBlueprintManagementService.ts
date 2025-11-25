@@ -2,6 +2,7 @@
 
 import { listProductBlueprintsHTTP } from "../infrastructure/repository/productBlueprintRepositoryHTTP";
 import { fetchBrandNameById } from "../../../brand/src/infrastructure/http/brandRepositoryHTTP";
+import { fetchMemberDisplayNameById } from "../../../member/src/infrastructure/http/memberRepositoryHTTP";
 
 export type UiRow = {
   id: string;
@@ -21,19 +22,18 @@ type RawProductBlueprintListRow = {
   brandId?: string;
   assigneeId?: string;
 
-  productIdTag?: {
-    type?: string | null;
-  } | null;
+  // backend の JSON は "productIdTag": "QRコード" などの文字列を直接返す想定
+  productIdTag?: string | null;
 
-  createdAt?: string; // ISO8601
-  updatedAt?: string; // ISO8601
+  createdAt?: string; // "YYYY/MM/DD" を想定（handler でフォーマット済み）
+  updatedAt?: string; // "YYYY/MM/DD"
   deletedAt?: string | null;
 };
 
 export type ProductBlueprintSortKey = "createdAt" | "updatedAt" | null;
 export type SortDirection = "asc" | "desc" | null;
 
-// ISO8601 → "YYYY/MM/DD"（壊れてたらそのまま返す） ※一覧用
+// ISO っぽいもの / YYYY/MM/DD → "YYYY/MM/DD"（壊れてたらそのまま返す）
 const toDisplayDate = (iso?: string | null): string => {
   if (!iso) return "";
   const d = new Date(iso);
@@ -52,8 +52,10 @@ const toTs = (yyyyMd: string) => {
 };
 
 /**
- * backend から商品設計一覧を取得し、brandId → brandName 変換も行う
- * - brandName: backend brand.Service.GetNameByID 相当（fetchBrandNameById）
+ * backend から商品設計一覧を取得し、
+ * - brandId → brandName 変換
+ * - assigneeId → assigneeName 変換
+ * を行って UiRow[] を構築する。
  */
 export async function fetchProductBlueprintManagementRows(): Promise<UiRow[]> {
   const list = await listProductBlueprintsHTTP();
@@ -63,15 +65,23 @@ export async function fetchProductBlueprintManagementRows(): Promise<UiRow[]> {
   for (const pb of list as RawProductBlueprintListRow[]) {
     if (pb.deletedAt) continue;
 
+    // ブランド名変換
     const brandId = pb.brandId ?? "";
-    const brandName = await fetchBrandNameById(brandId);
+    const brandName = brandId ? await fetchBrandNameById(brandId) : "";
 
-    // ProductIDTag.type は "qr" | "nfc" 想定。表示上は大文字ラベル化。
-    const productIdTag =
-      pb.productIdTag && pb.productIdTag.type
-        ? String(pb.productIdTag.type).toUpperCase()
-        : "-";
+    // 担当者名変換 (assigneeId -> displayName)
+    const assigneeId = (pb.assigneeId ?? "").trim();
+    let assigneeName = "-";
+    if (assigneeId) {
+      const displayName = await fetchMemberDisplayNameById(assigneeId);
+      assigneeName = displayName.trim() || assigneeId;
+    }
 
+    // ProductIDTag（そのまま表示。空なら "-"）
+    const productIdTagRaw = (pb.productIdTag ?? "").trim();
+    const productIdTag = productIdTagRaw || "-";
+
+    // 日付整形
     const createdAtDisp = toDisplayDate(pb.createdAt ?? "");
     const updatedAtDisp = toDisplayDate(pb.updatedAt ?? pb.createdAt ?? "");
 
@@ -79,7 +89,7 @@ export async function fetchProductBlueprintManagementRows(): Promise<UiRow[]> {
       id: pb.id ?? "",
       productName: pb.productName ?? "",
       brandName,
-      assigneeName: pb.assigneeId ?? "-",
+      assigneeName,
       productIdTag,
       createdAt: createdAtDisp,
       updatedAt: updatedAtDisp,
@@ -95,16 +105,35 @@ export async function fetchProductBlueprintManagementRows(): Promise<UiRow[]> {
 export function filterAndSortProductBlueprintRows(params: {
   allRows: UiRow[];
   brandFilter: string[];
+  assigneeFilter: string[];
+  tagFilter: string[];
   sortedKey: ProductBlueprintSortKey;
   sortedDir: SortDirection;
 }): UiRow[] {
-  const { allRows, brandFilter, sortedKey, sortedDir } = params;
+  const {
+    allRows,
+    brandFilter,
+    assigneeFilter,
+    tagFilter,
+    sortedKey,
+    sortedDir,
+  } = params;
 
   let work = allRows;
 
   // ブランド絞り込み（brandName で絞る）
   if (brandFilter.length > 0) {
     work = work.filter((r) => brandFilter.includes(r.brandName));
+  }
+
+  // 担当者絞り込み（assigneeName で絞る）
+  if (assigneeFilter.length > 0) {
+    work = work.filter((r) => assigneeFilter.includes(r.assigneeName));
+  }
+
+  // タグ種別絞り込み（productIdTag で絞る）
+  if (tagFilter.length > 0) {
+    work = work.filter((r) => tagFilter.includes(r.productIdTag));
   }
 
   // ソート適用（createdAt / updatedAt は "YYYY/MM/DD" 形式）

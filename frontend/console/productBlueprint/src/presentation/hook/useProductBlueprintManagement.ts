@@ -13,12 +13,21 @@ import {
 
 export interface UseProductBlueprintManagementResult {
   rows: UiRow[];
+
+  // フィルタ状態
   brandFilter: string[];
+  assigneeFilter: string[];
+  tagFilter: string[];
+
+  // フィルタ変更ハンドラ
   handleBrandFilterChange: (values: string[]) => void;
-  handleSortChange: (
-    key: string | null,
-    dir: "asc" | "desc" | null
-  ) => void;
+  handleAssigneeFilterChange: (values: string[]) => void;
+  handleTagFilterChange: (values: string[]) => void;
+
+  // ソート変更ハンドラ
+  handleSortChange: (key: string | null, dir: "asc" | "desc" | null) => void;
+
+  // 行クリック & 画面操作
   handleRowClick: (row: UiRow) => void;
   handleCreate: () => void;
   handleReset: () => void;
@@ -37,6 +46,8 @@ export function useProductBlueprintManagement(): UseProductBlueprintManagementRe
 
   // フィルタ & ソート状態
   const [brandFilter, setBrandFilter] = useState<string[]>([]);
+  const [assigneeFilter, setAssigneeFilter] = useState<string[]>([]);
+  const [tagFilter, setTagFilter] = useState<string[]>([]);
   const [sortedKey, setSortedKey] = useState<ProductBlueprintSortKey>(null);
   const [sortedDir, setSortedDir] = useState<SortDirection>(null);
 
@@ -47,6 +58,10 @@ export function useProductBlueprintManagement(): UseProductBlueprintManagementRe
     (async () => {
       try {
         const uiRows = await fetchProductBlueprintManagementRows();
+        console.log(
+          "[useProductBlueprintManagement] fetched uiRows:",
+          uiRows,
+        );
         setAllRows(uiRows);
       } catch (err) {
         console.error(
@@ -66,10 +81,12 @@ export function useProductBlueprintManagement(): UseProductBlueprintManagementRe
       filterAndSortProductBlueprintRows({
         allRows,
         brandFilter,
+        assigneeFilter,
+        tagFilter,
         sortedKey,
         sortedDir,
       }),
-    [allRows, brandFilter, sortedKey, sortedDir],
+    [allRows, brandFilter, assigneeFilter, tagFilter, sortedKey, sortedDir],
   );
 
   // ---------------------------
@@ -77,6 +94,14 @@ export function useProductBlueprintManagement(): UseProductBlueprintManagementRe
   // ---------------------------
   const handleBrandFilterChange = useCallback((values: string[]) => {
     setBrandFilter(values);
+  }, []);
+
+  const handleAssigneeFilterChange = useCallback((values: string[]) => {
+    setAssigneeFilter(values);
+  }, []);
+
+  const handleTagFilterChange = useCallback((values: string[]) => {
+    setTagFilter(values);
   }, []);
 
   const handleSortChange = useCallback(
@@ -100,6 +125,8 @@ export function useProductBlueprintManagement(): UseProductBlueprintManagementRe
 
   const handleReset = useCallback(() => {
     setBrandFilter([]);
+    setAssigneeFilter([]);
+    setTagFilter([]);
     setSortedKey(null);
     setSortedDir(null);
   }, []);
@@ -107,7 +134,11 @@ export function useProductBlueprintManagement(): UseProductBlueprintManagementRe
   return {
     rows,
     brandFilter,
+    assigneeFilter,
+    tagFilter,
     handleBrandFilterChange,
+    handleAssigneeFilterChange,
+    handleTagFilterChange,
     handleSortChange,
     handleRowClick,
     handleCreate,

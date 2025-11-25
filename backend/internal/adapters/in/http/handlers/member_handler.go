@@ -52,6 +52,15 @@ func (h *MemberHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	case r.Method == http.MethodGet && path == "/members":
 		h.list(w, r)
 
+	// ★ 追加: GET /members/{id}/display-name
+	case r.Method == http.MethodGet &&
+		strings.HasPrefix(path, "/members/") &&
+		strings.HasSuffix(path, "/display-name"):
+		// /members/{id}/display-name から {id} 部分を抽出
+		id := strings.TrimPrefix(path, "/members/")
+		id = strings.TrimSuffix(id, "/display-name")
+		h.getDisplayName(w, r, id)
+
 	case r.Method == http.MethodPatch && strings.HasPrefix(path, "/members/"):
 		id := strings.TrimPrefix(path, "/members/")
 		h.update(w, r, id)
@@ -279,6 +288,33 @@ func (h *MemberHandler) get(w http.ResponseWriter, r *http.Request, id string) {
 		return
 	}
 	_ = json.NewEncoder(w).Encode(member)
+}
+
+// -----------------------------------------------------------------------------
+// GET /members/{id}/display-name
+// -----------------------------------------------------------------------------
+// assigneeId → assigneeName 変換用のシンプルなエンドポイント。
+// Member の lastName / firstName から「姓 名」を組み立てて返す。
+func (h *MemberHandler) getDisplayName(w http.ResponseWriter, r *http.Request, id string) {
+	ctx := r.Context()
+
+	id = strings.TrimSpace(id)
+	if id == "" {
+		w.WriteHeader(http.StatusBadRequest)
+		_ = json.NewEncoder(w).Encode(map[string]string{"error": "invalid id"})
+		return
+	}
+
+	m, err := h.uc.GetByID(ctx, id)
+	if err != nil {
+		writeMemberErr(w, err)
+		return
+	}
+
+	displayName := memberdom.FormatLastFirst(m.LastName, m.FirstName)
+	_ = json.NewEncoder(w).Encode(map[string]string{
+		"displayName": displayName,
+	})
 }
 
 // -----------------------------------------------------------------------------
