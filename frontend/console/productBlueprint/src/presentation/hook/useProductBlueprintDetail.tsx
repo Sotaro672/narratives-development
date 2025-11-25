@@ -71,7 +71,6 @@ export function useProductBlueprintDetail(): UseProductBlueprintDetailResult {
   const navigate = useNavigate();
   const { blueprintId } = useParams<{ blueprintId: string }>();
 
-  // 初期値はすべて空（モック削除）
   const [pageTitle, setPageTitle] = React.useState<string>("");
 
   const [productName, setProductName] = React.useState<string>("");
@@ -108,9 +107,24 @@ export function useProductBlueprintDetail(): UseProductBlueprintDetailResult {
 
         console.log("[useProductBlueprintDetail] mapped detail:", detail);
 
+        // service から来る拡張フィールド
+        const brandNameFromService = (detail as any).brandName as
+          | string
+          | undefined;
+        const assigneeNameFromService = (detail as any).assigneeName as
+          | string
+          | undefined;
+        const createdByNameFromService = (detail as any).createdByName as
+          | string
+          | undefined;
+
         setPageTitle(detail.productName ?? blueprintId);
         setProductName(detail.productName ?? "");
-        setBrand(brandLabelFromId(detail.brandId));
+
+        // brand: service の brandName を優先、なければ従来の brandLabelFromId
+        setBrand(
+          brandNameFromService ?? brandLabelFromId(detail.brandId),
+        );
 
         setItemType((detail.itemType as ItemType) ?? "");
         setFit((detail.fit as Fit) ?? ("" as Fit));
@@ -128,8 +142,20 @@ export function useProductBlueprintDetail(): UseProductBlueprintDetailResult {
         setSizes([]);
         setModelNumbers([]);
 
-        setAssignee(detail.assigneeId ?? "担当者未設定");
-        setCreator(detail.createdBy ?? "作成者未設定");
+        // assignee: service の assigneeName を優先
+        setAssignee(
+          assigneeNameFromService ??
+            detail.assigneeId ??
+            "担当者未設定",
+        );
+
+        // creator: service の createdByName を優先
+        setCreator(
+          createdByNameFromService ??
+            detail.createdBy ??
+            "作成者未設定",
+        );
+
         setCreatedAt(formatProductBlueprintDate(detail.createdAt) || "");
       } catch (e) {
         console.error("[useProductBlueprintDetail] fetch failed:", e);
