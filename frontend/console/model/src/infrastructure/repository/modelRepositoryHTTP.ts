@@ -69,13 +69,10 @@ export async function createModelVariation(
         Authorization: `Bearer ${idToken}`,
       },
       body: JSON.stringify({
-        // ★ backend に確実に渡す
         productBlueprintId,
-
         modelNumber: payload.modelNumber,
         size: payload.size,
         color: payload.color,
-        // ★ ここで rgb も一緒に送る
         rgb: payload.rgb,
         measurements: cleanedMeasurements,
       }),

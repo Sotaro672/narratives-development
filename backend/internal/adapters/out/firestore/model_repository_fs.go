@@ -100,10 +100,10 @@ func (r *ModelRepositoryFS) GetModelDataByBlueprintID(ctx context.Context, produ
 	defer it.Stop()
 
 	snap, err := it.Next()
-	if err == iterator.Done {
-		return nil, modeldom.ErrNotFound
-	}
 	if err != nil {
+		if err == iterator.Done {
+			return nil, modeldom.ErrNotFound
+		}
 		return nil, err
 	}
 
@@ -418,6 +418,25 @@ func (r *ModelRepositoryFS) ReplaceModelVariations(
 }
 
 // ------------------------------------------------------------
+// ModelRepo interface の追加メソッド実装
+// ------------------------------------------------------------
+
+// 与えられた productBlueprintID に紐づく ModelVariation 一覧を返す
+func (r *ModelRepositoryFS) ListModelVariationsByProductBlueprintID(
+	ctx context.Context,
+	productBlueprintID string,
+) ([]modeldom.ModelVariation, error) {
+	if r.Client == nil {
+		return nil, errors.New("firestore client is nil")
+	}
+	productBlueprintID = strings.TrimSpace(productBlueprintID)
+	if productBlueprintID == "" {
+		return nil, modeldom.ErrInvalidBlueprintID
+	}
+	return r.listVariationsByProductBlueprintID(ctx, productBlueprintID)
+}
+
+// ------------------------------------------------------------
 // Helpers
 // ------------------------------------------------------------
 
@@ -434,10 +453,10 @@ func (r *ModelRepositoryFS) listVariationsByProductBlueprintID(ctx context.Conte
 	var out []modeldom.ModelVariation
 	for {
 		doc, err := it.Next()
-		if err == iterator.Done {
-			break
-		}
 		if err != nil {
+			if err == iterator.Done {
+				break
+			}
 			return nil, err
 		}
 		v, err := docToModelVariation(doc)

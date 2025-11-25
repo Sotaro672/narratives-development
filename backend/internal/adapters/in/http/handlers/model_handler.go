@@ -1,5 +1,4 @@
 // backend/internal/adapters/in/http/handlers/model_handler.go
-
 package handlers
 
 import (
@@ -50,12 +49,28 @@ func (h *ModelHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 
 	// ------------------------------------------------------------
+	// GET /models/{productBlueprintID}/variations
+	//   → 指定した productBlueprintID の ModelVariation 一覧を取得
+	//
 	// GET /models/{id}
 	//   → ModelUsecase.GetByID を呼び出す（従来どおり）
 	// ------------------------------------------------------------
 	case r.Method == http.MethodGet && strings.HasPrefix(r.URL.Path, "/models/"):
-		id := strings.TrimPrefix(r.URL.Path, "/models/")
+		path := strings.TrimPrefix(r.URL.Path, "/models/")
+		path = strings.Trim(path, "/")
+		parts := strings.Split(path, "/")
+
+		// /models/{productBlueprintID}/variations
+		if len(parts) == 2 && parts[1] == "variations" {
+			productBlueprintID := strings.TrimSpace(parts[0])
+			h.listVariationsByBlueprintID(w, r, productBlueprintID)
+			return
+		}
+
+		// それ以外は従来どおり /models/{id} として扱う
+		id := strings.TrimSpace(path)
 		h.get(w, r, id)
+		return
 
 	default:
 		w.WriteHeader(http.StatusNotFound)
@@ -80,6 +95,31 @@ func (h *ModelHandler) get(w http.ResponseWriter, r *http.Request, id string) {
 		return
 	}
 	_ = json.NewEncoder(w).Encode(m)
+}
+
+// GET /models/{productBlueprintID}/variations
+// → 指定した productBlueprintID に紐づく ModelVariation を一覧で返す
+func (h *ModelHandler) listVariationsByBlueprintID(
+	w http.ResponseWriter,
+	r *http.Request,
+	productBlueprintID string,
+) {
+	ctx := r.Context()
+
+	productBlueprintID = strings.TrimSpace(productBlueprintID)
+	if productBlueprintID == "" {
+		w.WriteHeader(http.StatusBadRequest)
+		_ = json.NewEncoder(w).Encode(map[string]string{"error": "invalid productBlueprintID"})
+		return
+	}
+
+	vars, err := h.uc.ListModelVariationsByBlueprintID(ctx, productBlueprintID)
+	if err != nil {
+		writeModelErr(w, err)
+		return
+	}
+
+	_ = json.NewEncoder(w).Encode(vars)
 }
 
 /* ============================================================

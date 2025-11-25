@@ -82,7 +82,7 @@ export default function ProductBlueprintDetail() {
           mode="edit"
           productName={productName}
           brand={brand}
-          itemType={itemType || undefined}         // ★ ここを修正
+          itemType={itemType || undefined}
           fit={fit}
           materials={materials}
           weight={weight}

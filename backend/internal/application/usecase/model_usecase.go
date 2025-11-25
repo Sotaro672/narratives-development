@@ -21,7 +21,6 @@ type ModelRepo interface {
 
 	GetModelVariationByID(ctx context.Context, variationID string) (*modeldom.ModelVariation, error)
 
-	// ★ 新規作成では productId は使わないので削除
 	CreateModelVariation(ctx context.Context, variation modeldom.NewModelVariation) (*modeldom.ModelVariation, error)
 
 	UpdateModelVariation(ctx context.Context, variationID string, updates modeldom.ModelVariationUpdate) (*modeldom.ModelVariation, error)
@@ -29,6 +28,9 @@ type ModelRepo interface {
 
 	// まとめて入れ替える場合も、Repo 側で紐づけキーを解決する想定にしておく
 	ReplaceModelVariations(ctx context.Context, vars []modeldom.NewModelVariation) ([]modeldom.ModelVariation, error)
+
+	// ★ 追加: productBlueprintID ごとに ModelVariation 一覧を取得
+	ListModelVariationsByProductBlueprintID(ctx context.Context, productBlueprintID string) ([]modeldom.ModelVariation, error)
 }
 
 // ------------------------------------------------------------
@@ -73,6 +75,18 @@ func (u *ModelUsecase) GetModelDataByProductBlueprintID(ctx context.Context, pro
 	return u.repo.GetModelDataByBlueprintID(ctx, productBlueprintID)
 }
 
+// ★ 追加: 与えられた productBlueprintID に紐づく ModelVariation を list する
+func (u *ModelUsecase) ListModelVariationsByBlueprintID(
+	ctx context.Context,
+	productBlueprintID string,
+) ([]modeldom.ModelVariation, error) {
+	productBlueprintID = strings.TrimSpace(productBlueprintID)
+	if productBlueprintID == "" {
+		return nil, modeldom.ErrInvalidBlueprintID
+	}
+	return u.repo.ListModelVariationsByProductBlueprintID(ctx, productBlueprintID)
+}
+
 // ------------------------------------------------------------
 // Commands
 // ------------------------------------------------------------
@@ -89,8 +103,6 @@ func (u *ModelUsecase) UpdateModelData(
 	return u.repo.UpdateModelData(ctx, id, updates)
 }
 
-// ★ CreateModelVariation から productId を排除
-//   - 紐付けは v.ProductBlueprintID など、NewModelVariation 側の情報で行う想定。
 func (u *ModelUsecase) CreateModelVariation(
 	ctx context.Context,
 	v modeldom.NewModelVariation,
