@@ -13,21 +13,11 @@ export type ItemType = "tops" | "bottoms" | "other";
 export type ProductIDTagType = "qr" | "nfc";
 
 /**
- * LogoDesignFile
- * backend/internal/domain/productBlueprint/entity.go の LogoDesignFile に対応。
- */
-export interface LogoDesignFile {
-  name: string;
-  url: string;
-}
-
-/**
  * ProductIDTag
  * backend/internal/domain/productBlueprint/entity.go の ProductIDTag に対応。
  */
 export interface ProductIDTag {
   type: ProductIDTagType;
-  logoDesignFile?: LogoDesignFile | null;
 }
 
 /**
@@ -113,29 +103,11 @@ export function isValidProductIDTagType(
   return value === "qr" || value === "nfc";
 }
 
-/** LogoDesignFile の簡易バリデーション */
-export function validateLogoDesignFile(file: LogoDesignFile): string[] {
-  const errors: string[] = [];
-  if (!file.name?.trim()) {
-    errors.push("logoDesignFile.name is required");
-  }
-  try {
-    // URL コンストラクタでざっくり検証
-    new URL(file.url);
-  } catch {
-    errors.push("logoDesignFile.url must be a valid URL");
-  }
-  return errors;
-}
-
 /** ProductIDTag の簡易バリデーション */
 export function validateProductIDTag(tag: ProductIDTag): string[] {
   const errors: string[] = [];
   if (!isValidProductIDTagType(tag.type)) {
     errors.push("productIdTag.type must be 'qr' or 'nfc'");
-  }
-  if (tag.logoDesignFile) {
-    errors.push(...validateLogoDesignFile(tag.logoDesignFile));
   }
   return errors;
 }

@@ -27,6 +27,7 @@ export const API_BASE = ENV_BASE || FALLBACK_BASE;
 export async function createProductBlueprintHTTP(
   params: CreateProductBlueprintParams,
 ): Promise<ProductBlueprintResponse> {
+
   const user = auth.currentUser;
   if (!user) {
     throw new Error("ログイン情報が見つかりません（未ログイン）");
@@ -46,10 +47,12 @@ export async function createProductBlueprintHTTP(
     productIdTag: params.productIdTag,
 
     companyId: params.companyId,
-
     assigneeId: params.assigneeId ?? null,
     createdBy: params.createdBy ?? null,
   };
+
+  // 🔍 POST 直前ログ
+  console.log("[createProductBlueprintHTTP] POST payload:", payload);
 
   const res = await fetch(`${API_BASE}/product-blueprints`, {
     method: "POST",
@@ -59,6 +62,9 @@ export async function createProductBlueprintHTTP(
     },
     body: JSON.stringify(payload),
   });
+
+  // 🔍 レスポンス RAW ログ
+  console.log("[createProductBlueprintHTTP] RAW response:", res);
 
   if (!res.ok) {
     let detail: unknown;
@@ -81,6 +87,10 @@ export async function createProductBlueprintHTTP(
   }
 
   const json = (await res.json()) as ProductBlueprintResponse;
+
+  // 🔍 解析後 JSON ログ
+  console.log("[createProductBlueprintHTTP] parsed JSON:", json);
+
   return json;
 }
 
@@ -88,13 +98,6 @@ export async function createProductBlueprintHTTP(
 // HTTP: ProductBlueprint 一覧取得
 // ------------------------------
 
-/**
- * 現在ログインしているユーザーの companyId コンテキストで、
- * 商品設計一覧を取得する GET /product-blueprints
- *
- * - companyId のフィルタリングは backend 側の Usecase が
- *   コンテキストから強制適用する前提。
- */
 export async function listProductBlueprintsHTTP(): Promise<
   ProductBlueprintResponse[]
 > {
@@ -105,12 +108,18 @@ export async function listProductBlueprintsHTTP(): Promise<
 
   const idToken = await user.getIdToken();
 
+  // 🔍 リクエスト URL ログ
+  console.log("[listProductBlueprintsHTTP] Request:", `${API_BASE}/product-blueprints`);
+
   const res = await fetch(`${API_BASE}/product-blueprints`, {
     method: "GET",
     headers: {
       Authorization: `Bearer ${idToken}`,
     },
   });
+
+  // 🔍 生レスポンスログ
+  console.log("[listProductBlueprintsHTTP] RAW response:", res);
 
   if (!res.ok) {
     let detail: unknown;
@@ -135,5 +144,12 @@ export async function listProductBlueprintsHTTP(): Promise<
   }
 
   const json = (await res.json()) as ProductBlueprintResponse[];
+
+  // 🔍 JSON の中身を完全出力
+  console.log(
+    "[listProductBlueprintsHTTP] parsed JSON:",
+    JSON.stringify(json, null, 2),
+  );
+
   return json;
 }

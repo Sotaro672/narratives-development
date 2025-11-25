@@ -3,7 +3,6 @@ package productBlueprint
 import (
 	"errors"
 	"fmt"
-	"net/url"
 	"strings"
 	"time"
 )
@@ -91,34 +90,13 @@ func IsValidTagType(v ProductIDTagType) bool {
 // Value objects
 // ======================================
 
-type LogoDesignFile struct {
-	Name string
-	URL  string
-}
-
-func (f LogoDesignFile) validate() error {
-	if strings.TrimSpace(f.Name) == "" {
-		return errors.New("logoDesignFile: name required")
-	}
-	if _, err := url.ParseRequestURI(f.URL); err != nil {
-		return fmt.Errorf("logoDesignFile: invalid url: %w", err)
-	}
-	return nil
-}
-
 type ProductIDTag struct {
-	Type           ProductIDTagType
-	LogoDesignFile *LogoDesignFile
+	Type ProductIDTagType
 }
 
 func (t ProductIDTag) validate() error {
 	if !IsValidTagType(t.Type) {
 		return ErrInvalidTagType
-	}
-	if t.LogoDesignFile != nil {
-		if err := t.LogoDesignFile.validate(); err != nil {
-			return err
-		}
 	}
 	return nil
 }

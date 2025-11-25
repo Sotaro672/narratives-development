@@ -396,8 +396,6 @@ export function useProductBlueprintCreate(): UseProductBlueprintCreateResult {
     // backend の ProductIDTag に対応する構造体
     const productIdTag = {
       type: productIdTagType,
-      // ロゴデザインファイルは現状 UI 未対応なため null で送信
-      logoDesignFile: null as null,
     };
 
     // backend/internal/domain/productBlueprint.ProductBlueprint に対応する

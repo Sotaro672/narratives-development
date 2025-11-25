@@ -184,6 +184,21 @@ export async function createProductBlueprint(
     },
   );
 
+  // 🔍 productIdTag の中身もログしておくとデバッグしやすい
+  console.log(
+    "[productBlueprintCreateService] productIdTag in params:",
+    params.productIdTag,
+  );
+
   // 2. API モジュールに委譲（ProductBlueprint 作成 + ModelVariations 作成）
-  return await createProductBlueprintApi(params, variations);
+  //    - ここで productIdTag.type を backend に渡すための橋渡しをする
+  return await createProductBlueprintApi(
+    {
+      ...params,
+      // backend の CreateProductBlueprintInput.ProductIdTagType に対応
+      // ※ CreateProductBlueprintParams 側に productIdTagType が定義されている前提
+      productIdTagType: params.productIdTag?.type ?? null,
+    } as CreateProductBlueprintParams,
+    variations,
+  );
 }

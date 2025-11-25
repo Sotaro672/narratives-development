@@ -16,7 +16,6 @@ export type ProductIDTagType = "qr" | "nfc";
  * ProductIDTag
  * backend/internal/domain/productBlueprint/entity.go の ProductIDTag に対応。
  *
- * LogoDesignFile を削除したため logoDesignFile も削除
  */
 export interface ProductIDTag {
   type: ProductIDTagType;

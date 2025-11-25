@@ -18,13 +18,14 @@ type ProductBlueprintHandler struct {
 }
 
 // DI コンテナ側で ProductBlueprintUsecase と brand.Service を渡してください。
+// brandSvc は現状未使用だが、将来 brand 名取得に使うために受け取っておく。
 func NewProductBlueprintHandler(
 	uc *usecase.ProductBlueprintUsecase,
 	brandSvc *brand.Service,
 ) http.Handler {
 	return &ProductBlueprintHandler{
 		uc:       uc,
-		brandSvc: brandSvc, // brandSvc は nil でも動作するようにしている
+		brandSvc: brandSvc,
 	}
 }
 
@@ -58,18 +59,22 @@ func (h *ProductBlueprintHandler) ServeHTTP(w http.ResponseWriter, r *http.Reque
 // POST /product-blueprints
 // ---------------------------------------------------
 
+type ProductIdTagInput struct {
+	Type string `json:"type"`
+}
+
 type CreateProductBlueprintInput struct {
-	ProductName      string   `json:"productName"`
-	BrandId          string   `json:"brandId"`
-	ItemType         string   `json:"itemType"`
-	Fit              string   `json:"fit"`
-	Material         string   `json:"material"`
-	Weight           float64  `json:"weight"`
-	QualityAssurance []string `json:"qualityAssurance"`
-	ProductIdTagType string   `json:"productIdTagType"`
-	AssigneeId       string   `json:"assigneeId"`
-	CompanyId        string   `json:"companyId"`
-	CreatedBy        string   `json:"createdBy,omitempty"`
+	ProductName      string            `json:"productName"`
+	BrandId          string            `json:"brandId"`
+	ItemType         string            `json:"itemType"`
+	Fit              string            `json:"fit"`
+	Material         string            `json:"material"`
+	Weight           float64           `json:"weight"`
+	QualityAssurance []string          `json:"qualityAssurance"`
+	ProductIdTag     ProductIdTagInput `json:"productIdTag"`
+	AssigneeId       string            `json:"assigneeId"`
+	CompanyId        string            `json:"companyId"`
+	CreatedBy        string            `json:"createdBy,omitempty"`
 }
 
 func (h *ProductBlueprintHandler) post(w http.ResponseWriter, r *http.Request) {
@@ -100,6 +105,10 @@ func (h *ProductBlueprintHandler) post(w http.ResponseWriter, r *http.Request) {
 		AssigneeID:       in.AssigneeId,
 		CompanyID:        in.CompanyId,
 		CreatedBy:        createdBy,
+		// ProductIdTag を保存対象としてセット（LogoDesignFile は扱わない）
+		ProductIdTag: pbdom.ProductIDTag{
+			Type: pbdom.ProductIDTagType(in.ProductIdTag.Type),
+		},
 	}
 
 	created, err := h.uc.Create(ctx, pb)
@@ -116,11 +125,15 @@ func (h *ProductBlueprintHandler) post(w http.ResponseWriter, r *http.Request) {
 // GET /product-blueprints   ← 一覧 API
 // ---------------------------------------------------
 
+// フロントエンドの期待に合わせた一覧用 DTO
+// - brandId: ID をそのまま返す（name 変換はフロント側）
+// - assigneeId: 担当者の MemberID をそのまま返す
+// - productIdTag: "QR" / "NFC" など文字列ラベル
 type ProductBlueprintListOutput struct {
 	ID           string `json:"id"`
 	ProductName  string `json:"productName"`
-	BrandName    string `json:"brandName"`
-	AssigneeName string `json:"assigneeName"`
+	BrandId      string `json:"brandId"`
+	AssigneeId   string `json:"assigneeId"`
 	ProductIdTag string `json:"productIdTag"`
 	CreatedAt    string `json:"createdAt"` // YYYY/MM/DD
 	UpdatedAt    string `json:"updatedAt"` // YYYY/MM/DD
@@ -137,40 +150,34 @@ func (h *ProductBlueprintHandler) list(w http.ResponseWriter, r *http.Request) {
 
 	out := make([]ProductBlueprintListOutput, 0, len(rows))
 	for _, pb := range rows {
-		// brandId → brandName 変換（brandSvc が nil の場合は ID のまま）
-		brandName := strings.TrimSpace(pb.BrandID)
-		if h.brandSvc != nil && brandName != "" {
-			if name, err := h.brandSvc.GetNameByID(ctx, pb.BrandID); err == nil {
-				if strings.TrimSpace(name) != "" {
-					brandName = name
-				}
-			}
+		// brandId / assigneeId は ID をそのまま返す（空なら空のまま or "-"）
+		brandId := strings.TrimSpace(pb.BrandID)
+		assigneeId := strings.TrimSpace(pb.AssigneeID)
+		if assigneeId == "" {
+			assigneeId = "-"
 		}
 
-		// 担当者名（現状は ID をそのまま表示。将来 Member サービスと連携する想定）
-		assigneeName := strings.TrimSpace(pb.AssigneeID)
-		if assigneeName == "" {
-			assigneeName = "-"
-		}
-
-		// ProductIdTag.Type → 表示用ラベル
+		// ProductIdTag.Type → 表示用ラベル（存在しない場合は "-"）
 		productIdTag := "-"
-		if pb.ProductIdTag.Type != "" { // ★ ここを ProductIDTag → ProductIdTag に修正
+		if pb.ProductIdTag.Type != "" {
 			productIdTag = strings.ToUpper(string(pb.ProductIdTag.Type))
 		}
 
 		// 日付を "YYYY/MM/DD" に整形
-		createdAt := pb.CreatedAt.Format("2006/01/02")
-		updatedAt := pb.UpdatedAt.Format("2006/01/02")
-		if pb.UpdatedAt.IsZero() {
-			updatedAt = createdAt
+		createdAt := ""
+		if !pb.CreatedAt.IsZero() {
+			createdAt = pb.CreatedAt.Format("2006/01/02")
+		}
+		updatedAt := createdAt
+		if !pb.UpdatedAt.IsZero() {
+			updatedAt = pb.UpdatedAt.Format("2006/01/02")
 		}
 
 		out = append(out, ProductBlueprintListOutput{
 			ID:           pb.ID,
 			ProductName:  pb.ProductName,
-			BrandName:    brandName,
-			AssigneeName: assigneeName,
+			BrandId:      brandId,
+			AssigneeId:   assigneeId,
 			ProductIdTag: productIdTag,
 			CreatedAt:    createdAt,
 			UpdatedAt:    updatedAt,
