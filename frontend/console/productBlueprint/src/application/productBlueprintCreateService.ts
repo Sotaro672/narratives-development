@@ -1,4 +1,4 @@
-// frontend/console/productBlueprint/src/application/productBlueprintCreateService.ts
+// frontend/console/productBlueprint/src/application/productBlueprintCreateService.ts 
 
 import type { ItemType, Fit } from "../domain/entity/catalog";
 import type { ProductIDTag } from "../domain/entity/productBlueprint";
@@ -43,6 +43,10 @@ export type CreateProductBlueprintParams = {
   colors: string[];
   sizes: SizeRow[];
   modelNumbers: ModelNumber[];
+
+  // ★ ColorVariationCard から渡される color 名 → HEX(RGB) のマップ
+  //   例: { "グリーン": "#417505" }
+  colorRgbMap?: Record<string, string>;
 };
 
 export type ProductBlueprintResponse = {
@@ -68,10 +72,46 @@ export type NewModelVariationMeasurements = Partial<
 export type NewModelVariationPayload = {
   sizeLabel: string;
   color: string;
+  rgb?: number; // ★ 色の RGB 値（0xRRGGBB）
   modelNumber: string;
   createdBy: string;
   measurements: NewModelVariationMeasurements;
 };
+
+// ------------------------------
+// HEX → number(RGB) 変換ヘルパー
+// ------------------------------
+
+function hexToRgbInt(hex?: string): number | undefined {
+  if (!hex) return undefined;
+
+  const trimmed = hex.trim();
+  if (!trimmed) return undefined;
+
+  const withoutHash = trimmed.startsWith("#")
+    ? trimmed.slice(1)
+    : trimmed;
+
+  // 6桁以外は無視（ログだけ出す）
+  if (!/^[0-9a-fA-F]{6}$/.test(withoutHash)) {
+    console.warn(
+      "[productBlueprintCreateService] invalid rgb hex format",
+      { hex },
+    );
+    return undefined;
+  }
+
+  const parsed = parseInt(withoutHash, 16);
+  if (Number.isNaN(parsed)) {
+    console.warn(
+      "[productBlueprintCreateService] failed to parse rgb hex",
+      { hex },
+    );
+    return undefined;
+  }
+
+  return parsed;
+}
 
 // ------------------------------
 // buildMeasurements をこのファイルに集約
@@ -120,11 +160,12 @@ function toNewModelVariationPayload(
     color: string;
     modelNumber: string;
     createdBy: string;
+    rgb?: number;
   },
 ): NewModelVariationPayload {
   const measurements = buildMeasurements(itemType, sizeRow);
 
-  // 🔍 buildMeasurements で組み立てた値をここでログ出力
+  // 🔍 buildMeasurements & rgb をここでログ出力
   console.log("[productBlueprintCreateService] buildMeasurements result", {
     itemType,
     sizeRow,
@@ -137,6 +178,7 @@ function toNewModelVariationPayload(
     color: base.color,
     modelNumber: base.modelNumber,
     createdBy: base.createdBy,
+    rgb: base.rgb,
     measurements,
   };
 }
@@ -160,7 +202,9 @@ export async function createProductBlueprint(
     anyJson.ID;
 
   const productBlueprintId =
-    typeof productBlueprintIdRaw === "string" ? productBlueprintIdRaw.trim() : "";
+    typeof productBlueprintIdRaw === "string"
+      ? productBlueprintIdRaw.trim()
+      : "";
 
   if (!productBlueprintId) {
     console.warn(
@@ -173,6 +217,8 @@ export async function createProductBlueprint(
   // 3. color / size / modelNumber / measurements から
   //    modelCreateService.tsx に渡す JSON を組み立てる
   const variations: NewModelVariationPayload[] = [];
+
+  const colorRgbMap = params.colorRgbMap ?? {};
 
   if (params.modelNumbers && params.sizes) {
     for (const v of params.modelNumbers) {
@@ -187,11 +233,17 @@ export async function createProductBlueprint(
         continue;
       }
 
+      // ★ color 名から HEX を取得し、RGB(int) に変換
+      const hex = colorRgbMap[v.color];
+      const rgbInt = hexToRgbInt(hex);
+
+      // rgb を含めて payload を組み立て
       const payload = toNewModelVariationPayload(params.itemType, sizeRow, {
         sizeLabel: v.size,
         color: v.color,
         modelNumber: v.code,
         createdBy: params.createdBy ?? "",
+        rgb: rgbInt,
       });
 
       variations.push(payload);

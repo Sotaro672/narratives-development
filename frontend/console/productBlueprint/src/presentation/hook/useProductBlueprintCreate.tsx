@@ -73,6 +73,8 @@ export interface UseProductBlueprintCreateResult {
 
   colors: string[];
   colorInput: string;
+  /** 色名 → RGB(hex) の対応マップ */
+  colorRgbMap: Record<string, string>;
   sizes: SizeRow[];
   modelNumbers: ModelNumber[];
 
@@ -100,6 +102,8 @@ export interface UseProductBlueprintCreateResult {
   onChangeColorInput: (v: string) => void;
   onAddColor: () => void;
   onRemoveColor: (name: string) => void;
+  /** 色名に対応する RGB(hex) を更新するハンドラ */
+  onChangeColorRgb: (name: string, rgbHex: string) => void;
 
   // サイズ系
   onAddSize: () => void;
@@ -253,6 +257,11 @@ export function useProductBlueprintCreate(): UseProductBlueprintCreateResult {
 
   const [colorInput, setColorInput] = React.useState("");
   const [colors, setColors] = React.useState<string[]>([]);
+  // ★ 色名 → RGB(hex) のマップ
+  const [colorRgbMap, setColorRgbMap] = React.useState<Record<string, string>>(
+    {},
+  );
+
   const [sizes, setSizes] = React.useState<SizeRow[]>([]);
   const [modelNumbers, setModelNumbers] = React.useState<ModelNumber[]>([]);
 
@@ -271,7 +280,8 @@ export function useProductBlueprintCreate(): UseProductBlueprintCreateResult {
   // backend に送るのは memberId（AssigneeID）
   const [assigneeId, setAssigneeId] = React.useState("");
   // 表示用のラベル（氏名 / メールアドレスなど）
-  const [assigneeDisplayName, setAssigneeDisplayName] = React.useState("");
+  const [assigneeDisplayName, setAssigneeDisplayName] =
+    React.useState("");
   const [createdBy] = React.useState("");
   const [createdAt] = React.useState("");
 
@@ -404,6 +414,8 @@ export function useProductBlueprintCreate(): UseProductBlueprintCreateResult {
       productIdTag,
       companyId: effectiveCompanyId,
       colors,
+      // ★ 色名 → RGB(hex) マップも一緒に送る
+      colorRgbMap,
       sizes,
       modelNumbers,
       assigneeId,
@@ -447,6 +459,7 @@ export function useProductBlueprintCreate(): UseProductBlueprintCreateResult {
     qualityAssurance,
     productIdTagType,
     colors,
+    colorRgbMap,
     sizes,
     modelNumbers,
     assigneeId,
@@ -467,6 +480,11 @@ export function useProductBlueprintCreate(): UseProductBlueprintCreateResult {
 
   const onRemoveColor = React.useCallback((name: string) => {
     setColors((prev) => prev.filter((c) => c !== name));
+    setColorRgbMap((prev) => {
+      const next = { ...prev };
+      delete next[name];
+      return next;
+    });
   }, []);
 
   const onAddSize = React.useCallback(() => {
@@ -548,6 +566,25 @@ export function useProductBlueprintCreate(): UseProductBlueprintCreateResult {
     [],
   );
 
+  // RGB(hex) を更新するハンドラ
+  const onChangeColorRgb = React.useCallback(
+    (name: string, rgbHex: string) => {
+      const key = name.trim();
+      if (!key) return;
+
+      console.log("[useProductBlueprintCreate] onChangeColorRgb", {
+        name: key,
+        rgbHex,
+      });
+
+      setColorRgbMap((prev) => ({
+        ...prev,
+        [key]: rgbHex,
+      }));
+    },
+    [],
+  );
+
   // 重さを 0 未満にできないようにクランプ
   const handleChangeWeight = React.useCallback((v: number) => {
     if (Number.isNaN(v)) {
@@ -599,6 +636,7 @@ export function useProductBlueprintCreate(): UseProductBlueprintCreateResult {
 
     colors,
     colorInput,
+    colorRgbMap,
     sizes,
     modelNumbers,
 
@@ -621,6 +659,7 @@ export function useProductBlueprintCreate(): UseProductBlueprintCreateResult {
     onChangeColorInput: setColorInput,
     onAddColor,
     onRemoveColor,
+    onChangeColorRgb,
 
     onAddSize,
     onRemoveSize,

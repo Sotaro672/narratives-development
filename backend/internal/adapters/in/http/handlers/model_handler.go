@@ -1,3 +1,5 @@
+// backend/internal/adapters/in/http/handlers/model_handler.go
+
 package handlers
 
 import (
@@ -82,15 +84,18 @@ func (h *ModelHandler) get(w http.ResponseWriter, r *http.Request, id string) {
 
 /* ============================================================
  * POST /models/{productBlueprintID}/variations 用のリクエスト型
- *   frontend/console/model/src/application/modelCreateService.tsx
- *   の CreateModelVariationRequest / NewModelVariationPayload に対応
+ *   frontend/console/model/src/infrastructure/repository/modelRepositoryHTTP.ts
+ *   の CreateModelVariationRequest に対応
  * ==========================================================*/
 
 type createModelVariationRequest struct {
-	ModelNumber  string             `json:"modelNumber"`            // "LM-SB-S-WHT" など
-	Size         string             `json:"size"`                   // "S" / "M" / ...
-	Color        string             `json:"color"`                  // "ホワイト" など
-	Measurements map[string]float64 `json:"measurements,omitempty"` // chest / shoulder / waist / length など
+	// URL パスにも含まれているが、body にもあれば一応受ける
+	ProductBlueprintID string             `json:"productBlueprintId,omitempty"`
+	ModelNumber        string             `json:"modelNumber"`            // "LM-SB-S-WHT" など
+	Size               string             `json:"size"`                   // "S" / "M" / ...
+	Color              string             `json:"color"`                  // "ホワイト" など（名前）
+	RGB                int                `json:"rgb,omitempty"`          // ★ 追加: フロントから来る rgb 値（0xRRGGBB 想定）
+	Measurements       map[string]float64 `json:"measurements,omitempty"` // 着丈/身幅/…など
 }
 
 // POST /models/{productBlueprintID}/variations
@@ -114,13 +119,15 @@ func (h *ModelHandler) createVariation(w http.ResponseWriter, r *http.Request, p
 		return
 	}
 
-	// ログ: フロントから渡ってきた measurements を確認
+	// ログ: フロントから渡ってきた値を確認
 	log.Printf(
-		"[ModelHandler] createVariation productBlueprintID=%s, body.ModelNumber=%s, size=%s, color=%s, measurements=%v",
+		"[ModelHandler] createVariation productBlueprintID(path)=%s, body.productBlueprintId=%s, modelNumber=%s, size=%s, color=%s, rgb=%d, measurements=%v",
 		productBlueprintID,
+		req.ProductBlueprintID,
 		req.ModelNumber,
 		req.Size,
 		req.Color,
+		req.RGB,
 		req.Measurements,
 	)
 
@@ -131,24 +138,24 @@ func (h *ModelHandler) createVariation(w http.ResponseWriter, r *http.Request, p
 		if key == "" {
 			continue
 		}
-		// 必要であれば 0 未満を弾くなどのバリデーションもここで可能
 		ms[key] = int(v)
 	}
 
 	newVar := modeldom.NewModelVariation{
-		ModelNumber: strings.TrimSpace(req.ModelNumber),
-		Size:        strings.TrimSpace(req.Size),
+		// URL から来た productBlueprintID を domain に渡す
+		ProductBlueprintID: productBlueprintID,
+		ModelNumber:        strings.TrimSpace(req.ModelNumber),
+		Size:               strings.TrimSpace(req.Size),
 		Color: modeldom.Color{
 			Name: strings.TrimSpace(req.Color),
-			RGB:  0, // RGB は現状フロントから来ていないため 0 で初期化
+			RGB:  req.RGB, // ★ リクエストの rgb をそのまま利用
 		},
 		Measurements: ms,
 	}
 
-	// ログ: NewModelVariation に measurements が詰め替えられているか確認
+	// ログ: NewModelVariation に values が詰め替えられているか確認
 	log.Printf("[ModelHandler] createVariation NewModelVariation=%+v", newVar)
 
-	// ★ ここで productBlueprintID を渡さず、Usecase のシグネチャに合わせる
 	mv, err := h.uc.CreateModelVariation(ctx, newVar)
 	if err != nil {
 		log.Printf("[ModelHandler] error: %v", err)

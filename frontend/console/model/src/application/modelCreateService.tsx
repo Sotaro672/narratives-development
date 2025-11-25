@@ -32,6 +32,8 @@ export type ModelNumber = {
   size: string; // "S" | "M" | ...
   color: string; // "ホワイト" | ...
   code: string; // "LM-SB-S-WHT"
+  /** ColorVariationCard → useModelCard 経由で渡される RGB(hex or int) */
+  rgb?: string | number;
 };
 
 export type SizeLike = { id: string; sizeLabel: string };
@@ -44,6 +46,8 @@ export type UseModelCardParams = {
    * ModelNumberCard の props.modelNumbers と同じ
    */
   modelNumbers: ModelNumber[];
+  /** 色名 → RGB(hex) の対応マップ */
+  colorRgbMap?: Record<string, string>;
 };
 
 export type UseModelCardResult = {
@@ -64,6 +68,7 @@ export type UseModelCardResult = {
 
   /**
    * 最終的に modelNumbers として保存／API送信に使える配列
+   * - rgb フィールドも保持
    */
   flatModelNumbers: ModelNumber[];
 };
@@ -124,8 +129,8 @@ export type NewModelVariationMeasurements = Partial<
  */
 export type NewModelVariationPayload = {
   sizeLabel: string;
-  color: string;      // 色名（例: "グリーン"）
-  rgb?: number;       // RGB 整数（例: 0xRRGGBB）※任意
+  color: string; // 色名（例: "グリーン"）
+  rgb?: number | string; // RGB(hex or int)
   modelNumber: string;
   createdBy: string;
   measurements: NewModelVariationMeasurements;
@@ -149,7 +154,7 @@ export type ModelVariationsFromProductBlueprint = {
 export async function createModelVariationsFromProductBlueprint(
   payload: ModelVariationsFromProductBlueprint,
 ): Promise<void> {
-  // 受け取った payload のログ（採寸含む）
+  // 受け取った payload のログ（採寸 / rgb 含む）
   console.log(
     "[modelCreateService] createModelVariationsFromProductBlueprint payload:",
     payload,
@@ -158,15 +163,41 @@ export async function createModelVariationsFromProductBlueprint(
   // NewModelVariationPayload[] → CreateModelVariationRequest[] へ変換
   // ★ ここで measurements と productBlueprintId / rgb を丸ごと渡す
   const requests: CreateModelVariationRequest[] = payload.variations.map(
-    (v) => {
+    (v, idx) => {
       const measurements = v.measurements ?? {};
+
+      // rgb(hex) を数値（0xRRGGBB）に変換
+      let rgbInt: number | undefined = undefined;
+      if (typeof v.rgb === "string") {
+        const hex = v.rgb.replace("#", "");
+        if (/^[0-9a-fA-F]{6}$/.test(hex)) {
+          rgbInt = parseInt(hex, 16);
+        } else {
+          console.warn(
+            "[modelCreateService] invalid rgb hex; skip convert",
+            v.rgb,
+          );
+        }
+      } else if (typeof v.rgb === "number") {
+        rgbInt = v.rgb;
+      }
+
+      console.log("[modelCreateService] map variation → request", {
+        index: idx,
+        color: v.color,
+        sizeLabel: v.sizeLabel,
+        modelNumber: v.modelNumber,
+        rawRgb: v.rgb,
+        rgbInt,
+        measurements,
+      });
 
       return {
         productBlueprintId: payload.productBlueprintId,
         modelNumber: v.modelNumber,
         size: v.sizeLabel,
         color: v.color,
-        rgb: v.rgb,
+        rgb: rgbInt, // backend へ送る値
         measurements,
       };
     },

@@ -20,14 +20,20 @@ export const API_BASE = ENV_BASE || FALLBACK_BASE;
  * =======================================================*/
 
 /**
- * backend/internal/domain/model.NewModelVariation と互換 + rgb 追加
+ * backend/internal/domain/model.NewModelVariation と互換
  */
 export type CreateModelVariationRequest = {
-  productBlueprintId: string; // Firestore 保存のため必須
+  /** Firestore の productBlueprintId として保存するために必須 */
+  productBlueprintId: string;
+  /** モデルナンバー（例: "LM-SB-S-WHT"） */
   modelNumber: string;
+  /** サイズラベル（"S" / "M" / ...） */
   size: string;
+  /** カラー名（"ホワイト" など） */
   color: string;
-  rgb?: number | null; // ★ 追加（カラーの RGB 値）
+  /** カラーの RGB 値（0xRRGGBB の int など、backend 側の仕様に合わせる） */
+  rgb?: number;
+  /** 採寸値（"ウエスト" など MeasurementKey の日本語ラベルをキーとする） */
   measurements?: Record<string, number | null | undefined>;
 };
 
@@ -63,16 +69,14 @@ export async function createModelVariation(
         Authorization: `Bearer ${idToken}`,
       },
       body: JSON.stringify({
-        // Firestore 書き込みに使う
+        // ★ backend に確実に渡す
         productBlueprintId,
 
         modelNumber: payload.modelNumber,
         size: payload.size,
         color: payload.color,
-
-        // ★ 追加：RGB を backend に渡す
-        rgb: payload.rgb ?? null,
-
+        // ★ ここで rgb も一緒に送る
+        rgb: payload.rgb,
         measurements: cleanedMeasurements,
       }),
     },
@@ -108,7 +112,7 @@ export async function createModelVariations(
   variations: CreateModelVariationRequest[],
 ): Promise<void> {
   for (const v of variations) {
-    // productBlueprintId を補完しつつ実行
+    // 各要素にも productBlueprintId を補完して渡す
     const enriched: CreateModelVariationRequest = {
       ...v,
       productBlueprintId,

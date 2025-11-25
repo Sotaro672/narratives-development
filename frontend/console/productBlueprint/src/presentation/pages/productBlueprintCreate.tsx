@@ -37,6 +37,7 @@ export default function ProductBlueprintCreate() {
     // バリエーション
     colorInput,
     colors,
+    colorRgbMap,
     sizes,
     modelNumbers,
     onChangeProductName,
@@ -49,6 +50,7 @@ export default function ProductBlueprintCreate() {
     onChangeColorInput,
     onAddColor,
     onRemoveColor,
+    onChangeColorRgb,
 
     // サイズ操作
     onAddSize,
@@ -70,11 +72,13 @@ export default function ProductBlueprintCreate() {
 
   // -----------------------------
   // モデルナンバー表示用の hook（model 側）
+  //   ※ rgb を hook 経由で渡す場合は、ここで colorRgbMap を useModelCard に渡す
   // -----------------------------
   const { getCode, onChangeModelNumber: uiOnChangeModelNumber } = useModelCard({
     sizes,
     colors,
     modelNumbers,
+    colorRgbMap,
   });
 
   // UI 変更時に「model 側の内部状態」と「productBlueprintCreate の状態」の両方を更新
@@ -84,7 +88,7 @@ export default function ProductBlueprintCreate() {
     nextCode: string,
   ) => {
     uiOnChangeModelNumber(sizeLabel, color, nextCode); // UI 側の codeMap を更新
-    onChangeModelNumber(sizeLabel, color, nextCode);   // 画面のアプリケーション状態を更新
+    onChangeModelNumber(sizeLabel, color, nextCode); // 画面のアプリケーション状態を更新
   };
 
   return (
@@ -125,6 +129,9 @@ export default function ProductBlueprintCreate() {
           onChangeColorInput={onChangeColorInput}
           onAddColor={onAddColor}
           onRemoveColor={onRemoveColor}
+          // ★ 色名ごとの RGB を渡す & 更新ハンドラも渡す
+          colorRgbMap={colorRgbMap}
+          onChangeColorRgb={onChangeColorRgb}
         />
 
         <SizeVariationCard

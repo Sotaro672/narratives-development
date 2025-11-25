@@ -30,6 +30,14 @@ type ColorVariationCardProps = {
   onAddColor: () => void;
   onRemoveColor: (color: string) => void;
   mode?: "edit" | "view";
+
+  /** color 名 → hex(RGB) のマップ（例: { "グリーン": "#00ff00" }） */
+  colorRgbMap?: Record<string, string>;
+  /**
+   * 色名ごとの RGB 変更通知
+   * - カラー追加ボタン押下時に `(colorInput, pickerColor)` で呼ばれる想定
+   */
+  onChangeColorRgb?: (color: string, rgbHex: string) => void;
 };
 
 const ColorVariationCard: React.FC<ColorVariationCardProps> = ({
@@ -39,12 +47,36 @@ const ColorVariationCard: React.FC<ColorVariationCardProps> = ({
   onAddColor,
   onRemoveColor,
   mode = "edit",
+  colorRgbMap,
+  onChangeColorRgb,
 }) => {
   const isEdit = mode === "edit";
 
   const [pickerColor, setPickerColor] = React.useState<string>(
     colorInput || "#ffffff",
   );
+
+  // pickerColor の変化を常にログ出力（デバッグ用）
+  React.useEffect(() => {
+    console.log("[ColorVariationCard] pickerColor changed:", pickerColor);
+  }, [pickerColor]);
+
+  // 「カラーを追加」ボタン押下時のラッパー
+  // - 先に color 名 → pickerColor を通知
+  // - その後本来の onAddColor を呼び出す
+  const handleAddColor = React.useCallback(() => {
+    const name = colorInput.trim();
+
+    console.log("[ColorVariationCard] handleAddColor called", {
+      colorInput: name,
+      pickerColor,
+    });
+
+    if (name) {
+      onChangeColorRgb?.(name, pickerColor);
+    }
+    onAddColor();
+  }, [colorInput, pickerColor, onAddColor, onChangeColorRgb]);
 
   return (
     <Card className="vc">
@@ -81,6 +113,13 @@ const ColorVariationCard: React.FC<ColorVariationCardProps> = ({
                     color={pickerColor}
                     onChange={(color: any) => {
                       const hex = color?.hex ?? "#ffffff";
+                      console.log(
+                        "[ColorVariationCard] SketchPicker onChange",
+                        {
+                          raw: color,
+                          hex,
+                        },
+                      );
                       setPickerColor(hex);
                     }}
                   />
@@ -95,13 +134,15 @@ const ColorVariationCard: React.FC<ColorVariationCardProps> = ({
                       onChangeColorInput(e.target.value);
                     }}
                     onKeyDown={(e) => {
-                      if (e.key === "Enter") onAddColor();
+                      if (e.key === "Enter") {
+                        handleAddColor();
+                      }
                     }}
                   />
                   <Button
                     variant="secondary"
                     size="icon"
-                    onClick={onAddColor}
+                    onClick={handleAddColor}
                     aria-label="カラーを追加"
                     className="vc__add"
                   >
@@ -119,58 +160,63 @@ const ColorVariationCard: React.FC<ColorVariationCardProps> = ({
                 <Table className="vc__table">
                   <TableHeader>
                     <TableRow>
-                      <TableHead className="w-[120px]">RGB</TableHead>
+                      <TableHead className="w-[160px]">RGB(HEX)</TableHead>
                       <TableHead>色名</TableHead>
                       {isEdit && <TableHead className="w-[40px]" />}
                     </TableRow>
                   </TableHeader>
 
                   <TableBody>
-                    {colors.map((c) => (
-                      <TableRow key={c}>
-                        {/* RGB列（色プレビュー + 値） */}
-                        <TableCell>
-                          <div className="flex items-center gap-2">
-                            <span
-                              className="inline-block w-4 h-4 rounded border"
-                              style={{ backgroundColor: pickerColor }}
-                            />
-                            {pickerColor}
-                          </div>
-                        </TableCell>
+                    {colors.map((c) => {
+                      // 1行ごとの表示用 HEX
+                      const hex = colorRgbMap?.[c] ?? pickerColor;
 
-                        {/* 色名列 */}
-                        <TableCell>
-                          <Badge
-                            className="vc__chip inline-flex items-center gap-1.5 px-2 py-1"
-                            variant="secondary"
-                          >
-                            {c}
-                          </Badge>
-                        </TableCell>
-
-                        {/* 削除ボタン */}
-                        {isEdit && (
-                          <TableCell className="text-right">
-                            <button
-                              className="vc__chip-close"
-                              onClick={() => onRemoveColor(c)}
-                              aria-label={`${c} を削除`}
-                              style={{
-                                background: "transparent",
-                                border: "none",
-                                cursor: "pointer",
-                                display: "inline-flex",
-                                alignItems: "center",
-                                padding: 0,
-                              }}
-                            >
-                              <X size={12} />
-                            </button>
+                      return (
+                        <TableRow key={c}>
+                          {/* RGB列（色プレビュー + HEX値） */}
+                          <TableCell>
+                            <div className="flex items-center gap-2">
+                              <span
+                                className="inline-block w-4 h-4 rounded border"
+                                style={{ backgroundColor: hex }}
+                              />
+                              {hex}
+                            </div>
                           </TableCell>
-                        )}
-                      </TableRow>
-                    ))}
+
+                          {/* 色名列 */}
+                          <TableCell>
+                            <Badge
+                              className="vc__chip inline-flex items-center gap-1.5 px-2 py-1"
+                              variant="secondary"
+                            >
+                              {c}
+                            </Badge>
+                          </TableCell>
+
+                          {/* 削除ボタン */}
+                          {isEdit && (
+                            <TableCell className="text-right">
+                              <button
+                                className="vc__chip-close"
+                                onClick={() => onRemoveColor(c)}
+                                aria-label={`${c} を削除`}
+                                style={{
+                                  background: "transparent",
+                                  border: "none",
+                                  cursor: "pointer",
+                                  display: "inline-flex",
+                                  alignItems: "center",
+                                  padding: 0,
+                                }}
+                              >
+                                <X size={12} />
+                              </button>
+                            </TableCell>
+                          )}
+                        </TableRow>
+                      );
+                    })}
                   </TableBody>
                 </Table>
               ) : (
