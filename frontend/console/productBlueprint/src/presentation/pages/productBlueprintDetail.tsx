@@ -13,6 +13,7 @@ export default function ProductBlueprintDetail() {
     pageTitle,
     productName,
     brand,
+    itemType,          // ★ ItemType | ""
     fit,
     materials,
     weight,
@@ -29,6 +30,7 @@ export default function ProductBlueprintDetail() {
     onBack,
     onSave,
     onChangeProductName,
+    onChangeItemType,
     onChangeFit,
     onChangeMaterials,
     onChangeWeight,
@@ -52,6 +54,7 @@ export default function ProductBlueprintDetail() {
     pageTitle,
     productName,
     brand,
+    itemType,
     fit,
     materials,
     weight,
@@ -79,12 +82,14 @@ export default function ProductBlueprintDetail() {
           mode="edit"
           productName={productName}
           brand={brand}
+          itemType={itemType || undefined}         // ★ ここを修正
           fit={fit}
           materials={materials}
           weight={weight}
           washTags={washTags}
           productIdTag={productIdTag}
           onChangeProductName={onChangeProductName}
+          onChangeItemType={onChangeItemType}
           onChangeFit={onChangeFit}
           onChangeMaterials={onChangeMaterials}
           onChangeWeight={onChangeWeight}

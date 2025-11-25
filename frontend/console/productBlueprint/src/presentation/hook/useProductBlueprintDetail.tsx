@@ -6,16 +6,14 @@ import { useNavigate, useParams } from "react-router-dom";
 import type { ProductIDTagType } from "../../../../shell/src/shared/types/productBlueprint";
 import {
   brandLabelFromId,
-  fetchProductBlueprintById,
-  fetchProductBlueprintSizeRows,
-  fetchProductBlueprintModelNumberRows,
   formatProductBlueprintDate,
   type SizeRow,
   type ModelNumberRow,
 } from "../../infrastructure/api/productBlueprintApi";
 
-// ▼ 選択肢などのカタログ情報をドメイン層から使用
-import type { Fit } from "../../domain/entity/catalog";
+import { getProductBlueprintDetail } from "../../application/productBlueprintDetailService";
+
+import type { Fit, ItemType, WashTagOption } from "../../domain/entity/catalog";
 
 export {
   FIT_OPTIONS,
@@ -29,6 +27,7 @@ export interface UseProductBlueprintDetailResult {
 
   productName: string;
   brand: string;
+  itemType: ItemType | "";
   fit: Fit;
   materials: string;
   weight: number;
@@ -40,7 +39,6 @@ export interface UseProductBlueprintDetailResult {
   sizes: SizeRow[];
   modelNumbers: ModelNumberRow[];
 
-  // ★ 追加：ModelNumberCard 用
   getCode: (sizeLabel: string, color: string) => string;
 
   assignee: string;
@@ -51,6 +49,7 @@ export interface UseProductBlueprintDetailResult {
   onSave: () => void;
 
   onChangeProductName: (v: string) => void;
+  onChangeItemType: (v: ItemType) => void;
   onChangeFit: (v: Fit) => void;
   onChangeMaterials: (v: string) => void;
   onChangeWeight: (v: number) => void;
@@ -72,69 +71,75 @@ export function useProductBlueprintDetail(): UseProductBlueprintDetailResult {
   const navigate = useNavigate();
   const { blueprintId } = useParams<{ blueprintId: string }>();
 
-  const blueprint = React.useMemo(
-    () => fetchProductBlueprintById(blueprintId),
-    [blueprintId],
-  );
+  // 初期値はすべて空（モック削除）
+  const [pageTitle, setPageTitle] = React.useState<string>("");
 
-  const pageTitle =
-    blueprint?.productName ?? blueprintId ?? "不明ID";
+  const [productName, setProductName] = React.useState<string>("");
+  const [brand, setBrand] = React.useState<string>("");
 
-  const [productName, setProductName] = React.useState(
-    () => blueprint?.productName ?? "シルクブラウス プレミアムライン",
-  );
-
-  const [brand] = React.useState(
-    () => (blueprint ? brandLabelFromId(blueprint.brandId) : ""),
-  );
-
+  const [itemType, setItemType] = React.useState<ItemType | "">("");
   const [fit, setFit] = React.useState<Fit>("" as Fit);
 
-  const [materials, setMaterials] = React.useState(
-    () => blueprint?.material ?? "シルク100%、裏地:ポリエステル100%",
-  );
-
-  const [weight, setWeight] = React.useState<number>(
-    () => blueprint?.weight ?? 180,
-  );
-
-  const [washTags, setWashTags] = React.useState<string[]>(() =>
-    blueprint?.qualityAssurance ?? ["手洗い", "ドライクリーニング可", "日陰つり干し"],
-  );
+  const [materials, setMaterials] = React.useState<string>("");
+  const [weight, setWeight] = React.useState<number>(0);
+  const [washTags, setWashTags] = React.useState<string[]>([]);
 
   const [productIdTagType, setProductIdTagType] =
-    React.useState<ProductIDTagType | "">(
-      () => (blueprint?.productIdTag as ProductIDTagType | undefined) ?? "",
-    );
+    React.useState<ProductIDTagType | "">("");
 
   const [colorInput, setColorInput] = React.useState("");
-  const [colors, setColors] = React.useState<string[]>([
-    "ホワイト",
-    "ブラック",
-    "ネイビー",
-  ]);
+  const [colors, setColors] = React.useState<string[]>([]);
+  const [sizes, setSizes] = React.useState<SizeRow[]>([]);
+  const [modelNumbers, setModelNumbers] = React.useState<ModelNumberRow[]>([]);
 
-  const [sizes, setSizes] = React.useState<SizeRow[]>(() =>
-    fetchProductBlueprintSizeRows(),
-  );
+  const [assignee, setAssignee] = React.useState("担当者未設定");
+  const [creator, setCreator] = React.useState("作成者未設定");
+  const [createdAt, setCreatedAt] = React.useState("");
 
-  const [modelNumbers] = React.useState<ModelNumberRow[]>(() =>
-    fetchProductBlueprintModelNumberRows(),
-  );
+  // ---------------------------------
+  // service → 詳細データを反映
+  // ---------------------------------
+  React.useEffect(() => {
+    if (!blueprintId) return;
 
-  const [assignee, setAssignee] = React.useState(
-    () => blueprint?.assigneeId ?? "担当者未設定",
-  );
-  const [creator] = React.useState(
-    () => blueprint?.createdBy ?? "作成者未設定",
-  );
-  const [createdAt] = React.useState(
-    () => formatProductBlueprintDate(blueprint?.createdAt) || "2024/1/15",
-  );
+    (async () => {
+      try {
+        const detail = await getProductBlueprintDetail(blueprintId);
 
-  // -----------------------------
-  // ★ getCode を追加
-  // -----------------------------
+        console.log("[useProductBlueprintDetail] mapped detail:", detail);
+
+        setPageTitle(detail.productName ?? blueprintId);
+        setProductName(detail.productName ?? "");
+        setBrand(brandLabelFromId(detail.brandId));
+
+        setItemType((detail.itemType as ItemType) ?? "");
+        setFit((detail.fit as Fit) ?? ("" as Fit));
+
+        setMaterials(detail.material ?? "");
+        setWeight(detail.weight ?? 0);
+        setWashTags(detail.qualityAssurance ?? []);
+
+        const tagType =
+          (detail.productIdTag?.type as ProductIDTagType | undefined) ?? "";
+        setProductIdTagType(tagType);
+
+        // variations から colors/sizes/modelNumbers を今後生成予定
+        setColors([]);
+        setSizes([]);
+        setModelNumbers([]);
+
+        setAssignee(detail.assigneeId ?? "担当者未設定");
+        setCreator(detail.createdBy ?? "作成者未設定");
+        setCreatedAt(formatProductBlueprintDate(detail.createdAt) || "");
+      } catch (e) {
+        console.error("[useProductBlueprintDetail] fetch failed:", e);
+      }
+    })();
+  }, [blueprintId]);
+
+  // ---------------------------------
+  // ModelNumberCard 用
+  // ---------------------------------
   const getCode = React.useCallback(
     (sizeLabel: string, color: string): string => {
       const row = modelNumbers.find(
@@ -145,9 +150,9 @@ export function useProductBlueprintDetail(): UseProductBlueprintDetailResult {
     [modelNumbers],
   );
 
-  // -----------------------------
+  // ---------------------------------
   // Handlers
-  // -----------------------------
+  // ---------------------------------
   const onSave = React.useCallback(() => {
     alert("保存しました（ダミー）");
   }, []);
@@ -188,6 +193,7 @@ export function useProductBlueprintDetail(): UseProductBlueprintDetailResult {
 
     productName,
     brand,
+    itemType,
     fit,
     materials,
     weight,
@@ -199,7 +205,7 @@ export function useProductBlueprintDetail(): UseProductBlueprintDetailResult {
     sizes,
     modelNumbers,
 
-    getCode, // ★ ModelNumberCard に渡す
+    getCode,
 
     assignee,
     creator,
@@ -209,6 +215,7 @@ export function useProductBlueprintDetail(): UseProductBlueprintDetailResult {
     onSave,
 
     onChangeProductName: setProductName,
+    onChangeItemType: (v: ItemType) => setItemType(v),
     onChangeFit: setFit,
     onChangeMaterials: setMaterials,
     onChangeWeight: setWeight,

@@ -4,13 +4,15 @@ import type { ItemType } from "../domain/entity/catalog";
 import type { SizeRow } from "../../../model/src/domain/entity/catalog";
 
 import {
-  getProductBlueprintDetailApi,
   updateProductBlueprintApi,
   type ProductBlueprintDetailResponse,
   type UpdateProductBlueprintParams,
   type NewModelVariationMeasurements,
   type NewModelVariationPayload,
 } from "../infrastructure/api/productBlueprintDetailApi";
+
+import { auth } from "../../../shell/src/auth/infrastructure/config/firebaseClient";
+import { API_BASE } from "../infrastructure/repository/productBlueprintRepositoryHTTP";
 
 // -----------------------------------------
 // HEX -> number(RGB) 変換
@@ -83,15 +85,92 @@ function toNewModelVariationPayload(
 }
 
 // -----------------------------------------
-// GET: 商品設計 詳細
+// サーバーの生レスポンス（PascalCase）型
+// -----------------------------------------
+type RawProductBlueprintDetailResponse = {
+  ID: string;
+  ProductName: string;
+  CompanyID: string;
+  BrandID: string;
+  ItemType: string;
+  Fit: string;
+  Material: string;
+  Weight: number;
+  QualityAssurance?: string[];
+  ProductIdTag?: { Type?: string } | null;
+  AssigneeID?: string | null;
+  CreatedBy?: string | null;
+  CreatedAt?: string | null;
+  UpdatedBy?: string | null;
+  UpdatedAt?: string | null;
+  DeletedBy?: string | null;
+  DeletedAt?: string | null;
+};
+
+// -----------------------------------------
+// GET: 商品設計 詳細（blueprintId で取得）
 // -----------------------------------------
 export async function getProductBlueprintDetail(
   id: string,
 ): Promise<ProductBlueprintDetailResponse> {
-  const response = await getProductBlueprintDetailApi(id);
+  const user = auth.currentUser;
+  if (!user) {
+    throw new Error("ログイン情報が見つかりません（未ログイン）");
+  }
 
-  // ★ 現在取得している詳細データのログ
-  console.log("[productBlueprintDetailService] GET detail response:", response);
+  const idToken = await user.getIdToken();
+
+  const res = await fetch(`${API_BASE}/product-blueprints/${id}`, {
+    method: "GET",
+    headers: {
+      Authorization: `Bearer ${idToken}`,
+    },
+  });
+
+  if (!res.ok) {
+    let detail: unknown;
+    try {
+      detail = await res.json();
+    } catch {
+      /* ignore */
+    }
+    throw new Error(
+      `商品設計詳細の取得に失敗しました（${res.status} ${res.statusText ?? ""}）`,
+    );
+  }
+
+  const raw = (await res.json()) as RawProductBlueprintDetailResponse;
+
+  console.log(
+    "[productBlueprintDetailService] GET raw detail response:",
+    raw,
+  );
+
+  // ★ PascalCase → camelCase（ProductBlueprintDetailResponse 型）へ変換
+  const response: ProductBlueprintDetailResponse = {
+    id: raw.ID,
+    productName: raw.ProductName,
+    companyId: raw.CompanyID,
+    brandId: raw.BrandID,
+    itemType: raw.ItemType,
+    fit: raw.Fit,
+    material: raw.Material,
+    weight: raw.Weight,
+    qualityAssurance: raw.QualityAssurance ?? [],
+    productIdTag: raw.ProductIdTag
+      ? { type: raw.ProductIdTag.Type ?? "" }
+      : undefined,
+    assigneeId: raw.AssigneeID ?? "",
+    createdBy: raw.CreatedBy ?? "",
+    createdAt: raw.CreatedAt ?? "",
+    // updatedBy / updatedAt / deletedBy / deletedAt は
+    // ProductBlueprintDetailResponse 型に存在しないのでマッピングしない
+  };
+
+  console.log(
+    "[productBlueprintDetailService] GET mapped detail response:",
+    response,
+  );
 
   return response;
 }
@@ -127,14 +206,18 @@ export async function updateProductBlueprint(
     }
   }
 
-  // ★ 現在送信しようとしているデータ全体をログ出力
   console.log("[productBlueprintDetailService] UPDATE params:", params);
-  console.log("[productBlueprintDetailService] UPDATE variations payload:", variations);
+  console.log(
+    "[productBlueprintDetailService] UPDATE variations payload:",
+    variations,
+  );
 
   const response = await updateProductBlueprintApi(params, variations);
 
-  // ★ 更新後の最新データもログ出力
-  console.log("[productBlueprintDetailService] UPDATE result response:", response);
+  console.log(
+    "[productBlueprintDetailService] UPDATE result response:",
+    response,
+  );
 
   return response;
 }
