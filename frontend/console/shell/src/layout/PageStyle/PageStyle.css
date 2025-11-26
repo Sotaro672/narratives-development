@@ -160,3 +160,11 @@
 .page-header__back:active {
   transform: translateY(1px);
 }
+.page-header__btn--danger {
+  color: #d92c2c;
+  border-color: #d92c2c;
+}
+
+.page-header__btn--danger:hover {
+  background: #ffe5e5;
+}

@@ -1,6 +1,13 @@
 // frontend/shell/src/layout/PageStyle/PageStyle.tsx
 import type { ReactNode } from "react";
-import { ArrowLeft, Save, Plus } from "lucide-react"; // ← Plus を追加
+import {
+  ArrowLeft,
+  Save,
+  Plus,
+  Pencil,
+  Trash2,
+  X, // ★ 追加
+} from "lucide-react";
 import "./PageStyle.css";
 
 function cn(...classes: Array<string | undefined | false | null>) {
@@ -11,9 +18,18 @@ interface PageStyleProps {
   children: ReactNode | [ReactNode, ReactNode];
   layout?: "grid-2" | "single";
   className?: string;
+
   onBack?: () => void;
   onSave?: () => void;
-  onCreate?: () => void; // ← 追加
+  onCreate?: () => void;
+
+  // 追加済み
+  onEdit?: () => void;
+  onDelete?: () => void;
+
+  // ★ 新規追加（キャンセル）
+  onCancel?: () => void;
+
   title?: string;
   badge?: ReactNode;
   actions?: ReactNode;
@@ -26,7 +42,10 @@ export default function PageStyle({
   className,
   onBack,
   onSave,
-  onCreate, // ← 追加
+  onCreate,
+  onEdit,
+  onDelete,
+  onCancel, // ★ 追加
   title,
   badge,
   actions,
@@ -40,6 +59,7 @@ export default function PageStyle({
     <header className="page-header">
       <div className="px-4 py-3">
         <div className="flex items-center justify-between">
+          {/* 左側：戻る + タイトル */}
           <div className="page-header__left">
             {hasBack && (
               <button
@@ -57,8 +77,46 @@ export default function PageStyle({
             </div>
           </div>
 
+          {/* 右側：アクションボタン */}
           <div className="page-header__actions">
-            {onCreate && ( // ← 追加
+            {/* 編集 */}
+            {onEdit && (
+              <button
+                type="button"
+                className="page-header__btn"
+                onClick={onEdit}
+              >
+                <Pencil size={16} style={{ marginRight: 4 }} />
+                編集
+              </button>
+            )}
+
+            {/* 削除 */}
+            {onDelete && (
+              <button
+                type="button"
+                className="page-header__btn page-header__btn--danger"
+                onClick={onDelete}
+              >
+                <Trash2 size={16} style={{ marginRight: 4 }} />
+                削除
+              </button>
+            )}
+
+            {/* ★ キャンセル */}
+            {onCancel && (
+              <button
+                type="button"
+                className="page-header__btn page-header__btn--ghost"
+                onClick={onCancel}
+              >
+                <X size={16} style={{ marginRight: 4 }} />
+                キャンセル
+              </button>
+            )}
+
+            {/* 作成 */}
+            {onCreate && (
               <button
                 type="button"
                 className="page-header__btn"
@@ -68,6 +126,8 @@ export default function PageStyle({
                 作成
               </button>
             )}
+
+            {/* 保存 */}
             {onSave && (
               <button
                 type="button"
@@ -78,6 +138,7 @@ export default function PageStyle({
                 保存
               </button>
             )}
+
             {actions}
           </div>
         </div>
