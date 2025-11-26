@@ -230,14 +230,41 @@ export function useProductBlueprintDetail(): UseProductBlueprintDetailResult {
                 base.hip = ms["ヒップ"] ?? undefined;
                 base.rise = ms["股上"] ?? undefined;
                 base.inseam = ms["股下"] ?? undefined;
-                base.thighWidth = ms["わたり幅"] ?? undefined;
+
+                const thighVal = ms["わたり幅"] ?? undefined;
+                if (thighVal != null) {
+                  // 正規フィールド + alias の両方に入れておく
+                  base.thigh = thighVal;
+                  base.thighWidth = thighVal;
+                }
+
                 base.hemWidth = ms["裾幅"] ?? undefined;
               } else {
                 // デフォルト（トップス）
-                base.length = ms["着丈"] ?? undefined;
-                base.bodyWidth = ms["身幅"] ?? undefined;
-                base.shoulder = ms["肩幅"] ?? undefined;
-                base.sleeve = ms["袖丈"] ?? undefined;
+                const lenVal = ms["着丈"] ?? undefined;
+                if (lenVal != null) {
+                  base.length = lenVal;
+                  base.lengthTop = lenVal; // alias も保持
+                }
+
+                const chestVal =
+                  ms["身幅"] ?? ms["胸囲"] ?? undefined;
+                if (chestVal != null) {
+                  base.chest = chestVal;      // 正規フィールド
+                  base.bust = chestVal;       // 胸囲 alias
+                  base.bodyWidth = chestVal;  // 旧フィールド alias
+                }
+
+                const shoulderVal = ms["肩幅"] ?? undefined;
+                if (shoulderVal != null) {
+                  base.shoulder = shoulderVal;
+                  base.shoulderWidth = shoulderVal; // alias
+                }
+
+                const sleeveVal = ms["袖丈"] ?? undefined;
+                if (sleeveVal != null) {
+                  base.sleeveLength = sleeveVal;
+                }
               }
             }
 

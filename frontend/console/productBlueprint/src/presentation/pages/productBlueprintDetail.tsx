@@ -1,4 +1,4 @@
-// frontend/productBlueprint/src/presentation/pages/productBlueprintDetail.tsx
+// frontend/console/productBlueprint/src/presentation/pages/productBlueprintDetail.tsx
 
 import PageStyle from "../../../../shell/src/layout/PageStyle/PageStyle";
 import AdminCard from "../../../../admin/src/presentation/components/AdminCard";
@@ -17,14 +17,14 @@ export default function ProductBlueprintDetail() {
     pageTitle,
     productName,
     brand,
-    itemType, // ItemType | ""
+    itemType,
     fit,
     materials,
     weight,
     washTags,
     productIdTag,
 
-    // ★ backend/model_handler.go → listModelVariationsByProductBlueprintId の結果
+    // variations
     colors,
     colorInput,
     sizes,
@@ -37,6 +37,8 @@ export default function ProductBlueprintDetail() {
 
     onBack,
     onSave,
+
+    // 編集ハンドラ
     onChangeProductName,
     onChangeItemType,
     onChangeFit,
@@ -51,45 +53,11 @@ export default function ProductBlueprintDetail() {
     onEditAssignee,
     onClickAssignee,
 
-    // ★ ModelNumberCard用
     getCode,
   } = useProductBlueprintDetail();
 
-  // ------------------------------------
-  // デバッグログ
-  // ------------------------------------
-  console.log("[ProductBlueprintDetail] Current values:", {
-    pageTitle,
-    productName,
-    brand,
-    itemType,
-    fit,
-    materials,
-    weight,
-    washTags,
-    productIdTag,
-    colors,
-    colorInput,
-    sizes,
-    modelNumbers,
-    colorRgbMap,
-    assignee,
-    creator,
-    createdAt,
-  });
-
-  // models（color / size / modelNumber）の専用ログ
-  console.log("[ProductBlueprintDetail] models debug:", {
-    colors,
-    sizes,
-    modelNumbers,
-    colorRgbMap,
-  });
-
-  // itemType を ItemType | undefined に正規化
   const normalizedItemType = (itemType || undefined) as ItemType | undefined;
 
-  // アイテム種別に応じた採寸オプション
   const measurementOptions =
     normalizedItemType != null
       ? ITEM_TYPE_MEASUREMENT_OPTIONS[normalizedItemType]
@@ -104,8 +72,9 @@ export default function ProductBlueprintDetail() {
     >
       {/* --- 左ペイン --- */}
       <div>
+        {/* ▼ ProductBlueprintCard だけ View モードに変更 */}
         <ProductBlueprintCard
-          mode="edit"
+          mode="view"
           productName={productName}
           brand={brand}
           itemType={normalizedItemType}
@@ -114,16 +83,9 @@ export default function ProductBlueprintDetail() {
           weight={weight}
           washTags={washTags}
           productIdTag={productIdTag}
-          onChangeProductName={onChangeProductName}
-          onChangeItemType={onChangeItemType}
-          onChangeFit={onChangeFit}
-          onChangeMaterials={onChangeMaterials}
-          onChangeWeight={onChangeWeight}
-          onChangeWashTags={onChangeWashTags}
-          onChangeProductIdTag={onChangeProductIdTag}
         />
 
-        {/* ★ color variations from backend */}
+        {/* ColorVariationCard は従来どおり edit */}
         <ColorVariationCard
           mode="edit"
           colors={colors}
@@ -131,11 +93,10 @@ export default function ProductBlueprintDetail() {
           onChangeColorInput={onChangeColorInput}
           onAddColor={onAddColor}
           onRemoveColor={onRemoveColor}
-          // Firestore から復元した RGB(HEX) をテーブルに反映
           colorRgbMap={colorRgbMap}
         />
 
-        {/* ★ size variations from backend */}
+        {/* SizeVariationCard も edit */}
         <SizeVariationCard
           mode="edit"
           sizes={sizes}
@@ -143,7 +104,7 @@ export default function ProductBlueprintDetail() {
           measurementOptions={measurementOptions}
         />
 
-        {/* ★ モデルナンバー（size × color × code） */}
+        {/* ModelNumberCard も edit */}
         <ModelNumberCard
           mode="edit"
           sizes={sizes}
