@@ -24,8 +24,6 @@ export const API_BASE = ENV_BASE || FALLBACK_BASE;
 
 /**
  * members/{uid} を叩いて「生の JSON」を返すだけの関数
- * - トークン取得や fetch, Content-Type チェックなど HTTP 周りのみ担当
- * - DTO への変換は application 層 (memberService) に委譲
  */
 export async function fetchCurrentMemberRaw(
   uid: string,
@@ -34,7 +32,6 @@ export async function fetchCurrentMemberRaw(
   if (!token) return null;
 
   const url = `${API_BASE}/members/${encodeURIComponent(uid)}`;
-  console.log("[authRepositoryHTTP] fetchCurrentMemberRaw uid:", uid, "GET", url);
 
   const res = await fetch(url, {
     method: "GET",
@@ -46,12 +43,6 @@ export async function fetchCurrentMemberRaw(
 
   if (!res.ok) {
     const text = await res.text().catch(() => "");
-    console.warn(
-      "[authRepositoryHTTP] fetchCurrentMemberRaw failed:",
-      res.status,
-      res.statusText,
-      text,
-    );
     return null;
   }
 
@@ -69,8 +60,6 @@ export async function fetchCurrentMemberRaw(
 
 /**
  * members/{id} に PATCH する HTTP 関数
- * - payload の shape は caller (memberService) 側で決める
- * - 戻り値は生 JSON
  */
 export async function updateCurrentMemberProfileRaw(
   id: string,
@@ -80,11 +69,6 @@ export async function updateCurrentMemberProfileRaw(
   if (!token) return null;
 
   const url = `${API_BASE}/members/${encodeURIComponent(id)}`;
-  console.log(
-    "[authRepositoryHTTP] updateCurrentMemberProfileRaw PATCH",
-    url,
-    payload,
-  );
 
   const res = await fetch(url, {
     method: "PATCH",
@@ -97,12 +81,6 @@ export async function updateCurrentMemberProfileRaw(
 
   if (!res.ok) {
     const text = await res.text().catch(() => "");
-    console.warn(
-      "[authRepositoryHTTP] updateCurrentMemberProfileRaw failed:",
-      res.status,
-      res.statusText,
-      text,
-    );
     return null;
   }
 
@@ -117,8 +95,6 @@ export async function updateCurrentMemberProfileRaw(
 
 /**
  * companies/{id} を叩いて「生の JSON」を返す関数
- * - Firebase ログインユーザーから ID トークンを取得
- * - 404 などは null で返す（従来の companyService と同じ挙動）
  */
 export async function fetchCompanyByIdRaw(
   companyId: string,
@@ -128,16 +104,12 @@ export async function fetchCompanyByIdRaw(
 
   const user = auth.currentUser;
   if (!user) {
-    console.warn(
-      "[authRepositoryHTTP] fetchCompanyByIdRaw called without logged-in user",
-    );
     throw new Error("ログイン情報が見つかりません（未ログイン）");
   }
 
   const idToken = await user.getIdToken();
 
   const url = `${API_BASE}/companies/${encodeURIComponent(id)}`;
-  console.log("[authRepositoryHTTP] fetchCompanyByIdRaw GET", url);
 
   const res = await fetch(url, {
     method: "GET",
@@ -148,19 +120,11 @@ export async function fetchCompanyByIdRaw(
   });
 
   if (!res.ok) {
-    console.error("[authRepositoryHTTP] GET /companies failed", {
-      status: res.status,
-      statusText: res.statusText,
-    });
     return null;
   }
 
   const ct = res.headers.get("Content-Type") ?? "";
   if (!ct.includes("application/json")) {
-    console.error(
-      "[authRepositoryHTTP] companies API did not return JSON (content-type=%s)",
-      ct,
-    );
     return null;
   }
 

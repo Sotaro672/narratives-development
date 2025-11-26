@@ -1,17 +1,30 @@
-// frontend/console/brand/src/presentation/hook/useBrandCreate.ts 
+// frontend/console/brand/src/presentation/hook/useBrandCreate.ts
 import { useState, useCallback, useMemo, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 
 import { useAuth } from "../../../../shell/src/auth/presentation/hook/useCurrentMember";
-import { auth } from "../../../../shell/src/auth/infrastructure/config/firebaseClient";
-import {
-  fetchMemberListWithToken,
-  formatLastFirst,
-} from "../../../../member/src/infrastructure/query/memberQuery";
 import type { Member } from "../../../../member/src/domain/entity/member";
 import type { MemberFilter } from "../../../../member/src/domain/repository/memberRepository";
 import type { Brand } from "../../domain/entity/brand";
 import { brandRepositoryHTTP } from "../../infrastructure/http/brandRepositoryHTTP";
+
+// メンバー取得用 HTTP リポジトリ
+import { MemberRepositoryHTTP } from "../../../../member/src/infrastructure/http/memberRepositoryHTTP";
+
+const memberRepo = new MemberRepositoryHTTP();
+
+// 姓名フォーマット（brand 作成画面専用）
+function formatLastFirst(
+  lastName?: string | null,
+  firstName?: string | null,
+) {
+  const ln = String(lastName ?? "").trim();
+  const fn = String(firstName ?? "").trim();
+  if (ln && fn) return `${ln} ${fn}`;
+  if (ln) return ln;
+  if (fn) return fn;
+  return "";
+}
 
 export function useBrandCreate() {
   const navigate = useNavigate();
@@ -39,30 +52,24 @@ export function useBrandCreate() {
 
   useEffect(() => {
     let cancelled = false;
+
     async function loadManagers() {
       try {
         setLoadingManagers(true);
         setManagerError(null);
 
-        const user = auth.currentUser;
-        if (!user) {
-          setManagerError("ログインユーザーが取得できませんでした。");
-          return;
-        }
-        const token = await user.getIdToken();
-
-        // ページネーションはこの画面では使わないので、
-        // 「1ページ目だけ」を固定で取得する
+        // ページネーションはこの画面では使わないので 1 ページ固定
         const filter: MemberFilter = {};
-        const { items } = await fetchMemberListWithToken(
-          token,
-          1 as any, // Page 型を要求されるが、この画面では 1 固定で十分
+        const { items } = await memberRepo.list(
+          { number: 1, perPage: 200, totalPages: 1 },
           filter,
         );
 
         if (cancelled) return;
         setManagerOptions(items);
-        if (!managerId && items.length > 0) setManagerId(items[0].id);
+        if (!managerId && items.length > 0) {
+          setManagerId(items[0].id);
+        }
       } catch (e: any) {
         if (!cancelled) {
           setManagerError(
@@ -73,6 +80,7 @@ export function useBrandCreate() {
         if (!cancelled) setLoadingManagers(false);
       }
     }
+
     loadManagers();
     return () => {
       cancelled = true;
@@ -114,8 +122,6 @@ export function useBrandCreate() {
     }
 
     // backend の Create は Brand 全体を受ける想定
-    const nowIso = new Date().toISOString();
-
     const payload: Omit<Brand, "createdAt" | "updatedAt"> = {
       id: "", // サーバ採番
       companyId,

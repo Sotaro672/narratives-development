@@ -26,7 +26,6 @@ const ENV_BASE =
     "",
   ) ?? "";
 
-// ★ Cloud Run の URL をフォールバックに追加
 const FALLBACK_BASE =
   "https://narratives-backend-871263659099.asia-northeast1.run.app";
 
@@ -117,15 +116,11 @@ export class MemberRepositoryHTTP implements MemberRepository {
   }
 
   async update(id: string, patch: MemberPatch, _opts?: SaveOptions): Promise<Member> {
-    throw new Error(
-      "MemberRepositoryHTTP.update: not supported by current backend API",
-    );
+    throw new Error("MemberRepositoryHTTP.update: not supported by current backend API");
   }
 
   async delete(id: string): Promise<void> {
-    throw new Error(
-      "MemberRepositoryHTTP.delete: not supported by current backend API",
-    );
+    throw new Error("MemberRepositoryHTTP.delete: not supported by current backend API");
   }
 
   async listByCursor(
@@ -164,38 +159,24 @@ export class MemberRepositoryHTTP implements MemberRepository {
   }
 
   async count(filter: MemberFilter): Promise<number> {
-    const res = await this.list(
-      { number: 1, perPage: 100, totalPages: 1 },
-      filter,
-    );
+    const res = await this.list({ number: 1, perPage: 100, totalPages: 1 }, filter);
     return res.totalCount ?? res.items.length;
   }
 
   async save(member: Member, opts?: SaveOptions): Promise<Member> {
     if (opts?.mode === "update" || opts?.ifExists) {
-      throw new Error(
-        "MemberRepositoryHTTP.save(update): not supported by current backend API",
-      );
-    }
-    if (opts?.mode === "create" || opts?.ifNotExists) {
-      return this.create(member);
+      throw new Error("MemberRepositoryHTTP.save(update): not supported by current backend API");
     }
     return this.create(member);
   }
 
   async reset(): Promise<void> {
-    throw new Error(
-      "MemberRepositoryHTTP.reset: not supported by current backend API",
-    );
+    throw new Error("MemberRepositoryHTTP.reset: not supported by current backend API");
   }
 }
 
 /**
- * assigneeId から画面表示用の担当者名を取得するヘルパー
- * - 姓名があれば「姓 名」
- * - なければ fullName
- * - それもなければ email
- * - それもなければ元の ID
+ * ID → 担当者名 解決
  */
 export async function fetchMemberDisplayNameById(
   memberId: string,
@@ -207,55 +188,24 @@ export async function fetchMemberDisplayNameById(
     const headers = await getAuthHeaders();
     const url = `${API_BASE}/members/${encodeURIComponent(trimmed)}`;
 
-    console.log(
-      "[memberRepositoryHTTP] fetchMemberDisplayNameById request",
-      url,
-    );
-
     const res = await fetch(url, { headers });
 
-    if (res.status === 404) {
-      console.warn(
-        "[memberRepositoryHTTP] fetchMemberDisplayNameById: member not found",
-        trimmed,
-      );
-      return trimmed;
-    }
+    if (res.status === 404) return trimmed;
 
     const ct = res.headers.get("content-type") ?? "";
-    if (!ct.includes("application/json")) {
-      console.warn(
-        "[memberRepositoryHTTP] fetchMemberDisplayNameById: unexpected content-type",
-        ct,
-      );
-      return trimmed;
-    }
+    if (!ct.includes("application/json")) return trimmed;
 
     const m = (await res.json()) as Member;
-
     const lastName = (m as any).lastName?.trim?.() ?? "";
     const firstName = (m as any).firstName?.trim?.() ?? "";
     const fullNameField = (m as any).fullName?.trim?.() ?? "";
+    const email = (m as any).email?.trim?.() ?? "";
 
     const nameParts = [lastName, firstName].filter(Boolean);
     const nameFromLF = nameParts.join(" ");
 
-    const email = (m as any).email?.trim?.() ?? "";
-
-    const display =
-      nameFromLF || fullNameField || email || trimmed;
-
-    console.log(
-      "[memberRepositoryHTTP] fetchMemberDisplayNameById result",
-      { memberId: trimmed, display },
-    );
-
-    return display;
-  } catch (e) {
-    console.error(
-      "[memberRepositoryHTTP] fetchMemberDisplayNameById error",
-      e,
-    );
+    return nameFromLF || fullNameField || email || trimmed;
+  } catch {
     return trimmed;
   }
 }

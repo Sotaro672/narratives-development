@@ -1,4 +1,4 @@
-//frontend\console\member\src\infrastructure\query\memberQuery.ts
+// frontend/console/member/src/infrastructure/query/memberQuery.ts
 /// <reference types="vite/client" />
 
 import type { Member } from "../../domain/entity/member";
@@ -7,7 +7,7 @@ import type { Page } from "../../../../shell/src/shared/types/common/common";
 import { DEFAULT_PAGE_LIMIT } from "../../../../shell/src/shared/types/common/common";
 
 // ─────────────────────────────────────────────
-// Backend base URL
+// Backend base URL（Query 層では参照のみ）
 // ─────────────────────────────────────────────
 const ENV_BASE =
   ((import.meta as any).env?.VITE_BACKEND_BASE_URL as string | undefined)
@@ -18,20 +18,25 @@ const FALLBACK_BASE =
 
 export const API_BASE = (ENV_BASE || FALLBACK_BASE).replace(/\/+$/g, "");
 
-// URL builder
-function apiUrl(path: string, qs?: string) {
+// ─────────────────────────────────────────────
+// URL builder（HTTP は叩かない）
+// ─────────────────────────────────────────────
+export function apiUrl(path: string, qs?: string) {
   const url = `${API_BASE}${path.startsWith("/") ? path : `/${path}`}`;
-  const full = qs ? `${url}?${qs}` : url;
-  console.log("[memberQuery] GET", full);
-  return full;
+  return qs ? `${url}?${qs}` : url;
 }
 
 // ─────────────────────────────────────────────
-// Query String Builder
+// Query String Builder（HTTP なし）
 // ─────────────────────────────────────────────
-export function buildMemberQuery(usePage: Page, useFilter: MemberFilter): string {
+export function buildMemberQuery(
+  usePage: Page,
+  useFilter: MemberFilter,
+): string {
   const perPage =
-    usePage?.perPage && usePage.perPage > 0 ? usePage.perPage : DEFAULT_PAGE_LIMIT;
+    usePage?.perPage && usePage.perPage > 0
+      ? usePage.perPage
+      : DEFAULT_PAGE_LIMIT;
 
   const pageNumber =
     usePage?.number && usePage.number > 0 ? usePage.number : 1;
@@ -56,12 +61,12 @@ export function buildMemberQuery(usePage: Page, useFilter: MemberFilter): string
 }
 
 // ─────────────────────────────────────────────
-// FormatLastFirst
+// FormatLastFirst（表示用の姓名整形）
 // ─────────────────────────────────────────────
 export function formatLastFirst(
   lastName?: string | null,
   firstName?: string | null,
-) {
+): string {
   const ln = String(lastName ?? "").trim();
   const fn = String(firstName ?? "").trim();
   if (ln && fn) return `${ln} ${fn}`;
@@ -71,9 +76,9 @@ export function formatLastFirst(
 }
 
 // ─────────────────────────────────────────────
-// Normalize Wire Format
+// データ整形（HTTP なし）
 // ─────────────────────────────────────────────
-function normalizeMemberWire(w: any): Member {
+export function normalizeMemberWire(w: any): Member {
   const id = String(w.id ?? w.ID ?? "").trim();
   const firstName = w.firstName ?? w.FirstName ?? null;
   const lastName = w.lastName ?? w.LastName ?? null;
@@ -89,12 +94,6 @@ function normalizeMemberWire(w: any): Member {
       ? w.assignedBrands ?? w.AssignedBrands
       : null;
 
-  const createdAt = w.createdAt ?? w.CreatedAt ?? null;
-  const updatedAt = w.updatedAt ?? w.UpdatedAt ?? null;
-  const deletedAt = w.deletedAt ?? w.DeletedAt ?? null;
-  const deletedBy = w.deletedBy ?? w.DeletedBy ?? null;
-  const updatedBy = w.updatedBy ?? w.UpdatedBy ?? null;
-
   return {
     id,
     firstName,
@@ -105,109 +104,10 @@ function normalizeMemberWire(w: any): Member {
     companyId,
     permissions,
     assignedBrands,
-    createdAt,
-    updatedAt,
-    deletedAt,
-    deletedBy,
-    updatedBy,
+    createdAt: w.createdAt ?? w.CreatedAt ?? null,
+    updatedAt: w.updatedAt ?? w.UpdatedAt ?? null,
+    deletedAt: w.deletedAt ?? w.DeletedAt ?? null,
+    deletedBy: w.deletedBy ?? w.DeletedBy ?? null,
+    updatedBy: w.updatedBy ?? w.UpdatedBy ?? null,
   } as Member;
-}
-
-// ─────────────────────────────────────────────
-// 型：PageResult<Member> 相当
-// ─────────────────────────────────────────────
-export type MemberListResult = {
-  items: Member[];
-  totalPages: number;
-};
-
-// ─────────────────────────────────────────────
-// fetchMemberListWithToken（ページング対応）
-// ─────────────────────────────────────────────
-export async function fetchMemberListWithToken(
-  token: string,
-  page: Page,
-  filter: MemberFilter,
-): Promise<MemberListResult> {
-
-  const qs = buildMemberQuery(page, filter);
-  const url = apiUrl("/members", qs);
-
-  const res = await fetch(url, {
-    method: "GET",
-    headers: {
-      Authorization: `Bearer ${token}`,
-      Accept: "application/json",
-    },
-  });
-
-  console.log("[memberQuery] response", res.status, res.statusText);
-
-  const ct = res.headers.get("content-type") ?? "";
-  if (!ct.includes("application/json")) {
-    const text = await res.text().catch(() => "");
-    throw new Error(`Unexpected content-type: ${ct}\n${text}`);
-  }
-
-  if (!res.ok) {
-    const text = await res.text().catch(() => "");
-    if (res.status === 401)
-      throw new Error(`認証エラー (401): ${text}`);
-    if (res.status === 403)
-      throw new Error(`認可エラー (403): ${text}`);
-    throw new Error(`一覧取得に失敗: ${res.status} ${text}`);
-  }
-
-  const raw = await res.json();
-
-  let rawItems: any[] = [];
-  let totalPages = 1;
-
-  if (Array.isArray(raw)) {
-    // 旧仕様
-    rawItems = raw;
-    totalPages = 1;
-  } else if (raw && Array.isArray(raw.items)) {
-    // PageResult<T>
-    rawItems = raw.items;
-    totalPages = Number(raw.totalPages ?? 1);
-  } else {
-    console.warn("[memberQuery] unexpected response shape:", raw);
-  }
-
-  const items = rawItems.map(normalizeMemberWire);
-
-  return {
-    items,
-    totalPages,
-  };
-}
-
-// ─────────────────────────────────────────────
-// 単一メンバー取得
-// ─────────────────────────────────────────────
-export async function fetchMemberByIdWithToken(
-  token: string,
-  memberId: string,
-): Promise<Member | null> {
-  const id = String(memberId ?? "").trim();
-  if (!id) return null;
-
-  const url = apiUrl(`/members/${encodeURIComponent(id)}`);
-
-  const res = await fetch(url, {
-    method: "GET",
-    headers: {
-      Authorization: `Bearer ${token}`,
-      Accept: "application/json",
-    },
-  });
-
-  const ct = res.headers.get("content-type") ?? "";
-  if (!ct.includes("application/json")) return null;
-  if (res.status === 404) return null;
-  if (!res.ok) return null;
-
-  const raw = await res.json();
-  return normalizeMemberWire(raw);
 }

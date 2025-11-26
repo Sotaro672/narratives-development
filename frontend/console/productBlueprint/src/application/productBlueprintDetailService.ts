@@ -15,10 +15,8 @@ import { auth } from "../../../shell/src/auth/infrastructure/config/firebaseClie
 import { API_BASE } from "../infrastructure/repository/productBlueprintRepositoryHTTP";
 
 import { fetchAllBrandsForCompany } from "../../../brand/src/infrastructure/query/brandQuery";
-import {
-  fetchMemberByIdWithToken,
-  formatLastFirst,
-} from "../../../member/src/infrastructure/query/memberQuery";
+import { formatLastFirst } from "../../../member/src/infrastructure/query/memberQuery";
+import { MemberRepositoryHTTP } from "../../../member/src/infrastructure/http/memberRepositoryHTTP";
 
 // -----------------------------------------
 // HEX -> number(RGB) 変換
@@ -38,7 +36,6 @@ function hexToRgbInt(hex?: string): number | undefined {
 
 // -----------------------------------------
 // itemType → measurements 組み立て
-// （SizeVariationCard.tsx / SizeRow の定義と一致させる）
 // -----------------------------------------
 function buildMeasurements(
   itemType: ItemType,
@@ -47,34 +44,23 @@ function buildMeasurements(
   const result: NewModelVariationMeasurements = {};
 
   if (itemType === "ボトムス") {
-    // ボトムス用の採寸マッピング
     result["ウエスト"] = size.waist ?? null;
     result["ヒップ"] = size.hip ?? null;
     result["股上"] = size.rise ?? null;
     result["股下"] = size.inseam ?? null;
-    // 「わたり幅」→ thigh（既存データ用に thighWidth もフォロー）
     result["わたり幅"] = size.thigh ?? size.thighWidth ?? null;
     result["裾幅"] = size.hemWidth ?? null;
     return result;
   }
 
-// デフォルト（トップス想定）
-// ✅ SizeRow の実フィールド名に合わせてマッピング
-result["着丈"] = size.length ?? size.lengthTop ?? null;
+  // デフォルト（トップス）
+  result["着丈"] = size.length ?? size.lengthTop ?? null;
+  result["身幅"] = size.chest ?? size.bodyWidth ?? null;
+  result["胸囲"] = size.chest ?? size.bodyWidth ?? null;
+  result["肩幅"] = size.shoulder ?? size.shoulderWidth ?? null;
+  result["袖丈"] = size.sleeveLength ?? null;
 
-// 「身幅」→ chest
-result["身幅"] = size.chest ?? size.bodyWidth ?? null;
-
-// ★ 追加：胸囲（alias の bodyWidth / chest を利用）
-result["胸囲"] = size.chest ?? size.bodyWidth ?? null;
-
-// 「肩幅」→ shoulder
-result["肩幅"] = size.shoulder ?? size.shoulderWidth ?? null;
-
-// 「袖丈」→ sleeveLength
-result["袖丈"] = size.sleeveLength ?? null;
-
-return result;
+  return result;
 }
 
 // -----------------------------------------
@@ -127,27 +113,22 @@ type RawProductBlueprintDetailResponse = {
 };
 
 // -----------------------------------------
-// ブランド名取得ヘルパー（service 内実装）
+// ブランド名取得ヘルパー
 // -----------------------------------------
 async function fetchBrandNameById(brandId: string): Promise<string> {
   const id = brandId.trim();
   if (!id) return "";
   try {
     const brands = await fetchAllBrandsForCompany("", false);
-    const hit = brands.find((b) => b.id === id);
-    return hit?.name ?? "";
+    return brands.find((b) => b.id === id)?.name ?? "";
   } catch (e) {
-    console.error(
-      "[productBlueprintDetailService] fetchBrandNameById error:",
-      e,
-    );
+    console.error("[productBlueprintDetailService] fetchBrandNameById error:", e);
     return "";
   }
 }
 
 // -----------------------------------------
-// メンバーID → 表示名 解決ヘルパー
-// （assigneeId / createdBy 共通で利用）
+// メンバー名解決（HTTP は Repository に委譲）
 // -----------------------------------------
 async function resolveMemberNameById(
   idToken: string,
@@ -158,48 +139,38 @@ async function resolveMemberNameById(
   if (!id) return fallback;
 
   try {
-    const member = await fetchMemberByIdWithToken(idToken, id);
-    const displayName = member
-      ? formatLastFirst(member.lastName, member.firstName)
-      : "";
-    const name = displayName.trim() || id;
+    const repo = new MemberRepositoryHTTP();
+    const member = await repo.getById(id);
+
+    if (!member) return fallback;
+
+    const name =
+      formatLastFirst(member.lastName, member.firstName)?.trim() || id;
+
     return name || fallback;
   } catch (e) {
-    console.error(
-      "[productBlueprintDetailService] resolveMemberNameById error:",
-      e,
-    );
+    console.error("[productBlueprintDetailService] resolveMemberNameById error:", e);
     return fallback;
   }
 }
 
 // -----------------------------------------
-// GET: 商品設計 詳細（blueprintId で取得）
+// GET: 商品設計 詳細
 // -----------------------------------------
 export async function getProductBlueprintDetail(
   id: string,
 ): Promise<ProductBlueprintDetailResponse> {
   const user = auth.currentUser;
-  if (!user) {
-    throw new Error("ログイン情報が見つかりません（未ログイン）");
-  }
+  if (!user) throw new Error("ログイン情報が見つかりません（未ログイン）");
 
   const idToken = await user.getIdToken();
 
   const res = await fetch(`${API_BASE}/product-blueprints/${id}`, {
     method: "GET",
-    headers: {
-      Authorization: `Bearer ${idToken}`,
-    },
+    headers: { Authorization: `Bearer ${idToken}` },
   });
 
   if (!res.ok) {
-    let detail: unknown;
-    try {
-      detail = await res.json();
-    } catch {
-      /* ignore */
-    }
     throw new Error(
       `商品設計詳細の取得に失敗しました（${res.status} ${res.statusText ?? ""}）`,
     );
@@ -207,12 +178,6 @@ export async function getProductBlueprintDetail(
 
   const raw = (await res.json()) as RawProductBlueprintDetailResponse;
 
-  console.log(
-    "[productBlueprintDetailService] GET raw detail response:",
-    raw,
-  );
-
-  // ProductBlueprintDetailResponse に brandName / assigneeName / createdByName を“追加”した形で返す
   const response: ProductBlueprintDetailResponse & {
     brandName?: string;
     assigneeName?: string;
@@ -235,46 +200,20 @@ export async function getProductBlueprintDetail(
     createdAt: raw.CreatedAt ?? "",
   };
 
-  // ブランド名変換
-  const brandId = response.brandId ?? "";
-  const brandName = brandId ? await fetchBrandNameById(brandId) : "";
-  response.brandName = brandName;
-
-  // 担当者名変換 (assigneeId -> displayName)
-  const assigneeName = await resolveMemberNameById(
-    idToken,
-    response.assigneeId,
-    "-",
-  );
-  response.assigneeName = assigneeName;
-
-  // 作成者名変換 (createdBy -> displayName)
-  const createdByName = await resolveMemberNameById(
+  // 追加情報の解決
+  response.brandName = await fetchBrandNameById(response.brandId ?? "");
+  response.assigneeName = await resolveMemberNameById(idToken, response.assigneeId, "-");
+  response.createdByName = await resolveMemberNameById(
     idToken,
     response.createdBy,
     "作成者未設定",
-  );
-  response.createdByName = createdByName;
-
-  console.log("[productBlueprintDetailService] resolved names:", {
-    brandId,
-    brandName,
-    assigneeId: response.assigneeId,
-    assigneeName,
-    createdById: response.createdBy,
-    createdByName,
-  });
-
-  console.log(
-    "[productBlueprintDetailService] GET mapped detail response:",
-    response,
   );
 
   return response;
 }
 
 // -----------------------------------------
-// UPDATE: 商品設計 更新
+// UPDATE
 // -----------------------------------------
 export async function updateProductBlueprint(
   params: UpdateProductBlueprintParams,
@@ -289,8 +228,7 @@ export async function updateProductBlueprint(
       const sizeRow = params.sizes.find((s: SizeRow) => s.sizeLabel === v.size);
       if (!sizeRow) continue;
 
-      const hex = colorRgbMap[v.color];
-      const rgbInt = hexToRgbInt(hex);
+      const rgbInt = hexToRgbInt(colorRgbMap[v.color]);
 
       variations.push(
         toNewModelVariationPayload(itemType, sizeRow, {
@@ -304,38 +242,18 @@ export async function updateProductBlueprint(
     }
   }
 
-  console.log("[productBlueprintDetailService] UPDATE params:", params);
-  console.log(
-    "[productBlueprintDetailService] UPDATE variations payload:",
-    variations,
-  );
-
-  const response = await updateProductBlueprintApi(params, variations);
-
-  console.log(
-    "[productBlueprintDetailService] UPDATE result response:",
-    response,
-  );
-
-  return response;
+  return await updateProductBlueprintApi(params, variations);
 }
 
 // -----------------------------------------
-// ModelVariation list（productBlueprintId 毎）
-// backend/internal/adapters/in/http/handlers/model_handler.go の
-//   GET /models/by-blueprint/{productBlueprintID}/variations
-// を叩くフロント側のヘルパー
+// ModelVariation list
 // -----------------------------------------
-
 export type ModelVariationResponse = {
   id: string;
   productBlueprintId: string;
   modelNumber: string;
   size: string;
-  color?: {
-    name: string;
-    rgb?: number | null;
-  };
+  color?: { name: string; rgb?: number | null };
   measurements?: Record<string, number | null>;
   createdAt?: string | null;
   createdBy?: string | null;
@@ -345,75 +263,33 @@ export type ModelVariationResponse = {
   deletedBy?: string | null;
 };
 
-/**
- * 与えられた productBlueprintId に紐づく ModelVariation を一覧取得する。
- * backend: GET /models/by-blueprint/{productBlueprintId}/variations
- */
 export async function listModelVariationsByProductBlueprintId(
   productBlueprintId: string,
 ): Promise<ModelVariationResponse[]> {
   const id = productBlueprintId.trim();
-  if (!id) {
-    throw new Error("productBlueprintId が空です");
-  }
+  if (!id) throw new Error("productBlueprintId が空です");
 
   const user = auth.currentUser;
-  if (!user) {
-    throw new Error("ログイン情報が見つかりません（未ログイン）");
-  }
+  if (!user) throw new Error("ログイン情報が見つかりません（未ログイン）");
 
   const idToken = await user.getIdToken();
-
-  const url = `${API_BASE}/models/by-blueprint/${encodeURIComponent(
-    id,
-  )}/variations`;
-
-  console.log(
-    "[productBlueprintDetailService] listModelVariationsByProductBlueprintId GET",
-    url,
-  );
+  const url = `${API_BASE}/models/by-blueprint/${encodeURIComponent(id)}/variations`;
 
   const res = await fetch(url, {
     method: "GET",
-    headers: {
-      Authorization: `Bearer ${idToken}`,
-      Accept: "application/json",
-    },
+    headers: { Authorization: `Bearer ${idToken}`, Accept: "application/json" },
   });
 
   if (!res.ok) {
-    let detail: unknown;
-    try {
-      detail = await res.json();
-    } catch {
-      /* ignore */
-    }
-    console.error(
-      "[productBlueprintDetailService] listModelVariationsByProductBlueprintId failed",
-      {
-        status: res.status,
-        statusText: res.statusText,
-        detail,
-      },
-    );
     throw new Error(
       `モデル一覧の取得に失敗しました（${res.status} ${res.statusText ?? ""}）`,
     );
   }
 
   const raw = (await res.json()) as any[] | null;
+  if (!raw) return [];
 
-  if (!raw) {
-    return [];
-  }
-
-  console.log(
-    "[productBlueprintDetailService] listModelVariationsByProductBlueprintId raw result:",
-    raw,
-  );
-
-  // PascalCase / camelCase の両方に対応しつつ、フロント用の ModelVariationResponse にマッピング
-  const mapped: ModelVariationResponse[] = raw.map((v: any) => {
+  return raw.map((v: any) => {
     const colorRaw = v.color ?? v.Color ?? {};
     const measurementsRaw = v.measurements ?? v.Measurements ?? {};
 
@@ -422,35 +298,24 @@ export async function listModelVariationsByProductBlueprintId(
         ? colorRaw.rgb
         : typeof colorRaw.RGB === "number"
           ? colorRaw.RGB
-          : undefined;
+          : null;
 
     return {
       id: v.id ?? v.ID ?? "",
-      productBlueprintId:
-        v.productBlueprintId ?? v.ProductBlueprintID ?? id,
+      productBlueprintId: v.productBlueprintId ?? v.ProductBlueprintID ?? id,
       modelNumber: v.modelNumber ?? v.ModelNumber ?? "",
       size: v.size ?? v.Size ?? "",
-      color: {
-        name: (colorRaw.name ?? colorRaw.Name ?? "") as string,
-        rgb: rgbValue ?? null,
-      },
+      color: { name: colorRaw.name ?? colorRaw.Name ?? "", rgb: rgbValue },
       measurements:
-        measurementsRaw && typeof measurementsRaw === "object"
+        typeof measurementsRaw === "object"
           ? (measurementsRaw as Record<string, number | null>)
           : {},
-      createdAt: (v.createdAt ?? v.CreatedAt ?? null) as string | null,
-      createdBy: (v.createdBy ?? v.CreatedBy ?? null) as string | null,
-      updatedAt: (v.updatedAt ?? v.UpdatedAt ?? null) as string | null,
-      updatedBy: (v.updatedBy ?? v.UpdatedBy ?? null) as string | null,
-      deletedAt: (v.deletedAt ?? v.DeletedAt ?? null) as string | null,
-      deletedBy: (v.deletedBy ?? v.DeletedBy ?? null) as string | null,
+      createdAt: v.createdAt ?? v.CreatedAt ?? null,
+      createdBy: v.createdBy ?? v.CreatedBy ?? null,
+      updatedAt: v.updatedAt ?? v.UpdatedAt ?? null,
+      updatedBy: v.updatedBy ?? v.UpdatedBy ?? null,
+      deletedAt: v.deletedAt ?? v.DeletedAt ?? null,
+      deletedBy: v.deletedBy ?? v.DeletedBy ?? null,
     };
   });
-
-  console.log(
-    "[productBlueprintDetailService] listModelVariationsByProductBlueprintId mapped:",
-    mapped,
-  );
-
-  return mapped;
 }
