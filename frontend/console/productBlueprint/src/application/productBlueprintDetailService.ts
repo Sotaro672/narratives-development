@@ -20,6 +20,12 @@ import { fetchAllBrandsForCompany } from "../../../brand/src/infrastructure/quer
 import { formatLastFirst } from "../../../member/src/infrastructure/query/memberQuery";
 import { MemberRepositoryHTTP } from "../../../member/src/infrastructure/http/memberRepositoryHTTP";
 
+// ★ ModelVariation 更新サービスを利用
+import {
+  updateModelVariation,
+  type ModelVariationUpdateRequest,
+} from "../../../model/src/application/modelUpdateService";
+
 // -----------------------------------------
 // HEX -> number(RGB) 変換
 // -----------------------------------------
@@ -36,8 +42,12 @@ function hexToRgbInt(hex?: string): number | undefined {
   return parsed;
 }
 
+// size + color → 一意キー
+const makeKey = (sizeLabel: string, color: string) =>
+  `${sizeLabel}__${color}`;
+
 // -----------------------------------------
-// itemType → measurements 組み立て
+// itemType → measurements 組み立て（新規作成向け）
 // -----------------------------------------
 function buildMeasurements(
   itemType: ItemType,
@@ -65,7 +75,26 @@ function buildMeasurements(
 }
 
 // -----------------------------------------
-// variations payload builder
+// UPDATE 用: SizeRow → map[string]float64（null は除外）
+// -----------------------------------------
+function buildMeasurementsFromSizeRowForUpdate(
+  itemType: ItemType,
+  size: SizeRow,
+): Record<string, number> | undefined {
+  const base = buildMeasurements(itemType, size);
+  const result: Record<string, number> = {};
+
+  Object.entries(base).forEach(([k, v]) => {
+    if (typeof v === "number" && !Number.isNaN(v)) {
+      result[k] = v;
+    }
+  });
+
+  return Object.keys(result).length > 0 ? result : undefined;
+}
+
+// -----------------------------------------
+// variations payload builder（新規作成向け）
 // -----------------------------------------
 function toNewModelVariationPayload(
   itemType: ItemType,
@@ -123,7 +152,10 @@ async function fetchBrandNameById(brandId: string): Promise<string> {
     const brands = await fetchAllBrandsForCompany("", false);
     return brands.find((b) => b.id === id)?.name ?? "";
   } catch (e) {
-    console.error("[productBlueprintDetailService] fetchBrandNameById error:", e);
+    console.error(
+      "[productBlueprintDetailService] fetchBrandNameById error:",
+      e,
+    );
     return "";
   }
 }
@@ -144,7 +176,8 @@ async function resolveMemberNameById(
     const member = await repo.getById(id);
     if (!member) return fallback;
 
-    const name = formatLastFirst(member.lastName, member.firstName)?.trim() || id;
+    const name =
+      formatLastFirst(member.lastName, member.firstName)?.trim() || id;
 
     return name || fallback;
   } catch (e) {
@@ -174,7 +207,9 @@ export async function getProductBlueprintDetail(
 
   if (!res.ok) {
     throw new Error(
-      `商品設計詳細の取得に失敗しました（${res.status} ${res.statusText ?? ""}）`,
+      `商品設計詳細の取得に失敗しました（${res.status} ${
+        res.statusText ?? ""
+      }）`,
     );
   }
 
@@ -218,42 +253,153 @@ export async function getProductBlueprintDetail(
 }
 
 // -----------------------------------------
-// UPDATE（Repository HTTP を使用）
+// UPDATE（Blueprint メタ情報 + ModelVariation）
 // -----------------------------------------
 export async function updateProductBlueprint(
-  params: UpdateProductBlueprintParams,
+  params: UpdateProductBlueprintParams & {
+    sizes?: SizeRow[];
+    modelNumbers?: { size: string; color: string; code: string }[];
+    colorRgbMap?: Record<string, string>;
+  },
 ): Promise<ProductBlueprintDetailResponse> {
-  const variations: NewModelVariationPayload[] = [];
+  const {
+    id,
+    productName,
+    itemType,
+    fit,
+    material,
+    weight,
+    qualityAssurance,
+    productIdTag,
+    brandId,
+    assigneeId,
+    updatedBy,
+    sizes = [],
+    modelNumbers = [],
+    colorRgbMap = {},
+  } = params as any;
 
-  const colorRgbMap = params.colorRgbMap ?? {};
-  const itemType = params.itemType as ItemType;
-
-  if (params.modelNumbers && params.sizes) {
-    for (const v of params.modelNumbers) {
-      const sizeRow = params.sizes.find(
-        (s: SizeRow) => s.sizeLabel === v.size,
-      );
-      if (!sizeRow) continue;
-
-      const rgbInt = hexToRgbInt(colorRgbMap[v.color]);
-
-      variations.push(
-        toNewModelVariationPayload(itemType, sizeRow, {
-          sizeLabel: v.size,
-          color: v.color,
-          modelNumber: v.code,
-          createdBy: params.updatedBy ?? "",
-          rgb: rgbInt,
-        }),
-      );
-    }
+  if (!id) {
+    throw new Error("updateProductBlueprint: id が空です");
   }
 
-  // ⭐ Repository 経由に一本化
-  return await updateProductBlueprintHTTP(params.id, {
-    ...params,
-    variations,
-  } as any);
+  // 1) まず ProductBlueprint 本体のメタ情報を更新
+  const updated = await updateProductBlueprintHTTP(
+    id,
+    // 型の差分があるので一度 unknown を経由してキャスト
+    {
+      ...(params as any),
+      id,
+      productName,
+      itemType,
+      fit,
+      material,
+      weight,
+      qualityAssurance,
+      productIdTag,
+      brandId,
+      assigneeId,
+      updatedBy,
+    } as unknown as UpdateProductBlueprintParams,
+  );
+
+  // itemType が不明なら variations 更新はスキップ（メタ情報だけ更新）
+  if (!itemType) {
+    console.log(
+      "[updateProductBlueprint] itemType が空のため、ModelVariation の更新はスキップします。",
+    );
+    return updated;
+  }
+
+  // 2) 現在の ModelVariation 一覧を取得
+  const variations = await listModelVariationsByProductBlueprintId(id);
+  const varsAny = variations as any[];
+
+  // 3) size×color → modelNumber(code) のマップを作成
+  const codeMap = new Map<string, string>();
+  modelNumbers.forEach(
+    (m: { size: string; color: string; code: string }) => {
+      if (!m.size || !m.color) return;
+      const key = makeKey(m.size, m.color);
+      codeMap.set(key, m.code ?? "");
+    },
+  );
+
+  // 4) sizeLabel → measurements(map[string]float64) のマップを作成
+  const measurementsMap = new Map<string, Record<string, number>>();
+  (sizes as SizeRow[]).forEach((s) => {
+    const ms = buildMeasurementsFromSizeRowForUpdate(
+      itemType as ItemType,
+      s,
+    );
+    if (ms) {
+      measurementsMap.set(s.sizeLabel, ms);
+    }
+  });
+
+  // 5) 既存の variation 1件ずつに対して updateModelVariation を呼び出し
+  await Promise.all(
+    varsAny.map(async (v) => {
+      const variationId: string = v.id ?? v.ID;
+      if (!variationId) return;
+
+      const sizeLabel: string =
+        (typeof v.size === "string"
+          ? v.size
+          : (v.Size as string | undefined)) ?? "";
+      const colorName: string =
+        (typeof v.color?.name === "string"
+          ? v.color.name
+          : (v.Color?.Name as string | undefined)) ?? "";
+
+      if (!sizeLabel || !colorName) return;
+
+      const key = makeKey(sizeLabel, colorName);
+
+      // モデルナンバー（未指定なら既存値を維持）
+      const nextCode: string =
+        codeMap.get(key) ??
+        (typeof v.modelNumber === "string"
+          ? v.modelNumber
+          : (v.ModelNumber as string | undefined) ??
+            "");
+
+      // RGB（hex から int に変換。無ければ既存値を維持）
+      const rgbHex = colorRgbMap[colorName];
+      const rgbFromHex = hexToRgbInt(rgbHex);
+      const existingRgb =
+        typeof v.color?.rgb === "number"
+          ? v.color.rgb
+          : typeof v.color?.RGB === "number"
+            ? v.color.RGB
+            : typeof v.Color?.RGB === "number"
+              ? v.Color.RGB
+              : undefined;
+      const rgb = rgbFromHex ?? existingRgb;
+
+      // 採寸（SizeRow から起こした map）
+      const measurements = measurementsMap.get(sizeLabel);
+
+      const payload: ModelVariationUpdateRequest = {
+        modelNumber: nextCode,
+        size: sizeLabel,
+        color: colorName,
+        ...(typeof rgb === "number" ? { rgb } : {}),
+        ...(measurements ? { measurements } : {}),
+      };
+
+      console.log("[updateProductBlueprint] updateModelVariation payload:", {
+        variationId,
+        payload,
+      });
+
+      await updateModelVariation(variationId, payload);
+    }),
+  );
+
+  console.log("[updateProductBlueprint] completed variations update");
+
+  return updated;
 }
 
 // -----------------------------------------
@@ -295,7 +441,9 @@ export async function listModelVariationsByProductBlueprintId(
 
   if (!res.ok) {
     throw new Error(
-      `モデル一覧の取得に失敗しました（${res.status} ${res.statusText ?? ""}）`,
+      `モデル一覧の取得に失敗しました（${res.status} ${
+        res.statusText ?? ""
+      }）`,
     );
   }
 

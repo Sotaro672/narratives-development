@@ -88,6 +88,12 @@ export async function updateModelVariation(
     measurements: payload.measurements,
   };
 
+  console.log("[updateModelVariation] request:", {
+    variationId: id,
+    url,
+    body,
+  });
+
   const res = await fetch(url, {
     method: "PUT",
     headers: {
@@ -98,8 +104,43 @@ export async function updateModelVariation(
     body: JSON.stringify(body),
   });
 
+  const text = await res.text().catch(() => "");
+
+  // ★ 404 の場合は「その variation は存在しない」とみなしてスキップ扱いにする
+  if (res.status === 404) {
+    console.warn(
+      "[updateModelVariation] 404 not_found - variation をスキップします",
+      {
+        variationId: id,
+        status: res.status,
+        statusText: res.statusText,
+        responseText: text,
+      },
+    );
+
+    // 呼び出し元はレスポンスの中身を使っていないので、最低限のダミーを返しておく
+    const dummy: ModelVariationResponse = {
+      id,
+      productBlueprintId: "",
+      modelNumber: payload.modelNumber,
+      size: payload.size,
+      color: {
+        name: payload.color,
+        rgb: payload.rgb ?? null,
+      },
+      measurements: payload.measurements ?? {},
+      createdAt: null,
+      createdBy: null,
+      updatedAt: null,
+      updatedBy: null,
+      deletedAt: null,
+      deletedBy: null,
+    };
+
+    return dummy;
+  }
+
   if (!res.ok) {
-    const text = await res.text().catch(() => "");
     throw new Error(
       `モデルバリエーションの更新に失敗しました（${res.status} ${res.statusText}）: ${text}`,
     );

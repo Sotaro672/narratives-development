@@ -28,14 +28,26 @@ const makeKey = (sizeLabel: string, color: string) =>
 
 /**
  * ModelNumberCard のロジックをすべてこの hook に集約する
+ *
+ * - UI ローカル状態（codeMap）を管理
+ * - application 層から渡された onChangeModelNumber も同時に呼び出すことで、
+ *   「画面ローカル状態」と「アプリケーション状態」を分離したまま同期できる
  */
 export function useModelCard(params: UseModelCardParams): UseModelCardResult {
   const { sizes, colors, modelNumbers } = params;
+
   // ★ color名 → rgb(hex など) のマップを application 層から受け取れるようにする
   //   - 型定義自体は modelCreateService.tsx 側の UseModelCardParams に
   //     colorRgbMap?: Record<string, string> を追加しておく想定
   const colorRgbMap: Record<string, string> =
     (params as any).colorRgbMap ?? {};
+
+  // ★ application 層（例: useProductBlueprintDetail / useProductBlueprintCreate）
+  //   から渡される「本体状態更新用のハンドラ」
+  //   - 型定義には含めず any キャストで受けておく（後方互換のため）
+  const appOnChangeModelNumber:
+    | ((sizeLabel: string, color: string, nextCode: string) => void)
+    | undefined = (params as any).onChangeModelNumber;
 
   /** ローカル状態（サイズ×カラーごとのコード） */
   const [codeMap, setCodeMap] = React.useState<Record<string, string>>({});
@@ -74,18 +86,29 @@ export function useModelCard(params: UseModelCardParams): UseModelCardResult {
 
   /**
    * 値更新（Card 側で Input onChange → ここへ伝達）
+   *
+   * - 自分の codeMap を更新
+   * - application 層に onChangeModelNumber が渡されていれば、それも呼ぶ
+   *   → useProductBlueprintDetail / useProductBlueprintCreate などの
+   *     「アプリケーション状態」はこのコールバックで更新される
    */
   const onChangeModelNumber =
     React.useCallback<UseModelCardResult["onChangeModelNumber"]>(
       (sizeLabel, color, nextCode) => {
         const key = makeKey(sizeLabel, color);
 
+        // 1) UI ローカル状態を更新
         setCodeMap((prev) => ({
           ...prev,
           [key]: nextCode,
         }));
+
+        // 2) アプリケーション層の状態も更新（渡されていれば）
+        if (appOnChangeModelNumber) {
+          appOnChangeModelNumber(sizeLabel, color, nextCode);
+        }
       },
-      [],
+      [appOnChangeModelNumber],
     );
 
   /**

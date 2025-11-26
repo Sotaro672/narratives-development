@@ -18,6 +18,9 @@ import {
 
 import type { Fit, ItemType, WashTagOption } from "../../domain/entity/catalog";
 
+// ★ ModelNumber / SizeVariation の UI ロジックを model 側 hook に委譲
+import { useModelCard } from "../../../../model/src/presentation/hook/useModelCard";
+
 export {
   FIT_OPTIONS,
   PRODUCT_ID_TAG_OPTIONS,
@@ -358,17 +361,54 @@ export function useProductBlueprintDetail(): UseProductBlueprintDetailResult {
   }, [blueprintId]);
 
   // ---------------------------------
-  // ModelNumberCard 用
+  // モデルナンバー変更（アプリケーション状態の更新専用ロジック）
   // ---------------------------------
-  const getCode = React.useCallback(
-    (sizeLabel: string, color: string): string => {
-      const row = modelNumbers.find(
-        (m) => m.size === sizeLabel && m.color === color,
-      );
-      return row?.code ?? "";
+  const handleChangeModelNumber = React.useCallback(
+    (sizeLabel: string, color: string, nextCode: string) => {
+      setModelNumbers((prev) => {
+        const idx = prev.findIndex(
+          (m) => m.size === sizeLabel && m.color === color,
+        );
+        const trimmed = nextCode.trim();
+
+        // 空文字の場合はエントリを削除（必要に応じてバリデーションで拾う）
+        if (!trimmed) {
+          if (idx === -1) return prev;
+          const copy = [...prev];
+          copy.splice(idx, 1);
+          return copy;
+        }
+
+        const next: ModelNumberRow = {
+          size: sizeLabel,
+          color,
+          code: trimmed,
+        };
+
+        if (idx === -1) {
+          return [...prev, next];
+        }
+
+        const copy = [...prev];
+        copy[idx] = next;
+        return copy;
+      });
     },
-    [modelNumbers],
+    [],
   );
+
+  // ---------------------------------
+  // ModelNumberCard 用ロジックは useModelCard に委譲
+  //   - getCode: 表示用 getter
+  //   - uiOnChangeModelNumber: Input からの変更イベント（UI 内部 state 用）
+  //   ※ application state の更新は handleChangeModelNumber で行う
+  // ---------------------------------
+  const { getCode, onChangeModelNumber: uiOnChangeModelNumber } = useModelCard({
+    sizes,
+    colors,
+    modelNumbers: modelNumbers as any, // 形は ModelNumberRow と互換
+    colorRgbMap,
+  });
 
   // ---------------------------------
   // Handlers
@@ -421,7 +461,6 @@ export function useProductBlueprintDetail(): UseProductBlueprintDetailResult {
           // ★ サーバ側で空にされないよう brandId / assigneeId も送る
           brandId,
           assigneeId,
-          // updatedBy はバックエンド側でトークンから解決する想定なら省略可
         } as any);
 
         alert("保存しました");
@@ -511,41 +550,6 @@ export function useProductBlueprintDetail(): UseProductBlueprintDetailResult {
     [],
   );
 
-  // ★ モデルナンバー変更
-  const onChangeModelNumber = React.useCallback(
-    (sizeLabel: string, color: string, nextCode: string) => {
-      setModelNumbers((prev) => {
-        const idx = prev.findIndex(
-          (m) => m.size === sizeLabel && m.color === color,
-        );
-        const trimmed = nextCode.trim();
-
-        // 空文字の場合はエントリを削除（必要に応じてバリデーションで拾う）
-        if (!trimmed) {
-          if (idx === -1) return prev;
-          const copy = [...prev];
-          copy.splice(idx, 1);
-          return copy;
-        }
-
-        const next: ModelNumberRow = {
-          size: sizeLabel,
-          color,
-          code: trimmed,
-        };
-
-        if (idx === -1) {
-          return [...prev, next];
-        }
-
-        const copy = [...prev];
-        copy[idx] = next;
-        return copy;
-      });
-    },
-    [],
-  );
-
   const onClickAssignee = React.useCallback(() => {
     console.log("assignee clicked:", assignee);
   }, [assignee]);
@@ -593,7 +597,14 @@ export function useProductBlueprintDetail(): UseProductBlueprintDetailResult {
     onRemoveSize,
     onAddSize,
     onChangeSize,
-    onChangeModelNumber,
+
+    // ★ UI からの onChange:
+    //   - useModelCard 側の codeMap を更新
+    //   - application state (modelNumbers) も更新
+    onChangeModelNumber: (sizeLabel, color, nextCode) => {
+      uiOnChangeModelNumber(sizeLabel, color, nextCode);
+      handleChangeModelNumber(sizeLabel, color, nextCode);
+    },
 
     onClickAssignee,
   };
