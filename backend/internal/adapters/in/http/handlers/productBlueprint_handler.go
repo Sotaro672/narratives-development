@@ -44,6 +44,12 @@ func (h *ProductBlueprintHandler) ServeHTTP(w http.ResponseWriter, r *http.Reque
 	case r.Method == http.MethodPost && path == "/product-blueprints":
 		h.post(w, r)
 
+	// PUT/PATCH /product-blueprints/{id} ← 更新 API
+	case (r.Method == http.MethodPut || r.Method == http.MethodPatch) &&
+		strings.HasPrefix(path, "/product-blueprints/"):
+		id := strings.TrimPrefix(path, "/product-blueprints/")
+		h.update(w, r, id)
+
 	// GET /product-blueprints/{id}
 	case r.Method == http.MethodGet && strings.HasPrefix(path, "/product-blueprints/"):
 		id := strings.TrimPrefix(path, "/product-blueprints/")
@@ -119,6 +125,74 @@ func (h *ProductBlueprintHandler) post(w http.ResponseWriter, r *http.Request) {
 
 	w.WriteHeader(http.StatusCreated)
 	_ = json.NewEncoder(w).Encode(created)
+}
+
+// ---------------------------------------------------
+// PUT/PATCH /product-blueprints/{id}  ← 更新 API
+// ---------------------------------------------------
+
+type UpdateProductBlueprintInput struct {
+	ProductName      string            `json:"productName"`
+	BrandId          string            `json:"brandId"`
+	ItemType         string            `json:"itemType"`
+	Fit              string            `json:"fit"`
+	Material         string            `json:"material"`
+	Weight           float64           `json:"weight"`
+	QualityAssurance []string          `json:"qualityAssurance"`
+	ProductIdTag     ProductIdTagInput `json:"productIdTag"`
+	AssigneeId       string            `json:"assigneeId"`
+	CompanyId        string            `json:"companyId"`
+	UpdatedBy        string            `json:"updatedBy,omitempty"`
+}
+
+func (h *ProductBlueprintHandler) update(w http.ResponseWriter, r *http.Request, id string) {
+	ctx := r.Context()
+
+	id = strings.TrimSpace(id)
+	if id == "" {
+		w.WriteHeader(http.StatusBadRequest)
+		_ = json.NewEncoder(w).Encode(map[string]string{"error": "invalid id"})
+		return
+	}
+
+	var in UpdateProductBlueprintInput
+	if err := json.NewDecoder(r.Body).Decode(&in); err != nil {
+		w.WriteHeader(http.StatusBadRequest)
+		_ = json.NewEncoder(w).Encode(map[string]string{"error": "invalid json"})
+		return
+	}
+
+	// updatedBy を *string に変換（空文字なら nil）
+	var updatedBy *string
+	if v := strings.TrimSpace(in.UpdatedBy); v != "" {
+		updatedBy = &v
+	}
+
+	// Domain 変換
+	pb := pbdom.ProductBlueprint{
+		ID:               id,
+		ProductName:      in.ProductName,
+		BrandID:          in.BrandId,
+		ItemType:         pbdom.ItemType(in.ItemType),
+		Fit:              in.Fit,
+		Material:         in.Material,
+		Weight:           in.Weight,
+		QualityAssurance: in.QualityAssurance,
+		AssigneeID:       in.AssigneeId,
+		CompanyID:        in.CompanyId,
+		UpdatedBy:        updatedBy,
+		ProductIdTag: pbdom.ProductIDTag{
+			Type: pbdom.ProductIDTagType(in.ProductIdTag.Type),
+		},
+	}
+
+	updated, err := h.uc.Update(ctx, pb)
+	if err != nil {
+		writeProductBlueprintErr(w, err)
+		return
+	}
+
+	_ = json.NewEncoder(w).Encode(updated)
 }
 
 // ---------------------------------------------------

@@ -80,6 +80,25 @@ func (u *ProductBlueprintUsecase) Save(
 	return u.repo.Save(ctx, v)
 }
 
+// Update: 既存 ID を前提とした更新用ユースケース
+// - ID が空の場合は ErrInvalidID を返す
+// - companyId は context 側を優先
+func (u *ProductBlueprintUsecase) Update(
+	ctx context.Context,
+	v productbpdom.ProductBlueprint,
+) (productbpdom.ProductBlueprint, error) {
+	if strings.TrimSpace(v.ID) == "" {
+		return productbpdom.ProductBlueprint{}, productbpdom.ErrInvalidID
+	}
+
+	if cid := companyIDFromContext(ctx); cid != "" {
+		v.CompanyID = strings.TrimSpace(cid)
+	}
+
+	// repository では Save を更新にも利用する前提
+	return u.repo.Save(ctx, v)
+}
+
 func (u *ProductBlueprintUsecase) Delete(ctx context.Context, id string) error {
 	return u.repo.Delete(ctx, strings.TrimSpace(id))
 }
