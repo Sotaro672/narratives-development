@@ -2,35 +2,34 @@
 
 import { auth } from "../../../../shell/src/auth/infrastructure/config/firebaseClient";
 
-// application 層の型だけを type import で参照（実行時の循環依存を避ける）
+// application 層の型だけを type import
 import type {
   CreateProductBlueprintParams,
-  ProductBlueprintResponse,
 } from "../../application/productBlueprintCreateService";
 
-// 🔙 BACKEND の BASE URL
+import type {
+  UpdateProductBlueprintParams,
+  ProductBlueprintDetailResponse,
+} from "../../infrastructure/api/productBlueprintDetailApi";
+
+// BASE URL
 const ENV_BASE =
-  ((import.meta as any).env?.VITE_BACKEND_BASE_URL as string | undefined)?.replace(
-    /\/+$/g,
-    "",
-  ) ?? "";
+  ((import.meta as any).env?.VITE_BACKEND_BASE_URL as string | undefined)
+    ?.replace(/\/+$/g, "") ?? "";
 
 const FALLBACK_BASE =
   "https://narratives-backend-871263659099.asia-northeast1.run.app";
 
 export const API_BASE = ENV_BASE || FALLBACK_BASE;
 
-// ------------------------------
-// HTTP: ProductBlueprint 作成
-// ------------------------------
-
+// -----------------------------------------------------------
+// POST: 商品設計 作成
+// -----------------------------------------------------------
 export async function createProductBlueprintHTTP(
   params: CreateProductBlueprintParams,
-): Promise<ProductBlueprintResponse> {
+): Promise<ProductBlueprintDetailResponse> {
   const user = auth.currentUser;
-  if (!user) {
-    throw new Error("ログイン情報が見つかりません（未ログイン）");
-  }
+  if (!user) throw new Error("未ログインです");
 
   const idToken = await user.getIdToken();
 
@@ -42,9 +41,7 @@ export async function createProductBlueprintHTTP(
     material: params.material,
     weight: params.weight,
     qualityAssurance: params.qualityAssurance,
-
     productIdTag: params.productIdTag,
-
     companyId: params.companyId,
     assigneeId: params.assigneeId ?? null,
     createdBy: params.createdBy ?? null,
@@ -60,32 +57,21 @@ export async function createProductBlueprintHTTP(
   });
 
   if (!res.ok) {
-    let detail: unknown;
-    try {
-      detail = await res.json();
-    } catch {
-      /* ignore */
-    }
     throw new Error(
-      `商品設計の作成に失敗しました（${res.status} ${res.statusText ?? ""}）`,
+      `商品設計の作成に失敗しました（${res.status} ${res.statusText}）`,
     );
   }
 
-  const json = (await res.json()) as ProductBlueprintResponse;
-  return json;
+  // ★ 詳細レスポンスとして返す
+  return (await res.json()) as ProductBlueprintDetailResponse;
 }
 
-// ------------------------------
-// HTTP: ProductBlueprint 一覧取得
-// ------------------------------
-
-export async function listProductBlueprintsHTTP(): Promise<
-  ProductBlueprintResponse[]
-> {
+// -----------------------------------------------------------
+// GET: 商品設計 一覧
+// -----------------------------------------------------------
+export async function listProductBlueprintsHTTP(): Promise<ProductBlueprintDetailResponse[]> {
   const user = auth.currentUser;
-  if (!user) {
-    throw new Error("ログイン情報が見つかりません（未ログイン）");
-  }
+  if (!user) throw new Error("未ログインです");
 
   const idToken = await user.getIdToken();
 
@@ -97,18 +83,44 @@ export async function listProductBlueprintsHTTP(): Promise<
   });
 
   if (!res.ok) {
-    let detail: unknown;
-    try {
-      detail = await res.json();
-    } catch {
-      /* ignore */
-    }
-
     throw new Error(
-      `商品設計一覧の取得に失敗しました（${res.status} ${res.statusText ?? ""}）`,
+      `商品設計一覧の取得に失敗しました（${res.status} ${res.statusText}）`,
     );
   }
 
-  const json = (await res.json()) as ProductBlueprintResponse[];
-  return json;
+  return (await res.json()) as ProductBlueprintDetailResponse[];
+}
+
+// -----------------------------------------------------------
+// PUT/PATCH: 商品設計 更新
+// -----------------------------------------------------------
+export async function updateProductBlueprintHTTP(
+  id: string,
+  params: UpdateProductBlueprintParams,
+): Promise<ProductBlueprintDetailResponse> {
+  const user = auth.currentUser;
+  if (!user) throw new Error("未ログインです");
+
+  const idToken = await user.getIdToken();
+
+  const url = `${API_BASE}/product-blueprints/${encodeURIComponent(id)}`;
+
+  const res = await fetch(url, {
+    method: "PUT",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${idToken}`,
+    },
+    body: JSON.stringify(params),
+  });
+
+  if (!res.ok) {
+    const detail = await res.text().catch(() => "");
+    throw new Error(
+      `商品設計の更新に失敗しました（${res.status} ${res.statusText}）\n${detail}`,
+    );
+  }
+
+  // ★ 返り値を ProductBlueprintDetailResponse に統一
+  return (await res.json()) as ProductBlueprintDetailResponse;
 }

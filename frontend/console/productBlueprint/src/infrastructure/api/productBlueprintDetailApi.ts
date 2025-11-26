@@ -6,6 +6,14 @@ import { getAuthHeaders } from "../../../../shell/src/auth/application/authServi
 import type { SizeRow } from "../../../../model/src/domain/entity/catalog";
 
 // ------------------------------------------------------
+// BASE URL（ファイル冒頭に移動して shadowing を防止）
+// ------------------------------------------------------
+export const API_BASE =
+  ((import.meta as any).env?.VITE_BACKEND_BASE_URL as string | undefined)
+    ?.replace(/\/+$/g, "") ??
+  "";
+
+// ------------------------------------------------------
 // 型定義
 // ------------------------------------------------------
 
@@ -70,7 +78,7 @@ export type UpdateProductBlueprintParams = {
 
   productName: string;
   brandId: string;
-  itemType: string; // ← string のままで OK（service 側で ItemType にキャストする）
+  itemType: string;
   fit: string;
   material: string;
   weight: number;
@@ -84,7 +92,6 @@ export type UpdateProductBlueprintParams = {
   colors: string[];
   colorRgbMap?: Record<string, string>;
 
-  // ← ここから追加分（service 側だけで使うフィールド）
   sizes?: SizeRow[];
   modelNumbers?: ModelNumberRow[];
   updatedBy?: string | null;
@@ -135,12 +142,6 @@ export async function getProductBlueprintDetailApi(
 // ------------------------------------------------------
 // PATCH /product-blueprints/{id}  更新
 // ------------------------------------------------------
-const API_BASE =
-  ((import.meta as any).env?.VITE_BACKEND_BASE_URL as string | undefined)?.replace(
-    /\/+$/g,
-    "",
-  ) ?? "";
-
 export async function updateProductBlueprintApi(
   params: UpdateProductBlueprintParams,
   variations: NewModelVariationPayload[],

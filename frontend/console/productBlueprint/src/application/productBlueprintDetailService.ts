@@ -3,13 +3,17 @@
 import type { ItemType } from "../domain/entity/catalog";
 import type { SizeRow } from "../../../model/src/domain/entity/catalog";
 
+// ⭐ API レイヤーは廃止 → Repository HTTP を使用
 import {
-  updateProductBlueprintApi,
-  type ProductBlueprintDetailResponse,
-  type UpdateProductBlueprintParams,
-  type NewModelVariationMeasurements,
-  type NewModelVariationPayload,
-} from "../infrastructure/api/productBlueprintDetailApi";
+  updateProductBlueprintHTTP,
+} from "../infrastructure/repository/productBlueprintRepositoryHTTP";
+
+import type {
+  ProductBlueprintDetailResponse,
+  UpdateProductBlueprintParams,
+  NewModelVariationMeasurements,
+  NewModelVariationPayload,
+} from "../infrastructure/api/productBlueprintDetailApi"; // ← 型のみ維持
 
 import { auth } from "../../../shell/src/auth/infrastructure/config/firebaseClient";
 import { API_BASE } from "../infrastructure/repository/productBlueprintRepositoryHTTP";
@@ -44,18 +48,15 @@ function buildMeasurements(
   const result: NewModelVariationMeasurements = {};
 
   if (itemType === "ボトムス") {
-    // ボトムス用の採寸マッピング
     result["ウエスト"] = size.waist ?? null;
     result["ヒップ"] = size.hip ?? null;
     result["股上"] = size.rise ?? null;
     result["股下"] = size.inseam ?? null;
-    // 「わたり幅」→ thigh（既存データ用に thighWidth もフォロー）
     result["わたり幅"] = size.thigh ?? size.thighWidth ?? null;
     result["裾幅"] = size.hemWidth ?? null;
     return result;
   }
 
-  // デフォルト（トップス）
   result["着丈"] = size.length ?? size.lengthTop ?? null;
   result["身幅"] = size.chest ?? size.bodyWidth ?? null;
   result["胸囲"] = size.chest ?? size.bodyWidth ?? null;
@@ -124,16 +125,13 @@ async function fetchBrandNameById(brandId: string): Promise<string> {
     const brands = await fetchAllBrandsForCompany("", false);
     return brands.find((b) => b.id === id)?.name ?? "";
   } catch (e) {
-    console.error(
-      "[productBlueprintDetailService] fetchBrandNameById error:",
-      e,
-    );
+    console.error("[productBlueprintDetailService] fetchBrandNameById error:", e);
     return "";
   }
 }
 
 // -----------------------------------------
-// メンバー名解決（HTTP は Repository に委譲）
+// メンバー名解決（Repository 経由）
 // -----------------------------------------
 async function resolveMemberNameById(
   _idToken: string,
@@ -148,8 +146,8 @@ async function resolveMemberNameById(
     const member = await repo.getById(id);
     if (!member) return fallback;
 
-    const name =
-      formatLastFirst(member.lastName, member.firstName)?.trim() || id;
+    const name = formatLastFirst(member.lastName, member.firstName)?.trim() || id;
+
     return name || fallback;
   } catch (e) {
     console.error(
@@ -206,7 +204,6 @@ export async function getProductBlueprintDetail(
     createdAt: raw.CreatedAt ?? "",
   };
 
-  // 追加情報の解決
   response.brandName = await fetchBrandNameById(response.brandId ?? "");
   response.assigneeName = await resolveMemberNameById(
     idToken,
@@ -223,7 +220,7 @@ export async function getProductBlueprintDetail(
 }
 
 // -----------------------------------------
-// UPDATE
+// UPDATE（Repository HTTP を使用）
 // -----------------------------------------
 export async function updateProductBlueprint(
   params: UpdateProductBlueprintParams,
@@ -235,7 +232,6 @@ export async function updateProductBlueprint(
 
   if (params.modelNumbers && params.sizes) {
     for (const v of params.modelNumbers) {
-      // ★ implicit any を解消
       const sizeRow = params.sizes.find(
         (s: SizeRow) => s.sizeLabel === v.size,
       );
@@ -255,7 +251,11 @@ export async function updateProductBlueprint(
     }
   }
 
-  return await updateProductBlueprintApi(params, variations);
+  // ⭐ Repository 経由に一本化
+  return await updateProductBlueprintHTTP(params.id, {
+    ...params,
+    variations,
+  } as any);
 }
 
 // -----------------------------------------
