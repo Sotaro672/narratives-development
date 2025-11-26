@@ -246,6 +246,7 @@
   display: flex;
   flex-direction: column;
 }
+
 /* =========================
    閲覧モード（Input を消して文字だけに見せる）
    ========================= */
@@ -266,4 +267,20 @@
 /* input の中のテキストを左寄せ・普通の文字に */
 .pbc.view-mode input {
   -webkit-text-fill-color: var(--pbp-text) !important;
+}
+
+/* =========================================
+   ★ アイテム種別は編集モードでも閲覧モード風に固定
+   （pbc-fit-row の一番左がアイテム種別という前提）
+   ========================================= */
+.pbc .pbc-fit-row > div:first-child .pbc-select-trigger {
+  background: transparent !important;
+  border: none !important;
+  box-shadow: none !important;
+  padding: 0 !important;
+  height: auto !important;
+  min-height: 0 !important;
+  cursor: default !important;
+  pointer-events: none !important;
+  color: var(--pbp-text) !important;
 }

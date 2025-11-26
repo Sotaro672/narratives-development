@@ -2,8 +2,6 @@
 
 import type { ItemType } from "../domain/entity/catalog";
 import type { SizeRow } from "../../../model/src/domain/entity/catalog";
-
-// ⭐ API レイヤーは廃止 → Repository HTTP を使用
 import {
   updateProductBlueprintHTTP,
 } from "../infrastructure/repository/productBlueprintRepositoryHTTP";
@@ -13,7 +11,7 @@ import type {
   UpdateProductBlueprintParams,
   NewModelVariationMeasurements,
   NewModelVariationPayload,
-} from "../infrastructure/api/productBlueprintDetailApi"; // ← 型のみ維持
+} from "../infrastructure/api/productBlueprintDetailApi";
 
 import { auth } from "../../../shell/src/auth/infrastructure/config/firebaseClient";
 import { API_BASE } from "../infrastructure/repository/productBlueprintRepositoryHTTP";

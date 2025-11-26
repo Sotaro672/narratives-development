@@ -1,5 +1,4 @@
 // frontend/console/productBlueprint/src/presentation/hook/useProductBlueprintDetail.tsx
-
 import * as React from "react";
 import { useNavigate, useParams } from "react-router-dom";
 
@@ -14,6 +13,7 @@ import {
 import {
   getProductBlueprintDetail,
   listModelVariationsByProductBlueprintId,
+  updateProductBlueprint, // ★ UPDATE 用
 } from "../../application/productBlueprintDetailService";
 
 import type { Fit, ItemType, WashTagOption } from "../../domain/entity/catalog";
@@ -68,9 +68,7 @@ export interface UseProductBlueprintDetailResult {
 
   onRemoveSize: (id: string) => void;
 
-  onEditAssignee: () => void;
   onClickAssignee: () => void;
-  onClickCreatedBy: () => void;
 }
 
 export function useProductBlueprintDetail(): UseProductBlueprintDetailResult {
@@ -104,6 +102,10 @@ export function useProductBlueprintDetail(): UseProductBlueprintDetailResult {
   const [creator, setCreator] = React.useState("作成者未設定");
   const [createdAt, setCreatedAt] = React.useState("");
 
+  // ★ 追加: サーバに渡すための ID を保持
+  const [brandId, setBrandId] = React.useState<string>("");
+  const [assigneeId, setAssigneeId] = React.useState<string>("");
+
   // ---------------------------------
   // service → 詳細データ + variations を反映
   // ---------------------------------
@@ -131,6 +133,10 @@ export function useProductBlueprintDetail(): UseProductBlueprintDetailResult {
 
         setPageTitle(detail.productName ?? productBlueprintId);
         setProductName(detail.productName ?? "");
+
+        // brandId / assigneeId を state に保持
+        setBrandId(detail.brandId ?? "");
+        setAssigneeId(detail.assigneeId ?? "");
 
         setBrand(
           brandNameFromService ?? brandLabelFromId(detail.brandId),
@@ -343,15 +349,13 @@ export function useProductBlueprintDetail(): UseProductBlueprintDetailResult {
         // assignee
         setAssignee(
           assigneeNameFromService ??
-            detail.assigneeId ??
-            "担当者未設定",
+            detail.assigneeId ?? "担当者未設定",
         );
 
         // creator
         setCreator(
           createdByNameFromService ??
-            detail.createdBy ??
-            "作成者未設定",
+            detail.createdBy ?? "作成者未設定",
         );
 
         setCreatedAt(formatProductBlueprintDate(detail.createdAt) || "");
@@ -378,8 +382,60 @@ export function useProductBlueprintDetail(): UseProductBlueprintDetailResult {
   // Handlers
   // ---------------------------------
   const onSave = React.useCallback(() => {
-    alert("保存しました（ダミー）");
-  }, []);
+    if (!blueprintId) {
+      alert("商品設計ID が不明です");
+      return;
+    }
+
+    // itemType が未選択の場合は一旦ガード
+    if (!itemType) {
+      alert("アイテム種別を選択してください");
+      return;
+    }
+
+    (async () => {
+      try {
+        await updateProductBlueprint({
+          id: blueprintId,
+          productName,
+          itemType: itemType as ItemType,
+          fit,
+          material: materials,
+          weight,
+          qualityAssurance: washTags,
+          productIdTag: productIdTagType
+            ? { type: productIdTagType }
+            : undefined,
+          sizes,
+          modelNumbers,
+          colorRgbMap,
+          // ★ サーバ側で空にされないよう brandId / assigneeId も送る
+          brandId,
+          assigneeId,
+          // updatedBy はバックエンド側でトークンから解決する想定なら省略可
+        } as any);
+
+        alert("保存しました");
+      } catch (e) {
+        console.error("[useProductBlueprintDetail] update failed:", e);
+        alert("保存に失敗しました");
+      }
+    })();
+  }, [
+    blueprintId,
+    productName,
+    itemType,
+    fit,
+    materials,
+    weight,
+    washTags,
+    productIdTagType,
+    sizes,
+    modelNumbers,
+    colorRgbMap,
+    brandId,
+    assigneeId,
+  ]);
 
   const onBack = React.useCallback(() => {
     navigate(-1);
@@ -400,17 +456,9 @@ export function useProductBlueprintDetail(): UseProductBlueprintDetailResult {
     setSizes((prev) => prev.filter((s) => s.id !== id));
   }, []);
 
-  const onEditAssignee = React.useCallback(() => {
-    setAssignee("新担当者");
-  }, []);
-
   const onClickAssignee = React.useCallback(() => {
     console.log("assignee clicked:", assignee);
   }, [assignee]);
-
-  const onClickCreatedBy = React.useCallback(() => {
-    console.log("createdBy clicked:", creator);
-  }, [creator]);
 
   return {
     pageTitle,
@@ -454,8 +502,6 @@ export function useProductBlueprintDetail(): UseProductBlueprintDetailResult {
 
     onRemoveSize,
 
-    onEditAssignee,
     onClickAssignee,
-    onClickCreatedBy,
   };
 }

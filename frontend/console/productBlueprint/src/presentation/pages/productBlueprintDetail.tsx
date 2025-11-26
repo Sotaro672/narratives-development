@@ -41,7 +41,7 @@ export default function ProductBlueprintDetail() {
     // 編集用
     onSave,
     onChangeProductName,
-    onChangeItemType,
+    onChangeItemType, // ← 受け取りは維持（将来用にも残しておく）
     onChangeFit,
     onChangeMaterials,
     onChangeWeight,
@@ -51,7 +51,6 @@ export default function ProductBlueprintDetail() {
     onAddColor,
     onRemoveColor,
     onRemoveSize,
-    onEditAssignee,
     onClickAssignee,
 
     getCode,
@@ -104,7 +103,9 @@ export default function ProductBlueprintDetail() {
           washTags={washTags}
           productIdTag={productIdTag}
           onChangeProductName={editMode ? onChangeProductName : undefined}
-          onChangeItemType={editMode ? onChangeItemType : undefined}
+          // ⭐ アイテム種別は model 変更幅が大きいため、edit モードでも変更不可にする
+          // onChangeItemType は常に渡さない
+          onChangeItemType={undefined}
           onChangeFit={editMode ? onChangeFit : undefined}
           onChangeMaterials={editMode ? onChangeMaterials : undefined}
           onChangeWeight={editMode ? onChangeWeight : undefined}
@@ -143,11 +144,7 @@ export default function ProductBlueprintDetail() {
         assigneeName={assignee}
         createdByName={creator}
         createdAt={createdAt}
-
-        /** ← ★ 追加（最重要） */
         mode={editMode ? "edit" : "view"}
-
-        onEditAssignee={editMode ? onEditAssignee : undefined}
         onClickAssignee={editMode ? onClickAssignee : noop}
       />
     </PageStyle>
