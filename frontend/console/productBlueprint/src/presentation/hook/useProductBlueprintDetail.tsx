@@ -70,6 +70,15 @@ export interface UseProductBlueprintDetailResult {
   onRemoveSize: (id: string) => void;
   /** サイズ追加（SizeVariationCard の「サイズを追加」ボタン用） */
   onAddSize: () => void;
+  /** サイズ 1 行分の変更（SizeVariationCard の各セル編集用） */
+  onChangeSize: (id: string, patch: Partial<Omit<SizeRow, "id">>) => void;
+
+  /** モデルナンバー変更（ModelNumberCard のセル編集用） */
+  onChangeModelNumber: (
+    sizeLabel: string,
+    color: string,
+    nextCode: string,
+  ) => void;
 
   onClickAssignee: () => void;
 }
@@ -472,6 +481,66 @@ export function useProductBlueprintDetail(): UseProductBlueprintDetailResult {
     });
   }, []);
 
+  // ★ サイズ 1 行分の変更
+  const onChangeSize = React.useCallback(
+    (id: string, patch: Partial<Omit<SizeRow, "id">>) => {
+      // 数値項目は 0 未満にならないようにクランプ（create と同じノリ）
+      const safePatch: Partial<Omit<SizeRow, "id">> = { ...patch };
+
+      const clampField = (key: keyof Omit<SizeRow, "id">) => {
+        const v = safePatch[key];
+        if (typeof v === "number") {
+          safePatch[key] = (v < 0 ? 0 : v) as any;
+        }
+      };
+
+      clampField("chest");
+      clampField("waist");
+      clampField("length");
+      clampField("shoulder");
+
+      setSizes((prev) =>
+        prev.map((s) => (s.id === id ? { ...s, ...safePatch } : s)),
+      );
+    },
+    [],
+  );
+
+  // ★ モデルナンバー変更
+  const onChangeModelNumber = React.useCallback(
+    (sizeLabel: string, color: string, nextCode: string) => {
+      setModelNumbers((prev) => {
+        const idx = prev.findIndex(
+          (m) => m.size === sizeLabel && m.color === color,
+        );
+        const trimmed = nextCode.trim();
+
+        // 空文字の場合はエントリを削除（必要に応じてバリデーションで拾う）
+        if (!trimmed) {
+          if (idx === -1) return prev;
+          const copy = [...prev];
+          copy.splice(idx, 1);
+          return copy;
+        }
+
+        const next: ModelNumberRow = {
+          size: sizeLabel,
+          color,
+          code: trimmed,
+        };
+
+        if (idx === -1) {
+          return [...prev, next];
+        }
+
+        const copy = [...prev];
+        copy[idx] = next;
+        return copy;
+      });
+    },
+    [],
+  );
+
   const onClickAssignee = React.useCallback(() => {
     console.log("assignee clicked:", assignee);
   }, [assignee]);
@@ -518,6 +587,8 @@ export function useProductBlueprintDetail(): UseProductBlueprintDetailResult {
 
     onRemoveSize,
     onAddSize,
+    onChangeSize,
+    onChangeModelNumber,
 
     onClickAssignee,
   };

@@ -50,8 +50,15 @@ export default function ProductBlueprintDetail() {
     onChangeColorInput,
     onAddColor,
     onRemoveColor,
-    onAddSize,     // ★ ここで hook から受け取る
+
+    // サイズ操作
+    onAddSize,
     onRemoveSize,
+    onChangeSize,
+
+    // モデルナンバー操作
+    onChangeModelNumber,
+
     onClickAssignee,
 
     getCode,
@@ -127,8 +134,9 @@ export default function ProductBlueprintDetail() {
           mode={editMode ? "edit" : "view"}
           sizes={sizes}
           measurementOptions={measurementOptions}
-          onAddSize={editMode ? onAddSize : undefined}  // ★ prop 名を onAddSize に揃える
+          onAddSize={editMode ? onAddSize : undefined}
           onRemove={editMode ? onRemoveSize : noop}
+          onChangeSize={editMode ? onChangeSize : undefined}
         />
 
         <ModelNumberCard
@@ -136,6 +144,7 @@ export default function ProductBlueprintDetail() {
           sizes={sizes}
           colors={colors}
           getCode={getCode}
+          onChangeModelNumber={editMode ? onChangeModelNumber : undefined}
         />
       </div>
 
