@@ -159,7 +159,6 @@
   font-size: 12px;
 }
 
-/* Misc */
 .suffix {
   display: inline-flex;
   align-items: center;
@@ -172,219 +171,99 @@
   color: var(--pbp-text-dim);
 }
 
-.pill {
-  height: 40px;
-  display: inline-flex;
-  align-items: center;
-  padding: 0 12px;
-  border-radius: 10px;
-  border: 1px solid var(--pbp-border-soft);
-  background: var(--pbp-muted-bg);
-  color: var(--pbp-text-dim);
-}
-
-/* 基本情報カード（ProductBlueprintCard） */
-
+/* Product Blueprint Card */
 .pbc {
   width: 100%;
-  background: var(--pbp-surface, #ffffff);
-  border: 1px solid var(--pbp-border, rgba(0, 0, 0, 0.08));
+  background: var(--pbp-surface);
+  border: 1px solid var(--pbp-border);
   border-radius: 18px;
-  box-shadow: 0 2px 4px rgba(15, 23, 42, 0.03);
-  box-sizing: border-box;
   overflow: hidden;
+  box-shadow: 0 2px 4px rgba(15, 23, 42, 0.03);
 }
-
-/* Header */
 
 .pbc .box__header {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 16px 20px;
-  border-bottom: 1px solid var(--pbp-border, rgba(0, 0, 0, 0.06));
+  border-bottom: 1px solid var(--pbp-border-soft);
 }
 
-.pbc .box__title {
-  font-size: 0.95rem;
-  font-weight: 600;
-  color: var(--pbp-text-dim, rgba(0, 0, 0, 0.7));
-}
-
-/* Body */
-
-.pbc .box__body {
-  padding: 20px;
-}
-
-.pbc .label {
-  font-size: 12px;
-  color: var(--pbp-text-soft, rgba(0, 0, 0, 0.6));
-  margin-bottom: 6px;
-  margin-top: 12px;
-}
-
-/* すべての input / textarea はカード幅いっぱい */
-
-.pbc .box__body input,
-.pbc .box__body textarea {
+.pbc .box__body input {
   width: 100%;
-  box-sizing: border-box;
 }
 
-/* =========================
-   編集モード
-   ========================= */
-
-.pbc:not(.view-mode) .box__body input:not([readonly]),
-.pbc:not(.view-mode) .box__body textarea:not([readonly]) {
-  padding: 10px 14px;
-  min-height: 40px;
-  border-radius: 10px;
-  background: #f6f7f9;
-  border: 1px solid rgba(0, 0, 0, 0.12);
-  color: var(--pbp-text, rgba(0, 0, 0, 0.86));
-}
-
+/* 編集モード */
 .pbc:not(.view-mode) .pbc-select-trigger {
   padding: 10px 14px;
   width: 100%;
   border-radius: 10px;
   background: #f6f7f9;
-  border: 1px solid rgba(0, 0, 0, 0.12);
-  color: var(--pbp-text, rgba(0, 0, 0, 0.86));
-  box-shadow: none;
+  border: 1px solid rgba(0,0,0,0.12);
 }
 
-.pbc:not(.view-mode) .suffix {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  height: 40px;
-  padding: 0 12px;
-  margin-left: 4px;
-  border-radius: 10px;
-  background: #f6f7f9;
-  border: 1px solid rgba(15, 23, 42, 0.3);
-  color: var(--pbp-text-soft, rgba(0, 0, 0, 0.6));
-}
-
-/* =========================
-   閲覧モード
-   ========================= */
-
-.pbc.view-mode .box__body input,
-.pbc.view-mode .box__body textarea {
-  padding: 10px 14px;
-  min-height: 40px;
-  border-radius: 10px;
+/* 閲覧モード */
+.pbc.view-mode .pbc-select-trigger {
   background: #ffffff !important;
   border-color: #ffffff !important;
-  box-shadow: none !important;
-  color: var(--pbp-text, rgba(0, 0, 0, 0.86)) !important;
 }
 
-.pbc.view-mode .pbc-select-trigger,
-.pbc.view-mode .suffix {
-  background: #ffffff !important;
-  border-color: #ffffff !important;
-  box-shadow: none !important;
-  color: var(--pbp-text, rgba(0, 0, 0, 0.86)) !important;
+/* ---------------------------
+   ★ アイテム種別 / フィット / 商品IDタグ（横一列）
+---------------------------- */
+
+.pbc-fit-row {
+  display: flex !important;
+  gap: 16px;
+  margin: 16px 0;
 }
 
-.pbc.view-mode .bg-muted,
-.pbc.view-mode .bg-slate-50,
-.pbc.view-mode .border-muted,
-.pbc.view-mode .border-slate-200 {
-  background-color: #ffffff !important;
-  border-color: #ffffff !important;
-  box-shadow: none !important;
+.pbc-fit-row > div {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
 }
 
-/* =========================
-   チップ・ボタンなど
-   ========================= */
+/* モバイルは縦並び */
+@media (max-width: 768px) {
+  .pbc-fit-row {
+    flex-direction: column;
+  }
+}
 
+/* 品質保証 */
 .pbc .chips {
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
-  margin-bottom: 8px;
 }
 
-.pbc .chip {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  height: 28px;
-  padding: 0 8px;
-  border-radius: 999px;
-  background: var(--pbp-chip-bg, #eff6ff);
-  color: var(--pbp-chip-fg, #1d4ed8);
-  font-size: 12px;
-}
-
-.pbc .chip-remove {
-  background: transparent;
-  border: none;
-  cursor: pointer;
-  display: inline-flex;
-  align-items: center;
-  padding: 0;
-}
-
-.pbc .btn {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 6px;
-  height: 36px;
-  padding: 0 12px;
-  border-radius: 10px;
-  border: 1px solid var(--pbp-border, rgba(0, 0, 0, 0.12));
-  background: var(--pbp-surface, #ffffff);
-  color: var(--pbp-text, rgba(0, 0, 0, 0.86));
-  cursor: pointer;
-  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.06);
-}
-
-.pbc .btn:hover {
-  background: var(--pbp-muted-bg, rgba(0, 0, 0, 0.03));
-}
-
-/* フィット / 商品IDタグ 横並び */
-.pbc .pbc-fit-row {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 16px;
-}
-
-@media (max-width: 768px) {
-  .pbc .pbc-fit-row {
-    grid-template-columns: 1fr;
-  }
-}
-
-/* ============================
-   ★ 品質保証ポップオーバー（カテゴリ横並び）
-   ============================ */
-
+/* ポップオーバー */
 .pbc .wash-popover {
   display: flex;
   flex-direction: row;
-  align-items: flex-start;
   gap: 24px;
 }
 
 .pbc .wash-popover-column {
   display: flex;
   flex-direction: column;
-  gap: 4px;
+}
+/* =========================
+   閲覧モード（Input を消して文字だけに見せる）
+   ========================= */
+.pbc.view-mode input,
+.pbc.view-mode .pbc-select-trigger,
+.pbc.view-mode .suffix {
+  background: transparent !important;
+  border: none !important;
+  box-shadow: none !important;
+  padding: 0 !important;
+  height: auto !important;
+  min-height: 0 !important;
+  cursor: default !important;
+  pointer-events: none !important;
+  color: var(--pbp-text) !important;
 }
 
-.pbc .wash-popover-column-title {
-  font-size: 12px;
-  font-weight: 600;
-  color: var(--pbp-text-soft);
-  margin-bottom: 4px;
+/* input の中のテキストを左寄せ・普通の文字に */
+.pbc.view-mode input {
+  -webkit-text-fill-color: var(--pbp-text) !important;
 }

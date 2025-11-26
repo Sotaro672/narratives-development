@@ -25,30 +25,27 @@ export type AdminAssigneeCandidate = {
 };
 
 export type AdminCardProps = {
-  // タイトル
   title?: string;
 
-  // 表示中の担当者名（画面表示用のみ）
   assigneeName?: string;
 
-  // 担当者候補一覧
   assigneeCandidates?: AdminAssigneeCandidate[];
   loadingMembers?: boolean;
 
-  // ポップオーバー開閉制御
   openAssigneePopover?: boolean;
   setOpenAssigneePopover?: (v: boolean) => void;
   onSelectAssignee?: (id: string) => void;
 
-  // 作成 / 更新情報
   createdByName?: string | null;
   createdAt?: string | null;
   updatedByName?: string | null;
   updatedAt?: string | null;
 
-  // 各種コールバック
   onEditAssignee?: () => void;
   onClickAssignee?: () => void;
+
+  /** ← ★ 追加 */
+  mode?: "edit" | "view";
 };
 
 export const AdminCard: React.FC<AdminCardProps> = ({
@@ -68,8 +65,14 @@ export const AdminCard: React.FC<AdminCardProps> = ({
 
   onEditAssignee,
   onClickAssignee,
+
+  mode = "edit", // ★ 追加（デフォルト＝edit）
 }) => {
+  const isEdit = mode === "edit";
+
   const handleTriggerClick = () => {
+    if (!isEdit) return;
+
     onClickAssignee?.();
     onEditAssignee?.();
 
@@ -79,8 +82,8 @@ export const AdminCard: React.FC<AdminCardProps> = ({
   };
 
   const handleSelect = (id: string) => {
+    if (!isEdit) return;
     onSelectAssignee?.(id);
-    // Popover の open/close は親側に任せる
   };
 
   return (
@@ -96,53 +99,62 @@ export const AdminCard: React.FC<AdminCardProps> = ({
             担当者
           </div>
 
-          <Popover>
-            <PopoverTrigger>
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                className="w-full justify-between admin-card__assignee-btn"
-                onClick={handleTriggerClick}
-              >
-                {/* ▼ ここで assigneeId ではなく assigneeName を表示 */}
-                <span>{assigneeName || "未設定"}</span>
-                <span className="text-[11px] text-slate-400" />
-              </Button>
-            </PopoverTrigger>
+          {/* ▼▼▼ view モード：文字列だけ表示 ▼▼▼ */}
+          {!isEdit && (
+            <div className="text-sm text-slate-800 py-1">
+              {assigneeName || "未設定"}
+            </div>
+          )}
 
-            <PopoverContent className="p-2 space-y-1 admin-card__popover">
-              {loadingMembers && (
-                <p className="text-xs text-slate-400">
-                  担当者を読み込み中です…
-                </p>
-              )}
+          {/* ▼▼▼ edit モード：従来どおりポップオーバー付き ▼▼▼ */}
+          {isEdit && (
+            <Popover>
+              <PopoverTrigger>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="w-full justify-between admin-card__assignee-btn"
+                  onClick={handleTriggerClick}
+                >
+                  <span>{assigneeName || "未設定"}</span>
+                  <span className="text-[11px] text-slate-400" />
+                </Button>
+              </PopoverTrigger>
 
-              {!loadingMembers &&
-                assigneeCandidates &&
-                assigneeCandidates.length > 0 && (
-                  <div className="space-y-1">
-                    {assigneeCandidates.map((c) => (
-                      <button
-                        key={c.id}
-                        type="button"
-                        className="block w-full text-left px-2 py-1 rounded hover:bg-slate-100 text-sm"
-                        onClick={() => handleSelect(c.id)}
-                      >
-                        {c.name}
-                      </button>
-                    ))}
-                  </div>
-                )}
-
-              {!loadingMembers &&
-                (!assigneeCandidates || assigneeCandidates.length === 0) && (
+              <PopoverContent className="p-2 space-y-1 admin-card__popover">
+                {loadingMembers && (
                   <p className="text-xs text-slate-400">
-                    担当者候補がありません。
+                    担当者を読み込み中です…
                   </p>
                 )}
-            </PopoverContent>
-          </Popover>
+
+                {!loadingMembers &&
+                  assigneeCandidates &&
+                  assigneeCandidates.length > 0 && (
+                    <div className="space-y-1">
+                      {assigneeCandidates.map((c) => (
+                        <button
+                          key={c.id}
+                          type="button"
+                          className="block w-full text-left px-2 py-1 rounded hover:bg-slate-100 text-sm"
+                          onClick={() => handleSelect(c.id)}
+                        >
+                          {c.name}
+                        </button>
+                      ))}
+                    </div>
+                  )}
+
+                {!loadingMembers &&
+                  (!assigneeCandidates || assigneeCandidates.length === 0) && (
+                    <p className="text-xs text-slate-400">
+                      担当者候補がありません。
+                    </p>
+                  )}
+              </PopoverContent>
+            </Popover>
+          )}
         </div>
 
         {/* 作成 / 更新情報 */}

@@ -89,7 +89,6 @@ export default function ProductBlueprintDetail() {
       onSave={editMode ? handleSave : undefined}
       onEdit={!editMode ? () => setEditMode(true) : undefined}
       onDelete={editMode ? handleDelete : undefined}
-      // ★ 追加：編集中のみキャンセルボタンを表示
       onCancel={editMode ? () => setEditMode(false) : undefined}
     >
       {/* --- 左ペイン --- */}
@@ -144,6 +143,10 @@ export default function ProductBlueprintDetail() {
         assigneeName={assignee}
         createdByName={creator}
         createdAt={createdAt}
+
+        /** ← ★ 追加（最重要） */
+        mode={editMode ? "edit" : "view"}
+
         onEditAssignee={editMode ? onEditAssignee : undefined}
         onClickAssignee={editMode ? onClickAssignee : noop}
       />

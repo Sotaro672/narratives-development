@@ -140,7 +140,7 @@ export function useAdminCard(): UseAdminCardResult {
 
   return {
     assigneeId,
-    assigneeName,          // ← 表示専用
+    assigneeName,
     assigneeCandidates,
     loadingMembers,
     openAssigneePopover,

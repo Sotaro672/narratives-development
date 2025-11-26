@@ -7,12 +7,11 @@ import AdminCard from "../../../../admin/src/presentation/components/AdminCard";
 // 閲覧モードで呼び出す対象
 import ProductBlueprintCard from "../../../../productBlueprint/src/presentation/components/productBlueprintCard";
 import ColorVariationCard from "../../../../model/src/presentation/components/ColorVariationCard";
-import SizeVariationCard, {
-  type SizeRow,
-} from "../../../../model/src/presentation/components/SizeVariationCard";
-import ModelNumberCard, {
-  type ModelNumber,
-} from "../../../../model/src/presentation/components/ModelNumberCard";
+import SizeVariationCard from "../../../../model/src/presentation/components/SizeVariationCard";
+import ModelNumberCard from "../../../../model/src/presentation/components/ModelNumberCard";
+
+// サイズ型は model ドメインから取得
+import type { SizeRow } from "../../../../model/src/domain/entity/catalog";
 
 // 生産数カード（編集モードで使用）
 import ProductionQuantityCard, {
@@ -64,8 +63,8 @@ export default function ProductionDetail() {
     { id: "3", sizeLabel: "L", chest: 52, waist: 62, length: 64, shoulder: 42 },
   ]);
 
-  // モデルナンバー
-  const [modelNumbers] = React.useState<ModelNumber[]>([
+  // モデルナンバー（型は useState の初期値から推論させる）
+  const [modelNumbers] = React.useState([
     { size: "S", color: "ホワイト", code: "LM-SB-S-WHT" },
     { size: "S", color: "ブラック", code: "MN-001" },
     { size: "S", color: "ネイビー", code: "MN-001" },
@@ -76,6 +75,17 @@ export default function ProductionDetail() {
     { size: "L", color: "ブラック", code: "LM-SB-L-BLK" },
     { size: "L", color: "ネイビー", code: "LM-SB-L-NVY" },
   ]);
+
+  // ModelNumberCard 用：size × color → code 取得関数
+  const getCode = React.useCallback(
+    (sizeLabel: string, color: string): string => {
+      const row = modelNumbers.find(
+        (m) => m.size === sizeLabel && m.color === color,
+      );
+      return row?.code ?? "";
+    },
+    [modelNumbers],
+  );
 
   // 管理情報
   const [assignee, setAssignee] = React.useState("佐藤 美咲");
@@ -203,7 +213,7 @@ export default function ProductionDetail() {
           mode="view"
           sizes={sizes}
           colors={colors}
-          modelNumbers={modelNumbers}
+          getCode={getCode}
         />
 
         {/* 生産数：編集モード */}
@@ -237,7 +247,6 @@ export default function ProductionDetail() {
         createdAt={createdAt}
         onEditAssignee={() => setAssignee("新担当者")}
         onClickAssignee={() => console.log("assignee clicked:", assignee)}
-        onClickCreatedBy={() => console.log("createdBy clicked:", creator)}
       />
     </PageStyle>
   );
