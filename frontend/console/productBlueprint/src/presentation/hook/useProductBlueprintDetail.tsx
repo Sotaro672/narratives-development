@@ -66,7 +66,10 @@ export interface UseProductBlueprintDetailResult {
   onAddColor: () => void;
   onRemoveColor: (name: string) => void;
 
+  /** サイズ削除 */
   onRemoveSize: (id: string) => void;
+  /** サイズ追加（SizeVariationCard の「サイズを追加」ボタン用） */
+  onAddSize: () => void;
 
   onClickAssignee: () => void;
 }
@@ -138,9 +141,7 @@ export function useProductBlueprintDetail(): UseProductBlueprintDetailResult {
         setBrandId(detail.brandId ?? "");
         setAssigneeId(detail.assigneeId ?? "");
 
-        setBrand(
-          brandNameFromService ?? brandLabelFromId(detail.brandId),
-        );
+        setBrand(brandNameFromService ?? brandLabelFromId(detail.brandId));
 
         setItemType(itemTypeFromDetail ?? "");
         setFit((detail.fit as Fit) ?? ("" as Fit));
@@ -253,12 +254,11 @@ export function useProductBlueprintDetail(): UseProductBlueprintDetailResult {
                   base.lengthTop = lenVal; // alias も保持
                 }
 
-                const chestVal =
-                  ms["身幅"] ?? ms["胸囲"] ?? undefined;
+                const chestVal = ms["身幅"] ?? ms["胸囲"] ?? undefined;
                 if (chestVal != null) {
-                  base.chest = chestVal;      // 正規フィールド
-                  base.bust = chestVal;       // 胸囲 alias
-                  base.bodyWidth = chestVal;  // 旧フィールド alias
+                  base.chest = chestVal; // 正規フィールド
+                  base.bust = chestVal; // 胸囲 alias
+                  base.bodyWidth = chestVal; // 旧フィールド alias
                 }
 
                 const shoulderVal = ms["肩幅"] ?? undefined;
@@ -277,13 +277,10 @@ export function useProductBlueprintDetail(): UseProductBlueprintDetailResult {
             return base as SizeRow;
           });
 
-          console.log(
-            "[useProductBlueprintDetail] sizeRows from measurements:",
-            {
-              itemType: itemTypeFromDetail,
-              sizeRows,
-            },
-          );
+          console.log("[useProductBlueprintDetail] sizeRows from measurements:", {
+            itemType: itemTypeFromDetail,
+            sizeRows,
+          });
 
           setSizes(sizeRows);
 
@@ -348,14 +345,12 @@ export function useProductBlueprintDetail(): UseProductBlueprintDetailResult {
 
         // assignee
         setAssignee(
-          assigneeNameFromService ??
-            detail.assigneeId ?? "担当者未設定",
+          assigneeNameFromService ?? detail.assigneeId ?? "担当者未設定",
         );
 
         // creator
         setCreator(
-          createdByNameFromService ??
-            detail.createdBy ?? "作成者未設定",
+          createdByNameFromService ?? detail.createdBy ?? "作成者未設定",
         );
 
         setCreatedAt(formatProductBlueprintDate(detail.createdAt) || "");
@@ -456,6 +451,27 @@ export function useProductBlueprintDetail(): UseProductBlueprintDetailResult {
     setSizes((prev) => prev.filter((s) => s.id !== id));
   }, []);
 
+  // ★ サイズ追加: 新しい空行を 1 行追加
+  const onAddSize = React.useCallback(() => {
+    setSizes((prev) => {
+      // 既存 id の最大値 + 1 を採番（数字でない id があっても安全側に倒す）
+      const nextNum =
+        prev.reduce((max, row) => {
+          const n = Number(row.id);
+          if (Number.isNaN(n)) return max;
+          return n > max ? n : max;
+        }, 0) + 1;
+
+      const next: SizeRow = {
+        id: String(nextNum),
+        sizeLabel: "",
+        // 他のフィールド(length, chest, ...) は undefined のままで OK
+      } as SizeRow;
+
+      return [...prev, next];
+    });
+  }, []);
+
   const onClickAssignee = React.useCallback(() => {
     console.log("assignee clicked:", assignee);
   }, [assignee]);
@@ -501,6 +517,7 @@ export function useProductBlueprintDetail(): UseProductBlueprintDetailResult {
     onRemoveColor,
 
     onRemoveSize,
+    onAddSize,
 
     onClickAssignee,
   };

@@ -4,7 +4,6 @@ package handlers
 import (
 	"encoding/json"
 	"errors"
-	"log"
 	"net/http"
 	"strings"
 
@@ -72,6 +71,18 @@ func (h *ModelHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 		w.WriteHeader(http.StatusNotFound)
 		_ = json.NewEncoder(w).Encode(map[string]string{"error": "not_found"})
+		return
+
+	// ------------------------------------------------------------
+	// PUT /models/{id}
+	//   → ModelUsecase.UpdateModelVariation
+	// ------------------------------------------------------------
+	case r.Method == http.MethodPut &&
+		strings.HasPrefix(r.URL.Path, "/models/"):
+
+		id := strings.TrimPrefix(r.URL.Path, "/models/")
+		id = strings.TrimSpace(id)
+		h.updateVariation(w, r, id)
 		return
 
 	// ------------------------------------------------------------
@@ -146,18 +157,6 @@ func (h *ModelHandler) createVariation(w http.ResponseWriter, r *http.Request, p
 		return
 	}
 
-	// ログ: フロントから渡ってきた値を確認
-	log.Printf(
-		"[ModelHandler] createVariation productBlueprintID(path)=%s, body.productBlueprintId=%s, modelNumber=%s, size=%s, color=%s, rgb=%d, measurements=%v",
-		productBlueprintID,
-		req.ProductBlueprintID,
-		req.ModelNumber,
-		req.Size,
-		req.Color,
-		req.RGB,
-		req.Measurements,
-	)
-
 	// frontend から来る measurements(map[string]float64) → domain 側の map[string]int へ変換
 	ms := make(modeldom.Measurements)
 	for k, v := range req.Measurements {
@@ -180,17 +179,70 @@ func (h *ModelHandler) createVariation(w http.ResponseWriter, r *http.Request, p
 		Measurements: ms,
 	}
 
-	// ログ: NewModelVariation に values が詰め替えられているか確認
-	log.Printf("[ModelHandler] createVariation NewModelVariation=%+v", newVar)
-
 	mv, err := h.uc.CreateModelVariation(ctx, newVar)
 	if err != nil {
-		log.Printf("[ModelHandler] error: %v", err)
 		writeModelErr(w, err)
 		return
 	}
 
 	w.WriteHeader(http.StatusCreated)
+	_ = json.NewEncoder(w).Encode(mv)
+}
+
+// PUT /models/{id}
+//
+// Request Body: createModelVariationRequest JSON と同等の形式を想定
+// Response    : 更新された ModelVariation を JSON で返す
+func (h *ModelHandler) updateVariation(w http.ResponseWriter, r *http.Request, id string) {
+	ctx := r.Context()
+
+	id = strings.TrimSpace(id)
+	if id == "" {
+		w.WriteHeader(http.StatusBadRequest)
+		_ = json.NewEncoder(w).Encode(map[string]string{"error": "invalid id"})
+		return
+	}
+
+	var req createModelVariationRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		w.WriteHeader(http.StatusBadRequest)
+		_ = json.NewEncoder(w).Encode(map[string]string{"error": "invalid json"})
+		return
+	}
+
+	// frontend から来る measurements(map[string]float64) → domain 側の map[string]int へ変換
+	ms := make(modeldom.Measurements)
+	for k, v := range req.Measurements {
+		key := strings.TrimSpace(k)
+		if key == "" {
+			continue
+		}
+		ms[key] = int(v)
+	}
+
+	// ★ ポインタフィールドに合わせてローカル変数を用意
+	modelNumber := strings.TrimSpace(req.ModelNumber)
+	size := strings.TrimSpace(req.Size)
+	color := modeldom.Color{
+		Name: strings.TrimSpace(req.Color),
+		RGB:  req.RGB,
+	}
+
+	// Update 用のコマンド（ModelVariationUpdate に合わせる）
+	updates := modeldom.ModelVariationUpdate{
+		ModelNumber:  &modelNumber,
+		Size:         &size,
+		Color:        &color,
+		Measurements: ms,
+	}
+
+	mv, err := h.uc.UpdateModelVariation(ctx, id, updates)
+	if err != nil {
+		writeModelErr(w, err)
+		return
+	}
+
+	w.WriteHeader(http.StatusOK)
 	_ = json.NewEncoder(w).Encode(mv)
 }
 

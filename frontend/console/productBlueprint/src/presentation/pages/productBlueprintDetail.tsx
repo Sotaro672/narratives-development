@@ -41,7 +41,7 @@ export default function ProductBlueprintDetail() {
     // 編集用
     onSave,
     onChangeProductName,
-    onChangeItemType, // ← 受け取りは維持（将来用にも残しておく）
+    onChangeItemType, // ← 将来用に hook からは受け取るが…
     onChangeFit,
     onChangeMaterials,
     onChangeWeight,
@@ -50,6 +50,7 @@ export default function ProductBlueprintDetail() {
     onChangeColorInput,
     onAddColor,
     onRemoveColor,
+    onAddSize,     // ★ ここで hook から受け取る
     onRemoveSize,
     onClickAssignee,
 
@@ -103,8 +104,7 @@ export default function ProductBlueprintDetail() {
           washTags={washTags}
           productIdTag={productIdTag}
           onChangeProductName={editMode ? onChangeProductName : undefined}
-          // ⭐ アイテム種別は model 変更幅が大きいため、edit モードでも変更不可にする
-          // onChangeItemType は常に渡さない
+          // ⭐ アイテム種別は model 変更幅が大きいため、edit モードでも変更不可
           onChangeItemType={undefined}
           onChangeFit={editMode ? onChangeFit : undefined}
           onChangeMaterials={editMode ? onChangeMaterials : undefined}
@@ -127,6 +127,7 @@ export default function ProductBlueprintDetail() {
           mode={editMode ? "edit" : "view"}
           sizes={sizes}
           measurementOptions={measurementOptions}
+          onAddSize={editMode ? onAddSize : undefined}  // ★ prop 名を onAddSize に揃える
           onRemove={editMode ? onRemoveSize : noop}
         />
 
