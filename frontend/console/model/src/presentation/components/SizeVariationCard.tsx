@@ -131,13 +131,14 @@ const SizeVariationCard: React.FC<SizeVariationCardProps> = ({
           </CardTitle>
         </div>
 
-        {isEdit && onAddSize && (
+        {/* ★ edit モードのときだけボタンを表示（onAddSize は任意） */}
+        {isEdit && (
           <Button
             type="button"
             size="sm"
             variant="outline"
             className="ml-auto"
-            onClick={onAddSize}
+            onClick={() => onAddSize?.()}
           >
             サイズを追加
           </Button>
