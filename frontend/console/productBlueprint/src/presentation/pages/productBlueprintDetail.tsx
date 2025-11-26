@@ -8,6 +8,10 @@ import SizeVariationCard from "../../../../model/src/presentation/components/Siz
 import ModelNumberCard from "../../../../model/src/presentation/components/ModelNumberCard";
 import { useProductBlueprintDetail } from "../hook/useProductBlueprintDetail";
 
+// ItemType / 採寸オプションを productBlueprint の catalog から利用
+import type { ItemType } from "../../domain/entity/catalog";
+import { ITEM_TYPE_MEASUREMENT_OPTIONS } from "../../domain/entity/catalog";
+
 export default function ProductBlueprintDetail() {
   const {
     pageTitle,
@@ -25,6 +29,7 @@ export default function ProductBlueprintDetail() {
     colorInput,
     sizes,
     modelNumbers,
+    colorRgbMap,
 
     assignee,
     creator,
@@ -67,10 +72,28 @@ export default function ProductBlueprintDetail() {
     colorInput,
     sizes,
     modelNumbers,
+    colorRgbMap,
     assignee,
     creator,
     createdAt,
   });
+
+  // models（color / size / modelNumber）の専用ログ
+  console.log("[ProductBlueprintDetail] models debug:", {
+    colors,
+    sizes,
+    modelNumbers,
+    colorRgbMap,
+  });
+
+  // itemType を ItemType | undefined に正規化
+  const normalizedItemType = (itemType || undefined) as ItemType | undefined;
+
+  // アイテム種別に応じた採寸オプション
+  const measurementOptions =
+    normalizedItemType != null
+      ? ITEM_TYPE_MEASUREMENT_OPTIONS[normalizedItemType]
+      : undefined;
 
   return (
     <PageStyle
@@ -85,7 +108,7 @@ export default function ProductBlueprintDetail() {
           mode="edit"
           productName={productName}
           brand={brand}
-          itemType={itemType || undefined}
+          itemType={normalizedItemType}
           fit={fit}
           materials={materials}
           weight={weight}
@@ -108,6 +131,8 @@ export default function ProductBlueprintDetail() {
           onChangeColorInput={onChangeColorInput}
           onAddColor={onAddColor}
           onRemoveColor={onRemoveColor}
+          // Firestore から復元した RGB(HEX) をテーブルに反映
+          colorRgbMap={colorRgbMap}
         />
 
         {/* ★ size variations from backend */}
@@ -115,6 +140,7 @@ export default function ProductBlueprintDetail() {
           mode="edit"
           sizes={sizes}
           onRemove={onRemoveSize}
+          measurementOptions={measurementOptions}
         />
 
         {/* ★ モデルナンバー（size × color × code） */}

@@ -42,7 +42,7 @@ export interface UseProductBlueprintDetailResult {
   sizes: SizeRow[];
   modelNumbers: ModelNumberRow[];
 
-  /** color 名 → HEX(RGB) のマップ（例: { "グリーン": "#00ff00" }） */
+  /** color 名 → rgb hex (#rrggbb) */
   colorRgbMap: Record<string, string>;
 
   getCode: (sizeLabel: string, color: string) => string;
@@ -96,8 +96,6 @@ export function useProductBlueprintDetail(): UseProductBlueprintDetailResult {
   const [colors, setColors] = React.useState<string[]>([]);
   const [sizes, setSizes] = React.useState<SizeRow[]>([]);
   const [modelNumbers, setModelNumbers] = React.useState<ModelNumberRow[]>([]);
-
-  // Color.Name / color.rgb を HEX(#rrggbb) にして保持
   const [colorRgbMap, setColorRgbMap] = React.useState<Record<string, string>>(
     {},
   );
@@ -129,6 +127,7 @@ export function useProductBlueprintDetail(): UseProductBlueprintDetailResult {
           | undefined;
 
         const productBlueprintId = detail.id ?? blueprintId;
+        const itemTypeFromDetail = detail.itemType as ItemType;
 
         setPageTitle(detail.productName ?? productBlueprintId);
         setProductName(detail.productName ?? "");
@@ -137,7 +136,7 @@ export function useProductBlueprintDetail(): UseProductBlueprintDetailResult {
           brandNameFromService ?? brandLabelFromId(detail.brandId),
         );
 
-        setItemType((detail.itemType as ItemType) ?? "");
+        setItemType(itemTypeFromDetail ?? "");
         setFit((detail.fit as Fit) ?? ("" as Fit));
 
         setMaterials(detail.material ?? "");
@@ -162,55 +161,147 @@ export function useProductBlueprintDetail(): UseProductBlueprintDetailResult {
             variations,
           );
 
-          // colors: variation.color.name のユニーク集合
+          const varsAny = variations as any[];
+
+          // -------------------------------
+          // colors（Color.Name / color.name）
+          // -------------------------------
           const uniqueColors = Array.from(
             new Set(
-              variations
-                .map((v) => v.color?.name?.trim())
-                .filter((c): c is string => !!c),
+              varsAny
+                .map((v) => {
+                  const nm =
+                    typeof v.color?.name === "string"
+                      ? v.color.name
+                      : typeof v.Color?.Name === "string"
+                        ? v.Color.Name
+                        : "";
+                  return nm.trim();
+                })
+                .filter((c: string) => !!c),
             ),
           );
           setColors(uniqueColors);
 
-          // サイズ: variation.size のユニーク集合
+          // -------------------------------
+          // sizes（Size / size）+ measurements を反映
+          // -------------------------------
           const uniqueSizes = Array.from(
             new Set(
-              variations
-                .map((v) => v.size?.trim())
-                .filter((s): s is string => !!s),
+              varsAny
+                .map((v) => {
+                  const sz =
+                    typeof v.size === "string"
+                      ? v.size
+                      : typeof v.Size === "string"
+                        ? v.Size
+                        : "";
+                  return sz.trim();
+                })
+                .filter((s: string) => !!s),
             ),
           );
 
-          const sizeRows: SizeRow[] = uniqueSizes.map((label, index) => ({
-            id: String(index + 1),
-            sizeLabel: label,
-          })) as SizeRow[];
+          const sizeRows: SizeRow[] = uniqueSizes.map((label, index) => {
+            // any ベースで組み立ててから SizeRow にキャストする
+            const base: any = {
+              id: String(index + 1),
+              sizeLabel: label,
+            };
+
+            // 該当サイズの最初の variation
+            const found = varsAny.find((v) => {
+              const sz =
+                typeof v.size === "string"
+                  ? v.size
+                  : typeof v.Size === "string"
+                    ? v.Size
+                    : "";
+              return sz.trim() === label;
+            });
+
+            const ms: Record<string, number | null> | undefined =
+              found?.measurements ?? found?.Measurements;
+
+            if (ms && typeof ms === "object") {
+              if (itemTypeFromDetail === "ボトムス") {
+                // ボトムス用: Firestore の日本語キー → base.* にマッピング
+                base.waist = ms["ウエスト"] ?? undefined;
+                base.hip = ms["ヒップ"] ?? undefined;
+                base.rise = ms["股上"] ?? undefined;
+                base.inseam = ms["股下"] ?? undefined;
+                base.thighWidth = ms["わたり幅"] ?? undefined;
+                base.hemWidth = ms["裾幅"] ?? undefined;
+              } else {
+                // デフォルト（トップス）
+                base.length = ms["着丈"] ?? undefined;
+                base.bodyWidth = ms["身幅"] ?? undefined;
+                base.shoulder = ms["肩幅"] ?? undefined;
+                base.sleeve = ms["袖丈"] ?? undefined;
+              }
+            }
+
+            return base as SizeRow;
+          });
+
+          console.log(
+            "[useProductBlueprintDetail] sizeRows from measurements:",
+            {
+              itemType: itemTypeFromDetail,
+              sizeRows,
+            },
+          );
+
           setSizes(sizeRows);
 
-          // modelNumbers: size × color ごとのコード
-          const modelNumberRows: ModelNumberRow[] = variations.map((v) => ({
-            size: v.size,
-            color: v.color?.name ?? "",
-            code: v.modelNumber,
-          }));
+          // -------------------------------
+          // modelNumbers（ModelNumber / modelNumber）
+          // -------------------------------
+          const modelNumberRows: ModelNumberRow[] = varsAny.map((v) => {
+            const size =
+              (typeof v.size === "string"
+                ? v.size
+                : (v.Size as string | undefined)) ?? "";
+
+            const color =
+              (typeof v.color?.name === "string"
+                ? v.color.name
+                : (v.Color?.Name as string | undefined)) ?? "";
+
+            const code =
+              (typeof v.modelNumber === "string"
+                ? v.modelNumber
+                : (v.ModelNumber as string | undefined)) ?? "";
+
+            return { size, color, code } as ModelNumberRow;
+          });
           setModelNumbers(modelNumberRows);
 
-          // colorRgbMap: Color.rgb(number) → HEX(#rrggbb)
-          const nextColorRgbMap: Record<string, string> = {};
-          for (const v of variations) {
-            const name = v.color?.name?.trim();
-            const rgb = v.color?.rgb;
-            if (!name || typeof rgb !== "number") continue;
+          // -------------------------------
+          // colorRgbMap（rgb int → #rrggbb）
+          // -------------------------------
+          const rgbMap: Record<string, string> = {};
+          varsAny.forEach((v) => {
+            const name =
+              (typeof v.color?.name === "string"
+                ? v.color.name
+                : (v.Color?.Name as string | undefined)) ?? "";
 
-            const hex =
-              "#" +
-              rgb
-                .toString(16)
-                .padStart(6, "0")
-                .toLowerCase();
-            nextColorRgbMap[name] = hex;
-          }
-          setColorRgbMap(nextColorRgbMap);
+            const rgbVal =
+              typeof v.color?.rgb === "number"
+                ? v.color.rgb
+                : typeof v.Color?.RGB === "number"
+                  ? v.Color.RGB
+                  : undefined;
+
+            if (name && typeof rgbVal === "number") {
+              const hex =
+                "#" +
+                (rgbVal >>> 0).toString(16).padStart(6, "0").toLowerCase();
+              rgbMap[name] = hex;
+            }
+          });
+          setColorRgbMap(rgbMap);
         } catch (e) {
           console.error(
             "[useProductBlueprintDetail] listModelVariationsByProductBlueprintId failed:",
@@ -310,7 +401,6 @@ export function useProductBlueprintDetail(): UseProductBlueprintDetailResult {
     colorInput,
     sizes,
     modelNumbers,
-
     colorRgbMap,
 
     getCode,

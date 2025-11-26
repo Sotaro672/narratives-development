@@ -1,4 +1,4 @@
-// frontend/console/model/src/presentation/hook/useModelCard.tsx
+// frontend/console/model/src/presentation/hook/useModelCard.tsx 
 
 import * as React from "react";
 
@@ -148,14 +148,14 @@ export function useSizeVariationCard(
     );
 
   // カタログの measurement に応じてヘッダ名を切り替える
-  //   - 現在の実装は 4 列分の数値カラムを持っているため、最大 4 つまで使用
+  // measurementOptions がなければ空配列
   const measurementHeaders: UseSizeVariationCardResult["measurementHeaders"] =
     React.useMemo(() => {
       if (!measurementOptions || measurementOptions.length === 0) {
-        // フォールバック（従来のヘッダー）
-        return ["胸囲", "ウエスト", "着丈", "肩幅"];
+        return [];
       }
-      return measurementOptions.map((m) => m.label).slice(0, 4);
+      // ラベル数の制限なしでそのまま利用
+      return measurementOptions.map((m) => m.label);
     }, [measurementOptions]);
 
   const handleChange: UseSizeVariationCardResult["handleChange"] =

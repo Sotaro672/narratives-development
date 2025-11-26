@@ -21,8 +21,14 @@ import {
 import "../styles/model.css";
 import "../../../../shell/src/shared/ui/card.css";
 
-// ★ 商品設計側のカタログから採寸ラベルを受け取る
-import type { MeasurementOption } from "../../../../productBlueprint/src/domain/entity/catalog";
+// ★ productBlueprint 側の catalog を import
+import type {
+  ItemType,
+  MeasurementOption,
+} from "../../../../productBlueprint/src/domain/entity/catalog";
+import {
+  ITEM_TYPE_MEASUREMENT_OPTIONS,
+} from "../../../../productBlueprint/src/domain/entity/catalog";
 
 // ロジックは hook 側に集約
 import {
@@ -31,32 +37,30 @@ import {
   type SizePatch,
 } from "../hook/useModelCard";
 
-type SizeVariationCardProps = {
+/** props */
+export type SizeVariationCardProps = {
   sizes: SizeRow[];
   onRemove: (id: string) => void;
   onChangeSize?: (id: string, patch: SizePatch) => void;
   mode?: "edit" | "view";
-
-  /** 商品設計側から渡される採寸定義（itemType に連動） */
   measurementOptions?: MeasurementOption[];
-
-  /** ヘッダー右端の「サイズを追加」ボタン押下時のハンドラ */
   onAddSize?: () => void;
 };
 
 // Measurement のラベル → SizeRow のどのフィールドか、の対応表
-type SizeFieldKey = keyof Omit<
-  SizeRow,
-  "id" | "sizeLabel"
->;
+type SizeFieldKey = keyof Omit<SizeRow, "id" | "sizeLabel">;
 
+/**
+ * measurement label → SizeRow フィールド対応表
+ */
 function mapLabelToField(label: string): SizeFieldKey {
   switch (label) {
     // トップス
     case "着丈":
       return "length";
     case "身幅":
-      // 仕様的には身幅＝chest とみなす
+      return "chest";
+    case "胸囲":
       return "chest";
     case "肩幅":
       return "shoulder";
@@ -76,15 +80,9 @@ function mapLabelToField(label: string): SizeFieldKey {
       return "thigh";
     case "裾幅":
       return "hemWidth";
-
-    // フォールバック（旧ヘッダーなど）
-    case "胸囲":
-      return "chest";
-
-    default:
-      // 万一未知ラベルの場合は chest にフォールバック
-      return "chest";
   }
+
+  throw new Error(`Unknown measurement label: ${label}`);
 }
 
 const SizeVariationCard: React.FC<SizeVariationCardProps> = ({
@@ -95,7 +93,7 @@ const SizeVariationCard: React.FC<SizeVariationCardProps> = ({
   measurementOptions,
   onAddSize,
 }) => {
-  // ★ ビューロジックは hook に委譲
+  // hook ロジック
   const {
     isEdit,
     readonlyInputProps,
@@ -108,12 +106,12 @@ const SizeVariationCard: React.FC<SizeVariationCardProps> = ({
     onChangeSize,
   });
 
-  // カラム定義: label と SizeRow のフィールド名を紐づけ
+  // label → field 紐づけ
   const measurementCols = React.useMemo(
     () =>
       (measurementHeaders ?? []).map((label) => ({
         label,
-        field: mapLabelToField(label),
+        field: mapLabelToField(label) as SizeFieldKey,
       })),
     [measurementHeaders],
   );
@@ -151,13 +149,15 @@ const SizeVariationCard: React.FC<SizeVariationCardProps> = ({
           <TableHeader>
             <TableRow>
               <TableHead>サイズ</TableHead>
-              {/* ★ 渡された measurement に応じて列名・列数を制御 */}
+
               {measurementCols.map((col) => (
                 <TableHead key={col.label}>{col.label}(cm)</TableHead>
               ))}
-              {isEdit && <TableHead />} {/* 削除列（編集時のみ） */}
+
+              {isEdit && <TableHead />} {/* 削除列 */}
             </TableRow>
           </TableHeader>
+
           <TableBody>
             {sizes.map((row) => (
               <TableRow key={row.id}>
@@ -170,7 +170,6 @@ const SizeVariationCard: React.FC<SizeVariationCardProps> = ({
                   />
                 </TableCell>
 
-                {/* 採寸列はラベル→フィールドの対応表に基づいて動的に描画 */}
                 {measurementCols.map((col) => (
                   <TableCell key={col.field}>
                     <Input
@@ -178,8 +177,6 @@ const SizeVariationCard: React.FC<SizeVariationCardProps> = ({
                       type="number"
                       inputMode="decimal"
                       value={row[col.field] ?? ""}
-                      // handleChange の key は keyof Omit<SizeRow, "id"> なので
-                      // col.field をそのまま渡して OK
                       onChange={handleChange(
                         row.id,
                         col.field as keyof Omit<SizeRow, "id">,
@@ -209,7 +206,6 @@ const SizeVariationCard: React.FC<SizeVariationCardProps> = ({
               <TableRow>
                 <TableCell
                   colSpan={
-                    // サイズ列 + measurement 列数 + 削除列（編集時のみ）
                     1 + measurementCols.length + (isEdit ? 1 : 0)
                   }
                   className="svc__empty"
@@ -225,4 +221,5 @@ const SizeVariationCard: React.FC<SizeVariationCardProps> = ({
   );
 };
 
+// default export
 export default SizeVariationCard;

@@ -38,6 +38,7 @@ function hexToRgbInt(hex?: string): number | undefined {
 
 // -----------------------------------------
 // itemType → measurements 組み立て
+// （SizeVariationCard.tsx / SizeRow の定義と一致させる）
 // -----------------------------------------
 function buildMeasurements(
   itemType: ItemType,
@@ -46,22 +47,34 @@ function buildMeasurements(
   const result: NewModelVariationMeasurements = {};
 
   if (itemType === "ボトムス") {
+    // ボトムス用の採寸マッピング
     result["ウエスト"] = size.waist ?? null;
     result["ヒップ"] = size.hip ?? null;
     result["股上"] = size.rise ?? null;
     result["股下"] = size.inseam ?? null;
-    result["わたり幅"] = size.thighWidth ?? null;
+    // 「わたり幅」→ thigh（既存データ用に thighWidth もフォロー）
+    result["わたり幅"] = size.thigh ?? size.thighWidth ?? null;
     result["裾幅"] = size.hemWidth ?? null;
     return result;
   }
 
-  // トップス
-  result["着丈"] = size.lengthTop ?? null;
-  result["身幅"] = size.bodyWidth ?? null;
-  result["肩幅"] = size.shoulderWidth ?? null;
-  result["袖丈"] = size.sleeveLength ?? null;
+// デフォルト（トップス想定）
+// ✅ SizeRow の実フィールド名に合わせてマッピング
+result["着丈"] = size.length ?? size.lengthTop ?? null;
 
-  return result;
+// 「身幅」→ chest
+result["身幅"] = size.chest ?? size.bodyWidth ?? null;
+
+// ★ 追加：胸囲（alias の bodyWidth / chest を利用）
+result["胸囲"] = size.chest ?? size.bodyWidth ?? null;
+
+// 「肩幅」→ shoulder
+result["肩幅"] = size.shoulder ?? size.shoulderWidth ?? null;
+
+// 「袖丈」→ sleeveLength
+result["袖丈"] = size.sleeveLength ?? null;
+
+return result;
 }
 
 // -----------------------------------------

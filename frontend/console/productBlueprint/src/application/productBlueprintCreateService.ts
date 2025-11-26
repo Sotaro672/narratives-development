@@ -57,6 +57,7 @@ function hexToRgbInt(hex?: string): number | undefined {
  * itemType に応じて measurements を組み立てるユーティリティ
  *
  * - MeasurementKey（catalog.ts）をキーにしたマップを返す。
+ * - SizeVariationCard.tsx の mapLabelToField と対応させる。
  */
 function buildMeasurements(
   itemType: ItemType,
@@ -70,19 +71,31 @@ function buildMeasurements(
     result["ヒップ"] = size.hip ?? null;
     result["股上"] = size.rise ?? null;
     result["股下"] = size.inseam ?? null;
-    result["わたり幅"] = size.thighWidth ?? null;
+    // SizeVariationCard では「わたり幅」→ thigh なのでそれに合わせる
+    // （既存データ用に thighWidth もあればそちらも見る）
+    result["わたり幅"] = size.thigh ?? size.thighWidth ?? null;
     result["裾幅"] = size.hemWidth ?? null;
     return result;
   }
 
-  // デフォルト（トップス想定）
-  // ✅ SizeRow の実フィールド名に合わせてマッピング
-  result["着丈"] = size.length ?? null;
-  result["身幅"] = size.chest ?? null;
-  result["肩幅"] = size.shoulder ?? null;
-  result["袖丈"] = size.sleeveLength ?? null;
+// デフォルト（トップス想定）
+// ✅ SizeRow の実フィールド名に合わせてマッピング
+result["着丈"] = size.length ?? size.lengthTop ?? null;
 
-  return result;
+// 「身幅」→ chest
+result["身幅"] = size.chest ?? size.bodyWidth ?? null;
+
+// ★ 追加：胸囲（alias の bodyWidth / chest を利用）
+result["胸囲"] = size.chest ?? size.bodyWidth ?? null;
+
+// 「肩幅」→ shoulder
+result["肩幅"] = size.shoulder ?? size.shoulderWidth ?? null;
+
+// 「袖丈」→ sleeveLength
+result["袖丈"] = size.sleeveLength ?? null;
+
+return result;
+
 }
 
 /**
