@@ -44,10 +44,12 @@ function buildMeasurements(
   const result: NewModelVariationMeasurements = {};
 
   if (itemType === "ボトムス") {
+    // ボトムス用の採寸マッピング
     result["ウエスト"] = size.waist ?? null;
     result["ヒップ"] = size.hip ?? null;
     result["股上"] = size.rise ?? null;
     result["股下"] = size.inseam ?? null;
+    // 「わたり幅」→ thigh（既存データ用に thighWidth もフォロー）
     result["わたり幅"] = size.thigh ?? size.thighWidth ?? null;
     result["裾幅"] = size.hemWidth ?? null;
     return result;
@@ -122,7 +124,10 @@ async function fetchBrandNameById(brandId: string): Promise<string> {
     const brands = await fetchAllBrandsForCompany("", false);
     return brands.find((b) => b.id === id)?.name ?? "";
   } catch (e) {
-    console.error("[productBlueprintDetailService] fetchBrandNameById error:", e);
+    console.error(
+      "[productBlueprintDetailService] fetchBrandNameById error:",
+      e,
+    );
     return "";
   }
 }
@@ -131,7 +136,7 @@ async function fetchBrandNameById(brandId: string): Promise<string> {
 // メンバー名解決（HTTP は Repository に委譲）
 // -----------------------------------------
 async function resolveMemberNameById(
-  idToken: string,
+  _idToken: string,
   memberId?: string | null,
   fallback: string = "-",
 ): Promise<string> {
@@ -141,15 +146,16 @@ async function resolveMemberNameById(
   try {
     const repo = new MemberRepositoryHTTP();
     const member = await repo.getById(id);
-
     if (!member) return fallback;
 
     const name =
       formatLastFirst(member.lastName, member.firstName)?.trim() || id;
-
     return name || fallback;
   } catch (e) {
-    console.error("[productBlueprintDetailService] resolveMemberNameById error:", e);
+    console.error(
+      "[productBlueprintDetailService] resolveMemberNameById error:",
+      e,
+    );
     return fallback;
   }
 }
@@ -202,7 +208,11 @@ export async function getProductBlueprintDetail(
 
   // 追加情報の解決
   response.brandName = await fetchBrandNameById(response.brandId ?? "");
-  response.assigneeName = await resolveMemberNameById(idToken, response.assigneeId, "-");
+  response.assigneeName = await resolveMemberNameById(
+    idToken,
+    response.assigneeId,
+    "-",
+  );
   response.createdByName = await resolveMemberNameById(
     idToken,
     response.createdBy,
@@ -225,7 +235,10 @@ export async function updateProductBlueprint(
 
   if (params.modelNumbers && params.sizes) {
     for (const v of params.modelNumbers) {
-      const sizeRow = params.sizes.find((s: SizeRow) => s.sizeLabel === v.size);
+      // ★ implicit any を解消
+      const sizeRow = params.sizes.find(
+        (s: SizeRow) => s.sizeLabel === v.size,
+      );
       if (!sizeRow) continue;
 
       const rgbInt = hexToRgbInt(colorRgbMap[v.color]);
@@ -273,7 +286,9 @@ export async function listModelVariationsByProductBlueprintId(
   if (!user) throw new Error("ログイン情報が見つかりません（未ログイン）");
 
   const idToken = await user.getIdToken();
-  const url = `${API_BASE}/models/by-blueprint/${encodeURIComponent(id)}/variations`;
+  const url = `${API_BASE}/models/by-blueprint/${encodeURIComponent(
+    id,
+  )}/variations`;
 
   const res = await fetch(url, {
     method: "GET",

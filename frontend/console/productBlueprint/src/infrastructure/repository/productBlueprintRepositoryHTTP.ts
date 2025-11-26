@@ -27,7 +27,6 @@ export const API_BASE = ENV_BASE || FALLBACK_BASE;
 export async function createProductBlueprintHTTP(
   params: CreateProductBlueprintParams,
 ): Promise<ProductBlueprintResponse> {
-
   const user = auth.currentUser;
   if (!user) {
     throw new Error("ログイン情報が見つかりません（未ログイン）");
