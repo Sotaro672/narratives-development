@@ -360,6 +360,30 @@ export function useProductBlueprintCreate(): UseProductBlueprintCreateResult {
       }
     }
 
+    // ★ 採寸値: 数字以外が入力されていないかチェック
+    // SizeRow のうち id / sizeLabel 以外のフィールドで、
+    // null/undefined を除き、number 以外 or NaN があればエラー
+    const invalidMeasurementFields: string[] = [];
+
+    sizes.forEach((s, index) => {
+      const label = (s as any).sizeLabel || `#${index + 1}`;
+      Object.entries(s as Record<string, unknown>).forEach(([key, value]) => {
+        if (key === "id" || key === "sizeLabel") return;
+        if (value == null) return; // 未入力はここでは許可
+        if (typeof value !== "number" || Number.isNaN(value)) {
+          invalidMeasurementFields.push(`サイズ ${label} の「${key}」`);
+        }
+      });
+    });
+
+    if (invalidMeasurementFields.length > 0) {
+      errors.push(
+        `採寸欄には数値のみ入力してください。（問題のある項目: ${invalidMeasurementFields.join(
+          "、",
+        )}）`,
+      );
+    }
+
     return errors;
   }, [
     effectiveCompanyId,
@@ -411,7 +435,7 @@ export function useProductBlueprintCreate(): UseProductBlueprintCreateResult {
       productIdTag,
       companyId: effectiveCompanyId,
       colors,
-      // ★ 色名 → RGB(hex) マップも一緒に送る
+      // ★ 色名 → RGB(hex) のマップも一緒に送る
       colorRgbMap,
       sizes,
       modelNumbers,
@@ -497,7 +521,7 @@ export function useProductBlueprintCreate(): UseProductBlueprintCreateResult {
         waist: undefined,
         length: undefined,
         shoulder: undefined,
-      },
+      } as any,
     ]);
   }, []);
 

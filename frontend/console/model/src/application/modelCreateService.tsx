@@ -148,6 +148,29 @@ export type ModelVariationsFromProductBlueprint = {
 };
 
 /**
+ * NewModelVariationMeasurements (MeasurementKey → number | null) から
+ * backend に送る Record<string, number> を組み立てるヘルパー。
+ *
+ * - null / NaN / 未定義は除外
+ */
+function normalizeMeasurements(
+  raw: NewModelVariationMeasurements | undefined,
+): Record<string, number> {
+  const result: Record<string, number> = {};
+  if (!raw) return result;
+
+  for (const [key, value] of Object.entries(raw)) {
+    if (value == null) continue;
+    const n = Number(value);
+    if (Number.isNaN(n)) continue;
+    // MeasurementKey は string の別名なのでそのままキーに使える
+    result[key] = n;
+  }
+
+  return result;
+}
+
+/**
  * productBlueprintCreateService.ts からの JSON を受け取り、
  * CreateModelVariation API を叩くためのエントリポイント。
  */
@@ -161,10 +184,10 @@ export async function createModelVariationsFromProductBlueprint(
   );
 
   // NewModelVariationPayload[] → CreateModelVariationRequest[] へ変換
-  // ★ ここで measurements と productBlueprintId / rgb を丸ごと渡す
+  // ★ ここで measurements を number のみに正規化して丸ごと渡す
   const requests: CreateModelVariationRequest[] = payload.variations.map(
     (v, idx) => {
-      const measurements = v.measurements ?? {};
+      const measurements = normalizeMeasurements(v.measurements);
 
       // rgb(hex) を数値（0xRRGGBB）に変換
       let rgbInt: number | undefined = undefined;

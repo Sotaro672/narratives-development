@@ -442,10 +442,7 @@ func (r *ModelRepositoryFS) ListModelVariationsByProductBlueprintID(
 
 func (r *ModelRepositoryFS) listVariationsByProductBlueprintID(ctx context.Context, productBlueprintID string) ([]modeldom.ModelVariation, error) {
 	q := r.variationsCol().
-		Where("productBlueprintId", "==", productBlueprintID).
-		OrderBy("modelNumber", firestore.Asc).
-		OrderBy("size", firestore.Asc).
-		OrderBy("color.name", firestore.Asc)
+		Where("productBlueprintId", "==", productBlueprintID)
 
 	it := q.Documents(ctx)
 	defer it.Stop()
