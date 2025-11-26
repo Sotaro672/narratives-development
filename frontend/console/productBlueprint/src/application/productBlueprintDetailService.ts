@@ -319,11 +319,11 @@ export type ModelVariationResponse = {
   productBlueprintId: string;
   modelNumber: string;
   size: string;
-  color: {
+  color?: {
     name: string;
     rgb?: number | null;
   };
-  measurements?: Record<string, number>;
+  measurements?: Record<string, number | null>;
   createdAt?: string | null;
   createdBy?: string | null;
   updatedAt?: string | null;
@@ -388,16 +388,56 @@ export async function listModelVariationsByProductBlueprintId(
     );
   }
 
-  const raw = (await res.json()) as ModelVariationResponse[] | null;
+  const raw = (await res.json()) as any[] | null;
 
   if (!raw) {
     return [];
   }
 
   console.log(
-    "[productBlueprintDetailService] listModelVariationsByProductBlueprintId result:",
+    "[productBlueprintDetailService] listModelVariationsByProductBlueprintId raw result:",
     raw,
   );
 
-  return raw;
+  // PascalCase / camelCase の両方に対応しつつ、フロント用の ModelVariationResponse にマッピング
+  const mapped: ModelVariationResponse[] = raw.map((v: any) => {
+    const colorRaw = v.color ?? v.Color ?? {};
+    const measurementsRaw = v.measurements ?? v.Measurements ?? {};
+
+    const rgbValue =
+      typeof colorRaw.rgb === "number"
+        ? colorRaw.rgb
+        : typeof colorRaw.RGB === "number"
+          ? colorRaw.RGB
+          : undefined;
+
+    return {
+      id: v.id ?? v.ID ?? "",
+      productBlueprintId:
+        v.productBlueprintId ?? v.ProductBlueprintID ?? id,
+      modelNumber: v.modelNumber ?? v.ModelNumber ?? "",
+      size: v.size ?? v.Size ?? "",
+      color: {
+        name: (colorRaw.name ?? colorRaw.Name ?? "") as string,
+        rgb: rgbValue ?? null,
+      },
+      measurements:
+        measurementsRaw && typeof measurementsRaw === "object"
+          ? (measurementsRaw as Record<string, number | null>)
+          : {},
+      createdAt: (v.createdAt ?? v.CreatedAt ?? null) as string | null,
+      createdBy: (v.createdBy ?? v.CreatedBy ?? null) as string | null,
+      updatedAt: (v.updatedAt ?? v.UpdatedAt ?? null) as string | null,
+      updatedBy: (v.updatedBy ?? v.UpdatedBy ?? null) as string | null,
+      deletedAt: (v.deletedAt ?? v.DeletedAt ?? null) as string | null,
+      deletedBy: (v.deletedBy ?? v.DeletedBy ?? null) as string | null,
+    };
+  });
+
+  console.log(
+    "[productBlueprintDetailService] listModelVariationsByProductBlueprintId mapped:",
+    mapped,
+  );
+
+  return mapped;
 }

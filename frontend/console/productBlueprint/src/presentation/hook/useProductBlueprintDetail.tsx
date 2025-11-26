@@ -42,6 +42,9 @@ export interface UseProductBlueprintDetailResult {
   sizes: SizeRow[];
   modelNumbers: ModelNumberRow[];
 
+  /** color 名 → HEX(RGB) のマップ（例: { "グリーン": "#00ff00" }） */
+  colorRgbMap: Record<string, string>;
+
   getCode: (sizeLabel: string, color: string) => string;
 
   assignee: string;
@@ -94,6 +97,11 @@ export function useProductBlueprintDetail(): UseProductBlueprintDetailResult {
   const [sizes, setSizes] = React.useState<SizeRow[]>([]);
   const [modelNumbers, setModelNumbers] = React.useState<ModelNumberRow[]>([]);
 
+  // Color.Name / color.rgb を HEX(#rrggbb) にして保持
+  const [colorRgbMap, setColorRgbMap] = React.useState<Record<string, string>>(
+    {},
+  );
+
   const [assignee, setAssignee] = React.useState("担当者未設定");
   const [creator, setCreator] = React.useState("作成者未設定");
   const [createdAt, setCreatedAt] = React.useState("");
@@ -110,7 +118,6 @@ export function useProductBlueprintDetail(): UseProductBlueprintDetailResult {
 
         console.log("[useProductBlueprintDetail] mapped detail:", detail);
 
-        // service から来る拡張フィールド
         const brandNameFromService = (detail as any).brandName as
           | string
           | undefined;
@@ -121,14 +128,14 @@ export function useProductBlueprintDetail(): UseProductBlueprintDetailResult {
           | string
           | undefined;
 
-        // blueprintId / pageTitle
         const productBlueprintId = detail.id ?? blueprintId;
 
         setPageTitle(detail.productName ?? productBlueprintId);
         setProductName(detail.productName ?? "");
 
-        // brand: service の brandName を優先、なければ従来の brandLabelFromId
-        setBrand(brandNameFromService ?? brandLabelFromId(detail.brandId));
+        setBrand(
+          brandNameFromService ?? brandLabelFromId(detail.brandId),
+        );
 
         setItemType((detail.itemType as ItemType) ?? "");
         setFit((detail.fit as Fit) ?? ("" as Fit));
@@ -142,20 +149,20 @@ export function useProductBlueprintDetail(): UseProductBlueprintDetailResult {
         setProductIdTagType(tagType);
 
         // --------------------------------------------------
-        // ★ model_handler.go の
-        //   GET /models/by-blueprint/{productBlueprintID}/variations
-        // を叩いて、同じ productBlueprintId の ModelVariation を取得
+        // ModelVariation 取得
         // --------------------------------------------------
         try {
           const variations =
-            await listModelVariationsByProductBlueprintId(productBlueprintId);
+            await listModelVariationsByProductBlueprintId(
+              productBlueprintId,
+            );
 
           console.log(
             "[useProductBlueprintDetail] model variations:",
             variations,
           );
 
-          // colors: variation の color.name のユニーク集合
+          // colors: variation.color.name のユニーク集合
           const uniqueColors = Array.from(
             new Set(
               variations
@@ -165,7 +172,7 @@ export function useProductBlueprintDetail(): UseProductBlueprintDetailResult {
           );
           setColors(uniqueColors);
 
-          // サイズごとに Measurements も含めて SizeRow を構築する
+          // サイズ: variation.size のユニーク集合
           const uniqueSizes = Array.from(
             new Set(
               variations
@@ -174,72 +181,59 @@ export function useProductBlueprintDetail(): UseProductBlueprintDetailResult {
             ),
           );
 
-          const sizeRows: SizeRow[] = uniqueSizes.map((label, index) => {
-            // そのサイズの代表 variation（最初の 1 件）を取得
-            const vForSize = variations.find(
-              (v) => v.size?.trim() === label,
-            );
-
-            const ms = (vForSize?.measurements ??
-              {}) as Record<string, unknown>;
-
-            const getNum = (key: string): number | undefined => {
-              const val = ms[key];
-              return typeof val === "number" ? val : undefined;
-            };
-
-            const row: SizeRow = {
-              id: String(index + 1),
-              sizeLabel: label,
-
-              // トップス系
-              chest: getNum("身幅"),
-              length: getNum("着丈"),
-              shoulder: getNum("肩幅"),
-              sleeveLength: getNum("袖丈"),
-
-              // ボトムス系（ItemType がボトムスのときに主に効く想定）
-              waist: getNum("ウエスト"),
-              hip: getNum("ヒップ"),
-              rise: getNum("股上"),
-              inseam: getNum("股下"),
-              thighWidth: getNum("わたり幅"),
-              hemWidth: getNum("裾幅"),
-            } as SizeRow;
-
-            return row;
-          });
-
+          const sizeRows: SizeRow[] = uniqueSizes.map((label, index) => ({
+            id: String(index + 1),
+            sizeLabel: label,
+          })) as SizeRow[];
           setSizes(sizeRows);
 
-          // modelNumbers: size x color ごとの code として modelNumber をセット
-          const modelNumberRows: ModelNumberRow[] = variations.map((v) => {
-            return {
-              size: v.size,
-              color: v.color?.name ?? "",
-              code: v.modelNumber,
-            } as ModelNumberRow;
-          });
+          // modelNumbers: size × color ごとのコード
+          const modelNumberRows: ModelNumberRow[] = variations.map((v) => ({
+            size: v.size,
+            color: v.color?.name ?? "",
+            code: v.modelNumber,
+          }));
           setModelNumbers(modelNumberRows);
+
+          // colorRgbMap: Color.rgb(number) → HEX(#rrggbb)
+          const nextColorRgbMap: Record<string, string> = {};
+          for (const v of variations) {
+            const name = v.color?.name?.trim();
+            const rgb = v.color?.rgb;
+            if (!name || typeof rgb !== "number") continue;
+
+            const hex =
+              "#" +
+              rgb
+                .toString(16)
+                .padStart(6, "0")
+                .toLowerCase();
+            nextColorRgbMap[name] = hex;
+          }
+          setColorRgbMap(nextColorRgbMap);
         } catch (e) {
           console.error(
             "[useProductBlueprintDetail] listModelVariationsByProductBlueprintId failed:",
             e,
           );
-          // variations が取れなくても画面全体は落とさない
           setColors([]);
           setSizes([]);
           setModelNumbers([]);
+          setColorRgbMap({});
         }
 
-        // assignee: service の assigneeName を優先
+        // assignee
         setAssignee(
-          assigneeNameFromService ?? detail.assigneeId ?? "担当者未設定",
+          assigneeNameFromService ??
+            detail.assigneeId ??
+            "担当者未設定",
         );
 
-        // creator: service の createdByName を優先
+        // creator
         setCreator(
-          createdByNameFromService ?? detail.createdBy ?? "作成者未設定",
+          createdByNameFromService ??
+            detail.createdBy ??
+            "作成者未設定",
         );
 
         setCreatedAt(formatProductBlueprintDate(detail.createdAt) || "");
@@ -316,6 +310,8 @@ export function useProductBlueprintDetail(): UseProductBlueprintDetailResult {
     colorInput,
     sizes,
     modelNumbers,
+
+    colorRgbMap,
 
     getCode,
 
