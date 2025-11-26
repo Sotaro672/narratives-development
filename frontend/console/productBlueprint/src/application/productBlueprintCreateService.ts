@@ -30,19 +30,11 @@ function hexToRgbInt(hex?: string): number | undefined {
     : trimmed;
 
   if (!/^[0-9a-fA-F]{6}$/.test(withoutHash)) {
-    console.warn(
-      "[productBlueprintCreateService] invalid rgb hex format",
-      { hex },
-    );
     return undefined;
   }
 
   const parsed = parseInt(withoutHash, 16);
   if (Number.isNaN(parsed)) {
-    console.warn(
-      "[productBlueprintCreateService] failed to parse rgb hex",
-      { hex },
-    );
     return undefined;
   }
 
@@ -66,36 +58,23 @@ function buildMeasurements(
   const result: NewModelVariationMeasurements = {};
 
   if (itemType === "ボトムス") {
-    // ボトムス用の採寸マッピング
     result["ウエスト"] = size.waist ?? null;
     result["ヒップ"] = size.hip ?? null;
     result["股上"] = size.rise ?? null;
     result["股下"] = size.inseam ?? null;
-    // SizeVariationCard では「わたり幅」→ thigh なのでそれに合わせる
-    // （既存データ用に thighWidth もあればそちらも見る）
     result["わたり幅"] = size.thigh ?? size.thighWidth ?? null;
     result["裾幅"] = size.hemWidth ?? null;
     return result;
   }
 
-// デフォルト（トップス想定）
-// ✅ SizeRow の実フィールド名に合わせてマッピング
-result["着丈"] = size.length ?? size.lengthTop ?? null;
+  // トップス（デフォルト）
+  result["着丈"] = size.length ?? size.lengthTop ?? null;
+  result["身幅"] = size.chest ?? size.bodyWidth ?? null;
+  result["胸囲"] = size.chest ?? size.bodyWidth ?? null;
+  result["肩幅"] = size.shoulder ?? size.shoulderWidth ?? null;
+  result["袖丈"] = size.sleeveLength ?? null;
 
-// 「身幅」→ chest
-result["身幅"] = size.chest ?? size.bodyWidth ?? null;
-
-// ★ 追加：胸囲（alias の bodyWidth / chest を利用）
-result["胸囲"] = size.chest ?? size.bodyWidth ?? null;
-
-// 「肩幅」→ shoulder
-result["肩幅"] = size.shoulder ?? size.shoulderWidth ?? null;
-
-// 「袖丈」→ sleeveLength
-result["袖丈"] = size.sleeveLength ?? null;
-
-return result;
-
+  return result;
 }
 
 /**
@@ -114,13 +93,6 @@ function toNewModelVariationPayload(
   },
 ): NewModelVariationPayload {
   const measurements = buildMeasurements(itemType, sizeRow);
-
-  console.log("[productBlueprintCreateService] buildMeasurements result", {
-    itemType,
-    sizeRow,
-    base,
-    measurements,
-  });
 
   return {
     sizeLabel: base.sizeLabel,
@@ -149,10 +121,6 @@ export async function createProductBlueprint(
         (s: SizeRow) => s.sizeLabel === v.size,
       );
       if (!sizeRow) {
-        console.warn(
-          "[productBlueprintCreateService] SizeRow not found for modelNumber; skip one variation",
-          v,
-        );
         continue;
       }
 
@@ -170,16 +138,6 @@ export async function createProductBlueprint(
       variations.push(payload);
     }
   }
-
-  console.log(
-    "[productBlueprintCreateService] variations payload (before API call)",
-    { variations },
-  );
-
-  console.log(
-    "[productBlueprintCreateService] productIdTag in params:",
-    params.productIdTag,
-  );
 
   return await createProductBlueprintApi(
     {

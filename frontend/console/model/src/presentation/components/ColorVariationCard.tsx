@@ -29,15 +29,8 @@ type ColorVariationCardProps = {
   onChangeColorInput: (v: string) => void;
   onAddColor: () => void;
   onRemoveColor: (color: string) => void;
-  /** 表示モード（既定: "edit"） */
   mode?: "edit" | "view";
-
-  /** color 名 → hex(RGB) のマップ（例: { "グリーン": "#00ff00" }） */
   colorRgbMap?: Record<string, string>;
-  /**
-   * 色名ごとの RGB 変更通知
-   * - カラー追加ボタン押下時に `(colorInput, pickerColor)` で呼ばれる想定
-   */
   onChangeColorRgb?: (color: string, rgbHex: string) => void;
 };
 
@@ -57,22 +50,9 @@ const ColorVariationCard: React.FC<ColorVariationCardProps> = ({
     colorInput || "#ffffff",
   );
 
-  // pickerColor の変化をログ出力（デバッグ用）
-  React.useEffect(() => {
-    console.log("[ColorVariationCard] pickerColor changed:", pickerColor);
-  }, [pickerColor]);
-
-  // 「カラーを追加」ボタン押下時のラッパー
-  // - 先に color 名 → pickerColor を通知
-  // - その後本来の onAddColor を呼び出す
+  // 追加ボタン押下
   const handleAddColor = React.useCallback(() => {
     const name = colorInput.trim();
-
-    console.log("[ColorVariationCard] handleAddColor called", {
-      colorInput: name,
-      pickerColor,
-    });
-
     if (name) {
       onChangeColorRgb?.(name, pickerColor);
     }
@@ -94,7 +74,6 @@ const ColorVariationCard: React.FC<ColorVariationCardProps> = ({
       </CardHeader>
 
       <CardContent className="box__body">
-        {/* カード内を左右 2 カラムに分割 */}
         <div
           className="vc__layout"
           style={{
@@ -105,7 +84,7 @@ const ColorVariationCard: React.FC<ColorVariationCardProps> = ({
             gap: 16,
           }}
         >
-          {/* 左カラム: カラーピッカー + 色名入力欄 + 追加ボタン */}
+          {/* 左カラム（edit のみ） */}
           <div className="vc__left">
             {isEdit && (
               <div className="flex flex-col gap-4">
@@ -114,13 +93,6 @@ const ColorVariationCard: React.FC<ColorVariationCardProps> = ({
                     color={pickerColor}
                     onChange={(color: any) => {
                       const hex = color?.hex ?? "#ffffff";
-                      console.log(
-                        "[ColorVariationCard] SketchPicker onChange",
-                        {
-                          raw: color,
-                          hex,
-                        },
-                      );
                       setPickerColor(hex);
                     }}
                   />
@@ -131,13 +103,9 @@ const ColorVariationCard: React.FC<ColorVariationCardProps> = ({
                     className="input vc__input"
                     placeholder="例：White, Black, Navy..."
                     value={colorInput}
-                    onChange={(e) => {
-                      onChangeColorInput(e.target.value);
-                    }}
+                    onChange={(e) => onChangeColorInput(e.target.value)}
                     onKeyDown={(e) => {
-                      if (e.key === "Enter") {
-                        handleAddColor();
-                      }
+                      if (e.key === "Enter") handleAddColor();
                     }}
                   />
                   <Button
@@ -154,7 +122,7 @@ const ColorVariationCard: React.FC<ColorVariationCardProps> = ({
             )}
           </div>
 
-          {/* 右カラム: RGB / 色名 テーブル */}
+          {/* 右カラム: 色一覧テーブル */}
           <div className="vc__right">
             <div className="vc__chips">
               {colors.length > 0 ? (
@@ -169,12 +137,10 @@ const ColorVariationCard: React.FC<ColorVariationCardProps> = ({
 
                   <TableBody>
                     {colors.map((c) => {
-                      // 1行ごとの表示用 HEX
                       const hex = colorRgbMap?.[c] ?? pickerColor;
 
                       return (
                         <TableRow key={c}>
-                          {/* RGB列（色プレビュー + HEX値） */}
                           <TableCell>
                             <div className="flex items-center gap-2">
                               <span
@@ -185,7 +151,6 @@ const ColorVariationCard: React.FC<ColorVariationCardProps> = ({
                             </div>
                           </TableCell>
 
-                          {/* 色名列 */}
                           <TableCell>
                             <Badge
                               className="vc__chip inline-flex items-center gap-1.5 px-2 py-1"
@@ -195,7 +160,6 @@ const ColorVariationCard: React.FC<ColorVariationCardProps> = ({
                             </Badge>
                           </TableCell>
 
-                          {/* 削除ボタン（edit のみ） */}
                           {isEdit && (
                             <TableCell className="text-right">
                               <button
