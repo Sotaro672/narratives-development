@@ -79,6 +79,15 @@ export async function updateModelVariation(
 
   const url = `${API_BASE}/models/${encodeURIComponent(id)}`;
 
+  const body = {
+    // backend の createModelVariationRequest に合わせてキー名を変換
+    modelNumber: payload.modelNumber,
+    size: payload.size,
+    color: payload.color,
+    rgb: payload.rgb,
+    measurements: payload.measurements,
+  };
+
   const res = await fetch(url, {
     method: "PUT",
     headers: {
@@ -86,14 +95,7 @@ export async function updateModelVariation(
       "Content-Type": "application/json",
       Accept: "application/json",
     },
-    body: JSON.stringify({
-      // backend の createModelVariationRequest に合わせてキー名を変換
-      modelNumber: payload.modelNumber,
-      size: payload.size,
-      color: payload.color,
-      rgb: payload.rgb,
-      measurements: payload.measurements,
-    }),
+    body: JSON.stringify(body),
   });
 
   if (!res.ok) {
@@ -104,5 +106,12 @@ export async function updateModelVariation(
   }
 
   const data = (await res.json()) as ModelVariationResponse;
+
+  // ★ 保存後に backend から受け取ったデータのスナップショットをログ出力
+  console.log("[updateModelVariation] response data:", {
+    variationId: id,
+    response: data,
+  });
+
   return data;
 }

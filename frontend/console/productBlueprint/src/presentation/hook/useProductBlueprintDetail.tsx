@@ -114,7 +114,7 @@ export function useProductBlueprintDetail(): UseProductBlueprintDetailResult {
   const [creator, setCreator] = React.useState("作成者未設定");
   const [createdAt, setCreatedAt] = React.useState("");
 
-  // ★ 追加: サーバに渡すための ID を保持
+  // ★ サーバに渡すための ID を保持
   const [brandId, setBrandId] = React.useState<string>("");
   const [assigneeId, setAssigneeId] = React.useState<string>("");
 
@@ -127,8 +127,6 @@ export function useProductBlueprintDetail(): UseProductBlueprintDetailResult {
     (async () => {
       try {
         const detail = await getProductBlueprintDetail(blueprintId);
-
-        console.log("[useProductBlueprintDetail] mapped detail:", detail);
 
         const brandNameFromService = (detail as any).brandName as
           | string
@@ -171,11 +169,6 @@ export function useProductBlueprintDetail(): UseProductBlueprintDetailResult {
             await listModelVariationsByProductBlueprintId(
               productBlueprintId,
             );
-
-          console.log(
-            "[useProductBlueprintDetail] model variations:",
-            variations,
-          );
 
           const varsAny = variations as any[];
 
@@ -286,11 +279,6 @@ export function useProductBlueprintDetail(): UseProductBlueprintDetailResult {
             return base as SizeRow;
           });
 
-          console.log("[useProductBlueprintDetail] sizeRows from measurements:", {
-            itemType: itemTypeFromDetail,
-            sizeRows,
-          });
-
           setSizes(sizeRows);
 
           // -------------------------------
@@ -399,6 +387,23 @@ export function useProductBlueprintDetail(): UseProductBlueprintDetailResult {
 
     (async () => {
       try {
+        // ★ 保存ボタン押下時のスナップショットを出力（編集後の状態）
+        console.log("[useProductBlueprintDetail] onSave payload snapshot", {
+          blueprintId,
+          productName,
+          itemType,
+          fit,
+          materials,
+          weight,
+          washTags,
+          productIdTagType,
+          sizes,
+          modelNumbers,
+          colorRgbMap,
+          brandId,
+          assigneeId,
+        });
+
         await updateProductBlueprint({
           id: blueprintId,
           productName,
