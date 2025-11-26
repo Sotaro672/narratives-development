@@ -29,6 +29,7 @@ type ColorVariationCardProps = {
   onChangeColorInput: (v: string) => void;
   onAddColor: () => void;
   onRemoveColor: (color: string) => void;
+  /** 表示モード（既定: "edit"） */
   mode?: "edit" | "view";
 
   /** color 名 → hex(RGB) のマップ（例: { "グリーン": "#00ff00" }） */
@@ -56,7 +57,7 @@ const ColorVariationCard: React.FC<ColorVariationCardProps> = ({
     colorInput || "#ffffff",
   );
 
-  // pickerColor の変化を常にログ出力（デバッグ用）
+  // pickerColor の変化をログ出力（デバッグ用）
   React.useEffect(() => {
     console.log("[ColorVariationCard] pickerColor changed:", pickerColor);
   }, [pickerColor]);
@@ -194,7 +195,7 @@ const ColorVariationCard: React.FC<ColorVariationCardProps> = ({
                             </Badge>
                           </TableCell>
 
-                          {/* 削除ボタン */}
+                          {/* 削除ボタン（edit のみ） */}
                           {isEdit && (
                             <TableCell className="text-right">
                               <button

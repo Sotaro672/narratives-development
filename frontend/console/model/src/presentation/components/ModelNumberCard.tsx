@@ -55,7 +55,6 @@ const ModelNumberCard: React.FC<ModelNumberCardProps> = ({
   onChangeModelNumber,
 }) => {
   const isEdit = mode === "edit";
-  const readonlyProps = { variant: "readonly" as const, readOnly: true };
 
   const handleChange =
     (sizeLabel: string, color: string) =>
@@ -101,17 +100,23 @@ const ModelNumberCard: React.FC<ModelNumberCardProps> = ({
               <TableRow key={s.id}>
                 <TableCell className="mnc__size">{s.sizeLabel}</TableCell>
 
-                {colors.map((c) => (
-                  <TableCell key={c}>
-                    <Input
-                      {...(!isEdit ? readonlyProps : {})}
-                      value={getCode(s.sizeLabel, c)}
-                      onChange={handleChange(s.sizeLabel, c)}
-                      placeholder="例: LM-SB-S-WHT"
-                      aria-label={`${s.sizeLabel} / ${c} のモデルナンバー`}
-                    />
-                  </TableCell>
-                ))}
+                {colors.map((c) => {
+                  const code = getCode(s.sizeLabel, c);
+                  return (
+                    <TableCell key={c}>
+                      {isEdit ? (
+                        <Input
+                          value={code}
+                          onChange={handleChange(s.sizeLabel, c)}
+                          placeholder="例: LM-SB-S-WHT"
+                          aria-label={`${s.sizeLabel} / ${c} のモデルナンバー`}
+                        />
+                      ) : (
+                        <span>{code}</span>
+                      )}
+                    </TableCell>
+                  );
+                })}
               </TableRow>
             ))}
 

@@ -154,38 +154,53 @@ const SizeVariationCard: React.FC<SizeVariationCardProps> = ({
                 <TableHead key={col.label}>{col.label}(cm)</TableHead>
               ))}
 
-              {isEdit && <TableHead />} {/* 削除列 */}
+              {isEdit && <TableHead />} {/* 削除列（view モードでは非表示） */}
             </TableRow>
           </TableHeader>
 
           <TableBody>
             {sizes.map((row) => (
               <TableRow key={row.id}>
+                {/* サイズラベル */}
                 <TableCell>
-                  <Input
-                    {...readonlyInputProps}
-                    value={row.sizeLabel}
-                    onChange={handleChange(row.id, "sizeLabel")}
-                    aria-label={`${row.sizeLabel} サイズ名`}
-                  />
-                </TableCell>
-
-                {measurementCols.map((col) => (
-                  <TableCell key={col.field}>
+                  {isEdit ? (
                     <Input
                       {...readonlyInputProps}
-                      type="number"
-                      inputMode="decimal"
-                      value={row[col.field] ?? ""}
-                      onChange={handleChange(
-                        row.id,
-                        col.field as keyof Omit<SizeRow, "id">,
-                      )}
-                      aria-label={`${row.sizeLabel} ${col.label}`}
+                      value={row.sizeLabel}
+                      onChange={handleChange(row.id, "sizeLabel")}
+                      aria-label={`${row.sizeLabel} サイズ名`}
                     />
+                  ) : (
+                    <span>{row.sizeLabel}</span>
+                  )}
+                </TableCell>
+
+                {/* 採寸列 */}
+                {measurementCols.map((col) => (
+                  <TableCell key={col.field}>
+                    {isEdit ? (
+                      <Input
+                        {...readonlyInputProps}
+                        type="number"
+                        inputMode="decimal"
+                        value={row[col.field] ?? ""}
+                        onChange={handleChange(
+                          row.id,
+                          col.field as keyof Omit<SizeRow, "id">,
+                        )}
+                        aria-label={`${row.sizeLabel} ${col.label}`}
+                      />
+                    ) : (
+                      <span>
+                        {row[col.field] !== undefined && row[col.field] !== null
+                          ? String(row[col.field])
+                          : ""}
+                      </span>
+                    )}
                   </TableCell>
                 ))}
 
+                {/* 削除ボタン列（view モードでは非表示） */}
                 {isEdit && (
                   <TableCell>
                     <Button
@@ -205,9 +220,7 @@ const SizeVariationCard: React.FC<SizeVariationCardProps> = ({
             {sizes.length === 0 && (
               <TableRow>
                 <TableCell
-                  colSpan={
-                    1 + measurementCols.length + (isEdit ? 1 : 0)
-                  }
+                  colSpan={1 + measurementCols.length + (isEdit ? 1 : 0)}
                   className="svc__empty"
                 >
                   登録されているサイズはありません。
