@@ -128,9 +128,7 @@ export function useProductBlueprintDetail(): UseProductBlueprintDetailResult {
         setProductName(detail.productName ?? "");
 
         // brand: service の brandName を優先、なければ従来の brandLabelFromId
-        setBrand(
-          brandNameFromService ?? brandLabelFromId(detail.brandId),
-        );
+        setBrand(brandNameFromService ?? brandLabelFromId(detail.brandId));
 
         setItemType((detail.itemType as ItemType) ?? "");
         setFit((detail.fit as Fit) ?? ("" as Fit));
@@ -150,9 +148,7 @@ export function useProductBlueprintDetail(): UseProductBlueprintDetailResult {
         // --------------------------------------------------
         try {
           const variations =
-            await listModelVariationsByProductBlueprintId(
-              productBlueprintId,
-            );
+            await listModelVariationsByProductBlueprintId(productBlueprintId);
 
           console.log(
             "[useProductBlueprintDetail] model variations:",
@@ -169,7 +165,7 @@ export function useProductBlueprintDetail(): UseProductBlueprintDetailResult {
           );
           setColors(uniqueColors);
 
-          // sizes: variation の size のユニーク集合から SizeRow を生成
+          // サイズごとに Measurements も含めて SizeRow を構築する
           const uniqueSizes = Array.from(
             new Set(
               variations
@@ -179,12 +175,41 @@ export function useProductBlueprintDetail(): UseProductBlueprintDetailResult {
           );
 
           const sizeRows: SizeRow[] = uniqueSizes.map((label, index) => {
-            // 必須項目だけ埋めて、他は undefined のままにしておく
-            return {
+            // そのサイズの代表 variation（最初の 1 件）を取得
+            const vForSize = variations.find(
+              (v) => v.size?.trim() === label,
+            );
+
+            const ms = (vForSize?.measurements ??
+              {}) as Record<string, unknown>;
+
+            const getNum = (key: string): number | undefined => {
+              const val = ms[key];
+              return typeof val === "number" ? val : undefined;
+            };
+
+            const row: SizeRow = {
               id: String(index + 1),
               sizeLabel: label,
+
+              // トップス系
+              chest: getNum("身幅"),
+              length: getNum("着丈"),
+              shoulder: getNum("肩幅"),
+              sleeveLength: getNum("袖丈"),
+
+              // ボトムス系（ItemType がボトムスのときに主に効く想定）
+              waist: getNum("ウエスト"),
+              hip: getNum("ヒップ"),
+              rise: getNum("股上"),
+              inseam: getNum("股下"),
+              thighWidth: getNum("わたり幅"),
+              hemWidth: getNum("裾幅"),
             } as SizeRow;
+
+            return row;
           });
+
           setSizes(sizeRows);
 
           // modelNumbers: size x color ごとの code として modelNumber をセット
@@ -209,16 +234,12 @@ export function useProductBlueprintDetail(): UseProductBlueprintDetailResult {
 
         // assignee: service の assigneeName を優先
         setAssignee(
-          assigneeNameFromService ??
-            detail.assigneeId ??
-            "担当者未設定",
+          assigneeNameFromService ?? detail.assigneeId ?? "担当者未設定",
         );
 
         // creator: service の createdByName を優先
         setCreator(
-          createdByNameFromService ??
-            detail.createdBy ??
-            "作成者未設定",
+          createdByNameFromService ?? detail.createdBy ?? "作成者未設定",
         );
 
         setCreatedAt(formatProductBlueprintDate(detail.createdAt) || "");
