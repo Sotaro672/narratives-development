@@ -68,6 +68,8 @@ export interface UseProductBlueprintDetailResult {
   onChangeColorInput: (v: string) => void;
   onAddColor: () => void;
   onRemoveColor: (name: string) => void;
+  /** カラーの RGB(hex) 更新用 */
+  onChangeColorRgb: (name: string, hex: string) => void;
 
   /** サイズ削除 */
   onRemoveSize: (id: string) => void;
@@ -493,11 +495,57 @@ export function useProductBlueprintDetail(): UseProductBlueprintDetailResult {
   }, [colorInput, colors]);
 
   const onRemoveColor = React.useCallback((name: string) => {
-    setColors((prev) => prev.filter((c) => c !== name));
+    const key = name.trim();
+    if (!key) return;
+
+    // colors から削除
+    setColors((prev) => prev.filter((c) => c !== key));
+
+    // 対応する RGB も削除しておく
+    setColorRgbMap((prev) => {
+      const next = { ...prev };
+      delete next[key];
+      return next;
+    });
+
+    // この color に紐づく modelNumber も削除
+    setModelNumbers((prevMN) => prevMN.filter((m) => m.color !== key));
+  }, []);
+
+  // ★ カラーの RGB(hex) 更新
+  const onChangeColorRgb = React.useCallback((name: string, hex: string) => {
+    const colorName = name.trim();
+    let value = hex.trim();
+    if (!colorName || !value) return;
+
+    // 「#」が無かったら付ける
+    if (!value.startsWith("#")) {
+      value = `#${value}`;
+    }
+
+    setColorRgbMap((prev) => ({
+      ...prev,
+      [colorName]: value,
+    }));
   }, []);
 
   const onRemoveSize = React.useCallback((id: string) => {
-    setSizes((prev) => prev.filter((s) => s.id !== id));
+    setSizes((prev) => {
+      const target = prev.find((s) => s.id === id);
+      const next = prev.filter((s) => s.id !== id);
+
+      if (target) {
+        const sizeLabel = (target.sizeLabel ?? "").trim();
+        if (sizeLabel) {
+          // この size に紐づく modelNumber も削除
+          setModelNumbers((prevMN) =>
+            prevMN.filter((m) => m.size !== sizeLabel),
+          );
+        }
+      }
+
+      return next;
+    });
   }, []);
 
   // ★ サイズ追加: 新しい空行を 1 行追加
@@ -589,6 +637,7 @@ export function useProductBlueprintDetail(): UseProductBlueprintDetailResult {
     onChangeColorInput: setColorInput,
     onAddColor,
     onRemoveColor,
+    onChangeColorRgb,
 
     onRemoveSize,
     onAddSize,

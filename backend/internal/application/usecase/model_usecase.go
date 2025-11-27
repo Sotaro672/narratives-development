@@ -19,11 +19,16 @@ type ModelRepo interface {
 	// id（productID / blueprintID など）をキーとして ModelData を更新
 	UpdateModelData(ctx context.Context, id string, updates modeldom.ModelDataUpdate) (*modeldom.ModelData, error)
 
+	// 単一の ModelVariation を ID で取得
 	GetModelVariationByID(ctx context.Context, variationID string) (*modeldom.ModelVariation, error)
 
+	// ModelVariation 作成
 	CreateModelVariation(ctx context.Context, variation modeldom.NewModelVariation) (*modeldom.ModelVariation, error)
 
+	// ModelVariation 更新
 	UpdateModelVariation(ctx context.Context, variationID string, updates modeldom.ModelVariationUpdate) (*modeldom.ModelVariation, error)
+
+	// ModelVariation 削除
 	DeleteModelVariation(ctx context.Context, variationID string) (*modeldom.ModelVariation, error)
 
 	// まとめて入れ替える場合も、Repo 側で紐づけキーを解決する想定にしておく
@@ -49,14 +54,14 @@ func NewModelUsecase(repo ModelRepo) *ModelUsecase {
 // Queries
 // ------------------------------------------------------------
 
-// GetByID は /models/{id} から呼ばれる ID 指定の単一取得。
-// Firestore 実装側では id を productID / productBlueprintID などとして扱う想定。
-func (u *ModelUsecase) GetByID(ctx context.Context, id string) (*modeldom.ModelData, error) {
+// GetByID は /models/{id} から呼ばれる「単一 ModelVariation 取得」。
+// Firestore 実装側では id を variation ドキュメント ID として扱う。
+func (u *ModelUsecase) GetByID(ctx context.Context, id string) (*modeldom.ModelVariation, error) {
 	id = strings.TrimSpace(id)
 	if id == "" {
-		return nil, modeldom.ErrInvalidProductID
+		return nil, modeldom.ErrInvalidID
 	}
-	return u.repo.GetModelData(ctx, id)
+	return u.repo.GetModelVariationByID(ctx, id)
 }
 
 func (u *ModelUsecase) GetModelData(ctx context.Context, id string) (*modeldom.ModelData, error) {

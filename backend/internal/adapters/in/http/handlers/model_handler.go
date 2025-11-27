@@ -86,6 +86,18 @@ func (h *ModelHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 
 	// ------------------------------------------------------------
+	// DELETE /models/{id}
+	//   → ModelUsecase.DeleteModelVariation
+	// ------------------------------------------------------------
+	case r.Method == http.MethodDelete &&
+		strings.HasPrefix(r.URL.Path, "/models/"):
+
+		id := strings.TrimPrefix(r.URL.Path, "/models/")
+		id = strings.TrimSpace(id)
+		h.deleteVariation(w, r, id)
+		return
+
+	// ------------------------------------------------------------
 	// GET /models/{id}
 	//   → ModelUsecase.GetByID（既存仕様）
 	// ------------------------------------------------------------
@@ -190,9 +202,9 @@ func (h *ModelHandler) createVariation(w http.ResponseWriter, r *http.Request, p
 }
 
 // PUT /models/{id}
-//
-// Request Body: createModelVariationRequest JSON と同等の形式を想定
-// Response    : 更新された ModelVariation を JSON で返す
+// //
+// // Request Body: createModelVariationRequest JSON と同等の形式を想定
+// // Response    : 更新された ModelVariation を JSON で返す
 func (h *ModelHandler) updateVariation(w http.ResponseWriter, r *http.Request, id string) {
 	ctx := r.Context()
 
@@ -242,6 +254,28 @@ func (h *ModelHandler) updateVariation(w http.ResponseWriter, r *http.Request, i
 		return
 	}
 
+	w.WriteHeader(http.StatusOK)
+	_ = json.NewEncoder(w).Encode(mv)
+}
+
+// DELETE /models/{id}
+func (h *ModelHandler) deleteVariation(w http.ResponseWriter, r *http.Request, id string) {
+	ctx := r.Context()
+
+	id = strings.TrimSpace(id)
+	if id == "" {
+		w.WriteHeader(http.StatusBadRequest)
+		_ = json.NewEncoder(w).Encode(map[string]string{"error": "invalid id"})
+		return
+	}
+
+	mv, err := h.uc.DeleteModelVariation(ctx, id)
+	if err != nil {
+		writeModelErr(w, err)
+		return
+	}
+
+	// 削除した ModelVariation を返す（不要なら 204 No Content でもよい）
 	w.WriteHeader(http.StatusOK)
 	_ = json.NewEncoder(w).Encode(mv)
 }
