@@ -14,6 +14,7 @@ export type ProductBlueprintManagementRow = {
   updatedAt: string; // YYYY/MM/DD
 };
 
+// backend /product-blueprints のレスポンス想定
 type RawProductBlueprintListRow = {
   id?: string;
   productName?: string;
@@ -21,11 +22,12 @@ type RawProductBlueprintListRow = {
   brandId?: string;
   assigneeId?: string;
 
+  // backend の JSON は "productIdTag": "QRコード" などの文字列を直接返す想定
   productIdTag?: string | null;
 
-  createdAt?: string;
-  updatedAt?: string;
-  deletedAt?: string | null;
+  createdAt?: string; // "YYYY/MM/DD" を想定（handler でフォーマット済み）
+  updatedAt?: string; // "YYYY/MM/DD"
+  // deletedAt はバックエンド側でフィルタされるため、ここでは参照しない
 };
 
 const toDisplayDate = (iso?: string | null): string => {
@@ -38,18 +40,27 @@ const toDisplayDate = (iso?: string | null): string => {
   return `${y}/${m}/${day}`;
 };
 
+/**
+ * backend から商品設計一覧を取得し、
+ * - brandId → brandName 変換
+ * - assigneeId → assigneeName 変換
+ * を行って ProductBlueprintManagementRow[] を構築する。
+ *
+ * ※ 論理削除済みの除外は backend (Usecase.List) 側で実施済み。
+ */
 export async function fetchProductBlueprintManagementRows(): Promise<ProductBlueprintManagementRow[]> {
   const list = await listProductBlueprintsHTTP();
 
   const uiRows: ProductBlueprintManagementRow[] = [];
 
   for (const pb of list as RawProductBlueprintListRow[]) {
-    // 🚫 論理削除済みは絶対に一覧へ出さない
-    if (pb.deletedAt != null) continue;
+    // 🚫 deletedAt によるフィルタリングは backend 側で実施済み
 
+    // ブランド名変換
     const brandId = pb.brandId ?? "";
     const brandName = brandId ? await fetchBrandNameById(brandId) : "";
 
+    // 担当者名変換 (assigneeId -> displayName)
     const assigneeId = (pb.assigneeId ?? "").trim();
     let assigneeName = "-";
     if (assigneeId) {
@@ -57,8 +68,10 @@ export async function fetchProductBlueprintManagementRows(): Promise<ProductBlue
       assigneeName = displayName.trim() || assigneeId;
     }
 
+    // ProductIDTag（そのまま表示。空なら "-"）
     const productIdTag = (pb.productIdTag ?? "").trim() || "-";
 
+    // 日付整形
     const createdAtDisp = toDisplayDate(pb.createdAt ?? "");
     const updatedAtDisp = toDisplayDate(pb.updatedAt ?? pb.createdAt ?? "");
 

@@ -50,7 +50,22 @@ func (u *ProductBlueprintUsecase) Exists(ctx context.Context, id string) (bool, 
 //
 //	Filter 型を導入していく想定）
 func (u *ProductBlueprintUsecase) List(ctx context.Context) ([]productbpdom.ProductBlueprint, error) {
-	return u.repo.List(ctx)
+	rows, err := u.repo.List(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	// ★ 論理削除済み（DeletedAt != nil）は一覧から除外する
+	filtered := make([]productbpdom.ProductBlueprint, 0, len(rows))
+	for _, pb := range rows {
+		if pb.DeletedAt != nil {
+			// 削除済みは管理画面の一覧には出さない
+			continue
+		}
+		filtered = append(filtered, pb)
+	}
+
+	return filtered, nil
 }
 
 // ------------------------------------------------------------
