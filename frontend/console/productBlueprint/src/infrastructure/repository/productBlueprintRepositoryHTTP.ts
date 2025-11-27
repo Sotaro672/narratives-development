@@ -3,9 +3,7 @@
 import { auth } from "../../../../shell/src/auth/infrastructure/config/firebaseClient";
 
 // application 層の型だけを type import
-import type {
-  CreateProductBlueprintParams,
-} from "../../application/productBlueprintCreateService";
+import type { CreateProductBlueprintParams } from "../../application/productBlueprintCreateService";
 
 import type {
   UpdateProductBlueprintParams,
@@ -23,15 +21,21 @@ const FALLBACK_BASE =
 export const API_BASE = ENV_BASE || FALLBACK_BASE;
 
 // -----------------------------------------------------------
+// 共通: Firebase 認証トークン取得
+// -----------------------------------------------------------
+async function getIdTokenOrThrow(): Promise<string> {
+  const user = auth.currentUser;
+  if (!user) throw new Error("未ログインです");
+  return user.getIdToken();
+}
+
+// -----------------------------------------------------------
 // POST: 商品設計 作成
 // -----------------------------------------------------------
 export async function createProductBlueprintHTTP(
   params: CreateProductBlueprintParams,
 ): Promise<ProductBlueprintDetailResponse> {
-  const user = auth.currentUser;
-  if (!user) throw new Error("未ログインです");
-
-  const idToken = await user.getIdToken();
+  const idToken = await getIdTokenOrThrow();
 
   const payload = {
     productName: params.productName,
@@ -70,10 +74,7 @@ export async function createProductBlueprintHTTP(
 // GET: 商品設計 一覧（論理削除されていないもの）
 // -----------------------------------------------------------
 export async function listProductBlueprintsHTTP(): Promise<ProductBlueprintDetailResponse[]> {
-  const user = auth.currentUser;
-  if (!user) throw new Error("未ログインです");
-
-  const idToken = await user.getIdToken();
+  const idToken = await getIdTokenOrThrow();
 
   const res = await fetch(`${API_BASE}/product-blueprints`, {
     method: "GET",
@@ -97,10 +98,7 @@ export async function listProductBlueprintsHTTP(): Promise<ProductBlueprintDetai
 //   - 返却型は Deleted 用 service 側でキャストして利用する
 // -----------------------------------------------------------
 export async function listDeletedProductBlueprintsHTTP(): Promise<any[]> {
-  const user = auth.currentUser;
-  if (!user) throw new Error("未ログインです");
-
-  const idToken = await user.getIdToken();
+  const idToken = await getIdTokenOrThrow();
 
   const res = await fetch(`${API_BASE}/product-blueprints/deleted`, {
     method: "GET",
@@ -119,16 +117,13 @@ export async function listDeletedProductBlueprintsHTTP(): Promise<any[]> {
 }
 
 // -----------------------------------------------------------
-// PUT/PATCH: 商品設計 更新
+// PUT: 商品設計 更新
 // -----------------------------------------------------------
 export async function updateProductBlueprintHTTP(
   id: string,
   params: UpdateProductBlueprintParams,
 ): Promise<ProductBlueprintDetailResponse> {
-  const user = auth.currentUser;
-  if (!user) throw new Error("未ログインです");
-
-  const idToken = await user.getIdToken();
+  const idToken = await getIdTokenOrThrow();
 
   const url = `${API_BASE}/product-blueprints/${encodeURIComponent(id)}`;
 
@@ -150,4 +145,35 @@ export async function updateProductBlueprintHTTP(
 
   // ★ 返り値を ProductBlueprintDetailResponse に統一
   return (await res.json()) as ProductBlueprintDetailResponse;
+}
+
+// -----------------------------------------------------------
+// POST: 商品設計 復旧（deletedAt / deletedBy / expireAt をクリア）
+//   - backend 側の POST /product-blueprints/{id}/restore を想定
+//   - 戻り値は特に使わない前提なので void で定義
+// -----------------------------------------------------------
+export async function restoreProductBlueprintHTTP(id: string): Promise<void> {
+  const trimmed = id?.trim();
+  if (!trimmed) {
+    throw new Error("restoreProductBlueprintHTTP: id が空です");
+  }
+
+  const idToken = await getIdTokenOrThrow();
+
+  const res = await fetch(
+    `${API_BASE}/product-blueprints/${encodeURIComponent(trimmed)}/restore`,
+    {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${idToken}`,
+      },
+    },
+  );
+
+  if (!res.ok) {
+    const detail = await res.text().catch(() => "");
+    throw new Error(
+      `商品設計の復旧に失敗しました（${res.status} ${res.statusText}）\n${detail}`,
+    );
+  }
 }

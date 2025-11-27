@@ -1,12 +1,20 @@
+// frontend/console/productBlueprint/src/presentation/hook/useProductBlueprintDeletedDetail.tsx
 import * as React from "react";
+
+// ★ 通常の詳細データ取得は既存 hook を利用（編集ハンドラは不要）
 import { useProductBlueprintDetail } from "./useProductBlueprintDetail";
 
+// 型
 import type { ProductIDTagType } from "../../../../shell/src/shared/types/productBlueprint";
 import type { Fit, ItemType } from "../../domain/entity/catalog";
 import type {
   SizeRow,
   ModelNumberRow,
 } from "../../infrastructure/api/productBlueprintApi";
+
+// ★ 復旧 API 呼び出し（後で service に委譲してもよい）
+import { restoreProductBlueprintHTTP } from "../../infrastructure/repository/productBlueprintRepositoryHTTP";
+import { useParams, useNavigate } from "react-router-dom";
 
 export interface UseProductBlueprintDeletedDetailResult {
   pageTitle: string;
@@ -38,30 +46,46 @@ export interface UseProductBlueprintDeletedDetailResult {
 
 /**
  * 削除済み商品設計 詳細画面用 hook
- * - 中身のデータ取得は useProductBlueprintDetail に委譲
- * - 復旧 / 物理削除ボタンのハンドラだけここで定義
+ * - データ取得は useProductBlueprintDetail に委譲
+ * - 復旧 / 物理削除だけここで保持
  */
 export function useProductBlueprintDeletedDetail(): UseProductBlueprintDeletedDetailResult {
   const base = useProductBlueprintDetail();
+  const { blueprintId } = useParams<{ blueprintId: string }>();
+  const navigate = useNavigate();
 
-  // ----------------------------------------
-  // 復旧 / 物理削除ボタン用ハンドラ
-  // （現時点では API 未接続なので TODO としてアラートのみ）
-  // ----------------------------------------
-  const handleRestore = React.useCallback(() => {
-    // TODO: 復旧 API と接続（restoreProductBlueprint など）
-    alert("復旧処理はまだ実装されていません。");
-  }, []);
+  // ---------------------------------------------------
+  // 復旧ボタン: deletedAt / deletedBy / expiredAt を null にする
+  // ---------------------------------------------------
+  const handleRestore = React.useCallback(async () => {
+    if (!blueprintId) return;
 
+    try {
+      await restoreProductBlueprintHTTP(blueprintId);
+      alert("復旧しました");
+
+      // 復旧後は通常の一覧へ戻る
+      navigate("/productBlueprint");
+    } catch (err) {
+      console.error("[useProductBlueprintDeletedDetail] restore failed:", err);
+      alert("復旧に失敗しました");
+    }
+  }, [blueprintId, navigate]);
+
+  // ---------------------------------------------------
+  // 物理削除（未実装）
+  // ---------------------------------------------------
   const handlePurge = React.useCallback(() => {
-    // TODO: 物理削除 API と接続（purgeProductBlueprint など）
+    if (!blueprintId) return;
+
     const ok = window.confirm(
       "この商品設計を完全に削除しますか？\nこの操作は取り消せません。",
     );
     if (!ok) return;
 
+    // TODO: purge API を接続
     alert("物理削除処理はまだ実装されていません。");
-  }, []);
+  }, [blueprintId]);
 
   return {
     pageTitle: base.pageTitle,
