@@ -9,6 +9,9 @@ import (
 	productbpdom "narratives/internal/domain/productBlueprint"
 )
 
+// ★ ProductBlueprint 論理削除後の TTL（物理削除予定までの期間: 90日）
+const productBlueprintTTL = 90 * 24 * time.Hour
+
 // ProductBlueprintRepo defines the minimal persistence port needed by ProductBlueprintUsecase.
 type ProductBlueprintRepo interface {
 	GetByID(ctx context.Context, id string) (productbpdom.ProductBlueprint, error)
@@ -125,7 +128,7 @@ func (u *ProductBlueprintUsecase) Delete(ctx context.Context, id string) error {
 // ------------------------------------------------------------
 
 // SoftDeleteWithModels は ProductBlueprint を論理削除するためのユースケースです。
-// 現時点では product_blueprints ドキュメントの DeletedAt / DeletedBy を更新する
+// 現時点では product_blueprints ドキュメントの DeletedAt / DeletedBy / ExpireAt を更新する
 // 実装に留め、models へのカスケードは今後の拡張ポイントとして残しています。
 func (u *ProductBlueprintUsecase) SoftDeleteWithModels(
 	ctx context.Context,
@@ -144,10 +147,13 @@ func (u *ProductBlueprintUsecase) SoftDeleteWithModels(
 	}
 
 	now := time.Now().UTC()
-	pb.DeletedAt = &now
-	pb.DeletedBy = deletedBy
-	pb.UpdatedAt = now
-	pb.UpdatedBy = deletedBy
+
+	// ★ ドメインメソッドを使って論理削除 + TTL 付き ExpireAt を設定
+	//   - DeletedAt = now
+	//   - DeletedBy = deletedBy
+	//   - ExpireAt = now + productBlueprintTTL (90日)
+	//   - UpdatedAt / UpdatedBy も内部で更新される
+	pb.SoftDelete(now, deletedBy, productBlueprintTTL)
 
 	// companyId は context を優先
 	if cid := companyIDFromContext(ctx); cid != "" {
@@ -164,7 +170,7 @@ func (u *ProductBlueprintUsecase) SoftDeleteWithModels(
 }
 
 // RestoreWithModels は論理削除された ProductBlueprint を復元するためのユースケースです。
-// 現時点では Blueprint の DeletedAt/DeletedBy をクリアする実装に留めています。
+// 現時点では Blueprint の DeletedAt/DeletedBy/ExpireAt をクリアする実装に留めています。
 func (u *ProductBlueprintUsecase) RestoreWithModels(
 	ctx context.Context,
 	id string,
@@ -181,10 +187,9 @@ func (u *ProductBlueprintUsecase) RestoreWithModels(
 	}
 
 	now := time.Now().UTC()
-	pb.DeletedAt = nil
-	pb.DeletedBy = nil
-	pb.UpdatedAt = now
-	pb.UpdatedBy = restoredBy
+
+	// ★ ドメインメソッドで復旧（Deleted/Expire をクリアし Updated 系も更新）
+	pb.Restore(now, restoredBy)
 
 	// companyId は context を優先
 	if cid := companyIDFromContext(ctx); cid != "" {

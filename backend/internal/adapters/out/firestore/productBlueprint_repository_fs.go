@@ -236,6 +236,10 @@ func (r *ProductBlueprintRepositoryFS) Delete(ctx context.Context, id string) er
 // SoftDeleteWithModels:
 //   - product_blueprints/{id} に deletedAt を立てて論理削除
 //   - かつ、models コレクションの該当 productBlueprintId のドキュメントも論理削除
+//
+// ※ 現在はユースケース側で SoftDelete + ExpireAt 設定を行うため、
+//
+//	このメソッドは将来的に廃止する方向のレガシー実装扱い。
 func (r *ProductBlueprintRepositoryFS) SoftDeleteWithModels(ctx context.Context, id string) error {
 	if r.Client == nil {
 		return errors.New("firestore client is nil")
@@ -428,6 +432,12 @@ func docToProductBlueprint(doc *firestore.DocumentSnapshot) (pbdom.ProductBluepr
 		deletedAtPtr = &t
 	}
 
+	// ★ ExpireAt（TTL 用フィールド）も Firestore から読み込む
+	var expireAtPtr *time.Time
+	if t := getTimeVal("expireAt", "expire_at"); !t.IsZero() {
+		expireAtPtr = &t
+	}
+
 	pb := pbdom.ProductBlueprint{
 		ID:               doc.Ref.ID,
 		ProductName:      getStr("productName", "product_name"),
@@ -448,6 +458,7 @@ func docToProductBlueprint(doc *firestore.DocumentSnapshot) (pbdom.ProductBluepr
 		UpdatedAt:  getTimeVal("updatedAt", "updated_at"),
 		DeletedBy:  getStrPtr("deletedBy", "deleted_by"),
 		DeletedAt:  deletedAtPtr,
+		ExpireAt:   expireAtPtr,
 	}
 
 	return pb, nil
@@ -492,6 +503,10 @@ func productBlueprintToDoc(v pbdom.ProductBlueprint, createdAt, updatedAt time.T
 		if s := strings.TrimSpace(*v.DeletedBy); s != "" {
 			m["deletedBy"] = s
 		}
+	}
+	// ★ ExpireAt も Firestore に書き出す（TTL 対象フィールド）
+	if v.ExpireAt != nil && !v.ExpireAt.IsZero() {
+		m["expireAt"] = v.ExpireAt.UTC()
 	}
 
 	return m, nil

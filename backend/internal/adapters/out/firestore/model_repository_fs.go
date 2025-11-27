@@ -393,12 +393,17 @@ func (r *ModelRepositoryFS) ReplaceModelVariations(
 		}
 		chunk := existing[i:end]
 
-		batch := r.Client.Batch()
-		for _, v := range chunk {
-			ref := r.variationsCol().Doc(v.ID)
-			batch.Delete(ref)
-		}
-		if _, err := batch.Commit(ctx); err != nil {
+		// ★ Batch ではなく Transaction を使用して削除
+		err := r.Client.RunTransaction(ctx, func(ctx context.Context, tx *firestore.Transaction) error {
+			for _, v := range chunk {
+				ref := r.variationsCol().Doc(v.ID)
+				if err := tx.Delete(ref); err != nil {
+					return err
+				}
+			}
+			return nil
+		})
+		if err != nil {
 			return nil, err
 		}
 	}
