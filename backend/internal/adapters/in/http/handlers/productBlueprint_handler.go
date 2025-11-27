@@ -265,23 +265,39 @@ func (h *ProductBlueprintHandler) restore(w http.ResponseWriter, r *http.Request
 
 	id = strings.TrimSpace(id)
 	if id == "" {
+		log.Printf("[ProductBlueprintHandler] restore: invalid id (empty)")
 		w.WriteHeader(http.StatusBadRequest)
 		_ = json.NewEncoder(w).Encode(map[string]string{"error": "invalid id"})
 		return
 	}
 
+	log.Printf("[ProductBlueprintHandler] restore: start id=%s", id)
+
 	// 復元実行（restoredBy も現状は context からの解決に任せるため nil）
 	if err := h.uc.RestoreWithModels(ctx, id, nil); err != nil {
+		log.Printf("[ProductBlueprintHandler] restore: usecase error id=%s err=%v", id, err)
 		writeProductBlueprintErr(w, err)
 		return
 	}
 
+	log.Printf("[ProductBlueprintHandler] restore: RestoreWithModels OK id=%s", id)
+
 	// 復元後の最新状態を返す
 	pb, err := h.uc.GetByID(ctx, id)
 	if err != nil {
+		log.Printf("[ProductBlueprintHandler] restore: GetByID after restore failed id=%s err=%v", id, err)
 		writeProductBlueprintErr(w, err)
 		return
 	}
+
+	log.Printf(
+		"[ProductBlueprintHandler] restore: after restore id=%s deletedAt=%v expireAt=%v updatedAt=%v updatedBy=%v",
+		pb.ID,
+		pb.DeletedAt,
+		pb.ExpireAt,
+		pb.UpdatedAt,
+		pb.UpdatedBy,
+	)
 
 	_ = json.NewEncoder(w).Encode(pb)
 }

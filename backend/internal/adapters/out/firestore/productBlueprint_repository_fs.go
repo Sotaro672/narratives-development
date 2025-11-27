@@ -233,7 +233,10 @@ func (r *ProductBlueprintRepositoryFS) Save(
 	}
 	data["id"] = pb.ID
 
-	if _, err := docRef.Set(ctx, data, firestore.MergeAll); err != nil {
+	// ★ 完全上書きに変更（MergeAll をやめる）
+	//   - Restore 時に DeletedAt / ExpireAt が nil ならフィールドごと消える
+	//   - SoftDelete 時には productBlueprintToDoc が deletedAt / expireAt を書き出す
+	if _, err := docRef.Set(ctx, data); err != nil {
 		return pbdom.ProductBlueprint{}, err
 	}
 

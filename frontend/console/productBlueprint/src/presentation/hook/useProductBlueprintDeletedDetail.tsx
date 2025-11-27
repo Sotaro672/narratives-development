@@ -1,5 +1,6 @@
 // frontend/console/productBlueprint/src/presentation/hook/useProductBlueprintDeletedDetail.tsx
 import * as React from "react";
+import { useParams, useNavigate } from "react-router-dom";
 
 // ★ 通常の詳細データ取得は既存 hook を利用（編集ハンドラは不要）
 import { useProductBlueprintDetail } from "./useProductBlueprintDetail";
@@ -12,9 +13,8 @@ import type {
   ModelNumberRow,
 } from "../../infrastructure/api/productBlueprintApi";
 
-// ★ 復旧 API 呼び出し（後で service に委譲してもよい）
-import { restoreProductBlueprintHTTP } from "../../infrastructure/repository/productBlueprintRepositoryHTTP";
-import { useParams, useNavigate } from "react-router-dom";
+// ★ 復旧用サービス（application 層）を利用
+import { restoreDeletedProductBlueprint } from "../../application/productBlueprintDeletedDetailService";
 
 export interface UseProductBlueprintDeletedDetailResult {
   pageTitle: string;
@@ -56,18 +56,34 @@ export function useProductBlueprintDeletedDetail(): UseProductBlueprintDeletedDe
 
   // ---------------------------------------------------
   // 復旧ボタン: deletedAt / deletedBy / expiredAt を null にする
+  //   - application 層の restoreDeletedProductBlueprint 経由で呼ぶ
   // ---------------------------------------------------
   const handleRestore = React.useCallback(async () => {
-    if (!blueprintId) return;
+    if (!blueprintId) {
+      console.error(
+        "[useProductBlueprintDeletedDetail] restore called with empty blueprintId",
+      );
+      alert("商品設計ID が不明です");
+      return;
+    }
+
+    console.log(
+      "[useProductBlueprintDeletedDetail] restore click: blueprintId=",
+      blueprintId,
+    );
 
     try {
-      await restoreProductBlueprintHTTP(blueprintId);
+      await restoreDeletedProductBlueprint(blueprintId);
       alert("復旧しました");
 
       // 復旧後は通常の一覧へ戻る
       navigate("/productBlueprint");
     } catch (err) {
-      console.error("[useProductBlueprintDeletedDetail] restore failed:", err);
+      console.error(
+        "[useProductBlueprintDeletedDetail] restore failed: blueprintId=",
+        blueprintId,
+        err,
+      );
       alert("復旧に失敗しました");
     }
   }, [blueprintId, navigate]);
@@ -76,7 +92,13 @@ export function useProductBlueprintDeletedDetail(): UseProductBlueprintDeletedDe
   // 物理削除（未実装）
   // ---------------------------------------------------
   const handlePurge = React.useCallback(() => {
-    if (!blueprintId) return;
+    if (!blueprintId) {
+      console.error(
+        "[useProductBlueprintDeletedDetail] purge called with empty blueprintId",
+      );
+      alert("商品設計ID が不明です");
+      return;
+    }
 
     const ok = window.confirm(
       "この商品設計を完全に削除しますか？\nこの操作は取り消せません。",

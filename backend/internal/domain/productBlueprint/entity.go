@@ -1,4 +1,4 @@
-// backend\internal\domain\productBlueprint\entity.go
+// backend/internal/domain/productBlueprint/entity.go
 package productBlueprint
 
 import (
@@ -268,14 +268,18 @@ func (p *ProductBlueprint) SoftDelete(now time.Time, deletedBy *string, ttl time
 	p.touch(now, deletedBy)
 }
 
-// ★ 復旧（Deleted/Expire をクリア）
+// ★ 復旧（DeletedAt / DeletedBy / ExpireAt をクリアして Updated 系を進める）
 func (p *ProductBlueprint) Restore(now time.Time, restoredBy *string) {
 	if now.IsZero() {
 		now = time.Now().UTC()
 	}
+
+	// ★ 論理削除状態を完全に解除
 	p.DeletedAt = nil
 	p.DeletedBy = nil
 	p.ExpireAt = nil
+
+	// ★ 復旧も更新扱い
 	p.touch(now, restoredBy)
 }
 
