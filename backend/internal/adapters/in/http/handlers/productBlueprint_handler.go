@@ -3,6 +3,7 @@ package handlers
 
 import (
 	"encoding/json"
+	"log"
 	"net/http"
 	"strings"
 
@@ -355,18 +356,28 @@ func (h *ProductBlueprintHandler) list(w http.ResponseWriter, r *http.Request) {
 // GET /product-blueprints/deleted  ← 削除済み一覧 API
 // ---------------------------------------------------
 
+// 例: GET /product-blueprints/deleted 用ハンドラ
 func (h *ProductBlueprintHandler) listDeleted(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 
+	log.Println("[ProductBlueprintHandler] listDeleted: start")
+
 	rows, err := h.uc.ListDeleted(ctx)
 	if err != nil {
+		log.Printf("[ProductBlueprintHandler] listDeleted: error: %v\n", err)
 		writeProductBlueprintErr(w, err)
 		return
 	}
 
-	// 削除済み一覧は、detail と同じドメイン構造をそのまま返す
-	// （frontend の productBlueprintDeletedService で DeletedAt / ExpireAt を参照）
-	_ = json.NewEncoder(w).Encode(rows)
+	log.Printf("[ProductBlueprintHandler] listDeleted: got %d rows\n", len(rows))
+
+	// ここで rows の中身もざっくり見たい場合
+	for i, pb := range rows {
+		log.Printf("[ProductBlueprintHandler] row[%d]: id=%s name=%s deletedAt=%v companyId=%s\n",
+			i, pb.ID, pb.ProductName, pb.DeletedAt, pb.CompanyID)
+	}
+
+	// 以降、レスポンス整形…
 }
 
 // ---------------------------------------------------

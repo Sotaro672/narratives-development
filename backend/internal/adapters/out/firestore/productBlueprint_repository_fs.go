@@ -110,6 +110,40 @@ func (r *ProductBlueprintRepositoryFS) List(ctx context.Context) ([]pbdom.Produc
 	return out, nil
 }
 
+// ListDeleted returns only product_blueprints whose deletedAt is NOT null
+// (i.e. logically deleted ones), optionally filtered by companyId in context.
+func (r *ProductBlueprintRepositoryFS) ListDeleted(ctx context.Context) ([]pbdom.ProductBlueprint, error) {
+	if r.Client == nil {
+		return nil, errors.New("firestore client is nil")
+	}
+
+	q := r.col().Query
+
+	// テナントスコープ: companyId が context に入っていれば絞り込む
+	if cid := strings.TrimSpace(usecase.CompanyIDFromContext(ctx)); cid != "" {
+		q = q.Where("companyId", "==", cid)
+	}
+
+	// deletedAt が存在して 0 以外の Timestamp が入っているものだけを取得
+	// （フィールド未定義のドキュメントはこの range 条件にマッチしない）
+	q = q.Where("deletedAt", ">", time.Time{})
+
+	snaps, err := q.Documents(ctx).GetAll()
+	if err != nil {
+		return nil, err
+	}
+
+	out := make([]pbdom.ProductBlueprint, 0, len(snaps))
+	for _, snap := range snaps {
+		pb, err := docToProductBlueprint(snap)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, pb)
+	}
+	return out, nil
+}
+
 // Create inserts a new ProductBlueprint (no upsert).
 // If ID is empty, it is auto-generated.
 // If CreatedAt/UpdatedAt are zero, they are set to now (UTC).

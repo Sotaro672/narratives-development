@@ -17,6 +17,9 @@ type ProductBlueprintRepo interface {
 	// 一覧取得用（companyId による絞り込みは repository 側の実装に委譲）
 	List(ctx context.Context) ([]productbpdom.ProductBlueprint, error)
 
+	// ★ 追加: 論理削除済みのみ取得する専用メソッド
+	ListDeleted(ctx context.Context) ([]productbpdom.ProductBlueprint, error)
+
 	Create(ctx context.Context, v productbpdom.ProductBlueprint) (productbpdom.ProductBlueprint, error)
 	Save(ctx context.Context, v productbpdom.ProductBlueprint) (productbpdom.ProductBlueprint, error)
 	Delete(ctx context.Context, id string) error
@@ -68,20 +71,22 @@ func (u *ProductBlueprintUsecase) List(ctx context.Context) ([]productbpdom.Prod
 	return filtered, nil
 }
 
-// ★ 新規追加:
-// DeletedAt が null ではない（論理削除済み）の ProductBlueprint のみを一覧で返す。
-// 管理画面側で「ゴミ箱一覧」「復元候補一覧」などに利用する想定。
+// ★ 論理削除済みのみの一覧
+// DeletedAt が null ではない ProductBlueprint のみを返す。
+// Repository 側の ListDeleted は Firestore クエリで deletedAt / companyId を絞り込む。
 func (u *ProductBlueprintUsecase) ListDeleted(ctx context.Context) ([]productbpdom.ProductBlueprint, error) {
-	rows, err := u.repo.List(ctx)
+	rows, err := u.repo.ListDeleted(ctx)
 	if err != nil {
 		return nil, err
 	}
 
+	// 念のため usecase 側でも DeletedAt != nil を保証しておく
 	deleted := make([]productbpdom.ProductBlueprint, 0, len(rows))
 	for _, pb := range rows {
-		if pb.DeletedAt != nil {
-			deleted = append(deleted, pb)
+		if pb.DeletedAt == nil {
+			continue
 		}
+		deleted = append(deleted, pb)
 	}
 	return deleted, nil
 }
