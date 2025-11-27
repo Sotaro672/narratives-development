@@ -31,6 +31,9 @@ export interface UseProductBlueprintManagementResult {
   handleRowClick: (row: UiRow) => void;
   handleCreate: () => void;
   handleReset: () => void;
+
+  // ★ ゴミ箱ボタン押下時のハンドラ（削除一覧ページへ遷移）
+  handleTrash: () => void;
 }
 
 /**
@@ -52,26 +55,25 @@ export function useProductBlueprintManagement(): UseProductBlueprintManagementRe
   const [sortedDir, setSortedDir] = useState<SortDirection>(null);
 
   // ---------------------------
+  // 一覧取得処理（初回 & リフレッシュ共通）
+  // ---------------------------
+  const load = useCallback(async () => {
+    try {
+      const uiRows = await fetchProductBlueprintManagementRows();
+      console.log("[useProductBlueprintManagement] fetched uiRows:", uiRows);
+      setAllRows(uiRows);
+    } catch (err) {
+      console.error("[useProductBlueprintManagement] list load failed", err);
+      setAllRows([]);
+    }
+  }, []);
+
+  // ---------------------------
   // 初回ロード: backend から取得
   // ---------------------------
   useEffect(() => {
-    (async () => {
-      try {
-        const uiRows = await fetchProductBlueprintManagementRows();
-        console.log(
-          "[useProductBlueprintManagement] fetched uiRows:",
-          uiRows,
-        );
-        setAllRows(uiRows);
-      } catch (err) {
-        console.error(
-          "[useProductBlueprintManagement] list load failed",
-          err,
-        );
-        setAllRows([]);
-      }
-    })();
-  }, []);
+    void load();
+  }, [load]);
 
   // ---------------------------
   // フィルタ・ソート適用
@@ -124,12 +126,21 @@ export function useProductBlueprintManagement(): UseProductBlueprintManagementRe
   }, [navigate]);
 
   const handleReset = useCallback(() => {
+    // フィルタ・ソート状態をリセット
     setBrandFilter([]);
     setAssigneeFilter([]);
     setTagFilter([]);
     setSortedKey(null);
     setSortedDir(null);
-  }, []);
+
+    // 一覧を再取得（リフレッシュ）
+    void load();
+  }, [load]);
+
+  // ★ ゴミ箱ボタン押下 → 削除済み一覧ページへ遷移
+  const handleTrash = useCallback(() => {
+    navigate("/productBlueprint/deleted");
+  }, [navigate]);
 
   return {
     rows,
@@ -143,5 +154,6 @@ export function useProductBlueprintManagement(): UseProductBlueprintManagementRe
     handleRowClick,
     handleCreate,
     handleReset,
+    handleTrash,
   };
 }

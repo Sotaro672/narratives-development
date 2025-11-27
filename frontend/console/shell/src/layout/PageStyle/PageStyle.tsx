@@ -6,7 +6,8 @@ import {
   Plus,
   Pencil,
   Trash2,
-  X, // ★ 追加
+  X,
+  RotateCw, // ★ 復旧（Restore）
 } from "lucide-react";
 import "./PageStyle.css";
 
@@ -23,12 +24,15 @@ interface PageStyleProps {
   onSave?: () => void;
   onCreate?: () => void;
 
-  // 追加済み
   onEdit?: () => void;
-  onDelete?: () => void;
+  onDelete?: () => void; // 論理削除
 
-  // ★ 新規追加（キャンセル）
+  // ★ キャンセル
   onCancel?: () => void;
+
+  // ★ 新規追加
+  onPurge?: () => void;   // 物理削除
+  onRestore?: () => void; // 復旧
 
   title?: string;
   badge?: ReactNode;
@@ -45,7 +49,9 @@ export default function PageStyle({
   onCreate,
   onEdit,
   onDelete,
-  onCancel, // ★ 追加
+  onCancel,
+  onPurge,     // ★
+  onRestore,   // ★
   title,
   badge,
   actions,
@@ -79,6 +85,7 @@ export default function PageStyle({
 
           {/* 右側：アクションボタン */}
           <div className="page-header__actions">
+
             {/* 編集 */}
             {onEdit && (
               <button
@@ -91,7 +98,7 @@ export default function PageStyle({
               </button>
             )}
 
-            {/* 削除 */}
+            {/* 論理削除 */}
             {onDelete && (
               <button
                 type="button"
@@ -103,7 +110,31 @@ export default function PageStyle({
               </button>
             )}
 
-            {/* ★ キャンセル */}
+            {/* ★ 復旧ボタン */}
+            {onRestore && (
+              <button
+                type="button"
+                className="page-header__btn"
+                onClick={onRestore}
+              >
+                <RotateCw size={16} style={{ marginRight: 4 }} />
+                復旧
+              </button>
+            )}
+
+            {/* ★ 物理削除ボタン */}
+            {onPurge && (
+              <button
+                type="button"
+                className="page-header__btn page-header__btn--danger"
+                onClick={onPurge}
+              >
+                <Trash2 size={16} style={{ marginRight: 4 }} />
+                物理削除
+              </button>
+            )}
+
+            {/* キャンセル */}
             {onCancel && (
               <button
                 type="button"

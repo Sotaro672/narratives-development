@@ -1,32 +1,35 @@
-// frontend/console/productBlueprint/src/presentation/pages/productBlueprintManagement.tsx
+// frontend/console/productBlueprint/src/presentation/pages/productBlueprintDeleted.tsx
 
+import { useNavigate } from "react-router-dom";
 import List, {
   FilterableTableHeader,
   SortableTableHeader,
 } from "../../../../shell/src/layout/List/List";
-import { useProductBlueprintManagement } from "../hook/useProductBlueprintManagement";
+import { useProductBlueprintDeleted } from "../hook/useProductBlueprintDeleted";
 
-export default function ProductBlueprintManagement() {
+/**
+ * 論理削除済み ProductBlueprint 一覧ページ
+ * - ヘッダー構成: プロダクト / ブランド / 担当者 / 削除日 / 期限日
+ * - ブランド / 担当者: FilterableTableHeader
+ * - 削除日 / 期限日: SortableTableHeader
+ */
+export default function ProductBlueprintDeleted() {
+  const navigate = useNavigate();
+
   const {
     rows,
     brandFilter,
     assigneeFilter,
-    tagFilter,
     handleBrandFilterChange,
     handleAssigneeFilterChange,
-    handleTagFilterChange,
     handleSortChange,
     handleRowClick,
-    handleCreate,
     handleReset,
-  } = useProductBlueprintManagement();
+  } = useProductBlueprintDeleted();
 
-  // -----------------------------
-  // ★ 追加：ゴミ箱ボタン押下
-  // -----------------------------
-  const handleTrash = () => {
-    console.log("ゴミ箱ボタン押下：削除対象選択 or 一括削除ロジックへ");
-    // 必要に応じて削除モーダルなどをここに追加できます
+  // キャンセルボタン（×）押下時: 通常の一覧に戻る
+  const handleCancel = () => {
+    navigate("/productBlueprint");
   };
 
   // rows からオプションを動的生成
@@ -37,10 +40,6 @@ export default function ProductBlueprintManagement() {
   const assigneeOptions = Array.from(
     new Set(rows.map((r) => r.assigneeName).filter(Boolean)),
   ).map((name) => ({ value: name, label: name }));
-
-  const tagOptions = Array.from(
-    new Set(rows.map((r) => r.productIdTag).filter(Boolean)),
-  ).map((tag) => ({ value: tag, label: tag }));
 
   const headers = [
     "プロダクト",
@@ -58,25 +57,18 @@ export default function ProductBlueprintManagement() {
       selected={assigneeFilter}
       onChange={handleAssigneeFilterChange}
     />,
-    <FilterableTableHeader
-      key="tag"
-      label="タグ種別"
-      options={tagOptions}
-      selected={tagFilter}
-      onChange={handleTagFilterChange}
-    />,
     <SortableTableHeader
-      key="createdAt"
-      label="作成日"
-      sortKey="createdAt"
+      key="deletedAt"
+      label="削除日"
+      sortKey="deletedAt"
       activeKey={null}
       direction={null}
       onChange={handleSortChange}
     />,
     <SortableTableHeader
-      key="updatedAt"
-      label="最終更新日"
-      sortKey="updatedAt"
+      key="expireAt"
+      label="期限日"
+      sortKey="expireAt"
       activeKey={null}
       direction={null}
       onChange={handleSortChange}
@@ -85,17 +77,14 @@ export default function ProductBlueprintManagement() {
 
   return (
     <List
-      title="商品設計"
+      title="削除済み商品設計"
       headerCells={headers}
-      showCreateButton
-      createLabel="商品設計を作成"
-      onCreate={handleCreate}
+      // 削除済み一覧なので作成ボタンは表示しない（デフォルト false のまま）
       showResetButton
       onReset={handleReset}
-
-      // ★ 追加：ゴミ箱ボタン
-      showTrashButton
-      onTrash={handleTrash}
+      // ★ キャンセルボタン（×）をリフレッシュボタンの右隣りに表示
+      showCancelButton
+      onCancel={handleCancel}
     >
       {rows.map((r) => (
         <tr
@@ -108,9 +97,8 @@ export default function ProductBlueprintManagement() {
             <span className="lp-brand-pill">{r.brandName}</span>
           </td>
           <td>{r.assigneeName}</td>
-          <td>{r.productIdTag}</td>
-          <td>{r.createdAt}</td>
-          <td>{r.updatedAt}</td>
+          <td>{r.deletedAt}</td>
+          <td>{r.expireAt}</td>
         </tr>
       ))}
     </List>

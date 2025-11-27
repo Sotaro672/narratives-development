@@ -67,7 +67,7 @@ export async function createProductBlueprintHTTP(
 }
 
 // -----------------------------------------------------------
-// GET: 商品設計 一覧
+// GET: 商品設計 一覧（論理削除されていないもの）
 // -----------------------------------------------------------
 export async function listProductBlueprintsHTTP(): Promise<ProductBlueprintDetailResponse[]> {
   const user = auth.currentUser;
@@ -89,6 +89,33 @@ export async function listProductBlueprintsHTTP(): Promise<ProductBlueprintDetai
   }
 
   return (await res.json()) as ProductBlueprintDetailResponse[];
+}
+
+// -----------------------------------------------------------
+// GET: 商品設計 一覧（論理削除済みのみ）
+//   - backend 側の GET /product-blueprints/deleted を想定
+//   - 返却型は Deleted 用 service 側でキャストして利用する
+// -----------------------------------------------------------
+export async function listDeletedProductBlueprintsHTTP(): Promise<any[]> {
+  const user = auth.currentUser;
+  if (!user) throw new Error("未ログインです");
+
+  const idToken = await user.getIdToken();
+
+  const res = await fetch(`${API_BASE}/product-blueprints/deleted`, {
+    method: "GET",
+    headers: {
+      Authorization: `Bearer ${idToken}`,
+    },
+  });
+
+  if (!res.ok) {
+    throw new Error(
+      `削除済み商品設計一覧の取得に失敗しました（${res.status} ${res.statusText}）`,
+    );
+  }
+
+  return (await res.json()) as any[];
 }
 
 // -----------------------------------------------------------
