@@ -38,16 +38,16 @@ func (h *ProductBlueprintHandler) ServeHTTP(w http.ResponseWriter, r *http.Reque
 
 	switch {
 	// ---------------------------------------------------
-	// GET /product-blueprints/deleted  ← 削除済み一覧 API
-	// ---------------------------------------------------
-	case r.Method == http.MethodGet && path == "/product-blueprints/deleted":
-		h.listDeleted(w, r)
-
-	// ---------------------------------------------------
-	// GET /product-blueprints  ← 一覧 API
+	// GET /product-blueprints  ← 一覧 API（未削除のみ）
 	// ---------------------------------------------------
 	case r.Method == http.MethodGet && path == "/product-blueprints":
 		h.list(w, r)
+
+	// ---------------------------------------------------
+	// GET /product-blueprints/deleted ← 削除済み一覧 API
+	// ---------------------------------------------------
+	case r.Method == http.MethodGet && path == "/product-blueprints/deleted":
+		h.listDeleted(w, r)
 
 	// ---------------------------------------------------
 	// POST /product-blueprints  ← 新規作成 API
@@ -287,7 +287,7 @@ func (h *ProductBlueprintHandler) restore(w http.ResponseWriter, r *http.Request
 }
 
 // ---------------------------------------------------
-// GET /product-blueprints   ← 一覧 API（非削除）
+// GET /product-blueprints   ← 一覧 API（未削除）
 // ---------------------------------------------------
 
 // フロントエンドの期待に合わせた一覧用 DTO
@@ -356,28 +356,65 @@ func (h *ProductBlueprintHandler) list(w http.ResponseWriter, r *http.Request) {
 // GET /product-blueprints/deleted  ← 削除済み一覧 API
 // ---------------------------------------------------
 
-// 例: GET /product-blueprints/deleted 用ハンドラ
+// 削除済み一覧用 DTO
+type ProductBlueprintDeletedListOutput struct {
+	ID          string `json:"id"`
+	ProductName string `json:"productName"`
+	BrandId     string `json:"brandId"`
+	AssigneeId  string `json:"assigneeId"`
+	DeletedAt   string `json:"deletedAt"` // YYYY/MM/DD
+	ExpireAt    string `json:"expireAt"`  // YYYY/MM/DD
+}
+
 func (h *ProductBlueprintHandler) listDeleted(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 
-	log.Println("[ProductBlueprintHandler] listDeleted: start")
+	log.Printf("[ProductBlueprintHandler] listDeleted: start")
 
 	rows, err := h.uc.ListDeleted(ctx)
 	if err != nil {
-		log.Printf("[ProductBlueprintHandler] listDeleted: error: %v\n", err)
+		log.Printf("[ProductBlueprintHandler] listDeleted: error: %v", err)
 		writeProductBlueprintErr(w, err)
 		return
 	}
 
-	log.Printf("[ProductBlueprintHandler] listDeleted: got %d rows\n", len(rows))
+	log.Printf("[ProductBlueprintHandler] listDeleted: got %d rows", len(rows))
 
-	// ここで rows の中身もざっくり見たい場合
+	out := make([]ProductBlueprintDeletedListOutput, 0, len(rows))
 	for i, pb := range rows {
-		log.Printf("[ProductBlueprintHandler] row[%d]: id=%s name=%s deletedAt=%v companyId=%s\n",
-			i, pb.ID, pb.ProductName, pb.DeletedAt, pb.CompanyID)
+		brandId := strings.TrimSpace(pb.BrandID)
+		assigneeId := strings.TrimSpace(pb.AssigneeID)
+		if assigneeId == "" {
+			assigneeId = "-"
+		}
+
+		deletedAtStr := ""
+		if pb.DeletedAt != nil && !pb.DeletedAt.IsZero() {
+			deletedAtStr = pb.DeletedAt.Format("2006/01/02")
+		}
+
+		expireAtStr := ""
+		if pb.ExpireAt != nil && !pb.ExpireAt.IsZero() {
+			expireAtStr = pb.ExpireAt.Format("2006/01/02")
+		}
+
+		log.Printf(
+			"[ProductBlueprintHandler] listDeleted: row[%d]: id=%s name=%s deletedAt=%v companyId=%s",
+			i, pb.ID, pb.ProductName, pb.DeletedAt, pb.CompanyID,
+		)
+
+		out = append(out, ProductBlueprintDeletedListOutput{
+			ID:          pb.ID,
+			ProductName: pb.ProductName,
+			BrandId:     brandId,
+			AssigneeId:  assigneeId,
+			DeletedAt:   deletedAtStr,
+			ExpireAt:    expireAtStr,
+		})
 	}
 
-	// 以降、レスポンス整形…
+	// ★ 必ず JSON 配列を返す
+	_ = json.NewEncoder(w).Encode(out)
 }
 
 // ---------------------------------------------------
