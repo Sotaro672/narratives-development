@@ -5,8 +5,11 @@ import List, {
   SortableTableHeader,
 } from "../../../../shell/src/layout/List/List";
 import { useProductBlueprintManagement } from "../hook/useProductBlueprintManagement";
+import { useNavigate } from "react-router-dom";
 
 export default function ProductBlueprintManagement() {
+  const navigate = useNavigate();
+
   const {
     rows,
     brandFilter,
@@ -22,11 +25,10 @@ export default function ProductBlueprintManagement() {
   } = useProductBlueprintManagement();
 
   // -----------------------------
-  // ★ 追加：ゴミ箱ボタン押下
+  // ゴミ箱ボタン押下 → 削除済み一覧へ遷移
   // -----------------------------
   const handleTrash = () => {
-    console.log("ゴミ箱ボタン押下：削除対象選択 or 一括削除ロジックへ");
-    // 必要に応じて削除モーダルなどをここに追加できます
+    navigate("/productBlueprint/deleted");
   };
 
   // rows からオプションを動的生成
@@ -92,8 +94,7 @@ export default function ProductBlueprintManagement() {
       onCreate={handleCreate}
       showResetButton
       onReset={handleReset}
-
-      // ★ 追加：ゴミ箱ボタン
+      // ★ ゴミ箱ボタン（削除済み一覧へ）
       showTrashButton
       onTrash={handleTrash}
     >
