@@ -1,5 +1,3 @@
-// frontend/console/model/src/application/modelUpdateService.tsx
-
 /// <reference types="vite/client" />
 
 import { auth } from "../../../shell/src/auth/infrastructure/config/firebaseClient";
@@ -88,6 +86,12 @@ export async function updateModelVariation(
     measurements: payload.measurements,
   };
 
+  // 呼び出し前スナップショット
+  console.log("[updateModelVariation] received payload from caller:", {
+    variationId: id,
+    ...payload,
+  });
+
   console.log("[updateModelVariation] request:", {
     variationId: id,
     url,
@@ -104,8 +108,6 @@ export async function updateModelVariation(
     body: JSON.stringify(body),
   });
 
-  const text = await res.text().catch(() => "");
-
   // ★ 404 の場合は「その variation は存在しない」とみなしてスキップ扱いにする
   if (res.status === 404) {
     console.warn(
@@ -114,7 +116,6 @@ export async function updateModelVariation(
         variationId: id,
         status: res.status,
         statusText: res.statusText,
-        responseText: text,
       },
     );
 
@@ -140,7 +141,9 @@ export async function updateModelVariation(
     return dummy;
   }
 
+  // 404 以外のエラー時だけ text を読む（JSON をパースする前に body を消費しない）
   if (!res.ok) {
+    const text = await res.text().catch(() => "");
     throw new Error(
       `モデルバリエーションの更新に失敗しました（${res.status} ${res.statusText}）: ${text}`,
     );

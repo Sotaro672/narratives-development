@@ -247,7 +247,6 @@ export function useProductBlueprintDetail(): UseProductBlueprintDetailResult {
                 if (thighVal != null) {
                   // 正規フィールド + alias の両方に入れておく
                   base.thigh = thighVal;
-                  base.thighWidth = thighVal;
                 }
 
                 base.hemWidth = ms["裾幅"] ?? undefined;
@@ -256,20 +255,16 @@ export function useProductBlueprintDetail(): UseProductBlueprintDetailResult {
                 const lenVal = ms["着丈"] ?? undefined;
                 if (lenVal != null) {
                   base.length = lenVal;
-                  base.lengthTop = lenVal; // alias も保持
                 }
 
                 const chestVal = ms["身幅"] ?? ms["胸囲"] ?? undefined;
                 if (chestVal != null) {
                   base.chest = chestVal; // 正規フィールド
-                  base.bust = chestVal; // 胸囲 alias
-                  base.bodyWidth = chestVal; // 旧フィールド alias
                 }
 
                 const shoulderVal = ms["肩幅"] ?? undefined;
                 if (shoulderVal != null) {
                   base.shoulder = shoulderVal;
-                  base.shoulderWidth = shoulderVal; // alias
                 }
 
                 const sleeveVal = ms["袖丈"] ?? undefined;
@@ -485,8 +480,9 @@ export function useProductBlueprintDetail(): UseProductBlueprintDetailResult {
     assigneeId,
   ]);
 
+  // ★ 戻るボタン: 相対 -1 ではなく、商品設計一覧の絶対パスへ
   const onBack = React.useCallback(() => {
-    navigate(-1);
+    navigate("/productBlueprint");
   }, [navigate]);
 
   const onAddColor = React.useCallback(() => {

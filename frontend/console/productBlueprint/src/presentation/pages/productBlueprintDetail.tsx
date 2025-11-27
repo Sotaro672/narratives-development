@@ -29,7 +29,6 @@ export default function ProductBlueprintDetail() {
     colors,
     colorInput,
     sizes,
-    modelNumbers,
     colorRgbMap,
 
     assignee,
@@ -41,7 +40,6 @@ export default function ProductBlueprintDetail() {
     // 編集用
     onSave,
     onChangeProductName,
-    onChangeItemType, // ← 将来用に hook からは受け取るが…
     onChangeFit,
     onChangeMaterials,
     onChangeWeight,

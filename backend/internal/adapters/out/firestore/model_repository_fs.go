@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log"
 	"strings"
 	"time"
 
@@ -246,6 +247,9 @@ func (r *ModelRepositoryFS) UpdateModelVariation(ctx context.Context, variationI
 	if variationID == "" {
 		return nil, modeldom.ErrNotFound
 	}
+
+	// ★ 追記：どのパスを更新しようとしているかログ出力
+	log.Printf("[ModelRepositoryFS] UpdateModelVariation id=%s path=models/%s", variationID, variationID)
 
 	docRef := r.variationsCol().Doc(variationID)
 	var fsUpdates []firestore.Update
