@@ -26,6 +26,12 @@ import {
   type ModelVariationUpdateRequest,
 } from "../../../model/src/application/modelUpdateService";
 
+// ★ 新規 ModelVariation 作成用 Repository を利用
+import {
+  createModelVariations,
+  type CreateModelVariationRequest,
+} from "../../../model/src/infrastructure/repository/modelRepositoryHTTP";
+
 // -----------------------------------------
 // HEX -> number(RGB) 変換
 // -----------------------------------------
@@ -286,7 +292,6 @@ export async function updateProductBlueprint(
   // 1) まず ProductBlueprint 本体のメタ情報を更新
   const updated = await updateProductBlueprintHTTP(
     id,
-    // 型の差分があるので一度 unknown を経由してキャスト
     {
       ...(params as any),
       id,
@@ -315,7 +320,24 @@ export async function updateProductBlueprint(
   const variations = await listModelVariationsByProductBlueprintId(id);
   const varsAny = variations as any[];
 
-  // 3) size×color → modelNumber(code) のマップを作成
+  // 3) 既存 variation を size×color → variation にマップ
+  const existingMap = new Map<string, any>();
+  varsAny.forEach((v) => {
+    const sizeLabel: string =
+      (typeof v.size === "string"
+        ? v.size
+        : (v.Size as string | undefined)) ?? "";
+    const colorName: string =
+      (typeof v.color?.name === "string"
+        ? v.color.name
+        : (v.Color?.Name as string | undefined)) ?? "";
+
+    if (!sizeLabel || !colorName) return;
+    const key = makeKey(sizeLabel, colorName);
+    existingMap.set(key, v);
+  });
+
+  // 4) size×color → modelNumber(code) のマップ（希望状態）
   const codeMap = new Map<string, string>();
   modelNumbers.forEach(
     (m: { size: string; color: string; code: string }) => {
@@ -325,7 +347,7 @@ export async function updateProductBlueprint(
     },
   );
 
-  // 4) sizeLabel → measurements(map[string]float64) のマップを作成
+  // 5) sizeLabel → measurements(map[string]float64) のマップ
   const measurementsMap = new Map<string, Record<string, number>>();
   (sizes as SizeRow[]).forEach((s) => {
     const ms = buildMeasurementsFromSizeRowForUpdate(
@@ -337,65 +359,112 @@ export async function updateProductBlueprint(
     }
   });
 
-  // 5) 既存の variation 1件ずつに対して updateModelVariation を呼び出し
-  await Promise.all(
-    varsAny.map(async (v) => {
-      const variationId: string = v.id ?? v.ID;
-      if (!variationId) return;
+  // 6) 既存 variation は updateModelVariation で更新
+  const updateTasks: Promise<void>[] = [];
 
-      const sizeLabel: string =
-        (typeof v.size === "string"
-          ? v.size
-          : (v.Size as string | undefined)) ?? "";
-      const colorName: string =
-        (typeof v.color?.name === "string"
-          ? v.color.name
-          : (v.Color?.Name as string | undefined)) ?? "";
+  existingMap.forEach((v, key) => {
+    const variationId: string = v.id ?? v.ID;
+    if (!variationId) return;
 
-      if (!sizeLabel || !colorName) return;
+    const sizeLabel: string =
+      (typeof v.size === "string"
+        ? v.size
+        : (v.Size as string | undefined)) ?? "";
+    const colorName: string =
+      (typeof v.color?.name === "string"
+        ? v.color.name
+        : (v.Color?.Name as string | undefined)) ?? "";
 
-      const key = makeKey(sizeLabel, colorName);
+    if (!sizeLabel || !colorName) return;
 
-      // モデルナンバー（未指定なら既存値を維持）
-      const nextCode: string =
-        codeMap.get(key) ??
-        (typeof v.modelNumber === "string"
-          ? v.modelNumber
-          : (v.ModelNumber as string | undefined) ??
-            "");
+    // 希望 side の modelNumber（なければ既存値を維持）
+    const nextCode: string =
+      codeMap.get(key) ??
+      (typeof v.modelNumber === "string"
+        ? v.modelNumber
+        : (v.ModelNumber as string | undefined) ?? "");
 
-      // RGB（hex から int に変換。無ければ既存値を維持）
-      const rgbHex = colorRgbMap[colorName];
-      const rgbFromHex = hexToRgbInt(rgbHex);
-      const existingRgb =
-        typeof v.color?.rgb === "number"
-          ? v.color.rgb
-          : typeof v.color?.RGB === "number"
-            ? v.color.RGB
-            : typeof v.Color?.RGB === "number"
-              ? v.Color.RGB
-              : undefined;
-      const rgb = rgbFromHex ?? existingRgb;
+    // RGB（hex から int に変換。無ければ既存値を維持）
+    const rgbHex = colorRgbMap[colorName];
+    const rgbFromHex = hexToRgbInt(rgbHex);
+    const existingRgb =
+      typeof v.color?.rgb === "number"
+        ? v.color.rgb
+        : typeof v.color?.RGB === "number"
+          ? v.color.RGB
+          : typeof v.Color?.RGB === "number"
+            ? v.Color.RGB
+            : undefined;
+    const rgb = rgbFromHex ?? existingRgb;
 
-      // 採寸（SizeRow から起こした map）
-      const measurements = measurementsMap.get(sizeLabel);
+    // 採寸（SizeRow から起こした map）
+    const measurements = measurementsMap.get(sizeLabel);
 
-      const payload: ModelVariationUpdateRequest = {
-        modelNumber: nextCode,
-        size: sizeLabel,
-        color: colorName,
-        ...(typeof rgb === "number" ? { rgb } : {}),
-        ...(measurements ? { measurements } : {}),
-      };
+    const payload: ModelVariationUpdateRequest = {
+      modelNumber: nextCode,
+      size: sizeLabel,
+      color: colorName,
+      ...(typeof rgb === "number" ? { rgb } : {}),
+      ...(measurements ? { measurements } : {}),
+    };
 
-      console.log("[updateProductBlueprint] updateModelVariation payload:", {
-        variationId,
-        payload,
-      });
+    console.log("[updateProductBlueprint] updateModelVariation payload:", {
+      variationId,
+      payload,
+    });
 
-      await updateModelVariation(variationId, payload);
-    }),
-  );
+    // ★ ここで「void を返す匿名 async 関数」を push して、型を Promise<void> に合わせる
+    updateTasks.push(
+      (async () => {
+        await updateModelVariation(variationId, payload);
+      })(),
+    );
+  });
+
+  // 既存分の更新を待つ
+  await Promise.all(updateTasks);
+
+  // 7) 既存に存在しない（新規の） size×color は CreateModelVariation で作成
+  const createPayloads: CreateModelVariationRequest[] = [];
+
+  codeMap.forEach((code, key) => {
+    if (existingMap.has(key)) {
+      // 既存 variation については上で更新済み
+      return;
+    }
+
+    const [sizeLabel, colorName] = key.split("__");
+    if (!sizeLabel || !colorName) return;
+
+    const sizeRow = (sizes as SizeRow[]).find(
+      (s) => s.sizeLabel === sizeLabel,
+    );
+    if (!sizeRow) return;
+
+    const rgbHex = colorRgbMap[colorName];
+    const rgb = hexToRgbInt(rgbHex);
+
+    const measurements = buildMeasurements(itemType as ItemType, sizeRow);
+
+    const createReq: CreateModelVariationRequest = {
+      productBlueprintId: id,
+      modelNumber: code,
+      size: sizeLabel,
+      color: colorName,
+      ...(typeof rgb === "number" ? { rgb } : {}),
+      measurements,
+    };
+
+    createPayloads.push(createReq);
+  });
+
+  if (createPayloads.length > 0) {
+    console.log(
+      "[updateProductBlueprint] createModelVariations payload:",
+      createPayloads,
+    );
+    await createModelVariations(id, createPayloads);
+  }
 
   console.log("[updateProductBlueprint] completed variations update");
 

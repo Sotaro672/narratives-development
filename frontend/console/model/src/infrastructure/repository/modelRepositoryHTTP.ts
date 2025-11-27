@@ -38,6 +38,28 @@ export type CreateModelVariationRequest = {
 };
 
 /* =========================================================
+ * backend/internal/domain/model.ModelVariation に対応するレスポンス想定
+ * =======================================================*/
+
+export type ModelVariationResponse = {
+  id: string;
+  productBlueprintId: string;
+  modelNumber: string;
+  size: string;
+  color: {
+    name: string;
+    rgb?: number | null;
+  };
+  measurements?: Record<string, number | null>;
+  createdAt?: string | null;
+  createdBy?: string | null;
+  updatedAt?: string | null;
+  updatedBy?: string | null;
+  deletedAt?: string | null;
+  deletedBy?: string | null;
+};
+
+/* =========================================================
  * 単一 ModelVariation 作成 API
  * POST /models/{productBlueprintId}/variations
  * =======================================================*/
@@ -45,7 +67,7 @@ export type CreateModelVariationRequest = {
 export async function createModelVariation(
   productBlueprintId: string,
   payload: CreateModelVariationRequest,
-): Promise<void> {
+): Promise<ModelVariationResponse> {
   const user = auth.currentUser;
   if (!user) {
     throw new Error("ログイン情報が見つかりません（未ログイン）");
@@ -60,29 +82,40 @@ export async function createModelVariation(
       ),
     );
 
-  const res = await fetch(
-    `${API_BASE}/models/${encodeURIComponent(productBlueprintId)}/variations`,
-    {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${idToken}`,
-      },
-      body: JSON.stringify({
-        productBlueprintId,
-        modelNumber: payload.modelNumber,
-        size: payload.size,
-        color: payload.color,
-        rgb: payload.rgb,
-        measurements: cleanedMeasurements,
-      }),
+  const url = `${API_BASE}/models/${encodeURIComponent(
+    productBlueprintId,
+  )}/variations`;
+
+  const body = {
+    productBlueprintId,
+    modelNumber: payload.modelNumber,
+    size: payload.size,
+    color: payload.color,
+    rgb: payload.rgb,
+    measurements: cleanedMeasurements,
+  };
+
+  console.log("[modelRepositoryHTTP] createModelVariation request:", {
+    url,
+    body,
+  });
+
+  const res = await fetch(url, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${idToken}`,
+      Accept: "application/json",
     },
-  );
+    body: JSON.stringify(body),
+  });
+
+  const text = await res.text().catch(() => "");
 
   if (!res.ok) {
-    let detail: unknown;
+    let detail: unknown = text;
     try {
-      detail = await res.json();
+      detail = text ? JSON.parse(text) : undefined;
     } catch {
       /* ignore JSON parse error */
     }
@@ -97,6 +130,12 @@ export async function createModelVariation(
       }）`,
     );
   }
+
+  const data = (text ? JSON.parse(text) : {}) as ModelVariationResponse;
+
+  console.log("[modelRepositoryHTTP] createModelVariation response:", data);
+
+  return data;
 }
 
 /* =========================================================
@@ -107,13 +146,18 @@ export async function createModelVariation(
 export async function createModelVariations(
   productBlueprintId: string,
   variations: CreateModelVariationRequest[],
-): Promise<void> {
+): Promise<ModelVariationResponse[]> {
+  const results: ModelVariationResponse[] = [];
+
   for (const v of variations) {
     // 各要素にも productBlueprintId を補完して渡す
     const enriched: CreateModelVariationRequest = {
       ...v,
       productBlueprintId,
     };
-    await createModelVariation(productBlueprintId, enriched);
+    const created = await createModelVariation(productBlueprintId, enriched);
+    results.push(created);
   }
+
+  return results;
 }
