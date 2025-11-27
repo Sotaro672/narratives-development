@@ -3,7 +3,6 @@ package handlers
 
 import (
 	"encoding/json"
-	"errors"
 	"net/http"
 	"strings"
 
@@ -37,6 +36,12 @@ func (h *ProductBlueprintHandler) ServeHTTP(w http.ResponseWriter, r *http.Reque
 	path := strings.TrimRight(r.URL.Path, "/")
 
 	switch {
+	// ---------------------------------------------------
+	// GET /product-blueprints/deleted  ← 削除済み一覧 API
+	// ---------------------------------------------------
+	case r.Method == http.MethodGet && path == "/product-blueprints/deleted":
+		h.listDeleted(w, r)
+
 	// ---------------------------------------------------
 	// GET /product-blueprints  ← 一覧 API
 	// ---------------------------------------------------
@@ -281,7 +286,7 @@ func (h *ProductBlueprintHandler) restore(w http.ResponseWriter, r *http.Request
 }
 
 // ---------------------------------------------------
-// GET /product-blueprints   ← 一覧 API
+// GET /product-blueprints   ← 一覧 API（非削除）
 // ---------------------------------------------------
 
 // フロントエンドの期待に合わせた一覧用 DTO
@@ -347,6 +352,24 @@ func (h *ProductBlueprintHandler) list(w http.ResponseWriter, r *http.Request) {
 }
 
 // ---------------------------------------------------
+// GET /product-blueprints/deleted  ← 削除済み一覧 API
+// ---------------------------------------------------
+
+func (h *ProductBlueprintHandler) listDeleted(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+
+	rows, err := h.uc.ListDeleted(ctx)
+	if err != nil {
+		writeProductBlueprintErr(w, err)
+		return
+	}
+
+	// 削除済み一覧は、detail と同じドメイン構造をそのまま返す
+	// （frontend の productBlueprintDeletedService で DeletedAt / ExpireAt を参照）
+	_ = json.NewEncoder(w).Encode(rows)
+}
+
+// ---------------------------------------------------
 // GET /product-blueprints/{id}
 // ---------------------------------------------------
 
@@ -386,9 +409,6 @@ func writeProductBlueprintErr(w http.ResponseWriter, err error) {
 		code = http.StatusUnauthorized
 	case pbdom.IsForbidden(err):
 		code = http.StatusForbidden
-	case errors.Is(err, pbdom.ErrRestoreExpired):
-		// TTL 期限切れで復元不可
-		code = http.StatusGone
 	default:
 		// それ以外は 500 のまま
 	}
