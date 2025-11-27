@@ -160,3 +160,83 @@ export async function updateModelVariation(
 
   return data;
 }
+
+/**
+ * モデルバリエーションを削除するサービス
+ *
+ * 呼び出し先:
+ *   DELETE /models/{id}
+ * Handler:
+ *   backend/internal/adapters/in/http/handlers/model_handler.go の deleteVariation
+ *
+ * 呼び出し元（例）:
+ *   - サイズ削除時 / カラー削除時に、対応する variation を物理削除したい場合
+ */
+export async function deleteModelVariation(variationId: string): Promise<void> {
+  const id = variationId.trim();
+  if (!id) {
+    throw new Error("variationId が空です");
+  }
+
+  const user = auth.currentUser;
+  if (!user) {
+    throw new Error("ログイン情報が見つかりません（未ログイン）");
+  }
+
+  const idToken = await user.getIdToken();
+  const url = `${API_BASE}/models/${encodeURIComponent(id)}`;
+
+  console.log("[deleteModelVariation] request:", {
+    variationId: id,
+    url,
+  });
+
+  const res = await fetch(url, {
+    method: "DELETE",
+    headers: {
+      Authorization: `Bearer ${idToken}`,
+      Accept: "application/json",
+    },
+  });
+
+  // ★ 404 の場合は「既に存在しない」とみなして成功扱いにする
+  if (res.status === 404) {
+    console.warn(
+      "[deleteModelVariation] 404 not_found - 既に削除済みとみなします",
+      {
+        variationId: id,
+        status: res.status,
+        statusText: res.statusText,
+      },
+    );
+    return;
+  }
+
+  if (!res.ok) {
+    const text = await res.text().catch(() => "");
+    throw new Error(
+      `モデルバリエーションの削除に失敗しました（${res.status} ${res.statusText}）: ${text}`,
+    );
+  }
+
+  // 念のためレスポンス body を読んでおく（現在は呼び出し元では未使用）
+  const text = await res.text().catch(() => "");
+  if (text) {
+    try {
+      const json = JSON.parse(text);
+      console.log("[deleteModelVariation] response:", {
+        variationId: id,
+        response: json,
+      });
+    } catch {
+      console.log("[deleteModelVariation] response (raw text):", {
+        variationId: id,
+        response: text,
+      });
+    }
+  } else {
+    console.log("[deleteModelVariation] response: <empty>", {
+      variationId: id,
+    });
+  }
+}

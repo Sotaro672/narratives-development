@@ -1,4 +1,3 @@
-// backend/internal/adapters/in/http/handlers/model_handler.go
 package handlers
 
 import (
@@ -34,12 +33,10 @@ func (h *ModelHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	case r.Method == http.MethodGet &&
 		strings.HasPrefix(r.URL.Path, "/models/by-blueprint/"):
 
-		// /models/by-blueprint/{productBlueprintID}/variations
 		path := strings.TrimPrefix(r.URL.Path, "/models/by-blueprint/")
 		path = strings.Trim(path, "/")
 		parts := strings.Split(path, "/")
 
-		// 期待形式: {productBlueprintID}/variations
 		if len(parts) == 2 && parts[1] == "variations" {
 			productBlueprintID := strings.TrimSpace(parts[0])
 			h.listVariationsByProductBlueprintID(w, r, productBlueprintID)
@@ -57,12 +54,10 @@ func (h *ModelHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	case r.Method == http.MethodPost &&
 		strings.HasPrefix(r.URL.Path, "/models/"):
 
-		// /models/{productBlueprintID}/variations を分解
 		path := strings.TrimPrefix(r.URL.Path, "/models/")
 		path = strings.Trim(path, "/")
 		parts := strings.Split(path, "/")
 
-		// 期待形式: {productBlueprintID}/variations
 		if len(parts) == 2 && parts[1] == "variations" {
 			productBlueprintID := strings.TrimSpace(parts[0])
 			h.createVariation(w, r, productBlueprintID)
@@ -99,13 +94,14 @@ func (h *ModelHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	// ------------------------------------------------------------
 	// GET /models/{id}
-	//   → ModelUsecase.GetByID（既存仕様）
+	//   → ModelUsecase.GetByID
 	// ------------------------------------------------------------
 	case r.Method == http.MethodGet &&
 		strings.HasPrefix(r.URL.Path, "/models/"):
 
 		id := strings.TrimPrefix(r.URL.Path, "/models/")
 		h.get(w, r, id)
+		return
 
 	default:
 		w.WriteHeader(http.StatusNotFound)
@@ -132,26 +128,22 @@ func (h *ModelHandler) get(w http.ResponseWriter, r *http.Request, id string) {
 	_ = json.NewEncoder(w).Encode(m)
 }
 
-/* ============================================================
- * POST /models/{productBlueprintID}/variations 用のリクエスト型
- * frontend/console/model/src/infrastructure/repository/modelRepositoryHTTP.ts
- * の CreateModelVariationRequest に対応
- * ==========================================================*/
+// ------------------------------------------------------------
+// Request struct for CREATE / UPDATE
+// ------------------------------------------------------------
 
 type createModelVariationRequest struct {
-	// URL パスにも含まれているが、body にもあれば一応受ける
 	ProductBlueprintID string             `json:"productBlueprintId,omitempty"`
-	ModelNumber        string             `json:"modelNumber"`            // "LM-SB-S-WHT" など
-	Size               string             `json:"size"`                   // "S" / "M" / ...
-	Color              string             `json:"color"`                  // "ホワイト" など（名前）
-	RGB                int                `json:"rgb,omitempty"`          // rgb 値（0xRRGGBB 想定）
-	Measurements       map[string]float64 `json:"measurements,omitempty"` // 着丈/身幅/…など
+	ModelNumber        string             `json:"modelNumber"`
+	Size               string             `json:"size"`
+	Color              string             `json:"color"`
+	RGB                int                `json:"rgb,omitempty"`
+	Measurements       map[string]float64 `json:"measurements,omitempty"`
 }
 
+// ------------------------------------------------------------
 // POST /models/{productBlueprintID}/variations
-//
-// Request Body: createModelVariationRequest JSON
-// Response    : 作成された ModelVariation を JSON で返す
+// ------------------------------------------------------------
 func (h *ModelHandler) createVariation(w http.ResponseWriter, r *http.Request, productBlueprintID string) {
 	ctx := r.Context()
 
@@ -169,7 +161,6 @@ func (h *ModelHandler) createVariation(w http.ResponseWriter, r *http.Request, p
 		return
 	}
 
-	// frontend から来る measurements(map[string]float64) → domain 側の map[string]int へ変換
 	ms := make(modeldom.Measurements)
 	for k, v := range req.Measurements {
 		key := strings.TrimSpace(k)
@@ -180,7 +171,6 @@ func (h *ModelHandler) createVariation(w http.ResponseWriter, r *http.Request, p
 	}
 
 	newVar := modeldom.NewModelVariation{
-		// URL から来た productBlueprintID を domain に渡す
 		ProductBlueprintID: productBlueprintID,
 		ModelNumber:        strings.TrimSpace(req.ModelNumber),
 		Size:               strings.TrimSpace(req.Size),
@@ -201,10 +191,9 @@ func (h *ModelHandler) createVariation(w http.ResponseWriter, r *http.Request, p
 	_ = json.NewEncoder(w).Encode(mv)
 }
 
+// ------------------------------------------------------------
 // PUT /models/{id}
-// //
-// // Request Body: createModelVariationRequest JSON と同等の形式を想定
-// // Response    : 更新された ModelVariation を JSON で返す
+// ------------------------------------------------------------
 func (h *ModelHandler) updateVariation(w http.ResponseWriter, r *http.Request, id string) {
 	ctx := r.Context()
 
@@ -222,7 +211,6 @@ func (h *ModelHandler) updateVariation(w http.ResponseWriter, r *http.Request, i
 		return
 	}
 
-	// frontend から来る measurements(map[string]float64) → domain 側の map[string]int へ変換
 	ms := make(modeldom.Measurements)
 	for k, v := range req.Measurements {
 		key := strings.TrimSpace(k)
@@ -232,7 +220,6 @@ func (h *ModelHandler) updateVariation(w http.ResponseWriter, r *http.Request, i
 		ms[key] = int(v)
 	}
 
-	// ★ ポインタフィールドに合わせてローカル変数を用意
 	modelNumber := strings.TrimSpace(req.ModelNumber)
 	size := strings.TrimSpace(req.Size)
 	color := modeldom.Color{
@@ -240,7 +227,6 @@ func (h *ModelHandler) updateVariation(w http.ResponseWriter, r *http.Request, i
 		RGB:  req.RGB,
 	}
 
-	// Update 用のコマンド（ModelVariationUpdate に合わせる）
 	updates := modeldom.ModelVariationUpdate{
 		ModelNumber:  &modelNumber,
 		Size:         &size,
@@ -258,7 +244,9 @@ func (h *ModelHandler) updateVariation(w http.ResponseWriter, r *http.Request, i
 	_ = json.NewEncoder(w).Encode(mv)
 }
 
+// ------------------------------------------------------------
 // DELETE /models/{id}
+// ------------------------------------------------------------
 func (h *ModelHandler) deleteVariation(w http.ResponseWriter, r *http.Request, id string) {
 	ctx := r.Context()
 
@@ -275,12 +263,13 @@ func (h *ModelHandler) deleteVariation(w http.ResponseWriter, r *http.Request, i
 		return
 	}
 
-	// 削除した ModelVariation を返す（不要なら 204 No Content でもよい）
 	w.WriteHeader(http.StatusOK)
 	_ = json.NewEncoder(w).Encode(mv)
 }
 
+// ------------------------------------------------------------
 // GET /models/by-blueprint/{productBlueprintID}/variations
+// ------------------------------------------------------------
 func (h *ModelHandler) listVariationsByProductBlueprintID(
 	w http.ResponseWriter,
 	r *http.Request,
@@ -301,22 +290,21 @@ func (h *ModelHandler) listVariationsByProductBlueprintID(
 		return
 	}
 
-	// 0件でも 200 & [] を返す
 	w.WriteHeader(http.StatusOK)
 	_ = json.NewEncoder(w).Encode(vars)
 }
 
-// エラーハンドリング
+// ------------------------------------------------------------
+// 共通エラー処理
+// ------------------------------------------------------------
 func writeModelErr(w http.ResponseWriter, err error) {
 	code := http.StatusInternalServerError
 
-	// バリデーション系
 	if errors.Is(err, modeldom.ErrInvalidID) ||
 		errors.Is(err, modeldom.ErrInvalidProductID) ||
 		errors.Is(err, modeldom.ErrInvalidBlueprintID) {
 		code = http.StatusBadRequest
 	} else if errors.Is(err, modeldom.ErrNotFound) {
-		// NotFound は 404 にする
 		code = http.StatusNotFound
 	}
 
