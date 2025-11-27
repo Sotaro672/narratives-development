@@ -36,21 +36,51 @@ func (h *ProductBlueprintHandler) ServeHTTP(w http.ResponseWriter, r *http.Reque
 	path := strings.TrimRight(r.URL.Path, "/")
 
 	switch {
+	// ---------------------------------------------------
 	// GET /product-blueprints  ← 一覧 API
+	// ---------------------------------------------------
 	case r.Method == http.MethodGet && path == "/product-blueprints":
 		h.list(w, r)
 
-	// POST /product-blueprints
+	// ---------------------------------------------------
+	// POST /product-blueprints  ← 新規作成 API
+	// ---------------------------------------------------
 	case r.Method == http.MethodPost && path == "/product-blueprints":
 		h.post(w, r)
 
+	// ---------------------------------------------------
+	// POST /product-blueprints/{id}/restore  ← 復元 API
+	// ---------------------------------------------------
+	case r.Method == http.MethodPost &&
+		strings.HasPrefix(path, "/product-blueprints/") &&
+		strings.HasSuffix(path, "/restore"):
+
+		trimmed := strings.TrimPrefix(path, "/product-blueprints/")
+		trimmed = strings.TrimSuffix(trimmed, "/restore")
+		id := strings.Trim(trimmed, "/")
+		h.restore(w, r, id)
+
+	// ---------------------------------------------------
 	// PUT/PATCH /product-blueprints/{id} ← 更新 API
+	// ---------------------------------------------------
 	case (r.Method == http.MethodPut || r.Method == http.MethodPatch) &&
 		strings.HasPrefix(path, "/product-blueprints/"):
+
 		id := strings.TrimPrefix(path, "/product-blueprints/")
 		h.update(w, r, id)
 
-	// GET /product-blueprints/{id}
+	// ---------------------------------------------------
+	// DELETE /product-blueprints/{id} ← 論理削除 API
+	// ---------------------------------------------------
+	case r.Method == http.MethodDelete &&
+		strings.HasPrefix(path, "/product-blueprints/"):
+
+		id := strings.TrimPrefix(path, "/product-blueprints/")
+		h.delete(w, r, id)
+
+	// ---------------------------------------------------
+	// GET /product-blueprints/{id} ← 詳細取得 API
+	// ---------------------------------------------------
 	case r.Method == http.MethodGet && strings.HasPrefix(path, "/product-blueprints/"):
 		id := strings.TrimPrefix(path, "/product-blueprints/")
 		h.get(w, r, id)
@@ -111,7 +141,7 @@ func (h *ProductBlueprintHandler) post(w http.ResponseWriter, r *http.Request) {
 		AssigneeID:       in.AssigneeId,
 		CompanyID:        in.CompanyId,
 		CreatedBy:        createdBy,
-		// ProductIdTag を保存対象としてセット（LogoDesignFile は扱わない）
+		// ProductIdTag を保存対象としてセット
 		ProductIdTag: pbdom.ProductIDTag{
 			Type: pbdom.ProductIDTagType(in.ProductIdTag.Type),
 		},
@@ -196,6 +226,60 @@ func (h *ProductBlueprintHandler) update(w http.ResponseWriter, r *http.Request,
 }
 
 // ---------------------------------------------------
+// DELETE /product-blueprints/{id}  ← 論理削除 API
+// ---------------------------------------------------
+
+func (h *ProductBlueprintHandler) delete(w http.ResponseWriter, r *http.Request, id string) {
+	ctx := r.Context()
+
+	id = strings.TrimSpace(id)
+	if id == "" {
+		w.WriteHeader(http.StatusBadRequest)
+		_ = json.NewEncoder(w).Encode(map[string]string{"error": "invalid id"})
+		return
+	}
+
+	// 削除実行（deletedBy は現状 context からの解決に任せるため nil）
+	if err := h.uc.SoftDeleteWithModels(ctx, id, nil); err != nil {
+		writeProductBlueprintErr(w, err)
+		return
+	}
+
+	// 論理削除なので 204 No Content を返す
+	w.WriteHeader(http.StatusNoContent)
+}
+
+// ---------------------------------------------------
+// POST /product-blueprints/{id}/restore  ← 復元 API
+// ---------------------------------------------------
+
+func (h *ProductBlueprintHandler) restore(w http.ResponseWriter, r *http.Request, id string) {
+	ctx := r.Context()
+
+	id = strings.TrimSpace(id)
+	if id == "" {
+		w.WriteHeader(http.StatusBadRequest)
+		_ = json.NewEncoder(w).Encode(map[string]string{"error": "invalid id"})
+		return
+	}
+
+	// 復元実行（restoredBy も現状は context からの解決に任せるため nil）
+	if err := h.uc.RestoreWithModels(ctx, id, nil); err != nil {
+		writeProductBlueprintErr(w, err)
+		return
+	}
+
+	// 復元後の最新状態を返す
+	pb, err := h.uc.GetByID(ctx, id)
+	if err != nil {
+		writeProductBlueprintErr(w, err)
+		return
+	}
+
+	_ = json.NewEncoder(w).Encode(pb)
+}
+
+// ---------------------------------------------------
 // GET /product-blueprints   ← 一覧 API
 // ---------------------------------------------------
 
@@ -237,7 +321,7 @@ func (h *ProductBlueprintHandler) list(w http.ResponseWriter, r *http.Request) {
 			productIdTag = strings.ToUpper(string(pb.ProductIdTag.Type))
 		}
 
-		// 日付を "YYYY/MM/DD" に整形
+		// 日付を "2006/01/02" 形式に整形
 		createdAt := ""
 		if !pb.CreatedAt.IsZero() {
 			createdAt = pb.CreatedAt.Format("2006/01/02")
@@ -289,9 +373,22 @@ func (h *ProductBlueprintHandler) get(w http.ResponseWriter, r *http.Request, id
 
 func writeProductBlueprintErr(w http.ResponseWriter, err error) {
 	code := http.StatusInternalServerError
-	if err == pbdom.ErrInvalidID {
+
+	switch {
+	case pbdom.IsInvalid(err):
 		code = http.StatusBadRequest
+	case pbdom.IsNotFound(err):
+		code = http.StatusNotFound
+	case pbdom.IsConflict(err):
+		code = http.StatusConflict
+	case pbdom.IsUnauthorized(err):
+		code = http.StatusUnauthorized
+	case pbdom.IsForbidden(err):
+		code = http.StatusForbidden
+	default:
+		// それ以外は 500 のまま
 	}
+
 	w.WriteHeader(code)
 	_ = json.NewEncoder(w).Encode(map[string]string{"error": err.Error()})
 }

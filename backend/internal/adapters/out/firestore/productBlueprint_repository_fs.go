@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"cloud.google.com/go/firestore"
+	"google.golang.org/api/iterator"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
@@ -209,7 +210,9 @@ func (r *ProductBlueprintRepositoryFS) Save(
 	return docToProductBlueprint(snap)
 }
 
-// Delete removes a ProductBlueprint by ID.
+// Delete removes a ProductBlueprint by ID (物理削除用).
+// 通常の画面操作からは usecase.ProductBlueprintUsecase.Delete → SoftDeleteWithModels を利用し、
+// この Delete は 90日後のクリーンアップジョブなどから直接呼ぶ想定。
 func (r *ProductBlueprintRepositoryFS) Delete(ctx context.Context, id string) error {
 	if r.Client == nil {
 		return errors.New("firestore client is nil")
@@ -227,6 +230,129 @@ func (r *ProductBlueprintRepositoryFS) Delete(ctx context.Context, id string) er
 		}
 		return err
 	}
+	return nil
+}
+
+// SoftDeleteWithModels:
+//   - product_blueprints/{id} に deletedAt を立てて論理削除
+//   - かつ、models コレクションの該当 productBlueprintId のドキュメントも論理削除
+func (r *ProductBlueprintRepositoryFS) SoftDeleteWithModels(ctx context.Context, id string) error {
+	if r.Client == nil {
+		return errors.New("firestore client is nil")
+	}
+
+	id = strings.TrimSpace(id)
+	if id == "" {
+		return pbdom.ErrInvalidID
+	}
+
+	now := time.Now().UTC()
+
+	// まず product_blueprints/{id} が存在するかチェック
+	pbRef := r.col().Doc(id)
+	if _, err := pbRef.Get(ctx); err != nil {
+		if status.Code(err) == codes.NotFound {
+			return pbdom.ErrNotFound
+		}
+		return err
+	}
+
+	// productBlueprint を論理削除
+	if _, err := pbRef.Update(ctx, []firestore.Update{
+		{Path: "deletedAt", Value: now},
+		// DeletedBy は context からのユーザーIDなどを後で組み込む想定
+	}); err != nil {
+		if status.Code(err) == codes.NotFound {
+			return pbdom.ErrNotFound
+		}
+		return err
+	}
+
+	// ぶら下がっている models も論理削除
+	modelsCol := r.Client.Collection("models")
+	it := modelsCol.Where("productBlueprintId", "==", id).Documents(ctx)
+	defer it.Stop()
+
+	for {
+		snap, err := it.Next()
+		if err == iterator.Done {
+			break
+		}
+		if err != nil {
+			return err
+		}
+
+		if _, err := snap.Ref.Update(ctx, []firestore.Update{
+			{Path: "deletedAt", Value: now},
+		}); err != nil {
+			// 既に削除されていた場合はスキップ
+			if status.Code(err) == codes.NotFound {
+				continue
+			}
+			return err
+		}
+	}
+
+	return nil
+}
+
+// RestoreWithModels:
+//   - 論理削除された product_blueprints/{id} の deletedAt / deletedBy をクリアして復旧
+//   - かつ、models コレクションの該当 productBlueprintId の deletedAt / deletedBy もクリア
+func (r *ProductBlueprintRepositoryFS) RestoreWithModels(ctx context.Context, id string) error {
+	if r.Client == nil {
+		return errors.New("firestore client is nil")
+	}
+
+	id = strings.TrimSpace(id)
+	if id == "" {
+		return pbdom.ErrInvalidID
+	}
+
+	pbRef := r.col().Doc(id)
+	if _, err := pbRef.Get(ctx); err != nil {
+		if status.Code(err) == codes.NotFound {
+			return pbdom.ErrNotFound
+		}
+		return err
+	}
+
+	// productBlueprint の論理削除を解除
+	if _, err := pbRef.Update(ctx, []firestore.Update{
+		{Path: "deletedAt", Value: firestore.Delete},
+		{Path: "deletedBy", Value: firestore.Delete},
+	}); err != nil {
+		if status.Code(err) == codes.NotFound {
+			return pbdom.ErrNotFound
+		}
+		return err
+	}
+
+	// ぶら下がっている models の論理削除も解除
+	modelsCol := r.Client.Collection("models")
+	it := modelsCol.Where("productBlueprintId", "==", id).Documents(ctx)
+	defer it.Stop()
+
+	for {
+		snap, err := it.Next()
+		if err == iterator.Done {
+			break
+		}
+		if err != nil {
+			return err
+		}
+
+		if _, err := snap.Ref.Update(ctx, []firestore.Update{
+			{Path: "deletedAt", Value: firestore.Delete},
+			{Path: "deletedBy", Value: firestore.Delete},
+		}); err != nil {
+			if status.Code(err) == codes.NotFound {
+				continue
+			}
+			return err
+		}
+	}
+
 	return nil
 }
 
@@ -297,6 +423,11 @@ func docToProductBlueprint(doc *firestore.DocumentSnapshot) (pbdom.ProductBluepr
 	tagTypeStr := getStr("productIdTagType", "product_id_tag_type")
 	itemTypeStr := getStr("itemType", "item_type")
 
+	var deletedAtPtr *time.Time
+	if t := getTimeVal("deletedAt", "deleted_at"); !t.IsZero() {
+		deletedAtPtr = &t
+	}
+
 	pb := pbdom.ProductBlueprint{
 		ID:               doc.Ref.ID,
 		ProductName:      getStr("productName", "product_name"),
@@ -315,6 +446,8 @@ func docToProductBlueprint(doc *firestore.DocumentSnapshot) (pbdom.ProductBluepr
 		CreatedAt:  getTimeVal("createdAt", "created_at"),
 		UpdatedBy:  getStrPtr("updatedBy", "updated_by"),
 		UpdatedAt:  getTimeVal("updatedAt", "updated_at"),
+		DeletedBy:  getStrPtr("deletedBy", "deleted_by"),
+		DeletedAt:  deletedAtPtr,
 	}
 
 	return pb, nil
@@ -350,6 +483,14 @@ func productBlueprintToDoc(v pbdom.ProductBlueprint, createdAt, updatedAt time.T
 	if v.UpdatedBy != nil {
 		if s := strings.TrimSpace(*v.UpdatedBy); s != "" {
 			m["updatedBy"] = s
+		}
+	}
+	if v.DeletedAt != nil && !v.DeletedAt.IsZero() {
+		m["deletedAt"] = v.DeletedAt.UTC()
+	}
+	if v.DeletedBy != nil {
+		if s := strings.TrimSpace(*v.DeletedBy); s != "" {
+			m["deletedBy"] = s
 		}
 	}
 

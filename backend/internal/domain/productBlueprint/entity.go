@@ -1,3 +1,4 @@
+// backend\internal\domain\productBlueprint\entity.go
 package productBlueprint
 
 import (
@@ -9,12 +10,13 @@ import (
 
 // 汎用エラー（ドメイン共通）
 var (
-	ErrNotFound     = errors.New("productBlueprint: not found")
-	ErrConflict     = errors.New("productBlueprint: conflict")
-	ErrInvalid      = errors.New("productBlueprint: invalid")
-	ErrUnauthorized = errors.New("productBlueprint: unauthorized")
-	ErrForbidden    = errors.New("productBlueprint: forbidden")
-	ErrInternal     = errors.New("productBlueprint: internal")
+	ErrNotFound       = errors.New("productBlueprint: not found")
+	ErrConflict       = errors.New("productBlueprint: conflict")
+	ErrInvalid        = errors.New("productBlueprint: invalid")
+	ErrUnauthorized   = errors.New("productBlueprint: unauthorized")
+	ErrForbidden      = errors.New("productBlueprint: forbidden")
+	ErrInternal       = errors.New("productBlueprint: internal")
+	ErrRestoreExpired = errors.New("productBlueprint: restore expired") // ★ TTL 期限切れ復旧不可用
 )
 
 func IsNotFound(err error) bool     { return errors.Is(err, ErrNotFound) }
@@ -117,12 +119,17 @@ type ProductBlueprint struct {
 	QualityAssurance []string
 	ProductIdTag     ProductIDTag
 	AssigneeID       string
-	CreatedBy        *string
-	CreatedAt        time.Time
-	UpdatedBy        *string
-	UpdatedAt        time.Time
-	DeletedBy        *string
-	DeletedAt        *time.Time
+
+	CreatedBy *string
+	CreatedAt time.Time
+	UpdatedBy *string
+	UpdatedAt time.Time
+
+	DeletedBy *string
+	DeletedAt *time.Time
+
+	// ★ 物理削除予定日時（Firestore TTL 対象フィールド）
+	ExpireAt *time.Time
 }
 
 // ======================================
@@ -171,11 +178,12 @@ func New(
 		AssigneeID:       strings.TrimSpace(assigneeID),
 		CompanyID:        strings.TrimSpace(companyID),
 		CreatedBy:        createdBy,
-		CreatedAt:        createdAt,
+		CreatedAt:        createdAt.UTC(),
 		UpdatedBy:        createdBy,
-		UpdatedAt:        createdAt,
+		UpdatedAt:        createdAt.UTC(),
 		DeletedBy:        nil,
 		DeletedAt:        nil,
+		ExpireAt:         nil,
 	}
 
 	if err := pb.validate(); err != nil {
@@ -239,6 +247,36 @@ func (p *ProductBlueprint) UpdateTag(tag ProductIDTag, now time.Time, updatedBy 
 	p.ProductIdTag = tag
 	p.touch(now, updatedBy)
 	return nil
+}
+
+// ★ Soft Delete（論理削除 + TTL セット）
+func (p *ProductBlueprint) SoftDelete(now time.Time, deletedBy *string, ttl time.Duration) {
+	if now.IsZero() {
+		now = time.Now().UTC()
+	}
+	p.DeletedAt = &now
+	p.DeletedBy = deletedBy
+
+	if ttl > 0 {
+		exp := now.Add(ttl)
+		p.ExpireAt = &exp
+	} else {
+		p.ExpireAt = nil
+	}
+
+	// 削除も「更新」とみなして Updated 系も進める
+	p.touch(now, deletedBy)
+}
+
+// ★ 復旧（Deleted/Expire をクリア）
+func (p *ProductBlueprint) Restore(now time.Time, restoredBy *string) {
+	if now.IsZero() {
+		now = time.Now().UTC()
+	}
+	p.DeletedAt = nil
+	p.DeletedBy = nil
+	p.ExpireAt = nil
+	p.touch(now, restoredBy)
 }
 
 // ======================================

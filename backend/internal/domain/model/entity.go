@@ -1,4 +1,4 @@
-// backend\internal\domain\model\entity.go
+// backend/internal/domain/model/entity.go
 package model
 
 import (
@@ -7,6 +7,9 @@ import (
 	"strings"
 	"time"
 )
+
+// ソフトデリートから物理削除までの猶予期間（90日）
+const softDeleteTTL = 90 * 24 * time.Hour
 
 var (
 	ErrProductIDRequired          = errors.New("productId is required")
@@ -212,7 +215,7 @@ func NewModelDataFromStringTime(
 }
 
 // ==========================
-// Behavior
+// Behavior（ModelVariation）
 // ==========================
 
 func (mv *ModelVariation) SetMeasurement(key string, value int) error {
@@ -242,6 +245,46 @@ func (mv ModelVariation) ToItemSpec() ItemSpec {
 		Measurements: cloneMeasurements(mv.Measurements),
 	}
 }
+
+// ソフトデリート（論理削除）
+func (mv *ModelVariation) SoftDelete(now time.Time, deletedBy *string) {
+	if now.IsZero() {
+		now = time.Now().UTC()
+	}
+	mv.DeletedAt = &now
+	mv.DeletedBy = deletedBy
+}
+
+// 復旧（論理削除解除）
+func (mv *ModelVariation) Restore(now time.Time, restoredBy *string) {
+	if now.IsZero() {
+		now = time.Now().UTC()
+	}
+	mv.DeletedAt = nil
+	mv.DeletedBy = nil
+	mv.UpdatedAt = now
+	mv.UpdatedBy = restoredBy
+}
+
+// 論理削除状態かどうか
+func (mv ModelVariation) IsDeleted() bool {
+	return mv.DeletedAt != nil
+}
+
+// 物理削除対象かどうか（DeletedAt から 90 日以上経過）
+func (mv ModelVariation) ShouldHardDelete(now time.Time) bool {
+	if mv.DeletedAt == nil {
+		return false
+	}
+	if now.IsZero() {
+		now = time.Now().UTC()
+	}
+	return now.Sub(*mv.DeletedAt) >= softDeleteTTL
+}
+
+// ==========================
+// Behavior（ModelData）
+// ==========================
 
 func (md *ModelData) AddVariation(v ModelVariation, now time.Time) error {
 	if v.ProductBlueprintID != md.ProductBlueprintID {

@@ -194,10 +194,14 @@ func (r *ModelRepositoryFS) GetModelVariationByID(ctx context.Context, variation
 	if err != nil {
 		return nil, err
 	}
+	// ★ 論理削除済みのものは「存在しない」とみなす
+	if v.DeletedAt != nil {
+		return nil, modeldom.ErrNotFound
+	}
 	return &v, nil
 }
 
-// ★ CreateModelVariation（productBlueprintID は使わない）
+// CreateModelVariation（productBlueprintID は NewModelVariation から利用）
 func (r *ModelRepositoryFS) CreateModelVariation(
 	ctx context.Context,
 	variation modeldom.NewModelVariation,
@@ -206,7 +210,6 @@ func (r *ModelRepositoryFS) CreateModelVariation(
 		return nil, errors.New("firestore client is nil")
 	}
 
-	// NewModelVariation 側の ProductBlueprintID をそのまま利用する前提
 	now := time.Now().UTC()
 	docRef := r.variationsCol().NewDoc()
 
@@ -248,7 +251,7 @@ func (r *ModelRepositoryFS) UpdateModelVariation(ctx context.Context, variationI
 		return nil, modeldom.ErrNotFound
 	}
 
-	// ★ 追記：どのパスを更新しようとしているかログ出力
+	// どのパスを更新しようとしているかログ出力
 	log.Printf("[ModelRepositoryFS] UpdateModelVariation id=%s path=models/%s", variationID, variationID)
 
 	docRef := r.variationsCol().Doc(variationID)
@@ -293,6 +296,7 @@ func (r *ModelRepositoryFS) UpdateModelVariation(ctx context.Context, variationI
 	return r.GetModelVariationByID(ctx, variationID)
 }
 
+// ★ DeleteModelVariation: 物理削除 → 論理削除に変更
 func (r *ModelRepositoryFS) DeleteModelVariation(ctx context.Context, variationID string) (*modeldom.ModelVariation, error) {
 	if r.Client == nil {
 		return nil, errors.New("firestore client is nil")
@@ -303,7 +307,9 @@ func (r *ModelRepositoryFS) DeleteModelVariation(ctx context.Context, variationI
 		return nil, modeldom.ErrNotFound
 	}
 
-	snap, err := r.variationsCol().Doc(variationID).Get(ctx)
+	docRef := r.variationsCol().Doc(variationID)
+
+	snap, err := docRef.Get(ctx)
 	if err != nil {
 		if status.Code(err) == codes.NotFound {
 			return nil, modeldom.ErrNotFound
@@ -316,10 +322,27 @@ func (r *ModelRepositoryFS) DeleteModelVariation(ctx context.Context, variationI
 		return nil, err
 	}
 
-	// ここでは物理削除のまま
-	if _, err := snap.Ref.Delete(ctx); err != nil {
+	// すでに論理削除されている場合はそのまま返す
+	if v.DeletedAt != nil {
+		return &v, nil
+	}
+
+	now := time.Now().UTC()
+	v.DeletedAt = &now
+	// DeletedBy は、現状 context からの取得はしていないので nil のまま
+	// 必要になればここで actor を context から取り出してセットする
+
+	// Firestore 上では deletedAt / updatedAt を更新
+	if _, err := docRef.Update(ctx, []firestore.Update{
+		{Path: "deletedAt", Value: now},
+		{Path: "updatedAt", Value: now},
+	}); err != nil {
+		if status.Code(err) == codes.NotFound {
+			return nil, modeldom.ErrNotFound
+		}
 		return nil, err
 	}
+
 	return &v, nil
 }
 
@@ -355,6 +378,7 @@ func (r *ModelRepositoryFS) ReplaceModelVariations(
 	}
 
 	// 既存 variations を削除（productBlueprint 単位で）
+	// ※ここは依然として物理削除。履歴を残したい場合は同様に論理削除へ変更する。
 	const chunkSize = 400
 
 	existing, err := r.listVariationsByProductBlueprintID(ctx, productBlueprintID)
@@ -463,6 +487,10 @@ func (r *ModelRepositoryFS) listVariationsByProductBlueprintID(ctx context.Conte
 		v, err := docToModelVariation(doc)
 		if err != nil {
 			return nil, err
+		}
+		// ★ 論理削除済み（deletedAt が入っている）ものは一覧から除外
+		if v.DeletedAt != nil {
+			continue
 		}
 		out = append(out, v)
 	}

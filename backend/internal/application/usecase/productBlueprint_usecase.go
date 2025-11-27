@@ -4,6 +4,7 @@ package usecase
 import (
 	"context"
 	"strings"
+	"time"
 
 	productbpdom "narratives/internal/domain/productBlueprint"
 )
@@ -99,6 +100,87 @@ func (u *ProductBlueprintUsecase) Update(
 	return u.repo.Save(ctx, v)
 }
 
+// 旧・物理削除用ユースケース（将来的には使用停止予定）
 func (u *ProductBlueprintUsecase) Delete(ctx context.Context, id string) error {
 	return u.repo.Delete(ctx, strings.TrimSpace(id))
+}
+
+// ------------------------------------------------------------
+// SoftDelete / Restore (withModels 用のエントリポイント)
+// ------------------------------------------------------------
+
+// SoftDeleteWithModels は ProductBlueprint を論理削除するためのユースケースです。
+// 現時点では product_blueprints ドキュメントの DeletedAt / DeletedBy を更新する
+// 実装に留め、models へのカスケードは今後の拡張ポイントとして残しています。
+func (u *ProductBlueprintUsecase) SoftDeleteWithModels(
+	ctx context.Context,
+	id string,
+	deletedBy *string,
+) error {
+	id = strings.TrimSpace(id)
+	if id == "" {
+		return productbpdom.ErrInvalidID
+	}
+
+	// 対象 Blueprint を取得
+	pb, err := u.repo.GetByID(ctx, id)
+	if err != nil {
+		return err
+	}
+
+	now := time.Now().UTC()
+	pb.DeletedAt = &now
+	pb.DeletedBy = deletedBy
+	pb.UpdatedAt = now
+	pb.UpdatedBy = deletedBy
+
+	// companyId は context を優先
+	if cid := companyIDFromContext(ctx); cid != "" {
+		pb.CompanyID = strings.TrimSpace(cid)
+	}
+
+	_, err = u.repo.Save(ctx, pb)
+	if err != nil {
+		return err
+	}
+
+	// TODO: models 側の論理削除カスケードを ModelUsecase / ModelRepo と連携して実装
+	return nil
+}
+
+// RestoreWithModels は論理削除された ProductBlueprint を復元するためのユースケースです。
+// 現時点では Blueprint の DeletedAt/DeletedBy をクリアする実装に留めています。
+func (u *ProductBlueprintUsecase) RestoreWithModels(
+	ctx context.Context,
+	id string,
+	restoredBy *string,
+) error {
+	id = strings.TrimSpace(id)
+	if id == "" {
+		return productbpdom.ErrInvalidID
+	}
+
+	pb, err := u.repo.GetByID(ctx, id)
+	if err != nil {
+		return err
+	}
+
+	now := time.Now().UTC()
+	pb.DeletedAt = nil
+	pb.DeletedBy = nil
+	pb.UpdatedAt = now
+	pb.UpdatedBy = restoredBy
+
+	// companyId は context を優先
+	if cid := companyIDFromContext(ctx); cid != "" {
+		pb.CompanyID = strings.TrimSpace(cid)
+	}
+
+	_, err = u.repo.Save(ctx, pb)
+	if err != nil {
+		return err
+	}
+
+	// TODO: models 側の復元カスケードを ModelUsecase / ModelRepo と連携して実装
+	return nil
 }

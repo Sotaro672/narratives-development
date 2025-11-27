@@ -28,7 +28,7 @@ type ModelRepo interface {
 	// ModelVariation 更新
 	UpdateModelVariation(ctx context.Context, variationID string, updates modeldom.ModelVariationUpdate) (*modeldom.ModelVariation, error)
 
-	// ModelVariation 削除
+	// ModelVariation 削除（論理削除を行う実装を想定）
 	DeleteModelVariation(ctx context.Context, variationID string) (*modeldom.ModelVariation, error)
 
 	// まとめて入れ替える場合も、Repo 側で紐づけキーを解決する想定にしておく
@@ -72,7 +72,10 @@ func (u *ModelUsecase) GetModelData(ctx context.Context, id string) (*modeldom.M
 	return u.repo.GetModelData(ctx, id)
 }
 
-func (u *ModelUsecase) GetModelDataByProductBlueprintID(ctx context.Context, productBlueprintID string) (*modeldom.ModelData, error) {
+func (u *ModelUsecase) GetModelDataByProductBlueprintID(
+	ctx context.Context,
+	productBlueprintID string,
+) (*modeldom.ModelData, error) {
 	productBlueprintID = strings.TrimSpace(productBlueprintID)
 	if productBlueprintID == "" {
 		return nil, modeldom.ErrInvalidBlueprintID
@@ -128,6 +131,8 @@ func (u *ModelUsecase) UpdateModelVariation(
 	return u.repo.UpdateModelVariation(ctx, variationID, updates)
 }
 
+// DeleteModelVariation は ModelVariation の論理削除を行うユースケース。
+// 実際の削除方法（deletedAt を立てる / 完全削除）は repository 実装に委譲する。
 func (u *ModelUsecase) DeleteModelVariation(
 	ctx context.Context,
 	variationID string,
