@@ -39,10 +39,7 @@ export default function ProductBlueprintDetail() {
 
     // 編集用
     onSave,
-    onDelete, // 論理削除
-    onPurge,  // 物理削除（deletedAt がある時のみ有効）
-    onRestore, // 復旧（deletedAt がある時のみ有効）
-
+    onDelete,
     onChangeProductName,
     onChangeFit,
     onChangeMaterials,
@@ -85,7 +82,7 @@ export default function ProductBlueprintDetail() {
     setEditMode(false);
   };
 
-  // 削除押下時 → hook 経由で論理削除を実行
+  // 削除押下時
   const handleDelete = () => {
     if (!onDelete) return;
     onDelete();
@@ -100,9 +97,6 @@ export default function ProductBlueprintDetail() {
       onEdit={!editMode ? () => setEditMode(true) : undefined}
       onDelete={editMode ? handleDelete : undefined}
       onCancel={editMode ? () => setEditMode(false) : undefined}
-      // ★ deletedAt が非 null のときだけ hook から渡ってくる
-      onPurge={onPurge}
-      onRestore={onRestore}
     >
       {/* --- 左ペイン --- */}
       <div>

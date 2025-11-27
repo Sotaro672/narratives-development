@@ -1,4 +1,4 @@
-// frontend/console/productBlueprint/src/presentation/hook/useProductBlueprintDetail.tsx 
+// frontend/console/productBlueprint/src/presentation/hook/useProductBlueprintDetail.tsx
 import * as React from "react";
 import { useNavigate, useParams } from "react-router-dom";
 
@@ -59,10 +59,6 @@ export interface UseProductBlueprintDetailResult {
   onSave: () => void;
   /** 論理削除（削除ボタン用） */
   onDelete: () => void;
-
-  /** deletedAt が非 null のときだけ PageHeader に渡す */
-  onPurge?: () => void;   // 物理削除
-  onRestore?: () => void; // 復旧
 
   onChangeProductName: (v: string) => void;
   onChangeItemType: (v: ItemType) => void;
@@ -130,9 +126,6 @@ export function useProductBlueprintDetail(): UseProductBlueprintDetailResult {
   const [brandId, setBrandId] = React.useState<string>("");
   const [assigneeId, setAssigneeId] = React.useState<string>("");
 
-  // ★ 論理削除済みかどうか
-  const [isDeleted, setIsDeleted] = React.useState(false);
-
   // ---------------------------------
   // service → 詳細データ + variations を反映
   // ---------------------------------
@@ -175,10 +168,6 @@ export function useProductBlueprintDetail(): UseProductBlueprintDetailResult {
         const tagType =
           (detail.productIdTag?.type as ProductIDTagType | undefined) ?? "";
         setProductIdTagType(tagType);
-
-        // ★ deletedAt の有無で isDeleted を判定
-        const deletedAtRaw = (detail as any).deletedAt;
-        setIsDeleted(Boolean(deletedAtRaw));
 
         // --------------------------------------------------
         // ModelVariation 取得
@@ -520,39 +509,6 @@ export function useProductBlueprintDetail(): UseProductBlueprintDetailResult {
     })();
   }, [blueprintId, navigate]);
 
-  // ---------------------------------
-  // Handlers: 復旧（deletedAt があるときだけ使う）
-  // ---------------------------------
-  const handleRestore = React.useCallback(() => {
-    if (!blueprintId) {
-      alert("商品設計ID が不明です");
-      return;
-    }
-    if (!isDeleted) return;
-
-    // TODO: 復旧 API と接続（restoreProductBlueprint など）
-    alert("復旧処理はまだ実装されていません。");
-  }, [blueprintId, isDeleted]);
-
-  // ---------------------------------
-  // Handlers: 物理削除（deletedAt があるときだけ使う）
-  // ---------------------------------
-  const handlePurge = React.useCallback(() => {
-    if (!blueprintId) {
-      alert("商品設計ID が不明です");
-      return;
-    }
-    if (!isDeleted) return;
-
-    const ok = window.confirm(
-      "この商品設計を完全に削除しますか？\nこの操作は取り消せません。",
-    );
-    if (!ok) return;
-
-    // TODO: 物理削除 API と接続（purgeProductBlueprint など）
-    alert("物理削除処理はまだ実装されていません。");
-  }, [blueprintId, isDeleted]);
-
   // ★ 戻るボタン: 相対 -1 ではなく、商品設計一覧の絶対パスへ
   const onBack = React.useCallback(() => {
     navigate("/productBlueprint");
@@ -696,10 +652,6 @@ export function useProductBlueprintDetail(): UseProductBlueprintDetailResult {
     onBack,
     onSave,
     onDelete,
-
-    // deletedAt が非 null の場合のみ PageHeader に渡す
-    onPurge: isDeleted ? handlePurge : undefined,
-    onRestore: isDeleted ? handleRestore : undefined,
 
     onChangeProductName: setProductName,
     onChangeItemType: (v: ItemType) => setItemType(v),
