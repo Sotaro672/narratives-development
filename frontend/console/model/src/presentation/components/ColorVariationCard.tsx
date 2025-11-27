@@ -30,7 +30,9 @@ type ColorVariationCardProps = {
   onAddColor: () => void;
   onRemoveColor: (color: string) => void;
   mode?: "edit" | "view";
+  /** color 名 -> #rrggbb */
   colorRgbMap?: Record<string, string>;
+  /** カラーごとの RGB(hex) 更新用 */
   onChangeColorRgb?: (color: string, rgbHex: string) => void;
 };
 
@@ -54,6 +56,7 @@ const ColorVariationCard: React.FC<ColorVariationCardProps> = ({
   const handleAddColor = React.useCallback(() => {
     const name = colorInput.trim();
     if (name) {
+      // 追加する色名に対して現在の pickerColor を RGB として保存
       onChangeColorRgb?.(name, pickerColor);
     }
     onAddColor();
@@ -137,7 +140,10 @@ const ColorVariationCard: React.FC<ColorVariationCardProps> = ({
 
                   <TableBody>
                     {colors.map((c) => {
-                      const hex = colorRgbMap?.[c] ?? pickerColor;
+                      // ★ 既存 / 保存済みの colorRgbMap を優先し、
+                      //    無い場合のみデフォルト色(#ffffff)を使う
+                      const hexFromMap = colorRgbMap?.[c];
+                      const hex = hexFromMap ?? "#ffffff";
 
                       return (
                         <TableRow key={c}>
@@ -147,7 +153,7 @@ const ColorVariationCard: React.FC<ColorVariationCardProps> = ({
                                 className="inline-block w-4 h-4 rounded border"
                                 style={{ backgroundColor: hex }}
                               />
-                              {hex}
+                              {hexFromMap ?? "-"}
                             </div>
                           </TableCell>
 

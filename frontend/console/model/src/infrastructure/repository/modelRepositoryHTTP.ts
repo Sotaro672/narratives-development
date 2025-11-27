@@ -77,23 +77,27 @@ export async function createModelVariation(
   const cleanedMeasurements =
     payload.measurements &&
     Object.fromEntries(
-      Object.entries(payload.measurements).filter(
-        ([, v]) => typeof v === "number",
-      ),
+      Object.entries(payload.measurements).filter(([_, v]) => {
+        return typeof v === "number" && Number.isFinite(v);
+      }),
     );
 
   const url = `${API_BASE}/models/${encodeURIComponent(
     productBlueprintId,
   )}/variations`;
 
-  const body = {
+  const body: any = {
     productBlueprintId,
     modelNumber: payload.modelNumber,
     size: payload.size,
     color: payload.color,
-    rgb: payload.rgb,
     measurements: cleanedMeasurements,
   };
+
+  // rgb が数値のときだけ送る（undefined の場合はフィールド自体を省略）
+  if (typeof payload.rgb === "number" && Number.isFinite(payload.rgb)) {
+    body.rgb = payload.rgb;
+  }
 
   console.log("[modelRepositoryHTTP] createModelVariation request:", {
     url,

@@ -1,3 +1,4 @@
+// frontend/console/model/src/application/modelUpdateService.tsx
 /// <reference types="vite/client" />
 
 import { auth } from "../../../shell/src/auth/infrastructure/config/firebaseClient";
