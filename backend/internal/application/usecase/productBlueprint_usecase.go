@@ -187,7 +187,7 @@ func (u *ProductBlueprintUsecase) SoftDeleteWithModels(
 }
 
 // RestoreWithModels は論理削除された ProductBlueprint を復元するためのユースケースです。
-// 現時点では Blueprint の DeletedAt/DeletedBy をクリアする実装に留めています。
+// deletedAt / deletedBy / expireAt をクリアし、updatedAt / updatedBy を更新する。
 func (u *ProductBlueprintUsecase) RestoreWithModels(
 	ctx context.Context,
 	id string,
@@ -205,8 +205,26 @@ func (u *ProductBlueprintUsecase) RestoreWithModels(
 
 	now := time.Now().UTC()
 
-	// ★ ドメインメソッドで復元（Deleted/Expire をクリアして Updated 系も更新）
-	pb.Restore(now, restoredBy)
+	// ------------------------------------------------
+	// ★ 復旧ロジック:
+	//   - deletedAt / deletedBy / expireAt を null にする
+	//   - updatedAt / updatedBy を更新する
+	// ------------------------------------------------
+	pb.DeletedAt = nil
+	pb.DeletedBy = nil
+	pb.ExpireAt = nil
+
+	pb.UpdatedAt = now
+	if restoredBy != nil {
+		if trimmed := strings.TrimSpace(*restoredBy); trimmed != "" {
+			// 新しいポインタを作成して UpdatedBy にセット
+			rb := trimmed
+			pb.UpdatedBy = &rb
+		} else {
+			// 空文字の場合は UpdatedBy をクリア
+			pb.UpdatedBy = nil
+		}
+	}
 
 	// companyId は context を優先
 	if cid := companyIDFromContext(ctx); cid != "" {

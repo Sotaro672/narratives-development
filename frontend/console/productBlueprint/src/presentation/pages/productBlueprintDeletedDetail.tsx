@@ -1,4 +1,3 @@
-// frontend/console/productBlueprint/src/presentation/pages/productBlueprintDeletedDetail.tsx
 import PageStyle from "../../../../shell/src/layout/PageStyle/PageStyle";
 import AdminCard from "../../../../admin/src/presentation/components/AdminCard";
 import ProductBlueprintCard from "../components/productBlueprintCard";
@@ -6,17 +5,16 @@ import ColorVariationCard from "../../../../model/src/presentation/components/Co
 import SizeVariationCard from "../../../../model/src/presentation/components/SizeVariationCard";
 import ModelNumberCard from "../../../../model/src/presentation/components/ModelNumberCard";
 
-import { useProductBlueprintDetail } from "../hook/useProductBlueprintDetail";
-
 import type { ItemType } from "../../domain/entity/catalog";
 import { ITEM_TYPE_MEASUREMENT_OPTIONS } from "../../domain/entity/catalog";
+
+import { useProductBlueprintDeletedDetail } from "../hook/useProductBlueprintDeletedDetail";
 
 /**
  * 削除済み商品設計の詳細画面（閲覧専用）
  * - PageStyle レイアウトは ProductBlueprintDetail と同じ grid-2
  * - 本画面では常に view モード
- * - ヘッダーには編集ボタンを出さず、「復旧 / 物理削除」ボタンのみを表示（onRestore / onPurge）
- *   ※ 現時点では中身は TODO: API 接続予定
+ * - ヘッダーには編集ボタンを出さず、「復旧 / 物理削除」ボタンのみを表示
  */
 export default function ProductBlueprintDeletedDetail() {
   const {
@@ -39,33 +37,11 @@ export default function ProductBlueprintDeletedDetail() {
     creator,
     createdAt,
 
-    onBack,
-
-    // 編集用ハンドラは削除済み画面では使わない
-    // onSave,
-    // onDelete,
-    // onChangeProductName,
-    // onChangeFit,
-    // onChangeMaterials,
-    // onChangeWeight,
-    // onChangeWashTags,
-    // onChangeProductIdTag,
-    // onChangeColorInput,
-    // onAddColor,
-    // onRemoveColor,
-
-    // サイズ操作（削除済み画面では編集しないのでハンドラは使わない）
-    // onAddSize,
-    // onRemoveSize,
-    // onChangeSize,
-
-    // モデルナンバー操作（同上）
-    // onChangeModelNumber,
-
-    // onClickAssignee,
-
     getCode,
-  } = useProductBlueprintDetail();
+    onBack,
+    onRestore,
+    onPurge,
+  } = useProductBlueprintDeletedDetail();
 
   const normalizedItemType = (itemType || undefined) as ItemType | undefined;
 
@@ -75,27 +51,7 @@ export default function ProductBlueprintDeletedDetail() {
       : undefined;
 
   // 削除済み画面では常に view モード
-  const editMode = false;
   const noop = () => {};
-
-  // ----------------------------------------
-  // 復旧 / 物理削除ボタン用ハンドラ
-  // （現時点では API 未接続なので TODO としてアラートのみ）
-  // ----------------------------------------
-  const handleRestore = () => {
-    // TODO: 復旧 API と接続（restoreProductBlueprint など）
-    alert("復旧処理はまだ実装されていません。");
-  };
-
-  const handlePurge = () => {
-    // TODO: 物理削除 API と接続（purgeProductBlueprint など）
-    const ok = window.confirm(
-      "この商品設計を完全に削除しますか？\nこの操作は取り消せません。",
-    );
-    if (!ok) return;
-
-    alert("物理削除処理はまだ実装されていません。");
-  };
 
   return (
     <PageStyle
@@ -108,8 +64,8 @@ export default function ProductBlueprintDeletedDetail() {
       onDelete={undefined}
       onCancel={undefined}
       // 代わりに復旧 / 物理削除ボタンをヘッダーに表示
-      onRestore={handleRestore}
-      onPurge={handlePurge}
+      onRestore={onRestore}
+      onPurge={onPurge}
     >
       {/* --- 左ペイン --- */}
       <div>

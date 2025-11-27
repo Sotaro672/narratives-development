@@ -58,7 +58,7 @@ export function useProductBlueprintDeleted(): UseProductBlueprintDeletedResult {
         const uiRows = await fetchProductBlueprintDeletedRows();
         console.log(
           "[useProductBlueprintDeleted] fetched deleted uiRows:",
-          uiRows
+          uiRows,
         );
         setAllRows(uiRows);
       } catch (err) {
@@ -80,7 +80,7 @@ export function useProductBlueprintDeleted(): UseProductBlueprintDeletedResult {
         sortedKey,
         sortedDir,
       }),
-    [allRows, brandFilter, assigneeFilter, sortedKey, sortedDir]
+    [allRows, brandFilter, assigneeFilter, sortedKey, sortedDir],
   );
 
   // ---------------------------
@@ -99,14 +99,17 @@ export function useProductBlueprintDeleted(): UseProductBlueprintDeletedResult {
       setSortedKey((key as ProductBlueprintDeletedSortKey) ?? null);
       setSortedDir(dir as SortDirection);
     },
-    []
+    [],
   );
 
   const handleRowClick = useCallback(
     (row: UiRow) => {
-      navigate(`/productBlueprint/detail/${encodeURIComponent(row.id)}`);
+      // ★ 削除済み詳細ページへ遷移するように修正
+      navigate(
+        `/productBlueprint/deleted/detail/${encodeURIComponent(row.id)}`,
+      );
     },
-    [navigate]
+    [navigate],
   );
 
   const handleReset = useCallback(() => {
