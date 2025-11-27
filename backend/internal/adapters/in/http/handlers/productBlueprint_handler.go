@@ -3,6 +3,7 @@ package handlers
 
 import (
 	"encoding/json"
+	"errors"
 	"net/http"
 	"strings"
 
@@ -385,6 +386,9 @@ func writeProductBlueprintErr(w http.ResponseWriter, err error) {
 		code = http.StatusUnauthorized
 	case pbdom.IsForbidden(err):
 		code = http.StatusForbidden
+	case errors.Is(err, pbdom.ErrRestoreExpired):
+		// TTL 期限切れで復元不可
+		code = http.StatusGone
 	default:
 		// それ以外は 500 のまま
 	}

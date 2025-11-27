@@ -9,9 +9,6 @@ import (
 	productbpdom "narratives/internal/domain/productBlueprint"
 )
 
-// ★ ProductBlueprint 論理削除後の TTL（物理削除予定までの期間: 90日）
-const productBlueprintTTL = 90 * 24 * time.Hour
-
 // ProductBlueprintRepo defines the minimal persistence port needed by ProductBlueprintUsecase.
 type ProductBlueprintRepo interface {
 	GetByID(ctx context.Context, id string) (productbpdom.ProductBlueprint, error)
@@ -71,6 +68,24 @@ func (u *ProductBlueprintUsecase) List(ctx context.Context) ([]productbpdom.Prod
 	return filtered, nil
 }
 
+// ★ 新規追加:
+// DeletedAt が null ではない（論理削除済み）の ProductBlueprint のみを一覧で返す。
+// 管理画面側で「ゴミ箱一覧」「復元候補一覧」などに利用する想定。
+func (u *ProductBlueprintUsecase) ListDeleted(ctx context.Context) ([]productbpdom.ProductBlueprint, error) {
+	rows, err := u.repo.List(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	deleted := make([]productbpdom.ProductBlueprint, 0, len(rows))
+	for _, pb := range rows {
+		if pb.DeletedAt != nil {
+			deleted = append(deleted, pb)
+		}
+	}
+	return deleted, nil
+}
+
 // ------------------------------------------------------------
 // Commands (単体)
 // ------------------------------------------------------------
@@ -128,7 +143,7 @@ func (u *ProductBlueprintUsecase) Delete(ctx context.Context, id string) error {
 // ------------------------------------------------------------
 
 // SoftDeleteWithModels は ProductBlueprint を論理削除するためのユースケースです。
-// 現時点では product_blueprints ドキュメントの DeletedAt / DeletedBy / ExpireAt を更新する
+// 現時点では product_blueprints ドキュメントの DeletedAt / DeletedBy を更新する
 // 実装に留め、models へのカスケードは今後の拡張ポイントとして残しています。
 func (u *ProductBlueprintUsecase) SoftDeleteWithModels(
 	ctx context.Context,
@@ -148,12 +163,9 @@ func (u *ProductBlueprintUsecase) SoftDeleteWithModels(
 
 	now := time.Now().UTC()
 
-	// ★ ドメインメソッドを使って論理削除 + TTL 付き ExpireAt を設定
-	//   - DeletedAt = now
-	//   - DeletedBy = deletedBy
-	//   - ExpireAt = now + productBlueprintTTL (90日)
-	//   - UpdatedAt / UpdatedBy も内部で更新される
-	pb.SoftDelete(now, deletedBy, productBlueprintTTL)
+	// ★ ドメインメソッドで SoftDelete（DeletedAt / ExpireAt / Updated 系をまとめて更新）
+	const softDeleteTTL = 90 * 24 * time.Hour
+	pb.SoftDelete(now, deletedBy, softDeleteTTL)
 
 	// companyId は context を優先
 	if cid := companyIDFromContext(ctx); cid != "" {
@@ -170,7 +182,7 @@ func (u *ProductBlueprintUsecase) SoftDeleteWithModels(
 }
 
 // RestoreWithModels は論理削除された ProductBlueprint を復元するためのユースケースです。
-// 現時点では Blueprint の DeletedAt/DeletedBy/ExpireAt をクリアする実装に留めています。
+// 現時点では Blueprint の DeletedAt/DeletedBy をクリアする実装に留めています。
 func (u *ProductBlueprintUsecase) RestoreWithModels(
 	ctx context.Context,
 	id string,
@@ -188,7 +200,7 @@ func (u *ProductBlueprintUsecase) RestoreWithModels(
 
 	now := time.Now().UTC()
 
-	// ★ ドメインメソッドで復旧（Deleted/Expire をクリアし Updated 系も更新）
+	// ★ ドメインメソッドで復元（Deleted/Expire をクリアして Updated 系も更新）
 	pb.Restore(now, restoredBy)
 
 	// companyId は context を優先
