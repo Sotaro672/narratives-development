@@ -549,3 +549,49 @@ export async function listModelVariationsByProductBlueprintId(
     };
   });
 }
+// -----------------------------------------
+// DELETE: 商品設計 論理削除
+// -----------------------------------------
+export async function softDeleteProductBlueprint(
+  productBlueprintId: string,
+): Promise<void> {
+  const id = productBlueprintId.trim();
+  if (!id) {
+    throw new Error("softDeleteProductBlueprint: productBlueprintId が空です");
+  }
+
+  const user = auth.currentUser;
+  if (!user) {
+    throw new Error("ログイン情報が見つかりません（未ログイン）");
+  }
+
+  const idToken = await user.getIdToken();
+
+  const url = `${API_BASE}/product-blueprints/${encodeURIComponent(id)}`;
+
+  const res = await fetch(url, {
+    method: "DELETE",
+    headers: {
+      Authorization: `Bearer ${idToken}`,
+      Accept: "application/json",
+    },
+  });
+
+  if (!res.ok) {
+    let detail = "";
+    try {
+      detail = await res.text();
+    } catch {
+      // ignore
+    }
+
+    throw new Error(
+      `商品設計の削除に失敗しました（${res.status} ${res.statusText}）${
+        detail ? `\n${detail}` : ""
+      }`,
+    );
+  }
+
+  // handler 側は 204 No Content を返す想定なので、
+  // 正常系では何も返さず終了（void）で問題ありません。
+}

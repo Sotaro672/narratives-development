@@ -14,6 +14,7 @@ import {
   getProductBlueprintDetail,
   listModelVariationsByProductBlueprintId,
   updateProductBlueprint, // ★ UPDATE 用
+  softDeleteProductBlueprint, // ★ 論理削除用
 } from "../../application/productBlueprintDetailService";
 
 import type { Fit, ItemType, WashTagOption } from "../../domain/entity/catalog";
@@ -56,6 +57,8 @@ export interface UseProductBlueprintDetailResult {
 
   onBack: () => void;
   onSave: () => void;
+  /** 論理削除（削除ボタン用） */
+  onDelete: () => void;
 
   onChangeProductName: (v: string) => void;
   onChangeItemType: (v: ItemType) => void;
@@ -396,9 +399,6 @@ export function useProductBlueprintDetail(): UseProductBlueprintDetailResult {
 
   // ---------------------------------
   // ModelNumberCard 用ロジックは useModelCard に委譲
-  //   - getCode: 表示用 getter
-  //   - uiOnChangeModelNumber: Input からの変更イベント（UI 内部 state 用）
-  //   ※ application state の更新は handleChangeModelNumber で行う
   // ---------------------------------
   const { getCode, onChangeModelNumber: uiOnChangeModelNumber } = useModelCard({
     sizes,
@@ -408,7 +408,7 @@ export function useProductBlueprintDetail(): UseProductBlueprintDetailResult {
   });
 
   // ---------------------------------
-  // Handlers
+  // Handlers: 保存
   // ---------------------------------
   const onSave = React.useCallback(() => {
     if (!blueprintId) {
@@ -481,6 +481,33 @@ export function useProductBlueprintDetail(): UseProductBlueprintDetailResult {
     brandId,
     assigneeId,
   ]);
+
+  // ---------------------------------
+  // Handlers: 論理削除
+  // ---------------------------------
+  const onDelete = React.useCallback(() => {
+    if (!blueprintId) {
+      alert("商品設計ID が不明です");
+      return;
+    }
+
+    const ok = window.confirm(
+      "この商品設計を削除しますか？\n関連するモデルバリエーションも含めて論理削除されます。",
+    );
+    if (!ok) return;
+
+    (async () => {
+      try {
+        await softDeleteProductBlueprint(blueprintId);
+        alert("削除しました");
+        // 一覧へ戻る
+        navigate("/productBlueprint");
+      } catch (e) {
+        console.error("[useProductBlueprintDetail] delete failed:", e);
+        alert("削除に失敗しました");
+      }
+    })();
+  }, [blueprintId, navigate]);
 
   // ★ 戻るボタン: 相対 -1 ではなく、商品設計一覧の絶対パスへ
   const onBack = React.useCallback(() => {
@@ -624,6 +651,7 @@ export function useProductBlueprintDetail(): UseProductBlueprintDetailResult {
 
     onBack,
     onSave,
+    onDelete,
 
     onChangeProductName: setProductName,
     onChangeItemType: (v: ItemType) => setItemType(v),

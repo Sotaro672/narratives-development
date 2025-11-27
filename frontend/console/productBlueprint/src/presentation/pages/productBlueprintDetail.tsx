@@ -39,6 +39,7 @@ export default function ProductBlueprintDetail() {
 
     // 編集用
     onSave,
+    onDelete, // ✅ 追加：hook から onDelete を受け取る
     onChangeProductName,
     onChangeFit,
     onChangeMaterials,
@@ -81,9 +82,10 @@ export default function ProductBlueprintDetail() {
     setEditMode(false);
   };
 
-  // 削除押下時（未実装なので今は空）
+  // 削除押下時 → hook 経由で論理削除を実行
   const handleDelete = () => {
-    console.log("DELETE clicked");
+    if (!onDelete) return;
+    onDelete();
   };
 
   return (
