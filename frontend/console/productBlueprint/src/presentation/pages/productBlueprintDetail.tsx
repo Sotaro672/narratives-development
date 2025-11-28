@@ -50,6 +50,7 @@ export default function ProductBlueprintDetail() {
     onChangeColorInput,
     onAddColor,
     onRemoveColor,
+    onChangeColorRgb, // ★ 追加
 
     // サイズ操作
     onAddSize,
@@ -76,6 +77,8 @@ export default function ProductBlueprintDetail() {
   // ----------------------------------------
   const [editMode, setEditMode] = React.useState(false);
   const noop = () => {};
+  const noopStr = (_: string) => {};
+  const noopColor = (_: string) => {};
 
   // 保存押下時
   const handleSave = () => {
@@ -112,7 +115,7 @@ export default function ProductBlueprintDetail() {
           washTags={washTags}
           productIdTag={productIdTag}
           onChangeProductName={editMode ? onChangeProductName : undefined}
-          // ⭐ アイテム種別は model 変更幅が大きいため、edit モードでも変更不可
+          // ⭐ アイテム種別は edit でも変更不可
           onChangeItemType={undefined}
           onChangeFit={editMode ? onChangeFit : undefined}
           onChangeMaterials={editMode ? onChangeMaterials : undefined}
@@ -126,9 +129,10 @@ export default function ProductBlueprintDetail() {
           colors={colors}
           colorInput={colorInput}
           colorRgbMap={colorRgbMap}
-          onChangeColorInput={editMode ? onChangeColorInput : noop}
+          onChangeColorInput={editMode ? onChangeColorInput : noopStr}
           onAddColor={editMode ? onAddColor : noop}
-          onRemoveColor={editMode ? onRemoveColor : noop}
+          onRemoveColor={editMode ? onRemoveColor : noopColor}
+          onChangeColorRgb={editMode ? onChangeColorRgb : undefined}
         />
 
         <SizeVariationCard

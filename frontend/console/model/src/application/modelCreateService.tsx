@@ -143,6 +143,7 @@ export async function createModelVariationsFromProductBlueprint(
         color: v.color,
         rgb: rgbInt,
         measurements,
+        version: 1,
       };
     },
   );

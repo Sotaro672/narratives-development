@@ -10,8 +10,7 @@ import type { SizeRow } from "../../../../model/src/domain/entity/catalog";
 // ------------------------------------------------------
 export const API_BASE =
   ((import.meta as any).env?.VITE_BACKEND_BASE_URL as string | undefined)
-    ?.replace(/\/+$/g, "") ??
-  "";
+    ?.replace(/\/+$/g, "") ?? "";
 
 // ------------------------------------------------------
 // 型定義
@@ -26,6 +25,8 @@ export type NewModelVariationPayload = {
   color: string;
   modelNumber: string;
   createdBy: string;
+  /** モデルバリエーションのバージョン（新規は 1 から） */
+  version?: number;
   rgb?: number;
   measurements: NewModelVariationMeasurements;
 };
@@ -67,6 +68,8 @@ export type ProductBlueprintDetailResponse = {
     rgb?: number | null;
     measurements?: Record<string, number | null>;
     productBlueprintId?: string;
+    /** 現在のバージョン番号 */
+    version?: number;
     createdAt?: string | null;
     updatedAt?: string | null;
   }>;

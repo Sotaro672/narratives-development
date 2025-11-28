@@ -168,6 +168,8 @@ export type NewModelVariationPayload = {
   color: string;
   rgb?: number; // 色の RGB 値（0xRRGGBB）
   modelNumber: string;
+  /** 新規作成時の version （基本 1 から開始） */
+  version?: number;
   createdBy: string;
   measurements: NewModelVariationMeasurements;
 };
@@ -208,13 +210,10 @@ export async function createProductBlueprintApi(
   }
 
   // 🔍 backend（/models/{productBlueprintId}/variations）に渡す直前の payload 全体をログ出力
-  console.log(
-    "[productBlueprintApi] variations payload for backend",
-    {
-      productBlueprintId,
-      variations,
-    },
-  );
+  console.log("[productBlueprintApi] variations payload for backend", {
+    productBlueprintId,
+    variations,
+  });
 
   // 3. variations がある場合のみ ModelVariation を作成
   if (variations.length > 0) {

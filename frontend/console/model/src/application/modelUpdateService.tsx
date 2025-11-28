@@ -28,6 +28,8 @@ export type ModelVariationUpdateRequest = {
   rgb?: number;
   /** 着丈 / 身幅 / 股下 などの採寸値マップ（キーは日本語ラベル） */
   measurements?: Record<string, number>;
+  /** 現在の version（あれば +1 して送信される） */
+  version?: number;
 };
 
 /**
@@ -50,7 +52,36 @@ export type ModelVariationResponse = {
   updatedBy?: string | null;
   deletedAt?: string | null;
   deletedBy?: string | null;
+  /** 現在の version（backend 側の struct に合わせて利用） */
+  version?: number;
 };
+
+/**
+ * 現在の ModelVariation を取得して version を知るためのヘルパー
+ */
+async function fetchCurrentModelVariation(
+  variationId: string,
+  idToken: string,
+): Promise<ModelVariationResponse | null> {
+  const id = variationId.trim();
+  if (!id) return null;
+
+  const url = `${API_BASE}/models/${encodeURIComponent(id)}`;
+  const res = await fetch(url, {
+    method: "GET",
+    headers: {
+      Authorization: `Bearer ${idToken}`,
+      Accept: "application/json",
+    },
+  });
+
+  if (!res.ok) {
+    return null;
+  }
+
+  const data = (await res.json()) as ModelVariationResponse;
+  return data;
+}
 
 /**
  * モデルバリエーションを更新するサービス
@@ -76,9 +107,31 @@ export async function updateModelVariation(
 
   const idToken = await user.getIdToken();
 
+  // 1. 現在の version を取得し、nextVersion を決定
+  let nextVersion: number | undefined = undefined;
+
+  // まず backend に保存されている現在の version を優先して利用
+  try {
+    const current = await fetchCurrentModelVariation(id, idToken);
+    if (current && typeof current.version === "number") {
+      nextVersion = current.version + 1;
+    }
+  } catch {
+    // 取得に失敗した場合は payload.version にフォールバック
+  }
+
+  // backend から取れなかった場合、payload.version を元に +1
+  if (
+    nextVersion === undefined &&
+    typeof payload.version === "number" &&
+    !Number.isNaN(payload.version)
+  ) {
+    nextVersion = payload.version + 1;
+  }
+
   const url = `${API_BASE}/models/${encodeURIComponent(id)}`;
 
-  const body = {
+  const body: any = {
     // backend の createModelVariationRequest に合わせてキー名を変換
     modelNumber: payload.modelNumber,
     size: payload.size,
@@ -87,17 +140,10 @@ export async function updateModelVariation(
     measurements: payload.measurements,
   };
 
-  // 呼び出し前スナップショット
-  console.log("[updateModelVariation] received payload from caller:", {
-    variationId: id,
-    ...payload,
-  });
-
-  console.log("[updateModelVariation] request:", {
-    variationId: id,
-    url,
-    body,
-  });
+  // version が決まっていれば送信（backend 側で Version フィールドとして利用想定）
+  if (typeof nextVersion === "number") {
+    body.version = nextVersion;
+  }
 
   const res = await fetch(url, {
     method: "PUT",
@@ -111,16 +157,6 @@ export async function updateModelVariation(
 
   // ★ 404 の場合は「その variation は存在しない」とみなしてスキップ扱いにする
   if (res.status === 404) {
-    console.warn(
-      "[updateModelVariation] 404 not_found - variation をスキップします",
-      {
-        variationId: id,
-        status: res.status,
-        statusText: res.statusText,
-      },
-    );
-
-    // 呼び出し元はレスポンスの中身を使っていないので、最低限のダミーを返しておく
     const dummy: ModelVariationResponse = {
       id,
       productBlueprintId: "",
@@ -137,6 +173,7 @@ export async function updateModelVariation(
       updatedBy: null,
       deletedAt: null,
       deletedBy: null,
+      version: nextVersion,
     };
 
     return dummy;
@@ -151,13 +188,6 @@ export async function updateModelVariation(
   }
 
   const data = (await res.json()) as ModelVariationResponse;
-
-  // ★ 保存後に backend から受け取ったデータのスナップショットをログ出力
-  console.log("[updateModelVariation] response data:", {
-    variationId: id,
-    response: data,
-  });
-
   return data;
 }
 
@@ -186,11 +216,6 @@ export async function deleteModelVariation(variationId: string): Promise<void> {
   const idToken = await user.getIdToken();
   const url = `${API_BASE}/models/${encodeURIComponent(id)}`;
 
-  console.log("[deleteModelVariation] request:", {
-    variationId: id,
-    url,
-  });
-
   const res = await fetch(url, {
     method: "DELETE",
     headers: {
@@ -201,14 +226,6 @@ export async function deleteModelVariation(variationId: string): Promise<void> {
 
   // ★ 404 の場合は「既に存在しない」とみなして成功扱いにする
   if (res.status === 404) {
-    console.warn(
-      "[deleteModelVariation] 404 not_found - 既に削除済みとみなします",
-      {
-        variationId: id,
-        status: res.status,
-        statusText: res.statusText,
-      },
-    );
     return;
   }
 
@@ -219,24 +236,5 @@ export async function deleteModelVariation(variationId: string): Promise<void> {
     );
   }
 
-  // 念のためレスポンス body を読んでおく（現在は呼び出し元では未使用）
-  const text = await res.text().catch(() => "");
-  if (text) {
-    try {
-      const json = JSON.parse(text);
-      console.log("[deleteModelVariation] response:", {
-        variationId: id,
-        response: json,
-      });
-    } catch {
-      console.log("[deleteModelVariation] response (raw text):", {
-        variationId: id,
-        response: text,
-      });
-    }
-  } else {
-    console.log("[deleteModelVariation] response: <empty>", {
-      variationId: id,
-    });
-  }
+  // 正常時はレスポンスボディは特に利用しない
 }
