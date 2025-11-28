@@ -119,11 +119,11 @@ type ModelVariation struct {
 	Size               string
 	Measurements       map[string]int // 各計測位置: 計測値(int)
 	Color              Color
-
-	CreatedAt time.Time
-	CreatedBy *string
-	UpdatedAt time.Time
-	UpdatedBy *string
+	Version            int64 `firestore:"version"`
+	CreatedAt          time.Time
+	CreatedBy          *string
+	UpdatedAt          time.Time
+	UpdatedBy          *string
 }
 
 // NewModelVariation は新規作成時に使う入力モデル。

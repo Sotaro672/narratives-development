@@ -156,10 +156,10 @@ const ProductBlueprintCard: React.FC<ProductBlueprintCardProps> = ({
           />
         ) : (
           <Input
-            value={safeProductName}
+            value={selectedBrandName || safeBrand}
             variant="readonly"
             readOnly
-            aria-label="プロダクト名"
+            aria-label="ブランド"
           />
         )}
 

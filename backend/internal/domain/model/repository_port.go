@@ -124,7 +124,7 @@ type Repository = RepositoryPort
 //	product_blueprints_history/{blueprintId}/models/{version}/variations/{variationId}
 //
 // version は ProductBlueprint 側の Version と同期して管理する。
-type ModelHistoryRepo interface {
+type ModelHistoryRepository interface {
 	// SaveSnapshot:
 	//   指定された blueprintID + blueprintVersion に対して、
 	//   variations（ライブの ModelVariation 一式）のスナップショットを保存する。
