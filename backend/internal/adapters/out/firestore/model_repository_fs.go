@@ -264,6 +264,7 @@ func (r *ModelRepositoryFS) CreateModelVariation(
 			RGB:  variation.Color.RGB,
 		},
 		Measurements: variation.Measurements,
+		Version:      1, // ★ 新規作成は常に 1
 		CreatedAt:    now,
 		UpdatedAt:    now,
 	}
@@ -292,7 +293,6 @@ func (r *ModelRepositoryFS) UpdateModelVariation(ctx context.Context, variationI
 		return nil, modeldom.ErrNotFound
 	}
 
-	// どのパスを更新しようとしているかログ出力
 	log.Printf("[ModelRepositoryFS] UpdateModelVariation id=%s path=models/%s", variationID, variationID)
 
 	docRef := r.variationsCol().Doc(variationID)
@@ -317,7 +317,8 @@ func (r *ModelRepositoryFS) UpdateModelVariation(ctx context.Context, variationI
 		fsUpdates = append(fsUpdates, firestore.Update{Path: "measurements", Value: updates.Measurements})
 	}
 
-	// updatedAt は必ず更新
+	// Version は Usecase が更新するため repository は触らない
+
 	fsUpdates = append(fsUpdates, firestore.Update{
 		Path:  "updatedAt",
 		Value: time.Now().UTC(),
@@ -460,6 +461,7 @@ func (r *ModelRepositoryFS) ReplaceModelVariations(
 						RGB:  nv.Color.RGB,
 					},
 					Measurements: nv.Measurements,
+					Version:      1, // ★ 一括置き換え後の初期 version も 1
 					CreatedAt:    now,
 					UpdatedAt:    now,
 				}
@@ -613,6 +615,19 @@ func docToModelVariation(doc *firestore.DocumentSnapshot) (modeldom.ModelVariati
 		updatedBy = &s
 	}
 
+	// version フィールド（なければ 0）
+	var version int64
+	if v, ok := data["version"]; ok {
+		switch x := v.(type) {
+		case int64:
+			version = x
+		case int:
+			version = int64(x)
+		case float64:
+			version = int64(x)
+		}
+	}
+
 	return modeldom.ModelVariation{
 		ID:                 doc.Ref.ID,
 		ProductBlueprintID: getStr("productBlueprintId"),
@@ -620,6 +635,7 @@ func docToModelVariation(doc *firestore.DocumentSnapshot) (modeldom.ModelVariati
 		Size:               getStr("size"),
 		Color:              color,
 		Measurements:       getMeasurements(),
+		Version:            version,
 		CreatedAt:          createdAt,
 		CreatedBy:          createdBy,
 		UpdatedAt:          updatedAt,
@@ -636,6 +652,7 @@ func modelVariationToDoc(v modeldom.ModelVariation) map[string]any {
 			"name": v.Color.Name,
 			"rgb":  v.Color.RGB,
 		},
+		"version": v.Version, // ★ version も永続化
 	}
 
 	if v.Measurements != nil {
