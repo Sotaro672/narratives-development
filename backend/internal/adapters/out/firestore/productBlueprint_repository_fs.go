@@ -29,6 +29,13 @@ func (r *ProductBlueprintRepositoryFS) col() *firestore.CollectionRef {
 	return r.Client.Collection("product_blueprints")
 }
 
+// history コレクション: product_blueprints_history/{blueprintId}/versions/{version}
+func (r *ProductBlueprintRepositoryFS) historyCol(blueprintID string) *firestore.CollectionRef {
+	return r.Client.Collection("product_blueprints_history").
+		Doc(blueprintID).
+		Collection("versions")
+}
+
 // Compile-time check: ensure this satisfies usecase.ProductBlueprintRepo.
 var _ usecase.ProductBlueprintRepo = (*ProductBlueprintRepositoryFS)(nil)
 
@@ -80,6 +87,7 @@ func (r *ProductBlueprintRepositoryFS) Exists(ctx context.Context, id string) (b
 }
 
 // List returns all ProductBlueprints (optionally filtered by companyId in context).
+// （簡易版: フィルタ/ソート/ページングは usecase 側でラップして利用）
 func (r *ProductBlueprintRepositoryFS) List(ctx context.Context) ([]pbdom.ProductBlueprint, error) {
 	if r.Client == nil {
 		return nil, errors.New("firestore client is nil")
@@ -146,6 +154,7 @@ func (r *ProductBlueprintRepositoryFS) ListDeleted(ctx context.Context) ([]pbdom
 // Create inserts a new ProductBlueprint (no upsert).
 // If ID is empty, it is auto-generated.
 // If CreatedAt/UpdatedAt are zero, they are set to now (UTC).
+// Version は domain.New() 側で 1 が設定されている想定だが、0 以下ならここで 1 に補正する。
 func (r *ProductBlueprintRepositoryFS) Create(
 	ctx context.Context,
 	pb pbdom.ProductBlueprint,
@@ -174,6 +183,9 @@ func (r *ProductBlueprintRepositoryFS) Create(
 		pb.UpdatedAt = now
 	} else {
 		pb.UpdatedAt = pb.UpdatedAt.UTC()
+	}
+	if pb.Version <= 0 {
+		pb.Version = 1
 	}
 
 	data, err := productBlueprintToDoc(pb, pb.CreatedAt, pb.UpdatedAt)
@@ -226,15 +238,18 @@ func (r *ProductBlueprintRepositoryFS) Save(
 	}
 	pb.UpdatedAt = now
 
+	if pb.Version < 0 {
+		// 0 は「未設定」扱いで許容、負数のみ防御
+		pb.Version = 0
+	}
+
 	data, err := productBlueprintToDoc(pb, pb.CreatedAt, pb.UpdatedAt)
 	if err != nil {
 		return pbdom.ProductBlueprint{}, err
 	}
 	data["id"] = pb.ID
 
-	// ★ 完全上書きに変更（MergeAll をやめる）
-	//   - Restore 時に DeletedAt / ExpireAt が nil ならフィールドごと消える
-	//   - SoftDelete 時には productBlueprintToDoc が deletedAt / expireAt を書き出す
+	// 完全上書き（MergeAll は使わない）
 	if _, err := docRef.Set(ctx, data); err != nil {
 		return pbdom.ProductBlueprint{}, err
 	}
@@ -346,6 +361,213 @@ func (r *ProductBlueprintRepositoryFS) RestoreWithModels(ctx context.Context, id
 }
 
 // ========================
+// History (snapshot, versioned)
+// ========================
+
+// SaveHistorySnapshot は product_blueprints_history/{blueprintId}/versions/{version}
+// に、その時点の ProductBlueprint のスナップショットを保存する。
+func (r *ProductBlueprintRepositoryFS) SaveHistorySnapshot(
+	ctx context.Context,
+	blueprintID string,
+	h pbdom.HistoryRecord,
+) error {
+	if r.Client == nil {
+		return errors.New("firestore client is nil")
+	}
+
+	blueprintID = strings.TrimSpace(blueprintID)
+	if blueprintID == "" {
+		return pbdom.ErrInvalidID
+	}
+	if h.Version <= 0 {
+		return pbdom.ErrInvalidVersion
+	}
+
+	// Blueprint.ID が空なら補正、異なる場合も blueprintID を優先
+	if strings.TrimSpace(h.Blueprint.ID) == "" || h.Blueprint.ID != blueprintID {
+		h.Blueprint.ID = blueprintID
+	}
+
+	// UpdatedAt/UpdatedBy（履歴メタ）は Blueprint 側になければ HistoryRecord 側から補完
+	if h.UpdatedAt.IsZero() {
+		h.UpdatedAt = h.Blueprint.UpdatedAt
+	}
+	if h.UpdatedAt.IsZero() {
+		h.UpdatedAt = time.Now().UTC()
+	}
+
+	// ドキュメント ID は version 番号文字列
+	docID := fmt.Sprintf("%d", h.Version)
+	docRef := r.historyCol(blueprintID).Doc(docID)
+
+	data, err := productBlueprintToDoc(h.Blueprint, h.Blueprint.CreatedAt, h.Blueprint.UpdatedAt)
+	if err != nil {
+		return err
+	}
+	data["id"] = blueprintID
+	data["version"] = h.Version
+	data["historyUpdatedAt"] = h.UpdatedAt.UTC()
+	if h.UpdatedBy != nil {
+		if s := strings.TrimSpace(*h.UpdatedBy); s != "" {
+			data["historyUpdatedBy"] = s
+		}
+	}
+
+	if _, err := docRef.Set(ctx, data); err != nil {
+		return err
+	}
+	return nil
+}
+
+// ListHistory は blueprintID に紐づく全バージョンの履歴を取得する。
+// 基本的には version の降順（新しい順）で返す。
+func (r *ProductBlueprintRepositoryFS) ListHistory(
+	ctx context.Context,
+	blueprintID string,
+) ([]pbdom.HistoryRecord, error) {
+	if r.Client == nil {
+		return nil, errors.New("firestore client is nil")
+	}
+
+	blueprintID = strings.TrimSpace(blueprintID)
+	if blueprintID == "" {
+		return nil, pbdom.ErrInvalidID
+	}
+
+	q := r.historyCol(blueprintID).OrderBy("version", firestore.Desc)
+	snaps, err := q.Documents(ctx).GetAll()
+	if err != nil {
+		return nil, err
+	}
+
+	out := make([]pbdom.HistoryRecord, 0, len(snaps))
+	for _, snap := range snaps {
+		data := snap.Data()
+		if data == nil {
+			continue
+		}
+
+		pb, err := docToProductBlueprint(snap)
+		if err != nil {
+			return nil, err
+		}
+
+		// version の取り出し
+		var version int64
+		if v, ok := data["version"]; ok {
+			switch x := v.(type) {
+			case int64:
+				version = x
+			case int:
+				version = int64(x)
+			case float64:
+				version = int64(x)
+			}
+		}
+
+		// UpdatedAt/UpdatedBy（履歴メタ）
+		var histUpdatedAt time.Time
+		if v, ok := data["historyUpdatedAt"].(time.Time); ok && !v.IsZero() {
+			histUpdatedAt = v.UTC()
+		} else {
+			histUpdatedAt = pb.UpdatedAt
+		}
+
+		var histUpdatedBy *string
+		if v, ok := data["historyUpdatedBy"].(string); ok && strings.TrimSpace(v) != "" {
+			s := strings.TrimSpace(v)
+			histUpdatedBy = &s
+		} else {
+			histUpdatedBy = pb.UpdatedBy
+		}
+
+		out = append(out, pbdom.HistoryRecord{
+			Blueprint: pb,
+			Version:   version,
+			UpdatedAt: histUpdatedAt,
+			UpdatedBy: histUpdatedBy,
+		})
+	}
+	return out, nil
+}
+
+// GetHistoryByVersion は特定バージョンの履歴を 1 件取得する。
+func (r *ProductBlueprintRepositoryFS) GetHistoryByVersion(
+	ctx context.Context,
+	blueprintID string,
+	version int64,
+) (pbdom.HistoryRecord, error) {
+	if r.Client == nil {
+		return pbdom.HistoryRecord{}, errors.New("firestore client is nil")
+	}
+
+	blueprintID = strings.TrimSpace(blueprintID)
+	if blueprintID == "" {
+		return pbdom.HistoryRecord{}, pbdom.ErrInvalidID
+	}
+	if version <= 0 {
+		return pbdom.HistoryRecord{}, pbdom.ErrInvalidVersion
+	}
+
+	docID := fmt.Sprintf("%d", version)
+	snap, err := r.historyCol(blueprintID).Doc(docID).Get(ctx)
+	if err != nil {
+		if status.Code(err) == codes.NotFound {
+			return pbdom.HistoryRecord{}, pbdom.ErrNotFound
+		}
+		return pbdom.HistoryRecord{}, err
+	}
+
+	data := snap.Data()
+	if data == nil {
+		return pbdom.HistoryRecord{}, fmt.Errorf("empty history document: %s", snap.Ref.Path)
+	}
+
+	pb, err := docToProductBlueprint(snap)
+	if err != nil {
+		return pbdom.HistoryRecord{}, err
+	}
+
+	// version の取り出し（念のため doc からも読んでおく）
+	var ver int64
+	if v, ok := data["version"]; ok {
+		switch x := v.(type) {
+		case int64:
+			ver = x
+		case int:
+			ver = int64(x)
+		case float64:
+			ver = int64(x)
+		}
+	}
+	if ver == 0 {
+		ver = version
+	}
+
+	var histUpdatedAt time.Time
+	if v, ok := data["historyUpdatedAt"].(time.Time); ok && !v.IsZero() {
+		histUpdatedAt = v.UTC()
+	} else {
+		histUpdatedAt = pb.UpdatedAt
+	}
+
+	var histUpdatedBy *string
+	if v, ok := data["historyUpdatedBy"].(string); ok && strings.TrimSpace(v) != "" {
+		s := strings.TrimSpace(v)
+		histUpdatedBy = &s
+	} else {
+		histUpdatedBy = pb.UpdatedBy
+	}
+
+	return pbdom.HistoryRecord{
+		Blueprint: pb,
+		Version:   ver,
+		UpdatedAt: histUpdatedAt,
+		UpdatedBy: histUpdatedBy,
+	}, nil
+}
+
+// ========================
 // Helpers
 // ========================
 
@@ -382,6 +604,21 @@ func docToProductBlueprint(doc *firestore.DocumentSnapshot) (pbdom.ProductBluepr
 		}
 		return time.Time{}
 	}
+	getInt64 := func(keys ...string) int64 {
+		for _, k := range keys {
+			if v, ok := data[k]; ok {
+				switch x := v.(type) {
+				case int64:
+					return x
+				case int:
+					return int64(x)
+				case float64:
+					return int64(x)
+				}
+			}
+		}
+		return 0
+	}
 
 	getStringSlice := func(keys ...string) []string {
 		for _, key := range keys {
@@ -417,14 +654,21 @@ func docToProductBlueprint(doc *firestore.DocumentSnapshot) (pbdom.ProductBluepr
 		deletedAtPtr = &t
 	}
 
-	// ★ ExpireAt（TTL 用フィールド）も Firestore から読み込む
+	// ExpireAt（TTL 用フィールド）も Firestore から読み込む
 	var expireAtPtr *time.Time
 	if t := getTimeVal("expireAt", "expire_at"); !t.IsZero() {
 		expireAtPtr = &t
 	}
 
+	// ID はフィールド "id" / "blueprintId" があればそれを優先し、なければ doc.Ref.ID
+	id := getStr("id", "blueprintId", "blueprint_id")
+	if id == "" {
+		id = doc.Ref.ID
+	}
+
 	pb := pbdom.ProductBlueprint{
-		ID:               doc.Ref.ID,
+		ID:               id,
+		Version:          getInt64("version"),
 		ProductName:      getStr("productName", "product_name"),
 		BrandID:          getStr("brandId", "brand_id"),
 		ItemType:         pbdom.ItemType(itemTypeStr),
@@ -463,6 +707,11 @@ func productBlueprintToDoc(v pbdom.ProductBlueprint, createdAt, updatedAt time.T
 		"updatedAt":   updatedAt.UTC(),
 	}
 
+	// version は 0 を「旧データ/未設定」として許容しつつ、そのまま保存
+	if v.Version != 0 {
+		m["version"] = v.Version
+	}
+
 	if len(v.QualityAssurance) > 0 {
 		m["qualityAssurance"] = dedupTrimStrings(v.QualityAssurance)
 	}
@@ -489,7 +738,7 @@ func productBlueprintToDoc(v pbdom.ProductBlueprint, createdAt, updatedAt time.T
 			m["deletedBy"] = s
 		}
 	}
-	// ★ ExpireAt も Firestore に書き出す（TTL 対象フィールド）
+	// ExpireAt も Firestore に書き出す（TTL 対象フィールド）
 	if v.ExpireAt != nil && !v.ExpireAt.IsZero() {
 		m["expireAt"] = v.ExpireAt.UTC()
 	}

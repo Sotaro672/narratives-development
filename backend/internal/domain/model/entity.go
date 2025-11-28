@@ -70,6 +70,7 @@ func (md ModelData) validate() error {
 	}
 
 	// Version は 0 を「未確定」として許容し、負数のみ不正とする
+	// （実際には productBlueprint 側の Version に追従して 1,2,3,... を想定）
 	if md.Version < 0 {
 		return ErrInvalidVersion
 	}
@@ -106,6 +107,10 @@ type Color struct {
 	Name string
 	RGB  int
 }
+
+// Measurements は計測値のマップ型エイリアス。
+// Firestore アダプタなどから model.Measurements 型として利用する。
+type Measurements = map[string]int
 
 type ModelVariation struct {
 	ID                 string

@@ -96,11 +96,36 @@ type PageResult struct {
 }
 
 // ========================================
+// History contracts
+// ========================================
+
+// HistoryRecord は ProductBlueprint のバージョン履歴 1 件分を表す。
+// LogCard で使う version / updatedAt / updatedBy に加えて、
+// 当時の ProductBlueprint 本体も保持しておく。
+type HistoryRecord struct {
+	Blueprint ProductBlueprint
+	Version   int64
+	UpdatedAt time.Time
+	UpdatedBy *string
+}
+
+// ProductBlueprintHistoryRepo は Firestore の
+// product_blueprints_history/{blueprintId}/versions/{version}
+// にアクセスするための専用ポート。
+type ProductBlueprintHistoryRepo interface {
+	// ライブの ProductBlueprint スナップショットを指定 version で保存
+	SaveSnapshot(ctx context.Context, pb ProductBlueprint) error
+
+	// 特定の productBlueprintID の履歴一覧（LogCard 用）
+	ListByProductBlueprintID(ctx context.Context, productBlueprintID string) ([]ProductBlueprint, error)
+}
+
+// ========================================
 // Repository Port (interface contracts only)
 // ========================================
 
 type Repository interface {
-	// Read
+	// Read (live)
 	GetByID(ctx context.Context, id string) (ProductBlueprint, error)
 	List(ctx context.Context, filter Filter, sort Sort, page Page) (PageResult, error)
 	Count(ctx context.Context, filter Filter) (int, error)
@@ -108,10 +133,16 @@ type Repository interface {
 	// 存在確認（adapter の Exists を port に昇格）
 	Exists(ctx context.Context, id string) (bool, error)
 
-	// Write
+	// Write (live)
 	Create(ctx context.Context, in CreateInput) (ProductBlueprint, error)
 	Update(ctx context.Context, id string, patch Patch) (ProductBlueprint, error)
 	Delete(ctx context.Context, id string) error
+
+	// History (snapshot, versioned)
+	// ★ version は ProductBlueprint.Version に従う前提。
+	SaveHistorySnapshot(ctx context.Context, blueprintID string, h HistoryRecord) error
+	ListHistory(ctx context.Context, blueprintID string) ([]HistoryRecord, error)
+	GetHistoryByVersion(ctx context.Context, blueprintID string, version int64) (HistoryRecord, error)
 
 	// Dev/Test helper
 	Reset(ctx context.Context) error

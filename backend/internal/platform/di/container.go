@@ -1,4 +1,4 @@
-// backend\internal\platform\di\container.go
+// backend/internal/platform/di/container.go
 package di
 
 import (
@@ -151,6 +151,10 @@ type Container struct {
 	MemberRepo  memdom.Repository
 	MessageRepo *fs.MessageRepositoryFS
 
+	// ★ History Repositories
+	ProductBlueprintHistoryRepo *fs.ProductBlueprintHistoryRepositoryFS
+	ModelHistoryRepo            *fs.ModelHistoryRepositoryFS
+
 	// Application-layer usecases
 	AccountUC          *uc.AccountUsecase
 	AnnouncementUC     *uc.AnnouncementUsecase
@@ -257,6 +261,10 @@ func NewContainer(ctx context.Context) (*Container, error) {
 	userRepo := fs.NewUserRepositoryFS(fsClient)
 	walletRepo := fs.NewWalletRepositoryFS(fsClient)
 
+	// ★ History repositories
+	productBlueprintHistoryRepo := fs.NewProductBlueprintHistoryRepositoryFS(fsClient)
+	modelHistoryRepo := fs.NewModelHistoryRepositoryFS(fsClient)
+
 	// ★ 招待トークン用 Repository（Firestore 実装）＋ Usecase 用アダプタ
 	invitationTokenFSRepo := fs.NewInvitationTokenRepositoryFS(fsClient)
 	invitationTokenUCRepo := &invitationTokenRepoAdapter{
@@ -291,13 +299,19 @@ func NewContainer(ctx context.Context) (*Container, error) {
 	memberUC := uc.NewMemberUsecase(memberRepo)
 	messageUC := uc.NewMessageUsecase(messageRepo, nil, nil)
 	mintRequestUC := uc.NewMintRequestUsecase(mintRequestRepo)
-	modelUC := uc.NewModelUsecase(modelRepo)
+	modelUC := uc.NewModelUsecase(modelRepo) // ★ history は今後ここに注入予定
 	orderUC := uc.NewOrderUsecase(orderRepo)
 	paymentUC := uc.NewPaymentUsecase(paymentRepo)
 	permissionUC := uc.NewPermissionUsecase(permissionRepo)
 	productUC := uc.NewProductUsecase(productRepo)
 	productionUC := uc.NewProductionUsecase(productionRepo)
-	productBlueprintUC := uc.NewProductBlueprintUsecase(productBlueprintRepo)
+
+	// ★ ProductBlueprintUsecase に HistoryRepo を注入
+	productBlueprintUC := uc.NewProductBlueprintUsecase(
+		productBlueprintRepo,
+		productBlueprintHistoryRepo,
+	)
+
 	saleUC := uc.NewSaleUsecase(saleRepo)
 	shippingAddressUC := uc.NewShippingAddressUsecase(shippingAddressRepo)
 	tokenUC := uc.NewTokenUsecase(tokenRepo)
@@ -344,6 +358,10 @@ func NewContainer(ctx context.Context) (*Container, error) {
 		FirebaseAuth: fbAuth,
 		MemberRepo:   memberRepo,
 		MessageRepo:  messageRepo,
+
+		// History Repos
+		ProductBlueprintHistoryRepo: productBlueprintHistoryRepo,
+		ModelHistoryRepo:            modelHistoryRepo,
 
 		AccountUC:          accountUC,
 		AnnouncementUC:     announcementUC,

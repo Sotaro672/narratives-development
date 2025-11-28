@@ -27,11 +27,18 @@ type ProductBlueprintRepo interface {
 
 // ProductBlueprintUsecase orchestrates productBlueprint operations.
 type ProductBlueprintUsecase struct {
-	repo ProductBlueprintRepo
+	repo        ProductBlueprintRepo
+	historyRepo productbpdom.ProductBlueprintHistoryRepo
 }
 
-func NewProductBlueprintUsecase(repo ProductBlueprintRepo) *ProductBlueprintUsecase {
-	return &ProductBlueprintUsecase{repo: repo}
+func NewProductBlueprintUsecase(
+	repo ProductBlueprintRepo,
+	historyRepo productbpdom.ProductBlueprintHistoryRepo,
+) *ProductBlueprintUsecase {
+	return &ProductBlueprintUsecase{
+		repo:        repo,
+		historyRepo: historyRepo,
+	}
 }
 
 // ------------------------------------------------------------
@@ -91,6 +98,22 @@ func (u *ProductBlueprintUsecase) ListDeleted(ctx context.Context) ([]productbpd
 	return deleted, nil
 }
 
+// ★ 履歴一覧取得（LogCard 用）
+// historyRepo から productBlueprintID ごとのバージョン履歴を取得する。
+func (u *ProductBlueprintUsecase) ListHistory(
+	ctx context.Context,
+	productBlueprintID string,
+) ([]productbpdom.ProductBlueprint, error) {
+	productBlueprintID = strings.TrimSpace(productBlueprintID)
+	if productBlueprintID == "" {
+		return nil, productbpdom.ErrInvalidID
+	}
+	if u.historyRepo == nil {
+		return nil, productbpdom.ErrInternal
+	}
+	return u.historyRepo.ListByProductBlueprintID(ctx, productBlueprintID)
+}
+
 // ------------------------------------------------------------
 // Commands (単体)
 // ------------------------------------------------------------
@@ -104,7 +127,25 @@ func (u *ProductBlueprintUsecase) Create(
 	if cid := companyIDFromContext(ctx); cid != "" {
 		v.CompanyID = strings.TrimSpace(cid)
 	}
-	return u.repo.Create(ctx, v)
+
+	// ★ 新規作成時は version=1 を保証
+	if v.Version <= 0 {
+		v.Version = 1
+	}
+
+	created, err := u.repo.Create(ctx, v)
+	if err != nil {
+		return productbpdom.ProductBlueprint{}, err
+	}
+
+	// ★ 履歴スナップショット保存（version=1）
+	if u.historyRepo != nil {
+		if err := u.historyRepo.SaveSnapshot(ctx, created); err != nil {
+			return productbpdom.ProductBlueprint{}, err
+		}
+	}
+
+	return created, nil
 }
 
 func (u *ProductBlueprintUsecase) Save(
@@ -121,21 +162,51 @@ func (u *ProductBlueprintUsecase) Save(
 
 // Update: 既存 ID を前提とした更新用ユースケース
 // - ID が空の場合は ErrInvalidID を返す
-// - companyId は context 側を優先
+// - companyId は context を優先
+// - version は更新ごとに +1 し、そのスナップショットを履歴に保存する
 func (u *ProductBlueprintUsecase) Update(
 	ctx context.Context,
 	v productbpdom.ProductBlueprint,
 ) (productbpdom.ProductBlueprint, error) {
-	if strings.TrimSpace(v.ID) == "" {
+	id := strings.TrimSpace(v.ID)
+	if id == "" {
 		return productbpdom.ProductBlueprint{}, productbpdom.ErrInvalidID
 	}
 
+	// companyId は context を優先
 	if cid := companyIDFromContext(ctx); cid != "" {
 		v.CompanyID = strings.TrimSpace(cid)
 	}
 
+	// 現在の version を取得して nextVersion を決定
+	current, err := u.repo.GetByID(ctx, id)
+	if err != nil {
+		return productbpdom.ProductBlueprint{}, err
+	}
+
+	var nextVersion int64
+	if current.Version <= 0 {
+		// 旧データなど、version 未設定の場合は 1 から開始
+		nextVersion = 1
+	} else {
+		nextVersion = current.Version + 1
+	}
+	v.Version = nextVersion
+
 	// repository では Save を更新にも利用する前提
-	return u.repo.Save(ctx, v)
+	updated, err := u.repo.Save(ctx, v)
+	if err != nil {
+		return productbpdom.ProductBlueprint{}, err
+	}
+
+	// ★ 更新後スナップショットを履歴に保存
+	if u.historyRepo != nil {
+		if err := u.historyRepo.SaveSnapshot(ctx, updated); err != nil {
+			return productbpdom.ProductBlueprint{}, err
+		}
+	}
+
+	return updated, nil
 }
 
 // ------------------------------------------------------------

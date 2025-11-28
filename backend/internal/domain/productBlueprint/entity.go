@@ -106,10 +106,15 @@ func (t ProductIDTag) validate() error {
 // ======================================
 // Entity（★ VariationIDs は削除済み）
 // ======================================
-
+//
+// Version の意味:
+//   - 新規作成時: 1 から開始（New で固定）
+//   - 更新ごとに +1 され、そのタイミングのスナップショットが history に保存される想定
+//   - 0 は「旧データ/マイグレーション前」を許容するための値（validate では 0 以上を許容）
 type ProductBlueprint struct {
-	ID          string
-	Version     int64
+	ID      string
+	Version int64
+
 	ProductName string
 	CompanyID   string
 	BrandID     string
@@ -251,6 +256,17 @@ func (p *ProductBlueprint) UpdateTag(tag ProductIDTag, now time.Time, updatedBy 
 	p.ProductIdTag = tag
 	p.touch(now, updatedBy)
 	return nil
+}
+
+// ★ version を 1 つ進め、Updated 系を更新
+//   - Usecase から「新しいスナップショットを確定する」タイミングで呼び出す想定
+func (p *ProductBlueprint) BumpVersion(now time.Time, updatedBy *string) {
+	if p.Version < 0 {
+		// マイグレーションなどで負数が入っていた場合の保険
+		p.Version = 0
+	}
+	p.Version++
+	p.touch(now, updatedBy)
 }
 
 // ★ Soft Delete（論理削除 + TTL セット）

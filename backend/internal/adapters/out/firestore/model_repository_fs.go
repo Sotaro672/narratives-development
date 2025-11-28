@@ -37,7 +37,7 @@ func (r *ModelRepositoryFS) variationsCol() *firestore.CollectionRef {
 }
 
 // ------------------------------------------------------------
-// model_sets 取得
+// model_sets 取得（ライブ）
 // ------------------------------------------------------------
 
 func (r *ModelRepositoryFS) GetModelData(ctx context.Context, productBlueprintID string) (*modeldom.ModelData, error) {
@@ -62,7 +62,7 @@ func (r *ModelRepositoryFS) GetModelData(ctx context.Context, productBlueprintID
 		return nil, fmt.Errorf("empty model_set document: %s", snap.Ref.ID)
 	}
 
-	// ★ ここを := ではなく = に変更（引数を上書きして使う）
+	// Firestore 側に productBlueprintId があればそれを正とする
 	if v, ok := data["productBlueprintId"].(string); ok {
 		productBlueprintID = strings.TrimSpace(v)
 	}
@@ -75,6 +75,19 @@ func (r *ModelRepositoryFS) GetModelData(ctx context.Context, productBlueprintID
 		updatedAt = v.UTC()
 	}
 
+	// version フィールドを取得（なければ 0 のまま）
+	var version int64
+	if v, ok := data["version"]; ok {
+		switch x := v.(type) {
+		case int64:
+			version = x
+		case int:
+			version = int64(x)
+		case float64:
+			version = int64(x)
+		}
+	}
+
 	vars, err := r.listVariationsByProductBlueprintID(ctx, productBlueprintID)
 	if err != nil {
 		return nil, err
@@ -82,6 +95,7 @@ func (r *ModelRepositoryFS) GetModelData(ctx context.Context, productBlueprintID
 
 	return &modeldom.ModelData{
 		ProductBlueprintID: productBlueprintID,
+		Version:            version,
 		Variations:         vars,
 		UpdatedAt:          updatedAt,
 	}, nil
@@ -112,9 +126,23 @@ func (r *ModelRepositoryFS) GetModelDataByBlueprintID(ctx context.Context, produ
 	if data == nil {
 		return nil, fmt.Errorf("empty model_set: %s", snap.Ref.ID)
 	}
+
 	var updatedAt time.Time
 	if v, ok := data["updatedAt"].(time.Time); ok {
 		updatedAt = v.UTC()
+	}
+
+	// version フィールドを取得（なければ 0 のまま）
+	var version int64
+	if v, ok := data["version"]; ok {
+		switch x := v.(type) {
+		case int64:
+			version = x
+		case int:
+			version = int64(x)
+		case float64:
+			version = int64(x)
+		}
 	}
 
 	vars, err := r.listVariationsByProductBlueprintID(ctx, productBlueprintID)
@@ -124,13 +152,14 @@ func (r *ModelRepositoryFS) GetModelDataByBlueprintID(ctx context.Context, produ
 
 	return &modeldom.ModelData{
 		ProductBlueprintID: productBlueprintID,
+		Version:            version,
 		Variations:         vars,
 		UpdatedAt:          updatedAt,
 	}, nil
 }
 
 // ------------------------------------------------------------
-// model_sets 更新
+// model_sets 更新（ライブ）
 // ------------------------------------------------------------
 
 func (r *ModelRepositoryFS) UpdateModelData(ctx context.Context, productBlueprintID string, updates modeldom.ModelDataUpdate) (*modeldom.ModelData, error) {
@@ -155,11 +184,27 @@ func (r *ModelRepositoryFS) UpdateModelData(ctx context.Context, productBlueprin
 		}
 	}
 
-	// updatedAt 必ず更新
+	// version を受け取った場合は Firestore 側にも反映
+	if v, ok := updates["version"]; ok {
+		switch x := v.(type) {
+		case int64:
+			fsUpdates = append(fsUpdates, firestore.Update{Path: "version", Value: x})
+		case int:
+			fsUpdates = append(fsUpdates, firestore.Update{Path: "version", Value: int64(x)})
+		case float64:
+			fsUpdates = append(fsUpdates, firestore.Update{Path: "version", Value: int64(x)})
+		}
+	}
+
+	// updatedAt は必ず更新
 	fsUpdates = append(fsUpdates, firestore.Update{
 		Path:  "updatedAt",
 		Value: time.Now().UTC(),
 	})
+
+	if len(fsUpdates) == 0 {
+		return r.GetModelData(ctx, productBlueprintID)
+	}
 
 	if _, err := docRef.Update(ctx, fsUpdates); err != nil {
 		if status.Code(err) == codes.NotFound {
@@ -172,7 +217,7 @@ func (r *ModelRepositoryFS) UpdateModelData(ctx context.Context, productBlueprin
 }
 
 // ------------------------------------------------------------
-// Variation CRUD
+// Variation CRUD（ライブの models コレクション）
 // ------------------------------------------------------------
 
 func (r *ModelRepositoryFS) GetModelVariationByID(ctx context.Context, variationID string) (*modeldom.ModelVariation, error) {
@@ -292,7 +337,7 @@ func (r *ModelRepositoryFS) UpdateModelVariation(ctx context.Context, variationI
 	return r.GetModelVariationByID(ctx, variationID)
 }
 
-// ★ DeleteModelVariation: 物理削除に戻す
+// ★ DeleteModelVariation: 物理削除（論理削除要素はドメインから削除済み）
 func (r *ModelRepositoryFS) DeleteModelVariation(ctx context.Context, variationID string) (*modeldom.ModelVariation, error) {
 	if r.Client == nil {
 		return nil, errors.New("firestore client is nil")
@@ -331,7 +376,7 @@ func (r *ModelRepositoryFS) DeleteModelVariation(ctx context.Context, variationI
 }
 
 // ------------------------------------------------------------
-// ReplaceModelVariations（大量更新）
+// ReplaceModelVariations（大量更新、ライブ）
 // ------------------------------------------------------------
 
 func (r *ModelRepositoryFS) ReplaceModelVariations(
@@ -377,7 +422,7 @@ func (r *ModelRepositoryFS) ReplaceModelVariations(
 		}
 		chunk := existing[i:end]
 
-		// ★ Batch ではなく Transaction を使用して削除
+		// Transaction を使用して削除
 		err := r.Client.RunTransaction(ctx, func(ctx context.Context, tx *firestore.Transaction) error {
 			for _, v := range chunk {
 				ref := r.variationsCol().Doc(v.ID)
@@ -477,7 +522,7 @@ func (r *ModelRepositoryFS) listVariationsByProductBlueprintID(ctx context.Conte
 		if err != nil {
 			return nil, err
 		}
-		// ★ DeletedAt / DeletedBy は廃止したのでフィルタなしで返す
+		// DeletedAt / DeletedBy はドメインから削除済みなのでフィルタ不要
 		out = append(out, v)
 	}
 	return out, nil
