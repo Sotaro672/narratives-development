@@ -13,6 +13,9 @@
   --pbp-muted-bg: rgba(0, 0, 0, 0.02);
   --pbp-primary: #4f46e5;
   --pbp-primary-hover: #6366f1;
+
+  /* ★ 追加：PageHeader の高さ（Sticky offset 用） */
+  --pbp-header-height: 56px;
 }
 
 /* ダークテーマ */
@@ -34,7 +37,7 @@
 .pbp {
   background: var(--pbp-bg);
   color: var(--pbp-text);
-  min-height: calc(100vh - 56px);
+  min-height: calc(100vh - var(--pbp-header-height));
 }
 
 /* ページ内の水平パディングとセンタリング */
@@ -67,7 +70,9 @@
 /* 右ペインのカードをスクロール追従させる */
 .sticky-aside {
   position: sticky;
-  top: 0;
+
+  /* ★ 修正：header（sticky）と重ならないように offset を header 分ずらす */
+  top: calc(var(--pbp-header-height) + 8px);
 }
 
 /* セクション間の余白 */
@@ -87,6 +92,7 @@
   position: sticky;
   top: 0;
   z-index: 10;
+  height: var(--pbp-header-height); /* ★ 明示的に高さを合わせる */
 }
 
 /* 左側：タイトル＋戻るボタン */
@@ -160,6 +166,7 @@
 .page-header__back:active {
   transform: translateY(1px);
 }
+
 .page-header__btn--danger {
   color: #d92c2c;
   border-color: #d92c2c;

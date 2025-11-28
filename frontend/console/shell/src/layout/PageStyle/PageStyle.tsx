@@ -1,4 +1,3 @@
-// frontend/shell/src/layout/PageStyle/PageStyle.tsx
 import type { ReactNode } from "react";
 import {
   ArrowLeft,
@@ -50,8 +49,8 @@ export default function PageStyle({
   onEdit,
   onDelete,
   onCancel,
-  onPurge,     // ★
-  onRestore,   // ★
+  onPurge,
+  onRestore,
   title,
   badge,
   actions,
@@ -85,8 +84,6 @@ export default function PageStyle({
 
           {/* 右側：アクションボタン */}
           <div className="page-header__actions">
-
-            {/* 編集 */}
             {onEdit && (
               <button
                 type="button"
@@ -98,7 +95,6 @@ export default function PageStyle({
               </button>
             )}
 
-            {/* 論理削除 */}
             {onDelete && (
               <button
                 type="button"
@@ -110,7 +106,6 @@ export default function PageStyle({
               </button>
             )}
 
-            {/* ★ 復旧ボタン */}
             {onRestore && (
               <button
                 type="button"
@@ -122,7 +117,6 @@ export default function PageStyle({
               </button>
             )}
 
-            {/* ★ 物理削除ボタン */}
             {onPurge && (
               <button
                 type="button"
@@ -134,7 +128,6 @@ export default function PageStyle({
               </button>
             )}
 
-            {/* キャンセル */}
             {onCancel && (
               <button
                 type="button"
@@ -146,7 +139,6 @@ export default function PageStyle({
               </button>
             )}
 
-            {/* 作成 */}
             {onCreate && (
               <button
                 type="button"
@@ -158,7 +150,6 @@ export default function PageStyle({
               </button>
             )}
 
-            {/* 保存 */}
             {onSave && (
               <button
                 type="button"
@@ -195,7 +186,6 @@ export default function PageStyle({
     );
   }
 
-  // single
   return (
     <div className={rootClass}>
       {header}
