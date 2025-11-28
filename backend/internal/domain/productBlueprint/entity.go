@@ -108,14 +108,16 @@ func (t ProductIDTag) validate() error {
 // ======================================
 
 type ProductBlueprint struct {
-	ID               string
-	ProductName      string
-	CompanyID        string
-	BrandID          string
-	ItemType         ItemType
-	Fit              string
-	Material         string
-	Weight           float64
+	ID          string
+	Version     int64
+	ProductName string
+	CompanyID   string
+	BrandID     string
+	ItemType    ItemType
+	Fit         string
+	Material    string
+	Weight      float64
+
 	QualityAssurance []string
 	ProductIdTag     ProductIDTag
 	AssigneeID       string
@@ -146,6 +148,7 @@ var (
 	ErrInvalidCreatedAt = errors.New("productBlueprint: invalid createdAt")
 	ErrInvalidAssignee  = errors.New("productBlueprint: invalid assigneeId")
 	ErrInvalidCompanyID = errors.New("productBlueprint: invalid companyId")
+	ErrInvalidVersion   = errors.New("productBlueprint: invalid version")
 )
 
 // ======================================
@@ -167,6 +170,7 @@ func New(
 
 	pb := ProductBlueprint{
 		ID:               strings.TrimSpace(id),
+		Version:          1, // ★ 新規作成時は version=1 から開始
 		ProductName:      strings.TrimSpace(productName),
 		BrandID:          strings.TrimSpace(brandID),
 		ItemType:         itemType,
@@ -311,6 +315,10 @@ func (p ProductBlueprint) validate() error {
 	}
 	if p.CreatedAt.IsZero() {
 		return ErrInvalidCreatedAt
+	}
+	// Version は 0 以上を許容（0 は「旧データ / 未設定」として扱えるようにする）
+	if p.Version < 0 {
+		return ErrInvalidVersion
 	}
 	return nil
 }

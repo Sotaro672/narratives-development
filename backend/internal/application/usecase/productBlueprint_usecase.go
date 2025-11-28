@@ -138,11 +138,6 @@ func (u *ProductBlueprintUsecase) Update(
 	return u.repo.Save(ctx, v)
 }
 
-// 旧・物理削除用ユースケース（将来的には使用停止予定）
-func (u *ProductBlueprintUsecase) Delete(ctx context.Context, id string) error {
-	return u.repo.Delete(ctx, strings.TrimSpace(id))
-}
-
 // ------------------------------------------------------------
 // SoftDelete / Restore (withModels 用のエントリポイント)
 // ------------------------------------------------------------

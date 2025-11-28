@@ -1,11 +1,9 @@
-// backend\internal\domain\productBlueprint\repository_port.go
+// backend/internal/domain/productBlueprint/repository_port.go
 package productBlueprint
 
 import (
 	"context"
 	"time"
-
-	model "narratives/internal/domain/model"
 )
 
 // ========================================
@@ -13,31 +11,31 @@ import (
 // ========================================
 
 type CreateInput struct {
-	ProductName      string                 `json:"productName"`
-	BrandID          string                 `json:"brandId"`
-	ItemType         ItemType               `json:"itemType"`
-	Variations       []model.ModelVariation `json:"variations"` // Model variations
-	Fit              string                 `json:"fit"`
-	Material         string                 `json:"material"`
-	Weight           float64                `json:"weight"`
-	QualityAssurance []string               `json:"qualityAssurance"`
-	ProductIdTag     ProductIDTag           `json:"productIdTag"`
-	AssigneeID       string                 `json:"assigneeId"`
-	CreatedBy        *string                `json:"createdBy,omitempty"`
-	CreatedAt        *time.Time             `json:"createdAt,omitempty"` // repo may set if nil
+	ProductName      string       `json:"productName"`
+	BrandID          string       `json:"brandId"`
+	ItemType         ItemType     `json:"itemType"`
+	Fit              string       `json:"fit"`
+	Material         string       `json:"material"`
+	Weight           float64      `json:"weight"`
+	QualityAssurance []string     `json:"qualityAssurance"`
+	ProductIdTag     ProductIDTag `json:"productIdTag"`
+	AssigneeID       string       `json:"assigneeId"`
+	CompanyID        string       `json:"companyId"`
+
+	CreatedBy *string    `json:"createdBy,omitempty"`
+	CreatedAt *time.Time `json:"createdAt,omitempty"` // repo may set if nil
 }
 
 type Patch struct {
-	ProductName      *string                 `json:"productName,omitempty"`
-	BrandID          *string                 `json:"brandId,omitempty"`
-	ItemType         *ItemType               `json:"itemType,omitempty"`
-	Variations       *[]model.ModelVariation `json:"variations,omitempty"`
-	Fit              *string                 `json:"fit,omitempty"`
-	Material         *string                 `json:"material,omitempty"`
-	Weight           *float64                `json:"weight,omitempty"`
-	QualityAssurance *[]string               `json:"qualityAssurance,omitempty"`
-	ProductIdTag     *ProductIDTag           `json:"productIdTag,omitempty"`
-	AssigneeID       *string                 `json:"assigneeId,omitempty"`
+	ProductName      *string       `json:"productName,omitempty"`
+	BrandID          *string       `json:"brandId,omitempty"`
+	ItemType         *ItemType     `json:"itemType,omitempty"`
+	Fit              *string       `json:"fit,omitempty"`
+	Material         *string       `json:"material,omitempty"`
+	Weight           *float64      `json:"weight,omitempty"`
+	QualityAssurance *[]string     `json:"qualityAssurance,omitempty"`
+	ProductIdTag     *ProductIDTag `json:"productIdTag,omitempty"`
+	AssigneeID       *string       `json:"assigneeId,omitempty"`
 }
 
 // ========================================
@@ -47,11 +45,15 @@ type Patch struct {
 type Filter struct {
 	SearchTerm string
 
-	BrandIDs     []string
-	AssigneeIDs  []string
-	ItemTypes    []ItemType
-	VariationIDs []string // filter by included variation ids (any match)
-	TagTypes     []ProductIDTagType
+	BrandIDs    []string
+	AssigneeIDs []string
+	ItemTypes   []ItemType
+	TagTypes    []ProductIDTagType
+
+	// 削除状態フィルタ:
+	// - false: 通常の（未削除）レコードを対象（実装側で DeletedAt == nil を想定）
+	// - true : 論理削除済み（DeletedAt != nil）のみを対象
+	OnlyDeleted bool
 
 	CreatedFrom *time.Time
 	CreatedTo   *time.Time
@@ -102,6 +104,9 @@ type Repository interface {
 	GetByID(ctx context.Context, id string) (ProductBlueprint, error)
 	List(ctx context.Context, filter Filter, sort Sort, page Page) (PageResult, error)
 	Count(ctx context.Context, filter Filter) (int, error)
+
+	// 存在確認（adapter の Exists を port に昇格）
+	Exists(ctx context.Context, id string) (bool, error)
 
 	// Write
 	Create(ctx context.Context, in CreateInput) (ProductBlueprint, error)
