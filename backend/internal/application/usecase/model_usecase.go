@@ -39,15 +39,27 @@ type ModelRepo interface {
 }
 
 // ------------------------------------------------------------
+// ModelHistoryRepo
+// ------------------------------------------------------------
+
+type ModelHistoryRepo interface {
+	// TODO: モデルバリエーション履歴保存用のメソッドを定義する
+}
+
+// ------------------------------------------------------------
 // ModelUsecase
 // ------------------------------------------------------------
 
 type ModelUsecase struct {
-	repo ModelRepo
+	repo        ModelRepo
+	historyRepo ModelHistoryRepo
 }
 
-func NewModelUsecase(repo ModelRepo) *ModelUsecase {
-	return &ModelUsecase{repo: repo}
+func NewModelUsecase(repo ModelRepo, historyRepo ModelHistoryRepo) *ModelUsecase {
+	return &ModelUsecase{
+		repo:        repo,
+		historyRepo: historyRepo,
+	}
 }
 
 // ------------------------------------------------------------

@@ -16,7 +16,7 @@ import (
 	mailadp "narratives/internal/adapters/out/mail"
 	uc "narratives/internal/application/usecase"
 	authuc "narratives/internal/application/usecase/auth"
-	branddom "narratives/internal/domain/brand" // ★ 追加: Brand 用ドメインサービス
+	branddom "narratives/internal/domain/brand" // ★ Brand 用ドメインサービス
 	companydom "narratives/internal/domain/company"
 	memdom "narratives/internal/domain/member"
 	appcfg "narratives/internal/infra/config"
@@ -299,7 +299,10 @@ func NewContainer(ctx context.Context) (*Container, error) {
 	memberUC := uc.NewMemberUsecase(memberRepo)
 	messageUC := uc.NewMessageUsecase(messageRepo, nil, nil)
 	mintRequestUC := uc.NewMintRequestUsecase(mintRequestRepo)
-	modelUC := uc.NewModelUsecase(modelRepo) // ★ history は今後ここに注入予定
+
+	// ★ ModelUsecase に HistoryRepo を注入
+	modelUC := uc.NewModelUsecase(modelRepo, modelHistoryRepo)
+
 	orderUC := uc.NewOrderUsecase(orderRepo)
 	paymentUC := uc.NewPaymentUsecase(paymentRepo)
 	permissionUC := uc.NewPermissionUsecase(permissionRepo)

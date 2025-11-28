@@ -1,6 +1,4 @@
 // frontend/console/productBlueprint/src/infrastructure/api/productBlueprintApi.ts
-
-import { PRODUCT_BLUEPRINTS } from "../mockdata/productBlueprint_mockdata";
 import {
   MODEL_NUMBERS,
   SIZE_VARIATIONS,
@@ -72,19 +70,6 @@ export type ModelNumberRow = {
   color: string;
   code: string;
 };
-
-/**
- * ID から ProductBlueprint を取得（現在はモック配列を探索）
- * - ソフトデリート済み（deletedAt が truthy）のものは取得対象外
- */
-export function fetchProductBlueprintById(
-  blueprintId?: string,
-): ProductBlueprint | undefined {
-  if (!blueprintId) return undefined;
-  return (PRODUCT_BLUEPRINTS as ProductBlueprint[]).find(
-    (pb) => pb.id === blueprintId && !pb.deletedAt,
-  );
-}
 
 /**
  * 詳細画面用：サイズ行データを取得（現在は SIZE_VARIATIONS から復元）
