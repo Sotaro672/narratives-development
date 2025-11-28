@@ -69,12 +69,6 @@ func (md ModelData) validate() error {
 		return ErrInvalidBlueprintID
 	}
 
-	// Version は 0 を「未確定」として許容し、負数のみ不正とする
-	// （実際には productBlueprint 側の Version に追従して 1,2,3,... を想定）
-	if md.Version < 0 {
-		return ErrInvalidVersion
-	}
-
 	// UpdatedAt は必須のまま
 	if md.UpdatedAt.IsZero() {
 		return ErrInvalidUpdatedAt
@@ -119,7 +113,6 @@ type ModelVariation struct {
 	Size               string
 	Measurements       map[string]int // 各計測位置: 計測値(int)
 	Color              Color
-	Version            int64 `firestore:"version"`
 	CreatedAt          time.Time
 	CreatedBy          *string
 	UpdatedAt          time.Time
@@ -137,11 +130,8 @@ type NewModelVariation struct {
 }
 
 // ModelData は 1 つの ProductBlueprint に紐づく models の集合を表す。
-// Version は productBlueprint 側の version と同調させる想定で、
-// 0 の場合は「まだバージョン未確定」として扱う。
 type ModelData struct {
 	ProductBlueprintID string
-	Version            int64
 	Variations         []ModelVariation
 	UpdatedAt          time.Time
 }
@@ -182,7 +172,6 @@ var (
 	ErrInvalidUpdatedAt     = errors.New("model: invalid updatedAt")
 	ErrDuplicateVariationID = errors.New("model: duplicate variation id")
 	ErrProductMismatch      = errors.New("model: variation.productBlueprintId mismatch")
-	ErrInvalidVersion       = errors.New("model: invalid version")
 )
 
 // ==========================
@@ -198,13 +187,11 @@ var AllowedColors = map[string]struct{}{}
 
 func NewModelData(
 	productID, productBlueprintID string,
-	version int64,
 	variations []ModelVariation,
 	updatedAt time.Time,
 ) (ModelData, error) {
 	md := ModelData{
 		ProductBlueprintID: strings.TrimSpace(productBlueprintID),
-		Version:            version,
 		Variations:         append([]ModelVariation(nil), variations...),
 		UpdatedAt:          updatedAt,
 	}
@@ -216,7 +203,6 @@ func NewModelData(
 
 func NewModelDataFromStringTime(
 	productID, productBlueprintID string,
-	version int64,
 	variations []ModelVariation,
 	updatedAt string,
 ) (ModelData, error) {
@@ -224,7 +210,7 @@ func NewModelDataFromStringTime(
 	if err != nil {
 		return ModelData{}, fmt.Errorf("%w: %v", ErrInvalidUpdatedAt, err)
 	}
-	return NewModelData(productID, productBlueprintID, version, variations, t)
+	return NewModelData(productID, productBlueprintID, variations, t)
 }
 
 // ==========================

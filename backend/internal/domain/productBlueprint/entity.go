@@ -104,16 +104,11 @@ func (t ProductIDTag) validate() error {
 }
 
 // ======================================
-// Entity（★ VariationIDs は削除済み）
+// Entity（★ Version を完全削除）
 // ======================================
-//
-// Version の意味:
-//   - 新規作成時: 1 から開始（New で固定）
-//   - 更新ごとに +1 され、そのタイミングのスナップショットが history に保存される想定
-//   - 0 は「旧データ/マイグレーション前」を許容するための値（validate では 0 以上を許容）
+
 type ProductBlueprint struct {
-	ID      string
-	Version int64
+	ID string
 
 	ProductName string
 	CompanyID   string
@@ -153,7 +148,6 @@ var (
 	ErrInvalidCreatedAt = errors.New("productBlueprint: invalid createdAt")
 	ErrInvalidAssignee  = errors.New("productBlueprint: invalid assigneeId")
 	ErrInvalidCompanyID = errors.New("productBlueprint: invalid companyId")
-	ErrInvalidVersion   = errors.New("productBlueprint: invalid version")
 )
 
 // ======================================
@@ -175,7 +169,6 @@ func New(
 
 	pb := ProductBlueprint{
 		ID:               strings.TrimSpace(id),
-		Version:          1, // ★ 新規作成時は version=1 から開始
 		ProductName:      strings.TrimSpace(productName),
 		BrandID:          strings.TrimSpace(brandID),
 		ItemType:         itemType,
@@ -258,18 +251,9 @@ func (p *ProductBlueprint) UpdateTag(tag ProductIDTag, now time.Time, updatedBy 
 	return nil
 }
 
-// ★ version を 1 つ進め、Updated 系を更新
-//   - Usecase から「新しいスナップショットを確定する」タイミングで呼び出す想定
-func (p *ProductBlueprint) BumpVersion(now time.Time, updatedBy *string) {
-	if p.Version < 0 {
-		// マイグレーションなどで負数が入っていた場合の保険
-		p.Version = 0
-	}
-	p.Version++
-	p.touch(now, updatedBy)
-}
+// ★ Version 更新機能（BumpVersion）は削除済み
 
-// ★ Soft Delete（論理削除 + TTL セット）
+// Soft Delete（論理削除 + TTL セット）
 func (p *ProductBlueprint) SoftDelete(now time.Time, deletedBy *string, ttl time.Duration) {
 	if now.IsZero() {
 		now = time.Now().UTC()
@@ -284,22 +268,18 @@ func (p *ProductBlueprint) SoftDelete(now time.Time, deletedBy *string, ttl time
 		p.ExpireAt = nil
 	}
 
-	// 削除も「更新」とみなして Updated 系も進める
 	p.touch(now, deletedBy)
 }
 
-// ★ 復旧（DeletedAt / DeletedBy / ExpireAt をクリアして Updated 系を進める）
+// 復旧（DeletedAt / DeletedBy / ExpireAt をクリアして Updated 系を進める）
 func (p *ProductBlueprint) Restore(now time.Time, restoredBy *string) {
 	if now.IsZero() {
 		now = time.Now().UTC()
 	}
 
-	// ★ 論理削除状態を完全に解除
 	p.DeletedAt = nil
 	p.DeletedBy = nil
 	p.ExpireAt = nil
-
-	// ★ 復旧も更新扱い
 	p.touch(now, restoredBy)
 }
 
@@ -331,10 +311,6 @@ func (p ProductBlueprint) validate() error {
 	}
 	if p.CreatedAt.IsZero() {
 		return ErrInvalidCreatedAt
-	}
-	// Version は 0 以上を許容（0 は「旧データ / 未設定」として扱えるようにする）
-	if p.Version < 0 {
-		return ErrInvalidVersion
 	}
 	return nil
 }

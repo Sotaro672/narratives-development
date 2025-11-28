@@ -449,10 +449,9 @@ func (h *ProductBlueprintHandler) listDeleted(w http.ResponseWriter, r *http.Req
 // GET /product-blueprints/{id}/history  ← 履歴一覧 API（LogCard 用）
 // ---------------------------------------------------
 
-// 履歴一覧用 DTO
+// 履歴一覧用 DTO（version 要素削除後）
 type ProductBlueprintHistoryOutput struct {
 	ID          string  `json:"id"`
-	Version     int64   `json:"version"`
 	ProductName string  `json:"productName"`
 	BrandId     string  `json:"brandId"`
 	AssigneeId  string  `json:"assigneeId"`
@@ -506,13 +505,12 @@ func (h *ProductBlueprintHandler) listHistory(w http.ResponseWriter, r *http.Req
 		}
 
 		log.Printf(
-			"[ProductBlueprintHandler] listHistory: row[%d]: id=%s version=%d updatedAt=%v updatedBy=%v",
-			i, pb.ID, pb.Version, pb.UpdatedAt, pb.UpdatedBy,
+			"[ProductBlueprintHandler] listHistory: row[%d]: id=%s updatedAt=%v updatedBy=%v",
+			i, pb.ID, pb.UpdatedAt, pb.UpdatedBy,
 		)
 
 		out = append(out, ProductBlueprintHistoryOutput{
 			ID:          pb.ID,
-			Version:     pb.Version,
 			ProductName: pb.ProductName,
 			BrandId:     brandId,
 			AssigneeId:  assigneeId,

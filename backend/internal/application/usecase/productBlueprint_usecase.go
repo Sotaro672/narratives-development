@@ -99,7 +99,7 @@ func (u *ProductBlueprintUsecase) ListDeleted(ctx context.Context) ([]productbpd
 }
 
 // ★ 履歴一覧取得（LogCard 用）
-// historyRepo から productBlueprintID ごとのバージョン履歴を取得する。
+// historyRepo から productBlueprintID ごとの履歴を取得する。
 func (u *ProductBlueprintUsecase) ListHistory(
 	ctx context.Context,
 	productBlueprintID string,
@@ -128,17 +128,12 @@ func (u *ProductBlueprintUsecase) Create(
 		v.CompanyID = strings.TrimSpace(cid)
 	}
 
-	// ★ 新規作成時は version=1 を保証
-	if v.Version <= 0 {
-		v.Version = 1
-	}
-
 	created, err := u.repo.Create(ctx, v)
 	if err != nil {
 		return productbpdom.ProductBlueprint{}, err
 	}
 
-	// ★ 履歴スナップショット保存（version=1）
+	// ★ 履歴スナップショット保存
 	if u.historyRepo != nil {
 		if err := u.historyRepo.SaveSnapshot(ctx, created); err != nil {
 			return productbpdom.ProductBlueprint{}, err
@@ -163,7 +158,7 @@ func (u *ProductBlueprintUsecase) Save(
 // Update: 既存 ID を前提とした更新用ユースケース
 // - ID が空の場合は ErrInvalidID を返す
 // - companyId は context を優先
-// - version は更新ごとに +1 し、そのスナップショットを履歴に保存する
+// - 履歴スナップショットを保存する
 func (u *ProductBlueprintUsecase) Update(
 	ctx context.Context,
 	v productbpdom.ProductBlueprint,
@@ -178,20 +173,10 @@ func (u *ProductBlueprintUsecase) Update(
 		v.CompanyID = strings.TrimSpace(cid)
 	}
 
-	// 現在の version を取得して nextVersion を決定
-	current, err := u.repo.GetByID(ctx, id)
-	if err != nil {
+	// まず存在確認のみ行う（存在しなければエラー）
+	if _, err := u.repo.GetByID(ctx, id); err != nil {
 		return productbpdom.ProductBlueprint{}, err
 	}
-
-	var nextVersion int64
-	if current.Version <= 0 {
-		// 旧データなど、version 未設定の場合は 1 から開始
-		nextVersion = 1
-	} else {
-		nextVersion = current.Version + 1
-	}
-	v.Version = nextVersion
 
 	// repository では Save を更新にも利用する前提
 	updated, err := u.repo.Save(ctx, v)
@@ -242,15 +227,6 @@ func (u *ProductBlueprintUsecase) SoftDeleteWithModels(
 	if cid := companyIDFromContext(ctx); cid != "" {
 		pb.CompanyID = strings.TrimSpace(cid)
 	}
-
-	// ★ SoftDelete も履歴の一種としてバージョンを進める
-	var nextVersion int64
-	if pb.Version <= 0 {
-		nextVersion = 1
-	} else {
-		nextVersion = pb.Version + 1
-	}
-	pb.Version = nextVersion
 
 	saved, err := u.repo.Save(ctx, pb)
 	if err != nil {
@@ -312,15 +288,6 @@ func (u *ProductBlueprintUsecase) RestoreWithModels(
 	if cid := companyIDFromContext(ctx); cid != "" {
 		pb.CompanyID = strings.TrimSpace(cid)
 	}
-
-	// ★ 復旧も履歴イベントとしてバージョンを進める
-	var nextVersion int64
-	if pb.Version <= 0 {
-		nextVersion = 1
-	} else {
-		nextVersion = pb.Version + 1
-	}
-	pb.Version = nextVersion
 
 	saved, err := u.repo.Save(ctx, pb)
 	if err != nil {

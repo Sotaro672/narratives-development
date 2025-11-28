@@ -154,7 +154,6 @@ func (r *ProductBlueprintRepositoryFS) ListDeleted(ctx context.Context) ([]pbdom
 // Create inserts a new ProductBlueprint (no upsert).
 // If ID is empty, it is auto-generated.
 // If CreatedAt/UpdatedAt are zero, they are set to now (UTC).
-// Version は domain.New() 側で 1 が設定されている想定だが、0 以下ならここで 1 に補正する。
 func (r *ProductBlueprintRepositoryFS) Create(
 	ctx context.Context,
 	pb pbdom.ProductBlueprint,
@@ -183,9 +182,6 @@ func (r *ProductBlueprintRepositoryFS) Create(
 		pb.UpdatedAt = now
 	} else {
 		pb.UpdatedAt = pb.UpdatedAt.UTC()
-	}
-	if pb.Version <= 0 {
-		pb.Version = 1
 	}
 
 	data, err := productBlueprintToDoc(pb, pb.CreatedAt, pb.UpdatedAt)
@@ -237,11 +233,6 @@ func (r *ProductBlueprintRepositoryFS) Save(
 		pb.CreatedAt = pb.CreatedAt.UTC()
 	}
 	pb.UpdatedAt = now
-
-	if pb.Version < 0 {
-		// 0 は「未設定」扱いで許容、負数のみ防御
-		pb.Version = 0
-	}
 
 	data, err := productBlueprintToDoc(pb, pb.CreatedAt, pb.UpdatedAt)
 	if err != nil {
@@ -379,9 +370,6 @@ func (r *ProductBlueprintRepositoryFS) SaveHistorySnapshot(
 	if blueprintID == "" {
 		return pbdom.ErrInvalidID
 	}
-	if h.Version <= 0 {
-		return pbdom.ErrInvalidVersion
-	}
 
 	// Blueprint.ID が空なら補正、異なる場合も blueprintID を優先
 	if strings.TrimSpace(h.Blueprint.ID) == "" || h.Blueprint.ID != blueprintID {
@@ -505,9 +493,6 @@ func (r *ProductBlueprintRepositoryFS) GetHistoryByVersion(
 	if blueprintID == "" {
 		return pbdom.HistoryRecord{}, pbdom.ErrInvalidID
 	}
-	if version <= 0 {
-		return pbdom.HistoryRecord{}, pbdom.ErrInvalidVersion
-	}
 
 	docID := fmt.Sprintf("%d", version)
 	snap, err := r.historyCol(blueprintID).Doc(docID).Get(ctx)
@@ -604,21 +589,6 @@ func docToProductBlueprint(doc *firestore.DocumentSnapshot) (pbdom.ProductBluepr
 		}
 		return time.Time{}
 	}
-	getInt64 := func(keys ...string) int64 {
-		for _, k := range keys {
-			if v, ok := data[k]; ok {
-				switch x := v.(type) {
-				case int64:
-					return x
-				case int:
-					return int64(x)
-				case float64:
-					return int64(x)
-				}
-			}
-		}
-		return 0
-	}
 
 	getStringSlice := func(keys ...string) []string {
 		for _, key := range keys {
@@ -668,7 +638,6 @@ func docToProductBlueprint(doc *firestore.DocumentSnapshot) (pbdom.ProductBluepr
 
 	pb := pbdom.ProductBlueprint{
 		ID:               id,
-		Version:          getInt64("version"),
 		ProductName:      getStr("productName", "product_name"),
 		BrandID:          getStr("brandId", "brand_id"),
 		ItemType:         pbdom.ItemType(itemTypeStr),
@@ -705,11 +674,6 @@ func productBlueprintToDoc(v pbdom.ProductBlueprint, createdAt, updatedAt time.T
 		"companyId":   strings.TrimSpace(v.CompanyID),
 		"createdAt":   createdAt.UTC(),
 		"updatedAt":   updatedAt.UTC(),
-	}
-
-	// version は 0 を「旧データ/未設定」として許容しつつ、そのまま保存
-	if v.Version != 0 {
-		m["version"] = v.Version
 	}
 
 	if len(v.QualityAssurance) > 0 {

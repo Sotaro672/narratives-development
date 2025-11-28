@@ -4,7 +4,6 @@ package firestore
 import (
 	"context"
 	"errors"
-	"fmt"
 	"strings"
 	"time"
 
@@ -36,8 +35,7 @@ func (r *ProductBlueprintHistoryRepositoryFS) historyCol(blueprintID string) *fi
 }
 
 // SaveSnapshot は、ライブの ProductBlueprint をそのままスナップショットとして保存する。
-// - ドキュメントパス: product_blueprints_history/{pb.ID}/versions/{pb.Version}
-// - version は ProductBlueprint.Version を利用する。
+// - ドキュメントパス: product_blueprints_history/{pb.ID}/versions/{autoID}
 // - UpdatedAt/UpdatedBy は ProductBlueprint 側の値をそのまま利用。
 func (r *ProductBlueprintHistoryRepositoryFS) SaveSnapshot(
 	ctx context.Context,
@@ -51,9 +49,6 @@ func (r *ProductBlueprintHistoryRepositoryFS) SaveSnapshot(
 	if blueprintID == "" {
 		return pbdom.ErrInvalidID
 	}
-	if pb.Version <= 0 {
-		return pbdom.ErrInvalidVersion
-	}
 
 	// UpdatedAt が空なら現在時刻で補完（ログ用）
 	if pb.UpdatedAt.IsZero() {
@@ -63,8 +58,8 @@ func (r *ProductBlueprintHistoryRepositoryFS) SaveSnapshot(
 		pb.CreatedAt = pb.UpdatedAt
 	}
 
-	docID := fmt.Sprintf("%d", pb.Version)
-	docRef := r.historyCol(blueprintID).Doc(docID)
+	// version をドメインからは持たないため、ドキュメント ID は自動採番
+	docRef := r.historyCol(blueprintID).NewDoc()
 
 	// 既存の productBlueprintToDoc を流用してフィールド構成を揃える
 	data, err := productBlueprintToDoc(pb, pb.CreatedAt, pb.UpdatedAt)
@@ -74,7 +69,7 @@ func (r *ProductBlueprintHistoryRepositoryFS) SaveSnapshot(
 
 	// history 用のメタ情報
 	data["id"] = blueprintID
-	data["version"] = pb.Version
+	// 「履歴の更新時刻」として historyUpdatedAt を持たせる
 	data["historyUpdatedAt"] = pb.UpdatedAt.UTC()
 	if pb.UpdatedBy != nil {
 		if s := strings.TrimSpace(*pb.UpdatedBy); s != "" {
@@ -89,8 +84,8 @@ func (r *ProductBlueprintHistoryRepositoryFS) SaveSnapshot(
 }
 
 // ListByProductBlueprintID は、指定された productBlueprintID に紐づく
-// 履歴 ProductBlueprint 一覧を version の降順（新しい順）で返す。
-// LogCard 側では ProductBlueprint.Version / UpdatedAt / UpdatedBy を利用する想定。
+// 履歴 ProductBlueprint 一覧を、新しい順（historyUpdatedAt 降順）で返す。
+// LogCard 側では ProductBlueprint.UpdatedAt / UpdatedBy を利用する想定。
 func (r *ProductBlueprintHistoryRepositoryFS) ListByProductBlueprintID(
 	ctx context.Context,
 	productBlueprintID string,
@@ -104,7 +99,8 @@ func (r *ProductBlueprintHistoryRepositoryFS) ListByProductBlueprintID(
 		return nil, pbdom.ErrInvalidID
 	}
 
-	q := r.historyCol(productBlueprintID).OrderBy("version", firestore.Desc)
+	// version ではなく historyUpdatedAt でソート
+	q := r.historyCol(productBlueprintID).OrderBy("historyUpdatedAt", firestore.Desc)
 
 	snaps, err := q.Documents(ctx).GetAll()
 	if err != nil {
@@ -123,9 +119,6 @@ func (r *ProductBlueprintHistoryRepositoryFS) ListByProductBlueprintID(
 			return nil, err
 		}
 
-		// version は docToProductBlueprint 内で "version" を読んだ値が入っている想定だが、
-		// 念のため docID から復元するフォールバックはここでは行わず、
-		// 0 の場合はそのまま（古いデータとして扱う）。
 		// UpdatedAt / UpdatedBy は、historyUpdatedAt / historyUpdatedBy があればそちらを優先する。
 		if t, ok := data["historyUpdatedAt"].(time.Time); ok && !t.IsZero() {
 			pb.UpdatedAt = t.UTC()

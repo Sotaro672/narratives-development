@@ -45,22 +45,21 @@ type ModelRepo interface {
 // ------------------------------------------------------------
 // ModelHistoryRepo
 // ------------------------------------------------------------
-//   Firestore 保存パス：
-//   product_blueprints_history/{blueprintID}/models/{version}/variations/{variationID}
+//   Firestore 保存パス（例）：
+//   product_blueprints_history/{blueprintID}/models/{snapshotID}/variations/{variationID}
+//   ※ここでは version を扱わず、実際のキー構成は実装側に委譲。
 // ------------------------------------------------------------
 
 type ModelHistoryRepo interface {
 	SaveSnapshot(
 		ctx context.Context,
 		blueprintID string,
-		version int64,
 		variations []modeldom.ModelVariation,
 	) error
 
-	ListByProductBlueprintIDAndVersion(
+	ListByProductBlueprintID(
 		ctx context.Context,
 		blueprintID string,
-		version int64,
 	) ([]modeldom.ModelVariation, error)
 }
 
@@ -88,10 +87,9 @@ func NewModelUsecase(repo ModelRepo, historyRepo ModelHistoryRepo) *ModelUsecase
 func (u *ModelUsecase) saveHistorySnapshot(
 	ctx context.Context,
 	blueprintID string,
-	version int64,
 ) {
 	if u.historyRepo == nil {
-		log.Printf("[ModelUsecase] saveHistorySnapshot skipped: historyRepo is nil (blueprintID=%s version=%d)", blueprintID, version)
+		log.Printf("[ModelUsecase] saveHistorySnapshot skipped: historyRepo is nil (blueprintID=%s)", blueprintID)
 		return
 	}
 	blueprintID = strings.TrimSpace(blueprintID)
@@ -99,12 +97,8 @@ func (u *ModelUsecase) saveHistorySnapshot(
 		log.Printf("[ModelUsecase] saveHistorySnapshot skipped: empty blueprintID")
 		return
 	}
-	if version <= 0 {
-		log.Printf("[ModelUsecase] saveHistorySnapshot: version<=0, fallback to 1 (blueprintID=%s)", blueprintID)
-		version = 1
-	}
 
-	log.Printf("[ModelUsecase] saveHistorySnapshot start: blueprintID=%s version=%d", blueprintID, version)
+	log.Printf("[ModelUsecase] saveHistorySnapshot start: blueprintID=%s", blueprintID)
 
 	vars, err := u.repo.ListModelVariationsByProductBlueprintID(ctx, blueprintID)
 	if err != nil {
@@ -112,12 +106,12 @@ func (u *ModelUsecase) saveHistorySnapshot(
 		return
 	}
 
-	if err := u.historyRepo.SaveSnapshot(ctx, blueprintID, version, vars); err != nil {
+	if err := u.historyRepo.SaveSnapshot(ctx, blueprintID, vars); err != nil {
 		log.Printf("[ModelUsecase] saveHistorySnapshot: save snapshot failed: %v", err)
 		return
 	}
 
-	log.Printf("[ModelUsecase] saveHistorySnapshot done: blueprintID=%s version=%d count=%d", blueprintID, version, len(vars))
+	log.Printf("[ModelUsecase] saveHistorySnapshot done: blueprintID=%s count=%d", blueprintID, len(vars))
 }
 
 // ------------------------------------------------------------
@@ -178,7 +172,7 @@ func (u *ModelUsecase) UpdateModelData(
 	return u.repo.UpdateModelData(ctx, id, updates)
 }
 
-// Create ModelVariation → Version = 1 固定 + 履歴保存
+// Create ModelVariation → 履歴保存のみ（version は扱わない）
 func (u *ModelUsecase) CreateModelVariation(
 	ctx context.Context,
 	v modeldom.NewModelVariation,
@@ -189,18 +183,13 @@ func (u *ModelUsecase) CreateModelVariation(
 		return nil, err
 	}
 
-	// version を 1 に設定（ドメイン上の初期値）
-	if created.Version <= 0 {
-		created.Version = 1
-	}
-
-	// 履歴スナップショット保存（productBlueprint の Version と揃えたい場合はここを調整）
-	u.saveHistorySnapshot(ctx, created.ProductBlueprintID, created.Version)
+	// 履歴スナップショット保存
+	u.saveHistorySnapshot(ctx, created.ProductBlueprintID)
 
 	return created, nil
 }
 
-// Update ModelVariation → Version++ + 履歴保存
+// Update ModelVariation → 履歴保存のみ（version は扱わない）
 func (u *ModelUsecase) UpdateModelVariation(
 	ctx context.Context,
 	variationID string,
@@ -212,26 +201,13 @@ func (u *ModelUsecase) UpdateModelVariation(
 		return nil, modeldom.ErrInvalidID
 	}
 
-	// 現状を取得して version をインクリメント
-	current, err := u.repo.GetModelVariationByID(ctx, variationID)
-	if err != nil {
-		return nil, err
-	}
-
-	newVersion := current.Version + 1
-	if newVersion <= 0 {
-		newVersion = 1
-	}
-
 	updated, err := u.repo.UpdateModelVariation(ctx, variationID, updates)
 	if err != nil {
 		return nil, err
 	}
 
-	updated.Version = newVersion
-
 	// 履歴スナップショット保存
-	u.saveHistorySnapshot(ctx, updated.ProductBlueprintID, updated.Version)
+	u.saveHistorySnapshot(ctx, updated.ProductBlueprintID)
 
 	return updated, nil
 }
@@ -262,20 +238,16 @@ func (u *ModelUsecase) ReplaceModelVariations(
 		return nil, err
 	}
 
-	// ReplaceVariations 後の version 管理は ProductBlueprintUsecase 側で一括で行う想定。
-	// ここでは最低限の初期値補正と UpdatedAt 更新のみを行う。
+	// ReplaceVariations 後は UpdatedAt の補正のみ（version は扱わない）
 	now := time.Now().UTC()
 	for i := range updated {
-		if updated[i].Version <= 0 {
-			updated[i].Version = 1
-		}
 		updated[i].UpdatedAt = now
 	}
 
 	// 代表となる blueprintID を決めて履歴を保存（全件同一前提）
 	if len(updated) > 0 {
 		blueprintID := updated[0].ProductBlueprintID
-		u.saveHistorySnapshot(ctx, blueprintID, updated[0].Version)
+		u.saveHistorySnapshot(ctx, blueprintID)
 	}
 
 	return updated, nil
