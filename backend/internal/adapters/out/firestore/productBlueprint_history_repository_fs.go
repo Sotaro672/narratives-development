@@ -4,6 +4,7 @@ package firestore
 import (
 	"context"
 	"errors"
+	"fmt"
 	"strings"
 	"time"
 
@@ -14,7 +15,7 @@ import (
 
 // ProductBlueprintHistoryRepositoryFS implements ProductBlueprintHistoryRepo
 // using Firestore の
-// product_blueprints_history/{blueprintId}/versions/{version}
+// product_blueprints_history/{blueprintId}/versions/{1,2,3,...}
 // サブコレクションを利用する実装。
 type ProductBlueprintHistoryRepositoryFS struct {
 	Client *firestore.Client
@@ -35,8 +36,9 @@ func (r *ProductBlueprintHistoryRepositoryFS) historyCol(blueprintID string) *fi
 }
 
 // SaveSnapshot は、ライブの ProductBlueprint をそのままスナップショットとして保存する。
-// - ドキュメントパス: product_blueprints_history/{pb.ID}/versions/{autoID}
+// - ドキュメントパス: product_blueprints_history/{pb.ID}/versions/{1,2,3,...}
 // - UpdatedAt/UpdatedBy は ProductBlueprint 側の値をそのまま利用。
+// - 連番 version 自体はドメインには持たず、このリポジトリ内でのみ index として管理する。
 func (r *ProductBlueprintHistoryRepositoryFS) SaveSnapshot(
 	ctx context.Context,
 	pb pbdom.ProductBlueprint,
@@ -50,7 +52,7 @@ func (r *ProductBlueprintHistoryRepositoryFS) SaveSnapshot(
 		return pbdom.ErrInvalidID
 	}
 
-	// UpdatedAt が空なら現在時刻で補完（ログ用）
+	// UpdatedAt / CreatedAt 補完
 	if pb.UpdatedAt.IsZero() {
 		pb.UpdatedAt = time.Now().UTC()
 	}
@@ -58,8 +60,45 @@ func (r *ProductBlueprintHistoryRepositoryFS) SaveSnapshot(
 		pb.CreatedAt = pb.UpdatedAt
 	}
 
-	// version をドメインからは持たないため、ドキュメント ID は自動採番
-	docRef := r.historyCol(blueprintID).NewDoc()
+	hCol := r.historyCol(blueprintID)
+
+	// -------------------------
+	// ★ 直近の index を取得して nextIndex を決定
+	//     - index フィールドで降順ソート → 先頭の index + 1
+	//     - 1 件も無ければ 1 から開始
+	// -------------------------
+	var nextIndex int
+	q := hCol.OrderBy("index", firestore.Desc).Limit(1)
+	snaps, err := q.Documents(ctx).GetAll()
+	if err != nil {
+		return fmt.Errorf("SaveSnapshot: get latest index failed: %w", err)
+	}
+
+	if len(snaps) == 0 {
+		nextIndex = 1
+	} else {
+		data := snaps[0].Data()
+		cur := 0
+		if v, ok := data["index"]; ok {
+			switch x := v.(type) {
+			case int64:
+				cur = int(x)
+			case int:
+				cur = x
+			case float64:
+				cur = int(x)
+			}
+		}
+		if cur <= 0 {
+			nextIndex = 1
+		} else {
+			nextIndex = cur + 1
+		}
+	}
+
+	// docID を "1", "2", ... の文字列にする
+	docID := fmt.Sprintf("%d", nextIndex)
+	docRef := hCol.Doc(docID)
 
 	// 既存の productBlueprintToDoc を流用してフィールド構成を揃える
 	data, err := productBlueprintToDoc(pb, pb.CreatedAt, pb.UpdatedAt)
@@ -69,8 +108,8 @@ func (r *ProductBlueprintHistoryRepositoryFS) SaveSnapshot(
 
 	// history 用のメタ情報
 	data["id"] = blueprintID
-	// 「履歴の更新時刻」として historyUpdatedAt を持たせる
-	data["historyUpdatedAt"] = pb.UpdatedAt.UTC()
+	data["index"] = nextIndex                     // ★ 連番
+	data["historyUpdatedAt"] = pb.UpdatedAt.UTC() // 履歴としての時刻
 	if pb.UpdatedBy != nil {
 		if s := strings.TrimSpace(*pb.UpdatedBy); s != "" {
 			data["historyUpdatedBy"] = s
@@ -84,7 +123,7 @@ func (r *ProductBlueprintHistoryRepositoryFS) SaveSnapshot(
 }
 
 // ListByProductBlueprintID は、指定された productBlueprintID に紐づく
-// 履歴 ProductBlueprint 一覧を、新しい順（historyUpdatedAt 降順）で返す。
+// 履歴 ProductBlueprint 一覧を、新しい順（index 降順）で返す。
 // LogCard 側では ProductBlueprint.UpdatedAt / UpdatedBy を利用する想定。
 func (r *ProductBlueprintHistoryRepositoryFS) ListByProductBlueprintID(
 	ctx context.Context,
@@ -99,8 +138,8 @@ func (r *ProductBlueprintHistoryRepositoryFS) ListByProductBlueprintID(
 		return nil, pbdom.ErrInvalidID
 	}
 
-	// version ではなく historyUpdatedAt でソート
-	q := r.historyCol(productBlueprintID).OrderBy("historyUpdatedAt", firestore.Desc)
+	// index（1,2,3,...）の降順で取得
+	q := r.historyCol(productBlueprintID).OrderBy("index", firestore.Desc)
 
 	snaps, err := q.Documents(ctx).GetAll()
 	if err != nil {

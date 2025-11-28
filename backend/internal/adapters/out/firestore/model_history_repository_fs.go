@@ -18,7 +18,9 @@ import (
 //
 // パス構造:
 //
-//	product_blueprints_history/{blueprintID}/models/latest/variations/{variationID}
+//	product_blueprints_history/{blueprintID}/models/{version}/variations/{variationID}
+//
+// version は 1,2,3,... の連番として自動採番する。
 type ModelHistoryRepositoryFS struct {
 	Client *firestore.Client
 }
@@ -27,25 +29,72 @@ func NewModelHistoryRepositoryFS(client *firestore.Client) *ModelHistoryReposito
 	return &ModelHistoryRepositoryFS{Client: client}
 }
 
-// ベースコレクションのヘルパー（最新版用 variations サブコレクション）
-func (r *ModelHistoryRepositoryFS) historyVariationsCol(
-	blueprintID string,
-) *firestore.CollectionRef {
-	// version を廃止し、常に "latest" ドキュメント配下に保存する
+// models コレクション（バージョンごとの metadata）へのヘルパー
+func (r *ModelHistoryRepositoryFS) modelsCol(blueprintID string) *firestore.CollectionRef {
 	return r.Client.
 		Collection("product_blueprints_history").
 		Doc(blueprintID).
-		Collection("models").
-		Doc("latest").
+		Collection("models")
+}
+
+// ベースコレクションのヘルパー（version ごとの variations サブコレクション）
+func (r *ModelHistoryRepositoryFS) historyVariationsCol(
+	blueprintID string,
+	version int64,
+) *firestore.CollectionRef {
+	versionDocID := fmt.Sprintf("%d", version)
+
+	return r.modelsCol(blueprintID).
+		Doc(versionDocID).
 		Collection("variations")
+}
+
+// 最新バージョン番号を取得する（なければ 0 を返す）
+func (r *ModelHistoryRepositoryFS) getLatestVersion(
+	ctx context.Context,
+	blueprintID string,
+) (int64, error) {
+	col := r.modelsCol(blueprintID)
+
+	// version フィールドの降順で 1 件だけ取得
+	iter := col.OrderBy("version", firestore.Desc).Limit(1).Documents(ctx)
+	defer iter.Stop()
+
+	doc, err := iter.Next()
+	if err != nil {
+		if err == iterator.Done {
+			// まだ 1 件も無い場合は 0 とみなす
+			return 0, nil
+		}
+		return 0, err
+	}
+
+	data := doc.Data()
+	if data == nil {
+		return 0, nil
+	}
+
+	var v int64
+	switch x := data["version"].(type) {
+	case int64:
+		v = x
+	case int:
+		v = int64(x)
+	case float64:
+		v = int64(x)
+	default:
+		v = 0
+	}
+
+	return v, nil
 }
 
 // SaveSnapshot:
 //
 // 指定された blueprintID に対して、
 // variations（ライブの ModelVariation 一式）のスナップショットを
-// 1) variations サブコレクション
-// 2) models/latest ドキュメント本体（サマリ）
+// 1) versions サブコレクション（models/{version}/variations/*）
+// 2) models/{version} ドキュメント本体（サマリ）
 // の両方に保存する。
 func (r *ModelHistoryRepositoryFS) SaveSnapshot(
 	ctx context.Context,
@@ -59,17 +108,24 @@ func (r *ModelHistoryRepositoryFS) SaveSnapshot(
 		return fmt.Errorf("ModelHistoryRepositoryFS.SaveSnapshot: blueprintID is empty")
 	}
 
+	// 直近の version を取得し、次の version を決定（1 からスタート）
+	latestVersion, err := r.getLatestVersion(ctx, blueprintID)
+	if err != nil {
+		return fmt.Errorf("ModelHistoryRepositoryFS.SaveSnapshot: getLatestVersion: %w", err)
+	}
+	newVersion := latestVersion + 1
+
 	log.Printf(
-		"[ModelHistoryRepositoryFS] SaveSnapshot blueprintID=%s variations=%d",
-		blueprintID, len(variations),
+		"[ModelHistoryRepositoryFS] SaveSnapshot blueprintID=%s version=%d variations=%d",
+		blueprintID, newVersion, len(variations),
 	)
 
-	col := r.historyVariationsCol(blueprintID)
+	col := r.historyVariationsCol(blueprintID, newVersion)
 
 	batch := r.Client.Batch()
 	now := time.Now().UTC()
 
-	// models/latest ドキュメントに格納するサマリ用配列
+	// models/{version} ドキュメントに格納するサマリ用配列
 	var snapshotList []map[string]any
 
 	for _, v := range variations {
@@ -104,7 +160,7 @@ func (r *ModelHistoryRepositoryFS) SaveSnapshot(
 
 		batch.Set(docRef, data)
 
-		// models/latest ドキュメントに格納する「サマリ」も作成
+		// models/{version} ドキュメントに格納する「サマリ」も作成
 		snap := map[string]any{
 			"id":                 v.ID,
 			"productBlueprintId": v.ProductBlueprintID,
@@ -124,18 +180,15 @@ func (r *ModelHistoryRepositoryFS) SaveSnapshot(
 		return fmt.Errorf("ModelHistoryRepositoryFS.SaveSnapshot: batch.Commit: %w", err)
 	}
 
-	// models/latest ドキュメント本体にもサマリを保存
-	metaRef := r.Client.
-		Collection("product_blueprints_history").
-		Doc(blueprintID).
-		Collection("models").
-		Doc("latest")
+	// models/{version} ドキュメント本体にもサマリを保存
+	metaRef := r.modelsCol(blueprintID).Doc(fmt.Sprintf("%d", newVersion))
 
 	meta := map[string]any{
 		"productBlueprintId": blueprintID,
+		"version":            newVersion,
 		"variationCount":     len(variations),
 		"createdAt":          now,
-		"variations":         snapshotList, // ★ 最新スナップショットの中身をここに格納
+		"variations":         snapshotList, // ★ 各バージョンの中身をここに格納
 	}
 
 	// 既存フィールドがあっても上書きマージで更新
@@ -144,8 +197,8 @@ func (r *ModelHistoryRepositoryFS) SaveSnapshot(
 	}
 
 	log.Printf(
-		"[ModelHistoryRepositoryFS] SaveSnapshot completed blueprintID=%s",
-		blueprintID,
+		"[ModelHistoryRepositoryFS] SaveSnapshot completed blueprintID=%s version=%d",
+		blueprintID, newVersion,
 	)
 
 	return nil
@@ -153,7 +206,8 @@ func (r *ModelHistoryRepositoryFS) SaveSnapshot(
 
 // ListByProductBlueprintID:
 //
-// 指定された blueprintID に紐づく最新版スナップショットの ModelVariation 履歴をすべて返す。
+// 指定された blueprintID に紐づく **最新バージョン** の
+// ModelVariation 履歴をすべて返す。
 func (r *ModelHistoryRepositoryFS) ListByProductBlueprintID(
 	ctx context.Context,
 	blueprintID string,
@@ -165,7 +219,17 @@ func (r *ModelHistoryRepositoryFS) ListByProductBlueprintID(
 		return nil, fmt.Errorf("ModelHistoryRepositoryFS.ListByProductBlueprintID: blueprintID is empty")
 	}
 
-	col := r.historyVariationsCol(blueprintID)
+	// 最新 version を取得
+	latestVersion, err := r.getLatestVersion(ctx, blueprintID)
+	if err != nil {
+		return nil, fmt.Errorf("ModelHistoryRepositoryFS.ListByProductBlueprintID: getLatestVersion: %w", err)
+	}
+	if latestVersion == 0 {
+		// まだ履歴がない場合は空配列
+		return []model.ModelVariation{}, nil
+	}
+
+	col := r.historyVariationsCol(blueprintID, latestVersion)
 	iter := col.Documents(ctx)
 	defer iter.Stop()
 
