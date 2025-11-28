@@ -423,6 +423,26 @@ export function useProductBlueprintDetail(): UseProductBlueprintDetailResult {
       return;
     }
 
+    // ★ モデルナンバーのバリデーション
+    // サイズラベル & カラーの組み合わせで、どこか 1 つでも modelNumber が空ならエラー
+    const hasEmptyModelNumber = sizes.some((s) => {
+      const sizeLabel = (s.sizeLabel ?? "").trim();
+      if (!sizeLabel) return false; // サイズ未設定行は無視
+
+      return colors.some((c) => {
+        const color = (c ?? "").trim();
+        if (!color) return false; // 空のカラー名は無視
+
+        const code = getCode(sizeLabel, color);
+        return !code || !code.trim();
+      });
+    });
+
+    if (hasEmptyModelNumber) {
+      alert("モデルナンバーが空欄です");
+      return;
+    }
+
     (async () => {
       try {
         // ★ 保存ボタン押下時のスナップショットを出力（編集後の状態）
@@ -481,6 +501,8 @@ export function useProductBlueprintDetail(): UseProductBlueprintDetailResult {
     colorRgbMap,
     brandId,
     assigneeId,
+    colors,
+    getCode,
   ]);
 
   // ---------------------------------

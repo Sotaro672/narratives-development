@@ -1,11 +1,4 @@
-// frontend/console/productBlueprint/src/infrastructure/api/productBlueprintApi.ts
-import {
-  MODEL_NUMBERS,
-  SIZE_VARIATIONS,
-} from "../../../../model/src/infrastructure/mockdata/mockdata";
-
-// 一覧・詳細表示で利用する ProductBlueprint（モック用）
-import type { ProductBlueprint } from "../../../../shell/src/shared/types/productBlueprint";
+// frontend/console/productBlueprint/src/infrastructure/api/productBlueprintApi.ts 
 
 // ─────────────────────────────────────────────
 // 作成系 API 用の型・依存
@@ -19,7 +12,7 @@ import type {
 import type { ModelNumber } from "../../../../model/src/application/modelCreateService";
 
 import { createProductBlueprintHTTP } from "../repository/productBlueprintRepositoryHTTP";
-import { createModelVariationsFromProductBlueprint } from "../../../../model/src/application/modelCreateService";
+import { createModelVariationsFromProductBlueprint } from "../../../../model/src/infrastructure/api/modelCreateApi";
 
 // ISO8601 → "YYYY/MM/DD"（壊れてたらそのまま返す） ※一覧用
 const toDisplayDate = (iso?: string | null): string => {
@@ -55,14 +48,8 @@ export type ProductBlueprintListRow = {
 };
 
 // 詳細画面用：サイズ行モデル
-export type SizeRow = {
-  id: string;
-  sizeLabel: string;
-  chest: number;
-  waist: number;
-  length: number;
-  shoulder: number;
-};
+// ★ model ドメインの SizeRow をそのまま使う
+export type SizeRow = CatalogSizeRow;
 
 // 詳細画面用：モデルナンバー行モデル
 export type ModelNumberRow = {
@@ -70,32 +57,6 @@ export type ModelNumberRow = {
   color: string;
   code: string;
 };
-
-/**
- * 詳細画面用：サイズ行データを取得（現在は SIZE_VARIATIONS から復元）
- */
-export function fetchProductBlueprintSizeRows(): SizeRow[] {
-  return SIZE_VARIATIONS.map((v, i) => ({
-    id: String(i + 1),
-    sizeLabel: v.size,
-    width: v.measurements["身幅"] ?? 0,
-    chest: v.measurements["胸囲"] ?? 0,
-    waist: v.measurements["ウエスト"] ?? 0,
-    length: v.measurements["着丈"] ?? 0,
-    shoulder: v.measurements["肩幅"] ?? 0,
-  }));
-}
-
-/**
- * 詳細画面用：モデルナンバー行データを取得（現在は MODEL_NUMBERS から復元）
- */
-export function fetchProductBlueprintModelNumberRows(): ModelNumberRow[] {
-  return MODEL_NUMBERS.map((m) => ({
-    size: m.size,
-    color: m.color,
-    code: m.modelNumber,
-  }));
-}
 
 /* =========================================================
  * 作成系 API（createProductBlueprint + variations 作成）
