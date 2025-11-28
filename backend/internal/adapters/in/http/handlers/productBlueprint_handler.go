@@ -50,6 +50,18 @@ func (h *ProductBlueprintHandler) ServeHTTP(w http.ResponseWriter, r *http.Reque
 		h.listDeleted(w, r)
 
 	// ---------------------------------------------------
+	// GET /product-blueprints/{id}/history ← 履歴一覧 API（LogCard 用）
+	// ---------------------------------------------------
+	case r.Method == http.MethodGet &&
+		strings.HasPrefix(path, "/product-blueprints/") &&
+		strings.HasSuffix(path, "/history"):
+
+		trimmed := strings.TrimPrefix(path, "/product-blueprints/")
+		trimmed = strings.TrimSuffix(trimmed, "/history")
+		id := strings.Trim(trimmed, "/")
+		h.listHistory(w, r, id)
+
+	// ---------------------------------------------------
 	// POST /product-blueprints  ← 新規作成 API
 	// ---------------------------------------------------
 	case r.Method == http.MethodPost && path == "/product-blueprints":
@@ -430,6 +442,87 @@ func (h *ProductBlueprintHandler) listDeleted(w http.ResponseWriter, r *http.Req
 	}
 
 	// ★ 必ず JSON 配列を返す
+	_ = json.NewEncoder(w).Encode(out)
+}
+
+// ---------------------------------------------------
+// GET /product-blueprints/{id}/history  ← 履歴一覧 API（LogCard 用）
+// ---------------------------------------------------
+
+// 履歴一覧用 DTO
+type ProductBlueprintHistoryOutput struct {
+	ID          string  `json:"id"`
+	Version     int64   `json:"version"`
+	ProductName string  `json:"productName"`
+	BrandId     string  `json:"brandId"`
+	AssigneeId  string  `json:"assigneeId"`
+	UpdatedAt   string  `json:"updatedAt"`           // YYYY/MM/DD HH:MM:SS
+	UpdatedBy   *string `json:"updatedBy,omitempty"` // メンバーID（表示名はフロント側で解決）
+	DeletedAt   string  `json:"deletedAt,omitempty"` // YYYY/MM/DD
+	ExpireAt    string  `json:"expireAt,omitempty"`  // YYYY/MM/DD
+}
+
+func (h *ProductBlueprintHandler) listHistory(w http.ResponseWriter, r *http.Request, id string) {
+	ctx := r.Context()
+
+	id = strings.TrimSpace(id)
+	if id == "" {
+		w.WriteHeader(http.StatusBadRequest)
+		_ = json.NewEncoder(w).Encode(map[string]string{"error": "invalid id"})
+		return
+	}
+
+	log.Printf("[ProductBlueprintHandler] listHistory: start id=%s", id)
+
+	rows, err := h.uc.ListHistory(ctx, id)
+	if err != nil {
+		log.Printf("[ProductBlueprintHandler] listHistory: error id=%s err=%v", id, err)
+		writeProductBlueprintErr(w, err)
+		return
+	}
+
+	out := make([]ProductBlueprintHistoryOutput, 0, len(rows))
+	for i, pb := range rows {
+		brandId := strings.TrimSpace(pb.BrandID)
+		assigneeId := strings.TrimSpace(pb.AssigneeID)
+		if assigneeId == "" {
+			assigneeId = "-"
+		}
+
+		updatedAtStr := ""
+		if !pb.UpdatedAt.IsZero() {
+			// 履歴なので時間まで含めて返す
+			updatedAtStr = pb.UpdatedAt.Format("2006/01/02 15:04:05")
+		}
+
+		deletedAtStr := ""
+		if pb.DeletedAt != nil && !pb.DeletedAt.IsZero() {
+			deletedAtStr = pb.DeletedAt.Format("2006/01/02")
+		}
+
+		expireAtStr := ""
+		if pb.ExpireAt != nil && !pb.ExpireAt.IsZero() {
+			expireAtStr = pb.ExpireAt.Format("2006/01/02")
+		}
+
+		log.Printf(
+			"[ProductBlueprintHandler] listHistory: row[%d]: id=%s version=%d updatedAt=%v updatedBy=%v",
+			i, pb.ID, pb.Version, pb.UpdatedAt, pb.UpdatedBy,
+		)
+
+		out = append(out, ProductBlueprintHistoryOutput{
+			ID:          pb.ID,
+			Version:     pb.Version,
+			ProductName: pb.ProductName,
+			BrandId:     brandId,
+			AssigneeId:  assigneeId,
+			UpdatedAt:   updatedAtStr,
+			UpdatedBy:   pb.UpdatedBy,
+			DeletedAt:   deletedAtStr,
+			ExpireAt:    expireAtStr,
+		})
+	}
+
 	_ = json.NewEncoder(w).Encode(out)
 }
 

@@ -243,9 +243,25 @@ func (u *ProductBlueprintUsecase) SoftDeleteWithModels(
 		pb.CompanyID = strings.TrimSpace(cid)
 	}
 
-	_, err = u.repo.Save(ctx, pb)
+	// ★ SoftDelete も履歴の一種としてバージョンを進める
+	var nextVersion int64
+	if pb.Version <= 0 {
+		nextVersion = 1
+	} else {
+		nextVersion = pb.Version + 1
+	}
+	pb.Version = nextVersion
+
+	saved, err := u.repo.Save(ctx, pb)
 	if err != nil {
 		return err
+	}
+
+	// ★ 論理削除後のスナップショットを履歴に保存
+	if u.historyRepo != nil {
+		if err := u.historyRepo.SaveSnapshot(ctx, saved); err != nil {
+			return err
+		}
 	}
 
 	// TODO: models 側の論理削除カスケードを ModelUsecase / ModelRepo と連携して実装
@@ -297,9 +313,25 @@ func (u *ProductBlueprintUsecase) RestoreWithModels(
 		pb.CompanyID = strings.TrimSpace(cid)
 	}
 
-	_, err = u.repo.Save(ctx, pb)
+	// ★ 復旧も履歴イベントとしてバージョンを進める
+	var nextVersion int64
+	if pb.Version <= 0 {
+		nextVersion = 1
+	} else {
+		nextVersion = pb.Version + 1
+	}
+	pb.Version = nextVersion
+
+	saved, err := u.repo.Save(ctx, pb)
 	if err != nil {
 		return err
+	}
+
+	// ★ 復旧後スナップショットを履歴に保存
+	if u.historyRepo != nil {
+		if err := u.historyRepo.SaveSnapshot(ctx, saved); err != nil {
+			return err
+		}
 	}
 
 	// TODO: models 側の復元カスケードを ModelUsecase / ModelRepo と連携して実装
