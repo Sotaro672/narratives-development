@@ -148,5 +148,17 @@ export async function createModelVariationsFromProductBlueprint(
     },
   );
 
+  /* ============================================
+   * ★★ ここにログを追加 — POST直前の中身を全部出力
+   * ============================================ */
+  console.group(
+    "%c[modelCreateService] POST /models payload preview",
+    "color: #0077cc; font-weight: bold;"
+  );
+  console.log("productBlueprintId:", payload.productBlueprintId);
+  console.log("raw variations from screen:", payload.variations);
+  console.log("normalized POST requests:", requests);
+  console.groupEnd();
+
   await createModelVariations(payload.productBlueprintId, requests);
 }

@@ -152,6 +152,7 @@ export function useProductBlueprintDetail(): UseProductBlueprintDetailResult {
         setProductName(detail.productName ?? "");
 
         // brandId / assigneeId を state に保持
+        setBrand(brandNameFromService ?? "");
         setBrandId(detail.brandId ?? "");
         setAssigneeId(detail.assigneeId ?? "");
 
