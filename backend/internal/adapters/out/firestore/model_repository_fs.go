@@ -194,10 +194,6 @@ func (r *ModelRepositoryFS) GetModelVariationByID(ctx context.Context, variation
 	if err != nil {
 		return nil, err
 	}
-	// ★ 論理削除済みのものは「存在しない」とみなす
-	if v.DeletedAt != nil {
-		return nil, modeldom.ErrNotFound
-	}
 	return &v, nil
 }
 
@@ -296,7 +292,7 @@ func (r *ModelRepositoryFS) UpdateModelVariation(ctx context.Context, variationI
 	return r.GetModelVariationByID(ctx, variationID)
 }
 
-// ★ DeleteModelVariation: 物理削除 → 論理削除に変更
+// ★ DeleteModelVariation: 物理削除に戻す
 func (r *ModelRepositoryFS) DeleteModelVariation(ctx context.Context, variationID string) (*modeldom.ModelVariation, error) {
 	if r.Client == nil {
 		return nil, errors.New("firestore client is nil")
@@ -309,6 +305,7 @@ func (r *ModelRepositoryFS) DeleteModelVariation(ctx context.Context, variationI
 
 	docRef := r.variationsCol().Doc(variationID)
 
+	// 削除前の状態を取得して返す
 	snap, err := docRef.Get(ctx)
 	if err != nil {
 		if status.Code(err) == codes.NotFound {
@@ -322,21 +319,8 @@ func (r *ModelRepositoryFS) DeleteModelVariation(ctx context.Context, variationI
 		return nil, err
 	}
 
-	// すでに論理削除されている場合はそのまま返す
-	if v.DeletedAt != nil {
-		return &v, nil
-	}
-
-	now := time.Now().UTC()
-	v.DeletedAt = &now
-	// DeletedBy は、現状 context からの取得はしていないので nil のまま
-	// 必要になればここで actor を context から取り出してセットする
-
-	// Firestore 上では deletedAt / updatedAt を更新
-	if _, err := docRef.Update(ctx, []firestore.Update{
-		{Path: "deletedAt", Value: now},
-		{Path: "updatedAt", Value: now},
-	}); err != nil {
+	// 物理削除
+	if _, err := docRef.Delete(ctx); err != nil {
 		if status.Code(err) == codes.NotFound {
 			return nil, modeldom.ErrNotFound
 		}
@@ -378,7 +362,7 @@ func (r *ModelRepositoryFS) ReplaceModelVariations(
 	}
 
 	// 既存 variations を削除（productBlueprint 単位で）
-	// ※ここは依然として物理削除。履歴を残したい場合は同様に論理削除へ変更する。
+	// ※ここは依然として物理削除。
 	const chunkSize = 400
 
 	existing, err := r.listVariationsByProductBlueprintID(ctx, productBlueprintID)
@@ -493,10 +477,7 @@ func (r *ModelRepositoryFS) listVariationsByProductBlueprintID(ctx context.Conte
 		if err != nil {
 			return nil, err
 		}
-		// ★ 論理削除済み（deletedAt が入っている）ものは一覧から除外
-		if v.DeletedAt != nil {
-			continue
-		}
+		// ★ DeletedAt / DeletedBy は廃止したのでフィルタなしで返す
 		out = append(out, v)
 	}
 	return out, nil
@@ -575,12 +556,6 @@ func docToModelVariation(doc *firestore.DocumentSnapshot) (modeldom.ModelVariati
 		updatedAt = v.UTC()
 	}
 
-	var deletedAt *time.Time
-	if v, ok := data["deletedAt"].(time.Time); ok {
-		t := v.UTC()
-		deletedAt = &t
-	}
-
 	var createdBy *string
 	if v, ok := data["createdBy"].(string); ok && strings.TrimSpace(v) != "" {
 		s := strings.TrimSpace(v)
@@ -591,12 +566,6 @@ func docToModelVariation(doc *firestore.DocumentSnapshot) (modeldom.ModelVariati
 	if v, ok := data["updatedBy"].(string); ok && strings.TrimSpace(v) != "" {
 		s := strings.TrimSpace(v)
 		updatedBy = &s
-	}
-
-	var deletedBy *string
-	if v, ok := data["deletedBy"].(string); ok && strings.TrimSpace(v) != "" {
-		s := strings.TrimSpace(v)
-		deletedBy = &s
 	}
 
 	return modeldom.ModelVariation{
@@ -610,8 +579,6 @@ func docToModelVariation(doc *firestore.DocumentSnapshot) (modeldom.ModelVariati
 		CreatedBy:          createdBy,
 		UpdatedAt:          updatedAt,
 		UpdatedBy:          updatedBy,
-		DeletedAt:          deletedAt,
-		DeletedBy:          deletedBy,
 	}, nil
 }
 
@@ -641,11 +608,6 @@ func modelVariationToDoc(v modeldom.ModelVariation) map[string]any {
 	if v.UpdatedBy != nil {
 		m["updatedBy"] = *v.UpdatedBy
 	}
-	if v.DeletedAt != nil {
-		m["deletedAt"] = *v.DeletedAt
-	}
-	if v.DeletedBy != nil {
-		m["deletedBy"] = *v.DeletedBy
-	}
+
 	return m
 }

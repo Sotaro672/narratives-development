@@ -8,9 +8,6 @@ import (
 	"time"
 )
 
-// ソフトデリートから物理削除までの猶予期間（90日）
-const softDeleteTTL = 90 * 24 * time.Hour
-
 var (
 	ErrProductIDRequired          = errors.New("productId is required")
 	ErrVariationIDRequired        = errors.New("variationId is required")
@@ -122,8 +119,6 @@ type ModelVariation struct {
 	CreatedBy *string
 	UpdatedAt time.Time
 	UpdatedBy *string
-	DeletedAt *time.Time
-	DeletedBy *string
 }
 
 // NewModelVariation は新規作成時に使う入力モデル。
@@ -257,42 +252,6 @@ func (mv ModelVariation) ToItemSpec() ItemSpec {
 		Color:        mv.Color.Name, // 旧来の string ベース API とは Name を共有
 		Measurements: cloneMeasurements(mv.Measurements),
 	}
-}
-
-// ソフトデリート（論理削除）
-func (mv *ModelVariation) SoftDelete(now time.Time, deletedBy *string) {
-	if now.IsZero() {
-		now = time.Now().UTC()
-	}
-	mv.DeletedAt = &now
-	mv.DeletedBy = deletedBy
-}
-
-// 復旧（論理削除解除）
-func (mv *ModelVariation) Restore(now time.Time, restoredBy *string) {
-	if now.IsZero() {
-		now = time.Now().UTC()
-	}
-	mv.DeletedAt = nil
-	mv.DeletedBy = nil
-	mv.UpdatedAt = now
-	mv.UpdatedBy = restoredBy
-}
-
-// 論理削除状態かどうか
-func (mv ModelVariation) IsDeleted() bool {
-	return mv.DeletedAt != nil
-}
-
-// 物理削除対象かどうか（DeletedAt から 90 日以上経過）
-func (mv ModelVariation) ShouldHardDelete(now time.Time) bool {
-	if mv.DeletedAt == nil {
-		return false
-	}
-	if now.IsZero() {
-		now = time.Now().UTC()
-	}
-	return now.Sub(*mv.DeletedAt) >= softDeleteTTL
 }
 
 // ==========================

@@ -9,7 +9,6 @@ import (
 	"time"
 
 	"cloud.google.com/go/firestore"
-	"google.golang.org/api/iterator"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
@@ -271,8 +270,8 @@ func (r *ProductBlueprintRepositoryFS) Delete(ctx context.Context, id string) er
 }
 
 // SoftDeleteWithModels:
-//   - product_blueprints/{id} に deletedAt を立てて論理削除
-//   - かつ、models コレクションの該当 productBlueprintId のドキュメントも論理削除
+//   - 現在は product_blueprints/{id} に deletedAt を立てて論理削除するだけ。
+//   - models コレクションのドキュメントには一切変更を加えない。
 //
 // ※ 現在はユースケース側で SoftDelete + ExpireAt 設定を行うため、
 //
@@ -298,7 +297,7 @@ func (r *ProductBlueprintRepositoryFS) SoftDeleteWithModels(ctx context.Context,
 		return err
 	}
 
-	// productBlueprint を論理削除
+	// productBlueprint を論理削除（models 側には何もしない）
 	if _, err := pbRef.Update(ctx, []firestore.Update{
 		{Path: "deletedAt", Value: now},
 		// DeletedBy は context からのユーザーIDなどを後で組み込む想定
@@ -309,37 +308,12 @@ func (r *ProductBlueprintRepositoryFS) SoftDeleteWithModels(ctx context.Context,
 		return err
 	}
 
-	// ぶら下がっている models も論理削除
-	modelsCol := r.Client.Collection("models")
-	it := modelsCol.Where("productBlueprintId", "==", id).Documents(ctx)
-	defer it.Stop()
-
-	for {
-		snap, err := it.Next()
-		if err == iterator.Done {
-			break
-		}
-		if err != nil {
-			return err
-		}
-
-		if _, err := snap.Ref.Update(ctx, []firestore.Update{
-			{Path: "deletedAt", Value: now},
-		}); err != nil {
-			// 既に削除されていた場合はスキップ
-			if status.Code(err) == codes.NotFound {
-				continue
-			}
-			return err
-		}
-	}
-
 	return nil
 }
 
 // RestoreWithModels:
-//   - 論理削除された product_blueprints/{id} の deletedAt / deletedBy をクリアして復旧
-//   - かつ、models コレクションの該当 productBlueprintId の deletedAt / deletedBy もクリア
+//   - 論理削除された product_blueprints/{id} の deletedAt / deletedBy をクリアして復旧。
+//   - models コレクションのドキュメントには一切変更を加えない。
 func (r *ProductBlueprintRepositoryFS) RestoreWithModels(ctx context.Context, id string) error {
 	if r.Client == nil {
 		return errors.New("firestore client is nil")
@@ -358,7 +332,7 @@ func (r *ProductBlueprintRepositoryFS) RestoreWithModels(ctx context.Context, id
 		return err
 	}
 
-	// productBlueprint の論理削除を解除
+	// productBlueprint の論理削除を解除（models 側には何もしない）
 	if _, err := pbRef.Update(ctx, []firestore.Update{
 		{Path: "deletedAt", Value: firestore.Delete},
 		{Path: "deletedBy", Value: firestore.Delete},
@@ -368,32 +342,6 @@ func (r *ProductBlueprintRepositoryFS) RestoreWithModels(ctx context.Context, id
 		}
 		return err
 	}
-
-	// ぶら下がっている models の論理削除も解除
-	modelsCol := r.Client.Collection("models")
-	it := modelsCol.Where("productBlueprintId", "==", id).Documents(ctx)
-	defer it.Stop()
-
-	for {
-		snap, err := it.Next()
-		if err == iterator.Done {
-			break
-		}
-		if err != nil {
-			return err
-		}
-
-		if _, err := snap.Ref.Update(ctx, []firestore.Update{
-			{Path: "deletedAt", Value: firestore.Delete},
-			{Path: "deletedBy", Value: firestore.Delete},
-		}); err != nil {
-			if status.Code(err) == codes.NotFound {
-				continue
-			}
-			return err
-		}
-	}
-
 	return nil
 }
 
