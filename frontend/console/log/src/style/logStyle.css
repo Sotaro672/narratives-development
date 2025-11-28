@@ -1,27 +1,48 @@
+/* ============================
+   LogCard（ログカード）
+   ============================ */
+
 /* LogCard 全体 */
 .log-card {
   background: var(--pbp-surface);
   border: 1px solid var(--pbp-border);
   border-radius: 12px;
-  padding: 16px 20px;
 
-  /* 右カラム全体は sticky のため、
-     LogCard が伸びても画面をはみ出さないように最大高さを制限する */
+  /* AdminCard の下に置いた際に画面からはみ出さないように最大高さを制限 */
   max-height: calc(100vh - var(--pbp-header-height) - 220px);
 
-  /* 内容が overflow したら内部スクロール */
+  /* 内容が溢れたら内部スクロール */
   overflow-y: auto;
+
+  padding: 0; /* header/body の padding に任せる */
 }
 
-/* タイトル部分 */
+/* ============================
+   Header（AdminCard と高さを揃える）
+   ============================ */
+.log-card__header {
+  padding: 16px 20px; /* AdminCard と同一 */
+  border-bottom: 1px solid var(--pbp-border-soft);
+
+  display: flex;
+  align-items: center;
+}
+
 .log-card__title {
   font-size: 14px;
   font-weight: 600;
   color: var(--pbp-text-dim);
-  margin-bottom: 12px;
+  margin: 0;
 }
 
-/* ログ行 */
+/* ============================
+   Content
+   ============================ */
+.log-card__content {
+  padding: 16px 20px 18px 20px;
+}
+
+/* ログ項目 */
 .log-card__item {
   padding: 8px 0;
   border-bottom: 1px solid var(--pbp-border-soft);
@@ -31,4 +52,11 @@
 
 .log-card__item:last-child {
   border-bottom: none;
+}
+
+/* 日付表示 */
+.log-card__date {
+  font-size: 12px;
+  color: var(--pbp-text-soft);
+  margin-top: 4px;
 }

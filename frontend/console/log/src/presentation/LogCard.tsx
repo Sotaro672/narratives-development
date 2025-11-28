@@ -20,7 +20,7 @@ export type LogCardProps = {
 export default function LogCard({ logs = [] }: LogCardProps) {
   return (
     <Card className="log-card">
-      <CardHeader>
+      <CardHeader className="log-card__header">
         <CardTitle className="log-card__title">ログ</CardTitle>
       </CardHeader>
 
