@@ -1,0 +1,34 @@
+/* LogCard 全体 */
+.log-card {
+  background: var(--pbp-surface);
+  border: 1px solid var(--pbp-border);
+  border-radius: 12px;
+  padding: 16px 20px;
+
+  /* 右カラム全体は sticky のため、
+     LogCard が伸びても画面をはみ出さないように最大高さを制限する */
+  max-height: calc(100vh - var(--pbp-header-height) - 220px);
+
+  /* 内容が overflow したら内部スクロール */
+  overflow-y: auto;
+}
+
+/* タイトル部分 */
+.log-card__title {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--pbp-text-dim);
+  margin-bottom: 12px;
+}
+
+/* ログ行 */
+.log-card__item {
+  padding: 8px 0;
+  border-bottom: 1px solid var(--pbp-border-soft);
+  font-size: 14px;
+  color: var(--pbp-text);
+}
+
+.log-card__item:last-child {
+  border-bottom: none;
+}

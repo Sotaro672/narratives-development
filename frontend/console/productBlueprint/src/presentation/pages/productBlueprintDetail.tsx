@@ -8,6 +8,7 @@ import ProductBlueprintCard from "../components/productBlueprintCard";
 import ColorVariationCard from "../../../../model/src/presentation/components/ColorVariationCard";
 import SizeVariationCard from "../../../../model/src/presentation/components/SizeVariationCard";
 import ModelNumberCard from "../../../../model/src/presentation/components/ModelNumberCard";
+import LogCard from "../../../../log/src/presentation/LogCard";
 
 import { useProductBlueprintDetail } from "../hook/useProductBlueprintDetail";
 
@@ -148,15 +149,21 @@ export default function ProductBlueprintDetail() {
         />
       </div>
 
-      {/* --- 右ペイン：管理情報 --- */}
-      <AdminCard
-        title="管理情報"
-        assigneeName={assignee}
-        createdByName={creator}
-        createdAt={createdAt}
-        mode={editMode ? "edit" : "view"}
-        onClickAssignee={editMode ? onClickAssignee : noop}
-      />
+      {/* --- 右ペイン：管理情報 + ログ --- */}
+      <div>
+        <AdminCard
+          title="管理情報"
+          assigneeName={assignee}
+          createdByName={creator}
+          createdAt={createdAt}
+          mode={editMode ? "edit" : "view"}
+          onClickAssignee={editMode ? onClickAssignee : noop}
+        />
+
+        <div className="section-gap">
+          <LogCard />
+        </div>
+      </div>
     </PageStyle>
   );
 }
