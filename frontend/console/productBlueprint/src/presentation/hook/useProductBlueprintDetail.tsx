@@ -21,12 +21,20 @@ import type { Fit, ItemType, WashTagOption } from "../../domain/entity/catalog";
 // ★ ModelNumber / SizeVariation の UI ロジックを model 側 hook に委譲
 import { useModelCard } from "../../../../model/src/presentation/hook/useModelCard";
 
+// ★ ブランド一覧取得
+import { fetchAllBrandsForCompany } from "../../../../brand/src/infrastructure/query/brandQuery";
+
 export {
   FIT_OPTIONS,
   PRODUCT_ID_TAG_OPTIONS,
   WASH_TAG_OPTIONS,
 } from "../../domain/entity/catalog";
 export type { Fit, WashTagOption } from "../../domain/entity/catalog";
+
+type BrandOption = {
+  id: string;
+  name: string;
+};
 
 export interface UseProductBlueprintDetailResult {
   pageTitle: string;
@@ -39,6 +47,13 @@ export interface UseProductBlueprintDetailResult {
   weight: number;
   washTags: string[];
   productIdTag: ProductIDTagType | "";
+
+  /** ブランド編集用 */
+  brandId: string;
+  brandOptions: BrandOption[];
+  brandLoading: boolean;
+  brandError: Error | null;
+  onChangeBrandId: (id: string) => void;
 
   colors: string[];
   colorInput: string;
@@ -125,6 +140,11 @@ export function useProductBlueprintDetail(): UseProductBlueprintDetailResult {
   const [brandId, setBrandId] = React.useState<string>("");
   const [assigneeId, setAssigneeId] = React.useState<string>("");
 
+  // ★ ブランド選択用 state
+  const [brandOptions, setBrandOptions] = React.useState<BrandOption[]>([]);
+  const [brandLoading, setBrandLoading] = React.useState<boolean>(false);
+  const [brandError, setBrandError] = React.useState<Error | null>(null);
+
   // ---------------------------------
   // service → 詳細データ + variations を反映
   // ---------------------------------
@@ -166,6 +186,42 @@ export function useProductBlueprintDetail(): UseProductBlueprintDetailResult {
         const tagType =
           (detail.productIdTag?.type as ProductIDTagType | undefined) ?? "";
         setProductIdTagType(tagType);
+
+        // --------------------------------------------------
+        // ブランド一覧を取得（同一 companyId に紐づくもの）
+        // --------------------------------------------------
+        setBrandLoading(true);
+        setBrandError(null);
+        try {
+          const companyId = detail.companyId ?? "";
+          if (companyId) {
+            const brands = await fetchAllBrandsForCompany(companyId, false);
+            const options: BrandOption[] = brands.map((b: any) => ({
+              id: b.id,
+              name: b.name,
+            }));
+            setBrandOptions(options);
+
+            // brandId がセットされている場合、brand ラベルが空ならここで補完
+            if (!brandNameFromService && detail.brandId) {
+              const found = options.find((o) => o.id === detail.brandId);
+              if (found) {
+                setBrand(found.name);
+              }
+            }
+          } else {
+            setBrandOptions([]);
+          }
+        } catch (e) {
+          console.error(
+            "[useProductBlueprintDetail] fetchAllBrandsForCompany failed:",
+            e,
+          );
+          setBrandError(e as Error);
+          setBrandOptions([]);
+        } finally {
+          setBrandLoading(false);
+        }
 
         // --------------------------------------------------
         // ModelVariation 取得
@@ -648,6 +704,18 @@ export function useProductBlueprintDetail(): UseProductBlueprintDetailResult {
     console.log("assignee clicked:", assignee);
   }, [assignee]);
 
+  // ★ ブランド変更ハンドラ（id と表示名の両方を更新）
+  const onChangeBrandId = React.useCallback(
+    (id: string) => {
+      setBrandId(id);
+      const found = brandOptions.find((b) => b.id === id);
+      if (found) {
+        setBrand(found.name);
+      }
+    },
+    [brandOptions],
+  );
+
   return {
     pageTitle,
 
@@ -659,6 +727,13 @@ export function useProductBlueprintDetail(): UseProductBlueprintDetailResult {
     weight,
     washTags,
     productIdTag: productIdTagType || "",
+
+    // ブランド編集用
+    brandId,
+    brandOptions,
+    brandLoading,
+    brandError,
+    onChangeBrandId,
 
     colors,
     colorInput,

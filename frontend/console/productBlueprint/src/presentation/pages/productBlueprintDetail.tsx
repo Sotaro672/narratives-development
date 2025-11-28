@@ -20,6 +20,13 @@ export default function ProductBlueprintDetail() {
     pageTitle,
     productName,
     brand,
+    // ▼ ブランド編集用フィールド
+    brandId,
+    brandOptions,
+    brandLoading,
+    brandError,
+    onChangeBrandId,
+
     itemType,
     fit,
     materials,
@@ -42,6 +49,8 @@ export default function ProductBlueprintDetail() {
     onSave,
     onDelete,
     onChangeProductName,
+    // ▼ アイテム種別も edit 時に変更可能にする
+    onChangeItemType,
     onChangeFit,
     onChangeMaterials,
     onChangeWeight,
@@ -108,6 +117,13 @@ export default function ProductBlueprintDetail() {
           mode={editMode ? "edit" : "view"}
           productName={productName}
           brand={brand}
+          // ▼ ブランド編集用 props を連携
+          brandId={brandId}
+          brandOptions={brandOptions}
+          brandLoading={brandLoading}
+          brandError={brandError}
+          onChangeBrandId={editMode ? onChangeBrandId : undefined}
+          // ▼ アイテム種別
           itemType={normalizedItemType}
           fit={fit}
           materials={materials}
@@ -115,8 +131,8 @@ export default function ProductBlueprintDetail() {
           washTags={washTags}
           productIdTag={productIdTag}
           onChangeProductName={editMode ? onChangeProductName : undefined}
-          // ⭐ アイテム種別は edit でも変更不可
-          onChangeItemType={undefined}
+          // ⭐ アイテム種別を edit モードで変更可能に
+          onChangeItemType={editMode ? onChangeItemType : undefined}
           onChangeFit={editMode ? onChangeFit : undefined}
           onChangeMaterials={editMode ? onChangeMaterials : undefined}
           onChangeWeight={editMode ? onChangeWeight : undefined}

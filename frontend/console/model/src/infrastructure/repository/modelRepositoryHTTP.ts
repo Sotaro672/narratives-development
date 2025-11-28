@@ -55,8 +55,6 @@ export type ModelVariationResponse = {
   createdBy?: string | null;
   updatedAt?: string | null;
   updatedBy?: string | null;
-  deletedAt?: string | null;
-  deletedBy?: string | null;
 };
 
 /* =========================================================

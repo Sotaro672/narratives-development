@@ -1,5 +1,3 @@
-// frontend/console/model/src/infrastructure/api/modelCreateApi.ts
-
 import type { MeasurementKey } from "../../domain/entity/catalog";
 
 // ★ HTTP リポジトリ（CreateModelVariation 用）
@@ -77,7 +75,7 @@ export async function createModelVariationsFromProductBlueprint(
         color: v.color,
         rgb: rgbInt,
         measurements,
-        version: 1,
+        // version: 1,  ← ★ 削除
       };
     },
   );

@@ -20,10 +20,12 @@ import { fetchAllBrandsForCompany } from "../../../brand/src/infrastructure/quer
 import { formatLastFirst } from "../../../member/src/infrastructure/query/memberQuery";
 import { MemberRepositoryHTTP } from "../../../member/src/infrastructure/http/memberRepositoryHTTP";
 
-// ★ ModelVariation 更新サービスを利用
+// ★ ModelVariation 更新サービスを利用（差分削除も利用）
 import {
   updateModelVariation,
   type ModelVariationUpdateRequest,
+  deleteRemovedModelVariations,
+  type ModelVariationResponse as ModelUpdateServiceVariationResponse,
 } from "../../../model/src/application/modelUpdateService";
 
 // ★ 新規 ModelVariation 作成用 Repository を利用
@@ -413,7 +415,6 @@ export async function updateProductBlueprint(
       payload,
     });
 
-    // ★ ここで「void を返す匿名 async 関数」を push して、型を Promise<void> に合わせる
     updateTasks.push(
       (async () => {
         await updateModelVariation(variationId, payload);
@@ -466,6 +467,33 @@ export async function updateProductBlueprint(
     await createModelVariations(id, createPayloads);
   }
 
+  // 8) 差分削除の指令を modelUpdateService へ渡す
+  const remainingIds = (variations as ModelUpdateServiceVariationResponse[])
+    .filter((v) => {
+      const key = makeKey(v.size, v.color?.name ?? "");
+      return codeMap.has(key);
+    })
+    .map((v) => v.id);
+
+  console.group(
+    "%c[updateProductBlueprint] modelUpdateService 差分削除 指令",
+    "color:#ff9500; font-weight:bold;",
+  );
+  console.log(
+    "📦 list 取得済み ModelVariation IDs:",
+    variations.map((v) => v.id),
+  );
+  console.log(
+    "📦 画面上に残すべき ModelVariation IDs (remainingIds):",
+    remainingIds,
+  );
+  console.groupEnd();
+
+  await deleteRemovedModelVariations(
+    variations as ModelUpdateServiceVariationResponse[],
+    remainingIds,
+  );
+
   console.log("[updateProductBlueprint] completed variations update");
 
   return updated;
@@ -485,8 +513,6 @@ export type ModelVariationResponse = {
   createdBy?: string | null;
   updatedAt?: string | null;
   updatedBy?: string | null;
-  deletedAt?: string | null;
-  deletedBy?: string | null;
 };
 
 export async function listModelVariationsByProductBlueprintId(
@@ -544,8 +570,6 @@ export async function listModelVariationsByProductBlueprintId(
       createdBy: v.createdBy ?? v.CreatedBy ?? null,
       updatedAt: v.updatedAt ?? v.UpdatedAt ?? null,
       updatedBy: v.updatedBy ?? v.UpdatedBy ?? null,
-      deletedAt: v.deletedAt ?? v.DeletedAt ?? null,
-      deletedBy: v.deletedBy ?? v.DeletedBy ?? null,
     };
   });
 }
@@ -555,7 +579,6 @@ export async function listModelVariationsByProductBlueprintId(
 // -----------------------------------------
 export type ProductBlueprintHistoryItem = {
   id: string;
-  version: number;
   productName: string;
   brandId: string;
   assigneeId: string;
@@ -604,7 +627,6 @@ export async function getProductBlueprintHistory(
 
   return raw.map((v: any): ProductBlueprintHistoryItem => ({
     id: v.id ?? v.ID ?? "",
-    version: Number(v.version ?? v.Version ?? 0),
     productName: v.productName ?? v.ProductName ?? "",
     brandId: v.brandId ?? v.BrandId ?? "",
     assigneeId: v.assigneeId ?? v.AssigneeId ?? "",
