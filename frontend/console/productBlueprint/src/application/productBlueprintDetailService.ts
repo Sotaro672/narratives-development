@@ -549,6 +549,72 @@ export async function listModelVariationsByProductBlueprintId(
     };
   });
 }
+
+// -----------------------------------------
+// 商品設計の履歴一覧取得（LogCard 用）
+// -----------------------------------------
+export type ProductBlueprintHistoryItem = {
+  id: string;
+  version: number;
+  productName: string;
+  brandId: string;
+  assigneeId: string;
+  updatedAt: string; // "YYYY/MM/DD HH:MM:SS"
+  updatedBy?: string; // メンバーID（表示名は別途解決）
+  deletedAt?: string;
+  expireAt?: string;
+};
+
+export async function getProductBlueprintHistory(
+  productBlueprintId: string,
+): Promise<ProductBlueprintHistoryItem[]> {
+  const id = productBlueprintId.trim();
+  if (!id) {
+    throw new Error("getProductBlueprintHistory: productBlueprintId が空です");
+  }
+
+  const user = auth.currentUser;
+  if (!user) {
+    throw new Error("ログイン情報が見つかりません（未ログイン）");
+  }
+
+  const idToken = await user.getIdToken();
+  const url = `${API_BASE}/product-blueprints/${encodeURIComponent(
+    id,
+  )}/history`;
+
+  const res = await fetch(url, {
+    method: "GET",
+    headers: {
+      Authorization: `Bearer ${idToken}`,
+      Accept: "application/json",
+    },
+  });
+
+  if (!res.ok) {
+    throw new Error(
+      `商品設計履歴の取得に失敗しました（${res.status} ${
+        res.statusText ?? ""
+      }）`,
+    );
+  }
+
+  const raw = (await res.json()) as any[] | null;
+  if (!raw) return [];
+
+  return raw.map((v: any): ProductBlueprintHistoryItem => ({
+    id: v.id ?? v.ID ?? "",
+    version: Number(v.version ?? v.Version ?? 0),
+    productName: v.productName ?? v.ProductName ?? "",
+    brandId: v.brandId ?? v.BrandId ?? "",
+    assigneeId: v.assigneeId ?? v.AssigneeId ?? "",
+    updatedAt: v.updatedAt ?? v.UpdatedAt ?? "",
+    updatedBy: v.updatedBy ?? v.UpdatedBy ?? undefined,
+    deletedAt: v.deletedAt ?? v.DeletedAt ?? undefined,
+    expireAt: v.expireAt ?? v.ExpireAt ?? undefined,
+  }));
+}
+
 // -----------------------------------------
 // DELETE: 商品設計 論理削除
 // -----------------------------------------
