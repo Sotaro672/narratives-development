@@ -66,15 +66,15 @@ function buildMeasurements(
     result["ヒップ"] = size.hip ?? null;
     result["股上"] = size.rise ?? null;
     result["股下"] = size.inseam ?? null;
-    result["わたり幅"] = size.thigh ?? size.thighWidth ?? null;
+    result["わたり幅"] = size.thigh ?? null;
     result["裾幅"] = size.hemWidth ?? null;
     return result;
   }
 
-  result["着丈"] = size.length ?? size.lengthTop ?? null;
-  result["身幅"] = size.chest ?? size.bodyWidth ?? null;
-  result["胸囲"] = size.chest ?? size.bodyWidth ?? null;
-  result["肩幅"] = size.shoulder ?? size.shoulderWidth ?? null;
+  result["着丈"] = size.length ?? null;
+  result["身幅"] = size.width ?? null;
+  result["胸囲"] = size.chest ?? null;
+  result["肩幅"] = size.shoulder ?? null;
   result["袖丈"] = size.sleeveLength ?? null;
 
   return result;

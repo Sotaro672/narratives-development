@@ -23,18 +23,6 @@ import type { ModelNumber } from "../../../../model/src/application/modelCreateS
 import { createProductBlueprintHTTP } from "../repository/productBlueprintRepositoryHTTP";
 import { createModelVariationsFromProductBlueprint } from "../../../../model/src/application/modelCreateService";
 
-// BrandID → 表示名（モック用マッピング）
-export const brandLabelFromId = (brandId: string): string => {
-  switch (brandId) {
-    case "brand_lumina":
-      return "LUMINA Fashion";
-    case "brand_nexus":
-      return "NEXUS Street";
-    default:
-      return brandId || "-";
-  }
-};
-
 // ISO8601 → "YYYY/MM/DD"（壊れてたらそのまま返す） ※一覧用
 const toDisplayDate = (iso?: string | null): string => {
   if (!iso) return "";
@@ -86,30 +74,6 @@ export type ModelNumberRow = {
 };
 
 /**
- * 商品設計一覧用の行データを取得する API（現在はモック）
- * - backend の ProductBlueprint エンティティを UI 用行データへ変換する責務を持つ
- * - ソフトデリート済み（deletedAt が truthy）のものは一覧から除外
- */
-export function fetchProductBlueprintListRows(): ProductBlueprintListRow[] {
-  return (PRODUCT_BLUEPRINTS as ProductBlueprint[])
-    .filter((pb) => !pb.deletedAt) // deletedAt が設定されているものは除外
-    .map((pb) => ({
-      id: pb.id,
-      productName: pb.productName,
-      brandLabel: brandLabelFromId(pb.brandId),
-      assigneeLabel: pb.assigneeId || "-",
-      // entity.go 準拠: Tag は ProductIdTag (struct) を保持し、その type を表示
-      tagLabel:
-        pb.productIdTag && pb.productIdTag.type
-          ? pb.productIdTag.type.toUpperCase()
-          : "-",
-      createdAt: toDisplayDate(pb.createdAt),
-      // entity.go 準拠: 最終更新日時は UpdatedAt
-      lastModifiedAt: toDisplayDate(pb.updatedAt),
-    }));
-}
-
-/**
  * ID から ProductBlueprint を取得（現在はモック配列を探索）
  * - ソフトデリート済み（deletedAt が truthy）のものは取得対象外
  */
@@ -129,7 +93,8 @@ export function fetchProductBlueprintSizeRows(): SizeRow[] {
   return SIZE_VARIATIONS.map((v, i) => ({
     id: String(i + 1),
     sizeLabel: v.size,
-    chest: v.measurements["身幅"] ?? 0,
+    width: v.measurements["身幅"] ?? 0,
+    chest: v.measurements["胸囲"] ?? 0,
     waist: v.measurements["ウエスト"] ?? 0,
     length: v.measurements["着丈"] ?? 0,
     shoulder: v.measurements["肩幅"] ?? 0,

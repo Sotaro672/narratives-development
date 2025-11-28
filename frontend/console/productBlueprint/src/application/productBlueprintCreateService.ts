@@ -69,7 +69,7 @@ function buildMeasurements(
 
   // トップス（デフォルト）
   result["着丈"] = size.length ?? null;
-  result["身幅"] = size.bodyWidth ?? null;
+  result["身幅"] = size.width ?? null;
   result["胸囲"] = size.chest ?? null;
   result["肩幅"] = size.shoulder ?? null;
   result["袖丈"] = size.sleeveLength ?? null;

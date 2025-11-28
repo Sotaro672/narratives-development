@@ -59,7 +59,7 @@ function mapLabelToField(label: string): SizeFieldKey {
     case "着丈":
       return "length";
     case "身幅":
-      return "bodyWidth";
+      return "width";
     case "胸囲":
       return "chest";
     case "肩幅":

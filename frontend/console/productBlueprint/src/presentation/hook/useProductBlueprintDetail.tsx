@@ -4,7 +4,6 @@ import { useNavigate, useParams } from "react-router-dom";
 
 import type { ProductIDTagType } from "../../../../shell/src/shared/types/productBlueprint";
 import {
-  brandLabelFromId,
   formatProductBlueprintDate,
   type SizeRow,
   type ModelNumberRow,
@@ -156,8 +155,6 @@ export function useProductBlueprintDetail(): UseProductBlueprintDetailResult {
         setBrandId(detail.brandId ?? "");
         setAssigneeId(detail.assigneeId ?? "");
 
-        setBrand(brandNameFromService ?? brandLabelFromId(detail.brandId));
-
         setItemType(itemTypeFromDetail ?? "");
         setFit((detail.fit as Fit) ?? ("" as Fit));
 
@@ -262,11 +259,14 @@ export function useProductBlueprintDetail(): UseProductBlueprintDetailResult {
                   base.length = lenVal;
                 }
 
-                const chestVal = ms["身幅"] ?? ms["胸囲"] ?? undefined;
+                const chestVal = ms["胸囲"] ?? undefined;
                 if (chestVal != null) {
                   base.chest = chestVal; // 正規フィールド
                 }
-
+                const widthVal = ms["身幅"] ?? undefined;
+                if (widthVal != null) {
+                  base.width = widthVal; // 正規フィールド
+                }
                 const shoulderVal = ms["肩幅"] ?? undefined;
                 if (shoulderVal != null) {
                   base.shoulder = shoulderVal;

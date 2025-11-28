@@ -76,8 +76,8 @@ export type SizeRow = {
 
   // トップス
   length?: number;       // 着丈
-  chest?: number;        // 身幅
-  bust?: number;         // 胸囲（新規）
+  width?: number;        // 身幅
+  chest?: number;         // 胸囲（新規）
   shoulder?: number;     // 肩幅
   sleeveLength?: number; // 袖丈
 
@@ -88,10 +88,4 @@ export type SizeRow = {
   inseam?: number;  // 股下
   thigh?: number;   // わたり幅
   hemWidth?: number; // 裾幅
-
-  // alias
-  lengthTop?: number;
-  bodyWidth?: number;
-  shoulderWidth?: number;
-  thighWidth?: number;
 };

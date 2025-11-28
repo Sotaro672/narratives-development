@@ -19,10 +19,6 @@ import { useAuth } from "../../../../shell/src/auth/presentation/hook/useCurrent
 
 // catalog.ts から ItemType / Fit / measurement 系を集約して利用
 import {
-  FIT_OPTIONS,
-  WASH_TAG_OPTIONS,
-  ITEM_TYPE_OPTIONS,
-  PRODUCT_ID_TAG_OPTIONS,
   ITEM_TYPE_MEASUREMENT_OPTIONS,
 } from "../../domain/entity/catalog";
 import type {
