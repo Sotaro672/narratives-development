@@ -1,4 +1,4 @@
-// backend\internal\adapters\in\http\handlers\production_handler.go
+// backend/internal/adapters/in/http/handlers/production_handler.go
 package handlers
 
 import (
@@ -59,8 +59,7 @@ func (h *ProductionHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 func (h *ProductionHandler) list(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 
-	// ★ 担当者名付き一覧を usecase から取得
-	productions, err := h.uc.ListWithAssigneeName(ctx)
+	productions, err := h.uc.List(ctx)
 	if err != nil {
 		writeProductionErr(w, err)
 		return

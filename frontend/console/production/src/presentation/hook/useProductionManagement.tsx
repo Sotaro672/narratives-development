@@ -10,9 +10,6 @@ import type { ProductionStatus } from "../../../../shell/src/shared/types/produc
 
 import {
   loadProductionRows,
-  buildBlueprintOptions,
-  buildAssigneeOptions,
-  buildStatusOptions,
   buildRowsView,
   type SortKey,
   type ProductionRow,
@@ -59,18 +56,61 @@ export function useProductionManagement() {
   }, []);
 
   // ===== オプション生成 =====
+  // プロダクト名フィルタ: value は productBlueprintId, label は productBlueprintName（なければ ID）
   const blueprintOptions = useMemo(
-    () => buildBlueprintOptions(baseRows),
+    () => {
+      const map = new Map<string, string>();
+
+      for (const row of baseRows) {
+        const id = row.productBlueprintId;
+        if (!id) continue;
+        if (!map.has(id)) {
+          const name = (row as any).productBlueprintName ?? "";
+          const label = name || id;
+          map.set(id, label);
+        }
+      }
+
+      return Array.from(map.entries()).map(([value, label]) => ({
+        value,
+        label,
+      }));
+    },
     [baseRows],
   );
 
+  // 担当者フィルタ: value は assigneeId, label は assigneeName（なければ ID）
   const assigneeOptions = useMemo(
-    () => buildAssigneeOptions(baseRows),
+    () => {
+      const map = new Map<string, string>();
+
+      for (const row of baseRows) {
+        const id = (row.assigneeId ?? "").trim();
+        if (!id) continue;
+        if (!map.has(id)) {
+          const name = (row as any).assigneeName ?? "";
+          const label = (name as string).trim() || id;
+          map.set(id, label);
+        }
+      }
+
+      return Array.from(map.entries()).map(([value, label]) => ({
+        value,
+        label,
+      }));
+    },
     [baseRows],
   );
 
+  // ステータスフィルタ
   const statusOptions = useMemo(
-    () => buildStatusOptions(baseRows),
+    () => {
+      const set = new Set<string>();
+      for (const row of baseRows) {
+        if (row.status) set.add(row.status);
+      }
+      return Array.from(set).map((v) => ({ value: v, label: v }));
+    },
     [baseRows],
   );
 

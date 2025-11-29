@@ -13,7 +13,7 @@ export default function ProductionManagement() {
     handleRowClick,
   } = useProductionManagement();
 
-  // ===== 取得した rows の確認用ログ =====
+  // ===== rows をログ ==========
   useEffect(() => {
     console.log("[ProductionManagement] rows:", rows);
   }, [rows]);
@@ -35,11 +35,18 @@ export default function ProductionManagement() {
             className="cursor-pointer hover:bg-blue-50 transition-colors"
             onClick={() => handleRowClick(p.id)}
           >
+            {/* Production ID */}
             <td className="text-blue-600 underline">{p.id}</td>
-            <td>{p.productBlueprintId}</td>
-            <td>{p.assigneeId}</td>
+
+            {/* ★ ここを productBlueprintName に変更 */}
+            <td>{(p as any).productBlueprintName || p.productBlueprintId}</td>
+
+            {/* ★ 担当者名（あれば名前、なければID） */}
+            <td>{(p as any).assigneeName || p.assigneeId}</td>
+
             <td>{p.status}</td>
             <td>{p.totalQuantity}</td>
+
             <td>{p.printedAtLabel}</td>
             <td>{p.createdAtLabel}</td>
           </tr>
