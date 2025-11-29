@@ -1,7 +1,7 @@
 // frontend/console/production/src/application/productionCreateService.tsx
 // ======================================================================
 // Application Service for Production Create
-//   - API 呼び出しは infrastructure/api/productionCreateApi.ts へ移譲
+//   - API 呼び出しは infrastructure/api/productionCreateApi.ts / http へ移譲
 // ======================================================================
 
 // =========================
@@ -17,6 +17,9 @@ import type {
 } from "../../../productBlueprint/src/domain/entity/catalog";
 
 import { getMemberFullName } from "../../../member/src/domain/entity/member";
+
+// ★ Production 作成用 HTTP Repository
+import { ProductionRepositoryHTTP } from "../infrastructure/http/productionRepositoryHTTP";
 
 // ★ API 呼び出しは infra 層から利用
 export {
@@ -222,7 +225,7 @@ export function buildProductionRequest(params: {
   };
 }
 
-// useProductionCreate から呼び出すためのラッパー
+// useProductionCreate から呼び出すためのラッパー（ペイロード生成のみ）
 export function buildProductionPayload(params: {
   productBlueprintId: string;
   assigneeId: string;
@@ -231,10 +234,40 @@ export function buildProductionPayload(params: {
 }): Production {
   const { productBlueprintId, assigneeId, rows, currentMemberId } = params;
 
-  return buildProductionRequest({
+  // ★ useProductionCreate から受け取った値をログ出力
+  console.log("[Production] buildProductionPayload params:", {
+    productBlueprintId,
+    assigneeId,
+    rows,
+    currentMemberId,
+  });
+
+  const request = buildProductionRequest({
     productBlueprintId,
     assigneeId,
     creatorId: currentMemberId ?? "",
     quantities: rows,
   });
+
+  // ★ バックエンドへ送る直前のリクエスト内容もログ出力
+  console.log("[Production] buildProductionPayload request:", request);
+
+  return request;
+}
+
+// ======================================================================
+// Production 作成 API 呼び出し
+// ======================================================================
+/**
+ * Production をバックエンドへ POST する
+ * useProductionCreate からは buildProductionPayload で生成した値を渡す想定
+ */
+export async function createProduction(
+  payload: Production,
+): Promise<Production> {
+  // ★ useProductionCreate から渡された payload をログ出力
+  console.log("[Production] createProduction payload:", payload);
+
+  const repo = new ProductionRepositoryHTTP();
+  return await repo.create(payload);
 }

@@ -264,6 +264,7 @@ func NewRouter(deps RouterDeps) http.Handler {
 		mux.Handle("/product-blueprints", h)
 		mux.Handle("/product-blueprints/", h)
 	}
+
 	// ================================
 	// Token Blueprints
 	// ================================
@@ -337,6 +338,22 @@ func NewRouter(deps RouterDeps) http.Handler {
 
 		mux.Handle("/members", h)
 		mux.Handle("/members/", h)
+	}
+
+	// ================================
+	// Productions
+	// ================================
+	if deps.ProductionUC != nil {
+		productionH := handlers.NewProductionHandler(deps.ProductionUC)
+
+		var h http.Handler = productionH
+		if authMw != nil {
+			h = authMw.Handler(h)
+		}
+
+		// ★ フロントの POST /productions と合わせる
+		mux.Handle("/productions", h)
+		mux.Handle("/productions/", h)
 	}
 
 	// ================================

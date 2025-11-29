@@ -1,4 +1,4 @@
-//frontend\console\production\src\presentation\hook\useProductionCreate.tsx
+// frontend/console/production/src/presentation/hook/useProductionCreate.tsx
 import * as React from "react";
 import { useNavigate } from "react-router-dom";
 
@@ -18,6 +18,7 @@ import {
   buildAssigneeOptions,
   mapModelVariationsToRows,
   buildProductionPayload,
+  createProduction, // ★ Production 作成API呼び出し
 } from "../../application/productionCreateService";
 
 // ★ 型
@@ -208,9 +209,9 @@ export function useProductionCreate() {
   const modelVariationsForCard = quantityRows;
 
   // ==========================
-  // 保存
+  // 保存（バックエンドへ POST）
   // ==========================
-  const handleSave = React.useCallback(() => {
+  const handleSave = React.useCallback(async () => {
     if (!selectedId) {
       alert("商品設計を選択してください");
       return;
@@ -228,10 +229,13 @@ export function useProductionCreate() {
       currentMemberId,
     });
 
-    console.log("[ProductionCreate] Production payload:", payload);
-
-    alert("生産計画を作成しました（ダミー）");
-    navigate("/production");
+    try {
+      await createProduction(payload);
+      alert("生産計画を作成しました");
+      navigate("/production");
+    } catch (e) {
+      alert("生産計画の作成に失敗しました");
+    }
   }, [selectedId, assigneeId, quantityRows, currentMemberId, navigate]);
 
   // ==========================
