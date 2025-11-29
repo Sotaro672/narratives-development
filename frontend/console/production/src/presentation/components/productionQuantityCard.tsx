@@ -1,3 +1,4 @@
+// frontend/console/production/src/presentation/components/productionQuantityCard.tsx
 import * as React from "react";
 import { Palette } from "lucide-react";
 import {
@@ -14,16 +15,20 @@ import {
   TableRow,
   TableCell,
 } from "../../../../shell/src/shared/ui/table";
-
 import { Input } from "../../../../shell/src/shared/ui/input";
 
 import "../styles/production.css";
 
 export type ProductionQuantityRow = {
+  /** 型番 (例: "LM-SB-S-WHT") */
   modelCode: string;
+  /** サイズ (例: "S" | "M" | "L") */
   size: string;
+  /** カラー表示名 (例: "ホワイト") */
   colorName: string;
-  colorCode?: string; // "#000000" | undefined
+  /** カラーコード (例: "#000000") - 無指定の場合は白い円 */
+  colorCode?: string;
+  /** 生産数 */
   stock: number;
 };
 
@@ -32,23 +37,56 @@ type ProductionQuantityCardProps = {
   rows: ProductionQuantityRow[];
   className?: string;
 
-  /** 追加: edit/view */
-  mode?: "edit" | "view";
+  /** 表示モード */
+  mode?: "view" | "edit";
 
-  /** 追加: 編集時の変更ハンドラ */
-  onChangeStock?: (index: number, value: number) => void;
+  /** 親に編集結果を返したい場合に使用（任意） */
+  onRowsChange?: (rows: ProductionQuantityRow[]) => void;
 };
 
+/**
+ * モデル別生産数一覧カード
+ * - view: 閲覧専用
+ * - edit: 生産数を編集可能
+ */
 const ProductionQuantityCard: React.FC<ProductionQuantityCardProps> = ({
   title = "モデル別生産数一覧",
   rows,
   className,
   mode = "view",
-  onChangeStock,
+  onRowsChange,
 }) => {
+  const isEditable = mode === "edit";
+
+  // 生産数編集用にローカルコピーを持つ
+  const [localRows, setLocalRows] = React.useState<ProductionQuantityRow[]>(rows);
+
+  // rows が外から更新されたときはローカルも同期
+  React.useEffect(() => {
+    setLocalRows(rows);
+  }, [rows]);
+
+  // 生産数合計
   const totalStock = React.useMemo(
-    () => rows.reduce((sum, r) => sum + (r.stock || 0), 0),
-    [rows],
+    () => localRows.reduce((sum, r) => sum + (r.stock || 0), 0),
+    [localRows],
+  );
+
+  const handleChangeStock = React.useCallback(
+    (index: number, value: string) => {
+      if (!isEditable) return;
+
+      // 空文字は 0、負値/NaN は 0、少数は切り捨て
+      const n = Math.max(0, Math.floor(Number(value || "0")));
+      const next = [...localRows];
+      next[index] = {
+        ...next[index],
+        stock: Number.isFinite(n) ? n : 0,
+      };
+      setLocalRows(next);
+      onRowsChange?.(next);
+    },
+    [isEditable, localRows, onRowsChange],
   );
 
   return (
@@ -58,8 +96,10 @@ const ProductionQuantityCard: React.FC<ProductionQuantityCardProps> = ({
           <Palette className="ivc__icon" size={18} />
           <CardTitle className="ivc__title">
             {title}
-            {mode === "edit" && (
-              <span className="ml-2 text-xs text-gray-500">（編集）</span>
+            {isEditable && (
+              <span className="ml-2 text-xs text-[hsl(var(--muted-foreground))]">
+                （編集）
+              </span>
             )}
           </CardTitle>
         </div>
@@ -78,13 +118,10 @@ const ProductionQuantityCard: React.FC<ProductionQuantityCardProps> = ({
             </TableHeader>
 
             <TableBody>
-              {rows.map((row, idx) => (
+              {localRows.map((row, idx) => (
                 <TableRow key={`${row.modelCode}-${idx}`} className="ivc__tr">
-                  <TableCell className="ivc__model">
-                    {row.modelCode}
-                  </TableCell>
+                  <TableCell className="ivc__model">{row.modelCode}</TableCell>
                   <TableCell className="ivc__size">{row.size}</TableCell>
-
                   <TableCell className="ivc__color-cell">
                     <span
                       className="ivc__color-dot"
@@ -92,41 +129,45 @@ const ProductionQuantityCard: React.FC<ProductionQuantityCardProps> = ({
                         backgroundColor:
                           row.colorCode && row.colorCode.trim()
                             ? row.colorCode
-                            : "#000000", // ★ rgb:0 を黒で表示
+                            : "#ffffff",
                         boxShadow: "0 0 0 1px rgba(0,0,0,0.18)",
                       }}
                     />
                     <span className="ivc__color-label">{row.colorName}</span>
                   </TableCell>
-
                   <TableCell className="ivc__stock">
-                    {mode === "edit" ? (
+                    {isEditable ? (
                       <Input
                         type="number"
                         min={0}
-                        value={row.stock}
-                        className="w-20 text-right"
-                        onChange={(e) => {
-                          const v = Math.max(0, parseInt(e.target.value || "0"));
-                          onChangeStock?.(idx, v);
-                        }}
+                        step={1}
+                        value={localRows[idx].stock}
+                        onChange={(e) =>
+                          handleChangeStock(idx, e.target.value)
+                        }
+                        className="ivc__stock-input w-20 text-right"
+                        aria-label={`${row.modelCode} / ${row.size} / ${row.colorName} の生産数`}
                       />
                     ) : (
-                      <span className="ivc__stock-number">{row.stock}</span>
+                      <span className="ivc__stock-number">
+                        {row.stock}
+                      </span>
                     )}
                   </TableCell>
                 </TableRow>
               ))}
 
-              {rows.length === 0 && (
+              {/* データなし表示 */}
+              {localRows.length === 0 && (
                 <TableRow>
                   <TableCell colSpan={4} className="ivc__empty">
-                    表示できる型番がありません。
+                    表示できる生産数データがありません。
                   </TableCell>
                 </TableRow>
               )}
 
-              {rows.length > 0 && (
+              {/* 合計行 */}
+              {localRows.length > 0 && (
                 <TableRow className="ivc__total-row">
                   <TableCell
                     colSpan={3}
