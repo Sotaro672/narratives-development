@@ -61,8 +61,9 @@ export default function ProductionCreate() {
     selectedProductId,
     selectProductById,
 
-    // ★ ModelVariation 一覧を InventoryRow 形式にマッピングしたもの
+    // ProductionQuantityCard 用
     modelVariationsForCard,
+    setQuantityRows,
   } = useProductionCreate();
 
   return (
@@ -86,12 +87,13 @@ export default function ProductionCreate() {
           </div>
         )}
 
-        {/* ★★★ ProductionQuantityCard を追加（edit モード） ★★★ */}
+        {/* ★★★ ProductionQuantityCard（編集モード） ★★★ */}
         {hasSelectedProductBlueprint && (
           <ProductionQuantityCard
             title="モデル別 生産数一覧"
             rows={modelVariationsForCard}
             mode="edit"
+            onChangeRows={setQuantityRows}
           />
         )}
       </div>

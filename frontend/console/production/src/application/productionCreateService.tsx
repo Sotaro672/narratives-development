@@ -1,6 +1,7 @@
-//frontend\console\production\src\application\productionCreateService.tsx
+// frontend/console/production/src/application/productionCreateService.tsx
 // ======================================================================
 // Application Service for Production Create
+//   - API 呼び出しは infrastructure/api/productionCreateApi.ts へ移譲
 // ======================================================================
 
 // =========================
@@ -15,18 +16,18 @@ import type {
   Fit,
 } from "../../../productBlueprint/src/domain/entity/catalog";
 
-import { fetchAllBrandsForCompany } from "../../../brand/src/infrastructure/query/brandQuery";
-import { fetchProductBlueprintManagementRows } from "../../../productBlueprint/src/infrastructure/query/productBlueprintQuery";
-import {
-  getProductBlueprintDetail,
-  listModelVariationsByProductBlueprintId,
-} from "../../../productBlueprint/src/application/productBlueprintDetailService";
-import { scopedFilterByCompanyId } from "../../../member/src/domain/repository/memberRepository";
-import { MemberRepositoryHTTP } from "../../../member/src/infrastructure/http/memberRepositoryHTTP";
 import { getMemberFullName } from "../../../member/src/domain/entity/member";
 
+// ★ API 呼び出しは infra 層から利用
+export {
+  loadBrands,
+  loadProductBlueprints,
+  loadDetailAndModels,
+  loadAssigneeCandidates,
+} from "../infrastructure/api/productionCreateApi";
+
 // =========================
-// 型の再エクスポート（エラー回避）
+// 型の再エクスポート（useProductionCreate から利用）
 // =========================
 export type {
   Brand,
@@ -96,33 +97,15 @@ export interface Production {
 }
 
 // ======================================================================
-// ブランド
+// ブランド（変換ロジック）
 // ======================================================================
-export async function loadBrands(): Promise<Brand[]> {
-  try {
-    return await fetchAllBrandsForCompany("", true);
-  } catch {
-    return [];
-  }
-}
-
 export function buildBrandOptions(brands: Brand[]): string[] {
   return brands.map((b) => b.name).filter(Boolean);
 }
 
 // ======================================================================
-// 商品設計一覧
+// 商品設計一覧（変換ロジック）
 // ======================================================================
-export async function loadProductBlueprints(): Promise<
-  ProductBlueprintManagementRow[]
-> {
-  try {
-    return await fetchProductBlueprintManagementRows();
-  } catch {
-    return [];
-  }
-}
-
 export function filterProductBlueprintsByBrand(
   rows: ProductBlueprintManagementRow[],
   brandName: string | null,
@@ -139,20 +122,8 @@ export function buildProductRows(filtered: ProductBlueprintManagementRow[]) {
 }
 
 // ======================================================================
-// 詳細 + ModelVariations
+// 詳細 + ModelVariations → ProductBlueprintCard 用データに整形
 // ======================================================================
-export async function loadDetailAndModels(pbId: string): Promise<{
-  detail: any;
-  models: ModelVariationResponse[];
-}> {
-  const [detail, models] = await Promise.all([
-    getProductBlueprintDetail(pbId),
-    listModelVariationsByProductBlueprintId(pbId),
-  ]);
-  return { detail, models };
-}
-
-// ProductBlueprintCard 用の整形
 export function buildSelectedForCard(
   detail: any,
   row: ProductBlueprintManagementRow | null,
@@ -187,22 +158,8 @@ export function buildSelectedForCard(
 }
 
 // ======================================================================
-// 担当者一覧
+// 担当者一覧（変換ロジック）
 // ======================================================================
-export async function loadAssigneeCandidates(
-  companyId: string,
-): Promise<Member[]> {
-  try {
-    const filter = scopedFilterByCompanyId(companyId, { status: "active" });
-    const repo = new MemberRepositoryHTTP();
-    const page = { number: 1, perPage: 200, totalPages: 1 };
-    const result = await repo.list(page, filter);
-    return result.items ?? [];
-  } catch {
-    return [];
-  }
-}
-
 export function buildAssigneeOptions(members: Member[]) {
   return members.map((m) => ({
     id: m.id,
