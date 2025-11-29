@@ -92,14 +92,8 @@ export default function ProductionCreate() {
 
               <PopoverContent>
                 <div className="pb-select__list">
-                  <button
-                    className={
-                      "pb-select__row" + (!selectedBrand ? " is-active" : "")
-                    }
-                    onClick={() => selectBrand(null)}
-                  >
-                    すべてのブランド
-                  </button>
+
+                  {/* ← 「すべてのブランド」削除済み */}
 
                   {brandOptions.map((b) => (
                     <button

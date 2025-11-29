@@ -79,4 +79,3 @@ export async function fetchAllBrandsForCompany(
   });
   return result.items;
 }
-

@@ -1,13 +1,13 @@
 // frontend/console/production/src/presentation/hook/useProductionCreate.tsx
 import * as React from "react";
 import { useNavigate } from "react-router-dom";
-import type { SizeRow } from "../../../../model/src/domain/entity/catalog";
+import { fetchAllBrandsForCompany } from "../../../../brand/src/infrastructure/query/brandQuery";
+import type { Brand } from "../../../../brand/src/domain/entity/brand";
 
 type ProductBlueprint = {
   id: string;
   name: string;
   brand?: string;
-  description?: string;
 };
 
 export function useProductionCreate() {
@@ -22,10 +22,9 @@ export function useProductionCreate() {
   const [selectedBrand, setSelectedBrand] = React.useState<string | null>(null);
 
   // ==========================
-  // サイズ・カラー（APIで後で埋める）
+  // カラー（APIで後で埋める）
   // ==========================
   const [colors] = React.useState<string[]>([]);
-  const [sizes] = React.useState<SizeRow[]>([]);
 
   // ==========================
   // 管理情報
@@ -33,7 +32,7 @@ export function useProductionCreate() {
   const [assignee, setAssignee] = React.useState("未設定");
   const [creator] = React.useState("現在のユーザー");
   const [createdAt] = React.useState(() =>
-    new Date().toLocaleDateString("ja-JP")
+    new Date().toLocaleDateString("ja-JP"),
   );
 
   const handleBack = React.useCallback(() => {
@@ -41,18 +40,23 @@ export function useProductionCreate() {
   }, [navigate]);
 
   // ==========================
-  // ブランド一覧
+  // ブランド一覧（API）
   // ==========================
+  const [brands, setBrands] = React.useState<Brand[]>([]);
+
+  React.useEffect(() => {
+    // companyId は互換用ダミー。実際の絞り込みは backend 側の context.companyId で行われる
+    fetchAllBrandsForCompany("", true)
+      .then((items) => setBrands(items))
+      .catch((e) => {
+        console.error("ブランド取得失敗:", e);
+        setBrands([]);
+      });
+  }, []);
+
   const brandOptions = React.useMemo(
-    () =>
-      Array.from(
-        new Set(
-          productBlueprints
-            .map((p) => p.brand?.trim())
-            .filter((b): b is string => !!b)
-        )
-      ),
-    [productBlueprints]
+    () => brands.map((b) => b.name).filter(Boolean),
+    [brands],
   );
 
   // ==========================
@@ -68,17 +72,16 @@ export function useProductionCreate() {
   // ==========================
   const selected = React.useMemo(
     () => productBlueprints.find((p) => p.id === selectedId) ?? null,
-    [selectedId, productBlueprints]
+    [selectedId, productBlueprints],
   );
 
-  const selectedForCard: any =
+  const selectedForCard: ProductBlueprint =
     selected ??
     ({
       id: "",
       name: "",
       brand: "",
-      description: "",
-    } as any);
+    } as ProductBlueprint);
 
   const hasSelected = selected != null;
 
@@ -94,12 +97,11 @@ export function useProductionCreate() {
     console.log("生産計画作成:", {
       productBlueprintId: selectedId,
       colors,
-      sizes,
     });
 
     alert("生産計画を作成しました（ダミー）");
     navigate("/production");
-  }, [navigate, selectedId, colors, sizes]);
+  }, [navigate, selectedId, colors]);
 
   return {
     // PageStyle 用
