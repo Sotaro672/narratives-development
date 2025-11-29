@@ -23,6 +23,10 @@ func (h *ProductionHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 
 	switch {
+	// GET /productions （一覧）
+	case r.Method == http.MethodGet && r.URL.Path == "/productions":
+		h.list(w, r)
+
 	// GET /productions/{id}
 	case r.Method == http.MethodGet && strings.HasPrefix(r.URL.Path, "/productions/"):
 		id := strings.TrimPrefix(r.URL.Path, "/productions/")
@@ -46,6 +50,20 @@ func (h *ProductionHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusNotFound)
 		_ = json.NewEncoder(w).Encode(map[string]string{"error": "not_found"})
 	}
+}
+
+// GET /productions （一覧）
+func (h *ProductionHandler) list(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+
+	// ★ Usecase 側に List を生やしている想定
+	productions, err := h.uc.List(ctx)
+	if err != nil {
+		writeProductionErr(w, err)
+		return
+	}
+
+	_ = json.NewEncoder(w).Encode(productions)
 }
 
 // GET /productions/{id}

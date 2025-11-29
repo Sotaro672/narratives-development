@@ -121,63 +121,64 @@ func (r *ModelHistoryRepositoryFS) SaveSnapshot(
 	)
 
 	col := r.historyVariationsCol(blueprintID, newVersion)
-
-	batch := r.Client.Batch()
 	now := time.Now().UTC()
 
 	// models/{version} ドキュメントに格納するサマリ用配列
 	var snapshotList []map[string]any
 
-	for _, v := range variations {
-		if v.ID == "" {
-			// ID 無しはスキップ
-			continue
+	// variations サブコレクションをトランザクションで一括書き込み
+	if err := r.Client.RunTransaction(ctx, func(txCtx context.Context, tx *firestore.Transaction) error {
+		for _, v := range variations {
+			if v.ID == "" {
+				// ID 無しはスキップ
+				continue
+			}
+
+			docRef := col.Doc(v.ID)
+
+			// variations サブコレクションに保存するデータ
+			data := map[string]any{
+				"id":                 v.ID,
+				"productBlueprintId": v.ProductBlueprintID,
+				"modelNumber":        v.ModelNumber,
+				"size":               v.Size,
+				"color": map[string]any{
+					"name": v.Color.Name,
+					"rgb":  v.Color.RGB,
+				},
+				"measurements": v.Measurements,
+				"createdAt":    v.CreatedAt,
+				"createdBy":    v.CreatedBy,
+				"updatedAt":    v.UpdatedAt,
+				"updatedBy":    v.UpdatedBy,
+			}
+
+			// UpdatedAt がゼロなら now で補完
+			if t, ok := data["updatedAt"].(time.Time); !ok || t.IsZero() {
+				data["updatedAt"] = now
+			}
+
+			if err := tx.Set(docRef, data); err != nil {
+				return fmt.Errorf("ModelHistoryRepositoryFS.SaveSnapshot: tx.Set variation: %w", err)
+			}
+
+			// models/{version} ドキュメントに格納する「サマリ」も作成
+			snap := map[string]any{
+				"id":                 v.ID,
+				"productBlueprintId": v.ProductBlueprintID,
+				"modelNumber":        v.ModelNumber,
+				"size":               v.Size,
+				"color": map[string]any{
+					"name": v.Color.Name,
+					"rgb":  v.Color.RGB,
+				},
+				"measurements": v.Measurements,
+			}
+			snapshotList = append(snapshotList, snap)
 		}
-
-		docRef := col.Doc(v.ID)
-
-		// variations サブコレクションに保存するデータ
-		data := map[string]any{
-			"id":                 v.ID,
-			"productBlueprintId": v.ProductBlueprintID,
-			"modelNumber":        v.ModelNumber,
-			"size":               v.Size,
-			"color": map[string]any{
-				"name": v.Color.Name,
-				"rgb":  v.Color.RGB,
-			},
-			"measurements": v.Measurements,
-			"createdAt":    v.CreatedAt,
-			"createdBy":    v.CreatedBy,
-			"updatedAt":    v.UpdatedAt,
-			"updatedBy":    v.UpdatedBy,
-		}
-
-		// UpdatedAt がゼロなら now で補完
-		if t, ok := data["updatedAt"].(time.Time); !ok || t.IsZero() {
-			data["updatedAt"] = now
-		}
-
-		batch.Set(docRef, data)
-
-		// models/{version} ドキュメントに格納する「サマリ」も作成
-		snap := map[string]any{
-			"id":                 v.ID,
-			"productBlueprintId": v.ProductBlueprintID,
-			"modelNumber":        v.ModelNumber,
-			"size":               v.Size,
-			"color": map[string]any{
-				"name": v.Color.Name,
-				"rgb":  v.Color.RGB,
-			},
-			"measurements": v.Measurements,
-		}
-		snapshotList = append(snapshotList, snap)
-	}
-
-	// variations サブコレクションを一括書き込み
-	if _, err := batch.Commit(ctx); err != nil {
-		return fmt.Errorf("ModelHistoryRepositoryFS.SaveSnapshot: batch.Commit: %w", err)
+		return nil
+	}); err != nil {
+		return fmt.Errorf("ModelHistoryRepositoryFS.SaveSnapshot: transaction (variations) failed: %w", err)
 	}
 
 	// models/{version} ドキュメント本体にもサマリを保存
