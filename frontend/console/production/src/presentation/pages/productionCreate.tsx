@@ -30,6 +30,9 @@ import {
 
 import { useProductionCreate } from "../hook/useProductionCreate";
 
+// ★ ProductionQuantityCard（InventoryCard互換デザイン）
+import ProductionQuantityCard from "../components/productionQuantityCard";
+
 import "../styles/production.css";
 
 export default function ProductionCreate() {
@@ -57,6 +60,9 @@ export default function ProductionCreate() {
     productRows,
     selectedProductId,
     selectProductById,
+
+    // ★ ModelVariation 一覧を InventoryRow 形式にマッピングしたもの
+    modelVariationsForCard,
   } = useProductionCreate();
 
   return (
@@ -68,12 +74,25 @@ export default function ProductionCreate() {
     >
       {/* ========== 左カラム ========== */}
       <div className="space-y-4">
+        {/* 商品設計カード */}
         {hasSelectedProductBlueprint ? (
-          <ProductBlueprintCard mode="view" {...selectedProductBlueprintForCard} />
+          <ProductBlueprintCard
+            mode="view"
+            {...selectedProductBlueprintForCard}
+          />
         ) : (
           <div className="flex h-full items-center justify-center text-gray-500">
             商品設計を選択してください
           </div>
+        )}
+
+        {/* ★★★ ProductionQuantityCard を追加（edit モード） ★★★ */}
+        {hasSelectedProductBlueprint && (
+          <ProductionQuantityCard
+            title="モデル別 生産数一覧"
+            rows={modelVariationsForCard}
+            mode="edit"
+          />
         )}
       </div>
 
@@ -88,7 +107,6 @@ export default function ProductionCreate() {
           createdByName={creator}
           createdAt={createdAt}
           onSelectAssignee={onSelectAssignee}
-          // mode はデフォルト edit なので省略（編集モードでポップオーバー使用）
         />
 
         {/* ブランド選択 */}
@@ -130,7 +148,7 @@ export default function ProductionCreate() {
           </CardContent>
         </Card>
 
-        {/* 商品設計一覧 Table */}
+        {/* 商品設計一覧テーブル */}
         <Card>
           <CardHeader>
             <CardTitle>商品設計一覧</CardTitle>
