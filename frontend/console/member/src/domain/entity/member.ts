@@ -42,6 +42,20 @@ export interface Member {
 }
 
 /**
+ * Member から表示用フルネームを取得
+ * - lastName + firstName を優先
+ * - 無ければ fullName フィールド
+ * - どちらも無ければ空文字
+ */
+export function getMemberFullName(member: Member): string {
+  const ln = (member.lastName ?? "").trim();
+  const fn = (member.firstName ?? "").trim();
+  const composed = `${ln} ${fn}`.trim();
+  const fullField = (member.fullName ?? "").trim();
+  return composed || fullField || "";
+}
+
+/**
  * MemberPatch
  * backend/internal/domain/member/entity.go の MemberPatch に対応。
  * - usecase / repository レイヤで部分更新時に利用

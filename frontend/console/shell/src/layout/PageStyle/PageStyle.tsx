@@ -1,3 +1,4 @@
+//frontend\console\shell\src\layout\PageStyle\PageStyle.tsx
 import type { ReactNode } from "react";
 import {
   ArrowLeft,

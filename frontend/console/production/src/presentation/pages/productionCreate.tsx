@@ -1,4 +1,5 @@
 // frontend/console/production/src/presentation/pages/productionCreate.tsx
+
 import PageStyle from "../../../../shell/src/layout/PageStyle/PageStyle";
 import AdminCard from "../../../../admin/src/presentation/components/AdminCard";
 
@@ -35,15 +36,24 @@ export default function ProductionCreate() {
   const {
     onBack,
     onSave,
+
     hasSelectedProductBlueprint,
     selectedProductBlueprintForCard,
+
+    // 管理カード用
     assignee,
     creator,
     createdAt,
-    // setAssignee,   ← 使用しないため削除（必要な場合は残しても問題なし）
+    assigneeOptions,
+    loadingMembers,
+    onSelectAssignee,
+
+    // ブランド選択用
     selectedBrand,
     brandOptions,
     selectBrand,
+
+    // 商品設計テーブル用
     productRows,
     selectedProductId,
     selectProductById,
@@ -59,7 +69,7 @@ export default function ProductionCreate() {
       {/* ========== 左カラム ========== */}
       <div className="space-y-4">
         {hasSelectedProductBlueprint ? (
-          <ProductBlueprintCard {...selectedProductBlueprintForCard} />
+          <ProductBlueprintCard mode="view" {...selectedProductBlueprintForCard} />
         ) : (
           <div className="flex h-full items-center justify-center text-gray-500">
             商品設計を選択してください
@@ -69,13 +79,16 @@ export default function ProductionCreate() {
 
       {/* ========== 右カラム ========== */}
       <div className="space-y-4">
+        {/* 管理情報カード */}
         <AdminCard
           title="管理情報"
           assigneeName={assignee}
+          assigneeCandidates={assigneeOptions}
+          loadingMembers={loadingMembers}
           createdByName={creator}
           createdAt={createdAt}
-          // ★ モック削除：クリックしても何もしない
-          onEditAssignee={() => {}}
+          onSelectAssignee={onSelectAssignee}
+          // mode はデフォルト edit なので省略（編集モードでポップオーバー使用）
         />
 
         {/* ブランド選択 */}
@@ -93,8 +106,6 @@ export default function ProductionCreate() {
 
               <PopoverContent>
                 <div className="pb-select__list">
-                  {/* 「すべてのブランド」削除済み */}
-
                   {brandOptions.map((b) => (
                     <button
                       key={b}

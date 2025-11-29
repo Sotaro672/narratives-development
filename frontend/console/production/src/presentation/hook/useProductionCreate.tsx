@@ -21,6 +21,7 @@ import {
   type MemberSort,
 } from "../../../../member/src/domain/repository/memberRepository";
 import { MemberRepositoryHTTP } from "../../../../member/src/infrastructure/http/memberRepositoryHTTP";
+import { getMemberFullName } from "../../../../member/src/domain/entity/member";
 
 type ProductBlueprintForCard = {
   id: string;
@@ -89,7 +90,13 @@ export function useProductionCreate() {
   // ==========================
   React.useEffect(() => {
     fetchProductBlueprintManagementRows()
-      .then((rows) => setAllProductBlueprints(rows))
+      .then((rows) => {
+        console.log(
+          "[ProductionCreate] fetched productBlueprints:",
+          rows,
+        );
+        setAllProductBlueprints(rows);
+      })
       .catch((e) => {
         console.error("商品設計一覧取得失敗:", e);
         setAllProductBlueprints([]);
@@ -143,6 +150,7 @@ export function useProductionCreate() {
   const [assigneeCandidates, setAssigneeCandidates] = React.useState<Member[]>(
     [],
   );
+  const [loadingMembers, setLoadingMembers] = React.useState(false);
 
   React.useEffect(() => {
     if (!companyId) {
@@ -152,6 +160,7 @@ export function useProductionCreate() {
 
     (async () => {
       try {
+        setLoadingMembers(true);
         // companyId でスコープしたフィルタ（active メンバー想定）
         const filter = scopedFilterByCompanyId(companyId, {
           status: "active",
@@ -162,28 +171,43 @@ export function useProductionCreate() {
           order: "asc",
         };
 
-        // Page 型の詳細は共通定義に依存するため any で渡す
         const page: any = { number: 1, perPage: 200 };
 
-        // ★ クラスのインスタンスを生成して list を呼ぶ
         const repo = new MemberRepositoryHTTP();
         const result = await repo.list(page, filter);
-        // list の戻り値は PageResult<Member> を想定
+
         setAssigneeCandidates(result.items ?? []);
       } catch (e) {
         console.error("担当者候補一覧の取得に失敗しました:", e);
         setAssigneeCandidates([]);
+      } finally {
+        setLoadingMembers(false);
       }
     })();
   }, [companyId]);
 
-  // UI で使いやすい形にマッピング（id + 表示名）
+  // UI で使いやすい形にマッピング（id + 表示名 = fullName優先）
   const assigneeOptions = React.useMemo(
     () =>
-      assigneeCandidates.map((m) => ({
-        id: m.id,
-        name: m.fullName || m.email || m.id,
-      })),
+      assigneeCandidates.map((m) => {
+        const full = getMemberFullName(m); // lastName → firstName
+        return {
+          id: m.id,
+          name: full || m.email || m.id,
+        };
+      }),
+    [assigneeCandidates],
+  );
+
+  // 担当者選択時：assignee を更新
+  const handleSelectAssignee = React.useCallback(
+    (id: string) => {
+      const target = assigneeCandidates.find((m) => m.id === id);
+      if (!target) return;
+      const full = getMemberFullName(target);
+      const name = full || target.email || target.id;
+      setAssignee(name);
+    },
     [assigneeCandidates],
   );
 
@@ -220,10 +244,9 @@ export function useProductionCreate() {
     assignee,
     creator,
     createdAt,
-    setAssignee,
-
-    // 担当者候補一覧（今後 Popover 等で使う想定）
     assigneeOptions,
+    loadingMembers,
+    onSelectAssignee: handleSelectAssignee,
 
     // ブランド選択用
     selectedBrand,
