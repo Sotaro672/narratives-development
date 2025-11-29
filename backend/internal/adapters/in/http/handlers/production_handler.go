@@ -1,4 +1,4 @@
-// backend/internal/adapters/in/http/handlers/production_handler.go
+// backend\internal\adapters\in\http\handlers\production_handler.go
 package handlers
 
 import (
@@ -23,6 +23,7 @@ func (h *ProductionHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 
 	switch {
+
 	// GET /productions （一覧）
 	case r.Method == http.MethodGet && r.URL.Path == "/productions":
 		h.list(w, r)
@@ -52,12 +53,14 @@ func (h *ProductionHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+// ------------------------------------------------------------
 // GET /productions （一覧）
+// ------------------------------------------------------------
 func (h *ProductionHandler) list(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 
-	// ★ Usecase 側に List を生やしている想定
-	productions, err := h.uc.List(ctx)
+	// ★ 担当者名付き一覧を usecase から取得
+	productions, err := h.uc.ListWithAssigneeName(ctx)
 	if err != nil {
 		writeProductionErr(w, err)
 		return
@@ -66,7 +69,9 @@ func (h *ProductionHandler) list(w http.ResponseWriter, r *http.Request) {
 	_ = json.NewEncoder(w).Encode(productions)
 }
 
+// ------------------------------------------------------------
 // GET /productions/{id}
+// ------------------------------------------------------------
 func (h *ProductionHandler) get(w http.ResponseWriter, r *http.Request, id string) {
 	ctx := r.Context()
 
@@ -82,10 +87,13 @@ func (h *ProductionHandler) get(w http.ResponseWriter, r *http.Request, id strin
 		writeProductionErr(w, err)
 		return
 	}
+
 	_ = json.NewEncoder(w).Encode(p)
 }
 
+// ------------------------------------------------------------
 // POST /productions
+// ------------------------------------------------------------
 func (h *ProductionHandler) post(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	defer r.Body.Close()
@@ -97,7 +105,6 @@ func (h *ProductionHandler) post(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Usecase は値（productiondom.Production）を受け取る
 	p, err := h.uc.Create(ctx, req)
 	if err != nil {
 		writeProductionErr(w, err)
@@ -108,7 +115,9 @@ func (h *ProductionHandler) post(w http.ResponseWriter, r *http.Request) {
 	_ = json.NewEncoder(w).Encode(p)
 }
 
+// ------------------------------------------------------------
 // PUT /productions/{id}
+// ------------------------------------------------------------
 func (h *ProductionHandler) put(w http.ResponseWriter, r *http.Request, id string) {
 	ctx := r.Context()
 	defer r.Body.Close()
@@ -127,10 +136,9 @@ func (h *ProductionHandler) put(w http.ResponseWriter, r *http.Request, id strin
 		return
 	}
 
-	// パスの id を優先してセット（Body 側の ID は信用しない）
+	// パスの id を優先
 	req.ID = id
 
-	// Update 用のユースケースは Save を利用（upsert 的な役割）
 	p, err := h.uc.Save(ctx, req)
 	if err != nil {
 		writeProductionErr(w, err)
@@ -140,7 +148,9 @@ func (h *ProductionHandler) put(w http.ResponseWriter, r *http.Request, id strin
 	_ = json.NewEncoder(w).Encode(p)
 }
 
+// ------------------------------------------------------------
 // DELETE /productions/{id}
+// ------------------------------------------------------------
 func (h *ProductionHandler) delete(w http.ResponseWriter, r *http.Request, id string) {
 	ctx := r.Context()
 
@@ -156,10 +166,12 @@ func (h *ProductionHandler) delete(w http.ResponseWriter, r *http.Request, id st
 		return
 	}
 
-	// 204 No Content
 	w.WriteHeader(http.StatusNoContent)
 }
 
+// ------------------------------------------------------------
+// エラー共通処理
+// ------------------------------------------------------------
 func writeProductionErr(w http.ResponseWriter, err error) {
 	code := http.StatusInternalServerError
 	switch err {

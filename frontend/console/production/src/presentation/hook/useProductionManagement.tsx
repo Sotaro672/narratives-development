@@ -101,14 +101,14 @@ export function useProductionManagement() {
       "ID",
       <FilterableTableHeader
         key="blueprint"
-        label="商品設計ID"
+        label="プロダクト名"
         options={blueprintOptions}
         selected={blueprintFilter}
         onChange={setBlueprintFilter}
       />,
       <FilterableTableHeader
         key="assignee"
-        label="担当者ID"
+        label="担当者"
         options={assigneeOptions}
         selected={assigneeFilter}
         onChange={setAssigneeFilter}

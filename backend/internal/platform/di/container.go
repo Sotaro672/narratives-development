@@ -271,6 +271,13 @@ func NewContainer(ctx context.Context) (*Container, error) {
 		fsRepo: invitationTokenFSRepo,
 	}
 
+	// ★ Company / Brand 用ドメインサービス（表示名解決用）
+	companySvc := companydom.NewService(companyRepo)
+	brandSvc := branddom.NewService(brandRepo)
+
+	// ★ member.Service（表示名解決用）
+	memberSvc := memdom.NewService(memberRepo)
+
 	// 5. Application-layer usecases
 	accountUC := uc.NewAccountUsecase(accountRepo)
 
@@ -307,7 +314,9 @@ func NewContainer(ctx context.Context) (*Container, error) {
 	paymentUC := uc.NewPaymentUsecase(paymentRepo)
 	permissionUC := uc.NewPermissionUsecase(permissionRepo)
 	productUC := uc.NewProductUsecase(productRepo)
-	productionUC := uc.NewProductionUsecase(productionRepo)
+
+	// ★ ProductionUsecase に member.Service を注入
+	productionUC := uc.NewProductionUsecase(productionRepo, memberSvc)
 
 	// ★ ProductBlueprintUsecase に HistoryRepo を注入
 	productBlueprintUC := uc.NewProductBlueprintUsecase(
@@ -323,10 +332,6 @@ func NewContainer(ctx context.Context) (*Container, error) {
 	trackingUC := uc.NewTrackingUsecase(trackingRepo)
 	userUC := uc.NewUserUsecase(userRepo)
 	walletUC := uc.NewWalletUsecase(walletRepo)
-
-	// ★ Company / Brand 用ドメインサービス（表示名解決用）
-	companySvc := companydom.NewService(companyRepo)
-	brandSvc := branddom.NewService(brandRepo)
 
 	// ★ Invitation 用メールクライアント & メーラー
 	//   → ここでのみ SendGrid を使用（会社名 + ブランド名表示）

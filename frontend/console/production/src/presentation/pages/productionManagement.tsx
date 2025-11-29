@@ -1,6 +1,6 @@
 // frontend/console/production/src/presentation/pages/productionManagement.tsx
 
-import React from "react";
+import React, { useEffect } from "react";
 import { useProductionManagement } from "../hook/useProductionManagement";
 import List from "../../../../shell/src/layout/List/List";
 
@@ -12,6 +12,11 @@ export default function ProductionManagement() {
     handleReset,
     handleRowClick,
   } = useProductionManagement();
+
+  // ===== 取得した rows の確認用ログ =====
+  useEffect(() => {
+    console.log("[ProductionManagement] rows:", rows);
+  }, [rows]);
 
   return (
     <div className="p-0">

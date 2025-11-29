@@ -60,10 +60,8 @@ export function useProductBlueprintManagement(): UseProductBlueprintManagementRe
   const load = useCallback(async () => {
     try {
       const uiRows = await fetchProductBlueprintManagementRows();
-      console.log("[useProductBlueprintManagement] fetched uiRows:", uiRows);
       setAllRows(uiRows);
-    } catch (err) {
-      console.error("[useProductBlueprintManagement] list load failed", err);
+    } catch {
       setAllRows([]);
     }
   }, []);

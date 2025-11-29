@@ -47,20 +47,57 @@ const formatDate = (iso?: string | null): string => {
 export async function loadProductionRows(): Promise<ProductionRow[]> {
   const items = await listProductionsHTTP();
 
-  const rows: ProductionRow[] = items.map((p: any) => {
-    const models = Array.isArray(p.models) ? p.models : [];
-    const totalQuantity = models.reduce(
-      (sum: number, m: any) => sum + (m?.quantity ?? 0),
+  console.log("[productionManagementService] fetched items:", items);
+
+  const rows: ProductionRow[] = items.map((raw: any) => {
+    // Models 配列（大文字 / 小文字両対応）
+    const rawModels = Array.isArray(raw.models)
+      ? raw.models
+      : Array.isArray(raw.Models)
+        ? raw.Models
+        : [];
+
+    // quantity / Quantity の両方に対応して総数計算
+    const totalQuantity = rawModels.reduce(
+      (sum: number, m: any) => sum + (m?.quantity ?? m?.Quantity ?? 0),
       0,
     );
 
+    // Firestore からの大文字キーを camelCase に寄せる
     const row: ProductionRow = {
-      ...(p as Production),
+      ...(raw as Production),
+
+      // ID
+      id: raw.id ?? raw.ID ?? "",
+
+      // 商品設計 ID
+      productBlueprintId:
+        raw.productBlueprintId ?? raw.ProductBlueprintID ?? "",
+
+      // 担当者 ID
+      assigneeId: raw.assigneeId ?? raw.AssigneeID ?? "",
+
+      // ステータス（service の Status をそのまま使う）
+      status: (raw.status ?? raw.Status ?? "") as ProductionStatus,
+
+      // 日付系（ISO 文字列想定）
+      printedAt: raw.printedAt ?? raw.PrintedAt ?? null,
+      createdAt: raw.createdAt ?? raw.CreatedAt ?? null,
+      updatedAt: raw.updatedAt ?? raw.UpdatedAt ?? null,
+
+      // models も最低限そのまま渡す（型は Production 側に依存）
+      models: rawModels,
+
       totalQuantity,
     };
 
     return row;
   });
+
+  console.log(
+    "[productionManagementService] rows with totalQuantity (normalized):",
+    rows,
+  );
 
   return rows;
 }
@@ -135,13 +172,17 @@ export function buildRowsView(params: {
     });
   }
 
-  return data.map<ProductionRowView>((p) => ({
+  const view = data.map<ProductionRowView>((p) => ({
     id: p.id,
     productBlueprintId: p.productBlueprintId,
     assigneeId: p.assigneeId,
-    status: p.status,
+    status: p.status, // ★ service の status をそのまま渡す
     totalQuantity: p.totalQuantity,
     printedAtLabel: formatDate(p.printedAt),
     createdAtLabel: formatDate(p.createdAt),
   }));
+
+  console.log("[productionManagementService] view rows:", view);
+
+  return view;
 }
