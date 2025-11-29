@@ -1,4 +1,4 @@
-// frontend/shared/ui/table.tsx
+// frontend\console\shell\src\shared\ui\table.tsx
 // Standalone Table UI primitives (no external imports, no JSX namespace types)
 
 /** Simple className merger */
