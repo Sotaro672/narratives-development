@@ -1,75 +1,59 @@
 // frontend/console/production/src/presentation/hook/useProductionCreate.tsx
-
 import * as React from "react";
 import { useNavigate } from "react-router-dom";
 
-import { fetchAllBrandsForCompany } from "../../../../brand/src/infrastructure/query/brandQuery";
-import type { Brand } from "../../../../brand/src/domain/entity/brand";
-
-import {
-  fetchProductBlueprintManagementRows,
-  type ProductBlueprintManagementRow,
-} from "../../../../productBlueprint/src/infrastructure/query/productBlueprintQuery";
-
-// ★ 商品設計 詳細取得サービス + ModelVariation 一覧
-import {
-  getProductBlueprintDetail,
-  listModelVariationsByProductBlueprintId,
-  type ModelVariationResponse,
-} from "../../../../productBlueprint/src/application/productBlueprintDetailService";
-
-// ★ itemType / fit の型
-import type {
-  ItemType,
-  Fit,
-} from "../../../../productBlueprint/src/domain/entity/catalog";
-
-// ★ currentMember.fullName, companyId 取得
 import { useAuth } from "../../../../shell/src/auth/presentation/hook/useCurrentMember";
 
-// ★ 担当者候補一覧（MemberRepository）
-import type { Member } from "../../../../member/src/domain/entity/member";
+// ★ アプリケーション層サービス
 import {
-  scopedFilterByCompanyId,
-  type MemberSort,
-} from "../../../../member/src/domain/repository/memberRepository";
-import { MemberRepositoryHTTP } from "../../../../member/src/infrastructure/http/memberRepositoryHTTP";
-import { getMemberFullName } from "../../../../member/src/domain/entity/member";
+  loadBrands,
+  buildBrandOptions,
+  loadProductBlueprints,
+  filterProductBlueprintsByBrand,
+  buildProductRows,
+  loadDetailAndModels,
+  buildSelectedForCard,
+  loadAssigneeCandidates,
+  buildAssigneeOptions,
+  mapModelVariationsToRows,
+} from "../../application/productionCreateService";
 
-type ProductBlueprintForCard = {
-  id: string;
-  productName: string;
-  brand?: string;
-
-  itemType?: ItemType;
-  fit?: Fit;
-  materials?: string;
-  weight?: number;
-  washTags?: string[];
-  productIdTag?: string;
-};
+import type {
+  Brand,
+  ProductBlueprintManagementRow,
+  Member,
+  ProductBlueprintForCard,
+  ModelVariationResponse,
+} from "../../application/productionCreateService";
 
 export function useProductionCreate() {
   const navigate = useNavigate();
 
+  // ★ currentMember から fullName / companyId を利用
   const { currentMember } = useAuth();
   const creator = currentMember?.fullName ?? "-";
   const companyId = currentMember?.companyId?.trim() ?? "";
 
+  // ==========================
+  // 商品設計一覧 / 選択状態
+  // ==========================
   const [allProductBlueprints, setAllProductBlueprints] =
     React.useState<ProductBlueprintManagementRow[]>([]);
-
   const [selectedId, setSelectedId] = React.useState<string | null>(null);
   const [selectedBrand, setSelectedBrand] = React.useState<string | null>(null);
 
+  // 選択中の商品設計の詳細 + ModelVariations
   const [selectedDetail, setSelectedDetail] = React.useState<any | null>(null);
-
   const [modelVariations, setModelVariations] = React.useState<
     ModelVariationResponse[]
   >([]);
 
+  // Colors（現状はダミー。将来 API 連携予定）
   const [colors] = React.useState<string[]>([]);
 
+  // ==========================
+  // 管理情報
+  // ==========================
   const [assignee, setAssignee] = React.useState("未設定");
   const [createdAt] = React.useState(() =>
     new Date().toLocaleDateString("ja-JP"),
@@ -79,48 +63,51 @@ export function useProductionCreate() {
     navigate("/production");
   }, [navigate]);
 
+  // ==========================
+  // ブランド一覧
+  // ==========================
   const [brands, setBrands] = React.useState<Brand[]>([]);
 
   React.useEffect(() => {
-    fetchAllBrandsForCompany("", true)
+    loadBrands()
       .then((items) => setBrands(items))
       .catch(() => setBrands([]));
   }, []);
 
   const brandOptions = React.useMemo(
-    () => brands.map((b) => b.name).filter(Boolean),
+    () => buildBrandOptions(brands),
     [brands],
   );
 
+  // ==========================
+  // 商品設計一覧取得
+  // ==========================
   React.useEffect(() => {
-    fetchProductBlueprintManagementRows()
-      .then((rows) => {
-        setAllProductBlueprints(rows);
-      })
+    loadProductBlueprints()
+      .then((rows) => setAllProductBlueprints(rows))
       .catch(() => setAllProductBlueprints([]));
   }, []);
 
-  const filteredBlueprints = React.useMemo(() => {
-    if (!selectedBrand) return [];
-    return allProductBlueprints.filter(
-      (pb) => pb.brandName === selectedBrand,
-    );
-  }, [allProductBlueprints, selectedBrand]);
+  // ブランドで商品設計を絞る
+  const filteredBlueprints = React.useMemo(
+    () => filterProductBlueprintsByBrand(allProductBlueprints, selectedBrand),
+    [allProductBlueprints, selectedBrand],
+  );
 
   const productRows = React.useMemo(
-    () =>
-      filteredBlueprints.map((pb) => ({
-        id: pb.id,
-        name: pb.productName,
-      })),
+    () => buildProductRows(filteredBlueprints),
     [filteredBlueprints],
   );
 
+  // 管理一覧上での選択行
   const selectedMgmtRow = React.useMemo(
     () => allProductBlueprints.find((pb) => pb.id === selectedId) ?? null,
     [allProductBlueprints, selectedId],
   );
 
+  // ==========================
+  // 詳細 + models の取得
+  // ==========================
   React.useEffect(() => {
     if (!selectedId) {
       setSelectedDetail(null);
@@ -130,53 +117,29 @@ export function useProductionCreate() {
 
     (async () => {
       try {
-        const [detail, models] = await Promise.all([
-          getProductBlueprintDetail(selectedId),
-          listModelVariationsByProductBlueprintId(selectedId),
-        ]);
-
-        setSelectedDetail(detail as any);
+        const { detail, models } = await loadDetailAndModels(selectedId);
+        setSelectedDetail(detail);
         setModelVariations(models);
-
-        console.log(
-          "[ProductionCreate] fetched model variations for productBlueprintId:",
-          selectedId,
-          models,
-        );
-      } catch (e) {
-        console.error("商品設計詳細/モデル一覧の取得に失敗しました:", e);
+      } catch {
         setSelectedDetail(null);
         setModelVariations([]);
       }
     })();
   }, [selectedId]);
 
-  const selectedForCard: ProductBlueprintForCard = selectedDetail
-    ? {
-        id: selectedDetail.id,
-        productName: selectedDetail.productName,
-        brand: selectedDetail.brandName ?? "",
-        itemType: selectedDetail.itemType as ItemType,
-        fit: selectedDetail.fit as Fit,
-        materials: selectedDetail.material,
-        weight: selectedDetail.weight,
-        washTags: selectedDetail.qualityAssurance ?? [],
-        productIdTag: selectedDetail.productIdTag?.type ?? "",
-      }
-    : selectedMgmtRow
-      ? {
-          id: selectedMgmtRow.id,
-          productName: selectedMgmtRow.productName,
-          brand: selectedMgmtRow.brandName,
-        }
-      : {
-          id: "",
-          productName: "",
-          brand: "",
-        };
+  // ProductBlueprintCard 用データ
+  const selectedProductBlueprintForCard: ProductBlueprintForCard =
+    React.useMemo(
+      () => buildSelectedForCard(selectedDetail, selectedMgmtRow),
+      [selectedDetail, selectedMgmtRow],
+    );
 
-  const hasSelected = selectedDetail != null || selectedMgmtRow != null;
+  const hasSelectedProductBlueprint =
+    selectedDetail != null || selectedMgmtRow != null;
 
+  // ==========================
+  // 担当者候補一覧
+  // ==========================
   const [assigneeCandidates, setAssigneeCandidates] = React.useState<Member[]>(
     [],
   );
@@ -191,22 +154,9 @@ export function useProductionCreate() {
     (async () => {
       try {
         setLoadingMembers(true);
-        const filter = scopedFilterByCompanyId(companyId, {
-          status: "active",
-        });
-
-        const sort: MemberSort = {
-          column: "name",
-          order: "asc",
-        };
-
-        const page: any = { number: 1, perPage: 200 };
-
-        const repo = new MemberRepositoryHTTP();
-        const result = await repo.list(page, filter);
-
-        setAssigneeCandidates(result.items ?? []);
-      } catch (e) {
+        const members = await loadAssigneeCandidates(companyId);
+        setAssigneeCandidates(members);
+      } catch {
         setAssigneeCandidates([]);
       } finally {
         setLoadingMembers(false);
@@ -215,14 +165,7 @@ export function useProductionCreate() {
   }, [companyId]);
 
   const assigneeOptions = React.useMemo(
-    () =>
-      assigneeCandidates.map((m) => {
-        const full = getMemberFullName(m);
-        return {
-          id: m.id,
-          name: full || m.email || m.id,
-        };
-      }),
+    () => buildAssigneeOptions(assigneeCandidates),
     [assigneeCandidates],
   );
 
@@ -230,28 +173,25 @@ export function useProductionCreate() {
     (id: string) => {
       const target = assigneeCandidates.find((m) => m.id === id);
       if (!target) return;
-      const full = getMemberFullName(target);
-      const name = full || target.email || target.id;
+
+      const match = assigneeOptions.find((o) => o.id === id);
+      const name = match?.name ?? target.email ?? target.id;
       setAssignee(name);
     },
-    [assigneeCandidates],
+    [assigneeCandidates, assigneeOptions],
   );
 
-  // ==================================================
-  // ★★★ ProductionQuantityCard 用 rows 変換（InventoryCard と同形式）
-  // ==================================================
-  const modelVariationsForCard = React.useMemo(() => {
-    return modelVariations.map((mv) => ({
-      modelCode: mv.modelNumber,
-      size: mv.size,
-      colorName: mv.color?.name ?? "",
-      colorCode: mv.color?.rgb
-        ? `#${mv.color.rgb.toString(16).padStart(6, "0")}`
-        : "#FFFFFF",
-      stock: 0,
-    }));
-  }, [modelVariations]);
+  // ==========================
+  // ProductionQuantityCard 用 rows 変換
+  // ==========================
+  const modelVariationsForCard = React.useMemo(
+    () => mapModelVariationsToRows(modelVariations),
+    [modelVariations],
+  );
 
+  // ==========================
+  // 保存（ダミー）
+  // ==========================
   const handleSave = React.useCallback(() => {
     if (!selectedId) {
       alert("商品設計を選択してください");
@@ -271,12 +211,15 @@ export function useProductionCreate() {
   }, [navigate, selectedId, colors, creator, assignee, modelVariations]);
 
   return {
+    // PageStyle 用
     onBack: handleBack,
     onSave: handleSave,
 
-    hasSelectedProductBlueprint: hasSelected,
-    selectedProductBlueprintForCard: selectedForCard,
+    // 左カラム
+    hasSelectedProductBlueprint,
+    selectedProductBlueprintForCard,
 
+    // 管理カード用
     assignee,
     creator,
     createdAt,
@@ -284,15 +227,18 @@ export function useProductionCreate() {
     loadingMembers,
     onSelectAssignee: handleSelectAssignee,
 
+    // ブランド選択用
     selectedBrand,
     brandOptions,
     selectBrand: setSelectedBrand,
 
+    // 商品設計テーブル用
     productRows,
     selectedProductId: selectedId,
     selectProductById: setSelectedId,
 
+    // ModelVariations とカード用 rows
     modelVariations,
-    modelVariationsForCard, // ← ★★★ 新しく返す！
+    modelVariationsForCard,
   };
 }

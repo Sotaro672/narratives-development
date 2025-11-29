@@ -121,7 +121,7 @@ const ProductionQuantityCard: React.FC<ProductionQuantityCardProps> = ({
               {rows.length === 0 && (
                 <TableRow>
                   <TableCell colSpan={4} className="ivc__empty">
-                    表示できる生産数データがありません。
+                    表示できる型番がありません。
                   </TableCell>
                 </TableRow>
               )}
