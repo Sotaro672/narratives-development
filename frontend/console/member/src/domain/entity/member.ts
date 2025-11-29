@@ -1,4 +1,4 @@
-// frontend/member/src/domain/entity/member.ts
+// frontend/console/member/src/domain/entity/member.ts
 
 /** Email バリデーション（backend の emailRe 相当） */
 const emailRe = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -18,6 +18,9 @@ export interface Member {
   lastName?: string | null;
   firstNameKana?: string | null;
   lastNameKana?: string | null;
+
+  /** 姓＋名を結合したフルネーム（lastName → firstName） */
+  fullName?: string | null;
 
   /** 空文字 or undefined の場合は「未設定」扱い（backend と同様の解釈） */
   email?: string | null;
@@ -127,7 +130,9 @@ export function createMember(params: {
       ? params.firstName
       : null;
   member.lastName =
-    params.lastName !== undefined && params.lastName !== null ? params.lastName : null;
+    params.lastName !== undefined && params.lastName !== null
+      ? params.lastName
+      : null;
   member.firstNameKana =
     params.firstNameKana !== undefined && params.firstNameKana !== null
       ? params.firstNameKana
@@ -143,6 +148,14 @@ export function createMember(params: {
     member.assignedBrands = dedup(params.assignedBrands);
   } else {
     member.assignedBrands = null;
+  }
+
+  // ★ fullName を lastName → firstName で組み立てる
+  {
+    const ln = (member.lastName ?? "").trim();
+    const fn = (member.firstName ?? "").trim();
+    const full = `${ln} ${fn}`.trim();
+    member.fullName = full !== "" ? full : null;
   }
 
   const error = validateMember(member);
@@ -189,12 +202,12 @@ export function validateMember(member: Member): MemberErrorCode | null {
 export function setPermissionsByName(
   member: Member,
   names: string[],
-  catalog: PermissionCatalogItem[]
+  catalog: PermissionCatalogItem[],
 ): Member {
   const allow = new Set(
     catalog
       .map((p) => p.name.trim())
-      .filter((n) => n.length > 0)
+      .filter((n) => n.length > 0),
   );
 
   const seen = new Set<string>();
@@ -217,12 +230,12 @@ export function setPermissionsByName(
 /** 現在の Permissions がカタログに含まれるか検証（backend: ValidatePermissions 相当） */
 export function validatePermissionsWithCatalog(
   member: Member,
-  catalog: PermissionCatalogItem[]
+  catalog: PermissionCatalogItem[],
 ): boolean {
   const allow = new Set(
     catalog
       .map((p) => p.name.trim())
-      .filter((n) => n.length > 0)
+      .filter((n) => n.length > 0),
   );
 
   return member.permissions.every((raw) => allow.has(raw.trim()));
@@ -233,7 +246,7 @@ export function hasPermission(member: Member, name: string): boolean {
   const target = name.trim().toLowerCase();
   if (!target) return false;
   return member.permissions.some(
-    (p) => p.trim().toLowerCase() === target
+    (p) => p.trim().toLowerCase() === target,
   );
 }
 

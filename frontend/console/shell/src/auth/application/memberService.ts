@@ -1,3 +1,4 @@
+//frontend\console\shell\src\auth\application\memberService.ts
 /// <reference types="vite/client" />
 
 // frontend/console/shell/src/auth/application/memberService.ts

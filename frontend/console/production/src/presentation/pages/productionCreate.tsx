@@ -40,7 +40,7 @@ export default function ProductionCreate() {
     assignee,
     creator,
     createdAt,
-    setAssignee,
+    // setAssignee,   ← 使用しないため削除（必要な場合は残しても問題なし）
     selectedBrand,
     brandOptions,
     selectBrand,
@@ -74,7 +74,8 @@ export default function ProductionCreate() {
           assigneeName={assignee}
           createdByName={creator}
           createdAt={createdAt}
-          onEditAssignee={() => setAssignee("変更済み担当者")}
+          // ★ モック削除：クリックしても何もしない
+          onEditAssignee={() => {}}
         />
 
         {/* ブランド選択 */}
@@ -92,8 +93,7 @@ export default function ProductionCreate() {
 
               <PopoverContent>
                 <div className="pb-select__list">
-
-                  {/* ← 「すべてのブランド」削除済み */}
+                  {/* 「すべてのブランド」削除済み */}
 
                   {brandOptions.map((b) => (
                     <button
