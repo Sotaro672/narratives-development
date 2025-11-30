@@ -14,10 +14,10 @@ export type ProductionRow = Production & {
   totalQuantity: number;
   assigneeName?: string;
 
-  /** ★ backend から受け取る productBlueprintName（なければ fallback で ID を使う） */
+  /** backend から受け取る productBlueprintName（なければ fallback で ID を使う） */
   productBlueprintName?: string;
 
-  /** ★ backend から受け取る brandName（なければ空文字） */
+  /** backend から受け取る brandName（なければ空文字） */
   brandName?: string;
 };
 
@@ -32,7 +32,6 @@ export type ProductionRowView = {
   totalQuantity: number;
   printedAtLabel: string;
   createdAtLabel: string;
-  /** ★ 一覧表示・ログ用のブランド名 */
   brandName: string;
 };
 
@@ -56,8 +55,6 @@ const formatDate = (iso?: string | null): string => {
 export async function loadProductionRows(): Promise<ProductionRow[]> {
   const items = await listProductionsHTTP();
 
-  console.log("[productionManagementService] fetched items:", items);
-
   const rows: ProductionRow[] = items.map((raw: any) => {
     const rawModels = Array.isArray(raw.models)
       ? raw.models
@@ -79,10 +76,7 @@ export async function loadProductionRows(): Promise<ProductionRow[]> {
       id: raw.id ?? raw.ID ?? "",
       productBlueprintId: blueprintId,
 
-      /** ★ backend から productBlueprintName が来ていればそれを優先、なければ ID を使う */
       productBlueprintName: raw.productBlueprintName ?? blueprintId,
-
-      /** ★ backend から brandName を受け取る（なければ空文字） */
       brandName: raw.brandName ?? raw.BrandName ?? "",
 
       assigneeId: raw.assigneeId ?? raw.AssigneeID ?? "",
@@ -99,20 +93,6 @@ export async function loadProductionRows(): Promise<ProductionRow[]> {
 
     return row;
   });
-
-  console.log(
-    "[productionManagementService] rows with totalQuantity (normalized):",
-    rows,
-    // ★ productBlueprintName / brandName を含めてログ出力
-    rows.map((r) => ({
-      id: r.id,
-      productBlueprintId: r.productBlueprintId,
-      productBlueprintName: r.productBlueprintName,
-      brandName: r.brandName,
-      assigneeId: r.assigneeId,
-      assigneeName: r.assigneeName,
-    })),
-  );
 
   return rows;
 }
@@ -179,18 +159,6 @@ export function buildRowsView(params: {
     createdAtLabel: formatDate(p.createdAt),
     brandName: p.brandName ?? "",
   }));
-
-  console.log(
-    "[productionManagementService] view rows:",
-    view.map((v) => ({
-      id: v.id,
-      productBlueprintId: v.productBlueprintId,
-      productBlueprintName: v.productBlueprintName,
-      brandName: v.brandName,
-      assigneeId: v.assigneeId,
-      assigneeName: v.assigneeName,
-    })),
-  );
 
   return view;
 }

@@ -32,6 +32,7 @@ export default function ProductionDetail() {
 
     // 戻る
     onBack,
+    onSave, // ★ hook からの保存処理
 
     // データ関連
     production,
@@ -67,13 +68,13 @@ export default function ProductionDetail() {
   }, [switchToView]);
 
   const handleSave = React.useCallback(() => {
-    console.log("[ProductionDetail] save clicked, rows:", quantityRows);
-    switchToView();
-  }, [quantityRows, switchToView]);
+    // ★ ここで hook の onSave を呼ぶ
+    void onSave();
+  }, [onSave]);
 
   const handleDelete = React.useCallback(() => {
-    console.log("[ProductionDetail] delete clicked:", production);
-  }, [production]);
+    // 今後削除処理を実装する場合はここに追加
+  }, []);
 
   return (
     <PageStyle
@@ -156,7 +157,7 @@ export default function ProductionDetail() {
         <AdminCard
           title="管理情報"
           assigneeName={assigneeDisplay}
-          assigneeCandidates={[]} // 詳細画面では担当者変更しないので空
+          assigneeCandidates={[]} // 詳細画面では編集しないので空
           loadingMembers={false}
           createdByName={creator}
           createdAt={createdAtLabel}

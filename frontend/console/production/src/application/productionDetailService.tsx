@@ -128,7 +128,6 @@ export async function loadProductionDetail(
     totalQuantity,
   };
 
-  // 一覧から名前解決
   try {
     const listItems = await listProductionsHTTP();
 
@@ -178,7 +177,7 @@ export async function loadProductBlueprintDetail(
   productBlueprintId: string,
 ): Promise<ProductBlueprintDetail | null> {
   const id = productBlueprintId?.trim();
- 	if (!id) return null;
+  if (!id) return null;
 
   const token = await getIdTokenOrThrow();
   const safeId = encodeURIComponent(id);
@@ -285,7 +284,7 @@ export async function loadModelVariationIndexByProductBlueprintId(
   const id = productBlueprintId.trim();
   if (!id) return {};
 
- 	const list = await listModelVariationsByProductBlueprintId(id);
+  const list = await listModelVariationsByProductBlueprintId(id);
   return buildModelIndexFromVariations(list);
 }
 
@@ -337,14 +336,49 @@ export function buildQuantityRowsFromModels(
 }
 
 /* ---------------------------------------------------------
- * 保存前 payload ログ（onSave 時に rows を表示）
+ * Production 更新リクエスト（quantity + assigneeId）
  * --------------------------------------------------------- */
-export function logProductionQuantitySavePayload(
-  rows: ProductionQuantityRow[],
-): void {
-  console.log(
-    "%c[productionDetailService] onSave payload (ProductionQuantityRow[]) ↓",
-    "color: #0B5FFF; font-weight: bold;",
-  );
-  console.log(rows);
+export async function updateProductionDetail(params: {
+  productionId: string;
+  rows: ProductionQuantityRow[];
+  assigneeId?: string | null;
+}): Promise<ProductionDetail | null> {
+  const { productionId, rows, assigneeId } = params;
+  const id = productionId.trim();
+  if (!id) throw new Error("productionId is required");
+
+  const token = await getIdTokenOrThrow();
+  const safeId = encodeURIComponent(id);
+
+  const modelsPayload = rows.map((r) => ({
+    modelId: r.id,
+    quantity: Number.isFinite(Number(r.quantity))
+      ? Math.max(0, Math.floor(Number(r.quantity)))
+      : 0,
+  }));
+
+  const payload: any = {
+    assigneeId: assigneeId ?? null,
+    models: modelsPayload,
+  };
+
+  const res = await fetch(`${BACKEND_API_BASE}/productions/${safeId}`, {
+    method: "PUT",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${token}`,
+    },
+    body: JSON.stringify(payload),
+  });
+
+  if (!res.ok) {
+    const body = await res.text().catch(() => "");
+    throw new Error(
+      `Production update failed: ${res.status} ${res.statusText}${
+        body ? ` - ${body}` : ""
+      }`,
+    );
+  }
+
+  return loadProductionDetail(id);
 }

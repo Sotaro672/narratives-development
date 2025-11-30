@@ -13,11 +13,6 @@ export default function ProductionManagement() {
     handleRowClick,
   } = useProductionManagement();
 
-  // ===== rows をログ ==========
-  useEffect(() => {
-    console.log("[ProductionManagement] rows:", rows);
-  }, [rows]);
-
   return (
     <div className="p-0">
       <List

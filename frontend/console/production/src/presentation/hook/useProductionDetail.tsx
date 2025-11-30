@@ -9,6 +9,7 @@ import {
   loadProductBlueprintDetail,
   loadModelVariationIndexByProductBlueprintId,
   buildQuantityRowsFromModels,
+  updateProductionDetail,
   type ProductionDetail,
   type ProductBlueprintDetail,
   type ModelVariationSummary,
@@ -41,7 +42,7 @@ export function useProductionDetail() {
     [],
   );
 
-  // ★ AdminCard 用のモード（単純に mode をそのまま渡す）
+  // AdminCard 用モード
   const adminMode: "view" | "edit" = mode;
 
   const [production, setProduction] = React.useState<ProductionDetail | null>(
@@ -168,7 +169,7 @@ export function useProductionDetail() {
   }, [production?.productBlueprintId]);
 
   // ======================================================
-  // production.models × modelIndex を quantityRows へ変換
+  // production.models × modelIndex → quantityRows
   // ======================================================
   React.useEffect(() => {
     if (!production?.models || !Array.isArray((production as any).models)) {
@@ -187,18 +188,14 @@ export function useProductionDetail() {
       const quantity = row.quantity ?? 0;
 
       const createRow: CreateQuantityRow & {
-        // 追加情報（必要になったときのために保持）
         id?: string;
       } = {
-        // ProductionQuantityRow 型に揃える
         modelVariationId: row.id,
         modelNumber: row.modelNumber,
         size: row.size,
         color: row.color,
         rgb: row.rgb ?? null,
         quantity,
-
-        // 追加情報
         id: row.id,
       };
 
@@ -209,14 +206,36 @@ export function useProductionDetail() {
   }, [production, modelIndex]);
 
   // ======================================================
-  // onSave で渡された rows をログ出力するためのヘルパー
+  // 保存処理（ログ削除済）
   // ======================================================
-  const logSaveRows = React.useCallback(
-    (rows: CreateQuantityRow[]) => {
-      console.log("[useProductionDetail] onSave rows payload:", rows);
-    },
-    [],
-  );
+  const onSave = React.useCallback(async () => {
+    if (!productionId || !production) return;
+
+    try {
+      const rowsForUpdate: DetailQuantityRow[] = quantityRows.map((row) => ({
+        id: row.modelVariationId,
+        modelNumber: row.modelNumber,
+        size: row.size,
+        color: row.color,
+        rgb: row.rgb ?? null,
+        quantity: row.quantity ?? 0,
+      }));
+
+      const updated = await updateProductionDetail({
+        productionId,
+        rows: rowsForUpdate,
+        assigneeId: production.assigneeId ?? null,
+      });
+
+      if (updated) {
+        setProduction(updated);
+      }
+
+      setMode("view");
+    } catch {
+      alert("更新に失敗しました");
+    }
+  }, [productionId, production, quantityRows]);
 
   // ======================================================
   // 戻る
@@ -226,7 +245,6 @@ export function useProductionDetail() {
   }, [navigate]);
 
   return {
-    // モード関連（ページ全体）
     mode,
     isViewMode,
     isEditMode,
@@ -234,32 +252,24 @@ export function useProductionDetail() {
     switchToEdit,
     toggleMode,
 
-    // AdminCard 用のモード
     adminMode,
 
-    // 画面制御
     onBack: handleBack,
+    onSave,
 
-    // Production 詳細データ関連
     productionId: productionId ?? null,
     production,
     setProduction,
     loading,
     error,
 
-    // ProductBlueprint 詳細データ関連
     productBlueprint,
     pbLoading,
     pbError,
 
-    // ProductionQuantityCard 用
     quantityRows,
     setQuantityRows,
 
-    // onSave から rows を渡して呼び出せるログ関数
-    logSaveRows,
-
-    // 参考情報
     creator,
   };
 }

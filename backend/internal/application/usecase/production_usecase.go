@@ -234,6 +234,42 @@ func (u *ProductionUsecase) Save(ctx context.Context, p productiondom.Production
 	return u.repo.Save(ctx, p)
 }
 
+// Update updates only quantity (models) and assigneeId.
+//   - 他の項目は既存値を維持する。
+//   - assigneeId: patch.AssigneeID が非空なら上書き
+//   - quantity: patch.Models が与えられていれば、それを現在の Models として保存（数量更新用想定）
+func (u *ProductionUsecase) Update(ctx context.Context, id string, patch productiondom.Production) (productiondom.Production, error) {
+	id = strings.TrimSpace(id)
+	if id == "" {
+		return productiondom.Production{}, productiondom.ErrInvalidID
+	}
+
+	// 既存データを取得
+	current, err := u.repo.GetByID(ctx, id)
+	if err != nil {
+		return productiondom.Production{}, err
+	}
+
+	// ★ assigneeId のみ更新（非空なら上書き）
+	if strings.TrimSpace(patch.AssigneeID) != "" {
+		current.AssigneeID = strings.TrimSpace(patch.AssigneeID)
+	}
+
+	// ★ quantity（Models）のみ更新
+	//    フロントからは「既存モデルの数量更新用」の Models が渡される想定。
+	//    ここでは Models 全体を差し替えるが、他フィールドはフロント側で
+	//    既存値を維持したまま送ってもらう設計。
+	if len(patch.Models) > 0 {
+		current.Models = patch.Models
+	}
+
+	// 更新日時を更新
+	current.UpdatedAt = u.now().UTC()
+
+	// 他の項目は current をそのまま再保存
+	return u.repo.Save(ctx, current)
+}
+
 func (u *ProductionUsecase) Delete(ctx context.Context, id string) error {
 	return u.repo.Delete(ctx, strings.TrimSpace(id))
 }

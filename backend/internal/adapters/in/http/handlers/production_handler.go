@@ -116,6 +116,8 @@ func (h *ProductionHandler) post(w http.ResponseWriter, r *http.Request) {
 
 // ------------------------------------------------------------
 // PUT /productions/{id}（UPDATE）
+//   - 更新対象: quantity(models) と assigneeId のみ（Usecase.Update が制御）
+//
 // ------------------------------------------------------------
 func (h *ProductionHandler) update(w http.ResponseWriter, r *http.Request, id string) {
 	ctx := r.Context()
@@ -138,18 +140,15 @@ func (h *ProductionHandler) update(w http.ResponseWriter, r *http.Request, id st
 	// パスの ID を優先する
 	req.ID = id
 
-	// ---- ★ ログ追加：更新内容の確認 ----
-	_ = json.NewEncoder(w).Encode(map[string]interface{}{
-		"debug_update_payload": req,
-	})
-
-	// データ更新実行（Create と同じく Save を呼ぶ設計）
-	p, err := h.uc.Save(ctx, req)
+	// ★ Usecase.Update を呼び出し、quantity / assigneeId だけ更新
+	p, err := h.uc.Update(ctx, id, req)
 	if err != nil {
 		writeProductionErr(w, err)
 		return
 	}
 
+	// 200 OK（明示しなくても Encode で 200 だが、わかりやすくしておいてもOK）
+	// w.WriteHeader(http.StatusOK)
 	_ = json.NewEncoder(w).Encode(p)
 }
 
