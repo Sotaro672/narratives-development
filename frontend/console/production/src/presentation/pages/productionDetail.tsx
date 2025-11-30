@@ -6,13 +6,19 @@ import AdminCard from "../../../../admin/src/presentation/components/AdminCard";
 
 import ProductBlueprintCard from "../../../../productBlueprint/src/presentation/components/productBlueprintCard";
 import ProductionQuantityCard from "../components/productionQuantityCard";
-import type { ProductionQuantityRow } from "../../application/productionCreateService";
 
 import { useProductionDetail } from "../hook/useProductionDetail";
 import "../styles/production.css";
 
 export default function ProductionDetail() {
-  const { onBack, production, loading, error, creator } = useProductionDetail();
+  const {
+    onBack,
+    production,
+    loading,
+    error,
+    creator,
+    quantityRows, // ★ Hook から受け取る
+  } = useProductionDetail();
 
   // AdminCard 用の表示値
   const assigneeDisplay =
@@ -23,38 +29,6 @@ export default function ProductionDetail() {
   const createdAtLabel = production?.createdAt
     ? new Date(production.createdAt).toLocaleDateString("ja-JP")
     : "-";
-
-  // ProductionQuantityCard 用: Production.models → ProductionQuantityRow[] にマッピング
-  const quantityRows: ProductionQuantityRow[] = React.useMemo(() => {
-    if (!production) return [];
-
-    const rawModels = Array.isArray((production as any).models)
-      ? ((production as any).models as any[])
-      : [];
-
-    return rawModels.map((m: any, idx: number): ProductionQuantityRow => ({
-      // ★ 必須: modelVariationId
-      modelVariationId:
-        m.modelVariationId ?? m.id ?? m.variationId ?? `variation-${idx}`,
-
-      // モデル番号 / 型番
-      modelCode: m.modelCode ?? m.modelNumber ?? `#${idx + 1}`,
-
-      // サイズ
-      size: m.size ?? m.sizeLabel ?? "",
-
-      // カラー名
-      colorName: m.colorName ?? "",
-
-      // カラーコード（例: "#ffffff" / "rgb(...)"）
-      colorCode:
-        m.colorCode ??
-        (typeof m.colorRgb === "string" ? m.colorRgb : undefined),
-
-      // 生産数
-      stock: m.quantity ?? m.stock ?? 0,
-    }));
-  }, [production]);
 
   return (
     <PageStyle layout="grid-2" title="生産詳細" onBack={onBack}>
@@ -91,7 +65,7 @@ export default function ProductionDetail() {
             {/* ★ モデル別 生産数一覧（閲覧モード） */}
             <ProductionQuantityCard
               title="モデル別 生産数一覧"
-              rows={quantityRows}
+              rows={quantityRows} // ★ Hook から渡された rows をそのまま使用
               mode="view"
             />
           </>
@@ -114,3 +88,4 @@ export default function ProductionDetail() {
     </PageStyle>
   );
 }
+

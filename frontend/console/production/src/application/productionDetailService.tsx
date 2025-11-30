@@ -5,36 +5,27 @@ import type {
   ProductionStatus,
 } from "../../../shell/src/shared/types/production";
 import { ProductionRepositoryHTTP } from "../infrastructure/http/productionRepositoryHTTP";
+import { listProductionsHTTP } from "../infrastructure/query/productionQuery";
 
 /**
  * 詳細表示用型
- * - totalQuantity 付与
- * - assigneeName / productBlueprintName / brandName を含む
  */
 export type ProductionDetail = Production & {
   totalQuantity: number;
   assigneeName?: string;
   productBlueprintName?: string;
-  brandName?: string; // ★ 新規追加
+  brandName?: string;
 };
 
-/**
- * Production 1件取得
- * - backend フィールド名揺れに対応
- * - models から totalQuantity を算出
- */
 export async function loadProductionDetail(
   productionId: string,
 ): Promise<ProductionDetail | null> {
   if (!productionId) return null;
 
   const repo = new ProductionRepositoryHTTP();
-
-  // 取得
   const raw = (await repo.getById(productionId)) as any;
   if (!raw) return null;
 
-  // --- models 正規化 ---
   const rawModels = Array.isArray(raw.models)
     ? raw.models
     : Array.isArray(raw.Models)
@@ -49,43 +40,84 @@ export async function loadProductionDetail(
   const blueprintId =
     raw.productBlueprintId ?? raw.ProductBlueprintID ?? "";
 
-  // --- brandName の吸収（一覧と同様） ---
-  const brandName =
-    raw.brandName ??
-    raw.BrandName ??
-    raw.brand ??
-    raw.Brand ??
-    "";
-
-  const detail: ProductionDetail = {
+  let detail: ProductionDetail = {
     ...(raw as Production),
-
     id: raw.id ?? raw.ID ?? "",
     productBlueprintId: blueprintId,
-
-    // productBlueprintName（なければ ID）
     productBlueprintName:
       raw.productBlueprintName ??
       raw.ProductBlueprintName ??
       blueprintId,
-
-    // brandName（一覧と揃える）
-    brandName,
-
+    brandName:
+      raw.brandName ??
+      raw.BrandName ??
+      raw.brand ??
+      raw.Brand ??
+      "",
     assigneeId: raw.assigneeId ?? raw.AssigneeID ?? "",
     assigneeName: raw.assigneeName ?? raw.AssigneeName ?? "",
-
     status: (raw.status ?? raw.Status ?? "") as ProductionStatus,
-
     printedAt: raw.printedAt ?? raw.PrintedAt ?? null,
     createdAt: raw.createdAt ?? raw.CreatedAt ?? null,
     updatedAt: raw.updatedAt ?? raw.UpdatedAt ?? null,
-
     models: rawModels,
     totalQuantity,
   };
 
-  console.log("[productionDetailService] loaded detail:", detail);
+  // =====================================================
+  // ★ 一覧データからの名前解決（productBlueprintName / brandName / assigneeName）
+  // =====================================================
+  try {
+    if (
+      !detail.productBlueprintName ||
+      detail.productBlueprintName === detail.productBlueprintId ||
+      !detail.brandName ||
+      !detail.assigneeName
+    ) {
+      const listItems = await listProductionsHTTP();
 
+      const match = (listItems as any[]).find((item) => {
+        const itemId = item.id ?? item.ID ?? "";
+        const itemBlueprintId =
+          item.productBlueprintId ?? item.ProductBlueprintID ?? "";
+        return (
+          itemId === detail.id ||
+          (itemBlueprintId &&
+            itemBlueprintId === detail.productBlueprintId)
+        );
+      });
+
+      if (match) {
+        const resolvedBlueprintName =
+          match.productBlueprintName ??
+          match.ProductBlueprintName ??
+          detail.productBlueprintId;
+
+        const resolvedBrandName =
+          match.brandName ?? match.BrandName ?? "";
+
+        const resolvedAssigneeName =
+          match.assigneeName ?? match.AssigneeName ?? "";
+
+        detail = {
+          ...detail,
+          productBlueprintName:
+            detail.productBlueprintName &&
+            detail.productBlueprintName !== detail.productBlueprintId
+              ? detail.productBlueprintName
+              : resolvedBlueprintName,
+          brandName: detail.brandName || resolvedBrandName,
+          assigneeName: detail.assigneeName || resolvedAssigneeName,
+        };
+      }
+    }
+  } catch (e) {
+    console.warn(
+      "[productionDetailService] failed to resolve names from list:",
+      e,
+    );
+  }
+
+  console.log("[productionDetailService] loaded detail:", detail);
   return detail;
 }
