@@ -315,8 +315,12 @@ func NewContainer(ctx context.Context) (*Container, error) {
 	permissionUC := uc.NewPermissionUsecase(permissionRepo)
 	productUC := uc.NewProductUsecase(productRepo)
 
-	// ★ ProductionUsecase に member.Service を注入
-	productionUC := uc.NewProductionUsecase(productionRepo, memberSvc)
+	// ★ ProductionUsecase に member.Service + ProductBlueprintRepo を注入
+	productionUC := uc.NewProductionUsecase(
+		productionRepo,
+		memberSvc,
+		productBlueprintRepo,
+	)
 
 	// ★ ProductBlueprintUsecase に HistoryRepo を注入
 	productBlueprintUC := uc.NewProductBlueprintUsecase(

@@ -128,7 +128,6 @@ type Repository interface {
 	// Read (live)
 	GetByID(ctx context.Context, id string) (ProductBlueprint, error)
 	List(ctx context.Context, filter Filter, sort Sort, page Page) (PageResult, error)
-	Count(ctx context.Context, filter Filter) (int, error)
 
 	// 存在確認（adapter の Exists を port に昇格）
 	Exists(ctx context.Context, id string) (bool, error)

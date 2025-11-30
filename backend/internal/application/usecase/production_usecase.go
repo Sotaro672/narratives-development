@@ -10,6 +10,10 @@ import (
 	productiondom "narratives/internal/domain/production"
 )
 
+// ============================================================
+// Ports
+// ============================================================
+
 // ProductionRepo defines the minimal persistence port needed by ProductionUsecase.
 type ProductionRepo interface {
 	GetByID(ctx context.Context, id string) (productiondom.Production, error)
@@ -23,23 +27,39 @@ type ProductionRepo interface {
 	Delete(ctx context.Context, id string) error
 }
 
-// ★ フロント用 DTO: 担当者名付き Production
+// ★ フロント用 DTO: 担当者名 + プロダクト名付き Production
 type ProductionWithAssigneeName struct {
 	productiondom.Production
-	AssigneeName string `json:"assigneeName"`
+	AssigneeName         string `json:"assigneeName"`
+	ProductBlueprintName string `json:"productBlueprintName"`
 }
+
+// ============================================================
+// Usecase
+// ============================================================
 
 // ProductionUsecase orchestrates production operations.
 type ProductionUsecase struct {
 	repo      ProductionRepo
 	memberSvc *memberdom.Service
-	now       func() time.Time
+
+	// ★ productBlueprintId → ProductName 解決用
+	//   interface 自体は productBlueprint_usecase.go 側で定義済みの
+	//   `type ProductBlueprintRepo interface {...}` をそのまま利用する。
+	pbRepo ProductBlueprintRepo
+
+	now func() time.Time
 }
 
-func NewProductionUsecase(repo ProductionRepo, memberSvc *memberdom.Service) *ProductionUsecase {
+func NewProductionUsecase(
+	repo ProductionRepo,
+	memberSvc *memberdom.Service,
+	pbRepo ProductBlueprintRepo,
+) *ProductionUsecase {
 	return &ProductionUsecase{
 		repo:      repo,
 		memberSvc: memberSvc,
+		pbRepo:    pbRepo,
 		now:       time.Now,
 	}
 }
@@ -78,7 +98,26 @@ func (u *ProductionUsecase) ResolveAssigneeName(ctx context.Context, assigneeID 
 	return u.memberSvc.GetNameLastFirstByID(ctx, assigneeID)
 }
 
-// ★ 担当者名付き一覧（/productions 用）
+// ★ productBlueprintId からプロダクト名を解決する resolver 的メソッド
+//   - pbRepo が設定されていない場合や ID が空文字の場合は "" を返す
+func (u *ProductionUsecase) ResolveProductBlueprintName(ctx context.Context, blueprintID string) (string, error) {
+	if u.pbRepo == nil {
+		return "", nil
+	}
+
+	blueprintID = strings.TrimSpace(blueprintID)
+	if blueprintID == "" {
+		return "", nil
+	}
+
+	pb, err := u.pbRepo.GetByID(ctx, blueprintID)
+	if err != nil {
+		return "", err
+	}
+	return strings.TrimSpace(pb.ProductName), nil
+}
+
+// ★ 担当者名 + プロダクト名付き一覧（/productions 用）
 func (u *ProductionUsecase) ListWithAssigneeName(ctx context.Context) ([]ProductionWithAssigneeName, error) {
 	list, err := u.repo.List(ctx)
 	if err != nil {
@@ -88,18 +127,26 @@ func (u *ProductionUsecase) ListWithAssigneeName(ctx context.Context) ([]Product
 	out := make([]ProductionWithAssigneeName, 0, len(list))
 
 	for _, p := range list {
+		// 担当者名
 		name := ""
-
-		// memberSvc が DI されていて、assigneeId が空でなければ名前を解決
 		if u.memberSvc != nil && strings.TrimSpace(p.AssigneeID) != "" {
 			if n, err := u.memberSvc.GetNameLastFirstByID(ctx, p.AssigneeID); err == nil {
 				name = n
 			}
 		}
 
+		// プロダクト名
+		productName := ""
+		if u.pbRepo != nil && strings.TrimSpace(p.ProductBlueprintID) != "" {
+			if pb, err := u.pbRepo.GetByID(ctx, p.ProductBlueprintID); err == nil {
+				productName = strings.TrimSpace(pb.ProductName)
+			}
+		}
+
 		out = append(out, ProductionWithAssigneeName{
-			Production:   p,
-			AssigneeName: name,
+			Production:           p,
+			AssigneeName:         name,
+			ProductBlueprintName: productName,
 		})
 	}
 
