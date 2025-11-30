@@ -333,7 +333,7 @@ export function buildQuantityRowsFromModels(
 
     // 数量
     const quantityRaw =
-      m.quantity ?? m.Quantity ?? m.stock ?? m.Stock ?? 0;
+      m.quantity ?? 0;
     const quantity = Number.isFinite(Number(quantityRaw))
       ? Math.max(0, Math.floor(Number(quantityRaw)))
       : 0;

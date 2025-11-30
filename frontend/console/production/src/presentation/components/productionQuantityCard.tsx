@@ -60,12 +60,12 @@ const ProductionQuantityCard: React.FC<ProductionQuantityCardProps> = ({
   const isEditable = mode === "edit";
 
   // 生産数合計を算出
-  const totalStock = React.useMemo(
-    () => rows.reduce((sum, r) => sum + (r.stock || 0), 0),
+  const totalQuantity = React.useMemo(
+    () => rows.reduce((sum, r) => sum + (r.quantity || 0), 0),
     [rows],
   );
 
-  const handleChangeStock = React.useCallback(
+  const handleChangeQuantity = React.useCallback(
     (index: number, value: string) => {
       if (!onChangeRows) return;
 
@@ -74,7 +74,7 @@ const ProductionQuantityCard: React.FC<ProductionQuantityCardProps> = ({
       const safe = Number.isFinite(n) ? n : 0;
 
       const next = rows.map((row, i) =>
-        i === index ? { ...row, stock: safe } : row,
+        i === index ? { ...row, quantity: safe } : row,
       );
       onChangeRows(next);
     },
@@ -145,21 +145,21 @@ const ProductionQuantityCard: React.FC<ProductionQuantityCardProps> = ({
                         {row.colorName}
                       </span>
                     </TableCell>
-                    <TableCell className="ivc__stock">
+                    <TableCell className="ivc__quantity">
                       {isEditable ? (
                         <Input
                           type="number"
                           min={0}
                           step={1}
-                          value={row.stock ?? 0}
+                          value={row.quantity ?? 0}
                           onChange={(e) =>
-                            handleChangeStock(idx, e.target.value)
+                            handleChangeQuantity(idx, e.target.value)
                           }
-                          className="ivc__stock-input w-20 text-right"
+                          className="ivc__quantity-input w-20 text-right"
                           aria-label={`${row.modelCode} の生産数`}
                         />
                       ) : (
-                        <span className="ivc__stock-number">{row.stock}</span>
+                        <span className="ivc__quantity-number">{row.quantity}</span>
                       )}
                     </TableCell>
                   </TableRow>
@@ -185,7 +185,7 @@ const ProductionQuantityCard: React.FC<ProductionQuantityCardProps> = ({
                     合計
                   </TableCell>
                   <TableCell className="ivc__total-value">
-                    <strong>{totalStock}</strong>
+                    <strong>{totalQuantity}</strong>
                   </TableCell>
                 </TableRow>
               )}

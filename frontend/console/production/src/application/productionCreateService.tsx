@@ -64,7 +64,7 @@ export type ProductionQuantityRow = {
   size: string;
   colorName: string;
   colorCode?: string;
-  stock: number;
+  quantity: number;
 };
 
 // ======================================================================
@@ -195,7 +195,7 @@ export function mapModelVariationsToRows(
       size: mv.size,
       colorName: mv.color?.name ?? "",
       colorCode,
-      stock: 0,
+      quantity: 0,
     };
   });
 }
@@ -217,7 +217,7 @@ export function buildProductionRequest(params: {
     assigneeId,
     models: quantities.map((q) => ({
       modelId: q.modelVariationId,
-      quantity: q.stock,
+      quantity: q.quantity,
     })),
     status: "planned",
     createdBy: creatorId,

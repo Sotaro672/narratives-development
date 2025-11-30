@@ -224,7 +224,7 @@ export function useProductionDetail() {
   //    - size
   //    - colorName
   //    - colorCode
-  //    - stock
+  //    - quantity
   //    に変換しつつ、追加情報（rgb / quantity / modelNumber など）も
   //    オブジェクトには保持しておく。
   // --------------------------
@@ -259,14 +259,13 @@ export function useProductionDetail() {
         size: row.size,
         colorName: row.color,
         colorCode: "", // 現状は色情報は name のみなので空
-        stock: quantity,
+        quantity: quantity,
 
         // 追加情報
         id: row.id,
         modelNumber: row.modelNumber,
         color: row.color,
         rgb: row.rgb ?? null,
-        quantity,
       };
 
       return createRow;
