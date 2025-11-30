@@ -1,4 +1,3 @@
-// frontend/console/production/src/infrastructure/api/productionDetailApi.ts
 // ======================================================================
 // Infrastructure API for Production Detail
 //   - Production 本体の取得
@@ -29,7 +28,6 @@ export async function fetchProductionById(
   const repo = new ProductionRepositoryHTTP();
 
   try {
-    // Repository 側で使っている Production 型と揃えるため、そのままの型を使用
     const data = (await repo.getById(productionId)) as Production;
     console.log("[productionDetailApi] fetchProductionById:", {
       productionId,
@@ -47,13 +45,11 @@ export async function fetchProductionById(
 
 // ======================================================================
 // ProductBlueprint 詳細 + ModelVariations API
-//   - production が持つ productBlueprintId を使って取得する想定
-//   - ProductBlueprintDetail 型は productBlueprint 側で export されていないため、detail は any 扱い
 // ======================================================================
 export async function fetchProductBlueprintDetailForProduction(
   productBlueprintId: string | null | undefined,
 ): Promise<{
-  detail: any | null; // ProductBlueprintDetail が export されていないので any で受ける
+  detail: any | null;
   models: ModelVariationResponse[];
 }> {
   const pbId = (productBlueprintId ?? "").trim();

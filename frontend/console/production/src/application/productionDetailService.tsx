@@ -337,8 +337,14 @@ export function buildQuantityRowsFromModels(
 }
 
 /* ---------------------------------------------------------
- * 保存前 payload ログ（※ログ削除版は no-op）
+ * 保存前 payload ログ（onSave 時に rows を表示）
  * --------------------------------------------------------- */
-export function logProductionQuantitySavePayload(_: ProductionQuantityRow[]): void {
-  // no log
+export function logProductionQuantitySavePayload(
+  rows: ProductionQuantityRow[],
+): void {
+  console.log(
+    "%c[productionDetailService] onSave payload (ProductionQuantityRow[]) ↓",
+    "color: #0B5FFF; font-weight: bold;",
+  );
+  console.log(rows);
 }

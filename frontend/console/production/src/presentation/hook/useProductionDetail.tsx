@@ -185,7 +185,7 @@ export function useProductionDetail() {
         // 追加情報（必要になったときのために保持）
         id?: string;
       } = {
-        // ★ ProductionQuantityRow 型に揃える
+        // ProductionQuantityRow 型に揃える
         modelVariationId: row.id,
         modelNumber: row.modelNumber,
         size: row.size,
@@ -202,6 +202,19 @@ export function useProductionDetail() {
 
     setQuantityRows(mapped);
   }, [production, modelIndex]);
+
+  // ======================================================
+  // onSave で渡された rows をログ出力するためのヘルパー
+  // ======================================================
+  const logSaveRows = React.useCallback(
+    (rows: CreateQuantityRow[]) => {
+      console.log(
+        "[useProductionDetail] onSave rows payload:",
+        rows,
+      );
+    },
+    [],
+  );
 
   // ======================================================
   // 戻る
@@ -232,6 +245,9 @@ export function useProductionDetail() {
 
     quantityRows,
     setQuantityRows,
+
+    // onSave から rows を渡して呼び出せるログ関数
+    logSaveRows,
 
     creator,
   };
