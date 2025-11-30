@@ -137,6 +137,7 @@ func (r *ProductRepositoryFS) Save(ctx context.Context, v productdom.Product) (p
 }
 
 // Update(ctx, id, product) = usecase.ProductRepo と互換の full update
+// usecase 側で更新可能フィールドだけを上書き済みの Product が渡される想定。
 func (r *ProductRepositoryFS) Update(ctx context.Context, id string, v productdom.Product) (productdom.Product, error) {
 	if r.Client == nil {
 		return productdom.Product{}, errors.New("firestore client is nil")
@@ -147,14 +148,14 @@ func (r *ProductRepositoryFS) Update(ctx context.Context, id string, v productdo
 		return productdom.Product{}, productdom.ErrNotFound
 	}
 
-	// 強制的に ID を固定
+	// ID は常にパスの id を優先
 	v.ID = id
 
 	return r.Save(ctx, v)
 }
 
 // ============================================================
-// List （filter / sort を削除した簡易版）
+// List （filter / sort を無視した簡易版）
 // ============================================================
 
 func (r *ProductRepositoryFS) List(
