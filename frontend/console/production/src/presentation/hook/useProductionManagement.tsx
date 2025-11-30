@@ -138,7 +138,6 @@ export function useProductionManagement() {
   // ===== ヘッダー =====
   const headers: React.ReactNode[] = useMemo(
     () => [
-      "ID",
       <FilterableTableHeader
         key="blueprint"
         label="プロダクト名"

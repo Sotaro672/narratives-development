@@ -35,19 +35,22 @@ export default function ProductionManagement() {
             className="cursor-pointer hover:bg-blue-50 transition-colors"
             onClick={() => handleRowClick(p.id)}
           >
-            {/* Production ID */}
-            <td className="text-blue-600 underline">{p.id}</td>
-
-            {/* ★ ここを productBlueprintName に変更 */}
+            {/* ★ productBlueprintName（またはID） */}
             <td>{(p as any).productBlueprintName || p.productBlueprintId}</td>
 
-            {/* ★ 担当者名（あれば名前、なければID） */}
+            {/* ★ 担当者名（名前があれば名前、なければID） */}
             <td>{(p as any).assigneeName || p.assigneeId}</td>
 
+            {/* ステータス */}
             <td>{p.status}</td>
+
+            {/* 合計数量 */}
             <td>{p.totalQuantity}</td>
 
+            {/* 印刷日時ラベル */}
             <td>{p.printedAtLabel}</td>
+
+            {/* 作成日時ラベル */}
             <td>{p.createdAtLabel}</td>
           </tr>
         ))}
