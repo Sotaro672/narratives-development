@@ -390,3 +390,19 @@
   max-height: 360px;
   overflow-y: auto;
 }
+/* ================================
+ * 印刷ボタンカードの中央配置用
+ * ================================ */
+.print-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;     /* 横方向中央揃え */
+  justify-content: center; /* 縦方向中央揃え（必要に応じて） */
+  text-align: center;
+}
+
+.print-card button {
+  width: 60%;              /* ボタン幅を調整（お好みで変更可） */
+  max-width: 280px;        /* 最大幅 */
+  margin-top: 12px;
+}

@@ -11,6 +11,14 @@ import { useProductionDetail } from "../hook/useProductionDetail";
 import "../styles/production.css";
 
 import LogCard from "../../../../log/src/presentation/LogCard";
+import { Button } from "../../../../shell/src/shared/ui/button";
+// ★ Card コンポーネント群を追加
+import {
+  Card,
+  CardHeader,
+  CardTitle,
+  CardContent,
+} from "../../../../shell/src/shared/ui/card";
 
 // ProductBlueprintCard の型用
 import type {
@@ -32,7 +40,7 @@ export default function ProductionDetail() {
 
     // 戻る
     onBack,
-    onSave, // ★ hook からの保存処理
+    onSave,
 
     // データ関連
     production,
@@ -46,7 +54,6 @@ export default function ProductionDetail() {
     pbError,
   } = useProductionDetail();
 
-  // AdminCard 用の表示値
   const assigneeDisplay =
     production?.assigneeName ||
     production?.assigneeId ||
@@ -57,7 +64,7 @@ export default function ProductionDetail() {
     : "-";
 
   // ==========================
-  // ヘッダーボタン用ハンドラ
+  // ヘッダー操作
   // ==========================
   const handleEnterEdit = React.useCallback(() => {
     switchToEdit();
@@ -68,12 +75,27 @@ export default function ProductionDetail() {
   }, [switchToView]);
 
   const handleSave = React.useCallback(() => {
-    // ★ ここで hook の onSave を呼ぶ
     void onSave();
   }, [onSave]);
 
   const handleDelete = React.useCallback(() => {
-    // 今後削除処理を実装する場合はここに追加
+    // TODO: 削除処理
+  }, []);
+
+  // ==========================
+  // ★ 印刷ボタン押下時処理
+  // ==========================
+  const handlePrint = React.useCallback(() => {
+    const ok = window.confirm(
+      "印刷後は生産数を減らすことはできません。印刷しますか？",
+    );
+
+    if (!ok) return;
+
+    // ★ 印刷処理（必要に応じて差し替える）
+    window.print();
+
+    // 将来的に「printedAt」を更新するAPIをここで呼び出せます
   }, []);
 
   return (
@@ -88,35 +110,28 @@ export default function ProductionDetail() {
     >
       {/* ========== 左カラム ========== */}
       <div className="space-y-4">
-        {/* Production 読み込み中 */}
         {loading && (
           <div className="flex h-full items-center justify-center text-gray-500">
             生産情報を読み込み中です…
           </div>
         )}
 
-        {/* Production 読み込みエラー */}
         {!loading && error && (
           <div className="flex h-full items-center justify-center text-red-500">
             {error}
           </div>
         )}
 
-        {/* 該当なし */}
         {!loading && !error && !production && (
           <div className="flex h-full items-center justify-center text-gray-500">
             対象の生産情報が見つかりません。
           </div>
         )}
 
-        {/* --- Production が取得できているとき --- */}
         {!loading && !error && production && (
           <>
-            {/* ===== 商品設計カード（常に閲覧モード） ===== */}
             {pbLoading && (
-              <div className="p-4 text-gray-500">
-                商品設計を読み込み中…
-              </div>
+              <div className="p-4 text-gray-500">商品設計を読み込み中…</div>
             )}
 
             {!pbLoading && pbError && (
@@ -125,12 +140,10 @@ export default function ProductionDetail() {
 
             {!pbLoading && !pbError && productBlueprint && (
               <ProductBlueprintCard
-                mode="view" // edit モードでも常に view
+                mode="view"
                 productName={productBlueprint.productName}
-                // ブランド名は production 側で解決済みのものを表示
                 brand={production.brandName ?? ""}
                 brandId={productBlueprint.brandId}
-                // 型は string だが、catalog 側の union と互換想定なので as で合わせる
                 itemType={productBlueprint.itemType as ItemType}
                 fit={productBlueprint.fit as Fit}
                 materials={productBlueprint.material}
@@ -140,14 +153,31 @@ export default function ProductionDetail() {
               />
             )}
 
-            {/* ===== モデル別 生産数一覧 ===== */}
             <ProductionQuantityCard
               title="モデル別 生産数一覧"
               rows={quantityRows}
-              // ページが edit モードのときだけカードも edit
               mode={isEditMode ? "edit" : "view"}
               onChangeRows={isEditMode ? setQuantityRows : undefined}
             />
+
+            {/* ===== 印刷カード（Card コンポーネントで実装） ===== */}
+            <Card className="print-card">
+              <CardHeader>
+                <CardTitle>商品IDタグを印刷する</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="print-card__content">
+                  <Button
+                    variant="solid"
+                    size="lg"
+                    onClick={handlePrint}
+                    className="w-full max-w-xs"
+                  >
+                    印刷
+                  </Button>
+                </div>
+              </CardContent>
+            </Card>
           </>
         )}
       </div>
@@ -157,20 +187,17 @@ export default function ProductionDetail() {
         <AdminCard
           title="管理情報"
           assigneeName={assigneeDisplay}
-          assigneeCandidates={[]} // 詳細画面では編集しないので空
+          assigneeCandidates={[]}
           loadingMembers={false}
           createdByName={creator}
           createdAt={createdAtLabel}
-          // hook からの mode をそのまま渡す
           mode={adminMode}
-          // 詳細画面では担当者変更しないので no-op
           onSelectAssignee={() => {}}
         />
 
-        {/* ★ AdminCard の下にログカードを配置 */}
         <LogCard
           title="更新履歴"
-          logs={[]} // 今後 API で取得した履歴を渡す
+          logs={[]}
           emptyText="更新履歴はまだありません。"
         />
       </div>
