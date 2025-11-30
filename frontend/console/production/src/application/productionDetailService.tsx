@@ -182,14 +182,10 @@ export async function loadProductionDetail(
         };
       }
     }
-  } catch (e) {
-    console.warn(
-      "[productionDetailService] failed to resolve names from list:",
-      e,
-    );
+  } catch {
+    // 名前解決に失敗しても致命的ではないので黙ってスルー
   }
 
-  console.log("[productionDetailService] loaded detail:", detail);
   return detail;
 }
 
@@ -207,11 +203,6 @@ export async function loadProductBlueprintDetail(
 
   const url = `${BACKEND_API_BASE}/product-blueprints/${safeId}`;
 
-  console.log("[productionDetailService] loadProductBlueprintDetail request:", {
-    url,
-    productBlueprintId: id,
-  });
-
   const res = await fetch(url, {
     method: "GET",
     headers: {
@@ -222,12 +213,6 @@ export async function loadProductBlueprintDetail(
 
   if (!res.ok) {
     const body = await res.text().catch(() => "");
-    console.error(
-      "[productionDetailService] loadProductBlueprintDetail error:",
-      res.status,
-      res.statusText,
-      body,
-    );
     throw new Error(
       `ProductBlueprint API error: ${res.status} ${res.statusText}${
         body ? ` - ${body}` : ""
@@ -287,11 +272,6 @@ export async function loadProductBlueprintDetail(
     expireAt: raw.expireAt ?? raw.ExpireAt ?? null,
   };
 
-  console.log(
-    "[productionDetailService] loaded productBlueprint detail:",
-    detail,
-  );
-
   return detail;
 }
 
@@ -311,11 +291,6 @@ export function buildModelIndexFromVariations(
       color: v.color?.name ?? "",
       rgb: v.color?.rgb ?? null,
     };
-  });
-
-  console.log("[productionDetailService] buildModelIndexFromVariations:", {
-    variations,
-    index,
   });
 
   return index;
@@ -375,10 +350,18 @@ export function buildQuantityRowsFromModels(
     };
   });
 
-  console.log(
-    "[productionDetailService] buildQuantityRowsFromModels:",
-    { models: safeModels, modelIndex, rows },
-  );
-
   return rows;
+}
+
+// ---------------------------------------------------------
+// onSave 後に渡された数量行のログ出力（デバッグ用）
+//   - ProductionDetail 画面の onSave から呼び出して利用する想定
+// ---------------------------------------------------------
+export function logProductionQuantitySavePayload(
+  rows: ProductionQuantityRow[],
+): void {
+  console.log(
+    "[productionDetailService] onSave payload (ProductionQuantityRow[]):",
+    rows,
+  );
 }

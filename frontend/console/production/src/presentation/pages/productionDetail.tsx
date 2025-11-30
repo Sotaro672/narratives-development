@@ -10,6 +10,8 @@ import ProductionQuantityCard from "../components/productionQuantityCard";
 import { useProductionDetail } from "../hook/useProductionDetail";
 import "../styles/production.css";
 
+import LogCard from "../../../../log/src/presentation/LogCard";
+
 // ProductBlueprintCard の型用
 import type {
   ItemType,
@@ -18,13 +20,24 @@ import type {
 
 export default function ProductionDetail() {
   const {
+    // モード関連
+    mode,
+    isViewMode,
+    isEditMode,
+    switchToView,
+    switchToEdit,
+
+    // 戻る
     onBack,
+
+    // データ関連
     production,
     loading,
     error,
     creator,
-    quantityRows,      // ★ Hook から受け取る（モデル別生産数）
-    productBlueprint,  // ★ Hook から受け取る（商品設計の全データ）
+    quantityRows,
+    setQuantityRows,
+    productBlueprint,
     pbLoading,
     pbError,
   } = useProductionDetail();
@@ -39,8 +52,36 @@ export default function ProductionDetail() {
     ? new Date(production.createdAt).toLocaleDateString("ja-JP")
     : "-";
 
+  // ==========================
+  // ヘッダーボタン用ハンドラ
+  // ==========================
+  const handleEnterEdit = React.useCallback(() => {
+    switchToEdit();
+  }, [switchToEdit]);
+
+  const handleCancelEdit = React.useCallback(() => {
+    switchToView();
+  }, [switchToView]);
+
+  const handleSave = React.useCallback(() => {
+    console.log("[ProductionDetail] save clicked, rows:", quantityRows);
+    switchToView();
+  }, [quantityRows, switchToView]);
+
+  const handleDelete = React.useCallback(() => {
+    console.log("[ProductionDetail] delete clicked:", production);
+  }, [production]);
+
   return (
-    <PageStyle layout="grid-2" title="生産詳細" onBack={onBack}>
+    <PageStyle
+      layout="grid-2"
+      title="生産詳細"
+      onBack={onBack}
+      onEdit={isViewMode ? handleEnterEdit : undefined}
+      onDelete={isEditMode ? handleDelete : undefined}
+      onCancel={isEditMode ? handleCancelEdit : undefined}
+      onSave={isEditMode ? handleSave : undefined}
+    >
       {/* ========== 左カラム ========== */}
       <div className="space-y-4">
         {/* Production 読み込み中 */}
@@ -67,7 +108,7 @@ export default function ProductionDetail() {
         {/* --- Production が取得できているとき --- */}
         {!loading && !error && production && (
           <>
-            {/* ===== 商品設計カード（閲覧モード） ===== */}
+            {/* ===== 商品設計カード（常に閲覧モード） ===== */}
             {pbLoading && (
               <div className="p-4 text-gray-500">
                 商品設計を読み込み中…
@@ -80,7 +121,7 @@ export default function ProductionDetail() {
 
             {!pbLoading && !pbError && productBlueprint && (
               <ProductBlueprintCard
-                mode="view"
+                mode="view" // edit モードでも常に view
                 productName={productBlueprint.productName}
                 // ブランド名は production 側で解決済みのものを表示
                 brand={production.brandName ?? ""}
@@ -95,11 +136,13 @@ export default function ProductionDetail() {
               />
             )}
 
-            {/* ===== モデル別 生産数一覧（閲覧モード） ===== */}
+            {/* ===== モデル別 生産数一覧 ===== */}
             <ProductionQuantityCard
               title="モデル別 生産数一覧"
-              rows={quantityRows} // ★ Hook から渡された rows をそのまま使用
-              mode="view"
+              rows={quantityRows}
+              // ページが edit モードのときだけカードも edit
+              mode={isEditMode ? "edit" : "view"}
+              onChangeRows={isEditMode ? setQuantityRows : undefined}
             />
           </>
         )}
@@ -116,6 +159,13 @@ export default function ProductionDetail() {
           createdAt={createdAtLabel}
           // 詳細画面では担当者変更しないので no-op
           onSelectAssignee={() => {}}
+        />
+
+        {/* ★ AdminCard の下にログカードを配置 */}
+        <LogCard
+          title="更新履歴"
+          logs={[]} // 今後 API で取得した履歴を渡す
+          emptyText="更新履歴はまだありません。"
         />
       </div>
     </PageStyle>

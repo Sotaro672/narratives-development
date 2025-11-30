@@ -57,18 +57,6 @@ export class ProductionRepositoryHTTP implements ProductionRepository {
     const idToken = await getIdTokenOrThrow();
     const url = `${this.baseUrl}${path}`;
 
-    // ★ Repository が受け取ったリクエスト内容をログ出力
-    console.log("[ProductionRepositoryHTTP] request start:", {
-      url,
-      method: init.method,
-      body:
-        typeof init.body === "string"
-          ? init.body
-          : init.body
-          ? "[non-string body]"
-          : undefined,
-    });
-
     const res = await fetch(url, {
       ...init,
       headers: {
@@ -78,25 +66,13 @@ export class ProductionRepositoryHTTP implements ProductionRepository {
       },
     });
 
-    console.log("[ProductionRepositoryHTTP] response status:", {
-      url,
-      status: res.status,
-      statusText: res.statusText,
-    });
-
     if (!res.ok) {
       let bodyText = "";
       try {
         bodyText = await res.text();
       } catch {
-        // ignore
+        /* ignore */
       }
-      console.error(
-        "[ProductionRepositoryHTTP] error",
-        res.status,
-        res.statusText,
-        bodyText,
-      );
       throw new Error(
         `Production API error: ${res.status} ${res.statusText}${
           bodyText ? ` - ${bodyText}` : ""
@@ -104,13 +80,12 @@ export class ProductionRepositoryHTTP implements ProductionRepository {
       );
     }
 
-    // DELETE など 204 の場合は何も返さない
+    // DELETE 等の 204 → 空を返す
     if (res.status === 204) {
       return undefined as unknown as T;
     }
 
     const json = (await res.json()) as T;
-    console.log("[ProductionRepositoryHTTP] response json:", json);
     return json;
   }
 
@@ -118,9 +93,6 @@ export class ProductionRepositoryHTTP implements ProductionRepository {
   // create: POST /productions
   // --------------------------------------------------------------------
   async create(payload: Production): Promise<Production> {
-    // ★ useProductionCreate → createProduction → Repository まで渡ってきた payload をログ
-    console.log("[ProductionRepositoryHTTP] create payload:", payload);
-
     return this.request<Production>("/productions", {
       method: "POST",
       body: JSON.stringify(payload),
@@ -132,9 +104,6 @@ export class ProductionRepositoryHTTP implements ProductionRepository {
   // --------------------------------------------------------------------
   async getById(id: string): Promise<Production> {
     const safeId = encodeURIComponent(id.trim());
-
-    // ★ 取得リクエストのパラメータをログ
-    console.log("[ProductionRepositoryHTTP] getById params:", { id, safeId });
 
     return this.request<Production>(`/productions/${safeId}`, {
       method: "GET",
@@ -150,13 +119,6 @@ export class ProductionRepositoryHTTP implements ProductionRepository {
   ): Promise<Production> {
     const safeId = encodeURIComponent(id.trim());
 
-    // ★ 更新時に渡された patch をログ
-    console.log("[ProductionRepositoryHTTP] update params:", {
-      id,
-      safeId,
-      patch,
-    });
-
     return this.request<Production>(`/productions/${safeId}`, {
       method: "PUT",
       body: JSON.stringify(patch),
@@ -168,9 +130,6 @@ export class ProductionRepositoryHTTP implements ProductionRepository {
   // --------------------------------------------------------------------
   async delete(id: string): Promise<void> {
     const safeId = encodeURIComponent(id.trim());
-
-    // ★ 削除対象の ID をログ
-    console.log("[ProductionRepositoryHTTP] delete params:", { id, safeId });
 
     await this.request<void>(`/productions/${safeId}`, {
       method: "DELETE",

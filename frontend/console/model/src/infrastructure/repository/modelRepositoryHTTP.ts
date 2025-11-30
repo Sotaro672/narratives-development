@@ -177,11 +177,6 @@ export async function createModelVariation(
     body.rgb = payload.rgb;
   }
 
-  console.log("[modelRepositoryHTTP] createModelVariation request:", {
-    url,
-    body,
-  });
-
   const res = await fetch(url, {
     method: "POST",
     headers: {
@@ -201,11 +196,6 @@ export async function createModelVariation(
     } catch {
       /* ignore JSON parse error */
     }
-    console.error("[modelRepositoryHTTP] createModelVariation failed", {
-      status: res.status,
-      statusText: res.statusText,
-      detail,
-    });
     throw new Error(
       `モデルバリエーションの作成に失敗しました（${res.status} ${
         res.statusText ?? ""
@@ -215,8 +205,6 @@ export async function createModelVariation(
 
   const raw = text ? JSON.parse(text) : {};
   const data = mapRawToModelVariation(raw);
-
-  console.log("[modelRepositoryHTTP] createModelVariation response:", data);
 
   return data;
 }
@@ -258,11 +246,6 @@ export async function getModelVariationById(
 
   const url = `${API_BASE}/models/${safeId}`;
 
-  console.log("[modelRepositoryHTTP] getModelVariationById request:", {
-    url,
-    id,
-  });
-
   const res = await fetch(url, {
     method: "GET",
     headers: {
@@ -275,11 +258,6 @@ export async function getModelVariationById(
   const text = await res.text().catch(() => "");
 
   if (!res.ok) {
-    console.error("[modelRepositoryHTTP] getModelVariationById failed", {
-      status: res.status,
-      statusText: res.statusText,
-      body: text,
-    });
     throw new Error(
       `モデルバリエーションの取得に失敗しました（${res.status} ${
         res.statusText ?? ""
@@ -289,8 +267,6 @@ export async function getModelVariationById(
 
   const raw = text ? JSON.parse(text) : {};
   const data = mapRawToModelVariation(raw);
-
-  console.log("[modelRepositoryHTTP] getModelVariationById response:", data);
 
   return data;
 }
@@ -308,11 +284,6 @@ export async function listModelVariationsByProductBlueprintId(
 
   const url = `${API_BASE}/models/by-blueprint/${safeId}/variations`;
 
-  console.log(
-    "[modelRepositoryHTTP] listModelVariationsByProductBlueprintId request:",
-    { url, productBlueprintId },
-  );
-
   const res = await fetch(url, {
     method: "GET",
     headers: {
@@ -325,14 +296,6 @@ export async function listModelVariationsByProductBlueprintId(
   const text = await res.text().catch(() => "");
 
   if (!res.ok) {
-    console.error(
-      "[modelRepositoryHTTP] listModelVariationsByProductBlueprintId failed",
-      {
-        status: res.status,
-        statusText: res.statusText,
-        body: text,
-      },
-    );
     throw new Error(
       `モデルバリエーション一覧の取得に失敗しました（${res.status} ${
         res.statusText ?? ""
@@ -344,11 +307,6 @@ export async function listModelVariationsByProductBlueprintId(
   const list = Array.isArray(rawList)
     ? rawList.map((raw) => mapRawToModelVariation(raw))
     : [];
-
-  console.log(
-    "[modelRepositoryHTTP] listModelVariationsByProductBlueprintId response:",
-    list,
-  );
 
   return list;
 }

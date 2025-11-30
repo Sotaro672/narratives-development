@@ -89,9 +89,9 @@ export function useProductionDetail() {
   // ProductionQuantityCard 用 rows
   //   - 型は Create 画面と共通（ProductionQuantityCard の props に合わせる）
   // ==========================
-  const [quantityRows, setQuantityRows] = React.useState<
-    CreateQuantityRow[]
-  >([]);
+  const [quantityRows, setQuantityRows] = React.useState<CreateQuantityRow[]>(
+    [],
+  );
 
   // --------------------------
   // Production 詳細取得
@@ -113,10 +113,8 @@ export function useProductionDetail() {
         const data = await loadProductionDetail(productionId);
         if (cancelled) return;
 
-        console.log("[useProductionDetail] loaded production detail:", data);
         setProduction(data);
       } catch (e) {
-        console.error("[useProductionDetail] failed to load:", e);
         if (!cancelled) {
           setError("生産情報の取得に失敗しました");
           setProduction(null);
@@ -157,16 +155,8 @@ export function useProductionDetail() {
         const pb = await loadProductBlueprintDetail(blueprintId);
         if (cancelled) return;
 
-        console.log(
-          "[useProductionDetail] loaded productBlueprint detail:",
-          pb,
-        );
         setProductBlueprint(pb);
       } catch (e) {
-        console.error(
-          "[useProductionDetail] failed to load productBlueprint:",
-          e,
-        );
         if (!cancelled) {
           setPbError("商品設計情報の取得に失敗しました");
           setProductBlueprint(null);
@@ -203,16 +193,8 @@ export function useProductionDetail() {
         );
         if (cancelled) return;
 
-        console.log(
-          "[useProductionDetail] loaded model variation index:",
-          index,
-        );
         setModelIndex(index);
       } catch (e) {
-        console.error(
-          "[useProductionDetail] failed to load model variations:",
-          e,
-        );
         if (!cancelled) {
           setModelIndex({});
         }
@@ -290,7 +272,6 @@ export function useProductionDetail() {
       return createRow;
     });
 
-    console.log("[useProductionDetail] mapped quantityRows:", mapped);
     setQuantityRows(mapped);
   }, [production, modelIndex]);
 
