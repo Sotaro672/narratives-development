@@ -61,6 +61,23 @@ func (u *ProductionUsecase) List(ctx context.Context) ([]productiondom.Productio
 	return u.repo.List(ctx)
 }
 
+// ★ 担当者ID から表示名を解決する resolver 的メソッド
+//   - memberSvc が設定されていない場合や ID が空文字の場合は "" を返す
+//   - memberSvc 側（member.Service.GetNameLastFirstByID）からのエラーはそのまま返却
+func (u *ProductionUsecase) ResolveAssigneeName(ctx context.Context, assigneeID string) (string, error) {
+	if u.memberSvc == nil {
+		// 名前解決サービスが DI されていない場合は何も表示しない前提
+		return "", nil
+	}
+
+	assigneeID = strings.TrimSpace(assigneeID)
+	if assigneeID == "" {
+		return "", nil
+	}
+
+	return u.memberSvc.GetNameLastFirstByID(ctx, assigneeID)
+}
+
 // ★ 担当者名付き一覧（/productions 用）
 func (u *ProductionUsecase) ListWithAssigneeName(ctx context.Context) ([]ProductionWithAssigneeName, error) {
 	list, err := u.repo.List(ctx)

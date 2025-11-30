@@ -9,12 +9,12 @@ import { listProductionsHTTP } from "../infrastructure/query/productionQuery";
 /** ソートキー */
 export type SortKey = "printedAt" | "createdAt" | "totalQuantity" | null;
 
-/** 一覧表示用に totalQuantity を付与した行型（内部用） */
+/** 一覧表示用に totalQuantity などを付与した行型（内部用） */
 export type ProductionRow = Production & {
   totalQuantity: number;
   assigneeName?: string;
 
-  /** ★ productBlueprintNameをログ用に保持（現状は productBlueprintId と同じ） */
+  /** ★ productBlueprintName をログ用・表示用に保持（現状は productBlueprintId と同じ） */
   productBlueprintName?: string;
 };
 
@@ -22,7 +22,7 @@ export type ProductionRow = Production & {
 export type ProductionRowView = {
   id: string;
   productBlueprintId: string;
-  productBlueprintName: string; // ★ 追加
+  productBlueprintName: string;
   assigneeId: string;
   assigneeName: string;
   status: ProductionStatus;
@@ -47,7 +47,7 @@ const formatDate = (iso?: string | null): string => {
   return `${y}/${m}/${day}`;
 };
 
-/** Production一覧取得 */
+/** Production 一覧取得 */
 export async function loadProductionRows(): Promise<ProductionRow[]> {
   const items = await listProductionsHTTP();
 
@@ -74,8 +74,8 @@ export async function loadProductionRows(): Promise<ProductionRow[]> {
       id: raw.id ?? raw.ID ?? "",
       productBlueprintId: blueprintId,
 
-      /** ★ 本来は backend から productBlueprintName を返すべき */
-      productBlueprintName: blueprintId,
+      /** ★ 本来は backend から productBlueprintName を返すべきだが、なければ ID を使う */
+      productBlueprintName: raw.productBlueprintName ?? blueprintId,
 
       assigneeId: raw.assigneeId ?? raw.AssigneeID ?? "",
       assigneeName: raw.assigneeName ?? raw.AssigneeName ?? "",
@@ -95,20 +95,20 @@ export async function loadProductionRows(): Promise<ProductionRow[]> {
   console.log(
     "[productionManagementService] rows with totalQuantity (normalized):",
     rows,
-    /** ★ productBlueprintName を含めてログ出力 */
-    rows.map(r => ({
+    // ★ productBlueprintName を含めてログ出力
+    rows.map((r) => ({
       id: r.id,
       productBlueprintId: r.productBlueprintId,
       productBlueprintName: r.productBlueprintName,
-    }))
+      assigneeId: r.assigneeId,
+      assigneeName: r.assigneeName,
+    })),
   );
 
   return rows;
 }
 
-/** フィルタなどの関数は省略（そのまま） */
-
-/** rows → viewRows 変換 */
+/** rows → viewRows 変換（フィルタ + ソート + 表示用ラベル整形） */
 export function buildRowsView(params: {
   baseRows: ProductionRow[];
   blueprintFilter: string[];
@@ -126,6 +126,7 @@ export function buildRowsView(params: {
     sortDir,
   } = params;
 
+  // ===== フィルタ適用 =====
   let data = baseRows.filter((p) => {
     if (
       blueprintFilter.length > 0 &&
@@ -142,6 +143,7 @@ export function buildRowsView(params: {
     return true;
   });
 
+  // ===== ソート適用 =====
   if (sortKey && sortDir) {
     data = [...data].sort((a, b) => {
       if (sortKey === "totalQuantity") {
@@ -155,10 +157,11 @@ export function buildRowsView(params: {
     });
   }
 
+  // ===== 表示用変換 =====
   const view = data.map<ProductionRowView>((p) => ({
     id: p.id,
     productBlueprintId: p.productBlueprintId,
-    productBlueprintName: p.productBlueprintName ?? "", // ★ 追加
+    productBlueprintName: p.productBlueprintName ?? "",
     assigneeId: p.assigneeId,
     assigneeName: p.assigneeName ?? "",
     status: p.status,
@@ -167,14 +170,15 @@ export function buildRowsView(params: {
     createdAtLabel: formatDate(p.createdAt),
   }));
 
-  /** ★ ここにも productBlueprintName を含める */
   console.log(
     "[productionManagementService] view rows:",
-    view.map(v => ({
+    view.map((v) => ({
       id: v.id,
       productBlueprintId: v.productBlueprintId,
       productBlueprintName: v.productBlueprintName,
-    }))
+      assigneeId: v.assigneeId,
+      assigneeName: v.assigneeName,
+    })),
   );
 
   return view;

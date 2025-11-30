@@ -59,12 +59,12 @@ func (h *ProductionHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 func (h *ProductionHandler) list(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 
-	productions, err := h.uc.List(ctx)
+	// ★ ここを List → ListWithAssigneeName に変更
+	productions, err := h.uc.ListWithAssigneeName(ctx)
 	if err != nil {
 		writeProductionErr(w, err)
 		return
 	}
-
 	_ = json.NewEncoder(w).Encode(productions)
 }
 
