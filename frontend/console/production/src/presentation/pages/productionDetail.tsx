@@ -10,6 +10,12 @@ import ProductionQuantityCard from "../components/productionQuantityCard";
 import { useProductionDetail } from "../hook/useProductionDetail";
 import "../styles/production.css";
 
+// ProductBlueprintCard の型用
+import type {
+  ItemType,
+  Fit,
+} from "../../../../productBlueprint/src/domain/entity/catalog";
+
 export default function ProductionDetail() {
   const {
     onBack,
@@ -17,7 +23,10 @@ export default function ProductionDetail() {
     loading,
     error,
     creator,
-    quantityRows, // ★ Hook から受け取る
+    quantityRows,      // ★ Hook から受け取る（モデル別生産数）
+    productBlueprint,  // ★ Hook から受け取る（商品設計の全データ）
+    pbLoading,
+    pbError,
   } = useProductionDetail();
 
   // AdminCard 用の表示値
@@ -34,35 +43,59 @@ export default function ProductionDetail() {
     <PageStyle layout="grid-2" title="生産詳細" onBack={onBack}>
       {/* ========== 左カラム ========== */}
       <div className="space-y-4">
+        {/* Production 読み込み中 */}
         {loading && (
           <div className="flex h-full items-center justify-center text-gray-500">
             生産情報を読み込み中です…
           </div>
         )}
 
+        {/* Production 読み込みエラー */}
         {!loading && error && (
           <div className="flex h-full items-center justify-center text-red-500">
             {error}
           </div>
         )}
 
+        {/* 該当なし */}
         {!loading && !error && !production && (
           <div className="flex h-full items-center justify-center text-gray-500">
             対象の生産情報が見つかりません。
           </div>
         )}
 
+        {/* --- Production が取得できているとき --- */}
         {!loading && !error && production && (
           <>
-            {/* 商品設計カード（閲覧モード） */}
-            <ProductBlueprintCard
-              mode="view"
-              productName={production.productBlueprintName ?? ""}
-              // backend が brandName を返していればそれを使う（なければ空）
-              brand={(production as any).brandName ?? ""}
-            />
+            {/* ===== 商品設計カード（閲覧モード） ===== */}
+            {pbLoading && (
+              <div className="p-4 text-gray-500">
+                商品設計を読み込み中…
+              </div>
+            )}
 
-            {/* ★ モデル別 生産数一覧（閲覧モード） */}
+            {!pbLoading && pbError && (
+              <div className="p-4 text-red-500">{pbError}</div>
+            )}
+
+            {!pbLoading && !pbError && productBlueprint && (
+              <ProductBlueprintCard
+                mode="view"
+                productName={productBlueprint.productName}
+                // ブランド名は production 側で解決済みのものを表示
+                brand={production.brandName ?? ""}
+                brandId={productBlueprint.brandId}
+                // 型は string だが、catalog 側の union と互換想定なので as で合わせる
+                itemType={productBlueprint.itemType as ItemType}
+                fit={productBlueprint.fit as Fit}
+                materials={productBlueprint.material}
+                weight={productBlueprint.weight}
+                washTags={productBlueprint.qualityAssurance}
+                productIdTag={productBlueprint.productIdTag}
+              />
+            )}
+
+            {/* ===== モデル別 生産数一覧（閲覧モード） ===== */}
             <ProductionQuantityCard
               title="モデル別 生産数一覧"
               rows={quantityRows} // ★ Hook から渡された rows をそのまま使用
@@ -88,4 +121,3 @@ export default function ProductionDetail() {
     </PageStyle>
   );
 }
-
