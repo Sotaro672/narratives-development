@@ -14,8 +14,11 @@ export type ProductionRow = Production & {
   totalQuantity: number;
   assigneeName?: string;
 
-  /** ★ productBlueprintName をログ用・表示用に保持（現状は productBlueprintId と同じ） */
+  /** ★ backend から受け取る productBlueprintName（なければ fallback で ID を使う） */
   productBlueprintName?: string;
+
+  /** ★ backend から受け取る brandName（なければ空文字） */
+  brandName?: string;
 };
 
 /** 画面表示用の行型 */
@@ -29,6 +32,8 @@ export type ProductionRowView = {
   totalQuantity: number;
   printedAtLabel: string;
   createdAtLabel: string;
+  /** ★ 一覧表示・ログ用のブランド名 */
+  brandName: string;
 };
 
 const toTs = (iso?: string | null): number => {
@@ -74,8 +79,11 @@ export async function loadProductionRows(): Promise<ProductionRow[]> {
       id: raw.id ?? raw.ID ?? "",
       productBlueprintId: blueprintId,
 
-      /** ★ 本来は backend から productBlueprintName を返すべきだが、なければ ID を使う */
+      /** ★ backend から productBlueprintName が来ていればそれを優先、なければ ID を使う */
       productBlueprintName: raw.productBlueprintName ?? blueprintId,
+
+      /** ★ backend から brandName を受け取る（なければ空文字） */
+      brandName: raw.brandName ?? raw.BrandName ?? "",
 
       assigneeId: raw.assigneeId ?? raw.AssigneeID ?? "",
       assigneeName: raw.assigneeName ?? raw.AssigneeName ?? "",
@@ -95,11 +103,12 @@ export async function loadProductionRows(): Promise<ProductionRow[]> {
   console.log(
     "[productionManagementService] rows with totalQuantity (normalized):",
     rows,
-    // ★ productBlueprintName を含めてログ出力
+    // ★ productBlueprintName / brandName を含めてログ出力
     rows.map((r) => ({
       id: r.id,
       productBlueprintId: r.productBlueprintId,
       productBlueprintName: r.productBlueprintName,
+      brandName: r.brandName,
       assigneeId: r.assigneeId,
       assigneeName: r.assigneeName,
     })),
@@ -168,6 +177,7 @@ export function buildRowsView(params: {
     totalQuantity: p.totalQuantity,
     printedAtLabel: formatDate(p.printedAt),
     createdAtLabel: formatDate(p.createdAt),
+    brandName: p.brandName ?? "",
   }));
 
   console.log(
@@ -176,6 +186,7 @@ export function buildRowsView(params: {
       id: v.id,
       productBlueprintId: v.productBlueprintId,
       productBlueprintName: v.productBlueprintName,
+      brandName: v.brandName,
       assigneeId: v.assigneeId,
       assigneeName: v.assigneeName,
     })),

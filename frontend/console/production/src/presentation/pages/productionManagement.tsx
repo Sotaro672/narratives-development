@@ -38,6 +38,9 @@ export default function ProductionManagement() {
             {/* ★ productBlueprintName（またはID） */}
             <td>{(p as any).productBlueprintName || p.productBlueprintId}</td>
 
+            {/* ★ ブランド名（あればブランド名、なければ空文字） */}
+            <td>{(p as any).brandName || ""}</td>
+
             {/* ★ 担当者名（名前があれば名前、なければID） */}
             <td>{(p as any).assigneeName || p.assigneeId}</td>
 

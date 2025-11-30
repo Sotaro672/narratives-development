@@ -6,7 +6,9 @@ import (
 	"strings"
 	"time"
 
+	branddom "narratives/internal/domain/brand"
 	memberdom "narratives/internal/domain/member"
+	productbpdom "narratives/internal/domain/productBlueprint"
 	productiondom "narratives/internal/domain/production"
 )
 
@@ -27,11 +29,13 @@ type ProductionRepo interface {
 	Delete(ctx context.Context, id string) error
 }
 
-// ★ フロント用 DTO: 担当者名 + プロダクト名付き Production
+// ★ フロント用 DTO: 担当者名 + プロダクト名 + brandId/brandName 付き Production
 type ProductionWithAssigneeName struct {
 	productiondom.Production
 	AssigneeName         string `json:"assigneeName"`
 	ProductBlueprintName string `json:"productBlueprintName"`
+	BrandID              string `json:"brandId"`
+	BrandName            string `json:"brandName"`
 }
 
 // ============================================================
@@ -43,10 +47,11 @@ type ProductionUsecase struct {
 	repo      ProductionRepo
 	memberSvc *memberdom.Service
 
-	// ★ productBlueprintId → ProductName 解決用
-	//   interface 自体は productBlueprint_usecase.go 側で定義済みの
-	//   `type ProductBlueprintRepo interface {...}` をそのまま利用する。
-	pbRepo ProductBlueprintRepo
+	// ★ productBlueprintId → ProductName / BrandID 解決用
+	pbSvc *productbpdom.Service
+
+	// ★ brandId → BrandName 解決用
+	brandSvc *branddom.Service
 
 	now func() time.Time
 }
@@ -54,12 +59,14 @@ type ProductionUsecase struct {
 func NewProductionUsecase(
 	repo ProductionRepo,
 	memberSvc *memberdom.Service,
-	pbRepo ProductBlueprintRepo,
+	pbSvc *productbpdom.Service,
+	brandSvc *branddom.Service,
 ) *ProductionUsecase {
 	return &ProductionUsecase{
 		repo:      repo,
 		memberSvc: memberSvc,
-		pbRepo:    pbRepo,
+		pbSvc:     pbSvc,
+		brandSvc:  brandSvc,
 		now:       time.Now,
 	}
 }
@@ -99,9 +106,9 @@ func (u *ProductionUsecase) ResolveAssigneeName(ctx context.Context, assigneeID 
 }
 
 // ★ productBlueprintId からプロダクト名を解決する resolver 的メソッド
-//   - pbRepo が設定されていない場合や ID が空文字の場合は "" を返す
+//   - pbSvc が設定されていない場合や ID が空文字の場合は "" を返す
 func (u *ProductionUsecase) ResolveProductBlueprintName(ctx context.Context, blueprintID string) (string, error) {
-	if u.pbRepo == nil {
+	if u.pbSvc == nil {
 		return "", nil
 	}
 
@@ -110,14 +117,52 @@ func (u *ProductionUsecase) ResolveProductBlueprintName(ctx context.Context, blu
 		return "", nil
 	}
 
-	pb, err := u.pbRepo.GetByID(ctx, blueprintID)
+	name, err := u.pbSvc.GetProductNameByID(ctx, blueprintID)
 	if err != nil {
 		return "", err
 	}
-	return strings.TrimSpace(pb.ProductName), nil
+	return strings.TrimSpace(name), nil
 }
 
-// ★ 担当者名 + プロダクト名付き一覧（/productions 用）
+// ★ productBlueprintId から brandId を解決する resolver 的メソッド
+//   - pbSvc が設定されていない場合や ID が空文字の場合は "" を返す
+func (u *ProductionUsecase) ResolveBrandID(ctx context.Context, blueprintID string) (string, error) {
+	if u.pbSvc == nil {
+		return "", nil
+	}
+
+	blueprintID = strings.TrimSpace(blueprintID)
+	if blueprintID == "" {
+		return "", nil
+	}
+
+	brandID, err := u.pbSvc.GetBrandIDByID(ctx, blueprintID)
+	if err != nil {
+		return "", err
+	}
+	return strings.TrimSpace(brandID), nil
+}
+
+// ★ brandId から brandName を解決する resolver 的メソッド
+//   - brandSvc が設定されていない場合や ID が空文字の場合は "" を返す
+func (u *ProductionUsecase) ResolveBrandName(ctx context.Context, brandID string) (string, error) {
+	if u.brandSvc == nil {
+		return "", nil
+	}
+
+	brandID = strings.TrimSpace(brandID)
+	if brandID == "" {
+		return "", nil
+	}
+
+	name, err := u.brandSvc.GetNameByID(ctx, brandID)
+	if err != nil {
+		return "", err
+	}
+	return strings.TrimSpace(name), nil
+}
+
+// ★ 担当者名 + プロダクト名 + brandId/brandName 付き一覧（/productions 用）
 func (u *ProductionUsecase) ListWithAssigneeName(ctx context.Context) ([]ProductionWithAssigneeName, error) {
 	list, err := u.repo.List(ctx)
 	if err != nil {
@@ -135,11 +180,24 @@ func (u *ProductionUsecase) ListWithAssigneeName(ctx context.Context) ([]Product
 			}
 		}
 
-		// プロダクト名
+		// プロダクト名 & brandId / brandName
 		productName := ""
-		if u.pbRepo != nil && strings.TrimSpace(p.ProductBlueprintID) != "" {
-			if pb, err := u.pbRepo.GetByID(ctx, p.ProductBlueprintID); err == nil {
-				productName = strings.TrimSpace(pb.ProductName)
+		brandID := ""
+		brandName := ""
+
+		if u.pbSvc != nil && strings.TrimSpace(p.ProductBlueprintID) != "" {
+			if n, err := u.pbSvc.GetProductNameByID(ctx, p.ProductBlueprintID); err == nil {
+				productName = strings.TrimSpace(n)
+			}
+			if bID, err := u.pbSvc.GetBrandIDByID(ctx, p.ProductBlueprintID); err == nil {
+				brandID = strings.TrimSpace(bID)
+
+				// brandId → brandName
+				if u.brandSvc != nil && brandID != "" {
+					if bName, err := u.brandSvc.GetNameByID(ctx, brandID); err == nil {
+						brandName = strings.TrimSpace(bName)
+					}
+				}
 			}
 		}
 
@@ -147,6 +205,8 @@ func (u *ProductionUsecase) ListWithAssigneeName(ctx context.Context) ([]Product
 			Production:           p,
 			AssigneeName:         name,
 			ProductBlueprintName: productName,
+			BrandID:              brandID,
+			BrandName:            brandName,
 		})
 	}
 

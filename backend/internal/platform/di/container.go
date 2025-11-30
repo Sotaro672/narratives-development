@@ -19,6 +19,7 @@ import (
 	branddom "narratives/internal/domain/brand" // ★ Brand 用ドメインサービス
 	companydom "narratives/internal/domain/company"
 	memdom "narratives/internal/domain/member"
+	productbpdom "narratives/internal/domain/productBlueprint"
 	appcfg "narratives/internal/infra/config"
 )
 
@@ -132,6 +133,28 @@ func (a *invitationTokenRepoAdapter) CreateInvitationToken(
 	// FS 実装は既に (ctx, member.InvitationInfo) を受け取るように
 	// 変更済みという前提で、そのまま委譲する。
 	return a.fsRepo.CreateInvitationToken(ctx, info)
+}
+
+// ========================================
+// productBlueprint ドメインサービス用アダプタ
+// ========================================
+//
+// fs.ProductBlueprintRepositoryFS（= uc.ProductBlueprintRepo 実装）を
+// productBlueprint.Service の期待する productBlueprint.Repository に
+// 合わせるための薄いアダプタです。
+// Service 側では GetByID しか使わない前提。
+type productBlueprintDomainRepoAdapter struct {
+	repo uc.ProductBlueprintRepo
+}
+
+func (a *productBlueprintDomainRepoAdapter) GetByID(
+	ctx context.Context,
+	id string,
+) (productbpdom.ProductBlueprint, error) {
+	if a == nil || a.repo == nil {
+		return productbpdom.ProductBlueprint{}, productbpdom.ErrInternal
+	}
+	return a.repo.GetByID(ctx, id)
 }
 
 // ========================================
@@ -278,6 +301,12 @@ func NewContainer(ctx context.Context) (*Container, error) {
 	// ★ member.Service（表示名解決用）
 	memberSvc := memdom.NewService(memberRepo)
 
+	// ★ productBlueprint.Service（ProductName / BrandID 解決用）
+	pbDomainRepo := &productBlueprintDomainRepoAdapter{
+		repo: productBlueprintRepo, // uc.ProductBlueprintRepo として扱う
+	}
+	pbSvc := productbpdom.NewService(pbDomainRepo)
+
 	// 5. Application-layer usecases
 	accountUC := uc.NewAccountUsecase(accountRepo)
 
@@ -315,11 +344,12 @@ func NewContainer(ctx context.Context) (*Container, error) {
 	permissionUC := uc.NewPermissionUsecase(permissionRepo)
 	productUC := uc.NewProductUsecase(productRepo)
 
-	// ★ ProductionUsecase に member.Service + ProductBlueprintRepo を注入
+	// ★ ProductionUsecase に member.Service + productBlueprint.Service + brand.Service を注入
 	productionUC := uc.NewProductionUsecase(
 		productionRepo,
 		memberSvc,
-		productBlueprintRepo,
+		pbSvc,
+		brandSvc,
 	)
 
 	// ★ ProductBlueprintUsecase に HistoryRepo を注入

@@ -21,6 +21,7 @@ export function useProductionManagement() {
 
   // ===== フィルタ状態 =====
   const [blueprintFilter, setBlueprintFilter] = useState<string[]>([]);
+  const [brandFilter, setBrandFilter] = useState<string[]>([]);
   const [assigneeFilter, setAssigneeFilter] = useState<string[]>([]);
   const [statusFilter, setStatusFilter] = useState<ProductionStatus[]>([]);
 
@@ -79,6 +80,28 @@ export function useProductionManagement() {
     [baseRows],
   );
 
+  // ブランドフィルタ: value / label ともに brandName
+  const brandOptions = useMemo(
+    () => {
+      const map = new Map<string, string>();
+
+      for (const row of baseRows) {
+        const name = ((row as any).brandName ?? "") as string;
+        const trimmed = name.trim();
+        if (!trimmed) continue;
+        if (!map.has(trimmed)) {
+          map.set(trimmed, trimmed);
+        }
+      }
+
+      return Array.from(map.entries()).map(([value, label]) => ({
+        value,
+        label,
+      }));
+    },
+    [baseRows],
+  );
+
   // 担当者フィルタ: value は assigneeId, label は assigneeName（なければ ID）
   const assigneeOptions = useMemo(
     () => {
@@ -115,7 +138,7 @@ export function useProductionManagement() {
   );
 
   // ===== フィルタ＋ソート適用 → 表示用行に変換 =====
-  const rows: ProductionRowView[] = useMemo(
+  const allRowsView: ProductionRowView[] = useMemo(
     () =>
       buildRowsView({
         baseRows,
@@ -135,6 +158,17 @@ export function useProductionManagement() {
     ],
   );
 
+  // ブランドフィルタは View 行に対して適用
+  const rows: ProductionRowView[] = useMemo(
+    () => {
+      if (brandFilter.length === 0) return allRowsView;
+      return allRowsView.filter((r) =>
+        brandFilter.includes((r.brandName ?? "").trim()),
+      );
+    },
+    [allRowsView, brandFilter],
+  );
+
   // ===== ヘッダー =====
   const headers: React.ReactNode[] = useMemo(
     () => [
@@ -144,6 +178,13 @@ export function useProductionManagement() {
         options={blueprintOptions}
         selected={blueprintFilter}
         onChange={setBlueprintFilter}
+      />,
+      <FilterableTableHeader
+        key="brand"
+        label="ブランド"
+        options={brandOptions}
+        selected={brandFilter}
+        onChange={setBrandFilter}
       />,
       <FilterableTableHeader
         key="assignee"
@@ -196,6 +237,8 @@ export function useProductionManagement() {
     [
       blueprintOptions,
       blueprintFilter,
+      brandOptions,
+      brandFilter,
       assigneeOptions,
       assigneeFilter,
       statusOptions,
@@ -213,6 +256,7 @@ export function useProductionManagement() {
 
   const handleReset = () => {
     setBlueprintFilter([]);
+    setBrandFilter([]);
     setAssigneeFilter([]);
     setStatusFilter([]);
     setSortKey(null);
