@@ -27,6 +27,9 @@ export default function ProductionDetail() {
     switchToView,
     switchToEdit,
 
+    // AdminCard 用モード
+    adminMode,
+
     // 戻る
     onBack,
 
@@ -153,10 +156,12 @@ export default function ProductionDetail() {
         <AdminCard
           title="管理情報"
           assigneeName={assigneeDisplay}
-          assigneeCandidates={[]} // 詳細画面では編集しないので空
+          assigneeCandidates={[]} // 詳細画面では担当者変更しないので空
           loadingMembers={false}
           createdByName={creator}
           createdAt={createdAtLabel}
+          // hook からの mode をそのまま渡す
+          mode={adminMode}
           // 詳細画面では担当者変更しないので no-op
           onSelectAssignee={() => {}}
         />

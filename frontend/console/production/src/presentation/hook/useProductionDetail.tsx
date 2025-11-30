@@ -1,5 +1,4 @@
 // frontend/console/production/src/presentation/hook/useProductionDetail.tsx
-
 import * as React from "react";
 import { useNavigate, useParams } from "react-router-dom";
 
@@ -28,6 +27,9 @@ export function useProductionDetail() {
   const { currentMember } = useAuth();
   const creator = currentMember?.fullName ?? "-";
 
+  // ======================================================
+  // 画面全体のモード（view / edit）
+  // ======================================================
   const [mode, setMode] = React.useState<Mode>("view");
   const isViewMode = mode === "view";
   const isEditMode = mode === "edit";
@@ -38,6 +40,9 @@ export function useProductionDetail() {
     () => setMode((prev) => (prev === "view" ? "edit" : "view")),
     [],
   );
+
+  // ★ AdminCard 用のモード（単純に mode をそのまま渡す）
+  const adminMode: "view" | "edit" = mode;
 
   const [production, setProduction] = React.useState<ProductionDetail | null>(
     null,
@@ -214,25 +219,6 @@ export function useProductionDetail() {
   );
 
   // ======================================================
-  // AdminCard 用のコールバック
-  //   - 編集ボタン → edit モードへ
-  //   - キャンセルボタン → view モードへ
-  //   - 保存ボタン → とりあえず view へ戻す（保存処理は別で実装）
-  // ======================================================
-  const handleAdminEdit = React.useCallback(() => {
-    setMode("edit");
-  }, []);
-
-  const handleAdminCancel = React.useCallback(() => {
-    setMode("view");
-  }, []);
-
-  const handleAdminSave = React.useCallback(() => {
-    // 保存処理を別で呼んだあとに view 戻し、などの想定
-    setMode("view");
-  }, []);
-
-  // ======================================================
   // 戻る
   // ======================================================
   const handleBack = React.useCallback(() => {
@@ -240,7 +226,7 @@ export function useProductionDetail() {
   }, [navigate]);
 
   return {
-    // モード関連
+    // モード関連（ページ全体）
     mode,
     isViewMode,
     isEditMode,
@@ -248,11 +234,8 @@ export function useProductionDetail() {
     switchToEdit,
     toggleMode,
 
-    // AdminCard から使いやすい専用ハンドラ
-    adminMode: mode,
-    onAdminEdit: handleAdminEdit,
-    onAdminCancel: handleAdminCancel,
-    onAdminSave: handleAdminSave,
+    // AdminCard 用のモード
+    adminMode,
 
     // 画面制御
     onBack: handleBack,
