@@ -1,19 +1,20 @@
 // frontend/console/admin/src/presentation/hook/useAdminCard.tsx
-import { useEffect, useMemo, useState, useCallback } from "react";
+import { useEffect, useState, useCallback } from "react";
 import { useAuth } from "../../../../shell/src/auth/presentation/hook/useCurrentMember";
-import { auth } from "../../../../shell/src/auth/infrastructure/config/firebaseClient";
-import { fetchMemberListWithToken } from "../../../../member/src/infrastructure/query/memberQuery";
-import type { MemberFilter } from "../../../../member/src/domain/repository/memberRepository";
-import type { Page } from "../../../../shell/src/shared/types/common/common";
-import { DEFAULT_PAGE } from "../../../../shell/src/shared/types/common/common";
 
 // ★ ID → 「姓 名」を解決するフック
 import { useMemberList } from "../../../../member/src/presentation/hooks/useMemberList";
 
+// ★ Admin 用アプリケーションサービス
+import {
+  type AssigneeCandidate,
+  fetchAssigneeCandidatesForCurrentCompany,
+} from "../../application/AdminService";
+
 export type UseAdminCardResult = {
-  assigneeId: string | null;            // ← そのまま保持（重要）
-  assigneeName: string;                  // 表示用のみ
-  assigneeCandidates: { id: string; name: string }[];
+  assigneeId: string | null; // ← そのまま保持（重要）
+  assigneeName: string; // 表示用のみ
+  assigneeCandidates: AssigneeCandidate[];
   loadingMembers: boolean;
 
   openAssigneePopover: boolean;
@@ -24,27 +25,25 @@ export type UseAdminCardResult = {
 
 export function useAdminCard(): UseAdminCardResult {
   const { currentMember } = useAuth();
-
   const { getNameLastFirstByID } = useMemberList();
 
   // ★ assigneeId — 選択 ID のルートは従来のまま完全維持
   const [assigneeId, setAssigneeId] = useState<string | null>(
-    currentMember?.id ?? null
+    currentMember?.id ?? null,
   );
 
-  // 一覧取得時のローカルキャッシュ
-  const [assigneeNameMap, setAssigneeNameMap] = useState<Record<string, string>>(
-    {}
-  );
+  // 一覧取得時のローカルキャッシュ（id → name）
+  const [assigneeNameMap, setAssigneeNameMap] =
+    useState<Record<string, string>>({});
 
-  // 画面表示専用 — getNameLastFirstByID の結果
+  // 画面表示専用 — getNameLastFirstByID / 一覧キャッシュの結果
   const [assigneeName, setAssigneeName] = useState<string>("未設定");
 
   const [openAssigneePopover, setOpenAssigneePopover] = useState(false);
 
   const [loadingMembers, setLoadingMembers] = useState(false);
   const [assigneeCandidates, setAssigneeCandidates] = useState<
-    { id: string; name: string }[]
+    AssigneeCandidate[]
   >([]);
 
   // currentMember の id が後から来るケースに備える
@@ -57,27 +56,10 @@ export function useAdminCard(): UseAdminCardResult {
   // メンバー一覧取得（companyId は backend が ctx から付与）
   useEffect(() => {
     (async () => {
-      const fbUser = auth.currentUser;
-      if (!fbUser) return;
-
-      const token = await fbUser.getIdToken();
-      const page: Page = { ...DEFAULT_PAGE, number: 1, perPage: 200 };
-      const filter: MemberFilter = {};
-
       setLoadingMembers(true);
       try {
-        const { items } = await fetchMemberListWithToken(token, page, filter);
-
-        const candidates = items.map((m) => {
-          const full =
-            `${m.lastName ?? ""} ${m.firstName ?? ""}`.trim() ||
-            m.email ||
-            m.id;
-          return { id: m.id, name: full };
-        });
-
-        const nameMap: Record<string, string> = {};
-        candidates.forEach((c) => (nameMap[c.id] = c.name));
+        const { candidates, nameMap } =
+          await fetchAssigneeCandidatesForCurrentCompany();
 
         setAssigneeCandidates(candidates);
         setAssigneeNameMap(nameMap);
@@ -106,13 +88,13 @@ export function useAdminCard(): UseAdminCardResult {
       }
 
       try {
-        // 1. getNameLastFirstByID（非同期）
+        // 1. useMemberList 経由の名前解決（非同期）
         const resolved = await getNameLastFirstByID(id);
         if (!cancelled && resolved) {
           setAssigneeName(resolved);
           return;
         }
-      } catch (_) {
+      } catch {
         /* 無視して fallback に進む */
       }
 
@@ -134,7 +116,7 @@ export function useAdminCard(): UseAdminCardResult {
 
   // ★ AdminCard から assigneeId を更新する
   const onSelectAssignee = useCallback((id: string) => {
-    setAssigneeId(id);                // ← assigneeId ルートは維持
+    setAssigneeId(id); // ← assigneeId ルートは維持
     setOpenAssigneePopover(false);
   }, []);
 

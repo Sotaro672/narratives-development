@@ -111,3 +111,46 @@ export function normalizeMemberWire(w: any): Member {
     updatedBy: w.updatedBy ?? w.UpdatedBy ?? null,
   } as Member;
 }
+
+// ─────────────────────────────────────────────
+// HTTP 呼び出し付き メンバー一覧取得
+//   - useAdminCard などから利用
+// ─────────────────────────────────────────────
+export async function fetchMemberListWithToken(
+  token: string,
+  page: Page,
+  filter: MemberFilter,
+): Promise<{ items: Member[] }> {
+  const qs = buildMemberQuery(page, filter);
+  const url = apiUrl("/members", qs);
+
+  const res = await fetch(url, {
+    method: "GET",
+    headers: {
+      Authorization: `Bearer ${token}`,
+      "Content-Type": "application/json",
+    },
+  });
+
+  if (!res.ok) {
+    const body = await res.text().catch(() => "");
+    throw new Error(
+      `fetchMemberListWithToken failed: ${res.status} ${res.statusText}${
+        body ? ` - ${body}` : ""
+      }`,
+    );
+  }
+
+  const raw = await res.json();
+
+  // backend が { items: [...] } を返す場合と、配列そのものを返す場合の両対応
+  const rawItems: any[] = Array.isArray(raw)
+    ? raw
+    : Array.isArray(raw?.items)
+    ? raw.items
+    : [];
+
+  const items: Member[] = rawItems.map((w: any) => normalizeMemberWire(w));
+
+  return { items };
+}
