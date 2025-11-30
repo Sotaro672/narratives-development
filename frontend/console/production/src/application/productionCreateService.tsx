@@ -1,27 +1,18 @@
 // frontend/console/production/src/application/productionCreateService.tsx
 // ======================================================================
 // Application Service for Production Create
-//   - API 呼び出しは infrastructure/api/productionCreateApi.ts / http へ移譲
 // ======================================================================
 
-// =========================
-// 外部型のインポート（独自定義しない）
-// =========================
 import type { Brand } from "../../../brand/src/domain/entity/brand";
 import type { ProductBlueprintManagementRow } from "../../../productBlueprint/src/infrastructure/query/productBlueprintQuery";
 import type { Member } from "../../../member/src/domain/entity/member";
 import type { ModelVariationResponse } from "../../../productBlueprint/src/application/productBlueprintDetailService";
-import type {
-  ItemType,
-  Fit,
-} from "../../../productBlueprint/src/domain/entity/catalog";
+import type { ItemType, Fit } from "../../../productBlueprint/src/domain/entity/catalog";
 
 import { getMemberFullName } from "../../../member/src/domain/entity/member";
 
-// ★ Production 作成用 HTTP Repository
 import { ProductionRepositoryHTTP } from "../infrastructure/http/productionRepositoryHTTP";
 
-// ★ API 呼び出しは infra 層から利用
 export {
   loadBrands,
   loadProductBlueprints,
@@ -29,9 +20,6 @@ export {
   loadAssigneeCandidates,
 } from "../infrastructure/api/productionCreateApi";
 
-// =========================
-// 型の再エクスポート（useProductionCreate から利用）
-// =========================
 export type {
   Brand,
   ProductBlueprintManagementRow,
@@ -40,7 +28,7 @@ export type {
 };
 
 // ======================================================================
-// ProductBlueprintCard 用データ型
+// ProductBlueprintCard
 // ======================================================================
 export type ProductBlueprintForCard = {
   id: string;
@@ -60,10 +48,18 @@ export type ProductBlueprintForCard = {
 // ======================================================================
 export type ProductionQuantityRow = {
   modelVariationId: string;
-  modelCode: string;
+
+  /** 型番（例: “GM”） */
+  modelNumber: string;
+
   size: string;
-  colorName: string;
-  colorCode?: string;
+
+  /** 色名（例: “グリーン”） */
+  color: string;
+
+  /** RGB 値（0xRRGGBB int） */
+  rgb?: number | string | null;
+
   quantity: number;
 };
 
@@ -88,7 +84,6 @@ export interface Production {
 
   printedAt?: string | null;
   inspectedAt?: string | null;
-
   createdBy?: string | null;
   createdAt?: string | null;
 
@@ -100,14 +95,14 @@ export interface Production {
 }
 
 // ======================================================================
-// ブランド（変換ロジック）
+// ブランド（変換）
 // ======================================================================
 export function buildBrandOptions(brands: Brand[]): string[] {
   return brands.map((b) => b.name).filter(Boolean);
 }
 
 // ======================================================================
-// 商品設計一覧（変換ロジック）
+// 商品設計一覧（変換）
 // ======================================================================
 export function filterProductBlueprintsByBrand(
   rows: ProductBlueprintManagementRow[],
@@ -125,7 +120,7 @@ export function buildProductRows(filtered: ProductBlueprintManagementRow[]) {
 }
 
 // ======================================================================
-// 詳細 + ModelVariations → ProductBlueprintCard 用データに整形
+// buildSelectedForCard
 // ======================================================================
 export function buildSelectedForCard(
   detail: any,
@@ -153,15 +148,11 @@ export function buildSelectedForCard(
     };
   }
 
-  return {
-    id: "",
-    productName: "",
-    brand: "",
-  };
+  return { id: "", productName: "", brand: "" };
 }
 
 // ======================================================================
-// 担当者一覧（変換ロジック）
+// 担当者一覧（変換）
 // ======================================================================
 export function buildAssigneeOptions(members: Member[]) {
   return members.map((m) => ({
@@ -176,28 +167,16 @@ export function buildAssigneeOptions(members: Member[]) {
 export function mapModelVariationsToRows(
   list: ModelVariationResponse[],
 ): ProductionQuantityRow[] {
-  return list.map((mv) => {
-    let colorCode = "#FFFFFF";
+  return list.map((mv) => ({
+    modelVariationId: mv.id,
+    modelNumber: mv.modelNumber, // ← 修正ポイント
+    size: mv.size,
 
-    if (typeof mv.color?.rgb === "number") {
-      const rgb = mv.color.rgb;
-      // ★ 要件: rgb:0 は黒として扱う
-      if (rgb === 0) {
-        colorCode = "#000000";
-      } else {
-        colorCode = `#${rgb.toString(16).padStart(6, "0")}`;
-      }
-    }
+    color: mv.color?.name ?? "",
+    rgb: mv.color?.rgb ?? null,
 
-    return {
-      modelVariationId: mv.id,
-      modelCode: mv.modelNumber,
-      size: mv.size,
-      colorName: mv.color?.name ?? "",
-      colorCode,
-      quantity: 0,
-    };
-  });
+    quantity: 0,
+  }));
 }
 
 // ======================================================================
@@ -225,7 +204,9 @@ export function buildProductionRequest(params: {
   };
 }
 
-// useProductionCreate から呼び出すためのラッパー（ペイロード生成のみ）
+// ======================================================================
+// buildProductionPayload
+// ======================================================================
 export function buildProductionPayload(params: {
   productBlueprintId: string;
   assigneeId: string;
@@ -234,14 +215,6 @@ export function buildProductionPayload(params: {
 }): Production {
   const { productBlueprintId, assigneeId, rows, currentMemberId } = params;
 
-  // ★ useProductionCreate から受け取った値をログ出力
-  console.log("[Production] buildProductionPayload params:", {
-    productBlueprintId,
-    assigneeId,
-    rows,
-    currentMemberId,
-  });
-
   const request = buildProductionRequest({
     productBlueprintId,
     assigneeId,
@@ -249,25 +222,15 @@ export function buildProductionPayload(params: {
     quantities: rows,
   });
 
-  // ★ バックエンドへ送る直前のリクエスト内容もログ出力
-  console.log("[Production] buildProductionPayload request:", request);
-
   return request;
 }
 
 // ======================================================================
-// Production 作成 API 呼び出し
+// createProduction
 // ======================================================================
-/**
- * Production をバックエンドへ POST する
- * useProductionCreate からは buildProductionPayload で生成した値を渡す想定
- */
 export async function createProduction(
   payload: Production,
 ): Promise<Production> {
-  // ★ useProductionCreate から渡された payload をログ出力
-  console.log("[Production] createProduction payload:", payload);
-
   const repo = new ProductionRepositoryHTTP();
   return await repo.create(payload);
 }

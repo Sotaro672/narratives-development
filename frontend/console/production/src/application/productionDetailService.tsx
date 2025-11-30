@@ -1,5 +1,4 @@
 // frontend/console/production/src/application/productionDetailService.tsx
-
 import type {
   Production,
   ProductionStatus,
@@ -11,7 +10,7 @@ import {
 import { listProductionsHTTP } from "../infrastructure/query/productionQuery";
 import { auth } from "../../../shell/src/auth/infrastructure/config/firebaseClient";
 
-// ★ model モジュール側のリポジトリ（modelNumber / size / color / rgb を解決するため）
+// model module
 import {
   listModelVariationsByProductBlueprintId,
   type ModelVariationResponse,
@@ -27,13 +26,8 @@ export type ProductionDetail = Production & {
   brandName?: string;
 };
 
-/**
- * 「モデル別 生産数一覧」カード用のモデル情報
- *   - modelVariationId ごとに 1 行
- *   - modelNumber / size / color / rgb は model モジュール側の情報から解決する
- */
 export type ModelVariationSummary = {
-  id: string; // modelVariationId
+  id: string;
   modelNumber: string;
   size: string;
   color: string;
@@ -41,7 +35,7 @@ export type ModelVariationSummary = {
 };
 
 export type ProductionQuantityRow = {
-  id: string; // modelVariationId
+  id: string;
   modelNumber: string;
   size: string;
   color: string;
@@ -50,7 +44,7 @@ export type ProductionQuantityRow = {
 };
 
 /**
- * ProductBlueprint 詳細用型
+ * ProductBlueprint 詳細用
  */
 export type ProductBlueprintDetail = {
   id: string;
@@ -64,7 +58,7 @@ export type ProductBlueprintDetail = {
   weight: number;
 
   qualityAssurance: string[];
-  productIdTag: string; // ← 画面表示用に文字列として扱う
+  productIdTag: string;
   assigneeId: string;
 
   createdBy?: string | null;
@@ -78,18 +72,15 @@ export type ProductBlueprintDetail = {
   expireAt?: string | null;
 };
 
-// ---------------------------------------------------------
-// 共通: Firebase トークン取得
-// ---------------------------------------------------------
 async function getIdTokenOrThrow(): Promise<string> {
   const user = auth.currentUser;
   if (!user) throw new Error("未ログインです");
   return user.getIdToken();
 }
 
-// ---------------------------------------------------------
-// Production 詳細取得
-// ---------------------------------------------------------
+/* ---------------------------------------------------------
+ * Production 詳細取得
+ * --------------------------------------------------------- */
 export async function loadProductionDetail(
   productionId: string,
 ): Promise<ProductionDetail | null> {
@@ -137,66 +128,57 @@ export async function loadProductionDetail(
     totalQuantity,
   };
 
-  // 一覧データから名前解決
+  // 一覧から名前解決
   try {
-    if (
-      !detail.productBlueprintName ||
-      detail.productBlueprintName === detail.productBlueprintId ||
-      !detail.brandName ||
-      !detail.assigneeName
-    ) {
-      const listItems = await listProductionsHTTP();
+    const listItems = await listProductionsHTTP();
 
-      const match = (listItems as any[]).find((item) => {
-        const itemId = item.id ?? item.ID ?? "";
-        const itemBlueprintId =
-          item.productBlueprintId ?? item.ProductBlueprintID ?? "";
-        return (
-          itemId === detail.id ||
-          (itemBlueprintId &&
-            itemBlueprintId === detail.productBlueprintId)
-        );
-      });
+    const match = (listItems as any[]).find((item) => {
+      const itemId = item.id ?? item.ID ?? "";
+      const itemBlueprintId =
+        item.productBlueprintId ?? item.ProductBlueprintID ?? "";
+      return (
+        itemId === detail.id ||
+        (itemBlueprintId &&
+          itemBlueprintId === detail.productBlueprintId)
+      );
+    });
 
-      if (match) {
-        const resolvedBlueprintName =
-          match.productBlueprintName ??
-          match.ProductBlueprintName ??
-          detail.productBlueprintId;
+    if (match) {
+      detail = {
+        ...detail,
+        productBlueprintName:
+          detail.productBlueprintName &&
+          detail.productBlueprintName !== detail.productBlueprintId
+            ? detail.productBlueprintName
+            : match.productBlueprintName ??
+              match.ProductBlueprintName ??
+              detail.productBlueprintId,
 
-        const resolvedBrandName =
-          match.brandName ?? match.BrandName ?? "";
-
-        const resolvedAssigneeName =
-          match.assigneeName ?? match.AssigneeName ?? "";
-
-        detail = {
-          ...detail,
-          productBlueprintName:
-            detail.productBlueprintName &&
-            detail.productBlueprintName !== detail.productBlueprintId
-              ? detail.productBlueprintName
-              : resolvedBlueprintName,
-          brandName: detail.brandName || resolvedBrandName,
-          assigneeName: detail.assigneeName || resolvedAssigneeName,
-        };
-      }
+        brandName:
+          detail.brandName ||
+          match.brandName ||
+          match.BrandName ||
+          "",
+        assigneeName:
+          detail.assigneeName ||
+          match.assigneeName ||
+          match.AssigneeName ||
+          "",
+      };
     }
-  } catch {
-    // 名前解決に失敗しても致命的ではないので黙ってスルー
-  }
+  } catch (_) {}
 
   return detail;
 }
 
-// ---------------------------------------------------------
-// ProductBlueprint 詳細取得
-// ---------------------------------------------------------
+/* ---------------------------------------------------------
+ * ProductBlueprint 詳細取得
+ * --------------------------------------------------------- */
 export async function loadProductBlueprintDetail(
   productBlueprintId: string,
 ): Promise<ProductBlueprintDetail | null> {
   const id = productBlueprintId?.trim();
-  if (!id) return null;
+ 	if (!id) return null;
 
   const token = await getIdTokenOrThrow();
   const safeId = encodeURIComponent(id);
@@ -253,9 +235,7 @@ export async function loadProductBlueprintDetail(
     itemType: raw.itemType ?? raw.ItemType ?? "",
     fit: raw.fit ?? raw.Fit ?? "",
     material: raw.material ?? raw.Material ?? "",
-    weight: Number(
-      raw.weight ?? raw.Weight ?? 0,
-    ),
+    weight: Number(raw.weight ?? raw.Weight ?? 0),
 
     qualityAssurance: Array.isArray(qa) ? qa : [],
     productIdTag,
@@ -275,9 +255,9 @@ export async function loadProductBlueprintDetail(
   return detail;
 }
 
-// ---------------------------------------------------------
-// ModelVariationResponse[] → ModelVariationSummary index へ変換
-// ---------------------------------------------------------
+/* ---------------------------------------------------------
+ * variations → index 変換
+ * --------------------------------------------------------- */
 export function buildModelIndexFromVariations(
   variations: ModelVariationResponse[],
 ): Record<string, ModelVariationSummary> {
@@ -296,24 +276,22 @@ export function buildModelIndexFromVariations(
   return index;
 }
 
-// ---------------------------------------------------------
-// productBlueprintId から ModelVariationSummary index を取得
-// ---------------------------------------------------------
+/* ---------------------------------------------------------
+ * productBlueprintId → ModelVariation index
+ * --------------------------------------------------------- */
 export async function loadModelVariationIndexByProductBlueprintId(
   productBlueprintId: string,
 ): Promise<Record<string, ModelVariationSummary>> {
   const id = productBlueprintId.trim();
   if (!id) return {};
 
-  const list = await listModelVariationsByProductBlueprintId(id);
+ 	const list = await listModelVariationsByProductBlueprintId(id);
   return buildModelIndexFromVariations(list);
 }
 
-// ---------------------------------------------------------
-// モデル別 生産数一覧用の行を構築
-//   - Production.Models の id / quantity と
-//     「variationId → ModelVariationSummary」の index を突き合わせる
-// ---------------------------------------------------------
+/* ---------------------------------------------------------
+ * モデル別 生産数行を生成
+ * --------------------------------------------------------- */
 export function buildQuantityRowsFromModels(
   models: any[],
   modelIndex: Record<string, ModelVariationSummary>,
@@ -321,7 +299,6 @@ export function buildQuantityRowsFromModels(
   const safeModels = Array.isArray(models) ? models : [];
 
   const rows: ProductionQuantityRow[] = safeModels.map((m: any, index) => {
-    // ★ Production.Models 側がどのフィールド名で ID を持っていても拾えるようにする
     const id =
       m.modelVariationId ??
       m.ModelVariationID ??
@@ -331,16 +308,20 @@ export function buildQuantityRowsFromModels(
       m.ID ??
       `${index}`;
 
-    // 数量
     const quantityRaw =
-      m.quantity ?? 0;
+      m.quantity ??
+      m.Quantity ??
+      m.stock ??
+      m.Stock ??
+      0;
+
     const quantity = Number.isFinite(Number(quantityRaw))
       ? Math.max(0, Math.floor(Number(quantityRaw)))
       : 0;
 
     const meta = id ? modelIndex[id] : undefined;
 
-    return {
+    const row: ProductionQuantityRow = {
       id,
       modelNumber: meta?.modelNumber ?? "",
       size: meta?.size ?? "",
@@ -348,20 +329,16 @@ export function buildQuantityRowsFromModels(
       rgb: meta?.rgb ?? null,
       quantity,
     };
+
+    return row;
   });
 
   return rows;
 }
 
-// ---------------------------------------------------------
-// onSave 後に渡された数量行のログ出力（デバッグ用）
-//   - ProductionDetail 画面の onSave から呼び出して利用する想定
-// ---------------------------------------------------------
-export function logProductionQuantitySavePayload(
-  rows: ProductionQuantityRow[],
-): void {
-  console.log(
-    "[productionDetailService] onSave payload (ProductionQuantityRow[]):",
-    rows,
-  );
+/* ---------------------------------------------------------
+ * 保存前 payload ログ（※ログ削除版は no-op）
+ * --------------------------------------------------------- */
+export function logProductionQuantitySavePayload(_: ProductionQuantityRow[]): void {
+  // no log
 }

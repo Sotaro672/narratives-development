@@ -1,4 +1,5 @@
 // frontend/console/production/src/presentation/components/productionQuantityCard.tsx
+
 import * as React from "react";
 import { Palette } from "lucide-react";
 import {
@@ -21,21 +22,9 @@ import type { ProductionQuantityRow } from "../../application/productionCreateSe
 
 import "../styles/production.css";
 
-type ProductionQuantityCardProps = {
-  title?: string;
-  rows: ProductionQuantityRow[];
-  className?: string;
-
-  /** "edit" なら数量入力可 / "view" なら閲覧のみ */
-  mode?: "view" | "edit";
-
-  /** 行全体を更新するためのコールバック */
-  onChangeRows?: (rows: ProductionQuantityRow[]) => void;
-};
-
-/**
- * number / string な RGB (0xRRGGBB) を CSS 用 #RRGGBB に変換
- */
+// ----------------------------------------------------------
+// RGB → HEX (#RRGGBB)
+// ----------------------------------------------------------
 function rgbIntToHex(rgb: number | string | null | undefined): string | null {
   if (rgb === null || rgb === undefined) return null;
   const n = typeof rgb === "string" ? Number(rgb) : rgb;
@@ -46,10 +35,14 @@ function rgbIntToHex(rgb: number | string | null | undefined): string | null {
   return `#${hex}`;
 }
 
-/**
- * モデル別生産数一覧カード
- * inventoryCard と同じ見た目 + edit/view 切り替え
- */
+type ProductionQuantityCardProps = {
+  title?: string;
+  rows: ProductionQuantityRow[];
+  className?: string;
+  mode?: "view" | "edit";
+  onChangeRows?: (rows: ProductionQuantityRow[]) => void;
+};
+
 const ProductionQuantityCard: React.FC<ProductionQuantityCardProps> = ({
   title = "モデル別生産数一覧",
   rows,
@@ -59,7 +52,6 @@ const ProductionQuantityCard: React.FC<ProductionQuantityCardProps> = ({
 }) => {
   const isEditable = mode === "edit";
 
-  // 生産数合計を算出
   const totalQuantity = React.useMemo(
     () => rows.reduce((sum, r) => sum + (r.quantity || 0), 0),
     [rows],
@@ -69,7 +61,6 @@ const ProductionQuantityCard: React.FC<ProductionQuantityCardProps> = ({
     (index: number, value: string) => {
       if (!onChangeRows) return;
 
-      // 空文字は 0、負値/NaN は 0、少数は切り捨て
       const n = Math.max(0, Math.floor(Number(value || "0")));
       const safe = Number.isFinite(n) ? n : 0;
 
@@ -105,32 +96,25 @@ const ProductionQuantityCard: React.FC<ProductionQuantityCardProps> = ({
                 <TableHead className="ivc__th ivc__th--left">型番</TableHead>
                 <TableHead className="ivc__th">サイズ</TableHead>
                 <TableHead className="ivc__th">カラー</TableHead>
-                <TableHead className="ivc__th ivc__th--right">
-                  生産数
-                </TableHead>
+                <TableHead className="ivc__th ivc__th--right">生産数</TableHead>
               </TableRow>
             </TableHeader>
 
             <TableBody>
               {rows.map((row, idx) => {
-                // create / detail 双方で追加済みの rgb プロパティを拾う
-                const rgb = (row as any).rgb as number | string | null | undefined;
+                const rgb = row.rgb;
                 const rgbHex = rgbIntToHex(rgb);
-
-                const bgColor =
-                  row.colorCode && row.colorCode.trim()
-                    ? row.colorCode
-                    : rgbHex ?? "#ffffff";
+                const bgColor = rgbHex ?? "#ffffff";
 
                 return (
-                  <TableRow
-                    key={`${row.modelCode}-${idx}`}
-                    className="ivc__tr"
-                  >
-                    <TableCell className="ivc__model">
-                      {row.modelCode}
-                    </TableCell>
+                  <TableRow key={`${row.modelNumber}-${idx}`} className="ivc__tr">
+                    {/* 型番 */}
+                    <TableCell className="ivc__model">{row.modelNumber}</TableCell>
+
+                    {/* サイズ */}
                     <TableCell className="ivc__size">{row.size}</TableCell>
+
+                    {/* カラー */}
                     <TableCell className="ivc__color-cell">
                       <span
                         className="ivc__color-dot"
@@ -138,13 +122,12 @@ const ProductionQuantityCard: React.FC<ProductionQuantityCardProps> = ({
                           backgroundColor: bgColor,
                           boxShadow: "0 0 0 1px rgba(0,0,0,0.18)",
                         }}
-                        // 参考として title に HEX を入れておく
-                        title={rgbHex ?? row.colorCode ?? ""}
+                        title={rgbHex ?? ""}
                       />
-                      <span className="ivc__color-label">
-                        {row.colorName}
-                      </span>
+                      <span className="ivc__color-label">{row.color}</span>
                     </TableCell>
+
+                    {/* 生産数 */}
                     <TableCell className="ivc__quantity">
                       {isEditable ? (
                         <Input
@@ -152,11 +135,9 @@ const ProductionQuantityCard: React.FC<ProductionQuantityCardProps> = ({
                           min={0}
                           step={1}
                           value={row.quantity ?? 0}
-                          onChange={(e) =>
-                            handleChangeQuantity(idx, e.target.value)
-                          }
+                          onChange={(e) => handleChangeQuantity(idx, e.target.value)}
                           className="ivc__quantity-input w-20 text-right"
-                          aria-label={`${row.modelCode} の生産数`}
+                          aria-label={`${row.modelNumber} の生産数`}
                         />
                       ) : (
                         <span className="ivc__quantity-number">{row.quantity}</span>
@@ -166,7 +147,6 @@ const ProductionQuantityCard: React.FC<ProductionQuantityCardProps> = ({
                 );
               })}
 
-              {/* データなし表示 */}
               {rows.length === 0 && (
                 <TableRow>
                   <TableCell colSpan={4} className="ivc__empty">
@@ -175,13 +155,9 @@ const ProductionQuantityCard: React.FC<ProductionQuantityCardProps> = ({
                 </TableRow>
               )}
 
-              {/* ✅ 合計行 */}
               {rows.length > 0 && (
                 <TableRow className="ivc__total-row">
-                  <TableCell
-                    colSpan={3}
-                    className="ivc__total-label ivc__th--right"
-                  >
+                  <TableCell colSpan={3} className="ivc__total-label ivc__th--right">
                     合計
                   </TableCell>
                   <TableCell className="ivc__total-value">
