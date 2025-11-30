@@ -10,6 +10,7 @@ import {
   loadModelVariationIndexByProductBlueprintId,
   buildQuantityRowsFromModels,
   updateProductionDetail,
+  createProductsForPrint,
   type ProductionDetail,
   type ProductBlueprintDetail,
   type ModelVariationSummary,
@@ -206,7 +207,7 @@ export function useProductionDetail() {
   }, [production, modelIndex]);
 
   // ======================================================
-  // 保存処理（ログ削除済）
+  // 保存処理（quantity + assigneeId）
   // ======================================================
   const onSave = React.useCallback(async () => {
     if (!productionId || !production) return;
@@ -238,6 +239,31 @@ export function useProductionDetail() {
   }, [productionId, production, quantityRows]);
 
   // ======================================================
+  // 印刷時 Product 作成処理（バックエンドへ create リクエスト送信）
+  // ======================================================
+  const onPrint = React.useCallback(async () => {
+    if (!productionId || !production) return;
+
+    try {
+      const rowsForPrint: DetailQuantityRow[] = quantityRows.map((row) => ({
+        id: row.modelVariationId,
+        modelNumber: row.modelNumber,
+        size: row.size,
+        color: row.color,
+        rgb: row.rgb ?? null,
+        quantity: row.quantity ?? 0,
+      }));
+
+      await createProductsForPrint({
+        productionId,
+        rows: rowsForPrint,
+      });
+    } catch {
+      alert("印刷用のデータ作成に失敗しました");
+    }
+  }, [productionId, production, quantityRows]);
+
+  // ======================================================
   // 戻る
   // ======================================================
   const handleBack = React.useCallback(() => {
@@ -256,6 +282,7 @@ export function useProductionDetail() {
 
     onBack: handleBack,
     onSave,
+    onPrint,
 
     productionId: productionId ?? null,
     production,

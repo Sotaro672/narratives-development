@@ -38,9 +38,10 @@ export default function ProductionDetail() {
     // AdminCard 用モード
     adminMode,
 
-    // 戻る
+    // 戻る & 保存・印刷
     onBack,
     onSave,
+    onPrint,
 
     // データ関連
     production,
@@ -85,18 +86,23 @@ export default function ProductionDetail() {
   // ==========================
   // ★ 印刷ボタン押下時処理
   // ==========================
-  const handlePrint = React.useCallback(() => {
+  const handlePrint = React.useCallback(async () => {
     const ok = window.confirm(
       "印刷後は生産数を減らすことはできません。印刷しますか？",
     );
 
     if (!ok) return;
 
-    // ★ 印刷処理（必要に応じて差し替える）
-    window.print();
+    try {
+      // ① バックエンドへ products 作成リクエスト
+      await onPrint();
 
-    // 将来的に「printedAt」を更新するAPIをここで呼び出せます
-  }, []);
+      // ② ブラウザの印刷ダイアログ表示
+      window.print();
+    } catch {
+      alert("印刷用データの作成に失敗しました");
+    }
+  }, [onPrint]);
 
   return (
     <PageStyle

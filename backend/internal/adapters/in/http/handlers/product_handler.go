@@ -1,7 +1,9 @@
+// backend/internal/adapters/in/http/handlers/product_handler.go
 package handlers
 
 import (
 	"encoding/json"
+	"log"
 	"net/http"
 	"strings"
 	"time"
@@ -24,16 +26,23 @@ func NewProductHandler(uc *usecase.ProductUsecase) http.Handler {
 func (h *ProductHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 
+	// ★ リクエストログを追加
+	log.Printf("[ProductHandler] method=%s path=%s", r.Method, r.URL.Path)
+
 	switch {
+	// GET /products/{id}
 	case r.Method == http.MethodGet && strings.HasPrefix(r.URL.Path, "/products/"):
-		// GET /products/{id}
 		id := strings.TrimPrefix(r.URL.Path, "/products/")
 		h.get(w, r, id)
 
+	// PATCH /products/{id}
 	case r.Method == http.MethodPatch && strings.HasPrefix(r.URL.Path, "/products/"):
-		// PATCH /products/{id}
 		id := strings.TrimPrefix(r.URL.Path, "/products/")
 		h.update(w, r, id)
+
+	// POST /products
+	case r.Method == http.MethodPost && r.URL.Path == "/products":
+		h.create(w, r)
 
 	default:
 		w.WriteHeader(http.StatusNotFound)
@@ -58,6 +67,67 @@ func (h *ProductHandler) get(w http.ResponseWriter, r *http.Request, id string) 
 		return
 	}
 	_ = json.NewEncoder(w).Encode(p)
+}
+
+// POST /products
+// 印刷時などに、以下の項目で Product を新規作成する想定:
+// - modelId        : モデルID（必須, 更新不可）
+// - productionId   : 生産計画ID（必須, 更新不可）
+// - printedAt      : 印刷日時（必須, 更新不可）
+// - printedBy      : 印刷者（任意）
+//
+// inspectionResult / connectedToken / inspectedAt / inspectedBy は
+// このタイミングでは未設定とし、InspectionResult は notYet を採用します。
+func (h *ProductHandler) create(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+
+	var req struct {
+		ModelID      string    `json:"modelId"`
+		ProductionID string    `json:"productionId"`
+		PrintedAt    time.Time `json:"printedAt"`
+		PrintedBy    *string   `json:"printedBy"`
+	}
+
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		w.WriteHeader(http.StatusBadRequest)
+		_ = json.NewEncoder(w).Encode(map[string]string{"error": "invalid json"})
+		return
+	}
+
+	req.ModelID = strings.TrimSpace(req.ModelID)
+	req.ProductionID = strings.TrimSpace(req.ProductionID)
+
+	if req.ModelID == "" || req.ProductionID == "" {
+		w.WriteHeader(http.StatusBadRequest)
+		_ = json.NewEncoder(w).Encode(map[string]string{"error": "modelId and productionId are required"})
+		return
+	}
+	if req.PrintedAt.IsZero() {
+		w.WriteHeader(http.StatusBadRequest)
+		_ = json.NewEncoder(w).Encode(map[string]string{"error": "printedAt is required"})
+		return
+	}
+
+	// domain.Product を構築（POST時に確定させるフィールドのみ設定）
+	p := productdom.Product{
+		// ID は空のまま渡し、RepositoryFS 側で auto-ID を採番させる
+		ModelID:          req.ModelID,
+		ProductionID:     req.ProductionID,
+		InspectionResult: productdom.InspectionNotYet,
+		ConnectedToken:   nil,
+		PrintedAt:        &req.PrintedAt,
+		PrintedBy:        req.PrintedBy,
+		InspectedAt:      nil,
+		InspectedBy:      nil,
+	}
+
+	created, err := h.uc.Create(ctx, p)
+	if err != nil {
+		writeProductErr(w, err)
+		return
+	}
+
+	_ = json.NewEncoder(w).Encode(created)
 }
 
 // PATCH /products/{id}
