@@ -181,11 +181,6 @@ func (p *Product) MarkPrinted(by string, at time.Time) error {
 	return nil
 }
 
-func (p *Product) ClearPrinted() {
-	p.PrintedBy = nil
-	p.PrintedAt = nil
-}
-
 func (p *Product) MarkInspected(result InspectionResult, by string, at time.Time) error {
 	if result != InspectionPassed && result != InspectionFailed {
 		return ErrInvalidInspectionResult
