@@ -6,16 +6,20 @@ import { useNavigate, useParams } from "react-router-dom";
 // ★ currentMember.fullName 取得など（将来の表示用）
 import { useAuth } from "../../../../shell/src/auth/presentation/hook/useCurrentMember";
 
-// ★ Production / ProductBlueprint 詳細取得サービス
+// ★ Production / ProductBlueprint / ModelVariation 詳細取得サービス
 import {
   loadProductionDetail,
   loadProductBlueprintDetail,
+  loadModelVariationIndexByProductBlueprintId,
+  buildQuantityRowsFromModels,
   type ProductionDetail,
   type ProductBlueprintDetail,
+  type ModelVariationSummary,
+  type ProductionQuantityRow as DetailQuantityRow,
 } from "../../application/productionDetailService";
 
 // ★ ProductionQuantityCard 用の行型（Create 画面と共通）
-import type { ProductionQuantityRow } from "../../application/productionCreateService";
+import type { ProductionQuantityRow as CreateQuantityRow } from "../../application/productionCreateService";
 
 type Mode = "view" | "edit";
 
@@ -27,7 +31,8 @@ type Mode = "view" | "edit";
  * - 戻るボタン用の onBack を提供
  * - loadProductionDetail を使って Production 詳細を取得
  * - production.productBlueprintId を使って ProductBlueprint 詳細も取得
- * - production.models から ProductionQuantityRow[] を生成して画面へ渡す
+ * - productBlueprintId から ModelVariation 一覧を取得して index 化
+ * - production.models と modelIndex を突き合わせて ProductionQuantityRow[] を生成
  */
 export function useProductionDetail() {
   const navigate = useNavigate();
@@ -72,10 +77,20 @@ export function useProductionDetail() {
   const [pbError, setPbError] = React.useState<string | null>(null);
 
   // ==========================
+  // ModelVariation index
+  //   - key: variationId
+  //   - value: ModelVariationSummary（modelNumber / size / color / rgb）
+  // ==========================
+  const [modelIndex, setModelIndex] = React.useState<
+    Record<string, ModelVariationSummary>
+  >({});
+
+  // ==========================
   // ProductionQuantityCard 用 rows
+  //   - 型は Create 画面と共通（ProductionQuantityCard の props に合わせる）
   // ==========================
   const [quantityRows, setQuantityRows] = React.useState<
-    ProductionQuantityRow[]
+    CreateQuantityRow[]
   >([]);
 
   // --------------------------
@@ -92,6 +107,8 @@ export function useProductionDetail() {
         setError(null);
         setProductBlueprint(null); // Production 変更時は一旦リセット
         setPbError(null);
+        setModelIndex({});
+        setQuantityRows([]);
 
         const data = await loadProductionDetail(productionId);
         if (cancelled) return;
@@ -105,6 +122,7 @@ export function useProductionDetail() {
           setProduction(null);
           setQuantityRows([]);
           setProductBlueprint(null);
+          setModelIndex({});
         }
       } finally {
         if (!cancelled) {
@@ -117,106 +135,6 @@ export function useProductionDetail() {
       cancelled = true;
     };
   }, [productionId]);
-
-  // --------------------------
-  // production.models → quantityRows へマッピング
-  //   ※ ProductionQuantityRow は Create 画面と共通の型:
-  //      - modelVariationId
-  //      - modelCode
-  //      - size
-  //      - colorName
-  //      - colorCode
-  //      - stock
-  //
-  //   ここでは、それらに加えて
-  //      - modelNumber
-  //      - color
-  //      - rgb
-  //      - quantity
-  //   などの追加プロパティも持たせておく（型的には許容される）。
-  // --------------------------
-  React.useEffect(() => {
-    if (!production || !Array.isArray((production as any).models)) {
-      setQuantityRows([]);
-      return;
-    }
-
-    const rawModels = (production as any).models as any[];
-
-    const rows: ProductionQuantityRow[] = rawModels.map((m: any, index) => {
-      // モデルID（modelVariationId 相当）
-      const modelVariationId =
-        m.modelVariationId ??
-        m.ModelVariationID ??
-        m.modelId ??
-        m.ModelID ??
-        m.id ??
-        m.ID ??
-        `${index}`;
-
-      // 型番（modelNumber → modelCode に流し込む）
-      const modelNumber =
-        m.modelNumber ??
-        m.ModelNumber ??
-        m.modelCode ??
-        m.ModelCode ??
-        "";
-
-      // サイズ
-      const size = m.size ?? m.Size ?? "";
-
-      // カラー名 / コード
-      const colorName = m.colorName ?? m.ColorName ?? "";
-      const colorCode = m.colorCode ?? m.ColorCode ?? "";
-      const color = colorName || colorCode;
-
-      // RGB（あれば拾う）
-      const rgb =
-        m.rgb ??
-        m.Rgb ??
-        m.RGB ??
-        m.colorRgb ??
-        m.ColorRgb ??
-        m.ColorRGB ??
-        null;
-
-      // 数量
-      const quantityRaw =
-        m.quantity ?? m.Quantity ?? m.stock ?? m.Stock ?? 0;
-      const quantity = Number.isFinite(Number(quantityRaw))
-        ? Math.max(0, Math.floor(Number(quantityRaw)))
-        : 0;
-
-      const row: ProductionQuantityRow & {
-        // 追加情報（ProductionQuantityCard 側で使いたくなった時用）
-        modelNumber?: string;
-        color?: string;
-        rgb?: number | string | null;
-        quantity?: number;
-        id?: string;
-      } = {
-        // ★ ProductionQuantityRow で必須なフィールド
-        modelVariationId,
-        modelCode: modelNumber,
-        size,
-        colorName,
-        colorCode,
-        stock: quantity,
-
-        // ★ 追加情報（型には無いが、オブジェクトとしては保持）
-        id: modelVariationId,
-        modelNumber,
-        color,
-        rgb,
-        quantity,
-      };
-
-      return row;
-    });
-
-    console.log("[useProductionDetail] mapped quantityRows:", rows);
-    setQuantityRows(rows);
-  }, [production]);
 
   // --------------------------
   // productBlueprintId → ProductBlueprint 詳細取得
@@ -264,6 +182,117 @@ export function useProductionDetail() {
       cancelled = true;
     };
   }, [production?.productBlueprintId]);
+
+  // --------------------------
+  // productBlueprintId → ModelVariation 一覧取得
+  //   - /models/by-blueprint/{productBlueprintId}/variations を叩いて index 化
+  // --------------------------
+  React.useEffect(() => {
+    const blueprintId = production?.productBlueprintId;
+    if (!blueprintId) {
+      setModelIndex({});
+      return;
+    }
+
+    let cancelled = false;
+
+    (async () => {
+      try {
+        const index = await loadModelVariationIndexByProductBlueprintId(
+          blueprintId,
+        );
+        if (cancelled) return;
+
+        console.log(
+          "[useProductionDetail] loaded model variation index:",
+          index,
+        );
+        setModelIndex(index);
+      } catch (e) {
+        console.error(
+          "[useProductionDetail] failed to load model variations:",
+          e,
+        );
+        if (!cancelled) {
+          setModelIndex({});
+        }
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [production?.productBlueprintId]);
+
+  // --------------------------
+  // production.models × modelIndex → quantityRows へマッピング
+  //
+  // 1) buildQuantityRowsFromModels で
+  //    - id
+  //    - modelNumber
+  //    - size
+  //    - color
+  //    - rgb
+  //    - quantity
+  //    の入った DetailQuantityRow[] を作成
+  //
+  // 2) ProductionQuantityCard が期待する CreateQuantityRow 形式:
+  //    - modelVariationId
+  //    - modelCode
+  //    - size
+  //    - colorName
+  //    - colorCode
+  //    - stock
+  //    に変換しつつ、追加情報（rgb / quantity / modelNumber など）も
+  //    オブジェクトには保持しておく。
+  // --------------------------
+  React.useEffect(() => {
+    if (!production || !Array.isArray((production as any).models)) {
+      setQuantityRows([]);
+      return;
+    }
+
+    const rawModels = (production as any).models as any[];
+
+    // ★ modelIndex を使って id → modelNumber / size / color / rgb を解決
+    const detailRows: DetailQuantityRow[] = buildQuantityRowsFromModels(
+      rawModels,
+      modelIndex,
+    );
+
+    const mapped: CreateQuantityRow[] = detailRows.map((row) => {
+      const quantity = row.quantity ?? 0;
+
+      const createRow: CreateQuantityRow & {
+        // 追加情報（今後カード側で使いたくなるかもしれないので保持）
+        id?: string;
+        modelNumber?: string;
+        color?: string;
+        rgb?: number | string | null;
+        quantity?: number;
+      } = {
+        // ProductionQuantityCard が必須としているフィールド
+        modelVariationId: row.id,
+        modelCode: row.modelNumber,
+        size: row.size,
+        colorName: row.color,
+        colorCode: "", // 現状は色情報は name のみなので空
+        stock: quantity,
+
+        // 追加情報
+        id: row.id,
+        modelNumber: row.modelNumber,
+        color: row.color,
+        rgb: row.rgb ?? null,
+        quantity,
+      };
+
+      return createRow;
+    });
+
+    console.log("[useProductionDetail] mapped quantityRows:", mapped);
+    setQuantityRows(mapped);
+  }, [production, modelIndex]);
 
   // ==========================
   // 戻る

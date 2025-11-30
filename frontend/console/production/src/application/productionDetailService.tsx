@@ -11,6 +11,12 @@ import {
 import { listProductionsHTTP } from "../infrastructure/query/productionQuery";
 import { auth } from "../../../shell/src/auth/infrastructure/config/firebaseClient";
 
+// ★ model モジュール側のリポジトリ（modelNumber / size / color / rgb を解決するため）
+import {
+  listModelVariationsByProductBlueprintId,
+  type ModelVariationResponse,
+} from "../../../model/src/infrastructure/repository/modelRepositoryHTTP";
+
 /**
  * 詳細表示用型（Production）
  */
@@ -45,27 +51,6 @@ export type ProductionQuantityRow = {
 
 /**
  * ProductBlueprint 詳細用型
- * Go 側:
- *   type ProductBlueprint struct {
- *     ID string
- *     ProductName string
- *     CompanyID   string
- *     BrandID     string
- *     ItemType    ItemType
- *     Fit         string
- *     Material    string
- *     Weight      float64
- *     QualityAssurance []string
- *     ProductIdTag     ProductIDTag
- *     AssigneeID       string
- *     CreatedBy *string
- *     CreatedAt time.Time
- *     UpdatedBy *string
- *     UpdatedAt time.Time
- *     DeletedBy *string
- *     DeletedAt *time.Time
- *     ExpireAt *time.Time
- *   }
  */
 export type ProductBlueprintDetail = {
   id: string;
@@ -152,10 +137,7 @@ export async function loadProductionDetail(
     totalQuantity,
   };
 
-  // =====================================================
-  // ★ 一覧データからの名前解決
-  //   - productBlueprintName / brandName / assigneeName
-  // =====================================================
+  // 一覧データから名前解決
   try {
     if (
       !detail.productBlueprintName ||
@@ -213,7 +195,6 @@ export async function loadProductionDetail(
 
 // ---------------------------------------------------------
 // ProductBlueprint 詳細取得
-//   - /product-blueprints/{id} から productBlueprint 全体を取得
 // ---------------------------------------------------------
 export async function loadProductBlueprintDetail(
   productBlueprintId: string,
@@ -261,7 +242,6 @@ export async function loadProductBlueprintDetail(
     raw.QualityAssurance ??
     [];
 
-  // ★ productIdTag は string / object 両対応で Type を抜き出す
   const rawTag =
     raw.productIdTag ??
     raw.ProductIdTag ??
@@ -316,6 +296,45 @@ export async function loadProductBlueprintDetail(
 }
 
 // ---------------------------------------------------------
+// ModelVariationResponse[] → ModelVariationSummary index へ変換
+// ---------------------------------------------------------
+export function buildModelIndexFromVariations(
+  variations: ModelVariationResponse[],
+): Record<string, ModelVariationSummary> {
+  const index: Record<string, ModelVariationSummary> = {};
+
+  variations.forEach((v) => {
+    index[v.id] = {
+      id: v.id,
+      modelNumber: v.modelNumber,
+      size: v.size,
+      color: v.color?.name ?? "",
+      rgb: v.color?.rgb ?? null,
+    };
+  });
+
+  console.log("[productionDetailService] buildModelIndexFromVariations:", {
+    variations,
+    index,
+  });
+
+  return index;
+}
+
+// ---------------------------------------------------------
+// productBlueprintId から ModelVariationSummary index を取得
+// ---------------------------------------------------------
+export async function loadModelVariationIndexByProductBlueprintId(
+  productBlueprintId: string,
+): Promise<Record<string, ModelVariationSummary>> {
+  const id = productBlueprintId.trim();
+  if (!id) return {};
+
+  const list = await listModelVariationsByProductBlueprintId(id);
+  return buildModelIndexFromVariations(list);
+}
+
+// ---------------------------------------------------------
 // モデル別 生産数一覧用の行を構築
 //   - Production.Models の id / quantity と
 //     「variationId → ModelVariationSummary」の index を突き合わせる
@@ -326,15 +345,23 @@ export function buildQuantityRowsFromModels(
 ): ProductionQuantityRow[] {
   const safeModels = Array.isArray(models) ? models : [];
 
-  const rows: ProductionQuantityRow[] = safeModels.map((m: any) => {
+  const rows: ProductionQuantityRow[] = safeModels.map((m: any, index) => {
+    // ★ Production.Models 側がどのフィールド名で ID を持っていても拾えるようにする
     const id =
-      m.id ??
-      m.ID ??
       m.modelVariationId ??
       m.ModelVariationID ??
-      "";
+      m.modelId ??
+      m.ModelID ??
+      m.id ??
+      m.ID ??
+      `${index}`;
 
-    const quantity = m.quantity ?? m.Quantity ?? 0;
+    // 数量
+    const quantityRaw =
+      m.quantity ?? m.Quantity ?? m.stock ?? m.Stock ?? 0;
+    const quantity = Number.isFinite(Number(quantityRaw))
+      ? Math.max(0, Math.floor(Number(quantityRaw)))
+      : 0;
 
     const meta = id ? modelIndex[id] : undefined;
 

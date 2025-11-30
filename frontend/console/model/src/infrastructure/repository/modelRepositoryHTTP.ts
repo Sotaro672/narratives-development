@@ -15,6 +15,17 @@ const FALLBACK_BASE =
 
 export const API_BASE = ENV_BASE || FALLBACK_BASE;
 
+// ---------------------------------------------------------
+// 共通: Firebase トークン取得
+// ---------------------------------------------------------
+async function getIdTokenOrThrow(): Promise<string> {
+  const user = auth.currentUser;
+  if (!user) {
+    throw new Error("ログイン情報が見つかりません（未ログイン）");
+  }
+  return user.getIdToken();
+}
+
 /* =========================================================
  * backend/internal/domain/model.NewModelVariation に対応
  * =======================================================*/
@@ -56,6 +67,75 @@ export type ModelVariationResponse = {
   updatedAt?: string | null;
   updatedBy?: string | null;
 };
+
+// Firestore / Go 構造体からの生 JSON をフロント用に正規化するヘルパー
+function mapRawToModelVariation(raw: any): ModelVariationResponse {
+  if (!raw || typeof raw !== "object") {
+    return {
+      id: "",
+      productBlueprintId: "",
+      modelNumber: "",
+      size: "",
+      color: { name: "", rgb: null },
+      measurements: {},
+      createdAt: null,
+      createdBy: null,
+      updatedAt: null,
+      updatedBy: null,
+    };
+  }
+
+  const id = raw.id ?? raw.ID ?? "";
+  const productBlueprintId =
+    raw.productBlueprintId ?? raw.ProductBlueprintID ?? "";
+  const modelNumber = raw.modelNumber ?? raw.ModelNumber ?? "";
+  const size = raw.size ?? raw.Size ?? "";
+
+  // Color 構造体のケースいろいろを吸収
+  const colorObj =
+    raw.color ??
+    raw.Color ??
+    null;
+
+  const colorName =
+    colorObj?.name ??
+    colorObj?.Name ??
+    raw.colorName ??
+    raw.ColorName ??
+    "";
+  const colorRgb =
+    colorObj?.rgb ??
+    colorObj?.RGB ??
+    raw.rgb ??
+    raw.RGB ??
+    null;
+
+  const measurements =
+    raw.measurements ??
+    raw.Measurements ??
+    undefined;
+
+  const createdAt = raw.createdAt ?? raw.CreatedAt ?? null;
+  const createdBy = raw.createdBy ?? raw.CreatedBy ?? null;
+  const updatedAt = raw.updatedAt ?? raw.UpdatedAt ?? null;
+  const updatedBy = raw.updatedBy ?? raw.UpdatedBy ?? null;
+
+  return {
+    id,
+    productBlueprintId,
+    modelNumber,
+    size,
+    color: {
+      name: colorName,
+      rgb: colorRgb,
+    },
+    measurements,
+    createdAt,
+    createdBy,
+    updatedAt,
+    updatedBy,
+  };
+}
 
 /* =========================================================
  * 単一 ModelVariation 作成 API
@@ -133,7 +213,8 @@ export async function createModelVariation(
     );
   }
 
-  const data = (text ? JSON.parse(text) : {}) as ModelVariationResponse;
+  const raw = text ? JSON.parse(text) : {};
+  const data = mapRawToModelVariation(raw);
 
   console.log("[modelRepositoryHTTP] createModelVariation response:", data);
 
@@ -162,4 +243,112 @@ export async function createModelVariations(
   }
 
   return results;
+}
+
+/* =========================================================
+ * 単一 ModelVariation 取得 API
+ * GET /models/{id}
+ * =======================================================*/
+
+export async function getModelVariationById(
+  id: string,
+): Promise<ModelVariationResponse> {
+  const token = await getIdTokenOrThrow();
+  const safeId = encodeURIComponent(id.trim());
+
+  const url = `${API_BASE}/models/${safeId}`;
+
+  console.log("[modelRepositoryHTTP] getModelVariationById request:", {
+    url,
+    id,
+  });
+
+  const res = await fetch(url, {
+    method: "GET",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${token}`,
+      Accept: "application/json",
+    },
+  });
+
+  const text = await res.text().catch(() => "");
+
+  if (!res.ok) {
+    console.error("[modelRepositoryHTTP] getModelVariationById failed", {
+      status: res.status,
+      statusText: res.statusText,
+      body: text,
+    });
+    throw new Error(
+      `モデルバリエーションの取得に失敗しました（${res.status} ${
+        res.statusText ?? ""
+      }）`,
+    );
+  }
+
+  const raw = text ? JSON.parse(text) : {};
+  const data = mapRawToModelVariation(raw);
+
+  console.log("[modelRepositoryHTTP] getModelVariationById response:", data);
+
+  return data;
+}
+
+/* =========================================================
+ * Blueprint 単位での ModelVariation 一覧取得
+ * GET /models/by-blueprint/{productBlueprintId}/variations
+ * =======================================================*/
+
+export async function listModelVariationsByProductBlueprintId(
+  productBlueprintId: string,
+): Promise<ModelVariationResponse[]> {
+  const token = await getIdTokenOrThrow();
+  const safeId = encodeURIComponent(productBlueprintId.trim());
+
+  const url = `${API_BASE}/models/by-blueprint/${safeId}/variations`;
+
+  console.log(
+    "[modelRepositoryHTTP] listModelVariationsByProductBlueprintId request:",
+    { url, productBlueprintId },
+  );
+
+  const res = await fetch(url, {
+    method: "GET",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${token}`,
+      Accept: "application/json",
+    },
+  });
+
+  const text = await res.text().catch(() => "");
+
+  if (!res.ok) {
+    console.error(
+      "[modelRepositoryHTTP] listModelVariationsByProductBlueprintId failed",
+      {
+        status: res.status,
+        statusText: res.statusText,
+        body: text,
+      },
+    );
+    throw new Error(
+      `モデルバリエーション一覧の取得に失敗しました（${res.status} ${
+        res.statusText ?? ""
+      }）`,
+    );
+  }
+
+  const rawList = text ? JSON.parse(text) : [];
+  const list = Array.isArray(rawList)
+    ? rawList.map((raw) => mapRawToModelVariation(raw))
+    : [];
+
+  console.log(
+    "[modelRepositoryHTTP] listModelVariationsByProductBlueprintId response:",
+    list,
+  );
+
+  return list;
 }

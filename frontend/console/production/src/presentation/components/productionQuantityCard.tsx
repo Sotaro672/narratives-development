@@ -34,6 +34,19 @@ type ProductionQuantityCardProps = {
 };
 
 /**
+ * number / string な RGB (0xRRGGBB) を CSS 用 #RRGGBB に変換
+ */
+function rgbIntToHex(rgb: number | string | null | undefined): string | null {
+  if (rgb === null || rgb === undefined) return null;
+  const n = typeof rgb === "string" ? Number(rgb) : rgb;
+  if (!Number.isFinite(n)) return null;
+
+  const clamped = Math.max(0, Math.min(0xffffff, Math.floor(n)));
+  const hex = clamped.toString(16).padStart(6, "0");
+  return `#${hex}`;
+}
+
+/**
  * モデル別生産数一覧カード
  * inventoryCard と同じ見た目 + edit/view 切り替え
  */
@@ -99,46 +112,59 @@ const ProductionQuantityCard: React.FC<ProductionQuantityCardProps> = ({
             </TableHeader>
 
             <TableBody>
-              {rows.map((row, idx) => (
-                <TableRow key={`${row.modelCode}-${idx}`} className="ivc__tr">
-                  <TableCell className="ivc__model">
-                    {row.modelCode}
-                  </TableCell>
-                  <TableCell className="ivc__size">{row.size}</TableCell>
-                  <TableCell className="ivc__color-cell">
-                    <span
-                      className="ivc__color-dot"
-                      style={{
-                        backgroundColor:
-                          row.colorCode && row.colorCode.trim()
-                            ? row.colorCode
-                            : "#ffffff",
-                        boxShadow: "0 0 0 1px rgba(0,0,0,0.18)",
-                      }}
-                    />
-                    <span className="ivc__color-label">
-                      {row.colorName}
-                    </span>
-                  </TableCell>
-                  <TableCell className="ivc__stock">
-                    {isEditable ? (
-                      <Input
-                        type="number"
-                        min={0}
-                        step={1}
-                        value={row.stock ?? 0}
-                        onChange={(e) =>
-                          handleChangeStock(idx, e.target.value)
-                        }
-                        className="ivc__stock-input w-20 text-right"
-                        aria-label={`${row.modelCode} の生産数`}
+              {rows.map((row, idx) => {
+                // create / detail 双方で追加済みの rgb プロパティを拾う
+                const rgb = (row as any).rgb as number | string | null | undefined;
+                const rgbHex = rgbIntToHex(rgb);
+
+                const bgColor =
+                  row.colorCode && row.colorCode.trim()
+                    ? row.colorCode
+                    : rgbHex ?? "#ffffff";
+
+                return (
+                  <TableRow
+                    key={`${row.modelCode}-${idx}`}
+                    className="ivc__tr"
+                  >
+                    <TableCell className="ivc__model">
+                      {row.modelCode}
+                    </TableCell>
+                    <TableCell className="ivc__size">{row.size}</TableCell>
+                    <TableCell className="ivc__color-cell">
+                      <span
+                        className="ivc__color-dot"
+                        style={{
+                          backgroundColor: bgColor,
+                          boxShadow: "0 0 0 1px rgba(0,0,0,0.18)",
+                        }}
+                        // 参考として title に HEX を入れておく
+                        title={rgbHex ?? row.colorCode ?? ""}
                       />
-                    ) : (
-                      <span className="ivc__stock-number">{row.stock}</span>
-                    )}
-                  </TableCell>
-                </TableRow>
-              ))}
+                      <span className="ivc__color-label">
+                        {row.colorName}
+                      </span>
+                    </TableCell>
+                    <TableCell className="ivc__stock">
+                      {isEditable ? (
+                        <Input
+                          type="number"
+                          min={0}
+                          step={1}
+                          value={row.stock ?? 0}
+                          onChange={(e) =>
+                            handleChangeStock(idx, e.target.value)
+                          }
+                          className="ivc__stock-input w-20 text-right"
+                          aria-label={`${row.modelCode} の生産数`}
+                        />
+                      ) : (
+                        <span className="ivc__stock-number">{row.stock}</span>
+                      )}
+                    </TableCell>
+                  </TableRow>
+                );
+              })}
 
               {/* データなし表示 */}
               {rows.length === 0 && (
