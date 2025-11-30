@@ -66,7 +66,7 @@ export const AdminCard: React.FC<AdminCardProps> = ({
   onEditAssignee,
   onClickAssignee,
 
-  mode = "edit", // ★ 追加（デフォルト＝edit）
+  mode = "view", // ★ 追加（デフォルト＝view）
 }) => {
   const isEdit = mode === "edit";
 

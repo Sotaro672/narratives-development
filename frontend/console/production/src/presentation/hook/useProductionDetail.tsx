@@ -208,13 +208,29 @@ export function useProductionDetail() {
   // ======================================================
   const logSaveRows = React.useCallback(
     (rows: CreateQuantityRow[]) => {
-      console.log(
-        "[useProductionDetail] onSave rows payload:",
-        rows,
-      );
+      console.log("[useProductionDetail] onSave rows payload:", rows);
     },
     [],
   );
+
+  // ======================================================
+  // AdminCard 用のコールバック
+  //   - 編集ボタン → edit モードへ
+  //   - キャンセルボタン → view モードへ
+  //   - 保存ボタン → とりあえず view へ戻す（保存処理は別で実装）
+  // ======================================================
+  const handleAdminEdit = React.useCallback(() => {
+    setMode("edit");
+  }, []);
+
+  const handleAdminCancel = React.useCallback(() => {
+    setMode("view");
+  }, []);
+
+  const handleAdminSave = React.useCallback(() => {
+    // 保存処理を別で呼んだあとに view 戻し、などの想定
+    setMode("view");
+  }, []);
 
   // ======================================================
   // 戻る
@@ -224,6 +240,7 @@ export function useProductionDetail() {
   }, [navigate]);
 
   return {
+    // モード関連
     mode,
     isViewMode,
     isEditMode,
@@ -231,24 +248,35 @@ export function useProductionDetail() {
     switchToEdit,
     toggleMode,
 
+    // AdminCard から使いやすい専用ハンドラ
+    adminMode: mode,
+    onAdminEdit: handleAdminEdit,
+    onAdminCancel: handleAdminCancel,
+    onAdminSave: handleAdminSave,
+
+    // 画面制御
     onBack: handleBack,
 
+    // Production 詳細データ関連
     productionId: productionId ?? null,
     production,
     setProduction,
     loading,
     error,
 
+    // ProductBlueprint 詳細データ関連
     productBlueprint,
     pbLoading,
     pbError,
 
+    // ProductionQuantityCard 用
     quantityRows,
     setQuantityRows,
 
     // onSave から rows を渡して呼び出せるログ関数
     logSaveRows,
 
+    // 参考情報
     creator,
   };
 }

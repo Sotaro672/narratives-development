@@ -37,10 +37,10 @@ func (h *ProductionHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	case r.Method == http.MethodPost && r.URL.Path == "/productions":
 		h.post(w, r)
 
-	// PUT /productions/{id}
+	// PUT /productions/{id}（UPDATE）
 	case r.Method == http.MethodPut && strings.HasPrefix(r.URL.Path, "/productions/"):
 		id := strings.TrimPrefix(r.URL.Path, "/productions/")
-		h.put(w, r, id)
+		h.update(w, r, id)
 
 	// DELETE /productions/{id}
 	case r.Method == http.MethodDelete && strings.HasPrefix(r.URL.Path, "/productions/"):
@@ -59,7 +59,7 @@ func (h *ProductionHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 func (h *ProductionHandler) list(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 
-	// ★ ここを List → ListWithAssigneeName に変更
+	// ★ ListWithAssigneeName を使用
 	productions, err := h.uc.ListWithAssigneeName(ctx)
 	if err != nil {
 		writeProductionErr(w, err)
@@ -91,7 +91,7 @@ func (h *ProductionHandler) get(w http.ResponseWriter, r *http.Request, id strin
 }
 
 // ------------------------------------------------------------
-// POST /productions
+// POST /productions（CREATE）
 // ------------------------------------------------------------
 func (h *ProductionHandler) post(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
@@ -115,9 +115,9 @@ func (h *ProductionHandler) post(w http.ResponseWriter, r *http.Request) {
 }
 
 // ------------------------------------------------------------
-// PUT /productions/{id}
+// PUT /productions/{id}（UPDATE）
 // ------------------------------------------------------------
-func (h *ProductionHandler) put(w http.ResponseWriter, r *http.Request, id string) {
+func (h *ProductionHandler) update(w http.ResponseWriter, r *http.Request, id string) {
 	ctx := r.Context()
 	defer r.Body.Close()
 
@@ -135,9 +135,15 @@ func (h *ProductionHandler) put(w http.ResponseWriter, r *http.Request, id strin
 		return
 	}
 
-	// パスの id を優先
+	// パスの ID を優先する
 	req.ID = id
 
+	// ---- ★ ログ追加：更新内容の確認 ----
+	_ = json.NewEncoder(w).Encode(map[string]interface{}{
+		"debug_update_payload": req,
+	})
+
+	// データ更新実行（Create と同じく Save を呼ぶ設計）
 	p, err := h.uc.Save(ctx, req)
 	if err != nil {
 		writeProductionErr(w, err)
@@ -169,7 +175,7 @@ func (h *ProductionHandler) delete(w http.ResponseWriter, r *http.Request, id st
 }
 
 // ------------------------------------------------------------
-// エラー共通処理
+// エラーを JSON で返す共通処理
 // ------------------------------------------------------------
 func writeProductionErr(w http.ResponseWriter, err error) {
 	code := http.StatusInternalServerError
