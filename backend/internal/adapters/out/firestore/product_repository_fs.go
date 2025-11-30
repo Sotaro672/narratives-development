@@ -33,7 +33,7 @@ func (r *ProductRepositoryFS) col() *firestore.CollectionRef {
 // ProductRepo interface methods
 // ============================================================
 
-// GetByID returns a single Product by ID (value return, not pointer)
+// GetByID returns a single Product by ID
 func (r *ProductRepositoryFS) GetByID(ctx context.Context, id string) (productdom.Product, error) {
 	if r.Client == nil {
 		return productdom.Product{}, errors.New("firestore client is nil")
@@ -52,11 +52,7 @@ func (r *ProductRepositoryFS) GetByID(ctx context.Context, id string) (productdo
 		return productdom.Product{}, err
 	}
 
-	p, err := docToProduct(snap)
-	if err != nil {
-		return productdom.Product{}, err
-	}
-	return p, nil
+	return docToProduct(snap)
 }
 
 // Exists checks if a product with the given ID exists
@@ -80,11 +76,7 @@ func (r *ProductRepositoryFS) Exists(ctx context.Context, id string) (bool, erro
 	return true, nil
 }
 
-// Create inserts a new product and returns the created entity.
-//
-// Semantics aligned with PG version:
-// - If v.ID is empty, Firestore auto-ID is used.
-// - inspection_result, connected_token, printed_at/by, inspected_at/by can be nil.
+// Create inserts a new product (Firestore auto-ID allowed)
 func (r *ProductRepositoryFS) Create(ctx context.Context, v productdom.Product) (productdom.Product, error) {
 	if r.Client == nil {
 		return productdom.Product{}, errors.New("firestore client is nil")
@@ -114,19 +106,10 @@ func (r *ProductRepositoryFS) Create(ctx context.Context, v productdom.Product) 
 	if err != nil {
 		return productdom.Product{}, err
 	}
-	out, err := docToProduct(snap)
-	if err != nil {
-		return productdom.Product{}, err
-	}
-	return out, nil
+	return docToProduct(snap)
 }
 
-// Save performs upsert-style write of Product by ID.
-//
-// Semantics aligned with PG version:
-// - If ID is empty -> behaves like Create (auto-ID).
-//
-// NOTE: updatedAt / updatedBy は Product から削除済みのため扱いません。
+// Save = full upsert
 func (r *ProductRepositoryFS) Save(ctx context.Context, v productdom.Product) (productdom.Product, error) {
 	if r.Client == nil {
 		return productdom.Product{}, errors.New("firestore client is nil")
@@ -150,45 +133,36 @@ func (r *ProductRepositoryFS) Save(ctx context.Context, v productdom.Product) (p
 	if err != nil {
 		return productdom.Product{}, err
 	}
-	out, err := docToProduct(snap)
-	if err != nil {
-		return productdom.Product{}, err
-	}
-	return out, nil
+	return docToProduct(snap)
 }
 
-// Delete removes a product by ID
-func (r *ProductRepositoryFS) Delete(ctx context.Context, id string) error {
+// Update(ctx, id, product) = usecase.ProductRepo と互換の full update
+func (r *ProductRepositoryFS) Update(ctx context.Context, id string, v productdom.Product) (productdom.Product, error) {
 	if r.Client == nil {
-		return errors.New("firestore client is nil")
+		return productdom.Product{}, errors.New("firestore client is nil")
 	}
 
 	id = strings.TrimSpace(id)
 	if id == "" {
-		return productdom.ErrNotFound
+		return productdom.Product{}, productdom.ErrNotFound
 	}
 
-	_, err := r.col().Doc(id).Delete(ctx)
-	if err != nil {
-		if status.Code(err) == codes.NotFound {
-			return productdom.ErrNotFound
-		}
-		return err
-	}
-	return nil
+	// 強制的に ID を固定
+	v.ID = id
+
+	return r.Save(ctx, v)
 }
 
 // ============================================================
-// Extra helper/query methods
+// List （filter / sort を削除した簡易版）
 // ============================================================
 
-// List: 簡易版。filter / sort / orderBy をすべて無視して全件返す。
 func (r *ProductRepositoryFS) List(
 	ctx context.Context,
 	filter productdom.Filter,
-	sort productdom.Sort,
 	page productdom.Page,
 ) (productdom.PageResult, error) {
+
 	if r.Client == nil {
 		return productdom.PageResult{}, errors.New("firestore client is nil")
 	}
@@ -213,15 +187,6 @@ func (r *ProductRepositoryFS) List(
 	}
 
 	total := len(items)
-	if total == 0 {
-		return productdom.PageResult{
-			Items:      []productdom.Product{},
-			TotalCount: 0,
-			TotalPages: 0,
-			Page:       1,
-			PerPage:    0,
-		}, nil
-	}
 
 	return productdom.PageResult{
 		Items:      items,
@@ -230,199 +195,6 @@ func (r *ProductRepositoryFS) List(
 		Page:       1,
 		PerPage:    total,
 	}, nil
-}
-
-// Count: 簡易版。filter を無視して全件数を返す。
-func (r *ProductRepositoryFS) Count(ctx context.Context, filter productdom.Filter) (int, error) {
-	if r.Client == nil {
-		return 0, errors.New("firestore client is nil")
-	}
-
-	it := r.col().Documents(ctx)
-	defer it.Stop()
-
-	total := 0
-	for {
-		_, err := it.Next()
-		if err == iterator.Done {
-			break
-		}
-		if err != nil {
-			return 0, err
-		}
-		total++
-	}
-	return total, nil
-}
-
-// Update: partial update patch API
-//
-// updatedAt / updatedBy の更新は削除。
-func (r *ProductRepositoryFS) Update(ctx context.Context, id string, in productdom.UpdateProductInput) (productdom.Product, error) {
-	if r.Client == nil {
-		return productdom.Product{}, errors.New("firestore client is nil")
-	}
-
-	id = strings.TrimSpace(id)
-	if id == "" {
-		return productdom.Product{}, productdom.ErrNotFound
-	}
-
-	docRef := r.col().Doc(id)
-	var updates []firestore.Update
-
-	setStr := func(path string, p *string) {
-		if p != nil {
-			updates = append(updates, firestore.Update{
-				Path:  path,
-				Value: strings.TrimSpace(*p),
-			})
-		}
-	}
-	setTime := func(path string, t *time.Time) {
-		if t != nil {
-			updates = append(updates, firestore.Update{
-				Path:  path,
-				Value: t.UTC(),
-			})
-		}
-	}
-
-	setStr("modelId", in.ModelID)
-	setStr("productionId", in.ProductionID)
-
-	if in.InspectionResult != nil {
-		updates = append(updates, firestore.Update{
-			Path:  "inspectionResult",
-			Value: strings.TrimSpace(string(*in.InspectionResult)),
-		})
-	}
-
-	if in.ConnectedToken != nil {
-		v := strings.TrimSpace(*in.ConnectedToken)
-		if v == "" {
-			updates = append(updates, firestore.Update{
-				Path:  "connectedToken",
-				Value: firestore.Delete,
-			})
-		} else {
-			updates = append(updates, firestore.Update{
-				Path:  "connectedToken",
-				Value: v,
-			})
-		}
-	}
-
-	setTime("printedAt", in.PrintedAt)
-	setStr("printedBy", in.PrintedBy)
-	setTime("inspectedAt", in.InspectedAt)
-	setStr("inspectedBy", in.InspectedBy)
-
-	if len(updates) == 0 {
-		// 変更なしならそのまま返す
-		return r.GetByID(ctx, id)
-	}
-
-	_, err := docRef.Update(ctx, updates)
-	if err != nil {
-		if status.Code(err) == codes.NotFound {
-			return productdom.Product{}, productdom.ErrNotFound
-		}
-		return productdom.Product{}, err
-	}
-
-	return r.GetByID(ctx, id)
-}
-
-// UpdateInspection: convenience helper
-//
-// updatedAt / updatedBy は更新しない。
-func (r *ProductRepositoryFS) UpdateInspection(ctx context.Context, id string, in productdom.UpdateInspectionInput) (productdom.Product, error) {
-	if r.Client == nil {
-		return productdom.Product{}, errors.New("firestore client is nil")
-	}
-
-	id = strings.TrimSpace(id)
-	if id == "" {
-		return productdom.Product{}, productdom.ErrNotFound
-	}
-
-	docRef := r.col().Doc(id)
-
-	now := time.Now().UTC()
-	inspectedAt := now
-	if in.InspectedAt != nil && !in.InspectedAt.IsZero() {
-		inspectedAt = in.InspectedAt.UTC()
-	}
-
-	updates := []firestore.Update{
-		{
-			Path:  "inspectionResult",
-			Value: strings.TrimSpace(string(in.InspectionResult)),
-		},
-		{
-			Path:  "inspectedBy",
-			Value: strings.TrimSpace(in.InspectedBy),
-		},
-		{
-			Path:  "inspectedAt",
-			Value: inspectedAt,
-		},
-	}
-
-	_, err := docRef.Update(ctx, updates)
-	if err != nil {
-		if status.Code(err) == codes.NotFound {
-			return productdom.Product{}, productdom.ErrNotFound
-		}
-		return productdom.Product{}, err
-	}
-
-	return r.GetByID(ctx, id)
-}
-
-// ConnectToken: convenience helper
-//
-// updatedAt は更新せず、connectedToken のみ更新。
-func (r *ProductRepositoryFS) ConnectToken(ctx context.Context, id string, in productdom.ConnectTokenInput) (productdom.Product, error) {
-	if r.Client == nil {
-		return productdom.Product{}, errors.New("firestore client is nil")
-	}
-
-	id = strings.TrimSpace(id)
-	if id == "" {
-		return productdom.Product{}, productdom.ErrNotFound
-	}
-
-	docRef := r.col().Doc(id)
-
-	var updates []firestore.Update
-
-	if in.TokenID == nil || strings.TrimSpace(*in.TokenID) == "" {
-		updates = append(updates, firestore.Update{
-			Path:  "connectedToken",
-			Value: firestore.Delete,
-		})
-	} else {
-		updates = append(updates, firestore.Update{
-			Path:  "connectedToken",
-			Value: strings.TrimSpace(*in.TokenID),
-		})
-	}
-
-	if len(updates) == 0 {
-		return r.GetByID(ctx, id)
-	}
-
-	_, err := docRef.Update(ctx, updates)
-	if err != nil {
-		if status.Code(err) == codes.NotFound {
-			return productdom.Product{}, productdom.ErrNotFound
-		}
-		return productdom.Product{}, err
-	}
-
-	return r.GetByID(ctx, id)
 }
 
 // ============================================================
@@ -443,6 +215,7 @@ func docToProduct(doc *firestore.DocumentSnapshot) (productdom.Product, error) {
 		}
 		return ""
 	}
+
 	getStrPtr := func(keys ...string) *string {
 		for _, k := range keys {
 			if v, ok := data[k].(string); ok {
@@ -454,6 +227,7 @@ func docToProduct(doc *firestore.DocumentSnapshot) (productdom.Product, error) {
 		}
 		return nil
 	}
+
 	getTimePtr := func(keys ...string) *time.Time {
 		for _, k := range keys {
 			if v, ok := data[k].(time.Time); ok && !v.IsZero() {
@@ -464,19 +238,17 @@ func docToProduct(doc *firestore.DocumentSnapshot) (productdom.Product, error) {
 		return nil
 	}
 
-	p := productdom.Product{
+	return productdom.Product{
 		ID:               doc.Ref.ID,
-		ModelID:          getStr("modelId", "model_id"),
-		ProductionID:     getStr("productionId", "production_id"),
-		InspectionResult: productdom.InspectionResult(getStr("inspectionResult", "inspection_result")),
-		ConnectedToken:   getStrPtr("connectedToken", "connected_token"),
-		PrintedAt:        getTimePtr("printedAt", "printed_at"),
-		PrintedBy:        getStrPtr("printedBy", "printed_by"),
-		InspectedAt:      getTimePtr("inspectedAt", "inspected_at"),
-		InspectedBy:      getStrPtr("inspectedBy", "inspected_by"),
-	}
-
-	return p, nil
+		ModelID:          getStr("modelId"),
+		ProductionID:     getStr("productionId"),
+		InspectionResult: productdom.InspectionResult(getStr("inspectionResult")),
+		ConnectedToken:   getStrPtr("connectedToken"),
+		PrintedAt:        getTimePtr("printedAt"),
+		PrintedBy:        getStrPtr("printedBy"),
+		InspectedAt:      getTimePtr("inspectedAt"),
+		InspectedBy:      getStrPtr("inspectedBy"),
+	}, nil
 }
 
 func productToDoc(v productdom.Product) map[string]any {
