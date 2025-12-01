@@ -33,16 +33,29 @@ type PrintLogRepo interface {
 	ListByProductionID(ctx context.Context, productionID string) ([]productdom.PrintLog, error)
 }
 
-// ProductUsecase orchestrates product operations.
-type ProductUsecase struct {
-	repo         ProductRepo
-	printLogRepo PrintLogRepo
+// ★ Inspection 用リポジトリ（print_log と同じ product ドメイン配下の集約として扱う）
+type InspectionRepo interface {
+	// inspections_by_production/{productionId} ドキュメントの作成を担当
+	// （実体は product ドメインの InspectionBatch などを想定）
+	Create(ctx context.Context, batch productdom.InspectionBatch) (productdom.InspectionBatch, error)
 }
 
-func NewProductUsecase(repo ProductRepo, printLogRepo PrintLogRepo) *ProductUsecase {
+// ProductUsecase orchestrates product operations.
+type ProductUsecase struct {
+	repo           ProductRepo
+	printLogRepo   PrintLogRepo
+	inspectionRepo InspectionRepo
+}
+
+func NewProductUsecase(
+	repo ProductRepo,
+	printLogRepo PrintLogRepo,
+	inspectionRepo InspectionRepo,
+) *ProductUsecase {
 	return &ProductUsecase{
-		repo:         repo,
-		printLogRepo: printLogRepo,
+		repo:           repo,
+		printLogRepo:   printLogRepo,
+		inspectionRepo: inspectionRepo,
 	}
 }
 
@@ -106,10 +119,16 @@ func (u *ProductUsecase) ListPrintLogsByProductionID(ctx context.Context, produc
 	return logs, nil
 }
 
-// ★ 追加: 1 回の印刷分の Product 一覧から print_log を 1 件作成し、QrPayloads 付きで返す
+// ★ 追加: 1 回の印刷分の Product 一覧から print_log を 1 件作成し、
+//
+//	同じタイミングで inspections_by_production を 1 件作成する。
 func (u *ProductUsecase) CreatePrintLogForProduction(ctx context.Context, productionID string) (productdom.PrintLog, error) {
 	if u.printLogRepo == nil {
 		return productdom.PrintLog{}, fmt.Errorf("printLogRepo is nil")
+	}
+	if u.inspectionRepo == nil {
+		// print_log と inspection はセットで作る前提なので、nil は構成エラー扱い
+		return productdom.PrintLog{}, fmt.Errorf("inspectionRepo is nil")
 	}
 
 	pid := strings.TrimSpace(productionID)
@@ -165,7 +184,25 @@ func (u *ProductUsecase) CreatePrintLogForProduction(ctx context.Context, produc
 		return productdom.PrintLog{}, err
 	}
 
-	// 保存
+	// ★ ここで inspections_by_production/{productionId} 用のバッチを作成
+	//   - inspectionResult / inspectedBy / inspectedAt はすべて nil で初期化
+	//   - status は "inspecting" 固定で開始
+	batch, err := productdom.NewInspectionBatch(
+		pid,
+		productdom.InspectionStatusInspecting, // enum: inspecting / completed
+		productIDs,
+	)
+	if err != nil {
+		return productdom.PrintLog{}, err
+	}
+
+	// 先に Inspection を保存してから PrintLog を保存するか、
+	// 逆順にするかは好みですが、ここでは Inspection → PrintLog の順にします。
+	if _, err := u.inspectionRepo.Create(ctx, batch); err != nil {
+		return productdom.PrintLog{}, err
+	}
+
+	// PrintLog を保存
 	created, err := u.printLogRepo.Create(ctx, log)
 	if err != nil {
 		return productdom.PrintLog{}, err
@@ -195,6 +232,7 @@ func (u *ProductUsecase) CreatePrintLogForProduction(ctx context.Context, produc
 // ==========================
 
 // Create: Product のみ作成する。
+//
 // 以前の仕様（Create のたびに 1 件ずつ print_log を作成）は廃止し、
 // 「1 回の印刷バッチでまとめて PrintLog を作る」ために
 // CreatePrintLogForProduction を別途呼び出す方式に変更。

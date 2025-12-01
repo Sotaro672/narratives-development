@@ -16,7 +16,7 @@ import (
 	mailadp "narratives/internal/adapters/out/mail"
 	uc "narratives/internal/application/usecase"
 	authuc "narratives/internal/application/usecase/auth"
-	branddom "narratives/internal/domain/brand" // ★ Brand 用ドメインサービス
+	branddom "narratives/internal/domain/brand"
 	companydom "narratives/internal/domain/company"
 	memdom "narratives/internal/domain/member"
 	productbpdom "narratives/internal/domain/productBlueprint"
@@ -287,6 +287,9 @@ func NewContainer(ctx context.Context) (*Container, error) {
 	// ★ PrintLog 用リポジトリ
 	printLogRepo := fs.NewPrintLogRepositoryFS(fsClient)
 
+	// ★ Inspection 用リポジトリ（inspections_by_production）
+	inspectionRepo := fs.NewInspectionRepositoryFS(fsClient)
+
 	// ★ History repositories
 	productBlueprintHistoryRepo := fs.NewProductBlueprintHistoryRepositoryFS(fsClient)
 	modelHistoryRepo := fs.NewModelHistoryRepositoryFS(fsClient)
@@ -346,8 +349,8 @@ func NewContainer(ctx context.Context) (*Container, error) {
 	paymentUC := uc.NewPaymentUsecase(paymentRepo)
 	permissionUC := uc.NewPermissionUsecase(permissionRepo)
 
-	// ★ ProductUsecase に PrintLogRepo を併せて注入
-	productUC := uc.NewProductUsecase(productRepo, printLogRepo)
+	// ★ ProductUsecase に PrintLogRepo + InspectionRepo を注入
+	productUC := uc.NewProductUsecase(productRepo, printLogRepo, inspectionRepo)
 
 	// ★ ProductionUsecase に member.Service + productBlueprint.Service + brand.Service を注入
 	productionUC := uc.NewProductionUsecase(

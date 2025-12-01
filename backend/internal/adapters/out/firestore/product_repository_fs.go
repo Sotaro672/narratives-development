@@ -1,3 +1,4 @@
+// backend/internal/adapters/out/firestore/product_repository_fs.go
 package firestore
 
 import (
@@ -324,6 +325,57 @@ func (r *PrintLogRepositoryFS) ListByProductionID(ctx context.Context, productio
 }
 
 // ============================================================
+// InspectionRepositoryFS: inspections_by_production 用 Firestore リポジトリ
+//   usecase.InspectionRepo の Create を実装する
+// ============================================================
+
+type InspectionRepositoryFS struct {
+	Client *firestore.Client
+}
+
+func NewInspectionRepositoryFS(client *firestore.Client) *InspectionRepositoryFS {
+	return &InspectionRepositoryFS{Client: client}
+}
+
+func (r *InspectionRepositoryFS) col() *firestore.CollectionRef {
+	return r.Client.Collection("inspections_by_production")
+}
+
+// Create: inspections_by_production/{productionId} に 1 ドキュメント作成
+//
+//	productionId をドキュメントIDとして保存します。
+func (r *InspectionRepositoryFS) Create(ctx context.Context, v productdom.InspectionBatch) (productdom.InspectionBatch, error) {
+	if r.Client == nil {
+		return productdom.InspectionBatch{}, errors.New("firestore client is nil")
+	}
+
+	// ドメイン側バリデーション
+	if err := v.Validate(); err != nil {
+		return productdom.InspectionBatch{}, err
+	}
+
+	pid := strings.TrimSpace(v.ProductionID)
+	if pid == "" {
+		return productdom.InspectionBatch{}, productdom.ErrInvalidInspectionProductionID
+	}
+
+	docRef := r.col().Doc(pid)
+	data := inspectionBatchToDoc(v)
+
+	_, err := docRef.Create(ctx, data)
+	if err != nil {
+		// 既に存在している場合はそのままエラーを返す
+		if status.Code(err) == codes.AlreadyExists {
+			return productdom.InspectionBatch{}, err
+		}
+		return productdom.InspectionBatch{}, err
+	}
+
+	// 今のところ Firestore 側で値が変わる要素もないので v をそのまま返す
+	return v, nil
+}
+
+// ============================================================
 // Helpers
 // ============================================================
 
@@ -457,6 +509,47 @@ func printLogToDoc(v productdom.PrintLog) map[string]any {
 		"printedAt":    v.PrintedAt.UTC(),
 	}
 	return m
+}
+
+// inspections_by_production 用の変換
+func inspectionBatchToDoc(v productdom.InspectionBatch) map[string]any {
+	items := make([]map[string]any, 0, len(v.Inspections))
+	for _, ins := range v.Inspections {
+		m := map[string]any{
+			"productId": strings.TrimSpace(ins.ProductID),
+		}
+
+		if ins.InspectionResult != nil {
+			m["inspectionResult"] = string(*ins.InspectionResult)
+		} else {
+			m["inspectionResult"] = nil
+		}
+
+		if ins.InspectedBy != nil {
+			s := strings.TrimSpace(*ins.InspectedBy)
+			if s != "" {
+				m["inspectedBy"] = s
+			} else {
+				m["inspectedBy"] = nil
+			}
+		} else {
+			m["inspectedBy"] = nil
+		}
+
+		if ins.InspectedAt != nil && !ins.InspectedAt.IsZero() {
+			m["inspectedAt"] = ins.InspectedAt.UTC()
+		} else {
+			m["inspectedAt"] = nil
+		}
+
+		items = append(items, m)
+	}
+
+	return map[string]any{
+		"productionId": strings.TrimSpace(v.ProductionID),
+		"status":       string(v.Status),
+		"inspections":  items,
+	}
 }
 
 func asString(v any) string {

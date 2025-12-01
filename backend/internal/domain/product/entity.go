@@ -1,3 +1,4 @@
+// backend/internal/domain/product/entity.go
 package product
 
 import (
@@ -63,6 +64,42 @@ const (
 )
 
 // ===============================
+// Inspection batch (inspections_by_production)
+// ===============================
+
+// InspectionStatus は inspections_by_production のステータス
+type InspectionStatus string
+
+const (
+	InspectionStatusInspecting InspectionStatus = "inspecting"
+	InspectionStatusCompleted  InspectionStatus = "completed"
+)
+
+// InspectionItem は 1 つの productId に対する検査状態を表す
+type InspectionItem struct {
+	ProductID        string            `json:"productId"`
+	InspectionResult *InspectionResult `json:"inspectionResult"` // create 時は nil
+	InspectedBy      *string           `json:"inspectedBy"`      // create 時は nil
+	InspectedAt      *time.Time        `json:"inspectedAt"`      // create 時は nil
+}
+
+// InspectionBatch は 1 productionId に紐づく inspections_by_production ドキュメント
+//
+//	inspections_by_production/{productionId} {
+//	  "productionId": "...",
+//	  "status": "inspecting" | "completed",
+//	  "inspections": [
+//	    { "productId": "...", "inspectionResult": null, "inspectedBy": null, "inspectedAt": null },
+//	    ...
+//	  ]
+//	}
+type InspectionBatch struct {
+	ProductionID string           `json:"productionId"`
+	Status       InspectionStatus `json:"status"`
+	Inspections  []InspectionItem `json:"inspections"`
+}
+
+// ===============================
 // Errors
 // ===============================
 
@@ -86,6 +123,11 @@ var (
 	ErrInvalidPrintLogProductIDs   = errors.New("printLog: invalid productIds")
 	ErrInvalidPrintLogPrintedBy    = errors.New("printLog: invalid printedBy")
 	ErrInvalidPrintLogPrintedAt    = errors.New("printLog: invalid printedAt")
+
+	// InspectionBatch 用エラー
+	ErrInvalidInspectionProductionID = errors.New("inspection: invalid productionId")
+	ErrInvalidInspectionStatus       = errors.New("inspection: invalid status")
+	ErrInvalidInspectionProductIDs   = errors.New("inspection: invalid productIds")
 )
 
 // ===============================
@@ -180,6 +222,52 @@ func NewPrintLog(
 		return PrintLog{}, err
 	}
 	return pl, nil
+}
+
+// NewInspectionBatch は inspections_by_production 用のバッチを生成します。
+// - productionID は必須
+// - status は inspecting / completed のいずれか
+// - productIDs は 1 件以上必要
+// - 各 InspectionItem の inspectionResult / inspectedBy / inspectedAt は nil で初期化
+func NewInspectionBatch(
+	productionID string,
+	status InspectionStatus,
+	productIDs []string,
+) (InspectionBatch, error) {
+
+	pid := strings.TrimSpace(productionID)
+	if pid == "" {
+		return InspectionBatch{}, ErrInvalidInspectionProductionID
+	}
+	if !IsValidInspectionStatus(status) {
+		return InspectionBatch{}, ErrInvalidInspectionStatus
+	}
+
+	ids := normalizeIDList(productIDs)
+	if len(ids) == 0 {
+		return InspectionBatch{}, ErrInvalidInspectionProductIDs
+	}
+
+	inspections := make([]InspectionItem, 0, len(ids))
+	for _, id := range ids {
+		inspections = append(inspections, InspectionItem{
+			ProductID:        id,
+			InspectionResult: nil,
+			InspectedBy:      nil,
+			InspectedAt:      nil,
+		})
+	}
+
+	batch := InspectionBatch{
+		ProductionID: pid,
+		Status:       status,
+		Inspections:  inspections,
+	}
+
+	if err := batch.validate(); err != nil {
+		return InspectionBatch{}, err
+	}
+	return batch, nil
 }
 
 // ===============================
@@ -311,6 +399,51 @@ func (pl PrintLog) validate() error {
 	return nil
 }
 
+// InspectionBatch のバリデーション
+func (b InspectionBatch) validate() error {
+	if strings.TrimSpace(b.ProductionID) == "" {
+		return ErrInvalidInspectionProductionID
+	}
+	if !IsValidInspectionStatus(b.Status) {
+		return ErrInvalidInspectionStatus
+	}
+	if len(b.Inspections) == 0 {
+		return ErrInvalidInspectionProductIDs
+	}
+
+	for _, ins := range b.Inspections {
+		if strings.TrimSpace(ins.ProductID) == "" {
+			return ErrInvalidInspectionProductIDs
+		}
+
+		if ins.InspectionResult != nil {
+			// 結果が入っている場合は、結果の妥当性 + inspectedBy / inspectedAt の整合性をチェック
+			if !IsValidInspectionResult(*ins.InspectionResult) {
+				return ErrInvalidInspectionResult
+			}
+			if ins.InspectedBy == nil || strings.TrimSpace(*ins.InspectedBy) == "" {
+				return ErrInvalidInspectedBy
+			}
+			if ins.InspectedAt == nil || ins.InspectedAt.IsZero() {
+				return ErrInvalidInspectedAt
+			}
+		} else {
+			// inspectionResult が nil の場合、他も nil であるべき
+			if ins.InspectedBy != nil || ins.InspectedAt != nil {
+				return ErrInvalidCoherence
+			}
+		}
+	}
+
+	return nil
+}
+
+// Validate is an exported wrapper for the internal validate method.
+// Firestore adaptersなど、product パッケージ外からドメインバリデーションを呼ぶために使用する。
+func (b InspectionBatch) Validate() error {
+	return b.validate()
+}
+
 // ===============================
 // Helpers
 // ===============================
@@ -385,6 +518,16 @@ func parseTime(s string, classify error) (time.Time, error) {
 func IsValidInspectionResult(v InspectionResult) bool {
 	switch v {
 	case InspectionNotYet, InspectionPassed, InspectionFailed, InspectionNotManufactured:
+		return true
+	default:
+		return false
+	}
+}
+
+// Valid inspection status
+func IsValidInspectionStatus(s InspectionStatus) bool {
+	switch s {
+	case InspectionStatusInspecting, InspectionStatusCompleted:
 		return true
 	default:
 		return false
