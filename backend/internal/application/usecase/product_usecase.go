@@ -59,11 +59,33 @@ func (u *ProductUsecase) ListByProductionID(ctx context.Context, productionID st
 }
 
 // ★ 追加: 同一 productionId を持つ PrintLog を一覧取得
+//   - このタイミングで各 productId に対して BuildProductQRValue を実行する
 func (u *ProductUsecase) ListPrintLogsByProductionID(ctx context.Context, productionID string) ([]productdom.PrintLog, error) {
 	if u.printLogRepo == nil {
 		return nil, fmt.Errorf("printLogRepo is nil")
 	}
-	return u.printLogRepo.ListByProductionID(ctx, strings.TrimSpace(productionID))
+
+	logs, err := u.printLogRepo.ListByProductionID(ctx, strings.TrimSpace(productionID))
+	if err != nil {
+		return nil, err
+	}
+
+	// ★ 各 print_log に含まれる productId ごとに QR ペイロードを生成して検証する
+	//   実際の QR 画像生成はフロント/インフラ側で、この値を使って行う想定。
+	//
+	//   BaseURL はまだ Usecase に注入していないので、ここでは空文字を渡し、
+	//   「productId の妥当性チェック」として利用している。
+	//   （BaseURL を使った URL 生成は、Config 注入後に拡張可能）
+	for _, logItem := range logs {
+		for _, pid := range logItem.ProductIDs {
+			if _, err := productdom.BuildProductQRValue("", pid); err != nil {
+				// QR ペイロード生成に失敗した場合はエラーとして返す
+				return nil, err
+			}
+		}
+	}
+
+	return logs, nil
 }
 
 // ==========================
