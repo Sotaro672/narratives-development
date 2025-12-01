@@ -266,7 +266,6 @@ func (h *ProductHandler) create(w http.ResponseWriter, r *http.Request) {
 		InspectionResult: productdom.InspectionNotYet,
 		ConnectedToken:   nil,
 		PrintedAt:        &req.PrintedAt,
-		PrintedBy:        req.PrintedBy,
 		InspectedAt:      nil,
 		InspectedBy:      nil,
 	}

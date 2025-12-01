@@ -387,3 +387,111 @@ export async function updateProductionDetail(params: {
 
   return loadProductionDetail(id);
 }
+
+/* ---------------------------------------------------------
+ * 印刷完了シグナル受信（printService → ここ）
+ *   - printedAt / printedBy / status を更新
+ * --------------------------------------------------------- */
+export async function notifyPrintLogCompleted(params: {
+  productionId: string;
+  logCount: number;
+  totalQrCount: number;
+  /** 既存の print_log を再利用した場合 true */
+  reusedExistingLogs?: boolean;
+}): Promise<void> {
+  const {
+    productionId,
+    logCount,
+    totalQrCount,
+    reusedExistingLogs,
+  } = params;
+
+  const id = productionId.trim();
+  if (!id) {
+    // eslint-disable-next-line no-console
+    console.warn(
+      "[ProductionDetailService] print_log completed signal received but productionId is empty",
+      params,
+    );
+    return;
+  }
+
+  // 受信ログ
+  // eslint-disable-next-line no-console
+  console.log(
+    "[ProductionDetailService] print_log completed signal received",
+    {
+      productionId: id,
+      logCount,
+      totalQrCount,
+      reusedExistingLogs: !!reusedExistingLogs,
+    },
+  );
+
+  const user = auth.currentUser;
+  if (!user) {
+    // eslint-disable-next-line no-console
+    console.warn(
+      "[ProductionDetailService] cannot update production as printed: no currentUser",
+    );
+    return;
+  }
+
+  const printedBy = user.uid; // currentMember として扱う
+  const printedAt = new Date().toISOString();
+
+  try {
+    const token = await getIdTokenOrThrow();
+    const safeId = encodeURIComponent(id);
+
+    const payload: any = {
+      // quantity / assigneeId はここでは変更せず、
+      // printedAt / printedBy / status のみを更新する意図。
+      status: "printed" as ProductionStatus,
+      printedAt,
+      printedBy,
+    };
+
+    const res = await fetch(`${BACKEND_API_BASE}/productions/${safeId}`, {
+      method: "PUT",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify(payload),
+    });
+
+    if (!res.ok) {
+      const body = await res.text().catch(() => "");
+      // eslint-disable-next-line no-console
+      console.error(
+        "[ProductionDetailService] failed to update production as printed",
+        {
+          status: res.status,
+          statusText: res.statusText,
+          body,
+        },
+      );
+      return;
+    }
+
+    // 成功ログ
+    // eslint-disable-next-line no-console
+    console.log(
+      "[ProductionDetailService] production printed status updated",
+      {
+        productionId: id,
+        status: "printed",
+        printedAt,
+        printedBy,
+        reusedExistingLogs: !!reusedExistingLogs,
+      },
+    );
+  } catch (e) {
+    // eslint-disable-next-line no-console
+    console.error(
+      "[ProductionDetailService] error while updating production as printed",
+      e,
+    );
+  }
+}

@@ -372,7 +372,6 @@ func docToProduct(doc *firestore.DocumentSnapshot) (productdom.Product, error) {
 		InspectionResult: productdom.InspectionResult(getStr("inspectionResult")),
 		ConnectedToken:   getStrPtr("connectedToken"),
 		PrintedAt:        getTimePtr("printedAt"),
-		PrintedBy:        getStrPtr("printedBy"),
 		InspectedAt:      getTimePtr("inspectedAt"),
 		InspectedBy:      getStrPtr("inspectedBy"),
 	}, nil
@@ -397,11 +396,7 @@ func productToDoc(v productdom.Product) map[string]any {
 	if v.PrintedAt != nil && !v.PrintedAt.IsZero() {
 		m["printedAt"] = v.PrintedAt.UTC()
 	}
-	if v.PrintedBy != nil {
-		if s := strings.TrimSpace(*v.PrintedBy); s != "" {
-			m["printedBy"] = s
-		}
-	}
+
 	if v.InspectedAt != nil && !v.InspectedAt.IsZero() {
 		m["inspectedAt"] = v.InspectedAt.UTC()
 	}

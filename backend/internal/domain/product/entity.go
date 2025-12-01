@@ -37,7 +37,6 @@ type Product struct {
 	ConnectedToken   *string          `json:"connectedToken"`
 
 	PrintedAt   *time.Time `json:"printedAt"`
-	PrintedBy   *string    `json:"printedBy"`
 	InspectedAt *time.Time `json:"inspectedAt"`
 	InspectedBy *string    `json:"inspectedBy"`
 }
@@ -75,7 +74,6 @@ var (
 	ErrInvalidConnectedToken   = errors.New("product: invalid connectedToken")
 
 	ErrInvalidPrintedAt = errors.New("product: invalid printedAt")
-	ErrInvalidPrintedBy = errors.New("product: invalid printedBy")
 
 	ErrInvalidInspectedAt = errors.New("product: invalid inspectedAt")
 	ErrInvalidInspectedBy = errors.New("product: invalid inspectedBy")
@@ -99,7 +97,6 @@ func New(
 	inspection InspectionResult,
 	connectedToken *string,
 	printedAt *time.Time,
-	printedBy *string,
 	inspectedAt *time.Time,
 	inspectedBy *string,
 ) (Product, error) {
@@ -116,7 +113,6 @@ func New(
 		ConnectedToken:   normalizeStrPtr(connectedToken),
 
 		PrintedAt:   normalizeTimePtr(printedAt),
-		PrintedBy:   normalizeStrPtr(printedBy),
 		InspectedAt: normalizeTimePtr(inspectedAt),
 		InspectedBy: normalizeStrPtr(inspectedBy),
 	}
@@ -132,7 +128,6 @@ func NewFromStringTimes(
 	inspection InspectionResult,
 	connectedToken *string,
 	printedAtStr string,
-	printedBy *string,
 	inspectedAtStr string,
 	inspectedBy *string,
 ) (Product, error) {
@@ -158,7 +153,7 @@ func NewFromStringTimes(
 	return New(
 		id, modelID, productionID,
 		inspection, connectedToken,
-		printedAtPtr, printedBy,
+		printedAtPtr,
 		inspectedAtPtr, inspectedBy,
 	)
 }
@@ -211,16 +206,12 @@ func (p Product) ConnectionStatus() TokenConnectionStatus {
 	return TokenDisconnected
 }
 
-func (p *Product) MarkPrinted(by string, at time.Time) error {
-	by = strings.TrimSpace(by)
-	if by == "" {
-		return ErrInvalidPrintedBy
-	}
+// printedBy は保持しない方針なので、by は受け取らず printedAt のみを更新
+func (p *Product) MarkPrinted(at time.Time) error {
 	if at.IsZero() {
 		return ErrInvalidPrintedAt
 	}
 	at = at.UTC()
-	p.PrintedBy = &by
 	p.PrintedAt = &at
 	return nil
 }
@@ -272,13 +263,7 @@ func (p Product) validate() error {
 		return ErrInvalidConnectedToken
 	}
 
-	// printed pair coherence
-	if (p.PrintedAt == nil) != (p.PrintedBy == nil) {
-		return ErrInvalidCoherence
-	}
-	if p.PrintedBy != nil && strings.TrimSpace(*p.PrintedBy) == "" {
-		return ErrInvalidPrintedBy
-	}
+	// printedAt: あればゼロでないことだけチェック（printedBy は保持しない）
 	if p.PrintedAt != nil && p.PrintedAt.IsZero() {
 		return ErrInvalidPrintedAt
 	}

@@ -138,24 +138,16 @@ func (u *ProductUsecase) CreatePrintLogForProduction(ctx context.Context, produc
 	}
 
 	// printedBy / printedAt を決定
-	// 1) 一覧の中で最初に有効なものを探す
-	var printedBy string
+	// Product から printedBy は取得しない方針なので、printedBy は固定値や設定値で決定する
+	printedBy := "system" // TODO: 必要なら環境変数やコンフィグから設定
+
+	// printedAt は Product 側の PrintedAt があればそれを採用、なければ現在時刻
 	var printedAt time.Time
 	for _, p := range products {
-		if p.PrintedBy != nil && strings.TrimSpace(*p.PrintedBy) != "" {
-			printedBy = strings.TrimSpace(*p.PrintedBy)
-		}
 		if p.PrintedAt != nil && !p.PrintedAt.IsZero() {
 			printedAt = p.PrintedAt.UTC()
-		}
-		if printedBy != "" && !printedAt.IsZero() {
 			break
 		}
-	}
-
-	// 2) 見つからなかった場合はデフォルト値で補完
-	if printedBy == "" {
-		printedBy = "system" // TODO: 必要なら環境変数やコンフィグから設定
 	}
 	if printedAt.IsZero() {
 		printedAt = time.Now().UTC()
@@ -224,7 +216,7 @@ func (u *ProductUsecase) Save(ctx context.Context, p productdom.Product) (produc
 // - ID               … URL パスの id で決定（不変）
 // - ModelID          … POST 時に確定、更新不可
 // - ProductionID     … POST 時に確定、更新不可
-// - PrintedAt/By     … POST 時に確定、更新不可
+// - PrintedAt        … POST 時に確定、更新不可
 // - InspectionResult … 更新対象
 // - ConnectedToken   … 更新対象
 // - InspectedAt      … 更新対象（InspectionResult の入力日時）
@@ -246,7 +238,7 @@ func (u *ProductUsecase) Update(ctx context.Context, id string, in productdom.Pr
 	current.ConnectedToken = in.ConnectedToken
 	current.InspectedAt = in.InspectedAt
 	current.InspectedBy = in.InspectedBy
-	// ID / ModelID / ProductionID / PrintedAt / PrintedBy は current の値を維持
+	// ID / ModelID / ProductionID / PrintedAt は current の値を維持
 
 	// 永続化
 	return u.repo.Update(ctx, id, current)

@@ -234,11 +234,20 @@ func (u *ProductionUsecase) Save(ctx context.Context, p productiondom.Production
 	return u.repo.Save(ctx, p)
 }
 
-// Update updates only quantity (models) and assigneeId.
-//   - 他の項目は既存値を維持する。
-//   - assigneeId: patch.AssigneeID が非空なら上書き
-//   - quantity: patch.Models が与えられていれば、それを現在の Models として保存（数量更新用想定）
-func (u *ProductionUsecase) Update(ctx context.Context, id string, patch productiondom.Production) (productiondom.Production, error) {
+// Update updates Production partially.
+//
+// - 通常の編集画面からの更新:
+//   - models / assigneeId を更新
+//
+// - 印刷完了シグナル(notifyPrintLogCompleted)からの更新:
+//   - status / printedAt / printedBy を更新
+//
+// いずれも「patch に値が入っているフィールドだけを current に上書き」する。
+func (u *ProductionUsecase) Update(
+	ctx context.Context,
+	id string,
+	patch productiondom.Production,
+) (productiondom.Production, error) {
 	id = strings.TrimSpace(id)
 	if id == "" {
 		return productiondom.Production{}, productiondom.ErrInvalidID
@@ -250,20 +259,54 @@ func (u *ProductionUsecase) Update(ctx context.Context, id string, patch product
 		return productiondom.Production{}, err
 	}
 
-	// ★ assigneeId のみ更新（非空なら上書き）
+	// --------------------------------------------------
+	// 1. assigneeId の更新（非空なら上書き）
+	// --------------------------------------------------
 	if strings.TrimSpace(patch.AssigneeID) != "" {
 		current.AssigneeID = strings.TrimSpace(patch.AssigneeID)
 	}
 
-	// ★ quantity（Models）のみ更新
+	// --------------------------------------------------
+	// 2. quantity（Models）の更新
 	//    フロントからは「既存モデルの数量更新用」の Models が渡される想定。
-	//    ここでは Models 全体を差し替えるが、他フィールドはフロント側で
-	//    既存値を維持したまま送ってもらう設計。
+	//    配列が渡されているときだけ差し替える。
+	// --------------------------------------------------
 	if len(patch.Models) > 0 {
 		current.Models = patch.Models
 	}
 
-	// 更新日時を更新
+	// --------------------------------------------------
+	// 3. 印刷関連: status / printedAt / printedBy
+	//    notifyPrintLogCompleted からの PUT でここに入る。
+	// --------------------------------------------------
+
+	// status: 空でなければ上書き（"printed" など）
+	if patch.Status != "" {
+		current.Status = patch.Status
+	}
+
+	// printedAt: patch.PrintedAt が非 nil なら上書き（UTC 正規化）
+	if patch.PrintedAt != nil {
+		t := patch.PrintedAt.UTC() // time.Time
+		current.PrintedAt = &t     // *time.Time に代入
+	}
+
+	// printedBy: patch.PrintedBy が非 nil なら上書き
+	if patch.PrintedBy != nil {
+		v := strings.TrimSpace(*patch.PrintedBy)
+		if v == "" {
+			// 空文字なら nil とみなす
+			current.PrintedBy = nil
+		} else {
+			// 新しい string を確保してポインタで保持
+			vCopy := v
+			current.PrintedBy = &vCopy
+		}
+	}
+
+	// --------------------------------------------------
+	// 4. updatedAt を現在時刻で更新
+	// --------------------------------------------------
 	current.UpdatedAt = u.now().UTC()
 
 	// 他の項目は current をそのまま再保存

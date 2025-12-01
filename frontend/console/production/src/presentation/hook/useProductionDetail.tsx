@@ -22,7 +22,15 @@ import type { ProductionQuantityRow as CreateQuantityRow } from "../../applicati
 // ★ 印刷用ロジックを分離した hook を利用
 import { usePrintCard } from "../../../../product/src/presentation/hook/usePrintCard";
 
+// ★ domain の ProductionStatus 型を import
+import type {
+  ProductionStatus as DomainProductionStatus,
+} from "../../../../production/src/domain/entity/production";
+
 type Mode = "view" | "edit";
+
+// ★ 編集可能なステータス（domain 型に基づく）
+const EDITABLE_STATUS: DomainProductionStatus = "planning";
 
 export function useProductionDetail() {
   const navigate = useNavigate();
@@ -31,6 +39,10 @@ export function useProductionDetail() {
   const { currentMember } = useAuth();
   const creator = currentMember?.fullName ?? "-";
 
+  const [production, setProduction] = React.useState<ProductionDetail | null>(
+    null,
+  );
+
   // ======================================================
   // 画面全体のモード（view / edit）
   // ======================================================
@@ -38,19 +50,38 @@ export function useProductionDetail() {
   const isViewMode = mode === "view";
   const isEditMode = mode === "edit";
 
+  // ★ status が planning のときだけ編集可能
+  const canEdit = production?.status === EDITABLE_STATUS;
+
   const switchToView = React.useCallback(() => setMode("view"), []);
-  const switchToEdit = React.useCallback(() => setMode("edit"), []);
-  const toggleMode = React.useCallback(
-    () => setMode((prev) => (prev === "view" ? "edit" : "view")),
-    [],
-  );
+
+  const switchToEdit = React.useCallback(() => {
+    if (!canEdit) {
+      // eslint-disable-next-line no-console
+      console.log(
+        "[useProductionDetail] switchToEdit called but production is not editable (status is not 'planning')",
+        { status: production?.status },
+      );
+      return;
+    }
+    setMode("edit");
+  }, [canEdit, production?.status]);
+
+  const toggleMode = React.useCallback(() => {
+    if (!canEdit) {
+      // eslint-disable-next-line no-console
+      console.log(
+        "[useProductionDetail] toggleMode called but production is not editable (status is not 'planning')",
+        { status: production?.status },
+      );
+      return;
+    }
+    setMode((prev) => (prev === "view" ? "edit" : "view"));
+  }, [canEdit, production?.status]);
 
   // AdminCard 用モード
   const adminMode: "view" | "edit" = mode;
 
-  const [production, setProduction] = React.useState<ProductionDetail | null>(
-    null,
-  );
   const [loading, setLoading] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
 
@@ -214,6 +245,13 @@ export function useProductionDetail() {
   const onSave = React.useCallback(async () => {
     if (!productionId || !production) return;
 
+    // status が planning 以外なら保存も不可
+    if (!canEdit) {
+      // eslint-disable-next-line no-alert
+      alert("この生産は編集できません（ステータスが planning ではありません）。");
+      return;
+    }
+
     try {
       const rowsForUpdate: DetailQuantityRow[] = quantityRows.map((row) => ({
         id: row.modelVariationId,
@@ -238,7 +276,7 @@ export function useProductionDetail() {
     } catch {
       alert("更新に失敗しました");
     }
-  }, [productionId, production, quantityRows]);
+  }, [productionId, production, quantityRows, canEdit]);
 
   // ======================================================
   // 印刷時 Product 作成処理は usePrintCard に委譲
@@ -263,6 +301,9 @@ export function useProductionDetail() {
     switchToView,
     switchToEdit,
     toggleMode,
+
+    // ★ 画面側で header の編集ボタン表示可否に使う
+    canEdit,
 
     adminMode,
 

@@ -78,6 +78,7 @@ type Production struct {
 	Models             []ModelQuantity // [{modelId, quantity}]
 	Status             ProductionStatus
 	PrintedAt          *time.Time
+	PrintedBy          *string // ★ 追加: 印刷担当者
 	InspectedAt        *time.Time
 	CreatedBy          *string
 	CreatedAt          time.Time // optional（ゼロ許容）
@@ -97,6 +98,7 @@ var (
 	ErrInvalidQuantity           = errors.New("production: invalid quantity")
 	ErrInvalidStatus             = errors.New("production: invalid status")
 	ErrInvalidPrintedAt          = errors.New("production: invalid printedAt")
+	ErrInvalidPrintedBy          = errors.New("production: invalid printedBy") // ★ 追加
 	ErrInvalidInspectedAt        = errors.New("production: invalid inspectedAt")
 	ErrInvalidCreatedAt          = errors.New("production: invalid createdAt")
 	ErrInvalidUpdatedAt          = errors.New("production: invalid updatedAt")
@@ -127,9 +129,11 @@ func New(
 		Models:             normalizeModels(models),
 		Status:             status,
 		PrintedAt:          printedAt,
-		InspectedAt:        inspectedAt,
-		CreatedBy:          normalizePtr(createdBy),
-		CreatedAt:          createdAt, // ゼロ許容
+		// PrintedBy はコンストラクタでは nil 初期化（後から更新）
+		PrintedBy:   nil,
+		InspectedAt: inspectedAt,
+		CreatedBy:   normalizePtr(createdBy),
+		CreatedAt:   createdAt, // ゼロ許容
 	}
 	if err := p.validate(); err != nil {
 		return Production{}, err
@@ -254,6 +258,7 @@ func (p *Production) MarkInspected(at time.Time) error {
 func (p *Production) ResetToManufacturing() {
 	p.Status = StatusManufacturing
 	p.PrintedAt = nil
+	p.PrintedBy = nil
 	p.InspectedAt = nil
 }
 
@@ -283,6 +288,12 @@ func (p Production) validate() error {
 	if !IsValidStatus(p.Status) {
 		return ErrInvalidStatus
 	}
+
+	// PrintedBy は nil または非空文字列のみ許容
+	if p.PrintedBy != nil && strings.TrimSpace(*p.PrintedBy) == "" {
+		return ErrInvalidPrintedBy
+	}
+
 	// Status/time coherence
 	switch p.Status {
 	case StatusManufacturing, StatusPlanning, StatusSuspended:
@@ -309,6 +320,7 @@ func (p Production) validate() error {
 			return ErrInvalidDeletedAt
 		}
 	}
+
 	// CreatedAt/UpdatedAt は optional（ゼロ許容）
 	if !p.CreatedAt.IsZero() && !p.UpdatedAt.IsZero() && p.UpdatedAt.Before(p.CreatedAt) {
 		return ErrInvalidUpdatedAt
