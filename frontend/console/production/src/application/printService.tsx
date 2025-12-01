@@ -4,8 +4,10 @@ import { auth } from "../../../shell/src/auth/infrastructure/config/firebaseClie
 import { API_BASE as BACKEND_API_BASE } from "../infrastructure/http/productionRepositoryHTTP";
 
 // 印刷用の行型（ProductionDetail 画面側から渡す）
+// modelId / modelVariationId のどちらかが入っていれば OK にする
 export type PrintRow = {
-  modelVariationId: string;
+  modelId?: string;
+  modelVariationId?: string;
   quantity: number | null | undefined;
 };
 
@@ -87,10 +89,19 @@ export async function createProductsForPrint(params: {
       ? Math.max(0, Math.floor(Number(row.quantity as number)))
       : 0;
 
+    // modelId or modelVariationId → 実際に送る modelId に正規化
+    const rawModelId = row.modelId ?? row.modelVariationId ?? "";
+    const modelId = rawModelId.trim();
+
+    // ID が空 or quantity 0 以下はスキップ
+    if (!modelId || q <= 0) {
+      return;
+    }
+
     for (let i = 0; i < q; i += 1) {
       tasks.push(
         createProductHTTP({
-          modelId: row.modelVariationId,
+          modelId,
           productionId: id,
           printedAt: printedAtISO,
           printedBy,

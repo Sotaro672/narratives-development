@@ -18,7 +18,7 @@ import (
 //
 // パス構造:
 //
-//	product_blueprints_history/{blueprintID}/models/{version}/variations/{variationID}
+//	product_blueprints_history/{productBlueprintId}/models/{version}/variations/{variationID}
 //
 // version は 1,2,3,... の連番として自動採番する。
 type ModelHistoryRepositoryFS struct {
@@ -30,21 +30,21 @@ func NewModelHistoryRepositoryFS(client *firestore.Client) *ModelHistoryReposito
 }
 
 // models コレクション（バージョンごとの metadata）へのヘルパー
-func (r *ModelHistoryRepositoryFS) modelsCol(blueprintID string) *firestore.CollectionRef {
+func (r *ModelHistoryRepositoryFS) modelsCol(productBlueprintID string) *firestore.CollectionRef {
 	return r.Client.
 		Collection("product_blueprints_history").
-		Doc(blueprintID).
+		Doc(productBlueprintID).
 		Collection("models")
 }
 
 // ベースコレクションのヘルパー（version ごとの variations サブコレクション）
 func (r *ModelHistoryRepositoryFS) historyVariationsCol(
-	blueprintID string,
+	productBlueprintID string,
 	version int64,
 ) *firestore.CollectionRef {
 	versionDocID := fmt.Sprintf("%d", version)
 
-	return r.modelsCol(blueprintID).
+	return r.modelsCol(productBlueprintID).
 		Doc(versionDocID).
 		Collection("variations")
 }
@@ -52,9 +52,9 @@ func (r *ModelHistoryRepositoryFS) historyVariationsCol(
 // 最新バージョン番号を取得する（なければ 0 を返す）
 func (r *ModelHistoryRepositoryFS) getLatestVersion(
 	ctx context.Context,
-	blueprintID string,
+	productBlueprintID string,
 ) (int64, error) {
-	col := r.modelsCol(blueprintID)
+	col := r.modelsCol(productBlueprintID)
 
 	// version フィールドの降順で 1 件だけ取得
 	iter := col.OrderBy("version", firestore.Desc).Limit(1).Documents(ctx)
@@ -91,36 +91,36 @@ func (r *ModelHistoryRepositoryFS) getLatestVersion(
 
 // SaveSnapshot:
 //
-// 指定された blueprintID に対して、
+// 指定された productBlueprintID に対して、
 // variations（ライブの ModelVariation 一式）のスナップショットを
 // 1) versions サブコレクション（models/{version}/variations/*）
 // 2) models/{version} ドキュメント本体（サマリ）
 // の両方に保存する。
 func (r *ModelHistoryRepositoryFS) SaveSnapshot(
 	ctx context.Context,
-	blueprintID string,
+	productBlueprintID string,
 	variations []model.ModelVariation,
 ) error {
 	if r.Client == nil {
 		return fmt.Errorf("ModelHistoryRepositoryFS.SaveSnapshot: firestore client is nil")
 	}
-	if blueprintID == "" {
-		return fmt.Errorf("ModelHistoryRepositoryFS.SaveSnapshot: blueprintID is empty")
+	if productBlueprintID == "" {
+		return fmt.Errorf("ModelHistoryRepositoryFS.SaveSnapshot: productBlueprintID is empty")
 	}
 
 	// 直近の version を取得し、次の version を決定（1 からスタート）
-	latestVersion, err := r.getLatestVersion(ctx, blueprintID)
+	latestVersion, err := r.getLatestVersion(ctx, productBlueprintID)
 	if err != nil {
 		return fmt.Errorf("ModelHistoryRepositoryFS.SaveSnapshot: getLatestVersion: %w", err)
 	}
 	newVersion := latestVersion + 1
 
 	log.Printf(
-		"[ModelHistoryRepositoryFS] SaveSnapshot blueprintID=%s version=%d variations=%d",
-		blueprintID, newVersion, len(variations),
+		"[ModelHistoryRepositoryFS] SaveSnapshot productBlueprintID=%s version=%d variations=%d",
+		productBlueprintID, newVersion, len(variations),
 	)
 
-	col := r.historyVariationsCol(blueprintID, newVersion)
+	col := r.historyVariationsCol(productBlueprintID, newVersion)
 	now := time.Now().UTC()
 
 	// models/{version} ドキュメントに格納するサマリ用配列
@@ -182,10 +182,10 @@ func (r *ModelHistoryRepositoryFS) SaveSnapshot(
 	}
 
 	// models/{version} ドキュメント本体にもサマリを保存
-	metaRef := r.modelsCol(blueprintID).Doc(fmt.Sprintf("%d", newVersion))
+	metaRef := r.modelsCol(productBlueprintID).Doc(fmt.Sprintf("%d", newVersion))
 
 	meta := map[string]any{
-		"productBlueprintId": blueprintID,
+		"productBlueprintId": productBlueprintID,
 		"version":            newVersion,
 		"variationCount":     len(variations),
 		"createdAt":          now,
@@ -198,8 +198,8 @@ func (r *ModelHistoryRepositoryFS) SaveSnapshot(
 	}
 
 	log.Printf(
-		"[ModelHistoryRepositoryFS] SaveSnapshot completed blueprintID=%s version=%d",
-		blueprintID, newVersion,
+		"[ModelHistoryRepositoryFS] SaveSnapshot completed productBlueprintID=%s version=%d",
+		productBlueprintID, newVersion,
 	)
 
 	return nil
@@ -207,21 +207,21 @@ func (r *ModelHistoryRepositoryFS) SaveSnapshot(
 
 // ListByProductBlueprintID:
 //
-// 指定された blueprintID に紐づく **最新バージョン** の
+// 指定された productBlueprintID に紐づく **最新バージョン** の
 // ModelVariation 履歴をすべて返す。
 func (r *ModelHistoryRepositoryFS) ListByProductBlueprintID(
 	ctx context.Context,
-	blueprintID string,
+	productBlueprintID string,
 ) ([]model.ModelVariation, error) {
 	if r.Client == nil {
 		return nil, fmt.Errorf("ModelHistoryRepositoryFS.ListByProductBlueprintID: firestore client is nil")
 	}
-	if blueprintID == "" {
-		return nil, fmt.Errorf("ModelHistoryRepositoryFS.ListByProductBlueprintID: blueprintID is empty")
+	if productBlueprintID == "" {
+		return nil, fmt.Errorf("ModelHistoryRepositoryFS.ListByProductBlueprintID: productBlueprintID is empty")
 	}
 
 	// 最新 version を取得
-	latestVersion, err := r.getLatestVersion(ctx, blueprintID)
+	latestVersion, err := r.getLatestVersion(ctx, productBlueprintID)
 	if err != nil {
 		return nil, fmt.Errorf("ModelHistoryRepositoryFS.ListByProductBlueprintID: getLatestVersion: %w", err)
 	}
@@ -230,7 +230,7 @@ func (r *ModelHistoryRepositoryFS) ListByProductBlueprintID(
 		return []model.ModelVariation{}, nil
 	}
 
-	col := r.historyVariationsCol(blueprintID, latestVersion)
+	col := r.historyVariationsCol(productBlueprintID, latestVersion)
 	iter := col.Documents(ctx)
 	defer iter.Stop()
 

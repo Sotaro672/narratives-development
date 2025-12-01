@@ -114,8 +114,8 @@ export function useProductionDetail() {
   // ProductBlueprint 詳細取得
   // ======================================================
   React.useEffect(() => {
-    const blueprintId = production?.productBlueprintId;
-    if (!blueprintId) {
+    const productBlueprintId = production?.productBlueprintId;
+    if (!productBlueprintId) {
       setProductBlueprint(null);
       setPbError(null);
       return;
@@ -127,7 +127,7 @@ export function useProductionDetail() {
         setPbLoading(true);
         setPbError(null);
 
-        const pb = await loadProductBlueprintDetail(blueprintId);
+        const pb = await loadProductBlueprintDetail(productBlueprintId);
         if (cancelled) return;
 
         setProductBlueprint(pb);
@@ -150,8 +150,8 @@ export function useProductionDetail() {
   // ModelVariation index 取得
   // ======================================================
   React.useEffect(() => {
-    const blueprintId = production?.productBlueprintId;
-    if (!blueprintId) {
+    const productBlueprintId = production?.productBlueprintId;
+    if (!productBlueprintId) {
       setModelIndex({});
       return;
     }
@@ -160,7 +160,7 @@ export function useProductionDetail() {
     (async () => {
       try {
         const index =
-          await loadModelVariationIndexByProductBlueprintId(blueprintId);
+          await loadModelVariationIndexByProductBlueprintId(productBlueprintId);
         if (cancelled) return;
 
         setModelIndex(index);
@@ -252,7 +252,7 @@ export function useProductionDetail() {
     try {
       // PrintRow[] へマッピング（printService.tsx の型に合わせる）
       const rowsForPrint: PrintRow[] = quantityRows.map((row) => ({
-        modelVariationId: row.modelVariationId,
+        modelId: row.modelVariationId,
         quantity: row.quantity ?? 0,
       }));
 
