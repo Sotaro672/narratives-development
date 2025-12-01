@@ -20,7 +20,7 @@ import {
 import {
   createProductsForPrint,
   type PrintRow,
-} from "../../application/printService";
+} from "../../../../product/src/application/printService";
 
 // create 用行型（modelNumber / color / rgb / quantity を持つ）
 import type { ProductionQuantityRow as CreateQuantityRow } from "../../application/productionCreateService";

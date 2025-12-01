@@ -32,7 +32,7 @@ import {
   listProductsByProductionId,
   type PrintRow,
   type ProductSummaryForPrint,
-} from "../../application/printService";
+} from "../../../../product/src/application/printService";
 
 export default function ProductionDetail() {
   const {

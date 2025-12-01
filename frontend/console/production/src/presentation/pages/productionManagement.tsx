@@ -30,7 +30,7 @@ export default function ProductionManagement() {
             className="cursor-pointer hover:bg-blue-50 transition-colors"
             onClick={() => handleRowClick(p.id)}
           >
-            {/* ★ productName */}
+            {/* ★ プロダクト名 */}
             <td>{(p as any).productName || p.productBlueprintId}</td>
 
             {/* ★ ブランド名 */}

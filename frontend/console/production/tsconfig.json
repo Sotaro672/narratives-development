@@ -30,5 +30,5 @@
   },
 
   // 各モジュール配下のみ含める
-  "include": ["src"]
+  "include": ["src", "../product/src/application/printService.tsx"]
 }

@@ -1,7 +1,7 @@
 // frontend/console/production/src/application/printService.tsx
 
 import { auth } from "../../../shell/src/auth/infrastructure/config/firebaseClient";
-import { API_BASE as BACKEND_API_BASE } from "../infrastructure/http/productionRepositoryHTTP";
+import { API_BASE as BACKEND_API_BASE } from "../../../production/src/infrastructure/http/productionRepositoryHTTP";
 
 // 印刷用の行型（ProductionDetail 画面側から渡す）
 // modelId / modelVariationId のどちらかが入っていれば OK にする
