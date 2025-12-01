@@ -19,7 +19,7 @@ export type ProductionStatus =
   | "manufacturing"
   | "inspected"
   | "printed"
-  | "planning"
+  | "planned"
   | "deleted"
   | "suspended";
 
@@ -31,7 +31,7 @@ export function isValidProductionStatus(
     status === "manufacturing" ||
     status === "inspected" ||
     status === "printed" ||
-    status === "planning" ||
+    status === "planned" ||
     status === "deleted" ||
     status === "suspended"
   );

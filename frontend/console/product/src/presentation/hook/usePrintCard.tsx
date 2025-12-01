@@ -36,33 +36,60 @@ export function usePrintCard<T extends QuantityRowBase>({
 
   /**
    * 印刷処理本体。
-   *
-   * 戻り値として print_log 一覧（PrintLogForPrint[]）を返すので、
-   * 呼び出し元（productionDetail.tsx）から PDF 印刷処理などを呼び出せる。
    */
   const onPrint = React.useCallback(async (): Promise<PrintLogForPrint[]> => {
-    if (!productionId || !hasProduction) return [];
+    if (!productionId || !hasProduction) {
+      console.warn("[usePrintCard] print skipped: no production or invalid state", {
+        productionId,
+        hasProduction,
+      });
+      return [];
+    }
 
     try {
       setPrinting(true);
       setError(null);
 
-      // PrintRow[] へマッピング（printService.tsx の型に合わせる）
+      // -------------------------
+      // ★ 渡された rows をログ表示
+      // -------------------------
+      console.log("[usePrintCard] onPrint invoked with params:", {
+        productionId,
+        hasProduction,
+        rows,
+      });
+
+      // rows が null/undefined の可能性対策
+      if (!Array.isArray(rows)) {
+        console.error("[usePrintCard] rows is NOT array", rows);
+        alert("印刷用データが不正です（rows が配列ではありません）");
+        return [];
+      }
+
+      // -------------------------
+      // ★ PrintRow[] へマッピング
+      // -------------------------
       const rowsForPrint: PrintRow[] = rows.map((row) => ({
         modelId: row.modelVariationId,
         quantity: row.quantity ?? 0,
       }));
 
-      // Product 作成 + print_log 作成 + print_log 一覧取得
+      console.log("[usePrintCard] rowsForPrint (payload for printService):", rowsForPrint);
+
+      // -------------------------
+      // ★ Product 作成 + print_log 作成
+      // -------------------------
       const logs = await createProductsForPrint({
         productionId,
         rows: rowsForPrint,
       });
 
+      console.log("[usePrintCard] response logs from printService:", logs);
+
       setPrintLogs(logs);
-      return logs;
+      return logs ?? [];
     } catch (e) {
-      console.error(e);
+      console.error("[usePrintCard] print error:", e);
       setError("印刷用のデータ作成に失敗しました");
       alert("印刷用のデータ作成に失敗しました");
       return [];

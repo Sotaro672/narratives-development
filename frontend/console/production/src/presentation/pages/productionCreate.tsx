@@ -35,6 +35,11 @@ import ProductionQuantityCard from "../components/productionQuantityCard";
 
 import "../styles/production.css";
 
+type ProductRow = {
+  id: string;
+  name: string;
+};
+
 export default function ProductionCreate() {
   const {
     onBack,
@@ -102,6 +107,7 @@ export default function ProductionCreate() {
       <div className="space-y-4">
         {/* 管理情報カード */}
         <AdminCard
+          mode="edit" // ★ AdminCard を編集モードで使用
           title="管理情報"
           assigneeName={assignee}
           assigneeCandidates={assigneeOptions}
@@ -126,7 +132,7 @@ export default function ProductionCreate() {
 
               <PopoverContent>
                 <div className="pb-select__list">
-                  {brandOptions.map((b) => (
+                  {brandOptions.map((b: string) => (
                     <button
                       key={b}
                       className={
@@ -163,7 +169,7 @@ export default function ProductionCreate() {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {productRows.map((p) => (
+                {productRows.map((p: ProductRow) => (
                   <TableRow
                     key={p.id}
                     className={

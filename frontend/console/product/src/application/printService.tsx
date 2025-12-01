@@ -39,6 +39,13 @@ export async function listPrintLogsByProductionId(
   if (!id) return [];
 
   const logs = await listPrintLogsByProductionIdApi(id);
+
+  // eslint-disable-next-line no-console
+  console.log("[printService] listPrintLogsByProductionIdApi result:", {
+    productionId: id,
+    logs,
+  });
+
   return logs;
 }
 
@@ -54,6 +61,13 @@ export async function listProductsByProductionId(
   if (!id) return [];
 
   const products = await listProductsByProductionIdApi(id);
+
+  // eslint-disable-next-line no-console
+  console.log("[printService] listProductsByProductionIdApi result:", {
+    productionId: id,
+    products,
+  });
+
   return products;
 }
 
@@ -65,13 +79,34 @@ async function buildAndOpenQrPdfFromLogs(
   logs: PrintLogForPrint[],
   productionId: string,
 ): Promise<number> {
+  // eslint-disable-next-line no-console
+  console.log("[printService] buildAndOpenQrPdfFromLogs: start", {
+    productionId,
+    logs,
+  });
+
   const qrItems: QrPdfItem[] = [];
 
-  logs.forEach((log) => {
+  logs.forEach((log, logIndex) => {
     const { productIds, qrPayloads } = log;
 
+    // qrPayloads が null / undefined / 配列以外のケースに備えて安全に扱う
+    const payloadList = Array.isArray(qrPayloads) ? qrPayloads : [];
+
+    if (!Array.isArray(qrPayloads)) {
+      // eslint-disable-next-line no-console
+      console.warn(
+        "[printService] buildAndOpenQrPdfFromLogs: qrPayloads is not an array",
+        {
+          productionId,
+          logIndex,
+          log,
+        },
+      );
+    }
+
     productIds.forEach((pid, index) => {
-      const payloadJson = qrPayloads[index];
+      const payloadJson = payloadList[index];
       if (!pid || !payloadJson) return;
 
       // payloadJson は JSON 文字列としてそのまま QR に埋め込む想定。
@@ -93,6 +128,16 @@ async function buildAndOpenQrPdfFromLogs(
     );
     return 0;
   }
+
+  // eslint-disable-next-line no-console
+  console.log(
+    "[printService] buildAndOpenQrPdfFromLogs: building PDF with items",
+    {
+      productionId,
+      qrItemCount: qrItems.length,
+      qrItemsSample: qrItems.slice(0, 5),
+    },
+  );
 
   // A4 縦・1 行 5 つの QR PDF を生成
   const pdfBlob = await buildQrPdfBlobA4(qrItems, {
@@ -134,10 +179,26 @@ export async function createProductsForPrint(params: {
   const id = productionId.trim();
   if (!id) throw new Error("productionId is required");
 
+  // eslint-disable-next-line no-console
+  console.log("[printService] createProductsForPrint called:", {
+    productionId: id,
+    rows,
+  });
+
   // ------------------------------------------------------
   // 0. 既存の print_log があるかどうかを確認
   // ------------------------------------------------------
   const existingLogs = await listPrintLogsByProductionIdApi(id);
+
+  // eslint-disable-next-line no-console
+  console.log(
+    "[printService] createProductsForPrint: existingLogs fetched:",
+    {
+      productionId: id,
+      logCount: existingLogs.length,
+      logs: existingLogs,
+    },
+  );
 
   if (existingLogs.length > 0) {
     // eslint-disable-next-line no-console
@@ -170,6 +231,16 @@ export async function createProductsForPrint(params: {
     productionId: id,
     rows,
   });
+
+  // eslint-disable-next-line no-console
+  console.log(
+    "[printService] createProductsForPrintApi result (new logs):",
+    {
+      productionId: id,
+      logCount: logs.length,
+      logs,
+    },
+  );
 
   // print_log が 0 件なら PDF 生成はスキップ
   if (logs.length === 0) {

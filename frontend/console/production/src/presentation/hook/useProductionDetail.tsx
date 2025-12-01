@@ -30,7 +30,8 @@ import type {
 type Mode = "view" | "edit";
 
 // ★ 編集可能なステータス（domain 型に基づく）
-const EDITABLE_STATUS: DomainProductionStatus = "planning";
+//   status が "planned" のときだけ編集可能にする
+const EDITABLE_STATUS: DomainProductionStatus = "planned";
 
 export function useProductionDetail() {
   const navigate = useNavigate();
@@ -50,7 +51,7 @@ export function useProductionDetail() {
   const isViewMode = mode === "view";
   const isEditMode = mode === "edit";
 
-  // ★ status が planning のときだけ編集可能
+  // ★ status が planned のときだけ編集可能
   const canEdit = production?.status === EDITABLE_STATUS;
 
   const switchToView = React.useCallback(() => setMode("view"), []);
@@ -59,7 +60,7 @@ export function useProductionDetail() {
     if (!canEdit) {
       // eslint-disable-next-line no-console
       console.log(
-        "[useProductionDetail] switchToEdit called but production is not editable (status is not 'planning')",
+        "[useProductionDetail] switchToEdit called but production is not editable (status is not 'planned')",
         { status: production?.status },
       );
       return;
@@ -71,7 +72,7 @@ export function useProductionDetail() {
     if (!canEdit) {
       // eslint-disable-next-line no-console
       console.log(
-        "[useProductionDetail] toggleMode called but production is not editable (status is not 'planning')",
+        "[useProductionDetail] toggleMode called but production is not editable (status is not 'planned')",
         { status: production?.status },
       );
       return;
@@ -245,10 +246,10 @@ export function useProductionDetail() {
   const onSave = React.useCallback(async () => {
     if (!productionId || !production) return;
 
-    // status が planning 以外なら保存も不可
+    // status が planned 以外なら保存も不可
     if (!canEdit) {
       // eslint-disable-next-line no-alert
-      alert("この生産は編集できません（ステータスが planning ではありません）。");
+      alert("この生産は編集できません（ステータスが planned ではありません）。");
       return;
     }
 

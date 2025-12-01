@@ -43,9 +43,32 @@ export async function listPrintLogsByProductionId(
   const id = productionId.trim();
   if (!id) return [];
 
+  // eslint-disable-next-line no-console
+  console.log("[printApi] listPrintLogsByProductionId called:", { productionId: id });
+
   const raw = await fetchPrintLogsByProductionId(id);
 
-  return raw
+  // eslint-disable-next-line no-console
+  console.log("[printApi] fetchPrintLogsByProductionId raw:", raw);
+
+  if (!raw) {
+    // eslint-disable-next-line no-console
+    console.warn(
+      "[printApi] listPrintLogsByProductionId: raw is null/undefined, return []",
+    );
+    return [];
+  }
+
+  if (!Array.isArray(raw)) {
+    // eslint-disable-next-line no-console
+    console.warn(
+      "[printApi] listPrintLogsByProductionId: raw is not array. Treat as empty.",
+      raw,
+    );
+    return [];
+  }
+
+  return (raw as any[])
     .map((log: any) => {
       const productIds: string[] = Array.isArray(log.productIds)
         ? log.productIds
@@ -59,17 +82,23 @@ export async function listPrintLogsByProductionId(
             .filter((v: string) => !!v)
         : [];
 
-      return {
+      const mapped: PrintLogForPrint = {
         id: log.id ?? log.ID ?? "",
         productionId: log.productionId ?? log.ProductionID ?? "",
         productIds,
+        // backend 側では printedBy は廃止済みなので、あれば拾う・なければ空文字
         printedBy: log.printedBy ?? log.PrintedBy ?? "",
         printedAt:
           log.printedAt ??
           log.PrintedAt ??
           "", // ISO 文字列 or 空文字（フロント側で必要ならパース）
         qrPayloads,
-      } as PrintLogForPrint;
+      };
+
+      // eslint-disable-next-line no-console
+      console.log("[printApi] listPrintLogsByProductionId mapped log:", mapped);
+
+      return mapped;
     })
     .filter((log) => log.id && log.productionId === id);
 }
@@ -93,8 +122,13 @@ export async function createProductsForPrint(params: {
   const id = productionId.trim();
   if (!id) throw new Error("productionId is required");
 
+  // eslint-disable-next-line no-console
+  console.log("[printApi] createProductsForPrint called:", { productionId: id, rows });
+
   // 印刷タイミングの時刻（全 Product で共通とする）
   const printedAtISO = new Date().toISOString();
+  // eslint-disable-next-line no-console
+  console.log("[printApi] createProductsForPrint printedAtISO:", printedAtISO);
 
   const tasks: Promise<void>[] = [];
 
@@ -108,8 +142,16 @@ export async function createProductsForPrint(params: {
 
     // ID が空 or quantity 0 以下はスキップ
     if (!modelId || q <= 0) {
+      // eslint-disable-next-line no-console
+      console.log("[printApi] createProductsForPrint skip row:", { row, q, modelId });
       return;
     }
+
+    // eslint-disable-next-line no-console
+    console.log(
+      "[printApi] createProductsForPrint enqueue createProductHTTP:",
+      { modelId, q },
+    );
 
     for (let i = 0; i < q; i += 1) {
       tasks.push(
@@ -122,14 +164,28 @@ export async function createProductsForPrint(params: {
     }
   });
 
+  // eslint-disable-next-line no-console
+  console.log(
+    "[printApi] createProductsForPrint total createProductHTTP tasks:",
+    tasks.length,
+  );
+
   // 1. Product を全件作成
   await Promise.all(tasks);
 
+  // eslint-disable-next-line no-console
+  console.log("[printApi] createProductsForPrint: all createProductHTTP done");
+
   // 2. print_log 作成リクエストをバックエンドへ送信
-  await createPrintLogsHTTP(id);
+  const createLogsResult = await createPrintLogsHTTP(id);
+  // eslint-disable-next-line no-console
+  console.log("[printApi] createPrintLogsHTTP result:", createLogsResult);
 
   // 3. print_log を取得（ここで BuildProductQRValue 済みの qrPayloads を受け取る想定）
   const logs = await listPrintLogsByProductionId(id);
+
+  // eslint-disable-next-line no-console
+  console.log("[printApi] createProductsForPrint logs from backend:", logs);
 
   // 4. 呼び出し元（usePrintCard.tsx など）へ返却
   return logs;
@@ -145,13 +201,41 @@ export async function listProductsByProductionId(
   const id = productionId.trim();
   if (!id) return [];
 
+  // eslint-disable-next-line no-console
+  console.log("[printApi] listProductsByProductionId called:", { productionId: id });
+
   const raw = await fetchProductsByProductionId(id);
 
-  return (raw as any[])
+  // eslint-disable-next-line no-console
+  console.log("[printApi] fetchProductsByProductionId raw:", raw);
+
+  if (!raw) {
+    // eslint-disable-next-line no-console
+    console.warn(
+      "[printApi] listProductsByProductionId: raw is null/undefined, return []",
+    );
+    return [];
+  }
+
+  if (!Array.isArray(raw)) {
+    // eslint-disable-next-line no-console
+    console.warn(
+      "[printApi] listProductsByProductionId: raw is not array. Treat as empty.",
+      raw,
+    );
+    return [];
+  }
+
+  const mapped = (raw as any[])
     .map((p) => ({
       id: p.id ?? p.ID ?? "",
       modelId: p.modelId ?? p.ModelID ?? "",
       productionId: p.productionId ?? p.ProductionID ?? "",
     }))
     .filter((p) => p.id && p.productionId === id);
+
+  // eslint-disable-next-line no-console
+  console.log("[printApi] listProductsByProductionId mapped:", mapped);
+
+  return mapped;
 }
