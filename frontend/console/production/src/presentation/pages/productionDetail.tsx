@@ -19,13 +19,8 @@ import type {
   Fit,
 } from "../../../../productBlueprint/src/domain/entity/catalog";
 
-// ★ 印刷用サービスを import
-import {
-  createProductsForPrint,
-  listProductsByProductionId,
-  type PrintRow,
-  type ProductSummaryForPrint,
-} from "../../../../product/src/application/printService";
+// ★ usePrintCard Hook（print_log + QR 情報取得）
+import { usePrintCard } from "../../../../product/src/presentation/hook/usePrintCard";
 
 // ★ 分離した印刷カードコンポーネント
 import PrintCard from "../../../../product/src/presentation/component/printCard";
@@ -69,14 +64,23 @@ export default function ProductionDetail() {
     : "-";
 
   // ==========================
+  // usePrintCard: 印刷 + print_log 取得
+  // ==========================
+  const {
+    onPrint,
+    printLogs,
+    printing,
+    error: printError,
+  } = usePrintCard({
+    productionId: productionId ?? null,
+    hasProduction: !!production,
+    rows: quantityRows,
+  });
+
+  // ==========================
   // 印刷結果ダイアログ用 state
   // ==========================
-  const [printing, setPrinting] = React.useState(false);
   const [printDialogOpen, setPrintDialogOpen] = React.useState(false);
-  const [printedProducts, setPrintedProducts] = React.useState<
-    ProductSummaryForPrint[]
-  >([]);
-  const [printError, setPrintError] = React.useState<string | null>(null);
 
   // ==========================
   // ヘッダー操作
@@ -99,6 +103,9 @@ export default function ProductionDetail() {
 
   // ==========================
   // ★ 印刷ボタン押下時処理
+  //   - usePrintCard.onPrint を呼び出し
+  //   - 戻り値として Hook 内部に保持された printLogs を
+  //     ダイアログで表示する
   // ==========================
   const handlePrint = React.useCallback(async () => {
     if (!productionId) {
@@ -107,39 +114,19 @@ export default function ProductionDetail() {
     }
 
     const ok = window.confirm(
-      "印刷用の Product を発行します。同じ productionId を持つ productId 一覧を表示します。よろしいですか？",
+      "印刷用の Product / print_log を発行します。よろしいですか？",
     );
     if (!ok) return;
 
-    try {
-      setPrinting(true);
-      setPrintError(null);
+    // usePrintCard 内で:
+    //   1. Product を作成
+    //   2. print_log を作成
+    //   3. print_log 一覧（QR ペイロード付き）を取得して保持
+    await onPrint();
 
-      // quantityRows(Create用) → PrintRow へ変換
-      const rowsForPrint: PrintRow[] = quantityRows.map((row) => ({
-        modelVariationId: row.modelVariationId,
-        quantity: row.quantity ?? 0,
-      }));
-
-      // 1) products 作成（印刷用）
-      await createProductsForPrint({
-        productionId,
-        rows: rowsForPrint,
-      });
-
-      // 2) 同じ productionId を持つ products 一覧を取得
-      const list = await listProductsByProductionId(productionId);
-
-      setPrintedProducts(list);
-      setPrintDialogOpen(true);
-    } catch (e) {
-      console.error(e);
-      setPrintError("印刷用 Product の発行または一覧取得に失敗しました。");
-      window.alert("印刷用 Product の発行または一覧取得に失敗しました。");
-    } finally {
-      setPrinting(false);
-    }
-  }, [productionId, quantityRows]);
+    // Hook が保持している printLogs をダイアログで確認する
+    setPrintDialogOpen(true);
+  }, [productionId, onPrint]);
 
   // ==========================
   // 戻る
@@ -211,7 +198,9 @@ export default function ProductionDetail() {
                 onChangeRows={isEditMode ? setQuantityRows : undefined}
               />
 
-              {/* ===== 分離した印刷カード ===== */}
+              {/* ===== 分離した印刷カード =====
+                  printing フラグとクリックハンドラのみ渡す。
+                  実際の処理は usePrintCard + handlePrint に集約。 */}
               <PrintCard printing={printing} onClick={handlePrint} />
             </>
           )}
@@ -239,36 +228,71 @@ export default function ProductionDetail() {
       </PageStyle>
 
       {/* ==========================
-          ★ Product 一覧ダイアログ
+          ★ print_log 一覧 + QR ペイロード ダイアログ
          ========================== */}
       {printDialogOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
-          <div className="w-full max-w-lg rounded-lg bg-white p-4 shadow-lg">
+          <div className="w-full max-w-2xl rounded-lg bg-white p-4 shadow-lg">
             <h2 className="mb-2 text-lg font-semibold">
-              発行された Product ID 一覧
+              発行された print_log 一覧
             </h2>
 
             {printError && (
               <p className="mb-2 text-sm text-red-600">{printError}</p>
             )}
 
-            {printedProducts.length === 0 ? (
+            {printLogs.length === 0 ? (
               <p className="text-sm text-gray-600">
-                該当する Product はありません。
+                該当する print_log はありません。
               </p>
             ) : (
-              <ul className="max-h-64 space-y-1 overflow-y-auto rounded border border-gray-200 bg-gray-50 p-2 text-sm font-mono">
-                {printedProducts.map((p) => (
-                  <li key={p.id}>
-                    <span className="font-semibold">productId:</span> {p.id}
-                    {p.modelId && (
-                      <span className="ml-2 text-xs text-gray-500">
-                        (modelId: {p.modelId})
+              <div className="max-h-80 space-y-3 overflow-y-auto rounded border border-gray-200 bg-gray-50 p-3 text-sm">
+                {printLogs.map((log) => (
+                  <div
+                    key={log.id}
+                    className="rounded border border-gray-200 bg-white p-2"
+                  >
+                    <div className="mb-1 flex items-center justify-between">
+                      <span className="font-semibold">
+                        print_log ID: {log.id}
                       </span>
+                      <span className="text-xs text-gray-500">
+                        printedAt: {log.printedAt}
+                      </span>
+                    </div>
+                    <div className="mb-1 text-xs text-gray-500">
+                      printedBy: {log.printedBy}
+                    </div>
+
+                    {log.productIds.length === 0 ? (
+                      <div className="text-xs text-gray-500">
+                        productId は記録されていません。
+                      </div>
+                    ) : (
+                      <ul className="space-y-1 text-xs font-mono">
+                        {log.productIds.map((pid, idx) => (
+                          <li key={`${log.id}-${pid}-${idx}`}>
+                            <span className="font-semibold">productId:</span>{" "}
+                            {pid}
+                            {log.qrPayloads[idx] && (
+                              <span className="ml-2 text-[11px] text-blue-600 underline">
+                                {/* QR ペイロードは URL を想定。 */}
+                                <a
+                                  href={log.qrPayloads[idx]}
+                                  target="_blank"
+                                  rel="noreferrer"
+                                >
+                                  QR ペイロードを開く
+                                </a>
+                              </span>
+                            )}
+                          </li>
+                        ))}
+                      </ul>
                     )}
-                  </li>
+                  </div>
                 ))}
-              </ul>
+              </div>
             )}
 
             <div className="mt-4 flex justify-end gap-2">
