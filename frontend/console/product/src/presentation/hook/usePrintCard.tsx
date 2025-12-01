@@ -19,11 +19,6 @@ type UsePrintCardParams<T extends QuantityRowBase> = {
 
 /**
  * 商品IDタグ用 Product 発行ロジックをまとめた Hook。
- * Production 側から productionId / quantityRows などを渡して利用します。
- *
- * - Product 作成
- * - print_log 作成
- * - print_log 一覧（QR ペイロード付き）取得
  */
 export function usePrintCard<T extends QuantityRowBase>({
   productionId,
@@ -39,10 +34,6 @@ export function usePrintCard<T extends QuantityRowBase>({
    */
   const onPrint = React.useCallback(async (): Promise<PrintLogForPrint[]> => {
     if (!productionId || !hasProduction) {
-      console.warn("[usePrintCard] print skipped: no production or invalid state", {
-        productionId,
-        hasProduction,
-      });
       return [];
     }
 
@@ -50,46 +41,24 @@ export function usePrintCard<T extends QuantityRowBase>({
       setPrinting(true);
       setError(null);
 
-      // -------------------------
-      // ★ 渡された rows をログ表示
-      // -------------------------
-      console.log("[usePrintCard] onPrint invoked with params:", {
-        productionId,
-        hasProduction,
-        rows,
-      });
-
-      // rows が null/undefined の可能性対策
       if (!Array.isArray(rows)) {
-        console.error("[usePrintCard] rows is NOT array", rows);
         alert("印刷用データが不正です（rows が配列ではありません）");
         return [];
       }
 
-      // -------------------------
-      // ★ PrintRow[] へマッピング
-      // -------------------------
       const rowsForPrint: PrintRow[] = rows.map((row) => ({
         modelId: row.modelVariationId,
         quantity: row.quantity ?? 0,
       }));
 
-      console.log("[usePrintCard] rowsForPrint (payload for printService):", rowsForPrint);
-
-      // -------------------------
-      // ★ Product 作成 + print_log 作成
-      // -------------------------
       const logs = await createProductsForPrint({
         productionId,
         rows: rowsForPrint,
       });
 
-      console.log("[usePrintCard] response logs from printService:", logs);
-
       setPrintLogs(logs);
       return logs ?? [];
-    } catch (e) {
-      console.error("[usePrintCard] print error:", e);
+    } catch (_) {
       setError("印刷用のデータ作成に失敗しました");
       alert("印刷用のデータ作成に失敗しました");
       return [];
