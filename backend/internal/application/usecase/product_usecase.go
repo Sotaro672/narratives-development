@@ -137,11 +137,8 @@ func (u *ProductUsecase) CreatePrintLogForProduction(ctx context.Context, produc
 		return productdom.PrintLog{}, productdom.ErrInvalidPrintLogProductIDs
 	}
 
-	// printedBy / printedAt を決定
-	// Product から printedBy は取得しない方針なので、printedBy は固定値や設定値で決定する
-	printedBy := "system" // TODO: 必要なら環境変数やコンフィグから設定
-
-	// printedAt は Product 側の PrintedAt があればそれを採用、なければ現在時刻
+	// printedAt を決定
+	// Product 側の PrintedAt があればそれを採用、なければ現在時刻
 	var printedAt time.Time
 	for _, p := range products {
 		if p.PrintedAt != nil && !p.PrintedAt.IsZero() {
@@ -154,12 +151,14 @@ func (u *ProductUsecase) CreatePrintLogForProduction(ctx context.Context, produc
 	}
 
 	// PrintLog エンティティ作成
+	// ※ printedBy フィールドはドメイン構造体には残っているが、
+	//   Firestore には保存していない（printLogToDoc から削除済み）。
 	logID := fmt.Sprintf("%s-%d", pid, printedAt.UnixNano())
 	log, err := productdom.NewPrintLog(
 		logID,
 		pid,
 		productIDs,
-		printedBy,
+		"system", // 互換用のダミー値。永続化はされない方針。
 		printedAt,
 	)
 	if err != nil {

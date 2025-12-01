@@ -1,4 +1,3 @@
-// backend/internal/adapters/out/firestore/product_repository_fs.go
 package firestore
 
 import (
@@ -445,7 +444,6 @@ func docToPrintLog(doc *firestore.DocumentSnapshot) (productdom.PrintLog, error)
 		ID:           doc.Ref.ID,
 		ProductionID: strings.TrimSpace(asString(data["productionId"])),
 		ProductIDs:   productIDs,
-		PrintedBy:    strings.TrimSpace(asString(data["printedBy"])),
 		PrintedAt:    printedAt,
 	}
 
@@ -456,7 +454,6 @@ func printLogToDoc(v productdom.PrintLog) map[string]any {
 	m := map[string]any{
 		"productionId": strings.TrimSpace(v.ProductionID),
 		"productIds":   v.ProductIDs,
-		"printedBy":    strings.TrimSpace(v.PrintedBy),
 		"printedAt":    v.PrintedAt.UTC(),
 	}
 	return m
