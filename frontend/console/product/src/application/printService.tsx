@@ -7,6 +7,7 @@ import {
   createProductsForPrint as createProductsForPrintApi,
   listPrintLogsByProductionId as listPrintLogsByProductionIdApi,
   listProductsByProductionId as listProductsByProductionIdApi,
+  createInspectionBatchForProduction as createInspectionBatchForProductionApi,
   type PrintRow,
   type ProductSummaryForPrint,
   type PrintLogForPrint,
@@ -39,13 +40,6 @@ export async function listPrintLogsByProductionId(
   if (!id) return [];
 
   const logs = await listPrintLogsByProductionIdApi(id);
-
-  // eslint-disable-next-line no-console
-  console.log("[printService] listPrintLogsByProductionIdApi result:", {
-    productionId: id,
-    logs,
-  });
-
   return logs;
 }
 
@@ -61,13 +55,6 @@ export async function listProductsByProductionId(
   if (!id) return [];
 
   const products = await listProductsByProductionIdApi(id);
-
-  // eslint-disable-next-line no-console
-  console.log("[printService] listProductsByProductionIdApi result:", {
-    productionId: id,
-    products,
-  });
-
   return products;
 }
 
@@ -110,35 +97,16 @@ async function buildAndOpenQrPdfFromLogs(
   productionId: string,
   products?: ProductSummaryForPrint[],
 ): Promise<number> {
-  // eslint-disable-next-line no-console
-  console.log("[printService] buildAndOpenQrPdfFromLogs: start", {
-    productionId,
-    logs,
-    products,
-  });
-
   const qrItems: QrPdfItem[] = [];
 
   // productId -> ラベル(modelNumber) のマップ
   const productLabelMap = buildProductLabelMap(products);
 
-  logs.forEach((log, logIndex) => {
+  logs.forEach((log) => {
     const { productIds, qrPayloads } = log;
 
     // qrPayloads が null / undefined / 配列以外のケースに備えて安全に扱う
     const payloadList = Array.isArray(qrPayloads) ? qrPayloads : [];
-
-    if (!Array.isArray(qrPayloads)) {
-      // eslint-disable-next-line no-console
-      console.warn(
-        "[printService] buildAndOpenQrPdfFromLogs: qrPayloads is not an array",
-        {
-          productionId,
-          logIndex,
-          log,
-        },
-      );
-    }
 
     productIds.forEach((pid, index) => {
       const payloadJson = payloadList[index];
@@ -157,24 +125,8 @@ async function buildAndOpenQrPdfFromLogs(
 
   // QR 対象が 0 件なら何もしない
   if (qrItems.length === 0) {
-    // eslint-disable-next-line no-console
-    console.log(
-      "[printService] buildAndOpenQrPdfFromLogs: no QR items for productionId=",
-      productionId,
-      { logs },
-    );
     return 0;
   }
-
-  // eslint-disable-next-line no-console
-  console.log(
-    "[printService] buildAndOpenQrPdfFromLogs: building PDF with items",
-    {
-      productionId,
-      qrItemCount: qrItems.length,
-      qrItemsSample: qrItems.slice(0, 5),
-    },
-  );
 
   // A4 縦・1 行 5 つの QR PDF を生成
   const pdfBlob = await buildQrPdfBlobA4(qrItems, {
@@ -200,6 +152,7 @@ async function buildAndOpenQrPdfFromLogs(
 // 2. あれば buildAndOpenQrPdfFromLogs で PDF 表示のみ
 // 3. なければ /products に対して Product を必要数作成
 // 4. /products/print-logs に対して print_log 作成リクエストを送信
+//    （★ 同じタイミングで /products/inspections も作成要求）
 // 5. /products/print-logs?productionId=... で print_log を取得
 // 6. 取得した print_log から QR JSON を取り出し、A4 1 行 5 つで PDF 生成
 // 7. 新しいタブで PDF を開く
@@ -216,40 +169,14 @@ export async function createProductsForPrint(params: {
   const id = productionId.trim();
   if (!id) throw new Error("productionId is required");
 
-  // eslint-disable-next-line no-console
-  console.log("[printService] createProductsForPrint called:", {
-    productionId: id,
-    rows,
-  });
-
   // ------------------------------------------------------
   // 0. 既存の print_log があるかどうかを確認
   // ------------------------------------------------------
   const existingLogs = await listPrintLogsByProductionIdApi(id);
 
-  // eslint-disable-next-line no-console
-  console.log(
-    "[printService] createProductsForPrint: existingLogs fetched:",
-    {
-      productionId: id,
-      logCount: existingLogs.length,
-      logs: existingLogs,
-    },
-  );
-
   if (existingLogs.length > 0) {
     // ★ 既存 Product 一覧を取得し、modelNumber をラベルに使う
     const products = await listProductsByProductionId(id);
-
-    // eslint-disable-next-line no-console
-    console.log(
-      "[printService] existing print_log found. Reusing for PDF with products.",
-      {
-        productionId: id,
-        logCount: existingLogs.length,
-        productCount: products.length,
-      },
-    );
 
     const totalQrCount = await buildAndOpenQrPdfFromLogs(
       existingLogs,
@@ -276,16 +203,6 @@ export async function createProductsForPrint(params: {
     rows,
   });
 
-  // eslint-disable-next-line no-console
-  console.log(
-    "[printService] createProductsForPrintApi result (new logs):",
-    {
-      productionId: id,
-      logCount: logs.length,
-      logs,
-    },
-  );
-
   // print_log が 0 件なら PDF 生成はスキップ
   if (logs.length === 0) {
     await notifyPrintLogCompleted({
@@ -296,6 +213,9 @@ export async function createProductsForPrint(params: {
     });
     return logs;
   }
+
+  // ★ 新規 print_log 作成と同じタイミングで inspection テーブル作成を要求
+  await createInspectionBatchForProductionApi(id);
 
   // ★ 新規作成した場合も Product 一覧を取得して modelNumber をラベルに使う
   const products = await listProductsByProductionId(id);

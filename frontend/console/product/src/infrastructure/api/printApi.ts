@@ -46,7 +46,9 @@ export async function listPrintLogsByProductionId(
   if (!id) return [];
 
   // eslint-disable-next-line no-console
-  console.log("[printApi] listPrintLogsByProductionId called:", { productionId: id });
+  console.log("[printApi] listPrintLogsByProductionId called:", {
+    productionId: id,
+  });
 
   const raw = await fetchPrintLogsByProductionId(id);
 
@@ -125,7 +127,10 @@ export async function createProductsForPrint(params: {
   if (!id) throw new Error("productionId is required");
 
   // eslint-disable-next-line no-console
-  console.log("[printApi] createProductsForPrint called:", { productionId: id, rows });
+  console.log("[printApi] createProductsForPrint called:", {
+    productionId: id,
+    rows,
+  });
 
   // 印刷タイミングの時刻（全 Product で共通とする）
   const printedAtISO = new Date().toISOString();
@@ -145,7 +150,11 @@ export async function createProductsForPrint(params: {
     // ID が空 or quantity 0 以下はスキップ
     if (!modelId || q <= 0) {
       // eslint-disable-next-line no-console
-      console.log("[printApi] createProductsForPrint skip row:", { row, q, modelId });
+      console.log("[printApi] createProductsForPrint skip row:", {
+        row,
+        q,
+        modelId,
+      });
       return;
     }
 
@@ -204,7 +213,9 @@ export async function listProductsByProductionId(
   if (!id) return [];
 
   // eslint-disable-next-line no-console
-  console.log("[printApi] listProductsByProductionId called:", { productionId: id });
+  console.log("[printApi] listProductsByProductionId called:", {
+    productionId: id,
+  });
 
   const raw = await fetchProductsByProductionId(id);
 
@@ -242,4 +253,24 @@ export async function listProductsByProductionId(
   console.log("[printApi] listProductsByProductionId mapped:", mapped);
 
   return mapped;
+}
+
+/* ---------------------------------------------------------
+ * inspection バッチ作成リクエスト（互換用ダミー）
+ *
+ * 現状、バックエンド側で「print_log 作成時に inspections_by_production も
+ * 同時に作成」しているため、ここでは追加の HTTP リクエストは行いません。
+ *
+ * 将来的に print_log と inspection の作成を別エンドポイントに分離したい場合は、
+ * この関数内で専用の HTTP 呼び出しを実装してください。
+ * --------------------------------------------------------- */
+export async function createInspectionBatchForProduction(
+  productionId: string,
+): Promise<void> {
+  const id = productionId.trim();
+  if (!id) {
+    throw new Error("productionId is required");
+  }
+  // 現時点では何もしない（backend 側で print_log 作成時に inspection も作成済み）
+  return;
 }
