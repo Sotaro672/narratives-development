@@ -72,20 +72,55 @@ export async function listProductsByProductionId(
 }
 
 // ==============================
+// ヘルパー: Product 一覧から productId -> ラベル のマップを作成
+//   ※ ラベルは modelNumber のみを使う（無い場合はラベル無し）
+// ==============================
+
+function buildProductLabelMap(
+  products: ProductSummaryForPrint[] | undefined,
+): Map<string, string> {
+  const map = new Map<string, string>();
+  if (!products || products.length === 0) return map;
+
+  for (const p of products) {
+    // ProductSummaryForPrint は { id, modelId, productionId, modelNumber? }
+    const productId = p.id;
+    if (!productId) continue;
+
+    const modelNumber = (p.modelNumber ?? "").trim();
+    if (!modelNumber) {
+      // modelNumber が無いものはラベルを付けない
+      continue;
+    }
+
+    // productId -> modelNumber
+    map.set(productId, modelNumber);
+  }
+
+  return map;
+}
+
+// ==============================
 // ヘルパー: PrintLog 一覧から QR PDF を生成して開く
+//   ★ 第3引数に products を追加し、modelNumber をラベルに利用
 // ==============================
 
 async function buildAndOpenQrPdfFromLogs(
   logs: PrintLogForPrint[],
   productionId: string,
+  products?: ProductSummaryForPrint[],
 ): Promise<number> {
   // eslint-disable-next-line no-console
   console.log("[printService] buildAndOpenQrPdfFromLogs: start", {
     productionId,
     logs,
+    products,
   });
 
   const qrItems: QrPdfItem[] = [];
+
+  // productId -> ラベル(modelNumber) のマップ
+  const productLabelMap = buildProductLabelMap(products);
 
   logs.forEach((log, logIndex) => {
     const { productIds, qrPayloads } = log;
@@ -109,11 +144,13 @@ async function buildAndOpenQrPdfFromLogs(
       const payloadJson = payloadList[index];
       if (!pid || !payloadJson) return;
 
+      // ★ ラベルは modelNumber のみ。無ければラベル無し。
+      const label = productLabelMap.get(pid);
+
       // payloadJson は JSON 文字列としてそのまま QR に埋め込む想定。
-      // productId をラベルにして PDF に表示。
       qrItems.push({
         payload: payloadJson,
-        label: pid,
+        label,
       });
     });
   });
@@ -201,16 +238,23 @@ export async function createProductsForPrint(params: {
   );
 
   if (existingLogs.length > 0) {
+    // ★ 既存 Product 一覧を取得し、modelNumber をラベルに使う
+    const products = await listProductsByProductionId(id);
+
     // eslint-disable-next-line no-console
     console.log(
-      "[printService] existing print_log found. Reusing for PDF. productionId=",
-      id,
-      { logCount: existingLogs.length },
+      "[printService] existing print_log found. Reusing for PDF with products.",
+      {
+        productionId: id,
+        logCount: existingLogs.length,
+        productCount: products.length,
+      },
     );
 
     const totalQrCount = await buildAndOpenQrPdfFromLogs(
       existingLogs,
       id,
+      products,
     );
 
     // ★ 既存ログを使って PDF を開いたことをシグナルとして通知
@@ -253,10 +297,13 @@ export async function createProductsForPrint(params: {
     return logs;
   }
 
+  // ★ 新規作成した場合も Product 一覧を取得して modelNumber をラベルに使う
+  const products = await listProductsByProductionId(id);
+
   // ------------------------------------------------------
   // 4〜6. print_log から QR PDF を生成
   // ------------------------------------------------------
-  const totalQrCount = await buildAndOpenQrPdfFromLogs(logs, id);
+  const totalQrCount = await buildAndOpenQrPdfFromLogs(logs, id, products);
 
   // ★ 最後に「print_log 作成 + QR PDF 生成完了」のシグナルを送る
   await notifyPrintLogCompleted({

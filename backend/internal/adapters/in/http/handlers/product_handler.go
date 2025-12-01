@@ -9,17 +9,28 @@ import (
 	"time"
 
 	usecase "narratives/internal/application/usecase"
+	modeldom "narratives/internal/domain/model"
 	productdom "narratives/internal/domain/product"
 )
 
 // ProductHandler は /products 関連のエンドポイントを担当します。
 type ProductHandler struct {
-	uc *usecase.ProductUsecase
+	uc           *usecase.ProductUsecase
+	productionUC *usecase.ProductionUsecase
+	modelUC      *usecase.ModelUsecase
 }
 
 // NewProductHandler はHTTPハンドラを初期化します。
-func NewProductHandler(uc *usecase.ProductUsecase) http.Handler {
-	return &ProductHandler{uc: uc}
+func NewProductHandler(
+	uc *usecase.ProductUsecase,
+	productionUC *usecase.ProductionUsecase,
+	modelUC *usecase.ModelUsecase,
+) http.Handler {
+	return &ProductHandler{
+		uc:           uc,
+		productionUC: productionUC,
+		modelUC:      modelUC,
+	}
 }
 
 // ServeHTTP はHTTPルーティングの入口です。
@@ -58,6 +69,7 @@ func (h *ProductHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	// ------------------------------------------------------------
 	// GET /products?productionId=xxx
 	//   → 同一 productionId を持つ Product 一覧を返す
+	//      ※ ここで modelNumber を付与して返す
 	// ------------------------------------------------------------
 	case r.Method == http.MethodGet && r.URL.Path == "/products":
 		productionID := strings.TrimSpace(r.URL.Query().Get("productionId"))
@@ -121,6 +133,7 @@ func (h *ProductHandler) get(w http.ResponseWriter, r *http.Request, id string) 
 // ------------------------------------------------------------
 // GET /products?productionId={productionId}
 //   同一 productionId を持つ Product 一覧を返す
+//   ※ modelNumber を backend 側で解決して付与する
 // ------------------------------------------------------------
 
 func (h *ProductHandler) listByProductionID(w http.ResponseWriter, r *http.Request, productionID string) {
@@ -139,7 +152,69 @@ func (h *ProductHandler) listByProductionID(w http.ResponseWriter, r *http.Reque
 		return
 	}
 
-	_ = json.NewEncoder(w).Encode(list)
+	// modelNumber 付与に必要な Usecase が無い場合は、従来どおりそのまま返す
+	if h.productionUC == nil || h.modelUC == nil {
+		log.Printf("[ProductHandler] listByProductionID: productionUC or modelUC is nil, return raw products")
+		_ = json.NewEncoder(w).Encode(list)
+		return
+	}
+
+	// production から productBlueprintID を取得
+	prod, err := h.productionUC.GetByID(ctx, productionID)
+	if err != nil {
+		log.Printf("[ProductHandler] listByProductionID: GetByID(productionID=%s) failed: %v", productionID, err)
+		_ = json.NewEncoder(w).Encode(list)
+		return
+	}
+
+	pbID := strings.TrimSpace(prod.ProductBlueprintID)
+	if pbID == "" {
+		log.Printf("[ProductHandler] listByProductionID: empty ProductBlueprintID for productionID=%s", productionID)
+		_ = json.NewEncoder(w).Encode(list)
+		return
+	}
+
+	// 対象 ProductBlueprint の ModelData を取得
+	md, err := h.modelUC.GetModelDataByProductBlueprintID(ctx, pbID)
+	if err != nil {
+		log.Printf("[ProductHandler] listByProductionID: GetModelDataByProductBlueprintID(%s) failed: %v", pbID, err)
+		_ = json.NewEncoder(w).Encode(list)
+		return
+	}
+
+	// フロント用のレスポンス型
+	type productWithModelNumber struct {
+		ID           string `json:"id"`
+		ModelID      string `json:"modelId"`
+		ProductionID string `json:"productionId"`
+		ModelNumber  string `json:"modelNumber"`
+	}
+
+	out := make([]productWithModelNumber, 0, len(list))
+
+	for _, p := range list {
+		modelNumber := ""
+
+		if md != nil {
+			mn, err := modeldom.ModelNumberFromID(md, p.ModelID)
+			if err != nil {
+				log.Printf("[ProductHandler] ModelNumberFromID failed: productID=%s modelID=%s err=%v", p.ID, p.ModelID, err)
+			} else {
+				modelNumber = mn
+			}
+		} else {
+			log.Printf("[ProductHandler] md is nil for productionID=%s", productionID)
+		}
+
+		out = append(out, productWithModelNumber{
+			ID:           p.ID,
+			ModelID:      p.ModelID,
+			ProductionID: p.ProductionID,
+			ModelNumber:  modelNumber,
+		})
+	}
+
+	_ = json.NewEncoder(w).Encode(out)
 }
 
 // ------------------------------------------------------------

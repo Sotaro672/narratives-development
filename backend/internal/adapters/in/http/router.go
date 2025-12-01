@@ -239,7 +239,8 @@ func NewRouter(deps RouterDeps) http.Handler {
 	// Products
 	// ================================
 	if deps.ProductUC != nil {
-		productH := handlers.NewProductHandler(deps.ProductUC)
+		// ★ ProductUsecase に加えて ProductionUsecase / ModelUsecase も渡す
+		productH := handlers.NewProductHandler(deps.ProductUC, deps.ProductionUC, deps.ModelUC)
 
 		var h http.Handler = productH
 		if authMw != nil {
@@ -248,6 +249,8 @@ func NewRouter(deps RouterDeps) http.Handler {
 
 		mux.Handle("/products", h)
 		mux.Handle("/products/", h)
+		// /products/print-logs も ProductHandler に流す
+		mux.Handle("/products/print-logs", h)
 	}
 
 	// ================================

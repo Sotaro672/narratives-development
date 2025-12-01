@@ -14,11 +14,13 @@ export type PrintRow = {
   quantity: number | null | undefined;
 };
 
-/** products 一覧の簡易型（ダイアログ表示用） */
+/** products 一覧の簡易型（ダイアログ表示用 + QR ラベル用） */
 export type ProductSummaryForPrint = {
   id: string;
   modelId: string;
   productionId: string;
+  // ★ 追加: QR ラベルで使う modelNumber（backend から渡される想定）
+  modelNumber?: string;
 };
 
 /** print_log 一覧の型（QR ペイロードを含めてフロントで扱う想定） */
@@ -231,6 +233,8 @@ export async function listProductsByProductionId(
       id: p.id ?? p.ID ?? "",
       modelId: p.modelId ?? p.ModelID ?? "",
       productionId: p.productionId ?? p.ProductionID ?? "",
+      // ★ 追加: backend が返した modelNumber を拾う
+      modelNumber: p.modelNumber ?? p.ModelNumber ?? "",
     }))
     .filter((p) => p.id && p.productionId === id);
 
