@@ -12,13 +12,6 @@ import "../styles/production.css";
 
 import LogCard from "../../../../log/src/presentation/LogCard";
 import { Button } from "../../../../shell/src/shared/ui/button";
-// ★ Card コンポーネント群を追加
-import {
-  Card,
-  CardHeader,
-  CardTitle,
-  CardContent,
-} from "../../../../shell/src/shared/ui/card";
 
 // ProductBlueprintCard の型用
 import type {
@@ -33,6 +26,9 @@ import {
   type PrintRow,
   type ProductSummaryForPrint,
 } from "../../../../product/src/application/printService";
+
+// ★ 分離した印刷カードコンポーネント
+import PrintCard from "../../../../product/src/presentation/component/printCard";
 
 export default function ProductionDetail() {
   const {
@@ -110,7 +106,6 @@ export default function ProductionDetail() {
       return;
     }
 
-    // 必要なら確認ダイアログ（残す）
     const ok = window.confirm(
       "印刷用の Product を発行します。同じ productionId を持つ productId 一覧を表示します。よろしいですか？",
     );
@@ -216,25 +211,8 @@ export default function ProductionDetail() {
                 onChangeRows={isEditMode ? setQuantityRows : undefined}
               />
 
-              {/* ===== 印刷カード（Product 発行 + 一覧ダイアログ） ===== */}
-              <Card className="print-card">
-                <CardHeader>
-                  <CardTitle>商品IDタグ用 Product を発行する</CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <div className="print-card__content">
-                    <Button
-                      variant="solid"
-                      size="lg"
-                      onClick={handlePrint}
-                      className="w-full max-w-xs"
-                      disabled={printing}
-                    >
-                      {printing ? "発行中..." : "印刷用 Product を発行"}
-                    </Button>
-                  </div>
-                </CardContent>
-              </Card>
+              {/* ===== 分離した印刷カード ===== */}
+              <PrintCard printing={printing} onClick={handlePrint} />
             </>
           )}
         </div>

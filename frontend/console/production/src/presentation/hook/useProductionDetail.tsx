@@ -1,4 +1,4 @@
-// frontend/console/production/src/presentation/hook/useProductionDetail.tsx 
+// frontend/console/production/src/presentation/hook/useProductionDetail.tsx
 import * as React from "react";
 import { useNavigate, useParams } from "react-router-dom";
 
@@ -16,14 +16,11 @@ import {
   type ProductionQuantityRow as DetailQuantityRow,
 } from "../../application/productionDetailService";
 
-// ★ 印刷用 Product 作成ロジックは分離したサービスから利用
-import {
-  createProductsForPrint,
-  type PrintRow,
-} from "../../../../product/src/application/printService";
-
 // create 用行型（modelNumber / color / rgb / quantity を持つ）
 import type { ProductionQuantityRow as CreateQuantityRow } from "../../application/productionCreateService";
+
+// ★ 印刷用ロジックを分離した hook を利用
+import { usePrintCard } from "../../../../product/src/presentation/hook/usePrintCard";
 
 type Mode = "view" | "edit";
 
@@ -244,26 +241,13 @@ export function useProductionDetail() {
   }, [productionId, production, quantityRows]);
 
   // ======================================================
-  // 印刷時 Product 作成処理（バックエンドへ create リクエスト送信）
+  // 印刷時 Product 作成処理は usePrintCard に委譲
   // ======================================================
-  const onPrint = React.useCallback(async () => {
-    if (!productionId || !production) return;
-
-    try {
-      // PrintRow[] へマッピング（printService.tsx の型に合わせる）
-      const rowsForPrint: PrintRow[] = quantityRows.map((row) => ({
-        modelId: row.modelVariationId,
-        quantity: row.quantity ?? 0,
-      }));
-
-      await createProductsForPrint({
-        productionId,
-        rows: rowsForPrint,
-      });
-    } catch {
-      alert("印刷用のデータ作成に失敗しました");
-    }
-  }, [productionId, production, quantityRows]);
+  const { onPrint } = usePrintCard({
+    productionId: productionId ?? null,
+    hasProduction: !!production,
+    rows: quantityRows,
+  });
 
   // ======================================================
   // 戻る
