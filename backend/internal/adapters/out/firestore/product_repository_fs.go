@@ -237,6 +237,94 @@ func (r *ProductRepositoryFS) List(
 }
 
 // ============================================================
+// PrintLogRepositoryFS: print_logs 用 Firestore リポジトリ
+//   usecase.PrintLogRepo の Create / ListByProductionID を実装する
+// ============================================================
+
+type PrintLogRepositoryFS struct {
+	Client *firestore.Client
+}
+
+func NewPrintLogRepositoryFS(client *firestore.Client) *PrintLogRepositoryFS {
+	return &PrintLogRepositoryFS{Client: client}
+}
+
+func (r *PrintLogRepositoryFS) col() *firestore.CollectionRef {
+	return r.Client.Collection("print_logs")
+}
+
+// Create は新しい print_log を 1 件保存します。
+// ID が空なら Firestore の auto-ID を採用します。
+func (r *PrintLogRepositoryFS) Create(ctx context.Context, v productdom.PrintLog) (productdom.PrintLog, error) {
+	if r.Client == nil {
+		return productdom.PrintLog{}, errors.New("firestore client is nil")
+	}
+
+	id := strings.TrimSpace(v.ID)
+	var docRef *firestore.DocumentRef
+	if id == "" {
+		docRef = r.col().NewDoc()
+		v.ID = docRef.ID
+	} else {
+		docRef = r.col().Doc(id)
+		v.ID = id
+	}
+
+	data := printLogToDoc(v)
+
+	_, err := docRef.Create(ctx, data)
+	if err != nil {
+		if status.Code(err) == codes.AlreadyExists {
+			// PrintLog 固有の ErrConflict は定義していないので、そのまま返す
+			return productdom.PrintLog{}, err
+		}
+		return productdom.PrintLog{}, err
+	}
+
+	// Firestore 側で timestamp などが変わる可能性もあるので、再取得して返す
+	snap, err := docRef.Get(ctx)
+	if err != nil {
+		return productdom.PrintLog{}, err
+	}
+	return docToPrintLog(snap)
+}
+
+// ListByProductionID: 同一 productionId を持つ PrintLog 一覧を取得
+func (r *PrintLogRepositoryFS) ListByProductionID(ctx context.Context, productionID string) ([]productdom.PrintLog, error) {
+	if r.Client == nil {
+		return nil, errors.New("firestore client is nil")
+	}
+
+	productionID = strings.TrimSpace(productionID)
+	if productionID == "" {
+		// productionID 未指定なら空配列を返す（エラーにはしない）
+		return []productdom.PrintLog{}, nil
+	}
+
+	q := r.col().Where("productionId", "==", productionID)
+	it := q.Documents(ctx)
+	defer it.Stop()
+
+	var logs []productdom.PrintLog
+	for {
+		doc, err := it.Next()
+		if err == iterator.Done {
+			break
+		}
+		if err != nil {
+			return nil, err
+		}
+		l, err := docToPrintLog(doc)
+		if err != nil {
+			return nil, err
+		}
+		logs = append(logs, l)
+	}
+
+	return logs, nil
+}
+
+// ============================================================
 // Helpers
 // ============================================================
 
@@ -324,4 +412,67 @@ func productToDoc(v productdom.Product) map[string]any {
 	}
 
 	return m
+}
+
+// print_logs 用の変換
+func docToPrintLog(doc *firestore.DocumentSnapshot) (productdom.PrintLog, error) {
+	data := doc.Data()
+	if data == nil {
+		return productdom.PrintLog{}, fmt.Errorf("empty print_log document: %s", doc.Ref.ID)
+	}
+
+	// productIds は []interface{} として返ってくることが多いので安全に変換
+	var productIDs []string
+	if raw, ok := data["productIds"]; ok {
+		switch vv := raw.(type) {
+		case []interface{}:
+			for _, x := range vv {
+				if s, ok := x.(string); ok && strings.TrimSpace(s) != "" {
+					productIDs = append(productIDs, strings.TrimSpace(s))
+				}
+			}
+		case []string:
+			for _, s := range vv {
+				s = strings.TrimSpace(s)
+				if s != "" {
+					productIDs = append(productIDs, s)
+				}
+			}
+		}
+	}
+
+	var printedAt time.Time
+	if v, ok := data["printedAt"].(time.Time); ok && !v.IsZero() {
+		printedAt = v.UTC()
+	}
+
+	log := productdom.PrintLog{
+		ID:           doc.Ref.ID,
+		ProductionID: strings.TrimSpace(asString(data["productionId"])),
+		ProductIDs:   productIDs,
+		PrintedBy:    strings.TrimSpace(asString(data["printedBy"])),
+		PrintedAt:    printedAt,
+	}
+
+	return log, nil
+}
+
+func printLogToDoc(v productdom.PrintLog) map[string]any {
+	m := map[string]any{
+		"productionId": strings.TrimSpace(v.ProductionID),
+		"productIds":   v.ProductIDs,
+		"printedBy":    strings.TrimSpace(v.PrintedBy),
+		"printedAt":    v.PrintedAt.UTC(),
+	}
+	return m
+}
+
+func asString(v any) string {
+	if v == nil {
+		return ""
+	}
+	if s, ok := v.(string); ok {
+		return s
+	}
+	return ""
 }

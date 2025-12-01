@@ -2,6 +2,7 @@ package usecase
 
 import (
 	"context"
+	"fmt"
 	"strings"
 
 	productdom "narratives/internal/domain/product"
@@ -19,13 +20,25 @@ type ProductRepo interface {
 	ListByProductionID(ctx context.Context, productionID string) ([]productdom.Product, error)
 }
 
-// ProductUsecase orchestrates product operations.
-type ProductUsecase struct {
-	repo ProductRepo
+// ★ PrintLog 用リポジトリ
+type PrintLogRepo interface {
+	Create(ctx context.Context, log productdom.PrintLog) (productdom.PrintLog, error)
+
+	// ★ 追加: productionId で絞り込んだ PrintLog 一覧
+	ListByProductionID(ctx context.Context, productionID string) ([]productdom.PrintLog, error)
 }
 
-func NewProductUsecase(repo ProductRepo) *ProductUsecase {
-	return &ProductUsecase{repo: repo}
+// ProductUsecase orchestrates product operations.
+type ProductUsecase struct {
+	repo         ProductRepo
+	printLogRepo PrintLogRepo
+}
+
+func NewProductUsecase(repo ProductRepo, printLogRepo PrintLogRepo) *ProductUsecase {
+	return &ProductUsecase{
+		repo:         repo,
+		printLogRepo: printLogRepo,
+	}
 }
 
 // ==========================
@@ -45,13 +58,48 @@ func (u *ProductUsecase) ListByProductionID(ctx context.Context, productionID st
 	return u.repo.ListByProductionID(ctx, strings.TrimSpace(productionID))
 }
 
+// ★ 追加: 同一 productionId を持つ PrintLog を一覧取得
+func (u *ProductUsecase) ListPrintLogsByProductionID(ctx context.Context, productionID string) ([]productdom.PrintLog, error) {
+	if u.printLogRepo == nil {
+		return nil, fmt.Errorf("printLogRepo is nil")
+	}
+	return u.printLogRepo.ListByProductionID(ctx, strings.TrimSpace(productionID))
+}
+
 // ==========================
 // Commands
 // ==========================
 
-// Create: POST 時に ID / ModelID / ProductionID / PrintedAt / PrintedBy を確定させる
+// Create: POST 時に ID / ModelID / ProductionID / PrintedAt / PrintedBy を確定させる。
+//
+//	同時に print_log も 1 レコード作成する（PrintedAt / PrintedBy が入っている場合のみ）。
 func (u *ProductUsecase) Create(ctx context.Context, p productdom.Product) (productdom.Product, error) {
-	return u.repo.Create(ctx, p)
+	created, err := u.repo.Create(ctx, p)
+	if err != nil {
+		return productdom.Product{}, err
+	}
+
+	// printLogRepo が設定されていて、印刷情報が埋まっている場合のみ print_log を作成
+	if u.printLogRepo != nil && created.PrintedBy != nil && created.PrintedAt != nil {
+		logID := fmt.Sprintf("%s-%d", created.ProductionID, created.PrintedAt.UnixNano())
+
+		log, err := productdom.NewPrintLog(
+			logID,
+			created.ProductionID,
+			[]string{created.ID}, // 単一 Product だが一覧として保持
+			*created.PrintedBy,
+			*created.PrintedAt,
+		)
+		if err != nil {
+			return productdom.Product{}, err
+		}
+
+		if _, err := u.printLogRepo.Create(ctx, log); err != nil {
+			return productdom.Product{}, err
+		}
+	}
+
+	return created, nil
 }
 
 // Save: 既存の互換用途として残しておく（フルアップサート）

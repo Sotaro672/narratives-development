@@ -284,6 +284,9 @@ func NewContainer(ctx context.Context) (*Container, error) {
 	userRepo := fs.NewUserRepositoryFS(fsClient)
 	walletRepo := fs.NewWalletRepositoryFS(fsClient)
 
+	// ★ PrintLog 用リポジトリ
+	printLogRepo := fs.NewPrintLogRepositoryFS(fsClient)
+
 	// ★ History repositories
 	productBlueprintHistoryRepo := fs.NewProductBlueprintHistoryRepositoryFS(fsClient)
 	modelHistoryRepo := fs.NewModelHistoryRepositoryFS(fsClient)
@@ -342,7 +345,9 @@ func NewContainer(ctx context.Context) (*Container, error) {
 	orderUC := uc.NewOrderUsecase(orderRepo)
 	paymentUC := uc.NewPaymentUsecase(paymentRepo)
 	permissionUC := uc.NewPermissionUsecase(permissionRepo)
-	productUC := uc.NewProductUsecase(productRepo)
+
+	// ★ ProductUsecase に PrintLogRepo を併せて注入
+	productUC := uc.NewProductUsecase(productRepo, printLogRepo)
 
 	// ★ ProductionUsecase に member.Service + productBlueprint.Service + brand.Service を注入
 	productionUC := uc.NewProductionUsecase(

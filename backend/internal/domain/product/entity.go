@@ -42,6 +42,16 @@ type Product struct {
 	InspectedBy *string    `json:"inspectedBy"`
 }
 
+// PrintLog は「印刷した Product の履歴」を保持するエンティティ。
+// 1 レコードで 1 回の印刷バッチを表し、productIds にそのとき印刷された Product ID 一覧を持ちます。
+type PrintLog struct {
+	ID           string    `json:"id"`
+	ProductionID string    `json:"productionId"`
+	ProductIDs   []string  `json:"productIds"`
+	PrintedBy    string    `json:"printedBy"`
+	PrintedAt    time.Time `json:"printedAt"`
+}
+
 // TokenConnectionStatus はトークン接続状態の列挙
 type TokenConnectionStatus string
 
@@ -68,6 +78,13 @@ var (
 	ErrInvalidInspectedBy = errors.New("product: invalid inspectedBy")
 
 	ErrInvalidCoherence = errors.New("product: invalid field coherence")
+
+	// PrintLog 用エラー
+	ErrInvalidPrintLogID           = errors.New("printLog: invalid id")
+	ErrInvalidPrintLogProductionID = errors.New("printLog: invalid productionId")
+	ErrInvalidPrintLogProductIDs   = errors.New("printLog: invalid productIds")
+	ErrInvalidPrintLogPrintedBy    = errors.New("printLog: invalid printedBy")
+	ErrInvalidPrintLogPrintedAt    = errors.New("printLog: invalid printedAt")
 )
 
 // ===============================
@@ -141,6 +158,28 @@ func NewFromStringTimes(
 		printedAtPtr, printedBy,
 		inspectedAtPtr, inspectedBy,
 	)
+}
+
+// NewPrintLog は PrintLog エンティティのコンストラクタです。
+// 空白除去などを行ったうえでバリデーションします。
+func NewPrintLog(
+	id string,
+	productionID string,
+	productIDs []string,
+	printedBy string,
+	printedAt time.Time,
+) (PrintLog, error) {
+	pl := PrintLog{
+		ID:           strings.TrimSpace(id),
+		ProductionID: strings.TrimSpace(productionID),
+		ProductIDs:   normalizeIDList(productIDs),
+		PrintedBy:    strings.TrimSpace(printedBy),
+		PrintedAt:    printedAt.UTC(),
+	}
+	if err := pl.validate(); err != nil {
+		return PrintLog{}, err
+	}
+	return pl, nil
 }
 
 // ===============================
@@ -257,6 +296,30 @@ func (p Product) validate() error {
 	return nil
 }
 
+func (pl PrintLog) validate() error {
+	if pl.ID == "" {
+		return ErrInvalidPrintLogID
+	}
+	if pl.ProductionID == "" {
+		return ErrInvalidPrintLogProductionID
+	}
+	if len(pl.ProductIDs) == 0 {
+		return ErrInvalidPrintLogProductIDs
+	}
+	for _, pid := range pl.ProductIDs {
+		if strings.TrimSpace(pid) == "" {
+			return ErrInvalidPrintLogProductIDs
+		}
+	}
+	if strings.TrimSpace(pl.PrintedBy) == "" {
+		return ErrInvalidPrintLogPrintedBy
+	}
+	if pl.PrintedAt.IsZero() {
+		return ErrInvalidPrintLogPrintedAt
+	}
+	return nil
+}
+
 // ===============================
 // Helpers
 // ===============================
@@ -281,6 +344,25 @@ func normalizeTimePtr(p *time.Time) *time.Time {
 	}
 	utc := p.UTC()
 	return &utc
+}
+
+// ID のスライスをトリムし、空文字を除去する。
+// 結果が空なら nil を返します（バリデーションで検知）。
+func normalizeIDList(list []string) []string {
+	if len(list) == 0 {
+		return nil
+	}
+	out := make([]string, 0, len(list))
+	for _, v := range list {
+		v = strings.TrimSpace(v)
+		if v != "" {
+			out = append(out, v)
+		}
+	}
+	if len(out) == 0 {
+		return nil
+	}
+	return out
 }
 
 func parseTime(s string, classify error) (time.Time, error) {

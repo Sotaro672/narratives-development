@@ -30,6 +30,18 @@ func (h *ProductHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	log.Printf("[ProductHandler] method=%s path=%s query=%s", r.Method, r.URL.Path, r.URL.RawQuery)
 
 	switch {
+	// GET /products/print-logs?productionId=xxx
+	case r.Method == http.MethodGet && r.URL.Path == "/products/print-logs":
+		productionID := strings.TrimSpace(r.URL.Query().Get("productionId"))
+		if productionID == "" {
+			w.WriteHeader(http.StatusBadRequest)
+			_ = json.NewEncoder(w).Encode(map[string]string{
+				"error": "productionId query parameter is required",
+			})
+			return
+		}
+		h.listPrintLogsByProductionID(w, r, productionID)
+
 	// GET /products?productionId=xxx
 	case r.Method == http.MethodGet && r.URL.Path == "/products":
 		productionID := strings.TrimSpace(r.URL.Query().Get("productionId"))
@@ -100,6 +112,29 @@ func (h *ProductHandler) listByProductionID(w http.ResponseWriter, r *http.Reque
 	}
 
 	_ = json.NewEncoder(w).Encode(list)
+}
+
+// GET /products/print-logs?productionId={productionId}
+// 同一 productionId を持つ print_log 一覧を返す
+func (h *ProductHandler) listPrintLogsByProductionID(w http.ResponseWriter, r *http.Request, productionID string) {
+	ctx := r.Context()
+
+	productionID = strings.TrimSpace(productionID)
+	if productionID == "" {
+		w.WriteHeader(http.StatusBadRequest)
+		_ = json.NewEncoder(w).Encode(map[string]string{"error": "invalid productionId"})
+		return
+	}
+
+	logs, err := h.uc.ListPrintLogsByProductionID(ctx, productionID)
+	if err != nil {
+		// print_log 用の専用エラー型はまだないので、ひとまず 500 を返す
+		w.WriteHeader(http.StatusInternalServerError)
+		_ = json.NewEncoder(w).Encode(map[string]string{"error": err.Error()})
+		return
+	}
+
+	_ = json.NewEncoder(w).Encode(logs)
 }
 
 // POST /products
