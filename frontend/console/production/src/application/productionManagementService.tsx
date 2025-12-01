@@ -14,8 +14,8 @@ export type ProductionRow = Production & {
   totalQuantity: number;
   assigneeName?: string;
 
-  /** backend から受け取る productBlueprintName（なければ fallback で ID を使う） */
-  productBlueprintName?: string;
+  /** backend から受け取る productName（なければ fallback で ID を使う） */
+  productName?: string;
 
   /** backend から受け取る brandName（なければ空文字） */
   brandName?: string;
@@ -25,7 +25,7 @@ export type ProductionRow = Production & {
 export type ProductionRowView = {
   id: string;
   productBlueprintId: string;
-  productBlueprintName: string;
+  productName: string;
   assigneeId: string;
   assigneeName: string;
   status: ProductionStatus;
@@ -70,13 +70,18 @@ export async function loadProductionRows(): Promise<ProductionRow[]> {
     const blueprintId =
       raw.productBlueprintId ?? raw.ProductBlueprintID ?? "";
 
+    const productName =
+      raw.productName ??
+      raw.ProductName ??
+      blueprintId;
+
     const row: ProductionRow = {
       ...(raw as Production),
 
       id: raw.id ?? raw.ID ?? "",
       productBlueprintId: blueprintId,
 
-      productBlueprintName: raw.productBlueprintName ?? blueprintId,
+      productName,
       brandName: raw.brandName ?? raw.BrandName ?? "",
 
       assigneeId: raw.assigneeId ?? raw.AssigneeID ?? "",
@@ -150,7 +155,7 @@ export function buildRowsView(params: {
   const view = data.map<ProductionRowView>((p) => ({
     id: p.id,
     productBlueprintId: p.productBlueprintId,
-    productBlueprintName: p.productBlueprintName ?? "",
+    productName: p.productName ?? "",
     assigneeId: p.assigneeId,
     assigneeName: p.assigneeName ?? "",
     status: p.status,

@@ -1,4 +1,4 @@
-// frontend/console/production/src/presentation/hook/useProductionDetail.tsx
+// frontend/console/production/src/presentation/hook/useProductionDetail.tsx 
 import * as React from "react";
 import { useNavigate, useParams } from "react-router-dom";
 
@@ -10,12 +10,17 @@ import {
   loadModelVariationIndexByProductBlueprintId,
   buildQuantityRowsFromModels,
   updateProductionDetail,
-  createProductsForPrint,
   type ProductionDetail,
   type ProductBlueprintDetail,
   type ModelVariationSummary,
   type ProductionQuantityRow as DetailQuantityRow,
 } from "../../application/productionDetailService";
+
+// ★ 印刷用 Product 作成ロジックは分離したサービスから利用
+import {
+  createProductsForPrint,
+  type PrintRow,
+} from "../../application/printService";
 
 // create 用行型（modelNumber / color / rgb / quantity を持つ）
 import type { ProductionQuantityRow as CreateQuantityRow } from "../../application/productionCreateService";
@@ -245,12 +250,9 @@ export function useProductionDetail() {
     if (!productionId || !production) return;
 
     try {
-      const rowsForPrint: DetailQuantityRow[] = quantityRows.map((row) => ({
-        id: row.modelVariationId,
-        modelNumber: row.modelNumber,
-        size: row.size,
-        color: row.color,
-        rgb: row.rgb ?? null,
+      // PrintRow[] へマッピング（printService.tsx の型に合わせる）
+      const rowsForPrint: PrintRow[] = quantityRows.map((row) => ({
+        modelVariationId: row.modelVariationId,
         quantity: row.quantity ?? 0,
       }));
 

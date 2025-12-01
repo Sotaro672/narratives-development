@@ -22,7 +22,7 @@ import {
 export type ProductionDetail = Production & {
   totalQuantity: number;
   assigneeName?: string;
-  productBlueprintName?: string;
+  productName?: string; // ← 統一
   brandName?: string;
 };
 
@@ -104,14 +104,17 @@ export async function loadProductionDetail(
   const blueprintId =
     raw.productBlueprintId ?? raw.ProductBlueprintID ?? "";
 
+  /** productName 統一 */
+  const resolvedProductName =
+    raw.productName ??
+    raw.ProductName ??
+    blueprintId;
+
   let detail: ProductionDetail = {
     ...(raw as Production),
     id: raw.id ?? raw.ID ?? "",
     productBlueprintId: blueprintId,
-    productBlueprintName:
-      raw.productBlueprintName ??
-      raw.ProductBlueprintName ??
-      blueprintId,
+    productName: resolvedProductName, // ← 統一済み
     brandName:
       raw.brandName ??
       raw.BrandName ??
@@ -128,6 +131,9 @@ export async function loadProductionDetail(
     totalQuantity,
   };
 
+  /* ---------------------------------------------------------
+   * 一覧の name 解決ロジック
+   * --------------------------------------------------------- */
   try {
     const listItems = await listProductionsHTTP();
 
@@ -143,21 +149,26 @@ export async function loadProductionDetail(
     });
 
     if (match) {
+      /** productName のみ使用する */
+      const matchProductName =
+        match.productName ??
+        match.ProductName ??
+        detail.productBlueprintId;
+
       detail = {
         ...detail,
-        productBlueprintName:
-          detail.productBlueprintName &&
-          detail.productBlueprintName !== detail.productBlueprintId
-            ? detail.productBlueprintName
-            : match.productBlueprintName ??
-              match.ProductBlueprintName ??
-              detail.productBlueprintId,
+        productName:
+          detail.productName &&
+          detail.productName !== detail.productBlueprintId
+            ? detail.productName
+            : matchProductName,
 
         brandName:
           detail.brandName ||
           match.brandName ||
           match.BrandName ||
           "",
+
         assigneeName:
           detail.assigneeName ||
           match.assigneeName ||

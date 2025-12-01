@@ -29,13 +29,13 @@ type ProductionRepo interface {
 	Delete(ctx context.Context, id string) error
 }
 
-// ★ フロント用 DTO: 担当者名 + プロダクト名 + brandId/brandName 付き Production
+// ★ フロント用 DTO: 担当者名 + productName + brandId/brandName 付き Production
 type ProductionWithAssigneeName struct {
 	productiondom.Production
-	AssigneeName         string `json:"assigneeName"`
-	ProductBlueprintName string `json:"productBlueprintName"`
-	BrandID              string `json:"brandId"`
-	BrandName            string `json:"brandName"`
+	AssigneeName string `json:"assigneeName"`
+	ProductName  string `json:"productName"`
+	BrandID      string `json:"brandId"`
+	BrandName    string `json:"brandName"`
 }
 
 // ============================================================
@@ -105,9 +105,9 @@ func (u *ProductionUsecase) ResolveAssigneeName(ctx context.Context, assigneeID 
 	return u.memberSvc.GetNameLastFirstByID(ctx, assigneeID)
 }
 
-// ★ productBlueprintId からプロダクト名を解決する resolver 的メソッド
+// ★ productBlueprintId から productName を解決する resolver 的メソッド
 //   - pbSvc が設定されていない場合や ID が空文字の場合は "" を返す
-func (u *ProductionUsecase) ResolveProductBlueprintName(ctx context.Context, blueprintID string) (string, error) {
+func (u *ProductionUsecase) ResolveProductName(ctx context.Context, blueprintID string) (string, error) {
 	if u.pbSvc == nil {
 		return "", nil
 	}
@@ -162,7 +162,7 @@ func (u *ProductionUsecase) ResolveBrandName(ctx context.Context, brandID string
 	return strings.TrimSpace(name), nil
 }
 
-// ★ 担当者名 + プロダクト名 + brandId/brandName 付き一覧（/productions 用）
+// ★ 担当者名 + productName + brandId/brandName 付き一覧（/productions 用）
 func (u *ProductionUsecase) ListWithAssigneeName(ctx context.Context) ([]ProductionWithAssigneeName, error) {
 	list, err := u.repo.List(ctx)
 	if err != nil {
@@ -180,7 +180,7 @@ func (u *ProductionUsecase) ListWithAssigneeName(ctx context.Context) ([]Product
 			}
 		}
 
-		// プロダクト名 & brandId / brandName
+		// productName & brandId / brandName
 		productName := ""
 		brandID := ""
 		brandName := ""
@@ -202,11 +202,11 @@ func (u *ProductionUsecase) ListWithAssigneeName(ctx context.Context) ([]Product
 		}
 
 		out = append(out, ProductionWithAssigneeName{
-			Production:           p,
-			AssigneeName:         name,
-			ProductBlueprintName: productName,
-			BrandID:              brandID,
-			BrandName:            brandName,
+			Production:   p,
+			AssigneeName: name,
+			ProductName:  productName,
+			BrandID:      brandID,
+			BrandName:    brandName,
 		})
 	}
 

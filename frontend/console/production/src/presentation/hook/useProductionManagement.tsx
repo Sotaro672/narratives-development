@@ -57,7 +57,7 @@ export function useProductionManagement() {
   }, []);
 
   // ===== オプション生成 =====
-  // プロダクト名フィルタ: value は productBlueprintId, label は productBlueprintName（なければ ID）
+  // プロダクト名フィルタ: value は productBlueprintId, label は productName（なければ ID）
   const blueprintOptions = useMemo(
     () => {
       const map = new Map<string, string>();
@@ -66,7 +66,7 @@ export function useProductionManagement() {
         const id = row.productBlueprintId;
         if (!id) continue;
         if (!map.has(id)) {
-          const name = (row as any).productBlueprintName ?? "";
+          const name = (row as any).productName ?? "";
           const label = name || id;
           map.set(id, label);
         }

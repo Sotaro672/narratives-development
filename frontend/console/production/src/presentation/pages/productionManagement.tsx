@@ -30,13 +30,13 @@ export default function ProductionManagement() {
             className="cursor-pointer hover:bg-blue-50 transition-colors"
             onClick={() => handleRowClick(p.id)}
           >
-            {/* ★ productBlueprintName（またはID） */}
-            <td>{(p as any).productBlueprintName || p.productBlueprintId}</td>
+            {/* ★ productName */}
+            <td>{(p as any).productName || p.productBlueprintId}</td>
 
-            {/* ★ ブランド名（あればブランド名、なければ空文字） */}
+            {/* ★ ブランド名 */}
             <td>{(p as any).brandName || ""}</td>
 
-            {/* ★ 担当者名（名前があれば名前、なければID） */}
+            {/* ★ 担当者名（あれば名前、なければID） */}
             <td>{(p as any).assigneeName || p.assigneeId}</td>
 
             {/* ステータス */}
@@ -56,3 +56,4 @@ export default function ProductionManagement() {
     </div>
   );
 }
+
