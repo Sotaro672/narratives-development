@@ -50,6 +50,9 @@ type PrintLog struct {
 	ProductIDs   []string  `json:"productIds"`
 	PrintedBy    string    `json:"printedBy"`
 	PrintedAt    time.Time `json:"printedAt"`
+	// QR ペイロード一覧（例: 各 productId に対応する URL）
+	// Firestore には保存せず、レスポンス専用に使う想定。
+	QrPayloads []string `json:"qrPayloads,omitempty"`
 }
 
 // TokenConnectionStatus はトークン接続状態の列挙
@@ -162,6 +165,7 @@ func NewFromStringTimes(
 
 // NewPrintLog は PrintLog エンティティのコンストラクタです。
 // 空白除去などを行ったうえでバリデーションします。
+// QrPayloads はここでは扱わず、後続の処理（usecase など）で必要に応じて詰める想定です。
 func NewPrintLog(
 	id string,
 	productionID string,
@@ -175,6 +179,7 @@ func NewPrintLog(
 		ProductIDs:   normalizeIDList(productIDs),
 		PrintedBy:    strings.TrimSpace(printedBy),
 		PrintedAt:    printedAt.UTC(),
+		// QrPayloads は任意フィールドなのでデフォルト nil のまま
 	}
 	if err := pl.validate(); err != nil {
 		return PrintLog{}, err
@@ -317,6 +322,7 @@ func (pl PrintLog) validate() error {
 	if pl.PrintedAt.IsZero() {
 		return ErrInvalidPrintLogPrintedAt
 	}
+	// QrPayloads は任意なのでここではバリデーションしない
 	return nil
 }
 

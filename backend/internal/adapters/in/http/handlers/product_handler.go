@@ -30,7 +30,20 @@ func (h *ProductHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	log.Printf("[ProductHandler] method=%s path=%s query=%s", r.Method, r.URL.Path, r.URL.RawQuery)
 
 	switch {
+
+	// ------------------------------------------------------------
+	// POST /products/print-logs
+	//   body: { "productionId": "xxx" }
+	//   → 対象 productionId の products から 1 件の print_log を作成
+	//     （内部で QR JSON 文字列も生成して QrPayloads に格納）
+	// ------------------------------------------------------------
+	case r.Method == http.MethodPost && r.URL.Path == "/products/print-logs":
+		h.createPrintLog(w, r)
+
+	// ------------------------------------------------------------
 	// GET /products/print-logs?productionId=xxx
+	//   → 同一 productionId を持つ print_log 一覧を返す
+	// ------------------------------------------------------------
 	case r.Method == http.MethodGet && r.URL.Path == "/products/print-logs":
 		productionID := strings.TrimSpace(r.URL.Query().Get("productionId"))
 		if productionID == "" {
@@ -42,7 +55,10 @@ func (h *ProductHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		}
 		h.listPrintLogsByProductionID(w, r, productionID)
 
+	// ------------------------------------------------------------
 	// GET /products?productionId=xxx
+	//   → 同一 productionId を持つ Product 一覧を返す
+	// ------------------------------------------------------------
 	case r.Method == http.MethodGet && r.URL.Path == "/products":
 		productionID := strings.TrimSpace(r.URL.Query().Get("productionId"))
 		if productionID == "" {
@@ -54,17 +70,23 @@ func (h *ProductHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		}
 		h.listByProductionID(w, r, productionID)
 
+	// ------------------------------------------------------------
 	// GET /products/{id}
+	// ------------------------------------------------------------
 	case r.Method == http.MethodGet && strings.HasPrefix(r.URL.Path, "/products/"):
 		id := strings.TrimPrefix(r.URL.Path, "/products/")
 		h.get(w, r, id)
 
+	// ------------------------------------------------------------
 	// PATCH /products/{id}
+	// ------------------------------------------------------------
 	case r.Method == http.MethodPatch && strings.HasPrefix(r.URL.Path, "/products/"):
 		id := strings.TrimPrefix(r.URL.Path, "/products/")
 		h.update(w, r, id)
 
+	// ------------------------------------------------------------
 	// POST /products
+	// ------------------------------------------------------------
 	case r.Method == http.MethodPost && r.URL.Path == "/products":
 		h.create(w, r)
 
@@ -74,7 +96,10 @@ func (h *ProductHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+// ------------------------------------------------------------
 // GET /products/{id}
+// ------------------------------------------------------------
+
 func (h *ProductHandler) get(w http.ResponseWriter, r *http.Request, id string) {
 	ctx := r.Context()
 
@@ -93,8 +118,11 @@ func (h *ProductHandler) get(w http.ResponseWriter, r *http.Request, id string) 
 	_ = json.NewEncoder(w).Encode(p)
 }
 
+// ------------------------------------------------------------
 // GET /products?productionId={productionId}
-// 同一 productionId を持つ Product 一覧を返す
+//   同一 productionId を持つ Product 一覧を返す
+// ------------------------------------------------------------
+
 func (h *ProductHandler) listByProductionID(w http.ResponseWriter, r *http.Request, productionID string) {
 	ctx := r.Context()
 
@@ -114,8 +142,12 @@ func (h *ProductHandler) listByProductionID(w http.ResponseWriter, r *http.Reque
 	_ = json.NewEncoder(w).Encode(list)
 }
 
+// ------------------------------------------------------------
 // GET /products/print-logs?productionId={productionId}
-// 同一 productionId を持つ print_log 一覧を返す
+//   同一 productionId を持つ print_log 一覧を返す
+//   （usecase 側で QrPayloads も埋めた状態で返ってくる想定）
+// ------------------------------------------------------------
+
 func (h *ProductHandler) listPrintLogsByProductionID(w http.ResponseWriter, r *http.Request, productionID string) {
 	ctx := r.Context()
 
@@ -128,7 +160,7 @@ func (h *ProductHandler) listPrintLogsByProductionID(w http.ResponseWriter, r *h
 
 	logs, err := h.uc.ListPrintLogsByProductionID(ctx, productionID)
 	if err != nil {
-		// print_log 用の専用エラー型はまだないので、ひとまず 500 を返す
+		log.Printf("[ProductHandler] listPrintLogsByProductionID error: %v", err)
 		w.WriteHeader(http.StatusInternalServerError)
 		_ = json.NewEncoder(w).Encode(map[string]string{"error": err.Error()})
 		return
@@ -137,15 +169,65 @@ func (h *ProductHandler) listPrintLogsByProductionID(w http.ResponseWriter, r *h
 	_ = json.NewEncoder(w).Encode(logs)
 }
 
-// POST /products
-// 印刷時などに、以下の項目で Product を新規作成する想定:
-// - modelId        : モデルID（必須, 更新不可）
-// - productionId   : 生産計画ID（必須, 更新不可）
-// - printedAt      : 印刷日時（必須, 更新不可）
-// - printedBy      : 印刷者（任意）
+// ------------------------------------------------------------
+// POST /products/print-logs
+//   body: { "productionId": "xxx" }
 //
-// inspectionResult / connectedToken / inspectedAt / inspectedBy は
-// このタイミングでは未設定とし、InspectionResult は notYet を採用します。
+//   1. 該当 productionId の Product 一覧を usecase から取得
+//   2. 1 回の印刷バッチとして PrintLog を 1 件作成
+//   3. QR JSON 文字列を QrPayloads に詰めた状態で返す
+// ------------------------------------------------------------
+
+func (h *ProductHandler) createPrintLog(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+
+	var req struct {
+		ProductionID string `json:"productionId"`
+	}
+
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		w.WriteHeader(http.StatusBadRequest)
+		_ = json.NewEncoder(w).Encode(map[string]string{"error": "invalid json"})
+		return
+	}
+
+	productionID := strings.TrimSpace(req.ProductionID)
+	if productionID == "" {
+		w.WriteHeader(http.StatusBadRequest)
+		_ = json.NewEncoder(w).Encode(map[string]string{"error": "productionId is required"})
+		return
+	}
+
+	log.Printf("[ProductHandler] createPrintLog productionId=%s", productionID)
+
+	// usecase 側で:
+	//   - products を収集
+	//   - PrintLog を 1 件作成
+	//   - 各 productId から QR JSON を生成して QrPayloads に詰める
+	pl, err := h.uc.CreatePrintLogForProduction(ctx, productionID)
+	if err != nil {
+		log.Printf("[ProductHandler] createPrintLog error: %v", err)
+		w.WriteHeader(http.StatusInternalServerError)
+		_ = json.NewEncoder(w).Encode(map[string]string{"error": err.Error()})
+		return
+	}
+
+	// 正常時は作成した print_log 1 件を返す
+	_ = json.NewEncoder(w).Encode(pl)
+}
+
+// ------------------------------------------------------------
+// POST /products
+//   印刷時などに、以下の項目で Product を新規作成する想定:
+//   - modelId        : モデルID（必須, 更新不可）
+//   - productionId   : 生産計画ID（必須, 更新不可）
+//   - printedAt      : 印刷日時（必須, 更新不可）
+//   - printedBy      : 印刷者（任意）
+//
+//   inspectionResult / connectedToken / inspectedAt / inspectedBy は
+//   このタイミングでは未設定とし、InspectionResult は notYet を採用します。
+// ------------------------------------------------------------
+
 func (h *ProductHandler) create(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 
@@ -198,13 +280,17 @@ func (h *ProductHandler) create(w http.ResponseWriter, r *http.Request) {
 	_ = json.NewEncoder(w).Encode(created)
 }
 
+// ------------------------------------------------------------
 // PATCH /products/{id}
-// 更新対象:
-// - inspectionResult
-// - connectedToken
-// - inspectedAt
-// - inspectedBy
-// ID / ModelID / ProductionID / PrintedAt / PrintedBy は更新不可（usecase側で維持）
+//   更新対象:
+//     - inspectionResult
+//     - connectedToken
+//     - inspectedAt
+//     - inspectedBy
+//   ID / ModelID / ProductionID / PrintedAt / PrintedBy は更新不可
+//   （usecase側で維持）
+// ------------------------------------------------------------
+
 func (h *ProductHandler) update(w http.ResponseWriter, r *http.Request, id string) {
 	ctx := r.Context()
 
@@ -245,7 +331,10 @@ func (h *ProductHandler) update(w http.ResponseWriter, r *http.Request, id strin
 	_ = json.NewEncoder(w).Encode(updated)
 }
 
+// ------------------------------------------------------------
 // エラーハンドリング
+// ------------------------------------------------------------
+
 func writeProductErr(w http.ResponseWriter, err error) {
 	code := http.StatusInternalServerError
 	switch err {

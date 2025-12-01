@@ -1,3 +1,4 @@
+// backend/internal/application/usecase/product_usecase.go
 package usecase
 
 import (
@@ -8,6 +9,9 @@ import (
 
 	productdom "narratives/internal/domain/product"
 )
+
+// QR ペイロード生成時に使うベース URL（必要に応じて差し替えてください）
+const defaultQRBaseURL = "https://example.com" // TODO: 実際のフロントエンド URL に変更する
 
 // ProductRepo defines the minimal persistence port needed by ProductUsecase.
 type ProductRepo interface {
@@ -59,100 +63,138 @@ func (u *ProductUsecase) ListByProductionID(ctx context.Context, productionID st
 	return u.repo.ListByProductionID(ctx, strings.TrimSpace(productionID))
 }
 
-// ★ 追加: 同一 productionId を持つ PrintLog を一覧取得
-//
-//	（この中で BuildProductQRValue による QR ペイロード付与を行う想定）
+// ★ 追加: 同一 productionId を持つ PrintLog を一覧取得（QrPayloads 付き）
 func (u *ProductUsecase) ListPrintLogsByProductionID(ctx context.Context, productionID string) ([]productdom.PrintLog, error) {
 	if u.printLogRepo == nil {
 		return nil, fmt.Errorf("printLogRepo is nil")
 	}
-	return u.printLogRepo.ListByProductionID(ctx, strings.TrimSpace(productionID))
+
+	pid := strings.TrimSpace(productionID)
+	if pid == "" {
+		return nil, productdom.ErrInvalidPrintLogProductionID
+	}
+
+	// 1) print_logs を取得
+	logs, err := u.printLogRepo.ListByProductionID(ctx, pid)
+	if err != nil {
+		return nil, err
+	}
+
+	// 2) 各 productId ごとに QR ペイロード(JSON文字列) を生成して QrPayloads に詰める
+	baseURL := defaultQRBaseURL
+
+	for i := range logs {
+		var payloads []string
+		for _, productID := range logs[i].ProductIDs {
+			productID = strings.TrimSpace(productID)
+			if productID == "" {
+				continue
+			}
+
+			// BuildProductQRValue は (productID, baseURL) を受け取り
+			// QR コード用の JSON 文字列を返す想定
+			payload, err := productdom.BuildProductQRValue(productID, baseURL)
+			if err != nil {
+				// 運用方針次第だが、ここではエラーを返して 500 に繋げる
+				return nil, err
+			}
+			payloads = append(payloads, payload)
+		}
+		logs[i].QrPayloads = payloads
+	}
+
+	return logs, nil
 }
 
-// ★ 追加: 1回の印刷バッチに対してまとめて 1 件の print_log を作成する
-//
-//   - productionID: 対象の生産計画ID
-//   - printedAt   : フロント側で各 Product 作成時に付与した printedAt（全Product共通）
-//
-// 手順:
-//  1. repo.ListByProductionID で該当 productionId の Product 一覧を取得
-//  2. PrintedAt が指定値と一致する Product だけを抽出
-//  3. その productId 一覧 + PrintedBy + PrintedAt で 1 件の PrintLog を作成
-func (u *ProductUsecase) CreatePrintLogBatch(
-	ctx context.Context,
-	productionID string,
-	printedAt time.Time,
-) (productdom.PrintLog, error) {
-
+// ★ 追加: 1 回の印刷分の Product 一覧から print_log を 1 件作成し、QrPayloads 付きで返す
+func (u *ProductUsecase) CreatePrintLogForProduction(ctx context.Context, productionID string) (productdom.PrintLog, error) {
 	if u.printLogRepo == nil {
 		return productdom.PrintLog{}, fmt.Errorf("printLogRepo is nil")
 	}
 
-	id := strings.TrimSpace(productionID)
-	if id == "" {
-		return productdom.PrintLog{}, productdom.ErrInvalidProductionID
+	pid := strings.TrimSpace(productionID)
+	if pid == "" {
+		return productdom.PrintLog{}, productdom.ErrInvalidPrintLogProductionID
 	}
-	if printedAt.IsZero() {
-		return productdom.PrintLog{}, productdom.ErrInvalidPrintedAt
-	}
-	printedAtUTC := printedAt.UTC()
 
-	// 1. 該当 productionId の Product 一覧を取得
-	products, err := u.repo.ListByProductionID(ctx, id)
+	// 該当 productionId の Product 一覧を取得
+	products, err := u.repo.ListByProductionID(ctx, pid)
 	if err != nil {
 		return productdom.PrintLog{}, err
 	}
+	if len(products) == 0 {
+		return productdom.PrintLog{}, fmt.Errorf("no products found for productionId=%s", pid)
+	}
 
-	// 2. PrintedAt が一致する Product だけを抽出
-	var productIDs []string
-	printedBy := ""
-
+	// ProductID 一覧
+	productIDs := make([]string, 0, len(products))
 	for _, p := range products {
-		if p.PrintedAt == nil {
-			continue
-		}
-		if !p.PrintedAt.UTC().Equal(printedAtUTC) {
-			continue
-		}
-
-		productIDs = append(productIDs, p.ID)
-
-		// PrintedBy は 1 件目から拝借（全て同じ UID の想定）
-		if printedBy == "" && p.PrintedBy != nil {
-			if pb := strings.TrimSpace(*p.PrintedBy); pb != "" {
-				printedBy = pb
-			}
+		if strings.TrimSpace(p.ID) != "" {
+			productIDs = append(productIDs, strings.TrimSpace(p.ID))
 		}
 	}
-
 	if len(productIDs) == 0 {
-		return productdom.PrintLog{}, fmt.Errorf(
-			"no products found for productionId=%s and printedAt=%s",
-			id, printedAtUTC.Format(time.RFC3339Nano),
-		)
+		return productdom.PrintLog{}, productdom.ErrInvalidPrintLogProductIDs
 	}
+
+	// printedBy / printedAt を決定
+	// 1) 一覧の中で最初に有効なものを探す
+	var printedBy string
+	var printedAt time.Time
+	for _, p := range products {
+		if p.PrintedBy != nil && strings.TrimSpace(*p.PrintedBy) != "" {
+			printedBy = strings.TrimSpace(*p.PrintedBy)
+		}
+		if p.PrintedAt != nil && !p.PrintedAt.IsZero() {
+			printedAt = p.PrintedAt.UTC()
+		}
+		if printedBy != "" && !printedAt.IsZero() {
+			break
+		}
+	}
+
+	// 2) 見つからなかった場合はデフォルト値で補完
 	if printedBy == "" {
-		return productdom.PrintLog{}, productdom.ErrInvalidPrintedBy
+		printedBy = "system" // TODO: 必要なら環境変数やコンフィグから設定
+	}
+	if printedAt.IsZero() {
+		printedAt = time.Now().UTC()
 	}
 
-	// 3. 1件分の PrintLog を作成
-	logID := fmt.Sprintf("%s-%d", id, printedAtUTC.UnixNano())
-
+	// PrintLog エンティティ作成
+	logID := fmt.Sprintf("%s-%d", pid, printedAt.UnixNano())
 	log, err := productdom.NewPrintLog(
 		logID,
-		id,
+		pid,
 		productIDs,
 		printedBy,
-		printedAtUTC,
+		printedAt,
 	)
 	if err != nil {
 		return productdom.PrintLog{}, err
 	}
 
+	// 保存
 	created, err := u.printLogRepo.Create(ctx, log)
 	if err != nil {
 		return productdom.PrintLog{}, err
 	}
+
+	// QrPayloads を付与（JSON文字列の配列）
+	baseURL := defaultQRBaseURL
+	var payloads []string
+	for _, productID := range created.ProductIDs {
+		productID = strings.TrimSpace(productID)
+		if productID == "" {
+			continue
+		}
+		payload, err := productdom.BuildProductQRValue(productID, baseURL)
+		if err != nil {
+			return productdom.PrintLog{}, err
+		}
+		payloads = append(payloads, payload)
+	}
+	created.QrPayloads = payloads
 
 	return created, nil
 }
@@ -161,13 +203,16 @@ func (u *ProductUsecase) CreatePrintLogBatch(
 // Commands
 // ==========================
 
-// Create: POST 時に ID / ModelID / ProductionID / PrintedAt / PrintedBy を確定させる。
-//
-// 以前はここで Product ごとに print_log を 1 件ずつ作成していたが、
-// 「1回の印刷バッチで印刷された product 一覧をまとめて 1件の print_log にする」
-// 仕様に変更したため、ここでは **print_log は作成しない**。
+// Create: Product のみ作成する。
+// 以前の仕様（Create のたびに 1 件ずつ print_log を作成）は廃止し、
+// 「1 回の印刷バッチでまとめて PrintLog を作る」ために
+// CreatePrintLogForProduction を別途呼び出す方式に変更。
 func (u *ProductUsecase) Create(ctx context.Context, p productdom.Product) (productdom.Product, error) {
-	return u.repo.Create(ctx, p)
+	created, err := u.repo.Create(ctx, p)
+	if err != nil {
+		return productdom.Product{}, err
+	}
+	return created, nil
 }
 
 // Save: 既存の互換用途として残しておく（フルアップサート）
