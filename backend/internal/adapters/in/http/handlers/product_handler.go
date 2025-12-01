@@ -66,6 +66,31 @@ func (h *ProductHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		h.listPrintLogsByProductionID(w, r, productionID)
 
 	// ------------------------------------------------------------
+	// POST /products/inspections
+	//   body: { "productionId": "xxx" }
+	//   → inspections_by_production/{productionId} ドキュメントを作成
+	//      inspections は productId ごとに null 初期化
+	//      status は "inspecting" で開始
+	// ------------------------------------------------------------
+	case r.Method == http.MethodPost && r.URL.Path == "/products/inspections":
+		h.createInspectionBatch(w, r)
+
+	// ------------------------------------------------------------
+	// PATCH /products/inspections
+	//   body: {
+	//     "productionId": "xxx",
+	//     "productId": "yyy",
+	//     "inspectionResult": "passed" | "failed" | "notYet" | "notManufactured",
+	//     "inspectedBy": "inspector-id-or-name",
+	//     "inspectedAt": "2025-12-02T10:00:00Z",   // RFC3339 (任意)
+	//     "status": "inspecting" | "completed"     // 任意
+	//   }
+	//   → 対象 productId の検査結果を更新し、必要に応じてバッチ status も更新
+	// ------------------------------------------------------------
+	case r.Method == http.MethodPatch && r.URL.Path == "/products/inspections":
+		h.updateInspection(w, r)
+
+	// ------------------------------------------------------------
 	// GET /products?productionId=xxx
 	//   → 同一 productionId を持つ Product 一覧を返す
 	//      ※ ここで modelNumber を付与して返す
@@ -292,6 +317,113 @@ func (h *ProductHandler) createPrintLog(w http.ResponseWriter, r *http.Request) 
 
 	// 正常時は作成した print_log 1 件を返す
 	_ = json.NewEncoder(w).Encode(pl)
+}
+
+// ------------------------------------------------------------
+// POST /products/inspections
+//   body: { "productionId": "xxx" }
+//
+//   1. 該当 productionId の Product 一覧を usecase から取得
+//   2. inspections_by_production/{productionId} ドキュメントを作成
+//      - inspections は productId ごとに null 初期化
+//      - status は "inspecting" で開始
+// ------------------------------------------------------------
+
+func (h *ProductHandler) createInspectionBatch(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+
+	var req struct {
+		ProductionID string `json:"productionId"`
+	}
+
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		w.WriteHeader(http.StatusBadRequest)
+		_ = json.NewEncoder(w).Encode(map[string]string{"error": "invalid json"})
+		return
+	}
+
+	productionID := strings.TrimSpace(req.ProductionID)
+	if productionID == "" {
+		w.WriteHeader(http.StatusBadRequest)
+		_ = json.NewEncoder(w).Encode(map[string]string{"error": "productionId is required"})
+		return
+	}
+
+	log.Printf("[ProductHandler] createInspectionBatch productionId=%s", productionID)
+
+	batch, err := h.uc.CreateInspectionBatchForProduction(ctx, productionID)
+	if err != nil {
+		log.Printf("[ProductHandler] createInspectionBatch error: %v", err)
+		w.WriteHeader(http.StatusInternalServerError)
+		_ = json.NewEncoder(w).Encode(map[string]string{"error": err.Error()})
+		return
+	}
+
+	_ = json.NewEncoder(w).Encode(batch)
+}
+
+// ------------------------------------------------------------
+// PATCH /products/inspections
+//   body: {
+//     "productionId": "xxx",
+//     "productId": "yyy",
+//     "inspectionResult": "passed" | "failed" | "notYet" | "notManufactured",
+//     "inspectedBy": "inspector-id-or-name",
+//     "inspectedAt": "2025-12-02T10:00:00Z",   // RFC3339 (任意)
+//     "status": "inspecting" | "completed"     // 任意
+//   }
+//
+//   → 対象 productId の InspectionItem を更新し、更新後の InspectionBatch を返す
+// ------------------------------------------------------------
+
+func (h *ProductHandler) updateInspection(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+
+	var req struct {
+		ProductionID     string                       `json:"productionId"`
+		ProductID        string                       `json:"productId"`
+		InspectionResult *productdom.InspectionResult `json:"inspectionResult"` // nil の場合は変更しない
+		InspectedBy      *string                      `json:"inspectedBy"`      // nil の場合は変更しない
+		InspectedAt      *time.Time                   `json:"inspectedAt"`      // nil の場合は変更しない
+		Status           *productdom.InspectionStatus `json:"status"`           // nil の場合は変更しない
+	}
+
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		w.WriteHeader(http.StatusBadRequest)
+		_ = json.NewEncoder(w).Encode(map[string]string{"error": "invalid json"})
+		return
+	}
+
+	req.ProductionID = strings.TrimSpace(req.ProductionID)
+	req.ProductID = strings.TrimSpace(req.ProductID)
+
+	if req.ProductionID == "" || req.ProductID == "" {
+		w.WriteHeader(http.StatusBadRequest)
+		_ = json.NewEncoder(w).Encode(map[string]string{"error": "productionId and productId are required"})
+		return
+	}
+
+	log.Printf(
+		"[ProductHandler] updateInspection productionId=%s productId=%s result=%v status=%v",
+		req.ProductionID, req.ProductID, req.InspectionResult, req.Status,
+	)
+
+	batch, err := h.uc.UpdateInspectionForProduct(
+		ctx,
+		req.ProductionID,
+		req.ProductID,
+		req.InspectionResult,
+		req.InspectedBy,
+		req.InspectedAt,
+		req.Status,
+	)
+	if err != nil {
+		log.Printf("[ProductHandler] updateInspection error: %v", err)
+		writeProductErr(w, err)
+		return
+	}
+
+	_ = json.NewEncoder(w).Encode(batch)
 }
 
 // ------------------------------------------------------------

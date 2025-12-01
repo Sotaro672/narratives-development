@@ -326,7 +326,7 @@ func (r *PrintLogRepositoryFS) ListByProductionID(ctx context.Context, productio
 
 // ============================================================
 // InspectionRepositoryFS: inspections_by_production 用 Firestore リポジトリ
-//   usecase.InspectionRepo の Create を実装する
+//   usecase.InspectionRepo の Create / GetByProductionID / Save を実装する
 // ============================================================
 
 type InspectionRepositoryFS struct {
@@ -349,11 +349,6 @@ func (r *InspectionRepositoryFS) Create(ctx context.Context, v productdom.Inspec
 		return productdom.InspectionBatch{}, errors.New("firestore client is nil")
 	}
 
-	// ドメイン側バリデーション
-	if err := v.Validate(); err != nil {
-		return productdom.InspectionBatch{}, err
-	}
-
 	pid := strings.TrimSpace(v.ProductionID)
 	if pid == "" {
 		return productdom.InspectionBatch{}, productdom.ErrInvalidInspectionProductionID
@@ -371,8 +366,68 @@ func (r *InspectionRepositoryFS) Create(ctx context.Context, v productdom.Inspec
 		return productdom.InspectionBatch{}, err
 	}
 
-	// 今のところ Firestore 側で値が変わる要素もないので v をそのまま返す
-	return v, nil
+	// Firestore から再取得して整形して返す
+	snap, err := docRef.Get(ctx)
+	if err != nil {
+		return productdom.InspectionBatch{}, err
+	}
+	return docToInspectionBatch(snap)
+}
+
+// GetByProductionID: inspections_by_production/{productionId} を取得
+func (r *InspectionRepositoryFS) GetByProductionID(
+	ctx context.Context,
+	productionID string,
+) (productdom.InspectionBatch, error) {
+	if r.Client == nil {
+		return productdom.InspectionBatch{}, errors.New("firestore client is nil")
+	}
+
+	pid := strings.TrimSpace(productionID)
+	if pid == "" {
+		return productdom.InspectionBatch{}, productdom.ErrInvalidInspectionProductionID
+	}
+
+	docRef := r.col().Doc(pid)
+	snap, err := docRef.Get(ctx)
+	if err != nil {
+		if status.Code(err) == codes.NotFound {
+			return productdom.InspectionBatch{}, productdom.ErrNotFound
+		}
+		return productdom.InspectionBatch{}, err
+	}
+
+	return docToInspectionBatch(snap)
+}
+
+// Save: inspections_by_production/{productionId} を Upsert 的に保存
+func (r *InspectionRepositoryFS) Save(
+	ctx context.Context,
+	v productdom.InspectionBatch,
+) (productdom.InspectionBatch, error) {
+	if r.Client == nil {
+		return productdom.InspectionBatch{}, errors.New("firestore client is nil")
+	}
+
+	pid := strings.TrimSpace(v.ProductionID)
+	if pid == "" {
+		return productdom.InspectionBatch{}, productdom.ErrInvalidInspectionProductionID
+	}
+
+	docRef := r.col().Doc(pid)
+	data := inspectionBatchToDoc(v)
+
+	_, err := docRef.Set(ctx, data, firestore.MergeAll)
+	if err != nil {
+		return productdom.InspectionBatch{}, err
+	}
+
+	snap, err := docRef.Get(ctx)
+	if err != nil {
+		return productdom.InspectionBatch{}, err
+	}
+
+	return docToInspectionBatch(snap)
 }
 
 // ============================================================
@@ -511,7 +566,7 @@ func printLogToDoc(v productdom.PrintLog) map[string]any {
 	return m
 }
 
-// inspections_by_production 用の変換
+// inspections_by_production 用の変換 (domain -> Firestore)
 func inspectionBatchToDoc(v productdom.InspectionBatch) map[string]any {
 	items := make([]map[string]any, 0, len(v.Inspections))
 	for _, ins := range v.Inspections {
@@ -550,6 +605,67 @@ func inspectionBatchToDoc(v productdom.InspectionBatch) map[string]any {
 		"status":       string(v.Status),
 		"inspections":  items,
 	}
+}
+
+// Firestore -> domain.InspectionBatch
+func docToInspectionBatch(doc *firestore.DocumentSnapshot) (productdom.InspectionBatch, error) {
+	data := doc.Data()
+	if data == nil {
+		return productdom.InspectionBatch{}, fmt.Errorf("empty inspection document: %s", doc.Ref.ID)
+	}
+
+	productionID := strings.TrimSpace(asString(data["productionId"]))
+	statusStr := strings.TrimSpace(asString(data["status"]))
+
+	batch := productdom.InspectionBatch{
+		ProductionID: productionID,
+		Status:       productdom.InspectionStatus(statusStr),
+	}
+
+	// inspections 配列のパース
+	if raw, ok := data["inspections"]; ok && raw != nil {
+		switch vv := raw.(type) {
+		case []interface{}:
+			for _, e := range vv {
+				m, ok := e.(map[string]interface{})
+				if !ok {
+					continue
+				}
+				item := productdom.InspectionItem{}
+
+				if v, ok := m["productId"].(string); ok {
+					item.ProductID = strings.TrimSpace(v)
+				}
+
+				if v, ok := m["inspectionResult"].(string); ok && strings.TrimSpace(v) != "" {
+					r := productdom.InspectionResult(strings.TrimSpace(v))
+					item.InspectionResult = &r
+				}
+
+				if v, ok := m["inspectedBy"].(string); ok && strings.TrimSpace(v) != "" {
+					s := strings.TrimSpace(v)
+					item.InspectedBy = &s
+				}
+
+				if v, ok := m["inspectedAt"].(time.Time); ok && !v.IsZero() {
+					t := v.UTC()
+					item.InspectedAt = &t
+				}
+
+				batch.Inspections = append(batch.Inspections, item)
+			}
+		}
+	}
+
+	// ざっくりしたバリデーション（最低限）
+	if strings.TrimSpace(batch.ProductionID) == "" {
+		return productdom.InspectionBatch{}, productdom.ErrInvalidInspectionProductionID
+	}
+	if len(batch.Inspections) == 0 {
+		return productdom.InspectionBatch{}, productdom.ErrInvalidInspectionProductIDs
+	}
+
+	return batch, nil
 }
 
 func asString(v any) string {

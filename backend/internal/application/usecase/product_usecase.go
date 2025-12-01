@@ -35,9 +35,14 @@ type PrintLogRepo interface {
 
 // ★ Inspection 用リポジトリ（print_log と同じ product ドメイン配下の集約として扱う）
 type InspectionRepo interface {
-	// inspections_by_production/{productionId} ドキュメントの作成を担当
-	// （実体は product ドメインの InspectionBatch などを想定）
+	// inspections_by_production/{productionId} を新規作成
 	Create(ctx context.Context, batch productdom.InspectionBatch) (productdom.InspectionBatch, error)
+
+	// productionId から inspections_by_production を取得
+	GetByProductionID(ctx context.Context, productionID string) (productdom.InspectionBatch, error)
+
+	// 既存バッチを保存（フルアップサート想定）
+	Save(ctx context.Context, batch productdom.InspectionBatch) (productdom.InspectionBatch, error)
 }
 
 // ProductUsecase orchestrates product operations.
@@ -119,6 +124,61 @@ func (u *ProductUsecase) ListPrintLogsByProductionID(ctx context.Context, produc
 	return logs, nil
 }
 
+// ★ 追加: inspections_by_production を単独で作成する
+//
+// POST /products/inspections 用
+func (u *ProductUsecase) CreateInspectionBatchForProduction(
+	ctx context.Context,
+	productionID string,
+) (productdom.InspectionBatch, error) {
+
+	if u.inspectionRepo == nil {
+		return productdom.InspectionBatch{}, fmt.Errorf("inspectionRepo is nil")
+	}
+
+	pid := strings.TrimSpace(productionID)
+	if pid == "" {
+		return productdom.InspectionBatch{}, productdom.ErrInvalidInspectionProductionID
+	}
+
+	// 対象 productionId の Product 一覧を取得
+	products, err := u.repo.ListByProductionID(ctx, pid)
+	if err != nil {
+		return productdom.InspectionBatch{}, err
+	}
+	if len(products) == 0 {
+		return productdom.InspectionBatch{}, fmt.Errorf("no products found for productionId=%s", pid)
+	}
+
+	// ProductID 一覧
+	productIDs := make([]string, 0, len(products))
+	for _, p := range products {
+		if strings.TrimSpace(p.ID) != "" {
+			productIDs = append(productIDs, strings.TrimSpace(p.ID))
+		}
+	}
+	if len(productIDs) == 0 {
+		return productdom.InspectionBatch{}, productdom.ErrInvalidInspectionProductIDs
+	}
+
+	// InspectionBatch エンティティ作成（全て null, status=inspecting）
+	batch, err := productdom.NewInspectionBatch(
+		pid,
+		productdom.InspectionStatusInspecting,
+		productIDs,
+	)
+	if err != nil {
+		return productdom.InspectionBatch{}, err
+	}
+
+	created, err := u.inspectionRepo.Create(ctx, batch)
+	if err != nil {
+		return productdom.InspectionBatch{}, err
+	}
+
+	return created, nil
+}
+
 // ★ 追加: 1 回の印刷分の Product 一覧から print_log を 1 件作成し、
 //
 //	同じタイミングで inspections_by_production を 1 件作成する。
@@ -196,8 +256,7 @@ func (u *ProductUsecase) CreatePrintLogForProduction(ctx context.Context, produc
 		return productdom.PrintLog{}, err
 	}
 
-	// 先に Inspection を保存してから PrintLog を保存するか、
-	// 逆順にするかは好みですが、ここでは Inspection → PrintLog の順にします。
+	// 先に Inspection を保存してから PrintLog を保存
 	if _, err := u.inspectionRepo.Create(ctx, batch); err != nil {
 		return productdom.PrintLog{}, err
 	}
@@ -225,6 +284,101 @@ func (u *ProductUsecase) CreatePrintLogForProduction(ctx context.Context, produc
 	created.QrPayloads = payloads
 
 	return created, nil
+}
+
+// ★ 追加: inspections_by_production 内の 1 productId 分を更新する
+//
+// PATCH /products/inspections 用
+func (u *ProductUsecase) UpdateInspectionForProduct(
+	ctx context.Context,
+	productionID string,
+	productID string,
+	result *productdom.InspectionResult,
+	inspectedBy *string,
+	inspectedAt *time.Time,
+	status *productdom.InspectionStatus,
+) (productdom.InspectionBatch, error) {
+
+	if u.inspectionRepo == nil {
+		return productdom.InspectionBatch{}, fmt.Errorf("inspectionRepo is nil")
+	}
+
+	pid := strings.TrimSpace(productionID)
+	if pid == "" {
+		return productdom.InspectionBatch{}, productdom.ErrInvalidInspectionProductionID
+	}
+	pdID := strings.TrimSpace(productID)
+	if pdID == "" {
+		return productdom.InspectionBatch{}, productdom.ErrInvalidInspectionProductIDs
+	}
+
+	// 現在のバッチを取得
+	batch, err := u.inspectionRepo.GetByProductionID(ctx, pid)
+	if err != nil {
+		return productdom.InspectionBatch{}, err
+	}
+
+	// 対象 productId の InspectionItem を探す
+	found := false
+	for i := range batch.Inspections {
+		if strings.TrimSpace(batch.Inspections[i].ProductID) != pdID {
+			continue
+		}
+		found = true
+
+		item := &batch.Inspections[i]
+
+		// inspectionResult の更新
+		if result != nil {
+			if !productdom.IsValidInspectionResult(*result) {
+				return productdom.InspectionBatch{}, productdom.ErrInvalidInspectionResult
+			}
+			r := *result
+			item.InspectionResult = &r
+		}
+
+		// inspectedBy の更新
+		if inspectedBy != nil {
+			v := strings.TrimSpace(*inspectedBy)
+			if v == "" {
+				return productdom.InspectionBatch{}, productdom.ErrInvalidInspectedBy
+			}
+			item.InspectedBy = &v
+		}
+
+		// inspectedAt の更新
+		if inspectedAt != nil {
+			at := inspectedAt.UTC()
+			if at.IsZero() {
+				return productdom.InspectionBatch{}, productdom.ErrInvalidInspectedAt
+			}
+			item.InspectedAt = &at
+		}
+
+		// domain 側の整合性に近づけるため、result が nil かつ inspectedBy / inspectedAt が nil の場合は
+		// 「未検査状態」に戻す用途も想定できるが、今回はシンプルに「与えられたものだけ更新」に留める。
+		break
+	}
+
+	if !found {
+		return productdom.InspectionBatch{}, productdom.ErrInvalidInspectionProductIDs
+	}
+
+	// status の更新（任意）
+	if status != nil {
+		if !productdom.IsValidInspectionStatus(*status) {
+			return productdom.InspectionBatch{}, productdom.ErrInvalidInspectionStatus
+		}
+		batch.Status = *status
+	}
+
+	// 保存（InspectionRepo.Save 側で Firestore に反映）
+	updated, err := u.inspectionRepo.Save(ctx, batch)
+	if err != nil {
+		return productdom.InspectionBatch{}, err
+	}
+
+	return updated, nil
 }
 
 // ==========================
