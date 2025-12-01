@@ -9,7 +9,6 @@ import (
 	"time"
 
 	usecase "narratives/internal/application/usecase"
-	modeldom "narratives/internal/domain/model"
 	productdom "narratives/internal/domain/product"
 )
 
@@ -174,12 +173,21 @@ func (h *ProductHandler) listByProductionID(w http.ResponseWriter, r *http.Reque
 		return
 	}
 
-	// 対象 ProductBlueprint の ModelData を取得
-	md, err := h.modelUC.GetModelDataByProductBlueprintID(ctx, pbID)
+	// 対象 ProductBlueprint の ModelVariations を取得し、
+	// modelID -> modelNumber のマップを作る
+	vars, err := h.modelUC.ListModelVariationsByProductBlueprintID(ctx, pbID)
 	if err != nil {
-		log.Printf("[ProductHandler] listByProductionID: GetModelDataByProductBlueprintID(%s) failed: %v", pbID, err)
+		log.Printf("[ProductHandler] listByProductionID: ListModelVariationsByProductBlueprintID(%s) failed: %v", pbID, err)
 		_ = json.NewEncoder(w).Encode(list)
 		return
+	}
+
+	idToModelNumber := make(map[string]string, len(vars))
+	for _, v := range vars {
+		mn := strings.TrimSpace(v.ModelNumber)
+		if mn != "" {
+			idToModelNumber[v.ID] = mn
+		}
 	}
 
 	// フロント用のレスポンス型
@@ -193,17 +201,12 @@ func (h *ProductHandler) listByProductionID(w http.ResponseWriter, r *http.Reque
 	out := make([]productWithModelNumber, 0, len(list))
 
 	for _, p := range list {
-		modelNumber := ""
-
-		if md != nil {
-			mn, err := modeldom.ModelNumberFromID(md, p.ModelID)
-			if err != nil {
-				log.Printf("[ProductHandler] ModelNumberFromID failed: productID=%s modelID=%s err=%v", p.ID, p.ModelID, err)
-			} else {
-				modelNumber = mn
-			}
-		} else {
-			log.Printf("[ProductHandler] md is nil for productionID=%s", productionID)
+		modelNumber := strings.TrimSpace(idToModelNumber[p.ModelID])
+		if modelNumber == "" {
+			log.Printf(
+				"[ProductHandler] listByProductionID: modelNumber not found for productID=%s modelID=%s (pbID=%s)",
+				p.ID, p.ModelID, pbID,
+			)
 		}
 
 		out = append(out, productWithModelNumber{
