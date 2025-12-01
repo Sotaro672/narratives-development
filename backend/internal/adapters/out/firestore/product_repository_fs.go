@@ -155,6 +155,44 @@ func (r *ProductRepositoryFS) Update(ctx context.Context, id string, v productdo
 }
 
 // ============================================================
+// ListByProductionID: 同一 productionId を持つ Product 一覧を取得
+// ============================================================
+
+func (r *ProductRepositoryFS) ListByProductionID(ctx context.Context, productionID string) ([]productdom.Product, error) {
+	if r.Client == nil {
+		return nil, errors.New("firestore client is nil")
+	}
+
+	productionID = strings.TrimSpace(productionID)
+	if productionID == "" {
+		// productionID 未指定なら空配列を返す（エラーにはしない）
+		return []productdom.Product{}, nil
+	}
+
+	q := r.col().Where("productionId", "==", productionID)
+	it := q.Documents(ctx)
+	defer it.Stop()
+
+	var items []productdom.Product
+	for {
+		doc, err := it.Next()
+		if err == iterator.Done {
+			break
+		}
+		if err != nil {
+			return nil, err
+		}
+		p, err := docToProduct(doc)
+		if err != nil {
+			return nil, err
+		}
+		items = append(items, p)
+	}
+
+	return items, nil
+}
+
+// ============================================================
 // List （filter / sort を無視した簡易版）
 // ============================================================
 

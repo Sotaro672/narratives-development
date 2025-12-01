@@ -27,9 +27,21 @@ func (h *ProductHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 
 	// ★ リクエストログを追加
-	log.Printf("[ProductHandler] method=%s path=%s", r.Method, r.URL.Path)
+	log.Printf("[ProductHandler] method=%s path=%s query=%s", r.Method, r.URL.Path, r.URL.RawQuery)
 
 	switch {
+	// GET /products?productionId=xxx
+	case r.Method == http.MethodGet && r.URL.Path == "/products":
+		productionID := strings.TrimSpace(r.URL.Query().Get("productionId"))
+		if productionID == "" {
+			w.WriteHeader(http.StatusBadRequest)
+			_ = json.NewEncoder(w).Encode(map[string]string{
+				"error": "productionId query parameter is required",
+			})
+			return
+		}
+		h.listByProductionID(w, r, productionID)
+
 	// GET /products/{id}
 	case r.Method == http.MethodGet && strings.HasPrefix(r.URL.Path, "/products/"):
 		id := strings.TrimPrefix(r.URL.Path, "/products/")
@@ -67,6 +79,27 @@ func (h *ProductHandler) get(w http.ResponseWriter, r *http.Request, id string) 
 		return
 	}
 	_ = json.NewEncoder(w).Encode(p)
+}
+
+// GET /products?productionId={productionId}
+// 同一 productionId を持つ Product 一覧を返す
+func (h *ProductHandler) listByProductionID(w http.ResponseWriter, r *http.Request, productionID string) {
+	ctx := r.Context()
+
+	productionID = strings.TrimSpace(productionID)
+	if productionID == "" {
+		w.WriteHeader(http.StatusBadRequest)
+		_ = json.NewEncoder(w).Encode(map[string]string{"error": "invalid productionId"})
+		return
+	}
+
+	list, err := h.uc.ListByProductionID(ctx, productionID)
+	if err != nil {
+		writeProductErr(w, err)
+		return
+	}
+
+	_ = json.NewEncoder(w).Encode(list)
 }
 
 // POST /products

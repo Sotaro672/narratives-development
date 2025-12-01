@@ -299,19 +299,13 @@ export function buildQuantityRowsFromModels(
 
   const rows: ProductionQuantityRow[] = safeModels.map((m: any, index) => {
     const id =
-      m.modelVariationId ??
-      m.ModelVariationID ??
-      m.modelId ??
       m.ModelID ??
       m.id ??
       m.ID ??
       `${index}`;
 
     const quantityRaw =
-      m.quantity ??
       m.Quantity ??
-      m.stock ??
-      m.Stock ??
       0;
 
     const quantity = Number.isFinite(Number(quantityRaw))
@@ -381,81 +375,4 @@ export async function updateProductionDetail(params: {
   }
 
   return loadProductionDetail(id);
-}
-
-/* ---------------------------------------------------------
- * Product 作成API（印刷用）: 1件分
- * --------------------------------------------------------- */
-async function createProductHTTP(payload: {
-  modelId: string;
-  productionId: string;
-  printedAt: string; // ISO 文字列
-  printedBy?: string | null;
-}): Promise<void> {
-  const token = await getIdTokenOrThrow();
-
-  const res = await fetch(`${BACKEND_API_BASE}/products`, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${token}`,
-    },
-    body: JSON.stringify({
-      modelId: payload.modelId,
-      productionId: payload.productionId,
-      printedAt: payload.printedAt,
-      printedBy: payload.printedBy ?? null,
-      // inspectionResult / connectedToken などは
-      // バックエンド側でデフォルト値(notYet/null)を設定する想定
-    }),
-  });
-
-  if (!res.ok) {
-    const body = await res.text().catch(() => "");
-    throw new Error(
-      `Product create failed: ${res.status} ${res.statusText}${
-        body ? ` - ${body}` : ""
-      }`,
-    );
-  }
-}
-
-/* ---------------------------------------------------------
- * 印刷用: 各 modelId の quantity 分だけ Product を作成
- * --------------------------------------------------------- */
-export async function createProductsForPrint(params: {
-  productionId: string;
-  rows: ProductionQuantityRow[];
-}): Promise<void> {
-  const { productionId, rows } = params;
-  const id = productionId.trim();
-  if (!id) throw new Error("productionId is required");
-
-  // 印刷タイミングの時刻（全Productで共通とする）
-  const printedAtISO = new Date().toISOString();
-
-  // printedBy は Firebase ユーザーIDなどを使用
-  const user = auth.currentUser;
-  const printedBy = user?.uid ?? null;
-
-  const tasks: Promise<void>[] = [];
-
-  rows.forEach((row) => {
-    const q = Number.isFinite(Number(row.quantity))
-      ? Math.max(0, Math.floor(Number(row.quantity)))
-      : 0;
-
-    for (let i = 0; i < q; i += 1) {
-      tasks.push(
-        createProductHTTP({
-          modelId: row.id,
-          productionId: id,
-          printedAt: printedAtISO,
-          printedBy,
-        }),
-      );
-    }
-  });
-
-  await Promise.all(tasks);
 }

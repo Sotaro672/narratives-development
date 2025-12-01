@@ -14,6 +14,9 @@ type ProductRepo interface {
 	Create(ctx context.Context, p productdom.Product) (productdom.Product, error)
 	Save(ctx context.Context, p productdom.Product) (productdom.Product, error)
 	Update(ctx context.Context, id string, p productdom.Product) (productdom.Product, error)
+
+	// ★ 追加: productionId で絞り込んだ Product 一覧
+	ListByProductionID(ctx context.Context, productionID string) ([]productdom.Product, error)
 }
 
 // ProductUsecase orchestrates product operations.
@@ -35,6 +38,11 @@ func (u *ProductUsecase) GetByID(ctx context.Context, id string) (productdom.Pro
 
 func (u *ProductUsecase) Exists(ctx context.Context, id string) (bool, error) {
 	return u.repo.Exists(ctx, strings.TrimSpace(id))
+}
+
+// ★ 追加: 同一 productionId を持つ Product を一覧取得
+func (u *ProductUsecase) ListByProductionID(ctx context.Context, productionID string) ([]productdom.Product, error) {
+	return u.repo.ListByProductionID(ctx, strings.TrimSpace(productionID))
 }
 
 // ==========================
