@@ -1,6 +1,6 @@
-// frontend/inspector/lib/screens/inspection_detail_screen.dart
+// ignore_for_file: deprecated_member_use, avoid_web_libraries_in_flutter
 import 'package:flutter/material.dart';
-import 'dart:developer' as developer;
+import 'dart:html' as html; // Chrome コンソール出力用
 
 import '../services/product_api.dart';
 
@@ -29,10 +29,6 @@ class _InspectionDetailScreenState extends State<InspectionDetailScreen> {
     });
   }
 
-  /// 合否（passed / failed）を送信
-  ///
-  /// - products テーブル: ProductApi.submitInspection()
-  /// - inspections テーブル: ProductApi.updateInspectionBatch()
   Future<void> _submitResult(
     InspectorProductDetail detail,
     String result,
@@ -43,13 +39,11 @@ class _InspectionDetailScreenState extends State<InspectionDetailScreen> {
     });
 
     try {
-      // 1) products テーブル側を更新（/products/{productId}）
       await ProductApi.submitInspection(
         productId: detail.productId,
         result: result,
       );
 
-      // 2) inspections テーブル側を更新（/products/inspections）
       await ProductApi.updateInspectionBatch(
         productionId: detail.productionId,
         productId: detail.productId,
@@ -76,12 +70,6 @@ class _InspectionDetailScreenState extends State<InspectionDetailScreen> {
     }
   }
 
-  /// 検品を完了する
-  ///
-  /// - Go 側ロジック前提:
-  ///   - 該当 productionId の inspections のうち inspectionResult == "notYet" を
-  ///     "notManufactured" に更新
-  ///   - status を "inspected" に更新
   Future<void> _completeInspection(String productionId) async {
     if (_submitting) return;
     setState(() {
@@ -109,11 +97,13 @@ class _InspectionDetailScreenState extends State<InspectionDetailScreen> {
     }
   }
 
-  /// 検品を続ける（カメラ画面に戻る）
   void _continueInspection() {
-    Navigator.of(context).pop(); // スタックを 1 つ戻る → スキャナー画面へ
+    Navigator.of(context).pop();
   }
 
+  // ----------------------------------------------------------
+  // 修正①: productId / modelId を削除したモデル情報カード
+  // ----------------------------------------------------------
   Widget _buildModelCard(InspectorProductDetail detail) {
     final entries = detail.measurements.entries.toList()
       ..sort((a, b) => a.key.compareTo(b.key));
@@ -130,8 +120,12 @@ class _InspectionDetailScreenState extends State<InspectionDetailScreen> {
               style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
             ),
             const SizedBox(height: 8),
-            Text('productId: ${detail.productId}'),
-            Text('modelId: ${detail.modelId}'),
+
+            // -------------------------
+            // 削除: productId, modelId
+            // -------------------------
+            // Text('productId: ${detail.productId}'),
+            // Text('modelId: ${detail.modelId}'),
             Text('modelNumber: ${detail.modelNumber}'),
             if (detail.size.isNotEmpty) Text('サイズ: ${detail.size}'),
             const SizedBox(height: 8),
@@ -170,8 +164,12 @@ class _InspectionDetailScreenState extends State<InspectionDetailScreen> {
     );
   }
 
+  // ----------------------------------------------------------
+  // 修正②: タイトルの (ProductBlueprint) を削除
+  //         productBlueprintId の表示も削除
+  // ----------------------------------------------------------
   Widget _buildProductBlueprintCard(InspectorProductDetail detail) {
-    final bp = detail.blueprint;
+    final bp = detail.productBlueprint;
     return Card(
       margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
       child: Padding(
@@ -180,13 +178,16 @@ class _InspectionDetailScreenState extends State<InspectionDetailScreen> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             const Text(
-              '商品設計情報 (ProductBlueprint)',
+              '商品設計情報', // ← "(ProductBlueprint)" を削除
               style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
             ),
             const SizedBox(height: 8),
-            Text('productBlueprintId: ${detail.productBlueprintId}'),
+
+            // ------------------------------
+            // 削除: productBlueprintId 表示
+            // ------------------------------
+            // Text('productBlueprintId: ${detail.productBlueprintId}'),
             Text('商品名: ${bp.productName}'),
-            // ▼ ラベル＆プロパティ名を変更
             Text('ブランド名: ${bp.brandName}'),
             Text('会社名: ${bp.companyName}'),
             Text('アイテム種別: ${bp.itemType}'),
@@ -234,7 +235,7 @@ class _InspectionDetailScreenState extends State<InspectionDetailScreen> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             const Text(
-              '検品結果一覧 (inspections)',
+              '検品結果一覧',
               style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
             ),
             const SizedBox(height: 8),
@@ -272,7 +273,6 @@ class _InspectionDetailScreenState extends State<InspectionDetailScreen> {
     );
   }
 
-  /// 合否ボタン + 「検品を続ける」「検品を完了する」
   Widget _buildActionButtons(InspectorProductDetail detail) {
     final nowStatus = detail.inspectionResult;
     return Padding(
@@ -291,7 +291,6 @@ class _InspectionDetailScreenState extends State<InspectionDetailScreen> {
                 ),
               ),
             ),
-          // 合否ボタン
           Row(
             children: [
               Expanded(
@@ -314,7 +313,6 @@ class _InspectionDetailScreenState extends State<InspectionDetailScreen> {
             ],
           ),
           const SizedBox(height: 16),
-          // 検品を続ける / 検品を完了する
           Row(
             children: [
               Expanded(
@@ -362,19 +360,17 @@ class _InspectionDetailScreenState extends State<InspectionDetailScreen> {
 
           final detail = snapshot.data!;
 
-          // ▼ 取得したデータを表すログ（print → developer.log に変更）
-          developer.log(
+          html.window.console.log(
             '[InspectionDetailScreen] loaded detail: '
             'productId=${detail.productId}, '
             'modelId=${detail.modelId}, '
             'productionId=${detail.productionId}, '
             'modelNumber=${detail.modelNumber}, '
             'size=${detail.size}, '
-            'brandName=${detail.blueprint.brandName}, '
-            'companyName=${detail.blueprint.companyName}, '
+            'brandName=${detail.productBlueprint.brandName}, '
+            'companyName=${detail.productBlueprint.companyName}, '
             'inspectionResult=${detail.inspectionResult}, '
             'inspectionsCount=${detail.inspections.length}',
-            name: 'InspectionDetailScreen',
           );
 
           return RefreshIndicator(

@@ -3,72 +3,51 @@ package handlers
 
 import (
 	"encoding/json"
+	"log"
 	"net/http"
 	"strings"
 
-	uc "narratives/internal/application/usecase"
+	usecase "narratives/internal/application/usecase"
 )
 
-// ProductHandler は /inspector/products 関連のエンドポイントを担当します。
-// 現時点では検品アプリ用の「検品詳細取得」のみを扱います。
 type ProductHandler struct {
-	uc *uc.ProductUsecase
+	uc *usecase.ProductUsecase
 }
 
-// NewProductHandler は ProductUsecase を受け取って HTTP ハンドラを生成します。
-func NewProductHandler(ucase *uc.ProductUsecase) http.Handler {
-	return &ProductHandler{uc: ucase}
+func NewProductHandler(uc *usecase.ProductUsecase) http.Handler {
+	return &ProductHandler{uc: uc}
 }
 
-// ServeHTTP は /inspector/products/{productId} を扱います。
-//
-// フロント側（inspector アプリ）からのリクエスト仕様:
-//
-//	GET /inspector/products/{productId}
-//	Header: Authorization: Bearer <idToken>
-//
-// レスポンス: InspectorProductDetail 互換 JSON
 func (h *ProductHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
+	log.Printf("[ProductHandler] method=%s path=%s", r.Method, r.URL.Path)
 
 	switch {
-	// ------------------------------------------------------------
-	// GET /inspector/products/{productId}
-	// ------------------------------------------------------------
-	case r.Method == http.MethodGet &&
-		strings.HasPrefix(r.URL.Path, "/inspector/products/"):
-
-		productID := strings.TrimPrefix(r.URL.Path, "/inspector/products/")
-		productID = strings.TrimSpace(productID)
-		if productID == "" {
-			http.Error(w, `{"error":"productId is required"}`, http.StatusBadRequest)
-			return
-		}
-
-		detail, err := h.uc.GetInspectorProductDetail(r.Context(), productID)
-		if err != nil {
-			// ここではシンプルに 500 を返す。
-			// 必要に応じてドメインエラーごとに 404 / 400 など出し分けてもよい。
-			http.Error(w, `{"error":"`+escapeForJSON(err.Error())+`"}`, http.StatusInternalServerError)
-			return
-		}
-
-		if err := json.NewEncoder(w).Encode(detail); err != nil {
-			http.Error(w, `{"error":"failed to encode response"}`, http.StatusInternalServerError)
-			return
-		}
-
+	case r.Method == http.MethodGet && strings.HasPrefix(r.URL.Path, "/inspector/products/"):
+		id := strings.TrimPrefix(r.URL.Path, "/inspector/products/")
+		h.getInspectorDetail(w, r, id)
 	default:
-		http.NotFound(w, r)
+		w.WriteHeader(http.StatusNotFound)
+		_ = json.NewEncoder(w).Encode(map[string]string{"error": "not_found"})
 	}
 }
 
-// escapeForJSON はエラーメッセージを簡易的に JSON 文字列に埋め込める形にします。
-// （ここではダブルクォートと改行だけ最低限エスケープ）
-func escapeForJSON(s string) string {
-	s = strings.ReplaceAll(s, `\`, `\\`)
-	s = strings.ReplaceAll(s, `"`, `\"`)
-	s = strings.ReplaceAll(s, "\n", `\n`)
-	s = strings.ReplaceAll(s, "\r", `\r`)
-	return s
+func (h *ProductHandler) getInspectorDetail(w http.ResponseWriter, r *http.Request, productID string) {
+	ctx := r.Context()
+	productID = strings.TrimSpace(productID)
+	if productID == "" {
+		w.WriteHeader(http.StatusBadRequest)
+		_ = json.NewEncoder(w).Encode(map[string]string{"error": "invalid productId"})
+		return
+	}
+
+	detail, err := h.uc.GetInspectorProductDetail(ctx, productID)
+	if err != nil {
+		// domain 側で ErrNotFound などを 404 にマッピング
+		w.WriteHeader(http.StatusNotFound)
+		_ = json.NewEncoder(w).Encode(map[string]string{"error": err.Error()})
+		return
+	}
+
+	_ = json.NewEncoder(w).Encode(detail)
 }

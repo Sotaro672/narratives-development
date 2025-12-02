@@ -50,6 +50,9 @@ type RouterDeps struct {
 	UserUC             *usecase.UserUsecase
 	WalletUC           *usecase.WalletUsecase
 
+	// ⭐ Inspector 用 ProductUsecase（/inspector/products/{id}）
+	ProductUC *usecase.ProductUsecase
+
 	// ⭐ 検品専用 Usecase
 	InspectionUC *usecase.InspectionUsecase
 
@@ -354,7 +357,25 @@ func NewRouter(deps RouterDeps) http.Handler {
 	}
 
 	// ================================
+	// Inspector Products (検品アプリ用詳細)
+	//   GET /inspector/products/{id}
+	//   → ProductUsecase + ProductHandler
+	// ================================
+	if deps.ProductUC != nil {
+		inspectorProductH := handlers.NewProductHandler(deps.ProductUC)
+
+		var h http.Handler = inspectorProductH
+		if authMw != nil {
+			h = authMw.Handler(h)
+		}
+
+		// /inspector/products/{id} をこのハンドラに紐付け
+		mux.Handle("/inspector/products/", h)
+	}
+
+	// ================================
 	// ⭐ 検品 API（Inspector 用）
+	//   PATCH /products/inspections だけを担当
 	// ================================
 	if deps.PrintUC != nil && deps.InspectionUC != nil {
 		inspectorH := handlers.NewInspectorHandler(deps.PrintUC, deps.InspectionUC)
@@ -365,10 +386,8 @@ func NewRouter(deps RouterDeps) http.Handler {
 			h = authMw.Handler(h)
 		}
 
-		// GET /inspector/products/{productId}
-		mux.Handle("/inspector/products/", h)
-
-		// PATCH /products/inspections も InspectorHandler で扱う
+		// ★ /inspector/products/ は ProductHandler 側に任せる
+		// PATCH /products/inspections だけを InspectorHandler で扱う
 		mux.Handle("/products/inspections", h)
 	}
 

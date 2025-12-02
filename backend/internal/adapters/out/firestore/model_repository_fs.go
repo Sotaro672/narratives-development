@@ -180,7 +180,11 @@ func (r *ModelRepositoryFS) UpdateModelData(ctx context.Context, productBlueprin
 // Variation CRUD（ライブの models コレクション）
 // ------------------------------------------------------------
 
-func (r *ModelRepositoryFS) GetModelVariationByID(ctx context.Context, variationID string) (*modeldom.ModelVariation, error) {
+// ★ ここをポインタ戻りに戻す（ModelUsecase の ModelRepo と合わせる）
+func (r *ModelRepositoryFS) GetModelVariationByID(
+	ctx context.Context,
+	variationID string,
+) (*modeldom.ModelVariation, error) {
 	if r.Client == nil {
 		return nil, errors.New("firestore client is nil")
 	}
@@ -243,7 +247,11 @@ func (r *ModelRepositoryFS) CreateModelVariation(
 	return &saved, nil
 }
 
-func (r *ModelRepositoryFS) UpdateModelVariation(ctx context.Context, variationID string, updates modeldom.ModelVariationUpdate) (*modeldom.ModelVariation, error) {
+func (r *ModelRepositoryFS) UpdateModelVariation(
+	ctx context.Context,
+	variationID string,
+	updates modeldom.ModelVariationUpdate,
+) (*modeldom.ModelVariation, error) {
 	if r.Client == nil {
 		return nil, errors.New("firestore client is nil")
 	}

@@ -1,4 +1,3 @@
-// backend/internal/application/usecase/product_usecase.go
 package usecase
 
 import (

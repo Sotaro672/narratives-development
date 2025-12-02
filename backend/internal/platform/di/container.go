@@ -1,4 +1,4 @@
-// backend/internal/platform/di/container.go
+// backend\internal\platform\di\container.go
 package di
 
 import (
@@ -19,6 +19,8 @@ import (
 	branddom "narratives/internal/domain/brand"
 	companydom "narratives/internal/domain/company"
 	memdom "narratives/internal/domain/member"
+	modeldom "narratives/internal/domain/model"     // ★ productQueryRepoAdapter 用
+	productdom "narratives/internal/domain/product" // ★ productQueryRepoAdapter 用
 	productbpdom "narratives/internal/domain/productBlueprint"
 	appcfg "narratives/internal/infra/config"
 )
@@ -158,6 +160,74 @@ func (a *productBlueprintDomainRepoAdapter) GetByID(
 }
 
 // ========================================
+// ProductUsecase 用 ProductQueryRepo アダプタ
+// ========================================
+//
+// 既存の Firestore Repository 群を束ねて usecase.ProductQueryRepo を実装します。
+// - productRepo          → products 取得
+// - modelRepo            → model variations 取得
+// - productionRepo       → productions 取得
+// - productBlueprintRepo → product_blueprints 取得
+type productQueryRepoAdapter struct {
+	productRepo          *fs.ProductRepositoryFS
+	modelRepo            *fs.ModelRepositoryFS
+	productionRepo       *fs.ProductionRepositoryFS
+	productBlueprintRepo *fs.ProductBlueprintRepositoryFS
+}
+
+// GetProductByID implements usecase.ProductQueryRepo.
+func (a *productQueryRepoAdapter) GetProductByID(
+	ctx context.Context,
+	productID string,
+) (productdom.Product, error) {
+	if a == nil || a.productRepo == nil {
+		return productdom.Product{}, errors.New("productQueryRepoAdapter: productRepo is nil")
+	}
+	return a.productRepo.GetByID(ctx, productID)
+}
+
+// GetModelByID implements usecase.ProductQueryRepo.
+func (a *productQueryRepoAdapter) GetModelByID(
+	ctx context.Context,
+	modelID string,
+) (modeldom.ModelVariation, error) {
+	if a == nil || a.modelRepo == nil {
+		return modeldom.ModelVariation{}, errors.New("productQueryRepoAdapter: modelRepo is nil")
+	}
+	mv, err := a.modelRepo.GetModelVariationByID(ctx, modelID)
+	if err != nil {
+		return modeldom.ModelVariation{}, err
+	}
+	if mv == nil {
+		return modeldom.ModelVariation{}, errors.New("productQueryRepoAdapter: modelRepo returned nil model variation")
+	}
+	return *mv, nil
+}
+
+// GetProductionByID implements usecase.ProductQueryRepo.
+func (a *productQueryRepoAdapter) GetProductionByID(
+	ctx context.Context,
+	productionID string,
+) (interface{}, error) {
+	if a == nil || a.productionRepo == nil {
+		return nil, errors.New("productQueryRepoAdapter: productionRepo is nil")
+	}
+	// productiondom.Production 型を interface{} として返す
+	return a.productionRepo.GetByID(ctx, productionID)
+}
+
+// GetProductBlueprintByID implements usecase.ProductQueryRepo.
+func (a *productQueryRepoAdapter) GetProductBlueprintByID(
+	ctx context.Context,
+	bpID string,
+) (productbpdom.ProductBlueprint, error) {
+	if a == nil || a.productBlueprintRepo == nil {
+		return productbpdom.ProductBlueprint{}, errors.New("productQueryRepoAdapter: productBlueprintRepo is nil")
+	}
+	return a.productBlueprintRepo.GetByID(ctx, bpID)
+}
+
+// ========================================
 // Container (Firestore + Firebase edition)
 // ========================================
 //
@@ -210,7 +280,10 @@ type Container struct {
 	UserUC             *uc.UserUsecase
 	WalletUC           *uc.WalletUsecase
 
-	// ★ 検品アプリ用 Usecase
+	// ★ 検品アプリ用 ProductUsecase（/inspector/products/{id}）
+	ProductUC *uc.ProductUsecase
+
+	// ★ 検品アプリ用 Usecase（バッチ検品など）
 	InspectionUC *uc.InspectionUsecase
 
 	// ★ 招待関連 Usecase
@@ -374,6 +447,15 @@ func NewContainer(ctx context.Context) (*Container, error) {
 		inspectionRepo,
 	)
 
+	// ★ ProductUsecase（Inspector 詳細画面用）
+	productQueryRepo := &productQueryRepoAdapter{
+		productRepo:          productRepo,
+		modelRepo:            modelRepo,
+		productionRepo:       productionRepo,
+		productBlueprintRepo: productBlueprintRepo,
+	}
+	productUC := uc.NewProductUsecase(productQueryRepo, brandSvc, companySvc)
+
 	saleUC := uc.NewSaleUsecase(saleRepo)
 	shippingAddressUC := uc.NewShippingAddressUsecase(shippingAddressRepo)
 	tokenUC := uc.NewTokenUsecase(tokenRepo)
@@ -384,7 +466,6 @@ func NewContainer(ctx context.Context) (*Container, error) {
 	walletUC := uc.NewWalletUsecase(walletRepo)
 
 	// ★ Invitation 用メールクライアント & メーラー
-	//   → ここでのみ SendGrid を使用（会社名 + ブランド名表示）
 	invitationMailer := mailadp.NewInvitationMailerWithSendGrid(
 		companySvc, // CompanyNameResolver
 		brandSvc,   // BrandNameResolver
@@ -453,6 +534,7 @@ func NewContainer(ctx context.Context) (*Container, error) {
 		WalletUC:           walletUC,
 
 		// 検品アプリ用
+		ProductUC:    productUC,
 		InspectionUC: inspectionUC,
 
 		InvitationQuery:   invitationQueryUC,
@@ -500,13 +582,14 @@ func (c *Container) RouterDeps() httpin.RouterDeps {
 		WalletUC:           c.WalletUC,
 
 		// 検品アプリ用 Usecase
+		ProductUC:    c.ProductUC,
 		InspectionUC: c.InspectionUC,
 
-		// ★ 招待関連 Usecase を Router に渡す
+		// 招待関連 Usecase
 		InvitationQuery:   c.InvitationQuery,
 		InvitationCommand: c.InvitationCommand,
 
-		// ★ auth/bootstrap 用
+		// auth/bootstrap 用
 		AuthBootstrap: c.AuthBootstrap,
 
 		// AuthMiddleware 用

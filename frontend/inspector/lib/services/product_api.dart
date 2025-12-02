@@ -134,7 +134,7 @@ class InspectorProductDetail {
   final Map<String, int> measurements;
   final InspectorColor color;
 
-  final InspectorProductBlueprint blueprint;
+  final InspectorProductBlueprint productBlueprint;
   final List<InspectorInspectionRecord> inspections;
 
   /// 現在の検品ステータス
@@ -149,7 +149,7 @@ class InspectorProductDetail {
     required this.size,
     required this.measurements,
     required this.color,
-    required this.blueprint,
+    required this.productBlueprint,
     required this.inspections,
     required this.inspectionResult,
   });
@@ -186,7 +186,7 @@ class InspectorProductDetail {
       color: InspectorColor.fromJson(
         (json['color'] as Map<String, dynamic>? ?? const {}),
       ),
-      blueprint: InspectorProductBlueprint.fromJson(
+      productBlueprint: InspectorProductBlueprint.fromJson(
         (json['productBlueprint'] as Map<String, dynamic>? ?? const {}),
       ),
       inspections: inspections,
