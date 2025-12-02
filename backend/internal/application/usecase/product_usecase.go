@@ -10,8 +10,9 @@ import (
 	productdom "narratives/internal/domain/product"
 )
 
-// QR ペイロード生成時に使うベース URL（必要に応じて差し替えてください）
-const defaultQRBaseURL = "https://example.com" // TODO: 実際のフロントエンド URL に変更する
+// QR ペイロード生成時に使うベース URL
+// 例: https://narratives.jp/products/{productId} のような形で利用される想定
+const defaultQRBaseURL = "https://narratives.jp"
 
 // ProductRepo defines the minimal persistence port needed by ProductUsecase.
 type ProductRepo interface {

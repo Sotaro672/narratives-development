@@ -267,7 +267,6 @@ export default function ListDetail() {
         createdAt={"2025/10/25 14:30"}
         onEditAssignee={() => console.log("edit assignee")}
         onClickAssignee={() => console.log("assignee clicked")}
-        onClickCreatedBy={() => console.log("createdBy clicked")}
       />
     </PageStyle>
   );

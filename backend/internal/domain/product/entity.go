@@ -78,9 +78,9 @@ const (
 // InspectionItem は 1 つの productId に対する検査状態を表す
 type InspectionItem struct {
 	ProductID        string            `json:"productId"`
-	InspectionResult *InspectionResult `json:"inspectionResult"` // create 時は nil
-	InspectedBy      *string           `json:"inspectedBy"`      // create 時は nil
-	InspectedAt      *time.Time        `json:"inspectedAt"`      // create 時は nil
+	InspectionResult *InspectionResult `json:"inspectionResult"`
+	InspectedBy      *string           `json:"inspectedBy"`
+	InspectedAt      *time.Time        `json:"inspectedAt"`
 }
 
 // InspectionBatch は 1 productionId に紐づく inspections ドキュメント
@@ -89,7 +89,7 @@ type InspectionItem struct {
 //	  "productionId": "...",
 //	  "status": "inspecting" | "completed",
 //	  "inspections": [
-//	    { "productId": "...", "inspectionResult": null, "inspectedBy": null, "inspectedAt": null },
+//	    { "productId": "...", "inspectionResult": "notYet", "inspectedBy": null, "inspectedAt": null },
 //	    ...
 //	  ]
 //	}
@@ -228,7 +228,7 @@ func NewPrintLog(
 // - productionID は必須
 // - status は inspecting / completed のいずれか
 // - productIDs は 1 件以上必要
-// - 各 InspectionItem の inspectionResult / inspectedBy / inspectedAt は nil で初期化
+// - 各 InspectionItem の inspectionResult は notYet、inspectedBy / inspectedAt は nil で初期化
 func NewInspectionBatch(
 	productionID string,
 	status InspectionStatus,
@@ -250,9 +250,10 @@ func NewInspectionBatch(
 
 	inspections := make([]InspectionItem, 0, len(ids))
 	for _, id := range ids {
+		r := InspectionNotYet
 		inspections = append(inspections, InspectionItem{
 			ProductID:        id,
-			InspectionResult: nil,
+			InspectionResult: &r,
 			InspectedBy:      nil,
 			InspectedAt:      nil,
 		})
