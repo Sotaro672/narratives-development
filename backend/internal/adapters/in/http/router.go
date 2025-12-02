@@ -1,4 +1,3 @@
-// backend/internal/adapters/in/http/router.go
 package httpin
 
 import (
@@ -35,7 +34,7 @@ type RouterDeps struct {
 	MemberUC           *usecase.MemberUsecase
 	MessageUC          *usecase.MessageUsecase
 	MintRequestUC      *usecase.MintRequestUsecase
-	ModelUC            *usecase.ModelUsecase // ★ Models で使用
+	ModelUC            *usecase.ModelUsecase
 	OrderUC            *usecase.OrderUsecase
 	PaymentUC          *usecase.PaymentUsecase
 	PermissionUC       *usecase.PermissionUsecase
@@ -68,7 +67,7 @@ func NewRouter(deps RouterDeps) http.Handler {
 	mux := http.NewServeMux()
 
 	// ================================
-	// 共通 Auth ミドルウェア（Member 必須）
+	// 共通 Auth ミドルウェア
 	// ================================
 	var authMw *middleware.AuthMiddleware
 	if deps.FirebaseAuth != nil && deps.MemberRepo != nil {
@@ -79,7 +78,7 @@ func NewRouter(deps RouterDeps) http.Handler {
 	}
 
 	// ================================
-	// /auth/bootstrap 専用ミドルウェア
+	// /auth/bootstrap 専用
 	// ================================
 	var bootstrapMw *middleware.BootstrapAuthMiddleware
 	if deps.FirebaseAuth != nil {
@@ -93,10 +92,8 @@ func NewRouter(deps RouterDeps) http.Handler {
 	// ================================
 	if deps.AuthBootstrap != nil && bootstrapMw != nil {
 		bootstrapHandler := handlers.NewAuthBootstrapHandler(deps.AuthBootstrap)
-
 		var h http.Handler = bootstrapHandler
 		h = bootstrapMw.Handler(h)
-
 		mux.Handle("/auth/bootstrap", h)
 	}
 
@@ -105,12 +102,10 @@ func NewRouter(deps RouterDeps) http.Handler {
 	// ================================
 	if deps.AccountUC != nil {
 		accountH := handlers.NewAccountHandler(deps.AccountUC)
-
 		var h http.Handler = accountH
 		if authMw != nil {
 			h = authMw.Handler(h)
 		}
-
 		mux.Handle("/accounts", h)
 		mux.Handle("/accounts/", h)
 	}
@@ -120,12 +115,10 @@ func NewRouter(deps RouterDeps) http.Handler {
 	// ================================
 	if deps.AnnouncementUC != nil {
 		announcementH := handlers.NewAnnouncementHandler(deps.AnnouncementUC)
-
 		var h http.Handler = announcementH
 		if authMw != nil {
 			h = authMw.Handler(h)
 		}
-
 		mux.Handle("/announcements", h)
 		mux.Handle("/announcements/", h)
 	}
@@ -135,12 +128,10 @@ func NewRouter(deps RouterDeps) http.Handler {
 	// ================================
 	if deps.PermissionUC != nil {
 		permissionH := handlers.NewPermissionHandler(deps.PermissionUC)
-
 		var h http.Handler = permissionH
 		if authMw != nil {
 			h = authMw.Handler(h)
 		}
-
 		mux.Handle("/permissions", h)
 		mux.Handle("/permissions/", h)
 	}
@@ -150,12 +141,10 @@ func NewRouter(deps RouterDeps) http.Handler {
 	// ================================
 	if deps.AvatarUC != nil {
 		avatarH := handlers.NewAvatarHandler(deps.AvatarUC)
-
 		var h http.Handler = avatarH
 		if authMw != nil {
 			h = authMw.Handler(h)
 		}
-
 		mux.Handle("/avatars", h)
 		mux.Handle("/avatars/", h)
 	}
@@ -165,12 +154,10 @@ func NewRouter(deps RouterDeps) http.Handler {
 	// ================================
 	if deps.BrandUC != nil {
 		brandH := handlers.NewBrandHandler(deps.BrandUC)
-
 		var h http.Handler = brandH
 		if authMw != nil {
 			h = authMw.Handler(h)
 		}
-
 		mux.Handle("/brands", h)
 		mux.Handle("/brands/", h)
 	}
@@ -180,12 +167,10 @@ func NewRouter(deps RouterDeps) http.Handler {
 	// ================================
 	if deps.CompanyUC != nil {
 		companyH := handlers.NewCompanyHandler(deps.CompanyUC)
-
 		var h http.Handler = companyH
 		if authMw != nil {
 			h = authMw.Handler(h)
 		}
-
 		mux.Handle("/companies", h)
 		mux.Handle("/companies/", h)
 	}
@@ -195,12 +180,10 @@ func NewRouter(deps RouterDeps) http.Handler {
 	// ================================
 	if deps.InquiryUC != nil {
 		inquiryH := handlers.NewInquiryHandler(deps.InquiryUC)
-
 		var h http.Handler = inquiryH
 		if authMw != nil {
 			h = authMw.Handler(h)
 		}
-
 		mux.Handle("/inquiries", h)
 		mux.Handle("/inquiries/", h)
 	}
@@ -210,12 +193,10 @@ func NewRouter(deps RouterDeps) http.Handler {
 	// ================================
 	if deps.InventoryUC != nil {
 		inventoryH := handlers.NewInventoryHandler(deps.InventoryUC)
-
 		var h http.Handler = inventoryH
 		if authMw != nil {
 			h = authMw.Handler(h)
 		}
-
 		mux.Handle("/inventories", h)
 		mux.Handle("/inventories/", h)
 	}
@@ -225,12 +206,10 @@ func NewRouter(deps RouterDeps) http.Handler {
 	// ================================
 	if deps.TokenUC != nil {
 		tokenH := handlers.NewTokenHandler(deps.TokenUC)
-
 		var h http.Handler = tokenH
 		if authMw != nil {
 			h = authMw.Handler(h)
 		}
-
 		mux.Handle("/tokens", h)
 		mux.Handle("/tokens/", h)
 	}
@@ -239,7 +218,6 @@ func NewRouter(deps RouterDeps) http.Handler {
 	// Products
 	// ================================
 	if deps.ProductUC != nil {
-		// ★ ProductUsecase に加えて ProductionUsecase / ModelUsecase も渡す
 		productH := handlers.NewProductHandler(deps.ProductUC, deps.ProductionUC, deps.ModelUC)
 
 		var h http.Handler = productH
@@ -249,7 +227,6 @@ func NewRouter(deps RouterDeps) http.Handler {
 
 		mux.Handle("/products", h)
 		mux.Handle("/products/", h)
-		// /products/print-logs も ProductHandler に流す
 		mux.Handle("/products/print-logs", h)
 	}
 
@@ -354,7 +331,6 @@ func NewRouter(deps RouterDeps) http.Handler {
 			h = authMw.Handler(h)
 		}
 
-		// ★ フロントの POST /productions と合わせる
 		mux.Handle("/productions", h)
 		mux.Handle("/productions/", h)
 	}
@@ -372,6 +348,22 @@ func NewRouter(deps RouterDeps) http.Handler {
 
 		mux.Handle("/models", h)
 		mux.Handle("/models/", h)
+	}
+
+	// ================================
+	// ⭐ 検品 API（Inspector 用）
+	// ================================
+	if deps.ProductUC != nil {
+		inspectorH := handlers.NewInspectorHandler(deps.ProductUC)
+
+		var h http.Handler = inspectorH
+		// Flutter inspector アプリは Firebase Auth を使っており認証必須
+		if authMw != nil {
+			h = authMw.Handler(h)
+		}
+
+		// GET /inspector/products/{productId}
+		mux.Handle("/inspector/products/", h)
 	}
 
 	return mux

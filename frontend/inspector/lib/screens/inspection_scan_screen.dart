@@ -25,24 +25,30 @@ class _InspectionScanScreenState extends State<InspectionScanScreen> {
 
   /// QR 内容から productId を抽出
   /// - 「ただのID」の場合はそのまま
-  /// - URL の場合は /products/{id} をパース
+  /// - URL (http/https) の場合は最後の path segment を ID とみなす
+  ///   例: https://narratives.jp/oQtZOWW2OKFKvHIo0YsQ → oQtZOWW2OKFKvHIo0YsQ
   String? _extractProductId(String raw) {
     final trimmed = raw.trim();
     if (trimmed.isEmpty) return null;
 
-    // URL の場合
-    Uri? uri;
+    // まずは Uri.parse で正規の URL として扱えるか確認
     try {
-      uri = Uri.parse(trimmed);
+      final uri = Uri.parse(trimmed);
+      if (uri.scheme == 'http' || uri.scheme == 'https') {
+        final segments = uri.pathSegments.where((s) => s.isNotEmpty).toList();
+        if (segments.isNotEmpty) {
+          return segments.last;
+        }
+      }
     } catch (_) {
-      uri = null;
+      // 無視してフォールバックへ
     }
 
-    if (uri != null && uri.hasScheme) {
-      final segments = uri.pathSegments;
-      final idx = segments.indexOf('products');
-      if (idx != -1 && idx + 1 < segments.length) {
-        return segments[idx + 1];
+    // まだ URL っぽい文字列が残っている場合のフォールバック
+    if (trimmed.contains('https://') || trimmed.contains('http://')) {
+      final lastSlash = trimmed.lastIndexOf('/');
+      if (lastSlash != -1 && lastSlash + 1 < trimmed.length) {
+        return trimmed.substring(lastSlash + 1);
       }
     }
 

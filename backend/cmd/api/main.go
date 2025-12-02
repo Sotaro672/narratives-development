@@ -7,40 +7,13 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
-	"strings"
 	"syscall"
 	"time"
 
 	httpin "narratives/internal/adapters/in/http"
+	"narratives/internal/adapters/in/http/middleware"
 	"narratives/internal/platform/di"
 )
-
-// withCORS wraps an http.Handler with simple CORS headers.
-// allowedOrigin には既に環境変数などから決めた値を渡す。
-// Authorization ヘッダを許可（Cookie 等の credentials は使っていない前提）。
-func withCORS(next http.Handler, allowedOrigin string) http.Handler {
-	allowedOrigin = strings.TrimSpace(allowedOrigin)
-	if allowedOrigin == "" {
-		// それでも空なら完全ワイルドカード（開発用）
-		allowedOrigin = "*"
-	}
-
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Access-Control-Allow-Origin", allowedOrigin)
-		w.Header().Set("Vary", "Origin")
-		w.Header().Set("Access-Control-Allow-Methods", "GET,POST,PUT,PATCH,DELETE,OPTIONS")
-		w.Header().Set("Access-Control-Allow-Headers", "Authorization,Content-Type")
-		w.Header().Set("Access-Control-Max-Age", "600")
-
-		// Preflight
-		if r.Method == http.MethodOptions {
-			w.WriteHeader(http.StatusNoContent)
-			return
-		}
-
-		next.ServeHTTP(w, r)
-	})
-}
 
 func main() {
 	ctx := context.Background()
@@ -101,21 +74,18 @@ func main() {
 
 	// ─────────────────────────────────────────────────────────────
 	// Global CORS wrapper (covers /healthz and app routes)
-	// FRONTEND_ORIGIN が未指定なら、開発用に
-	//   https://narratives-console-dev.web.app
-	// をデフォルトとして使う。
+	//
+	// 許可する Origin 自体は middleware.CORS 側で
+	//   - https://narratives.jp
+	//   - https://narratives-console-dev.web.app
+	//   - https://narratives-development-26c2d.web.app
+	// などを動的に判定している。
 	// ─────────────────────────────────────────────────────────────
-	allowedOrigin := strings.TrimSpace(os.Getenv("FRONTEND_ORIGIN"))
-	if allowedOrigin == "" {
-		allowedOrigin = "https://narratives.jp"
-	}
-	log.Printf("[boot] CORS allowed origin: %s", allowedOrigin)
-
-	handler := withCORS(mux, allowedOrigin)
+	handler := middleware.CORS(mux)
 
 	srv := &http.Server{
 		Addr:         ":" + port,
-		Handler:      handler, // CORS applied here
+		Handler:      handler, // CORS applied here (dynamic by Origin)
 		ReadTimeout:  10 * time.Second,
 		WriteTimeout: 10 * time.Second,
 		IdleTimeout:  60 * time.Second,

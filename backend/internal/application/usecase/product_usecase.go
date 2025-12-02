@@ -10,9 +10,9 @@ import (
 	productdom "narratives/internal/domain/product"
 )
 
-// QR ペイロード生成時に使うベース URL
-// 例: https://narratives.jp/products/{productId} のような形で利用される想定
-const defaultQRBaseURL = "https://narratives.jp"
+// QR コードに埋め込む公開 URL のベース
+// 👉 https://narratives.jp/{productId} という形で利用
+const publicQRBaseURL = "https://narratives.jp"
 
 // ProductRepo defines the minimal persistence port needed by ProductUsecase.
 type ProductRepo interface {
@@ -99,9 +99,8 @@ func (u *ProductUsecase) ListPrintLogsByProductionID(ctx context.Context, produc
 		return nil, err
 	}
 
-	// 2) 各 productId ごとに QR ペイロード(JSON文字列) を生成して QrPayloads に詰める
-	baseURL := defaultQRBaseURL
-
+	// 2) 各 productId ごとに QR ペイロードを生成して QrPayloads に詰める
+	//    👉 QR には「https://narratives.jp/{productId}」を埋め込む
 	for i := range logs {
 		var payloads []string
 		for _, productID := range logs[i].ProductIDs {
@@ -109,15 +108,8 @@ func (u *ProductUsecase) ListPrintLogsByProductionID(ctx context.Context, produc
 			if productID == "" {
 				continue
 			}
-
-			// BuildProductQRValue は (baseURL, productID) を受け取り
-			// QR コード用の文字列を返す
-			payload, err := productdom.BuildProductQRValue(baseURL, productID)
-			if err != nil {
-				// 運用方針次第だが、ここではエラーを返して 500 に繋げる
-				return nil, err
-			}
-			payloads = append(payloads, payload)
+			url := fmt.Sprintf("%s/%s", publicQRBaseURL, productID)
+			payloads = append(payloads, url)
 		}
 		logs[i].QrPayloads = payloads
 	}
@@ -162,7 +154,7 @@ func (u *ProductUsecase) CreateInspectionBatchForProduction(
 		return productdom.InspectionBatch{}, productdom.ErrInvalidInspectionProductIDs
 	}
 
-	// InspectionBatch エンティティ作成（全て nil, status=inspecting）
+	// InspectionBatch エンティティ作成（全て notYet, status=inspecting）
 	batch, err := productdom.NewInspectionBatch(
 		pid,
 		productdom.InspectionStatusInspecting,
@@ -246,7 +238,7 @@ func (u *ProductUsecase) CreatePrintLogForProduction(ctx context.Context, produc
 	}
 
 	// ★ ここで inspections/{productionId} 用のバッチを作成
-	//   - inspectionResult / inspectedBy / inspectedAt はすべて nil で初期化
+	//   - inspectionResult / inspectedBy / inspectedAt はすべて notYet / nil で初期化
 	//   - status は "inspecting" 固定で開始
 	batch, err := productdom.NewInspectionBatch(
 		pid,
@@ -268,19 +260,15 @@ func (u *ProductUsecase) CreatePrintLogForProduction(ctx context.Context, produc
 		return productdom.PrintLog{}, err
 	}
 
-	// QrPayloads を付与（文字列の配列）
-	baseURL := defaultQRBaseURL
+	// QrPayloads を付与（https://narratives.jp/{productId} を埋め込む）
 	var payloads []string
 	for _, productID := range created.ProductIDs {
 		productID = strings.TrimSpace(productID)
 		if productID == "" {
 			continue
 		}
-		payload, err := productdom.BuildProductQRValue(baseURL, productID)
-		if err != nil {
-			return productdom.PrintLog{}, err
-		}
-		payloads = append(payloads, payload)
+		url := fmt.Sprintf("%s/%s", publicQRBaseURL, productID)
+		payloads = append(payloads, url)
 	}
 	created.QrPayloads = payloads
 
@@ -356,8 +344,6 @@ func (u *ProductUsecase) UpdateInspectionForProduct(
 			item.InspectedAt = &at
 		}
 
-		// domain 側の整合性に近づけるため、result が nil かつ inspectedBy / inspectedAt が nil の場合は
-		// 「未検査状態」に戻す用途も想定できるが、今回はシンプルに「与えられたものだけ更新」に留める。
 		break
 	}
 
@@ -405,10 +391,7 @@ func (u *ProductUsecase) CompleteInspectionForProduction(
 		return productdom.InspectionBatch{}, err
 	}
 
-	// ドメインサービス側で:
-	//   - 未検品(nil / notYet) を notManufactured に変更
-	//   - inspectedBy / inspectedAt を一括で設定
-	//   - Status を completed に変更
+	// ドメイン側の Complete を利用して一括更新
 	if err := batch.Complete(by, at); err != nil {
 		return productdom.InspectionBatch{}, err
 	}

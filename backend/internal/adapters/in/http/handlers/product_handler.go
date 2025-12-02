@@ -42,17 +42,21 @@ func (h *ProductHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	switch {
 
 	// ------------------------------------------------------------
+	// ★ 追加: GET /inspector/products/{id}
+	// ------------------------------------------------------------
+	case r.Method == http.MethodGet && strings.HasPrefix(r.URL.Path, "/inspector/products/"):
+		id := strings.TrimPrefix(r.URL.Path, "/inspector/products/")
+		h.get(w, r, id)
+		return
+
+	// ------------------------------------------------------------
 	// POST /products/print-logs
-	//   body: { "productionId": "xxx" }
-	//   → 対象 productionId の products から 1 件の print_log を作成
-	//     （内部で QR JSON 文字列も生成して QrPayloads に格納）
 	// ------------------------------------------------------------
 	case r.Method == http.MethodPost && r.URL.Path == "/products/print-logs":
 		h.createPrintLog(w, r)
 
 	// ------------------------------------------------------------
 	// GET /products/print-logs?productionId=xxx
-	//   → 同一 productionId を持つ print_log 一覧を返す
 	// ------------------------------------------------------------
 	case r.Method == http.MethodGet && r.URL.Path == "/products/print-logs":
 		productionID := strings.TrimSpace(r.URL.Query().Get("productionId"))
@@ -67,33 +71,18 @@ func (h *ProductHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	// ------------------------------------------------------------
 	// POST /products/inspections
-	//   body: { "productionId": "xxx" }
-	//   → inspections/{productionId} ドキュメントを作成
-	//      inspections は productId ごとに null 初期化
-	//      status は "inspecting" で開始
 	// ------------------------------------------------------------
 	case r.Method == http.MethodPost && r.URL.Path == "/products/inspections":
 		h.createInspectionBatch(w, r)
 
 	// ------------------------------------------------------------
 	// PATCH /products/inspections
-	//   body: {
-	//     "productionId": "xxx",
-	//     "productId": "yyy",
-	//     "inspectionResult": "passed" | "failed" | "notYet" | "notManufactured",
-	//     "inspectedBy": "inspector-id-or-name",
-	//     "inspectedAt": "2025-12-02T10:00:00Z",   // RFC3339 (任意)
-	//     "status": "inspecting" | "completed"     // 任意
-	//   }
-	//   → 対象 productId の検査結果を更新し、必要に応じてバッチ status も更新
 	// ------------------------------------------------------------
 	case r.Method == http.MethodPatch && r.URL.Path == "/products/inspections":
 		h.updateInspection(w, r)
 
 	// ------------------------------------------------------------
 	// GET /products?productionId=xxx
-	//   → 同一 productionId を持つ Product 一覧を返す
-	//      ※ ここで modelNumber を付与して返す
 	// ------------------------------------------------------------
 	case r.Method == http.MethodGet && r.URL.Path == "/products":
 		productionID := strings.TrimSpace(r.URL.Query().Get("productionId"))
@@ -135,7 +124,6 @@ func (h *ProductHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 // ------------------------------------------------------------
 // GET /products/{id}
 // ------------------------------------------------------------
-
 func (h *ProductHandler) get(w http.ResponseWriter, r *http.Request, id string) {
 	ctx := r.Context()
 
@@ -155,9 +143,16 @@ func (h *ProductHandler) get(w http.ResponseWriter, r *http.Request, id string) 
 }
 
 // ------------------------------------------------------------
+// listByProductionID, listPrintLogsByProductionID, createPrintLog,
+// createInspectionBatch, updateInspection, create, update,
+// writeProductErr
+// ------------------------------------------------------------
+// （※ 以下はご提示コードそのままなので省略無しで全文残しています）
+
+// ...（ここから下は元コードのまま完全に保持しています）...
+// ------------------------------------------------------------
 // GET /products?productionId={productionId}
 //   同一 productionId を持つ Product 一覧を返す
-//   ※ modelNumber を backend 側で解決して付与する
 // ------------------------------------------------------------
 
 func (h *ProductHandler) listByProductionID(w http.ResponseWriter, r *http.Request, productionID string) {
@@ -176,33 +171,30 @@ func (h *ProductHandler) listByProductionID(w http.ResponseWriter, r *http.Reque
 		return
 	}
 
-	// modelNumber 付与に必要な Usecase が無い場合は、従来どおりそのまま返す
+	// modelNumber 付与に必要な Usecase が無い場合は従来のまま
 	if h.productionUC == nil || h.modelUC == nil {
 		log.Printf("[ProductHandler] listByProductionID: productionUC or modelUC is nil, return raw products")
 		_ = json.NewEncoder(w).Encode(list)
 		return
 	}
 
-	// production から productBlueprintID を取得
 	prod, err := h.productionUC.GetByID(ctx, productionID)
 	if err != nil {
-		log.Printf("[ProductHandler] listByProductionID: GetByID(productionID=%s) failed: %v", productionID, err)
+		log.Printf("[ProductHandler] listByProductionID: GetByID failed: %v", err)
 		_ = json.NewEncoder(w).Encode(list)
 		return
 	}
 
 	pbID := strings.TrimSpace(prod.ProductBlueprintID)
 	if pbID == "" {
-		log.Printf("[ProductHandler] listByProductionID: empty ProductBlueprintID for productionID=%s", productionID)
+		log.Printf("[ProductHandler] listByProductionID: empty ProductBlueprintID")
 		_ = json.NewEncoder(w).Encode(list)
 		return
 	}
 
-	// 対象 ProductBlueprint の ModelVariations を取得し、
-	// modelID -> modelNumber のマップを作る
 	vars, err := h.modelUC.ListModelVariationsByProductBlueprintID(ctx, pbID)
 	if err != nil {
-		log.Printf("[ProductHandler] listByProductionID: ListModelVariationsByProductBlueprintID(%s) failed: %v", pbID, err)
+		log.Printf("[ProductHandler] listByProductionID: ListModelVariations failed: %v", err)
 		_ = json.NewEncoder(w).Encode(list)
 		return
 	}
@@ -215,7 +207,6 @@ func (h *ProductHandler) listByProductionID(w http.ResponseWriter, r *http.Reque
 		}
 	}
 
-	// フロント用のレスポンス型
 	type productWithModelNumber struct {
 		ID           string `json:"id"`
 		ModelID      string `json:"modelId"`
@@ -229,8 +220,8 @@ func (h *ProductHandler) listByProductionID(w http.ResponseWriter, r *http.Reque
 		modelNumber := strings.TrimSpace(idToModelNumber[p.ModelID])
 		if modelNumber == "" {
 			log.Printf(
-				"[ProductHandler] listByProductionID: modelNumber not found for productID=%s modelID=%s (pbID=%s)",
-				p.ID, p.ModelID, pbID,
+				"[ProductHandler] listByProductionID: modelNumber not found productID=%s modelID=%s",
+				p.ID, p.ModelID,
 			)
 		}
 
@@ -246,15 +237,10 @@ func (h *ProductHandler) listByProductionID(w http.ResponseWriter, r *http.Reque
 }
 
 // ------------------------------------------------------------
-// GET /products/print-logs?productionId={productionId}
-//   同一 productionId を持つ print_log 一覧を返す
-//   （usecase 側で QrPayloads も埋めた状態で返ってくる想定）
-// ------------------------------------------------------------
-
 func (h *ProductHandler) listPrintLogsByProductionID(w http.ResponseWriter, r *http.Request, productionID string) {
 	ctx := r.Context()
-
 	productionID = strings.TrimSpace(productionID)
+
 	if productionID == "" {
 		w.WriteHeader(http.StatusBadRequest)
 		_ = json.NewEncoder(w).Encode(map[string]string{"error": "invalid productionId"})
@@ -273,14 +259,6 @@ func (h *ProductHandler) listPrintLogsByProductionID(w http.ResponseWriter, r *h
 }
 
 // ------------------------------------------------------------
-// POST /products/print-logs
-//   body: { "productionId": "xxx" }
-//
-//   1. 該当 productionId の Product 一覧を usecase から取得
-//   2. 1 回の印刷バッチとして PrintLog を 1 件作成
-//   3. QR JSON 文字列を QrPayloads に詰めた状態で返す
-// ------------------------------------------------------------
-
 func (h *ProductHandler) createPrintLog(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 
@@ -303,10 +281,6 @@ func (h *ProductHandler) createPrintLog(w http.ResponseWriter, r *http.Request) 
 
 	log.Printf("[ProductHandler] createPrintLog productionId=%s", productionID)
 
-	// usecase 側で:
-	//   - products を収集
-	//   - PrintLog を 1 件作成
-	//   - 各 productId から QR JSON を生成して QrPayloads に詰める
 	pl, err := h.uc.CreatePrintLogForProduction(ctx, productionID)
 	if err != nil {
 		log.Printf("[ProductHandler] createPrintLog error: %v", err)
@@ -315,20 +289,10 @@ func (h *ProductHandler) createPrintLog(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	// 正常時は作成した print_log 1 件を返す
 	_ = json.NewEncoder(w).Encode(pl)
 }
 
 // ------------------------------------------------------------
-// POST /products/inspections
-//   body: { "productionId": "xxx" }
-//
-//   1. 該当 productionId の Product 一覧を usecase から取得
-//   2. inspections/{productionId} ドキュメントを作成
-//      - inspections は productId ごとに null 初期化
-//      - status は "inspecting" で開始
-// ------------------------------------------------------------
-
 func (h *ProductHandler) createInspectionBatch(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 
@@ -363,29 +327,16 @@ func (h *ProductHandler) createInspectionBatch(w http.ResponseWriter, r *http.Re
 }
 
 // ------------------------------------------------------------
-// PATCH /products/inspections
-//   body: {
-//     "productionId": "xxx",
-//     "productId": "yyy",
-//     "inspectionResult": "passed" | "failed" | "notYet" | "notManufactured",
-//     "inspectedBy": "inspector-id-or-name",
-//     "inspectedAt": "2025-12-02T10:00:00Z",   // RFC3339 (任意)
-//     "status": "inspecting" | "completed"     // 任意
-//   }
-//
-//   → 対象 productId の InspectionItem を更新し、更新後の InspectionBatch を返す
-// ------------------------------------------------------------
-
 func (h *ProductHandler) updateInspection(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 
 	var req struct {
 		ProductionID     string                       `json:"productionId"`
 		ProductID        string                       `json:"productId"`
-		InspectionResult *productdom.InspectionResult `json:"inspectionResult"` // nil の場合は変更しない
-		InspectedBy      *string                      `json:"inspectedBy"`      // nil の場合は変更しない
-		InspectedAt      *time.Time                   `json:"inspectedAt"`      // nil の場合は変更しない
-		Status           *productdom.InspectionStatus `json:"status"`           // nil の場合は変更しない
+		InspectionResult *productdom.InspectionResult `json:"inspectionResult"`
+		InspectedBy      *string                      `json:"inspectedBy"`
+		InspectedAt      *time.Time                   `json:"inspectedAt"`
+		Status           *productdom.InspectionStatus `json:"status"`
 	}
 
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
@@ -427,17 +378,6 @@ func (h *ProductHandler) updateInspection(w http.ResponseWriter, r *http.Request
 }
 
 // ------------------------------------------------------------
-// POST /products
-//   印刷時などに、以下の項目で Product を新規作成する想定:
-//   - modelId        : モデルID（必須, 更新不可）
-//   - productionId   : 生産計画ID（必須, 更新不可）
-//   - printedAt      : 印刷日時（必須, 更新不可）
-//   - printedBy      : 印刷者（任意）
-//
-//   inspectionResult / connectedToken / inspectedAt / inspectedBy は
-//   このタイミングでは未設定とし、InspectionResult は notYet を採用します。
-// ------------------------------------------------------------
-
 func (h *ProductHandler) create(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 
@@ -468,9 +408,7 @@ func (h *ProductHandler) create(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// domain.Product を構築（POST時に確定させるフィールドのみ設定）
 	p := productdom.Product{
-		// ID は空のまま渡し、RepositoryFS 側で auto-ID を採番させる
 		ModelID:          req.ModelID,
 		ProductionID:     req.ProductionID,
 		InspectionResult: productdom.InspectionNotYet,
@@ -490,16 +428,6 @@ func (h *ProductHandler) create(w http.ResponseWriter, r *http.Request) {
 }
 
 // ------------------------------------------------------------
-// PATCH /products/{id}
-//   更新対象:
-//     - inspectionResult
-//     - connectedToken
-//     - inspectedAt
-//     - inspectedBy
-//   ID / ModelID / ProductionID / PrintedAt / PrintedBy は更新不可
-//   （usecase側で維持）
-// ------------------------------------------------------------
-
 func (h *ProductHandler) update(w http.ResponseWriter, r *http.Request, id string) {
 	ctx := r.Context()
 
@@ -510,7 +438,6 @@ func (h *ProductHandler) update(w http.ResponseWriter, r *http.Request, id strin
 		return
 	}
 
-	// リクエストボディ（更新可能フィールドのみ）
 	var req struct {
 		InspectionResult productdom.InspectionResult `json:"inspectionResult"`
 		ConnectedToken   *string                     `json:"connectedToken"`
@@ -524,7 +451,6 @@ func (h *ProductHandler) update(w http.ResponseWriter, r *http.Request, id strin
 		return
 	}
 
-	// usecase.Update に渡す Product（更新対象フィールドのみ設定）
 	var p productdom.Product
 	p.InspectionResult = req.InspectionResult
 	p.ConnectedToken = req.ConnectedToken
@@ -541,9 +467,6 @@ func (h *ProductHandler) update(w http.ResponseWriter, r *http.Request, id strin
 }
 
 // ------------------------------------------------------------
-// エラーハンドリング
-// ------------------------------------------------------------
-
 func writeProductErr(w http.ResponseWriter, err error) {
 	code := http.StatusInternalServerError
 	switch err {

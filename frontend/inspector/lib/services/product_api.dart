@@ -20,7 +20,6 @@ class InspectorColor {
     if (raw is int) {
       rgbValue = raw;
     } else if (raw is String) {
-      // "0xff112233" など文字列なら int に変換
       rgbValue = int.tryParse(raw) ?? 0xff000000;
     } else {
       rgbValue = 0xff000000;
@@ -127,7 +126,7 @@ class InspectorProductDetail {
   final InspectorProductBlueprint blueprint;
   final List<InspectorInspectionRecord> inspections;
 
-  /// 現在の検品ステータス（`inspectionResult` の集約値など）
+  /// 現在の検品ステータス
   final String inspectionResult;
 
   InspectorProductDetail({
@@ -202,22 +201,18 @@ class ProductApi {
     return token;
   }
 
-  /// 検品詳細画面用の情報を取得する API 呼び出し
-  ///
-  /// ※実際のエンドポイント名はバックエンド実装に合わせて変更してください。
-  ///   ここでは例として `/inspector/products/{productId}` を想定しています。
+  /// 検品詳細取得 API
   static Future<InspectorProductDetail> fetchInspectorDetail(
     String productId,
   ) async {
     final token = await _getIdToken();
 
     final uri = Uri.parse('$_baseUrl/inspector/products/$productId');
+
+    // ★ GET では Content-Type を付けない（CORS 回避）
     final resp = await http.get(
       uri,
-      headers: {
-        'Authorization': 'Bearer $token',
-        'Content-Type': 'application/json',
-      },
+      headers: {'Authorization': 'Bearer $token'},
     );
 
     if (resp.statusCode != 200) {
@@ -231,12 +226,10 @@ class ProductApi {
   /// 合否送信
   static Future<void> submitInspection({
     required String productId,
-    required String result, // "passed" or "failed"
+    required String result,
   }) async {
     final token = await _getIdToken();
 
-    // バックエンドの仕様に合わせて `productionId` なども必要なら別途解決してください。
-    // ここではシンプルに `/products/{id}` PATCH を叩く例です。
     final uri = Uri.parse('$_baseUrl/products/$productId');
     final now = DateTime.now().toUtc().toIso8601String();
 
@@ -263,24 +256,13 @@ class ProductApi {
     }
   }
 
-  /// 検品を完了する
-  ///
-  /// Go 側の想定ロジック:
-  /// - 該当 productionId の inspections のうち inspectionResult == "notYet" を
-  ///   "notManufactured" に更新
-  /// - status を "completed"（または "inspected" など、ドメインに合わせた値）へ更新
+  /// 検品完了
   static Future<void> completeInspection({required String productionId}) async {
     final token = await _getIdToken();
 
-    // エンドポイントは Go 側で実装予定のものに合わせてください。
-    // 例として PATCH /products/inspections/complete を想定。
     final uri = Uri.parse('$_baseUrl/products/inspections/complete');
 
-    final body = json.encode({
-      'productionId': productionId,
-      // status は Go 側で決め打ちでも良いので、ここでは送らず最低限の情報だけ渡す。
-      // 必要なら 'status': 'completed' 等を追加してください。
-    });
+    final body = json.encode({'productionId': productionId});
 
     final resp = await http.patch(
       uri,
