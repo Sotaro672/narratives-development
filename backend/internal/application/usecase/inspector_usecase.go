@@ -1,164 +1,95 @@
-// backend/internal/application/usecase/inspector_usecase.go
+// backend\internal\application\usecase\inspector_usecase.go
 package usecase
 
 import (
 	"context"
-	"fmt"
-	"strings"
-	"time"
 
+	modeldom "narratives/internal/domain/model"
 	productdom "narratives/internal/domain/product"
+	bpdom "narratives/internal/domain/productBlueprint"
 )
 
-// InspectorUsecase は検品アプリ（inspector）専用のユースケースをまとめる。
-// - inspections テーブルの 1 productId 分の検品結果更新
-// - 検品完了処理（一括クローズ）
+// ------------------------------------------------------------
+// DTO 群（Inspector 用 ReadModel）
+// ------------------------------------------------------------
+
+type InspectorColorDTO struct {
+	RGB  int    `json:"rgb"`
+	Name string `json:"name,omitempty"`
+}
+
+type InspectorBlueprintDTO struct {
+	ProductName      string   `json:"productName"`
+	BrandID          string   `json:"brandId"`
+	CompanyID        string   `json:"companyId"`
+	ItemType         string   `json:"itemType"`
+	Fit              string   `json:"fit"`
+	Material         string   `json:"material"`
+	Weight           int      `json:"weight"`
+	QualityAssurance []string `json:"qualityAssurance"`
+	ProductIdTagType string   `json:"productIdTagType"`
+	AssigneeID       string   `json:"assigneeId"`
+}
+
+type InspectionHistoryItemDTO struct {
+	ProductID        string  `json:"productId"`
+	InspectionResult *string `json:"inspectionResult,omitempty"`
+	InspectedBy      *string `json:"inspectedBy,omitempty"`
+	InspectedAt      *string `json:"inspectedAt,omitempty"`
+}
+
+type InspectorProductDetail struct {
+	ProductID        string `json:"productId"`
+	ModelID          string `json:"modelId"`
+	ProductionID     string `json:"productionId"`
+	InspectionResult string `json:"inspectionResult"`
+
+	ModelNumber  string             `json:"modelNumber"`
+	Size         string             `json:"size"`
+	Color        InspectorColorDTO  `json:"color"`
+	Measurements map[string]float64 `json:"measurements"`
+
+	ProductBlueprintID string                `json:"productBlueprintId"`
+	Blueprint          InspectorBlueprintDTO `json:"blueprint"`
+
+	Inspections []InspectionHistoryItemDTO `json:"inspections"`
+}
+
+// ------------------------------------------------------------
+// Usecase / Repository インターフェース
+// ------------------------------------------------------------
+
+// InspectionQueryRepo は検品詳細画面用の ReadModel を構築するための
+// 最小限の読み取り専用ポートです。
+// 旧: InspectionQueryRepo
+type InspectorQueryRepo interface {
+	GetProductByID(ctx context.Context, productID string) (productdom.Product, error)
+	GetModelByID(ctx context.Context, modelID string) (modeldom.ModelVariation, error)
+	GetProductionByID(ctx context.Context, productionID string) ( /* productiondom.Production */ interface{}, error)
+	GetProductBlueprintByID(ctx context.Context, bpID string) (bpdom.ProductBlueprint, error)
+}
+
+// InspectionUsecase は Inspector 用 DTO を組み立てるユースケースです。
 type InspectorUsecase struct {
-	inspectionRepo InspectionRepo
+	repo InspectorQueryRepo
 }
 
-func NewInspectorUsecase(
-	inspectionRepo InspectionRepo,
-) *InspectorUsecase {
-	return &InspectorUsecase{
-		inspectionRepo: inspectionRepo,
-	}
+func NewInspectorUsecase(repo InspectorQueryRepo) *InspectorUsecase {
+	return &InspectorUsecase{repo: repo}
 }
 
-// ★ inspections 内の 1 productId 分を更新する
-//
-// もともと ProductUsecase.UpdateInspectionForProduct にあった処理を
-// inspections テーブル専用に抜き出したもの。
-//
-// PATCH /products/inspections 用
-func (u *InspectorUsecase) UpdateInspectionForProduct(
+// GetInspectorProductDetail は productId を起点に各ドメインから情報を取得し，
+// InspectorProductDetail DTO に詰め替えて返します。
+func (u *InspectionUsecase) GetInspectorProductDetail(
 	ctx context.Context,
-	productionID string,
 	productID string,
-	result *productdom.InspectionResult,
-	inspectedBy *string,
-	inspectedAt *time.Time,
-	status *productdom.InspectionStatus,
-) (productdom.InspectionBatch, error) {
-
-	if u.inspectionRepo == nil {
-		return productdom.InspectionBatch{}, fmt.Errorf("inspectionRepo is nil")
-	}
-
-	pid := strings.TrimSpace(productionID)
-	if pid == "" {
-		return productdom.InspectionBatch{}, productdom.ErrInvalidInspectionProductionID
-	}
-	pdID := strings.TrimSpace(productID)
-	if pdID == "" {
-		return productdom.InspectionBatch{}, productdom.ErrInvalidInspectionProductIDs
-	}
-
-	// 現在のバッチを取得
-	batch, err := u.inspectionRepo.GetByProductionID(ctx, pid)
-	if err != nil {
-		return productdom.InspectionBatch{}, err
-	}
-
-	// 対象 productId の InspectionItem を探す
-	found := false
-	for i := range batch.Inspections {
-		if strings.TrimSpace(batch.Inspections[i].ProductID) != pdID {
-			continue
-		}
-		found = true
-
-		item := &batch.Inspections[i]
-
-		// inspectionResult の更新
-		if result != nil {
-			if !productdom.IsValidInspectionResult(*result) {
-				return productdom.InspectionBatch{}, productdom.ErrInvalidInspectionResult
-			}
-			r := *result
-			item.InspectionResult = &r
-		}
-
-		// inspectedBy の更新
-		if inspectedBy != nil {
-			v := strings.TrimSpace(*inspectedBy)
-			if v == "" {
-				return productdom.InspectionBatch{}, productdom.ErrInvalidInspectedBy
-			}
-			item.InspectedBy = &v
-		}
-
-		// inspectedAt の更新
-		if inspectedAt != nil {
-			at := inspectedAt.UTC()
-			if at.IsZero() {
-				return productdom.InspectionBatch{}, productdom.ErrInvalidInspectedAt
-			}
-			item.InspectedAt = &at
-		}
-
-		break
-	}
-
-	if !found {
-		return productdom.InspectionBatch{}, productdom.ErrInvalidInspectionProductIDs
-	}
-
-	// status の更新（任意）
-	if status != nil {
-		if !productdom.IsValidInspectionStatus(*status) {
-			return productdom.InspectionBatch{}, productdom.ErrInvalidInspectionStatus
-		}
-		batch.Status = *status
-	}
-
-	// 保存（InspectionRepo.Save 側で Firestore に反映）
-	updated, err := u.inspectionRepo.Save(ctx, batch)
-	if err != nil {
-		return productdom.InspectionBatch{}, err
-	}
-
-	return updated, nil
-}
-
-// ★ 検品完了（未検品を notManufactured にし、ステータスを completed にする）
-//
-// もともと ProductUsecase.CompleteInspectionForProduction にあった処理を
-// inspections テーブル専用に抜き出したもの。
-//
-// PATCH /products/inspections/complete 用
-func (u *InspectorUsecase) CompleteInspectionForProduction(
-	ctx context.Context,
-	productionID string,
-	by string,
-	at time.Time,
-) (productdom.InspectionBatch, error) {
-
-	if u.inspectionRepo == nil {
-		return productdom.InspectionBatch{}, fmt.Errorf("inspectionRepo is nil")
-	}
-
-	pid := strings.TrimSpace(productionID)
-	if pid == "" {
-		return productdom.InspectionBatch{}, productdom.ErrInvalidInspectionProductionID
-	}
-
-	// 現在のバッチを取得
-	batch, err := u.inspectionRepo.GetByProductionID(ctx, pid)
-	if err != nil {
-		return productdom.InspectionBatch{}, err
-	}
-
-	// ドメイン側の Complete を利用して一括更新
-	if err := batch.Complete(by, at); err != nil {
-		return productdom.InspectionBatch{}, err
-	}
-
-	// 保存
-	updated, err := u.inspectionRepo.Save(ctx, batch)
-	if err != nil {
-		return productdom.InspectionBatch{}, err
-	}
-
-	return updated, nil
+) (InspectorProductDetail, error) {
+	// TODO: ここで各ドメインリポジトリから取得して DTO に詰め替える
+	// - product: repo.GetProductByID
+	// - model:   repo.GetModelByID
+	// - production → productBlueprintId: repo.GetProductionByID
+	// - blueprint: repo.GetProductBlueprintByID
+	// - inspections: repo.ListInspectionsByProductID
+	// を呼び出して、InspectorProductDetail を構築する。
+	return InspectorProductDetail{}, nil
 }

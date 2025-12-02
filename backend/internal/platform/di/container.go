@@ -211,7 +211,7 @@ type Container struct {
 	WalletUC           *uc.WalletUsecase
 
 	// ★ 検品アプリ用 Usecase
-	InspectorUC *uc.InspectorUsecase
+	InspectionUC *uc.InspectionUsecase
 
 	// ★ 招待関連 Usecase
 	InvitationQuery   uc.InvitationQueryPort
@@ -369,8 +369,8 @@ func NewContainer(ctx context.Context) (*Container, error) {
 		productBlueprintHistoryRepo,
 	)
 
-	// ★ InspectorUsecase（検品アプリ専用）
-	inspectorUC := uc.NewInspectorUsecase(
+	// ★ InspectionUsecase（検品アプリ専用）
+	inspectionUC := uc.NewInspectionUsecase(
 		inspectionRepo,
 	)
 
@@ -453,7 +453,7 @@ func NewContainer(ctx context.Context) (*Container, error) {
 		WalletUC:           walletUC,
 
 		// 検品アプリ用
-		InspectorUC: inspectorUC,
+		InspectionUC: inspectionUC,
 
 		InvitationQuery:   invitationQueryUC,
 		InvitationCommand: invitationCommandUC,
@@ -500,7 +500,7 @@ func (c *Container) RouterDeps() httpin.RouterDeps {
 		WalletUC:           c.WalletUC,
 
 		// 検品アプリ用 Usecase
-		InspectorUC: c.InspectorUC,
+		InspectionUC: c.InspectionUC,
 
 		// ★ 招待関連 Usecase を Router に渡す
 		InvitationQuery:   c.InvitationQuery,

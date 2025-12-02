@@ -51,7 +51,7 @@ type RouterDeps struct {
 	WalletUC           *usecase.WalletUsecase
 
 	// ⭐ 検品専用 Usecase
-	InspectorUC *usecase.InspectorUsecase
+	InspectionUC *usecase.InspectionUsecase
 
 	// 認証・招待まわり
 	AuthBootstrap     *authuc.BootstrapService
@@ -356,8 +356,8 @@ func NewRouter(deps RouterDeps) http.Handler {
 	// ================================
 	// ⭐ 検品 API（Inspector 用）
 	// ================================
-	if deps.ProductUC != nil && deps.InspectorUC != nil {
-		inspectorH := handlers.NewInspectorHandler(deps.ProductUC, deps.InspectorUC)
+	if deps.ProductUC != nil && deps.InspectionUC != nil {
+		inspectorH := handlers.NewInspectorHandler(deps.ProductUC, deps.InspectionUC)
 
 		var h http.Handler = inspectorH
 		// Flutter inspector アプリは Firebase Auth を使っており認証必須
