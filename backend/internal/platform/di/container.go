@@ -198,7 +198,7 @@ type Container struct {
 	OrderUC            *uc.OrderUsecase
 	PaymentUC          *uc.PaymentUsecase
 	PermissionUC       *uc.PermissionUsecase
-	ProductUC          *uc.ProductUsecase
+	PrintUC            *uc.PrintUsecase
 	ProductionUC       *uc.ProductionUsecase
 	ProductBlueprintUC *uc.ProductBlueprintUsecase
 	SaleUC             *uc.SaleUsecase
@@ -352,8 +352,8 @@ func NewContainer(ctx context.Context) (*Container, error) {
 	paymentUC := uc.NewPaymentUsecase(paymentRepo)
 	permissionUC := uc.NewPermissionUsecase(permissionRepo)
 
-	// ★ ProductUsecase に PrintLogRepo + InspectionRepo を注入
-	productUC := uc.NewProductUsecase(productRepo, printLogRepo, inspectionRepo)
+	// ★ PrintUsecase に PrintLogRepo + InspectionRepo を注入
+	printUC := uc.NewPrintUsecase(productRepo, printLogRepo, inspectionRepo)
 
 	// ★ ProductionUsecase に member.Service + productBlueprint.Service + brand.Service を注入
 	productionUC := uc.NewProductionUsecase(
@@ -440,7 +440,7 @@ func NewContainer(ctx context.Context) (*Container, error) {
 		OrderUC:            orderUC,
 		PaymentUC:          paymentUC,
 		PermissionUC:       permissionUC,
-		ProductUC:          productUC,
+		PrintUC:            printUC,
 		ProductionUC:       productionUC,
 		ProductBlueprintUC: productBlueprintUC,
 		SaleUC:             saleUC,
@@ -487,7 +487,7 @@ func (c *Container) RouterDeps() httpin.RouterDeps {
 		OrderUC:            c.OrderUC,
 		PaymentUC:          c.PaymentUC,
 		PermissionUC:       c.PermissionUC,
-		ProductUC:          c.ProductUC,
+		PrintUC:            c.PrintUC,
 		ProductionUC:       c.ProductionUC,
 		ProductBlueprintUC: c.ProductBlueprintUC,
 		SaleUC:             c.SaleUC,

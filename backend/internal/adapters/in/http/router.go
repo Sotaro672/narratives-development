@@ -38,7 +38,7 @@ type RouterDeps struct {
 	OrderUC            *usecase.OrderUsecase
 	PaymentUC          *usecase.PaymentUsecase
 	PermissionUC       *usecase.PermissionUsecase
-	ProductUC          *usecase.ProductUsecase
+	PrintUC            *usecase.PrintUsecase
 	ProductionUC       *usecase.ProductionUsecase
 	ProductBlueprintUC *usecase.ProductBlueprintUsecase
 	SaleUC             *usecase.SaleUsecase
@@ -220,8 +220,8 @@ func NewRouter(deps RouterDeps) http.Handler {
 	// ================================
 	// Products
 	// ================================
-	if deps.ProductUC != nil {
-		productH := handlers.NewProductHandler(deps.ProductUC, deps.ProductionUC, deps.ModelUC)
+	if deps.PrintUC != nil {
+		productH := handlers.NewProductHandler(deps.PrintUC, deps.ProductionUC, deps.ModelUC)
 
 		var h http.Handler = productH
 		if authMw != nil {
@@ -356,8 +356,8 @@ func NewRouter(deps RouterDeps) http.Handler {
 	// ================================
 	// ⭐ 検品 API（Inspector 用）
 	// ================================
-	if deps.ProductUC != nil && deps.InspectionUC != nil {
-		inspectorH := handlers.NewInspectorHandler(deps.ProductUC, deps.InspectionUC)
+	if deps.PrintUC != nil && deps.InspectionUC != nil {
+		inspectorH := handlers.NewInspectorHandler(deps.PrintUC, deps.InspectionUC)
 
 		var h http.Handler = inspectorH
 		// Flutter inspector アプリは Firebase Auth を使っており認証必須

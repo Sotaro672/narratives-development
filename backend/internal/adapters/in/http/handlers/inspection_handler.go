@@ -13,12 +13,12 @@ import (
 )
 
 type InspectorHandler struct {
-	productUC    *usecase.ProductUsecase
+	productUC    *usecase.PrintUsecase
 	inspectionUC *usecase.InspectionUsecase
 }
 
 func NewInspectorHandler(
-	productUC *usecase.ProductUsecase,
+	productUC *usecase.PrintUsecase,
 	inspectionUC *usecase.InspectionUsecase,
 ) http.Handler {
 	return &InspectorHandler{

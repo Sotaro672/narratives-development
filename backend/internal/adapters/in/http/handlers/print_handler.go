@@ -14,14 +14,14 @@ import (
 
 // ProductHandler は /products 関連のエンドポイントを担当します。
 type ProductHandler struct {
-	uc           *usecase.ProductUsecase
+	uc           *usecase.PrintUsecase
 	productionUC *usecase.ProductionUsecase
 	modelUC      *usecase.ModelUsecase
 }
 
 // NewProductHandler はHTTPハンドラを初期化します。
 func NewProductHandler(
-	uc *usecase.ProductUsecase,
+	uc *usecase.PrintUsecase,
 	productionUC *usecase.ProductionUsecase,
 	modelUC *usecase.ModelUsecase,
 ) http.Handler {

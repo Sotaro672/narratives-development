@@ -1,4 +1,4 @@
-// backend/internal/application/usecase/product_usecase.go
+// backend/internal/application/usecase/print_usecase.go
 package usecase
 
 import (
@@ -14,7 +14,8 @@ import (
 // 👉 https://narratives.jp/{productId} という形で利用
 const publicQRBaseURL = "https://narratives.jp"
 
-// ProductRepo defines the minimal persistence port needed by ProductUsecase.
+// ProductRepo defines the minimal persistence port needed by PrintUsecase
+// to operate on Product entities.
 type ProductRepo interface {
 	GetByID(ctx context.Context, id string) (productdom.Product, error)
 	Exists(ctx context.Context, id string) (bool, error)
@@ -46,19 +47,19 @@ type InspectionRepo interface {
 	Save(ctx context.Context, batch productdom.InspectionBatch) (productdom.InspectionBatch, error)
 }
 
-// ProductUsecase orchestrates product operations.
-type ProductUsecase struct {
+// PrintUsecase orchestrates print & inspection operations around products.
+type PrintUsecase struct {
 	repo           ProductRepo
 	printLogRepo   PrintLogRepo
 	inspectionRepo InspectionRepo
 }
 
-func NewProductUsecase(
+func NewPrintUsecase(
 	repo ProductRepo,
 	printLogRepo PrintLogRepo,
 	inspectionRepo InspectionRepo,
-) *ProductUsecase {
-	return &ProductUsecase{
+) *PrintUsecase {
+	return &PrintUsecase{
 		repo:           repo,
 		printLogRepo:   printLogRepo,
 		inspectionRepo: inspectionRepo,
@@ -69,21 +70,21 @@ func NewProductUsecase(
 // Queries
 // ==========================
 
-func (u *ProductUsecase) GetByID(ctx context.Context, id string) (productdom.Product, error) {
+func (u *PrintUsecase) GetByID(ctx context.Context, id string) (productdom.Product, error) {
 	return u.repo.GetByID(ctx, strings.TrimSpace(id))
 }
 
-func (u *ProductUsecase) Exists(ctx context.Context, id string) (bool, error) {
+func (u *PrintUsecase) Exists(ctx context.Context, id string) (bool, error) {
 	return u.repo.Exists(ctx, strings.TrimSpace(id))
 }
 
 // ★ 追加: 同一 productionId を持つ Product を一覧取得
-func (u *ProductUsecase) ListByProductionID(ctx context.Context, productionID string) ([]productdom.Product, error) {
+func (u *PrintUsecase) ListByProductionID(ctx context.Context, productionID string) ([]productdom.Product, error) {
 	return u.repo.ListByProductionID(ctx, strings.TrimSpace(productionID))
 }
 
 // ★ 追加: 同一 productionId を持つ PrintLog を一覧取得（QrPayloads 付き）
-func (u *ProductUsecase) ListPrintLogsByProductionID(ctx context.Context, productionID string) ([]productdom.PrintLog, error) {
+func (u *PrintUsecase) ListPrintLogsByProductionID(ctx context.Context, productionID string) ([]productdom.PrintLog, error) {
 	if u.printLogRepo == nil {
 		return nil, fmt.Errorf("printLogRepo is nil")
 	}
@@ -120,7 +121,7 @@ func (u *ProductUsecase) ListPrintLogsByProductionID(ctx context.Context, produc
 // ★ 追加: inspections を単独で作成する
 //
 // POST /products/inspections 用
-func (u *ProductUsecase) CreateInspectionBatchForProduction(
+func (u *PrintUsecase) CreateInspectionBatchForProduction(
 	ctx context.Context,
 	productionID string,
 ) (productdom.InspectionBatch, error) {
@@ -175,7 +176,7 @@ func (u *ProductUsecase) CreateInspectionBatchForProduction(
 // ★ 追加: 1 回の印刷分の Product 一覧から print_log を 1 件作成し、
 //
 //	同じタイミングで inspections を 1 件作成する。
-func (u *ProductUsecase) CreatePrintLogForProduction(ctx context.Context, productionID string) (productdom.PrintLog, error) {
+func (u *PrintUsecase) CreatePrintLogForProduction(ctx context.Context, productionID string) (productdom.PrintLog, error) {
 	if u.printLogRepo == nil {
 		return productdom.PrintLog{}, fmt.Errorf("printLogRepo is nil")
 	}
@@ -284,7 +285,7 @@ func (u *ProductUsecase) CreatePrintLogForProduction(ctx context.Context, produc
 // 以前の仕様（Create のたびに 1 件ずつ print_log を作成）は廃止し、
 // 「1 回の印刷バッチでまとめて PrintLog を作る」ために
 // CreatePrintLogForProduction を別途呼び出す方式に変更。
-func (u *ProductUsecase) Create(ctx context.Context, p productdom.Product) (productdom.Product, error) {
+func (u *PrintUsecase) Create(ctx context.Context, p productdom.Product) (productdom.Product, error) {
 	created, err := u.repo.Create(ctx, p)
 	if err != nil {
 		return productdom.Product{}, err
@@ -293,11 +294,12 @@ func (u *ProductUsecase) Create(ctx context.Context, p productdom.Product) (prod
 }
 
 // Save: 既存の互換用途として残しておく（フルアップサート）
-func (u *ProductUsecase) Save(ctx context.Context, p productdom.Product) (productdom.Product, error) {
+func (u *PrintUsecase) Save(ctx context.Context, p productdom.Product) (productdom.Product, error) {
 	return u.repo.Save(ctx, p)
 }
 
 // Update:
+//
 // - ID               … URL パスの id で決定（不変）
 // - ModelID          … POST 時に確定、更新不可
 // - ProductionID     … POST 時に確定、更新不可
@@ -306,7 +308,7 @@ func (u *ProductUsecase) Save(ctx context.Context, p productdom.Product) (produc
 // - ConnectedToken   … 更新対象
 // - InspectedAt      … 更新対象（InspectionResult の入力日時）
 // - InspectedBy      … 更新対象（InspectionResult の入力者）
-func (u *ProductUsecase) Update(ctx context.Context, id string, in productdom.Product) (productdom.Product, error) {
+func (u *PrintUsecase) Update(ctx context.Context, id string, in productdom.Product) (productdom.Product, error) {
 	id = strings.TrimSpace(id)
 	if id == "" {
 		return productdom.Product{}, productdom.ErrInvalidID
