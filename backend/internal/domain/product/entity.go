@@ -418,15 +418,24 @@ func (b InspectionBatch) validate() error {
 		}
 
 		if ins.InspectionResult != nil {
-			// 結果が入っている場合は、結果の妥当性 + inspectedBy / inspectedAt の整合性をチェック
+			// 結果が入っている場合は Product と同じルールで整合性チェック
 			if !IsValidInspectionResult(*ins.InspectionResult) {
 				return ErrInvalidInspectionResult
 			}
-			if ins.InspectedBy == nil || strings.TrimSpace(*ins.InspectedBy) == "" {
-				return ErrInvalidInspectedBy
-			}
-			if ins.InspectedAt == nil || ins.InspectedAt.IsZero() {
-				return ErrInvalidInspectedAt
+
+			switch *ins.InspectionResult {
+			case InspectionPassed, InspectionFailed:
+				if ins.InspectedBy == nil || strings.TrimSpace(*ins.InspectedBy) == "" {
+					return ErrInvalidInspectedBy
+				}
+				if ins.InspectedAt == nil || ins.InspectedAt.IsZero() {
+					return ErrInvalidInspectedAt
+				}
+			case InspectionNotYet, InspectionNotManufactured:
+				// 未検査 / 未製造のときは inspectedBy / inspectedAt は両方 nil であるべき
+				if ins.InspectedBy != nil || ins.InspectedAt != nil {
+					return ErrInvalidCoherence
+				}
 			}
 		} else {
 			// inspectionResult が nil の場合、他も nil であるべき

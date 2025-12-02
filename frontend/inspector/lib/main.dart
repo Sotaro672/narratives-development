@@ -5,6 +5,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'firebase_options.dart';
 import 'screens/login_screen.dart';
 import 'screens/inspection_scan_screen.dart';
+import 'screens/inspection_detail_screen.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -25,7 +26,20 @@ class InspectorApp extends StatelessWidget {
         colorScheme: ColorScheme.fromSeed(seedColor: Colors.indigo),
         useMaterial3: true,
       ),
-      home: const _RootPage(),
+
+      // ★ ここを routes ではなく onGenerateRoute に変更
+      onGenerateRoute: (settings) {
+        if (settings.name == '/detail') {
+          final productId = settings.arguments as String;
+          return MaterialPageRoute(
+            builder: (_) => InspectionDetailScreen(productId: productId),
+          );
+        }
+
+        return MaterialPageRoute(builder: (_) => const _RootPage());
+      },
+
+      initialRoute: '/',
     );
   }
 }
@@ -47,6 +61,7 @@ class _RootPage extends StatelessWidget {
         }
 
         final user = snapshot.data;
+
         // 未ログイン → ログイン画面
         if (user == null) {
           return const LoginScreen();

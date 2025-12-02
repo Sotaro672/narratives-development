@@ -110,9 +110,9 @@ func (u *ProductUsecase) ListPrintLogsByProductionID(ctx context.Context, produc
 				continue
 			}
 
-			// BuildProductQRValue は (productID, baseURL) を受け取り
-			// QR コード用の JSON 文字列を返す想定
-			payload, err := productdom.BuildProductQRValue(productID, baseURL)
+			// BuildProductQRValue は (baseURL, productID) を受け取り
+			// QR コード用の文字列を返す
+			payload, err := productdom.BuildProductQRValue(baseURL, productID)
 			if err != nil {
 				// 運用方針次第だが、ここではエラーを返して 500 に繋げる
 				return nil, err
@@ -162,7 +162,7 @@ func (u *ProductUsecase) CreateInspectionBatchForProduction(
 		return productdom.InspectionBatch{}, productdom.ErrInvalidInspectionProductIDs
 	}
 
-	// InspectionBatch エンティティ作成（全て null, status=inspecting）
+	// InspectionBatch エンティティ作成（全て nil, status=inspecting）
 	batch, err := productdom.NewInspectionBatch(
 		pid,
 		productdom.InspectionStatusInspecting,
@@ -268,7 +268,7 @@ func (u *ProductUsecase) CreatePrintLogForProduction(ctx context.Context, produc
 		return productdom.PrintLog{}, err
 	}
 
-	// QrPayloads を付与（JSON文字列の配列）
+	// QrPayloads を付与（文字列の配列）
 	baseURL := defaultQRBaseURL
 	var payloads []string
 	for _, productID := range created.ProductIDs {
@@ -276,7 +276,7 @@ func (u *ProductUsecase) CreatePrintLogForProduction(ctx context.Context, produc
 		if productID == "" {
 			continue
 		}
-		payload, err := productdom.BuildProductQRValue(productID, baseURL)
+		payload, err := productdom.BuildProductQRValue(baseURL, productID)
 		if err != nil {
 			return productdom.PrintLog{}, err
 		}
@@ -374,6 +374,46 @@ func (u *ProductUsecase) UpdateInspectionForProduct(
 	}
 
 	// 保存（InspectionRepo.Save 側で Firestore に反映）
+	updated, err := u.inspectionRepo.Save(ctx, batch)
+	if err != nil {
+		return productdom.InspectionBatch{}, err
+	}
+
+	return updated, nil
+}
+
+// ★ 追加: 検品完了（未検品を notManufactured にし、ステータスを completed にする）
+func (u *ProductUsecase) CompleteInspectionForProduction(
+	ctx context.Context,
+	productionID string,
+	by string,
+	at time.Time,
+) (productdom.InspectionBatch, error) {
+
+	if u.inspectionRepo == nil {
+		return productdom.InspectionBatch{}, fmt.Errorf("inspectionRepo is nil")
+	}
+
+	pid := strings.TrimSpace(productionID)
+	if pid == "" {
+		return productdom.InspectionBatch{}, productdom.ErrInvalidInspectionProductionID
+	}
+
+	// 現在のバッチを取得
+	batch, err := u.inspectionRepo.GetByProductionID(ctx, pid)
+	if err != nil {
+		return productdom.InspectionBatch{}, err
+	}
+
+	// ドメインサービス側で:
+	//   - 未検品(nil / notYet) を notManufactured に変更
+	//   - inspectedBy / inspectedAt を一括で設定
+	//   - Status を completed に変更
+	if err := batch.Complete(by, at); err != nil {
+		return productdom.InspectionBatch{}, err
+	}
+
+	// 保存
 	updated, err := u.inspectionRepo.Save(ctx, batch)
 	if err != nil {
 		return productdom.InspectionBatch{}, err
