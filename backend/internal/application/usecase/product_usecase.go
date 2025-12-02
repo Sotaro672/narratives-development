@@ -35,10 +35,10 @@ type PrintLogRepo interface {
 
 // ★ Inspection 用リポジトリ（print_log と同じ product ドメイン配下の集約として扱う）
 type InspectionRepo interface {
-	// inspections_by_production/{productionId} を新規作成
+	// inspections/{productionId} を新規作成
 	Create(ctx context.Context, batch productdom.InspectionBatch) (productdom.InspectionBatch, error)
 
-	// productionId から inspections_by_production を取得
+	// productionId から inspections を取得
 	GetByProductionID(ctx context.Context, productionID string) (productdom.InspectionBatch, error)
 
 	// 既存バッチを保存（フルアップサート想定）
@@ -124,7 +124,7 @@ func (u *ProductUsecase) ListPrintLogsByProductionID(ctx context.Context, produc
 	return logs, nil
 }
 
-// ★ 追加: inspections_by_production を単独で作成する
+// ★ 追加: inspections を単独で作成する
 //
 // POST /products/inspections 用
 func (u *ProductUsecase) CreateInspectionBatchForProduction(
@@ -181,7 +181,7 @@ func (u *ProductUsecase) CreateInspectionBatchForProduction(
 
 // ★ 追加: 1 回の印刷分の Product 一覧から print_log を 1 件作成し、
 //
-//	同じタイミングで inspections_by_production を 1 件作成する。
+//	同じタイミングで inspections を 1 件作成する。
 func (u *ProductUsecase) CreatePrintLogForProduction(ctx context.Context, productionID string) (productdom.PrintLog, error) {
 	if u.printLogRepo == nil {
 		return productdom.PrintLog{}, fmt.Errorf("printLogRepo is nil")
@@ -244,7 +244,7 @@ func (u *ProductUsecase) CreatePrintLogForProduction(ctx context.Context, produc
 		return productdom.PrintLog{}, err
 	}
 
-	// ★ ここで inspections_by_production/{productionId} 用のバッチを作成
+	// ★ ここで inspections/{productionId} 用のバッチを作成
 	//   - inspectionResult / inspectedBy / inspectedAt はすべて nil で初期化
 	//   - status は "inspecting" 固定で開始
 	batch, err := productdom.NewInspectionBatch(
@@ -286,7 +286,7 @@ func (u *ProductUsecase) CreatePrintLogForProduction(ctx context.Context, produc
 	return created, nil
 }
 
-// ★ 追加: inspections_by_production 内の 1 productId 分を更新する
+// ★ 追加: inspections 内の 1 productId 分を更新する
 //
 // PATCH /products/inspections 用
 func (u *ProductUsecase) UpdateInspectionForProduct(

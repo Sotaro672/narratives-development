@@ -325,7 +325,7 @@ func (r *PrintLogRepositoryFS) ListByProductionID(ctx context.Context, productio
 }
 
 // ============================================================
-// InspectionRepositoryFS: inspections_by_production 用 Firestore リポジトリ
+// InspectionRepositoryFS: inspections 用 Firestore リポジトリ
 //   usecase.InspectionRepo の Create / GetByProductionID / Save を実装する
 // ============================================================
 
@@ -338,10 +338,10 @@ func NewInspectionRepositoryFS(client *firestore.Client) *InspectionRepositoryFS
 }
 
 func (r *InspectionRepositoryFS) col() *firestore.CollectionRef {
-	return r.Client.Collection("inspections_by_production")
+	return r.Client.Collection("inspections")
 }
 
-// Create: inspections_by_production/{productionId} に 1 ドキュメント作成
+// Create: inspections/{productionId} に 1 ドキュメント作成
 //
 //	productionId をドキュメントIDとして保存します。
 func (r *InspectionRepositoryFS) Create(ctx context.Context, v productdom.InspectionBatch) (productdom.InspectionBatch, error) {
@@ -374,7 +374,7 @@ func (r *InspectionRepositoryFS) Create(ctx context.Context, v productdom.Inspec
 	return docToInspectionBatch(snap)
 }
 
-// GetByProductionID: inspections_by_production/{productionId} を取得
+// GetByProductionID: inspections/{productionId} を取得
 func (r *InspectionRepositoryFS) GetByProductionID(
 	ctx context.Context,
 	productionID string,
@@ -400,7 +400,7 @@ func (r *InspectionRepositoryFS) GetByProductionID(
 	return docToInspectionBatch(snap)
 }
 
-// Save: inspections_by_production/{productionId} を Upsert 的に保存
+// Save: inspections/{productionId} を Upsert 的に保存
 func (r *InspectionRepositoryFS) Save(
 	ctx context.Context,
 	v productdom.InspectionBatch,
@@ -566,7 +566,7 @@ func printLogToDoc(v productdom.PrintLog) map[string]any {
 	return m
 }
 
-// inspections_by_production 用の変換 (domain -> Firestore)
+// inspections 用の変換 (domain -> Firestore)
 func inspectionBatchToDoc(v productdom.InspectionBatch) map[string]any {
 	items := make([]map[string]any, 0, len(v.Inspections))
 	for _, ins := range v.Inspections {

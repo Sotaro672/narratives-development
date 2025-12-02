@@ -68,7 +68,7 @@ func (h *ProductHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	// ------------------------------------------------------------
 	// POST /products/inspections
 	//   body: { "productionId": "xxx" }
-	//   → inspections_by_production/{productionId} ドキュメントを作成
+	//   → inspections/{productionId} ドキュメントを作成
 	//      inspections は productId ごとに null 初期化
 	//      status は "inspecting" で開始
 	// ------------------------------------------------------------
@@ -324,7 +324,7 @@ func (h *ProductHandler) createPrintLog(w http.ResponseWriter, r *http.Request) 
 //   body: { "productionId": "xxx" }
 //
 //   1. 該当 productionId の Product 一覧を usecase から取得
-//   2. inspections_by_production/{productionId} ドキュメントを作成
+//   2. inspections/{productionId} ドキュメントを作成
 //      - inspections は productId ごとに null 初期化
 //      - status は "inspecting" で開始
 // ------------------------------------------------------------

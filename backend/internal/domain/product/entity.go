@@ -64,10 +64,10 @@ const (
 )
 
 // ===============================
-// Inspection batch (inspections_by_production)
+// Inspection batch (inspections)
 // ===============================
 
-// InspectionStatus は inspections_by_production のステータス
+// InspectionStatus は inspections のステータス
 type InspectionStatus string
 
 const (
@@ -83,9 +83,9 @@ type InspectionItem struct {
 	InspectedAt      *time.Time        `json:"inspectedAt"`      // create 時は nil
 }
 
-// InspectionBatch は 1 productionId に紐づく inspections_by_production ドキュメント
+// InspectionBatch は 1 productionId に紐づく inspections ドキュメント
 //
-//	inspections_by_production/{productionId} {
+//	inspections/{productionId} {
 //	  "productionId": "...",
 //	  "status": "inspecting" | "completed",
 //	  "inspections": [
@@ -224,7 +224,7 @@ func NewPrintLog(
 	return pl, nil
 }
 
-// NewInspectionBatch は inspections_by_production 用のバッチを生成します。
+// NewInspectionBatch は inspections 用のバッチを生成します。
 // - productionID は必須
 // - status は inspecting / completed のいずれか
 // - productIDs は 1 件以上必要

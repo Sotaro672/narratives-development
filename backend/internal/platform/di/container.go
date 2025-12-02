@@ -287,7 +287,7 @@ func NewContainer(ctx context.Context) (*Container, error) {
 	// ★ PrintLog 用リポジトリ
 	printLogRepo := fs.NewPrintLogRepositoryFS(fsClient)
 
-	// ★ Inspection 用リポジトリ（inspections_by_production）
+	// ★ Inspection 用リポジトリ（inspections）
 	inspectionRepo := fs.NewInspectionRepositoryFS(fsClient)
 
 	// ★ History repositories
