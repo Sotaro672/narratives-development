@@ -31,8 +31,10 @@ func (h *InspectorHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 
 	switch {
+
 	// ------------------------------------------------------------
 	// GET /inspector/products/{productId}
+	//   → 検品アプリ（Flutter）用の詳細情報取得
 	// ------------------------------------------------------------
 	case r.Method == http.MethodGet &&
 		strings.HasPrefix(r.URL.Path, "/inspector/products/"):
@@ -62,7 +64,8 @@ func (h *InspectorHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	// ------------------------------------------------------------
 	// PATCH /products/inspections
-	//   → 検品アプリから inspectionResult 等を更新するバッチ API
+	//   → inspections テーブル（1 productId 分）更新 API
+	//   ※ products テーブル側も同時に更新される（InspectionUsecase 内で統合済）
 	// ------------------------------------------------------------
 	case r.Method == http.MethodPatch && r.URL.Path == "/products/inspections":
 		h.updateInspection(w, r)
@@ -74,9 +77,10 @@ func (h *InspectorHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 }
 
 // ------------------------------------------------------------
+// PATCH /products/inspections
 //
-//	検品結果更新: PATCH /products/inspections
-//	  ※ 元々 ProductHandler にあった処理を InspectorUsecase に移譲済み
+//	検品結果を更新する（1 productId 単位）
+//	→ InspectionUsecase.UpdateInspectionForProduct に移譲
 //
 // ------------------------------------------------------------
 func (h *InspectorHandler) updateInspection(w http.ResponseWriter, r *http.Request) {
@@ -84,7 +88,9 @@ func (h *InspectorHandler) updateInspection(w http.ResponseWriter, r *http.Reque
 
 	if h.inspectionUC == nil {
 		w.WriteHeader(http.StatusInternalServerError)
-		_ = json.NewEncoder(w).Encode(map[string]string{"error": "inspection usecase is not configured"})
+		_ = json.NewEncoder(w).Encode(map[string]string{
+			"error": "inspection usecase is not configured",
+		})
 		return
 	}
 
@@ -99,7 +105,9 @@ func (h *InspectorHandler) updateInspection(w http.ResponseWriter, r *http.Reque
 
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		w.WriteHeader(http.StatusBadRequest)
-		_ = json.NewEncoder(w).Encode(map[string]string{"error": "invalid json"})
+		_ = json.NewEncoder(w).Encode(map[string]string{
+			"error": "invalid json",
+		})
 		return
 	}
 
@@ -108,7 +116,9 @@ func (h *InspectorHandler) updateInspection(w http.ResponseWriter, r *http.Reque
 
 	if req.ProductionID == "" || req.ProductID == "" {
 		w.WriteHeader(http.StatusBadRequest)
-		_ = json.NewEncoder(w).Encode(map[string]string{"error": "productionId and productId are required"})
+		_ = json.NewEncoder(w).Encode(map[string]string{
+			"error": "productionId and productId are required",
+		})
 		return
 	}
 
@@ -122,7 +132,7 @@ func (h *InspectorHandler) updateInspection(w http.ResponseWriter, r *http.Reque
 		req.Status,
 	)
 	if err != nil {
-		// Inspection 系のエラーを HTTP にマッピング
+
 		code := http.StatusInternalServerError
 		switch err {
 		case productdom.ErrInvalidInspectionProductionID,
@@ -132,12 +142,15 @@ func (h *InspectorHandler) updateInspection(w http.ResponseWriter, r *http.Reque
 			productdom.ErrInvalidInspectedAt,
 			productdom.ErrInvalidInspectionStatus:
 			code = http.StatusBadRequest
+
 		case productdom.ErrNotFound:
 			code = http.StatusNotFound
 		}
 
 		w.WriteHeader(code)
-		_ = json.NewEncoder(w).Encode(map[string]string{"error": err.Error()})
+		_ = json.NewEncoder(w).Encode(map[string]string{
+			"error": err.Error(),
+		})
 		return
 	}
 

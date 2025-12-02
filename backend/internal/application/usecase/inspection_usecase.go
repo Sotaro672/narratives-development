@@ -1,4 +1,4 @@
-// backend\internal\application\usecase\inspection_usecase.go
+// backend/internal/application/usecase/inspection_usecase.go
 package usecase
 
 import (
@@ -10,27 +10,63 @@ import (
 	productdom "narratives/internal/domain/product"
 )
 
-// InspectorUsecase は検品アプリ（inspector）専用のユースケースをまとめる。
+// ------------------------------------------------------------
+// Ports (Repository Interfaces)
+// ------------------------------------------------------------
+
+// ProductInspectionRepo は products テーブル側の inspectionResult を更新するための
+// 最小限のポートです。
+// 具体的な実装（Firestore など）は adapters 層で用意します。
+type ProductInspectionRepo interface {
+	// 指定 productId の inspectionResult を更新する
+	UpdateInspectionResult(
+		ctx context.Context,
+		productID string,
+		result productdom.InspectionResult,
+	) error
+}
+
+// InspectionRepo インターフェース自体は既存のものを利用する想定。
+//   - GetByProductionID(ctx, productionID)
+//   - Save(ctx, batch)
+// の 2 つを使います。
+// （定義は別ファイルに既に存在している前提です）
+
+// ------------------------------------------------------------
+// Usecase
+// ------------------------------------------------------------
+
+// InspectionUsecase は検品アプリ（inspector）専用のユースケースをまとめる。
 // - inspections テーブルの 1 productId 分の検品結果更新
 // - 検品完了処理（一括クローズ）
+// に加えて、
+// - products テーブル側の inspectionResult も同じタイミングで更新する。
 type InspectionUsecase struct {
 	inspectionRepo InspectionRepo
+	productRepo    ProductInspectionRepo
 }
 
 func NewInspectionUsecase(
 	inspectionRepo InspectionRepo,
+	productRepo ProductInspectionRepo,
 ) *InspectionUsecase {
 	return &InspectionUsecase{
 		inspectionRepo: inspectionRepo,
+		productRepo:    productRepo,
 	}
 }
 
 // ★ inspections 内の 1 productId 分を更新する
 //
 // もともと ProductUsecase.UpdateInspectionForProduct にあった処理を
-// inspections テーブル専用に抜き出したもの。
+// inspections テーブル専用に抜き出したものをベースに、
 //
-// PATCH /products/inspections 用
+// さらに products テーブルの inspectionResult も同時に更新するように拡張。
+//
+// Flutter 側からは PATCH /products/inspections を 1 回叩くだけで、
+// - inspections コレクション
+// - products コレクション
+// の両方が更新される想定。
 func (u *InspectionUsecase) UpdateInspectionForProduct(
 	ctx context.Context,
 	productionID string,
@@ -54,13 +90,13 @@ func (u *InspectionUsecase) UpdateInspectionForProduct(
 		return productdom.InspectionBatch{}, productdom.ErrInvalidInspectionProductIDs
 	}
 
-	// 現在のバッチを取得
+	// 1) 現在のバッチを取得（inspections/{productionId}）
 	batch, err := u.inspectionRepo.GetByProductionID(ctx, pid)
 	if err != nil {
 		return productdom.InspectionBatch{}, err
 	}
 
-	// 対象 productId の InspectionItem を探す
+	// 2) 対象 productId の InspectionItem を探す
 	found := false
 	for i := range batch.Inspections {
 		if strings.TrimSpace(batch.Inspections[i].ProductID) != pdID {
@@ -104,7 +140,7 @@ func (u *InspectionUsecase) UpdateInspectionForProduct(
 		return productdom.InspectionBatch{}, productdom.ErrInvalidInspectionProductIDs
 	}
 
-	// status の更新（任意）
+	// 3) status の更新（任意）
 	if status != nil {
 		if !productdom.IsValidInspectionStatus(*status) {
 			return productdom.InspectionBatch{}, productdom.ErrInvalidInspectionStatus
@@ -112,10 +148,18 @@ func (u *InspectionUsecase) UpdateInspectionForProduct(
 		batch.Status = *status
 	}
 
-	// 保存（InspectionRepo.Save 側で Firestore に反映）
+	// 4) inspections テーブル側を保存
 	updated, err := u.inspectionRepo.Save(ctx, batch)
 	if err != nil {
 		return productdom.InspectionBatch{}, err
+	}
+
+	// 5) products テーブル側の inspectionResult も同期
+	//    （result が指定されている場合のみ）
+	if result != nil && u.productRepo != nil {
+		if err := u.productRepo.UpdateInspectionResult(ctx, pdID, *result); err != nil {
+			return productdom.InspectionBatch{}, err
+		}
 	}
 
 	return updated, nil
@@ -124,9 +168,15 @@ func (u *InspectionUsecase) UpdateInspectionForProduct(
 // ★ 検品完了（未検品を notManufactured にし、ステータスを completed にする）
 //
 // もともと ProductUsecase.CompleteInspectionForProduction にあった処理を
-// inspections テーブル専用に抜き出したもの。
+// inspections テーブル専用に抜き出したものをベースに、
 //
-// PATCH /products/inspections/complete 用
+// さらに「完了後の各 productId の inspectionResult を products テーブル側にも反映」
+// するように拡張。
+//
+// Flutter 側からは PATCH /products/inspections/complete を 1 回叩くだけで、
+// - inspections コレクション側の status/inspectionResult
+// - products コレクション側の inspectionResult
+// が同期される想定。
 func (u *InspectionUsecase) CompleteInspectionForProduction(
 	ctx context.Context,
 	productionID string,
@@ -143,21 +193,41 @@ func (u *InspectionUsecase) CompleteInspectionForProduction(
 		return productdom.InspectionBatch{}, productdom.ErrInvalidInspectionProductionID
 	}
 
-	// 現在のバッチを取得
+	// 1) 現在のバッチを取得
 	batch, err := u.inspectionRepo.GetByProductionID(ctx, pid)
 	if err != nil {
 		return productdom.InspectionBatch{}, err
 	}
 
-	// ドメイン側の Complete を利用して一括更新
+	// 2) ドメイン側の Complete を利用して一括更新
+	//    - inspectionResult == "notYet" → "notManufactured"
+	//    - status → "completed"（など）
 	if err := batch.Complete(by, at); err != nil {
 		return productdom.InspectionBatch{}, err
 	}
 
-	// 保存
+	// 3) inspections テーブル側を保存
 	updated, err := u.inspectionRepo.Save(ctx, batch)
 	if err != nil {
 		return productdom.InspectionBatch{}, err
+	}
+
+	// 4) products テーブル側の inspectionResult も同期
+	//    各 InspectionItem の InspectionResult をそのまま products に反映する。
+	if u.productRepo != nil {
+		for _, item := range updated.Inspections {
+			if item.InspectionResult == nil {
+				continue
+			}
+			result := *item.InspectionResult
+			if !productdom.IsValidInspectionResult(result) {
+				// 念のため検証
+				return productdom.InspectionBatch{}, productdom.ErrInvalidInspectionResult
+			}
+			if err := u.productRepo.UpdateInspectionResult(ctx, item.ProductID, result); err != nil {
+				return productdom.InspectionBatch{}, err
+			}
+		}
 	}
 
 	return updated, nil

@@ -232,6 +232,42 @@ func (r *ProductRepositoryFS) List(
 }
 
 // ============================================================
+// ProductInspectionRepo 用メソッド
+// ============================================================
+
+// UpdateInspectionResult implements usecase.ProductInspectionRepo.
+//
+// inspections テーブルの更新にあわせて、products/{productId} の
+// inspectionResult を部分更新します。
+func (r *ProductRepositoryFS) UpdateInspectionResult(
+	ctx context.Context,
+	productID string,
+	result productdom.InspectionResult,
+) error {
+	if r.Client == nil {
+		return errors.New("firestore client is nil")
+	}
+
+	id := strings.TrimSpace(productID)
+	if id == "" {
+		return productdom.ErrNotFound
+	}
+
+	updates := map[string]any{
+		"inspectionResult": strings.TrimSpace(string(result)),
+	}
+
+	_, err := r.col().Doc(id).Set(ctx, updates, firestore.MergeAll)
+	if err != nil {
+		if status.Code(err) == codes.NotFound {
+			return productdom.ErrNotFound
+		}
+		return err
+	}
+	return nil
+}
+
+// ============================================================
 // PrintLogRepositoryFS
 // ============================================================
 

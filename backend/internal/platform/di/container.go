@@ -444,7 +444,8 @@ func NewContainer(ctx context.Context) (*Container, error) {
 
 	// ★ InspectionUsecase（検品アプリ専用）
 	inspectionUC := uc.NewInspectionUsecase(
-		inspectionRepo,
+		inspectionRepo, // inspections テーブル
+		productRepo,    // products テーブル（inspectionResult 同期用）
 	)
 
 	// ★ ProductUsecase（Inspector 詳細画面用）
