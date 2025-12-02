@@ -1,4 +1,4 @@
-// backend\internal\application\usecase\inspector_usecase.go
+// backend/internal/application/usecase/product_usecase.go
 package usecase
 
 import (
@@ -13,12 +13,12 @@ import (
 // DTO 群（Inspector 用 ReadModel）
 // ------------------------------------------------------------
 
-type InspectorColorDTO struct {
+type ProductColorDTO struct {
 	RGB  int    `json:"rgb"`
 	Name string `json:"name,omitempty"`
 }
 
-type InspectorBlueprintDTO struct {
+type ProductBlueprintDTO struct {
 	ProductName      string   `json:"productName"`
 	BrandID          string   `json:"brandId"`
 	CompanyID        string   `json:"companyId"`
@@ -38,7 +38,7 @@ type InspectionHistoryItemDTO struct {
 	InspectedAt      *string `json:"inspectedAt,omitempty"`
 }
 
-type InspectorProductDetail struct {
+type ProductDetail struct {
 	ProductID        string `json:"productId"`
 	ModelID          string `json:"modelId"`
 	ProductionID     string `json:"productionId"`
@@ -46,50 +46,48 @@ type InspectorProductDetail struct {
 
 	ModelNumber  string             `json:"modelNumber"`
 	Size         string             `json:"size"`
-	Color        InspectorColorDTO  `json:"color"`
+	Color        ProductColorDTO    `json:"color"`
 	Measurements map[string]float64 `json:"measurements"`
 
-	ProductBlueprintID string                `json:"productBlueprintId"`
-	Blueprint          InspectorBlueprintDTO `json:"blueprint"`
-
-	Inspections []InspectionHistoryItemDTO `json:"inspections"`
+	ProductBlueprintID  string              `json:"productBlueprintId"`
+	ProductBlueprintDTO ProductBlueprintDTO `json:"productBlueprintDTO"`
 }
 
 // ------------------------------------------------------------
 // Usecase / Repository インターフェース
 // ------------------------------------------------------------
 
-// InspectionQueryRepo は検品詳細画面用の ReadModel を構築するための
+// ProductQueryRepo は検品詳細画面用の ReadModel を構築するための
 // 最小限の読み取り専用ポートです。
-// 旧: InspectionQueryRepo
-type InspectorQueryRepo interface {
+// 旧: InspectionQueryRepo / InspectorQueryRepo
+type ProductQueryRepo interface {
 	GetProductByID(ctx context.Context, productID string) (productdom.Product, error)
 	GetModelByID(ctx context.Context, modelID string) (modeldom.ModelVariation, error)
 	GetProductionByID(ctx context.Context, productionID string) ( /* productiondom.Production */ interface{}, error)
 	GetProductBlueprintByID(ctx context.Context, bpID string) (bpdom.ProductBlueprint, error)
 }
 
-// InspectionUsecase は Inspector 用 DTO を組み立てるユースケースです。
-type InspectorUsecase struct {
-	repo InspectorQueryRepo
+// ProductUsecase は Inspector 用 DTO を組み立てるユースケースです。
+type ProductUsecase struct {
+	repo ProductQueryRepo
 }
 
-func NewInspectorUsecase(repo InspectorQueryRepo) *InspectorUsecase {
-	return &InspectorUsecase{repo: repo}
+func NewProductUsecase(repo ProductQueryRepo) *ProductUsecase {
+	return &ProductUsecase{repo: repo}
 }
 
 // GetInspectorProductDetail は productId を起点に各ドメインから情報を取得し，
 // InspectorProductDetail DTO に詰め替えて返します。
-func (u *InspectionUsecase) GetInspectorProductDetail(
+func (u *ProductUsecase) GetInspectorProductDetail(
 	ctx context.Context,
 	productID string,
-) (InspectorProductDetail, error) {
+) (ProductDetail, error) {
 	// TODO: ここで各ドメインリポジトリから取得して DTO に詰め替える
-	// - product: repo.GetProductByID
-	// - model:   repo.GetModelByID
-	// - production → productBlueprintId: repo.GetProductionByID
-	// - blueprint: repo.GetProductBlueprintByID
-	// - inspections: repo.ListInspectionsByProductID
-	// を呼び出して、InspectorProductDetail を構築する。
-	return InspectorProductDetail{}, nil
+	// - product:   u.repo.GetProductByID
+	// - model:     u.repo.GetModelByID
+	// - production → productBlueprintId: u.repo.GetProductionByID
+	// - blueprint: u.repo.GetProductBlueprintByID
+	// - inspections: （別途 DTO 専用リポジトリを定義して取得する想定）
+	// を呼び出して、ProductDetail を構築する。
+	return ProductDetail{}, nil
 }

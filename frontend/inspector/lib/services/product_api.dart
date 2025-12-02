@@ -32,8 +32,13 @@ class InspectorColor {
 class InspectorProductBlueprint {
   final String id;
   final String productName;
-  final String companyId;
-  final String brandId;
+
+  // ▼ 会社ID → 会社名
+  final String companyName;
+
+  // ▼ ブランドID → ブランド名
+  final String brandName;
+
   final String itemType;
   final String fit;
   final String material;
@@ -45,8 +50,8 @@ class InspectorProductBlueprint {
   InspectorProductBlueprint({
     required this.id,
     required this.productName,
-    required this.companyId,
-    required this.brandId,
+    required this.companyName,
+    required this.brandName,
     required this.itemType,
     required this.fit,
     required this.material,
@@ -57,11 +62,17 @@ class InspectorProductBlueprint {
   });
 
   factory InspectorProductBlueprint.fromJson(Map<String, dynamic> json) {
+    // バックエンド側が companyName / brandName を返す前提。
+    // もしまだ companyId / brandId しか無い場合はフォールバックする。
+    final companyName =
+        (json['companyName'] ?? json['companyId'] ?? '') as String;
+    final brandName = (json['brandName'] ?? json['brandId'] ?? '') as String;
+
     return InspectorProductBlueprint(
       id: (json['id'] ?? '') as String,
       productName: (json['productName'] ?? '') as String,
-      companyId: (json['companyId'] ?? '') as String,
-      brandId: (json['brandId'] ?? '') as String,
+      companyName: companyName,
+      brandName: brandName,
       itemType: (json['itemType'] ?? '') as String,
       fit: (json['fit'] ?? '') as String,
       material: (json['material'] ?? '') as String,

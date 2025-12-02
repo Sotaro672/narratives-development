@@ -1,5 +1,6 @@
 // frontend/inspector/lib/screens/inspection_detail_screen.dart
 import 'package:flutter/material.dart';
+import 'dart:developer' as developer;
 
 import '../services/product_api.dart';
 
@@ -185,8 +186,9 @@ class _InspectionDetailScreenState extends State<InspectionDetailScreen> {
             const SizedBox(height: 8),
             Text('productBlueprintId: ${detail.productBlueprintId}'),
             Text('商品名: ${bp.productName}'),
-            Text('ブランドID: ${bp.brandId}'),
-            Text('会社ID: ${bp.companyId}'),
+            // ▼ ラベル＆プロパティ名を変更
+            Text('ブランド名: ${bp.brandName}'),
+            Text('会社名: ${bp.companyName}'),
             Text('アイテム種別: ${bp.itemType}'),
             if (bp.fit.isNotEmpty) Text('フィット: ${bp.fit}'),
             if (bp.material.isNotEmpty) Text('素材: ${bp.material}'),
@@ -359,6 +361,22 @@ class _InspectionDetailScreenState extends State<InspectionDetailScreen> {
           }
 
           final detail = snapshot.data!;
+
+          // ▼ 取得したデータを表すログ（print → developer.log に変更）
+          developer.log(
+            '[InspectionDetailScreen] loaded detail: '
+            'productId=${detail.productId}, '
+            'modelId=${detail.modelId}, '
+            'productionId=${detail.productionId}, '
+            'modelNumber=${detail.modelNumber}, '
+            'size=${detail.size}, '
+            'brandName=${detail.blueprint.brandName}, '
+            'companyName=${detail.blueprint.companyName}, '
+            'inspectionResult=${detail.inspectionResult}, '
+            'inspectionsCount=${detail.inspections.length}',
+            name: 'InspectionDetailScreen',
+          );
+
           return RefreshIndicator(
             onRefresh: _reload,
             child: ListView(
