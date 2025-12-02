@@ -221,9 +221,9 @@ func NewRouter(deps RouterDeps) http.Handler {
 	// Products
 	// ================================
 	if deps.PrintUC != nil {
-		productH := handlers.NewProductHandler(deps.PrintUC, deps.ProductionUC, deps.ModelUC)
+		printH := handlers.NewPrintHandler(deps.PrintUC, deps.ProductionUC, deps.ModelUC)
 
-		var h http.Handler = productH
+		var h http.Handler = printH
 		if authMw != nil {
 			h = authMw.Handler(h)
 		}

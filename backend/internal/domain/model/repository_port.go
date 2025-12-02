@@ -43,28 +43,6 @@ type VariationFilter struct {
 	Deleted *bool // nil: all, true: deleted only, false: non-deleted only
 }
 
-type VariationSort struct {
-	Column VariationSortColumn
-	Order  SortOrder
-}
-
-type VariationSortColumn string
-
-const (
-	SortByModelNumber VariationSortColumn = "modelNumber"
-	SortBySize        VariationSortColumn = "size"
-	SortByColor       VariationSortColumn = "color"
-	SortByCreatedAt   VariationSortColumn = "createdAt"
-	SortByUpdatedAt   VariationSortColumn = "updatedAt"
-)
-
-type SortOrder string
-
-const (
-	SortAsc  SortOrder = "asc"
-	SortDesc SortOrder = "desc"
-)
-
 type Page struct {
 	Number  int
 	PerPage int
@@ -86,7 +64,7 @@ type RepositoryPort interface {
 	UpdateModelData(ctx context.Context, productID string, updates ModelDataUpdate) (*ModelData, error)
 
 	// Variations (CRUD)
-	ListVariations(ctx context.Context, filter VariationFilter, sort VariationSort, page Page) (VariationPageResult, error)
+	ListVariations(ctx context.Context, filter VariationFilter, page Page) (VariationPageResult, error)
 	GetModelVariations(ctx context.Context, productID string) ([]ModelVariation, error)
 	GetModelVariationByID(ctx context.Context, variationID string) (*ModelVariation, error)
 
@@ -130,8 +108,8 @@ type ModelHistoryRepository interface {
 	//   variations（ライブの ModelVariation 一式）のスナップショットを保存する。
 	SaveSnapshot(
 		ctx context.Context,
-		blueprintID string,
-		blueprintVersion int64,
+		productBlueprintID string,
+		productBlueprintVersion int64,
 		variations []ModelVariation,
 	) error
 
@@ -140,7 +118,7 @@ type ModelHistoryRepository interface {
 	//   LogCard から、特定バージョン時点の Model 行を表示する用途を想定。
 	ListByProductBlueprintIDAndVersion(
 		ctx context.Context,
-		blueprintID string,
-		version int64,
+		productBlueprintID string,
+		productBlueprintVersion int64,
 	) ([]ModelVariation, error)
 }

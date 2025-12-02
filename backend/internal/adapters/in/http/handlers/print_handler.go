@@ -1,4 +1,4 @@
-// backend/internal/adapters/in/http/handlers/product_handler.go
+// backend/internal/adapters/in/http/handlers/print_handler.go
 package handlers
 
 import (
@@ -12,20 +12,20 @@ import (
 	productdom "narratives/internal/domain/product"
 )
 
-// ProductHandler は /products 関連のエンドポイントを担当します。
-type ProductHandler struct {
+// PrintHandler は /products 関連のエンドポイントを担当します。
+type PrintHandler struct {
 	uc           *usecase.PrintUsecase
 	productionUC *usecase.ProductionUsecase
 	modelUC      *usecase.ModelUsecase
 }
 
-// NewProductHandler はHTTPハンドラを初期化します。
-func NewProductHandler(
+// NewPrintHandler はHTTPハンドラを初期化します。
+func NewPrintHandler(
 	uc *usecase.PrintUsecase,
 	productionUC *usecase.ProductionUsecase,
 	modelUC *usecase.ModelUsecase,
 ) http.Handler {
-	return &ProductHandler{
+	return &PrintHandler{
 		uc:           uc,
 		productionUC: productionUC,
 		modelUC:      modelUC,
@@ -33,17 +33,17 @@ func NewProductHandler(
 }
 
 // ServeHTTP はHTTPルーティングの入口です。
-func (h *ProductHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+func (h *PrintHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 
 	// ★ リクエストログを追加
-	log.Printf("[ProductHandler] method=%s path=%s query=%s", r.Method, r.URL.Path, r.URL.RawQuery)
-
+	log.Printf("[PrintHandler] method=%s path=%s query=%s", r.Method, r.URL.Path, r.URL.RawQuery)
 	switch {
 
 	// ------------------------------------------------------------
 	// ★ 追加: GET /inspector/products/{id}
-	//   ※ 現在は InspectorHandler に移譲済みなので ProductHandler 側では扱わない
+	//   ※ 現在は InspectorHandler に移譲済みなので PrintHandler 側では扱わない想定だが、
+	//     一旦既存の get を流用している
 	// ------------------------------------------------------------
 	case r.Method == http.MethodGet && strings.HasPrefix(r.URL.Path, "/inspector/products/"):
 		id := strings.TrimPrefix(r.URL.Path, "/inspector/products/")
@@ -72,7 +72,7 @@ func (h *ProductHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	// ------------------------------------------------------------
 	// POST /products/inspections
-	//   → 検品バッチ作成（これはコンソール側の印刷ロット単位なので ProductHandler に残す）
+	//   → 検品バッチ作成（これはコンソール側の印刷ロット単位）
 	// ------------------------------------------------------------
 	case r.Method == http.MethodPost && r.URL.Path == "/products/inspections":
 		h.createInspectionBatch(w, r)
@@ -100,7 +100,7 @@ func (h *ProductHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	// ------------------------------------------------------------
 	// PATCH /products/{id}
-	//   → 個別 Product の更新（旧来の更新API。検品ロジックの一部は Inspector に移譲）
+	//   → 個別 Product の更新（検品結果など）
 	// ------------------------------------------------------------
 	case r.Method == http.MethodPatch && strings.HasPrefix(r.URL.Path, "/products/"):
 		id := strings.TrimPrefix(r.URL.Path, "/products/")
@@ -121,7 +121,7 @@ func (h *ProductHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 // ------------------------------------------------------------
 // GET /products/{id}
 // ------------------------------------------------------------
-func (h *ProductHandler) get(w http.ResponseWriter, r *http.Request, id string) {
+func (h *PrintHandler) get(w http.ResponseWriter, r *http.Request, id string) {
 	ctx := r.Context()
 
 	id = strings.TrimSpace(id)
@@ -141,10 +141,11 @@ func (h *ProductHandler) get(w http.ResponseWriter, r *http.Request, id string) 
 
 // ------------------------------------------------------------
 // GET /products?productionId={productionId}
-//   同一 productionId を持つ Product 一覧を返す
+//
+//	同一 productionId を持つ Product 一覧を返す
+//
 // ------------------------------------------------------------
-
-func (h *ProductHandler) listByProductionID(w http.ResponseWriter, r *http.Request, productionID string) {
+func (h *PrintHandler) listByProductionID(w http.ResponseWriter, r *http.Request, productionID string) {
 	ctx := r.Context()
 
 	productionID = strings.TrimSpace(productionID)
@@ -162,28 +163,28 @@ func (h *ProductHandler) listByProductionID(w http.ResponseWriter, r *http.Reque
 
 	// modelNumber 付与に必要な Usecase が無い場合は従来のまま
 	if h.productionUC == nil || h.modelUC == nil {
-		log.Printf("[ProductHandler] listByProductionID: productionUC or modelUC is nil, return raw products")
+		log.Printf("[PrintHandler] listByProductionID: productionUC or modelUC is nil, return raw products")
 		_ = json.NewEncoder(w).Encode(list)
 		return
 	}
 
 	prod, err := h.productionUC.GetByID(ctx, productionID)
 	if err != nil {
-		log.Printf("[ProductHandler] listByProductionID: GetByID failed: %v", err)
+		log.Printf("[PrintHandler] listByProductionID: GetByID failed: %v", err)
 		_ = json.NewEncoder(w).Encode(list)
 		return
 	}
 
 	pbID := strings.TrimSpace(prod.ProductBlueprintID)
 	if pbID == "" {
-		log.Printf("[ProductHandler] listByProductionID: empty ProductBlueprintID")
+		log.Printf("[PrintHandler] listByProductionID: empty ProductBlueprintID")
 		_ = json.NewEncoder(w).Encode(list)
 		return
 	}
 
 	vars, err := h.modelUC.ListModelVariationsByProductBlueprintID(ctx, pbID)
 	if err != nil {
-		log.Printf("[ProductHandler] listByProductionID: ListModelVariations failed: %v", err)
+		log.Printf("[PrintHandler] listByProductionID: ListModelVariations failed: %v", err)
 		_ = json.NewEncoder(w).Encode(list)
 		return
 	}
@@ -209,7 +210,7 @@ func (h *ProductHandler) listByProductionID(w http.ResponseWriter, r *http.Reque
 		modelNumber := strings.TrimSpace(idToModelNumber[p.ModelID])
 		if modelNumber == "" {
 			log.Printf(
-				"[ProductHandler] listByProductionID: modelNumber not found productID=%s modelID=%s",
+				"[PrintHandler] listByProductionID: modelNumber not found productID=%s modelID=%s",
 				p.ID, p.ModelID,
 			)
 		}
@@ -226,7 +227,9 @@ func (h *ProductHandler) listByProductionID(w http.ResponseWriter, r *http.Reque
 }
 
 // ------------------------------------------------------------
-func (h *ProductHandler) listPrintLogsByProductionID(w http.ResponseWriter, r *http.Request, productionID string) {
+// GET /products/print-logs?productionId={productionId}
+// ------------------------------------------------------------
+func (h *PrintHandler) listPrintLogsByProductionID(w http.ResponseWriter, r *http.Request, productionID string) {
 	ctx := r.Context()
 	productionID = strings.TrimSpace(productionID)
 
@@ -238,7 +241,7 @@ func (h *ProductHandler) listPrintLogsByProductionID(w http.ResponseWriter, r *h
 
 	logs, err := h.uc.ListPrintLogsByProductionID(ctx, productionID)
 	if err != nil {
-		log.Printf("[ProductHandler] listPrintLogsByProductionID error: %v", err)
+		log.Printf("[PrintHandler] listPrintLogsByProductionID error: %v", err)
 		w.WriteHeader(http.StatusInternalServerError)
 		_ = json.NewEncoder(w).Encode(map[string]string{"error": err.Error()})
 		return
@@ -248,7 +251,9 @@ func (h *ProductHandler) listPrintLogsByProductionID(w http.ResponseWriter, r *h
 }
 
 // ------------------------------------------------------------
-func (h *ProductHandler) createPrintLog(w http.ResponseWriter, r *http.Request) {
+// POST /products/print-logs
+// ------------------------------------------------------------
+func (h *PrintHandler) createPrintLog(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 
 	var req struct {
@@ -268,11 +273,11 @@ func (h *ProductHandler) createPrintLog(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	log.Printf("[ProductHandler] createPrintLog productionId=%s", productionID)
+	log.Printf("[PrintHandler] createPrintLog productionId=%s", productionID)
 
 	pl, err := h.uc.CreatePrintLogForProduction(ctx, productionID)
 	if err != nil {
-		log.Printf("[ProductHandler] createPrintLog error: %v", err)
+		log.Printf("[PrintHandler] createPrintLog error: %v", err)
 		w.WriteHeader(http.StatusInternalServerError)
 		_ = json.NewEncoder(w).Encode(map[string]string{"error": err.Error()})
 		return
@@ -282,7 +287,9 @@ func (h *ProductHandler) createPrintLog(w http.ResponseWriter, r *http.Request) 
 }
 
 // ------------------------------------------------------------
-func (h *ProductHandler) createInspectionBatch(w http.ResponseWriter, r *http.Request) {
+// POST /products/inspections
+// ------------------------------------------------------------
+func (h *PrintHandler) createInspectionBatch(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 
 	var req struct {
@@ -302,11 +309,11 @@ func (h *ProductHandler) createInspectionBatch(w http.ResponseWriter, r *http.Re
 		return
 	}
 
-	log.Printf("[ProductHandler] createInspectionBatch productionId=%s", productionID)
+	log.Printf("[PrintHandler] createInspectionBatch productionId=%s", productionID)
 
 	batch, err := h.uc.CreateInspectionBatchForProduction(ctx, productionID)
 	if err != nil {
-		log.Printf("[ProductHandler] createInspectionBatch error: %v", err)
+		log.Printf("[PrintHandler] createInspectionBatch error: %v", err)
 		w.WriteHeader(http.StatusInternalServerError)
 		_ = json.NewEncoder(w).Encode(map[string]string{"error": err.Error()})
 		return
@@ -316,7 +323,9 @@ func (h *ProductHandler) createInspectionBatch(w http.ResponseWriter, r *http.Re
 }
 
 // ------------------------------------------------------------
-func (h *ProductHandler) create(w http.ResponseWriter, r *http.Request) {
+// POST /products
+// ------------------------------------------------------------
+func (h *PrintHandler) create(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 
 	var req struct {
@@ -366,7 +375,9 @@ func (h *ProductHandler) create(w http.ResponseWriter, r *http.Request) {
 }
 
 // ------------------------------------------------------------
-func (h *ProductHandler) update(w http.ResponseWriter, r *http.Request, id string) {
+// PATCH /products/{id}
+// ------------------------------------------------------------
+func (h *PrintHandler) update(w http.ResponseWriter, r *http.Request, id string) {
 	ctx := r.Context()
 
 	id = strings.TrimSpace(id)
@@ -404,6 +415,8 @@ func (h *ProductHandler) update(w http.ResponseWriter, r *http.Request, id strin
 	_ = json.NewEncoder(w).Encode(updated)
 }
 
+// ------------------------------------------------------------
+// 共通エラーレスポンス
 // ------------------------------------------------------------
 func writeProductErr(w http.ResponseWriter, err error) {
 	code := http.StatusInternalServerError
