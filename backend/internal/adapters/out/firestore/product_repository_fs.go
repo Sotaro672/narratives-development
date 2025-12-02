@@ -1,4 +1,3 @@
-// backend/internal/adapters/out/firestore/product_repository_fs.go
 package firestore
 
 import (
@@ -136,8 +135,7 @@ func (r *ProductRepositoryFS) Save(ctx context.Context, v productdom.Product) (p
 	return docToProduct(snap)
 }
 
-// Update(ctx, id, product) = usecase.ProductRepo と互換の full update
-// usecase 側で更新可能フィールドだけを上書き済みの Product が渡される想定。
+// Update(ctx, id, product) = full update
 func (r *ProductRepositoryFS) Update(ctx context.Context, id string, v productdom.Product) (productdom.Product, error) {
 	if r.Client == nil {
 		return productdom.Product{}, errors.New("firestore client is nil")
@@ -148,14 +146,12 @@ func (r *ProductRepositoryFS) Update(ctx context.Context, id string, v productdo
 		return productdom.Product{}, productdom.ErrNotFound
 	}
 
-	// ID は常にパスの id を優先
 	v.ID = id
-
 	return r.Save(ctx, v)
 }
 
 // ============================================================
-// ListByProductionID: 同一 productionId を持つ Product 一覧を取得
+// ListByProductionID
 // ============================================================
 
 func (r *ProductRepositoryFS) ListByProductionID(ctx context.Context, productionID string) ([]productdom.Product, error) {
@@ -165,7 +161,6 @@ func (r *ProductRepositoryFS) ListByProductionID(ctx context.Context, production
 
 	productionID = strings.TrimSpace(productionID)
 	if productionID == "" {
-		// productionID 未指定なら空配列を返す（エラーにはしない）
 		return []productdom.Product{}, nil
 	}
 
@@ -193,7 +188,7 @@ func (r *ProductRepositoryFS) ListByProductionID(ctx context.Context, production
 }
 
 // ============================================================
-// List （filter / sort を無視した簡易版）
+// List (simple)
 // ============================================================
 
 func (r *ProductRepositoryFS) List(
@@ -237,8 +232,7 @@ func (r *ProductRepositoryFS) List(
 }
 
 // ============================================================
-// PrintLogRepositoryFS: print_logs 用 Firestore リポジトリ
-//   usecase.PrintLogRepo の Create / ListByProductionID を実装する
+// PrintLogRepositoryFS
 // ============================================================
 
 type PrintLogRepositoryFS struct {
@@ -253,8 +247,6 @@ func (r *PrintLogRepositoryFS) col() *firestore.CollectionRef {
 	return r.Client.Collection("print_logs")
 }
 
-// Create は新しい print_log を 1 件保存します。
-// ID が空なら Firestore の auto-ID を採用します。
 func (r *PrintLogRepositoryFS) Create(ctx context.Context, v productdom.PrintLog) (productdom.PrintLog, error) {
 	if r.Client == nil {
 		return productdom.PrintLog{}, errors.New("firestore client is nil")
@@ -275,21 +267,19 @@ func (r *PrintLogRepositoryFS) Create(ctx context.Context, v productdom.PrintLog
 	_, err := docRef.Create(ctx, data)
 	if err != nil {
 		if status.Code(err) == codes.AlreadyExists {
-			// PrintLog 固有の ErrConflict は定義していないので、そのまま返す
 			return productdom.PrintLog{}, err
 		}
 		return productdom.PrintLog{}, err
 	}
 
-	// Firestore 側で timestamp などが変わる可能性もあるので、再取得して返す
 	snap, err := docRef.Get(ctx)
 	if err != nil {
 		return productdom.PrintLog{}, err
 	}
+
 	return docToPrintLog(snap)
 }
 
-// ListByProductionID: 同一 productionId を持つ PrintLog 一覧を取得
 func (r *PrintLogRepositoryFS) ListByProductionID(ctx context.Context, productionID string) ([]productdom.PrintLog, error) {
 	if r.Client == nil {
 		return nil, errors.New("firestore client is nil")
@@ -297,7 +287,6 @@ func (r *PrintLogRepositoryFS) ListByProductionID(ctx context.Context, productio
 
 	productionID = strings.TrimSpace(productionID)
 	if productionID == "" {
-		// productionID 未指定なら空配列を返す（エラーにはしない）
 		return []productdom.PrintLog{}, nil
 	}
 
@@ -322,112 +311,6 @@ func (r *PrintLogRepositoryFS) ListByProductionID(ctx context.Context, productio
 	}
 
 	return logs, nil
-}
-
-// ============================================================
-// InspectionRepositoryFS: inspections 用 Firestore リポジトリ
-//   usecase.InspectionRepo の Create / GetByProductionID / Save を実装する
-// ============================================================
-
-type InspectionRepositoryFS struct {
-	Client *firestore.Client
-}
-
-func NewInspectionRepositoryFS(client *firestore.Client) *InspectionRepositoryFS {
-	return &InspectionRepositoryFS{Client: client}
-}
-
-func (r *InspectionRepositoryFS) col() *firestore.CollectionRef {
-	return r.Client.Collection("inspections")
-}
-
-// Create: inspections/{productionId} に 1 ドキュメント作成
-//
-//	productionId をドキュメントIDとして保存します。
-func (r *InspectionRepositoryFS) Create(ctx context.Context, v productdom.InspectionBatch) (productdom.InspectionBatch, error) {
-	if r.Client == nil {
-		return productdom.InspectionBatch{}, errors.New("firestore client is nil")
-	}
-
-	pid := strings.TrimSpace(v.ProductionID)
-	if pid == "" {
-		return productdom.InspectionBatch{}, productdom.ErrInvalidInspectionProductionID
-	}
-
-	docRef := r.col().Doc(pid)
-	data := inspectionBatchToDoc(v)
-
-	_, err := docRef.Create(ctx, data)
-	if err != nil {
-		// 既に存在している場合はそのままエラーを返す
-		if status.Code(err) == codes.AlreadyExists {
-			return productdom.InspectionBatch{}, err
-		}
-		return productdom.InspectionBatch{}, err
-	}
-
-	// Firestore から再取得して整形して返す
-	snap, err := docRef.Get(ctx)
-	if err != nil {
-		return productdom.InspectionBatch{}, err
-	}
-	return docToInspectionBatch(snap)
-}
-
-// GetByProductionID: inspections/{productionId} を取得
-func (r *InspectionRepositoryFS) GetByProductionID(
-	ctx context.Context,
-	productionID string,
-) (productdom.InspectionBatch, error) {
-	if r.Client == nil {
-		return productdom.InspectionBatch{}, errors.New("firestore client is nil")
-	}
-
-	pid := strings.TrimSpace(productionID)
-	if pid == "" {
-		return productdom.InspectionBatch{}, productdom.ErrInvalidInspectionProductionID
-	}
-
-	docRef := r.col().Doc(pid)
-	snap, err := docRef.Get(ctx)
-	if err != nil {
-		if status.Code(err) == codes.NotFound {
-			return productdom.InspectionBatch{}, productdom.ErrNotFound
-		}
-		return productdom.InspectionBatch{}, err
-	}
-
-	return docToInspectionBatch(snap)
-}
-
-// Save: inspections/{productionId} を Upsert 的に保存
-func (r *InspectionRepositoryFS) Save(
-	ctx context.Context,
-	v productdom.InspectionBatch,
-) (productdom.InspectionBatch, error) {
-	if r.Client == nil {
-		return productdom.InspectionBatch{}, errors.New("firestore client is nil")
-	}
-
-	pid := strings.TrimSpace(v.ProductionID)
-	if pid == "" {
-		return productdom.InspectionBatch{}, productdom.ErrInvalidInspectionProductionID
-	}
-
-	docRef := r.col().Doc(pid)
-	data := inspectionBatchToDoc(v)
-
-	_, err := docRef.Set(ctx, data, firestore.MergeAll)
-	if err != nil {
-		return productdom.InspectionBatch{}, err
-	}
-
-	snap, err := docRef.Get(ctx)
-	if err != nil {
-		return productdom.InspectionBatch{}, err
-	}
-
-	return docToInspectionBatch(snap)
 }
 
 // ============================================================
@@ -515,14 +398,12 @@ func productToDoc(v productdom.Product) map[string]any {
 	return m
 }
 
-// print_logs 用の変換
 func docToPrintLog(doc *firestore.DocumentSnapshot) (productdom.PrintLog, error) {
 	data := doc.Data()
 	if data == nil {
 		return productdom.PrintLog{}, fmt.Errorf("empty print_log document: %s", doc.Ref.ID)
 	}
 
-	// productIds は []interface{} として返ってくることが多いので安全に変換
 	var productIDs []string
 	if raw, ok := data["productIds"]; ok {
 		switch vv := raw.(type) {
@@ -564,108 +445,6 @@ func printLogToDoc(v productdom.PrintLog) map[string]any {
 		"printedAt":    v.PrintedAt.UTC(),
 	}
 	return m
-}
-
-// inspections 用の変換 (domain -> Firestore)
-func inspectionBatchToDoc(v productdom.InspectionBatch) map[string]any {
-	items := make([]map[string]any, 0, len(v.Inspections))
-	for _, ins := range v.Inspections {
-		m := map[string]any{
-			"productId": strings.TrimSpace(ins.ProductID),
-		}
-
-		if ins.InspectionResult != nil {
-			m["inspectionResult"] = string(*ins.InspectionResult)
-		} else {
-			m["inspectionResult"] = nil
-		}
-
-		if ins.InspectedBy != nil {
-			s := strings.TrimSpace(*ins.InspectedBy)
-			if s != "" {
-				m["inspectedBy"] = s
-			} else {
-				m["inspectedBy"] = nil
-			}
-		} else {
-			m["inspectedBy"] = nil
-		}
-
-		if ins.InspectedAt != nil && !ins.InspectedAt.IsZero() {
-			m["inspectedAt"] = ins.InspectedAt.UTC()
-		} else {
-			m["inspectedAt"] = nil
-		}
-
-		items = append(items, m)
-	}
-
-	return map[string]any{
-		"productionId": strings.TrimSpace(v.ProductionID),
-		"status":       string(v.Status),
-		"inspections":  items,
-	}
-}
-
-// Firestore -> domain.InspectionBatch
-func docToInspectionBatch(doc *firestore.DocumentSnapshot) (productdom.InspectionBatch, error) {
-	data := doc.Data()
-	if data == nil {
-		return productdom.InspectionBatch{}, fmt.Errorf("empty inspection document: %s", doc.Ref.ID)
-	}
-
-	productionID := strings.TrimSpace(asString(data["productionId"]))
-	statusStr := strings.TrimSpace(asString(data["status"]))
-
-	batch := productdom.InspectionBatch{
-		ProductionID: productionID,
-		Status:       productdom.InspectionStatus(statusStr),
-	}
-
-	// inspections 配列のパース
-	if raw, ok := data["inspections"]; ok && raw != nil {
-		switch vv := raw.(type) {
-		case []interface{}:
-			for _, e := range vv {
-				m, ok := e.(map[string]interface{})
-				if !ok {
-					continue
-				}
-				item := productdom.InspectionItem{}
-
-				if v, ok := m["productId"].(string); ok {
-					item.ProductID = strings.TrimSpace(v)
-				}
-
-				if v, ok := m["inspectionResult"].(string); ok && strings.TrimSpace(v) != "" {
-					r := productdom.InspectionResult(strings.TrimSpace(v))
-					item.InspectionResult = &r
-				}
-
-				if v, ok := m["inspectedBy"].(string); ok && strings.TrimSpace(v) != "" {
-					s := strings.TrimSpace(v)
-					item.InspectedBy = &s
-				}
-
-				if v, ok := m["inspectedAt"].(time.Time); ok && !v.IsZero() {
-					t := v.UTC()
-					item.InspectedAt = &t
-				}
-
-				batch.Inspections = append(batch.Inspections, item)
-			}
-		}
-	}
-
-	// ざっくりしたバリデーション（最低限）
-	if strings.TrimSpace(batch.ProductionID) == "" {
-		return productdom.InspectionBatch{}, productdom.ErrInvalidInspectionProductionID
-	}
-	if len(batch.Inspections) == 0 {
-		return productdom.InspectionBatch{}, productdom.ErrInvalidInspectionProductIDs
-	}
-
-	return batch, nil
 }
 
 func asString(v any) string {

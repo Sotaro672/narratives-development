@@ -50,6 +50,9 @@ type RouterDeps struct {
 	UserUC             *usecase.UserUsecase
 	WalletUC           *usecase.WalletUsecase
 
+	// ⭐ 検品専用 Usecase
+	InspectorUC *usecase.InspectorUsecase
+
 	// 認証・招待まわり
 	AuthBootstrap     *authuc.BootstrapService
 	InvitationQuery   usecase.InvitationQueryPort
@@ -353,8 +356,8 @@ func NewRouter(deps RouterDeps) http.Handler {
 	// ================================
 	// ⭐ 検品 API（Inspector 用）
 	// ================================
-	if deps.ProductUC != nil {
-		inspectorH := handlers.NewInspectorHandler(deps.ProductUC)
+	if deps.ProductUC != nil && deps.InspectorUC != nil {
+		inspectorH := handlers.NewInspectorHandler(deps.ProductUC, deps.InspectorUC)
 
 		var h http.Handler = inspectorH
 		// Flutter inspector アプリは Firebase Auth を使っており認証必須
@@ -364,6 +367,9 @@ func NewRouter(deps RouterDeps) http.Handler {
 
 		// GET /inspector/products/{productId}
 		mux.Handle("/inspector/products/", h)
+
+		// PATCH /products/inspections も InspectorHandler で扱う
+		mux.Handle("/products/inspections", h)
 	}
 
 	return mux

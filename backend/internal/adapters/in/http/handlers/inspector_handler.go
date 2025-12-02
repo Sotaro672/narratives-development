@@ -6,24 +6,34 @@ import (
 	"errors"
 	"net/http"
 	"strings"
+	"time"
 
 	"narratives/internal/application/usecase"
 	productdom "narratives/internal/domain/product"
 )
 
 type InspectorHandler struct {
-	productUC *usecase.ProductUsecase
+	productUC   *usecase.ProductUsecase
+	inspectorUC *usecase.InspectorUsecase
 }
 
-func NewInspectorHandler(productUC *usecase.ProductUsecase) http.Handler {
-	return &InspectorHandler{productUC: productUC}
+func NewInspectorHandler(
+	productUC *usecase.ProductUsecase,
+	inspectorUC *usecase.InspectorUsecase,
+) http.Handler {
+	return &InspectorHandler{
+		productUC:   productUC,
+		inspectorUC: inspectorUC,
+	}
 }
 
 func (h *InspectorHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 
 	switch {
+	// ------------------------------------------------------------
 	// GET /inspector/products/{productId}
+	// ------------------------------------------------------------
 	case r.Method == http.MethodGet &&
 		strings.HasPrefix(r.URL.Path, "/inspector/products/"):
 
@@ -34,7 +44,6 @@ func (h *InspectorHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		// ProductUsecase 側に「検品用のビュー」を返すメソッドを追加してもOK
 		p, err := h.productUC.GetByID(r.Context(), productID)
 		if errors.Is(err, productdom.ErrNotFound) {
 			http.Error(w, `{"error":"product not found"}`, http.StatusNotFound)
@@ -51,7 +60,86 @@ func (h *InspectorHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		}
 		return
 
+	// ------------------------------------------------------------
+	// PATCH /products/inspections
+	//   → 検品アプリから inspectionResult 等を更新するバッチ API
+	// ------------------------------------------------------------
+	case r.Method == http.MethodPatch && r.URL.Path == "/products/inspections":
+		h.updateInspection(w, r)
+		return
+
 	default:
 		http.NotFound(w, r)
 	}
+}
+
+// ------------------------------------------------------------
+//
+//	検品結果更新: PATCH /products/inspections
+//	  ※ 元々 ProductHandler にあった処理を InspectorUsecase に移譲済み
+//
+// ------------------------------------------------------------
+func (h *InspectorHandler) updateInspection(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+
+	if h.inspectorUC == nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		_ = json.NewEncoder(w).Encode(map[string]string{"error": "inspector usecase is not configured"})
+		return
+	}
+
+	var req struct {
+		ProductionID     string                       `json:"productionId"`
+		ProductID        string                       `json:"productId"`
+		InspectionResult *productdom.InspectionResult `json:"inspectionResult"`
+		InspectedBy      *string                      `json:"inspectedBy"`
+		InspectedAt      *time.Time                   `json:"inspectedAt"`
+		Status           *productdom.InspectionStatus `json:"status"`
+	}
+
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		w.WriteHeader(http.StatusBadRequest)
+		_ = json.NewEncoder(w).Encode(map[string]string{"error": "invalid json"})
+		return
+	}
+
+	req.ProductionID = strings.TrimSpace(req.ProductionID)
+	req.ProductID = strings.TrimSpace(req.ProductID)
+
+	if req.ProductionID == "" || req.ProductID == "" {
+		w.WriteHeader(http.StatusBadRequest)
+		_ = json.NewEncoder(w).Encode(map[string]string{"error": "productionId and productId are required"})
+		return
+	}
+
+	batch, err := h.inspectorUC.UpdateInspectionForProduct(
+		ctx,
+		req.ProductionID,
+		req.ProductID,
+		req.InspectionResult,
+		req.InspectedBy,
+		req.InspectedAt,
+		req.Status,
+	)
+	if err != nil {
+		// Inspection 系のエラーを HTTP にマッピング
+		code := http.StatusInternalServerError
+		switch err {
+		case productdom.ErrInvalidInspectionProductionID,
+			productdom.ErrInvalidInspectionProductIDs,
+			productdom.ErrInvalidInspectionResult,
+			productdom.ErrInvalidInspectedBy,
+			productdom.ErrInvalidInspectedAt,
+			productdom.ErrInvalidInspectionStatus:
+			code = http.StatusBadRequest
+		case productdom.ErrNotFound:
+			code = http.StatusNotFound
+		}
+
+		w.WriteHeader(code)
+		_ = json.NewEncoder(w).Encode(map[string]string{"error": err.Error()})
+		return
+	}
+
+	_ = json.NewEncoder(w).Encode(batch)
 }

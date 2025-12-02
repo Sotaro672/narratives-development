@@ -43,6 +43,7 @@ func (h *ProductHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	// ------------------------------------------------------------
 	// ★ 追加: GET /inspector/products/{id}
+	//   ※ 現在は InspectorHandler に移譲済みなので ProductHandler 側では扱わない
 	// ------------------------------------------------------------
 	case r.Method == http.MethodGet && strings.HasPrefix(r.URL.Path, "/inspector/products/"):
 		id := strings.TrimPrefix(r.URL.Path, "/inspector/products/")
@@ -71,15 +72,10 @@ func (h *ProductHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	// ------------------------------------------------------------
 	// POST /products/inspections
+	//   → 検品バッチ作成（これはコンソール側の印刷ロット単位なので ProductHandler に残す）
 	// ------------------------------------------------------------
 	case r.Method == http.MethodPost && r.URL.Path == "/products/inspections":
 		h.createInspectionBatch(w, r)
-
-	// ------------------------------------------------------------
-	// PATCH /products/inspections
-	// ------------------------------------------------------------
-	case r.Method == http.MethodPatch && r.URL.Path == "/products/inspections":
-		h.updateInspection(w, r)
 
 	// ------------------------------------------------------------
 	// GET /products?productionId=xxx
@@ -104,6 +100,7 @@ func (h *ProductHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	// ------------------------------------------------------------
 	// PATCH /products/{id}
+	//   → 個別 Product の更新（旧来の更新API。検品ロジックの一部は Inspector に移譲）
 	// ------------------------------------------------------------
 	case r.Method == http.MethodPatch && strings.HasPrefix(r.URL.Path, "/products/"):
 		id := strings.TrimPrefix(r.URL.Path, "/products/")
@@ -142,14 +139,6 @@ func (h *ProductHandler) get(w http.ResponseWriter, r *http.Request, id string) 
 	_ = json.NewEncoder(w).Encode(p)
 }
 
-// ------------------------------------------------------------
-// listByProductionID, listPrintLogsByProductionID, createPrintLog,
-// createInspectionBatch, updateInspection, create, update,
-// writeProductErr
-// ------------------------------------------------------------
-// （※ 以下はご提示コードそのままなので省略無しで全文残しています）
-
-// ...（ここから下は元コードのまま完全に保持しています）...
 // ------------------------------------------------------------
 // GET /products?productionId={productionId}
 //   同一 productionId を持つ Product 一覧を返す
@@ -320,57 +309,6 @@ func (h *ProductHandler) createInspectionBatch(w http.ResponseWriter, r *http.Re
 		log.Printf("[ProductHandler] createInspectionBatch error: %v", err)
 		w.WriteHeader(http.StatusInternalServerError)
 		_ = json.NewEncoder(w).Encode(map[string]string{"error": err.Error()})
-		return
-	}
-
-	_ = json.NewEncoder(w).Encode(batch)
-}
-
-// ------------------------------------------------------------
-func (h *ProductHandler) updateInspection(w http.ResponseWriter, r *http.Request) {
-	ctx := r.Context()
-
-	var req struct {
-		ProductionID     string                       `json:"productionId"`
-		ProductID        string                       `json:"productId"`
-		InspectionResult *productdom.InspectionResult `json:"inspectionResult"`
-		InspectedBy      *string                      `json:"inspectedBy"`
-		InspectedAt      *time.Time                   `json:"inspectedAt"`
-		Status           *productdom.InspectionStatus `json:"status"`
-	}
-
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		w.WriteHeader(http.StatusBadRequest)
-		_ = json.NewEncoder(w).Encode(map[string]string{"error": "invalid json"})
-		return
-	}
-
-	req.ProductionID = strings.TrimSpace(req.ProductionID)
-	req.ProductID = strings.TrimSpace(req.ProductID)
-
-	if req.ProductionID == "" || req.ProductID == "" {
-		w.WriteHeader(http.StatusBadRequest)
-		_ = json.NewEncoder(w).Encode(map[string]string{"error": "productionId and productId are required"})
-		return
-	}
-
-	log.Printf(
-		"[ProductHandler] updateInspection productionId=%s productId=%s result=%v status=%v",
-		req.ProductionID, req.ProductID, req.InspectionResult, req.Status,
-	)
-
-	batch, err := h.uc.UpdateInspectionForProduct(
-		ctx,
-		req.ProductionID,
-		req.ProductID,
-		req.InspectionResult,
-		req.InspectedBy,
-		req.InspectedAt,
-		req.Status,
-	)
-	if err != nil {
-		log.Printf("[ProductHandler] updateInspection error: %v", err)
-		writeProductErr(w, err)
 		return
 	}
 
