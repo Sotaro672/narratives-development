@@ -1,4 +1,4 @@
-// すでにある import に加えて、まだなら追加
+// frontend/inspector/lib/services/product_api.dart
 import 'dart:convert';
 import 'package:http/http.dart' as http;
 import 'package:firebase_auth/firebase_auth.dart';
@@ -223,7 +223,7 @@ class ProductApi {
     return InspectorProductDetail.fromJson(body);
   }
 
-  /// 合否送信
+  /// products テーブルの検品結果（単体）を更新
   static Future<void> submitInspection({
     required String productId,
     required String result,
@@ -253,6 +253,42 @@ class ProductApi {
 
     if (resp.statusCode != 200) {
       throw Exception('検品結果の送信に失敗しました: ${resp.statusCode} ${resp.body}');
+    }
+  }
+
+  /// inspections テーブルの検品結果を更新する API
+  static Future<void> updateInspectionBatch({
+    required String productionId,
+    required String productId,
+    required String inspectionResult,
+  }) async {
+    final token = await _getIdToken();
+
+    final uri = Uri.parse('$_baseUrl/products/inspections');
+    final now = DateTime.now().toUtc().toIso8601String();
+
+    final user = FirebaseAuth.instance.currentUser;
+    final inspectedBy = user?.email ?? user?.uid ?? 'unknown';
+
+    final body = json.encode({
+      'productionId': productionId,
+      'productId': productId,
+      'inspectionResult': inspectionResult,
+      'inspectedBy': inspectedBy,
+      'inspectedAt': now,
+    });
+
+    final resp = await http.patch(
+      uri,
+      headers: {
+        'Authorization': 'Bearer $token',
+        'Content-Type': 'application/json',
+      },
+      body: body,
+    );
+
+    if (resp.statusCode != 200) {
+      throw Exception('inspections 更新に失敗しました: ${resp.statusCode} ${resp.body}');
     }
   }
 

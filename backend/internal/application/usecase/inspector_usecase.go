@@ -11,7 +11,7 @@ import (
 )
 
 // InspectorUsecase は検品アプリ（inspector）専用のユースケースをまとめる。
-// - 個別 Product の検品結果更新
+// - inspections テーブルの 1 productId 分の検品結果更新
 // - 検品完了処理（一括クローズ）
 type InspectorUsecase struct {
 	inspectionRepo InspectionRepo
@@ -27,7 +27,8 @@ func NewInspectorUsecase(
 
 // ★ inspections 内の 1 productId 分を更新する
 //
-// もともと ProductUsecase.UpdateInspectionForProduct にあった処理。
+// もともと ProductUsecase.UpdateInspectionForProduct にあった処理を
+// inspections テーブル専用に抜き出したもの。
 //
 // PATCH /products/inspections 用
 func (u *InspectorUsecase) UpdateInspectionForProduct(
@@ -122,7 +123,10 @@ func (u *InspectorUsecase) UpdateInspectionForProduct(
 
 // ★ 検品完了（未検品を notManufactured にし、ステータスを completed にする）
 //
-// もともと ProductUsecase.CompleteInspectionForProduction にあった処理。
+// もともと ProductUsecase.CompleteInspectionForProduction にあった処理を
+// inspections テーブル専用に抜き出したもの。
+//
+// PATCH /products/inspections/complete 用
 func (u *InspectorUsecase) CompleteInspectionForProduction(
 	ctx context.Context,
 	productionID string,

@@ -29,21 +29,37 @@ class _InspectionDetailScreenState extends State<InspectionDetailScreen> {
   }
 
   /// 合否（passed / failed）を送信
-  Future<void> _submitResult(String result) async {
+  ///
+  /// - products テーブル: ProductApi.submitInspection()
+  /// - inspections テーブル: ProductApi.updateInspectionBatch()
+  Future<void> _submitResult(
+    InspectorProductDetail detail,
+    String result,
+  ) async {
     if (_submitting) return;
     setState(() {
       _submitting = true;
     });
 
     try {
+      // 1) products テーブル側を更新（/products/{productId}）
       await ProductApi.submitInspection(
-        productId: widget.productId,
+        productId: detail.productId,
         result: result,
       );
+
+      // 2) inspections テーブル側を更新（/products/inspections）
+      await ProductApi.updateInspectionBatch(
+        productionId: detail.productionId,
+        productId: detail.productId,
+        inspectionResult: result == 'passed' ? 'passed' : 'failed',
+      );
+
       if (!mounted) return;
       ScaffoldMessenger.of(
         context,
       ).showSnackBar(SnackBar(content: Text('検品結果を送信しました（$result）')));
+
       await _reload();
     } catch (e) {
       if (!mounted) return;
@@ -278,14 +294,18 @@ class _InspectionDetailScreenState extends State<InspectionDetailScreen> {
             children: [
               Expanded(
                 child: OutlinedButton(
-                  onPressed: _submitting ? null : () => _submitResult('failed'),
+                  onPressed: _submitting
+                      ? null
+                      : () => _submitResult(detail, 'failed'),
                   child: const Text('不合格'),
                 ),
               ),
               const SizedBox(width: 12),
               Expanded(
                 child: ElevatedButton(
-                  onPressed: _submitting ? null : () => _submitResult('passed'),
+                  onPressed: _submitting
+                      ? null
+                      : () => _submitResult(detail, 'passed'),
                   child: const Text('合格'),
                 ),
               ),
