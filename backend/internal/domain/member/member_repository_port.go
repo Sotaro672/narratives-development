@@ -33,35 +33,6 @@ type Filter struct {
 	Permissions []string
 }
 
-// Sort describes ordering for list results.
-// Column uses symbolic names consumed by adapters/handlers.
-type Sort struct {
-	Column SortColumn
-	Order  SortOrder
-}
-
-type SortColumn string
-
-const (
-	// Historical naming kept for compatibility with handlers/adapters.
-	// Handlers typically map "joinedAt" -> entity.CreatedAt.
-	SortByJoinedAt      SortColumn = "joinedAt"
-	SortByPermissions   SortColumn = "permissions"
-	SortByAssigneeCount SortColumn = "assigneeCount"
-
-	// Common columns
-	SortByName      SortColumn = "name"
-	SortByEmail     SortColumn = "email"
-	SortByUpdatedAt SortColumn = "updatedAt"
-)
-
-type SortOrder string
-
-const (
-	SortAsc  SortOrder = "asc"
-	SortDesc SortOrder = "desc"
-)
-
 // Common aliases
 type Page = common.Page
 type PageResult = common.PageResult[Member]
@@ -76,7 +47,7 @@ type Repository interface {
 	common.RepositoryList[Member, Filter]
 
 	// Additional requirements
-	ListByCursor(ctx context.Context, filter Filter, sort Sort, cpage CursorPage) (CursorPageResult, error)
+	ListByCursor(ctx context.Context, filter Filter, cpage CursorPage) (CursorPageResult, error)
 	GetByID(ctx context.Context, id string) (Member, error)
 	GetByEmail(ctx context.Context, email string) (Member, error)
 
@@ -86,7 +57,6 @@ type Repository interface {
 	GetByFirebaseUID(ctx context.Context, firebaseUID string) (Member, error)
 
 	Exists(ctx context.Context, id string) (bool, error)
-	Count(ctx context.Context, filter Filter) (int, error)
 	Save(ctx context.Context, m Member, opts *SaveOptions) (Member, error)
 	Reset(ctx context.Context) error
 }

@@ -64,13 +64,6 @@ func (u *MemberUsecase) Exists(ctx context.Context, id string) (bool, error) {
 	return u.repo.Exists(ctx, strings.TrimSpace(id))
 }
 
-func (u *MemberUsecase) Count(ctx context.Context, f memdom.Filter) (int, error) {
-	if cid := companyIDFromContext(ctx); cid != "" {
-		f.CompanyID = cid
-	}
-	return u.repo.Count(ctx, f)
-}
-
 func (u *MemberUsecase) List(
 	ctx context.Context,
 	f memdom.Filter,

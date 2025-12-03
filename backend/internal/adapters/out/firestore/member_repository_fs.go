@@ -139,12 +139,12 @@ func (r *MemberRepositoryFS) Exists(ctx context.Context, id string) (bool, error
 // List / Count
 // ========================
 
+// Count は companyId だけを Firestore クエリに反映し、その他の filter 条件は無視します。
 func (r *MemberRepositoryFS) Count(ctx context.Context, f memdom.Filter) (int, error) {
 	if r.Client == nil {
 		return 0, errors.New("firestore client is nil")
 	}
 
-	// ▼ 受け取った Filter.CompanyID を Firestore クエリに反映（実装責務）
 	q := r.col().Query
 	if cid := strings.TrimSpace(f.CompanyID); cid != "" {
 		q = q.Where("companyId", "==", cid)
@@ -155,34 +155,24 @@ func (r *MemberRepositoryFS) Count(ctx context.Context, f memdom.Filter) (int, e
 
 	total := 0
 	for {
-		doc, err := it.Next()
+		_, err := it.Next()
 		if err == iterator.Done {
 			break
 		}
 		if err != nil {
 			return 0, err
 		}
-
-		m, err := readMemberSnapshot(doc)
-		if err != nil {
-			return 0, err
-		}
-		if m.ID == "" {
-			m.ID = doc.Ref.ID
-		}
-
-		// その他の条件は既存のローカルフィルタで最終判定
-		if matchMemberFilter(m, f) {
-			total++
-		}
+		total++
 	}
 	return total, nil
 }
 
+// List は companyId で絞り込み、updatedAt desc / docID desc の固定ソートでページングします。
+// s / f の詳細な sort / filter 条件は使用しません。
 func (r *MemberRepositoryFS) List(
 	ctx context.Context,
 	f memdom.Filter,
-	s common.Sort,
+	_ common.Sort,
 	p common.Page,
 ) (common.PageResult[memdom.Member], error) {
 	if r.Client == nil {
@@ -191,12 +181,13 @@ func (r *MemberRepositoryFS) List(
 
 	pageNum, perPage, offset := fscommon.NormalizePage(p.Number, p.PerPage, 50, 200)
 
-	// ▼ companyId を Firestore クエリに適用
 	q := r.col().Query
 	if cid := strings.TrimSpace(f.CompanyID); cid != "" {
 		q = q.Where("companyId", "==", cid)
 	}
-	q = applyMemberSort(q, s)
+	// 固定ソート: updatedAt desc → docID desc
+	q = q.OrderBy("updatedAt", firestore.Desc).
+		OrderBy(firestore.DocumentID, firestore.Desc)
 
 	it := q.Documents(ctx)
 	defer it.Stop()
@@ -218,10 +209,7 @@ func (r *MemberRepositoryFS) List(
 		if m.ID == "" {
 			m.ID = doc.Ref.ID
 		}
-		// 最終判定はローカルフィルタ
-		if matchMemberFilter(m, f) {
-			all = append(all, m)
-		}
+		all = append(all, m)
 	}
 
 	total := len(all)
@@ -253,10 +241,11 @@ func (r *MemberRepositoryFS) List(
 	}, nil
 }
 
+// ListByCursor は companyId で絞り込み、updatedAt desc / docID desc の固定ソートで
+// ID ベースのカーソルページングを行います。memdom.Sort は使用しません。
 func (r *MemberRepositoryFS) ListByCursor(
 	ctx context.Context,
 	f memdom.Filter,
-	s memdom.Sort,
 	cpage memdom.CursorPage,
 ) (memdom.CursorPageResult, error) {
 	if r.Client == nil {
@@ -268,12 +257,13 @@ func (r *MemberRepositoryFS) ListByCursor(
 		limit = 50
 	}
 
-	// ▼ companyId を Firestore クエリに適用
 	q := r.col().Query
 	if cid := strings.TrimSpace(f.CompanyID); cid != "" {
 		q = q.Where("companyId", "==", cid)
 	}
-	q = applyMemberSortForCursor(q, s)
+	// 固定ソート
+	q = q.OrderBy("updatedAt", firestore.Desc).
+		OrderBy(firestore.DocumentID, firestore.Desc)
 
 	it := q.Documents(ctx)
 	defer it.Stop()
@@ -301,11 +291,6 @@ func (r *MemberRepositoryFS) ListByCursor(
 		}
 		if m.ID == "" {
 			m.ID = doc.Ref.ID
-		}
-
-		// 追加条件はローカルフィルタ
-		if !matchMemberFilter(m, f) {
-			continue
 		}
 
 		if skipping {
@@ -577,122 +562,4 @@ func readMemberSnapshot(doc *firestore.DocumentSnapshot) (memdom.Member, error) 
 	}
 
 	return m, nil
-}
-
-// ========================
-// Helper: Filter & Sort
-// ========================
-
-func matchMemberFilter(m memdom.Member, f memdom.Filter) bool {
-	// Free text
-	if sq := strings.TrimSpace(f.SearchQuery); sq != "" {
-		lq := strings.ToLower(sq)
-		hay := strings.ToLower(m.ID + " " + m.FirstName + " " + m.LastName + " " + m.Email)
-		if !strings.Contains(hay, lq) {
-			return false
-		}
-	}
-
-	// Company filter (exact)
-	if cid := strings.TrimSpace(f.CompanyID); cid != "" {
-		if strings.TrimSpace(m.CompanyID) != cid {
-			return false
-		}
-	}
-
-	// Status filter (exact)
-	if st := strings.TrimSpace(f.Status); st != "" {
-		if strings.TrimSpace(m.Status) != st {
-			return false
-		}
-	}
-
-	// BrandIDs / Brands (alias)
-	if len(f.BrandIDs) > 0 || len(f.Brands) > 0 {
-		want := append(append([]string{}, f.BrandIDs...), f.Brands...)
-		if !fscommon.IntersectsStrings(want, m.AssignedBrands) {
-			return false
-		}
-	}
-
-	// Permissions (AND)
-	if len(f.Permissions) > 0 && !fscommon.HasAllStrings(m.Permissions, f.Permissions) {
-		return false
-	}
-
-	// CreatedAt / UpdatedAt ranges
-	if f.CreatedFrom != nil && m.CreatedAt.Before(f.CreatedFrom.UTC()) {
-		return false
-	}
-	if f.CreatedTo != nil && !m.CreatedAt.Before(f.CreatedTo.UTC()) {
-		return false
-	}
-	if f.UpdatedFrom != nil {
-		if m.UpdatedAt == nil || m.UpdatedAt.Before(f.UpdatedFrom.UTC()) {
-			return false
-		}
-	}
-	if f.UpdatedTo != nil {
-		if m.UpdatedAt == nil || !m.UpdatedAt.Before(f.UpdatedTo.UTC()) {
-			return false
-		}
-	}
-
-	return true
-}
-
-func applyMemberSort(q firestore.Query, s common.Sort) firestore.Query {
-	col := strings.ToLower(strings.TrimSpace(string(s.Column)))
-	var field string
-
-	switch col {
-	case "name":
-		field = "firstName"
-	case "email":
-		field = "email"
-	case "joinedat":
-		field = "createdAt"
-	case "updatedat":
-		field = "updatedAt"
-	// 仕様上は permissions / assigneeCount などもあり得るが、
-	// Firestore の単純 OrderBy で表現困難なため安全なデフォルトにフォールバック
-	default:
-		return q.OrderBy("updatedAt", firestore.Desc).
-			OrderBy(firestore.DocumentID, firestore.Desc)
-	}
-
-	dir := firestore.Asc
-	if strings.EqualFold(string(s.Order), "desc") {
-		dir = firestore.Desc
-	}
-
-	return q.OrderBy(field, dir).
-		OrderBy(firestore.DocumentID, dir)
-}
-
-func applyMemberSortForCursor(q firestore.Query, s memdom.Sort) firestore.Query {
-	col := strings.ToLower(strings.TrimSpace(string(s.Column)))
-	var field string
-
-	switch col {
-	case "name":
-		field = "firstName"
-	case "email":
-		field = "email"
-	case "joinedat":
-		field = "createdAt"
-	case "updatedat":
-		field = "updatedAt"
-	default:
-		return q.OrderBy("updatedAt", firestore.Desc).
-			OrderBy(firestore.DocumentID, firestore.Desc)
-	}
-
-	dir := firestore.Asc
-	if strings.EqualFold(string(s.Order), "desc") {
-		dir = firestore.Desc
-	}
-
-	return q.OrderBy(field, dir).
-		OrderBy(firestore.DocumentID, dir)
 }
