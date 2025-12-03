@@ -1,4 +1,3 @@
-// backend/internal/application/usecase/inspection_usecase.go
 package usecase
 
 import (
@@ -7,6 +6,7 @@ import (
 	"strings"
 	"time"
 
+	modeldom "narratives/internal/domain/model"
 	productdom "narratives/internal/domain/product"
 )
 
@@ -31,6 +31,12 @@ type ProductInspectionRepo interface {
 //   - GetByProductionID(ctx, productionID)
 //   - Save(ctx, batch)
 
+// ModelNumberRepo は modelID から ModelVariation を取得するためのポート。
+// ここで取得した ModelVariation から modelNumber を取り出して InspectionItem に埋めます。
+type ModelNumberRepo interface {
+	GetModelVariationByID(ctx context.Context, modelID string) (modeldom.ModelVariation, error)
+}
+
 // ------------------------------------------------------------
 // Usecase
 // ------------------------------------------------------------
@@ -43,16 +49,72 @@ type ProductInspectionRepo interface {
 type InspectionUsecase struct {
 	inspectionRepo InspectionRepo
 	productRepo    ProductInspectionRepo
+	modelRepo      ModelNumberRepo
 }
 
 func NewInspectionUsecase(
 	inspectionRepo InspectionRepo,
 	productRepo ProductInspectionRepo,
+	modelRepo ModelNumberRepo,
 ) *InspectionUsecase {
 	return &InspectionUsecase{
 		inspectionRepo: inspectionRepo,
 		productRepo:    productRepo,
+		modelRepo:      modelRepo,
 	}
+}
+
+// ------------------------------------------------------------
+// private helper: modelId → modelNumber の解決
+// ------------------------------------------------------------
+
+// fillModelNumbers は、InspectionBatch 内の各 InspectionItem について、
+// modelId から modelNumber を解決し、InspectionItem.ModelNumber にセットします。
+// modelRepo が nil の場合や解決に失敗した場合は、その項目はスキップします。
+func (u *InspectionUsecase) fillModelNumbers(
+	ctx context.Context,
+	batch productdom.InspectionBatch,
+) productdom.InspectionBatch {
+
+	if u.modelRepo == nil {
+		return batch
+	}
+
+	// 同じ modelId に対する解決結果はキャッシュする
+	cache := make(map[string]string)
+
+	for i := range batch.Inspections {
+		mid := strings.TrimSpace(batch.Inspections[i].ModelID)
+		if mid == "" {
+			continue
+		}
+
+		// 既にキャッシュ済みならそれを使う
+		if num, ok := cache[mid]; ok {
+			n := num
+			batch.Inspections[i].ModelNumber = &n
+			continue
+		}
+
+		// modelId から ModelVariation を取得
+		mv, err := u.modelRepo.GetModelVariationByID(ctx, mid)
+		if err != nil {
+			continue
+		}
+
+		num := strings.TrimSpace(mv.ModelNumber)
+		if num == "" {
+			// ModelNumber が未設定ならスキップ
+			continue
+		}
+
+		// キャッシュしてから項目に反映
+		cache[mid] = num
+		n := num
+		batch.Inspections[i].ModelNumber = &n
+	}
+
+	return batch
 }
 
 // ★ 追加: productionId から inspections バッチをそのまま返す
@@ -70,7 +132,14 @@ func (u *InspectionUsecase) GetBatchByProductionID(
 		return productdom.InspectionBatch{}, productdom.ErrInvalidInspectionProductionID
 	}
 
-	return u.inspectionRepo.GetByProductionID(ctx, pid)
+	batch, err := u.inspectionRepo.GetByProductionID(ctx, pid)
+	if err != nil {
+		return productdom.InspectionBatch{}, err
+	}
+
+	// modelId → modelNumber を埋めてから返却
+	batch = u.fillModelNumbers(ctx, batch)
+	return batch, nil
 }
 
 // ★ inspections 内の 1 productId 分を更新する
@@ -176,6 +245,9 @@ func (u *InspectionUsecase) UpdateInspectionForProduct(
 		return productdom.InspectionBatch{}, err
 	}
 
+	// 4.5) ★ modelNumber の埋め込み
+	updated = u.fillModelNumbers(ctx, updated)
+
 	// 5) products テーブル側の inspectionResult も同期
 	//    （result が指定されている場合のみ）
 	if result != nil && u.productRepo != nil {
@@ -236,6 +308,9 @@ func (u *InspectionUsecase) CompleteInspectionForProduction(
 	if err != nil {
 		return productdom.InspectionBatch{}, err
 	}
+
+	// 3.5) ★ modelNumber の埋め込み
+	updated = u.fillModelNumbers(ctx, updated)
 
 	// 4) products テーブル側の inspectionResult も同期
 	//    各 InspectionItem の InspectionResult をそのまま products に反映する。

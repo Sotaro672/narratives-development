@@ -24,6 +24,7 @@ const (
 type InspectionItem struct {
 	ProductID        string            `json:"productId"`
 	ModelID          string            `json:"modelId"`
+	ModelNumber      *string           `json:"modelNumber,omitempty"` // ★ 追加: modelId から解決した型番
 	InspectionResult *InspectionResult `json:"inspectionResult"`
 	InspectedBy      *string           `json:"inspectedBy"`
 	InspectedAt      *time.Time        `json:"inspectedAt"`
@@ -88,7 +89,8 @@ func NewInspectionBatch(
 		r := InspectionNotYet
 		inspections = append(inspections, InspectionItem{
 			ProductID:        id,
-			ModelID:          "", // modelId はアプリケーション層で埋める
+			ModelID:          "",  // modelId はアプリケーション層で埋める
+			ModelNumber:      nil, // modelNumber も後から解決
 			InspectionResult: &r,
 			InspectedBy:      nil,
 			InspectedAt:      nil,

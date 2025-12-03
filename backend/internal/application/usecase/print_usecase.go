@@ -7,6 +7,7 @@ import (
 	"strings"
 	"time"
 
+	// ★ 追加: ModelNumberRepo 用
 	productdom "narratives/internal/domain/product"
 )
 
@@ -52,17 +53,22 @@ type PrintUsecase struct {
 	repo           ProductRepo
 	printLogRepo   PrintLogRepo
 	inspectionRepo InspectionRepo
+
+	// ★ 追加: modelId → modelNumber 解決用
+	modelNumberRepo ModelNumberRepo
 }
 
 func NewPrintUsecase(
 	repo ProductRepo,
 	printLogRepo PrintLogRepo,
 	inspectionRepo InspectionRepo,
+	modelNumberRepo ModelNumberRepo,
 ) *PrintUsecase {
 	return &PrintUsecase{
-		repo:           repo,
-		printLogRepo:   printLogRepo,
-		inspectionRepo: inspectionRepo,
+		repo:            repo,
+		printLogRepo:    printLogRepo,
+		inspectionRepo:  inspectionRepo,
+		modelNumberRepo: modelNumberRepo,
 	}
 }
 
@@ -159,6 +165,28 @@ func (u *PrintUsecase) CreateInspectionBatchForProduction(
 		return productdom.InspectionBatch{}, productdom.ErrInvalidInspectionProductIDs
 	}
 
+	// ★ modelId → modelNumber のキャッシュを構築（ModelNumberRepo があれば）
+	modelNumberByModelID := map[string]string{}
+	if u.modelNumberRepo != nil {
+		for _, mid := range modelIDByProductID {
+			mid = strings.TrimSpace(mid)
+			if mid == "" {
+				continue
+			}
+			if _, exists := modelNumberByModelID[mid]; exists {
+				continue
+			}
+			mv, err := u.modelNumberRepo.GetModelVariationByID(ctx, mid)
+			if err != nil {
+				continue
+			}
+			mn := strings.TrimSpace(mv.ModelNumber)
+			if mn != "" {
+				modelNumberByModelID[mid] = mn
+			}
+		}
+	}
+
 	// InspectionBatch エンティティ作成（全て notYet, status=inspecting）
 	// quantity / totalPassed / requestedBy / requestedAt / mintedAt / tokenBlueprintId
 	// は NewInspectionBatch 側で初期化される
@@ -171,11 +199,17 @@ func (u *PrintUsecase) CreateInspectionBatchForProduction(
 		return productdom.InspectionBatch{}, err
 	}
 
-	// ★ InspectionItem に modelId を埋め込む
+	// ★ InspectionItem に modelId / modelNumber を埋め込む
 	for i := range batch.Inspections {
 		pid := batch.Inspections[i].ProductID
 		if mid, ok := modelIDByProductID[pid]; ok {
+			mid = strings.TrimSpace(mid)
 			batch.Inspections[i].ModelID = mid
+
+			if mn, ok := modelNumberByModelID[mid]; ok && mn != "" {
+				mnCopy := mn
+				batch.Inspections[i].ModelNumber = &mnCopy
+			}
 		}
 	}
 
@@ -228,6 +262,28 @@ func (u *PrintUsecase) CreatePrintLogForProduction(ctx context.Context, producti
 		return productdom.PrintLog{}, productdom.ErrInvalidPrintLogProductIDs
 	}
 
+	// ★ modelId → modelNumber のキャッシュを構築
+	modelNumberByModelID := map[string]string{}
+	if u.modelNumberRepo != nil {
+		for _, mid := range modelIDByProductID {
+			mid = strings.TrimSpace(mid)
+			if mid == "" {
+				continue
+			}
+			if _, exists := modelNumberByModelID[mid]; exists {
+				continue
+			}
+			mv, err := u.modelNumberRepo.GetModelVariationByID(ctx, mid)
+			if err != nil {
+				continue
+			}
+			mn := strings.TrimSpace(mv.ModelNumber)
+			if mn != "" {
+				modelNumberByModelID[mid] = mn
+			}
+		}
+	}
+
 	// printedAt を決定
 	// Product 側の PrintedAt があればそれを採用、なければ現在時刻
 	var printedAt time.Time
@@ -268,11 +324,17 @@ func (u *PrintUsecase) CreatePrintLogForProduction(ctx context.Context, producti
 		return productdom.PrintLog{}, err
 	}
 
-	// ★ InspectionItem に modelId を埋め込む
+	// ★ InspectionItem に modelId / modelNumber を埋め込む
 	for i := range batch.Inspections {
 		pid := batch.Inspections[i].ProductID
 		if mid, ok := modelIDByProductID[pid]; ok {
+			mid = strings.TrimSpace(mid)
 			batch.Inspections[i].ModelID = mid
+
+			if mn, ok := modelNumberByModelID[mid]; ok && mn != "" {
+				mnCopy := mn
+				batch.Inspections[i].ModelNumber = &mnCopy
+			}
 		}
 	}
 	// quantity / totalPassed / requestedBy / requestedAt / mintedAt / tokenBlueprintId は

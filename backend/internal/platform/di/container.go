@@ -1,10 +1,11 @@
-// backend\internal\platform\di\container.go
+// backend/internal/platform/di/container.go
 package di
 
 import (
 	"context"
 	"errors"
 	"log"
+	"strings"
 
 	firebase "firebase.google.com/go/v4"
 	firebaseauth "firebase.google.com/go/v4/auth"
@@ -19,7 +20,7 @@ import (
 	branddom "narratives/internal/domain/brand"
 	companydom "narratives/internal/domain/company"
 	memdom "narratives/internal/domain/member"
-	modeldom "narratives/internal/domain/model"     // ★ productQueryRepoAdapter 用
+	modeldom "narratives/internal/domain/model"     // ★ productQueryRepoAdapter / modelNumberRepoAdapter 用
 	productdom "narratives/internal/domain/product" // ★ productQueryRepoAdapter 用
 	productbpdom "narratives/internal/domain/productBlueprint"
 	appcfg "narratives/internal/infra/config"
@@ -157,6 +158,60 @@ func (a *productBlueprintDomainRepoAdapter) GetByID(
 		return productbpdom.ProductBlueprint{}, productbpdom.ErrInternal
 	}
 	return a.repo.GetByID(ctx, id)
+}
+
+// ========================================
+// ModelNumberRepo アダプタ
+// ========================================
+//
+// InspectionUsecase が期待する uc.ModelNumberRepo を
+// Firestore の ModelRepositoryFS に接続するアダプタ。
+// modelId → modelNumber の解決を担当する。
+type modelNumberRepoAdapter struct {
+	modelRepo *fs.ModelRepositoryFS
+}
+
+// GetModelVariationByID は interface usecase.ModelNumberRepo が要求するメソッド。
+// modelID から ModelVariation（値）を返します。
+func (a *modelNumberRepoAdapter) GetModelVariationByID(
+	ctx context.Context,
+	modelID string,
+) (modeldom.ModelVariation, error) {
+	if a == nil || a.modelRepo == nil {
+		return modeldom.ModelVariation{}, errors.New("modelNumberRepoAdapter: modelRepo is nil")
+	}
+
+	id := strings.TrimSpace(modelID)
+	if id == "" {
+		return modeldom.ModelVariation{}, modeldom.ErrInvalidID
+	}
+
+	mv, err := a.modelRepo.GetModelVariationByID(ctx, id)
+	if err != nil {
+		return modeldom.ModelVariation{}, err
+	}
+	if mv == nil {
+		return modeldom.ModelVariation{}, modeldom.ErrVariationNotFound
+	}
+	return *mv, nil
+}
+
+// （オプション）modelID から直接 modelNumber を解決したい場合用のヘルパ。
+// usecase 側で使っていなければコンパイルには影響しない。
+func (a *modelNumberRepoAdapter) GetModelNumberByModelID(
+	ctx context.Context,
+	modelID string,
+) (string, error) {
+	mv, err := a.GetModelVariationByID(ctx, modelID)
+	if err != nil {
+		return "", err
+	}
+
+	num := strings.TrimSpace(mv.ModelNumber)
+	if num == "" {
+		return "", modeldom.ErrInvalidModelNumber
+	}
+	return num, nil
 }
 
 // ========================================
@@ -389,6 +444,11 @@ func NewContainer(ctx context.Context) (*Container, error) {
 	}
 	pbSvc := productbpdom.NewService(pbDomainRepo)
 
+	// ★ modelId → modelNumber 解決用 Repo アダプタ
+	modelNumberRepo := &modelNumberRepoAdapter{
+		modelRepo: modelRepo,
+	}
+
 	// 5. Application-layer usecases
 	accountUC := uc.NewAccountUsecase(accountRepo)
 
@@ -426,7 +486,12 @@ func NewContainer(ctx context.Context) (*Container, error) {
 	permissionUC := uc.NewPermissionUsecase(permissionRepo)
 
 	// ★ PrintUsecase に PrintLogRepo + InspectionRepo を注入
-	printUC := uc.NewPrintUsecase(productRepo, printLogRepo, inspectionRepo)
+	printUC := uc.NewPrintUsecase(
+		productRepo,
+		printLogRepo,
+		inspectionRepo,
+		modelNumberRepo,
+	)
 
 	// ★ ProductionUsecase に member.Service + productBlueprint.Service + brand.Service を注入
 	productionUC := uc.NewProductionUsecase(
@@ -444,8 +509,9 @@ func NewContainer(ctx context.Context) (*Container, error) {
 
 	// ★ InspectionUsecase（検品アプリ専用）
 	inspectionUC := uc.NewInspectionUsecase(
-		inspectionRepo, // inspections テーブル
-		productRepo,    // products テーブル（inspectionResult 同期用）
+		inspectionRepo,  // inspections テーブル
+		productRepo,     // products テーブル（inspectionResult 同期用）
+		modelNumberRepo, // modelId → modelNumber 解決用
 	)
 
 	// ★ ProductUsecase（Inspector 詳細画面用）

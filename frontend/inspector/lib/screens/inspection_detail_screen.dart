@@ -234,7 +234,7 @@ class _InspectionDetailScreenState extends State<InspectionDetailScreen> {
 
   // ----------------------------------------------------------
   // 検品履歴: inspections テーブルの内容表示
-  //  productId + modelNumber + inspectionResult の一覧
+  //  modelNumber + 生産量(quantity) + 合格数(totalPassed) + 各 product 行
   // ----------------------------------------------------------
   Widget _buildInspectionList(InspectorProductDetail detail) {
     final inspections = detail.inspections;
@@ -244,6 +244,14 @@ class _InspectionDetailScreenState extends State<InspectionDetailScreen> {
         child: Text('検品履歴はまだありません。'),
       );
     }
+
+    // ★ 生産量 = レコード数
+    final int quantity = inspections.length;
+
+    // ★ 合格数 = inspectionResult == 'passed' の件数
+    final int totalPassed = inspections
+        .where((r) => r.inspectionResult == 'passed')
+        .length;
 
     return Card(
       margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
@@ -256,6 +264,20 @@ class _InspectionDetailScreenState extends State<InspectionDetailScreen> {
               '検品履歴',
               style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
             ),
+            const SizedBox(height: 8),
+            // ★ 上部サマリー: modelNumber / 生産量 / 合格数
+            Padding(
+              padding: const EdgeInsets.only(bottom: 8),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text('modelNumber: ${detail.modelNumber}'),
+                  Text('生産量: $quantity'),
+                  Text('合格数: $totalPassed'),
+                ],
+              ),
+            ),
+            const Divider(height: 1),
             const SizedBox(height: 8),
             ListView.separated(
               shrinkWrap: true,

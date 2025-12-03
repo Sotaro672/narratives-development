@@ -133,6 +133,13 @@ func inspectionBatchToDoc(v productdom.InspectionBatch) map[string]any {
 			"modelId":   strings.TrimSpace(ins.ModelID), // ★ modelId を保存
 		}
 
+		// ★ modelNumber を保存（存在する場合のみ）
+		if ins.ModelNumber != nil && strings.TrimSpace(*ins.ModelNumber) != "" {
+			m["modelNumber"] = strings.TrimSpace(*ins.ModelNumber)
+		} else {
+			m["modelNumber"] = nil
+		}
+
 		if ins.InspectionResult != nil {
 			m["inspectionResult"] = string(*ins.InspectionResult)
 		} else {
@@ -275,6 +282,14 @@ func docToInspectionBatch(
 
 			if v, ok := m["modelId"].(string); ok {
 				item.ModelID = strings.TrimSpace(v)
+			}
+
+			// ★ modelNumber の復元
+			if v, ok := m["modelNumber"].(string); ok {
+				s := strings.TrimSpace(v)
+				if s != "" {
+					item.ModelNumber = &s
+				}
 			}
 
 			if v, ok := m["inspectionResult"].(string); ok {
