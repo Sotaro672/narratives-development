@@ -160,6 +160,16 @@ func (u *InspectionUsecase) UpdateInspectionForProduct(
 		batch.Status = *status
 	}
 
+	// 3.5) ★ totalPassed を再集計
+	//      → inspections 内で InspectionResult == "passed" の件数を数え直す
+	passedCount := 0
+	for _, ins := range batch.Inspections {
+		if ins.InspectionResult != nil && *ins.InspectionResult == productdom.InspectionPassed {
+			passedCount++
+		}
+	}
+	batch.TotalPassed = passedCount
+
 	// 4) inspections テーブル側を保存
 	updated, err := u.inspectionRepo.Save(ctx, batch)
 	if err != nil {
@@ -211,6 +221,15 @@ func (u *InspectionUsecase) CompleteInspectionForProduction(
 	if err := batch.Complete(by, at); err != nil {
 		return productdom.InspectionBatch{}, err
 	}
+
+	// 2.5) ★ 一括更新後に totalPassed を再集計
+	passedCount := 0
+	for _, ins := range batch.Inspections {
+		if ins.InspectionResult != nil && *ins.InspectionResult == productdom.InspectionPassed {
+			passedCount++
+		}
+	}
+	batch.TotalPassed = passedCount
 
 	// 3) inspections テーブル側を保存
 	updated, err := u.inspectionRepo.Save(ctx, batch)

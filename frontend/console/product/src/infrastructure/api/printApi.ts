@@ -27,7 +27,7 @@ export type PrintLogForPrint = {
   productionId: string;
   productIds: string[];
   printedBy: string;
-  printedAt: string; 
+  printedAt: string;
   qrPayloads: string[];
 };
 
@@ -41,8 +41,7 @@ export async function listPrintLogsByProductionId(
   if (!id) return [];
 
   const raw = await fetchPrintLogsByProductionId(id);
-  if (!raw) return [];
-  if (!Array.isArray(raw)) return [];
+  if (!raw || !Array.isArray(raw)) return [];
 
   return (raw as any[])
     .map((log: any) => {
@@ -63,10 +62,7 @@ export async function listPrintLogsByProductionId(
         productionId: log.productionId ?? log.ProductionID ?? "",
         productIds,
         printedBy: log.printedBy ?? log.PrintedBy ?? "",
-        printedAt:
-          log.printedAt ??
-          log.PrintedAt ??
-          "",
+        printedAt: log.printedAt ?? log.PrintedAt ?? "",
         qrPayloads,
       };
 
@@ -77,6 +73,9 @@ export async function listPrintLogsByProductionId(
 
 /* ---------------------------------------------------------
  * 印刷用 Product 作成 + print_log 取得
+ *   1. Product を作成
+ *   2. print_log を作成
+ *   3. listPrintLogsByProductionId で結果を取得
  * --------------------------------------------------------- */
 export async function createProductsForPrint(params: {
   productionId: string;
@@ -90,6 +89,7 @@ export async function createProductsForPrint(params: {
 
   const tasks: Promise<void>[] = [];
 
+  // 1. Product を全件作成するためのタスクを積む
   rows.forEach((row) => {
     const q = Number.isFinite(Number(row.quantity))
       ? Math.max(0, Math.floor(Number(row.quantity as number)))
@@ -98,9 +98,7 @@ export async function createProductsForPrint(params: {
     const rawModelId = row.modelId ?? "";
     const modelId = rawModelId.trim();
 
-    if (!modelId || q <= 0) {
-      return;
-    }
+    if (!modelId || q <= 0) return;
 
     for (let i = 0; i < q; i += 1) {
       tasks.push(
@@ -116,10 +114,10 @@ export async function createProductsForPrint(params: {
   // 1. Product を全件作成
   await Promise.all(tasks);
 
-  // 2. print_log 作成
+  // 2. print_log を作成
   await createPrintLogsHTTP(id);
 
-  // 3. print_log を再取得
+  // 3. 作成した print_log を取得
   const logs = await listPrintLogsByProductionId(id);
 
   return logs;
@@ -135,8 +133,7 @@ export async function listProductsByProductionId(
   if (!id) return [];
 
   const raw = await fetchProductsByProductionId(id);
-  if (!raw) return [];
-  if (!Array.isArray(raw)) return [];
+  if (!raw || !Array.isArray(raw)) return [];
 
   const mapped = (raw as any[])
     .map((p) => ({
@@ -160,5 +157,6 @@ export async function createInspectionBatchForProduction(
   if (!id) {
     throw new Error("productionId is required");
   }
+  // 将来的に /products/inspections を叩く場合はここで実装
   return;
 }

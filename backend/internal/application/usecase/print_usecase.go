@@ -144,18 +144,24 @@ func (u *PrintUsecase) CreateInspectionBatchForProduction(
 		return productdom.InspectionBatch{}, fmt.Errorf("no products found for productionId=%s", pid)
 	}
 
-	// ProductID 一覧
+	// ProductID 一覧 + productId -> modelId マップ
 	productIDs := make([]string, 0, len(products))
+	modelIDByProductID := make(map[string]string, len(products))
 	for _, p := range products {
-		if strings.TrimSpace(p.ID) != "" {
-			productIDs = append(productIDs, strings.TrimSpace(p.ID))
+		id := strings.TrimSpace(p.ID)
+		if id == "" {
+			continue
 		}
+		productIDs = append(productIDs, id)
+		modelIDByProductID[id] = strings.TrimSpace(p.ModelID) // ★ Product の ModelID を保持
 	}
 	if len(productIDs) == 0 {
 		return productdom.InspectionBatch{}, productdom.ErrInvalidInspectionProductIDs
 	}
 
 	// InspectionBatch エンティティ作成（全て notYet, status=inspecting）
+	// quantity / totalPassed / requestedBy / requestedAt / mintedAt / tokenBlueprintId
+	// は NewInspectionBatch 側で初期化される
 	batch, err := productdom.NewInspectionBatch(
 		pid,
 		productdom.InspectionStatusInspecting,
@@ -163,6 +169,14 @@ func (u *PrintUsecase) CreateInspectionBatchForProduction(
 	)
 	if err != nil {
 		return productdom.InspectionBatch{}, err
+	}
+
+	// ★ InspectionItem に modelId を埋め込む
+	for i := range batch.Inspections {
+		pid := batch.Inspections[i].ProductID
+		if mid, ok := modelIDByProductID[pid]; ok {
+			batch.Inspections[i].ModelID = mid
+		}
 	}
 
 	created, err := u.inspectionRepo.Create(ctx, batch)
@@ -199,12 +213,16 @@ func (u *PrintUsecase) CreatePrintLogForProduction(ctx context.Context, producti
 		return productdom.PrintLog{}, fmt.Errorf("no products found for productionId=%s", pid)
 	}
 
-	// ProductID 一覧
+	// ProductID 一覧 + productId -> modelId マップ
 	productIDs := make([]string, 0, len(products))
+	modelIDByProductID := make(map[string]string, len(products))
 	for _, p := range products {
-		if strings.TrimSpace(p.ID) != "" {
-			productIDs = append(productIDs, strings.TrimSpace(p.ID))
+		id := strings.TrimSpace(p.ID)
+		if id == "" {
+			continue
 		}
+		productIDs = append(productIDs, id)
+		modelIDByProductID[id] = strings.TrimSpace(p.ModelID)
 	}
 	if len(productIDs) == 0 {
 		return productdom.PrintLog{}, productdom.ErrInvalidPrintLogProductIDs
@@ -249,6 +267,16 @@ func (u *PrintUsecase) CreatePrintLogForProduction(ctx context.Context, producti
 	if err != nil {
 		return productdom.PrintLog{}, err
 	}
+
+	// ★ InspectionItem に modelId を埋め込む
+	for i := range batch.Inspections {
+		pid := batch.Inspections[i].ProductID
+		if mid, ok := modelIDByProductID[pid]; ok {
+			batch.Inspections[i].ModelID = mid
+		}
+	}
+	// quantity / totalPassed / requestedBy / requestedAt / mintedAt / tokenBlueprintId は
+	// NewInspectionBatch 側の初期値のまま
 
 	// 先に Inspection を保存してから PrintLog を保存
 	if _, err := u.inspectionRepo.Create(ctx, batch); err != nil {

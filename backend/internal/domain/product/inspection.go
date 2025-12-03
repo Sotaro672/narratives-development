@@ -11,7 +11,6 @@ import (
 // Inspection batch (inspections)
 // ===============================
 
-// InspectionStatus は inspections のステータス
 type InspectionStatus string
 
 const (
@@ -19,19 +18,33 @@ const (
 	InspectionStatusCompleted  InspectionStatus = "completed"
 )
 
-// InspectionItem は 1 つの productId に対する検査状態を表す
+// ------------------------------------------------------
+// InspectionItem: productId ごとの検査結果
+// ------------------------------------------------------
 type InspectionItem struct {
 	ProductID        string            `json:"productId"`
+	ModelID          string            `json:"modelId"`
 	InspectionResult *InspectionResult `json:"inspectionResult"`
 	InspectedBy      *string           `json:"inspectedBy"`
 	InspectedAt      *time.Time        `json:"inspectedAt"`
 }
 
-// InspectionBatch は 1 productionId に紐づく inspections ドキュメント
+// ------------------------------------------------------
+// InspectionBatch: inspections テーブル 1 レコード
+// ------------------------------------------------------
 type InspectionBatch struct {
 	ProductionID string           `json:"productionId"`
 	Status       InspectionStatus `json:"status"`
-	Inspections  []InspectionItem `json:"inspections"`
+
+	// ★ 追加フィールド
+	Quantity         int        `json:"quantity"`         // item の合計数
+	TotalPassed      int        `json:"totalPassed"`      // 合格数
+	RequestedBy      *string    `json:"requestedBy"`      // リクエストしたユーザー（作成時 null）
+	RequestedAt      *time.Time `json:"requestedAt"`      // リクエスト日時（作成時 null）
+	MintedAt         *time.Time `json:"mintedAt"`         // NFT ミント完了日時（作成時 null）
+	TokenBlueprintID *string    `json:"tokenBlueprintId"` // ★ 追加: トークン設計ID（作成時 null）
+
+	Inspections []InspectionItem `json:"inspections"`
 }
 
 // ===============================
@@ -48,6 +61,8 @@ var (
 // Constructors
 // ===============================
 
+// quantity / totalPassed / requestedX / mintedAt / tokenBlueprintId は
+// コンストラクタ内で初期化（tokenBlueprintId は常に nil）
 func NewInspectionBatch(
 	productionID string,
 	status InspectionStatus,
@@ -73,6 +88,7 @@ func NewInspectionBatch(
 		r := InspectionNotYet
 		inspections = append(inspections, InspectionItem{
 			ProductID:        id,
+			ModelID:          "", // modelId はアプリケーション層で埋める
 			InspectionResult: &r,
 			InspectedBy:      nil,
 			InspectedAt:      nil,
@@ -80,9 +96,15 @@ func NewInspectionBatch(
 	}
 
 	batch := InspectionBatch{
-		ProductionID: pid,
-		Status:       status,
-		Inspections:  inspections,
+		ProductionID:     pid,
+		Status:           status,
+		Quantity:         len(inspections), // item 合計数
+		TotalPassed:      0,                // 初期値 0
+		RequestedBy:      nil,              // null
+		RequestedAt:      nil,              // null
+		MintedAt:         nil,              // null
+		TokenBlueprintID: nil,              // ★ null で作成
+		Inspections:      inspections,
 	}
 
 	if err := batch.validate(); err != nil {
@@ -105,6 +127,13 @@ func (b InspectionBatch) validate() error {
 	}
 	if len(b.Inspections) == 0 {
 		return ErrInvalidInspectionProductIDs
+	}
+
+	if b.Quantity != len(b.Inspections) || b.Quantity <= 0 {
+		return errors.New("inspection: invalid quantity")
+	}
+	if b.TotalPassed < 0 {
+		return errors.New("inspection: invalid totalPassed")
 	}
 
 	for _, ins := range b.Inspections {
