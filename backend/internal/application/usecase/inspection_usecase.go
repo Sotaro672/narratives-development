@@ -26,11 +26,10 @@ type ProductInspectionRepo interface {
 	) error
 }
 
-// InspectionRepo インターフェース自体は既存のものを利用する想定。
+// InspectionRepo インターフェース自体は print_usecase.go 側で定義済みのものを利用する。
+//   - Create(ctx, batch)                  // print_usecase で使用
 //   - GetByProductionID(ctx, productionID)
 //   - Save(ctx, batch)
-// の 2 つを使います。
-// （定義は別ファイルに既に存在している前提です）
 
 // ------------------------------------------------------------
 // Usecase
@@ -75,11 +74,6 @@ func (u *InspectionUsecase) GetBatchByProductionID(
 }
 
 // ★ inspections 内の 1 productId 分を更新する
-//
-// もともと ProductUsecase.UpdateInspectionForProduct にあった処理を
-// inspections テーブル専用に抜き出したものをベースに、
-//
-// さらに products テーブルの inspectionResult も同時に更新するように拡張。
 //
 // Flutter 側からは PATCH /products/inspections を 1 回叩くだけで、
 // - inspections コレクション
@@ -184,12 +178,6 @@ func (u *InspectionUsecase) UpdateInspectionForProduct(
 }
 
 // ★ 検品完了（未検品を notManufactured にし、ステータスを completed にする）
-//
-// もともと ProductUsecase.CompleteInspectionForProduction にあった処理を
-// inspections テーブル専用に抜き出したものをベースに、
-//
-// さらに「完了後の各 productId の inspectionResult を products テーブル側にも反映」
-// するように拡張。
 //
 // Flutter 側からは PATCH /products/inspections/complete を 1 回叩くだけで、
 // - inspections コレクション側の status/inspectionResult
