@@ -5,10 +5,30 @@ import (
 	"encoding/json"
 	"net/http"
 	"strings"
+	"time"
 
 	usecase "narratives/internal/application/usecase"
 	mintreqdom "narratives/internal/domain/mintRequest"
 )
+
+// レスポンス DTO（frontend の MintRequestDTO に合わせる）
+type mintRequestDTO struct {
+	ID                 string  `json:"id"`
+	ProductionID       string  `json:"productionId"`
+	ProductBlueprintID string  `json:"productBlueprintId,omitempty"`
+	ProductName        *string `json:"productName,omitempty"`
+	TokenBlueprintID   *string `json:"tokenBlueprintId,omitempty"`
+
+	MintQuantity       int `json:"mintQuantity"`
+	ProductionQuantity int `json:"productionQuantity"`
+
+	Status string `json:"status"`
+
+	RequestedBy       *string `json:"requestedBy,omitempty"`
+	RequestedAt       *string `json:"requestedAt,omitempty"`
+	MintedAt          *string `json:"mintedAt,omitempty"`
+	ScheduledBurnDate *string `json:"scheduledBurnDate,omitempty"`
+}
 
 // MintRequestHandler は /mint-requests 関連のエンドポイントを担当します。
 type MintRequestHandler struct {
@@ -60,7 +80,24 @@ func (h *MintRequestHandler) get(w http.ResponseWriter, r *http.Request, id stri
 		writeMintRequestErr(w, err)
 		return
 	}
-	_ = json.NewEncoder(w).Encode(mr)
+
+	// ドメイン → DTO 変換（単体取得版）
+	dto := mintRequestDTO{
+		ID:                 mr.ID,
+		ProductionID:       mr.ProductionID,
+		ProductBlueprintID: "",  // 単体取得では現状まだ解決していないため空文字
+		ProductName:        nil, // 同上（今後 Production / ProductBlueprint 経由で解決予定）
+		TokenBlueprintID:   mr.TokenBlueprintID,
+		MintQuantity:       mr.MintQuantity,
+		ProductionQuantity: 0, // 単体取得では未解決（必要なら後続で拡張）
+		Status:             string(mr.Status),
+		RequestedBy:        mr.RequestedBy,
+		RequestedAt:        formatTimePtr(mr.RequestedAt),
+		MintedAt:           formatTimePtr(mr.MintedAt),
+		ScheduledBurnDate:  formatTimePtr(mr.ScheduledBurnDate),
+	}
+
+	_ = json.NewEncoder(w).Encode(dto)
 }
 
 // GET /mint-requests
@@ -69,20 +106,48 @@ func (h *MintRequestHandler) get(w http.ResponseWriter, r *http.Request, id stri
 func (h *MintRequestHandler) listByCurrentCompany(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 
-	if h.uc == nil {
-		w.WriteHeader(http.StatusInternalServerError)
-		_ = json.NewEncoder(w).Encode(map[string]string{"error": "mintRequest usecase not initialized"})
-		return
-	}
-
-	list, err := h.uc.ListByCurrentCompany(ctx)
+	results, err := h.uc.ListByCurrentCompany(ctx)
 	if err != nil {
 		writeMintRequestErr(w, err)
 		return
 	}
 
+	dtoList := make([]mintRequestDTO, 0, len(results))
+	for _, res := range results {
+		var productNamePtr *string
+		if strings.TrimSpace(res.ProductName) != "" {
+			name := strings.TrimSpace(res.ProductName)
+			productNamePtr = &name
+		}
+
+		dto := mintRequestDTO{
+			ID:                 res.ID,
+			ProductionID:       res.ProductionID,
+			ProductBlueprintID: res.ProductBlueprintID,
+			ProductName:        productNamePtr,
+			TokenBlueprintID:   res.TokenBlueprintID,
+			MintQuantity:       res.MintQuantity,
+			ProductionQuantity: res.ProductionQuantity,
+			Status:             res.Status,
+			RequestedBy:        res.RequestedBy,
+			RequestedAt:        formatTimePtr(res.RequestedAt),
+			MintedAt:           formatTimePtr(res.MintedAt),
+			ScheduledBurnDate:  formatTimePtr(res.BurnDate),
+		}
+		dtoList = append(dtoList, dto)
+	}
+
 	w.WriteHeader(http.StatusOK)
-	_ = json.NewEncoder(w).Encode(list)
+	_ = json.NewEncoder(w).Encode(dtoList)
+}
+
+// time.Time ポインタ → RFC3339 文字列ポインタ
+func formatTimePtr(t *time.Time) *string {
+	if t == nil || t.IsZero() {
+		return nil
+	}
+	s := t.UTC().Format(time.RFC3339)
+	return &s
 }
 
 // エラーハンドリング

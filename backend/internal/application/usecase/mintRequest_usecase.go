@@ -13,8 +13,22 @@ import (
 )
 
 // ========================================
-// 依存ポート（最小インターフェース）
+// Repository Port (usecase が要求する最小インターフェース)
 // ========================================
+//
+// Firestore 実装 (*firestore.MintRequestRepositoryFS) は
+// mintdom.Repository を実装しており、その superset ですが、
+// Usecase 側ではここで定義する最小インターフェースだけに依存します。
+type MintRequestRepository interface {
+	// ID で1件取得
+	GetByID(ctx context.Context, id string) (mintdom.MintRequest, error)
+
+	// productionId IN (...) で一覧取得
+	ListByProductionIDs(ctx context.Context, productionIDs []string) ([]mintdom.MintRequest, error)
+
+	// 既存 MintRequest の更新
+	Update(ctx context.Context, mr mintdom.MintRequest) (mintdom.MintRequest, error)
+}
 
 // ProductBlueprintListRepo は companyId 付きで一覧取得できる既存 FS 実装
 // (ProductBlueprintRepositoryFS) に対応する最小インターフェースです。
@@ -29,22 +43,25 @@ type ProductionListRepo interface {
 }
 
 // ========================================
-// Repository Port (usecase が要求する最小インターフェース)
+// クエリ結果 DTO（アプリケーション層）
 // ========================================
 //
-// Firestore 実装 (*firestore.MintRequestRepositoryFS) は
-// mintdom.Repository を実装しており、その superset ですが、
-// Usecase 側ではここで定義する最小インターフェースだけに依存します。
-type MintRequestRepository interface {
-	// ID で1件取得
-	GetByID(ctx context.Context, id string) (mintdom.MintRequest, error)
+// フロント側の MintRequestDTO とほぼ 1:1 でマッピングできる形。
+type MintRequestQueryResult struct {
+	ID                 string
+	ProductionID       string
+	ProductBlueprintID string
+	ProductName        string
+	TokenBlueprintID   *string
 
-	// 既存 MintRequest の更新
-	Update(ctx context.Context, mr mintdom.MintRequest) (mintdom.MintRequest, error)
+	MintQuantity       int
+	ProductionQuantity int
 
-	// 指定された productionId 群に紐づく MintRequest 一覧を取得
-	// （backend/internal/domain/mintRequest/repository_port.go に対応）
-	ListByProductionIDs(ctx context.Context, productionIDs []string) ([]mintdom.MintRequest, error)
+	Status      string
+	RequestedBy *string
+	RequestedAt *time.Time
+	MintedAt    *time.Time
+	BurnDate    *time.Time
 }
 
 // ========================================
@@ -94,9 +111,9 @@ func (u *MintRequestUsecase) GetByID(
 // という 3 段階で MintRequest 一覧を返します。
 func (u *MintRequestUsecase) ListByCurrentCompany(
 	ctx context.Context,
-) ([]mintdom.MintRequest, error) {
+) ([]MintRequestQueryResult, error) {
 
-	if u.pbRepo == nil || u.prodRepo == nil || u.repo == nil {
+	if u.repo == nil || u.pbRepo == nil || u.prodRepo == nil {
 		return nil, errors.New("mintRequest: usecase not initialized")
 	}
 
@@ -114,25 +131,25 @@ func (u *MintRequestUsecase) ListByCurrentCompany(
 		return nil, err
 	}
 
-	pbIDSet := make(map[string]struct{})
+	pbByID := make(map[string]pbdom.ProductBlueprint)
 	for _, pb := range pbs {
 		if strings.TrimSpace(pb.CompanyID) != cid {
 			continue
 		}
-		// 論理削除済みは除外（DeletedAt != nil）
 		if pb.DeletedAt != nil {
+			// 論理削除済みは除外
 			continue
 		}
 		id := strings.TrimSpace(pb.ID)
 		if id == "" {
 			continue
 		}
-		pbIDSet[id] = struct{}{}
+		pbByID[id] = pb
 	}
 
-	if len(pbIDSet) == 0 {
+	if len(pbByID) == 0 {
 		// 対象となる productBlueprint がない → MintRequest も 0 件
-		return []mintdom.MintRequest{}, nil
+		return []MintRequestQueryResult{}, nil
 	}
 
 	// 2) 上記 productBlueprintId を参照している Production 一覧を取得
@@ -141,29 +158,25 @@ func (u *MintRequestUsecase) ListByCurrentCompany(
 		return nil, err
 	}
 
-	prodIDSet := make(map[string]struct{})
+	prodByID := make(map[string]proddom.Production)
+	prodIDs := make([]string, 0, len(prods))
 	for _, p := range prods {
 		pbid := strings.TrimSpace(p.ProductBlueprintID)
-		if _, ok := pbIDSet[pbid]; !ok {
+		if _, ok := pbByID[pbid]; !ok {
 			continue
 		}
-		// ※必要に応じて Production 側の論理削除チェックを追加してもよい
 		id := strings.TrimSpace(p.ID)
 		if id == "" {
 			continue
 		}
-		prodIDSet[id] = struct{}{}
-	}
 
-	if len(prodIDSet) == 0 {
-		// 対象となる production がない → MintRequest も 0 件
-		return []mintdom.MintRequest{}, nil
-	}
-
-	// map → slice へ変換
-	prodIDs := make([]string, 0, len(prodIDSet))
-	for id := range prodIDSet {
+		prodByID[id] = p
 		prodIDs = append(prodIDs, id)
+	}
+
+	if len(prodIDs) == 0 {
+		// 対象となる production がない → MintRequest も 0 件
+		return []MintRequestQueryResult{}, nil
 	}
 
 	// 3) productionId IN (...) に紐づく MintRequest 一覧を取得
@@ -172,11 +185,57 @@ func (u *MintRequestUsecase) ListByCurrentCompany(
 		return nil, err
 	}
 
-	return mrs, nil
+	// 4) 結果組み立て（productName / productionQuantity を解決）
+	results := make([]MintRequestQueryResult, 0, len(mrs))
+
+	for _, mr := range mrs {
+		prodID := strings.TrimSpace(mr.ProductionID)
+		p, ok := prodByID[prodID]
+
+		var (
+			pbID          string
+			productName   string
+			productionQty int
+		)
+
+		if ok {
+			pbID = strings.TrimSpace(p.ProductBlueprintID)
+
+			if pb, okPB := pbByID[pbID]; okPB {
+				productName = strings.TrimSpace(pb.ProductName)
+			}
+
+			// Production の生産量: Models[].Quantity の合計とする
+			total := 0
+			for _, mq := range p.Models {
+				if mq.Quantity > 0 {
+					total += mq.Quantity
+				}
+			}
+			productionQty = total
+		}
+
+		results = append(results, MintRequestQueryResult{
+			ID:                 mr.ID,
+			ProductionID:       prodID,
+			ProductBlueprintID: pbID,
+			ProductName:        productName,
+			TokenBlueprintID:   mr.TokenBlueprintID,
+			MintQuantity:       mr.MintQuantity,
+			ProductionQuantity: productionQty,
+			Status:             string(mr.Status),
+			RequestedBy:        mr.RequestedBy,
+			RequestedAt:        mr.RequestedAt,
+			MintedAt:           mr.MintedAt,
+			BurnDate:           mr.ScheduledBurnDate,
+		})
+	}
+
+	return results, nil
 }
 
 // ----------------------------------------
-// Commands（今後の拡張用サンプル）
+// Commands
 // ----------------------------------------
 
 // Request は planning → requested への遷移を行います。

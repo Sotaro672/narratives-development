@@ -253,6 +253,23 @@ func NewRouter(deps RouterDeps) http.Handler {
 	}
 
 	// ================================
+	// Mint Requests
+	//   GET /mint-requests
+	//   GET /mint-requests/{id}
+	// ================================
+	if deps.MintRequestUC != nil {
+		mintReqH := handlers.NewMintRequestHandler(deps.MintRequestUC)
+
+		var h http.Handler = mintReqH
+		if authMw != nil {
+			h = authMw.Handler(h)
+		}
+
+		mux.Handle("/mint-requests", h)
+		mux.Handle("/mint-requests/", h)
+	}
+
+	// ================================
 	// Token Blueprints
 	// ================================
 	if deps.TokenBlueprintUC != nil {
