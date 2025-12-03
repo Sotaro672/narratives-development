@@ -4,6 +4,7 @@ package handlers
 import (
 	"encoding/json"
 	"errors"
+	"log"
 	"net/http"
 	"strings"
 	"time"
@@ -55,6 +56,13 @@ func (h *InspectorHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, `{"error":"internal error"}`, http.StatusInternalServerError)
 			return
 		}
+
+		// ★ inspector へ渡すデータ全体像ログ
+		log.Printf(
+			"[InspectorHandler] GET /inspector/products/%s response payload: %+v",
+			productID,
+			p,
+		)
 
 		if err := json.NewEncoder(w).Encode(p); err != nil {
 			http.Error(w, `{"error":"encode error"}`, http.StatusInternalServerError)
@@ -127,6 +135,15 @@ func (h *InspectorHandler) getInspectionsByProductionID(w http.ResponseWriter, r
 		return
 	}
 
+	// ★ inspector へ渡す inspections バッチ全体像ログ
+	log.Printf(
+		"[InspectorHandler] GET /products/inspections?productionId=%s response payload: status=%s, inspectionsCount=%d, batch=%+v",
+		productionID,
+		batch.Status,
+		len(batch.Inspections),
+		batch,
+	)
+
 	_ = json.NewEncoder(w).Encode(batch)
 }
 
@@ -176,6 +193,17 @@ func (h *InspectorHandler) updateInspection(w http.ResponseWriter, r *http.Reque
 		return
 	}
 
+	// ★ inspector から受け取った更新リクエストの全体像ログ
+	log.Printf(
+		"[InspectorHandler] PATCH /products/inspections request payload: productionId=%s, productId=%s, inspectionResult=%v, inspectedBy=%v, inspectedAt=%v, status=%v",
+		req.ProductionID,
+		req.ProductID,
+		req.InspectionResult,
+		req.InspectedBy,
+		req.InspectedAt,
+		req.Status,
+	)
+
 	batch, err := h.inspectionUC.UpdateInspectionForProduct(
 		ctx,
 		req.ProductionID,
@@ -207,6 +235,15 @@ func (h *InspectorHandler) updateInspection(w http.ResponseWriter, r *http.Reque
 		})
 		return
 	}
+
+	// ★ 更新後に inspector へ返すバッチ全体像ログ
+	log.Printf(
+		"[InspectorHandler] PATCH /products/inspections response payload: productionId=%s, status=%s, inspectionsCount=%d, batch=%+v",
+		batch.ProductionID,
+		batch.Status,
+		len(batch.Inspections),
+		batch,
+	)
 
 	_ = json.NewEncoder(w).Encode(batch)
 }

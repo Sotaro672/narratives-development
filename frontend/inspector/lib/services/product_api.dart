@@ -91,12 +91,15 @@ class InspectorProductBlueprint {
 
 class InspectorInspectionRecord {
   final String productId;
+  // ★ InspectionUsecase から渡される modelNumber を受け取る
+  final String? modelNumber;
   final String? inspectionResult;
   final String? inspectedBy;
   final DateTime? inspectedAt;
 
   InspectorInspectionRecord({
     required this.productId,
+    this.modelNumber,
     this.inspectionResult,
     this.inspectedBy,
     this.inspectedAt,
@@ -123,6 +126,8 @@ class InspectorInspectionRecord {
 
     return InspectorInspectionRecord(
       productId: (json['productId'] ?? '') as String,
+      // ★ backend から { "modelNumber": "XXX-001" } が来た場合に反映
+      modelNumber: json['modelNumber'] as String?,
       inspectionResult: json['inspectionResult'] as String?,
       inspectedBy: json['inspectedBy'] as String?,
       inspectedAt: parseDate(json['inspectedAt']),

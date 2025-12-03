@@ -124,6 +124,16 @@ class _InspectionDetailScreenState extends State<InspectionDetailScreen> {
     final entries = detail.measurements.entries.toList()
       ..sort((a, b) => a.key.compareTo(b.key));
 
+    // rgb(int) → Flutter Color 変換（RGB だけの場合も Alpha=0xFF を補う）
+    final colorInt = (() {
+      final v = detail.color.rgb;
+      // 上位 8bit が 0 の場合は alpha が無い想定なので 0xFF を付与
+      if ((v & 0xFF000000) == 0) {
+        return 0xFF000000 | v;
+      }
+      return v;
+    })();
+
     return Card(
       margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
       child: Padding(
@@ -147,7 +157,7 @@ class _InspectionDetailScreenState extends State<InspectionDetailScreen> {
                   width: 18,
                   height: 18,
                   decoration: BoxDecoration(
-                    color: Color(detail.color.rgb),
+                    color: Color(colorInt),
                     borderRadius: BorderRadius.circular(4),
                     border: Border.all(color: Colors.grey.shade400),
                   ),
@@ -224,7 +234,7 @@ class _InspectionDetailScreenState extends State<InspectionDetailScreen> {
 
   // ----------------------------------------------------------
   // 検品履歴: inspections テーブルの内容表示
-  //  productId + inspectionResult の一覧
+  //  productId + modelNumber + inspectionResult の一覧
   // ----------------------------------------------------------
   Widget _buildInspectionList(InspectorProductDetail detail) {
     final inspections = detail.inspections;
@@ -255,12 +265,15 @@ class _InspectionDetailScreenState extends State<InspectionDetailScreen> {
               itemBuilder: (context, index) {
                 final item = inspections[index];
                 final resultLabel = formatResult(item.inspectionResult);
+                final modelNumber = item.modelNumber ?? '';
 
                 return ListTile(
                   dense: true,
                   contentPadding: EdgeInsets.zero,
                   title: Text(
-                    'productId: ${item.productId}',
+                    modelNumber.isNotEmpty
+                        ? 'productId: ${item.productId} / modelNumber: $modelNumber'
+                        : 'productId: ${item.productId}',
                     style: const TextStyle(fontSize: 13),
                   ),
                   subtitle: Column(
