@@ -1,3 +1,4 @@
+// backend/internal/application/usecase/inspection_usecase.go
 package usecase
 
 import (
@@ -16,7 +17,6 @@ import (
 
 // ProductInspectionRepo は products テーブル側の inspectionResult を更新するための
 // 最小限のポートです。
-// 具体的な実装（Firestore など）は adapters 層で用意します。
 type ProductInspectionRepo interface {
 	// 指定 productId の inspectionResult を更新する
 	UpdateInspectionResult(
@@ -26,13 +26,9 @@ type ProductInspectionRepo interface {
 	) error
 }
 
-// InspectionRepo インターフェース自体は print_usecase.go 側で定義済みのものを利用する。
-//   - Create(ctx, batch)                  // print_usecase で使用
-//   - GetByProductionID(ctx, productionID)
-//   - Save(ctx, batch)
+// InspectionRepo インターフェース自体は print_usecase.go 側で定義済み。
 
 // ModelNumberRepo は modelID から ModelVariation を取得するためのポート。
-// ここで取得した ModelVariation から modelNumber を取り出して InspectionItem に埋めます。
 type ModelNumberRepo interface {
 	GetModelVariationByID(ctx context.Context, modelID string) (modeldom.ModelVariation, error)
 }
@@ -41,11 +37,6 @@ type ModelNumberRepo interface {
 // Usecase
 // ------------------------------------------------------------
 
-// InspectionUsecase は検品アプリ（inspector）専用のユースケースをまとめる。
-// - inspections テーブルの 1 productId 分の検品結果更新
-// - 検品完了処理（一括クローズ）
-// に加えて、
-// - products テーブル側の inspectionResult も同じタイミングで更新する。
 type InspectionUsecase struct {
 	inspectionRepo InspectionRepo
 	productRepo    ProductInspectionRepo
@@ -68,9 +59,6 @@ func NewInspectionUsecase(
 // private helper: modelId → modelNumber の解決
 // ------------------------------------------------------------
 
-// fillModelNumbers は、InspectionBatch 内の各 InspectionItem について、
-// modelId から modelNumber を解決し、InspectionItem.ModelNumber にセットします。
-// modelRepo が nil の場合や解決に失敗した場合は、その項目はスキップします。
 func (u *InspectionUsecase) fillModelNumbers(
 	ctx context.Context,
 	batch productdom.InspectionBatch,
@@ -143,11 +131,6 @@ func (u *InspectionUsecase) GetBatchByProductionID(
 }
 
 // ★ inspections 内の 1 productId 分を更新する
-//
-// Flutter 側からは PATCH /products/inspections を 1 回叩くだけで、
-// - inspections コレクション
-// - products コレクション
-// の両方が更新される想定。
 func (u *InspectionUsecase) UpdateInspectionForProduct(
 	ctx context.Context,
 	productionID string,
@@ -230,7 +213,6 @@ func (u *InspectionUsecase) UpdateInspectionForProduct(
 	}
 
 	// 3.5) ★ totalPassed を再集計
-	//      → inspections 内で InspectionResult == "passed" の件数を数え直す
 	passedCount := 0
 	for _, ins := range batch.Inspections {
 		if ins.InspectionResult != nil && *ins.InspectionResult == productdom.InspectionPassed {
@@ -260,11 +242,6 @@ func (u *InspectionUsecase) UpdateInspectionForProduct(
 }
 
 // ★ 検品完了（未検品を notManufactured にし、ステータスを completed にする）
-//
-// Flutter 側からは PATCH /products/inspections/complete を 1 回叩くだけで、
-// - inspections コレクション側の status/inspectionResult
-// - products コレクション側の inspectionResult
-// が同期される想定。
 func (u *InspectionUsecase) CompleteInspectionForProduction(
 	ctx context.Context,
 	productionID string,
@@ -288,8 +265,6 @@ func (u *InspectionUsecase) CompleteInspectionForProduction(
 	}
 
 	// 2) ドメイン側の Complete を利用して一括更新
-	//    - inspectionResult == "notYet" → "notManufactured"
-	//    - status → "completed"（など）
 	if err := batch.Complete(by, at); err != nil {
 		return productdom.InspectionBatch{}, err
 	}
@@ -313,7 +288,8 @@ func (u *InspectionUsecase) CompleteInspectionForProduction(
 	updated = u.fillModelNumbers(ctx, updated)
 
 	// 4) products テーブル側の inspectionResult も同期
-	//    各 InspectionItem の InspectionResult をそのまま products に反映する。
+	//    - notManufactured になった行は「物理的な商品が存在しない」ケースがあるためスキップ
+	//    - productId が空の行もスキップ
 	if u.productRepo != nil {
 		for _, item := range updated.Inspections {
 			if item.InspectionResult == nil {
@@ -321,10 +297,21 @@ func (u *InspectionUsecase) CompleteInspectionForProduction(
 			}
 			result := *item.InspectionResult
 			if !productdom.IsValidInspectionResult(result) {
-				// 念のため検証
 				return productdom.InspectionBatch{}, productdom.ErrInvalidInspectionResult
 			}
-			if err := u.productRepo.UpdateInspectionResult(ctx, item.ProductID, result); err != nil {
+
+			// 物理商品が存在しない可能性が高いので、notManufactured は products へ同期しない
+			if result == productdom.InspectionNotManufactured {
+				continue
+			}
+
+			pid := strings.TrimSpace(item.ProductID)
+			if pid == "" {
+				// product ドキュメントが存在しないので同期対象外
+				continue
+			}
+
+			if err := u.productRepo.UpdateInspectionResult(ctx, pid, result); err != nil {
 				return productdom.InspectionBatch{}, err
 			}
 		}

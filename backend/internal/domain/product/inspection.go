@@ -24,7 +24,7 @@ const (
 type InspectionItem struct {
 	ProductID        string            `json:"productId"`
 	ModelID          string            `json:"modelId"`
-	ModelNumber      *string           `json:"modelNumber,omitempty"` // ★ 追加: modelId から解決した型番
+	ModelNumber      *string           `json:"modelNumber,omitempty"` // modelId から解決した型番
 	InspectionResult *InspectionResult `json:"inspectionResult"`
 	InspectedBy      *string           `json:"inspectedBy"`
 	InspectedAt      *time.Time        `json:"inspectedAt"`
@@ -37,13 +37,13 @@ type InspectionBatch struct {
 	ProductionID string           `json:"productionId"`
 	Status       InspectionStatus `json:"status"`
 
-	// ★ 追加フィールド
+	// 追加フィールド
 	Quantity         int        `json:"quantity"`         // item の合計数
 	TotalPassed      int        `json:"totalPassed"`      // 合格数
 	RequestedBy      *string    `json:"requestedBy"`      // リクエストしたユーザー（作成時 null）
 	RequestedAt      *time.Time `json:"requestedAt"`      // リクエスト日時（作成時 null）
 	MintedAt         *time.Time `json:"mintedAt"`         // NFT ミント完了日時（作成時 null）
-	TokenBlueprintID *string    `json:"tokenBlueprintId"` // ★ 追加: トークン設計ID（作成時 null）
+	TokenBlueprintID *string    `json:"tokenBlueprintId"` // トークン設計ID（作成時 null）
 
 	Inspections []InspectionItem `json:"inspections"`
 }
@@ -100,12 +100,12 @@ func NewInspectionBatch(
 	batch := InspectionBatch{
 		ProductionID:     pid,
 		Status:           status,
-		Quantity:         len(inspections), // item 合計数
-		TotalPassed:      0,                // 初期値 0
-		RequestedBy:      nil,              // null
-		RequestedAt:      nil,              // null
-		MintedAt:         nil,              // null
-		TokenBlueprintID: nil,              // ★ null で作成
+		Quantity:         len(inspections),
+		TotalPassed:      0,
+		RequestedBy:      nil,
+		RequestedAt:      nil,
+		MintedAt:         nil,
+		TokenBlueprintID: nil,
 		Inspections:      inspections,
 	}
 
@@ -143,28 +143,30 @@ func (b InspectionBatch) validate() error {
 			return ErrInvalidInspectionProductIDs
 		}
 
-		if ins.InspectionResult != nil {
-			if !IsValidInspectionResult(*ins.InspectionResult) {
-				return ErrInvalidInspectionResult
+		// InspectionResult が nil の場合は「まだ何も書いていない」扱いにして
+		// inspectedBy/inspectedAt が入っていてもエラーにしない。
+		if ins.InspectionResult == nil {
+			continue
+		}
+
+		if !IsValidInspectionResult(*ins.InspectionResult) {
+			return ErrInvalidInspectionResult
+		}
+
+		switch *ins.InspectionResult {
+
+		// ★ 検査結果が確定している状態は by / at 必須
+		case InspectionPassed, InspectionFailed, InspectionNotManufactured:
+			if ins.InspectedBy == nil || strings.TrimSpace(*ins.InspectedBy) == "" {
+				return ErrInvalidInspectedBy
+			}
+			if ins.InspectedAt == nil || ins.InspectedAt.IsZero() {
+				return ErrInvalidInspectedAt
 			}
 
-			switch *ins.InspectionResult {
-			case InspectionPassed, InspectionFailed:
-				if ins.InspectedBy == nil || strings.TrimSpace(*ins.InspectedBy) == "" {
-					return ErrInvalidInspectedBy
-				}
-				if ins.InspectedAt == nil || ins.InspectedAt.IsZero() {
-					return ErrInvalidInspectedAt
-				}
-			case InspectionNotYet, InspectionNotManufactured:
-				if ins.InspectedBy != nil || ins.InspectedAt != nil {
-					return ErrInvalidCoherence
-				}
-			}
-		} else {
-			if ins.InspectedBy != nil || ins.InspectedAt != nil {
-				return ErrInvalidCoherence
-			}
+		// ★ notYet の場合は互換性のため、by/at が入っていてもエラーにしない
+		case InspectionNotYet:
+			// 何もしない（coherence はチェックしない）
 		}
 	}
 	return nil

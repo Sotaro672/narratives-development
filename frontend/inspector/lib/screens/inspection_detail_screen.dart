@@ -92,6 +92,12 @@ class _InspectionDetailScreenState extends State<InspectionDetailScreen> {
       _submitting = true;
     });
 
+    // ★ 検品完了リクエスト時に渡す情報をログ出力
+    html.window.console.log(
+      '[InspectionDetailScreen] completeInspection requested: '
+      'productionId=$productionId',
+    );
+
     try {
       await ProductApi.completeInspection(productionId: productionId);
       if (!mounted) return;
@@ -417,19 +423,6 @@ class _InspectionDetailScreenState extends State<InspectionDetailScreen> {
           }
 
           final detail = snapshot.data!;
-
-          html.window.console.log(
-            '[InspectionDetailScreen] loaded detail: '
-            'productId=${detail.productId}, '
-            'modelId=${detail.modelId}, '
-            'productionId=${detail.productionId}, '
-            'modelNumber=${detail.modelNumber}, '
-            'size=${detail.size}, '
-            'brandName=${detail.productBlueprint.brandName}, '
-            'companyName=${detail.productBlueprint.companyName}, '
-            'inspectionResult=${detail.inspectionResult}, '
-            'inspectionsCount=${detail.inspections.length}',
-          );
 
           return RefreshIndicator(
             onRefresh: _reload,

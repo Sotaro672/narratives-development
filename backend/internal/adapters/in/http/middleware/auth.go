@@ -24,12 +24,14 @@ var (
 	ctxKeyCompanyID = ctxKey{name: "companyId"}
 	ctxKeyUID       = ctxKey{name: "uid"}
 	ctxKeyEmail     = ctxKey{name: "email"}
+	ctxKeyFullName  = ctxKey{name: "fullName"} // ★ 追加: 表示名(fullName)
 )
 
 // AuthMiddleware は
+//
 //   - Authorization: Bearer <ID_TOKEN>
 //
-// を検証し、現在メンバーと companyId、uid/email を context に詰めて次のハンドラへ渡す。
+// を検証し、現在メンバーと companyId、uid/email/fullName を context に詰めて次のハンドラへ渡す。
 type AuthMiddleware struct {
 	FirebaseAuth *FirebaseAuthClient
 	MemberRepo   memdom.Repository
@@ -85,6 +87,12 @@ func (m *AuthMiddleware) Handler(next http.Handler) http.Handler {
 			if emailStr, ok2 := emailRaw.(string); ok2 && strings.TrimSpace(emailStr) != "" {
 				ctx = context.WithValue(ctx, ctxKeyEmail, strings.TrimSpace(emailStr))
 			}
+		}
+
+		// ★ fullName を member から組み立てて context に格納
+		fullName := memdom.FormatLastFirst(member.LastName, member.FirstName)
+		if strings.TrimSpace(fullName) != "" {
+			ctx = context.WithValue(ctx, ctxKeyFullName, strings.TrimSpace(fullName))
 		}
 
 		// companyId が空でなければ context に格納
@@ -146,4 +154,18 @@ func CurrentUIDAndEmail(r *http.Request) (uid string, email string, ok bool) {
 		}
 	}
 	return uid, email, true
+}
+
+// ★ 追加: CurrentFullName
+// middleware で注入された表示名(fullName)を取得します。
+func CurrentFullName(r *http.Request) (string, bool) {
+	v := r.Context().Value(ctxKeyFullName)
+	if v == nil {
+		return "", false
+	}
+	s, ok := v.(string)
+	if !ok || strings.TrimSpace(s) == "" {
+		return "", false
+	}
+	return strings.TrimSpace(s), true
 }

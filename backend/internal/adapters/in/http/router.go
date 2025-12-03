@@ -1,3 +1,4 @@
+// backend/internal/adapters/in/http/router.go
 package httpin
 
 import (
@@ -375,7 +376,9 @@ func NewRouter(deps RouterDeps) http.Handler {
 
 	// ================================
 	// ⭐ 検品 API（Inspector 用）
-	//   PATCH /products/inspections だけを担当
+	//   GET  /products/inspections
+	//   PATCH /products/inspections
+	//   PATCH /products/inspections/complete
 	// ================================
 	if deps.PrintUC != nil && deps.InspectionUC != nil {
 		inspectorH := handlers.NewInspectorHandler(deps.PrintUC, deps.InspectionUC)
@@ -386,9 +389,8 @@ func NewRouter(deps RouterDeps) http.Handler {
 			h = authMw.Handler(h)
 		}
 
-		// ★ /inspector/products/ は ProductHandler 側に任せる
-		// PATCH /products/inspections だけを InspectorHandler で扱う
 		mux.Handle("/products/inspections", h)
+		mux.Handle("/products/inspections/", h) // ← /complete などもこのハンドラに流す
 	}
 
 	return mux

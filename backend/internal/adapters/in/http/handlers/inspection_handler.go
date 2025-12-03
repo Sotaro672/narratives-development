@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	"narratives/internal/adapters/in/http/middleware"
 	"narratives/internal/application/usecase"
 	productdom "narratives/internal/domain/product"
 )
@@ -85,6 +86,14 @@ func (h *InspectorHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	// ------------------------------------------------------------
 	case r.Method == http.MethodPatch && r.URL.Path == "/products/inspections":
 		h.updateInspection(w, r)
+		return
+
+	// ------------------------------------------------------------
+	// PATCH /products/inspections/complete
+	//   → 検品完了（未検品: notYet を notManufactured にし status=completed）
+	// ------------------------------------------------------------
+	case r.Method == http.MethodPatch && r.URL.Path == "/products/inspections/complete":
+		h.completeInspection(w, r)
 		return
 
 	default:
@@ -169,7 +178,7 @@ func (h *InspectorHandler) updateInspection(w http.ResponseWriter, r *http.Reque
 		ProductionID     string                       `json:"productionId"`
 		ProductID        string                       `json:"productId"`
 		InspectionResult *productdom.InspectionResult `json:"inspectionResult"`
-		InspectedBy      *string                      `json:"inspectedBy"`
+		InspectedBy      *string                      `json:"inspectedBy"` // ← 互換のため定義だけ残す（実際には無視）
 		InspectedAt      *time.Time                   `json:"inspectedAt"`
 		Status           *productdom.InspectionStatus `json:"status"`
 	}
@@ -193,13 +202,31 @@ func (h *InspectorHandler) updateInspection(w http.ResponseWriter, r *http.Reque
 		return
 	}
 
-	// ★ inspector から受け取った更新リクエストの全体像ログ
+	// ★ 現在のメンバーの fullName をコンテキストから取得
+	fullName, hasFullName := middleware.CurrentFullName(r)
+
+	// ★ フォールバックとして email も拾っておく（fullName が空の場合）
+	_, email, hasUIDEmail := middleware.CurrentUIDAndEmail(r)
+
+	var inspectedByName *string
+	if hasFullName && strings.TrimSpace(fullName) != "" {
+		name := strings.TrimSpace(fullName)
+		inspectedByName = &name
+	} else if hasUIDEmail && strings.TrimSpace(email) != "" {
+		// fullName が取れなかった場合は email を代用
+		e := strings.TrimSpace(email)
+		inspectedByName = &e
+	} else {
+		// それでも何もなければ nil のまま → Usecase 側では inspectedBy 更新なし
+	}
+
+	// ★ inspector から受け取った更新リクエスト + 解決した inspectedBy のログ
 	log.Printf(
-		"[InspectorHandler] PATCH /products/inspections request payload: productionId=%s, productId=%s, inspectionResult=%v, inspectedBy=%v, inspectedAt=%v, status=%v",
+		"[InspectorHandler] PATCH /products/inspections request payload: productionId=%s, productId=%s, inspectionResult=%v, inspectedBy(fullName)=%v, inspectedAt=%v, status=%v",
 		req.ProductionID,
 		req.ProductID,
 		req.InspectionResult,
-		req.InspectedBy,
+		inspectedByName,
 		req.InspectedAt,
 		req.Status,
 	)
@@ -209,7 +236,7 @@ func (h *InspectorHandler) updateInspection(w http.ResponseWriter, r *http.Reque
 		req.ProductionID,
 		req.ProductID,
 		req.InspectionResult,
-		req.InspectedBy,
+		inspectedByName, // ★ ここで fullName（なければ email）を渡す
 		req.InspectedAt,
 		req.Status,
 	)
@@ -243,6 +270,114 @@ func (h *InspectorHandler) updateInspection(w http.ResponseWriter, r *http.Reque
 		batch.Status,
 		len(batch.Inspections),
 		batch,
+	)
+
+	_ = json.NewEncoder(w).Encode(batch)
+}
+
+// ------------------------------------------------------------
+// PATCH /products/inspections/complete
+//
+//	検品完了処理（未検品 notYet → notManufactured, status → completed）
+//	→ InspectionUsecase.CompleteInspectionForProduction に移譲
+//
+// ------------------------------------------------------------
+func (h *InspectorHandler) completeInspection(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+
+	if h.inspectionUC == nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		_ = json.NewEncoder(w).Encode(map[string]string{
+			"error": "inspection usecase is not configured",
+		})
+		return
+	}
+
+	var req struct {
+		ProductionID string     `json:"productionId"`
+		InspectedAt  *time.Time `json:"inspectedAt"` // 任意。nil の場合はサーバ時刻を使う
+	}
+
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		w.WriteHeader(http.StatusBadRequest)
+		_ = json.NewEncoder(w).Encode(map[string]string{
+			"error": "invalid json",
+		})
+		return
+	}
+
+	req.ProductionID = strings.TrimSpace(req.ProductionID)
+	if req.ProductionID == "" {
+		w.WriteHeader(http.StatusBadRequest)
+		_ = json.NewEncoder(w).Encode(map[string]string{
+			"error": "productionId is required",
+		})
+		return
+	}
+
+	// ★ by: CurrentFullName → email の順で解決
+	fullName, hasFullName := middleware.CurrentFullName(r)
+	_, email, hasUIDEmail := middleware.CurrentUIDAndEmail(r)
+
+	by := ""
+	if hasFullName && strings.TrimSpace(fullName) != "" {
+		by = strings.TrimSpace(fullName)
+	} else if hasUIDEmail && strings.TrimSpace(email) != "" {
+		by = strings.TrimSpace(email)
+	}
+
+	if by == "" {
+		w.WriteHeader(http.StatusBadRequest)
+		_ = json.NewEncoder(w).Encode(map[string]string{
+			"error": "inspectedBy (current member) could not be resolved",
+		})
+		return
+	}
+
+	// inspectedAt: 指定があればそれを UTC に、無ければ now.UTC()
+	var at time.Time
+	if req.InspectedAt != nil && !req.InspectedAt.IsZero() {
+		at = req.InspectedAt.UTC()
+	} else {
+		at = time.Now().UTC()
+	}
+
+	log.Printf(
+		"[InspectorHandler] PATCH /products/inspections/complete request payload: productionId=%s, by=%s, at=%s",
+		req.ProductionID,
+		by,
+		at.Format(time.RFC3339Nano),
+	)
+
+	batch, err := h.inspectionUC.CompleteInspectionForProduction(
+		ctx,
+		req.ProductionID,
+		by,
+		at,
+	)
+	if err != nil {
+		code := http.StatusInternalServerError
+		switch err {
+		case productdom.ErrInvalidInspectionProductionID,
+			productdom.ErrInvalidInspectionResult:
+			code = http.StatusBadRequest
+		case productdom.ErrNotFound:
+			code = http.StatusNotFound
+		}
+
+		w.WriteHeader(code)
+		_ = json.NewEncoder(w).Encode(map[string]string{
+			"error": err.Error(),
+		})
+		return
+	}
+
+	log.Printf(
+		"[InspectorHandler] PATCH /products/inspections/complete response payload: productionId=%s, status=%s, inspectionsCount=%d, totalPassed=%d",
+		batch.ProductionID,
+		batch.Status,
+		len(batch.Inspections),
+		batch.TotalPassed,
 	)
 
 	_ = json.NewEncoder(w).Encode(batch)

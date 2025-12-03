@@ -63,8 +63,6 @@ var (
 	ErrInvalidPrintedAt   = errors.New("product: invalid printedAt")
 	ErrInvalidInspectedAt = errors.New("product: invalid inspectedAt")
 	ErrInvalidInspectedBy = errors.New("product: invalid inspectedBy")
-
-	ErrInvalidCoherence = errors.New("product: invalid field coherence")
 )
 
 // ===============================
@@ -190,6 +188,23 @@ func (p *Product) MarkInspected(result InspectionResult, by string, at time.Time
 	return nil
 }
 
+// ★ 追加: notManufactured へ確定する
+func (p *Product) MarkNotManufactured(by string, at time.Time) error {
+	by = strings.TrimSpace(by)
+	if by == "" {
+		return ErrInvalidInspectedBy
+	}
+	if at.IsZero() {
+		return ErrInvalidInspectedAt
+	}
+
+	p.InspectionResult = InspectionNotManufactured
+	p.InspectedBy = &by
+	utc := at.UTC()
+	p.InspectedAt = &utc
+	return nil
+}
+
 func (p *Product) ClearInspection() {
 	p.InspectionResult = InspectionNotYet
 	p.InspectedAt = nil
@@ -224,19 +239,25 @@ func (p Product) validate() error {
 		return ErrInvalidPrintedAt
 	}
 
-	// inspected pair coherence
+	// ★ 検査結果との整合性チェック
 	switch p.InspectionResult {
-	case InspectionPassed, InspectionFailed:
+
+	// 検査が確定している状態は by/at 必須
+	case InspectionPassed, InspectionFailed, InspectionNotManufactured:
 		if p.InspectedBy == nil || strings.TrimSpace(*p.InspectedBy) == "" {
 			return ErrInvalidInspectedBy
 		}
 		if p.InspectedAt == nil || p.InspectedAt.IsZero() {
 			return ErrInvalidInspectedAt
 		}
-	case InspectionNotYet, InspectionNotManufactured:
-		if p.InspectedBy != nil || p.InspectedAt != nil {
-			return ErrInvalidCoherence
-		}
+
+	// まだ検査していない状態。過去データの互換性のため、
+	// inspectedBy/inspectedAt が入っていてもエラーにはしない。
+	case InspectionNotYet:
+		// 何もしない（coherence はチェックしない）
+
+	default:
+		// IsValidInspectionResult で弾いているのでここには来ない想定
 	}
 
 	return nil
