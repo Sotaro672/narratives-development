@@ -1,5 +1,4 @@
 import 'dart:convert';
-import 'dart:html' as html; // ★ HTTPリクエスト/レスポンス内容をChromeコンソールに出す用
 import 'package:http/http.dart' as http;
 import 'package:firebase_auth/firebase_auth.dart';
 
@@ -284,19 +283,9 @@ class ProductApi {
     // 1) プロダクト詳細（+ productionId 等）を取得
     final detailUri = Uri.parse('$_baseUrl/inspector/products/$productId');
 
-    // ★ リクエスト内容ログ（詳細取得）
-    html.window.console.log(
-      '[ProductApi.fetchInspectorDetail] GET $detailUri, headers={"Authorization":"Bearer <token>"}',
-    );
-
     final detailResp = await http.get(
       detailUri,
       headers: {'Authorization': 'Bearer $token'},
-    );
-
-    // ★ レスポンス内容ログ
-    html.window.console.log(
-      '[ProductApi.fetchInspectorDetail] response: status=${detailResp.statusCode}, body=${detailResp.body}',
     );
 
     if (detailResp.statusCode != 200) {
@@ -312,7 +301,7 @@ class ProductApi {
     InspectorInspectionBatch? batch;
     try {
       batch = await fetchInspectionBatch(baseDetail.productionId);
-    } catch (e) {
+    } catch (_) {
       // inspections 取得に失敗しても、詳細自体は返す
       batch = null;
     }
@@ -341,8 +330,6 @@ class ProductApi {
       measurements: baseDetail.measurements,
       color: baseDetail.color,
       productBlueprint: baseDetail.productBlueprint,
-      // 検品履歴としては、同じ productionId に属する productId 一覧を全部出したいので
-      // バッチ側の inspections をそのまま渡す
       inspections: batch.inspections,
       inspectionResult: currentResult,
     );
@@ -360,19 +347,9 @@ class ProductApi {
       '$_baseUrl/products/inspections?productionId=$productionId',
     );
 
-    // ★ リクエスト内容ログ
-    html.window.console.log(
-      '[ProductApi.fetchInspectionBatch] GET $uri, headers={"Authorization":"Bearer <token>"}',
-    );
-
     final resp = await http.get(
       uri,
       headers: {'Authorization': 'Bearer $token'},
-    );
-
-    // ★ レスポンス内容ログ
-    html.window.console.log(
-      '[ProductApi.fetchInspectionBatch] response: status=${resp.statusCode}, body=${resp.body}',
     );
 
     if (resp.statusCode != 200) {
@@ -403,11 +380,6 @@ class ProductApi {
     };
     final body = json.encode(bodyMap);
 
-    // ★ リクエスト内容ログ
-    html.window.console.log(
-      '[ProductApi.submitInspection] PATCH $uri, body=${jsonEncode(bodyMap)}',
-    );
-
     final resp = await http.patch(
       uri,
       headers: {
@@ -415,11 +387,6 @@ class ProductApi {
         'Content-Type': 'application/json',
       },
       body: body,
-    );
-
-    // ★ レスポンス内容ログ
-    html.window.console.log(
-      '[ProductApi.submitInspection] response: status=${resp.statusCode}, body=${resp.body}',
     );
 
     if (resp.statusCode != 200) {
@@ -450,11 +417,6 @@ class ProductApi {
     };
     final body = json.encode(bodyMap);
 
-    // ★ リクエスト内容ログ
-    html.window.console.log(
-      '[ProductApi.updateInspectionBatch] PATCH $uri, body=${jsonEncode(bodyMap)}',
-    );
-
     final resp = await http.patch(
       uri,
       headers: {
@@ -462,11 +424,6 @@ class ProductApi {
         'Content-Type': 'application/json',
       },
       body: body,
-    );
-
-    // ★ レスポンス内容ログ
-    html.window.console.log(
-      '[ProductApi.updateInspectionBatch] response: status=${resp.statusCode}, body=${resp.body}',
     );
 
     if (resp.statusCode != 200) {
@@ -483,11 +440,6 @@ class ProductApi {
     final bodyMap = {'productionId': productionId};
     final body = json.encode(bodyMap);
 
-    // ★ リクエスト内容ログ（今回のデバッグの本命）
-    html.window.console.log(
-      '[ProductApi.completeInspection] PATCH $uri, body=${jsonEncode(bodyMap)}',
-    );
-
     final resp = await http.patch(
       uri,
       headers: {
@@ -495,11 +447,6 @@ class ProductApi {
         'Content-Type': 'application/json',
       },
       body: body,
-    );
-
-    // ★ レスポンス内容ログ
-    html.window.console.log(
-      '[ProductApi.completeInspection] response: status=${resp.statusCode}, body=${resp.body}',
     );
 
     if (resp.statusCode != 200) {
