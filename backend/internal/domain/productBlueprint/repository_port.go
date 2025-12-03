@@ -129,6 +129,10 @@ type Repository interface {
 	GetByID(ctx context.Context, id string) (ProductBlueprint, error)
 	List(ctx context.Context, filter Filter, sort Sort, page Page) (PageResult, error)
 
+	// companyId 単位で productBlueprint の ID 一覧を取得
+	// （MintRequest 用のチェーン: companyId → productBlueprintId → production → mintRequest）
+	ListIDsByCompany(ctx context.Context, companyID string) ([]string, error)
+
 	// 存在確認（adapter の Exists を port に昇格）
 	Exists(ctx context.Context, id string) (bool, error)
 

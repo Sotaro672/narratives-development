@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"cloud.google.com/go/firestore"
+	"google.golang.org/api/iterator"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
@@ -84,6 +85,41 @@ func (r *ProductBlueprintRepositoryFS) Exists(ctx context.Context, id string) (b
 		return false, err
 	}
 	return true, nil
+}
+
+// ListIDsByCompany は、指定された companyId を持つ product_blueprints の ID 一覧を返します。
+// MintRequest 用のチェーン（companyId → productBlueprintId → production → mintRequest）で利用します。
+func (r *ProductBlueprintRepositoryFS) ListIDsByCompany(
+	ctx context.Context,
+	companyID string,
+) ([]string, error) {
+	if r.Client == nil {
+		return nil, errors.New("firestore client is nil")
+	}
+
+	companyID = strings.TrimSpace(companyID)
+	if companyID == "" {
+		// 空 companyId の場合は空配列を返す（エラーにはしない）
+		return []string{}, nil
+	}
+
+	iter := r.col().
+		Where("companyId", "==", companyID).
+		Documents(ctx)
+	defer iter.Stop()
+
+	var ids []string
+	for {
+		snap, err := iter.Next()
+		if err == iterator.Done {
+			break
+		}
+		if err != nil {
+			return nil, err
+		}
+		ids = append(ids, snap.Ref.ID)
+	}
+	return ids, nil
 }
 
 // List returns all ProductBlueprints (optionally filtered by companyId in context).
@@ -280,8 +316,7 @@ func (r *ProductBlueprintRepositoryFS) Delete(ctx context.Context, id string) er
 //   - models コレクションのドキュメントには一切変更を加えない。
 //
 // ※ 現在はユースケース側で SoftDelete + ExpireAt 設定を行うため、
-//
-//	このメソッドは将来的に廃止する方向のレガシー実装扱い。
+// このメソッドは将来的に廃止する方向のレガシー実装扱い。
 func (r *ProductBlueprintRepositoryFS) SoftDeleteWithModels(ctx context.Context, id string) error {
 	if r.Client == nil {
 		return errors.New("firestore client is nil")
@@ -637,26 +672,28 @@ func docToProductBlueprint(doc *firestore.DocumentSnapshot) (pbdom.ProductBluepr
 	}
 
 	pb := pbdom.ProductBlueprint{
-		ID:               id,
-		ProductName:      getStr("productName", "product_name"),
-		BrandID:          getStr("brandId", "brand_id"),
-		ItemType:         pbdom.ItemType(itemTypeStr),
-		Fit:              getStr("fit"),
-		Material:         getStr("material"),
-		Weight:           getFloat64(data["weight"]),
+		ID:          id,
+		ProductName: getStr("productName", "product_name"),
+		BrandID:     getStr("brandId", "brand_id"),
+		ItemType:    pbdom.ItemType(itemTypeStr),
+		Fit:         getStr("fit"),
+		Material:    getStr("material"),
+		Weight:      getFloat64(data["weight"]),
+
 		QualityAssurance: dedupTrimStrings(qas),
 		ProductIdTag: pbdom.ProductIDTag{
 			Type: pbdom.ProductIDTagType(tagTypeStr),
 		},
 		CompanyID:  getStr("companyId", "company_id"),
 		AssigneeID: getStr("assigneeId", "assignee_id"),
-		CreatedBy:  getStrPtr("createdBy", "created_by"),
-		CreatedAt:  getTimeVal("createdAt", "created_at"),
-		UpdatedBy:  getStrPtr("updatedBy", "updated_by"),
-		UpdatedAt:  getTimeVal("updatedAt", "updated_at"),
-		DeletedBy:  getStrPtr("deletedBy", "deleted_by"),
-		DeletedAt:  deletedAtPtr,
-		ExpireAt:   expireAtPtr,
+
+		CreatedBy: getStrPtr("createdBy", "created_by"),
+		CreatedAt: getTimeVal("createdAt", "created_at"),
+		UpdatedBy: getStrPtr("updatedBy", "updated_by"),
+		UpdatedAt: getTimeVal("updatedAt", "updated_at"),
+		DeletedBy: getStrPtr("deletedBy", "deleted_by"),
+		DeletedAt: deletedAtPtr,
+		ExpireAt:  expireAtPtr,
 	}
 
 	return pb, nil

@@ -476,7 +476,11 @@ func NewContainer(ctx context.Context) (*Container, error) {
 	var listUC *uc.ListUsecase = nil
 	memberUC := uc.NewMemberUsecase(memberRepo)
 	messageUC := uc.NewMessageUsecase(messageRepo, nil, nil)
-	mintRequestUC := uc.NewMintRequestUsecase(mintRequestRepo)
+	mintRequestUC := uc.NewMintRequestUsecase(
+		mintRequestRepo,      // usecase.MintRequestRepository
+		productBlueprintRepo, // usecase.ProductBlueprintListRepo
+		productionRepo,       // usecase.ProductionListRepo
+	)
 
 	// ★ ModelUsecase に HistoryRepo を注入
 	modelUC := uc.NewModelUsecase(modelRepo, modelHistoryRepo)

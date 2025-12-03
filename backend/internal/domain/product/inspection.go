@@ -1,4 +1,4 @@
-// backend/internal/domain/product/inspection.go
+// backend/internal/domain/inspection/entity.go
 package product
 
 import (
@@ -38,14 +38,14 @@ type InspectionBatch struct {
 	Status       InspectionStatus `json:"status"`
 
 	// 追加フィールド
-	Quantity         int        `json:"quantity"`         // item の合計数
-	TotalPassed      int        `json:"totalPassed"`      // 合格数
-	RequestedBy      *string    `json:"requestedBy"`      // リクエストしたユーザー（作成時 null）
-	RequestedAt      *time.Time `json:"requestedAt"`      // リクエスト日時（作成時 null）
-	MintedAt         *time.Time `json:"mintedAt"`         // NFT ミント完了日時（作成時 null）
-	TokenBlueprintID *string    `json:"tokenBlueprintId"` // トークン設計ID（作成時 null）
-
-	Inspections []InspectionItem `json:"inspections"`
+	Quantity          int              `json:"quantity"`          // item の合計数
+	TotalPassed       int              `json:"totalPassed"`       // 合格数
+	RequestedBy       *string          `json:"requestedBy"`       // リクエストしたユーザー（作成時 null）
+	RequestedAt       *time.Time       `json:"requestedAt"`       // リクエスト日時（作成時 null）
+	MintedAt          *time.Time       `json:"mintedAt"`          // NFT ミント完了日時（作成時 null）
+	ScheduledBurnDate *time.Time       `json:"scheduledBurnDate"` // バーン予定日時（作成時 null）
+	TokenBlueprintID  *string          `json:"tokenBlueprintId"`  // トークン設計ID（作成時 null）
+	Inspections       []InspectionItem `json:"inspections"`
 }
 
 // ===============================
@@ -62,8 +62,8 @@ var (
 // Constructors
 // ===============================
 
-// quantity / totalPassed / requestedX / mintedAt / tokenBlueprintId は
-// コンストラクタ内で初期化（tokenBlueprintId は常に nil）
+// quantity / totalPassed / requestedX / mintedAt / scheduledBurnDate / tokenBlueprintId は
+// コンストラクタ内で初期化（tokenBlueprintId / scheduledBurnDate は常に nil）
 func NewInspectionBatch(
 	productionID string,
 	status InspectionStatus,
@@ -98,15 +98,16 @@ func NewInspectionBatch(
 	}
 
 	batch := InspectionBatch{
-		ProductionID:     pid,
-		Status:           status,
-		Quantity:         len(inspections),
-		TotalPassed:      0,
-		RequestedBy:      nil,
-		RequestedAt:      nil,
-		MintedAt:         nil,
-		TokenBlueprintID: nil,
-		Inspections:      inspections,
+		ProductionID:      pid,
+		Status:            status,
+		Quantity:          len(inspections),
+		TotalPassed:       0,
+		RequestedBy:       nil,
+		RequestedAt:       nil,
+		MintedAt:          nil,
+		ScheduledBurnDate: nil,
+		TokenBlueprintID:  nil,
+		Inspections:       inspections,
 	}
 
 	if err := batch.validate(); err != nil {

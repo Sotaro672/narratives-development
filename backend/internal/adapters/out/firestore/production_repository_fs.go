@@ -228,6 +228,75 @@ func (r *ProductionRepositoryFS) List(ctx context.Context) ([]proddom.Production
 	return all, nil
 }
 
+// ListByProductBlueprintIDs は、指定された productBlueprintId のいずれかを持つ
+// Production をすべて取得します。
+// Firestore の "in" オペレータ制限（最大10要素）に対応するため、IDs をチャンクに分けて問い合わせます。
+func (r *ProductionRepositoryFS) ListByProductBlueprintIDs(
+	ctx context.Context,
+	productBlueprintIDs []string,
+) ([]proddom.Production, error) {
+	if r.Client == nil {
+		return nil, errors.New("firestore client is nil")
+	}
+
+	// 空なら即終了
+	if len(productBlueprintIDs) == 0 {
+		return []proddom.Production{}, nil
+	}
+
+	// 空文字を取り除きつつ trim & 重複排除
+	uniq := make(map[string]struct{}, len(productBlueprintIDs))
+	var ids []string
+	for _, id := range productBlueprintIDs {
+		id = strings.TrimSpace(id)
+		if id == "" {
+			continue
+		}
+		if _, ok := uniq[id]; ok {
+			continue
+		}
+		uniq[id] = struct{}{}
+		ids = append(ids, id)
+	}
+	if len(ids) == 0 {
+		return []proddom.Production{}, nil
+	}
+
+	const maxIn = 10
+	var results []proddom.Production
+
+	for start := 0; start < len(ids); start += maxIn {
+		end := start + maxIn
+		if end > len(ids) {
+			end = len(ids)
+		}
+		chunk := ids[start:end]
+
+		q := r.col().
+			Where("productBlueprintId", "in", chunk)
+
+		it := q.Documents(ctx)
+		defer it.Stop()
+
+		for {
+			doc, err := it.Next()
+			if errors.Is(err, iterator.Done) {
+				break
+			}
+			if err != nil {
+				return nil, err
+			}
+			p, err := docToProduction(doc)
+			if err != nil {
+				return nil, err
+			}
+			results = append(results, p)
+		}
+	}
+
+	return results, nil
+}
+
 // ============================================================
 // Mapping Helpers
 // ============================================================

@@ -1,3 +1,4 @@
+// backend/internal/domain/production/repository_port.go
 package production
 
 import (
@@ -77,6 +78,10 @@ type RepositoryPort interface {
 
 	// Create のみ残す
 	Create(ctx context.Context, in CreateProductionInput) (*Production, error)
+
+	// 補助: 複数の productBlueprintId に紐づく Production 一覧を取得
+	// （MintRequest のチェーン: companyId → productBlueprintId[] → production[] で利用）
+	ListByProductBlueprintIDs(ctx context.Context, productBlueprintIDs []string) ([]Production, error)
 
 	// Tx（任意）
 	WithTx(ctx context.Context, fn func(ctx context.Context) error) error

@@ -196,6 +196,13 @@ func inspectionBatchToDoc(v productdom.InspectionBatch) map[string]any {
 		data["mintedAt"] = nil
 	}
 
+	// scheduledBurnDate（新規・更新とも、nil の場合は Firestore 上で null にする）
+	if v.ScheduledBurnDate != nil && !v.ScheduledBurnDate.IsZero() {
+		data["scheduledBurnDate"] = v.ScheduledBurnDate.UTC()
+	} else {
+		data["scheduledBurnDate"] = nil
+	}
+
 	// tokenBlueprintId
 	if v.TokenBlueprintID != nil && strings.TrimSpace(*v.TokenBlueprintID) != "" {
 		data["tokenBlueprintId"] = strings.TrimSpace(*v.TokenBlueprintID)
@@ -251,6 +258,12 @@ func docToInspectionBatch(
 	if t, ok := data["mintedAt"].(time.Time); ok {
 		tt := t.UTC()
 		batch.MintedAt = &tt
+	}
+
+	// scheduledBurnDate
+	if t, ok := data["scheduledBurnDate"].(time.Time); ok {
+		tt := t.UTC()
+		batch.ScheduledBurnDate = &tt
 	}
 
 	// tokenBlueprintId

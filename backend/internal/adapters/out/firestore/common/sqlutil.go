@@ -1,3 +1,4 @@
+// backend\internal\adapters\out\firestore\common\sqlutil.go
 package common
 
 import (
@@ -41,7 +42,7 @@ func NullableOrEmpty(s string) any {
 	return s
 }
 
-// --- ここから共通ユーティリティ追加 ---
+// --- ここから共通ユーティリリティ追加 ---
 
 // Runner は *sql.DB と *sql.Tx の共通インターフェースです。
 type Runner interface {
@@ -324,4 +325,21 @@ func HasAllStrings(have, need []string) bool {
 		}
 	}
 	return true
+}
+
+// ========================
+// Firestore 等で使う time ポインタ正規化
+// ========================
+
+// NormalizeTimePtr は nil/Zero の *time.Time を nil にし、
+// 非 Zero の場合は UTC に変換した新しい *time.Time を返します。
+func NormalizeTimePtr(p *time.Time) *time.Time {
+	if p == nil {
+		return nil
+	}
+	if p.IsZero() {
+		return nil
+	}
+	utc := p.UTC()
+	return &utc
 }
