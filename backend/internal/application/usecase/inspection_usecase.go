@@ -56,6 +56,24 @@ func NewInspectionUsecase(
 	}
 }
 
+// ★ 追加: productionId から inspections バッチをそのまま返す
+func (u *InspectionUsecase) GetBatchByProductionID(
+	ctx context.Context,
+	productionID string,
+) (productdom.InspectionBatch, error) {
+
+	if u.inspectionRepo == nil {
+		return productdom.InspectionBatch{}, fmt.Errorf("inspectionRepo is nil")
+	}
+
+	pid := strings.TrimSpace(productionID)
+	if pid == "" {
+		return productdom.InspectionBatch{}, productdom.ErrInvalidInspectionProductionID
+	}
+
+	return u.inspectionRepo.GetByProductionID(ctx, pid)
+}
+
 // ★ inspections 内の 1 productId 分を更新する
 //
 // もともと ProductUsecase.UpdateInspectionForProduct にあった処理を

@@ -17,6 +17,20 @@ class _InspectionDetailScreenState extends State<InspectionDetailScreen> {
   late Future<InspectorProductDetail> _futureDetail;
   bool _submitting = false;
 
+  // 検査結果ラベル変換
+  String formatResult(String? raw) {
+    switch (raw) {
+      case 'passed':
+        return '合格';
+      case 'failed':
+        return '不合格';
+      case 'notYet':
+      case null:
+      default:
+        return '未検査';
+    }
+  }
+
   @override
   void initState() {
     super.initState();
@@ -39,11 +53,13 @@ class _InspectionDetailScreenState extends State<InspectionDetailScreen> {
     });
 
     try {
+      // products テーブルの検品結果更新
       await ProductApi.submitInspection(
         productId: detail.productId,
         result: result,
       );
 
+      // inspections テーブルの検品結果更新
       await ProductApi.updateInspectionBatch(
         productionId: detail.productionId,
         productId: detail.productId,
@@ -102,7 +118,7 @@ class _InspectionDetailScreenState extends State<InspectionDetailScreen> {
   }
 
   // ----------------------------------------------------------
-  // 修正①: productId / modelId を削除したモデル情報カード
+  // モデル情報カード（productId / modelId 非表示）
   // ----------------------------------------------------------
   Widget _buildModelCard(InspectorProductDetail detail) {
     final entries = detail.measurements.entries.toList()
@@ -120,12 +136,6 @@ class _InspectionDetailScreenState extends State<InspectionDetailScreen> {
               style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
             ),
             const SizedBox(height: 8),
-
-            // -------------------------
-            // 削除: productId, modelId
-            // -------------------------
-            // Text('productId: ${detail.productId}'),
-            // Text('modelId: ${detail.modelId}'),
             Text('modelNumber: ${detail.modelNumber}'),
             if (detail.size.isNotEmpty) Text('サイズ: ${detail.size}'),
             const SizedBox(height: 8),
@@ -165,8 +175,7 @@ class _InspectionDetailScreenState extends State<InspectionDetailScreen> {
   }
 
   // ----------------------------------------------------------
-  // 修正②: タイトルの (ProductBlueprint) を削除
-  //         productBlueprintId の表示も削除
+  // 商品設計情報カード
   // ----------------------------------------------------------
   Widget _buildProductBlueprintCard(InspectorProductDetail detail) {
     final bp = detail.productBlueprint;
@@ -178,15 +187,10 @@ class _InspectionDetailScreenState extends State<InspectionDetailScreen> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             const Text(
-              '商品設計情報', // ← "(ProductBlueprint)" を削除
+              '商品設計情報',
               style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
             ),
             const SizedBox(height: 8),
-
-            // ------------------------------
-            // 削除: productBlueprintId 表示
-            // ------------------------------
-            // Text('productBlueprintId: ${detail.productBlueprintId}'),
             Text('商品名: ${bp.productName}'),
             Text('ブランド名: ${bp.brandName}'),
             Text('会社名: ${bp.companyName}'),
@@ -218,6 +222,10 @@ class _InspectionDetailScreenState extends State<InspectionDetailScreen> {
     );
   }
 
+  // ----------------------------------------------------------
+  // 検品履歴: inspections テーブルの内容表示
+  //  productId + inspectionResult の一覧
+  // ----------------------------------------------------------
   Widget _buildInspectionList(InspectorProductDetail detail) {
     final inspections = detail.inspections;
     if (inspections.isEmpty) {
@@ -235,7 +243,7 @@ class _InspectionDetailScreenState extends State<InspectionDetailScreen> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             const Text(
-              '検品結果一覧',
+              '検品履歴',
               style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
             ),
             const SizedBox(height: 8),
@@ -246,6 +254,8 @@ class _InspectionDetailScreenState extends State<InspectionDetailScreen> {
               separatorBuilder: (_, __) => const Divider(height: 1),
               itemBuilder: (context, index) {
                 final item = inspections[index];
+                final resultLabel = formatResult(item.inspectionResult);
+
                 return ListTile(
                   dense: true,
                   contentPadding: EdgeInsets.zero,
@@ -256,7 +266,7 @@ class _InspectionDetailScreenState extends State<InspectionDetailScreen> {
                   subtitle: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text('結果: ${item.inspectionResult ?? '未検品'}'),
+                      Text('検査結果: $resultLabel'),
                       if (item.inspectedBy != null &&
                           item.inspectedBy!.isNotEmpty)
                         Text('検査者: ${item.inspectedBy}'),
@@ -273,8 +283,13 @@ class _InspectionDetailScreenState extends State<InspectionDetailScreen> {
     );
   }
 
-  Widget _buildActionButtons(InspectorProductDetail detail) {
+  // ----------------------------------------------------------
+  // 合否ボタン + 検品履歴 + 続ける / 完了ボタン
+  // ----------------------------------------------------------
+  Widget _buildActionSection(InspectorProductDetail detail) {
     final nowStatus = detail.inspectionResult;
+    final nowStatusLabel = nowStatus.isEmpty ? '未検査' : formatResult(nowStatus);
+
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
       child: Column(
@@ -284,13 +299,15 @@ class _InspectionDetailScreenState extends State<InspectionDetailScreen> {
             Padding(
               padding: const EdgeInsets.only(bottom: 8),
               child: Text(
-                '現在の検品ステータス: $nowStatus',
+                '現在の検品ステータス: $nowStatusLabel',
                 style: const TextStyle(
                   fontSize: 14,
                   fontWeight: FontWeight.bold,
                 ),
               ),
             ),
+
+          // 上段: 合格 / 不合格
           Row(
             children: [
               Expanded(
@@ -312,7 +329,13 @@ class _InspectionDetailScreenState extends State<InspectionDetailScreen> {
               ),
             ],
           ),
+
+          // 中段: 検品履歴（inspections 一覧）
           const SizedBox(height: 16),
+          _buildInspectionList(detail),
+          const SizedBox(height: 16),
+
+          // 下段: 検品を続ける / 完了する
           Row(
             children: [
               Expanded(
@@ -379,8 +402,7 @@ class _InspectionDetailScreenState extends State<InspectionDetailScreen> {
               children: [
                 _buildModelCard(detail),
                 _buildProductBlueprintCard(detail),
-                _buildActionButtons(detail),
-                _buildInspectionList(detail),
+                _buildActionSection(detail),
                 const SizedBox(height: 16),
               ],
             ),

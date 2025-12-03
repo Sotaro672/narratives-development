@@ -63,6 +63,14 @@ func (h *InspectorHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 
 	// ------------------------------------------------------------
+	// GET /products/inspections?productionId=xxxx
+	//   → productionId から inspections バッチをそのまま返す
+	// ------------------------------------------------------------
+	case r.Method == http.MethodGet && r.URL.Path == "/products/inspections":
+		h.getInspectionsByProductionID(w, r)
+		return
+
+	// ------------------------------------------------------------
 	// PATCH /products/inspections
 	//   → inspections テーブル（1 productId 分）更新 API
 	//   ※ products テーブル側も同時に更新される（InspectionUsecase 内で統合済）
@@ -74,6 +82,52 @@ func (h *InspectorHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	default:
 		http.NotFound(w, r)
 	}
+}
+
+// ------------------------------------------------------------
+// GET /products/inspections?productionId=xxxx
+//
+//	inspectionUsecase.GetBatchByProductionID に移譲
+//
+// ------------------------------------------------------------
+func (h *InspectorHandler) getInspectionsByProductionID(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+
+	if h.inspectionUC == nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		_ = json.NewEncoder(w).Encode(map[string]string{
+			"error": "inspection usecase is not configured",
+		})
+		return
+	}
+
+	productionID := strings.TrimSpace(r.URL.Query().Get("productionId"))
+	if productionID == "" {
+		w.WriteHeader(http.StatusBadRequest)
+		_ = json.NewEncoder(w).Encode(map[string]string{
+			"error": "productionId is required",
+		})
+		return
+	}
+
+	batch, err := h.inspectionUC.GetBatchByProductionID(ctx, productionID)
+	if err != nil {
+		code := http.StatusInternalServerError
+		switch err {
+		case productdom.ErrInvalidInspectionProductionID:
+			code = http.StatusBadRequest
+		case productdom.ErrNotFound:
+			code = http.StatusNotFound
+		}
+
+		w.WriteHeader(code)
+		_ = json.NewEncoder(w).Encode(map[string]string{
+			"error": err.Error(),
+		})
+		return
+	}
+
+	_ = json.NewEncoder(w).Encode(batch)
 }
 
 // ------------------------------------------------------------

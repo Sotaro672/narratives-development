@@ -1,4 +1,3 @@
-// frontend/inspector/lib/services/product_api.dart
 import 'dart:convert';
 import 'package:http/http.dart' as http;
 import 'package:firebase_auth/firebase_auth.dart';
@@ -104,20 +103,56 @@ class InspectorInspectionRecord {
   });
 
   factory InspectorInspectionRecord.fromJson(Map<String, dynamic> json) {
-    DateTime? parseDate(String? s) {
-      if (s == null || s.isEmpty) return null;
-      try {
-        return DateTime.parse(s);
-      } catch (_) {
-        return null;
+    DateTime? parseDate(dynamic raw) {
+      if (raw == null) return null;
+
+      // 文字列の場合（time.RFC3339 など）
+      if (raw is String && raw.isNotEmpty) {
+        try {
+          return DateTime.parse(raw);
+        } catch (_) {
+          return null;
+        }
       }
+
+      // Firestore Timestamp ライクなオブジェクトの場合もここで拡張可能
+      // 例: { "seconds": 123, "nanos": 0 }
+
+      return null;
     }
 
     return InspectorInspectionRecord(
       productId: (json['productId'] ?? '') as String,
       inspectionResult: json['inspectionResult'] as String?,
       inspectedBy: json['inspectedBy'] as String?,
-      inspectedAt: parseDate(json['inspectedAt'] as String?),
+      inspectedAt: parseDate(json['inspectedAt']),
+    );
+  }
+}
+
+/// inspections テーブル 1 レコード分（= 1 productionId 分）のバッチ
+class InspectorInspectionBatch {
+  final String productionId;
+  final String status;
+  final List<InspectorInspectionRecord> inspections;
+
+  InspectorInspectionBatch({
+    required this.productionId,
+    required this.status,
+    required this.inspections,
+  });
+
+  factory InspectorInspectionBatch.fromJson(Map<String, dynamic> json) {
+    final inspectionsJson = (json['inspections'] as List<dynamic>?) ?? const [];
+    final inspections = inspectionsJson
+        .whereType<Map<String, dynamic>>()
+        .map(InspectorInspectionRecord.fromJson)
+        .toList();
+
+    return InspectorInspectionBatch(
+      productionId: (json['productionId'] ?? '') as String,
+      status: (json['status'] ?? '') as String,
+      inspections: inspections,
     );
   }
 }
@@ -169,6 +204,7 @@ class InspectorProductDetail {
       return const {};
     }
 
+    // ※ /inspector/products/{id} 側で inspections を返さない場合はここは空になる
     final inspectionsJson = (json['inspections'] as List<dynamic>?) ?? const [];
     final inspections = inspectionsJson
         .whereType<Map<String, dynamic>>()
@@ -212,26 +248,96 @@ class ProductApi {
     return token;
   }
 
-  /// 検品詳細取得 API
+  /// 検品詳細取得 API（productId から詳細取得）
+  /// 1. GET /inspector/products/{productId} で product / model / blueprint 情報を取得
+  /// 2. 取得した productionId を使って GET /products/inspections?productionId=xxx を叩き、
+  ///    inspections テーブルの一覧をマージする
   static Future<InspectorProductDetail> fetchInspectorDetail(
     String productId,
   ) async {
     final token = await _getIdToken();
 
-    final uri = Uri.parse('$_baseUrl/inspector/products/$productId');
+    // 1) プロダクト詳細（+ productionId 等）を取得
+    final detailUri = Uri.parse('$_baseUrl/inspector/products/$productId');
 
-    // ★ GET では Content-Type を付けない（CORS 回避）
+    final detailResp = await http.get(
+      detailUri,
+      headers: {'Authorization': 'Bearer $token'},
+    );
+
+    if (detailResp.statusCode != 200) {
+      throw Exception(
+        '検品詳細の取得に失敗しました: ${detailResp.statusCode} ${detailResp.body}',
+      );
+    }
+
+    final detailBody = json.decode(detailResp.body) as Map<String, dynamic>;
+    final baseDetail = InspectorProductDetail.fromJson(detailBody);
+
+    // 2) productionId から inspections バッチを取得
+    InspectorInspectionBatch? batch;
+    try {
+      batch = await fetchInspectionBatch(baseDetail.productionId);
+    } catch (e) {
+      // inspections 取得に失敗しても、詳細自体は返す
+      // （必要ならここで log 出力など）
+      batch = null;
+    }
+
+    if (batch == null) {
+      return baseDetail;
+    }
+
+    // 3) この productId 自身の最新検査結果を拾って inspectionResult として反映
+    final recordsForThisProduct = batch.inspections
+        .where((r) => r.productId == baseDetail.productId)
+        .toList();
+
+    final currentResult = recordsForThisProduct.isNotEmpty
+        ? (recordsForThisProduct.first.inspectionResult ?? '')
+        : baseDetail.inspectionResult;
+
+    // 4) baseDetail をベースにして、inspections と inspectionResult を上書きしたものを返す
+    return InspectorProductDetail(
+      productId: baseDetail.productId,
+      productionId: baseDetail.productionId,
+      modelId: baseDetail.modelId,
+      productBlueprintId: baseDetail.productBlueprintId,
+      modelNumber: baseDetail.modelNumber,
+      size: baseDetail.size,
+      measurements: baseDetail.measurements,
+      color: baseDetail.color,
+      productBlueprint: baseDetail.productBlueprint,
+      // 検品履歴としては、同じ productionId に属する productId 一覧を全部出したいので
+      // バッチ側の inspections をそのまま渡す
+      inspections: batch.inspections,
+      inspectionResult: currentResult,
+    );
+  }
+
+  /// 同じ productionId を持つ inspections テーブルのバッチを取得
+  ///
+  /// GET /products/inspections?productionId={productionId}
+  static Future<InspectorInspectionBatch> fetchInspectionBatch(
+    String productionId,
+  ) async {
+    final token = await _getIdToken();
+
+    final uri = Uri.parse(
+      '$_baseUrl/products/inspections?productionId=$productionId',
+    );
+
     final resp = await http.get(
       uri,
       headers: {'Authorization': 'Bearer $token'},
     );
 
     if (resp.statusCode != 200) {
-      throw Exception('検品詳細の取得に失敗しました: ${resp.statusCode} ${resp.body}');
+      throw Exception('inspections 取得に失敗しました: ${resp.statusCode} ${resp.body}');
     }
 
     final body = json.decode(resp.body) as Map<String, dynamic>;
-    return InspectorProductDetail.fromJson(body);
+    return InspectorInspectionBatch.fromJson(body);
   }
 
   /// products テーブルの検品結果（単体）を更新
