@@ -66,6 +66,53 @@ func (r *ProductBlueprintRepositoryFS) GetByID(ctx context.Context, id string) (
 	return docToProductBlueprint(snap)
 }
 
+// ★ 追加: productBlueprintId から productName だけを取得するヘルパ
+// usecase.mintProductBlueprintRepo / productBlueprint.Repository の
+// GetProductNameByID を満たすための薄いラッパ。
+func (r *ProductBlueprintRepositoryFS) GetProductNameByID(
+	ctx context.Context,
+	id string,
+) (string, error) {
+	if r.Client == nil {
+		return "", errors.New("firestore client is nil")
+	}
+
+	id = strings.TrimSpace(id)
+	if id == "" {
+		return "", pbdom.ErrNotFound
+	}
+
+	snap, err := r.col().Doc(id).Get(ctx)
+	if err != nil {
+		if status.Code(err) == codes.NotFound {
+			return "", pbdom.ErrNotFound
+		}
+		return "", err
+	}
+
+	data := snap.Data()
+	if data != nil {
+		// まずはフィールドから直接読む（軽量）
+		if v, ok := data["productName"].(string); ok && strings.TrimSpace(v) != "" {
+			return strings.TrimSpace(v), nil
+		}
+		if v, ok := data["product_name"].(string); ok && strings.TrimSpace(v) != "" {
+			return strings.TrimSpace(v), nil
+		}
+	}
+
+	// なければ既存ヘルパでドメイン型に変換してから取り出す
+	pb, err := docToProductBlueprint(snap)
+	if err != nil {
+		return "", err
+	}
+	name := strings.TrimSpace(pb.ProductName)
+	if name == "" {
+		return "", pbdom.ErrNotFound
+	}
+	return name, nil
+}
+
 // Exists reports whether a ProductBlueprint with given ID exists.
 func (r *ProductBlueprintRepositoryFS) Exists(ctx context.Context, id string) (bool, error) {
 	if r.Client == nil {

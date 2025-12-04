@@ -61,27 +61,6 @@ type Filter struct {
 	UpdatedTo   *time.Time
 }
 
-type Sort struct {
-	Column SortColumn
-	Order  SortOrder
-}
-
-type SortColumn string
-
-const (
-	SortByCreatedAt   SortColumn = "createdAt"
-	SortByUpdatedAt   SortColumn = "updatedAt"
-	SortByProductName SortColumn = "productName"
-	SortByBrandID     SortColumn = "brandId"
-)
-
-type SortOrder string
-
-const (
-	SortAsc  SortOrder = "asc"
-	SortDesc SortOrder = "desc"
-)
-
 type Page struct {
 	Number  int
 	PerPage int
@@ -100,8 +79,6 @@ type PageResult struct {
 // ========================================
 
 // HistoryRecord は ProductBlueprint のバージョン履歴 1 件分を表す。
-// LogCard で使う version / updatedAt / updatedBy に加えて、
-// 当時の ProductBlueprint 本体も保持しておく。
 type HistoryRecord struct {
 	Blueprint ProductBlueprint
 	Version   int64
@@ -127,7 +104,11 @@ type ProductBlueprintHistoryRepo interface {
 type Repository interface {
 	// Read (live)
 	GetByID(ctx context.Context, id string) (ProductBlueprint, error)
-	List(ctx context.Context, filter Filter, sort Sort, page Page) (PageResult, error)
+	List(ctx context.Context, filter Filter, page Page) (PageResult, error)
+
+	// ★ 追加: productBlueprintId から productName だけを取得するヘルパ
+	//   MintRequest 一覧などで「ID → 名前」の名前解決だけを行いたいときに使用。
+	GetProductNameByID(ctx context.Context, id string) (string, error)
 
 	// companyId 単位で productBlueprint の ID 一覧を取得
 	// （MintRequest 用のチェーン: companyId → productBlueprintId → production → mintRequest）

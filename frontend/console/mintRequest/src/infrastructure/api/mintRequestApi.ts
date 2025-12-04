@@ -36,8 +36,8 @@ export type MintRequestRow = {
   id: string;
 
   tokenBlueprintId: string | null;
-  // 現時点では Inspection から取得できないので null 埋め
-  // 将来、productBlueprintId → productName の join でセット予定
+
+  // productBlueprintId から解決されたプロダクト名（バックエンド側で join 済み想定）
   productName: string | null;
 
   mintQuantity: number;
@@ -86,9 +86,9 @@ function mapInspectionToMintRow(dto: InspectionBatchDTO): MintRequestRow {
     id: dto.productionId,
 
     tokenBlueprintId: dto.tokenBlueprintId ?? null,
-    // ★ 現時点では Inspection 側に productName 情報が無いため null で返す
-    //   後続で Production API などから join する前提。
-    productName: null,
+
+    // ★ バックエンドが InspectionBatch.productName に詰めてくれた値をそのまま利用
+    productName: dto.productName ?? null,
 
     mintQuantity: dto.totalPassed ?? 0,
     // quantity が無ければ inspections.length で代用

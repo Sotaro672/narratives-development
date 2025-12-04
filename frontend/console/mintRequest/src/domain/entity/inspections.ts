@@ -46,6 +46,7 @@ export interface InspectionItem {
  *
  * - requestedBy / requestedAt / mintedAt / scheduledBurnDate / tokenBlueprintId は null or 未設定
  * - 日付/日時系は ISO8601 文字列を想定
+ * - productName は MintRequest 画面向けの追加情報（任意）
  */
 export interface InspectionBatch {
   productionId: string;
@@ -53,6 +54,9 @@ export interface InspectionBatch {
 
   quantity: number;
   totalPassed: number;
+
+  // MintRequest 向けに、productionId から解決された productName を載せるための任意フィールド
+  productName?: string | null;
 
   requestedBy?: string | null;
   requestedAt?: string | null;       // ISO8601 datetime
@@ -198,6 +202,8 @@ export function normalizeInspectionBatch(
     status: input.status,
     quantity: input.quantity,
     totalPassed: input.totalPassed,
+    // 任意の productName は trim + 空文字 → null に正規化
+    productName: normalizeOpt(input.productName),
     requestedBy: normalizeOpt(input.requestedBy),
     requestedAt: normalizeOpt(input.requestedAt),
     mintedAt: normalizeOpt(input.mintedAt),

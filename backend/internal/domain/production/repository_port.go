@@ -15,13 +15,13 @@ type CreateProductionInput struct {
 	ProductBlueprintID string            `json:"productBlueprintId"`
 	AssigneeID         string            `json:"assigneeId"`
 	Models             []ModelQuantity   `json:"models"`
-	Status             *ProductionStatus `json:"status,omitempty"` // nilなら既定（manufacturing）
+	Status             *ProductionStatus `json:"status,omitempty"`
 
 	PrintedAt   *time.Time `json:"printedAt,omitempty"`
 	InspectedAt *time.Time `json:"inspectedAt,omitempty"`
 
 	CreatedBy *string    `json:"createdBy,omitempty"`
-	CreatedAt *time.Time `json:"createdAt,omitempty"` // nilなら実装側で設定
+	CreatedAt *time.Time `json:"createdAt,omitempty"`
 }
 
 // ========================================
@@ -29,18 +29,13 @@ type CreateProductionInput struct {
 // ========================================
 
 type Filter struct {
-	// 識別子
 	ID                 string
 	ProductBlueprintID string
 	AssigneeID         string
+	ModelID            string
 
-	// モデルIDに紐づく生産計画（Modelsに含まれるもの）
-	ModelID string
-
-	// ステータス
 	Statuses []ProductionStatus
 
-	// 時刻レンジ
 	PrintedFrom   *time.Time
 	PrintedTo     *time.Time
 	InspectedFrom *time.Time
@@ -67,22 +62,27 @@ type PageResult struct {
 // ========================================
 
 type RepositoryPort interface {
-	// 取得
+	// Production を productionId で取得
 	GetByID(ctx context.Context, id string) (*Production, error)
 
-	// 指定modelIdを含む生産計画を返す（Filter.ModelID のショートカット）
+	// 指定 modelId を含む生産計画一覧
 	GetByModelID(ctx context.Context, modelID string) ([]Production, error)
 
-	// List（sort削除）
+	// List（ページング）
 	List(ctx context.Context, filter Filter, page Page) (PageResult, error)
 
-	// Create のみ残す
+	// Create
 	Create(ctx context.Context, in CreateProductionInput) (*Production, error)
 
-	// 補助: 複数の productBlueprintId に紐づく Production 一覧を取得
-	// （MintRequest のチェーン: companyId → productBlueprintId[] → production[] で利用）
+	// 複数の productBlueprintId に紐づく Production 一覧
 	ListByProductBlueprintID(ctx context.Context, productBlueprintIDs []string) ([]Production, error)
 
-	// Tx（任意）
+	// ★ 追加: productionId → productBlueprintId を返す関数
+	//
+	// MintRequest / Token 発行時などで、InspectionBatch.productionId から
+	// 対応する productBlueprintId を join する用途で利用。
+	GetProductBlueprintIDByProductionID(ctx context.Context, productionID string) (string, error)
+
+	// Tx
 	WithTx(ctx context.Context, fn func(ctx context.Context) error) error
 }

@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	inspectiondom "narratives/internal/domain/inspection"
+	pbpdom "narratives/internal/domain/productBlueprint"
 	proddom "narratives/internal/domain/production"
 )
 
@@ -14,11 +15,16 @@ import (
 // Ports (Repository interfaces for MintUsecase)
 // ============================================================
 
-// mintProductBlueprintRepo は companyId から productBlueprintId の一覧を取得するための最小ポート
+// mintProductBlueprintRepo は companyId から productBlueprintId の一覧を取得したり、
+// productBlueprintId から productName を解決するための最小ポート
 type mintProductBlueprintRepo interface {
 	// companyId に紐づく product_blueprints の ID 一覧を返す
 	// 実装例: ProductBlueprintRepositoryFS.ListIDsByCompany
 	ListIDsByCompany(ctx context.Context, companyID string) ([]string, error)
+
+	// productBlueprintId から productName だけを取得するヘルパ
+	// 実装例: ProductBlueprintRepositoryFS.GetProductNameByID
+	GetProductNameByID(ctx context.Context, id string) (string, error)
 }
 
 // mintProductionRepo は productBlueprintId 群から productions を取得するための最小ポート
@@ -33,6 +39,20 @@ type mintInspectionRepo interface {
 	// 指定された productionId 群に紐づく InspectionBatch をすべて返す
 	// 実装例: InspectionRepositoryFS.ListByProductionID
 	ListByProductionID(ctx context.Context, productionIDs []string) ([]inspectiondom.InspectionBatch, error)
+}
+
+// ============================================================
+// 画面向け DTO
+// ============================================================
+
+// MintInspectionView は Mint 管理画面向けの Inspection 表現。
+// 元の InspectionBatch に加えて、productBlueprintId / productName を付与して返す。
+type MintInspectionView struct {
+	inspectiondom.InspectionBatch
+
+	// Production → ProductBlueprint の join 結果
+	ProductBlueprintID string `json:"productBlueprintId"`
+	ProductName        string `json:"productName"`
 }
 
 // ============================================================
@@ -73,11 +93,12 @@ var ErrCompanyIDMissing = errors.New("companyId not found in context")
 //  1. companyId → productBlueprintId の一覧を取得
 //  2. productBlueprintId → productionId の一覧を取得
 //  3. productionId → inspections の一覧を取得
+//  4. productionId → productBlueprintId → productName を join して MintInspectionView に詰める
 //
-// という一連のチェーンを実行し、最終的な InspectionBatch の配列を返します。
+// という一連のチェーンを実行し、最終的な MintInspectionView の配列を返します。
 func (u *MintUsecase) ListInspectionsForCurrentCompany(
 	ctx context.Context,
-) ([]inspectiondom.InspectionBatch, error) {
+) ([]MintInspectionView, error) {
 
 	companyID := strings.TrimSpace(CompanyIDFromContext(ctx))
 	if companyID == "" {
@@ -92,7 +113,7 @@ func (u *MintUsecase) ListInspectionsForCurrentCompany(
 func (u *MintUsecase) ListInspectionsByCompanyID(
 	ctx context.Context,
 	companyID string,
-) ([]inspectiondom.InspectionBatch, error) {
+) ([]MintInspectionView, error) {
 
 	if u == nil {
 		return nil, errors.New("mint usecase is nil")
@@ -110,7 +131,7 @@ func (u *MintUsecase) ListInspectionsByCompanyID(
 	}
 	if len(pbIDs) == 0 {
 		// 該当 product_blueprints が無ければ空配列を返す
-		return []inspectiondom.InspectionBatch{}, nil
+		return []MintInspectionView{}, nil
 	}
 
 	// 2) productBlueprintId 群 → Production 一覧
@@ -120,21 +141,29 @@ func (u *MintUsecase) ListInspectionsByCompanyID(
 	}
 	if len(prods) == 0 {
 		// 該当 Production が無ければ空配列を返す
-		return []inspectiondom.InspectionBatch{}, nil
+		return []MintInspectionView{}, nil
 	}
 
 	// Production から productionId 一覧を抽出（重複除去）
 	prodIDSet := make(map[string]struct{}, len(prods))
+	// ついでに productionId → productBlueprintId のマップも作る
+	prodToPB := make(map[string]string, len(prods))
+
 	for _, p := range prods {
 		id := strings.TrimSpace(p.ID)
 		if id == "" {
 			continue
 		}
 		prodIDSet[id] = struct{}{}
+
+		pbID := strings.TrimSpace(p.ProductBlueprintID)
+		if pbID != "" {
+			prodToPB[id] = pbID
+		}
 	}
 
 	if len(prodIDSet) == 0 {
-		return []inspectiondom.InspectionBatch{}, nil
+		return []MintInspectionView{}, nil
 	}
 
 	prodIDs := make([]string, 0, len(prodIDSet))
@@ -147,8 +176,51 @@ func (u *MintUsecase) ListInspectionsByCompanyID(
 	if err != nil {
 		return nil, err
 	}
+	if len(batches) == 0 {
+		return []MintInspectionView{}, nil
+	}
 
-	// inspections が未作成の productionId については
-	// Repository 側で NotFound をスキップしている想定。
-	return batches, nil
+	// 4) productBlueprintId → productName の名前解決用マップ
+	pbNameMap := make(map[string]string)
+
+	// prods から実際に使われている productBlueprintId 群だけを抽出
+	usedPBSet := make(map[string]struct{})
+	for _, pbID := range prodToPB {
+		if pbID == "" {
+			continue
+		}
+		usedPBSet[pbID] = struct{}{}
+	}
+
+	for pbID := range usedPBSet {
+		name, err := u.pbRepo.GetProductNameByID(ctx, pbID)
+		if err != nil {
+			// 個別に失敗した場合は空文字として扱い、処理は続行
+			if !errors.Is(err, pbpdom.ErrNotFound) {
+				// NotFound 以外のエラーはログだけ出してスキップ、
+				// ここでは usecase を失敗させないポリシーもあり得る。
+				// 必要なら logger を受け取って warn を出すなどに変更。
+			}
+			continue
+		}
+		pbNameMap[pbID] = strings.TrimSpace(name)
+	}
+
+	// 5) InspectionBatch ごとに productBlueprintId / productName を紐付けて MintInspectionView に詰める
+	views := make([]MintInspectionView, 0, len(batches))
+
+	for _, b := range batches {
+		prodID := strings.TrimSpace(b.ProductionID)
+		pbID := prodToPB[prodID]
+		name := pbNameMap[pbID]
+
+		view := MintInspectionView{
+			InspectionBatch:    b,
+			ProductBlueprintID: pbID,
+			ProductName:        name,
+		}
+		views = append(views, view)
+	}
+
+	return views, nil
 }
