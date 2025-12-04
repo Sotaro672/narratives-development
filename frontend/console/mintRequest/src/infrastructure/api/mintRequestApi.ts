@@ -4,40 +4,26 @@ import {
   fetchInspectionBatchesHTTP,
   fetchInspectionByProductionIdHTTP,
 } from "../repository/mintRequestRepositoryHTTP";
+import type {
+  InspectionBatch,
+  InspectionItem,
+  InspectionStatus as DomainInspectionStatus,
+} from "../../domain/entity/inspections";
 
 // ===============================
 // DTO (backend → frontend)
 // ===============================
 
-// inspections.inspections[] の 1 行分
-export type InspectionStatus = "inspecting" | "completed";
+// frontend/console/mintRequest/src/domain/entity/inspections.ts を正とする。
+// ここではその型をそのまま DTO として再利用する。
 
-// backend/internal/domain/product/inspection.go に対応
-export type InspectionItemDTO = {
-  productId: string;
-  modelId: string;
-  modelNumber?: string | null;
-  inspectionResult?: string | null; // InspectionResult の文字列
-  inspectedBy?: string | null;
-  inspectedAt?: string | null; // RFC3339 文字列 or null
-};
+export type InspectionStatus = DomainInspectionStatus;
+
+// backend/internal/domain/inspection/entity.go に対応
+export type InspectionItemDTO = InspectionItem;
 
 // inspections コレクション 1 ドキュメント分
-export type InspectionBatchDTO = {
-  productionId: string;
-  status: InspectionStatus;
-
-  quantity: number;
-  totalPassed: number;
-
-  requestedBy?: string | null;
-  requestedAt?: string | null; // RFC3339 文字列 or null
-  mintedAt?: string | null; // RFC3339 文字列 or null
-  scheduledBurnDate?: string | null; // RFC3339 文字列 or null
-  tokenBlueprintId?: string | null;
-
-  inspections: InspectionItemDTO[];
-};
+export type InspectionBatchDTO = InspectionBatch;
 
 // ===============================
 // mintRequestManagement 画面向けの行型
@@ -124,7 +110,7 @@ export async function fetchInspectionBatches(): Promise<InspectionBatchDTO[]> {
 /**
  * mintRequestManagement 画面向けの行データとして取得するユーティリティ。
  * 画面側では MINT_REQUESTS モックの代わりにこの関数の戻り値を利用する想定。
- *   GET /inspections 由来のデータを MintRequestRow にマッピングする。
+ *   GET /mint/inspections 由来のデータを MintRequestRow にマッピングする。
  */
 export async function fetchMintRequestRows(): Promise<MintRequestRow[]> {
   const batches = await fetchInspectionBatchesHTTP();

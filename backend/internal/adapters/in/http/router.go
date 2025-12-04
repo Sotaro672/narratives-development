@@ -384,9 +384,8 @@ func NewRouter(deps RouterDeps) http.Handler {
 	}
 
 	// ================================
-	// ⭐ Mint API
+	// ⭐ Mint API（検品バッチ一覧: companyId 起点）
 	//   - GET /mint/inspections
-	//   → MintUsecase.ListInspectionsForCurrentCompany
 	// ================================
 	if deps.MintUC != nil {
 		mintH := handlers.NewMintHandler(deps.MintUC)
@@ -397,7 +396,6 @@ func NewRouter(deps RouterDeps) http.Handler {
 		}
 
 		mux.Handle("/mint/inspections", h)
-		mux.Handle("/mint/inspections/", h)
 	}
 
 	return mux
