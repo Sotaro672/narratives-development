@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	inspectiondom "narratives/internal/domain/inspection"
+	modeldom "narratives/internal/domain/model"
 	pbpdom "narratives/internal/domain/productBlueprint"
 	proddom "narratives/internal/domain/production"
 )
@@ -41,18 +42,35 @@ type mintInspectionRepo interface {
 	ListByProductionID(ctx context.Context, productionIDs []string) ([]inspectiondom.InspectionBatch, error)
 }
 
+// mintModelRepo は modelId(variationID) から size / color / rgb などの情報を解決するための最小ポート
+type mintModelRepo interface {
+	// 実装例: ModelRepositoryFS.GetModelVariationByID
+	GetModelVariationByID(ctx context.Context, variationID string) (*modeldom.ModelVariation, error)
+}
+
 // ============================================================
 // 画面向け DTO
 // ============================================================
 
+// モデル情報をフロントに渡すためのメタ情報
+type MintModelMeta struct {
+	Size      string `json:"size"`
+	ColorName string `json:"colorName"`
+	RGB       int    `json:"rgb"`
+}
+
 // MintInspectionView は Mint 管理画面向けの Inspection 表現。
-// 元の InspectionBatch に加えて、productBlueprintId / productName を付与して返す。
+// 元の InspectionBatch に加えて、productBlueprintId / productName、
+// そして modelId → size/color/rgb のマップを付与して返す。
 type MintInspectionView struct {
 	inspectiondom.InspectionBatch
 
 	// Production → ProductBlueprint の join 結果
 	ProductBlueprintID string `json:"productBlueprintId"`
 	ProductName        string `json:"productName"`
+
+	// モデル情報テーブル: modelId → { size, colorName, rgb }
+	ModelMeta map[string]MintModelMeta `json:"modelMeta"`
 }
 
 // ============================================================
@@ -60,23 +78,26 @@ type MintInspectionView struct {
 // ============================================================
 
 type MintUsecase struct {
-	pbRepo   mintProductBlueprintRepo
-	prodRepo mintProductionRepo
-	inspRepo mintInspectionRepo
+	pbRepo    mintProductBlueprintRepo
+	prodRepo  mintProductionRepo
+	inspRepo  mintInspectionRepo
+	modelRepo mintModelRepo
 }
 
 // NewMintUsecase は MintUsecase のコンストラクタです。
-// DI コンテナから ProductBlueprintRepositoryFS / ProductionRepositoryFS / InspectionRepositoryFS
-// をそれぞれ満たす実装として渡してください。
+// DI コンテナから ProductBlueprintRepositoryFS / ProductionRepositoryFS /
+// InspectionRepositoryFS / ModelRepositoryFS をそれぞれ満たす実装として渡してください。
 func NewMintUsecase(
 	pbRepo mintProductBlueprintRepo,
 	prodRepo mintProductionRepo,
 	inspRepo mintInspectionRepo,
+	modelRepo mintModelRepo,
 ) *MintUsecase {
 	return &MintUsecase{
-		pbRepo:   pbRepo,
-		prodRepo: prodRepo,
-		inspRepo: inspRepo,
+		pbRepo:    pbRepo,
+		prodRepo:  prodRepo,
+		inspRepo:  inspRepo,
+		modelRepo: modelRepo,
 	}
 }
 
@@ -93,7 +114,8 @@ var ErrCompanyIDMissing = errors.New("companyId not found in context")
 //  1. companyId → productBlueprintId の一覧を取得
 //  2. productBlueprintId → productionId の一覧を取得
 //  3. productionId → inspections の一覧を取得
-//  4. productionId → productBlueprintId → productName を join して MintInspectionView に詰める
+//  4. productionId → productBlueprintId → productName を join
+//  5. inspection 内の modelId 群 → ModelVariation を引き、modelId → {size,color,rgb} を構築
 //
 // という一連のチェーンを実行し、最終的な MintInspectionView の配列を返します。
 func (u *MintUsecase) ListInspectionsForCurrentCompany(
@@ -197,16 +219,53 @@ func (u *MintUsecase) ListInspectionsByCompanyID(
 		if err != nil {
 			// 個別に失敗した場合は空文字として扱い、処理は続行
 			if !errors.Is(err, pbpdom.ErrNotFound) {
-				// NotFound 以外のエラーはログだけ出してスキップ、
-				// ここでは usecase を失敗させないポリシーもあり得る。
-				// 必要なら logger を受け取って warn を出すなどに変更。
+				// TODO: ロガーを注入して warn を出すなど
 			}
 			continue
 		}
 		pbNameMap[pbID] = strings.TrimSpace(name)
 	}
 
-	// 5) InspectionBatch ごとに productBlueprintId / productName を紐付けて MintInspectionView に詰める
+	// 5) inspection 内の modelId 群を集めて、ModelVariation をまとめて取得
+	modelIDSet := make(map[string]struct{})
+	for _, b := range batches {
+		for _, item := range b.Inspections {
+			mid := strings.TrimSpace(item.ModelID)
+			if mid == "" {
+				continue
+			}
+			modelIDSet[mid] = struct{}{}
+		}
+	}
+
+	modelMetaMap := make(map[string]MintModelMeta, len(modelIDSet))
+	if u.modelRepo != nil && len(modelIDSet) > 0 {
+		for modelID := range modelIDSet {
+			mv, err := u.modelRepo.GetModelVariationByID(ctx, modelID)
+			if err != nil {
+				if errors.Is(err, modeldom.ErrNotFound) {
+					continue
+				}
+				// その他のエラーもここでは無視（必要ならログ）
+				continue
+			}
+
+			meta := MintModelMeta{
+				Size: strings.TrimSpace(mv.Size),
+			}
+
+			// Color 情報を追加（struct のフィールド名に合わせて調整）
+			if mv.Color.Name != "" {
+				meta.ColorName = strings.TrimSpace(mv.Color.Name)
+			}
+			meta.RGB = mv.Color.RGB
+
+			// キーは modelId（variationID）
+			modelMetaMap[modelID] = meta
+		}
+	}
+
+	// 6) InspectionBatch ごとに MintInspectionView を組み立てる
 	views := make([]MintInspectionView, 0, len(batches))
 
 	for _, b := range batches {
@@ -214,10 +273,23 @@ func (u *MintUsecase) ListInspectionsByCompanyID(
 		pbID := prodToPB[prodID]
 		name := pbNameMap[pbID]
 
+		// このバッチ内で実際に使われている modelId だけを modelMeta に入れる
+		perBatchModelMeta := make(map[string]MintModelMeta)
+		for _, item := range b.Inspections {
+			mid := strings.TrimSpace(item.ModelID)
+			if mid == "" {
+				continue
+			}
+			if meta, ok := modelMetaMap[mid]; ok {
+				perBatchModelMeta[mid] = meta
+			}
+		}
+
 		view := MintInspectionView{
 			InspectionBatch:    b,
 			ProductBlueprintID: pbID,
 			ProductName:        name,
+			ModelMeta:          perBatchModelMeta,
 		}
 		views = append(views, view)
 	}
