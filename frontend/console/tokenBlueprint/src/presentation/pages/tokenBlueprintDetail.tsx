@@ -1,4 +1,4 @@
-// frontend/tokenBlueprint/src/presentation/pages/tokenBlueprintDetail.tsx
+// frontend/tokenBlueprint/src/presentation/pages/tokenBlueprintDetail.tsx 
 
 import * as React from "react";
 import { useNavigate, useParams } from "react-router-dom";
@@ -18,10 +18,13 @@ export default function TokenBlueprintDetail() {
     if (!TOKEN_BLUEPRINTS.length) return undefined;
     if (tokenBlueprintId) {
       const found = TOKEN_BLUEPRINTS.find((b) => b.id === tokenBlueprintId);
-      if (found) return found;
+      if (found) {
+        // shell 側 TokenBlueprint → domain 側 TokenBlueprint へ型アサーション
+        return found as unknown as TokenBlueprint;
+      }
     }
     // パラメータ不一致時は先頭をフォールバック表示（モック用）
-    return TOKEN_BLUEPRINTS[0];
+    return TOKEN_BLUEPRINTS[0] as unknown as TokenBlueprint;
   }, [tokenBlueprintId]);
 
   const handleBack = React.useCallback(() => {

@@ -1,5 +1,3 @@
-// frontend\tokenBlueprint\src\domain\entity\tokenBlueprint.tsx
-
 /**
  * ContentFileType
  * backend/internal/domain/tokenBlueprint/entity.go の ContentFileType に対応。
@@ -37,6 +35,7 @@ export interface TokenBlueprint {
   name: string;
   symbol: string; // /^[A-Z0-9]{1,10}$/ を想定
   brandId: string;
+  companyId: string; // ★ 追加: テナント単位
   description: string;
 
   /** token_icons 等の ID（任意） */
@@ -100,6 +99,7 @@ export function validateTokenBlueprint(tb: TokenBlueprint): string[] {
     errors.push("symbol must match ^[A-Z0-9]{1,10}$");
   }
   if (!tb.brandId?.trim()) errors.push("brandId is required");
+  if (!tb.companyId?.trim()) errors.push("companyId is required"); // ★ 追加
   if (!tb.description?.trim()) errors.push("description is required");
   if (!tb.assigneeId?.trim()) errors.push("assigneeId is required");
   if (!tb.createdBy?.trim()) errors.push("createdBy is required");
