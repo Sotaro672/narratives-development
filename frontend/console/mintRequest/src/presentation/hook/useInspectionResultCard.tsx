@@ -10,7 +10,7 @@ import type {
 /**
  * 検査結果カード 1 行分
  * - modelNumber: 型番（InspectionItem.modelNumber を利用）
- * - size / color / rgb は今後 ModelVariation などと join する前提でダミー扱い
+ * - size / color / rgb は今後 ModelVariation などと join する前提で、現状はプレースホルダ
  * - passedQuantity: 合格数
  * - quantity      : 生産数（＝該当行の検査件数）
  */
@@ -24,7 +24,11 @@ export type InspectionResultRow = {
 };
 
 export type UseInspectionResultCardParams = {
-  /** InspectionBatch（inspection.ts と対応） */
+  /**
+   * InspectionBatch（inspection.ts と対応）
+   * Detail 画面では /products/inspections?productionId=... のレスポンス
+   * (= InspectionBatchDTO) をそのまま渡す想定。
+   */
   batch: InspectionBatch | null | undefined;
 };
 
@@ -48,7 +52,7 @@ export function useInspectionResultCard(
   const rows: InspectionResultRow[] = React.useMemo(() => {
     if (!batch) return [];
 
-    // modelNumber 単位で集計（今後 size / color / rgb は ModelVariation と join 予定）
+    // modelNumber 単位で集計
     const map = new Map<
       string,
       { passed: number; total: number; items: InspectionItem[] }
@@ -72,12 +76,12 @@ export function useInspectionResultCard(
 
     const result: InspectionResultRow[] = [];
     for (const [modelNumber, agg] of map.entries()) {
-      // ひとまずサイズ/カラー/RGB は空。後続で ModelVariation と join して埋める想定。
+      // TODO: 将来ここで ModelVariation 情報（size / color / rgb）を join して埋める
       result.push({
         modelNumber,
-        size: "", // TODO: ModelVariation から取得
-        color: "", // TODO: ModelVariation から取得
-        rgb: null, // TODO: ModelVariation から取得
+        size: "", // API 拡張後に埋める
+        color: "", // API 拡張後に埋める
+        rgb: null, // API 拡張後に埋める
         passedQuantity: agg.passed,
         quantity: agg.total,
       });
@@ -96,7 +100,7 @@ export function useInspectionResultCard(
     [rows],
   );
 
-  // RGB → HEX (#RRGGBB) 変換（スタイル用だが共通ロジックなのでここで保持）
+  // RGB → HEX (#RRGGBB) 変換
   const rgbIntToHex = React.useCallback(
     (rgb: number | string | null | undefined): string | null => {
       if (rgb === null || rgb === undefined) return null;
@@ -111,7 +115,7 @@ export function useInspectionResultCard(
   );
 
   return {
-    title: "モデル別検査結果",
+    title: "検品結果",
     rows,
     totalPassed,
     totalQuantity,

@@ -4,7 +4,6 @@ import * as React from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import PageStyle from "../../../../shell/src/layout/PageStyle/PageStyle";
 import TokenBlueprintCard from "../../../../tokenBlueprint/src/presentation/components/tokenBlueprintCard";
-import TokenContentsCard from "../../../../tokenContents/src/presentation/components/tokenContentsCard";
 import { TOKEN_BLUEPRINTS } from "../../../../tokenBlueprint/src/infrastructure/mockdata/tokenBlueprint_mockdata";
 import type { TokenBlueprint } from "../../../../tokenBlueprint/src/domain/entity/tokenBlueprint";
 import { Card, CardContent } from "../../../../shell/src/shared/ui/card";
@@ -91,7 +90,7 @@ export default function MintRequestDetail() {
       title={`ミント申請詳細：${requestId ?? "不明ID"}`}
       onBack={onBack}
     >
-      {/* 左カラム：検査結果カード → TokenBlueprintCard → TokenContentsCard → ミント申請ボタン */}
+      {/* 左カラム：検査結果カード → TokenBlueprintCard → ミント申請ボタン */}
       <div className="space-y-4 mt-4">
         {/* モデル別在庫カードの代わりに検査結果カードを表示 */}
         {loading ? (
@@ -120,12 +119,6 @@ export default function MintRequestDetail() {
           />
         )}
 
-        {/* TokenContentsCard: TokenBlueprint.contentFiles（ID配列）と連動させる想定 */}
-        <TokenContentsCard
-          mode="view"
-          images={blueprint?.contentFiles ?? []}
-        />
-
         <Card className="mint-request-card">
           <CardContent className="mint-request-card__body">
             <div className="mint-request-card__actions">
@@ -144,8 +137,8 @@ export default function MintRequestDetail() {
         </Card>
       </div>
 
-      {/* 右カラム：AdminCard を削除（カラム自体は維持しておく） */}
-      <div className="space-y-4 mt-4">{/* 将来、別カードを配置予定 */}</div>
+      {/* 右カラム：現状は空（将来、別カードを配置予定） */}
+      <div className="space-y-4 mt-4">{/* placeholder */}</div>
     </PageStyle>
   );
 }

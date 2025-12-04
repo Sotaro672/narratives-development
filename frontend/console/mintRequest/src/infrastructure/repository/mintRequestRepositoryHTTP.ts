@@ -17,7 +17,7 @@ const FALLBACK_BASE =
 export const API_BASE = ENV_BASE || FALLBACK_BASE;
 
 // ---------------------------------------------------------
-// 共通: Firebase トークン取得 + companyId デバッグ
+// 共通: Firebase トークン取得（ログ出力削除版）
 // ---------------------------------------------------------
 async function getIdTokenOrThrow(): Promise<string> {
   const user = auth.currentUser;
@@ -26,16 +26,6 @@ async function getIdTokenOrThrow(): Promise<string> {
   }
 
   const idToken = await user.getIdToken();
-
-  // ★★★ デバッグ: ID トークンの payload を decode して companyId を確認 ★★★
-  try {
-    const decoded = JSON.parse(atob(idToken.split(".")[1]));
-    console.log("[MintRequestRepo] ID Token claims:", decoded);
-    console.log("[MintRequestRepo] companyId from claims:", decoded.companyId);
-  } catch (e) {
-    console.warn("[MintRequestRepo] Failed to decode ID token:", e);
-  }
-
   return idToken;
 }
 
@@ -52,9 +42,6 @@ export async function fetchInspectionBatchesHTTP(): Promise<InspectionBatchDTO[]
 
   const url = `${API_BASE}/mint/inspections`;
 
-  // ★★★ バックエンドへ渡すURLの確認 ★★★
-  console.log("[MintRequestRepo] Fetch URL (mint inspections):", url);
-
   const res = await fetch(url, {
     method: "GET",
     headers: {
@@ -64,7 +51,6 @@ export async function fetchInspectionBatchesHTTP(): Promise<InspectionBatchDTO[]
   });
 
   if (!res.ok) {
-    console.error("[MintRequestRepo] Fetch failed:", res.status, res.statusText);
     throw new Error(
       `Failed to fetch inspections (mint): ${res.status} ${res.statusText}`,
     );
@@ -94,9 +80,6 @@ export async function fetchInspectionByProductionIdHTTP(
     trimmed,
   )}`;
 
-  // ★★★ バックエンドへ渡すURL（productionId付き）をログ出力 ★★★
-  console.log("[MintRequestRepo] Fetch URL (by productionId):", url);
-
   const res = await fetch(url, {
     method: "GET",
     headers: {
@@ -106,15 +89,10 @@ export async function fetchInspectionByProductionIdHTTP(
   });
 
   if (res.status === 404) {
-    console.log(
-      "[MintRequestRepo] No inspection batch found for productionId:",
-      trimmed,
-    );
     return null;
   }
 
   if (!res.ok) {
-    console.error("[MintRequestRepo] Fetch failed:", res.status, res.statusText);
     throw new Error(
       `Failed to fetch inspection by productionId: ${res.status} ${res.statusText}`,
     );
