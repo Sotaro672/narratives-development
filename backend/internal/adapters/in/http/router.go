@@ -221,7 +221,7 @@ func NewRouter(deps RouterDeps) http.Handler {
 	}
 
 	// ================================
-	// Products
+	// Products（印刷系）
 	// ================================
 	if deps.PrintUC != nil {
 		printH := handlers.NewPrintHandler(deps.PrintUC, deps.ProductionUC, deps.ModelUC)
@@ -357,30 +357,15 @@ func NewRouter(deps RouterDeps) http.Handler {
 	}
 
 	// ================================
-	// Inspector Products (検品アプリ用詳細)
-	//   GET /inspector/products/{id}
-	//   → ProductUsecase + ProductHandler
-	// ================================
-	if deps.ProductUC != nil {
-		inspectorProductH := handlers.NewProductHandler(deps.ProductUC)
-
-		var h http.Handler = inspectorProductH
-		if authMw != nil {
-			h = authMw.Handler(h)
-		}
-
-		// /inspector/products/{id} をこのハンドラに紐付け
-		mux.Handle("/inspector/products/", h)
-	}
-
-	// ================================
 	// ⭐ 検品 API（Inspector 用）
-	//   GET  /products/inspections
-	//   PATCH /products/inspections
-	//   PATCH /products/inspections/complete
+	//   - GET  /inspector/products/{id}
+	//   - GET  /products/inspections
+	//   - PATCH /products/inspections
+	//   - PATCH /products/inspections/complete
+	//   すべて InspectorHandler がまとめて処理
 	// ================================
-	if deps.PrintUC != nil && deps.InspectionUC != nil {
-		inspectorH := handlers.NewInspectorHandler(deps.PrintUC, deps.InspectionUC)
+	if deps.ProductUC != nil && deps.InspectionUC != nil {
+		inspectorH := handlers.NewInspectorHandler(deps.ProductUC, deps.InspectionUC)
 
 		var h http.Handler = inspectorH
 		// Flutter inspector アプリは Firebase Auth を使っており認証必須
@@ -388,8 +373,11 @@ func NewRouter(deps RouterDeps) http.Handler {
 			h = authMw.Handler(h)
 		}
 
+		// 詳細取得
+		mux.Handle("/inspector/products/", h)
+		// 検品バッチ取得/更新/完了
 		mux.Handle("/products/inspections", h)
-		mux.Handle("/products/inspections/", h) // ← /complete などもこのハンドラに流す
+		mux.Handle("/products/inspections/", h) // /complete などもこのハンドラに流す
 	}
 
 	return mux

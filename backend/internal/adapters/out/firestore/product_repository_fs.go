@@ -1,3 +1,4 @@
+// backend/internal/adapters/out/firestore/product_repository_fs.go
 package firestore
 
 import (
@@ -12,6 +13,7 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
+	fscommon "narratives/internal/adapters/out/firestore/common"
 	productdom "narratives/internal/domain/product"
 )
 
@@ -466,7 +468,7 @@ func docToPrintLog(doc *firestore.DocumentSnapshot) (productdom.PrintLog, error)
 
 	log := productdom.PrintLog{
 		ID:           doc.Ref.ID,
-		ProductionID: strings.TrimSpace(asString(data["productionId"])),
+		ProductionID: strings.TrimSpace(fscommon.AsString(data["productionId"])),
 		ProductIDs:   productIDs,
 		PrintedAt:    printedAt,
 	}
@@ -481,14 +483,4 @@ func printLogToDoc(v productdom.PrintLog) map[string]any {
 		"printedAt":    v.PrintedAt.UTC(),
 	}
 	return m
-}
-
-func asString(v any) string {
-	if v == nil {
-		return ""
-	}
-	if s, ok := v.(string); ok {
-		return s
-	}
-	return ""
 }

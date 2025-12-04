@@ -12,6 +12,7 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
+	fscommon "narratives/internal/adapters/out/firestore/common"
 	inspectiondom "narratives/internal/domain/inspection"
 )
 
@@ -90,21 +91,63 @@ func (r *InspectionRepositoryFS) GetByProductionID(
 	return docToInspectionBatch(snap)
 }
 
-// ListByProductionID: 互換用のラッパ（現在は 1 ドキュメントのみ想定）
-//
-//   - ドメイン側 Repository インターフェースで ListByProductionID が
-//     定義されている場合に備え、GetByProductionID をラップして
-//     []InspectionBatch を返す。
+// ListByProductionID:
+//   - 複数の productionId に紐づく inspections ドキュメントをまとめて取得する。
+//   - inspections コレクションは docID=productionId なので、Doc(id).Get をループで呼び出す。
+//   - まだ inspections が作成されていない productionId はスキップする。
 func (r *InspectionRepositoryFS) ListByProductionID(
 	ctx context.Context,
-	productionID string,
+	productionIDs []string,
 ) ([]inspectiondom.InspectionBatch, error) {
 
-	batch, err := r.GetByProductionID(ctx, productionID)
-	if err != nil {
-		return nil, err
+	if r.Client == nil {
+		return nil, errors.New("firestore client is nil")
 	}
-	return []inspectiondom.InspectionBatch{batch}, nil
+
+	// 空なら即終了
+	if len(productionIDs) == 0 {
+		return []inspectiondom.InspectionBatch{}, nil
+	}
+
+	// trim + 空/重複除去
+	uniq := make(map[string]struct{}, len(productionIDs))
+	ids := make([]string, 0, len(productionIDs))
+	for _, id := range productionIDs {
+		id = strings.TrimSpace(id)
+		if id == "" {
+			continue
+		}
+		if _, ok := uniq[id]; ok {
+			continue
+		}
+		uniq[id] = struct{}{}
+		ids = append(ids, id)
+	}
+
+	if len(ids) == 0 {
+		return []inspectiondom.InspectionBatch{}, nil
+	}
+
+	batches := make([]inspectiondom.InspectionBatch, 0, len(ids))
+
+	for _, pid := range ids {
+		snap, err := r.col().Doc(pid).Get(ctx)
+		if err != nil {
+			// inspections がまだ存在しない productionId はスキップ
+			if status.Code(err) == codes.NotFound {
+				continue
+			}
+			return nil, err
+		}
+
+		batch, err := docToInspectionBatch(snap)
+		if err != nil {
+			return nil, err
+		}
+		batches = append(batches, batch)
+	}
+
+	return batches, nil
 }
 
 // Save: Upsert
@@ -240,8 +283,8 @@ func docToInspectionBatch(
 	}
 
 	batch := inspectiondom.InspectionBatch{
-		ProductionID: strings.TrimSpace(asString(data["productionId"])),
-		Status:       inspectiondom.InspectionStatus(strings.TrimSpace(asString(data["status"]))),
+		ProductionID: strings.TrimSpace(fscommon.AsString(data["productionId"])),
+		Status:       inspectiondom.InspectionStatus(strings.TrimSpace(fscommon.AsString(data["status"]))),
 	}
 
 	// quantity（レガシー対応: 無ければ後で len(inspections) から補完）

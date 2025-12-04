@@ -373,6 +373,9 @@ type Container struct {
 	// ★ 検品アプリ用 Usecase（バッチ検品など）
 	InspectionUC *uc.InspectionUsecase
 
+	// ★ Mint 用 Usecase（MintRequest / NFT 発行チェーン）
+	MintUC *uc.MintUsecase
+
 	// ★ 招待関連 Usecase
 	InvitationQuery   uc.InvitationQueryPort
 	InvitationCommand uc.InvitationCommandPort
@@ -558,6 +561,14 @@ func NewContainer(ctx context.Context) (*Container, error) {
 	}
 	productUC := uc.NewProductUsecase(productQueryRepo, brandSvc, companySvc)
 
+	// ★ MintUsecase（MintRequest / NFT 発行候補一覧など）
+	// NewMintUsecase は (mintProductBlueprintRepo, mintProductionRepo, mintInspectionRepo) の 3 引数
+	mintUC := uc.NewMintUsecase(
+		productBlueprintRepo,
+		productionRepo,
+		inspectionRepo,
+	)
+
 	saleUC := uc.NewSaleUsecase(saleRepo)
 	shippingAddressUC := uc.NewShippingAddressUsecase(shippingAddressRepo)
 	tokenUC := uc.NewTokenUsecase(tokenRepo)
@@ -637,6 +648,9 @@ func NewContainer(ctx context.Context) (*Container, error) {
 		// 検品アプリ用
 		ProductUC:    productUC,
 		InspectionUC: inspectionUC,
+
+		// Mint 系
+		MintUC: mintUC,
 
 		InvitationQuery:   invitationQueryUC,
 		InvitationCommand: invitationCommandUC,

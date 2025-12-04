@@ -1,4 +1,4 @@
-// backend\internal\adapters\out\firestore\common\sqlutil.go
+// backend/internal/adapters/out/firestore/common/sqlutil.go
 package common
 
 import (
@@ -135,7 +135,7 @@ func BuildOrderBy(column string, allowed map[string]string, order string, fallba
 	}
 	dir := strings.ToUpper(order)
 	if dir != "ASC" && dir != "DESC" {
-		dir = "ASC"
+		return "ASC"
 	}
 	return fmt.Sprintf("ORDER BY %s %s", sqlCol, dir)
 }
@@ -342,4 +342,22 @@ func NormalizeTimePtr(p *time.Time) *time.Time {
 	}
 	utc := p.UTC()
 	return &utc
+}
+
+// ========================
+// 共通: any → string 変換ヘルパー
+// ========================
+
+// AsString は Firestore/SQL/任意の値を string に正規化します。
+// - nil            → ""
+// - string         → Trim して返す
+// - それ以外       → fmt.Sprintf("%v", v) を Trim して返す
+func AsString(v any) string {
+	if v == nil {
+		return ""
+	}
+	if s, ok := v.(string); ok {
+		return strings.TrimSpace(s)
+	}
+	return strings.TrimSpace(fmt.Sprintf("%v", v))
 }

@@ -15,12 +15,13 @@ import (
 )
 
 type InspectorHandler struct {
-	productUC    *usecase.PrintUsecase
+	// ★ 検品用 ProductUsecase（Inspector 詳細 DTO を組み立てる）
+	productUC    *usecase.ProductUsecase
 	inspectionUC *usecase.InspectionUsecase
 }
 
 func NewInspectorHandler(
-	productUC *usecase.PrintUsecase,
+	productUC *usecase.ProductUsecase,
 	inspectionUC *usecase.InspectionUsecase,
 ) http.Handler {
 	return &InspectorHandler{
@@ -37,6 +38,7 @@ func (h *InspectorHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	// ------------------------------------------------------------
 	// GET /inspector/products/{productId}
 	//   → 検品アプリ（Flutter）用の詳細情報取得
+	//      ProductUsecase.GetInspectorProductDetail を利用
 	// ------------------------------------------------------------
 	case r.Method == http.MethodGet &&
 		strings.HasPrefix(r.URL.Path, "/inspector/products/"):
@@ -48,7 +50,7 @@ func (h *InspectorHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		p, err := h.productUC.GetByID(r.Context(), productID)
+		p, err := h.productUC.GetInspectorProductDetail(r.Context(), productID)
 		if errors.Is(err, productdom.ErrNotFound) {
 			http.Error(w, `{"error":"product not found"}`, http.StatusNotFound)
 			return
