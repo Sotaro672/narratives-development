@@ -119,7 +119,7 @@ export function useMintRequestDetail() {
   const totalMintQuantity = inspectionCardData.totalPassed;
 
   // TokenBlueprint（現状は undefined を返すダミー実装）
-  const blueprint = resolveBlueprintForMintRequest(requestId);
+  const tokenBlueprint = resolveBlueprintForMintRequest(requestId);
 
   // ④ ProductBlueprintCard 用の ViewModel へ整形
   const productBlueprintCardView: ProductBlueprintCardViewModel | null =
@@ -156,7 +156,7 @@ export function useMintRequestDetail() {
     loading,
     error,
     inspectionCardData,
-    blueprint,
+    tokenBlueprint,
     totalMintQuantity,
     onBack,
     handleMint,

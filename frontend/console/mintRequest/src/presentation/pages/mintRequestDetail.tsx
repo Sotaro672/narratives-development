@@ -1,4 +1,3 @@
-// frontend/console/mintRequest/src/presentation/pages/mintRequestDetail.tsx
 import PageStyle from "../../../../shell/src/layout/PageStyle/PageStyle";
 import { Card, CardContent } from "../../../../shell/src/shared/ui/card";
 import { Button } from "../../../../shell/src/shared/ui/button";
@@ -16,7 +15,10 @@ export default function MintRequestDetail() {
     loading,
     error,
     inspectionCardData,
-    blueprint, // 将来 TokenBlueprintCard で使う予定だが、現状は表示しない
+
+    // ★ blueprint → tokenBlueprint に改名
+    tokenBlueprint,
+
     totalMintQuantity,
     onBack,
     handleMint,
@@ -25,8 +27,18 @@ export default function MintRequestDetail() {
     pbPatchError,
   } = useMintRequestDetail();
 
+  // PageHeader 用の保存ボタンハンドラ（現状はダミー）
+  const handleSave = () => {
+    // TODO: 必要になったら保存処理を実装
+  };
+
   return (
-    <PageStyle layout="grid-2" title={title} onBack={onBack}>
+    <PageStyle
+      layout="grid-2"
+      title={title}
+      onBack={onBack}
+      onSave={handleSave} // PageHeader に保存ボタン表示
+    >
       {/* 左カラム */}
       <div className="space-y-4 mt-4">
         {/* ① プロダクト基本情報（閲覧モード） */}
@@ -43,7 +55,6 @@ export default function MintRequestDetail() {
             </CardContent>
           </Card>
         ) : productBlueprintCardView ? (
-          // 外側の Card は ProductBlueprintCard 内に任せる
           <ProductBlueprintCard
             mode="view"
             productName={productBlueprintCardView.productName}
@@ -80,10 +91,10 @@ export default function MintRequestDetail() {
           <InspectionResultCard data={inspectionCardData} />
         )}
 
-        {/* ③ （将来用）TokenBlueprintCard はデフォルト非表示 */}
-        {false && blueprint && (
+        {/* ③ TokenBlueprintCard（将来用。現状は非表示） */}
+        {false && tokenBlueprint && (
           <div className="mt-4">
-            {/* TokenBlueprintCard を実装する際にここで blueprint を利用する */}
+            {/* TokenBlueprintCard を実装する際にここで tokenBlueprint を利用 */}
           </div>
         )}
 
@@ -106,7 +117,7 @@ export default function MintRequestDetail() {
         </Card>
       </div>
 
-      {/* 右カラム：現状は空（将来、別カードを配置予定） */}
+      {/* 右カラム（将来拡張用） */}
       <div className="space-y-4 mt-4">{/* placeholder */}</div>
     </PageStyle>
   );
