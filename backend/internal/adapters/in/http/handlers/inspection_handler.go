@@ -1,10 +1,9 @@
-// backend\internal\adapters\in\http\handlers\inspection_handler.go
+// backend/internal/adapters/in/http/handlers/inspection_handler.go
 package handlers
 
 import (
 	"encoding/json"
 	"errors"
-	"log"
 	"net/http"
 	"strings"
 	"time"
@@ -59,13 +58,6 @@ func (h *InspectorHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		// ★ inspector へ渡すデータ全体像ログ
-		log.Printf(
-			"[InspectorHandler] GET /inspector/products/%s response payload: %+v",
-			productID,
-			p,
-		)
-
 		if err := json.NewEncoder(w).Encode(p); err != nil {
 			http.Error(w, `{"error":"encode error"}`, http.StatusInternalServerError)
 			return
@@ -105,7 +97,7 @@ func (h *InspectorHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 // ------------------------------------------------------------
 // GET /products/inspections?productionId=xxxx
 //
-//	inspectionUsecase.GetBatchByProductionID に移譲
+//	inspectionUsecase.ListByProductionID に移譲
 //
 // ------------------------------------------------------------
 func (h *InspectorHandler) getInspectionsByProductionID(w http.ResponseWriter, r *http.Request) {
@@ -128,13 +120,14 @@ func (h *InspectorHandler) getInspectionsByProductionID(w http.ResponseWriter, r
 		return
 	}
 
-	batch, err := h.inspectionUC.GetBatchByProductionID(ctx, productionID)
+	// 現状の ListByProductionID は単一バッチを返す実装なので、そのまま返す
+	batch, err := h.inspectionUC.ListByProductionID(ctx, productionID)
 	if err != nil {
 		code := http.StatusInternalServerError
 		switch err {
 		case inspectiondom.ErrInvalidInspectionProductionID:
 			code = http.StatusBadRequest
-		case productdom.ErrNotFound:
+		case inspectiondom.ErrNotFound:
 			code = http.StatusNotFound
 		}
 
@@ -144,15 +137,6 @@ func (h *InspectorHandler) getInspectionsByProductionID(w http.ResponseWriter, r
 		})
 		return
 	}
-
-	// ★ inspector へ渡す inspections バッチ全体像ログ
-	log.Printf(
-		"[InspectorHandler] GET /products/inspections?productionId=%s response payload: status=%s, inspectionsCount=%d, batch=%+v",
-		productionID,
-		batch.Status,
-		len(batch.Inspections),
-		batch,
-	)
 
 	_ = json.NewEncoder(w).Encode(batch)
 }
@@ -203,10 +187,10 @@ func (h *InspectorHandler) updateInspection(w http.ResponseWriter, r *http.Reque
 		return
 	}
 
-	// ★ 現在のメンバーの fullName をコンテキストから取得
+	// 現在のメンバーの fullName をコンテキストから取得
 	fullName, hasFullName := middleware.CurrentFullName(r)
 
-	// ★ フォールバックとして email も拾っておく（fullName が空の場合）
+	// フォールバックとして email も拾っておく（fullName が空の場合）
 	_, email, hasUIDEmail := middleware.CurrentUIDAndEmail(r)
 
 	var inspectedByName *string
@@ -221,23 +205,12 @@ func (h *InspectorHandler) updateInspection(w http.ResponseWriter, r *http.Reque
 		// それでも何もなければ nil のまま → Usecase 側では inspectedBy 更新なし
 	}
 
-	// ★ inspector から受け取った更新リクエスト + 解決した inspectedBy のログ
-	log.Printf(
-		"[InspectorHandler] PATCH /products/inspections request payload: productionId=%s, productId=%s, inspectionResult=%v, inspectedBy(fullName)=%v, inspectedAt=%v, status=%v",
-		req.ProductionID,
-		req.ProductID,
-		req.InspectionResult,
-		inspectedByName,
-		req.InspectedAt,
-		req.Status,
-	)
-
 	batch, err := h.inspectionUC.UpdateInspectionForProduct(
 		ctx,
 		req.ProductionID,
 		req.ProductID,
 		req.InspectionResult,
-		inspectedByName, // ★ ここで fullName（なければ email）を渡す
+		inspectedByName, // ここで fullName（なければ email）を渡す
 		req.InspectedAt,
 		req.Status,
 	)
@@ -253,7 +226,7 @@ func (h *InspectorHandler) updateInspection(w http.ResponseWriter, r *http.Reque
 			inspectiondom.ErrInvalidInspectionStatus:
 			code = http.StatusBadRequest
 
-		case productdom.ErrNotFound:
+		case inspectiondom.ErrNotFound:
 			code = http.StatusNotFound
 		}
 
@@ -263,15 +236,6 @@ func (h *InspectorHandler) updateInspection(w http.ResponseWriter, r *http.Reque
 		})
 		return
 	}
-
-	// ★ 更新後に inspector へ返すバッチ全体像ログ
-	log.Printf(
-		"[InspectorHandler] PATCH /products/inspections response payload: productionId=%s, status=%s, inspectionsCount=%d, batch=%+v",
-		batch.ProductionID,
-		batch.Status,
-		len(batch.Inspections),
-		batch,
-	)
 
 	_ = json.NewEncoder(w).Encode(batch)
 }
@@ -316,7 +280,7 @@ func (h *InspectorHandler) completeInspection(w http.ResponseWriter, r *http.Req
 		return
 	}
 
-	// ★ by: CurrentFullName → email の順で解決
+	// by: CurrentFullName → email の順で解決
 	fullName, hasFullName := middleware.CurrentFullName(r)
 	_, email, hasUIDEmail := middleware.CurrentUIDAndEmail(r)
 
@@ -343,13 +307,6 @@ func (h *InspectorHandler) completeInspection(w http.ResponseWriter, r *http.Req
 		at = time.Now().UTC()
 	}
 
-	log.Printf(
-		"[InspectorHandler] PATCH /products/inspections/complete request payload: productionId=%s, by=%s, at=%s",
-		req.ProductionID,
-		by,
-		at.Format(time.RFC3339Nano),
-	)
-
 	batch, err := h.inspectionUC.CompleteInspectionForProduction(
 		ctx,
 		req.ProductionID,
@@ -362,7 +319,7 @@ func (h *InspectorHandler) completeInspection(w http.ResponseWriter, r *http.Req
 		case inspectiondom.ErrInvalidInspectionProductionID,
 			inspectiondom.ErrInvalidInspectionResult:
 			code = http.StatusBadRequest
-		case productdom.ErrNotFound:
+		case inspectiondom.ErrNotFound:
 			code = http.StatusNotFound
 		}
 
@@ -372,14 +329,6 @@ func (h *InspectorHandler) completeInspection(w http.ResponseWriter, r *http.Req
 		})
 		return
 	}
-
-	log.Printf(
-		"[InspectorHandler] PATCH /products/inspections/complete response payload: productionId=%s, status=%s, inspectionsCount=%d, totalPassed=%d",
-		batch.ProductionID,
-		batch.Status,
-		len(batch.Inspections),
-		batch.TotalPassed,
-	)
 
 	_ = json.NewEncoder(w).Encode(batch)
 }

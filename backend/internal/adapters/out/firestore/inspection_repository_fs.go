@@ -90,6 +90,23 @@ func (r *InspectionRepositoryFS) GetByProductionID(
 	return docToInspectionBatch(snap)
 }
 
+// ListByProductionID: 互換用のラッパ（現在は 1 ドキュメントのみ想定）
+//
+//   - ドメイン側 Repository インターフェースで ListByProductionID が
+//     定義されている場合に備え、GetByProductionID をラップして
+//     []InspectionBatch を返す。
+func (r *InspectionRepositoryFS) ListByProductionID(
+	ctx context.Context,
+	productionID string,
+) ([]inspectiondom.InspectionBatch, error) {
+
+	batch, err := r.GetByProductionID(ctx, productionID)
+	if err != nil {
+		return nil, err
+	}
+	return []inspectiondom.InspectionBatch{batch}, nil
+}
+
 // Save: Upsert
 func (r *InspectionRepositoryFS) Save(
 	ctx context.Context,

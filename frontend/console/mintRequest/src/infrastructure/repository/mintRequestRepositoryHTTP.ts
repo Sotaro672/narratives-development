@@ -33,8 +33,8 @@ async function getIdTokenOrThrow(): Promise<string> {
 
 /**
  * inspections の一覧を取得して、そのまま InspectionBatchDTO[] を返す。
- * バックエンド側では /products/inspections が inspections コレクション
- * を参照している想定。
+ * （※ 現在のバックエンド実装では /products/inspections に productionId
+ *     クエリが必須のため、この関数は将来的に廃止予定）
  */
 export async function fetchInspectionBatchesHTTP(): Promise<InspectionBatchDTO[]> {
   const idToken = await getIdTokenOrThrow();
@@ -61,8 +61,9 @@ export async function fetchInspectionBatchesHTTP(): Promise<InspectionBatchDTO[]
 /**
  * 個別の productionId に紐づく InspectionBatch を取得。
  *
- * 専用の /products/inspections/{id} エンドポイントは作らず、
- * 一覧を取得してから front 側で productionId で絞り込む。
+ * 以前は一覧を取得して front 側で絞り込んでいたが、
+ * バックエンドに ListByProductionID（?productionId=xxx）が追加されたので、
+ * 直接クエリパラメータ付きで /products/inspections を叩く。
  */
 export async function fetchInspectionByProductionIdHTTP(
   productionId: string,
@@ -72,7 +73,32 @@ export async function fetchInspectionByProductionIdHTTP(
     throw new Error("productionId が空です");
   }
 
-  const batches = await fetchInspectionBatchesHTTP();
-  const found = batches.find((b) => b.productionId === trimmed) ?? null;
-  return found;
+  const idToken = await getIdTokenOrThrow();
+
+  const url = `${API_BASE}/products/inspections?productionId=${encodeURIComponent(
+    trimmed,
+  )}`;
+
+  const res = await fetch(url, {
+    method: "GET",
+    headers: {
+      Authorization: `Bearer ${idToken}`,
+      "Content-Type": "application/json",
+    },
+  });
+
+  if (res.status === 404) {
+    // 対象の productionId のバッチが存在しない
+    return null;
+  }
+
+  if (!res.ok) {
+    throw new Error(
+      `Failed to fetch inspection by productionId: ${res.status} ${res.statusText}`,
+    );
+  }
+
+  const json = (await res.json()) as InspectionBatchDTO | null | undefined;
+  if (!json) return null;
+  return json;
 }

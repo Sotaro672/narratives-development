@@ -3,7 +3,6 @@ package handlers
 
 import (
 	"encoding/json"
-	"log"
 	"net/http"
 	"strings"
 	"time"
@@ -36,8 +35,6 @@ func NewPrintHandler(
 func (h *PrintHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 
-	// ★ リクエストログを追加
-	log.Printf("[PrintHandler] method=%s path=%s query=%s", r.Method, r.URL.Path, r.URL.RawQuery)
 	switch {
 
 	// ------------------------------------------------------------
@@ -163,28 +160,24 @@ func (h *PrintHandler) listByProductionID(w http.ResponseWriter, r *http.Request
 
 	// modelNumber 付与に必要な Usecase が無い場合は従来のまま
 	if h.productionUC == nil || h.modelUC == nil {
-		log.Printf("[PrintHandler] listByProductionID: productionUC or modelUC is nil, return raw products")
 		_ = json.NewEncoder(w).Encode(list)
 		return
 	}
 
 	prod, err := h.productionUC.GetByID(ctx, productionID)
 	if err != nil {
-		log.Printf("[PrintHandler] listByProductionID: GetByID failed: %v", err)
 		_ = json.NewEncoder(w).Encode(list)
 		return
 	}
 
 	pbID := strings.TrimSpace(prod.ProductBlueprintID)
 	if pbID == "" {
-		log.Printf("[PrintHandler] listByProductionID: empty ProductBlueprintID")
 		_ = json.NewEncoder(w).Encode(list)
 		return
 	}
 
 	vars, err := h.modelUC.ListModelVariationsByProductBlueprintID(ctx, pbID)
 	if err != nil {
-		log.Printf("[PrintHandler] listByProductionID: ListModelVariations failed: %v", err)
 		_ = json.NewEncoder(w).Encode(list)
 		return
 	}
@@ -208,12 +201,6 @@ func (h *PrintHandler) listByProductionID(w http.ResponseWriter, r *http.Request
 
 	for _, p := range list {
 		modelNumber := strings.TrimSpace(idToModelNumber[p.ModelID])
-		if modelNumber == "" {
-			log.Printf(
-				"[PrintHandler] listByProductionID: modelNumber not found productID=%s modelID=%s",
-				p.ID, p.ModelID,
-			)
-		}
 
 		out = append(out, productWithModelNumber{
 			ID:           p.ID,
@@ -241,7 +228,6 @@ func (h *PrintHandler) listPrintLogsByProductionID(w http.ResponseWriter, r *htt
 
 	logs, err := h.uc.ListPrintLogsByProductionID(ctx, productionID)
 	if err != nil {
-		log.Printf("[PrintHandler] listPrintLogsByProductionID error: %v", err)
 		w.WriteHeader(http.StatusInternalServerError)
 		_ = json.NewEncoder(w).Encode(map[string]string{"error": err.Error()})
 		return
@@ -273,11 +259,8 @@ func (h *PrintHandler) createPrintLog(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	log.Printf("[PrintHandler] createPrintLog productionId=%s", productionID)
-
 	pl, err := h.uc.CreatePrintLogForProduction(ctx, productionID)
 	if err != nil {
-		log.Printf("[PrintHandler] createPrintLog error: %v", err)
 		w.WriteHeader(http.StatusInternalServerError)
 		_ = json.NewEncoder(w).Encode(map[string]string{"error": err.Error()})
 		return
@@ -309,11 +292,8 @@ func (h *PrintHandler) createInspectionBatch(w http.ResponseWriter, r *http.Requ
 		return
 	}
 
-	log.Printf("[PrintHandler] createInspectionBatch productionId=%s", productionID)
-
 	batch, err := h.uc.CreateInspectionBatchForProduction(ctx, productionID)
 	if err != nil {
-		log.Printf("[PrintHandler] createInspectionBatch error: %v", err)
 		w.WriteHeader(http.StatusInternalServerError)
 		_ = json.NewEncoder(w).Encode(map[string]string{"error": err.Error()})
 		return

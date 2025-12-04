@@ -110,6 +110,10 @@ func (u *InspectionUsecase) fillModelNumbers(
 	return batch
 }
 
+// ------------------------------------------------------------
+// Queries
+// ------------------------------------------------------------
+
 // ★ productionId から inspections バッチをそのまま返す
 func (u *InspectionUsecase) GetBatchByProductionID(
 	ctx context.Context,
@@ -134,6 +138,21 @@ func (u *InspectionUsecase) GetBatchByProductionID(
 	batch = u.fillModelNumbers(ctx, batch)
 	return batch, nil
 }
+
+// ★ 互換用エイリアス: ListByProductionID
+//
+//	既存コードで「ListByProductionID」を呼んでいる箇所があっても
+//	GetBatchByProductionID と同じ挙動で動くようにするためのラッパー。
+func (u *InspectionUsecase) ListByProductionID(
+	ctx context.Context,
+	productionID string,
+) (inspectiondom.InspectionBatch, error) {
+	return u.GetBatchByProductionID(ctx, productionID)
+}
+
+// ------------------------------------------------------------
+// Commands
+// ------------------------------------------------------------
 
 // ★ inspections 内の 1 productId 分を更新する
 func (u *InspectionUsecase) UpdateInspectionForProduct(
