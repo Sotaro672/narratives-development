@@ -3,6 +3,7 @@ package middleware
 
 import (
 	"context"
+	"log"
 	"net/http"
 	"strings"
 
@@ -83,9 +84,11 @@ func (m *AuthMiddleware) Handler(next http.Handler) http.Handler {
 		ctx = context.WithValue(ctx, ctxKeyUID, uid)
 
 		// email があれば context に格納
+		emailStr := ""
 		if emailRaw, ok := token.Claims["email"]; ok {
-			if emailStr, ok2 := emailRaw.(string); ok2 && strings.TrimSpace(emailStr) != "" {
-				ctx = context.WithValue(ctx, ctxKeyEmail, strings.TrimSpace(emailStr))
+			if e, ok2 := emailRaw.(string); ok2 && strings.TrimSpace(e) != "" {
+				emailStr = strings.TrimSpace(e)
+				ctx = context.WithValue(ctx, ctxKeyEmail, emailStr)
 			}
 		}
 
@@ -99,6 +102,23 @@ func (m *AuthMiddleware) Handler(next http.Handler) http.Handler {
 		if cid := strings.TrimSpace(member.CompanyID); cid != "" {
 			ctx = usecase.WithCompanyID(ctx, cid)
 			ctx = context.WithValue(ctx, ctxKeyCompanyID, cid)
+
+			// ★ ここで companyId を持たせているかログに出力する
+			log.Printf(
+				"[AuthMiddleware] path=%s uid=%s companyId=%s email=%s",
+				r.URL.Path,
+				uid,
+				cid,
+				emailStr,
+			)
+		} else {
+			// ★ companyId が空だった場合もわかるようにログ
+			log.Printf(
+				"[AuthMiddleware] path=%s uid=%s has NO companyId (email=%s)",
+				r.URL.Path,
+				uid,
+				emailStr,
+			)
 		}
 
 		next.ServeHTTP(w, r.WithContext(ctx))

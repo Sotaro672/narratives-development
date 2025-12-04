@@ -56,6 +56,9 @@ type RouterDeps struct {
 	// ⭐ 検品専用 Usecase
 	InspectionUC *usecase.InspectionUsecase
 
+	// ⭐ Mint 用 Usecase（/mint/inspections）
+	MintUC *usecase.MintUsecase
+
 	// 認証・招待まわり
 	AuthBootstrap     *authuc.BootstrapService
 	InvitationQuery   usecase.InvitationQueryPort
@@ -378,6 +381,23 @@ func NewRouter(deps RouterDeps) http.Handler {
 		// 検品バッチ取得/更新/完了
 		mux.Handle("/products/inspections", h)
 		mux.Handle("/products/inspections/", h) // /complete などもこのハンドラに流す
+	}
+
+	// ================================
+	// ⭐ Mint API
+	//   - GET /mint/inspections
+	//   → MintUsecase.ListInspectionsForCurrentCompany
+	// ================================
+	if deps.MintUC != nil {
+		mintH := handlers.NewMintHandler(deps.MintUC)
+
+		var h http.Handler = mintH
+		if authMw != nil {
+			h = authMw.Handler(h)
+		}
+
+		mux.Handle("/mint/inspections", h)
+		mux.Handle("/mint/inspections/", h)
 	}
 
 	return mux
