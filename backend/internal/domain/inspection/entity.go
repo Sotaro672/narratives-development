@@ -1,5 +1,5 @@
 // backend/internal/domain/inspection/entity.go
-package product
+package inspection
 
 import (
 	"errors"
@@ -8,7 +8,20 @@ import (
 )
 
 // ===============================
-// Inspection batch (inspections)
+// InspectionResult（検査結果の種類）
+// ===============================
+
+type InspectionResult string
+
+const (
+	InspectionNotYet          InspectionResult = "notYet"          // 未検査
+	InspectionPassed          InspectionResult = "passed"          // 合格
+	InspectionFailed          InspectionResult = "failed"          // 不合格
+	InspectionNotManufactured InspectionResult = "notManufactured" // 生産されていない（欠品など）
+)
+
+// ===============================
+// InspectionStatus（バッチ全体の状態）
 // ===============================
 
 type InspectionStatus string
@@ -21,6 +34,7 @@ const (
 // ------------------------------------------------------
 // InspectionItem: productId ごとの検査結果
 // ------------------------------------------------------
+
 type InspectionItem struct {
 	ProductID        string            `json:"productId"`
 	ModelID          string            `json:"modelId"`
@@ -33,6 +47,7 @@ type InspectionItem struct {
 // ------------------------------------------------------
 // InspectionBatch: inspections テーブル 1 レコード
 // ------------------------------------------------------
+
 type InspectionBatch struct {
 	ProductionID string           `json:"productionId"`
 	Status       InspectionStatus `json:"status"`
@@ -56,6 +71,11 @@ var (
 	ErrInvalidInspectionProductionID = errors.New("inspection: invalid productionId")
 	ErrInvalidInspectionStatus       = errors.New("inspection: invalid status")
 	ErrInvalidInspectionProductIDs   = errors.New("inspection: invalid productIds")
+
+	ErrInvalidInspectionResult = errors.New("inspection: invalid inspectionResult")
+	ErrInvalidInspectedBy      = errors.New("inspection: invalid inspectedBy")
+	ErrInvalidInspectedAt      = errors.New("inspection: invalid inspectedAt")
+	ErrNotFound                = errors.New("inspection: not found")
 )
 
 // ===============================
@@ -178,10 +198,87 @@ func (b InspectionBatch) Validate() error {
 	return b.validate()
 }
 
+// ------------------------------------------------------
+// Complete: 検品完了処理（usecase から利用される）
+// ------------------------------------------------------
+//
+// - 引数 by / at が不正なら ErrInvalidInspectedBy / ErrInvalidInspectedAt を返す
+// - InspectionResult が nil or notYet の行は notManufactured にし、by/at を埋める
+// - バッチの Status を completed に変更
+func (b *InspectionBatch) Complete(by string, at time.Time) error {
+	inspector := strings.TrimSpace(by)
+	if inspector == "" {
+		return ErrInvalidInspectedBy
+	}
+
+	// at は UTC に正規化しておく
+	atUTC := at.UTC()
+	if atUTC.IsZero() {
+		return ErrInvalidInspectedAt
+	}
+
+	for i := range b.Inspections {
+		item := &b.Inspections[i]
+
+		// result が nil or notYet の場合は notManufactured にする
+		if item.InspectionResult == nil || *item.InspectionResult == InspectionNotYet {
+			r := InspectionNotManufactured
+			item.InspectionResult = &r
+
+			// by/at を上書き（未設定 or 既存値に関わらず）
+			item.InspectedBy = &inspector
+			item.InspectedAt = &atUTC
+			continue
+		}
+
+		// 既に passed/failed/notManufactured の結果が入っている場合は、
+		// ここでは特に変更しない（usecase 側で totalPassed は再集計される）。
+	}
+
+	// ステータスを completed に変更
+	b.Status = InspectionStatusCompleted
+
+	// 一貫性の最終チェック
+	return b.validate()
+}
+
 // ===============================
-// Status validator
+// Status / Result validator
 // ===============================
 
 func IsValidInspectionStatus(s InspectionStatus) bool {
 	return s == InspectionStatusInspecting || s == InspectionStatusCompleted
+}
+
+func IsValidInspectionResult(r InspectionResult) bool {
+	switch r {
+	case InspectionNotYet, InspectionPassed, InspectionFailed, InspectionNotManufactured:
+		return true
+	default:
+		return false
+	}
+}
+
+// ===============================
+// Helpers
+// ===============================
+
+// normalizeIDList は ID の配列をトリムし、空文字を除外し、重複を取り除きます。
+func normalizeIDList(raw []string) []string {
+	seen := make(map[string]struct{}, len(raw))
+	out := make([]string, 0, len(raw))
+
+	for _, id := range raw {
+		id = strings.TrimSpace(id)
+		if id == "" {
+			continue
+		}
+		if _, ok := seen[id]; ok {
+			continue
+		}
+		seen[id] = struct{}{}
+		out = append(out, id)
+	}
+
+	return out
 }

@@ -12,7 +12,7 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
-	productdom "narratives/internal/domain/product"
+	inspectiondom "narratives/internal/domain/inspection"
 )
 
 // ------------------------------------------------------------
@@ -34,16 +34,16 @@ func (r *InspectionRepositoryFS) col() *firestore.CollectionRef {
 // Create: inspections/{productionId} を新規作成
 func (r *InspectionRepositoryFS) Create(
 	ctx context.Context,
-	v productdom.InspectionBatch,
-) (productdom.InspectionBatch, error) {
+	v inspectiondom.InspectionBatch,
+) (inspectiondom.InspectionBatch, error) {
 
 	if r.Client == nil {
-		return productdom.InspectionBatch{}, errors.New("firestore client is nil")
+		return inspectiondom.InspectionBatch{}, errors.New("firestore client is nil")
 	}
 
 	pid := strings.TrimSpace(v.ProductionID)
 	if pid == "" {
-		return productdom.InspectionBatch{}, productdom.ErrInvalidInspectionProductionID
+		return inspectiondom.InspectionBatch{}, inspectiondom.ErrInvalidInspectionProductionID
 	}
 
 	docRef := r.col().Doc(pid)
@@ -52,14 +52,14 @@ func (r *InspectionRepositoryFS) Create(
 	_, err := docRef.Create(ctx, data)
 	if err != nil {
 		if status.Code(err) == codes.AlreadyExists {
-			return productdom.InspectionBatch{}, err
+			return inspectiondom.InspectionBatch{}, err
 		}
-		return productdom.InspectionBatch{}, err
+		return inspectiondom.InspectionBatch{}, err
 	}
 
 	snap, err := docRef.Get(ctx)
 	if err != nil {
-		return productdom.InspectionBatch{}, err
+		return inspectiondom.InspectionBatch{}, err
 	}
 	return docToInspectionBatch(snap)
 }
@@ -68,23 +68,23 @@ func (r *InspectionRepositoryFS) Create(
 func (r *InspectionRepositoryFS) GetByProductionID(
 	ctx context.Context,
 	productionID string,
-) (productdom.InspectionBatch, error) {
+) (inspectiondom.InspectionBatch, error) {
 
 	if r.Client == nil {
-		return productdom.InspectionBatch{}, errors.New("firestore client is nil")
+		return inspectiondom.InspectionBatch{}, errors.New("firestore client is nil")
 	}
 
 	pid := strings.TrimSpace(productionID)
 	if pid == "" {
-		return productdom.InspectionBatch{}, productdom.ErrInvalidInspectionProductionID
+		return inspectiondom.InspectionBatch{}, inspectiondom.ErrInvalidInspectionProductionID
 	}
 
 	snap, err := r.col().Doc(pid).Get(ctx)
 	if err != nil {
 		if status.Code(err) == codes.NotFound {
-			return productdom.InspectionBatch{}, productdom.ErrNotFound
+			return inspectiondom.InspectionBatch{}, inspectiondom.ErrNotFound
 		}
-		return productdom.InspectionBatch{}, err
+		return inspectiondom.InspectionBatch{}, err
 	}
 
 	return docToInspectionBatch(snap)
@@ -93,16 +93,16 @@ func (r *InspectionRepositoryFS) GetByProductionID(
 // Save: Upsert
 func (r *InspectionRepositoryFS) Save(
 	ctx context.Context,
-	v productdom.InspectionBatch,
-) (productdom.InspectionBatch, error) {
+	v inspectiondom.InspectionBatch,
+) (inspectiondom.InspectionBatch, error) {
 
 	if r.Client == nil {
-		return productdom.InspectionBatch{}, errors.New("firestore client is nil")
+		return inspectiondom.InspectionBatch{}, errors.New("firestore client is nil")
 	}
 
 	pid := strings.TrimSpace(v.ProductionID)
 	if pid == "" {
-		return productdom.InspectionBatch{}, productdom.ErrInvalidInspectionProductionID
+		return inspectiondom.InspectionBatch{}, inspectiondom.ErrInvalidInspectionProductionID
 	}
 
 	docRef := r.col().Doc(pid)
@@ -110,12 +110,12 @@ func (r *InspectionRepositoryFS) Save(
 
 	_, err := docRef.Set(ctx, data, firestore.MergeAll)
 	if err != nil {
-		return productdom.InspectionBatch{}, err
+		return inspectiondom.InspectionBatch{}, err
 	}
 
 	snap, err := docRef.Get(ctx)
 	if err != nil {
-		return productdom.InspectionBatch{}, err
+		return inspectiondom.InspectionBatch{}, err
 	}
 
 	return docToInspectionBatch(snap)
@@ -125,7 +125,7 @@ func (r *InspectionRepositoryFS) Save(
 // Helpers
 // ------------------------------------------------------------
 
-func inspectionBatchToDoc(v productdom.InspectionBatch) map[string]any {
+func inspectionBatchToDoc(v inspectiondom.InspectionBatch) map[string]any {
 	items := make([]map[string]any, 0, len(v.Inspections))
 	for _, ins := range v.Inspections {
 		m := map[string]any{
@@ -215,16 +215,16 @@ func inspectionBatchToDoc(v productdom.InspectionBatch) map[string]any {
 
 func docToInspectionBatch(
 	doc *firestore.DocumentSnapshot,
-) (productdom.InspectionBatch, error) {
+) (inspectiondom.InspectionBatch, error) {
 
 	data := doc.Data()
 	if data == nil {
-		return productdom.InspectionBatch{}, fmt.Errorf("empty inspection document: %s", doc.Ref.ID)
+		return inspectiondom.InspectionBatch{}, fmt.Errorf("empty inspection document: %s", doc.Ref.ID)
 	}
 
-	batch := productdom.InspectionBatch{
+	batch := inspectiondom.InspectionBatch{
 		ProductionID: strings.TrimSpace(asString(data["productionId"])),
-		Status:       productdom.InspectionStatus(strings.TrimSpace(asString(data["status"]))),
+		Status:       inspectiondom.InspectionStatus(strings.TrimSpace(asString(data["status"]))),
 	}
 
 	// quantity（レガシー対応: 無ければ後で len(inspections) から補完）
@@ -276,7 +276,7 @@ func docToInspectionBatch(
 
 	raw, ok := data["inspections"]
 	if !ok || raw == nil {
-		return productdom.InspectionBatch{}, productdom.ErrInvalidInspectionProductIDs
+		return inspectiondom.InspectionBatch{}, inspectiondom.ErrInvalidInspectionProductIDs
 	}
 
 	switch vv := raw.(type) {
@@ -287,7 +287,7 @@ func docToInspectionBatch(
 				continue
 			}
 
-			item := productdom.InspectionItem{}
+			item := inspectiondom.InspectionItem{}
 
 			if v, ok := m["productId"].(string); ok {
 				item.ProductID = strings.TrimSpace(v)
@@ -306,7 +306,7 @@ func docToInspectionBatch(
 			}
 
 			if v, ok := m["inspectionResult"].(string); ok {
-				r := productdom.InspectionResult(strings.TrimSpace(v))
+				r := inspectiondom.InspectionResult(strings.TrimSpace(v))
 				item.InspectionResult = &r
 			}
 
@@ -325,7 +325,7 @@ func docToInspectionBatch(
 	}
 
 	if batch.ProductionID == "" || len(batch.Inspections) == 0 {
-		return productdom.InspectionBatch{}, productdom.ErrInvalidInspectionProductIDs
+		return inspectiondom.InspectionBatch{}, inspectiondom.ErrInvalidInspectionProductIDs
 	}
 
 	// レガシーデータ用: quantity が 0 以下なら inspections 件数で補完

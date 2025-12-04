@@ -19,6 +19,7 @@ import (
 	authuc "narratives/internal/application/usecase/auth"
 	branddom "narratives/internal/domain/brand"
 	companydom "narratives/internal/domain/company"
+	inspectiondom "narratives/internal/domain/inspection"
 	memdom "narratives/internal/domain/member"
 	modeldom "narratives/internal/domain/model"     // ★ productQueryRepoAdapter / modelNumberRepoAdapter 用
 	productdom "narratives/internal/domain/product" // ★ productQueryRepoAdapter 用
@@ -215,6 +216,38 @@ func (a *modelNumberRepoAdapter) GetModelNumberByModelID(
 }
 
 // ========================================
+// inspection 用: products.UpdateInspectionResult アダプタ
+// ========================================
+//
+// usecase.ProductInspectionRepo が期待する
+//
+//	UpdateInspectionResult(ctx, productID string, result inspection.InspectionResult)
+//
+// を、ProductRepositoryFS が持つ
+//
+//	UpdateInspectionResult(ctx, productID string, result product.InspectionResult)
+//
+// に橋渡しする。
+type inspectionProductRepoAdapter struct {
+	repo interface {
+		UpdateInspectionResult(ctx context.Context, productID string, result productdom.InspectionResult) error
+	}
+}
+
+// InspectionUsecase.ProductInspectionRepo を満たす
+func (a *inspectionProductRepoAdapter) UpdateInspectionResult(
+	ctx context.Context,
+	productID string,
+	result inspectiondom.InspectionResult,
+) error {
+	if a == nil || a.repo == nil {
+		return errors.New("inspectionProductRepoAdapter: repo is nil")
+	}
+	// inspection.InspectionResult → product.InspectionResult に変換して委譲
+	return a.repo.UpdateInspectionResult(ctx, productID, productdom.InspectionResult(result))
+}
+
+// ========================================
 // ProductUsecase 用 ProductQueryRepo アダプタ
 // ========================================
 //
@@ -318,7 +351,6 @@ type Container struct {
 	ListUC             *uc.ListUsecase
 	MemberUC           *uc.MemberUsecase
 	MessageUC          *uc.MessageUsecase
-	MintRequestUC      *uc.MintRequestUsecase
 	ModelUC            *uc.ModelUsecase
 	OrderUC            *uc.OrderUsecase
 	PaymentUC          *uc.PaymentUsecase
@@ -398,7 +430,6 @@ func NewContainer(ctx context.Context) (*Container, error) {
 	invoiceRepo := fs.NewInvoiceRepositoryFS(fsClient)
 	memberRepo := fs.NewMemberRepositoryFS(fsClient)
 	messageRepo := fs.NewMessageRepositoryFS(fsClient)
-	mintRequestRepo := fs.NewMintRequestRepositoryFS(fsClient)
 	modelRepo := fs.NewModelRepositoryFS(fsClient)
 	orderRepo := fs.NewOrderRepositoryFS(fsClient)
 	paymentRepo := fs.NewPaymentRepositoryFS(fsClient)
@@ -476,11 +507,6 @@ func NewContainer(ctx context.Context) (*Container, error) {
 	var listUC *uc.ListUsecase = nil
 	memberUC := uc.NewMemberUsecase(memberRepo)
 	messageUC := uc.NewMessageUsecase(messageRepo, nil, nil)
-	mintRequestUC := uc.NewMintRequestUsecase(
-		mintRequestRepo,      // usecase.MintRequestRepository
-		productBlueprintRepo, // usecase.ProductBlueprintListRepo
-		productionRepo,       // usecase.ProductionListRepo
-	)
 
 	// ★ ModelUsecase に HistoryRepo を注入
 	modelUC := uc.NewModelUsecase(modelRepo, modelHistoryRepo)
@@ -511,11 +537,16 @@ func NewContainer(ctx context.Context) (*Container, error) {
 		productBlueprintHistoryRepo,
 	)
 
+	// ★ products テーブル用アダプタ（inspection.Result → product.Result 変換）
+	inspectionProductRepo := &inspectionProductRepoAdapter{
+		repo: productRepo,
+	}
+
 	// ★ InspectionUsecase（検品アプリ専用）
 	inspectionUC := uc.NewInspectionUsecase(
-		inspectionRepo,  // inspections テーブル
-		productRepo,     // products テーブル（inspectionResult 同期用）
-		modelNumberRepo, // modelId → modelNumber 解決用
+		inspectionRepo,        // inspections テーブル
+		inspectionProductRepo, // products テーブル（inspectionResult 同期用, アダプタ経由）
+		modelNumberRepo,       // modelId → modelNumber 解決用
 	)
 
 	// ★ ProductUsecase（Inspector 詳細画面用）
@@ -587,7 +618,6 @@ func NewContainer(ctx context.Context) (*Container, error) {
 		ListUC:             listUC,
 		MemberUC:           memberUC,
 		MessageUC:          messageUC,
-		MintRequestUC:      mintRequestUC,
 		ModelUC:            modelUC,
 		OrderUC:            orderUC,
 		PaymentUC:          paymentUC,
@@ -635,7 +665,6 @@ func (c *Container) RouterDeps() httpin.RouterDeps {
 		ListUC:             c.ListUC,
 		MemberUC:           c.MemberUC,
 		MessageUC:          c.MessageUC,
-		MintRequestUC:      c.MintRequestUC,
 		ModelUC:            c.ModelUC,
 		OrderUC:            c.OrderUC,
 		PaymentUC:          c.PaymentUC,

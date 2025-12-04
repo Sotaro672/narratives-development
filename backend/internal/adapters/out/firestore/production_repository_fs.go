@@ -228,10 +228,10 @@ func (r *ProductionRepositoryFS) List(ctx context.Context) ([]proddom.Production
 	return all, nil
 }
 
-// ListByProductBlueprintIDs は、指定された productBlueprintId のいずれかを持つ
+// ListByProductBlueprintID は、指定された productBlueprintId のいずれかを持つ
 // Production をすべて取得します。
 // Firestore の "in" オペレータ制限（最大10要素）に対応するため、IDs をチャンクに分けて問い合わせます。
-func (r *ProductionRepositoryFS) ListByProductBlueprintIDs(
+func (r *ProductionRepositoryFS) ListByProductBlueprintID(
 	ctx context.Context,
 	productBlueprintIDs []string,
 ) ([]proddom.Production, error) {

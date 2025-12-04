@@ -7,8 +7,8 @@ import (
 	"strings"
 	"time"
 
+	inspectiondom "narratives/internal/domain/inspection"
 	modeldom "narratives/internal/domain/model"
-	productdom "narratives/internal/domain/product"
 )
 
 // ------------------------------------------------------------
@@ -22,11 +22,16 @@ type ProductInspectionRepo interface {
 	UpdateInspectionResult(
 		ctx context.Context,
 		productID string,
-		result productdom.InspectionResult,
+		result inspectiondom.InspectionResult,
 	) error
 }
 
 // InspectionRepo インターフェース自体は print_usecase.go 側で定義済み。
+//   type InspectionRepo interface {
+//       Create(ctx context.Context, batch inspectiondom.InspectionBatch) (inspectiondom.InspectionBatch, error)
+//       GetByProductionID(ctx context.Context, productionID string) (inspectiondom.InspectionBatch, error)
+//       Save(ctx context.Context, batch inspectiondom.InspectionBatch) (inspectiondom.InspectionBatch, error)
+//   }
 
 // ModelNumberRepo は modelID から ModelVariation を取得するためのポート。
 type ModelNumberRepo interface {
@@ -61,8 +66,8 @@ func NewInspectionUsecase(
 
 func (u *InspectionUsecase) fillModelNumbers(
 	ctx context.Context,
-	batch productdom.InspectionBatch,
-) productdom.InspectionBatch {
+	batch inspectiondom.InspectionBatch,
+) inspectiondom.InspectionBatch {
 
 	if u.modelRepo == nil {
 		return batch
@@ -105,24 +110,24 @@ func (u *InspectionUsecase) fillModelNumbers(
 	return batch
 }
 
-// ★ 追加: productionId から inspections バッチをそのまま返す
+// ★ productionId から inspections バッチをそのまま返す
 func (u *InspectionUsecase) GetBatchByProductionID(
 	ctx context.Context,
 	productionID string,
-) (productdom.InspectionBatch, error) {
+) (inspectiondom.InspectionBatch, error) {
 
 	if u.inspectionRepo == nil {
-		return productdom.InspectionBatch{}, fmt.Errorf("inspectionRepo is nil")
+		return inspectiondom.InspectionBatch{}, fmt.Errorf("inspectionRepo is nil")
 	}
 
 	pid := strings.TrimSpace(productionID)
 	if pid == "" {
-		return productdom.InspectionBatch{}, productdom.ErrInvalidInspectionProductionID
+		return inspectiondom.InspectionBatch{}, inspectiondom.ErrInvalidInspectionProductionID
 	}
 
 	batch, err := u.inspectionRepo.GetByProductionID(ctx, pid)
 	if err != nil {
-		return productdom.InspectionBatch{}, err
+		return inspectiondom.InspectionBatch{}, err
 	}
 
 	// modelId → modelNumber を埋めてから返却
@@ -135,29 +140,29 @@ func (u *InspectionUsecase) UpdateInspectionForProduct(
 	ctx context.Context,
 	productionID string,
 	productID string,
-	result *productdom.InspectionResult,
+	result *inspectiondom.InspectionResult,
 	inspectedBy *string,
 	inspectedAt *time.Time,
-	status *productdom.InspectionStatus,
-) (productdom.InspectionBatch, error) {
+	status *inspectiondom.InspectionStatus,
+) (inspectiondom.InspectionBatch, error) {
 
 	if u.inspectionRepo == nil {
-		return productdom.InspectionBatch{}, fmt.Errorf("inspectionRepo is nil")
+		return inspectiondom.InspectionBatch{}, fmt.Errorf("inspectionRepo is nil")
 	}
 
 	pid := strings.TrimSpace(productionID)
 	if pid == "" {
-		return productdom.InspectionBatch{}, productdom.ErrInvalidInspectionProductionID
+		return inspectiondom.InspectionBatch{}, inspectiondom.ErrInvalidInspectionProductionID
 	}
 	pdID := strings.TrimSpace(productID)
 	if pdID == "" {
-		return productdom.InspectionBatch{}, productdom.ErrInvalidInspectionProductIDs
+		return inspectiondom.InspectionBatch{}, inspectiondom.ErrInvalidInspectionProductIDs
 	}
 
 	// 1) 現在のバッチを取得（inspections/{productionId}）
 	batch, err := u.inspectionRepo.GetByProductionID(ctx, pid)
 	if err != nil {
-		return productdom.InspectionBatch{}, err
+		return inspectiondom.InspectionBatch{}, err
 	}
 
 	// 2) 対象 productId の InspectionItem を探す
@@ -172,8 +177,8 @@ func (u *InspectionUsecase) UpdateInspectionForProduct(
 
 		// inspectionResult の更新
 		if result != nil {
-			if !productdom.IsValidInspectionResult(*result) {
-				return productdom.InspectionBatch{}, productdom.ErrInvalidInspectionResult
+			if !inspectiondom.IsValidInspectionResult(*result) {
+				return inspectiondom.InspectionBatch{}, inspectiondom.ErrInvalidInspectionResult
 			}
 			r := *result
 			item.InspectionResult = &r
@@ -183,31 +188,31 @@ func (u *InspectionUsecase) UpdateInspectionForProduct(
 		if inspectedBy != nil {
 			v := strings.TrimSpace(*inspectedBy)
 			if v == "" {
-				return productdom.InspectionBatch{}, productdom.ErrInvalidInspectedBy
+				return inspectiondom.InspectionBatch{}, inspectiondom.ErrInvalidInspectedBy
 			}
 			item.InspectedBy = &v
 		}
 
 		// inspectedAt の更新
 		if inspectedAt != nil {
-			at := inspectedAt.UTC()
-			if at.IsZero() {
-				return productdom.InspectionBatch{}, productdom.ErrInvalidInspectedAt
+			atUTC := inspectedAt.UTC()
+			if atUTC.IsZero() {
+				return inspectiondom.InspectionBatch{}, inspectiondom.ErrInvalidInspectedAt
 			}
-			item.InspectedAt = &at
+			item.InspectedAt = &atUTC
 		}
 
 		break
 	}
 
 	if !found {
-		return productdom.InspectionBatch{}, productdom.ErrInvalidInspectionProductIDs
+		return inspectiondom.InspectionBatch{}, inspectiondom.ErrInvalidInspectionProductIDs
 	}
 
 	// 3) status の更新（任意）
 	if status != nil {
-		if !productdom.IsValidInspectionStatus(*status) {
-			return productdom.InspectionBatch{}, productdom.ErrInvalidInspectionStatus
+		if !inspectiondom.IsValidInspectionStatus(*status) {
+			return inspectiondom.InspectionBatch{}, inspectiondom.ErrInvalidInspectionStatus
 		}
 		batch.Status = *status
 	}
@@ -215,7 +220,7 @@ func (u *InspectionUsecase) UpdateInspectionForProduct(
 	// 3.5) ★ totalPassed を再集計
 	passedCount := 0
 	for _, ins := range batch.Inspections {
-		if ins.InspectionResult != nil && *ins.InspectionResult == productdom.InspectionPassed {
+		if ins.InspectionResult != nil && *ins.InspectionResult == inspectiondom.InspectionPassed {
 			passedCount++
 		}
 	}
@@ -224,7 +229,7 @@ func (u *InspectionUsecase) UpdateInspectionForProduct(
 	// 4) inspections テーブル側を保存
 	updated, err := u.inspectionRepo.Save(ctx, batch)
 	if err != nil {
-		return productdom.InspectionBatch{}, err
+		return inspectiondom.InspectionBatch{}, err
 	}
 
 	// 4.5) ★ modelNumber の埋め込み
@@ -234,7 +239,7 @@ func (u *InspectionUsecase) UpdateInspectionForProduct(
 	//    （result が指定されている場合のみ）
 	if result != nil && u.productRepo != nil {
 		if err := u.productRepo.UpdateInspectionResult(ctx, pdID, *result); err != nil {
-			return productdom.InspectionBatch{}, err
+			return inspectiondom.InspectionBatch{}, err
 		}
 	}
 
@@ -247,32 +252,32 @@ func (u *InspectionUsecase) CompleteInspectionForProduction(
 	productionID string,
 	by string,
 	at time.Time,
-) (productdom.InspectionBatch, error) {
+) (inspectiondom.InspectionBatch, error) {
 
 	if u.inspectionRepo == nil {
-		return productdom.InspectionBatch{}, fmt.Errorf("inspectionRepo is nil")
+		return inspectiondom.InspectionBatch{}, fmt.Errorf("inspectionRepo is nil")
 	}
 
 	pid := strings.TrimSpace(productionID)
 	if pid == "" {
-		return productdom.InspectionBatch{}, productdom.ErrInvalidInspectionProductionID
+		return inspectiondom.InspectionBatch{}, inspectiondom.ErrInvalidInspectionProductionID
 	}
 
 	// 1) 現在のバッチを取得
 	batch, err := u.inspectionRepo.GetByProductionID(ctx, pid)
 	if err != nil {
-		return productdom.InspectionBatch{}, err
+		return inspectiondom.InspectionBatch{}, err
 	}
 
 	// 2) ドメイン側の Complete を利用して一括更新
 	if err := batch.Complete(by, at); err != nil {
-		return productdom.InspectionBatch{}, err
+		return inspectiondom.InspectionBatch{}, err
 	}
 
 	// 2.5) ★ 一括更新後に totalPassed を再集計
 	passedCount := 0
 	for _, ins := range batch.Inspections {
-		if ins.InspectionResult != nil && *ins.InspectionResult == productdom.InspectionPassed {
+		if ins.InspectionResult != nil && *ins.InspectionResult == inspectiondom.InspectionPassed {
 			passedCount++
 		}
 	}
@@ -281,7 +286,7 @@ func (u *InspectionUsecase) CompleteInspectionForProduction(
 	// 3) inspections テーブル側を保存
 	updated, err := u.inspectionRepo.Save(ctx, batch)
 	if err != nil {
-		return productdom.InspectionBatch{}, err
+		return inspectiondom.InspectionBatch{}, err
 	}
 
 	// 3.5) ★ modelNumber の埋め込み
@@ -296,12 +301,12 @@ func (u *InspectionUsecase) CompleteInspectionForProduction(
 				continue
 			}
 			result := *item.InspectionResult
-			if !productdom.IsValidInspectionResult(result) {
-				return productdom.InspectionBatch{}, productdom.ErrInvalidInspectionResult
+			if !inspectiondom.IsValidInspectionResult(result) {
+				return inspectiondom.InspectionBatch{}, inspectiondom.ErrInvalidInspectionResult
 			}
 
 			// 物理商品が存在しない可能性が高いので、notManufactured は products へ同期しない
-			if result == productdom.InspectionNotManufactured {
+			if result == inspectiondom.InspectionNotManufactured {
 				continue
 			}
 
@@ -312,7 +317,7 @@ func (u *InspectionUsecase) CompleteInspectionForProduction(
 			}
 
 			if err := u.productRepo.UpdateInspectionResult(ctx, pid, result); err != nil {
-				return productdom.InspectionBatch{}, err
+				return inspectiondom.InspectionBatch{}, err
 			}
 		}
 	}

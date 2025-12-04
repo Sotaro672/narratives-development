@@ -34,7 +34,6 @@ type RouterDeps struct {
 	ListUC             *usecase.ListUsecase
 	MemberUC           *usecase.MemberUsecase
 	MessageUC          *usecase.MessageUsecase
-	MintRequestUC      *usecase.MintRequestUsecase
 	ModelUC            *usecase.ModelUsecase
 	OrderUC            *usecase.OrderUsecase
 	PaymentUC          *usecase.PaymentUsecase
@@ -250,23 +249,6 @@ func NewRouter(deps RouterDeps) http.Handler {
 
 		mux.Handle("/product-blueprints", h)
 		mux.Handle("/product-blueprints/", h)
-	}
-
-	// ================================
-	// Mint Requests
-	//   GET /mint-requests
-	//   GET /mint-requests/{id}
-	// ================================
-	if deps.MintRequestUC != nil {
-		mintReqH := handlers.NewMintRequestHandler(deps.MintRequestUC)
-
-		var h http.Handler = mintReqH
-		if authMw != nil {
-			h = authMw.Handler(h)
-		}
-
-		mux.Handle("/mint-requests", h)
-		mux.Handle("/mint-requests/", h)
 	}
 
 	// ================================

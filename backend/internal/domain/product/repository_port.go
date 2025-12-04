@@ -217,29 +217,6 @@ type Filter struct {
 	UpdatedTo     *time.Time
 }
 
-// Sort - 並び順
-type Sort struct {
-	Column SortColumn
-	Order  SortOrder
-}
-
-type SortColumn string
-
-const (
-	SortByUpdatedAt    SortColumn = "updatedAt"
-	SortByPrintedAt    SortColumn = "printedAt"
-	SortByInspectedAt  SortColumn = "inspectedAt"
-	SortByModelID      SortColumn = "modelId"
-	SortByProductionID SortColumn = "productionId"
-)
-
-type SortOrder string
-
-const (
-	SortAsc  SortOrder = "asc"
-	SortDesc SortOrder = "desc"
-)
-
 // Page - ページ指定
 type Page struct {
 	Number  int
@@ -262,7 +239,7 @@ type PageResult struct {
 type RepositoryPort interface {
 	// 取得
 	GetByID(ctx context.Context, id string) (*Product, error)
-	List(ctx context.Context, filter Filter, sort Sort, page Page) (PageResult, error)
+	List(ctx context.Context, filter Filter, page Page) (PageResult, error)
 	Count(ctx context.Context, filter Filter) (int, error)
 
 	// 作成/更新/削除

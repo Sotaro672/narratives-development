@@ -7,8 +7,10 @@ import (
 	"strings"
 	"time"
 
-	// ★ 追加: ModelNumberRepo 用
+	// ★ Product / PrintLog 用
 	productdom "narratives/internal/domain/product"
+	// ★ Inspection 用
+	inspectiondom "narratives/internal/domain/inspection"
 )
 
 // QR コードに埋め込む公開 URL のベース
@@ -36,16 +38,16 @@ type PrintLogRepo interface {
 	ListByProductionID(ctx context.Context, productionID string) ([]productdom.PrintLog, error)
 }
 
-// ★ Inspection 用リポジトリ（print_log と同じ product ドメイン配下の集約として扱う）
+// ★ Inspection 用リポジトリ（inspection ドメインの集約として扱う）
 type InspectionRepo interface {
 	// inspections/{productionId} を新規作成
-	Create(ctx context.Context, batch productdom.InspectionBatch) (productdom.InspectionBatch, error)
+	Create(ctx context.Context, batch inspectiondom.InspectionBatch) (inspectiondom.InspectionBatch, error)
 
 	// productionId から inspections を取得
-	GetByProductionID(ctx context.Context, productionID string) (productdom.InspectionBatch, error)
+	GetByProductionID(ctx context.Context, productionID string) (inspectiondom.InspectionBatch, error)
 
 	// 既存バッチを保存（フルアップサート想定）
-	Save(ctx context.Context, batch productdom.InspectionBatch) (productdom.InspectionBatch, error)
+	Save(ctx context.Context, batch inspectiondom.InspectionBatch) (inspectiondom.InspectionBatch, error)
 }
 
 // PrintUsecase orchestrates print & inspection operations around products.
@@ -130,24 +132,24 @@ func (u *PrintUsecase) ListPrintLogsByProductionID(ctx context.Context, producti
 func (u *PrintUsecase) CreateInspectionBatchForProduction(
 	ctx context.Context,
 	productionID string,
-) (productdom.InspectionBatch, error) {
+) (inspectiondom.InspectionBatch, error) {
 
 	if u.inspectionRepo == nil {
-		return productdom.InspectionBatch{}, fmt.Errorf("inspectionRepo is nil")
+		return inspectiondom.InspectionBatch{}, fmt.Errorf("inspectionRepo is nil")
 	}
 
 	pid := strings.TrimSpace(productionID)
 	if pid == "" {
-		return productdom.InspectionBatch{}, productdom.ErrInvalidInspectionProductionID
+		return inspectiondom.InspectionBatch{}, inspectiondom.ErrInvalidInspectionProductionID
 	}
 
 	// 対象 productionId の Product 一覧を取得
 	products, err := u.repo.ListByProductionID(ctx, pid)
 	if err != nil {
-		return productdom.InspectionBatch{}, err
+		return inspectiondom.InspectionBatch{}, err
 	}
 	if len(products) == 0 {
-		return productdom.InspectionBatch{}, fmt.Errorf("no products found for productionId=%s", pid)
+		return inspectiondom.InspectionBatch{}, fmt.Errorf("no products found for productionId=%s", pid)
 	}
 
 	// ProductID 一覧 + productId -> modelId マップ
@@ -162,7 +164,7 @@ func (u *PrintUsecase) CreateInspectionBatchForProduction(
 		modelIDByProductID[id] = strings.TrimSpace(p.ModelID) // ★ Product の ModelID を保持
 	}
 	if len(productIDs) == 0 {
-		return productdom.InspectionBatch{}, productdom.ErrInvalidInspectionProductIDs
+		return inspectiondom.InspectionBatch{}, inspectiondom.ErrInvalidInspectionProductIDs
 	}
 
 	// ★ modelId → modelNumber のキャッシュを構築（ModelNumberRepo があれば）
@@ -190,13 +192,13 @@ func (u *PrintUsecase) CreateInspectionBatchForProduction(
 	// InspectionBatch エンティティ作成（全て notYet, status=inspecting）
 	// quantity / totalPassed / requestedBy / requestedAt / mintedAt / tokenBlueprintId
 	// は NewInspectionBatch 側で初期化される
-	batch, err := productdom.NewInspectionBatch(
+	batch, err := inspectiondom.NewInspectionBatch(
 		pid,
-		productdom.InspectionStatusInspecting,
+		inspectiondom.InspectionStatusInspecting,
 		productIDs,
 	)
 	if err != nil {
-		return productdom.InspectionBatch{}, err
+		return inspectiondom.InspectionBatch{}, err
 	}
 
 	// ★ InspectionItem に modelId / modelNumber を埋め込む
@@ -215,7 +217,7 @@ func (u *PrintUsecase) CreateInspectionBatchForProduction(
 
 	created, err := u.inspectionRepo.Create(ctx, batch)
 	if err != nil {
-		return productdom.InspectionBatch{}, err
+		return inspectiondom.InspectionBatch{}, err
 	}
 
 	return created, nil
@@ -315,9 +317,9 @@ func (u *PrintUsecase) CreatePrintLogForProduction(ctx context.Context, producti
 	// ★ ここで inspections/{productionId} 用のバッチを作成
 	//   - inspectionResult / inspectedBy / inspectedAt はすべて notYet / nil で初期化
 	//   - status は "inspecting" 固定で開始
-	batch, err := productdom.NewInspectionBatch(
+	batch, err := inspectiondom.NewInspectionBatch(
 		pid,
-		productdom.InspectionStatusInspecting, // enum: inspecting / completed
+		inspectiondom.InspectionStatusInspecting, // enum: inspecting / completed
 		productIDs,
 	)
 	if err != nil {

@@ -1,8 +1,8 @@
-// frontend/console/mintRequest/src/infrastructure/repository/mintRequestRepositoryHTTP.ts 
+// frontend/console/mintRequest/src/infrastructure/repository/mintRequestRepositoryHTTP.ts
 
 // Firebase Auth から ID トークンを取得
 import { auth } from "../../../../shell/src/auth/infrastructure/config/firebaseClient";
-import type { MintRequestDTO } from "../api/mintRequestApi";
+import type { InspectionBatchDTO } from "../api/mintRequestApi";
 
 // 🔙 BACKEND の BASE URL
 const ENV_BASE =
@@ -28,26 +28,18 @@ async function getIdTokenOrThrow(): Promise<string> {
 }
 
 // ===============================
-// HTTP Repository (mintRequests)
+// HTTP Repository (inspections)
 // ===============================
 
 /**
- * 現在ログイン中の companyId に紐づく MintRequest 一覧を取得する。
- *
- * バックエンド側:
- *   - AuthMiddleware が context に companyId を注入
- *   - MintRequestUsecase.ListByCurrentCompany(ctx) が
- *       1) productBlueprint (companyId 絞り込み)
- *       2) production (productBlueprintId 絞り込み)
- *       3) mintRequests  (ListByProductionIDs)
- *     を内部で呼び出す。
- *
- * フロント側は単に GET /mint-requests を叩くだけでよい。
+ * inspections の一覧を取得して、そのまま InspectionBatchDTO[] を返す。
+ * バックエンド側では /products/inspections が inspections コレクション
+ * を参照している想定。
  */
-export async function fetchMintRequestsHTTP(): Promise<MintRequestDTO[]> {
+export async function fetchInspectionBatchesHTTP(): Promise<InspectionBatchDTO[]> {
   const idToken = await getIdTokenOrThrow();
 
-  const res = await fetch(`${API_BASE}/mint-requests`, {
+  const res = await fetch(`${API_BASE}/products/inspections`, {
     method: "GET",
     headers: {
       Authorization: `Bearer ${idToken}`,
@@ -57,49 +49,30 @@ export async function fetchMintRequestsHTTP(): Promise<MintRequestDTO[]> {
 
   if (!res.ok) {
     throw new Error(
-      `Failed to fetch mintRequests: ${res.status} ${res.statusText}`,
+      `Failed to fetch inspections: ${res.status} ${res.statusText}`,
     );
   }
 
-  const json = (await res.json()) as MintRequestDTO[] | null | undefined;
+  const json = (await res.json()) as InspectionBatchDTO[] | null | undefined;
   if (!json) return [];
   return json;
 }
 
 /**
- * 個別の MintRequest を ID で取得する。
- *   GET /mint-requests/{id}
+ * 個別の productionId に紐づく InspectionBatch を取得。
+ *
+ * 専用の /products/inspections/{id} エンドポイントは作らず、
+ * 一覧を取得してから front 側で productionId で絞り込む。
  */
-export async function fetchMintRequestByIdHTTP(
-  id: string,
-): Promise<MintRequestDTO | null> {
-  const idToken = await getIdTokenOrThrow();
-
-  const trimmed = id.trim();
+export async function fetchInspectionByProductionIdHTTP(
+  productionId: string,
+): Promise<InspectionBatchDTO | null> {
+  const trimmed = productionId.trim();
   if (!trimmed) {
-    throw new Error("mintRequestId が空です");
+    throw new Error("productionId が空です");
   }
 
-  const res = await fetch(
-    `${API_BASE}/mint-requests/${encodeURIComponent(trimmed)}`,
-    {
-      method: "GET",
-      headers: {
-        Authorization: `Bearer ${idToken}`,
-        "Content-Type": "application/json",
-      },
-    },
-  );
-
-  if (res.status === 404) {
-    return null;
-  }
-  if (!res.ok) {
-    throw new Error(
-      `Failed to fetch mintRequest: ${res.status} ${res.statusText}`,
-    );
-  }
-
-  const json = (await res.json()) as MintRequestDTO;
-  return json;
+  const batches = await fetchInspectionBatchesHTTP();
+  const found = batches.find((b) => b.productionId === trimmed) ?? null;
+  return found;
 }

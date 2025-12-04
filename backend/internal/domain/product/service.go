@@ -4,7 +4,6 @@ package product
 import (
 	"fmt"
 	"strings"
-	"time"
 )
 
 // ======================================
@@ -78,43 +77,4 @@ func (s *QRService) BuildProductQRValue(productID string) (string, error) {
 func BuildProductQRValue(baseURL, productID string) (string, error) {
 	svc := NewQRService(baseURL)
 	return svc.BuildProductQRValue(productID)
-}
-
-// ======================================
-// InspectionBatch 用サービス
-// ======================================
-
-// Complete は、まだ検品されていない明細（InspectionResult が nil または notYet）を
-// notManufactured に更新し、バッチ全体の Status を completed にします。
-// その際、inspectedBy / inspectedAt には引数の値をセットします。
-func (b *InspectionBatch) Complete(by string, at time.Time) error {
-	by = strings.TrimSpace(by)
-	if by == "" {
-		return ErrInvalidInspectedBy
-	}
-	if at.IsZero() {
-		return ErrInvalidInspectedAt
-	}
-	at = at.UTC()
-
-	// バッチ全体を「検品完了」ステータスに
-	b.Status = InspectionStatusCompleted
-
-	for i := range b.Inspections {
-		ins := &b.Inspections[i]
-
-		// 対象: 未検品（nil or notYet）
-		if ins.InspectionResult == nil || *ins.InspectionResult == InspectionNotYet {
-			r := InspectionNotManufactured
-			ins.InspectionResult = &r
-
-			// 一括完了した担当者 / 時刻を入れておく
-			ins.InspectedBy = &by
-			t := at
-			ins.InspectedAt = &t
-		}
-	}
-
-	// ドメインルールに従っているか最終チェック
-	return b.Validate()
 }

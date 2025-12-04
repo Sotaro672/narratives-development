@@ -1,4 +1,4 @@
-// backend/internal/adapters/in/http/handlers/inspector_handler.go
+// backend\internal\adapters\in\http\handlers\inspection_handler.go
 package handlers
 
 import (
@@ -11,6 +11,7 @@ import (
 
 	"narratives/internal/adapters/in/http/middleware"
 	"narratives/internal/application/usecase"
+	inspectiondom "narratives/internal/domain/inspection"
 	productdom "narratives/internal/domain/product"
 )
 
@@ -131,7 +132,7 @@ func (h *InspectorHandler) getInspectionsByProductionID(w http.ResponseWriter, r
 	if err != nil {
 		code := http.StatusInternalServerError
 		switch err {
-		case productdom.ErrInvalidInspectionProductionID:
+		case inspectiondom.ErrInvalidInspectionProductionID:
 			code = http.StatusBadRequest
 		case productdom.ErrNotFound:
 			code = http.StatusNotFound
@@ -175,12 +176,12 @@ func (h *InspectorHandler) updateInspection(w http.ResponseWriter, r *http.Reque
 	}
 
 	var req struct {
-		ProductionID     string                       `json:"productionId"`
-		ProductID        string                       `json:"productId"`
-		InspectionResult *productdom.InspectionResult `json:"inspectionResult"`
-		InspectedBy      *string                      `json:"inspectedBy"` // ← 互換のため定義だけ残す（実際には無視）
-		InspectedAt      *time.Time                   `json:"inspectedAt"`
-		Status           *productdom.InspectionStatus `json:"status"`
+		ProductionID     string                          `json:"productionId"`
+		ProductID        string                          `json:"productId"`
+		InspectionResult *inspectiondom.InspectionResult `json:"inspectionResult"`
+		InspectedBy      *string                         `json:"inspectedBy"` // ← 互換のため定義だけ残す（実際には無視）
+		InspectedAt      *time.Time                      `json:"inspectedAt"`
+		Status           *inspectiondom.InspectionStatus `json:"status"`
 	}
 
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
@@ -244,12 +245,12 @@ func (h *InspectorHandler) updateInspection(w http.ResponseWriter, r *http.Reque
 
 		code := http.StatusInternalServerError
 		switch err {
-		case productdom.ErrInvalidInspectionProductionID,
-			productdom.ErrInvalidInspectionProductIDs,
-			productdom.ErrInvalidInspectionResult,
-			productdom.ErrInvalidInspectedBy,
-			productdom.ErrInvalidInspectedAt,
-			productdom.ErrInvalidInspectionStatus:
+		case inspectiondom.ErrInvalidInspectionProductionID,
+			inspectiondom.ErrInvalidInspectionProductIDs,
+			inspectiondom.ErrInvalidInspectionResult,
+			inspectiondom.ErrInvalidInspectedBy,
+			inspectiondom.ErrInvalidInspectedAt,
+			inspectiondom.ErrInvalidInspectionStatus:
 			code = http.StatusBadRequest
 
 		case productdom.ErrNotFound:
@@ -358,8 +359,8 @@ func (h *InspectorHandler) completeInspection(w http.ResponseWriter, r *http.Req
 	if err != nil {
 		code := http.StatusInternalServerError
 		switch err {
-		case productdom.ErrInvalidInspectionProductionID,
-			productdom.ErrInvalidInspectionResult:
+		case inspectiondom.ErrInvalidInspectionProductionID,
+			inspectiondom.ErrInvalidInspectionResult:
 			code = http.StatusBadRequest
 		case productdom.ErrNotFound:
 			code = http.StatusNotFound
