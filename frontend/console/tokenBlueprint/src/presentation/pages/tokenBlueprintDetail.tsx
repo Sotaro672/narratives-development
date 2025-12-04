@@ -27,9 +27,10 @@ export default function TokenBlueprintDetail() {
     return TOKEN_BLUEPRINTS[0] as unknown as TokenBlueprint;
   }, [tokenBlueprintId]);
 
-  const handleBack = React.useCallback(() => {
-    navigate(-1);
-  }, [navigate]);
+// 戻るボタン（絶対パスで TokenBlueprintManagement に戻る）
+const handleBack = React.useCallback(() => {
+  navigate("/token-blueprint", { replace: true });
+}, [navigate]);
 
   const handleSave = React.useCallback(() => {
     // TODO: TokenBlueprintCard の状態を集約して保存 API を呼ぶ

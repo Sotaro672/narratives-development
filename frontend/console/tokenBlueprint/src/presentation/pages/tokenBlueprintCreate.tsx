@@ -8,23 +8,28 @@ import TokenBlueprintCard from "../components/tokenBlueprintCard";
 import TokenContentsCard from "../../../../tokenContents/src/presentation/components/tokenContentsCard";
 import type { TokenBlueprint } from "../../domain/entity/tokenBlueprint";
 
+// ★ companyId を currentMember から取得（モックの場合は固定値でも可）
+import { useAuth } from "../../../../shell/src/auth/presentation/hook/useCurrentMember";
+
 /**
  * トークン設計作成ページ
- * frontend/tokenBlueprint/src/domain/entity/tokenBlueprint.tsx の TokenBlueprint
- * スキーマに準拠し、新規作成用のモック状態のみを扱う。
  */
 export default function TokenBlueprintCreate() {
   const navigate = useNavigate();
+
+  // ★ currentMember から companyId を取得
+  const { currentMember } = useAuth();
+  const companyId = currentMember?.companyId ?? "company-mock-001";
 
   // 管理情報（新規作成時のメタ情報をモック）
   const [assignee, setAssignee] = React.useState("assignee-001");
   const [createdBy] = React.useState("creator-001");
   const [createdAt] = React.useState("2024-01-20T00:00:00Z");
 
-  // 戻るボタン
-  const handleBack = React.useCallback(() => {
-    navigate(-1);
-  }, [navigate]);
+// 戻るボタン（絶対パスで TokenBlueprintManagement に戻る）
+const handleBack = React.useCallback(() => {
+  navigate("/token-blueprint", { replace: true });
+}, [navigate]);
 
   // 保存ボタン（実際はフォーム内容を収集して API へ送信する想定）
   const handleSave = React.useCallback(() => {
@@ -32,19 +37,19 @@ export default function TokenBlueprintCreate() {
     alert("トークン設計を作成しました（モック）");
   }, []);
 
-  // TokenBlueprint スキーマに沿った初期値（新規作成用）
+  // ★ companyId を追加した新規作成時の TokenBlueprint 初期値
   const initialTokenBlueprint: Partial<TokenBlueprint> = {
     id: "", // 新規のため未採番
     name: "",
     symbol: "",
     brandId: "",
     description: "",
+    companyId, // ★ 追加（必須）
     iconId: null,
     contentFiles: [],
     assigneeId: assignee,
     createdBy,
     createdAt,
-    // 新規作成時は updated 系も created と同一で初期化しておく
     updatedBy: createdBy,
     updatedAt: createdAt,
     deletedAt: null,
@@ -60,24 +65,20 @@ export default function TokenBlueprintCreate() {
     >
       {/* 左カラム：トークン設計フォーム＋コンテンツカード */}
       <div>
-        {/* 新規作成なので initialEditMode=true で空フォーム表示 */}
         <TokenBlueprintCard
           initialEditMode
           initialTokenBlueprint={initialTokenBlueprint}
         />
 
-        {/* コンテンツカード：新規作成時は空配列で表示（contentFiles と連動想定） */}
         <div style={{ marginTop: 16 }}>
           <TokenContentsCard images={[]} />
         </div>
       </div>
 
-      {/* 右カラム：管理情報（TokenBlueprint のメタ情報に対応） */}
+      {/* 右カラム：管理情報 */}
       <AdminCard
         title="管理情報"
         assigneeName={assignee}
-        createdByName={createdBy}
-        createdAt={createdAt}
         onEditAssignee={() => setAssignee("new-assignee-id")}
         onClickAssignee={() => console.log("assignee clicked:", assignee)}
       />
