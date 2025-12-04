@@ -2,17 +2,26 @@
 
 import * as React from "react";
 import { useNavigate, useParams } from "react-router-dom";
-
 import { useInspectionResultCard } from "./useInspectionResultCard";
 
-// ★ アプリケーション層サービス（MintUsecase 経由で model 情報も解決される）
+import type { InspectionBatchDTO } from "../../infrastructure/api/mintRequestApi";
 import {
   loadInspectionBatchFromMintAPI,
+  loadProductBlueprintPatch,
   resolveBlueprintForMintRequest,
+  type ProductBlueprintPatchDTO,
 } from "../../application/mintRequestService";
 
-import type { InspectionBatchDTO } from "../../infrastructure/api/mintRequestApi";
-import type { TokenBlueprint } from "../../../../tokenBlueprint/src/domain/entity/tokenBlueprint";
+export type ProductBlueprintCardViewModel = {
+  productName?: string;
+  brand?: string;
+  itemType?: string;
+  fit?: string;
+  materials?: string;
+  weight?: number;
+  washTags?: string[];
+  productIdTag?: string;
+};
 
 export function useMintRequestDetail() {
   const navigate = useNavigate();
@@ -23,12 +32,16 @@ export function useMintRequestDetail() {
   const [loading, setLoading] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
 
+  // productBlueprint Patch 用
+  const [pbPatch, setPbPatch] =
+    React.useState<ProductBlueprintPatchDTO | null>(null);
+  const [pbPatchLoading, setPbPatchLoading] = React.useState(false);
+  const [pbPatchError, setPbPatchError] = React.useState<string | null>(null);
+
   // 画面タイトル
   const title = `ミント申請詳細`;
 
-  // ================================
-  // 初期化: MintUsecase から検査結果取得
-  // ================================
+  // ① 初期化: MintUsecase 経由で Inspection + MintInspectionView を取得
   React.useEffect(() => {
     if (!requestId) return;
 
@@ -38,9 +51,7 @@ export function useMintRequestDetail() {
       setLoading(true);
       setError(null);
       try {
-        // ★ MintUsecase 経由の API → GetModelVariationByID が呼ばれる
         const batch = await loadInspectionBatchFromMintAPI(requestId);
-
         if (!cancelled) {
           setInspectionBatch(batch);
         }
@@ -61,9 +72,45 @@ export function useMintRequestDetail() {
     };
   }, [requestId]);
 
-  // ================================
-  // 検査カード用データ構築
-  // ================================
+  // ② inspectionBatch → productBlueprintId を取り出し、Patch を取得
+  React.useEffect(() => {
+    if (!inspectionBatch) return;
+
+    const pbId = (inspectionBatch as any).productBlueprintId as
+      | string
+      | undefined;
+    if (!pbId) return;
+
+    let cancelled = false;
+
+    const run = async () => {
+      setPbPatchLoading(true);
+      setPbPatchError(null);
+      try {
+        const patch = await loadProductBlueprintPatch(pbId);
+        if (!cancelled) {
+          setPbPatch(patch);
+        }
+      } catch (e: any) {
+        if (!cancelled) {
+          setPbPatchError(
+            e?.message ?? "プロダクト基本情報の取得に失敗しました",
+          );
+        }
+      } finally {
+        if (!cancelled) {
+          setPbPatchLoading(false);
+        }
+      }
+    };
+
+    run();
+    return () => {
+      cancelled = true;
+    };
+  }, [inspectionBatch]);
+
+  // ③ 検査カード用
   const inspectionCardData = useInspectionResultCard({
     batch: inspectionBatch ?? undefined,
   });
@@ -71,16 +118,27 @@ export function useMintRequestDetail() {
   // 合格数 = ミント数
   const totalMintQuantity = inspectionCardData.totalPassed;
 
-  // ================================
-  // TokenBlueprint の解決
-  // ================================
-  const blueprint: TokenBlueprint | undefined = resolveBlueprintForMintRequest(
-    requestId,
-  );
+  // TokenBlueprint（現状は undefined を返すダミー実装）
+  const blueprint = resolveBlueprintForMintRequest(requestId);
 
-  // ================================
-  // UI 用イベント
-  // ================================
+  // ④ ProductBlueprintCard 用の ViewModel へ整形
+  const productBlueprintCardView: ProductBlueprintCardViewModel | null =
+    React.useMemo(() => {
+      if (!pbPatch) return null;
+
+      return {
+        productName: pbPatch.productName ?? undefined,
+        // ★ 現状は brandId しかないため、そのまま brand に入れておく
+        brand: pbPatch.brandId ?? undefined,
+        itemType: pbPatch.itemType ?? undefined,
+        fit: pbPatch.fit ?? undefined,
+        materials: pbPatch.material ?? undefined,
+        weight: pbPatch.weight ?? undefined,
+        washTags: pbPatch.qualityAssurance ?? undefined,
+        productIdTag: pbPatch.productIdTag?.type ?? undefined,
+      };
+    }, [pbPatch]);
+
   const onBack = React.useCallback(() => {
     navigate(-1);
   }, [navigate]);
@@ -102,5 +160,10 @@ export function useMintRequestDetail() {
     totalMintQuantity,
     onBack,
     handleMint,
+
+    // productBlueprint Patch 系
+    productBlueprintCardView,
+    pbPatchLoading,
+    pbPatchError,
   };
 }

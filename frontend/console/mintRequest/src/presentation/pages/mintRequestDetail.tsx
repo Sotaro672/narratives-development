@@ -1,6 +1,4 @@
 // frontend/console/mintRequest/src/presentation/pages/mintRequestDetail.tsx
-
-import * as React from "react";
 import PageStyle from "../../../../shell/src/layout/PageStyle/PageStyle";
 import { Card, CardContent } from "../../../../shell/src/shared/ui/card";
 import { Button } from "../../../../shell/src/shared/ui/button";
@@ -22,16 +20,43 @@ export default function MintRequestDetail() {
     totalMintQuantity,
     onBack,
     handleMint,
+    productBlueprintCardView,
+    pbPatchLoading,
+    pbPatchError,
   } = useMintRequestDetail();
 
   return (
     <PageStyle layout="grid-2" title={title} onBack={onBack}>
       {/* 左カラム */}
       <div className="space-y-4 mt-4">
-        {/* ① プロダクト基本情報（閲覧モード）
-            ※ まだ inspectionCardData に productName などの項目を実装していないため、
-               現時点では空の閲覧用カードとして配置しておく */}
-        <ProductBlueprintCard mode="view" />
+        {/* ① プロダクト基本情報（閲覧モード） */}
+{pbPatchLoading ? (
+  <Card className="mint-request-card">
+    <CardContent className="mint-request-card__body">
+      プロダクト基本情報を読み込み中です…
+    </CardContent>
+  </Card>
+) : pbPatchError ? (
+  <Card className="mint-request-card">
+    <CardContent className="mint-request-card__body text-red-600">
+      {pbPatchError}
+    </CardContent>
+  </Card>
+) : (
+  // ★ 外側カードを removes
+  <ProductBlueprintCard
+    mode="view"
+    productName={productBlueprintCardView?.productName}
+    brand={productBlueprintCardView?.brand}
+    itemType={productBlueprintCardView?.itemType as any}
+    fit={productBlueprintCardView?.fit as any}
+    materials={productBlueprintCardView?.materials}
+    weight={productBlueprintCardView?.weight}
+    washTags={productBlueprintCardView?.washTags}
+    productIdTag={productBlueprintCardView?.productIdTag as any}
+  />
+)}
+
 
         {/* ② 検査結果カード */}
         {loading ? (

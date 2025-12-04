@@ -3,6 +3,7 @@
 // Firebase Auth から ID トークンを取得
 import { auth } from "../../../../shell/src/auth/infrastructure/config/firebaseClient";
 import type { InspectionBatchDTO } from "../api/mintRequestApi";
+import type { ProductBlueprintPatchDTO } from "../../application/mintRequestService";
 
 // 🔙 BACKEND の BASE URL
 const ENV_BASE =
@@ -17,16 +18,14 @@ const FALLBACK_BASE =
 export const API_BASE = ENV_BASE || FALLBACK_BASE;
 
 // ---------------------------------------------------------
-// 共通: Firebase トークン取得（ログ出力削除版）
+// 共通: Firebase トークン取得
 // ---------------------------------------------------------
 async function getIdTokenOrThrow(): Promise<string> {
   const user = auth.currentUser;
   if (!user) {
     throw new Error("ログイン情報が見つかりません（未ログイン）");
   }
-
-  const idToken = await user.getIdToken();
-  return idToken;
+  return await user.getIdToken();
 }
 
 // ===============================
@@ -57,9 +56,7 @@ export async function fetchInspectionBatchesHTTP(): Promise<InspectionBatchDTO[]
   }
 
   const json = (await res.json()) as InspectionBatchDTO[] | null | undefined;
-  if (!json) return [];
-
-  return json;
+  return json ?? [];
 }
 
 /**
@@ -99,7 +96,44 @@ export async function fetchInspectionByProductionIdHTTP(
   }
 
   const json = (await res.json()) as InspectionBatchDTO | null | undefined;
-  if (!json) return null;
+  return json ?? null;
+}
 
-  return json;
+// ===============================
+// HTTP Repository (productBlueprint Patch)
+// ===============================
+
+/**
+ * productBlueprintId → ProductBlueprint Patch を取得
+ * backend: GET /mint/product_blueprints/{id}/patch
+ */
+export async function fetchProductBlueprintPatchHTTP(
+  productBlueprintId: string,
+): Promise<ProductBlueprintPatchDTO | null> {
+  const idToken = await getIdTokenOrThrow();
+
+  const url = `${API_BASE}/mint/product_blueprints/${encodeURIComponent(
+    productBlueprintId,
+  )}/patch`;
+
+  const res = await fetch(url, {
+    method: "GET",
+    headers: {
+      Authorization: `Bearer ${idToken}`,
+      "Content-Type": "application/json",
+    },
+  });
+
+  if (res.status === 404) {
+    return null;
+  }
+
+  if (!res.ok) {
+    throw new Error(
+      `Failed to fetch productBlueprintPatch: ${res.status} ${res.statusText}`,
+    );
+  }
+
+  const json = (await res.json()) as ProductBlueprintPatchDTO | null | undefined;
+  return json ?? null;
 }

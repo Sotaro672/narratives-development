@@ -151,33 +151,25 @@ func (u *MintUsecase) ListInspectionsByCompanyID(
 		return nil, ErrCompanyIDMissing
 	}
 
-	log.Printf("[MintUsecase] ListInspectionsByCompanyID start companyId=%s", companyID)
-
 	// 1) companyId → productBlueprintId 一覧
 	pbIDs, err := u.pbRepo.ListIDsByCompany(ctx, companyID)
 	if err != nil {
-		log.Printf("[MintUsecase] ListIDsByCompany error: %v", err)
 		return nil, err
 	}
-	log.Printf("[MintUsecase] ListIDsByCompany companyId=%s pbIDs=%d", companyID, len(pbIDs))
 
 	if len(pbIDs) == 0 {
 		// 該当 product_blueprints が無ければ空配列を返す
-		log.Printf("[MintUsecase] no productBlueprints for companyId=%s", companyID)
 		return []MintInspectionView{}, nil
 	}
 
 	// 2) productBlueprintId 群 → Production 一覧
 	prods, err := u.prodRepo.ListByProductBlueprintID(ctx, pbIDs)
 	if err != nil {
-		log.Printf("[MintUsecase] ListByProductBlueprintID error: %v", err)
 		return nil, err
 	}
-	log.Printf("[MintUsecase] ListByProductBlueprintID pbIDs=%d productions=%d", len(pbIDs), len(prods))
 
 	if len(prods) == 0 {
 		// 該当 Production が無ければ空配列を返す
-		log.Printf("[MintUsecase] no productions for given productBlueprintIds")
 		return []MintInspectionView{}, nil
 	}
 
@@ -200,7 +192,6 @@ func (u *MintUsecase) ListInspectionsByCompanyID(
 	}
 
 	if len(prodIDSet) == 0 {
-		log.Printf("[MintUsecase] prodIDSet is empty after normalization")
 		return []MintInspectionView{}, nil
 	}
 
@@ -208,18 +199,14 @@ func (u *MintUsecase) ListInspectionsByCompanyID(
 	for id := range prodIDSet {
 		prodIDs = append(prodIDs, id)
 	}
-	log.Printf("[MintUsecase] normalized productionIds=%d", len(prodIDs))
 
 	// 3) productionId 群 → InspectionBatch 一覧
 	batches, err := u.inspRepo.ListByProductionID(ctx, prodIDs)
 	if err != nil {
-		log.Printf("[MintUsecase] ListByProductionID error: %v", err)
 		return nil, err
 	}
-	log.Printf("[MintUsecase] ListByProductionID productions=%d batches=%d", len(prodIDs), len(batches))
 
 	if len(batches) == 0 {
-		log.Printf("[MintUsecase] no inspections for given productionIds")
 		return []MintInspectionView{}, nil
 	}
 
@@ -240,13 +227,12 @@ func (u *MintUsecase) ListInspectionsByCompanyID(
 		if err != nil {
 			// 個別に失敗した場合は空文字として扱い、処理は続行
 			if !errors.Is(err, pbpdom.ErrNotFound) {
-				log.Printf("[MintUsecase] GetProductNameByID error pbID=%s err=%v", pbID, err)
+				// ここではログ出力を行わず、単にスキップ
 			}
 			continue
 		}
 		pbNameMap[pbID] = strings.TrimSpace(name)
 	}
-	log.Printf("[MintUsecase] resolved productNames count=%d", len(pbNameMap))
 
 	// 5) inspection 内の modelId 群を集めて、ModelVariation をまとめて取得
 	modelIDSet := make(map[string]struct{})
@@ -259,45 +245,31 @@ func (u *MintUsecase) ListInspectionsByCompanyID(
 			modelIDSet[mid] = struct{}{}
 		}
 	}
-	log.Printf("[MintUsecase] collected modelIds=%d", len(modelIDSet))
 
 	modelMetaMap := make(map[string]MintModelMeta, len(modelIDSet))
-	if len(modelIDSet) > 0 {
-		if u.modelRepo == nil {
-			log.Printf("[MintUsecase] modelRepo is nil — skipping GetModelVariationByID for %d modelIds", len(modelIDSet))
-		} else {
-			for modelID := range modelIDSet {
-				log.Printf("[MintUsecase] Calling GetModelVariationByID modelId=%s", modelID)
-
-				mv, err := u.modelRepo.GetModelVariationByID(ctx, modelID)
-				if err != nil {
-					if errors.Is(err, modeldom.ErrNotFound) {
-						log.Printf("[MintUsecase] GetModelVariationByID not found modelId=%s", modelID)
-						continue
-					}
-					// その他のエラーもここではログだけ出してスキップ
-					log.Printf("[MintUsecase] GetModelVariationByID error modelId=%s err=%v", modelID, err)
+	if len(modelIDSet) > 0 && u.modelRepo != nil {
+		for modelID := range modelIDSet {
+			mv, err := u.modelRepo.GetModelVariationByID(ctx, modelID)
+			if err != nil {
+				if errors.Is(err, modeldom.ErrNotFound) {
 					continue
 				}
-
-				meta := MintModelMeta{
-					Size: strings.TrimSpace(mv.Size),
-				}
-
-				// Color 情報を追加（struct のフィールド名に合わせて調整）
-				if mv.Color.Name != "" {
-					meta.ColorName = strings.TrimSpace(mv.Color.Name)
-				}
-				meta.RGB = mv.Color.RGB
-
-				// キーは modelId（variationID）
-				modelMetaMap[modelID] = meta
-
-				log.Printf(
-					"[MintUsecase] GetModelVariationByID OK modelId=%s size=%s colorName=%s rgb=%d",
-					modelID, meta.Size, meta.ColorName, meta.RGB,
-				)
+				// その他のエラーもここではスキップ
+				continue
 			}
+
+			meta := MintModelMeta{
+				Size: strings.TrimSpace(mv.Size),
+			}
+
+			// Color 情報を追加（struct のフィールド名に合わせて調整）
+			if mv.Color.Name != "" {
+				meta.ColorName = strings.TrimSpace(mv.Color.Name)
+			}
+			meta.RGB = mv.Color.RGB
+
+			// キーは modelId（variationID）
+			modelMetaMap[modelID] = meta
 		}
 	}
 
@@ -329,8 +301,6 @@ func (u *MintUsecase) ListInspectionsByCompanyID(
 		}
 		views = append(views, view)
 	}
-
-	log.Printf("[MintUsecase] ListInspectionsByCompanyID done companyId=%s views=%d", companyID, len(views))
 
 	return views, nil
 }
@@ -364,6 +334,8 @@ func (u *MintUsecase) GetProductBlueprintPatchByID(
 		return pbpdom.Patch{}, err
 	}
 
-	log.Printf("[MintUsecase] GetProductBlueprintPatchByID OK id=%s", id)
+	// ★ productBlueprint Patch の中身を確認できるようにログ出力
+	log.Printf("[MintUsecase] GetProductBlueprintPatchByID OK id=%s patch=%+v", id, patch)
+
 	return patch, nil
 }

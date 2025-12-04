@@ -8,10 +8,11 @@ import (
 	"strings"
 
 	usecase "narratives/internal/application/usecase"
+	pbpdom "narratives/internal/domain/productBlueprint"
 )
 
 // MintHandler は、MintUsecase を HTTP 経由で公開するハンドラです。
-// GET /mint/inspections を提供します。
+// GET /mint/inspections などを提供します。
 type MintHandler struct {
 	mintUC *usecase.MintUsecase
 }
@@ -27,10 +28,23 @@ func (h *MintHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 
 	switch {
+	// ------------------------------------------------------------
+	// GET /mint/inspections
+	// ------------------------------------------------------------
 	case r.Method == http.MethodGet &&
 		(r.URL.Path == "/mint/inspections" || strings.HasPrefix(r.URL.Path, "/mint/inspections/")):
 		h.listInspectionsForCurrentCompany(w, r)
 		return
+
+	// ------------------------------------------------------------
+	// GET /mint/product_blueprints/{id}/patch
+	// ------------------------------------------------------------
+	case r.Method == http.MethodGet &&
+		strings.HasPrefix(r.URL.Path, "/mint/product_blueprints/") &&
+		strings.HasSuffix(r.URL.Path, "/patch"):
+		h.getProductBlueprintPatchByID(w, r)
+		return
+
 	default:
 		http.NotFound(w, r)
 	}
@@ -65,4 +79,48 @@ func (h *MintHandler) listInspectionsForCurrentCompany(w http.ResponseWriter, r 
 	}
 
 	_ = json.NewEncoder(w).Encode(batches)
+}
+
+// ------------------------------------------------------------
+// GET /mint/product_blueprints/{id}/patch
+// ------------------------------------------------------------
+func (h *MintHandler) getProductBlueprintPatchByID(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+
+	if h.mintUC == nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		_ = json.NewEncoder(w).Encode(map[string]string{
+			"error": "mint usecase is not configured",
+		})
+		return
+	}
+
+	// パスから {id} を抽出: /mint/product_blueprints/{id}/patch
+	path := strings.TrimPrefix(r.URL.Path, "/mint/product_blueprints/")
+	path = strings.TrimSuffix(path, "/patch")
+	id := strings.Trim(path, "/")
+
+	if id == "" {
+		w.WriteHeader(http.StatusBadRequest)
+		_ = json.NewEncoder(w).Encode(map[string]string{
+			"error": "productBlueprintID is empty",
+		})
+		return
+	}
+
+	patch, err := h.mintUC.GetProductBlueprintPatchByID(ctx, id)
+	if err != nil {
+		status := http.StatusInternalServerError
+		if errors.Is(err, pbpdom.ErrNotFound) {
+			status = http.StatusNotFound
+		}
+
+		w.WriteHeader(status)
+		_ = json.NewEncoder(w).Encode(map[string]string{
+			"error": err.Error(),
+		})
+		return
+	}
+
+	_ = json.NewEncoder(w).Encode(patch)
 }
