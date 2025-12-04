@@ -66,15 +66,16 @@ func (r *TokenBlueprintRepositoryFS) GetByID(ctx context.Context, id string) (*t
 func (r *TokenBlueprintRepositoryFS) List(
 	ctx context.Context,
 	filter tbdom.Filter,
-	sort tbdom.Sort,
 	page tbdom.Page,
 ) (tbdom.PageResult, error) {
 	if r.Client == nil {
 		return tbdom.PageResult{}, errors.New("firestore client is nil")
 	}
 
-	q := r.col().Query
-	q = applyTBOrderBy(q, sort)
+	// デフォルト: updatedAt DESC, doc ID DESC
+	q := r.col().
+		OrderBy("updatedAt", firestore.Desc).
+		OrderBy(firestore.DocumentID, firestore.Desc)
 
 	it := q.Documents(ctx)
 	defer it.Stop()
@@ -189,6 +190,7 @@ func (r *TokenBlueprintRepositoryFS) Create(ctx context.Context, in tbdom.Create
 		"name":         strings.TrimSpace(in.Name),
 		"symbol":       strings.TrimSpace(in.Symbol),
 		"brandId":      strings.TrimSpace(in.BrandID),
+		"companyId":    strings.TrimSpace(in.CompanyID), // ★ 追加
 		"description":  strings.TrimSpace(in.Description),
 		"contentFiles": files,
 		"assigneeId":   strings.TrimSpace(in.AssigneeID),
@@ -266,6 +268,7 @@ func (r *TokenBlueprintRepositoryFS) Update(
 	setStr("brandId", in.BrandID)
 	setStr("description", in.Description)
 	setStr("assigneeId", in.AssigneeID)
+	// companyId は現状更新しない想定（必要ならここに追加）
 
 	// iconId (empty => null)
 	if in.IconID != nil {
@@ -549,6 +552,7 @@ func docToTokenBlueprint(doc *firestore.DocumentSnapshot) (tbdom.TokenBlueprint,
 		Name         string     `firestore:"name"`
 		Symbol       string     `firestore:"symbol"`
 		BrandID      string     `firestore:"brandId"`
+		CompanyID    string     `firestore:"companyId"` // ★ 追加
 		Description  string     `firestore:"description"`
 		IconID       *string    `firestore:"iconId"`
 		ContentFiles []string   `firestore:"contentFiles"`
@@ -570,6 +574,7 @@ func docToTokenBlueprint(doc *firestore.DocumentSnapshot) (tbdom.TokenBlueprint,
 		Name:         strings.TrimSpace(raw.Name),
 		Symbol:       strings.TrimSpace(raw.Symbol),
 		BrandID:      strings.TrimSpace(raw.BrandID),
+		CompanyID:    strings.TrimSpace(raw.CompanyID),
 		Description:  strings.TrimSpace(raw.Description),
 		ContentFiles: sanitizeStrings(raw.ContentFiles),
 		AssigneeID:   strings.TrimSpace(raw.AssigneeID),
@@ -620,6 +625,10 @@ func matchTBFilter(tb tbdom.TokenBlueprint, f tbdom.Filter) bool {
 	if len(f.BrandIDs) > 0 && !inList(tb.BrandID, f.BrandIDs) {
 		return false
 	}
+	// ★ 追加: companyId フィルタ
+	if len(f.CompanyIDs) > 0 && !inList(tb.CompanyID, f.CompanyIDs) {
+		return false
+	}
 	if len(f.AssigneeIDs) > 0 && !inList(tb.AssigneeID, f.AssigneeIDs) {
 		return false
 	}
@@ -662,35 +671,6 @@ func matchTBFilter(tb tbdom.TokenBlueprint, f tbdom.Filter) bool {
 	}
 
 	return true
-}
-
-// applyTBOrderBy maps tbdom.Sort to Firestore orderBy.
-func applyTBOrderBy(q firestore.Query, s tbdom.Sort) firestore.Query {
-	col := strings.ToLower(strings.TrimSpace(string(s.Column)))
-	var field string
-
-	switch col {
-	case "createdat", "created_at":
-		field = "createdAt"
-	case "updatedat", "updated_at":
-		field = "updatedAt"
-	case "name":
-		field = "name"
-	case "symbol":
-		field = "symbol"
-	default:
-		// default: updatedAt DESC, then doc ID DESC
-		return q.OrderBy("updatedAt", firestore.Desc).
-			OrderBy(firestore.DocumentID, firestore.Desc)
-	}
-
-	dir := firestore.Desc
-	if strings.EqualFold(string(s.Order), "asc") {
-		dir = firestore.Asc
-	}
-
-	return q.OrderBy(field, dir).
-		OrderBy(firestore.DocumentID, dir)
 }
 
 func sanitizeStrings(xs []string) []string {

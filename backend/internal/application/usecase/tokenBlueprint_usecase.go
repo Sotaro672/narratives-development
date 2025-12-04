@@ -1,3 +1,4 @@
+// backend/internal/application/usecase/tokenBlueprint_usecase.go
 package usecase
 
 import (
@@ -52,6 +53,7 @@ type CreateBlueprintRequest struct {
 	Name        string
 	Symbol      string
 	BrandID     string
+	CompanyID   string // ★ 追加: テナント
 	Description string
 
 	AssigneeID string
@@ -107,6 +109,7 @@ func (u *TokenBlueprintUsecase) CreateWithUploads(ctx context.Context, in Create
 		Name:         strings.TrimSpace(in.Name),
 		Symbol:       strings.TrimSpace(in.Symbol),
 		BrandID:      strings.TrimSpace(in.BrandID),
+		CompanyID:    strings.TrimSpace(in.CompanyID), // ★ 追加
 		Description:  strings.TrimSpace(in.Description),
 		IconID:       iconIDPtr,
 		ContentFiles: contentIDs,
@@ -129,8 +132,23 @@ func (u *TokenBlueprintUsecase) GetByID(ctx context.Context, id string) (*tbdom.
 	return u.tbRepo.GetByID(ctx, strings.TrimSpace(id))
 }
 
-func (u *TokenBlueprintUsecase) List(ctx context.Context, filter tbdom.Filter, sort tbdom.Sort, page tbdom.Page) (tbdom.PageResult, error) {
-	return u.tbRepo.List(ctx, filter, sort, page)
+// sort を廃止し、List からも除去
+func (u *TokenBlueprintUsecase) List(ctx context.Context, filter tbdom.Filter, page tbdom.Page) (tbdom.PageResult, error) {
+	return u.tbRepo.List(ctx, filter, page)
+}
+
+// ★ 追加: currentMember の companyId を指定して一覧取得するユースケース
+func (u *TokenBlueprintUsecase) ListByCompanyID(ctx context.Context, companyID string, page tbdom.Page) (tbdom.PageResult, error) {
+	cid := strings.TrimSpace(companyID)
+	if cid == "" {
+		return tbdom.PageResult{}, fmt.Errorf("companyId is empty")
+	}
+
+	filter := tbdom.Filter{
+		CompanyIDs: []string{cid},
+	}
+
+	return u.tbRepo.List(ctx, filter, page)
 }
 
 // Update

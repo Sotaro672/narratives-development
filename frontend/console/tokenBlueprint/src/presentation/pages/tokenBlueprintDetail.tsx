@@ -92,7 +92,6 @@ export default function TokenBlueprintDetail() {
         createdAt={createdAt || blueprint.createdAt}
         onEditAssignee={() => setAssignee("new-assignee-id")}
         onClickAssignee={() => console.log("assignee clicked:", assignee)}
-        onClickCreatedBy={() => console.log("createdBy clicked:", createdBy)}
       />
     </PageStyle>
   );

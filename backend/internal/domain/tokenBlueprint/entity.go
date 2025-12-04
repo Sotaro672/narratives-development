@@ -1,4 +1,3 @@
-// backend\internal\domain\tokenBlueprint\entity.go
 package tokenBlueprint
 
 import (
@@ -57,7 +56,7 @@ func WrapNotFound(err error, msg string) error {
 	return fmt.Errorf("%w: %s: %v", ErrNotFound, msg, err)
 }
 
-// Validation (moved from entity.go)
+// Validation
 
 func (t TokenBlueprint) validate() error {
 	if t.ID == "" {
@@ -72,6 +71,10 @@ func (t TokenBlueprint) validate() error {
 	if t.BrandID == "" {
 		return ErrInvalidBrandID
 	}
+	// companyId 必須
+	if strings.TrimSpace(t.CompanyID) == "" {
+		return ErrInvalidCompanyID
+	}
 	if strings.TrimSpace(t.Description) == "" {
 		return ErrInvalidDescription
 	}
@@ -79,7 +82,7 @@ func (t TokenBlueprint) validate() error {
 		return ErrInvalidAssigneeID
 	}
 
-	// IconID は任意。与えられた場合は空文字でないことのみ検証
+	// IconID は任意
 	if t.IconID != nil && strings.TrimSpace(*t.IconID) == "" {
 		return ErrInvalidIconID
 	}
@@ -89,12 +92,14 @@ func (t TokenBlueprint) validate() error {
 			return ErrInvalidContentFiles
 		}
 	}
+
 	if t.CreatedAt.IsZero() {
 		return ErrInvalidCreatedAt
 	}
 	if strings.TrimSpace(t.CreatedBy) == "" {
 		return ErrInvalidCreatedBy
 	}
+
 	return nil
 }
 
@@ -113,7 +118,7 @@ type ContentFile struct {
 	Name string
 	Type ContentFileType
 	URL  string
-	Size int64 // bytes
+	Size int64
 }
 
 func (f ContentFile) Validate() error {
@@ -129,16 +134,17 @@ func (f ContentFile) Validate() error {
 	return nil
 }
 
-// TokenBlueprint mirrors web-app/src/shared/types/tokenBlueprint.ts
+// TokenBlueprint mirrors TS-type
 type TokenBlueprint struct {
 	ID           string     `json:"id"`
 	Name         string     `json:"name"`
 	Symbol       string     `json:"symbol"`
 	BrandID      string     `json:"brandId"`
+	CompanyID    string     `json:"companyId"`
 	Description  string     `json:"description"`
 	IconID       *string    `json:"iconId,omitempty"`
 	ContentFiles []string   `json:"contentFiles"`
-	AssigneeID   string     `json:"assigneeId"` // TS側のキー名に合わせる
+	AssigneeID   string     `json:"assigneeId"`
 	CreatedAt    time.Time  `json:"createdAt"`
 	CreatedBy    string     `json:"createdBy"`
 	UpdatedAt    time.Time  `json:"updatedAt"`
@@ -153,17 +159,16 @@ var (
 	ErrInvalidName        = errors.New("tokenBlueprint: invalid name")
 	ErrInvalidSymbol      = errors.New("tokenBlueprint: invalid symbol")
 	ErrInvalidBrandID     = errors.New("tokenBlueprint: invalid brandId")
+	ErrInvalidCompanyID   = errors.New("tokenBlueprint: invalid companyId")
 	ErrInvalidDescription = errors.New("tokenBlueprint: invalid description")
 	ErrInvalidAssigneeID  = errors.New("tokenBlueprint: invalid assigneeId")
-	// 置換: IconURL -> IconID
+
 	ErrInvalidIconID    = errors.New("tokenBlueprint: invalid iconId")
 	ErrInvalidCreatedAt = errors.New("tokenBlueprint: invalid createdAt")
 	ErrInvalidCreatedBy = errors.New("tokenBlueprint: invalid createdBy")
-	// 追加: UpdatedBy/DeletedBy のリンク検証用
 	ErrInvalidUpdatedBy = errors.New("tokenBlueprint: invalid updatedBy")
 	ErrInvalidDeletedBy = errors.New("tokenBlueprint: invalid deletedBy")
 
-	// 追加: ContentFiles/ContentFile 用のエラー
 	ErrInvalidContentFiles = errors.New("tokenBlueprint: invalid contentFiles")
 	ErrInvalidContentFile  = errors.New("tokenBlueprint: invalid contentFile")
 	ErrInvalidContentType  = errors.New("tokenBlueprint: invalid contentFile.type")
@@ -173,21 +178,22 @@ var symbolRe = regexp.MustCompile(`^[A-Z0-9]{1,10}$`)
 
 // Constructors
 
-// New creates a TokenBlueprint with time.Time arguments.
 func New(
-	id, name, symbol, brandID, description string,
-	iconID *string, // URL ではなく ID を参照
+	id, name, symbol, brandID, companyID, description string,
+	iconID *string,
 	contentFiles []string,
 	assigneeID string,
 	createdAt time.Time,
 	createdBy string,
 	updatedAt time.Time,
 ) (TokenBlueprint, error) {
+
 	tb := TokenBlueprint{
 		ID:           strings.TrimSpace(id),
 		Name:         strings.TrimSpace(name),
 		Symbol:       strings.TrimSpace(symbol),
 		BrandID:      strings.TrimSpace(brandID),
+		CompanyID:    strings.TrimSpace(companyID),
 		Description:  strings.TrimSpace(description),
 		IconID:       normalizePtr(iconID),
 		ContentFiles: dedupTrim(contentFiles),
@@ -196,16 +202,17 @@ func New(
 		CreatedBy:    strings.TrimSpace(createdBy),
 		UpdatedAt:    updatedAt.UTC(),
 	}
+
 	if err := tb.validate(); err != nil {
 		return TokenBlueprint{}, err
 	}
+
 	return tb, nil
 }
 
-// NewFromStrings matches TS (createdAt/updatedAt: string, iconId: string|null).
 func NewFromStrings(
-	id, name, symbol, brandID, description string,
-	iconID string, // "" で null 扱い
+	id, name, symbol, brandID, companyID, description string,
+	iconID string,
 	contentFiles []string,
 	assigneeID string,
 	createdAt string,
@@ -217,6 +224,7 @@ func NewFromStrings(
 		icon := strings.TrimSpace(iconID)
 		iconPtr = &icon
 	}
+
 	ca, err := parseTime(createdAt)
 	if err != nil {
 		return TokenBlueprint{}, fmt.Errorf("%w: %v", ErrInvalidCreatedAt, err)
@@ -225,7 +233,8 @@ func NewFromStrings(
 	if err != nil {
 		return TokenBlueprint{}, fmt.Errorf("invalid updatedAt: %v", err)
 	}
-	return New(id, name, symbol, brandID, description, iconPtr, contentFiles, assigneeID, ca, createdBy, ua)
+
+	return New(id, name, symbol, brandID, companyID, description, iconPtr, contentFiles, assigneeID, ca, createdBy, ua)
 }
 
 // Mutators
@@ -248,7 +257,7 @@ func (t *TokenBlueprint) UpdateAssignee(id string) error {
 	return nil
 }
 
-// SetIconID sets or clears icon id (empty clears).
+// SetIconID sets or clears icon id
 func (t *TokenBlueprint) SetIconID(id string) error {
 	id = strings.TrimSpace(id)
 	if id == "" {
@@ -259,16 +268,14 @@ func (t *TokenBlueprint) SetIconID(id string) error {
 	return nil
 }
 
-// ClearIconID clears the icon reference.
 func (t *TokenBlueprint) ClearIconID() {
 	t.IconID = nil
 }
 
-// 互換: 既存呼び出しが残っている場合のためのラッパー（将来削除）
+// 互換用
 func (t *TokenBlueprint) SetIconURL(u string) error { return t.SetIconID(u) }
 func (t *TokenBlueprint) ClearIconURL()             { t.ClearIconID() }
 
-// SetBrand は与えられた Brand の主キー（Brand.ID）を BrandID に設定します。
 func (t *TokenBlueprint) SetBrand(b branddom.Brand) error {
 	if t == nil {
 		return nil
@@ -281,7 +288,6 @@ func (t *TokenBlueprint) SetBrand(b branddom.Brand) error {
 	return nil
 }
 
-// ValidateBrandLink は BrandID が空でないことを検証します。
 func (t TokenBlueprint) ValidateBrandLink() error {
 	if strings.TrimSpace(t.BrandID) == "" {
 		return ErrInvalidBrandID
@@ -289,7 +295,6 @@ func (t TokenBlueprint) ValidateBrandLink() error {
 	return nil
 }
 
-// SetIcon は与えられた TokenIcon の主キー（TokenIcon.ID）を IconID に設定します。
 func (t *TokenBlueprint) SetIcon(icon tokenicondom.TokenIcon) error {
 	if t == nil {
 		return nil
@@ -302,13 +307,6 @@ func (t *TokenBlueprint) SetIcon(icon tokenicondom.TokenIcon) error {
 	return nil
 }
 
-// ClearIcon はアイコンの参照を解除します（NULL にします）。
-func (t *TokenBlueprint) ClearIcon() {
-	t.IconID = nil
-}
-
-// ValidateIconLink は IconID の妥当性（存在する場合は空でないこと）を検証します。
-// 実在性の確認は上位レイヤー（リポジトリ/ユースケース）で行ってください。
 func (t TokenBlueprint) ValidateIconLink() error {
 	if t.IconID == nil {
 		return nil
@@ -319,7 +317,6 @@ func (t TokenBlueprint) ValidateIconLink() error {
 	return nil
 }
 
-// SetAssignee は与えられた Member の主キー（Member.ID）を AssigneeID に設定します。
 func (t *TokenBlueprint) SetAssignee(m memberdom.Member) error {
 	if t == nil {
 		return nil
@@ -332,8 +329,6 @@ func (t *TokenBlueprint) SetAssignee(m memberdom.Member) error {
 	return nil
 }
 
-// ValidateAssigneeLink は AssigneeID が空でないことを検証します。
-// 実在性チェックは上位レイヤーで行ってください。
 func (t TokenBlueprint) ValidateAssigneeLink() error {
 	if strings.TrimSpace(t.AssigneeID) == "" {
 		return ErrInvalidAssigneeID
@@ -341,7 +336,6 @@ func (t TokenBlueprint) ValidateAssigneeLink() error {
 	return nil
 }
 
-// SetCreatedBy は与えられた Member の主キー（Member.ID）を CreatedBy に設定します。
 func (t *TokenBlueprint) SetCreatedBy(m memberdom.Member) error {
 	if t == nil {
 		return nil
@@ -354,8 +348,6 @@ func (t *TokenBlueprint) SetCreatedBy(m memberdom.Member) error {
 	return nil
 }
 
-// ValidateCreatedByLink は CreatedBy が空でないことを検証します。
-// 実在性チェックは上位レイヤーで行ってください。
 func (t TokenBlueprint) ValidateCreatedByLink() error {
 	if strings.TrimSpace(t.CreatedBy) == "" {
 		return ErrInvalidCreatedBy
@@ -363,7 +355,6 @@ func (t TokenBlueprint) ValidateCreatedByLink() error {
 	return nil
 }
 
-// SetUpdatedBy は与えられた Member の主キー（Member.ID）を UpdatedBy に設定します。
 func (t *TokenBlueprint) SetUpdatedBy(m memberdom.Member) error {
 	if t == nil {
 		return nil
@@ -376,7 +367,6 @@ func (t *TokenBlueprint) SetUpdatedBy(m memberdom.Member) error {
 	return nil
 }
 
-// ValidateUpdatedByLink は UpdatedBy が空でないことを検証します。
 func (t TokenBlueprint) ValidateUpdatedByLink() error {
 	if strings.TrimSpace(t.UpdatedBy) == "" {
 		return ErrInvalidUpdatedBy
@@ -384,7 +374,6 @@ func (t TokenBlueprint) ValidateUpdatedByLink() error {
 	return nil
 }
 
-// SetDeletedBy は与えられた Member の主キー（Member.ID）を DeletedBy に設定します。
 func (t *TokenBlueprint) SetDeletedBy(m memberdom.Member) error {
 	if t == nil {
 		return nil
@@ -397,12 +386,10 @@ func (t *TokenBlueprint) SetDeletedBy(m memberdom.Member) error {
 	return nil
 }
 
-// ClearDeletedBy は DeletedBy を解除します（NULL にします）。
 func (t *TokenBlueprint) ClearDeletedBy() {
 	t.DeletedBy = nil
 }
 
-// ValidateDeletedByLink は DeletedBy が存在する場合、空でないことを検証します。
 func (t TokenBlueprint) ValidateDeletedByLink() error {
 	if t.DeletedBy == nil {
 		return nil
@@ -420,20 +407,24 @@ func parseTime(s string) (time.Time, error) {
 	if s == "" {
 		return time.Time{}, errors.New("empty time")
 	}
+
 	if t, err := time.Parse(time.RFC3339, s); err == nil {
 		return t.UTC(), nil
 	}
+
 	layouts := []string{
 		time.RFC3339Nano,
 		"2006-01-02T15:04:05Z07:00",
 		"2006-01-02 15:04:05",
 		"2006-01-02",
 	}
+
 	for _, l := range layouts {
 		if t, err := time.Parse(l, s); err == nil {
 			return t.UTC(), nil
 		}
 	}
+
 	return time.Time{}, fmt.Errorf("cannot parse time: %q", s)
 }
 
@@ -451,6 +442,7 @@ func normalizePtr(p *string) *string {
 func dedupTrim(xs []string) []string {
 	seen := make(map[string]struct{}, len(xs))
 	out := make([]string, 0, len(xs))
+
 	for _, x := range xs {
 		x = strings.TrimSpace(x)
 		if x == "" {
@@ -462,134 +454,6 @@ func dedupTrim(xs []string) []string {
 		seen[x] = struct{}{}
 		out = append(out, x)
 	}
+
 	return out
 }
-
-// TokenBlueprintsTableDDL defines the SQL for the token_blueprints table migration.
-const TokenBlueprintsTableDDL = `
--- Migration: Initialize TokenBlueprint domain
--- Mirrors backend/internal/domain/tokenBlueprint/entity.go
-
-BEGIN;
-
-CREATE TABLE IF NOT EXISTS token_blueprints (
-  id               TEXT        PRIMARY KEY,
-  name             TEXT        NOT NULL,
-  symbol           TEXT        NOT NULL,
-  brand_id         TEXT        NOT NULL,
-  description      TEXT        NOT NULL,
-  icon_id          TEXT,       -- icon の ID 参照（任意）
-  content_files    TEXT[]      NOT NULL DEFAULT '{}',
-  assignee_id      TEXT        NOT NULL,
-  created_at       TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-  created_by       TEXT        NOT NULL,
-  updated_at       TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-  updated_by       TEXT        NOT NULL,
-  deleted_at       TIMESTAMPTZ,
-  deleted_by       TEXT,
-
-  -- Non-empty checks
-  CONSTRAINT chk_tb_non_empty CHECK (
-    char_length(trim(id)) > 0
-    AND char_length(trim(name)) > 0
-    AND char_length(trim(symbol)) > 0
-    AND char_length(trim(brand_id)) > 0
-    AND char_length(trim(description)) > 0
-    AND char_length(trim(assignee_id)) > 0
-    AND char_length(trim(created_by)) > 0
-    AND char_length(trim(updated_by)) > 0
-  ),
-
-  -- Symbol format (matches ^[A-Z0-9]{1,10}$)
-  CONSTRAINT chk_tb_symbol_format CHECK (symbol ~ '^[A-Z0-9]{1,10}$'),
-
-  -- content_files: no empty items
-  CONSTRAINT chk_tb_content_files_no_empty CHECK (
-    NOT EXISTS (SELECT 1 FROM unnest(content_files) t(x) WHERE x = '')
-  ),
-
-  -- Time order
-  CONSTRAINT chk_tb_time_order CHECK (
-    updated_at >= created_at
-    AND (deleted_at IS NULL OR deleted_at >= created_at)
-  )
-);
-
--- Optional FKs (add only if referenced tables exist)
-DO $$
-BEGIN
-  IF EXISTS (
-    SELECT 1 FROM information_schema.tables
-    WHERE table_schema = 'public' AND table_name = 'brands'
-  ) THEN
-    BEGIN
-      ALTER TABLE token_blueprints
-        ADD CONSTRAINT fk_tb_brand
-        FOREIGN KEY (brand_id) REFERENCES brands(id) ON DELETE RESTRICT;
-    EXCEPTION WHEN duplicate_object THEN
-      NULL;
-    END;
-  END IF;
-
-  IF EXISTS (
-    SELECT 1 FROM information_schema.tables
-    WHERE table_schema = 'public' AND table_name = 'members'
-  ) THEN
-    BEGIN
-      ALTER TABLE token_blueprints
-        ADD CONSTRAINT fk_tb_assignee
-        FOREIGN KEY (assignee_id) REFERENCES members(id) ON DELETE RESTRICT;
-    EXCEPTION WHEN duplicate_object THEN
-      NULL;
-    END;
-
-    BEGIN
-      ALTER TABLE token_blueprints
-        ADD CONSTRAINT fk_tb_created_by
-        FOREIGN KEY (created_by) REFERENCES members(id) ON DELETE RESTRICT;
-    EXCEPTION WHEN duplicate_object THEN
-      NULL;
-    END;
-
-    BEGIN
-      ALTER TABLE token_blueprints
-        ADD CONSTRAINT fk_tb_updated_by
-        FOREIGN KEY (updated_by) REFERENCES members(id) ON DELETE RESTRICT;
-    EXCEPTION WHEN duplicate_object THEN
-      NULL;
-    END;
-
-    BEGIN
-      ALTER TABLE token_blueprints
-        ADD CONSTRAINT fk_tb_deleted_by
-        FOREIGN KEY (deleted_by) REFERENCES members(id) ON DELETE SET NULL;
-    EXCEPTION WHEN duplicate_object THEN
-      NULL;
-    END;
-  END IF;
-
-  IF EXISTS (
-    SELECT 1 FROM information_schema.tables
-    WHERE table_schema = 'public' AND table_name = 'token_icons'
-  ) THEN
-    BEGIN
-      ALTER TABLE token_blueprints
-        ADD CONSTRAINT fk_tb_icon
-        FOREIGN KEY (icon_id) REFERENCES token_icons(id) ON DELETE SET NULL;
-    EXCEPTION WHEN duplicate_object THEN
-      NULL;
-    END;
-  END IF;
-END$$;
-
--- Useful indexes
-CREATE INDEX IF NOT EXISTS idx_tb_brand_id    ON token_blueprints(brand_id);
-CREATE INDEX IF NOT EXISTS idx_tb_symbol      ON token_blueprints(symbol);
-CREATE INDEX IF NOT EXISTS idx_tb_created_at  ON token_blueprints(created_at);
-CREATE INDEX IF NOT EXISTS idx_tb_updated_at  ON token_blueprints(updated_at);
-CREATE INDEX IF NOT EXISTS idx_tb_icon_id     ON token_blueprints(icon_id);
-CREATE INDEX IF NOT EXISTS idx_tb_updated_by  ON token_blueprints(updated_by);
-CREATE INDEX IF NOT EXISTS idx_tb_deleted_by  ON token_blueprints(deleted_by);
-
-COMMIT;
-`

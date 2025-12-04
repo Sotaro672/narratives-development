@@ -1,3 +1,4 @@
+// backend\internal\domain\tokenBlueprint\repository_port.go
 package tokenBlueprint
 
 import (
@@ -14,6 +15,7 @@ type CreateTokenBlueprintInput struct {
 	Name        string `json:"name"`
 	Symbol      string `json:"symbol"`
 	BrandID     string `json:"brandId"`
+	CompanyID   string `json:"companyId"` // ★ 追加
 	Description string `json:"description"`
 	// IconID points to tokenIcon.TokenIcon primary key (token_icons.id). Optional.
 	IconID       *string  `json:"iconId,omitempty"`
@@ -33,6 +35,7 @@ type UpdateTokenBlueprintInput struct {
 	Symbol      *string `json:"symbol,omitempty"`
 	BrandID     *string `json:"brandId,omitempty"`
 	Description *string `json:"description,omitempty"`
+
 	// IconID（空文字の扱いはユースケースで決定：null化等）
 	IconID       *string   `json:"iconId,omitempty"`
 	ContentFiles *[]string `json:"contentFiles,omitempty"`
@@ -48,6 +51,7 @@ type UpdateTokenBlueprintInput struct {
 type Filter struct {
 	IDs         []string
 	BrandIDs    []string
+	CompanyIDs  []string // ★ 追加: companyId フィルタ
 	AssigneeIDs []string
 	Symbols     []string
 
@@ -61,27 +65,7 @@ type Filter struct {
 	UpdatedTo   *time.Time
 }
 
-// 並び順
-type Sort struct {
-	Column SortColumn
-	Order  SortOrder
-}
-
-type SortColumn string
-
-const (
-	SortByCreatedAt SortColumn = "createdAt"
-	SortByUpdatedAt SortColumn = "updatedAt"
-	SortByName      SortColumn = "name"
-	SortBySymbol    SortColumn = "symbol"
-)
-
-type SortOrder string
-
-const (
-	SortAsc  SortOrder = "asc"
-	SortDesc SortOrder = "desc"
-)
+// ▼▼▼ Sort / SortColumn / SortOrder は削除済み ▼▼▼
 
 // ページング
 type Page struct {
@@ -101,7 +85,10 @@ type PageResult struct {
 type RepositoryPort interface {
 	// 取得系
 	GetByID(ctx context.Context, id string) (*TokenBlueprint, error)
-	List(ctx context.Context, filter Filter, sort Sort, page Page) (PageResult, error)
+
+	// List: sort パラメータを削除
+	List(ctx context.Context, filter Filter, page Page) (PageResult, error)
+
 	Count(ctx context.Context, filter Filter) (int, error)
 
 	// 変更系
