@@ -699,6 +699,9 @@ func (c *Container) RouterDeps() httpin.RouterDeps {
 		ProductUC:    c.ProductUC,
 		InspectionUC: c.InspectionUC,
 
+		// ★ ここを追加：Mint 用 Usecase
+		MintUC: c.MintUC,
+
 		// 招待関連 Usecase
 		InvitationQuery:   c.InvitationQuery,
 		InvitationCommand: c.InvitationCommand,

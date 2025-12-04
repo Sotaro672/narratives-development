@@ -3,7 +3,6 @@ package middleware
 
 import (
 	"context"
-	"log"
 	"net/http"
 	"strings"
 
@@ -14,7 +13,6 @@ import (
 )
 
 // FirebaseAuthClient は firebase auth クライアントのエイリアス。
-// RouterDeps などからは *middleware.FirebaseAuthClient 型で受けられます。
 type FirebaseAuthClient = fbauth.Client
 
 // context key は string を使わず、衝突回避のため独自型を使用（SA1029 対策）
@@ -25,14 +23,10 @@ var (
 	ctxKeyCompanyID = ctxKey{name: "companyId"}
 	ctxKeyUID       = ctxKey{name: "uid"}
 	ctxKeyEmail     = ctxKey{name: "email"}
-	ctxKeyFullName  = ctxKey{name: "fullName"} // ★ 追加: 表示名(fullName)
+	ctxKeyFullName  = ctxKey{name: "fullName"} // 表示名(fullName)
 )
 
-// AuthMiddleware は
-//
-//   - Authorization: Bearer <ID_TOKEN>
-//
-// を検証し、現在メンバーと companyId、uid/email/fullName を context に詰めて次のハンドラへ渡す。
+// AuthMiddleware は Bearer <ID_TOKEN> を検証し、member と各情報を context に詰める。
 type AuthMiddleware struct {
 	FirebaseAuth *FirebaseAuthClient
 	MemberRepo   memdom.Repository
@@ -41,7 +35,6 @@ type AuthMiddleware struct {
 func (m *AuthMiddleware) Handler(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 
-		// 依存チェック
 		if m.FirebaseAuth == nil || m.MemberRepo == nil {
 			http.Error(w, "auth middleware not initialized", http.StatusServiceUnavailable)
 			return
@@ -83,42 +76,23 @@ func (m *AuthMiddleware) Handler(next http.Handler) http.Handler {
 		ctx := context.WithValue(r.Context(), ctxKeyMember, member)
 		ctx = context.WithValue(ctx, ctxKeyUID, uid)
 
-		// email があれば context に格納
-		emailStr := ""
+		// email 格納
 		if emailRaw, ok := token.Claims["email"]; ok {
 			if e, ok2 := emailRaw.(string); ok2 && strings.TrimSpace(e) != "" {
-				emailStr = strings.TrimSpace(e)
-				ctx = context.WithValue(ctx, ctxKeyEmail, emailStr)
+				ctx = context.WithValue(ctx, ctxKeyEmail, strings.TrimSpace(e))
 			}
 		}
 
-		// ★ fullName を member から組み立てて context に格納
+		// fullName 格納
 		fullName := memdom.FormatLastFirst(member.LastName, member.FirstName)
 		if strings.TrimSpace(fullName) != "" {
 			ctx = context.WithValue(ctx, ctxKeyFullName, strings.TrimSpace(fullName))
 		}
 
-		// companyId が空でなければ context に格納
+		// companyId 格納
 		if cid := strings.TrimSpace(member.CompanyID); cid != "" {
 			ctx = usecase.WithCompanyID(ctx, cid)
 			ctx = context.WithValue(ctx, ctxKeyCompanyID, cid)
-
-			// ★ ここで companyId を持たせているかログに出力する
-			log.Printf(
-				"[AuthMiddleware] path=%s uid=%s companyId=%s email=%s",
-				r.URL.Path,
-				uid,
-				cid,
-				emailStr,
-			)
-		} else {
-			// ★ companyId が空だった場合もわかるようにログ
-			log.Printf(
-				"[AuthMiddleware] path=%s uid=%s has NO companyId (email=%s)",
-				r.URL.Path,
-				uid,
-				emailStr,
-			)
 		}
 
 		next.ServeHTTP(w, r.WithContext(ctx))
@@ -144,7 +118,7 @@ func CurrentMember(r *http.Request) (*memdom.Member, bool) {
 	return nil, false
 }
 
-// CompanyID は context に注入された companyId を取得します。
+// CompanyID を取得
 func CompanyID(r *http.Request) (string, bool) {
 	v := r.Context().Value(ctxKeyCompanyID)
 	if v == nil {
@@ -157,27 +131,25 @@ func CompanyID(r *http.Request) (string, bool) {
 	return strings.TrimSpace(s), true
 }
 
-// CurrentUIDAndEmail は middleware で検証された Firebase UID と email を返します。
+// CurrentUIDAndEmail を返す
 func CurrentUIDAndEmail(r *http.Request) (uid string, email string, ok bool) {
 	vUID := r.Context().Value(ctxKeyUID)
 	u, okUID := vUID.(string)
 	if !okUID || strings.TrimSpace(u) == "" {
 		return "", "", false
 	}
-
 	uid = strings.TrimSpace(u)
 
-	vEmail := r.Context().Value(ctxKeyEmail)
-	if vEmail != nil {
+	if vEmail := r.Context().Value(ctxKeyEmail); vEmail != nil {
 		if e, okEmail := vEmail.(string); okEmail {
 			email = strings.TrimSpace(e)
 		}
 	}
+
 	return uid, email, true
 }
 
-// ★ 追加: CurrentFullName
-// middleware で注入された表示名(fullName)を取得します。
+// CurrentFullName を返す
 func CurrentFullName(r *http.Request) (string, bool) {
 	v := r.Context().Value(ctxKeyFullName)
 	if v == nil {

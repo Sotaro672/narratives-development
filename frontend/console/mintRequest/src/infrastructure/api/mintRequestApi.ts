@@ -43,7 +43,12 @@ export type MintRequestRow = {
   mintQuantity: number;
   productionQuantity: number;
 
+  // Mint リクエストの状態（planning / requested / minted）
   status: MintRequestRowStatus;
+
+  // 検査ステータス（inspecting / completed）
+  inspectionStatus: InspectionStatus;
+
   requestedBy: string | null;
   requestedAt: string | null;
   mintedAt: string | null;
@@ -89,7 +94,12 @@ function mapInspectionToMintRow(dto: InspectionBatchDTO): MintRequestRow {
     // quantity が無ければ inspections.length で代用
     productionQuantity: dto.quantity ?? dto.inspections.length,
 
+    // Mint の状態を推定
     status: deriveMintStatus(dto.status, requestedAt, mintedAt),
+
+    // ★ 検査ステータスをそのまま保持（inspecting / completed）
+    inspectionStatus: dto.status,
+
     requestedBy: dto.requestedBy ?? null,
     requestedAt,
     mintedAt,

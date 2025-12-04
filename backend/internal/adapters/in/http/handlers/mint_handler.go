@@ -12,8 +12,7 @@ import (
 )
 
 // MintHandler は、MintUsecase を HTTP 経由で公開するハンドラです。
-// 現状は「現在ログイン中の company に紐づく inspections 一覧」を返す
-// GET /mint/inspections のみを提供します。
+// GET /mint/inspections を提供します。
 type MintHandler struct {
 	mintUC *usecase.MintUsecase
 }
@@ -29,17 +28,10 @@ func (h *MintHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 
 	switch {
-	// ------------------------------------------------------------
-	// GET /mint/inspections
-	//   ↳ context に埋め込まれた companyId をもとに
-	//      MintUsecase.ListInspectionsForCurrentCompany を呼び出す
-	// ------------------------------------------------------------
 	case r.Method == http.MethodGet &&
 		(r.URL.Path == "/mint/inspections" || strings.HasPrefix(r.URL.Path, "/mint/inspections/")):
-
 		h.listInspectionsForCurrentCompany(w, r)
 		return
-
 	default:
 		http.NotFound(w, r)
 	}
@@ -47,16 +39,28 @@ func (h *MintHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 // ------------------------------------------------------------
 // GET /mint/inspections
-//
-//   - AuthMiddleware により context に埋め込まれた companyId を起点に
-//     MintUsecase.ListInspectionsForCurrentCompany を呼び出す。
-//   - 戻り値の []InspectionBatch をそのまま JSON で返却する。
-//
 // ------------------------------------------------------------
 func (h *MintHandler) listInspectionsForCurrentCompany(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 
+	// ---------------------------------------
+	// ① context に保持されている値をログ出力
+	// ---------------------------------------
+	companyID := strings.TrimSpace(usecase.CompanyIDFromContext(ctx))
+
+	log.Printf(
+		"[MintHandler Request] path=%s method=%s companyId=%s query=%v",
+		r.URL.Path,
+		r.Method,
+		companyID,
+		r.URL.Query(),
+	)
+
+	// ---------------------------------------
+	// ② mintUC が nil でないか
+	// ---------------------------------------
 	if h.mintUC == nil {
+		log.Printf("[MintHandler ERROR] mintUC is nil — cannot process request")
 		w.WriteHeader(http.StatusInternalServerError)
 		_ = json.NewEncoder(w).Encode(map[string]string{
 			"error": "mint usecase is not configured",
@@ -64,20 +68,26 @@ func (h *MintHandler) listInspectionsForCurrentCompany(w http.ResponseWriter, r 
 		return
 	}
 
-	// ログ用に、context に埋め込まれた companyId を確認
-	companyID := strings.TrimSpace(usecase.CompanyIDFromContext(ctx))
+	// ---------------------------------------
+	// ③ companyId があるかログ（error 状況追跡のため）
+	// ---------------------------------------
 	if companyID == "" {
-		log.Printf("[MintHandler] path=%s companyId=<empty>", r.URL.Path)
+		log.Printf("[MintHandler] companyId is EMPTY — request cannot be scoped to a company")
 	} else {
-		log.Printf("[MintHandler] path=%s companyId=%s", r.URL.Path, companyID)
+		log.Printf("[MintHandler] companyId resolved: %s — calling usecase", companyID)
 	}
 
+	// ---------------------------------------
+	// ④ Usecase 呼び出し
+	// ---------------------------------------
 	batches, err := h.mintUC.ListInspectionsForCurrentCompany(ctx)
 	if err != nil {
 		status := http.StatusInternalServerError
 		if errors.Is(err, usecase.ErrCompanyIDMissing) {
 			status = http.StatusBadRequest
 		}
+
+		log.Printf("[MintHandler ERROR] usecase returned error: %v (status=%d)", err, status)
 
 		w.WriteHeader(status)
 		_ = json.NewEncoder(w).Encode(map[string]string{
@@ -86,11 +96,19 @@ func (h *MintHandler) listInspectionsForCurrentCompany(w http.ResponseWriter, r 
 		return
 	}
 
-	// nil のままでも front 側で null チェックしているので問題ないが、
-	// 必要であればここで空スライスに差し替えることも可能。
-	// if batches == nil {
-	//     batches = []inspectiondom.InspectionBatch{}
-	// }
+	// ---------------------------------------
+	// ⑤ Usecase 成功時ログ
+	// ---------------------------------------
+	count := 0
+	if batches != nil {
+		count = len(batches)
+	}
+
+	log.Printf(
+		"[MintHandler Response] companyId=%s returned_batches=%d",
+		companyID,
+		count,
+	)
 
 	_ = json.NewEncoder(w).Encode(batches)
 }
