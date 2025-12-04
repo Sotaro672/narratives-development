@@ -4,6 +4,7 @@ package usecase
 import (
 	"context"
 	"errors"
+	"log"
 	"strings"
 
 	inspectiondom "narratives/internal/domain/inspection"
@@ -17,7 +18,7 @@ import (
 // ============================================================
 
 // mintProductBlueprintRepo は companyId から productBlueprintId の一覧を取得したり、
-// productBlueprintId から productName を解決するための最小ポート
+// productBlueprintId から productName / Patch を解決するための最小ポート
 type mintProductBlueprintRepo interface {
 	// companyId に紐づく product_blueprints の ID 一覧を返す
 	// 実装例: ProductBlueprintRepositoryFS.ListIDsByCompany
@@ -26,6 +27,10 @@ type mintProductBlueprintRepo interface {
 	// productBlueprintId から productName だけを取得するヘルパ
 	// 実装例: ProductBlueprintRepositoryFS.GetProductNameByID
 	GetProductNameByID(ctx context.Context, id string) (string, error)
+
+	// ★ 追加: productBlueprintId から Patch 全体を取得するヘルパ
+	// mintRequestDetail 画面の ProductBlueprintCard 表示用
+	GetPatchByID(ctx context.Context, id string) (pbpdom.Patch, error)
 }
 
 // mintProductionRepo は productBlueprintId 群から productions を取得するための最小ポート
@@ -146,23 +151,33 @@ func (u *MintUsecase) ListInspectionsByCompanyID(
 		return nil, ErrCompanyIDMissing
 	}
 
+	log.Printf("[MintUsecase] ListInspectionsByCompanyID start companyId=%s", companyID)
+
 	// 1) companyId → productBlueprintId 一覧
 	pbIDs, err := u.pbRepo.ListIDsByCompany(ctx, companyID)
 	if err != nil {
+		log.Printf("[MintUsecase] ListIDsByCompany error: %v", err)
 		return nil, err
 	}
+	log.Printf("[MintUsecase] ListIDsByCompany companyId=%s pbIDs=%d", companyID, len(pbIDs))
+
 	if len(pbIDs) == 0 {
 		// 該当 product_blueprints が無ければ空配列を返す
+		log.Printf("[MintUsecase] no productBlueprints for companyId=%s", companyID)
 		return []MintInspectionView{}, nil
 	}
 
 	// 2) productBlueprintId 群 → Production 一覧
 	prods, err := u.prodRepo.ListByProductBlueprintID(ctx, pbIDs)
 	if err != nil {
+		log.Printf("[MintUsecase] ListByProductBlueprintID error: %v", err)
 		return nil, err
 	}
+	log.Printf("[MintUsecase] ListByProductBlueprintID pbIDs=%d productions=%d", len(pbIDs), len(prods))
+
 	if len(prods) == 0 {
 		// 該当 Production が無ければ空配列を返す
+		log.Printf("[MintUsecase] no productions for given productBlueprintIds")
 		return []MintInspectionView{}, nil
 	}
 
@@ -185,6 +200,7 @@ func (u *MintUsecase) ListInspectionsByCompanyID(
 	}
 
 	if len(prodIDSet) == 0 {
+		log.Printf("[MintUsecase] prodIDSet is empty after normalization")
 		return []MintInspectionView{}, nil
 	}
 
@@ -192,13 +208,18 @@ func (u *MintUsecase) ListInspectionsByCompanyID(
 	for id := range prodIDSet {
 		prodIDs = append(prodIDs, id)
 	}
+	log.Printf("[MintUsecase] normalized productionIds=%d", len(prodIDs))
 
 	// 3) productionId 群 → InspectionBatch 一覧
 	batches, err := u.inspRepo.ListByProductionID(ctx, prodIDs)
 	if err != nil {
+		log.Printf("[MintUsecase] ListByProductionID error: %v", err)
 		return nil, err
 	}
+	log.Printf("[MintUsecase] ListByProductionID productions=%d batches=%d", len(prodIDs), len(batches))
+
 	if len(batches) == 0 {
+		log.Printf("[MintUsecase] no inspections for given productionIds")
 		return []MintInspectionView{}, nil
 	}
 
@@ -219,12 +240,13 @@ func (u *MintUsecase) ListInspectionsByCompanyID(
 		if err != nil {
 			// 個別に失敗した場合は空文字として扱い、処理は続行
 			if !errors.Is(err, pbpdom.ErrNotFound) {
-				// TODO: ロガーを注入して warn を出すなど
+				log.Printf("[MintUsecase] GetProductNameByID error pbID=%s err=%v", pbID, err)
 			}
 			continue
 		}
 		pbNameMap[pbID] = strings.TrimSpace(name)
 	}
+	log.Printf("[MintUsecase] resolved productNames count=%d", len(pbNameMap))
 
 	// 5) inspection 内の modelId 群を集めて、ModelVariation をまとめて取得
 	modelIDSet := make(map[string]struct{})
@@ -237,31 +259,45 @@ func (u *MintUsecase) ListInspectionsByCompanyID(
 			modelIDSet[mid] = struct{}{}
 		}
 	}
+	log.Printf("[MintUsecase] collected modelIds=%d", len(modelIDSet))
 
 	modelMetaMap := make(map[string]MintModelMeta, len(modelIDSet))
-	if u.modelRepo != nil && len(modelIDSet) > 0 {
-		for modelID := range modelIDSet {
-			mv, err := u.modelRepo.GetModelVariationByID(ctx, modelID)
-			if err != nil {
-				if errors.Is(err, modeldom.ErrNotFound) {
+	if len(modelIDSet) > 0 {
+		if u.modelRepo == nil {
+			log.Printf("[MintUsecase] modelRepo is nil — skipping GetModelVariationByID for %d modelIds", len(modelIDSet))
+		} else {
+			for modelID := range modelIDSet {
+				log.Printf("[MintUsecase] Calling GetModelVariationByID modelId=%s", modelID)
+
+				mv, err := u.modelRepo.GetModelVariationByID(ctx, modelID)
+				if err != nil {
+					if errors.Is(err, modeldom.ErrNotFound) {
+						log.Printf("[MintUsecase] GetModelVariationByID not found modelId=%s", modelID)
+						continue
+					}
+					// その他のエラーもここではログだけ出してスキップ
+					log.Printf("[MintUsecase] GetModelVariationByID error modelId=%s err=%v", modelID, err)
 					continue
 				}
-				// その他のエラーもここでは無視（必要ならログ）
-				continue
-			}
 
-			meta := MintModelMeta{
-				Size: strings.TrimSpace(mv.Size),
-			}
+				meta := MintModelMeta{
+					Size: strings.TrimSpace(mv.Size),
+				}
 
-			// Color 情報を追加（struct のフィールド名に合わせて調整）
-			if mv.Color.Name != "" {
-				meta.ColorName = strings.TrimSpace(mv.Color.Name)
-			}
-			meta.RGB = mv.Color.RGB
+				// Color 情報を追加（struct のフィールド名に合わせて調整）
+				if mv.Color.Name != "" {
+					meta.ColorName = strings.TrimSpace(mv.Color.Name)
+				}
+				meta.RGB = mv.Color.RGB
 
-			// キーは modelId（variationID）
-			modelMetaMap[modelID] = meta
+				// キーは modelId（variationID）
+				modelMetaMap[modelID] = meta
+
+				log.Printf(
+					"[MintUsecase] GetModelVariationByID OK modelId=%s size=%s colorName=%s rgb=%d",
+					modelID, meta.Size, meta.ColorName, meta.RGB,
+				)
+			}
 		}
 	}
 
@@ -294,5 +330,40 @@ func (u *MintUsecase) ListInspectionsByCompanyID(
 		views = append(views, view)
 	}
 
+	log.Printf("[MintUsecase] ListInspectionsByCompanyID done companyId=%s views=%d", companyID, len(views))
+
 	return views, nil
+}
+
+// ============================================================
+// Additional API: ProductBlueprint Patch 解決
+// ============================================================
+
+// GetProductBlueprintPatchByID は、productBlueprintId から
+// ProductBlueprint.Patch 相当の構造体を取得して返します。
+// mintRequestDetail 画面の ProductBlueprintCard に渡す想定です。
+func (u *MintUsecase) GetProductBlueprintPatchByID(
+	ctx context.Context,
+	productBlueprintID string,
+) (pbpdom.Patch, error) {
+
+	if u == nil {
+		return pbpdom.Patch{}, errors.New("mint usecase is nil")
+	}
+
+	id := strings.TrimSpace(productBlueprintID)
+	if id == "" {
+		return pbpdom.Patch{}, errors.New("productBlueprintID is empty")
+	}
+
+	log.Printf("[MintUsecase] GetProductBlueprintPatchByID start id=%s", id)
+
+	patch, err := u.pbRepo.GetPatchByID(ctx, id)
+	if err != nil {
+		log.Printf("[MintUsecase] GetPatchByID error id=%s err=%v", id, err)
+		return pbpdom.Patch{}, err
+	}
+
+	log.Printf("[MintUsecase] GetProductBlueprintPatchByID OK id=%s", id)
+	return patch, nil
 }

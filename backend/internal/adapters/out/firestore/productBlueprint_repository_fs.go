@@ -113,6 +113,54 @@ func (r *ProductBlueprintRepositoryFS) GetProductNameByID(
 	return name, nil
 }
 
+// ★ 追加: productBlueprintId から Patch 全体を組み立てて返すヘルパ
+// usecase.mintProductBlueprintRepo の GetPatchByID を満たすための実装。
+func (r *ProductBlueprintRepositoryFS) GetPatchByID(
+	ctx context.Context,
+	id string,
+) (pbdom.Patch, error) {
+	if r.Client == nil {
+		return pbdom.Patch{}, errors.New("firestore client is nil")
+	}
+
+	id = strings.TrimSpace(id)
+	if id == "" {
+		return pbdom.Patch{}, pbdom.ErrNotFound
+	}
+
+	// まずは既存の GetByID でライブの ProductBlueprint を取得
+	pb, err := r.GetByID(ctx, id)
+	if err != nil {
+		return pbdom.Patch{}, err
+	}
+
+	// Patch 用にポインタ値を組み立て
+	name := pb.ProductName
+	brandID := pb.BrandID
+	itemType := pb.ItemType
+	fit := pb.Fit
+	material := pb.Material
+	weight := pb.Weight
+	qa := make([]string, len(pb.QualityAssurance))
+	copy(qa, pb.QualityAssurance)
+	productIdTag := pb.ProductIdTag
+	assigneeID := pb.AssigneeID
+
+	patch := pbdom.Patch{
+		ProductName:      &name,
+		BrandID:          &brandID,
+		ItemType:         &itemType,
+		Fit:              &fit,
+		Material:         &material,
+		Weight:           &weight,
+		QualityAssurance: &qa,
+		ProductIdTag:     &productIdTag,
+		AssigneeID:       &assigneeID,
+	}
+
+	return patch, nil
+}
+
 // Exists reports whether a ProductBlueprint with given ID exists.
 func (r *ProductBlueprintRepositoryFS) Exists(ctx context.Context, id string) (bool, error) {
 	if r.Client == nil {

@@ -4,15 +4,30 @@ import * as React from "react";
 import type {
   InspectionBatch,
   InspectionItem,
-  InspectionResult,
 } from "../../domain/entity/inspections";
 
 /**
+ * バックエンドの MintInspectionView に相当する型のうち、
+ * InspectionBatch に modelMeta を足したものだけをここで再定義して使う。
+ * （TS の構造的型付けなので、API から追加で来る productName などとも両立します）
+ */
+export type MintModelMetaEntry = {
+  size?: string | null;
+  colorName?: string | null;
+  rgb?: number | null;
+};
+
+export type InspectionBatchWithModelMeta = InspectionBatch & {
+  // modelId → { size, colorName, rgb }
+  modelMeta?: Record<string, MintModelMetaEntry>;
+};
+
+/**
  * 検査結果カード 1 行分
- * - modelNumber: 型番（InspectionItem.modelNumber を利用）
- * - size / color / rgb は今後 ModelVariation などと join する前提で、現状はプレースホルダ
+ * - modelNumber: 型番
+ * - size / color / rgb: modelId → ModelMeta から取得
  * - passedQuantity: 合格数
- * - quantity      : 生産数（＝該当行の検査件数）
+ * - quantity      : 生産数（＝該当モデルの検査件数）
  */
 export type InspectionResultRow = {
   modelNumber: string;
@@ -24,12 +39,8 @@ export type InspectionResultRow = {
 };
 
 export type UseInspectionResultCardParams = {
-  /**
-   * InspectionBatch（inspection.ts と対応）
-   * Detail 画面では /products/inspections?productionId=... のレスポンス
-   * (= InspectionBatchDTO) をそのまま渡す想定。
-   */
-  batch: InspectionBatch | null | undefined;
+  /** MintInspectionView 相当（InspectionBatch + modelMeta） */
+  batch: InspectionBatchWithModelMeta | null | undefined;
 };
 
 export type UseInspectionResultCardResult = {
@@ -41,7 +52,7 @@ export type UseInspectionResultCardResult = {
 };
 
 /**
- * InspectionBatch（inspection.ts 準拠）から
+ * InspectionBatch（+ modelMeta）から
  * InspectionResultCard 用の行データ・集計値・RGB変換関数を提供するフック。
  */
 export function useInspectionResultCard(
@@ -52,36 +63,54 @@ export function useInspectionResultCard(
   const rows: InspectionResultRow[] = React.useMemo(() => {
     if (!batch) return [];
 
-    // modelNumber 単位で集計
+    const modelMeta = batch.modelMeta ?? {};
+
+    // modelId 単位で集計（同じ modelId の inspection をまとめる）
     const map = new Map<
       string,
-      { passed: number; total: number; items: InspectionItem[] }
+      {
+        modelNumber: string;
+        passed: number;
+        total: number;
+      }
     >();
 
     for (const ins of batch.inspections ?? []) {
+      const modelId = (ins.modelId ?? "").trim();
+      if (!modelId) continue;
+
       const modelNumber = (ins.modelNumber ?? "").trim();
-      if (!modelNumber) continue;
 
       const entry =
-        map.get(modelNumber) ?? { passed: 0, total: 0, items: [] };
+        map.get(modelId) ?? {
+          modelNumber,
+          passed: 0,
+          total: 0,
+        };
 
       entry.total += 1;
       if (ins.inspectionResult === "passed") {
         entry.passed += 1;
       }
-      entry.items.push(ins);
 
-      map.set(modelNumber, entry);
+      // 途中で modelNumber が空だった場合でも、どこかで値が入れば更新
+      if (!entry.modelNumber && modelNumber) {
+        entry.modelNumber = modelNumber;
+      }
+
+      map.set(modelId, entry);
     }
 
     const result: InspectionResultRow[] = [];
-    for (const [modelNumber, agg] of map.entries()) {
-      // TODO: 将来ここで ModelVariation 情報（size / color / rgb）を join して埋める
+
+    for (const [modelId, agg] of map.entries()) {
+      const meta = modelMeta[modelId];
+
       result.push({
-        modelNumber,
-        size: "", // API 拡張後に埋める
-        color: "", // API 拡張後に埋める
-        rgb: null, // API 拡張後に埋める
+        modelNumber: agg.modelNumber || modelId,
+        size: meta?.size?.trim() ?? "",
+        color: meta?.colorName?.trim() ?? "",
+        rgb: meta?.rgb ?? null,
         passedQuantity: agg.passed,
         quantity: agg.total,
       });
@@ -114,8 +143,14 @@ export function useInspectionResultCard(
     [],
   );
 
+  // タイトルに productName があれば補足として付けてもよい
+  const title =
+    (batch as any)?.productName && typeof (batch as any).productName === "string"
+      ? `検査結果：${(batch as any).productName}`
+      : "モデル別検査結果";
+
   return {
-    title: "検品結果",
+    title,
     rows,
     totalPassed,
     totalQuantity,

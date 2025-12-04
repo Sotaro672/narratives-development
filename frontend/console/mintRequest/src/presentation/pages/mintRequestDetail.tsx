@@ -1,98 +1,39 @@
-// frontend/mintRequest/src/presentation/pages/mintRequestDetail.tsx
+// frontend/console/mintRequest/src/presentation/pages/mintRequestDetail.tsx
 
 import * as React from "react";
-import { useNavigate, useParams } from "react-router-dom";
 import PageStyle from "../../../../shell/src/layout/PageStyle/PageStyle";
-import TokenBlueprintCard from "../../../../tokenBlueprint/src/presentation/components/tokenBlueprintCard";
-import { TOKEN_BLUEPRINTS } from "../../../../tokenBlueprint/src/infrastructure/mockdata/tokenBlueprint_mockdata";
-import type { TokenBlueprint } from "../../../../tokenBlueprint/src/domain/entity/tokenBlueprint";
 import { Card, CardContent } from "../../../../shell/src/shared/ui/card";
 import { Button } from "../../../../shell/src/shared/ui/button";
 import { Coins } from "lucide-react";
 
+import ProductBlueprintCard from "../../../../productBlueprint/src/presentation/components/productBlueprintCard";
 import InspectionResultCard from "../components/inspectionResultCard";
-import { useInspectionResultCard } from "../hook/useInspectionResultCard";
-import {
-  fetchInspectionByProductionId,
-  type InspectionBatchDTO,
-} from "../../infrastructure/api/mintRequestApi";
+import { useMintRequestDetail } from "../hook/useMintRequestDetail";
 
 import "../styles/mintRequest.css";
 
 export default function MintRequestDetail() {
-  const navigate = useNavigate();
-  const { requestId } = useParams<{ requestId: string }>();
-
-  // 検査バッチ（backend: inspections コレクション）
-  const [inspectionBatch, setInspectionBatch] =
-    React.useState<InspectionBatchDTO | null>(null);
-  const [loading, setLoading] = React.useState<boolean>(false);
-  const [error, setError] = React.useState<string | null>(null);
-
-  // requestId（= productionId）から InspectionBatch を取得
-  React.useEffect(() => {
-    if (!requestId) return;
-
-    let cancelled = false;
-    const run = async () => {
-      setLoading(true);
-      setError(null);
-      try {
-        const batch = await fetchInspectionByProductionId(requestId);
-        if (!cancelled) {
-          setInspectionBatch(batch);
-        }
-      } catch (e: any) {
-        if (!cancelled) {
-          setError(e?.message ?? "検査結果の取得に失敗しました");
-        }
-      } finally {
-        if (!cancelled) {
-          setLoading(false);
-        }
-      }
-    };
-
-    run();
-    return () => {
-      cancelled = true;
-    };
-  }, [requestId]);
-
-  // 検査結果カード用データ（InspectionBatch → モデル別行データ）
-  const inspectionCardData = useInspectionResultCard({
-    batch: inspectionBatch ?? undefined,
-  });
-
-  // ミント数 = 合格数合計（totalPassed）
-  const totalMintQuantity = inspectionCardData.totalPassed;
-
-  // トークン設計（暫定: 先頭 / 本来は requestId に紐付け）
-  const blueprint: TokenBlueprint | undefined = TOKEN_BLUEPRINTS[0];
-
-  // 戻るボタン
-  const onBack = React.useCallback(() => {
-    navigate(-1);
-  }, [navigate]);
-
-  // ミント申請ボタン
-  const handleMint = React.useCallback(() => {
-    alert(
-      `ミント申請を実行しました（申請ID: ${
-        requestId ?? "不明"
-      } / ミント数: ${totalMintQuantity}）`,
-    );
-  }, [requestId, totalMintQuantity]);
+  const {
+    title,
+    loading,
+    error,
+    inspectionCardData,
+    blueprint, // 将来 TokenBlueprintCard で使う予定だが、現状は表示しない
+    totalMintQuantity,
+    onBack,
+    handleMint,
+  } = useMintRequestDetail();
 
   return (
-    <PageStyle
-      layout="grid-2"
-      title={`ミント申請詳細：${requestId ?? "不明ID"}`}
-      onBack={onBack}
-    >
-      {/* 左カラム：検査結果カード → TokenBlueprintCard → ミント申請ボタン */}
+    <PageStyle layout="grid-2" title={title} onBack={onBack}>
+      {/* 左カラム */}
       <div className="space-y-4 mt-4">
-        {/* モデル別在庫カードの代わりに検査結果カードを表示 */}
+        {/* ① プロダクト基本情報（閲覧モード）
+            ※ まだ inspectionCardData に productName などの項目を実装していないため、
+               現時点では空の閲覧用カードとして配置しておく */}
+        <ProductBlueprintCard mode="view" />
+
+        {/* ② 検査結果カード */}
         {loading ? (
           <Card className="mint-request-card">
             <CardContent className="mint-request-card__body">
@@ -109,16 +50,14 @@ export default function MintRequestDetail() {
           <InspectionResultCard data={inspectionCardData} />
         )}
 
-        {blueprint && (
-          <TokenBlueprintCard
-            initialEditMode={false}
-            initialTokenBlueprint={blueprint}
-            // ドメイン外拡張フィールド（任意・モック）
-            initialBurnAt=""
-            initialIconUrl={blueprint.iconId ?? ""}
-          />
+        {/* ③ （将来用）TokenBlueprintCard はデフォルト非表示 */}
+        {false && blueprint && (
+          <div className="mt-4">
+            {/* TokenBlueprintCard を実装する際にここで blueprint を利用する */}
+          </div>
         )}
 
+        {/* ④ ミント申請ボタン */}
         <Card className="mint-request-card">
           <CardContent className="mint-request-card__body">
             <div className="mint-request-card__actions">

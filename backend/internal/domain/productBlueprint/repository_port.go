@@ -110,6 +110,16 @@ type Repository interface {
 	//   MintRequest 一覧などで「ID → 名前」の名前解決だけを行いたいときに使用。
 	GetProductNameByID(ctx context.Context, id string) (string, error)
 
+	// ★ 追加: productBlueprintId から Patch 相当の情報を取得するヘルパ
+	//   既存レコードを編集フォームに流し込む用途などで、
+	//   現在の値を Patch 形式（ポインタ付き）で受け取りたいときに使用。
+	//
+	//   典型的な実装イメージ:
+	//     pb, err := r.GetByID(ctx, id)
+	//     if err != nil { ... }
+	//     return pb.ToPatch(), nil
+	GetPatchByID(ctx context.Context, id string) (Patch, error)
+
 	// companyId 単位で productBlueprint の ID 一覧を取得
 	// （MintRequest 用のチェーン: companyId → productBlueprintId → production → mintRequest）
 	ListIDsByCompany(ctx context.Context, companyID string) ([]string, error)

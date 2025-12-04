@@ -4,7 +4,6 @@ package handlers
 import (
 	"encoding/json"
 	"errors"
-	"log"
 	"net/http"
 	"strings"
 
@@ -43,24 +42,7 @@ func (h *MintHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 func (h *MintHandler) listInspectionsForCurrentCompany(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 
-	// ---------------------------------------
-	// ① context に保持されている値をログ出力
-	// ---------------------------------------
-	companyID := strings.TrimSpace(usecase.CompanyIDFromContext(ctx))
-
-	log.Printf(
-		"[MintHandler Request] path=%s method=%s companyId=%s query=%v",
-		r.URL.Path,
-		r.Method,
-		companyID,
-		r.URL.Query(),
-	)
-
-	// ---------------------------------------
-	// ② mintUC が nil でないか
-	// ---------------------------------------
 	if h.mintUC == nil {
-		log.Printf("[MintHandler ERROR] mintUC is nil — cannot process request")
 		w.WriteHeader(http.StatusInternalServerError)
 		_ = json.NewEncoder(w).Encode(map[string]string{
 			"error": "mint usecase is not configured",
@@ -68,18 +50,6 @@ func (h *MintHandler) listInspectionsForCurrentCompany(w http.ResponseWriter, r 
 		return
 	}
 
-	// ---------------------------------------
-	// ③ companyId があるかログ（error 状況追跡のため）
-	// ---------------------------------------
-	if companyID == "" {
-		log.Printf("[MintHandler] companyId is EMPTY — request cannot be scoped to a company")
-	} else {
-		log.Printf("[MintHandler] companyId resolved: %s — calling usecase", companyID)
-	}
-
-	// ---------------------------------------
-	// ④ Usecase 呼び出し
-	// ---------------------------------------
 	batches, err := h.mintUC.ListInspectionsForCurrentCompany(ctx)
 	if err != nil {
 		status := http.StatusInternalServerError
@@ -87,28 +57,12 @@ func (h *MintHandler) listInspectionsForCurrentCompany(w http.ResponseWriter, r 
 			status = http.StatusBadRequest
 		}
 
-		log.Printf("[MintHandler ERROR] usecase returned error: %v (status=%d)", err, status)
-
 		w.WriteHeader(status)
 		_ = json.NewEncoder(w).Encode(map[string]string{
 			"error": err.Error(),
 		})
 		return
 	}
-
-	// ---------------------------------------
-	// ⑤ Usecase 成功時ログ
-	// ---------------------------------------
-	count := 0
-	if batches != nil {
-		count = len(batches)
-	}
-
-	log.Printf(
-		"[MintHandler Response] companyId=%s returned_batches=%d",
-		companyID,
-		count,
-	)
 
 	_ = json.NewEncoder(w).Encode(batches)
 }
