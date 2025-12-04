@@ -568,6 +568,7 @@ func NewContainer(ctx context.Context) (*Container, error) {
 		productionRepo,
 		inspectionRepo,
 		modelRepo,
+		brandSvc,
 	)
 
 	saleUC := uc.NewSaleUsecase(saleRepo)

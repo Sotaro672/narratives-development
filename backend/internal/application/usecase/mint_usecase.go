@@ -4,9 +4,9 @@ package usecase
 import (
 	"context"
 	"errors"
-	"log"
 	"strings"
 
+	branddom "narratives/internal/domain/brand"
 	inspectiondom "narratives/internal/domain/inspection"
 	modeldom "narratives/internal/domain/model"
 	pbpdom "narratives/internal/domain/productBlueprint"
@@ -87,22 +87,27 @@ type MintUsecase struct {
 	prodRepo  mintProductionRepo
 	inspRepo  mintInspectionRepo
 	modelRepo mintModelRepo
+
+	// brandId → brandName 解決用
+	brandSvc *branddom.Service
 }
 
 // NewMintUsecase は MintUsecase のコンストラクタです。
 // DI コンテナから ProductBlueprintRepositoryFS / ProductionRepositoryFS /
-// InspectionRepositoryFS / ModelRepositoryFS をそれぞれ満たす実装として渡してください。
+// InspectionRepositoryFS / ModelRepositoryFS / brand.Service をそれぞれ満たす実装として渡してください。
 func NewMintUsecase(
 	pbRepo mintProductBlueprintRepo,
 	prodRepo mintProductionRepo,
 	inspRepo mintInspectionRepo,
 	modelRepo mintModelRepo,
+	brandSvc *branddom.Service,
 ) *MintUsecase {
 	return &MintUsecase{
 		pbRepo:    pbRepo,
 		prodRepo:  prodRepo,
 		inspRepo:  inspRepo,
 		modelRepo: modelRepo,
+		brandSvc:  brandSvc,
 	}
 }
 
@@ -227,7 +232,7 @@ func (u *MintUsecase) ListInspectionsByCompanyID(
 		if err != nil {
 			// 個別に失敗した場合は空文字として扱い、処理は続行
 			if !errors.Is(err, pbpdom.ErrNotFound) {
-				// ここではログ出力を行わず、単にスキップ
+				// ここではログ出力などは行わず、単にスキップ
 			}
 			continue
 		}
@@ -326,16 +331,51 @@ func (u *MintUsecase) GetProductBlueprintPatchByID(
 		return pbpdom.Patch{}, errors.New("productBlueprintID is empty")
 	}
 
-	log.Printf("[MintUsecase] GetProductBlueprintPatchByID start id=%s", id)
-
 	patch, err := u.pbRepo.GetPatchByID(ctx, id)
 	if err != nil {
-		log.Printf("[MintUsecase] GetPatchByID error id=%s err=%v", id, err)
 		return pbpdom.Patch{}, err
 	}
 
-	// ★ productBlueprint Patch の中身を確認できるようにログ出力
-	log.Printf("[MintUsecase] GetProductBlueprintPatchByID OK id=%s patch=%+v", id, patch)
-
 	return patch, nil
+}
+
+// ============================================================
+// Helper: brandId → brandName 解決
+// ============================================================
+
+// getBrandNameByID は、brandID から表示用の brandName を取得します。
+// - brandSvc が設定されていない場合: 空文字 + nil を返す（ブランド名はオプション扱い）
+// - brand.ErrNotFound / brand.ErrInvalidID の場合: 空文字 + nil を返す（ブランド未設定/不整合は UI では無表示）
+// - その他のエラー: そのままエラーを返す
+func (u *MintUsecase) getBrandNameByID(ctx context.Context, brandID string) (string, error) {
+	if u == nil {
+		return "", errors.New("mint usecase is nil")
+	}
+
+	if u.brandSvc == nil {
+		// ブランド名表示がオプションであれば、nil エラーで空文字返却にする
+		return "", nil
+	}
+
+	brandID = strings.TrimSpace(brandID)
+	if brandID == "" {
+		return "", nil
+	}
+
+	name, err := u.brandSvc.GetNameByID(ctx, brandID)
+	if err != nil {
+		// 見つからない / 無効 ID は「ブランド名なし」として扱う
+		if errors.Is(err, branddom.ErrNotFound) || errors.Is(err, branddom.ErrInvalidID) {
+			return "", nil
+		}
+		// それ以外の予期しないエラーはそのまま返す
+		return "", err
+	}
+
+	return name, nil
+}
+
+// ResolveBrandNameByID は、外部（ハンドラ等）から brandID で brandName を取得する公開メソッドです。
+func (u *MintUsecase) ResolveBrandNameByID(ctx context.Context, brandID string) (string, error) {
+	return u.getBrandNameByID(ctx, brandID)
 }

@@ -1,6 +1,4 @@
 // frontend/mintRequest/src/presentation/pages/mintRequestManagement.tsx
-
-import React from "react";
 import List from "../../../../shell/src/layout/List/List";
 import "../styles/mintRequest.css";
 import { useMintRequestManagement } from "../hook/useMintRequestManagement";

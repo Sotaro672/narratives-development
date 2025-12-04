@@ -12,6 +12,10 @@ import {
 export type ProductBlueprintPatchDTO = {
   productName?: string | null;
   brandId?: string | null;
+
+  // MintHandler (/mint/product_blueprints/{id}/patch) が付与するブランド名
+  brandName?: string | null;
+
   itemType?: string | null; // Go 側 ItemType（"tops" / "bottoms" など）に対応
   fit?: string | null;
   material?: string | null;

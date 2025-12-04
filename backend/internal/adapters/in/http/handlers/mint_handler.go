@@ -81,6 +81,13 @@ func (h *MintHandler) listInspectionsForCurrentCompany(w http.ResponseWriter, r 
 	_ = json.NewEncoder(w).Encode(batches)
 }
 
+// productBlueprint Patch + brandName を返すレスポンス用 DTO。
+// Patch を埋め込みつつ brandName フィールドを追加する。
+type productBlueprintPatchResponse struct {
+	pbpdom.Patch
+	BrandName string `json:"brandName"`
+}
+
 // ------------------------------------------------------------
 // GET /mint/product_blueprints/{id}/patch
 // ------------------------------------------------------------
@@ -122,5 +129,27 @@ func (h *MintHandler) getProductBlueprintPatchByID(w http.ResponseWriter, r *htt
 		return
 	}
 
-	_ = json.NewEncoder(w).Encode(patch)
+	// Patch に含まれる brandId(*string) から brandName を解決する
+	brandName := ""
+	if patch.BrandID != nil {
+		brandID := strings.TrimSpace(*patch.BrandID)
+		if brandID != "" {
+			name, err := h.mintUC.ResolveBrandNameByID(ctx, brandID)
+			if err != nil {
+				w.WriteHeader(http.StatusInternalServerError)
+				_ = json.NewEncoder(w).Encode(map[string]string{
+					"error": err.Error(),
+				})
+				return
+			}
+			brandName = name
+		}
+	}
+
+	resp := productBlueprintPatchResponse{
+		Patch:     patch,
+		BrandName: brandName,
+	}
+
+	_ = json.NewEncoder(w).Encode(resp)
 }

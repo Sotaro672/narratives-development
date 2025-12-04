@@ -14,7 +14,7 @@ import {
 
 export type ProductBlueprintCardViewModel = {
   productName?: string;
-  brand?: string;
+  brand?: string; // brandName 優先（なければ brandId をフォールバック表示）
   itemType?: string;
   fit?: string;
   materials?: string;
@@ -128,8 +128,8 @@ export function useMintRequestDetail() {
 
       return {
         productName: pbPatch.productName ?? undefined,
-        // ★ 現状は brandId しかないため、そのまま brand に入れておく
-        brand: pbPatch.brandId ?? undefined,
+        // brandName があればそれを表示、なければフォールバックとして brandId を表示
+        brand: pbPatch.brandName ?? pbPatch.brandId ?? undefined,
         itemType: pbPatch.itemType ?? undefined,
         fit: pbPatch.fit ?? undefined,
         materials: pbPatch.material ?? undefined,

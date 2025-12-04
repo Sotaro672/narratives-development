@@ -30,33 +30,38 @@ export default function MintRequestDetail() {
       {/* 左カラム */}
       <div className="space-y-4 mt-4">
         {/* ① プロダクト基本情報（閲覧モード） */}
-{pbPatchLoading ? (
-  <Card className="mint-request-card">
-    <CardContent className="mint-request-card__body">
-      プロダクト基本情報を読み込み中です…
-    </CardContent>
-  </Card>
-) : pbPatchError ? (
-  <Card className="mint-request-card">
-    <CardContent className="mint-request-card__body text-red-600">
-      {pbPatchError}
-    </CardContent>
-  </Card>
-) : (
-  // ★ 外側カードを removes
-  <ProductBlueprintCard
-    mode="view"
-    productName={productBlueprintCardView?.productName}
-    brand={productBlueprintCardView?.brand}
-    itemType={productBlueprintCardView?.itemType as any}
-    fit={productBlueprintCardView?.fit as any}
-    materials={productBlueprintCardView?.materials}
-    weight={productBlueprintCardView?.weight}
-    washTags={productBlueprintCardView?.washTags}
-    productIdTag={productBlueprintCardView?.productIdTag as any}
-  />
-)}
-
+        {pbPatchLoading ? (
+          <Card className="mint-request-card">
+            <CardContent className="mint-request-card__body">
+              プロダクト基本情報を読み込み中です…
+            </CardContent>
+          </Card>
+        ) : pbPatchError ? (
+          <Card className="mint-request-card">
+            <CardContent className="mint-request-card__body text-red-600">
+              {pbPatchError}
+            </CardContent>
+          </Card>
+        ) : productBlueprintCardView ? (
+          // 外側の Card は ProductBlueprintCard 内に任せる
+          <ProductBlueprintCard
+            mode="view"
+            productName={productBlueprintCardView.productName}
+            brand={productBlueprintCardView.brand}
+            itemType={productBlueprintCardView.itemType as any}
+            fit={productBlueprintCardView.fit as any}
+            materials={productBlueprintCardView.materials}
+            weight={productBlueprintCardView.weight}
+            washTags={productBlueprintCardView.washTags}
+            productIdTag={productBlueprintCardView.productIdTag as any}
+          />
+        ) : (
+          <Card className="mint-request-card">
+            <CardContent className="mint-request-card__body">
+              プロダクト基本情報が見つかりません。
+            </CardContent>
+          </Card>
+        )}
 
         {/* ② 検査結果カード */}
         {loading ? (

@@ -8,6 +8,7 @@ import type {
   InspectionBatch,
   InspectionItem,
   InspectionStatus as DomainInspectionStatus,
+  MintInspectionView,
 } from "../../domain/entity/inspections";
 
 // ===============================
@@ -22,8 +23,8 @@ export type InspectionStatus = DomainInspectionStatus;
 // backend/internal/domain/inspection/entity.go に対応
 export type InspectionItemDTO = InspectionItem;
 
-// inspections コレクション 1 ドキュメント分
-export type InspectionBatchDTO = InspectionBatch;
+// MintUsecase が返す MintInspectionView を、そのまま 1 行分 DTO として扱う
+export type InspectionBatchDTO = MintInspectionView;
 
 // ===============================
 // mintRequestManagement 画面向けの行型
@@ -76,7 +77,7 @@ function deriveMintStatus(
   return "planning";
 }
 
-// InspectionBatchDTO → 画面用 MintRequestRow への変換
+// InspectionBatchDTO(MintInspectionView) → 画面用 MintRequestRow への変換
 function mapInspectionToMintRow(dto: InspectionBatchDTO): MintRequestRow {
   const requestedAt = dto.requestedAt ?? null;
   const mintedAt = dto.mintedAt ?? null;
@@ -87,7 +88,7 @@ function mapInspectionToMintRow(dto: InspectionBatchDTO): MintRequestRow {
 
     tokenBlueprintId: dto.tokenBlueprintId ?? null,
 
-    // ★ バックエンドが InspectionBatch.productName に詰めてくれた値をそのまま利用
+    // ★ バックエンドが MintInspectionView.productName に詰めてくれた値をそのまま利用
     productName: dto.productName ?? null,
 
     mintQuantity: dto.totalPassed ?? 0,

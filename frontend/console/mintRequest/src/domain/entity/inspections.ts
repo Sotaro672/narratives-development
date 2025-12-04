@@ -92,16 +92,12 @@ export interface MintInspectionView extends InspectionBatch {
  * =======================================================*/
 
 /** InspectionStatus 妥当性チェック（Go の IsValidInspectionStatus に対応） */
-export function isValidInspectionStatus(
-  s: string,
-): s is InspectionStatus {
+export function isValidInspectionStatus(s: string): s is InspectionStatus {
   return s === "inspecting" || s === "completed";
 }
 
 /** InspectionResult 妥当性チェック（Go の IsValidInspectionResult に対応） */
-export function isValidInspectionResult(
-  r: string,
-): r is InspectionResult {
+export function isValidInspectionResult(r: string): r is InspectionResult {
   return (
     r === "notYet" ||
     r === "passed" ||
@@ -125,9 +121,7 @@ function isValidDateTimeString(value: string | null | undefined): boolean {
  *
  * 問題があればエラーメッセージ配列を返す。
  */
-export function validateInspectionBatch(
-  batch: InspectionBatch,
-): string[] {
+export function validateInspectionBatch(batch: InspectionBatch): string[] {
   const errors: string[] = [];
 
   // productionId
@@ -209,9 +203,7 @@ export function validateInspectionBatch(
 export function normalizeInspectionBatch(
   input: InspectionBatch,
 ): InspectionBatch {
-  const normalizeOpt = (
-    v: string | null | undefined,
-  ): string | null => {
+  const normalizeOpt = (v: string | null | undefined): string | null => {
     const t = v?.trim() ?? "";
     return t ? t : null;
   };
@@ -240,9 +232,7 @@ export function normalizeInspectionBatch(
 
   const errors = validateInspectionBatch(normalized);
   if (errors.length > 0) {
-    throw new Error(
-      `Invalid InspectionBatch: ${errors.join(", ")}`,
-    );
+    throw new Error(`Invalid InspectionBatch: ${errors.join(", ")}`);
   }
 
   return normalized;
