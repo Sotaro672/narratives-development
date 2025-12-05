@@ -84,7 +84,7 @@ export function useTokenBlueprintCreate() {
     // UIへ渡す値
     initialTokenBlueprint,
     assigneeName: assignee,
-
+    initialEditMode: true,
     // UIトリガー
     onEditAssignee: () => setAssignee(memberId),
     onClickAssignee: () => {}, // console.log 削除

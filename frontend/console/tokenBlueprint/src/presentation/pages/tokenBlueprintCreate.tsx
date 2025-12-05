@@ -1,6 +1,4 @@
 // frontend/tokenBlueprint/src/presentation/pages/tokenBlueprintCreate.tsx
-
-import * as React from "react";
 import PageStyle from "../../../../shell/src/layout/PageStyle/PageStyle";
 import AdminCard from "../../../../admin/src/presentation/components/AdminCard";
 import TokenBlueprintCard from "../components/tokenBlueprintCard";
@@ -22,14 +20,15 @@ export default function TokenBlueprintCreate() {
     onClickAssignee,
     onBack,
     onSave, // (input: Partial<TokenBlueprint>) => Promise<void> を想定
+    initialEditMode, // ★追加：edit モード制御
   } = useTokenBlueprintCreate();
 
   // TokenBlueprintCard 用の ViewModel / Handlers を構築
   const { vm, handlers } = useTokenBlueprintCard({
     initialTokenBlueprint,
-    initialBurnAt: "", // 必要なら useTokenBlueprintCreate 側から渡す形に拡張
+    initialBurnAt: "",
     initialIconUrl: undefined,
-    initialEditMode: true,
+    initialEditMode, // ★ useTokenBlueprintCreate から渡す
   });
 
   return (
@@ -37,8 +36,6 @@ export default function TokenBlueprintCreate() {
       layout="grid-2"
       title="トークン設計を作成"
       onBack={onBack}
-      // PageStyle の onSave 型は () => void 想定なので、
-      // 内部で onSave(Partial<TokenBlueprint>) を fire-and-forget で呼び出す
       onSave={() => {
         const input: Partial<TokenBlueprint> = {
           ...initialTokenBlueprint,
@@ -46,7 +43,7 @@ export default function TokenBlueprintCreate() {
           symbol: vm.symbol,
           brandId: vm.brandId,
           description: vm.description,
-          // burnAt や iconId などを保存したい場合はここで追加
+          // burnAt や iconId を保存したい場合はここへ追加
         };
 
         void onSave(input);

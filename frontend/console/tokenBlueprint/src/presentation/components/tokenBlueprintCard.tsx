@@ -40,6 +40,7 @@ export type TokenBlueprintCardHandlers = {
   onChangeBurnAt?: (v: string) => void;
   onUploadIcon?: () => void;
   onPreview?: () => void;
+  onToggleEditMode?: () => void;
 };
 
 export default function TokenBlueprintCard({

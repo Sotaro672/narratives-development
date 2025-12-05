@@ -39,7 +39,11 @@ export function useTokenBlueprintCard(params: {
   const [description, setDescription] = React.useState(tb.description ?? "");
   const [burnAt, setBurnAt] = React.useState(params.initialBurnAt ?? "");
   const [iconUrl] = React.useState(params.initialIconUrl ?? "");
-  const [isEditMode] = React.useState(params.initialEditMode ?? false);
+
+  // ⭐ 編集モード切り替え可能に変更
+  const [isEditMode, setIsEditMode] = React.useState(
+    params.initialEditMode ?? false
+  );
 
   const [brandOptions, setBrandOptions] = React.useState<
     { id: string; name: string }[]
@@ -114,6 +118,11 @@ export function useTokenBlueprintCard(params: {
 
     onPreview: () => {
       alert("プレビュー画面を開きます（モック）");
+    },
+
+    // ⭐ 新規追加：編集モード切り替え
+    onToggleEditMode: () => {
+      setIsEditMode((prev) => !prev);
     },
   };
 
