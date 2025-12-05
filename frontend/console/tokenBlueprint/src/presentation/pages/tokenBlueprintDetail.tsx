@@ -9,6 +9,9 @@ import TokenContentsCard from "../../../../tokenContents/src/presentation/compon
 import { TOKEN_BLUEPRINTS } from "../../infrastructure/mockdata/tokenBlueprint_mockdata";
 import type { TokenBlueprint } from "../../domain/entity/tokenBlueprint";
 
+// ★ 追加: TokenBlueprintCard 用ロジックフック
+import { useTokenBlueprintCard } from "../hook/useTokenBlueprintCard";
+
 export default function TokenBlueprintDetail() {
   const navigate = useNavigate();
   const { tokenBlueprintId } = useParams<{ tokenBlueprintId: string }>();
@@ -27,10 +30,10 @@ export default function TokenBlueprintDetail() {
     return TOKEN_BLUEPRINTS[0] as unknown as TokenBlueprint;
   }, [tokenBlueprintId]);
 
-// 戻るボタン（絶対パスで TokenBlueprintManagement に戻る）
-const handleBack = React.useCallback(() => {
-  navigate("/tokenBlueprint", { replace: true });
-}, [navigate]);
+  // 戻るボタン（絶対パスで TokenBlueprintManagement に戻る）
+  const handleBack = React.useCallback(() => {
+    navigate("/tokenBlueprint", { replace: true });
+  }, [navigate]);
 
   const handleSave = React.useCallback(() => {
     // TODO: TokenBlueprintCard の状態を集約して保存 API を呼ぶ
@@ -43,11 +46,20 @@ const handleBack = React.useCallback(() => {
     () => blueprint?.assigneeId ?? "",
   );
   const [createdBy] = React.useState(
-    () => blueprint?.createdBy ?? "",
+    () => (blueprint as any)?.createdBy ?? "",
   );
   const [createdAt] = React.useState(
-    () => blueprint?.createdAt ?? "",
+    () => (blueprint as any)?.createdAt ?? "",
   );
+
+  // ★ TokenBlueprintCard 用の ViewModel / Handlers を構築
+  //   - initialEditMode: false → デフォルトを view モードにする
+  const { vm, handlers } = useTokenBlueprintCard({
+    initialTokenBlueprint: (blueprint ?? {}) as Partial<TokenBlueprint>,
+    initialBurnAt: "",        // まだ burnAt を使っていないので空で OK
+    initialIconUrl: undefined,
+    initialEditMode: false,   // ★ view モードで呼び出し
+  });
 
   // モックが無い場合の簡易フォールバック
   if (!blueprint) {
@@ -73,11 +85,8 @@ const handleBack = React.useCallback(() => {
     >
       {/* 左カラム：トークン設計カード＋コンテンツビューア */}
       <div>
-        {/* TokenBlueprintCard に TokenBlueprint スキーマ準拠の初期値を渡す */}
-        <TokenBlueprintCard
-          initialEditMode
-          initialTokenBlueprint={blueprint}
-        />
+        {/* TokenBlueprintCard は vm / handlers で受ける */}
+        <TokenBlueprintCard vm={vm} handlers={handlers} />
 
         {/* contentFiles（ID配列）と整合。
             TokenContentsCard 側で ID → 実ファイル等を解決する想定。 */}
@@ -92,8 +101,8 @@ const handleBack = React.useCallback(() => {
       <AdminCard
         title="管理情報"
         assigneeName={assignee || blueprint.assigneeId}
-        createdByName={createdBy || blueprint.createdBy}
-        createdAt={createdAt || blueprint.createdAt}
+        createdByName={createdBy || (blueprint as any).createdBy}
+        createdAt={createdAt || (blueprint as any).createdAt}
         onEditAssignee={() => setAssignee("new-assignee-id")}
         onClickAssignee={() => console.log("assignee clicked:", assignee)}
       />

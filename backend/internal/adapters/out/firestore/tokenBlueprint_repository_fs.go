@@ -63,6 +63,35 @@ func (r *TokenBlueprintRepositoryFS) GetByID(ctx context.Context, id string) (*t
 	return &tb, nil
 }
 
+// GetNameByID returns only the Name field of a TokenBlueprint.
+func (r *TokenBlueprintRepositoryFS) GetNameByID(ctx context.Context, id string) (string, error) {
+	if r.Client == nil {
+		return "", errors.New("firestore client is nil")
+	}
+
+	id = strings.TrimSpace(id)
+	if id == "" {
+		return "", tbdom.ErrNotFound
+	}
+
+	snap, err := r.col().Doc(id).Get(ctx)
+	if status.Code(err) == codes.NotFound {
+		return "", tbdom.ErrNotFound
+	}
+	if err != nil {
+		return "", err
+	}
+
+	var raw struct {
+		Name string `firestore:"name"`
+	}
+	if err := snap.DataTo(&raw); err != nil {
+		return "", err
+	}
+
+	return strings.TrimSpace(raw.Name), nil
+}
+
 func (r *TokenBlueprintRepositoryFS) List(
 	ctx context.Context,
 	filter tbdom.Filter,
@@ -128,6 +157,33 @@ func (r *TokenBlueprintRepositoryFS) List(
 		Page:       pageNum,
 		PerPage:    perPage,
 	}, nil
+}
+
+// ListByCompanyID: companyId で限定した一覧取得。
+// 追加の BrandID / NameLike / SymbolLike フィルタは Filter を使う呼び出し側で行う想定。
+func (r *TokenBlueprintRepositoryFS) ListByCompanyID(
+	ctx context.Context,
+	companyID string,
+	page tbdom.Page,
+) (tbdom.PageResult, error) {
+	cid := strings.TrimSpace(companyID)
+	if cid == "" {
+		// companyId が空の場合は空ページを返す
+		pageNum, perPage, _ := fscommon.NormalizePage(page.Number, page.PerPage, 50, 200)
+		return tbdom.PageResult{
+			Items:      []tbdom.TokenBlueprint{},
+			TotalCount: 0,
+			TotalPages: 0,
+			Page:       pageNum,
+			PerPage:    perPage,
+		}, nil
+	}
+
+	filter := tbdom.Filter{
+		CompanyIDs: []string{cid},
+	}
+
+	return r.List(ctx, filter, page)
 }
 
 func (r *TokenBlueprintRepositoryFS) Count(ctx context.Context, filter tbdom.Filter) (int, error) {
@@ -625,7 +681,7 @@ func matchTBFilter(tb tbdom.TokenBlueprint, f tbdom.Filter) bool {
 	if len(f.BrandIDs) > 0 && !inList(tb.BrandID, f.BrandIDs) {
 		return false
 	}
-	// ★ 追加: companyId フィルタ
+	// companyId フィルタ
 	if len(f.CompanyIDs) > 0 && !inList(tb.CompanyID, f.CompanyIDs) {
 		return false
 	}

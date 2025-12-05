@@ -1,4 +1,3 @@
-// backend\internal\domain\tokenBlueprint\repository_port.go
 package tokenBlueprint
 
 import (
@@ -7,17 +6,16 @@ import (
 	"time"
 )
 
-// 契約（インターフェース）のみを定義します。
-// エンティティ TokenBlueprint は同パッケージの entity.go を参照してください。
-
-// Create 用入力（IDはリポジトリ側で採番可。CreatedAt/UpdatedAtはnilなら実装側で付与可）
+// ===============================
+// Create 用入力
+// ===============================
 type CreateTokenBlueprintInput struct {
 	Name        string `json:"name"`
 	Symbol      string `json:"symbol"`
 	BrandID     string `json:"brandId"`
 	CompanyID   string `json:"companyId"` // ★ 追加
 	Description string `json:"description"`
-	// IconID points to tokenIcon.TokenIcon primary key (token_icons.id). Optional.
+
 	IconID       *string  `json:"iconId,omitempty"`
 	ContentFiles []string `json:"contentFiles"`
 	AssigneeID   string   `json:"assigneeId"`
@@ -28,15 +26,15 @@ type CreateTokenBlueprintInput struct {
 	UpdatedBy string     `json:"updatedBy"`
 }
 
-// 部分更新入力（nilは未更新）
-// DeletedAt/DeletedBy はソフトデリート用途（Deleteで物理削除する実装でも可）
+// ===============================
+// Update 用入力
+// ===============================
 type UpdateTokenBlueprintInput struct {
 	Name        *string `json:"name,omitempty"`
 	Symbol      *string `json:"symbol,omitempty"`
 	BrandID     *string `json:"brandId,omitempty"`
 	Description *string `json:"description,omitempty"`
 
-	// IconID（空文字の扱いはユースケースで決定：null化等）
 	IconID       *string   `json:"iconId,omitempty"`
 	ContentFiles *[]string `json:"contentFiles,omitempty"`
 	AssigneeID   *string   `json:"assigneeId,omitempty"`
@@ -47,17 +45,19 @@ type UpdateTokenBlueprintInput struct {
 	DeletedBy *string    `json:"deletedBy,omitempty"`
 }
 
-// フィルタ/検索条件
+// ===============================
+// Filter（検索条件）
+// ===============================
 type Filter struct {
 	IDs         []string
 	BrandIDs    []string
-	CompanyIDs  []string // ★ 追加: companyId フィルタ
+	CompanyIDs  []string
 	AssigneeIDs []string
 	Symbols     []string
 
-	NameLike   string // 部分一致
-	SymbolLike string // 部分一致
-	HasIcon    *bool  // nil=全件, true=アイコンあり, false=なし
+	NameLike   string
+	SymbolLike string
+	HasIcon    *bool
 
 	CreatedFrom *time.Time
 	CreatedTo   *time.Time
@@ -65,9 +65,9 @@ type Filter struct {
 	UpdatedTo   *time.Time
 }
 
-// ▼▼▼ Sort / SortColumn / SortOrder は削除済み ▼▼▼
-
-// ページング
+// ===============================
+// Page / PageResult
+// ===============================
 type Page struct {
 	Number  int
 	PerPage int
@@ -81,17 +81,26 @@ type PageResult struct {
 	PerPage    int
 }
 
-// RepositoryPort はトークン設計ドメインのリポジトリ境界です。
+// ===============================
+// RepositoryPort（リポジトリ境界）
+// ===============================
 type RepositoryPort interface {
-	// 取得系
+	// 単体取得
 	GetByID(ctx context.Context, id string) (*TokenBlueprint, error)
 
-	// List: sort パラメータを削除
+	// ★ ID → Name の高速解決
+	GetNameByID(ctx context.Context, id string) (string, error)
+
+	// 一覧取得
 	List(ctx context.Context, filter Filter, page Page) (PageResult, error)
 
+	// 一覧件数
 	Count(ctx context.Context, filter Filter) (int, error)
 
-	// 変更系
+	// ★ companyId で限定した一覧
+	ListByCompanyID(ctx context.Context, companyID string, page Page) (PageResult, error)
+
+	// 作成・更新・削除
 	Create(ctx context.Context, in CreateTokenBlueprintInput) (*TokenBlueprint, error)
 	Update(ctx context.Context, id string, in UpdateTokenBlueprintInput) (*TokenBlueprint, error)
 	Delete(ctx context.Context, id string) error
@@ -100,13 +109,13 @@ type RepositoryPort interface {
 	IsSymbolUnique(ctx context.Context, symbol string, excludeID string) (bool, error)
 	IsNameUnique(ctx context.Context, name string, excludeID string) (bool, error)
 
-	// ストレージ（アイコン/コンテンツのアップロード）
+	// ストレージ
 	UploadIcon(ctx context.Context, fileName, contentType string, r io.Reader) (url string, err error)
 	UploadContentFile(ctx context.Context, fileName, contentType string, r io.Reader) (url string, err error)
 
-	// トランザクション境界（任意）
+	// トランザクション
 	WithTx(ctx context.Context, fn func(ctx context.Context) error) error
 
-	// 開発/テスト補助（任意）
+	// テスト/開発用リセット
 	Reset(ctx context.Context) error
 }

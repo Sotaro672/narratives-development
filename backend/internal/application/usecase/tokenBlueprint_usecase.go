@@ -1,4 +1,3 @@
-// backend/internal/application/usecase/tokenBlueprint_usecase.go
 package usecase
 
 import (
@@ -57,8 +56,8 @@ type CreateBlueprintRequest struct {
 	Description string
 
 	AssigneeID string
-	CreatedBy  string // ★ 追加: 作成者（memberId）
-	ActorID    string // 操作したユーザー（監査用 UpdatedBy などに利用）
+	CreatedBy  string // 作成者（memberId）
+	ActorID    string // 操作者（更新者・監査用）
 
 	Icon     *IconUpload
 	Contents []ContentUpload
@@ -117,9 +116,9 @@ func (u *TokenBlueprintUsecase) CreateWithUploads(ctx context.Context, in Create
 		AssigneeID:   strings.TrimSpace(in.AssigneeID),
 
 		CreatedAt: nil,
-		CreatedBy: strings.TrimSpace(in.CreatedBy), // ★ フロントから渡された createdBy を保存
+		CreatedBy: strings.TrimSpace(in.CreatedBy),
 		UpdatedAt: nil,
-		UpdatedBy: strings.TrimSpace(in.ActorID), // ★ 操作者（通常は同一でも OK）
+		UpdatedBy: strings.TrimSpace(in.ActorID),
 	})
 	if err != nil {
 		return nil, err
@@ -133,23 +132,44 @@ func (u *TokenBlueprintUsecase) GetByID(ctx context.Context, id string) (*tbdom.
 	return u.tbRepo.GetByID(ctx, strings.TrimSpace(id))
 }
 
-// sort を廃止し、List からも除去
-func (u *TokenBlueprintUsecase) List(ctx context.Context, filter tbdom.Filter, page tbdom.Page) (tbdom.PageResult, error) {
-	return u.tbRepo.List(ctx, filter, page)
-}
+// ==== ★ List / Filter / Count の廃止に伴い削除 ====
+// func (u *TokenBlueprintUsecase) List(...) { ... }
 
-// currentMember の companyId を指定して一覧取得するユースケース
+// companyID で tenant-scoped 一覧取得
 func (u *TokenBlueprintUsecase) ListByCompanyID(ctx context.Context, companyID string, page tbdom.Page) (tbdom.PageResult, error) {
 	cid := strings.TrimSpace(companyID)
 	if cid == "" {
 		return tbdom.PageResult{}, fmt.Errorf("companyId is empty")
 	}
 
-	filter := tbdom.Filter{
-		CompanyIDs: []string{cid},
+	return u.tbRepo.ListByCompanyID(ctx, cid, page)
+}
+
+// ==== ★ ID → Name をまとめて解決する便利関数 ====
+func (u *TokenBlueprintUsecase) ResolveNames(
+	ctx context.Context,
+	ids []string,
+) (map[string]string, error) {
+
+	result := make(map[string]string, len(ids))
+
+	for _, id := range ids {
+		id = strings.TrimSpace(id)
+		if id == "" {
+			continue
+		}
+
+		name, err := u.tbRepo.GetNameByID(ctx, id)
+		if err != nil {
+			// NotFound → 空文字
+			result[id] = ""
+			continue
+		}
+
+		result[id] = strings.TrimSpace(name)
 	}
 
-	return u.tbRepo.List(ctx, filter, page)
+	return result, nil
 }
 
 // Update
@@ -161,8 +181,8 @@ type UpdateBlueprintRequest struct {
 	BrandID      *string
 	Description  *string
 	AssigneeID   *string
-	IconID       *string   // set empty string "" to clear
-	ContentFiles *[]string // full replacement list (IDs)
+	IconID       *string   // "" を渡すと NULL にする
+	ContentFiles *[]string // 全置換
 	ActorID      string
 }
 
@@ -185,7 +205,6 @@ func (u *TokenBlueprintUsecase) Update(ctx context.Context, in UpdateBlueprintRe
 
 // Convenient helpers
 
-// ReplaceIconWithUpload uploads a new icon, creates TokenIcon, and sets IconID on the blueprint.
 func (u *TokenBlueprintUsecase) ReplaceIconWithUpload(ctx context.Context, blueprintID string, icon IconUpload, actorID string) (*tbdom.TokenBlueprint, error) {
 	url, size, err := u.tiRepo.UploadIcon(ctx, icon.FileName, icon.ContentType, icon.Reader)
 	if err != nil {
@@ -207,7 +226,6 @@ func (u *TokenBlueprintUsecase) ReplaceIconWithUpload(ctx context.Context, bluep
 	})
 }
 
-// AddContentsWithUploads uploads and creates contents, then appends their IDs to ContentFiles.
 func (u *TokenBlueprintUsecase) AddContentsWithUploads(ctx context.Context, blueprintID string, uploads []ContentUpload, actorID string) (*tbdom.TokenBlueprint, error) {
 	if len(uploads) == 0 {
 		return u.tbRepo.GetByID(ctx, strings.TrimSpace(blueprintID))
@@ -233,11 +251,11 @@ func (u *TokenBlueprintUsecase) AddContentsWithUploads(ctx context.Context, blue
 		}
 	}
 
-	// Fetch current blueprint to merge
 	current, err := u.tbRepo.GetByID(ctx, strings.TrimSpace(blueprintID))
 	if err != nil {
 		return nil, err
 	}
+
 	merged := append([]string{}, current.ContentFiles...)
 	merged = append(merged, ids...)
 	merged = dedupStrings(merged)
@@ -249,17 +267,15 @@ func (u *TokenBlueprintUsecase) AddContentsWithUploads(ctx context.Context, blue
 	})
 }
 
-// ClearIcon clears IconID.
 func (u *TokenBlueprintUsecase) ClearIcon(ctx context.Context, blueprintID string, actorID string) (*tbdom.TokenBlueprint, error) {
 	empty := ""
 	return u.tbRepo.Update(ctx, strings.TrimSpace(blueprintID), tbdom.UpdateTokenBlueprintInput{
-		IconID:    &empty, // normalizeEmptyToNil will set NULL
+		IconID:    &empty,
 		UpdatedAt: nil,
 		UpdatedBy: ptr(strings.TrimSpace(actorID)),
 	})
 }
 
-// RemoveContentIDs replaces ContentFiles with given list (caller computes new list).
 func (u *TokenBlueprintUsecase) ReplaceContentIDs(ctx context.Context, blueprintID string, contentIDs []string, actorID string) (*tbdom.TokenBlueprint, error) {
 	clean := dedupStrings(contentIDs)
 	return u.tbRepo.Update(ctx, strings.TrimSpace(blueprintID), tbdom.UpdateTokenBlueprintInput{
@@ -274,5 +290,3 @@ func (u *TokenBlueprintUsecase) ReplaceContentIDs(ctx context.Context, blueprint
 func (u *TokenBlueprintUsecase) Delete(ctx context.Context, id string) error {
 	return u.tbRepo.Delete(ctx, strings.TrimSpace(id))
 }
-
-// Helpers は common_usecase.go に移動しました（trimPtr を使用してください）。
