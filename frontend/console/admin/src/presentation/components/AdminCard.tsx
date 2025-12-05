@@ -19,6 +19,9 @@ import {
 
 import "../styles/admin.css";
 
+// ★ Admin 用 hook（内部で AdminService + getDisplayName を使用）
+import { useAdminCard as useAdminCardHook } from "../hook/useAdminCard";
+
 export type AdminAssigneeCandidate = {
   id: string;
   name: string;
@@ -44,13 +47,13 @@ export type AdminCardProps = {
   onEditAssignee?: () => void;
   onClickAssignee?: () => void;
 
-  /** ← ★ 追加 */
+  /** 表示モード（編集 or 閲覧） */
   mode?: "edit" | "view";
 };
 
 export const AdminCard: React.FC<AdminCardProps> = ({
   title = "管理情報",
-  assigneeName = "未設定",
+  assigneeName,
   assigneeCandidates,
   loadingMembers,
 
@@ -66,9 +69,42 @@ export const AdminCard: React.FC<AdminCardProps> = ({
   onEditAssignee,
   onClickAssignee,
 
-  mode = "view", // ★ 追加（デフォルト＝view）
+  mode = "view", // デフォルト＝view
 }) => {
   const isEdit = mode === "edit";
+
+  // ★ hook 側（AdminService + getDisplayName）の値
+  const {
+    assigneeName: hookAssigneeName,
+    assigneeCandidates: hookAssigneeCandidates,
+    loadingMembers: hookLoadingMembers,
+    openAssigneePopover: hookOpenAssigneePopover,
+    setOpenAssigneePopover: hookSetOpenAssigneePopover,
+    onSelectAssignee: hookOnSelectAssignee,
+  } = useAdminCardHook();
+
+  // ★ 担当者名の優先順位をモード別に変更
+  //   - edit モード: hook の displayName を最優先
+  //   - view モード: props を優先（既存画面との互換性）
+  const effectiveAssigneeName = isEdit
+    ? hookAssigneeName ?? assigneeName ?? "未設定"
+    : assigneeName ?? hookAssigneeName ?? "未設定";
+
+  const effectiveCandidates =
+    assigneeCandidates ?? hookAssigneeCandidates ?? [];
+
+  const effectiveLoading =
+    typeof loadingMembers === "boolean"
+      ? loadingMembers
+      : hookLoadingMembers;
+
+  const effectiveOpen =
+    typeof openAssigneePopover === "boolean"
+      ? openAssigneePopover
+      : hookOpenAssigneePopover;
+
+  const effectiveSetOpen =
+    setOpenAssigneePopover ?? hookSetOpenAssigneePopover;
 
   const handleTriggerClick = () => {
     if (!isEdit) return;
@@ -76,13 +112,17 @@ export const AdminCard: React.FC<AdminCardProps> = ({
     onClickAssignee?.();
     onEditAssignee?.();
 
-    if (typeof openAssigneePopover === "boolean" && setOpenAssigneePopover) {
-      setOpenAssigneePopover(!openAssigneePopover);
+    if (typeof effectiveOpen === "boolean" && effectiveSetOpen) {
+      effectiveSetOpen(!effectiveOpen);
     }
   };
 
   const handleSelect = (id: string) => {
     if (!isEdit) return;
+
+    // まず hook 側の選択処理
+    hookOnSelectAssignee?.(id);
+    // 親コンポーネントへも通知
     onSelectAssignee?.(id);
   };
 
@@ -102,11 +142,11 @@ export const AdminCard: React.FC<AdminCardProps> = ({
           {/* ▼▼▼ view モード：文字列だけ表示 ▼▼▼ */}
           {!isEdit && (
             <div className="text-sm text-slate-800 py-1">
-              {assigneeName || "未設定"}
+              {effectiveAssigneeName || "未設定"}
             </div>
           )}
 
-          {/* ▼▼▼ edit モード：従来どおりポップオーバー付き ▼▼▼ */}
+          {/* ▼▼▼ edit モード：ポップオーバー付き ▼▼▼ */}
           {isEdit && (
             <Popover>
               <PopoverTrigger>
@@ -117,23 +157,23 @@ export const AdminCard: React.FC<AdminCardProps> = ({
                   className="w-full justify-between admin-card__assignee-btn"
                   onClick={handleTriggerClick}
                 >
-                  <span>{assigneeName || "未設定"}</span>
+                  <span>{effectiveAssigneeName || "未設定"}</span>
                   <span className="text-[11px] text-slate-400" />
                 </Button>
               </PopoverTrigger>
 
               <PopoverContent className="p-2 space-y-1 admin-card__popover">
-                {loadingMembers && (
+                {effectiveLoading && (
                   <p className="text-xs text-slate-400">
                     担当者を読み込み中です…
                   </p>
                 )}
 
-                {!loadingMembers &&
-                  assigneeCandidates &&
-                  assigneeCandidates.length > 0 && (
+                {!effectiveLoading &&
+                  effectiveCandidates &&
+                  effectiveCandidates.length > 0 && (
                     <div className="space-y-1">
-                      {assigneeCandidates.map((c) => (
+                      {effectiveCandidates.map((c) => (
                         <button
                           key={c.id}
                           type="button"
@@ -146,8 +186,9 @@ export const AdminCard: React.FC<AdminCardProps> = ({
                     </div>
                   )}
 
-                {!loadingMembers &&
-                  (!assigneeCandidates || assigneeCandidates.length === 0) && (
+                {!effectiveLoading &&
+                  (!effectiveCandidates ||
+                    effectiveCandidates.length === 0) && (
                     <p className="text-xs text-slate-400">
                       担当者候補がありません。
                     </p>

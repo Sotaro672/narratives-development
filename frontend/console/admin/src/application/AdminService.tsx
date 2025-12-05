@@ -34,8 +34,6 @@ export function buildAssigneeCandidates(
   items: MemberWithDisplayName[],
 ): { candidates: AssigneeCandidate[]; nameMap: Record<string, string> } {
 
-  console.log("[AdminService.buildAssigneeCandidates] raw items:", items);
-
   const candidates: AssigneeCandidate[] = items.map((m: MemberWithDisplayName) => {
     const full =
       (m.displayName ?? "").trim() ||
@@ -51,9 +49,6 @@ export function buildAssigneeCandidates(
     nameMap[c.id] = c.name;
   });
 
-  console.log("[AdminService.buildAssigneeCandidates] candidates:", candidates);
-  console.log("[AdminService.buildAssigneeCandidates] nameMap:", nameMap);
-
   return { candidates, nameMap };
 }
 
@@ -67,7 +62,6 @@ export async function fetchAssigneeCandidatesForCurrentCompany(): Promise<{
 }> {
   const fbUser = auth.currentUser;
   if (!fbUser) {
-    console.warn("[AdminService] No Firebase user — returning empty results");
     return { candidates: [], nameMap: {} };
   }
 
@@ -76,17 +70,10 @@ export async function fetchAssigneeCandidatesForCurrentCompany(): Promise<{
   const page: Page = { ...DEFAULT_PAGE, number: 1, perPage: 200 };
   const filter: MemberFilter = {};
 
-  console.log("[AdminService] Fetching members via fetchMemberListWithToken ...");
-
   // ★ listMembersByCompanyId → displayName 付きレスポンスを取得する想定
   const { items } = await fetchMemberListWithToken(token, page, filter);
 
-  console.log("[AdminService] fetchMemberListWithToken result:", items);
-
   const { candidates, nameMap } = buildAssigneeCandidates(items as MemberWithDisplayName[]);
-
-  console.log("[AdminService] Final assignee candidates:", candidates);
-  console.log("[AdminService] Final nameMap:", nameMap);
 
   return { candidates, nameMap };
 }
