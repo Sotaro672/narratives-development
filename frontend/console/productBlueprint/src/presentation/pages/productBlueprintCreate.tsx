@@ -155,6 +155,7 @@ export default function ProductBlueprintCreate() {
       </div>
 
       <AdminCard
+        mode="edit"
         assigneeName={assigneeName || "未設定"}
         onEditAssignee={onEditAssignee}
         onClickAssignee={onClickAssignee}

@@ -29,7 +29,7 @@ export default function TokenBlueprintDetail() {
 
 // 戻るボタン（絶対パスで TokenBlueprintManagement に戻る）
 const handleBack = React.useCallback(() => {
-  navigate("/token-blueprint", { replace: true });
+  navigate("/tokenBlueprint", { replace: true });
 }, [navigate]);
 
   const handleSave = React.useCallback(() => {

@@ -28,7 +28,7 @@ export default function TokenBlueprintCreate() {
 
 // 戻るボタン（絶対パスで TokenBlueprintManagement に戻る）
 const handleBack = React.useCallback(() => {
-  navigate("/token-blueprint", { replace: true });
+  navigate("/tokenBlueprint", { replace: true });
 }, [navigate]);
 
   // 保存ボタン（実際はフォーム内容を収集して API へ送信する想定）
@@ -78,6 +78,7 @@ const handleBack = React.useCallback(() => {
       {/* 右カラム：管理情報 */}
       <AdminCard
         title="管理情報"
+        mode="edit"
         assigneeName={assignee}
         onEditAssignee={() => setAssignee("new-assignee-id")}
         onClickAssignee={() => console.log("assignee clicked:", assignee)}
