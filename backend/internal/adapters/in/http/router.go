@@ -68,6 +68,9 @@ type RouterDeps struct {
 	FirebaseAuth *firebaseauth.Client
 	MemberRepo   memdom.Repository
 
+	// ★ member.Service（表示名解決用）
+	MemberService *memdom.Service
+
 	// Message 用の Firestore Repository
 	MessageRepo *msgrepo.MessageRepositoryFS
 }
@@ -258,7 +261,8 @@ func NewRouter(deps RouterDeps) http.Handler {
 	// Token Blueprints
 	// ================================
 	if deps.TokenBlueprintUC != nil {
-		tbH := handlers.NewTokenBlueprintHandler(deps.TokenBlueprintUC)
+		// ★ 第 2 引数に member.Service を DI 経由で渡す
+		tbH := handlers.NewTokenBlueprintHandler(deps.TokenBlueprintUC, deps.MemberService)
 
 		var h http.Handler = tbH
 		if authMw != nil {

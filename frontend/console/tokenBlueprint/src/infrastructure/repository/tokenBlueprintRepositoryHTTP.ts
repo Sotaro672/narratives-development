@@ -58,7 +58,7 @@ export interface CreateTokenBlueprintPayload {
   companyId?: string;
   description: string;
   assigneeId: string;
-  createdBy: string;            // ← ★追加
+  createdBy: string; // ← 作成者 memberId
   iconId?: string | null;
   contentFiles: string[];
 }
@@ -112,7 +112,7 @@ function normalizePageResult(raw: any): TokenBlueprintPageResult {
 // ---------------------------------------------------------
 
 /**
- * 一覧取得
+ * 一覧取得（汎用）
  */
 export async function fetchTokenBlueprints(
   params?: { page?: number; perPage?: number },
@@ -133,6 +133,38 @@ export async function fetchTokenBlueprints(
 
   const raw = await handleJsonResponse<any>(res);
   return normalizePageResult(raw);
+}
+
+/**
+ * currentMember.companyId に紐づくトークン設計一覧を取得
+ *
+ * - backend 側では AuthMiddleware により context に積まれた companyId を使用して
+ *   ListByCompanyID usecase が呼ばれる
+ * - ここでは companyId 引数は「空のときは呼ばない」ためのガード用途のみ
+ * - ページングは一覧用途として 200 件固定とし、items だけ返す
+ */
+export async function listTokenBlueprintsByCompanyId(
+  companyId: string,
+): Promise<TokenBlueprint[]> {
+  const cid = companyId.trim();
+  if (!cid) return [];
+
+  const token = await getIdTokenOrThrow();
+
+  const url = new URL(`${API_BASE}/token-blueprints`);
+  // companyId は backend が context から解決するためクエリでは渡さない
+  url.searchParams.set("perPage", "200");
+
+  const res = await fetch(url.toString(), {
+    method: "GET",
+    headers: {
+      Authorization: `Bearer ${token}`,
+    },
+  });
+
+  const raw = await handleJsonResponse<any>(res);
+  const page = normalizePageResult(raw);
+  return page.items;
 }
 
 /**
@@ -170,7 +202,7 @@ export async function createTokenBlueprint(
     brandId: payload.brandId.trim(),
     description: payload.description.trim(),
     assigneeId: payload.assigneeId.trim(),
-    createdBy: payload.createdBy.trim(),          // ← ★ここで backend に渡す
+    createdBy: payload.createdBy.trim(), // backend で createdByName 解決に利用
     iconId:
       payload.iconId && payload.iconId.trim()
         ? payload.iconId.trim()
@@ -178,6 +210,8 @@ export async function createTokenBlueprint(
     contentFiles: (payload.contentFiles ?? [])
       .map((x) => x.trim())
       .filter(Boolean),
+    // companyId は backend が context から解決するため必須ではないが、
+    // 将来の拡張に備えて送ることは許容（backend 側では無視される）
     companyId: payload.companyId?.trim(),
   };
 

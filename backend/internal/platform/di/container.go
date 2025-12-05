@@ -332,6 +332,9 @@ type Container struct {
 	MemberRepo  memdom.Repository
 	MessageRepo *fs.MessageRepositoryFS
 
+	// ★ member.Service（表示名解決用）を保持
+	MemberService *memdom.Service
+
 	// ★ History Repositories
 	ProductBlueprintHistoryRepo *fs.ProductBlueprintHistoryRepositoryFS
 	ModelHistoryRepo            *fs.ModelHistoryRepositoryFS
@@ -613,6 +616,9 @@ func NewContainer(ctx context.Context) (*Container, error) {
 		MemberRepo:   memberRepo,
 		MessageRepo:  messageRepo,
 
+		// member.Service
+		MemberService: memberSvc,
+
 		// History Repos
 		ProductBlueprintHistoryRepo: productBlueprintHistoryRepo,
 		ModelHistoryRepo:            modelHistoryRepo,
@@ -701,7 +707,7 @@ func (c *Container) RouterDeps() httpin.RouterDeps {
 		ProductUC:    c.ProductUC,
 		InspectionUC: c.InspectionUC,
 
-		// ★ ここを追加：Mint 用 Usecase
+		// ★ Mint 用 Usecase
 		MintUC: c.MintUC,
 
 		// 招待関連 Usecase
@@ -714,6 +720,9 @@ func (c *Container) RouterDeps() httpin.RouterDeps {
 		// AuthMiddleware 用
 		FirebaseAuth: c.FirebaseAuth,
 		MemberRepo:   c.MemberRepo,
+
+		// ★ TokenBlueprintHandler で assigneeName 解決に使う
+		MemberService: c.MemberService,
 
 		// MessageHandler 用
 		MessageRepo: c.MessageRepo,

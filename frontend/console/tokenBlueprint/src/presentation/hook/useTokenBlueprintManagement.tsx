@@ -1,19 +1,16 @@
 // frontend/console/tokenBlueprint/src/presentation/hook/useTokenBlueprintManagement.tsx
 
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { TOKEN_BLUEPRINTS } from "../../infrastructure/mockdata/tokenBlueprint_mockdata";
+import { useAuth } from "../../../../shell/src/auth/presentation/hook/useCurrentMember";
 import type { TokenBlueprint } from "../../../../shell/src/shared/types/tokenBlueprint";
-
-/** ISO8601 → timestamp（不正値は 0 扱い） */
-const toTs = (iso: string): number => {
-  if (!iso) return 0;
-  const t = Date.parse(iso);
-  return Number.isNaN(t) ? 0 : t;
-};
-
-type SortKey = "createdAt" | null;
-type SortDir = "asc" | "desc" | null;
+import {
+  SortKey,
+  SortDir,
+  fetchTokenBlueprintsForCompany,
+  buildOptionsFromTokenBlueprints,
+  filterAndSortTokenBlueprints,
+} from "../../application/tokenBlueprintManagementService";
 
 export type UseTokenBlueprintManagementResult = {
   rows: TokenBlueprint[];
@@ -33,11 +30,16 @@ export type UseTokenBlueprintManagementResult = {
 };
 
 /**
- * TokenBlueprint Management ページ用ロジック
+ * TokenBlueprint Management ページ用ロジック（Hook）
+ * - currentMember.companyId に紐づく TokenBlueprint 一覧を service 経由で取得
  * - フィルタ / ソート / 行クリック / 作成ボタン など UI 以外の要素を集約
  */
 export function useTokenBlueprintManagement(): UseTokenBlueprintManagementResult {
   const navigate = useNavigate();
+  const { currentMember } = useAuth();
+
+  // 一覧データ
+  const [rows, setRows] = useState<TokenBlueprint[]>([]);
 
   // フィルタ状態（brandId / assigneeId ベース）
   const [brandFilter, setBrandFilter] = useState<string[]>([]);
@@ -47,48 +49,41 @@ export function useTokenBlueprintManagement(): UseTokenBlueprintManagementResult
   const [sortKey, setSortKey] = useState<SortKey>(null);
   const [sortDir, setSortDir] = useState<SortDir>(null);
 
-  // オプション（brandId / assigneeId から算出）
-  const brandOptions = useMemo(
-    () =>
-      Array.from(new Set(TOKEN_BLUEPRINTS.map((r) => r.brandId))).map(
-        (v) => ({
-          value: v,
-          label: v,
-        }),
-      ),
-    [],
+  // ─────────────────────────────
+  // データ取得: ListByCompanyID usecase を叩く（service に委譲）
+  // ─────────────────────────────
+  useEffect(() => {
+    const companyId = currentMember?.companyId;
+    if (!companyId) return;
+
+    (async () => {
+      try {
+        const result = await fetchTokenBlueprintsForCompany(companyId);
+        setRows(result);
+      } catch (e) {
+        console.error("[useTokenBlueprintManagement] fetch error:", e);
+        setRows([]);
+      }
+    })();
+  }, [currentMember?.companyId]);
+
+  // オプション（brandId / assigneeId から算出）: service に委譲
+  const { brandOptions, assigneeOptions } = useMemo(
+    () => buildOptionsFromTokenBlueprints(rows),
+    [rows],
   );
 
-  const assigneeOptions = useMemo(
+  // フィルタ + ソート適用後の行: service に委譲
+  const filteredRows: TokenBlueprint[] = useMemo(
     () =>
-      Array.from(new Set(TOKEN_BLUEPRINTS.map((r) => r.assigneeId))).map(
-        (v) => ({
-          value: v,
-          label: v,
-        }),
-      ),
-    [],
+      filterAndSortTokenBlueprints(rows, {
+        brandFilter,
+        assigneeFilter,
+        sortKey,
+        sortDir,
+      }),
+    [rows, brandFilter, assigneeFilter, sortKey, sortDir],
   );
-
-  // フィルタ + ソート適用後の行
-  const rows: TokenBlueprint[] = useMemo(() => {
-    let data = TOKEN_BLUEPRINTS.filter(
-      (r) =>
-        (brandFilter.length === 0 || brandFilter.includes(r.brandId)) &&
-        (assigneeFilter.length === 0 ||
-          assigneeFilter.includes(r.assigneeId)),
-    );
-
-    if (sortKey && sortDir) {
-      data = [...data].sort((a, b) => {
-        const av = toTs(a[sortKey]);
-        const bv = toTs(b[sortKey]);
-        return sortDir === "asc" ? av - bv : bv - av;
-      });
-    }
-
-    return data;
-  }, [brandFilter, assigneeFilter, sortKey, sortDir]);
 
   // 行クリックで詳細へ（id を使用）
   const handleRowClick = useCallback(
@@ -127,7 +122,7 @@ export function useTokenBlueprintManagement(): UseTokenBlueprintManagementResult
   );
 
   return {
-    rows,
+    rows: filteredRows,
     brandOptions,
     assigneeOptions,
     brandFilter,

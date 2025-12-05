@@ -2,24 +2,31 @@
 package handlers
 
 import (
+	"context"
 	"encoding/json"
 	"log"
 	"net/http"
 	"strconv"
 	"strings"
+	"time"
 
 	uc "narratives/internal/application/usecase"
+	memdom "narratives/internal/domain/member"
 	tbdom "narratives/internal/domain/tokenBlueprint"
 )
 
 // TokenBlueprintHandler handles /token-blueprints endpoints (list/get/create/update/delete).
 type TokenBlueprintHandler struct {
-	uc *uc.TokenBlueprintUsecase
+	uc     *uc.TokenBlueprintUsecase
+	memSvc *memdom.Service
 }
 
 // NewTokenBlueprintHandler initializes the HTTP handler.
-func NewTokenBlueprintHandler(ucase *uc.TokenBlueprintUsecase) http.Handler {
-	return &TokenBlueprintHandler{uc: ucase}
+func NewTokenBlueprintHandler(ucase *uc.TokenBlueprintUsecase, memSvc *memdom.Service) http.Handler {
+	return &TokenBlueprintHandler{
+		uc:     ucase,
+		memSvc: memSvc,
+	}
 }
 
 // リクエスト DTO
@@ -43,6 +50,74 @@ type updateTokenBlueprintRequest struct {
 	AssigneeID   *string   `json:"assigneeId,omitempty"`
 	IconID       *string   `json:"iconId,omitempty"`
 	ContentFiles *[]string `json:"contentFiles,omitempty"`
+}
+
+// レスポンス DTO（assigneeName を含めて画面に渡す）
+type tokenBlueprintResponse struct {
+	ID           string   `json:"id"`
+	Name         string   `json:"name"`
+	Symbol       string   `json:"symbol"`
+	BrandID      string   `json:"brandId"`
+	CompanyID    string   `json:"companyId"`
+	Description  string   `json:"description"`
+	IconID       *string  `json:"iconId,omitempty"`
+	ContentFiles []string `json:"contentFiles"`
+	AssigneeID   string   `json:"assigneeId"`
+	AssigneeName string   `json:"assigneeName"` // ★ member.Service で解決した表示名
+
+	CreatedAt time.Time `json:"createdAt"`
+	CreatedBy string    `json:"createdBy"`
+	UpdatedAt time.Time `json:"updatedAt"`
+	UpdatedBy string    `json:"updatedBy"`
+}
+
+type tokenBlueprintPageResponse struct {
+	Items      []tokenBlueprintResponse `json:"items"`
+	TotalCount int                      `json:"totalCount"`
+	TotalPages int                      `json:"totalPages"`
+	Page       int                      `json:"page"`
+	PerPage    int                      `json:"perPage"`
+}
+
+// assigneeId → assigneeName 解決ヘルパー
+func (h *TokenBlueprintHandler) resolveAssigneeName(ctx context.Context, assigneeID string) string {
+	id := strings.TrimSpace(assigneeID)
+	if id == "" || h.memSvc == nil {
+		return ""
+	}
+	name, err := h.memSvc.GetNameLastFirstByID(ctx, id)
+	if err != nil {
+		// 名前が取れなくても致命的ではないので空文字で返す
+		return ""
+	}
+	return name
+}
+
+// ドメイン TokenBlueprint → レスポンス DTO 変換
+func (h *TokenBlueprintHandler) toResponse(ctx context.Context, tb *tbdom.TokenBlueprint) tokenBlueprintResponse {
+	if tb == nil {
+		return tokenBlueprintResponse{}
+	}
+
+	assigneeName := h.resolveAssigneeName(ctx, tb.AssigneeID)
+
+	return tokenBlueprintResponse{
+		ID:           tb.ID,
+		Name:         tb.Name,
+		Symbol:       tb.Symbol,
+		BrandID:      tb.BrandID,
+		CompanyID:    tb.CompanyID,
+		Description:  tb.Description,
+		IconID:       tb.IconID,
+		ContentFiles: tb.ContentFiles,
+		AssigneeID:   tb.AssigneeID,
+		AssigneeName: assigneeName,
+
+		CreatedAt: tb.CreatedAt,
+		CreatedBy: tb.CreatedBy,
+		UpdatedAt: tb.UpdatedAt,
+		UpdatedBy: tb.UpdatedBy,
+	}
 }
 
 // ServeHTTP routes requests.
@@ -151,8 +226,10 @@ func (h *TokenBlueprintHandler) create(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	resp := h.toResponse(ctx, tb)
+
 	w.WriteHeader(http.StatusCreated)
-	_ = json.NewEncoder(w).Encode(tb)
+	_ = json.NewEncoder(w).Encode(resp)
 }
 
 // GET /token-blueprints/{id}
@@ -171,7 +248,9 @@ func (h *TokenBlueprintHandler) get(w http.ResponseWriter, r *http.Request, id s
 		writeTokenBlueprintErr(w, err)
 		return
 	}
-	_ = json.NewEncoder(w).Encode(tb)
+
+	resp := h.toResponse(ctx, tb)
+	_ = json.NewEncoder(w).Encode(resp)
 }
 
 // GET /token-blueprints （currentMember.companyId で絞り込み）
@@ -210,7 +289,21 @@ func (h *TokenBlueprintHandler) list(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	_ = json.NewEncoder(w).Encode(result)
+	items := make([]tokenBlueprintResponse, 0, len(result.Items))
+	for i := range result.Items {
+		tb := &result.Items[i]
+		items = append(items, h.toResponse(ctx, tb))
+	}
+
+	resp := tokenBlueprintPageResponse{
+		Items:      items,
+		TotalCount: result.TotalCount,
+		TotalPages: result.TotalPages,
+		Page:       result.Page,
+		PerPage:    result.PerPage,
+	}
+
+	_ = json.NewEncoder(w).Encode(resp)
 }
 
 // PATCH/PUT /token-blueprints/{id}
@@ -249,7 +342,8 @@ func (h *TokenBlueprintHandler) update(w http.ResponseWriter, r *http.Request, i
 		return
 	}
 
-	_ = json.NewEncoder(w).Encode(tb)
+	resp := h.toResponse(ctx, tb)
+	_ = json.NewEncoder(w).Encode(resp)
 }
 
 // DELETE /token-blueprints/{id}

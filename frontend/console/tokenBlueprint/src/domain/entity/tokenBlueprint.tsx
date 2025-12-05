@@ -29,13 +29,17 @@ export interface ContentFile {
  * - 日付は ISO8601 文字列として表現
  * - camelCase 命名に揃える
  * - contentFiles は添付ファイルなどの ID 配列
+ *
+ * ※ assigneeName / createdByName は backend 側で Member 名を解決した
+ *    「表示用の派生フィールド」として扱う（ドメイン永続フィールドではない）。
  */
 export interface TokenBlueprint {
   id: string;
   name: string;
   symbol: string; // /^[A-Z0-9]{1,10}$/ を想定
   brandId: string;
-  companyId: string; // ★ 追加: テナント単位
+  companyId: string; // ★ テナント単位
+
   description: string;
 
   /** token_icons 等の ID（任意） */
@@ -47,9 +51,15 @@ export interface TokenBlueprint {
   /** 担当者 Member ID（必須） */
   assigneeId: string;
 
+  /** 担当者の表示名（member.Service.GetNameLastFirstByID で解決された値） */
+  assigneeName?: string;
+
   /** 作成情報 */
   createdAt: string; // ISO8601
   createdBy: string;
+
+  /** 作成者の表示名（member.Service で解決された値） */
+  createdByName?: string;
 
   /** 更新情報 */
   updatedAt: string; // ISO8601
@@ -65,9 +75,7 @@ export interface TokenBlueprint {
  * =======================================================*/
 
 /** ContentFileType の妥当性チェック */
-export function isValidContentFileType(
-  t: string
-): t is ContentFileType {
+export function isValidContentFileType(t: string): t is ContentFileType {
   return t === "image" || t === "video" || t === "pdf" || t === "document";
 }
 
@@ -78,7 +86,9 @@ export function validateContentFile(file: ContentFile): string[] {
   if (!file.id?.trim()) errors.push("contentFile.id is required");
   if (!file.name?.trim()) errors.push("contentFile.name is required");
   if (!isValidContentFileType(file.type)) {
-    errors.push("contentFile.type must be one of 'image' | 'video' | 'pdf' | 'document'");
+    errors.push(
+      "contentFile.type must be one of 'image' | 'video' | 'pdf' | 'document'",
+    );
   }
   if (file.size < 0) {
     errors.push("contentFile.size must be >= 0");
@@ -99,7 +109,7 @@ export function validateTokenBlueprint(tb: TokenBlueprint): string[] {
     errors.push("symbol must match ^[A-Z0-9]{1,10}$");
   }
   if (!tb.brandId?.trim()) errors.push("brandId is required");
-  if (!tb.companyId?.trim()) errors.push("companyId is required"); // ★ 追加
+  if (!tb.companyId?.trim()) errors.push("companyId is required");
   if (!tb.description?.trim()) errors.push("description is required");
   if (!tb.assigneeId?.trim()) errors.push("assigneeId is required");
   if (!tb.createdBy?.trim()) errors.push("createdBy is required");
@@ -144,16 +154,17 @@ export function normalizeContentFiles(ids: string[]): string[] {
  * - 文字列トリム
  * - contentFiles 正規化
  * - iconId の空文字 → null
+ *
+ * assigneeName / createdByName は backend 側で解決される派生値のため、
+ * input には含めない。
  */
 export function createTokenBlueprint(
-  input: Omit<TokenBlueprint, "contentFiles"> & {
+  input: Omit<TokenBlueprint, "contentFiles" | "assigneeName" | "createdByName"> & {
     contentFiles?: string[];
-  }
+  },
 ): TokenBlueprint {
   const iconId =
-    input.iconId && input.iconId.trim()
-      ? input.iconId.trim()
-      : null;
+    input.iconId && input.iconId.trim() ? input.iconId.trim() : null;
 
   return {
     ...input,
