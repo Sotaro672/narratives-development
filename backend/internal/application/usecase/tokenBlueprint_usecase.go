@@ -53,11 +53,12 @@ type CreateBlueprintRequest struct {
 	Name        string
 	Symbol      string
 	BrandID     string
-	CompanyID   string // ★ 追加: テナント
+	CompanyID   string // テナント
 	Description string
 
 	AssigneeID string
-	ActorID    string // use for CreatedBy / UpdatedBy
+	CreatedBy  string // ★ 追加: 作成者（memberId）
+	ActorID    string // 操作したユーザー（監査用 UpdatedBy などに利用）
 
 	Icon     *IconUpload
 	Contents []ContentUpload
@@ -109,16 +110,16 @@ func (u *TokenBlueprintUsecase) CreateWithUploads(ctx context.Context, in Create
 		Name:         strings.TrimSpace(in.Name),
 		Symbol:       strings.TrimSpace(in.Symbol),
 		BrandID:      strings.TrimSpace(in.BrandID),
-		CompanyID:    strings.TrimSpace(in.CompanyID), // ★ 追加
+		CompanyID:    strings.TrimSpace(in.CompanyID),
 		Description:  strings.TrimSpace(in.Description),
 		IconID:       iconIDPtr,
 		ContentFiles: contentIDs,
 		AssigneeID:   strings.TrimSpace(in.AssigneeID),
 
 		CreatedAt: nil,
-		CreatedBy: strings.TrimSpace(in.ActorID),
+		CreatedBy: strings.TrimSpace(in.CreatedBy), // ★ フロントから渡された createdBy を保存
 		UpdatedAt: nil,
-		UpdatedBy: strings.TrimSpace(in.ActorID),
+		UpdatedBy: strings.TrimSpace(in.ActorID), // ★ 操作者（通常は同一でも OK）
 	})
 	if err != nil {
 		return nil, err
@@ -137,7 +138,7 @@ func (u *TokenBlueprintUsecase) List(ctx context.Context, filter tbdom.Filter, p
 	return u.tbRepo.List(ctx, filter, page)
 }
 
-// ★ 追加: currentMember の companyId を指定して一覧取得するユースケース
+// currentMember の companyId を指定して一覧取得するユースケース
 func (u *TokenBlueprintUsecase) ListByCompanyID(ctx context.Context, companyID string, page tbdom.Page) (tbdom.PageResult, error) {
 	cid := strings.TrimSpace(companyID)
 	if cid == "" {

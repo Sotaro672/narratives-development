@@ -1,7 +1,9 @@
+// backend/internal/adapters/in/http/handlers/tokenBlueprint_handler.go
 package handlers
 
 import (
 	"encoding/json"
+	"log"
 	"net/http"
 	"strconv"
 	"strings"
@@ -23,12 +25,12 @@ func NewTokenBlueprintHandler(ucase *uc.TokenBlueprintUsecase) http.Handler {
 // リクエスト DTO
 
 type createTokenBlueprintRequest struct {
-	Name        string `json:"name"`
-	Symbol      string `json:"symbol"`
-	BrandID     string `json:"brandId"`
-	Description string `json:"description"`
-	AssigneeID  string `json:"assigneeId"`
-	// 将来用: contentFiles / iconId は別エンドポイント等で扱う想定
+	Name         string   `json:"name"`
+	Symbol       string   `json:"symbol"`
+	BrandID      string   `json:"brandId"`
+	Description  string   `json:"description"`
+	AssigneeID   string   `json:"assigneeId"`
+	CreatedBy    string   `json:"createdBy"` // ★ 追加: 作成者（memberId）
 	ContentFiles []string `json:"contentFiles,omitempty"`
 	IconID       *string  `json:"iconId,omitempty"`
 }
@@ -96,33 +98,53 @@ func (h *TokenBlueprintHandler) create(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// 簡易バリデーション（詳細はドメイン層で再検証）
+	// ★ デバッグ用ログ：実際に backend でどう見えているか確認
+	log.Printf(
+		"[TokenBlueprintHandler.create] raw req: name=%q symbol=%q brandId=%q assigneeId=%q createdBy=%q",
+		req.Name, req.Symbol, req.BrandID, req.AssigneeID, req.CreatedBy,
+	)
+
+	// -----------------------------------------
+	// description を必須チェックから除外したバリデーション
+	// -----------------------------------------
 	if strings.TrimSpace(req.Name) == "" ||
 		strings.TrimSpace(req.Symbol) == "" ||
 		strings.TrimSpace(req.BrandID) == "" ||
-		strings.TrimSpace(req.Description) == "" ||
 		strings.TrimSpace(req.AssigneeID) == "" {
+		log.Printf(
+			"[TokenBlueprintHandler.create] missing required fields: name=%q symbol=%q brandId=%q assigneeId=%q",
+			strings.TrimSpace(req.Name),
+			strings.TrimSpace(req.Symbol),
+			strings.TrimSpace(req.BrandID),
+			strings.TrimSpace(req.AssigneeID),
+		)
 		w.WriteHeader(http.StatusBadRequest)
 		_ = json.NewEncoder(w).Encode(map[string]string{"error": "missing required fields"})
 		return
 	}
 
-	// ActorID は暫定的にヘッダから取得（なければ空文字）
+	// ActorID / CreatedBy の解決
 	actorID := strings.TrimSpace(r.Header.Get("X-Actor-Id"))
+	createdBy := strings.TrimSpace(req.CreatedBy)
+	if createdBy == "" {
+		// ★ フロントから createdBy が来ていない場合は、暫定的に actorID を使う
+		createdBy = actorID
+	}
 
 	tb, err := h.uc.CreateWithUploads(ctx, uc.CreateBlueprintRequest{
 		Name:        strings.TrimSpace(req.Name),
 		Symbol:      strings.TrimSpace(req.Symbol),
 		BrandID:     strings.TrimSpace(req.BrandID),
 		CompanyID:   companyID,
-		Description: strings.TrimSpace(req.Description),
+		Description: strings.TrimSpace(req.Description), // ← 空でも OK
 		AssigneeID:  strings.TrimSpace(req.AssigneeID),
+
+		CreatedBy: createdBy,
+		ActorID:   actorID,
 
 		// ファイルアップロードはこのハンドラでは扱わない
 		Icon:     nil,
 		Contents: nil,
-
-		ActorID: strings.TrimSpace(actorID),
 	})
 	if err != nil {
 		writeTokenBlueprintErr(w, err)
@@ -163,7 +185,6 @@ func (h *TokenBlueprintHandler) list(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// ページング (page, perPage クエリは任意)
 	pageNum := 1
 	perPage := 50
 
@@ -252,7 +273,6 @@ func (h *TokenBlueprintHandler) delete(w http.ResponseWriter, r *http.Request, i
 
 // Error handling
 func writeTokenBlueprintErr(w http.ResponseWriter, err error) {
-	// Return 500 without depending on domain error types.
 	w.WriteHeader(http.StatusInternalServerError)
 	_ = json.NewEncoder(w).Encode(map[string]string{"error": err.Error()})
 }

@@ -39,8 +39,6 @@ async function getIdTokenOrThrow(): Promise<string> {
 
 /**
  * Go 側 PageResult に対応する型
- * - サーバー側のキーが `items` / `Items` のどちらでも受け取れるように
- *   正規化メソッド側でマッピングします。
  */
 export interface TokenBlueprintPageResult {
   items: TokenBlueprint[];
@@ -50,19 +48,22 @@ export interface TokenBlueprintPageResult {
   perPage: number;
 }
 
-// 作成用ペイロード（id / audit 系は backend 側で付与）
+// ---------------------------------------------------------
+// 作成用ペイロード（createdBy を追加）
+// ---------------------------------------------------------
 export interface CreateTokenBlueprintPayload {
   name: string;
   symbol: string;
   brandId: string;
-  companyId?: string; // backend は context の companyId を利用するため任意
+  companyId?: string;
   description: string;
   assigneeId: string;
+  createdBy: string;            // ← ★追加
   iconId?: string | null;
   contentFiles: string[];
 }
 
-// 更新用ペイロード（部分更新）
+// 更新用ペイロード
 export interface UpdateTokenBlueprintPayload {
   name?: string;
   symbol?: string;
@@ -89,7 +90,6 @@ async function handleJsonResponse<T>(res: Response): Promise<T> {
   }
 
   if (!text) {
-    // 204 No Content 等
     return undefined as unknown as T;
   }
 
@@ -108,12 +108,11 @@ function normalizePageResult(raw: any): TokenBlueprintPageResult {
 }
 
 // ---------------------------------------------------------
-// Public API: TokenBlueprint Repository 関数群
+// Public API
 // ---------------------------------------------------------
 
 /**
- * 一覧取得（currentMember.companyId でサーバ側が絞り込み）
- * GET /token-blueprints?page=&perPage=
+ * 一覧取得
  */
 export async function fetchTokenBlueprints(
   params?: { page?: number; perPage?: number },
@@ -138,7 +137,6 @@ export async function fetchTokenBlueprints(
 
 /**
  * 詳細取得
- * GET /token-blueprints/:id
  */
 export async function fetchTokenBlueprintById(
   id: string,
@@ -160,20 +158,19 @@ export async function fetchTokenBlueprintById(
 
 /**
  * 新規作成
- * POST /token-blueprints
  */
 export async function createTokenBlueprint(
   payload: CreateTokenBlueprintPayload,
 ): Promise<TokenBlueprint> {
   const token = await getIdTokenOrThrow();
 
-  // 空文字は null に正規化（iconId など）
   const body = {
     name: payload.name.trim(),
     symbol: payload.symbol.trim(),
     brandId: payload.brandId.trim(),
     description: payload.description.trim(),
     assigneeId: payload.assigneeId.trim(),
+    createdBy: payload.createdBy.trim(),          // ← ★ここで backend に渡す
     iconId:
       payload.iconId && payload.iconId.trim()
         ? payload.iconId.trim()
@@ -181,8 +178,6 @@ export async function createTokenBlueprint(
     contentFiles: (payload.contentFiles ?? [])
       .map((x) => x.trim())
       .filter(Boolean),
-    // companyId は backend が ID トークンから解決するので原則不要だが、
-    // 送っても無視されるだけなのであっても良い。
     companyId: payload.companyId?.trim(),
   };
 
@@ -200,7 +195,6 @@ export async function createTokenBlueprint(
 
 /**
  * 更新
- * PUT /token-blueprints/:id
  */
 export async function updateTokenBlueprint(
   id: string,
@@ -223,7 +217,6 @@ export async function updateTokenBlueprint(
       payload.iconId && payload.iconId.trim()
         ? payload.iconId.trim()
         : "";
-    // 空文字は backend 側で「null クリア」として解釈
   }
 
   if (payload.contentFiles !== undefined) {
@@ -249,7 +242,6 @@ export async function updateTokenBlueprint(
 
 /**
  * 削除
- * DELETE /token-blueprints/:id
  */
 export async function deleteTokenBlueprint(id: string): Promise<void> {
   const token = await getIdTokenOrThrow();
@@ -264,23 +256,17 @@ export async function deleteTokenBlueprint(id: string): Promise<void> {
     },
   );
 
-  // 削除系は body が無い前提なので void
   await handleJsonResponse<unknown>(res);
 }
 
 // ---------------------------------------------------------
-// Brand 取得系（TokenBlueprint 用）
+// Brand API
 // ---------------------------------------------------------
 
-// Brand 一覧（currentMember.companyId と同じ company のもの）用の簡易型
-export type BrandSummary = {
-  id: string;
-  name: string;
-};
+export type BrandSummary = { id: string; name: string };
 
 /**
- * 現在ログイン中ユーザーと同じ companyId を持つ Brand 一覧を取得
- * GET /brands?perPage=200
+ * 一覧取得 — 現在の company の brands
  */
 export async function fetchBrandsForCurrentCompany(): Promise<BrandSummary[]> {
   const token = await getIdTokenOrThrow();
@@ -305,8 +291,7 @@ export async function fetchBrandsForCurrentCompany(): Promise<BrandSummary[]> {
 }
 
 /**
- * brandId から brandName を取得
- * GET /brands/:id
+ * brandId → brandName
  */
 export async function fetchBrandNameById(id: string): Promise<string> {
   const trimmed = id.trim();

@@ -19,8 +19,8 @@ export default function TokenBlueprintCreate() {
     onEditAssignee,
     onClickAssignee,
     onBack,
-    onSave, // (input: Partial<TokenBlueprint>) => Promise<void> を想定
-    initialEditMode, // ★追加：edit モード制御
+    onSave, // (input: Partial<TokenBlueprint>) => Promise<void>
+    initialEditMode, // ★ 追加
   } = useTokenBlueprintCreate();
 
   // TokenBlueprintCard 用の ViewModel / Handlers を構築
@@ -28,7 +28,7 @@ export default function TokenBlueprintCreate() {
     initialTokenBlueprint,
     initialBurnAt: "",
     initialIconUrl: undefined,
-    initialEditMode, // ★ useTokenBlueprintCreate から渡す
+    initialEditMode, // ★ edit/view モード切替を受け渡し
   });
 
   return (
@@ -37,13 +37,14 @@ export default function TokenBlueprintCreate() {
       title="トークン設計を作成"
       onBack={onBack}
       onSave={() => {
+        // ★ initialTokenBlueprint は上書きしない
         const input: Partial<TokenBlueprint> = {
-          ...initialTokenBlueprint,
           name: vm.name,
           symbol: vm.symbol,
           brandId: vm.brandId,
           description: vm.description,
-          // burnAt や iconId を保存したい場合はここへ追加
+          iconId: null,
+          contentFiles: [],
         };
 
         void onSave(input);

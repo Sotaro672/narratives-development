@@ -42,6 +42,7 @@ export function useTokenBlueprintCreate() {
         throw new Error("memberId が取得できません（ログイン状態を確認してください）");
       }
 
+      // --- 必須項目不足による 400 BadRequest を防止 ---
       const payload: CreateTokenBlueprintPayload = {
         name: input.name?.trim() ?? "",
         symbol: input.symbol?.trim() ?? "",
@@ -49,9 +50,16 @@ export function useTokenBlueprintCreate() {
         description: input.description?.trim() ?? "",
         assigneeId: assignee,
         companyId,
+        createdBy: memberId, // ★ currentMember.id をそのまま渡す
         iconId: input.iconId ?? null,
         contentFiles: input.contentFiles ?? [],
       };
+
+      // ★ tokenBlueprintCreateService に渡す payload を確認するログ
+      console.log(
+        "[TokenBlueprintCreate] payload to tokenBlueprintCreateService:",
+        payload,
+      );
 
       await createTokenBlueprint(payload);
 
@@ -72,22 +80,23 @@ export function useTokenBlueprintCreate() {
     iconId: null,
     contentFiles: [],
     assigneeId: assignee,
-    createdBy,
+    createdBy: memberId, // ★ 初期値にも currentMember.id を設定
     createdAt,
-    updatedBy: createdBy,
+    updatedBy: memberId,
     updatedAt: createdAt,
     deletedAt: null,
     deletedBy: null,
   };
 
   return {
-    // UIへ渡す値
+    // UI へ渡す値
     initialTokenBlueprint,
     assigneeName: assignee,
-    initialEditMode: true,
-    // UIトリガー
+    initialEditMode: true, // ← 作成時は常に edit モードで開始
+
+    // UI トリガー
     onEditAssignee: () => setAssignee(memberId),
-    onClickAssignee: () => {}, // console.log 削除
+    onClickAssignee: () => {},
 
     onBack,
     onSave,
