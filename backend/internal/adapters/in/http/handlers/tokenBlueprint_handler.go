@@ -4,7 +4,6 @@ package handlers
 import (
 	"context"
 	"encoding/json"
-	"log"
 	"net/http"
 	"strconv"
 	"strings"
@@ -16,14 +15,13 @@ import (
 	tbdom "narratives/internal/domain/tokenBlueprint"
 )
 
-// TokenBlueprintHandler handles /token-blueprints endpoints (list/get/create/update/delete).
+// TokenBlueprintHandler handles /token-blueprints endpoints.
 type TokenBlueprintHandler struct {
 	uc       *uc.TokenBlueprintUsecase
 	memSvc   *memdom.Service
-	brandSvc *branddom.Service // brandName 解決用
+	brandSvc *branddom.Service
 }
 
-// NewTokenBlueprintHandler initializes the HTTP handler.
 func NewTokenBlueprintHandler(
 	ucase *uc.TokenBlueprintUsecase,
 	memSvc *memdom.Service,
@@ -36,7 +34,7 @@ func NewTokenBlueprintHandler(
 	}
 }
 
-// リクエスト DTO
+// DTO --------------------------------------------------------------------
 
 type createTokenBlueprintRequest struct {
 	Name         string   `json:"name"`
@@ -44,7 +42,7 @@ type createTokenBlueprintRequest struct {
 	BrandID      string   `json:"brandId"`
 	Description  string   `json:"description"`
 	AssigneeID   string   `json:"assigneeId"`
-	CreatedBy    string   `json:"createdBy"` // 作成者（memberId）
+	CreatedBy    string   `json:"createdBy"`
 	ContentFiles []string `json:"contentFiles,omitempty"`
 	IconID       *string  `json:"iconId,omitempty"`
 }
@@ -59,24 +57,22 @@ type updateTokenBlueprintRequest struct {
 	ContentFiles *[]string `json:"contentFiles,omitempty"`
 }
 
-// レスポンス DTO（assigneeName / brandName / createdByName を含めて画面に渡す）
 type tokenBlueprintResponse struct {
-	ID           string   `json:"id"`
-	Name         string   `json:"name"`
-	Symbol       string   `json:"symbol"`
-	BrandID      string   `json:"brandId"`
-	BrandName    string   `json:"brandName"` // brand.Service で解決した表示名
-	CompanyID    string   `json:"companyId"`
-	Description  string   `json:"description"`
-	IconID       *string  `json:"iconId,omitempty"`
-	ContentFiles []string `json:"contentFiles"`
-	AssigneeID   string   `json:"assigneeId"`
-	AssigneeName string   `json:"assigneeName"` // member.Service で解決した表示名
-
-	CreatedAt time.Time  `json:"createdAt"`
-	CreatedBy string     `json:"createdBy"`           // ★ member.Service で解決した「氏名」
-	UpdatedAt *time.Time `json:"updatedAt,omitempty"` // ゼロ値なら JSON から省略
-	UpdatedBy string     `json:"updatedBy"`
+	ID           string     `json:"id"`
+	Name         string     `json:"name"`
+	Symbol       string     `json:"symbol"`
+	BrandID      string     `json:"brandId"`
+	BrandName    string     `json:"brandName"`
+	CompanyID    string     `json:"companyId"`
+	Description  string     `json:"description"`
+	IconID       *string    `json:"iconId,omitempty"`
+	ContentFiles []string   `json:"contentFiles"`
+	AssigneeID   string     `json:"assigneeId"`
+	AssigneeName string     `json:"assigneeName"`
+	CreatedAt    time.Time  `json:"createdAt"`
+	CreatedBy    string     `json:"createdBy"`
+	UpdatedAt    *time.Time `json:"updatedAt,omitempty"`
+	UpdatedBy    string     `json:"updatedBy"`
 }
 
 type tokenBlueprintPageResponse struct {
@@ -87,137 +83,81 @@ type tokenBlueprintPageResponse struct {
 	PerPage    int                      `json:"perPage"`
 }
 
-// assigneeId → assigneeName 解決ヘルパー
-func (h *TokenBlueprintHandler) resolveAssigneeName(ctx context.Context, assigneeID string) string {
-	id := strings.TrimSpace(assigneeID)
-	if id == "" || h.memSvc == nil {
-		return ""
-	}
-	name, err := h.memSvc.GetNameLastFirstByID(ctx, id)
-	if err != nil {
-		// 名前が取れなくても致命的ではないので空文字で返す
-		log.Printf("[TokenBlueprintHandler.resolveAssigneeName] failed to resolve name for assigneeID=%q: %v", id, err)
-		return ""
-	}
+// name resolver helpers ----------------------------------------------------
+
+func (h *TokenBlueprintHandler) resolveAssigneeName(ctx context.Context, id string) string {
+	name, _ := h.memSvc.GetNameLastFirstByID(ctx, strings.TrimSpace(id))
 	return name
 }
 
-// createdBy(memberID) → createdByName 解決ヘルパー（★ 追加）
-func (h *TokenBlueprintHandler) resolveCreatorName(ctx context.Context, memberID string) string {
-	id := strings.TrimSpace(memberID)
-	if id == "" || h.memSvc == nil {
-		return ""
-	}
-	name, err := h.memSvc.GetNameLastFirstByID(ctx, id)
-	if err != nil {
-		log.Printf("[TokenBlueprintHandler.resolveCreatorName] failed to resolve name for memberID=%q: %v", id, err)
-		return ""
-	}
+func (h *TokenBlueprintHandler) resolveCreatorName(ctx context.Context, id string) string {
+	name, _ := h.memSvc.GetNameLastFirstByID(ctx, strings.TrimSpace(id))
 	return name
 }
 
-// brandId → brandName 解決ヘルパー
-func (h *TokenBlueprintHandler) resolveBrandName(ctx context.Context, brandID string) string {
-	id := strings.TrimSpace(brandID)
-	if id == "" || h.brandSvc == nil {
-		return ""
-	}
-	name, err := h.brandSvc.GetNameByID(ctx, id)
-	if err != nil {
-		log.Printf("[TokenBlueprintHandler.resolveBrandName] failed to resolve name for brandID=%q: %v", id, err)
-		return ""
-	}
+func (h *TokenBlueprintHandler) resolveBrandName(ctx context.Context, id string) string {
+	name, _ := h.brandSvc.GetNameByID(ctx, strings.TrimSpace(id))
 	return name
 }
 
-// ドメイン TokenBlueprint → レスポンス DTO 変換
 func (h *TokenBlueprintHandler) toResponse(ctx context.Context, tb *tbdom.TokenBlueprint) tokenBlueprintResponse {
 	if tb == nil {
 		return tokenBlueprintResponse{}
 	}
 
-	assigneeName := h.resolveAssigneeName(ctx, tb.AssigneeID)
-	brandName := h.resolveBrandName(ctx, tb.BrandID)
-
-	// ★ createdBy（memberID）→ 氏名へ変換
-	createdByDisplay := h.resolveCreatorName(ctx, tb.CreatedBy)
-	if createdByDisplay == "" {
-		// 氏名が取れなかった場合は従来どおり ID を返しておく
-		createdByDisplay = tb.CreatedBy
-	}
-
-	// UpdatedAt: ゼロ値なら nil にして JSON から省略
-	var updatedAtPtr *time.Time
+	var updPtr *time.Time
 	if !tb.UpdatedAt.IsZero() {
 		t := tb.UpdatedAt
-		updatedAtPtr = &t
+		updPtr = &t
 	}
 
-	resp := tokenBlueprintResponse{
+	return tokenBlueprintResponse{
 		ID:           tb.ID,
 		Name:         tb.Name,
 		Symbol:       tb.Symbol,
 		BrandID:      tb.BrandID,
-		BrandName:    brandName,
+		BrandName:    h.resolveBrandName(ctx, tb.BrandID),
 		CompanyID:    tb.CompanyID,
 		Description:  tb.Description,
 		IconID:       tb.IconID,
 		ContentFiles: tb.ContentFiles,
 		AssigneeID:   tb.AssigneeID,
-		AssigneeName: assigneeName,
-
-		CreatedAt: tb.CreatedAt,
-		CreatedBy: createdByDisplay, // ★ 氏名（なければ ID）
-		UpdatedAt: updatedAtPtr,
-		UpdatedBy: tb.UpdatedBy,
+		AssigneeName: h.resolveAssigneeName(ctx, tb.AssigneeID),
+		CreatedAt:    tb.CreatedAt,
+		CreatedBy:    h.resolveCreatorName(ctx, tb.CreatedBy),
+		UpdatedAt:    updPtr,
+		UpdatedBy:    tb.UpdatedBy,
 	}
-
-	// 画面へ渡す 1 レコード分のデータ内容をログ出力（デバッグ用）
-	if b, err := json.Marshal(resp); err == nil {
-		log.Printf("[TokenBlueprintHandler.toResponse] response DTO: %s", string(b))
-	} else {
-		log.Printf("[TokenBlueprintHandler.toResponse] failed to marshal response DTO for id=%q: %v", tb.ID, err)
-	}
-
-	return resp
 }
 
-// ServeHTTP routes requests.
+// ServeHTTP ---------------------------------------------------------------
+
 func (h *TokenBlueprintHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 
 	switch {
-	// 作成: POST /token-blueprints
 	case r.Method == http.MethodPost && r.URL.Path == "/token-blueprints":
 		h.create(w, r)
-
-	// 一覧: GET /token-blueprints
 	case r.Method == http.MethodGet && r.URL.Path == "/token-blueprints":
 		h.list(w, r)
-
-	// 更新: PATCH or PUT /token-blueprints/{id}
 	case (r.Method == http.MethodPatch || r.Method == http.MethodPut) &&
 		strings.HasPrefix(r.URL.Path, "/token-blueprints/"):
 		id := strings.TrimPrefix(r.URL.Path, "/token-blueprints/")
 		h.update(w, r, id)
-
-	// 削除: DELETE /token-blueprints/{id}
 	case r.Method == http.MethodDelete && strings.HasPrefix(r.URL.Path, "/token-blueprints/"):
 		id := strings.TrimPrefix(r.URL.Path, "/token-blueprints/")
 		h.delete(w, r, id)
-
-	// 詳細: GET /token-blueprints/{id}
 	case r.Method == http.MethodGet && strings.HasPrefix(r.URL.Path, "/token-blueprints/"):
 		id := strings.TrimPrefix(r.URL.Path, "/token-blueprints/")
 		h.get(w, r, id)
-
 	default:
 		w.WriteHeader(http.StatusNotFound)
 		_ = json.NewEncoder(w).Encode(map[string]string{"error": "not_found"})
 	}
 }
 
-// POST /token-blueprints
+// create ------------------------------------------------------------------
+
 func (h *TokenBlueprintHandler) create(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 
@@ -235,34 +175,18 @@ func (h *TokenBlueprintHandler) create(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// デバッグ用ログ
-	log.Printf(
-		"[TokenBlueprintHandler.create] raw req: name=%q symbol=%q brandId=%q assigneeId=%q createdBy=%q",
-		req.Name, req.Symbol, req.BrandID, req.AssigneeID, req.CreatedBy,
-	)
-
-	// description を必須チェックから除外したバリデーション
 	if strings.TrimSpace(req.Name) == "" ||
 		strings.TrimSpace(req.Symbol) == "" ||
 		strings.TrimSpace(req.BrandID) == "" ||
 		strings.TrimSpace(req.AssigneeID) == "" {
-		log.Printf(
-			"[TokenBlueprintHandler.create] missing required fields: name=%q symbol=%q brandId=%q assigneeId=%q",
-			strings.TrimSpace(req.Name),
-			strings.TrimSpace(req.Symbol),
-			strings.TrimSpace(req.BrandID),
-			strings.TrimSpace(req.AssigneeID),
-		)
 		w.WriteHeader(http.StatusBadRequest)
 		_ = json.NewEncoder(w).Encode(map[string]string{"error": "missing required fields"})
 		return
 	}
 
-	// ActorID / CreatedBy の解決
 	actorID := strings.TrimSpace(r.Header.Get("X-Actor-Id"))
 	createdBy := strings.TrimSpace(req.CreatedBy)
 	if createdBy == "" {
-		// フロントから createdBy が来ていない場合は暫定的に actorID を使う
 		createdBy = actorID
 	}
 
@@ -273,46 +197,33 @@ func (h *TokenBlueprintHandler) create(w http.ResponseWriter, r *http.Request) {
 		CompanyID:   companyID,
 		Description: strings.TrimSpace(req.Description),
 		AssigneeID:  strings.TrimSpace(req.AssigneeID),
-
-		CreatedBy: createdBy,
-		ActorID:   actorID,
-
-		Icon:     nil,
-		Contents: nil,
+		CreatedBy:   createdBy,
+		ActorID:     actorID,
 	})
 	if err != nil {
 		writeTokenBlueprintErr(w, err)
 		return
 	}
 
-	resp := h.toResponse(ctx, tb)
-
-	w.WriteHeader(http.StatusCreated)
-	_ = json.NewEncoder(w).Encode(resp)
+	_ = json.NewEncoder(w).Encode(h.toResponse(ctx, tb))
 }
 
-// GET /token-blueprints/{id}
+// get ---------------------------------------------------------------------
+
 func (h *TokenBlueprintHandler) get(w http.ResponseWriter, r *http.Request, id string) {
 	ctx := r.Context()
 
-	id = strings.TrimSpace(id)
-	if id == "" {
-		w.WriteHeader(http.StatusBadRequest)
-		_ = json.NewEncoder(w).Encode(map[string]string{"error": "invalid id"})
-		return
-	}
-
-	tb, err := h.uc.GetByID(ctx, id)
+	tb, err := h.uc.GetByID(ctx, strings.TrimSpace(id))
 	if err != nil {
 		writeTokenBlueprintErr(w, err)
 		return
 	}
 
-	resp := h.toResponse(ctx, tb)
-	_ = json.NewEncoder(w).Encode(resp)
+	_ = json.NewEncoder(w).Encode(h.toResponse(ctx, tb))
 }
 
-// GET /token-blueprints （currentMember.companyId で絞り込み）
+// list --------------------------------------------------------------------
+
 func (h *TokenBlueprintHandler) list(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 
@@ -327,22 +238,20 @@ func (h *TokenBlueprintHandler) list(w http.ResponseWriter, r *http.Request) {
 	perPage := 50
 
 	if v := r.URL.Query().Get("page"); v != "" {
-		if n, err := strconv.Atoi(v); err == nil && n > 0 {
+		if n, err := strconv.Atoi(v); err == nil {
 			pageNum = n
 		}
 	}
 	if v := r.URL.Query().Get("perPage"); v != "" {
-		if n, err := strconv.Atoi(v); err == nil && n > 0 && n <= 200 {
+		if n, err := strconv.Atoi(v); err == nil {
 			perPage = n
 		}
 	}
 
-	page := tbdom.Page{
+	result, err := h.uc.ListByCompanyID(ctx, companyID, tbdom.Page{
 		Number:  pageNum,
 		PerPage: perPage,
-	}
-
-	result, err := h.uc.ListByCompanyID(ctx, companyID, page)
+	})
 	if err != nil {
 		writeTokenBlueprintErr(w, err)
 		return
@@ -350,31 +259,23 @@ func (h *TokenBlueprintHandler) list(w http.ResponseWriter, r *http.Request) {
 
 	items := make([]tokenBlueprintResponse, 0, len(result.Items))
 	for i := range result.Items {
-		tb := &result.Items[i]
-		items = append(items, h.toResponse(ctx, tb))
+		items = append(items, h.toResponse(ctx, &result.Items[i]))
 	}
 
-	resp := tokenBlueprintPageResponse{
+	_ = json.NewEncoder(w).Encode(tokenBlueprintPageResponse{
 		Items:      items,
 		TotalCount: result.TotalCount,
 		TotalPages: result.TotalPages,
 		Page:       result.Page,
 		PerPage:    result.PerPage,
-	}
-
-	_ = json.NewEncoder(w).Encode(resp)
+	})
 }
 
-// PATCH/PUT /token-blueprints/{id}
+// update ------------------------------------------------------------------
+
 func (h *TokenBlueprintHandler) update(w http.ResponseWriter, r *http.Request, id string) {
 	ctx := r.Context()
-
 	id = strings.TrimSpace(id)
-	if id == "" {
-		w.WriteHeader(http.StatusBadRequest)
-		_ = json.NewEncoder(w).Encode(map[string]string{"error": "invalid id"})
-		return
-	}
 
 	var req updateTokenBlueprintRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
@@ -384,6 +285,14 @@ func (h *TokenBlueprintHandler) update(w http.ResponseWriter, r *http.Request, i
 	}
 
 	actorID := strings.TrimSpace(r.Header.Get("X-Actor-Id"))
+
+	// ★ update リクエスト内容をログ（デバッグ用）
+	{
+		b, _ := json.MarshalIndent(req, "", "  ")
+		println("[TokenBlueprintHandler.update] raw update req for id=", id)
+		println(string(b))
+		println("actorId=", actorID)
+	}
 
 	tb, err := h.uc.Update(ctx, uc.UpdateBlueprintRequest{
 		ID:           id,
@@ -401,22 +310,15 @@ func (h *TokenBlueprintHandler) update(w http.ResponseWriter, r *http.Request, i
 		return
 	}
 
-	resp := h.toResponse(ctx, tb)
-	_ = json.NewEncoder(w).Encode(resp)
+	_ = json.NewEncoder(w).Encode(h.toResponse(ctx, tb))
 }
 
-// DELETE /token-blueprints/{id}
+// delete ------------------------------------------------------------------
+
 func (h *TokenBlueprintHandler) delete(w http.ResponseWriter, r *http.Request, id string) {
 	ctx := r.Context()
 
-	id = strings.TrimSpace(id)
-	if id == "" {
-		w.WriteHeader(http.StatusBadRequest)
-		_ = json.NewEncoder(w).Encode(map[string]string{"error": "invalid id"})
-		return
-	}
-
-	if err := h.uc.Delete(ctx, id); err != nil {
+	if err := h.uc.Delete(ctx, strings.TrimSpace(id)); err != nil {
 		writeTokenBlueprintErr(w, err)
 		return
 	}
@@ -424,7 +326,8 @@ func (h *TokenBlueprintHandler) delete(w http.ResponseWriter, r *http.Request, i
 	w.WriteHeader(http.StatusNoContent)
 }
 
-// Error handling
+// error utility ------------------------------------------------------------
+
 func writeTokenBlueprintErr(w http.ResponseWriter, err error) {
 	w.WriteHeader(http.StatusInternalServerError)
 	_ = json.NewEncoder(w).Encode(map[string]string{"error": err.Error()})

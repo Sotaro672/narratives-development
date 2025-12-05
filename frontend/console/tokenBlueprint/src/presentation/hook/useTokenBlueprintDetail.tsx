@@ -7,7 +7,10 @@ import type { TokenBlueprint } from "../../domain/entity/tokenBlueprint";
 
 // TokenBlueprintCard 用ロジックフック
 import { useTokenBlueprintCard } from "../hook/useTokenBlueprintCard";
-import { fetchTokenBlueprintById } from "../../infrastructure/repository/tokenBlueprintRepositoryHTTP";
+import {
+  fetchTokenBlueprintById,
+  updateTokenBlueprint,
+} from "../../infrastructure/repository/tokenBlueprintRepositoryHTTP";
 
 type UseTokenBlueprintDetailVM = {
   blueprint: TokenBlueprint | null;
@@ -81,7 +84,7 @@ export function useTokenBlueprintDetail(): UseTokenBlueprintDetailResult {
     [blueprint],
   );
 
-  // ★ createdAt を yyyy/mm/dd に変換
+  // createdAt を yyyy/mm/dd に変換
   const createdAt = useMemo(() => {
     const raw = (blueprint as any)?.createdAt;
     if (!raw) return "";
@@ -123,15 +126,59 @@ export function useTokenBlueprintDetail(): UseTokenBlueprintDetailResult {
     cardHandlers?.setEditMode?.(false);
   }, [cardHandlers]);
 
-  const handleSave = useCallback(() => {
+  const handleSave = useCallback(async () => {
     if (loading) return;
-    // TODO: API 更新処理
-    cardHandlers?.setEditMode?.(false);
-  }, [loading, cardHandlers]);
+    if (!blueprint) return;
+
+    try {
+      setLoading(true);
+
+      // TokenBlueprintCard の VM 構造に依存しすぎないよう any キャストで吸収
+      const vmAny: any = cardVm || {};
+      const fields: any = vmAny.fields ?? vmAny ?? {};
+
+      const trimOrUndefined = (v: unknown): string | undefined =>
+        typeof v === "string" ? v.trim() : undefined;
+
+      const payload = {
+        name: trimOrUndefined(fields.name ?? blueprint.name),
+        symbol: trimOrUndefined(fields.symbol ?? blueprint.symbol),
+        brandId: trimOrUndefined(fields.brandId ?? blueprint.brandId),
+        description: trimOrUndefined(
+          fields.description ?? blueprint.description,
+        ),
+        assigneeId: trimOrUndefined(
+          fields.assigneeId ?? blueprint.assigneeId,
+        ),
+        iconId:
+          typeof fields.iconId === "string"
+            ? fields.iconId
+            : (blueprint as any)?.iconId ?? null,
+        contentFiles:
+          (fields.contentFiles as string[] | undefined) ??
+          blueprint.contentFiles ??
+          [],
+      };
+
+      const updated = await updateTokenBlueprint(blueprint.id, payload);
+
+      setBlueprint(updated);
+      setAssignee(
+        (prev) =>
+          prev || updated.assigneeName || updated.assigneeId || "",
+      );
+
+      cardHandlers?.setEditMode?.(false);
+    } catch (err) {
+      console.error("[TokenBlueprintDetail] update failed:", err);
+    } finally {
+      setLoading(false);
+    }
+  }, [loading, blueprint, cardVm, cardHandlers]);
 
   const handleDelete = useCallback(() => {
     if (!blueprint) return;
-    // TODO: deleteTokenBlueprint
+    // TODO: deleteTokenBlueprint(blueprint.id)
     navigate("/tokenBlueprint", { replace: true });
   }, [blueprint, navigate]);
 
@@ -145,11 +192,11 @@ export function useTokenBlueprintDetail(): UseTokenBlueprintDetailResult {
 
   const vm: UseTokenBlueprintDetailVM = {
     blueprint,
-    title: "トークン設計", // ★ ID は表示しない
+    title: "トークン設計", // ID は表示しない
     assigneeName:
       assignee || blueprint?.assigneeName || blueprint?.assigneeId || "",
     createdByName,
-    createdAt, // ← ★ フォーマット済み
+    createdAt, // フォーマット済み
     tokenContentsIds: blueprint?.contentFiles ?? [],
     cardVm,
     isEditMode,
