@@ -6,6 +6,7 @@ import (
 	"io"
 	"strings"
 
+	memdom "narratives/internal/domain/member"
 	tbdom "narratives/internal/domain/tokenBlueprint"
 	tcdom "narratives/internal/domain/tokenContents"
 	tidom "narratives/internal/domain/tokenIcon"
@@ -13,20 +14,23 @@ import (
 
 // TokenBlueprintUsecase coordinates TokenBlueprint, TokenContents, and TokenIcon domains.
 type TokenBlueprintUsecase struct {
-	tbRepo tbdom.RepositoryPort
-	tcRepo tcdom.RepositoryPort
-	tiRepo tidom.RepositoryPort
+	tbRepo    tbdom.RepositoryPort
+	tcRepo    tcdom.RepositoryPort
+	tiRepo    tidom.RepositoryPort
+	memberSvc *memdom.Service
 }
 
 func NewTokenBlueprintUsecase(
 	tbRepo tbdom.RepositoryPort,
 	tcRepo tcdom.RepositoryPort,
 	tiRepo tidom.RepositoryPort,
+	memberSvc *memdom.Service,
 ) *TokenBlueprintUsecase {
 	return &TokenBlueprintUsecase{
-		tbRepo: tbRepo,
-		tcRepo: tcRepo,
-		tiRepo: tiRepo,
+		tbRepo:    tbRepo,
+		tcRepo:    tcRepo,
+		tiRepo:    tiRepo,
+		memberSvc: memberSvc,
 	}
 }
 
@@ -131,6 +135,36 @@ func (u *TokenBlueprintUsecase) CreateWithUploads(ctx context.Context, in Create
 
 func (u *TokenBlueprintUsecase) GetByID(ctx context.Context, id string) (*tbdom.TokenBlueprint, error) {
 	return u.tbRepo.GetByID(ctx, strings.TrimSpace(id))
+}
+
+// ★ createdBy を氏名に解決して返す補助メソッド
+//   - 戻り値: (TokenBlueprint, createdByName, error)
+//   - memberSvc が未設定 or 解決失敗時は createdByName は空文字
+func (u *TokenBlueprintUsecase) GetByIDWithCreatorName(
+	ctx context.Context,
+	id string,
+) (*tbdom.TokenBlueprint, string, error) {
+	tb, err := u.tbRepo.GetByID(ctx, strings.TrimSpace(id))
+	if err != nil {
+		return nil, "", err
+	}
+
+	if u.memberSvc == nil {
+		return tb, "", nil
+	}
+
+	memberID := strings.TrimSpace(tb.CreatedBy)
+	if memberID == "" {
+		return tb, "", nil
+	}
+
+	name, err := u.memberSvc.GetNameLastFirstByID(ctx, memberID)
+	if err != nil {
+		// 氏名解決に失敗してもエラーにはせず、TokenBlueprint 自体は返す
+		return tb, "", nil
+	}
+
+	return tb, name, nil
 }
 
 // ==== ★ List / Filter / Count の廃止に伴い削除 ====

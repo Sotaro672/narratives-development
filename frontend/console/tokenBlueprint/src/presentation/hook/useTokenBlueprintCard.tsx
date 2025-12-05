@@ -116,7 +116,6 @@ export function useTokenBlueprintCard(params: {
     brandId,
     brandName,
     description,
-    burnAt,
     iconUrl,
     isEditMode,
     brandOptions,
@@ -135,7 +134,6 @@ export function useTokenBlueprintCard(params: {
     },
 
     onChangeDescription: (v) => setDescription(v),
-    onChangeBurnAt: (v) => setBurnAt(v),
 
     onUploadIcon: () => {
       if (!isEditMode) return;

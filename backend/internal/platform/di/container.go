@@ -580,7 +580,15 @@ func NewContainer(ctx context.Context) (*Container, error) {
 	saleUC := uc.NewSaleUsecase(saleRepo)
 	shippingAddressUC := uc.NewShippingAddressUsecase(shippingAddressRepo)
 	tokenUC := uc.NewTokenUsecase(tokenRepo)
-	tokenBlueprintUC := uc.NewTokenBlueprintUsecase(tokenBlueprintRepo, nil, nil)
+
+	// ★ TokenBlueprintUsecase に member.Service を注入
+	tokenBlueprintUC := uc.NewTokenBlueprintUsecase(
+		tokenBlueprintRepo,
+		nil,
+		nil,
+		memberSvc,
+	)
+
 	tokenOperationUC := uc.NewTokenOperationUsecase(tokenOperationRepo)
 	trackingUC := uc.NewTrackingUsecase(trackingRepo)
 	userUC := uc.NewUserUsecase(userRepo)

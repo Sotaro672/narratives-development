@@ -45,13 +45,11 @@ export function useTokenBlueprintDetail(): UseTokenBlueprintDetailResult {
   const [assignee, setAssignee] = useState<string>("");
 
   // ─────────────────────────────
-  // 詳細データ取得: backend /token-blueprints/:id
+  // 詳細データ取得
   // ─────────────────────────────
   useEffect(() => {
     const id = tokenBlueprintId?.trim();
-    if (!id) {
-      return;
-    }
+    if (!id) return;
 
     let cancelled = false;
 
@@ -64,16 +62,11 @@ export function useTokenBlueprintDetail(): UseTokenBlueprintDetailResult {
 
         setBlueprint(tb);
 
-        // 初回のみ assignee をセット
         setAssignee((prev) => prev || tb.assigneeName || tb.assigneeId || "");
       } catch {
-        if (!cancelled) {
-          navigate("/tokenBlueprint", { replace: true });
-        }
+        if (!cancelled) navigate("/tokenBlueprint", { replace: true });
       } finally {
-        if (!cancelled) {
-          setLoading(false);
-        }
+        if (!cancelled) setLoading(false);
       }
     })();
 
@@ -82,69 +75,63 @@ export function useTokenBlueprintDetail(): UseTokenBlueprintDetailResult {
     };
   }, [tokenBlueprintId, navigate]);
 
-  // createdBy / createdAt は blueprint から算出
+  // createdByName
   const createdByName = useMemo(
     () => (blueprint as any)?.createdBy || "",
     [blueprint],
   );
-  const createdAt = useMemo(
-    () => (blueprint as any)?.createdAt || "",
-    [blueprint],
-  );
+
+  // ★ createdAt を yyyy/mm/dd に変換
+  const createdAt = useMemo(() => {
+    const raw = (blueprint as any)?.createdAt;
+    if (!raw) return "";
+
+    const d = new Date(raw);
+    if (isNaN(d.getTime())) return "";
+
+    const yyyy = d.getFullYear();
+    const mm = String(d.getMonth() + 1).padStart(2, "0");
+    const dd = String(d.getDate()).padStart(2, "0");
+    return `${yyyy}/${mm}/${dd}`;
+  }, [blueprint]);
 
   // ─────────────────────────────
-  // TokenBlueprintCard 用 VM/Handlers
+  // TokenBlueprintCard 用 VM / handlers
   // ─────────────────────────────
   const { vm: cardVm, handlers: cardHandlers } = useTokenBlueprintCard({
     initialTokenBlueprint: (blueprint ?? {}) as Partial<TokenBlueprint>,
     initialBurnAt: "",
     initialIconUrl: undefined,
-    initialEditMode: false, // 初期は閲覧モード
+    initialEditMode: false,
   });
 
-  // カード側の isEditMode をヘッダー側にも反映
   const isEditMode: boolean = cardVm?.isEditMode ?? false;
 
   // ─────────────────────────────
-  // UI 用ハンドラ
+  // UI handlers
   // ─────────────────────────────
   const handleBack = useCallback(() => {
     navigate("/tokenBlueprint", { replace: true });
   }, [navigate]);
 
-  // 編集開始（明示的に編集モード ON）
   const handleEdit = useCallback(() => {
-    if (cardHandlers && typeof cardHandlers.setEditMode === "function") {
-      cardHandlers.setEditMode(true);
-    }
+    cardHandlers?.setEditMode?.(true);
   }, [cardHandlers]);
 
-  // キャンセル：編集内容を破棄して閲覧モードに戻す
   const handleCancel = useCallback(() => {
-    if (cardHandlers) {
-      if (typeof cardHandlers.reset === "function") {
-        cardHandlers.reset();
-      }
-      if (typeof cardHandlers.setEditMode === "function") {
-        cardHandlers.setEditMode(false);
-      }
-    }
+    cardHandlers?.reset?.();
+    cardHandlers?.setEditMode?.(false);
   }, [cardHandlers]);
 
-  // 保存：TODO で更新 API を呼ぶ想定。現時点では編集モードを抜けるだけ。
   const handleSave = useCallback(() => {
     if (loading) return;
-    // TODO: cardVm の内容を使って updateTokenBlueprint を呼び出す
-
-    if (cardHandlers && typeof cardHandlers.setEditMode === "function") {
-      cardHandlers.setEditMode(false);
-    }
+    // TODO: API 更新処理
+    cardHandlers?.setEditMode?.(false);
   }, [loading, cardHandlers]);
 
-  // 削除：TODO で deleteTokenBlueprint を呼ぶ想定
   const handleDelete = useCallback(() => {
     if (!blueprint) return;
-    // TODO: deleteTokenBlueprint(blueprint.id) を実装
+    // TODO: deleteTokenBlueprint
     navigate("/tokenBlueprint", { replace: true });
   }, [blueprint, navigate]);
 
@@ -153,16 +140,16 @@ export function useTokenBlueprintDetail(): UseTokenBlueprintDetailResult {
   }, []);
 
   const handleClickAssignee = useCallback(() => {
-    // TODO: 担当者の詳細画面などに遷移
+    // TODO: 担当者詳細など
   }, []);
 
   const vm: UseTokenBlueprintDetailVM = {
     blueprint,
-    title: blueprint ? `トークン設計：${blueprint.id}` : "トークン設計",
+    title: "トークン設計", // ★ ID は表示しない
     assigneeName:
       assignee || blueprint?.assigneeName || blueprint?.assigneeId || "",
     createdByName,
-    createdAt,
+    createdAt, // ← ★ フォーマット済み
     tokenContentsIds: blueprint?.contentFiles ?? [],
     cardVm,
     isEditMode,

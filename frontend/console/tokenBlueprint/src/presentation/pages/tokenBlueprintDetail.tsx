@@ -1,10 +1,9 @@
 // frontend/console/tokenBlueprint/src/presentation/pages/tokenBlueprintDetail.tsx
-
-import * as React from "react";
 import PageStyle from "../../../../shell/src/layout/PageStyle/PageStyle";
 import AdminCard from "../../../../admin/src/presentation/components/AdminCard";
 import TokenBlueprintCard from "../components/tokenBlueprintCard";
 import TokenContentsCard from "../../../../tokenContents/src/presentation/components/tokenContentsCard";
+import LogCard from "../../../../log/src/presentation/LogCard"; // ★ 追加
 
 // ★ ロジックはすべて Hook に移譲
 import { useTokenBlueprintDetail } from "../hook/useTokenBlueprintDetail";
@@ -14,13 +13,13 @@ export default function TokenBlueprintDetail() {
 
   const {
     blueprint,
-    title,
+    // title は使わない（ID を表示しないため）
     assigneeName,
     createdByName,
     createdAt,
     tokenContentsIds,
     cardVm,
-    isEditMode, // ★ 追加
+    isEditMode,
   } = vm;
 
   const {
@@ -48,7 +47,7 @@ export default function TokenBlueprintDetail() {
   return (
     <PageStyle
       layout="grid-2"
-      title={title}
+      title="トークン設計" // ★ tokenBlueprintId を含めない固定タイトル
       onBack={onBack}
       // ★ 通常時は「編集」ボタンのみ
       onEdit={!isEditMode ? onEdit : undefined}
@@ -66,15 +65,20 @@ export default function TokenBlueprintDetail() {
         </div>
       </div>
 
-      {/* 右カラム：管理情報（TokenBlueprint のメタ情報） */}
-      <AdminCard
-        title="管理情報"
-        assigneeName={assigneeName}
-        createdByName={createdByName}
-        createdAt={createdAt}
-        onEditAssignee={onEditAssignee}
-        onClickAssignee={onClickAssignee}
-      />
+      {/* 右カラム：管理情報（TokenBlueprint のメタ情報）＋ログ */}
+      <div className="space-y-4">
+        <AdminCard
+          title="管理情報"
+          assigneeName={assigneeName}
+          createdByName={createdByName}
+          createdAt={createdAt}
+          onEditAssignee={onEditAssignee}
+          onClickAssignee={onClickAssignee}
+        />
+
+        {/* ★ 追加：ログカード（現状はログデータ未連携のためデフォルト表示） */}
+        <LogCard title="更新ログ" />
+      </div>
     </PageStyle>
   );
 }

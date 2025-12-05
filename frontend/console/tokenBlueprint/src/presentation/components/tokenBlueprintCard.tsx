@@ -1,6 +1,6 @@
 // frontend/console/tokenBlueprint/src/presentation/components/tokenBlueprintCard.tsx
 import * as React from "react";
-import { Link2, Upload, Calendar, Eye } from "lucide-react";
+import { Link2, Upload, Eye } from "lucide-react";
 
 import {
   Card,
@@ -26,7 +26,6 @@ export type TokenBlueprintCardViewModel = {
   brandId: string;
   brandName: string;
   description: string;
-  burnAt: string;
   iconUrl?: string;
   isEditMode: boolean;
   brandOptions: { id: string; name: string }[];
@@ -37,12 +36,12 @@ export type TokenBlueprintCardHandlers = {
   onChangeSymbol?: (v: string) => void;
   onChangeBrand?: (id: string, name: string) => void;
   onChangeDescription?: (v: string) => void;
-  onChangeBurnAt?: (v: string) => void;
+
   onUploadIcon?: () => void;
   onPreview?: () => void;
   onToggleEditMode?: () => void;
 
-  // ★ 追加: 詳細ページから直接制御するためのハンドラ
+  // 外部からモード制御
   setEditMode?: (edit: boolean) => void;
   reset?: () => void;
 };
@@ -70,7 +69,7 @@ export default function TokenBlueprintCard({
             <Link2 className="token-blueprint-card__link-icon" />
           </span>
           <CardTitle className="token-blueprint-card__header-title">
-            {vm.id ? `トークン：${vm.id}` : "トークン：新規トークン設計"}
+            {vm.id ? "トークン設計" : "トークン：新規トークン設計"}
           </CardTitle>
           <Badge className="token-blueprint-card__header-badge">設計情報</Badge>
         </div>
@@ -218,33 +217,6 @@ export default function TokenBlueprintCard({
               !vm.isEditMode ? "readonly" : ""
             }`}
           />
-        </div>
-
-        {/* 焼却予定日 */}
-        <div className="token-blueprint-card__expires">
-          <Label className="token-blueprint-card__label">焼却予定日</Label>
-          <div className="token-blueprint-card__expires-row">
-            <Input
-              type="date"
-              value={vm.burnAt}
-              readOnly={!vm.isEditMode}
-              onChange={(e) =>
-                vm.isEditMode && handlers.onChangeBurnAt?.(e.target.value)
-              }
-              className={`token-blueprint-card__expires-input ${
-                !vm.isEditMode ? "readonly" : ""
-              }`}
-            />
-            <div className="token-blueprint-card__calendar-icon">
-              <Calendar className="token-blueprint-card__calendar-icon-svg" />
-            </div>
-          </div>
-
-          {!vm.burnAt && (
-            <div className="token-blueprint-card__expires-hint">
-              任意。キャンペーン終了日など、有効期限がある場合のみ設定します。
-            </div>
-          )}
         </div>
       </CardContent>
     </Card>

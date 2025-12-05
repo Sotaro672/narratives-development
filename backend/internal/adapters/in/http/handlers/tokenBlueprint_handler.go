@@ -11,7 +11,7 @@ import (
 	"time"
 
 	uc "narratives/internal/application/usecase"
-	branddom "narratives/internal/domain/brand" // ★ 追加
+	branddom "narratives/internal/domain/brand"
 	memdom "narratives/internal/domain/member"
 	tbdom "narratives/internal/domain/tokenBlueprint"
 )
@@ -20,14 +20,14 @@ import (
 type TokenBlueprintHandler struct {
 	uc       *uc.TokenBlueprintUsecase
 	memSvc   *memdom.Service
-	brandSvc *branddom.Service // ★ 追加: brandName 解決用
+	brandSvc *branddom.Service // brandName 解決用
 }
 
 // NewTokenBlueprintHandler initializes the HTTP handler.
 func NewTokenBlueprintHandler(
 	ucase *uc.TokenBlueprintUsecase,
 	memSvc *memdom.Service,
-	brandSvc *branddom.Service, // ★ 追加
+	brandSvc *branddom.Service,
 ) http.Handler {
 	return &TokenBlueprintHandler{
 		uc:       ucase,
@@ -44,7 +44,7 @@ type createTokenBlueprintRequest struct {
 	BrandID      string   `json:"brandId"`
 	Description  string   `json:"description"`
 	AssigneeID   string   `json:"assigneeId"`
-	CreatedBy    string   `json:"createdBy"` // ★ 追加: 作成者（memberId）
+	CreatedBy    string   `json:"createdBy"` // 作成者（memberId）
 	ContentFiles []string `json:"contentFiles,omitempty"`
 	IconID       *string  `json:"iconId,omitempty"`
 }
@@ -59,23 +59,23 @@ type updateTokenBlueprintRequest struct {
 	ContentFiles *[]string `json:"contentFiles,omitempty"`
 }
 
-// レスポンス DTO（assigneeName / brandName を含めて画面に渡す）
+// レスポンス DTO（assigneeName / brandName / createdByName を含めて画面に渡す）
 type tokenBlueprintResponse struct {
 	ID           string   `json:"id"`
 	Name         string   `json:"name"`
 	Symbol       string   `json:"symbol"`
 	BrandID      string   `json:"brandId"`
-	BrandName    string   `json:"brandName"` // ★ brand.Service で解決した表示名
+	BrandName    string   `json:"brandName"` // brand.Service で解決した表示名
 	CompanyID    string   `json:"companyId"`
 	Description  string   `json:"description"`
 	IconID       *string  `json:"iconId,omitempty"`
 	ContentFiles []string `json:"contentFiles"`
 	AssigneeID   string   `json:"assigneeId"`
-	AssigneeName string   `json:"assigneeName"` // ★ member.Service で解決した表示名
+	AssigneeName string   `json:"assigneeName"` // member.Service で解決した表示名
 
 	CreatedAt time.Time  `json:"createdAt"`
-	CreatedBy string     `json:"createdBy"`
-	UpdatedAt *time.Time `json:"updatedAt,omitempty"` // ★ ゼロ値なら JSON から省略
+	CreatedBy string     `json:"createdBy"`           // ★ member.Service で解決した「氏名」
+	UpdatedAt *time.Time `json:"updatedAt,omitempty"` // ゼロ値なら JSON から省略
 	UpdatedBy string     `json:"updatedBy"`
 }
 
@@ -102,7 +102,21 @@ func (h *TokenBlueprintHandler) resolveAssigneeName(ctx context.Context, assigne
 	return name
 }
 
-// brandId → brandName 解決ヘルパー（★ 新規）
+// createdBy(memberID) → createdByName 解決ヘルパー（★ 追加）
+func (h *TokenBlueprintHandler) resolveCreatorName(ctx context.Context, memberID string) string {
+	id := strings.TrimSpace(memberID)
+	if id == "" || h.memSvc == nil {
+		return ""
+	}
+	name, err := h.memSvc.GetNameLastFirstByID(ctx, id)
+	if err != nil {
+		log.Printf("[TokenBlueprintHandler.resolveCreatorName] failed to resolve name for memberID=%q: %v", id, err)
+		return ""
+	}
+	return name
+}
+
+// brandId → brandName 解決ヘルパー
 func (h *TokenBlueprintHandler) resolveBrandName(ctx context.Context, brandID string) string {
 	id := strings.TrimSpace(brandID)
 	if id == "" || h.brandSvc == nil {
@@ -123,9 +137,16 @@ func (h *TokenBlueprintHandler) toResponse(ctx context.Context, tb *tbdom.TokenB
 	}
 
 	assigneeName := h.resolveAssigneeName(ctx, tb.AssigneeID)
-	brandName := h.resolveBrandName(ctx, tb.BrandID) // ★ 追加
+	brandName := h.resolveBrandName(ctx, tb.BrandID)
 
-	// ★ UpdatedAt: ゼロ値なら nil にして JSON から省略
+	// ★ createdBy（memberID）→ 氏名へ変換
+	createdByDisplay := h.resolveCreatorName(ctx, tb.CreatedBy)
+	if createdByDisplay == "" {
+		// 氏名が取れなかった場合は従来どおり ID を返しておく
+		createdByDisplay = tb.CreatedBy
+	}
+
+	// UpdatedAt: ゼロ値なら nil にして JSON から省略
 	var updatedAtPtr *time.Time
 	if !tb.UpdatedAt.IsZero() {
 		t := tb.UpdatedAt
@@ -137,7 +158,7 @@ func (h *TokenBlueprintHandler) toResponse(ctx context.Context, tb *tbdom.TokenB
 		Name:         tb.Name,
 		Symbol:       tb.Symbol,
 		BrandID:      tb.BrandID,
-		BrandName:    brandName, // ★ 追加
+		BrandName:    brandName,
 		CompanyID:    tb.CompanyID,
 		Description:  tb.Description,
 		IconID:       tb.IconID,
@@ -146,8 +167,8 @@ func (h *TokenBlueprintHandler) toResponse(ctx context.Context, tb *tbdom.TokenB
 		AssigneeName: assigneeName,
 
 		CreatedAt: tb.CreatedAt,
-		CreatedBy: tb.CreatedBy,
-		UpdatedAt: updatedAtPtr, // ★ ここが nil なら created 直後は JSON に出ない
+		CreatedBy: createdByDisplay, // ★ 氏名（なければ ID）
+		UpdatedAt: updatedAtPtr,
 		UpdatedBy: tb.UpdatedBy,
 	}
 
@@ -214,15 +235,13 @@ func (h *TokenBlueprintHandler) create(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// ★ デバッグ用ログ：実際に backend でどう見えているか確認
+	// デバッグ用ログ
 	log.Printf(
 		"[TokenBlueprintHandler.create] raw req: name=%q symbol=%q brandId=%q assigneeId=%q createdBy=%q",
 		req.Name, req.Symbol, req.BrandID, req.AssigneeID, req.CreatedBy,
 	)
 
-	// -----------------------------------------
 	// description を必須チェックから除外したバリデーション
-	// -----------------------------------------
 	if strings.TrimSpace(req.Name) == "" ||
 		strings.TrimSpace(req.Symbol) == "" ||
 		strings.TrimSpace(req.BrandID) == "" ||
@@ -243,7 +262,7 @@ func (h *TokenBlueprintHandler) create(w http.ResponseWriter, r *http.Request) {
 	actorID := strings.TrimSpace(r.Header.Get("X-Actor-Id"))
 	createdBy := strings.TrimSpace(req.CreatedBy)
 	if createdBy == "" {
-		// ★ フロントから createdBy が来ていない場合は、暫定的に actorID を使う
+		// フロントから createdBy が来ていない場合は暫定的に actorID を使う
 		createdBy = actorID
 	}
 
@@ -252,13 +271,12 @@ func (h *TokenBlueprintHandler) create(w http.ResponseWriter, r *http.Request) {
 		Symbol:      strings.TrimSpace(req.Symbol),
 		BrandID:     strings.TrimSpace(req.BrandID),
 		CompanyID:   companyID,
-		Description: strings.TrimSpace(req.Description), // ← 空でも OK
+		Description: strings.TrimSpace(req.Description),
 		AssigneeID:  strings.TrimSpace(req.AssigneeID),
 
 		CreatedBy: createdBy,
 		ActorID:   actorID,
 
-		// ファイルアップロードはこのハンドラでは扱わない
 		Icon:     nil,
 		Contents: nil,
 	})
