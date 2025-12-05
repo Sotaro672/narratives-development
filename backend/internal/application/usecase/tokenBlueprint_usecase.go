@@ -115,10 +115,11 @@ func (u *TokenBlueprintUsecase) CreateWithUploads(ctx context.Context, in Create
 		ContentFiles: contentIDs,
 		AssigneeID:   strings.TrimSpace(in.AssigneeID),
 
+		// ★ 作成時は UpdatedAt / UpdatedBy は入力しない（nil / 空文字）
 		CreatedAt: nil,
 		CreatedBy: strings.TrimSpace(in.CreatedBy),
 		UpdatedAt: nil,
-		UpdatedBy: strings.TrimSpace(in.ActorID),
+		UpdatedBy: "",
 	})
 	if err != nil {
 		return nil, err

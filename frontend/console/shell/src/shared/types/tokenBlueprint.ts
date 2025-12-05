@@ -1,4 +1,4 @@
-// frontend/shell/src/shared/types/tokenBlueprint.ts
+// frontend/shell/src/shared/types/tokenBlueprint.ts 
 
 /**
  * ContentFileType
@@ -37,6 +37,10 @@ export interface TokenBlueprint {
   name: string;
   symbol: string; // /^[A-Z0-9]{1,10}$/ を想定
   brandId: string;
+
+  /** ブランド表示名（backend で解決された任意のラベル） */
+  brandName?: string;
+
   description: string;
 
   /** token_icons 等の ID（任意） */
@@ -47,6 +51,9 @@ export interface TokenBlueprint {
 
   /** 担当者 Member ID（必須） */
   assigneeId: string;
+
+  /** 担当者表示名（backend で解決されたフルネームなど、任意） */
+  assigneeName?: string;
 
   /** 作成情報 */
   createdAt: string; // ISO8601

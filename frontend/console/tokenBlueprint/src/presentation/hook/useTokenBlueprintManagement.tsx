@@ -30,6 +30,21 @@ export type UseTokenBlueprintManagementResult = {
 };
 
 /**
+ * ISO8601 → yyyy/MM/dd 形式に整形
+ */
+function formatDateYYYYMMDD(iso: string): string {
+  if (!iso) return "";
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) {
+    return iso; // パースできなければそのまま返す
+  }
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${y}/${m}/${day}`;
+}
+
+/**
  * TokenBlueprint Management ページ用ロジック（Hook）
  * - currentMember.companyId に紐づく TokenBlueprint 一覧を service 経由で取得
  * - フィルタ / ソート / 行クリック / 作成ボタン など UI 以外の要素を集約
@@ -59,6 +74,10 @@ export function useTokenBlueprintManagement(): UseTokenBlueprintManagementResult
     (async () => {
       try {
         const result = await fetchTokenBlueprintsForCompany(companyId);
+        console.log(
+          "[useTokenBlueprintManagement] fetched token blueprints for company:",
+          { companyId, result },
+        );
         setRows(result);
       } catch (e) {
         console.error("[useTokenBlueprintManagement] fetch error:", e);
@@ -67,23 +86,90 @@ export function useTokenBlueprintManagement(): UseTokenBlueprintManagementResult
     })();
   }, [currentMember?.companyId]);
 
-  // オプション（brandId / assigneeId から算出）: service に委譲
-  const { brandOptions, assigneeOptions } = useMemo(
-    () => buildOptionsFromTokenBlueprints(rows),
-    [rows],
-  );
+  // オプション（brandId / assigneeId から算出）:
+  // value は ID、label に brandName / assigneeName を渡す
+  const { brandOptions, assigneeOptions } = useMemo(() => {
+    const base = buildOptionsFromTokenBlueprints(rows);
+
+    const brandNameById = new Map<string, string>();
+    const assigneeNameById = new Map<string, string>();
+
+    rows.forEach((r) => {
+      const bid = r.brandId?.trim();
+      if (bid) {
+        const bname = (r as any).brandName ?? "";
+        if (bname && !brandNameById.has(bid)) {
+          brandNameById.set(bid, bname);
+        }
+      }
+
+      const aid = r.assigneeId?.trim();
+      if (aid) {
+        const aname = r.assigneeName ?? "";
+        if (aname && !assigneeNameById.has(aid)) {
+          assigneeNameById.set(aid, aname);
+        }
+      }
+    });
+
+    const brandOptions = base.brandOptions.map((opt) => ({
+      ...opt,
+      // brandName があればそれをラベルに使う
+      label: brandNameById.get(opt.value) || opt.label || opt.value,
+    }));
+
+    const assigneeOptions = base.assigneeOptions.map((opt) => ({
+      ...opt,
+      // assigneeName があればそれをラベルに使う
+      label: assigneeNameById.get(opt.value) || opt.label || opt.value,
+    }));
+
+    const opts = { brandOptions, assigneeOptions };
+    console.log(
+      "[useTokenBlueprintManagement] brandOptions / assigneeOptions:",
+      opts,
+    );
+    return opts;
+  }, [rows]);
 
   // フィルタ + ソート適用後の行: service に委譲
-  const filteredRows: TokenBlueprint[] = useMemo(
-    () =>
-      filterAndSortTokenBlueprints(rows, {
+  const filteredRows: TokenBlueprint[] = useMemo(() => {
+    const filtered = filterAndSortTokenBlueprints(rows, {
+      brandFilter,
+      assigneeFilter,
+      sortKey,
+      sortDir,
+    });
+
+    console.log(
+      "[useTokenBlueprintManagement] filteredRows (before date format, will be passed to UI):",
+      {
+        originalRows: rows,
         brandFilter,
         assigneeFilter,
         sortKey,
         sortDir,
-      }),
-    [rows, brandFilter, assigneeFilter, sortKey, sortDir],
-  );
+        filteredRows: filtered,
+      },
+    );
+
+    return filtered;
+  }, [rows, brandFilter, assigneeFilter, sortKey, sortDir]);
+
+  // createdAt を yyyy/MM/dd 形式に整形して UI へ渡す
+  const displayRows: TokenBlueprint[] = useMemo(() => {
+    const mapped = filteredRows.map((tb) => ({
+      ...tb,
+      createdAt: tb.createdAt ? formatDateYYYYMMDD(tb.createdAt) : tb.createdAt,
+    }));
+
+    console.log(
+      "[useTokenBlueprintManagement] displayRows (createdAt formatted):",
+      mapped,
+    );
+
+    return mapped;
+  }, [filteredRows]);
 
   // 行クリックで詳細へ（id を使用）
   const handleRowClick = useCallback(
@@ -102,7 +188,7 @@ export function useTokenBlueprintManagement(): UseTokenBlueprintManagementResult
     setAssigneeFilter([]);
     setSortKey(null);
     setSortDir(null);
-    console.log("トークン設計一覧リセット");
+    console.log("[useTokenBlueprintManagement] トークン設計一覧リセット");
   }, []);
 
   const handleChangeBrandFilter = useCallback((vals: string[]) => {
@@ -117,12 +203,16 @@ export function useTokenBlueprintManagement(): UseTokenBlueprintManagementResult
     (key: string | null, dir: SortDir) => {
       setSortKey((key as SortKey) ?? null);
       setSortDir(dir);
+      console.log("[useTokenBlueprintManagement] sort changed:", {
+        sortKey: key,
+        sortDir: dir,
+      });
     },
     [],
   );
 
   return {
-    rows: filteredRows,
+    rows: displayRows,
     brandOptions,
     assigneeOptions,
     brandFilter,

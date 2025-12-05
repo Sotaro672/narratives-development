@@ -335,6 +335,9 @@ type Container struct {
 	// ★ member.Service（表示名解決用）を保持
 	MemberService *memdom.Service
 
+	// ★ brand.Service（ブランド名解決用）を保持
+	BrandService *branddom.Service
+
 	// ★ History Repositories
 	ProductBlueprintHistoryRepo *fs.ProductBlueprintHistoryRepositoryFS
 	ModelHistoryRepo            *fs.ModelHistoryRepositoryFS
@@ -619,6 +622,9 @@ func NewContainer(ctx context.Context) (*Container, error) {
 		// member.Service
 		MemberService: memberSvc,
 
+		// brand.Service
+		BrandService: brandSvc,
+
 		// History Repos
 		ProductBlueprintHistoryRepo: productBlueprintHistoryRepo,
 		ModelHistoryRepo:            modelHistoryRepo,
@@ -723,6 +729,9 @@ func (c *Container) RouterDeps() httpin.RouterDeps {
 
 		// ★ TokenBlueprintHandler で assigneeName 解決に使う
 		MemberService: c.MemberService,
+
+		// ★ TokenBlueprintHandler で brandName 解決に使う
+		BrandService: c.BrandService,
 
 		// MessageHandler 用
 		MessageRepo: c.MessageRepo,

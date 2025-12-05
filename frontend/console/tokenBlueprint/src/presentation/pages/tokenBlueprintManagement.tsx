@@ -79,10 +79,17 @@ export default function TokenBlueprintManagementPage() {
           >
             <td>{t.name}</td>
             <td>{t.symbol}</td>
+
+            {/* ★ brandName があれば brandName、無ければ brandId を表示 */}
             <td>
-              <span className="lp-brand-pill">{t.brandId}</span>
+              <span className="lp-brand-pill">
+                {t.brandName || t.brandId}
+              </span>
             </td>
-            <td>{t.assigneeId}</td>
+
+            {/* ★ 担当者は assigneeName を表示（fallback は空文字） */}
+            <td>{t.assigneeName || ""}</td>
+
             <td>{t.createdAt}</td>
           </tr>
         ))}

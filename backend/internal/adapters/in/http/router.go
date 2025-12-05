@@ -15,6 +15,9 @@ import (
 
 	// MessageHandler 用 Repository
 	msgrepo "narratives/internal/adapters/out/firestore"
+
+	// ドメインサービス
+	branddom "narratives/internal/domain/brand"
 	memdom "narratives/internal/domain/member"
 )
 
@@ -70,6 +73,9 @@ type RouterDeps struct {
 
 	// ★ member.Service（表示名解決用）
 	MemberService *memdom.Service
+
+	// ★ brand.Service（ブランド名解決用）
+	BrandService *branddom.Service
 
 	// Message 用の Firestore Repository
 	MessageRepo *msgrepo.MessageRepositoryFS
@@ -261,8 +267,12 @@ func NewRouter(deps RouterDeps) http.Handler {
 	// Token Blueprints
 	// ================================
 	if deps.TokenBlueprintUC != nil {
-		// ★ 第 2 引数に member.Service を DI 経由で渡す
-		tbH := handlers.NewTokenBlueprintHandler(deps.TokenBlueprintUC, deps.MemberService)
+		// ★ member.Service + brand.Service を DI から渡す
+		tbH := handlers.NewTokenBlueprintHandler(
+			deps.TokenBlueprintUC,
+			deps.MemberService,
+			deps.BrandService,
+		)
 
 		var h http.Handler = tbH
 		if authMw != nil {

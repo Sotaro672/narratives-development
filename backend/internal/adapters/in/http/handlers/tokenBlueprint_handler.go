@@ -11,21 +11,28 @@ import (
 	"time"
 
 	uc "narratives/internal/application/usecase"
+	branddom "narratives/internal/domain/brand" // ★ 追加
 	memdom "narratives/internal/domain/member"
 	tbdom "narratives/internal/domain/tokenBlueprint"
 )
 
 // TokenBlueprintHandler handles /token-blueprints endpoints (list/get/create/update/delete).
 type TokenBlueprintHandler struct {
-	uc     *uc.TokenBlueprintUsecase
-	memSvc *memdom.Service
+	uc       *uc.TokenBlueprintUsecase
+	memSvc   *memdom.Service
+	brandSvc *branddom.Service // ★ 追加: brandName 解決用
 }
 
 // NewTokenBlueprintHandler initializes the HTTP handler.
-func NewTokenBlueprintHandler(ucase *uc.TokenBlueprintUsecase, memSvc *memdom.Service) http.Handler {
+func NewTokenBlueprintHandler(
+	ucase *uc.TokenBlueprintUsecase,
+	memSvc *memdom.Service,
+	brandSvc *branddom.Service, // ★ 追加
+) http.Handler {
 	return &TokenBlueprintHandler{
-		uc:     ucase,
-		memSvc: memSvc,
+		uc:       ucase,
+		memSvc:   memSvc,
+		brandSvc: brandSvc,
 	}
 }
 
@@ -52,12 +59,13 @@ type updateTokenBlueprintRequest struct {
 	ContentFiles *[]string `json:"contentFiles,omitempty"`
 }
 
-// レスポンス DTO（assigneeName を含めて画面に渡す）
+// レスポンス DTO（assigneeName / brandName を含めて画面に渡す）
 type tokenBlueprintResponse struct {
 	ID           string   `json:"id"`
 	Name         string   `json:"name"`
 	Symbol       string   `json:"symbol"`
 	BrandID      string   `json:"brandId"`
+	BrandName    string   `json:"brandName"` // ★ brand.Service で解決した表示名
 	CompanyID    string   `json:"companyId"`
 	Description  string   `json:"description"`
 	IconID       *string  `json:"iconId,omitempty"`
@@ -88,6 +96,21 @@ func (h *TokenBlueprintHandler) resolveAssigneeName(ctx context.Context, assigne
 	name, err := h.memSvc.GetNameLastFirstByID(ctx, id)
 	if err != nil {
 		// 名前が取れなくても致命的ではないので空文字で返す
+		log.Printf("[TokenBlueprintHandler.resolveAssigneeName] failed to resolve name for assigneeID=%q: %v", id, err)
+		return ""
+	}
+	return name
+}
+
+// brandId → brandName 解決ヘルパー（★ 新規）
+func (h *TokenBlueprintHandler) resolveBrandName(ctx context.Context, brandID string) string {
+	id := strings.TrimSpace(brandID)
+	if id == "" || h.brandSvc == nil {
+		return ""
+	}
+	name, err := h.brandSvc.GetNameByID(ctx, id)
+	if err != nil {
+		log.Printf("[TokenBlueprintHandler.resolveBrandName] failed to resolve name for brandID=%q: %v", id, err)
 		return ""
 	}
 	return name
@@ -100,12 +123,14 @@ func (h *TokenBlueprintHandler) toResponse(ctx context.Context, tb *tbdom.TokenB
 	}
 
 	assigneeName := h.resolveAssigneeName(ctx, tb.AssigneeID)
+	brandName := h.resolveBrandName(ctx, tb.BrandID) // ★ 追加
 
-	return tokenBlueprintResponse{
+	resp := tokenBlueprintResponse{
 		ID:           tb.ID,
 		Name:         tb.Name,
 		Symbol:       tb.Symbol,
 		BrandID:      tb.BrandID,
+		BrandName:    brandName, // ★ 追加
 		CompanyID:    tb.CompanyID,
 		Description:  tb.Description,
 		IconID:       tb.IconID,
@@ -118,6 +143,15 @@ func (h *TokenBlueprintHandler) toResponse(ctx context.Context, tb *tbdom.TokenB
 		UpdatedAt: tb.UpdatedAt,
 		UpdatedBy: tb.UpdatedBy,
 	}
+
+	// 画面へ渡す 1 レコード分のデータ内容をログ出力（デバッグ用）
+	if b, err := json.Marshal(resp); err == nil {
+		log.Printf("[TokenBlueprintHandler.toResponse] response DTO: %s", string(b))
+	} else {
+		log.Printf("[TokenBlueprintHandler.toResponse] failed to marshal response DTO for id=%q: %v", tb.ID, err)
+	}
+
+	return resp
 }
 
 // ServeHTTP routes requests.

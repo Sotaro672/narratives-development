@@ -93,18 +93,64 @@ async function handleJsonResponse<T>(res: Response): Promise<T> {
     return undefined as unknown as T;
   }
 
-  return JSON.parse(text) as T;
+  // ★ バックエンドから返ってきた生 JSON を確認できるようにログ出力
+  try {
+    const parsed = JSON.parse(text);
+    // ここでは汎用ハンドラなので、どの API かは個々の関数側で分かる前提でラベルのみ
+    console.log(
+      "[TokenBlueprintRepositoryHTTP] handleJsonResponse raw payload:",
+      parsed,
+    );
+    return parsed as T;
+  } catch {
+    // JSON でない場合はそのまま text を返す
+    console.log(
+      "[TokenBlueprintRepositoryHTTP] handleJsonResponse non-JSON text payload:",
+      text,
+    );
+    return text as unknown as T;
+  }
+}
+
+/**
+ * backend から受け取った 1 レコードを TokenBlueprint に正規化
+ * - brandName / BrandName を TokenBlueprint.brandName に載せ替え
+ */
+function normalizeTokenBlueprint(raw: any): TokenBlueprint {
+  const tb = raw as TokenBlueprint & {
+    BrandName?: string;
+  };
+
+  const brandName =
+    (raw && (raw.brandName ?? raw.BrandName)) != null
+      ? String(raw.brandName ?? raw.BrandName)
+      : undefined;
+
+  return {
+    ...tb,
+    // brandName フィールドを持っていない型でも optional なので代入して問題なし
+    ...(brandName !== undefined ? { brandName } : {}),
+  };
 }
 
 // PageResult 正規化
 function normalizePageResult(raw: any): TokenBlueprintPageResult {
-  return {
-    items: (raw.items ?? raw.Items ?? []) as TokenBlueprint[],
+  const rawItems = (raw.items ?? raw.Items ?? []) as any[];
+
+  const items = rawItems.map((it) => normalizeTokenBlueprint(it));
+
+  const pageResult: TokenBlueprintPageResult = {
+    items,
     totalCount: (raw.totalCount ?? raw.TotalCount ?? 0) as number,
     totalPages: (raw.totalPages ?? raw.TotalPages ?? 0) as number,
     page: (raw.page ?? raw.Page ?? 1) as number,
     perPage: (raw.perPage ?? raw.PerPage ?? 0) as number,
   };
+
+  // ★ 正規化後のページングデータをログ
+  console.log("[TokenBlueprintRepositoryHTTP] normalizePageResult:", pageResult);
+
+  return pageResult;
 }
 
 // ---------------------------------------------------------
@@ -132,7 +178,18 @@ export async function fetchTokenBlueprints(
   });
 
   const raw = await handleJsonResponse<any>(res);
-  return normalizePageResult(raw);
+  console.log(
+    "[TokenBlueprintRepositoryHTTP] fetchTokenBlueprints backend raw:",
+    raw,
+  );
+
+  const page = normalizePageResult(raw);
+  console.log(
+    "[TokenBlueprintRepositoryHTTP] fetchTokenBlueprints normalized page:",
+    page,
+  );
+
+  return page;
 }
 
 /**
@@ -163,7 +220,17 @@ export async function listTokenBlueprintsByCompanyId(
   });
 
   const raw = await handleJsonResponse<any>(res);
+  console.log(
+    "[TokenBlueprintRepositoryHTTP] listTokenBlueprintsByCompanyId backend raw:",
+    raw,
+  );
+
   const page = normalizePageResult(raw);
+  console.log(
+    "[TokenBlueprintRepositoryHTTP] listTokenBlueprintsByCompanyId items:",
+    page.items,
+  );
+
   return page.items;
 }
 
@@ -185,7 +252,15 @@ export async function fetchTokenBlueprintById(
     },
   );
 
-  return handleJsonResponse<TokenBlueprint>(res);
+  const raw = await handleJsonResponse<any>(res);
+  const data = normalizeTokenBlueprint(raw);
+
+  console.log(
+    "[TokenBlueprintRepositoryHTTP] fetchTokenBlueprintById backend data:",
+    data,
+  );
+
+  return data;
 }
 
 /**
@@ -215,6 +290,11 @@ export async function createTokenBlueprint(
     companyId: payload.companyId?.trim(),
   };
 
+  console.log(
+    "[TokenBlueprintRepositoryHTTP] createTokenBlueprint request body:",
+    body,
+  );
+
   const res = await fetch(`${API_BASE}/token-blueprints`, {
     method: "POST",
     headers: {
@@ -224,7 +304,15 @@ export async function createTokenBlueprint(
     body: JSON.stringify(body),
   });
 
-  return handleJsonResponse<TokenBlueprint>(res);
+  const raw = await handleJsonResponse<any>(res);
+  const data = normalizeTokenBlueprint(raw);
+
+  console.log(
+    "[TokenBlueprintRepositoryHTTP] createTokenBlueprint backend data:",
+    data,
+  );
+
+  return data;
 }
 
 /**
@@ -259,6 +347,11 @@ export async function updateTokenBlueprint(
       .filter(Boolean);
   }
 
+  console.log(
+    "[TokenBlueprintRepositoryHTTP] updateTokenBlueprint request body:",
+    body,
+  );
+
   const res = await fetch(
     `${API_BASE}/token-blueprints/${encodeURIComponent(id)}`,
     {
@@ -271,7 +364,15 @@ export async function updateTokenBlueprint(
     },
   );
 
-  return handleJsonResponse<TokenBlueprint>(res);
+  const raw = await handleJsonResponse<any>(res);
+  const data = normalizeTokenBlueprint(raw);
+
+  console.log(
+    "[TokenBlueprintRepositoryHTTP] updateTokenBlueprint backend data:",
+    data,
+  );
+
+  return data;
 }
 
 /**
@@ -291,6 +392,10 @@ export async function deleteTokenBlueprint(id: string): Promise<void> {
   );
 
   await handleJsonResponse<unknown>(res);
+  console.log(
+    "[TokenBlueprintRepositoryHTTP] deleteTokenBlueprint completed for id:",
+    id,
+  );
 }
 
 // ---------------------------------------------------------
@@ -316,12 +421,24 @@ export async function fetchBrandsForCurrentCompany(): Promise<BrandSummary[]> {
   });
 
   const raw = await handleJsonResponse<any>(res);
+  console.log(
+    "[TokenBlueprintRepositoryHTTP] fetchBrandsForCurrentCompany backend raw:",
+    raw,
+  );
+
   const items = (raw?.items ?? raw?.Items ?? []) as any[];
 
-  return items.map((b) => ({
+  const summaries = items.map((b) => ({
     id: String(b.id ?? b.ID ?? ""),
     name: String(b.name ?? b.Name ?? ""),
   }));
+
+  console.log(
+    "[TokenBlueprintRepositoryHTTP] fetchBrandsForCurrentCompany summaries:",
+    summaries,
+  );
+
+  return summaries;
 }
 
 /**
@@ -344,5 +461,16 @@ export async function fetchBrandNameById(id: string): Promise<string> {
   );
 
   const data = await handleJsonResponse<any>(res);
-  return String(data?.name ?? data?.Name ?? "").trim();
+  console.log(
+    "[TokenBlueprintRepositoryHTTP] fetchBrandNameById backend data:",
+    data,
+  );
+
+  const name = String(data?.name ?? data?.Name ?? "").trim();
+  console.log(
+    "[TokenBlueprintRepositoryHTTP] fetchBrandNameById resolved name:",
+    { id: trimmed, name },
+  );
+
+  return name;
 }

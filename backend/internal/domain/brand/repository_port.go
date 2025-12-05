@@ -1,3 +1,4 @@
+// backend\internal\domain\brand\repository_port.go
 package brand
 
 import (
