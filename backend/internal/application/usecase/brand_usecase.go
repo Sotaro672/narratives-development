@@ -1,3 +1,4 @@
+// backend/internal/application/usecase/brand_usecase.go
 package usecase
 
 import (
@@ -39,38 +40,68 @@ func (u *BrandUsecase) Exists(ctx context.Context, id string) (bool, error) {
 	return u.brandRepo.Exists(ctx, strings.TrimSpace(id))
 }
 
-func (u *BrandUsecase) Count(ctx context.Context, f branddom.Filter) (int, error) {
-	// currentMember (= context に載っている companyId) と同じ companyId に絞る
-	if cid := companyIDFromContext(ctx); cid != "" {
-		f.CompanyID = &cid
-	}
-	return u.brandRepo.Count(ctx, f)
-}
+// ★ Count はドメイン側から削除したので、Usecase からも削除済み
 
+// List: currentMember と同じ companyId に絞って一覧取得（ソート指定は廃止）
 func (u *BrandUsecase) List(
 	ctx context.Context,
 	f branddom.Filter,
-	s branddom.Sort,
 	p branddom.Page,
 ) (branddom.PageResult[branddom.Brand], error) {
 	// currentMember と同じ companyId の Brand のみを list
 	if cid := companyIDFromContext(ctx); cid != "" {
 		f.CompanyID = &cid
 	}
-	return u.brandRepo.List(ctx, f, s, p)
+	return u.brandRepo.List(ctx, f, p)
 }
 
+// ListByCursor: currentMember と同じ companyId に絞ってカーソル一覧取得（ソート指定は廃止）
 func (u *BrandUsecase) ListByCursor(
 	ctx context.Context,
 	f branddom.Filter,
-	s branddom.Sort,
 	c branddom.CursorPage,
 ) (branddom.CursorPageResult[branddom.Brand], error) {
 	// currentMember と同じ companyId に制限
 	if cid := companyIDFromContext(ctx); cid != "" {
 		f.CompanyID = &cid
 	}
-	return u.brandRepo.ListByCursor(ctx, f, s, c)
+	return u.brandRepo.ListByCursor(ctx, f, c)
+}
+
+// ★ 追加: ListByCompanyID → GetNameByID をセットで組み立てるヘルパ
+// currentMember の companyId を使って Brand を一覧取得し、
+// brand.Service.GetNameByID で Name を正規化した結果を Items に反映して返す。
+func (u *BrandUsecase) ListCurrentCompanyBrandsWithNames(
+	ctx context.Context,
+	page branddom.Page,
+) (branddom.PageResult[branddom.Brand], error) {
+	cid := companyIDFromContext(ctx)
+	if strings.TrimSpace(cid) == "" {
+		// companyId が無い場合は空を返す（必要であれば ErrInvalidID にしてもよい）
+		return branddom.PageResult[branddom.Brand]{}, nil
+	}
+
+	// brand.Service を使って ListByCompanyID → GetNameByID を組み立てる
+	svc := branddom.NewService(u.brandRepo)
+
+	// 1. companyId に紐づく Brand 一覧を取得
+	res, err := svc.ListByCompanyID(ctx, cid, page)
+	if err != nil {
+		return res, err
+	}
+
+	// 2. 各 Brand について GetNameByID を呼び出し、Name を正規化して上書き
+	for i, b := range res.Items {
+		name, err := svc.GetNameByID(ctx, b.ID)
+		if err != nil {
+			// 取得に失敗した場合は、既存の Name を trim だけして使う
+			res.Items[i].Name = strings.TrimSpace(b.Name)
+			continue
+		}
+		res.Items[i].Name = strings.TrimSpace(name)
+	}
+
+	return res, nil
 }
 
 // ==============================

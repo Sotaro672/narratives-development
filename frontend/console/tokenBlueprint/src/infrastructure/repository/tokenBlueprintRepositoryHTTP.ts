@@ -108,7 +108,7 @@ function normalizePageResult(raw: any): TokenBlueprintPageResult {
 }
 
 // ---------------------------------------------------------
-// Public API: Repository 関数群
+// Public API: TokenBlueprint Repository 関数群
 // ---------------------------------------------------------
 
 /**
@@ -178,7 +178,9 @@ export async function createTokenBlueprint(
       payload.iconId && payload.iconId.trim()
         ? payload.iconId.trim()
         : null,
-    contentFiles: (payload.contentFiles ?? []).map((x) => x.trim()).filter(Boolean),
+    contentFiles: (payload.contentFiles ?? [])
+      .map((x) => x.trim())
+      .filter(Boolean),
     // companyId は backend が ID トークンから解決するので原則不要だが、
     // 送っても無視されるだけなのであっても良い。
     companyId: payload.companyId?.trim(),
@@ -264,4 +266,64 @@ export async function deleteTokenBlueprint(id: string): Promise<void> {
 
   // 削除系は body が無い前提なので void
   await handleJsonResponse<unknown>(res);
+}
+
+// ---------------------------------------------------------
+// Brand 取得系（TokenBlueprint 用）
+// ---------------------------------------------------------
+
+// Brand 一覧（currentMember.companyId と同じ company のもの）用の簡易型
+export type BrandSummary = {
+  id: string;
+  name: string;
+};
+
+/**
+ * 現在ログイン中ユーザーと同じ companyId を持つ Brand 一覧を取得
+ * GET /brands?perPage=200
+ */
+export async function fetchBrandsForCurrentCompany(): Promise<BrandSummary[]> {
+  const token = await getIdTokenOrThrow();
+
+  const url = new URL(`${API_BASE}/brands`);
+  url.searchParams.set("perPage", "200");
+
+  const res = await fetch(url.toString(), {
+    method: "GET",
+    headers: {
+      Authorization: `Bearer ${token}`,
+    },
+  });
+
+  const raw = await handleJsonResponse<any>(res);
+  const items = (raw?.items ?? raw?.Items ?? []) as any[];
+
+  return items.map((b) => ({
+    id: String(b.id ?? b.ID ?? ""),
+    name: String(b.name ?? b.Name ?? ""),
+  }));
+}
+
+/**
+ * brandId から brandName を取得
+ * GET /brands/:id
+ */
+export async function fetchBrandNameById(id: string): Promise<string> {
+  const trimmed = id.trim();
+  if (!trimmed) return "";
+
+  const token = await getIdTokenOrThrow();
+
+  const res = await fetch(
+    `${API_BASE}/brands/${encodeURIComponent(trimmed)}`,
+    {
+      method: "GET",
+      headers: {
+        Authorization: `Bearer ${token}`,
+      },
+    },
+  );
+
+  const data = await handleJsonResponse<any>(res);
+  return String(data?.name ?? data?.Name ?? "").trim();
 }

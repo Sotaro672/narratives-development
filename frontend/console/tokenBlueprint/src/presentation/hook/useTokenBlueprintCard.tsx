@@ -1,0 +1,121 @@
+// frontend/console/tokenBlueprint/src/presentation/hook/useTokenBlueprintCard.tsx
+
+import * as React from "react";
+import type { TokenBlueprint } from "../../domain/entity/tokenBlueprint";
+
+import type {
+  TokenBlueprintCardViewModel,
+  TokenBlueprintCardHandlers,
+} from "../components/tokenBlueprintCard";
+
+// Service（アプリケーションロジック）
+import {
+  loadBrandsForCompany,
+  resolveBrandName,
+} from "../../application/tokenBlueprintCreateService";
+
+/**
+ * TokenBlueprintCard 用のロジックフック
+ * - UI 状態管理のみ担当
+ */
+export function useTokenBlueprintCard(params: {
+  initialTokenBlueprint?: Partial<TokenBlueprint> & { brandName?: string };
+  initialBurnAt?: string;
+  initialIconUrl?: string;
+  initialEditMode?: boolean;
+}) {
+  const tb = params.initialTokenBlueprint ?? {};
+
+  // -------------------------
+  // Local UI states
+  // -------------------------
+  const [id] = React.useState(tb.id ?? "");
+  const [name, setName] = React.useState(tb.name ?? "");
+  const [symbol, setSymbol] = React.useState(tb.symbol ?? "");
+
+  const [brandId, setBrandId] = React.useState(tb.brandId ?? "");
+  const [brandName, setBrandName] = React.useState(tb.brandName ?? "");
+
+  const [description, setDescription] = React.useState(tb.description ?? "");
+  const [burnAt, setBurnAt] = React.useState(params.initialBurnAt ?? "");
+  const [iconUrl] = React.useState(params.initialIconUrl ?? "");
+  const [isEditMode] = React.useState(params.initialEditMode ?? false);
+
+  const [brandOptions, setBrandOptions] = React.useState<
+    { id: string; name: string }[]
+  >([]);
+
+  // -------------------------
+  // Brand 一覧読み込み（Service に委譲）
+  // -------------------------
+  React.useEffect(() => {
+    let cancelled = false;
+
+    loadBrandsForCompany().then((brands) => {
+      if (!cancelled) setBrandOptions(brands);
+    });
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  // brandId しか無い場合、brandName を backend から解決
+  React.useEffect(() => {
+    let cancelled = false;
+
+    // brandName がすでにある場合は取得しない
+    if (!brandId || brandName) return;
+
+    resolveBrandName(brandId).then((name) => {
+      if (!cancelled && name) setBrandName(name);
+    });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [brandId, brandName]);
+
+  // -------------------------
+  // ViewModel
+  // -------------------------
+  const vm: TokenBlueprintCardViewModel = {
+    id,
+    name,
+    symbol,
+    brandId,
+    brandName,
+    description,
+    burnAt,
+    iconUrl,
+    isEditMode,
+    brandOptions,
+  };
+
+  // -------------------------
+  // Handlers（UI のみ）
+  // -------------------------
+  const handlers: TokenBlueprintCardHandlers = {
+    onChangeName: (v) => setName(v),
+    onChangeSymbol: (v) => setSymbol(v.toUpperCase()),
+
+    onChangeBrand: (id, name) => {
+      setBrandId(id);
+      setBrandName(name);
+    },
+
+    onChangeDescription: (v) => setDescription(v),
+    onChangeBurnAt: (v) => setBurnAt(v),
+
+    onUploadIcon: () => {
+      if (!isEditMode) return;
+      alert("トークンアイコンのアップロード（モック）");
+    },
+
+    onPreview: () => {
+      alert("プレビュー画面を開きます（モック）");
+    },
+  };
+
+  return { vm, handlers };
+}

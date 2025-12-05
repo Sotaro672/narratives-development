@@ -113,7 +113,7 @@ func (r *BrandRepositoryFS) Exists(ctx context.Context, id string) (bool, error)
 }
 
 // ========================================
-// Count
+// Count（インターフェース外だが残置）
 // ========================================
 
 func (r *BrandRepositoryFS) Count(ctx context.Context, filter branddom.Filter) (int, error) {
@@ -310,20 +310,16 @@ func (r *BrandRepositoryFS) Delete(ctx context.Context, id string) error {
 func (r *BrandRepositoryFS) List(
 	ctx context.Context,
 	filter branddom.Filter,
-	sort branddom.Sort,
 	page branddom.Page,
 ) (branddom.PageResult[branddom.Brand], error) {
 
-	// Firestore.Client からは projectID が外部公開されていないので、
-	// ログにはフィルタ / ソート / ページ情報のみを出す
-	log.Printf("[BrandRepositoryFS] filter=%+v sort=%+v page=%+v",
-		filter, sort, page)
+	log.Printf("[BrandRepositoryFS] filter=%+v page=%+v", filter, page)
 
 	q := r.col().Query
 	q = applyBrandFilterToQuery(q, filter)
 
-	field, dir := mapBrandSort(sort)
-	q = q.OrderBy(field, dir)
+	// ★ sort は廃止。createdAt 降順で固定。
+	q = q.OrderBy("createdAt", firestore.Desc)
 
 	perPage := page.PerPage
 	if perPage <= 0 {
@@ -380,9 +376,9 @@ func (r *BrandRepositoryFS) List(
 func (r *BrandRepositoryFS) ListByCursor(
 	_ context.Context,
 	_ branddom.Filter,
-	_ branddom.Sort,
 	_ branddom.CursorPage,
 ) (branddom.CursorPageResult[branddom.Brand], error) {
+	// 現状は未実装のまま（インターフェース互換のみ）
 	return branddom.CursorPageResult[branddom.Brand]{}, errors.New("ListByCursor not implemented for Firestore")
 }
 
@@ -566,7 +562,7 @@ func (r *BrandRepositoryFS) domainToDocData(b branddom.Brand) map[string]any {
 }
 
 // ========================================
-// Query / Sort Helpers
+// Query Helpers
 // ========================================
 
 func applyBrandFilterToQuery(q firestore.Query, f branddom.Filter) firestore.Query {
@@ -585,29 +581,6 @@ func applyBrandFilterToQuery(q firestore.Query, f branddom.Filter) firestore.Que
 	}
 
 	return q
-}
-
-func mapBrandSort(s branddom.Sort) (field string, dir firestore.Direction) {
-	col := strings.ToLower(strings.TrimSpace(s.Column))
-	switch col {
-	case "name":
-		field = "name"
-	case "is_active", "isactive":
-		field = "isActive"
-	case "updated_at", "updatedat":
-		field = "updatedAt"
-	case "created_at", "createdat":
-		field = "createdAt"
-	default:
-		field = "createdAt"
-	}
-
-	if strings.EqualFold(string(s.Order), "asc") {
-		dir = firestore.Asc
-	} else {
-		dir = firestore.Desc
-	}
-	return
 }
 
 // ========================================

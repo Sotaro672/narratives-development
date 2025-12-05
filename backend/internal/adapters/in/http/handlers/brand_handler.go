@@ -155,22 +155,7 @@ func (h *BrandHandler) list(w http.ResponseWriter, r *http.Request) {
 		f.SearchQuery = v
 	}
 
-	column := strings.TrimSpace(q.Get("column"))
-	if column == "" {
-		column = "created_at"
-	}
-
-	orderStr := strings.ToLower(strings.TrimSpace(q.Get("order")))
-	var order branddom.SortOrder
-	switch orderStr {
-	case "asc":
-		order = branddom.SortAsc
-	case "desc":
-		order = branddom.SortDesc
-	default:
-		order = branddom.SortDesc
-	}
-	sort := branddom.Sort{Column: column, Order: order}
+	// ★ sort / order は廃止 → デフォルトは Repository / Usecase 側の実装に任せる
 
 	pageNum := 1
 	if v := strings.TrimSpace(q.Get("page")); v != "" {
@@ -186,7 +171,8 @@ func (h *BrandHandler) list(w http.ResponseWriter, r *http.Request) {
 	}
 	p := branddom.Page{Number: pageNum, PerPage: perPage}
 
-	result, err := h.uc.List(ctx, f, sort, p)
+	// Usecase.List(ctx, filter, page) に変更（Sort 渡しは廃止）
+	result, err := h.uc.List(ctx, f, p)
 	if err != nil {
 		writeBrandErr(w, err)
 		return
