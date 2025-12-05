@@ -17,18 +17,19 @@ import (
 // MemberHandler
 // -----------------------------------------------------------------------------
 type MemberHandler struct {
-	uc *memberuc.MemberUsecase
+	uc   *memberuc.MemberUsecase
+	repo memberdom.Repository
 }
 
 // NewMemberHandler — メンバーハンドラ
-// ※ 招待メール送信は /members/{id}/invitation 用の MemberInvitationHandler に委譲するため、
-//
-//	ここでは InvitationCommandPort は扱わない。
+// ※ 第二引数 repo は ListMembersByCompanyID 用に追加
 func NewMemberHandler(
 	uc *memberuc.MemberUsecase,
+	repo memberdom.Repository,
 ) http.Handler {
 	return &MemberHandler{
-		uc: uc,
+		uc:   uc,
+		repo: repo,
 	}
 }
 
@@ -52,11 +53,16 @@ func (h *MemberHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	case r.Method == http.MethodGet && path == "/members":
 		h.list(w, r)
 
+	// ★ 追加: GET /members/by-company
+	// currentMember の companyId を使って ListMembersByCompanyID を叩くデバッグ用エンドポイント
+	case r.Method == http.MethodGet && path == "/members/by-company":
+		h.listByCompanyID(w, r)
+
 	// ★ 追加: GET /members/{id}/display-name
 	case r.Method == http.MethodGet &&
 		strings.HasPrefix(path, "/members/") &&
 		strings.HasSuffix(path, "/display-name"):
-		// /members/{id}/display-name から {id} 部分を抽出
+
 		id := strings.TrimPrefix(path, "/members/")
 		id = strings.TrimSuffix(id, "/display-name")
 		h.getDisplayName(w, r, id)
@@ -100,7 +106,6 @@ func (h *MemberHandler) create(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// AuthMiddleware から companyId 取得
 	me, ok := httpmw.CurrentMember(r)
 	if !ok || strings.TrimSpace(me.CompanyID) == "" {
 		w.WriteHeader(http.StatusUnauthorized)
@@ -197,32 +202,19 @@ func (h *MemberHandler) list(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	qv := r.URL.Query()
 
-	log.Printf("[memberHandler.list] ENTER path=%s", r.URL.Path)
-
 	var f memberdom.Filter
 	f.SearchQuery = strings.TrimSpace(qv.Get("q"))
 
 	me, ok := httpmw.CurrentMember(r)
-	if !ok {
-		log.Printf("[memberHandler.list] CurrentMember not found in context")
+	if !ok || strings.TrimSpace(me.CompanyID) == "" {
 		w.WriteHeader(http.StatusUnauthorized)
 		_ = json.NewEncoder(w).Encode(map[string]string{"error": "unauthorized"})
 		return
 	}
-	log.Printf(
-		"[memberHandler.list] CurrentMember.ID=%s companyId=%q",
-		me.ID, me.CompanyID,
-	)
 
-	if strings.TrimSpace(me.CompanyID) == "" {
-		log.Printf("[memberHandler.list] companyId empty → 401")
-		w.WriteHeader(http.StatusUnauthorized)
-		_ = json.NewEncoder(w).Encode(map[string]string{"error": "unauthorized"})
-		return
-	}
 	f.CompanyID = strings.TrimSpace(me.CompanyID)
-
 	f.Status = strings.TrimSpace(qv.Get("status"))
+
 	if v := strings.TrimSpace(qv.Get("brandIds")); v != "" {
 		f.BrandIDs = splitCSV(v)
 	}
@@ -243,6 +235,7 @@ func (h *MemberHandler) list(w http.ResponseWriter, r *http.Request) {
 	default:
 		sort.Column = "updatedAt"
 	}
+
 	switch strings.ToLower(strings.TrimSpace(qv.Get("order"))) {
 	case "asc":
 		sort.Order = "asc"
@@ -254,20 +247,62 @@ func (h *MemberHandler) list(w http.ResponseWriter, r *http.Request) {
 	page.Number = clampInt(parseIntDefault(qv.Get("page"), 1), 1, 1_000_000)
 	page.PerPage = clampInt(parseIntDefault(qv.Get("perPage"), 50), 1, 200)
 
-	log.Printf(
-		"[memberHandler.list] calling Usecase.List companyId=%q search=%q status=%q page=%d perPage=%d",
-		f.CompanyID, f.SearchQuery, f.Status, page.Number, page.PerPage,
-	)
-
 	res, err := h.uc.List(ctx, f, sort, page)
 	if err != nil {
-		log.Printf("[memberHandler.list] Usecase.List error: %v", err)
 		writeMemberErr(w, err)
 		return
 	}
 
-	log.Printf("[memberHandler.list] OK items=%d", len(res.Items))
 	_ = json.NewEncoder(w).Encode(res.Items)
+}
+
+// -----------------------------------------------------------------------------
+// GET /members/by-company
+// -----------------------------------------------------------------------------
+// currentMember の companyId を使って domain の ListMembersByCompanyID を叩く
+// 返却時には各メンバーに displayName を付与する。
+// 叩かれたかは log で確認できる。
+func (h *MemberHandler) listByCompanyID(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+
+	me, ok := httpmw.CurrentMember(r)
+	if !ok || strings.TrimSpace(me.CompanyID) == "" {
+		w.WriteHeader(http.StatusUnauthorized)
+		_ = json.NewEncoder(w).Encode(map[string]string{"error": "unauthorized"})
+		return
+	}
+
+	companyID := strings.TrimSpace(me.CompanyID)
+
+	// CursorPage のゼロ値（フィールド構成に依存しない）
+	var cpage memberdom.CursorPage
+
+	log.Printf("[memberHandler.listByCompanyID] ENTER companyID=%q", companyID)
+
+	res, err := memberdom.ListMembersByCompanyID(ctx, h.repo, companyID, cpage)
+	if err != nil {
+		log.Printf("[memberHandler.listByCompanyID] ListMembersByCompanyID error: %v", err)
+		writeMemberErr(w, err)
+		return
+	}
+
+	// レスポンス用 DTO: Member + displayName
+	type memberWithDisplayName struct {
+		memberdom.Member
+		DisplayName string `json:"displayName"`
+	}
+
+	items := make([]memberWithDisplayName, 0, len(res.Items))
+	for _, m := range res.Items {
+		items = append(items, memberWithDisplayName{
+			Member:      m,
+			DisplayName: memberdom.FormatLastFirst(m.LastName, m.FirstName),
+		})
+	}
+
+	log.Printf("[memberHandler.listByCompanyID] OK items=%d", len(items))
+
+	_ = json.NewEncoder(w).Encode(items)
 }
 
 // -----------------------------------------------------------------------------
@@ -275,6 +310,7 @@ func (h *MemberHandler) list(w http.ResponseWriter, r *http.Request) {
 // -----------------------------------------------------------------------------
 func (h *MemberHandler) get(w http.ResponseWriter, r *http.Request, id string) {
 	ctx := r.Context()
+
 	id = strings.TrimSpace(id)
 	if id == "" {
 		w.WriteHeader(http.StatusBadRequest)
@@ -293,8 +329,6 @@ func (h *MemberHandler) get(w http.ResponseWriter, r *http.Request, id string) {
 // -----------------------------------------------------------------------------
 // GET /members/{id}/display-name
 // -----------------------------------------------------------------------------
-// assigneeId → assigneeName 変換用のシンプルなエンドポイント。
-// Member の lastName / firstName から「姓 名」を組み立てて返す。
 func (h *MemberHandler) getDisplayName(w http.ResponseWriter, r *http.Request, id string) {
 	ctx := r.Context()
 
@@ -364,3 +398,5 @@ func clampInt(v, min, max int) int {
 	}
 	return v
 }
+
+// parseIntDefault は既存実装前提

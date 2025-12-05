@@ -1,7 +1,5 @@
 // frontend/console/admin/src/application/AdminService.tsx
 // Admin 用のアプリケーションサービス
-// - メンバー一覧取得
-// - AdminCard 用の担当者候補リスト整形 など
 
 import { auth } from "../../../shell/src/auth/infrastructure/config/firebaseClient";
 import {
@@ -23,17 +21,28 @@ export type AssigneeCandidate = {
   name: string;
 };
 
+// backend の /members/by-company が返す型：Member + displayName
+type MemberWithDisplayName = Member & {
+  displayName?: string;
+};
+
 /**
  * 生メンバー配列 → AdminCard 用の候補配列 & nameMap に変換
+ * displayName を優先的に使う
  */
 export function buildAssigneeCandidates(
-  items: Member[],
+  items: MemberWithDisplayName[],
 ): { candidates: AssigneeCandidate[]; nameMap: Record<string, string> } {
-  const candidates: AssigneeCandidate[] = items.map((m: Member) => {
+
+  console.log("[AdminService.buildAssigneeCandidates] raw items:", items);
+
+  const candidates: AssigneeCandidate[] = items.map((m: MemberWithDisplayName) => {
     const full =
+      (m.displayName ?? "").trim() ||
       `${m.lastName ?? ""} ${m.firstName ?? ""}`.trim() ||
       m.email ||
       m.id;
+
     return { id: m.id, name: full };
   });
 
@@ -42,16 +51,15 @@ export function buildAssigneeCandidates(
     nameMap[c.id] = c.name;
   });
 
+  console.log("[AdminService.buildAssigneeCandidates] candidates:", candidates);
+  console.log("[AdminService.buildAssigneeCandidates] nameMap:", nameMap);
+
   return { candidates, nameMap };
 }
 
 /**
  * 現在ログイン中ユーザーの companyId コンテキストで
- * AdminCard 用の担当者候補を取得する。
- *
- * - Firebase Auth から ID トークンを取得
- * - /members を叩く
- * - AdminCard 用フォーマットに変換して返す
+ * AdminCard 用の担当者候補を取得する
  */
 export async function fetchAssigneeCandidatesForCurrentCompany(): Promise<{
   candidates: AssigneeCandidate[];
@@ -59,7 +67,7 @@ export async function fetchAssigneeCandidatesForCurrentCompany(): Promise<{
 }> {
   const fbUser = auth.currentUser;
   if (!fbUser) {
-    // 未ログインの場合は空を返す
+    console.warn("[AdminService] No Firebase user — returning empty results");
     return { candidates: [], nameMap: {} };
   }
 
@@ -68,9 +76,17 @@ export async function fetchAssigneeCandidatesForCurrentCompany(): Promise<{
   const page: Page = { ...DEFAULT_PAGE, number: 1, perPage: 200 };
   const filter: MemberFilter = {};
 
+  console.log("[AdminService] Fetching members via fetchMemberListWithToken ...");
+
+  // ★ listMembersByCompanyId → displayName 付きレスポンスを取得する想定
   const { items } = await fetchMemberListWithToken(token, page, filter);
 
-  const { candidates, nameMap } = buildAssigneeCandidates(items as Member[]);
+  console.log("[AdminService] fetchMemberListWithToken result:", items);
+
+  const { candidates, nameMap } = buildAssigneeCandidates(items as MemberWithDisplayName[]);
+
+  console.log("[AdminService] Final assignee candidates:", candidates);
+  console.log("[AdminService] Final nameMap:", nameMap);
 
   return { candidates, nameMap };
 }

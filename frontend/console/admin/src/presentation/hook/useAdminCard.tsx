@@ -2,10 +2,11 @@
 import { useEffect, useState, useCallback } from "react";
 import { useAuth } from "../../../../shell/src/auth/presentation/hook/useCurrentMember";
 
-// ★ ID → 「姓 名」を解決するフック
+// ★ ID → 「姓 名」を backend の /members/{id}/display-name で解決するフック
 import { useMemberList } from "../../../../member/src/presentation/hooks/useMemberList";
 
 // ★ Admin 用アプリケーションサービス
+//   - ListMembersByCompanyID → displayName 付きメンバー一覧を返す想定
 import {
   type AssigneeCandidate,
   fetchAssigneeCandidatesForCurrentCompany,
@@ -13,7 +14,7 @@ import {
 
 export type UseAdminCardResult = {
   assigneeId: string | null; // ← そのまま保持（重要）
-  assigneeName: string; // 表示用のみ
+  assigneeName: string; // 表示用のみ（getDisplayName or fallback）
   assigneeCandidates: AssigneeCandidate[];
   loadingMembers: boolean;
 
@@ -25,7 +26,7 @@ export type UseAdminCardResult = {
 
 export function useAdminCard(): UseAdminCardResult {
   const { currentMember } = useAuth();
-  const { getNameLastFirstByID } = useMemberList();
+  const { getNameLastFirstByID } = useMemberList(); // ★ backend の getDisplayName を叩く
 
   // ★ assigneeId — 選択 ID のルートは従来のまま完全維持
   const [assigneeId, setAssigneeId] = useState<string | null>(
@@ -36,7 +37,7 @@ export function useAdminCard(): UseAdminCardResult {
   const [assigneeNameMap, setAssigneeNameMap] =
     useState<Record<string, string>>({});
 
-  // 画面表示専用 — getNameLastFirstByID / 一覧キャッシュの結果
+  // 画面表示専用 — 名前文字列
   const [assigneeName, setAssigneeName] = useState<string>("未設定");
 
   const [openAssigneePopover, setOpenAssigneePopover] = useState(false);
@@ -61,6 +62,7 @@ export function useAdminCard(): UseAdminCardResult {
         const { candidates, nameMap } =
           await fetchAssigneeCandidatesForCurrentCompany();
 
+        // ★ backend(ListMembersByCompanyID → displayName 付き)の結果をそのまま UI 用 state に格納
         setAssigneeCandidates(candidates);
         setAssigneeNameMap(nameMap);
       } finally {
@@ -70,6 +72,9 @@ export function useAdminCard(): UseAdminCardResult {
   }, []);
 
   // ★ assigneeId → assigneeName の解決（UI 表示専用）
+  //   1. backend の /members/{id}/display-name を叩く（getNameLastFirstByID）
+  //   2. 失敗した場合のみ一覧キャッシュ（assigneeNameMap）を見る
+  //   3. それも無ければ currentMember からの fallback
   useEffect(() => {
     let cancelled = false;
 
@@ -88,14 +93,14 @@ export function useAdminCard(): UseAdminCardResult {
       }
 
       try {
-        // 1. useMemberList 経由の名前解決（非同期）
+        // 1. backend の getDisplayName を叩く（useMemberList → /members/{id}/display-name）
         const resolved = await getNameLastFirstByID(id);
         if (!cancelled && resolved) {
           setAssigneeName(resolved);
           return;
         }
       } catch {
-        /* 無視して fallback に進む */
+        // 無視して fallback ルートへ
       }
 
       // 2. 一覧キャッシュから得られれば使う
@@ -105,7 +110,9 @@ export function useAdminCard(): UseAdminCardResult {
       }
 
       // 3. fallback
-      if (!cancelled) setAssigneeName(fallback);
+      if (!cancelled) {
+        setAssigneeName(fallback);
+      }
     };
 
     void resolveName();

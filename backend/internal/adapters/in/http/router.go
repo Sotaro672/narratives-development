@@ -317,8 +317,8 @@ func NewRouter(deps RouterDeps) http.Handler {
 	// ================================
 	// Members
 	// ================================
-	if deps.MemberUC != nil {
-		memberH := handlers.NewMemberHandler(deps.MemberUC)
+	if deps.MemberUC != nil && deps.MemberRepo != nil {
+		memberH := handlers.NewMemberHandler(deps.MemberUC, deps.MemberRepo)
 
 		var h http.Handler = memberH
 		if authMw != nil {
