@@ -8,8 +8,6 @@ import type { TokenBlueprint } from "../../domain/entity/tokenBlueprint";
 
 /**
  * Backend base URL
- * - .env の VITE_BACKEND_BASE_URL を優先
- * - 未設定時は Cloud Run の固定 URL を利用
  */
 const ENV_BASE =
   ((import.meta as any).env?.VITE_BACKEND_BASE_URL as string | undefined)?.replace(
@@ -37,9 +35,6 @@ async function getIdTokenOrThrow(): Promise<string> {
 // API レスポンス型
 // ---------------------------------------------------------
 
-/**
- * Go 側 PageResult に対応する型
- */
 export interface TokenBlueprintPageResult {
   items: TokenBlueprint[];
   totalCount: number;
@@ -49,7 +44,7 @@ export interface TokenBlueprintPageResult {
 }
 
 // ---------------------------------------------------------
-// 作成用ペイロード（createdBy を追加）
+// 作成用ペイロード
 // ---------------------------------------------------------
 export interface CreateTokenBlueprintPayload {
   name: string;
@@ -58,7 +53,7 @@ export interface CreateTokenBlueprintPayload {
   companyId?: string;
   description: string;
   assigneeId: string;
-  createdBy: string; // ← 作成者 memberId
+  createdBy: string;
   iconId?: string | null;
   contentFiles: string[];
 }
@@ -79,6 +74,7 @@ export interface UpdateTokenBlueprintPayload {
 // ---------------------------------------------------------
 async function handleJsonResponse<T>(res: Response): Promise<T> {
   const text = await res.text();
+
   if (!res.ok) {
     try {
       const data = JSON.parse(text);
@@ -93,33 +89,16 @@ async function handleJsonResponse<T>(res: Response): Promise<T> {
     return undefined as unknown as T;
   }
 
-  // ★ バックエンドから返ってきた生 JSON を確認できるようにログ出力
   try {
     const parsed = JSON.parse(text);
-    // ここでは汎用ハンドラなので、どの API かは個々の関数側で分かる前提でラベルのみ
-    console.log(
-      "[TokenBlueprintRepositoryHTTP] handleJsonResponse raw payload:",
-      parsed,
-    );
     return parsed as T;
   } catch {
-    // JSON でない場合はそのまま text を返す
-    console.log(
-      "[TokenBlueprintRepositoryHTTP] handleJsonResponse non-JSON text payload:",
-      text,
-    );
     return text as unknown as T;
   }
 }
 
-/**
- * backend から受け取った 1 レコードを TokenBlueprint に正規化
- * - brandName / BrandName を TokenBlueprint.brandName に載せ替え
- */
 function normalizeTokenBlueprint(raw: any): TokenBlueprint {
-  const tb = raw as TokenBlueprint & {
-    BrandName?: string;
-  };
+  const tb = raw as TokenBlueprint & { BrandName?: string };
 
   const brandName =
     (raw && (raw.brandName ?? raw.BrandName)) != null
@@ -128,38 +107,28 @@ function normalizeTokenBlueprint(raw: any): TokenBlueprint {
 
   return {
     ...tb,
-    // brandName フィールドを持っていない型でも optional なので代入して問題なし
     ...(brandName !== undefined ? { brandName } : {}),
   };
 }
 
-// PageResult 正規化
 function normalizePageResult(raw: any): TokenBlueprintPageResult {
   const rawItems = (raw.items ?? raw.Items ?? []) as any[];
 
   const items = rawItems.map((it) => normalizeTokenBlueprint(it));
 
-  const pageResult: TokenBlueprintPageResult = {
+  return {
     items,
     totalCount: (raw.totalCount ?? raw.TotalCount ?? 0) as number,
     totalPages: (raw.totalPages ?? raw.TotalPages ?? 0) as number,
     page: (raw.page ?? raw.Page ?? 1) as number,
     perPage: (raw.perPage ?? raw.PerPage ?? 0) as number,
   };
-
-  // ★ 正規化後のページングデータをログ
-  console.log("[TokenBlueprintRepositoryHTTP] normalizePageResult:", pageResult);
-
-  return pageResult;
 }
 
 // ---------------------------------------------------------
 // Public API
 // ---------------------------------------------------------
 
-/**
- * 一覧取得（汎用）
- */
 export async function fetchTokenBlueprints(
   params?: { page?: number; perPage?: number },
 ): Promise<TokenBlueprintPageResult> {
@@ -172,33 +141,15 @@ export async function fetchTokenBlueprints(
 
   const res = await fetch(url.toString(), {
     method: "GET",
-    headers: {
-      Authorization: `Bearer ${token}`,
-    },
+    headers: { Authorization: `Bearer ${token}` },
   });
 
   const raw = await handleJsonResponse<any>(res);
-  console.log(
-    "[TokenBlueprintRepositoryHTTP] fetchTokenBlueprints backend raw:",
-    raw,
-  );
-
-  const page = normalizePageResult(raw);
-  console.log(
-    "[TokenBlueprintRepositoryHTTP] fetchTokenBlueprints normalized page:",
-    page,
-  );
-
-  return page;
+  return normalizePageResult(raw);
 }
 
 /**
- * currentMember.companyId に紐づくトークン設計一覧を取得
- *
- * - backend 側では AuthMiddleware により context に積まれた companyId を使用して
- *   ListByCompanyID usecase が呼ばれる
- * - ここでは companyId 引数は「空のときは呼ばない」ためのガード用途のみ
- * - ページングは一覧用途として 200 件固定とし、items だけ返す
+ * currentMember.companyId に紐づく一覧
  */
 export async function listTokenBlueprintsByCompanyId(
   companyId: string,
@@ -209,28 +160,15 @@ export async function listTokenBlueprintsByCompanyId(
   const token = await getIdTokenOrThrow();
 
   const url = new URL(`${API_BASE}/token-blueprints`);
-  // companyId は backend が context から解決するためクエリでは渡さない
   url.searchParams.set("perPage", "200");
 
   const res = await fetch(url.toString(), {
     method: "GET",
-    headers: {
-      Authorization: `Bearer ${token}`,
-    },
+    headers: { Authorization: `Bearer ${token}` },
   });
 
   const raw = await handleJsonResponse<any>(res);
-  console.log(
-    "[TokenBlueprintRepositoryHTTP] listTokenBlueprintsByCompanyId backend raw:",
-    raw,
-  );
-
   const page = normalizePageResult(raw);
-  console.log(
-    "[TokenBlueprintRepositoryHTTP] listTokenBlueprintsByCompanyId items:",
-    page.items,
-  );
-
   return page.items;
 }
 
@@ -246,21 +184,12 @@ export async function fetchTokenBlueprintById(
     `${API_BASE}/token-blueprints/${encodeURIComponent(id)}`,
     {
       method: "GET",
-      headers: {
-        Authorization: `Bearer ${token}`,
-      },
+      headers: { Authorization: `Bearer ${token}` },
     },
   );
 
   const raw = await handleJsonResponse<any>(res);
-  const data = normalizeTokenBlueprint(raw);
-
-  console.log(
-    "[TokenBlueprintRepositoryHTTP] fetchTokenBlueprintById backend data:",
-    data,
-  );
-
-  return data;
+  return normalizeTokenBlueprint(raw);
 }
 
 /**
@@ -277,7 +206,7 @@ export async function createTokenBlueprint(
     brandId: payload.brandId.trim(),
     description: payload.description.trim(),
     assigneeId: payload.assigneeId.trim(),
-    createdBy: payload.createdBy.trim(), // backend で createdByName 解決に利用
+    createdBy: payload.createdBy.trim(),
     iconId:
       payload.iconId && payload.iconId.trim()
         ? payload.iconId.trim()
@@ -285,15 +214,8 @@ export async function createTokenBlueprint(
     contentFiles: (payload.contentFiles ?? [])
       .map((x) => x.trim())
       .filter(Boolean),
-    // companyId は backend が context から解決するため必須ではないが、
-    // 将来の拡張に備えて送ることは許容（backend 側では無視される）
     companyId: payload.companyId?.trim(),
   };
-
-  console.log(
-    "[TokenBlueprintRepositoryHTTP] createTokenBlueprint request body:",
-    body,
-  );
 
   const res = await fetch(`${API_BASE}/token-blueprints`, {
     method: "POST",
@@ -305,14 +227,7 @@ export async function createTokenBlueprint(
   });
 
   const raw = await handleJsonResponse<any>(res);
-  const data = normalizeTokenBlueprint(raw);
-
-  console.log(
-    "[TokenBlueprintRepositoryHTTP] createTokenBlueprint backend data:",
-    data,
-  );
-
-  return data;
+  return normalizeTokenBlueprint(raw);
 }
 
 /**
@@ -347,11 +262,6 @@ export async function updateTokenBlueprint(
       .filter(Boolean);
   }
 
-  console.log(
-    "[TokenBlueprintRepositoryHTTP] updateTokenBlueprint request body:",
-    body,
-  );
-
   const res = await fetch(
     `${API_BASE}/token-blueprints/${encodeURIComponent(id)}`,
     {
@@ -365,14 +275,7 @@ export async function updateTokenBlueprint(
   );
 
   const raw = await handleJsonResponse<any>(res);
-  const data = normalizeTokenBlueprint(raw);
-
-  console.log(
-    "[TokenBlueprintRepositoryHTTP] updateTokenBlueprint backend data:",
-    data,
-  );
-
-  return data;
+  return normalizeTokenBlueprint(raw);
 }
 
 /**
@@ -385,17 +288,11 @@ export async function deleteTokenBlueprint(id: string): Promise<void> {
     `${API_BASE}/token-blueprints/${encodeURIComponent(id)}`,
     {
       method: "DELETE",
-      headers: {
-        Authorization: `Bearer ${token}`,
-      },
+      headers: { Authorization: `Bearer ${token}` },
     },
   );
 
   await handleJsonResponse<unknown>(res);
-  console.log(
-    "[TokenBlueprintRepositoryHTTP] deleteTokenBlueprint completed for id:",
-    id,
-  );
 }
 
 // ---------------------------------------------------------
@@ -404,10 +301,9 @@ export async function deleteTokenBlueprint(id: string): Promise<void> {
 
 export type BrandSummary = { id: string; name: string };
 
-/**
- * 一覧取得 — 現在の company の brands
- */
-export async function fetchBrandsForCurrentCompany(): Promise<BrandSummary[]> {
+export async function fetchBrandsForCurrentCompany(): Promise<
+  BrandSummary[]
+> {
   const token = await getIdTokenOrThrow();
 
   const url = new URL(`${API_BASE}/brands`);
@@ -415,35 +311,19 @@ export async function fetchBrandsForCurrentCompany(): Promise<BrandSummary[]> {
 
   const res = await fetch(url.toString(), {
     method: "GET",
-    headers: {
-      Authorization: `Bearer ${token}`,
-    },
+    headers: { Authorization: `Bearer ${token}` },
   });
 
   const raw = await handleJsonResponse<any>(res);
-  console.log(
-    "[TokenBlueprintRepositoryHTTP] fetchBrandsForCurrentCompany backend raw:",
-    raw,
-  );
 
   const items = (raw?.items ?? raw?.Items ?? []) as any[];
 
-  const summaries = items.map((b) => ({
+  return items.map((b) => ({
     id: String(b.id ?? b.ID ?? ""),
     name: String(b.name ?? b.Name ?? ""),
   }));
-
-  console.log(
-    "[TokenBlueprintRepositoryHTTP] fetchBrandsForCurrentCompany summaries:",
-    summaries,
-  );
-
-  return summaries;
 }
 
-/**
- * brandId → brandName
- */
 export async function fetchBrandNameById(id: string): Promise<string> {
   const trimmed = id.trim();
   if (!trimmed) return "";
@@ -454,23 +334,10 @@ export async function fetchBrandNameById(id: string): Promise<string> {
     `${API_BASE}/brands/${encodeURIComponent(trimmed)}`,
     {
       method: "GET",
-      headers: {
-        Authorization: `Bearer ${token}`,
-      },
+      headers: { Authorization: `Bearer ${token}` },
     },
   );
 
   const data = await handleJsonResponse<any>(res);
-  console.log(
-    "[TokenBlueprintRepositoryHTTP] fetchBrandNameById backend data:",
-    data,
-  );
-
-  const name = String(data?.name ?? data?.Name ?? "").trim();
-  console.log(
-    "[TokenBlueprintRepositoryHTTP] fetchBrandNameById resolved name:",
-    { id: trimmed, name },
-  );
-
-  return name;
+  return String(data?.name ?? data?.Name ?? "").trim();
 }

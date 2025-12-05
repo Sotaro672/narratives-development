@@ -50,6 +50,15 @@ export default function TokenBlueprintManagementPage() {
       direction={sortDir}
       onChange={handleChangeSort}
     />,
+    // ★ 追加：更新日列
+    <SortableTableHeader
+      key="updatedAt"
+      label="更新日"
+      sortKey="updatedAt"
+      activeKey={sortKey}
+      direction={sortDir}
+      onChange={handleChangeSort}
+    />,
   ];
 
   return (
@@ -90,7 +99,11 @@ export default function TokenBlueprintManagementPage() {
             {/* ★ 担当者は assigneeName を表示（fallback は空文字） */}
             <td>{t.assigneeName || ""}</td>
 
+            {/* 作成日 */}
             <td>{t.createdAt}</td>
+
+            {/* ★ 追加：更新日（yyyy/MM/dd にフォーマット済み） */}
+            <td>{t.updatedAt}</td>
           </tr>
         ))}
       </List>

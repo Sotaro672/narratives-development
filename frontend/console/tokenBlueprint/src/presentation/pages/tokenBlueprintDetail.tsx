@@ -1,76 +1,45 @@
-// frontend/tokenBlueprint/src/presentation/pages/tokenBlueprintDetail.tsx 
+// frontend/console/tokenBlueprint/src/presentation/pages/tokenBlueprintDetail.tsx
 
 import * as React from "react";
-import { useNavigate, useParams } from "react-router-dom";
 import PageStyle from "../../../../shell/src/layout/PageStyle/PageStyle";
 import AdminCard from "../../../../admin/src/presentation/components/AdminCard";
 import TokenBlueprintCard from "../components/tokenBlueprintCard";
 import TokenContentsCard from "../../../../tokenContents/src/presentation/components/tokenContentsCard";
-import { TOKEN_BLUEPRINTS } from "../../infrastructure/mockdata/tokenBlueprint_mockdata";
-import type { TokenBlueprint } from "../../domain/entity/tokenBlueprint";
 
-// ★ 追加: TokenBlueprintCard 用ロジックフック
-import { useTokenBlueprintCard } from "../hook/useTokenBlueprintCard";
+// ★ ロジックはすべて Hook に移譲
+import { useTokenBlueprintDetail } from "../hook/useTokenBlueprintDetail";
 
 export default function TokenBlueprintDetail() {
-  const navigate = useNavigate();
-  const { tokenBlueprintId } = useParams<{ tokenBlueprintId: string }>();
+  const { vm, handlers } = useTokenBlueprintDetail();
 
-  // 対象の TokenBlueprint をモックから取得（id で検索）
-  const blueprint: TokenBlueprint | undefined = React.useMemo(() => {
-    if (!TOKEN_BLUEPRINTS.length) return undefined;
-    if (tokenBlueprintId) {
-      const found = TOKEN_BLUEPRINTS.find((b) => b.id === tokenBlueprintId);
-      if (found) {
-        // shell 側 TokenBlueprint → domain 側 TokenBlueprint へ型アサーション
-        return found as unknown as TokenBlueprint;
-      }
-    }
-    // パラメータ不一致時は先頭をフォールバック表示（モック用）
-    return TOKEN_BLUEPRINTS[0] as unknown as TokenBlueprint;
-  }, [tokenBlueprintId]);
+  const {
+    blueprint,
+    title,
+    assigneeName,
+    createdByName,
+    createdAt,
+    tokenContentsIds,
+    cardVm,
+    isEditMode, // ★ 追加
+  } = vm;
 
-  // 戻るボタン（絶対パスで TokenBlueprintManagement に戻る）
-  const handleBack = React.useCallback(() => {
-    navigate("/tokenBlueprint", { replace: true });
-  }, [navigate]);
+  const {
+    onBack,
+    onEdit,
+    onCancel,
+    onSave,
+    onDelete,
+    onEditAssignee,
+    onClickAssignee,
+    cardHandlers,
+  } = handlers;
 
-  const handleSave = React.useCallback(() => {
-    // TODO: TokenBlueprintCard の状態を集約して保存 API を呼ぶ
-    console.log("トークン設計を保存しました（モック）");
-    alert("トークン設計を保存しました（モック）");
-  }, []);
-
-  // 管理情報表示用（blueprint が無い場合は空文字フォールバック）
-  const [assignee, setAssignee] = React.useState(
-    () => blueprint?.assigneeId ?? "",
-  );
-  const [createdBy] = React.useState(
-    () => (blueprint as any)?.createdBy ?? "",
-  );
-  const [createdAt] = React.useState(
-    () => (blueprint as any)?.createdAt ?? "",
-  );
-
-  // ★ TokenBlueprintCard 用の ViewModel / Handlers を構築
-  //   - initialEditMode: false → デフォルトを view モードにする
-  const { vm, handlers } = useTokenBlueprintCard({
-    initialTokenBlueprint: (blueprint ?? {}) as Partial<TokenBlueprint>,
-    initialBurnAt: "",        // まだ burnAt を使っていないので空で OK
-    initialIconUrl: undefined,
-    initialEditMode: false,   // ★ view モードで呼び出し
-  });
-
-  // モックが無い場合の簡易フォールバック
+  // データが無い場合のフォールバック
   if (!blueprint) {
     return (
-      <PageStyle
-        layout="single"
-        title="トークン設計"
-        onBack={handleBack}
-      >
+      <PageStyle layout="single" title="トークン設計" onBack={onBack}>
         <p className="p-4 text-sm text-muted-foreground">
-          表示可能なトークン設計がありません（モックデータ未定義）。
+          表示可能なトークン設計がありません。
         </p>
       </PageStyle>
     );
@@ -79,32 +48,32 @@ export default function TokenBlueprintDetail() {
   return (
     <PageStyle
       layout="grid-2"
-      title={`トークン設計：${blueprint.id}`}
-      onBack={handleBack}
-      onSave={handleSave}
+      title={title}
+      onBack={onBack}
+      // ★ 通常時は「編集」ボタンのみ
+      onEdit={!isEditMode ? onEdit : undefined}
+      // ★ 編集モード時は「キャンセル／保存／削除」を表示
+      onCancel={isEditMode ? onCancel : undefined}
+      onSave={isEditMode ? onSave : undefined}
+      onDelete={isEditMode ? onDelete : undefined}
     >
       {/* 左カラム：トークン設計カード＋コンテンツビューア */}
       <div>
-        {/* TokenBlueprintCard は vm / handlers で受ける */}
-        <TokenBlueprintCard vm={vm} handlers={handlers} />
+        <TokenBlueprintCard vm={cardVm} handlers={cardHandlers} />
 
-        {/* contentFiles（ID配列）と整合。
-            TokenContentsCard 側で ID → 実ファイル等を解決する想定。 */}
         <div style={{ marginTop: 16 }}>
-          <TokenContentsCard
-            images={blueprint.contentFiles ?? []}
-          />
+          <TokenContentsCard images={tokenContentsIds} />
         </div>
       </div>
 
-      {/* 右カラム：管理情報（TokenBlueprint のメタ情報に対応） */}
+      {/* 右カラム：管理情報（TokenBlueprint のメタ情報） */}
       <AdminCard
         title="管理情報"
-        assigneeName={assignee || blueprint.assigneeId}
-        createdByName={createdBy || (blueprint as any).createdBy}
-        createdAt={createdAt || (blueprint as any).createdAt}
-        onEditAssignee={() => setAssignee("new-assignee-id")}
-        onClickAssignee={() => console.log("assignee clicked:", assignee)}
+        assigneeName={assigneeName}
+        createdByName={createdByName}
+        createdAt={createdAt}
+        onEditAssignee={onEditAssignee}
+        onClickAssignee={onClickAssignee}
       />
     </PageStyle>
   );

@@ -74,13 +74,8 @@ export function useTokenBlueprintManagement(): UseTokenBlueprintManagementResult
     (async () => {
       try {
         const result = await fetchTokenBlueprintsForCompany(companyId);
-        console.log(
-          "[useTokenBlueprintManagement] fetched token blueprints for company:",
-          { companyId, result },
-        );
         setRows(result);
-      } catch (e) {
-        console.error("[useTokenBlueprintManagement] fetch error:", e);
+      } catch {
         setRows([]);
       }
     })();
@@ -124,51 +119,26 @@ export function useTokenBlueprintManagement(): UseTokenBlueprintManagementResult
       label: assigneeNameById.get(opt.value) || opt.label || opt.value,
     }));
 
-    const opts = { brandOptions, assigneeOptions };
-    console.log(
-      "[useTokenBlueprintManagement] brandOptions / assigneeOptions:",
-      opts,
-    );
-    return opts;
+    return { brandOptions, assigneeOptions };
   }, [rows]);
 
   // フィルタ + ソート適用後の行: service に委譲
   const filteredRows: TokenBlueprint[] = useMemo(() => {
-    const filtered = filterAndSortTokenBlueprints(rows, {
+    return filterAndSortTokenBlueprints(rows, {
       brandFilter,
       assigneeFilter,
       sortKey,
       sortDir,
     });
-
-    console.log(
-      "[useTokenBlueprintManagement] filteredRows (before date format, will be passed to UI):",
-      {
-        originalRows: rows,
-        brandFilter,
-        assigneeFilter,
-        sortKey,
-        sortDir,
-        filteredRows: filtered,
-      },
-    );
-
-    return filtered;
   }, [rows, brandFilter, assigneeFilter, sortKey, sortDir]);
 
-  // createdAt を yyyy/MM/dd 形式に整形して UI へ渡す
+  // createdAt / updatedAt を yyyy/MM/dd 形式に整形して UI へ渡す
   const displayRows: TokenBlueprint[] = useMemo(() => {
-    const mapped = filteredRows.map((tb) => ({
+    return filteredRows.map((tb) => ({
       ...tb,
       createdAt: tb.createdAt ? formatDateYYYYMMDD(tb.createdAt) : tb.createdAt,
+      updatedAt: tb.updatedAt ? formatDateYYYYMMDD(tb.updatedAt) : tb.updatedAt,
     }));
-
-    console.log(
-      "[useTokenBlueprintManagement] displayRows (createdAt formatted):",
-      mapped,
-    );
-
-    return mapped;
   }, [filteredRows]);
 
   // 行クリックで詳細へ（id を使用）
@@ -188,7 +158,6 @@ export function useTokenBlueprintManagement(): UseTokenBlueprintManagementResult
     setAssigneeFilter([]);
     setSortKey(null);
     setSortDir(null);
-    console.log("[useTokenBlueprintManagement] トークン設計一覧リセット");
   }, []);
 
   const handleChangeBrandFilter = useCallback((vals: string[]) => {
@@ -203,10 +172,6 @@ export function useTokenBlueprintManagement(): UseTokenBlueprintManagementResult
     (key: string | null, dir: SortDir) => {
       setSortKey((key as SortKey) ?? null);
       setSortDir(dir);
-      console.log("[useTokenBlueprintManagement] sort changed:", {
-        sortKey: key,
-        sortDir: dir,
-      });
     },
     [],
   );

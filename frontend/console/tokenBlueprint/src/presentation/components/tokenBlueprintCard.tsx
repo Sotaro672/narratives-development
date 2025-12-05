@@ -1,4 +1,4 @@
-// frontend/tokenBlueprint/src/presentation/components/tokenBlueprintCard.tsx
+// frontend/console/tokenBlueprint/src/presentation/components/tokenBlueprintCard.tsx
 import * as React from "react";
 import { Link2, Upload, Calendar, Eye } from "lucide-react";
 
@@ -41,6 +41,10 @@ export type TokenBlueprintCardHandlers = {
   onUploadIcon?: () => void;
   onPreview?: () => void;
   onToggleEditMode?: () => void;
+
+  // ★ 追加: 詳細ページから直接制御するためのハンドラ
+  setEditMode?: (edit: boolean) => void;
+  reset?: () => void;
 };
 
 export default function TokenBlueprintCard({
@@ -118,7 +122,9 @@ export default function TokenBlueprintCard({
               <Input
                 value={vm.name}
                 placeholder="例：LUMINA VIP 会員トークン"
-                onChange={(e) => vm.isEditMode && handlers.onChangeName?.(e.target.value)}
+                onChange={(e) =>
+                  vm.isEditMode && handlers.onChangeName?.(e.target.value)
+                }
                 readOnly={!vm.isEditMode}
                 className={`token-blueprint-card__readonly-input ${
                   !vm.isEditMode ? "readonly" : ""
@@ -133,7 +139,8 @@ export default function TokenBlueprintCard({
                 value={vm.symbol}
                 placeholder="例：LUMI"
                 onChange={(e) =>
-                  vm.isEditMode && handlers.onChangeSymbol?.(e.target.value.toUpperCase())
+                  vm.isEditMode &&
+                  handlers.onChangeSymbol?.(e.target.value.toUpperCase())
                 }
                 readOnly={!vm.isEditMode}
                 className={`token-blueprint-card__readonly-input ${
@@ -159,7 +166,10 @@ export default function TokenBlueprintCard({
                     </div>
                   </PopoverTrigger>
 
-                  <PopoverContent align="start" className="token-blueprint-card__popover">
+                  <PopoverContent
+                    align="start"
+                    className="token-blueprint-card__popover"
+                  >
                     {vm.brandOptions.length === 0 && (
                       <div className="token-blueprint-card__popover-empty">
                         ブランド候補が未設定です
@@ -218,7 +228,9 @@ export default function TokenBlueprintCard({
               type="date"
               value={vm.burnAt}
               readOnly={!vm.isEditMode}
-              onChange={(e) => vm.isEditMode && handlers.onChangeBurnAt?.(e.target.value)}
+              onChange={(e) =>
+                vm.isEditMode && handlers.onChangeBurnAt?.(e.target.value)
+              }
               className={`token-blueprint-card__expires-input ${
                 !vm.isEditMode ? "readonly" : ""
               }`}

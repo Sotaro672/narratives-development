@@ -73,10 +73,10 @@ type tokenBlueprintResponse struct {
 	AssigneeID   string   `json:"assigneeId"`
 	AssigneeName string   `json:"assigneeName"` // ★ member.Service で解決した表示名
 
-	CreatedAt time.Time `json:"createdAt"`
-	CreatedBy string    `json:"createdBy"`
-	UpdatedAt time.Time `json:"updatedAt"`
-	UpdatedBy string    `json:"updatedBy"`
+	CreatedAt time.Time  `json:"createdAt"`
+	CreatedBy string     `json:"createdBy"`
+	UpdatedAt *time.Time `json:"updatedAt,omitempty"` // ★ ゼロ値なら JSON から省略
+	UpdatedBy string     `json:"updatedBy"`
 }
 
 type tokenBlueprintPageResponse struct {
@@ -125,6 +125,13 @@ func (h *TokenBlueprintHandler) toResponse(ctx context.Context, tb *tbdom.TokenB
 	assigneeName := h.resolveAssigneeName(ctx, tb.AssigneeID)
 	brandName := h.resolveBrandName(ctx, tb.BrandID) // ★ 追加
 
+	// ★ UpdatedAt: ゼロ値なら nil にして JSON から省略
+	var updatedAtPtr *time.Time
+	if !tb.UpdatedAt.IsZero() {
+		t := tb.UpdatedAt
+		updatedAtPtr = &t
+	}
+
 	resp := tokenBlueprintResponse{
 		ID:           tb.ID,
 		Name:         tb.Name,
@@ -140,7 +147,7 @@ func (h *TokenBlueprintHandler) toResponse(ctx context.Context, tb *tbdom.TokenB
 
 		CreatedAt: tb.CreatedAt,
 		CreatedBy: tb.CreatedBy,
-		UpdatedAt: tb.UpdatedAt,
+		UpdatedAt: updatedAtPtr, // ★ ここが nil なら created 直後は JSON に出ない
 		UpdatedBy: tb.UpdatedBy,
 	}
 

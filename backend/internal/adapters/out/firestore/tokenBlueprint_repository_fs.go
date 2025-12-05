@@ -101,9 +101,9 @@ func (r *TokenBlueprintRepositoryFS) List(
 		return tbdom.PageResult{}, errors.New("firestore client is nil")
 	}
 
-	// デフォルト: updatedAt DESC, doc ID DESC
+	// デフォルト: createdAt DESC, doc ID DESC
 	q := r.col().
-		OrderBy("updatedAt", firestore.Desc).
+		OrderBy("createdAt", firestore.Desc).
 		OrderBy(firestore.DocumentID, firestore.Desc)
 
 	it := q.Documents(ctx)
@@ -221,14 +221,10 @@ func (r *TokenBlueprintRepositoryFS) Create(ctx context.Context, in tbdom.Create
 
 	now := time.Now().UTC()
 
+	// CreatedAt は nil の場合のみ now を使う
 	createdAt := now
 	if in.CreatedAt != nil && !in.CreatedAt.IsZero() {
 		createdAt = in.CreatedAt.UTC()
-	}
-
-	updatedAt := createdAt
-	if in.UpdatedAt != nil && !in.UpdatedAt.IsZero() {
-		updatedAt = in.UpdatedAt.UTC()
 	}
 
 	files := sanitizeStrings(in.ContentFiles)
@@ -246,12 +242,11 @@ func (r *TokenBlueprintRepositoryFS) Create(ctx context.Context, in tbdom.Create
 		"name":         strings.TrimSpace(in.Name),
 		"symbol":       strings.TrimSpace(in.Symbol),
 		"brandId":      strings.TrimSpace(in.BrandID),
-		"companyId":    strings.TrimSpace(in.CompanyID), // ★ 追加
+		"companyId":    strings.TrimSpace(in.CompanyID), // ★ 追加済み
 		"description":  strings.TrimSpace(in.Description),
 		"contentFiles": files,
 		"assigneeId":   strings.TrimSpace(in.AssigneeID),
 		"createdAt":    createdAt,
-		"updatedAt":    updatedAt,
 		"deletedAt":    nil,
 		"deletedBy":    nil,
 	}
@@ -265,6 +260,11 @@ func (r *TokenBlueprintRepositoryFS) Create(ctx context.Context, in tbdom.Create
 	}
 	if s := strings.TrimSpace(in.UpdatedBy); s != "" {
 		data["updatedBy"] = s
+	}
+
+	// ★ UpdatedAt は入力がある場合のみ保存する
+	if in.UpdatedAt != nil && !in.UpdatedAt.IsZero() {
+		data["updatedAt"] = in.UpdatedAt.UTC()
 	}
 
 	if _, err := docRef.Create(ctx, data); err != nil {
