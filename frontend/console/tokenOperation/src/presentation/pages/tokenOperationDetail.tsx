@@ -1,76 +1,30 @@
 // frontend/console/tokenOperation/src/presentation/pages/tokenOperationDetail.tsx
 
 import * as React from "react";
-import { useNavigate, useParams } from "react-router-dom";
 import PageStyle from "../../../../shell/src/layout/PageStyle/PageStyle";
 import AdminCard from "../../../../admin/src/presentation/components/AdminCard";
 import TokenBlueprintCard from "../../../../tokenBlueprint/src/presentation/components/tokenBlueprintCard";
 import TokenContentsCard from "../../../../tokenContents/src/presentation/components/tokenContentsCard";
-import { useTokenBlueprintCard } from "../../../../tokenBlueprint/src/presentation/hook/useTokenBlueprintCard";
-import type { TokenBlueprint } from "../../../../tokenBlueprint/src/domain/entity/tokenBlueprint";
-import { fetchTokenBlueprintById } from "../../../../tokenBlueprint/src/infrastructure/repository/tokenBlueprintRepositoryHTTP";
+import { useTokenOperationDetail } from "../hook/useTokenOperationDetail";
 
 export default function TokenOperationDetail() {
-  const navigate = useNavigate();
-  const { tokenOperationId } = useParams<{ tokenOperationId: string }>();
-
-  // ─────────────────────────────────────────
-  // Backend から TokenBlueprint を取得
-  // ─────────────────────────────────────────
-  const [blueprint, setBlueprint] = React.useState<TokenBlueprint | null>(null);
-  const [loading, setLoading] = React.useState<boolean>(true);
-  const [error, setError] = React.useState<string | null>(null);
-
-  React.useEffect(() => {
-    const id = tokenOperationId?.trim();
-    if (!id) {
-      setLoading(false);
-      return;
-    }
-
-    (async () => {
-      try {
-        const tb = await fetchTokenBlueprintById(id);
-        setBlueprint(tb);
-        setError(null);
-      } catch (e) {
-        console.error("[TokenOperationDetail] fetch error:", e);
-        setBlueprint(null);
-        setError("トークン設計の取得に失敗しました。");
-      } finally {
-        setLoading(false);
-      }
-    })();
-  }, [tokenOperationId]);
-
-  // TokenBlueprintCard 用 VM / handlers
-  const { vm: cardVm, handlers: cardHandlers } = useTokenBlueprintCard({
-    initialTokenBlueprint: (blueprint ?? {}) as any,
-    initialBurnAt: "",
-    initialIconUrl: blueprint?.iconId ?? "",
-    initialEditMode: false,
-  });
-
-  // 管理情報（とりあえずモックのまま）
-  const [assignee, setAssignee] = React.useState("member_sato");
-  const [creator] = React.useState("member_yamada");
-  const [createdAt] = React.useState("2025-11-06T20:55:00Z"); // ISO8601 形式に寄せる
-
-  // 戻る
-  const onBack = React.useCallback(() => navigate(-1), [navigate]);
-
-  // 保存ボタンのアクション（モック）
-  const handleSave = React.useCallback(() => {
-    alert("トークン運用情報を保存しました（モック）");
-  }, []);
+  const {
+    title,
+    loading,
+    error,
+    blueprint,
+    cardVm,
+    cardHandlers,
+    assignee,
+    creator,
+    createdAt,
+    onBack,
+    handleSave,
+  } = useTokenOperationDetail();
 
   if (loading) {
     return (
-      <PageStyle
-        layout="grid-2"
-        title={`トークン運用：${tokenOperationId ?? "不明ID"}`}
-        onBack={onBack}
-      >
+      <PageStyle layout="grid-2" title={title} onBack={onBack}>
         <div>読み込み中です…</div>
       </PageStyle>
     );
@@ -78,23 +32,14 @@ export default function TokenOperationDetail() {
 
   if (error || !blueprint) {
     return (
-      <PageStyle
-        layout="grid-2"
-        title={`トークン運用：${tokenOperationId ?? "不明ID"}`}
-        onBack={onBack}
-      >
+      <PageStyle layout="grid-2" title={title} onBack={onBack}>
         <div>{error ?? "トークン設計が見つかりませんでした。"}</div>
       </PageStyle>
     );
   }
 
   return (
-    <PageStyle
-      layout="grid-2"
-      title={`トークン運用：${tokenOperationId ?? "不明ID"}`}
-      onBack={onBack}
-      onSave={handleSave}
-    >
+    <PageStyle layout="grid-2" title={title} onBack={onBack} onSave={handleSave}>
       {/* 左カラム：トークン設計＋コンテンツ */}
       <div>
         <TokenBlueprintCard vm={cardVm} handlers={cardHandlers} />
@@ -111,8 +56,8 @@ export default function TokenOperationDetail() {
         assigneeName={assignee}
         createdByName={creator}
         createdAt={createdAt}
-        onEditAssignee={() => setAssignee("member_new")}
-        onClickAssignee={() => console.log("assignee clicked:", assignee)}
+        onEditAssignee={undefined /* hook 側で必要になれば拡張 */}
+        onClickAssignee={undefined /* hook 側で必要になれば拡張 */}
       />
     </PageStyle>
   );
