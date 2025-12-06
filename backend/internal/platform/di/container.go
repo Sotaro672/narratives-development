@@ -568,12 +568,15 @@ func NewContainer(ctx context.Context) (*Container, error) {
 	productUC := uc.NewProductUsecase(productQueryRepo, brandSvc, companySvc)
 
 	// ★ MintUsecase（MintRequest / NFT 発行候補一覧など）
-	// NewMintUsecase は (mintProductBlueprintRepo, mintProductionRepo, mintInspectionRepo) の 3 引数
+	// NewMintUsecase は
+	// (mintProductBlueprintRepo, mintProductionRepo, mintInspectionRepo, mintModelRepo, mintTokenBlueprintRepo, *brand.Service)
+	// の 6 引数
 	mintUC := uc.NewMintUsecase(
 		productBlueprintRepo,
 		productionRepo,
 		inspectionRepo,
 		modelRepo,
+		tokenBlueprintRepo, // ★ 追加：TokenBlueprint 用リポジトリ
 		brandSvc,
 	)
 

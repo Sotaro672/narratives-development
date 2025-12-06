@@ -5,12 +5,14 @@ import (
 	"context"
 	"errors"
 	"strings"
+	"time"
 
 	branddom "narratives/internal/domain/brand"
 	inspectiondom "narratives/internal/domain/inspection"
 	modeldom "narratives/internal/domain/model"
 	pbpdom "narratives/internal/domain/productBlueprint"
 	proddom "narratives/internal/domain/production"
+	tbdom "narratives/internal/domain/tokenBlueprint"
 )
 
 // ============================================================
@@ -31,6 +33,14 @@ type mintProductBlueprintRepo interface {
 	// ★ 追加: productBlueprintId から Patch 全体を取得するヘルパ
 	// mintRequestDetail 画面の ProductBlueprintCard 表示用
 	GetPatchByID(ctx context.Context, id string) (pbpdom.Patch, error)
+}
+
+// ★ TokenBlueprint（トークン設計）の minted 状態を更新するための最小ポート
+type mintTokenBlueprintRepo interface {
+	// 現状確認用
+	GetByID(ctx context.Context, id string) (*tbdom.TokenBlueprint, error)
+	// minted 等を含めた更新
+	Update(ctx context.Context, id string, in tbdom.UpdateTokenBlueprintInput) (*tbdom.TokenBlueprint, error)
 }
 
 // mintProductionRepo は productBlueprintId 群から productions を取得するための最小ポート
@@ -88,18 +98,23 @@ type MintUsecase struct {
 	inspRepo  mintInspectionRepo
 	modelRepo mintModelRepo
 
+	// ★ TokenBlueprint の minted 状態を更新するためのリポジトリ
+	tbRepo mintTokenBlueprintRepo
+
 	// brandId → brandName 解決用
 	brandSvc *branddom.Service
 }
 
 // NewMintUsecase は MintUsecase のコンストラクタです。
 // DI コンテナから ProductBlueprintRepositoryFS / ProductionRepositoryFS /
-// InspectionRepositoryFS / ModelRepositoryFS / brand.Service をそれぞれ満たす実装として渡してください。
+// InspectionRepositoryFS / ModelRepositoryFS / TokenBlueprintRepositoryFS /
+// brand.Service をそれぞれ満たす実装として渡してください。
 func NewMintUsecase(
 	pbRepo mintProductBlueprintRepo,
 	prodRepo mintProductionRepo,
 	inspRepo mintInspectionRepo,
 	modelRepo mintModelRepo,
+	tbRepo mintTokenBlueprintRepo,
 	brandSvc *branddom.Service,
 ) *MintUsecase {
 	return &MintUsecase{
@@ -107,6 +122,7 @@ func NewMintUsecase(
 		prodRepo:  prodRepo,
 		inspRepo:  inspRepo,
 		modelRepo: modelRepo,
+		tbRepo:    tbRepo,
 		brandSvc:  brandSvc,
 	}
 }
@@ -337,6 +353,70 @@ func (u *MintUsecase) GetProductBlueprintPatchByID(
 	}
 
 	return patch, nil
+}
+
+// ============================================================
+// Additional API: TokenBlueprint minted 更新
+// ============================================================
+
+// MarkTokenBlueprintMinted は、指定された tokenBlueprintId の minted を
+// "notYet" → "minted" に更新する usecase です。
+// - すでに minted=MintStatusMinted の場合は domain 側の ErrAlreadyMinted が返ります。
+// - minted を戻す（minted → notYet）は許可されません。
+func (u *MintUsecase) MarkTokenBlueprintMinted(
+	ctx context.Context,
+	tokenBlueprintID string,
+	actorID string,
+) (*tbdom.TokenBlueprint, error) {
+
+	if u == nil {
+		return nil, errors.New("mint usecase is nil")
+	}
+	if u.tbRepo == nil {
+		return nil, errors.New("tokenBlueprint repo is nil")
+	}
+
+	id := strings.TrimSpace(tokenBlueprintID)
+	if id == "" {
+		return nil, errors.New("tokenBlueprintID is empty")
+	}
+
+	actorID = strings.TrimSpace(actorID)
+	if actorID == "" {
+		return nil, errors.New("actorID is empty")
+	}
+
+	// 現状を取得
+	tb, err := u.tbRepo.GetByID(ctx, id)
+	if err != nil {
+		return nil, err
+	}
+
+	// domain ルールに従って minted を更新
+	if err := tb.SetMinted(tbdom.MintStatusMinted); err != nil {
+		// ここで ErrAlreadyMinted 等が返りうる
+		return nil, err
+	}
+
+	now := time.Now().UTC()
+	updatedBy := actorID
+
+	// RepositoryPort.Update 経由で Firestore に minted / updatedAt / updatedBy を反映
+	return u.tbRepo.Update(ctx, id, tbdom.UpdateTokenBlueprintInput{
+		// name / symbol / brandId は minted 状態では変更しない方針なので指定しない
+		Description:  nil,
+		IconID:       nil,
+		ContentFiles: nil,
+		AssigneeID:   nil,
+
+		// minted のみ "minted" に更新
+		Minted: &tb.Minted,
+
+		UpdatedAt: &now,
+		UpdatedBy: &updatedBy,
+		DeletedAt: nil,
+		DeletedBy: nil,
+	})
 }
 
 // ============================================================

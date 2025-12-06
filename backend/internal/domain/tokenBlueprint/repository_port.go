@@ -13,12 +13,16 @@ type CreateTokenBlueprintInput struct {
 	Name        string `json:"name"`
 	Symbol      string `json:"symbol"`
 	BrandID     string `json:"brandId"`
-	CompanyID   string `json:"companyId"` // ★ 追加
+	CompanyID   string `json:"companyId"` // ★ テナント
 	Description string `json:"description"`
 
 	IconID       *string  `json:"iconId,omitempty"`
 	ContentFiles []string `json:"contentFiles"`
 	AssigneeID   string   `json:"assigneeId"`
+
+	// ★ create 時は必ず "notYet" を入れる（MintStatusNotYet）
+	//   - Usecase / Repository で明示的に MintStatusNotYet をセットする前提
+	Minted MintStatus `json:"minted"`
 
 	CreatedAt *time.Time `json:"createdAt,omitempty"`
 	CreatedBy string     `json:"createdBy"`
@@ -38,6 +42,10 @@ type UpdateTokenBlueprintInput struct {
 	IconID       *string   `json:"iconId,omitempty"`
 	ContentFiles *[]string `json:"contentFiles,omitempty"`
 	AssigneeID   *string   `json:"assigneeId,omitempty"`
+
+	// ★ minted 状態の更新用（notYet / minted）
+	//   - ドメイン側の SetMinted / ensureMutable による制約に従う
+	Minted *MintStatus `json:"minted,omitempty"`
 
 	UpdatedAt *time.Time `json:"updatedAt,omitempty"`
 	UpdatedBy *string    `json:"updatedBy,omitempty"`

@@ -109,7 +109,7 @@ func (u *TokenBlueprintUsecase) CreateWithUploads(ctx context.Context, in Create
 	}
 	contentIDs = dedupStrings(contentIDs)
 
-	// ★ domain.New 側で minted は自動的に "notYet" に設定される
+	// ★ minted は create 時は必ず "notYet" をセット
 	tb, err := u.tbRepo.Create(ctx, tbdom.CreateTokenBlueprintInput{
 		Name:         strings.TrimSpace(in.Name),
 		Symbol:       strings.TrimSpace(in.Symbol),
@@ -119,6 +119,7 @@ func (u *TokenBlueprintUsecase) CreateWithUploads(ctx context.Context, in Create
 		IconID:       iconIDPtr,
 		ContentFiles: contentIDs,
 		AssigneeID:   strings.TrimSpace(in.AssigneeID),
+		Minted:       tbdom.MintStatusNotYet, // ★ ここで notYet 固定
 
 		// ★ 作成時は UpdatedAt / UpdatedBy は入力しない（nil / 空文字）
 		CreatedAt: nil,
