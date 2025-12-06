@@ -43,11 +43,16 @@ export type BrandForMintDTO = {
 /**
  * backend/internal/domain/tokenBlueprint.TokenBlueprint に対応する簡易 DTO
  * ListTokenBlueprintsByBrand（= /mint/token_blueprints?brandId=...）用
- * UI では name を表示する想定。
+ *
+ * - name: トークン名
+ * - symbol: シンボル（例: LUMI）
+ * - iconUrl: アイコン画像 URL（存在しない場合は undefined / 空文字）
  */
 export type TokenBlueprintForMintDTO = {
   id: string;
   name: string;
+  symbol: string;
+  iconUrl?: string;
 };
 
 /**
@@ -101,7 +106,8 @@ export async function loadBrandsForMint(): Promise<BrandForMintDTO[]> {
  * backend/internal/application/usecase.MintUsecase.ListTokenBlueprintsByBrand
  * （HTTP: GET /mint/token_blueprints?brandId=...）に対応。
  *
- * 右カラムの「トークン設計カード」用に、name を表示する前提。
+ * 右カラムの「トークン設計カード」用に、
+ * name / symbol / iconUrl を表示する前提。
  */
 export async function loadTokenBlueprintsByBrand(
   brandId: string,

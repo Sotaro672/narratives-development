@@ -17,6 +17,7 @@ import {
 
 import ProductBlueprintCard from "../../../../productBlueprint/src/presentation/components/productBlueprintCard";
 import InspectionResultCard from "../components/inspectionResultCard";
+import TokenBlueprintCard from "../../../../tokenBlueprint/src/presentation/components/tokenBlueprintCard";
 import { useMintRequestDetail } from "../hook/useMintRequestDetail";
 
 import "../styles/mintRequest.css";
@@ -27,9 +28,6 @@ export default function MintRequestDetail() {
     loading,
     error,
     inspectionCardData,
-
-    // ★ blueprint → tokenBlueprint に改名
-    tokenBlueprint,
 
     totalMintQuantity,
     onBack,
@@ -44,30 +42,49 @@ export default function MintRequestDetail() {
     selectedBrandName,
     handleSelectBrand,
 
-    // ★ 追加: トークン設計一覧カード用
+    // トークン設計一覧カード用
     tokenBlueprintOptions,
     selectedTokenBlueprintId,
     handleSelectTokenBlueprint,
+
+    // ★ useMintRequestDetail 側で追加した「選択中 TokenBlueprintOption」
+    selectedTokenBlueprint,
   } = useMintRequestDetail();
 
-  // PageHeader 用の保存ボタンハンドラ（現状はダミー）
-  const handleSave = () => {
-    // TODO: 必要になったら保存処理を実装
-  };
+  const handleSave = () => {};
 
   const currentFilterLabel =
     selectedBrandName || selectedBrandId || "未選択";
+
+  // ★ 左カラム TokenBlueprintCard に渡す ViewModel
+  const tokenBlueprintCardVm = selectedTokenBlueprint
+    ? {
+        id: selectedTokenBlueprint.id,
+        name: selectedTokenBlueprint.name,
+        symbol: selectedTokenBlueprint.symbol,
+        brandId: selectedBrandId,
+        brandName: selectedBrandName,
+        description: "", // description は取得していないので空
+        iconUrl: selectedTokenBlueprint.iconUrl,
+        isEditMode: false,
+        brandOptions: brandOptions.map((b) => ({ id: b.id, name: b.name })),
+      }
+    : null;
+
+  const tokenBlueprintCardHandlers = {
+    onPreview: () => {},
+  };
 
   return (
     <PageStyle
       layout="grid-2"
       title={title}
       onBack={onBack}
-      onSave={handleSave} // PageHeader に保存ボタン表示
+      onSave={handleSave}
     >
       {/* 左カラム */}
       <div className="space-y-4 mt-4">
-        {/* ① プロダクト基本情報（閲覧モード） */}
+        {/* ① Product Blueprint */}
         {pbPatchLoading ? (
           <Card className="mint-request-card">
             <CardContent className="mint-request-card__body">
@@ -100,7 +117,7 @@ export default function MintRequestDetail() {
           </Card>
         )}
 
-        {/* ② 検査結果カード */}
+        {/* ② Inspection Card */}
         {loading ? (
           <Card className="mint-request-card">
             <CardContent className="mint-request-card__body">
@@ -117,14 +134,15 @@ export default function MintRequestDetail() {
           <InspectionResultCard data={inspectionCardData} />
         )}
 
-        {/* ③ TokenBlueprintCard（将来用。現状は非表示） */}
-        {false && tokenBlueprint && (
-          <div className="mt-4">
-            {/* TokenBlueprintCard を実装する際にここで tokenBlueprint を利用 */}
-          </div>
+        {/* ③ Token Blueprint Card（選択されている場合表示） */}
+        {tokenBlueprintCardVm && (
+          <TokenBlueprintCard
+            vm={tokenBlueprintCardVm}
+            handlers={tokenBlueprintCardHandlers}
+          />
         )}
 
-        {/* ④ ミント申請ボタン */}
+        {/* ④ Mint Button */}
         <Card className="mint-request-card">
           <CardContent className="mint-request-card__body">
             <div className="mint-request-card__actions">
@@ -145,7 +163,7 @@ export default function MintRequestDetail() {
 
       {/* 右カラム */}
       <div className="space-y-4 mt-4">
-        {/* ブランド選択カード（ProductionCreate と同系 UI） */}
+        {/* ブランド選択カード */}
         <Card className="pb-select">
           <CardHeader>
             <CardTitle>ブランド選択</CardTitle>
@@ -154,7 +172,6 @@ export default function MintRequestDetail() {
             <Popover>
               <PopoverTrigger>
                 <div className="pb-select__trigger">
-                  {/* ★ デフォルトは何も選択されていない状態 */}
                   {selectedBrandName || "ブランドを選択"}
                 </div>
               </PopoverTrigger>
@@ -190,20 +207,18 @@ export default function MintRequestDetail() {
           </CardContent>
         </Card>
 
-        {/* ★ 追加: トークン名一覧カード */}
+        {/* トークン一覧カード */}
         <Card className="pb-select">
           <CardHeader>
             <CardTitle>トークン設計一覧</CardTitle>
           </CardHeader>
           <CardContent>
-            {/* ブランド未選択時 */}
             {!selectedBrandId && (
               <div className="pb-select__empty">
                 先にブランドを選択してください。
               </div>
             )}
 
-            {/* ブランド選択済みかつ結果あり */}
             {selectedBrandId && tokenBlueprintOptions.length > 0 && (
               <div className="pb-select__list">
                 {tokenBlueprintOptions.map((tb) => (
@@ -222,7 +237,6 @@ export default function MintRequestDetail() {
               </div>
             )}
 
-            {/* ブランド選択済みだが結果なし */}
             {selectedBrandId && tokenBlueprintOptions.length === 0 && (
               <div className="pb-select__empty">
                 選択中のブランドに紐づくトークン設計がありません。

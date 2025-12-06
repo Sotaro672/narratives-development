@@ -208,14 +208,21 @@ export async function fetchBrandsForMintHTTP(): Promise<BrandForMintDTO[]> {
  * backend: GET /mint/token_blueprints?brandId=...
  *
  * Go 側は tbdom.PageResult を返す想定なので、
- * JSON の Items / items から id / name だけを抜き出して
+ * JSON の Items / items から id / name / symbol / iconURL を抜き出して
  * TokenBlueprintForMintDTO[] に変換する。
  */
 type TokenBlueprintRecordRaw = {
   id?: string;
   name?: string;
+  symbol?: string;
+  iconId?: string;
+  iconURL?: string;
+
+  // 大文字始まりのフィールドにも一応対応
   ID?: string;
   Name?: string;
+  Symbol?: string;
+  IconId?: string;
 };
 
 type TokenBlueprintPageResultDTO = {
@@ -276,8 +283,14 @@ export async function fetchTokenBlueprintsByBrandHTTP(
     .map((tb) => ({
       id: tb.id ?? tb.ID ?? "",
       name: tb.name ?? tb.Name ?? "",
+      symbol: tb.symbol ?? tb.Symbol ?? "",
+      iconUrl:
+        tb.iconURL ??
+        tb.iconId ??
+        tb.IconId ??
+        undefined,
     }))
-    .filter((tb) => tb.id && tb.name);
+    .filter((tb) => tb.id && tb.name && tb.symbol);
 
   return mapped;
 }

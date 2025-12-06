@@ -207,6 +207,16 @@ func (h *MintHandler) listBrandsForCurrentCompany(w http.ResponseWriter, r *http
 }
 
 // ------------------------------------------------------------
+// TokenBlueprint 簡易レスポンス DTO（Mint 用）
+// ------------------------------------------------------------
+type tokenBlueprintForMintResponse struct {
+	ID      string `json:"id"`
+	Name    string `json:"name"`
+	Symbol  string `json:"symbol"`
+	IconURL string `json:"iconUrl"`
+}
+
+// ------------------------------------------------------------
 // GET /mint/token_blueprints?brandId=...
 // ------------------------------------------------------------
 func (h *MintHandler) listTokenBlueprintsByBrand(w http.ResponseWriter, r *http.Request) {
@@ -264,5 +274,16 @@ func (h *MintHandler) listTokenBlueprintsByBrand(w http.ResponseWriter, r *http.
 		return
 	}
 
-	_ = json.NewEncoder(w).Encode(result)
+	// 必要な項目だけを詰め替えて返却
+	items := make([]tokenBlueprintForMintResponse, 0, len(result.Items))
+	for _, tb := range result.Items {
+		items = append(items, tokenBlueprintForMintResponse{
+			ID:      tb.ID,
+			Name:    tb.Name,
+			Symbol:  tb.Symbol,
+			IconURL: tb.IconURL, // TokenBlueprint のフィールド名に合わせてください
+		})
+	}
+
+	_ = json.NewEncoder(w).Encode(items)
 }

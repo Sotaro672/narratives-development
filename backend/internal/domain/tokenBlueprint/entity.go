@@ -164,6 +164,7 @@ type TokenBlueprint struct {
 	CompanyID    string     `json:"companyId"`
 	Description  string     `json:"description"`
 	IconID       *string    `json:"iconId,omitempty"`
+	IconURL      string     `json:"iconUrl,omitempty"` // ★ 追加: 表示用のアイコン URL
 	ContentFiles []string   `json:"contentFiles"`
 	AssigneeID   string     `json:"assigneeId"`
 	Minted       MintStatus `json:"minted"` // "notYet" | "minted"
@@ -225,6 +226,7 @@ func New(
 		CompanyID:    strings.TrimSpace(companyID),
 		Description:  strings.TrimSpace(description),
 		IconID:       normalizePtr(iconID),
+		IconURL:      "", // 初期値は空。必要に応じて別レイヤーで補完。
 		ContentFiles: dedupTrim(contentFiles),
 		AssigneeID:   strings.TrimSpace(assigneeID),
 		Minted:       MintStatusNotYet, // create 時は常に notYet
@@ -353,9 +355,23 @@ func (t *TokenBlueprint) ClearIconID() error {
 	return nil
 }
 
-// 互換用
-func (t *TokenBlueprint) SetIconURL(u string) error { return t.SetIconID(u) }
-func (t *TokenBlueprint) ClearIconURL() error       { return t.ClearIconID() }
+// アイコン URL 用のヘルパ（表示専用）
+// TokenIcon リポジトリ等で URL を解決したあとにセットする想定。
+func (t *TokenBlueprint) SetIconURL(u string) error {
+	if t == nil {
+		return nil
+	}
+	t.IconURL = strings.TrimSpace(u)
+	return nil
+}
+
+func (t *TokenBlueprint) ClearIconURL() error {
+	if t == nil {
+		return nil
+	}
+	t.IconURL = ""
+	return nil
+}
 
 // ★ minted=MintStatusMinted では brandId 変更禁止
 func (t *TokenBlueprint) SetBrand(b branddom.Brand) error {

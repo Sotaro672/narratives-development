@@ -10,47 +10,37 @@ import (
 // Create 用入力
 // ===============================
 type CreateTokenBlueprintInput struct {
-	Name        string `json:"name"`
-	Symbol      string `json:"symbol"`
-	BrandID     string `json:"brandId"`
-	CompanyID   string `json:"companyId"` // ★ テナント
-	Description string `json:"description"`
-
-	IconID       *string  `json:"iconId,omitempty"`
-	ContentFiles []string `json:"contentFiles"`
-	AssigneeID   string   `json:"assigneeId"`
-
-	// ★ create 時は必ず "notYet" を入れる（MintStatusNotYet）
-	//   - Usecase / Repository で明示的に MintStatusNotYet をセットする前提
-	Minted MintStatus `json:"minted"`
-
-	CreatedAt *time.Time `json:"createdAt,omitempty"`
-	CreatedBy string     `json:"createdBy"`
-	UpdatedAt *time.Time `json:"updatedAt,omitempty"`
-	UpdatedBy string     `json:"updatedBy"`
+	Name         string     `json:"name"`
+	Symbol       string     `json:"symbol"`
+	BrandID      string     `json:"brandId"`
+	CompanyID    string     `json:"companyId"`
+	Description  string     `json:"description"`
+	IconID       *string    `json:"iconId,omitempty"`
+	ContentFiles []string   `json:"contentFiles"`
+	AssigneeID   string     `json:"assigneeId"`
+	Minted       MintStatus `json:"minted"`
+	CreatedAt    *time.Time `json:"createdAt,omitempty"`
+	CreatedBy    string     `json:"createdBy"`
+	UpdatedAt    *time.Time `json:"updatedAt,omitempty"`
+	UpdatedBy    string     `json:"updatedBy"`
 }
 
 // ===============================
 // Update 用入力
 // ===============================
 type UpdateTokenBlueprintInput struct {
-	Name        *string `json:"name,omitempty"`
-	Symbol      *string `json:"symbol,omitempty"`
-	BrandID     *string `json:"brandId,omitempty"`
-	Description *string `json:"description,omitempty"`
-
-	IconID       *string   `json:"iconId,omitempty"`
-	ContentFiles *[]string `json:"contentFiles,omitempty"`
-	AssigneeID   *string   `json:"assigneeId,omitempty"`
-
-	// ★ minted 状態の更新用（notYet / minted）
-	//   - ドメイン側の SetMinted / ensureMutable による制約に従う
-	Minted *MintStatus `json:"minted,omitempty"`
-
-	UpdatedAt *time.Time `json:"updatedAt,omitempty"`
-	UpdatedBy *string    `json:"updatedBy,omitempty"`
-	DeletedAt *time.Time `json:"deletedAt,omitempty"`
-	DeletedBy *string    `json:"deletedBy,omitempty"`
+	Name         *string     `json:"name,omitempty"`
+	Symbol       *string     `json:"symbol,omitempty"`
+	BrandID      *string     `json:"brandId,omitempty"`
+	Description  *string     `json:"description,omitempty"`
+	IconID       *string     `json:"iconId,omitempty"`
+	ContentFiles *[]string   `json:"contentFiles,omitempty"`
+	AssigneeID   *string     `json:"assigneeId,omitempty"`
+	Minted       *MintStatus `json:"minted,omitempty"`
+	UpdatedAt    *time.Time  `json:"updatedAt,omitempty"`
+	UpdatedBy    *string     `json:"updatedBy,omitempty"`
+	DeletedAt    *time.Time  `json:"deletedAt,omitempty"`
+	DeletedBy    *string     `json:"deletedBy,omitempty"`
 }
 
 // ===============================

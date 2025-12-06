@@ -33,10 +33,12 @@ export type BrandOption = {
   name: string;
 };
 
-// トークン設計カード用（名前だけ表示）
+// トークン設計カード用（name / symbol / icon まで持つ）
 export type TokenBlueprintOption = {
   id: string;
   name: string;
+  symbol: string;
+  iconUrl?: string;
 };
 
 export function useMintRequestDetail() {
@@ -237,6 +239,8 @@ export function useMintRequestDetail() {
           (tb: TokenBlueprintForMintDTO): TokenBlueprintOption => ({
             id: tb.id,
             name: tb.name,
+            symbol: tb.symbol,
+            iconUrl: tb.iconUrl,
           }),
         );
         setTokenBlueprintOptions(opts);
@@ -261,6 +265,14 @@ export function useMintRequestDetail() {
       setSelectedTokenBlueprintId(tokenBlueprintId);
     },
     [],
+  );
+
+  // 左カラムの TokenBlueprintCard 用に、選択中の TokenBlueprintOption を解決
+  const selectedTokenBlueprint = React.useMemo(
+    () =>
+      tokenBlueprintOptions.find((tb) => tb.id === selectedTokenBlueprintId) ??
+      null,
+    [tokenBlueprintOptions, selectedTokenBlueprintId],
   );
 
   return {
@@ -288,5 +300,6 @@ export function useMintRequestDetail() {
     tokenBlueprintOptions,
     selectedTokenBlueprintId,
     handleSelectTokenBlueprint,
+    selectedTokenBlueprint,
   };
 }
