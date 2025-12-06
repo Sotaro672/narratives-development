@@ -105,9 +105,7 @@ export async function loadProductionDetail(
     raw.productBlueprintId ?? raw.ProductBlueprintID ?? "";
 
   const resolvedProductName =
-    raw.productName ??
-    raw.ProductName ??
-    blueprintId;
+    raw.productName ?? raw.ProductName ?? blueprintId;
 
   let detail: ProductionDetail = {
     ...(raw as Production),
@@ -115,11 +113,7 @@ export async function loadProductionDetail(
     productBlueprintId: blueprintId,
     productName: resolvedProductName,
     brandName:
-      raw.brandName ??
-      raw.BrandName ??
-      raw.brand ??
-      raw.Brand ??
-      "",
+      raw.brandName ?? raw.BrandName ?? raw.brand ?? raw.Brand ?? "",
     assigneeId: raw.assigneeId ?? raw.AssigneeID ?? "",
     assigneeName: raw.assigneeName ?? raw.AssigneeName ?? "",
     status: (raw.status ?? raw.Status ?? "") as ProductionStatus,
@@ -149,9 +143,7 @@ export async function loadProductionDetail(
 
     if (match) {
       const matchProductName =
-        match.productName ??
-        match.ProductName ??
-        detail.productBlueprintId;
+        match.productName ?? match.ProductName ?? detail.productBlueprintId;
 
       detail = {
         ...detail,
@@ -162,10 +154,7 @@ export async function loadProductionDetail(
             : matchProductName,
 
         brandName:
-          detail.brandName ||
-          match.brandName ||
-          match.BrandName ||
-          "",
+          detail.brandName || match.brandName || match.BrandName || "",
 
         assigneeName:
           detail.assigneeName ||
@@ -213,9 +202,7 @@ export async function loadProductBlueprintDetail(
   const raw = (await res.json()) as any;
 
   const qa =
-    raw.qualityAssurance ??
-    raw.QualityAssurance ??
-    [];
+    raw.qualityAssurance ?? raw.QualityAssurance ?? [];
 
   const rawTag =
     raw.productIdTag ??
@@ -388,6 +375,8 @@ export async function updateProductionDetail(params: {
 
 /* ---------------------------------------------------------
  * 印刷完了シグナル受信
+ *   - Production を printed に更新
+ *   - 対応する ProductBlueprint に対して mark-printed をリクエスト
  * --------------------------------------------------------- */
 export async function notifyPrintLogCompleted(params: {
   productionId: string;
@@ -419,6 +408,7 @@ export async function notifyPrintLogCompleted(params: {
     const token = await getIdTokenOrThrow();
     const safeId = encodeURIComponent(id);
 
+    // 1) Production を printed に更新
     const payload: any = {
       status: "printed" as ProductionStatus,
       printedAt,
@@ -433,5 +423,32 @@ export async function notifyPrintLogCompleted(params: {
       },
       body: JSON.stringify(payload),
     });
-  } catch (_) {}
+
+    // 2) 対応する ProductBlueprint を取得して printed フラグを立てる
+    const repo = new ProductionRepositoryHTTP();
+    const raw = (await repo.getById(id)) as any;
+
+    const productBlueprintId: string =
+      raw?.productBlueprintId ?? raw?.ProductBlueprintID ?? "";
+
+    const pbIdTrimmed = productBlueprintId?.trim();
+    if (pbIdTrimmed) {
+      const safePbId = encodeURIComponent(pbIdTrimmed);
+
+      await fetch(
+        `${BACKEND_API_BASE}/product-blueprints/${safePbId}/mark-printed`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${token}`,
+          },
+          // body は現状特に送るものがないので空オブジェクト
+          body: JSON.stringify({}),
+        },
+      );
+    }
+  } catch (_) {
+    // エラーは飲み込む（印刷自体はユーザー側で完了している前提）
+  }
 }

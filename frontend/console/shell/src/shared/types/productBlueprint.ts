@@ -13,6 +13,12 @@ export type ItemType = "tops" | "bottoms" | "other";
 export type ProductIDTagType = "qr" | "nfc";
 
 /**
+ * printed 状態
+ * backend/internal/domain/productBlueprint/entity.go の PrintedStatus に対応。
+ */
+export type PrintedStatus = "notYet" | "printed";
+
+/**
  * ProductIDTag
  * backend/internal/domain/productBlueprint/entity.go の ProductIDTag に対応。
  */
@@ -68,6 +74,9 @@ export interface ProductBlueprint {
   /** 担当者 Member ID（必須） */
   assigneeId: string;
 
+  /** printed フラグ ("notYet" | "printed") */
+  printed?: PrintedStatus;
+
   /** 作成者 Member ID（任意） */
   createdBy?: string | null;
 
@@ -101,6 +110,13 @@ export function isValidProductIDTagType(
   value: string,
 ): value is ProductIDTagType {
   return value === "qr" || value === "nfc";
+}
+
+/** PrintedStatus の妥当性チェック */
+export function isValidPrintedStatus(
+  value: string,
+): value is PrintedStatus {
+  return value === "notYet" || value === "printed";
 }
 
 /** ProductIDTag の簡易バリデーション */
@@ -201,6 +217,13 @@ export function validateProductBlueprint(pb: ProductBlueprint): string[] {
       errors.push(`duplicate variation id: ${id}`);
     }
     seen.add(id);
+  }
+
+  // printed が設定されている場合のみチェック
+  if (pb.printed !== undefined && pb.printed !== null) {
+    if (!isValidPrintedStatus(pb.printed)) {
+      errors.push("printed must be 'notYet' or 'printed'");
+    }
   }
 
   return errors;

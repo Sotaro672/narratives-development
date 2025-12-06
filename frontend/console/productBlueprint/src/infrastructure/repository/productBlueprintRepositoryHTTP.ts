@@ -49,6 +49,8 @@ export async function createProductBlueprintHTTP(
     companyId: params.companyId,
     assigneeId: params.assigneeId ?? null,
     createdBy: params.createdBy ?? null,
+    // printed は backend 側でデフォルト "notYet" を設定する想定なので、
+    // フロントからは明示的には渡さない（必要になればここに追加）
   };
 
   const res = await fetch(`${API_BASE}/product-blueprints`, {
@@ -66,7 +68,7 @@ export async function createProductBlueprintHTTP(
     );
   }
 
-  // ★ 詳細レスポンスとして返す
+  // ★ 詳細レスポンスとして返す（printed を含む想定）
   return (await res.json()) as ProductBlueprintDetailResponse;
 }
 
@@ -86,6 +88,58 @@ export async function listProductBlueprintsHTTP(): Promise<ProductBlueprintDetai
   if (!res.ok) {
     throw new Error(
       `商品設計一覧の取得に失敗しました（${res.status} ${res.statusText}）`,
+    );
+  }
+
+  return (await res.json()) as ProductBlueprintDetailResponse[];
+}
+
+// -----------------------------------------------------------
+// GET: 商品設計 一覧（printed == notYet）
+//   - backend: GET /product-blueprints/printed/notYet
+// -----------------------------------------------------------
+export async function listNotYetPrintedProductBlueprintsHTTP(): Promise<ProductBlueprintDetailResponse[]> {
+  const idToken = await getIdTokenOrThrow();
+
+  const res = await fetch(
+    `${API_BASE}/product-blueprints/printed/notYet`,
+    {
+      method: "GET",
+      headers: {
+        Authorization: `Bearer ${idToken}`,
+      },
+    },
+  );
+
+  if (!res.ok) {
+    throw new Error(
+      `未印刷の商品設計一覧の取得に失敗しました（${res.status} ${res.statusText}）`,
+    );
+  }
+
+  return (await res.json()) as ProductBlueprintDetailResponse[];
+}
+
+// -----------------------------------------------------------
+// GET: 商品設計 一覧（printed == printed）
+//   - backend: GET /product-blueprints/printed/printed
+// -----------------------------------------------------------
+export async function listPrintedProductBlueprintsHTTP(): Promise<ProductBlueprintDetailResponse[]> {
+  const idToken = await getIdTokenOrThrow();
+
+  const res = await fetch(
+    `${API_BASE}/product-blueprints/printed/printed`,
+    {
+      method: "GET",
+      headers: {
+        Authorization: `Bearer ${idToken}`,
+      },
+    },
+  );
+
+  if (!res.ok) {
+    throw new Error(
+      `印刷済みの商品設計一覧の取得に失敗しました（${res.status} ${res.statusText}）`,
     );
   }
 
@@ -133,6 +187,7 @@ export async function updateProductBlueprintHTTP(
       "Content-Type": "application/json",
       Authorization: `Bearer ${idToken}`,
     },
+    // params 内に printed があれば、そのまま backend に渡される
     body: JSON.stringify(params),
   });
 
@@ -143,7 +198,42 @@ export async function updateProductBlueprintHTTP(
     );
   }
 
-  // ★ 返り値を ProductBlueprintDetailResponse に統一
+  // ★ 返り値を ProductBlueprintDetailResponse に統一（printed を含む想定）
+  return (await res.json()) as ProductBlueprintDetailResponse;
+}
+
+// -----------------------------------------------------------
+// POST: 商品設計 printed フラグ更新（notYet → printed）
+//   - backend: POST /product-blueprints/{id}/mark-printed
+// -----------------------------------------------------------
+export async function markProductBlueprintPrintedHTTP(
+  id: string,
+): Promise<ProductBlueprintDetailResponse> {
+  const trimmed = id?.trim();
+  if (!trimmed) {
+    throw new Error("markProductBlueprintPrintedHTTP: id が空です");
+  }
+
+  const idToken = await getIdTokenOrThrow();
+
+  const res = await fetch(
+    `${API_BASE}/product-blueprints/${encodeURIComponent(trimmed)}/mark-printed`,
+    {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${idToken}`,
+      },
+    },
+  );
+
+  if (!res.ok) {
+    const detail = await res.text().catch(() => "");
+    throw new Error(
+      `商品設計のprinted更新に失敗しました（${res.status} ${res.statusText}）\n${detail}`,
+    );
+  }
+
+  // updated な ProductBlueprint（printed: "printed" を含む）を受け取る想定
   return (await res.json()) as ProductBlueprintDetailResponse;
 }
 
