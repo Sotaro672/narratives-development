@@ -1,4 +1,4 @@
-// frontend/shell/src/shared/types/tokenBlueprint.ts 
+// frontend/shell/src/shared/types/tokenBlueprint.ts  
 
 /**
  * ContentFileType
@@ -23,6 +23,14 @@ export interface ContentFile {
   /** ファイルサイズ（bytes） */
   size: number;
 }
+
+/**
+ * TokenBlueprint の minted ステータス
+ * backend/internal/domain/tokenBlueprint/entity.go の MintStatus に対応。
+ *
+ * - "notYet" | "minted"
+ */
+export type MintStatus = "notYet" | "minted";
 
 /**
  * TokenBlueprint
@@ -55,6 +63,9 @@ export interface TokenBlueprint {
   /** 担当者表示名（backend で解決されたフルネームなど、任意） */
   assigneeName?: string;
 
+  /** ミント状態（"notYet" | "minted"）。旧データでは未設定の場合もある想定。 */
+  minted?: MintStatus;
+
   /** 作成情報 */
   createdAt: string; // ISO8601
   createdBy: string;
@@ -75,6 +86,11 @@ export interface TokenBlueprint {
 /** ContentFileType の妥当性チェック */
 export function isValidContentFileType(t: string): t is ContentFileType {
   return t === "image" || t === "video" || t === "pdf" || t === "document";
+}
+
+/** MintStatus の妥当性チェック */
+export function isValidMintStatus(s: string | undefined | null): s is MintStatus {
+  return s === "notYet" || s === "minted";
 }
 
 /** ContentFile の簡易バリデーション（backend の Validate と整合） */
@@ -128,6 +144,11 @@ export function validateTokenBlueprint(tb: TokenBlueprint): string[] {
     }
   }
 
+  // minted: あれば "notYet" | "minted" のどちらか
+  if (tb.minted !== undefined && !isValidMintStatus(tb.minted)) {
+    errors.push("minted must be 'notYet' or 'minted' if set");
+  }
+
   return errors;
 }
 
@@ -151,6 +172,7 @@ export function normalizeContentFiles(ids: string[]): string[] {
  * - 文字列トリム
  * - contentFiles 正規化
  * - iconId の空文字 → null
+ * - minted が未指定の場合は "notYet" をデフォルトとする
  */
 export function createTokenBlueprint(
   input: Omit<TokenBlueprint, "contentFiles"> & {
@@ -162,9 +184,12 @@ export function createTokenBlueprint(
       ? input.iconId.trim()
       : null;
 
+  const minted: MintStatus = input.minted ?? "notYet";
+
   return {
     ...input,
     iconId,
+    minted,
     contentFiles: normalizeContentFiles(input.contentFiles ?? []),
   };
 }

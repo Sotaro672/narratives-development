@@ -21,15 +21,25 @@ export type TokenBlueprintFilterState = {
 };
 
 /**
+ * minted = "notYet" の行だけを抽出するユーティリティ
+ * - backend の ListMintedNotYet と同等のフィルタをフロント側でも行う
+ */
+export function listNotYet(rows: TokenBlueprint[]): TokenBlueprint[] {
+  return rows.filter((r) => r.minted === "notYet");
+}
+
+/**
  * currentMember.companyId を指定してトークン設計一覧を取得
  * - backend 側では ListByCompanyID usecase → GetNameByID が裏側で利用される想定
+ * - ここで minted = "notYet" のみを画面に渡す
  */
 export async function fetchTokenBlueprintsForCompany(
   companyId: string,
 ): Promise<TokenBlueprint[]> {
   const cid = companyId.trim();
   if (!cid) return [];
-  return listTokenBlueprintsByCompanyId(cid);
+  const all = await listTokenBlueprintsByCompanyId(cid);
+  return listNotYet(all);
 }
 
 /**
@@ -62,6 +72,7 @@ export function buildOptionsFromTokenBlueprints(rows: TokenBlueprint[]): {
 
 /**
  * フィルタ＋ソートを適用した TokenBlueprint 一覧を返す
+ * - minted = "notYet" のみを対象にする（ListMintedNotYet 相当のフィルタ）
  */
 export function filterAndSortTokenBlueprints(
   rows: TokenBlueprint[],
@@ -69,11 +80,11 @@ export function filterAndSortTokenBlueprints(
 ): TokenBlueprint[] {
   const { brandFilter, assigneeFilter, sortKey, sortDir } = state;
 
-  let data = rows.filter(
+  // ★ まず minted = "notYet" のみを対象に絞り込む
+  let data = listNotYet(rows).filter(
     (r) =>
       (brandFilter.length === 0 || brandFilter.includes(r.brandId)) &&
-      (assigneeFilter.length === 0 ||
-        assigneeFilter.includes(r.assigneeId)),
+      (assigneeFilter.length === 0 || assigneeFilter.includes(r.assigneeId)),
   );
 
   if (sortKey && sortDir) {

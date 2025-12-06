@@ -7,6 +7,14 @@
 export type ContentFileType = "image" | "video" | "pdf" | "document";
 
 /**
+ * MintStatus
+ * backend/internal/domain/tokenBlueprint/entity.go の MintStatus に対応。
+ *
+ * - "notYet" | "minted"
+ */
+export type MintStatus = "notYet" | "minted";
+
+/**
  * ContentFile
  * backend/internal/domain/tokenBlueprint/entity.go の ContentFile に対応。
  *
@@ -50,6 +58,9 @@ export interface TokenBlueprint {
 
   /** 担当者 Member ID（必須） */
   assigneeId: string;
+
+  /** minted 状態: "notYet" | "minted" */
+  minted: MintStatus;
 
   /** 担当者の表示名（member.Service.GetNameLastFirstByID で解決された値） */
   assigneeName?: string;
@@ -116,6 +127,13 @@ export function validateTokenBlueprint(tb: TokenBlueprint): string[] {
   if (!tb.createdAt?.trim()) errors.push("createdAt is required");
   if (!tb.updatedBy?.trim()) errors.push("updatedBy is required");
   if (!tb.updatedAt?.trim()) errors.push("updatedAt is required");
+
+  // minted のチェック
+  if (!tb.minted) {
+    errors.push("minted is required");
+  } else if (tb.minted !== "notYet" && tb.minted !== "minted") {
+    errors.push("minted must be 'notYet' or 'minted'");
+  }
 
   if (tb.iconId !== undefined && tb.iconId !== null) {
     if (!tb.iconId.trim()) {

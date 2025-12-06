@@ -98,15 +98,26 @@ async function handleJsonResponse<T>(res: Response): Promise<T> {
 }
 
 function normalizeTokenBlueprint(raw: any): TokenBlueprint {
-  const tb = raw as TokenBlueprint & { BrandName?: string };
+  // backend からの生データに brandName / BrandName / minted / Minted が混在していても吸収できるようにする
+  const tb = raw as TokenBlueprint & {
+    BrandName?: string;
+    minted?: string;
+    Minted?: string;
+  };
 
   const brandName =
     (raw && (raw.brandName ?? raw.BrandName)) != null
       ? String(raw.brandName ?? raw.BrandName)
       : undefined;
 
+  // minted: "notYet" | "minted"（未知値や未設定は "notYet" 扱い）
+  const mintedRaw = (raw && (raw.minted ?? raw.Minted)) as string | undefined;
+  const minted: "notYet" | "minted" =
+    mintedRaw === "minted" ? "minted" : "notYet";
+
   return {
     ...tb,
+    minted,
     ...(brandName !== undefined ? { brandName } : {}),
   };
 }
