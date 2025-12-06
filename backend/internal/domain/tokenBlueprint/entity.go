@@ -22,6 +22,14 @@ const (
 	ContentDocument ContentFileType = "document"
 )
 
+// minted: "notYet" | "minted"
+type MintStatus string
+
+const (
+	MintStatusNotYet MintStatus = "notYet"
+	MintStatusMinted MintStatus = "minted"
+)
+
 // 汎用エラー（リポジトリ/サービス共通）
 var (
 	ErrNotFound = errors.New("tokenBlueprint: not found")
@@ -93,6 +101,10 @@ func (t TokenBlueprint) validate() error {
 		}
 	}
 
+	if !IsValidMintStatus(t.Minted) {
+		return ErrInvalidMintStatus
+	}
+
 	if t.CreatedAt.IsZero() {
 		return ErrInvalidCreatedAt
 	}
@@ -106,6 +118,15 @@ func (t TokenBlueprint) validate() error {
 func IsValidContentType(t ContentFileType) bool {
 	switch t {
 	case ContentImage, ContentVideo, ContentPDF, ContentDocument:
+		return true
+	default:
+		return false
+	}
+}
+
+func IsValidMintStatus(s MintStatus) bool {
+	switch s {
+	case MintStatusNotYet, MintStatusMinted:
 		return true
 	default:
 		return false
@@ -145,6 +166,7 @@ type TokenBlueprint struct {
 	IconID       *string    `json:"iconId,omitempty"`
 	ContentFiles []string   `json:"contentFiles"`
 	AssigneeID   string     `json:"assigneeId"`
+	Minted       MintStatus `json:"minted"` // "notYet" | "minted"
 	CreatedAt    time.Time  `json:"createdAt"`
 	CreatedBy    string     `json:"createdBy"`
 	UpdatedAt    time.Time  `json:"updatedAt"`
@@ -172,6 +194,11 @@ var (
 	ErrInvalidContentFiles = errors.New("tokenBlueprint: invalid contentFiles")
 	ErrInvalidContentFile  = errors.New("tokenBlueprint: invalid contentFile")
 	ErrInvalidContentType  = errors.New("tokenBlueprint: invalid contentFile.type")
+
+	ErrInvalidMintStatus = errors.New("tokenBlueprint: invalid minted")
+
+	// ★ minted=MintStatusMinted の場合は変更/削除禁止
+	ErrAlreadyMinted = errors.New("tokenBlueprint: already minted; modification is not allowed")
 )
 
 var symbolRe = regexp.MustCompile(`^[A-Z0-9]{1,10}$`)
@@ -198,6 +225,7 @@ func New(
 		IconID:       normalizePtr(iconID),
 		ContentFiles: dedupTrim(contentFiles),
 		AssigneeID:   strings.TrimSpace(assigneeID),
+		Minted:       MintStatusNotYet, // create 時は常に notYet
 		CreatedAt:    createdAt.UTC(),
 		CreatedBy:    strings.TrimSpace(createdBy),
 		UpdatedAt:    updatedAt.UTC(),
@@ -234,12 +262,29 @@ func NewFromStrings(
 		return TokenBlueprint{}, fmt.Errorf("invalid updatedAt: %v", err)
 	}
 
+	// minted は create 時は常に notYet
 	return New(id, name, symbol, brandID, companyID, description, iconPtr, contentFiles, assigneeID, ca, createdBy, ua)
+}
+
+// ===============================
+// 内部ヘルパー: minted=MintStatusMinted なら変更禁止
+// ===============================
+func (t *TokenBlueprint) ensureMutable() error {
+	if t == nil {
+		return nil
+	}
+	if t.Minted == MintStatusMinted {
+		return ErrAlreadyMinted
+	}
+	return nil
 }
 
 // Mutators
 
 func (t *TokenBlueprint) UpdateDescription(desc string) error {
+	if err := t.ensureMutable(); err != nil {
+		return err
+	}
 	desc = strings.TrimSpace(desc)
 	if desc == "" {
 		return ErrInvalidDescription
@@ -249,6 +294,9 @@ func (t *TokenBlueprint) UpdateDescription(desc string) error {
 }
 
 func (t *TokenBlueprint) UpdateAssignee(id string) error {
+	if err := t.ensureMutable(); err != nil {
+		return err
+	}
 	id = strings.TrimSpace(id)
 	if id == "" {
 		return ErrInvalidAssigneeID
@@ -257,8 +305,37 @@ func (t *TokenBlueprint) UpdateAssignee(id string) error {
 	return nil
 }
 
+// SetMinted updates minted status ("notYet" / "minted")
+// - notYet → minted: 許可
+// - minted → minted: 許可（冪等）
+// - minted → notYet: 禁止（ErrAlreadyMinted）
+func (t *TokenBlueprint) SetMinted(status MintStatus) error {
+	if t == nil {
+		return nil
+	}
+
+	status = MintStatus(strings.TrimSpace(string(status)))
+	if status == "" {
+		status = MintStatusNotYet
+	}
+	if !IsValidMintStatus(status) {
+		return ErrInvalidMintStatus
+	}
+
+	// すでに minted 済みの場合、別の状態へ戻すことは禁止
+	if t.Minted == MintStatusMinted && status != MintStatusMinted {
+		return ErrAlreadyMinted
+	}
+
+	t.Minted = status
+	return nil
+}
+
 // SetIconID sets or clears icon id
 func (t *TokenBlueprint) SetIconID(id string) error {
+	if err := t.ensureMutable(); err != nil {
+		return err
+	}
 	id = strings.TrimSpace(id)
 	if id == "" {
 		t.IconID = nil
@@ -268,15 +345,22 @@ func (t *TokenBlueprint) SetIconID(id string) error {
 	return nil
 }
 
-func (t *TokenBlueprint) ClearIconID() {
+func (t *TokenBlueprint) ClearIconID() error {
+	if err := t.ensureMutable(); err != nil {
+		return err
+	}
 	t.IconID = nil
+	return nil
 }
 
 // 互換用
 func (t *TokenBlueprint) SetIconURL(u string) error { return t.SetIconID(u) }
-func (t *TokenBlueprint) ClearIconURL()             { t.ClearIconID() }
+func (t *TokenBlueprint) ClearIconURL() error       { return t.ClearIconID() }
 
 func (t *TokenBlueprint) SetBrand(b branddom.Brand) error {
+	if err := t.ensureMutable(); err != nil {
+		return err
+	}
 	if t == nil {
 		return nil
 	}
@@ -296,6 +380,9 @@ func (t TokenBlueprint) ValidateBrandLink() error {
 }
 
 func (t *TokenBlueprint) SetIcon(icon tokenicondom.TokenIcon) error {
+	if err := t.ensureMutable(); err != nil {
+		return err
+	}
 	if t == nil {
 		return nil
 	}
@@ -318,6 +405,9 @@ func (t TokenBlueprint) ValidateIconLink() error {
 }
 
 func (t *TokenBlueprint) SetAssignee(m memberdom.Member) error {
+	if err := t.ensureMutable(); err != nil {
+		return err
+	}
 	if t == nil {
 		return nil
 	}
@@ -337,6 +427,9 @@ func (t TokenBlueprint) ValidateAssigneeLink() error {
 }
 
 func (t *TokenBlueprint) SetCreatedBy(m memberdom.Member) error {
+	if err := t.ensureMutable(); err != nil {
+		return err
+	}
 	if t == nil {
 		return nil
 	}
@@ -356,6 +449,9 @@ func (t TokenBlueprint) ValidateCreatedByLink() error {
 }
 
 func (t *TokenBlueprint) SetUpdatedBy(m memberdom.Member) error {
+	if err := t.ensureMutable(); err != nil {
+		return err
+	}
 	if t == nil {
 		return nil
 	}
@@ -375,6 +471,10 @@ func (t TokenBlueprint) ValidateUpdatedByLink() error {
 }
 
 func (t *TokenBlueprint) SetDeletedBy(m memberdom.Member) error {
+	// ★ minted=MintStatusMinted の場合は削除マークも禁止（＝ Delete 不可）
+	if err := t.ensureMutable(); err != nil {
+		return err
+	}
 	if t == nil {
 		return nil
 	}
@@ -386,8 +486,13 @@ func (t *TokenBlueprint) SetDeletedBy(m memberdom.Member) error {
 	return nil
 }
 
-func (t *TokenBlueprint) ClearDeletedBy() {
+func (t *TokenBlueprint) ClearDeletedBy() error {
+	// ★ minted=MintStatusMinted の場合は削除状態の変更も禁止
+	if err := t.ensureMutable(); err != nil {
+		return err
+	}
 	t.DeletedBy = nil
+	return nil
 }
 
 func (t TokenBlueprint) ValidateDeletedByLink() error {

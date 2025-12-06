@@ -139,6 +139,7 @@ func (h *TokenBlueprintHandler) ServeHTTP(w http.ResponseWriter, r *http.Request
 	case r.Method == http.MethodPost && r.URL.Path == "/token-blueprints":
 		h.create(w, r)
 	case r.Method == http.MethodGet && r.URL.Path == "/token-blueprints":
+		// ★ 一覧取得（クエリにより ListByCompanyID / ListByBrandID / ListMintedNotYet / ListMintedCompleted を切り替え）
 		h.list(w, r)
 	case (r.Method == http.MethodPatch || r.Method == http.MethodPut) &&
 		strings.HasPrefix(r.URL.Path, "/token-blueprints/"):
@@ -223,7 +224,11 @@ func (h *TokenBlueprintHandler) get(w http.ResponseWriter, r *http.Request, id s
 }
 
 // list --------------------------------------------------------------------
-
+// クエリパラメータで挙動が変わる:
+// - ?brandId=xxxx                        → ListByBrandID
+// - ?minted=notYet                      → ListMintedNotYet
+// - ?minted=minted                      → ListMintedCompleted
+// - いずれも指定なし                     → ListByCompanyID (従来動作)
 func (h *TokenBlueprintHandler) list(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 
@@ -248,10 +253,38 @@ func (h *TokenBlueprintHandler) list(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	result, err := h.uc.ListByCompanyID(ctx, companyID, tbdom.Page{
+	q := r.URL.Query()
+	brandID := strings.TrimSpace(q.Get("brandId"))
+	mintedFilter := strings.TrimSpace(q.Get("minted"))
+
+	page := tbdom.Page{
 		Number:  pageNum,
 		PerPage: perPage,
-	})
+	}
+
+	var (
+		result tbdom.PageResult
+		err    error
+	)
+
+	switch {
+	// ★ brandId ごとの一覧
+	case brandID != "" && mintedFilter == "":
+		result, err = h.uc.ListByBrandID(ctx, brandID, page)
+
+	// ★ minted = notYet のみ
+	case mintedFilter == "notYet":
+		result, err = h.uc.ListMintedNotYet(ctx, page)
+
+	// ★ minted = minted のみ
+	case mintedFilter == "minted":
+		result, err = h.uc.ListMintedCompleted(ctx, page)
+
+	// ★ デフォルト: companyId 単位の一覧（従来挙動）
+	default:
+		result, err = h.uc.ListByCompanyID(ctx, companyID, page)
+	}
+
 	if err != nil {
 		writeTokenBlueprintErr(w, err)
 		return
@@ -285,14 +318,6 @@ func (h *TokenBlueprintHandler) update(w http.ResponseWriter, r *http.Request, i
 	}
 
 	actorID := strings.TrimSpace(r.Header.Get("X-Actor-Id"))
-
-	// ★ update リクエスト内容をログ（デバッグ用）
-	{
-		b, _ := json.MarshalIndent(req, "", "  ")
-		println("[TokenBlueprintHandler.update] raw update req for id=", id)
-		println(string(b))
-		println("actorId=", actorID)
-	}
 
 	tb, err := h.uc.Update(ctx, uc.UpdateBlueprintRequest{
 		ID:           id,

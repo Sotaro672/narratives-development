@@ -119,3 +119,78 @@ type RepositoryPort interface {
 	// テスト/開発用リセット
 	Reset(ctx context.Context) error
 }
+
+// ===============================
+// Helper Functions
+// ===============================
+
+// ★ brandId ごとに一覧取得
+func ListByBrandID(
+	ctx context.Context,
+	repo RepositoryPort,
+	brandID string,
+	page Page,
+) (PageResult, error) {
+
+	f := Filter{
+		BrandIDs: []string{brandID},
+	}
+	return repo.List(ctx, f, page)
+}
+
+// ==========================================================
+// ★ minted = notYet のみを一覧取得
+// ==========================================================
+func ListMintedNotYet(
+	ctx context.Context,
+	repo RepositoryPort,
+	page Page,
+) (PageResult, error) {
+
+	// mint 状態で DB フィルタできないため後段でフィルタ
+	result, err := repo.List(ctx, Filter{}, page)
+	if err != nil {
+		return PageResult{}, err
+	}
+
+	items := []TokenBlueprint{}
+	for _, tb := range result.Items {
+		if tb.Minted == MintStatusNotYet {
+			items = append(items, tb)
+		}
+	}
+
+	result.Items = items
+	result.TotalCount = len(items)
+	result.TotalPages = 1 // メモリ内フィルタなので 1 とする
+
+	return result, nil
+}
+
+// ==========================================================
+// ★ minted = minted のみ一覧取得
+// ==========================================================
+func ListMintedCompleted(
+	ctx context.Context,
+	repo RepositoryPort,
+	page Page,
+) (PageResult, error) {
+
+	result, err := repo.List(ctx, Filter{}, page)
+	if err != nil {
+		return PageResult{}, err
+	}
+
+	items := []TokenBlueprint{}
+	for _, tb := range result.Items {
+		if tb.Minted == MintStatusMinted {
+			items = append(items, tb)
+		}
+	}
+
+	result.Items = items
+	result.TotalCount = len(items)
+	result.TotalPages = 1
+
+	return result, nil
+}

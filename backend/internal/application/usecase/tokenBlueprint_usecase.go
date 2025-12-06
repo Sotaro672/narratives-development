@@ -109,6 +109,7 @@ func (u *TokenBlueprintUsecase) CreateWithUploads(ctx context.Context, in Create
 	}
 	contentIDs = dedupStrings(contentIDs)
 
+	// ★ domain.New 側で minted は自動的に "notYet" に設定される
 	tb, err := u.tbRepo.Create(ctx, tbdom.CreateTokenBlueprintInput{
 		Name:         strings.TrimSpace(in.Name),
 		Symbol:       strings.TrimSpace(in.Symbol),
@@ -178,6 +179,25 @@ func (u *TokenBlueprintUsecase) ListByCompanyID(ctx context.Context, companyID s
 	}
 
 	return u.tbRepo.ListByCompanyID(ctx, cid, page)
+}
+
+// ★ brandId 単位での一覧取得（domain のヘルパーを利用）
+func (u *TokenBlueprintUsecase) ListByBrandID(ctx context.Context, brandID string, page tbdom.Page) (tbdom.PageResult, error) {
+	bid := strings.TrimSpace(brandID)
+	if bid == "" {
+		return tbdom.PageResult{}, fmt.Errorf("brandId is empty")
+	}
+	return tbdom.ListByBrandID(ctx, u.tbRepo, bid, page)
+}
+
+// ★ minted = "notYet" のみの一覧取得
+func (u *TokenBlueprintUsecase) ListMintedNotYet(ctx context.Context, page tbdom.Page) (tbdom.PageResult, error) {
+	return tbdom.ListMintedNotYet(ctx, u.tbRepo, page)
+}
+
+// ★ minted = "minted" のみの一覧取得
+func (u *TokenBlueprintUsecase) ListMintedCompleted(ctx context.Context, page tbdom.Page) (tbdom.PageResult, error) {
+	return tbdom.ListMintedCompleted(ctx, u.tbRepo, page)
 }
 
 // ==== ★ ID → Name をまとめて解決する便利関数 ====
