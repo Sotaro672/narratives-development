@@ -32,6 +32,9 @@ type ProductBlueprintRepo interface {
 	// ListIDsByCompany → ListPrinted で 1 セットになる想定
 	ListPrinted(ctx context.Context, ids []string) ([]productbpdom.ProductBlueprint, error)
 
+	// ★ 追加: printed フラグを "printed" に更新する
+	MarkPrinted(ctx context.Context, id string) (productbpdom.ProductBlueprint, error)
+
 	Create(ctx context.Context, v productbpdom.ProductBlueprint) (productbpdom.ProductBlueprint, error)
 	Save(ctx context.Context, v productbpdom.ProductBlueprint) (productbpdom.ProductBlueprint, error)
 	Delete(ctx context.Context, id string) error
@@ -88,6 +91,24 @@ func (u *ProductBlueprintUsecase) List(ctx context.Context) ([]productbpdom.Prod
 	}
 
 	return filtered, nil
+}
+
+// ------------------------------------------------------------
+// printed 状態別一覧（Handler から呼ばれる公開メソッド）
+// ------------------------------------------------------------
+
+// ★ Handler 用: companyId は context から取得
+func (u *ProductBlueprintUsecase) ListNotYetPrinted(
+	ctx context.Context,
+) ([]productbpdom.ProductBlueprint, error) {
+	return u.ListNotYetPrintedByCompany(ctx)
+}
+
+// ★ Handler 用: companyId は context から取得
+func (u *ProductBlueprintUsecase) ListPrinted(
+	ctx context.Context,
+) ([]productbpdom.ProductBlueprint, error) {
+	return u.ListPrintedByCompany(ctx)
 }
 
 // ★ companyId ごとの printed:notYet 一覧
@@ -175,6 +196,32 @@ func (u *ProductBlueprintUsecase) ListPrintedByCompany(
 	}
 
 	return out, nil
+}
+
+// ★ printed フラグを "printed" に更新するユースケース
+// Handler から /product-blueprints/{id}/mark-printed などで呼ばれる想定。
+func (u *ProductBlueprintUsecase) MarkPrinted(
+	ctx context.Context,
+	id string,
+) (productbpdom.ProductBlueprint, error) {
+	id = strings.TrimSpace(id)
+	if id == "" {
+		return productbpdom.ProductBlueprint{}, productbpdom.ErrInvalidID
+	}
+
+	updated, err := u.repo.MarkPrinted(ctx, id)
+	if err != nil {
+		return productbpdom.ProductBlueprint{}, err
+	}
+
+	// ★ 履歴スナップショットも残しておく
+	if u.historyRepo != nil {
+		if err := u.historyRepo.SaveSnapshot(ctx, updated); err != nil {
+			return productbpdom.ProductBlueprint{}, err
+		}
+	}
+
+	return updated, nil
 }
 
 // ★ 論理削除済みのみの一覧

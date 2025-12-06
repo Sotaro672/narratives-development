@@ -3,7 +3,6 @@ package handlers
 
 import (
 	"encoding/json"
-	"log"
 	"net/http"
 	"strings"
 
@@ -50,6 +49,18 @@ func (h *ProductBlueprintHandler) ServeHTTP(w http.ResponseWriter, r *http.Reque
 		h.listDeleted(w, r)
 
 	// ---------------------------------------------------
+	// GET /product-blueprints/not-yet-printed ← printed == notYet 一覧
+	// ---------------------------------------------------
+	case r.Method == http.MethodGet && path == "/product-blueprints/not-yet-printed":
+		h.listNotYetPrinted(w, r)
+
+	// ---------------------------------------------------
+	// GET /product-blueprints/printed ← printed == printed 一覧
+	// ---------------------------------------------------
+	case r.Method == http.MethodGet && path == "/product-blueprints/printed":
+		h.listPrinted(w, r)
+
+	// ---------------------------------------------------
 	// GET /product-blueprints/{id}/history ← 履歴一覧 API（LogCard 用）
 	// ---------------------------------------------------
 	case r.Method == http.MethodGet &&
@@ -78,6 +89,18 @@ func (h *ProductBlueprintHandler) ServeHTTP(w http.ResponseWriter, r *http.Reque
 		trimmed = strings.TrimSuffix(trimmed, "/restore")
 		id := strings.Trim(trimmed, "/")
 		h.restore(w, r, id)
+
+	// ---------------------------------------------------
+	// POST /product-blueprints/{id}/mark-printed ← printed を printed に更新
+	// ---------------------------------------------------
+	case r.Method == http.MethodPost &&
+		strings.HasPrefix(path, "/product-blueprints/") &&
+		strings.HasSuffix(path, "/mark-printed"):
+
+		trimmed := strings.TrimPrefix(path, "/product-blueprints/")
+		trimmed = strings.TrimSuffix(trimmed, "/mark-printed")
+		id := strings.Trim(trimmed, "/")
+		h.markPrinted(w, r, id)
 
 	// ---------------------------------------------------
 	// PUT/PATCH /product-blueprints/{id} ← 更新 API
@@ -277,39 +300,23 @@ func (h *ProductBlueprintHandler) restore(w http.ResponseWriter, r *http.Request
 
 	id = strings.TrimSpace(id)
 	if id == "" {
-		log.Printf("[ProductBlueprintHandler] restore: invalid id (empty)")
 		w.WriteHeader(http.StatusBadRequest)
 		_ = json.NewEncoder(w).Encode(map[string]string{"error": "invalid id"})
 		return
 	}
 
-	log.Printf("[ProductBlueprintHandler] restore: start id=%s", id)
-
 	// 復元実行（restoredBy も現状は context からの解決に任せるため nil）
 	if err := h.uc.RestoreWithModels(ctx, id, nil); err != nil {
-		log.Printf("[ProductBlueprintHandler] restore: usecase error id=%s err=%v", id, err)
 		writeProductBlueprintErr(w, err)
 		return
 	}
-
-	log.Printf("[ProductBlueprintHandler] restore: RestoreWithModels OK id=%s", id)
 
 	// 復元後の最新状態を返す
 	pb, err := h.uc.GetByID(ctx, id)
 	if err != nil {
-		log.Printf("[ProductBlueprintHandler] restore: GetByID after restore failed id=%s err=%v", id, err)
 		writeProductBlueprintErr(w, err)
 		return
 	}
-
-	log.Printf(
-		"[ProductBlueprintHandler] restore: after restore id=%s deletedAt=%v expireAt=%v updatedAt=%v updatedBy=%v",
-		pb.ID,
-		pb.DeletedAt,
-		pb.ExpireAt,
-		pb.UpdatedAt,
-		pb.UpdatedBy,
-	)
 
 	_ = json.NewEncoder(w).Encode(pb)
 }
@@ -397,19 +404,14 @@ type ProductBlueprintDeletedListOutput struct {
 func (h *ProductBlueprintHandler) listDeleted(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 
-	log.Printf("[ProductBlueprintHandler] listDeleted: start")
-
 	rows, err := h.uc.ListDeleted(ctx)
 	if err != nil {
-		log.Printf("[ProductBlueprintHandler] listDeleted: error: %v", err)
 		writeProductBlueprintErr(w, err)
 		return
 	}
 
-	log.Printf("[ProductBlueprintHandler] listDeleted: got %d rows", len(rows))
-
 	out := make([]ProductBlueprintDeletedListOutput, 0, len(rows))
-	for i, pb := range rows {
+	for _, pb := range rows {
 		brandId := strings.TrimSpace(pb.BrandID)
 		assigneeId := strings.TrimSpace(pb.AssigneeID)
 		if assigneeId == "" {
@@ -426,11 +428,6 @@ func (h *ProductBlueprintHandler) listDeleted(w http.ResponseWriter, r *http.Req
 			expireAtStr = pb.ExpireAt.Format("2006/01/02")
 		}
 
-		log.Printf(
-			"[ProductBlueprintHandler] listDeleted: row[%d]: id=%s name=%s deletedAt=%v companyId=%s",
-			i, pb.ID, pb.ProductName, pb.DeletedAt, pb.CompanyID,
-		)
-
 		out = append(out, ProductBlueprintDeletedListOutput{
 			ID:          pb.ID,
 			ProductName: pb.ProductName,
@@ -443,6 +440,124 @@ func (h *ProductBlueprintHandler) listDeleted(w http.ResponseWriter, r *http.Req
 
 	// ★ 必ず JSON 配列を返す
 	_ = json.NewEncoder(w).Encode(out)
+}
+
+// ---------------------------------------------------
+// GET /product-blueprints/not-yet-printed
+// GET /product-blueprints/printed
+// ---------------------------------------------------
+
+func (h *ProductBlueprintHandler) listNotYetPrinted(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+
+	rows, err := h.uc.ListNotYetPrinted(ctx)
+	if err != nil {
+		writeProductBlueprintErr(w, err)
+		return
+	}
+
+	out := make([]ProductBlueprintListOutput, 0, len(rows))
+	for _, pb := range rows {
+		brandId := strings.TrimSpace(pb.BrandID)
+		assigneeId := strings.TrimSpace(pb.AssigneeID)
+		if assigneeId == "" {
+			assigneeId = "-"
+		}
+
+		productIdTag := "-"
+		if pb.ProductIdTag.Type != "" {
+			productIdTag = strings.ToUpper(string(pb.ProductIdTag.Type))
+		}
+
+		createdAt := ""
+		if !pb.CreatedAt.IsZero() {
+			createdAt = pb.CreatedAt.Format("2006/01/02")
+		}
+		updatedAt := createdAt
+		if !pb.UpdatedAt.IsZero() {
+			updatedAt = pb.UpdatedAt.Format("2006/01/02")
+		}
+
+		out = append(out, ProductBlueprintListOutput{
+			ID:           pb.ID,
+			ProductName:  pb.ProductName,
+			BrandId:      brandId,
+			AssigneeId:   assigneeId,
+			ProductIdTag: productIdTag,
+			CreatedAt:    createdAt,
+			UpdatedAt:    updatedAt,
+		})
+	}
+
+	_ = json.NewEncoder(w).Encode(out)
+}
+
+func (h *ProductBlueprintHandler) listPrinted(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+
+	rows, err := h.uc.ListPrinted(ctx)
+	if err != nil {
+		writeProductBlueprintErr(w, err)
+		return
+	}
+
+	out := make([]ProductBlueprintListOutput, 0, len(rows))
+	for _, pb := range rows {
+		brandId := strings.TrimSpace(pb.BrandID)
+		assigneeId := strings.TrimSpace(pb.AssigneeID)
+		if assigneeId == "" {
+			assigneeId = "-"
+		}
+
+		productIdTag := "-"
+		if pb.ProductIdTag.Type != "" {
+			productIdTag = strings.ToUpper(string(pb.ProductIdTag.Type))
+		}
+
+		createdAt := ""
+		if !pb.CreatedAt.IsZero() {
+			createdAt = pb.CreatedAt.Format("2006/01/02")
+		}
+		updatedAt := createdAt
+		if !pb.UpdatedAt.IsZero() {
+			updatedAt = pb.UpdatedAt.Format("2006/01/02")
+		}
+
+		out = append(out, ProductBlueprintListOutput{
+			ID:           pb.ID,
+			ProductName:  pb.ProductName,
+			BrandId:      brandId,
+			AssigneeId:   assigneeId,
+			ProductIdTag: productIdTag,
+			CreatedAt:    createdAt,
+			UpdatedAt:    updatedAt,
+		})
+	}
+
+	_ = json.NewEncoder(w).Encode(out)
+}
+
+// ---------------------------------------------------
+// POST /product-blueprints/{id}/mark-printed
+// ---------------------------------------------------
+
+func (h *ProductBlueprintHandler) markPrinted(w http.ResponseWriter, r *http.Request, id string) {
+	ctx := r.Context()
+
+	id = strings.TrimSpace(id)
+	if id == "" {
+		w.WriteHeader(http.StatusBadRequest)
+		_ = json.NewEncoder(w).Encode(map[string]string{"error": "invalid id"})
+		return
+	}
+
+	pb, err := h.uc.MarkPrinted(ctx, id)
+	if err != nil {
+		writeProductBlueprintErr(w, err)
+		return
+	}
+
+	_ = json.NewEncoder(w).Encode(pb)
 }
 
 // ---------------------------------------------------
@@ -471,17 +586,14 @@ func (h *ProductBlueprintHandler) listHistory(w http.ResponseWriter, r *http.Req
 		return
 	}
 
-	log.Printf("[ProductBlueprintHandler] listHistory: start id=%s", id)
-
 	rows, err := h.uc.ListHistory(ctx, id)
 	if err != nil {
-		log.Printf("[ProductBlueprintHandler] listHistory: error id=%s err=%v", id, err)
 		writeProductBlueprintErr(w, err)
 		return
 	}
 
 	out := make([]ProductBlueprintHistoryOutput, 0, len(rows))
-	for i, pb := range rows {
+	for _, pb := range rows {
 		brandId := strings.TrimSpace(pb.BrandID)
 		assigneeId := strings.TrimSpace(pb.AssigneeID)
 		if assigneeId == "" {
@@ -503,11 +615,6 @@ func (h *ProductBlueprintHandler) listHistory(w http.ResponseWriter, r *http.Req
 		if pb.ExpireAt != nil && !pb.ExpireAt.IsZero() {
 			expireAtStr = pb.ExpireAt.Format("2006/01/02")
 		}
-
-		log.Printf(
-			"[ProductBlueprintHandler] listHistory: row[%d]: id=%s updatedAt=%v updatedBy=%v",
-			i, pb.ID, pb.UpdatedAt, pb.UpdatedBy,
-		)
 
 		out = append(out, ProductBlueprintHistoryOutput{
 			ID:          pb.ID,
