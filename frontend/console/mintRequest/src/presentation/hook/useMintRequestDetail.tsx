@@ -23,6 +23,12 @@ export type ProductBlueprintCardViewModel = {
   productIdTag?: string;
 };
 
+// 右カラムのブランド選択カード用 VM
+export type BrandOption = {
+  id: string;
+  name: string;
+};
+
 export function useMintRequestDetail() {
   const navigate = useNavigate();
   const { requestId } = useParams<{ requestId: string }>();
@@ -37,6 +43,10 @@ export function useMintRequestDetail() {
     React.useState<ProductBlueprintPatchDTO | null>(null);
   const [pbPatchLoading, setPbPatchLoading] = React.useState(false);
   const [pbPatchError, setPbPatchError] = React.useState<string | null>(null);
+
+  // 右カラム: ブランド選択カード用
+  const [brandOptions, setBrandOptions] = React.useState<BrandOption[]>([]);
+  const [selectedBrandId, setSelectedBrandId] = React.useState<string>("");
 
   // 画面タイトル
   const title = `ミント申請詳細`;
@@ -151,6 +161,20 @@ export function useMintRequestDetail() {
     );
   }, [requestId, totalMintQuantity]);
 
+  // ⑤ ブランド選択カード向け hook 部分
+  //    - brandOptions は後で /mint/brands API から取得する想定（今は空配列）
+  //    - selectedBrandId を右カラムの select から更新し、
+  //      将来的に TokenBlueprint の絞り込み条件として利用する
+  React.useEffect(() => {
+    // TODO: /mint/brands からブランド一覧を取得して setBrandOptions する
+    // ひとまず空のまま（バックエンド配線後に実装）
+    setBrandOptions((prev) => prev ?? []);
+  }, []);
+
+  const handleSelectBrand = React.useCallback((brandId: string) => {
+    setSelectedBrandId(brandId);
+  }, []);
+
   return {
     title,
     loading,
@@ -165,5 +189,10 @@ export function useMintRequestDetail() {
     productBlueprintCardView,
     pbPatchLoading,
     pbPatchError,
+
+    // ブランド選択カード用
+    brandOptions,
+    selectedBrandId,
+    handleSelectBrand,
   };
 }

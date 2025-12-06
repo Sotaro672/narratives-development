@@ -1,4 +1,4 @@
-// backend\internal\domain\brand\repository_port.go
+// backend/internal/domain/brand/repository_port.go
 package brand
 
 import (
@@ -58,6 +58,8 @@ type SaveOptions = common.SaveOptions
 var (
 	ErrNotFound = errors.New("brand: not found")
 	ErrConflict = errors.New("brand: conflict")
+
+	// ErrInvalidID は entity.go 側で定義済みのものを利用する
 
 	ErrAssignedMemberReaderNotConfigured = errors.New("brand: assignedMemberReader not configured")
 )

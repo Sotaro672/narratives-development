@@ -149,6 +149,7 @@ func (u *MintUsecase) ListInspectionsForCurrentCompany(
 ) ([]MintInspectionView, error) {
 
 	companyID := strings.TrimSpace(CompanyIDFromContext(ctx))
+
 	if companyID == "" {
 		return nil, ErrCompanyIDMissing
 	}
@@ -458,4 +459,34 @@ func (u *MintUsecase) getBrandNameByID(ctx context.Context, brandID string) (str
 // ResolveBrandNameByID は、外部（ハンドラ等）から brandID で brandName を取得する公開メソッドです。
 func (u *MintUsecase) ResolveBrandNameByID(ctx context.Context, brandID string) (string, error) {
 	return u.getBrandNameByID(ctx, brandID)
+}
+
+// ============================================================
+// Additional API: Brand 一覧（current company）
+// ============================================================
+
+// ListBrandsForCurrentCompany は、context から companyId を取り出し、
+// brand.Service の ListByCompanyID を呼び出して同じ companyId を持つ Brand 一覧を返します。
+// Mint 画面でのブランドフィルタ等に利用する想定です。
+func (u *MintUsecase) ListBrandsForCurrentCompany(
+	ctx context.Context,
+	page branddom.Page,
+) (branddom.PageResult[branddom.Brand], error) {
+
+	var empty branddom.PageResult[branddom.Brand]
+
+	if u == nil {
+		return empty, errors.New("mint usecase is nil")
+	}
+	if u.brandSvc == nil {
+		return empty, errors.New("brand service is nil")
+	}
+
+	companyID := strings.TrimSpace(CompanyIDFromContext(ctx))
+	if companyID == "" {
+		return empty, ErrCompanyIDMissing
+	}
+
+	// ★ ここで brand.Service の ListByCompanyID を呼び出す
+	return u.brandSvc.ListByCompanyID(ctx, companyID, page)
 }

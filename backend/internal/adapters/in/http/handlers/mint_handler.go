@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	usecase "narratives/internal/application/usecase"
+	branddom "narratives/internal/domain/brand"
 	pbpdom "narratives/internal/domain/productBlueprint"
 )
 
@@ -45,6 +46,15 @@ func (h *MintHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		h.getProductBlueprintPatchByID(w, r)
 		return
 
+	// ------------------------------------------------------------
+	// GET /mint/brands
+	//   current companyId に紐づく Brand 一覧を返す
+	// ------------------------------------------------------------
+	case r.Method == http.MethodGet &&
+		r.URL.Path == "/mint/brands":
+		h.listBrandsForCurrentCompany(w, r)
+		return
+
 	default:
 		http.NotFound(w, r)
 	}
@@ -79,6 +89,42 @@ func (h *MintHandler) listInspectionsForCurrentCompany(w http.ResponseWriter, r 
 	}
 
 	_ = json.NewEncoder(w).Encode(batches)
+}
+
+// ------------------------------------------------------------
+// GET /mint/brands
+// current companyId に紐づく Brand 一覧を返す
+// ------------------------------------------------------------
+func (h *MintHandler) listBrandsForCurrentCompany(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+
+	if h.mintUC == nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		_ = json.NewEncoder(w).Encode(map[string]string{
+			"error": "mint usecase is not configured",
+		})
+		return
+	}
+
+	// ページ指定が必要になったら query param から埋める想定。
+	// 現状はデフォルト値（ゼロ値）の Page を渡す。
+	var page branddom.Page
+
+	result, err := h.mintUC.ListBrandsForCurrentCompany(ctx, page)
+	if err != nil {
+		status := http.StatusInternalServerError
+		if errors.Is(err, usecase.ErrCompanyIDMissing) {
+			status = http.StatusBadRequest
+		}
+
+		w.WriteHeader(status)
+		_ = json.NewEncoder(w).Encode(map[string]string{
+			"error": err.Error(),
+		})
+		return
+	}
+
+	_ = json.NewEncoder(w).Encode(result)
 }
 
 // productBlueprint Patch + brandName を返すレスポンス用 DTO。

@@ -3,7 +3,10 @@
 // Firebase Auth から ID トークンを取得
 import { auth } from "../../../../shell/src/auth/infrastructure/config/firebaseClient";
 import type { InspectionBatchDTO } from "../api/mintRequestApi";
-import type { ProductBlueprintPatchDTO } from "../../application/mintRequestService";
+import type {
+  ProductBlueprintPatchDTO,
+  BrandForMintDTO, // ★ 追加
+} from "../../application/mintRequestService";
 
 // 🔙 BACKEND の BASE URL
 const ENV_BASE =
@@ -136,4 +139,48 @@ export async function fetchProductBlueprintPatchHTTP(
 
   const json = (await res.json()) as ProductBlueprintPatchDTO | null | undefined;
   return json ?? null;
+}
+
+// ===============================
+// HTTP Repository (brands for Mint)
+// ===============================
+
+/**
+ * current companyId に紐づく Brand 一覧を取得する。
+ * backend: GET /mint/brands
+ *
+ * Go 側は branddom.PageResult[branddom.Brand] を返す想定なので、
+ * JSON の items から id / name だけを抜き出して BrandForMintDTO[] に変換する。
+ */
+type BrandPageResultDTO = {
+  items?: { id: string; name: string }[];
+  // 他に total / page / perPage 等があっても無視する
+};
+
+export async function fetchBrandsForMintHTTP(): Promise<BrandForMintDTO[]> {
+  const idToken = await getIdTokenOrThrow();
+
+  const url = `${API_BASE}/mint/brands`;
+
+  const res = await fetch(url, {
+    method: "GET",
+    headers: {
+      Authorization: `Bearer ${idToken}`,
+      "Content-Type": "application/json",
+    },
+  });
+
+  if (!res.ok) {
+    throw new Error(
+      `Failed to fetch brands (mint): ${res.status} ${res.statusText}`,
+    );
+  }
+
+  const json = (await res.json()) as BrandPageResultDTO | null | undefined;
+  const items = json?.items ?? [];
+
+  return items.map((b) => ({
+    id: b.id,
+    name: b.name,
+  }));
 }
