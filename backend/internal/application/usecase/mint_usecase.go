@@ -35,14 +35,6 @@ type mintProductBlueprintRepo interface {
 	GetPatchByID(ctx context.Context, id string) (pbpdom.Patch, error)
 }
 
-// ★ TokenBlueprint（トークン設計）の minted 状態を更新するための最小ポート
-type mintTokenBlueprintRepo interface {
-	// 現状確認用
-	GetByID(ctx context.Context, id string) (*tbdom.TokenBlueprint, error)
-	// minted 等を含めた更新
-	Update(ctx context.Context, id string, in tbdom.UpdateTokenBlueprintInput) (*tbdom.TokenBlueprint, error)
-}
-
 // mintProductionRepo は productBlueprintId 群から productions を取得するための最小ポート
 type mintProductionRepo interface {
 	// 指定された productBlueprintId 群のいずれかを持つ Production をすべて返す
@@ -98,8 +90,9 @@ type MintUsecase struct {
 	inspRepo  mintInspectionRepo
 	modelRepo mintModelRepo
 
-	// ★ TokenBlueprint の minted 状態を更新するためのリポジトリ
-	tbRepo mintTokenBlueprintRepo
+	// ★ TokenBlueprint の minted 状態や一覧を扱うためのリポジトリ
+	//    ドメイン側の RepositoryPort をそのまま利用する
+	tbRepo tbdom.RepositoryPort
 
 	// brandId → brandName 解決用
 	brandSvc *branddom.Service
@@ -114,7 +107,7 @@ func NewMintUsecase(
 	prodRepo mintProductionRepo,
 	inspRepo mintInspectionRepo,
 	modelRepo mintModelRepo,
-	tbRepo mintTokenBlueprintRepo,
+	tbRepo tbdom.RepositoryPort,
 	brandSvc *branddom.Service,
 ) *MintUsecase {
 	return &MintUsecase{
@@ -489,4 +482,35 @@ func (u *MintUsecase) ListBrandsForCurrentCompany(
 
 	// ★ ここで brand.Service の ListByCompanyID を呼び出す
 	return u.brandSvc.ListByCompanyID(ctx, companyID, page)
+}
+
+// ============================================================
+// Additional API: TokenBlueprint 一覧（brandId フィルタ）
+// ============================================================
+
+// ListTokenBlueprintsByBrand は、指定された brandID に紐づく
+// TokenBlueprint 一覧を返します。
+// ドメインヘルパー tbdom.ListByBrandID を利用して BrandIDs フィルタを適用します。
+func (u *MintUsecase) ListTokenBlueprintsByBrand(
+	ctx context.Context,
+	brandID string,
+	page tbdom.Page,
+) (tbdom.PageResult, error) {
+
+	var empty tbdom.PageResult
+
+	if u == nil {
+		return empty, errors.New("mint usecase is nil")
+	}
+	if u.tbRepo == nil {
+		return empty, errors.New("tokenBlueprint repo is nil")
+	}
+
+	brandID = strings.TrimSpace(brandID)
+	if brandID == "" {
+		return empty, errors.New("brandID is empty")
+	}
+
+	// ★ tokenBlueprint パッケージ側のフィルター関数を使用
+	return tbdom.ListByBrandID(ctx, u.tbRepo, brandID, page)
 }

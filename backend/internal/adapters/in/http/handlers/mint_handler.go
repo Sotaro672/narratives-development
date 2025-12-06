@@ -5,11 +5,13 @@ import (
 	"encoding/json"
 	"errors"
 	"net/http"
+	"strconv"
 	"strings"
 
 	usecase "narratives/internal/application/usecase"
 	branddom "narratives/internal/domain/brand"
 	pbpdom "narratives/internal/domain/productBlueprint"
+	tbdom "narratives/internal/domain/tokenBlueprint"
 )
 
 // MintHandler は、MintUsecase を HTTP 経由で公開するハンドラです。
@@ -51,6 +53,13 @@ func (h *MintHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	// ------------------------------------------------------------
 	case r.Method == http.MethodGet && r.URL.Path == "/mint/brands":
 		h.listBrandsForCurrentCompany(w, r)
+		return
+
+	// ------------------------------------------------------------
+	// GET /mint/token_blueprints?brandId=...
+	// ------------------------------------------------------------
+	case r.Method == http.MethodGet && r.URL.Path == "/mint/token_blueprints":
+		h.listTokenBlueprintsByBrand(w, r)
 		return
 
 	default:
@@ -194,5 +203,66 @@ func (h *MintHandler) listBrandsForCurrentCompany(w http.ResponseWriter, r *http
 	}
 
 	// PageResult[Brand] をそのまま返す
+	_ = json.NewEncoder(w).Encode(result)
+}
+
+// ------------------------------------------------------------
+// GET /mint/token_blueprints?brandId=...
+// ------------------------------------------------------------
+func (h *MintHandler) listTokenBlueprintsByBrand(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+
+	if h.mintUC == nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		_ = json.NewEncoder(w).Encode(map[string]string{
+			"error": "mint usecase is not configured",
+		})
+		return
+	}
+
+	// クエリから brandId を取得
+	brandID := strings.TrimSpace(r.URL.Query().Get("brandId"))
+	if brandID == "" {
+		w.WriteHeader(http.StatusBadRequest)
+		_ = json.NewEncoder(w).Encode(map[string]string{
+			"error": "brandId is required",
+		})
+		return
+	}
+
+	// ページング（デフォルト: 1 ページ目 / 100 件）
+	pageParam := strings.TrimSpace(r.URL.Query().Get("page"))
+	perPageParam := strings.TrimSpace(r.URL.Query().Get("perPage"))
+
+	pageNumber := 1
+	perPage := 100
+
+	if pageParam != "" {
+		if n, err := strconv.Atoi(pageParam); err == nil && n > 0 {
+			pageNumber = n
+		}
+	}
+	if perPageParam != "" {
+		if n, err := strconv.Atoi(perPageParam); err == nil && n > 0 {
+			perPage = n
+		}
+	}
+
+	page := tbdom.Page{
+		Number:  pageNumber,
+		PerPage: perPage,
+	}
+
+	result, err := h.mintUC.ListTokenBlueprintsByBrand(ctx, brandID, page)
+	if err != nil {
+		// brandId が不正など、validation 系のエラーは 400 にしても良いが、
+		// ここでは一律 500 とし、必要に応じて分岐を追加する。
+		w.WriteHeader(http.StatusInternalServerError)
+		_ = json.NewEncoder(w).Encode(map[string]string{
+			"error": err.Error(),
+		})
+		return
+	}
+
 	_ = json.NewEncoder(w).Encode(result)
 }

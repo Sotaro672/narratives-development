@@ -11,7 +11,9 @@ import {
   resolveBlueprintForMintRequest,
   type ProductBlueprintPatchDTO,
   type BrandForMintDTO,
+  type TokenBlueprintForMintDTO,
   loadBrandsForMint,
+  loadTokenBlueprintsByBrand,
 } from "../../application/mintRequestService";
 
 export type ProductBlueprintCardViewModel = {
@@ -27,6 +29,12 @@ export type ProductBlueprintCardViewModel = {
 
 // 右カラムのブランド選択カード用 VM
 export type BrandOption = {
+  id: string;
+  name: string;
+};
+
+// トークン設計カード用（名前だけ表示）
+export type TokenBlueprintOption = {
   id: string;
   name: string;
 };
@@ -50,6 +58,13 @@ export function useMintRequestDetail() {
   const [brandOptions, setBrandOptions] = React.useState<BrandOption[]>([]);
   const [selectedBrandId, setSelectedBrandId] = React.useState<string>(""); // "" = 未選択 / すべて
   const [selectedBrandName, setSelectedBrandName] = React.useState<string>("");
+
+  // 右カラム: ブランドに紐づく TokenBlueprint 一覧と選択中 ID
+  const [tokenBlueprintOptions, setTokenBlueprintOptions] = React.useState<
+    TokenBlueprintOption[]
+  >([]);
+  const [selectedTokenBlueprintId, setSelectedTokenBlueprintId] =
+    React.useState<string>("");
 
   // 画面タイトル
   const title = `ミント申請詳細`;
@@ -133,7 +148,7 @@ export function useMintRequestDetail() {
   // 合格数 = ミント数
   const totalMintQuantity = inspectionCardData.totalPassed;
 
-  // TokenBlueprint（現状は undefined を返すダミー実装）
+  // TokenBlueprint（現状は undefined を返すダミー実装）※ 将来ここで選択 ID を使ってもOK
   const tokenBlueprint = resolveBlueprintForMintRequest(requestId);
 
   // ④ ProductBlueprintCard 用の ViewModel へ整形
@@ -194,14 +209,17 @@ export function useMintRequestDetail() {
     };
   }, []);
 
-  // Popover からブランドを選択
+  // Popover からブランドを選択 → あわせて TokenBlueprint 一覧も取得
   const handleSelectBrand = React.useCallback(
-    (brandId: string) => {
+    async (brandId: string) => {
       setSelectedBrandId(brandId);
 
+      // ブランド名の表示更新
       if (!brandId) {
-        // 「すべてのブランド」扱い（未選択）
+        // 「未選択」扱い
         setSelectedBrandName("");
+        setTokenBlueprintOptions([]);
+        setSelectedTokenBlueprintId("");
         return;
       }
 
@@ -212,9 +230,37 @@ export function useMintRequestDetail() {
         setSelectedBrandName("");
       }
 
-      // 将来的にここで TokenBlueprint リストをフィルタリングする
+      // ★ 選択したブランドに紐づく TokenBlueprint 一覧を取得
+      try {
+        const list = await loadTokenBlueprintsByBrand(brandId);
+        const opts: TokenBlueprintOption[] = (list ?? []).map(
+          (tb: TokenBlueprintForMintDTO): TokenBlueprintOption => ({
+            id: tb.id,
+            name: tb.name,
+          }),
+        );
+        setTokenBlueprintOptions(opts);
+
+        // ブランド変更時は選択中トークン設計をリセット
+        setSelectedTokenBlueprintId("");
+      } catch (e) {
+        console.error(
+          "[useMintRequestDetail] failed to load tokenBlueprints by brand",
+          e,
+        );
+        setTokenBlueprintOptions([]);
+        setSelectedTokenBlueprintId("");
+      }
     },
     [brandOptions],
+  );
+
+  // トークン設計カード側からの選択ハンドラ
+  const handleSelectTokenBlueprint = React.useCallback(
+    (tokenBlueprintId: string) => {
+      setSelectedTokenBlueprintId(tokenBlueprintId);
+    },
+    [],
   );
 
   return {
@@ -237,5 +283,10 @@ export function useMintRequestDetail() {
     selectedBrandId,
     selectedBrandName,
     handleSelectBrand,
+
+    // トークン設計カード用
+    tokenBlueprintOptions,
+    selectedTokenBlueprintId,
+    handleSelectTokenBlueprint,
   };
 }

@@ -5,7 +5,8 @@ import { auth } from "../../../../shell/src/auth/infrastructure/config/firebaseC
 import type { InspectionBatchDTO } from "../api/mintRequestApi";
 import type {
   ProductBlueprintPatchDTO,
-  BrandForMintDTO, // ★ 追加
+  BrandForMintDTO,
+  TokenBlueprintForMintDTO, // ★ 追加
 } from "../../application/mintRequestService";
 
 // 🔙 BACKEND の BASE URL
@@ -43,10 +44,6 @@ export async function fetchInspectionBatchesHTTP(): Promise<InspectionBatchDTO[]
   const idToken = await getIdTokenOrThrow();
 
   const url = `${API_BASE}/mint/inspections`;
-  console.log(
-    "[mintRequestRepositoryHTTP] fetchInspectionBatchesHTTP url =",
-    url,
-  );
 
   const res = await fetch(url, {
     method: "GET",
@@ -56,12 +53,6 @@ export async function fetchInspectionBatchesHTTP(): Promise<InspectionBatchDTO[]
     },
   });
 
-  console.log(
-    "[mintRequestRepositoryHTTP] fetchInspectionBatchesHTTP status =",
-    res.status,
-    res.statusText,
-  );
-
   if (!res.ok) {
     throw new Error(
       `Failed to fetch inspections (mint): ${res.status} ${res.statusText}`,
@@ -69,11 +60,6 @@ export async function fetchInspectionBatchesHTTP(): Promise<InspectionBatchDTO[]
   }
 
   const json = (await res.json()) as InspectionBatchDTO[] | null | undefined;
-  console.log(
-    "[mintRequestRepositoryHTTP] fetchInspectionBatchesHTTP json =",
-    json,
-  );
-
   return json ?? [];
 }
 
@@ -94,10 +80,6 @@ export async function fetchInspectionByProductionIdHTTP(
   const url = `${API_BASE}/products/inspections?productionId=${encodeURIComponent(
     trimmed,
   )}`;
-  console.log(
-    "[mintRequestRepositoryHTTP] fetchInspectionByProductionIdHTTP url =",
-    url,
-  );
 
   const res = await fetch(url, {
     method: "GET",
@@ -107,16 +89,7 @@ export async function fetchInspectionByProductionIdHTTP(
     },
   });
 
-  console.log(
-    "[mintRequestRepositoryHTTP] fetchInspectionByProductionIdHTTP status =",
-    res.status,
-    res.statusText,
-  );
-
   if (res.status === 404) {
-    console.log(
-      "[mintRequestRepositoryHTTP] fetchInspectionByProductionIdHTTP 404 (not found)",
-    );
     return null;
   }
 
@@ -127,10 +100,6 @@ export async function fetchInspectionByProductionIdHTTP(
   }
 
   const json = (await res.json()) as InspectionBatchDTO | null | undefined;
-  console.log(
-    "[mintRequestRepositoryHTTP] fetchInspectionByProductionIdHTTP json =",
-    json,
-  );
   return json ?? null;
 }
 
@@ -151,13 +120,6 @@ export async function fetchProductBlueprintPatchHTTP(
     productBlueprintId,
   )}/patch`;
 
-  console.log(
-    "[mintRequestRepositoryHTTP] fetchProductBlueprintPatchHTTP url =",
-    url,
-    "productBlueprintId =",
-    productBlueprintId,
-  );
-
   const res = await fetch(url, {
     method: "GET",
     headers: {
@@ -166,16 +128,7 @@ export async function fetchProductBlueprintPatchHTTP(
     },
   });
 
-  console.log(
-    "[mintRequestRepositoryHTTP] fetchProductBlueprintPatchHTTP status =",
-    res.status,
-    res.statusText,
-  );
-
   if (res.status === 404) {
-    console.log(
-      "[mintRequestRepositoryHTTP] fetchProductBlueprintPatchHTTP 404 (not found)",
-    );
     return null;
   }
 
@@ -186,15 +139,6 @@ export async function fetchProductBlueprintPatchHTTP(
   }
 
   const json = (await res.json()) as ProductBlueprintPatchDTO | null | undefined;
-  console.log(
-    "[mintRequestRepositoryHTTP] fetchProductBlueprintPatchHTTP json =",
-    json,
-    "brandId =",
-    json?.brandId,
-    "brandName =",
-    json?.brandName,
-  );
-
   return json ?? null;
 }
 
@@ -226,7 +170,6 @@ export async function fetchBrandsForMintHTTP(): Promise<BrandForMintDTO[]> {
   const idToken = await getIdTokenOrThrow();
 
   const url = `${API_BASE}/mint/brands`;
-  console.log("[mintRequestRepositoryHTTP] fetchBrandsForMintHTTP url =", url);
 
   const res = await fetch(url, {
     method: "GET",
@@ -236,12 +179,6 @@ export async function fetchBrandsForMintHTTP(): Promise<BrandForMintDTO[]> {
     },
   });
 
-  console.log(
-    "[mintRequestRepositoryHTTP] fetchBrandsForMintHTTP status =",
-    res.status,
-    res.statusText,
-  );
-
   if (!res.ok) {
     throw new Error(
       `Failed to fetch brands (mint): ${res.status} ${res.statusText}`,
@@ -249,16 +186,8 @@ export async function fetchBrandsForMintHTTP(): Promise<BrandForMintDTO[]> {
   }
 
   const json = (await res.json()) as BrandPageResultDTO | null | undefined;
-  console.log(
-    "[mintRequestRepositoryHTTP] fetchBrandsForMintHTTP raw json =",
-    json,
-  );
 
   const rawItems: BrandRecordRaw[] = json?.items ?? json?.Items ?? [];
-  console.log(
-    "[mintRequestRepositoryHTTP] fetchBrandsForMintHTTP raw items =",
-    rawItems,
-  );
 
   const mapped: BrandForMintDTO[] = rawItems
     .map((b) => ({
@@ -267,10 +196,88 @@ export async function fetchBrandsForMintHTTP(): Promise<BrandForMintDTO[]> {
     }))
     .filter((b) => b.id && b.name);
 
-  console.log(
-    "[mintRequestRepositoryHTTP] fetchBrandsForMintHTTP mapped =",
-    mapped,
-  );
+  return mapped;
+}
+
+// ===============================
+// HTTP Repository (tokenBlueprints for Mint)
+// ===============================
+
+/**
+ * 指定した brandId に紐づく TokenBlueprint 一覧を取得する。
+ * backend: GET /mint/token_blueprints?brandId=...
+ *
+ * Go 側は tbdom.PageResult を返す想定なので、
+ * JSON の Items / items から id / name だけを抜き出して
+ * TokenBlueprintForMintDTO[] に変換する。
+ */
+type TokenBlueprintRecordRaw = {
+  id?: string;
+  name?: string;
+  ID?: string;
+  Name?: string;
+};
+
+type TokenBlueprintPageResultDTO = {
+  items?: TokenBlueprintRecordRaw[];
+  Items?: TokenBlueprintRecordRaw[];
+  // total / page / perPage などは無視
+};
+
+export async function fetchTokenBlueprintsByBrandHTTP(
+  brandId: string,
+): Promise<TokenBlueprintForMintDTO[]> {
+  const trimmed = brandId.trim();
+  if (!trimmed) {
+    return [];
+  }
+
+  const idToken = await getIdTokenOrThrow();
+
+  const url = `${API_BASE}/mint/token_blueprints?brandId=${encodeURIComponent(
+    trimmed,
+  )}`;
+
+  const res = await fetch(url, {
+    method: "GET",
+    headers: {
+      Authorization: `Bearer ${idToken}`,
+      "Content-Type": "application/json",
+    },
+  });
+
+  if (res.status === 404) {
+    return [];
+  }
+
+  if (!res.ok) {
+    throw new Error(
+      `Failed to fetch tokenBlueprints (mint): ${res.status} ${res.statusText}`,
+    );
+  }
+
+  const json = (await res.json()) as
+    | TokenBlueprintPageResultDTO
+    | TokenBlueprintRecordRaw[]
+    | null
+    | undefined;
+
+  let rawItems: TokenBlueprintRecordRaw[] = [];
+
+  if (Array.isArray(json)) {
+    // handler が単純に []TokenBlueprint を返すケース
+    rawItems = json;
+  } else {
+    // PageResult 経由で返ってくるケース
+    rawItems = json?.items ?? json?.Items ?? [];
+  }
+
+  const mapped: TokenBlueprintForMintDTO[] = rawItems
+    .map((tb) => ({
+      id: tb.id ?? tb.ID ?? "",
+      name: tb.name ?? tb.Name ?? "",
+    }))
+    .filter((tb) => tb.id && tb.name);
 
   return mapped;
 }

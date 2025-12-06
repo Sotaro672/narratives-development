@@ -43,6 +43,11 @@ export default function MintRequestDetail() {
     selectedBrandId,
     selectedBrandName,
     handleSelectBrand,
+
+    // ★ 追加: トークン設計一覧カード用
+    tokenBlueprintOptions,
+    selectedTokenBlueprintId,
+    handleSelectTokenBlueprint,
   } = useMintRequestDetail();
 
   // PageHeader 用の保存ボタンハンドラ（現状はダミー）
@@ -182,6 +187,47 @@ export default function MintRequestDetail() {
             <div className="mt-2 text-xs text-gray-500">
               現在のフィルタ: {currentFilterLabel}
             </div>
+          </CardContent>
+        </Card>
+
+        {/* ★ 追加: トークン名一覧カード */}
+        <Card className="pb-select">
+          <CardHeader>
+            <CardTitle>トークン設計一覧</CardTitle>
+          </CardHeader>
+          <CardContent>
+            {/* ブランド未選択時 */}
+            {!selectedBrandId && (
+              <div className="pb-select__empty">
+                先にブランドを選択してください。
+              </div>
+            )}
+
+            {/* ブランド選択済みかつ結果あり */}
+            {selectedBrandId && tokenBlueprintOptions.length > 0 && (
+              <div className="pb-select__list">
+                {tokenBlueprintOptions.map((tb) => (
+                  <button
+                    key={tb.id}
+                    type="button"
+                    className={
+                      "pb-select__row" +
+                      (selectedTokenBlueprintId === tb.id ? " is-active" : "")
+                    }
+                    onClick={() => handleSelectTokenBlueprint(tb.id)}
+                  >
+                    {tb.name}
+                  </button>
+                ))}
+              </div>
+            )}
+
+            {/* ブランド選択済みだが結果なし */}
+            {selectedBrandId && tokenBlueprintOptions.length === 0 && (
+              <div className="pb-select__empty">
+                選択中のブランドに紐づくトークン設計がありません。
+              </div>
+            )}
           </CardContent>
         </Card>
       </div>

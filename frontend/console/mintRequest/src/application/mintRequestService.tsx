@@ -6,6 +6,8 @@ import {
   fetchProductBlueprintPatchHTTP,
   // ★ companyId ごとの Brand 一覧取得用
   fetchBrandsForMintHTTP,
+  // ★ brandId ごとの TokenBlueprint 一覧取得用（/mint/token_blueprints?brandId=... を想定）
+  fetchTokenBlueprintsByBrandHTTP,
 } from "../infrastructure/repository/mintRequestRepositoryHTTP";
 
 /**
@@ -34,6 +36,16 @@ export type ProductBlueprintPatchDTO = {
  * ListBrandByCompanyId（= /mint/brands）用
  */
 export type BrandForMintDTO = {
+  id: string;
+  name: string;
+};
+
+/**
+ * backend/internal/domain/tokenBlueprint.TokenBlueprint に対応する簡易 DTO
+ * ListTokenBlueprintsByBrand（= /mint/token_blueprints?brandId=...）用
+ * UI では name を表示する想定。
+ */
+export type TokenBlueprintForMintDTO = {
   id: string;
   name: string;
 };
@@ -85,8 +97,27 @@ export async function loadBrandsForMint(): Promise<BrandForMintDTO[]> {
 }
 
 /**
+ * 指定した brandId に紐づく TokenBlueprint 一覧を取得する。
+ * backend/internal/application/usecase.MintUsecase.ListTokenBlueprintsByBrand
+ * （HTTP: GET /mint/token_blueprints?brandId=...）に対応。
+ *
+ * 右カラムの「トークン設計カード」用に、name を表示する前提。
+ */
+export async function loadTokenBlueprintsByBrand(
+  brandId: string,
+): Promise<TokenBlueprintForMintDTO[]> {
+  const trimmed = brandId.trim();
+  if (!trimmed) {
+    return [];
+  }
+
+  const tokenBps = await fetchTokenBlueprintsByBrandHTTP(trimmed);
+  return tokenBps ?? [];
+}
+
+/**
  * ミント申請詳細画面向けの TokenBlueprint を解決する。
- * 現状は API がないため undefined を返す。
+ * 現状は個別 TokenBlueprint 詳細 API がないため undefined を返す。
  * 必要になれば backend の tokenBlueprint API を呼ぶ方式に置き換える。
  */
 export function resolveBlueprintForMintRequest(requestId?: string) {
