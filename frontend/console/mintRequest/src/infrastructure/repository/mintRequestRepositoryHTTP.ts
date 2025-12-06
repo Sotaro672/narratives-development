@@ -208,21 +208,20 @@ export async function fetchBrandsForMintHTTP(): Promise<BrandForMintDTO[]> {
  * backend: GET /mint/token_blueprints?brandId=...
  *
  * Go 側は tbdom.PageResult を返す想定なので、
- * JSON の Items / items から id / name / symbol / iconURL を抜き出して
+ * JSON の Items / items から id / name / symbol / iconUrl を抜き出して
  * TokenBlueprintForMintDTO[] に変換する。
  */
 type TokenBlueprintRecordRaw = {
   id?: string;
   name?: string;
   symbol?: string;
-  iconId?: string;
-  iconURL?: string;
+  iconUrl?: string;
 
   // 大文字始まりのフィールドにも一応対応
   ID?: string;
   Name?: string;
   Symbol?: string;
-  IconId?: string;
+  IconUrl?: string;
 };
 
 type TokenBlueprintPageResultDTO = {
@@ -284,13 +283,62 @@ export async function fetchTokenBlueprintsByBrandHTTP(
       id: tb.id ?? tb.ID ?? "",
       name: tb.name ?? tb.Name ?? "",
       symbol: tb.symbol ?? tb.Symbol ?? "",
-      iconUrl:
-        tb.iconURL ??
-        tb.iconId ??
-        tb.IconId ??
-        undefined,
+      iconUrl: tb.iconUrl ?? tb.IconUrl ?? undefined,
     }))
     .filter((tb) => tb.id && tb.name && tb.symbol);
 
   return mapped;
+}
+
+// ===============================
+// HTTP Repository (mint request)
+// ===============================
+
+/**
+ * ミント申請リクエストを送信する。
+ * backend: POST /mint/inspections/{productionId}/request
+ *
+ * Body:
+ * {
+ *   "tokenBlueprintId": "..."
+ * }
+ */
+export async function postMintRequestHTTP(
+  productionId: string,
+  tokenBlueprintId: string,
+): Promise<InspectionBatchDTO | null> {
+  const trimmed = productionId.trim();
+  if (!trimmed) {
+    throw new Error("productionId が空です");
+  }
+
+  const idToken = await getIdTokenOrThrow();
+
+  const url = `${API_BASE}/mint/inspections/${encodeURIComponent(
+    trimmed,
+  )}/request`;
+
+  const res = await fetch(url, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${idToken}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      tokenBlueprintId,
+    }),
+  });
+
+  if (res.status === 404) {
+    return null;
+  }
+
+  if (!res.ok) {
+    throw new Error(
+      `Failed to post mint request: ${res.status} ${res.statusText}`,
+    );
+  }
+
+  const json = (await res.json()) as InspectionBatchDTO | null | undefined;
+  return json ?? null;
 }

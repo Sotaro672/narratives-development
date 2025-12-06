@@ -42,11 +42,22 @@ type mintProductionRepo interface {
 	ListByProductBlueprintID(ctx context.Context, productBlueprintIDs []string) ([]proddom.Production, error)
 }
 
-// mintInspectionRepo は productionId 群から inspections を取得するための最小ポート
+// mintInspectionRepo は productionId 群から inspections を取得・更新するための最小ポート
 type mintInspectionRepo interface {
 	// 指定された productionId 群に紐づく InspectionBatch をすべて返す
 	// 実装例: InspectionRepositoryFS.ListByProductionID
 	ListByProductionID(ctx context.Context, productionIDs []string) ([]inspectiondom.InspectionBatch, error)
+
+	// ★ 追加: requestedBy / requestedAt / tokenBlueprintId を更新するための専用メソッド
+	// - requestedBy はミント申請ボタンを押下した currentMember（= MemberIDFromContext(ctx)）を渡す。
+	// - requestedAt は time.Now().UTC() などの現在時刻を渡す。
+	UpdateRequestInfo(
+		ctx context.Context,
+		productionID string,
+		requestedBy string,
+		requestedAt time.Time,
+		tokenBlueprintID string,
+	) (inspectiondom.InspectionBatch, error)
 }
 
 // mintModelRepo は modelId(variationID) から size / color / rgb などの情報を解決するための最小ポート
@@ -355,6 +366,7 @@ func (u *MintUsecase) GetProductBlueprintPatchByID(
 
 // MarkTokenBlueprintMinted は、指定された tokenBlueprintId の minted を
 // "notYet" → "minted" に更新する usecase です。
+//
 // - すでに minted=MintStatusMinted の場合は domain 側の ErrAlreadyMinted が返ります。
 // - minted を戻す（minted → notYet）は許可されません。
 func (u *MintUsecase) MarkTokenBlueprintMinted(
@@ -411,6 +423,51 @@ func (u *MintUsecase) MarkTokenBlueprintMinted(
 		DeletedAt: nil,
 		DeletedBy: nil,
 	})
+}
+
+// ============================================================
+// Additional API: Inspection RequestInfo 更新
+// ============================================================
+//
+// ミント申請ボタン押下時に、InspectionBatch に対して
+// - RequestedBy       ← currentMember（= MemberIDFromContext(ctx)）
+// - RequestedAt       ← 現在時刻
+// - TokenBlueprintID  ← 選択された tokenBlueprintId
+// を登録するためのユースケースです。
+func (u *MintUsecase) UpdateRequestInfo(
+	ctx context.Context,
+	productionID string,
+	tokenBlueprintID string,
+) (inspectiondom.InspectionBatch, error) {
+
+	var empty inspectiondom.InspectionBatch
+
+	if u == nil {
+		return empty, errors.New("mint usecase is nil")
+	}
+	if u.inspRepo == nil {
+		return empty, errors.New("inspection repo is nil")
+	}
+
+	pid := strings.TrimSpace(productionID)
+	if pid == "" {
+		return empty, errors.New("productionID is empty")
+	}
+
+	tbID := strings.TrimSpace(tokenBlueprintID)
+	if tbID == "" {
+		return empty, errors.New("tokenBlueprintID is empty")
+	}
+
+	// requestedBy は currentMember（= ミント申請ボタンを押下したユーザー）
+	memberID := strings.TrimSpace(MemberIDFromContext(ctx))
+	if memberID == "" {
+		return empty, errors.New("memberID not found in context")
+	}
+
+	now := time.Now().UTC()
+
+	return u.inspRepo.UpdateRequestInfo(ctx, pid, memberID, now, tbID)
 }
 
 // ============================================================

@@ -76,6 +76,11 @@ func (m *AuthMiddleware) Handler(next http.Handler) http.Handler {
 		ctx := context.WithValue(r.Context(), ctxKeyMember, member)
 		ctx = context.WithValue(ctx, ctxKeyUID, uid)
 
+		// ★★★ usecase に memberID をセット（今回の 500 の原因修正ポイント）★★★
+		if strings.TrimSpace(member.ID) != "" {
+			ctx = usecase.WithMemberID(ctx, member.ID)
+		}
+
 		// email 格納
 		if emailRaw, ok := token.Claims["email"]; ok {
 			if e, ok2 := emailRaw.(string); ok2 && strings.TrimSpace(e) != "" {

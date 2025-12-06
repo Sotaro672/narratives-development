@@ -91,10 +91,7 @@ func (r *InspectionRepositoryFS) GetByProductionID(
 	return docToInspectionBatch(snap)
 }
 
-// ListByProductionID:
-//   - 複数の productionId に紐づく inspections ドキュメントをまとめて取得する。
-//   - inspections コレクションは docID=productionId なので、Doc(id).Get をループで呼び出す。
-//   - まだ inspections が作成されていない productionId はスキップする。
+// ListByProductionID: 複数 ID の inspections をまとめて取得
 func (r *InspectionRepositoryFS) ListByProductionID(
 	ctx context.Context,
 	productionIDs []string,
@@ -104,12 +101,10 @@ func (r *InspectionRepositoryFS) ListByProductionID(
 		return nil, errors.New("firestore client is nil")
 	}
 
-	// 空なら即終了
 	if len(productionIDs) == 0 {
 		return []inspectiondom.InspectionBatch{}, nil
 	}
 
-	// trim + 空/重複除去
 	uniq := make(map[string]struct{}, len(productionIDs))
 	ids := make([]string, 0, len(productionIDs))
 	for _, id := range productionIDs {
@@ -133,7 +128,6 @@ func (r *InspectionRepositoryFS) ListByProductionID(
 	for _, pid := range ids {
 		snap, err := r.col().Doc(pid).Get(ctx)
 		if err != nil {
-			// inspections がまだ存在しない productionId はスキップ
 			if status.Code(err) == codes.NotFound {
 				continue
 			}
@@ -182,6 +176,53 @@ func (r *InspectionRepositoryFS) Save(
 }
 
 // ------------------------------------------------------------
+// ★ 追加: UpdateRequestInfo
+// ------------------------------------------------------------
+//
+// MintUsecase.UpdateRequestInfo 用。
+// requestedBy / requestedAt / tokenBlueprintId を更新する。
+// 保存後は最新の InspectionBatch を返す。
+// ------------------------------------------------------------
+func (r *InspectionRepositoryFS) UpdateRequestInfo(
+	ctx context.Context,
+	productionID string,
+	requestedBy string,
+	requestedAt time.Time,
+	tokenBlueprintID string,
+) (inspectiondom.InspectionBatch, error) {
+
+	if r.Client == nil {
+		return inspectiondom.InspectionBatch{}, errors.New("firestore client is nil")
+	}
+
+	pid := strings.TrimSpace(productionID)
+	if pid == "" {
+		return inspectiondom.InspectionBatch{}, inspectiondom.ErrInvalidInspectionProductionID
+	}
+
+	// Firestore 更新内容
+	update := map[string]any{
+		"requestedBy":      strings.TrimSpace(requestedBy),
+		"requestedAt":      requestedAt.UTC(),
+		"tokenBlueprintId": strings.TrimSpace(tokenBlueprintID),
+	}
+
+	docRef := r.col().Doc(pid)
+
+	if _, err := docRef.Set(ctx, update, firestore.MergeAll); err != nil {
+		return inspectiondom.InspectionBatch{}, err
+	}
+
+	// 保存後に最新の状態を取得
+	snap, err := docRef.Get(ctx)
+	if err != nil {
+		return inspectiondom.InspectionBatch{}, err
+	}
+
+	return docToInspectionBatch(snap)
+}
+
+// ------------------------------------------------------------
 // Helpers
 // ------------------------------------------------------------
 
@@ -190,10 +231,9 @@ func inspectionBatchToDoc(v inspectiondom.InspectionBatch) map[string]any {
 	for _, ins := range v.Inspections {
 		m := map[string]any{
 			"productId": strings.TrimSpace(ins.ProductID),
-			"modelId":   strings.TrimSpace(ins.ModelID), // ★ modelId を保存
+			"modelId":   strings.TrimSpace(ins.ModelID),
 		}
 
-		// ★ modelNumber を保存（存在する場合のみ）
 		if ins.ModelNumber != nil && strings.TrimSpace(*ins.ModelNumber) != "" {
 			m["modelNumber"] = strings.TrimSpace(*ins.ModelNumber)
 		} else {
@@ -221,7 +261,6 @@ func inspectionBatchToDoc(v inspectiondom.InspectionBatch) map[string]any {
 		items = append(items, m)
 	}
 
-	// quantity は 0 以下なら inspections の件数で補完
 	qty := v.Quantity
 	if qty <= 0 {
 		qty = len(items)
@@ -231,39 +270,34 @@ func inspectionBatchToDoc(v inspectiondom.InspectionBatch) map[string]any {
 		"productionId": strings.TrimSpace(v.ProductionID),
 		"status":       string(v.Status),
 		"inspections":  items,
-		"quantity":     qty,           // ★ 追加
-		"totalPassed":  v.TotalPassed, // ★ 追加
+		"quantity":     qty,
+		"totalPassed":  v.TotalPassed,
 	}
 
-	// requestedBy
 	if v.RequestedBy != nil && strings.TrimSpace(*v.RequestedBy) != "" {
 		data["requestedBy"] = strings.TrimSpace(*v.RequestedBy)
 	} else {
 		data["requestedBy"] = nil
 	}
 
-	// requestedAt
 	if v.RequestedAt != nil && !v.RequestedAt.IsZero() {
 		data["requestedAt"] = v.RequestedAt.UTC()
 	} else {
 		data["requestedAt"] = nil
 	}
 
-	// mintedAt
 	if v.MintedAt != nil && !v.MintedAt.IsZero() {
 		data["mintedAt"] = v.MintedAt.UTC()
 	} else {
 		data["mintedAt"] = nil
 	}
 
-	// scheduledBurnDate（新規・更新とも、nil の場合は Firestore 上で null にする）
 	if v.ScheduledBurnDate != nil && !v.ScheduledBurnDate.IsZero() {
 		data["scheduledBurnDate"] = v.ScheduledBurnDate.UTC()
 	} else {
 		data["scheduledBurnDate"] = nil
 	}
 
-	// tokenBlueprintId
 	if v.TokenBlueprintID != nil && strings.TrimSpace(*v.TokenBlueprintID) != "" {
 		data["tokenBlueprintId"] = strings.TrimSpace(*v.TokenBlueprintID)
 	} else {
@@ -287,20 +321,18 @@ func docToInspectionBatch(
 		Status:       inspectiondom.InspectionStatus(strings.TrimSpace(fscommon.AsString(data["status"]))),
 	}
 
-	// quantity（レガシー対応: 無ければ後で len(inspections) から補完）
 	if v, ok := data["quantity"]; ok {
 		if n, ok := asInt(v); ok {
 			batch.Quantity = n
 		}
 	}
-	// totalPassed
+
 	if v, ok := data["totalPassed"]; ok {
 		if n, ok := asInt(v); ok {
 			batch.TotalPassed = n
 		}
 	}
 
-	// requestedBy
 	if v, ok := data["requestedBy"].(string); ok {
 		s := strings.TrimSpace(v)
 		if s != "" {
@@ -308,25 +340,21 @@ func docToInspectionBatch(
 		}
 	}
 
-	// requestedAt
 	if t, ok := data["requestedAt"].(time.Time); ok {
 		tt := t.UTC()
 		batch.RequestedAt = &tt
 	}
 
-	// mintedAt
 	if t, ok := data["mintedAt"].(time.Time); ok {
 		tt := t.UTC()
 		batch.MintedAt = &tt
 	}
 
-	// scheduledBurnDate
 	if t, ok := data["scheduledBurnDate"].(time.Time); ok {
 		tt := t.UTC()
 		batch.ScheduledBurnDate = &tt
 	}
 
-	// tokenBlueprintId
 	if v, ok := data["tokenBlueprintId"].(string); ok {
 		s := strings.TrimSpace(v)
 		if s != "" {
@@ -357,7 +385,6 @@ func docToInspectionBatch(
 				item.ModelID = strings.TrimSpace(v)
 			}
 
-			// ★ modelNumber の復元
 			if v, ok := m["modelNumber"].(string); ok {
 				s := strings.TrimSpace(v)
 				if s != "" {
@@ -388,7 +415,6 @@ func docToInspectionBatch(
 		return inspectiondom.InspectionBatch{}, inspectiondom.ErrInvalidInspectionProductIDs
 	}
 
-	// レガシーデータ用: quantity が 0 以下なら inspections 件数で補完
 	if batch.Quantity <= 0 {
 		batch.Quantity = len(batch.Inspections)
 	}
@@ -396,7 +422,7 @@ func docToInspectionBatch(
 	return batch, nil
 }
 
-// Firestore の number 型を int に変換するヘルパ
+// Firestore number → int
 func asInt(v any) (int, bool) {
 	switch n := v.(type) {
 	case int:

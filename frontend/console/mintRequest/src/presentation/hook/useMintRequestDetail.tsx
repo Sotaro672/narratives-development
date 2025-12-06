@@ -15,6 +15,7 @@ import {
   loadBrandsForMint,
   loadTokenBlueprintsByBrand,
 } from "../../application/mintRequestService";
+import { postMintRequestHTTP } from "../../infrastructure/repository/mintRequestRepositoryHTTP";
 
 export type ProductBlueprintCardViewModel = {
   productName?: string;
@@ -175,13 +176,55 @@ export function useMintRequestDetail() {
     navigate(-1);
   }, [navigate]);
 
-  const handleMint = React.useCallback(() => {
-    alert(
-      `ミント申請を実行しました（申請ID: ${
-        requestId ?? "不明"
-      } / ミント数: ${totalMintQuantity}）`,
-    );
-  }, [requestId, totalMintQuantity]);
+  // ★ ミント申請処理
+  const handleMint = React.useCallback(async () => {
+    if (!inspectionBatch) {
+      alert("検査バッチ情報が取得できていません。");
+      return;
+    }
+
+    if (!selectedTokenBlueprintId) {
+      alert("トークン設計を選択してください。");
+      return;
+    }
+
+    // MintUsecase 側の UpdateRequestInfo は productionId をキーにしているので、
+    // InspectionBatchDTO 側の productionId を優先的に利用する。
+    const productionId =
+      (inspectionBatch as any).productionId ?? requestId ?? "";
+
+    if (!productionId) {
+      alert("productionId が特定できません。");
+      return;
+    }
+
+    try {
+      const updated = await postMintRequestHTTP(
+        productionId,
+        selectedTokenBlueprintId,
+      );
+
+      if (updated) {
+        setInspectionBatch(updated);
+      }
+
+      alert(
+        `ミント申請を登録しました（生産ID: ${productionId} / ミント数: ${totalMintQuantity}）`,
+      );
+    } catch (e: any) {
+      console.error("[useMintRequestDetail] failed to post mint request", e);
+      alert(
+        `ミント申請に失敗しました: ${
+          e?.message ?? "不明なエラーが発生しました"
+        }`,
+      );
+    }
+  }, [
+    inspectionBatch,
+    selectedTokenBlueprintId,
+    requestId,
+    totalMintQuantity,
+  ]);
 
   // ⑤ ブランド選択カード向け: /mint/brands から候補取得
   React.useEffect(() => {

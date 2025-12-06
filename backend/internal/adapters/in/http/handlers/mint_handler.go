@@ -14,13 +14,10 @@ import (
 	tbdom "narratives/internal/domain/tokenBlueprint"
 )
 
-// MintHandler は、MintUsecase を HTTP 経由で公開するハンドラです。
-// GET /mint/inspections などを提供します。
 type MintHandler struct {
 	mintUC *usecase.MintUsecase
 }
 
-// NewMintHandler は MintHandler を生成します。
 func NewMintHandler(mintUC *usecase.MintUsecase) http.Handler {
 	return &MintHandler{
 		mintUC: mintUC,
@@ -31,6 +28,16 @@ func (h *MintHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 
 	switch {
+
+	// ------------------------------------------------------------
+	// POST /mint/inspections/{productionId}/request
+	// ------------------------------------------------------------
+	case r.Method == http.MethodPost &&
+		strings.HasPrefix(r.URL.Path, "/mint/inspections/") &&
+		strings.HasSuffix(r.URL.Path, "/request"):
+		h.updateRequestInfo(w, r)
+		return
+
 	// ------------------------------------------------------------
 	// GET /mint/inspections
 	// ------------------------------------------------------------
@@ -67,9 +74,71 @@ func (h *MintHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-// ------------------------------------------------------------
+// ============================================================
+// POST /mint/inspections/{productionId}/request
+// ============================================================
+// Body: { "tokenBlueprintId": "xxxx" }
+func (h *MintHandler) updateRequestInfo(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+
+	if h.mintUC == nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		_ = json.NewEncoder(w).Encode(map[string]string{
+			"error": "mint usecase is not configured",
+		})
+		return
+	}
+
+	// productionId 抽出
+	path := strings.TrimPrefix(r.URL.Path, "/mint/inspections/")
+	path = strings.TrimSuffix(path, "/request")
+	productionID := strings.TrimSpace(path)
+
+	if productionID == "" {
+		w.WriteHeader(http.StatusBadRequest)
+		_ = json.NewEncoder(w).Encode(map[string]string{
+			"error": "productionId is empty",
+		})
+		return
+	}
+
+	// Body parse
+	var body struct {
+		TokenBlueprintID string `json:"tokenBlueprintId"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		w.WriteHeader(http.StatusBadRequest)
+		_ = json.NewEncoder(w).Encode(map[string]string{
+			"error": "invalid body",
+		})
+		return
+	}
+
+	tokenBlueprintID := strings.TrimSpace(body.TokenBlueprintID)
+	if tokenBlueprintID == "" {
+		w.WriteHeader(http.StatusBadRequest)
+		_ = json.NewEncoder(w).Encode(map[string]string{
+			"error": "tokenBlueprintId is required",
+		})
+		return
+	}
+
+	// ★ Usecase 側で MemberIDFromContext(ctx) を参照するため requestedBy は渡さない
+	updated, err := h.mintUC.UpdateRequestInfo(ctx, productionID, tokenBlueprintID)
+	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		_ = json.NewEncoder(w).Encode(map[string]string{
+			"error": err.Error(),
+		})
+		return
+	}
+
+	_ = json.NewEncoder(w).Encode(updated)
+}
+
+// ============================================================
 // GET /mint/inspections
-// ------------------------------------------------------------
+// ============================================================
 func (h *MintHandler) listInspectionsForCurrentCompany(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 
@@ -98,16 +167,14 @@ func (h *MintHandler) listInspectionsForCurrentCompany(w http.ResponseWriter, r 
 	_ = json.NewEncoder(w).Encode(batches)
 }
 
-// productBlueprint Patch + brandName を返すレスポンス用 DTO。
-// Patch を埋め込みつつ brandName フィールドを追加する。
+// ============================================================
+// GET /mint/product_blueprints/{id}/patch
+// ============================================================
 type productBlueprintPatchResponse struct {
 	pbpdom.Patch
 	BrandName string `json:"brandName"`
 }
 
-// ------------------------------------------------------------
-// GET /mint/product_blueprints/{id}/patch
-// ------------------------------------------------------------
 func (h *MintHandler) getProductBlueprintPatchByID(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 
@@ -119,7 +186,6 @@ func (h *MintHandler) getProductBlueprintPatchByID(w http.ResponseWriter, r *htt
 		return
 	}
 
-	// パスから {id} を抽出: /mint/product_blueprints/{id}/patch
 	path := strings.TrimPrefix(r.URL.Path, "/mint/product_blueprints/")
 	path = strings.TrimSuffix(path, "/patch")
 	id := strings.Trim(path, "/")
@@ -146,12 +212,11 @@ func (h *MintHandler) getProductBlueprintPatchByID(w http.ResponseWriter, r *htt
 		return
 	}
 
-	// Patch に含まれる brandId(*string) から brandName を解決する
 	brandName := ""
 	if patch.BrandID != nil {
-		brandID := strings.TrimSpace(*patch.BrandID)
-		if brandID != "" {
-			name, err := h.mintUC.ResolveBrandNameByID(ctx, brandID)
+		bid := strings.TrimSpace(*patch.BrandID)
+		if bid != "" {
+			name, err := h.mintUC.ResolveBrandNameByID(ctx, bid)
 			if err != nil {
 				w.WriteHeader(http.StatusInternalServerError)
 				_ = json.NewEncoder(w).Encode(map[string]string{
@@ -171,9 +236,9 @@ func (h *MintHandler) getProductBlueprintPatchByID(w http.ResponseWriter, r *htt
 	_ = json.NewEncoder(w).Encode(resp)
 }
 
-// ------------------------------------------------------------
+// ============================================================
 // GET /mint/brands
-// ------------------------------------------------------------
+// ============================================================
 func (h *MintHandler) listBrandsForCurrentCompany(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 
@@ -185,7 +250,6 @@ func (h *MintHandler) listBrandsForCurrentCompany(w http.ResponseWriter, r *http
 		return
 	}
 
-	// ページング指定はとりあえずデフォルト値を利用
 	var page branddom.Page
 
 	result, err := h.mintUC.ListBrandsForCurrentCompany(ctx, page)
@@ -202,13 +266,12 @@ func (h *MintHandler) listBrandsForCurrentCompany(w http.ResponseWriter, r *http
 		return
 	}
 
-	// PageResult[Brand] をそのまま返す
 	_ = json.NewEncoder(w).Encode(result)
 }
 
-// ------------------------------------------------------------
-// TokenBlueprint 簡易レスポンス DTO（Mint 用）
-// ------------------------------------------------------------
+// ============================================================
+// GET /mint/token_blueprints
+// ============================================================
 type tokenBlueprintForMintResponse struct {
 	ID      string `json:"id"`
 	Name    string `json:"name"`
@@ -216,9 +279,6 @@ type tokenBlueprintForMintResponse struct {
 	IconURL string `json:"iconUrl"`
 }
 
-// ------------------------------------------------------------
-// GET /mint/token_blueprints?brandId=...
-// ------------------------------------------------------------
 func (h *MintHandler) listTokenBlueprintsByBrand(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 
@@ -230,7 +290,6 @@ func (h *MintHandler) listTokenBlueprintsByBrand(w http.ResponseWriter, r *http.
 		return
 	}
 
-	// クエリから brandId を取得
 	brandID := strings.TrimSpace(r.URL.Query().Get("brandId"))
 	if brandID == "" {
 		w.WriteHeader(http.StatusBadRequest)
@@ -240,7 +299,6 @@ func (h *MintHandler) listTokenBlueprintsByBrand(w http.ResponseWriter, r *http.
 		return
 	}
 
-	// ページング（デフォルト: 1 ページ目 / 100 件）
 	pageParam := strings.TrimSpace(r.URL.Query().Get("page"))
 	perPageParam := strings.TrimSpace(r.URL.Query().Get("perPage"))
 
@@ -265,8 +323,6 @@ func (h *MintHandler) listTokenBlueprintsByBrand(w http.ResponseWriter, r *http.
 
 	result, err := h.mintUC.ListTokenBlueprintsByBrand(ctx, brandID, page)
 	if err != nil {
-		// brandId が不正など、validation 系のエラーは 400 にしても良いが、
-		// ここでは一律 500 とし、必要に応じて分岐を追加する。
 		w.WriteHeader(http.StatusInternalServerError)
 		_ = json.NewEncoder(w).Encode(map[string]string{
 			"error": err.Error(),
@@ -274,14 +330,13 @@ func (h *MintHandler) listTokenBlueprintsByBrand(w http.ResponseWriter, r *http.
 		return
 	}
 
-	// 必要な項目だけを詰め替えて返却
 	items := make([]tokenBlueprintForMintResponse, 0, len(result.Items))
 	for _, tb := range result.Items {
 		items = append(items, tokenBlueprintForMintResponse{
 			ID:      tb.ID,
 			Name:    tb.Name,
 			Symbol:  tb.Symbol,
-			IconURL: tb.IconURL, // TokenBlueprint のフィールド名に合わせてください
+			IconURL: tb.IconURL,
 		})
 	}
 
