@@ -1,76 +1,27 @@
 // frontend/tokenOperation/src/presentation/pages/tokenOperation.tsx
 
-import React, { useMemo, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import React from "react";
 import List, {
   FilterableTableHeader,
   SortableTableHeader,
 } from "../../../../shell/src/layout/List/List";
-import {
-  TOKEN_OPERATION_EXTENDED,
-} from "../../infrastructure/mockdata/mockdata";
-import type {
-  TokenOperationExtended,
-} from "../../../../shell/src/shared/types/tokenOperation";
-
-type SortKey = "tokenName" | "symbol" | "brandName" | "assigneeName" | null;
-type SortDir = "asc" | "desc" | null;
+import { useTokenOperation } from "../hook/useTokenOperation";
 
 export default function TokenOperationPage() {
-  const navigate = useNavigate();
-
-  // ── Filter state（ブランド・担当者） ─────────────────────────────
-  const [brandFilter, setBrandFilter] = useState<string[]>([]);
-  const [assigneeFilter, setAssigneeFilter] = useState<string[]>([]);
-
-  // ── Sort state ─────────────────────────────────────────────
-  const [activeKey, setActiveKey] = useState<SortKey>(null);
-  const [direction, setDirection] = useState<SortDir>(null);
-
-  // ── Filter options ─────────────────────────────────────────
-  const brandOptions = useMemo(
-    () =>
-      Array.from(
-        new Set(TOKEN_OPERATION_EXTENDED.map((r) => r.brandName)),
-      ).map((v) => ({
-        value: v,
-        label: v,
-      })),
-    [],
-  );
-
-  const assigneeOptions = useMemo(
-    () =>
-      Array.from(
-        new Set(TOKEN_OPERATION_EXTENDED.map((r) => r.assigneeName)),
-      ).map((v) => ({
-        value: v,
-        label: v,
-      })),
-    [],
-  );
-
-  // ── Build rows (filter → sort) ────────────────────────────
-  const rows = useMemo(() => {
-    let data = TOKEN_OPERATION_EXTENDED.filter(
-      (r) =>
-        (brandFilter.length === 0 ||
-          brandFilter.includes(r.brandName)) &&
-        (assigneeFilter.length === 0 ||
-          assigneeFilter.includes(r.assigneeName)),
-    );
-
-    if (activeKey && direction) {
-      data = [...data].sort((a, b) => {
-        const av = (a[activeKey] ?? "") as string;
-        const bv = (b[activeKey] ?? "") as string;
-        const cmp = av.localeCompare(bv, "ja");
-        return direction === "asc" ? cmp : -cmp;
-      });
-    }
-
-    return data;
-  }, [brandFilter, assigneeFilter, activeKey, direction]);
+  const {
+    brandFilter,
+    assigneeFilter,
+    brandOptions,
+    assigneeOptions,
+    activeKey,
+    direction,
+    rows,
+    handleSortChange,
+    handleBrandFilterChange,
+    handleAssigneeFilterChange,
+    handleReset,
+    goDetail,
+  } = useTokenOperation();
 
   // ── Table headers（★ID列を削除） ─────────────────────────
   const headers: React.ReactNode[] = [
@@ -81,8 +32,7 @@ export default function TokenOperationPage() {
       activeKey={activeKey}
       direction={direction}
       onChange={(key, dir) => {
-        setActiveKey(key as SortKey);
-        setDirection(dir as SortDir);
+        handleSortChange(key, dir);
       }}
     />,
     <SortableTableHeader
@@ -92,8 +42,7 @@ export default function TokenOperationPage() {
       activeKey={activeKey}
       direction={direction}
       onChange={(key, dir) => {
-        setActiveKey(key as SortKey);
-        setDirection(dir as SortDir);
+        handleSortChange(key, dir);
       }}
     />,
     <FilterableTableHeader
@@ -101,21 +50,16 @@ export default function TokenOperationPage() {
       label="ブランド"
       options={brandOptions}
       selected={brandFilter}
-      onChange={setBrandFilter}
+      onChange={handleBrandFilterChange}
     />,
     <FilterableTableHeader
       key="assignee"
       label="担当者"
       options={assigneeOptions}
       selected={assigneeFilter}
-      onChange={setAssigneeFilter}
+      onChange={handleAssigneeFilterChange}
     />,
   ];
-
-  // 詳細ページへ遷移（クリックした行の ID を使用）
-  const goDetail = (operationId: string) => {
-    navigate(`/operation/${encodeURIComponent(operationId)}`);
-  };
 
   return (
     <div className="p-0">
@@ -124,14 +68,9 @@ export default function TokenOperationPage() {
         headerCells={headers}
         showCreateButton={false}
         showResetButton
-        onReset={() => {
-          setBrandFilter([]);
-          setAssigneeFilter([]);
-          setActiveKey(null);
-          setDirection(null);
-        }}
+        onReset={handleReset}
       >
-        {rows.map((t: TokenOperationExtended) => (
+        {rows.map((t) => (
           <tr
             key={t.id}
             role="button"

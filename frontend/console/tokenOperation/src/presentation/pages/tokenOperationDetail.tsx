@@ -1,4 +1,4 @@
-// frontend/tokenOperation/src/presentation/pages/tokenOperationDetail.tsx
+// frontend/console/tokenOperation/src/presentation/pages/tokenOperationDetail.tsx
 
 import * as React from "react";
 import { useNavigate, useParams } from "react-router-dom";
@@ -6,20 +6,44 @@ import PageStyle from "../../../../shell/src/layout/PageStyle/PageStyle";
 import AdminCard from "../../../../admin/src/presentation/components/AdminCard";
 import TokenBlueprintCard from "../../../../tokenBlueprint/src/presentation/components/tokenBlueprintCard";
 import TokenContentsCard from "../../../../tokenContents/src/presentation/components/tokenContentsCard";
-import { TOKEN_BLUEPRINTS } from "../../../../tokenBlueprint/src/infrastructure/mockdata/tokenBlueprint_mockdata";
 import { useTokenBlueprintCard } from "../../../../tokenBlueprint/src/presentation/hook/useTokenBlueprintCard";
+import type { TokenBlueprint } from "../../../../tokenBlueprint/src/domain/entity/tokenBlueprint";
+import { fetchTokenBlueprintById } from "../../../../tokenBlueprint/src/infrastructure/repository/tokenBlueprintRepositoryHTTP";
 
 export default function TokenOperationDetail() {
   const navigate = useNavigate();
   const { tokenOperationId } = useParams<{ tokenOperationId: string }>();
 
   // ─────────────────────────────────────────
-  // モックデータ（トークン設計）
-  // 本来は tokenOperationId と紐付いた TokenBlueprint を取得する想定
+  // Backend から TokenBlueprint を取得
   // ─────────────────────────────────────────
-  const blueprint = TOKEN_BLUEPRINTS[0];
+  const [blueprint, setBlueprint] = React.useState<TokenBlueprint | null>(null);
+  const [loading, setLoading] = React.useState<boolean>(true);
+  const [error, setError] = React.useState<string | null>(null);
 
-  // TokenBlueprintCard 用 VM / handlers（モック blueprint から初期化）
+  React.useEffect(() => {
+    const id = tokenOperationId?.trim();
+    if (!id) {
+      setLoading(false);
+      return;
+    }
+
+    (async () => {
+      try {
+        const tb = await fetchTokenBlueprintById(id);
+        setBlueprint(tb);
+        setError(null);
+      } catch (e) {
+        console.error("[TokenOperationDetail] fetch error:", e);
+        setBlueprint(null);
+        setError("トークン設計の取得に失敗しました。");
+      } finally {
+        setLoading(false);
+      }
+    })();
+  }, [tokenOperationId]);
+
+  // TokenBlueprintCard 用 VM / handlers
   const { vm: cardVm, handlers: cardHandlers } = useTokenBlueprintCard({
     initialTokenBlueprint: (blueprint ?? {}) as any,
     initialBurnAt: "",
@@ -27,7 +51,7 @@ export default function TokenOperationDetail() {
     initialEditMode: false,
   });
 
-  // 管理情報（右カラム：モック）
+  // 管理情報（とりあえずモックのまま）
   const [assignee, setAssignee] = React.useState("member_sato");
   const [creator] = React.useState("member_yamada");
   const [createdAt] = React.useState("2025-11-06T20:55:00Z"); // ISO8601 形式に寄せる
@@ -40,6 +64,30 @@ export default function TokenOperationDetail() {
     alert("トークン運用情報を保存しました（モック）");
   }, []);
 
+  if (loading) {
+    return (
+      <PageStyle
+        layout="grid-2"
+        title={`トークン運用：${tokenOperationId ?? "不明ID"}`}
+        onBack={onBack}
+      >
+        <div>読み込み中です…</div>
+      </PageStyle>
+    );
+  }
+
+  if (error || !blueprint) {
+    return (
+      <PageStyle
+        layout="grid-2"
+        title={`トークン運用：${tokenOperationId ?? "不明ID"}`}
+        onBack={onBack}
+      >
+        <div>{error ?? "トークン設計が見つかりませんでした。"}</div>
+      </PageStyle>
+    );
+  }
+
   return (
     <PageStyle
       layout="grid-2"
@@ -47,22 +95,17 @@ export default function TokenOperationDetail() {
       onBack={onBack}
       onSave={handleSave}
     >
-      {/* 左カラム：トークン設計＋コンテンツ（モックでプリフィル） */}
+      {/* 左カラム：トークン設計＋コンテンツ */}
       <div>
-        {blueprint && (
-          <TokenBlueprintCard vm={cardVm} handlers={cardHandlers} />
-        )}
+        <TokenBlueprintCard vm={cardVm} handlers={cardHandlers} />
 
         <div style={{ marginTop: 16 }}>
           {/* TokenContentsCard: TokenBlueprint.contentFiles（ID配列）と連動させる想定 */}
-          <TokenContentsCard
-            mode="edit"
-            images={blueprint?.contentFiles ?? []}
-          />
+          <TokenContentsCard mode="edit" images={blueprint.contentFiles ?? []} />
         </div>
       </div>
 
-      {/* 右カラム：管理情報 */}
+      {/* 右カラム：管理情報（現状モック） */}
       <AdminCard
         title="管理情報"
         assigneeName={assignee}
