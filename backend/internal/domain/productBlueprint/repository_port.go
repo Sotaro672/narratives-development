@@ -106,6 +106,13 @@ type Repository interface {
 	GetByID(ctx context.Context, id string) (ProductBlueprint, error)
 	List(ctx context.Context, filter Filter, page Page) (PageResult, error)
 
+	// ★ printed 状態ごとの絞り込み List
+	// printed == "notYet" のみを対象にページング取得
+	ListNotYetPrinted(ctx context.Context, filter Filter, page Page) (PageResult, error)
+
+	// printed == "printed" のみを対象にページング取得
+	ListPrinted(ctx context.Context, filter Filter, page Page) (PageResult, error)
+
 	// ★ 追加: productBlueprintId から productName だけを取得するヘルパ
 	//   MintRequest 一覧などで「ID → 名前」の名前解決だけを行いたいときに使用。
 	GetProductNameByID(ctx context.Context, id string) (string, error)
@@ -131,6 +138,11 @@ type Repository interface {
 	Create(ctx context.Context, in CreateInput) (ProductBlueprint, error)
 	Update(ctx context.Context, id string, patch Patch) (ProductBlueprint, error)
 	Delete(ctx context.Context, id string) error
+
+	// ★ printed: notYet → printed への状態遷移
+	//   - entity.ProductBlueprint.MarkPrinted を内部で利用する想定
+	//   - すでに printed の場合は idempotent に振る舞う実装を推奨
+	MarkPrinted(ctx context.Context, id string) (ProductBlueprint, error)
 
 	// History (snapshot, versioned)
 	// ★ version は ProductBlueprint.Version に従う前提。

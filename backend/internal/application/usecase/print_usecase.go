@@ -3,6 +3,7 @@ package usecase
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strings"
 	"time"
@@ -11,6 +12,8 @@ import (
 	productdom "narratives/internal/domain/product"
 	// ★ Inspection 用
 	inspectiondom "narratives/internal/domain/inspection"
+	// ★ ProductBlueprint printed 管理用
+	productbpdom "narratives/internal/domain/productBlueprint"
 )
 
 // QR コードに埋め込む公開 URL のベース
@@ -50,6 +53,16 @@ type InspectionRepo interface {
 	Save(ctx context.Context, batch inspectiondom.InspectionBatch) (inspectiondom.InspectionBatch, error)
 }
 
+// ★ PrintUsecase で printed 管理に必要な最小インターフェイス
+// Firestore 実装 (*fs.ProductBlueprintRepositoryFS) がこれを満たしていればよい。
+type ProductBlueprintPrintedRepo interface {
+	// companyId 単位で productBlueprint の ID 一覧を取得
+	ListIDsByCompany(ctx context.Context, companyID string) ([]string, error)
+
+	// printed: notYet → printed へ遷移させる
+	MarkPrinted(ctx context.Context, id string) (productbpdom.ProductBlueprint, error)
+}
+
 // PrintUsecase orchestrates print & inspection operations around products.
 type PrintUsecase struct {
 	repo           ProductRepo
@@ -58,6 +71,9 @@ type PrintUsecase struct {
 
 	// ★ 追加: modelId → modelNumber 解決用
 	modelNumberRepo ModelNumberRepo
+
+	// ★ 追加: ProductBlueprint の printed 管理用
+	productBlueprintRepo ProductBlueprintPrintedRepo
 }
 
 func NewPrintUsecase(
@@ -65,12 +81,14 @@ func NewPrintUsecase(
 	printLogRepo PrintLogRepo,
 	inspectionRepo InspectionRepo,
 	modelNumberRepo ModelNumberRepo,
+	productBlueprintRepo ProductBlueprintPrintedRepo,
 ) *PrintUsecase {
 	return &PrintUsecase{
-		repo:            repo,
-		printLogRepo:    printLogRepo,
-		inspectionRepo:  inspectionRepo,
-		modelNumberRepo: modelNumberRepo,
+		repo:                 repo,
+		printLogRepo:         printLogRepo,
+		inspectionRepo:       inspectionRepo,
+		modelNumberRepo:      modelNumberRepo,
+		productBlueprintRepo: productBlueprintRepo,
 	}
 }
 
@@ -365,7 +383,57 @@ func (u *PrintUsecase) CreatePrintLogForProduction(ctx context.Context, producti
 	}
 	created.QrPayloads = payloads
 
+	// ★★★ print 実行時に ProductBlueprint を printed にマークする ★★★
+	// companyId は context から取得し、その company の productBlueprint を対象に MarkPrinted を呼ぶ。
+	if err := u.markProductBlueprintPrinted(ctx); err != nil {
+		return productdom.PrintLog{}, err
+	}
+
 	return created, nil
+}
+
+// ★ ProductBlueprint printed: notYet → printed への遷移
+// - companyId は context から取得（他 Usecase と同様のパターン）
+// - ListIDsByCompany で対象 ID 一覧を取得
+// - 各 ID に対して MarkPrinted を実行
+func (u *PrintUsecase) markProductBlueprintPrinted(ctx context.Context) error {
+	if u.productBlueprintRepo == nil {
+		// DI されていない場合は何もしない（構成次第で opt-out できるようにしておく）
+		return nil
+	}
+
+	// ★ BrandUsecase / ProductBlueprintUsecase と同様に context から companyId を取得
+	cid := strings.TrimSpace(companyIDFromContext(ctx))
+	if cid == "" {
+		// companyId が取れない場合は何もしない
+		return nil
+	}
+
+	ids, err := u.productBlueprintRepo.ListIDsByCompany(ctx, cid)
+	if err != nil {
+		return err
+	}
+	if len(ids) == 0 {
+		return nil
+	}
+
+	for _, id := range ids {
+		id = strings.TrimSpace(id)
+		if id == "" {
+			continue
+		}
+		_, err := u.productBlueprintRepo.MarkPrinted(ctx, id)
+		if err != nil {
+			// MarkPrinted は printed 済みの場合は idempotent 実装を想定。
+			// 仮に Forbidden を返す実装だった場合は無視して続行する。
+			if errors.Is(err, productbpdom.ErrForbidden) {
+				continue
+			}
+			return err
+		}
+	}
+
+	return nil
 }
 
 // ==========================

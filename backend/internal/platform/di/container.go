@@ -530,6 +530,7 @@ func NewContainer(ctx context.Context) (*Container, error) {
 		printLogRepo,
 		inspectionRepo,
 		modelNumberRepo,
+		productBlueprintRepo,
 	)
 
 	// ★ ProductionUsecase に member.Service + productBlueprint.Service + brand.Service を注入

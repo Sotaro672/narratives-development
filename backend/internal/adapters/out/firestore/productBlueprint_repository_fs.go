@@ -37,8 +37,12 @@ func (r *ProductBlueprintRepositoryFS) historyCol(blueprintID string) *firestore
 		Collection("versions")
 }
 
-// Compile-time check: ensure this satisfies usecase.ProductBlueprintRepo.
-var _ usecase.ProductBlueprintRepo = (*ProductBlueprintRepositoryFS)(nil)
+// Compile-time check: ensure this satisfies usecase.ProductBlueprintRepo
+// および usecase.ProductBlueprintPrintedRepo.
+var (
+	_ usecase.ProductBlueprintRepo        = (*ProductBlueprintRepositoryFS)(nil)
+	_ usecase.ProductBlueprintPrintedRepo = (*ProductBlueprintRepositoryFS)(nil)
+)
 
 // ========================
 // Core methods (ProductBlueprintRepo)
@@ -215,6 +219,167 @@ func (r *ProductBlueprintRepositoryFS) ListIDsByCompany(
 		ids = append(ids, snap.Ref.ID)
 	}
 	return ids, nil
+}
+
+// ★ 追加: printed == "notYet"（または未定義）だけを、指定 ID 群から取得
+// - ListIDsByCompany → ListNotYetPrinted で 1 セットの利用を想定
+// - printed フィールドが存在しない古いドキュメントは notYet 相当として扱う
+func (r *ProductBlueprintRepositoryFS) ListNotYetPrinted(
+	ctx context.Context,
+	ids []string,
+) ([]pbdom.ProductBlueprint, error) {
+	if r.Client == nil {
+		return nil, errors.New("firestore client is nil")
+	}
+
+	// ID 正規化 & 重複排除
+	uniq := make(map[string]struct{}, len(ids))
+	var cleaned []string
+	for _, id := range ids {
+		id = strings.TrimSpace(id)
+		if id == "" {
+			continue
+		}
+		if _, ok := uniq[id]; ok {
+			continue
+		}
+		uniq[id] = struct{}{}
+		cleaned = append(cleaned, id)
+	}
+	if len(cleaned) == 0 {
+		return []pbdom.ProductBlueprint{}, nil
+	}
+
+	out := make([]pbdom.ProductBlueprint, 0, len(cleaned))
+	for _, id := range cleaned {
+		snap, err := r.col().Doc(id).Get(ctx)
+		if err != nil {
+			if status.Code(err) == codes.NotFound {
+				// 存在しない ID はスキップ（エラーにはしない）
+				continue
+			}
+			return nil, err
+		}
+		pb, err := docToProductBlueprint(snap)
+		if err != nil {
+			return nil, err
+		}
+
+		// printed 未設定("") も notYet と同等として扱う
+		if pb.Printed == "" || pb.Printed == pbdom.PrintedStatusNotYet {
+			out = append(out, pb)
+		}
+	}
+	return out, nil
+}
+
+// ★ 追加: printed == "printed" だけを、指定 ID 群から取得
+// - ListIDsByCompany → ListPrinted で 1 セットの利用を想定
+func (r *ProductBlueprintRepositoryFS) ListPrinted(
+	ctx context.Context,
+	ids []string,
+) ([]pbdom.ProductBlueprint, error) {
+	if r.Client == nil {
+		return nil, errors.New("firestore client is nil")
+	}
+
+	// ID 正規化 & 重複排除
+	uniq := make(map[string]struct{}, len(ids))
+	var cleaned []string
+	for _, id := range ids {
+		id = strings.TrimSpace(id)
+		if id == "" {
+			continue
+		}
+		if _, ok := uniq[id]; ok {
+			continue
+		}
+		uniq[id] = struct{}{}
+		cleaned = append(cleaned, id)
+	}
+	if len(cleaned) == 0 {
+		return []pbdom.ProductBlueprint{}, nil
+	}
+
+	out := make([]pbdom.ProductBlueprint, 0, len(cleaned))
+	for _, id := range cleaned {
+		snap, err := r.col().Doc(id).Get(ctx)
+		if err != nil {
+			if status.Code(err) == codes.NotFound {
+				continue
+			}
+			return nil, err
+		}
+		pb, err := docToProductBlueprint(snap)
+		if err != nil {
+			return nil, err
+		}
+
+		if pb.Printed == pbdom.PrintedStatusPrinted {
+			out = append(out, pb)
+		}
+	}
+	return out, nil
+}
+
+// ★ 追加: printed: notYet → printed へ更新する（usecase.ProductBlueprintPrintedRepo 用）
+func (r *ProductBlueprintRepositoryFS) MarkPrinted(
+	ctx context.Context,
+	id string,
+) (pbdom.ProductBlueprint, error) {
+	if r.Client == nil {
+		return pbdom.ProductBlueprint{}, errors.New("firestore client is nil")
+	}
+
+	id = strings.TrimSpace(id)
+	if id == "" {
+		return pbdom.ProductBlueprint{}, pbdom.ErrInvalidID
+	}
+
+	docRef := r.col().Doc(id)
+
+	// 現在状態を取得して printed を確認
+	snap, err := docRef.Get(ctx)
+	if err != nil {
+		if status.Code(err) == codes.NotFound {
+			return pbdom.ProductBlueprint{}, pbdom.ErrNotFound
+		}
+		return pbdom.ProductBlueprint{}, err
+	}
+
+	data := snap.Data()
+	if data != nil {
+		if v, ok := data["printed"].(string); ok {
+			switch strings.TrimSpace(v) {
+			case string(pbdom.PrintedStatusPrinted):
+				// すでに printed の場合は Forbidden 扱い（再印刷禁止など）
+				return pbdom.ProductBlueprint{}, pbdom.ErrForbidden
+			}
+		}
+	}
+
+	// printed = "printed", updatedAt = now をセット
+	now := time.Now().UTC()
+	if _, err := docRef.Update(ctx, []firestore.Update{
+		{Path: "printed", Value: string(pbdom.PrintedStatusPrinted)},
+		{Path: "updatedAt", Value: now},
+	}); err != nil {
+		if status.Code(err) == codes.NotFound {
+			return pbdom.ProductBlueprint{}, pbdom.ErrNotFound
+		}
+		return pbdom.ProductBlueprint{}, err
+	}
+
+	// 再取得してドメイン型へ変換
+	snap, err = docRef.Get(ctx)
+	if err != nil {
+		if status.Code(err) == codes.NotFound {
+			return pbdom.ProductBlueprint{}, pbdom.ErrNotFound
+		}
+		return pbdom.ProductBlueprint{}, err
+	}
+
+	return docToProductBlueprint(snap)
 }
 
 // List returns all ProductBlueprints (optionally filtered by companyId in context).
@@ -748,6 +913,7 @@ func docToProductBlueprint(doc *firestore.DocumentSnapshot) (pbdom.ProductBluepr
 	qas := getStringSlice("qualityAssurance", "quality_assurance")
 	tagTypeStr := getStr("productIdTagType", "product_id_tag_type")
 	itemTypeStr := getStr("itemType", "item_type")
+	printedStr := getStr("printed") // 新フィールド
 
 	var deletedAtPtr *time.Time
 	if t := getTimeVal("deletedAt", "deleted_at"); !t.IsZero() {
@@ -782,6 +948,9 @@ func docToProductBlueprint(doc *firestore.DocumentSnapshot) (pbdom.ProductBluepr
 		CompanyID:  getStr("companyId", "company_id"),
 		AssigneeID: getStr("assigneeId", "assignee_id"),
 
+		// New printed フィールド
+		Printed: pbdom.PrintedStatus(printedStr),
+
 		CreatedBy: getStrPtr("createdBy", "created_by"),
 		CreatedAt: getTimeVal("createdAt", "created_at"),
 		UpdatedBy: getStrPtr("updatedBy", "updated_by"),
@@ -814,6 +983,11 @@ func productBlueprintToDoc(v pbdom.ProductBlueprint, createdAt, updatedAt time.T
 
 	if v.ProductIdTag.Type != "" {
 		m["productIdTagType"] = strings.TrimSpace(string(v.ProductIdTag.Type))
+	}
+
+	// printed フィールド（notYet / printed）
+	if v.Printed != "" {
+		m["printed"] = strings.TrimSpace(string(v.Printed))
 	}
 
 	if v.CreatedBy != nil {

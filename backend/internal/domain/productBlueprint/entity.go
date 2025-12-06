@@ -69,6 +69,27 @@ func IsValidItemType(v ItemType) bool {
 }
 
 // ======================================
+// printed: "notYet" | "printed"
+// ======================================
+
+type PrintedStatus string
+
+const (
+	PrintedStatusNotYet  PrintedStatus = "notYet"
+	PrintedStatusPrinted PrintedStatus = "printed"
+)
+
+func IsValidPrintedStatus(v PrintedStatus) bool {
+	// 既存データ互換のため "" も許容（未設定 = notYet 相当）
+	switch v {
+	case "", PrintedStatusNotYet, PrintedStatusPrinted:
+		return true
+	default:
+		return false
+	}
+}
+
+// ======================================
 // ProductIDTagType
 // ======================================
 
@@ -122,6 +143,9 @@ type ProductBlueprint struct {
 	ProductIdTag     ProductIDTag
 	AssigneeID       string
 
+	// ★ 印刷状態: "notYet" | "printed"
+	Printed PrintedStatus
+
 	CreatedBy *string
 	CreatedAt time.Time
 	UpdatedBy *string
@@ -139,15 +163,16 @@ type ProductBlueprint struct {
 // ======================================
 
 var (
-	ErrInvalidID        = errors.New("productBlueprint: invalid id")
-	ErrInvalidProduct   = errors.New("productBlueprint: invalid productName")
-	ErrInvalidBrand     = errors.New("productBlueprint: invalid brandId")
-	ErrInvalidItemType  = errors.New("productBlueprint: invalid itemType")
-	ErrInvalidWeight    = errors.New("productBlueprint: invalid weight")
-	ErrInvalidTagType   = errors.New("productBlueprint: invalid productIdTag.type")
-	ErrInvalidCreatedAt = errors.New("productBlueprint: invalid createdAt")
-	ErrInvalidAssignee  = errors.New("productBlueprint: invalid assigneeId")
-	ErrInvalidCompanyID = errors.New("productBlueprint: invalid companyId")
+	ErrInvalidID            = errors.New("productBlueprint: invalid id")
+	ErrInvalidProduct       = errors.New("productBlueprint: invalid productName")
+	ErrInvalidBrand         = errors.New("productBlueprint: invalid brandId")
+	ErrInvalidItemType      = errors.New("productBlueprint: invalid itemType")
+	ErrInvalidWeight        = errors.New("productBlueprint: invalid weight")
+	ErrInvalidTagType       = errors.New("productBlueprint: invalid productIdTag.type")
+	ErrInvalidCreatedAt     = errors.New("productBlueprint: invalid createdAt")
+	ErrInvalidAssignee      = errors.New("productBlueprint: invalid assigneeId")
+	ErrInvalidCompanyID     = errors.New("productBlueprint: invalid companyId")
+	ErrInvalidPrintedStatus = errors.New("productBlueprint: invalid printed status")
 )
 
 // ======================================
@@ -179,13 +204,15 @@ func New(
 		ProductIdTag:     productIDTag,
 		AssigneeID:       strings.TrimSpace(assigneeID),
 		CompanyID:        strings.TrimSpace(companyID),
-		CreatedBy:        createdBy,
-		CreatedAt:        createdAt.UTC(),
-		UpdatedBy:        createdBy,
-		UpdatedAt:        createdAt.UTC(),
-		DeletedBy:        nil,
-		DeletedAt:        nil,
-		ExpireAt:         nil,
+		// ★ create 時は常に notYet をセット
+		Printed:   PrintedStatusNotYet,
+		CreatedBy: createdBy,
+		CreatedAt: createdAt.UTC(),
+		UpdatedBy: createdBy,
+		UpdatedAt: createdAt.UTC(),
+		DeletedBy: nil,
+		DeletedAt: nil,
+		ExpireAt:  nil,
 	}
 
 	if err := pb.validate(); err != nil {
@@ -224,10 +251,37 @@ func NewFromStringTime(
 }
 
 // ======================================
+// Update Helpers
+// ======================================
+
+// printed == "printed" の場合に更新・削除を禁止
+func (p ProductBlueprint) canModify() bool {
+	return p.Printed != PrintedStatusPrinted
+}
+
+// printed を "printed" にするための専用メソッド
+func (p *ProductBlueprint) MarkPrinted(now time.Time, updatedBy *string) error {
+	if !IsValidPrintedStatus(p.Printed) {
+		return ErrInvalidPrintedStatus
+	}
+	if p.Printed == PrintedStatusPrinted {
+		// すでに printed の場合は何もしない（idempotent）
+		return nil
+	}
+	p.Printed = PrintedStatusPrinted
+	p.touch(now, updatedBy)
+	return nil
+}
+
+// ======================================
 // Update Methods
 // ======================================
 
 func (p *ProductBlueprint) UpdateAssignee(assigneeID string, now time.Time, updatedBy *string) error {
+	if !p.canModify() {
+		return ErrForbidden // printed のため更新不可
+	}
+
 	assigneeID = strings.TrimSpace(assigneeID)
 	if assigneeID == "" {
 		return ErrInvalidAssignee
@@ -237,12 +291,19 @@ func (p *ProductBlueprint) UpdateAssignee(assigneeID string, now time.Time, upda
 	return nil
 }
 
-func (p *ProductBlueprint) UpdateQualityAssurance(items []string, now time.Time, updatedBy *string) {
+func (p *ProductBlueprint) UpdateQualityAssurance(items []string, now time.Time, updatedBy *string) error {
+	if !p.canModify() {
+		return ErrForbidden // printed のため更新不可
+	}
 	p.QualityAssurance = dedupTrim(items)
 	p.touch(now, updatedBy)
+	return nil
 }
 
 func (p *ProductBlueprint) UpdateTag(tag ProductIDTag, now time.Time, updatedBy *string) error {
+	if !p.canModify() {
+		return ErrForbidden // printed のため更新不可
+	}
 	if err := tag.validate(); err != nil {
 		return err
 	}
@@ -254,7 +315,11 @@ func (p *ProductBlueprint) UpdateTag(tag ProductIDTag, now time.Time, updatedBy 
 // ★ Version 更新機能（BumpVersion）は削除済み
 
 // Soft Delete（論理削除 + TTL セット）
-func (p *ProductBlueprint) SoftDelete(now time.Time, deletedBy *string, ttl time.Duration) {
+func (p *ProductBlueprint) SoftDelete(now time.Time, deletedBy *string, ttl time.Duration) error {
+	if !p.canModify() {
+		return ErrForbidden // printed のため削除不可
+	}
+
 	if now.IsZero() {
 		now = time.Now().UTC()
 	}
@@ -269,10 +334,15 @@ func (p *ProductBlueprint) SoftDelete(now time.Time, deletedBy *string, ttl time
 	}
 
 	p.touch(now, deletedBy)
+	return nil
 }
 
 // 復旧（DeletedAt / DeletedBy / ExpireAt をクリアして Updated 系を進める）
-func (p *ProductBlueprint) Restore(now time.Time, restoredBy *string) {
+func (p *ProductBlueprint) Restore(now time.Time, restoredBy *string) error {
+	if !p.canModify() {
+		return ErrForbidden // printed のため更新不可
+	}
+
 	if now.IsZero() {
 		now = time.Now().UTC()
 	}
@@ -281,6 +351,7 @@ func (p *ProductBlueprint) Restore(now time.Time, restoredBy *string) {
 	p.DeletedBy = nil
 	p.ExpireAt = nil
 	p.touch(now, restoredBy)
+	return nil
 }
 
 // ======================================
@@ -311,6 +382,9 @@ func (p ProductBlueprint) validate() error {
 	}
 	if p.CreatedAt.IsZero() {
 		return ErrInvalidCreatedAt
+	}
+	if !IsValidPrintedStatus(p.Printed) {
+		return ErrInvalidPrintedStatus
 	}
 	return nil
 }
