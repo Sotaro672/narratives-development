@@ -7,10 +7,13 @@ import type { TokenBlueprint } from "../../domain/entity/tokenBlueprint";
 
 // TokenBlueprintCard 用ロジックフック
 import { useTokenBlueprintCard } from "../hook/useTokenBlueprintCard";
+
+// アプリケーション層サービス
 import {
-  fetchTokenBlueprintById,
-  updateTokenBlueprint,
-} from "../../infrastructure/repository/tokenBlueprintRepositoryHTTP";
+  fetchTokenBlueprintDetail,
+  updateTokenBlueprintFromCard,
+  formatCreatedAt,
+} from "../../application/tokenBlueprintDetailService";
 
 type UseTokenBlueprintDetailVM = {
   blueprint: TokenBlueprint | null;
@@ -48,7 +51,7 @@ export function useTokenBlueprintDetail(): UseTokenBlueprintDetailResult {
   const [assignee, setAssignee] = useState<string>("");
 
   // ─────────────────────────────
-  // 詳細データ取得
+  // 詳細データ取得（サービス経由）
   // ─────────────────────────────
   useEffect(() => {
     const id = tokenBlueprintId?.trim();
@@ -60,7 +63,7 @@ export function useTokenBlueprintDetail(): UseTokenBlueprintDetailResult {
       try {
         setLoading(true);
 
-        const tb = await fetchTokenBlueprintById(id);
+        const tb = await fetchTokenBlueprintDetail(id);
         if (cancelled) return;
 
         setBlueprint(tb);
@@ -84,19 +87,11 @@ export function useTokenBlueprintDetail(): UseTokenBlueprintDetailResult {
     [blueprint],
   );
 
-  // createdAt を yyyy/mm/dd に変換
-  const createdAt = useMemo(() => {
-    const raw = (blueprint as any)?.createdAt;
-    if (!raw) return "";
-
-    const d = new Date(raw);
-    if (isNaN(d.getTime())) return "";
-
-    const yyyy = d.getFullYear();
-    const mm = String(d.getMonth() + 1).padStart(2, "0");
-    const dd = String(d.getDate()).padStart(2, "0");
-    return `${yyyy}/${mm}/${dd}`;
-  }, [blueprint]);
+  // createdAt（サービスでフォーマット）
+  const createdAt = useMemo(
+    () => formatCreatedAt((blueprint as any)?.createdAt),
+    [blueprint],
+  );
 
   // ─────────────────────────────
   // TokenBlueprintCard 用 VM / handlers
@@ -111,7 +106,7 @@ export function useTokenBlueprintDetail(): UseTokenBlueprintDetailResult {
   const isEditMode: boolean = cardVm?.isEditMode ?? false;
 
   // ─────────────────────────────
-  // UI handlers
+  // UI handlers（ナビゲーション周りのみ保持）
   // ─────────────────────────────
   const handleBack = useCallback(() => {
     navigate("/tokenBlueprint", { replace: true });
@@ -133,34 +128,7 @@ export function useTokenBlueprintDetail(): UseTokenBlueprintDetailResult {
     try {
       setLoading(true);
 
-      // TokenBlueprintCard の VM 構造に依存しすぎないよう any キャストで吸収
-      const vmAny: any = cardVm || {};
-      const fields: any = vmAny.fields ?? vmAny ?? {};
-
-      const trimOrUndefined = (v: unknown): string | undefined =>
-        typeof v === "string" ? v.trim() : undefined;
-
-      const payload = {
-        name: trimOrUndefined(fields.name ?? blueprint.name),
-        symbol: trimOrUndefined(fields.symbol ?? blueprint.symbol),
-        brandId: trimOrUndefined(fields.brandId ?? blueprint.brandId),
-        description: trimOrUndefined(
-          fields.description ?? blueprint.description,
-        ),
-        assigneeId: trimOrUndefined(
-          fields.assigneeId ?? blueprint.assigneeId,
-        ),
-        iconId:
-          typeof fields.iconId === "string"
-            ? fields.iconId
-            : (blueprint as any)?.iconId ?? null,
-        contentFiles:
-          (fields.contentFiles as string[] | undefined) ??
-          blueprint.contentFiles ??
-          [],
-      };
-
-      const updated = await updateTokenBlueprint(blueprint.id, payload);
+      const updated = await updateTokenBlueprintFromCard(blueprint, cardVm);
 
       setBlueprint(updated);
       setAssignee(
@@ -196,7 +164,7 @@ export function useTokenBlueprintDetail(): UseTokenBlueprintDetailResult {
     assigneeName:
       assignee || blueprint?.assigneeName || blueprint?.assigneeId || "",
     createdByName,
-    createdAt, // フォーマット済み
+    createdAt,
     tokenContentsIds: blueprint?.contentFiles ?? [],
     cardVm,
     isEditMode,

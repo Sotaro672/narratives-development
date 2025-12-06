@@ -7,7 +7,7 @@ import AdminCard from "../../../../admin/src/presentation/components/AdminCard";
 import TokenBlueprintCard from "../../../../tokenBlueprint/src/presentation/components/tokenBlueprintCard";
 import TokenContentsCard from "../../../../tokenContents/src/presentation/components/tokenContentsCard";
 import { TOKEN_BLUEPRINTS } from "../../../../tokenBlueprint/src/infrastructure/mockdata/tokenBlueprint_mockdata";
-import type { TokenBlueprint } from "../../../../tokenBlueprint/src/domain/entity/tokenBlueprint";
+import { useTokenBlueprintCard } from "../../../../tokenBlueprint/src/presentation/hook/useTokenBlueprintCard";
 
 export default function TokenOperationDetail() {
   const navigate = useNavigate();
@@ -17,7 +17,15 @@ export default function TokenOperationDetail() {
   // モックデータ（トークン設計）
   // 本来は tokenOperationId と紐付いた TokenBlueprint を取得する想定
   // ─────────────────────────────────────────
-  const blueprint: TokenBlueprint | undefined = TOKEN_BLUEPRINTS[0];
+  const blueprint = TOKEN_BLUEPRINTS[0];
+
+  // TokenBlueprintCard 用 VM / handlers（モック blueprint から初期化）
+  const { vm: cardVm, handlers: cardHandlers } = useTokenBlueprintCard({
+    initialTokenBlueprint: (blueprint ?? {}) as any,
+    initialBurnAt: "",
+    initialIconUrl: blueprint?.iconId ?? "",
+    initialEditMode: false,
+  });
 
   // 管理情報（右カラム：モック）
   const [assignee, setAssignee] = React.useState("member_sato");
@@ -27,7 +35,7 @@ export default function TokenOperationDetail() {
   // 戻る
   const onBack = React.useCallback(() => navigate(-1), [navigate]);
 
-  // 保存ボタンのアクション
+  // 保存ボタンのアクション（モック）
   const handleSave = React.useCallback(() => {
     alert("トークン運用情報を保存しました（モック）");
   }, []);
@@ -42,14 +50,7 @@ export default function TokenOperationDetail() {
       {/* 左カラム：トークン設計＋コンテンツ（モックでプリフィル） */}
       <div>
         {blueprint && (
-          <TokenBlueprintCard
-            initialEditMode={false}
-            // TokenBlueprint スキーマ準拠の初期値をそのまま渡す
-            initialTokenBlueprint={blueprint}
-            // ドメイン外拡張フィールド（任意の表示用）
-            initialBurnAt=""
-            initialIconUrl={blueprint.iconId ?? ""}
-          />
+          <TokenBlueprintCard vm={cardVm} handlers={cardHandlers} />
         )}
 
         <div style={{ marginTop: 16 }}>
@@ -69,7 +70,6 @@ export default function TokenOperationDetail() {
         createdAt={createdAt}
         onEditAssignee={() => setAssignee("member_new")}
         onClickAssignee={() => console.log("assignee clicked:", assignee)}
-        onClickCreatedBy={() => console.log("createdBy clicked:", creator)}
       />
     </PageStyle>
   );

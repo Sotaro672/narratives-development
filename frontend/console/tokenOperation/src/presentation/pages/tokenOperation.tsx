@@ -72,9 +72,8 @@ export default function TokenOperationPage() {
     return data;
   }, [brandFilter, assigneeFilter, activeKey, direction]);
 
-  // ── Table headers ─────────────────────────────────────────
+  // ── Table headers（★ID列を削除） ─────────────────────────
   const headers: React.ReactNode[] = [
-    "トークン運用ID",
     <SortableTableHeader
       key="tokenName"
       label="トークン名"
@@ -113,7 +112,7 @@ export default function TokenOperationPage() {
     />,
   ];
 
-  // 詳細ページへ遷移（運用IDで遷移）
+  // 詳細ページへ遷移（クリックした行の ID を使用）
   const goDetail = (operationId: string) => {
     navigate(`/operation/${encodeURIComponent(operationId)}`);
   };
@@ -146,7 +145,7 @@ export default function TokenOperationPage() {
               }
             }}
           >
-            <td>{t.id}</td>
+            {/* ★ ID 列を削除 */}
             <td>{t.tokenName}</td>
             <td>{t.symbol}</td>
             <td>
