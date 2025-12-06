@@ -43,6 +43,10 @@ export async function fetchInspectionBatchesHTTP(): Promise<InspectionBatchDTO[]
   const idToken = await getIdTokenOrThrow();
 
   const url = `${API_BASE}/mint/inspections`;
+  console.log(
+    "[mintRequestRepositoryHTTP] fetchInspectionBatchesHTTP url =",
+    url,
+  );
 
   const res = await fetch(url, {
     method: "GET",
@@ -52,6 +56,12 @@ export async function fetchInspectionBatchesHTTP(): Promise<InspectionBatchDTO[]
     },
   });
 
+  console.log(
+    "[mintRequestRepositoryHTTP] fetchInspectionBatchesHTTP status =",
+    res.status,
+    res.statusText,
+  );
+
   if (!res.ok) {
     throw new Error(
       `Failed to fetch inspections (mint): ${res.status} ${res.statusText}`,
@@ -59,6 +69,11 @@ export async function fetchInspectionBatchesHTTP(): Promise<InspectionBatchDTO[]
   }
 
   const json = (await res.json()) as InspectionBatchDTO[] | null | undefined;
+  console.log(
+    "[mintRequestRepositoryHTTP] fetchInspectionBatchesHTTP json =",
+    json,
+  );
+
   return json ?? [];
 }
 
@@ -79,6 +94,10 @@ export async function fetchInspectionByProductionIdHTTP(
   const url = `${API_BASE}/products/inspections?productionId=${encodeURIComponent(
     trimmed,
   )}`;
+  console.log(
+    "[mintRequestRepositoryHTTP] fetchInspectionByProductionIdHTTP url =",
+    url,
+  );
 
   const res = await fetch(url, {
     method: "GET",
@@ -88,7 +107,16 @@ export async function fetchInspectionByProductionIdHTTP(
     },
   });
 
+  console.log(
+    "[mintRequestRepositoryHTTP] fetchInspectionByProductionIdHTTP status =",
+    res.status,
+    res.statusText,
+  );
+
   if (res.status === 404) {
+    console.log(
+      "[mintRequestRepositoryHTTP] fetchInspectionByProductionIdHTTP 404 (not found)",
+    );
     return null;
   }
 
@@ -99,6 +127,10 @@ export async function fetchInspectionByProductionIdHTTP(
   }
 
   const json = (await res.json()) as InspectionBatchDTO | null | undefined;
+  console.log(
+    "[mintRequestRepositoryHTTP] fetchInspectionByProductionIdHTTP json =",
+    json,
+  );
   return json ?? null;
 }
 
@@ -119,6 +151,13 @@ export async function fetchProductBlueprintPatchHTTP(
     productBlueprintId,
   )}/patch`;
 
+  console.log(
+    "[mintRequestRepositoryHTTP] fetchProductBlueprintPatchHTTP url =",
+    url,
+    "productBlueprintId =",
+    productBlueprintId,
+  );
+
   const res = await fetch(url, {
     method: "GET",
     headers: {
@@ -127,7 +166,16 @@ export async function fetchProductBlueprintPatchHTTP(
     },
   });
 
+  console.log(
+    "[mintRequestRepositoryHTTP] fetchProductBlueprintPatchHTTP status =",
+    res.status,
+    res.statusText,
+  );
+
   if (res.status === 404) {
+    console.log(
+      "[mintRequestRepositoryHTTP] fetchProductBlueprintPatchHTTP 404 (not found)",
+    );
     return null;
   }
 
@@ -138,6 +186,15 @@ export async function fetchProductBlueprintPatchHTTP(
   }
 
   const json = (await res.json()) as ProductBlueprintPatchDTO | null | undefined;
+  console.log(
+    "[mintRequestRepositoryHTTP] fetchProductBlueprintPatchHTTP json =",
+    json,
+    "brandId =",
+    json?.brandId,
+    "brandName =",
+    json?.brandName,
+  );
+
   return json ?? null;
 }
 
@@ -150,10 +207,18 @@ export async function fetchProductBlueprintPatchHTTP(
  * backend: GET /mint/brands
  *
  * Go 側は branddom.PageResult[branddom.Brand] を返す想定なので、
- * JSON の items から id / name だけを抜き出して BrandForMintDTO[] に変換する。
+ * JSON の Items / items から id / name だけを抜き出して BrandForMintDTO[] に変換する。
  */
+type BrandRecordRaw = {
+  id?: string;
+  name?: string;
+  ID?: string;
+  Name?: string;
+};
+
 type BrandPageResultDTO = {
-  items?: { id: string; name: string }[];
+  items?: BrandRecordRaw[]; // 将来 json タグを付けた場合
+  Items?: BrandRecordRaw[]; // 現状の Go デフォルト (先頭大文字)
   // 他に total / page / perPage 等があっても無視する
 };
 
@@ -161,6 +226,7 @@ export async function fetchBrandsForMintHTTP(): Promise<BrandForMintDTO[]> {
   const idToken = await getIdTokenOrThrow();
 
   const url = `${API_BASE}/mint/brands`;
+  console.log("[mintRequestRepositoryHTTP] fetchBrandsForMintHTTP url =", url);
 
   const res = await fetch(url, {
     method: "GET",
@@ -170,6 +236,12 @@ export async function fetchBrandsForMintHTTP(): Promise<BrandForMintDTO[]> {
     },
   });
 
+  console.log(
+    "[mintRequestRepositoryHTTP] fetchBrandsForMintHTTP status =",
+    res.status,
+    res.statusText,
+  );
+
   if (!res.ok) {
     throw new Error(
       `Failed to fetch brands (mint): ${res.status} ${res.statusText}`,
@@ -177,10 +249,28 @@ export async function fetchBrandsForMintHTTP(): Promise<BrandForMintDTO[]> {
   }
 
   const json = (await res.json()) as BrandPageResultDTO | null | undefined;
-  const items = json?.items ?? [];
+  console.log(
+    "[mintRequestRepositoryHTTP] fetchBrandsForMintHTTP raw json =",
+    json,
+  );
 
-  return items.map((b) => ({
-    id: b.id,
-    name: b.name,
-  }));
+  const rawItems: BrandRecordRaw[] = json?.items ?? json?.Items ?? [];
+  console.log(
+    "[mintRequestRepositoryHTTP] fetchBrandsForMintHTTP raw items =",
+    rawItems,
+  );
+
+  const mapped: BrandForMintDTO[] = rawItems
+    .map((b) => ({
+      id: b.id ?? b.ID ?? "",
+      name: b.name ?? b.Name ?? "",
+    }))
+    .filter((b) => b.id && b.name);
+
+  console.log(
+    "[mintRequestRepositoryHTTP] fetchBrandsForMintHTTP mapped =",
+    mapped,
+  );
+
+  return mapped;
 }

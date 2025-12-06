@@ -10,6 +10,8 @@ import {
   loadProductBlueprintPatch,
   resolveBlueprintForMintRequest,
   type ProductBlueprintPatchDTO,
+  type BrandForMintDTO,
+  loadBrandsForMint,
 } from "../../application/mintRequestService";
 
 export type ProductBlueprintCardViewModel = {
@@ -44,9 +46,10 @@ export function useMintRequestDetail() {
   const [pbPatchLoading, setPbPatchLoading] = React.useState(false);
   const [pbPatchError, setPbPatchError] = React.useState<string | null>(null);
 
-  // 右カラム: ブランド選択カード用
+  // 右カラム: ブランド選択カード用（デフォルトは未選択）
   const [brandOptions, setBrandOptions] = React.useState<BrandOption[]>([]);
-  const [selectedBrandId, setSelectedBrandId] = React.useState<string>("");
+  const [selectedBrandId, setSelectedBrandId] = React.useState<string>(""); // "" = 未選択 / すべて
+  const [selectedBrandName, setSelectedBrandName] = React.useState<string>("");
 
   // 画面タイトル
   const title = `ミント申請詳細`;
@@ -83,6 +86,8 @@ export function useMintRequestDetail() {
   }, [requestId]);
 
   // ② inspectionBatch → productBlueprintId を取り出し、Patch を取得
+  //    ※ 右カラムのブランド選択の初期値には反映せず、
+  //       あくまで左カラムの Product 情報表示専用とする。
   React.useEffect(() => {
     if (!inspectionBatch) return;
 
@@ -161,19 +166,56 @@ export function useMintRequestDetail() {
     );
   }, [requestId, totalMintQuantity]);
 
-  // ⑤ ブランド選択カード向け hook 部分
-  //    - brandOptions は後で /mint/brands API から取得する想定（今は空配列）
-  //    - selectedBrandId を右カラムの select から更新し、
-  //      将来的に TokenBlueprint の絞り込み条件として利用する
+  // ⑤ ブランド選択カード向け: /mint/brands から候補取得
   React.useEffect(() => {
-    // TODO: /mint/brands からブランド一覧を取得して setBrandOptions する
-    // ひとまず空のまま（バックエンド配線後に実装）
-    setBrandOptions((prev) => prev ?? []);
+    let cancelled = false;
+
+    const run = async () => {
+      try {
+        const brands = await loadBrandsForMint();
+        if (!cancelled) {
+          setBrandOptions(
+            (brands ?? []).map(
+              (b: BrandForMintDTO): BrandOption => ({
+                id: b.id,
+                name: b.name,
+              }),
+            ),
+          );
+        }
+      } catch (e) {
+        console.error("[useMintRequestDetail] failed to load brands", e);
+      }
+    };
+
+    run();
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
-  const handleSelectBrand = React.useCallback((brandId: string) => {
-    setSelectedBrandId(brandId);
-  }, []);
+  // Popover からブランドを選択
+  const handleSelectBrand = React.useCallback(
+    (brandId: string) => {
+      setSelectedBrandId(brandId);
+
+      if (!brandId) {
+        // 「すべてのブランド」扱い（未選択）
+        setSelectedBrandName("");
+        return;
+      }
+
+      const found = brandOptions.find((b) => b.id === brandId);
+      if (found) {
+        setSelectedBrandName(found.name);
+      } else {
+        setSelectedBrandName("");
+      }
+
+      // 将来的にここで TokenBlueprint リストをフィルタリングする
+    },
+    [brandOptions],
+  );
 
   return {
     title,
@@ -193,6 +235,7 @@ export function useMintRequestDetail() {
     // ブランド選択カード用
     brandOptions,
     selectedBrandId,
+    selectedBrandName,
     handleSelectBrand,
   };
 }

@@ -4,7 +4,7 @@ import type { InspectionBatchDTO } from "../infrastructure/api/mintRequestApi";
 import {
   fetchInspectionBatchesHTTP,
   fetchProductBlueprintPatchHTTP,
-  // ★ 追加: companyId ごとの Brand 一覧取得用
+  // ★ companyId ごとの Brand 一覧取得用
   fetchBrandsForMintHTTP,
 } from "../infrastructure/repository/mintRequestRepositoryHTTP";
 
@@ -78,12 +78,8 @@ export async function loadProductBlueprintPatch(
  * current companyId に紐づく Brand 一覧を取得する。
  * backend/internal/application/usecase.MintUsecase.ListBrandsForCurrentCompany
  * （HTTP: GET /mint/brands）に対応。
- *
- * Repository 層の fetchBrandsForMintHTTP は、
- * すでに companyId コンテキスト付きで /mint/brands を叩き、
- * BrandForMintDTO[] を返す想定。
  */
-export async function loadBrandsByCompanyIdForMint(): Promise<BrandForMintDTO[]> {
+export async function loadBrandsForMint(): Promise<BrandForMintDTO[]> {
   const brands = await fetchBrandsForMintHTTP();
   return brands ?? [];
 }

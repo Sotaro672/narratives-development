@@ -161,7 +161,6 @@ export default function TokenBlueprintCard({
                         value={vm.brandName || vm.brandId || "ブランド未設定"}
                         className="token-blueprint-card__select-input"
                       />
-                      <span className="token-blueprint-card__select-caret">▾</span>
                     </div>
                   </PopoverTrigger>
 
