@@ -148,18 +148,9 @@ export async function createProductBlueprintApi(
       : "";
 
   if (!productBlueprintId) {
-    console.warn(
-      "[productBlueprintApi] productBlueprintId not found in response; skip ModelVariation creation",
-      json,
-    );
+    // ID が取れない場合は ModelVariation 作成をスキップ
     return json;
   }
-
-  // 🔍 backend（/models/{productBlueprintId}/variations）に渡す直前の payload 全体をログ出力
-  console.log("[productBlueprintApi] variations payload for backend", {
-    productBlueprintId,
-    variations,
-  });
 
   // 3. variations がある場合のみ ModelVariation を作成
   if (variations.length > 0) {
@@ -167,10 +158,6 @@ export async function createProductBlueprintApi(
       productBlueprintId,
       variations,
     });
-  } else {
-    console.log(
-      "[productBlueprintApi] no variations to create; variations array is empty",
-    );
   }
 
   return json;

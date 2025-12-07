@@ -1,23 +1,16 @@
-// frontend/console/productBlueprint/src/presentation/hook/useProductBlueprintCreate.tsx 
+// frontend/console/productBlueprint/src/presentation/hook/useProductBlueprintCreate.tsx
 import * as React from "react";
 import { useNavigate } from "react-router-dom";
 
-// ProductIDTagType だけ productBlueprint のエンティティから使う
 import type { ProductIDTagType } from "../../domain/entity/productBlueprint";
-
-// Brand (domain)
 import type { Brand } from "../../../../brand/src/domain/entity/brand";
-// ★ companyId フィルタ付きの安全なクエリを利用
 import { fetchAllBrandsForCompany } from "../../../../brand/src/infrastructure/query/brandQuery";
 
-// Size / ModelNumber の型だけ借りる
 import type { SizeRow } from "../../../../model/src/presentation/hook/useModelCard";
 import type { ModelNumber } from "../../../../model/src/application/modelCreateService";
 
-// Auth / currentMember
 import { useAuth } from "../../../../shell/src/auth/presentation/hook/useCurrentMember";
 
-// catalog.ts から ItemType / Fit / measurement 系を集約して利用
 import {
   ITEM_TYPE_MEASUREMENT_OPTIONS,
 } from "../../domain/entity/catalog";
@@ -27,10 +20,8 @@ import type {
   MeasurementOption,
 } from "../../domain/entity/catalog";
 
-// ★ 商品設計作成 API 呼び出しサービス
 import { createProductBlueprint } from "../../application/productBlueprintCreateService";
 
-// 他プレゼン層からも使いやすいように再エクスポート
 export {
   FIT_OPTIONS,
   WASH_TAG_OPTIONS,
@@ -39,14 +30,9 @@ export {
   ITEM_TYPE_MEASUREMENT_OPTIONS,
 } from "../../domain/entity/catalog";
 
-// -------------------------------
-// Hook が外に公開する ViewModel
-// -------------------------------
 export interface UseProductBlueprintCreateResult {
-  // Meta
   title: string;
 
-  // ブランド関連
   brandId: string;
   brandName: string;
   brandOptions: Brand[];
@@ -54,39 +40,30 @@ export interface UseProductBlueprintCreateResult {
   brandError: Error | null;
   onChangeBrandId: (id: string) => void;
 
-  // 商品設計フィールド
   productName: string;
   itemType: ItemType;
   fit: Fit;
   material: string;
   weight: number;
   qualityAssurance: string[];
-  /** UI 上は Tag の種別のみを扱う（backend では ProductIDTag struct にマッピング） */
   productIdTagType: ProductIDTagType;
 
-  // アイテム種別から導出された採寸項目
   measurementOptions: MeasurementOption[];
 
   colors: string[];
   colorInput: string;
-  /** 色名 → RGB(hex) の対応マップ */
   colorRgbMap: Record<string, string>;
   sizes: SizeRow[];
   modelNumbers: ModelNumber[];
 
-  /** backend に送る担当者 ID（memberId） */
   assigneeId: string;
-  /** 表示用の担当者名（fullName / email など） */
   assigneeName: string;
-
   createdBy: string;
   createdAt: string;
 
-  // 画面全体アクション
   onCreate: () => void;
   onBack: () => void;
 
-  // 入力変更ハンドラ
   onChangeProductName: (v: string) => void;
   onChangeItemType: (v: ItemType) => void;
   onChangeFit: (v: Fit) => void;
@@ -98,10 +75,8 @@ export interface UseProductBlueprintCreateResult {
   onChangeColorInput: (v: string) => void;
   onAddColor: () => void;
   onRemoveColor: (name: string) => void;
-  /** 色名に対応する RGB(hex) を更新するハンドラ */
   onChangeColorRgb: (name: string, rgbHex: string) => void;
 
-  // サイズ系
   onAddSize: () => void;
   onRemoveSize: (id: string) => void;
   onChangeSize: (
@@ -109,56 +84,26 @@ export interface UseProductBlueprintCreateResult {
     patch: Partial<Omit<SizeRow, "id">>,
   ) => void;
 
-  // モデルナンバー系
   onChangeModelNumber: (
     sizeLabel: string,
     color: string,
     nextCode: string,
   ) => void;
 
-  // 担当者系
   onEditAssignee: () => void;
   onClickAssignee: () => void;
 }
 
-/**
- * 商品設計作成画面用のロジック・状態をまとめたカスタムフック
- *
- * backend の ProductBlueprint 構造体に対応:
- *
- * type ProductBlueprint struct {
- *   ID               string
- *   ProductName      string
- *   BrandID          string
- *   ItemType         ItemType
- *   Fit              string
- *   Material         string
- *   Weight           float64
- *   QualityAssurance []string
- *   ProductIdTag     ProductIDTag
- *   CompanyID        string
- *   AssigneeID       string
- *   CreatedBy        *string
- *   CreatedAt        time.Time
- *   UpdatedBy        *string
- *   UpdatedAt        time.Time
- *   DeletedBy        *string
- *   DeletedAt        *time.Time
- * }
- */
 export function useProductBlueprintCreate(): UseProductBlueprintCreateResult {
   const navigate = useNavigate();
-
-  // Auth / currentMember から companyId を取得（backend: CompanyID）
   const { currentMember, user } = useAuth();
+
   const effectiveCompanyId = React.useMemo(
     () => (currentMember?.companyId ?? user?.companyId ?? "").trim(),
     [currentMember?.companyId, user?.companyId],
   );
 
-  // ───────────────────────
-  // ブランド一覧（companyId で必ず絞る）
-  // ───────────────────────
+  // ブランド
   const [brandId, setBrandId] = React.useState("");
   const [brandOptions, setBrandOptions] = React.useState<Brand[]>([]);
   const [brandLoading, setBrandLoading] = React.useState(false);
@@ -169,17 +114,9 @@ export function useProductBlueprintCreate(): UseProductBlueprintCreateResult {
 
     async function loadBrands() {
       if (!effectiveCompanyId) {
-        console.log(
-          "[useProductBlueprintCreate] companyId is empty; skip brand fetch.",
-        );
         setBrandOptions([]);
         return;
       }
-
-      console.log(
-        "[useProductBlueprintCreate] start fetchAllBrandsForCompany",
-        { companyId: effectiveCompanyId },
-      );
 
       setBrandLoading(true);
       setBrandError(null);
@@ -187,33 +124,16 @@ export function useProductBlueprintCreate(): UseProductBlueprintCreateResult {
       try {
         const items = await fetchAllBrandsForCompany(
           effectiveCompanyId,
-          true, // isActiveOnly
+          true
         );
-        if (cancelled) {
-          console.log(
-            "[useProductBlueprintCreate] brand fetch result ignored (cancelled)",
-          );
-          return;
+        if (!cancelled) {
+          setBrandOptions(items);
         }
-
-        console.log(
-          "[useProductBlueprintCreate] fetchAllBrandsForCompany result",
-          {
-            count: items.length,
-            sample: items.slice(0, 3),
-          },
-        );
-
-        setBrandOptions(items);
       } catch (e) {
         const err = e instanceof Error ? e : new Error(String(e));
         if (!cancelled) {
           setBrandError(err);
         }
-        console.error(
-          "[useProductBlueprintCreate] failed to fetch brands for company:",
-          err,
-        );
       } finally {
         if (!cancelled) {
           setBrandLoading(false);
@@ -222,10 +142,7 @@ export function useProductBlueprintCreate(): UseProductBlueprintCreateResult {
     }
 
     void loadBrands();
-
-    return () => {
-      cancelled = true;
-    };
+    return () => { cancelled = true };
   }, [effectiveCompanyId]);
 
   const brandName = React.useMemo(() => {
@@ -233,27 +150,18 @@ export function useProductBlueprintCreate(): UseProductBlueprintCreateResult {
     return found?.name ?? "";
   }, [brandId, brandOptions]);
 
-  // ───────────────────────
-  // 商品設計フィールド
-  // ───────────────────────
+  // 商品フィールド
   const [productName, setProductName] = React.useState("");
-
-  // アイテム種別は空（未選択）から
   const [itemType, setItemType] = React.useState<ItemType>("" as ItemType);
-
-  // フィットは空（未選択）から
   const [fit, setFit] = React.useState<Fit>("" as Fit);
-
   const [material, setMaterial] = React.useState("");
   const [weight, setWeight] = React.useState<number>(0);
   const [qualityAssurance, setQualityAssurance] = React.useState<string[]>([]);
-
   const [productIdTagType, setProductIdTagType] =
     React.useState<ProductIDTagType>("" as ProductIDTagType);
 
   const [colorInput, setColorInput] = React.useState("");
   const [colors, setColors] = React.useState<string[]>([]);
-  // ★ 色名 → RGB(hex) のマップ
   const [colorRgbMap, setColorRgbMap] = React.useState<Record<string, string>>(
     {},
   );
@@ -261,21 +169,12 @@ export function useProductBlueprintCreate(): UseProductBlueprintCreateResult {
   const [sizes, setSizes] = React.useState<SizeRow[]>([]);
   const [modelNumbers, setModelNumbers] = React.useState<ModelNumber[]>([]);
 
-  // ───────────────────────
-  // アイテム種別 → 採寸項目
-  // ───────────────────────
   const measurementOptions: MeasurementOption[] = React.useMemo(() => {
     if (!itemType) return [];
-    // ★ ここで catalog.ts の ItemType と完全に一致していれば 7053 は発生しない
     return ITEM_TYPE_MEASUREMENT_OPTIONS[itemType] ?? [];
   }, [itemType]);
 
-  // ───────────────────────
-  // 管理情報
-  // ───────────────────────
-  // backend に送るのは memberId（AssigneeID）
   const [assigneeId, setAssigneeId] = React.useState("");
-  // 表示用のラベル（氏名 / メールアドレスなど）
   const [assigneeName, setAssigneeName] = React.useState("");
   const [createdBy] = React.useState("");
   const [createdAt] = React.useState("");
@@ -284,7 +183,6 @@ export function useProductBlueprintCreate(): UseProductBlueprintCreateResult {
     if (!currentMember) return;
     if (assigneeId) return;
 
-    // backend の AssigneeID は Member.ID を渡す
     const memberId = currentMember.id;
     const label =
       currentMember.fullName || currentMember.email || currentMember.id;
@@ -293,79 +191,106 @@ export function useProductBlueprintCreate(): UseProductBlueprintCreateResult {
     setAssigneeName(label);
   }, [currentMember, assigneeId]);
 
-  // ───────────────────────
   // バリデーション
-  // ───────────────────────
   const validate = React.useCallback((): string[] => {
     const errors: string[] = [];
 
-    // 必須: companyId
-    if (!effectiveCompanyId) {
+    if (!effectiveCompanyId)
       errors.push("companyId が取得できません。ログインし直してください。");
-    }
 
-    // 必須: 商品名
-    if (!productName.trim()) {
-      errors.push("商品名は必須です。");
-    }
-
-    // 必須: ブランド
-    if (!brandId) {
-      errors.push("ブランドを選択してください。");
-    }
-
-    // 必須: アイテム種別
-    if (!itemType) {
-      errors.push("アイテム種別を選択してください。");
-    }
-
-    // 必須: 商品IDタグ種別
-    if (!productIdTagType) {
+    if (!productName.trim()) errors.push("商品名は必須です。");
+    if (!brandId) errors.push("ブランドを選択してください。");
+    if (!itemType) errors.push("アイテム種別を選択してください。");
+    if (!productIdTagType)
       errors.push("商品IDタグを選択してください。");
-    }
-
-    // 重さは 0 以上
-    if (weight < 0) {
+    if (weight < 0)
       errors.push("重さは 0 以上の値を入力してください。");
-    }
-
-    // カラーバリエーションは1件以上
-    if (colors.length === 0) {
+    if (colors.length === 0)
       errors.push("カラーバリエーションを1つ以上登録してください。");
-    }
-
-    // サイズバリエーションは1件以上
-    if (sizes.length === 0) {
+    if (sizes.length === 0)
       errors.push("サイズバリエーションを1つ以上登録してください。");
-    }
 
-    // モデルナンバー: 1件以上 & 空欄禁止
+    // モデルナンバー必須 & 空欄チェック
     if (modelNumbers.length === 0) {
       errors.push("モデルナンバーを1つ以上登録してください。");
     } else {
-      const hasEmpty = modelNumbers.some((mn) => {
-        return Object.values(mn as any).some((v) => {
+      const hasEmpty = modelNumbers.some((mn) =>
+        Object.values(mn).some((v) => {
           if (v == null) return true;
           if (typeof v === "string" && v.trim() === "") return true;
           return false;
-        });
+        }),
+      );
+      if (hasEmpty)
+        errors.push("モデルナンバー欄に空欄があります。すべて入力してください。");
+    }
+
+    // ✅ モデルナンバーの重複チェック（code 単位でユニーク）
+    if (modelNumbers.length > 0) {
+      const seenCodes = new Set<string>();
+      const dupCodes = new Set<string>();
+
+      modelNumbers.forEach((mn) => {
+        const code = mn.code?.trim();
+        if (!code) return;
+        if (seenCodes.has(code)) {
+          dupCodes.add(code);
+        } else {
+          seenCodes.add(code);
+        }
       });
 
-      if (hasEmpty) {
-        errors.push("モデルナンバー欄に空欄があります。すべて入力してください。");
+      if (dupCodes.size > 0) {
+        errors.push(
+          `モデルナンバーが重複しています。（重複コード: ${Array.from(
+            dupCodes,
+          ).join("、")}）`,
+        );
       }
     }
 
-    // ★ 採寸値: 数字以外が入力されていないかチェック
-    // SizeRow のうち id / sizeLabel 以外のフィールドで、
-    // null/undefined を除き、number 以外 or NaN があればエラー
-    const invalidMeasurementFields: string[] = [];
+    // ✅ サイズ名（sizeLabel）の重複チェック
+    if (sizes.length > 0) {
+      const seenSizes = new Set<string>();
+      const dupSizes = new Set<string>();
 
+      sizes.forEach((s) => {
+        const labelRaw = (s as any).sizeLabel;
+        const label =
+          typeof labelRaw === "string" ? labelRaw.trim() : String(labelRaw ?? "").trim();
+        if (!label) return;
+        if (seenSizes.has(label)) {
+          dupSizes.add(label);
+        } else {
+          seenSizes.add(label);
+        }
+      });
+
+      if (dupSizes.size > 0) {
+        errors.push(
+          `サイズ名が重複しています。（重複サイズ: ${Array.from(
+            dupSizes,
+          ).join("、")}）`,
+        );
+      }
+    }
+
+    // ✅ 採寸値: 空欄もエラーにする
+    const invalidMeasurementFields: string[] = [];
     sizes.forEach((s, index) => {
       const label = (s as any).sizeLabel || `#${index + 1}`;
       Object.entries(s as Record<string, unknown>).forEach(([key, value]) => {
         if (key === "id" || key === "sizeLabel") return;
-        if (value == null) return; // 未入力はここでは許可
+
+        // 空欄（null / undefined / 空文字）も NG
+        if (
+          value == null ||
+          (typeof value === "string" && value.trim() === "")
+        ) {
+          invalidMeasurementFields.push(`サイズ ${label} の「${key}」`);
+          return;
+        }
+
         if (typeof value !== "number" || Number.isNaN(value)) {
           invalidMeasurementFields.push(`サイズ ${label} の「${key}」`);
         }
@@ -374,7 +299,7 @@ export function useProductBlueprintCreate(): UseProductBlueprintCreateResult {
 
     if (invalidMeasurementFields.length > 0) {
       errors.push(
-        `採寸欄には数値のみ入力してください。（問題のある項目: ${invalidMeasurementFields.join(
+        `採寸欄には空欄がないようにし、数値のみ入力してください。（問題のある項目: ${invalidMeasurementFields.join(
           "、",
         )}）`,
       );
@@ -393,33 +318,20 @@ export function useProductBlueprintCreate(): UseProductBlueprintCreateResult {
     modelNumbers,
   ]);
 
-  // ───────────────────────
-  // アクション
-  // ───────────────────────
   const onCreate = React.useCallback(async () => {
     const errors = validate();
     if (errors.length > 0) {
       alert(`入力内容に不備があります。\n\n- ${errors.join("\n- ")}`);
-      console.warn("[useProductBlueprintCreate] validation errors:", errors);
       return;
     }
 
     if (!effectiveCompanyId) {
-      // validate でも弾いているが、型上のガードとしてもう一度チェック
-      console.error(
-        "[useProductBlueprintCreate] effectiveCompanyId is empty at onCreate",
-      );
       alert("companyId が取得できません。ログインし直してください。");
       return;
     }
 
-    // backend の ProductIDTag に対応する構造体
-    const productIdTag = {
-      type: productIdTagType,
-    };
+    const productIdTag = { type: productIdTagType };
 
-    // backend/internal/domain/productBlueprint.ProductBlueprint に対応する
-    // CreateProductBlueprintParams を構成
     const apiParams = {
       productName,
       brandId,
@@ -431,7 +343,6 @@ export function useProductBlueprintCreate(): UseProductBlueprintCreateResult {
       productIdTag,
       companyId: effectiveCompanyId,
       colors,
-      // ★ 色名 → RGB(hex) のマップも一緒に送る
       colorRgbMap,
       sizes,
       modelNumbers,
@@ -439,24 +350,11 @@ export function useProductBlueprintCreate(): UseProductBlueprintCreateResult {
       createdBy: currentMember?.id ?? "",
     };
 
-    // デバッグ用スナップショット（brandName / measurementOptions / assigneeName も含めておく）
-    console.log("[useProductBlueprintCreate] onCreate payload snapshot", {
-      apiParams,
-      brandName,
-      measurementOptions,
-      assigneeName,
-    });
-
     try {
       await createProductBlueprint(apiParams);
       alert("商品設計を作成しました。");
-      // ★ 履歴の -1 ではなく、商品設計一覧の絶対パスに遷移
       navigate("/productBlueprint");
     } catch (e: any) {
-      console.error(
-        "[useProductBlueprintCreate] failed to create product blueprint:",
-        e,
-      );
       alert(
         e instanceof Error
           ? e.message
@@ -468,7 +366,6 @@ export function useProductBlueprintCreate(): UseProductBlueprintCreateResult {
     effectiveCompanyId,
     productName,
     brandId,
-    brandName,
     itemType,
     fit,
     material,
@@ -480,8 +377,6 @@ export function useProductBlueprintCreate(): UseProductBlueprintCreateResult {
     sizes,
     modelNumbers,
     assigneeId,
-    assigneeName,
-    measurementOptions,
     currentMember?.id,
     navigate,
   ]);
@@ -527,7 +422,6 @@ export function useProductBlueprintCreate(): UseProductBlueprintCreateResult {
 
   const onChangeSize = React.useCallback(
     (id: string, patch: Partial<Omit<SizeRow, "id">>) => {
-      // 採寸値は 0 未満にならないようにクランプ
       const safePatch: Partial<Omit<SizeRow, "id">> = { ...patch };
 
       const clampField = (key: keyof Omit<SizeRow, "id">) => {
@@ -557,7 +451,7 @@ export function useProductBlueprintCreate(): UseProductBlueprintCreateResult {
         );
         const trimmed = nextCode.trim();
 
-        // 空文字場合はエントリを削除（バリデーションで拾う）
+        // 空文字の場合はエントリ削除（上のバリデーションで拾う）
         if (!trimmed) {
           if (idx === -1) return prev;
           const copy = [...prev];
@@ -583,17 +477,10 @@ export function useProductBlueprintCreate(): UseProductBlueprintCreateResult {
     [],
   );
 
-  // RGB(hex) を更新するハンドラ
   const onChangeColorRgb = React.useCallback(
     (name: string, rgbHex: string) => {
       const key = name.trim();
       if (!key) return;
-
-      console.log("[useProductBlueprintCreate] onChangeColorRgb", {
-        name: key,
-        rgbHex,
-      });
-
       setColorRgbMap((prev) => ({
         ...prev,
         [key]: rgbHex,
@@ -602,7 +489,6 @@ export function useProductBlueprintCreate(): UseProductBlueprintCreateResult {
     [],
   );
 
-  // 重さを 0 未満にできないようにクランプ
   const handleChangeWeight = React.useCallback((v: number) => {
     if (Number.isNaN(v)) {
       setWeight(0);
@@ -622,15 +508,9 @@ export function useProductBlueprintCreate(): UseProductBlueprintCreateResult {
   }, [currentMember]);
 
   const onClickAssignee = React.useCallback(() => {
-    console.log("[useProductBlueprintCreate] assignee clicked:", {
-      assigneeId,
-      assigneeName,
-    });
+    // クリック自体のハンドリングのみ（ログ出力なし）
   }, [assigneeId, assigneeName]);
 
-  // -------------------------------
-  // 返却する ViewModel
-  // -------------------------------
   return {
     title: "商品設計を作成",
 

@@ -183,6 +183,8 @@ func (h *ProductBlueprintHandler) post(w http.ResponseWriter, r *http.Request) {
 		AssigneeID:       in.AssigneeId,
 		CompanyID:        in.CompanyId,
 		CreatedBy:        createdBy,
+		// create 時は常に notYet から開始
+		Printed: pbdom.PrintedStatusNotYet,
 		// ProductIdTag を保存対象としてセット
 		ProductIdTag: pbdom.ProductIDTag{
 			Type: pbdom.ProductIDTagType(in.ProductIdTag.Type),

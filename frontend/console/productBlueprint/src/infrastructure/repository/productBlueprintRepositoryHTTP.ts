@@ -96,13 +96,13 @@ export async function listProductBlueprintsHTTP(): Promise<ProductBlueprintDetai
 
 // -----------------------------------------------------------
 // GET: 商品設計 一覧（printed == notYet）
-//   - backend: GET /product-blueprints/printed/notYet
+//   - backend: GET /product-blueprints/not-yet-printed
 // -----------------------------------------------------------
 export async function listNotYetPrintedProductBlueprintsHTTP(): Promise<ProductBlueprintDetailResponse[]> {
   const idToken = await getIdTokenOrThrow();
 
   const res = await fetch(
-    `${API_BASE}/product-blueprints/printed/notYet`,
+    `${API_BASE}/product-blueprints/not-yet-printed`,
     {
       method: "GET",
       headers: {
@@ -122,13 +122,13 @@ export async function listNotYetPrintedProductBlueprintsHTTP(): Promise<ProductB
 
 // -----------------------------------------------------------
 // GET: 商品設計 一覧（printed == printed）
-//   - backend: GET /product-blueprints/printed/printed
+//   - backend: GET /product-blueprints/printed
 // -----------------------------------------------------------
 export async function listPrintedProductBlueprintsHTTP(): Promise<ProductBlueprintDetailResponse[]> {
   const idToken = await getIdTokenOrThrow();
 
   const res = await fetch(
-    `${API_BASE}/product-blueprints/printed/printed`,
+    `${API_BASE}/product-blueprints/printed`,
     {
       method: "GET",
       headers: {
