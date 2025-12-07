@@ -41,13 +41,14 @@ export type InventoryProductSummary = {
   id: string;
   productName: string;
   brandId: string;
+  brandName?: string;
   assigneeId: string;
+  assigneeName?: string;
 };
 
 /**
  * 在庫詳細画面用：
- * ProductBlueprint ID（= inventoryId として利用想定）から
- * productName / brandId / assigneeId を取得する。
+ * ProductBlueprint ID から productName / brandId / assigneeId を取得
  *
  * GET /product-blueprints/{id}
  */
@@ -60,22 +61,11 @@ export async function fetchInventoryProductSummary(
     productBlueprintId,
   )}`;
 
-  // 🔍 どこに取りに行っているか
-  console.log("[InventoryAPI] fetchInventoryProductSummary request:", {
-    url,
-    productBlueprintId,
-  });
-
   const res = await fetch(url, {
     method: "GET",
     headers: {
       Authorization: `Bearer ${token}`,
     },
-  });
-
-  console.log("[InventoryAPI] fetchInventoryProductSummary response status:", {
-    status: res.status,
-    statusText: res.statusText,
   });
 
   if (!res.ok) {
@@ -86,29 +76,21 @@ export async function fetchInventoryProductSummary(
 
   const data = await res.json();
 
-  // 🔍 backend からそのまま返ってきた JSON
-  console.log("[InventoryAPI] fetchInventoryProductSummary raw data:", data);
-
   const mapped: InventoryProductSummary = {
     id: String(data.id ?? ""),
     productName: String(data.productName ?? ""),
     brandId: String(data.brandId ?? ""),
+    brandName: data.brandName ? String(data.brandName) : undefined,
     assigneeId: String(data.assigneeId ?? ""),
+    assigneeName: data.assigneeName ? String(data.assigneeName) : undefined,
   };
-
-  // 🔍 画面に渡す直前の整形済みオブジェクト
-  console.log(
-    "[InventoryAPI] fetchInventoryProductSummary mapped summary:",
-    mapped,
-  );
 
   return mapped;
 }
 
 /**
  * 在庫一覧（ヘッダー用）:
- * printed == "printed" の ProductBlueprint 一覧を取得し、
- * productName / brandId / assigneeId をまとめて取る。
+ * printed == "printed" の ProductBlueprint 一覧を取得
  *
  * GET /product-blueprints/printed
  */
@@ -119,22 +101,12 @@ export async function fetchPrintedInventorySummaries(): Promise<
 
   const url = `${API_BASE}/product-blueprints/printed`;
 
-  console.log("[InventoryAPI] fetchPrintedInventorySummaries request:", { url });
-
   const res = await fetch(url, {
     method: "GET",
     headers: {
       Authorization: `Bearer ${token}`,
     },
   });
-
-  console.log(
-    "[InventoryAPI] fetchPrintedInventorySummaries response status:",
-    {
-      status: res.status,
-      statusText: res.statusText,
-    },
-  );
 
   if (!res.ok) {
     throw new Error(
@@ -144,13 +116,7 @@ export async function fetchPrintedInventorySummaries(): Promise<
 
   const data = await res.json();
 
-  // 🔍 生の配列（handler の ProductBlueprintListOutput）
-  console.log("[InventoryAPI] fetchPrintedInventorySummaries raw data:", data);
-
   if (!Array.isArray(data)) {
-    console.warn(
-      "[InventoryAPI] fetchPrintedInventorySummaries: response is not an array",
-    );
     return [];
   }
 
@@ -158,14 +124,10 @@ export async function fetchPrintedInventorySummaries(): Promise<
     id: String(row.id ?? ""),
     productName: String(row.productName ?? ""),
     brandId: String(row.brandId ?? ""),
+    brandName: row.brandName ? String(row.brandName) : undefined,
     assigneeId: String(row.assigneeId ?? ""),
+    assigneeName: row.assigneeName ? String(row.assigneeName) : undefined,
   }));
-
-  // 🔍 画面用にマッピング後の一覧
-  console.log(
-    "[InventoryAPI] fetchPrintedInventorySummaries mapped summaries:",
-    mapped,
-  );
 
   return mapped;
 }

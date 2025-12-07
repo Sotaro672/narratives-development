@@ -12,7 +12,7 @@ import { buildInventoryHeaders } from "../../application/inventoryManagementServ
 
 /** 在庫管理ページ（スタイル＋レイアウト中心） */
 export default function InventoryManagementPage() {
-  console.log("[InventoryManagementPage] render");  // ★テストログ
+  console.log("[InventoryManagementPage] render"); // ★テストログ
 
   const {
     rows,
@@ -74,21 +74,24 @@ export default function InventoryManagementPage() {
               }
             }}
           >
+            {/* プロダクト名 */}
             <td>{row.productName}</td>
-            <td>{row.brandName}</td>
+
+            {/* ★ ブランド列：brandName をラベル表示 */}
             <td>
-              {row.assigneeName ? (
-                <span className="lp-brand-pill">
-                  {row.assigneeName}
-                </span>
+              {row.brandName ? (
+                <span className="lp-brand-pill">{row.brandName}</span>
               ) : (
                 "-"
               )}
             </td>
+
+            {/* ★ 担当者列：assigneeName をそのまま表示 */}
+            <td>{row.assigneeName ?? "-"}</td>
+
+            {/* 総在庫数 */}
             <td>
-              <span className="inv__total-pill">
-                {row.totalQuantity}
-              </span>
+              <span className="inv__total-pill">{row.totalQuantity}</span>
             </td>
           </tr>
         ))}

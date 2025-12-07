@@ -2,122 +2,127 @@
 package handlers
 
 import (
+	"context"
 	"encoding/json"
-	"log"
 	"net/http"
 	"strings"
 
 	usecase "narratives/internal/application/usecase"
 	brand "narratives/internal/domain/brand"
+	memdom "narratives/internal/domain/member"
 	pbdom "narratives/internal/domain/productBlueprint"
 )
 
 // ProductBlueprintHandler は ProductBlueprint 用の HTTP ハンドラです。
 type ProductBlueprintHandler struct {
-	uc       *usecase.ProductBlueprintUsecase
-	brandSvc *brand.Service
+	uc        *usecase.ProductBlueprintUsecase
+	brandSvc  *brand.Service
+	memberSvc *memdom.Service
 }
 
-// DI コンテナ側で ProductBlueprintUsecase と brand.Service を渡してください。
-// brandSvc は現状未使用だが、将来 brand 名取得に使うために受け取っておく。
 func NewProductBlueprintHandler(
 	uc *usecase.ProductBlueprintUsecase,
 	brandSvc *brand.Service,
+	memberSvc *memdom.Service,
 ) http.Handler {
 	return &ProductBlueprintHandler{
-		uc:       uc,
-		brandSvc: brandSvc,
+		uc:        uc,
+		brandSvc:  brandSvc,
+		memberSvc: memberSvc,
 	}
+}
+
+// brandId → brandName 解決用ヘルパ
+func (h *ProductBlueprintHandler) getBrandNameByID(ctx context.Context, brandID string) string {
+	brandID = strings.TrimSpace(brandID)
+	if brandID == "" {
+		return ""
+	}
+	if h.brandSvc == nil {
+		return brandID
+	}
+
+	name, err := h.brandSvc.GetNameByID(ctx, brandID)
+	if err != nil {
+		return brandID
+	}
+	return strings.TrimSpace(name)
+}
+
+// assigneeId → assigneeName 解決用ヘルパ
+func (h *ProductBlueprintHandler) getAssigneeNameByID(ctx context.Context, memberID string) string {
+	memberID = strings.TrimSpace(memberID)
+	if memberID == "" {
+		return ""
+	}
+	if h.memberSvc == nil {
+		return memberID
+	}
+
+	name, err := h.memberSvc.GetNameLastFirstByID(ctx, memberID)
+	if err != nil {
+		return memberID
+	}
+
+	name = strings.TrimSpace(name)
+	if name == "" {
+		return memberID
+	}
+	return name
 }
 
 func (h *ProductBlueprintHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 
-	// 末尾のスラッシュを削ってから判定
 	path := strings.TrimRight(r.URL.Path, "/")
 
 	switch {
-	// ---------------------------------------------------
-	// GET /product-blueprints  ← 一覧 API（未削除のみ）
-	// ---------------------------------------------------
 	case r.Method == http.MethodGet && path == "/product-blueprints":
 		h.list(w, r)
 
-	// ---------------------------------------------------
-	// GET /product-blueprints/deleted ← 削除済み一覧 API
-	// ---------------------------------------------------
 	case r.Method == http.MethodGet && path == "/product-blueprints/deleted":
 		h.listDeleted(w, r)
 
-	// ---------------------------------------------------
-	// GET /product-blueprints/printed ← printed == printed 一覧
-	// ---------------------------------------------------
 	case r.Method == http.MethodGet && path == "/product-blueprints/printed":
 		h.listPrinted(w, r)
 
-	// ---------------------------------------------------
-	// GET /product-blueprints/{id}/history ← 履歴一覧 API（LogCard 用）
-	// ---------------------------------------------------
 	case r.Method == http.MethodGet &&
 		strings.HasPrefix(path, "/product-blueprints/") &&
 		strings.HasSuffix(path, "/history"):
-
 		trimmed := strings.TrimPrefix(path, "/product-blueprints/")
 		trimmed = strings.TrimSuffix(trimmed, "/history")
 		id := strings.Trim(trimmed, "/")
 		h.listHistory(w, r, id)
 
-	// ---------------------------------------------------
-	// POST /product-blueprints  ← 新規作成 API
-	// ---------------------------------------------------
 	case r.Method == http.MethodPost && path == "/product-blueprints":
 		h.post(w, r)
 
-	// ---------------------------------------------------
-	// POST /product-blueprints/{id}/restore  ← 復元 API
-	// ---------------------------------------------------
 	case r.Method == http.MethodPost &&
 		strings.HasPrefix(path, "/product-blueprints/") &&
 		strings.HasSuffix(path, "/restore"):
-
 		trimmed := strings.TrimPrefix(path, "/product-blueprints/")
 		trimmed = strings.TrimSuffix(trimmed, "/restore")
 		id := strings.Trim(trimmed, "/")
 		h.restore(w, r, id)
 
-	// ---------------------------------------------------
-	// POST /product-blueprints/{id}/mark-printed ← printed を printed に更新
-	// ---------------------------------------------------
 	case r.Method == http.MethodPost &&
 		strings.HasPrefix(path, "/product-blueprints/") &&
 		strings.HasSuffix(path, "/mark-printed"):
-
 		trimmed := strings.TrimPrefix(path, "/product-blueprints/")
 		trimmed = strings.TrimSuffix(trimmed, "/mark-printed")
 		id := strings.Trim(trimmed, "/")
 		h.markPrinted(w, r, id)
 
-	// ---------------------------------------------------
-	// PUT/PATCH /product-blueprints/{id} ← 更新 API
-	// ---------------------------------------------------
 	case (r.Method == http.MethodPut || r.Method == http.MethodPatch) &&
 		strings.HasPrefix(path, "/product-blueprints/"):
-
 		id := strings.TrimPrefix(path, "/product-blueprints/")
 		h.update(w, r, id)
 
-	// ---------------------------------------------------
-	// DELETE /product-blueprints/{id} ← 論理削除 API
-	// ---------------------------------------------------
 	case r.Method == http.MethodDelete &&
 		strings.HasPrefix(path, "/product-blueprints/"):
-
 		id := strings.TrimPrefix(path, "/product-blueprints/")
 		h.delete(w, r, id)
 
-	// ---------------------------------------------------
-	// GET /product-blueprints/{id} ← 詳細取得 API
-	// ---------------------------------------------------
 	case r.Method == http.MethodGet && strings.HasPrefix(path, "/product-blueprints/"):
 		id := strings.TrimPrefix(path, "/product-blueprints/")
 		h.get(w, r, id)
@@ -160,13 +165,11 @@ func (h *ProductBlueprintHandler) post(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// createdBy を *string に変換（空文字なら nil）
 	var createdBy *string
 	if v := strings.TrimSpace(in.CreatedBy); v != "" {
 		createdBy = &v
 	}
 
-	// Domain 変換
 	pb := pbdom.ProductBlueprint{
 		ProductName:      in.ProductName,
 		BrandID:          in.BrandId,
@@ -178,9 +181,7 @@ func (h *ProductBlueprintHandler) post(w http.ResponseWriter, r *http.Request) {
 		AssigneeID:       in.AssigneeId,
 		CompanyID:        in.CompanyId,
 		CreatedBy:        createdBy,
-		// create 時は常に notYet から開始
-		Printed: pbdom.PrintedStatusNotYet,
-		// ProductIdTag を保存対象としてセット
+		Printed:          pbdom.PrintedStatusNotYet,
 		ProductIdTag: pbdom.ProductIDTag{
 			Type: pbdom.ProductIDTagType(in.ProductIdTag.Type),
 		},
@@ -192,14 +193,12 @@ func (h *ProductBlueprintHandler) post(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	log.Printf("[ProductBlueprint] create response: %+v", created)
-
 	w.WriteHeader(http.StatusCreated)
 	_ = json.NewEncoder(w).Encode(created)
 }
 
 // ---------------------------------------------------
-// PUT/PATCH /product-blueprints/{id}  ← 更新 API
+// PUT/PATCH /product-blueprints/{id}
 // ---------------------------------------------------
 
 type UpdateProductBlueprintInput struct {
@@ -233,13 +232,11 @@ func (h *ProductBlueprintHandler) update(w http.ResponseWriter, r *http.Request,
 		return
 	}
 
-	// updatedBy を *string に変換（空文字なら nil）
 	var updatedBy *string
 	if v := strings.TrimSpace(in.UpdatedBy); v != "" {
 		updatedBy = &v
 	}
 
-	// Domain 変換
 	pb := pbdom.ProductBlueprint{
 		ID:               id,
 		ProductName:      in.ProductName,
@@ -263,13 +260,11 @@ func (h *ProductBlueprintHandler) update(w http.ResponseWriter, r *http.Request,
 		return
 	}
 
-	log.Printf("[ProductBlueprint] update response: %+v", updated)
-
 	_ = json.NewEncoder(w).Encode(updated)
 }
 
 // ---------------------------------------------------
-// DELETE /product-blueprints/{id}  ← 論理削除 API
+// DELETE /product-blueprints/{id}
 // ---------------------------------------------------
 
 func (h *ProductBlueprintHandler) delete(w http.ResponseWriter, r *http.Request, id string) {
@@ -282,18 +277,16 @@ func (h *ProductBlueprintHandler) delete(w http.ResponseWriter, r *http.Request,
 		return
 	}
 
-	// 削除実行（deletedBy は現状 context からの解決に任せるため nil）
 	if err := h.uc.SoftDeleteWithModels(ctx, id, nil); err != nil {
 		writeProductBlueprintErr(w, err)
 		return
 	}
 
-	// 論理削除なので 204 No Content を返す
 	w.WriteHeader(http.StatusNoContent)
 }
 
 // ---------------------------------------------------
-// POST /product-blueprints/{id}/restore  ← 復元 API
+// POST /product-blueprints/{id}/restore
 // ---------------------------------------------------
 
 func (h *ProductBlueprintHandler) restore(w http.ResponseWriter, r *http.Request, id string) {
@@ -306,40 +299,34 @@ func (h *ProductBlueprintHandler) restore(w http.ResponseWriter, r *http.Request
 		return
 	}
 
-	// 復元実行（restoredBy も現状は context からの解決に任せるため nil）
 	if err := h.uc.RestoreWithModels(ctx, id, nil); err != nil {
 		writeProductBlueprintErr(w, err)
 		return
 	}
 
-	// 復元後の最新状態を返す
 	pb, err := h.uc.GetByID(ctx, id)
 	if err != nil {
 		writeProductBlueprintErr(w, err)
 		return
 	}
 
-	log.Printf("[ProductBlueprint] restore response: %+v", pb)
-
 	_ = json.NewEncoder(w).Encode(pb)
 }
 
 // ---------------------------------------------------
-// GET /product-blueprints   ← 一覧 API（未削除）
+// GET /product-blueprints
 // ---------------------------------------------------
 
-// フロントエンドの期待に合わせた一覧用 DTO
-// - brandId: ID をそのまま返す（name 変換はフロント側）
-// - assigneeId: 担当者の MemberID をそのまま返す
-// - productIdTag: "QR" / "NFC" など文字列ラベル
 type ProductBlueprintListOutput struct {
 	ID           string `json:"id"`
 	ProductName  string `json:"productName"`
 	BrandId      string `json:"brandId"`
+	BrandName    string `json:"brandName"`
 	AssigneeId   string `json:"assigneeId"`
+	AssigneeName string `json:"assigneeName"`
 	ProductIdTag string `json:"productIdTag"`
-	CreatedAt    string `json:"createdAt"` // YYYY/MM/DD
-	UpdatedAt    string `json:"updatedAt"` // YYYY/MM/DD
+	CreatedAt    string `json:"createdAt"`
+	UpdatedAt    string `json:"updatedAt"`
 }
 
 func (h *ProductBlueprintHandler) list(w http.ResponseWriter, r *http.Request) {
@@ -353,24 +340,32 @@ func (h *ProductBlueprintHandler) list(w http.ResponseWriter, r *http.Request) {
 
 	out := make([]ProductBlueprintListOutput, 0, len(rows))
 	for _, pb := range rows {
-		// brandId / assigneeId は ID をそのまま返す（空なら空のまま or "-"）
 		brandId := strings.TrimSpace(pb.BrandID)
 		assigneeId := strings.TrimSpace(pb.AssigneeID)
 		if assigneeId == "" {
 			assigneeId = "-"
 		}
 
-		// ProductIdTag.Type → 表示用ラベル（存在しない場合は "-"）
+		brandName := h.getBrandNameByID(ctx, brandId)
+		if brandName == "" {
+			brandName = brandId
+		}
+
+		assigneeName := "-"
+		if assigneeId != "-" {
+			assigneeName = h.getAssigneeNameByID(ctx, assigneeId)
+		}
+
 		productIdTag := "-"
 		if pb.ProductIdTag.Type != "" {
 			productIdTag = strings.ToUpper(string(pb.ProductIdTag.Type))
 		}
 
-		// 日付を "2006/01/02" 形式に整形
 		createdAt := ""
 		if !pb.CreatedAt.IsZero() {
 			createdAt = pb.CreatedAt.Format("2006/01/02")
 		}
+
 		updatedAt := createdAt
 		if !pb.UpdatedAt.IsZero() {
 			updatedAt = pb.UpdatedAt.Format("2006/01/02")
@@ -380,30 +375,29 @@ func (h *ProductBlueprintHandler) list(w http.ResponseWriter, r *http.Request) {
 			ID:           pb.ID,
 			ProductName:  pb.ProductName,
 			BrandId:      brandId,
+			BrandName:    brandName,
 			AssigneeId:   assigneeId,
+			AssigneeName: assigneeName,
 			ProductIdTag: productIdTag,
 			CreatedAt:    createdAt,
 			UpdatedAt:    updatedAt,
 		})
 	}
 
-	log.Printf("[ProductBlueprint] list response: %d items", len(out))
-
 	_ = json.NewEncoder(w).Encode(out)
 }
 
 // ---------------------------------------------------
-// GET /product-blueprints/deleted  ← 削除済み一覧 API
+// GET /product-blueprints/deleted
 // ---------------------------------------------------
 
-// 削除済み一覧用 DTO
 type ProductBlueprintDeletedListOutput struct {
 	ID          string `json:"id"`
 	ProductName string `json:"productName"`
 	BrandId     string `json:"brandId"`
 	AssigneeId  string `json:"assigneeId"`
-	DeletedAt   string `json:"deletedAt"` // YYYY/MM/DD
-	ExpireAt    string `json:"expireAt"`  // YYYY/MM/DD
+	DeletedAt   string `json:"deletedAt"`
+	ExpireAt    string `json:"expireAt"`
 }
 
 func (h *ProductBlueprintHandler) listDeleted(w http.ResponseWriter, r *http.Request) {
@@ -443,9 +437,6 @@ func (h *ProductBlueprintHandler) listDeleted(w http.ResponseWriter, r *http.Req
 		})
 	}
 
-	log.Printf("[ProductBlueprint] listDeleted response: %d items", len(out))
-
-	// ★ 必ず JSON 配列を返す
 	_ = json.NewEncoder(w).Encode(out)
 }
 
@@ -470,6 +461,16 @@ func (h *ProductBlueprintHandler) listPrinted(w http.ResponseWriter, r *http.Req
 			assigneeId = "-"
 		}
 
+		brandName := h.getBrandNameByID(ctx, brandId)
+		if brandName == "" {
+			brandName = brandId
+		}
+
+		assigneeName := "-"
+		if assigneeId != "-" {
+			assigneeName = h.getAssigneeNameByID(ctx, assigneeId)
+		}
+
 		productIdTag := "-"
 		if pb.ProductIdTag.Type != "" {
 			productIdTag = strings.ToUpper(string(pb.ProductIdTag.Type))
@@ -479,6 +480,7 @@ func (h *ProductBlueprintHandler) listPrinted(w http.ResponseWriter, r *http.Req
 		if !pb.CreatedAt.IsZero() {
 			createdAt = pb.CreatedAt.Format("2006/01/02")
 		}
+
 		updatedAt := createdAt
 		if !pb.UpdatedAt.IsZero() {
 			updatedAt = pb.UpdatedAt.Format("2006/01/02")
@@ -488,17 +490,13 @@ func (h *ProductBlueprintHandler) listPrinted(w http.ResponseWriter, r *http.Req
 			ID:           pb.ID,
 			ProductName:  pb.ProductName,
 			BrandId:      brandId,
+			BrandName:    brandName,
 			AssigneeId:   assigneeId,
+			AssigneeName: assigneeName,
 			ProductIdTag: productIdTag,
 			CreatedAt:    createdAt,
 			UpdatedAt:    updatedAt,
 		})
-	}
-
-	if len(out) == 0 {
-		log.Printf("[ProductBlueprint] listPrinted response: 0 items")
-	} else {
-		log.Printf("[ProductBlueprint] listPrinted response: %d items, first=%+v", len(out), out[0])
 	}
 
 	_ = json.NewEncoder(w).Encode(out)
@@ -524,25 +522,22 @@ func (h *ProductBlueprintHandler) markPrinted(w http.ResponseWriter, r *http.Req
 		return
 	}
 
-	log.Printf("[ProductBlueprint] markPrinted response: %+v", pb)
-
 	_ = json.NewEncoder(w).Encode(pb)
 }
 
 // ---------------------------------------------------
-// GET /product-blueprints/{id}/history  ← 履歴一覧 API（LogCard 用）
+// GET /product-blueprints/{id}/history
 // ---------------------------------------------------
 
-// 履歴一覧用 DTO（version 要素削除後）
 type ProductBlueprintHistoryOutput struct {
 	ID          string  `json:"id"`
 	ProductName string  `json:"productName"`
 	BrandId     string  `json:"brandId"`
 	AssigneeId  string  `json:"assigneeId"`
-	UpdatedAt   string  `json:"updatedAt"`           // YYYY/MM/DD HH:MM:SS
-	UpdatedBy   *string `json:"updatedBy,omitempty"` // メンバーID（表示名はフロント側で解決）
-	DeletedAt   string  `json:"deletedAt,omitempty"` // YYYY/MM/DD
-	ExpireAt    string  `json:"expireAt,omitempty"`  // YYYY/MM/DD
+	UpdatedAt   string  `json:"updatedAt"`
+	UpdatedBy   *string `json:"updatedBy,omitempty"`
+	DeletedAt   string  `json:"deletedAt,omitempty"`
+	ExpireAt    string  `json:"expireAt,omitempty"`
 }
 
 func (h *ProductBlueprintHandler) listHistory(w http.ResponseWriter, r *http.Request, id string) {
@@ -571,7 +566,6 @@ func (h *ProductBlueprintHandler) listHistory(w http.ResponseWriter, r *http.Req
 
 		updatedAtStr := ""
 		if !pb.UpdatedAt.IsZero() {
-			// 履歴なので時間まで含めて返す
 			updatedAtStr = pb.UpdatedAt.Format("2006/01/02 15:04:05")
 		}
 
@@ -597,8 +591,6 @@ func (h *ProductBlueprintHandler) listHistory(w http.ResponseWriter, r *http.Req
 		})
 	}
 
-	log.Printf("[ProductBlueprint] listHistory response: %d items (id=%s)", len(out), id)
-
 	_ = json.NewEncoder(w).Encode(out)
 }
 
@@ -622,8 +614,6 @@ func (h *ProductBlueprintHandler) get(w http.ResponseWriter, r *http.Request, id
 		return
 	}
 
-	log.Printf("[ProductBlueprint] get response: %+v", pb)
-
 	_ = json.NewEncoder(w).Encode(pb)
 }
 
@@ -646,10 +636,7 @@ func writeProductBlueprintErr(w http.ResponseWriter, err error) {
 	case pbdom.IsForbidden(err):
 		code = http.StatusForbidden
 	default:
-		// それ以外は 500 のまま
 	}
-
-	log.Printf("[ProductBlueprint] error: %v (status=%d)", err, code)
 
 	w.WriteHeader(code)
 	_ = json.NewEncoder(w).Encode(map[string]string{"error": err.Error()})

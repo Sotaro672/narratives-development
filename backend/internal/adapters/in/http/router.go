@@ -252,7 +252,12 @@ func NewRouter(deps RouterDeps) http.Handler {
 	// Product Blueprints
 	// ================================
 	if deps.ProductBlueprintUC != nil {
-		pbH := handlers.NewProductBlueprintHandler(deps.ProductBlueprintUC, nil)
+		// ★ brand.Service を渡して brandName を解決できるようにする
+		pbH := handlers.NewProductBlueprintHandler(
+			deps.ProductBlueprintUC,
+			deps.BrandService,
+			deps.MemberService, // ★ assigneeName 解決のため追加
+		)
 
 		var h http.Handler = pbH
 		if authMw != nil {
@@ -375,11 +380,6 @@ func NewRouter(deps RouterDeps) http.Handler {
 
 	// ================================
 	// ⭐ 検品 API（Inspector 用）
-	//   - GET  /inspector/products/{id}
-	//   - GET  /products/inspections
-	//   - PATCH /products/inspections
-	//   - PATCH /products/inspections/complete
-	//   すべて InspectorHandler がまとめて処理
 	// ================================
 	if deps.ProductUC != nil && deps.InspectionUC != nil {
 		inspectorH := handlers.NewInspectorHandler(deps.ProductUC, deps.InspectionUC)
@@ -399,8 +399,6 @@ func NewRouter(deps RouterDeps) http.Handler {
 
 	// ================================
 	// ⭐ Mint API
-	//   - GET /mint/inspections
-	//   - GET /mint/product_blueprints/{id}/patch
 	// ================================
 	if deps.MintUC != nil {
 		mintH := handlers.NewMintHandler(deps.MintUC)
