@@ -49,12 +49,6 @@ func (h *ProductBlueprintHandler) ServeHTTP(w http.ResponseWriter, r *http.Reque
 		h.listDeleted(w, r)
 
 	// ---------------------------------------------------
-	// GET /product-blueprints/not-yet-printed ← printed == notYet 一覧
-	// ---------------------------------------------------
-	case r.Method == http.MethodGet && path == "/product-blueprints/not-yet-printed":
-		h.listNotYetPrinted(w, r)
-
-	// ---------------------------------------------------
 	// GET /product-blueprints/printed ← printed == printed 一覧
 	// ---------------------------------------------------
 	case r.Method == http.MethodGet && path == "/product-blueprints/printed":
@@ -445,54 +439,8 @@ func (h *ProductBlueprintHandler) listDeleted(w http.ResponseWriter, r *http.Req
 }
 
 // ---------------------------------------------------
-// GET /product-blueprints/not-yet-printed
 // GET /product-blueprints/printed
 // ---------------------------------------------------
-
-func (h *ProductBlueprintHandler) listNotYetPrinted(w http.ResponseWriter, r *http.Request) {
-	ctx := r.Context()
-
-	rows, err := h.uc.ListNotYetPrinted(ctx)
-	if err != nil {
-		writeProductBlueprintErr(w, err)
-		return
-	}
-
-	out := make([]ProductBlueprintListOutput, 0, len(rows))
-	for _, pb := range rows {
-		brandId := strings.TrimSpace(pb.BrandID)
-		assigneeId := strings.TrimSpace(pb.AssigneeID)
-		if assigneeId == "" {
-			assigneeId = "-"
-		}
-
-		productIdTag := "-"
-		if pb.ProductIdTag.Type != "" {
-			productIdTag = strings.ToUpper(string(pb.ProductIdTag.Type))
-		}
-
-		createdAt := ""
-		if !pb.CreatedAt.IsZero() {
-			createdAt = pb.CreatedAt.Format("2006/01/02")
-		}
-		updatedAt := createdAt
-		if !pb.UpdatedAt.IsZero() {
-			updatedAt = pb.UpdatedAt.Format("2006/01/02")
-		}
-
-		out = append(out, ProductBlueprintListOutput{
-			ID:           pb.ID,
-			ProductName:  pb.ProductName,
-			BrandId:      brandId,
-			AssigneeId:   assigneeId,
-			ProductIdTag: productIdTag,
-			CreatedAt:    createdAt,
-			UpdatedAt:    updatedAt,
-		})
-	}
-
-	_ = json.NewEncoder(w).Encode(out)
-}
 
 func (h *ProductBlueprintHandler) listPrinted(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()

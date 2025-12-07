@@ -106,10 +106,6 @@ type Repository interface {
 	GetByID(ctx context.Context, id string) (ProductBlueprint, error)
 	List(ctx context.Context, filter Filter, page Page) (PageResult, error)
 
-	// ★ printed 状態ごとの絞り込み List
-	// printed == "notYet" のみを対象にページング取得
-	ListNotYetPrinted(ctx context.Context, filter Filter, page Page) (PageResult, error)
-
 	// printed == "printed" のみを対象にページング取得
 	ListPrinted(ctx context.Context, filter Filter, page Page) (PageResult, error)
 

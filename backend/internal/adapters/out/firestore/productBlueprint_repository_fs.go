@@ -221,58 +221,6 @@ func (r *ProductBlueprintRepositoryFS) ListIDsByCompany(
 	return ids, nil
 }
 
-// ★ 追加: printed == "notYet"（または未定義）だけを、指定 ID 群から取得
-// - ListIDsByCompany → ListNotYetPrinted で 1 セットの利用を想定
-// - printed フィールドが存在しない古いドキュメントは notYet 相当として扱う
-func (r *ProductBlueprintRepositoryFS) ListNotYetPrinted(
-	ctx context.Context,
-	ids []string,
-) ([]pbdom.ProductBlueprint, error) {
-	if r.Client == nil {
-		return nil, errors.New("firestore client is nil")
-	}
-
-	// ID 正規化 & 重複排除
-	uniq := make(map[string]struct{}, len(ids))
-	var cleaned []string
-	for _, id := range ids {
-		id = strings.TrimSpace(id)
-		if id == "" {
-			continue
-		}
-		if _, ok := uniq[id]; ok {
-			continue
-		}
-		uniq[id] = struct{}{}
-		cleaned = append(cleaned, id)
-	}
-	if len(cleaned) == 0 {
-		return []pbdom.ProductBlueprint{}, nil
-	}
-
-	out := make([]pbdom.ProductBlueprint, 0, len(cleaned))
-	for _, id := range cleaned {
-		snap, err := r.col().Doc(id).Get(ctx)
-		if err != nil {
-			if status.Code(err) == codes.NotFound {
-				// 存在しない ID はスキップ（エラーにはしない）
-				continue
-			}
-			return nil, err
-		}
-		pb, err := docToProductBlueprint(snap)
-		if err != nil {
-			return nil, err
-		}
-
-		// printed 未設定("") も notYet と同等として扱う
-		if pb.Printed == "" || pb.Printed == pbdom.PrintedStatusNotYet {
-			out = append(out, pb)
-		}
-	}
-	return out, nil
-}
-
 // ★ 追加: printed == "printed" だけを、指定 ID 群から取得
 // - ListIDsByCompany → ListPrinted で 1 セットの利用を想定
 func (r *ProductBlueprintRepositoryFS) ListPrinted(

@@ -24,10 +24,6 @@ type ProductBlueprintRepo interface {
 	// （MintRequest 用のチェーン: companyId → productBlueprintId → production → mintRequest など）
 	ListIDsByCompany(ctx context.Context, companyID string) ([]string, error)
 
-	// ★ 追加: printed == "notYet" のみを対象に、指定 ID 群の Blueprint を取得
-	// ListIDsByCompany → ListNotYetPrinted で 1 セットになる想定
-	ListNotYetPrinted(ctx context.Context, ids []string) ([]productbpdom.ProductBlueprint, error)
-
 	// ★ 追加: printed == "printed" のみを対象に、指定 ID 群の Blueprint を取得
 	// ListIDsByCompany → ListPrinted で 1 セットになる想定
 	ListPrinted(ctx context.Context, ids []string) ([]productbpdom.ProductBlueprint, error)
@@ -98,61 +94,10 @@ func (u *ProductBlueprintUsecase) List(ctx context.Context) ([]productbpdom.Prod
 // ------------------------------------------------------------
 
 // ★ Handler 用: companyId は context から取得
-func (u *ProductBlueprintUsecase) ListNotYetPrinted(
-	ctx context.Context,
-) ([]productbpdom.ProductBlueprint, error) {
-	return u.ListNotYetPrintedByCompany(ctx)
-}
-
-// ★ Handler 用: companyId は context から取得
 func (u *ProductBlueprintUsecase) ListPrinted(
 	ctx context.Context,
 ) ([]productbpdom.ProductBlueprint, error) {
 	return u.ListPrintedByCompany(ctx)
-}
-
-// ★ companyId ごとの printed:notYet 一覧
-// ListIDsByCompany → ListNotYetPrinted で 1 セットのユースケース。
-func (u *ProductBlueprintUsecase) ListNotYetPrintedByCompany(
-	ctx context.Context,
-) ([]productbpdom.ProductBlueprint, error) {
-	cid := strings.TrimSpace(companyIDFromContext(ctx))
-	if cid == "" {
-		return nil, productbpdom.ErrInvalidCompanyID
-	}
-
-	// 1) companyId から対象 Blueprint ID 群を取得
-	ids, err := u.repo.ListIDsByCompany(ctx, cid)
-	if err != nil {
-		return nil, err
-	}
-	if len(ids) == 0 {
-		return []productbpdom.ProductBlueprint{}, nil
-	}
-
-	// 2) その ID 群のうち、printed == "notYet" のものだけを取得
-	rows, err := u.repo.ListNotYetPrinted(ctx, ids)
-	if err != nil {
-		return nil, err
-	}
-
-	// 念のため usecase 側でも printed 状態を確認し、論理削除は除外
-	out := make([]productbpdom.ProductBlueprint, 0, len(rows))
-	for _, pb := range rows {
-		if pb.DeletedAt != nil {
-			continue
-		}
-		if pb.Printed != productbpdom.PrintedStatusNotYet {
-			continue
-		}
-		// companyId も念のためチェック
-		if strings.TrimSpace(pb.CompanyID) != cid {
-			continue
-		}
-		out = append(out, pb)
-	}
-
-	return out, nil
 }
 
 // ★ companyId ごとの printed:printed 一覧

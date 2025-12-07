@@ -40,6 +40,13 @@ export interface ProductionRepository {
 
   /** 削除 */
   delete(id: string): Promise<void>;
+
+  /**
+   * 対応する商品設計(ProductBlueprint)の printed フラグを
+   * notYet → printed に更新する
+   * - backend: POST /product-blueprints/{id}/mark-printed
+   */
+  markProductBlueprintPrinted(productBlueprintId: string): Promise<void>;
 }
 
 // ----------------------------------------------------------------------
@@ -134,5 +141,20 @@ export class ProductionRepositoryHTTP implements ProductionRepository {
     await this.request<void>(`/productions/${safeId}`, {
       method: "DELETE",
     });
+  }
+
+  // --------------------------------------------------------------------
+  // markProductBlueprintPrinted:
+  //   POST /product-blueprints/{productBlueprintId}/mark-printed
+  // --------------------------------------------------------------------
+  async markProductBlueprintPrinted(productBlueprintId: string): Promise<void> {
+    const safeId = encodeURIComponent(productBlueprintId.trim());
+
+    await this.request<void>(
+      `/product-blueprints/${safeId}/mark-printed`,
+      {
+        method: "POST",
+      },
+    );
   }
 }

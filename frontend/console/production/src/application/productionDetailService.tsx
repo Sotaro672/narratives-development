@@ -376,7 +376,7 @@ export async function updateProductionDetail(params: {
 /* ---------------------------------------------------------
  * 印刷完了シグナル受信
  *   - Production を printed に更新
- *   - 対応する ProductBlueprint に対して mark-printed をリクエスト
+ *   - ProductBlueprint の printed 更新は printService 側に委譲
  * --------------------------------------------------------- */
 export async function notifyPrintLogCompleted(params: {
   productionId: string;
@@ -384,12 +384,7 @@ export async function notifyPrintLogCompleted(params: {
   totalQrCount: number;
   reusedExistingLogs?: boolean;
 }): Promise<void> {
-  const {
-    productionId,
-    logCount,
-    totalQrCount,
-    reusedExistingLogs,
-  } = params;
+  const { productionId } = params;
 
   const id = productionId.trim();
   if (!id) {
@@ -408,14 +403,13 @@ export async function notifyPrintLogCompleted(params: {
     const token = await getIdTokenOrThrow();
     const safeId = encodeURIComponent(id);
 
-    // 1) Production を printed に更新
     const payload: any = {
       status: "printed" as ProductionStatus,
       printedAt,
       printedBy,
     };
 
-    await fetch(`${BACKEND_API_BASE}/productions/${safeId}`, {
+    const res = await fetch(`${BACKEND_API_BASE}/productions/${safeId}`, {
       method: "PUT",
       headers: {
         "Content-Type": "application/json",
@@ -424,31 +418,25 @@ export async function notifyPrintLogCompleted(params: {
       body: JSON.stringify(payload),
     });
 
-    // 2) 対応する ProductBlueprint を取得して printed フラグを立てる
-    const repo = new ProductionRepositoryHTTP();
-    const raw = (await repo.getById(id)) as any;
-
-    const productBlueprintId: string =
-      raw?.productBlueprintId ?? raw?.ProductBlueprintID ?? "";
-
-    const pbIdTrimmed = productBlueprintId?.trim();
-    if (pbIdTrimmed) {
-      const safePbId = encodeURIComponent(pbIdTrimmed);
-
-      await fetch(
-        `${BACKEND_API_BASE}/product-blueprints/${safePbId}/mark-printed`,
+    if (!res.ok) {
+      const body = await res.text().catch(() => "");
+      console.error(
+        "[notifyPrintLogCompleted] failed to update production printed status",
         {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${token}`,
-          },
-          // body は現状特に送るものがないので空オブジェクト
-          body: JSON.stringify({}),
+          productionId: id,
+          status: res.status,
+          statusText: res.statusText,
+          body,
         },
       );
     }
-  } catch (_) {
-    // エラーは飲み込む（印刷自体はユーザー側で完了している前提）
+  } catch (e) {
+    console.error(
+      "[notifyPrintLogCompleted] unexpected error while updating production printed status",
+      {
+        productionId: id,
+        error: e,
+      },
+    );
   }
 }

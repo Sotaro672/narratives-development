@@ -2,6 +2,7 @@
 // Infrastructure API for Production Detail
 //   - Production 本体の取得
 //   - ProductBlueprint 詳細 + ModelVariations の取得
+//   - ProductBlueprint の printed: notYet → printed 更新
 // ======================================================================
 
 import type { Production } from "../../application/productionCreateService";
@@ -29,16 +30,8 @@ export async function fetchProductionById(
 
   try {
     const data = (await repo.getById(productionId)) as Production;
-    console.log("[productionDetailApi] fetchProductionById:", {
-      productionId,
-      data,
-    });
     return data;
   } catch (e) {
-    console.error("[productionDetailApi] failed to fetchProductionById:", {
-      productionId,
-      error: e,
-    });
     return null;
   }
 }
@@ -54,37 +47,35 @@ export async function fetchProductBlueprintDetailForProduction(
 }> {
   const pbId = (productBlueprintId ?? "").trim();
   if (!pbId) {
-    console.warn(
-      "[productionDetailApi] fetchProductBlueprintDetailForProduction: empty productBlueprintId",
-    );
     return { detail: null, models: [] };
   }
 
   try {
-    console.log(
-      "[productionDetailApi] fetchProductBlueprintDetailForProduction request:",
-      { productBlueprintId: pbId },
-    );
-
     const [detail, models] = await Promise.all([
       getProductBlueprintDetail(pbId),
       listModelVariationsByProductBlueprintId(pbId),
     ]);
-
-    console.log(
-      "[productionDetailApi] fetchProductBlueprintDetailForProduction response:",
-      { detail, models },
-    );
 
     return {
       detail: detail ?? null,
       models: Array.isArray(models) ? models : [],
     };
   } catch (e) {
-    console.error(
-      "[productionDetailApi] failed to fetchProductBlueprintDetailForProduction:",
-      { productBlueprintId: pbId, error: e },
-    );
     return { detail: null, models: [] };
   }
+}
+
+// ======================================================================
+// ProductBlueprint printed 更新 API
+//   - printed: notYet → printed
+//   - backend: POST /product-blueprints/{id}/mark-printed
+// ======================================================================
+export async function markProductBlueprintAsPrinted(
+  productBlueprintId: string,
+): Promise<void> {
+  const id = productBlueprintId.trim();
+  if (!id) return;
+
+  const repo = new ProductionRepositoryHTTP();
+  await repo.markProductBlueprintPrinted(id);
 }
