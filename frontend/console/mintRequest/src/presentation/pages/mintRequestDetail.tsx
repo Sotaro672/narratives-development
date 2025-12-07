@@ -49,6 +49,11 @@ export default function MintRequestDetail() {
 
     // ★ useMintRequestDetail 側で追加した「選択中 TokenBlueprintOption」
     selectedTokenBlueprint,
+
+    // ★ 申請済みモード制御用
+    isMintRequested,
+    requestedBy,
+    requestedAt,
   } = useMintRequestDetail();
 
   const handleSave = () => {};
@@ -74,6 +79,13 @@ export default function MintRequestDetail() {
   const tokenBlueprintCardHandlers = {
     onPreview: () => {},
   };
+
+  // ★ requestedAt の表示用フォーマット
+  const requestedAtLabel = requestedAt
+    ? new Date(requestedAt).toLocaleString("ja-JP")
+    : "（未登録）";
+
+  const requestedByLabel = requestedBy || "（不明）";
 
   return (
     <PageStyle
@@ -134,7 +146,9 @@ export default function MintRequestDetail() {
           <InspectionResultCard data={inspectionCardData} />
         )}
 
-        {/* ③ Token Blueprint Card（選択されている場合表示） */}
+        {/* ③ Token Blueprint Card
+            - 未申請: 選択中トークンがあれば表示
+            - 申請済み: requestedBy/At/tokenBlueprintId があれば表示（hook 側で vm 解決済み） */}
         {tokenBlueprintCardVm && (
           <TokenBlueprintCard
             vm={tokenBlueprintCardVm}
@@ -142,108 +156,132 @@ export default function MintRequestDetail() {
           />
         )}
 
-        {/* ④ Mint Button */}
-        <Card className="mint-request-card">
-          <CardContent className="mint-request-card__body">
-            <div className="mint-request-card__actions">
-              <Button
-                onClick={handleMint}
-                className="mint-request-card__button flex items-center gap-2"
-              >
-                <Coins size={16} />
-                ミント申請を実行
-              </Button>
-              <span className="mint-request-card__total">
-                ミント数: <strong>{totalMintQuantity}</strong>
-              </span>
-            </div>
-          </CardContent>
-        </Card>
+        {/* ④ ミント申請カード（未申請モードのみ表示） */}
+        {!isMintRequested && (
+          <Card className="mint-request-card">
+            <CardContent className="mint-request-card__body">
+              <div className="mint-request-card__actions">
+                <Button
+                  onClick={handleMint}
+                  className="mint-request-card__button flex items-center gap-2"
+                >
+                  <Coins size={16} />
+                  ミント申請を実行
+                </Button>
+                <span className="mint-request-card__total">
+                  ミント数: <strong>{totalMintQuantity}</strong>
+                </span>
+              </div>
+            </CardContent>
+          </Card>
+        )}
       </div>
 
       {/* 右カラム */}
       <div className="space-y-4 mt-4">
-        {/* ブランド選択カード */}
-        <Card className="pb-select">
-          <CardHeader>
-            <CardTitle>ブランド選択</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <Popover>
-              <PopoverTrigger>
-                <div className="pb-select__trigger">
-                  {selectedBrandName || "ブランドを選択"}
+        {isMintRequested ? (
+          // ★ 申請済みモード: ミント数 + requestedBy + requestedAt を表示
+          <Card className="pb-select">
+            <CardHeader>
+              <CardTitle>ミント申請情報</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="space-y-2 text-sm">
+                <div>
+                  ミント数: <strong>{totalMintQuantity}</strong>
                 </div>
-              </PopoverTrigger>
-
-              <PopoverContent>
-                <div className="pb-select__list">
-                  {brandOptions.map((b) => (
-                    <button
-                      key={b.id}
-                      type="button"
-                      className={
-                        "pb-select__row" +
-                        (selectedBrandId === b.id ? " is-active" : "")
-                      }
-                      onClick={() => handleSelectBrand(b.id)}
-                    >
-                      {b.name}
-                    </button>
-                  ))}
-
-                  {brandOptions.length === 0 && (
-                    <div className="pb-select__empty">
-                      ブランド候補が未設定です
+                <div>申請者: {requestedByLabel}</div>
+                <div>申請日時: {requestedAtLabel}</div>
+              </div>
+            </CardContent>
+          </Card>
+        ) : (
+          <>
+            {/* ブランド選択カード（未申請モードのみ） */}
+            <Card className="pb-select">
+              <CardHeader>
+                <CardTitle>ブランド選択</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <Popover>
+                  <PopoverTrigger>
+                    <div className="pb-select__trigger">
+                      {selectedBrandName || "ブランドを選択"}
                     </div>
-                  )}
+                  </PopoverTrigger>
+
+                  <PopoverContent>
+                    <div className="pb-select__list">
+                      {brandOptions.map((b) => (
+                        <button
+                          key={b.id}
+                          type="button"
+                          className={
+                            "pb-select__row" +
+                            (selectedBrandId === b.id ? " is-active" : "")
+                          }
+                          onClick={() => handleSelectBrand(b.id)}
+                        >
+                          {b.name}
+                        </button>
+                      ))}
+
+                      {brandOptions.length === 0 && (
+                        <div className="pb-select__empty">
+                          ブランド候補が未設定です
+                        </div>
+                      )}
+                    </div>
+                  </PopoverContent>
+                </Popover>
+
+                <div className="mt-2 text-xs text-gray-500">
+                  現在のフィルタ: {currentFilterLabel}
                 </div>
-              </PopoverContent>
-            </Popover>
+              </CardContent>
+            </Card>
 
-            <div className="mt-2 text-xs text-gray-500">
-              現在のフィルタ: {currentFilterLabel}
-            </div>
-          </CardContent>
-        </Card>
+            {/* トークン一覧カード（未申請モードのみ） */}
+            <Card className="pb-select">
+              <CardHeader>
+                <CardTitle>トークン設計一覧</CardTitle>
+              </CardHeader>
+              <CardContent>
+                {!selectedBrandId && (
+                  <div className="pb-select__empty">
+                    先にブランドを選択してください。
+                  </div>
+                )}
 
-        {/* トークン一覧カード */}
-        <Card className="pb-select">
-          <CardHeader>
-            <CardTitle>トークン設計一覧</CardTitle>
-          </CardHeader>
-          <CardContent>
-            {!selectedBrandId && (
-              <div className="pb-select__empty">
-                先にブランドを選択してください。
-              </div>
-            )}
+                {selectedBrandId && tokenBlueprintOptions.length > 0 && (
+                  <div className="pb-select__list">
+                    {tokenBlueprintOptions.map((tb) => (
+                      <button
+                        key={tb.id}
+                        type="button"
+                        className={
+                          "pb-select__row" +
+                          (selectedTokenBlueprintId === tb.id
+                            ? " is-active"
+                            : "")
+                        }
+                        onClick={() => handleSelectTokenBlueprint(tb.id)}
+                      >
+                        {tb.name}
+                      </button>
+                    ))}
+                  </div>
+                )}
 
-            {selectedBrandId && tokenBlueprintOptions.length > 0 && (
-              <div className="pb-select__list">
-                {tokenBlueprintOptions.map((tb) => (
-                  <button
-                    key={tb.id}
-                    type="button"
-                    className={
-                      "pb-select__row" +
-                      (selectedTokenBlueprintId === tb.id ? " is-active" : "")
-                    }
-                    onClick={() => handleSelectTokenBlueprint(tb.id)}
-                  >
-                    {tb.name}
-                  </button>
-                ))}
-              </div>
-            )}
-
-            {selectedBrandId && tokenBlueprintOptions.length === 0 && (
-              <div className="pb-select__empty">
-                選択中のブランドに紐づくトークン設計がありません。
-              </div>
-            )}
-          </CardContent>
-        </Card>
+                {selectedBrandId && tokenBlueprintOptions.length === 0 && (
+                  <div className="pb-select__empty">
+                    選択中のブランドに紐づくトークン設計がありません。
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          </>
+        )}
       </div>
     </PageStyle>
   );
