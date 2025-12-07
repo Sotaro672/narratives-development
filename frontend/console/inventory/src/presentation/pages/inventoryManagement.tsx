@@ -12,6 +12,8 @@ import { buildInventoryHeaders } from "../../application/inventoryManagementServ
 
 /** 在庫管理ページ（スタイル＋レイアウト中心） */
 export default function InventoryManagementPage() {
+  console.log("[InventoryManagementPage] render");  // ★テストログ
+
   const {
     rows,
     options: { productOptions, brandOptions, assigneeOptions },

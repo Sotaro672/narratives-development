@@ -191,7 +191,7 @@ export function useProductBlueprintCreate(): UseProductBlueprintCreateResult {
     setAssigneeName(label);
   }, [currentMember, assigneeId]);
 
-  // バリデーション
+  // バリデーション（※ measurements 空欄NGチェックは削除済み）
   const validate = React.useCallback((): string[] => {
     const errors: string[] = [];
 
@@ -225,7 +225,7 @@ export function useProductBlueprintCreate(): UseProductBlueprintCreateResult {
         errors.push("モデルナンバー欄に空欄があります。すべて入力してください。");
     }
 
-    // ✅ モデルナンバーの重複チェック（code 単位でユニーク）
+    // モデルナンバー重複チェック（code 単位でユニーク）
     if (modelNumbers.length > 0) {
       const seenCodes = new Set<string>();
       const dupCodes = new Set<string>();
@@ -249,7 +249,7 @@ export function useProductBlueprintCreate(): UseProductBlueprintCreateResult {
       }
     }
 
-    // ✅ サイズ名（sizeLabel）の重複チェック
+    // サイズ名（sizeLabel）の重複チェック
     if (sizes.length > 0) {
       const seenSizes = new Set<string>();
       const dupSizes = new Set<string>();
@@ -275,35 +275,7 @@ export function useProductBlueprintCreate(): UseProductBlueprintCreateResult {
       }
     }
 
-    // ✅ 採寸値: 空欄もエラーにする
-    const invalidMeasurementFields: string[] = [];
-    sizes.forEach((s, index) => {
-      const label = (s as any).sizeLabel || `#${index + 1}`;
-      Object.entries(s as Record<string, unknown>).forEach(([key, value]) => {
-        if (key === "id" || key === "sizeLabel") return;
-
-        // 空欄（null / undefined / 空文字）も NG
-        if (
-          value == null ||
-          (typeof value === "string" && value.trim() === "")
-        ) {
-          invalidMeasurementFields.push(`サイズ ${label} の「${key}」`);
-          return;
-        }
-
-        if (typeof value !== "number" || Number.isNaN(value)) {
-          invalidMeasurementFields.push(`サイズ ${label} の「${key}」`);
-        }
-      });
-    });
-
-    if (invalidMeasurementFields.length > 0) {
-      errors.push(
-        `採寸欄には空欄がないようにし、数値のみ入力してください。（問題のある項目: ${invalidMeasurementFields.join(
-          "、",
-        )}）`,
-      );
-    }
+    // ✅ measurements（chest / waist / length / shoulder 等）の空欄チェックは行わない
 
     return errors;
   }, [

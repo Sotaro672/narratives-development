@@ -3,6 +3,7 @@ package handlers
 
 import (
 	"encoding/json"
+	"log"
 	"net/http"
 	"strings"
 
@@ -191,6 +192,8 @@ func (h *ProductBlueprintHandler) post(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	log.Printf("[ProductBlueprint] create response: %+v", created)
+
 	w.WriteHeader(http.StatusCreated)
 	_ = json.NewEncoder(w).Encode(created)
 }
@@ -260,6 +263,8 @@ func (h *ProductBlueprintHandler) update(w http.ResponseWriter, r *http.Request,
 		return
 	}
 
+	log.Printf("[ProductBlueprint] update response: %+v", updated)
+
 	_ = json.NewEncoder(w).Encode(updated)
 }
 
@@ -313,6 +318,8 @@ func (h *ProductBlueprintHandler) restore(w http.ResponseWriter, r *http.Request
 		writeProductBlueprintErr(w, err)
 		return
 	}
+
+	log.Printf("[ProductBlueprint] restore response: %+v", pb)
 
 	_ = json.NewEncoder(w).Encode(pb)
 }
@@ -380,6 +387,8 @@ func (h *ProductBlueprintHandler) list(w http.ResponseWriter, r *http.Request) {
 		})
 	}
 
+	log.Printf("[ProductBlueprint] list response: %d items", len(out))
+
 	_ = json.NewEncoder(w).Encode(out)
 }
 
@@ -434,6 +443,8 @@ func (h *ProductBlueprintHandler) listDeleted(w http.ResponseWriter, r *http.Req
 		})
 	}
 
+	log.Printf("[ProductBlueprint] listDeleted response: %d items", len(out))
+
 	// ★ 必ず JSON 配列を返す
 	_ = json.NewEncoder(w).Encode(out)
 }
@@ -484,6 +495,12 @@ func (h *ProductBlueprintHandler) listPrinted(w http.ResponseWriter, r *http.Req
 		})
 	}
 
+	if len(out) == 0 {
+		log.Printf("[ProductBlueprint] listPrinted response: 0 items")
+	} else {
+		log.Printf("[ProductBlueprint] listPrinted response: %d items, first=%+v", len(out), out[0])
+	}
+
 	_ = json.NewEncoder(w).Encode(out)
 }
 
@@ -506,6 +523,8 @@ func (h *ProductBlueprintHandler) markPrinted(w http.ResponseWriter, r *http.Req
 		writeProductBlueprintErr(w, err)
 		return
 	}
+
+	log.Printf("[ProductBlueprint] markPrinted response: %+v", pb)
 
 	_ = json.NewEncoder(w).Encode(pb)
 }
@@ -578,6 +597,8 @@ func (h *ProductBlueprintHandler) listHistory(w http.ResponseWriter, r *http.Req
 		})
 	}
 
+	log.Printf("[ProductBlueprint] listHistory response: %d items (id=%s)", len(out), id)
+
 	_ = json.NewEncoder(w).Encode(out)
 }
 
@@ -600,6 +621,9 @@ func (h *ProductBlueprintHandler) get(w http.ResponseWriter, r *http.Request, id
 		writeProductBlueprintErr(w, err)
 		return
 	}
+
+	log.Printf("[ProductBlueprint] get response: %+v", pb)
+
 	_ = json.NewEncoder(w).Encode(pb)
 }
 
@@ -624,6 +648,8 @@ func writeProductBlueprintErr(w http.ResponseWriter, err error) {
 	default:
 		// それ以外は 500 のまま
 	}
+
+	log.Printf("[ProductBlueprint] error: %v (status=%d)", err, code)
 
 	w.WriteHeader(code)
 	_ = json.NewEncoder(w).Encode(map[string]string{"error": err.Error()})
