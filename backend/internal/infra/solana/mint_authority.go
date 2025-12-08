@@ -6,6 +6,7 @@ import (
 	"crypto/ed25519"
 	"encoding/json"
 	"fmt"
+	"log"
 	"os"
 
 	secretmanager "cloud.google.com/go/secretmanager/apiv1"
@@ -63,6 +64,14 @@ func LoadMintAuthority(ctx context.Context) (*MintAuthority, error) {
 		return nil, fmt.Errorf("AccountFromBytes: %w", err)
 	}
 
+	// ★ マスターウォレット（ミント権限）との接続確認ログ
+	//   - Secret Manager からの取得が成功し、Account を復元できたタイミングで出す
+	log.Printf(
+		"[narratives-mint] loaded mint authority from Secret Manager: secret=%s pubkey=%s",
+		secretName,
+		acc.PublicKey.ToBase58(),
+	)
+
 	return &MintAuthority{Account: acc}, nil
 }
 
@@ -85,6 +94,12 @@ func LoadMintAuthorityKeyFromEnv(ctx context.Context) (*MintAuthorityKey, error)
 		return nil, fmt.Errorf("unexpected public key length: got %d, want %d", len(pubBytes), ed25519.PublicKeySize)
 	}
 	pub := ed25519.PublicKey(pubBytes)
+
+	// ★ ed25519 鍵ペアとしても問題なく復元できたことを追加でログ（公開鍵のみ）
+	log.Printf(
+		"[narratives-mint] mint authority ed25519 key restored: pubkey=%s",
+		mint.Account.PublicKey.ToBase58(),
+	)
 
 	return &MintAuthorityKey{
 		PrivateKey: priv,

@@ -71,34 +71,20 @@ async function fetchManagerName(memberId: string): Promise<string> {
   try {
     const headers = await getAuthHeaders();
     const url = `${API_BASE}/members/${encodeURIComponent(id)}`;
-    // eslint-disable-next-line no-console
-    console.log("[brandService] fetchManagerName GET", url);
 
     const res = await fetch(url, { headers });
     const ct = res.headers.get("content-type") ?? "";
     if (!ct.includes("application/json")) {
-      // eslint-disable-next-line no-console
-      console.error(
-        "[brandService] fetchManagerName unexpected content-type:",
-        ct,
-      );
       return "";
     }
     if (!res.ok) {
-      // eslint-disable-next-line no-console
-      console.error(
-        "[brandService] fetchManagerName HTTP error:",
-        res.status,
-      );
       return "";
     }
 
     const data: any = await res.json();
     const name = formatLastFirst(data.lastName, data.firstName);
     return name;
-  } catch (e) {
-    // eslint-disable-next-line no-console
-    console.error("[brandService] fetchManagerName error:", e);
+  } catch {
     return "";
   }
 }
@@ -114,11 +100,6 @@ export function formatBrandName(name: string | null | undefined): string {
 //   - フロントでは companyId は「まだログイン情報が取れていない場合は呼ばない」ためのガード用途のみ
 // ===========================
 export async function listBrands(companyId: string): Promise<BrandRow[]> {
-  // eslint-disable-next-line no-console
-  console.log("[brandService] listBrands start, companyId =", companyId);
-  // eslint-disable-next-line no-console
-  console.log("[brandService] API_BASE =", API_BASE);
-
   // companyId が空の間は呼ばない（認証コンテキスト未準備のガード）
   if (!companyId) return [];
 
@@ -136,8 +117,6 @@ export async function listBrands(companyId: string): Promise<BrandRow[]> {
   });
 
   const brands = (page.items ?? []) as Brand[];
-  // eslint-disable-next-line no-console
-  console.log("[brandService] brands =", brands);
 
   // ② Brand → BrandRow（まず managerId / name / registeredAt / updatedAt だけ詰める）
   const baseRows: BrandRow[] = brands.map((b) => {
@@ -153,13 +132,6 @@ export async function listBrands(companyId: string): Promise<BrandRow[]> {
       updatedAt: formatDateYmd(b.updatedAt), // ★ 追加
     };
 
-    // eslint-disable-next-line no-console
-    console.log(
-      "[brandService] mapped BrandRow row id=",
-      row.id,
-      "managerId=",
-      row.managerId,
-    );
     return row;
   });
 
@@ -192,7 +164,26 @@ export async function listBrands(companyId: string): Promise<BrandRow[]> {
     };
   });
 
-  // eslint-disable-next-line no-console
-  console.log("[brandService] rowsWithName =", rowsWithName);
   return rowsWithName;
+}
+
+// ===========================
+// Solana brand wallet 開設リクエスト
+// ※ backend 側に /brands/:id/wallet のようなエンドポイントを用意しておき、
+//   既存 brand に対してウォレットを後付けで開設したい場合などに利用する想定。
+//   （ブランド新規作成時は BrandUsecase.Create 内で自動開設される設計）
+// ===========================
+export async function requestOpenSolanaWalletForBrand(
+  brandId: string,
+): Promise<void> {
+  const id = (brandId ?? "").trim();
+  if (!id) return;
+
+  const headers = await getAuthHeaders();
+  await fetch(`${API_BASE}/brands/${encodeURIComponent(id)}/wallet`, {
+    method: "POST",
+    headers,
+  }).catch(() => {
+    // 通信エラー時も UI は止めず、エラー表示等は呼び出し側で実装する想定
+  });
 }

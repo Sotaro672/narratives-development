@@ -105,7 +105,7 @@ func (h *BrandHandler) create(w http.ResponseWriter, r *http.Request) {
 		in.CompanyID,
 		in.Name,
 		in.Description,
-		"pending",
+		"",
 		in.WebsiteURL,
 		isActive,
 		in.ManagerID,

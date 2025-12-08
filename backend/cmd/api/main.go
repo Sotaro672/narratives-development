@@ -3,6 +3,7 @@ package main
 
 import (
 	"context"
+	"io"
 	"log"
 	"net/http"
 	"os"
@@ -17,9 +18,16 @@ import (
 
 func main() {
 	ctx := context.Background()
-	f, err := os.OpenFile("debug-idtoken.log", os.O_WRONLY|os.O_CREATE|os.O_APPEND, 0644)
-	if err == nil {
-		log.SetOutput(f)
+
+	// ─────────────────────────────────────────────────────────────
+	// Log output: ファイル + stdout の両方に出す
+	// ─────────────────────────────────────────────────────────────
+	if f, err := os.OpenFile("debug-idtoken.log", os.O_WRONLY|os.O_CREATE|os.O_APPEND, 0644); err == nil {
+		mw := io.MultiWriter(os.Stdout, f)
+		log.SetOutput(mw)
+		log.Printf("[boot] log output = stdout + debug-idtoken.log")
+	} else {
+		log.Printf("[boot] WARN: could not open debug-idtoken.log: %v", err)
 	}
 
 	// ─────────────────────────────────────────────────────────────
@@ -41,7 +49,7 @@ func main() {
 		cont = c
 		defer cont.Close()
 
-		// RouterDeps を取得して FirebaseAuth / MemberRepo の状態をログ出力
+		// RouterDeps logging
 		deps := cont.RouterDeps()
 
 		if deps.FirebaseAuth == nil {
@@ -78,24 +86,20 @@ func main() {
 
 	// ─────────────────────────────────────────────────────────────
 	// Global CORS wrapper (covers /healthz and app routes)
-	//
-	// 許可する Origin 自体は middleware.CORS 側で
-	//   - https://narratives.jp
-	//   - https://narratives-console-dev.web.app
-	//   - https://narratives-development-26c2d.web.app
-	// などを動的に判定している。
 	// ─────────────────────────────────────────────────────────────
 	handler := middleware.CORS(mux)
 
 	srv := &http.Server{
 		Addr:         ":" + port,
-		Handler:      handler, // CORS applied here (dynamic by Origin)
+		Handler:      handler,
 		ReadTimeout:  10 * time.Second,
 		WriteTimeout: 10 * time.Second,
 		IdleTimeout:  60 * time.Second,
 	}
 
+	// ─────────────────────────────────────────────────────────────
 	// Graceful shutdown for Cloud Run
+	// ─────────────────────────────────────────────────────────────
 	idleConnsClosed := make(chan struct{})
 	go func() {
 		c := make(chan os.Signal, 1)

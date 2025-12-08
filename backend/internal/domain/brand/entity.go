@@ -1,3 +1,4 @@
+// backend/internal/domain/brand/entity.go
 package brand
 
 import (
@@ -107,9 +108,16 @@ func (b Brand) validate() error {
 	if b.URL != "" && !isValidURL(b.URL) {
 		return ErrInvalidURL
 	}
-	if b.WalletAddress == "" {
-		return ErrInvalidWalletAddress
-	}
+
+	// 🔽🔽 ここを「空を許容」に変更 🔽🔽
+	// Brand 作成直後は walletAddress が空でもよい。
+	// SolanaBrandWalletService により後から付与される想定。
+	// 形式チェックが必要になったら、「非空かつ base58 っぽい場合のみチェック」などにする。
+	//
+	// if b.WalletAddress == "" {
+	// 	return ErrInvalidWalletAddress
+	// }
+
 	if b.CreatedAt.IsZero() {
 		return ErrInvalidCreatedAt
 	}
@@ -123,7 +131,7 @@ func (b Brand) validate() error {
 }
 
 // ===============================
-// Utility Functions  ★★（復活）
+// Utility Functions
 // ===============================
 
 // 空なら nil、空白トリムも実施
@@ -182,3 +190,5 @@ type BrandPatch struct {
 	DeletedBy     *string
 	CreatedBy     *string
 }
+
+// ここに SolanaWallet などの追加定義がある場合はそのまま残して OK

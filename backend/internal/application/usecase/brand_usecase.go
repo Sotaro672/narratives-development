@@ -14,16 +14,29 @@ import (
 type BrandUsecase struct {
 	brandRepo  branddom.Repository
 	memberRepo memberdom.Repository
+	walletSvc  branddom.SolanaBrandWalletService
 	now        func() time.Time
 }
 
+// 既存コンストラクタ（後方互換用）
+// SolanaBrandWalletService は nil のままになる。
 func NewBrandUsecase(
 	brandRepo branddom.Repository,
 	memberRepo memberdom.Repository,
 ) *BrandUsecase {
+	return NewBrandUsecaseWithWallet(brandRepo, memberRepo, nil)
+}
+
+// SolanaBrandWalletService まで含めて DI したい場合はこちらを使用
+func NewBrandUsecaseWithWallet(
+	brandRepo branddom.Repository,
+	memberRepo memberdom.Repository,
+	walletSvc branddom.SolanaBrandWalletService,
+) *BrandUsecase {
 	return &BrandUsecase{
 		brandRepo:  brandRepo,
 		memberRepo: memberRepo,
+		walletSvc:  walletSvc,
 		now:        time.Now,
 	}
 }
@@ -110,10 +123,17 @@ func (u *BrandUsecase) ListCurrentCompanyBrandsWithNames(
 
 // Create
 // Brand を作成し、その後 ManagerID を元に member.assignedBrands を更新する
+// さらに、SolanaBrandWalletService が設定されている場合は
+// ブランド専用 Solana ウォレットを自動開設し、walletAddress に反映する。
 func (u *BrandUsecase) Create(ctx context.Context, b branddom.Brand) (branddom.Brand, error) {
 	// context の companyId を優先して強制適用
 	if cid := companyIDFromContext(ctx); cid != "" {
 		b.CompanyID = strings.TrimSpace(cid)
+	}
+
+	// isActive は自動的に有効化（フロントからは入力されない前提）
+	if !b.IsActive {
+		b.IsActive = true
 	}
 
 	if b.CreatedAt.IsZero() {
@@ -124,6 +144,30 @@ func (u *BrandUsecase) Create(ctx context.Context, b branddom.Brand) (branddom.B
 	created, err := u.brandRepo.Create(ctx, b)
 	if err != nil {
 		return created, err
+	}
+
+	// 1.5 ブランド専用 Solana ウォレット自動開設
+	// Brand.WalletAddress が未設定（""）または "pending" の場合に実行。
+	waTrimmed := strings.TrimSpace(created.WalletAddress)
+	if u.walletSvc != nil && (waTrimmed == "" || waTrimmed == "pending") {
+		wallet, werr := u.walletSvc.OpenBrandWallet(ctx, created)
+		if werr != nil {
+			log.Printf("[BrandUsecase] WARN: failed to open Solana brand wallet (brandId=%s): %v", created.ID, werr)
+		} else {
+			wa := strings.TrimSpace(wallet.Address)
+			if wa == "" {
+				log.Printf("[BrandUsecase] WARN: OpenBrandWallet returned empty address (brandId=%s)", created.ID)
+			} else {
+				created.WalletAddress = wa
+				// 永続化しておく（失敗しても Brand 作成は成功扱いにする）
+				if saved, errSave := u.brandRepo.Save(ctx, created, nil); errSave != nil {
+					log.Printf("[BrandUsecase] WARN: failed to persist brand walletAddress (brandId=%s wallet=%s): %v",
+						created.ID, wa, errSave)
+				} else {
+					created = saved
+				}
+			}
+		}
 	}
 
 	// 2. ManagerID が存在しない場合はここで終了

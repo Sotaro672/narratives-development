@@ -491,6 +491,10 @@ func NewContainer(ctx context.Context) (*Container, error) {
 	companySvc := companydom.NewService(companyRepo)
 	brandSvc := branddom.NewService(brandRepo)
 
+	// ★ Solana Brand Wallet Service（ブランド専用ウォレット開設 + 秘密鍵 SecretManager 保管）
+	//   - 第2引数は Secret 名のプレフィックス（実装に合わせて調整）
+	brandWalletSvc := solanainfra.NewBrandWalletService(cfg.FirestoreProjectID)
+
 	// ★ member.Service（表示名解決用）
 	memberSvc := memdom.NewService(memberRepo)
 
@@ -526,7 +530,14 @@ func NewContainer(ctx context.Context) (*Container, error) {
 	)
 
 	billingAddressUC := uc.NewBillingAddressUsecase(billingAddressRepo)
-	brandUC := uc.NewBrandUsecase(brandRepo, memberRepo)
+
+	// ★ BrandUsecase に SolanaBrandWalletService を DI
+	brandUC := uc.NewBrandUsecaseWithWallet(
+		brandRepo,
+		memberRepo,
+		brandWalletSvc,
+	)
+
 	campaignUC := uc.NewCampaignUsecase(campaignRepo, nil, nil, nil)
 	companyUC := uc.NewCompanyUsecase(companyRepo)
 	discountUC := uc.NewDiscountUsecase(discountRepo)

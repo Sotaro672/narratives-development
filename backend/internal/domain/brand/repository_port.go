@@ -186,3 +186,45 @@ func (s *Service) ListAssignedMemberIDs(ctx context.Context, brandID string) ([]
 
 	return result, nil
 }
+
+// ========================================
+// Solana Brand Wallet 関連 (Domain メタ情報)
+// ========================================
+
+// SolanaBrandWallet は「ブランド専用ウォレット」のメタ情報を表します。
+//   - BrandID: Firestore 上の brand ドキュメント ID
+//   - Address: Solana ウォレットの公開鍵 (base58)
+//   - SecretName: Secret Manager 上の秘密鍵保管先パス
+//     例: projects/<project>/secrets/brand-wallet-<brandID>/versions/1
+type SolanaBrandWallet struct {
+	BrandID    string
+	Address    string
+	SecretName string
+}
+
+// MintAuthorityKey は「マスターウォレット（ミント権限）」のメタ情報を表します。
+// ここでは domain 層なので、暗号ライブラリの実体ではなく
+// 「どの鍵かを特定するための情報」だけを持たせています。
+type MintAuthorityKey struct {
+	Address    string // マスターウォレットの公開鍵 (base58)
+	SecretName string // Secret Manager 上の秘密鍵パス
+}
+
+// SolanaBrandWalletService は brand 用 Solana ウォレットの開設・管理・権限委譲を扱うドメインサービスのポートです。
+// 実装は infra/solana などのインフラレイヤーに置きます。
+type SolanaBrandWalletService interface {
+	// Brand 作成時に呼び出され、Brand 専用ウォレットを新規作成し、
+	// Firestore に保存するためのメタ情報を返します。
+	OpenBrandWallet(ctx context.Context, b Brand) (SolanaBrandWallet, error)
+
+	// ブランドウォレットの「凍結」など、将来的な運用用フック。
+	FreezeBrandWallet(ctx context.Context, wallet SolanaBrandWallet) error
+
+	// マスターウォレットからブランドウォレットへのトークン運用権限委譲用フック。
+	// 具体的な on-chain 実装はインフラ側で行う想定。
+	DelegateTokenOperation(
+		ctx context.Context,
+		brandWallet SolanaBrandWallet,
+		master MintAuthorityKey,
+	) error
+}
