@@ -1,132 +1,68 @@
+// backend\internal\domain\token\repository_port.go
 package token
 
 import (
 	"context"
 	"errors"
-	"time"
 )
 
-// ========================================
-// 入出力（契約のみ）
-// ========================================
+// =====================================================
+// MintAuthorityWalletPort
+// -----------------------------------------------------
+// 「システムが唯一保持するミント権限ウォレット」を表すドメインポート。
+// 実装は infra 側（例: GCP Secret Manager + Solana RPC）に置き、
+// Usecase はこのポートを通じてのみミントを実行する。
+// =====================================================
 
-type CreateTokenInput struct {
-	MintAddress   string `json:"mintAddress"`
-	MintRequestID string `json:"mintRequestId"`
-	Owner         string `json:"owner"`
+// MintAuthorityWalletPort は、ミント権限ウォレットに対する操作を抽象化するポートです。
+type MintAuthorityWalletPort interface {
+	// PublicKey は、ミント権限ウォレットの公開鍵 (base58 文字列) を返します。
+	// - 公開鍵はキャッシュしてよい（実装側判断）
+	// - ネットワークエラーや Secret 読み込み失敗時はエラーを返す
+	PublicKey(ctx context.Context) (string, error)
+
+	// MintToken は、与えられたパラメータに基づいてトークン/NFT をミントします。
+	// - Solana / Metaplex への実際の送信はアダプタ側の責務
+	// - 成功時はトランザクションシグネチャや Mint アドレスなどを返す
+	MintToken(ctx context.Context, params MintParams) (*MintResult, error)
 }
 
-type UpdateTokenInput struct {
-	MintRequestID *string `json:"mintRequestId,omitempty"`
-	Owner         *string `json:"owner,omitempty"`
+// MintParams はミント時に必要となる情報を表します。
+// Solana 特有の構造体（Transaction など）はここでは扱わず、
+// ドメインにとって意味のある最小限の情報だけを持たせます。
+type MintParams struct {
+	// ToAddress は、トークンを受け取るウォレットアドレス (base58) です。
+	ToAddress string
+
+	// Amount はミントする数量です。
+	// - NFT の場合は通常 1 固定
+	// - 将来的に FT（Fungible Token）対応を見据えて uint64 としておく
+	Amount uint64
+
+	// MetadataURI は、Metaplex 形式の JSON メタデータを格納した URI（例: GCS, Arweave）です。
+	MetadataURI string
+
+	// Name / Symbol は、オンチェーンメタデータに格納されるトークン名・シンボルです。
+	// - TokenBlueprint から引き継ぐ想定
+	Name   string
+	Symbol string
 }
 
-// ========================================
-// 検索条件/ソート/ページング（契約のみ）
-// ========================================
+// MintResult はミント処理の結果を表します。
+type MintResult struct {
+	// Signature はブロックチェーン上のトランザクションシグネチャです。
+	Signature string
 
-type Filter struct {
-	// 識別子
-	MintAddresses   []string
-	MintRequestIDs  []string
-	Owners          []string
-	MintAddressLike string // 部分一致（実装依存）
-
-	// 期間（実装側の保持フィールドに合わせて任意で利用）
-	MintedFrom         *time.Time
-	MintedTo           *time.Time
-	LastTransferredFrom *time.Time
-	LastTransferredTo   *time.Time
+	// MintAddress は作成されたトークンの Mint アドレス (base58) です。
+	// - NFT の場合は 1 トークン = 1 Mint アドレス
+	MintAddress string
 }
 
-type Sort struct {
-	Column SortColumn
-	Order  SortOrder
-}
-
-type SortColumn string
-
-const (
-	SortByMintAddress       SortColumn = "mintAddress"
-	SortByMintRequestID     SortColumn = "mintRequestId"
-	SortByOwner             SortColumn = "owner"
-	SortByMintedAt          SortColumn = "mintedAt"
-	SortByLastTransferredAt SortColumn = "lastTransferredAt"
-)
-
-type SortOrder string
-
-const (
-	SortAsc  SortOrder = "asc"
-	SortDesc SortOrder = "desc"
-)
-
-type Page struct {
-	Number  int
-	PerPage int
-}
-
-type PageResult struct {
-	Items      []Token
-	TotalCount int
-	TotalPages int
-	Page       int
-	PerPage    int
-}
-
-// ========================================
-// 統計（任意契約）
-// ========================================
-
-type TokenStats struct {
-	TotalTokens        int
-	UniqueOwners       int
-	UniqueMintRequests int
-	ByMintRequest      map[string]int
-	ByOwner            map[string]int
-	TopOwners          []struct {
-		Owner string
-		Count int
-	}
-	TopMintRequests []struct {
-		MintRequestID string
-		Count         int
-	}
-}
-
-// ========================================
-// Repository Port（契約のみ）
-// ========================================
-
-type RepositoryPort interface {
-	// 取得系
-	GetByMintAddress(ctx context.Context, mintAddress string) (Token, error)
-	List(ctx context.Context, filter Filter, sort Sort, page Page) (PageResult, error)
-	Count(ctx context.Context, filter Filter) (int, error)
-	GetByOwner(ctx context.Context, owner string) ([]Token, error)
-	GetByMintRequest(ctx context.Context, mintRequestID string) ([]Token, error)
-
-	// 変更系
-	Create(ctx context.Context, in CreateTokenInput) (Token, error)
-	Update(ctx context.Context, mintAddress string, in UpdateTokenInput) (Token, error)
-	Delete(ctx context.Context, mintAddress string) error
-
-	// ドメイン操作
-	Transfer(ctx context.Context, mintAddress, newOwner string) (Token, error)
-	Burn(ctx context.Context, mintAddress string) error
-
-	// 統計（任意）
-	GetStats(ctx context.Context) (TokenStats, error)
-
-	// （任意）トランザクション境界
-	WithTx(ctx context.Context, fn func(ctx context.Context) error) error
-
-	// 管理（任意）
-	Reset(ctx context.Context) error
-}
-
-// 共通エラー（契約）
+// 共通エラー定義（必要に応じてアダプタ側で wrap して使う）
 var (
-	ErrNotFound = errors.New("token: not found")
-	ErrConflict = errors.New("token: conflict")
+	// ErrMintAuthorityNotConfigured は、ミント権限ウォレットの設定が存在しない場合のエラーです。
+	ErrMintAuthorityNotConfigured = errors.New("token: mint authority wallet is not configured")
+
+	// ErrMintFailed は、チェーン側でミントに失敗したことを表す汎用エラーです。
+	ErrMintFailed = errors.New("token: mint failed")
 )

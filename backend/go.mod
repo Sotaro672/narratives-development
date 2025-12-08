@@ -4,6 +4,7 @@ go 1.24.4
 
 require (
 	cloud.google.com/go/firestore v1.20.0
+	cloud.google.com/go/secretmanager v1.16.0
 	cloud.google.com/go/storage v1.57.0
 	firebase.google.com/go/v4 v4.18.0
 	github.com/lib/pq v1.10.9

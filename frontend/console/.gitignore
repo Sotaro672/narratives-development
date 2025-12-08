@@ -22,3 +22,8 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+# -------------------------------------------
+# Solana Mint Authority Secret Key (Very Important)
+# -------------------------------------------
+tools/solana/narratives-mint-authority.json

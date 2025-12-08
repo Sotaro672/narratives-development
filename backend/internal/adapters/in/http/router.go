@@ -46,7 +46,6 @@ type RouterDeps struct {
 	ProductBlueprintUC *usecase.ProductBlueprintUsecase
 	SaleUC             *usecase.SaleUsecase
 	ShippingAddressUC  *usecase.ShippingAddressUsecase
-	TokenUC            *usecase.TokenUsecase
 	TokenBlueprintUC   *usecase.TokenBlueprintUsecase
 	TokenOperationUC   *usecase.TokenOperationUsecase
 	TrackingUC         *usecase.TrackingUsecase
@@ -217,19 +216,6 @@ func NewRouter(deps RouterDeps) http.Handler {
 		}
 		mux.Handle("/inventories", h)
 		mux.Handle("/inventories/", h)
-	}
-
-	// ================================
-	// Tokens
-	// ================================
-	if deps.TokenUC != nil {
-		tokenH := handlers.NewTokenHandler(deps.TokenUC)
-		var h http.Handler = tokenH
-		if authMw != nil {
-			h = authMw.Handler(h)
-		}
-		mux.Handle("/tokens", h)
-		mux.Handle("/tokens/", h)
 	}
 
 	// ================================

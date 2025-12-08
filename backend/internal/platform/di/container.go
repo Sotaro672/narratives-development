@@ -10,6 +10,8 @@ import (
 	firebase "firebase.google.com/go/v4"
 	firebaseauth "firebase.google.com/go/v4/auth"
 
+	solanainfra "narratives/internal/infra/solana"
+
 	"cloud.google.com/go/firestore"
 
 	httpin "narratives/internal/adapters/in/http"
@@ -388,6 +390,9 @@ type Container struct {
 
 	// ★ auth/bootstrap 用 Usecase
 	AuthBootstrap *authuc.BootstrapService
+
+	// ★ Solana: Narratives ミント権限ウォレット
+	MintAuthorityKey *solanainfra.MintAuthorityKey
 }
 
 // ========================================
@@ -398,6 +403,18 @@ type Container struct {
 func NewContainer(ctx context.Context) (*Container, error) {
 	// 1. Load config
 	cfg := appcfg.Load()
+
+	// 1.5 Solana ミント権限ウォレットの鍵を Secret Manager から読み込む
+	mintKey, err := solanainfra.LoadMintAuthorityKey(
+		ctx,
+		cfg.FirestoreProjectID,             // = narratives-development-26c2d
+		"narratives-solana-mint-authority", // Secret 名
+	)
+	if err != nil {
+		log.Printf("[container] WARN: failed to load mint authority key: %v", err)
+		// 開発中は nil 許容。本番で必須にする場合はここで return err にしても良い
+		mintKey = nil
+	}
 
 	// 2. Initialize Firestore client (Application Default Credentials 前提)
 	fsClient, err := firestore.NewClient(ctx, cfg.FirestoreProjectID)
@@ -448,7 +465,6 @@ func NewContainer(ctx context.Context) (*Container, error) {
 	productionRepo := fs.NewProductionRepositoryFS(fsClient)
 	saleRepo := fs.NewSaleRepositoryFS(fsClient)
 	shippingAddressRepo := fs.NewShippingAddressRepositoryFS(fsClient)
-	tokenRepo := fs.NewTokenRepositoryFS(fsClient)
 	tokenBlueprintRepo := fs.NewTokenBlueprintRepositoryFS(fsClient)
 	tokenOperationRepo := fs.NewTokenOperationRepositoryFS(fsClient)
 	trackingRepo := fs.NewTrackingRepositoryFS(fsClient)
@@ -583,7 +599,6 @@ func NewContainer(ctx context.Context) (*Container, error) {
 
 	saleUC := uc.NewSaleUsecase(saleRepo)
 	shippingAddressUC := uc.NewShippingAddressUsecase(shippingAddressRepo)
-	tokenUC := uc.NewTokenUsecase(tokenRepo)
 
 	// ★ TokenBlueprintUsecase に member.Service を注入
 	tokenBlueprintUC := uc.NewTokenBlueprintUsecase(
@@ -597,6 +612,17 @@ func NewContainer(ctx context.Context) (*Container, error) {
 	trackingUC := uc.NewTrackingUsecase(trackingRepo)
 	userUC := uc.NewUserUsecase(userRepo)
 	walletUC := uc.NewWalletUsecase(walletRepo)
+
+	// ★ TokenUsecase（Solana ミント権限ウォレットを使用）
+	var tokenUC *uc.TokenUsecase
+	if mintKey != nil {
+		solanaClient := solanainfra.NewMintClient(mintKey)
+		// MintRequestPort はまだ実装していないので nil を渡しておき、後で接続する
+		tokenUC = uc.NewTokenUsecase(solanaClient, nil)
+	} else {
+		// Mint 権限キーが取得できなかった場合でもコンテナ生成は続行
+		tokenUC = uc.NewTokenUsecase(nil, nil)
+	}
 
 	// ★ Invitation 用メールクライアント & メーラー
 	invitationMailer := mailadp.NewInvitationMailerWithSendGrid(
@@ -682,6 +708,9 @@ func NewContainer(ctx context.Context) (*Container, error) {
 		InvitationCommand: invitationCommandUC,
 
 		AuthBootstrap: authBootstrapSvc,
+
+		// Solana ミント権限鍵
+		MintAuthorityKey: mintKey,
 	}, nil
 }
 
@@ -714,7 +743,6 @@ func (c *Container) RouterDeps() httpin.RouterDeps {
 		ProductBlueprintUC: c.ProductBlueprintUC,
 		SaleUC:             c.SaleUC,
 		ShippingAddressUC:  c.ShippingAddressUC,
-		TokenUC:            c.TokenUC,
 		TokenBlueprintUC:   c.TokenBlueprintUC,
 		TokenOperationUC:   c.TokenOperationUC,
 		TrackingUC:         c.TrackingUC,
