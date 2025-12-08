@@ -505,6 +505,10 @@ func NewContainer(ctx context.Context) (*Container, error) {
 		modelRepo: modelRepo,
 	}
 
+	// ★ MintRequestPort（TokenUsecase 用）
+	//   - コレクション名を空文字にして、mint_request_port_fs 側のデフォルト "mintRequests" を利用
+	mintRequestPort := fs.NewMintRequestPortFS(fsClient, "")
+
 	// 5. Application-layer usecases
 	accountUC := uc.NewAccountUsecase(accountRepo)
 
@@ -613,15 +617,14 @@ func NewContainer(ctx context.Context) (*Container, error) {
 	userUC := uc.NewUserUsecase(userRepo)
 	walletUC := uc.NewWalletUsecase(walletRepo)
 
-	// ★ TokenUsecase（Solana ミント権限ウォレットを使用）
+	// ★ TokenUsecase（Solana ミント権限ウォレット + MintRequestPort）
 	var tokenUC *uc.TokenUsecase
 	if mintKey != nil {
 		solanaClient := solanainfra.NewMintClient(mintKey)
-		// MintRequestPort はまだ実装していないので nil を渡しておき、後で接続する
-		tokenUC = uc.NewTokenUsecase(solanaClient, nil)
+		tokenUC = uc.NewTokenUsecase(solanaClient, mintRequestPort)
 	} else {
 		// Mint 権限キーが取得できなかった場合でもコンテナ生成は続行
-		tokenUC = uc.NewTokenUsecase(nil, nil)
+		tokenUC = uc.NewTokenUsecase(nil, mintRequestPort)
 	}
 
 	// ★ Invitation 用メールクライアント & メーラー
@@ -743,6 +746,7 @@ func (c *Container) RouterDeps() httpin.RouterDeps {
 		ProductBlueprintUC: c.ProductBlueprintUC,
 		SaleUC:             c.SaleUC,
 		ShippingAddressUC:  c.ShippingAddressUC,
+		TokenUC:            c.TokenUC,
 		TokenBlueprintUC:   c.TokenBlueprintUC,
 		TokenOperationUC:   c.TokenOperationUC,
 		TrackingUC:         c.TrackingUC,

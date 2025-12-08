@@ -48,10 +48,13 @@ type MintRequestPortFS struct {
 	collectionRef *firestore.CollectionRef
 }
 
-// NewMintRequestPortFS は Firestore クライアントから MintRequestPort 実装を生成します。
+// コンパイル時に usecase.MintRequestPort を満たしていることを確認
+var _ usecase.MintRequestPort = (*MintRequestPortFS)(nil)
+
+// NewMintRequestPortFS は Firestore クライアントから MintRequestPort 実装を生成します.
 //
 // colName はコレクション名です。デフォルト "mintRequests" を使いたい場合は
-// 空文字を渡すか、引数なしのラッパーを別途用意しても構いません。
+// 空文字を渡してください。
 func NewMintRequestPortFS(client *firestore.Client, colName string) *MintRequestPortFS {
 	if colName == "" {
 		colName = "mintRequests" // ※必要に応じて実際のコレクション名に合わせてください

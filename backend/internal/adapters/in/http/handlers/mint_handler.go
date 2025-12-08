@@ -15,7 +15,9 @@ import (
 )
 
 type MintHandler struct {
-	mintUC  *usecase.MintUsecase
+	// ミント候補一覧やパッチ取得など「事前準備」系
+	mintUC *usecase.MintUsecase
+	// 実際のチェーンミントを行う Usecase（Solana + MintRequestPort）
 	tokenUC *usecase.TokenUsecase
 }
 
@@ -32,7 +34,18 @@ func (h *MintHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	switch {
 
 	// ------------------------------------------------------------
+	// POST /mint/requests/{mintRequestId}/mint
+	//  → TokenUsecase を使ってチェーン上でミント実行
+	// ------------------------------------------------------------
+	case r.Method == http.MethodPost &&
+		strings.HasPrefix(r.URL.Path, "/mint/requests/") &&
+		strings.HasSuffix(r.URL.Path, "/mint"):
+		h.mintFromMintRequest(w, r)
+		return
+
+	// ------------------------------------------------------------
 	// POST /mint/inspections/{productionId}/request
+	//  → 検品結果から MintRequest 情報を更新（ミント候補を作る）
 	// ------------------------------------------------------------
 	case r.Method == http.MethodPost &&
 		strings.HasPrefix(r.URL.Path, "/mint/inspections/") &&
@@ -71,19 +84,52 @@ func (h *MintHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		h.listTokenBlueprintsByBrand(w, r)
 		return
 
-	// ------------------------------------------------------------
-	// POST /mint/requests/{id}/mint
-	//   - ミント申請ボタンから叩かれる想定
-	// ------------------------------------------------------------
-	case r.Method == http.MethodPost &&
-		strings.HasPrefix(r.URL.Path, "/mint/requests/") &&
-		strings.HasSuffix(r.URL.Path, "/mint"):
-		h.mintFromMintRequest(w, r)
-		return
-
 	default:
 		http.NotFound(w, r)
 	}
+}
+
+// ============================================================
+// POST /mint/requests/{mintRequestId}/mint
+// ============================================================
+//
+// Body はなし。Path から mintRequestId を取り出し、TokenUsecase に委譲して
+// チェーンミントを行う。
+func (h *MintHandler) mintFromMintRequest(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+
+	if h.tokenUC == nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		_ = json.NewEncoder(w).Encode(map[string]string{
+			"error": "token usecase is not configured",
+		})
+		return
+	}
+
+	// /mint/requests/{id}/mint から {id} を抽出
+	path := strings.TrimPrefix(r.URL.Path, "/mint/requests/")
+	path = strings.TrimSuffix(path, "/mint")
+	mintRequestID := strings.Trim(path, "/")
+
+	if mintRequestID == "" {
+		w.WriteHeader(http.StatusBadRequest)
+		_ = json.NewEncoder(w).Encode(map[string]string{
+			"error": "mintRequestId is empty",
+		})
+		return
+	}
+
+	result, err := h.tokenUC.MintFromMintRequest(ctx, mintRequestID)
+	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		_ = json.NewEncoder(w).Encode(map[string]string{
+			"error": err.Error(),
+		})
+		return
+	}
+
+	// tokendom.MintResult をそのまま JSON で返す
+	_ = json.NewEncoder(w).Encode(result)
 }
 
 // ============================================================
@@ -353,46 +399,4 @@ func (h *MintHandler) listTokenBlueprintsByBrand(w http.ResponseWriter, r *http.
 	}
 
 	_ = json.NewEncoder(w).Encode(items)
-}
-
-// ============================================================
-// POST /mint/requests/{id}/mint
-//   - ミント申請ボタンから叩く: On-chain ミント実行
-//
-// ============================================================
-func (h *MintHandler) mintFromMintRequest(w http.ResponseWriter, r *http.Request) {
-	ctx := r.Context()
-
-	if h.tokenUC == nil {
-		w.WriteHeader(http.StatusInternalServerError)
-		_ = json.NewEncoder(w).Encode(map[string]string{
-			"error": "token usecase is not configured",
-		})
-		return
-	}
-
-	// パスから {id} を抽出
-	path := strings.TrimPrefix(r.URL.Path, "/mint/requests/")
-	path = strings.TrimSuffix(path, "/mint")
-	id := strings.Trim(path, "/")
-
-	if id == "" {
-		w.WriteHeader(http.StatusBadRequest)
-		_ = json.NewEncoder(w).Encode(map[string]string{
-			"error": "mintRequestID is empty",
-		})
-		return
-	}
-
-	result, err := h.tokenUC.MintFromMintRequest(ctx, id)
-	if err != nil {
-		// ステータスコードは状況に応じて調整可能（とりあえず 400）
-		w.WriteHeader(http.StatusBadRequest)
-		_ = json.NewEncoder(w).Encode(map[string]string{
-			"error": err.Error(),
-		})
-		return
-	}
-
-	_ = json.NewEncoder(w).Encode(result)
 }

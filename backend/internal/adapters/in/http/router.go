@@ -61,6 +61,9 @@ type RouterDeps struct {
 	// ⭐ Mint 用 Usecase（/mint/inspections など）
 	MintUC *usecase.MintUsecase
 
+	// ⭐ チェーンミント実行用 TokenUsecase
+	TokenUC *usecase.TokenUsecase
+
 	// 認証・招待まわり
 	AuthBootstrap     *authuc.BootstrapService
 	InvitationQuery   usecase.InvitationQueryPort
@@ -386,9 +389,9 @@ func NewRouter(deps RouterDeps) http.Handler {
 	// ================================
 	// ⭐ Mint API
 	// ================================
-	if deps.MintUC != nil {
-		// 第二引数に TokenUsecase を渡す（現時点では未配線なので nil を渡す）
-		mintH := handlers.NewMintHandler(deps.MintUC, nil)
+	if deps.MintUC != nil && deps.TokenUC != nil {
+		// 第二引数に TokenUsecase を渡す
+		mintH := handlers.NewMintHandler(deps.MintUC, deps.TokenUC)
 
 		var h http.Handler = mintH
 		if authMw != nil {
