@@ -4,6 +4,7 @@ package solana
 import (
 	"context"
 	"fmt"
+	"log"
 	"os"
 
 	"github.com/blocto/solana-go-sdk/client"
@@ -165,5 +166,18 @@ func MintNFTToOwner(
 		return "", "", fmt.Errorf("SendTransaction: %w", err)
 	}
 
-	return mint.PublicKey.ToBase58(), sig, nil
+	mintAddr = mint.PublicKey.ToBase58()
+
+	// ★ Cloud Run / Cloud Logging にミント結果を出力
+	log.Printf(
+		"[narratives-mint] minted 1 NFT on devnet: mint=%s sig=%s owner=%s name=%s symbol=%s uri=%s",
+		mintAddr,
+		sig,
+		ownerWallet,
+		meta.Name,
+		meta.Symbol,
+		meta.URI,
+	)
+
+	return mintAddr, sig, nil
 }
