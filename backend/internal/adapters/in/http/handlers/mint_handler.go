@@ -15,12 +15,14 @@ import (
 )
 
 type MintHandler struct {
-	mintUC *usecase.MintUsecase
+	mintUC  *usecase.MintUsecase
+	tokenUC *usecase.TokenUsecase
 }
 
-func NewMintHandler(mintUC *usecase.MintUsecase) http.Handler {
+func NewMintHandler(mintUC *usecase.MintUsecase, tokenUC *usecase.TokenUsecase) http.Handler {
 	return &MintHandler{
-		mintUC: mintUC,
+		mintUC:  mintUC,
+		tokenUC: tokenUC,
 	}
 }
 
@@ -67,6 +69,16 @@ func (h *MintHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	// ------------------------------------------------------------
 	case r.Method == http.MethodGet && r.URL.Path == "/mint/token_blueprints":
 		h.listTokenBlueprintsByBrand(w, r)
+		return
+
+	// ------------------------------------------------------------
+	// POST /mint/requests/{id}/mint
+	//   - ミント申請ボタンから叩かれる想定
+	// ------------------------------------------------------------
+	case r.Method == http.MethodPost &&
+		strings.HasPrefix(r.URL.Path, "/mint/requests/") &&
+		strings.HasSuffix(r.URL.Path, "/mint"):
+		h.mintFromMintRequest(w, r)
 		return
 
 	default:
@@ -341,4 +353,46 @@ func (h *MintHandler) listTokenBlueprintsByBrand(w http.ResponseWriter, r *http.
 	}
 
 	_ = json.NewEncoder(w).Encode(items)
+}
+
+// ============================================================
+// POST /mint/requests/{id}/mint
+//   - ミント申請ボタンから叩く: On-chain ミント実行
+//
+// ============================================================
+func (h *MintHandler) mintFromMintRequest(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+
+	if h.tokenUC == nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		_ = json.NewEncoder(w).Encode(map[string]string{
+			"error": "token usecase is not configured",
+		})
+		return
+	}
+
+	// パスから {id} を抽出
+	path := strings.TrimPrefix(r.URL.Path, "/mint/requests/")
+	path = strings.TrimSuffix(path, "/mint")
+	id := strings.Trim(path, "/")
+
+	if id == "" {
+		w.WriteHeader(http.StatusBadRequest)
+		_ = json.NewEncoder(w).Encode(map[string]string{
+			"error": "mintRequestID is empty",
+		})
+		return
+	}
+
+	result, err := h.tokenUC.MintFromMintRequest(ctx, id)
+	if err != nil {
+		// ステータスコードは状況に応じて調整可能（とりあえず 400）
+		w.WriteHeader(http.StatusBadRequest)
+		_ = json.NewEncoder(w).Encode(map[string]string{
+			"error": err.Error(),
+		})
+		return
+	}
+
+	_ = json.NewEncoder(w).Encode(result)
 }

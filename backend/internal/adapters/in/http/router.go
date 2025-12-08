@@ -387,7 +387,8 @@ func NewRouter(deps RouterDeps) http.Handler {
 	// ⭐ Mint API
 	// ================================
 	if deps.MintUC != nil {
-		mintH := handlers.NewMintHandler(deps.MintUC)
+		// 第二引数に TokenUsecase を渡す（現時点では未配線なので nil を渡す）
+		mintH := handlers.NewMintHandler(deps.MintUC, nil)
 
 		var h http.Handler = mintH
 		if authMw != nil {
