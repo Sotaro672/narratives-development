@@ -746,7 +746,6 @@ func (c *Container) RouterDeps() httpin.RouterDeps {
 		ProductBlueprintUC: c.ProductBlueprintUC,
 		SaleUC:             c.SaleUC,
 		ShippingAddressUC:  c.ShippingAddressUC,
-		TokenUC:            c.TokenUC,
 		TokenBlueprintUC:   c.TokenBlueprintUC,
 		TokenOperationUC:   c.TokenOperationUC,
 		TrackingUC:         c.TrackingUC,

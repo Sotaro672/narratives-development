@@ -17,6 +17,10 @@ import (
 
 func main() {
 	ctx := context.Background()
+	f, err := os.OpenFile("debug-idtoken.log", os.O_WRONLY|os.O_CREATE|os.O_APPEND, 0644)
+	if err == nil {
+		log.SetOutput(f)
+	}
 
 	// ─────────────────────────────────────────────────────────────
 	// Lightweight healthz first so PORT is LISTENed quickly

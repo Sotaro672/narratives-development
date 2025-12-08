@@ -1,0 +1,22 @@
+2025/12/08 13:47:06 [container] Firestore connected to project: narratives-development-26c2d
+2025/12/08 13:47:06 [container] Firebase Auth initialized
+2025/12/08 13:47:06 [mail] WARN: SENDGRID_API_KEY is empty. InvitationMailer will fail to send mail.
+2025/12/08 13:47:06 [mail] WARN: SENDGRID_FROM is empty. InvitationMailer will fail to send mail.
+2025/12/08 13:47:06 [mail] INFO: CONSOLE_BASE_URL is empty. default=https://narratives.jp
+2025/12/08 13:47:06 [mail] InvitationMailerWithSendGrid initialized. from= baseURL=https://narratives.jp
+2025/12/08 13:47:06 [boot] RouterDeps.FirebaseAuth: *auth.Client
+2025/12/08 13:47:06 [boot] RouterDeps.MemberRepo: *firestore.MemberRepositoryFS
+2025/12/08 13:47:06 [boot] listening on :8080
+2025/12/08 13:48:16 [boot] received signal: interrupt; shutting down...
+2025/12/08 13:48:16 [boot] server stopped
+2025/12/08 13:48:20 [container] Firestore connected to project: narratives-development-26c2d
+2025/12/08 13:48:20 [container] Firebase Auth initialized
+2025/12/08 13:48:20 [mail] WARN: SENDGRID_API_KEY is empty. InvitationMailer will fail to send mail.
+2025/12/08 13:48:20 [mail] WARN: SENDGRID_FROM is empty. InvitationMailer will fail to send mail.
+2025/12/08 13:48:20 [mail] INFO: CONSOLE_BASE_URL is empty. default=https://narratives.jp
+2025/12/08 13:48:20 [mail] InvitationMailerWithSendGrid initialized. from= baseURL=https://narratives.jp
+2025/12/08 13:48:20 [boot] RouterDeps.FirebaseAuth: *auth.Client
+2025/12/08 13:48:20 [boot] RouterDeps.MemberRepo: *firestore.MemberRepositoryFS
+2025/12/08 13:48:20 [boot] listening on :8080
+2025/12/08 13:48:23 [boot] received signal: interrupt; shutting down...
+2025/12/08 13:48:23 [boot] server stopped

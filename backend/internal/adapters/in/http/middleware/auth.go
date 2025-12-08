@@ -3,7 +3,10 @@ package middleware
 
 import (
 	"context"
+	"encoding/base64"
+	"log"
 	"net/http"
+	"os"
 	"strings"
 
 	fbauth "firebase.google.com/go/v4/auth"
@@ -23,7 +26,7 @@ var (
 	ctxKeyCompanyID = ctxKey{name: "companyId"}
 	ctxKeyUID       = ctxKey{name: "uid"}
 	ctxKeyEmail     = ctxKey{name: "email"}
-	ctxKeyFullName  = ctxKey{name: "fullName"} // 表示名(fullName)
+	ctxKeyFullName  = ctxKey{name: "fullName"}
 )
 
 // AuthMiddleware は Bearer <ID_TOKEN> を検証し、member と各情報を context に詰める。
@@ -50,6 +53,28 @@ func (m *AuthMiddleware) Handler(next http.Handler) http.Handler {
 		if idToken == "" {
 			http.Error(w, "unauthorized: empty bearer token", http.StatusUnauthorized)
 			return
+		}
+
+		// ============================================================
+		// ★ ID TOKEN をログに完全表示 + Base64 化してファイル保存
+		// ============================================================
+		log.Printf("[auth] RAW ID TOKEN (first 50 chars): %.50s...", idToken)
+
+		// Base64 encode the token for safe logging
+		encoded := base64.StdEncoding.EncodeToString([]byte(idToken))
+
+		// Write full encoded token to file
+		f, err := os.OpenFile("debug-idtoken.log", os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0644)
+		if err == nil {
+			defer f.Close()
+			f.WriteString("========================================\n")
+			f.WriteString("RAW ID TOKEN:\n")
+			f.WriteString(idToken + "\n\n")
+			f.WriteString("BASE64 ENCODED:\n")
+			f.WriteString(encoded + "\n")
+			f.WriteString("========================================\n\n")
+		} else {
+			log.Printf("[auth] ERROR writing debug-idtoken.log: %v", err)
 		}
 
 		// Firebase ID トークン検証

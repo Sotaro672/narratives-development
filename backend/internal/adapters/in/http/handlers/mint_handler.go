@@ -4,6 +4,7 @@ package handlers
 import (
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
 	"strconv"
 	"strings"
@@ -26,6 +27,12 @@ func NewMintHandler(mintUC *usecase.MintUsecase, tokenUC *usecase.TokenUsecase) 
 		mintUC:  mintUC,
 		tokenUC: tokenUC,
 	}
+}
+
+// デバッグ用エンドポイント /mint/debug で使用
+func (h *MintHandler) HandleDebug(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "application/json")
+	fmt.Fprintf(w, `{"ok": true, "msg": "Mint API alive"}`)
 }
 
 func (h *MintHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
