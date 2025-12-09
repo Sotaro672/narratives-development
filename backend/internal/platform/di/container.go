@@ -531,12 +531,8 @@ func NewContainer(ctx context.Context) (*Container, error) {
 
 	billingAddressUC := uc.NewBillingAddressUsecase(billingAddressRepo)
 
-	// ★ BrandUsecase に SolanaBrandWalletService を DI
-	brandUC := uc.NewBrandUsecaseWithWallet(
-		brandRepo,
-		memberRepo,
-		brandWalletSvc,
-	)
+	// ★ walletSvc 付き BrandUsecase
+	brandUC := uc.NewBrandUsecaseWithWallet(brandRepo, memberRepo, brandWalletSvc)
 
 	campaignUC := uc.NewCampaignUsecase(campaignRepo, nil, nil, nil)
 	companyUC := uc.NewCompanyUsecase(companyRepo)

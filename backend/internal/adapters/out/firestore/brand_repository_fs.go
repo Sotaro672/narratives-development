@@ -313,8 +313,6 @@ func (r *BrandRepositoryFS) List(
 	page branddom.Page,
 ) (branddom.PageResult[branddom.Brand], error) {
 
-	log.Printf("[BrandRepositoryFS] filter=%+v page=%+v", filter, page)
-
 	q := r.col().Query
 	q = applyBrandFilterToQuery(q, filter)
 
