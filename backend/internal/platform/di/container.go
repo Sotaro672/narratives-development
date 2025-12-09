@@ -457,6 +457,7 @@ func NewContainer(ctx context.Context) (*Container, error) {
 	memberRepo := fs.NewMemberRepositoryFS(fsClient)
 	messageRepo := fs.NewMessageRepositoryFS(fsClient)
 	modelRepo := fs.NewModelRepositoryFS(fsClient)
+	mintRepo := fs.NewMintRepositoryFS(fsClient)
 	orderRepo := fs.NewOrderRepositoryFS(fsClient)
 	paymentRepo := fs.NewPaymentRepositoryFS(fsClient)
 	permissionRepo := fs.NewPermissionRepositoryFS(fsClient)
@@ -600,14 +601,15 @@ func NewContainer(ctx context.Context) (*Container, error) {
 	// (mintProductBlueprintRepo, mintProductionRepo, mintInspectionRepo, mintModelRepo, mintTokenBlueprintRepo, *brand.Service)
 	// の 6 引数
 	mintUC := uc.NewMintUsecase(
-		productBlueprintRepo,
-		productionRepo,
-		inspectionRepo,
-		modelRepo,
-		tokenBlueprintRepo, // ★ 追加：TokenBlueprint 用リポジトリ
-		brandSvc,
+		productBlueprintRepo, // mintProductBlueprintRepo
+		productionRepo,       // mintProductionRepo
+		inspectionRepo,       // mintInspectionRepo
+		modelRepo,            // mintModelRepo
+		tokenBlueprintRepo,   // tbdom.RepositoryPort
+		brandSvc,             // *branddom.Service
+		mintRepo,             // mint.MintRepository
+		inspectionRepo,       // mint.PassedProductLister（InspectionRepositoryFS に実装を追加する）
 	)
-
 	saleUC := uc.NewSaleUsecase(saleRepo)
 	shippingAddressUC := uc.NewShippingAddressUsecase(shippingAddressRepo)
 

@@ -4,7 +4,6 @@ package handlers
 import (
 	"encoding/json"
 	"errors"
-	"fmt"
 	"net/http"
 	"strconv"
 	"strings"
@@ -13,7 +12,6 @@ import (
 	branddom "narratives/internal/domain/brand"
 	pbpdom "narratives/internal/domain/productBlueprint"
 	tbdom "narratives/internal/domain/tokenBlueprint"
-	solana "narratives/internal/infra/solana"
 )
 
 type MintHandler struct {
@@ -33,28 +31,13 @@ func NewMintHandler(mintUC *usecase.MintUsecase, tokenUC *usecase.TokenUsecase) 
 // デバッグ用エンドポイント /mint/debug で使用
 func (h *MintHandler) HandleDebug(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
-	fmt.Fprintf(w, `{"ok": true, "msg": "Mint API alive"}`)
+	_, _ = w.Write([]byte(`{"ok": true, "msg": "Mint API alive"}`))
 }
 
 func (h *MintHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 
 	switch {
-
-	// ------------------------------------------------------------
-	// POST /mint/debug/nft
-	//  → Solana Devnet で Metaplex NFT ミントをテストするためのデバッグ用エンドポイント
-	// Body:
-	// {
-	//   "walletAddress": "受取ウォレット(base58)",
-	//   "name": "任意 (省略可)",
-	//   "symbol": "任意 (省略可)",
-	//   "uri": "任意 (省略可)"
-	// }
-	// ------------------------------------------------------------
-	case r.Method == http.MethodPost && r.URL.Path == "/mint/debug/nft":
-		h.debugMintNFT(w, r)
-		return
 
 	// ------------------------------------------------------------
 	// 任意: GET /mint/debug で生存確認
@@ -66,6 +49,7 @@ func (h *MintHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	// ------------------------------------------------------------
 	// POST /mint/requests/{mintRequestId}/mint
 	//  → TokenUsecase を使ってチェーン上でミント実行
+	//    （※ mints テーブル作成がゴールの場合、実際に呼ばなければよい）
 	// ------------------------------------------------------------
 	case r.Method == http.MethodPost &&
 		strings.HasPrefix(r.URL.Path, "/mint/requests/") &&
@@ -75,7 +59,8 @@ func (h *MintHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	// ------------------------------------------------------------
 	// POST /mint/inspections/{productionId}/request
-	//  → 検品結果から MintRequest 情報を更新（ミント候補を作る）
+	//  → 検品結果から MintRequest 情報を更新
+	//     ＋ MintUsecase 側で mints テーブルのレコードを作成
 	// ------------------------------------------------------------
 	case r.Method == http.MethodPost &&
 		strings.HasPrefix(r.URL.Path, "/mint/inspections/") &&
@@ -117,78 +102,6 @@ func (h *MintHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	default:
 		http.NotFound(w, r)
 	}
-}
-
-// ============================================================
-// デバッグ用: POST /mint/debug/nft
-// ============================================================
-//
-// Solana Devnet に対して直接 Metaplex NFT を 1 枚ミントする。
-// - Usecase には依存せず、platform/solana の MintNFTToOwner を直呼び出し。
-// - 開発環境での疎通確認専用。
-func (h *MintHandler) debugMintNFT(w http.ResponseWriter, r *http.Request) {
-	ctx := r.Context()
-
-	var body struct {
-		WalletAddress string `json:"walletAddress"`
-		Name          string `json:"name"`
-		Symbol        string `json:"symbol"`
-		URI           string `json:"uri"`
-	}
-	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
-		w.WriteHeader(http.StatusBadRequest)
-		_ = json.NewEncoder(w).Encode(map[string]string{
-			"error": "invalid body",
-		})
-		return
-	}
-
-	wallet := strings.TrimSpace(body.WalletAddress)
-	if wallet == "" {
-		w.WriteHeader(http.StatusBadRequest)
-		_ = json.NewEncoder(w).Encode(map[string]string{
-			"error": "walletAddress is required",
-		})
-		return
-	}
-
-	// デフォルト値（省略時）
-	name := strings.TrimSpace(body.Name)
-	if name == "" {
-		name = "Narratives Debug NFT"
-	}
-	symbol := strings.TrimSpace(body.Symbol)
-	if symbol == "" {
-		symbol = "NDEBUG"
-	}
-	uri := strings.TrimSpace(body.URI)
-	if uri == "" {
-		// ひとまずダミー（将来的には GCS/Arweave の metadata.json に置き換える）
-		uri = "https://example.com/narratives/debug-metadata.json"
-	}
-
-	meta := solana.NFTMetadataInput{
-		Name:                 name,
-		Symbol:               symbol,
-		URI:                  uri,
-		SellerFeeBasisPoints: 500, // 5%
-	}
-
-	mintAddr, sig, err := solana.MintNFTToOwner(ctx, wallet, meta)
-	if err != nil {
-		w.WriteHeader(http.StatusInternalServerError)
-		_ = json.NewEncoder(w).Encode(map[string]string{
-			"error": err.Error(),
-		})
-		return
-	}
-
-	_ = json.NewEncoder(w).Encode(map[string]string{
-		"mintAddress":  mintAddr,
-		"txSignature":  sig,
-		"cluster":      "devnet",
-		"explorerLink": fmt.Sprintf("https://explorer.solana.com/tx/%s?cluster=devnet", sig),
-	})
 }
 
 // ============================================================
@@ -237,7 +150,16 @@ func (h *MintHandler) mintFromMintRequest(w http.ResponseWriter, r *http.Request
 // ============================================================
 // POST /mint/inspections/{productionId}/request
 // ============================================================
-// Body: { "tokenBlueprintId": "xxxx" }
+//
+// Body:
+//
+//	{
+//	  "tokenBlueprintId": "xxxx",
+//	  "scheduledBurnDate": "2025-12-31" // 任意（HTML date input の "YYYY-MM-DD" を想定）
+//	}
+//
+// MintUsecase.UpdateRequestInfo(ctx, productionID, tokenBlueprintID, scheduledBurnDate)
+// が内部で inspections の RequestInfo 更新と mints テーブル作成を行う想定。
 func (h *MintHandler) updateRequestInfo(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 
@@ -264,7 +186,8 @@ func (h *MintHandler) updateRequestInfo(w http.ResponseWriter, r *http.Request) 
 
 	// Body parse
 	var body struct {
-		TokenBlueprintID string `json:"tokenBlueprintId"`
+		TokenBlueprintID  string  `json:"tokenBlueprintId"`
+		ScheduledBurnDate *string `json:"scheduledBurnDate,omitempty"` // ★ 任意の焼却予定日
 	}
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 		w.WriteHeader(http.StatusBadRequest)
@@ -283,8 +206,19 @@ func (h *MintHandler) updateRequestInfo(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
+	// ポインタ(*string) → string へ変換（未指定なら空文字）
+	scheduledBurnDate := ""
+	if body.ScheduledBurnDate != nil {
+		scheduledBurnDate = strings.TrimSpace(*body.ScheduledBurnDate)
+	}
+
 	// ★ Usecase 側で MemberIDFromContext(ctx) を参照するため requestedBy は渡さない
-	updated, err := h.mintUC.UpdateRequestInfo(ctx, productionID, tokenBlueprintID)
+	updated, err := h.mintUC.UpdateRequestInfo(
+		ctx,
+		productionID,
+		tokenBlueprintID,
+		scheduledBurnDate, // 焼却予定日（空文字なら未指定扱い）
+	)
 	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
 		_ = json.NewEncoder(w).Encode(map[string]string{

@@ -8,6 +8,8 @@ import {
   fetchBrandsForMintHTTP,
   // ★ brandId ごとの TokenBlueprint 一覧取得用（/mint/token_blueprints?brandId=... を想定）
   fetchTokenBlueprintsByBrandHTTP,
+  // ★ ミント申請 POST 用
+  postMintRequestHTTP,
 } from "../infrastructure/repository/mintRequestRepositoryHTTP";
 
 /**
@@ -128,4 +130,29 @@ export async function loadTokenBlueprintsByBrand(
  */
 export function resolveBlueprintForMintRequest(requestId?: string) {
   return undefined;
+}
+
+/**
+ * ★ ミント申請 POST 用サービス関数
+ *
+ * - productionId: 生産ID（inspectionBatch.productionId）
+ * - tokenBlueprintId: 選択されたトークン設計ID
+ * - scheduledBurnDate: 焼却予定日（"YYYY-MM-DD" 形式 / 任意）
+ *
+ * repository の postMintRequestHTTP に委譲する。
+ */
+export async function postMintRequest(
+  productionId: string,
+  tokenBlueprintId: string,
+  scheduledBurnDate?: string,
+) {
+  const pid = productionId.trim();
+  const tbid = tokenBlueprintId.trim();
+
+  if (!pid || !tbid) {
+    throw new Error("productionId / tokenBlueprintId is empty");
+  }
+
+  // scheduledBurnDate は undefined 許容でそのまま渡す（API 側で nullable 扱い）
+  return await postMintRequestHTTP(pid, tbid, scheduledBurnDate);
 }

@@ -14,8 +14,8 @@ import {
   type TokenBlueprintForMintDTO,
   loadBrandsForMint,
   loadTokenBlueprintsByBrand,
+  postMintRequest, // ★ service 経由でミント申請
 } from "../../application/mintRequestService";
-import { postMintRequestHTTP } from "../../infrastructure/repository/mintRequestRepositoryHTTP";
 
 export type ProductBlueprintCardViewModel = {
   productName?: string;
@@ -68,6 +68,9 @@ export function useMintRequestDetail() {
   >([]);
   const [selectedTokenBlueprintId, setSelectedTokenBlueprintId] =
     React.useState<string>("");
+
+  // ★ 焼却予定日（ScheduledBurnDate）: HTML date input から "YYYY-MM-DD" 形式で入る想定
+  const [scheduledBurnDate, setScheduledBurnDate] = React.useState<string>("");
 
   // 画面タイトル
   const title = `ミント申請詳細`;
@@ -346,6 +349,7 @@ export function useMintRequestDetail() {
   ]);
 
   // ★ ミント申請処理（未申請時のみ呼ばれる想定）
+  //   ScheduledBurnDate も service(postMintRequest) に渡す
   const handleMint = React.useCallback(async () => {
     if (!inspectionBatch) {
       alert("検査バッチ情報が取得できていません。");
@@ -368,9 +372,11 @@ export function useMintRequestDetail() {
     }
 
     try {
-      const updated = await postMintRequestHTTP(
+      const updated = await postMintRequest(
         productionId,
         selectedTokenBlueprintId,
+        // HTML date input の "YYYY-MM-DD" をそのまま渡す（API 側でパース想定）
+        scheduledBurnDate || undefined,
       );
 
       if (updated) {
@@ -393,6 +399,7 @@ export function useMintRequestDetail() {
     selectedTokenBlueprintId,
     requestId,
     totalMintQuantity,
+    scheduledBurnDate,
   ]);
 
   // トークン設計カード側からの選択ハンドラ
@@ -447,5 +454,9 @@ export function useMintRequestDetail() {
     selectedTokenBlueprintId,
     handleSelectTokenBlueprint,
     selectedTokenBlueprint,
+
+    // ★ 焼却予定日（ScheduledBurnDate）を画面側へ公開
+    scheduledBurnDate,
+    setScheduledBurnDate,
   };
 }

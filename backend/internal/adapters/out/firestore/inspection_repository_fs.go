@@ -223,6 +223,60 @@ func (r *InspectionRepositoryFS) UpdateRequestInfo(
 }
 
 // ------------------------------------------------------------
+// ★ 追加: ListPassedProductIDsByProductionID
+// ------------------------------------------------------------
+//
+// mint.PassedProductLister を満たすための実装。
+// - 指定された productionID の InspectionBatch を 1 件取得
+// - inspections 配列の中から inspectionResult == "passed" の productId を重複なしで返す
+// ------------------------------------------------------------
+func (r *InspectionRepositoryFS) ListPassedProductIDsByProductionID(
+	ctx context.Context,
+	productionID string,
+) ([]string, error) {
+
+	if r.Client == nil {
+		return nil, errors.New("firestore client is nil")
+	}
+
+	pid := strings.TrimSpace(productionID)
+	if pid == "" {
+		return nil, inspectiondom.ErrInvalidInspectionProductionID
+	}
+
+	// 単一バッチ取得を再利用
+	batch, err := r.GetByProductionID(ctx, pid)
+	if err != nil {
+		return nil, err
+	}
+
+	out := make([]string, 0, len(batch.Inspections))
+	seen := make(map[string]struct{}, len(batch.Inspections))
+
+	for _, item := range batch.Inspections {
+		if item.InspectionResult == nil {
+			continue
+		}
+		if *item.InspectionResult != inspectiondom.InspectionPassed {
+			continue
+		}
+		p := strings.TrimSpace(item.ProductID)
+		if p == "" {
+			continue
+		}
+		if _, ok := seen[p]; ok {
+			continue
+		}
+		seen[p] = struct{}{}
+		out = append(out, p)
+	}
+
+	// passed が 0 件でもエラーにはせず、空スライスを返す
+	// （最終判断は usecase 側で行う）
+	return out, nil
+}
+
+// ------------------------------------------------------------
 // Helpers
 // ------------------------------------------------------------
 

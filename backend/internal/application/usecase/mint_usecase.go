@@ -1,4 +1,3 @@
-// backend/internal/application/usecase/mint_usecase.go
 package usecase
 
 import (
@@ -9,6 +8,7 @@ import (
 
 	branddom "narratives/internal/domain/brand"
 	inspectiondom "narratives/internal/domain/inspection"
+	mintdom "narratives/internal/domain/mint"
 	modeldom "narratives/internal/domain/model"
 	pbpdom "narratives/internal/domain/productBlueprint"
 	proddom "narratives/internal/domain/production"
@@ -102,17 +102,22 @@ type MintUsecase struct {
 	modelRepo mintModelRepo
 
 	// ★ TokenBlueprint の minted 状態や一覧を扱うためのリポジトリ
-	//    ドメイン側の RepositoryPort をそのまま利用する
 	tbRepo tbdom.RepositoryPort
 
 	// brandId → brandName 解決用
 	brandSvc *branddom.Service
+
+	// ★ mints テーブル用リポジトリ
+	mintRepo mintdom.MintRepository
+	// ★ inspections → passed productId 一覧を取得するためのポート
+	passedProductLister mintdom.PassedProductLister
 }
 
 // NewMintUsecase は MintUsecase のコンストラクタです。
 // DI コンテナから ProductBlueprintRepositoryFS / ProductionRepositoryFS /
 // InspectionRepositoryFS / ModelRepositoryFS / TokenBlueprintRepositoryFS /
-// brand.Service をそれぞれ満たす実装として渡してください。
+// MintRepositoryFS /（inspections 用の PassedProductLister 実装）/ brand.Service
+// をそれぞれ満たす実装として渡してください。
 func NewMintUsecase(
 	pbRepo mintProductBlueprintRepo,
 	prodRepo mintProductionRepo,
@@ -120,14 +125,18 @@ func NewMintUsecase(
 	modelRepo mintModelRepo,
 	tbRepo tbdom.RepositoryPort,
 	brandSvc *branddom.Service,
+	mintRepo mintdom.MintRepository,
+	passedProductLister mintdom.PassedProductLister,
 ) *MintUsecase {
 	return &MintUsecase{
-		pbRepo:    pbRepo,
-		prodRepo:  prodRepo,
-		inspRepo:  inspRepo,
-		modelRepo: modelRepo,
-		tbRepo:    tbRepo,
-		brandSvc:  brandSvc,
+		pbRepo:              pbRepo,
+		prodRepo:            prodRepo,
+		inspRepo:            inspRepo,
+		modelRepo:           modelRepo,
+		tbRepo:              tbRepo,
+		brandSvc:            brandSvc,
+		mintRepo:            mintRepo,
+		passedProductLister: passedProductLister,
 	}
 }
 
@@ -426,18 +435,20 @@ func (u *MintUsecase) MarkTokenBlueprintMinted(
 }
 
 // ============================================================
-// Additional API: Inspection RequestInfo 更新
+// Additional API: Inspection RequestInfo 更新 + mints 作成
 // ============================================================
 //
 // ミント申請ボタン押下時に、InspectionBatch に対して
 // - RequestedBy       ← currentMember（= MemberIDFromContext(ctx)）
 // - RequestedAt       ← 現在時刻
 // - TokenBlueprintID  ← 選択された tokenBlueprintId
-// を登録するためのユースケースです。
+// を登録すると同時に、mints テーブルにも 1 レコード作成します。
+// さらに、画面で指定された ScheduledBurnDate（任意）も mints に保存します。
 func (u *MintUsecase) UpdateRequestInfo(
 	ctx context.Context,
 	productionID string,
 	tokenBlueprintID string,
+	scheduledBurnDateStr string, // HTML date input の "YYYY-MM-DD" 形式（空文字なら未指定）
 ) (inspectiondom.InspectionBatch, error) {
 
 	var empty inspectiondom.InspectionBatch
@@ -447,6 +458,15 @@ func (u *MintUsecase) UpdateRequestInfo(
 	}
 	if u.inspRepo == nil {
 		return empty, errors.New("inspection repo is nil")
+	}
+	if u.mintRepo == nil {
+		return empty, errors.New("mint repo is nil")
+	}
+	if u.passedProductLister == nil {
+		return empty, errors.New("passedProductLister is nil")
+	}
+	if u.tbRepo == nil {
+		return empty, errors.New("tokenBlueprint repo is nil")
 	}
 
 	pid := strings.TrimSpace(productionID)
@@ -467,7 +487,62 @@ func (u *MintUsecase) UpdateRequestInfo(
 
 	now := time.Now().UTC()
 
-	return u.inspRepo.UpdateRequestInfo(ctx, pid, memberID, now, tbID)
+	// 1) TokenBlueprint から brandId を解決
+	tb, err := u.tbRepo.GetByID(ctx, tbID)
+	if err != nil {
+		return empty, err
+	}
+	brandID := strings.TrimSpace(tb.BrandID)
+	if brandID == "" {
+		return empty, errors.New("brandID is empty on tokenBlueprint")
+	}
+
+	// 2) inspections テーブルから inspectionResult: passed の productId 一覧を取得
+	passedProductIDs, err := u.passedProductLister.ListPassedProductIDsByProductionID(ctx, pid)
+	if err != nil {
+		return empty, err
+	}
+	if len(passedProductIDs) == 0 {
+		return empty, errors.New("no passed products for this production")
+	}
+
+	// 3) Mint エンティティ生成（minted=false / mintedAt=nil で作成）
+	mintEntity, err := mintdom.NewMint(
+		"",
+		brandID,
+		tbID,
+		passedProductIDs,
+		memberID,
+		now,
+	)
+	if err != nil {
+		return empty, err
+	}
+
+	// 3-1) ScheduledBurnDate を文字列からパースして設定（任意）
+	scheduledBurnDateStr = strings.TrimSpace(scheduledBurnDateStr)
+	if scheduledBurnDateStr != "" {
+		// フロントからは "YYYY-MM-DD" 形式で来る想定
+		t, err := time.Parse("2006-01-02", scheduledBurnDateStr)
+		if err != nil {
+			return empty, errors.New("invalid scheduledBurnDate format (expected YYYY-MM-DD)")
+		}
+		utc := t.UTC()
+		mintEntity.ScheduledBurnDate = &utc
+	}
+
+	// 4) InspectionBatch 側の RequestInfo を更新
+	batch, err := u.inspRepo.UpdateRequestInfo(ctx, pid, memberID, now, tbID)
+	if err != nil {
+		return empty, err
+	}
+
+	// 5) mints テーブルへ保存（ScheduledBurnDate を含む）
+	if _, err := u.mintRepo.Create(ctx, mintEntity); err != nil {
+		return empty, err
+	}
+
+	return batch, nil
 }
 
 // ============================================================

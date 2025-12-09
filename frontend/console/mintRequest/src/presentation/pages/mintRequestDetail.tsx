@@ -1,4 +1,6 @@
 // frontend/console/mintRequest/src/presentation/pages/mintRequestDetail.tsx
+import * as React from "react";
+
 import PageStyle from "../../../../shell/src/layout/PageStyle/PageStyle";
 import {
   Card,
@@ -55,6 +57,10 @@ export default function MintRequestDetail() {
     requestedBy,
     requestedAt,
   } = useMintRequestDetail();
+
+  // ★ 焼却予定日（ScheduledBurnDate）入力用ローカル状態
+  //   - まずは UI 側に入力欄だけ追加（実際の保存は後続の実装で紐付け）
+  const [scheduledBurnDate, setScheduledBurnDate] = React.useState<string>("");
 
   const handleSave = () => {};
 
@@ -160,17 +166,35 @@ export default function MintRequestDetail() {
         {!isMintRequested && (
           <Card className="mint-request-card">
             <CardContent className="mint-request-card__body">
-              <div className="mint-request-card__actions">
-                <Button
-                  onClick={handleMint}
-                  className="mint-request-card__button flex items-center gap-2"
-                >
-                  <Coins size={16} />
-                  ミント申請を実行
-                </Button>
-                <span className="mint-request-card__total">
-                  ミント数: <strong>{totalMintQuantity}</strong>
-                </span>
+              <div className="space-y-3">
+                {/* ★ 焼却予定日入力欄（ScheduledBurnDate） */}
+                <div className="mint-request-card__burn-date space-y-1">
+                  <label className="block text-sm font-medium text-gray-700">
+                    焼却予定日（Scheduled Burn Date）
+                  </label>
+                  <input
+                    type="date"
+                    className="mint-request-card__burn-date-input"
+                    value={scheduledBurnDate}
+                    onChange={(e) => setScheduledBurnDate(e.target.value)}
+                  />
+                  <p className="text-xs text-gray-500">
+                    ※ 任意。未入力の場合は焼却予定日なしでミント申請します。
+                  </p>
+                </div>
+
+                <div className="mint-request-card__actions">
+                  <Button
+                    onClick={handleMint}
+                    className="mint-request-card__button flex items-center gap-2"
+                  >
+                    <Coins size={16} />
+                    ミント申請を実行
+                  </Button>
+                  <span className="mint-request-card__total">
+                    ミント数: <strong>{totalMintQuantity}</strong>
+                  </span>
+                </div>
               </div>
             </CardContent>
           </Card>

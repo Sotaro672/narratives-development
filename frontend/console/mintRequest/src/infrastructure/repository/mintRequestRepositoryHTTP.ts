@@ -6,7 +6,7 @@ import type { InspectionBatchDTO } from "../api/mintRequestApi";
 import type {
   ProductBlueprintPatchDTO,
   BrandForMintDTO,
-  TokenBlueprintForMintDTO, // ★ 追加
+  TokenBlueprintForMintDTO,
 } from "../../application/mintRequestService";
 
 // 🔙 BACKEND の BASE URL
@@ -300,12 +300,14 @@ export async function fetchTokenBlueprintsByBrandHTTP(
  *
  * Body:
  * {
- *   "tokenBlueprintId": "..."
+ *   "tokenBlueprintId": "...",
+ *   "scheduledBurnDate": "YYYY-MM-DD" // 任意
  * }
  */
 export async function postMintRequestHTTP(
   productionId: string,
   tokenBlueprintId: string,
+  scheduledBurnDate?: string,
 ): Promise<InspectionBatchDTO | null> {
   const trimmed = productionId.trim();
   if (!trimmed) {
@@ -318,15 +320,25 @@ export async function postMintRequestHTTP(
     trimmed,
   )}/request`;
 
+  const payload: {
+    tokenBlueprintId: string;
+    scheduledBurnDate?: string;
+  } = {
+    tokenBlueprintId,
+  };
+
+  // HTML の date input から渡される "YYYY-MM-DD" をそのまま送る
+  if (scheduledBurnDate && scheduledBurnDate.trim()) {
+    payload.scheduledBurnDate = scheduledBurnDate.trim();
+  }
+
   const res = await fetch(url, {
     method: "POST",
     headers: {
       Authorization: `Bearer ${idToken}`,
       "Content-Type": "application/json",
     },
-    body: JSON.stringify({
-      tokenBlueprintId,
-    }),
+    body: JSON.stringify(payload),
   });
 
   if (res.status === 404) {
