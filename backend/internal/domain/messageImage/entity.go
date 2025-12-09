@@ -30,27 +30,28 @@ func BuildObjectPath(messageID, fileName string) (string, error) {
 }
 
 // ImageFile mirrors web-app/src/shared/types/messageImage.ts (TS source of truth):
-// export interface ImageFile {
-//   messageId: string;
-//   fileName: string;
-//   fileUrl: string;
-//   fileSize: number;
-//   mimeType: string;
-//   width?: number;
-//   height?: number;
-//   createdAt: Date | string;
-//   updatedAt?: Date | string;
-//   deletedAt?: Date | string;
-// }
+//
+//	export interface ImageFile {
+//	  messageId: string;
+//	  fileName: string;
+//	  fileUrl: string;
+//	  fileSize: number;
+//	  mimeType: string;
+//	  width?: number;
+//	  height?: number;
+//	  createdAt: Date | string;
+//	  updatedAt?: Date | string;
+//	  deletedAt?: Date | string;
+//	}
 type ImageFile struct {
-	MessageID  string
-	FileName   string
+	MessageID string
+	FileName  string
 	// FileURL は任意（署名付き URL 等）。未設定の場合は PublicURL() で生成可能。
-	FileURL    string
-	FileSize   int64
-	MimeType   string
-	Width      *int
-	Height     *int
+	FileURL  string
+	FileSize int64
+	MimeType string
+	Width    *int
+	Height   *int
 
 	// GCS 配置情報
 	Bucket     string // 例: narratives_development_message_image
@@ -398,53 +399,6 @@ func normalizeTimePtr(p *time.Time) *time.Time {
 	t := p.UTC()
 	return &t
 }
-
-// ========================================
-// SQL DDL (任意: 参照情報のみを RDB に保持する場合の雛形)
-// ========================================
-const MessageImagesTableDDL = `
--- Migration: Initialize message_images table
-
-BEGIN;
-
-CREATE TABLE IF NOT EXISTS message_images (
-  message_id     UUID        NOT NULL,
-  file_name      TEXT        NOT NULL,
-  file_url       TEXT        NOT NULL,
-  file_size      BIGINT      NOT NULL CHECK (file_size >= 0),
-  mime_type      TEXT        NOT NULL,
-  width          INT         NULL CHECK (width IS NULL OR (width >= 1 AND width <= 10000)),
-  height         INT         NULL CHECK (height IS NULL OR (height IS NULL) OR (height >= 1 AND height <= 10000)),
-  created_at     TIMESTAMPTZ NOT NULL,
-  updated_at     TIMESTAMPTZ NULL,
-  deleted_at     TIMESTAMPTZ NULL,
-
-  -- 参照情報（GCS）
-  bucket         TEXT        NOT NULL,
-  object_path    TEXT        NOT NULL,
-
-  CONSTRAINT pk_message_images PRIMARY KEY (message_id, file_name),
-
-  CONSTRAINT chk_message_images_non_empty CHECK (
-    char_length(trim(file_name)) > 0
-    AND char_length(trim(file_url)) > 0
-    AND char_length(trim(mime_type)) > 0
-    AND char_length(trim(bucket)) > 0
-    AND char_length(trim(object_path)) > 0
-  ),
-
-  CONSTRAINT chk_message_images_time_order CHECK (
-    (updated_at IS NULL OR updated_at >= created_at)
-    AND (deleted_at IS NULL OR deleted_at >= created_at)
-  )
-);
-
-CREATE INDEX IF NOT EXISTS idx_message_images_message_id  ON message_images (message_id);
-CREATE INDEX IF NOT EXISTS idx_message_images_created_at  ON message_images (created_at);
-CREATE INDEX IF NOT EXISTS idx_message_images_deleted_at  ON message_images (deleted_at);
-
-COMMIT;
-`
 
 // ========================================
 // Cascade delete helpers (Message -> MessageImage)
