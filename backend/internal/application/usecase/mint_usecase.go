@@ -1,3 +1,4 @@
+// backend/internal/application/usecase/mint_usecase.go
 package usecase
 
 import (
@@ -448,7 +449,7 @@ func (u *MintUsecase) UpdateRequestInfo(
 	ctx context.Context,
 	productionID string,
 	tokenBlueprintID string,
-	scheduledBurnDateStr string, // HTML date input の "YYYY-MM-DD" 形式（空文字なら未指定）
+	scheduledBurnDate *string, // HTML date input の "YYYY-MM-DD" 形式（nil or 空文字なら未指定）
 ) (inspectiondom.InspectionBatch, error) {
 
 	var empty inspectiondom.InspectionBatch
@@ -520,22 +521,28 @@ func (u *MintUsecase) UpdateRequestInfo(
 	}
 
 	// 3-1) ScheduledBurnDate を文字列からパースして設定（任意）
-	scheduledBurnDateStr = strings.TrimSpace(scheduledBurnDateStr)
-	if scheduledBurnDateStr != "" {
-		// フロントからは "YYYY-MM-DD" 形式で来る想定
-		t, err := time.Parse("2006-01-02", scheduledBurnDateStr)
-		if err != nil {
-			return empty, errors.New("invalid scheduledBurnDate format (expected YYYY-MM-DD)")
+	if scheduledBurnDate != nil {
+		if s := strings.TrimSpace(*scheduledBurnDate); s != "" {
+			// フロントからは "YYYY-MM-DD" 形式で来る想定
+			t, err := time.Parse("2006-01-02", s)
+			if err != nil {
+				return empty, errors.New("invalid scheduledBurnDate format (expected YYYY-MM-DD)")
+			}
+			utc := t.UTC()
+			mintEntity.ScheduledBurnDate = &utc
 		}
-		utc := t.UTC()
-		mintEntity.ScheduledBurnDate = &utc
 	}
 
 	// 4) InspectionBatch 側の RequestInfo を更新
+	//    ※ inspections の更新を将来廃止する予定なら、ここを別ロジックに差し替える
 	batch, err := u.inspRepo.UpdateRequestInfo(ctx, pid, memberID, now, tbID)
 	if err != nil {
 		return empty, err
 	}
+
+	// （現時点では InspectionBatch に ID フィールドが無いため、
+	// 　mints.InspectionID へのセットは行っていません。
+	// 　必要になったら InspectionBatch 側に ID を追加するか、別ポート経由で解決してください）
 
 	// 5) mints テーブルへ保存（ScheduledBurnDate を含む）
 	if _, err := u.mintRepo.Create(ctx, mintEntity); err != nil {

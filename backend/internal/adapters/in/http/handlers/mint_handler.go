@@ -187,7 +187,7 @@ func (h *MintHandler) updateRequestInfo(w http.ResponseWriter, r *http.Request) 
 	// Body parse
 	var body struct {
 		TokenBlueprintID  string  `json:"tokenBlueprintId"`
-		ScheduledBurnDate *string `json:"scheduledBurnDate,omitempty"` // ★ 任意の焼却予定日
+		ScheduledBurnDate *string `json:"scheduledBurnDate,omitempty"` // ★ 任意の焼却予定日（ポインタ）
 	}
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 		w.WriteHeader(http.StatusBadRequest)
@@ -206,18 +206,12 @@ func (h *MintHandler) updateRequestInfo(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	// ポインタ(*string) → string へ変換（未指定なら空文字）
-	scheduledBurnDate := ""
-	if body.ScheduledBurnDate != nil {
-		scheduledBurnDate = strings.TrimSpace(*body.ScheduledBurnDate)
-	}
-
-	// ★ Usecase 側で MemberIDFromContext(ctx) を参照するため requestedBy は渡さない
+	// ★ Usecase 側で MemberIDFromContext(ctx) と scheduledBurnDate のパースを行う
 	updated, err := h.mintUC.UpdateRequestInfo(
 		ctx,
 		productionID,
 		tokenBlueprintID,
-		scheduledBurnDate, // 焼却予定日（空文字なら未指定扱い）
+		body.ScheduledBurnDate, // *string をそのまま渡す
 	)
 	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)

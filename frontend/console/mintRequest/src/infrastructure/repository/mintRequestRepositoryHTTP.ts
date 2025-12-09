@@ -314,6 +314,14 @@ export async function postMintRequestHTTP(
     throw new Error("productionId が空です");
   }
 
+  // ここでまず引数のログを出す
+  console.log("[postMintRequestHTTP] called", {
+    productionId: trimmed,
+    tokenBlueprintId,
+    scheduledBurnDate,
+    API_BASE,
+  });
+
   const idToken = await getIdTokenOrThrow();
 
   const url = `${API_BASE}/mint/inspections/${encodeURIComponent(
@@ -332,6 +340,11 @@ export async function postMintRequestHTTP(
     payload.scheduledBurnDate = scheduledBurnDate.trim();
   }
 
+  console.log("[postMintRequestHTTP] about to POST", {
+    url,
+    payload,
+  });
+
   const res = await fetch(url, {
     method: "POST",
     headers: {
@@ -341,16 +354,37 @@ export async function postMintRequestHTTP(
     body: JSON.stringify(payload),
   });
 
+  console.log("[postMintRequestHTTP] response status", {
+    status: res.status,
+    statusText: res.statusText,
+  });
+
   if (res.status === 404) {
+    console.warn("[postMintRequestHTTP] 404 Not Found");
     return null;
   }
 
   if (!res.ok) {
+    // エラーレスポンス本文もログに出しておく
+    let errorBody = "";
+    try {
+      errorBody = await res.text();
+    } catch {
+      // ignore
+    }
+    console.error("[postMintRequestHTTP] failed", {
+      status: res.status,
+      statusText: res.statusText,
+      body: errorBody,
+    });
+
     throw new Error(
       `Failed to post mint request: ${res.status} ${res.statusText}`,
     );
   }
 
   const json = (await res.json()) as InspectionBatchDTO | null | undefined;
+  console.log("[postMintRequestHTTP] success response json", json);
+
   return json ?? null;
 }

@@ -22,10 +22,6 @@ import {
 // ★ 印刷完了シグナルを送るために ProductionDetailService を import
 import { notifyPrintLogCompleted } from "../../../production/src/application/productionDetailService";
 
-// ★ productionId → productBlueprintId 解決 & mark-printed 呼び出し用
-import { ProductionRepositoryHTTP } from "../../../production/src/infrastructure/http/productionRepositoryHTTP";
-import { markProductBlueprintPrintedHTTP } from "../../../productBlueprint/src/infrastructure/repository/productBlueprintRepositoryHTTP";
-
 // ==============================
 // 型の再エクスポート（既存の import を壊さないため）
 // ==============================
@@ -145,56 +141,6 @@ async function buildAndOpenQrPdfFromLogs(
 }
 
 // ==============================
-// ヘルパー: productionId から productBlueprint を MarkPrinted
-//   - /productions/{id} で Production を取得
-//   - productBlueprintId を取り出して
-//     /product-blueprints/{pbId}/mark-printed を叩く
-//   - エラー内容をコンソール & アラートで確認できるようにする
-// ==============================
-
-async function markProductBlueprintPrintedByProductionId(
-  productionId: string,
-): Promise<void> {
-  const id = productionId.trim();
-  if (!id) return;
-
-  try {
-    const repo = new ProductionRepositoryHTTP();
-    const raw = (await repo.getById(id)) as any;
-    if (!raw) return;
-
-    const productBlueprintId: string =
-      raw.productBlueprintId ?? raw.ProductBlueprintID ?? "";
-
-    const pbIdTrimmed = (productBlueprintId ?? "").trim();
-    if (!pbIdTrimmed) return;
-
-    await markProductBlueprintPrintedHTTP(pbIdTrimmed);
-  } catch (e) {
-    // ★ エラー詳細を確認できるようにする
-    console.error(
-      "[markProductBlueprintPrintedByProductionId] failed to mark printed",
-      {
-        productionId: id,
-        error: e,
-      },
-    );
-
-    if (e instanceof Error) {
-      alert(
-        `商品設計のprinted更新に失敗しました。\n\n${e.message}\n\n` +
-          "詳しくはブラウザのコンソールログを確認してください。",
-      );
-    } else {
-      alert(
-        "商品設計のprinted更新に失敗しました。（詳細はブラウザのコンソールログを確認してください）",
-      );
-    }
-    // 印刷自体は完了している想定なので、ここでは例外を投げずに処理を終了する
-  }
-}
-
-// ==============================
 // 印刷用: Product 作成 + print_log 作成 + QR PDF 表示
 //
 // 仕様拡張：
@@ -211,8 +157,9 @@ async function markProductBlueprintPrintedByProductionId(
 // 6. 取得した print_log から QR JSON を取り出し、A4 1 行 5 つで PDF 生成
 // 7. 新しいタブで PDF を開く
 //
-// → usePrintCard.tsx からは、この戻り値（printLogs）を受け取って
-//   ダイアログ表示やデバッグに利用できます。
+// ★ ProductBlueprint の printed 遷移（notYet → printed）は
+//    バックエンド側の PrintUsecase / ProductBlueprintUsecase に任せる。
+//    フロントから mark-printed API は呼ばない。
 // ==============================
 
 export async function createProductsForPrint(params: {
@@ -246,8 +193,8 @@ export async function createProductsForPrint(params: {
       reusedExistingLogs: true,
     });
 
-    // 既存ログ利用時は、ProductBlueprint の printed はすでに printed の想定なので
-    // MarkPrinted は呼ばない（呼ぶとドメイン側で Conflict になる可能性がある）
+    // printed 状態は過去の初回印刷時にバックエンド側で更新済みの想定。
+    // 再印刷時は printed を変更しない。
     return existingLogs;
   }
 
@@ -267,7 +214,7 @@ export async function createProductsForPrint(params: {
       totalQrCount: 0,
       reusedExistingLogs: false,
     });
-    // printed にもならないので MarkPrinted も呼ばない
+    // printed の遷移も発生しない（バックエンド側も何もしない想定）
     return logs;
   }
 
@@ -290,8 +237,9 @@ export async function createProductsForPrint(params: {
     reusedExistingLogs: false,
   });
 
-  // ★ 新規印刷完了時のみ ProductBlueprint の printed: notYet → printed を要求
-  await markProductBlueprintPrintedByProductionId(id);
+  // ★ ProductBlueprint の printed: notYet → printed への遷移は
+  //    バックエンド側（PrintUsecase / ProductBlueprintUsecase）に任せる。
+  //    ここでは mark-printed API を呼ばない。
 
   return logs;
 }

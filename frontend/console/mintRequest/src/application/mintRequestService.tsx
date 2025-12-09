@@ -48,7 +48,7 @@ export type BrandForMintDTO = {
  *
  * - name: トークン名
  * - symbol: シンボル（例: LUMI）
- * - iconUrl: アイコン画像 URL（存在しない場合は undefined / 空文字）
+ * - iconUrl: アイコン画像 URL（存在しない場合は undefined / 空文字） 
  */
 export type TokenBlueprintForMintDTO = {
   id: string;
@@ -153,6 +153,21 @@ export async function postMintRequest(
     throw new Error("productionId / tokenBlueprintId is empty");
   }
 
-  // scheduledBurnDate は undefined 許容でそのまま渡す（API 側で nullable 扱い）
-  return await postMintRequestHTTP(pid, tbid, scheduledBurnDate);
+  // ★ バックエンドに渡すリクエスト内容をログ出力
+  //    - scheduledBurnDate は undefined の可能性があるので null に正規化しておく
+  //    - 実際に Repository に渡す直前の値をそのまま出す
+  // eslint-disable-next-line no-console
+  console.log("[MintRequestService] postMintRequest payload", {
+    productionId: pid,
+    tokenBlueprintId: tbid,
+    scheduledBurnDate: scheduledBurnDate ?? null,
+  });
+
+  const res = await postMintRequestHTTP(pid, tbid, scheduledBurnDate);
+
+  // ★ レスポンスも確認したい場合
+  // eslint-disable-next-line no-console
+  console.log("[MintRequestService] postMintRequest response", res);
+
+  return res;
 }

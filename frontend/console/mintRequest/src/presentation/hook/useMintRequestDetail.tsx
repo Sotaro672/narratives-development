@@ -371,12 +371,43 @@ export function useMintRequestDetail() {
       return;
     }
 
+    // ★ ミント申請ボタン押下時点でのデータをログ出力する
+    const batchAny = inspectionBatch as any;
+    const inspectionId =
+      batchAny.id ?? batchAny.ID ?? batchAny.inspectionId ?? batchAny.InspectionId;
+
+    const passedProducts =
+      Array.isArray(batchAny.inspections) || Array.isArray(batchAny.Inspections)
+        ? (
+            (batchAny.inspections ?? batchAny.Inspections) as any[]
+          ).filter((it) => {
+            const result = it.result ?? it.Result ?? it.inspectionResult;
+            return result === "passed" || result === "ok" || result === "pass";
+          }).map((it) => it.productId ?? it.ProductId ?? it.productID)
+        : [];
+
+    // eslint-disable-next-line no-console
+    console.log("[useMintRequestDetail] handleMint payload", {
+      productionId,
+      tokenBlueprintId: selectedTokenBlueprintId,
+      scheduledBurnDate: scheduledBurnDate || null,
+      inspectionId,
+      rawInspectionBatch: inspectionBatch,
+      passedProducts,
+    });
+
     try {
       const updated = await postMintRequest(
         productionId,
         selectedTokenBlueprintId,
         // HTML date input の "YYYY-MM-DD" をそのまま渡す（API 側でパース想定）
         scheduledBurnDate || undefined,
+      );
+
+      // eslint-disable-next-line no-console
+      console.log(
+        "[useMintRequestDetail] handleMint backend response",
+        updated,
       );
 
       if (updated) {
