@@ -34,28 +34,32 @@ func (r *ProductionRepositoryFS) col() *firestore.CollectionRef {
 }
 
 // ============================================================
-// Facade methods used from HTTP handler via Usecase
+// RepositoryPort 実装
 // ============================================================
 
 // GetByID returns a Production by document ID.
-func (r *ProductionRepositoryFS) GetByID(ctx context.Context, id string) (proddom.Production, error) {
+func (r *ProductionRepositoryFS) GetByID(ctx context.Context, id string) (*proddom.Production, error) {
 	if r.Client == nil {
-		return proddom.Production{}, errors.New("firestore client is nil")
+		return nil, errors.New("firestore client is nil")
 	}
 	id = strings.TrimSpace(id)
 	if id == "" {
-		return proddom.Production{}, proddom.ErrNotFound
+		return nil, proddom.ErrNotFound
 	}
 
 	snap, err := r.col().Doc(id).Get(ctx)
 	if status.Code(err) == codes.NotFound {
-		return proddom.Production{}, proddom.ErrNotFound
+		return nil, proddom.ErrNotFound
 	}
 	if err != nil {
-		return proddom.Production{}, err
+		return nil, err
 	}
 
-	return docToProduction(snap)
+	p, err := docToProduction(snap)
+	if err != nil {
+		return nil, err
+	}
+	return &p, nil
 }
 
 // Exists returns true if a document with that ID exists.
@@ -78,60 +82,81 @@ func (r *ProductionRepositoryFS) Exists(ctx context.Context, id string) (bool, e
 	return true, nil
 }
 
-// Create creates a new Production document.
-// - If ID is empty -> auto ID
-// - If Status is empty -> "manufacturing"
-// - CreatedAt/UpdatedAt default to now (UTC) if zero
-func (r *ProductionRepositoryFS) Create(ctx context.Context, p proddom.Production) (proddom.Production, error) {
+// Create creates a new Production document from CreateProductionInput.
+// - ID は CreateProductionInput には含まれないため、常に Firestore の auto ID を採番
+// - Status が nil/空の場合は "manufacturing" をデフォルト設定
+// - CreatedAt/UpdatedAt は省略時 now(UTC)
+func (r *ProductionRepositoryFS) Create(
+	ctx context.Context,
+	in proddom.CreateProductionInput,
+) (*proddom.Production, error) {
 	if r.Client == nil {
-		return proddom.Production{}, errors.New("firestore client is nil")
+		return nil, errors.New("firestore client is nil")
 	}
 
 	now := time.Now().UTC()
 
-	// Defaults
-	if p.CreatedAt.IsZero() {
-		p.CreatedAt = now
+	// CreatedAt の決定
+	createdAt := now
+	if in.CreatedAt != nil && !in.CreatedAt.IsZero() {
+		createdAt = in.CreatedAt.UTC()
 	}
-	if p.UpdatedAt.IsZero() {
-		p.UpdatedAt = now
+
+	// Entity 組み立て
+	p := proddom.Production{
+		// ID は後で NewDoc から採番
+		ProductBlueprintID: strings.TrimSpace(in.ProductBlueprintID),
+		AssigneeID:         strings.TrimSpace(in.AssigneeID),
+		Models:             in.Models,
+		CreatedBy:          fscommon.TrimPtr(in.CreatedBy),
+		CreatedAt:          createdAt,
+		UpdatedAt:          createdAt,
 	}
-	if strings.TrimSpace(string(p.Status)) == "" {
+
+	// Status
+	if in.Status != nil && strings.TrimSpace(string(*in.Status)) != "" {
+		p.Status = *in.Status
+	} else {
 		p.Status = proddom.ProductionStatus("manufacturing")
 	}
 
-	// Firestore doc ref
-	var ref *firestore.DocumentRef
-	if strings.TrimSpace(p.ID) == "" {
-		ref = r.col().NewDoc()
-		p.ID = ref.ID
-	} else {
-		ref = r.col().Doc(strings.TrimSpace(p.ID))
+	// PrintedAt（ある場合のみ設定）
+	if in.PrintedAt != nil && !in.PrintedAt.IsZero() {
+		t := in.PrintedAt.UTC()
+		p.PrintedAt = &t
 	}
+
+	// Firestore doc ref（常に新規）
+	ref := r.col().NewDoc()
+	p.ID = ref.ID
 
 	data := productionToDoc(p)
 
 	if _, err := ref.Create(ctx, data); err != nil {
 		if status.Code(err) == codes.AlreadyExists {
-			return proddom.Production{}, proddom.ErrConflict
+			return nil, proddom.ErrConflict
 		}
-		return proddom.Production{}, err
+		return nil, err
 	}
 
 	snap, err := ref.Get(ctx)
 	if err != nil {
-		return proddom.Production{}, err
+		return nil, err
 	}
-	return docToProduction(snap)
+	out, err := docToProduction(snap)
+	if err != nil {
+		return nil, err
+	}
+	return &out, nil
 }
 
 // Save is upsert-ish:
 // - If ID is empty -> Create (auto ID)
 // - If ID exists -> update via Set(MergeAll)
 // - If ID does not exist -> treated as Create with that ID
-func (r *ProductionRepositoryFS) Save(ctx context.Context, p proddom.Production) (proddom.Production, error) {
+func (r *ProductionRepositoryFS) Save(ctx context.Context, p proddom.Production) (*proddom.Production, error) {
 	if r.Client == nil {
-		return proddom.Production{}, errors.New("firestore client is nil")
+		return nil, errors.New("firestore client is nil")
 	}
 
 	now := time.Now().UTC()
@@ -158,17 +183,21 @@ func (r *ProductionRepositoryFS) Save(ctx context.Context, p proddom.Production)
 	data := productionToDoc(p)
 
 	if _, err := ref.Set(ctx, data, firestore.MergeAll); err != nil {
-		return proddom.Production{}, err
+		return nil, err
 	}
 
 	snap, err := ref.Get(ctx)
 	if status.Code(err) == codes.NotFound {
-		return proddom.Production{}, proddom.ErrNotFound
+		return nil, proddom.ErrNotFound
 	}
 	if err != nil {
-		return proddom.Production{}, err
+		return nil, err
 	}
-	return docToProduction(snap)
+	out, err := docToProduction(snap)
+	if err != nil {
+		return nil, err
+	}
+	return &out, nil
 }
 
 // Delete performs a hard delete of the document.
@@ -196,8 +225,8 @@ func (r *ProductionRepositoryFS) Delete(ctx context.Context, id string) error {
 	return nil
 }
 
-// List returns all productions (sorted by createdAt DESC, then document ID DESC).
-func (r *ProductionRepositoryFS) List(ctx context.Context) ([]proddom.Production, error) {
+// ListAll returns all productions (sorted by createdAt DESC, then document ID DESC).
+func (r *ProductionRepositoryFS) ListAll(ctx context.Context) ([]proddom.Production, error) {
 	if r.Client == nil {
 		return nil, errors.New("firestore client is nil")
 	}
@@ -226,6 +255,121 @@ func (r *ProductionRepositoryFS) List(ctx context.Context) ([]proddom.Production
 	}
 
 	return all, nil
+}
+
+// List implements RepositoryPort.List using in-memory filtering/paging over ListAll.
+func (r *ProductionRepositoryFS) List(
+	ctx context.Context,
+	filter proddom.Filter,
+	page proddom.Page,
+) (proddom.PageResult, error) {
+	all, err := r.ListAll(ctx)
+	if err != nil {
+		return proddom.PageResult{}, err
+	}
+
+	var filtered []proddom.Production
+	for _, p := range all {
+		// ID
+		if strings.TrimSpace(filter.ID) != "" && p.ID != strings.TrimSpace(filter.ID) {
+			continue
+		}
+		// ProductBlueprintID
+		if strings.TrimSpace(filter.ProductBlueprintID) != "" &&
+			p.ProductBlueprintID != strings.TrimSpace(filter.ProductBlueprintID) {
+			continue
+		}
+		// AssigneeID
+		if strings.TrimSpace(filter.AssigneeID) != "" &&
+			p.AssigneeID != strings.TrimSpace(filter.AssigneeID) {
+			continue
+		}
+		// ModelID（ModelQuantity に含まれるかどうか）
+		if strings.TrimSpace(filter.ModelID) != "" {
+			target := strings.TrimSpace(filter.ModelID)
+			found := false
+			for _, mq := range p.Models {
+				if strings.TrimSpace(mq.ModelID) == target {
+					found = true
+					break
+				}
+			}
+			if !found {
+				continue
+			}
+		}
+		// Statuses
+		if len(filter.Statuses) > 0 {
+			match := false
+			for _, st := range filter.Statuses {
+				if p.Status == st {
+					match = true
+					break
+				}
+			}
+			if !match {
+				continue
+			}
+		}
+		// PrintedFrom / PrintedTo
+		if filter.PrintedFrom != nil || filter.PrintedTo != nil {
+			if p.PrintedAt == nil {
+				// PrintedAt が必要条件になるので nil の場合は除外
+				continue
+			}
+			if filter.PrintedFrom != nil && p.PrintedAt.Before(filter.PrintedFrom.UTC()) {
+				continue
+			}
+			if filter.PrintedTo != nil && p.PrintedAt.After(filter.PrintedTo.UTC()) {
+				continue
+			}
+		}
+		// CreatedFrom / CreatedTo
+		if filter.CreatedFrom != nil && p.CreatedAt.Before(filter.CreatedFrom.UTC()) {
+			continue
+		}
+		if filter.CreatedTo != nil && p.CreatedAt.After(filter.CreatedTo.UTC()) {
+			continue
+		}
+		// InspectedFrom / InspectedTo は Production にフィールドが無ければ無視
+
+		filtered = append(filtered, p)
+	}
+
+	// Paging
+	perPage := page.PerPage
+	if perPage <= 0 {
+		perPage = len(filtered)
+	}
+	pageNum := page.Number
+	if pageNum <= 0 {
+		pageNum = 1
+	}
+
+	totalCount := len(filtered)
+	totalPages := 0
+	if perPage > 0 {
+		totalPages = (totalCount + perPage - 1) / perPage
+	}
+
+	start := (pageNum - 1) * perPage
+	if start > totalCount {
+		start = totalCount
+	}
+	end := start + perPage
+	if end > totalCount {
+		end = totalCount
+	}
+
+	items := filtered[start:end]
+
+	return proddom.PageResult{
+		Items:      items,
+		TotalCount: totalCount,
+		TotalPages: totalPages,
+		Page:       pageNum,
+		PerPage:    perPage,
+	}, nil
 }
 
 // ListByProductBlueprintID は、指定された productBlueprintId のいずれかを持つ
@@ -295,6 +439,56 @@ func (r *ProductionRepositoryFS) ListByProductBlueprintID(
 	}
 
 	return results, nil
+}
+
+// GetByModelID は、指定 modelId を Models に含む Production 一覧を返します。
+func (r *ProductionRepositoryFS) GetByModelID(ctx context.Context, modelID string) ([]proddom.Production, error) {
+	modelID = strings.TrimSpace(modelID)
+	if modelID == "" {
+		return []proddom.Production{}, nil
+	}
+
+	all, err := r.ListAll(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	var out []proddom.Production
+	for _, p := range all {
+		for _, mq := range p.Models {
+			if strings.TrimSpace(mq.ModelID) == modelID {
+				out = append(out, p)
+				break
+			}
+		}
+	}
+	return out, nil
+}
+
+// GetProductBlueprintIDByProductionID は productionId → productBlueprintId を返します。
+func (r *ProductionRepositoryFS) GetProductBlueprintIDByProductionID(
+	ctx context.Context,
+	productionID string,
+) (string, error) {
+	p, err := r.GetByID(ctx, productionID)
+	if err != nil {
+		return "", err
+	}
+	if p == nil {
+		return "", proddom.ErrNotFound
+	}
+	return strings.TrimSpace(p.ProductBlueprintID), nil
+}
+
+// WithTx は簡易実装として、単純に fn(ctx) を呼び出します。
+// Firestore トランザクションを活用したい場合は、RunTransaction による
+// 実装に差し替え可能です。
+func (r *ProductionRepositoryFS) WithTx(ctx context.Context, fn func(ctx context.Context) error) error {
+	if r.Client == nil {
+		return errors.New("firestore client is nil")
+	}
+	// ここではトランザクションを張らず、そのまま実行
+	return fn(ctx)
 }
 
 // ============================================================

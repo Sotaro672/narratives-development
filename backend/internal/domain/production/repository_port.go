@@ -62,6 +62,10 @@ type PageResult struct {
 // ========================================
 
 type RepositoryPort interface {
+	// ----------------------------------------
+	// 既存: 高機能クエリ系（フィルタ＋ページングなど）
+	// ----------------------------------------
+
 	// Production を productionId で取得
 	GetByID(ctx context.Context, id string) (*Production, error)
 
@@ -71,7 +75,7 @@ type RepositoryPort interface {
 	// List（ページング）
 	List(ctx context.Context, filter Filter, page Page) (PageResult, error)
 
-	// Create
+	// Create （CreateProductionInput ベース）
 	Create(ctx context.Context, in CreateProductionInput) (*Production, error)
 
 	// 複数の productBlueprintId に紐づく Production 一覧
@@ -85,4 +89,23 @@ type RepositoryPort interface {
 
 	// Tx
 	WithTx(ctx context.Context, fn func(ctx context.Context) error) error
+
+	// ----------------------------------------
+	// ★ 方針1: CRUD を持たせるための拡張メソッド
+	//   - application/production.Usecase などの
+	//     シンプルな CRUD 用ポートとして利用する
+	// ----------------------------------------
+
+	// Exists: productionId の存在確認
+	Exists(ctx context.Context, id string) (bool, error)
+
+	// ListAll: フィルタ無しで全件一覧を返す（コンソール一覧などシンプル用途向け）
+	ListAll(ctx context.Context) ([]Production, error)
+
+	// Save: Production エンティティを保存（新規 or 更新）
+	//       実装側で upsert として扱って良い。
+	Save(ctx context.Context, p Production) (*Production, error)
+
+	// Delete: productionId で削除
+	Delete(ctx context.Context, id string) error
 }

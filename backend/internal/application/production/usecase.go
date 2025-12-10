@@ -3,6 +3,7 @@ package production
 
 import (
 	"context"
+	"errors"
 	"strings"
 	"time"
 
@@ -17,17 +18,10 @@ import (
 // Ports
 // ============================================================
 
-// ProductionRepo defines the minimal persistence port needed by ProductionUsecase.
+// ProductionRepo は domain 側の RepositoryPort をそのまま利用しつつ、
+// Usecase からはシンプルな CRUD として扱うためのポートです。
 type ProductionRepo interface {
-	GetByID(ctx context.Context, id string) (productiondom.Production, error)
-	Exists(ctx context.Context, id string) (bool, error)
-
-	// ★ 一覧取得
-	List(ctx context.Context) ([]productiondom.Production, error)
-
-	Create(ctx context.Context, p productiondom.Production) (productiondom.Production, error)
-	Save(ctx context.Context, p productiondom.Production) (productiondom.Production, error)
-	Delete(ctx context.Context, id string) error
+	productiondom.RepositoryPort
 }
 
 // ============================================================
@@ -65,16 +59,33 @@ func NewProductionUsecase(
 // ============================
 
 func (u *ProductionUsecase) GetByID(ctx context.Context, id string) (productiondom.Production, error) {
-	return u.repo.GetByID(ctx, strings.TrimSpace(id))
+	p, err := u.repo.GetByID(ctx, strings.TrimSpace(id))
+	if err != nil {
+		return productiondom.Production{}, err
+	}
+	if p == nil {
+		// RepositoryPort 実装側が nil を返した場合も NotFound 相当として扱う
+		return productiondom.Production{}, productiondom.ErrNotFound
+	}
+	return *p, nil
 }
 
+// RepositoryPort に Exists は無いので、GetByID ベースで存在確認する
 func (u *ProductionUsecase) Exists(ctx context.Context, id string) (bool, error) {
-	return u.repo.Exists(ctx, strings.TrimSpace(id))
+	_, err := u.repo.GetByID(ctx, strings.TrimSpace(id))
+	if err != nil {
+		if errors.Is(err, productiondom.ErrNotFound) {
+			return false, nil
+		}
+		return false, err
+	}
+	return true, nil
 }
 
 // ★ 素の一覧（必要なところ向けに残す）
+// RepositoryPort 側の ListAll を利用する
 func (u *ProductionUsecase) List(ctx context.Context) ([]productiondom.Production, error) {
-	return u.repo.List(ctx)
+	return u.repo.ListAll(ctx)
 }
 
 // ★ 担当者ID から表示名を解決する（NameResolver に委譲）
@@ -141,7 +152,7 @@ func (u *ProductionUsecase) ResolveBrandName(ctx context.Context, brandID string
 // ★ 一覧ページ用 DTO を返却（/productions 用）
 // dto.ProductionListItemDTO は backend/internal/application/production/dto/list.go で定義
 func (u *ProductionUsecase) ListWithAssigneeName(ctx context.Context) ([]dto.ProductionListItemDTO, error) {
-	list, err := u.repo.List(ctx)
+	list, err := u.repo.ListAll(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -196,21 +207,61 @@ func (u *ProductionUsecase) ListWithAssigneeName(ctx context.Context) ([]dto.Pro
 // Commands
 // ============================
 
-// Create accepts a fully-formed entity. If CreatedAt is zero, it is set to now (UTC).
+// Create accepts a fully-formed entity.
+// RepositoryPort の Create(CreateProductionInput) を呼び出す形にブリッジする。
 func (u *ProductionUsecase) Create(ctx context.Context, p productiondom.Production) (productiondom.Production, error) {
 	// Best-effort normalization of timestamps commonly present on entities
 	if p.CreatedAt.IsZero() {
 		p.CreatedAt = u.now().UTC()
 	}
-	return u.repo.Create(ctx, p)
+
+	// Production → CreateProductionInput へ変換
+	var statusPtr *productiondom.ProductionStatus
+	if p.Status != "" {
+		s := p.Status
+		statusPtr = &s
+	}
+
+	in := productiondom.CreateProductionInput{
+		ProductBlueprintID: p.ProductBlueprintID,
+		AssigneeID:         p.AssigneeID,
+		Models:             p.Models,
+		Status:             statusPtr,
+		PrintedAt:          p.PrintedAt,
+		CreatedBy:          p.CreatedBy,
+	}
+
+	// CreatedAt があればポインタで渡す
+	if !p.CreatedAt.IsZero() {
+		t := p.CreatedAt
+		in.CreatedAt = &t
+	}
+
+	created, err := u.repo.Create(ctx, in)
+	if err != nil {
+		return productiondom.Production{}, err
+	}
+	if created == nil {
+		// Repository 実装が nil を返すのは異常ケースなので一応 NotFound 相当として扱う
+		return productiondom.Production{}, productiondom.ErrNotFound
+	}
+	return *created, nil
 }
 
 // Save performs upsert. If CreatedAt is zero, it is set to now (UTC).
+// RepositoryPort.Save(Production) を利用。
 func (u *ProductionUsecase) Save(ctx context.Context, p productiondom.Production) (productiondom.Production, error) {
 	if p.CreatedAt.IsZero() {
 		p.CreatedAt = u.now().UTC()
 	}
-	return u.repo.Save(ctx, p)
+	saved, err := u.repo.Save(ctx, p)
+	if err != nil {
+		return productiondom.Production{}, err
+	}
+	if saved == nil {
+		return productiondom.Production{}, productiondom.ErrNotFound
+	}
+	return *saved, nil
 }
 
 // Update updates Production partially.
@@ -232,11 +283,15 @@ func (u *ProductionUsecase) Update(
 		return productiondom.Production{}, productiondom.ErrInvalidID
 	}
 
-	// 既存データを取得
-	current, err := u.repo.GetByID(ctx, id)
+	// 既存データを取得（RepositoryPort.GetByID は *Production を返す）
+	currentPtr, err := u.repo.GetByID(ctx, id)
 	if err != nil {
 		return productiondom.Production{}, err
 	}
+	if currentPtr == nil {
+		return productiondom.Production{}, productiondom.ErrNotFound
+	}
+	current := *currentPtr
 
 	// --------------------------------------------------
 	// 1. assigneeId の更新（非空なら上書き）
@@ -289,7 +344,14 @@ func (u *ProductionUsecase) Update(
 	current.UpdatedAt = u.now().UTC()
 
 	// 他の項目は current をそのまま再保存
-	return u.repo.Save(ctx, current)
+	saved, err := u.repo.Save(ctx, current)
+	if err != nil {
+		return productiondom.Production{}, err
+	}
+	if saved == nil {
+		return productiondom.Production{}, productiondom.ErrNotFound
+	}
+	return *saved, nil
 }
 
 func (u *ProductionUsecase) Delete(ctx context.Context, id string) error {
