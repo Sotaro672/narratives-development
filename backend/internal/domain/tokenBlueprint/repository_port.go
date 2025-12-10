@@ -41,6 +41,9 @@ type UpdateTokenBlueprintInput struct {
 	UpdatedBy    *string    `json:"updatedBy,omitempty"`
 	DeletedAt    *time.Time `json:"deletedAt,omitempty"`
 	DeletedBy    *string    `json:"deletedBy,omitempty"`
+
+	// ★ 追加: metadataUri 用のポインタフィールド
+	MetadataURI *string `json:"metadataUri,omitempty"`
 }
 
 // ===============================

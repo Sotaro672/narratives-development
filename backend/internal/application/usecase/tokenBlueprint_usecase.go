@@ -15,10 +15,17 @@ import (
 
 // TokenBlueprintUsecase coordinates TokenBlueprint, TokenContents, and TokenIcon domains.
 type TokenBlueprintUsecase struct {
-	tbRepo    tbdom.RepositoryPort
-	tcRepo    tcdom.RepositoryPort
-	tiRepo    tidom.RepositoryPort
+	tbRepo tbdom.RepositoryPort
+	tcRepo tcdom.RepositoryPort
+	tiRepo tidom.RepositoryPort
+
 	memberSvc *memdom.Service
+
+	// ★ Arweave 連携用
+	arweave ArweaveUploader
+
+	// ★ TokenBlueprint → NFT メタデータ JSON 生成用
+	metadataBuilder *TokenMetadataBuilder
 }
 
 func NewTokenBlueprintUsecase(
@@ -26,12 +33,16 @@ func NewTokenBlueprintUsecase(
 	tcRepo tcdom.RepositoryPort,
 	tiRepo tidom.RepositoryPort,
 	memberSvc *memdom.Service,
+	arweave ArweaveUploader,
+	metadataBuilder *TokenMetadataBuilder,
 ) *TokenBlueprintUsecase {
 	return &TokenBlueprintUsecase{
-		tbRepo:    tbRepo,
-		tcRepo:    tcRepo,
-		tiRepo:    tiRepo,
-		memberSvc: memberSvc,
+		tbRepo:          tbRepo,
+		tcRepo:          tcRepo,
+		tiRepo:          tiRepo,
+		memberSvc:       memberSvc,
+		arweave:         arweave,
+		metadataBuilder: metadataBuilder,
 	}
 }
 
@@ -168,9 +179,6 @@ func (u *TokenBlueprintUsecase) GetByIDWithCreatorName(
 
 	return tb, name, nil
 }
-
-// ==== ★ List / Filter / Count の廃止に伴い削除 ====
-// func (u *TokenBlueprintUsecase) List(...) { ... }
 
 // companyID で tenant-scoped 一覧取得
 func (u *TokenBlueprintUsecase) ListByCompanyID(ctx context.Context, companyID string, page tbdom.Page) (tbdom.PageResult, error) {

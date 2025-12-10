@@ -218,8 +218,13 @@ func NewContainer(ctx context.Context) (*Container, error) {
 	pbSvc := productbpdom.NewService(pbDomainRepo)
 
 	// ★ MintRequestPort（TokenUsecase 用）
-	//   - コレクション名を空文字にして、mint_request_port_fs 側のデフォルト "mintRequests" を利用
-	mintRequestPort := fs.NewMintRequestPortFS(fsClient, "")
+	//   - mints ベースの MintRequestPort 実装
+	mintRequestPort := fs.NewMintRequestPortFS(
+		fsClient,
+		"mints",            // mintsColName
+		"token_blueprints", // tokenBlueprintsColName（実際の名前に合わせて）
+		"brands",           // brandsColName（実際の名前に合わせて）
+	)
 
 	// ★ NameResolver（ID→名前/型番解決）
 	//    TokenBlueprint はアダプタで value 戻りに揃える
@@ -237,6 +242,23 @@ func NewContainer(ctx context.Context) (*Container, error) {
 	)
 
 	// 5. Application-layer usecases
+
+	// ★ TokenUsecase（Solana ミント権限ウォレット + MintRequestPort）
+	var tokenUC *uc.TokenUsecase
+	if mintKey != nil {
+		solanaClient := solanainfra.NewMintClient(mintKey)
+		tokenUC = uc.NewTokenUsecase(
+			solanaClient,    // tokendom.MintAuthorityWalletPort
+			mintRequestPort, // usecase.MintRequestPort
+		)
+	} else {
+		// Mint 権限キーが取得できなかった場合でもコンテナ生成は続行
+		tokenUC = uc.NewTokenUsecase(
+			nil,             // tokendom.MintAuthorityWalletPort (nil 許容)
+			mintRequestPort, // usecase.MintRequestPort
+		)
+	}
+
 	accountUC := uc.NewAccountUsecase(accountRepo)
 
 	announcementUC := uc.NewAnnouncementUsecase(
@@ -317,8 +339,10 @@ func NewContainer(ctx context.Context) (*Container, error) {
 
 	// ★ MintUsecase（MintRequest / NFT 発行候補一覧など）
 	// NewMintUsecase は
-	// (mintProductBlueprintRepo, mintProductionRepo, mintInspectionRepo, mintModelRepo, mintTokenBlueprintRepo, *brand.Service)
-	// の 6 引数
+	// (mintProductBlueprintRepo, mintProductionRepo, mintInspectionRepo, mintModelRepo,
+	//  mintTokenBlueprintRepo, *brand.Service, mint.MintRepository, mint.PassedProductLister,
+	//  *resolver.NameResolver, usecase.TokenMintPort)
+	// の 10 引数
 	mintUC := uc.NewMintUsecase(
 		productBlueprintRepo, // mint.MintProductBlueprintRepo
 		productionRepo,       // mint.MintProductionRepo
@@ -328,39 +352,34 @@ func NewContainer(ctx context.Context) (*Container, error) {
 		brandSvc,             // *brand.Service
 		mintRepo,             // mint.MintRepository
 		inspectionRepo,       // mint.PassedProductLister（InspectionRepositoryFS に実装追加済み前提）
-		nameResolver,         // *resolver.NameResolver ★追加
+		nameResolver,         // *resolver.NameResolver
+		tokenUC,              // usecase.TokenMintPort（TokenUsecase のインスタンス）
 	)
+
 	saleUC := uc.NewSaleUsecase(saleRepo)
 	shippingAddressUC := uc.NewShippingAddressUsecase(shippingAddressRepo)
 
-	// ★ TokenBlueprintUsecase に member.Service を注入
+	// ★ TokenBlueprint 用メタデータビルダー
+	tokenMetadataBuilder := uc.NewTokenMetadataBuilder()
+
+	// ★ ArweaveUploader
+	//  まだ実装がなければ nil のまま運用し、Publish 時にエラーを返す想定
+	var arweaveUploader uc.ArweaveUploader = nil
+
+	// ★ TokenBlueprintUsecase に member.Service と Arweave 関連を注入
 	tokenBlueprintUC := uc.NewTokenBlueprintUsecase(
-		tokenBlueprintRepo,
-		nil,
-		nil,
-		memberSvc,
+		tokenBlueprintRepo,   // tbRepo
+		nil,                  // tcRepo (token contents repo, 未接続なら nil)
+		nil,                  // tiRepo (token icon repo, 未接続なら nil)
+		memberSvc,            // *member.Service
+		arweaveUploader,      // ArweaveUploader（現状 nil）
+		tokenMetadataBuilder, // *TokenMetadataBuilder
 	)
 
 	tokenOperationUC := uc.NewTokenOperationUsecase(tokenOperationRepo)
 	trackingUC := uc.NewTrackingUsecase(trackingRepo)
 	userUC := uc.NewUserUsecase(userRepo)
 	walletUC := uc.NewWalletUsecase(walletRepo)
-
-	// ★ TokenUsecase（Solana ミント権限ウォレット + MintRequestPort）
-	var tokenUC *uc.TokenUsecase
-	if mintKey != nil {
-		solanaClient := solanainfra.NewMintClient(mintKey)
-		tokenUC = uc.NewTokenUsecase(
-			solanaClient,    // tokendom.MintAuthorityWalletPort
-			mintRequestPort, // usecase.MintRequestPort
-		)
-	} else {
-		// Mint 権限キーが取得できなかった場合でもコンテナ生成は続行
-		tokenUC = uc.NewTokenUsecase(
-			nil,             // tokendom.MintAuthorityWalletPort (nil 許容)
-			mintRequestPort, // usecase.MintRequestPort
-		)
-	}
 
 	// ★ Invitation 用メールクライアント & メーラー
 	invitationMailer := mailadp.NewInvitationMailerWithSendGrid(

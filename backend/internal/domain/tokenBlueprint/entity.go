@@ -100,6 +100,9 @@ func (t TokenBlueprint) validate() error {
 		return ErrInvalidCreatedBy
 	}
 
+	// MetadataURI は「Arweave 等に公開済みかどうか」を示すための任意フィールドなので、
+	// validate では必須チェックを行わない（空でも許容）。
+
 	return nil
 }
 
@@ -143,7 +146,7 @@ type TokenBlueprint struct {
 	CompanyID    string     `json:"companyId"`
 	Description  string     `json:"description"`
 	IconID       *string    `json:"iconId,omitempty"`
-	IconURL      string     `json:"iconUrl,omitempty"` // ★ 追加: 表示用のアイコン URL
+	IconURL      string     `json:"iconUrl,omitempty"` // 表示用のアイコン URL
 	ContentFiles []string   `json:"contentFiles"`
 	AssigneeID   string     `json:"assigneeId"`
 	Minted       bool       `json:"minted"` // false | true
@@ -153,6 +156,10 @@ type TokenBlueprint struct {
 	UpdatedBy    string     `json:"updatedBy"`
 	DeletedAt    *time.Time `json:"deletedAt,omitempty"`
 	DeletedBy    *string    `json:"deletedBy,omitempty"`
+
+	// ★ 追加: メタデータの Arweave など外部 URI
+	//   - PublishTokenBlueprint 実行後にセットされる想定
+	MetadataURI string `json:"metadataUri,omitempty"`
 }
 
 // Errors
@@ -210,6 +217,7 @@ func New(
 		CreatedAt:    createdAt.UTC(),
 		CreatedBy:    strings.TrimSpace(createdBy),
 		UpdatedAt:    updatedAt.UTC(),
+		// MetadataURI は Publish 前は空のまま
 	}
 
 	if err := tb.validate(); err != nil {
@@ -465,7 +473,7 @@ func (t *TokenBlueprint) SetDeletedBy(m memberdom.Member) error {
 	return nil
 }
 
-// ★ minted=true の場合は削除状態変更も禁止
+// ★ mintedtrue の場合は削除状態変更も禁止
 func (t *TokenBlueprint) ClearDeletedBy() error {
 	if err := t.ensureMutableCoreOrDeletable(); err != nil {
 		return err

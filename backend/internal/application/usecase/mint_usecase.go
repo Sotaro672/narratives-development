@@ -13,6 +13,7 @@ import (
 	mintdom "narratives/internal/domain/mint"
 	modeldom "narratives/internal/domain/model"
 	pbpdom "narratives/internal/domain/productBlueprint"
+	tokendom "narratives/internal/domain/token"
 	tbdom "narratives/internal/domain/tokenBlueprint"
 )
 
@@ -42,6 +43,16 @@ type MintInspectionView struct {
 }
 
 // ============================================================
+// チェーンミント起動用ポート
+// ============================================================
+
+// TokenMintPort は、MintUsecase から見た「オンチェーンミントを起動するための」ポートです。
+// TokenUsecase がこのインターフェースを実装する想定です。
+type TokenMintPort interface {
+	MintFromMintRequest(ctx context.Context, mintID string) (*tokendom.MintResult, error)
+}
+
+// ============================================================
 // MintUsecase 本体
 // ============================================================
 
@@ -64,13 +75,16 @@ type MintUsecase struct {
 
 	// 各種「名前解決」を集約する NameResolver
 	nameResolver *resolver.NameResolver
+
+	// チェーンミント実行用ポート（TokenUsecase を想定）
+	tokenMinter TokenMintPort
 }
 
 // NewMintUsecase は MintUsecase のコンストラクタです。
 // DI コンテナから ProductBlueprintRepositoryFS / ProductionRepositoryFS /
 // InspectionRepositoryFS / ModelRepositoryFS / TokenBlueprintRepositoryFS /
-// MintRepositoryFS /（inspections 用の PassedProductLister 実装）/ brand.Service / NameResolver
-// をそれぞれ満たす実装として渡してください。
+// MintRepositoryFS /（inspections 用の PassedProductLister 実装）/ brand.Service / NameResolver /
+// TokenUsecase(TokenMintPort を実装) をそれぞれ満たす実装として渡してください。
 func NewMintUsecase(
 	pbRepo mintdom.MintProductBlueprintRepo,
 	prodRepo mintdom.MintProductionRepo,
@@ -81,6 +95,7 @@ func NewMintUsecase(
 	mintRepo mintdom.MintRepository,
 	passedProductLister mintdom.PassedProductLister,
 	nameResolver *resolver.NameResolver,
+	tokenMinter TokenMintPort,
 ) *MintUsecase {
 	return &MintUsecase{
 		pbRepo:              pbRepo,
@@ -92,6 +107,7 @@ func NewMintUsecase(
 		mintRepo:            mintRepo,
 		passedProductLister: passedProductLister,
 		nameResolver:        nameResolver,
+		tokenMinter:         tokenMinter,
 	}
 }
 
@@ -323,7 +339,7 @@ func (u *MintUsecase) GetProductBlueprintPatchByID(
 }
 
 // ============================================================
-// Additional API: Inspection requested 更新 + mints 作成
+// Additional API: Inspection requested 更新 + mints 作成 + チェーンミント
 // ============================================================
 //
 // ミント申請ボタン押下時に、
@@ -331,8 +347,9 @@ func (u *MintUsecase) GetProductBlueprintPatchByID(
 //   - inspections 側: 該当 Production の InspectionBatch.requested を true に更新
 //   - mints 側    : brandId / tokenBlueprintId / passedProductIDs / createdAt / createdBy /
 //     scheduledBurnDate（任意）/ minted=false を 1 レコード作成
+//   - token 側    : 直後に TokenUsecase（TokenMintPort）を用いてチェーンミントを実行
 //
-// という 2 つの処理を行います。
+// という処理を行います。
 func (u *MintUsecase) UpdateRequestInfo(
 	ctx context.Context,
 	productionID string,
@@ -429,8 +446,20 @@ func (u *MintUsecase) UpdateRequestInfo(
 	}
 
 	// 5) mints テーブルへ保存（ScheduledBurnDate を含む）
-	if _, err := u.mintRepo.Create(ctx, mintEntity); err != nil {
+	//    Create の戻り値は ID フィールドを持つ Mint エンティティを想定
+	savedMint, err := u.mintRepo.Create(ctx, mintEntity)
+	if err != nil {
 		return empty, err
+	}
+
+	// 6) 直後にチェーンミントをトリガー
+	//    - TokenUsecase(TokenMintPort) 実装側では、mints テーブルや tokenBlueprintId などから
+	//      MintRequestForUsecase を組み立てて MintFromMintRequest を実行する想定。
+	if u.tokenMinter != nil {
+		if _, err := u.tokenMinter.MintFromMintRequest(ctx, strings.TrimSpace(savedMint.ID)); err != nil {
+			// 挙動は要件次第だが、ここではエラーを返してロールアップする。
+			return empty, err
+		}
 	}
 
 	return batch, nil

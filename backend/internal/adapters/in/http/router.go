@@ -19,6 +19,7 @@ import (
 
 	// MessageHandler 用 Repository
 	msgrepo "narratives/internal/adapters/out/firestore"
+
 	// ドメインサービス
 	branddom "narratives/internal/domain/brand"
 	memdom "narratives/internal/domain/member"
@@ -55,7 +56,10 @@ type RouterDeps struct {
 	TrackingUC         *usecase.TrackingUsecase
 	UserUC             *usecase.UserUsecase
 	WalletUC           *usecase.WalletUsecase
-	NameResolver       *resolver.NameResolver
+
+	// ★ NameResolver（ID→名前/型番解決）
+	NameResolver *resolver.NameResolver
+
 	// ⭐ Inspector 用 ProductUsecase（/inspector/products/{id}）
 	ProductUC *usecase.ProductUsecase
 
@@ -230,7 +234,7 @@ func NewRouter(deps RouterDeps) http.Handler {
 			deps.PrintUC,
 			deps.ProductionUC,
 			deps.ModelUC,
-			deps.NameResolver, // ★ 追加: NameResolver を注入
+			deps.NameResolver, // ★ NameResolver を注入
 		)
 
 		var h http.Handler = printH
@@ -247,11 +251,11 @@ func NewRouter(deps RouterDeps) http.Handler {
 	// Product Blueprints
 	// ================================
 	if deps.ProductBlueprintUC != nil {
-		// ★ brand.Service を渡して brandName を解決できるようにする
+		// ★ brand.Service + member.Service を渡して brandName / assigneeName を解決
 		pbH := handlers.NewProductBlueprintHandler(
 			deps.ProductBlueprintUC,
 			deps.BrandService,
-			deps.MemberService, // ★ assigneeName 解決のため追加
+			deps.MemberService,
 		)
 
 		var h http.Handler = pbH

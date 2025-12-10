@@ -245,7 +245,7 @@ func (r *TokenBlueprintRepositoryFS) Create(ctx context.Context, in tbdom.Create
 		"name":         strings.TrimSpace(in.Name),
 		"symbol":       strings.TrimSpace(in.Symbol),
 		"brandId":      strings.TrimSpace(in.BrandID),
-		"companyId":    strings.TrimSpace(in.CompanyID), // ★ 追加済み
+		"companyId":    strings.TrimSpace(in.CompanyID), // ★ companyId
 		"description":  strings.TrimSpace(in.Description),
 		"contentFiles": files,
 		"assigneeId":   strings.TrimSpace(in.AssigneeID),
@@ -253,6 +253,7 @@ func (r *TokenBlueprintRepositoryFS) Create(ctx context.Context, in tbdom.Create
 		"createdAt":    createdAt,
 		"deletedAt":    nil,
 		"deletedBy":    nil,
+		// "metadataUri" は create 時点では未設定（Publish 時に付与）
 	}
 
 	if iconID != nil {
@@ -329,6 +330,14 @@ func (r *TokenBlueprintRepositoryFS) Update(
 	setStr("description", in.Description)
 	setStr("assigneeId", in.AssigneeID)
 	// companyId は現状更新しない想定（必要ならここに追加）
+
+	// ★ metadataUri の更新
+	if in.MetadataURI != nil {
+		updates = append(updates, firestore.Update{
+			Path:  "metadataUri",
+			Value: strings.TrimSpace(*in.MetadataURI),
+		})
+	}
 
 	// minted フィールド更新（bool）
 	if in.Minted != nil {
@@ -620,7 +629,7 @@ func docToTokenBlueprint(doc *firestore.DocumentSnapshot) (tbdom.TokenBlueprint,
 		Name         string     `firestore:"name"`
 		Symbol       string     `firestore:"symbol"`
 		BrandID      string     `firestore:"brandId"`
-		CompanyID    string     `firestore:"companyId"` // ★ 追加
+		CompanyID    string     `firestore:"companyId"` // ★ companyId
 		Description  string     `firestore:"description"`
 		IconID       *string    `firestore:"iconId"`
 		ContentFiles []string   `firestore:"contentFiles"`
@@ -632,6 +641,8 @@ func docToTokenBlueprint(doc *firestore.DocumentSnapshot) (tbdom.TokenBlueprint,
 		UpdatedBy    string     `firestore:"updatedBy"`
 		DeletedAt    *time.Time `firestore:"deletedAt"`
 		DeletedBy    *string    `firestore:"deletedBy"`
+		// ★ Arweave metadata URI
+		MetadataURI string `firestore:"metadataUri"`
 	}
 
 	if err := doc.DataTo(&raw); err != nil {
@@ -673,6 +684,7 @@ func docToTokenBlueprint(doc *firestore.DocumentSnapshot) (tbdom.TokenBlueprint,
 		CreatedBy:    strings.TrimSpace(raw.CreatedBy),
 		UpdatedAt:    raw.UpdatedAt.UTC(),
 		UpdatedBy:    strings.TrimSpace(raw.UpdatedBy),
+		MetadataURI:  strings.TrimSpace(raw.MetadataURI), // ★ ここでドメインへ反映
 	}
 
 	if raw.IconID != nil {

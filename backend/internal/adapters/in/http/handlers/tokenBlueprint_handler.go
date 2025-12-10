@@ -73,6 +73,8 @@ type tokenBlueprintResponse struct {
 	CreatedBy    string     `json:"createdBy"`
 	UpdatedAt    *time.Time `json:"updatedAt,omitempty"`
 	UpdatedBy    string     `json:"updatedBy"`
+	// ★ 追加: Arweave メタデータ URI（公開済みの場合のみ非空）
+	MetadataURI string `json:"metadataUri"`
 }
 
 type tokenBlueprintPageResponse struct {
@@ -127,6 +129,7 @@ func (h *TokenBlueprintHandler) toResponse(ctx context.Context, tb *tbdom.TokenB
 		CreatedBy:    h.resolveCreatorName(ctx, tb.CreatedBy),
 		UpdatedAt:    updPtr,
 		UpdatedBy:    tb.UpdatedBy,
+		MetadataURI:  tb.MetadataURI, // ★ ドメインからそのまま返す
 	}
 }
 
