@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"strings"
+	"time"
 
 	memdom "narratives/internal/domain/member"
 	tbdom "narratives/internal/domain/tokenBlueprint"
@@ -109,7 +110,7 @@ func (u *TokenBlueprintUsecase) CreateWithUploads(ctx context.Context, in Create
 	}
 	contentIDs = dedupStrings(contentIDs)
 
-	// ★ minted は create 時は必ず "notYet" をセット
+	// ★ minted は create 時は必ず false（domain/Repository 側で固定される）
 	tb, err := u.tbRepo.Create(ctx, tbdom.CreateTokenBlueprintInput{
 		Name:         strings.TrimSpace(in.Name),
 		Symbol:       strings.TrimSpace(in.Symbol),
@@ -119,7 +120,6 @@ func (u *TokenBlueprintUsecase) CreateWithUploads(ctx context.Context, in Create
 		IconID:       iconIDPtr,
 		ContentFiles: contentIDs,
 		AssigneeID:   strings.TrimSpace(in.AssigneeID),
-		Minted:       tbdom.MintStatusNotYet, // ★ ここで notYet 固定
 
 		// ★ 作成時は UpdatedAt / UpdatedBy は入力しない（nil / 空文字）
 		CreatedAt: nil,
@@ -191,12 +191,12 @@ func (u *TokenBlueprintUsecase) ListByBrandID(ctx context.Context, brandID strin
 	return tbdom.ListByBrandID(ctx, u.tbRepo, bid, page)
 }
 
-// ★ minted = "notYet" のみの一覧取得
+// ★ minted = false のみの一覧取得
 func (u *TokenBlueprintUsecase) ListMintedNotYet(ctx context.Context, page tbdom.Page) (tbdom.PageResult, error) {
 	return tbdom.ListMintedNotYet(ctx, u.tbRepo, page)
 }
 
-// ★ minted = "minted" のみの一覧取得
+// ★ minted = true のみの一覧取得
 func (u *TokenBlueprintUsecase) ListMintedCompleted(ctx context.Context, page tbdom.Page) (tbdom.PageResult, error) {
 	return tbdom.ListMintedCompleted(ctx, u.tbRepo, page)
 }
@@ -345,4 +345,64 @@ func (u *TokenBlueprintUsecase) ReplaceContentIDs(ctx context.Context, blueprint
 
 func (u *TokenBlueprintUsecase) Delete(ctx context.Context, id string) error {
 	return u.tbRepo.Delete(ctx, strings.TrimSpace(id))
+}
+
+// ============================================================
+// Additional API: TokenBlueprint minted 更新（移譲版）
+// ============================================================
+//
+// MarkTokenBlueprintMinted は、指定された tokenBlueprintId の minted を
+// false（notYet） → true（minted） に更新する usecase です。
+func (u *TokenBlueprintUsecase) MarkTokenBlueprintMinted(
+	ctx context.Context,
+	tokenBlueprintID string,
+	actorID string,
+) (*tbdom.TokenBlueprint, error) {
+
+	if u == nil {
+		return nil, fmt.Errorf("tokenBlueprint usecase is nil")
+	}
+	if u.tbRepo == nil {
+		return nil, fmt.Errorf("tokenBlueprint repo is nil")
+	}
+
+	id := strings.TrimSpace(tokenBlueprintID)
+	if id == "" {
+		return nil, fmt.Errorf("tokenBlueprintID is empty")
+	}
+
+	actorID = strings.TrimSpace(actorID)
+	if actorID == "" {
+		return nil, fmt.Errorf("actorID is empty")
+	}
+
+	// 現状を取得
+	tb, err := u.tbRepo.GetByID(ctx, id)
+	if err != nil {
+		return nil, err
+	}
+
+	// すでに minted=true なら冪等的にそのまま返す
+	if tb.Minted {
+		return tb, nil
+	}
+
+	now := time.Now().UTC()
+	minted := true
+	updatedBy := actorID
+
+	// RepositoryPort.Update 経由で Firestore に minted / updatedAt / updatedBy を反映
+	return u.tbRepo.Update(ctx, id, tbdom.UpdateTokenBlueprintInput{
+		Description:  nil,
+		IconID:       nil,
+		ContentFiles: nil,
+		AssigneeID:   nil,
+
+		Minted: &minted,
+
+		UpdatedAt: &now,
+		UpdatedBy: &updatedBy,
+		DeletedAt: nil,
+		DeletedBy: nil,
+	})
 }

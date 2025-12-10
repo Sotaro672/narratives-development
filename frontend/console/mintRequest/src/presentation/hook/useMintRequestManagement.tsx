@@ -222,8 +222,8 @@ export const useMintRequestManagement = () => {
 
   const headers: React.ReactNode[] = [
     <FilterableTableHeader
-      key="tokenBlueprintId"
-      label="トークン設計ID"
+      key="tokenName"
+      label="トークン設計"
       options={tokenOptions}
       selected={tokenFilter}
       onChange={setTokenFilter}

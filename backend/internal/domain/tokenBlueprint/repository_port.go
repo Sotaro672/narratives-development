@@ -18,7 +18,7 @@ type CreateTokenBlueprintInput struct {
 	IconID       *string    `json:"iconId,omitempty"`
 	ContentFiles []string   `json:"contentFiles"`
 	AssigneeID   string     `json:"assigneeId"`
-	Minted       MintStatus `json:"minted"`
+	Minted       bool       `json:"minted"` // ★ boolean に変更（create時は常に false を想定）
 	CreatedAt    *time.Time `json:"createdAt,omitempty"`
 	CreatedBy    string     `json:"createdBy"`
 	UpdatedAt    *time.Time `json:"updatedAt,omitempty"`
@@ -29,18 +29,18 @@ type CreateTokenBlueprintInput struct {
 // Update 用入力
 // ===============================
 type UpdateTokenBlueprintInput struct {
-	Name         *string     `json:"name,omitempty"`
-	Symbol       *string     `json:"symbol,omitempty"`
-	BrandID      *string     `json:"brandId,omitempty"`
-	Description  *string     `json:"description,omitempty"`
-	IconID       *string     `json:"iconId,omitempty"`
-	ContentFiles *[]string   `json:"contentFiles,omitempty"`
-	AssigneeID   *string     `json:"assigneeId,omitempty"`
-	Minted       *MintStatus `json:"minted,omitempty"`
-	UpdatedAt    *time.Time  `json:"updatedAt,omitempty"`
-	UpdatedBy    *string     `json:"updatedBy,omitempty"`
-	DeletedAt    *time.Time  `json:"deletedAt,omitempty"`
-	DeletedBy    *string     `json:"deletedBy,omitempty"`
+	Name         *string    `json:"name,omitempty"`
+	Symbol       *string    `json:"symbol,omitempty"`
+	BrandID      *string    `json:"brandId,omitempty"`
+	Description  *string    `json:"description,omitempty"`
+	IconID       *string    `json:"iconId,omitempty"`
+	ContentFiles *[]string  `json:"contentFiles,omitempty"`
+	AssigneeID   *string    `json:"assigneeId,omitempty"`
+	Minted       *bool      `json:"minted,omitempty"` // ★ boolean に変更
+	UpdatedAt    *time.Time `json:"updatedAt,omitempty"`
+	UpdatedBy    *string    `json:"updatedBy,omitempty"`
+	DeletedAt    *time.Time `json:"deletedAt,omitempty"`
+	DeletedBy    *string    `json:"deletedBy,omitempty"`
 }
 
 // ===============================
@@ -137,7 +137,7 @@ func ListByBrandID(
 }
 
 // ==========================================================
-// ★ minted = notYet のみを一覧取得
+// ★ minted = false（notYet） のみを一覧取得
 // ==========================================================
 func ListMintedNotYet(
 	ctx context.Context,
@@ -153,7 +153,7 @@ func ListMintedNotYet(
 
 	items := []TokenBlueprint{}
 	for _, tb := range result.Items {
-		if tb.Minted == MintStatusNotYet {
+		if !tb.Minted { // false = notYet
 			items = append(items, tb)
 		}
 	}
@@ -166,7 +166,7 @@ func ListMintedNotYet(
 }
 
 // ==========================================================
-// ★ minted = minted のみ一覧取得
+// ★ minted = true（minted） のみ一覧取得
 // ==========================================================
 func ListMintedCompleted(
 	ctx context.Context,
@@ -181,7 +181,7 @@ func ListMintedCompleted(
 
 	items := []TokenBlueprint{}
 	for _, tb := range result.Items {
-		if tb.Minted == MintStatusMinted {
+		if tb.Minted { // true = minted
 			items = append(items, tb)
 		}
 	}

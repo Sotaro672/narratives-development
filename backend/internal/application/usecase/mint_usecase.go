@@ -1,3 +1,4 @@
+// backend/internal/application/usecase/mint_usecase.go
 package usecase
 
 import (
@@ -6,62 +7,14 @@ import (
 	"strings"
 	"time"
 
+	resolver "narratives/internal/application/resolver"
 	branddom "narratives/internal/domain/brand"
 	inspectiondom "narratives/internal/domain/inspection"
 	mintdom "narratives/internal/domain/mint"
 	modeldom "narratives/internal/domain/model"
 	pbpdom "narratives/internal/domain/productBlueprint"
-	proddom "narratives/internal/domain/production"
 	tbdom "narratives/internal/domain/tokenBlueprint"
 )
-
-// ============================================================
-// Ports (Repository interfaces for MintUsecase)
-// ============================================================
-
-// mintProductBlueprintRepo は companyId から productBlueprintId の一覧を取得したり、
-// productBlueprintId から productName / Patch を解決するための最小ポート
-type mintProductBlueprintRepo interface {
-	// companyId に紐づく product_blueprints の ID 一覧を返す
-	// 実装例: ProductBlueprintRepositoryFS.ListIDsByCompany
-	ListIDsByCompany(ctx context.Context, companyID string) ([]string, error)
-
-	// productBlueprintId から productName だけを取得するヘルパ
-	// 実装例: ProductBlueprintRepositoryFS.GetProductNameByID
-	GetProductNameByID(ctx context.Context, id string) (string, error)
-
-	// ★ 追加: productBlueprintId から Patch 全体を取得するヘルパ
-	// mintRequestDetail 画面の ProductBlueprintCard 表示用
-	GetPatchByID(ctx context.Context, id string) (pbpdom.Patch, error)
-}
-
-// mintProductionRepo は productBlueprintId 群から productions を取得するための最小ポート
-type mintProductionRepo interface {
-	// 指定された productBlueprintId 群のいずれかを持つ Production をすべて返す
-	// 実装例: ProductionRepositoryFS.ListByProductBlueprintID
-	ListByProductBlueprintID(ctx context.Context, productBlueprintIDs []string) ([]proddom.Production, error)
-}
-
-// mintInspectionRepo は productionId 群から inspections を取得・更新するための最小ポート
-type mintInspectionRepo interface {
-	// 指定された productionId 群に紐づく InspectionBatch をすべて返す
-	// 実装例: InspectionRepositoryFS.ListByProductionID
-	ListByProductionID(ctx context.Context, productionIDs []string) ([]inspectiondom.InspectionBatch, error)
-
-	// ★ 追加: requested フラグを更新するための専用メソッド
-	// - ミント申請が実行された productionID に紐づく InspectionBatch.requested を true にする用途を想定
-	UpdateRequestedFlag(
-		ctx context.Context,
-		productionID string,
-		requested bool,
-	) (inspectiondom.InspectionBatch, error)
-}
-
-// mintModelRepo は modelId(variationID) から size / color / rgb などの情報を解決するための最小ポート
-type mintModelRepo interface {
-	// 実装例: ModelRepositoryFS.GetModelVariationByID
-	GetModelVariationByID(ctx context.Context, variationID string) (*modeldom.ModelVariation, error)
-}
 
 // ============================================================
 // 画面向け DTO
@@ -93,37 +46,41 @@ type MintInspectionView struct {
 // ============================================================
 
 type MintUsecase struct {
-	pbRepo    mintProductBlueprintRepo
-	prodRepo  mintProductionRepo
-	inspRepo  mintInspectionRepo
-	modelRepo mintModelRepo
+	pbRepo    mintdom.MintProductBlueprintRepo
+	prodRepo  mintdom.MintProductionRepo
+	inspRepo  mintdom.MintInspectionRepo
+	modelRepo mintdom.MintModelRepo
 
-	// ★ TokenBlueprint の minted 状態や一覧を扱うためのリポジトリ
+	// TokenBlueprint の minted 状態や一覧を扱うためのリポジトリ
 	tbRepo tbdom.RepositoryPort
 
-	// brandId → brandName 解決用
+	// brandId → brandName 解決や Brand 一覧取得用
 	brandSvc *branddom.Service
 
-	// ★ mints テーブル用リポジトリ
+	// mints テーブル用リポジトリ
 	mintRepo mintdom.MintRepository
-	// ★ inspections → passed productId 一覧を取得するためのポート
+	// inspections → passed productId 一覧を取得するためのポート
 	passedProductLister mintdom.PassedProductLister
+
+	// 各種「名前解決」を集約する NameResolver
+	nameResolver *resolver.NameResolver
 }
 
 // NewMintUsecase は MintUsecase のコンストラクタです。
 // DI コンテナから ProductBlueprintRepositoryFS / ProductionRepositoryFS /
 // InspectionRepositoryFS / ModelRepositoryFS / TokenBlueprintRepositoryFS /
-// MintRepositoryFS /（inspections 用の PassedProductLister 実装）/ brand.Service
+// MintRepositoryFS /（inspections 用の PassedProductLister 実装）/ brand.Service / NameResolver
 // をそれぞれ満たす実装として渡してください。
 func NewMintUsecase(
-	pbRepo mintProductBlueprintRepo,
-	prodRepo mintProductionRepo,
-	inspRepo mintInspectionRepo,
-	modelRepo mintModelRepo,
+	pbRepo mintdom.MintProductBlueprintRepo,
+	prodRepo mintdom.MintProductionRepo,
+	inspRepo mintdom.MintInspectionRepo,
+	modelRepo mintdom.MintModelRepo,
 	tbRepo tbdom.RepositoryPort,
 	brandSvc *branddom.Service,
 	mintRepo mintdom.MintRepository,
 	passedProductLister mintdom.PassedProductLister,
+	nameResolver *resolver.NameResolver,
 ) *MintUsecase {
 	return &MintUsecase{
 		pbRepo:              pbRepo,
@@ -134,6 +91,7 @@ func NewMintUsecase(
 		brandSvc:            brandSvc,
 		mintRepo:            mintRepo,
 		passedProductLister: passedProductLister,
+		nameResolver:        nameResolver,
 	}
 }
 
@@ -254,16 +212,14 @@ func (u *MintUsecase) ListInspectionsByCompanyID(
 		usedPBSet[pbID] = struct{}{}
 	}
 
-	for pbID := range usedPBSet {
-		name, err := u.pbRepo.GetProductNameByID(ctx, pbID)
-		if err != nil {
-			// 個別に失敗した場合は空文字として扱い、処理は続行
-			if !errors.Is(err, pbpdom.ErrNotFound) {
-				// ここではログ出力などは行わず、単にスキップ
+	// NameResolver に「商品名解決」を委譲
+	if u.nameResolver != nil {
+		for pbID := range usedPBSet {
+			name := strings.TrimSpace(u.nameResolver.ResolveProductName(ctx, pbID))
+			if name != "" {
+				pbNameMap[pbID] = name
 			}
-			continue
 		}
-		pbNameMap[pbID] = strings.TrimSpace(name)
 	}
 
 	// 5) inspection 内の modelId 群を集めて、ModelVariation をまとめて取得
@@ -367,71 +323,6 @@ func (u *MintUsecase) GetProductBlueprintPatchByID(
 }
 
 // ============================================================
-// Additional API: TokenBlueprint minted 更新
-// ============================================================
-
-// MarkTokenBlueprintMinted は、指定された tokenBlueprintId の minted を
-// "notYet" → "minted" に更新する usecase です。
-//
-// - すでに minted=MintStatusMinted の場合は domain 側の ErrAlreadyMinted が返ります。
-// - minted を戻す（minted → notYet）は許可されません。
-func (u *MintUsecase) MarkTokenBlueprintMinted(
-	ctx context.Context,
-	tokenBlueprintID string,
-	actorID string,
-) (*tbdom.TokenBlueprint, error) {
-
-	if u == nil {
-		return nil, errors.New("mint usecase is nil")
-	}
-	if u.tbRepo == nil {
-		return nil, errors.New("tokenBlueprint repo is nil")
-	}
-
-	id := strings.TrimSpace(tokenBlueprintID)
-	if id == "" {
-		return nil, errors.New("tokenBlueprintID is empty")
-	}
-
-	actorID = strings.TrimSpace(actorID)
-	if actorID == "" {
-		return nil, errors.New("actorID is empty")
-	}
-
-	// 現状を取得
-	tb, err := u.tbRepo.GetByID(ctx, id)
-	if err != nil {
-		return nil, err
-	}
-
-	// domain ルールに従って minted を更新
-	if err := tb.SetMinted(tbdom.MintStatusMinted); err != nil {
-		// ここで ErrAlreadyMinted 等が返りうる
-		return nil, err
-	}
-
-	now := time.Now().UTC()
-	updatedBy := actorID
-
-	// RepositoryPort.Update 経由で Firestore に minted / updatedAt / updatedBy を反映
-	return u.tbRepo.Update(ctx, id, tbdom.UpdateTokenBlueprintInput{
-		// name / symbol / brandId は minted 状態では変更しない方針なので指定しない
-		Description:  nil,
-		IconID:       nil,
-		ContentFiles: nil,
-		AssigneeID:   nil,
-
-		// minted のみ "minted" に更新
-		Minted: &tb.Minted,
-
-		UpdatedAt: &now,
-		UpdatedBy: &updatedBy,
-		DeletedAt: nil,
-		DeletedBy: nil,
-	})
-}
-
-// ============================================================
 // Additional API: Inspection requested 更新 + mints 作成
 // ============================================================
 //
@@ -521,7 +412,7 @@ func (u *MintUsecase) UpdateRequestInfo(
 	// 3-1) ScheduledBurnDate を文字列からパースして設定（任意）
 	if scheduledBurnDate != nil {
 		if s := strings.TrimSpace(*scheduledBurnDate); s != "" {
-			// フロントからは "YYYY-MM-DD" 形式で来る想定
+			// フロントからは "2006-01-02" 形式で来る想定
 			t, err := time.Parse("2006-01-02", s)
 			if err != nil {
 				return empty, errors.New("invalid scheduledBurnDate format (expected YYYY-MM-DD)")
@@ -546,44 +437,21 @@ func (u *MintUsecase) UpdateRequestInfo(
 }
 
 // ============================================================
-// Helper: brandId → brandName 解決
+// Helper: brandId → brandName 解決（NameResolver へ委譲）
 // ============================================================
 
-// getBrandNameByID は、brandID から表示用の brandName を取得します。
-// - brandSvc が設定されていない場合: 空文字 + nil を返す（ブランド名はオプション扱い）
-// - brand.ErrNotFound / brand.ErrInvalidID の場合: 空文字 + nil を返す（ブランド未設定/不整合は UI では無表示）
-// - その他のエラー: そのままエラーを返す
-func (u *MintUsecase) getBrandNameByID(ctx context.Context, brandID string) (string, error) {
+// ResolveBrandNameByID は、外部（ハンドラ等）から brandID で brandName を取得する公開メソッド。
+// 実体の名前解決は NameResolver に委譲し、ここではエラーではなく空文字／文字列を返す。
+func (u *MintUsecase) ResolveBrandNameByID(ctx context.Context, brandID string) (string, error) {
 	if u == nil {
 		return "", errors.New("mint usecase is nil")
 	}
-
-	if u.brandSvc == nil {
-		// ブランド名表示がオプションであれば、nil エラーで空文字返却にする
-		return "", nil
+	if u.nameResolver == nil {
+		return "", errors.New("name resolver is nil")
 	}
 
-	brandID = strings.TrimSpace(brandID)
-	if brandID == "" {
-		return "", nil
-	}
-
-	name, err := u.brandSvc.GetNameByID(ctx, brandID)
-	if err != nil {
-		// 見つからない / 無効 ID は「ブランド名なし」として扱う
-		if errors.Is(err, branddom.ErrNotFound) || errors.Is(err, branddom.ErrInvalidID) {
-			return "", nil
-		}
-		// それ以外の予期しないエラーはそのまま返す
-		return "", err
-	}
-
+	name := strings.TrimSpace(u.nameResolver.ResolveBrandName(ctx, brandID))
 	return name, nil
-}
-
-// ResolveBrandNameByID は、外部（ハンドラ等）から brandID で brandName を取得する公開メソッドです。
-func (u *MintUsecase) ResolveBrandNameByID(ctx context.Context, brandID string) (string, error) {
-	return u.getBrandNameByID(ctx, brandID)
 }
 
 // ============================================================
@@ -612,7 +480,7 @@ func (u *MintUsecase) ListBrandsForCurrentCompany(
 		return empty, ErrCompanyIDMissing
 	}
 
-	// ★ ここで brand.Service の ListByCompanyID を呼び出す
+	// 一覧取得は brand.Service の責務のまま
 	return u.brandSvc.ListByCompanyID(ctx, companyID, page)
 }
 
@@ -643,6 +511,6 @@ func (u *MintUsecase) ListTokenBlueprintsByBrand(
 		return empty, errors.New("brandID is empty")
 	}
 
-	// ★ tokenBlueprint パッケージ側のフィルター関数を使用
+	// tokenBlueprint パッケージ側のフィルター関数を使用
 	return tbdom.ListByBrandID(ctx, u.tbRepo, brandID, page)
 }

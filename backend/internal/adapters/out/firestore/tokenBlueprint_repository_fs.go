@@ -236,11 +236,8 @@ func (r *TokenBlueprintRepositoryFS) Create(ctx context.Context, in tbdom.Create
 		}
 	}
 
-	// minted は必ず何かしら保存する（空なら notYet として扱う）
-	minted := tbdom.MintStatusNotYet
-	if strings.TrimSpace(string(in.Minted)) == string(tbdom.MintStatusMinted) {
-		minted = tbdom.MintStatusMinted
-	}
+	// minted は create 時は必ず false
+	minted := false
 
 	docRef := r.col().NewDoc()
 
@@ -252,7 +249,7 @@ func (r *TokenBlueprintRepositoryFS) Create(ctx context.Context, in tbdom.Create
 		"description":  strings.TrimSpace(in.Description),
 		"contentFiles": files,
 		"assigneeId":   strings.TrimSpace(in.AssigneeID),
-		"minted":       string(minted), // ★ minted を Firestore に保存
+		"minted":       minted, // ★ minted を bool で Firestore に保存
 		"createdAt":    createdAt,
 		"deletedAt":    nil,
 		"deletedBy":    nil,
@@ -333,16 +330,11 @@ func (r *TokenBlueprintRepositoryFS) Update(
 	setStr("assigneeId", in.AssigneeID)
 	// companyId は現状更新しない想定（必要ならここに追加）
 
-	// minted フィールド更新
+	// minted フィールド更新（bool）
 	if in.Minted != nil {
-		v := strings.TrimSpace(string(*in.Minted))
-		if v == "" {
-			// 空指定は notYet として保存しておく（念のため）
-			v = string(tbdom.MintStatusNotYet)
-		}
 		updates = append(updates, firestore.Update{
 			Path:  "minted",
-			Value: v,
+			Value: *in.Minted,
 		})
 	}
 
@@ -633,7 +625,7 @@ func docToTokenBlueprint(doc *firestore.DocumentSnapshot) (tbdom.TokenBlueprint,
 		IconID       *string    `firestore:"iconId"`
 		ContentFiles []string   `firestore:"contentFiles"`
 		AssigneeID   string     `firestore:"assigneeId"`
-		Minted       string     `firestore:"minted"` // ★ minted 生値（文字列）
+		Minted       any        `firestore:"minted"` // ★ minted: bool or 旧 string
 		CreatedAt    time.Time  `firestore:"createdAt"`
 		CreatedBy    string     `firestore:"createdBy"`
 		UpdatedAt    time.Time  `firestore:"updatedAt"`
@@ -647,16 +639,24 @@ func docToTokenBlueprint(doc *firestore.DocumentSnapshot) (tbdom.TokenBlueprint,
 	}
 
 	// minted は Firestore に存在しない旧データもある前提で、
-	// 空文字や未知値はすべて "notYet" として扱う。
-	minted := tbdom.MintStatusNotYet
-	switch strings.TrimSpace(raw.Minted) {
-	case string(tbdom.MintStatusMinted):
-		minted = tbdom.MintStatusMinted
-	case "", string(tbdom.MintStatusNotYet):
-		minted = tbdom.MintStatusNotYet
+	// - bool 型: そのまま利用
+	// - string 型: "minted" → true, それ以外（"notYet"/空/未知）は false
+	// - nil/その他: false
+	var mintedBool bool
+	switch v := raw.Minted.(type) {
+	case bool:
+		mintedBool = v
+	case string:
+		switch strings.TrimSpace(v) {
+		case "minted":
+			mintedBool = true
+		default: // "notYet", "", その他未知値 → false
+			mintedBool = false
+		}
+	case nil:
+		mintedBool = false
 	default:
-		// 将来未知値が入っていた場合も安全側で notYet 扱い
-		minted = tbdom.MintStatusNotYet
+		mintedBool = false
 	}
 
 	tb := tbdom.TokenBlueprint{
@@ -668,7 +668,7 @@ func docToTokenBlueprint(doc *firestore.DocumentSnapshot) (tbdom.TokenBlueprint,
 		Description:  strings.TrimSpace(raw.Description),
 		ContentFiles: sanitizeStrings(raw.ContentFiles),
 		AssigneeID:   strings.TrimSpace(raw.AssigneeID),
-		Minted:       minted,
+		Minted:       mintedBool,
 		CreatedAt:    raw.CreatedAt.UTC(),
 		CreatedBy:    strings.TrimSpace(raw.CreatedBy),
 		UpdatedAt:    raw.UpdatedAt.UTC(),

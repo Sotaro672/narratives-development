@@ -320,14 +320,15 @@ func NewContainer(ctx context.Context) (*Container, error) {
 	// (mintProductBlueprintRepo, mintProductionRepo, mintInspectionRepo, mintModelRepo, mintTokenBlueprintRepo, *brand.Service)
 	// の 6 引数
 	mintUC := uc.NewMintUsecase(
-		productBlueprintRepo, // mintProductBlueprintRepo
-		productionRepo,       // mintProductionRepo
-		inspectionRepo,       // mintInspectionRepo
-		modelRepo,            // mintModelRepo
-		tokenBlueprintRepo,   // tbdom.RepositoryPort
-		brandSvc,             // *branddom.Service
+		productBlueprintRepo, // mint.MintProductBlueprintRepo
+		productionRepo,       // mint.MintProductionRepo
+		inspectionRepo,       // mint.MintInspectionRepo
+		modelRepo,            // mint.MintModelRepo
+		tokenBlueprintRepo,   // tokenBlueprint.RepositoryPort
+		brandSvc,             // *brand.Service
 		mintRepo,             // mint.MintRepository
-		inspectionRepo,       // mint.PassedProductLister（InspectionRepositoryFS に実装を追加する）
+		inspectionRepo,       // mint.PassedProductLister（InspectionRepositoryFS に実装追加済み前提）
+		nameResolver,         // *resolver.NameResolver ★追加
 	)
 	saleUC := uc.NewSaleUsecase(saleRepo)
 	shippingAddressUC := uc.NewShippingAddressUsecase(shippingAddressRepo)
@@ -349,10 +350,16 @@ func NewContainer(ctx context.Context) (*Container, error) {
 	var tokenUC *uc.TokenUsecase
 	if mintKey != nil {
 		solanaClient := solanainfra.NewMintClient(mintKey)
-		tokenUC = uc.NewTokenUsecase(solanaClient, mintRequestPort)
+		tokenUC = uc.NewTokenUsecase(
+			solanaClient,    // tokendom.MintAuthorityWalletPort
+			mintRequestPort, // usecase.MintRequestPort
+		)
 	} else {
 		// Mint 権限キーが取得できなかった場合でもコンテナ生成は続行
-		tokenUC = uc.NewTokenUsecase(nil, mintRequestPort)
+		tokenUC = uc.NewTokenUsecase(
+			nil,             // tokendom.MintAuthorityWalletPort (nil 許容)
+			mintRequestPort, // usecase.MintRequestPort
+		)
 	}
 
 	// ★ Invitation 用メールクライアント & メーラー

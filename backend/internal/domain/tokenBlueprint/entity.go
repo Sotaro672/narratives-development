@@ -22,14 +22,6 @@ const (
 	ContentDocument ContentFileType = "document"
 )
 
-// minted: "notYet" | "minted"
-type MintStatus string
-
-const (
-	MintStatusNotYet MintStatus = "notYet"
-	MintStatusMinted MintStatus = "minted"
-)
-
 // 汎用エラー（リポジトリ/サービス共通）
 var (
 	ErrNotFound = errors.New("tokenBlueprint: not found")
@@ -101,10 +93,6 @@ func (t TokenBlueprint) validate() error {
 		}
 	}
 
-	if !IsValidMintStatus(t.Minted) {
-		return ErrInvalidMintStatus
-	}
-
 	if t.CreatedAt.IsZero() {
 		return ErrInvalidCreatedAt
 	}
@@ -118,15 +106,6 @@ func (t TokenBlueprint) validate() error {
 func IsValidContentType(t ContentFileType) bool {
 	switch t {
 	case ContentImage, ContentVideo, ContentPDF, ContentDocument:
-		return true
-	default:
-		return false
-	}
-}
-
-func IsValidMintStatus(s MintStatus) bool {
-	switch s {
-	case MintStatusNotYet, MintStatusMinted:
 		return true
 	default:
 		return false
@@ -167,7 +146,7 @@ type TokenBlueprint struct {
 	IconURL      string     `json:"iconUrl,omitempty"` // ★ 追加: 表示用のアイコン URL
 	ContentFiles []string   `json:"contentFiles"`
 	AssigneeID   string     `json:"assigneeId"`
-	Minted       MintStatus `json:"minted"` // "notYet" | "minted"
+	Minted       bool       `json:"minted"` // false | true
 	CreatedAt    time.Time  `json:"createdAt"`
 	CreatedBy    string     `json:"createdBy"`
 	UpdatedAt    time.Time  `json:"updatedAt"`
@@ -196,9 +175,7 @@ var (
 	ErrInvalidContentFile  = errors.New("tokenBlueprint: invalid contentFile")
 	ErrInvalidContentType  = errors.New("tokenBlueprint: invalid contentFile.type")
 
-	ErrInvalidMintStatus = errors.New("tokenBlueprint: invalid minted")
-
-	// ★ minted=MintStatusMinted の場合のコアフィールド/削除制約用
+	// ★ minted=true の場合のコアフィールド/削除制約用
 	//   - name / symbol / brandId の変更は禁止（コア定義）
 	//   - Delete 系（DeletedBy/DeletedAt）は禁止
 	ErrAlreadyMinted = errors.New("tokenBlueprint: already minted; core fields or deletion are not allowed")
@@ -229,7 +206,7 @@ func New(
 		IconURL:      "", // 初期値は空。必要に応じて別レイヤーで補完。
 		ContentFiles: dedupTrim(contentFiles),
 		AssigneeID:   strings.TrimSpace(assigneeID),
-		Minted:       MintStatusNotYet, // create 時は常に notYet
+		Minted:       false, // create 時は常に false
 		CreatedAt:    createdAt.UTC(),
 		CreatedBy:    strings.TrimSpace(createdBy),
 		UpdatedAt:    updatedAt.UTC(),
@@ -266,12 +243,12 @@ func NewFromStrings(
 		return TokenBlueprint{}, fmt.Errorf("invalid updatedAt: %v", err)
 	}
 
-	// minted は create 時は常に notYet
+	// minted は create 時は常に false
 	return New(id, name, symbol, brandID, companyID, description, iconPtr, contentFiles, assigneeID, ca, createdBy, ua)
 }
 
 // ===============================
-// 内部ヘルパー: minted=MintStatusMinted の場合の制約
+// 内部ヘルパー: minted=true の場合の制約
 //
 //	※ここでは「削除系」や「brandId変更」のような
 //	  コアな変更にのみ使う想定（icon/assignee/contents は対象外）
@@ -281,7 +258,7 @@ func (t *TokenBlueprint) ensureMutableCoreOrDeletable() error {
 	if t == nil {
 		return nil
 	}
-	if t.Minted == MintStatusMinted {
+	if t.Minted {
 		return ErrAlreadyMinted
 	}
 	return nil
@@ -289,7 +266,7 @@ func (t *TokenBlueprint) ensureMutableCoreOrDeletable() error {
 
 // Mutators
 
-// ★ minted=MintStatusMinted でも Description は変更可能（要件に含まれていないため）
+// ★ minted=true でも Description は変更可能（要件に含まれていないため）
 //
 //	→ ここでは ensureMutableCoreOrDeletable を呼ばない
 func (t *TokenBlueprint) UpdateDescription(desc string) error {
@@ -301,7 +278,7 @@ func (t *TokenBlueprint) UpdateDescription(desc string) error {
 	return nil
 }
 
-// ★ minted=MintStatusMinted でも assigneeId は変更可能（要件より）
+// ★ minted=true でも assigneeId は変更可能（要件より）
 func (t *TokenBlueprint) UpdateAssignee(id string) error {
 	id = strings.TrimSpace(id)
 	if id == "" {
@@ -311,25 +288,17 @@ func (t *TokenBlueprint) UpdateAssignee(id string) error {
 	return nil
 }
 
-// SetMinted updates minted status ("notYet" / "minted")
-// - notYet → minted: 許可
-// - minted → minted: 許可（冪等）
-// - minted → notYet: 禁止（ErrAlreadyMinted）
-func (t *TokenBlueprint) SetMinted(status MintStatus) error {
+// SetMinted updates minted flag (false / true)
+// - false → true: 許可
+// - true → true: 許可（冪等）
+// - true → false: 禁止（ErrAlreadyMinted）
+func (t *TokenBlueprint) SetMinted(status bool) error {
 	if t == nil {
 		return nil
 	}
 
-	status = MintStatus(strings.TrimSpace(string(status)))
-	if status == "" {
-		status = MintStatusNotYet
-	}
-	if !IsValidMintStatus(status) {
-		return ErrInvalidMintStatus
-	}
-
-	// すでに minted 済みの場合、別の状態へ戻すことは禁止
-	if t.Minted == MintStatusMinted && status != MintStatusMinted {
+	// すでに minted=true の場合、false へ戻すことは禁止
+	if t.Minted && !status {
 		return ErrAlreadyMinted
 	}
 
@@ -338,7 +307,7 @@ func (t *TokenBlueprint) SetMinted(status MintStatus) error {
 }
 
 // SetIconID sets or clears icon id
-// ★ minted=MintStatusMinted でも icon の変更は許可（要件より）
+// ★ minted=true でも icon の変更は許可（要件より）
 func (t *TokenBlueprint) SetIconID(id string) error {
 	id = strings.TrimSpace(id)
 	if id == "" {
@@ -349,7 +318,7 @@ func (t *TokenBlueprint) SetIconID(id string) error {
 	return nil
 }
 
-// ★ minted=MintStatusMinted でも icon のクリアは許可
+// ★ minted=true でも icon のクリアは許可
 func (t *TokenBlueprint) ClearIconID() error {
 	t.IconID = nil
 	return nil
@@ -373,7 +342,7 @@ func (t *TokenBlueprint) ClearIconURL() error {
 	return nil
 }
 
-// ★ minted=MintStatusMinted では brandId 変更禁止
+// ★ minted=true では brandId 変更禁止
 func (t *TokenBlueprint) SetBrand(b branddom.Brand) error {
 	if err := t.ensureMutableCoreOrDeletable(); err != nil {
 		return err
@@ -396,7 +365,7 @@ func (t TokenBlueprint) ValidateBrandLink() error {
 	return nil
 }
 
-// ★ minted=MintStatusMinted でも icon の設定は許可（SetIconID と同様の方針）
+// ★ minted=true でも icon の設定は許可（SetIconID と同様の方針）
 func (t *TokenBlueprint) SetIcon(icon tokenicondom.TokenIcon) error {
 	if t == nil {
 		return nil
@@ -419,7 +388,7 @@ func (t TokenBlueprint) ValidateIconLink() error {
 	return nil
 }
 
-// ★ minted=MintStatusMinted でも assigneeId の設定は許可
+// ★ minted=true でも assigneeId の設定は許可
 func (t *TokenBlueprint) SetAssignee(m memberdom.Member) error {
 	if t == nil {
 		return nil
@@ -480,7 +449,7 @@ func (t TokenBlueprint) ValidateUpdatedByLink() error {
 	return nil
 }
 
-// ★ minted=MintStatusMinted の場合は削除マーク禁止（＝ Delete 不可）
+// ★ minted=true の場合は削除マーク禁止（＝ Delete 不可）
 func (t *TokenBlueprint) SetDeletedBy(m memberdom.Member) error {
 	if err := t.ensureMutableCoreOrDeletable(); err != nil {
 		return err
@@ -496,7 +465,7 @@ func (t *TokenBlueprint) SetDeletedBy(m memberdom.Member) error {
 	return nil
 }
 
-// ★ minted=MintStatusMinted の場合は削除状態変更も禁止
+// ★ minted=true の場合は削除状態変更も禁止
 func (t *TokenBlueprint) ClearDeletedBy() error {
 	if err := t.ensureMutableCoreOrDeletable(); err != nil {
 		return err
