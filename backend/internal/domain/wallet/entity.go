@@ -1,4 +1,4 @@
-// backend\internal\domain\wallet\entity.go
+// backend/internal/domain/wallet/entity.go
 package wallet
 
 import (
@@ -16,6 +16,8 @@ var (
 	ErrInvalidUpdatedAt     = errors.New("wallet: invalid updatedAt")
 	ErrInvalidLastUpdatedAt = errors.New("wallet: invalid lastUpdatedAt")
 	ErrInvalidStatus        = errors.New("wallet: invalid status")
+	// 追加: NotFound 用のドメインエラー
+	ErrNotFound = errors.New("wallet: not found")
 )
 
 // WalletStatus mirrors TS: 'active' | 'inactive'

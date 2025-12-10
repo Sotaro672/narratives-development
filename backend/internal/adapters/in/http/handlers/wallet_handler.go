@@ -1,3 +1,4 @@
+// backend/internal/adapters/in/http/handlers/wallet_handler.go
 package handlers
 
 import (
@@ -9,7 +10,7 @@ import (
 	walletdom "narratives/internal/domain/wallet"
 )
 
-// WalletHandler は /wallets 関連のエンドポイントを担当します（単一取得のみ）。
+// WalletHandler は /wallets 関連のエンドポイントを担当します。
 type WalletHandler struct {
 	uc *usecase.WalletUsecase
 }
@@ -44,11 +45,14 @@ func (h *WalletHandler) get(w http.ResponseWriter, r *http.Request, walletAddres
 		return
 	}
 
-	wallet, err := h.uc.GetByID(ctx, walletAddress)
+	// WalletUsecase 側の公開メソッドに合わせて呼び出しを修正
+	// 例: SyncWalletTokens(ctx, walletAddress) で On-chain と同期しつつ Wallet を返す
+	wallet, err := h.uc.SyncWalletTokens(ctx, walletAddress)
 	if err != nil {
 		writeWalletErr(w, err)
 		return
 	}
+
 	_ = json.NewEncoder(w).Encode(wallet)
 }
 

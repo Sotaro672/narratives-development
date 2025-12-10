@@ -1,51 +1,81 @@
-// backend\internal\application\usecase\wallet_usecase.go
+// backend/internal/application/usecase/wallet_usecase.go
 package usecase
 
 import (
 	"context"
-	"strings"
+	"time"
 
 	walletdom "narratives/internal/domain/wallet"
 )
 
-// WalletRepo defines the minimal persistence port needed by WalletUsecase.
-type WalletRepo interface {
-	GetByID(ctx context.Context, id string) (walletdom.Wallet, error)
-	Exists(ctx context.Context, id string) (bool, error)
-	Create(ctx context.Context, v walletdom.Wallet) (walletdom.Wallet, error)
-	Save(ctx context.Context, v walletdom.Wallet) (walletdom.Wallet, error)
-	Delete(ctx context.Context, id string) error
-}
+// ドメイン側に移譲したポートを usecase パッケージ内ではエイリアスとして利用する
+type WalletRepository = walletdom.Repository
+type OnchainWalletReader = walletdom.OnchainReader
 
-// WalletUsecase orchestrates wallet operations.
+// WalletUsecase は Wallet 同期ユースケース
 type WalletUsecase struct {
-	repo WalletRepo
+	WalletRepo    WalletRepository
+	OnchainReader OnchainWalletReader // DI で未設定の場合は nil
 }
 
-func NewWalletUsecase(repo WalletRepo) *WalletUsecase {
-	return &WalletUsecase{repo: repo}
+// コンストラクタ（DI コンテナの呼び出しに合わせて 1 引数）
+// OnchainReader は後からセットするか、未設定なら On-chain 同期なしで動作します。
+func NewWalletUsecase(
+	walletRepo WalletRepository,
+) *WalletUsecase {
+	return &WalletUsecase{
+		WalletRepo:    walletRepo,
+		OnchainReader: nil,
+	}
 }
 
-// Queries
-
-func (u *WalletUsecase) GetByID(ctx context.Context, id string) (walletdom.Wallet, error) {
-	return u.repo.GetByID(ctx, strings.TrimSpace(id))
+// 任意: OnchainReader を後から差し込むためのセッター（必要になったら DI 側で利用）
+func (uc *WalletUsecase) WithOnchainReader(r OnchainWalletReader) *WalletUsecase {
+	uc.OnchainReader = r
+	return uc
 }
 
-func (u *WalletUsecase) Exists(ctx context.Context, id string) (bool, error) {
-	return u.repo.Exists(ctx, strings.TrimSpace(id))
-}
+// Solana 上と Wallet エンティティを同期するユースケース
+// - OnchainReader が設定されていれば Solana から mint 一覧を取得して Wallet.Tokens を更新
+// - OnchainReader が nil の場合は、DB の Wallet を取得（または新規作成）するだけ
+func (uc *WalletUsecase) SyncWalletTokens(ctx context.Context, addr string) (walletdom.Wallet, error) {
+	var mints []string
+	var err error
 
-// Commands
+	// 1. On-chain の mint 一覧を取得（OnchainReader があれば）
+	if uc.OnchainReader != nil {
+		mints, err = uc.OnchainReader.ListOwnedTokenMints(ctx, addr)
+		if err != nil {
+			return walletdom.Wallet{}, err
+		}
+	}
 
-func (u *WalletUsecase) Create(ctx context.Context, v walletdom.Wallet) (walletdom.Wallet, error) {
-	return u.repo.Create(ctx, v)
-}
+	// 2. DB 上の Wallet を取得（なければ新規作成）
+	w, err := uc.WalletRepo.GetByAddress(ctx, addr)
+	if err != nil {
+		// NotFound の扱い：Wallet レコードを新規作成
+		now := time.Now().UTC()
+		initialTokens := mints
+		if uc.OnchainReader == nil {
+			// OnchainReader 無しの場合はトークン情報は空で作成
+			initialTokens = nil
+		}
+		w, err = walletdom.NewFull(addr, initialTokens, now, now, now, walletdom.StatusActive)
+		if err != nil {
+			return walletdom.Wallet{}, err
+		}
+	} else if uc.OnchainReader != nil {
+		// 既存 Wallet があり、かつ OnchainReader が有効なら Tokens を同期
+		if err := w.ReplaceTokens(mints, time.Now().UTC()); err != nil {
+			return walletdom.Wallet{}, err
+		}
+		// （OnchainReader が nil の場合は既存 Tokens をそのまま保持）
+	}
 
-func (u *WalletUsecase) Save(ctx context.Context, v walletdom.Wallet) (walletdom.Wallet, error) {
-	return u.repo.Save(ctx, v)
-}
+	// 3. 永続化（新規作成 or 更新）
+	if err := uc.WalletRepo.Save(ctx, w); err != nil {
+		return walletdom.Wallet{}, err
+	}
 
-func (u *WalletUsecase) Delete(ctx context.Context, id string) error {
-	return u.repo.Delete(ctx, strings.TrimSpace(id))
+	return w, nil
 }
