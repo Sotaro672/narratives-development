@@ -6,16 +6,16 @@ import (
 	"net/http"
 	"strings"
 
-	usecase "narratives/internal/application/usecase"
+	productionapp "narratives/internal/application/production"
 	productiondom "narratives/internal/domain/production"
 )
 
 // ProductionHandler は /productions 関連のエンドポイントを担当します。
 type ProductionHandler struct {
-	uc *usecase.ProductionUsecase
+	uc *productionapp.ProductionUsecase
 }
 
-func NewProductionHandler(uc *usecase.ProductionUsecase) http.Handler {
+func NewProductionHandler(uc *productionapp.ProductionUsecase) http.Handler {
 	return &ProductionHandler{uc: uc}
 }
 
@@ -147,8 +147,6 @@ func (h *ProductionHandler) update(w http.ResponseWriter, r *http.Request, id st
 		return
 	}
 
-	// 200 OK（明示しなくても Encode で 200 だが、わかりやすくしておいてもOK）
-	// w.WriteHeader(http.StatusOK)
 	_ = json.NewEncoder(w).Encode(p)
 }
 

@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	branddom "narratives/internal/domain/brand"
+	companydom "narratives/internal/domain/company"
 	memberdom "narratives/internal/domain/member"
 	modeldom "narratives/internal/domain/model"
 	tbdom "narratives/internal/domain/tokenBlueprint"
@@ -18,6 +19,11 @@ import (
 // Brand 名の取得に必要な最小限のインターフェース
 type BrandNameRepository interface {
 	GetByID(ctx context.Context, id string) (branddom.Brand, error)
+}
+
+// Company 名の取得に必要な最小限のインターフェース
+type CompanyNameRepository interface {
+	GetByID(ctx context.Context, id string) (companydom.Company, error)
 }
 
 // ProductBlueprint → productName だけ取得できればよい
@@ -47,6 +53,7 @@ type TokenBlueprintNameRepository interface {
 
 type NameResolver struct {
 	brandRepo            BrandNameRepository
+	companyRepo          CompanyNameRepository
 	productBlueprintRepo ProductBlueprintNameRepository
 	memberRepo           MemberNameRepository
 	modelNumberRepo      ModelNumberRepository
@@ -57,6 +64,7 @@ type NameResolver struct {
 // 画面向けの「名前解決ヘルパ」を生成する。
 func NewNameResolver(
 	brandRepo BrandNameRepository,
+	companyRepo CompanyNameRepository,
 	productBlueprintRepo ProductBlueprintNameRepository,
 	memberRepo MemberNameRepository,
 	modelNumberRepo ModelNumberRepository,
@@ -64,6 +72,7 @@ func NewNameResolver(
 ) *NameResolver {
 	return &NameResolver{
 		brandRepo:            brandRepo,
+		companyRepo:          companyRepo,
 		productBlueprintRepo: productBlueprintRepo,
 		memberRepo:           memberRepo,
 		modelNumberRepo:      modelNumberRepo,
@@ -93,6 +102,30 @@ func (r *NameResolver) ResolveBrandName(ctx context.Context, brandID string) str
 
 	// Brand ドメインの Name フィールドを想定
 	return strings.TrimSpace(b.Name)
+}
+
+// ------------------------------------------------------------
+// Company 関連
+// ------------------------------------------------------------
+
+// ResolveCompanyName は companyId から会社名（Name）を解決する。
+// 取得できなかった場合は空文字列を返す。
+func (r *NameResolver) ResolveCompanyName(ctx context.Context, companyID string) string {
+	if r == nil || r.companyRepo == nil {
+		return ""
+	}
+	id := strings.TrimSpace(companyID)
+	if id == "" {
+		return ""
+	}
+
+	c, err := r.companyRepo.GetByID(ctx, id)
+	if err != nil {
+		return ""
+	}
+
+	// Company ドメインの Name フィールドを想定
+	return strings.TrimSpace(c.Name)
 }
 
 // ------------------------------------------------------------
@@ -182,6 +215,16 @@ func (r *NameResolver) ResolveUpdatedByName(ctx context.Context, updatedBy *stri
 // ResolveRequestedByName は requestedBy (memberId) → 氏名を解決する。
 func (r *NameResolver) ResolveRequestedByName(ctx context.Context, requestedBy *string) string {
 	return r.resolveMemberNameFromPtr(ctx, requestedBy)
+}
+
+// ResolveInspectedByName は inspectedBy (memberId) → 氏名を解決する。
+func (r *NameResolver) ResolveInspectedByName(ctx context.Context, inspectedBy *string) string {
+	return r.resolveMemberNameFromPtr(ctx, inspectedBy)
+}
+
+// ResolvePrintedByName は printedBy (memberId) → 氏名を解決する。
+func (r *NameResolver) ResolvePrintedByName(ctx context.Context, printedBy *string) string {
+	return r.resolveMemberNameFromPtr(ctx, printedBy)
 }
 
 // ------------------------------------------------------------

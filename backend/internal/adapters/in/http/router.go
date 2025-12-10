@@ -9,6 +9,9 @@ import (
 	usecase "narratives/internal/application/usecase"
 	authuc "narratives/internal/application/usecase/auth"
 
+	// ★ new: Production 用の新パッケージ
+	productionapp "narratives/internal/application/production"
+
 	// ハンドラ群
 	"narratives/internal/adapters/in/http/handlers"
 	"narratives/internal/adapters/in/http/middleware"
@@ -22,27 +25,28 @@ import (
 )
 
 type RouterDeps struct {
-	AccountUC          *usecase.AccountUsecase
-	AnnouncementUC     *usecase.AnnouncementUsecase
-	AvatarUC           *usecase.AvatarUsecase
-	BillingAddressUC   *usecase.BillingAddressUsecase
-	BrandUC            *usecase.BrandUsecase
-	CampaignUC         *usecase.CampaignUsecase
-	CompanyUC          *usecase.CompanyUsecase
-	DiscountUC         *usecase.DiscountUsecase
-	FulfillmentUC      *usecase.FulfillmentUsecase
-	InquiryUC          *usecase.InquiryUsecase
-	InventoryUC        *usecase.InventoryUsecase
-	InvoiceUC          *usecase.InvoiceUsecase
-	ListUC             *usecase.ListUsecase
-	MemberUC           *usecase.MemberUsecase
-	MessageUC          *usecase.MessageUsecase
-	ModelUC            *usecase.ModelUsecase
-	OrderUC            *usecase.OrderUsecase
-	PaymentUC          *usecase.PaymentUsecase
-	PermissionUC       *usecase.PermissionUsecase
-	PrintUC            *usecase.PrintUsecase
-	ProductionUC       *usecase.ProductionUsecase
+	AccountUC        *usecase.AccountUsecase
+	AnnouncementUC   *usecase.AnnouncementUsecase
+	AvatarUC         *usecase.AvatarUsecase
+	BillingAddressUC *usecase.BillingAddressUsecase
+	BrandUC          *usecase.BrandUsecase
+	CampaignUC       *usecase.CampaignUsecase
+	CompanyUC        *usecase.CompanyUsecase
+	DiscountUC       *usecase.DiscountUsecase
+	FulfillmentUC    *usecase.FulfillmentUsecase
+	InquiryUC        *usecase.InquiryUsecase
+	InventoryUC      *usecase.InventoryUsecase
+	InvoiceUC        *usecase.InvoiceUsecase
+	ListUC           *usecase.ListUsecase
+	MemberUC         *usecase.MemberUsecase
+	MessageUC        *usecase.MessageUsecase
+	ModelUC          *usecase.ModelUsecase
+	OrderUC          *usecase.OrderUsecase
+	PaymentUC        *usecase.PaymentUsecase
+	PermissionUC     *usecase.PermissionUsecase
+	PrintUC          *usecase.PrintUsecase
+	// ★ここだけ型を新パッケージに変更
+	ProductionUC       *productionapp.ProductionUsecase
 	ProductBlueprintUC *usecase.ProductBlueprintUsecase
 	SaleUC             *usecase.SaleUsecase
 	ShippingAddressUC  *usecase.ShippingAddressUsecase

@@ -7,6 +7,7 @@ import (
 	"strings"
 	"time"
 
+	productionapp "narratives/internal/application/production"
 	resolver "narratives/internal/application/resolver"
 	usecase "narratives/internal/application/usecase"
 	productdom "narratives/internal/domain/product"
@@ -14,9 +15,13 @@ import (
 
 // PrintHandler は /products 関連のエンドポイントを担当します。
 type PrintHandler struct {
-	uc           *usecase.PrintUsecase
-	productionUC *usecase.ProductionUsecase
-	modelUC      *usecase.ModelUsecase
+	uc *usecase.PrintUsecase
+
+	// ★ 生産情報を参照する場合用（現状未使用だが将来拡張向けに保持）
+	productionUC *productionapp.ProductionUsecase
+
+	// ★ モデル情報を参照する場合用（現状未使用だが将来拡張向けに保持）
+	modelUC *usecase.ModelUsecase
 
 	// ★ 追加: modelId → modelNumber 解決用 NameResolver
 	nameResolver *resolver.NameResolver
@@ -25,7 +30,7 @@ type PrintHandler struct {
 // NewPrintHandler はHTTPハンドラを初期化します。
 func NewPrintHandler(
 	uc *usecase.PrintUsecase,
-	productionUC *usecase.ProductionUsecase,
+	productionUC *productionapp.ProductionUsecase,
 	modelUC *usecase.ModelUsecase,
 	nameResolver *resolver.NameResolver, // ★ 追加
 ) http.Handler {

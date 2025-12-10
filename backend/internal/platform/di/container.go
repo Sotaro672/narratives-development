@@ -13,6 +13,7 @@ import (
 	httpin "narratives/internal/adapters/in/http"
 	fs "narratives/internal/adapters/out/firestore"
 	mailadp "narratives/internal/adapters/out/mail"
+	productionapp "narratives/internal/application/production"
 	resolver "narratives/internal/application/resolver"
 	uc "narratives/internal/application/usecase"
 	authuc "narratives/internal/application/usecase/auth"
@@ -72,7 +73,7 @@ type Container struct {
 	PaymentUC          *uc.PaymentUsecase
 	PermissionUC       *uc.PermissionUsecase
 	PrintUC            *uc.PrintUsecase
-	ProductionUC       *uc.ProductionUsecase
+	ProductionUC       *productionapp.ProductionUsecase
 	ProductBlueprintUC *uc.ProductBlueprintUsecase
 	SaleUC             *uc.SaleUsecase
 	ShippingAddressUC  *uc.ShippingAddressUsecase
@@ -228,6 +229,7 @@ func NewContainer(ctx context.Context) (*Container, error) {
 
 	nameResolver := resolver.NewNameResolver(
 		brandRepo,              // BrandNameRepository
+		companyRepo,            // CompanyNameRepository
 		productBlueprintRepo,   // ProductBlueprintNameRepository
 		memberRepo,             // MemberNameRepository
 		modelRepo,              // ModelNumberRepository
@@ -279,12 +281,12 @@ func NewContainer(ctx context.Context) (*Container, error) {
 		productBlueprintRepo,
 		nameResolver,
 	)
-	// ★ ProductionUsecase に member.Service + productBlueprint.Service + brand.Service を注入
-	productionUC := uc.NewProductionUsecase(
-		productionRepo,
-		memberSvc,
-		pbSvc,
-		brandSvc,
+
+	// ★ ProductionUsecase（新パッケージ application/production）
+	productionUC := productionapp.NewProductionUsecase(
+		productionRepo, // ProductionRepo
+		pbSvc,          // *productBlueprint.Service
+		nameResolver,   // *resolver.NameResolver
 	)
 
 	// ★ ProductBlueprintUsecase に HistoryRepo を注入

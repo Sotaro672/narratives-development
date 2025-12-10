@@ -1,133 +1,78 @@
 // frontend/shell/src/shared/types/production.ts
 
 /**
- * ModelQuantity
- * backend/internal/domain/production/entity.go の ModelQuantity に対応
+ * ProductionStatus
+ * バックエンド（productiondom.Production.Status）のラッパー。
+ * 実際の値は "planning" / "inProgress" / "printing" / "printed" などが入りますが、
+ * 型崩れを避けるため現時点では string として扱います。
  */
-export interface ModelQuantity {
-  /** モデルID */
-  modelId: string;
-  /** 数量 (1以上) */
-  quantity: number;
-}
+export type ProductionStatus = string;
 
 /**
- * ProductionStatus
- * backend/internal/domain/production/entity.go の ProductionStatus に対応
+ * ProductionModel
+ * バックエンドの Production.Models 要素に対応する想定の型です。
+ * - modelId: 対象の ModelVariation の ID
+ * - quantity: そのモデルで生産する数量
  */
-export type ProductionStatus =
-  | "manufacturing"
-  | "inspected"
-  | "printed"
-  | "planning"
-  | "deleted"
-  | "suspended";
-
-/** ProductionStatus の妥当性チェック */
-export function isValidProductionStatus(
-  status: string
-): status is ProductionStatus {
-  return (
-    status === "manufacturing" ||
-    status === "inspected" ||
-    status === "printed" ||
-    status === "planning" ||
-    status === "deleted" ||
-    status === "suspended"
-  );
-}
+export type ProductionModel = {
+  /** Firestore ドキュメント ID 等がある場合に使う（なければ無視されてもよい） */
+  id?: string;
+  /** model_variations コレクションの ID */
+  modelId: string;
+  /** 生産数量 */
+  quantity: number;
+};
 
 /**
  * Production
- * backend/internal/domain/production/entity.go の Production に対応する共通型
+ * backend/internal/domain/production/entity.go の Production 構造体に対応する
+ * フロントエンド用の共通型です。
  *
- * - 日付は ISO8601 文字列
- * - ポインタ型は string | null で表現
+ * Firestore からの JSON をそのまま受け取れるよう、日時は string（ISO8601）で扱います。
+ * 画面ごとの DTO（一覧・詳細・作成フォーム用）は各コンテキストの
+ * application 層でこの型を拡張して利用してください。
  */
-export interface Production {
+export type Production = {
+  /** productions コレクションのドキュメント ID */
   id: string;
+
+  /** 会社 ID */
+  companyId: string;
+
+  /** ブランド ID */
+  brandId: string;
+
+  /** 紐づく product_blueprints の ID */
   productBlueprintId: string;
-  assigneeId: string;
-  models: ModelQuantity[];
+
+  /** 担当者の memberId（未設定なら null / undefined） */
+  assigneeId?: string | null;
+
+  /** 生産ステータス */
   status: ProductionStatus;
+
+  /** モデル別の生産数量一覧 */
+  models: ProductionModel[];
+
+  // ─── 印刷関連 ────────────────────────────────
+
+  /** 印刷完了日時（ISO8601）。未印刷なら null / undefined */
   printedAt?: string | null;
-  inspectedAt?: string | null;
+
+  /** 印刷を実行したメンバーの memberId（ない場合は null / undefined） */
+  printedBy?: string | null;
+
+  // ─── 監査情報 ────────────────────────────────
+
+  /** 作成者の memberId（履歴用途。無い場合もある） */
   createdBy?: string | null;
-  createdAt?: string | null;
+
+  /** 最終更新者の memberId（履歴用途。無い場合もある） */
   updatedBy?: string | null;
-  updatedAt?: string | null;
-  deletedBy?: string | null;
-  deletedAt?: string | null;
-}
 
-/* =========================================================
- * ユーティリティ
- * =======================================================*/
+  /** 作成日時（ISO8601） */
+  createdAt: string;
 
-/** models 配列の正規化（空ID・数量<=0を除外、modelId小文字で重複排除） */
-export function normalizeModelQuantities(
-  models: ModelQuantity[]
-): ModelQuantity[] {
-  const seen = new Set<string>();
-  const result: ModelQuantity[] = [];
-
-  for (const m of models || []) {
-    const id = (m.modelId ?? "").trim();
-    if (!id || m.quantity <= 0) continue;
-    const key = id.toLowerCase();
-    if (seen.has(key)) continue;
-    seen.add(key);
-    result.push({ modelId: id, quantity: m.quantity });
-  }
-  return result;
-}
-
-/** Production の簡易バリデーション（backend の validate() に整合） */
-export function validateProduction(p: Production): string[] {
-  const errors: string[] = [];
-
-  if (!p.id?.trim()) errors.push("id is required");
-  if (!p.productBlueprintId?.trim())
-    errors.push("productBlueprintId is required");
-  if (!p.assigneeId?.trim()) errors.push("assigneeId is required");
-
-  if (!Array.isArray(p.models) || p.models.length === 0) {
-    errors.push("models must contain at least one element");
-  } else {
-    for (const mq of p.models) {
-      if (!mq.modelId?.trim()) errors.push("modelId is required");
-      if (mq.quantity <= 0) errors.push("quantity must be > 0");
-    }
-  }
-
-  if (!isValidProductionStatus(p.status)) {
-    errors.push("invalid status");
-  }
-
-  // 状態と時刻の整合性チェック
-  switch (p.status) {
-    case "printed":
-      if (!p.printedAt) errors.push("printedAt is required when printed");
-      break;
-    case "inspected":
-      if (!p.printedAt) errors.push("printedAt is required when inspected");
-      if (!p.inspectedAt)
-        errors.push("inspectedAt is required when inspected");
-      break;
-    case "deleted":
-      if (!p.deletedAt) errors.push("deletedAt is required when deleted");
-      break;
-  }
-
-  return errors;
-}
-
-/**
- * ファクトリ関数：入力値を正規化して Production を生成
- */
-export function createProduction(
-  input: Omit<Production, "models"> & { models?: ModelQuantity[] }
-): Production {
-  const models = normalizeModelQuantities(input.models ?? []);
-  return { ...input, models };
-}
+  /** 更新日時（ISO8601） */
+  updatedAt: string;
+};
