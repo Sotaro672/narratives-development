@@ -16,6 +16,10 @@ type MintClient struct {
 	key *MintAuthorityKey
 }
 
+// インターフェース実装チェック:
+// MintClient が tokendom.MintAuthorityWalletPort を満たしていなければコンパイルエラーになります。
+var _ tokendom.MintAuthorityWalletPort = (*MintClient)(nil)
+
 // NewMintClient はミント権限キーを受け取って MintClient を初期化します。
 func NewMintClient(key *MintAuthorityKey) *MintClient {
 	return &MintClient{key: key}
@@ -27,6 +31,8 @@ func NewMintClient(key *MintAuthorityKey) *MintClient {
 // TODO: 将来的には Solana の base58 アドレス形式に揃える。
 // ひとまずは ed25519.PublicKey ([]byte) を hex 文字列にして返しています。
 func (c *MintClient) PublicKey(ctx context.Context) (string, error) {
+	_ = ctx // 現時点では ctx を使用していないため unused 回避
+
 	if c == nil || c.key == nil {
 		return "", fmt.Errorf("mint client is not initialized (missing mint authority key)")
 	}
@@ -45,6 +51,8 @@ func (c *MintClient) MintToken(
 	ctx context.Context,
 	params tokendom.MintParams,
 ) (*tokendom.MintResult, error) {
+	_ = ctx // 現時点では ctx を使用していないため unused 回避
+
 	if c == nil || c.key == nil {
 		return nil, fmt.Errorf("mint client is not initialized (missing mint authority key)")
 	}
