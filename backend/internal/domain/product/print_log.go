@@ -4,17 +4,15 @@ package product
 import (
 	"errors"
 	"strings"
-	"time"
 )
 
 // PrintLog は「印刷した Product の履歴」を保持するエンティティ。
 // 1 レコードで 1 回の印刷バッチを表し、productIds にそのとき印刷された Product ID 一覧を持ちます。
+// printedAt / printedBy は Production 側で責務を持つためここでは扱いません。
 type PrintLog struct {
-	ID           string    `json:"id"`
-	ProductionID string    `json:"productionId"`
-	ProductIDs   []string  `json:"productIds"`
-	PrintedBy    string    `json:"printedBy"`
-	PrintedAt    time.Time `json:"printedAt"`
+	ID           string   `json:"id"`
+	ProductionID string   `json:"productionId"`
+	ProductIDs   []string `json:"productIds"`
 	// QR ペイロード一覧（例: 各 productId に対応する URL）
 	// Firestore には保存せず、レスポンス専用に使う想定。
 	QrPayloads []string `json:"qrPayloads,omitempty"`
@@ -25,8 +23,6 @@ var (
 	ErrInvalidPrintLogID           = errors.New("printLog: invalid id")
 	ErrInvalidPrintLogProductionID = errors.New("printLog: invalid productionId")
 	ErrInvalidPrintLogProductIDs   = errors.New("printLog: invalid productIds")
-	ErrInvalidPrintLogPrintedBy    = errors.New("printLog: invalid printedBy")
-	ErrInvalidPrintLogPrintedAt    = errors.New("printLog: invalid printedAt")
 )
 
 // NewPrintLog は PrintLog エンティティのコンストラクタです。
@@ -36,15 +32,11 @@ func NewPrintLog(
 	id string,
 	productionID string,
 	productIDs []string,
-	printedBy string,
-	printedAt time.Time,
 ) (PrintLog, error) {
 	pl := PrintLog{
 		ID:           strings.TrimSpace(id),
 		ProductionID: strings.TrimSpace(productionID),
 		ProductIDs:   normalizeIDList(productIDs),
-		PrintedBy:    strings.TrimSpace(printedBy),
-		PrintedAt:    printedAt.UTC(),
 		// QrPayloads は任意フィールドなのでデフォルト nil のまま
 	}
 	if err := pl.validate(); err != nil {
@@ -67,12 +59,6 @@ func (pl PrintLog) validate() error {
 		if strings.TrimSpace(pid) == "" {
 			return ErrInvalidPrintLogProductIDs
 		}
-	}
-	if strings.TrimSpace(pl.PrintedBy) == "" {
-		return ErrInvalidPrintLogPrintedBy
-	}
-	if pl.PrintedAt.IsZero() {
-		return ErrInvalidPrintLogPrintedAt
 	}
 	// QrPayloads は任意なのでここではバリデーションしない
 	return nil

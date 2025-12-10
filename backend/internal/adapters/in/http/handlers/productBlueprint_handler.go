@@ -181,7 +181,8 @@ func (h *ProductBlueprintHandler) post(w http.ResponseWriter, r *http.Request) {
 		AssigneeID:       in.AssigneeId,
 		CompanyID:        in.CompanyId,
 		CreatedBy:        createdBy,
-		Printed:          pbdom.PrintedStatusNotYet,
+		// ★ printed は bool に変更。create 時は常に false（未印刷）
+		Printed: false,
 		ProductIdTag: pbdom.ProductIDTag{
 			Type: pbdom.ProductIDTagType(in.ProductIdTag.Type),
 		},
@@ -252,6 +253,9 @@ func (h *ProductBlueprintHandler) update(w http.ResponseWriter, r *http.Request,
 		ProductIdTag: pbdom.ProductIDTag{
 			Type: pbdom.ProductIDTagType(in.ProductIdTag.Type),
 		},
+		// Printed はここでは明示設定しない（既存値を repo.Save 側で維持する前提なら
+		// ここでフィールドを省略しても良いですが、struct literal なのでゼロ値 false になります。
+		// もし「更新時に Printed を維持したい」場合は、別途 Get → マージが必要になります）
 	}
 
 	updated, err := h.uc.Update(ctx, pb)

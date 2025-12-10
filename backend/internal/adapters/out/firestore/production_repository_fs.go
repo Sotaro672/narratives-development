@@ -308,7 +308,6 @@ func docToProduction(doc *firestore.DocumentSnapshot) (proddom.Production, error
 		Models             []proddom.ModelQuantity `firestore:"models"`
 		Status             string                  `firestore:"status"`
 		PrintedAt          *time.Time              `firestore:"printedAt"`
-		InspectedAt        *time.Time              `firestore:"inspectedAt"`
 		CreatedBy          *string                 `firestore:"createdBy"`
 		CreatedAt          time.Time               `firestore:"createdAt"`
 		UpdatedBy          *string                 `firestore:"updatedBy"`
@@ -333,7 +332,6 @@ func docToProduction(doc *firestore.DocumentSnapshot) (proddom.Production, error
 		Models:             raw.Models,
 		Status:             proddom.ProductionStatus(statusStr),
 		PrintedAt:          normalizeTimePtr(raw.PrintedAt),
-		InspectedAt:        normalizeTimePtr(raw.InspectedAt),
 		CreatedBy:          fscommon.TrimPtr(raw.CreatedBy),
 		CreatedAt:          raw.CreatedAt.UTC(),
 		UpdatedBy:          fscommon.TrimPtr(raw.UpdatedBy),
@@ -375,9 +373,6 @@ func productionToDoc(p proddom.Production) map[string]any {
 	}
 	if p.PrintedAt != nil && !p.PrintedAt.IsZero() {
 		m["printedAt"] = p.PrintedAt.UTC()
-	}
-	if p.InspectedAt != nil && !p.InspectedAt.IsZero() {
-		m["inspectedAt"] = p.InspectedAt.UTC()
 	}
 	if p.UpdatedBy != nil {
 		if s := strings.TrimSpace(*p.UpdatedBy); s != "" {

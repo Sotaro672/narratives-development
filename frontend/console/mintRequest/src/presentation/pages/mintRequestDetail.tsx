@@ -56,11 +56,14 @@ export default function MintRequestDetail() {
     isMintRequested,
     requestedBy,
     requestedAt,
+
+    // ★ 焼却予定日（ScheduledBurnDate）: hook から受け取る
+    scheduledBurnDate,
+    setScheduledBurnDate,
   } = useMintRequestDetail();
 
-  // ★ 焼却予定日（ScheduledBurnDate）入力用ローカル状態
-  //   - まずは UI 側に入力欄だけ追加（実際の保存は後続の実装で紐付け）
-  const [scheduledBurnDate, setScheduledBurnDate] = React.useState<string>("");
+  // ★ ページ側でのローカル scheduledBurnDate state は削除
+  // const [scheduledBurnDate, setScheduledBurnDate] = React.useState<string>("");
 
   const handleSave = () => {};
 
@@ -152,9 +155,7 @@ export default function MintRequestDetail() {
           <InspectionResultCard data={inspectionCardData} />
         )}
 
-        {/* ③ Token Blueprint Card
-            - 未申請: 選択中トークンがあれば表示
-            - 申請済み: requestedBy/At/tokenBlueprintId があれば表示（hook 側で vm 解決済み） */}
+        {/* ③ Token Blueprint Card */}
         {tokenBlueprintCardVm && (
           <TokenBlueprintCard
             vm={tokenBlueprintCardVm}

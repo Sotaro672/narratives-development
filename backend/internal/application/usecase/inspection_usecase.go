@@ -8,7 +8,6 @@ import (
 	"time"
 
 	inspectiondom "narratives/internal/domain/inspection"
-	modeldom "narratives/internal/domain/model"
 )
 
 // ------------------------------------------------------------
@@ -33,11 +32,6 @@ type ProductInspectionRepo interface {
 //       Save(ctx context.Context, batch inspectiondom.InspectionBatch) (inspectiondom.InspectionBatch, error)
 //   }
 
-// ModelNumberRepo は modelID から ModelVariation を取得するためのポート。
-type ModelNumberRepo interface {
-	GetModelVariationByID(ctx context.Context, modelID string) (modeldom.ModelVariation, error)
-}
-
 // ------------------------------------------------------------
 // Usecase
 // ------------------------------------------------------------
@@ -45,69 +39,16 @@ type ModelNumberRepo interface {
 type InspectionUsecase struct {
 	inspectionRepo InspectionRepo
 	productRepo    ProductInspectionRepo
-	modelRepo      ModelNumberRepo
 }
 
 func NewInspectionUsecase(
 	inspectionRepo InspectionRepo,
 	productRepo ProductInspectionRepo,
-	modelRepo ModelNumberRepo,
 ) *InspectionUsecase {
 	return &InspectionUsecase{
 		inspectionRepo: inspectionRepo,
 		productRepo:    productRepo,
-		modelRepo:      modelRepo,
 	}
-}
-
-// ------------------------------------------------------------
-// private helper: modelId → modelNumber の解決
-// ------------------------------------------------------------
-
-func (u *InspectionUsecase) fillModelNumbers(
-	ctx context.Context,
-	batch inspectiondom.InspectionBatch,
-) inspectiondom.InspectionBatch {
-
-	if u.modelRepo == nil {
-		return batch
-	}
-
-	// 同じ modelId に対する解決結果はキャッシュする
-	cache := make(map[string]string)
-
-	for i := range batch.Inspections {
-		mid := strings.TrimSpace(batch.Inspections[i].ModelID)
-		if mid == "" {
-			continue
-		}
-
-		// 既にキャッシュ済みならそれを使う
-		if num, ok := cache[mid]; ok {
-			n := num
-			batch.Inspections[i].ModelNumber = &n
-			continue
-		}
-
-		// modelId から ModelVariation を取得
-		mv, err := u.modelRepo.GetModelVariationByID(ctx, mid)
-		if err != nil {
-			continue
-		}
-
-		num := strings.TrimSpace(mv.ModelNumber)
-		if num == "" {
-			// ModelNumber が未設定ならスキップ
-			continue
-		}
-
-		// キャッシュしてから項目に反映
-		cache[mid] = num
-		n := num
-		batch.Inspections[i].ModelNumber = &n
-	}
-
-	return batch
 }
 
 // ------------------------------------------------------------
@@ -134,8 +75,7 @@ func (u *InspectionUsecase) GetBatchByProductionID(
 		return inspectiondom.InspectionBatch{}, err
 	}
 
-	// modelId → modelNumber を埋めてから返却
-	batch = u.fillModelNumbers(ctx, batch)
+	// 以前はここで modelId → modelNumber を埋め込んでいたが、現在はそのロジックを削除
 	return batch, nil
 }
 
@@ -251,8 +191,7 @@ func (u *InspectionUsecase) UpdateInspectionForProduct(
 		return inspectiondom.InspectionBatch{}, err
 	}
 
-	// 4.5) ★ modelNumber の埋め込み
-	updated = u.fillModelNumbers(ctx, updated)
+	// 以前はここで modelNumber の埋め込みを行っていたが、現在は削除済み
 
 	// 5) products テーブル側の inspectionResult も同期
 	//    （result が指定されている場合のみ）
@@ -265,7 +204,9 @@ func (u *InspectionUsecase) UpdateInspectionForProduct(
 	return updated, nil
 }
 
-// ★ 検品完了（未検品を notManufactured にし、ステータスを completed にする）
+// ★ 検品完了
+//   - inspections 側ではドメインの Complete により notYet → notManufactured へ遷移
+//   - products 側にも inspectionResult を同期（notManufactured を含む）
 func (u *InspectionUsecase) CompleteInspectionForProduction(
 	ctx context.Context,
 	productionID string,
@@ -289,6 +230,7 @@ func (u *InspectionUsecase) CompleteInspectionForProduction(
 	}
 
 	// 2) ドメイン側の Complete を利用して一括更新
+	//    ここで notYet → notManufactured への遷移が行われる想定
 	if err := batch.Complete(by, at); err != nil {
 		return inspectiondom.InspectionBatch{}, err
 	}
@@ -308,12 +250,11 @@ func (u *InspectionUsecase) CompleteInspectionForProduction(
 		return inspectiondom.InspectionBatch{}, err
 	}
 
-	// 3.5) ★ modelNumber の埋め込み
-	updated = u.fillModelNumbers(ctx, updated)
+	// 以前はここで modelNumber の埋め込みを行っていたが、現在は削除済み
 
 	// 4) products テーブル側の inspectionResult も同期
-	//    - notManufactured になった行は「物理的な商品が存在しない」ケースがあるためスキップ
-	//    - productId が空の行もスキップ
+	//    - Complete による notYet → notManufactured の結果も反映するため、
+	//      notManufactured も含めて全て同期する
 	if u.productRepo != nil {
 		for _, item := range updated.Inspections {
 			if item.InspectionResult == nil {
@@ -322,11 +263,6 @@ func (u *InspectionUsecase) CompleteInspectionForProduction(
 			result := *item.InspectionResult
 			if !inspectiondom.IsValidInspectionResult(result) {
 				return inspectiondom.InspectionBatch{}, inspectiondom.ErrInvalidInspectionResult
-			}
-
-			// 物理商品が存在しない可能性が高いので、notManufactured は products へ同期しない
-			if result == inspectiondom.InspectionNotManufactured {
-				continue
 			}
 
 			pid := strings.TrimSpace(item.ProductID)

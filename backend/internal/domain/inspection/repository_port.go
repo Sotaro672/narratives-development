@@ -3,7 +3,6 @@ package inspection
 
 import (
 	"context"
-	"time"
 )
 
 // Repository は inspection ドメインの永続化ポートです。
@@ -39,22 +38,5 @@ type Repository interface {
 	Save(
 		ctx context.Context,
 		batch InspectionBatch,
-	) (InspectionBatch, error)
-
-	// ------------------------------------------------------
-	// UpdateRequestInfo:
-	//   requestedBy / requestedAt / tokenBlueprintId を更新するための専用メソッド。
-	//
-	// - 対象 productionID の InspectionBatch が存在しない場合は ErrNotFound を返す想定です。
-	// - 実装側では、既存の InspectionBatch を取得し、
-	//   RequestedBy / RequestedAt / TokenBlueprintID を更新してから Save する形でも構いません。
-	// - requestedBy / tokenBlueprintID が空文字の場合は、nil クリア扱いにする実装を推奨します。
-	// - requestedAt がゼロ値の場合は nil クリア扱いにする実装を推奨します。
-	UpdateRequestInfo(
-		ctx context.Context,
-		productionID string,
-		requestedBy string,
-		requestedAt time.Time,
-		tokenBlueprintID string,
 	) (InspectionBatch, error)
 }

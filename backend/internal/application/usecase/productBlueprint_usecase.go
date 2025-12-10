@@ -24,11 +24,11 @@ type ProductBlueprintRepo interface {
 	// （MintRequest 用のチェーン: companyId → productBlueprintId → production → mintRequest など）
 	ListIDsByCompany(ctx context.Context, companyID string) ([]string, error)
 
-	// ★ 追加: printed == "printed" のみを対象に、指定 ID 群の Blueprint を取得
+	// ★ 追加: printed == true（印刷済み）のみを対象に、指定 ID 群の Blueprint を取得
 	// ListIDsByCompany → ListPrinted で 1 セットになる想定
 	ListPrinted(ctx context.Context, ids []string) ([]productbpdom.ProductBlueprint, error)
 
-	// ★ 追加: printed フラグを "printed" に更新する
+	// ★ 追加: printed フラグを true（印刷済み）に更新する
 	MarkPrinted(ctx context.Context, id string) (productbpdom.ProductBlueprint, error)
 
 	Create(ctx context.Context, v productbpdom.ProductBlueprint) (productbpdom.ProductBlueprint, error)
@@ -100,7 +100,7 @@ func (u *ProductBlueprintUsecase) ListPrinted(
 	return u.ListPrintedByCompany(ctx)
 }
 
-// ★ companyId ごとの printed:printed 一覧
+// ★ companyId ごとの printed:true 一覧
 // ListIDsByCompany → ListPrinted で 1 セットのユースケース。
 func (u *ProductBlueprintUsecase) ListPrintedByCompany(
 	ctx context.Context,
@@ -119,7 +119,7 @@ func (u *ProductBlueprintUsecase) ListPrintedByCompany(
 		return []productbpdom.ProductBlueprint{}, nil
 	}
 
-	// 2) その ID 群のうち、printed == "printed" のものだけを取得
+	// 2) その ID 群のうち、printed == true（印刷済み）のものだけを取得
 	rows, err := u.repo.ListPrinted(ctx, ids)
 	if err != nil {
 		return nil, err
@@ -131,7 +131,7 @@ func (u *ProductBlueprintUsecase) ListPrintedByCompany(
 		if pb.DeletedAt != nil {
 			continue
 		}
-		if pb.Printed != productbpdom.PrintedStatusPrinted {
+		if !pb.Printed {
 			continue
 		}
 		if strings.TrimSpace(pb.CompanyID) != cid {
@@ -143,7 +143,7 @@ func (u *ProductBlueprintUsecase) ListPrintedByCompany(
 	return out, nil
 }
 
-// ★ printed フラグを "printed" に更新するユースケース
+// ★ printed フラグを true（印刷済み）に更新するユースケース
 // Handler から /product-blueprints/{id}/mark-printed などで呼ばれる想定。
 func (u *ProductBlueprintUsecase) MarkPrinted(
 	ctx context.Context,

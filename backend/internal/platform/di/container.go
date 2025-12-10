@@ -3,319 +3,27 @@ package di
 
 import (
 	"context"
-	"errors"
 	"log"
-	"strings"
 
 	firebase "firebase.google.com/go/v4"
 	firebaseauth "firebase.google.com/go/v4/auth"
 
 	solanainfra "narratives/internal/infra/solana"
 
-	"cloud.google.com/go/firestore"
-
 	httpin "narratives/internal/adapters/in/http"
 	fs "narratives/internal/adapters/out/firestore"
 	mailadp "narratives/internal/adapters/out/mail"
+	resolver "narratives/internal/application/resolver"
 	uc "narratives/internal/application/usecase"
 	authuc "narratives/internal/application/usecase/auth"
 	branddom "narratives/internal/domain/brand"
 	companydom "narratives/internal/domain/company"
-	inspectiondom "narratives/internal/domain/inspection"
 	memdom "narratives/internal/domain/member"
-	modeldom "narratives/internal/domain/model"     // ★ productQueryRepoAdapter / modelNumberRepoAdapter 用
-	productdom "narratives/internal/domain/product" // ★ productQueryRepoAdapter 用
 	productbpdom "narratives/internal/domain/productBlueprint"
 	appcfg "narratives/internal/infra/config"
+
+	"cloud.google.com/go/firestore"
 )
-
-//
-// ========================================
-// auth.BootstrapService 用アダプタ
-// ========================================
-//
-
-// memdom.Repository → auth.MemberRepository
-type authMemberRepoAdapter struct {
-	repo memdom.Repository
-}
-
-// Save: *member を memdom.Repository.Save に委譲
-func (a *authMemberRepoAdapter) Save(ctx context.Context, m *memdom.Member) error {
-	if m == nil {
-		return errors.New("authMemberRepoAdapter.Save: nil member")
-	}
-	saved, err := a.repo.Save(ctx, *m, nil)
-	if err != nil {
-		return err
-	}
-	// Save 側で CreatedAt / UpdatedAt などが上書きされた場合に反映しておく
-	*m = saved
-	return nil
-}
-
-// GetByID: 値戻りをポインタに変換
-func (a *authMemberRepoAdapter) GetByID(ctx context.Context, id string) (*memdom.Member, error) {
-	v, err := a.repo.GetByID(ctx, id)
-	if err != nil {
-		return nil, err
-	}
-	return &v, nil
-}
-
-// CompanyRepositoryFS → auth.CompanyRepository
-type authCompanyRepoAdapter struct {
-	repo *fs.CompanyRepositoryFS
-}
-
-// NewID: Firestore の companies コレクションから DocID を採番
-func (a *authCompanyRepoAdapter) NewID(ctx context.Context) (string, error) {
-	if a.repo == nil || a.repo.Client == nil {
-		return "", errors.New("authCompanyRepoAdapter.NewID: repo or client is nil")
-	}
-	doc := a.repo.Client.Collection("companies").NewDoc()
-	return doc.ID, nil
-}
-
-// Save: companydom.Company を CompanyRepositoryFS.Save に委譲
-func (a *authCompanyRepoAdapter) Save(ctx context.Context, c *companydom.Company) error {
-	if c == nil {
-		return errors.New("authCompanyRepoAdapter.Save: nil company")
-	}
-	saved, err := a.repo.Save(ctx, *c, nil)
-	if err != nil {
-		return err
-	}
-	*c = saved
-	return nil
-}
-
-//
-// ========================================
-// InvitationTokenRepository 用アダプタ
-// ========================================
-//
-// Firestore 実装 (*fs.InvitationTokenRepositoryFS) を
-// usecase.InvitationTokenRepository に合わせてラップする。
-//   - ResolveInvitationInfoByToken
-//   - CreateInvitationToken
-//
-
-type invitationTokenRepoAdapter struct {
-	fsRepo *fs.InvitationTokenRepositoryFS
-}
-
-// ResolveInvitationInfoByToken は token から InvitationInfo を取得します。
-func (a *invitationTokenRepoAdapter) ResolveInvitationInfoByToken(
-	ctx context.Context,
-	token string,
-) (memdom.InvitationInfo, error) {
-	if a.fsRepo == nil {
-		return memdom.InvitationInfo{}, errors.New("invitationTokenRepoAdapter.ResolveInvitationInfoByToken: fsRepo is nil")
-	}
-
-	it, err := a.fsRepo.FindByToken(ctx, token)
-	if err != nil {
-		return memdom.InvitationInfo{}, err
-	}
-
-	return memdom.InvitationInfo{
-		MemberID:         it.MemberID,
-		CompanyID:        it.CompanyID,
-		AssignedBrandIDs: it.AssignedBrandIDs,
-		Permissions:      it.Permissions,
-	}, nil
-}
-
-// CreateInvitationToken は InvitationInfo を受け取り、
-// Firestore 側に招待トークンを作成して token 文字列を返します。
-func (a *invitationTokenRepoAdapter) CreateInvitationToken(
-	ctx context.Context,
-	info memdom.InvitationInfo,
-) (string, error) {
-	if a.fsRepo == nil {
-		return "", errors.New("invitationTokenRepoAdapter.CreateInvitationToken: fsRepo is nil")
-	}
-	// FS 実装は既に (ctx, member.InvitationInfo) を受け取るように
-	// 変更済みという前提で、そのまま委譲する。
-	return a.fsRepo.CreateInvitationToken(ctx, info)
-}
-
-// ========================================
-// productBlueprint ドメインサービス用アダプタ
-// ========================================
-//
-// fs.ProductBlueprintRepositoryFS（= uc.ProductBlueprintRepo 実装）を
-// productBlueprint.Service の期待する productBlueprint.Repository に
-// 合わせるための薄いアダプタです。
-// Service 側では GetByID しか使わない前提。
-type productBlueprintDomainRepoAdapter struct {
-	repo uc.ProductBlueprintRepo
-}
-
-func (a *productBlueprintDomainRepoAdapter) GetByID(
-	ctx context.Context,
-	id string,
-) (productbpdom.ProductBlueprint, error) {
-	if a == nil || a.repo == nil {
-		return productbpdom.ProductBlueprint{}, productbpdom.ErrInternal
-	}
-	return a.repo.GetByID(ctx, id)
-}
-
-// ========================================
-// ModelNumberRepo アダプタ
-// ========================================
-//
-// InspectionUsecase が期待する uc.ModelNumberRepo を
-// Firestore の ModelRepositoryFS に接続するアダプタ。
-// modelId → modelNumber の解決を担当する。
-type modelNumberRepoAdapter struct {
-	modelRepo *fs.ModelRepositoryFS
-}
-
-// GetModelVariationByID は interface usecase.ModelNumberRepo が要求するメソッド。
-// modelID から ModelVariation（値）を返します。
-func (a *modelNumberRepoAdapter) GetModelVariationByID(
-	ctx context.Context,
-	modelID string,
-) (modeldom.ModelVariation, error) {
-	if a == nil || a.modelRepo == nil {
-		return modeldom.ModelVariation{}, errors.New("modelNumberRepoAdapter: modelRepo is nil")
-	}
-
-	id := strings.TrimSpace(modelID)
-	if id == "" {
-		return modeldom.ModelVariation{}, modeldom.ErrInvalidID
-	}
-
-	mv, err := a.modelRepo.GetModelVariationByID(ctx, id)
-	if err != nil {
-		return modeldom.ModelVariation{}, err
-	}
-	if mv == nil {
-		return modeldom.ModelVariation{}, modeldom.ErrVariationNotFound
-	}
-	return *mv, nil
-}
-
-// （オプション）modelID から直接 modelNumber を解決したい場合用のヘルパ。
-// usecase 側で使っていなければコンパイルには影響しない。
-func (a *modelNumberRepoAdapter) GetModelNumberByModelID(
-	ctx context.Context,
-	modelID string,
-) (string, error) {
-	mv, err := a.GetModelVariationByID(ctx, modelID)
-	if err != nil {
-		return "", err
-	}
-
-	num := strings.TrimSpace(mv.ModelNumber)
-	if num == "" {
-		return "", modeldom.ErrInvalidModelNumber
-	}
-	return num, nil
-}
-
-// ========================================
-// inspection 用: products.UpdateInspectionResult アダプタ
-// ========================================
-//
-// usecase.ProductInspectionRepo が期待する
-//
-//	UpdateInspectionResult(ctx, productID string, result inspection.InspectionResult)
-//
-// を、ProductRepositoryFS が持つ
-//
-//	UpdateInspectionResult(ctx, productID string, result product.InspectionResult)
-//
-// に橋渡しする。
-type inspectionProductRepoAdapter struct {
-	repo interface {
-		UpdateInspectionResult(ctx context.Context, productID string, result productdom.InspectionResult) error
-	}
-}
-
-// InspectionUsecase.ProductInspectionRepo を満たす
-func (a *inspectionProductRepoAdapter) UpdateInspectionResult(
-	ctx context.Context,
-	productID string,
-	result inspectiondom.InspectionResult,
-) error {
-	if a == nil || a.repo == nil {
-		return errors.New("inspectionProductRepoAdapter: repo is nil")
-	}
-	// inspection.InspectionResult → product.InspectionResult に変換して委譲
-	return a.repo.UpdateInspectionResult(ctx, productID, productdom.InspectionResult(result))
-}
-
-// ========================================
-// ProductUsecase 用 ProductQueryRepo アダプタ
-// ========================================
-//
-// 既存の Firestore Repository 群を束ねて usecase.ProductQueryRepo を実装します。
-// - productRepo          → products 取得
-// - modelRepo            → model variations 取得
-// - productionRepo       → productions 取得
-// - productBlueprintRepo → product_blueprints 取得
-type productQueryRepoAdapter struct {
-	productRepo          *fs.ProductRepositoryFS
-	modelRepo            *fs.ModelRepositoryFS
-	productionRepo       *fs.ProductionRepositoryFS
-	productBlueprintRepo *fs.ProductBlueprintRepositoryFS
-}
-
-// GetProductByID implements usecase.ProductQueryRepo.
-func (a *productQueryRepoAdapter) GetProductByID(
-	ctx context.Context,
-	productID string,
-) (productdom.Product, error) {
-	if a == nil || a.productRepo == nil {
-		return productdom.Product{}, errors.New("productQueryRepoAdapter: productRepo is nil")
-	}
-	return a.productRepo.GetByID(ctx, productID)
-}
-
-// GetModelByID implements usecase.ProductQueryRepo.
-func (a *productQueryRepoAdapter) GetModelByID(
-	ctx context.Context,
-	modelID string,
-) (modeldom.ModelVariation, error) {
-	if a == nil || a.modelRepo == nil {
-		return modeldom.ModelVariation{}, errors.New("productQueryRepoAdapter: modelRepo is nil")
-	}
-	mv, err := a.modelRepo.GetModelVariationByID(ctx, modelID)
-	if err != nil {
-		return modeldom.ModelVariation{}, err
-	}
-	if mv == nil {
-		return modeldom.ModelVariation{}, errors.New("productQueryRepoAdapter: modelRepo returned nil model variation")
-	}
-	return *mv, nil
-}
-
-// GetProductionByID implements usecase.ProductQueryRepo.
-func (a *productQueryRepoAdapter) GetProductionByID(
-	ctx context.Context,
-	productionID string,
-) (interface{}, error) {
-	if a == nil || a.productionRepo == nil {
-		return nil, errors.New("productQueryRepoAdapter: productionRepo is nil")
-	}
-	// productiondom.Production 型を interface{} として返す
-	return a.productionRepo.GetByID(ctx, productionID)
-}
-
-// GetProductBlueprintByID implements usecase.ProductQueryRepo.
-func (a *productQueryRepoAdapter) GetProductBlueprintByID(
-	ctx context.Context,
-	bpID string,
-) (productbpdom.ProductBlueprint, error) {
-	if a == nil || a.productBlueprintRepo == nil {
-		return productbpdom.ProductBlueprint{}, errors.New("productQueryRepoAdapter: productBlueprintRepo is nil")
-	}
-	return a.productBlueprintRepo.GetByID(ctx, bpID)
-}
 
 // ========================================
 // Container (Firestore + Firebase edition)
@@ -393,6 +101,9 @@ type Container struct {
 
 	// ★ Solana: Narratives ミント権限ウォレット
 	MintAuthorityKey *solanainfra.MintAuthorityKey
+
+	// ★ NameResolver（ID→名前/型番解決用）
+	NameResolver *resolver.NameResolver
 }
 
 // ========================================
@@ -505,14 +216,23 @@ func NewContainer(ctx context.Context) (*Container, error) {
 	}
 	pbSvc := productbpdom.NewService(pbDomainRepo)
 
-	// ★ modelId → modelNumber 解決用 Repo アダプタ
-	modelNumberRepo := &modelNumberRepoAdapter{
-		modelRepo: modelRepo,
-	}
-
 	// ★ MintRequestPort（TokenUsecase 用）
 	//   - コレクション名を空文字にして、mint_request_port_fs 側のデフォルト "mintRequests" を利用
 	mintRequestPort := fs.NewMintRequestPortFS(fsClient, "")
+
+	// ★ NameResolver（ID→名前/型番解決）
+	//    TokenBlueprint はアダプタで value 戻りに揃える
+	tokenBlueprintNameRepo := &tokenBlueprintNameRepoAdapter{
+		repo: tokenBlueprintRepo,
+	}
+
+	nameResolver := resolver.NewNameResolver(
+		brandRepo,              // BrandNameRepository
+		productBlueprintRepo,   // ProductBlueprintNameRepository
+		memberRepo,             // MemberNameRepository
+		modelRepo,              // ModelNumberRepository
+		tokenBlueprintNameRepo, // TokenBlueprintNameRepository
+	)
 
 	// 5. Application-layer usecases
 	accountUC := uc.NewAccountUsecase(accountRepo)
@@ -552,15 +272,13 @@ func NewContainer(ctx context.Context) (*Container, error) {
 	paymentUC := uc.NewPaymentUsecase(paymentRepo)
 	permissionUC := uc.NewPermissionUsecase(permissionRepo)
 
-	// ★ PrintUsecase に PrintLogRepo + InspectionRepo を注入
 	printUC := uc.NewPrintUsecase(
 		productRepo,
 		printLogRepo,
 		inspectionRepo,
-		modelNumberRepo,
 		productBlueprintRepo,
+		nameResolver,
 	)
-
 	// ★ ProductionUsecase に member.Service + productBlueprint.Service + brand.Service を注入
 	productionUC := uc.NewProductionUsecase(
 		productionRepo,
@@ -584,7 +302,6 @@ func NewContainer(ctx context.Context) (*Container, error) {
 	inspectionUC := uc.NewInspectionUsecase(
 		inspectionRepo,        // inspections テーブル
 		inspectionProductRepo, // products テーブル（inspectionResult 同期用, アダプタ経由）
-		modelNumberRepo,       // modelId → modelNumber 解決用
 	)
 
 	// ★ ProductUsecase（Inspector 詳細画面用）
@@ -723,6 +440,9 @@ func NewContainer(ctx context.Context) (*Container, error) {
 
 		// Solana ミント権限鍵
 		MintAuthorityKey: mintKey,
+
+		// NameResolver
+		NameResolver: nameResolver,
 	}, nil
 }
 
@@ -784,6 +504,9 @@ func (c *Container) RouterDeps() httpin.RouterDeps {
 
 		// ★ TokenBlueprintHandler で brandName 解決に使う
 		BrandService: c.BrandService,
+
+		// ★ NameResolver（ID→名前/型番解決）
+		NameResolver: c.NameResolver,
 
 		// MessageHandler 用
 		MessageRepo: c.MessageRepo,

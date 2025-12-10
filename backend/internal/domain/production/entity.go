@@ -78,8 +78,7 @@ type Production struct {
 	Models             []ModelQuantity // [{modelId, quantity}]
 	Status             ProductionStatus
 	PrintedAt          *time.Time
-	PrintedBy          *string // ★ 追加: 印刷担当者
-	InspectedAt        *time.Time
+	PrintedBy          *string // ★ 印刷担当者
 	CreatedBy          *string
 	CreatedAt          time.Time // optional（ゼロ許容）
 	UpdatedAt          time.Time // optional（ゼロ許容）
@@ -98,8 +97,7 @@ var (
 	ErrInvalidQuantity           = errors.New("production: invalid quantity")
 	ErrInvalidStatus             = errors.New("production: invalid status")
 	ErrInvalidPrintedAt          = errors.New("production: invalid printedAt")
-	ErrInvalidPrintedBy          = errors.New("production: invalid printedBy") // ★ 追加
-	ErrInvalidInspectedAt        = errors.New("production: invalid inspectedAt")
+	ErrInvalidPrintedBy          = errors.New("production: invalid printedBy")
 	ErrInvalidCreatedAt          = errors.New("production: invalid createdAt")
 	ErrInvalidUpdatedAt          = errors.New("production: invalid updatedAt")
 	ErrInvalidUpdatedBy          = errors.New("production: invalid updatedBy")
@@ -115,7 +113,7 @@ func New(
 	id, productBlueprintID, assigneeID string,
 	models []ModelQuantity,
 	status ProductionStatus,
-	printedAt, inspectedAt *time.Time,
+	printedAt *time.Time,
 	createdBy *string,
 	createdAt time.Time,
 ) (Production, error) {
@@ -130,10 +128,9 @@ func New(
 		Status:             status,
 		PrintedAt:          printedAt,
 		// PrintedBy はコンストラクタでは nil 初期化（後から更新）
-		PrintedBy:   nil,
-		InspectedAt: inspectedAt,
-		CreatedBy:   normalizePtr(createdBy),
-		CreatedAt:   createdAt, // ゼロ許容
+		PrintedBy: nil,
+		CreatedBy: normalizePtr(createdBy),
+		CreatedAt: createdAt, // ゼロ許容
 	}
 	if err := p.validate(); err != nil {
 		return Production{}, err
@@ -148,16 +145,16 @@ func NewNow(
 	status ProductionStatus,
 ) (Production, error) {
 	now := time.Now().UTC()
-	return New(id, productBlueprintID, assigneeID, models, status, nil, nil, nil, now)
+	return New(id, productBlueprintID, assigneeID, models, status, nil, nil, now)
 }
 
-// NewFromStringTimes parses printedAt/inspectedAt/createdAt/updatedAt/deletedAt from ISO8601 strings.
+// NewFromStringTimes parses printedAt/createdAt/updatedAt/deletedAt from ISO8601 strings.
 // Pass "" for optional times. createdBy/updatedBy/deletedBy は nil または空白で未設定。
 func NewFromStringTimes(
 	id, productBlueprintID, assigneeID string,
 	models []ModelQuantity,
 	status ProductionStatus,
-	printedAt, inspectedAt, createdAt string,
+	printedAt, createdAt string,
 	createdBy *string,
 	updatedAt string,
 	updatedBy *string,
@@ -165,11 +162,10 @@ func NewFromStringTimes(
 	deletedBy *string,
 ) (Production, error) {
 	var (
-		printedPtr   *time.Time
-		inspectedPtr *time.Time
-		created      time.Time
-		updated      time.Time
-		deletedPtr   *time.Time
+		printedPtr *time.Time
+		created    time.Time
+		updated    time.Time
+		deletedPtr *time.Time
 	)
 
 	if strings.TrimSpace(printedAt) != "" {
@@ -178,13 +174,6 @@ func NewFromStringTimes(
 			return Production{}, fmt.Errorf("%w: %v", ErrInvalidPrintedAt, err)
 		}
 		printedPtr = &t
-	}
-	if strings.TrimSpace(inspectedAt) != "" {
-		t, err := parseTime(inspectedAt)
-		if err != nil {
-			return Production{}, fmt.Errorf("%w: %v", ErrInvalidInspectedAt, err)
-		}
-		inspectedPtr = &t
 	}
 	if strings.TrimSpace(createdAt) != "" {
 		t, err := parseTime(createdAt)
@@ -208,7 +197,7 @@ func NewFromStringTimes(
 		deletedPtr = &t
 	}
 
-	p, err := New(id, productBlueprintID, assigneeID, models, status, printedPtr, inspectedPtr, createdBy, created)
+	p, err := New(id, productBlueprintID, assigneeID, models, status, printedPtr, createdBy, created)
 	if err != nil {
 		return Production{}, err
 	}
@@ -241,16 +230,12 @@ func (p *Production) MarkPrinted(at time.Time) error {
 }
 
 // MarkInspected: printed -> inspected
-func (p *Production) MarkInspected(at time.Time) error {
+// inspectedAt は持たないため、ステータスのみを遷移させる。
+func (p *Production) MarkInspected(_ time.Time) error {
 	if p.Status != StatusPrinted {
 		return ErrTransition
 	}
-	if at.IsZero() {
-		return ErrInvalidInspectedAt
-	}
-	at = at.UTC()
 	p.Status = StatusInspected
-	p.InspectedAt = &at
 	return nil
 }
 
@@ -259,7 +244,6 @@ func (p *Production) ResetToManufacturing() {
 	p.Status = StatusManufacturing
 	p.PrintedAt = nil
 	p.PrintedBy = nil
-	p.InspectedAt = nil
 }
 
 // ===== Validation =====
@@ -302,18 +286,10 @@ func (p Production) validate() error {
 		if p.PrintedAt == nil {
 			return ErrInvalidPrintedAt
 		}
-		if p.InspectedAt != nil && p.InspectedAt.Before(*p.PrintedAt) {
-			return ErrInvalidInspectedAt
-		}
 	case StatusInspected:
+		// 検品済みでも、PrintedAt だけは存在しているべき
 		if p.PrintedAt == nil {
 			return ErrInvalidPrintedAt
-		}
-		if p.InspectedAt == nil {
-			return ErrInvalidInspectedAt
-		}
-		if p.InspectedAt.Before(*p.PrintedAt) {
-			return ErrInvalidInspectedAt
 		}
 	case StatusDeleted:
 		if p.DeletedAt == nil || p.DeletedAt.IsZero() {

@@ -461,26 +461,22 @@ func docToPrintLog(doc *firestore.DocumentSnapshot) (productdom.PrintLog, error)
 		}
 	}
 
-	var printedAt time.Time
-	if v, ok := data["printedAt"].(time.Time); ok && !v.IsZero() {
-		printedAt = v.UTC()
-	}
+	productionID := strings.TrimSpace(fscommon.AsString(data["productionId"]))
 
-	log := productdom.PrintLog{
-		ID:           doc.Ref.ID,
-		ProductionID: strings.TrimSpace(fscommon.AsString(data["productionId"])),
-		ProductIDs:   productIDs,
-		PrintedAt:    printedAt,
-	}
-
-	return log, nil
+	// ★ PrintLog は printedAt / printedBy を持たないので、
+	//   Firestore に残っていても読み込まず、ID / productionId / productIds のみで構築する。
+	return productdom.NewPrintLog(
+		doc.Ref.ID,
+		productionID,
+		productIDs,
+	)
 }
 
 func printLogToDoc(v productdom.PrintLog) map[string]any {
-	m := map[string]any{
+	// ★ PrintLog 側から printedAt / printedBy を削除したので、
+	//   Firestore には productionId / productIds だけを保存する。
+	return map[string]any{
 		"productionId": strings.TrimSpace(v.ProductionID),
 		"productIds":   v.ProductIDs,
-		"printedAt":    v.PrintedAt.UTC(),
 	}
-	return m
 }

@@ -38,7 +38,6 @@ const (
 type InspectionItem struct {
 	ProductID        string            `json:"productId"`
 	ModelID          string            `json:"modelId"`
-	ModelNumber      *string           `json:"modelNumber,omitempty"` // modelId から解決した型番
 	InspectionResult *InspectionResult `json:"inspectionResult"`
 	InspectedBy      *string           `json:"inspectedBy"`
 	InspectedAt      *time.Time        `json:"inspectedAt"`
@@ -52,15 +51,14 @@ type InspectionBatch struct {
 	ProductionID string           `json:"productionId"`
 	Status       InspectionStatus `json:"status"`
 
-	// 追加フィールド
-	Quantity          int              `json:"quantity"`          // item の合計数
-	TotalPassed       int              `json:"totalPassed"`       // 合格数
-	RequestedBy       *string          `json:"requestedBy"`       // リクエストしたユーザー（作成時 null）
-	RequestedAt       *time.Time       `json:"requestedAt"`       // リクエスト日時（作成時 null）
-	MintedAt          *time.Time       `json:"mintedAt"`          // NFT ミント完了日時（作成時 null）
-	ScheduledBurnDate *time.Time       `json:"scheduledBurnDate"` // バーン予定日時（作成時 null）
-	TokenBlueprintID  *string          `json:"tokenBlueprintId"`  // トークン設計ID（作成時 null）
-	Inspections       []InspectionItem `json:"inspections"`
+	// 集計系フィールド
+	Quantity    int `json:"quantity"`    // item の合計数
+	TotalPassed int `json:"totalPassed"` // 合格数
+
+	// ミント申請済みかどうかのフラグ（tokenBlueprintId / requestedBy / requestedAt などは mints テーブル側が責務を持つ）
+	Requested bool `json:"requested"`
+
+	Inspections []InspectionItem `json:"inspections"`
 }
 
 // ===============================
@@ -82,8 +80,7 @@ var (
 // Constructors
 // ===============================
 
-// quantity / totalPassed / requestedX / mintedAt / scheduledBurnDate / tokenBlueprintId は
-// コンストラクタ内で初期化（tokenBlueprintId / scheduledBurnDate は常に nil）
+// quantity / totalPassed / requested フラグはコンストラクタ内で初期化する。
 func NewInspectionBatch(
 	productionID string,
 	status InspectionStatus,
@@ -100,6 +97,7 @@ func NewInspectionBatch(
 	}
 
 	ids := normalizeIDList(productIDs)
+
 	if len(ids) == 0 {
 		return InspectionBatch{}, ErrInvalidInspectionProductIDs
 	}
@@ -109,8 +107,7 @@ func NewInspectionBatch(
 		r := InspectionNotYet
 		inspections = append(inspections, InspectionItem{
 			ProductID:        id,
-			ModelID:          "",  // modelId はアプリケーション層で埋める
-			ModelNumber:      nil, // modelNumber も後から解決
+			ModelID:          "", // modelId はアプリケーション層で埋める
 			InspectionResult: &r,
 			InspectedBy:      nil,
 			InspectedAt:      nil,
@@ -118,16 +115,12 @@ func NewInspectionBatch(
 	}
 
 	batch := InspectionBatch{
-		ProductionID:      pid,
-		Status:            status,
-		Quantity:          len(inspections),
-		TotalPassed:       0,
-		RequestedBy:       nil,
-		RequestedAt:       nil,
-		MintedAt:          nil,
-		ScheduledBurnDate: nil,
-		TokenBlueprintID:  nil,
-		Inspections:       inspections,
+		ProductionID: pid,
+		Status:       status,
+		Quantity:     len(inspections),
+		TotalPassed:  0,
+		Requested:    false,
+		Inspections:  inspections,
 	}
 
 	if err := batch.validate(); err != nil {

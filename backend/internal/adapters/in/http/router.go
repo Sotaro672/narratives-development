@@ -12,10 +12,10 @@ import (
 	// ハンドラ群
 	"narratives/internal/adapters/in/http/handlers"
 	"narratives/internal/adapters/in/http/middleware"
+	resolver "narratives/internal/application/resolver"
 
 	// MessageHandler 用 Repository
 	msgrepo "narratives/internal/adapters/out/firestore"
-
 	// ドメインサービス
 	branddom "narratives/internal/domain/brand"
 	memdom "narratives/internal/domain/member"
@@ -51,7 +51,7 @@ type RouterDeps struct {
 	TrackingUC         *usecase.TrackingUsecase
 	UserUC             *usecase.UserUsecase
 	WalletUC           *usecase.WalletUsecase
-
+	NameResolver       *resolver.NameResolver
 	// ⭐ Inspector 用 ProductUsecase（/inspector/products/{id}）
 	ProductUC *usecase.ProductUsecase
 
@@ -222,7 +222,12 @@ func NewRouter(deps RouterDeps) http.Handler {
 	// Products（印刷系）
 	// ================================
 	if deps.PrintUC != nil {
-		printH := handlers.NewPrintHandler(deps.PrintUC, deps.ProductionUC, deps.ModelUC)
+		printH := handlers.NewPrintHandler(
+			deps.PrintUC,
+			deps.ProductionUC,
+			deps.ModelUC,
+			deps.NameResolver, // ★ 追加: NameResolver を注入
+		)
 
 		var h http.Handler = printH
 		if authMw != nil {

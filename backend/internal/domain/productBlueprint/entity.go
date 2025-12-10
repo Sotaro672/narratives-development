@@ -69,27 +69,6 @@ func IsValidItemType(v ItemType) bool {
 }
 
 // ======================================
-// printed: "notYet" | "printed"
-// ======================================
-
-type PrintedStatus string
-
-const (
-	PrintedStatusNotYet  PrintedStatus = "notYet"
-	PrintedStatusPrinted PrintedStatus = "printed"
-)
-
-func IsValidPrintedStatus(v PrintedStatus) bool {
-	// 既存データ互換のため "" も許容（未設定 = notYet 相当）
-	switch v {
-	case "", PrintedStatusNotYet, PrintedStatusPrinted:
-		return true
-	default:
-		return false
-	}
-}
-
-// ======================================
 // ProductIDTagType
 // ======================================
 
@@ -143,8 +122,8 @@ type ProductBlueprint struct {
 	ProductIdTag     ProductIDTag
 	AssigneeID       string
 
-	// ★ 印刷状態: "notYet" | "printed"
-	Printed PrintedStatus
+	// ★ 印刷状態: false=未印刷, true=印刷済み
+	Printed bool
 
 	CreatedBy *string
 	CreatedAt time.Time
@@ -163,16 +142,15 @@ type ProductBlueprint struct {
 // ======================================
 
 var (
-	ErrInvalidID            = errors.New("productBlueprint: invalid id")
-	ErrInvalidProduct       = errors.New("productBlueprint: invalid productName")
-	ErrInvalidBrand         = errors.New("productBlueprint: invalid brandId")
-	ErrInvalidItemType      = errors.New("productBlueprint: invalid itemType")
-	ErrInvalidWeight        = errors.New("productBlueprint: invalid weight")
-	ErrInvalidTagType       = errors.New("productBlueprint: invalid productIdTag.type")
-	ErrInvalidCreatedAt     = errors.New("productBlueprint: invalid createdAt")
-	ErrInvalidAssignee      = errors.New("productBlueprint: invalid assigneeId")
-	ErrInvalidCompanyID     = errors.New("productBlueprint: invalid companyId")
-	ErrInvalidPrintedStatus = errors.New("productBlueprint: invalid printed status")
+	ErrInvalidID        = errors.New("productBlueprint: invalid id")
+	ErrInvalidProduct   = errors.New("productBlueprint: invalid productName")
+	ErrInvalidBrand     = errors.New("productBlueprint: invalid brandId")
+	ErrInvalidItemType  = errors.New("productBlueprint: invalid itemType")
+	ErrInvalidWeight    = errors.New("productBlueprint: invalid weight")
+	ErrInvalidTagType   = errors.New("productBlueprint: invalid productIdTag.type")
+	ErrInvalidCreatedAt = errors.New("productBlueprint: invalid createdAt")
+	ErrInvalidAssignee  = errors.New("productBlueprint: invalid assigneeId")
+	ErrInvalidCompanyID = errors.New("productBlueprint: invalid companyId")
 )
 
 // ======================================
@@ -204,8 +182,8 @@ func New(
 		ProductIdTag:     productIDTag,
 		AssigneeID:       strings.TrimSpace(assigneeID),
 		CompanyID:        strings.TrimSpace(companyID),
-		// ★ create 時は常に notYet をセット
-		Printed:   PrintedStatusNotYet,
+		// ★ create 時は常に false（未印刷）をセット
+		Printed:   false,
 		CreatedBy: createdBy,
 		CreatedAt: createdAt.UTC(),
 		UpdatedBy: createdBy,
@@ -254,21 +232,18 @@ func NewFromStringTime(
 // Update Helpers
 // ======================================
 
-// printed == "printed" の場合に更新・削除を禁止
+// Printed == true（印刷済み）の場合に更新・削除を禁止
 func (p ProductBlueprint) canModify() bool {
-	return p.Printed != PrintedStatusPrinted
+	return !p.Printed
 }
 
-// printed を "printed" にするための専用メソッド
+// Printed を true（印刷済み）にするための専用メソッド
 func (p *ProductBlueprint) MarkPrinted(now time.Time, updatedBy *string) error {
-	if !IsValidPrintedStatus(p.Printed) {
-		return ErrInvalidPrintedStatus
-	}
-	if p.Printed == PrintedStatusPrinted {
+	if p.Printed {
 		// すでに printed の場合は何もしない（idempotent）
 		return nil
 	}
-	p.Printed = PrintedStatusPrinted
+	p.Printed = true
 	p.touch(now, updatedBy)
 	return nil
 }
@@ -383,9 +358,7 @@ func (p ProductBlueprint) validate() error {
 	if p.CreatedAt.IsZero() {
 		return ErrInvalidCreatedAt
 	}
-	if !IsValidPrintedStatus(p.Printed) {
-		return ErrInvalidPrintedStatus
-	}
+	// Printed は bool のため常に有効
 	return nil
 }
 

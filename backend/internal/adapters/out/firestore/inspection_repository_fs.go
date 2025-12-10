@@ -176,19 +176,17 @@ func (r *InspectionRepositoryFS) Save(
 }
 
 // ------------------------------------------------------------
-// ★ 追加: UpdateRequestInfo
+// ★ 追加: UpdateRequestedFlag
 // ------------------------------------------------------------
 //
-// MintUsecase.UpdateRequestInfo 用。
-// requestedBy / requestedAt / tokenBlueprintId を更新する。
+// MintUsecase.UpdateRequestInfo（改め、requested フラグ更新）用。
+// inspections ドキュメントの `requested` boolean を更新する。
 // 保存後は最新の InspectionBatch を返す。
 // ------------------------------------------------------------
-func (r *InspectionRepositoryFS) UpdateRequestInfo(
+func (r *InspectionRepositoryFS) UpdateRequestedFlag(
 	ctx context.Context,
 	productionID string,
-	requestedBy string,
-	requestedAt time.Time,
-	tokenBlueprintID string,
+	requested bool,
 ) (inspectiondom.InspectionBatch, error) {
 
 	if r.Client == nil {
@@ -200,20 +198,16 @@ func (r *InspectionRepositoryFS) UpdateRequestInfo(
 		return inspectiondom.InspectionBatch{}, inspectiondom.ErrInvalidInspectionProductionID
 	}
 
-	// Firestore 更新内容
-	update := map[string]any{
-		"requestedBy":      strings.TrimSpace(requestedBy),
-		"requestedAt":      requestedAt.UTC(),
-		"tokenBlueprintId": strings.TrimSpace(tokenBlueprintID),
-	}
-
 	docRef := r.col().Doc(pid)
+
+	update := map[string]any{
+		"requested": requested,
+	}
 
 	if _, err := docRef.Set(ctx, update, firestore.MergeAll); err != nil {
 		return inspectiondom.InspectionBatch{}, err
 	}
 
-	// 保存後に最新の状態を取得
 	snap, err := docRef.Get(ctx)
 	if err != nil {
 		return inspectiondom.InspectionBatch{}, err
@@ -288,11 +282,9 @@ func inspectionBatchToDoc(v inspectiondom.InspectionBatch) map[string]any {
 			"modelId":   strings.TrimSpace(ins.ModelID),
 		}
 
-		if ins.ModelNumber != nil && strings.TrimSpace(*ins.ModelNumber) != "" {
-			m["modelNumber"] = strings.TrimSpace(*ins.ModelNumber)
-		} else {
-			m["modelNumber"] = nil
-		}
+		// modelNumber は inspections テーブルには記録しない
+		// （画面側で NameResolver により解決する方針）
+		// そのため m["modelNumber"] 自体を持たせない
 
 		if ins.InspectionResult != nil {
 			m["inspectionResult"] = string(*ins.InspectionResult)
@@ -326,36 +318,8 @@ func inspectionBatchToDoc(v inspectiondom.InspectionBatch) map[string]any {
 		"inspections":  items,
 		"quantity":     qty,
 		"totalPassed":  v.TotalPassed,
-	}
-
-	if v.RequestedBy != nil && strings.TrimSpace(*v.RequestedBy) != "" {
-		data["requestedBy"] = strings.TrimSpace(*v.RequestedBy)
-	} else {
-		data["requestedBy"] = nil
-	}
-
-	if v.RequestedAt != nil && !v.RequestedAt.IsZero() {
-		data["requestedAt"] = v.RequestedAt.UTC()
-	} else {
-		data["requestedAt"] = nil
-	}
-
-	if v.MintedAt != nil && !v.MintedAt.IsZero() {
-		data["mintedAt"] = v.MintedAt.UTC()
-	} else {
-		data["mintedAt"] = nil
-	}
-
-	if v.ScheduledBurnDate != nil && !v.ScheduledBurnDate.IsZero() {
-		data["scheduledBurnDate"] = v.ScheduledBurnDate.UTC()
-	} else {
-		data["scheduledBurnDate"] = nil
-	}
-
-	if v.TokenBlueprintID != nil && strings.TrimSpace(*v.TokenBlueprintID) != "" {
-		data["tokenBlueprintId"] = strings.TrimSpace(*v.TokenBlueprintID)
-	} else {
-		data["tokenBlueprintId"] = nil
+		// 新設: requested フラグ
+		"requested": v.Requested,
 	}
 
 	return data
@@ -387,32 +351,10 @@ func docToInspectionBatch(
 		}
 	}
 
-	if v, ok := data["requestedBy"].(string); ok {
-		s := strings.TrimSpace(v)
-		if s != "" {
-			batch.RequestedBy = &s
-		}
-	}
-
-	if t, ok := data["requestedAt"].(time.Time); ok {
-		tt := t.UTC()
-		batch.RequestedAt = &tt
-	}
-
-	if t, ok := data["mintedAt"].(time.Time); ok {
-		tt := t.UTC()
-		batch.MintedAt = &tt
-	}
-
-	if t, ok := data["scheduledBurnDate"].(time.Time); ok {
-		tt := t.UTC()
-		batch.ScheduledBurnDate = &tt
-	}
-
-	if v, ok := data["tokenBlueprintId"].(string); ok {
-		s := strings.TrimSpace(v)
-		if s != "" {
-			batch.TokenBlueprintID = &s
+	// 新設: requested フラグ
+	if v, ok := data["requested"]; ok {
+		if b, ok := v.(bool); ok {
+			batch.Requested = b
 		}
 	}
 
@@ -439,12 +381,8 @@ func docToInspectionBatch(
 				item.ModelID = strings.TrimSpace(v)
 			}
 
-			if v, ok := m["modelNumber"].(string); ok {
-				s := strings.TrimSpace(v)
-				if s != "" {
-					item.ModelNumber = &s
-				}
-			}
+			// modelNumber は DB からは読み取らない（スキップ）
+			// 画面側 NameResolver で解決
 
 			if v, ok := m["inspectionResult"].(string); ok {
 				r := inspectiondom.InspectionResult(strings.TrimSpace(v))

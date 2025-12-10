@@ -221,7 +221,7 @@ func (r *ProductBlueprintRepositoryFS) ListIDsByCompany(
 	return ids, nil
 }
 
-// ★ 追加: printed == "printed" だけを、指定 ID 群から取得
+// ★ 追加: printed == true だけを、指定 ID 群から取得
 // - ListIDsByCompany → ListPrinted で 1 セットの利用を想定
 func (r *ProductBlueprintRepositoryFS) ListPrinted(
 	ctx context.Context,
@@ -263,14 +263,14 @@ func (r *ProductBlueprintRepositoryFS) ListPrinted(
 			return nil, err
 		}
 
-		if pb.Printed == pbdom.PrintedStatusPrinted {
+		if pb.Printed {
 			out = append(out, pb)
 		}
 	}
 	return out, nil
 }
 
-// ★ 追加: printed: notYet → printed へ更新する（usecase.ProductBlueprintPrintedRepo 用）
+// ★ 追加: printed: false → true へ更新する（usecase.ProductBlueprintPrintedRepo 用）
 func (r *ProductBlueprintRepositoryFS) MarkPrinted(
 	ctx context.Context,
 	id string,
@@ -297,19 +297,26 @@ func (r *ProductBlueprintRepositoryFS) MarkPrinted(
 
 	data := snap.Data()
 	if data != nil {
-		if v, ok := data["printed"].(string); ok {
-			switch strings.TrimSpace(v) {
-			case string(pbdom.PrintedStatusPrinted):
-				// すでに printed の場合は Forbidden 扱い（再印刷禁止など）
-				return pbdom.ProductBlueprint{}, pbdom.ErrForbidden
+		if v, ok := data["printed"]; ok {
+			switch x := v.(type) {
+			case bool:
+				if x {
+					// すでに printed の場合は Forbidden 扱い（再印刷禁止など）
+					return pbdom.ProductBlueprint{}, pbdom.ErrForbidden
+				}
+			case string:
+				// 旧データ互換: "printed" を true 相当とみなす
+				if strings.TrimSpace(x) == "printed" {
+					return pbdom.ProductBlueprint{}, pbdom.ErrForbidden
+				}
 			}
 		}
 	}
 
-	// printed = "printed", updatedAt = now をセット
+	// printed = true, updatedAt = now をセット
 	now := time.Now().UTC()
 	if _, err := docRef.Update(ctx, []firestore.Update{
-		{Path: "printed", Value: string(pbdom.PrintedStatusPrinted)},
+		{Path: "printed", Value: true},
 		{Path: "updatedAt", Value: now},
 	}); err != nil {
 		if status.Code(err) == codes.NotFound {
@@ -861,7 +868,19 @@ func docToProductBlueprint(doc *firestore.DocumentSnapshot) (pbdom.ProductBluepr
 	qas := getStringSlice("qualityAssurance", "quality_assurance")
 	tagTypeStr := getStr("productIdTagType", "product_id_tag_type")
 	itemTypeStr := getStr("itemType", "item_type")
-	printedStr := getStr("printed") // 新フィールド
+
+	// printed は bool（新）/ string（旧データ）両対応で読み取る
+	var printedBool bool
+	if v, ok := data["printed"]; ok {
+		switch x := v.(type) {
+		case bool:
+			printedBool = x
+		case string:
+			s := strings.TrimSpace(x)
+			// 旧データ: "printed" を true、それ以外/空は false とみなす
+			printedBool = (s == "printed")
+		}
+	}
 
 	var deletedAtPtr *time.Time
 	if t := getTimeVal("deletedAt", "deleted_at"); !t.IsZero() {
@@ -896,8 +915,8 @@ func docToProductBlueprint(doc *firestore.DocumentSnapshot) (pbdom.ProductBluepr
 		CompanyID:  getStr("companyId", "company_id"),
 		AssigneeID: getStr("assigneeId", "assignee_id"),
 
-		// New printed フィールド
-		Printed: pbdom.PrintedStatus(printedStr),
+		// New printed フィールド（bool）
+		Printed: printedBool,
 
 		CreatedBy: getStrPtr("createdBy", "created_by"),
 		CreatedAt: getTimeVal("createdAt", "created_at"),
@@ -923,6 +942,7 @@ func productBlueprintToDoc(v pbdom.ProductBlueprint, createdAt, updatedAt time.T
 		"companyId":   strings.TrimSpace(v.CompanyID),
 		"createdAt":   createdAt.UTC(),
 		"updatedAt":   updatedAt.UTC(),
+		"printed":     v.Printed,
 	}
 
 	if len(v.QualityAssurance) > 0 {
@@ -931,11 +951,6 @@ func productBlueprintToDoc(v pbdom.ProductBlueprint, createdAt, updatedAt time.T
 
 	if v.ProductIdTag.Type != "" {
 		m["productIdTagType"] = strings.TrimSpace(string(v.ProductIdTag.Type))
-	}
-
-	// printed フィールド（notYet / printed）
-	if v.Printed != "" {
-		m["printed"] = strings.TrimSpace(string(v.Printed))
 	}
 
 	if v.CreatedBy != nil {

@@ -7,6 +7,7 @@ import (
 	"strings"
 	"time"
 
+	resolver "narratives/internal/application/resolver"
 	usecase "narratives/internal/application/usecase"
 	productdom "narratives/internal/domain/product"
 )
@@ -16,6 +17,9 @@ type PrintHandler struct {
 	uc           *usecase.PrintUsecase
 	productionUC *usecase.ProductionUsecase
 	modelUC      *usecase.ModelUsecase
+
+	// ★ 追加: modelId → modelNumber 解決用 NameResolver
+	nameResolver *resolver.NameResolver
 }
 
 // NewPrintHandler はHTTPハンドラを初期化します。
@@ -23,11 +27,13 @@ func NewPrintHandler(
 	uc *usecase.PrintUsecase,
 	productionUC *usecase.ProductionUsecase,
 	modelUC *usecase.ModelUsecase,
+	nameResolver *resolver.NameResolver, // ★ 追加
 ) http.Handler {
 	return &PrintHandler{
 		uc:           uc,
 		productionUC: productionUC,
 		modelUC:      modelUC,
+		nameResolver: nameResolver, // ★ 追加
 	}
 }
 
@@ -140,6 +146,7 @@ func (h *PrintHandler) get(w http.ResponseWriter, r *http.Request, id string) {
 // GET /products?productionId={productionId}
 //
 //	同一 productionId を持つ Product 一覧を返す
+//	レスポンスには name_resolver を用いて modelNumber を付与する
 //
 // ------------------------------------------------------------
 func (h *PrintHandler) listByProductionID(w http.ResponseWriter, r *http.Request, productionID string) {
@@ -158,36 +165,10 @@ func (h *PrintHandler) listByProductionID(w http.ResponseWriter, r *http.Request
 		return
 	}
 
-	// modelNumber 付与に必要な Usecase が無い場合は従来のまま
-	if h.productionUC == nil || h.modelUC == nil {
+	// ★ NameResolver が未注入の場合は従来どおり Product 生データを返す
+	if h.nameResolver == nil {
 		_ = json.NewEncoder(w).Encode(list)
 		return
-	}
-
-	prod, err := h.productionUC.GetByID(ctx, productionID)
-	if err != nil {
-		_ = json.NewEncoder(w).Encode(list)
-		return
-	}
-
-	pbID := strings.TrimSpace(prod.ProductBlueprintID)
-	if pbID == "" {
-		_ = json.NewEncoder(w).Encode(list)
-		return
-	}
-
-	vars, err := h.modelUC.ListModelVariationsByProductBlueprintID(ctx, pbID)
-	if err != nil {
-		_ = json.NewEncoder(w).Encode(list)
-		return
-	}
-
-	idToModelNumber := make(map[string]string, len(vars))
-	for _, v := range vars {
-		mn := strings.TrimSpace(v.ModelNumber)
-		if mn != "" {
-			idToModelNumber[v.ID] = mn
-		}
 	}
 
 	type productWithModelNumber struct {
@@ -200,7 +181,14 @@ func (h *PrintHandler) listByProductionID(w http.ResponseWriter, r *http.Request
 	out := make([]productWithModelNumber, 0, len(list))
 
 	for _, p := range list {
-		modelNumber := strings.TrimSpace(idToModelNumber[p.ModelID])
+		modelID := strings.TrimSpace(p.ModelID)
+		modelNumber := ""
+
+		if modelID != "" {
+			// ★ name_resolver 経由で modelId → modelNumber を解決（1 戻り値版）
+			mn := strings.TrimSpace(h.nameResolver.ResolveModelNumber(ctx, modelID))
+			modelNumber = mn
+		}
 
 		out = append(out, productWithModelNumber{
 			ID:           p.ID,

@@ -63,32 +63,38 @@ type ProductBlueprintPrintedRepo interface {
 	MarkPrinted(ctx context.Context, id string) (productbpdom.ProductBlueprint, error)
 }
 
+// ★ modelNumber 解決用ポート（NameResolver の一部だけを参照する）
+//   - resolver.NameResolver がこれを実装する想定
+type ModelNumberResolver interface {
+	ResolveModelNumber(ctx context.Context, variationID string) string
+}
+
 // PrintUsecase orchestrates print & inspection operations around products.
 type PrintUsecase struct {
 	repo           ProductRepo
 	printLogRepo   PrintLogRepo
 	inspectionRepo InspectionRepo
 
-	// ★ 追加: modelId → modelNumber 解決用
-	modelNumberRepo ModelNumberRepo
-
 	// ★ 追加: ProductBlueprint の printed 管理用
 	productBlueprintRepo ProductBlueprintPrintedRepo
+
+	// ★ 追加: ID → modelNumber 解決用
+	modelNumberResolver ModelNumberResolver
 }
 
 func NewPrintUsecase(
 	repo ProductRepo,
 	printLogRepo PrintLogRepo,
 	inspectionRepo InspectionRepo,
-	modelNumberRepo ModelNumberRepo,
 	productBlueprintRepo ProductBlueprintPrintedRepo,
+	modelNumberResolver ModelNumberResolver, // ★ 追加
 ) *PrintUsecase {
 	return &PrintUsecase{
 		repo:                 repo,
 		printLogRepo:         printLogRepo,
 		inspectionRepo:       inspectionRepo,
-		modelNumberRepo:      modelNumberRepo,
 		productBlueprintRepo: productBlueprintRepo,
+		modelNumberResolver:  modelNumberResolver,
 	}
 }
 
@@ -110,6 +116,8 @@ func (u *PrintUsecase) ListByProductionID(ctx context.Context, productionID stri
 }
 
 // ★ 追加: 同一 productionId を持つ PrintLog を一覧取得（QrPayloads 付き）
+//
+//	→ QR 本体データ (URL) を生成
 func (u *PrintUsecase) ListPrintLogsByProductionID(ctx context.Context, productionID string) ([]productdom.PrintLog, error) {
 	if u.printLogRepo == nil {
 		return nil, fmt.Errorf("printLogRepo is nil")
@@ -142,6 +150,53 @@ func (u *PrintUsecase) ListPrintLogsByProductionID(ctx context.Context, producti
 	}
 
 	return logs, nil
+}
+
+// ★ 追加: QR ラベル用に「productID → modelNumber」を解決するユースケース
+//
+// print_handler 側で：
+//
+//	labelsByProductID, _ := printUC.ResolveModelNumbersForProduction(ctx, productionID)
+//
+// を呼び出し、各 QR の下に表示するラベル文字列として利用する想定。
+func (u *PrintUsecase) ResolveModelNumbersForProduction(
+	ctx context.Context,
+	productionID string,
+) (map[string]string, error) {
+	if u.inspectionRepo == nil {
+		return nil, fmt.Errorf("inspectionRepo is nil")
+	}
+	if u.modelNumberResolver == nil {
+		return nil, fmt.Errorf("modelNumberResolver is nil")
+	}
+
+	pid := strings.TrimSpace(productionID)
+	if pid == "" {
+		return nil, inspectiondom.ErrInvalidInspectionProductionID
+	}
+
+	// inspections/{productionId} を取得
+	batch, err := u.inspectionRepo.GetByProductionID(ctx, pid)
+	if err != nil {
+		return nil, err
+	}
+
+	// productID → modelNumber マップを構築
+	result := make(map[string]string, len(batch.Inspections))
+	for _, ins := range batch.Inspections {
+		pid := strings.TrimSpace(ins.ProductID)
+		mid := strings.TrimSpace(ins.ModelID)
+		if pid == "" || mid == "" {
+			continue
+		}
+		label := strings.TrimSpace(u.modelNumberResolver.ResolveModelNumber(ctx, mid))
+		if label == "" {
+			continue
+		}
+		result[pid] = label
+	}
+
+	return result, nil
 }
 
 // ★ 追加: inspections を単独で作成する
@@ -185,31 +240,8 @@ func (u *PrintUsecase) CreateInspectionBatchForProduction(
 		return inspectiondom.InspectionBatch{}, inspectiondom.ErrInvalidInspectionProductIDs
 	}
 
-	// ★ modelId → modelNumber のキャッシュを構築（ModelNumberRepo があれば）
-	modelNumberByModelID := map[string]string{}
-	if u.modelNumberRepo != nil {
-		for _, mid := range modelIDByProductID {
-			mid = strings.TrimSpace(mid)
-			if mid == "" {
-				continue
-			}
-			if _, exists := modelNumberByModelID[mid]; exists {
-				continue
-			}
-			mv, err := u.modelNumberRepo.GetModelVariationByID(ctx, mid)
-			if err != nil {
-				continue
-			}
-			mn := strings.TrimSpace(mv.ModelNumber)
-			if mn != "" {
-				modelNumberByModelID[mid] = mn
-			}
-		}
-	}
-
 	// InspectionBatch エンティティ作成（全て notYet, status=inspecting）
-	// quantity / totalPassed / requestedBy / requestedAt / mintedAt / tokenBlueprintId
-	// は NewInspectionBatch 側で初期化される
+	// quantity / totalPassed / requested は NewInspectionBatch 側で初期化される
 	batch, err := inspectiondom.NewInspectionBatch(
 		pid,
 		inspectiondom.InspectionStatusInspecting,
@@ -219,17 +251,11 @@ func (u *PrintUsecase) CreateInspectionBatchForProduction(
 		return inspectiondom.InspectionBatch{}, err
 	}
 
-	// ★ InspectionItem に modelId / modelNumber を埋め込む
+	// ★ InspectionItem に modelId だけを埋め込む（modelNumber は DB に持たない）
 	for i := range batch.Inspections {
 		pid := batch.Inspections[i].ProductID
 		if mid, ok := modelIDByProductID[pid]; ok {
-			mid = strings.TrimSpace(mid)
-			batch.Inspections[i].ModelID = mid
-
-			if mn, ok := modelNumberByModelID[mid]; ok && mn != "" {
-				mnCopy := mn
-				batch.Inspections[i].ModelNumber = &mnCopy
-			}
+			batch.Inspections[i].ModelID = strings.TrimSpace(mid)
 		}
 	}
 
@@ -282,28 +308,6 @@ func (u *PrintUsecase) CreatePrintLogForProduction(ctx context.Context, producti
 		return productdom.PrintLog{}, productdom.ErrInvalidPrintLogProductIDs
 	}
 
-	// ★ modelId → modelNumber のキャッシュを構築
-	modelNumberByModelID := map[string]string{}
-	if u.modelNumberRepo != nil {
-		for _, mid := range modelIDByProductID {
-			mid = strings.TrimSpace(mid)
-			if mid == "" {
-				continue
-			}
-			if _, exists := modelNumberByModelID[mid]; exists {
-				continue
-			}
-			mv, err := u.modelNumberRepo.GetModelVariationByID(ctx, mid)
-			if err != nil {
-				continue
-			}
-			mn := strings.TrimSpace(mv.ModelNumber)
-			if mn != "" {
-				modelNumberByModelID[mid] = mn
-			}
-		}
-	}
-
 	// printedAt を決定
 	// Product 側の PrintedAt があればそれを採用、なければ現在時刻
 	var printedAt time.Time
@@ -325,8 +329,6 @@ func (u *PrintUsecase) CreatePrintLogForProduction(ctx context.Context, producti
 		logID,
 		pid,
 		productIDs,
-		"system", // 互換用のダミー値。永続化はされない方針。
-		printedAt,
 	)
 	if err != nil {
 		return productdom.PrintLog{}, err
@@ -344,21 +346,14 @@ func (u *PrintUsecase) CreatePrintLogForProduction(ctx context.Context, producti
 		return productdom.PrintLog{}, err
 	}
 
-	// ★ InspectionItem に modelId / modelNumber を埋め込む
+	// ★ InspectionItem に modelId だけを埋め込む（modelNumber は持たない）
 	for i := range batch.Inspections {
 		pid := batch.Inspections[i].ProductID
 		if mid, ok := modelIDByProductID[pid]; ok {
-			mid = strings.TrimSpace(mid)
-			batch.Inspections[i].ModelID = mid
-
-			if mn, ok := modelNumberByModelID[mid]; ok && mn != "" {
-				mnCopy := mn
-				batch.Inspections[i].ModelNumber = &mnCopy
-			}
+			batch.Inspections[i].ModelID = strings.TrimSpace(mid)
 		}
 	}
-	// quantity / totalPassed / requestedBy / requestedAt / mintedAt / tokenBlueprintId は
-	// NewInspectionBatch 側の初期値のまま
+	// quantity / totalPassed / requested は NewInspectionBatch 側の初期値のまま
 
 	// 先に Inspection を保存してから PrintLog を保存
 	if _, err := u.inspectionRepo.Create(ctx, batch); err != nil {

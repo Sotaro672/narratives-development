@@ -1,4 +1,3 @@
-// backend/internal/application/usecase/mint_usecase.go
 package usecase
 
 import (
@@ -49,15 +48,12 @@ type mintInspectionRepo interface {
 	// 実装例: InspectionRepositoryFS.ListByProductionID
 	ListByProductionID(ctx context.Context, productionIDs []string) ([]inspectiondom.InspectionBatch, error)
 
-	// ★ 追加: requestedBy / requestedAt / tokenBlueprintId を更新するための専用メソッド
-	// - requestedBy はミント申請ボタンを押下した currentMember（= MemberIDFromContext(ctx)）を渡す。
-	// - requestedAt は time.Now().UTC() などの現在時刻を渡す。
-	UpdateRequestInfo(
+	// ★ 追加: requested フラグを更新するための専用メソッド
+	// - ミント申請が実行された productionID に紐づく InspectionBatch.requested を true にする用途を想定
+	UpdateRequestedFlag(
 		ctx context.Context,
 		productionID string,
-		requestedBy string,
-		requestedAt time.Time,
-		tokenBlueprintID string,
+		requested bool,
 	) (inspectiondom.InspectionBatch, error)
 }
 
@@ -436,15 +432,16 @@ func (u *MintUsecase) MarkTokenBlueprintMinted(
 }
 
 // ============================================================
-// Additional API: Inspection RequestInfo 更新 + mints 作成
+// Additional API: Inspection requested 更新 + mints 作成
 // ============================================================
 //
-// ミント申請ボタン押下時に、InspectionBatch に対して
-// - RequestedBy       ← currentMember（= MemberIDFromContext(ctx)）
-// - RequestedAt       ← 現在時刻
-// - TokenBlueprintID  ← 選択された tokenBlueprintId
-// を登録すると同時に、mints テーブルにも 1 レコード作成します。
-// さらに、画面で指定された ScheduledBurnDate（任意）も mints に保存します。
+// ミント申請ボタン押下時に、
+//
+//   - inspections 側: 該当 Production の InspectionBatch.requested を true に更新
+//   - mints 側    : brandId / tokenBlueprintId / passedProductIDs / createdAt / createdBy /
+//     scheduledBurnDate（任意）/ minted=false を 1 レコード作成
+//
+// という 2 つの処理を行います。
 func (u *MintUsecase) UpdateRequestInfo(
 	ctx context.Context,
 	productionID string,
@@ -480,7 +477,8 @@ func (u *MintUsecase) UpdateRequestInfo(
 		return empty, errors.New("tokenBlueprintID is empty")
 	}
 
-	// requestedBy は currentMember（= ミント申請ボタンを押下したユーザー）
+	// requestedBy 相当は currentMember（= ミント申請ボタンを押下したユーザー）
+	// → inspections には保存せず、mints.createdBy に責務を移譲する
 	memberID := strings.TrimSpace(MemberIDFromContext(ctx))
 	if memberID == "" {
 		return empty, errors.New("memberID not found in context")
@@ -513,8 +511,8 @@ func (u *MintUsecase) UpdateRequestInfo(
 		brandID,
 		tbID,
 		passedProductIDs,
-		memberID,
-		now,
+		memberID, // createdBy 相当
+		now,      // createdAt 相当
 	)
 	if err != nil {
 		return empty, err
@@ -533,16 +531,11 @@ func (u *MintUsecase) UpdateRequestInfo(
 		}
 	}
 
-	// 4) InspectionBatch 側の RequestInfo を更新
-	//    ※ inspections の更新を将来廃止する予定なら、ここを別ロジックに差し替える
-	batch, err := u.inspRepo.UpdateRequestInfo(ctx, pid, memberID, now, tbID)
+	// 4) InspectionBatch 側の requested フラグを更新（true にする）
+	batch, err := u.inspRepo.UpdateRequestedFlag(ctx, pid, true)
 	if err != nil {
 		return empty, err
 	}
-
-	// （現時点では InspectionBatch に ID フィールドが無いため、
-	// 　mints.InspectionID へのセットは行っていません。
-	// 　必要になったら InspectionBatch 側に ID を追加するか、別ポート経由で解決してください）
 
 	// 5) mints テーブルへ保存（ScheduledBurnDate を含む）
 	if _, err := u.mintRepo.Create(ctx, mintEntity); err != nil {

@@ -51,9 +51,18 @@ export const useMintRequestManagement = () => {
       setLoading(true);
       setError(null);
       try {
+        console.log("[useMintRequestManagement] fetching mint request rows...");
         const rows = await fetchMintRequestRows();
+        console.log(
+          "[useMintRequestManagement] fetched mint request rows (raw)",
+          rows,
+        );
         if (!cancelled) setRawRows(rows);
       } catch (e: any) {
+        console.error(
+          "[useMintRequestManagement] failed to fetch mint request rows",
+          e,
+        );
         if (!cancelled) setError(e?.message ?? "Failed to fetch mint requests");
       } finally {
         if (!cancelled) setLoading(false);
@@ -66,13 +75,24 @@ export const useMintRequestManagement = () => {
     };
   }, []);
 
+  // rawRows の変化もログ出ししておく
+  useEffect(() => {
+    if (!rawRows.length) return;
+    console.log(
+      "[useMintRequestManagement] rawRows updated (for screen)",
+      rawRows,
+    );
+  }, [rawRows]);
+
   // ---------------------------
   // Filters
   // ---------------------------
   const [tokenFilter, setTokenFilter] = useState<string[]>([]);
   const [productionFilter, setProductionFilter] = useState<string[]>([]);
   const [requesterFilter, setRequesterFilter] = useState<string[]>([]);
-  const [statusFilter, setStatusFilter] = useState<InspectionStatus[] | string[]>([]);
+  const [statusFilter, setStatusFilter] = useState<
+    InspectionStatus[] | string[]
+  >([]);
 
   // Sorting（デフォルト：mintedAt DESC）
   const [sortKey, setSortKey] = useState<SortKey>("mintedAt");
@@ -133,8 +153,7 @@ export const useMintRequestManagement = () => {
 
       const st = r.inspectionStatus ?? "notYet"; // fallback
       const statusOk =
-        statusFilter.length === 0 ||
-        statusFilter.includes(st as any);
+        statusFilter.length === 0 || statusFilter.includes(st as any);
 
       return tokenOk && productionOk && requesterOk && statusOk;
     });
@@ -155,10 +174,29 @@ export const useMintRequestManagement = () => {
     }
 
     // ラベル付与
-    return data.map((r) => ({
+    const result = data.map((r) => ({
       ...r,
       statusLabel: statusLabel(r.inspectionStatus),
     }));
+
+    // 画面に渡される最終 rows をログ出し
+    console.log(
+      "[useMintRequestManagement] rows after filter/sort (for screen)",
+      {
+        rawRows,
+        filters: {
+          tokenFilter,
+          productionFilter,
+          requesterFilter,
+          statusFilter,
+          sortKey,
+          sortDir,
+        },
+        rows: result,
+      },
+    );
+
+    return result;
   }, [
     rawRows,
     tokenFilter,
@@ -174,6 +212,7 @@ export const useMintRequestManagement = () => {
   // ---------------------------
 
   const goDetail = (id: string) => {
+    console.log("[useMintRequestManagement] navigate detail", { id });
     navigate(`/mintRequest/${encodeURIComponent(id)}`);
   };
 
@@ -238,6 +277,7 @@ export const useMintRequestManagement = () => {
   ];
 
   const onReset = () => {
+    console.log("[useMintRequestManagement] reset filters/sort");
     setTokenFilter([]);
     setProductionFilter([]);
     setRequesterFilter([]);

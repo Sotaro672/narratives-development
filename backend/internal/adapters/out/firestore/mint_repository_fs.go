@@ -46,6 +46,7 @@ func (r *MintRepositoryFS) Create(ctx context.Context, m mintdom.Mint) (mintdom.
 	}
 
 	// Firestore に保存するデータ
+	// 🔸 ここでドメインのフィールドを落とさないように明示的にマッピングする
 	data := map[string]interface{}{
 		"brandId":          m.BrandID,
 		"tokenBlueprintId": m.TokenBlueprintID,
@@ -63,6 +64,12 @@ func (r *MintRepositoryFS) Create(ctx context.Context, m mintdom.Mint) (mintdom.
 	// ★ ScheduledBurnDate（任意）も保存
 	if m.ScheduledBurnDate != nil && !m.ScheduledBurnDate.IsZero() {
 		data["scheduledBurnDate"] = m.ScheduledBurnDate.UTC()
+	}
+
+	// ★ InspectionID（任意）も保存
+	//    InspectionBatch に ID フィールドを追加し、Usecase 側で m.InspectionID に詰めた値がここに反映される想定
+	if m.InspectionID != "" {
+		data["inspectionId"] = m.InspectionID
 	}
 
 	if _, err := docRef.Set(ctx, data); err != nil {
