@@ -173,8 +173,7 @@ if (Test-Path $EnvFile) {
       "CONSOLE_BASE_URL",
       "SOLANA_RPC_URL",
       "SOLANA_MINT_KEY_SECRET",
-      "ARWEAVE_BASE_URL",
-  
+      "ARWEAVE_BASE_URL"
     )) {
       $envPairs += "$key=$value"
     }

@@ -9,18 +9,22 @@ import (
 	"io"
 	"log"
 	"net/http"
+	"strings"
 	"time"
 )
 
-// Bundlr や Irys の HTTP API を叩く実装例
+// Irys Uploader (Cloud Run) などの HTTP API を叩く実装
 type HTTPUploader struct {
 	client  *http.Client
-	baseURL string // 例: "https://node1.bundlr.network"
-	apiKey  string // 認証が必要な場合に使用
+	baseURL string // 例: "https://narratives-irys-uploader-xxxx.asia-northeast1.run.app"
+	apiKey  string // 認証が必要な場合に使用（IRYS_SERVICE_API_KEY など）
 }
 
-// NewHTTPUploader は Arweave/Bundlr 用の HTTP uploader を生成します。
+// NewHTTPUploader は Arweave/Irys 用の HTTP uploader を生成します。
 func NewHTTPUploader(baseURL, apiKey string) *HTTPUploader {
+	baseURL = strings.TrimSpace(baseURL)
+	baseURL = strings.TrimRight(baseURL, "/") // 末尾の "/" を削っておく
+
 	return &HTTPUploader{
 		client: &http.Client{
 			Timeout: 30 * time.Second,
@@ -33,14 +37,19 @@ func NewHTTPUploader(baseURL, apiKey string) *HTTPUploader {
 // ----------------------------------------------------------------------
 // ArweaveUploader インターフェース実装
 // ----------------------------------------------------------------------
-// usecase.ArweaveUploader は UploadMetadata(ctx, data []byte) を要求しているので
-// 既存の UploadJSON に委譲するだけのラッパを生やします。
+//
+// usecase.ArweaveUploader は:
+//
+//	UploadMetadata(ctx context.Context, data []byte) (string, error)
+//
+// を要求している想定なので、そのまま UploadJSON に委譲します。
 func (u *HTTPUploader) UploadMetadata(ctx context.Context, data []byte) (string, error) {
 	log.Printf("[arweave] UploadMetadata called (len=%d)", len(data))
 	return u.UploadJSON(ctx, data)
 }
 
-// UploadJSON は metadataJSON を Arweave にアップロードし、その URL を返します。
+// UploadJSON は metadataJSON を Irys Uploader 経由で Arweave にアップロードし、その URL を返します。
+// 呼び出し側（TokenMetadataBuilder / Usecase）が JSON をエンコードした []byte を渡してくる前提です。
 func (u *HTTPUploader) UploadJSON(ctx context.Context, metadataJSON []byte) (string, error) {
 	if len(metadataJSON) == 0 {
 		return "", fmt.Errorf("metadataJSON is empty")
@@ -52,8 +61,6 @@ func (u *HTTPUploader) UploadJSON(ctx context.Context, metadataJSON []byte) (str
 
 	log.Printf("[arweave] UploadJSON start baseURL=%s", u.baseURL)
 
-	// 実際のエンドポイントは使うサービスに合わせて調整してください。
-	// （例）POST /upload/json など
 	req, err := http.NewRequestWithContext(
 		ctx,
 		http.MethodPost,
@@ -89,7 +96,7 @@ func (u *HTTPUploader) UploadJSON(ctx context.Context, metadataJSON []byte) (str
 	}
 
 	var res struct {
-		URI string `json:"uri"` // 例: "https://arweave.net/xxxx"
+		URI string `json:"uri"` // 例: "https://gateway.irys.xyz/xxxx"
 	}
 	if err := json.Unmarshal(bodyBytes, &res); err != nil {
 		log.Printf("[arweave] decode upload response FAILED err=%v body=%s", err, string(bodyBytes))

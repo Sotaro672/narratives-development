@@ -1,0 +1,14 @@
+// backend/cmd/irys-uploader/tsconfig.irys.json
+{
+  "compilerOptions": {
+    "target": "ES2019",
+    "module": "CommonJS",
+    "moduleResolution": "node",
+    "strict": true,
+    "esModuleInterop": true,
+    "skipLibCheck": true,
+    "rootDir": ".",
+    "outDir": "./dist"
+  },
+  "include": ["index.ts"]
+}
