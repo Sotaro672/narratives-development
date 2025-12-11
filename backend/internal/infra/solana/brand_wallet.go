@@ -78,7 +78,7 @@ func (s *BrandWalletService) OpenBrandWallet(
 	}
 
 	// 3. Secret Manager に保存
-	//    Secret ID は "brand-wallet-<brandID>" の形式とする（brandID は Firestore の docID 想定）。
+	//    Secret ID は "brand-wallet-%s" の形式とする（brandID は Firestore の docID 想定）。
 	secretID := fmt.Sprintf("brand-wallet-%s", brandID)
 
 	smClient, err := secretmanager.NewClient(ctx)

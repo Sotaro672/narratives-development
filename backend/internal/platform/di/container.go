@@ -109,20 +109,6 @@ type Container struct {
 }
 
 // ========================================
-// ArweaveUploader Adapter
-// ========================================
-//
-// infra/arweave.HTTPUploader (UploadJSON) を
-// usecase.ArweaveUploader (UploadMetadata) にアダプトするための薄いラッパ。
-type arweaveUploaderAdapter struct {
-	inner *arweaveinfra.HTTPUploader
-}
-
-func (a *arweaveUploaderAdapter) UploadMetadata(ctx context.Context, data []byte) (string, error) {
-	return a.inner.UploadJSON(ctx, data)
-}
-
-// ========================================
 // NewContainer
 // ========================================
 //
@@ -132,10 +118,12 @@ func NewContainer(ctx context.Context) (*Container, error) {
 	cfg := appcfg.Load()
 
 	// 1.2 Arweave HTTP uploader (optional)
+	//     infra/arweave.HTTPUploader は UploadMetadata を実装しているので
+	//     そのまま usecase.ArweaveUploader として渡せる。
 	var arweaveUploader uc.ArweaveUploader
 	if cfg.ArweaveBaseURL != "" {
 		httpUp := arweaveinfra.NewHTTPUploader(cfg.ArweaveBaseURL, cfg.ArweaveAPIKey)
-		arweaveUploader = &arweaveUploaderAdapter{inner: httpUp}
+		arweaveUploader = httpUp
 		log.Printf("[container] Arweave HTTPUploader initialized baseURL=%s", cfg.ArweaveBaseURL)
 	} else {
 		log.Printf("[container] Arweave HTTPUploader not configured (ARWEAVE_BASE_URL empty)")
