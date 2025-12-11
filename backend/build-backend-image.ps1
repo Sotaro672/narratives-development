@@ -68,5 +68,8 @@ try {
 
 Write-Ok "Image build completed: $Image"
 Write-Host ""
+Write-Host "Built image (copy & paste if needed):" -ForegroundColor Yellow
+Write-Host "  $Image" -ForegroundColor Cyan
+Write-Host ""
 Write-Host "To deploy this image to Cloud Run:" -ForegroundColor Yellow
 Write-Host "  .\backend\deploy-backend.ps1 -Image `"$Image`"" -ForegroundColor Yellow

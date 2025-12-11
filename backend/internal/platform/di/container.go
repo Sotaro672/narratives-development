@@ -8,6 +8,7 @@ import (
 	firebase "firebase.google.com/go/v4"
 	firebaseauth "firebase.google.com/go/v4/auth"
 
+	arweaveinfra "narratives/internal/infra/arweave"
 	solanainfra "narratives/internal/infra/solana"
 
 	httpin "narratives/internal/adapters/in/http"
@@ -108,6 +109,20 @@ type Container struct {
 }
 
 // ========================================
+// ArweaveUploader Adapter
+// ========================================
+//
+// infra/arweave.HTTPUploader (UploadJSON) を
+// usecase.ArweaveUploader (UploadMetadata) にアダプトするための薄いラッパ。
+type arweaveUploaderAdapter struct {
+	inner *arweaveinfra.HTTPUploader
+}
+
+func (a *arweaveUploaderAdapter) UploadMetadata(ctx context.Context, data []byte) (string, error) {
+	return a.inner.UploadJSON(ctx, data)
+}
+
+// ========================================
 // NewContainer
 // ========================================
 //
@@ -115,6 +130,16 @@ type Container struct {
 func NewContainer(ctx context.Context) (*Container, error) {
 	// 1. Load config
 	cfg := appcfg.Load()
+
+	// 1.2 Arweave HTTP uploader (optional)
+	var arweaveUploader uc.ArweaveUploader
+	if cfg.ArweaveBaseURL != "" {
+		httpUp := arweaveinfra.NewHTTPUploader(cfg.ArweaveBaseURL, cfg.ArweaveAPIKey)
+		arweaveUploader = &arweaveUploaderAdapter{inner: httpUp}
+		log.Printf("[container] Arweave HTTPUploader initialized baseURL=%s", cfg.ArweaveBaseURL)
+	} else {
+		log.Printf("[container] Arweave HTTPUploader not configured (ARWEAVE_BASE_URL empty)")
+	}
 
 	// 1.5 Solana ミント権限ウォレットの鍵を Secret Manager から読み込む
 	mintKey, err := solanainfra.LoadMintAuthorityKey(
@@ -362,17 +387,13 @@ func NewContainer(ctx context.Context) (*Container, error) {
 	// ★ TokenBlueprint 用メタデータビルダー
 	tokenMetadataBuilder := uc.NewTokenMetadataBuilder()
 
-	// ★ ArweaveUploader
-	//  まだ実装がなければ nil のまま運用し、Publish 時にエラーを返す想定
-	var arweaveUploader uc.ArweaveUploader = nil
-
 	// ★ TokenBlueprintUsecase に member.Service と Arweave 関連を注入
 	tokenBlueprintUC := uc.NewTokenBlueprintUsecase(
 		tokenBlueprintRepo,   // tbRepo
 		nil,                  // tcRepo (token contents repo, 未接続なら nil)
 		nil,                  // tiRepo (token icon repo, 未接続なら nil)
 		memberSvc,            // *member.Service
-		arweaveUploader,      // ArweaveUploader（現状 nil）
+		arweaveUploader,      // ArweaveUploader（cfg.ArweaveBaseURL が空なら nil のまま）
 		tokenMetadataBuilder, // *TokenMetadataBuilder
 	)
 

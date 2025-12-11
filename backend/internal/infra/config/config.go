@@ -13,6 +13,12 @@ type Config struct {
 
 	// ★ 追加: Firebase Auth 用のプロジェクトID
 	FirebaseProjectID string
+
+	// ★ 追加: Arweave / Bundlr / Irys 用設定
+	// 例) https://node1.bundlr.network や 自前の Cloud Run ラッパ API の URL
+	ArweaveBaseURL string
+	// 認証が必要な場合に使用（不要なら空でOK）
+	ArweaveAPIKey string
 }
 
 // Load は環境変数を読み込み Config を返します。
@@ -29,6 +35,10 @@ func Load() *Config {
 
 		// ★ FIREBASE_PROJECT_ID が未指定なら GCP のデフォルトを使う
 		FirebaseProjectID: getenvDefault("FIREBASE_PROJECT_ID", defaultProject),
+
+		// ★ Arweave / Bundlr / Irys 関連
+		// 環境変数が未設定なら空文字のまま → Arweave 連携はスキップされる
+		ArweaveBaseURL: os.Getenv("ARWEAVE_BASE_URL"),
 	}
 
 	return cfg
@@ -42,6 +52,16 @@ func (c *Config) GetFirestoreProjectID() string {
 // Firebase 用の ProjectID を返すヘルパー（あると便利）
 func (c *Config) GetFirebaseProjectID() string {
 	return c.FirebaseProjectID
+}
+
+// Arweave / Bundlr / Irys のベース URL を返すヘルパー
+func (c *Config) GetArweaveBaseURL() string {
+	return c.ArweaveBaseURL
+}
+
+// Arweave 用の API Key を返すヘルパー
+func (c *Config) GetArweaveAPIKey() string {
+	return c.ArweaveAPIKey
 }
 
 func getenvDefault(key, def string) string {
