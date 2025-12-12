@@ -16,41 +16,48 @@ export default function MintRequestManagementPage() {
         showResetButton
         onReset={onReset}
       >
-        {rows.map((r) => (
-          <tr
-            key={r.id}
-            onClick={() => handleRowClick(r.id)}
-            style={{ cursor: "pointer" }}
-            tabIndex={0}
-            onKeyDown={(e) => handleRowKeyDown(e, r.id)}
-            aria-label={`ミント申請 ${r.productName} の詳細へ`}
-          >
-            {/* ★ ミント申請ID列は削除（id は内部的にのみ使用） */}
-            <td>
-              <span className="lp-brand-pill">{r.tokenBlueprintId}</span>
-            </td>
-            <td>
-              <span className="lp-brand-pill">{r.productName}</span>
-            </td>
-            <td>{r.mintQuantity}</td>
-            {/* ★ 生産量列（Mint数量の右隣り） */}
-            <td>{r.productionQuantity ?? "-"}</td>
-            <td>
-              {r.status === "minted" ? (
-                <span className="mint-badge is-done">{r.statusLabel}</span>
-              ) : r.status === "requested" ? (
-                <span className="mint-badge is-requested">
-                  {r.statusLabel}
-                </span>
-              ) : (
-                <span className="mint-badge is-planned">{r.statusLabel}</span>
-              )}
-            </td>
-            <td>{r.requestedBy ?? "-"}</td>
-            {/* ★ リクエスト日時列は削除 */}
-            <td>{r.mintedAt ?? "-"}</td>
-          </tr>
-        ))}
+        {rows.map((r) => {
+          // ★ リクエスト者: mints.createdByName のみを使用（無ければ "-"）
+          const requesterName = (r as any).createdByName ?? "-";
+
+          // ★ ミント日時: minted 状態のときだけ mintedAt を表示（それ以外は "-"）
+          const mintedAtLabel = r.status === "minted" ? r.mintedAt ?? "-" : "-";
+
+          return (
+            <tr
+              key={r.id}
+              onClick={() => handleRowClick(r.id)}
+              style={{ cursor: "pointer" }}
+              tabIndex={0}
+              onKeyDown={(e) => handleRowKeyDown(e, r.id)}
+              aria-label={`ミント申請 ${r.productName} の詳細へ`}
+            >
+              <td>
+                <span className="lp-brand-pill">{r.tokenBlueprintId}</span>
+              </td>
+              <td>
+                <span className="lp-brand-pill">{r.productName}</span>
+              </td>
+              <td>{r.mintQuantity}</td>
+              <td>{r.productionQuantity ?? "-"}</td>
+              <td>
+                {r.status === "minted" ? (
+                  <span className="mint-badge is-done">{r.statusLabel}</span>
+                ) : r.status === "requested" ? (
+                  <span className="mint-badge is-requested">{r.statusLabel}</span>
+                ) : (
+                  <span className="mint-badge is-planned">{r.statusLabel}</span>
+                )}
+              </td>
+
+              {/* ★ リクエスト者（mints.createdByName） */}
+              <td>{requesterName}</td>
+
+              {/* ★ ミント日時（mintedAt） */}
+              <td>{mintedAtLabel}</td>
+            </tr>
+          );
+        })}
       </List>
     </div>
   );

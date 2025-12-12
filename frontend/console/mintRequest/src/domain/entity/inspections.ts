@@ -28,13 +28,13 @@ export type InspectionStatus = "inspecting" | "completed";
  * InspectionItem
  * backend/internal/domain/inspection/entity.go の InspectionItem に対応。
  *
- * - modelNumber / inspectionResult / inspectedBy / inspectedAt は null もしくは未設定を許容
+ * - inspectionResult / inspectedBy / inspectedAt は null もしくは未設定を許容（Go のポインタに対応）
  * - inspectedAt は ISO8601 日時文字列（例: "2025-01-01T00:00:00Z"）を想定
  */
 export interface InspectionItem {
   productId: string;
   modelId: string;
-  modelNumber?: string | null;
+
   inspectionResult?: InspectionResult | null;
   inspectedBy?: string | null;
   inspectedAt?: string | null; // time.Time 相当（ISO8601）
@@ -44,8 +44,9 @@ export interface InspectionItem {
  * InspectionBatch
  * backend/internal/domain/inspection/entity.go の InspectionBatch に対応。
  *
- * - requestedBy / requestedAt / mintedAt / scheduledBurnDate / tokenBlueprintId は null or 未設定
- * - 日付/日時系は ISO8601 文字列を想定
+ * - requested は boolean（inspections 側は requested だけを持つ）
+ * - requestedBy / requestedAt / mintedAt / scheduledBurnDate / tokenBlueprintId は
+ *   mints テーブル側が責務を持つため、この型からは削除する
  */
 export interface InspectionBatch {
   productionId: string;
@@ -54,11 +55,8 @@ export interface InspectionBatch {
   quantity: number;
   totalPassed: number;
 
-  requestedBy?: string | null;
-  requestedAt?: string | null;       // ISO8601 datetime
-  mintedAt?: string | null;          // ISO8601 datetime
-  scheduledBurnDate?: string | null; // ISO8601 datetime
-  tokenBlueprintId?: string | null;
+  /** ミント申請済みフラグ（mints 側に詳細がある前提） */
+  requested: boolean;
 
   inspections: InspectionItem[];
 }
@@ -147,14 +145,20 @@ export function validateInspectionBatch(batch: InspectionBatch): string[] {
     errors.push("totalPassed must be >= 0");
   }
 
-  // inspections[i] の整合性チェック
-  for (const ins of batch.inspections) {
+  // requested
+  if (typeof batch.requested !== "boolean") {
+    errors.push("requested must be boolean");
+  }
+
+  // inspections[i] の整合性チェック（Go の validate() と同じ方針）
+  for (const ins of batch.inspections ?? []) {
     if (!ins.productId?.trim()) {
       errors.push("inspection.productId is required");
       continue;
     }
 
-    // inspectionResult が未設定なら、by/at があっても許容（Go 実装に合わせて緩くする）
+    // InspectionResult が nil の場合は「まだ何も書いていない」扱い
+    // inspectedBy/inspectedAt が入っていてもエラーにしない。
     if (ins.inspectionResult == null) {
       continue;
     }
@@ -166,7 +170,7 @@ export function validateInspectionBatch(batch: InspectionBatch): string[] {
       continue;
     }
 
-    // notYet の場合は by/at が入っていてもエラーにしない
+    // notYet の場合は互換性のため、by/at が入っていてもエラーにしない
     if (ins.inspectionResult === "notYet") {
       continue;
     }
@@ -214,17 +218,14 @@ export function normalizeInspectionBatch(
     status: input.status,
     quantity: input.quantity,
     totalPassed: input.totalPassed,
-    requestedBy: normalizeOpt(input.requestedBy),
-    requestedAt: normalizeOpt(input.requestedAt),
-    mintedAt: normalizeOpt(input.mintedAt),
-    scheduledBurnDate: normalizeOpt(input.scheduledBurnDate),
-    tokenBlueprintId: normalizeOpt(input.tokenBlueprintId),
+    requested: !!input.requested,
     inspections: (input.inspections ?? []).map((ins) => ({
       ...ins,
       productId: ins.productId.trim(),
       modelId: ins.modelId.trim(),
-      modelNumber: normalizeOpt(ins.modelNumber),
-      inspectionResult: ins.inspectionResult ?? null,
+      inspectionResult: (ins.inspectionResult ?? null) as
+        | InspectionResult
+        | null,
       inspectedBy: normalizeOpt(ins.inspectedBy),
       inspectedAt: normalizeOpt(ins.inspectedAt),
     })),

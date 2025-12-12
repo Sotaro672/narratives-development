@@ -7,8 +7,10 @@ import {
   SortableTableHeader,
 } from "../../../../shell/src/layout/List/List";
 import {
-  fetchMintRequestRows,
-  type MintRequestRow,
+  fetchInspectionBatches,
+  fetchMintsMapByInspectionIds,
+  type MintDTO,
+  type InspectionBatchDTO,
 } from "../../infrastructure/api/mintRequestApi";
 import type { InspectionStatus } from "../../domain/entity/inspections";
 
@@ -20,7 +22,7 @@ const toTs = (s: string | null | undefined): number => {
 };
 
 // 🔥 検査ステータスの表示ラベル（InspectionStatus）
-const statusLabel = (s: InspectionStatus | null | undefined): string => {
+const inspectionStatusLabel = (s: InspectionStatus | null | undefined): string => {
   switch (s) {
     case "inspecting":
       return "検査中";
@@ -31,8 +33,37 @@ const statusLabel = (s: InspectionStatus | null | undefined): string => {
   }
 };
 
+// mint 状態（UIバッジ色などに利用）
+export type MintRequestRowStatus = "planning" | "requested" | "minted";
+
 // Sorting key
 type SortKey = "mintedAt" | "mintQuantity" | null;
+
+// 画面に必要な最小 Row（MintDTO + InspectionBatchDTO を突合して作る）
+type ViewRow = {
+  id: string; // = productionId (= mint.inspectionId)
+  tokenBlueprintId: string | null;
+
+  productName: string | null;
+
+  mintQuantity: number;        // = inspection.totalPassed
+  productionQuantity: number;  // = inspection.quantity
+
+  status: MintRequestRowStatus;      // = mint の有無・minted で判定
+  inspectionStatus: InspectionStatus; // = inspection.status
+
+  createdByName: string | null; // = mint.createdByName ?? mint.createdBy
+  mintedAt: string | null;      // = mint.mintedAt
+
+  // 既存UIが使っている想定の表示用ラベル（ここでは検査ステータス）
+  statusLabel: string;
+};
+
+function deriveMintStatusFromMint(mint: MintDTO | null): MintRequestRowStatus {
+  if (!mint) return "planning";
+  if (mint.minted || !!mint.mintedAt) return "minted";
+  return "requested";
+}
 
 export const useMintRequestManagement = () => {
   const navigate = useNavigate();
@@ -40,7 +71,7 @@ export const useMintRequestManagement = () => {
   // ---------------------------
   // データ取得
   // ---------------------------
-  const [rawRows, setRawRows] = useState<MintRequestRow[]>([]);
+  const [rawRows, setRawRows] = useState<ViewRow[]>([]);
   const [loading, setLoading] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -50,8 +81,51 @@ export const useMintRequestManagement = () => {
     const run = async () => {
       setLoading(true);
       setError(null);
+
       try {
-        const rows = await fetchMintRequestRows();
+        // 1) inspections（MintInspectionView）を取得（productName / quantity / totalPassed / status が得られる）
+        const batches: InspectionBatchDTO[] = await fetchInspectionBatches();
+
+        const productionIds = batches
+          .map((b) => String((b as any).productionId ?? "").trim())
+          .filter((s) => !!s);
+
+        // 2) mints をまとめて取得（正：mintsテーブル）
+        const mintMap = await fetchMintsMapByInspectionIds(productionIds);
+
+        // 3) 画面用 Row を組み立て
+        const rows: ViewRow[] = batches.map((b) => {
+          const pid = String((b as any).productionId ?? "").trim();
+          const mint: MintDTO | null = pid ? (mintMap[pid] ?? null) : null;
+
+          const st = deriveMintStatusFromMint(mint);
+
+          const inspSt = (b.status ?? "inspecting") as InspectionStatus;
+
+          const createdByName =
+            (mint?.createdByName ?? null) ||
+            (mint?.createdBy ?? null) ||
+            null;
+
+          return {
+            id: pid,
+            tokenBlueprintId: mint?.tokenBlueprintId ?? null,
+
+            productName: b.productName ?? null,
+
+            mintQuantity: b.totalPassed ?? 0,
+            productionQuantity: (b as any).quantity ?? (b.inspections?.length ?? 0),
+
+            status: st,
+            inspectionStatus: inspSt,
+
+            createdByName,
+            mintedAt: mint?.mintedAt ?? null,
+
+            statusLabel: inspectionStatusLabel(inspSt),
+          };
+        });
+
         if (!cancelled) setRawRows(rows);
       } catch (e: any) {
         if (!cancelled) setError(e?.message ?? "Failed to fetch mint requests");
@@ -72,9 +146,9 @@ export const useMintRequestManagement = () => {
   const [tokenFilter, setTokenFilter] = useState<string[]>([]);
   const [productionFilter, setProductionFilter] = useState<string[]>([]);
   const [requesterFilter, setRequesterFilter] = useState<string[]>([]);
-  const [statusFilter, setStatusFilter] = useState<
-    InspectionStatus[] | string[]
-  >([]);
+  const [statusFilter, setStatusFilter] = useState<InspectionStatus[] | string[]>(
+    [],
+  );
 
   // Sorting（デフォルト：mintedAt DESC）
   const [sortKey, setSortKey] = useState<SortKey>("mintedAt");
@@ -96,13 +170,14 @@ export const useMintRequestManagement = () => {
     return [...s].map((v) => ({ value: v, label: v }));
   }, [rawRows]);
 
+  // ★ requestedByName / requestedBy は完全に使わない（createdByName のみ）
   const requesterOptions = useMemo(() => {
     const s = new Set<string>();
-    rawRows.forEach((r) => r.requestedBy && s.add(r.requestedBy.trim()));
+    rawRows.forEach((r) => r.createdByName && s.add(r.createdByName.trim()));
     return [...s].map((v) => ({ value: v, label: v }));
   }, [rawRows]);
 
-  // 🔥 inspectionStatus のフィルタオプション
+  // 検査ステータスのフィルタオプション
   const statusOptions = useMemo(() => {
     const s = new Set<InspectionStatus>();
     rawRows.forEach((r) => {
@@ -111,7 +186,7 @@ export const useMintRequestManagement = () => {
 
     return [...s].map((v) => ({
       value: v,
-      label: statusLabel(v),
+      label: inspectionStatusLabel(v),
     }));
   }, [rawRows]);
 
@@ -131,7 +206,7 @@ export const useMintRequestManagement = () => {
 
       const requesterOk =
         requesterFilter.length === 0 ||
-        requesterFilter.includes(r.requestedBy ?? "");
+        requesterFilter.includes(r.createdByName ?? "");
 
       const st = r.inspectionStatus ?? "notYet"; // fallback
       const statusOk =
@@ -155,11 +230,7 @@ export const useMintRequestManagement = () => {
       });
     }
 
-    // ラベル付与
-    return data.map((r) => ({
-      ...r,
-      statusLabel: statusLabel(r.inspectionStatus),
-    }));
+    return data;
   }, [
     rawRows,
     tokenFilter,
