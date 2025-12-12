@@ -422,6 +422,11 @@ func NewRouter(deps RouterDeps) http.Handler {
 
 		// /mint/inspections は従来どおり
 		mux.Handle("/mint/inspections", h)
+
+		// ★ 追加: mints 一覧取得（inspectionIds クエリ）
+		mux.Handle("/mint/mints", h)
+		mux.Handle("/mint/mints/", h)
+
 		// /mint/product_blueprints/.../patch など /mint/ 配下全体を MintHandler に流す
 		mux.Handle("/mint/", h)
 	}

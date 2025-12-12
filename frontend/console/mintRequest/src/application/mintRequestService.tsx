@@ -1,16 +1,9 @@
 // frontend/console/mintRequest/src/application/mintRequestService.tsx
 
 import type { InspectionBatchDTO } from "../infrastructure/api/mintRequestApi";
-import {
-  fetchInspectionBatchesHTTP,
-  fetchProductBlueprintPatchHTTP,
-  // ★ companyId ごとの Brand 一覧取得用
-  fetchBrandsForMintHTTP,
-  // ★ brandId ごとの TokenBlueprint 一覧取得用（/mint/token_blueprints?brandId=... を想定）
-  fetchTokenBlueprintsByBrandHTTP,
-  // ★ ミント申請 POST 用
-  postMintRequestHTTP,
-} from "../infrastructure/repository/mintRequestRepositoryHTTP";
+
+// repository は段階的移行に備えて * as import し、存在しない関数は runtime で noop にする
+import * as repo from "../infrastructure/repository/mintRequestRepositoryHTTP";
 
 /**
  * backend/internal/domain/productBlueprint.Patch に対応する DTO
@@ -48,13 +41,33 @@ export type BrandForMintDTO = {
  *
  * - name: トークン名
  * - symbol: シンボル（例: LUMI）
- * - iconUrl: アイコン画像 URL（存在しない場合は undefined / 空文字） 
+ * - iconUrl: アイコン画像 URL（存在しない場合は undefined / 空文字）
  */
 export type TokenBlueprintForMintDTO = {
   id: string;
   name: string;
   symbol: string;
   iconUrl?: string;
+};
+
+/**
+ * mints テーブル（正）に対応する DTO
+ * ※ 現在の運用では inspectionId = productionId を格納する前提
+ */
+export type MintDTO = {
+  id: string;
+  brandId: string;
+  tokenBlueprintId: string;
+  inspectionId: string; // = productionId
+  products: string[]; // 正: array
+  createdAt: string; // ISO string など（repo の実装に従う）
+  createdBy: string;
+  minted: boolean;
+  mintedAt?: string | null;
+  scheduledBurnDate?: string | null;
+
+  // テーブル上は存在しても、ドメイン未定義ならここでは任意扱い
+  onChainTxSignature?: string | null;
 };
 
 /**
@@ -71,7 +84,7 @@ export async function loadInspectionBatchFromMintAPI(
   if (!trimmed) return null;
 
   // /mint/inspections を実行（Repository 経由）
-  const batches = await fetchInspectionBatchesHTTP();
+  const batches = await repo.fetchInspectionBatchesHTTP();
 
   // productionId で絞り込み
   const hit =
@@ -90,7 +103,7 @@ export async function loadProductBlueprintPatch(
   const trimmed = productBlueprintId.trim();
   if (!trimmed) return null;
 
-  return await fetchProductBlueprintPatchHTTP(trimmed);
+  return await repo.fetchProductBlueprintPatchHTTP(trimmed);
 }
 
 /**
@@ -99,7 +112,7 @@ export async function loadProductBlueprintPatch(
  * （HTTP: GET /mint/brands）に対応。
  */
 export async function loadBrandsForMint(): Promise<BrandForMintDTO[]> {
-  const brands = await fetchBrandsForMintHTTP();
+  const brands = await repo.fetchBrandsForMintHTTP();
   return brands ?? [];
 }
 
@@ -107,9 +120,6 @@ export async function loadBrandsForMint(): Promise<BrandForMintDTO[]> {
  * 指定した brandId に紐づく TokenBlueprint 一覧を取得する。
  * backend/internal/application/usecase.MintUsecase.ListTokenBlueprintsByBrand
  * （HTTP: GET /mint/token_blueprints?brandId=...）に対応。
- *
- * 右カラムの「トークン設計カード」用に、
- * name / symbol / iconUrl を表示する前提。
  */
 export async function loadTokenBlueprintsByBrand(
   brandId: string,
@@ -119,8 +129,60 @@ export async function loadTokenBlueprintsByBrand(
     return [];
   }
 
-  const tokenBps = await fetchTokenBlueprintsByBrandHTTP(trimmed);
+  const tokenBps = await repo.fetchTokenBlueprintsByBrandHTTP(trimmed);
   return tokenBps ?? [];
+}
+
+/**
+ * ★ mints テーブルの有無で「申請済みモード」を判定するための取得関数（段階導入）
+ *
+ * - inspectionId (= productionId) で 1 件取得できることを期待
+ * - repository 実装がまだ無い場合は null を返す（呼び出し側でフォールバック可能）
+ *
+ * 期待する repository 側の関数名（どちらか）:
+ * - fetchMintByInspectionIdHTTP(inspectionId: string): Promise<MintDTO | null>
+ */
+export async function loadMintByInspectionIdFromMintAPI(
+  inspectionId: string,
+): Promise<MintDTO | null> {
+  const trimmed = inspectionId.trim();
+  if (!trimmed) return null;
+
+  const anyRepo = repo as any;
+
+  if (typeof anyRepo.fetchMintByInspectionIdHTTP === "function") {
+    const mint = await anyRepo.fetchMintByInspectionIdHTTP(trimmed);
+    return mint ?? null;
+  }
+
+  // repository 未実装なら noop（呼び出し側で旧 requestedBy/At 判定にフォールバック可能）
+  return null;
+}
+
+/**
+ * ★ 複数 inspectionId (= productionId) をまとめて引く版（段階導入）
+ *
+ * 期待する repository 側の関数名（どちらか）:
+ * - fetchMintsByInspectionIdsHTTP(ids: string[]): Promise<Record<string, MintDTO>>
+ *   ※ key は inspectionId
+ */
+export async function loadMintsByInspectionIdsFromMintAPI(
+  inspectionIds: string[],
+): Promise<Record<string, MintDTO>> {
+  const ids = (inspectionIds ?? [])
+    .map((s) => String(s ?? "").trim())
+    .filter((s) => !!s);
+
+  if (ids.length === 0) return {};
+
+  const anyRepo = repo as any;
+
+  if (typeof anyRepo.fetchMintsByInspectionIdsHTTP === "function") {
+    const m = await anyRepo.fetchMintsByInspectionIdsHTTP(ids);
+    return (m ?? {}) as Record<string, MintDTO>;
+  }
+
+  return {};
 }
 
 /**
@@ -153,9 +215,6 @@ export async function postMintRequest(
     throw new Error("productionId / tokenBlueprintId is empty");
   }
 
-  // ★ バックエンドに渡すリクエスト内容をログ出力
-  //    - scheduledBurnDate は undefined の可能性があるので null に正規化しておく
-  //    - 実際に Repository に渡す直前の値をそのまま出す
   // eslint-disable-next-line no-console
   console.log("[MintRequestService] postMintRequest payload", {
     productionId: pid,
@@ -163,9 +222,8 @@ export async function postMintRequest(
     scheduledBurnDate: scheduledBurnDate ?? null,
   });
 
-  const res = await postMintRequestHTTP(pid, tbid, scheduledBurnDate);
+  const res = await repo.postMintRequestHTTP(pid, tbid, scheduledBurnDate);
 
-  // ★ レスポンスも確認したい場合
   // eslint-disable-next-line no-console
   console.log("[MintRequestService] postMintRequest response", res);
 

@@ -2,7 +2,7 @@
 
 // Firebase Auth から ID トークンを取得
 import { auth } from "../../../../shell/src/auth/infrastructure/config/firebaseClient";
-import type { InspectionBatchDTO } from "../api/mintRequestApi";
+import type { InspectionBatchDTO, MintDTO } from "../api/mintRequestApi";
 import type {
   ProductBlueprintPatchDTO,
   BrandForMintDTO,
@@ -161,9 +161,8 @@ type BrandRecordRaw = {
 };
 
 type BrandPageResultDTO = {
-  items?: BrandRecordRaw[]; // 将来 json タグを付けた場合
-  Items?: BrandRecordRaw[]; // 現状の Go デフォルト (先頭大文字)
-  // 他に total / page / perPage 等があっても無視する
+  items?: BrandRecordRaw[];
+  Items?: BrandRecordRaw[];
 };
 
 export async function fetchBrandsForMintHTTP(): Promise<BrandForMintDTO[]> {
@@ -191,8 +190,8 @@ export async function fetchBrandsForMintHTTP(): Promise<BrandForMintDTO[]> {
 
   const mapped: BrandForMintDTO[] = rawItems
     .map((b) => ({
-      id: b.id ?? b.ID ?? "",
-      name: b.name ?? b.Name ?? "",
+      id: (b.id ?? b.ID ?? "").trim(),
+      name: (b.name ?? b.Name ?? "").trim(),
     }))
     .filter((b) => b.id && b.name);
 
@@ -206,10 +205,6 @@ export async function fetchBrandsForMintHTTP(): Promise<BrandForMintDTO[]> {
 /**
  * 指定した brandId に紐づく TokenBlueprint 一覧を取得する。
  * backend: GET /mint/token_blueprints?brandId=...
- *
- * Go 側は tbdom.PageResult を返す想定なので、
- * JSON の Items / items から id / name / symbol / iconUrl を抜き出して
- * TokenBlueprintForMintDTO[] に変換する。
  */
 type TokenBlueprintRecordRaw = {
   id?: string;
@@ -217,7 +212,6 @@ type TokenBlueprintRecordRaw = {
   symbol?: string;
   iconUrl?: string;
 
-  // 大文字始まりのフィールドにも一応対応
   ID?: string;
   Name?: string;
   Symbol?: string;
@@ -227,7 +221,6 @@ type TokenBlueprintRecordRaw = {
 type TokenBlueprintPageResultDTO = {
   items?: TokenBlueprintRecordRaw[];
   Items?: TokenBlueprintRecordRaw[];
-  // total / page / perPage などは無視
 };
 
 export async function fetchTokenBlueprintsByBrandHTTP(
@@ -268,26 +261,105 @@ export async function fetchTokenBlueprintsByBrandHTTP(
     | null
     | undefined;
 
-  let rawItems: TokenBlueprintRecordRaw[] = [];
-
-  if (Array.isArray(json)) {
-    // handler が単純に []TokenBlueprint を返すケース
-    rawItems = json;
-  } else {
-    // PageResult 経由で返ってくるケース
-    rawItems = json?.items ?? json?.Items ?? [];
-  }
+  const rawItems: TokenBlueprintRecordRaw[] = Array.isArray(json)
+    ? json
+    : json?.items ?? json?.Items ?? [];
 
   const mapped: TokenBlueprintForMintDTO[] = rawItems
     .map((tb) => ({
-      id: tb.id ?? tb.ID ?? "",
-      name: tb.name ?? tb.Name ?? "",
-      symbol: tb.symbol ?? tb.Symbol ?? "",
-      iconUrl: tb.iconUrl ?? tb.IconUrl ?? undefined,
+      id: (tb.id ?? tb.ID ?? "").trim(),
+      name: (tb.name ?? tb.Name ?? "").trim(),
+      symbol: (tb.symbol ?? tb.Symbol ?? "").trim(),
+      iconUrl: (tb.iconUrl ?? tb.IconUrl ?? "").trim() || undefined,
     }))
     .filter((tb) => tb.id && tb.name && tb.symbol);
 
   return mapped;
+}
+
+// ===============================
+// HTTP Repository (mints)
+// ===============================
+
+/**
+ * inspectionIds (= productionIds) をまとめて渡して、mints を取得する。
+ * backend: GET /mint/mints?inspectionIds=a,b,c
+ *
+ * 戻り値は "inspectionId -> MintDTO" の map を期待（画面側での突合を簡単にするため）。
+ */
+export async function fetchMintsByInspectionIdsHTTP(
+  inspectionIds: string[],
+): Promise<Record<string, MintDTO>> {
+  const ids = (inspectionIds ?? [])
+    .map((s) => String(s ?? "").trim())
+    .filter((s) => !!s);
+
+  if (ids.length === 0) return {};
+
+  const idToken = await getIdTokenOrThrow();
+
+  // query: inspectionIds=... (CSV)
+  const url = `${API_BASE}/mint/mints?inspectionIds=${encodeURIComponent(
+    ids.join(","),
+  )}`;
+
+  const res = await fetch(url, {
+    method: "GET",
+    headers: {
+      Authorization: `Bearer ${idToken}`,
+      "Content-Type": "application/json",
+    },
+  });
+
+  if (res.status === 404) {
+    return {};
+  }
+
+  if (!res.ok) {
+    throw new Error(`Failed to fetch mints: ${res.status} ${res.statusText}`);
+  }
+
+  // 期待: { [inspectionId]: MintDTO }
+  const json = (await res.json()) as Record<string, MintDTO> | null | undefined;
+  return json ?? {};
+}
+
+/**
+ * 単発: inspectionId (= productionId) で 1 件取得（バックエンドが用意されている場合）
+ * backend: GET /mint/mints/{inspectionId}
+ */
+export async function fetchMintByInspectionIdHTTP(
+  inspectionId: string,
+): Promise<MintDTO | null> {
+  const iid = String(inspectionId ?? "").trim();
+  if (!iid) {
+    throw new Error("inspectionId が空です");
+  }
+
+  const idToken = await getIdTokenOrThrow();
+
+  const url = `${API_BASE}/mint/mints/${encodeURIComponent(iid)}`;
+
+  const res = await fetch(url, {
+    method: "GET",
+    headers: {
+      Authorization: `Bearer ${idToken}`,
+      "Content-Type": "application/json",
+    },
+  });
+
+  if (res.status === 404) {
+    return null;
+  }
+
+  if (!res.ok) {
+    throw new Error(
+      `Failed to fetch mint by inspectionId: ${res.status} ${res.statusText}`,
+    );
+  }
+
+  const json = (await res.json()) as MintDTO | null | undefined;
+  return json ?? null;
 }
 
 // ===============================
@@ -315,6 +387,7 @@ export async function postMintRequestHTTP(
   }
 
   // ここでまず引数のログを出す
+  // eslint-disable-next-line no-console
   console.log("[postMintRequestHTTP] called", {
     productionId: trimmed,
     tokenBlueprintId,
@@ -332,7 +405,7 @@ export async function postMintRequestHTTP(
     tokenBlueprintId: string;
     scheduledBurnDate?: string;
   } = {
-    tokenBlueprintId,
+    tokenBlueprintId: tokenBlueprintId.trim(),
   };
 
   // HTML の date input から渡される "YYYY-MM-DD" をそのまま送る
@@ -340,6 +413,7 @@ export async function postMintRequestHTTP(
     payload.scheduledBurnDate = scheduledBurnDate.trim();
   }
 
+  // eslint-disable-next-line no-console
   console.log("[postMintRequestHTTP] about to POST", {
     url,
     payload,
@@ -354,12 +428,14 @@ export async function postMintRequestHTTP(
     body: JSON.stringify(payload),
   });
 
+  // eslint-disable-next-line no-console
   console.log("[postMintRequestHTTP] response status", {
     status: res.status,
     statusText: res.statusText,
   });
 
   if (res.status === 404) {
+    // eslint-disable-next-line no-console
     console.warn("[postMintRequestHTTP] 404 Not Found");
     return null;
   }
@@ -372,6 +448,7 @@ export async function postMintRequestHTTP(
     } catch {
       // ignore
     }
+    // eslint-disable-next-line no-console
     console.error("[postMintRequestHTTP] failed", {
       status: res.status,
       statusText: res.statusText,
@@ -384,6 +461,7 @@ export async function postMintRequestHTTP(
   }
 
   const json = (await res.json()) as InspectionBatchDTO | null | undefined;
+  // eslint-disable-next-line no-console
   console.log("[postMintRequestHTTP] success response json", json);
 
   return json ?? null;

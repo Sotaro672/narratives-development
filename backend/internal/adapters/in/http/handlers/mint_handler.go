@@ -11,6 +11,7 @@ import (
 
 	usecase "narratives/internal/application/usecase"
 	branddom "narratives/internal/domain/brand"
+	mintdom "narratives/internal/domain/mint"
 	pbpdom "narratives/internal/domain/productBlueprint"
 	tbdom "narratives/internal/domain/tokenBlueprint"
 )
@@ -45,6 +46,15 @@ func (h *MintHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	// ------------------------------------------------------------
 	case r.Method == http.MethodGet && r.URL.Path == "/mint/debug":
 		h.HandleDebug(w, r)
+		return
+
+	// ------------------------------------------------------------
+	// GET /mint/mints?inspectionIds=a,b,c
+	//  → inspectionIds（= productionId）に対応する mints をまとめて返す
+	//  → 戻り値: map[inspectionId]Mint
+	// ------------------------------------------------------------
+	case r.Method == http.MethodGet && r.URL.Path == "/mint/mints":
+		h.listMintsByInspectionIDs(w, r)
 		return
 
 	// ------------------------------------------------------------
@@ -106,6 +116,91 @@ func (h *MintHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 }
 
 // ============================================================
+// GET /mint/mints?inspectionIds=a,b,c
+// ============================================================
+//
+// return:
+//
+//	{
+//	  "inspectionIdA": { ...mint... },
+//	  "inspectionIdB": { ...mint... }
+//	}
+func (h *MintHandler) listMintsByInspectionIDs(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+
+	log.Printf("[mint_handler] listMintsByInspectionIDs called method=%s path=%s rawQuery=%s",
+		r.Method, r.URL.Path, r.URL.RawQuery)
+
+	if h.mintUC == nil {
+		log.Printf("[mint_handler] listMintsByInspectionIDs FAILED: mintUC is nil")
+		w.WriteHeader(http.StatusInternalServerError)
+		_ = json.NewEncoder(w).Encode(map[string]string{"error": "mint usecase is not configured"})
+		return
+	}
+
+	raw := strings.TrimSpace(r.URL.Query().Get("inspectionIds"))
+	if raw == "" {
+		// 空なら空マップを返す（フロントが扱いやすい）
+		_ = json.NewEncoder(w).Encode(map[string]any{})
+		return
+	}
+
+	parts := strings.Split(raw, ",")
+	ids := make([]string, 0, len(parts))
+	seen := make(map[string]struct{}, len(parts))
+	for _, p := range parts {
+		s := strings.TrimSpace(p)
+		if s == "" {
+			continue
+		}
+		if _, ok := seen[s]; ok {
+			continue
+		}
+		seen[s] = struct{}{}
+		ids = append(ids, s)
+	}
+
+	if len(ids) == 0 {
+		_ = json.NewEncoder(w).Encode(map[string]any{})
+		return
+	}
+
+	// ★ ここは MintUsecase 側に実装されている想定（repo.ListByInspectionIDs を内部で呼ぶ）
+	mintsByInspectionID, err := h.mintUC.ListMintsByInspectionIDs(ctx, ids)
+	if err != nil {
+		log.Printf("[mint_handler] listMintsByInspectionIDs FAILED err=%v", err)
+		w.WriteHeader(http.StatusInternalServerError)
+		_ = json.NewEncoder(w).Encode(map[string]string{"error": err.Error()})
+		return
+	}
+
+	// フロントがそのまま使えるように JSON shape を整える（lower camel）
+	out := make(map[string]any, len(mintsByInspectionID))
+	for inspectionID, m := range mintsByInspectionID {
+		out[inspectionID] = map[string]any{
+			"id":               m.ID,
+			"brandId":          m.BrandID,
+			"tokenBlueprintId": m.TokenBlueprintID,
+			"createdBy":        m.CreatedBy,
+			"createdAt":        m.CreatedAt,
+			"minted":           m.Minted,
+			"mintedAt":         m.MintedAt,
+			"scheduledBurnDate": func() any {
+				if m.ScheduledBurnDate == nil || m.ScheduledBurnDate.IsZero() {
+					return nil
+				}
+				return *m.ScheduledBurnDate
+			}(),
+			// products はドメインが map の場合でも、フロントは mint existence 判定しかしていないのでそのまま返す
+			"products": m.Products,
+		}
+	}
+
+	log.Printf("[mint_handler] listMintsByInspectionIDs OK count=%d", len(out))
+	_ = json.NewEncoder(w).Encode(out)
+}
+
+// ============================================================
 // POST /mint/requests/{mintRequestId}/mint
 // ============================================================
 //
@@ -160,16 +255,6 @@ func (h *MintHandler) mintFromMintRequest(w http.ResponseWriter, r *http.Request
 // ============================================================
 // POST /mint/inspections/{productionId}/request
 // ============================================================
-//
-// Body:
-//
-//	{
-//	  "tokenBlueprintId": "xxxx",
-//	  "scheduledBurnDate": "2025-12-31" // 任意（HTML date input の "YYYY-MM-DD" を想定）
-//	}
-//
-// MintUsecase.UpdateRequestInfo(ctx, productionID, tokenBlueprintID, scheduledBurnDate)
-// が内部で inspections の RequestInfo 更新と mints テーブル作成を行う想定。
 func (h *MintHandler) updateRequestInfo(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 
@@ -203,7 +288,7 @@ func (h *MintHandler) updateRequestInfo(w http.ResponseWriter, r *http.Request) 
 	// Body parse
 	var body struct {
 		TokenBlueprintID  string  `json:"tokenBlueprintId"`
-		ScheduledBurnDate *string `json:"scheduledBurnDate,omitempty"` // ★ 任意の焼却予定日（ポインタ）
+		ScheduledBurnDate *string `json:"scheduledBurnDate,omitempty"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 		log.Printf("[mint_handler] updateRequestInfo FAILED: invalid body err=%v", err)
@@ -230,12 +315,11 @@ func (h *MintHandler) updateRequestInfo(w http.ResponseWriter, r *http.Request) 
 	log.Printf("[mint_handler] calling MintUsecase.UpdateRequestInfo productionId=%s tokenBlueprintId=%s scheduledBurnDate=%v",
 		productionID, tokenBlueprintID, body.ScheduledBurnDate)
 
-	// ★ Usecase 側で MemberIDFromContext(ctx) と scheduledBurnDate のパースを行う
 	updated, err := h.mintUC.UpdateRequestInfo(
 		ctx,
 		productionID,
 		tokenBlueprintID,
-		body.ScheduledBurnDate, // *string をそのまま渡す
+		body.ScheduledBurnDate,
 	)
 	if err != nil {
 		log.Printf("[mint_handler] UpdateRequestInfo FAILED productionId=%s tokenBlueprintId=%s err=%v",
@@ -257,6 +341,10 @@ func (h *MintHandler) updateRequestInfo(w http.ResponseWriter, r *http.Request) 
 // ============================================================
 // GET /mint/inspections
 // ============================================================
+//
+// ★ 追加:
+//   - 取得した inspections に対して /mint/mints と同じロジックで mints を引いて
+//     batch.mint を埋め込んで返す（detail 画面が minted モード判定できるように）
 func (h *MintHandler) listInspectionsForCurrentCompany(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 
@@ -287,9 +375,61 @@ func (h *MintHandler) listInspectionsForCurrentCompany(w http.ResponseWriter, r 
 		return
 	}
 
-	log.Printf("[mint_handler] listInspectionsForCurrentCompany OK count=%d", len(batches))
+	// ============================
+	// ★ mints をまとめて取得して batch に埋め込む
+	// ============================
+	inspectionIDs := make([]string, 0, len(batches))
+	for _, b := range batches {
+		// productionId を inspectionId として扱う（フロントの requestId も productionId）
+		inspectionIDs = append(inspectionIDs, b.ProductionID)
+	}
 
-	_ = json.NewEncoder(w).Encode(batches)
+	var mintsByInspectionID map[string]mintdom.Mint
+	if len(inspectionIDs) > 0 {
+		m, e := h.mintUC.ListMintsByInspectionIDs(ctx, inspectionIDs)
+		if e != nil {
+			// mints が取れなくても inspections 自体は返す（画面崩壊を避ける）
+			log.Printf("[mint_handler] listInspectionsForCurrentCompany WARN: failed to attach mints err=%v", e)
+		} else {
+			mintsByInspectionID = m
+		}
+	}
+
+	// batches は struct slice なので、mint を付与するために map 化して返す
+	out := make([]any, 0, len(batches))
+	for _, b := range batches {
+		// struct → map
+		var asMap map[string]any
+		raw, _ := json.Marshal(b)
+		_ = json.Unmarshal(raw, &asMap)
+
+		// mint を付与（存在する場合のみ）
+		if mintsByInspectionID != nil {
+			if m, ok := mintsByInspectionID[b.ProductionID]; ok {
+				asMap["mint"] = map[string]any{
+					"id":               m.ID,
+					"brandId":          m.BrandID,
+					"tokenBlueprintId": m.TokenBlueprintID,
+					"createdBy":        m.CreatedBy,
+					"createdAt":        m.CreatedAt,
+					"minted":           m.Minted,
+					"mintedAt":         m.MintedAt,
+					"scheduledBurnDate": func() any {
+						if m.ScheduledBurnDate == nil || m.ScheduledBurnDate.IsZero() {
+							return nil
+						}
+						return *m.ScheduledBurnDate
+					}(),
+					"products": m.Products,
+				}
+			}
+		}
+
+		out = append(out, asMap)
+	}
+
+	log.Printf("[mint_handler] listInspectionsForCurrentCompany OK count=%d", len(out))
+	_ = json.NewEncoder(w).Encode(out)
 }
 
 // ============================================================

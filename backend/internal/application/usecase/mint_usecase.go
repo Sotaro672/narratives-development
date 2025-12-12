@@ -309,6 +309,50 @@ func (u *MintUsecase) ListInspectionsByCompanyID(
 }
 
 // ============================================================
+// Additional API: mints を inspectionIds で取得
+// ============================================================
+
+// ListMintsByInspectionIDs は、inspectionIds（= productionIds）に紐づく mints を
+// inspectionId をキーにした map で返します。
+// - handler: GET /mint/mints?inspectionIds=a,b,c などで利用する想定
+func (u *MintUsecase) ListMintsByInspectionIDs(
+	ctx context.Context,
+	inspectionIDs []string,
+) (map[string]mintdom.Mint, error) {
+
+	if u == nil {
+		return nil, errors.New("mint usecase is nil")
+	}
+	if u.mintRepo == nil {
+		return nil, errors.New("mint repo is nil")
+	}
+
+	// normalize: trim + dedupe + remove empty
+	seen := make(map[string]struct{}, len(inspectionIDs))
+	ids := make([]string, 0, len(inspectionIDs))
+
+	for _, id := range inspectionIDs {
+		s := strings.TrimSpace(id)
+		if s == "" {
+			continue
+		}
+		if _, ok := seen[s]; ok {
+			continue
+		}
+		seen[s] = struct{}{}
+		ids = append(ids, s)
+	}
+
+	if len(ids) == 0 {
+		return map[string]mintdom.Mint{}, nil
+	}
+
+	// ★ repo の期待シグネチャ:
+	// ListByInspectionIDs(ctx, []string) (map[string]mintdom.Mint, error)
+	return u.mintRepo.ListByInspectionIDs(ctx, ids)
+}
+
+// ============================================================
 // Additional API: ProductBlueprint Patch 解決
 // ============================================================
 
@@ -344,7 +388,7 @@ func (u *MintUsecase) GetProductBlueprintPatchByID(
 // ミント申請ボタン押下時に、
 //
 //   - inspections 側: 該当 Production の InspectionBatch.requested を true に更新
-//   - mints 側    : brandId / tokenBlueprintId / passedProductIDs / createdAt / createdBy /
+//   - mints 側    : inspectionId(=productionId) / brandId / tokenBlueprintId / passedProductIDs / createdAt / createdBy /
 //     scheduledBurnDate（任意）/ minted=false を 1 レコード作成
 //   - token 側    : 直後に TokenUsecase（TokenMintPort）を用いてチェーンミントを実行
 //
@@ -414,8 +458,9 @@ func (u *MintUsecase) UpdateRequestInfo(
 	}
 
 	// 3) Mint エンティティ生成（minted=false / mintedAt=nil で作成）
+	// ★ inspectionId は productionId を入れる（mints の存在判定を productionId で行うため）
 	mintEntity, err := mintdom.NewMint(
-		"",
+		pid,
 		brandID,
 		tbID,
 		passedProductIDs,

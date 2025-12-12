@@ -49,28 +49,21 @@ export default function MintRequestDetail() {
     selectedTokenBlueprintId,
     handleSelectTokenBlueprint,
 
-    // ★ useMintRequestDetail 側で追加した「選択中 TokenBlueprintOption」
+    // 選択中 TokenBlueprintOption（左カラム表示用）
     selectedTokenBlueprint,
 
-    // ★ 申請済みモード制御用
-    isMintRequested,
-    requestedBy,
-    requestedAt,
+    // ★ ここから：mints テーブル有無での表示制御（hook 側で算出）
+    hasMint,
+    mint,
 
     // ★ 焼却予定日（ScheduledBurnDate）: hook から受け取る
     scheduledBurnDate,
     setScheduledBurnDate,
   } = useMintRequestDetail();
 
-  // ★ ページ側でのローカル scheduledBurnDate state は削除
-  // const [scheduledBurnDate, setScheduledBurnDate] = React.useState<string>("");
-
   const handleSave = () => {};
 
-  const currentFilterLabel =
-    selectedBrandName || selectedBrandId || "未選択";
-
-  // ★ 左カラム TokenBlueprintCard に渡す ViewModel
+  // 左カラム TokenBlueprintCard に渡す ViewModel
   const tokenBlueprintCardVm = selectedTokenBlueprint
     ? {
         id: selectedTokenBlueprint.id,
@@ -89,12 +82,24 @@ export default function MintRequestDetail() {
     onPreview: () => {},
   };
 
-  // ★ requestedAt の表示用フォーマット
-  const requestedAtLabel = requestedAt
-    ? new Date(requestedAt).toLocaleString("ja-JP")
-    : "（未登録）";
+  // mints テーブル由来の表示用ラベル
+  const mintCreatedAtLabel =
+    mint?.createdAt ? new Date(mint.createdAt).toLocaleString("ja-JP") : "（未登録）";
 
-  const requestedByLabel = requestedBy || "（不明）";
+  const mintCreatedByLabel = mint?.createdBy || "（不明）";
+
+  const mintScheduledBurnDateLabel =
+    mint?.scheduledBurnDate
+      ? new Date(mint.scheduledBurnDate).toLocaleDateString("ja-JP")
+      : "（未設定）";
+
+  const mintMintedAtLabel =
+    mint?.mintedAt ? new Date(mint.mintedAt).toLocaleString("ja-JP") : "（未完了）";
+
+  const mintedLabel =
+    typeof mint?.minted === "boolean" ? (mint.minted ? "minted" : "notYet") : "（不明）";
+
+  const onChainTxSignature = mint?.onChainTxSignature || "";
 
   return (
     <PageStyle
@@ -163,12 +168,12 @@ export default function MintRequestDetail() {
           />
         )}
 
-        {/* ④ ミント申請カード（未申請モードのみ表示） */}
-        {!isMintRequested && (
+        {/* ④ ミント申請カード（mints が無い場合のみ表示） */}
+        {!hasMint && (
           <Card className="mint-request-card">
             <CardContent className="mint-request-card__body">
               <div className="space-y-3">
-                {/* ★ 焼却予定日入力欄（ScheduledBurnDate） */}
+                {/* 焼却予定日入力欄（ScheduledBurnDate） */}
                 <div className="mint-request-card__burn-date space-y-1">
                   <label className="block text-sm font-medium text-gray-700">
                     焼却予定日（Scheduled Burn Date）
@@ -204,25 +209,38 @@ export default function MintRequestDetail() {
 
       {/* 右カラム */}
       <div className="space-y-4 mt-4">
-        {isMintRequested ? (
-          // ★ 申請済みモード: ミント数 + requestedBy + requestedAt を表示
+        {hasMint ? (
+          // ★ mints テーブルが存在する場合のモード表示
           <Card className="pb-select">
             <CardHeader>
-              <CardTitle>ミント申請情報</CardTitle>
+              <CardTitle>ミント情報</CardTitle>
             </CardHeader>
             <CardContent>
               <div className="space-y-2 text-sm">
                 <div>
                   ミント数: <strong>{totalMintQuantity}</strong>
                 </div>
-                <div>申請者: {requestedByLabel}</div>
-                <div>申請日時: {requestedAtLabel}</div>
+
+                <div>作成者: {mintCreatedByLabel}</div>
+                <div>作成日時: {mintCreatedAtLabel}</div>
+
+                <div>焼却予定日: {mintScheduledBurnDateLabel}</div>
+
+                <div>minted: {mintedLabel}</div>
+                <div>mintedAt: {mintMintedAtLabel}</div>
+
+                {onChainTxSignature && (
+                  <div className="break-all">
+                    txSignature:{" "}
+                    <span className="font-mono text-xs">{onChainTxSignature}</span>
+                  </div>
+                )}
               </div>
             </CardContent>
           </Card>
         ) : (
           <>
-            {/* ブランド選択カード（未申請モードのみ） */}
+            {/* ブランド選択カード（mints が無い場合のみ） */}
             <Card className="pb-select">
               <CardHeader>
                 <CardTitle>ブランド選択</CardTitle>
@@ -262,7 +280,7 @@ export default function MintRequestDetail() {
               </CardContent>
             </Card>
 
-            {/* トークン一覧カード（未申請モードのみ） */}
+            {/* トークン一覧カード（mints が無い場合のみ） */}
             <Card className="pb-select">
               <CardHeader>
                 <CardTitle>トークン設計一覧</CardTitle>

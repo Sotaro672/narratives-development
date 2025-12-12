@@ -26,6 +26,19 @@ type MintRepository interface {
 	// - m.ID が空文字の場合、実装側で採番して返却しても構いません。
 	// - 戻り値 Mint には、保存後の ID / CreatedAt などが反映されていることを期待します。
 	Create(ctx context.Context, m Mint) (Mint, error)
+
+	// GetByInspectionID:
+	// - inspectionId（= Narratives では productionId を格納する運用）に紐づく Mint を 1 件取得します。
+	// - 未作成の場合は ErrNotFound を返す想定です。
+	// - 画面側の「ミント申請済みモード」の判定を inspections.requestedBy/requestedAt ではなく、
+	//   mints の有無で行うための取得口です。
+	GetByInspectionID(ctx context.Context, inspectionID string) (Mint, error)
+
+	// ListByInspectionIDs:
+	// - inspectionId（= productionId）群に紐づく Mint をまとめて取得します。
+	// - 戻り値は inspectionId をキーにした map を想定します（存在しないものは含めない or 空Mintでも可）。
+	// - 管理画面の一覧等で N+1 を避ける用途を想定します。
+	ListByInspectionIDs(ctx context.Context, inspectionIDs []string) (map[string]Mint, error)
 }
 
 // ============================================================
