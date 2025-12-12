@@ -455,14 +455,69 @@ func (u *MintUsecase) UpdateRequestInfo(
 	// 6) 直後にチェーンミントをトリガー
 	//    - TokenUsecase(TokenMintPort) 実装側では、mints テーブルや tokenBlueprintId などから
 	//      MintRequestForUsecase を組み立てて MintFromMintRequest を実行する想定。
+	//
+	// ★ 追加: Mint（mints側）が minted:false→true になる「成功タイミング」に合わせて
+	//         tokenBlueprint.minted も false→true にするトリガーをここで実行する。
 	if u.tokenMinter != nil {
 		if _, err := u.tokenMinter.MintFromMintRequest(ctx, strings.TrimSpace(savedMint.ID)); err != nil {
 			// 挙動は要件次第だが、ここではエラーを返してロールアップする。
 			return empty, err
 		}
+
+		// ★ チェーンミント成功後（= Mint が minted 化するタイミング）に TokenBlueprint も minted 化
+		if err := u.markTokenBlueprintMinted(ctx, tbID, memberID); err != nil {
+			return empty, err
+		}
 	}
 
 	return batch, nil
+}
+
+// ★ TokenBlueprint minted: false → true への遷移（冪等）
+// - Mint が minted:false→true になる成功タイミングに合わせて呼ぶ想定
+// - 既に minted=true の場合は noop
+func (u *MintUsecase) markTokenBlueprintMinted(ctx context.Context, tokenBlueprintID string, actorID string) error {
+	if u == nil {
+		return errors.New("mint usecase is nil")
+	}
+	if u.tbRepo == nil {
+		return errors.New("tokenBlueprint repo is nil")
+	}
+
+	id := strings.TrimSpace(tokenBlueprintID)
+	if id == "" {
+		return errors.New("tokenBlueprintID is empty")
+	}
+
+	actorID = strings.TrimSpace(actorID)
+	if actorID == "" {
+		return errors.New("actorID is empty")
+	}
+
+	tb, err := u.tbRepo.GetByID(ctx, id)
+	if err != nil {
+		return err
+	}
+
+	// すでに minted=true なら冪等に終了
+	if tb.Minted {
+		return nil
+	}
+
+	now := time.Now().UTC()
+	minted := true
+	updatedBy := actorID
+
+	_, err = u.tbRepo.Update(ctx, id, tbdom.UpdateTokenBlueprintInput{
+		Minted:    &minted,
+		UpdatedAt: &now,
+		UpdatedBy: &updatedBy,
+	})
+	if err != nil {
+		return err
+	}
+
+	return nil
 }
 
 // ============================================================

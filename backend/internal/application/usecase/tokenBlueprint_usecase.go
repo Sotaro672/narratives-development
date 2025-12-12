@@ -6,7 +6,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"log"
 	"strings"
 	"time"
 
@@ -81,7 +80,6 @@ func NewTokenBlueprintUsecase(
 	arweave ArweaveUploader,
 	metadataBuilder *TokenMetadataBuilder,
 ) *TokenBlueprintUsecase {
-	log.Printf("[token-blueprint] NewTokenBlueprintUsecase init (arweave=%v, metadataBuilder=%v)", arweave != nil, metadataBuilder != nil)
 
 	return &TokenBlueprintUsecase{
 		tbRepo:          tbRepo,
@@ -127,23 +125,13 @@ type CreateBlueprintRequest struct {
 }
 
 func (u *TokenBlueprintUsecase) CreateWithUploads(ctx context.Context, in CreateBlueprintRequest) (*tbdom.TokenBlueprint, error) {
-	log.Printf("[token-blueprint] CreateWithUploads start name=%s symbol=%s brandId=%s companyId=%s contents=%d",
-		strings.TrimSpace(in.Name),
-		strings.TrimSpace(in.Symbol),
-		strings.TrimSpace(in.BrandID),
-		strings.TrimSpace(in.CompanyID),
-		len(in.Contents),
-	)
 
 	var iconIDPtr *string
 	if in.Icon != nil {
-		log.Printf("[token-blueprint] uploading icon fileName=%s contentType=%s", in.Icon.FileName, in.Icon.ContentType)
 		iconURL, size, err := u.tiRepo.UploadIcon(ctx, in.Icon.FileName, in.Icon.ContentType, in.Icon.Reader)
 		if err != nil {
-			log.Printf("[token-blueprint] upload icon FAILED fileName=%s err=%v", in.Icon.FileName, err)
 			return nil, fmt.Errorf("upload icon: %w", err)
 		}
-		log.Printf("[token-blueprint] upload icon OK url=%s size=%d", iconURL, size)
 
 		icon, err := u.tiRepo.Create(ctx, tidom.CreateTokenIconInput{
 			URL:      strings.TrimSpace(iconURL),
@@ -151,11 +139,9 @@ func (u *TokenBlueprintUsecase) CreateWithUploads(ctx context.Context, in Create
 			Size:     size,
 		})
 		if err != nil {
-			log.Printf("[token-blueprint] create token icon FAILED fileName=%s err=%v", in.Icon.FileName, err)
 			return nil, fmt.Errorf("create token icon: %w", err)
 		}
 		iconID := strings.TrimSpace(icon.ID)
-		log.Printf("[token-blueprint] create token icon OK id=%s", iconID)
 		if iconID != "" {
 			iconIDPtr = &iconID
 		}
@@ -163,13 +149,10 @@ func (u *TokenBlueprintUsecase) CreateWithUploads(ctx context.Context, in Create
 
 	contentIDs := make([]string, 0, len(in.Contents))
 	for _, c := range in.Contents {
-		log.Printf("[token-blueprint] uploading content name=%s fileName=%s type=%s", c.Name, c.FileName, c.Type)
 		url, size, err := u.tcRepo.UploadContent(ctx, c.FileName, c.ContentType, c.Reader)
 		if err != nil {
-			log.Printf("[token-blueprint] upload content FAILED fileName=%s err=%v", c.FileName, err)
 			return nil, fmt.Errorf("upload content(%s): %w", c.FileName, err)
 		}
-		log.Printf("[token-blueprint] upload content OK fileName=%s url=%s size=%d", c.FileName, url, size)
 
 		tc, err := u.tcRepo.Create(ctx, tcdom.CreateTokenContentInput{
 			Name: strings.TrimSpace(c.Name),
@@ -178,11 +161,9 @@ func (u *TokenBlueprintUsecase) CreateWithUploads(ctx context.Context, in Create
 			Size: size,
 		})
 		if err != nil {
-			log.Printf("[token-blueprint] create token content FAILED name=%s err=%v", c.Name, err)
 			return nil, fmt.Errorf("create token content(%s): %w", c.Name, err)
 		}
 		if id := strings.TrimSpace(tc.ID); id != "" {
-			log.Printf("[token-blueprint] create token content OK id=%s name=%s", id, c.Name)
 			contentIDs = append(contentIDs, id)
 		}
 	}
@@ -206,50 +187,35 @@ func (u *TokenBlueprintUsecase) CreateWithUploads(ctx context.Context, in Create
 		UpdatedBy: "",
 	})
 	if err != nil {
-		log.Printf("[token-blueprint] CreateWithUploads FAILED name=%s symbol=%s err=%v", in.Name, in.Symbol, err)
 		return nil, err
 	}
-
-	log.Printf("[token-blueprint] CreateWithUploads OK id=%s name=%s symbol=%s", tb.ID, tb.Name, tb.Symbol)
 
 	// ─────────────────────────────────────────────
 	// ここから Arweave 連携（自動 Publish）
 	// ─────────────────────────────────────────────
 	if u.arweave == nil || u.metadataBuilder == nil {
-		log.Printf("[token-blueprint] Arweave publish SKIP id=%s (arweave=%v, metadataBuilder=%v)",
-			tb.ID, u.arweave != nil, u.metadataBuilder != nil)
 		return tb, nil
 	}
-
-	log.Printf("[token-blueprint] Arweave publish START id=%s", tb.ID)
 
 	// 1) メタデータ JSON を生成
 	metaJSON, err := u.metadataBuilder.BuildFromBlueprint(*tb)
 	if err != nil {
-		log.Printf("[token-blueprint] Arweave build metadata FAILED id=%s err=%v", tb.ID, err)
 		return nil, fmt.Errorf("build metadata: %w", err)
 	}
-	log.Printf("[token-blueprint] Arweave build metadata OK id=%s size=%d", tb.ID, len(metaJSON))
 
 	// 2) Arweave にアップロード
-	log.Printf("[token-blueprint] Arweave upload START id=%s", tb.ID)
 	uri, err := u.arweave.UploadMetadata(ctx, metaJSON)
 	if err != nil {
-		log.Printf("[token-blueprint] Arweave upload FAILED id=%s err=%v", tb.ID, err)
 		return nil, fmt.Errorf("upload metadata to arweave: %w", err)
 	}
-	log.Printf("[token-blueprint] Arweave upload OK id=%s uri=%s", tb.ID, uri)
 
 	// 3) metadataUri を更新
-	log.Printf("[token-blueprint] Arweave update metadataUri START id=%s", tb.ID)
 	updated, err := u.tbRepo.Update(ctx, tb.ID, tbdom.UpdateTokenBlueprintInput{
 		MetadataURI: &uri,
 	})
 	if err != nil {
-		log.Printf("[token-blueprint] Arweave update metadataUri FAILED id=%s err=%v", tb.ID, err)
 		return nil, fmt.Errorf("update token blueprint metadataUri: %w", err)
 	}
-	log.Printf("[token-blueprint] Arweave publish OK id=%s uri=%s", updated.ID, uri)
 
 	return updated, nil
 }
@@ -258,7 +224,6 @@ func (u *TokenBlueprintUsecase) CreateWithUploads(ctx context.Context, in Create
 
 func (u *TokenBlueprintUsecase) GetByID(ctx context.Context, id string) (*tbdom.TokenBlueprint, error) {
 	tid := strings.TrimSpace(id)
-	log.Printf("[token-blueprint] GetByID id=%s", tid)
 	return u.tbRepo.GetByID(ctx, tid)
 }
 
@@ -270,11 +235,9 @@ func (u *TokenBlueprintUsecase) GetByIDWithCreatorName(
 	id string,
 ) (*tbdom.TokenBlueprint, string, error) {
 	tid := strings.TrimSpace(id)
-	log.Printf("[token-blueprint] GetByIDWithCreatorName id=%s", tid)
 
 	tb, err := u.tbRepo.GetByID(ctx, tid)
 	if err != nil {
-		log.Printf("[token-blueprint] GetByIDWithCreatorName FAILED id=%s err=%v", tid, err)
 		return nil, "", err
 	}
 
@@ -290,11 +253,9 @@ func (u *TokenBlueprintUsecase) GetByIDWithCreatorName(
 	name, err := u.memberSvc.GetNameLastFirstByID(ctx, memberID)
 	if err != nil {
 		// 氏名解決に失敗してもエラーにはせず、TokenBlueprint 自体は返す
-		log.Printf("[token-blueprint] resolve creator name FAILED memberId=%s err=%v", memberID, err)
 		return tb, "", nil
 	}
 
-	log.Printf("[token-blueprint] resolve creator name OK memberId=%s name=%s", memberID, name)
 	return tb, name, nil
 }
 
@@ -305,7 +266,6 @@ func (u *TokenBlueprintUsecase) ListByCompanyID(ctx context.Context, companyID s
 		return tbdom.PageResult{}, fmt.Errorf("companyId is empty")
 	}
 
-	log.Printf("[token-blueprint] ListByCompanyID companyId=%s page=%d perPage=%d", cid, page.Number, page.PerPage)
 	return u.tbRepo.ListByCompanyID(ctx, cid, page)
 }
 
@@ -315,19 +275,16 @@ func (u *TokenBlueprintUsecase) ListByBrandID(ctx context.Context, brandID strin
 	if bid == "" {
 		return tbdom.PageResult{}, fmt.Errorf("brandId is empty")
 	}
-	log.Printf("[token-blueprint] ListByBrandID brandId=%s page=%d perPage=%d", bid, page.Number, page.PerPage)
 	return tbdom.ListByBrandID(ctx, u.tbRepo, bid, page)
 }
 
 // ★ minted = false のみの一覧取得
 func (u *TokenBlueprintUsecase) ListMintedNotYet(ctx context.Context, page tbdom.Page) (tbdom.PageResult, error) {
-	log.Printf("[token-blueprint] ListMintedNotYet page=%d perPage=%d", page.Number, page.PerPage)
 	return tbdom.ListMintedNotYet(ctx, u.tbRepo, page)
 }
 
 // ★ minted = true のみの一覧取得
 func (u *TokenBlueprintUsecase) ListMintedCompleted(ctx context.Context, page tbdom.Page) (tbdom.PageResult, error) {
-	log.Printf("[token-blueprint] ListMintedCompleted page=%d perPage=%d", page.Number, page.PerPage)
 	return tbdom.ListMintedCompleted(ctx, u.tbRepo, page)
 }
 
@@ -336,8 +293,6 @@ func (u *TokenBlueprintUsecase) ResolveNames(
 	ctx context.Context,
 	ids []string,
 ) (map[string]string, error) {
-
-	log.Printf("[token-blueprint] ResolveNames ids=%v", ids)
 
 	result := make(map[string]string, len(ids))
 
@@ -350,7 +305,6 @@ func (u *TokenBlueprintUsecase) ResolveNames(
 		name, err := u.tbRepo.GetNameByID(ctx, id)
 		if err != nil {
 			// NotFound → 空文字
-			log.Printf("[token-blueprint] ResolveNames GetNameByID FAILED id=%s err=%v", id, err)
 			result[id] = ""
 			continue
 		}
@@ -376,7 +330,6 @@ type UpdateBlueprintRequest struct {
 }
 
 func (u *TokenBlueprintUsecase) Update(ctx context.Context, in UpdateBlueprintRequest) (*tbdom.TokenBlueprint, error) {
-	log.Printf("[token-blueprint] Update id=%s actorId=%s", strings.TrimSpace(in.ID), strings.TrimSpace(in.ActorID))
 
 	tb, err := u.tbRepo.Update(ctx, strings.TrimSpace(in.ID), tbdom.UpdateTokenBlueprintInput{
 		Name:         trimPtr(in.Name),
@@ -393,22 +346,18 @@ func (u *TokenBlueprintUsecase) Update(ctx context.Context, in UpdateBlueprintRe
 		DeletedBy: nil,
 	})
 	if err != nil {
-		log.Printf("[token-blueprint] Update FAILED id=%s err=%v", in.ID, err)
 		return nil, err
 	}
 
-	log.Printf("[token-blueprint] Update OK id=%s", tb.ID)
 	return tb, nil
 }
 
 // Convenient helpers
 
 func (u *TokenBlueprintUsecase) ReplaceIconWithUpload(ctx context.Context, blueprintID string, icon IconUpload, actorID string) (*tbdom.TokenBlueprint, error) {
-	log.Printf("[token-blueprint] ReplaceIconWithUpload blueprintId=%s fileName=%s", blueprintID, icon.FileName)
 
 	url, size, err := u.tiRepo.UploadIcon(ctx, icon.FileName, icon.ContentType, icon.Reader)
 	if err != nil {
-		log.Printf("[token-blueprint] ReplaceIconWithUpload upload icon FAILED id=%s err=%v", blueprintID, err)
 		return nil, fmt.Errorf("upload icon: %w", err)
 	}
 	ti, err := u.tiRepo.Create(ctx, tidom.CreateTokenIconInput{
@@ -417,7 +366,6 @@ func (u *TokenBlueprintUsecase) ReplaceIconWithUpload(ctx context.Context, bluep
 		Size:     size,
 	})
 	if err != nil {
-		log.Printf("[token-blueprint] ReplaceIconWithUpload create icon FAILED id=%s err=%v", blueprintID, err)
 		return nil, fmt.Errorf("create token icon: %w", err)
 	}
 	iconID := strings.TrimSpace(ti.ID)
@@ -427,15 +375,12 @@ func (u *TokenBlueprintUsecase) ReplaceIconWithUpload(ctx context.Context, bluep
 		UpdatedBy: ptr(strings.TrimSpace(actorID)),
 	})
 	if err != nil {
-		log.Printf("[token-blueprint] ReplaceIconWithUpload update FAILED id=%s err=%v", blueprintID, err)
 		return nil, err
 	}
-	log.Printf("[token-blueprint] ReplaceIconWithUpload OK blueprintId=%s iconId=%s", blueprintID, iconID)
 	return tb, nil
 }
 
 func (u *TokenBlueprintUsecase) AddContentsWithUploads(ctx context.Context, blueprintID string, uploads []ContentUpload, actorID string) (*tbdom.TokenBlueprint, error) {
-	log.Printf("[token-blueprint] AddContentsWithUploads blueprintId=%s uploads=%d", blueprintID, len(uploads))
 
 	if len(uploads) == 0 {
 		return u.tbRepo.GetByID(ctx, strings.TrimSpace(blueprintID))
@@ -443,10 +388,8 @@ func (u *TokenBlueprintUsecase) AddContentsWithUploads(ctx context.Context, blue
 
 	ids := make([]string, 0, len(uploads))
 	for _, up := range uploads {
-		log.Printf("[token-blueprint] AddContentsWithUploads uploading name=%s fileName=%s type=%s", up.Name, up.FileName, up.Type)
 		url, size, err := u.tcRepo.UploadContent(ctx, up.FileName, up.ContentType, up.Reader)
 		if err != nil {
-			log.Printf("[token-blueprint] AddContentsWithUploads upload FAILED fileName=%s err=%v", up.FileName, err)
 			return nil, fmt.Errorf("upload content(%s): %w", up.FileName, err)
 		}
 		tc, err := u.tcRepo.Create(ctx, tcdom.CreateTokenContentInput{
@@ -456,18 +399,15 @@ func (u *TokenBlueprintUsecase) AddContentsWithUploads(ctx context.Context, blue
 			Size: size,
 		})
 		if err != nil {
-			log.Printf("[token-blueprint] AddContentsWithUploads create FAILED name=%s err=%v", up.Name, err)
 			return nil, fmt.Errorf("create token content(%s): %w", up.Name, err)
 		}
 		if id := strings.TrimSpace(tc.ID); id != "" {
-			log.Printf("[token-blueprint] AddContentsWithUploads create OK id=%s name=%s", id, up.Name)
 			ids = append(ids, id)
 		}
 	}
 
 	current, err := u.tbRepo.GetByID(ctx, strings.TrimSpace(blueprintID))
 	if err != nil {
-		log.Printf("[token-blueprint] AddContentsWithUploads get current FAILED id=%s err=%v", blueprintID, err)
 		return nil, err
 	}
 
@@ -481,16 +421,13 @@ func (u *TokenBlueprintUsecase) AddContentsWithUploads(ctx context.Context, blue
 		UpdatedBy:    ptr(strings.TrimSpace(actorID)),
 	})
 	if err != nil {
-		log.Printf("[token-blueprint] AddContentsWithUploads update FAILED id=%s err=%v", blueprintID, err)
 		return nil, err
 	}
 
-	log.Printf("[token-blueprint] AddContentsWithUploads OK blueprintId=%s added=%d total=%d", blueprintID, len(ids), len(tb.ContentFiles))
 	return tb, nil
 }
 
 func (u *TokenBlueprintUsecase) ClearIcon(ctx context.Context, blueprintID string, actorID string) (*tbdom.TokenBlueprint, error) {
-	log.Printf("[token-blueprint] ClearIcon blueprintId=%s", blueprintID)
 	empty := ""
 	tb, err := u.tbRepo.Update(ctx, strings.TrimSpace(blueprintID), tbdom.UpdateTokenBlueprintInput{
 		IconID:    &empty,
@@ -498,15 +435,12 @@ func (u *TokenBlueprintUsecase) ClearIcon(ctx context.Context, blueprintID strin
 		UpdatedBy: ptr(strings.TrimSpace(actorID)),
 	})
 	if err != nil {
-		log.Printf("[token-blueprint] ClearIcon FAILED id=%s err=%v", blueprintID, err)
 		return nil, err
 	}
-	log.Printf("[token-blueprint] ClearIcon OK blueprintId=%s", blueprintID)
 	return tb, nil
 }
 
 func (u *TokenBlueprintUsecase) ReplaceContentIDs(ctx context.Context, blueprintID string, contentIDs []string, actorID string) (*tbdom.TokenBlueprint, error) {
-	log.Printf("[token-blueprint] ReplaceContentIDs blueprintId=%s newIds=%v", blueprintID, contentIDs)
 
 	clean := dedupStrings(contentIDs)
 	tb, err := u.tbRepo.Update(ctx, strings.TrimSpace(blueprintID), tbdom.UpdateTokenBlueprintInput{
@@ -515,10 +449,8 @@ func (u *TokenBlueprintUsecase) ReplaceContentIDs(ctx context.Context, blueprint
 		UpdatedBy:    ptr(strings.TrimSpace(actorID)),
 	})
 	if err != nil {
-		log.Printf("[token-blueprint] ReplaceContentIDs FAILED id=%s err=%v", blueprintID, err)
 		return nil, err
 	}
-	log.Printf("[token-blueprint] ReplaceContentIDs OK blueprintId=%s total=%d", blueprintID, len(tb.ContentFiles))
 	return tb, nil
 }
 
@@ -526,13 +458,10 @@ func (u *TokenBlueprintUsecase) ReplaceContentIDs(ctx context.Context, blueprint
 
 func (u *TokenBlueprintUsecase) Delete(ctx context.Context, id string) error {
 	tid := strings.TrimSpace(id)
-	log.Printf("[token-blueprint] Delete id=%s", tid)
 	err := u.tbRepo.Delete(ctx, tid)
 	if err != nil {
-		log.Printf("[token-blueprint] Delete FAILED id=%s err=%v", tid, err)
 		return err
 	}
-	log.Printf("[token-blueprint] Delete OK id=%s", tid)
 	return nil
 }
 
@@ -565,18 +494,14 @@ func (u *TokenBlueprintUsecase) MarkTokenBlueprintMinted(
 		return nil, fmt.Errorf("actorID is empty")
 	}
 
-	log.Printf("[token-blueprint] MarkTokenBlueprintMinted start id=%s actorId=%s", id, actorID)
-
 	// 現状を取得
 	tb, err := u.tbRepo.GetByID(ctx, id)
 	if err != nil {
-		log.Printf("[token-blueprint] MarkTokenBlueprintMinted get FAILED id=%s err=%v", id, err)
 		return nil, err
 	}
 
 	// すでに minted=true なら冪等的にそのまま返す
 	if tb.Minted {
-		log.Printf("[token-blueprint] MarkTokenBlueprintMinted noop id=%s already minted", id)
 		return tb, nil
 	}
 
@@ -599,10 +524,8 @@ func (u *TokenBlueprintUsecase) MarkTokenBlueprintMinted(
 		DeletedBy: nil,
 	})
 	if err != nil {
-		log.Printf("[token-blueprint] MarkTokenBlueprintMinted update FAILED id=%s err=%v", id, err)
 		return nil, err
 	}
 
-	log.Printf("[token-blueprint] MarkTokenBlueprintMinted OK id=%s", id)
 	return updated, nil
 }
