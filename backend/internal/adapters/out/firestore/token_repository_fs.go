@@ -1,4 +1,3 @@
-// backend\internal\adapters\out\firestore\token_repository_fs.go
 package firestore
 
 import (
@@ -19,11 +18,11 @@ import (
 // ========================================
 
 // mints/{id} のビュー
+// ★ products は decode 時は扱わない（Data() から柔軟に取得するため）
 type mintDoc struct {
-	BrandID          string   `firestore:"brandId"`
-	TokenBlueprintID string   `firestore:"tokenBlueprintId"`
-	Products         []string `firestore:"products"`
-	Minted           bool     `firestore:"minted"`
+	BrandID          string `firestore:"brandId"`
+	TokenBlueprintID string `firestore:"tokenBlueprintId"`
+	Minted           bool   `firestore:"minted"`
 }
 
 // token_blueprints/{id} のビュー
@@ -44,6 +43,8 @@ type MintRequestPortFS struct {
 	mintsCol           *firestore.CollectionRef
 	tokenBlueprintsCol *firestore.CollectionRef
 	brandsCol          *firestore.CollectionRef
+	// ★ 1商品=1トークン用のトークン保存コレクション
+	tokensCol *firestore.CollectionRef
 }
 
 // コンパイル時に MintRequestPort を満たしていることを確認
@@ -68,6 +69,8 @@ func NewMintRequestPortFS(
 		mintsCol:           client.Collection(mintsColName),
 		tokenBlueprintsCol: client.Collection(tokenBlueprintsColName),
 		brandsCol:          client.Collection(brandsColName),
+		// ★ トークン保存先はひとまず固定で "tokens" コレクションを想定
+		tokensCol: client.Collection("tokens"),
 	}
 }
 
@@ -96,6 +99,7 @@ func (p *MintRequestPortFS) LoadForMinting(
 		return nil, fmt.Errorf("get mint %s: %w", mintID, err)
 	}
 
+	// 基本フィールドは struct に decode
 	var m mintDoc
 	if err := mintSnap.DataTo(&m); err != nil {
 		return nil, fmt.Errorf("decode mint %s: %w", mintID, err)
@@ -113,6 +117,49 @@ func (p *MintRequestPortFS) LoadForMinting(
 	tbID := strings.TrimSpace(m.TokenBlueprintID)
 	if tbID == "" {
 		return nil, fmt.Errorf("mint %s has empty tokenBlueprintId", mintID)
+	}
+
+	// 1-2) products は旧・新スキーマ両対応で取得する
+	raw := mintSnap.Data()
+	productIDs := make([]string, 0)
+
+	if v, ok := raw["products"]; ok {
+		switch vv := v.(type) {
+		case []interface{}:
+			// 旧: products: [ "productId1", "productId2", ... ]
+			for _, x := range vv {
+				if s, ok := x.(string); ok {
+					s = strings.TrimSpace(s)
+					if s != "" {
+						productIDs = append(productIDs, s)
+					}
+				}
+			}
+		case []string:
+			for _, s := range vv {
+				s = strings.TrimSpace(s)
+				if s != "" {
+					productIDs = append(productIDs, s)
+				}
+			}
+		case map[string]interface{}:
+			// 新: products: { "productId1": "mintAddress1", ... }
+			for k := range vv {
+				k = strings.TrimSpace(k)
+				if k != "" {
+					productIDs = append(productIDs, k)
+				}
+			}
+		case map[string]string:
+			for k := range vv {
+				k = strings.TrimSpace(k)
+				if k != "" {
+					productIDs = append(productIDs, k)
+				}
+			}
+		default:
+			// 型が想定外の場合は何もしない（Amount=1 fallback へ）
+		}
 	}
 
 	// 2) token_blueprints/{tokenBlueprintId} を取得
@@ -160,17 +207,18 @@ func (p *MintRequestPortFS) LoadForMinting(
 	}
 
 	// 4) Amount を決める
-	// ここは要件次第だが、シンプルに「products の件数」を数量とする例。
-	amount := len(m.Products)
+	// products が取得できていればその件数、なければ最低 1
+	amount := len(productIDs)
 	if amount <= 0 {
-		// products が空でも最低 1 はミントしたい場合
 		amount = 1
 	}
 
+	// ★ ProductIDs も DTO に渡す（1商品=1Mint 用）
 	dto := &usecase.MintRequestForUsecase{
 		ID:              mintID,
 		ToAddress:       toAddress,
 		Amount:          uint64(amount),
+		ProductIDs:      productIDs,
 		BlueprintName:   name,
 		BlueprintSymbol: symbol,
 		MetadataURI:     metadataURI,
@@ -180,6 +228,7 @@ func (p *MintRequestPortFS) LoadForMinting(
 }
 
 // MarkAsMinted はチェーンミント結果をもとに mints/{mintID} を更新します。
+// （従来の「まとめてミント」モード用）
 func (p *MintRequestPortFS) MarkAsMinted(
 	ctx context.Context,
 	id string,
@@ -222,6 +271,86 @@ func (p *MintRequestPortFS) MarkAsMinted(
 			return fmt.Errorf("mint %s not found when updating as minted", mintID)
 		}
 		return fmt.Errorf("update mint %s as minted: %w", mintID, err)
+	}
+
+	return nil
+}
+
+// MarkProductsAsMinted は「1商品=1Mint」でミントした結果を Firestore に反映します。
+// - tokens コレクションに [productId, mintAddress] を 1:1 で保存
+// - mints/{id} 自体も minted=true に更新（代表の MintResult を利用）
+func (p *MintRequestPortFS) MarkProductsAsMinted(
+	ctx context.Context,
+	id string,
+	minted []usecase.MintedTokenForUsecase,
+) error {
+	if p == nil || p.client == nil || p.mintsCol == nil || p.tokensCol == nil {
+		return fmt.Errorf("MintRequestPortFS is not initialized (tokensCol may be nil)")
+	}
+	mintID := strings.TrimSpace(id)
+	if mintID == "" {
+		return fmt.Errorf("mint id is empty")
+	}
+	if len(minted) == 0 {
+		return fmt.Errorf("no minted results provided")
+	}
+
+	// 対応する mints/{id} を再取得して、brandId / tokenBlueprintId 等を参照
+	mintSnap, err := p.mintsCol.Doc(mintID).Get(ctx)
+	if err != nil {
+		if status.Code(err) == codes.NotFound {
+			return fmt.Errorf("mint %s not found when MarkProductsAsMinted", mintID)
+		}
+		return fmt.Errorf("get mint %s in MarkProductsAsMinted: %w", mintID, err)
+	}
+
+	var m mintDoc
+	if err := mintSnap.DataTo(&m); err != nil {
+		return fmt.Errorf("decode mint %s in MarkProductsAsMinted: %w", mintID, err)
+	}
+
+	// tokens コレクションに 1商品=1トークンのレコードを作成
+	// ここでは「productId を docID」にして 1:1 を保証する方針。
+	for _, mt := range minted {
+		productID := strings.TrimSpace(mt.ProductID)
+		if productID == "" {
+			continue
+		}
+		if mt.Result == nil {
+			continue
+		}
+
+		docID := productID
+
+		data := map[string]interface{}{
+			"brandId":            m.BrandID,
+			"tokenBlueprintId":   m.TokenBlueprintID,
+			"productId":          productID,
+			"mintAddress":        mt.Result.MintAddress,
+			"onChainTxSignature": mt.Result.Signature,
+			"mintedAt":           firestore.ServerTimestamp,
+			// 必要に応じて scheduledBurnDate 等もここへコピーしてよい
+		}
+
+		// 既に存在していた場合は上書き (1 productId = 1 token の前提)
+		if _, err := p.tokensCol.Doc(docID).Set(ctx, data); err != nil {
+			return fmt.Errorf("failed to upsert token doc for product %s: %w", productID, err)
+		}
+	}
+
+	// mints/{id} 自体も minted=true に更新（代表として最後の MintResult を利用）
+	var lastResult *tokendom.MintResult
+	for _, mt := range minted {
+		if mt.Result != nil {
+			lastResult = mt.Result
+		}
+	}
+	if lastResult == nil {
+		return fmt.Errorf("no valid MintResult found in minted list")
+	}
+
+	if err := p.MarkAsMinted(ctx, mintID, lastResult); err != nil {
+		return fmt.Errorf("failed to mark mint %s as minted after per-product tokens: %w", mintID, err)
 	}
 
 	return nil

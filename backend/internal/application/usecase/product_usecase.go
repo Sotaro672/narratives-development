@@ -52,6 +52,9 @@ type ProductDetail struct {
 	ProductionID     string `json:"productionId"`
 	InspectionResult string `json:"inspectionResult"`
 
+	// ★ 追加: connectedToken をそのままフロントに返す
+	ConnectedToken *string `json:"connectedToken,omitempty"`
+
 	ModelNumber string          `json:"modelNumber"`
 	Size        string          `json:"size"`
 	Color       ProductColorDTO `json:"color"`
@@ -169,10 +172,13 @@ func (u *ProductUsecase) GetInspectorProductDetail(
 
 	// 9) 最終的な DTO を組み立てて返す
 	detail := ProductDetail{
-		ProductID:           product.ID,
-		ModelID:             product.ModelID,
-		ProductionID:        product.ProductionID,
-		InspectionResult:    inspectionResult,
+		ProductID:        product.ID,
+		ModelID:          product.ModelID,
+		ProductionID:     product.ProductionID,
+		InspectionResult: inspectionResult,
+
+		ConnectedToken: product.ConnectedToken,
+
 		ModelNumber:         model.ModelNumber,
 		Size:                model.Size,
 		Color:               colorDTO,

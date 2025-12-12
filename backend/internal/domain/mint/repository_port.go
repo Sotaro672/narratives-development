@@ -3,7 +3,6 @@ package mint
 
 import (
 	"context"
-	"strings"
 	"time"
 
 	inspectiondom "narratives/internal/domain/inspection"
@@ -123,49 +122,7 @@ func (m *Mint) ResetMinted() {
 }
 
 // Validate はエンティティの一貫性チェックを公開します。
+// 実体は entity.go 側の m.validate() に委譲します。
 func (m Mint) Validate() error {
 	return m.validate()
-}
-
-// ------------------------------------------------------
-// internal validation
-// ------------------------------------------------------
-
-func (m Mint) validate() error {
-	// ID は必須扱いにはしない（リポジトリ層で採番するケースを許容）
-	if strings.TrimSpace(m.BrandID) == "" {
-		return ErrInvalidBrandID
-	}
-	if m.TokenBlueprintID == "" {
-		return ErrInvalidTokenBlueprintID
-	}
-	if strings.TrimSpace(m.CreatedBy) == "" {
-		return ErrInvalidCreatedBy
-	}
-	if m.CreatedAt.IsZero() {
-		return ErrInvalidCreatedAt
-	}
-
-	if len(m.Products) == 0 {
-		return ErrInvalidProducts
-	}
-	for _, pid := range m.Products {
-		if strings.TrimSpace(pid) == "" {
-			return ErrInvalidProducts
-		}
-	}
-
-	// minted / mintedAt の整合性チェック
-	if m.Minted {
-		if m.MintedAt == nil || m.MintedAt.IsZero() {
-			return ErrInconsistentMintedStatus
-		}
-	} else {
-		// minted=false のとき mintedAt が入っていたら矛盾として扱う
-		if m.MintedAt != nil && !m.MintedAt.IsZero() {
-			return ErrInconsistentMintedStatus
-		}
-	}
-
-	return nil
 }

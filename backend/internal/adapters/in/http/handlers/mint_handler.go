@@ -4,6 +4,7 @@ package handlers
 import (
 	"encoding/json"
 	"errors"
+	"log"
 	"net/http"
 	"strconv"
 	"strings"
@@ -113,7 +114,10 @@ func (h *MintHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 func (h *MintHandler) mintFromMintRequest(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 
+	log.Printf("[mint_handler] mintFromMintRequest called method=%s path=%s", r.Method, r.URL.Path)
+
 	if h.tokenUC == nil {
+		log.Printf("[mint_handler] mintFromMintRequest FAILED: tokenUC is nil")
 		w.WriteHeader(http.StatusInternalServerError)
 		_ = json.NewEncoder(w).Encode(map[string]string{
 			"error": "token usecase is not configured",
@@ -126,7 +130,10 @@ func (h *MintHandler) mintFromMintRequest(w http.ResponseWriter, r *http.Request
 	path = strings.TrimSuffix(path, "/mint")
 	mintRequestID := strings.Trim(path, "/")
 
+	log.Printf("[mint_handler] mintFromMintRequest parsed mintRequestID=%s rawPath=%s", mintRequestID, r.URL.Path)
+
 	if mintRequestID == "" {
+		log.Printf("[mint_handler] mintFromMintRequest FAILED: mintRequestId is empty")
 		w.WriteHeader(http.StatusBadRequest)
 		_ = json.NewEncoder(w).Encode(map[string]string{
 			"error": "mintRequestId is empty",
@@ -136,12 +143,15 @@ func (h *MintHandler) mintFromMintRequest(w http.ResponseWriter, r *http.Request
 
 	result, err := h.tokenUC.MintFromMintRequest(ctx, mintRequestID)
 	if err != nil {
+		log.Printf("[mint_handler] mintFromMintRequest FAILED: mintRequestID=%s err=%v", mintRequestID, err)
 		w.WriteHeader(http.StatusInternalServerError)
 		_ = json.NewEncoder(w).Encode(map[string]string{
 			"error": err.Error(),
 		})
 		return
 	}
+
+	log.Printf("[mint_handler] mintFromMintRequest OK mintRequestID=%s result=%+v", mintRequestID, result)
 
 	// tokendom.MintResult をそのまま JSON で返す
 	_ = json.NewEncoder(w).Encode(result)
@@ -163,7 +173,10 @@ func (h *MintHandler) mintFromMintRequest(w http.ResponseWriter, r *http.Request
 func (h *MintHandler) updateRequestInfo(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 
+	log.Printf("[mint_handler] updateRequestInfo called method=%s path=%s", r.Method, r.URL.Path)
+
 	if h.mintUC == nil {
+		log.Printf("[mint_handler] updateRequestInfo FAILED: mintUC is nil")
 		w.WriteHeader(http.StatusInternalServerError)
 		_ = json.NewEncoder(w).Encode(map[string]string{
 			"error": "mint usecase is not configured",
@@ -176,7 +189,10 @@ func (h *MintHandler) updateRequestInfo(w http.ResponseWriter, r *http.Request) 
 	path = strings.TrimSuffix(path, "/request")
 	productionID := strings.TrimSpace(path)
 
+	log.Printf("[mint_handler] updateRequestInfo parsed productionId=%s rawPath=%s", productionID, r.URL.Path)
+
 	if productionID == "" {
+		log.Printf("[mint_handler] updateRequestInfo FAILED: productionId is empty")
 		w.WriteHeader(http.StatusBadRequest)
 		_ = json.NewEncoder(w).Encode(map[string]string{
 			"error": "productionId is empty",
@@ -190,6 +206,7 @@ func (h *MintHandler) updateRequestInfo(w http.ResponseWriter, r *http.Request) 
 		ScheduledBurnDate *string `json:"scheduledBurnDate,omitempty"` // ★ 任意の焼却予定日（ポインタ）
 	}
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		log.Printf("[mint_handler] updateRequestInfo FAILED: invalid body err=%v", err)
 		w.WriteHeader(http.StatusBadRequest)
 		_ = json.NewEncoder(w).Encode(map[string]string{
 			"error": "invalid body",
@@ -197,14 +214,21 @@ func (h *MintHandler) updateRequestInfo(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
+	log.Printf("[mint_handler] updateRequestInfo body parsed productionId=%s tokenBlueprintId=%s scheduledBurnDate=%v",
+		productionID, strings.TrimSpace(body.TokenBlueprintID), body.ScheduledBurnDate)
+
 	tokenBlueprintID := strings.TrimSpace(body.TokenBlueprintID)
 	if tokenBlueprintID == "" {
+		log.Printf("[mint_handler] updateRequestInfo FAILED: tokenBlueprintId is required productionId=%s", productionID)
 		w.WriteHeader(http.StatusBadRequest)
 		_ = json.NewEncoder(w).Encode(map[string]string{
 			"error": "tokenBlueprintId is required",
 		})
 		return
 	}
+
+	log.Printf("[mint_handler] calling MintUsecase.UpdateRequestInfo productionId=%s tokenBlueprintId=%s scheduledBurnDate=%v",
+		productionID, tokenBlueprintID, body.ScheduledBurnDate)
 
 	// ★ Usecase 側で MemberIDFromContext(ctx) と scheduledBurnDate のパースを行う
 	updated, err := h.mintUC.UpdateRequestInfo(
@@ -214,12 +238,18 @@ func (h *MintHandler) updateRequestInfo(w http.ResponseWriter, r *http.Request) 
 		body.ScheduledBurnDate, // *string をそのまま渡す
 	)
 	if err != nil {
+		log.Printf("[mint_handler] UpdateRequestInfo FAILED productionId=%s tokenBlueprintId=%s err=%v",
+			productionID, tokenBlueprintID, err)
+
 		w.WriteHeader(http.StatusInternalServerError)
 		_ = json.NewEncoder(w).Encode(map[string]string{
 			"error": err.Error(),
 		})
 		return
 	}
+
+	log.Printf("[mint_handler] UpdateRequestInfo OK productionId=%s tokenBlueprintId=%s result=%+v",
+		productionID, tokenBlueprintID, updated)
 
 	_ = json.NewEncoder(w).Encode(updated)
 }
@@ -230,7 +260,10 @@ func (h *MintHandler) updateRequestInfo(w http.ResponseWriter, r *http.Request) 
 func (h *MintHandler) listInspectionsForCurrentCompany(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 
+	log.Printf("[mint_handler] listInspectionsForCurrentCompany called method=%s path=%s", r.Method, r.URL.Path)
+
 	if h.mintUC == nil {
+		log.Printf("[mint_handler] listInspectionsForCurrentCompany FAILED: mintUC is nil")
 		w.WriteHeader(http.StatusInternalServerError)
 		_ = json.NewEncoder(w).Encode(map[string]string{
 			"error": "mint usecase is not configured",
@@ -245,12 +278,16 @@ func (h *MintHandler) listInspectionsForCurrentCompany(w http.ResponseWriter, r 
 			status = http.StatusBadRequest
 		}
 
+		log.Printf("[mint_handler] listInspectionsForCurrentCompany FAILED err=%v status=%d", err, status)
+
 		w.WriteHeader(status)
 		_ = json.NewEncoder(w).Encode(map[string]string{
 			"error": err.Error(),
 		})
 		return
 	}
+
+	log.Printf("[mint_handler] listInspectionsForCurrentCompany OK count=%d", len(batches))
 
 	_ = json.NewEncoder(w).Encode(batches)
 }
@@ -266,7 +303,10 @@ type productBlueprintPatchResponse struct {
 func (h *MintHandler) getProductBlueprintPatchByID(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 
+	log.Printf("[mint_handler] getProductBlueprintPatchByID called method=%s path=%s", r.Method, r.URL.Path)
+
 	if h.mintUC == nil {
+		log.Printf("[mint_handler] getProductBlueprintPatchByID FAILED: mintUC is nil")
 		w.WriteHeader(http.StatusInternalServerError)
 		_ = json.NewEncoder(w).Encode(map[string]string{
 			"error": "mint usecase is not configured",
@@ -278,7 +318,10 @@ func (h *MintHandler) getProductBlueprintPatchByID(w http.ResponseWriter, r *htt
 	path = strings.TrimSuffix(path, "/patch")
 	id := strings.Trim(path, "/")
 
+	log.Printf("[mint_handler] getProductBlueprintPatchByID parsed productBlueprintID=%s", id)
+
 	if id == "" {
+		log.Printf("[mint_handler] getProductBlueprintPatchByID FAILED: productBlueprintID is empty")
 		w.WriteHeader(http.StatusBadRequest)
 		_ = json.NewEncoder(w).Encode(map[string]string{
 			"error": "productBlueprintID is empty",
@@ -293,6 +336,8 @@ func (h *MintHandler) getProductBlueprintPatchByID(w http.ResponseWriter, r *htt
 			status = http.StatusNotFound
 		}
 
+		log.Printf("[mint_handler] getProductBlueprintPatchByID FAILED id=%s err=%v status=%d", id, err, status)
+
 		w.WriteHeader(status)
 		_ = json.NewEncoder(w).Encode(map[string]string{
 			"error": err.Error(),
@@ -306,6 +351,8 @@ func (h *MintHandler) getProductBlueprintPatchByID(w http.ResponseWriter, r *htt
 		if bid != "" {
 			name, err := h.mintUC.ResolveBrandNameByID(ctx, bid)
 			if err != nil {
+				log.Printf("[mint_handler] getProductBlueprintPatchByID ResolveBrandNameByID FAILED brandID=%s err=%v", bid, err)
+
 				w.WriteHeader(http.StatusInternalServerError)
 				_ = json.NewEncoder(w).Encode(map[string]string{
 					"error": err.Error(),
@@ -321,6 +368,8 @@ func (h *MintHandler) getProductBlueprintPatchByID(w http.ResponseWriter, r *htt
 		BrandName: brandName,
 	}
 
+	log.Printf("[mint_handler] getProductBlueprintPatchByID OK id=%s brandName=%s", id, brandName)
+
 	_ = json.NewEncoder(w).Encode(resp)
 }
 
@@ -330,7 +379,10 @@ func (h *MintHandler) getProductBlueprintPatchByID(w http.ResponseWriter, r *htt
 func (h *MintHandler) listBrandsForCurrentCompany(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 
+	log.Printf("[mint_handler] listBrandsForCurrentCompany called method=%s path=%s", r.Method, r.URL.Path)
+
 	if h.mintUC == nil {
+		log.Printf("[mint_handler] listBrandsForCurrentCompany FAILED: mintUC is nil")
 		w.WriteHeader(http.StatusInternalServerError)
 		_ = json.NewEncoder(w).Encode(map[string]string{
 			"error": "mint usecase is not configured",
@@ -347,12 +399,16 @@ func (h *MintHandler) listBrandsForCurrentCompany(w http.ResponseWriter, r *http
 			status = http.StatusBadRequest
 		}
 
+		log.Printf("[mint_handler] listBrandsForCurrentCompany FAILED err=%v status=%d", err, status)
+
 		w.WriteHeader(status)
 		_ = json.NewEncoder(w).Encode(map[string]string{
 			"error": err.Error(),
 		})
 		return
 	}
+
+	log.Printf("[mint_handler] listBrandsForCurrentCompany OK count=%d", len(result.Items))
 
 	_ = json.NewEncoder(w).Encode(result)
 }
@@ -370,7 +426,11 @@ type tokenBlueprintForMintResponse struct {
 func (h *MintHandler) listTokenBlueprintsByBrand(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 
+	log.Printf("[mint_handler] listTokenBlueprintsByBrand called method=%s path=%s rawQuery=%s",
+		r.Method, r.URL.Path, r.URL.RawQuery)
+
 	if h.mintUC == nil {
+		log.Printf("[mint_handler] listTokenBlueprintsByBrand FAILED: mintUC is nil")
 		w.WriteHeader(http.StatusInternalServerError)
 		_ = json.NewEncoder(w).Encode(map[string]string{
 			"error": "mint usecase is not configured",
@@ -380,6 +440,7 @@ func (h *MintHandler) listTokenBlueprintsByBrand(w http.ResponseWriter, r *http.
 
 	brandID := strings.TrimSpace(r.URL.Query().Get("brandId"))
 	if brandID == "" {
+		log.Printf("[mint_handler] listTokenBlueprintsByBrand FAILED: brandId is required")
 		w.WriteHeader(http.StatusBadRequest)
 		_ = json.NewEncoder(w).Encode(map[string]string{
 			"error": "brandId is required",
@@ -404,6 +465,9 @@ func (h *MintHandler) listTokenBlueprintsByBrand(w http.ResponseWriter, r *http.
 		}
 	}
 
+	log.Printf("[mint_handler] listTokenBlueprintsByBrand params brandId=%s page=%d perPage=%d",
+		brandID, pageNumber, perPage)
+
 	page := tbdom.Page{
 		Number:  pageNumber,
 		PerPage: perPage,
@@ -411,6 +475,8 @@ func (h *MintHandler) listTokenBlueprintsByBrand(w http.ResponseWriter, r *http.
 
 	result, err := h.mintUC.ListTokenBlueprintsByBrand(ctx, brandID, page)
 	if err != nil {
+		log.Printf("[mint_handler] listTokenBlueprintsByBrand FAILED brandId=%s err=%v", brandID, err)
+
 		w.WriteHeader(http.StatusInternalServerError)
 		_ = json.NewEncoder(w).Encode(map[string]string{
 			"error": err.Error(),
@@ -427,6 +493,8 @@ func (h *MintHandler) listTokenBlueprintsByBrand(w http.ResponseWriter, r *http.
 			IconURL: tb.IconURL,
 		})
 	}
+
+	log.Printf("[mint_handler] listTokenBlueprintsByBrand OK brandId=%s count=%d", brandID, len(items))
 
 	_ = json.NewEncoder(w).Encode(items)
 }
