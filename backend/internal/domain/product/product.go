@@ -34,20 +34,11 @@ type Product struct {
 	ModelID          string           `json:"modelId"`
 	ProductionID     string           `json:"productionId"`
 	InspectionResult InspectionResult `json:"inspectionResult"`
-	ConnectedToken   *string          `json:"connectedToken"`
 
 	PrintedAt   *time.Time `json:"printedAt"`
 	InspectedAt *time.Time `json:"inspectedAt"`
 	InspectedBy *string    `json:"inspectedBy"`
 }
-
-// TokenConnectionStatus はトークン接続状態の列挙
-type TokenConnectionStatus string
-
-const (
-	TokenConnected    TokenConnectionStatus = "connected"
-	TokenDisconnected TokenConnectionStatus = "notConnected"
-)
 
 // ===============================
 // Errors
@@ -58,7 +49,6 @@ var (
 	ErrInvalidModelID          = errors.New("product: invalid modelId")
 	ErrInvalidProductionID     = errors.New("product: invalid productionId")
 	ErrInvalidInspectionResult = errors.New("product: invalid inspectionResult")
-	ErrInvalidConnectedToken   = errors.New("product: invalid connectedToken")
 
 	ErrInvalidPrintedAt   = errors.New("product: invalid printedAt")
 	ErrInvalidInspectedAt = errors.New("product: invalid inspectedAt")
@@ -72,7 +62,6 @@ var (
 func New(
 	id, modelID, productionID string,
 	inspection InspectionResult,
-	connectedToken *string,
 	printedAt *time.Time,
 	inspectedAt *time.Time,
 	inspectedBy *string,
@@ -87,7 +76,6 @@ func New(
 		ModelID:          strings.TrimSpace(modelID),
 		ProductionID:     strings.TrimSpace(productionID),
 		InspectionResult: inspection,
-		ConnectedToken:   normalizeStrPtr(connectedToken),
 
 		PrintedAt:   normalizeTimePtr(printedAt),
 		InspectedAt: normalizeTimePtr(inspectedAt),
@@ -103,7 +91,6 @@ func New(
 func NewFromStringTimes(
 	id, modelID, productionID string,
 	inspection InspectionResult,
-	connectedToken *string,
 	printedAtStr string,
 	inspectedAtStr string,
 	inspectedBy *string,
@@ -129,7 +116,7 @@ func NewFromStringTimes(
 
 	return New(
 		id, modelID, productionID,
-		inspection, connectedToken,
+		inspection,
 		printedAtPtr,
 		inspectedAtPtr, inspectedBy,
 	)
@@ -138,26 +125,6 @@ func NewFromStringTimes(
 // ===============================
 // Behavior
 // ===============================
-
-func (p *Product) ConnectToken(token string) error {
-	token = strings.TrimSpace(token)
-	if token == "" {
-		return ErrInvalidConnectedToken
-	}
-	p.ConnectedToken = &token
-	return nil
-}
-
-func (p *Product) DisconnectToken() {
-	p.ConnectedToken = nil
-}
-
-func (p Product) ConnectionStatus() TokenConnectionStatus {
-	if p.ConnectedToken != nil {
-		return TokenConnected
-	}
-	return TokenDisconnected
-}
 
 // printedBy は保持しない方針なので、by は受け取らず printedAt のみを更新
 func (p *Product) MarkPrinted(at time.Time) error {
@@ -228,10 +195,6 @@ func (p Product) validate() error {
 
 	if !IsValidInspectionResult(p.InspectionResult) {
 		return ErrInvalidInspectionResult
-	}
-
-	if p.ConnectedToken != nil && strings.TrimSpace(*p.ConnectedToken) == "" {
-		return ErrInvalidConnectedToken
 	}
 
 	// printedAt: あればゼロでないことだけチェック

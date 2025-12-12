@@ -322,8 +322,6 @@ func (u *PrintUsecase) CreatePrintLogForProduction(ctx context.Context, producti
 	}
 
 	// PrintLog エンティティ作成
-	// ※ printedBy フィールドはドメイン構造体には残っているが、
-	//   Firestore には保存していない（printLogToDoc から削除済み）。
 	logID := fmt.Sprintf("%s-%d", pid, printedAt.UnixNano())
 	log, err := productdom.NewPrintLog(
 		logID,
@@ -335,8 +333,6 @@ func (u *PrintUsecase) CreatePrintLogForProduction(ctx context.Context, producti
 	}
 
 	// ★ ここで inspections/{productionId} 用のバッチを作成
-	//   - inspectionResult / inspectedBy / inspectedAt はすべて notYet / nil で初期化
-	//   - status は "inspecting" 固定で開始
 	batch, err := inspectiondom.NewInspectionBatch(
 		pid,
 		inspectiondom.InspectionStatusInspecting, // enum: inspecting / completed
@@ -353,7 +349,6 @@ func (u *PrintUsecase) CreatePrintLogForProduction(ctx context.Context, producti
 			batch.Inspections[i].ModelID = strings.TrimSpace(mid)
 		}
 	}
-	// quantity / totalPassed / requested は NewInspectionBatch 側の初期値のまま
 
 	// 先に Inspection を保存してから PrintLog を保存
 	if _, err := u.inspectionRepo.Create(ctx, batch); err != nil {
@@ -379,7 +374,6 @@ func (u *PrintUsecase) CreatePrintLogForProduction(ctx context.Context, producti
 	created.QrPayloads = payloads
 
 	// ★★★ print 実行時に ProductBlueprint を printed にマークする ★★★
-	// companyId は context から取得し、その company の productBlueprint を対象に MarkPrinted を呼ぶ。
 	if err := u.markProductBlueprintPrinted(ctx); err != nil {
 		return productdom.PrintLog{}, err
 	}
@@ -388,19 +382,15 @@ func (u *PrintUsecase) CreatePrintLogForProduction(ctx context.Context, producti
 }
 
 // ★ ProductBlueprint printed: notYet → printed への遷移
-// - companyId は context から取得（他 Usecase と同様のパターン）
-// - ListIDsByCompany で対象 ID 一覧を取得
-// - 各 ID に対して MarkPrinted を実行
 func (u *PrintUsecase) markProductBlueprintPrinted(ctx context.Context) error {
 	if u.productBlueprintRepo == nil {
-		// DI されていない場合は何もしない（構成次第で opt-out できるようにしておく）
+		// DI されていない場合は何もしない
 		return nil
 	}
 
-	// ★ BrandUsecase / ProductBlueprintUsecase と同様に context から companyId を取得
+	// ★ context から companyId を取得
 	cid := strings.TrimSpace(companyIDFromContext(ctx))
 	if cid == "" {
-		// companyId が取れない場合は何もしない
 		return nil
 	}
 
@@ -419,8 +409,6 @@ func (u *PrintUsecase) markProductBlueprintPrinted(ctx context.Context) error {
 		}
 		_, err := u.productBlueprintRepo.MarkPrinted(ctx, id)
 		if err != nil {
-			// MarkPrinted は printed 済みの場合は idempotent 実装を想定。
-			// 仮に Forbidden を返す実装だった場合は無視して続行する。
 			if errors.Is(err, productbpdom.ErrForbidden) {
 				continue
 			}
@@ -436,10 +424,6 @@ func (u *PrintUsecase) markProductBlueprintPrinted(ctx context.Context) error {
 // ==========================
 
 // Create: Product のみ作成する。
-//
-// 以前の仕様（Create のたびに 1 件ずつ print_log を作成）は廃止し、
-// 「1 回の印刷バッチでまとめて PrintLog を作る」ために
-// CreatePrintLogForProduction を別途呼び出す方式に変更。
 func (u *PrintUsecase) Create(ctx context.Context, p productdom.Product) (productdom.Product, error) {
 	created, err := u.repo.Create(ctx, p)
 	if err != nil {
@@ -460,7 +444,6 @@ func (u *PrintUsecase) Save(ctx context.Context, p productdom.Product) (productd
 // - ProductionID     … POST 時に確定、更新不可
 // - PrintedAt        … POST 時に確定、更新不可
 // - InspectionResult … 更新対象
-// - ConnectedToken   … 更新対象
 // - InspectedAt      … 更新対象（InspectionResult の入力日時）
 // - InspectedBy      … 更新対象（InspectionResult の入力者）
 func (u *PrintUsecase) Update(ctx context.Context, id string, in productdom.Product) (productdom.Product, error) {
@@ -477,7 +460,6 @@ func (u *PrintUsecase) Update(ctx context.Context, id string, in productdom.Prod
 
 	// ---- 更新可能フィールドだけ上書き ----
 	current.InspectionResult = in.InspectionResult
-	current.ConnectedToken = in.ConnectedToken
 	current.InspectedAt = in.InspectedAt
 	current.InspectedBy = in.InspectedBy
 	// ID / ModelID / ProductionID / PrintedAt は current の値を維持

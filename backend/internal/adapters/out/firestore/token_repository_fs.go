@@ -120,14 +120,15 @@ func (p *MintRequestPortFS) LoadForMinting(
 		return nil, fmt.Errorf("mint %s has empty tokenBlueprintId", mintID)
 	}
 
-	// 1-2) products は旧・新スキーマ両対応で取得する
+	// 1-2) products は「配列（productId一覧）」のみ対応する
+	// ※ map[productId]"" / map[productId]mintAddress 形式は廃止（互換コード削除）
 	raw := mintSnap.Data()
 	productIDs := make([]string, 0)
 
 	if v, ok := raw["products"]; ok {
 		switch vv := v.(type) {
 		case []interface{}:
-			// 旧: products: [ "productId1", "productId2", ... ]
+			// products: [ "productId1", "productId2", ... ]
 			for _, x := range vv {
 				if s, ok := x.(string); ok {
 					s = strings.TrimSpace(s)
@@ -143,23 +144,9 @@ func (p *MintRequestPortFS) LoadForMinting(
 					productIDs = append(productIDs, s)
 				}
 			}
-		case map[string]interface{}:
-			// 新: products: { "productId1": "mintAddress1", ... }
-			for k := range vv {
-				k = strings.TrimSpace(k)
-				if k != "" {
-					productIDs = append(productIDs, k)
-				}
-			}
-		case map[string]string:
-			for k := range vv {
-				k = strings.TrimSpace(k)
-				if k != "" {
-					productIDs = append(productIDs, k)
-				}
-			}
 		default:
 			// 型が想定外の場合は何もしない（ProductIDs 空のまま）
+			// 旧データが map 形式の場合は、ここで productIDs が空になり、後段でエラーになります。
 		}
 	}
 
@@ -252,6 +239,7 @@ func (p *MintRequestPortFS) LoadForMinting(
 }
 
 // MarkAsMinted はチェーンミント結果をもとに mints/{mintID} を更新します。
+// ★ 注意: mints には mintAddress を保存しない方針のため、mintAddress 更新は行いません。
 func (p *MintRequestPortFS) MarkAsMinted(
 	ctx context.Context,
 	id string,
@@ -282,10 +270,7 @@ func (p *MintRequestPortFS) MarkAsMinted(
 			Path:  "onChainTxSignature",
 			Value: result.Signature,
 		},
-		{
-			Path:  "mintAddress",
-			Value: result.MintAddress,
-		},
+		// ★ mintAddress は mints に保存しない
 	}
 
 	_, err := p.mintsCol.Doc(mintID).Update(ctx, updates)
@@ -300,8 +285,8 @@ func (p *MintRequestPortFS) MarkAsMinted(
 }
 
 // MarkProductsAsMinted は「1商品=1Mint」でミントした結果を Firestore に反映します。
-// - tokens コレクションに [productId, mintAddress] を 1:1 で保存
-// - mints/{id} 自体も minted=true に更新（代表の MintResult を利用）
+// - tokens コレクションに [productId, mintAddress] を 1:1 で保存（★これは残す）
+// - mints/{id} 自体も minted=true に更新（代表の MintResult を利用。ただし mintAddress は保存しない）
 func (p *MintRequestPortFS) MarkProductsAsMinted(
 	ctx context.Context,
 	id string,
@@ -349,7 +334,7 @@ func (p *MintRequestPortFS) MarkProductsAsMinted(
 			"brandId":            m.BrandID,
 			"tokenBlueprintId":   m.TokenBlueprintID,
 			"productId":          productID,
-			"mintAddress":        mt.Result.MintAddress,
+			"mintAddress":        mt.Result.MintAddress, // ★ tokens には mintAddress を保存（削除しない）
 			"onChainTxSignature": mt.Result.Signature,
 			"mintedAt":           firestore.ServerTimestamp,
 			// 必要に応じて scheduledBurnDate 等もここへコピーしてよい
@@ -362,6 +347,7 @@ func (p *MintRequestPortFS) MarkProductsAsMinted(
 	}
 
 	// mints/{id} 自体も minted=true に更新（代表として最後の MintResult を利用）
+	// ※ MarkAsMinted 側で mintAddress は保存しない方針
 	var lastResult *tokendom.MintResult
 	for _, mt := range minted {
 		if mt.Result != nil {

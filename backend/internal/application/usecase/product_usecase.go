@@ -172,13 +172,10 @@ func (u *ProductUsecase) GetInspectorProductDetail(
 
 	// 9) 最終的な DTO を組み立てて返す
 	detail := ProductDetail{
-		ProductID:        product.ID,
-		ModelID:          product.ModelID,
-		ProductionID:     product.ProductionID,
-		InspectionResult: inspectionResult,
-
-		ConnectedToken: product.ConnectedToken,
-
+		ProductID:           product.ID,
+		ModelID:             product.ModelID,
+		ProductionID:        product.ProductionID,
+		InspectionResult:    inspectionResult,
 		ModelNumber:         model.ModelNumber,
 		Size:                model.Size,
 		Color:               colorDTO,

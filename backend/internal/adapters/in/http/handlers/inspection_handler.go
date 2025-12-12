@@ -189,22 +189,19 @@ func (h *InspectorHandler) updateInspection(w http.ResponseWriter, r *http.Reque
 		return
 	}
 
-	// 現在のメンバーの fullName をコンテキストから取得
-	fullName, hasFullName := middleware.CurrentFullName(r)
-
-	// フォールバックとして email も拾っておく（fullName が空の場合）
-	_, email, hasUIDEmail := middleware.CurrentUIDAndEmail(r)
-
-	var inspectedByName *string
-	if hasFullName && strings.TrimSpace(fullName) != "" {
-		name := strings.TrimSpace(fullName)
-		inspectedByName = &name
-	} else if hasUIDEmail && strings.TrimSpace(email) != "" {
-		// fullName が取れなかった場合は email を代用
-		e := strings.TrimSpace(email)
-		inspectedByName = &e
+	// ★ inspectedBy は「表示名」ではなく memberId（認証UID）を保存する方針
+	uid, _, hasUIDEmail := middleware.CurrentUIDAndEmail(r)
+	var inspectedByMemberID *string
+	if hasUIDEmail && strings.TrimSpace(uid) != "" {
+		v := strings.TrimSpace(uid)
+		inspectedByMemberID = &v
 	} else {
-		// それでも何もなければ nil のまま → Usecase 側では inspectedBy 更新なし
+		// ここで uid が取れないのは認証が不正 or middleware 構成不備なので 400
+		w.WriteHeader(http.StatusBadRequest)
+		_ = json.NewEncoder(w).Encode(map[string]string{
+			"error": "inspectedBy (current member uid) could not be resolved",
+		})
+		return
 	}
 
 	batch, err := h.inspectionUC.UpdateInspectionForProduct(
@@ -212,7 +209,7 @@ func (h *InspectorHandler) updateInspection(w http.ResponseWriter, r *http.Reque
 		req.ProductionID,
 		req.ProductID,
 		req.InspectionResult,
-		inspectedByName, // ここで fullName（なければ email）を渡す
+		inspectedByMemberID, // ★ memberId (uid) を渡す
 		req.InspectedAt,
 		req.Status,
 	)
@@ -282,21 +279,17 @@ func (h *InspectorHandler) completeInspection(w http.ResponseWriter, r *http.Req
 		return
 	}
 
-	// by: CurrentFullName → email の順で解決
-	fullName, hasFullName := middleware.CurrentFullName(r)
-	_, email, hasUIDEmail := middleware.CurrentUIDAndEmail(r)
-
+	// ★ by は「表示名」ではなく memberId（認証UID）を保存する方針
+	uid, _, hasUIDEmail := middleware.CurrentUIDAndEmail(r)
 	by := ""
-	if hasFullName && strings.TrimSpace(fullName) != "" {
-		by = strings.TrimSpace(fullName)
-	} else if hasUIDEmail && strings.TrimSpace(email) != "" {
-		by = strings.TrimSpace(email)
+	if hasUIDEmail && strings.TrimSpace(uid) != "" {
+		by = strings.TrimSpace(uid)
 	}
 
 	if by == "" {
 		w.WriteHeader(http.StatusBadRequest)
 		_ = json.NewEncoder(w).Encode(map[string]string{
-			"error": "inspectedBy (current member) could not be resolved",
+			"error": "inspectedBy (current member uid) could not be resolved",
 		})
 		return
 	}
@@ -312,7 +305,7 @@ func (h *InspectorHandler) completeInspection(w http.ResponseWriter, r *http.Req
 	batch, err := h.inspectionUC.CompleteInspectionForProduction(
 		ctx,
 		req.ProductionID,
-		by,
+		by, // ★ memberId (uid)
 		at,
 	)
 	if err != nil {

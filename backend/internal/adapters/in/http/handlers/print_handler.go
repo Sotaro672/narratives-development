@@ -332,7 +332,6 @@ func (h *PrintHandler) create(w http.ResponseWriter, r *http.Request) {
 		ModelID:          req.ModelID,
 		ProductionID:     req.ProductionID,
 		InspectionResult: productdom.InspectionNotYet,
-		ConnectedToken:   nil,
 		PrintedAt:        &req.PrintedAt,
 		InspectedAt:      nil,
 		InspectedBy:      nil,
@@ -362,7 +361,6 @@ func (h *PrintHandler) update(w http.ResponseWriter, r *http.Request, id string)
 
 	var req struct {
 		InspectionResult productdom.InspectionResult `json:"inspectionResult"`
-		ConnectedToken   *string                     `json:"connectedToken"`
 		InspectedAt      *time.Time                  `json:"inspectedAt"`
 		InspectedBy      *string                     `json:"inspectedBy"`
 	}
@@ -375,7 +373,6 @@ func (h *PrintHandler) update(w http.ResponseWriter, r *http.Request, id string)
 
 	var p productdom.Product
 	p.InspectionResult = req.InspectionResult
-	p.ConnectedToken = req.ConnectedToken
 	p.InspectedAt = req.InspectedAt
 	p.InspectedBy = req.InspectedBy
 

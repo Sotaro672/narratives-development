@@ -4,7 +4,6 @@ package usecase
 import (
 	"context"
 	"errors"
-	"log"
 	"strings"
 	"time"
 
@@ -98,21 +97,6 @@ func NewMintUsecase(
 	nameResolver *resolver.NameResolver,
 	tokenMinter TokenMintPort,
 ) *MintUsecase {
-
-	log.Printf(
-		"[mint_usecase] NewMintUsecase init pbRepo=%v prodRepo=%v inspRepo=%v modelRepo=%v tbRepo=%v brandSvc=%v mintRepo=%v passedProductLister=%v nameResolver=%v tokenMinter=%v",
-		pbRepo != nil,
-		prodRepo != nil,
-		inspRepo != nil,
-		modelRepo != nil,
-		tbRepo != nil,
-		brandSvc != nil,
-		mintRepo != nil,
-		passedProductLister != nil,
-		nameResolver != nil,
-		tokenMinter != nil,
-	)
-
 	return &MintUsecase{
 		pbRepo:              pbRepo,
 		prodRepo:            prodRepo,
@@ -149,10 +133,7 @@ func (u *MintUsecase) ListInspectionsForCurrentCompany(
 ) ([]MintInspectionView, error) {
 
 	companyID := strings.TrimSpace(CompanyIDFromContext(ctx))
-	log.Printf("[mint_usecase] ListInspectionsForCurrentCompany companyID=%s", companyID)
-
 	if companyID == "" {
-		log.Printf("[mint_usecase] ListInspectionsForCurrentCompany FAILED: companyID is empty")
 		return nil, ErrCompanyIDMissing
 	}
 
@@ -166,46 +147,34 @@ func (u *MintUsecase) ListInspectionsByCompanyID(
 	companyID string,
 ) ([]MintInspectionView, error) {
 
-	log.Printf("[mint_usecase] ListInspectionsByCompanyID start companyID=%s", strings.TrimSpace(companyID))
-
 	if u == nil {
-		log.Printf("[mint_usecase] ListInspectionsByCompanyID FAILED: usecase is nil")
 		return nil, errors.New("mint usecase is nil")
 	}
 
 	companyID = strings.TrimSpace(companyID)
 	if companyID == "" {
-		log.Printf("[mint_usecase] ListInspectionsByCompanyID FAILED: companyID is empty")
 		return nil, ErrCompanyIDMissing
 	}
 
 	// 1) companyId → productBlueprintId 一覧
 	pbIDs, err := u.pbRepo.ListIDsByCompany(ctx, companyID)
 	if err != nil {
-		log.Printf("[mint_usecase] ListInspectionsByCompanyID pbRepo.ListIDsByCompany FAILED companyID=%s err=%v", companyID, err)
 		return nil, err
 	}
 
-	log.Printf("[mint_usecase] ListInspectionsByCompanyID pbIDs len=%d", len(pbIDs))
-
 	if len(pbIDs) == 0 {
 		// 該当 product_blueprints が無ければ空配列を返す
-		log.Printf("[mint_usecase] ListInspectionsByCompanyID no productBlueprints for companyID=%s", companyID)
 		return []MintInspectionView{}, nil
 	}
 
 	// 2) productBlueprintId 群 → Production 一覧
 	prods, err := u.prodRepo.ListByProductBlueprintID(ctx, pbIDs)
 	if err != nil {
-		log.Printf("[mint_usecase] ListInspectionsByCompanyID prodRepo.ListByProductBlueprintID FAILED err=%v", err)
 		return nil, err
 	}
 
-	log.Printf("[mint_usecase] ListInspectionsByCompanyID productions len=%d", len(prods))
-
 	if len(prods) == 0 {
 		// 該当 Production が無ければ空配列を返す
-		log.Printf("[mint_usecase] ListInspectionsByCompanyID no productions for companyID=%s", companyID)
 		return []MintInspectionView{}, nil
 	}
 
@@ -228,7 +197,6 @@ func (u *MintUsecase) ListInspectionsByCompanyID(
 	}
 
 	if len(prodIDSet) == 0 {
-		log.Printf("[mint_usecase] ListInspectionsByCompanyID prodIDSet is empty after normalization")
 		return []MintInspectionView{}, nil
 	}
 
@@ -237,19 +205,13 @@ func (u *MintUsecase) ListInspectionsByCompanyID(
 		prodIDs = append(prodIDs, id)
 	}
 
-	log.Printf("[mint_usecase] ListInspectionsByCompanyID prodIDs len=%d", len(prodIDs))
-
 	// 3) productionId 群 → InspectionBatch 一覧
 	batches, err := u.inspRepo.ListByProductionID(ctx, prodIDs)
 	if err != nil {
-		log.Printf("[mint_usecase] ListInspectionsByCompanyID inspRepo.ListByProductionID FAILED err=%v", err)
 		return nil, err
 	}
 
-	log.Printf("[mint_usecase] ListInspectionsByCompanyID inspection batches len=%d", len(batches))
-
 	if len(batches) == 0 {
-		log.Printf("[mint_usecase] ListInspectionsByCompanyID no inspection batches for given productions")
 		return []MintInspectionView{}, nil
 	}
 
@@ -265,8 +227,6 @@ func (u *MintUsecase) ListInspectionsByCompanyID(
 		usedPBSet[pbID] = struct{}{}
 	}
 
-	log.Printf("[mint_usecase] ListInspectionsByCompanyID usedPBSet size=%d", len(usedPBSet))
-
 	// NameResolver に「商品名解決」を委譲
 	if u.nameResolver != nil {
 		for pbID := range usedPBSet {
@@ -275,9 +235,6 @@ func (u *MintUsecase) ListInspectionsByCompanyID(
 				pbNameMap[pbID] = name
 			}
 		}
-		log.Printf("[mint_usecase] ListInspectionsByCompanyID pbNameMap size=%d", len(pbNameMap))
-	} else {
-		log.Printf("[mint_usecase] ListInspectionsByCompanyID nameResolver is nil, skipping product name resolution")
 	}
 
 	// 5) inspection 内の modelId 群を集めて、ModelVariation をまとめて取得
@@ -292,19 +249,15 @@ func (u *MintUsecase) ListInspectionsByCompanyID(
 		}
 	}
 
-	log.Printf("[mint_usecase] ListInspectionsByCompanyID modelIDSet size=%d", len(modelIDSet))
-
 	modelMetaMap := make(map[string]MintModelMeta, len(modelIDSet))
 	if len(modelIDSet) > 0 && u.modelRepo != nil {
 		for modelID := range modelIDSet {
 			mv, err := u.modelRepo.GetModelVariationByID(ctx, modelID)
 			if err != nil {
 				if errors.Is(err, modeldom.ErrNotFound) {
-					log.Printf("[mint_usecase] ListInspectionsByCompanyID model variation not found modelID=%s", modelID)
 					continue
 				}
 				// その他のエラーもここではスキップ
-				log.Printf("[mint_usecase] ListInspectionsByCompanyID GetModelVariationByID FAILED modelID=%s err=%v", modelID, err)
 				continue
 			}
 
@@ -321,9 +274,6 @@ func (u *MintUsecase) ListInspectionsByCompanyID(
 			// キーは modelId（variationID）
 			modelMetaMap[modelID] = meta
 		}
-		log.Printf("[mint_usecase] ListInspectionsByCompanyID modelMetaMap size=%d", len(modelMetaMap))
-	} else {
-		log.Printf("[mint_usecase] ListInspectionsByCompanyID skip modelRepo lookup modelRepoNil=%v", u.modelRepo == nil)
 	}
 
 	// 6) InspectionBatch ごとに MintInspectionView を組み立てる
@@ -355,8 +305,6 @@ func (u *MintUsecase) ListInspectionsByCompanyID(
 		views = append(views, view)
 	}
 
-	log.Printf("[mint_usecase] ListInspectionsByCompanyID DONE companyID=%s views len=%d", companyID, len(views))
-
 	return views, nil
 }
 
@@ -372,26 +320,19 @@ func (u *MintUsecase) GetProductBlueprintPatchByID(
 	productBlueprintID string,
 ) (pbpdom.Patch, error) {
 
-	log.Printf("[mint_usecase] GetProductBlueprintPatchByID start productBlueprintID=%s", strings.TrimSpace(productBlueprintID))
-
 	if u == nil {
-		log.Printf("[mint_usecase] GetProductBlueprintPatchByID FAILED: usecase is nil")
 		return pbpdom.Patch{}, errors.New("mint usecase is nil")
 	}
 
 	id := strings.TrimSpace(productBlueprintID)
 	if id == "" {
-		log.Printf("[mint_usecase] GetProductBlueprintPatchByID FAILED: productBlueprintID is empty")
 		return pbpdom.Patch{}, errors.New("productBlueprintID is empty")
 	}
 
 	patch, err := u.pbRepo.GetPatchByID(ctx, id)
 	if err != nil {
-		log.Printf("[mint_usecase] GetProductBlueprintPatchByID pbRepo.GetPatchByID FAILED id=%s err=%v", id, err)
 		return pbpdom.Patch{}, err
 	}
-
-	log.Printf("[mint_usecase] GetProductBlueprintPatchByID OK id=%s", id)
 
 	return patch, nil
 }
@@ -415,44 +356,31 @@ func (u *MintUsecase) UpdateRequestInfo(
 	scheduledBurnDate *string, // HTML date input の "YYYY-MM-DD" 形式（nil or 空文字なら未指定）
 ) (inspectiondom.InspectionBatch, error) {
 
-	log.Printf("[mint_usecase] UpdateRequestInfo start productionID=%s tokenBlueprintID=%s scheduledBurnDate=%v",
-		strings.TrimSpace(productionID),
-		strings.TrimSpace(tokenBlueprintID),
-		scheduledBurnDate,
-	)
-
 	var empty inspectiondom.InspectionBatch
 
 	if u == nil {
-		log.Printf("[mint_usecase] UpdateRequestInfo FAILED: usecase is nil")
 		return empty, errors.New("mint usecase is nil")
 	}
 	if u.inspRepo == nil {
-		log.Printf("[mint_usecase] UpdateRequestInfo FAILED: inspRepo is nil")
 		return empty, errors.New("inspection repo is nil")
 	}
 	if u.mintRepo == nil {
-		log.Printf("[mint_usecase] UpdateRequestInfo FAILED: mintRepo is nil")
 		return empty, errors.New("mint repo is nil")
 	}
 	if u.passedProductLister == nil {
-		log.Printf("[mint_usecase] UpdateRequestInfo FAILED: passedProductLister is nil")
 		return empty, errors.New("passedProductLister is nil")
 	}
 	if u.tbRepo == nil {
-		log.Printf("[mint_usecase] UpdateRequestInfo FAILED: tbRepo is nil")
 		return empty, errors.New("tokenBlueprint repo is nil")
 	}
 
 	pid := strings.TrimSpace(productionID)
 	if pid == "" {
-		log.Printf("[mint_usecase] UpdateRequestInfo FAILED: productionID is empty")
 		return empty, errors.New("productionID is empty")
 	}
 
 	tbID := strings.TrimSpace(tokenBlueprintID)
 	if tbID == "" {
-		log.Printf("[mint_usecase] UpdateRequestInfo FAILED: tokenBlueprintID is empty")
 		return empty, errors.New("tokenBlueprintID is empty")
 	}
 
@@ -460,7 +388,6 @@ func (u *MintUsecase) UpdateRequestInfo(
 	// → inspections には保存せず、mints.createdBy に責務を移譲する
 	memberID := strings.TrimSpace(MemberIDFromContext(ctx))
 	if memberID == "" {
-		log.Printf("[mint_usecase] UpdateRequestInfo FAILED: memberID not found in context")
 		return empty, errors.New("memberID not found in context")
 	}
 
@@ -469,34 +396,24 @@ func (u *MintUsecase) UpdateRequestInfo(
 	// 1) TokenBlueprint から brandId を解決
 	tb, err := u.tbRepo.GetByID(ctx, tbID)
 	if err != nil {
-		log.Printf("[mint_usecase] UpdateRequestInfo tbRepo.GetByID FAILED tokenBlueprintID=%s err=%v", tbID, err)
 		return empty, err
 	}
 	brandID := strings.TrimSpace(tb.BrandID)
 	if brandID == "" {
-		log.Printf("[mint_usecase] UpdateRequestInfo FAILED: brandID is empty on tokenBlueprint id=%s", tbID)
 		return empty, errors.New("brandID is empty on tokenBlueprint")
 	}
-
-	log.Printf("[mint_usecase] UpdateRequestInfo resolved brandID=%s from tokenBlueprintID=%s", brandID, tbID)
 
 	// 2) inspections テーブルから inspectionResult: passed の productId 一覧を取得
 	passedProductIDs, err := u.passedProductLister.ListPassedProductIDsByProductionID(ctx, pid)
 	if err != nil {
-		log.Printf("[mint_usecase] UpdateRequestInfo passedProductLister.ListPassedProductIDsByProductionID FAILED productionID=%s err=%v", pid, err)
 		return empty, err
 	}
-	log.Printf("[mint_usecase] UpdateRequestInfo passedProductIDs len=%d values=%v", len(passedProductIDs), passedProductIDs)
 
 	if len(passedProductIDs) == 0 {
-		log.Printf("[mint_usecase] UpdateRequestInfo FAILED: no passed products for this production productionID=%s", pid)
 		return empty, errors.New("no passed products for this production")
 	}
 
 	// 3) Mint エンティティ生成（minted=false / mintedAt=nil で作成）
-	log.Printf("[mint_usecase] UpdateRequestInfo creating Mint entity brandID=%s tokenBlueprintID=%s memberID=%s createdAt=%s",
-		brandID, tbID, memberID, now.Format(time.RFC3339))
-
 	mintEntity, err := mintdom.NewMint(
 		"",
 		brandID,
@@ -506,84 +423,44 @@ func (u *MintUsecase) UpdateRequestInfo(
 		now,      // createdAt 相当
 	)
 	if err != nil {
-		log.Printf("[mint_usecase] UpdateRequestInfo mintdom.NewMint FAILED err=%v", err)
 		return empty, err
 	}
-
-	log.Printf("[mint_usecase] UpdateRequestInfo Mint entity created (before ScheduledBurnDate) id=%s brandID=%s tokenBlueprintID=%s products=%v",
-		mintEntity.ID,
-		mintEntity.BrandID,
-		mintEntity.TokenBlueprintID,
-		mintEntity.Products,
-	)
 
 	// 3-1) ScheduledBurnDate を文字列からパースして設定（任意）
 	if scheduledBurnDate != nil {
 		if s := strings.TrimSpace(*scheduledBurnDate); s != "" {
-			log.Printf("[mint_usecase] UpdateRequestInfo parsing scheduledBurnDate=%s", s)
 			// フロントからは "2006-01-02" 形式で来る想定
 			t, err := time.Parse("2006-01-02", s)
 			if err != nil {
-				log.Printf("[mint_usecase] UpdateRequestInfo FAILED: invalid scheduledBurnDate format=%s err=%v", s, err)
 				return empty, errors.New("invalid scheduledBurnDate format (expected YYYY-MM-DD)")
 			}
 			utc := t.UTC()
 			mintEntity.ScheduledBurnDate = &utc
-			log.Printf("[mint_usecase] UpdateRequestInfo ScheduledBurnDate set=%s (UTC)", utc.Format(time.RFC3339))
-		} else {
-			log.Printf("[mint_usecase] UpdateRequestInfo scheduledBurnDate is empty string, skip setting")
 		}
-	} else {
-		log.Printf("[mint_usecase] UpdateRequestInfo scheduledBurnDate is nil, skip setting")
 	}
 
 	// 4) InspectionBatch 側の requested フラグを更新（true にする）
-	log.Printf("[mint_usecase] UpdateRequestInfo updating InspectionBatch requestedFlag productionID=%s", pid)
 	batch, err := u.inspRepo.UpdateRequestedFlag(ctx, pid, true)
 	if err != nil {
-		log.Printf("[mint_usecase] UpdateRequestInfo inspRepo.UpdateRequestedFlag FAILED productionID=%s err=%v", pid, err)
 		return empty, err
 	}
-	log.Printf("[mint_usecase] UpdateRequestInfo InspectionBatch updated requested=true productionID=%s", pid)
 
 	// 5) mints テーブルへ保存（ScheduledBurnDate を含む）
 	//    Create の戻り値は ID フィールドを持つ Mint エンティティを想定
-	log.Printf("[mint_usecase] UpdateRequestInfo saving Mint to repository brandID=%s tokenBlueprintID=%s products=%v scheduledBurnDate=%v",
-		mintEntity.BrandID,
-		mintEntity.TokenBlueprintID,
-		mintEntity.Products,
-		mintEntity.ScheduledBurnDate,
-	)
-
 	savedMint, err := u.mintRepo.Create(ctx, mintEntity)
 	if err != nil {
-		log.Printf("[mint_usecase] UpdateRequestInfo mintRepo.Create FAILED err=%v", err)
 		return empty, err
 	}
-
-	log.Printf("[mint_usecase] UpdateRequestInfo Mint saved id=%s brandID=%s tokenBlueprintID=%s products=%v",
-		savedMint.ID,
-		savedMint.BrandID,
-		savedMint.TokenBlueprintID,
-		savedMint.Products,
-	)
 
 	// 6) 直後にチェーンミントをトリガー
 	//    - TokenUsecase(TokenMintPort) 実装側では、mints テーブルや tokenBlueprintId などから
 	//      MintRequestForUsecase を組み立てて MintFromMintRequest を実行する想定。
 	if u.tokenMinter != nil {
-		log.Printf("[mint_usecase] UpdateRequestInfo triggering on-chain mint mintID=%s", strings.TrimSpace(savedMint.ID))
 		if _, err := u.tokenMinter.MintFromMintRequest(ctx, strings.TrimSpace(savedMint.ID)); err != nil {
 			// 挙動は要件次第だが、ここではエラーを返してロールアップする。
-			log.Printf("[mint_usecase] UpdateRequestInfo tokenMinter.MintFromMintRequest FAILED mintID=%s err=%v", strings.TrimSpace(savedMint.ID), err)
 			return empty, err
 		}
-		log.Printf("[mint_usecase] UpdateRequestInfo on-chain mint triggered OK mintID=%s", strings.TrimSpace(savedMint.ID))
-	} else {
-		log.Printf("[mint_usecase] UpdateRequestInfo tokenMinter is nil, skip on-chain mint mintID=%s", strings.TrimSpace(savedMint.ID))
 	}
-
-	log.Printf("[mint_usecase] UpdateRequestInfo DONE productionID=%s mintID=%s", pid, strings.TrimSpace(savedMint.ID))
 
 	return batch, nil
 }
@@ -595,19 +472,14 @@ func (u *MintUsecase) UpdateRequestInfo(
 // ResolveBrandNameByID は、外部（ハンドラ等）から brandID で brandName を取得する公開メソッド。
 // 実体の名前解決は NameResolver に委譲し、ここではエラーではなく空文字／文字列を返す。
 func (u *MintUsecase) ResolveBrandNameByID(ctx context.Context, brandID string) (string, error) {
-	log.Printf("[mint_usecase] ResolveBrandNameByID start brandID=%s", strings.TrimSpace(brandID))
-
 	if u == nil {
-		log.Printf("[mint_usecase] ResolveBrandNameByID FAILED: usecase is nil")
 		return "", errors.New("mint usecase is nil")
 	}
 	if u.nameResolver == nil {
-		log.Printf("[mint_usecase] ResolveBrandNameByID FAILED: nameResolver is nil")
 		return "", errors.New("name resolver is nil")
 	}
 
 	name := strings.TrimSpace(u.nameResolver.ResolveBrandName(ctx, brandID))
-	log.Printf("[mint_usecase] ResolveBrandNameByID OK brandID=%s name=%s", strings.TrimSpace(brandID), name)
 	return name, nil
 }
 
@@ -623,33 +495,25 @@ func (u *MintUsecase) ListBrandsForCurrentCompany(
 	page branddom.Page,
 ) (branddom.PageResult[branddom.Brand], error) {
 
-	log.Printf("[mint_usecase] ListBrandsForCurrentCompany start page=%+v", page)
-
 	var empty branddom.PageResult[branddom.Brand]
 
 	if u == nil {
-		log.Printf("[mint_usecase] ListBrandsForCurrentCompany FAILED: usecase is nil")
 		return empty, errors.New("mint usecase is nil")
 	}
 	if u.brandSvc == nil {
-		log.Printf("[mint_usecase] ListBrandsForCurrentCompany FAILED: brandSvc is nil")
 		return empty, errors.New("brand service is nil")
 	}
 
 	companyID := strings.TrimSpace(CompanyIDFromContext(ctx))
 	if companyID == "" {
-		log.Printf("[mint_usecase] ListBrandsForCurrentCompany FAILED: companyID is empty")
 		return empty, ErrCompanyIDMissing
 	}
 
 	// 一覧取得は brand.Service の責務のまま
 	result, err := u.brandSvc.ListByCompanyID(ctx, companyID, page)
 	if err != nil {
-		log.Printf("[mint_usecase] ListBrandsForCurrentCompany brandSvc.ListByCompanyID FAILED companyID=%s err=%v", companyID, err)
 		return empty, err
 	}
-
-	log.Printf("[mint_usecase] ListBrandsForCurrentCompany OK companyID=%s items=%d", companyID, len(result.Items))
 
 	return result, nil
 }
@@ -667,33 +531,25 @@ func (u *MintUsecase) ListTokenBlueprintsByBrand(
 	page tbdom.Page,
 ) (tbdom.PageResult, error) {
 
-	log.Printf("[mint_usecase] ListTokenBlueprintsByBrand start brandID=%s page=%+v", strings.TrimSpace(brandID), page)
-
 	var empty tbdom.PageResult
 
 	if u == nil {
-		log.Printf("[mint_usecase] ListTokenBlueprintsByBrand FAILED: usecase is nil")
 		return empty, errors.New("mint usecase is nil")
 	}
 	if u.tbRepo == nil {
-		log.Printf("[mint_usecase] ListTokenBlueprintsByBrand FAILED: tbRepo is nil")
 		return empty, errors.New("tokenBlueprint repo is nil")
 	}
 
 	brandID = strings.TrimSpace(brandID)
 	if brandID == "" {
-		log.Printf("[mint_usecase] ListTokenBlueprintsByBrand FAILED: brandID is empty")
 		return empty, errors.New("brandID is empty")
 	}
 
 	// tokenBlueprint パッケージ側のフィルター関数を使用
 	result, err := tbdom.ListByBrandID(ctx, u.tbRepo, brandID, page)
 	if err != nil {
-		log.Printf("[mint_usecase] ListTokenBlueprintsByBrand tbdom.ListByBrandID FAILED brandID=%s err=%v", brandID, err)
 		return empty, err
 	}
-
-	log.Printf("[mint_usecase] ListTokenBlueprintsByBrand OK brandID=%s items=%d", brandID, len(result.Items))
 
 	return result, nil
 }
