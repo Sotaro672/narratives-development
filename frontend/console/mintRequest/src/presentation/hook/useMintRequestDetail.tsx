@@ -175,8 +175,11 @@ export function useMintRequestDetail() {
       };
     }, [pbPatch]);
 
+  // ★ 戻る: -1 ではなく MintRequestManagement へ絶対パス遷移
+  // ※ shell 側のマウントが "mintRequest/*" 想定なら "/mintRequest" が管理画面のルートになります
+  const MINT_REQUEST_MANAGEMENT_PATH = "/mintRequest";
   const onBack = React.useCallback(() => {
-    navigate(-1);
+    navigate(MINT_REQUEST_MANAGEMENT_PATH);
   }, [navigate]);
 
   // ⑤ ブランド一覧のロード（右カラム / 自動選択どちらでも使う）
@@ -374,16 +377,19 @@ export function useMintRequestDetail() {
     // ★ ミント申請ボタン押下時点でのデータをログ出力する
     const batchAny = inspectionBatch as any;
     const inspectionId =
-      batchAny.id ?? batchAny.ID ?? batchAny.inspectionId ?? batchAny.InspectionId;
+      batchAny.id ??
+      batchAny.ID ??
+      batchAny.inspectionId ??
+      batchAny.InspectionId;
 
     const passedProducts =
       Array.isArray(batchAny.inspections) || Array.isArray(batchAny.Inspections)
-        ? (
-            (batchAny.inspections ?? batchAny.Inspections) as any[]
-          ).filter((it) => {
-            const result = it.result ?? it.Result ?? it.inspectionResult;
-            return result === "passed" || result === "ok" || result === "pass";
-          }).map((it) => it.productId ?? it.ProductId ?? it.productID)
+        ? ((batchAny.inspections ?? batchAny.Inspections) as any[])
+            .filter((it) => {
+              const result = it.result ?? it.Result ?? it.inspectionResult;
+              return result === "passed" || result === "ok" || result === "pass";
+            })
+            .map((it) => it.productId ?? it.ProductId ?? it.productID)
         : [];
 
     // eslint-disable-next-line no-console
@@ -405,10 +411,7 @@ export function useMintRequestDetail() {
       );
 
       // eslint-disable-next-line no-console
-      console.log(
-        "[useMintRequestDetail] handleMint backend response",
-        updated,
-      );
+      console.log("[useMintRequestDetail] handleMint backend response", updated);
 
       if (updated) {
         setInspectionBatch(updated);

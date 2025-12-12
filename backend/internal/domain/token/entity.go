@@ -1,7 +1,11 @@
 // backend/internal/domain/token/entity.go
 package token
 
-// MintParams は、ミント実行に必要な最小限のパラメータです。
+// MintParams は、Solana 上でトークン/NFT をミントする際に
+// MintAuthorityWalletPort に渡す最小限のパラメータです。
+//
+// - 「1商品=1Mint」モードでは、Amount は常に 1 を指定します。
+// - 旧来の「まとめてミント」モードでは、Amount に発行枚数を指定します。
 type MintParams struct {
 	// トークンを受け取るウォレットアドレス (base58)
 	ToAddress string
@@ -18,6 +22,7 @@ type MintParams struct {
 }
 
 // MintResult は、チェーン上のミント結果です。
+// 1 回の MintToken 実行に対して 1 件生成されます。
 type MintResult struct {
 	// ミントトランザクションのシグネチャ (base58)
 	Signature string

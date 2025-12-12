@@ -1,3 +1,4 @@
+// backend/internal/adapters/out/firestore/token_repository_fs.go
 package firestore
 
 import (
@@ -75,7 +76,7 @@ func NewMintRequestPortFS(
 }
 
 // LoadForMinting は mintID を受け取り、
-// mints + tokenBlueprints + brands から MintRequestForUsecase を構築して返します。
+// mints + token_blueprints + brands から MintRequestForUsecase を構築して返します。
 func (p *MintRequestPortFS) LoadForMinting(
 	ctx context.Context,
 	id string,
@@ -158,7 +159,38 @@ func (p *MintRequestPortFS) LoadForMinting(
 				}
 			}
 		default:
-			// 型が想定外の場合は何もしない（Amount=1 fallback へ）
+			// 型が想定外の場合は何もしない（ProductIDs 空のまま）
+		}
+	}
+
+	// ★ 追加: すでに tokens に存在する productId がないか検査
+	if len(productIDs) > 0 && p.tokensCol != nil {
+		already := make([]string, 0, len(productIDs))
+
+		for _, pid := range productIDs {
+			pid = strings.TrimSpace(pid)
+			if pid == "" {
+				continue
+			}
+
+			// tokens/{productId} をチェック
+			_, err := p.tokensCol.Doc(pid).Get(ctx)
+			if err == nil {
+				// ドキュメントが存在 = すでにミント済み
+				already = append(already, pid)
+				continue
+			}
+			if status.Code(err) == codes.NotFound {
+				// まだミントされていないので OK
+				continue
+			}
+
+			// それ以外のエラーはそのまま返す
+			return nil, fmt.Errorf("check token for product %s: %w", pid, err)
+		}
+
+		if len(already) > 0 {
+			return nil, fmt.Errorf("tokens already exist for products: %v", already)
 		}
 	}
 
@@ -206,18 +238,10 @@ func (p *MintRequestPortFS) LoadForMinting(
 		return nil, fmt.Errorf("brand %s has empty walletAddress", brandID)
 	}
 
-	// 4) Amount を決める
-	// products が取得できていればその件数、なければ最低 1
-	amount := len(productIDs)
-	if amount <= 0 {
-		amount = 1
-	}
-
-	// ★ ProductIDs も DTO に渡す（1商品=1Mint 用）
+	// ★ ProductIDs を DTO に渡す（1商品=1Mint 用）
 	dto := &usecase.MintRequestForUsecase{
 		ID:              mintID,
 		ToAddress:       toAddress,
-		Amount:          uint64(amount),
 		ProductIDs:      productIDs,
 		BlueprintName:   name,
 		BlueprintSymbol: symbol,
@@ -228,7 +252,6 @@ func (p *MintRequestPortFS) LoadForMinting(
 }
 
 // MarkAsMinted はチェーンミント結果をもとに mints/{mintID} を更新します。
-// （従来の「まとめてミント」モード用）
 func (p *MintRequestPortFS) MarkAsMinted(
 	ctx context.Context,
 	id string,
