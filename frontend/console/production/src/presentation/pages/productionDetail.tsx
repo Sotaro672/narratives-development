@@ -199,9 +199,10 @@ export default function ProductionDetail() {
               />
 
               {/* ===== 分離した印刷カード =====
-                  printing フラグとクリックハンドラのみ渡す。
-                  実際の処理は usePrintCard + handlePrint に集約。 */}
-              <PrintCard printing={printing} onClick={handlePrint} />
+                  ★ edit モードでは非表示 */}
+              {isViewMode && (
+                <PrintCard printing={printing} onClick={handlePrint} />
+              )}
             </>
           )}
         </div>

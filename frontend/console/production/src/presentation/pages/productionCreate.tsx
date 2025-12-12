@@ -107,13 +107,11 @@ export default function ProductionCreate() {
       <div className="space-y-4">
         {/* 管理情報カード */}
         <AdminCard
-          mode="edit" // ★ AdminCard を編集モードで使用
+          mode="edit"
           title="管理情報"
           assigneeName={assignee}
           assigneeCandidates={assigneeOptions}
           loadingMembers={loadingMembers}
-          createdByName={creator}
-          createdAt={createdAt}
           onSelectAssignee={onSelectAssignee}
         />
 

@@ -259,10 +259,6 @@ export default function MintRequestDetail() {
                     </div>
                   </PopoverContent>
                 </Popover>
-
-                <div className="mt-2 text-xs text-gray-500">
-                  現在のフィルタ: {currentFilterLabel}
-                </div>
               </CardContent>
             </Card>
 
