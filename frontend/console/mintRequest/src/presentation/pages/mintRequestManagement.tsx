@@ -23,6 +23,10 @@ export default function MintRequestManagementPage() {
           // ★ ミント日時: minted 状態のときだけ mintedAt を表示（それ以外は "-"）
           const mintedAtLabel = r.status === "minted" ? r.mintedAt ?? "-" : "-";
 
+          // ★ トークン設計: tokenName を表示（無ければ tokenBlueprintId か "-"）
+          //   ※ tokenBlueprintId は detail/API 用に保持しているだけで、基本表示は tokenName
+          const tokenLabel = r.tokenName ?? r.tokenBlueprintId ?? "-";
+
           return (
             <tr
               key={r.id}
@@ -33,7 +37,7 @@ export default function MintRequestManagementPage() {
               aria-label={`ミント申請 ${r.productName} の詳細へ`}
             >
               <td>
-                <span className="lp-brand-pill">{r.tokenBlueprintId}</span>
+                <span className="lp-brand-pill">{tokenLabel}</span>
               </td>
               <td>
                 <span className="lp-brand-pill">{r.productName}</span>

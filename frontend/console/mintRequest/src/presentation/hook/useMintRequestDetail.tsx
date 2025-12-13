@@ -4,16 +4,20 @@ import * as React from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { useInspectionResultCard } from "./useInspectionResultCard";
 
-import type { InspectionBatchDTO } from "../../infrastructure/api/mintRequestApi";
+import type {
+  InspectionBatchDTO,
+  MintDTO,
+} from "../../infrastructure/api/mintRequestApi";
 
-// ✅ 以前は application/mintRequestService から import していたが、
-// いまは export が揃っていないため Repository を直接呼ぶ（最短でビルドを通す）。
+// ✅ Repository を直接呼ぶ
 import {
-  fetchInspectionBatchesHTTP,
+  fetchInspectionByProductionIdHTTP,
   fetchProductBlueprintPatchHTTP,
   fetchBrandsForMintHTTP,
   fetchTokenBlueprintsByBrandHTTP,
   postMintRequestHTTP,
+  fetchMintByInspectionIdHTTP,
+  fetchProductBlueprintIdByProductionIdHTTP, // ★追加
 } from "../../infrastructure/repository/mintRequestRepositoryHTTP";
 
 // -------------------------------
@@ -48,7 +52,7 @@ export type TokenBlueprintForMintDTO = {
 
 export type ProductBlueprintCardViewModel = {
   productName?: string;
-  brand?: string; // brandName 優先（なければ brandId をフォールバック表示）
+  brand?: string;
   itemType?: string;
   fit?: string;
   materials?: string;
@@ -57,13 +61,11 @@ export type ProductBlueprintCardViewModel = {
   productIdTag?: string;
 };
 
-// 右カラムのブランド選択カード用 VM
 export type BrandOption = {
   id: string;
   name: string;
 };
 
-// トークン設計カード用（name / symbol / icon まで持つ）
 export type TokenBlueprintOption = {
   id: string;
   name: string;
@@ -71,14 +73,12 @@ export type TokenBlueprintOption = {
   iconUrl?: string;
 };
 
-// ★ mints テーブル由来の「表示用 Mint 情報」
-// ※ 「mints テーブルが正」なので、createdBy/createdAt 等は mints 由来を優先する
 export type MintInfo = {
   id: string;
   brandId: string;
   tokenBlueprintId: string;
   createdBy: string;
-  createdAt: string; // ISO string 想定
+  createdAt: string;
   minted: boolean;
   mintedAt?: string | null;
   onChainTxSignature?: string | null;
@@ -102,24 +102,26 @@ function asMaybeISO(v: any): string {
   return String(v);
 }
 
-/**
- * requestId (= productionId) をキーに /mint/inspections で 1 件取得する。
- * ※ repository には単発 API がないため、一覧を引いて絞り込む（必要なら単発 API を後で追加）
- */
-async function loadInspectionBatchFromMintAPI(
-  productionId: string,
-): Promise<InspectionBatchDTO | null> {
-  const pid = String(productionId ?? "").trim();
-  if (!pid) return null;
+// -------------------------------
+// ★ productBlueprintId 抽出/解決
+// -------------------------------
 
-  const batches = await fetchInspectionBatchesHTTP();
-  const hit =
-    (batches ?? []).find((b: any) => String(b?.productionId ?? "").trim() === pid) ??
-    null;
-
-  log("loadInspectionBatchFromMintAPI pid=", pid, "hit=", hit ?? null);
-  return hit as any;
+function extractProductBlueprintIdFromBatch(batch: any): string {
+  if (!batch) return "";
+  const v =
+    batch.productBlueprintId ??
+    batch.productBlueprintID ??
+    batch.ProductBlueprintId ??
+    batch.ProductBlueprintID ??
+    batch.productBlueprint?.id ??
+    batch.productBlueprint?.ID ??
+    "";
+  return asNonEmptyString(v);
 }
+
+// -------------------------------
+// data loaders
+// -------------------------------
 
 async function loadProductBlueprintPatch(
   productBlueprintId: string,
@@ -128,13 +130,43 @@ async function loadProductBlueprintPatch(
   if (!id) return null;
 
   const patch = await fetchProductBlueprintPatchHTTP(id);
+
+  // ★追加: 受け取れた要素が分かる summary log
+  const summary = patch
+    ? {
+        productName: patch.productName ?? null,
+        brandId: patch.brandId ?? null,
+        brandName: patch.brandName ?? null,
+        itemType: patch.itemType ?? null,
+        fit: patch.fit ?? null,
+        material: patch.material ?? null,
+        weight: patch.weight ?? null,
+        qualityAssuranceCount: Array.isArray(patch.qualityAssurance)
+          ? patch.qualityAssurance.length
+          : 0,
+        qualityAssuranceSample: Array.isArray(patch.qualityAssurance)
+          ? patch.qualityAssurance.slice(0, 5)
+          : [],
+        productIdTagType: patch.productIdTag?.type ?? null,
+        assigneeId: patch.assigneeId ?? null,
+        keys: Object.keys(patch as any),
+      }
+    : null;
+
   log("loadProductBlueprintPatch id=", id, "patch=", patch ?? null);
+  log("loadProductBlueprintPatch summary=", summary);
+
   return (patch ?? null) as any;
 }
 
 async function loadBrandsForMint(): Promise<BrandForMintDTO[]> {
   const brands = await fetchBrandsForMintHTTP();
-  log("loadBrandsForMint length=", (brands ?? []).length, "sample[0]=", (brands ?? [])[0]);
+  log(
+    "loadBrandsForMint length=",
+    (brands ?? []).length,
+    "sample[0]=",
+    (brands ?? [])[0],
+  );
   return (brands ?? []) as any;
 }
 
@@ -158,112 +190,62 @@ async function loadTokenBlueprintsByBrand(
 
 /**
  * 互換: 現状は個別 TokenBlueprint 詳細 API がないため undefined を返す。
- * 必要になれば backend の tokenBlueprint API を呼ぶ方式に置き換える。
  */
 function resolveBlueprintForMintRequest(_requestId?: string) {
   return undefined;
 }
 
-// ★ InspectionBatchDTO に mint 情報が “埋め込まれて返ってくる” 前提で、幅広く吸収する
+// -------------------------------
+// ★ MintInfo 解決（mintDTO 優先）
+// -------------------------------
+
+function extractMintInfoFromMintDTO(m: any): MintInfo | null {
+  if (!m) return null;
+
+  const id = asNonEmptyString(m.id ?? m.ID ?? m.mintId ?? m.MintID);
+  const brandId = asNonEmptyString(m.brandId ?? m.BrandID ?? m.BrandId);
+  const tokenBlueprintId = asNonEmptyString(
+    m.tokenBlueprintId ?? m.TokenBlueprintID ?? m.TokenBlueprintId,
+  );
+  const createdBy = asNonEmptyString(m.createdBy ?? m.CreatedBy);
+  const createdAt = asNonEmptyString(asMaybeISO(m.createdAt ?? m.CreatedAt));
+  const minted =
+    typeof m.minted === "boolean"
+      ? m.minted
+      : Boolean(m.mintedAt ?? m.MintedAt);
+  const mintedAt = asNonEmptyString(asMaybeISO(m.mintedAt ?? m.MintedAt));
+  const onChainTxSignature = asNonEmptyString(
+    m.onChainTxSignature ?? m.OnChainTxSignature,
+  );
+  const scheduledBurnDate = asNonEmptyString(
+    asMaybeISO(m.scheduledBurnDate ?? m.ScheduledBurnDate),
+  );
+
+  if (!id || !brandId || !tokenBlueprintId || !createdBy || !createdAt)
+    return null;
+
+  return {
+    id,
+    brandId,
+    tokenBlueprintId,
+    createdBy,
+    createdAt,
+    minted,
+    mintedAt: mintedAt ? mintedAt : null,
+    onChainTxSignature: onChainTxSignature ? onChainTxSignature : null,
+    scheduledBurnDate: scheduledBurnDate ? scheduledBurnDate : null,
+  };
+}
+
+// “inspectionBatch に mint が埋め込まれて返る”可能性も一応吸収（ただし今回のログでは null）
 function extractMintInfoFromBatch(batch: any): MintInfo | null {
   if (!batch) return null;
 
   const mintObj =
     batch.mint ?? batch.Mint ?? batch.mintRequest ?? batch.MintRequest ?? null;
+  if (!mintObj) return null;
 
-  const pick = (o: any, keys: string[]) => {
-    for (const k of keys) {
-      const v = o?.[k];
-      const s = asNonEmptyString(v);
-      if (s) return s;
-    }
-    return "";
-  };
-
-  const pickBool = (o: any, keys: string[]) => {
-    for (const k of keys) {
-      if (typeof o?.[k] === "boolean") return o[k] as boolean;
-    }
-    return false;
-  };
-
-  const pickMaybeStr = (o: any, keys: string[]) => {
-    for (const k of keys) {
-      const v = o?.[k];
-      const s = asNonEmptyString(asMaybeISO(v));
-      if (s) return s;
-    }
-    return "";
-  };
-
-  // A) batch.mint がある
-  if (mintObj) {
-    const id = pick(mintObj, ["id", "ID", "mintId", "MintID"]);
-    const brandId = pick(mintObj, ["brandId", "BrandId", "BrandID"]);
-    const tokenBlueprintId = pick(mintObj, [
-      "tokenBlueprintId",
-      "TokenBlueprintId",
-      "TokenBlueprintID",
-    ]);
-    const createdBy = pick(mintObj, ["createdBy", "CreatedBy"]);
-    const createdAt = pickMaybeStr(mintObj, ["createdAt", "CreatedAt"]);
-    const minted = pickBool(mintObj, ["minted", "Minted"]);
-    const mintedAt = pickMaybeStr(mintObj, ["mintedAt", "MintedAt"]);
-    const onChainTxSignature = pick(mintObj, [
-      "onChainTxSignature",
-      "OnChainTxSignature",
-    ]);
-    const scheduledBurnDate = pickMaybeStr(mintObj, [
-      "scheduledBurnDate",
-      "ScheduledBurnDate",
-    ]);
-
-    if (id && brandId && tokenBlueprintId && createdBy && createdAt) {
-      return {
-        id,
-        brandId,
-        tokenBlueprintId,
-        createdBy,
-        createdAt,
-        minted,
-        mintedAt: mintedAt ? mintedAt : null,
-        onChainTxSignature: onChainTxSignature ? onChainTxSignature : null,
-        scheduledBurnDate: scheduledBurnDate ? scheduledBurnDate : null,
-      };
-    }
-  }
-
-  // B) batch にフラットに載る
-  const mintId = pick(batch, ["mintId", "MintId", "MintID"]);
-  const brandId = pick(batch, ["mintBrandId", "BrandId", "BrandID", "brandId"]);
-  const tokenBlueprintId = pick(batch, [
-    "mintTokenBlueprintId",
-    "tokenBlueprintId",
-    "TokenBlueprintId",
-    "TokenBlueprintID",
-  ]);
-  const createdBy = pick(batch, ["mintCreatedBy", "createdBy", "CreatedBy"]);
-  const createdAt = pickMaybeStr(batch, ["mintCreatedAt", "createdAt", "CreatedAt"]);
-  const minted = pickBool(batch, ["minted", "Minted"]);
-  const mintedAt = pickMaybeStr(batch, ["mintedAt", "MintedAt"]);
-  const onChainTxSignature = pick(batch, ["onChainTxSignature", "OnChainTxSignature"]);
-  const scheduledBurnDate = pickMaybeStr(batch, ["scheduledBurnDate", "ScheduledBurnDate"]);
-
-  if (mintId && brandId && tokenBlueprintId && createdBy && createdAt) {
-    return {
-      id: mintId,
-      brandId,
-      tokenBlueprintId,
-      createdBy,
-      createdAt,
-      minted,
-      mintedAt: mintedAt ? mintedAt : null,
-      onChainTxSignature: onChainTxSignature ? onChainTxSignature : null,
-      scheduledBurnDate: scheduledBurnDate ? scheduledBurnDate : null,
-    };
-  }
-
-  return null;
+  return extractMintInfoFromMintDTO(mintObj);
 }
 
 export function useMintRequestDetail() {
@@ -272,33 +254,37 @@ export function useMintRequestDetail() {
 
   const [inspectionBatch, setInspectionBatch] =
     React.useState<InspectionBatchDTO | null>(null);
+
+  // ★ 追加: MintDTO を単体取得して detail 情報のソースにする
+  const [mintDTO, setMintDTO] = React.useState<MintDTO | null>(null);
+
+  // ★ 追加: productBlueprintId（/mint/inspections に無いので別経路で解決）
+  const [productBlueprintId, setProductBlueprintId] =
+    React.useState<string>("");
+
   const [loading, setLoading] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
 
-  // productBlueprint Patch 用
   const [pbPatch, setPbPatch] =
     React.useState<ProductBlueprintPatchDTO | null>(null);
   const [pbPatchLoading, setPbPatchLoading] = React.useState(false);
   const [pbPatchError, setPbPatchError] = React.useState<string | null>(null);
 
-  // 右カラム: ブランド選択カード用（デフォルトは未選択）
   const [brandOptions, setBrandOptions] = React.useState<BrandOption[]>([]);
   const [selectedBrandId, setSelectedBrandId] = React.useState<string>("");
   const [selectedBrandName, setSelectedBrandName] = React.useState<string>("");
 
-  // 右カラム: ブランドに紐づく TokenBlueprint 一覧と選択中 ID
   const [tokenBlueprintOptions, setTokenBlueprintOptions] = React.useState<
     TokenBlueprintOption[]
   >([]);
   const [selectedTokenBlueprintId, setSelectedTokenBlueprintId] =
     React.useState<string>("");
 
-  // ★ 焼却予定日（ScheduledBurnDate）
   const [scheduledBurnDate, setScheduledBurnDate] = React.useState<string>("");
 
   const title = `ミント申請詳細`;
 
-  // ① 初期化: MintUsecase 経由で Inspection を取得
+  // ① 初期化: inspection + mintDTO + productBlueprintId を解決
   React.useEffect(() => {
     if (!requestId) return;
 
@@ -307,12 +293,59 @@ export function useMintRequestDetail() {
     const run = async () => {
       setLoading(true);
       setError(null);
+
       try {
         log("load start requestId=", requestId);
-        const batch = await loadInspectionBatchFromMintAPI(requestId);
-        if (!cancelled) {
-          setInspectionBatch(batch);
-          log("inspectionBatch set", batch ?? null);
+
+        // inspection は 1件取得
+        const [batch, mint] = await Promise.all([
+          fetchInspectionByProductionIdHTTP(requestId),
+          fetchMintByInspectionIdHTTP(requestId).catch((e) => {
+            log(
+              "fetchMintByInspectionIdHTTP failed -> treat as null",
+              e?.message ?? e,
+            );
+            return null;
+          }),
+        ]);
+
+        if (cancelled) return;
+
+        setInspectionBatch(batch ?? null);
+        log("inspectionBatch set", batch ?? null);
+        log("inspectionBatch keys=", batch ? Object.keys(batch as any) : []);
+
+        setMintDTO(mint ?? null);
+        log("mintDTO set (by inspectionId)", mint ?? null);
+
+        // ★ productBlueprintId: batchから→無ければ /productions で解決
+        const pbFromBatch = extractProductBlueprintIdFromBatch(batch as any);
+        log(
+          "extractProductBlueprintIdFromBatch =",
+          pbFromBatch ? pbFromBatch : "(empty)",
+        );
+
+        let resolvedPB = pbFromBatch;
+        if (!resolvedPB) {
+          const pbFromProduction =
+            await fetchProductBlueprintIdByProductionIdHTTP(requestId).catch(
+              (e) => {
+                log(
+                  "fetchProductBlueprintIdByProductionIdHTTP failed",
+                  e?.message ?? e,
+                );
+                return null;
+              },
+            );
+          resolvedPB = asNonEmptyString(pbFromProduction);
+        }
+
+        if (resolvedPB) {
+          setProductBlueprintId(resolvedPB);
+          log("productBlueprintId resolved =", resolvedPB);
+        } else {
+          setProductBlueprintId("");
+          log("WARN: productBlueprintId not resolved (inspections/prod both missing?)");
         }
       } catch (e: any) {
         if (!cancelled) {
@@ -333,14 +366,9 @@ export function useMintRequestDetail() {
     };
   }, [requestId]);
 
-  // ② inspectionBatch → productBlueprintId を取り出し、Patch を取得
+  // ② productBlueprintId が解決できたら Patch を取得
   React.useEffect(() => {
-    if (!inspectionBatch) return;
-
-    const pbId = (inspectionBatch as any).productBlueprintId as string | undefined;
-    log("inspect batch -> productBlueprintId", pbId);
-
-    if (!pbId) return;
+    if (!productBlueprintId) return;
 
     let cancelled = false;
 
@@ -348,15 +376,13 @@ export function useMintRequestDetail() {
       setPbPatchLoading(true);
       setPbPatchError(null);
       try {
-        const patch = await loadProductBlueprintPatch(pbId);
+        const patch = await loadProductBlueprintPatch(productBlueprintId);
         if (!cancelled) {
           setPbPatch(patch);
         }
       } catch (e: any) {
         if (!cancelled) {
-          setPbPatchError(
-            e?.message ?? "プロダクト基本情報の取得に失敗しました",
-          );
+          setPbPatchError(e?.message ?? "プロダクト基本情報の取得に失敗しました");
         }
       } finally {
         if (!cancelled) {
@@ -369,20 +395,47 @@ export function useMintRequestDetail() {
     return () => {
       cancelled = true;
     };
-  }, [inspectionBatch]);
+  }, [productBlueprintId]);
+
+  // ★追加: pbPatch が「実際に state に入ったか」を監視して要素を全チェック
+  React.useEffect(() => {
+    const p = pbPatch as any;
+
+    if (!p) {
+      log("pbPatch state =", null);
+      return;
+    }
+
+    const snapshot = {
+      productName: p?.productName ?? null,
+      brandId: p?.brandId ?? null,
+      brandName: p?.brandName ?? null,
+      itemType: p?.itemType ?? null,
+      fit: p?.fit ?? null,
+      material: p?.material ?? null,
+      weight: p?.weight ?? null,
+      qualityAssurance: Array.isArray(p?.qualityAssurance) ? p.qualityAssurance : null,
+      qualityAssuranceCount: Array.isArray(p?.qualityAssurance)
+        ? p.qualityAssurance.length
+        : 0,
+      productIdTag: p?.productIdTag ?? null,
+      productIdTagType: p?.productIdTag?.type ?? null,
+      assigneeId: p?.assigneeId ?? null,
+      keys: Object.keys(p ?? {}),
+    };
+
+    log("pbPatch state set -> snapshot =", snapshot);
+  }, [pbPatch]);
 
   // ③ 検査カード用
   const inspectionCardData = useInspectionResultCard({
     batch: inspectionBatch ?? undefined,
   });
 
-  // 合格数 = ミント数
   const totalMintQuantity = inspectionCardData.totalPassed;
-
-  // TokenBlueprint（現状は undefined を返すダミー実装）
   const tokenBlueprint = resolveBlueprintForMintRequest(requestId);
 
-  // ④ ProductBlueprintCard 用の ViewModel へ整形
+  // ④ ProductBlueprintCard 用 VM
   const productBlueprintCardView: ProductBlueprintCardViewModel | null =
     React.useMemo(() => {
       if (!pbPatch) return null;
@@ -399,13 +452,12 @@ export function useMintRequestDetail() {
       };
     }, [pbPatch]);
 
-  // ★ 戻る
   const MINT_REQUEST_MANAGEMENT_PATH = "/mintRequest";
   const onBack = React.useCallback(() => {
     navigate(MINT_REQUEST_MANAGEMENT_PATH);
   }, [navigate]);
 
-  // ⑤ ブランド一覧のロード
+  // ⑤ ブランド一覧
   React.useEffect(() => {
     let cancelled = false;
 
@@ -481,14 +533,20 @@ export function useMintRequestDetail() {
   );
 
   // ============================================================
-  // ★ mints テーブル由来の判定と公開値
+  // ★ mint 情報（mintDTO 優先）
   // ============================================================
 
   const mint: MintInfo | null = React.useMemo(() => {
-    const m = extractMintInfoFromBatch(inspectionBatch as any);
-    log("extractMintInfoFromBatch =", m ?? null);
-    return m;
-  }, [inspectionBatch]);
+    const fromDTO = extractMintInfoFromMintDTO(mintDTO as any);
+    if (fromDTO) {
+      log("mint resolved from mintDTO =", fromDTO);
+      return fromDTO;
+    }
+
+    const fromBatch = extractMintInfoFromBatch(inspectionBatch as any);
+    log("mint resolved from inspectionBatch(embed) =", fromBatch ?? null);
+    return fromBatch;
+  }, [mintDTO, inspectionBatch]);
 
   const hasMint = React.useMemo(() => !!mint, [mint]);
   const isMintRequested = hasMint;
@@ -513,7 +571,8 @@ export function useMintRequestDetail() {
     if (!hasMint) return;
 
     const brandId =
-      asNonEmptyString(mint?.brandId) || asNonEmptyString((pbPatch as any)?.brandId);
+      asNonEmptyString(mint?.brandId) ||
+      asNonEmptyString((pbPatch as any)?.brandId);
 
     if (!brandId) return;
     if (selectedBrandId === brandId) return;
@@ -564,12 +623,11 @@ export function useMintRequestDetail() {
     }
   }, [hasMint, mint, scheduledBurnDate]);
 
-  // 申請済み表示制御
   const showMintButton = !isMintRequested;
   const showBrandSelectorCard = !isMintRequested;
   const showTokenSelectorCard = !isMintRequested;
 
-  // ★ ミント申請処理（未申請時のみ呼ばれる想定）
+  // ★ ミント申請（未申請時のみ）
   const handleMint = React.useCallback(async () => {
     if (!inspectionBatch) {
       alert("検査バッチ情報が取得できていません。");
@@ -646,7 +704,8 @@ export function useMintRequestDetail() {
     onBack,
     handleMint,
 
-    // ★ ページ側で使うために追加
+    // ★ detail へ渡したいキー
+    productBlueprintId, // ★追加
     hasMint,
     mint,
 
@@ -677,7 +736,7 @@ export function useMintRequestDetail() {
     handleSelectTokenBlueprint,
     selectedTokenBlueprint,
 
-    // 焼却予定日（ScheduledBurnDate）
+    // 焼却予定日
     scheduledBurnDate,
     setScheduledBurnDate,
   };

@@ -1,4 +1,4 @@
-// frontend/console/mintRequest/src/application/mintRequestManagementService.tsx
+// frontend\console\mintRequest\src\application\mintRequestService.tsx
 import type { InspectionStatus } from "../domain/entity/inspections";
 import {
   fetchInspectionBatches, // fallback (legacy)
@@ -36,6 +36,15 @@ export type ViewRow = {
 
   createdByName: string | null;
   mintedAt: string | null;
+
+  // ✅ detail で必要になるキーを保持
+  tokenBlueprintId: string | null;
+  requestedBy: string | null;
+
+  // ✅ 追加: detail で必要
+  productBlueprintId: string | null;
+  scheduledBurnDate: string | null;
+  minted: boolean;
 
   statusLabel: string; // 画面表示用（ここでは検査ステータス）
 };
@@ -146,11 +155,92 @@ function normalizeTotalQuantityFromProductionListItem(v: any): number {
   return n > 0 ? n : 0;
 }
 
+// ★ 追加: /productions から productBlueprintId を拾う（存在すれば）
+function normalizeProductBlueprintIdFromProductionListItem(v: any): string | null {
+  const s = String(
+    v?.productBlueprintId ??
+      v?.productBlueprintID ??
+      v?.production?.productBlueprintId ??
+      v?.production?.productBlueprintID ??
+      v?.productBlueprint?.id ??
+      v?.productBlueprint?.ID ??
+      "",
+  ).trim();
+  return s ? s : null;
+}
+
 function deriveMintStatusFromMintDTO(mint: MintDTO | null): MintRequestRowStatus {
   if (!mint) return "planning";
   if ((mint as any)?.mintedAt) return "minted";
   if ((mint as any)?.minted === true) return "minted";
   return "requested";
+}
+
+// tokenBlueprintId 抽出（DTO / list の揺れ吸収）
+function pickTokenBlueprintId(mintDTO: any, mintList: any): string | null {
+  const v =
+    mintDTO?.tokenBlueprintId ??
+    mintDTO?.tokenBlueprintID ??
+    mintDTO?.token_blueprint_id ??
+    mintList?.tokenBlueprintId ??
+    mintList?.tokenBlueprintID ??
+    mintList?.tokenBlueprint ??
+    null;
+
+  const s = typeof v === "string" ? v.trim() : "";
+  return s ? s : null;
+}
+
+// requestedBy 抽出（DTO / list の揺れ吸収）
+function pickRequestedBy(mintDTO: any, mintList: any): string | null {
+  const v =
+    mintDTO?.createdBy ??
+    mintDTO?.requestedBy ??
+    mintList?.createdBy ??
+    mintList?.requestedBy ??
+    null;
+
+  const s = typeof v === "string" ? v.trim() : "";
+  return s ? s : null;
+}
+
+// ★ 追加: scheduledBurnDate（mintDTO 優先）
+function pickScheduledBurnDate(mintDTO: any): string | null {
+  const v = mintDTO?.scheduledBurnDate ?? mintDTO?.ScheduledBurnDate ?? null;
+  if (!v) return null;
+  const s = typeof v === "string" ? v.trim() : String(v);
+  return s.trim() ? s.trim() : null;
+}
+
+// ★ 追加: minted（mintDTO 優先）
+function pickMinted(mintDTO: any, mintList: any): boolean {
+  if (typeof mintDTO?.minted === "boolean") return mintDTO.minted;
+  if (mintDTO?.mintedAt) return true;
+  if (typeof mintList?.minted === "boolean") return mintList.minted;
+  if (mintList?.mintedAt) return true;
+  return false;
+}
+
+// ★ 追加: productBlueprintId（inspection -> productionIndex の順でフォールバック）
+function pickProductBlueprintId(
+  batch: any,
+  productBlueprintIdById: Record<string, string | null>,
+  pid: string,
+): string | null {
+  const v =
+    batch?.productBlueprintId ??
+    batch?.productBlueprintID ??
+    batch?.ProductBlueprintID ??
+    batch?.ProductBlueprintId ??
+    batch?.productBlueprint?.id ??
+    batch?.productBlueprint?.ID ??
+    null;
+
+  const s1 = typeof v === "string" ? v.trim() : "";
+  if (s1) return s1;
+
+  const s2 = String(productBlueprintIdById?.[pid] ?? "").trim();
+  return s2 ? s2 : null;
 }
 
 // ============================================================
@@ -161,10 +251,12 @@ type ProductionIndex = {
   productionIds: string[];
   productNameById: Record<string, string | null>;
   totalQuantityById: Record<string, number>;
+
+  // ★ 追加
+  productBlueprintIdById: Record<string, string | null>;
 };
 
 async function fetchProductionIndex(): Promise<ProductionIndex> {
-  // /productions は認証が必要なため、この層で直に叩く（mintRequestRepositoryHTTP には依存しない）
   const items = await fetchJsonWithAuth<any[]>("/productions");
 
   log(
@@ -180,6 +272,7 @@ async function fetchProductionIndex(): Promise<ProductionIndex> {
 
   const productNameById: Record<string, string | null> = {};
   const totalQuantityById: Record<string, number> = {};
+  const productBlueprintIdById: Record<string, string | null> = {};
 
   for (const it of items ?? []) {
     const pid = normalizeProductionIdFromProductionListItem(it);
@@ -189,6 +282,8 @@ async function fetchProductionIndex(): Promise<ProductionIndex> {
 
     productNameById[pid] = normalizeProductNameFromProductionListItem(it);
     totalQuantityById[pid] = normalizeTotalQuantityFromProductionListItem(it);
+
+    productBlueprintIdById[pid] = normalizeProductBlueprintIdFromProductionListItem(it);
   }
 
   log(
@@ -199,7 +294,12 @@ async function fetchProductionIndex(): Promise<ProductionIndex> {
     productionIds.slice(0, 5),
   );
 
-  return { productionIds, productNameById, totalQuantityById };
+  log(
+    "productBlueprintIdById(sample)",
+    productionIds.slice(0, 3).map((id) => ({ id, pbId: productBlueprintIdById[id] })),
+  );
+
+  return { productionIds, productNameById, totalQuantityById, productBlueprintIdById };
 }
 
 async function fetchInspectionBatchesByProductionIds(
@@ -211,8 +311,6 @@ async function fetchInspectionBatchesByProductionIds(
 
   if (ids.length === 0) return [];
 
-  // ✅ New endpoint: /mint/inspections?productionIds=a,b,c
-  // ※ repository 側が未対応でもここで必ずクエリ付きで叩ける
   const query = encodeURIComponent(ids.join(","));
   const batches = await fetchJsonWithAuth<InspectionBatchDTO[]>(
     `/mint/inspections?productionIds=${query}`,
@@ -245,6 +343,7 @@ function buildRowsJoined(
   productionIds: string[],
   productNameById: Record<string, string | null>,
   totalQuantityById: Record<string, number>,
+  productBlueprintIdById: Record<string, string | null>,
   batchesById: Record<string, InspectionBatchDTO>,
   mintsDTOById: Record<string, MintDTO>,
   mintsListById: Record<string, MintListRowDTO>,
@@ -260,21 +359,18 @@ function buildRowsJoined(
     const inspSt = ((b as any)?.status ?? null) as any;
     const status = deriveMintStatusFromMintDTO(mintDTO);
 
-    const tokenName =
-      (mintList as any)?.tokenName ??
-      (mintDTO as any)?.tokenName ??
-      (mintDTO as any)?.tokenBlueprintId ??
-      null;
+    const tokenBlueprintId = pickTokenBlueprintId(mintDTO as any, mintList as any);
+    const requestedBy = pickRequestedBy(mintDTO as any, mintList as any);
 
-    const createdByName =
-      (mintList as any)?.createdByName ??
-      (mintDTO as any)?.createdBy ??
-      null;
+    // ✅ tokenName は “名前解決済み” を優先
+    const tokenName = (mintList as any)?.tokenName ?? (mintDTO as any)?.tokenName ?? null;
+
+    const createdByName = (mintList as any)?.createdByName ?? null;
 
     const mintedAt =
-      ((mintDTO as any)?.mintedAt ??
-        (mintList as any)?.mintedAt ??
-        null) as string | null;
+      ((mintDTO as any)?.mintedAt ?? (mintList as any)?.mintedAt ?? null) as
+        | string
+        | null;
 
     const mintQuantity = Number((b as any)?.totalPassed ?? 0) || 0;
 
@@ -286,8 +382,17 @@ function buildRowsJoined(
           0,
       ) || 0;
 
-    const productName =
-      (productNameById?.[pid] ?? null) as string | null;
+    const productName = (productNameById?.[pid] ?? null) as string | null;
+
+    // ★ 追加: productBlueprintId / scheduledBurnDate / minted
+    const productBlueprintId = pickProductBlueprintId(
+      b as any,
+      productBlueprintIdById ?? {},
+      pid,
+    );
+
+    const scheduledBurnDate = pickScheduledBurnDate(mintDTO as any);
+    const minted = pickMinted(mintDTO as any, mintList as any);
 
     rows.push({
       id: pid,
@@ -299,10 +404,19 @@ function buildRowsJoined(
       productionQuantity,
 
       status,
+      // NOTE: ここは "notYet" があるならそちらが自然。既存互換を崩したくないので現状維持。
       inspectionStatus: (inspSt ?? "inspecting") as InspectionStatus,
 
       createdByName,
       mintedAt,
+
+      tokenBlueprintId,
+      requestedBy,
+
+      // ★ 追加
+      productBlueprintId,
+      scheduledBurnDate,
+      minted,
 
       statusLabel: inspectionStatusLabel(inspSt as any),
     });
@@ -315,23 +429,14 @@ function buildRowsJoined(
 // Service: MintRequestManagement (list screen)
 // ============================================================
 
-/**
- * MintRequestManagement 一覧用の行を組み立てて返す。
- *
- * New flow:
- * - /productions で productionIds（芯）を作る
- * - /mint/inspections?productionIds=... で inspectionsDTO（芯）取得
- * - /mint/mints?inspectionIds=...&view=dto で mintsDTO（肉付け）取得
- * - productionId で join して ViewRow[] を返す
- */
 export async function loadMintRequestManagementRows(): Promise<ViewRow[]> {
   log("load start", { API_BASE });
 
   // 0) productionIds（芯）
-  const { productionIds, productNameById, totalQuantityById } =
+  const { productionIds, productNameById, totalQuantityById, productBlueprintIdById } =
     await fetchProductionIndex();
 
-  // 互換 fallback: どうしても productionIds が取れない場合は旧 inspections から作る
+  // 互換 fallback
   let effectiveProductionIds = productionIds;
   if (effectiveProductionIds.length === 0) {
     try {
@@ -357,88 +462,43 @@ export async function loadMintRequestManagementRows(): Promise<ViewRow[]> {
   }
 
   // 1) inspectionsDTO（芯）
-  const batches = await fetchInspectionBatchesByProductionIds(
-    effectiveProductionIds,
-  );
+  const batches = await fetchInspectionBatchesByProductionIds(effectiveProductionIds);
   const batchesById = indexBatchesByProductionId(batches);
-
-  log(
-    "batchesById keys=",
-    Object.keys(batchesById).length,
-    "sampleKey=",
-    Object.keys(batchesById)[0],
-    "sampleVal=",
-    Object.keys(batchesById)[0]
-      ? (batchesById as any)[Object.keys(batchesById)[0]]
-      : undefined,
-  );
 
   // 2) mintsDTO（肉付け）
   let mintsDTOById: Record<string, MintDTO> = {};
   try {
-    mintsDTOById = (await fetchMintsByInspectionIdsHTTP(
-      effectiveProductionIds,
-    )) as any;
-
+    mintsDTOById = (await fetchMintsByInspectionIdsHTTP(effectiveProductionIds)) as any;
     const keys = Object.keys(mintsDTOById ?? {});
-    log(
-      "fetchMintsByInspectionIdsHTTP (dto) keys=",
-      keys.length,
-      "sampleKey=",
-      keys[0],
-      "sampleVal=",
-      keys[0] ? (mintsDTOById as any)[keys[0]] : undefined,
-    );
+    log("fetchMintsByInspectionIdsHTTP (dto) keys=", keys.length, "sampleKey=", keys[0]);
   } catch (e: any) {
     log("fetchMintsByInspectionIdsHTTP (dto) error=", e?.message ?? e);
     mintsDTOById = {};
   }
 
-  // 3) 表示用の list row（tokenName / createdByName が欲しいので併用）
+  // 3) 表示用 list row（tokenName / createdByName）
   let mintsListById: Record<string, MintListRowDTO> = {};
   try {
-    mintsListById = await listMintsByInspectionIDsHTTP(
-      effectiveProductionIds,
-    );
-
+    mintsListById = await listMintsByInspectionIDsHTTP(effectiveProductionIds);
     const keys = Object.keys(mintsListById ?? {});
-    log(
-      "listMintsByInspectionIDsHTTP (list) keys=",
-      keys.length,
-      "sampleKey=",
-      keys[0],
-      "sampleVal=",
-      keys[0] ? (mintsListById as any)[keys[0]] : undefined,
-    );
+    log("listMintsByInspectionIDsHTTP (list) keys=", keys.length, "sampleKey=", keys[0]);
   } catch (e: any) {
     log("listMintsByInspectionIDsHTTP (list) error=", e?.message ?? e);
     mintsListById = {};
   }
 
-  // 4) join（productionId で合体）
+  // 4) join
   const rows = buildRowsJoined(
     effectiveProductionIds,
     productNameById ?? {},
     totalQuantityById ?? {},
+    productBlueprintIdById ?? {},
     batchesById ?? {},
     mintsDTOById ?? {},
     mintsListById ?? {},
   );
 
-  log(
-    "buildRowsJoined rows(length)=",
-    rows.length,
-    "rows sample[0..4]=",
-    rows.slice(0, 5),
-  );
-
-  log(
-    "rows sample with mintDTO:",
-    rows
-      .filter((r) => r.status !== "planning")
-      .slice(0, 5),
-  );
-
+  log("buildRowsJoined rows(length)=", rows.length, "sample[0]=", rows[0]);
   log("load end");
   return rows;
 }
@@ -447,10 +507,6 @@ export async function loadMintRequestManagementRows(): Promise<ViewRow[]> {
 // Service: MintDTO fetch (full DTO)
 // ============================================================
 
-/**
- * MintDTO を inspectionIds (= productionIds) でまとめて取得する。
- * - 詳細画面や、将来的な “mint存在判定以外の情報” が必要になった場合のため
- */
 export async function loadMintsDTOMapByInspectionIds(
   inspectionIds: string[],
 ): Promise<Record<string, MintDTO>> {
@@ -463,21 +519,11 @@ export async function loadMintsDTOMapByInspectionIds(
   const m = await fetchMintsByInspectionIdsHTTP(ids);
 
   const keys = Object.keys(m ?? {});
-  log(
-    "loadMintsDTOMapByInspectionIds keys=",
-    keys.length,
-    "sampleKey=",
-    keys[0],
-    "sampleVal=",
-    keys[0] ? (m as any)[keys[0]] : undefined,
-  );
+  log("loadMintsDTOMapByInspectionIds keys=", keys.length, "sampleKey=", keys[0]);
 
   return (m ?? {}) as Record<string, MintDTO>;
 }
 
-/**
- * MintDTO を inspectionId で1件取得（バックエンドが用意されている場合）
- */
 export async function loadMintDTOByInspectionId(
   inspectionId: string,
 ): Promise<MintDTO | null> {

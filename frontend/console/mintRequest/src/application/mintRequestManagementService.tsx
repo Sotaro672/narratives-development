@@ -17,7 +17,6 @@ import {
 // ✅ MintRequestQueryService 呼び出し用（ID Token）
 import { auth } from "../../../shell/src/auth/infrastructure/config/firebaseClient";
 
-
 // ============================================================
 // Types (ViewModel for MintRequestManagement)
 // ============================================================
@@ -30,14 +29,18 @@ export type ViewRow = {
   tokenName: string | null;
   productName: string | null;
 
-  mintQuantity: number; // = inspection.totalPassed
-  productionQuantity: number; // = inspection.quantity
+  // ✅ 数量は Query 側が mintQuantity / productionQuantity を返すのでそれを優先
+  mintQuantity: number;
+  productionQuantity: number;
 
   status: MintRequestRowStatus; // = mint の有無・mintedAt で判定
   inspectionStatus: InspectionStatus; // = inspection.status
 
   createdByName: string | null;
   mintedAt: string | null;
+
+  // ✅ detail 画面などで必要なら保持（現状 hook は参照しないので optional 扱い）
+  tokenBlueprintId?: string | null;
 
   statusLabel: string; // 画面表示用（ここでは検査ステータス）
 };
@@ -94,39 +97,71 @@ async function requestJSON<T>(path: string): Promise<T> {
       statusText: res.statusText,
       bodyHead: txt?.slice(0, 300),
     });
-    throw new Error(`MintRequestQueryService error: ${res.status} ${res.statusText}${txt ? `\n${txt}` : ""}`);
+    throw new Error(
+      `MintRequestQueryService error: ${res.status} ${res.statusText}${
+        txt ? `\n${txt}` : ""
+      }`,
+    );
   }
 
   try {
     return (txt ? JSON.parse(txt) : null) as T;
-  } catch (e) {
+  } catch (_e) {
     log("response parse error", { url, bodyHead: txt?.slice(0, 300) });
     throw new Error("MintRequestQueryService response is not JSON");
   }
 }
 
 /**
- * MintRequestQueryService が返す “一覧用 DTO” を想定（フィールド名は揺れても吸収する）
- * - requestedBy = mint.createdBy（あなたの要件）
+ * MintRequestQueryService が返す “一覧用 DTO” を想定（フィールド名の揺れを吸収）
+ *
+ * ✅ 現在の backend (ProductionInspectionMintDTO) に合わせて:
+ * - mintQuantity / productionQuantity を優先
+ * - mintedAt / tokenBlueprintId は top-level or mint 配下の両方を吸収
+ * - inspectionStatus / productName も top-level or inspection 配下を吸収
  */
 type MintRequestManagementRowDTO = {
   id?: string;
   productionId?: string;
   inspectionId?: string;
 
-  productName?: string | null;
-
-  inspectionStatus?: InspectionStatus | string | null;
-  totalPassed?: number | null;
-  quantity?: number | null;
-
+  // list fields (preferred)
   tokenName?: string | null;
+  productName?: string | null;
+  mintQuantity?: number | null;
+  productionQuantity?: number | null;
+  inspectionStatus?: InspectionStatus | string | null;
 
-  requestedBy?: string | null; // = mint.createdBy
-  requestedByName?: string | null; // = memberName(requestedBy)（あれば）
+  // legacy/alt fields (fallback)
+  totalPassed?: number | null; // older name
+  quantity?: number | null; // older name
+
+  // requestedBy = mint.createdBy
+  requestedBy?: string | null;
+  requestedByName?: string | null;
   createdByName?: string | null; // 互換
 
   mintedAt?: string | null;
+
+  // token blueprint (optional)
+  tokenBlueprintId?: string | null;
+
+  // raw sub docs (optional)
+  mint?: {
+    tokenBlueprintId?: string | null;
+    tokenBlueprintID?: string | null; // casing fallback
+    tokenBlueprint?: string | null; // older list DTO name
+    tokenName?: string | null;
+    mintedAt?: string | null;
+    createdBy?: string | null;
+  } | null;
+
+  inspection?: {
+    status?: InspectionStatus | string | null;
+    productName?: string | null;
+    totalPassed?: number | null;
+    quantity?: number | null;
+  } | null;
 };
 
 const asNonEmptyString = (v: any): string =>
@@ -169,11 +204,6 @@ const inspectionStatusLabel = (
       return "未検査";
   }
 };
-
-function deriveMintStatusFromMintedAt(mintedAt: string | null | undefined): MintRequestRowStatus {
-  if (!mintedAt) return "requested"; // mint がある前提の DTO を想定
-  return "minted";
-}
 
 function deriveMintStatusFromListRow(
   mint: MintListRowDTO | null,
@@ -228,6 +258,13 @@ function buildRows(
   });
 }
 
+/**
+ * ✅ Query DTO (ProductionInspectionMintDTO など) から ViewRow に変換
+ *
+ * 重要:
+ * - backend は mintQuantity / productionQuantity を返しているので、それを最優先で使う
+ * - 以前の totalPassed / quantity を参照すると 0 に落ちる（今回の原因）
+ */
 function buildRowsFromQueryDTO(items: MintRequestManagementRowDTO[]): ViewRow[] {
   return (items ?? []).map((raw) => {
     const pid =
@@ -235,32 +272,78 @@ function buildRowsFromQueryDTO(items: MintRequestManagementRowDTO[]): ViewRow[] 
       asNonEmptyString(raw.inspectionId) ||
       asNonEmptyString(raw.id);
 
-    const inspSt = normalizeInspectionStatus(raw.inspectionStatus);
+    const inspSt = normalizeInspectionStatus(
+      raw.inspectionStatus ?? raw.inspection?.status,
+    );
 
-    // ✅ requestedBy = mint.createdBy が backend から来る前提
+    const mintedAt =
+      asStringOrNull(raw.mintedAt) ?? asStringOrNull(raw.mint?.mintedAt);
+
+    // ✅ tokenName / productName は top-level 優先、なければ subdoc から拾う
+    const tokenName =
+      asStringOrNull(raw.tokenName) ?? asStringOrNull(raw.mint?.tokenName);
+
+    const productName =
+      asStringOrNull(raw.productName) ??
+      asStringOrNull(raw.inspection?.productName);
+
+    // ✅ 数量は mintQuantity / productionQuantity を最優先（←ここが今回の修正点）
+    const mintQuantity = asNumber0(
+      raw.mintQuantity ??
+        raw.totalPassed ??
+        raw.inspection?.totalPassed ??
+        0,
+    );
+
+    const productionQuantity = asNumber0(
+      raw.productionQuantity ??
+        raw.quantity ??
+        raw.inspection?.quantity ??
+        0,
+    );
+
+    // ✅ tokenBlueprintId も維持（detail 画面や更新API用）
+    const tokenBlueprintId =
+      asStringOrNull(raw.tokenBlueprintId) ??
+      asStringOrNull(raw.mint?.tokenBlueprintId) ??
+      asStringOrNull(raw.mint?.tokenBlueprintID) ??
+      asStringOrNull(raw.mint?.tokenBlueprint);
+
+    // ✅ requestedBy / createdByName の吸収
+    const requestedBy =
+      asStringOrNull(raw.requestedBy) ?? asStringOrNull(raw.mint?.createdBy);
+
     const requesterName =
       asStringOrNull(raw.requestedByName) ??
       asStringOrNull(raw.createdByName) ??
-      asStringOrNull(raw.requestedBy);
+      requestedBy;
 
-    // mintedAt があるなら minted、無いなら requested（planning は “mint無し” 側で作る）
-    const st: MintRequestRowStatus =
-      raw.mintedAt ? "minted" : "requested";
+    // ✅ planning/requested/minted 判定
+    const hasRequestSignal =
+      !!tokenBlueprintId || !!tokenName || !!requestedBy || !!mintedAt;
+
+    const st: MintRequestRowStatus = !hasRequestSignal
+      ? "planning"
+      : mintedAt
+        ? "minted"
+        : "requested";
 
     return {
       id: pid,
 
-      tokenName: asStringOrNull(raw.tokenName),
-      productName: asStringOrNull(raw.productName),
+      tokenName: tokenName ?? null,
+      productName: productName ?? null,
 
-      mintQuantity: asNumber0(raw.totalPassed),
-      productionQuantity: asNumber0(raw.quantity),
+      mintQuantity,
+      productionQuantity,
 
       status: st,
       inspectionStatus: inspSt,
 
-      createdByName: requesterName,
-      mintedAt: raw.mintedAt ?? null,
+      createdByName: requesterName ?? null,
+      mintedAt: mintedAt ?? null,
+
+      tokenBlueprintId: tokenBlueprintId ?? null,
 
       statusLabel: inspectionStatusLabel(inspSt),
     };
@@ -285,12 +368,10 @@ export async function loadMintRequestManagementRows(): Promise<ViewRow[]> {
 
   // ------------------------------------------------------------
   // 0) ✅ まずは MintRequestQueryService を叩く（本命）
-  //    - ルートは実装に合わせて変更OK:
-  //      例) GET /mint/requests, /mint/requests/management, /mint/query/requests など
   // ------------------------------------------------------------
   const queryPaths = [
-    "/mint/requests",                 // ← 最有力（GET 追加しやすい）
-    "/mint/requests?view=management", // ← もし view 切替にしている場合
+    "/mint/requests",
+    "/mint/requests?view=management",
     "/mint/requests?view=list",
   ];
 
@@ -300,7 +381,9 @@ export async function loadMintRequestManagementRows(): Promise<ViewRow[]> {
 
       // array 想定
       if (Array.isArray(dto)) {
-        const rows = buildRowsFromQueryDTO(dto as MintRequestManagementRowDTO[]);
+        const rows = buildRowsFromQueryDTO(
+          dto as MintRequestManagementRowDTO[],
+        );
         log("MintRequestQueryService success", {
           path,
           rowsLen: rows.length,
@@ -312,7 +395,9 @@ export async function loadMintRequestManagementRows(): Promise<ViewRow[]> {
 
       // object { items: [] } みたいな形にも対応
       if (dto && Array.isArray((dto as any).items)) {
-        const rows = buildRowsFromQueryDTO((dto as any).items as MintRequestManagementRowDTO[]);
+        const rows = buildRowsFromQueryDTO(
+          (dto as any).items as MintRequestManagementRowDTO[],
+        );
         log("MintRequestQueryService success(items)", {
           path,
           rowsLen: rows.length,
@@ -328,7 +413,6 @@ export async function loadMintRequestManagementRows(): Promise<ViewRow[]> {
         path,
         err: e?.message ?? e,
       });
-      // 次の path を試す
     }
   }
 
