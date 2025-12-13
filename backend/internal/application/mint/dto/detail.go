@@ -10,14 +10,14 @@ type MintDetailDTO struct {
 	BrandID           string  `json:"brandId"`
 	BrandName         string  `json:"brandName"`
 	TokenName         string  `json:"tokenName"`
-	ScheduledBurnDate *string `json:"scheduledBurnDate,omitempty"` // 例: "YYYY-MM-DD" or ISO（運用に合わせて）
+	ScheduledBurnDate *string `json:"scheduledBurnDate,omitempty"` // "YYYY-MM-DD" を想定
 }
 
 // ============================================================
-// 画面向け DTO
+// 画面向け DTO（inspections 一覧 / 詳細で共用）
 // ============================================================
 
-// モデル情報をフロントに渡すためのメタ情報
+// MintModelMeta は、モデル情報をフロントに渡すためのメタ情報
 type MintModelMeta struct {
 	Size      string `json:"size"`
 	ColorName string `json:"colorName"`
@@ -32,7 +32,9 @@ type MintInspectionView struct {
 
 	// Production → ProductBlueprint の join 結果
 	ProductBlueprintID string `json:"productBlueprintId"`
-	ProductName        string `json:"productName"`
+
+	// ★ 名前解決は presenter が担当（usecase では埋めない）
+	ProductName string `json:"productName"`
 
 	// モデル情報テーブル: modelId → { size, colorName, rgb }
 	ModelMeta map[string]MintModelMeta `json:"modelMeta"`

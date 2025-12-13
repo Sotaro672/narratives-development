@@ -49,7 +49,7 @@ type RouterDeps struct {
 	PaymentUC        *usecase.PaymentUsecase
 	PermissionUC     *usecase.PermissionUsecase
 	PrintUC          *usecase.PrintUsecase
-
+	TokenUC          *usecase.TokenUsecase
 	// ★ここだけ型を新パッケージに変更
 	ProductionUC       *productionapp.ProductionUsecase
 	ProductBlueprintUC *usecase.ProductBlueprintUsecase
@@ -399,8 +399,10 @@ func NewRouter(deps RouterDeps) http.Handler {
 	// ⭐ Mint API
 	// ================================
 	if deps.MintUC != nil {
-		// ★ NOTE: handlers.NewMintHandler 側も application/mint.MintUsecase を受け取るように修正が必要
-		mintH := handlers.NewMintHandler(deps.MintUC, nil)
+		// ★ NewMintHandler は (mintUC, tokenUC, nameResolver) を受け取る
+		//   tokenUC はチェーンミントを使わないなら nil でも OK
+		//   nameResolver は list/patch で使うので必須（DI で組み立てて deps に載せる）
+		mintH := handlers.NewMintHandler(deps.MintUC, deps.TokenUC, deps.NameResolver)
 
 		if mh, ok := mintH.(*handlers.MintHandler); ok {
 			mux.HandleFunc("/mint/debug", mh.HandleDebug)

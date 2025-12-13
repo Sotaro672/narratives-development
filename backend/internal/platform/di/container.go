@@ -355,8 +355,8 @@ func NewContainer(ctx context.Context) (*Container, error) {
 	// NewMintUsecase は
 	// (mintProductBlueprintRepo, mintProductionRepo, mintInspectionRepo, mintModelRepo,
 	//  mintTokenBlueprintRepo, *brand.Service, mint.MintRepository, mint.PassedProductLister,
-	//  *resolver.NameResolver, usecase.TokenMintPort)
-	// の 10 引数
+	//  mint.TokenMintPort)
+	// の 9 引数
 	mintUC := mintapp.NewMintUsecase(
 		productBlueprintRepo, // mint.MintProductBlueprintRepo
 		productionRepo,       // mint.MintProductionRepo
@@ -365,9 +365,8 @@ func NewContainer(ctx context.Context) (*Container, error) {
 		tokenBlueprintRepo,   // tokenBlueprint.RepositoryPort
 		brandSvc,             // *brand.Service
 		mintRepo,             // mint.MintRepository
-		inspectionRepo,       // mint.PassedProductLister（InspectionRepositoryFS に実装追加済み前提）
-		nameResolver,         // *resolver.NameResolver
-		tokenUC,              // mint.TokenMintPort（TokenUsecase のインスタンス）
+		inspectionRepo,       // mint.PassedProductLister（InspectionRepositoryFS が実装している前提）
+		tokenUC,              // mint.TokenMintPort（TokenUsecase が実装している前提）
 	)
 
 	saleUC := uc.NewSaleUsecase(saleRepo)

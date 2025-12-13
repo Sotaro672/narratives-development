@@ -5,13 +5,19 @@ import (
 	"encoding/json"
 	"errors"
 	"net/http"
+	"sort"
 	"strconv"
 	"strings"
+	"time"
+
+	resolver "narratives/internal/application/resolver"
 
 	mintapp "narratives/internal/application/mint"
+	mintdto "narratives/internal/application/mint/dto"
+	mintpresenter "narratives/internal/application/mint/presenter"
+
 	usecase "narratives/internal/application/usecase"
 	branddom "narratives/internal/domain/brand"
-	mintdom "narratives/internal/domain/mint"
 	pbpdom "narratives/internal/domain/productBlueprint"
 	tbdom "narratives/internal/domain/tokenBlueprint"
 )
@@ -21,12 +27,20 @@ type MintHandler struct {
 	mintUC *mintapp.MintUsecase
 	// 実際のチェーンミントを行う Usecase（Solana + MintRequestPort）
 	tokenUC *usecase.TokenUsecase
+
+	// ★ 画面向け名前解決（usecase 直呼びにしない）
+	nameResolver *resolver.NameResolver
 }
 
-func NewMintHandler(mintUC *mintapp.MintUsecase, tokenUC *usecase.TokenUsecase) http.Handler {
+func NewMintHandler(
+	mintUC *mintapp.MintUsecase,
+	tokenUC *usecase.TokenUsecase,
+	nameResolver *resolver.NameResolver,
+) http.Handler {
 	return &MintHandler{
-		mintUC:  mintUC,
-		tokenUC: tokenUC,
+		mintUC:       mintUC,
+		tokenUC:      tokenUC,
+		nameResolver: nameResolver,
 	}
 }
 
@@ -51,7 +65,7 @@ func (h *MintHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	// ------------------------------------------------------------
 	// GET /mint/mints?inspectionIds=a,b,c
 	//  → inspectionIds（= productionId）に対応する mints をまとめて返す
-	//  → 戻り値: map[inspectionId]Mint
+	//  → 戻り値: map[inspectionId]MintListRowDTO（最小）
 	// ------------------------------------------------------------
 	case r.Method == http.MethodGet && r.URL.Path == "/mint/mints":
 		h.listMintsByInspectionIDs(w, r)
@@ -60,7 +74,6 @@ func (h *MintHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	// ------------------------------------------------------------
 	// POST /mint/requests/{mintRequestId}/mint
 	//  → TokenUsecase を使ってチェーン上でミント実行
-	//    （※ mints テーブル作成がゴールの場合、実際に呼ばなければよい）
 	// ------------------------------------------------------------
 	case r.Method == http.MethodPost &&
 		strings.HasPrefix(r.URL.Path, "/mint/requests/") &&
@@ -70,8 +83,7 @@ func (h *MintHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	// ------------------------------------------------------------
 	// POST /mint/inspections/{productionId}/request
-	//  → 検品結果から MintRequest 情報を更新
-	//     ＋ MintUsecase 側で mints テーブルのレコードを作成
+	//  → 検品結果から MintRequest 情報を更新 + mints テーブル作成
 	// ------------------------------------------------------------
 	case r.Method == http.MethodPost &&
 		strings.HasPrefix(r.URL.Path, "/mint/inspections/") &&
@@ -122,8 +134,8 @@ func (h *MintHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 // return:
 //
 //	{
-//	  "inspectionIdA": { ...mint... },
-//	  "inspectionIdB": { ...mint... }
+//	  "inspectionIdA": { "tokenName": "...", "createdByName": "...", "mintedAt": "2025/12/13" },
+//	  "inspectionIdB": { ... }
 //	}
 func (h *MintHandler) listMintsByInspectionIDs(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
@@ -136,7 +148,6 @@ func (h *MintHandler) listMintsByInspectionIDs(w http.ResponseWriter, r *http.Re
 
 	raw := strings.TrimSpace(r.URL.Query().Get("inspectionIds"))
 	if raw == "" {
-		// 空なら空マップを返す（フロントが扱いやすい）
 		_ = json.NewEncoder(w).Encode(map[string]any{})
 		return
 	}
@@ -161,7 +172,9 @@ func (h *MintHandler) listMintsByInspectionIDs(w http.ResponseWriter, r *http.Re
 		return
 	}
 
-	// ★ ここは MintUsecase 側に実装されている想定（repo.ListByInspectionIDs を内部で呼ぶ）
+	// 順序安定化（推奨）
+	sort.Strings(ids)
+
 	mintsByInspectionID, err := h.mintUC.ListMintsByInspectionIDs(ctx, ids)
 	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
@@ -169,25 +182,42 @@ func (h *MintHandler) listMintsByInspectionIDs(w http.ResponseWriter, r *http.Re
 		return
 	}
 
-	// フロントがそのまま使えるように JSON shape を整える（lower camel）
-	out := make(map[string]any, len(mintsByInspectionID))
+	out := make(map[string]mintdto.MintListRowDTO, len(mintsByInspectionID))
+
 	for inspectionID, m := range mintsByInspectionID {
-		out[inspectionID] = map[string]any{
-			"id":               m.ID,
-			"brandId":          m.BrandID,
-			"tokenBlueprintId": m.TokenBlueprintID,
-			"createdBy":        m.CreatedBy,
-			"createdAt":        m.CreatedAt,
-			"minted":           m.Minted,
-			"mintedAt":         m.MintedAt,
-			"scheduledBurnDate": func() any {
-				if m.ScheduledBurnDate == nil || m.ScheduledBurnDate.IsZero() {
-					return nil
+		// tokenName（resolver）
+		tokenName := ""
+		if h.nameResolver != nil {
+			tokenName = strings.TrimSpace(h.nameResolver.ResolveTokenName(ctx, m.TokenBlueprintID))
+		}
+		if tokenName == "" {
+			// フォールバック（空だと UI が崩れるので）
+			tokenName = strings.TrimSpace(m.TokenBlueprintID)
+		}
+
+		// createdByName（resolver。取れなければ nil → UI は "-"）
+		var createdByNamePtr *string
+		if h.nameResolver != nil {
+			createdBy := strings.TrimSpace(m.CreatedBy)
+			if createdBy != "" {
+				name := strings.TrimSpace(h.nameResolver.ResolveCreatedByName(ctx, &createdBy))
+				if name != "" {
+					createdByNamePtr = &name
 				}
-				return *m.ScheduledBurnDate
-			}(),
-			// products はドメインが map の場合でも、フロントは mint existence 判定しかしていないのでそのまま返す
-			"products": m.Products,
+			}
+		}
+
+		// mintedAt（minted のときだけ yyyy/mm/dd）
+		var mintedAtPtr *string
+		if m.Minted && m.MintedAt != nil && !m.MintedAt.IsZero() {
+			s := m.MintedAt.In(time.UTC).Format("2006/01/02")
+			mintedAtPtr = &s
+		}
+
+		out[inspectionID] = mintdto.MintListRowDTO{
+			TokenName:     tokenName,
+			CreatedByName: createdByNamePtr,
+			MintedAt:      mintedAtPtr,
 		}
 	}
 
@@ -233,7 +263,6 @@ func (h *MintHandler) mintFromMintRequest(w http.ResponseWriter, r *http.Request
 		return
 	}
 
-	// tokendom.MintResult をそのまま JSON で返す
 	_ = json.NewEncoder(w).Encode(result)
 }
 
@@ -307,9 +336,9 @@ func (h *MintHandler) updateRequestInfo(w http.ResponseWriter, r *http.Request) 
 // GET /mint/inspections
 // ============================================================
 //
-// ★ 追加:
-//   - 取得した inspections に対して /mint/mints と同じロジックで mints を引いて
-//     batch.mint を埋め込んで返す（detail 画面が minted モード判定できるように）
+// - inspections 一覧を取得（usecase）
+// - ProductName は presenter で NameResolver から埋める
+// - mints はここでは埋め込まない（画面側で /mint/mints で突合）
 func (h *MintHandler) listInspectionsForCurrentCompany(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 
@@ -335,56 +364,8 @@ func (h *MintHandler) listInspectionsForCurrentCompany(w http.ResponseWriter, r 
 		return
 	}
 
-	// ============================
-	// ★ mints をまとめて取得して batch に埋め込む
-	// ============================
-	inspectionIDs := make([]string, 0, len(batches))
-	for _, b := range batches {
-		// productionId を inspectionId として扱う（フロントの requestId も productionId）
-		inspectionIDs = append(inspectionIDs, b.ProductionID)
-	}
-
-	var mintsByInspectionID map[string]mintdom.Mint
-	if len(inspectionIDs) > 0 {
-		m, e := h.mintUC.ListMintsByInspectionIDs(ctx, inspectionIDs)
-		if e == nil {
-			mintsByInspectionID = m
-		}
-		// mints が取れなくても inspections 自体は返す（画面崩壊を避ける）
-	}
-
-	// batches は struct slice なので、mint を付与するために map 化して返す
-	out := make([]any, 0, len(batches))
-	for _, b := range batches {
-		// struct → map
-		var asMap map[string]any
-		raw, _ := json.Marshal(b)
-		_ = json.Unmarshal(raw, &asMap)
-
-		// mint を付与（存在する場合のみ）
-		if mintsByInspectionID != nil {
-			if m, ok := mintsByInspectionID[b.ProductionID]; ok {
-				asMap["mint"] = map[string]any{
-					"id":               m.ID,
-					"brandId":          m.BrandID,
-					"tokenBlueprintId": m.TokenBlueprintID,
-					"createdBy":        m.CreatedBy,
-					"createdAt":        m.CreatedAt,
-					"minted":           m.Minted,
-					"mintedAt":         m.MintedAt,
-					"scheduledBurnDate": func() any {
-						if m.ScheduledBurnDate == nil || m.ScheduledBurnDate.IsZero() {
-							return nil
-						}
-						return *m.ScheduledBurnDate
-					}(),
-					"products": m.Products,
-				}
-			}
-		}
-
-		out = append(out, asMap)
-	}
+	// ★ presenter で productName 解決
+	out := mintpresenter.PresentInspectionViews(ctx, h.nameResolver, batches)
 
 	_ = json.NewEncoder(w).Encode(out)
 }
@@ -435,18 +416,10 @@ func (h *MintHandler) getProductBlueprintPatchByID(w http.ResponseWriter, r *htt
 	}
 
 	brandName := ""
-	if patch.BrandID != nil {
+	if patch.BrandID != nil && h.nameResolver != nil {
 		bid := strings.TrimSpace(*patch.BrandID)
 		if bid != "" {
-			name, err := h.mintUC.ResolveBrandNameByID(ctx, bid)
-			if err != nil {
-				w.WriteHeader(http.StatusInternalServerError)
-				_ = json.NewEncoder(w).Encode(map[string]string{
-					"error": err.Error(),
-				})
-				return
-			}
-			brandName = name
+			brandName = strings.TrimSpace(h.nameResolver.ResolveBrandName(ctx, bid))
 		}
 	}
 

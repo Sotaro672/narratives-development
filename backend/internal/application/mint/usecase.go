@@ -4,10 +4,11 @@ package mint
 import (
 	"context"
 	"errors"
+	"sort"
 	"strings"
 	"time"
 
-	resolver "narratives/internal/application/resolver"
+	dto "narratives/internal/application/mint/dto"
 	appusecase "narratives/internal/application/usecase"
 	branddom "narratives/internal/domain/brand"
 	inspectiondom "narratives/internal/domain/inspection"
@@ -17,31 +18,6 @@ import (
 	tokendom "narratives/internal/domain/token"
 	tbdom "narratives/internal/domain/tokenBlueprint"
 )
-
-// ============================================================
-// 画面向け DTO
-// ============================================================
-
-// モデル情報をフロントに渡すためのメタ情報
-type MintModelMeta struct {
-	Size      string `json:"size"`
-	ColorName string `json:"colorName"`
-	RGB       int    `json:"rgb"`
-}
-
-// MintInspectionView は Mint 管理画面向けの Inspection 表現。
-// 元の InspectionBatch に加えて、productBlueprintId / productName、
-// そして modelId → size/color/rgb のマップを付与して返す。
-type MintInspectionView struct {
-	inspectiondom.InspectionBatch
-
-	// Production → ProductBlueprint の join 結果
-	ProductBlueprintID string `json:"productBlueprintId"`
-	ProductName        string `json:"productName"`
-
-	// モデル情報テーブル: modelId → { size, colorName, rgb }
-	ModelMeta map[string]MintModelMeta `json:"modelMeta"`
-}
 
 // ============================================================
 // チェーンミント起動用ポート
@@ -66,7 +42,7 @@ type MintUsecase struct {
 	// TokenBlueprint の minted 状態や一覧を扱うためのリポジトリ
 	tbRepo tbdom.RepositoryPort
 
-	// brandId → brandName 解決や Brand 一覧取得用
+	// Brand 一覧取得用
 	brandSvc *branddom.Service
 
 	// mints テーブル用リポジトリ
@@ -74,18 +50,12 @@ type MintUsecase struct {
 	// inspections → passed productId 一覧を取得するためのポート
 	passedProductLister mintdom.PassedProductLister
 
-	// 各種「名前解決」を集約する NameResolver
-	nameResolver *resolver.NameResolver
-
 	// チェーンミント実行用ポート（TokenUsecase を想定）
 	tokenMinter TokenMintPort
 }
 
 // NewMintUsecase は MintUsecase のコンストラクタです。
-// DI コンテナから ProductBlueprintRepositoryFS / ProductionRepositoryFS /
-// InspectionRepositoryFS / ModelRepositoryFS / TokenBlueprintRepositoryFS /
-// MintRepositoryFS /（inspections 用の PassedProductLister 実装）/ brand.Service / NameResolver /
-// TokenUsecase(TokenMintPort を実装) をそれぞれ満たす実装として渡してください。
+// ★ NameResolver は usecase に持たせず、presenter/mapper 側で扱う方針
 func NewMintUsecase(
 	pbRepo mintdom.MintProductBlueprintRepo,
 	prodRepo mintdom.MintProductionRepo,
@@ -95,7 +65,6 @@ func NewMintUsecase(
 	brandSvc *branddom.Service,
 	mintRepo mintdom.MintRepository,
 	passedProductLister mintdom.PassedProductLister,
-	nameResolver *resolver.NameResolver,
 	tokenMinter TokenMintPort,
 ) *MintUsecase {
 	return &MintUsecase{
@@ -107,7 +76,6 @@ func NewMintUsecase(
 		brandSvc:            brandSvc,
 		mintRepo:            mintRepo,
 		passedProductLister: passedProductLister,
-		nameResolver:        nameResolver,
 		tokenMinter:         tokenMinter,
 	}
 }
@@ -123,7 +91,7 @@ var ErrCompanyIDMissing = errors.New("companyId not found in context")
 // （middleware.AuthMiddleware → usecase.WithCompanyID）を基点に、
 func (u *MintUsecase) ListInspectionsForCurrentCompany(
 	ctx context.Context,
-) ([]MintInspectionView, error) {
+) ([]dto.MintInspectionView, error) {
 
 	companyID := strings.TrimSpace(appusecase.CompanyIDFromContext(ctx))
 	if companyID == "" {
@@ -134,10 +102,11 @@ func (u *MintUsecase) ListInspectionsForCurrentCompany(
 }
 
 // ListInspectionsByCompanyID は、明示的に companyId を指定して同じチェーンを実行するバリアントです。
+// ★ productName の名前解決は行わない（presenter/mapper が担当）
 func (u *MintUsecase) ListInspectionsByCompanyID(
 	ctx context.Context,
 	companyID string,
-) ([]MintInspectionView, error) {
+) ([]dto.MintInspectionView, error) {
 
 	if u == nil {
 		return nil, errors.New("mint usecase is nil")
@@ -154,7 +123,7 @@ func (u *MintUsecase) ListInspectionsByCompanyID(
 		return nil, err
 	}
 	if len(pbIDs) == 0 {
-		return []MintInspectionView{}, nil
+		return []dto.MintInspectionView{}, nil
 	}
 
 	// 2) productBlueprintId 群 → Production 一覧
@@ -163,7 +132,7 @@ func (u *MintUsecase) ListInspectionsByCompanyID(
 		return nil, err
 	}
 	if len(prods) == 0 {
-		return []MintInspectionView{}, nil
+		return []dto.MintInspectionView{}, nil
 	}
 
 	// Production から productionId 一覧を抽出（重複除去）
@@ -184,13 +153,15 @@ func (u *MintUsecase) ListInspectionsByCompanyID(
 		}
 	}
 	if len(prodIDSet) == 0 {
-		return []MintInspectionView{}, nil
+		return []dto.MintInspectionView{}, nil
 	}
 
+	// ★ map iteration を安定化（推奨）
 	prodIDs := make([]string, 0, len(prodIDSet))
 	for id := range prodIDSet {
 		prodIDs = append(prodIDs, id)
 	}
+	sort.Strings(prodIDs)
 
 	// 3) productionId 群 → InspectionBatch 一覧
 	batches, err := u.inspRepo.ListByProductionID(ctx, prodIDs)
@@ -198,30 +169,10 @@ func (u *MintUsecase) ListInspectionsByCompanyID(
 		return nil, err
 	}
 	if len(batches) == 0 {
-		return []MintInspectionView{}, nil
+		return []dto.MintInspectionView{}, nil
 	}
 
-	// 4) productBlueprintId → productName の名前解決用マップ
-	pbNameMap := make(map[string]string)
-
-	usedPBSet := make(map[string]struct{})
-	for _, pbID := range prodToPB {
-		if pbID == "" {
-			continue
-		}
-		usedPBSet[pbID] = struct{}{}
-	}
-
-	if u.nameResolver != nil {
-		for pbID := range usedPBSet {
-			name := strings.TrimSpace(u.nameResolver.ResolveProductName(ctx, pbID))
-			if name != "" {
-				pbNameMap[pbID] = name
-			}
-		}
-	}
-
-	// 5) inspection 内の modelId 群を集めて、ModelVariation をまとめて取得
+	// 4) inspection 内の modelId 群を集めて、ModelVariation を取得
 	modelIDSet := make(map[string]struct{})
 	for _, b := range batches {
 		for _, item := range b.Inspections {
@@ -233,9 +184,18 @@ func (u *MintUsecase) ListInspectionsByCompanyID(
 		}
 	}
 
-	modelMetaMap := make(map[string]MintModelMeta, len(modelIDSet))
-	if len(modelIDSet) > 0 && u.modelRepo != nil {
-		for modelID := range modelIDSet {
+	// ★ map iteration を安定化（推奨）
+	modelIDs := make([]string, 0, len(modelIDSet))
+	for mid := range modelIDSet {
+		modelIDs = append(modelIDs, mid)
+	}
+	sort.Strings(modelIDs)
+
+	modelMetaMap := make(map[string]dto.MintModelMeta, len(modelIDs))
+
+	// （任意）本当は modelRepo が ListByIDs を持てると 1 回で取れて高速
+	if len(modelIDs) > 0 && u.modelRepo != nil {
+		for _, modelID := range modelIDs {
 			mv, err := u.modelRepo.GetModelVariationByID(ctx, modelID)
 			if err != nil {
 				if errors.Is(err, modeldom.ErrNotFound) {
@@ -244,7 +204,7 @@ func (u *MintUsecase) ListInspectionsByCompanyID(
 				continue
 			}
 
-			meta := MintModelMeta{
+			meta := dto.MintModelMeta{
 				Size: strings.TrimSpace(mv.Size),
 			}
 
@@ -257,15 +217,14 @@ func (u *MintUsecase) ListInspectionsByCompanyID(
 		}
 	}
 
-	// 6) InspectionBatch ごとに MintInspectionView を組み立てる
-	views := make([]MintInspectionView, 0, len(batches))
+	// 5) InspectionBatch ごとに MintInspectionView を組み立てる
+	views := make([]dto.MintInspectionView, 0, len(batches))
 
 	for _, b := range batches {
 		prodID := strings.TrimSpace(b.ProductionID)
-		pbID := prodToPB[prodID]
-		name := pbNameMap[pbID]
+		pbID := strings.TrimSpace(prodToPB[prodID])
 
-		perBatchModelMeta := make(map[string]MintModelMeta)
+		perBatchModelMeta := make(map[string]dto.MintModelMeta)
 		for _, item := range b.Inspections {
 			mid := strings.TrimSpace(item.ModelID)
 			if mid == "" {
@@ -276,10 +235,10 @@ func (u *MintUsecase) ListInspectionsByCompanyID(
 			}
 		}
 
-		view := MintInspectionView{
+		view := dto.MintInspectionView{
 			InspectionBatch:    b,
 			ProductBlueprintID: pbID,
-			ProductName:        name,
+			ProductName:        "", // ★ 名前解決は presenter が埋める
 			ModelMeta:          perBatchModelMeta,
 		}
 		views = append(views, view)
@@ -324,6 +283,9 @@ func (u *MintUsecase) ListMintsByInspectionIDs(
 	if len(ids) == 0 {
 		return map[string]mintdom.Mint{}, nil
 	}
+
+	// （任意）順序固定したいならここも sort.Strings(ids)
+	sort.Strings(ids)
 
 	return u.mintRepo.ListByInspectionIDs(ctx, ids)
 }
@@ -429,9 +391,10 @@ func (u *MintUsecase) UpdateRequestInfo(
 		return empty, err
 	}
 
+	// （任意）仕様固定：scheduledBurnDate は "YYYY-MM-DD" を UTC の日付として解釈する
 	if scheduledBurnDate != nil {
 		if s := strings.TrimSpace(*scheduledBurnDate); s != "" {
-			t, err := time.Parse("2006-01-02", s)
+			t, err := time.ParseInLocation("2006-01-02", s, time.UTC)
 			if err != nil {
 				return empty, errors.New("invalid scheduledBurnDate format (expected YYYY-MM-DD)")
 			}
@@ -500,22 +463,6 @@ func (u *MintUsecase) markTokenBlueprintMinted(ctx context.Context, tokenBluepri
 		UpdatedBy: &updatedBy,
 	})
 	return err
-}
-
-// ============================================================
-// Helper: brandId → brandName 解決（NameResolver へ委譲）
-// ============================================================
-
-func (u *MintUsecase) ResolveBrandNameByID(ctx context.Context, brandID string) (string, error) {
-	if u == nil {
-		return "", errors.New("mint usecase is nil")
-	}
-	if u.nameResolver == nil {
-		return "", errors.New("name resolver is nil")
-	}
-
-	name := strings.TrimSpace(u.nameResolver.ResolveBrandName(ctx, brandID))
-	return name, nil
 }
 
 // ============================================================
