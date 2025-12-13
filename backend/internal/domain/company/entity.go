@@ -5,14 +5,16 @@ import (
 	"regexp"
 	"strings"
 	"time"
+	"unicode/utf8"
 )
 
 // ---------------------------
 // 正規表現
 // ---------------------------
-
-// 会社名：漢字/ひらがな/カタカナ/英数字/長音/スペース
-var companyNameRe = regexp.MustCompile(`^[\p{Han}\p{Hiragana}\p{Katakana}A-Za-z0-9ー\s]+$`)
+//
+// 会社名：漢字/ひらがな/カタカナ/英数字(半角/全角)/長音/スペース
+// - 追加: 全角数字 ０-９ を許可
+var companyNameRe = regexp.MustCompile(`^[\p{Han}\p{Hiragana}\p{Katakana}A-Za-z0-9０-９ー\s]+$`)
 
 // ---------------------------
 // Domain errors
@@ -202,7 +204,6 @@ func (c Company) validate() error {
 	return nil
 }
 
-// validateUpdateOnly keeps update invariants minimal
 func (c Company) validateUpdateOnly() error {
 	if strings.TrimSpace(c.UpdatedBy) == "" {
 		return ErrInvalidUpdatedBy
@@ -221,9 +222,11 @@ func validateCompanyName(name string) error {
 	if name == "" {
 		return ErrInvalidName
 	}
-	if len(name) > 100 {
+	// ★ rune 数で 100 文字制限（日本語でも意図通り）
+	if utf8.RuneCountInString(name) > 100 {
 		return ErrInvalidName
 	}
+	// ★ 全角数字も許可
 	if !companyNameRe.MatchString(name) {
 		return ErrInvalidName
 	}

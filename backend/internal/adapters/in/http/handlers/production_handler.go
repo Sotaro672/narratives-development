@@ -1,22 +1,34 @@
-// backend/internal/adapters/in/http/handlers/production_handler.go
 package handlers
 
 import (
 	"encoding/json"
+	"errors"
 	"net/http"
 	"strings"
 
 	productionapp "narratives/internal/application/production"
+	companyquery "narratives/internal/application/query"
+	productbpdom "narratives/internal/domain/productBlueprint"
 	productiondom "narratives/internal/domain/production"
 )
 
 // ProductionHandler は /productions 関連のエンドポイントを担当します。
+// 方針:
+// - GET /productions (一覧) は CompanyProductionQueryService（company境界付き）
+// - CRUD（GET /{id}, POST, PUT, DELETE）は ProductionUsecase（従来通り）
 type ProductionHandler struct {
-	uc *productionapp.ProductionUsecase
+	query *companyquery.CompanyProductionQueryService
+	uc    *productionapp.ProductionUsecase
 }
 
-func NewProductionHandler(uc *productionapp.ProductionUsecase) http.Handler {
-	return &ProductionHandler{uc: uc}
+func NewProductionHandler(
+	companyProductionQueryService *companyquery.CompanyProductionQueryService,
+	uc *productionapp.ProductionUsecase,
+) http.Handler {
+	return &ProductionHandler{
+		query: companyProductionQueryService,
+		uc:    uc,
+	}
 }
 
 func (h *ProductionHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
@@ -59,13 +71,20 @@ func (h *ProductionHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 func (h *ProductionHandler) list(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 
-	// ★ ListWithAssigneeName を使用
-	productions, err := h.uc.ListWithAssigneeName(ctx)
+	if h.query == nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		_ = json.NewEncoder(w).Encode(map[string]string{"error": "query service is nil"})
+		return
+	}
+
+	// ★ QueryService（company境界付き）を使用
+	rows, err := h.query.ListProductionsWithAssigneeName(ctx)
 	if err != nil {
 		writeProductionErr(w, err)
 		return
 	}
-	_ = json.NewEncoder(w).Encode(productions)
+
+	_ = json.NewEncoder(w).Encode(rows)
 }
 
 // ------------------------------------------------------------
@@ -73,6 +92,12 @@ func (h *ProductionHandler) list(w http.ResponseWriter, r *http.Request) {
 // ------------------------------------------------------------
 func (h *ProductionHandler) get(w http.ResponseWriter, r *http.Request, id string) {
 	ctx := r.Context()
+
+	if h.uc == nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		_ = json.NewEncoder(w).Encode(map[string]string{"error": "usecase is nil"})
+		return
+	}
 
 	id = strings.TrimSpace(id)
 	if id == "" {
@@ -97,6 +122,12 @@ func (h *ProductionHandler) post(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	defer r.Body.Close()
 
+	if h.uc == nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		_ = json.NewEncoder(w).Encode(map[string]string{"error": "usecase is nil"})
+		return
+	}
+
 	var req productiondom.Production
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		w.WriteHeader(http.StatusBadRequest)
@@ -116,12 +147,16 @@ func (h *ProductionHandler) post(w http.ResponseWriter, r *http.Request) {
 
 // ------------------------------------------------------------
 // PUT /productions/{id}（UPDATE）
-//   - 更新対象: quantity(models) と assigneeId のみ（Usecase.Update が制御）
-//
 // ------------------------------------------------------------
 func (h *ProductionHandler) update(w http.ResponseWriter, r *http.Request, id string) {
 	ctx := r.Context()
 	defer r.Body.Close()
+
+	if h.uc == nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		_ = json.NewEncoder(w).Encode(map[string]string{"error": "usecase is nil"})
+		return
+	}
 
 	id = strings.TrimSpace(id)
 	if id == "" {
@@ -137,10 +172,9 @@ func (h *ProductionHandler) update(w http.ResponseWriter, r *http.Request, id st
 		return
 	}
 
-	// パスの ID を優先する
+	// パスの ID を優先
 	req.ID = id
 
-	// ★ Usecase.Update を呼び出し、quantity / assigneeId だけ更新
 	p, err := h.uc.Update(ctx, id, req)
 	if err != nil {
 		writeProductionErr(w, err)
@@ -155,6 +189,12 @@ func (h *ProductionHandler) update(w http.ResponseWriter, r *http.Request, id st
 // ------------------------------------------------------------
 func (h *ProductionHandler) delete(w http.ResponseWriter, r *http.Request, id string) {
 	ctx := r.Context()
+
+	if h.uc == nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		_ = json.NewEncoder(w).Encode(map[string]string{"error": "usecase is nil"})
+		return
+	}
 
 	id = strings.TrimSpace(id)
 	if id == "" {
@@ -176,12 +216,20 @@ func (h *ProductionHandler) delete(w http.ResponseWriter, r *http.Request, id st
 // ------------------------------------------------------------
 func writeProductionErr(w http.ResponseWriter, err error) {
 	code := http.StatusInternalServerError
-	switch err {
-	case productiondom.ErrInvalidID:
+
+	// Production domain errors
+	if errors.Is(err, productiondom.ErrInvalidID) {
 		code = http.StatusBadRequest
-	case productiondom.ErrNotFound:
+	} else if errors.Is(err, productiondom.ErrNotFound) {
 		code = http.StatusNotFound
+
+		// ProductBlueprint domain errors（companyId 無しなど、QueryService 側で起きる）
+	} else if errors.Is(err, productbpdom.ErrInvalidCompanyID) {
+		code = http.StatusBadRequest
+	} else if errors.Is(err, productbpdom.ErrInvalidID) {
+		code = http.StatusBadRequest
 	}
+
 	w.WriteHeader(code)
 	_ = json.NewEncoder(w).Encode(map[string]string{"error": err.Error()})
 }

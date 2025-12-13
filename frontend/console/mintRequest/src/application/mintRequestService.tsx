@@ -1,172 +1,457 @@
-// frontend/console/mintRequest/src/application/mintRequestService.tsx
+// frontend/console/mintRequest/src/application/mintRequestManagementService.tsx
+import type { InspectionStatus } from "../domain/entity/inspections";
+import {
+  fetchInspectionBatches, // fallback (legacy)
+  type InspectionBatchDTO,
+  type MintListRowDTO,
+  type MintDTO,
+} from "../infrastructure/api/mintRequestApi";
 
-import type { InspectionBatchDTO } from "../infrastructure/api/mintRequestApi";
+// ✅ 一覧用 MintListRow を repository から取得する（名前解決済みを使う）
+import {
+  listMintsByInspectionIDsHTTP,
+  fetchMintsByInspectionIdsHTTP, // view=dto 想定
+  fetchMintByInspectionIdHTTP,
+} from "../infrastructure/repository/mintRequestRepositoryHTTP";
 
-// repository は段階的移行に備えて * as import し、存在しない関数は runtime で noop にする
-import * as repo from "../infrastructure/repository/mintRequestRepositoryHTTP";
+import { auth } from "../../../shell/src/auth/infrastructure/config/firebaseClient";
 
-/**
- * backend/internal/domain/productBlueprint.Patch に対応する DTO
- */
-export type ProductBlueprintPatchDTO = {
-  productName?: string | null;
-  brandId?: string | null;
+// ============================================================
+// Types (ViewModel for MintRequestManagement)
+// ============================================================
 
-  // MintHandler (/mint/product_blueprints/{id}/patch) が付与するブランド名
-  brandName?: string | null;
+export type MintRequestRowStatus = "planning" | "requested" | "minted";
 
-  itemType?: string | null; // Go 側 ItemType（"tops" / "bottoms" など）に対応
-  fit?: string | null;
-  material?: string | null;
-  weight?: number | null;
-  qualityAssurance?: string[] | null;
-  productIdTag?: {
-    type?: string | null;
-  } | null;
-  assigneeId?: string | null;
+export type ViewRow = {
+  id: string; // = productionId (= inspectionId 扱い)
+
+  tokenName: string | null;
+  productName: string | null;
+
+  mintQuantity: number; // = inspection.totalPassed
+  productionQuantity: number; // = inspection.quantity (fallback: production.totalQuantity)
+
+  status: MintRequestRowStatus; // = mint の有無・mintedAt で判定
+  inspectionStatus: InspectionStatus; // = inspection.status
+
+  createdByName: string | null;
+  mintedAt: string | null;
+
+  statusLabel: string; // 画面表示用（ここでは検査ステータス）
 };
 
-/**
- * backend/internal/domain/brand.Brand に対応する簡易 DTO
- * ListBrandByCompanyId（= /mint/brands）用
- */
-export type BrandForMintDTO = {
-  id: string;
-  name: string;
+// ============================================================
+// Debug logger
+// ============================================================
+
+const log = (...args: any[]) => {
+  // eslint-disable-next-line no-console
+  console.log("[mintRequest/mintRequestManagementService]", ...args);
 };
 
+// ============================================================
+// API base / fetch helpers
+// ============================================================
+
+const API_BASE = String((import.meta as any)?.env?.VITE_BACKEND_BASE_URL ?? "")
+  .trim()
+  .replace(/\/$/, "");
+
+async function fetchJsonWithAuth<T>(path: string): Promise<T> {
+  if (!API_BASE) {
+    throw new Error("VITE_BACKEND_BASE_URL is empty");
+  }
+
+  const user = auth.currentUser;
+  const token = user ? await user.getIdToken() : "";
+
+  const url = `${API_BASE}${path.startsWith("/") ? path : `/${path}`}`;
+  log("fetchJsonWithAuth", { url, hasToken: !!token });
+
+  const res = await fetch(url, {
+    method: "GET",
+    headers: {
+      "Content-Type": "application/json",
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    },
+  });
+
+  const text = await res.text();
+
+  log("fetchJsonWithAuth response", {
+    url,
+    status: res.status,
+    ok: res.ok,
+    bodySample: text?.slice?.(0, 300),
+  });
+
+  if (!res.ok) {
+    throw new Error(`HTTP ${res.status} ${url}: ${text?.slice?.(0, 200) ?? ""}`);
+  }
+
+  try {
+    return JSON.parse(text) as T;
+  } catch (e: any) {
+    throw new Error(`Invalid JSON from ${url}: ${e?.message ?? e}`);
+  }
+}
+
+// ============================================================
+// Pure helpers
+// ============================================================
+
+const inspectionStatusLabel = (
+  s: InspectionStatus | null | undefined,
+): string => {
+  switch (s) {
+    case "inspecting":
+      return "検査中";
+    case "completed":
+      return "検査完了";
+    default:
+      return "未検査";
+  }
+};
+
+function normalizeProductionId(v: any): string {
+  return String(v?.productionId ?? v?.inspectionId ?? v?.id ?? "").trim();
+}
+
+// /productions の返却は DTO だが、型がここでは確定しないので安全に拾う
+function normalizeProductionIdFromProductionListItem(v: any): string {
+  return String(
+    v?.productionId ??
+      v?.id ??
+      v?.production?.id ??
+      v?.production?.productionId ??
+      "",
+  ).trim();
+}
+
+function normalizeProductNameFromProductionListItem(v: any): string | null {
+  const s = String(
+    v?.productName ??
+      v?.production?.productName ??
+      v?.productionName ??
+      v?.production?.name ??
+      "",
+  ).trim();
+  return s ? s : null;
+}
+
+function normalizeTotalQuantityFromProductionListItem(v: any): number {
+  const n =
+    Number(v?.totalQuantity ?? v?.production?.totalQuantity ?? v?.quantity ?? 0) ||
+    0;
+  return n > 0 ? n : 0;
+}
+
+function deriveMintStatusFromMintDTO(mint: MintDTO | null): MintRequestRowStatus {
+  if (!mint) return "planning";
+  if ((mint as any)?.mintedAt) return "minted";
+  if ((mint as any)?.minted === true) return "minted";
+  return "requested";
+}
+
+// ============================================================
+// New flow: inspectionsDTO（芯） + mintsDTO（肉付け）を productionId で join
+// ============================================================
+
+type ProductionIndex = {
+  productionIds: string[];
+  productNameById: Record<string, string | null>;
+  totalQuantityById: Record<string, number>;
+};
+
+async function fetchProductionIndex(): Promise<ProductionIndex> {
+  // /productions は認証が必要なため、この層で直に叩く（mintRequestRepositoryHTTP には依存しない）
+  const items = await fetchJsonWithAuth<any[]>("/productions");
+
+  log(
+    "/productions fetched",
+    "length=",
+    (items ?? []).length,
+    "sample[0]=",
+    (items ?? [])[0],
+  );
+
+  const productionIds: string[] = [];
+  const seen = new Set<string>();
+
+  const productNameById: Record<string, string | null> = {};
+  const totalQuantityById: Record<string, number> = {};
+
+  for (const it of items ?? []) {
+    const pid = normalizeProductionIdFromProductionListItem(it);
+    if (!pid || seen.has(pid)) continue;
+    seen.add(pid);
+    productionIds.push(pid);
+
+    productNameById[pid] = normalizeProductNameFromProductionListItem(it);
+    totalQuantityById[pid] = normalizeTotalQuantityFromProductionListItem(it);
+  }
+
+  log(
+    "productionIds",
+    "len=",
+    productionIds.length,
+    "sample[0..4]=",
+    productionIds.slice(0, 5),
+  );
+
+  return { productionIds, productNameById, totalQuantityById };
+}
+
+async function fetchInspectionBatchesByProductionIds(
+  productionIds: string[],
+): Promise<InspectionBatchDTO[]> {
+  const ids = (productionIds ?? [])
+    .map((s) => String(s ?? "").trim())
+    .filter((s) => !!s);
+
+  if (ids.length === 0) return [];
+
+  // ✅ New endpoint: /mint/inspections?productionIds=a,b,c
+  // ※ repository 側が未対応でもここで必ずクエリ付きで叩ける
+  const query = encodeURIComponent(ids.join(","));
+  const batches = await fetchJsonWithAuth<InspectionBatchDTO[]>(
+    `/mint/inspections?productionIds=${query}`,
+  );
+
+  log(
+    "/mint/inspections fetched",
+    "len=",
+    (batches ?? []).length,
+    "sample[0]=",
+    (batches ?? [])[0],
+  );
+
+  return batches ?? [];
+}
+
+function indexBatchesByProductionId(
+  batches: InspectionBatchDTO[],
+): Record<string, InspectionBatchDTO> {
+  const out: Record<string, InspectionBatchDTO> = {};
+  for (const b of batches ?? []) {
+    const pid = normalizeProductionId(b);
+    if (!pid) continue;
+    out[pid] = b;
+  }
+  return out;
+}
+
+function buildRowsJoined(
+  productionIds: string[],
+  productNameById: Record<string, string | null>,
+  totalQuantityById: Record<string, number>,
+  batchesById: Record<string, InspectionBatchDTO>,
+  mintsDTOById: Record<string, MintDTO>,
+  mintsListById: Record<string, MintListRowDTO>,
+): ViewRow[] {
+  const rows: ViewRow[] = [];
+
+  for (const pid of productionIds ?? []) {
+    const b = batchesById?.[pid] ?? null;
+
+    const mintDTO: MintDTO | null = (mintsDTOById?.[pid] ?? null) as any;
+    const mintList: MintListRowDTO | null = (mintsListById?.[pid] ?? null) as any;
+
+    const inspSt = ((b as any)?.status ?? null) as any;
+    const status = deriveMintStatusFromMintDTO(mintDTO);
+
+    const tokenName =
+      (mintList as any)?.tokenName ??
+      (mintDTO as any)?.tokenName ??
+      (mintDTO as any)?.tokenBlueprintId ??
+      null;
+
+    const createdByName =
+      (mintList as any)?.createdByName ??
+      (mintDTO as any)?.createdBy ??
+      null;
+
+    const mintedAt =
+      ((mintDTO as any)?.mintedAt ??
+        (mintList as any)?.mintedAt ??
+        null) as string | null;
+
+    const mintQuantity = Number((b as any)?.totalPassed ?? 0) || 0;
+
+    const productionQuantity =
+      Number(
+        (b as any)?.quantity ??
+          ((b as any)?.inspections?.length ?? 0) ??
+          totalQuantityById?.[pid] ??
+          0,
+      ) || 0;
+
+    const productName =
+      (productNameById?.[pid] ?? null) as string | null;
+
+    rows.push({
+      id: pid,
+
+      tokenName,
+      productName,
+
+      mintQuantity,
+      productionQuantity,
+
+      status,
+      inspectionStatus: (inspSt ?? "inspecting") as InspectionStatus,
+
+      createdByName,
+      mintedAt,
+
+      statusLabel: inspectionStatusLabel(inspSt as any),
+    });
+  }
+
+  return rows;
+}
+
+// ============================================================
+// Service: MintRequestManagement (list screen)
+// ============================================================
+
 /**
- * backend/internal/domain/tokenBlueprint.TokenBlueprint に対応する簡易 DTO
- * ListTokenBlueprintsByBrand（= /mint/token_blueprints?brandId=...）用
+ * MintRequestManagement 一覧用の行を組み立てて返す。
  *
- * - name: トークン名
- * - symbol: シンボル（例: LUMI）
- * - iconUrl: アイコン画像 URL（存在しない場合は undefined / 空文字）
+ * New flow:
+ * - /productions で productionIds（芯）を作る
+ * - /mint/inspections?productionIds=... で inspectionsDTO（芯）取得
+ * - /mint/mints?inspectionIds=...&view=dto で mintsDTO（肉付け）取得
+ * - productionId で join して ViewRow[] を返す
  */
-export type TokenBlueprintForMintDTO = {
-  id: string;
-  name: string;
-  symbol: string;
-  iconUrl?: string;
-};
+export async function loadMintRequestManagementRows(): Promise<ViewRow[]> {
+  log("load start", { API_BASE });
 
-/**
- * mints テーブル（正）に対応する DTO
- * ※ 現在の運用では inspectionId = productionId を格納する前提
- */
-export type MintDTO = {
-  id: string;
-  brandId: string;
-  tokenBlueprintId: string;
-  inspectionId: string; // = productionId
-  products: string[]; // 正: array
-  createdAt: string; // ISO string など（repo の実装に従う）
-  createdBy: string;
-  minted: boolean;
-  mintedAt?: string | null;
-  scheduledBurnDate?: string | null;
+  // 0) productionIds（芯）
+  const { productionIds, productNameById, totalQuantityById } =
+    await fetchProductionIndex();
 
-  // テーブル上は存在しても、ドメイン未定義ならここでは任意扱い
-  onChainTxSignature?: string | null;
-};
+  // 互換 fallback: どうしても productionIds が取れない場合は旧 inspections から作る
+  let effectiveProductionIds = productionIds;
+  if (effectiveProductionIds.length === 0) {
+    try {
+      const legacyBatches = await fetchInspectionBatches();
+      const legacyIds = (legacyBatches ?? [])
+        .map((b) => normalizeProductionId(b))
+        .filter((s) => !!s);
 
-/**
- * MintUsecase 経由の /mint/inspections を叩き、
- * 指定された productionId に対応する InspectionBatchDTO を 1 件返す。
- *
- * ※ /mint/inspections は backend の MintUsecase
- *   （＝ GetModelVariationByID を含む処理）を経由する。
- */
-export async function loadInspectionBatchFromMintAPI(
-  productionId: string,
-): Promise<InspectionBatchDTO | null> {
-  const trimmed = productionId.trim();
-  if (!trimmed) return null;
+      effectiveProductionIds = legacyIds;
+      log("fallback productionIds from legacy inspections", {
+        len: legacyIds.length,
+        sample: legacyIds.slice(0, 5),
+      });
+    } catch (e: any) {
+      log("fallback fetchInspectionBatches failed", e?.message ?? e);
+      effectiveProductionIds = [];
+    }
+  }
 
-  // /mint/inspections を実行（Repository 経由）
-  const batches = await repo.fetchInspectionBatchesHTTP();
-
-  // productionId で絞り込み
-  const hit =
-    batches.find((b) => (b as any).productionId === trimmed) ?? null;
-
-  return hit;
-}
-
-/**
- * productBlueprintId から、MintUsecase.GetProductBlueprintPatchByID 経由で
- * ProductBlueprint Patch DTO を取得する。
- */
-export async function loadProductBlueprintPatch(
-  productBlueprintId: string,
-): Promise<ProductBlueprintPatchDTO | null> {
-  const trimmed = productBlueprintId.trim();
-  if (!trimmed) return null;
-
-  return await repo.fetchProductBlueprintPatchHTTP(trimmed);
-}
-
-/**
- * current companyId に紐づく Brand 一覧を取得する。
- * backend/internal/application/usecase.MintUsecase.ListBrandsForCurrentCompany
- * （HTTP: GET /mint/brands）に対応。
- */
-export async function loadBrandsForMint(): Promise<BrandForMintDTO[]> {
-  const brands = await repo.fetchBrandsForMintHTTP();
-  return brands ?? [];
-}
-
-/**
- * 指定した brandId に紐づく TokenBlueprint 一覧を取得する。
- * backend/internal/application/usecase.MintUsecase.ListTokenBlueprintsByBrand
- * （HTTP: GET /mint/token_blueprints?brandId=...）に対応。
- */
-export async function loadTokenBlueprintsByBrand(
-  brandId: string,
-): Promise<TokenBlueprintForMintDTO[]> {
-  const trimmed = brandId.trim();
-  if (!trimmed) {
+  if (effectiveProductionIds.length === 0) {
+    log("no productionIds -> return []");
     return [];
   }
 
-  const tokenBps = await repo.fetchTokenBlueprintsByBrandHTTP(trimmed);
-  return tokenBps ?? [];
-}
+  // 1) inspectionsDTO（芯）
+  const batches = await fetchInspectionBatchesByProductionIds(
+    effectiveProductionIds,
+  );
+  const batchesById = indexBatchesByProductionId(batches);
 
-/**
- * ★ mints テーブルの有無で「申請済みモード」を判定するための取得関数（段階導入）
- *
- * - inspectionId (= productionId) で 1 件取得できることを期待
- * - repository 実装がまだ無い場合は null を返す（呼び出し側でフォールバック可能）
- *
- * 期待する repository 側の関数名（どちらか）:
- * - fetchMintByInspectionIdHTTP(inspectionId: string): Promise<MintDTO | null>
- */
-export async function loadMintByInspectionIdFromMintAPI(
-  inspectionId: string,
-): Promise<MintDTO | null> {
-  const trimmed = inspectionId.trim();
-  if (!trimmed) return null;
+  log(
+    "batchesById keys=",
+    Object.keys(batchesById).length,
+    "sampleKey=",
+    Object.keys(batchesById)[0],
+    "sampleVal=",
+    Object.keys(batchesById)[0]
+      ? (batchesById as any)[Object.keys(batchesById)[0]]
+      : undefined,
+  );
 
-  const anyRepo = repo as any;
+  // 2) mintsDTO（肉付け）
+  let mintsDTOById: Record<string, MintDTO> = {};
+  try {
+    mintsDTOById = (await fetchMintsByInspectionIdsHTTP(
+      effectiveProductionIds,
+    )) as any;
 
-  if (typeof anyRepo.fetchMintByInspectionIdHTTP === "function") {
-    const mint = await anyRepo.fetchMintByInspectionIdHTTP(trimmed);
-    return mint ?? null;
+    const keys = Object.keys(mintsDTOById ?? {});
+    log(
+      "fetchMintsByInspectionIdsHTTP (dto) keys=",
+      keys.length,
+      "sampleKey=",
+      keys[0],
+      "sampleVal=",
+      keys[0] ? (mintsDTOById as any)[keys[0]] : undefined,
+    );
+  } catch (e: any) {
+    log("fetchMintsByInspectionIdsHTTP (dto) error=", e?.message ?? e);
+    mintsDTOById = {};
   }
 
-  // repository 未実装なら noop（呼び出し側で旧 requestedBy/At 判定にフォールバック可能）
-  return null;
+  // 3) 表示用の list row（tokenName / createdByName が欲しいので併用）
+  let mintsListById: Record<string, MintListRowDTO> = {};
+  try {
+    mintsListById = await listMintsByInspectionIDsHTTP(
+      effectiveProductionIds,
+    );
+
+    const keys = Object.keys(mintsListById ?? {});
+    log(
+      "listMintsByInspectionIDsHTTP (list) keys=",
+      keys.length,
+      "sampleKey=",
+      keys[0],
+      "sampleVal=",
+      keys[0] ? (mintsListById as any)[keys[0]] : undefined,
+    );
+  } catch (e: any) {
+    log("listMintsByInspectionIDsHTTP (list) error=", e?.message ?? e);
+    mintsListById = {};
+  }
+
+  // 4) join（productionId で合体）
+  const rows = buildRowsJoined(
+    effectiveProductionIds,
+    productNameById ?? {},
+    totalQuantityById ?? {},
+    batchesById ?? {},
+    mintsDTOById ?? {},
+    mintsListById ?? {},
+  );
+
+  log(
+    "buildRowsJoined rows(length)=",
+    rows.length,
+    "rows sample[0..4]=",
+    rows.slice(0, 5),
+  );
+
+  log(
+    "rows sample with mintDTO:",
+    rows
+      .filter((r) => r.status !== "planning")
+      .slice(0, 5),
+  );
+
+  log("load end");
+  return rows;
 }
 
+// ============================================================
+// Service: MintDTO fetch (full DTO)
+// ============================================================
+
 /**
- * ★ 複数 inspectionId (= productionId) をまとめて引く版（段階導入）
- *
- * 期待する repository 側の関数名（どちらか）:
- * - fetchMintsByInspectionIdsHTTP(ids: string[]): Promise<Record<string, MintDTO>>
- *   ※ key は inspectionId
+ * MintDTO を inspectionIds (= productionIds) でまとめて取得する。
+ * - 詳細画面や、将来的な “mint存在判定以外の情報” が必要になった場合のため
  */
-export async function loadMintsByInspectionIdsFromMintAPI(
+export async function loadMintsDTOMapByInspectionIds(
   inspectionIds: string[],
 ): Promise<Record<string, MintDTO>> {
   const ids = (inspectionIds ?? [])
@@ -175,57 +460,33 @@ export async function loadMintsByInspectionIdsFromMintAPI(
 
   if (ids.length === 0) return {};
 
-  const anyRepo = repo as any;
+  const m = await fetchMintsByInspectionIdsHTTP(ids);
 
-  if (typeof anyRepo.fetchMintsByInspectionIdsHTTP === "function") {
-    const m = await anyRepo.fetchMintsByInspectionIdsHTTP(ids);
-    return (m ?? {}) as Record<string, MintDTO>;
-  }
+  const keys = Object.keys(m ?? {});
+  log(
+    "loadMintsDTOMapByInspectionIds keys=",
+    keys.length,
+    "sampleKey=",
+    keys[0],
+    "sampleVal=",
+    keys[0] ? (m as any)[keys[0]] : undefined,
+  );
 
-  return {};
+  return (m ?? {}) as Record<string, MintDTO>;
 }
 
 /**
- * ミント申請詳細画面向けの TokenBlueprint を解決する。
- * 現状は個別 TokenBlueprint 詳細 API がないため undefined を返す。
- * 必要になれば backend の tokenBlueprint API を呼ぶ方式に置き換える。
+ * MintDTO を inspectionId で1件取得（バックエンドが用意されている場合）
  */
-export function resolveBlueprintForMintRequest(requestId?: string) {
-  return undefined;
-}
+export async function loadMintDTOByInspectionId(
+  inspectionId: string,
+): Promise<MintDTO | null> {
+  const iid = String(inspectionId ?? "").trim();
+  if (!iid) return null;
 
-/**
- * ★ ミント申請 POST 用サービス関数
- *
- * - productionId: 生産ID（inspectionBatch.productionId）
- * - tokenBlueprintId: 選択されたトークン設計ID
- * - scheduledBurnDate: 焼却予定日（"YYYY-MM-DD" 形式 / 任意）
- *
- * repository の postMintRequestHTTP に委譲する。
- */
-export async function postMintRequest(
-  productionId: string,
-  tokenBlueprintId: string,
-  scheduledBurnDate?: string,
-) {
-  const pid = productionId.trim();
-  const tbid = tokenBlueprintId.trim();
+  const m = await fetchMintByInspectionIdHTTP(iid);
 
-  if (!pid || !tbid) {
-    throw new Error("productionId / tokenBlueprintId is empty");
-  }
+  log("loadMintDTOByInspectionId iid=", iid, "result=", m ?? null);
 
-  // eslint-disable-next-line no-console
-  console.log("[MintRequestService] postMintRequest payload", {
-    productionId: pid,
-    tokenBlueprintId: tbid,
-    scheduledBurnDate: scheduledBurnDate ?? null,
-  });
-
-  const res = await repo.postMintRequestHTTP(pid, tbid, scheduledBurnDate);
-
-  // eslint-disable-next-line no-console
-  console.log("[MintRequestService] postMintRequest response", res);
-
-  return res;
+  return (m ?? null) as MintDTO | null;
 }

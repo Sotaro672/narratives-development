@@ -10,6 +10,7 @@ import (
 	dto "narratives/internal/application/production/dto"
 	resolver "narratives/internal/application/resolver"
 
+	memberdom "narratives/internal/domain/member"
 	productbpdom "narratives/internal/domain/productBlueprint"
 	productiondom "narratives/internal/domain/production"
 )
@@ -24,6 +25,16 @@ type ProductionRepo interface {
 	productiondom.RepositoryPort
 }
 
+// ★ companyId → productBlueprintId 解決に必要な最小インターフェース
+// （*productBlueprint.Service をそのまま渡せる想定）
+type ProductBlueprintService interface {
+	// productBlueprintId → brandId 解決
+	GetBrandIDByID(ctx context.Context, blueprintID string) (string, error)
+
+	// companyId 単位で productBlueprint の ID 一覧を取得
+	ListIDsByCompany(ctx context.Context, companyID string) ([]string, error)
+}
+
 // ============================================================
 // Usecase
 // ============================================================
@@ -32,8 +43,8 @@ type ProductionRepo interface {
 type ProductionUsecase struct {
 	repo ProductionRepo
 
-	// ★ productBlueprintId → BrandID 解決用
-	pbSvc *productbpdom.Service
+	// ★ companyId → productBlueprintIds / productBlueprintId → BrandID 解決用
+	pbSvc ProductBlueprintService
 
 	// ★ ID→名前解決ヘルパ
 	nameResolver *resolver.NameResolver
@@ -43,7 +54,7 @@ type ProductionUsecase struct {
 
 func NewProductionUsecase(
 	repo ProductionRepo,
-	pbSvc *productbpdom.Service,
+	pbSvc ProductBlueprintService,
 	nameResolver *resolver.NameResolver,
 ) *ProductionUsecase {
 	return &ProductionUsecase{
@@ -82,10 +93,59 @@ func (u *ProductionUsecase) Exists(ctx context.Context, id string) (bool, error)
 	return true, nil
 }
 
-// ★ 素の一覧（必要なところ向けに残す）
-// RepositoryPort 側の ListAll を利用する
+// ★ companyId → productBlueprintId → production のルート以外での list を禁止する
+// - companyId が空なら、絶対に repo 側の一覧取得を呼ばない（全社漏洩を防ぐ）
+// - companyId から productBlueprintIds を引き、ListByProductBlueprintID のみ使用する
+func (u *ProductionUsecase) listByCurrentCompany(ctx context.Context) ([]productiondom.Production, error) {
+	cid := strings.TrimSpace(companyIDFromContext(ctx))
+	if cid == "" {
+		// companyId を持たないユーザーは一覧取得不可（全件漏洩の根本対策）
+		return nil, productbpdom.ErrInvalidCompanyID
+	}
+	if u.pbSvc == nil {
+		return nil, productbpdom.ErrInternal
+	}
+
+	// 1) companyId → productBlueprintIds
+	pbIDs, err := u.pbSvc.ListIDsByCompany(ctx, cid)
+	if err != nil {
+		return nil, err
+	}
+	if len(pbIDs) == 0 {
+		return []productiondom.Production{}, nil
+	}
+
+	// 2) productBlueprintIds → productions
+	rows, err := u.repo.ListByProductBlueprintID(ctx, pbIDs)
+	if err != nil {
+		return nil, err
+	}
+	if len(rows) == 0 {
+		return []productiondom.Production{}, nil
+	}
+
+	// 念のため: productBlueprintIds の集合に含まれる production のみを返す（repo 側バグ対策）
+	set := make(map[string]struct{}, len(pbIDs))
+	for _, id := range pbIDs {
+		if tid := strings.TrimSpace(id); tid != "" {
+			set[tid] = struct{}{}
+		}
+	}
+
+	out := make([]productiondom.Production, 0, len(rows))
+	for _, p := range rows {
+		if _, ok := set[strings.TrimSpace(p.ProductBlueprintID)]; !ok {
+			continue
+		}
+		out = append(out, p)
+	}
+	return out, nil
+}
+
+// ★ 一覧（素の一覧は削除）
+// 必ず companyId → productBlueprintId で絞り込んだ production のみを返す。
 func (u *ProductionUsecase) List(ctx context.Context) ([]productiondom.Production, error) {
-	return u.repo.ListAll(ctx)
+	return u.listByCurrentCompany(ctx)
 }
 
 // ★ 担当者ID から表示名を解決する（NameResolver に委譲）
@@ -117,7 +177,6 @@ func (u *ProductionUsecase) ResolveProductName(ctx context.Context, blueprintID 
 }
 
 // ★ productBlueprintId から brandId を解決する
-//   - BrandID 自体は NameResolver にはないため、従来どおり pbSvc を利用
 func (u *ProductionUsecase) ResolveBrandID(ctx context.Context, blueprintID string) (string, error) {
 	if u.pbSvc == nil {
 		return "", nil
@@ -151,8 +210,9 @@ func (u *ProductionUsecase) ResolveBrandName(ctx context.Context, brandID string
 
 // ★ 一覧ページ用 DTO を返却（/productions 用）
 // dto.ProductionListItemDTO は backend/internal/application/production/dto/list.go で定義
+// ★ 素の一覧は禁止：必ず companyId → productBlueprintId で絞った production のみ返す
 func (u *ProductionUsecase) ListWithAssigneeName(ctx context.Context) ([]dto.ProductionListItemDTO, error) {
-	list, err := u.repo.ListAll(ctx)
+	list, err := u.listByCurrentCompany(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -190,10 +250,10 @@ func (u *ProductionUsecase) ListWithAssigneeName(ctx context.Context) ([]dto.Pro
 		}
 
 		out = append(out, dto.ProductionListItemDTO{
-			Production:     p,            // ← Production をそのまま埋め込む
-			ProductName:    productName,  // 名前解決済み
-			BrandName:      brandName,    // 名前解決済み
-			AssigneeName:   assigneeName, // 名前解決済み
+			Production:     p,
+			ProductName:    productName,
+			BrandName:      brandName,
+			AssigneeName:   assigneeName,
 			TotalQuantity:  totalQty,
 			PrintedAtLabel: printedAtLabel,
 			CreatedAtLabel: createdAtLabel,
@@ -242,7 +302,6 @@ func (u *ProductionUsecase) Create(ctx context.Context, p productiondom.Producti
 		return productiondom.Production{}, err
 	}
 	if created == nil {
-		// Repository 実装が nil を返すのは異常ケースなので一応 NotFound 相当として扱う
 		return productiondom.Production{}, productiondom.ErrNotFound
 	}
 	return *created, nil
@@ -265,14 +324,6 @@ func (u *ProductionUsecase) Save(ctx context.Context, p productiondom.Production
 }
 
 // Update updates Production partially.
-//
-// - 通常の編集画面からの更新:
-//   - models / assigneeId を更新
-//
-// - 印刷完了シグナル(notifyPrintLogCompleted)からの更新:
-//   - status / printedAt / printedBy を更新
-//
-// いずれも「patch に値が入っているフィールドだけを current に上書き」する。
 func (u *ProductionUsecase) Update(
 	ctx context.Context,
 	id string,
@@ -283,7 +334,6 @@ func (u *ProductionUsecase) Update(
 		return productiondom.Production{}, productiondom.ErrInvalidID
 	}
 
-	// 既存データを取得（RepositoryPort.GetByID は *Production を返す）
 	currentPtr, err := u.repo.GetByID(ctx, id)
 	if err != nil {
 		return productiondom.Production{}, err
@@ -293,57 +343,35 @@ func (u *ProductionUsecase) Update(
 	}
 	current := *currentPtr
 
-	// --------------------------------------------------
-	// 1. assigneeId の更新（非空なら上書き）
-	// --------------------------------------------------
 	if strings.TrimSpace(patch.AssigneeID) != "" {
 		current.AssigneeID = strings.TrimSpace(patch.AssigneeID)
 	}
 
-	// --------------------------------------------------
-	// 2. quantity（Models）の更新
-	//    フロントからは「既存モデルの数量更新用」の Models が渡される想定。
-	//    配列が渡されているときだけ差し替える。
-	// --------------------------------------------------
 	if len(patch.Models) > 0 {
 		current.Models = patch.Models
 	}
 
-	// --------------------------------------------------
-	// 3. 印刷関連: status / printedAt / printedBy
-	//    notifyPrintLogCompleted からの PUT でここに入る。
-	// --------------------------------------------------
-
-	// status: 空でなければ上書き（"printed" など）
 	if patch.Status != "" {
 		current.Status = patch.Status
 	}
 
-	// printedAt: patch.PrintedAt が非 nil なら上書き（UTC 正規化）
 	if patch.PrintedAt != nil {
-		t := patch.PrintedAt.UTC() // time.Time
-		current.PrintedAt = &t     // *time.Time に代入
+		t := patch.PrintedAt.UTC()
+		current.PrintedAt = &t
 	}
 
-	// printedBy: patch.PrintedBy が非 nil なら上書き
 	if patch.PrintedBy != nil {
 		v := strings.TrimSpace(*patch.PrintedBy)
 		if v == "" {
-			// 空文字なら nil とみなす
 			current.PrintedBy = nil
 		} else {
-			// 新しい string を確保してポインタで保持
 			vCopy := v
 			current.PrintedBy = &vCopy
 		}
 	}
 
-	// --------------------------------------------------
-	// 4. updatedAt を現在時刻で更新
-	// --------------------------------------------------
 	current.UpdatedAt = u.now().UTC()
 
-	// 他の項目は current をそのまま再保存
 	saved, err := u.repo.Save(ctx, current)
 	if err != nil {
 		return productiondom.Production{}, err
@@ -356,4 +384,52 @@ func (u *ProductionUsecase) Update(
 
 func (u *ProductionUsecase) Delete(ctx context.Context, id string) error {
 	return u.repo.Delete(ctx, strings.TrimSpace(id))
+}
+
+// ============================================================
+// Context helpers
+// ============================================================
+
+// companyIDFromContext は認証ミドルウェアが context に載せた companyId を取り出します。
+// - キー実装が揺れても落ちないように、複数候補を試します。
+// - companyId が見つからなければ "" を返します。
+func companyIDFromContext(ctx context.Context) string {
+	if ctx == nil {
+		return ""
+	}
+
+	// 1) まずはよくあるキー（string）で取得
+	for _, k := range []string{"companyId", "companyID", "company_id"} {
+		if v := ctx.Value(k); v != nil {
+			if s, ok := v.(string); ok {
+				if t := strings.TrimSpace(s); t != "" {
+					return t
+				}
+			}
+		}
+	}
+
+	// 2) currentMember を積んでいるケース（*memberdom.Member）
+	for _, k := range []string{"currentMember", "member"} {
+		if v := ctx.Value(k); v != nil {
+			if m, ok := v.(*memberdom.Member); ok && m != nil {
+				if t := strings.TrimSpace(m.CompanyID); t != "" {
+					return t
+				}
+			}
+		}
+	}
+
+	// 3) 値型 memberdom.Member を積んでいるケースにも対応（念のため）
+	for _, k := range []string{"currentMember", "member"} {
+		if v := ctx.Value(k); v != nil {
+			if m, ok := v.(memberdom.Member); ok {
+				if t := strings.TrimSpace(m.CompanyID); t != "" {
+					return t
+				}
+			}
+		}
+	}
+
+	return ""
 }

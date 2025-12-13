@@ -119,14 +119,31 @@ func (m *AuthMiddleware) Handler(next http.Handler) http.Handler {
 			ctx = context.WithValue(ctx, ctxKeyFullName, strings.TrimSpace(fullName))
 		}
 
+		// ★ 互換のため、application 側の companyIDFromContext が拾える "文字列キー" も追加で積む
+		//   staticcheck SA1029 は、下の helper で意図的に握りつぶします。
+		ctx = withLegacyStringKey(ctx, "currentMember", member)
+		ctx = withLegacyStringKey(ctx, "member", member)
+
 		// companyId 格納
 		if cid := strings.TrimSpace(member.CompanyID); cid != "" {
 			ctx = usecase.WithCompanyID(ctx, cid)
 			ctx = context.WithValue(ctx, ctxKeyCompanyID, cid)
+
+			// ★ 互換: 文字列キーでも companyId を積む
+			ctx = withLegacyStringKey(ctx, "companyId", cid)
+			ctx = withLegacyStringKey(ctx, "companyID", cid)
+			ctx = withLegacyStringKey(ctx, "company_id", cid)
 		}
 
 		next.ServeHTTP(w, r.WithContext(ctx))
 	})
+}
+
+// withLegacyStringKey is intentionally using string keys for backward compatibility.
+// (e.g. existing companyIDFromContext implementations that still do ctx.Value("companyId"))
+func withLegacyStringKey(ctx context.Context, key string, val interface{}) context.Context {
+	//lint:ignore SA1029 We intentionally use string keys for backward compatibility with older context extractors.
+	return context.WithValue(ctx, key, val)
 }
 
 // CurrentMember は現在ログイン中の Member を取得します。

@@ -2,8 +2,10 @@
 package handlers
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
+	"log"
 	"net/http"
 	"sort"
 	"strconv"
@@ -14,6 +16,13 @@ import (
 
 	mintapp "narratives/internal/application/mint"
 	mintdto "narratives/internal/application/mint/dto"
+	mintpresenter "narratives/internal/application/mint/presenter"
+
+	// ★ productionIds 自動解決用
+	productionapp "narratives/internal/application/production"
+
+	// ★ NEW: mintRequest 一覧の Query（productionId -> inspection + mint）
+	querydto "narratives/internal/application/query/dto"
 
 	usecase "narratives/internal/application/usecase"
 	branddom "narratives/internal/domain/brand"
@@ -22,21 +31,39 @@ import (
 	tbdom "narratives/internal/domain/tokenBlueprint"
 )
 
+// ★ NEW: handler が依存する最小 query IF
+// - 実装は backend/internal/application/query/* に置く想定
+type MintRequestQueryService interface {
+	// company 境界付きで、productionId と同 docId の inspection/mint を束ねた DTO を返す
+	// NOTE: requestedBy は mint.CreatedBy に合わせる（DTO 側で担保）
+	ListMintRequestManagementRows(ctx context.Context) ([]querydto.ProductionInspectionMintDTO, error)
+}
+
 type MintHandler struct {
 	mintUC       *mintapp.MintUsecase
 	tokenUC      *usecase.TokenUsecase
 	nameResolver *resolver.NameResolver
+
+	// ★ /mint/inspections に productionIds が来ない場合に productions から自動生成する
+	productionUC *productionapp.ProductionUsecase
+
+	// ★ NEW: /mint/requests 用 Query
+	mintRequestQS MintRequestQueryService
 }
 
 func NewMintHandler(
 	mintUC *mintapp.MintUsecase,
 	tokenUC *usecase.TokenUsecase,
 	nameResolver *resolver.NameResolver,
+	productionUC *productionapp.ProductionUsecase,
+	mintRequestQS MintRequestQueryService, // ★ 追加
 ) http.Handler {
 	return &MintHandler{
-		mintUC:       mintUC,
-		tokenUC:      tokenUC,
-		nameResolver: nameResolver,
+		mintUC:        mintUC,
+		tokenUC:       tokenUC,
+		nameResolver:  nameResolver,
+		productionUC:  productionUC,
+		mintRequestQS: mintRequestQS,
 	}
 }
 
@@ -48,9 +75,21 @@ func (h *MintHandler) HandleDebug(w http.ResponseWriter, r *http.Request) {
 func (h *MintHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 
+	log.Printf("[mint_handler] request method=%s path=%s rawQuery=%q", r.Method, r.URL.Path, r.URL.RawQuery)
+
 	switch {
 	case r.Method == http.MethodGet && r.URL.Path == "/mint/debug":
 		h.HandleDebug(w, r)
+		return
+
+	// ★ NEW: GET /mint/requests（mintRequest 管理一覧を 1shot で返す）
+	case r.Method == http.MethodGet && r.URL.Path == "/mint/requests":
+		h.listMintRequestsByCurrentCompany(w, r)
+		return
+
+	// GET /mint/inspections?productionIds=a,b,c
+	case r.Method == http.MethodGet && r.URL.Path == "/mint/inspections":
+		h.listInspectionsByProductionIDs(w, r)
 		return
 
 	// GET /mint/mints?inspectionIds=a,b,c(&view=list|dto)
@@ -77,9 +116,6 @@ func (h *MintHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		h.updateRequestInfo(w, r)
 		return
 
-	// ★ GET /mint/inspections は旧フローのため削除
-	// （productionId 一覧は ProductionUsecase 側で作り、/mint/mints に渡す方式）
-
 	// GET /mint/product_blueprints/{id}/patch
 	case r.Method == http.MethodGet &&
 		strings.HasPrefix(r.URL.Path, "/mint/product_blueprints/") &&
@@ -103,10 +139,212 @@ func (h *MintHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 }
 
 // ============================================================
+// ★ NEW: GET /mint/requests
+// - company 境界付き Query を呼び、mintRequest 管理画面用の rows を返す
+// - optional: ?productionIds=a,b,c でサーバ側フィルタ
+// - optional: ?view=management|list（現状どちらでも同じ rows を返す）
+// ============================================================
+func (h *MintHandler) listMintRequestsByCurrentCompany(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+
+	if h.mintRequestQS == nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		_ = json.NewEncoder(w).Encode(map[string]string{"error": "mintRequest query service is not configured"})
+		return
+	}
+
+	view := strings.TrimSpace(r.URL.Query().Get("view"))
+	if view == "" {
+		view = "management"
+	}
+
+	rawProductionIDs := strings.TrimSpace(r.URL.Query().Get("productionIds"))
+	filterSet := map[string]struct{}{}
+	if rawProductionIDs != "" {
+		parts := strings.Split(rawProductionIDs, ",")
+		for _, p := range parts {
+			id := strings.TrimSpace(p)
+			if id == "" {
+				continue
+			}
+			filterSet[id] = struct{}{}
+		}
+	}
+
+	log.Printf(
+		"[mint_handler] /mint/requests query view=%q rawProductionIds=%q filterCount=%d",
+		view, rawProductionIDs, len(filterSet),
+	)
+
+	start := time.Now()
+	rows, err := h.mintRequestQS.ListMintRequestManagementRows(ctx)
+	elapsed := time.Since(start)
+
+	if err != nil {
+		// companyId なしは 400 に寄せてフロントで判定しやすくする
+		if errors.Is(err, mintapp.ErrCompanyIDMissing) {
+			w.WriteHeader(http.StatusBadRequest)
+			_ = json.NewEncoder(w).Encode(map[string]string{"error": "companyId is missing"})
+			return
+		}
+
+		log.Printf("[mint_handler] /mint/requests query error=%v elapsed=%s", err, elapsed)
+		w.WriteHeader(http.StatusInternalServerError)
+		_ = json.NewEncoder(w).Encode(map[string]string{"error": err.Error()})
+		return
+	}
+
+	// optional server-side filter
+	if len(filterSet) > 0 {
+		filtered := make([]querydto.ProductionInspectionMintDTO, 0, len(rows))
+		for _, row := range rows {
+			pid := strings.TrimSpace(row.ProductionID)
+			if pid == "" {
+				pid = strings.TrimSpace(row.ID)
+			}
+			if pid == "" {
+				continue
+			}
+			if _, ok := filterSet[pid]; ok {
+				filtered = append(filtered, row)
+			}
+		}
+		rows = filtered
+	}
+
+	log.Printf(
+		"[mint_handler] /mint/requests result rows len=%d elapsed=%s sampleRow[0]=%s",
+		len(rows),
+		elapsed,
+		toJSONForLog(sampleFirst(rows), 1500),
+	)
+
+	_ = json.NewEncoder(w).Encode(rows)
+}
+
+// ============================================================
+// GET /mint/inspections?productionIds=a,b,c
+// ============================================================
+func (h *MintHandler) listInspectionsByProductionIDs(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+
+	if h.mintUC == nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		_ = json.NewEncoder(w).Encode(map[string]string{"error": "mint usecase is not configured"})
+		return
+	}
+
+	rawProductionIDs := strings.TrimSpace(r.URL.Query().Get("productionIds"))
+	rawInspectionIDs := strings.TrimSpace(r.URL.Query().Get("inspectionIds"))
+
+	raw := rawProductionIDs
+	if raw == "" {
+		raw = rawInspectionIDs
+	}
+
+	log.Printf(
+		"[mint_handler] /mint/inspections query rawProductionIds=%q rawInspectionIds=%q chosenRaw=%q",
+		rawProductionIDs, rawInspectionIDs, raw,
+	)
+
+	var ids []string
+
+	if raw == "" {
+		if h.productionUC == nil {
+			log.Printf("[mint_handler] /mint/inspections productionIds is empty AND productionUC is nil -> return []")
+			_ = json.NewEncoder(w).Encode([]any{})
+			return
+		}
+
+		prods, err := h.productionUC.ListWithAssigneeName(ctx)
+		if err != nil {
+			log.Printf("[mint_handler] /mint/inspections auto productionIds resolve error (ListWithAssigneeName) err=%v", err)
+			w.WriteHeader(http.StatusInternalServerError)
+			_ = json.NewEncoder(w).Encode(map[string]string{"error": err.Error()})
+			return
+		}
+
+		seen := make(map[string]struct{}, len(prods))
+		ids = make([]string, 0, len(prods))
+		for _, p := range prods {
+			pid := strings.TrimSpace(p.ID)
+			if pid == "" {
+				continue
+			}
+			if _, ok := seen[pid]; ok {
+				continue
+			}
+			seen[pid] = struct{}{}
+			ids = append(ids, pid)
+		}
+		sort.Strings(ids)
+
+		log.Printf(
+			"[mint_handler] /mint/inspections auto productionIds from /productions len=%d sample[0..4]=%v sampleProd[0]=%s",
+			len(ids),
+			ids[:min(5, len(ids))],
+			toJSONForLog(sampleFirst(prods), 1500),
+		)
+
+		if len(ids) == 0 {
+			log.Printf("[mint_handler] /mint/inspections auto productionIds resolved but EMPTY -> return []")
+			_ = json.NewEncoder(w).Encode([]any{})
+			return
+		}
+
+	} else {
+		parts := strings.Split(raw, ",")
+		seen := make(map[string]struct{}, len(parts))
+		ids = make([]string, 0, len(parts))
+		for _, p := range parts {
+			s := strings.TrimSpace(p)
+			if s == "" {
+				continue
+			}
+			if _, ok := seen[s]; ok {
+				continue
+			}
+			seen[s] = struct{}{}
+			ids = append(ids, s)
+		}
+
+		if len(ids) == 0 {
+			log.Printf("[mint_handler] /mint/inspections productionIds parsed empty (raw=%q) -> return []", raw)
+			_ = json.NewEncoder(w).Encode([]any{})
+			return
+		}
+
+		sort.Strings(ids)
+
+		log.Printf(
+			"[mint_handler] /mint/inspections productionIds parsed len=%d sample[0..4]=%v",
+			len(ids), ids[:min(5, len(ids))],
+		)
+	}
+
+	start := time.Now()
+	batches, err := h.mintUC.ListInspectionBatchesByProductionIDs(ctx, ids)
+	elapsed := time.Since(start)
+
+	if err != nil {
+		log.Printf("[mint_handler] /mint/inspections ListInspectionBatchesByProductionIDs error=%v elapsed=%s", err, elapsed)
+		w.WriteHeader(http.StatusInternalServerError)
+		_ = json.NewEncoder(w).Encode(map[string]string{"error": err.Error()})
+		return
+	}
+
+	log.Printf(
+		"[mint_handler] /mint/inspections result batches len=%d elapsed=%s sampleBatch[0]=%s",
+		len(batches),
+		elapsed,
+		toJSONForLog(sampleFirst(batches), 1500),
+	)
+
+	_ = json.NewEncoder(w).Encode(batches)
+}
+
+// ============================================================
 // GET /mint/mints?inspectionIds=a,b,c
-// - docId 同一設計なので inspectionId (= productionId) をキーに map 返却
-// - view=list: MintListRowDTO
-// - view=dto : MintDTO 相当（画面で inspection と 1:1 結合しやすい形）
 // ============================================================
 func (h *MintHandler) listMintsByInspectionIDs(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
@@ -150,14 +388,27 @@ func (h *MintHandler) listMintsByInspectionIDs(w http.ResponseWriter, r *http.Re
 
 	sort.Strings(ids)
 
+	log.Printf("[mint_handler] /mint/mints inspectionIds len=%d sample[0..4]=%v view=%s", len(ids), ids[:min(5, len(ids))], view)
+
+	start := time.Now()
 	mintsByInspectionID, err := h.mintUC.ListMintsByInspectionIDs(ctx, ids)
+	elapsed := time.Since(start)
+
 	if err != nil {
+		log.Printf("[mint_handler] /mint/mints ListMintsByInspectionIDs error=%v elapsed=%s", err, elapsed)
 		w.WriteHeader(http.StatusInternalServerError)
 		_ = json.NewEncoder(w).Encode(map[string]string{"error": err.Error()})
 		return
 	}
 
-	// view=dto: フロントが normalizeMintDTO しやすい shape で返す
+	log.Printf(
+		"[mint_handler] /mint/mints result keys=%d elapsed=%s sampleKey=%q sampleVal=%s",
+		len(mintsByInspectionID),
+		elapsed,
+		sampleFirstKey(mintsByInspectionID),
+		toJSONForLog(sampleFirstValue(mintsByInspectionID), 1500),
+	)
+
 	if view == "dto" {
 		out := make(map[string]any, len(mintsByInspectionID))
 		for inspectionID, m := range mintsByInspectionID {
@@ -207,12 +458,10 @@ func (h *MintHandler) listMintsByInspectionIDs(w http.ResponseWriter, r *http.Re
 		return
 	}
 
-	// view=list（デフォルト）: MintListRowDTO
 	out := make(map[string]mintdto.MintListRowDTO, len(mintsByInspectionID))
 	for inspectionID, m := range mintsByInspectionID {
 		iid := strings.TrimSpace(inspectionID)
 
-		// tokenName
 		tbID := strings.TrimSpace(m.TokenBlueprintID)
 		tokenName := ""
 		if h.nameResolver != nil && tbID != "" {
@@ -252,7 +501,6 @@ func (h *MintHandler) listMintsByInspectionIDs(w http.ResponseWriter, r *http.Re
 
 // ============================================================
 // GET /mint/mints/{id}
-// - docId 同一設計なので {id} は inspectionId (= productionId = mint docId)
 // ============================================================
 func (h *MintHandler) getMintByID(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
@@ -285,7 +533,6 @@ func (h *MintHandler) getMintByID(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// dto 形で返す（フロント normalizeMintDTO に合わせる）
 	products := make([]string, 0, len(mintEntity.Products))
 	for pid := range mintEntity.Products {
 		p := strings.TrimSpace(pid)
@@ -400,8 +647,14 @@ func (h *MintHandler) updateRequestInfo(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
+	log.Printf(
+		"[mint_handler] /mint/inspections/{productionId}/request productionId=%q tokenBlueprintId=%q scheduledBurnDate=%v",
+		productionID, tokenBlueprintID, body.ScheduledBurnDate,
+	)
+
 	updated, err := h.mintUC.UpdateRequestInfo(ctx, productionID, tokenBlueprintID, body.ScheduledBurnDate)
 	if err != nil {
+		log.Printf("[mint_handler] updateRequestInfo error=%v", err)
 		w.WriteHeader(http.StatusInternalServerError)
 		_ = json.NewEncoder(w).Encode(map[string]string{"error": err.Error()})
 		return
@@ -559,5 +812,65 @@ func (h *MintHandler) listTokenBlueprintsByBrand(w http.ResponseWriter, r *http.
 	_ = json.NewEncoder(w).Encode(items)
 }
 
-// compile-time guard（未使用でも import が消されないように）
+// ============================================================
+// Helpers (logging)
+// ============================================================
+
+func min(a, b int) int {
+	if a < b {
+		return a
+	}
+	return b
+}
+
+func sampleFirst[T any](xs []T) any {
+	if len(xs) == 0 {
+		return nil
+	}
+	return xs[0]
+}
+
+func toJSONForLog(v any, max int) string {
+	if v == nil {
+		return "null"
+	}
+	b, err := json.Marshal(v)
+	if err != nil {
+		return "<marshal_error>"
+	}
+	s := string(b)
+	if max > 0 && len(s) > max {
+		return s[:max] + "...(truncated)"
+	}
+	return s
+}
+
+func sampleFirstKey[V any](m map[string]V) string {
+	if len(m) == 0 {
+		return ""
+	}
+	keys := make([]string, 0, len(m))
+	for k := range m {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+	return keys[0]
+}
+
+func sampleFirstValue[V any](m map[string]V) any {
+	if len(m) == 0 {
+		return nil
+	}
+	k := sampleFirstKey(m)
+	if k == "" {
+		return nil
+	}
+	return m[k]
+}
+
+// ============================================================
+// compile-time guards（未使用でも import が消されないように）
+// ============================================================
+
 var _ = mintdom.ErrNotFound
+var _ = mintpresenter.PresentInspectionViews

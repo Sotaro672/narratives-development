@@ -15,6 +15,7 @@ type ProductBlueprintRepo interface {
 	Exists(ctx context.Context, id string) (bool, error)
 
 	// 一覧取得用（companyId による絞り込みは repository 側の実装に委譲）
+	// ★ ただし、companyId が空の状態で List を呼ぶことは禁止（usecase 側でガード）
 	List(ctx context.Context) ([]productbpdom.ProductBlueprint, error)
 
 	// ★ 追加: 論理削除済みのみ取得する専用メソッド
@@ -66,21 +67,30 @@ func (u *ProductBlueprintUsecase) Exists(ctx context.Context, id string) (bool, 
 
 // List
 // handler 側の GET /product-blueprints から利用される一覧取得。
-// companyId でのテナント絞り込みは、現状は repository 実装に委譲する形にしています。
-// （もし usecase 層で companyId を強制したい場合は、BrandUsecase 同様に
-//
-//	Filter 型を導入していく想定）
+// ★ companyID が空のまま List を呼ぶのを絶対禁止（全社データが漏れるため）。
+// テナント絞り込み自体は repository 側の実装に委譲しつつ、usecase 側でも二重にガードする。
 func (u *ProductBlueprintUsecase) List(ctx context.Context) ([]productbpdom.ProductBlueprint, error) {
+	cid := strings.TrimSpace(companyIDFromContext(ctx))
+	if cid == "" {
+		// companyId が無いユーザーは絶対に全件一覧できない
+		return nil, productbpdom.ErrInvalidCompanyID
+	}
+
 	rows, err := u.repo.List(ctx)
 	if err != nil {
 		return nil, err
 	}
 
 	// ★ 論理削除済み（DeletedAt != nil）は一覧から除外する
+	// ★ 念のため companyId が一致しないデータも除外する（repo 実装のバグ対策）
 	filtered := make([]productbpdom.ProductBlueprint, 0, len(rows))
 	for _, pb := range rows {
 		if pb.DeletedAt != nil {
 			// 削除済みは管理画面の一覧には出さない
+			continue
+		}
+		if strings.TrimSpace(pb.CompanyID) != cid {
+			// テナント境界（漏洩防止）
 			continue
 		}
 		filtered = append(filtered, pb)
@@ -173,15 +183,24 @@ func (u *ProductBlueprintUsecase) MarkPrinted(
 // DeletedAt が null ではない ProductBlueprint のみを返す。
 // Repository 側の ListDeleted は Firestore クエリで deletedAt / companyId を絞り込む。
 func (u *ProductBlueprintUsecase) ListDeleted(ctx context.Context) ([]productbpdom.ProductBlueprint, error) {
+	cid := strings.TrimSpace(companyIDFromContext(ctx))
+	if cid == "" {
+		// companyId が無いユーザーは絶対に全件一覧できない
+		return nil, productbpdom.ErrInvalidCompanyID
+	}
+
 	rows, err := u.repo.ListDeleted(ctx)
 	if err != nil {
 		return nil, err
 	}
 
-	// 念のため usecase 側でも DeletedAt != nil を保証しておく
+	// 念のため usecase 側でも DeletedAt != nil と companyId を保証しておく
 	deleted := make([]productbpdom.ProductBlueprint, 0, len(rows))
 	for _, pb := range rows {
 		if pb.DeletedAt == nil {
+			continue
+		}
+		if strings.TrimSpace(pb.CompanyID) != cid {
 			continue
 		}
 		deleted = append(deleted, pb)
@@ -213,11 +232,12 @@ func (u *ProductBlueprintUsecase) Create(
 	ctx context.Context,
 	v productbpdom.ProductBlueprint,
 ) (productbpdom.ProductBlueprint, error) {
-	// ★ BrandUsecase と同様:
-	//   context の companyId を優先して強制適用
-	if cid := companyIDFromContext(ctx); cid != "" {
-		v.CompanyID = strings.TrimSpace(cid)
+	// ★ context の companyId を必須として強制適用（空は禁止）
+	cid := strings.TrimSpace(companyIDFromContext(ctx))
+	if cid == "" {
+		return productbpdom.ProductBlueprint{}, productbpdom.ErrInvalidCompanyID
 	}
+	v.CompanyID = cid
 
 	created, err := u.repo.Create(ctx, v)
 	if err != nil {
@@ -238,17 +258,19 @@ func (u *ProductBlueprintUsecase) Save(
 	ctx context.Context,
 	v productbpdom.ProductBlueprint,
 ) (productbpdom.ProductBlueprint, error) {
-	// ★ BrandUsecase と同様:
-	//   context の companyId を優先して強制適用
-	if cid := companyIDFromContext(ctx); cid != "" {
-		v.CompanyID = strings.TrimSpace(cid)
+	// ★ context の companyId を必須として強制適用（空は禁止）
+	cid := strings.TrimSpace(companyIDFromContext(ctx))
+	if cid == "" {
+		return productbpdom.ProductBlueprint{}, productbpdom.ErrInvalidCompanyID
 	}
+	v.CompanyID = cid
+
 	return u.repo.Save(ctx, v)
 }
 
 // Update: 既存 ID を前提とした更新用ユースケース
 // - ID が空の場合は ErrInvalidID を返す
-// - companyId は context を優先
+// - companyId は context を必須として強制適用（空は禁止）
 // - 履歴スナップショットを保存する
 func (u *ProductBlueprintUsecase) Update(
 	ctx context.Context,
@@ -259,10 +281,12 @@ func (u *ProductBlueprintUsecase) Update(
 		return productbpdom.ProductBlueprint{}, productbpdom.ErrInvalidID
 	}
 
-	// companyId は context を優先
-	if cid := companyIDFromContext(ctx); cid != "" {
-		v.CompanyID = strings.TrimSpace(cid)
+	// ★ companyId は context を必須として強制適用（空は禁止）
+	cid := strings.TrimSpace(companyIDFromContext(ctx))
+	if cid == "" {
+		return productbpdom.ProductBlueprint{}, productbpdom.ErrInvalidCompanyID
 	}
+	v.CompanyID = cid
 
 	// まず存在確認のみ行う（存在しなければエラー）
 	if _, err := u.repo.GetByID(ctx, id); err != nil {
@@ -302,6 +326,12 @@ func (u *ProductBlueprintUsecase) SoftDeleteWithModels(
 		return productbpdom.ErrInvalidID
 	}
 
+	// ★ companyId は context を必須（空は禁止）
+	cid := strings.TrimSpace(companyIDFromContext(ctx))
+	if cid == "" {
+		return productbpdom.ErrInvalidCompanyID
+	}
+
 	// 対象 Blueprint を取得
 	pb, err := u.repo.GetByID(ctx, id)
 	if err != nil {
@@ -314,10 +344,8 @@ func (u *ProductBlueprintUsecase) SoftDeleteWithModels(
 	const softDeleteTTL = 90 * 24 * time.Hour
 	pb.SoftDelete(now, deletedBy, softDeleteTTL)
 
-	// companyId は context を優先
-	if cid := companyIDFromContext(ctx); cid != "" {
-		pb.CompanyID = strings.TrimSpace(cid)
-	}
+	// companyId は context を強制適用
+	pb.CompanyID = cid
 
 	saved, err := u.repo.Save(ctx, pb)
 	if err != nil {
@@ -345,6 +373,12 @@ func (u *ProductBlueprintUsecase) RestoreWithModels(
 	id = strings.TrimSpace(id)
 	if id == "" {
 		return productbpdom.ErrInvalidID
+	}
+
+	// ★ companyId は context を必須（空は禁止）
+	cid := strings.TrimSpace(companyIDFromContext(ctx))
+	if cid == "" {
+		return productbpdom.ErrInvalidCompanyID
 	}
 
 	pb, err := u.repo.GetByID(ctx, id)
@@ -375,10 +409,8 @@ func (u *ProductBlueprintUsecase) RestoreWithModels(
 		}
 	}
 
-	// companyId は context を優先
-	if cid := companyIDFromContext(ctx); cid != "" {
-		pb.CompanyID = strings.TrimSpace(cid)
-	}
+	// companyId は context を強制適用
+	pb.CompanyID = cid
 
 	saved, err := u.repo.Save(ctx, pb)
 	if err != nil {

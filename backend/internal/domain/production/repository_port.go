@@ -16,17 +16,21 @@ type CreateProductionInput struct {
 	AssigneeID         string            `json:"assigneeId"`
 	Models             []ModelQuantity   `json:"models"`
 	Status             *ProductionStatus `json:"status,omitempty"`
-
-	PrintedAt   *time.Time `json:"printedAt,omitempty"`
-	InspectedAt *time.Time `json:"inspectedAt,omitempty"`
-
-	CreatedBy *string    `json:"createdBy,omitempty"`
-	CreatedAt *time.Time `json:"createdAt,omitempty"`
+	PrintedAt          *time.Time        `json:"printedAt,omitempty"`
+	CreatedBy          *string           `json:"createdBy,omitempty"`
+	CreatedAt          *time.Time        `json:"createdAt,omitempty"`
 }
 
 // ========================================
 // Query contracts (filters/paging)
 // ========================================
+//
+// ★重要方針:
+// Production は companyId を直接持たないため、
+// 一覧取得（list）は必ず「companyId → productBlueprintIds → productions」のルートで行う。
+// したがって、この port からは「フィルタ無し全件」「任意条件での List（company 無）」の口を用意しない。
+// （もし必要なら application/usecase 側で productBlueprintIds を解決した上で、
+//  その ID 群に限定したクエリメソッドを追加する）
 
 type Filter struct {
 	ID                 string
@@ -63,22 +67,18 @@ type PageResult struct {
 
 type RepositoryPort interface {
 	// ----------------------------------------
-	// 既存: 高機能クエリ系（フィルタ＋ページングなど）
+	// Read
 	// ----------------------------------------
 
 	// Production を productionId で取得
 	GetByID(ctx context.Context, id string) (*Production, error)
 
-	// 指定 modelId を含む生産計画一覧
-	GetByModelID(ctx context.Context, modelID string) ([]Production, error)
-
-	// List（ページング）
-	List(ctx context.Context, filter Filter, page Page) (PageResult, error)
-
-	// Create （CreateProductionInput ベース）
-	Create(ctx context.Context, in CreateProductionInput) (*Production, error)
+	// ★禁止（削除）:
+	// - companyId が空でも呼べてしまう「全件/任意条件の list」はマルチテナント境界を破壊するため廃止
+	//   例: List(ctx, filter, page), ListAll(ctx), GetByModelID(ctx, modelID) など
 
 	// 複数の productBlueprintId に紐づく Production 一覧
+	// ★一覧取得は必ずこのメソッド経由（productBlueprintIds を上位層で companyId から解決する）
 	ListByProductBlueprintID(ctx context.Context, productBlueprintIDs []string) ([]Production, error)
 
 	// ★ 追加: productionId → productBlueprintId を返す関数
@@ -87,20 +87,12 @@ type RepositoryPort interface {
 	// 対応する productBlueprintId を join する用途で利用。
 	GetProductBlueprintIDByProductionID(ctx context.Context, productionID string) (string, error)
 
-	// Tx
-	WithTx(ctx context.Context, fn func(ctx context.Context) error) error
-
 	// ----------------------------------------
-	// ★ 方針1: CRUD を持たせるための拡張メソッド
-	//   - application/production.Usecase などの
-	//     シンプルな CRUD 用ポートとして利用する
+	// Write
 	// ----------------------------------------
 
-	// Exists: productionId の存在確認
-	Exists(ctx context.Context, id string) (bool, error)
-
-	// ListAll: フィルタ無しで全件一覧を返す（コンソール一覧などシンプル用途向け）
-	ListAll(ctx context.Context) ([]Production, error)
+	// Create （CreateProductionInput ベース）
+	Create(ctx context.Context, in CreateProductionInput) (*Production, error)
 
 	// Save: Production エンティティを保存（新規 or 更新）
 	//       実装側で upsert として扱って良い。
@@ -108,4 +100,10 @@ type RepositoryPort interface {
 
 	// Delete: productionId で削除
 	Delete(ctx context.Context, id string) error
+
+	// Exists: productionId の存在確認
+	Exists(ctx context.Context, id string) (bool, error)
+
+	// Tx
+	WithTx(ctx context.Context, fn func(ctx context.Context) error) error
 }

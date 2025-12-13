@@ -8,14 +8,24 @@ import (
 	firebase "firebase.google.com/go/v4"
 	firebaseauth "firebase.google.com/go/v4/auth"
 
+	"cloud.google.com/go/firestore"
+
 	arweaveinfra "narratives/internal/infra/arweave"
 	solanainfra "narratives/internal/infra/solana"
 
 	httpin "narratives/internal/adapters/in/http"
 	fs "narratives/internal/adapters/out/firestore"
 	mailadp "narratives/internal/adapters/out/mail"
+
+	// ★ MintUsecase 移動先
 	mintapp "narratives/internal/application/mint"
+
+	// ★ ProductionUsecase（application/production）
 	productionapp "narratives/internal/application/production"
+
+	// ★ CompanyProductionQueryService / MintRequestQueryService
+	companyquery "narratives/internal/application/query"
+
 	resolver "narratives/internal/application/resolver"
 
 	// ★ InspectionUsecase 移動先
@@ -23,13 +33,13 @@ import (
 
 	uc "narratives/internal/application/usecase"
 	authuc "narratives/internal/application/usecase/auth"
+
 	branddom "narratives/internal/domain/brand"
 	companydom "narratives/internal/domain/company"
 	memdom "narratives/internal/domain/member"
 	productbpdom "narratives/internal/domain/productBlueprint"
-	appcfg "narratives/internal/infra/config"
 
-	"cloud.google.com/go/firestore"
+	appcfg "narratives/internal/infra/config"
 )
 
 // ========================================
@@ -37,7 +47,7 @@ import (
 // ========================================
 //
 // Firestore クライアントと Firebase Auth クライアントを中心に、
-// 各 Repository と Usecase を初期化して束ねる。
+// 各 Repository と Usecase / QueryService を初期化して束ねる。
 type Container struct {
 	// Infra
 	Config       *appcfg.Config
@@ -90,6 +100,12 @@ type Container struct {
 	UserUC             *uc.UserUsecase
 	WalletUC           *uc.WalletUsecase
 
+	// ★ 追加: QueryService（GET /productions 一覧専用、Company境界付き）
+	CompanyProductionQueryService *companyquery.CompanyProductionQueryService
+
+	// ★ NEW: QueryService（GET /mint/requests 一覧専用、Company境界付き）
+	MintRequestQueryService *companyquery.MintRequestQueryService
+
 	// ★ 検品アプリ用 ProductUsecase（/inspector/products/{id}）
 	ProductUC *uc.ProductUsecase
 
@@ -113,18 +129,39 @@ type Container struct {
 	NameResolver *resolver.NameResolver
 }
 
+// ============================================================
+// Adapters (for query ports)
+// ============================================================
+
+// pbQueryRepoAdapter adapts ProductBlueprintRepositoryFS to query.ProductBlueprintQueryRepo.
+//
+// ProductBlueprintRepositoryFS.GetByID が value 戻りの場合は、ここも value に合わせる。
+type pbQueryRepoAdapter struct {
+	repo interface {
+		ListIDsByCompany(ctx context.Context, companyID string) ([]string, error)
+		GetByID(ctx context.Context, id string) (productbpdom.ProductBlueprint, error) // ★ value 戻りに修正
+	}
+}
+
+func (a *pbQueryRepoAdapter) ListIDsByCompany(ctx context.Context, companyID string) ([]string, error) {
+	return a.repo.ListIDsByCompany(ctx, companyID)
+}
+
+func (a *pbQueryRepoAdapter) GetByID(ctx context.Context, id string) (productbpdom.ProductBlueprint, error) {
+	// ★ そのまま repo に委譲（NotFound などは repo の err をそのまま返す）
+	return a.repo.GetByID(ctx, id)
+}
+
 // ========================================
 // NewContainer
 // ========================================
 //
-// Firestore / Firebase クライアントを初期化し、各 Usecase を構築して返す。
+// Firestore / Firebase クライアントを初期化し、各 Usecase / QueryService を構築して返す。
 func NewContainer(ctx context.Context) (*Container, error) {
 	// 1. Load config
 	cfg := appcfg.Load()
 
 	// 1.2 Arweave HTTP uploader (optional)
-	//     infra/arweave.HTTPUploader は UploadMetadata を実装しているので
-	//     そのまま usecase.ArweaveUploader として渡せる。
 	var arweaveUploader uc.ArweaveUploader
 	if cfg.ArweaveBaseURL != "" {
 		httpUp := arweaveinfra.NewHTTPUploader(cfg.ArweaveBaseURL, cfg.ArweaveAPIKey)
@@ -223,7 +260,6 @@ func NewContainer(ctx context.Context) (*Container, error) {
 	brandSvc := branddom.NewService(brandRepo)
 
 	// ★ Solana Brand Wallet Service（ブランド専用ウォレット開設 + 秘密鍵 SecretManager 保管）
-	//   - 第2引数は Secret 名のプレフィックス（実装に合わせて調整）
 	brandWalletSvc := solanainfra.NewBrandWalletService(cfg.FirestoreProjectID)
 
 	// ★ member.Service（表示名解決用）
@@ -236,7 +272,6 @@ func NewContainer(ctx context.Context) (*Container, error) {
 	pbSvc := productbpdom.NewService(pbDomainRepo)
 
 	// ★ MintRequestPort（TokenUsecase 用）
-	//   - mints ベースの MintRequestPort 実装
 	mintRequestPort := fs.NewMintRequestPortFS(
 		fsClient,
 		"mints",            // mintsColName
@@ -270,7 +305,6 @@ func NewContainer(ctx context.Context) (*Container, error) {
 			mintRequestPort, // usecase.MintRequestPort
 		)
 	} else {
-		// Mint 権限キーが取得できなかった場合でもコンテナ生成は続行
 		tokenUC = uc.NewTokenUsecase(
 			nil,             // tokendom.MintAuthorityWalletPort (nil 許容)
 			mintRequestPort, // usecase.MintRequestPort
@@ -322,11 +356,21 @@ func NewContainer(ctx context.Context) (*Container, error) {
 		nameResolver,
 	)
 
-	// ★ ProductionUsecase（新パッケージ application/production）
+	// ★ ProductionUsecase（application/production）
 	productionUC := productionapp.NewProductionUsecase(
 		productionRepo, // ProductionRepo
 		pbSvc,          // *productBlueprint.Service
 		nameResolver,   // *resolver.NameResolver
+	)
+
+	// ★ CompanyProductionQueryService（GET /productions 一覧専用）
+	pbQueryRepo := &pbQueryRepoAdapter{
+		repo: productBlueprintRepo,
+	}
+	companyProductionQueryService := companyquery.NewCompanyProductionQueryService(
+		pbQueryRepo,    // ProductBlueprintQueryRepo
+		productionRepo, // ProductionQueryRepo
+		nameResolver,   // NameResolver
 	)
 
 	// ★ ProductBlueprintUsecase に HistoryRepo を注入
@@ -356,11 +400,6 @@ func NewContainer(ctx context.Context) (*Container, error) {
 	productUC := uc.NewProductUsecase(productQueryRepo, brandSvc, companySvc)
 
 	// ★ MintUsecase（MintRequest / NFT 発行候補一覧など）
-	// NewMintUsecase は
-	// (mintProductBlueprintRepo, mintProductionRepo, mintInspectionRepo, mintModelRepo,
-	//  mintTokenBlueprintRepo, *brand.Service, mint.MintRepository, mint.PassedProductLister,
-	//  mint.TokenMintPort)
-	// の 9 引数
 	mintUC := mintapp.NewMintUsecase(
 		productBlueprintRepo, // mint.MintProductBlueprintRepo
 		productionRepo,       // mint.MintProductionRepo
@@ -371,6 +410,13 @@ func NewContainer(ctx context.Context) (*Container, error) {
 		mintRepo,             // mint.MintRepository
 		inspectionRepo,       // mint.PassedProductLister（InspectionRepositoryFS が実装している前提）
 		tokenUC,              // mint.TokenMintPort（TokenUsecase が実装している前提）
+	)
+
+	// ★ NEW: MintRequestQueryService（GET /mint/requests 一覧専用）
+	mintRequestQueryService := companyquery.NewMintRequestQueryService(
+		mintUC,
+		productionUC,
+		nameResolver,
 	)
 
 	saleUC := uc.NewSaleUsecase(saleRepo)
@@ -467,6 +513,12 @@ func NewContainer(ctx context.Context) (*Container, error) {
 		UserUC:             userUC,
 		WalletUC:           walletUC,
 
+		// ★ QueryService（GET /productions）
+		CompanyProductionQueryService: companyProductionQueryService,
+
+		// ★ NEW: QueryService（GET /mint/requests）
+		MintRequestQueryService: mintRequestQueryService,
+
 		// 検品アプリ用
 		ProductUC:    productUC,
 		InspectionUC: inspectionUC,
@@ -521,6 +573,12 @@ func (c *Container) RouterDeps() httpin.RouterDeps {
 		TrackingUC:         c.TrackingUC,
 		UserUC:             c.UserUC,
 		WalletUC:           c.WalletUC,
+
+		// ★ 追加: GET /productions 一覧（Company境界付き）
+		CompanyProductionQueryService: c.CompanyProductionQueryService,
+
+		// ★ NEW: GET /mint/requests 一覧（Company境界付き）
+		MintRequestQueryService: c.MintRequestQueryService,
 
 		// 検品アプリ用 Usecase
 		ProductUC:    c.ProductUC,

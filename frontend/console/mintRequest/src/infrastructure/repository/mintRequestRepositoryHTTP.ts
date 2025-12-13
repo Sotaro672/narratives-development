@@ -7,17 +7,41 @@ import type {
   MintListRowDTO,
   MintDTO,
 } from "../api/mintRequestApi";
-import type {
-  ProductBlueprintPatchDTO,
-  BrandForMintDTO,
-  TokenBlueprintForMintDTO,
-} from "../../application/mintRequestService";
+
+// ✅ ここで DTO を定義して循環/参照エラーを避ける
+// （application/mintRequestService 側の export 変更に依存しない）
+export type ProductBlueprintPatchDTO = {
+  productName?: string | null;
+  brandId?: string | null;
+  brandName?: string | null; // MintHandler が付与する
+
+  itemType?: string | null;
+  fit?: string | null;
+  material?: string | null;
+  weight?: number | null;
+  qualityAssurance?: string[] | null;
+  productIdTag?: { type?: string | null } | null;
+  assigneeId?: string | null;
+};
+
+export type BrandForMintDTO = {
+  id: string;
+  name: string;
+};
+
+export type TokenBlueprintForMintDTO = {
+  id: string;
+  name: string;
+  symbol: string;
+  iconUrl?: string;
+};
 
 // 🔙 BACKEND の BASE URL
 const ENV_BASE =
-  ((import.meta as any).env?.VITE_BACKEND_BASE_URL as
-    | string
-    | undefined)?.replace(/\/+$/g, "") ?? "";
+  ((import.meta as any).env?.VITE_BACKEND_BASE_URL as string | undefined)?.replace(
+    /\/+$/g,
+    "",
+  ) ?? "";
 
 const FALLBACK_BASE =
   "https://narratives-backend-871263659099.asia-northeast1.run.app";
@@ -53,15 +77,6 @@ function buildHeaders(idToken: string): HeadersInit {
 // helper: list row normalize（バックエンド返却差異に強くする）
 // ---------------------------------------------------------
 function normalizeMintListRow(v: any): MintListRowDTO {
-  // ✅ 新DTO（backend）想定:
-  // {
-  //   inspectionId, mintId, tokenBlueprintId,
-  //   tokenName, createdByName, mintedAt (RFC3339 | null)
-  // }
-  //
-  // ✅ 旧DTO / 互換フォールバック:
-  // { tokenName, createdByName, mintedAt } や MintDTO に近い形を吸収
-
   const inspectionId =
     String(
       v?.inspectionId ??
@@ -97,20 +112,15 @@ function normalizeMintListRow(v: any): MintListRowDTO {
     String(v?.createdByName ?? v?.CreatedByName ?? v?.createdBy ?? "").trim() ||
     null;
 
-  // mintedAt は RFC3339 でも yyyy/mm/dd でも「stringなら通す」
   const mintedAtRaw = v?.mintedAt ?? v?.MintedAt ?? null;
   const mintedAt =
     typeof mintedAtRaw === "string" && mintedAtRaw.trim()
       ? mintedAtRaw.trim()
       : null;
 
-  // minted が無い場合は mintedAt で推定（一覧のステータス判定用）
-  const minted =
-    typeof v?.minted === "boolean" ? v.minted : Boolean(mintedAt);
+  const minted = typeof v?.minted === "boolean" ? v.minted : Boolean(mintedAt);
 
   return {
-    // フロント側 MintListRowDTO の定義に “inspectionId 等” が無い場合でも、
-    // as any で保持しておくとデバッグに役立つ（必要なら型定義も更新してください）
     inspectionId,
     mintId,
     tokenBlueprintId,
@@ -127,7 +137,6 @@ function normalizeMintListRow(v: any): MintListRowDTO {
 function normalizeMintDTO(v: any): MintDTO {
   const obj: any = { ...(v ?? {}) };
 
-  // camel / Pascal / 別名フォールバック
   obj.id = obj.id ?? obj.ID ?? "";
   obj.brandId = obj.brandId ?? obj.BrandID ?? "";
   obj.tokenBlueprintId = obj.tokenBlueprintId ?? obj.TokenBlueprintID ?? "";
@@ -139,7 +148,7 @@ function normalizeMintDTO(v: any): MintDTO {
     obj.ProductionID ??
     "";
 
-  // ✅ 画面に Products を渡さない方針なので削除
+  // ✅ Products は画面に渡さない方針ならここで触らない
   // obj.products = obj.products ?? obj.Products ?? [];
 
   obj.createdAt = obj.createdAt ?? obj.CreatedAt ?? null;
@@ -150,8 +159,7 @@ function normalizeMintDTO(v: any): MintDTO {
     typeof obj.minted === "boolean" ? obj.minted : Boolean(obj.mintedAt);
   obj.mintedAt = obj.mintedAt ?? obj.MintedAt ?? null;
 
-  obj.scheduledBurnDate =
-    obj.scheduledBurnDate ?? obj.ScheduledBurnDate ?? null;
+  obj.scheduledBurnDate = obj.scheduledBurnDate ?? obj.ScheduledBurnDate ?? null;
 
   obj.onChainTxSignature =
     obj.onChainTxSignature ?? obj.OnChainTxSignature ?? null;
@@ -159,22 +167,120 @@ function normalizeMintDTO(v: any): MintDTO {
   return obj as MintDTO;
 }
 
-// ===============================
-// HTTP Repository (inspections)
-// ===============================
+// ---------------------------------------------------------
+// helper: productions -> productionIds（mint/inspections 用）
+// ---------------------------------------------------------
+function normalizeProductionIdFromProductionListItem(v: any): string {
+  return String(
+    v?.productionId ??
+      v?.id ??
+      v?.production?.id ??
+      v?.production?.productionId ??
+      "",
+  ).trim();
+}
 
-export async function fetchInspectionBatchesHTTP(): Promise<InspectionBatchDTO[]> {
+async function fetchProductionIdsForCurrentCompanyHTTP(): Promise<string[]> {
   const idToken = await getIdTokenOrThrow();
 
-  const url = `${API_BASE}/mint/inspections`;
-  log("fetchInspectionBatchesHTTP url=", url);
+  const url = `${API_BASE}/productions`;
+  log("fetchProductionIdsForCurrentCompanyHTTP url=", url);
 
   const res = await fetch(url, {
     method: "GET",
     headers: buildHeaders(idToken),
   });
 
-  log("fetchInspectionBatchesHTTP status=", res.status, res.statusText);
+  log(
+    "fetchProductionIdsForCurrentCompanyHTTP status=",
+    res.status,
+    res.statusText,
+  );
+
+  if (!res.ok) {
+    throw new Error(
+      `Failed to fetch productions: ${res.status} ${res.statusText}`,
+    );
+  }
+
+  const json = (await res.json()) as any[] | null | undefined;
+  const items = json ?? [];
+
+  const ids: string[] = [];
+  const seen = new Set<string>();
+  for (const it of items) {
+    const pid = normalizeProductionIdFromProductionListItem(it);
+    if (!pid || seen.has(pid)) continue;
+    seen.add(pid);
+    ids.push(pid);
+  }
+
+  log(
+    "fetchProductionIdsForCurrentCompanyHTTP result len=",
+    ids.length,
+    "sample[0..4]=",
+    ids.slice(0, 5),
+  );
+
+  return ids;
+}
+
+// ===============================
+// HTTP Repository (inspections)
+// ===============================
+
+/**
+ * ✅ New flow: /productions で productionIds を作り、
+ * /mint/inspections?productionIds=a,b,c を叩く。
+ */
+export async function fetchInspectionBatchesHTTP(): Promise<InspectionBatchDTO[]> {
+  const productionIds = await fetchProductionIdsForCurrentCompanyHTTP();
+
+  if (productionIds.length === 0) {
+    log("fetchInspectionBatchesHTTP productionIds is empty -> return []");
+    return [];
+  }
+
+  return await fetchInspectionBatchesByProductionIdsHTTP(productionIds);
+}
+
+/**
+ * ✅ 直接 productionIds を指定して mint/inspections を叩く版
+ * GET /mint/inspections?productionIds=a,b,c
+ */
+export async function fetchInspectionBatchesByProductionIdsHTTP(
+  productionIds: string[],
+): Promise<InspectionBatchDTO[]> {
+  const ids = (productionIds ?? [])
+    .map((s) => String(s ?? "").trim())
+    .filter((s) => !!s);
+
+  if (ids.length === 0) return [];
+
+  const idToken = await getIdTokenOrThrow();
+
+  const url = `${API_BASE}/mint/inspections?productionIds=${encodeURIComponent(
+    ids.join(","),
+  )}`;
+  log(
+    "fetchInspectionBatchesByProductionIdsHTTP url=",
+    url,
+    "ids.length=",
+    ids.length,
+    "sample[0..4]=",
+    ids.slice(0, 5),
+  );
+
+  const res = await fetch(url, {
+    method: "GET",
+    headers: buildHeaders(idToken),
+  });
+
+  log(
+    "fetchInspectionBatchesByProductionIdsHTTP status=",
+    res.status,
+    res.statusText,
+  );
 
   if (!res.ok) {
     throw new Error(
@@ -185,7 +291,7 @@ export async function fetchInspectionBatchesHTTP(): Promise<InspectionBatchDTO[]
   const json = (await res.json()) as InspectionBatchDTO[] | null | undefined;
   const out = json ?? [];
   log(
-    "fetchInspectionBatchesHTTP result length=",
+    "fetchInspectionBatchesByProductionIdsHTTP result length=",
     out.length,
     "sample[0]=",
     out[0],
@@ -201,33 +307,12 @@ export async function fetchInspectionByProductionIdHTTP(
     throw new Error("productionId が空です");
   }
 
-  const idToken = await getIdTokenOrThrow();
+  // ✅ 新エンドポイント経由で 1 件だけ取りたい場合は productionIds を 1 個にして叩く
+  const batches = await fetchInspectionBatchesByProductionIdsHTTP([trimmed]);
+  const hit = batches.find((b: any) => String((b as any)?.productionId ?? "").trim() === trimmed) ?? null;
 
-  const url = `${API_BASE}/products/inspections?productionId=${encodeURIComponent(
-    trimmed,
-  )}`;
-  log("fetchInspectionByProductionIdHTTP url=", url);
-
-  const res = await fetch(url, {
-    method: "GET",
-    headers: buildHeaders(idToken),
-  });
-
-  log("fetchInspectionByProductionIdHTTP status=", res.status, res.statusText);
-
-  if (res.status === 404) {
-    return null;
-  }
-
-  if (!res.ok) {
-    throw new Error(
-      `Failed to fetch inspection by productionId: ${res.status} ${res.statusText}`,
-    );
-  }
-
-  const json = (await res.json()) as InspectionBatchDTO | null | undefined;
-  log("fetchInspectionByProductionIdHTTP result=", json);
-  return json ?? null;
+  log("fetchInspectionByProductionIdHTTP productionId=", trimmed, "hit=", hit);
+  return hit ?? null;
 }
 
 // ===============================
@@ -428,7 +513,6 @@ async function fetchMintsMapRaw(
 
   if (res.status === 404) return {};
   if (!res.ok) {
-    // 呼び出し元で fallback できるように throw
     throw new Error(`Failed to fetch mints: ${res.status} ${res.statusText}`);
   }
 
@@ -441,86 +525,81 @@ async function fetchMintsMapRaw(
     "sampleKey=",
     keys[0],
     "sampleVal=",
-    raw[keys[0]],
+    keys[0] ? raw[keys[0]] : undefined,
   );
   return raw;
 }
 
 /**
- * ✅ 単発: mintId で 1 件取得
- * backend: GET /mint/mints/{mintId}
- *
- * NOTE:
- * - 詳細用の MintDTO を返す前提
+ * ✅ 単発: inspectionId(=productionId) で 1 件取得
+ * backend: GET /mint/mints/{inspectionId}
  */
-export async function fetchMintByMintIdHTTP(
-  mintId: string,
+export async function fetchMintByInspectionIdHTTP(
+  inspectionId: string,
 ): Promise<MintDTO | null> {
-  const mid = String(mintId ?? "").trim();
-  if (!mid) {
-    throw new Error("mintId が空です");
-  }
+  const iid = String(inspectionId ?? "").trim();
+  if (!iid) throw new Error("inspectionId が空です");
 
   const idToken = await getIdTokenOrThrow();
 
-  const url = `${API_BASE}/mint/mints/${encodeURIComponent(mid)}`;
-  log("fetchMintByMintIdHTTP url=", url);
+  const url = `${API_BASE}/mint/mints/${encodeURIComponent(iid)}`;
+  log("fetchMintByInspectionIdHTTP url=", url);
 
   const res = await fetch(url, {
     method: "GET",
     headers: buildHeaders(idToken),
   });
 
-  log("fetchMintByMintIdHTTP status=", res.status, res.statusText);
+  log("fetchMintByInspectionIdHTTP status=", res.status, res.statusText);
 
   if (res.status === 404) return null;
 
   if (!res.ok) {
     throw new Error(
-      `Failed to fetch mint by mintId: ${res.status} ${res.statusText}`,
+      `Failed to fetch mint by inspectionId: ${res.status} ${res.statusText}`,
     );
   }
 
   const json = (await res.json()) as any;
-  log("fetchMintByMintIdHTTP raw=", json);
+  log("fetchMintByInspectionIdHTTP raw=", json);
   if (!json) return null;
 
   const out = normalizeMintDTO(json);
-  log("fetchMintByMintIdHTTP normalized=", out);
+  log("fetchMintByInspectionIdHTTP normalized=", out);
   return out;
 }
 
 /**
- * ✅ フォールバック: mintIds を 1件取得で回収して一覧行 DTO を組み立てる
- *
- * - /mint/mints?inspectionIds=... が 500 でも画面が成立するようにする
- * - 戻り map の key は mintId
+ * ✅ フォールバック: inspectionIds を 1件取得で回収して list row を組み立てる
  */
-async function fetchMintListRowsByMintIdsFallback(
-  mintIds: string[],
+async function fetchMintListRowsByInspectionIdsFallback(
+  inspectionIds: string[],
 ): Promise<Record<string, MintListRowDTO>> {
-  const ids = (mintIds ?? []).map((s) => String(s ?? "").trim()).filter(Boolean);
+  const ids = (inspectionIds ?? [])
+    .map((s) => String(s ?? "").trim())
+    .filter(Boolean);
+
   if (ids.length === 0) return {};
 
   log(
-    "fetchMintListRowsByMintIdsFallback start ids.length=",
+    "fetchMintListRowsByInspectionIdsFallback start ids.length=",
     ids.length,
     "sample[0..4]=",
     ids.slice(0, 5),
   );
 
   const settled = await Promise.all(
-    ids.map(async (mintId) => {
+    ids.map(async (inspectionId) => {
       try {
-        const m = await fetchMintByMintIdHTTP(mintId);
-        return { mintId, mint: m };
+        const m = await fetchMintByInspectionIdHTTP(inspectionId);
+        return { inspectionId, mint: m };
       } catch (e: any) {
         log(
-          "fetchMintListRowsByMintIdsFallback error mintId=",
-          mintId,
+          "fetchMintListRowsByInspectionIdsFallback error inspectionId=",
+          inspectionId,
           e?.message ?? e,
         );
-        return { mintId, mint: null };
+        return { inspectionId, mint: null };
       }
     }),
   );
@@ -529,36 +608,33 @@ async function fetchMintListRowsByMintIdsFallback(
   for (const it of settled) {
     if (!it.mint) continue;
 
-    // normalizeMintListRow が吸収できる形に寄せる
     const v = {
       ...(it.mint as any),
-      mintId: (it.mint as any).id || it.mintId,
-      inspectionId: (it.mint as any).inspectionId || null,
+      inspectionId: it.inspectionId,
+      mintId: (it.mint as any).id ?? null,
+      tokenBlueprintId: (it.mint as any).tokenBlueprintId ?? null,
+      createdByName: (it.mint as any).createdByName ?? (it.mint as any).createdBy ?? null,
+      mintedAt: (it.mint as any).mintedAt ?? null,
     };
 
-    out[it.mintId] = normalizeMintListRow(v);
+    out[it.inspectionId] = normalizeMintListRow(v);
   }
 
   const keys = Object.keys(out);
   log(
-    "fetchMintListRowsByMintIdsFallback end keys=",
+    "fetchMintListRowsByInspectionIdsFallback end keys=",
     keys.length,
     "sampleKey=",
     keys[0],
     "sampleVal=",
-    out[keys[0]],
+    keys[0] ? out[keys[0]] : undefined,
   );
 
   return out;
 }
 
 /**
- * ✅ 一覧用: ids をまとめて渡して、mints(list row) を取得する。
- *
- * まずは従来の
- *   GET /mint/mints?inspectionIds=a,b,c (&view=list)
- * を試し、500 等で落ちた場合は
- *   inspections から得た mintId を想定して /mint/mints/{mintId} を並列取得する。
+ * ✅ 一覧用: inspectionIds をまとめて渡して、mints(list row) を取得する。
  */
 export async function fetchMintListRowsByInspectionIdsHTTP(
   inspectionIds: string[],
@@ -569,7 +645,6 @@ export async function fetchMintListRowsByInspectionIdsHTTP(
 
   if (ids.length === 0) return {};
 
-  // まず view=list を試す → backend 未対応/500なら view なし
   try {
     let raw: Record<string, any> = {};
     try {
@@ -596,27 +671,20 @@ export async function fetchMintListRowsByInspectionIdsHTTP(
       "sampleKey=",
       keys[0],
       "sampleVal=",
-      out[keys[0]],
+      keys[0] ? out[keys[0]] : undefined,
     );
     return out;
   } catch (e: any) {
-    // ✅ ここが今回の本命（/mint/mints?inspectionIds=... が 500 の時）
     log(
-      "fetchMintListRowsByInspectionIdsHTTP fallback to per-mint fetch because:",
+      "fetchMintListRowsByInspectionIdsHTTP fallback to per-id fetch because:",
       e?.message ?? e,
     );
-    return await fetchMintListRowsByMintIdsFallback(ids);
+    return await fetchMintListRowsByInspectionIdsFallback(ids);
   }
 }
 
 /**
- * ✅ 詳細DTO用: inspectionIds (= productionIds) をまとめて渡して、mints(MintDTO) を取得する。
- *
- * backend: GET /mint/mints?inspectionIds=a,b,c  (＋可能なら &view=dto)
- *
- * NOTE:
- * - このルートが 500 の場合もあり得るが、現状の画面要件は list row のみなので
- *   ここは従来通り（必要になったら MintID フォールバックも追加可能）
+ * ✅ 詳細DTO用: inspectionIds をまとめて渡して、mints(MintDTO) を取得する。
  */
 export async function fetchMintsByInspectionIdsHTTP(
   inspectionIds: string[],
@@ -652,17 +720,13 @@ export async function fetchMintsByInspectionIdsHTTP(
     "sampleKey=",
     keys[0],
     "sampleVal=",
-    out[keys[0]],
+    keys[0] ? out[keys[0]] : undefined,
   );
   return out;
 }
 
 /**
- * ✅ 追加: “listMintsByInspectionIDs” という名前で取得したい場合のエイリアス
- * - 画面（service/hook）からはこちらを呼ぶ想定でもOK
- *
- * NOTE:
- * - 呼び出し側が inspections の mintId[] を渡しても動く（fallback があるため）
+ * ✅ 追加: 画面（service/hook）からはこちらを呼ぶ想定のエイリアス
  */
 export async function listMintsByInspectionIDsHTTP(
   inspectionIds: string[],
@@ -676,19 +740,6 @@ export async function listMintsByInspectionIDsHTTP(
   const m = await fetchMintListRowsByInspectionIdsHTTP(inspectionIds);
   log("listMintsByInspectionIDsHTTP done keys=", Object.keys(m ?? {}).length);
   return m;
-}
-
-/**
- * 単発: 互換用（既存呼び出しを壊さない）
- * backend: GET /mint/mints/{id}
- *
- * NOTE:
- * - ここでは id を mintId として扱う（inspections の mintId を渡す前提）
- */
-export async function fetchMintByInspectionIdHTTP(
-  inspectionId: string,
-): Promise<MintDTO | null> {
-  return await fetchMintByMintIdHTTP(inspectionId);
 }
 
 // ===============================

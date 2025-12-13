@@ -12,10 +12,14 @@ import (
 
 // ReaderRepository は Service が利用する最小限の読み取り専用ポートです。
 // 既存の Repository インターフェースはより多くのメソッドを持ちますが、
-// Service 側では「ID から ProductBlueprint を 1 件取ってくる」だけに依存させることで
+// Service 側では「必要な読み取り」だけに依存させることで
 // インターフェースを小さく保ちます。
 type ReaderRepository interface {
 	GetByID(ctx context.Context, id string) (ProductBlueprint, error)
+
+	// ★追加: companyId 単位で productBlueprint の ID 一覧を取得
+	// （Production 一覧や MintRequest のチェーンの起点: companyId → productBlueprintIds）
+	ListIDsByCompany(ctx context.Context, companyID string) ([]string, error)
 }
 
 // Service は productBlueprint 領域の便宜関数を提供します。
@@ -25,7 +29,7 @@ type Service struct {
 }
 
 // NewService は productBlueprint.Service を生成します。
-// 引数には ReaderRepository（GetByID だけを持つ小さいポート）を受け取ります。
+// 引数には ReaderRepository（必要最小限の read ポート）を受け取ります。
 func NewService(repo ReaderRepository) *Service {
 	return &Service{repo: repo}
 }
@@ -68,4 +72,20 @@ func (s *Service) GetBrandIDByID(ctx context.Context, id string) (string, error)
 	}
 
 	return strings.TrimSpace(pb.BrandID), nil
+}
+
+// ★追加: companyId → productBlueprintIds を返す
+// - companyID が空の場合: ErrInvalidCompanyID
+// - repo.ListIDsByCompany の結果はそのまま返却
+func (s *Service) ListIDsByCompany(ctx context.Context, companyID string) ([]string, error) {
+	cid := strings.TrimSpace(companyID)
+	if cid == "" {
+		return nil, ErrInvalidCompanyID
+	}
+
+	ids, err := s.repo.ListIDsByCompany(ctx, cid)
+	if err != nil {
+		return nil, err
+	}
+	return ids, nil
 }

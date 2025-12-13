@@ -3,7 +3,10 @@
 import {
   fetchInspectionBatchesHTTP,
   fetchInspectionByProductionIdHTTP,
+  // ✅ New flow: productionIds を直接渡せる版も公開
+  fetchInspectionBatchesByProductionIdsHTTP,
 } from "../repository/mintRequestRepositoryHTTP";
+
 import * as repo from "../repository/mintRequestRepositoryHTTP";
 
 import type {
@@ -31,9 +34,14 @@ export type InspectionBatchDTO = MintInspectionView;
 // backend/internal/application/mint/dto/list.go の MintListRowDTO を正とする。
 // inspectionId (= productionId) をキーにした map として返ってくる想定。
 export type MintListRowDTO = {
+  inspectionId?: string | null;
+  mintId?: string | null;
+  tokenBlueprintId?: string | null;
+
   tokenName: string;
   createdByName?: string | null;
-  mintedAt?: string | null; // 期待: "yyyy/mm/dd"（バックエンド整形）
+  mintedAt?: string | null; // 期待: RFC3339 or "yyyy/mm/dd"（どちらでも string として扱う）
+  minted?: boolean;
 };
 
 // ===============================
@@ -65,19 +73,42 @@ export type MintDTO = {
 // ===============================
 
 /**
- * inspections の一覧をそのまま取得する（汎用用途向け）。
+ * ✅ inspections の一覧を取得する（新フロー）。
+ * 内部で /productions → productionIds を作り、/mint/inspections?productionIds=... を叩く。
  */
 export async function fetchInspectionBatches(): Promise<InspectionBatchDTO[]> {
   return fetchInspectionBatchesHTTP();
 }
 
 /**
- * mints(list row) を inspectionIds (= productionIds) でまとめて取得する。
+ * ✅ productionIds を受け取って inspections を取得（画面側が productionIds を持っている場合）。
+ */
+export async function fetchInspectionBatchesByProductionIds(
+  productionIds: string[],
+): Promise<InspectionBatchDTO[]> {
+  const ids = (productionIds ?? [])
+    .map((s) => String(s ?? "").trim())
+    .filter((s) => !!s);
+
+  if (ids.length === 0) return [];
+
+  // repository に実装がある場合のみ使う（段階移行に強くする）
+  const anyRepo = repo as any;
+  if (typeof anyRepo.fetchInspectionBatchesByProductionIdsHTTP === "function") {
+    return (await anyRepo.fetchInspectionBatchesByProductionIdsHTTP(ids)) as
+      | InspectionBatchDTO[]
+      | [];
+  }
+
+  // 直接 import しているので基本ここに来ないが、念のため
+  return fetchInspectionBatchesByProductionIdsHTTP(ids);
+}
+
+/**
+ * ✅ mints(list row) を inspectionIds (= productionIds) でまとめて取得する。
  *
- * 期待する repository 側の関数:
- * - fetchMintsByInspectionIdsHTTP(ids: string[]): Promise<Record<string, MintListRowDTO>>
- *
- * （単発取得しかない場合は MintDTO を返す可能性があるため、ここでは扱わない）
+ * 推奨: repository の listMintsByInspectionIDsHTTP を優先して呼ぶ
+ * （内部で view=list を試し、ダメならフォールバックする実装にしてある）
  */
 export async function fetchMintsMapByInspectionIds(
   inspectionIds: string[],
@@ -90,12 +121,42 @@ export async function fetchMintsMapByInspectionIds(
 
   const anyRepo = repo as any;
 
-  if (typeof anyRepo.fetchMintsByInspectionIdsHTTP === "function") {
-    const m = await anyRepo.fetchMintsByInspectionIdsHTTP(ids);
+  // ✅ 推奨: list row 取得（フォールバック付き）
+  if (typeof anyRepo.listMintsByInspectionIDsHTTP === "function") {
+    const m = await anyRepo.listMintsByInspectionIDsHTTP(ids);
+    return (m ?? {}) as Record<string, MintListRowDTO>;
+  }
+
+  // 互換: 旧名
+  if (typeof anyRepo.fetchMintListRowsByInspectionIdsHTTP === "function") {
+    const m = await anyRepo.fetchMintListRowsByInspectionIdsHTTP(ids);
     return (m ?? {}) as Record<string, MintListRowDTO>;
   }
 
   // 未実装なら空
+  return {};
+}
+
+/**
+ * ✅ MintDTO を inspectionIds (= productionIds) でまとめて取得する（肉付け用途）。
+ * repository 側に実装が無い場合は {} を返す。
+ */
+export async function fetchMintsDTOMapByInspectionIds(
+  inspectionIds: string[],
+): Promise<Record<string, MintDTO>> {
+  const ids = (inspectionIds ?? [])
+    .map((s) => String(s ?? "").trim())
+    .filter((s) => !!s);
+
+  if (ids.length === 0) return {};
+
+  const anyRepo = repo as any;
+
+  if (typeof anyRepo.fetchMintsByInspectionIdsHTTP === "function") {
+    const m = await anyRepo.fetchMintsByInspectionIdsHTTP(ids);
+    return (m ?? {}) as Record<string, MintDTO>;
+  }
+
   return {};
 }
 

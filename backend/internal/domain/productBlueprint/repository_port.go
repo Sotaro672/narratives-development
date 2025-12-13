@@ -43,6 +43,9 @@ type Patch struct {
 // ========================================
 
 type Filter struct {
+	// ★ 必須: マルチテナント境界
+	CompanyID string
+
 	SearchTerm string
 
 	BrandIDs    []string
@@ -50,9 +53,6 @@ type Filter struct {
 	ItemTypes   []ItemType
 	TagTypes    []ProductIDTagType
 
-	// 削除状態フィルタ:
-	// - false: 通常の（未削除）レコードを対象（実装側で DeletedAt == nil を想定）
-	// - true : 論理削除済み（DeletedAt != nil）のみを対象
 	OnlyDeleted bool
 
 	CreatedFrom *time.Time

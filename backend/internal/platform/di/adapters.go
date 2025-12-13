@@ -4,6 +4,7 @@ package di
 import (
 	"context"
 	"errors"
+	"strings"
 
 	fs "narratives/internal/adapters/out/firestore"
 	companydom "narratives/internal/domain/company"
@@ -131,13 +132,13 @@ func (a *invitationTokenRepoAdapter) CreateInvitationToken(
 // productBlueprint ドメインサービス用アダプタ
 // ========================================
 //
-// fs.ProductBlueprintRepositoryFS（= uc.ProductBlueprintRepo 実装）を
-// productBlueprint.Service の期待する productBlueprint.Repository に
+// fs.ProductBlueprintRepositoryFS（= domain/productBlueprint.Repository 実装）を
+// productBlueprint.Service が期待する ReaderRepository（GetByID + ListIDsByCompany）に
 // 合わせるための薄いアダプタです。
-// Service 側では GetByID しか使わない前提。
 type productBlueprintDomainRepoAdapter struct {
 	repo interface {
 		GetByID(ctx context.Context, id string) (productbpdom.ProductBlueprint, error)
+		ListIDsByCompany(ctx context.Context, companyID string) ([]string, error)
 	}
 }
 
@@ -148,7 +149,18 @@ func (a *productBlueprintDomainRepoAdapter) GetByID(
 	if a == nil || a.repo == nil {
 		return productbpdom.ProductBlueprint{}, productbpdom.ErrInternal
 	}
-	return a.repo.GetByID(ctx, id)
+	return a.repo.GetByID(ctx, strings.TrimSpace(id))
+}
+
+// ★追加: companyId → productBlueprintIds を repo に委譲
+func (a *productBlueprintDomainRepoAdapter) ListIDsByCompany(
+	ctx context.Context,
+	companyID string,
+) ([]string, error) {
+	if a == nil || a.repo == nil {
+		return nil, productbpdom.ErrInternal
+	}
+	return a.repo.ListIDsByCompany(ctx, strings.TrimSpace(companyID))
 }
 
 // ========================================

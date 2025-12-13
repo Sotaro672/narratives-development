@@ -51,6 +51,10 @@ const formatDate = (iso?: string | null): string => {
   return `${y}/${m}/${day}`;
 };
 
+const asString = (v: any): string => (typeof v === "string" ? v : "");
+const asNonEmptyString = (v: any): string =>
+  typeof v === "string" && v.trim() ? v.trim() : "";
+
 /** Production 一覧取得 */
 export async function loadProductionRows(): Promise<ProductionRow[]> {
   const items = await listProductionsHTTP();
@@ -67,31 +71,31 @@ export async function loadProductionRows(): Promise<ProductionRow[]> {
       0,
     );
 
-    const blueprintId =
-      raw.productBlueprintId ?? raw.ProductBlueprintID ?? "";
+    const blueprintId = asNonEmptyString(
+      raw.productBlueprintId ?? raw.ProductBlueprintID ?? "",
+    );
 
     const productName =
-      raw.productName ??
-      raw.ProductName ??
-      blueprintId;
+      asNonEmptyString(raw.productName ?? raw.ProductName) || blueprintId;
 
     const row: ProductionRow = {
       ...(raw as Production),
 
-      id: raw.id ?? raw.ID ?? "",
+      id: asNonEmptyString(raw.id ?? raw.ID ?? ""),
       productBlueprintId: blueprintId,
 
       productName,
-      brandName: raw.brandName ?? raw.BrandName ?? "",
+      brandName: asString(raw.brandName ?? raw.BrandName ?? ""),
 
-      assigneeId: raw.assigneeId ?? raw.AssigneeID ?? "",
-      assigneeName: raw.assigneeName ?? raw.AssigneeName ?? "",
+      // ✅ string | null | undefined を潰して必ず string にする
+      assigneeId: asString(raw.assigneeId ?? raw.AssigneeID ?? ""),
+      assigneeName: asString(raw.assigneeName ?? raw.AssigneeName ?? ""),
 
       status: (raw.status ?? raw.Status ?? "") as ProductionStatus,
-      printedAt: raw.printedAt ?? raw.PrintedAt ?? null,
-      createdAt: raw.createdAt ?? raw.CreatedAt ?? null,
-      updatedAt: raw.updatedAt ?? raw.UpdatedAt ?? null,
-      models: rawModels,
+      printedAt: (raw.printedAt ?? raw.PrintedAt ?? null) as any,
+      createdAt: (raw.createdAt ?? raw.CreatedAt ?? null) as any,
+      updatedAt: (raw.updatedAt ?? raw.UpdatedAt ?? null) as any,
+      models: rawModels as any,
 
       totalQuantity,
     };
@@ -145,8 +149,8 @@ export function buildRowsView(params: {
         const bv = b.totalQuantity;
         return sortDir === "asc" ? av - bv : bv - av;
       }
-      const av = toTs(a[sortKey]);
-      const bv = toTs(b[sortKey]);
+      const av = toTs((a as any)[sortKey] as any);
+      const bv = toTs((b as any)[sortKey] as any);
       return sortDir === "asc" ? av - bv : bv - av;
     });
   }
@@ -156,12 +160,13 @@ export function buildRowsView(params: {
     id: p.id,
     productBlueprintId: p.productBlueprintId,
     productName: p.productName ?? "",
+    // ✅ ProductionRow.assigneeId は string に正規化済み
     assigneeId: p.assigneeId,
     assigneeName: p.assigneeName ?? "",
     status: p.status,
     totalQuantity: p.totalQuantity,
-    printedAtLabel: formatDate(p.printedAt),
-    createdAtLabel: formatDate(p.createdAt),
+    printedAtLabel: formatDate((p as any).printedAt ?? null),
+    createdAtLabel: formatDate((p as any).createdAt ?? null),
     brandName: p.brandName ?? "",
   }));
 

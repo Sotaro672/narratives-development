@@ -14,6 +14,10 @@ import {
   fetchMintByInspectionIdHTTP,
 } from "../infrastructure/repository/mintRequestRepositoryHTTP";
 
+// ✅ MintRequestQueryService 呼び出し用（ID Token）
+import { auth } from "../../../shell/src/auth/infrastructure/config/firebaseClient";
+
+
 // ============================================================
 // Types (ViewModel for MintRequestManagement)
 // ============================================================
@@ -48,6 +52,108 @@ const log = (...args: any[]) => {
 };
 
 // ============================================================
+// MintRequestQueryService (backend) access
+// ============================================================
+
+const RAW_ENV_BASE =
+  ((import.meta as any).env?.VITE_BACKEND_BASE_URL as string | undefined) ?? "";
+
+const FALLBACK_BASE =
+  "https://narratives-backend-871263659099.asia-northeast1.run.app";
+
+function sanitizeBase(u: string): string {
+  return (u || "").replace(/\/+$/g, "");
+}
+
+const API_BASE = sanitizeBase(sanitizeBase(RAW_ENV_BASE) || FALLBACK_BASE);
+
+async function getIdTokenOrThrow(): Promise<string> {
+  const user = auth.currentUser;
+  if (!user) throw new Error("未ログインです");
+  return user.getIdToken(false);
+}
+
+async function requestJSON<T>(path: string): Promise<T> {
+  const idToken = await getIdTokenOrThrow();
+  const url = `${API_BASE}${path}`;
+  log("request", { method: "GET", url });
+
+  const res = await fetch(url, {
+    method: "GET",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${idToken}`,
+    },
+  });
+
+  const txt = await res.text().catch(() => "");
+  if (!res.ok) {
+    log("response error", {
+      url,
+      status: res.status,
+      statusText: res.statusText,
+      bodyHead: txt?.slice(0, 300),
+    });
+    throw new Error(`MintRequestQueryService error: ${res.status} ${res.statusText}${txt ? `\n${txt}` : ""}`);
+  }
+
+  try {
+    return (txt ? JSON.parse(txt) : null) as T;
+  } catch (e) {
+    log("response parse error", { url, bodyHead: txt?.slice(0, 300) });
+    throw new Error("MintRequestQueryService response is not JSON");
+  }
+}
+
+/**
+ * MintRequestQueryService が返す “一覧用 DTO” を想定（フィールド名は揺れても吸収する）
+ * - requestedBy = mint.createdBy（あなたの要件）
+ */
+type MintRequestManagementRowDTO = {
+  id?: string;
+  productionId?: string;
+  inspectionId?: string;
+
+  productName?: string | null;
+
+  inspectionStatus?: InspectionStatus | string | null;
+  totalPassed?: number | null;
+  quantity?: number | null;
+
+  tokenName?: string | null;
+
+  requestedBy?: string | null; // = mint.createdBy
+  requestedByName?: string | null; // = memberName(requestedBy)（あれば）
+  createdByName?: string | null; // 互換
+
+  mintedAt?: string | null;
+};
+
+const asNonEmptyString = (v: any): string =>
+  typeof v === "string" && v.trim() ? v.trim() : "";
+
+const asStringOrNull = (v: any): string | null => {
+  const s = typeof v === "string" ? v.trim() : "";
+  return s ? s : null;
+};
+
+const asNumber0 = (v: any): number => {
+  const n = Number(v);
+  return Number.isFinite(n) ? n : 0;
+};
+
+function normalizeInspectionStatus(v: any): InspectionStatus {
+  const s = String(v ?? "").trim();
+  if (s === "completed") return "completed";
+  if (s === "inspecting") return "inspecting";
+  return "notYet" as any; // domain 側の実体に合わせている前提
+}
+
+function normalizeProductionId(b: any): string {
+  return String(b?.productionId ?? b?.inspectionId ?? b?.id ?? "").trim();
+}
+
+// ============================================================
 // Pure helpers
 // ============================================================
 
@@ -64,6 +170,11 @@ const inspectionStatusLabel = (
   }
 };
 
+function deriveMintStatusFromMintedAt(mintedAt: string | null | undefined): MintRequestRowStatus {
+  if (!mintedAt) return "requested"; // mint がある前提の DTO を想定
+  return "minted";
+}
+
 function deriveMintStatusFromListRow(
   mint: MintListRowDTO | null,
 ): MintRequestRowStatus {
@@ -72,8 +183,17 @@ function deriveMintStatusFromListRow(
   return "requested";
 }
 
-function normalizeProductionId(b: any): string {
-  return String(b?.productionId ?? "").trim();
+function uniqStrings(xs: string[]): string[] {
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const x of xs ?? []) {
+    const s = String(x ?? "").trim();
+    if (!s) continue;
+    if (seen.has(s)) continue;
+    seen.add(s);
+    out.push(s);
+  }
+  return out;
 }
 
 function buildRows(
@@ -108,46 +228,176 @@ function buildRows(
   });
 }
 
+function buildRowsFromQueryDTO(items: MintRequestManagementRowDTO[]): ViewRow[] {
+  return (items ?? []).map((raw) => {
+    const pid =
+      asNonEmptyString(raw.productionId) ||
+      asNonEmptyString(raw.inspectionId) ||
+      asNonEmptyString(raw.id);
+
+    const inspSt = normalizeInspectionStatus(raw.inspectionStatus);
+
+    // ✅ requestedBy = mint.createdBy が backend から来る前提
+    const requesterName =
+      asStringOrNull(raw.requestedByName) ??
+      asStringOrNull(raw.createdByName) ??
+      asStringOrNull(raw.requestedBy);
+
+    // mintedAt があるなら minted、無いなら requested（planning は “mint無し” 側で作る）
+    const st: MintRequestRowStatus =
+      raw.mintedAt ? "minted" : "requested";
+
+    return {
+      id: pid,
+
+      tokenName: asStringOrNull(raw.tokenName),
+      productName: asStringOrNull(raw.productName),
+
+      mintQuantity: asNumber0(raw.totalPassed),
+      productionQuantity: asNumber0(raw.quantity),
+
+      status: st,
+      inspectionStatus: inspSt,
+
+      createdByName: requesterName,
+      mintedAt: raw.mintedAt ?? null,
+
+      statusLabel: inspectionStatusLabel(inspSt),
+    };
+  });
+}
+
 // ============================================================
 // Service: MintRequestManagement (list screen)
 // ============================================================
 
 /**
  * MintRequestManagement 一覧用の行を組み立てて返す。
- * - inspections を取得
- * - productionIds を抽出
- * - mints(list) をまとめて取得（inspectionId -> MintListRowDTO）
- * - 1行に合成して ViewRow[] で返す
+ *
+ * ✅ 新フロー（推奨）:
+ * - MintRequestQueryService（backend query）に 1 回リクエストして一覧を取得
+ *
+ * ✅ フォールバック:
+ * - 旧フロー（inspections → productionIds → mints）で合成
  */
 export async function loadMintRequestManagementRows(): Promise<ViewRow[]> {
   log("load start");
 
-  const batches: InspectionBatchDTO[] = await fetchInspectionBatches();
+  // ------------------------------------------------------------
+  // 0) ✅ まずは MintRequestQueryService を叩く（本命）
+  //    - ルートは実装に合わせて変更OK:
+  //      例) GET /mint/requests, /mint/requests/management, /mint/query/requests など
+  // ------------------------------------------------------------
+  const queryPaths = [
+    "/mint/requests",                 // ← 最有力（GET 追加しやすい）
+    "/mint/requests?view=management", // ← もし view 切替にしている場合
+    "/mint/requests?view=list",
+  ];
+
+  for (const path of queryPaths) {
+    try {
+      const dto = await requestJSON<any>(path);
+
+      // array 想定
+      if (Array.isArray(dto)) {
+        const rows = buildRowsFromQueryDTO(dto as MintRequestManagementRowDTO[]);
+        log("MintRequestQueryService success", {
+          path,
+          rowsLen: rows.length,
+          sample0: rows[0],
+        });
+        log("load end");
+        return rows;
+      }
+
+      // object { items: [] } みたいな形にも対応
+      if (dto && Array.isArray((dto as any).items)) {
+        const rows = buildRowsFromQueryDTO((dto as any).items as MintRequestManagementRowDTO[]);
+        log("MintRequestQueryService success(items)", {
+          path,
+          rowsLen: rows.length,
+          sample0: rows[0],
+        });
+        log("load end");
+        return rows;
+      }
+
+      log("MintRequestQueryService unexpected shape", { path, dtoHead: dto });
+    } catch (e: any) {
+      log("MintRequestQueryService failed -> fallback next path", {
+        path,
+        err: e?.message ?? e,
+      });
+      // 次の path を試す
+    }
+  }
+
+  // ------------------------------------------------------------
+  // 1) フォールバック（旧フロー）
+  // ------------------------------------------------------------
+  log("fallback: legacy flow start");
+
+  // まず inspections を取得（productionIds 抽出用）
+  const initialBatches: InspectionBatchDTO[] = await fetchInspectionBatches();
   log(
-    "fetchInspectionBatches result length=",
-    (batches ?? []).length,
+    "fetchInspectionBatches(initial) result length=",
+    (initialBatches ?? []).length,
     "sample[0]=",
-    (batches ?? [])[0],
+    (initialBatches ?? [])[0],
   );
 
-  const productionIds = (batches ?? [])
-    .map((b) => normalizeProductionId(b))
-    .filter((s) => !!s);
+  const productionIds = uniqStrings(
+    (initialBatches ?? []).map((b) => normalizeProductionId(b)),
+  );
 
   log(
-    "productionIds length=",
+    "productionIds(uniq) length=",
     productionIds.length,
     "sample[0..4]=",
     productionIds.slice(0, 5),
   );
 
-  // ✅ 一覧は list row を取得（view=list 相当）
+  // inspections を ListByProductionID で取得（可能なら）
+  let batches: InspectionBatchDTO[] = initialBatches ?? [];
+  try {
+    const byProd: InspectionBatchDTO[] = await (fetchInspectionBatches as any)(
+      productionIds,
+    );
+    if (Array.isArray(byProd) && byProd.length >= 0) {
+      batches = byProd;
+    }
+    log(
+      "fetchInspectionBatches(ListByProductionID) length=",
+      (batches ?? []).length,
+      "sample[0]=",
+      (batches ?? [])[0],
+    );
+  } catch (e: any) {
+    log(
+      "fetchInspectionBatches(ListByProductionID) error=",
+      e?.message ?? e,
+      "fallback to initialBatches",
+    );
+    batches = initialBatches ?? [];
+  }
+
+  const productionIds2 = uniqStrings(
+    (batches ?? []).map((b) => normalizeProductionId(b)),
+  );
+  log(
+    "productionIds(from ListByProductionID inspections) length=",
+    productionIds2.length,
+    "sample[0..4]=",
+    productionIds2.slice(0, 5),
+  );
+
+  // mints を map 取得
   let mintMap: Record<string, MintListRowDTO> = {};
   try {
-    mintMap = await listMintsByInspectionIDsHTTP(productionIds);
+    mintMap = await (listMintsByInspectionIDsHTTP as any)(productionIds2);
     const keys = Object.keys(mintMap ?? {});
     log(
-      "listMintsByInspectionIDsHTTP keys=",
+      "listMintsByProductionID (via listMintsByInspectionIDsHTTP) keys=",
       keys.length,
       "sampleKey=",
       keys[0],
@@ -155,7 +405,7 @@ export async function loadMintRequestManagementRows(): Promise<ViewRow[]> {
       keys[0] ? (mintMap as any)[keys[0]] : undefined,
     );
   } catch (e: any) {
-    log("listMintsByInspectionIDsHTTP error=", e?.message ?? e);
+    log("listMintsByProductionID error=", e?.message ?? e);
     mintMap = {};
   }
 
@@ -174,6 +424,7 @@ export async function loadMintRequestManagementRows(): Promise<ViewRow[]> {
     rows.filter((r) => !r.tokenName).slice(0, 10),
   );
 
+  log("fallback: legacy flow end");
   log("load end");
   return rows;
 }
@@ -189,10 +440,7 @@ export async function loadMintRequestManagementRows(): Promise<ViewRow[]> {
 export async function loadMintsDTOMapByInspectionIds(
   inspectionIds: string[],
 ): Promise<Record<string, MintDTO>> {
-  const ids = (inspectionIds ?? [])
-    .map((s) => String(s ?? "").trim())
-    .filter((s) => !!s);
-
+  const ids = uniqStrings(inspectionIds ?? []);
   if (ids.length === 0) return {};
 
   // repository 直呼び（/mint/mints?inspectionIds=... のレスポンスを MintDTO map として扱う）

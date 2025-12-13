@@ -1,4 +1,3 @@
-// backend/internal/application/usecase/auth/bootstrap.go
 package auth
 
 import (
@@ -17,7 +16,6 @@ import (
 // -------------------------------------------------------
 
 type MemberRepository interface {
-	// Firestore 版とも整合性を取るため、*Member を返す
 	GetByID(ctx context.Context, id string) (*memberdom.Member, error)
 	Save(ctx context.Context, m *memberdom.Member) error
 }
@@ -59,8 +57,6 @@ func (s *BootstrapService) Bootstrap(
 	profile *SignUpProfile,
 ) error {
 	now := time.Now().UTC()
-
-	// ログ: リクエスト到達
 	log.Printf("[bootstrap] request received: uid=%s email=%s", uid, email)
 
 	// nil セーフ
@@ -69,13 +65,53 @@ func (s *BootstrapService) Bootstrap(
 		p = *profile
 	}
 
+	companyName := strings.TrimSpace(p.CompanyName)
+
+	//---------------------------------------------------------
+	// 0) companyName がある場合は先に Company を作る
+	//    - ここで失敗したら member は作らない（中途半端状態を防ぐ）
+	//---------------------------------------------------------
+	companyID := ""
+
+	if companyName != "" {
+		issuedID, err := s.Companies.NewID(ctx)
+		if err != nil {
+			log.Printf("[bootstrap] failed to issue companyID: uid=%s err=%v", uid, err)
+			return err
+		}
+
+		companyEntity, err := companydom.NewCompanyWithNow(
+			issuedID,
+			companyName,
+			uid, // admin
+			uid, // createdBy
+			uid, // updatedBy
+			true,
+			now,
+		)
+		if err != nil {
+			log.Printf("[bootstrap] failed to create company entity: uid=%s companyName=%s err=%v", uid, companyName, err)
+			return err
+		}
+
+		if err := s.Companies.Save(ctx, &companyEntity); err != nil {
+			log.Printf("[bootstrap] failed to save company: uid=%s companyID=%s err=%v", uid, issuedID, err)
+			return err
+		}
+
+		companyID = issuedID
+		log.Printf("[bootstrap] company created: uid=%s companyID=%s name=%s", uid, companyID, companyName)
+	} else {
+		log.Printf("[bootstrap] no companyName provided, will create member only: uid=%s", uid)
+	}
+
 	//---------------------------------------------------------
 	// 1) Member 新規作成
 	//    - status = "active"
 	//    - permissions = 全権限（backend catalog 由来）
+	//    - companyName がある場合は companyID を紐付けて保存
 	//---------------------------------------------------------
 
-	// backend の Permission カタログから name 一覧を取得
 	allPermNames := permdom.AllPermissionNames()
 
 	memberEntity, err := memberdom.New(
@@ -84,81 +120,26 @@ func (s *BootstrapService) Bootstrap(
 		memberdom.WithName(p.FirstName, p.LastName),
 		memberdom.WithNameKana(p.FirstNameKana, p.LastNameKana),
 		memberdom.WithEmail(email),
-		memberdom.WithStatus("active"),          // ★ ここで active にする
-		memberdom.WithPermissions(allPermNames), // ★ 全権限を付与
+		memberdom.WithStatus("active"),
+		memberdom.WithPermissions(allPermNames),
 	)
 	if err != nil {
 		log.Printf("[bootstrap] failed to create member entity: uid=%s err=%v", uid, err)
 		return err
 	}
 
-	// まず Member を保存（この時点では CompanyID 空のまま）
+	// ★ company が作れている場合のみ紐付け（保存は1回で済ませる）
+	if companyID != "" {
+		memberEntity.CompanyID = companyID
+	}
+
 	if err := s.Members.Save(ctx, &memberEntity); err != nil {
 		log.Printf("[bootstrap] failed to save member: uid=%s err=%v", uid, err)
 		return err
 	}
 
-	log.Printf("[bootstrap] member created: uid=%s, permissions=%d, status=%s",
-		uid, len(memberEntity.Permissions), memberEntity.Status)
-
-	//---------------------------------------------------------
-	// 2) 会社名が空ならここで終了（Company は作成しない）
-	//---------------------------------------------------------
-
-	companyName := strings.TrimSpace(p.CompanyName)
-	if companyName == "" {
-		log.Printf("[bootstrap] no companyName provided, finish with member only: uid=%s", uid)
-		return nil
-	}
-
-	//---------------------------------------------------------
-	// 3) Company を新規作成
-	//---------------------------------------------------------
-
-	companyID, err := s.Companies.NewID(ctx)
-	if err != nil {
-		log.Printf("[bootstrap] failed to issue companyID: uid=%s err=%v", uid, err)
-		return err
-	}
-
-	companyEntity, err := companydom.NewCompanyWithNow(
-		companyID,
-		companyName,
-		uid, // admin
-		uid, // createdBy
-		uid, // updatedBy
-		true,
-		now,
-	)
-	if err != nil {
-		log.Printf("[bootstrap] failed to create company entity: uid=%s companyName=%s err=%v", uid, companyName, err)
-		return err
-	}
-
-	if err := s.Companies.Save(ctx, &companyEntity); err != nil {
-		log.Printf("[bootstrap] failed to save company: uid=%s companyID=%s err=%v", uid, companyID, err)
-		return err
-	}
-
-	log.Printf("[bootstrap] company created: uid=%s companyID=%s name=%s", uid, companyID, companyName)
-
-	//---------------------------------------------------------
-	// 4) Member に companyId を紐付けて更新
-	//---------------------------------------------------------
-
-	memberEntity.CompanyID = companyID
-
-	if err := memberEntity.TouchUpdated(now, &uid); err != nil {
-		log.Printf("[bootstrap] failed to touch member updated: uid=%s err=%v", uid, err)
-		return err
-	}
-
-	if err := s.Members.Save(ctx, &memberEntity); err != nil {
-		log.Printf("[bootstrap] failed to update member with companyID: uid=%s companyID=%s err=%v", uid, companyID, err)
-		return err
-	}
-
-	log.Printf("[bootstrap] member linked to company: uid=%s companyID=%s", uid, companyID)
+	log.Printf("[bootstrap] member created: uid=%s, companyID=%s, permissions=%d, status=%s",
+		uid, companyID, len(memberEntity.Permissions), memberEntity.Status)
 
 	return nil
 }

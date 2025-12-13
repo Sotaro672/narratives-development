@@ -18,6 +18,9 @@ import (
 	// ★ new: Production 用の新パッケージ
 	productionapp "narratives/internal/application/production"
 
+	// ★ new: CompanyProductionQueryService
+	companyquery "narratives/internal/application/query"
+
 	// ハンドラ群
 	"narratives/internal/adapters/in/http/handlers"
 	"narratives/internal/adapters/in/http/middleware"
@@ -65,6 +68,9 @@ type RouterDeps struct {
 	UserUC             *usecase.UserUsecase
 	WalletUC           *usecase.WalletUsecase
 
+	// ★ 追加: Company → ProductBlueprintIds → Productions の Query 専用（GET一覧）
+	CompanyProductionQueryService *companyquery.CompanyProductionQueryService
+
 	// ★ NameResolver（ID→名前/型番解決）
 	NameResolver *resolver.NameResolver
 
@@ -94,6 +100,8 @@ type RouterDeps struct {
 
 	// Message 用の Firestore Repository
 	MessageRepo *msgrepo.MessageRepositoryFS
+	// ★ MintRequest の query（productionIds を company 境界で取得する等に使う）
+	MintRequestQueryService handlers.MintRequestQueryService
 }
 
 func NewRouter(deps RouterDeps) http.Handler {
@@ -356,8 +364,15 @@ func NewRouter(deps RouterDeps) http.Handler {
 	// ================================
 	// Productions
 	// ================================
-	if deps.ProductionUC != nil {
-		productionH := handlers.NewProductionHandler(deps.ProductionUC)
+	// 方針:
+	// - GET /productions は CompanyProductionQueryService
+	// - CRUD は ProductionUsecase
+	// NewProductionHandler(companyQueryService, uc) の順で渡す
+	if deps.ProductionUC != nil && deps.CompanyProductionQueryService != nil {
+		productionH := handlers.NewProductionHandler(
+			deps.CompanyProductionQueryService, // ★ 第1引数: QueryService
+			deps.ProductionUC,                  // ★ 第2引数: Usecase
+		)
 
 		var h http.Handler = productionH
 		if authMw != nil {
@@ -403,10 +418,13 @@ func NewRouter(deps RouterDeps) http.Handler {
 	// ⭐ Mint API
 	// ================================
 	if deps.MintUC != nil {
-		// ★ NewMintHandler は (mintUC, tokenUC, nameResolver) を受け取る
-		//   tokenUC はチェーンミントを使わないなら nil でも OK
-		//   nameResolver は list/patch で使うので必須（DI で組み立てて deps に載せる）
-		mintH := handlers.NewMintHandler(deps.MintUC, deps.TokenUC, deps.NameResolver)
+		mintH := handlers.NewMintHandler(
+			deps.MintUC,
+			deps.TokenUC,
+			deps.NameResolver,
+			deps.ProductionUC,            // ★ 追加（既存）
+			deps.MintRequestQueryService, // ★ NEW: query service を渡す
+		)
 
 		if mh, ok := mintH.(*handlers.MintHandler); ok {
 			mux.HandleFunc("/mint/debug", mh.HandleDebug)
@@ -420,6 +438,10 @@ func NewRouter(deps RouterDeps) http.Handler {
 		mux.Handle("/mint/inspections", h)
 		mux.Handle("/mint/mints", h)
 		mux.Handle("/mint/mints/", h)
+
+		// ★ NEW: /mint/requests も MintHandler が処理するので明示（なくても /mint/ で拾うが推奨）
+		mux.Handle("/mint/requests", h)
+
 		mux.Handle("/mint/", h)
 	}
 

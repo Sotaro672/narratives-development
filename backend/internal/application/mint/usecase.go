@@ -540,3 +540,41 @@ func (u *MintUsecase) ListTokenBlueprintsByBrand(
 
 	return tbdom.ListByBrandID(ctx, u.tbRepo, brandID, page)
 }
+
+// ListInspectionBatchesByProductionIDs fetches inspection batches by production docIds.
+// New flow: ProductionUsecase (or frontend) prepares productionIds and passes them here.
+func (u *MintUsecase) ListInspectionBatchesByProductionIDs(
+	ctx context.Context,
+	productionIDs []string,
+) ([]inspectiondom.InspectionBatch, error) {
+
+	if u == nil {
+		return nil, errors.New("mint usecase is nil")
+	}
+	if u.inspRepo == nil {
+		return nil, errors.New("inspection repo is nil")
+	}
+
+	seen := make(map[string]struct{}, len(productionIDs))
+	ids := make([]string, 0, len(productionIDs))
+
+	for _, id := range productionIDs {
+		s := strings.TrimSpace(id)
+		if s == "" {
+			continue
+		}
+		if _, ok := seen[s]; ok {
+			continue
+		}
+		seen[s] = struct{}{}
+		ids = append(ids, s)
+	}
+
+	if len(ids) == 0 {
+		return []inspectiondom.InspectionBatch{}, nil
+	}
+
+	sort.Strings(ids)
+
+	return u.inspRepo.ListByProductionID(ctx, ids)
+}
