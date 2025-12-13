@@ -14,6 +14,7 @@ import (
 	httpin "narratives/internal/adapters/in/http"
 	fs "narratives/internal/adapters/out/firestore"
 	mailadp "narratives/internal/adapters/out/mail"
+	mintapp "narratives/internal/application/mint"
 	productionapp "narratives/internal/application/production"
 	resolver "narratives/internal/application/resolver"
 	uc "narratives/internal/application/usecase"
@@ -92,7 +93,7 @@ type Container struct {
 	InspectionUC *uc.InspectionUsecase
 
 	// ★ Mint 用 Usecase（MintRequest / NFT 発行チェーン）
-	MintUC *uc.MintUsecase
+	MintUC *mintapp.MintUsecase
 
 	// ★ 招待関連 Usecase
 	InvitationQuery   uc.InvitationQueryPort
@@ -356,7 +357,7 @@ func NewContainer(ctx context.Context) (*Container, error) {
 	//  mintTokenBlueprintRepo, *brand.Service, mint.MintRepository, mint.PassedProductLister,
 	//  *resolver.NameResolver, usecase.TokenMintPort)
 	// の 10 引数
-	mintUC := uc.NewMintUsecase(
+	mintUC := mintapp.NewMintUsecase(
 		productBlueprintRepo, // mint.MintProductBlueprintRepo
 		productionRepo,       // mint.MintProductionRepo
 		inspectionRepo,       // mint.MintInspectionRepo
@@ -366,7 +367,7 @@ func NewContainer(ctx context.Context) (*Container, error) {
 		mintRepo,             // mint.MintRepository
 		inspectionRepo,       // mint.PassedProductLister（InspectionRepositoryFS に実装追加済み前提）
 		nameResolver,         // *resolver.NameResolver
-		tokenUC,              // usecase.TokenMintPort（TokenUsecase のインスタンス）
+		tokenUC,              // mint.TokenMintPort（TokenUsecase のインスタンス）
 	)
 
 	saleUC := uc.NewSaleUsecase(saleRepo)

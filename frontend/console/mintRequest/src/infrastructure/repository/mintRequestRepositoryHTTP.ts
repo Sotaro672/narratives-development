@@ -2,7 +2,11 @@
 
 // Firebase Auth から ID トークンを取得
 import { auth } from "../../../../shell/src/auth/infrastructure/config/firebaseClient";
-import type { InspectionBatchDTO, MintDTO } from "../api/mintRequestApi";
+import type {
+  InspectionBatchDTO,
+  MintListRowDTO,
+  MintDTO,
+} from "../api/mintRequestApi";
 import type {
   ProductBlueprintPatchDTO,
   BrandForMintDTO,
@@ -11,10 +15,9 @@ import type {
 
 // 🔙 BACKEND の BASE URL
 const ENV_BASE =
-  ((import.meta as any).env?.VITE_BACKEND_BASE_URL as string | undefined)?.replace(
-    /\/+$/g,
-    "",
-  ) ?? "";
+  ((import.meta as any).env?.VITE_BACKEND_BASE_URL as
+    | string
+    | undefined)?.replace(/\/+$/g, "") ?? "";
 
 const FALLBACK_BASE =
   "https://narratives-backend-871263659099.asia-northeast1.run.app";
@@ -282,14 +285,18 @@ export async function fetchTokenBlueprintsByBrandHTTP(
 // ===============================
 
 /**
- * inspectionIds (= productionIds) をまとめて渡して、mints を取得する。
+ * inspectionIds (= productionIds) をまとめて渡して、mints(list row) を取得する。
  * backend: GET /mint/mints?inspectionIds=a,b,c
  *
- * 戻り値は "inspectionId -> MintDTO" の map を期待（画面側での突合を簡単にするため）。
+ * 戻り値は "inspectionId -> MintListRowDTO" の map を期待（画面側での突合を簡単にするため）。
+ *
+ * NOTE:
+ * - 一覧画面の結合用に必要なのは tokenName / createdByName / mintedAt のみ
+ * - それ以外は detail API が担う
  */
 export async function fetchMintsByInspectionIdsHTTP(
   inspectionIds: string[],
-): Promise<Record<string, MintDTO>> {
+): Promise<Record<string, MintListRowDTO>> {
   const ids = (inspectionIds ?? [])
     .map((s) => String(s ?? "").trim())
     .filter((s) => !!s);
@@ -319,14 +326,22 @@ export async function fetchMintsByInspectionIdsHTTP(
     throw new Error(`Failed to fetch mints: ${res.status} ${res.statusText}`);
   }
 
-  // 期待: { [inspectionId]: MintDTO }
-  const json = (await res.json()) as Record<string, MintDTO> | null | undefined;
+  // 期待: { [inspectionId]: MintListRowDTO }
+  const json = (await res.json()) as
+    | Record<string, MintListRowDTO>
+    | null
+    | undefined;
+
   return json ?? {};
 }
 
 /**
  * 単発: inspectionId (= productionId) で 1 件取得（バックエンドが用意されている場合）
  * backend: GET /mint/mints/{inspectionId}
+ *
+ * NOTE:
+ * - 既存実装が詳細用の MintDTO を返す前提のまま残す
+ * - 一覧は fetchMintsByInspectionIdsHTTP（MintListRowDTO）を使う
  */
 export async function fetchMintByInspectionIdHTTP(
   inspectionId: string,
@@ -386,15 +401,6 @@ export async function postMintRequestHTTP(
     throw new Error("productionId が空です");
   }
 
-  // ここでまず引数のログを出す
-  // eslint-disable-next-line no-console
-  console.log("[postMintRequestHTTP] called", {
-    productionId: trimmed,
-    tokenBlueprintId,
-    scheduledBurnDate,
-    API_BASE,
-  });
-
   const idToken = await getIdTokenOrThrow();
 
   const url = `${API_BASE}/mint/inspections/${encodeURIComponent(
@@ -413,12 +419,6 @@ export async function postMintRequestHTTP(
     payload.scheduledBurnDate = scheduledBurnDate.trim();
   }
 
-  // eslint-disable-next-line no-console
-  console.log("[postMintRequestHTTP] about to POST", {
-    url,
-    payload,
-  });
-
   const res = await fetch(url, {
     method: "POST",
     headers: {
@@ -428,41 +428,16 @@ export async function postMintRequestHTTP(
     body: JSON.stringify(payload),
   });
 
-  // eslint-disable-next-line no-console
-  console.log("[postMintRequestHTTP] response status", {
-    status: res.status,
-    statusText: res.statusText,
-  });
-
   if (res.status === 404) {
-    // eslint-disable-next-line no-console
-    console.warn("[postMintRequestHTTP] 404 Not Found");
     return null;
   }
 
   if (!res.ok) {
-    // エラーレスポンス本文もログに出しておく
-    let errorBody = "";
-    try {
-      errorBody = await res.text();
-    } catch {
-      // ignore
-    }
-    // eslint-disable-next-line no-console
-    console.error("[postMintRequestHTTP] failed", {
-      status: res.status,
-      statusText: res.statusText,
-      body: errorBody,
-    });
-
     throw new Error(
       `Failed to post mint request: ${res.status} ${res.statusText}`,
     );
   }
 
   const json = (await res.json()) as InspectionBatchDTO | null | undefined;
-  // eslint-disable-next-line no-console
-  console.log("[postMintRequestHTTP] success response json", json);
-
   return json ?? null;
 }

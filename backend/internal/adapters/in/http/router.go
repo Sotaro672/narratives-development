@@ -6,6 +6,9 @@ import (
 
 	firebaseauth "firebase.google.com/go/v4/auth"
 
+	// ★ MintUsecase 移動先
+	mintapp "narratives/internal/application/mint"
+
 	usecase "narratives/internal/application/usecase"
 	authuc "narratives/internal/application/usecase/auth"
 
@@ -46,6 +49,7 @@ type RouterDeps struct {
 	PaymentUC        *usecase.PaymentUsecase
 	PermissionUC     *usecase.PermissionUsecase
 	PrintUC          *usecase.PrintUsecase
+
 	// ★ここだけ型を新パッケージに変更
 	ProductionUC       *productionapp.ProductionUsecase
 	ProductBlueprintUC *usecase.ProductBlueprintUsecase
@@ -67,7 +71,7 @@ type RouterDeps struct {
 	InspectionUC *usecase.InspectionUsecase
 
 	// ⭐ Mint 用 Usecase（/mint/inspections など）
-	MintUC *usecase.MintUsecase
+	MintUC *mintapp.MintUsecase
 
 	// 認証・招待まわり
 	AuthBootstrap     *authuc.BootstrapService
@@ -251,7 +255,6 @@ func NewRouter(deps RouterDeps) http.Handler {
 	// Product Blueprints
 	// ================================
 	if deps.ProductBlueprintUC != nil {
-		// ★ brand.Service + member.Service を渡して brandName / assigneeName を解決
 		pbH := handlers.NewProductBlueprintHandler(
 			deps.ProductBlueprintUC,
 			deps.BrandService,
@@ -271,7 +274,6 @@ func NewRouter(deps RouterDeps) http.Handler {
 	// Token Blueprints
 	// ================================
 	if deps.TokenBlueprintUC != nil {
-		// ★ member.Service + brand.Service を DI から渡す
 		tbH := handlers.NewTokenBlueprintHandler(
 			deps.TokenBlueprintUC,
 			deps.MemberService,
@@ -384,35 +386,24 @@ func NewRouter(deps RouterDeps) http.Handler {
 		inspectorH := handlers.NewInspectorHandler(deps.ProductUC, deps.InspectionUC)
 
 		var h http.Handler = inspectorH
-		// Flutter inspector アプリは Firebase Auth を使っており認証必須
 		if authMw != nil {
 			h = authMw.Handler(h)
 		}
 
-		// 詳細取得
 		mux.Handle("/inspector/products/", h)
-		// 検品バッチ取得/更新/完了
 		mux.Handle("/products/inspections", h)
-		mux.Handle("/products/inspections/", h) // /complete などもこのハンドラに流す
+		mux.Handle("/products/inspections/", h)
 	}
 
 	// ================================
 	// ⭐ Mint API
 	// ================================
 	if deps.MintUC != nil {
-		// 第二引数に TokenUsecase を渡す（現時点では未配線なので nil を渡す）
+		// ★ NOTE: handlers.NewMintHandler 側も application/mint.MintUsecase を受け取るように修正が必要
 		mintH := handlers.NewMintHandler(deps.MintUC, nil)
 
-		// デバッグ用エンドポイント /mint/debug
 		if mh, ok := mintH.(*handlers.MintHandler); ok {
-			// 認証なしで疎通確認したいならそのまま
 			mux.HandleFunc("/mint/debug", mh.HandleDebug)
-			// 認証付きにしたい場合は以下のようにラップする:
-			// var dh http.Handler = http.HandlerFunc(mh.HandleDebug)
-			// if authMw != nil {
-			//     dh = authMw.Handler(dh)
-			// }
-			// mux.Handle("/mint/debug", dh)
 		}
 
 		var h http.Handler = mintH
@@ -420,14 +411,9 @@ func NewRouter(deps RouterDeps) http.Handler {
 			h = authMw.Handler(h)
 		}
 
-		// /mint/inspections は従来どおり
 		mux.Handle("/mint/inspections", h)
-
-		// ★ 追加: mints 一覧取得（inspectionIds クエリ）
 		mux.Handle("/mint/mints", h)
 		mux.Handle("/mint/mints/", h)
-
-		// /mint/product_blueprints/.../patch など /mint/ 配下全体を MintHandler に流す
 		mux.Handle("/mint/", h)
 	}
 
