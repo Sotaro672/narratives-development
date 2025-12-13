@@ -1,18 +1,16 @@
 // frontend/console/mintRequest/src/presentation/hook/useMintRequestManagement.tsx
-
 import React, { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import {
   FilterableTableHeader,
   SortableTableHeader,
 } from "../../../../shell/src/layout/List/List";
-import {
-  fetchInspectionBatches,
-  fetchMintsMapByInspectionIds,
-  type MintDTO,
-  type InspectionBatchDTO,
-} from "../../infrastructure/api/mintRequestApi";
+
 import type { InspectionStatus } from "../../domain/entity/inspections";
+import {
+  loadMintRequestManagementRows,
+  type ViewRow,
+} from "../../application/mintRequestManagementService";
 
 // 日時文字列 → timestamp（不正や null は -1）
 const toTs = (s: string | null | undefined): number => {
@@ -21,8 +19,13 @@ const toTs = (s: string | null | undefined): number => {
   return Number.isNaN(t) ? -1 : t;
 };
 
+// Sorting key
+type SortKey = "mintedAt" | "mintQuantity" | null;
+
 // 🔥 検査ステータスの表示ラベル（InspectionStatus）
-const inspectionStatusLabel = (s: InspectionStatus | null | undefined): string => {
+const inspectionStatusLabel = (
+  s: InspectionStatus | null | undefined,
+): string => {
   switch (s) {
     case "inspecting":
       return "検査中";
@@ -33,43 +36,11 @@ const inspectionStatusLabel = (s: InspectionStatus | null | undefined): string =
   }
 };
 
-// mint 状態（UIバッジ色などに利用）
-export type MintRequestRowStatus = "planning" | "requested" | "minted";
-
-// Sorting key
-type SortKey = "mintedAt" | "mintQuantity" | null;
-
-// 画面に必要な最小 Row（MintDTO + InspectionBatchDTO を突合して作る）
-type ViewRow = {
-  id: string; // = productionId (= mint.inspectionId)
-  tokenBlueprintId: string | null;
-
-  productName: string | null;
-
-  mintQuantity: number;        // = inspection.totalPassed
-  productionQuantity: number;  // = inspection.quantity
-
-  status: MintRequestRowStatus;      // = mint の有無・minted で判定
-  inspectionStatus: InspectionStatus; // = inspection.status
-
-  createdByName: string | null; // = mint.createdByName ?? mint.createdBy
-  mintedAt: string | null;      // = mint.mintedAt
-
-  // 既存UIが使っている想定の表示用ラベル（ここでは検査ステータス）
-  statusLabel: string;
-};
-
-function deriveMintStatusFromMint(mint: MintDTO | null): MintRequestRowStatus {
-  if (!mint) return "planning";
-  if (mint.minted || !!mint.mintedAt) return "minted";
-  return "requested";
-}
-
 export const useMintRequestManagement = () => {
   const navigate = useNavigate();
 
   // ---------------------------
-  // データ取得
+  // データ取得（serviceに委譲）
   // ---------------------------
   const [rawRows, setRawRows] = useState<ViewRow[]>([]);
   const [loading, setLoading] = useState<boolean>(false);
@@ -82,55 +53,49 @@ export const useMintRequestManagement = () => {
       setLoading(true);
       setError(null);
 
+      // どの画面/タイミングか追いやすいように prefix を固定
+      const TAG = "[mintRequest/useMintRequestManagement]";
+
       try {
-        // 1) inspections（MintInspectionView）を取得（productName / quantity / totalPassed / status が得られる）
-        const batches: InspectionBatchDTO[] = await fetchInspectionBatches();
+        console.log(`${TAG} load start`);
 
-        const productionIds = batches
-          .map((b) => String((b as any).productionId ?? "").trim())
-          .filter((s) => !!s);
+        const rows = await loadMintRequestManagementRows();
 
-        // 2) mints をまとめて取得（正：mintsテーブル）
-        const mintMap = await fetchMintsMapByInspectionIds(productionIds);
+        // ✅ 取得結果全体
+        console.log(`${TAG} load result rows(length)=`, rows?.length ?? 0);
+        console.log(`${TAG} load result rows(sample[0..4])=`, (rows ?? []).slice(0, 5));
 
-        // 3) 画面用 Row を組み立て
-        const rows: ViewRow[] = batches.map((b) => {
-          const pid = String((b as any).productionId ?? "").trim();
-          const mint: MintDTO | null = pid ? (mintMap[pid] ?? null) : null;
+        // ✅ tokenName / mintedAt / createdByName が入っているかの簡易サマリ
+        const summary = (rows ?? []).slice(0, 20).map((r) => ({
+          id: (r as any)?.id,
+          tokenName: (r as any)?.tokenName,
+          productName: (r as any)?.productName,
+          createdByName: (r as any)?.createdByName,
+          mintedAt: (r as any)?.mintedAt,
+          inspectionStatus: (r as any)?.inspectionStatus,
+          mintQuantity: (r as any)?.mintQuantity,
+        }));
+        console.log(`${TAG} rows(summary[0..20])=`, summary);
 
-          const st = deriveMintStatusFromMint(mint);
+        // ✅ tokenName が空の行だけ抜き出して原因切り分け
+        const emptyTokenName = (rows ?? []).filter((r) => !r.tokenName);
+        if (emptyTokenName.length > 0) {
+          console.warn(
+            `${TAG} rows with empty tokenName:`,
+            emptyTokenName.slice(0, 10),
+          );
+        }
 
-          const inspSt = (b.status ?? "inspecting") as InspectionStatus;
-
-          const createdByName =
-            (mint?.createdByName ?? null) ||
-            (mint?.createdBy ?? null) ||
-            null;
-
-          return {
-            id: pid,
-            tokenBlueprintId: mint?.tokenBlueprintId ?? null,
-
-            productName: b.productName ?? null,
-
-            mintQuantity: b.totalPassed ?? 0,
-            productionQuantity: (b as any).quantity ?? (b.inspections?.length ?? 0),
-
-            status: st,
-            inspectionStatus: inspSt,
-
-            createdByName,
-            mintedAt: mint?.mintedAt ?? null,
-
-            statusLabel: inspectionStatusLabel(inspSt),
-          };
-        });
-
-        if (!cancelled) setRawRows(rows);
+        if (!cancelled) {
+          setRawRows(rows ?? []);
+          console.log(`${TAG} setRawRows done length=`, rows?.length ?? 0);
+        }
       } catch (e: any) {
+        console.error(`${TAG} load failed`, e);
         if (!cancelled) setError(e?.message ?? "Failed to fetch mint requests");
       } finally {
         if (!cancelled) setLoading(false);
+        console.log(`${TAG} load end`);
       }
     };
 
@@ -139,6 +104,13 @@ export const useMintRequestManagement = () => {
       cancelled = true;
     };
   }, []);
+
+  // rawRows が state に入った瞬間も追えるようにする（反映漏れ切り分け）
+  useEffect(() => {
+    const TAG = "[mintRequest/useMintRequestManagement]";
+    console.log(`${TAG} rawRows updated length=`, rawRows.length);
+    console.log(`${TAG} rawRows sample[0..4]=`, rawRows.slice(0, 5));
+  }, [rawRows]);
 
   // ---------------------------
   // Filters
@@ -154,40 +126,63 @@ export const useMintRequestManagement = () => {
   const [sortKey, setSortKey] = useState<SortKey>("mintedAt");
   const [sortDir, setSortDir] = useState<"asc" | "desc" | null>("desc");
 
+  // フィルタ状態もログ（「フィルタで全部消えてる」検知）
+  useEffect(() => {
+    const TAG = "[mintRequest/useMintRequestManagement]";
+    console.log(`${TAG} filters updated`, {
+      tokenFilter,
+      productionFilter,
+      requesterFilter,
+      statusFilter,
+      sortKey,
+      sortDir,
+    });
+  }, [tokenFilter, productionFilter, requesterFilter, statusFilter, sortKey, sortDir]);
+
   // ---------------------------
   // Filter options
   // ---------------------------
 
   const tokenOptions = useMemo(() => {
     const s = new Set<string>();
-    rawRows.forEach((r) => r.tokenBlueprintId && s.add(r.tokenBlueprintId));
-    return [...s].map((v) => ({ value: v, label: v }));
+    rawRows.forEach((r) => r.tokenName && s.add(r.tokenName.trim()));
+    const opts = [...s].map((v) => ({ value: v, label: v }));
+
+    console.log("[mintRequest/useMintRequestManagement] tokenOptions=", opts);
+    return opts;
   }, [rawRows]);
 
   const productionOptions = useMemo(() => {
     const s = new Set<string>();
     rawRows.forEach((r) => r.productName && s.add(r.productName.trim()));
-    return [...s].map((v) => ({ value: v, label: v }));
+    const opts = [...s].map((v) => ({ value: v, label: v }));
+
+    console.log("[mintRequest/useMintRequestManagement] productionOptions=", opts);
+    return opts;
   }, [rawRows]);
 
-  // ★ requestedByName / requestedBy は完全に使わない（createdByName のみ）
   const requesterOptions = useMemo(() => {
     const s = new Set<string>();
     rawRows.forEach((r) => r.createdByName && s.add(r.createdByName.trim()));
-    return [...s].map((v) => ({ value: v, label: v }));
+    const opts = [...s].map((v) => ({ value: v, label: v }));
+
+    console.log("[mintRequest/useMintRequestManagement] requesterOptions=", opts);
+    return opts;
   }, [rawRows]);
 
-  // 検査ステータスのフィルタオプション
   const statusOptions = useMemo(() => {
     const s = new Set<InspectionStatus>();
     rawRows.forEach((r) => {
       if (r.inspectionStatus) s.add(r.inspectionStatus);
     });
 
-    return [...s].map((v) => ({
+    const opts = [...s].map((v) => ({
       value: v,
       label: inspectionStatusLabel(v),
     }));
+
+    console.log("[mintRequest/useMintRequestManagement] statusOptions=", opts);
+    return opts;
   }, [rawRows]);
 
   // ---------------------------
@@ -198,7 +193,7 @@ export const useMintRequestManagement = () => {
     let data = rawRows.filter((r) => {
       const tokenOk =
         tokenFilter.length === 0 ||
-        (r.tokenBlueprintId && tokenFilter.includes(r.tokenBlueprintId));
+        (r.tokenName && tokenFilter.includes(r.tokenName));
 
       const productionOk =
         productionFilter.length === 0 ||
@@ -215,7 +210,6 @@ export const useMintRequestManagement = () => {
       return tokenOk && productionOk && requesterOk && statusOk;
     });
 
-    // Sort
     if (sortKey && sortDir) {
       data = [...data].sort((a, b) => {
         if (sortKey === "mintQuantity") {
@@ -229,6 +223,9 @@ export const useMintRequestManagement = () => {
         return sortDir === "asc" ? av - bv : bv - av;
       });
     }
+
+    console.log("[mintRequest/useMintRequestManagement] computed rows length=", data.length);
+    console.log("[mintRequest/useMintRequestManagement] computed rows sample[0..4]=", data.slice(0, 5));
 
     return data;
   }, [

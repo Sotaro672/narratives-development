@@ -291,6 +291,114 @@ func (u *MintUsecase) ListMintsByInspectionIDs(
 }
 
 // ============================================================
+// Additional API: mints(list) を inspectionIds で取得し、名前解決して DTO を組み立てる
+// ============================================================
+
+// ListMintListRowsByInspectionIDs は、inspectionIds（= productionIds）に紐づく mints を取得し、
+// tokenBlueprintId → tokenName を解決して、一覧向け DTO を inspectionId をキーにした map で返します。
+//
+// NOTE:
+//   - CreatedByName は現状 Mint.CreatedBy（memberId）をそのまま返します。
+//     もし「表示名」にしたい場合は NameResolver / member.Service を注入する設計に拡張してください。
+func (u *MintUsecase) ListMintListRowsByInspectionIDs(
+	ctx context.Context,
+	inspectionIDs []string,
+) (map[string]dto.MintListRowDTO, error) {
+
+	if u == nil {
+		return nil, errors.New("mint usecase is nil")
+	}
+	if u.mintRepo == nil {
+		return nil, errors.New("mint repo is nil")
+	}
+
+	// 1) mints を取得（inspectionId -> Mint）
+	mintsByInspectionID, err := u.ListMintsByInspectionIDs(ctx, inspectionIDs)
+	if err != nil {
+		return nil, err
+	}
+	if len(mintsByInspectionID) == 0 {
+		return map[string]dto.MintListRowDTO{}, nil
+	}
+
+	// 2) tokenBlueprintId を集めて tokenName を解決（tbRepo 経由）
+	tbNameByID := map[string]string{}
+	if u.tbRepo != nil {
+		tbIDSet := map[string]struct{}{}
+		for _, m := range mintsByInspectionID {
+			tbID := strings.TrimSpace(m.TokenBlueprintID)
+			if tbID == "" {
+				continue
+			}
+			tbIDSet[tbID] = struct{}{}
+		}
+
+		tbIDs := make([]string, 0, len(tbIDSet))
+		for id := range tbIDSet {
+			tbIDs = append(tbIDs, id)
+		}
+		sort.Strings(tbIDs)
+
+		for _, tbID := range tbIDs {
+			tb, err := u.tbRepo.GetByID(ctx, tbID)
+			if err != nil {
+				// ここは一覧用途なので失敗しても握りつぶし（tokenName="" で返す）
+				continue
+			}
+			tbNameByID[tbID] = strings.TrimSpace(tb.Name)
+		}
+	}
+
+	// 3) DTO を組み立て（inspectionId -> MintListRowDTO）
+	out := make(map[string]dto.MintListRowDTO, len(mintsByInspectionID))
+
+	// map iteration 安定化（ログや比較がしやすい）
+	keys := make([]string, 0, len(mintsByInspectionID))
+	for k := range mintsByInspectionID {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+
+	for _, inspectionID := range keys {
+		m := mintsByInspectionID[inspectionID]
+
+		iid := strings.TrimSpace(inspectionID)
+		mintID := strings.TrimSpace(m.ID)
+		tbID := strings.TrimSpace(m.TokenBlueprintID)
+
+		// tokenName（tbRepo で解決済み、無ければ ""）
+		tokenName := ""
+		if tbID != "" {
+			if n, ok := tbNameByID[tbID]; ok {
+				tokenName = n
+			}
+		}
+
+		// createdByName（現状は memberId をそのまま返す）
+		createdByName := strings.TrimSpace(m.CreatedBy)
+
+		// mintedAt（nil なら未mint、入れるなら RFC3339）
+		var mintedAt *string
+		if m.MintedAt != nil && !m.MintedAt.IsZero() {
+			s := m.MintedAt.UTC().Format(time.RFC3339)
+			mintedAt = &s
+		}
+
+		out[iid] = dto.MintListRowDTO{
+			InspectionID:   iid,
+			MintID:         mintID,
+			TokenBlueprint: tbID,
+
+			TokenName:     tokenName,
+			CreatedByName: createdByName,
+			MintedAt:      mintedAt,
+		}
+	}
+
+	return out, nil
+}
+
+// ============================================================
 // Additional API: ProductBlueprint Patch 解決
 // ============================================================
 

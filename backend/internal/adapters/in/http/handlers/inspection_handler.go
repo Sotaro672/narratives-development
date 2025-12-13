@@ -11,6 +11,7 @@ import (
 	"narratives/internal/adapters/in/http/middleware"
 	"narratives/internal/application/usecase"
 	inspectiondom "narratives/internal/domain/inspection"
+	mintdom "narratives/internal/domain/mint"
 	productdom "narratives/internal/domain/product"
 )
 
@@ -67,6 +68,18 @@ func (h *InspectorHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 
 	// ------------------------------------------------------------
+	// GET /products/inspections/mints?inspectionId=xxxx
+	//   → inspectionId (= productionId 扱い) に紐づく mints を返す
+	//
+	// NOTE:
+	// - query は inspectionId を優先し、互換のため productionId も受け付ける
+	// - 戻り値は []Mint（複数行対応）
+	// ------------------------------------------------------------
+	case r.Method == http.MethodGet && r.URL.Path == "/products/inspections/mints":
+		h.getMintsByInspectionID(w, r)
+		return
+
+	// ------------------------------------------------------------
 	// GET /products/inspections?productionId=xxxx
 	//   → productionId から inspections バッチをそのまま返す
 	// ------------------------------------------------------------
@@ -94,6 +107,59 @@ func (h *InspectorHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	default:
 		http.NotFound(w, r)
 	}
+}
+
+// ------------------------------------------------------------
+// GET /products/inspections/mints?inspectionId=xxxx
+//
+//	inspectionUsecase.ListMintsByInspectionID に移譲
+//
+// ------------------------------------------------------------
+func (h *InspectorHandler) getMintsByInspectionID(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+
+	if h.inspectionUC == nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		_ = json.NewEncoder(w).Encode(map[string]string{
+			"error": "inspection usecase is not configured",
+		})
+		return
+	}
+
+	// inspectionId 優先、互換で productionId も許容
+	inspectionID := strings.TrimSpace(r.URL.Query().Get("inspectionId"))
+	if inspectionID == "" {
+		inspectionID = strings.TrimSpace(r.URL.Query().Get("productionId"))
+	}
+	if inspectionID == "" {
+		w.WriteHeader(http.StatusBadRequest)
+		_ = json.NewEncoder(w).Encode(map[string]string{
+			"error": "inspectionId is required",
+		})
+		return
+	}
+
+	mints, err := h.inspectionUC.ListMintsByInspectionID(ctx, inspectionID)
+	if err != nil {
+		code := http.StatusInternalServerError
+		switch err {
+		case inspectiondom.ErrInvalidInspectionProductionID:
+			code = http.StatusBadRequest
+		}
+
+		w.WriteHeader(code)
+		_ = json.NewEncoder(w).Encode(map[string]string{
+			"error": err.Error(),
+		})
+		return
+	}
+
+	// nil でも [] を返す
+	if mints == nil {
+		mints = []mintdom.Mint{}
+	}
+
+	_ = json.NewEncoder(w).Encode(mints)
 }
 
 // ------------------------------------------------------------

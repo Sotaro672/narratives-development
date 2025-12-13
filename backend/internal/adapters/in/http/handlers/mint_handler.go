@@ -130,13 +130,6 @@ func (h *MintHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 // ============================================================
 // GET /mint/mints?inspectionIds=a,b,c
 // ============================================================
-//
-// return:
-//
-//	{
-//	  "inspectionIdA": { "tokenName": "...", "createdByName": "...", "mintedAt": "2025/12/13" },
-//	  "inspectionIdB": { ... }
-//	}
 func (h *MintHandler) listMintsByInspectionIDs(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 
@@ -185,38 +178,44 @@ func (h *MintHandler) listMintsByInspectionIDs(w http.ResponseWriter, r *http.Re
 	out := make(map[string]mintdto.MintListRowDTO, len(mintsByInspectionID))
 
 	for inspectionID, m := range mintsByInspectionID {
+		iid := strings.TrimSpace(inspectionID)
+
 		// tokenName（resolver）
+		tbID := strings.TrimSpace(m.TokenBlueprintID)
 		tokenName := ""
-		if h.nameResolver != nil {
-			tokenName = strings.TrimSpace(h.nameResolver.ResolveTokenName(ctx, m.TokenBlueprintID))
+		if h.nameResolver != nil && tbID != "" {
+			tokenName = strings.TrimSpace(h.nameResolver.ResolveTokenName(ctx, tbID))
 		}
 		if tokenName == "" {
-			// フォールバック（空だと UI が崩れるので）
-			tokenName = strings.TrimSpace(m.TokenBlueprintID)
+			// フォールバック（空だとUIが困るのでIDを返す）
+			tokenName = tbID
 		}
 
-		// createdByName（resolver。取れなければ nil → UI は "-"）
-		var createdByNamePtr *string
-		if h.nameResolver != nil {
-			createdBy := strings.TrimSpace(m.CreatedBy)
-			if createdBy != "" {
-				name := strings.TrimSpace(h.nameResolver.ResolveCreatedByName(ctx, &createdBy))
-				if name != "" {
-					createdByNamePtr = &name
-				}
-			}
+		// createdByName（stringにする：取れなければ createdBy を返す）
+		createdBy := strings.TrimSpace(m.CreatedBy)
+		createdByName := ""
+		if h.nameResolver != nil && createdBy != "" {
+			// NameResolver に ResolveMemberName がある想定（無い場合はそれに合わせて差し替え）
+			createdByName = strings.TrimSpace(h.nameResolver.ResolveMemberName(ctx, createdBy))
+		}
+		if createdByName == "" {
+			createdByName = createdBy
 		}
 
-		// mintedAt（minted のときだけ yyyy/mm/dd）
+		// mintedAt（RFC3339, nilなら未mint）
 		var mintedAtPtr *string
-		if m.Minted && m.MintedAt != nil && !m.MintedAt.IsZero() {
-			s := m.MintedAt.In(time.UTC).Format("2006/01/02")
+		if m.MintedAt != nil && !m.MintedAt.IsZero() {
+			s := m.MintedAt.UTC().Format(time.RFC3339)
 			mintedAtPtr = &s
 		}
 
-		out[inspectionID] = mintdto.MintListRowDTO{
+		out[iid] = mintdto.MintListRowDTO{
+			InspectionID:   iid,
+			MintID:         strings.TrimSpace(m.ID),
+			TokenBlueprint: tbID,
+
 			TokenName:     tokenName,
-			CreatedByName: createdByNamePtr,
+			CreatedByName: createdByName,
 			MintedAt:      mintedAtPtr,
 		}
 	}

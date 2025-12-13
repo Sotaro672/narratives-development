@@ -4,10 +4,12 @@ package usecase
 import (
 	"context"
 	"fmt"
+	"sort"
 	"strings"
 	"time"
 
 	inspectiondom "narratives/internal/domain/inspection"
+	mintdom "narratives/internal/domain/mint"
 )
 
 // ------------------------------------------------------------
@@ -25,6 +27,13 @@ type ProductInspectionRepo interface {
 	) error
 }
 
+// ★ 追加: inspectionId (= productionId 扱い) から mints を取得するための最小ポート
+//   - mints テーブルが「inspectionId で複数レコードを持ちうる」前提で slice を返す
+//   - 1件しか持たない設計でも、この形なら将来拡張しやすい
+type InspectionMintLister interface {
+	ListByInspectionID(ctx context.Context, inspectionID string) ([]mintdom.Mint, error)
+}
+
 // InspectionRepo インターフェース自体は print_usecase.go 側で定義済み。
 //   type InspectionRepo interface {
 //       Create(ctx context.Context, batch inspectiondom.InspectionBatch) (inspectiondom.InspectionBatch, error)
@@ -39,6 +48,9 @@ type ProductInspectionRepo interface {
 type InspectionUsecase struct {
 	inspectionRepo InspectionRepo
 	productRepo    ProductInspectionRepo
+
+	// ★ 追加: mints を引くための repo（任意・nil 許容）
+	mintRepo InspectionMintLister
 }
 
 func NewInspectionUsecase(
@@ -49,6 +61,17 @@ func NewInspectionUsecase(
 		inspectionRepo: inspectionRepo,
 		productRepo:    productRepo,
 	}
+}
+
+// ★ 追加: mintRepo も注入できるコンストラクタ（既存の NewInspectionUsecase は壊さない）
+func NewInspectionUsecaseWithMint(
+	inspectionRepo InspectionRepo,
+	productRepo ProductInspectionRepo,
+	mintRepo InspectionMintLister,
+) *InspectionUsecase {
+	u := NewInspectionUsecase(inspectionRepo, productRepo)
+	u.mintRepo = mintRepo
+	return u
 }
 
 // ------------------------------------------------------------
@@ -88,6 +111,52 @@ func (u *InspectionUsecase) ListByProductionID(
 	productionID string,
 ) (inspectiondom.InspectionBatch, error) {
 	return u.GetBatchByProductionID(ctx, productionID)
+}
+
+// ★ 追加: 同じ inspectionId (= productionId 扱い) を持つ mints を取得する
+//
+// 想定ユースケース:
+// - MintRequest 一覧/詳細で、inspectionId (= productionId) をキーに mints を引く
+// - mints の設計が 1 inspectionId に対して複数行を持つ場合でも対応できる
+func (u *InspectionUsecase) ListMintsByInspectionID(
+	ctx context.Context,
+	inspectionID string,
+) ([]mintdom.Mint, error) {
+
+	if u.mintRepo == nil {
+		return nil, fmt.Errorf("mintRepo is nil")
+	}
+
+	iid := strings.TrimSpace(inspectionID)
+	if iid == "" {
+		// inspectiondom 側に専用 Err が無いので productionId の Err を流用
+		return nil, inspectiondom.ErrInvalidInspectionProductionID
+	}
+
+	mints, err := u.mintRepo.ListByInspectionID(ctx, iid)
+	if err != nil {
+		return nil, err
+	}
+
+	// 順序を安定化（UI/テストに優しい）
+	// - CreatedAt 昇順
+	// - 同時刻は ID で昇順
+	sort.SliceStable(mints, func(i, j int) bool {
+		if mints[i].CreatedAt.Equal(mints[j].CreatedAt) {
+			return mints[i].ID < mints[j].ID
+		}
+		return mints[i].CreatedAt.Before(mints[j].CreatedAt)
+	})
+
+	return mints, nil
+}
+
+// ★ 任意: productionId で呼びたい場合の別名（inspectionId と同義扱い）
+func (u *InspectionUsecase) ListMintsByProductionID(
+	ctx context.Context,
+	productionID string,
+) ([]mintdom.Mint, error) {
+	return u.ListMintsByInspectionID(ctx, productionID)
 }
 
 // ------------------------------------------------------------

@@ -35,6 +35,85 @@ async function getIdTokenOrThrow(): Promise<string> {
   return await user.getIdToken();
 }
 
+function buildHeaders(idToken: string): HeadersInit {
+  return {
+    Authorization: `Bearer ${idToken}`,
+    "Content-Type": "application/json",
+  };
+}
+
+// ---------------------------------------------------------
+// helper: list row normalize（バックエンド返却差異に強くする）
+// ---------------------------------------------------------
+function normalizeMintListRow(v: any): MintListRowDTO {
+  // 想定: { tokenName, createdByName, mintedAt, minted } だが、
+  // 現状の backend が MintDTO に近い shape を返している可能性があるためフォールバックする。
+  const tokenName =
+    String(
+      v?.tokenName ??
+        v?.tokenBlueprintName ??
+        v?.name ??
+        v?.tokenBlueprintId ??
+        v?.tokenBlueprintID ??
+        "",
+    ).trim() || null;
+
+  const createdByName =
+    String(v?.createdByName ?? v?.createdBy ?? "").trim() || null;
+
+  const mintedAt = (v?.mintedAt ?? null) as string | null;
+
+  // minted が無い場合は mintedAt で推定（一覧のステータス判定用）
+  const minted =
+    typeof v?.minted === "boolean" ? v.minted : Boolean(v?.mintedAt);
+
+  // MintListRowDTO の実体に合わせて返す
+  return {
+    tokenName,
+    createdByName,
+    mintedAt,
+    // MintListRowDTO に minted が無い設計ならここは削ってOK
+    // ただし derive 判定を mintedAt だけに寄せるなら minted は不要
+    minted,
+  } as any;
+}
+
+// ---------------------------------------------------------
+// helper: MintDTO normalize（バックエンド返却差異に強くする）
+// ---------------------------------------------------------
+function normalizeMintDTO(v: any): MintDTO {
+  // ここは「ドメイン正の MintDTO」を期待するが、欠けていても落ちないように最低限の補正を入れる
+  // （最終的には backend を正の shape に揃えるのが理想）
+  const obj: any = { ...(v ?? {}) };
+
+  // camel / Pascal / 別名フォールバック
+  obj.id = obj.id ?? obj.ID ?? "";
+  obj.brandId = obj.brandId ?? obj.BrandID ?? "";
+  obj.tokenBlueprintId = obj.tokenBlueprintId ?? obj.TokenBlueprintID ?? "";
+  obj.inspectionId =
+    obj.inspectionId ??
+    obj.InspectionID ??
+    obj.inspectionID ??
+    obj.inspectionId ??
+    "";
+
+  obj.products = obj.products ?? obj.Products ?? [];
+  obj.createdAt = obj.createdAt ?? obj.CreatedAt ?? null;
+  obj.createdBy = obj.createdBy ?? obj.CreatedBy ?? "";
+  obj.createdByName = obj.createdByName ?? obj.CreatedByName ?? null;
+
+  obj.minted = typeof obj.minted === "boolean" ? obj.minted : Boolean(obj.mintedAt);
+  obj.mintedAt = obj.mintedAt ?? obj.MintedAt ?? null;
+
+  obj.scheduledBurnDate =
+    obj.scheduledBurnDate ?? obj.ScheduledBurnDate ?? null;
+
+  obj.onChainTxSignature =
+    obj.onChainTxSignature ?? obj.OnChainTxSignature ?? null;
+
+  return obj as MintDTO;
+}
+
 // ===============================
 // HTTP Repository (inspections)
 // ===============================
@@ -50,10 +129,7 @@ export async function fetchInspectionBatchesHTTP(): Promise<InspectionBatchDTO[]
 
   const res = await fetch(url, {
     method: "GET",
-    headers: {
-      Authorization: `Bearer ${idToken}`,
-      "Content-Type": "application/json",
-    },
+    headers: buildHeaders(idToken),
   });
 
   if (!res.ok) {
@@ -86,10 +162,7 @@ export async function fetchInspectionByProductionIdHTTP(
 
   const res = await fetch(url, {
     method: "GET",
-    headers: {
-      Authorization: `Bearer ${idToken}`,
-      "Content-Type": "application/json",
-    },
+    headers: buildHeaders(idToken),
   });
 
   if (res.status === 404) {
@@ -125,10 +198,7 @@ export async function fetchProductBlueprintPatchHTTP(
 
   const res = await fetch(url, {
     method: "GET",
-    headers: {
-      Authorization: `Bearer ${idToken}`,
-      "Content-Type": "application/json",
-    },
+    headers: buildHeaders(idToken),
   });
 
   if (res.status === 404) {
@@ -149,13 +219,6 @@ export async function fetchProductBlueprintPatchHTTP(
 // HTTP Repository (brands for Mint)
 // ===============================
 
-/**
- * current companyId に紐づく Brand 一覧を取得する。
- * backend: GET /mint/brands
- *
- * Go 側は branddom.PageResult[branddom.Brand] を返す想定なので、
- * JSON の Items / items から id / name だけを抜き出して BrandForMintDTO[] に変換する。
- */
 type BrandRecordRaw = {
   id?: string;
   name?: string;
@@ -175,10 +238,7 @@ export async function fetchBrandsForMintHTTP(): Promise<BrandForMintDTO[]> {
 
   const res = await fetch(url, {
     method: "GET",
-    headers: {
-      Authorization: `Bearer ${idToken}`,
-      "Content-Type": "application/json",
-    },
+    headers: buildHeaders(idToken),
   });
 
   if (!res.ok) {
@@ -205,10 +265,6 @@ export async function fetchBrandsForMintHTTP(): Promise<BrandForMintDTO[]> {
 // HTTP Repository (tokenBlueprints for Mint)
 // ===============================
 
-/**
- * 指定した brandId に紐づく TokenBlueprint 一覧を取得する。
- * backend: GET /mint/token_blueprints?brandId=...
- */
 type TokenBlueprintRecordRaw = {
   id?: string;
   name?: string;
@@ -242,10 +298,7 @@ export async function fetchTokenBlueprintsByBrandHTTP(
 
   const res = await fetch(url, {
     method: "GET",
-    headers: {
-      Authorization: `Bearer ${idToken}`,
-      "Content-Type": "application/json",
-    },
+    headers: buildHeaders(idToken),
   });
 
   if (res.status === 404) {
@@ -285,16 +338,16 @@ export async function fetchTokenBlueprintsByBrandHTTP(
 // ===============================
 
 /**
- * inspectionIds (= productionIds) をまとめて渡して、mints(list row) を取得する。
- * backend: GET /mint/mints?inspectionIds=a,b,c
+ * ✅ 一覧用: inspectionIds (= productionIds) をまとめて渡して、mints(list row) を取得する。
+ *
+ * backend: GET /mint/mints?inspectionIds=a,b,c&view=list
  *
  * 戻り値は "inspectionId -> MintListRowDTO" の map を期待（画面側での突合を簡単にするため）。
  *
  * NOTE:
- * - 一覧画面の結合用に必要なのは tokenName / createdByName / mintedAt のみ
- * - それ以外は detail API が担う
+ * - backend が MintDTO に近い shape を返してきても normalize で吸収する
  */
-export async function fetchMintsByInspectionIdsHTTP(
+export async function fetchMintListRowsByInspectionIdsHTTP(
   inspectionIds: string[],
 ): Promise<Record<string, MintListRowDTO>> {
   const ids = (inspectionIds ?? [])
@@ -305,34 +358,74 @@ export async function fetchMintsByInspectionIdsHTTP(
 
   const idToken = await getIdTokenOrThrow();
 
-  // query: inspectionIds=... (CSV)
   const url = `${API_BASE}/mint/mints?inspectionIds=${encodeURIComponent(
     ids.join(","),
-  )}`;
+  )}&view=list`;
 
   const res = await fetch(url, {
     method: "GET",
-    headers: {
-      Authorization: `Bearer ${idToken}`,
-      "Content-Type": "application/json",
-    },
+    headers: buildHeaders(idToken),
   });
 
-  if (res.status === 404) {
-    return {};
-  }
-
+  if (res.status === 404) return {};
   if (!res.ok) {
-    throw new Error(`Failed to fetch mints: ${res.status} ${res.statusText}`);
+    throw new Error(`Failed to fetch mints(list): ${res.status} ${res.statusText}`);
   }
 
-  // 期待: { [inspectionId]: MintListRowDTO }
-  const json = (await res.json()) as
-    | Record<string, MintListRowDTO>
-    | null
-    | undefined;
+  const json = (await res.json()) as Record<string, any> | null | undefined;
+  const raw = json ?? {};
 
-  return json ?? {};
+  const out: Record<string, MintListRowDTO> = {};
+  for (const [k, v] of Object.entries(raw)) {
+    const key = String(k ?? "").trim();
+    if (!key) continue;
+    out[key] = normalizeMintListRow(v);
+  }
+  return out;
+}
+
+/**
+ * ✅ 詳細DTO用: inspectionIds (= productionIds) をまとめて渡して、mints(MintDTO) を取得する。
+ *
+ * backend: GET /mint/mints?inspectionIds=a,b,c&view=dto
+ *
+ * 戻り値は "inspectionId -> MintDTO" の map を期待（画面側での突合を簡単にするため）。
+ */
+export async function fetchMintsByInspectionIdsHTTP(
+  inspectionIds: string[],
+): Promise<Record<string, MintDTO>> {
+  const ids = (inspectionIds ?? [])
+    .map((s) => String(s ?? "").trim())
+    .filter((s) => !!s);
+
+  if (ids.length === 0) return {};
+
+  const idToken = await getIdTokenOrThrow();
+
+  const url = `${API_BASE}/mint/mints?inspectionIds=${encodeURIComponent(
+    ids.join(","),
+  )}&view=dto`;
+
+  const res = await fetch(url, {
+    method: "GET",
+    headers: buildHeaders(idToken),
+  });
+
+  if (res.status === 404) return {};
+  if (!res.ok) {
+    throw new Error(`Failed to fetch mints(dto): ${res.status} ${res.statusText}`);
+  }
+
+  const json = (await res.json()) as Record<string, any> | null | undefined;
+  const raw = json ?? {};
+
+  const out: Record<string, MintDTO> = {};
+  for (const [k, v] of Object.entries(raw)) {
+    const key = String(k ?? "").trim();
+    if (!key) continue;
+    out[key] = normalizeMintDTO(v);
+  }
+  return out;
 }
 
 /**
@@ -340,8 +433,7 @@ export async function fetchMintsByInspectionIdsHTTP(
  * backend: GET /mint/mints/{inspectionId}
  *
  * NOTE:
- * - 既存実装が詳細用の MintDTO を返す前提のまま残す
- * - 一覧は fetchMintsByInspectionIdsHTTP（MintListRowDTO）を使う
+ * - ここは詳細用の MintDTO を返す前提
  */
 export async function fetchMintByInspectionIdHTTP(
   inspectionId: string,
@@ -357,15 +449,10 @@ export async function fetchMintByInspectionIdHTTP(
 
   const res = await fetch(url, {
     method: "GET",
-    headers: {
-      Authorization: `Bearer ${idToken}`,
-      "Content-Type": "application/json",
-    },
+    headers: buildHeaders(idToken),
   });
 
-  if (res.status === 404) {
-    return null;
-  }
+  if (res.status === 404) return null;
 
   if (!res.ok) {
     throw new Error(
@@ -373,8 +460,10 @@ export async function fetchMintByInspectionIdHTTP(
     );
   }
 
-  const json = (await res.json()) as MintDTO | null | undefined;
-  return json ?? null;
+  const json = (await res.json()) as any;
+  if (!json) return null;
+
+  return normalizeMintDTO(json);
 }
 
 // ===============================
@@ -414,23 +503,17 @@ export async function postMintRequestHTTP(
     tokenBlueprintId: tokenBlueprintId.trim(),
   };
 
-  // HTML の date input から渡される "YYYY-MM-DD" をそのまま送る
   if (scheduledBurnDate && scheduledBurnDate.trim()) {
     payload.scheduledBurnDate = scheduledBurnDate.trim();
   }
 
   const res = await fetch(url, {
     method: "POST",
-    headers: {
-      Authorization: `Bearer ${idToken}`,
-      "Content-Type": "application/json",
-    },
+    headers: buildHeaders(idToken),
     body: JSON.stringify(payload),
   });
 
-  if (res.status === 404) {
-    return null;
-  }
+  if (res.status === 404) return null;
 
   if (!res.ok) {
     throw new Error(
