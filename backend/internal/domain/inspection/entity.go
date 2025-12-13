@@ -50,15 +50,10 @@ type InspectionItem struct {
 type InspectionBatch struct {
 	ProductionID string           `json:"productionId"`
 	Status       InspectionStatus `json:"status"`
-
-	// 集計系フィールド
-	Quantity    int `json:"quantity"`    // item の合計数
-	TotalPassed int `json:"totalPassed"` // 合格数
-
-	// ミント申請済みかどうかのフラグ（tokenBlueprintId / requestedBy / requestedAt などは mints テーブル側が責務を持つ）
-	Requested bool `json:"requested"`
-
-	Inspections []InspectionItem `json:"inspections"`
+	MintID       *string          `json:"mintId,omitempty"` // mints テーブルのID（未申請なら nil）
+	Quantity     int              `json:"quantity"`         // item の合計数
+	TotalPassed  int              `json:"totalPassed"`      // 合格数
+	Inspections  []InspectionItem `json:"inspections"`
 }
 
 // ===============================
@@ -69,6 +64,7 @@ var (
 	ErrInvalidInspectionProductionID = errors.New("inspection: invalid productionId")
 	ErrInvalidInspectionStatus       = errors.New("inspection: invalid status")
 	ErrInvalidInspectionProductIDs   = errors.New("inspection: invalid productIds")
+	ErrInvalidInspectionMintID       = errors.New("inspection: invalid mintId")
 
 	ErrInvalidInspectionResult = errors.New("inspection: invalid inspectionResult")
 	ErrInvalidInspectedBy      = errors.New("inspection: invalid inspectedBy")
@@ -80,7 +76,7 @@ var (
 // Constructors
 // ===============================
 
-// quantity / totalPassed / requested フラグはコンストラクタ内で初期化する。
+// quantity / totalPassed / mintId はコンストラクタ内で初期化する。
 func NewInspectionBatch(
 	productionID string,
 	status InspectionStatus,
@@ -117,9 +113,9 @@ func NewInspectionBatch(
 	batch := InspectionBatch{
 		ProductionID: pid,
 		Status:       status,
+		MintID:       nil,
 		Quantity:     len(inspections),
 		TotalPassed:  0,
-		Requested:    false,
 		Inspections:  inspections,
 	}
 
@@ -143,6 +139,10 @@ func (b InspectionBatch) validate() error {
 	}
 	if len(b.Inspections) == 0 {
 		return ErrInvalidInspectionProductIDs
+	}
+
+	if b.MintID != nil && strings.TrimSpace(*b.MintID) == "" {
+		return ErrInvalidInspectionMintID
 	}
 
 	if b.Quantity != len(b.Inspections) || b.Quantity <= 0 {

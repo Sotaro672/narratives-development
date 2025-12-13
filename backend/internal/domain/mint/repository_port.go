@@ -30,7 +30,7 @@ type MintRepository interface {
 	// GetByInspectionID:
 	// - inspectionId（= Narratives では productionId を格納する運用）に紐づく Mint を 1 件取得します。
 	// - 未作成の場合は ErrNotFound を返す想定です。
-	// - 画面側の「ミント申請済みモード」の判定を inspections.requestedBy/requestedAt ではなく、
+	// - 画面側の「ミント申請済みモード」の判定を inspections のフラグではなく、
 	//   mints の有無で行うための取得口です。
 	GetByInspectionID(ctx context.Context, inspectionID string) (Mint, error)
 
@@ -75,12 +75,13 @@ type MintInspectionRepo interface {
 	// 実装例: InspectionRepositoryFS.ListByProductionID
 	ListByProductionID(ctx context.Context, productionIDs []string) ([]inspectiondom.InspectionBatch, error)
 
-	// requested フラグを更新するための専用メソッド
-	// - ミント申請が実行された productionID に紐づく InspectionBatch.requested を true にする用途を想定
-	UpdateRequestedFlag(
+	// mintId を更新するための専用メソッド
+	// - ミント申請が実行された productionID に紐づく InspectionBatch.mintId を設定する用途を想定
+	// - mintID == nil の場合は mintId を未設定（削除）として扱う想定
+	UpdateMintID(
 		ctx context.Context,
 		productionID string,
-		requested bool,
+		mintID *string,
 	) (inspectiondom.InspectionBatch, error)
 }
 

@@ -425,7 +425,7 @@ func (u *MintUsecase) GetProductBlueprintPatchByID(
 }
 
 // ============================================================
-// Additional API: Inspection requested 更新 + mints 作成 + チェーンミント
+// Additional API: Inspection へ mintId を記録 + mints 作成 + チェーンミント
 // ============================================================
 
 func (u *MintUsecase) UpdateRequestInfo(
@@ -511,18 +511,26 @@ func (u *MintUsecase) UpdateRequestInfo(
 		}
 	}
 
-	batch, err := u.inspRepo.UpdateRequestedFlag(ctx, pid, true)
-	if err != nil {
-		return empty, err
-	}
-
+	// 1) mints に作成（ID を確定させる）
 	savedMint, err := u.mintRepo.Create(ctx, mintEntity)
 	if err != nil {
 		return empty, err
 	}
 
+	mid := strings.TrimSpace(savedMint.ID)
+	if mid == "" {
+		return empty, errors.New("saved mintID is empty")
+	}
+
+	// 2) inspections に mintId を記録（requested の代替）
+	batch, err := u.inspRepo.UpdateMintID(ctx, pid, &mid)
+	if err != nil {
+		return empty, err
+	}
+
+	// 3) オンチェーンミント（任意）
 	if u.tokenMinter != nil {
-		if _, err := u.tokenMinter.MintFromMintRequest(ctx, strings.TrimSpace(savedMint.ID)); err != nil {
+		if _, err := u.tokenMinter.MintFromMintRequest(ctx, mid); err != nil {
 			return empty, err
 		}
 

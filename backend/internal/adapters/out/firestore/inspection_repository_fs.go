@@ -176,17 +176,18 @@ func (r *InspectionRepositoryFS) Save(
 }
 
 // ------------------------------------------------------------
-// ★ 追加: UpdateRequestedFlag
+// ★ 追加: UpdateMintID
 // ------------------------------------------------------------
 //
-// MintUsecase.UpdateRequestInfo（改め、requested フラグ更新）用。
-// inspections ドキュメントの `requested` boolean を更新する。
+// Mint 申請/作成後に inspections ドキュメントへ mintId を記録する。
+// - mintID != nil : mintId を保存
+// - mintID == nil : mintId フィールドを削除（未申請状態へ戻すなど）
 // 保存後は最新の InspectionBatch を返す。
 // ------------------------------------------------------------
-func (r *InspectionRepositoryFS) UpdateRequestedFlag(
+func (r *InspectionRepositoryFS) UpdateMintID(
 	ctx context.Context,
 	productionID string,
-	requested bool,
+	mintID *string,
 ) (inspectiondom.InspectionBatch, error) {
 
 	if r.Client == nil {
@@ -200,8 +201,16 @@ func (r *InspectionRepositoryFS) UpdateRequestedFlag(
 
 	docRef := r.col().Doc(pid)
 
-	update := map[string]any{
-		"requested": requested,
+	update := map[string]any{}
+	if mintID == nil {
+		// フィールドごと削除（null を残さない）
+		update["mintId"] = firestore.Delete
+	} else {
+		mid := strings.TrimSpace(*mintID)
+		if mid == "" {
+			return inspectiondom.InspectionBatch{}, inspectiondom.ErrInvalidInspectionMintID
+		}
+		update["mintId"] = mid
 	}
 
 	if _, err := docRef.Set(ctx, update, firestore.MergeAll); err != nil {
@@ -318,8 +327,19 @@ func inspectionBatchToDoc(v inspectiondom.InspectionBatch) map[string]any {
 		"inspections":  items,
 		"quantity":     qty,
 		"totalPassed":  v.TotalPassed,
-		// 新設: requested フラグ
-		"requested": v.Requested,
+	}
+
+	// mintId（任意）
+	if v.MintID != nil {
+		mid := strings.TrimSpace(*v.MintID)
+		if mid != "" {
+			data["mintId"] = mid
+		} else {
+			// 空文字は保存しない（ドメイン側の validate でも弾く想定）
+			data["mintId"] = nil
+		}
+	} else {
+		data["mintId"] = nil
 	}
 
 	return data
@@ -337,6 +357,17 @@ func docToInspectionBatch(
 	batch := inspectiondom.InspectionBatch{
 		ProductionID: strings.TrimSpace(fscommon.AsString(data["productionId"])),
 		Status:       inspectiondom.InspectionStatus(strings.TrimSpace(fscommon.AsString(data["status"]))),
+		MintID:       nil,
+	}
+
+	// mintId（任意）
+	if v, ok := data["mintId"]; ok && v != nil {
+		if s, ok := v.(string); ok {
+			mid := strings.TrimSpace(s)
+			if mid != "" {
+				batch.MintID = &mid
+			}
+		}
 	}
 
 	if v, ok := data["quantity"]; ok {
@@ -348,13 +379,6 @@ func docToInspectionBatch(
 	if v, ok := data["totalPassed"]; ok {
 		if n, ok := asInt(v); ok {
 			batch.TotalPassed = n
-		}
-	}
-
-	// 新設: requested フラグ
-	if v, ok := data["requested"]; ok {
-		if b, ok := v.(bool); ok {
-			batch.Requested = b
 		}
 	}
 

@@ -2,14 +2,14 @@
 import type { InspectionStatus } from "../domain/entity/inspections";
 import {
   fetchInspectionBatches,
-  fetchMintsMapByInspectionIds,
   type InspectionBatchDTO,
   type MintListRowDTO,
   type MintDTO,
 } from "../infrastructure/api/mintRequestApi";
 
-// MintDTO を repository から直接引くため（MintListRowDTO とは別ルート）
+// ✅ 一覧用 MintListRow を repository から取得する（DTO とは別ルート）
 import {
+  listMintsByInspectionIDsHTTP,
   fetchMintsByInspectionIdsHTTP,
   fetchMintByInspectionIdHTTP,
 } from "../infrastructure/repository/mintRequestRepositoryHTTP";
@@ -39,6 +39,15 @@ export type ViewRow = {
 };
 
 // ============================================================
+// Debug logger
+// ============================================================
+
+const log = (...args: any[]) => {
+  // eslint-disable-next-line no-console
+  console.log("[mintRequest/mintRequestManagementService]", ...args);
+};
+
+// ============================================================
 // Pure helpers
 // ============================================================
 
@@ -59,7 +68,7 @@ function deriveMintStatusFromListRow(
   mint: MintListRowDTO | null,
 ): MintRequestRowStatus {
   if (!mint) return "planning";
-  if (mint.mintedAt) return "minted";
+  if ((mint as any)?.mintedAt) return "minted";
   return "requested";
 }
 
@@ -71,9 +80,9 @@ function buildRows(
   batches: InspectionBatchDTO[],
   mintMap: Record<string, MintListRowDTO>,
 ): ViewRow[] {
-  return batches.map((b) => {
+  return (batches ?? []).map((b) => {
     const pid = normalizeProductionId(b);
-    const mint: MintListRowDTO | null = pid ? (mintMap[pid] ?? null) : null;
+    const mint: MintListRowDTO | null = pid ? (mintMap?.[pid] ?? null) : null;
 
     const st = deriveMintStatusFromListRow(mint);
     const inspSt = (b.status ?? "inspecting") as InspectionStatus;
@@ -81,7 +90,7 @@ function buildRows(
     return {
       id: pid,
 
-      tokenName: mint?.tokenName ?? null,
+      tokenName: (mint as any)?.tokenName ?? null,
       productName: (b as any).productName ?? null,
 
       mintQuantity: (b as any).totalPassed ?? 0,
@@ -91,8 +100,8 @@ function buildRows(
       status: st,
       inspectionStatus: inspSt,
 
-      createdByName: (mint?.createdByName as any) ?? null,
-      mintedAt: (mint?.mintedAt as any) ?? null,
+      createdByName: (mint as any)?.createdByName ?? null,
+      mintedAt: ((mint as any)?.mintedAt ?? null) as string | null,
 
       statusLabel: inspectionStatusLabel(inspSt),
     };
@@ -111,19 +120,66 @@ function buildRows(
  * - 1行に合成して ViewRow[] で返す
  */
 export async function loadMintRequestManagementRows(): Promise<ViewRow[]> {
+  log("load start");
+
   const batches: InspectionBatchDTO[] = await fetchInspectionBatches();
+  log(
+    "fetchInspectionBatches result length=",
+    (batches ?? []).length,
+    "sample[0]=",
+    (batches ?? [])[0],
+  );
 
   const productionIds = (batches ?? [])
     .map((b) => normalizeProductionId(b))
     .filter((s) => !!s);
 
-  const mintMap = await fetchMintsMapByInspectionIds(productionIds);
+  log(
+    "productionIds length=",
+    productionIds.length,
+    "sample[0..4]=",
+    productionIds.slice(0, 5),
+  );
 
-  return buildRows(batches ?? [], mintMap ?? {});
+  // ✅ 一覧は list row を取得（view=list 相当）
+  let mintMap: Record<string, MintListRowDTO> = {};
+  try {
+    mintMap = await listMintsByInspectionIDsHTTP(productionIds);
+    const keys = Object.keys(mintMap ?? {});
+    log(
+      "listMintsByInspectionIDsHTTP keys=",
+      keys.length,
+      "sampleKey=",
+      keys[0],
+      "sampleVal=",
+      keys[0] ? (mintMap as any)[keys[0]] : undefined,
+    );
+  } catch (e: any) {
+    log("listMintsByInspectionIDsHTTP error=", e?.message ?? e);
+    mintMap = {};
+  }
+
+  const rows = buildRows(batches ?? [], mintMap ?? {});
+  log(
+    "buildRows rows(length)=",
+    rows.length,
+    "rowsWithTokenName=",
+    rows.filter((r) => !!r.tokenName).length,
+    "rows sample[0..4]=",
+    rows.slice(0, 5),
+  );
+
+  log(
+    "rows with empty tokenName:",
+    rows.filter((r) => !r.tokenName).slice(0, 10),
+  );
+
+  log("load end");
+  return rows;
 }
 
 // ============================================================
-// Service: MintDTO fetch (full DTO)  ※要望により追加
+// Service: MintDTO fetch (full DTO)
 // ============================================================
 
 /**
@@ -141,6 +197,17 @@ export async function loadMintsDTOMapByInspectionIds(
 
   // repository 直呼び（/mint/mints?inspectionIds=... のレスポンスを MintDTO map として扱う）
   const m = await fetchMintsByInspectionIdsHTTP(ids);
+
+  const keys = Object.keys(m ?? {});
+  log(
+    "loadMintsDTOMapByInspectionIds keys=",
+    keys.length,
+    "sampleKey=",
+    keys[0],
+    "sampleVal=",
+    keys[0] ? (m as any)[keys[0]] : undefined,
+  );
+
   return (m ?? {}) as Record<string, MintDTO>;
 }
 
@@ -154,5 +221,8 @@ export async function loadMintDTOByInspectionId(
   if (!iid) return null;
 
   const m = await fetchMintByInspectionIdHTTP(iid);
+
+  log("loadMintDTOByInspectionId iid=", iid, "result=", m ?? null);
+
   return (m ?? null) as MintDTO | null;
 }
