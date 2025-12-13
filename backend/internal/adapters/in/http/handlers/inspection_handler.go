@@ -9,7 +9,10 @@ import (
 	"time"
 
 	"narratives/internal/adapters/in/http/middleware"
-	"narratives/internal/application/usecase"
+
+	inspectionapp "narratives/internal/application/inspection" // ★ moved
+	"narratives/internal/application/usecase"                  // ProductUsecase はここ
+
 	inspectiondom "narratives/internal/domain/inspection"
 	mintdom "narratives/internal/domain/mint"
 	productdom "narratives/internal/domain/product"
@@ -18,12 +21,12 @@ import (
 type InspectorHandler struct {
 	// ★ 検品用 ProductUsecase（Inspector 詳細 DTO を組み立てる）
 	productUC    *usecase.ProductUsecase
-	inspectionUC *usecase.InspectionUsecase
+	inspectionUC *inspectionapp.InspectionUsecase // ★ moved
 }
 
 func NewInspectorHandler(
 	productUC *usecase.ProductUsecase,
-	inspectionUC *usecase.InspectionUsecase,
+	inspectionUC *inspectionapp.InspectionUsecase, // ★ moved
 ) http.Handler {
 	return &InspectorHandler{
 		productUC:    productUC,
@@ -69,14 +72,14 @@ func (h *InspectorHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	// ------------------------------------------------------------
 	// GET /products/inspections/mints?inspectionId=xxxx
-	//   → inspectionId (= productionId 扱い) に紐づく mints を返す
+	//   → inspectionId (= productionId 扱い) に紐づく mint を返す
 	//
 	// NOTE:
 	// - query は inspectionId を優先し、互換のため productionId も受け付ける
-	// - 戻り値は []Mint（複数行対応）
+	// - 戻り値は Mint（単数）
 	// ------------------------------------------------------------
 	case r.Method == http.MethodGet && r.URL.Path == "/products/inspections/mints":
-		h.getMintsByInspectionID(w, r)
+		h.getMintByInspectionID(w, r)
 		return
 
 	// ------------------------------------------------------------
@@ -112,10 +115,10 @@ func (h *InspectorHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 // ------------------------------------------------------------
 // GET /products/inspections/mints?inspectionId=xxxx
 //
-//	inspectionUsecase.ListMintsByInspectionID に移譲
+//	inspectionUsecase.GetMintByInspectionID に移譲
 //
 // ------------------------------------------------------------
-func (h *InspectorHandler) getMintsByInspectionID(w http.ResponseWriter, r *http.Request) {
+func (h *InspectorHandler) getMintByInspectionID(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 
 	if h.inspectionUC == nil {
@@ -139,12 +142,14 @@ func (h *InspectorHandler) getMintsByInspectionID(w http.ResponseWriter, r *http
 		return
 	}
 
-	mints, err := h.inspectionUC.ListMintsByInspectionID(ctx, inspectionID)
+	m, err := h.inspectionUC.GetMintByInspectionID(ctx, inspectionID)
 	if err != nil {
 		code := http.StatusInternalServerError
 		switch err {
 		case inspectiondom.ErrInvalidInspectionProductionID:
 			code = http.StatusBadRequest
+		case mintdom.ErrNotFound:
+			code = http.StatusNotFound
 		}
 
 		w.WriteHeader(code)
@@ -154,12 +159,7 @@ func (h *InspectorHandler) getMintsByInspectionID(w http.ResponseWriter, r *http
 		return
 	}
 
-	// nil でも [] を返す
-	if mints == nil {
-		mints = []mintdom.Mint{}
-	}
-
-	_ = json.NewEncoder(w).Encode(mints)
+	_ = json.NewEncoder(w).Encode(m)
 }
 
 // ------------------------------------------------------------

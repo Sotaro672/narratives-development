@@ -14,7 +14,6 @@ import (
 // Firestore 上の想定構造:
 //
 // - id                 : string
-// - inspectionId       : string                 // 検査元 (inspections ドキュメント ID = productionId)
 // - brandId            : string
 // - tokenBlueprintId   : string
 // - products           : map[string]string      // ★ productId → mintAddress（作成時は "" でよい）
@@ -26,9 +25,6 @@ import (
 type Mint struct {
 	ID string `json:"id"`
 
-	// 検査結果（inspectionResults: passed の productId）を取得した inspections テーブル側の ID
-	// 実体としては inspections コレクションのドキュメント ID（= productionId）を想定。
-	InspectionID     string            `json:"inspectionId"`
 	BrandID          string            `json:"brandId"`
 	TokenBlueprintID string            `json:"tokenBlueprintId"`
 	Products         map[string]string `json:"products"` // ★ productId → mintAddress
@@ -65,7 +61,6 @@ var (
 //
 // NewMint : brandId / tokenBlueprintId / products / createdBy / createdAt を受け取って
 // Mint エンティティを生成する。
-// ※ inspectionId は後から usecase 側で紐づける想定。
 func NewMint(
 	id string,
 	brandID string,
@@ -105,16 +100,14 @@ func NewMint(
 	}
 
 	m := Mint{
-		ID:               strings.TrimSpace(id),
-		InspectionID:     "", // ★ 後から usecase 側で埋める想定
-		BrandID:          bid,
-		TokenBlueprintID: tbID,
-		Products:         productMap,
-		CreatedAt:        createdAt.UTC(),
-		CreatedBy:        cb,
-		MintedAt:         nil,
-		Minted:           false,
-		// 新規作成時点では ScheduledBurnDate は未定なので nil
+		ID:                strings.TrimSpace(id),
+		BrandID:           bid,
+		TokenBlueprintID:  tbID,
+		Products:          productMap,
+		CreatedAt:         createdAt.UTC(),
+		CreatedBy:         cb,
+		MintedAt:          nil,
+		Minted:            false,
 		ScheduledBurnDate: nil,
 	}
 
@@ -135,6 +128,9 @@ func NewMint(
 //   - 非空の場合、キー(productId) が空文字でないことだけを見る
 //   - 件数 0 でエラーにはしない（Usecase 側でチェック済み）
 func (m Mint) validate() error {
+	// （ID は採番を repo 側に任せるケースがあるため、ここでは必須にしない）
+	// if strings.TrimSpace(m.ID) == "" { return ErrInvalidMintID }
+
 	if strings.TrimSpace(m.BrandID) == "" {
 		return ErrInvalidBrandID
 	}

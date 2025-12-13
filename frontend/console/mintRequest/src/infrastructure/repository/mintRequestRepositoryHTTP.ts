@@ -139,7 +139,9 @@ function normalizeMintDTO(v: any): MintDTO {
     obj.ProductionID ??
     "";
 
-  obj.products = obj.products ?? obj.Products ?? [];
+  // ✅ 画面に Products を渡さない方針なので削除
+  // obj.products = obj.products ?? obj.Products ?? [];
+
   obj.createdAt = obj.createdAt ?? obj.CreatedAt ?? null;
   obj.createdBy = obj.createdBy ?? obj.CreatedBy ?? "";
   obj.createdByName = obj.createdByName ?? obj.CreatedByName ?? null;
@@ -182,7 +184,12 @@ export async function fetchInspectionBatchesHTTP(): Promise<InspectionBatchDTO[]
 
   const json = (await res.json()) as InspectionBatchDTO[] | null | undefined;
   const out = json ?? [];
-  log("fetchInspectionBatchesHTTP result length=", out.length, "sample[0]=", out[0]);
+  log(
+    "fetchInspectionBatchesHTTP result length=",
+    out.length,
+    "sample[0]=",
+    out[0],
+  );
   return out;
 }
 
@@ -305,7 +312,12 @@ export async function fetchBrandsForMintHTTP(): Promise<BrandForMintDTO[]> {
     }))
     .filter((b) => b.id && b.name);
 
-  log("fetchBrandsForMintHTTP result length=", mapped.length, "sample[0]=", mapped[0]);
+  log(
+    "fetchBrandsForMintHTTP result length=",
+    mapped.length,
+    "sample[0]=",
+    mapped[0],
+  );
   return mapped;
 }
 
@@ -381,7 +393,12 @@ export async function fetchTokenBlueprintsByBrandHTTP(
     }))
     .filter((tb) => tb.id && tb.name && tb.symbol);
 
-  log("fetchTokenBlueprintsByBrandHTTP result length=", mapped.length, "sample[0]=", mapped[0]);
+  log(
+    "fetchTokenBlueprintsByBrandHTTP result length=",
+    mapped.length,
+    "sample[0]=",
+    mapped[0],
+  );
   return mapped;
 }
 
@@ -418,14 +435,130 @@ async function fetchMintsMapRaw(
   const json = (await res.json()) as Record<string, any> | null | undefined;
   const raw = json ?? {};
   const keys = Object.keys(raw);
-  log("fetchMintsMapRaw response keys=", keys.length, "sampleKey=", keys[0], "sampleVal=", raw[keys[0]]);
+  log(
+    "fetchMintsMapRaw response keys=",
+    keys.length,
+    "sampleKey=",
+    keys[0],
+    "sampleVal=",
+    raw[keys[0]],
+  );
   return raw;
 }
 
 /**
- * ✅ 一覧用: inspectionIds (= productionIds) をまとめて渡して、mints(list row) を取得する。
+ * ✅ 単発: mintId で 1 件取得
+ * backend: GET /mint/mints/{mintId}
  *
- * backend: GET /mint/mints?inspectionIds=a,b,c  (＋可能なら &view=list)
+ * NOTE:
+ * - 詳細用の MintDTO を返す前提
+ */
+export async function fetchMintByMintIdHTTP(
+  mintId: string,
+): Promise<MintDTO | null> {
+  const mid = String(mintId ?? "").trim();
+  if (!mid) {
+    throw new Error("mintId が空です");
+  }
+
+  const idToken = await getIdTokenOrThrow();
+
+  const url = `${API_BASE}/mint/mints/${encodeURIComponent(mid)}`;
+  log("fetchMintByMintIdHTTP url=", url);
+
+  const res = await fetch(url, {
+    method: "GET",
+    headers: buildHeaders(idToken),
+  });
+
+  log("fetchMintByMintIdHTTP status=", res.status, res.statusText);
+
+  if (res.status === 404) return null;
+
+  if (!res.ok) {
+    throw new Error(
+      `Failed to fetch mint by mintId: ${res.status} ${res.statusText}`,
+    );
+  }
+
+  const json = (await res.json()) as any;
+  log("fetchMintByMintIdHTTP raw=", json);
+  if (!json) return null;
+
+  const out = normalizeMintDTO(json);
+  log("fetchMintByMintIdHTTP normalized=", out);
+  return out;
+}
+
+/**
+ * ✅ フォールバック: mintIds を 1件取得で回収して一覧行 DTO を組み立てる
+ *
+ * - /mint/mints?inspectionIds=... が 500 でも画面が成立するようにする
+ * - 戻り map の key は mintId
+ */
+async function fetchMintListRowsByMintIdsFallback(
+  mintIds: string[],
+): Promise<Record<string, MintListRowDTO>> {
+  const ids = (mintIds ?? []).map((s) => String(s ?? "").trim()).filter(Boolean);
+  if (ids.length === 0) return {};
+
+  log(
+    "fetchMintListRowsByMintIdsFallback start ids.length=",
+    ids.length,
+    "sample[0..4]=",
+    ids.slice(0, 5),
+  );
+
+  const settled = await Promise.all(
+    ids.map(async (mintId) => {
+      try {
+        const m = await fetchMintByMintIdHTTP(mintId);
+        return { mintId, mint: m };
+      } catch (e: any) {
+        log(
+          "fetchMintListRowsByMintIdsFallback error mintId=",
+          mintId,
+          e?.message ?? e,
+        );
+        return { mintId, mint: null };
+      }
+    }),
+  );
+
+  const out: Record<string, MintListRowDTO> = {};
+  for (const it of settled) {
+    if (!it.mint) continue;
+
+    // normalizeMintListRow が吸収できる形に寄せる
+    const v = {
+      ...(it.mint as any),
+      mintId: (it.mint as any).id || it.mintId,
+      inspectionId: (it.mint as any).inspectionId || null,
+    };
+
+    out[it.mintId] = normalizeMintListRow(v);
+  }
+
+  const keys = Object.keys(out);
+  log(
+    "fetchMintListRowsByMintIdsFallback end keys=",
+    keys.length,
+    "sampleKey=",
+    keys[0],
+    "sampleVal=",
+    out[keys[0]],
+  );
+
+  return out;
+}
+
+/**
+ * ✅ 一覧用: ids をまとめて渡して、mints(list row) を取得する。
+ *
+ * まずは従来の
+ *   GET /mint/mints?inspectionIds=a,b,c (&view=list)
+ * を試し、500 等で落ちた場合は
+ *   inspections から得た mintId を想定して /mint/mints/{mintId} を並列取得する。
  */
 export async function fetchMintListRowsByInspectionIdsHTTP(
   inspectionIds: string[],
@@ -436,31 +569,54 @@ export async function fetchMintListRowsByInspectionIdsHTTP(
 
   if (ids.length === 0) return {};
 
-  // まず view=list を試す → backend 未対応なら view なしで再試行
-  let raw: Record<string, any> = {};
+  // まず view=list を試す → backend 未対応/500なら view なし
   try {
-    raw = await fetchMintsMapRaw(ids, "list");
+    let raw: Record<string, any> = {};
+    try {
+      raw = await fetchMintsMapRaw(ids, "list");
+    } catch (e: any) {
+      log(
+        "fetchMintListRowsByInspectionIdsHTTP fallback to no-view because:",
+        e?.message ?? e,
+      );
+      raw = await fetchMintsMapRaw(ids, null);
+    }
+
+    const out: Record<string, MintListRowDTO> = {};
+    for (const [k, v] of Object.entries(raw ?? {})) {
+      const key = String(k ?? "").trim();
+      if (!key) continue;
+      out[key] = normalizeMintListRow(v);
+    }
+
+    const keys = Object.keys(out);
+    log(
+      "fetchMintListRowsByInspectionIdsHTTP normalized keys=",
+      keys.length,
+      "sampleKey=",
+      keys[0],
+      "sampleVal=",
+      out[keys[0]],
+    );
+    return out;
   } catch (e: any) {
-    log("fetchMintListRowsByInspectionIdsHTTP fallback to no-view because:", e?.message ?? e);
-    raw = await fetchMintsMapRaw(ids, null);
+    // ✅ ここが今回の本命（/mint/mints?inspectionIds=... が 500 の時）
+    log(
+      "fetchMintListRowsByInspectionIdsHTTP fallback to per-mint fetch because:",
+      e?.message ?? e,
+    );
+    return await fetchMintListRowsByMintIdsFallback(ids);
   }
-
-  const out: Record<string, MintListRowDTO> = {};
-  for (const [k, v] of Object.entries(raw ?? {})) {
-    const key = String(k ?? "").trim();
-    if (!key) continue;
-    out[key] = normalizeMintListRow(v);
-  }
-
-  const keys = Object.keys(out);
-  log("fetchMintListRowsByInspectionIdsHTTP normalized keys=", keys.length, "sampleKey=", keys[0], "sampleVal=", out[keys[0]]);
-  return out;
 }
 
 /**
  * ✅ 詳細DTO用: inspectionIds (= productionIds) をまとめて渡して、mints(MintDTO) を取得する。
  *
  * backend: GET /mint/mints?inspectionIds=a,b,c  (＋可能なら &view=dto)
+ *
+ * NOTE:
+ * - このルートが 500 の場合もあり得るが、現状の画面要件は list row のみなので
+ *   ここは従来通り（必要になったら MintID フォールバックも追加可能）
  */
 export async function fetchMintsByInspectionIdsHTTP(
   inspectionIds: string[],
@@ -475,7 +631,10 @@ export async function fetchMintsByInspectionIdsHTTP(
   try {
     raw = await fetchMintsMapRaw(ids, "dto");
   } catch (e: any) {
-    log("fetchMintsByInspectionIdsHTTP fallback to no-view because:", e?.message ?? e);
+    log(
+      "fetchMintsByInspectionIdsHTTP fallback to no-view because:",
+      e?.message ?? e,
+    );
     raw = await fetchMintsMapRaw(ids, null);
   }
 
@@ -487,65 +646,49 @@ export async function fetchMintsByInspectionIdsHTTP(
   }
 
   const keys = Object.keys(out);
-  log("fetchMintsByInspectionIdsHTTP normalized keys=", keys.length, "sampleKey=", keys[0], "sampleVal=", out[keys[0]]);
+  log(
+    "fetchMintsByInspectionIdsHTTP normalized keys=",
+    keys.length,
+    "sampleKey=",
+    keys[0],
+    "sampleVal=",
+    out[keys[0]],
+  );
   return out;
 }
 
 /**
  * ✅ 追加: “listMintsByInspectionIDs” という名前で取得したい場合のエイリアス
  * - 画面（service/hook）からはこちらを呼ぶ想定でもOK
+ *
+ * NOTE:
+ * - 呼び出し側が inspections の mintId[] を渡しても動く（fallback があるため）
  */
 export async function listMintsByInspectionIDsHTTP(
   inspectionIds: string[],
 ): Promise<Record<string, MintListRowDTO>> {
-  log("listMintsByInspectionIDsHTTP called ids=", (inspectionIds ?? []).slice(0, 10), "len=", (inspectionIds ?? []).length);
+  log(
+    "listMintsByInspectionIDsHTTP called ids=",
+    (inspectionIds ?? []).slice(0, 10),
+    "len=",
+    (inspectionIds ?? []).length,
+  );
   const m = await fetchMintListRowsByInspectionIdsHTTP(inspectionIds);
   log("listMintsByInspectionIDsHTTP done keys=", Object.keys(m ?? {}).length);
   return m;
 }
 
 /**
- * 単発: inspectionId (= productionId) で 1 件取得（バックエンドが用意されている場合）
- * backend: GET /mint/mints/{inspectionId}
+ * 単発: 互換用（既存呼び出しを壊さない）
+ * backend: GET /mint/mints/{id}
  *
  * NOTE:
- * - ここは詳細用の MintDTO を返す前提
+ * - ここでは id を mintId として扱う（inspections の mintId を渡す前提）
  */
 export async function fetchMintByInspectionIdHTTP(
   inspectionId: string,
 ): Promise<MintDTO | null> {
-  const iid = String(inspectionId ?? "").trim();
-  if (!iid) {
-    throw new Error("inspectionId が空です");
-  }
-
-  const idToken = await getIdTokenOrThrow();
-
-  const url = `${API_BASE}/mint/mints/${encodeURIComponent(iid)}`;
-  log("fetchMintByInspectionIdHTTP url=", url);
-
-  const res = await fetch(url, {
-    method: "GET",
-    headers: buildHeaders(idToken),
-  });
-
-  log("fetchMintByInspectionIdHTTP status=", res.status, res.statusText);
-
-  if (res.status === 404) return null;
-
-  if (!res.ok) {
-    throw new Error(
-      `Failed to fetch mint by inspectionId: ${res.status} ${res.statusText}`,
-    );
-  }
-
-  const json = (await res.json()) as any;
-  log("fetchMintByInspectionIdHTTP raw=", json);
-  if (!json) return null;
-
-  const out = normalizeMintDTO(json);
-  log("fetchMintByInspectionIdHTTP normalized=", out);
-  return out;
+  return await fetchMintByMintIdHTTP(inspectionId);
 }
 
 // ===============================

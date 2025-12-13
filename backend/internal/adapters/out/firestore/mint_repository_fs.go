@@ -5,11 +5,13 @@ import (
 	"context"
 	"errors"
 	"reflect"
+	"sort"
 	"strings"
 	"time"
 
 	"cloud.google.com/go/firestore"
-	"google.golang.org/api/iterator"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 
 	mintdom "narratives/internal/domain/mint"
 )
@@ -21,6 +23,10 @@ type MintRepositoryFS struct {
 
 func NewMintRepositoryFS(client *firestore.Client) *MintRepositoryFS {
 	return &MintRepositoryFS{Client: client}
+}
+
+func (r *MintRepositoryFS) col() *firestore.CollectionRef {
+	return r.Client.Collection("mints")
 }
 
 // normalizeProductsToIDs converts Mint.Products into []string (productId list) and removes empty strings.
@@ -159,14 +165,15 @@ func decodeMintFromDoc(doc *firestore.DocumentSnapshot) (mintdom.Mint, error) {
 	data := doc.Data()
 
 	var m mintdom.Mint
+
+	// ✅ docId (= productionId/inspectionId/mintId) を Mint.ID として扱う
 	m.ID = strings.TrimSpace(doc.Ref.ID)
 
-	// ✅ 正テーブル（lower camelCase）のみ
+	// ✅ 正テーブル（lower camelCase）
 	m.BrandID = asString(data["brandId"])
 	m.TokenBlueprintID = asString(data["tokenBlueprintId"])
-	m.InspectionID = asString(data["inspectionId"])
 
-	// products: Firestore は array を正とする
+	// products: Firestore は array を正とする（互換で map も吸える）
 	ids := normalizeProductsToIDs(data["products"])
 	m.Products = idsToProductsMap(ids)
 
@@ -178,12 +185,9 @@ func decodeMintFromDoc(doc *firestore.DocumentSnapshot) (mintdom.Mint, error) {
 
 	m.ScheduledBurnDate = asTimePtr(data["scheduledBurnDate"])
 
-	// ★ onChainTxSignature はテーブルには存在しても、現状ドメイン Mint にフィールドが無いので扱わない
-
 	if err := m.Validate(); err != nil {
 		return mintdom.Mint{}, err
 	}
-
 	return m, nil
 }
 
@@ -192,24 +196,20 @@ func (r *MintRepositoryFS) Create(ctx context.Context, m mintdom.Mint) (mintdom.
 		return mintdom.Mint{}, errors.New("firestore client is nil")
 	}
 
-	col := r.Client.Collection("mints")
-
-	// ID が空なら自動採番
-	var docRef *firestore.DocumentRef
-	if strings.TrimSpace(m.ID) == "" {
-		docRef = col.NewDoc()
-		m.ID = docRef.ID
-	} else {
-		docRef = col.Doc(strings.TrimSpace(m.ID))
-		m.ID = docRef.ID
+	// ✅ 期待値: docId = productionId = inspectionId = mintId
+	docID := strings.TrimSpace(m.ID)
+	if docID == "" {
+		return mintdom.Mint{}, errors.New("mint.ID is empty (docId must be productionId/inspectionId)")
 	}
+
+	docRef := r.col().Doc(docID)
+	m.ID = docRef.ID
 
 	// CreatedAt がゼロなら補完
 	if m.CreatedAt.IsZero() {
 		m.CreatedAt = time.Now().UTC()
 	}
 
-	// ドメイン Validate
 	if err := m.Validate(); err != nil {
 		return mintdom.Mint{}, err
 	}
@@ -220,7 +220,6 @@ func (r *MintRepositoryFS) Create(ctx context.Context, m mintdom.Mint) (mintdom.
 	data := map[string]interface{}{
 		"brandId":          strings.TrimSpace(m.BrandID),
 		"tokenBlueprintId": strings.TrimSpace(m.TokenBlueprintID),
-		"inspectionId":     strings.TrimSpace(m.InspectionID),
 		"products":         productIDs,
 		"createdAt":        m.CreatedAt.UTC(),
 		"createdBy":        strings.TrimSpace(m.CreatedBy),
@@ -230,42 +229,31 @@ func (r *MintRepositoryFS) Create(ctx context.Context, m mintdom.Mint) (mintdom.
 	if m.MintedAt != nil && !m.MintedAt.IsZero() {
 		data["mintedAt"] = m.MintedAt.UTC()
 	}
-
 	if m.ScheduledBurnDate != nil && !m.ScheduledBurnDate.IsZero() {
 		data["scheduledBurnDate"] = m.ScheduledBurnDate.UTC()
 	}
 
-	// ★ onChainTxSignature は Mint ドメインにフィールドが無いのでここでは保存しない
-	//    （保存したい場合は mintdom.Mint にフィールド追加 → ここで data に入れる）
-
 	if _, err := docRef.Set(ctx, data); err != nil {
 		return mintdom.Mint{}, err
 	}
-
 	return m, nil
 }
 
-// GetByInspectionID:
-// - inspectionId（= productionId を格納する運用）から mints を 1 件取得する
-func (r *MintRepositoryFS) GetByInspectionID(ctx context.Context, inspectionID string) (mintdom.Mint, error) {
+// GetByID returns a Mint by docId.
+// docId is expected to be productionId/inspectionId/mintId (same value).
+func (r *MintRepositoryFS) GetByID(ctx context.Context, id string) (mintdom.Mint, error) {
 	if r.Client == nil {
 		return mintdom.Mint{}, errors.New("firestore client is nil")
 	}
 
-	iid := strings.TrimSpace(inspectionID)
-	if iid == "" {
-		return mintdom.Mint{}, errors.New("inspectionID is empty")
+	docID := strings.TrimSpace(id)
+	if docID == "" {
+		return mintdom.Mint{}, errors.New("id is empty")
 	}
 
-	iter := r.Client.Collection("mints").
-		Where("inspectionId", "==", iid).
-		Limit(1).
-		Documents(ctx)
-	defer iter.Stop()
-
-	doc, err := iter.Next()
+	doc, err := r.col().Doc(docID).Get(ctx)
 	if err != nil {
-		if errors.Is(err, iterator.Done) {
+		if status.Code(err) == codes.NotFound {
 			return mintdom.Mint{}, mintdom.ErrNotFound
 		}
 		return mintdom.Mint{}, err
@@ -274,19 +262,17 @@ func (r *MintRepositoryFS) GetByInspectionID(ctx context.Context, inspectionID s
 	return decodeMintFromDoc(doc)
 }
 
-// ListByInspectionIDs:
-// - inspectionId（= productionId）を複数受け取り、該当する mints を map で返す
-// - map の key は inspectionId（= productionId）
-// - Firestore の "in" は最大 10 件なのでチャンクして取得する
-func (r *MintRepositoryFS) ListByInspectionIDs(ctx context.Context, inspectionIDs []string) (map[string]mintdom.Mint, error) {
+// ListByProductionID lists mints by production docIds.
+// Expectation: production docId == mint docId, so we Get() by docId for each id.
+// Missing docs are treated as "mint not created yet" and skipped.
+func (r *MintRepositoryFS) ListByProductionID(ctx context.Context, productionIDs []string) (map[string]mintdom.Mint, error) {
 	if r.Client == nil {
 		return nil, errors.New("firestore client is nil")
 	}
 
-	// trim + 空除去 + 重複除去
-	uniq := make([]string, 0, len(inspectionIDs))
-	seen := make(map[string]struct{}, len(inspectionIDs))
-	for _, id := range inspectionIDs {
+	seen := make(map[string]struct{}, len(productionIDs))
+	ids := make([]string, 0, len(productionIDs))
+	for _, id := range productionIDs {
 		s := strings.TrimSpace(id)
 		if s == "" {
 			continue
@@ -295,56 +281,35 @@ func (r *MintRepositoryFS) ListByInspectionIDs(ctx context.Context, inspectionID
 			continue
 		}
 		seen[s] = struct{}{}
-		uniq = append(uniq, s)
+		ids = append(ids, s)
 	}
 
-	out := make(map[string]mintdom.Mint, len(uniq))
-	if len(uniq) == 0 {
+	out := make(map[string]mintdom.Mint, len(ids))
+	if len(ids) == 0 {
 		return out, nil
 	}
 
-	const inLimit = 10
+	sort.Strings(ids)
 
-	for start := 0; start < len(uniq); start += inLimit {
-		end := start + inLimit
-		if end > len(uniq) {
-			end = len(uniq)
-		}
-		chunk := uniq[start:end]
-
-		iter := r.Client.Collection("mints").
-			Where("inspectionId", "in", chunk).
-			Documents(ctx)
-
-		for {
-			doc, err := iter.Next()
-			if err != nil {
-				if errors.Is(err, iterator.Done) {
-					break
-				}
-				iter.Stop()
-				return nil, err
+	for _, id := range ids {
+		doc, err := r.col().Doc(id).Get(ctx)
+		if err != nil {
+			if status.Code(err) == codes.NotFound {
+				continue // mint 未作成
 			}
-
-			m, err := decodeMintFromDoc(doc)
-			if err != nil {
-				iter.Stop()
-				return nil, err
-			}
-
-			key := strings.TrimSpace(m.InspectionID)
-			if key == "" {
-				// 念のため: inspectionId が無いデータは map に入れない
-				continue
-			}
-
-			// 同一 inspectionId が複数ある場合は「先勝ち」にする（必要なら上書きに変更可）
-			if _, exists := out[key]; !exists {
-				out[key] = m
-			}
+			return nil, err
 		}
 
-		iter.Stop()
+		m, err := decodeMintFromDoc(doc)
+		if err != nil {
+			return nil, err
+		}
+
+		key := strings.TrimSpace(doc.Ref.ID) // = productionId (= docId)
+		if key == "" {
+			continue
+		}
+		out[key] = m
 	}
 
 	return out, nil

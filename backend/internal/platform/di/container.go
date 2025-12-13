@@ -17,6 +17,10 @@ import (
 	mintapp "narratives/internal/application/mint"
 	productionapp "narratives/internal/application/production"
 	resolver "narratives/internal/application/resolver"
+
+	// ★ InspectionUsecase 移動先
+	inspectionapp "narratives/internal/application/inspection"
+
 	uc "narratives/internal/application/usecase"
 	authuc "narratives/internal/application/usecase/auth"
 	branddom "narratives/internal/domain/brand"
@@ -89,8 +93,8 @@ type Container struct {
 	// ★ 検品アプリ用 ProductUsecase（/inspector/products/{id}）
 	ProductUC *uc.ProductUsecase
 
-	// ★ 検品アプリ用 Usecase（バッチ検品など）
-	InspectionUC *uc.InspectionUsecase
+	// ★ 検品アプリ用 Usecase（バッチ検品など）※ moved
+	InspectionUC *inspectionapp.InspectionUsecase
 
 	// ★ Mint 用 Usecase（MintRequest / NFT 発行チェーン）
 	MintUC *mintapp.MintUsecase
@@ -336,8 +340,8 @@ func NewContainer(ctx context.Context) (*Container, error) {
 		repo: productRepo,
 	}
 
-	// ★ InspectionUsecase（検品アプリ専用）
-	inspectionUC := uc.NewInspectionUsecase(
+	// ★ InspectionUsecase（検品アプリ専用）※ moved
+	inspectionUC := inspectionapp.NewInspectionUsecase(
 		inspectionRepo,        // inspections テーブル
 		inspectionProductRepo, // products テーブル（inspectionResult 同期用, アダプタ経由）
 	)

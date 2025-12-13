@@ -22,8 +22,11 @@ func NewListPresenter(r *resolver.NameResolver) *ListPresenter {
 // ToRowDTO converts Mint(domain) -> MintListRowDTO (list screen DTO).
 // - dto.MintListRowDTO の定義に合わせて string / *string を厳密に合わせる
 // - MintedAt は RFC3339 (nil なら未mint)
+//
+// NOTE:
+//   - mintdom.Mint から inspectionId は削除されたため、この presenter では設定しない。
+//   - InspectionID は呼び出し元（usecase 側で inspectionId をキーに map を組み立てる等）で埋める想定。
 func (p *ListPresenter) ToRowDTO(ctx context.Context, m mintdom.Mint) dto.MintListRowDTO {
-	inspectionID := strings.TrimSpace(m.InspectionID)
 	mintID := strings.TrimSpace(m.ID)
 	tokenBlueprintID := strings.TrimSpace(m.TokenBlueprintID)
 
@@ -53,7 +56,6 @@ func (p *ListPresenter) ToRowDTO(ctx context.Context, m mintdom.Mint) dto.MintLi
 	}
 
 	return dto.MintListRowDTO{
-		InspectionID:   inspectionID,
 		MintID:         mintID,
 		TokenBlueprint: tokenBlueprintID,
 

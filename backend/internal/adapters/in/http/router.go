@@ -9,6 +9,9 @@ import (
 	// ★ MintUsecase 移動先
 	mintapp "narratives/internal/application/mint"
 
+	// ★ InspectionUsecase 移動先
+	inspectionapp "narratives/internal/application/inspection"
+
 	usecase "narratives/internal/application/usecase"
 	authuc "narratives/internal/application/usecase/auth"
 
@@ -50,6 +53,7 @@ type RouterDeps struct {
 	PermissionUC     *usecase.PermissionUsecase
 	PrintUC          *usecase.PrintUsecase
 	TokenUC          *usecase.TokenUsecase
+
 	// ★ここだけ型を新パッケージに変更
 	ProductionUC       *productionapp.ProductionUsecase
 	ProductBlueprintUC *usecase.ProductBlueprintUsecase
@@ -67,8 +71,8 @@ type RouterDeps struct {
 	// ⭐ Inspector 用 ProductUsecase（/inspector/products/{id}）
 	ProductUC *usecase.ProductUsecase
 
-	// ⭐ 検品専用 Usecase
-	InspectionUC *usecase.InspectionUsecase
+	// ⭐ 検品専用 Usecase（★ moved）
+	InspectionUC *inspectionapp.InspectionUsecase
 
 	// ⭐ Mint 用 Usecase（/mint/inspections など）
 	MintUC *mintapp.MintUsecase

@@ -21,24 +21,17 @@ import (
 
 // MintRepository は mints テーブルへの永続化を担当するリポジトリポートです。
 type MintRepository interface {
-	// Create:
-	// - 新しい Mint エンティティを保存します。
-	// - m.ID が空文字の場合、実装側で採番して返却しても構いません。
-	// - 戻り値 Mint には、保存後の ID / CreatedAt などが反映されていることを期待します。
+	// 既存
 	Create(ctx context.Context, m Mint) (Mint, error)
 
-	// GetByInspectionID:
-	// - inspectionId（= Narratives では productionId を格納する運用）に紐づく Mint を 1 件取得します。
-	// - 未作成の場合は ErrNotFound を返す想定です。
-	// - 画面側の「ミント申請済みモード」の判定を inspections のフラグではなく、
-	//   mints の有無で行うための取得口です。
-	GetByInspectionID(ctx context.Context, inspectionID string) (Mint, error)
+	// （推奨）docId で取得できる実装があるなら残す/追加
+	GetByID(ctx context.Context, id string) (Mint, error)
 
-	// ListByInspectionIDs:
-	// - inspectionId（= productionId）群に紐づく Mint をまとめて取得します。
-	// - 戻り値は inspectionId をキーにした map を想定します（存在しないものは含めない or 空Mintでも可）。
-	// - 管理画面の一覧等で N+1 を避ける用途を想定します。
-	ListByInspectionIDs(ctx context.Context, inspectionIDs []string) (map[string]Mint, error)
+	// ★ 新定義：production の docId 群（= mint の docId 群）から mint を取得する
+	// - productionIDs の各要素を mint の docId として Get する
+	// - mint が存在しない productionID はスキップしてよい（一覧用途）
+	// - 戻り値は join しやすいよう productionID をキーにした map を推奨
+	ListByProductionID(ctx context.Context, productionIDs []string) (map[string]Mint, error)
 }
 
 // ============================================================
@@ -49,10 +42,6 @@ type MintRepository interface {
 // MintProductBlueprintRepo は companyId から productBlueprintId の一覧を取得したり、
 // productBlueprintId から productName / Patch を解決するための最小ポートです。
 type MintProductBlueprintRepo interface {
-	// companyId に紐づく product_blueprints の ID 一覧を返す
-	// 実装例: ProductBlueprintRepositoryFS.ListIDsByCompany
-	ListIDsByCompany(ctx context.Context, companyID string) ([]string, error)
-
 	// productBlueprintId から productName だけを取得するヘルパ
 	// 実装例: ProductBlueprintRepositoryFS.GetProductNameByID
 	GetProductNameByID(ctx context.Context, id string) (string, error)

@@ -13,7 +13,6 @@ import (
 	branddom "narratives/internal/domain/brand"
 	inspectiondom "narratives/internal/domain/inspection"
 	mintdom "narratives/internal/domain/mint"
-	modeldom "narratives/internal/domain/model"
 	pbpdom "narratives/internal/domain/productBlueprint"
 	tokendom "narratives/internal/domain/token"
 	tbdom "narratives/internal/domain/tokenBlueprint"
@@ -34,6 +33,7 @@ type TokenMintPort interface {
 // ============================================================
 
 type MintUsecase struct {
+	// 互換のため残しているが、company -> pb -> production の探索にはもう使わない方針
 	pbRepo    mintdom.MintProductBlueprintRepo
 	prodRepo  mintdom.MintProductionRepo
 	inspRepo  mintdom.MintInspectionRepo
@@ -47,6 +47,7 @@ type MintUsecase struct {
 
 	// mints テーブル用リポジトリ
 	mintRepo mintdom.MintRepository
+
 	// inspections → passed productId 一覧を取得するためのポート
 	passedProductLister mintdom.PassedProductLister
 
@@ -84,175 +85,15 @@ func NewMintUsecase(
 var ErrCompanyIDMissing = errors.New("companyId not found in context")
 
 // ============================================================
-// Public API
+// Additional API: mints を inspectionIds(docId) で取得
 // ============================================================
 
-// ListInspectionsForCurrentCompany は、context に埋め込まれた companyId
-// （middleware.AuthMiddleware → usecase.WithCompanyID）を基点に、
-func (u *MintUsecase) ListInspectionsForCurrentCompany(
-	ctx context.Context,
-) ([]dto.MintInspectionView, error) {
-
-	companyID := strings.TrimSpace(appusecase.CompanyIDFromContext(ctx))
-	if companyID == "" {
-		return nil, ErrCompanyIDMissing
-	}
-
-	return u.ListInspectionsByCompanyID(ctx, companyID)
-}
-
-// ListInspectionsByCompanyID は、明示的に companyId を指定して同じチェーンを実行するバリアントです。
-// ★ productName の名前解決は行わない（presenter/mapper が担当）
-func (u *MintUsecase) ListInspectionsByCompanyID(
-	ctx context.Context,
-	companyID string,
-) ([]dto.MintInspectionView, error) {
-
-	if u == nil {
-		return nil, errors.New("mint usecase is nil")
-	}
-
-	companyID = strings.TrimSpace(companyID)
-	if companyID == "" {
-		return nil, ErrCompanyIDMissing
-	}
-
-	// 1) companyId → productBlueprintId 一覧
-	pbIDs, err := u.pbRepo.ListIDsByCompany(ctx, companyID)
-	if err != nil {
-		return nil, err
-	}
-	if len(pbIDs) == 0 {
-		return []dto.MintInspectionView{}, nil
-	}
-
-	// 2) productBlueprintId 群 → Production 一覧
-	prods, err := u.prodRepo.ListByProductBlueprintID(ctx, pbIDs)
-	if err != nil {
-		return nil, err
-	}
-	if len(prods) == 0 {
-		return []dto.MintInspectionView{}, nil
-	}
-
-	// Production から productionId 一覧を抽出（重複除去）
-	prodIDSet := make(map[string]struct{}, len(prods))
-	// productionId → productBlueprintId のマップ
-	prodToPB := make(map[string]string, len(prods))
-
-	for _, p := range prods {
-		id := strings.TrimSpace(p.ID)
-		if id == "" {
-			continue
-		}
-		prodIDSet[id] = struct{}{}
-
-		pbID := strings.TrimSpace(p.ProductBlueprintID)
-		if pbID != "" {
-			prodToPB[id] = pbID
-		}
-	}
-	if len(prodIDSet) == 0 {
-		return []dto.MintInspectionView{}, nil
-	}
-
-	// ★ map iteration を安定化（推奨）
-	prodIDs := make([]string, 0, len(prodIDSet))
-	for id := range prodIDSet {
-		prodIDs = append(prodIDs, id)
-	}
-	sort.Strings(prodIDs)
-
-	// 3) productionId 群 → InspectionBatch 一覧
-	batches, err := u.inspRepo.ListByProductionID(ctx, prodIDs)
-	if err != nil {
-		return nil, err
-	}
-	if len(batches) == 0 {
-		return []dto.MintInspectionView{}, nil
-	}
-
-	// 4) inspection 内の modelId 群を集めて、ModelVariation を取得
-	modelIDSet := make(map[string]struct{})
-	for _, b := range batches {
-		for _, item := range b.Inspections {
-			mid := strings.TrimSpace(item.ModelID)
-			if mid == "" {
-				continue
-			}
-			modelIDSet[mid] = struct{}{}
-		}
-	}
-
-	// ★ map iteration を安定化（推奨）
-	modelIDs := make([]string, 0, len(modelIDSet))
-	for mid := range modelIDSet {
-		modelIDs = append(modelIDs, mid)
-	}
-	sort.Strings(modelIDs)
-
-	modelMetaMap := make(map[string]dto.MintModelMeta, len(modelIDs))
-
-	// （任意）本当は modelRepo が ListByIDs を持てると 1 回で取れて高速
-	if len(modelIDs) > 0 && u.modelRepo != nil {
-		for _, modelID := range modelIDs {
-			mv, err := u.modelRepo.GetModelVariationByID(ctx, modelID)
-			if err != nil {
-				if errors.Is(err, modeldom.ErrNotFound) {
-					continue
-				}
-				continue
-			}
-
-			meta := dto.MintModelMeta{
-				Size: strings.TrimSpace(mv.Size),
-			}
-
-			if mv.Color.Name != "" {
-				meta.ColorName = strings.TrimSpace(mv.Color.Name)
-			}
-			meta.RGB = mv.Color.RGB
-
-			modelMetaMap[modelID] = meta
-		}
-	}
-
-	// 5) InspectionBatch ごとに MintInspectionView を組み立てる
-	views := make([]dto.MintInspectionView, 0, len(batches))
-
-	for _, b := range batches {
-		prodID := strings.TrimSpace(b.ProductionID)
-		pbID := strings.TrimSpace(prodToPB[prodID])
-
-		perBatchModelMeta := make(map[string]dto.MintModelMeta)
-		for _, item := range b.Inspections {
-			mid := strings.TrimSpace(item.ModelID)
-			if mid == "" {
-				continue
-			}
-			if meta, ok := modelMetaMap[mid]; ok {
-				perBatchModelMeta[mid] = meta
-			}
-		}
-
-		view := dto.MintInspectionView{
-			InspectionBatch:    b,
-			ProductBlueprintID: pbID,
-			ProductName:        "", // ★ 名前解決は presenter が埋める
-			ModelMeta:          perBatchModelMeta,
-		}
-		views = append(views, view)
-	}
-
-	return views, nil
-}
-
-// ============================================================
-// Additional API: mints を inspectionIds で取得
-// ============================================================
-
-// ListMintsByInspectionIDs は、inspectionIds（= productionIds）に紐づく mints を
+// ListMintsByInspectionIDs は、inspectionIds（= productionIds = docId）に紐づく mints を
 // inspectionId をキーにした map で返します。
+//
+// ★ Firestore 設計上、production/inspection/mints の docId が同一であるため、
+// 「where(inspectionId in ...)」ではなく「docId で Get/ループ」が最も堅牢。
+// この関数は mintRepo が ListByProductionID を持つならそれを最優先します。
 func (u *MintUsecase) ListMintsByInspectionIDs(
 	ctx context.Context,
 	inspectionIDs []string,
@@ -284,10 +125,64 @@ func (u *MintUsecase) ListMintsByInspectionIDs(
 		return map[string]mintdom.Mint{}, nil
 	}
 
-	// （任意）順序固定したいならここも sort.Strings(ids)
+	// 順序固定（ログ/比較安定）
 	sort.Strings(ids)
 
-	return u.mintRepo.ListByInspectionIDs(ctx, ids)
+	// ------------------------------------------------------------
+	// 最優先: mintRepo が docId 同一前提の ListByProductionID を持つ
+	// ------------------------------------------------------------
+	if lister, ok := u.mintRepo.(interface {
+		ListByProductionID(ctx context.Context, productionIDs []string) (map[string]mintdom.Mint, error)
+	}); ok {
+		return lister.ListByProductionID(ctx, ids)
+	}
+
+	// ------------------------------------------------------------
+	// 次点: GetByID / Get で docId を個別取得
+	// ------------------------------------------------------------
+	if getter, ok := u.mintRepo.(interface {
+		GetByID(ctx context.Context, id string) (mintdom.Mint, error)
+	}); ok {
+		out := make(map[string]mintdom.Mint, len(ids))
+		for _, id := range ids {
+			m, err := getter.GetByID(ctx, id)
+			if err != nil {
+				// 未作成 mint は「存在しないだけ」なので握りつぶす（一覧用途）
+				if strings.Contains(strings.ToLower(err.Error()), "not found") {
+					continue
+				}
+				if errors.Is(err, mintdom.ErrNotFound) {
+					continue
+				}
+				return nil, err
+			}
+			out[id] = m
+		}
+		return out, nil
+	}
+
+	if getter, ok := u.mintRepo.(interface {
+		Get(ctx context.Context, id string) (mintdom.Mint, error)
+	}); ok {
+		out := make(map[string]mintdom.Mint, len(ids))
+		for _, id := range ids {
+			m, err := getter.Get(ctx, id)
+			if err != nil {
+				if strings.Contains(strings.ToLower(err.Error()), "not found") {
+					continue
+				}
+				if errors.Is(err, mintdom.ErrNotFound) {
+					continue
+				}
+				return nil, err
+			}
+			out[id] = m
+		}
+		return out, nil
+	}
+
+	// ListByInspectionIDs は廃止方針なのでここで明示エラー
+	return nil, errors.New("mint repo does not support ListByProductionID/GetByID/Get")
 }
 
 // ============================================================
@@ -398,6 +293,15 @@ func (u *MintUsecase) ListMintListRowsByInspectionIDs(
 	return out, nil
 }
 
+// ListMintListRowsByProductionIDs は、ProductionUsecase 等で取得した productionIds をそのまま渡すための薄いラッパです。
+// productionIds == inspectionIds == docId の設計前提。
+func (u *MintUsecase) ListMintListRowsByProductionIDs(
+	ctx context.Context,
+	productionIDs []string,
+) (map[string]dto.MintListRowDTO, error) {
+	return u.ListMintListRowsByInspectionIDs(ctx, productionIDs)
+}
+
 // ============================================================
 // Additional API: ProductBlueprint Patch 解決
 // ============================================================
@@ -409,6 +313,9 @@ func (u *MintUsecase) GetProductBlueprintPatchByID(
 
 	if u == nil {
 		return pbpdom.Patch{}, errors.New("mint usecase is nil")
+	}
+	if u.pbRepo == nil {
+		return pbpdom.Patch{}, errors.New("productBlueprint repo is nil")
 	}
 
 	id := strings.TrimSpace(productBlueprintID)
