@@ -520,17 +520,14 @@ func (s *MintRequestQueryService) GetMintRequestDetail(
 		sort.Strings(productIDs)
 
 		mintSummary = &querydto.MintSummaryDTO{
-			ID:               strings.TrimSpace(ml.ID),
-			BrandID:          strings.TrimSpace(ml.BrandID),
-			TokenBlueprintID: strings.TrimSpace(ml.TokenBlueprintID),
-
-			CreatedBy:     strings.TrimSpace(ml.CreatedBy),
-			CreatedByName: strings.TrimSpace(createdByName),
-			CreatedAt:     ml.CreatedAt,
-
-			Minted:   ml.Minted,
-			MintedAt: ml.MintedAt,
-
+			ID:                strings.TrimSpace(ml.ID),
+			BrandID:           strings.TrimSpace(ml.BrandID),
+			TokenBlueprintID:  strings.TrimSpace(ml.TokenBlueprintID),
+			CreatedBy:         strings.TrimSpace(ml.CreatedBy),
+			CreatedByName:     strings.TrimSpace(createdByName),
+			CreatedAt:         ml.CreatedAt,
+			Minted:            ml.Minted,
+			MintedAt:          ml.MintedAt,
 			ScheduledBurnDate: ml.ScheduledBurnDate,
 			ProductIDs:        productIDs,
 		}
@@ -552,37 +549,27 @@ func (s *MintRequestQueryService) GetMintRequestDetail(
 			TotalPassed:  insp.TotalPassed,
 			Quantity:     insp.Quantity,
 			ProductName:  "",
-
-			Inspections: inspectionItems,
+			Inspections:  inspectionItems,
 		}
 	}
 
 	out := &querydto.MintRequestDetailDTO{
-		ID:           pid,
-		ProductionID: pid,
-
-		ProductName: productName,
-		TokenName:   tokenName,
-
-		TokenBlueprintID: tokenBlueprintID,
-
+		ID:                 pid,
+		ProductionID:       pid,
+		ProductName:        productName,
+		TokenName:          tokenName,
+		TokenBlueprintID:   tokenBlueprintID,
 		MintQuantity:       mintQty,
 		ProductionQuantity: prodQty,
-
-		InspectionStatus: inspStatus,
-
-		RequestedBy:   requestedBy,
-		CreatedByName: createdByName,
-
-		MintedAt: mintedAt,
-
-		Production: prodSummary,
-		Inspection: inspSummary,
-		Mint:       mintSummary,
-
-		ModelMeta: modelMeta,
-
-		TokenBlueprint: nil,
+		InspectionStatus:   inspStatus,
+		RequestedBy:        requestedBy,
+		CreatedByName:      createdByName,
+		MintedAt:           mintedAt,
+		Production:         prodSummary,
+		Inspection:         inspSummary,
+		Mint:               mintSummary,
+		ModelMeta:          modelMeta,
+		TokenBlueprint:     nil,
 	}
 
 	log.Printf("[mint_request_qs] detail built pid=%q elapsed=%s dto=%s",

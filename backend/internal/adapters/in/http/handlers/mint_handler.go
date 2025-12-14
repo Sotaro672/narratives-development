@@ -16,7 +16,6 @@ import (
 
 	mintapp "narratives/internal/application/mint"
 	mintdto "narratives/internal/application/mint/dto"
-	mintpresenter "narratives/internal/application/mint/presenter"
 
 	// ★ productionIds 自動解決用
 	productionapp "narratives/internal/application/production"
@@ -59,6 +58,11 @@ func NewMintHandler(
 	productionUC *productionapp.ProductionUsecase,
 	mintRequestQS MintRequestQueryService, // ★ 追加
 ) http.Handler {
+	// ★ A案: MintUsecase 側に NameResolver を持たせる
+	if mintUC != nil {
+		mintUC.SetNameResolver(nameResolver)
+	}
+
 	return &MintHandler{
 		mintUC:        mintUC,
 		tokenUC:       tokenUC,
@@ -450,16 +454,40 @@ func (h *MintHandler) listMintsByInspectionIDs(w http.ResponseWriter, r *http.Re
 		seen[s] = struct{}{}
 		ids = append(ids, s)
 	}
-
 	if len(ids) == 0 {
 		_ = json.NewEncoder(w).Encode(map[string]any{})
 		return
 	}
-
 	sort.Strings(ids)
 
 	log.Printf("[mint_handler] /mint/mints inspectionIds len=%d sample[0..4]=%v view=%s", len(ids), ids[:min(5, len(ids))], view)
 
+	// ★ view=list: Usecase 側で tokenName/createdByName を解決した DTO を返す
+	if view != "dto" {
+		start := time.Now()
+		out, err := h.mintUC.ListMintListRowsByInspectionIDs(ctx, ids)
+		elapsed := time.Since(start)
+
+		if err != nil {
+			log.Printf("[mint_handler] /mint/mints ListMintListRowsByInspectionIDs error=%v elapsed=%s", err, elapsed)
+			w.WriteHeader(http.StatusInternalServerError)
+			_ = json.NewEncoder(w).Encode(map[string]string{"error": err.Error()})
+			return
+		}
+
+		log.Printf(
+			"[mint_handler] /mint/mints(list) ok keys=%d elapsed=%s sampleKey=%q sampleVal=%s",
+			len(out),
+			elapsed,
+			sampleFirstKey(out),
+			toJSONForLog(sampleFirstValue(out), 1500),
+		)
+
+		_ = json.NewEncoder(w).Encode(out)
+		return
+	}
+
+	// ★ view=dto: 詳細フィールドを返しつつ、createdByName/tokenName も入れる
 	start := time.Now()
 	mintsByInspectionID, err := h.mintUC.ListMintsByInspectionIDs(ctx, ids)
 	elapsed := time.Since(start)
@@ -471,98 +499,74 @@ func (h *MintHandler) listMintsByInspectionIDs(w http.ResponseWriter, r *http.Re
 		return
 	}
 
+	// createdByName/tokenName は Usecase の list-row DTO を流用して解決（A案のルート）
+	listRows, _ := h.mintUC.ListMintListRowsByInspectionIDs(ctx, ids)
+
 	log.Printf(
-		"[mint_handler] /mint/mints result keys=%d elapsed=%s sampleKey=%q sampleVal=%s",
+		"[mint_handler] /mint/mints(dto) ok keys=%d elapsed=%s sampleKey=%q sampleVal=%s",
 		len(mintsByInspectionID),
 		elapsed,
 		sampleFirstKey(mintsByInspectionID),
 		toJSONForLog(sampleFirstValue(mintsByInspectionID), 1500),
 	)
 
-	if view == "dto" {
-		out := make(map[string]any, len(mintsByInspectionID))
-		for inspectionID, m := range mintsByInspectionID {
-			iid := strings.TrimSpace(inspectionID)
-
-			products := make([]string, 0, len(m.Products))
-			for pid := range m.Products {
-				p := strings.TrimSpace(pid)
-				if p != "" {
-					products = append(products, p)
-				}
-			}
-			sort.Strings(products)
-
-			var createdAt *string
-			if !m.CreatedAt.IsZero() {
-				s := m.CreatedAt.UTC().Format(time.RFC3339)
-				createdAt = &s
-			}
-
-			var mintedAt *string
-			if m.MintedAt != nil && !m.MintedAt.IsZero() {
-				s := m.MintedAt.UTC().Format(time.RFC3339)
-				mintedAt = &s
-			}
-
-			var scheduledBurnDate *string
-			if m.ScheduledBurnDate != nil && !m.ScheduledBurnDate.IsZero() {
-				s := m.ScheduledBurnDate.UTC().Format(time.RFC3339)
-				scheduledBurnDate = &s
-			}
-
-			out[iid] = map[string]any{
-				"id":                strings.TrimSpace(m.ID),
-				"inspectionId":      iid,
-				"brandId":           strings.TrimSpace(m.BrandID),
-				"tokenBlueprintId":  strings.TrimSpace(m.TokenBlueprintID),
-				"products":          products,
-				"createdBy":         strings.TrimSpace(m.CreatedBy),
-				"createdAt":         createdAt,
-				"minted":            m.Minted,
-				"mintedAt":          mintedAt,
-				"scheduledBurnDate": scheduledBurnDate,
-			}
-		}
-		_ = json.NewEncoder(w).Encode(out)
-		return
-	}
-
-	out := make(map[string]mintdto.MintListRowDTO, len(mintsByInspectionID))
+	out := make(map[string]any, len(mintsByInspectionID))
 	for inspectionID, m := range mintsByInspectionID {
 		iid := strings.TrimSpace(inspectionID)
 
-		tbID := strings.TrimSpace(m.TokenBlueprintID)
-		tokenName := ""
-		if h.nameResolver != nil && tbID != "" {
-			tokenName = strings.TrimSpace(h.nameResolver.ResolveTokenName(ctx, tbID))
+		products := make([]string, 0, len(m.Products))
+		for pid := range m.Products {
+			p := strings.TrimSpace(pid)
+			if p != "" {
+				products = append(products, p)
+			}
 		}
-		if tokenName == "" {
-			tokenName = tbID
+		sort.Strings(products)
+
+		var createdAt *string
+		if !m.CreatedAt.IsZero() {
+			s := m.CreatedAt.UTC().Format(time.RFC3339)
+			createdAt = &s
+		}
+
+		var mintedAt *string
+		if m.MintedAt != nil && !m.MintedAt.IsZero() {
+			s := m.MintedAt.UTC().Format(time.RFC3339)
+			mintedAt = &s
+		}
+
+		var scheduledBurnDate *string
+		if m.ScheduledBurnDate != nil && !m.ScheduledBurnDate.IsZero() {
+			s := m.ScheduledBurnDate.UTC().Format(time.RFC3339)
+			scheduledBurnDate = &s
 		}
 
 		createdBy := strings.TrimSpace(m.CreatedBy)
-		createdByName := ""
-		if h.nameResolver != nil && createdBy != "" {
-			createdByName = strings.TrimSpace(h.nameResolver.ResolveMemberName(ctx, createdBy))
-		}
-		if createdByName == "" {
-			createdByName = createdBy
+		createdByName := createdBy
+		tokenName := strings.TrimSpace(m.TokenBlueprintID)
+
+		if row, ok := listRows[iid]; ok {
+			if s := strings.TrimSpace(row.CreatedByName); s != "" {
+				createdByName = s
+			}
+			if s := strings.TrimSpace(row.TokenName); s != "" {
+				tokenName = s
+			}
 		}
 
-		var mintedAtPtr *string
-		if m.MintedAt != nil && !m.MintedAt.IsZero() {
-			s := m.MintedAt.UTC().Format(time.RFC3339)
-			mintedAtPtr = &s
-		}
-
-		out[iid] = mintdto.MintListRowDTO{
-			InspectionID:   iid,
-			MintID:         strings.TrimSpace(m.ID),
-			TokenBlueprint: tbID,
-			TokenName:      tokenName,
-			CreatedByName:  createdByName,
-			MintedAt:       mintedAtPtr,
+		out[iid] = map[string]any{
+			"id":                strings.TrimSpace(m.ID),
+			"inspectionId":      iid,
+			"brandId":           strings.TrimSpace(m.BrandID),
+			"tokenBlueprintId":  strings.TrimSpace(m.TokenBlueprintID),
+			"tokenName":         tokenName,
+			"products":          products,
+			"createdBy":         createdBy,
+			"createdByName":     createdByName,
+			"createdAt":         createdAt,
+			"minted":            m.Minted,
+			"mintedAt":          mintedAt,
+			"scheduledBurnDate": scheduledBurnDate,
 		}
 	}
 
@@ -603,6 +607,22 @@ func (h *MintHandler) getMintByID(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// createdByName / tokenName を Usecase の list-row DTO で解決（A案のルート）
+	createdBy := strings.TrimSpace(mintEntity.CreatedBy)
+	createdByName := createdBy
+	tokenName := strings.TrimSpace(mintEntity.TokenBlueprintID)
+
+	if rows, err := h.mintUC.ListMintListRowsByInspectionIDs(ctx, []string{id}); err == nil {
+		if row, ok := rows[id]; ok {
+			if s := strings.TrimSpace(row.CreatedByName); s != "" {
+				createdByName = s
+			}
+			if s := strings.TrimSpace(row.TokenName); s != "" {
+				tokenName = s
+			}
+		}
+	}
+
 	products := make([]string, 0, len(mintEntity.Products))
 	for pid := range mintEntity.Products {
 		p := strings.TrimSpace(pid)
@@ -635,8 +655,10 @@ func (h *MintHandler) getMintByID(w http.ResponseWriter, r *http.Request) {
 		"inspectionId":      strings.TrimSpace(id),
 		"brandId":           strings.TrimSpace(mintEntity.BrandID),
 		"tokenBlueprintId":  strings.TrimSpace(mintEntity.TokenBlueprintID),
+		"tokenName":         tokenName,
 		"products":          products,
-		"createdBy":         strings.TrimSpace(mintEntity.CreatedBy),
+		"createdBy":         createdBy,
+		"createdByName":     createdByName,
 		"createdAt":         createdAt,
 		"minted":            mintEntity.Minted,
 		"mintedAt":          mintedAt,
@@ -939,11 +961,8 @@ func sampleFirstValue[V any](m map[string]V) any {
 }
 
 // ============================================================
-// compile-time guards（未使用でも import が消されないように）
+// keep imports referenced in some builds
 // ============================================================
 
-var _ = mintdom.ErrNotFound
-var _ = mintpresenter.PresentInspectionViews
-
-// keep unused in some builds
+var _ = mintdto.MintListRowDTO{}
 var _ = context.Canceled

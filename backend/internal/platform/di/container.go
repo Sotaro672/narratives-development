@@ -412,6 +412,10 @@ func NewContainer(ctx context.Context) (*Container, error) {
 		tokenUC,              // mint.TokenMintPort（TokenUsecase が実装している前提）
 	)
 
+	// ✅ 追加: MintUsecase に NameResolver を差し込む（createdByName 解決用）
+	// - mint/usecase.go 側で SetNameResolver を追加した前提
+	mintUC.SetNameResolver(nameResolver)
+
 	// ★ NEW: MintRequestQueryService（GET /mint/requests 一覧専用）
 	mintRequestQueryService := companyquery.NewMintRequestQueryService(
 		mintUC,

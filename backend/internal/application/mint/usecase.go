@@ -4,12 +4,14 @@ package mint
 import (
 	"context"
 	"errors"
+	"log"
 	"sort"
 	"strings"
 	"time"
 
 	dto "narratives/internal/application/mint/dto"
 	qdto "narratives/internal/application/query/dto"
+	resolver "narratives/internal/application/resolver"
 	appusecase "narratives/internal/application/usecase"
 	branddom "narratives/internal/domain/brand"
 	inspectiondom "narratives/internal/domain/inspection"
@@ -54,10 +56,14 @@ type MintUsecase struct {
 
 	// チェーンミント実行用ポート（TokenUsecase を想定）
 	tokenMinter TokenMintPort
+
+	// ★ 追加: createdBy(memberId) → 氏名 を解決するため（A案）
+	// 既存DIを壊さないため、Setterで後から差し込む
+	nameResolver *resolver.NameResolver
 }
 
 // NewMintUsecase は MintUsecase のコンストラクタです。
-// ★ NameResolver は usecase に持たせず、presenter/mapper 側で扱う方針
+// NameResolver は任意依存（Setterで後から差し込む）とする。
 func NewMintUsecase(
 	pbRepo mintdom.MintProductBlueprintRepo,
 	prodRepo mintdom.MintProductionRepo,
@@ -79,7 +85,35 @@ func NewMintUsecase(
 		mintRepo:            mintRepo,
 		passedProductLister: passedProductLister,
 		tokenMinter:         tokenMinter,
+		nameResolver:        nil,
 	}
+}
+
+// ★ 追加: DI 側で nameResolver を後から注入できるようにする（既存constructorを壊さない）
+func (u *MintUsecase) SetNameResolver(r *resolver.NameResolver) {
+	if u == nil {
+		return
+	}
+	u.nameResolver = r
+}
+
+// internal helper: createdBy(memberId) -> display name
+// nameResolver が無い/解決できない場合は memberId を返す
+func (u *MintUsecase) resolveCreatedByName(ctx context.Context, memberID string) string {
+	memberID = strings.TrimSpace(memberID)
+	if memberID == "" {
+		return ""
+	}
+
+	// ★ A案: nameResolver があれば ResolveMemberName を使う
+	if u != nil && u.nameResolver != nil {
+		if name := strings.TrimSpace(u.nameResolver.ResolveMemberName(ctx, memberID)); name != "" {
+			return name
+		}
+	}
+
+	// fallback
+	return memberID
 }
 
 // ErrCompanyIDMissing は context から companyId が解決できない場合のエラーです。
@@ -193,9 +227,9 @@ func (u *MintUsecase) ListMintsByInspectionIDs(
 // ListMintListRowsByInspectionIDs は、inspectionIds（= productionIds）に紐づく mints を取得し、
 // tokenBlueprintId → tokenName を解決して、一覧向け DTO を inspectionId をキーにした map で返します。
 //
-// NOTE:
-//   - CreatedByName は現状 Mint.CreatedBy（memberId）をそのまま返します。
-//     もし「表示名」にしたい場合は NameResolver / member.Service を注入する設計に拡張してください。
+// ★更新点:
+//   - createdByName は NameResolver が設定されていれば createdBy(memberId) を氏名へ解決して返す
+//   - 未設定/失敗時は従来通り memberId を返す（互換）
 func (u *MintUsecase) ListMintListRowsByInspectionIDs(
 	ctx context.Context,
 	inspectionIDs []string,
@@ -255,6 +289,10 @@ func (u *MintUsecase) ListMintListRowsByInspectionIDs(
 	}
 	sort.Strings(keys)
 
+	log.Printf("[mint_usecase] ListMintListRowsByInspectionIDs start ids=%d mints=%d nameResolver=%t",
+		len(inspectionIDs), len(keys), u.nameResolver != nil,
+	)
+
 	for _, inspectionID := range keys {
 		m := mintsByInspectionID[inspectionID]
 
@@ -270,8 +308,8 @@ func (u *MintUsecase) ListMintListRowsByInspectionIDs(
 			}
 		}
 
-		// createdByName（現状は memberId をそのまま返す）
-		createdByName := strings.TrimSpace(m.CreatedBy)
+		// ★ createdByName: createdBy(memberId) を NameResolver で氏名へ（A案）
+		createdByName := u.resolveCreatedByName(ctx, m.CreatedBy)
 
 		// mintedAt（nil なら未mint、入れるなら RFC3339）
 		var mintedAt *string
@@ -290,6 +328,16 @@ func (u *MintUsecase) ListMintListRowsByInspectionIDs(
 			MintedAt:      mintedAt,
 		}
 	}
+
+	log.Printf("[mint_usecase] ListMintListRowsByInspectionIDs done out=%d sampleKey=%q",
+		len(out),
+		func() string {
+			if len(keys) == 0 {
+				return ""
+			}
+			return keys[0]
+		}(),
+	)
 
 	return out, nil
 }
@@ -335,10 +383,6 @@ func (u *MintUsecase) GetProductBlueprintPatchByID(
 // ============================================================
 // ★ NEW (moved idea): model variations -> modelMeta（任意・設定されていれば）
 // ============================================================
-//
-// - MintUsecase 側で modelMeta の解決手段を持ち、handler / query-service から呼べるようにする。
-// - modelRepo が対応していない環境では「空 map」を返す（互換重視）。
-//
 
 type modelMetaLister interface {
 	ListModelMetaByIDs(ctx context.Context, modelIDs []string) (map[string]qdto.MintModelMetaEntry, error)

@@ -4,10 +4,7 @@ import * as React from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { useInspectionResultCard } from "./useInspectionResultCard";
 
-import type {
-  InspectionBatchDTO,
-  MintDTO,
-} from "../../infrastructure/api/mintRequestApi";
+import type { InspectionBatchDTO, MintDTO } from "../../infrastructure/api/mintRequestApi";
 
 // ✅ Repository を直接呼ぶ
 import {
@@ -96,12 +93,14 @@ export type TokenBlueprintCardHandlers = {
 
 export type MintInfo = {
   id: string;
+
+  // 取得元DTOの形状差（/mint/mints が「list row」返すケース等）に備え、空文字許容
   brandId: string;
   tokenBlueprintId: string;
 
   createdBy: string;
-  createdByName?: string | null; // ★追加（表示はこれを優先）
-  createdAt: string;
+  createdByName?: string | null; // ★表示はこれを優先
+  createdAt: string | null;
 
   minted: boolean;
   mintedAt?: string | null;
@@ -271,34 +270,58 @@ function resolveBlueprintForMintRequest(_requestId?: string) {
 // ★ MintInfo 解決（mintDTO 優先）
 // -------------------------------
 
+/**
+ * MintDTO は環境/エンドポイントによって shape が揺れる可能性があるため、
+ * ここでは「持っている情報を最大限拾って MintInfo に詰める」方針にする。
+ *
+ * - full mint: {id, brandId, tokenBlueprintId, createdBy, createdAt, ...}
+ * - list row: {mintId, tokenBlueprint, createdByName, mintedAt, ...} など
+ */
 function extractMintInfoFromMintDTO(m: any): MintInfo | null {
   if (!m) return null;
 
-  const id = asNonEmptyString(m.id ?? m.ID ?? m.mintId ?? m.MintID);
-  const brandId = asNonEmptyString(m.brandId ?? m.BrandID ?? m.BrandId);
+  // id 系（MintEntity / ListRow 両対応）
+  const id = asNonEmptyString(m.id ?? m.ID ?? m.mintId ?? m.MintID ?? m.mintID);
+
+  // tokenBlueprintId 系（MintEntity / ListRow 両対応）
   const tokenBlueprintId = asNonEmptyString(
-    m.tokenBlueprintId ?? m.TokenBlueprintID ?? m.TokenBlueprintId,
+    m.tokenBlueprintId ??
+      m.TokenBlueprintID ??
+      m.TokenBlueprintId ??
+      m.tokenBlueprint ??
+      m.TokenBlueprint ??
+      "",
   );
 
-  const createdBy = asNonEmptyString(m.createdBy ?? m.CreatedBy);
+  const brandId = asNonEmptyString(m.brandId ?? m.BrandID ?? m.BrandId ?? "");
 
-  // ★ createdByName（backendのDTO由来）を吸収
+  // createdBy / createdByName（createdByName が来れば UI はそれを優先表示）
+  const createdBy = asNonEmptyString(m.createdBy ?? m.CreatedBy ?? "");
   const createdByName = asNonEmptyString(
     m.createdByName ?? m.CreatedByName ?? m.created_by_name ?? "",
   );
 
-  const createdAt = asNonEmptyString(asMaybeISO(m.createdAt ?? m.CreatedAt));
+  // createdAt（list row では無い場合がある）
+  const createdAtStr = asNonEmptyString(asMaybeISO(m.createdAt ?? m.CreatedAt));
+  const createdAt = createdAtStr ? createdAtStr : null;
+
+  // minted 系
+  const mintedAtStr = asNonEmptyString(asMaybeISO(m.mintedAt ?? m.MintedAt));
   const minted =
-    typeof m.minted === "boolean" ? m.minted : Boolean(m.mintedAt ?? m.MintedAt);
-  const mintedAt = asNonEmptyString(asMaybeISO(m.mintedAt ?? m.MintedAt));
+    typeof m.minted === "boolean"
+      ? m.minted
+      : Boolean(mintedAtStr); // mintedAt があれば minted 扱い
+
   const onChainTxSignature = asNonEmptyString(
     m.onChainTxSignature ?? m.OnChainTxSignature,
   );
+
   const scheduledBurnDate = asNonEmptyString(
     asMaybeISO(m.scheduledBurnDate ?? m.ScheduledBurnDate),
   );
 
-  if (!id || !brandId || !tokenBlueprintId || !createdBy || !createdAt) return null;
+  // id が無いなら何もできない
+  if (!id) return null;
 
   return {
     id,
@@ -308,7 +331,7 @@ function extractMintInfoFromMintDTO(m: any): MintInfo | null {
     createdByName: createdByName ? createdByName : null,
     createdAt,
     minted,
-    mintedAt: mintedAt ? mintedAt : null,
+    mintedAt: mintedAtStr ? mintedAtStr : null,
     onChainTxSignature: onChainTxSignature ? onChainTxSignature : null,
     scheduledBurnDate: scheduledBurnDate ? scheduledBurnDate : null,
   };
@@ -401,6 +424,10 @@ export function useMintRequestDetail() {
           hasMint: !!mint,
           sampleInspection: (batch as any)?.inspections?.[0] ?? null,
           modelRowsLen: buildModelRows(batch ?? null).length,
+          // ★createdByName が来ているかの確認用
+          mintCreatedByName:
+            asNonEmptyString((mint as any)?.createdByName ?? (mint as any)?.CreatedByName) ||
+            null,
         });
 
         // ★ productBlueprintId: batchから→無ければ /productions で解決
@@ -568,7 +595,7 @@ export function useMintRequestDetail() {
   }, [mint]);
 
   const requestedAt: string | null = React.useMemo(() => {
-    const v = asNonEmptyString(mint?.createdAt);
+    const v = asNonEmptyString(mint?.createdAt ?? null);
     return v ? v : null;
   }, [mint]);
 
@@ -731,10 +758,12 @@ export function useMintRequestDetail() {
     [mint?.createdAt],
   );
 
-  // ✅ createdByName を優先して表示（期待値）
+  // ✅ createdByName → mintCreatedByLabel へ確実に流す
+  // - mintDTO が「list row DTO」でも createdByName を拾うので、ここで表示に乗る
   const mintCreatedByLabel = React.useMemo(() => {
     const name = asNonEmptyString(mint?.createdByName);
     if (name) return name;
+
     const fallback = asNonEmptyString(mint?.createdBy);
     return fallback ? fallback : "（不明）";
   }, [mint?.createdByName, mint?.createdBy]);
@@ -815,7 +844,7 @@ export function useMintRequestDetail() {
 
     // ★ page から移譲した labels
     mintCreatedAtLabel,
-    mintCreatedByLabel,
+    mintCreatedByLabel, // ✅ createdByName がここに出る
     mintScheduledBurnDateLabel,
     mintMintedAtLabel,
     mintedLabel,
