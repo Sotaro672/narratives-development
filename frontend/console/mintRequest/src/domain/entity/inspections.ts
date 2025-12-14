@@ -35,6 +35,10 @@ export interface InspectionItem {
   productId: string;
   modelId: string;
 
+  // ★追加: useInspectionResultCard.tsx が参照するため
+  // 既存データに無い可能性があるので optional + nullable で受ける
+  modelNumber?: string | null;
+
   inspectionResult?: InspectionResult | null;
   inspectedBy?: string | null;
   inspectedAt?: string | null; // time.Time 相当（ISO8601）
@@ -223,6 +227,8 @@ export function normalizeInspectionBatch(
       ...ins,
       productId: ins.productId.trim(),
       modelId: ins.modelId.trim(),
+      // ★追加: 文字列なら trim、空なら null
+      modelNumber: normalizeOpt((ins as any).modelNumber),
       inspectionResult: (ins.inspectionResult ?? null) as
         | InspectionResult
         | null,

@@ -49,57 +49,25 @@ export default function MintRequestDetail() {
     selectedTokenBlueprintId,
     handleSelectTokenBlueprint,
 
-    // 選択中 TokenBlueprintOption（左カラム表示用）
-    selectedTokenBlueprint,
-
     // ★ ここから：mints テーブル有無での表示制御（hook 側で算出）
     hasMint,
-    mint,
 
     // ★ 焼却予定日（ScheduledBurnDate）: hook から受け取る
     scheduledBurnDate,
     setScheduledBurnDate,
+
+    // ★ page から移譲された VM / handlers / labels
+    tokenBlueprintCardVm,
+    tokenBlueprintCardHandlers,
+    mintCreatedAtLabel,
+    mintCreatedByLabel,
+    mintScheduledBurnDateLabel,
+    mintMintedAtLabel,
+    mintedLabel,
+    onChainTxSignature,
   } = useMintRequestDetail();
 
   const handleSave = () => {};
-
-  // 左カラム TokenBlueprintCard に渡す ViewModel
-  const tokenBlueprintCardVm = selectedTokenBlueprint
-    ? {
-        id: selectedTokenBlueprint.id,
-        name: selectedTokenBlueprint.name,
-        symbol: selectedTokenBlueprint.symbol,
-        brandId: selectedBrandId,
-        brandName: selectedBrandName,
-        description: "", // description は取得していないので空
-        iconUrl: selectedTokenBlueprint.iconUrl,
-        isEditMode: false,
-        brandOptions: brandOptions.map((b) => ({ id: b.id, name: b.name })),
-      }
-    : null;
-
-  const tokenBlueprintCardHandlers = {
-    onPreview: () => {},
-  };
-
-  // mints テーブル由来の表示用ラベル
-  const mintCreatedAtLabel =
-    mint?.createdAt ? new Date(mint.createdAt).toLocaleString("ja-JP") : "（未登録）";
-
-  const mintCreatedByLabel = mint?.createdBy || "（不明）";
-
-  const mintScheduledBurnDateLabel =
-    mint?.scheduledBurnDate
-      ? new Date(mint.scheduledBurnDate).toLocaleDateString("ja-JP")
-      : "（未設定）";
-
-  const mintMintedAtLabel =
-    mint?.mintedAt ? new Date(mint.mintedAt).toLocaleString("ja-JP") : "（未完了）";
-
-  const mintedLabel =
-    typeof mint?.minted === "boolean" ? (mint.minted ? "minted" : "notYet") : "（不明）";
-
-  const onChainTxSignature = mint?.onChainTxSignature || "";
 
   return (
     <PageStyle
@@ -163,8 +131,8 @@ export default function MintRequestDetail() {
         {/* ③ Token Blueprint Card */}
         {tokenBlueprintCardVm && (
           <TokenBlueprintCard
-            vm={tokenBlueprintCardVm}
-            handlers={tokenBlueprintCardHandlers}
+            vm={tokenBlueprintCardVm as any}
+            handlers={tokenBlueprintCardHandlers as any}
           />
         )}
 
@@ -232,7 +200,9 @@ export default function MintRequestDetail() {
                 {onChainTxSignature && (
                   <div className="break-all">
                     txSignature:{" "}
-                    <span className="font-mono text-xs">{onChainTxSignature}</span>
+                    <span className="font-mono text-xs">
+                      {onChainTxSignature}
+                    </span>
                   </div>
                 )}
               </div>

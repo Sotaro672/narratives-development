@@ -233,8 +233,10 @@ func (s *MintRequestQueryService) ListMintRequestManagementRows(ctx context.Cont
 				tokenName = tokenBlueprintID
 			}
 
-			if s.nameResolver != nil && requestedBy != "" {
-				createdByName = strings.TrimSpace(s.nameResolver.ResolveMemberName(ctx, requestedBy))
+			// ★★★ 修正: createdBy(memberId) -> createdByName を NameResolver の ResolveCreatedByName で解決
+			if s.nameResolver != nil {
+				cb := requestedBy // requestedBy は mint.CreatedBy(memberId) と同義
+				createdByName = strings.TrimSpace(s.nameResolver.ResolveCreatedByName(ctx, &cb))
 			}
 			if createdByName == "" {
 				createdByName = requestedBy
@@ -478,9 +480,10 @@ func (s *MintRequestQueryService) GetMintRequestDetail(
 			tokenName = tokenBlueprintID
 		}
 
-		// resolved member name
-		if s.nameResolver != nil && requestedBy != "" {
-			createdByName = strings.TrimSpace(s.nameResolver.ResolveMemberName(ctx, requestedBy))
+		// ★★★ 修正: createdBy(memberId) -> createdByName を NameResolver の ResolveCreatedByName で解決
+		if s.nameResolver != nil {
+			cb := requestedBy // requestedBy は mint.CreatedBy(memberId) と同義
+			createdByName = strings.TrimSpace(s.nameResolver.ResolveCreatedByName(ctx, &cb))
 		}
 		if createdByName == "" {
 			createdByName = requestedBy
