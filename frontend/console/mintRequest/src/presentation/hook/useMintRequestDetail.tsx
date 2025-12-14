@@ -4,7 +4,10 @@ import * as React from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { useInspectionResultCard } from "./useInspectionResultCard";
 
-import type { InspectionBatchDTO, MintDTO } from "../../infrastructure/api/mintRequestApi";
+import type {
+  InspectionBatchDTO,
+  MintDTO,
+} from "../../infrastructure/api/mintRequestApi";
 
 // ✅ Repository を直接呼ぶ
 import {
@@ -106,6 +109,36 @@ export type MintInfo = {
   scheduledBurnDate?: string | null;
 };
 
+// ============================================================
+// ✅ model rows（まずは modelId 集計のみ）
+// ============================================================
+
+export type MintModelMetaEntry = {
+  modelNumber?: string | null;
+  size?: string | null;
+  colorName?: string | null;
+  rgb?: number | null;
+};
+
+export type ModelInspectionRow = {
+  modelId: string;
+
+  // 現状は未解決（後で /models 側から解決予定）
+  modelNumber: string | null;
+  size: string | null;
+  colorName: string | null;
+  rgb: number | null;
+
+  passedCount: number; // 合格数
+  totalCount: number; // 生産数（このモデルの対象件数）
+};
+
+const LOG_PREFIX = "[mintRequest/useMintRequestDetail]";
+function log(...args: any[]) {
+  // eslint-disable-next-line no-console
+  console.log(LOG_PREFIX, ...args);
+}
+
 function asNonEmptyString(v: any): string {
   return typeof v === "string" && v.trim() ? v.trim() : "";
 }
@@ -151,6 +184,51 @@ function extractProductBlueprintIdFromBatch(batch: any): string {
     batch.productBlueprint?.ID ??
     "";
   return asNonEmptyString(v);
+}
+
+function isPassedResult(v: any): boolean {
+  const s = asNonEmptyString(v).toLowerCase();
+  return s === "passed";
+}
+
+function buildModelRows(batch: InspectionBatchDTO | null): ModelInspectionRow[] {
+  const inspections: any[] = Array.isArray((batch as any)?.inspections)
+    ? ((batch as any).inspections as any[])
+    : [];
+
+  const agg = new Map<string, { modelId: string; passed: number; total: number }>();
+
+  for (const it of inspections) {
+    const modelId = asNonEmptyString(it?.modelId ?? it?.ModelID ?? it?.modelID);
+    if (!modelId) continue;
+
+    const prev = agg.get(modelId) ?? { modelId, passed: 0, total: 0 };
+    prev.total += 1;
+
+    const result =
+      it?.inspectionResult ??
+      it?.InspectionResult ??
+      it?.result ??
+      it?.Result ??
+      null;
+
+    if (isPassedResult(result)) prev.passed += 1;
+
+    agg.set(modelId, prev);
+  }
+
+  const rows: ModelInspectionRow[] = Array.from(agg.values()).map((g) => ({
+    modelId: g.modelId,
+    modelNumber: null,
+    size: null,
+    colorName: null,
+    rgb: null,
+    passedCount: g.passed,
+    totalCount: g.total,
+  }));
+
+  rows.sort((a, b) => a.modelId.localeCompare(b.modelId));
+  return rows;
 }
 
 // -------------------------------
@@ -260,6 +338,10 @@ export function useMintRequestDetail() {
   // ★ 追加: productBlueprintId（/mint/inspections に無いので別経路で解決）
   const [productBlueprintId, setProductBlueprintId] = React.useState<string>("");
 
+  // ✅ modelId 集計（メタデータは後で解決）
+  const [modelMetaMap] = React.useState<Record<string, MintModelMetaEntry>>({});
+  const [modelRows, setModelRows] = React.useState<ModelInspectionRow[]>([]);
+
   const [loading, setLoading] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
 
@@ -287,7 +369,7 @@ export function useMintRequestDetail() {
     return brandOptions.find((b) => b.id === selectedBrandId)?.name ?? "";
   }, [brandOptions, selectedBrandId]);
 
-  // ① 初期化: inspection + mintDTO + productBlueprintId を解決
+  // ① 初期化: inspection + mintDTO + productBlueprintId を解決（※新ルートは使わない）
   React.useEffect(() => {
     if (!requestId) return;
 
@@ -297,8 +379,10 @@ export function useMintRequestDetail() {
       setLoading(true);
       setError(null);
 
+      log("load start requestId=", requestId);
+
       try {
-        // inspection は 1件取得
+        // inspection は 1件取得（旧ルート）
         const [batch, mint] = await Promise.all([
           fetchInspectionByProductionIdHTTP(requestId),
           fetchMintByInspectionIdHTTP(requestId).catch(() => null),
@@ -308,6 +392,16 @@ export function useMintRequestDetail() {
 
         setInspectionBatch(batch ?? null);
         setMintDTO(mint ?? null);
+
+        // modelRows（まずは modelId 集計だけ）
+        setModelRows(buildModelRows(batch ?? null));
+
+        log("loaded inspection/mint", {
+          hasInspection: !!batch,
+          hasMint: !!mint,
+          sampleInspection: (batch as any)?.inspections?.[0] ?? null,
+          modelRowsLen: buildModelRows(batch ?? null).length,
+        });
 
         // ★ productBlueprintId: batchから→無ければ /productions で解決
         const pbFromBatch = extractProductBlueprintIdFromBatch(batch as any);
@@ -416,7 +510,7 @@ export function useMintRequestDetail() {
           );
         }
       } catch {
-        // （ログは削除）
+        // noop
       }
     };
 
@@ -426,36 +520,32 @@ export function useMintRequestDetail() {
     };
   }, []);
 
-  const handleSelectBrand = React.useCallback(
-    async (brandId: string) => {
-      setSelectedBrandId(brandId);
+  const handleSelectBrand = React.useCallback(async (brandId: string) => {
+    setSelectedBrandId(brandId);
 
-      if (!brandId) {
-        setTokenBlueprintOptions([]);
-        setSelectedTokenBlueprintId("");
-        return;
-      }
+    if (!brandId) {
+      setTokenBlueprintOptions([]);
+      setSelectedTokenBlueprintId("");
+      return;
+    }
 
-      try {
-        const list = await loadTokenBlueprintsByBrand(brandId);
-        const opts: TokenBlueprintOption[] = (list ?? []).map(
-          (tb: TokenBlueprintForMintDTO): TokenBlueprintOption => ({
-            id: tb.id,
-            name: tb.name,
-            symbol: tb.symbol,
-            iconUrl: tb.iconUrl,
-          }),
-        );
-        setTokenBlueprintOptions(opts);
-        setSelectedTokenBlueprintId("");
-      } catch {
-        // （ログは削除）
-        setTokenBlueprintOptions([]);
-        setSelectedTokenBlueprintId("");
-      }
-    },
-    [],
-  );
+    try {
+      const list = await loadTokenBlueprintsByBrand(brandId);
+      const opts: TokenBlueprintOption[] = (list ?? []).map(
+        (tb: TokenBlueprintForMintDTO): TokenBlueprintOption => ({
+          id: tb.id,
+          name: tb.name,
+          symbol: tb.symbol,
+          iconUrl: tb.iconUrl,
+        }),
+      );
+      setTokenBlueprintOptions(opts);
+      setSelectedTokenBlueprintId("");
+    } catch {
+      setTokenBlueprintOptions([]);
+      setSelectedTokenBlueprintId("");
+    }
+  }, []);
 
   // ============================================================
   // ★ mint 情報（mintDTO 優先）
@@ -501,7 +591,7 @@ export function useMintRequestDetail() {
       try {
         await handleSelectBrand(brandId);
       } catch {
-        // （ログは削除）
+        // noop
       }
     })();
   }, [hasMint, mint, pbPatch, selectedBrandId, handleSelectBrand]);
@@ -570,13 +660,13 @@ export function useMintRequestDetail() {
 
       if (updated) {
         setInspectionBatch(updated as any);
+        setModelRows(buildModelRows(updated as any));
       }
 
       alert(
         `ミント申請を登録しました（生産ID: ${productionId} / ミント数: ${totalMintQuantity}）`,
       );
     } catch (e: any) {
-      // （ログは削除）
       alert(
         `ミント申請に失敗しました: ${e?.message ?? "不明なエラーが発生しました"}`,
       );
@@ -685,6 +775,10 @@ export function useMintRequestDetail() {
     productBlueprintId,
     hasMint,
     mint,
+
+    // ✅ ここは「戻した状態」でも返せる（今は modelId 集計だけ）
+    modelMetaMap, // 現状 {}
+    modelRows, // modelId / passedCount / totalCount
 
     // 申請済みフラグ＆表示制御
     isMintRequested,

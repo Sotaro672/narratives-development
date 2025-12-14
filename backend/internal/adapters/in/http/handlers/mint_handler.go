@@ -26,6 +26,7 @@ import (
 
 	usecase "narratives/internal/application/usecase"
 	branddom "narratives/internal/domain/brand"
+	inspectiondom "narratives/internal/domain/inspection"
 	mintdom "narratives/internal/domain/mint"
 	pbpdom "narratives/internal/domain/productBlueprint"
 	tbdom "narratives/internal/domain/tokenBlueprint"
@@ -92,6 +93,14 @@ func (h *MintHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		h.listInspectionsByProductionIDs(w, r)
 		return
 
+	// ★ NEW: GET /mint/inspections/{productionId}
+	// - detail 用（1件返す）
+	case r.Method == http.MethodGet &&
+		strings.HasPrefix(r.URL.Path, "/mint/inspections/") &&
+		!strings.HasSuffix(r.URL.Path, "/request"):
+		h.getMintRequestDetailByProductionID(w, r)
+		return
+
 	// GET /mint/mints?inspectionIds=a,b,c(&view=list|dto)
 	case r.Method == http.MethodGet && r.URL.Path == "/mint/mints":
 		h.listMintsByInspectionIDs(w, r)
@@ -136,6 +145,67 @@ func (h *MintHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	default:
 		http.NotFound(w, r)
 	}
+}
+
+// ============================================================
+// ★ NEW: GET /mint/inspections/{productionId}
+// - detail 用: MintUsecase.GetMintRequestDetail を呼ぶ
+// ============================================================
+func (h *MintHandler) getMintRequestDetailByProductionID(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+
+	if h.mintUC == nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		_ = json.NewEncoder(w).Encode(map[string]string{"error": "mint usecase is not configured"})
+		return
+	}
+
+	// /mint/inspections/{productionId}
+	path := strings.TrimPrefix(r.URL.Path, "/mint/inspections/")
+	path = strings.Trim(path, "/")
+	if path == "" {
+		w.WriteHeader(http.StatusBadRequest)
+		_ = json.NewEncoder(w).Encode(map[string]string{"error": "productionId is empty"})
+		return
+	}
+	// 余計なセグメントを弾く（/mint/inspections/{id}/xxx など）
+	if strings.Contains(path, "/") {
+		http.NotFound(w, r)
+		return
+	}
+	productionID := strings.TrimSpace(path)
+
+	log.Printf("[mint_handler] /mint/inspections/{productionId} start productionId=%q", productionID)
+
+	start := time.Now()
+	detail, err := h.mintUC.GetMintRequestDetail(ctx, productionID)
+	elapsed := time.Since(start)
+
+	if err != nil {
+		if errors.Is(err, mintapp.ErrCompanyIDMissing) {
+			w.WriteHeader(http.StatusBadRequest)
+			_ = json.NewEncoder(w).Encode(map[string]string{"error": "companyId is missing"})
+			return
+		}
+		if errors.Is(err, inspectiondom.ErrNotFound) || errors.Is(err, mintdom.ErrNotFound) {
+			w.WriteHeader(http.StatusNotFound)
+			_ = json.NewEncoder(w).Encode(map[string]string{"error": "mint request detail not found"})
+			return
+		}
+
+		log.Printf("[mint_handler] /mint/inspections/{productionId} error=%v elapsed=%s", err, elapsed)
+		w.WriteHeader(http.StatusInternalServerError)
+		_ = json.NewEncoder(w).Encode(map[string]string{"error": err.Error()})
+		return
+	}
+
+	log.Printf(
+		"[mint_handler] /mint/inspections/{productionId} ok elapsed=%s detail=%s",
+		elapsed,
+		toJSONForLog(detail, 2000),
+	)
+
+	_ = json.NewEncoder(w).Encode(detail)
 }
 
 // ============================================================
@@ -874,3 +944,6 @@ func sampleFirstValue[V any](m map[string]V) any {
 
 var _ = mintdom.ErrNotFound
 var _ = mintpresenter.PresentInspectionViews
+
+// keep unused in some builds
+var _ = context.Canceled

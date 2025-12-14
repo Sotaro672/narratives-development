@@ -9,6 +9,7 @@ import "time"
 // Frontend usage (mintRequest/useInspectionResultCard):
 // - modelMeta[modelId] -> { modelNumber, size, colorName, rgb }
 type MintModelMetaEntry struct {
+	ModelID     string `json:"modelId"` // ★追加: map の key と一致させつつ、entry 単体でも参照可能にする
 	ModelNumber string `json:"modelNumber,omitempty"`
 	Size        string `json:"size,omitempty"`
 	ColorName   string `json:"colorName,omitempty"`
@@ -48,8 +49,8 @@ type MintRequestDetailDTO struct {
 	// minted timestamp (optional)
 	MintedAt *time.Time `json:"mintedAt,omitempty"`
 
-	// ★追加: modelId -> {modelNumber, size, colorName, rgb}
-	// 例: "modelMeta": { "<modelId>": { "size":"M", "colorName":"Black", "rgb": 0 } }
+	// ★ modelId -> {modelId, modelNumber, size, colorName, rgb}
+	// 例: "modelMeta": { "<modelId>": { "modelId":"<modelId>", "size":"M", "colorName":"Black", "rgb": 0 } }
 	ModelMeta map[string]MintModelMetaEntry `json:"modelMeta,omitempty"`
 
 	// optional nested summaries for detail page
@@ -71,6 +72,8 @@ type ProductionSummaryDTO struct {
 // - modelId, modelNumber, size, color, rgb
 // plus inspectionResult for aggregations (passed/total).
 type InspectionItemDTO struct {
+	ProductID string `json:"productId,omitempty"` // ★追加: productId を保持しておくと後で拡張しやすい
+
 	ModelID     string `json:"modelId"`
 	ModelNumber string `json:"modelNumber,omitempty"`
 
@@ -79,6 +82,8 @@ type InspectionItemDTO struct {
 	RGB   *int   `json:"rgb,omitempty"`
 
 	InspectionResult string `json:"inspectionResult,omitempty"` // passed/failed/...
+	InspectedBy      string `json:"inspectedBy,omitempty"`
+	InspectedAt      string `json:"inspectedAt,omitempty"` // RFC3339 string (time.Time の揺れを避ける)
 }
 
 // InspectionSummaryDTO is a minimal inspection summary for detail page.
@@ -104,16 +109,17 @@ type InspectionSummaryDTO struct {
 // MintSummaryDTO is a mint summary (safe for frontend).
 // Note: Products is represented as productIds to avoid Firestore map-shape leaking to UI.
 type MintSummaryDTO struct {
-	ID                string     `json:"id"`
-	BrandID           string     `json:"brandId"`
-	TokenBlueprintID  string     `json:"tokenBlueprintId"`
-	CreatedBy         string     `json:"createdBy"`
-	CreatedByName     string     `json:"createdByName,omitempty"`
-	CreatedAt         *time.Time `json:"createdAt,omitempty"`
-	Minted            bool       `json:"minted"`
-	MintedAt          *time.Time `json:"mintedAt,omitempty"`
-	ScheduledBurnDate *time.Time `json:"scheduledBurnDate,omitempty"`
-	ProductIDs        []string   `json:"productIds,omitempty"`
+	ID                 string     `json:"id"`
+	BrandID            string     `json:"brandId"`
+	TokenBlueprintID   string     `json:"tokenBlueprintId"`
+	CreatedBy          string     `json:"createdBy"`
+	CreatedByName      string     `json:"createdByName,omitempty"`
+	CreatedAt          *time.Time `json:"createdAt,omitempty"`
+	Minted             bool       `json:"minted"`
+	MintedAt           *time.Time `json:"mintedAt,omitempty"`
+	ScheduledBurnDate  *time.Time `json:"scheduledBurnDate,omitempty"`
+	ProductIDs         []string   `json:"productIds,omitempty"`
+	OnChainTxSignature string     `json:"onChainTxSignature,omitempty"` // ★追加: 詳細表示で出したい場合に備える
 }
 
 // TokenBlueprintSummaryDTO is an optional token blueprint summary for detail page.
@@ -122,4 +128,5 @@ type TokenBlueprintSummaryDTO struct {
 	Name    string `json:"name,omitempty"`
 	Symbol  string `json:"symbol,omitempty"`
 	BrandID string `json:"brandId,omitempty"`
+	IconURL string `json:"iconUrl,omitempty"` // ★追加: UI でアイコンを出せるように
 }

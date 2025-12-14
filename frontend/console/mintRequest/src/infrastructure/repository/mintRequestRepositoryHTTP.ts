@@ -38,6 +38,40 @@ export type TokenBlueprintForMintDTO = {
   iconUrl?: string;
 };
 
+// ★ NEW: /mint/inspections/{productionId} の detail DTO（バックエンド返却差異に強くするため緩め）
+export type MintModelMetaEntryDTO = {
+  modelNumber?: string | null;
+  size?: string | null;
+  colorName?: string | null;
+  rgb?: number | null;
+};
+
+export type MintRequestDetailDTO = {
+  // id / productionId / inspectionId など揺れる可能性があるため任意
+  productionId?: string | null;
+  inspectionId?: string | null;
+
+  // inspection batch（または同等）
+  inspection?: InspectionBatchDTO | null;
+
+  // mint（存在すれば）
+  mint?: MintDTO | null;
+
+  // product blueprint patch（存在すれば）
+  productBlueprintPatch?: ProductBlueprintPatchDTO | null;
+
+  // model variations -> modelMeta（存在すれば）
+  modelMeta?: Record<string, MintModelMetaEntryDTO> | null;
+
+  // 主要フィールド（detail の揺れ吸収用）
+  tokenBlueprintId?: string | null;
+  productName?: string | null;
+  tokenName?: string | null;
+
+  // その他バックエンド側が返すフィールドを落とさない
+  [k: string]: any;
+};
+
 // 🔙 BACKEND の BASE URL
 const ENV_BASE =
   ((import.meta as any).env?.VITE_BACKEND_BASE_URL as string | undefined)?.replace(
@@ -240,7 +274,8 @@ function normalizeProductBlueprintPatch(v: any): ProductBlueprintPatchDTO | null
     // ✅ 最終的に { type } に統一
     productIdTag: tagType ? { type: tagType } : null,
 
-    assigneeId: asMaybeString(v?.assigneeId ?? v?.AssigneeID ?? v?.AssigneeId) ?? null,
+    assigneeId:
+      asMaybeString(v?.assigneeId ?? v?.AssigneeID ?? v?.AssigneeId) ?? null,
   };
 
   return out;
@@ -426,6 +461,143 @@ async function fetchProductionIdsForCurrentCompanyHTTP(): Promise<string[]> {
 // HTTP Repository (inspections)
 // ===============================
 
+// ✅ “detail が inspection batch を直返し”のケースだけ拾うために shape 判定を強化
+function looksLikeInspectionBatchDTO(x: any): boolean {
+  if (!x || typeof x !== "object") return false;
+  return (
+    Array.isArray(x.inspections) ||
+    Array.isArray(x.Inspections) ||
+    Array.isArray(x.results) ||
+    Array.isArray(x.Results) ||
+    Array.isArray(x.items) ||
+    Array.isArray(x.Items)
+  );
+}
+
+// ★ NEW: detail は /mint/inspections/{productionId} を叩く
+function normalizeMintRequestDetail(v: any): MintRequestDetailDTO | null {
+  if (!v) return null;
+
+  const pid =
+    asMaybeString(v?.productionId ?? v?.ProductionID ?? v?.id ?? v?.ID) ?? null;
+
+  const inspectionId =
+    asMaybeString(
+      v?.inspectionId ??
+        v?.InspectionID ??
+        v?.inspectionID ??
+        v?.productionId ??
+        v?.ProductionID,
+    ) ?? null;
+
+  // inspection 本体の取り出し（揺れ吸収）
+  const inspectionRaw =
+    v?.inspection ??
+    v?.inspectionBatch ??
+    v?.Inspection ??
+    v?.InspectionBatch ??
+    null;
+
+  // “detail が inspection batch を直返し”のケースも拾う（判定を強化）
+  const looksLikeInspectionBatch =
+    typeof v === "object" &&
+    (Array.isArray((v as any)?.inspections) ||
+      Array.isArray((v as any)?.Inspections) ||
+      Array.isArray((v as any)?.results) ||
+      Array.isArray((v as any)?.Results) ||
+      Array.isArray((v as any)?.items) ||
+      Array.isArray((v as any)?.Items));
+
+  const inspection: InspectionBatchDTO | null =
+    (inspectionRaw as any) ??
+    (looksLikeInspectionBatch ? (v as any) : null) ??
+    null;
+
+  // mint 本体（揺れ吸収）
+  const mintRaw = v?.mint ?? v?.Mint ?? v?.mintDTO ?? v?.MintDTO ?? null;
+  const mint: MintDTO | null = mintRaw ? normalizeMintDTO(mintRaw) : null;
+
+  // productBlueprintPatch（揺れ吸収）
+  const pbpRaw =
+    v?.productBlueprintPatch ??
+    v?.productBlueprint ??
+    v?.ProductBlueprintPatch ??
+    v?.patch ??
+    v?.Patch ??
+    null;
+  const productBlueprintPatch = normalizeProductBlueprintPatch(pbpRaw);
+
+  // modelMeta（揺れ吸収）
+  const modelMetaRaw =
+    v?.modelMeta ?? v?.ModelMeta ?? v?.model_meta ?? v?.modelmeta ?? null;
+
+  const modelMeta: Record<string, MintModelMetaEntryDTO> | null =
+    modelMetaRaw && typeof modelMetaRaw === "object" ? modelMetaRaw : null;
+
+  // ✅ detail DTO の主要フィールドを明示的に拾う（UI 側の揺れ耐性を上げる）
+  const tokenBlueprintId =
+    asMaybeString(v?.tokenBlueprintId ?? v?.TokenBlueprintID ?? v?.tokenBlueprintID) ??
+    null;
+
+  const productName =
+    asMaybeString(v?.productName ?? v?.ProductName) ?? null;
+
+  const tokenName =
+    asMaybeString(v?.tokenName ?? v?.TokenName) ?? null;
+
+  return {
+    ...(v ?? {}),
+    productionId: pid,
+    inspectionId,
+    tokenBlueprintId,
+    productName,
+    tokenName,
+    inspection: inspection ?? null,
+    mint,
+    productBlueprintPatch,
+    modelMeta,
+  };
+}
+
+export async function fetchMintRequestDetailByProductionIdHTTP(
+  productionId: string,
+): Promise<MintRequestDetailDTO | null> {
+  const pid = String(productionId ?? "").trim();
+  if (!pid) throw new Error("productionId が空です");
+
+  const idToken = await getIdTokenOrThrow();
+
+  const url = `${API_BASE}/mint/inspections/${encodeURIComponent(pid)}`;
+  log("fetchMintRequestDetailByProductionIdHTTP url=", url);
+
+  const res = await fetch(url, {
+    method: "GET",
+    headers: buildHeaders(idToken),
+  });
+
+  log(
+    "fetchMintRequestDetailByProductionIdHTTP status=",
+    res.status,
+    res.statusText,
+  );
+
+  if (res.status === 404) return null;
+
+  if (!res.ok) {
+    throw new Error(
+      `Failed to fetch mint request detail: ${res.status} ${res.statusText}`,
+    );
+  }
+
+  const json = (await res.json()) as any;
+  log("fetchMintRequestDetailByProductionIdHTTP raw=", json);
+
+  const out = normalizeMintRequestDetail(json);
+  log("fetchMintRequestDetailByProductionIdHTTP normalized=", out);
+
+  return out ?? null;
+}
+
 export async function fetchInspectionBatchesHTTP(): Promise<InspectionBatchDTO[]> {
   const productionIds = await fetchProductionIdsForCurrentCompanyHTTP();
 
@@ -491,18 +663,52 @@ export async function fetchInspectionBatchesByProductionIdsHTTP(
 export async function fetchInspectionByProductionIdHTTP(
   productionId: string,
 ): Promise<InspectionBatchDTO | null> {
-  const trimmed = productionId.trim();
+  const trimmed = String(productionId ?? "").trim();
   if (!trimmed) {
     throw new Error("productionId が空です");
   }
 
+  // ✅ detail 表示時は新ルートを優先して叩く（ただし batch-shape のときだけ採用）
+  try {
+    const detail = await fetchMintRequestDetailByProductionIdHTTP(trimmed);
+    const inspection = (detail?.inspection ?? null) as any;
+    log(
+      "fetchInspectionByProductionIdHTTP (new route) productionId=",
+      trimmed,
+      "inspection=",
+      inspection,
+    );
+
+    if (looksLikeInspectionBatchDTO(inspection)) {
+      return inspection as InspectionBatchDTO;
+    }
+
+    log(
+      "fetchInspectionByProductionIdHTTP (new route) NOT batch-shape -> fallback",
+      inspection,
+    );
+  } catch (e: any) {
+    log(
+      "fetchInspectionByProductionIdHTTP new-route failed -> fallback old list route",
+      "productionId=",
+      trimmed,
+      e?.message ?? e,
+    );
+  }
+
+  // 🔙 fallback: 既存の list ルート
   const batches = await fetchInspectionBatchesByProductionIdsHTTP([trimmed]);
   const hit =
     batches.find(
       (b: any) => String((b as any)?.productionId ?? "").trim() === trimmed,
     ) ?? null;
 
-  log("fetchInspectionByProductionIdHTTP productionId=", trimmed, "hit=", hit);
+  log(
+    "fetchInspectionByProductionIdHTTP (fallback) productionId=",
+    trimmed,
+    "hit=",
+    hit,
+  );
   return hit ?? null;
 }
 

@@ -84,10 +84,8 @@ func (s *MintRequestQueryService) ListMintRequestManagementRows(ctx context.Cont
 		Quantity    int    `json:"quantity"`
 		ProductName string `json:"productName"`
 
-		// 互換: production の返却が PascalCase / camelCase 両方あり得るため両方受ける
-		ProductBlueprintID1 string `json:"productBlueprintId"`
-		ProductBlueprintID2 string `json:"ProductBlueprintID"`
-		ProductBlueprintID3 string `json:"ProductBlueprintId"`
+		// ✅ ProductBlueprintID が正（ここに一本化）
+		ProductBlueprintID string `json:"ProductBlueprintID"`
 	}
 	prods := make([]prodLite, 0)
 	if b, mErr := json.Marshal(prodsAny); mErr == nil {
@@ -128,12 +126,13 @@ func (s *MintRequestQueryService) ListMintRequestManagementRows(ctx context.Cont
 		return nil, err
 	}
 
+	// InspectionBatch の実体(struct)に依存せず JSON 経由で吸収する（型ズレ回避）
 	type inspectionLite struct {
 		ProductionID string `json:"productionId"`
 		Status       string `json:"status"`
 		TotalPassed  int    `json:"totalPassed"`
 		Quantity     int    `json:"quantity"`
-		ProductName  string `json:"productName"`
+		MintID       string `json:"mintId"`
 	}
 	batches := make([]inspectionLite, 0)
 	if b, mErr := json.Marshal(batchesAny); mErr == nil {
@@ -170,7 +169,6 @@ func (s *MintRequestQueryService) ListMintRequestManagementRows(ctx context.Cont
 	// ------------------------------------------------------------
 	rows := make([]querydto.ProductionInspectionMintDTO, 0, len(ids))
 
-	// tokenName 解決失敗のログが多すぎないように上限を設ける
 	const tokenNameMissLogLimit = 10
 	tokenNameMissCount := 0
 
@@ -186,9 +184,6 @@ func (s *MintRequestQueryService) ListMintRequestManagementRows(ctx context.Cont
 		}
 
 		productName := strings.TrimSpace(p.ProductName)
-		if hasInsp && strings.TrimSpace(insp.ProductName) != "" {
-			productName = strings.TrimSpace(insp.ProductName)
-		}
 
 		mintQty := 0
 		prodQty := 0
@@ -206,7 +201,6 @@ func (s *MintRequestQueryService) ListMintRequestManagementRows(ctx context.Cont
 			prodQty = p.Quantity
 		}
 
-		// tokenBlueprintId / tokenName / requestedBy / createdByName / mintedAt
 		tokenBlueprintID := ""
 		tokenName := ""
 		requestedBy := ""
@@ -216,11 +210,8 @@ func (s *MintRequestQueryService) ListMintRequestManagementRows(ctx context.Cont
 		if hasMint {
 			requestedBy = strings.TrimSpace(m.CreatedBy)
 			mintedAt = m.MintedAt
-
-			// ★ フロントへ「tokenBlueprintId」を生で渡す（詳細画面や更新のキー）
 			tokenBlueprintID = strings.TrimSpace(m.TokenBlueprintID)
 
-			// ★ tokenName は nameResolver で解決して “表示用” として返す
 			if s.nameResolver != nil && tokenBlueprintID != "" {
 				tokenName = strings.TrimSpace(s.nameResolver.ResolveTokenName(ctx, tokenBlueprintID))
 				if tokenName == "" && tokenNameMissCount < tokenNameMissLogLimit {
@@ -228,14 +219,12 @@ func (s *MintRequestQueryService) ListMintRequestManagementRows(ctx context.Cont
 					log.Printf("[mint_request_qs] WARN: tokenName not resolved tokenBlueprintId=%q (will fallback to id)", tokenBlueprintID)
 				}
 			}
-			// フォールバック
 			if tokenName == "" {
 				tokenName = tokenBlueprintID
 			}
 
-			// ★★★ 修正: createdBy(memberId) -> createdByName を NameResolver の ResolveCreatedByName で解決
 			if s.nameResolver != nil {
-				cb := requestedBy // requestedBy は mint.CreatedBy(memberId) と同義
+				cb := requestedBy
 				createdByName = strings.TrimSpace(s.nameResolver.ResolveCreatedByName(ctx, &cb))
 			}
 			if createdByName == "" {
@@ -247,7 +236,6 @@ func (s *MintRequestQueryService) ListMintRequestManagementRows(ctx context.Cont
 			ID:           pid,
 			ProductionID: pid,
 
-			// ★ DTO側にフィールドがある前提
 			TokenBlueprintID: tokenBlueprintID,
 
 			TokenName:          tokenName,
@@ -259,8 +247,8 @@ func (s *MintRequestQueryService) ListMintRequestManagementRows(ctx context.Cont
 			CreatedByName:      createdByName,
 			MintedAt:           mintedAt,
 
-			Inspection: nil,     // 型依存を避ける
-			Mint:       mintPtr, // mint は domain 型で返して OK（デバッグ用）
+			Inspection: nil,
+			Mint:       mintPtr,
 		})
 	}
 
@@ -272,15 +260,11 @@ func (s *MintRequestQueryService) ListMintRequestManagementRows(ctx context.Cont
 }
 
 // GetMintRequestDetail returns detail DTO for a single productionId (= inspectionId = docId).
-//
-// B案（推奨）: detail は productionId をキーに必要データを API で取り直す、の backend 側実装。
-// - production: productionUC.ListWithAssigneeName から 1件抽出（確実に存在するメソッドに寄せる）
+// detail は productionId をキーに必要データを API で取り直す backend 側実装。
+// - production: productionUC.ListWithAssigneeName から 1件抽出
 // - inspection: mintUC.ListInspectionBatchesByProductionIDs([pid])
 // - mint: mintUC.ListMintsByInspectionIDs([pid])
-//
-// ★追加: productBlueprintId を production から取得し、
-//
-//	ListModelVariationsByProductBlueprintID で modelMeta(map[modelId]...) を組み立てる
+// - modelMeta: (任意) modelRepo.ListModelVariationsByProductBlueprintID
 func (s *MintRequestQueryService) GetMintRequestDetail(
 	ctx context.Context,
 	productionID string,
@@ -305,14 +289,10 @@ func (s *MintRequestQueryService) GetMintRequestDetail(
 	}
 
 	type prodLite struct {
-		ID          string `json:"id"`
-		Quantity    int    `json:"quantity"`
-		ProductName string `json:"productName"`
-
-		// 互換: production から productBlueprintId を拾う（Pascal/camel を吸収）
-		ProductBlueprintID1 string `json:"productBlueprintId"`
-		ProductBlueprintID2 string `json:"ProductBlueprintID"`
-		ProductBlueprintID3 string `json:"ProductBlueprintId"`
+		ID                 string `json:"id"`
+		Quantity           int    `json:"quantity"`
+		ProductName        string `json:"productName"`
+		ProductBlueprintID string `json:"ProductBlueprintID"`
 	}
 	prods := make([]prodLite, 0)
 	if b, mErr := json.Marshal(prodsAny); mErr == nil {
@@ -329,20 +309,10 @@ func (s *MintRequestQueryService) GetMintRequestDetail(
 		}
 	}
 	if !foundProd {
-		// company boundary 上 “見えない” もあり得るので not found 扱い
 		return nil, errors.New("production not found")
 	}
 
-	// production -> productBlueprintId を解決（この値が modelVariations 取得キーになる）
-	productBlueprintID := ""
-	if strings.TrimSpace(prod.ProductBlueprintID1) != "" {
-		productBlueprintID = strings.TrimSpace(prod.ProductBlueprintID1)
-	} else if strings.TrimSpace(prod.ProductBlueprintID2) != "" {
-		productBlueprintID = strings.TrimSpace(prod.ProductBlueprintID2)
-	} else if strings.TrimSpace(prod.ProductBlueprintID3) != "" {
-		productBlueprintID = strings.TrimSpace(prod.ProductBlueprintID3)
-	}
-
+	productBlueprintID := strings.TrimSpace(prod.ProductBlueprintID)
 	log.Printf("[mint_request_qs] detail pid=%q production resolved productBlueprintId=%q", pid, productBlueprintID)
 
 	// ------------------------------------------------------------
@@ -353,19 +323,27 @@ func (s *MintRequestQueryService) GetMintRequestDetail(
 		return nil, err
 	}
 
-	type inspectionLite struct {
-		ProductionID string `json:"productionId"`
-		Status       string `json:"status"`
-		TotalPassed  int    `json:"totalPassed"`
-		Quantity     int    `json:"quantity"`
-		ProductName  string `json:"productName"`
+	type inspectionItemLite struct {
+		ModelID          string `json:"modelId"`
+		InspectionResult string `json:"inspectionResult"`
+		RGB              *int   `json:"rgb,omitempty"`
+		Size             string `json:"size,omitempty"`
+		Color            string `json:"color,omitempty"`
+		ModelNumber      string `json:"modelNumber,omitempty"`
 	}
-	batches := make([]inspectionLite, 0)
+	type inspectionBatchLite struct {
+		ProductionID string               `json:"productionId"`
+		Status       string               `json:"status"`
+		TotalPassed  int                  `json:"totalPassed"`
+		Quantity     int                  `json:"quantity"`
+		Inspections  []inspectionItemLite `json:"inspections"`
+	}
+	batches := make([]inspectionBatchLite, 0)
 	if b, mErr := json.Marshal(batchesAny); mErr == nil {
 		_ = json.Unmarshal(b, &batches)
 	}
 
-	var insp inspectionLite
+	var insp inspectionBatchLite
 	hasInsp := false
 	for _, b := range batches {
 		if strings.TrimSpace(b.ProductionID) == pid {
@@ -382,11 +360,10 @@ func (s *MintRequestQueryService) GetMintRequestDetail(
 	if err != nil {
 		return nil, err
 	}
-
 	m, hasMint := mintsByPID[pid]
 
 	// ------------------------------------------------------------
-	// 3.5) ★ model variations -> modelMeta（任意・設定されていれば）
+	// 3.5) model variations -> modelMeta（任意）
 	// ------------------------------------------------------------
 	modelMeta := map[string]querydto.MintModelMetaEntry(nil)
 
@@ -405,10 +382,7 @@ func (s *MintRequestQueryService) GetMintRequestDetail(
 				if id == "" {
 					continue
 				}
-
-				// ✅ int -> *int 変換（domain: int / dto: *int）
 				rgb := v.Color.RGB
-
 				tmp[id] = querydto.MintModelMetaEntry{
 					ModelNumber: strings.TrimSpace(v.ModelNumber),
 					Size:        strings.TrimSpace(v.Size),
@@ -433,16 +407,16 @@ func (s *MintRequestQueryService) GetMintRequestDetail(
 	}
 
 	// ------------------------------------------------------------
-	// 4) compute detail fields (prefer inspection)
+	// 4) compute detail fields
 	// ------------------------------------------------------------
 	productName := strings.TrimSpace(prod.ProductName)
-	if hasInsp && strings.TrimSpace(insp.ProductName) != "" {
-		productName = strings.TrimSpace(insp.ProductName)
-	}
 
 	mintQty := 0
-	prodQty := 0
+	prodQty := prod.Quantity
 	inspStatus := "notYet"
+
+	inspectionItems := make([]querydto.InspectionItemDTO, 0)
+
 	if hasInsp {
 		mintQty = insp.TotalPassed
 		if strings.TrimSpace(insp.Status) != "" {
@@ -451,9 +425,43 @@ func (s *MintRequestQueryService) GetMintRequestDetail(
 		if insp.Quantity > 0 {
 			prodQty = insp.Quantity
 		}
-	}
-	if prodQty == 0 {
-		prodQty = prod.Quantity
+
+		// inspections[] を DTO へ（modelMeta があれば上書き）
+		for _, it := range insp.Inspections {
+			mid := strings.TrimSpace(it.ModelID)
+			ir := strings.TrimSpace(it.InspectionResult)
+
+			row := querydto.InspectionItemDTO{
+				ModelID:          mid,
+				InspectionResult: ir,
+			}
+
+			// backend inspection item が modelNumber/size/color/rgb を持っているなら拾う（保険）
+			row.ModelNumber = strings.TrimSpace(it.ModelNumber)
+			row.Size = strings.TrimSpace(it.Size)
+			row.Color = strings.TrimSpace(it.Color)
+			row.RGB = it.RGB
+
+			// modelMeta があればそれを最優先で埋める
+			if mid != "" && modelMeta != nil {
+				if mm, ok := modelMeta[mid]; ok {
+					if strings.TrimSpace(mm.ModelNumber) != "" {
+						row.ModelNumber = strings.TrimSpace(mm.ModelNumber)
+					}
+					if strings.TrimSpace(mm.Size) != "" {
+						row.Size = strings.TrimSpace(mm.Size)
+					}
+					if strings.TrimSpace(mm.ColorName) != "" {
+						row.Color = strings.TrimSpace(mm.ColorName)
+					}
+					if mm.RGB != nil {
+						row.RGB = mm.RGB
+					}
+				}
+			}
+
+			inspectionItems = append(inspectionItems, row)
+		}
 	}
 
 	// mint fields
@@ -462,17 +470,13 @@ func (s *MintRequestQueryService) GetMintRequestDetail(
 	requestedBy := ""
 	createdByName := ""
 	var mintedAt *time.Time
-
-	// nested mint summary
 	var mintSummary *querydto.MintSummaryDTO
 
 	if hasMint {
 		requestedBy = strings.TrimSpace(m.CreatedBy)
 		mintedAt = m.MintedAt
-
 		tokenBlueprintID = strings.TrimSpace(m.TokenBlueprintID)
 
-		// resolved token name
 		if s.nameResolver != nil && tokenBlueprintID != "" {
 			tokenName = strings.TrimSpace(s.nameResolver.ResolveTokenName(ctx, tokenBlueprintID))
 		}
@@ -480,16 +484,15 @@ func (s *MintRequestQueryService) GetMintRequestDetail(
 			tokenName = tokenBlueprintID
 		}
 
-		// ★★★ 修正: createdBy(memberId) -> createdByName を NameResolver の ResolveCreatedByName で解決
 		if s.nameResolver != nil {
-			cb := requestedBy // requestedBy は mint.CreatedBy(memberId) と同義
+			cb := requestedBy
 			createdByName = strings.TrimSpace(s.nameResolver.ResolveCreatedByName(ctx, &cb))
 		}
 		if createdByName == "" {
 			createdByName = requestedBy
 		}
 
-		// build mint summary (safe for frontend)
+		// mint -> safe summary（products の shape 揺れ回避のため json 経由）
 		type mintLite struct {
 			ID                string         `json:"id"`
 			BrandID           string         `json:"brandId"`
@@ -501,7 +504,6 @@ func (s *MintRequestQueryService) GetMintRequestDetail(
 			MintedAt          *time.Time     `json:"mintedAt"`
 			ScheduledBurnDate *time.Time     `json:"scheduledBurnDate"`
 		}
-
 		var ml mintLite
 		if b, mErr := json.Marshal(m); mErr == nil {
 			_ = json.Unmarshal(b, &ml)
@@ -524,8 +526,7 @@ func (s *MintRequestQueryService) GetMintRequestDetail(
 
 			CreatedBy:     strings.TrimSpace(ml.CreatedBy),
 			CreatedByName: strings.TrimSpace(createdByName),
-
-			CreatedAt: ml.CreatedAt,
+			CreatedAt:     ml.CreatedAt,
 
 			Minted:   ml.Minted,
 			MintedAt: ml.MintedAt,
@@ -542,7 +543,7 @@ func (s *MintRequestQueryService) GetMintRequestDetail(
 		Quantity:    prodQty,
 	}
 
-	// inspection summary (if exists)
+	// inspection summary
 	var inspSummary *querydto.InspectionSummaryDTO
 	if hasInsp {
 		inspSummary = &querydto.InspectionSummaryDTO{
@@ -550,7 +551,9 @@ func (s *MintRequestQueryService) GetMintRequestDetail(
 			Status:       strings.TrimSpace(insp.Status),
 			TotalPassed:  insp.TotalPassed,
 			Quantity:     insp.Quantity,
-			ProductName:  strings.TrimSpace(insp.ProductName),
+			ProductName:  "",
+
+			Inspections: inspectionItems,
 		}
 	}
 
@@ -577,11 +580,8 @@ func (s *MintRequestQueryService) GetMintRequestDetail(
 		Inspection: inspSummary,
 		Mint:       mintSummary,
 
-		// ★追加: modelId -> (modelNumber/size/color/rgb) を返す
-		// ※ querydto.MintRequestDetailDTO に ModelMeta を追加している前提
 		ModelMeta: modelMeta,
 
-		// TokenBlueprint は現状 repo 直参照を避けるため未設定（必要なら QueryService に tbRepo を注入する）
 		TokenBlueprint: nil,
 	}
 

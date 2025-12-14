@@ -9,6 +9,7 @@ import (
 	"time"
 
 	dto "narratives/internal/application/mint/dto"
+	qdto "narratives/internal/application/query/dto"
 	appusecase "narratives/internal/application/usecase"
 	branddom "narratives/internal/domain/brand"
 	inspectiondom "narratives/internal/domain/inspection"
@@ -332,6 +333,111 @@ func (u *MintUsecase) GetProductBlueprintPatchByID(
 }
 
 // ============================================================
+// ★ NEW (moved idea): model variations -> modelMeta（任意・設定されていれば）
+// ============================================================
+//
+// - MintUsecase 側で modelMeta の解決手段を持ち、handler / query-service から呼べるようにする。
+// - modelRepo が対応していない環境では「空 map」を返す（互換重視）。
+//
+
+type modelMetaLister interface {
+	ListModelMetaByIDs(ctx context.Context, modelIDs []string) (map[string]qdto.MintModelMetaEntry, error)
+}
+
+type modelMetaGetter interface {
+	GetModelMetaByID(ctx context.Context, modelID string) (*qdto.MintModelMetaEntry, error)
+}
+
+func (u *MintUsecase) resolveModelMetaByModelIDs(
+	ctx context.Context,
+	modelIDs []string,
+) (map[string]qdto.MintModelMetaEntry, error) {
+
+	if u == nil {
+		return map[string]qdto.MintModelMetaEntry{}, nil
+	}
+	if u.modelRepo == nil {
+		return map[string]qdto.MintModelMetaEntry{}, nil
+	}
+
+	seen := map[string]struct{}{}
+	ids := make([]string, 0, len(modelIDs))
+	for _, id := range modelIDs {
+		s := strings.TrimSpace(id)
+		if s == "" {
+			continue
+		}
+		if _, ok := seen[s]; ok {
+			continue
+		}
+		seen[s] = struct{}{}
+		ids = append(ids, s)
+	}
+	if len(ids) == 0 {
+		return map[string]qdto.MintModelMetaEntry{}, nil
+	}
+	sort.Strings(ids)
+
+	// 1) まとめて引ける実装があれば最優先
+	if l, ok := any(u.modelRepo).(modelMetaLister); ok {
+		m, err := l.ListModelMetaByIDs(ctx, ids)
+		if err != nil {
+			return nil, err
+		}
+		if m == nil {
+			return map[string]qdto.MintModelMetaEntry{}, nil
+		}
+		// entry.ModelID を揃えておく（optional）
+		for k, v := range m {
+			if strings.TrimSpace(v.ModelID) == "" {
+				v.ModelID = strings.TrimSpace(k)
+				m[k] = v
+			}
+		}
+		return m, nil
+	}
+
+	// 2) 単発 getter があればループ
+	if g, ok := any(u.modelRepo).(modelMetaGetter); ok {
+		out := make(map[string]qdto.MintModelMetaEntry, len(ids))
+		for _, id := range ids {
+			ent, err := g.GetModelMetaByID(ctx, id)
+			if err != nil {
+				// detail 表示に致命ではないので「任意」扱い：ここはスキップ
+				continue
+			}
+			if ent == nil {
+				continue
+			}
+			v := *ent
+			if strings.TrimSpace(v.ModelID) == "" {
+				v.ModelID = id
+			}
+			out[id] = v
+		}
+		return out, nil
+	}
+
+	// 3) 非対応なら空で返す（互換）
+	return map[string]qdto.MintModelMetaEntry{}, nil
+}
+
+func (u *MintUsecase) ResolveModelMetaFromInspectionBatch(
+	ctx context.Context,
+	batch inspectiondom.InspectionBatch,
+) (map[string]qdto.MintModelMetaEntry, error) {
+
+	// inspections から modelId を集める
+	modelIDs := make([]string, 0, len(batch.Inspections))
+	for _, it := range batch.Inspections {
+		// InspectionItem のフィールド名は ModelID 想定
+		modelIDs = append(modelIDs, strings.TrimSpace(it.ModelID))
+	}
+
+	return u.resolveModelMetaByModelIDs(ctx, modelIDs)
+}
+
+// ============================================================
 // Additional API: Inspection へ mintId を記録 + mints 作成 + チェーンミント
 // ============================================================
 
@@ -577,4 +683,48 @@ func (u *MintUsecase) ListInspectionBatchesByProductionIDs(
 	sort.Strings(ids)
 
 	return u.inspRepo.ListByProductionID(ctx, ids)
+}
+
+// ============================================================
+// ★ NEW: Detail API for GET /mint/inspections/{productionId}
+// ============================================================
+
+// GetMintRequestDetail returns a single inspection batch for the given productionId.
+// This is a thin wrapper around ListInspectionBatchesByProductionIDs to support
+// a detail endpoint without changing repository ports.
+func (u *MintUsecase) GetMintRequestDetail(
+	ctx context.Context,
+	productionID string,
+) (inspectiondom.InspectionBatch, error) {
+
+	var empty inspectiondom.InspectionBatch
+
+	if u == nil {
+		return empty, errors.New("mint usecase is nil")
+	}
+
+	pid := strings.TrimSpace(productionID)
+	if pid == "" {
+		return empty, errors.New("productionID is empty")
+	}
+
+	batches, err := u.ListInspectionBatchesByProductionIDs(ctx, []string{pid})
+	if err != nil {
+		return empty, err
+	}
+	if len(batches) == 0 {
+		// detail では「無い」を明確にしたいので NotFound 扱い
+		return empty, inspectiondom.ErrNotFound
+	}
+
+	// 念のため pid 一致を優先
+	for _, b := range batches {
+		// InspectionBatch の json が productionId なので通常は ProductionID のはず
+		if strings.TrimSpace(b.ProductionID) == pid {
+			return b, nil
+		}
+	}
+
+	// 最後の保険
+	return batches[0], nil
 }

@@ -419,6 +419,11 @@ func NewContainer(ctx context.Context) (*Container, error) {
 		nameResolver,
 	)
 
+	// ✅ 追加: MintRequestQueryService に modelRepo を差し込む
+	// - companyquery.MintRequestQueryService.SetModelRepo は “最小IF(ModelVariationsLister)” を受ける想定
+	// - fs.ModelRepositoryFS が ListModelVariationsByProductBlueprintID を実装していればそのまま渡せる
+	mintRequestQueryService.SetModelRepo(modelRepo)
+
 	saleUC := uc.NewSaleUsecase(saleRepo)
 	shippingAddressUC := uc.NewShippingAddressUsecase(shippingAddressRepo)
 
