@@ -118,12 +118,22 @@ func (u *ModelUsecase) saveHistorySnapshot(
 // Queries
 // ------------------------------------------------------------
 
+// GetByID is a legacy-style alias: variationID を受け取り、ModelVariation を返す
 func (u *ModelUsecase) GetByID(ctx context.Context, id string) (*modeldom.ModelVariation, error) {
 	id = strings.TrimSpace(id)
 	if id == "" {
 		return nil, modeldom.ErrInvalidID
 	}
 	return u.repo.GetModelVariationByID(ctx, id)
+}
+
+// ★追加：HTTP の GET /models/variations/{variationId} 用の明示メソッド
+// （mintRequest の modelId (= variationId) から modelNumber/size/color を取得する用途）
+func (u *ModelUsecase) GetModelVariationByID(
+	ctx context.Context,
+	variationID string,
+) (*modeldom.ModelVariation, error) {
+	return u.GetByID(ctx, variationID)
 }
 
 func (u *ModelUsecase) GetModelData(ctx context.Context, id string) (*modeldom.ModelData, error) {

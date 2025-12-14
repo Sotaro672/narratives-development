@@ -10,6 +10,7 @@ import (
 	inspectiondto "narratives/internal/application/inspection/dto"
 	inspectiondom "narratives/internal/domain/inspection"
 	mintdom "narratives/internal/domain/mint"
+	modeldom "narratives/internal/domain/model"
 )
 
 // ------------------------------------------------------------
@@ -17,7 +18,7 @@ import (
 // ------------------------------------------------------------
 //
 // inspections 永続化ポートは domain 側（inspection.Repository）へ移譲しました。
-// ここでは inspection 以外の境界（products / mints）に関する最小ポートのみ定義します。
+// ここでは inspection 以外の境界（products / mints / models）に関する最小ポートのみ定義します。
 
 // ProductInspectionRepo は products テーブル側の inspectionResult を更新するための
 // 最小限のポートです。
@@ -34,6 +35,11 @@ type InspectionMintGetter interface {
 	GetByInspectionID(ctx context.Context, inspectionID string) (mintdom.Mint, error)
 }
 
+// ★ 追加：modelVariationId から ModelVariation を 1 件取得するための最小ポート
+type ModelVariationGetter interface {
+	GetModelVariationByID(ctx context.Context, variationID string) (*modeldom.ModelVariation, error)
+}
+
 // ------------------------------------------------------------
 // Usecase
 // ------------------------------------------------------------
@@ -42,6 +48,7 @@ type InspectionUsecase struct {
 	inspectionRepo inspectiondom.Repository
 	productRepo    ProductInspectionRepo
 	mintRepo       InspectionMintGetter // nil 許容
+	modelRepo      ModelVariationGetter // nil 許容
 }
 
 func NewInspectionUsecase(
@@ -61,6 +68,29 @@ func NewInspectionUsecaseWithMint(
 ) *InspectionUsecase {
 	u := NewInspectionUsecase(inspectionRepo, productRepo)
 	u.mintRepo = mintRepo
+	return u
+}
+
+// ★ 追加：ModelVariation 参照あり
+func NewInspectionUsecaseWithModel(
+	inspectionRepo inspectiondom.Repository,
+	productRepo ProductInspectionRepo,
+	modelRepo ModelVariationGetter,
+) *InspectionUsecase {
+	u := NewInspectionUsecase(inspectionRepo, productRepo)
+	u.modelRepo = modelRepo
+	return u
+}
+
+// ★ 追加：Mint + ModelVariation 参照あり
+func NewInspectionUsecaseWithMintAndModel(
+	inspectionRepo inspectiondom.Repository,
+	productRepo ProductInspectionRepo,
+	mintRepo InspectionMintGetter,
+	modelRepo ModelVariationGetter,
+) *InspectionUsecase {
+	u := NewInspectionUsecaseWithMint(inspectionRepo, productRepo, mintRepo)
+	u.modelRepo = modelRepo
 	return u
 }
 
@@ -122,6 +152,24 @@ func (u *InspectionUsecase) GetMintByProductionID(
 	productionID string,
 ) (mintdom.Mint, error) {
 	return u.GetMintByInspectionID(ctx, productionID)
+}
+
+// ★ 追加：ModelVariation を 1 件取得する（UI で modelId → size/color/rgb 等の解決に使う想定）
+func (u *InspectionUsecase) GetModelVariationByID(
+	ctx context.Context,
+	variationID string,
+) (*modeldom.ModelVariation, error) {
+
+	if u.modelRepo == nil {
+		return nil, fmt.Errorf("modelRepo is nil")
+	}
+
+	vid := strings.TrimSpace(variationID)
+	if vid == "" {
+		return nil, modeldom.ErrInvalid
+	}
+
+	return u.modelRepo.GetModelVariationByID(ctx, vid)
 }
 
 // ★ 追加：画面用 DTO（InspectionBatch + Mint を結合して返す）

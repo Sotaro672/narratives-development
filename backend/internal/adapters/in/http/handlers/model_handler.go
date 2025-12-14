@@ -21,11 +21,81 @@ func NewModelHandler(uc *usecase.ModelUsecase) http.Handler {
 	return &ModelHandler{uc: uc}
 }
 
+// ------------------------------------------------------------
+// helpers
+// ------------------------------------------------------------
+
+func extractSingleID(path string, prefix string) (string, bool) {
+	if !strings.HasPrefix(path, prefix) {
+		return "", false
+	}
+	id := strings.TrimPrefix(path, prefix)
+	id = strings.Trim(id, "/")
+	id = strings.TrimSpace(id)
+	if id == "" {
+		return "", false
+	}
+	// /models/variations/{id}/xxx のような余計なパスは弾く
+	if strings.Contains(id, "/") {
+		return "", false
+	}
+	return id, true
+}
+
 // ServeHTTP はHTTPルーティングの入口です。
 func (h *ModelHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 
 	switch {
+
+	// ------------------------------------------------------------
+	// GET /models/variations/{variationId}
+	//   → ModelUsecase.GetModelVariationByID
+	// ※ mintRequest の「モデル別検査結果」(modelId=variationId) 用に追加
+	// ------------------------------------------------------------
+	case r.Method == http.MethodGet &&
+		strings.HasPrefix(r.URL.Path, "/models/variations/"):
+
+		if id, ok := extractSingleID(r.URL.Path, "/models/variations/"); ok {
+			h.getVariationByID(w, r, id)
+			return
+		}
+
+		w.WriteHeader(http.StatusNotFound)
+		_ = json.NewEncoder(w).Encode(map[string]string{"error": "not_found"})
+		return
+
+	// ------------------------------------------------------------
+	// PUT /models/variations/{id}
+	//   → 既存の PUT /models/{id} と同じ処理（互換エイリアス）
+	// ------------------------------------------------------------
+	case r.Method == http.MethodPut &&
+		strings.HasPrefix(r.URL.Path, "/models/variations/"):
+
+		if id, ok := extractSingleID(r.URL.Path, "/models/variations/"); ok {
+			h.updateVariation(w, r, id)
+			return
+		}
+
+		w.WriteHeader(http.StatusNotFound)
+		_ = json.NewEncoder(w).Encode(map[string]string{"error": "not_found"})
+		return
+
+	// ------------------------------------------------------------
+	// DELETE /models/variations/{id}
+	//   → 既存の DELETE /models/{id} と同じ処理（互換エイリアス）
+	// ------------------------------------------------------------
+	case r.Method == http.MethodDelete &&
+		strings.HasPrefix(r.URL.Path, "/models/variations/"):
+
+		if id, ok := extractSingleID(r.URL.Path, "/models/variations/"); ok {
+			h.deleteVariation(w, r, id)
+			return
+		}
+
+		w.WriteHeader(http.StatusNotFound)
+		_ = json.NewEncoder(w).Encode(map[string]string{"error": "not_found"})
+		return
 
 	// ------------------------------------------------------------
 	// GET /models/by-blueprint/{productBlueprintID}/variations
@@ -77,6 +147,7 @@ func (h *ModelHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		strings.HasPrefix(r.URL.Path, "/models/"):
 
 		id := strings.TrimPrefix(r.URL.Path, "/models/")
+		id = strings.Trim(id, "/")
 		id = strings.TrimSpace(id)
 		h.updateVariation(w, r, id)
 		return
@@ -89,6 +160,7 @@ func (h *ModelHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		strings.HasPrefix(r.URL.Path, "/models/"):
 
 		id := strings.TrimPrefix(r.URL.Path, "/models/")
+		id = strings.Trim(id, "/")
 		id = strings.TrimSpace(id)
 		h.deleteVariation(w, r, id)
 		return
@@ -101,6 +173,17 @@ func (h *ModelHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		strings.HasPrefix(r.URL.Path, "/models/"):
 
 		id := strings.TrimPrefix(r.URL.Path, "/models/")
+		id = strings.Trim(id, "/")
+		id = strings.TrimSpace(id)
+
+		// ✅ /models/variations/... は上の case で処理済みの想定だが、
+		//   念のため誤ルーティングを防ぐ
+		if strings.HasPrefix(id, "variations/") || id == "variations" {
+			w.WriteHeader(http.StatusNotFound)
+			_ = json.NewEncoder(w).Encode(map[string]string{"error": "not_found"})
+			return
+		}
+
 		h.get(w, r, id)
 		return
 
@@ -108,6 +191,29 @@ func (h *ModelHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusNotFound)
 		_ = json.NewEncoder(w).Encode(map[string]string{"error": "not_found"})
 	}
+}
+
+// ------------------------------------------------------------
+// GET /models/variations/{variationId}
+// ------------------------------------------------------------
+func (h *ModelHandler) getVariationByID(w http.ResponseWriter, r *http.Request, id string) {
+	ctx := r.Context()
+
+	id = strings.TrimSpace(id)
+	if id == "" {
+		w.WriteHeader(http.StatusBadRequest)
+		_ = json.NewEncoder(w).Encode(map[string]string{"error": "invalid id"})
+		return
+	}
+
+	// ★ 期待値: modelId (= variationId) から modelNumber/size/color を解決する
+	mv, err := h.uc.GetModelVariationByID(ctx, id)
+	if err != nil {
+		writeModelErr(w, err)
+		return
+	}
+
+	_ = json.NewEncoder(w).Encode(mv)
 }
 
 // GET /models/{id}
