@@ -6,29 +6,29 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"sort"
 	"strings"
 	"time"
 
 	"cloud.google.com/go/storage"
 	"google.golang.org/api/iterator"
 
-	dbcommon "narratives/internal/adapters/out/firestore/common"
 	gcscommon "narratives/internal/adapters/out/gcs/common"
 	tidom "narratives/internal/domain/tokenIcon"
 )
 
-// GCS-based implementation of TokenIcon repository.
-// - Icons are stored as GCS objects.
-// - One object = one TokenIcon.
-// - Object name is used as ID (id == objectPath).
-// - Metadata (file_name, size, etc.) is stored in GCS object metadata.
+// TokenIconRepositoryGCS
+//   - Token Icon の実体（バイナリ）を GCS に保存するためのアダプタ。
+//   - tokenIcon.RepositoryPort を満たすため、GCS 走査で GetByID/List/Count/Stats/Reset も実装します。
+//     ※ 大量オブジェクトになるなら、将来的に別永続層へ分離推奨。
 type TokenIconRepositoryGCS struct {
 	Client *storage.Client
 	Bucket string
 }
 
-// Default bucket for token icons in this adapter layer.
-const defaultTokenIconBucket = "narratives_development_token_icon"
+// Default bucket for token icons (public).
+// env TOKEN_ICON_BUCKET が空のときのフォールバック。
+const defaultTokenIconBucket = "narratives-development_token_icon"
 
 func NewTokenIconRepositoryGCS(client *storage.Client, bucket string) *TokenIconRepositoryGCS {
 	b := strings.TrimSpace(bucket)
@@ -49,9 +49,9 @@ func (r *TokenIconRepositoryGCS) bucket() string {
 	return b
 }
 
-// ========================
-// RepositoryPort impl
-// ========================
+// ============================================================
+// GetByID
+// ============================================================
 
 // GetByID:
 // - id is either:
@@ -62,22 +62,9 @@ func (r *TokenIconRepositoryGCS) GetByID(ctx context.Context, id string) (*tidom
 		return nil, errors.New("TokenIconRepositoryGCS: nil storage client")
 	}
 
-	id = strings.TrimSpace(id)
-	if id == "" {
-		return nil, tidom.ErrNotFound
-	}
-
-	var bucket, objectPath string
-	if b, obj, ok := gcscommon.ParseGCSURL(id); ok {
-		bucket, objectPath = b, obj
-	} else {
-		bucket = r.bucket()
-		objectPath = id
-	}
-
-	objectPath = strings.TrimLeft(strings.TrimSpace(objectPath), "/")
-	if objectPath == "" {
-		return nil, tidom.ErrNotFound
+	bucket, objectPath, err := resolveBucketObject(id, r.bucket())
+	if err != nil {
+		return nil, err
 	}
 
 	attrs, err := r.Client.Bucket(bucket).Object(objectPath).Attrs(ctx)
@@ -88,18 +75,18 @@ func (r *TokenIconRepositoryGCS) GetByID(ctx context.Context, id string) (*tidom
 		return nil, err
 	}
 
-	icon := buildTokenIconFromAttrs(bucket, attrs)
-	return &icon, nil
+	ti := buildTokenIconFromAttrs(bucket, attrs)
+	return &ti, nil
 }
 
-// List:
-// - Scans all objects in bucket.
-// - Maps them to TokenIcon.
-// - Applies Filter / Sort / Page in memory.
+// ============================================================
+// List / Count
+// ============================================================
+
 func (r *TokenIconRepositoryGCS) List(
 	ctx context.Context,
 	filter tidom.Filter,
-	sort tidom.Sort,
+	sortSpec tidom.Sort,
 	page tidom.Page,
 ) (tidom.PageResult, error) {
 	if r.Client == nil {
@@ -109,7 +96,7 @@ func (r *TokenIconRepositoryGCS) List(
 	bucket := r.bucket()
 	it := r.Client.Bucket(bucket).Objects(ctx, &storage.Query{})
 
-	var all []tidom.TokenIcon
+	all := make([]tidom.TokenIcon, 0, 64)
 	for {
 		attrs, err := it.Next()
 		if errors.Is(err, iterator.Done) {
@@ -118,17 +105,28 @@ func (r *TokenIconRepositoryGCS) List(
 		if err != nil {
 			return tidom.PageResult{}, err
 		}
-		icon := buildTokenIconFromAttrs(bucket, attrs)
-		if matchTokenIconFilter(icon, filter) {
-			all = append(all, icon)
+
+		ti := buildTokenIconFromAttrs(bucket, attrs)
+		if matchTokenIconFilter(ti, filter) {
+			all = append(all, ti)
 		}
 	}
 
-	applyTokenIconSort(all, sort)
+	applyTokenIconSort(all, sortSpec)
 
-	pageNum, perPage, offset := dbcommon.NormalizePage(page.Number, page.PerPage, 50, 200)
+	pageNum := page.Number
+	if pageNum <= 0 {
+		pageNum = 1
+	}
+	perPage := page.PerPage
+	if perPage <= 0 {
+		perPage = 50
+	}
+	if perPage > 200 {
+		perPage = 200
+	}
+
 	total := len(all)
-
 	if total == 0 {
 		return tidom.PageResult{
 			Items:      []tidom.TokenIcon{},
@@ -139,6 +137,8 @@ func (r *TokenIconRepositoryGCS) List(
 		}, nil
 	}
 
+	totalPages := (total + perPage - 1) / perPage
+	offset := (pageNum - 1) * perPage
 	if offset > total {
 		offset = total
 	}
@@ -146,18 +146,16 @@ func (r *TokenIconRepositoryGCS) List(
 	if end > total {
 		end = total
 	}
-	items := all[offset:end]
 
 	return tidom.PageResult{
-		Items:      items,
+		Items:      all[offset:end],
 		TotalCount: total,
-		TotalPages: dbcommon.ComputeTotalPages(total, perPage),
+		TotalPages: totalPages,
 		Page:       pageNum,
 		PerPage:    perPage,
 	}, nil
 }
 
-// Count: scan and count those that match filter.
 func (r *TokenIconRepositoryGCS) Count(ctx context.Context, filter tidom.Filter) (int, error) {
 	if r.Client == nil {
 		return 0, errors.New("TokenIconRepositoryGCS: nil storage client")
@@ -175,41 +173,103 @@ func (r *TokenIconRepositoryGCS) Count(ctx context.Context, filter tidom.Filter)
 		if err != nil {
 			return 0, err
 		}
-		icon := buildTokenIconFromAttrs(bucket, attrs)
-		if matchTokenIconFilter(icon, filter) {
+
+		ti := buildTokenIconFromAttrs(bucket, attrs)
+		if matchTokenIconFilter(ti, filter) {
 			total++
 		}
 	}
+
 	return total, nil
 }
 
+// ============================================================
+// Upload
+// ============================================================
+
+// UploadIcon uploads icon file to GCS and returns (publicURL, size).
+// Object name policy: "<unix_nano>_<fileName>" in the configured bucket.
+func (r *TokenIconRepositoryGCS) UploadIcon(
+	ctx context.Context,
+	fileName string,
+	contentType string,
+	body io.Reader,
+) (string, int64, error) {
+	if r.Client == nil {
+		return "", 0, errors.New("TokenIconRepositoryGCS: nil storage client")
+	}
+	fileName = sanitizeFileName(fileName)
+	if fileName == "" {
+		return "", 0, fmt.Errorf("UploadIcon: empty fileName")
+	}
+
+	objectPath := fmt.Sprintf("%d_%s", time.Now().UTC().UnixNano(), fileName)
+	return r.UploadIconTo(ctx, objectPath, contentType, body)
+}
+
+// UploadIconTo uploads icon bytes to the specified objectPath in the configured bucket.
+func (r *TokenIconRepositoryGCS) UploadIconTo(
+	ctx context.Context,
+	objectPath string,
+	contentType string,
+	body io.Reader,
+) (string, int64, error) {
+	if r.Client == nil {
+		return "", 0, errors.New("TokenIconRepositoryGCS: nil storage client")
+	}
+	objectPath = strings.TrimLeft(strings.TrimSpace(objectPath), "/")
+	if objectPath == "" {
+		return "", 0, fmt.Errorf("UploadIconTo: empty objectPath")
+	}
+
+	bucket := r.bucket()
+
+	w := r.Client.Bucket(bucket).Object(objectPath).NewWriter(ctx)
+	if ct := strings.TrimSpace(contentType); ct != "" {
+		w.ContentType = ct
+	}
+
+	n, err := io.Copy(w, body)
+	if cerr := w.Close(); cerr != nil && err == nil {
+		err = cerr
+	}
+	if err != nil {
+		_ = r.Client.Bucket(bucket).Object(objectPath).Delete(ctx)
+		return "", 0, err
+	}
+
+	publicURL := gcscommon.GCSPublicURL(bucket, objectPath, defaultTokenIconBucket)
+	return publicURL, n, nil
+}
+
+// ============================================================
+// Create / Update / Delete
+// ============================================================
+
 // Create:
-// - Assumes GCS object already exists.
-// - in.URL should be a GCS URL or object path.
-// - Updates GCS metadata (file_name, size) and returns TokenIcon.
-func (r *TokenIconRepositoryGCS) Create(ctx context.Context, in tidom.CreateTokenIconInput) (*tidom.TokenIcon, error) {
+// - 「Upload 済みの GCS オブジェクト」に対してメタデータ（file_name/size/url）を付与します。
+// - in.URL は publicURL / gs:// / https://storage.googleapis.com/... / objectPath のいずれでもOK。
+// - 戻り値 TokenIcon.ID は objectPath（= newAttrs.Name）です。
+func (r *TokenIconRepositoryGCS) Create(
+	ctx context.Context,
+	in tidom.CreateTokenIconInput,
+) (*tidom.TokenIcon, error) {
 	if r.Client == nil {
 		return nil, errors.New("TokenIconRepositoryGCS: nil storage client")
 	}
 
-	url := strings.TrimSpace(in.URL)
-	if url == "" {
+	raw := strings.TrimSpace(in.URL)
+	if raw == "" {
 		return nil, fmt.Errorf("TokenIconRepositoryGCS.Create: empty URL")
 	}
 
-	var bucket, objectPath string
-	if b, obj, ok := gcscommon.ParseGCSURL(url); ok {
-		bucket, objectPath = b, obj
-	} else {
-		bucket = r.bucket()
-		objectPath = url
-	}
-	objectPath = strings.TrimLeft(strings.TrimSpace(objectPath), "/")
-	if objectPath == "" {
-		return nil, fmt.Errorf("TokenIconRepositoryGCS.Create: empty objectPath")
+	bucket, objectPath, err := resolveBucketObject(raw, r.bucket())
+	if err != nil {
+		return nil, err
 	}
 
 	obj := r.Client.Bucket(bucket).Object(objectPath)
+
 	attrs, err := obj.Attrs(ctx)
 	if err != nil {
 		if errors.Is(err, storage.ErrObjectNotExist) {
@@ -218,6 +278,7 @@ func (r *TokenIconRepositoryGCS) Create(ctx context.Context, in tidom.CreateToke
 		return nil, err
 	}
 
+	// merge metadata
 	meta := map[string]string{}
 	for k, v := range attrs.Metadata {
 		meta[k] = v
@@ -230,42 +291,49 @@ func (r *TokenIconRepositoryGCS) Create(ctx context.Context, in tidom.CreateToke
 		meta["size"] = fmt.Sprint(in.Size)
 	}
 
-	ua := storage.ObjectAttrsToUpdate{}
-	if len(meta) > 0 {
-		ua.Metadata = meta
-	}
+	// URL は “公開 URL” を優先して入れる（Create入力がgs://等でも閲覧側はこれを使える）
+	publicURL := gcscommon.GCSPublicURL(bucket, objectPath, defaultTokenIconBucket)
+	meta["url"] = publicURL
 
-	newAttrs, err := obj.Update(ctx, ua)
+	newAttrs, err := obj.Update(ctx, storage.ObjectAttrsToUpdate{Metadata: meta})
 	if err != nil {
 		return nil, err
 	}
 
-	ti := buildTokenIconFromAttrs(bucket, newAttrs)
+	ti := tidom.TokenIcon{
+		ID:       newAttrs.Name,
+		URL:      strings.TrimSpace(meta["url"]),
+		FileName: strings.TrimSpace(meta["file_name"]),
+		Size:     newAttrs.Size,
+	}
+	if ti.URL == "" {
+		ti.URL = publicURL
+	}
+	if ti.FileName == "" {
+		ti.FileName = lastSegment(newAttrs.Name)
+	}
+	if v := strings.TrimSpace(meta["size"]); v != "" {
+		if sz, ok := gcscommon.ParseInt64Meta(meta, "size"); ok {
+			ti.Size = sz
+		}
+	}
+
 	return &ti, nil
 }
 
-// Update:
-// - Updates GCS metadata for the icon identified by id.
-func (r *TokenIconRepositoryGCS) Update(ctx context.Context, id string, in tidom.UpdateTokenIconInput) (*tidom.TokenIcon, error) {
+// Update updates GCS object metadata for the icon identified by id.
+func (r *TokenIconRepositoryGCS) Update(
+	ctx context.Context,
+	id string,
+	in tidom.UpdateTokenIconInput,
+) (*tidom.TokenIcon, error) {
 	if r.Client == nil {
 		return nil, errors.New("TokenIconRepositoryGCS: nil storage client")
 	}
 
-	id = strings.TrimSpace(id)
-	if id == "" {
-		return nil, tidom.ErrNotFound
-	}
-
-	var bucket, objectPath string
-	if b, obj, ok := gcscommon.ParseGCSURL(id); ok {
-		bucket, objectPath = b, obj
-	} else {
-		bucket = r.bucket()
-		objectPath = id
-	}
-	objectPath = strings.TrimLeft(strings.TrimSpace(objectPath), "/")
-	if objectPath == "" {
-		return nil, tidom.ErrNotFound
+	bucket, objectPath, err := resolveBucketObject(id, r.bucket())
+	if err != nil {
+		return nil, err
 	}
 
 	obj := r.Client.Bucket(bucket).Object(objectPath)
@@ -304,14 +372,7 @@ func (r *TokenIconRepositoryGCS) Update(ctx context.Context, id string, in tidom
 	setStr("url", in.URL)
 	setInt64("size", in.Size)
 
-	if len(meta) == 0 {
-		// nothing to update; return current
-		ti := buildTokenIconFromAttrs(bucket, attrs)
-		return &ti, nil
-	}
-
-	ua := storage.ObjectAttrsToUpdate{Metadata: meta}
-	newAttrs, err := obj.Update(ctx, ua)
+	newAttrs, err := obj.Update(ctx, storage.ObjectAttrsToUpdate{Metadata: meta})
 	if err != nil {
 		return nil, err
 	}
@@ -320,75 +381,28 @@ func (r *TokenIconRepositoryGCS) Update(ctx context.Context, id string, in tidom
 	return &ti, nil
 }
 
-// Delete:
-// - Deletes the underlying GCS object.
-// - id can be a GCS URL or object path.
+// Delete deletes the underlying GCS object.
 func (r *TokenIconRepositoryGCS) Delete(ctx context.Context, id string) error {
 	if r.Client == nil {
 		return errors.New("TokenIconRepositoryGCS: nil storage client")
 	}
 
-	id = strings.TrimSpace(id)
-	if id == "" {
-		return tidom.ErrNotFound
+	bucket, objectPath, err := resolveBucketObject(id, r.bucket())
+	if err != nil {
+		return err
 	}
 
-	var bucket, objectPath string
-	if b, obj, ok := gcscommon.ParseGCSURL(id); ok {
-		bucket, objectPath = b, obj
-	} else {
-		bucket = r.bucket()
-		objectPath = id
-	}
-	objectPath = strings.TrimLeft(strings.TrimSpace(objectPath), "/")
-	if objectPath == "" {
-		return tidom.ErrNotFound
-	}
-
-	err := r.Client.Bucket(bucket).Object(objectPath).Delete(ctx)
+	err = r.Client.Bucket(bucket).Object(objectPath).Delete(ctx)
 	if errors.Is(err, storage.ErrObjectNotExist) {
 		return tidom.ErrNotFound
 	}
 	return err
 }
 
-// UploadIcon:
-// - Uploads icon file to GCS and returns (publicURL, size).
-// - Object name policy: "<unix_nano>_<fileName>".
-func (r *TokenIconRepositoryGCS) UploadIcon(ctx context.Context, fileName, contentType string, body io.Reader) (string, int64, error) {
-	if r.Client == nil {
-		return "", 0, errors.New("TokenIconRepositoryGCS: nil storage client")
-	}
+// ============================================================
+// Stats / Tx / Reset (RepositoryPort compatibility)
+// ============================================================
 
-	fileName = strings.TrimSpace(fileName)
-	if fileName == "" {
-		return "", 0, fmt.Errorf("UploadIcon: empty fileName")
-	}
-
-	bucket := r.bucket()
-	objectPath := fmt.Sprintf("%d_%s", time.Now().UTC().UnixNano(), fileName)
-
-	w := r.Client.Bucket(bucket).Object(objectPath).NewWriter(ctx)
-	if ct := strings.TrimSpace(contentType); ct != "" {
-		w.ContentType = ct
-	}
-
-	n, err := io.Copy(w, body)
-	if cerr := w.Close(); cerr != nil && err == nil {
-		err = cerr
-	}
-	if err != nil {
-		// best-effort cleanup
-		_ = r.Client.Bucket(bucket).Object(objectPath).Delete(ctx)
-		return "", 0, err
-	}
-
-	publicURL := gcscommon.GCSPublicURL(bucket, objectPath, defaultTokenIconBucket)
-	return publicURL, n, nil
-}
-
-// GetTokenIconStats:
-// - Scans all objects and computes stats.
 func (r *TokenIconRepositoryGCS) GetTokenIconStats(ctx context.Context) (tidom.TokenIconStats, error) {
 	if r.Client == nil {
 		return tidom.TokenIconStats{}, errors.New("TokenIconRepositoryGCS: nil storage client")
@@ -410,20 +424,20 @@ func (r *TokenIconRepositoryGCS) GetTokenIconStats(ctx context.Context) (tidom.T
 			return tidom.TokenIconStats{}, err
 		}
 
-		icon := buildTokenIconFromAttrs(bucket, attrs)
-		if icon.Size <= 0 {
+		ti := buildTokenIconFromAttrs(bucket, attrs)
+		if ti.Size <= 0 {
 			continue
 		}
 
 		stats.Total++
-		stats.TotalSize += icon.Size
+		stats.TotalSize += ti.Size
 
-		if largest == nil || icon.Size > largest.Size || (icon.Size == largest.Size && icon.ID < largest.ID) {
-			tmp := icon
+		if largest == nil || ti.Size > largest.Size || (ti.Size == largest.Size && ti.ID < largest.ID) {
+			tmp := ti
 			largest = &tmp
 		}
-		if smallest == nil || icon.Size < smallest.Size || (icon.Size == smallest.Size && icon.ID < smallest.ID) {
-			tmp := icon
+		if smallest == nil || ti.Size < smallest.Size || (ti.Size == smallest.Size && ti.ID < smallest.ID) {
+			tmp := ti
 			smallest = &tmp
 		}
 	}
@@ -449,9 +463,7 @@ func (r *TokenIconRepositoryGCS) GetTokenIconStats(ctx context.Context) (tidom.T
 	return stats, nil
 }
 
-// WithTx:
-// - No real transactions in GCS; call fn directly.
-// - Provided only for interface compatibility.
+// WithTx: GCS にトランザクションは無いので、そのまま実行
 func (r *TokenIconRepositoryGCS) WithTx(ctx context.Context, fn func(ctx context.Context) error) error {
 	if fn == nil {
 		return nil
@@ -459,17 +471,15 @@ func (r *TokenIconRepositoryGCS) WithTx(ctx context.Context, fn func(ctx context
 	return fn(ctx)
 }
 
-// Reset:
-// - Deletes all objects in the configured bucket.
-// - Mainly for tests; use carefully.
+// Reset: 開発/テスト用。バケット内の全オブジェクトを削除。
 func (r *TokenIconRepositoryGCS) Reset(ctx context.Context) error {
 	if r.Client == nil {
 		return errors.New("TokenIconRepositoryGCS: nil storage client")
 	}
-	bucket := r.bucket()
 
+	bucket := r.bucket()
 	it := r.Client.Bucket(bucket).Objects(ctx, &storage.Query{})
-	var errs []error
+
 	for {
 		attrs, err := it.Next()
 		if errors.Is(err, iterator.Done) {
@@ -478,57 +488,14 @@ func (r *TokenIconRepositoryGCS) Reset(ctx context.Context) error {
 		if err != nil {
 			return err
 		}
-		if err := r.Client.Bucket(bucket).Object(attrs.Name).Delete(ctx); err != nil && !errors.Is(err, storage.ErrObjectNotExist) {
-			errs = append(errs, fmt.Errorf("%s: %w", attrs.Name, err))
-		}
-	}
-	if len(errs) > 0 {
-		return dbcommon.JoinErrors(errs)
+		_ = r.Client.Bucket(bucket).Object(attrs.Name).Delete(ctx)
 	}
 	return nil
 }
 
-// ========================
-// Compatibility methods
-// (kept for callers using old names; now backed by GCS)
-// ========================
-
-func (r *TokenIconRepositoryGCS) FetchAllTokenIcons(ctx context.Context) ([]*tidom.TokenIcon, error) {
-	res, err := r.List(ctx, tidom.Filter{}, tidom.Sort{}, tidom.Page{
-		Number:  1,
-		PerPage: 10000, // large enough; adjust if needed
-	})
-	if err != nil {
-		return nil, err
-	}
-	out := make([]*tidom.TokenIcon, 0, len(res.Items))
-	for i := range res.Items {
-		ti := res.Items[i]
-		out = append(out, &ti)
-	}
-	return out, nil
-}
-
-func (r *TokenIconRepositoryGCS) FetchTokenIconByID(ctx context.Context, iconID string) (*tidom.TokenIcon, error) {
-	return r.GetByID(ctx, iconID)
-}
-
-func (r *TokenIconRepositoryGCS) FetchTokenIconByBlueprintID(ctx context.Context, _ string) (*tidom.TokenIcon, error) {
-	// Not supported (schema doesn't relate icons and blueprints directly).
-	return nil, tidom.ErrNotFound
-}
-
-func (r *TokenIconRepositoryGCS) CreateTokenIcon(ctx context.Context, in tidom.CreateTokenIconInput) (*tidom.TokenIcon, error) {
-	return r.Create(ctx, in)
-}
-
-func (r *TokenIconRepositoryGCS) UpdateTokenIcon(ctx context.Context, iconID string, updates tidom.UpdateTokenIconInput) (*tidom.TokenIcon, error) {
-	return r.Update(ctx, iconID, updates)
-}
-
-// ========================
+// ============================================================
 // Helpers
-// ========================
+// ============================================================
 
 func buildTokenIconFromAttrs(bucket string, attrs *storage.ObjectAttrs) tidom.TokenIcon {
 	name := strings.TrimSpace(attrs.Name)
@@ -541,25 +508,18 @@ func buildTokenIconFromAttrs(bucket string, attrs *storage.ObjectAttrs) tidom.To
 		return strings.TrimSpace(meta[key])
 	}
 
-	// ID: object name as-is
 	id := name
 
-	// URL: metadata.url or public URL
 	url := getMeta("url")
 	if url == "" {
 		url = gcscommon.GCSPublicURL(bucket, name, defaultTokenIconBucket)
 	}
 
-	// FileName: metadata.file_name or last segment of object name
 	fileName := getMeta("file_name")
 	if fileName == "" {
-		fileName = name
-		if idx := strings.LastIndex(fileName, "/"); idx >= 0 && idx < len(fileName)-1 {
-			fileName = fileName[idx+1:]
-		}
+		fileName = lastSegment(name)
 	}
 
-	// Size: metadata.size or attrs.Size
 	size := attrs.Size
 	if meta != nil {
 		if sz, ok := gcscommon.ParseInt64Meta(meta, "size"); ok {
@@ -575,9 +535,7 @@ func buildTokenIconFromAttrs(bucket string, attrs *storage.ObjectAttrs) tidom.To
 	}
 }
 
-// matchTokenIconFilter applies tidom.Filter conditions to a TokenIcon.
 func matchTokenIconFilter(ti tidom.TokenIcon, f tidom.Filter) bool {
-	// IDs
 	if len(f.IDs) > 0 {
 		ok := false
 		for _, id := range f.IDs {
@@ -591,7 +549,6 @@ func matchTokenIconFilter(ti tidom.TokenIcon, f tidom.Filter) bool {
 		}
 	}
 
-	// FileNameLike
 	if v := strings.TrimSpace(f.FileNameLike); v != "" {
 		lv := strings.ToLower(v)
 		if !strings.Contains(strings.ToLower(ti.FileName), lv) {
@@ -599,7 +556,6 @@ func matchTokenIconFilter(ti tidom.TokenIcon, f tidom.Filter) bool {
 		}
 	}
 
-	// Size range
 	if f.SizeMin != nil && ti.Size < *f.SizeMin {
 		return false
 	}
@@ -610,41 +566,73 @@ func matchTokenIconFilter(ti tidom.TokenIcon, f tidom.Filter) bool {
 	return true
 }
 
-// applyTokenIconSort: in-memory sorting analogous to buildTIOrderBy.
 func applyTokenIconSort(items []tidom.TokenIcon, s tidom.Sort) {
 	if len(items) <= 1 {
 		return
 	}
 
 	col := strings.ToLower(strings.TrimSpace(string(s.Column)))
-	dir := strings.ToUpper(strings.TrimSpace(string(s.Order)))
-	if dir != "ASC" && dir != "DESC" {
-		dir = "DESC"
+	dir := strings.ToLower(strings.TrimSpace(string(s.Order)))
+	if dir != "asc" && dir != "desc" {
+		dir = "desc"
 	}
 
-	var less func(i, j int) bool
+	less := func(i, j int) bool { return items[i].ID < items[j].ID }
 
 	switch col {
 	case "size":
 		less = func(i, j int) bool { return items[i].Size < items[j].Size }
-	case "filename", "file_name":
+	case "filename", "file_name", "filename_like", "fileName":
 		less = func(i, j int) bool { return items[i].FileName < items[j].FileName }
 	default:
-		// default: id DESC (ASC comparator then invert if dir == DESC)
 		less = func(i, j int) bool { return items[i].ID < items[j].ID }
-		col = "id"
 	}
 
-	// simple O(n^2) sort; dataset is expected to be small
-	for i := 0; i < len(items)-1; i++ {
-		for j := i + 1; j < len(items); j++ {
-			swap := less(j, i)
-			if dir == "DESC" {
-				swap = less(i, j)
-			}
-			if swap {
-				items[i], items[j] = items[j], items[i]
-			}
+	sort.Slice(items, func(i, j int) bool {
+		if dir == "asc" {
+			return less(i, j)
 		}
+		return less(j, i)
+	})
+}
+
+func resolveBucketObject(id string, fallbackBucket string) (bucket string, objectPath string, err error) {
+	id = strings.TrimSpace(id)
+	if id == "" {
+		return "", "", tidom.ErrNotFound
 	}
+
+	if b, obj, ok := gcscommon.ParseGCSURL(id); ok {
+		bucket, objectPath = b, obj
+	} else {
+		bucket = strings.TrimSpace(fallbackBucket)
+		objectPath = id
+	}
+
+	objectPath = strings.TrimLeft(strings.TrimSpace(objectPath), "/")
+	if bucket == "" || objectPath == "" {
+		return "", "", tidom.ErrNotFound
+	}
+	return bucket, objectPath, nil
+}
+
+func sanitizeFileName(name string) string {
+	name = strings.TrimSpace(name)
+	if name == "" {
+		return ""
+	}
+	name = strings.ReplaceAll(name, "\\", "_")
+	name = strings.ReplaceAll(name, "/", "_")
+	return name
+}
+
+func lastSegment(p string) string {
+	p = strings.TrimSpace(p)
+	if p == "" {
+		return ""
+	}
+	if i := strings.LastIndex(p, "/"); i >= 0 && i < len(p)-1 {
+		return p[i+1:]
+	}
+	return p
 }

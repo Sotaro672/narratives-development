@@ -9,12 +9,14 @@ import (
 	firebaseauth "firebase.google.com/go/v4/auth"
 
 	"cloud.google.com/go/firestore"
+	"cloud.google.com/go/storage"
 
 	arweaveinfra "narratives/internal/infra/arweave"
 	solanainfra "narratives/internal/infra/solana"
 
 	httpin "narratives/internal/adapters/in/http"
 	fs "narratives/internal/adapters/out/firestore"
+	gcso "narratives/internal/adapters/out/gcs"
 	mailadp "narratives/internal/adapters/out/mail"
 
 	// ★ MintUsecase 移動先
@@ -54,6 +56,9 @@ type Container struct {
 	Firestore    *firestore.Client
 	FirebaseApp  *firebase.App
 	FirebaseAuth *firebaseauth.Client
+
+	// ★ GCS client (Token icon uploader etc.)
+	GCS *storage.Client
 
 	// Repositories（AuthMiddleware 用に memberRepo だけ保持）
 	MemberRepo  memdom.Repository
@@ -190,6 +195,13 @@ func NewContainer(ctx context.Context) (*Container, error) {
 	}
 	log.Println("[container] Firestore connected to project:", cfg.FirestoreProjectID)
 
+	// 2.5 Initialize GCS client (Token icon uploader etc.)
+	gcsClient, err := storage.NewClient(ctx)
+	if err != nil {
+		return nil, err
+	}
+	log.Println("[container] GCS storage client initialized")
+
 	// 3. Initialize Firebase App & Auth（AuthMiddleware 用）
 	var fbApp *firebase.App
 	var fbAuth *firebaseauth.Client
@@ -293,6 +305,9 @@ func NewContainer(ctx context.Context) (*Container, error) {
 		modelRepo,              // ModelNumberRepository
 		tokenBlueprintNameRepo, // TokenBlueprintNameRepository
 	)
+
+	// ★ Token icon repository (GCS: public bucket)
+	tokenIconRepo := gcso.NewTokenIconRepositoryGCS(gcsClient, cfg.TokenIconBucket)
 
 	// 5. Application-layer usecases
 
@@ -438,7 +453,7 @@ func NewContainer(ctx context.Context) (*Container, error) {
 	tokenBlueprintUC := uc.NewTokenBlueprintUsecase(
 		tokenBlueprintRepo,   // tbRepo
 		nil,                  // tcRepo (token contents repo, 未接続なら nil)
-		nil,                  // tiRepo (token icon repo, 未接続なら nil)
+		tokenIconRepo,        // ✅ tiRepo (token icon repo, GCS)
 		memberSvc,            // *member.Service
 		arweaveUploader,      // ArweaveUploader（cfg.ArweaveBaseURL が空なら nil のまま）
 		tokenMetadataBuilder, // *TokenMetadataBuilder
@@ -479,8 +494,10 @@ func NewContainer(ctx context.Context) (*Container, error) {
 		Firestore:    fsClient,
 		FirebaseApp:  fbApp,
 		FirebaseAuth: fbAuth,
-		MemberRepo:   memberRepo,
-		MessageRepo:  messageRepo,
+		GCS:          gcsClient,
+
+		MemberRepo:  memberRepo,
+		MessageRepo: messageRepo,
 
 		// member.Service
 		MemberService: memberSvc,
@@ -625,10 +642,13 @@ func (c *Container) RouterDeps() httpin.RouterDeps {
 // Close
 // ========================================
 //
-// Firestore クライアントを安全に閉じる。
+// Firestore / GCS クライアントを安全に閉じる。
 func (c *Container) Close() error {
 	if c.Firestore != nil {
-		return c.Firestore.Close()
+		_ = c.Firestore.Close()
+	}
+	if c.GCS != nil {
+		_ = c.GCS.Close()
 	}
 	return nil
 }

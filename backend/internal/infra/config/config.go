@@ -19,6 +19,16 @@ type Config struct {
 	ArweaveBaseURL string
 	// 認証が必要な場合に使用（不要なら空でOK）
 	ArweaveAPIKey string
+
+	// ==========================================
+	// ★ 追加: Token Assets (GCS Buckets)
+	// ==========================================
+
+	// ★ Token Icon (公開バケット)
+	TokenIconBucket string
+
+	// ★ Token Contents (非公開バケット)
+	TokenContentsBucket string
 }
 
 // Load は環境変数を読み込み Config を返します。
@@ -39,6 +49,11 @@ func Load() *Config {
 		// ★ Arweave / Bundlr / Irys 関連
 		// 環境変数が未設定なら空文字のまま → Arweave 連携はスキップされる
 		ArweaveBaseURL: os.Getenv("ARWEAVE_BASE_URL"),
+		ArweaveAPIKey:  os.Getenv("ARWEAVE_API_KEY"),
+
+		// ★ Token Assets (GCS Buckets)
+		TokenIconBucket:     os.Getenv("TOKEN_ICON_BUCKET"),
+		TokenContentsBucket: os.Getenv("TOKEN_CONTENTS_BUCKET"),
 	}
 
 	return cfg
@@ -62,6 +77,16 @@ func (c *Config) GetArweaveBaseURL() string {
 // Arweave 用の API Key を返すヘルパー
 func (c *Config) GetArweaveAPIKey() string {
 	return c.ArweaveAPIKey
+}
+
+// Token Icon Bucket を返すヘルパー
+func (c *Config) GetTokenIconBucket() string {
+	return c.TokenIconBucket
+}
+
+// Token Contents Bucket を返すヘルパー
+func (c *Config) GetTokenContentsBucket() string {
+	return c.TokenContentsBucket
 }
 
 func getenvDefault(key, def string) string {

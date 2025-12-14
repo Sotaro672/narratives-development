@@ -13,6 +13,7 @@ import (
 	branddom "narratives/internal/domain/brand"
 	memdom "narratives/internal/domain/member"
 	tbdom "narratives/internal/domain/tokenBlueprint"
+	tidom "narratives/internal/domain/tokenIcon"
 )
 
 // TokenBlueprintHandler handles /token-blueprints endpoints.
@@ -20,8 +21,12 @@ type TokenBlueprintHandler struct {
 	uc       *uc.TokenBlueprintUsecase
 	memSvc   *memdom.Service
 	brandSvc *branddom.Service
+
+	// ★ 追加: iconId -> iconUrl 解決用
+	tiRepo tidom.RepositoryPort
 }
 
+// 後方互換: 既存のDIが壊れないように、tiRepo は nil で生成できる形を残す
 func NewTokenBlueprintHandler(
 	ucase *uc.TokenBlueprintUsecase,
 	memSvc *memdom.Service,
@@ -31,6 +36,22 @@ func NewTokenBlueprintHandler(
 		uc:       ucase,
 		memSvc:   memSvc,
 		brandSvc: brandSvc,
+		tiRepo:   nil,
+	}
+}
+
+// ★ 推奨: TokenIconRepo を渡して iconUrl を解決できるコンストラクタ
+func NewTokenBlueprintHandlerWithTokenIconRepo(
+	ucase *uc.TokenBlueprintUsecase,
+	memSvc *memdom.Service,
+	brandSvc *branddom.Service,
+	tiRepo tidom.RepositoryPort,
+) http.Handler {
+	return &TokenBlueprintHandler{
+		uc:       ucase,
+		memSvc:   memSvc,
+		brandSvc: brandSvc,
+		tiRepo:   tiRepo,
 	}
 }
 
@@ -66,6 +87,7 @@ type tokenBlueprintResponse struct {
 	CompanyID    string     `json:"companyId"`
 	Description  string     `json:"description"`
 	IconID       *string    `json:"iconId,omitempty"`
+	IconURL      string     `json:"iconUrl,omitempty"` // ★ 追加: iconId -> url を解決した結果
 	ContentFiles []string   `json:"contentFiles"`
 	AssigneeID   string     `json:"assigneeId"`
 	AssigneeName string     `json:"assigneeName"`
@@ -102,6 +124,23 @@ func (h *TokenBlueprintHandler) resolveBrandName(ctx context.Context, id string)
 	return name
 }
 
+// ★ iconId -> iconUrl を解決（解決できない場合は空文字）
+func (h *TokenBlueprintHandler) resolveIconURL(ctx context.Context, iconIDPtr *string) string {
+	if h == nil || h.tiRepo == nil || iconIDPtr == nil {
+		return ""
+	}
+	id := strings.TrimSpace(*iconIDPtr)
+	if id == "" {
+		return ""
+	}
+
+	ti, err := h.tiRepo.GetByID(ctx, id)
+	if err != nil || ti == nil {
+		return ""
+	}
+	return strings.TrimSpace(ti.URL)
+}
+
 func (h *TokenBlueprintHandler) toResponse(ctx context.Context, tb *tbdom.TokenBlueprint) tokenBlueprintResponse {
 	if tb == nil {
 		return tokenBlueprintResponse{}
@@ -122,6 +161,7 @@ func (h *TokenBlueprintHandler) toResponse(ctx context.Context, tb *tbdom.TokenB
 		CompanyID:    tb.CompanyID,
 		Description:  tb.Description,
 		IconID:       tb.IconID,
+		IconURL:      h.resolveIconURL(ctx, tb.IconID), // ★ ここで解決
 		ContentFiles: tb.ContentFiles,
 		AssigneeID:   tb.AssigneeID,
 		AssigneeName: h.resolveAssigneeName(ctx, tb.AssigneeID),
