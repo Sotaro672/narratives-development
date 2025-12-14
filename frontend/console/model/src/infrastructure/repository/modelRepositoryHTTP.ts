@@ -3,6 +3,24 @@
 // Firebase Auth から ID トークンを取得
 import { auth } from "../../../../shell/src/auth/infrastructure/config/firebaseClient";
 
+// ============================================================
+// Debug logging (取得したデータが分かるログ)
+// ============================================================
+
+const LOG_PREFIX = "[model/modelRepositoryHTTP]";
+function log(...args: any[]) {
+  // eslint-disable-next-line no-console
+  console.log(LOG_PREFIX, ...args);
+}
+function warn(...args: any[]) {
+  // eslint-disable-next-line no-console
+  console.warn(LOG_PREFIX, ...args);
+}
+function errorLog(...args: any[]) {
+  // eslint-disable-next-line no-console
+  console.error(LOG_PREFIX, ...args);
+}
+
 // 🔙 BACKEND の BASE URL
 const ENV_BASE =
   ((import.meta as any).env?.VITE_BACKEND_BASE_URL as string | undefined)?.replace(
@@ -15,15 +33,27 @@ const FALLBACK_BASE =
 
 export const API_BASE = ENV_BASE || FALLBACK_BASE;
 
+log("API_BASE resolved =", API_BASE, {
+  ENV_BASE,
+  usingFallback: !ENV_BASE,
+});
+
 // ---------------------------------------------------------
 // 共通: Firebase トークン取得
 // ---------------------------------------------------------
 async function getIdTokenOrThrow(): Promise<string> {
   const user = auth.currentUser;
   if (!user) {
+    errorLog("getIdTokenOrThrow: auth.currentUser is null (not logged in)");
     throw new Error("ログイン情報が見つかりません（未ログイン）");
   }
-  return user.getIdToken();
+  // トークンそのものはログに出さない（秘匿）
+  const token = await user.getIdToken();
+  log("getIdTokenOrThrow: idToken acquired (masked)", {
+    uid: user.uid,
+    email: user.email ?? null,
+  });
+  return token;
 }
 
 /* =========================================================
@@ -71,6 +101,7 @@ export type ModelVariationResponse = {
 // Firestore / Go 構造体からの生 JSON をフロント用に正規化するヘルパー
 function mapRawToModelVariation(raw: any): ModelVariationResponse {
   if (!raw || typeof raw !== "object") {
+    warn("mapRawToModelVariation: raw is not an object -> return empty", { raw });
     return {
       id: "",
       productBlueprintId: "",
@@ -92,35 +123,21 @@ function mapRawToModelVariation(raw: any): ModelVariationResponse {
   const size = raw.size ?? raw.Size ?? "";
 
   // Color 構造体のケースいろいろを吸収
-  const colorObj =
-    raw.color ??
-    raw.Color ??
-    null;
+  const colorObj = raw.color ?? raw.Color ?? null;
 
   const colorName =
-    colorObj?.name ??
-    colorObj?.Name ??
-    raw.colorName ??
-    raw.ColorName ??
-    "";
+    colorObj?.name ?? colorObj?.Name ?? raw.colorName ?? raw.ColorName ?? "";
   const colorRgb =
-    colorObj?.rgb ??
-    colorObj?.RGB ??
-    raw.rgb ??
-    raw.RGB ??
-    null;
+    colorObj?.rgb ?? colorObj?.RGB ?? raw.rgb ?? raw.RGB ?? null;
 
-  const measurements =
-    raw.measurements ??
-    raw.Measurements ??
-    undefined;
+  const measurements = raw.measurements ?? raw.Measurements ?? undefined;
 
   const createdAt = raw.createdAt ?? raw.CreatedAt ?? null;
   const createdBy = raw.createdBy ?? raw.CreatedBy ?? null;
   const updatedAt = raw.updatedAt ?? raw.UpdatedAt ?? null;
   const updatedBy = raw.updatedBy ?? raw.UpdatedBy ?? null;
 
-  return {
+  const normalized: ModelVariationResponse = {
     id,
     productBlueprintId,
     modelNumber,
@@ -135,6 +152,8 @@ function mapRawToModelVariation(raw: any): ModelVariationResponse {
     updatedAt,
     updatedBy,
   };
+
+  return normalized;
 }
 
 /* =========================================================
@@ -148,17 +167,35 @@ export async function createModelVariation(
 ): Promise<ModelVariationResponse> {
   const user = auth.currentUser;
   if (!user) {
+    errorLog("createModelVariation: auth.currentUser is null (not logged in)");
     throw new Error("ログイン情報が見つかりません（未ログイン）");
   }
   const idToken = await user.getIdToken();
 
+  log("createModelVariation: input", {
+    productBlueprintId,
+    payload: {
+      ...payload,
+      // measurements は大きくなりがちなので別で
+      measurements: payload.measurements ? "(present)" : "(none)",
+    },
+    user: { uid: user.uid, email: user.email ?? null },
+  });
+
   const cleanedMeasurements =
     payload.measurements &&
     Object.fromEntries(
-      Object.entries(payload.measurements).filter(([_, v]) => {
-        return typeof v === "number" && Number.isFinite(v);
+      Object.entries(payload.measurements).filter(([k, v]) => {
+        const ok = typeof v === "number" && Number.isFinite(v);
+        if (!ok) {
+          // null/undefined/NaN/非数値は送らない（何が落ちたか分かるログ）
+          log("createModelVariation: drop measurement (non-number)", { key: k, value: v });
+        }
+        return ok;
       }),
     );
+
+  log("createModelVariation: cleanedMeasurements", cleanedMeasurements ?? null);
 
   const url = `${API_BASE}/models/${encodeURIComponent(
     productBlueprintId,
@@ -177,6 +214,17 @@ export async function createModelVariation(
     body.rgb = payload.rgb;
   }
 
+  log("createModelVariation: request", {
+    method: "POST",
+    url,
+    body,
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: "Bearer (masked)",
+      Accept: "application/json",
+    },
+  });
+
   const res = await fetch(url, {
     method: "POST",
     headers: {
@@ -189,6 +237,14 @@ export async function createModelVariation(
 
   const text = await res.text().catch(() => "");
 
+  log("createModelVariation: response", {
+    ok: res.ok,
+    status: res.status,
+    statusText: res.statusText ?? "",
+    contentType: res.headers.get("content-type"),
+    bodyTextPreview: text ? text.slice(0, 500) : "",
+  });
+
   if (!res.ok) {
     let detail: unknown = text;
     try {
@@ -196,6 +252,7 @@ export async function createModelVariation(
     } catch {
       /* ignore JSON parse error */
     }
+    errorLog("createModelVariation: error detail", detail);
     throw new Error(
       `モデルバリエーションの作成に失敗しました（${res.status} ${
         res.statusText ?? ""
@@ -204,7 +261,10 @@ export async function createModelVariation(
   }
 
   const raw = text ? JSON.parse(text) : {};
+  log("createModelVariation: raw parsed", raw);
+
   const data = mapRawToModelVariation(raw);
+  log("createModelVariation: mapped data", data);
 
   return data;
 }
@@ -218,6 +278,11 @@ export async function createModelVariations(
   productBlueprintId: string,
   variations: CreateModelVariationRequest[],
 ): Promise<ModelVariationResponse[]> {
+  log("createModelVariations: start", {
+    productBlueprintId,
+    count: variations.length,
+  });
+
   const results: ModelVariationResponse[] = [];
 
   for (const v of variations) {
@@ -226,10 +291,27 @@ export async function createModelVariations(
       ...v,
       productBlueprintId,
     };
+
+    log("createModelVariations: creating one", {
+      modelNumber: enriched.modelNumber,
+      size: enriched.size,
+      color: enriched.color,
+      rgb: typeof enriched.rgb === "number" ? enriched.rgb : null,
+      measurements: enriched.measurements ? "(present)" : "(none)",
+    });
+
     const created = await createModelVariation(productBlueprintId, enriched);
     results.push(created);
+
+    log("createModelVariations: created", {
+      id: created.id,
+      modelNumber: created.modelNumber,
+      size: created.size,
+      color: created.color,
+    });
   }
 
+  log("createModelVariations: done", { createdCount: results.length });
   return results;
 }
 
@@ -246,6 +328,17 @@ export async function getModelVariationById(
 
   const url = `${API_BASE}/models/${safeId}`;
 
+  log("getModelVariationById: request", {
+    method: "GET",
+    id,
+    url,
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: "Bearer (masked)",
+      Accept: "application/json",
+    },
+  });
+
   const res = await fetch(url, {
     method: "GET",
     headers: {
@@ -257,7 +350,16 @@ export async function getModelVariationById(
 
   const text = await res.text().catch(() => "");
 
+  log("getModelVariationById: response", {
+    ok: res.ok,
+    status: res.status,
+    statusText: res.statusText ?? "",
+    contentType: res.headers.get("content-type"),
+    bodyTextPreview: text ? text.slice(0, 500) : "",
+  });
+
   if (!res.ok) {
+    errorLog("getModelVariationById: failed", { status: res.status, text });
     throw new Error(
       `モデルバリエーションの取得に失敗しました（${res.status} ${
         res.statusText ?? ""
@@ -266,7 +368,10 @@ export async function getModelVariationById(
   }
 
   const raw = text ? JSON.parse(text) : {};
+  log("getModelVariationById: raw parsed", raw);
+
   const data = mapRawToModelVariation(raw);
+  log("getModelVariationById: mapped data", data);
 
   return data;
 }
@@ -284,6 +389,17 @@ export async function listModelVariationsByProductBlueprintId(
 
   const url = `${API_BASE}/models/by-blueprint/${safeId}/variations`;
 
+  log("listModelVariationsByProductBlueprintId: request", {
+    method: "GET",
+    productBlueprintId,
+    url,
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: "Bearer (masked)",
+      Accept: "application/json",
+    },
+  });
+
   const res = await fetch(url, {
     method: "GET",
     headers: {
@@ -295,7 +411,19 @@ export async function listModelVariationsByProductBlueprintId(
 
   const text = await res.text().catch(() => "");
 
+  log("listModelVariationsByProductBlueprintId: response", {
+    ok: res.ok,
+    status: res.status,
+    statusText: res.statusText ?? "",
+    contentType: res.headers.get("content-type"),
+    bodyTextPreview: text ? text.slice(0, 500) : "",
+  });
+
   if (!res.ok) {
+    errorLog("listModelVariationsByProductBlueprintId: failed", {
+      status: res.status,
+      text,
+    });
     throw new Error(
       `モデルバリエーション一覧の取得に失敗しました（${res.status} ${
         res.statusText ?? ""
@@ -304,9 +432,21 @@ export async function listModelVariationsByProductBlueprintId(
   }
 
   const rawList = text ? JSON.parse(text) : [];
+  log("listModelVariationsByProductBlueprintId: raw parsed", {
+    isArray: Array.isArray(rawList),
+    length: Array.isArray(rawList) ? rawList.length : 0,
+    sample0: Array.isArray(rawList) && rawList.length > 0 ? rawList[0] : null,
+  });
+
   const list = Array.isArray(rawList)
     ? rawList.map((raw) => mapRawToModelVariation(raw))
     : [];
+
+  log("listModelVariationsByProductBlueprintId: mapped list", {
+    length: list.length,
+    sample0: list.length > 0 ? list[0] : null,
+    ids: list.slice(0, 10).map((v) => v.id),
+  });
 
   return list;
 }

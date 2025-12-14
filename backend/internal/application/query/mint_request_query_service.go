@@ -15,9 +15,20 @@ import (
 	querydto "narratives/internal/application/query/dto"
 	resolver "narratives/internal/application/resolver"
 	mintdom "narratives/internal/domain/mint"
+	modeldom "narratives/internal/domain/model"
 )
 
 var ErrMintRequestQueryServiceNotConfigured = errors.New("mintRequest query service is not configured")
+
+// ------------------------------------------------------------
+// Optional dependency: model variations lister
+// - Firestore 実装(ModelRepositoryFS) の ListModelVariationsByProductBlueprintID を
+//   そのまま差し込めるように “最小インターフェース” を定義する
+// ------------------------------------------------------------
+
+type ModelVariationsLister interface {
+	ListModelVariationsByProductBlueprintID(ctx context.Context, productBlueprintID string) ([]modeldom.ModelVariation, error)
+}
 
 // MintRequestQueryService is used by /mint/requests handler.
 // It returns management rows: (productionId = docId) + inspection + mint summary.
@@ -25,6 +36,9 @@ type MintRequestQueryService struct {
 	mintUC       *mintapp.MintUsecase
 	productionUC *productionapp.ProductionUsecase
 	nameResolver *resolver.NameResolver
+
+	// ★追加: productBlueprintId -> modelVariations を引くため（任意）
+	modelRepo ModelVariationsLister
 }
 
 func NewMintRequestQueryService(
@@ -36,7 +50,16 @@ func NewMintRequestQueryService(
 		mintUC:       mintUC,
 		productionUC: productionUC,
 		nameResolver: nameResolver,
+		modelRepo:    nil,
 	}
+}
+
+// ★追加: DI 側で後から差し込めるようにする（既存 constructor を壊さない）
+func (s *MintRequestQueryService) SetModelRepo(modelRepo ModelVariationsLister) {
+	if s == nil {
+		return
+	}
+	s.modelRepo = modelRepo
 }
 
 // ListMintRequestManagementRows returns rows for current company.
@@ -60,6 +83,11 @@ func (s *MintRequestQueryService) ListMintRequestManagementRows(ctx context.Cont
 		ID          string `json:"id"`
 		Quantity    int    `json:"quantity"`
 		ProductName string `json:"productName"`
+
+		// 互換: production の返却が PascalCase / camelCase 両方あり得るため両方受ける
+		ProductBlueprintID1 string `json:"productBlueprintId"`
+		ProductBlueprintID2 string `json:"ProductBlueprintID"`
+		ProductBlueprintID3 string `json:"ProductBlueprintId"`
 	}
 	prods := make([]prodLite, 0)
 	if b, mErr := json.Marshal(prodsAny); mErr == nil {
@@ -247,6 +275,10 @@ func (s *MintRequestQueryService) ListMintRequestManagementRows(ctx context.Cont
 // - production: productionUC.ListWithAssigneeName から 1件抽出（確実に存在するメソッドに寄せる）
 // - inspection: mintUC.ListInspectionBatchesByProductionIDs([pid])
 // - mint: mintUC.ListMintsByInspectionIDs([pid])
+//
+// ★追加: productBlueprintId を production から取得し、
+//
+//	ListModelVariationsByProductBlueprintID で modelMeta(map[modelId]...) を組み立てる
 func (s *MintRequestQueryService) GetMintRequestDetail(
 	ctx context.Context,
 	productionID string,
@@ -274,6 +306,11 @@ func (s *MintRequestQueryService) GetMintRequestDetail(
 		ID          string `json:"id"`
 		Quantity    int    `json:"quantity"`
 		ProductName string `json:"productName"`
+
+		// 互換: production から productBlueprintId を拾う（Pascal/camel を吸収）
+		ProductBlueprintID1 string `json:"productBlueprintId"`
+		ProductBlueprintID2 string `json:"ProductBlueprintID"`
+		ProductBlueprintID3 string `json:"ProductBlueprintId"`
 	}
 	prods := make([]prodLite, 0)
 	if b, mErr := json.Marshal(prodsAny); mErr == nil {
@@ -293,6 +330,18 @@ func (s *MintRequestQueryService) GetMintRequestDetail(
 		// company boundary 上 “見えない” もあり得るので not found 扱い
 		return nil, errors.New("production not found")
 	}
+
+	// production -> productBlueprintId を解決（この値が modelVariations 取得キーになる）
+	productBlueprintID := ""
+	if strings.TrimSpace(prod.ProductBlueprintID1) != "" {
+		productBlueprintID = strings.TrimSpace(prod.ProductBlueprintID1)
+	} else if strings.TrimSpace(prod.ProductBlueprintID2) != "" {
+		productBlueprintID = strings.TrimSpace(prod.ProductBlueprintID2)
+	} else if strings.TrimSpace(prod.ProductBlueprintID3) != "" {
+		productBlueprintID = strings.TrimSpace(prod.ProductBlueprintID3)
+	}
+
+	log.Printf("[mint_request_qs] detail pid=%q production resolved productBlueprintId=%q", pid, productBlueprintID)
 
 	// ------------------------------------------------------------
 	// 2) inspection (by pid)
@@ -333,6 +382,53 @@ func (s *MintRequestQueryService) GetMintRequestDetail(
 	}
 
 	m, hasMint := mintsByPID[pid]
+
+	// ------------------------------------------------------------
+	// 3.5) ★ model variations -> modelMeta（任意・設定されていれば）
+	// ------------------------------------------------------------
+	modelMeta := map[string]querydto.MintModelMetaEntry(nil)
+
+	if productBlueprintID == "" {
+		log.Printf("[mint_request_qs] WARN: productBlueprintId is empty, skip model variations (pid=%q)", pid)
+	} else if s.modelRepo == nil {
+		log.Printf("[mint_request_qs] WARN: modelRepo not configured, skip model variations (pid=%q pbId=%q)", pid, productBlueprintID)
+	} else {
+		vars, vErr := s.modelRepo.ListModelVariationsByProductBlueprintID(ctx, productBlueprintID)
+		if vErr != nil {
+			log.Printf("[mint_request_qs] WARN: ListModelVariationsByProductBlueprintID failed pid=%q pbId=%q err=%v", pid, productBlueprintID, vErr)
+		} else {
+			tmp := make(map[string]querydto.MintModelMetaEntry, len(vars))
+			for _, v := range vars {
+				id := strings.TrimSpace(v.ID)
+				if id == "" {
+					continue
+				}
+
+				// ✅ int -> *int 変換（domain: int / dto: *int）
+				rgb := v.Color.RGB
+
+				tmp[id] = querydto.MintModelMetaEntry{
+					ModelNumber: strings.TrimSpace(v.ModelNumber),
+					Size:        strings.TrimSpace(v.Size),
+					ColorName:   strings.TrimSpace(v.Color.Name),
+					RGB:         intPtr(rgb),
+				}
+			}
+			modelMeta = tmp
+			log.Printf("[mint_request_qs] modelMeta built pbId=%q len=%d sampleKey=%q sampleVal=%s",
+				productBlueprintID,
+				len(modelMeta),
+				firstKey(modelMeta),
+				toJSONForLog(func() any {
+					k := firstKey(modelMeta)
+					if k == "" {
+						return nil
+					}
+					return modelMeta[k]
+				}(), 500),
+			)
+		}
+	}
 
 	// ------------------------------------------------------------
 	// 4) compute detail fields (prefer inspection)
@@ -478,6 +574,10 @@ func (s *MintRequestQueryService) GetMintRequestDetail(
 		Inspection: inspSummary,
 		Mint:       mintSummary,
 
+		// ★追加: modelId -> (modelNumber/size/color/rgb) を返す
+		// ※ querydto.MintRequestDetailDTO に ModelMeta を追加している前提
+		ModelMeta: modelMeta,
+
 		// TokenBlueprint は現状 repo 直参照を避けるため未設定（必要なら QueryService に tbRepo を注入する）
 		TokenBlueprint: nil,
 	}
@@ -492,6 +592,11 @@ func (s *MintRequestQueryService) GetMintRequestDetail(
 // -----------------------
 // helpers
 // -----------------------
+
+func intPtr(n int) *int {
+	v := n
+	return &v
+}
 
 func min(a, b int) int {
 	if a < b {

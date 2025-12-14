@@ -240,7 +240,7 @@ func (mv ModelVariation) ToItemSpec() ItemSpec {
 	return ItemSpec{
 		ModelNumber:  mv.ModelNumber,
 		Size:         mv.Size,
-		Color:        mv.Color.Name, // 旧来の string ベース API とは Name を共有
+		Color:        mv.Color.Name,
 		Measurements: cloneMeasurements(mv.Measurements),
 	}
 }

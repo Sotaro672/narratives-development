@@ -3,6 +3,18 @@ package dto
 
 import "time"
 
+// MintModelMetaEntry is a per-model metadata entry for mint request detail page.
+// Keyed by modelId (variationId) on the wire.
+//
+// Frontend usage (mintRequest/useInspectionResultCard):
+// - modelMeta[modelId] -> { modelNumber, size, colorName, rgb }
+type MintModelMetaEntry struct {
+	ModelNumber string `json:"modelNumber,omitempty"`
+	Size        string `json:"size,omitempty"`
+	ColorName   string `json:"colorName,omitempty"`
+	RGB         *int   `json:"rgb,omitempty"`
+}
+
 // MintRequestDetailDTO is a detail DTO for mint request detail page.
 // Key is productionId (= inspectionId = docId).
 //
@@ -36,6 +48,10 @@ type MintRequestDetailDTO struct {
 	// minted timestamp (optional)
 	MintedAt *time.Time `json:"mintedAt,omitempty"`
 
+	// ★追加: modelId -> {modelNumber, size, colorName, rgb}
+	// 例: "modelMeta": { "<modelId>": { "size":"M", "colorName":"Black", "rgb": 0 } }
+	ModelMeta map[string]MintModelMetaEntry `json:"modelMeta,omitempty"`
+
 	// optional nested summaries for detail page
 	Production     *ProductionSummaryDTO     `json:"production,omitempty"`
 	Inspection     *InspectionSummaryDTO     `json:"inspection,omitempty"`
@@ -50,7 +66,27 @@ type ProductionSummaryDTO struct {
 	Quantity    int    `json:"quantity"`
 }
 
+// InspectionItemDTO is a minimal inspection item for detail page.
+// It carries model fields needed by frontend table:
+// - modelId, modelNumber, size, color, rgb
+// plus inspectionResult for aggregations (passed/total).
+type InspectionItemDTO struct {
+	ModelID     string `json:"modelId"`
+	ModelNumber string `json:"modelNumber,omitempty"`
+
+	Size  string `json:"size,omitempty"`
+	Color string `json:"color,omitempty"`
+	RGB   *int   `json:"rgb,omitempty"`
+
+	InspectionResult string `json:"inspectionResult,omitempty"` // passed/failed/...
+}
+
 // InspectionSummaryDTO is a minimal inspection summary for detail page.
+//
+// NOTE:
+// - `Inspections` is optional but when present, frontend can aggregate
+//   per-model rows without additional API calls.
+// - Each inspection item includes modelId + modelNumber/size/color/rgb.
 type InspectionSummaryDTO struct {
 	ProductionID    string     `json:"productionId"`
 	Status          string     `json:"status"`
@@ -60,6 +96,9 @@ type InspectionSummaryDTO struct {
 	InspectedBy     string     `json:"inspectedBy,omitempty"`
 	InspectedByName string     `json:"inspectedByName,omitempty"`
 	InspectedAt     *time.Time `json:"inspectedAt,omitempty"`
+
+	// 明細（modelId / modelNumber / size / color / rgb を含める）
+	Inspections []InspectionItemDTO `json:"inspections,omitempty"`
 }
 
 // MintSummaryDTO is a mint summary (safe for frontend).
