@@ -67,7 +67,6 @@ export function useTokenBlueprintDetail(): UseTokenBlueprintDetailResult {
         if (cancelled) return;
 
         setBlueprint(tb);
-
         setAssignee((prev) => prev || tb.assigneeName || tb.assigneeId || "");
       } catch {
         if (!cancelled) navigate("/tokenBlueprint", { replace: true });
@@ -96,10 +95,15 @@ export function useTokenBlueprintDetail(): UseTokenBlueprintDetailResult {
   // ─────────────────────────────
   // TokenBlueprintCard 用 VM / handlers
   // ─────────────────────────────
-  const { vm: cardVm, handlers: cardHandlers } = useTokenBlueprintCard({
+  // ★重要: selectedIconFile を受け取って onSave に渡せるようにする
+  const {
+    vm: cardVm,
+    handlers: cardHandlers,
+    selectedIconFile,
+  } = useTokenBlueprintCard({
     initialTokenBlueprint: (blueprint ?? {}) as Partial<TokenBlueprint>,
     initialBurnAt: "",
-    initialIconUrl: undefined,
+    initialIconUrl: (blueprint as any)?.iconUrl ?? undefined,
     initialEditMode: false,
   });
 
@@ -128,21 +132,49 @@ export function useTokenBlueprintDetail(): UseTokenBlueprintDetailResult {
     try {
       setLoading(true);
 
-      const updated = await updateTokenBlueprintFromCard(blueprint, cardVm);
+      // ★ここが今回の修正ポイント:
+      // - iconFile を updateTokenBlueprintFromCard に渡せるように cardVm を拡張する
+      // - buildUpdatePayloadFromCardVm が vmAny.fields または vmAny を読むので、
+      //   iconFile を vm 直下に載せれば拾えるようにしておく（service 側で参照する）
+      const vmWithIconFile = {
+        ...(cardVm ?? {}),
+        iconFile: selectedIconFile ?? null,
+      };
+
+      // eslint-disable-next-line no-console
+      console.log("[useTokenBlueprintDetail] save start", {
+        id: blueprint.id,
+        hasIconFile: Boolean(selectedIconFile),
+        iconFile: selectedIconFile
+          ? {
+              name: selectedIconFile.name,
+              type: selectedIconFile.type,
+              size: selectedIconFile.size,
+            }
+          : null,
+        isEditMode,
+      });
+
+      const updated = await updateTokenBlueprintFromCard(blueprint, vmWithIconFile);
+
+      // eslint-disable-next-line no-console
+      console.log("[useTokenBlueprintDetail] save success", {
+        id: (updated as any)?.id,
+        iconId: (updated as any)?.iconId,
+        iconUrl: (updated as any)?.iconUrl,
+      });
 
       setBlueprint(updated);
-      setAssignee(
-        (prev) =>
-          prev || updated.assigneeName || updated.assigneeId || "",
-      );
+      setAssignee((prev) => prev || updated.assigneeName || updated.assigneeId || "");
 
       cardHandlers?.setEditMode?.(false);
     } catch (err) {
+      // eslint-disable-next-line no-console
       console.error("[TokenBlueprintDetail] update failed:", err);
     } finally {
       setLoading(false);
     }
-  }, [loading, blueprint, cardVm, cardHandlers]);
+  }, [loading, blueprint, cardVm, selectedIconFile, cardHandlers, isEditMode]);
 
   const handleDelete = useCallback(() => {
     if (!blueprint) return;
@@ -161,8 +193,7 @@ export function useTokenBlueprintDetail(): UseTokenBlueprintDetailResult {
   const vm: UseTokenBlueprintDetailVM = {
     blueprint,
     title: "トークン設計", // ID は表示しない
-    assigneeName:
-      assignee || blueprint?.assigneeName || blueprint?.assigneeId || "",
+    assigneeName: assignee || blueprint?.assigneeName || blueprint?.assigneeId || "",
     createdByName,
     createdAt,
     tokenContentsIds: blueprint?.contentFiles ?? [],

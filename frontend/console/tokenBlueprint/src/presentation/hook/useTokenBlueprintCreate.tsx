@@ -34,8 +34,10 @@ export function useTokenBlueprintCreate() {
     navigate("/tokenBlueprint", { replace: true });
   }, [navigate]);
 
-  // ★ onSave が受け取る input は UI 実装に依存するため、File を運べるよう拡張して受ける
-  // - TokenBlueprintCard 側で `iconFile` を載せて onSave に渡せるようにしておく（まだなら後で hook 側を更新）
+  /**
+   * ★ onSave が受け取る input は UI 実装に依存するため、File を運べるよう拡張して受ける
+   * - TokenBlueprintCard 側で `iconFile` を載せて onSave に渡せるようにしておく（まだなら後で hook 側を更新）
+   */
   type SaveInput = Partial<TokenBlueprint> & { iconFile?: File | null };
 
   // --- 保存処理：create + (optional) icon upload ---
@@ -59,7 +61,10 @@ export function useTokenBlueprintCreate() {
         assigneeId: assignee,
         companyId,
         createdBy: memberId, // ★ currentMember.id をそのまま渡す
-        iconId: null, // ★ create 時点は基本 null（objectPath は後から付く）
+
+        // ★ create 時点は基本 null（objectPath は後から付く）
+        iconId: null,
+
         contentFiles: input.contentFiles ?? [],
 
         // ★ UI が File を持っている場合だけ渡す
@@ -68,19 +73,22 @@ export function useTokenBlueprintCreate() {
 
       // ログ（service 層に入る前に「File が乗っているか」を確認する）
       // eslint-disable-next-line no-console
-      console.log("[TokenBlueprintCreate] payload to createTokenBlueprintWithOptionalIcon:", {
-        name: payload.name,
-        symbol: payload.symbol,
-        brandId: payload.brandId,
-        assigneeId: payload.assigneeId,
-        createdBy: payload.createdBy,
-        companyId: payload.companyId,
-        contentFilesCount: (payload.contentFiles ?? []).length,
-        hasIconFile: Boolean(iconFile),
-        iconFile: iconFile
-          ? { name: iconFile.name, type: iconFile.type, size: iconFile.size }
-          : null,
-      });
+      console.log(
+        "[TokenBlueprintCreate] payload to createTokenBlueprintWithOptionalIcon:",
+        {
+          name: payload.name,
+          symbol: payload.symbol,
+          brandId: payload.brandId,
+          assigneeId: payload.assigneeId,
+          createdBy: payload.createdBy,
+          companyId: payload.companyId,
+          contentFilesCount: (payload.contentFiles ?? []).length,
+          hasIconFile: Boolean(iconFile),
+          iconFile: iconFile
+            ? { name: iconFile.name, type: iconFile.type, size: iconFile.size }
+            : null,
+        },
+      );
 
       // create (+ icon upload/attach if possible)
       const created = await createTokenBlueprintWithOptionalIcon(payload);

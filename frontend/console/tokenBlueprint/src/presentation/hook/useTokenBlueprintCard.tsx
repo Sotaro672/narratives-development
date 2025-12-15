@@ -59,8 +59,10 @@ export function useTokenBlueprintCard(params: {
   // ★ ローカルプレビュー（アップロード前に表示したい場合）
   const [localPreviewUrl, setLocalPreviewUrl] = React.useState<string>("");
 
-  // ★ 追加: 選択したアイコンファイル（service に渡すために保持）
-  const [selectedIconFile, setSelectedIconFile] = React.useState<File | null>(null);
+  // ★ 選択したアイコンファイル（service に渡すために保持）
+  const [selectedIconFile, setSelectedIconFile] = React.useState<File | null>(
+    null,
+  );
 
   // ⭐ 編集モード切り替え可能に変更
   const [isEditMode, setIsEditMode] = React.useState(
@@ -117,7 +119,9 @@ export function useTokenBlueprintCard(params: {
     setDescription(src.description ?? "");
 
     // ★ minted(boolean) を反映（未設定は false）
-    setMinted(typeof (src as any).minted === "boolean" ? (src as any).minted : false);
+    setMinted(
+      typeof (src as any).minted === "boolean" ? (src as any).minted : false,
+    );
 
     // ★ 詳細取得で状態が置き換わったタイミングでは「未アップロードの選択ファイル」は消して安全側に倒す
     setSelectedIconFile(null);
@@ -208,7 +212,7 @@ export function useTokenBlueprintCard(params: {
         return;
       }
 
-      // ★ 追加: File 本体を保持（service に渡すため）
+      // ★ File 本体を保持（service に渡すため）
       setSelectedIconFile(file);
 
       // ローカルプレビュー
@@ -299,7 +303,9 @@ export function useTokenBlueprintCard(params: {
       setDescription(src.description ?? "");
 
       // ★ minted(boolean) を元に戻す
-      setMinted(typeof (src as any).minted === "boolean" ? (src as any).minted : false);
+      setMinted(
+        typeof (src as any).minted === "boolean" ? (src as any).minted : false,
+      );
 
       // burnAt は今のところそのまま
 
@@ -319,11 +325,5 @@ export function useTokenBlueprintCard(params: {
     },
   };
 
-  /**
-   * ★ 追加: service 層に渡せるように selectedIconFile を返す
-   * 呼び出し側で:
-   *   const { vm, handlers, selectedIconFile } = useTokenBlueprintCard(...)
-   * として create/update service に File を渡してください。
-   */
   return { vm, handlers, selectedIconFile };
 }

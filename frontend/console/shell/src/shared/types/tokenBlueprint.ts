@@ -1,4 +1,4 @@
-// frontend/shell/src/shared/types/tokenBlueprint.ts  
+// frontend/shell/src/shared/types/tokenBlueprint.ts
 
 /**
  * ContentFileType
@@ -25,12 +25,16 @@ export interface ContentFile {
 }
 
 /**
- * TokenBlueprint の minted ステータス
- * backend/internal/domain/tokenBlueprint/entity.go の MintStatus に対応。
- *
- * - "notYet" | "minted"
+ * SignedIconUpload
+ * TokenBlueprint 作成レスポンスに embed される「署名付き PUT URL」情報（方針A）
  */
-export type MintStatus = "notYet" | "minted";
+export type SignedIconUpload = {
+  uploadUrl: string;
+  objectPath: string; // 例: "{tokenBlueprintId}/icon"
+  publicUrl: string; // 例: https://storage.googleapis.com/<bucket>/{tokenBlueprintId}/icon
+  expiresAt?: string;
+  contentType?: string; // PUT 時に一致必須
+};
 
 /**
  * TokenBlueprint
@@ -39,9 +43,14 @@ export type MintStatus = "notYet" | "minted";
  * - 日付は ISO8601 文字列として表現
  * - camelCase 命名に揃える
  * - contentFiles は添付ファイルなどの ID 配列
+ *
+ * ★変更:
+ * - minted は boolean（"notYet"/"minted" は廃止）
  */
 export interface TokenBlueprint {
+  /** Firestore docId / 作成前のドラフトでは空文字の場合がある */
   id: string;
+
   name: string;
   symbol: string; // /^[A-Z0-9]{1,10}$/ を想定
   brandId: string;
@@ -49,10 +58,17 @@ export interface TokenBlueprint {
   /** ブランド表示名（backend で解決された任意のラベル） */
   brandName?: string;
 
+  /** 説明（空でも許容する運用があり得る） */
   description: string;
 
   /** token_icons 等の ID（任意） */
   iconId?: string | null;
+
+  /** backend が解決して返す icon URL（任意） */
+  iconUrl?: string;
+
+  /** create レスポンスで返る署名付きURL情報（任意） */
+  iconUpload?: SignedIconUpload;
 
   /** 関連コンテンツファイルの ID 一覧（空文字禁止） */
   contentFiles: string[];
@@ -63,8 +79,8 @@ export interface TokenBlueprint {
   /** 担当者表示名（backend で解決されたフルネームなど、任意） */
   assigneeName?: string;
 
-  /** ミント状態（"notYet" | "minted"）。旧データでは未設定の場合もある想定。 */
-  minted?: MintStatus;
+  /** ミント済みか（未設定/旧データは false 扱いに寄せる） */
+  minted?: boolean;
 
   /** 作成情報 */
   createdAt: string; // ISO8601
@@ -88,11 +104,6 @@ export function isValidContentFileType(t: string): t is ContentFileType {
   return t === "image" || t === "video" || t === "pdf" || t === "document";
 }
 
-/** MintStatus の妥当性チェック */
-export function isValidMintStatus(s: string | undefined | null): s is MintStatus {
-  return s === "notYet" || s === "minted";
-}
-
 /** ContentFile の簡易バリデーション（backend の Validate と整合） */
 export function validateContentFile(file: ContentFile): string[] {
   const errors: string[] = [];
@@ -111,19 +122,25 @@ export function validateContentFile(file: ContentFile): string[] {
   return errors;
 }
 
-/** TokenBlueprint の簡易バリデーション（Go側 validate() と概ね対応） */
+/**
+ * TokenBlueprint の簡易バリデーション（Go側 validate() と概ね対応）
+ *
+ * ★注意:
+ * - 新規作成前は id が空文字でも動くため、ここでは id の必須チェックを外しています。
+ * - description は空文字でも運用上許容し得るため、必須チェックを外しています。
+ */
 export function validateTokenBlueprint(tb: TokenBlueprint): string[] {
   const errors: string[] = [];
 
-  if (!tb.id?.trim()) errors.push("id is required");
   if (!tb.name?.trim()) errors.push("name is required");
+
   if (!tb.symbol?.trim()) {
     errors.push("symbol is required");
   } else if (!/^[A-Z0-9]{1,10}$/.test(tb.symbol)) {
     errors.push("symbol must match ^[A-Z0-9]{1,10}$");
   }
+
   if (!tb.brandId?.trim()) errors.push("brandId is required");
-  if (!tb.description?.trim()) errors.push("description is required");
   if (!tb.assigneeId?.trim()) errors.push("assigneeId is required");
   if (!tb.createdBy?.trim()) errors.push("createdBy is required");
   if (!tb.createdAt?.trim()) errors.push("createdAt is required");
@@ -144,9 +161,17 @@ export function validateTokenBlueprint(tb: TokenBlueprint): string[] {
     }
   }
 
-  // minted: あれば "notYet" | "minted" のどちらか
-  if (tb.minted !== undefined && !isValidMintStatus(tb.minted)) {
-    errors.push("minted must be 'notYet' or 'minted' if set");
+  // minted: あれば boolean
+  if (tb.minted !== undefined && typeof tb.minted !== "boolean") {
+    errors.push("minted must be boolean if set");
+  }
+
+  // iconUpload: あれば最低限 uploadUrl/objectPath/publicUrl
+  if (tb.iconUpload !== undefined) {
+    const u = tb.iconUpload as any;
+    if (!String(u?.uploadUrl ?? "").trim()) errors.push("iconUpload.uploadUrl is required");
+    if (!String(u?.objectPath ?? "").trim()) errors.push("iconUpload.objectPath is required");
+    if (!String(u?.publicUrl ?? "").trim()) errors.push("iconUpload.publicUrl is required");
   }
 
   return errors;
@@ -172,19 +197,16 @@ export function normalizeContentFiles(ids: string[]): string[] {
  * - 文字列トリム
  * - contentFiles 正規化
  * - iconId の空文字 → null
- * - minted が未指定の場合は "notYet" をデフォルトとする
+ * - minted が未指定の場合は false をデフォルトとする
  */
 export function createTokenBlueprint(
   input: Omit<TokenBlueprint, "contentFiles"> & {
     contentFiles?: string[];
   },
 ): TokenBlueprint {
-  const iconId =
-    input.iconId && input.iconId.trim()
-      ? input.iconId.trim()
-      : null;
+  const iconId = input.iconId && input.iconId.trim() ? input.iconId.trim() : null;
 
-  const minted: MintStatus = input.minted ?? "notYet";
+  const minted: boolean = typeof input.minted === "boolean" ? input.minted : false;
 
   return {
     ...input,

@@ -19,12 +19,13 @@ export default function TokenBlueprintCreate() {
     onEditAssignee,
     onClickAssignee,
     onBack,
-    onSave, // (input: Partial<TokenBlueprint>) => Promise<void>
+    onSave, // (input: Partial<TokenBlueprint> & { iconFile?: File | null }) => Promise<void>
     initialEditMode, // ★ 追加
   } = useTokenBlueprintCreate();
 
   // TokenBlueprintCard 用の ViewModel / Handlers を構築
-  const { vm, handlers } = useTokenBlueprintCard({
+  // ★ selectedIconFile を受け取り、onSave に渡す
+  const { vm, handlers, selectedIconFile } = useTokenBlueprintCard({
     initialTokenBlueprint,
     initialBurnAt: "",
     initialIconUrl: undefined,
@@ -38,14 +39,33 @@ export default function TokenBlueprintCreate() {
       onBack={onBack}
       onSave={() => {
         // ★ initialTokenBlueprint は上書きしない
-        const input: Partial<TokenBlueprint> = {
+        // ★ iconFile を一緒に渡す（ここが抜けていたため service に届かなかった）
+        const input: Partial<TokenBlueprint> & { iconFile?: File | null } = {
           name: vm.name,
           symbol: vm.symbol,
           brandId: vm.brandId,
           description: vm.description,
           iconId: null,
           contentFiles: [],
+
+          // ★ 追加: hook が保持している File を渡す
+          iconFile: selectedIconFile ?? null,
         };
+
+        // eslint-disable-next-line no-console
+        console.log("[TokenBlueprintCreate.page] onSave input:", {
+          name: input.name,
+          symbol: input.symbol,
+          brandId: input.brandId,
+          hasIconFile: Boolean(input.iconFile),
+          iconFile: input.iconFile
+            ? {
+                name: input.iconFile.name,
+                type: input.iconFile.type,
+                size: input.iconFile.size,
+              }
+            : null,
+        });
 
         void onSave(input);
       }}

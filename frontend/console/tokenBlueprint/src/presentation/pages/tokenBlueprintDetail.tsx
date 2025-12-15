@@ -33,6 +33,11 @@ export default function TokenBlueprintDetail() {
     cardHandlers,
   } = handlers;
 
+  // ★ 将来/実装差分吸収:
+  // useTokenBlueprintDetail が selectedIconFile を vm に載せる実装になっていても壊れないようにする
+  const selectedIconFile: File | null =
+    ((vm as any)?.selectedIconFile as File | null) ?? null;
+
   // データが無い場合のフォールバック
   if (!blueprint) {
     return (
@@ -53,7 +58,29 @@ export default function TokenBlueprintDetail() {
       onEdit={!isEditMode ? onEdit : undefined}
       // ★ 編集モード時は「キャンセル／保存／削除」を表示
       onCancel={isEditMode ? onCancel : undefined}
-      onSave={isEditMode ? onSave : undefined}
+      onSave={
+        isEditMode
+          ? () => {
+              // eslint-disable-next-line no-console
+              console.log("[TokenBlueprintDetail] onSave clicked", {
+                id: (blueprint as any)?.id,
+                hasIconFile: Boolean(selectedIconFile),
+                iconFile: selectedIconFile
+                  ? {
+                      name: selectedIconFile.name,
+                      type: selectedIconFile.type,
+                      size: selectedIconFile.size,
+                    }
+                  : null,
+              });
+
+              // ★ hook 側が引数を取る実装でも / 取らない実装でも動くように any 呼び出し
+              // - 取る場合: { iconFile } が渡る
+              // - 取らない場合: 引数は無視される
+              void (onSave as any)({ iconFile: selectedIconFile });
+            }
+          : undefined
+      }
       onDelete={isEditMode ? onDelete : undefined}
     >
       {/* 左カラム：トークン設計カード＋コンテンツビューア */}
