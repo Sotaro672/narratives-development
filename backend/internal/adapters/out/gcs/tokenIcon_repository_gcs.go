@@ -3,14 +3,18 @@ package gcs
 
 import (
 	"context"
+	"encoding/base64"
 	"errors"
 	"fmt"
 	"io"
+	"os"
+	"path/filepath"
 	"sort"
 	"strings"
 	"time"
 
 	"cloud.google.com/go/storage"
+	"google.golang.org/api/iamcredentials/v1"
 	"google.golang.org/api/iterator"
 
 	gcscommon "narratives/internal/adapters/out/gcs/common"
@@ -24,20 +28,49 @@ import (
 type TokenIconRepositoryGCS struct {
 	Client *storage.Client
 	Bucket string
+
+	// ★ Signed URL 発行用（フロントから直接 PUT する）
+	// 例: narratives-backend-sa@xxxx.iam.gserviceaccount.com
+	SignerEmail string
+
+	// ★ Signed URL の有効期限（未指定なら 15分）
+	SignedURLTTL time.Duration
 }
 
 // Default bucket for token icons (public).
 // env TOKEN_ICON_BUCKET が空のときのフォールバック。
 const defaultTokenIconBucket = "narratives-development_token_icon"
 
+// Signed URL TTL のデフォルト
+const defaultSignedURLTTL = 15 * time.Minute
+
 func NewTokenIconRepositoryGCS(client *storage.Client, bucket string) *TokenIconRepositoryGCS {
 	b := strings.TrimSpace(bucket)
 	if b == "" {
 		b = defaultTokenIconBucket
 	}
+
+	// ★ 署名者（サービスアカウント）を env から拾う（無ければ空のまま。IssueSignedUploadURL でエラーにする）
+	signer := strings.TrimSpace(os.Getenv("TOKEN_ICON_SIGNER_EMAIL"))
+	if signer == "" {
+		signer = strings.TrimSpace(os.Getenv("GCS_SIGNER_EMAIL"))
+	}
+	if signer == "" {
+		signer = strings.TrimSpace(os.Getenv("GOOGLE_SERVICE_ACCOUNT_EMAIL"))
+	}
+
+	ttl := defaultSignedURLTTL
+	if v := strings.TrimSpace(os.Getenv("TOKEN_ICON_SIGNED_URL_TTL")); v != "" {
+		if d, err := time.ParseDuration(v); err == nil && d > 0 {
+			ttl = d
+		}
+	}
+
 	return &TokenIconRepositoryGCS{
-		Client: client,
-		Bucket: b,
+		Client:       client,
+		Bucket:       b,
+		SignerEmail:  signer,
+		SignedURLTTL: ttl,
 	}
 }
 
@@ -47,6 +80,96 @@ func (r *TokenIconRepositoryGCS) bucket() string {
 		return defaultTokenIconBucket
 	}
 	return b
+}
+
+func (r *TokenIconRepositoryGCS) signedURLTTL() time.Duration {
+	if r == nil {
+		return defaultSignedURLTTL
+	}
+	if r.SignedURLTTL <= 0 {
+		return defaultSignedURLTTL
+	}
+	return r.SignedURLTTL
+}
+
+// ============================================================
+// ★ Signed URL (PUT) 発行
+//   - フロントが直接 GCS に PUT するための URL を返す
+//   - docId 配下に object を作る（例: "{docId}/icon.png"）
+//   - ".keep" も必要なら purpose="keep" で発行できる
+// ============================================================
+
+func (r *TokenIconRepositoryGCS) IssueSignedUploadURL(
+	ctx context.Context,
+	in tidom.SignedUploadURLInput,
+) (*tidom.SignedUploadURLResult, error) {
+	if r == nil || r.Client == nil {
+		return nil, errors.New("TokenIconRepositoryGCS: nil storage client")
+	}
+
+	docID := strings.TrimSpace(in.DocID)
+	if docID == "" {
+		return nil, fmt.Errorf("IssueSignedUploadURL: docId is empty")
+	}
+
+	signer := strings.TrimSpace(r.SignerEmail)
+	if signer == "" {
+		return nil, fmt.Errorf("IssueSignedUploadURL: signerEmail is empty (set TOKEN_ICON_SIGNER_EMAIL or GCS_SIGNER_EMAIL)")
+	}
+
+	bucket := r.bucket()
+
+	// objectPath 決定
+	objectPath := buildObjectPathForTokenIcon(docID, strings.TrimSpace(in.FileName), strings.TrimSpace(in.ContentType), strings.TrimSpace(in.Purpose))
+	if objectPath == "" {
+		return nil, fmt.Errorf("IssueSignedUploadURL: failed to build objectPath")
+	}
+
+	// Content-Type（V4署名に含める。PUT時は同じ Content-Type を必ず付ける）
+	ct := strings.TrimSpace(in.ContentType)
+	if ct == "" {
+		ct = "application/octet-stream"
+	}
+
+	// IAM Credentials API で SignBlob（鍵ファイル不要）
+	signBytes := func(b []byte) ([]byte, error) {
+		svc, err := iamcredentials.NewService(ctx)
+		if err != nil {
+			return nil, err
+		}
+		name := fmt.Sprintf("projects/-/serviceAccounts/%s", signer)
+		req := &iamcredentials.SignBlobRequest{
+			Payload: base64.StdEncoding.EncodeToString(b),
+		}
+		resp, err := svc.Projects.ServiceAccounts.SignBlob(name, req).Do()
+		if err != nil {
+			return nil, err
+		}
+		return base64.StdEncoding.DecodeString(resp.SignedBlob)
+	}
+
+	exp := time.Now().UTC().Add(r.signedURLTTL())
+	uploadURL, err := storage.SignedURL(bucket, objectPath, &storage.SignedURLOptions{
+		Scheme:         storage.SigningSchemeV4,
+		Method:         "PUT",
+		Expires:        exp,
+		GoogleAccessID: signer,
+		SignBytes:      signBytes,
+
+		// V4 canonical request に含める
+		ContentType: ct,
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	publicURL := gcscommon.GCSPublicURL(bucket, objectPath, defaultTokenIconBucket)
+	return &tidom.SignedUploadURLResult{
+		UploadURL:  uploadURL,
+		ObjectPath: objectPath,
+		PublicURL:  publicURL,
+		ExpiresAt:  &exp,
+	}, nil
 }
 
 // ============================================================
@@ -104,6 +227,11 @@ func (r *TokenIconRepositoryGCS) List(
 		}
 		if err != nil {
 			return tidom.PageResult{}, err
+		}
+
+		// ★ .keep は一覧対象から除外
+		if isKeepObject(attrs.Name) {
+			continue
 		}
 
 		ti := buildTokenIconFromAttrs(bucket, attrs)
@@ -174,6 +302,11 @@ func (r *TokenIconRepositoryGCS) Count(ctx context.Context, filter tidom.Filter)
 			return 0, err
 		}
 
+		// ★ .keep はカウント対象から除外
+		if isKeepObject(attrs.Name) {
+			continue
+		}
+
 		ti := buildTokenIconFromAttrs(bucket, attrs)
 		if matchTokenIconFilter(ti, filter) {
 			total++
@@ -184,7 +317,7 @@ func (r *TokenIconRepositoryGCS) Count(ctx context.Context, filter tidom.Filter)
 }
 
 // ============================================================
-// Upload
+// Upload (互換: バックエンド直 upload)
 // ============================================================
 
 // UploadIcon uploads icon file to GCS and returns (publicURL, size).
@@ -424,6 +557,11 @@ func (r *TokenIconRepositoryGCS) GetTokenIconStats(ctx context.Context) (tidom.T
 			return tidom.TokenIconStats{}, err
 		}
 
+		// ★ .keep は統計対象から除外
+		if isKeepObject(attrs.Name) {
+			continue
+		}
+
 		ti := buildTokenIconFromAttrs(bucket, attrs)
 		if ti.Size <= 0 {
 			continue
@@ -635,4 +773,58 @@ func lastSegment(p string) string {
 		return p[i+1:]
 	}
 	return p
+}
+
+func isKeepObject(objectPath string) bool {
+	p := strings.TrimSpace(objectPath)
+	if p == "" {
+		return false
+	}
+	// "xxx/.keep" も ".keep" 単体も除外
+	return strings.HasSuffix(p, "/.keep") || lastSegment(p) == ".keep"
+}
+
+func buildObjectPathForTokenIcon(docID, fileName, contentType, purpose string) string {
+	docID = strings.TrimLeft(strings.TrimSpace(docID), "/")
+	if docID == "" {
+		return ""
+	}
+
+	// keep を作りたい場合（「フォルダ作成」用）
+	if strings.EqualFold(strings.TrimSpace(purpose), "keep") {
+		return docID + "/.keep"
+	}
+
+	fileName = sanitizeFileName(fileName)
+
+	// ファイル名が無い場合は icon + 拡張子推定
+	if fileName == "" {
+		ext := guessExtFromContentType(contentType)
+		if ext == "" {
+			ext = ".bin"
+		}
+		fileName = "icon" + ext
+	}
+
+	// docID 配下に配置
+	// 例: "{docId}/icon.png" / "{docId}/myfile.png"
+	return docID + "/" + filepath.Base(fileName)
+}
+
+func guessExtFromContentType(ct string) string {
+	ct = strings.ToLower(strings.TrimSpace(ct))
+	switch ct {
+	case "image/png":
+		return ".png"
+	case "image/jpeg", "image/jpg":
+		return ".jpg"
+	case "image/webp":
+		return ".webp"
+	case "image/gif":
+		return ".gif"
+	case "image/svg+xml":
+		return ".svg"
+	default:
+		return ""
+	}
 }

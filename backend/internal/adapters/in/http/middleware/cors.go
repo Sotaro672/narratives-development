@@ -1,9 +1,11 @@
 package middleware
 
-import "net/http"
+import (
+	"net/http"
+	"strings"
+)
 
 func CORS(next http.Handler) http.Handler {
-
 	// ★ 許可する Origin を動的に管理する
 	allowedOrigins := map[string]bool{
 		"https://narratives.jp":                        true, // 本番
@@ -11,9 +13,20 @@ func CORS(next http.Handler) http.Handler {
 		"https://narratives-development-26c2d.web.app": true, // 検品アプリ dev
 	}
 
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	// ★ 許可するヘッダ（preflight の Access-Control-Request-Headers と突合される）
+	allowedHeaders := strings.Join([]string{
+		"Authorization",
+		"Content-Type",
+		"Accept",
+		"X-Actor-Id",
+		"X-Icon-Content-Type",
+		"X-Icon-File-Name",
+	}, ", ")
 
-		origin := r.Header.Get("Origin")
+	allowedMethods := "GET,POST,PUT,PATCH,DELETE,OPTIONS"
+
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		origin := strings.TrimSpace(r.Header.Get("Origin"))
 		_, ok := allowedOrigins[origin]
 
 		if ok {
@@ -24,10 +37,18 @@ func CORS(next http.Handler) http.Handler {
 			w.Header().Set("Access-Control-Allow-Credentials", "true")
 
 			// ★ キャッシュしつつヘッダの揺れを防ぐ
-			w.Header().Set("Vary", "Origin, Access-Control-Request-Method, Access-Control-Request-Headers")
+			w.Header().Set(
+				"Vary",
+				"Origin, Access-Control-Request-Method, Access-Control-Request-Headers",
+			)
 
-			w.Header().Set("Access-Control-Allow-Methods", "GET,POST,PUT,PATCH,DELETE,OPTIONS")
-			w.Header().Set("Access-Control-Allow-Headers", "Authorization, Content-Type, Accept")
+			w.Header().Set("Access-Control-Allow-Methods", allowedMethods)
+
+			// ★ 重要: フロントが送るカスタムヘッダを許可する
+			w.Header().Set("Access-Control-Allow-Headers", allowedHeaders)
+
+			// ★ あると便利: preflight の結果をキャッシュ（秒）
+			w.Header().Set("Access-Control-Max-Age", "600")
 		}
 
 		// ★ プリフライトならここで終了

@@ -59,6 +59,9 @@ export function useTokenBlueprintCard(params: {
   // ★ ローカルプレビュー（アップロード前に表示したい場合）
   const [localPreviewUrl, setLocalPreviewUrl] = React.useState<string>("");
 
+  // ★ 追加: 選択したアイコンファイル（service に渡すために保持）
+  const [selectedIconFile, setSelectedIconFile] = React.useState<File | null>(null);
+
   // ⭐ 編集モード切り替え可能に変更
   const [isEditMode, setIsEditMode] = React.useState(
     params.initialEditMode ?? false,
@@ -116,7 +119,19 @@ export function useTokenBlueprintCard(params: {
     // ★ minted(boolean) を反映（未設定は false）
     setMinted(typeof (src as any).minted === "boolean" ? (src as any).minted : false);
 
+    // ★ 詳細取得で状態が置き換わったタイミングでは「未アップロードの選択ファイル」は消して安全側に倒す
+    setSelectedIconFile(null);
+    if (localPreviewUrl) {
+      try {
+        URL.revokeObjectURL(localPreviewUrl);
+      } catch {
+        // ignore
+      }
+      setLocalPreviewUrl("");
+    }
+
     // burnAt は今のところ別初期値を優先
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [params.initialTokenBlueprint, isEditMode]);
 
   // ★ 初期 iconUrl が更新された場合（詳細取得後など）
@@ -153,7 +168,13 @@ export function useTokenBlueprintCard(params: {
   // ★ ローカルプレビューのメモリ解放（unmount）
   React.useEffect(() => {
     return () => {
-      if (localPreviewUrl) URL.revokeObjectURL(localPreviewUrl);
+      if (localPreviewUrl) {
+        try {
+          URL.revokeObjectURL(localPreviewUrl);
+        } catch {
+          // ignore
+        }
+      }
     };
   }, [localPreviewUrl]);
 
@@ -187,6 +208,9 @@ export function useTokenBlueprintCard(params: {
         return;
       }
 
+      // ★ 追加: File 本体を保持（service に渡すため）
+      setSelectedIconFile(file);
+
       // ローカルプレビュー
       try {
         if (localPreviewUrl) URL.revokeObjectURL(localPreviewUrl);
@@ -195,10 +219,6 @@ export function useTokenBlueprintCard(params: {
         // ignore
       }
 
-      // ★ ここで upload を呼ぶ想定（現状は最短のモック）
-      // params.onUploadIcon?.(file, id);
-      // もしくは service を呼ぶならここで呼ぶ
-      // いったん動作確認用ログ
       // eslint-disable-next-line no-console
       console.log("[useTokenBlueprintCard] icon selected", {
         tokenBlueprintId: id,
@@ -207,6 +227,7 @@ export function useTokenBlueprintCard(params: {
         type: file.type,
         minted,
         isEditMode,
+        storedToState: true,
       });
     },
     [canEditIcon, id, isEditMode, localPreviewUrl, minted],
@@ -284,12 +305,25 @@ export function useTokenBlueprintCard(params: {
 
       // remoteIconUrl は initialIconUrl を優先
       setRemoteIconUrl(params.initialIconUrl ?? "");
+
+      // ★ 未アップロードの選択ファイル/プレビューはリセット
+      setSelectedIconFile(null);
       if (localPreviewUrl) {
-        URL.revokeObjectURL(localPreviewUrl);
+        try {
+          URL.revokeObjectURL(localPreviewUrl);
+        } catch {
+          // ignore
+        }
         setLocalPreviewUrl("");
       }
     },
   };
 
-  return { vm, handlers };
+  /**
+   * ★ 追加: service 層に渡せるように selectedIconFile を返す
+   * 呼び出し側で:
+   *   const { vm, handlers, selectedIconFile } = useTokenBlueprintCard(...)
+   * として create/update service に File を渡してください。
+   */
+  return { vm, handlers, selectedIconFile };
 }

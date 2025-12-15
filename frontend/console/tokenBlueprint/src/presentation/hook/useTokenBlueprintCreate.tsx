@@ -3,11 +3,14 @@
 import * as React from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "../../../../shell/src/auth/presentation/hook/useCurrentMember";
+
 import type { TokenBlueprint } from "../../domain/entity/tokenBlueprint";
+
+// ★ create + (optional) icon upload を application service に集約
 import {
-  createTokenBlueprint,
-  type CreateTokenBlueprintPayload,
-} from "../../infrastructure/repository/tokenBlueprintRepositoryHTTP";
+  createTokenBlueprintWithOptionalIcon,
+  type CreateTokenBlueprintInput,
+} from "../../application/tokenBlueprintCreateService";
 
 /**
  * TokenBlueprintCreate ページ用ロジック
@@ -24,7 +27,6 @@ export function useTokenBlueprintCreate() {
   const [assignee, setAssignee] = React.useState(memberId);
 
   // 作成者/更新者 = currentMember
-  const createdBy = memberId;
   const createdAt = new Date().toISOString();
 
   // --- 戻る処理：tokenBlueprint Management へ絶対パス ---
@@ -32,9 +34,13 @@ export function useTokenBlueprintCreate() {
     navigate("/tokenBlueprint", { replace: true });
   }, [navigate]);
 
-  // --- 保存処理：実 API 呼び出しに変更 ---
+  // ★ onSave が受け取る input は UI 実装に依存するため、File を運べるよう拡張して受ける
+  // - TokenBlueprintCard 側で `iconFile` を載せて onSave に渡せるようにしておく（まだなら後で hook 側を更新）
+  type SaveInput = Partial<TokenBlueprint> & { iconFile?: File | null };
+
+  // --- 保存処理：create + (optional) icon upload ---
   const onSave = React.useCallback(
-    async (input: Partial<TokenBlueprint>) => {
+    async (input: SaveInput) => {
       if (!companyId) {
         throw new Error("companyId が取得できません（ログイン状態を確認してください）");
       }
@@ -42,8 +48,10 @@ export function useTokenBlueprintCreate() {
         throw new Error("memberId が取得できません（ログイン状態を確認してください）");
       }
 
+      const iconFile = input.iconFile ?? null;
+
       // --- 必須項目不足による 400 BadRequest を防止 ---
-      const payload: CreateTokenBlueprintPayload = {
+      const payload: CreateTokenBlueprintInput = {
         name: input.name?.trim() ?? "",
         symbol: input.symbol?.trim() ?? "",
         brandId: input.brandId?.trim() ?? "",
@@ -51,17 +59,39 @@ export function useTokenBlueprintCreate() {
         assigneeId: assignee,
         companyId,
         createdBy: memberId, // ★ currentMember.id をそのまま渡す
-        iconId: input.iconId ?? null,
+        iconId: null, // ★ create 時点は基本 null（objectPath は後から付く）
         contentFiles: input.contentFiles ?? [],
+
+        // ★ UI が File を持っている場合だけ渡す
+        iconFile,
       };
 
-      // ★ tokenBlueprintCreateService に渡す payload を確認するログ
-      console.log(
-        "[TokenBlueprintCreate] payload to tokenBlueprintCreateService:",
-        payload,
-      );
+      // ログ（service 層に入る前に「File が乗っているか」を確認する）
+      // eslint-disable-next-line no-console
+      console.log("[TokenBlueprintCreate] payload to createTokenBlueprintWithOptionalIcon:", {
+        name: payload.name,
+        symbol: payload.symbol,
+        brandId: payload.brandId,
+        assigneeId: payload.assigneeId,
+        createdBy: payload.createdBy,
+        companyId: payload.companyId,
+        contentFilesCount: (payload.contentFiles ?? []).length,
+        hasIconFile: Boolean(iconFile),
+        iconFile: iconFile
+          ? { name: iconFile.name, type: iconFile.type, size: iconFile.size }
+          : null,
+      });
 
-      await createTokenBlueprint(payload);
+      // create (+ icon upload/attach if possible)
+      const created = await createTokenBlueprintWithOptionalIcon(payload);
+
+      // eslint-disable-next-line no-console
+      console.log("[TokenBlueprintCreate] create result:", {
+        id: (created as any)?.id,
+        iconId: (created as any)?.iconId,
+        iconUrl: (created as any)?.iconUrl,
+        iconUpload: (created as any)?.iconUpload,
+      });
 
       // 作成後に一覧へ戻る
       navigate("/tokenBlueprint", { replace: true });

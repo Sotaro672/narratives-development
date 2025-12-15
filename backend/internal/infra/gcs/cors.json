@@ -1,0 +1,11 @@
+[
+  {
+    "origin": [
+      "https://narratives.jp",
+      "https://narratives-console-dev.web.app"
+    ],
+    "method": ["GET", "HEAD", "PUT", "OPTIONS"],
+    "responseHeader": ["Content-Type", "ETag"],
+    "maxAgeSeconds": 3600
+  }
+]

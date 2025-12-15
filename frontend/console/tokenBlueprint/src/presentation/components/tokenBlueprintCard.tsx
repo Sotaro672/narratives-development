@@ -1,6 +1,6 @@
 // frontend/console/tokenBlueprint/src/presentation/components/tokenBlueprintCard.tsx
 import * as React from "react";
-import { Link2, Upload, Eye } from "lucide-react";
+import { Link2, Upload, Eye, X } from "lucide-react";
 
 import {
   Card,
@@ -27,8 +27,13 @@ export type TokenBlueprintCardViewModel = {
   brandName: string;
   description: string;
   iconUrl?: string;
+
   // ★ minted:true でもアイコン編集できるようにするため、UIで判定できるよう追加
   minted: boolean;
+
+  // ★ NEW: UI で選択されたアイコン File（サービス層へ渡すために保持）
+  // - hook 側でセットし、親（Create/Edit page）→ service へ渡す想定
+  iconFile?: File | null;
 
   // UI state
   isEditMode: boolean;
@@ -47,6 +52,9 @@ export type TokenBlueprintCardHandlers = {
   onRequestPickIconFile?: () => void;
   onIconInputChange?: (e: React.ChangeEvent<HTMLInputElement>) => void;
 
+  // ★ NEW: ローカルで選択した iconFile をクリアしたい場合（任意）
+  onClearLocalIconFile?: () => void;
+
   onPreview?: () => void;
   onToggleEditMode?: () => void;
 
@@ -64,6 +72,8 @@ export default function TokenBlueprintCard({
 }) {
   // ★ minted:true でもアイコン編集可能にする（編集モード OR minted）
   const canEditIcon = Boolean(vm.isEditMode || vm.minted);
+
+  const selectedIconFile = vm.iconFile ?? null;
 
   return (
     <Card className="token-blueprint-card">
@@ -97,7 +107,9 @@ export default function TokenBlueprintCard({
                 <img
                   src={vm.iconUrl}
                   alt="Token Icon"
-                  onClick={() => canEditIcon && handlers.onRequestPickIconFile?.()}
+                  onClick={() =>
+                    canEditIcon && handlers.onRequestPickIconFile?.()
+                  }
                   style={{
                     cursor: canEditIcon ? "pointer" : "default",
                   }}
@@ -139,6 +151,46 @@ export default function TokenBlueprintCard({
                 <Upload className="token-blueprint-card__upload-icon" />
                 アップロード
               </button>
+            )}
+
+            {/* ★ NEW: 選択中のファイル表示（service 層へ渡せているかの確認用） */}
+            {selectedIconFile && (
+              <div
+                className="token-blueprint-card__icon-selected"
+                style={{
+                  marginTop: 8,
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 8,
+                  fontSize: 12,
+                  opacity: 0.85,
+                }}
+              >
+                <span>
+                  選択中: {selectedIconFile.name}（
+                  {Math.round(selectedIconFile.size / 1024)}KB）
+                </span>
+
+                {/* 任意：選択を取り消したい場合 */}
+                {canEditIcon && handlers.onClearLocalIconFile && (
+                  <button
+                    type="button"
+                    onClick={() => handlers.onClearLocalIconFile?.()}
+                    aria-label="選択したアイコンを取り消す"
+                    style={{
+                      display: "inline-flex",
+                      alignItems: "center",
+                      justifyContent: "center",
+                      border: "none",
+                      background: "transparent",
+                      padding: 0,
+                      cursor: "pointer",
+                    }}
+                  >
+                    <X size={16} />
+                  </button>
+                )}
+              </div>
             )}
           </div>
 

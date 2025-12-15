@@ -3,11 +3,16 @@ package usecase
 
 import (
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"io"
+	"os"
 	"strings"
 	"time"
+
+	"cloud.google.com/go/storage"
+	"google.golang.org/api/iamcredentials/v1"
 
 	memdom "narratives/internal/domain/member"
 	tbdom "narratives/internal/domain/tokenBlueprint"
@@ -15,10 +20,61 @@ import (
 	tidom "narratives/internal/domain/tokenIcon"
 )
 
+// ============================================================
+// Config
+// ============================================================
+
+// ★ token icon 用の GCS バケット名（デフォルト）
+// ※ 環境変数 TOKEN_ICON_BUCKET があればそれを優先
+const defaultTokenIconBucket = "narratives-development_token_icon"
+
+// ★ 署名に使うサービスアカウントメール（必須）
+// 例: narratives-backend-sa@narratives-development-26c2d.iam.gserviceaccount.com
+// ※ Cloud Run では自動で入らないことが多いので env で明示推奨
+const envTokenIconSignerEmail = "TOKEN_ICON_SIGNER_EMAIL"
+
+// ★ 署名付きURLの有効期限（PUT）
+const tokenIconSignedURLTTL = 15 * time.Minute
+
+func tokenIconBucketName() string {
+	if v := strings.TrimSpace(os.Getenv("TOKEN_ICON_BUCKET")); v != "" {
+		return v
+	}
+	return defaultTokenIconBucket
+}
+
+// tokenIconSignerEmail returns signer service account email.
+func tokenIconSignerEmail() string {
+	if v := strings.TrimSpace(os.Getenv(envTokenIconSignerEmail)); v != "" {
+		return v
+	}
+	// 互換用の別名も見ておく（任意）
+	if v := strings.TrimSpace(os.Getenv("GCS_SIGNER_EMAIL")); v != "" {
+		return v
+	}
+	return ""
+}
+
+// gcsObjectPublicURL returns public HTTPS URL for an object.
+func gcsObjectPublicURL(bucket, object string) string {
+	bucket = strings.TrimSpace(bucket)
+	object = strings.TrimLeft(strings.TrimSpace(object), "/")
+	return fmt.Sprintf("https://storage.googleapis.com/%s/%s", bucket, object)
+}
+
+// tokenIconObjectPath is a stable object path under "{tokenBlueprintId}/".
+// ★ 画像を後から差し替えても URL を固定化するため、ファイル名は常に "icon" に寄せる
+func tokenIconObjectPath(tokenBlueprintID string) string {
+	id := strings.Trim(strings.TrimSpace(tokenBlueprintID), "/")
+	return id + "/icon"
+}
+
+// ============================================================
+// Arweave / Metaplex metadata
+// ============================================================
+
 // ArweaveUploader は メタデータ JSON を Arweave にアップロードし、URI を返す責務を持つ。
 type ArweaveUploader interface {
-	// data: JSON バイト列
-	// 戻り値: Arweave 上の URI (例: https://arweave.net/xxxx)
 	UploadMetadata(ctx context.Context, data []byte) (string, error)
 }
 
@@ -26,12 +82,16 @@ type ArweaveUploader interface {
 type TokenMetadataBuilder struct{}
 
 // NewTokenMetadataBuilder はビルダーのコンストラクタです。
-func NewTokenMetadataBuilder() *TokenMetadataBuilder {
-	return &TokenMetadataBuilder{}
+func NewTokenMetadataBuilder() *TokenMetadataBuilder { return &TokenMetadataBuilder{} }
+
+// BuildFromBlueprint は TokenBlueprint から Arweave 用メタデータ JSON を生成します（互換用）。
+func (b *TokenMetadataBuilder) BuildFromBlueprint(pb tbdom.TokenBlueprint) ([]byte, error) {
+	return b.BuildFromBlueprintWithImage(pb, "")
 }
 
-// BuildFromBlueprint は TokenBlueprint から Arweave 用メタデータ JSON を生成します。
-func (b *TokenMetadataBuilder) BuildFromBlueprint(pb tbdom.TokenBlueprint) ([]byte, error) {
+// BuildFromBlueprintWithImage は TokenBlueprint から Arweave 用メタデータ JSON を生成します。
+// ★ imageURL が非空なら Metaplex 形式の "image" に格納します
+func (b *TokenMetadataBuilder) BuildFromBlueprintWithImage(pb tbdom.TokenBlueprint, imageURL string) ([]byte, error) {
 	name := strings.TrimSpace(pb.Name)
 	symbol := strings.TrimSpace(pb.Symbol)
 
@@ -44,18 +104,20 @@ func (b *TokenMetadataBuilder) BuildFromBlueprint(pb tbdom.TokenBlueprint) ([]by
 		"symbol": symbol,
 	}
 
-	// description フィールドが存在する場合だけ追加
 	if desc := strings.TrimSpace(pb.Description); desc != "" {
 		metadata["description"] = desc
 	}
 
-	// アイコンや画像 URL などを追加したくなったらここに追記するイメージ:
-	// if pb.IconURL != "" {
-	//     metadata["image"] = pb.IconURL
-	// }
+	if u := strings.TrimSpace(imageURL); u != "" {
+		metadata["image"] = u
+	}
 
 	return json.Marshal(metadata)
 }
+
+// ============================================================
+// Usecase
+// ============================================================
 
 // TokenBlueprintUsecase coordinates TokenBlueprint, TokenContents, and TokenIcon domains.
 type TokenBlueprintUsecase struct {
@@ -65,10 +127,7 @@ type TokenBlueprintUsecase struct {
 
 	memberSvc *memdom.Service
 
-	// ★ Arweave 連携用
-	arweave ArweaveUploader
-
-	// ★ TokenBlueprint → NFT メタデータ JSON 生成用
+	arweave         ArweaveUploader
 	metadataBuilder *TokenMetadataBuilder
 }
 
@@ -80,7 +139,6 @@ func NewTokenBlueprintUsecase(
 	arweave ArweaveUploader,
 	metadataBuilder *TokenMetadataBuilder,
 ) *TokenBlueprintUsecase {
-
 	return &TokenBlueprintUsecase{
 		tbRepo:          tbRepo,
 		tcRepo:          tcRepo,
@@ -91,8 +149,7 @@ func NewTokenBlueprintUsecase(
 	}
 }
 
-// Upload DTOs
-
+// Upload DTOs（contents は従来通り）
 type IconUpload struct {
 	FileName    string
 	ContentType string
@@ -107,46 +164,140 @@ type ContentUpload struct {
 	Reader      io.Reader
 }
 
+// ============================================================
+// Signed URL (Front PUT -> GCS)
+// ============================================================
+
+// TokenIconUploadURL is returned to front for direct PUT.
+type TokenIconUploadURL struct {
+	UploadURL  string     `json:"uploadUrl"`
+	PublicURL  string     `json:"publicUrl"`
+	ObjectPath string     `json:"objectPath"`
+	ExpiresAt  *time.Time `json:"expiresAt,omitempty"`
+}
+
+// IssueTokenIconUploadURL issues V4 signed PUT URL for "{tokenBlueprintId}/icon".
+//
+// 必要条件:
+// - env TOKEN_ICON_SIGNER_EMAIL に署名用SAメールを設定
+// - Cloud Run 実行SAに iam.serviceAccounts.signBlob 権限（= IAMCredentials SignBlob が通る）
+//
+// 注意:
+// - SignedURL に ContentType を含めるため、フロントの PUT の Content-Type は一致必須
+func (u *TokenBlueprintUsecase) IssueTokenIconUploadURL(
+	ctx context.Context,
+	tokenBlueprintID string,
+	fileName string, // 現状はログ・互換用（object名は固定 "icon"）
+	contentType string, // 署名に含める。PUT時の Content-Type と一致必須
+) (*TokenIconUploadURL, error) {
+
+	if u == nil || u.tbRepo == nil {
+		return nil, fmt.Errorf("tokenBlueprint usecase/repo is nil")
+	}
+
+	id := strings.TrimSpace(tokenBlueprintID)
+	if id == "" {
+		return nil, fmt.Errorf("tokenBlueprintID is empty")
+	}
+
+	// blueprint の存在確認（誤ったIDで勝手にアップロードURL発行しない）
+	if _, err := u.tbRepo.GetByID(ctx, id); err != nil {
+		return nil, err
+	}
+
+	bucket := tokenIconBucketName()
+	if bucket == "" {
+		return nil, fmt.Errorf("token icon bucket is empty")
+	}
+
+	accessID := tokenIconSignerEmail()
+	if accessID == "" {
+		return nil, fmt.Errorf("missing %s env (signer service account email)", envTokenIconSignerEmail)
+	}
+
+	// object path は固定（後から差し替えても URL が変わらない）
+	objectPath := tokenIconObjectPath(id)
+
+	ct := strings.TrimSpace(contentType)
+	if ct == "" {
+		ct = "application/octet-stream"
+	}
+
+	// IAM Credentials API による署名（秘密鍵不要）
+	iamSvc, err := iamcredentials.NewService(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("create iamcredentials service: %w", err)
+	}
+
+	signBytes := func(b []byte) ([]byte, error) {
+		name := "projects/-/serviceAccounts/" + accessID
+		req := &iamcredentials.SignBlobRequest{
+			Payload: base64.StdEncoding.EncodeToString(b),
+		}
+		resp, err := iamSvc.Projects.ServiceAccounts.SignBlob(name, req).Do()
+		if err != nil {
+			return nil, err
+		}
+		return base64.StdEncoding.DecodeString(resp.SignedBlob)
+	}
+
+	expires := time.Now().UTC().Add(tokenIconSignedURLTTL)
+
+	uploadURL, err := storage.SignedURL(bucket, objectPath, &storage.SignedURLOptions{
+		Scheme:         storage.SigningSchemeV4,
+		Method:         "PUT",
+		GoogleAccessID: accessID,
+		SignBytes:      signBytes,
+		Expires:        expires,
+		ContentType:    ct,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("sign gcs url: %w", err)
+	}
+
+	_ = fileName // 互換用（将来ログに使いたければここで使う）
+
+	publicURL := gcsObjectPublicURL(bucket, objectPath)
+	return &TokenIconUploadURL{
+		UploadURL:  strings.TrimSpace(uploadURL),
+		PublicURL:  strings.TrimSpace(publicURL),
+		ObjectPath: strings.TrimSpace(objectPath),
+		ExpiresAt:  ptr(expires),
+	}, nil
+}
+
+// ============================================================
 // Create
+// ============================================================
 
 type CreateBlueprintRequest struct {
 	Name        string
 	Symbol      string
 	BrandID     string
-	CompanyID   string // テナント
+	CompanyID   string
 	Description string
 
 	AssigneeID string
-	CreatedBy  string // 作成者（memberId）
-	ActorID    string // 操作者（更新者・監査用）
+	CreatedBy  string
+	ActorID    string
 
+	// ★ 方針A: icon は create では受け取らない（署名付きURLでフロントがPUT）
+	// 互換のため struct は残すが、CreateWithUploads では受け付けない
 	Icon     *IconUpload
 	Contents []ContentUpload
 }
 
 func (u *TokenBlueprintUsecase) CreateWithUploads(ctx context.Context, in CreateBlueprintRequest) (*tbdom.TokenBlueprint, error) {
-
-	var iconIDPtr *string
-	if in.Icon != nil {
-		iconURL, size, err := u.tiRepo.UploadIcon(ctx, in.Icon.FileName, in.Icon.ContentType, in.Icon.Reader)
-		if err != nil {
-			return nil, fmt.Errorf("upload icon: %w", err)
-		}
-
-		icon, err := u.tiRepo.Create(ctx, tidom.CreateTokenIconInput{
-			URL:      strings.TrimSpace(iconURL),
-			FileName: strings.TrimSpace(in.Icon.FileName),
-			Size:     size,
-		})
-		if err != nil {
-			return nil, fmt.Errorf("create token icon: %w", err)
-		}
-		iconID := strings.TrimSpace(icon.ID)
-		if iconID != "" {
-			iconIDPtr = &iconID
-		}
+	if u == nil || u.tbRepo == nil || u.tcRepo == nil {
+		return nil, fmt.Errorf("tokenBlueprint usecase/repo is nil")
 	}
 
+	// ★ 方針A: create での icon アップロードは廃止
+	if in.Icon != nil {
+		return nil, ErrNotSupported("CreateWithUploads with icon (use IssueTokenIconUploadURL + frontend PUT + Update(iconId))")
+	}
+
+	// 0) contents（tokenBlueprintId に依存しない）
 	contentIDs := make([]string, 0, len(in.Contents))
 	for _, c := range in.Contents {
 		url, size, err := u.tcRepo.UploadContent(ctx, c.FileName, c.ContentType, c.Reader)
@@ -169,18 +320,17 @@ func (u *TokenBlueprintUsecase) CreateWithUploads(ctx context.Context, in Create
 	}
 	contentIDs = dedupStrings(contentIDs)
 
-	// ★ minted は create 時は必ず false（domain/Repository 側で固定される）
+	// 1) まず TokenBlueprint を作る（docId 確定）
 	tb, err := u.tbRepo.Create(ctx, tbdom.CreateTokenBlueprintInput{
 		Name:         strings.TrimSpace(in.Name),
 		Symbol:       strings.TrimSpace(in.Symbol),
 		BrandID:      strings.TrimSpace(in.BrandID),
 		CompanyID:    strings.TrimSpace(in.CompanyID),
 		Description:  strings.TrimSpace(in.Description),
-		IconID:       iconIDPtr,
+		IconID:       nil, // ★ 画像は後から Update で objectPath をセット
 		ContentFiles: contentIDs,
 		AssigneeID:   strings.TrimSpace(in.AssigneeID),
 
-		// ★ 作成時は UpdatedAt / UpdatedBy は入力しない（nil / 空文字）
 		CreatedAt: nil,
 		CreatedBy: strings.TrimSpace(in.CreatedBy),
 		UpdatedAt: nil,
@@ -190,26 +340,28 @@ func (u *TokenBlueprintUsecase) CreateWithUploads(ctx context.Context, in Create
 		return nil, err
 	}
 
-	// ─────────────────────────────────────────────
-	// ここから Arweave 連携（自動 Publish）
-	// ─────────────────────────────────────────────
+	// 2) Arweave 連携（image には “将来アップロードされる予定のURL” を入れておく）
+	//    ※ object が無い間は 404 だが、後で PUT すれば同URLで表示される
 	if u.arweave == nil || u.metadataBuilder == nil {
 		return tb, nil
 	}
 
-	// 1) メタデータ JSON を生成
-	metaJSON, err := u.metadataBuilder.BuildFromBlueprint(*tb)
+	bucket := tokenIconBucketName()
+	imageURLForMetaplex := ""
+	if bucket != "" && strings.TrimSpace(tb.ID) != "" {
+		imageURLForMetaplex = gcsObjectPublicURL(bucket, tokenIconObjectPath(tb.ID))
+	}
+
+	metaJSON, err := u.metadataBuilder.BuildFromBlueprintWithImage(*tb, imageURLForMetaplex)
 	if err != nil {
 		return nil, fmt.Errorf("build metadata: %w", err)
 	}
 
-	// 2) Arweave にアップロード
 	uri, err := u.arweave.UploadMetadata(ctx, metaJSON)
 	if err != nil {
 		return nil, fmt.Errorf("upload metadata to arweave: %w", err)
 	}
 
-	// 3) metadataUri を更新
 	updated, err := u.tbRepo.Update(ctx, tb.ID, tbdom.UpdateTokenBlueprintInput{
 		MetadataURI: &uri,
 	})
@@ -220,16 +372,15 @@ func (u *TokenBlueprintUsecase) CreateWithUploads(ctx context.Context, in Create
 	return updated, nil
 }
 
+// ============================================================
 // Read
+// ============================================================
 
 func (u *TokenBlueprintUsecase) GetByID(ctx context.Context, id string) (*tbdom.TokenBlueprint, error) {
 	tid := strings.TrimSpace(id)
 	return u.tbRepo.GetByID(ctx, tid)
 }
 
-// ★ createdBy を氏名に解決して返す補助メソッド
-//   - 戻り値: (TokenBlueprint, createdByName, error)
-//   - memberSvc が未設定 or 解決失敗時は createdByName は空文字
 func (u *TokenBlueprintUsecase) GetByIDWithCreatorName(
 	ctx context.Context,
 	id string,
@@ -252,24 +403,20 @@ func (u *TokenBlueprintUsecase) GetByIDWithCreatorName(
 
 	name, err := u.memberSvc.GetNameLastFirstByID(ctx, memberID)
 	if err != nil {
-		// 氏名解決に失敗してもエラーにはせず、TokenBlueprint 自体は返す
 		return tb, "", nil
 	}
 
 	return tb, name, nil
 }
 
-// companyID で tenant-scoped 一覧取得
 func (u *TokenBlueprintUsecase) ListByCompanyID(ctx context.Context, companyID string, page tbdom.Page) (tbdom.PageResult, error) {
 	cid := strings.TrimSpace(companyID)
 	if cid == "" {
 		return tbdom.PageResult{}, fmt.Errorf("companyId is empty")
 	}
-
 	return u.tbRepo.ListByCompanyID(ctx, cid, page)
 }
 
-// ★ brandId 単位での一覧取得（domain のヘルパーを利用）
 func (u *TokenBlueprintUsecase) ListByBrandID(ctx context.Context, brandID string, page tbdom.Page) (tbdom.PageResult, error) {
 	bid := strings.TrimSpace(brandID)
 	if bid == "" {
@@ -278,17 +425,14 @@ func (u *TokenBlueprintUsecase) ListByBrandID(ctx context.Context, brandID strin
 	return tbdom.ListByBrandID(ctx, u.tbRepo, bid, page)
 }
 
-// ★ minted = false のみの一覧取得
 func (u *TokenBlueprintUsecase) ListMintedNotYet(ctx context.Context, page tbdom.Page) (tbdom.PageResult, error) {
 	return tbdom.ListMintedNotYet(ctx, u.tbRepo, page)
 }
 
-// ★ minted = true のみの一覧取得
 func (u *TokenBlueprintUsecase) ListMintedCompleted(ctx context.Context, page tbdom.Page) (tbdom.PageResult, error) {
 	return tbdom.ListMintedCompleted(ctx, u.tbRepo, page)
 }
 
-// ==== ★ ID → Name をまとめて解決する便利関数 ====
 func (u *TokenBlueprintUsecase) ResolveNames(
 	ctx context.Context,
 	ids []string,
@@ -304,7 +448,6 @@ func (u *TokenBlueprintUsecase) ResolveNames(
 
 		name, err := u.tbRepo.GetNameByID(ctx, id)
 		if err != nil {
-			// NotFound → 空文字
 			result[id] = ""
 			continue
 		}
@@ -315,7 +458,9 @@ func (u *TokenBlueprintUsecase) ResolveNames(
 	return result, nil
 }
 
+// ============================================================
 // Update
+// ============================================================
 
 type UpdateBlueprintRequest struct {
 	ID           string
@@ -324,19 +469,30 @@ type UpdateBlueprintRequest struct {
 	BrandID      *string
 	Description  *string
 	AssigneeID   *string
-	IconID       *string   // "" を渡すと NULL にする
+	IconID       *string   // "" を渡すと NULL にする（現在の仕様維持）
 	ContentFiles *[]string // 全置換
 	ActorID      string
 }
 
-func (u *TokenBlueprintUsecase) Update(ctx context.Context, in UpdateBlueprintRequest) (*tbdom.TokenBlueprint, error) {
+func normalizeIconIDForUpdate(p *string) *string {
+	if p == nil {
+		return nil
+	}
+	v := strings.TrimSpace(*p)
+	if v == "" {
+		empty := ""
+		return &empty
+	}
+	return &v
+}
 
+func (u *TokenBlueprintUsecase) Update(ctx context.Context, in UpdateBlueprintRequest) (*tbdom.TokenBlueprint, error) {
 	tb, err := u.tbRepo.Update(ctx, strings.TrimSpace(in.ID), tbdom.UpdateTokenBlueprintInput{
 		Name:         trimPtr(in.Name),
 		Symbol:       trimPtr(in.Symbol),
 		BrandID:      trimPtr(in.BrandID),
 		Description:  trimPtr(in.Description),
-		IconID:       normalizeEmptyToNil(in.IconID),
+		IconID:       normalizeIconIDForUpdate(in.IconID),
 		ContentFiles: normalizeSlicePtr(in.ContentFiles),
 		AssigneeID:   trimPtr(in.AssigneeID),
 
@@ -348,40 +504,19 @@ func (u *TokenBlueprintUsecase) Update(ctx context.Context, in UpdateBlueprintRe
 	if err != nil {
 		return nil, err
 	}
-
 	return tb, nil
 }
 
-// Convenient helpers
+// ============================================================
+// Convenience helpers
+// ============================================================
 
+// 方針A: バックエンドでのアップロードは廃止（署名付きURLでフロントPUT）
 func (u *TokenBlueprintUsecase) ReplaceIconWithUpload(ctx context.Context, blueprintID string, icon IconUpload, actorID string) (*tbdom.TokenBlueprint, error) {
-
-	url, size, err := u.tiRepo.UploadIcon(ctx, icon.FileName, icon.ContentType, icon.Reader)
-	if err != nil {
-		return nil, fmt.Errorf("upload icon: %w", err)
-	}
-	ti, err := u.tiRepo.Create(ctx, tidom.CreateTokenIconInput{
-		URL:      strings.TrimSpace(url),
-		FileName: strings.TrimSpace(icon.FileName),
-		Size:     size,
-	})
-	if err != nil {
-		return nil, fmt.Errorf("create token icon: %w", err)
-	}
-	iconID := strings.TrimSpace(ti.ID)
-	tb, err := u.tbRepo.Update(ctx, strings.TrimSpace(blueprintID), tbdom.UpdateTokenBlueprintInput{
-		IconID:    &iconID,
-		UpdatedAt: nil,
-		UpdatedBy: ptr(strings.TrimSpace(actorID)),
-	})
-	if err != nil {
-		return nil, err
-	}
-	return tb, nil
+	return nil, ErrNotSupported("ReplaceIconWithUpload (use signed URL PUT from frontend)")
 }
 
 func (u *TokenBlueprintUsecase) AddContentsWithUploads(ctx context.Context, blueprintID string, uploads []ContentUpload, actorID string) (*tbdom.TokenBlueprint, error) {
-
 	if len(uploads) == 0 {
 		return u.tbRepo.GetByID(ctx, strings.TrimSpace(blueprintID))
 	}
@@ -441,7 +576,6 @@ func (u *TokenBlueprintUsecase) ClearIcon(ctx context.Context, blueprintID strin
 }
 
 func (u *TokenBlueprintUsecase) ReplaceContentIDs(ctx context.Context, blueprintID string, contentIDs []string, actorID string) (*tbdom.TokenBlueprint, error) {
-
 	clean := dedupStrings(contentIDs)
 	tb, err := u.tbRepo.Update(ctx, strings.TrimSpace(blueprintID), tbdom.UpdateTokenBlueprintInput{
 		ContentFiles: &clean,
@@ -454,23 +588,19 @@ func (u *TokenBlueprintUsecase) ReplaceContentIDs(ctx context.Context, blueprint
 	return tb, nil
 }
 
+// ============================================================
 // Delete
+// ============================================================
 
 func (u *TokenBlueprintUsecase) Delete(ctx context.Context, id string) error {
 	tid := strings.TrimSpace(id)
-	err := u.tbRepo.Delete(ctx, tid)
-	if err != nil {
-		return err
-	}
-	return nil
+	return u.tbRepo.Delete(ctx, tid)
 }
 
 // ============================================================
 // Additional API: TokenBlueprint minted 更新（移譲版）
 // ============================================================
-//
-// MarkTokenBlueprintMinted は、指定された tokenBlueprintId の minted を
-// false（notYet） → true（minted） に更新する usecase です。
+
 func (u *TokenBlueprintUsecase) MarkTokenBlueprintMinted(
 	ctx context.Context,
 	tokenBlueprintID string,
@@ -494,13 +624,11 @@ func (u *TokenBlueprintUsecase) MarkTokenBlueprintMinted(
 		return nil, fmt.Errorf("actorID is empty")
 	}
 
-	// 現状を取得
 	tb, err := u.tbRepo.GetByID(ctx, id)
 	if err != nil {
 		return nil, err
 	}
 
-	// すでに minted=true なら冪等的にそのまま返す
 	if tb.Minted {
 		return tb, nil
 	}
@@ -509,7 +637,6 @@ func (u *TokenBlueprintUsecase) MarkTokenBlueprintMinted(
 	minted := true
 	updatedBy := actorID
 
-	// RepositoryPort.Update 経由で Firestore に minted / updatedAt / updatedBy を反映
 	updated, err := u.tbRepo.Update(ctx, id, tbdom.UpdateTokenBlueprintInput{
 		Description:  nil,
 		IconID:       nil,

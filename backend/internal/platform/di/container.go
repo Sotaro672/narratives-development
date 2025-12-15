@@ -4,6 +4,8 @@ package di
 import (
 	"context"
 	"log"
+	"os"
+	"strings"
 
 	firebase "firebase.google.com/go/v4"
 	firebaseauth "firebase.google.com/go/v4/auth"
@@ -309,6 +311,16 @@ func NewContainer(ctx context.Context) (*Container, error) {
 	// ★ Token icon repository (GCS: public bucket)
 	tokenIconRepo := gcso.NewTokenIconRepositoryGCS(gcsClient, cfg.TokenIconBucket)
 
+	// ★ Token contents repository (GCS)
+	// - ここが nil だと TokenBlueprint の CreateWithUploads が「usecase/repo is nil」等で落ちる実装になりやすいので、
+	//   最低でも Repository を差し込んでおく。
+	// - バケット名は環境変数 TOKEN_CONTENTS_BUCKET を優先し、無ければ narratives-development-token を使う。
+	tokenContentsBucket := strings.TrimSpace(os.Getenv("TOKEN_CONTENTS_BUCKET"))
+	if tokenContentsBucket == "" {
+		tokenContentsBucket = "narratives-development-token"
+	}
+	tokenContentsRepo := gcso.NewTokenContentsRepositoryGCS(gcsClient, tokenContentsBucket)
+
 	// 5. Application-layer usecases
 
 	// ★ TokenUsecase（Solana ミント権限ウォレット + MintRequestPort）
@@ -452,7 +464,7 @@ func NewContainer(ctx context.Context) (*Container, error) {
 	// ★ TokenBlueprintUsecase に member.Service と Arweave 関連を注入
 	tokenBlueprintUC := uc.NewTokenBlueprintUsecase(
 		tokenBlueprintRepo,   // tbRepo
-		nil,                  // tcRepo (token contents repo, 未接続なら nil)
+		tokenContentsRepo,    // ✅ tcRepo (GCS)
 		tokenIconRepo,        // ✅ tiRepo (token icon repo, GCS)
 		memberSvc,            // *member.Service
 		arweaveUploader,      // ArweaveUploader（cfg.ArweaveBaseURL が空なら nil のまま）

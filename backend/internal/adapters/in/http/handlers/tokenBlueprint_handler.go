@@ -23,7 +23,7 @@ type TokenBlueprintHandler struct {
 	memSvc   *memdom.Service
 	brandSvc *branddom.Service
 
-	// ★ 追加: iconId -> iconUrl 解決用
+	// ★ iconId -> iconUrl 解決用（任意）
 	tiRepo tidom.RepositoryPort
 }
 
@@ -66,7 +66,9 @@ type createTokenBlueprintRequest struct {
 	AssigneeID   string   `json:"assigneeId"`
 	CreatedBy    string   `json:"createdBy"`
 	ContentFiles []string `json:"contentFiles,omitempty"`
-	IconID       *string  `json:"iconId,omitempty"`
+
+	// 互換のため残しているが、方針Aでは create で iconId を受け取っても使用しない
+	IconID *string `json:"iconId,omitempty"`
 }
 
 type updateTokenBlueprintRequest struct {
@@ -75,7 +77,7 @@ type updateTokenBlueprintRequest struct {
 	BrandID      *string   `json:"brandId,omitempty"`
 	Description  *string   `json:"description,omitempty"`
 	AssigneeID   *string   `json:"assigneeId,omitempty"`
-	IconID       *string   `json:"iconId,omitempty"`
+	IconID       *string   `json:"iconId,omitempty"` // ★ 方針A: objectPath（例: "{docId}/icon"）を想定
 	ContentFiles *[]string `json:"contentFiles,omitempty"`
 }
 
@@ -88,7 +90,7 @@ type tokenBlueprintResponse struct {
 	CompanyID    string     `json:"companyId"`
 	Description  string     `json:"description"`
 	IconID       *string    `json:"iconId,omitempty"`
-	IconURL      string     `json:"iconUrl,omitempty"` // ★ 追加: iconId -> url を解決した結果
+	IconURL      string     `json:"iconUrl,omitempty"` // ★ iconId -> url
 	ContentFiles []string   `json:"contentFiles"`
 	AssigneeID   string     `json:"assigneeId"`
 	AssigneeName string     `json:"assigneeName"`
@@ -96,8 +98,20 @@ type tokenBlueprintResponse struct {
 	CreatedBy    string     `json:"createdBy"`
 	UpdatedAt    *time.Time `json:"updatedAt,omitempty"`
 	UpdatedBy    string     `json:"updatedBy"`
-	// ★ 追加: Arweave メタデータ URI（公開済みの場合のみ非空）
+
+	// ★ Arweave メタデータ URI（公開済みの場合のみ非空）
 	MetadataURI string `json:"metadataUri"`
+
+	// ★ 署名付きURLで直接PUTするための情報（任意で返す）
+	IconUpload *signedIconUploadResponse `json:"iconUpload,omitempty"`
+}
+
+type signedIconUploadResponse struct {
+	UploadURL   string     `json:"uploadUrl"`
+	PublicURL   string     `json:"publicUrl"`
+	ObjectPath  string     `json:"objectPath"`
+	ExpiresAt   *time.Time `json:"expiresAt,omitempty"`
+	ContentType string     `json:"contentType"`
 }
 
 type tokenBlueprintPageResponse struct {
@@ -111,21 +125,34 @@ type tokenBlueprintPageResponse struct {
 // name resolver helpers ----------------------------------------------------
 
 func (h *TokenBlueprintHandler) resolveAssigneeName(ctx context.Context, id string) string {
+	if h == nil || h.memSvc == nil {
+		return ""
+	}
 	name, _ := h.memSvc.GetNameLastFirstByID(ctx, strings.TrimSpace(id))
 	return name
 }
 
 func (h *TokenBlueprintHandler) resolveCreatorName(ctx context.Context, id string) string {
+	if h == nil || h.memSvc == nil {
+		return ""
+	}
 	name, _ := h.memSvc.GetNameLastFirstByID(ctx, strings.TrimSpace(id))
 	return name
 }
 
 func (h *TokenBlueprintHandler) resolveBrandName(ctx context.Context, id string) string {
+	if h == nil || h.brandSvc == nil {
+		return ""
+	}
 	name, _ := h.brandSvc.GetNameByID(ctx, strings.TrimSpace(id))
 	return name
 }
 
 // ★ iconId -> iconUrl を解決（解決できない場合は空文字）
+//
+// 重要:
+// - 方針Aでは iconId は「GCS objectPath（例: {docId}/icon）」になる想定
+// - TokenIconRepositoryGCS.GetByID は「URL/gs:// もしくは objectPath」を受け取れる実装なので、そのまま渡せる
 func (h *TokenBlueprintHandler) resolveIconURL(ctx context.Context, iconIDPtr *string) string {
 	if h == nil || h.tiRepo == nil || iconIDPtr == nil {
 		return ""
@@ -162,7 +189,7 @@ func (h *TokenBlueprintHandler) toResponse(ctx context.Context, tb *tbdom.TokenB
 		CompanyID:    tb.CompanyID,
 		Description:  tb.Description,
 		IconID:       tb.IconID,
-		IconURL:      h.resolveIconURL(ctx, tb.IconID), // ★ ここで解決
+		IconURL:      h.resolveIconURL(ctx, tb.IconID),
 		ContentFiles: tb.ContentFiles,
 		AssigneeID:   tb.AssigneeID,
 		AssigneeName: h.resolveAssigneeName(ctx, tb.AssigneeID),
@@ -170,7 +197,7 @@ func (h *TokenBlueprintHandler) toResponse(ctx context.Context, tb *tbdom.TokenB
 		CreatedBy:    h.resolveCreatorName(ctx, tb.CreatedBy),
 		UpdatedAt:    updPtr,
 		UpdatedBy:    tb.UpdatedBy,
-		MetadataURI:  tb.MetadataURI, // ★ ドメインからそのまま返す
+		MetadataURI:  tb.MetadataURI,
 	}
 }
 
@@ -182,19 +209,29 @@ func (h *TokenBlueprintHandler) ServeHTTP(w http.ResponseWriter, r *http.Request
 	switch {
 	case r.Method == http.MethodPost && r.URL.Path == "/token-blueprints":
 		h.create(w, r)
+
 	case r.Method == http.MethodGet && r.URL.Path == "/token-blueprints":
-		// ★ 一覧取得（クエリにより ListByCompanyID / ListByBrandID / ListMintedNotYet / ListMintedCompleted を切り替え）
 		h.list(w, r)
+
+	// ★ 追加: 署名付きURL発行（id は /token-blueprints/{id}/icon-upload-url の {id}）
+	case r.Method == http.MethodGet && strings.HasPrefix(r.URL.Path, "/token-blueprints/") && strings.HasSuffix(r.URL.Path, "/icon-upload-url"):
+		id := strings.TrimPrefix(r.URL.Path, "/token-blueprints/")
+		id = strings.TrimSuffix(id, "/icon-upload-url")
+		h.issueIconUploadURL(w, r, id)
+
 	case (r.Method == http.MethodPatch || r.Method == http.MethodPut) &&
 		strings.HasPrefix(r.URL.Path, "/token-blueprints/"):
 		id := strings.TrimPrefix(r.URL.Path, "/token-blueprints/")
 		h.update(w, r, id)
+
 	case r.Method == http.MethodDelete && strings.HasPrefix(r.URL.Path, "/token-blueprints/"):
 		id := strings.TrimPrefix(r.URL.Path, "/token-blueprints/")
 		h.delete(w, r, id)
+
 	case r.Method == http.MethodGet && strings.HasPrefix(r.URL.Path, "/token-blueprints/"):
 		id := strings.TrimPrefix(r.URL.Path, "/token-blueprints/")
 		h.get(w, r, id)
+
 	default:
 		w.WriteHeader(http.StatusNotFound)
 		_ = json.NewEncoder(w).Encode(map[string]string{"error": "not_found"})
@@ -225,14 +262,14 @@ func (h *TokenBlueprintHandler) create(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	log.Printf("[tokenBlueprint_handler] create request name=%q symbol=%q brandId=%q assigneeId=%q createdBy=%q hasIcon=%v contentFiles=%d",
+	log.Printf("[tokenBlueprint_handler] create request name=%q symbol=%q brandId=%q assigneeId=%q createdBy=%q contentFiles=%d iconIdProvided=%v",
 		strings.TrimSpace(req.Name),
 		strings.TrimSpace(req.Symbol),
 		strings.TrimSpace(req.BrandID),
 		strings.TrimSpace(req.AssigneeID),
 		strings.TrimSpace(req.CreatedBy),
-		req.IconID != nil && strings.TrimSpace(*req.IconID) != "",
 		len(req.ContentFiles),
+		req.IconID != nil && strings.TrimSpace(*req.IconID) != "",
 	)
 
 	if strings.TrimSpace(req.Name) == "" ||
@@ -258,6 +295,7 @@ func (h *TokenBlueprintHandler) create(w http.ResponseWriter, r *http.Request) {
 		AssigneeID:  strings.TrimSpace(req.AssigneeID),
 		CreatedBy:   createdBy,
 		ActorID:     actorID,
+		// ★ 方針A: create は icon バイナリを扱わない（署名付きURLでPUT）
 	})
 	if err != nil {
 		log.Printf("[tokenBlueprint_handler] create failed err=%v", err)
@@ -265,11 +303,112 @@ func (h *TokenBlueprintHandler) create(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	log.Printf("[tokenBlueprint_handler] create success id=%q companyId=%q brandId=%q assigneeId=%q minted=%v metadataUri=%q",
-		tb.ID, tb.CompanyID, tb.BrandID, tb.AssigneeID, tb.Minted, tb.MetadataURI,
+	// ★ 作成直後に「署名付きPUT URL」を返す（可能なら）
+	// フロントはこれを使って:
+	//   1) UploadURL に PUT（Content-Type 一致必須）
+	//   2) Update(iconId=ObjectPath) を呼んで iconId を反映
+	//
+	// contentType / fileName はヘッダ優先、無ければ query も見る。どちらも無ければ octet-stream で発行を試す。
+	uploadCT := strings.TrimSpace(r.Header.Get("X-Icon-Content-Type"))
+	if uploadCT == "" {
+		uploadCT = strings.TrimSpace(r.URL.Query().Get("iconContentType"))
+	}
+	uploadFN := strings.TrimSpace(r.Header.Get("X-Icon-File-Name"))
+	if uploadFN == "" {
+		uploadFN = strings.TrimSpace(r.URL.Query().Get("iconFileName"))
+	}
+	if uploadCT == "" {
+		uploadCT = "application/octet-stream"
+	}
+
+	var iconUploadResp *signedIconUploadResponse
+	upl, uerr := h.uc.IssueTokenIconUploadURL(ctx, tb.ID, uploadFN, uploadCT)
+	if uerr != nil {
+		// 発行に失敗しても作成自体は成功しているので、ログのみ（後で /icon-upload-url を叩けばよい）
+		log.Printf("[tokenBlueprint_handler] issue icon upload url failed id=%q err=%v", tb.ID, uerr)
+	} else if upl != nil {
+		iconUploadResp = &signedIconUploadResponse{
+			UploadURL:   strings.TrimSpace(upl.UploadURL),
+			PublicURL:   strings.TrimSpace(upl.PublicURL),
+			ObjectPath:  strings.TrimSpace(upl.ObjectPath),
+			ExpiresAt:   upl.ExpiresAt,
+			ContentType: strings.TrimSpace(uploadCT),
+		}
+	}
+
+	log.Printf("[tokenBlueprint_handler] create success id=%q companyId=%q brandId=%q assigneeId=%q minted=%v metadataUri=%q iconUploadIssued=%v",
+		tb.ID, tb.CompanyID, tb.BrandID, tb.AssigneeID, tb.Minted, tb.MetadataURI, iconUploadResp != nil,
 	)
 
-	_ = json.NewEncoder(w).Encode(h.toResponse(ctx, tb))
+	resp := h.toResponse(ctx, tb)
+	resp.IconUpload = iconUploadResp
+	_ = json.NewEncoder(w).Encode(resp)
+}
+
+// issueIconUploadURL -------------------------------------------------------
+
+// GET /token-blueprints/{id}/icon-upload-url?contentType=image/png&fileName=xxx.png
+// - 署名付きPUT URLを発行して返す
+func (h *TokenBlueprintHandler) issueIconUploadURL(w http.ResponseWriter, r *http.Request, id string) {
+	ctx := r.Context()
+
+	companyID := strings.TrimSpace(uc.CompanyIDFromContext(ctx))
+	actorID := strings.TrimSpace(r.Header.Get("X-Actor-Id"))
+	id = strings.TrimSpace(id)
+
+	log.Printf("[tokenBlueprint_handler] issueIconUploadURL start id=%q companyId(ctx)=%q actorId=%q", id, companyID, actorID)
+
+	if companyID == "" {
+		w.WriteHeader(http.StatusForbidden)
+		_ = json.NewEncoder(w).Encode(map[string]string{"error": "companyId not found in context"})
+		return
+	}
+	if id == "" {
+		w.WriteHeader(http.StatusBadRequest)
+		_ = json.NewEncoder(w).Encode(map[string]string{"error": "id is empty"})
+		return
+	}
+
+	// テナント境界チェック（companyId一致）
+	tb, err := h.uc.GetByID(ctx, id)
+	if err != nil {
+		log.Printf("[tokenBlueprint_handler] issueIconUploadURL get failed id=%q err=%v", id, err)
+		writeTokenBlueprintErr(w, err)
+		return
+	}
+	if strings.TrimSpace(tb.CompanyID) != companyID {
+		w.WriteHeader(http.StatusForbidden)
+		_ = json.NewEncoder(w).Encode(map[string]string{"error": "forbidden"})
+		return
+	}
+
+	q := r.URL.Query()
+	ct := strings.TrimSpace(q.Get("contentType"))
+	if ct == "" {
+		ct = strings.TrimSpace(r.Header.Get("X-Icon-Content-Type"))
+	}
+	if ct == "" {
+		ct = "application/octet-stream"
+	}
+	fn := strings.TrimSpace(q.Get("fileName"))
+	if fn == "" {
+		fn = strings.TrimSpace(r.Header.Get("X-Icon-File-Name"))
+	}
+
+	upl, err := h.uc.IssueTokenIconUploadURL(ctx, id, fn, ct)
+	if err != nil {
+		log.Printf("[tokenBlueprint_handler] issueIconUploadURL failed id=%q err=%v", id, err)
+		writeTokenBlueprintErr(w, err)
+		return
+	}
+
+	_ = json.NewEncoder(w).Encode(signedIconUploadResponse{
+		UploadURL:   strings.TrimSpace(upl.UploadURL),
+		PublicURL:   strings.TrimSpace(upl.PublicURL),
+		ObjectPath:  strings.TrimSpace(upl.ObjectPath),
+		ExpiresAt:   upl.ExpiresAt,
+		ContentType: strings.TrimSpace(ct),
+	})
 }
 
 // get ---------------------------------------------------------------------
@@ -289,8 +428,13 @@ func (h *TokenBlueprintHandler) get(w http.ResponseWriter, r *http.Request, id s
 		return
 	}
 
-	log.Printf("[tokenBlueprint_handler] get success id=%q companyId=%q brandId=%q assigneeId=%q minted=%v metadataUri=%q",
-		tb.ID, tb.CompanyID, tb.BrandID, tb.AssigneeID, tb.Minted, tb.MetadataURI,
+	log.Printf("[tokenBlueprint_handler] get success id=%q companyId=%q brandId=%q assigneeId=%q minted=%v metadataUri=%q iconId=%q",
+		tb.ID, tb.CompanyID, tb.BrandID, tb.AssigneeID, tb.Minted, tb.MetadataURI, strings.TrimSpace(func() string {
+			if tb.IconID == nil {
+				return ""
+			}
+			return *tb.IconID
+		}()),
 	)
 
 	_ = json.NewEncoder(w).Encode(h.toResponse(ctx, tb))
@@ -335,7 +479,6 @@ func (h *TokenBlueprintHandler) list(w http.ResponseWriter, r *http.Request) {
 		PerPage: perPage,
 	}
 
-	// ★ ログ: 入力条件
 	log.Printf("[tokenBlueprint_handler] list start companyId=%q page=%d perPage=%d brandId=%q minted=%q",
 		companyID, pageNum, perPage, brandID, mintedFilter,
 	)
@@ -347,22 +490,15 @@ func (h *TokenBlueprintHandler) list(w http.ResponseWriter, r *http.Request) {
 	)
 
 	switch {
-	// ★ brandId ごとの一覧
 	case brandID != "" && mintedFilter == "":
 		mode = "ListByBrandID"
 		result, err = h.uc.ListByBrandID(ctx, brandID, page)
-
-	// ★ minted = notYet のみ
 	case mintedFilter == "notYet":
 		mode = "ListMintedNotYet"
 		result, err = h.uc.ListMintedNotYet(ctx, page)
-
-	// ★ minted = minted のみ
 	case mintedFilter == "minted":
 		mode = "ListMintedCompleted"
 		result, err = h.uc.ListMintedCompleted(ctx, page)
-
-	// ★ デフォルト: companyId 単位の一覧（従来挙動）
 	default:
 		mode = "ListByCompanyID"
 		result, err = h.uc.ListByCompanyID(ctx, companyID, page)
@@ -374,16 +510,15 @@ func (h *TokenBlueprintHandler) list(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// ★ ログ: 取得結果（件数 + サンプル）
 	sampleIDs := make([]string, 0, 5)
-	sample := make([]map[string]any, 0, 3)
+	sample := make([]map[string]interface{}, 0, 3)
 	for i := range result.Items {
 		if len(sampleIDs) < 5 {
 			sampleIDs = append(sampleIDs, strings.TrimSpace(result.Items[i].ID))
 		}
 		if len(sample) < 3 {
 			tb := result.Items[i]
-			sample = append(sample, map[string]any{
+			sample = append(sample, map[string]interface{}{
 				"id":         strings.TrimSpace(tb.ID),
 				"companyId":  strings.TrimSpace(tb.CompanyID),
 				"brandId":    strings.TrimSpace(tb.BrandID),
@@ -391,6 +526,12 @@ func (h *TokenBlueprintHandler) list(w http.ResponseWriter, r *http.Request) {
 				"minted":     tb.Minted,
 				"createdAt":  tb.CreatedAt,
 				"updatedAt":  tb.UpdatedAt,
+				"iconId": func() string {
+					if tb.IconID == nil {
+						return ""
+					}
+					return strings.TrimSpace(*tb.IconID)
+				}(),
 			})
 		}
 	}
@@ -432,8 +573,7 @@ func (h *TokenBlueprintHandler) update(w http.ResponseWriter, r *http.Request, i
 		return
 	}
 
-	// 入力の概要だけログ（値そのものは必要最低限）
-	log.Printf("[tokenBlueprint_handler] update request id=%q hasName=%v hasSymbol=%v hasBrandId=%v hasDesc=%v hasAssignee=%v hasIconId=%v hasContentFiles=%v",
+	log.Printf("[tokenBlueprint_handler] update request id=%q hasName=%v hasSymbol=%v hasBrandId=%v hasDesc=%v hasAssignee=%v hasIconId=%v hasContentFiles=%v iconIdValue=%q",
 		id,
 		req.Name != nil,
 		req.Symbol != nil,
@@ -442,6 +582,12 @@ func (h *TokenBlueprintHandler) update(w http.ResponseWriter, r *http.Request, i
 		req.AssigneeID != nil,
 		req.IconID != nil,
 		req.ContentFiles != nil,
+		func() string {
+			if req.IconID == nil {
+				return ""
+			}
+			return strings.TrimSpace(*req.IconID)
+		}(),
 	)
 
 	tb, err := h.uc.Update(ctx, uc.UpdateBlueprintRequest{
@@ -461,8 +607,14 @@ func (h *TokenBlueprintHandler) update(w http.ResponseWriter, r *http.Request, i
 		return
 	}
 
-	log.Printf("[tokenBlueprint_handler] update success id=%q companyId=%q brandId=%q assigneeId=%q minted=%v metadataUri=%q",
+	log.Printf("[tokenBlueprint_handler] update success id=%q companyId=%q brandId=%q assigneeId=%q minted=%v metadataUri=%q iconId=%q",
 		tb.ID, tb.CompanyID, tb.BrandID, tb.AssigneeID, tb.Minted, tb.MetadataURI,
+		strings.TrimSpace(func() string {
+			if tb.IconID == nil {
+				return ""
+			}
+			return *tb.IconID
+		}()),
 	)
 
 	_ = json.NewEncoder(w).Encode(h.toResponse(ctx, tb))
