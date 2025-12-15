@@ -209,6 +209,53 @@
   color: var(--pbp-text-soft, rgba(0, 0, 0, 0.5));
 }
 
+/* ================================
+ * Popover (Brand list)
+ * ここが今回の修正ポイント
+ * ================================ */
+
+.token-blueprint-card__popover {
+  width: min(360px, calc(100vw - 32px));
+  padding: 10px;
+}
+
+/* 縦並びを強制するリストコンテナ */
+.token-blueprint-card__popover-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+/* 空表示 */
+.token-blueprint-card__popover-empty {
+  font-size: 0.82rem;
+  color: rgba(0, 0, 0, 0.55);
+  padding: 6px 4px;
+}
+
+/* 1行=1候補 */
+.token-blueprint-card__popover-item {
+  display: block;          /* ← inline を避ける */
+  width: 100%;             /* ← 横幅いっぱい */
+  text-align: left;
+  padding: 10px 10px;
+  border-radius: 10px;
+  border: 1px solid rgba(0, 0, 0, 0.08);
+  background: #ffffff;
+  font-size: 0.88rem;
+  cursor: pointer;
+}
+
+.token-blueprint-card__popover-item:hover {
+  background: #f9fafb;
+}
+
+/* 選択中 */
+.token-blueprint-card__popover-item.is-active {
+  border-color: rgba(79, 70, 229, 0.35);
+  box-shadow: 0 2px 8px rgba(79, 70, 229, 0.12);
+}
+
 /* 説明エリア */
 .token-blueprint-card__description {
   margin-top: 18px;

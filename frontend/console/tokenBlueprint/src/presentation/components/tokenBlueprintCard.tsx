@@ -32,7 +32,6 @@ export type TokenBlueprintCardViewModel = {
   minted: boolean;
 
   // ★ NEW: UI で選択されたアイコン File（サービス層へ渡すために保持）
-  // - hook 側でセットし、親（Create/Edit page）→ service へ渡す想定
   iconFile?: File | null;
 
   // UI state
@@ -46,19 +45,16 @@ export type TokenBlueprintCardHandlers = {
   onChangeBrand?: (id: string, name: string) => void;
   onChangeDescription?: (v: string) => void;
 
-  // ★ component には「スタイル要素のみ」残すため、DOM/挙動は hook 側へ
   descriptionRef?: React.RefObject<HTMLTextAreaElement | null>;
   iconInputRef?: React.RefObject<HTMLInputElement | null>;
   onRequestPickIconFile?: () => void;
   onIconInputChange?: (e: React.ChangeEvent<HTMLInputElement>) => void;
 
-  // ★ NEW: ローカルで選択した iconFile をクリアしたい場合（任意）
   onClearLocalIconFile?: () => void;
 
   onPreview?: () => void;
   onToggleEditMode?: () => void;
 
-  // 外部からモード制御
   setEditMode?: (edit: boolean) => void;
   reset?: () => void;
 };
@@ -132,7 +128,7 @@ export default function TokenBlueprintCard({
               )}
             </div>
 
-            {/* hidden input（DOM はここに置くが、ref/handler は hook 側へ移譲） */}
+            {/* hidden input */}
             <input
               ref={handlers.iconInputRef ?? undefined}
               type="file"
@@ -141,7 +137,6 @@ export default function TokenBlueprintCard({
               onChange={handlers.onIconInputChange}
             />
 
-            {/* ★ アイコン変更ボタンは canEditIcon のとき表示（minted:true でも表示される） */}
             {canEditIcon && (
               <button
                 type="button"
@@ -153,7 +148,6 @@ export default function TokenBlueprintCard({
               </button>
             )}
 
-            {/* ★ NEW: 選択中のファイル表示（service 層へ渡せているかの確認用） */}
             {selectedIconFile && (
               <div
                 className="token-blueprint-card__icon-selected"
@@ -171,7 +165,6 @@ export default function TokenBlueprintCard({
                   {Math.round(selectedIconFile.size / 1024)}KB）
                 </span>
 
-                {/* 任意：選択を取り消したい場合 */}
                 {canEditIcon && handlers.onClearLocalIconFile && (
                   <button
                     type="button"
@@ -235,8 +228,14 @@ export default function TokenBlueprintCard({
 
               {vm.isEditMode ? (
                 <Popover>
+                  {/* ★ asChild は使わない（あなたの PopoverTrigger 型に無い） */}
                   <PopoverTrigger>
-                    <div className="token-blueprint-card__select">
+                    <div
+                      className="token-blueprint-card__select"
+                      role="button"
+                      aria-label="ブランドを選択"
+                      style={{ cursor: "pointer" }}
+                    >
                       <Input
                         readOnly
                         value={vm.brandName || vm.brandId || "ブランド未設定"}
@@ -249,25 +248,27 @@ export default function TokenBlueprintCard({
                     align="start"
                     className="token-blueprint-card__popover"
                   >
-                    {vm.brandOptions.length === 0 && (
+                    {vm.brandOptions.length === 0 ? (
                       <div className="token-blueprint-card__popover-empty">
                         ブランド候補が未設定です
                       </div>
+                    ) : (
+                      <div className="token-blueprint-card__popover-list">
+                        {vm.brandOptions.map((b) => (
+                          <button
+                            key={b.id}
+                            type="button"
+                            className={
+                              "token-blueprint-card__popover-item" +
+                              (b.id === vm.brandId ? " is-active" : "")
+                            }
+                            onClick={() => handlers.onChangeBrand?.(b.id, b.name)}
+                          >
+                            {b.name}
+                          </button>
+                        ))}
+                      </div>
                     )}
-
-                    {vm.brandOptions.map((b) => (
-                      <button
-                        key={b.id}
-                        type="button"
-                        className={
-                          "token-blueprint-card__popover-item" +
-                          (b.id === vm.brandId ? " is-active" : "")
-                        }
-                        onClick={() => handlers.onChangeBrand?.(b.id, b.name)}
-                      >
-                        {b.name}
-                      </button>
-                    ))}
                   </PopoverContent>
                 </Popover>
               ) : (
