@@ -21,22 +21,12 @@ export type TokenBlueprintFilterState = {
 };
 
 /**
- * minted = "notYet" の行だけを抽出するユーティリティ
- * - backend の ListMintedNotYet と同等のフィルタをフロント側でも行う
- *
- * 注意:
- * - 旧実装は minted を "notYet" | "minted" の文字列として扱っていましたが、
- *   現状 backend は minted を boolean で返しています（true/false）。
- * - repository 側でも minted を boolean に正規化しているため、ここも boolean で扱います。
- */
-export function listNotYet(rows: TokenBlueprint[]): TokenBlueprint[] {
-  return rows.filter((r) => (r as any).minted === false);
-}
-
-/**
  * currentMember.companyId を指定してトークン設計一覧を取得
  * - backend 側では companyId は context から取得される想定
- * - ここで minted = false（notYet）のみを画面に渡す
+ *
+ * ★変更点:
+ * - minted による絞り込み（minted=false のみ表示）を廃止
+ * - minted:true/false 両方を返す
  */
 export async function fetchTokenBlueprintsForCompany(
   companyId: string,
@@ -48,8 +38,8 @@ export async function fetchTokenBlueprintsForCompany(
   // ここでは呼び出しのトリガとして companyId を受け取るだけでOK
   const all = await listTokenBlueprintsByCompanyId(cid);
 
-  // ★ minted=false のみを返す
-  return listNotYet(all);
+  // ★ minted でのフィルタはしない（true/false 両方表示）
+  return all;
 }
 
 /**
@@ -82,7 +72,10 @@ export function buildOptionsFromTokenBlueprints(rows: TokenBlueprint[]): {
 
 /**
  * フィルタ＋ソートを適用した TokenBlueprint 一覧を返す
- * - minted = false（notYet）のみを対象にする（ListMintedNotYet 相当のフィルタ）
+ *
+ * ★変更点:
+ * - minted による篩い分けは廃止
+ * - brand / assignee のフィルタは従来通り有効
  */
 export function filterAndSortTokenBlueprints(
   rows: TokenBlueprint[],
@@ -90,8 +83,8 @@ export function filterAndSortTokenBlueprints(
 ): TokenBlueprint[] {
   const { brandFilter, assigneeFilter, sortKey, sortDir } = state;
 
-  // ★ まず minted=false のみを対象に絞り込む
-  let data = listNotYet(rows).filter(
+  // ★ minted の絞り込みはしない
+  let data = (rows ?? []).filter(
     (r) =>
       (brandFilter.length === 0 || brandFilter.includes(r.brandId)) &&
       (assigneeFilter.length === 0 || assigneeFilter.includes(r.assigneeId)),

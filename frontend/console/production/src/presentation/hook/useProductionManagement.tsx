@@ -17,8 +17,7 @@ import {
 } from "../../application/productionManagementService";
 
 function extractBackendJsonErrorMessage(e: unknown): string {
-  // productionManagementService 側の throw が `...（500 ）\n{"error":"..."}`
-  // のような形式になることがあるので、JSON 部分を拾う
+  // productionManagementService 側の throw が `...（500 ）\n{"error":"..."}` のような形式になることがあるので、JSON 部分を拾う
   const raw = (e as any)?.message ?? String(e ?? "");
   const m = raw.match(/\{[\s\S]*\}$/);
   if (!m) return raw;
@@ -58,20 +57,13 @@ export function useProductionManagement() {
   const [loadError, setLoadError] = useState<string | null>(null);
 
   const reload = useCallback(async () => {
-    console.log("[useProductionManagement] load start");
     setLoading(true);
     setLoadError(null);
 
     try {
       const rows = await loadProductionRows();
-      console.log(
-        "[useProductionManagement] load success rows(length)=",
-        rows?.length ?? 0,
-      );
       setBaseRows(rows ?? []);
     } catch (e) {
-      console.error("[useProductionManagement] failed to load productions:", e);
-
       // ★ companyId 無しのユーザーが /productions を叩くと backend が 500 で弾く（方針どおり）
       if (isInvalidCompanyIDError(e)) {
         setLoadError(
@@ -84,7 +76,6 @@ export function useProductionManagement() {
       setBaseRows([]);
     } finally {
       setLoading(false);
-      console.log("[useProductionManagement] load end");
     }
   }, []);
 

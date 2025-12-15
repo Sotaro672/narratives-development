@@ -20,15 +20,6 @@ const FALLBACK_BASE =
 
 export const API_BASE = ENV_BASE || FALLBACK_BASE;
 
-console.log(
-  "[tokenBlueprint/tokenBlueprintRepositoryHTTP] API_BASE resolved =",
-  API_BASE,
-  {
-    ENV_BASE,
-    usingFallback: !ENV_BASE,
-  },
-);
-
 // ---------------------------------------------------------
 // (Optional) Public GCS bucket for icon URL resolution in UI
 // ---------------------------------------------------------
@@ -354,13 +345,6 @@ export async function createTokenBlueprint(
   // ★ iconUpload を発行してもらう（期待値: 画像なし create でも）
   applyIconIssueHeaders(headers, options);
 
-  console.log("[tokenBlueprint/tokenBlueprintRepositoryHTTP] createTokenBlueprint request", {
-    hasIconHeader: Boolean(headers["X-Icon-Content-Type"] || headers["X-Icon-File-Name"]),
-    iconContentType: headers["X-Icon-Content-Type"],
-    iconFileName: headers["X-Icon-File-Name"],
-    body: { ...body, contentFiles: (body.contentFiles ?? []).length },
-  });
-
   const res = await fetch(`${API_BASE}/token-blueprints`, {
     method: "POST",
     headers,
@@ -369,12 +353,6 @@ export async function createTokenBlueprint(
 
   const raw = await handleJsonResponse<any>(res);
   const tb = normalizeTokenBlueprint(raw);
-
-  console.log("[tokenBlueprint/tokenBlueprintRepositoryHTTP] createTokenBlueprint response", {
-    id: (tb as any)?.id,
-    iconUploadIssued: Boolean((tb as any)?.iconUpload?.uploadUrl),
-    iconUpload: (tb as any)?.iconUpload,
-  });
 
   // ★ 画像なし create の場合でも object を作る（best-effort / 失敗しても create 自体は成功させる）
   // - options が無い = create 直後に実ファイル PUT しないケースが多い想定
@@ -387,18 +365,8 @@ export async function createTokenBlueprint(
     if (uploadUrl) {
       try {
         await putEmptyToSignedUrl(uploadUrl, ct);
-
-        // eslint-disable-next-line no-console
-        console.log(
-          "[tokenBlueprint/tokenBlueprintRepositoryHTTP] createTokenBlueprint: empty PUT success (placeholder object created)",
-          { id: (tb as any)?.id, objectPath: upl?.objectPath, contentType: ct || "application/octet-stream" },
-        );
-      } catch (e) {
-        // eslint-disable-next-line no-console
-        console.warn(
-          "[tokenBlueprint/tokenBlueprintRepositoryHTTP] createTokenBlueprint: empty PUT failed (ignored)",
-          e,
-        );
+      } catch {
+        // best-effort: ignore
       }
     }
   }
