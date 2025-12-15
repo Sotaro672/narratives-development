@@ -10,10 +10,9 @@ import type { TokenBlueprint } from "../../domain/entity/tokenBlueprint";
  * Backend base URL
  */
 const ENV_BASE =
-  ((import.meta as any).env?.VITE_BACKEND_BASE_URL as string | undefined)?.replace(
-    /\/+$/g,
-    "",
-  ) ?? "";
+  ((import.meta as any).env?.VITE_BACKEND_BASE_URL as
+    | string
+    | undefined)?.replace(/\/+$/g, "") ?? "";
 
 const FALLBACK_BASE =
   "https://narratives-backend-871263659099.asia-northeast1.run.app";
@@ -98,41 +97,38 @@ async function handleJsonResponse<T>(res: Response): Promise<T> {
 }
 
 function normalizeTokenBlueprint(raw: any): TokenBlueprint {
-  // backend からの生データに brandName / BrandName / minted / Minted が混在していても吸収できるようにする
-  const tb = raw as TokenBlueprint & {
-    BrandName?: string;
-    minted?: string;
-    Minted?: string;
-  };
+  // ★ Spread できるように、まず「object として」固定する（TS2698 回避）
+  const obj: Record<string, any> =
+    raw && typeof raw === "object" ? (raw as Record<string, any>) : {};
 
+  const brandNameRaw = obj.brandName ?? obj.BrandName;
   const brandName =
-    (raw && (raw.brandName ?? raw.BrandName)) != null
-      ? String(raw.brandName ?? raw.BrandName)
-      : undefined;
+    brandNameRaw != null ? String(brandNameRaw).trim() : undefined;
 
-  // minted: "notYet" | "minted"（未知値や未設定は "notYet" 扱い）
-  const mintedRaw = (raw && (raw.minted ?? raw.Minted)) as string | undefined;
-  const minted: "notYet" | "minted" =
-    mintedRaw === "minted" ? "minted" : "notYet";
+  // ★ minted: boolean（未設定/未知値は false）
+  const mintedRaw = obj.minted ?? obj.Minted;
+  const minted = typeof mintedRaw === "boolean" ? mintedRaw : false;
 
   return {
-    ...tb,
+    ...(obj as any),
     minted,
     ...(brandName !== undefined ? { brandName } : {}),
-  };
+  } as TokenBlueprint;
 }
 
 function normalizePageResult(raw: any): TokenBlueprintPageResult {
-  const rawItems = (raw.items ?? raw.Items ?? []) as any[];
+  const obj: Record<string, any> =
+    raw && typeof raw === "object" ? (raw as Record<string, any>) : {};
 
+  const rawItems = (obj.items ?? obj.Items ?? []) as any[];
   const items = rawItems.map((it) => normalizeTokenBlueprint(it));
 
   return {
     items,
-    totalCount: (raw.totalCount ?? raw.TotalCount ?? 0) as number,
-    totalPages: (raw.totalPages ?? raw.TotalPages ?? 0) as number,
-    page: (raw.page ?? raw.Page ?? 1) as number,
-    perPage: (raw.perPage ?? raw.PerPage ?? 0) as number,
+    totalCount: (obj.totalCount ?? obj.TotalCount ?? 0) as number,
+    totalPages: (obj.totalPages ?? obj.TotalPages ?? 0) as number,
+    page: (obj.page ?? obj.Page ?? 1) as number,
+    perPage: (obj.perPage ?? obj.PerPage ?? 0) as number,
   };
 }
 
@@ -140,9 +136,10 @@ function normalizePageResult(raw: any): TokenBlueprintPageResult {
 // Public API
 // ---------------------------------------------------------
 
-export async function fetchTokenBlueprints(
-  params?: { page?: number; perPage?: number },
-): Promise<TokenBlueprintPageResult> {
+export async function fetchTokenBlueprints(params?: {
+  page?: number;
+  perPage?: number;
+}): Promise<TokenBlueprintPageResult> {
   const token = await getIdTokenOrThrow();
 
   const url = new URL(`${API_BASE}/token-blueprints`);
@@ -218,10 +215,7 @@ export async function createTokenBlueprint(
     description: payload.description.trim(),
     assigneeId: payload.assigneeId.trim(),
     createdBy: payload.createdBy.trim(),
-    iconId:
-      payload.iconId && payload.iconId.trim()
-        ? payload.iconId.trim()
-        : null,
+    iconId: payload.iconId && payload.iconId.trim() ? payload.iconId.trim() : null,
     contentFiles: (payload.contentFiles ?? [])
       .map((x) => x.trim())
       .filter(Boolean),
@@ -261,10 +255,11 @@ export async function updateTokenBlueprint(
     body.assigneeId = payload.assigneeId.trim();
 
   if (payload.iconId !== undefined) {
-    body.iconId =
-      payload.iconId && payload.iconId.trim()
-        ? payload.iconId.trim()
-        : "";
+    if (payload.iconId === null) {
+      body.iconId = null;
+    } else {
+      body.iconId = payload.iconId.trim() ? payload.iconId.trim() : "";
+    }
   }
 
   if (payload.contentFiles !== undefined) {
@@ -312,9 +307,7 @@ export async function deleteTokenBlueprint(id: string): Promise<void> {
 
 export type BrandSummary = { id: string; name: string };
 
-export async function fetchBrandsForCurrentCompany(): Promise<
-  BrandSummary[]
-> {
+export async function fetchBrandsForCurrentCompany(): Promise<BrandSummary[]> {
   const token = await getIdTokenOrThrow();
 
   const url = new URL(`${API_BASE}/brands`);
@@ -341,13 +334,10 @@ export async function fetchBrandNameById(id: string): Promise<string> {
 
   const token = await getIdTokenOrThrow();
 
-  const res = await fetch(
-    `${API_BASE}/brands/${encodeURIComponent(trimmed)}`,
-    {
-      method: "GET",
-      headers: { Authorization: `Bearer ${token}` },
-    },
-  );
+  const res = await fetch(`${API_BASE}/brands/${encodeURIComponent(trimmed)}`, {
+    method: "GET",
+    headers: { Authorization: `Bearer ${token}` },
+  });
 
   const data = await handleJsonResponse<any>(res);
   return String(data?.name ?? data?.Name ?? "").trim();

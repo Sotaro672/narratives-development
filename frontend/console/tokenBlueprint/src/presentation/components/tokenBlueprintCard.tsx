@@ -20,13 +20,17 @@ import {
 import "../styles/tokenBlueprint.css";
 
 export type TokenBlueprintCardViewModel = {
-  id: string;
+  id: string; // docId
   name: string;
   symbol: string;
   brandId: string;
   brandName: string;
   description: string;
   iconUrl?: string;
+  // ★ minted:true でもアイコン編集できるようにするため、UIで判定できるよう追加
+  minted: boolean;
+
+  // UI state
   isEditMode: boolean;
   brandOptions: { id: string; name: string }[];
 };
@@ -37,7 +41,12 @@ export type TokenBlueprintCardHandlers = {
   onChangeBrand?: (id: string, name: string) => void;
   onChangeDescription?: (v: string) => void;
 
-  onUploadIcon?: () => void;
+  // ★ component には「スタイル要素のみ」残すため、DOM/挙動は hook 側へ
+  descriptionRef?: React.RefObject<HTMLTextAreaElement | null>;
+  iconInputRef?: React.RefObject<HTMLInputElement | null>;
+  onRequestPickIconFile?: () => void;
+  onIconInputChange?: (e: React.ChangeEvent<HTMLInputElement>) => void;
+
   onPreview?: () => void;
   onToggleEditMode?: () => void;
 
@@ -53,13 +62,8 @@ export default function TokenBlueprintCard({
   vm: TokenBlueprintCardViewModel;
   handlers: TokenBlueprintCardHandlers;
 }) {
-  const descriptionRef = React.useRef<HTMLTextAreaElement | null>(null);
-
-  React.useEffect(() => {
-    if (!descriptionRef.current) return;
-    descriptionRef.current.style.height = "auto";
-    descriptionRef.current.style.height = `${descriptionRef.current.scrollHeight}px`;
-  }, [vm.description]);
+  // ★ minted:true でもアイコン編集可能にする（編集モード OR minted）
+  const canEditIcon = Boolean(vm.isEditMode || vm.minted);
 
   return (
     <Card className="token-blueprint-card">
@@ -90,22 +94,47 @@ export default function TokenBlueprintCard({
           <div className="token-blueprint-card__icon-area">
             <div className="token-blueprint-card__icon-wrap">
               {vm.iconUrl ? (
-                <img src={vm.iconUrl} alt="Token Icon" />
+                <img
+                  src={vm.iconUrl}
+                  alt="Token Icon"
+                  onClick={() => canEditIcon && handlers.onRequestPickIconFile?.()}
+                  style={{
+                    cursor: canEditIcon ? "pointer" : "default",
+                  }}
+                />
               ) : (
-                <div className="token-blueprint-card__icon-placeholder">
+                <button
+                  type="button"
+                  className="token-blueprint-card__icon-placeholder"
+                  onClick={() => handlers.onRequestPickIconFile?.()}
+                  disabled={!canEditIcon}
+                  aria-label="アイコン画像をアップロード"
+                  style={{
+                    cursor: canEditIcon ? "pointer" : "default",
+                  }}
+                >
                   アイコン画像を
                   <br />
                   アップロード
-                </div>
+                </button>
               )}
             </div>
 
-            {/* 編集モードのみ */}
-            {vm.isEditMode && (
+            {/* hidden input（DOM はここに置くが、ref/handler は hook 側へ移譲） */}
+            <input
+              ref={handlers.iconInputRef ?? undefined}
+              type="file"
+              accept="image/*"
+              style={{ display: "none" }}
+              onChange={handlers.onIconInputChange}
+            />
+
+            {/* ★ アイコン変更ボタンは canEditIcon のとき表示（minted:true でも表示される） */}
+            {canEditIcon && (
               <button
                 type="button"
                 className="token-blueprint-card__upload-btn"
-                onClick={() => handlers.onUploadIcon?.()}
+                onClick={() => handlers.onRequestPickIconFile?.()}
               >
                 <Upload className="token-blueprint-card__upload-icon" />
                 アップロード
@@ -205,7 +234,7 @@ export default function TokenBlueprintCard({
           <Label className="token-blueprint-card__label">説明</Label>
 
           <textarea
-            ref={descriptionRef}
+            ref={handlers.descriptionRef ?? undefined}
             value={vm.description}
             placeholder="このトークンで付与する権利・特典を記載してください。"
             onChange={(e) =>

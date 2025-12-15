@@ -16,13 +16,20 @@ import {
 
 /**
  * TokenBlueprintCard 用のロジックフック
- * - UI 状態管理のみ担当
+ * - UI 状態管理 +（★移譲）アイコンアップロードの UI ロジック（file input / preview / click）
+ *
+ * ★仕様:
+ * - minted は boolean（notYet/minted は使わない）
+ * - minted:true でも「トークンアイコンは編集できる」(=アイコンだけアップロード可能)
  */
 export function useTokenBlueprintCard(params: {
   initialTokenBlueprint?: Partial<TokenBlueprint> & { brandName?: string };
   initialBurnAt?: string;
   initialIconUrl?: string;
   initialEditMode?: boolean;
+
+  // ★ 将来：実アップロードを hook 外から注入したい場合に使う（任意）
+  // onUploadIcon?: (file: File, tokenBlueprintId: string) => Promise<void> | void;
 }) {
   const tb = params.initialTokenBlueprint ?? {};
 
@@ -34,13 +41,23 @@ export function useTokenBlueprintCard(params: {
   const [symbol, setSymbol] = React.useState(tb.symbol ?? "");
 
   const [brandId, setBrandId] = React.useState(tb.brandId ?? "");
-  const [brandName, setBrandName] = React.useState(
-    (tb as any).brandName ?? "",
-  );
+  const [brandName, setBrandName] = React.useState((tb as any).brandName ?? "");
 
   const [description, setDescription] = React.useState(tb.description ?? "");
   const [burnAt, setBurnAt] = React.useState(params.initialBurnAt ?? "");
-  const [iconUrl] = React.useState(params.initialIconUrl ?? "");
+
+  // ★ minted は boolean（未設定は false 扱い）
+  const [minted, setMinted] = React.useState<boolean>(
+    typeof (tb as any).minted === "boolean" ? (tb as any).minted : false,
+  );
+
+  // ★ backend 反映済み iconUrl（初期値）
+  const [remoteIconUrl, setRemoteIconUrl] = React.useState(
+    params.initialIconUrl ?? "",
+  );
+
+  // ★ ローカルプレビュー（アップロード前に表示したい場合）
+  const [localPreviewUrl, setLocalPreviewUrl] = React.useState<string>("");
 
   // ⭐ 編集モード切り替え可能に変更
   const [isEditMode, setIsEditMode] = React.useState(
@@ -55,6 +72,13 @@ export function useTokenBlueprintCard(params: {
   const initialRef = React.useRef<
     (Partial<TokenBlueprint> & { brandName?: string }) | null
   >(tb);
+
+  // ★ UI refs（component からはスタイルだけにするため、ここで管理）
+  const descriptionRef = React.useRef<HTMLTextAreaElement | null>(null);
+  const iconInputRef = React.useRef<HTMLInputElement | null>(null);
+
+  // ★ アイコンは minted:true でも編集可能（編集モード OR minted）
+  const canEditIcon = Boolean(isEditMode || minted);
 
   // -------------------------
   // Brand 一覧読み込み（Service に委譲）
@@ -88,8 +112,21 @@ export function useTokenBlueprintCard(params: {
     setBrandId(src.brandId ?? "");
     setBrandName((src as any).brandName ?? "");
     setDescription(src.description ?? "");
-    // burnAt / iconUrl は今のところ別初期値を優先
+
+    // ★ minted(boolean) を反映（未設定は false）
+    setMinted(typeof (src as any).minted === "boolean" ? (src as any).minted : false);
+
+    // burnAt は今のところ別初期値を優先
   }, [params.initialTokenBlueprint, isEditMode]);
+
+  // ★ 初期 iconUrl が更新された場合（詳細取得後など）
+  React.useEffect(() => {
+    if (isEditMode) return;
+
+    const next = params.initialIconUrl ?? "";
+    setRemoteIconUrl(next);
+    // ローカルプレビューは「ユーザーが選択した時だけ」なのでここでは触らない
+  }, [params.initialIconUrl, isEditMode]);
 
   // brandId しか無い場合、brandName を backend から解決
   React.useEffect(() => {
@@ -106,6 +143,77 @@ export function useTokenBlueprintCard(params: {
     };
   }, [brandId, brandName]);
 
+  // ★ textarea auto-resize（スタイル/見た目の調整なので hook 側に移譲）
+  React.useEffect(() => {
+    if (!descriptionRef.current) return;
+    descriptionRef.current.style.height = "auto";
+    descriptionRef.current.style.height = `${descriptionRef.current.scrollHeight}px`;
+  }, [description]);
+
+  // ★ ローカルプレビューのメモリ解放（unmount）
+  React.useEffect(() => {
+    return () => {
+      if (localPreviewUrl) URL.revokeObjectURL(localPreviewUrl);
+    };
+  }, [localPreviewUrl]);
+
+  // -------------------------
+  // Icon upload UI logic
+  // -------------------------
+  const requestPickIconFile = React.useCallback(() => {
+    // ★ minted:true でも開ける
+    if (!canEditIcon) return;
+    iconInputRef.current?.click();
+  }, [canEditIcon]);
+
+  const onIconInputChange = React.useCallback(
+    (e: React.ChangeEvent<HTMLInputElement>) => {
+      // ★ minted:true でも許可
+      if (!canEditIcon) {
+        // 同じファイルを連続で選べるように value をクリア
+        e.target.value = "";
+        return;
+      }
+
+      const file = e.target.files?.[0] ?? null;
+
+      // 同じファイルを連続で選べるように value をクリア（hook 側で実施）
+      e.target.value = "";
+
+      if (!file) return;
+
+      // 画像のみ
+      if (!file.type?.startsWith("image/")) {
+        return;
+      }
+
+      // ローカルプレビュー
+      try {
+        if (localPreviewUrl) URL.revokeObjectURL(localPreviewUrl);
+        setLocalPreviewUrl(URL.createObjectURL(file));
+      } catch {
+        // ignore
+      }
+
+      // ★ ここで upload を呼ぶ想定（現状は最短のモック）
+      // params.onUploadIcon?.(file, id);
+      // もしくは service を呼ぶならここで呼ぶ
+      // いったん動作確認用ログ
+      // eslint-disable-next-line no-console
+      console.log("[useTokenBlueprintCard] icon selected", {
+        tokenBlueprintId: id,
+        fileName: file.name,
+        size: file.size,
+        type: file.type,
+        minted,
+        isEditMode,
+      });
+    },
+    [canEditIcon, id, isEditMode, localPreviewUrl, minted],
+  );
+
+  const shownIconUrl = localPreviewUrl || remoteIconUrl;
+
   // -------------------------
   // ViewModel
   // -------------------------
@@ -116,7 +224,9 @@ export function useTokenBlueprintCard(params: {
     brandId,
     brandName,
     description,
-    iconUrl,
+    iconUrl: shownIconUrl,
+
+    minted, // ★ boolean
     isEditMode,
     brandOptions,
   };
@@ -135,10 +245,11 @@ export function useTokenBlueprintCard(params: {
 
     onChangeDescription: (v) => setDescription(v),
 
-    onUploadIcon: () => {
-      if (!isEditMode) return;
-      alert("トークンアイコンのアップロード（モック）");
-    },
+    // ★ component 側は style のみ：file picker / onChange は hook 側が持つ
+    iconInputRef,
+    descriptionRef,
+    onRequestPickIconFile: requestPickIconFile,
+    onIconInputChange,
 
     onPreview: () => {
       alert("プレビュー画面を開きます（モック）");
@@ -165,7 +276,18 @@ export function useTokenBlueprintCard(params: {
       setBrandId(src.brandId ?? "");
       setBrandName((src as any).brandName ?? "");
       setDescription(src.description ?? "");
+
+      // ★ minted(boolean) を元に戻す
+      setMinted(typeof (src as any).minted === "boolean" ? (src as any).minted : false);
+
       // burnAt は今のところそのまま
+
+      // remoteIconUrl は initialIconUrl を優先
+      setRemoteIconUrl(params.initialIconUrl ?? "");
+      if (localPreviewUrl) {
+        URL.revokeObjectURL(localPreviewUrl);
+        setLocalPreviewUrl("");
+      }
     },
   };
 

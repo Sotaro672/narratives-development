@@ -4,6 +4,7 @@ package handlers
 import (
 	"context"
 	"encoding/json"
+	"log"
 	"net/http"
 	"strconv"
 	"strings"
@@ -206,6 +207,10 @@ func (h *TokenBlueprintHandler) create(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 
 	companyID := strings.TrimSpace(uc.CompanyIDFromContext(ctx))
+	actorID := strings.TrimSpace(r.Header.Get("X-Actor-Id"))
+
+	log.Printf("[tokenBlueprint_handler] create start companyId=%q actorId=%q", companyID, actorID)
+
 	if companyID == "" {
 		w.WriteHeader(http.StatusForbidden)
 		_ = json.NewEncoder(w).Encode(map[string]string{"error": "companyId not found in context"})
@@ -214,10 +219,21 @@ func (h *TokenBlueprintHandler) create(w http.ResponseWriter, r *http.Request) {
 
 	var req createTokenBlueprintRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		log.Printf("[tokenBlueprint_handler] create decode failed err=%v", err)
 		w.WriteHeader(http.StatusBadRequest)
 		_ = json.NewEncoder(w).Encode(map[string]string{"error": "invalid json"})
 		return
 	}
+
+	log.Printf("[tokenBlueprint_handler] create request name=%q symbol=%q brandId=%q assigneeId=%q createdBy=%q hasIcon=%v contentFiles=%d",
+		strings.TrimSpace(req.Name),
+		strings.TrimSpace(req.Symbol),
+		strings.TrimSpace(req.BrandID),
+		strings.TrimSpace(req.AssigneeID),
+		strings.TrimSpace(req.CreatedBy),
+		req.IconID != nil && strings.TrimSpace(*req.IconID) != "",
+		len(req.ContentFiles),
+	)
 
 	if strings.TrimSpace(req.Name) == "" ||
 		strings.TrimSpace(req.Symbol) == "" ||
@@ -228,7 +244,6 @@ func (h *TokenBlueprintHandler) create(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	actorID := strings.TrimSpace(r.Header.Get("X-Actor-Id"))
 	createdBy := strings.TrimSpace(req.CreatedBy)
 	if createdBy == "" {
 		createdBy = actorID
@@ -245,9 +260,14 @@ func (h *TokenBlueprintHandler) create(w http.ResponseWriter, r *http.Request) {
 		ActorID:     actorID,
 	})
 	if err != nil {
+		log.Printf("[tokenBlueprint_handler] create failed err=%v", err)
 		writeTokenBlueprintErr(w, err)
 		return
 	}
+
+	log.Printf("[tokenBlueprint_handler] create success id=%q companyId=%q brandId=%q assigneeId=%q minted=%v metadataUri=%q",
+		tb.ID, tb.CompanyID, tb.BrandID, tb.AssigneeID, tb.Minted, tb.MetadataURI,
+	)
 
 	_ = json.NewEncoder(w).Encode(h.toResponse(ctx, tb))
 }
@@ -257,11 +277,21 @@ func (h *TokenBlueprintHandler) create(w http.ResponseWriter, r *http.Request) {
 func (h *TokenBlueprintHandler) get(w http.ResponseWriter, r *http.Request, id string) {
 	ctx := r.Context()
 
-	tb, err := h.uc.GetByID(ctx, strings.TrimSpace(id))
+	companyID := strings.TrimSpace(uc.CompanyIDFromContext(ctx))
+	id = strings.TrimSpace(id)
+
+	log.Printf("[tokenBlueprint_handler] get start id=%q companyId(ctx)=%q", id, companyID)
+
+	tb, err := h.uc.GetByID(ctx, id)
 	if err != nil {
+		log.Printf("[tokenBlueprint_handler] get failed id=%q err=%v", id, err)
 		writeTokenBlueprintErr(w, err)
 		return
 	}
+
+	log.Printf("[tokenBlueprint_handler] get success id=%q companyId=%q brandId=%q assigneeId=%q minted=%v metadataUri=%q",
+		tb.ID, tb.CompanyID, tb.BrandID, tb.AssigneeID, tb.Minted, tb.MetadataURI,
+	)
 
 	_ = json.NewEncoder(w).Encode(h.toResponse(ctx, tb))
 }
@@ -305,33 +335,69 @@ func (h *TokenBlueprintHandler) list(w http.ResponseWriter, r *http.Request) {
 		PerPage: perPage,
 	}
 
+	// ★ ログ: 入力条件
+	log.Printf("[tokenBlueprint_handler] list start companyId=%q page=%d perPage=%d brandId=%q minted=%q",
+		companyID, pageNum, perPage, brandID, mintedFilter,
+	)
+
 	var (
 		result tbdom.PageResult
 		err    error
+		mode   string
 	)
 
 	switch {
 	// ★ brandId ごとの一覧
 	case brandID != "" && mintedFilter == "":
+		mode = "ListByBrandID"
 		result, err = h.uc.ListByBrandID(ctx, brandID, page)
 
 	// ★ minted = notYet のみ
 	case mintedFilter == "notYet":
+		mode = "ListMintedNotYet"
 		result, err = h.uc.ListMintedNotYet(ctx, page)
 
 	// ★ minted = minted のみ
 	case mintedFilter == "minted":
+		mode = "ListMintedCompleted"
 		result, err = h.uc.ListMintedCompleted(ctx, page)
 
 	// ★ デフォルト: companyId 単位の一覧（従来挙動）
 	default:
+		mode = "ListByCompanyID"
 		result, err = h.uc.ListByCompanyID(ctx, companyID, page)
 	}
 
 	if err != nil {
+		log.Printf("[tokenBlueprint_handler] list failed mode=%s companyId=%q err=%v", mode, companyID, err)
 		writeTokenBlueprintErr(w, err)
 		return
 	}
+
+	// ★ ログ: 取得結果（件数 + サンプル）
+	sampleIDs := make([]string, 0, 5)
+	sample := make([]map[string]any, 0, 3)
+	for i := range result.Items {
+		if len(sampleIDs) < 5 {
+			sampleIDs = append(sampleIDs, strings.TrimSpace(result.Items[i].ID))
+		}
+		if len(sample) < 3 {
+			tb := result.Items[i]
+			sample = append(sample, map[string]any{
+				"id":         strings.TrimSpace(tb.ID),
+				"companyId":  strings.TrimSpace(tb.CompanyID),
+				"brandId":    strings.TrimSpace(tb.BrandID),
+				"assigneeId": strings.TrimSpace(tb.AssigneeID),
+				"minted":     tb.Minted,
+				"createdAt":  tb.CreatedAt,
+				"updatedAt":  tb.UpdatedAt,
+			})
+		}
+	}
+
+	log.Printf("[tokenBlueprint_handler] list success mode=%s companyId=%q totalCount=%d page=%d perPage=%d items=%d sampleIds=%v sample=%v",
+		mode, companyID, result.TotalCount, result.Page, result.PerPage, len(result.Items), sampleIDs, sample,
+	)
 
 	items := make([]tokenBlueprintResponse, 0, len(result.Items))
 	for i := range result.Items {
@@ -353,14 +419,30 @@ func (h *TokenBlueprintHandler) update(w http.ResponseWriter, r *http.Request, i
 	ctx := r.Context()
 	id = strings.TrimSpace(id)
 
+	companyID := strings.TrimSpace(uc.CompanyIDFromContext(ctx))
+	actorID := strings.TrimSpace(r.Header.Get("X-Actor-Id"))
+
+	log.Printf("[tokenBlueprint_handler] update start id=%q companyId(ctx)=%q actorId=%q", id, companyID, actorID)
+
 	var req updateTokenBlueprintRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		log.Printf("[tokenBlueprint_handler] update decode failed id=%q err=%v", id, err)
 		w.WriteHeader(http.StatusBadRequest)
 		_ = json.NewEncoder(w).Encode(map[string]string{"error": "invalid json"})
 		return
 	}
 
-	actorID := strings.TrimSpace(r.Header.Get("X-Actor-Id"))
+	// 入力の概要だけログ（値そのものは必要最低限）
+	log.Printf("[tokenBlueprint_handler] update request id=%q hasName=%v hasSymbol=%v hasBrandId=%v hasDesc=%v hasAssignee=%v hasIconId=%v hasContentFiles=%v",
+		id,
+		req.Name != nil,
+		req.Symbol != nil,
+		req.BrandID != nil,
+		req.Description != nil,
+		req.AssigneeID != nil,
+		req.IconID != nil,
+		req.ContentFiles != nil,
+	)
 
 	tb, err := h.uc.Update(ctx, uc.UpdateBlueprintRequest{
 		ID:           id,
@@ -374,9 +456,14 @@ func (h *TokenBlueprintHandler) update(w http.ResponseWriter, r *http.Request, i
 		ActorID:      actorID,
 	})
 	if err != nil {
+		log.Printf("[tokenBlueprint_handler] update failed id=%q err=%v", id, err)
 		writeTokenBlueprintErr(w, err)
 		return
 	}
+
+	log.Printf("[tokenBlueprint_handler] update success id=%q companyId=%q brandId=%q assigneeId=%q minted=%v metadataUri=%q",
+		tb.ID, tb.CompanyID, tb.BrandID, tb.AssigneeID, tb.Minted, tb.MetadataURI,
+	)
 
 	_ = json.NewEncoder(w).Encode(h.toResponse(ctx, tb))
 }
@@ -385,12 +472,20 @@ func (h *TokenBlueprintHandler) update(w http.ResponseWriter, r *http.Request, i
 
 func (h *TokenBlueprintHandler) delete(w http.ResponseWriter, r *http.Request, id string) {
 	ctx := r.Context()
+	id = strings.TrimSpace(id)
 
-	if err := h.uc.Delete(ctx, strings.TrimSpace(id)); err != nil {
+	companyID := strings.TrimSpace(uc.CompanyIDFromContext(ctx))
+	actorID := strings.TrimSpace(r.Header.Get("X-Actor-Id"))
+
+	log.Printf("[tokenBlueprint_handler] delete start id=%q companyId(ctx)=%q actorId=%q", id, companyID, actorID)
+
+	if err := h.uc.Delete(ctx, id); err != nil {
+		log.Printf("[tokenBlueprint_handler] delete failed id=%q err=%v", id, err)
 		writeTokenBlueprintErr(w, err)
 		return
 	}
 
+	log.Printf("[tokenBlueprint_handler] delete success id=%q", id)
 	w.WriteHeader(http.StatusNoContent)
 }
 

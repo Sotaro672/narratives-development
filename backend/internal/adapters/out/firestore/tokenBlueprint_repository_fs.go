@@ -160,16 +160,20 @@ func (r *TokenBlueprintRepositoryFS) List(
 }
 
 // ListByCompanyID: companyId で限定した一覧取得。
-// 追加の BrandID / NameLike / SymbolLike フィルタは Filter を使う呼び出し側で行う想定。
+// ★修正: Firestore の Where で companyId を確実に絞る（in-memory 全走査をやめる）
 func (r *TokenBlueprintRepositoryFS) ListByCompanyID(
 	ctx context.Context,
 	companyID string,
 	page tbdom.Page,
 ) (tbdom.PageResult, error) {
+	if r.Client == nil {
+		return tbdom.PageResult{}, errors.New("firestore client is nil")
+	}
+
 	cid := strings.TrimSpace(companyID)
+	pageNum, perPage, offset := fscommon.NormalizePage(page.Number, page.PerPage, 50, 200)
+
 	if cid == "" {
-		// companyId が空の場合は空ページを返す
-		pageNum, perPage, _ := fscommon.NormalizePage(page.Number, page.PerPage, 50, 200)
 		return tbdom.PageResult{
 			Items:      []tbdom.TokenBlueprint{},
 			TotalCount: 0,
@@ -179,11 +183,81 @@ func (r *TokenBlueprintRepositoryFS) ListByCompanyID(
 		}, nil
 	}
 
-	filter := tbdom.Filter{
-		CompanyIDs: []string{cid},
+	// companyId を Firestore クエリで確実に絞る（minted は絞らない）
+	baseQ := r.col().
+		Where("companyId", "==", cid).
+		OrderBy("createdAt", firestore.Desc).
+		OrderBy(firestore.DocumentID, firestore.Desc)
+
+	// totalCount を計算（deletedAt が入っているものは除外）
+	total := 0
+	{
+		it := baseQ.Documents(ctx)
+		defer it.Stop()
+
+		for {
+			doc, err := it.Next()
+			if errors.Is(err, iterator.Done) {
+				break
+			}
+			if err != nil {
+				return tbdom.PageResult{}, err
+			}
+			tb, err := docToTokenBlueprint(doc)
+			if err != nil {
+				return tbdom.PageResult{}, err
+			}
+			if tb.DeletedAt != nil {
+				continue
+			}
+			total++
+		}
 	}
 
-	return r.List(ctx, filter, page)
+	if total == 0 {
+		return tbdom.PageResult{
+			Items:      []tbdom.TokenBlueprint{},
+			TotalCount: 0,
+			TotalPages: 0,
+			Page:       pageNum,
+			PerPage:    perPage,
+		}, nil
+	}
+
+	// ページングして items を取得
+	q := baseQ.Offset(offset).Limit(perPage)
+
+	it := q.Documents(ctx)
+	defer it.Stop()
+
+	items := make([]tbdom.TokenBlueprint, 0, perPage)
+	for {
+		doc, err := it.Next()
+		if errors.Is(err, iterator.Done) {
+			break
+		}
+		if err != nil {
+			return tbdom.PageResult{}, err
+		}
+
+		tb, err := docToTokenBlueprint(doc)
+		if err != nil {
+			return tbdom.PageResult{}, err
+		}
+		if tb.DeletedAt != nil {
+			continue
+		}
+
+		items = append(items, tb)
+	}
+
+	return tbdom.PageResult{
+		Items:      items,
+		TotalCount: total,
+		TotalPages: fscommon.ComputeTotalPages(total, perPage),
+		Page:       pageNum,
+		PerPage:    perPage,
+	}, nil
 }
 
 func (r *TokenBlueprintRepositoryFS) Count(ctx context.Context, filter tbdom.Filter) (int, error) {
