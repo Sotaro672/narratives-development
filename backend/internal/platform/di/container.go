@@ -440,8 +440,10 @@ func NewContainer(ctx context.Context) (*Container, error) {
 	)
 
 	// ✅ 追加: MintUsecase に NameResolver を差し込む（createdByName 解決用）
-	// - mint/usecase.go 側で SetNameResolver を追加した前提
 	mintUC.SetNameResolver(nameResolver)
+
+	// ✅ NEW: minted:false→true のタイミングで Inventory へ反映するため、InventoryRepo を差し込む
+	mintUC.SetInventoryRepo(inventoryRepo)
 
 	// ★ NEW: MintRequestQueryService（GET /mint/requests 一覧専用）
 	mintRequestQueryService := companyquery.NewMintRequestQueryService(
@@ -451,8 +453,6 @@ func NewContainer(ctx context.Context) (*Container, error) {
 	)
 
 	// ✅ 追加: MintRequestQueryService に modelRepo を差し込む
-	// - companyquery.MintRequestQueryService.SetModelRepo は “最小IF(ModelVariationsLister)” を受ける想定
-	// - fs.ModelRepositoryFS が ListModelVariationsByProductBlueprintID を実装していればそのまま渡せる
 	mintRequestQueryService.SetModelRepo(modelRepo)
 
 	saleUC := uc.NewSaleUsecase(saleRepo)

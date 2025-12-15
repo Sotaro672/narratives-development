@@ -65,7 +65,7 @@ func NewMintHandler(
 
 	return &MintHandler{
 		mintUC:        mintUC,
-		tokenUC:       tokenUC,
+		tokenUC:       tokenUC, // 互換のため保持（mint 実行は mintUC 経由に変更）
 		nameResolver:  nameResolver,
 		productionUC:  productionUC,
 		mintRequestQS: mintRequestQS,
@@ -670,13 +670,15 @@ func (h *MintHandler) getMintByID(w http.ResponseWriter, r *http.Request) {
 
 // ============================================================
 // POST /mint/requests/{mintRequestId}/mint
+// ★ A案: tokenUC 直呼びを廃止し、mintUC 経由に統一
+// - minted:false→true 更新時に inventory へ反映するため
 // ============================================================
 func (h *MintHandler) mintFromMintRequest(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 
-	if h.tokenUC == nil {
+	if h.mintUC == nil {
 		w.WriteHeader(http.StatusInternalServerError)
-		_ = json.NewEncoder(w).Encode(map[string]string{"error": "token usecase is not configured"})
+		_ = json.NewEncoder(w).Encode(map[string]string{"error": "mint usecase is not configured"})
 		return
 	}
 
@@ -690,7 +692,8 @@ func (h *MintHandler) mintFromMintRequest(w http.ResponseWriter, r *http.Request
 		return
 	}
 
-	result, err := h.tokenUC.MintFromMintRequest(ctx, mintRequestID)
+	// ★ MintUsecase 経由でチェーンミント & minted 更新 & inventory 反映まで実行
+	result, err := h.mintUC.MintFromMintRequest(ctx, mintRequestID)
 	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
 		_ = json.NewEncoder(w).Encode(map[string]string{"error": err.Error()})

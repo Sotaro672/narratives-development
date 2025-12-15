@@ -3,6 +3,8 @@ package usecase
 
 import (
 	"context"
+	"errors"
+	"sort"
 	"strings"
 	"time"
 
@@ -27,6 +29,96 @@ func NewInventoryUsecase(repo invdom.RepositoryPort) *InventoryUsecase {
 // ============================================================
 // Commands
 // ============================================================
+
+// UpsertFromMint
+//
+// mint から渡された情報（tokenBlueprintId + productBlueprintId + productIds）をもとに、
+// 既に同一組み合わせの Inventory(Mint) が存在する場合は
+//   - products に未登録 productId を追加
+//   - 追加された件数ぶん accumulation を増加（idempotent）
+//
+// 存在しない場合は
+//   - レコード自体を新規作成（accumulation は productIds 件数で初期化）
+//
+// ※ docID 生成規則は MintUsecase 側（buildInventoryDocID）と合わせる。
+func (uc *InventoryUsecase) UpsertFromMint(
+	ctx context.Context,
+	tokenBlueprintID string,
+	productBlueprintID string,
+	productIDs []string,
+) (invdom.Mint, error) {
+	if uc == nil || uc.repo == nil {
+		return invdom.Mint{}, errors.New("inventory usecase/repo is nil")
+	}
+
+	tbID := strings.TrimSpace(tokenBlueprintID)
+	pbID := strings.TrimSpace(productBlueprintID)
+	if tbID == "" {
+		return invdom.Mint{}, invdom.ErrInvalidTokenBlueprintID
+	}
+	if pbID == "" {
+		return invdom.Mint{}, invdom.ErrInvalidProductBlueprintID
+	}
+
+	ids := normalizeIDs(productIDs)
+	if len(ids) == 0 {
+		return invdom.Mint{}, invdom.ErrInvalidProducts
+	}
+
+	docID := buildInventoryDocID(tbID, pbID)
+
+	// 1) まず「同一組み合わせ」が既にあるか確認（docID で取得）
+	existing, err := uc.repo.GetByID(ctx, docID)
+	if err != nil {
+		// 無ければ新規作成
+		if errors.Is(err, invdom.ErrNotFound) {
+			now := time.Now().UTC()
+			ent, err := invdom.NewMint(
+				docID, // docId を固定（tokenBlueprint + productBlueprint の組み合わせ）
+				tbID,
+				pbID,
+				ids,
+				len(ids), // accumulation 初期値 = products 件数
+				now,
+			)
+			if err != nil {
+				return invdom.Mint{}, err
+			}
+			return uc.repo.Create(ctx, ent)
+		}
+		return invdom.Mint{}, err
+	}
+
+	// 2) 既存あり → products に未登録分だけ追加し、その差分だけ accumulation を増やす
+	if existing.Products == nil {
+		existing.Products = map[string]string{}
+	}
+
+	added := 0
+	for _, pid := range ids {
+		if _, ok := existing.Products[pid]; ok {
+			continue
+		}
+		existing.Products[pid] = "" // mintAddress は後から埋める想定
+		added++
+	}
+
+	// products 更新
+	updated, err := uc.repo.Update(ctx, existing)
+	if err != nil {
+		return invdom.Mint{}, err
+	}
+
+	// accumulation 増加（added が 0 なら no-op）
+	if added > 0 {
+		updated, err = uc.repo.IncrementAccumulation(ctx, docID, added)
+		if err != nil {
+			return invdom.Mint{}, err
+		}
+	}
+
+	return updated, nil
+}
 
 // CreateMint creates a new inventory Mint record.
 //
@@ -102,4 +194,35 @@ func (uc *InventoryUsecase) ListByProductBlueprintID(ctx context.Context, produc
 
 func (uc *InventoryUsecase) ListByTokenAndProductBlueprintID(ctx context.Context, tokenBlueprintID, productBlueprintID string) ([]invdom.Mint, error) {
 	return uc.repo.ListByTokenAndProductBlueprintID(ctx, tokenBlueprintID, productBlueprintID)
+}
+
+// ============================================================
+// Helpers (local)
+// ============================================================
+
+func normalizeIDs(raw []string) []string {
+	seen := map[string]struct{}{}
+	out := make([]string, 0, len(raw))
+	for _, s := range raw {
+		s = strings.TrimSpace(s)
+		if s == "" {
+			continue
+		}
+		if _, ok := seen[s]; ok {
+			continue
+		}
+		seen[s] = struct{}{}
+		out = append(out, s)
+	}
+	sort.Strings(out)
+	return out
+}
+
+func buildInventoryDocID(tokenBlueprintID, productBlueprintID string) string {
+	sanitize := func(s string) string {
+		s = strings.TrimSpace(s)
+		s = strings.ReplaceAll(s, "/", "_")
+		return s
+	}
+	return sanitize(tokenBlueprintID) + "__" + sanitize(productBlueprintID)
 }
