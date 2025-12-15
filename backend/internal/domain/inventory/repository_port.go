@@ -1,83 +1,44 @@
-// backend\internal\domain\inventory\repository_port.go
+// backend/internal/domain/inventory/repository_port.go
 package inventory
 
-import (
-	"context"
-	"errors"
-	"time"
+import "context"
 
-	common "narratives/internal/domain/common"
-)
+// ------------------------------------------------------
+// Repository Port for Inventory (mints コレクション / テーブル)
+// ------------------------------------------------------
+//
+// Hexagonal Architecture における「出力ポート」。
+// Firestore などの具体実装は adapters/out 側で実装し、
+// ドメイン層からはこのインターフェースのみを参照します。
+//
+// 対象エンティティ: Mint（backend/internal/domain/inventory/entity.go）
+type RepositoryPort interface {
+	// Create:
+	// - 新しい Mint エンティティを保存します。
+	// - m.ID が空の場合、実装側で採番して返却します。
+	Create(ctx context.Context, m Mint) (Mint, error)
 
-// Patch（部分更新）: nil のフィールドは更新しない
-// ConnectedToken は nil=変更なし、空文字ポインタ("")=クリア、非空ポインタ=設定 の運用を想定
-type InventoryPatch struct {
-	Models         *[]InventoryModel
-	Location       *string
-	Status         *InventoryStatus
-	ConnectedToken *string
+	// GetByID:
+	// - id で 1 件取得します。
+	GetByID(ctx context.Context, id string) (Mint, error)
 
-	UpdatedAt *time.Time
-	UpdatedBy *string
-}
+	// Update:
+	// - Mint を更新します（updatedAt は実装側で更新してよい）。
+	Update(ctx context.Context, m Mint) (Mint, error)
 
-// フィルタ/検索条件（実装側で適宜解釈）
-type Filter struct {
-	// フリーテキスト（id, location などへの部分一致等は実装側に委譲）
-	SearchQuery string
-
-	// 絞り込み
-	IDs            []string
-	ConnectedToken *string
-	Location       *string
-	Status         *InventoryStatus
-	Statuses       []InventoryStatus
-	CreatedBy      *string
-	UpdatedBy      *string
-
-	// 日付レンジ
-	CreatedFrom *time.Time
-	CreatedTo   *time.Time
-	UpdatedFrom *time.Time
-	UpdatedTo   *time.Time
-}
-
-// 共通型エイリアス（インフラ非依存）
-type Sort = common.Sort
-type SortOrder = common.SortOrder
-type Page = common.Page
-type PageResult[T any] = common.PageResult[T]
-type CursorPage = common.CursorPage
-type CursorPageResult[T any] = common.CursorPageResult[T]
-type SaveOptions = common.SaveOptions
-
-const (
-	SortAsc  = common.SortAsc
-	SortDesc = common.SortDesc
-)
-
-// 契約上の代表的エラー
-var (
-	ErrNotFound = errors.New("inventory: not found")
-	ErrConflict = errors.New("inventory: conflict")
-)
-
-// Repository ポート（契約）
-type Repository interface {
-	// 一覧取得
-	List(ctx context.Context, filter Filter, sort Sort, page Page) (PageResult[Inventory], error)
-	ListByCursor(ctx context.Context, filter Filter, sort Sort, cpage CursorPage) (CursorPageResult[Inventory], error)
-
-	// 取得
-	GetByID(ctx context.Context, id string) (Inventory, error)
-	Exists(ctx context.Context, id string) (bool, error)
-	Count(ctx context.Context, filter Filter) (int, error)
-
-	// 変更
-	Create(ctx context.Context, inv Inventory) (Inventory, error)
-	Update(ctx context.Context, id string, patch InventoryPatch) (Inventory, error)
+	// Delete:
+	// - id の Mint を削除します。
 	Delete(ctx context.Context, id string) error
 
-	// 任意: Upsert 等
-	Save(ctx context.Context, inv Inventory, opts *SaveOptions) (Inventory, error)
+	// ListByTokenBlueprintID:
+	// - tokenBlueprintId に紐づく Mint を一覧取得します。
+	ListByTokenBlueprintID(ctx context.Context, tokenBlueprintID string) ([]Mint, error)
+
+	// ListByProductBlueprintID:
+	// - productBlueprintId に紐づく Mint を一覧取得します。
+	ListByProductBlueprintID(ctx context.Context, productBlueprintID string) ([]Mint, error)
+
+	// ListByTokenAndProductBlueprintID:
+	// - tokenBlueprintId と productBlueprintId の AND 条件で一覧取得します。
+	ListByTokenAndProductBlueprintID(ctx context.Context, tokenBlueprintID, productBlueprintID string) ([]Mint, error)
 }
