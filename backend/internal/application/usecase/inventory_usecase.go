@@ -1,3 +1,4 @@
+// backend\internal\application\usecase\inventory_usecase.go
 package usecase
 
 import (

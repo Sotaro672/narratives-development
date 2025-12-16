@@ -18,7 +18,7 @@ import (
 	// ★ new: Production 用の新パッケージ
 	productionapp "narratives/internal/application/production"
 
-	// ★ new: CompanyProductionQueryService
+	// ★ new: Query services (CompanyProductionQueryService / InventoryQuery)
 	companyquery "narratives/internal/application/query"
 
 	// ハンドラ群
@@ -70,6 +70,9 @@ type RouterDeps struct {
 
 	// ★ 追加: Company → ProductBlueprintIds → Productions の Query 専用（GET一覧）
 	CompanyProductionQueryService *companyquery.CompanyProductionQueryService
+
+	// ★ NEW: Inventory detail の read-model assembler（/inventory/...）
+	InventoryQuery *companyquery.InventoryQuery
 
 	// ★ NameResolver（ID→名前/型番解決）
 	NameResolver *resolver.NameResolver
@@ -233,13 +236,23 @@ func NewRouter(deps RouterDeps) http.Handler {
 	// Inventories
 	// ================================
 	if deps.InventoryUC != nil {
-		inventoryH := handlers.NewInventoryHandler(deps.InventoryUC)
+		// ✅ Query を注入（nil の場合は /inventory 側が NotImplemented を返す想定）
+		inventoryH := handlers.NewInventoryHandler(deps.InventoryUC, deps.InventoryQuery)
+
 		var h http.Handler = inventoryH
 		if authMw != nil {
 			h = authMw.Handler(h)
 		}
+
+		// CRUD (domain/usecase)
 		mux.Handle("/inventories", h)
 		mux.Handle("/inventories/", h)
+
+		// Query (read-only DTO)
+		// - GET /inventory/{inventoryId}
+		// - GET /inventory/by-product-blueprint/{productBlueprintId}
+		mux.Handle("/inventory", h)
+		mux.Handle("/inventory/", h)
 	}
 
 	// ================================

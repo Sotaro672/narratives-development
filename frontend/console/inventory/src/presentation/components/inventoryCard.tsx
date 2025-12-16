@@ -1,4 +1,4 @@
-// frontend/inventory/src/pages/inventoryCard.tsx
+// frontend\console\inventory\src\presentation\components\inventoryCard.tsx
 import * as React from "react";
 import { Palette } from "lucide-react";
 import {
@@ -18,15 +18,39 @@ import {
 
 import "../styles/inventory.css";
 
+// ----------------------------------------------------------
+// RGB(int) → HEX (#RRGGBB)
+// - InventoryRow.rgb は string | number | null どれでも来うる前提で安全に変換
+// ----------------------------------------------------------
+function rgbIntToHex(rgb: number | string | null | undefined): string | null {
+  if (rgb === null || rgb === undefined) return null;
+  const n = typeof rgb === "string" ? Number(rgb) : rgb;
+  if (!Number.isFinite(n)) return null;
+
+  const clamped = Math.max(0, Math.min(0xffffff, Math.floor(n)));
+  const hex = clamped.toString(16).padStart(6, "0");
+  return `#${hex}`;
+}
+
 export type InventoryRow = {
+  /** トークン表示（例: "Token A" / "TB-xxxx" / tokenBlueprint name など） */
+  token?: string;
+
   /** 型番 (例: "LM-SB-S-WHT") */
-  modelCode: string;
+  modelNumber: string;
+
   /** サイズ (例: "S" | "M" | "L") */
   size: string;
+
   /** カラー表示名 (例: "ホワイト") */
-  colorName: string;
-  /** カラーコード (例: "#000000") - 無指定の場合は白い円 */
-  colorCode?: string;
+  color: string;
+
+  /**
+   * RGB
+   * - int(0xRRGGBB) で来ることもあるので、表示時に hex 化して dot に反映する
+   */
+  rgb?: number | string | null;
+
   /** 在庫数 */
   stock: number;
 };
@@ -35,21 +59,18 @@ type InventoryCardProps = {
   title?: string;
   rows: InventoryRow[];
   className?: string;
+  mode?: "view"; // 現状は閲覧専用
 };
 
-/**
- * モデル別在庫一覧カード（閲覧専用）
- * Screenshot のトーンに合わせた表示専用テーブル
- */
 const InventoryCard: React.FC<InventoryCardProps> = ({
   title = "モデル別在庫一覧",
   rows,
   className,
+  mode = "view",
 }) => {
-  // 在庫合計数を算出
   const totalStock = React.useMemo(
     () => rows.reduce((sum, r) => sum + (r.stock || 0), 0),
-    [rows]
+    [rows],
   );
 
   return (
@@ -57,7 +78,14 @@ const InventoryCard: React.FC<InventoryCardProps> = ({
       <CardHeader className="ivc__header">
         <div className="ivc__header-inner">
           <Palette className="ivc__icon" size={18} />
-          <CardTitle className="ivc__title">{title}</CardTitle>
+          <CardTitle className="ivc__title">
+            {title}
+            {mode !== "view" && (
+              <span className="ml-2 text-xs text-[hsl(var(--muted-foreground))]">
+                （{mode}）
+              </span>
+            )}
+          </CardTitle>
         </div>
       </CardHeader>
 
@@ -66,6 +94,7 @@ const InventoryCard: React.FC<InventoryCardProps> = ({
           <Table className="ivc__table">
             <TableHeader>
               <TableRow>
+                <TableHead className="ivc__th ivc__th--left">トークン</TableHead>
                 <TableHead className="ivc__th ivc__th--left">型番</TableHead>
                 <TableHead className="ivc__th">サイズ</TableHead>
                 <TableHead className="ivc__th">カラー</TableHead>
@@ -74,45 +103,56 @@ const InventoryCard: React.FC<InventoryCardProps> = ({
             </TableHeader>
 
             <TableBody>
-              {rows.map((row, idx) => (
-                <TableRow key={`${row.modelCode}-${idx}`} className="ivc__tr">
-                  <TableCell className="ivc__model">{row.modelCode}</TableCell>
-                  <TableCell className="ivc__size">{row.size}</TableCell>
-                  <TableCell className="ivc__color-cell">
-                    <span
-                      className="ivc__color-dot"
-                      style={{
-                        backgroundColor:
-                          row.colorCode && row.colorCode.trim()
-                            ? row.colorCode
-                            : "#ffffff",
-                        boxShadow: "0 0 0 1px rgba(0,0,0,0.18)",
-                      }}
-                    />
-                    <span className="ivc__color-label">{row.colorName}</span>
-                  </TableCell>
-                  <TableCell className="ivc__stock">
-                    <span className="ivc__stock-number">{row.stock}</span>
-                  </TableCell>
-                </TableRow>
-              ))}
+              {rows.map((row, idx) => {
+                const rgbHex = rgbIntToHex(row.rgb);
+                const bgColor =
+                  row.rgb && typeof row.rgb === "string" && row.rgb.trim().startsWith("#")
+                    ? row.rgb.trim()
+                    : rgbHex ?? "#ffffff";
 
-              {/* データなし表示 */}
+                return (
+                  <TableRow key={`${row.modelNumber}-${idx}`} className="ivc__tr">
+                    {/* トークン */}
+                    <TableCell className="ivc__token">{row.token ?? "-"}</TableCell>
+
+                    {/* 型番 */}
+                    <TableCell className="ivc__model">{row.modelNumber}</TableCell>
+
+                    {/* サイズ */}
+                    <TableCell className="ivc__size">{row.size}</TableCell>
+
+                    {/* カラー */}
+                    <TableCell className="ivc__color-cell">
+                      <span
+                        className="ivc__color-dot"
+                        style={{
+                          backgroundColor: bgColor,
+                          boxShadow: "0 0 0 1px rgba(0,0,0,0.18)",
+                        }}
+                        title={rgbHex ?? (typeof row.rgb === "string" ? row.rgb : "")}
+                      />
+                      <span className="ivc__color-label">{row.color}</span>
+                    </TableCell>
+
+                    {/* 在庫数 */}
+                    <TableCell className="ivc__stock">
+                      <span className="ivc__stock-number">{row.stock}</span>
+                    </TableCell>
+                  </TableRow>
+                );
+              })}
+
               {rows.length === 0 && (
                 <TableRow>
-                  <TableCell colSpan={4} className="ivc__empty">
+                  <TableCell colSpan={5} className="ivc__empty">
                     表示できる在庫データがありません。
                   </TableCell>
                 </TableRow>
               )}
 
-              {/* ✅ 合計行 */}
               {rows.length > 0 && (
                 <TableRow className="ivc__total-row">
-                  <TableCell
-                    colSpan={3}
-                    className="ivc__total-label ivc__th--right"
-                  >
+                  <TableCell colSpan={4} className="ivc__total-label ivc__th--right">
                     合計
                   </TableCell>
                   <TableCell className="ivc__total-value">

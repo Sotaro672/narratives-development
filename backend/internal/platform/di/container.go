@@ -28,7 +28,7 @@ import (
 	// ★ ProductionUsecase（application/production）
 	productionapp "narratives/internal/application/production"
 
-	// ★ CompanyProductionQueryService / MintRequestQueryService
+	// ★ CompanyProductionQueryService / MintRequestQueryService / InventoryQuery
 	companyquery "narratives/internal/application/query"
 
 	resolver "narratives/internal/application/resolver"
@@ -114,6 +114,9 @@ type Container struct {
 
 	// ★ NEW: QueryService（GET /mint/requests 一覧専用、Company境界付き）
 	MintRequestQueryService *companyquery.MintRequestQueryService
+
+	// ★ NEW: Inventory detail の read-model assembler（GET /inventory/...）
+	InventoryQuery *companyquery.InventoryQuery
 
 	// ★ 検品アプリ用 ProductUsecase（/inspector/products/{id}）
 	ProductUC *uc.ProductUsecase
@@ -571,6 +574,15 @@ func NewContainer(ctx context.Context) (*Container, error) {
 		},
 	}
 
+	// ★ NEW: InventoryQuery（GET /inventory/...）
+	// まずは ProductBlueprintCard 用に Patch を返せれば良いので tbReader/prReader は nil でOK。
+	inventoryQuery := companyquery.NewInventoryQuery(
+		inventoryRepo,        // invRepo
+		nil,                  // tbReader (optional)
+		productBlueprintRepo, // pbPatchReader (GetPatchByID)
+		nil,                  // prReader (optional)
+	)
+
 	// 6. Assemble container
 	return &Container{
 		Config:       cfg,
@@ -620,6 +632,9 @@ func NewContainer(ctx context.Context) (*Container, error) {
 
 		CompanyProductionQueryService: companyProductionQueryService,
 		MintRequestQueryService:       mintRequestQueryService,
+
+		// ✅ NEW
+		InventoryQuery: inventoryQuery,
 
 		ProductUC:    productUC,
 		InspectionUC: inspectionUC,
@@ -674,6 +689,9 @@ func (c *Container) RouterDeps() httpin.RouterDeps {
 
 		CompanyProductionQueryService: c.CompanyProductionQueryService,
 		MintRequestQueryService:       c.MintRequestQueryService,
+
+		// ✅ NEW
+		InventoryQuery: c.InventoryQuery,
 
 		ProductUC:    c.ProductUC,
 		InspectionUC: c.InspectionUC,

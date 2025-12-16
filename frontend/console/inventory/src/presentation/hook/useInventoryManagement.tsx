@@ -1,33 +1,29 @@
 // frontend/console/inventory/src/presentation/hook/useInventoryManagement.tsx
 
-import {
-  useMemo,
-  useState,
-  useCallback,
-  useEffect,
-} from "react";
+import { useMemo, useState, useCallback, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
-import {
-  fetchPrintedInventorySummaries,
-  type InventoryProductSummary,
-} from "../../infrastructure/http/inventoryRepositoryHTTP";
 
-export type InventorySortKey = "totalQuantity" | null;
+import {
+  loadInventoryRowsFromBackend,
+  buildInventoryFilterOptionsFromRows,
+  type InventoryManagementRow,
+  type InventorySortKey,
+} from "../../application/inventoryManagementService";
+
 export type SortDirection = "asc" | "desc" | null;
 
 /**
- * InventoryRow は BE/API から取得する在庫データの行。
- * 現状は printed な ProductBlueprint 一覧を 1 行ずつマッピングする。
+ * ✅ InventoryRow は inventory_query.go の結果を元にした一覧用の行。
+ * 列順: [プロダクト名, トークン名, 型番, 在庫数]
  */
 export type InventoryRow = {
-  id: string;
+  id: string; // 一覧の主キー（UI用）
   productBlueprintId: string;
 
   productName: string;
-  brandName: string;     // brandId → brandName
-
-  assigneeName?: string; // assigneeId → Member 名
-  totalQuantity: number; // 将来拡張
+  tokenName: string;
+  modelNumber: string;
+  stock: number;
 };
 
 /** フックの返却型 */
@@ -35,20 +31,17 @@ export type UseInventoryManagementResult = {
   rows: InventoryRow[];
   options: {
     productOptions: Array<{ value: string; label: string }>;
-    brandOptions: Array<{ value: string; label: string }>;
-    assigneeOptions: Array<{ value: string; label: string }>;
+    tokenOptions: Array<{ value: string; label: string }>;
   };
   state: {
     productFilter: string[];
-    brandFilter: string[];
-    assigneeFilter: string[];
+    tokenFilter: string[];
     sortKey: InventorySortKey;
     sortDir: SortDirection;
   };
   handlers: {
     setProductFilter: (v: string[]) => void;
-    setBrandFilter: (v: string[]) => void;
-    setAssigneeFilter: (v: string[]) => void;
+    setTokenFilter: (v: string[]) => void;
     setSortKey: (k: InventorySortKey) => void;
     setSortDir: (d: SortDirection) => void;
     handleRowClick: (row: InventoryRow) => void;
@@ -56,159 +49,142 @@ export type UseInventoryManagementResult = {
   };
 };
 
+function mapToRows(items: InventoryManagementRow[]): InventoryRow[] {
+  return items.map((x, i) => ({
+    // productBlueprintId + token + modelNumber で一意になる想定
+    id: `${x.productBlueprintId}__${x.tokenName}__${x.modelNumber}__${i}`,
+    productBlueprintId: x.productBlueprintId,
+
+    productName: x.productName,
+    tokenName: x.tokenName,
+    modelNumber: x.modelNumber,
+    stock: x.stock,
+  }));
+}
+
 /** 在庫管理ページ用 ロジックフック */
 export function useInventoryManagement(): UseInventoryManagementResult {
   const navigate = useNavigate();
 
-  // ===== クライアント側状態 =====
+  // ===== rows (raw) =====
   const [inventoryRows, setInventoryRows] = useState<InventoryRow[]>([]);
 
-  // ===== フィルタ状態 =====
+  // ===== filters =====
   const [productFilter, setProductFilter] = useState<string[]>([]);
-  const [brandFilter, setBrandFilter] = useState<string[]>([]);
-  const [assigneeFilter, setAssigneeFilter] = useState<string[]>([]);
+  const [tokenFilter, setTokenFilter] = useState<string[]>([]);
 
-  // ===== ソート状態 =====
-  const [sortKey, setSortKey] = useState<InventorySortKey>(null);
-  const [sortDir, setSortDir] = useState<SortDirection>(null);
+  // ===== sort =====
+  const [sortKey, setSortKey] = useState<InventorySortKey>("productName");
+  const [sortDir, setSortDir] = useState<SortDirection>("asc");
 
   /* ---------------------------------------------------------
-   * printed ProductBlueprint 一覧の取得
+   * ✅ inventory_query.go の結果をロード
    * --------------------------------------------------------- */
   useEffect(() => {
     (async () => {
       try {
-        const summaries: InventoryProductSummary[] =
-          await fetchPrintedInventorySummaries();
+        console.log("[inventory/useInventoryManagement] load start");
 
-        const rows: InventoryRow[] = summaries.map((s) => ({
-          id: s.id,
-          productBlueprintId: s.id,
-          productName: s.productName,
-          brandName:
-            s.brandName && s.brandName.trim().length > 0
-              ? s.brandName
-              : s.brandId,
-          assigneeName:
-            (s.assigneeName && s.assigneeName.trim().length > 0
-              ? s.assigneeName
-              : s.assigneeId || "-") || "-",
-          totalQuantity: 0,
-        }));
+        const vmRows = await loadInventoryRowsFromBackend();
+        const mapped = mapToRows(vmRows);
 
-        setInventoryRows(rows);
-      } catch (e) {
+        console.log("[inventory/useInventoryManagement] load ok", {
+          rows: mapped.length,
+          sample: mapped.slice(0, 10),
+        });
+
+        setInventoryRows(mapped);
+      } catch (e: any) {
+        console.warn("[inventory/useInventoryManagement] load failed", {
+          error: String(e?.message ?? e),
+        });
         setInventoryRows([]);
       }
     })();
   }, []);
 
   /* ---------------------------------------------------------
-   * フィルタ → ソートの処理
+   * フィルタ → ソート
    * --------------------------------------------------------- */
   const filteredSortedRows = useMemo(() => {
     let data = inventoryRows.filter((r) => {
       const productOk =
-        productFilter.length === 0 ||
-        productFilter.includes(r.productName);
+        productFilter.length === 0 || productFilter.includes(r.productName);
 
-      const brandOk =
-        brandFilter.length === 0 ||
-        brandFilter.includes(r.brandName);
+      const tokenOk =
+        tokenFilter.length === 0 || tokenFilter.includes(r.tokenName);
 
-      const assigneeOk =
-        assigneeFilter.length === 0 ||
-        (r.assigneeName != null &&
-          assigneeFilter.includes(r.assigneeName));
-
-      return productOk && brandOk && assigneeOk;
+      return productOk && tokenOk;
     });
 
     if (sortKey && sortDir) {
       data = [...data].sort((a, b) => {
-        const av = a.totalQuantity;
-        const bv = b.totalQuantity;
-        return sortDir === "asc" ? av - bv : bv - av;
+        const dir = sortDir === "asc" ? 1 : -1;
+
+        const as = (v: any) => String(v ?? "");
+        const an = (v: any) => Number(v ?? 0);
+
+        if (sortKey === "productName") return dir * as(a.productName).localeCompare(as(b.productName));
+        if (sortKey === "tokenName") return dir * as(a.tokenName).localeCompare(as(b.tokenName));
+        if (sortKey === "modelNumber") return dir * as(a.modelNumber).localeCompare(as(b.modelNumber));
+        if (sortKey === "stock") return dir * (an(a.stock) - an(b.stock));
+
+        return 0;
       });
     }
 
     return data;
-  }, [
-    inventoryRows,
-    productFilter,
-    brandFilter,
-    assigneeFilter,
-    sortKey,
-    sortDir,
-  ]);
+  }, [inventoryRows, productFilter, tokenFilter, sortKey, sortDir]);
 
   /* ---------------------------------------------------------
-   * UI ハンドラ
+   * options（フィルタ選択肢）
+   * ※ rows から生成（InventoryManagementService 側の helper を利用）
+   * --------------------------------------------------------- */
+  const options = useMemo(() => {
+    const asServiceRows: InventoryManagementRow[] = filteredSortedRows.map((r) => ({
+      productBlueprintId: r.productBlueprintId,
+      productName: r.productName,
+      tokenName: r.tokenName,
+      modelNumber: r.modelNumber,
+      stock: r.stock,
+    }));
+
+    return buildInventoryFilterOptionsFromRows(asServiceRows);
+  }, [filteredSortedRows]);
+
+  /* ---------------------------------------------------------
+   * UI handlers
    * --------------------------------------------------------- */
   const handleRowClick = useCallback(
     (row: InventoryRow) => {
-      navigate(`/inventory/detail/${encodeURIComponent(row.id)}`);
+      // ✅ 詳細は pbId を渡して query させる（期待値）
+      navigate(`/inventory/detail/${encodeURIComponent(row.productBlueprintId)}`);
     },
     [navigate],
   );
 
   const handleReset = useCallback(() => {
     setProductFilter([]);
-    setBrandFilter([]);
-    setAssigneeFilter([]);
-    setSortKey(null);
-    setSortDir(null);
+    setTokenFilter([]);
+    setSortKey("productName");
+    setSortDir("asc");
   }, []);
-
-  /* ---------------------------------------------------------
-   * フィルタ項目（オプション）
-   * --------------------------------------------------------- */
-  const productOptions = useMemo(
-    () =>
-      Array.from(
-        new Set(filteredSortedRows.map((r) => r.productName)),
-      ).map((v) => ({ value: v, label: v })),
-    [filteredSortedRows],
-  );
-
-  const brandOptions = useMemo(
-    () =>
-      Array.from(
-        new Set(filteredSortedRows.map((r) => r.brandName)),
-      ).map((v) => ({ value: v, label: v })),
-    [filteredSortedRows],
-  );
-
-  const assigneeOptions = useMemo(
-    () =>
-      Array.from(
-        new Set(
-          filteredSortedRows
-            .map((r) => r.assigneeName)
-            .filter((x): x is string => !!x),
-        ),
-      ).map((v) => ({ value: v, label: v })),
-    [filteredSortedRows],
-  );
 
   return {
     rows: filteredSortedRows,
     options: {
-      productOptions,
-      brandOptions,
-      assigneeOptions,
+      productOptions: options.productOptions,
+      tokenOptions: options.tokenOptions,
     },
     state: {
       productFilter,
-      brandFilter,
-      assigneeFilter,
+      tokenFilter,
       sortKey,
       sortDir,
     },
     handlers: {
       setProductFilter,
-      setBrandFilter,
-      setAssigneeFilter,
+      setTokenFilter,
       setSortKey,
       setSortDir,
       handleRowClick,
@@ -216,4 +192,3 @@ export function useInventoryManagement(): UseInventoryManagementResult {
     },
   };
 }
-

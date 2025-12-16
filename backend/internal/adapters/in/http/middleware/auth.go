@@ -3,10 +3,8 @@ package middleware
 
 import (
 	"context"
-	"encoding/base64"
 	"log"
 	"net/http"
-	"os"
 	"strings"
 
 	fbauth "firebase.google.com/go/v4/auth"
@@ -55,27 +53,9 @@ func (m *AuthMiddleware) Handler(next http.Handler) http.Handler {
 			return
 		}
 
-		// ============================================================
-		// ★ ID TOKEN をログに完全表示 + Base64 化してファイル保存
-		// ============================================================
-		log.Printf("[auth] RAW ID TOKEN (first 50 chars): %.50s...", idToken)
-
-		// Base64 encode the token for safe logging
-		encoded := base64.StdEncoding.EncodeToString([]byte(idToken))
-
-		// Write full encoded token to file
-		f, err := os.OpenFile("debug-idtoken.log", os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0644)
-		if err == nil {
-			defer f.Close()
-			f.WriteString("========================================\n")
-			f.WriteString("RAW ID TOKEN:\n")
-			f.WriteString(idToken + "\n\n")
-			f.WriteString("BASE64 ENCODED:\n")
-			f.WriteString(encoded + "\n")
-			f.WriteString("========================================\n\n")
-		} else {
-			log.Printf("[auth] ERROR writing debug-idtoken.log: %v", err)
-		}
+		// ✅ ID TOKEN の完全表示・ファイル保存は削除
+		// （必要なら最小限の存在確認ログのみ）
+		log.Printf("[auth] bearer token received (len=%d)", len(idToken))
 
 		// Firebase ID トークン検証
 		token, err := m.FirebaseAuth.VerifyIDToken(r.Context(), idToken)
