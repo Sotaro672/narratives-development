@@ -11,23 +11,6 @@ import (
 	invdom "narratives/internal/domain/inventory"
 )
 
-// ============================================================
-// Inventory Handler
-// ============================================================
-//
-// Router 側では以下のように束ねて扱う想定:
-//   mux.Handle("/inventories", inventoryH)
-//   mux.Handle("/inventories/", inventoryH)
-//
-// このため InventoryHandler は http.Handler (ServeHTTP) を実装します。
-//
-// Endpoints:
-//   POST   /inventories
-//   GET    /inventories?tokenBlueprintId=...&productBlueprintId=...
-//   GET    /inventories/{id}
-//   PATCH  /inventories/{id}
-//   DELETE /inventories/{id}
-
 type InventoryHandler struct {
 	UC *usecase.InventoryUsecase
 }
@@ -36,15 +19,9 @@ func NewInventoryHandler(uc *usecase.InventoryUsecase) *InventoryHandler {
 	return &InventoryHandler{UC: uc}
 }
 
-// ============================================================
-// http.Handler
-// ============================================================
-
 func (h *InventoryHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	// base: "/inventories"
 	path := strings.TrimSuffix(r.URL.Path, "/")
 
-	// /inventories
 	if path == "/inventories" {
 		switch r.Method {
 		case http.MethodPost:
@@ -59,7 +36,6 @@ func (h *InventoryHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	// /inventories/{id}
 	if strings.HasPrefix(path, "/inventories/") {
 		switch r.Method {
 		case http.MethodGet:
@@ -77,13 +53,10 @@ func (h *InventoryHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	// not found
 	w.WriteHeader(http.StatusNotFound)
 }
 
-// ============================================================
 // DTOs
-// ============================================================
 
 type createInventoryMintRequest struct {
 	TokenBlueprintID   string   `json:"tokenBlueprintId"`
@@ -93,15 +66,12 @@ type createInventoryMintRequest struct {
 }
 
 type updateInventoryMintRequest struct {
-	Products     map[string]string `json:"products"`
-	Accumulation *int              `json:"accumulation,omitempty"`
+	Products     []string `json:"products"` // ★ []string only
+	Accumulation *int     `json:"accumulation,omitempty"`
 }
 
-// ============================================================
 // Handlers
-// ============================================================
 
-// Create: POST /inventories
 func (h *InventoryHandler) Create(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 
@@ -126,7 +96,6 @@ func (h *InventoryHandler) Create(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusCreated, m)
 }
 
-// List: GET /inventories?tokenBlueprintId=...&productBlueprintId=...
 func (h *InventoryHandler) List(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 
@@ -134,7 +103,6 @@ func (h *InventoryHandler) List(w http.ResponseWriter, r *http.Request) {
 	tbID := strings.TrimSpace(q.Get("tokenBlueprintId"))
 	pbID := strings.TrimSpace(q.Get("productBlueprintId"))
 
-	// 条件なし全件は危険なので禁止
 	if tbID == "" && pbID == "" {
 		writeError(w, http.StatusBadRequest, "tokenBlueprintId or productBlueprintId is required")
 		return
@@ -162,7 +130,6 @@ func (h *InventoryHandler) List(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, list)
 }
 
-// GetByID: GET /inventories/{id}
 func (h *InventoryHandler) GetByID(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 
@@ -181,7 +148,6 @@ func (h *InventoryHandler) GetByID(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, m)
 }
 
-// Update: PATCH /inventories/{id}
 func (h *InventoryHandler) Update(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 
@@ -203,6 +169,7 @@ func (h *InventoryHandler) Update(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Products は「指定されたら置き換え」
 	if req.Products != nil {
 		current.Products = req.Products
 	}
@@ -219,7 +186,6 @@ func (h *InventoryHandler) Update(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, updated)
 }
 
-// Delete: DELETE /inventories/{id}
 func (h *InventoryHandler) Delete(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 
@@ -237,9 +203,7 @@ func (h *InventoryHandler) Delete(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNoContent)
 }
 
-// ============================================================
-// Helpers (local)
-// ============================================================
+// Helpers
 
 func writeJSON(w http.ResponseWriter, status int, v any) {
 	w.Header().Set("Content-Type", "application/json; charset=utf-8")
@@ -272,8 +236,6 @@ func writeDomainError(w http.ResponseWriter, err error) {
 	}
 }
 
-// pathParamLast extracts the last path segment as an ID.
-// Example: "/inventories/abc" -> "abc"
 func pathParamLast(path string) string {
 	path = strings.TrimSpace(path)
 	if path == "" {

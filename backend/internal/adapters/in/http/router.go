@@ -436,14 +436,15 @@ func NewRouter(deps RouterDeps) http.Handler {
 			h = authMw.Handler(h)
 		}
 
-		mux.Handle("/mint/inspections", h)
-		mux.Handle("/mint/mints", h)
-		mux.Handle("/mint/mints/", h)
-
-		// ★ NEW: /mint/requests も MintHandler が処理するので明示（なくても /mint/ で拾うが推奨）
-		mux.Handle("/mint/requests", h)
-
+		// ✅ MintHandler は /mint 配下をサブツリーで受けるのが安全（/mint/mints/{id} を確実に拾う）
 		mux.Handle("/mint/", h)
+
+		// （任意）明示したい場合は残してOKだが、/mint/ があれば不要
+		// mux.Handle("/mint/inspections", h)
+		// mux.Handle("/mint/inspections/", h)
+		// mux.Handle("/mint/mints", h)
+		// mux.Handle("/mint/mints/", h)
+		// mux.Handle("/mint/requests", h)
 	}
 
 	return mux

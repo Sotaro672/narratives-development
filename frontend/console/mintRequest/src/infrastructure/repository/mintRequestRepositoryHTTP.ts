@@ -72,6 +72,40 @@ export type MintRequestDetailDTO = {
   [k: string]: any;
 };
 
+// ===============================
+// ✅ /mint/requests response helpers
+// ===============================
+
+type MintRequestRowRaw = {
+  id?: string | null;
+  productionId?: string | null;
+  inspectionId?: string | null;
+
+  // “mint が埋め込まれて返る” 想定
+  mint?: any | null;
+  Mint?: any | null;
+
+  // “list row 的に平坦化されて返る”可能性もある
+  tokenName?: string | null;
+  createdByName?: string | null;
+  mintedAt?: string | null;
+  minted?: boolean | null;
+
+  [k: string]: any;
+};
+
+type MintRequestsPayloadRaw =
+  | {
+      rows?: MintRequestRowRaw[] | null;
+      Rows?: MintRequestRowRaw[] | null;
+      items?: MintRequestRowRaw[] | null;
+      Items?: MintRequestRowRaw[] | null;
+      data?: MintRequestRowRaw[] | null;
+      Data?: MintRequestRowRaw[] | null;
+      [k: string]: any;
+    }
+  | MintRequestRowRaw[];
+
 // 🔙 BACKEND の BASE URL
 const ENV_BASE =
   ((import.meta as any).env?.VITE_BACKEND_BASE_URL as string | undefined)?.replace(
@@ -123,18 +157,24 @@ function normalizeMintListRow(v: any): MintListRowDTO {
       v?.inspectionId ??
         v?.InspectionID ??
         v?.inspectionID ??
+        v?.InspectionId ??
         v?.productionId ??
         v?.ProductionID ??
+        v?.id ??
+        v?.ID ??
         "",
     ).trim() || null;
 
   const mintId =
-    String(v?.mintId ?? v?.MintID ?? v?.id ?? v?.ID ?? "").trim() || null;
+    String(v?.mintId ?? v?.MintID ?? v?.MintId ?? v?.id ?? v?.ID ?? "").trim() ||
+    null;
 
   const tokenBlueprintId =
     String(
       v?.tokenBlueprintId ??
+        v?.tokenBlueprintID ??
         v?.TokenBlueprintID ??
+        v?.TokenBlueprintId ??
         v?.tokenBlueprint ??
         v?.TokenBlueprint ??
         "",
@@ -144,16 +184,18 @@ function normalizeMintListRow(v: any): MintListRowDTO {
     String(
       v?.tokenName ??
         v?.tokenBlueprintName ??
+        v?.TokenBlueprintName ??
         v?.name ??
         tokenBlueprintId ??
         "",
     ).trim() || null;
 
   const createdByName =
-    String(v?.createdByName ?? v?.CreatedByName ?? v?.createdBy ?? "").trim() ||
-    null;
+    String(
+      v?.createdByName ?? v?.CreatedByName ?? v?.createdBy ?? v?.CreatedBy ?? "",
+    ).trim() || null;
 
-  const mintedAtRaw = v?.mintedAt ?? v?.MintedAt ?? null;
+  const mintedAtRaw = v?.mintedAt ?? v?.MintedAt ?? v?.minted_at ?? null;
   const mintedAt =
     typeof mintedAtRaw === "string" && mintedAtRaw.trim()
       ? mintedAtRaw.trim()
@@ -178,23 +220,34 @@ function normalizeMintListRow(v: any): MintListRowDTO {
 function normalizeMintDTO(v: any): MintDTO {
   const obj: any = { ...(v ?? {}) };
 
-  obj.id = obj.id ?? obj.ID ?? "";
-  obj.brandId = obj.brandId ?? obj.BrandID ?? "";
-  obj.tokenBlueprintId = obj.tokenBlueprintId ?? obj.TokenBlueprintID ?? "";
+  obj.id = obj.id ?? obj.ID ?? obj.MintID ?? obj.MintId ?? "";
+  obj.brandId = obj.brandId ?? obj.BrandID ?? obj.BrandId ?? "";
+  obj.tokenBlueprintId =
+    obj.tokenBlueprintId ?? obj.TokenBlueprintID ?? obj.TokenBlueprintId ?? "";
+
   obj.inspectionId =
     obj.inspectionId ??
     obj.InspectionID ??
+    obj.InspectionId ??
     obj.inspectionID ??
     obj.productionId ??
     obj.ProductionID ??
+    obj.ProductionId ??
     "";
 
   obj.createdAt = obj.createdAt ?? obj.CreatedAt ?? null;
   obj.createdBy = obj.createdBy ?? obj.CreatedBy ?? "";
   obj.createdByName = obj.createdByName ?? obj.CreatedByName ?? null;
 
+  // tokenName を返す実装がある場合の保険（TokenBlueprintCard 側で使う可能性）
+  obj.tokenName = obj.tokenName ?? obj.TokenName ?? null;
+
   obj.minted =
-    typeof obj.minted === "boolean" ? obj.minted : Boolean(obj.mintedAt);
+    typeof obj.minted === "boolean"
+      ? obj.minted
+      : typeof obj.Minted === "boolean"
+        ? obj.Minted
+        : Boolean(obj.mintedAt ?? obj.MintedAt);
   obj.mintedAt = obj.mintedAt ?? obj.MintedAt ?? null;
 
   obj.scheduledBurnDate =
@@ -212,19 +265,16 @@ function normalizeMintDTO(v: any): MintDTO {
 function normalizeProductBlueprintPatch(v: any): ProductBlueprintPatchDTO | null {
   if (!v) return null;
 
-  // productIdTag の揺れ（Type / type / { type: { ... } } 等）を吸収
   const rawTag = v?.productIdTag ?? v?.ProductIdTag ?? v?.product_id_tag ?? null;
 
   let tagType: string | null = null;
 
   if (rawTag) {
-    // 1) { Type: "QRコード" } / { type: "QRコード" }
     tagType =
       asMaybeString(rawTag?.type) ??
       asMaybeString(rawTag?.Type) ??
       asMaybeString(rawTag?.TYPE);
 
-    // 2) 変なネスト: { type: { Type: "..." } } など
     if (!tagType && typeof rawTag?.type === "object") {
       tagType =
         asMaybeString(rawTag?.type?.type) ??
@@ -238,7 +288,6 @@ function normalizeProductBlueprintPatch(v: any): ProductBlueprintPatchDTO | null
         null;
     }
 
-    // 3) 文字列で返ってくるケース
     if (!tagType && typeof rawTag === "string") {
       tagType = asMaybeString(rawTag);
     }
@@ -265,7 +314,6 @@ function normalizeProductBlueprintPatch(v: any): ProductBlueprintPatchDTO | null
         v?.WashTags ??
         null) ?? null,
 
-    // ✅ 最終的に { type } に統一
     productIdTag: tagType ? { type: tagType } : null,
 
     assigneeId:
@@ -281,33 +329,32 @@ function normalizeProductBlueprintPatch(v: any): ProductBlueprintPatchDTO | null
 function normalizeProductionIdFromProductionListItem(v: any): string {
   return String(
     v?.productionId ??
+      v?.ProductionId ??
       v?.id ??
-      v?.ID ?? // ✅ PascalCase 対応
+      v?.ID ??
       v?.production?.id ??
-      v?.production?.ID ?? // ✅ PascalCase 対応
+      v?.production?.ID ??
       v?.production?.productionId ??
       "",
   ).trim();
 }
 
-// ★追加: /productions から productBlueprintId を拾う（ProductBlueprintID が正）
 function normalizeProductBlueprintIdFromProductionListItem(v: any): string {
   return String(
     v?.productBlueprintId ??
       v?.productBlueprintID ??
       v?.ProductBlueprintId ??
-      v?.ProductBlueprintID ?? // ✅ ここが正（実データ）
+      v?.ProductBlueprintID ??
       v?.production?.productBlueprintId ??
       v?.production?.productBlueprintID ??
       v?.production?.ProductBlueprintId ??
-      v?.production?.ProductBlueprintID ?? // ✅ ネストも吸収
+      v?.production?.ProductBlueprintID ??
       v?.productBlueprint?.id ??
       v?.productBlueprint?.ID ??
       "",
   ).trim();
 }
 
-// ★追加: /productions の返却が配列/ページングどちらでも吸収
 function normalizeProductionsPayload(json: any): any[] {
   if (Array.isArray(json)) return json;
   const items =
@@ -323,11 +370,6 @@ function normalizeProductionsPayload(json: any): any[] {
 // productions: productBlueprintId 解決（detail 用）
 // ===============================
 
-/**
- * ✅ productBlueprintId を productionId から解決する
- * - まず /productions/{id} を試す（存在すれば一発）
- * - なければ /productions 一覧から検索
- */
 export async function fetchProductBlueprintIdByProductionIdHTTP(
   productionId: string,
 ): Promise<string | null> {
@@ -336,14 +378,10 @@ export async function fetchProductBlueprintIdByProductionIdHTTP(
 
   const idToken = await getIdTokenOrThrow();
 
-  // 1) /productions/{id} を試す（存在する環境なら最短）
   const url1 = `${API_BASE}/productions/${encodeURIComponent(pid)}`;
 
   try {
-    const res1 = await fetch(url1, {
-      method: "GET",
-      headers: buildHeaders(idToken),
-    });
+    const res1 = await fetch(url1, { method: "GET", headers: buildHeaders(idToken) });
 
     if (res1.ok) {
       const j1 = (await res1.json()) as any;
@@ -351,21 +389,15 @@ export async function fetchProductBlueprintIdByProductionIdHTTP(
       return pb1 ? pb1 : null;
     }
   } catch (_e: any) {
-    // noop -> fallback list
+    // noop
   }
 
-  // 2) /productions 一覧から探す
   const url2 = `${API_BASE}/productions`;
 
-  const res2 = await fetch(url2, {
-    method: "GET",
-    headers: buildHeaders(idToken),
-  });
+  const res2 = await fetch(url2, { method: "GET", headers: buildHeaders(idToken) });
 
   if (!res2.ok) {
-    throw new Error(
-      `Failed to fetch productions: ${res2.status} ${res2.statusText}`,
-    );
+    throw new Error(`Failed to fetch productions: ${res2.status} ${res2.statusText}`);
   }
 
   const json2 = await res2.json();
@@ -377,7 +409,6 @@ export async function fetchProductBlueprintIdByProductionIdHTTP(
     ) ?? null;
 
   const pb2 = hit ? normalizeProductBlueprintIdFromProductionListItem(hit) : "";
-
   return pb2 ? pb2 : null;
 }
 
@@ -386,15 +417,10 @@ async function fetchProductionIdsForCurrentCompanyHTTP(): Promise<string[]> {
 
   const url = `${API_BASE}/productions`;
 
-  const res = await fetch(url, {
-    method: "GET",
-    headers: buildHeaders(idToken),
-  });
+  const res = await fetch(url, { method: "GET", headers: buildHeaders(idToken) });
 
   if (!res.ok) {
-    throw new Error(
-      `Failed to fetch productions: ${res.status} ${res.statusText}`,
-    );
+    throw new Error(`Failed to fetch productions: ${res.status} ${res.statusText}`);
   }
 
   const json = await res.json();
@@ -416,7 +442,6 @@ async function fetchProductionIdsForCurrentCompanyHTTP(): Promise<string[]> {
 // HTTP Repository (inspections)
 // ===============================
 
-// ✅ “detail が inspection batch を直返し”のケースだけ拾うために shape 判定を強化
 function looksLikeInspectionBatchDTO(x: any): boolean {
   if (!x || typeof x !== "object") return false;
   return (
@@ -429,20 +454,22 @@ function looksLikeInspectionBatchDTO(x: any): boolean {
   );
 }
 
-// ★ NEW: detail は /mint/inspections/{productionId} を叩く
 function normalizeMintRequestDetail(v: any): MintRequestDetailDTO | null {
   if (!v) return null;
 
   const pid =
-    asMaybeString(v?.productionId ?? v?.ProductionID ?? v?.id ?? v?.ID) ?? null;
+    asMaybeString(v?.productionId ?? v?.ProductionID ?? v?.ProductionId ?? v?.id ?? v?.ID) ??
+    null;
 
   const inspectionId =
     asMaybeString(
       v?.inspectionId ??
         v?.InspectionID ??
+        v?.InspectionId ??
         v?.inspectionID ??
         v?.productionId ??
-        v?.ProductionID,
+        v?.ProductionID ??
+        v?.ProductionId,
     ) ?? null;
 
   // inspection 本体の取り出し（揺れ吸収）
@@ -453,7 +480,6 @@ function normalizeMintRequestDetail(v: any): MintRequestDetailDTO | null {
     v?.InspectionBatch ??
     null;
 
-  // “detail が inspection batch を直返し”のケースも拾う（判定を強化）
   const looksLikeInspectionBatch =
     typeof v === "object" &&
     (Array.isArray((v as any)?.inspections) ||
@@ -464,9 +490,7 @@ function normalizeMintRequestDetail(v: any): MintRequestDetailDTO | null {
       Array.isArray((v as any)?.Items));
 
   const inspection: InspectionBatchDTO | null =
-    (inspectionRaw as any) ??
-    (looksLikeInspectionBatch ? (v as any) : null) ??
-    null;
+    (inspectionRaw as any) ?? (looksLikeInspectionBatch ? (v as any) : null) ?? null;
 
   // mint 本体（揺れ吸収）
   const mintRaw = v?.mint ?? v?.Mint ?? v?.mintDTO ?? v?.MintDTO ?? null;
@@ -489,23 +513,41 @@ function normalizeMintRequestDetail(v: any): MintRequestDetailDTO | null {
   const modelMeta: Record<string, MintModelMetaEntryDTO> | null =
     modelMetaRaw && typeof modelMetaRaw === "object" ? modelMetaRaw : null;
 
-  // ✅ detail DTO の主要フィールドを明示的に拾う（UI 側の揺れ耐性を上げる）
-  const tokenBlueprintId =
+  // ✅ detail の主要フィールド（UI 側で使うキー）
+  // まず v 直下、無ければ mint から補完
+  const tokenBlueprintIdFromTop =
     asMaybeString(
-      v?.tokenBlueprintId ?? v?.TokenBlueprintID ?? v?.tokenBlueprintID,
+      v?.tokenBlueprintId ??
+        v?.TokenBlueprintID ??
+        v?.TokenBlueprintId ??
+        v?.tokenBlueprintID,
     ) ?? null;
 
-  const productName = asMaybeString(v?.productName ?? v?.ProductName) ?? null;
+  const tokenBlueprintIdFromMint =
+    asMaybeString((mint as any)?.tokenBlueprintId ?? (mint as any)?.TokenBlueprintID ?? (mint as any)?.TokenBlueprintId) ??
+    null;
 
-  const tokenName = asMaybeString(v?.tokenName ?? v?.TokenName) ?? null;
+  const tokenBlueprintId = tokenBlueprintIdFromTop ?? tokenBlueprintIdFromMint ?? null;
+
+  const productName =
+    asMaybeString(v?.productName ?? v?.ProductName) ??
+    asMaybeString((productBlueprintPatch as any)?.productName) ??
+    null;
+
+  const tokenName =
+    asMaybeString(v?.tokenName ?? v?.TokenName) ??
+    asMaybeString((mint as any)?.tokenName ?? (mint as any)?.TokenName) ??
+    null;
 
   return {
     ...(v ?? {}),
     productionId: pid,
     inspectionId,
+
     tokenBlueprintId,
     productName,
     tokenName,
+
     inspection: inspection ?? null,
     mint,
     productBlueprintPatch,
@@ -523,10 +565,7 @@ export async function fetchMintRequestDetailByProductionIdHTTP(
 
   const url = `${API_BASE}/mint/inspections/${encodeURIComponent(pid)}`;
 
-  const res = await fetch(url, {
-    method: "GET",
-    headers: buildHeaders(idToken),
-  });
+  const res = await fetch(url, { method: "GET", headers: buildHeaders(idToken) });
 
   if (res.status === 404) return null;
 
@@ -537,19 +576,13 @@ export async function fetchMintRequestDetailByProductionIdHTTP(
   }
 
   const json = (await res.json()) as any;
-
   const out = normalizeMintRequestDetail(json);
-
   return out ?? null;
 }
 
 export async function fetchInspectionBatchesHTTP(): Promise<InspectionBatchDTO[]> {
   const productionIds = await fetchProductionIdsForCurrentCompanyHTTP();
-
-  if (productionIds.length === 0) {
-    return [];
-  }
-
+  if (productionIds.length === 0) return [];
   return await fetchInspectionBatchesByProductionIdsHTTP(productionIds);
 }
 
@@ -568,10 +601,7 @@ export async function fetchInspectionBatchesByProductionIdsHTTP(
     ids.join(","),
   )}`;
 
-  const res = await fetch(url, {
-    method: "GET",
-    headers: buildHeaders(idToken),
-  });
+  const res = await fetch(url, { method: "GET", headers: buildHeaders(idToken) });
 
   if (!res.ok) {
     throw new Error(
@@ -580,19 +610,16 @@ export async function fetchInspectionBatchesByProductionIdsHTTP(
   }
 
   const json = (await res.json()) as InspectionBatchDTO[] | null | undefined;
-  const out = json ?? [];
-  return out;
+  return json ?? [];
 }
 
 export async function fetchInspectionByProductionIdHTTP(
   productionId: string,
 ): Promise<InspectionBatchDTO | null> {
   const trimmed = String(productionId ?? "").trim();
-  if (!trimmed) {
-    throw new Error("productionId が空です");
-  }
+  if (!trimmed) throw new Error("productionId が空です");
 
-  // ✅ detail 表示時は新ルートを優先して叩く（ただし batch-shape のときだけ採用）
+  // ✅ detail を優先（batch-shape のときだけ採用）
   try {
     const detail = await fetchMintRequestDetailByProductionIdHTTP(trimmed);
     const inspection = (detail?.inspection ?? null) as any;
@@ -601,14 +628,15 @@ export async function fetchInspectionByProductionIdHTTP(
       return inspection as InspectionBatchDTO;
     }
   } catch (_e: any) {
-    // noop -> fallback old list route
+    // noop
   }
 
-  // 🔙 fallback: 既存の list ルート
+  // 🔙 fallback: list ルート
   const batches = await fetchInspectionBatchesByProductionIdsHTTP([trimmed]);
   const hit =
     batches.find(
-      (b: any) => String((b as any)?.productionId ?? "").trim() === trimmed,
+      (b: any) =>
+        String((b as any)?.productionId ?? (b as any)?.ProductionID ?? "").trim() === trimmed,
     ) ?? null;
 
   return hit ?? null;
@@ -627,14 +655,9 @@ export async function fetchProductBlueprintPatchHTTP(
     productBlueprintId,
   )}/patch`;
 
-  const res = await fetch(url, {
-    method: "GET",
-    headers: buildHeaders(idToken),
-  });
+  const res = await fetch(url, { method: "GET", headers: buildHeaders(idToken) });
 
-  if (res.status === 404) {
-    return null;
-  }
+  if (res.status === 404) return null;
 
   if (!res.ok) {
     throw new Error(
@@ -643,9 +666,7 @@ export async function fetchProductBlueprintPatchHTTP(
   }
 
   const json = (await res.json()) as any;
-  const out = normalizeProductBlueprintPatch(json);
-
-  return out ?? null;
+  return normalizeProductBlueprintPatch(json) ?? null;
 }
 
 // ===============================
@@ -669,10 +690,7 @@ export async function fetchBrandsForMintHTTP(): Promise<BrandForMintDTO[]> {
 
   const url = `${API_BASE}/mint/brands`;
 
-  const res = await fetch(url, {
-    method: "GET",
-    headers: buildHeaders(idToken),
-  });
+  const res = await fetch(url, { method: "GET", headers: buildHeaders(idToken) });
 
   if (!res.ok) {
     throw new Error(
@@ -684,14 +702,12 @@ export async function fetchBrandsForMintHTTP(): Promise<BrandForMintDTO[]> {
 
   const rawItems: BrandRecordRaw[] = json?.items ?? json?.Items ?? [];
 
-  const mapped: BrandForMintDTO[] = rawItems
+  return rawItems
     .map((b) => ({
       id: (b.id ?? b.ID ?? "").trim(),
       name: (b.name ?? b.Name ?? "").trim(),
     }))
     .filter((b) => b.id && b.name);
-
-  return mapped;
 }
 
 // ===============================
@@ -719,9 +735,7 @@ export async function fetchTokenBlueprintsByBrandHTTP(
   brandId: string,
 ): Promise<TokenBlueprintForMintDTO[]> {
   const trimmed = brandId.trim();
-  if (!trimmed) {
-    return [];
-  }
+  if (!trimmed) return [];
 
   const idToken = await getIdTokenOrThrow();
 
@@ -729,14 +743,9 @@ export async function fetchTokenBlueprintsByBrandHTTP(
     trimmed,
   )}`;
 
-  const res = await fetch(url, {
-    method: "GET",
-    headers: buildHeaders(idToken),
-  });
+  const res = await fetch(url, { method: "GET", headers: buildHeaders(idToken) });
 
-  if (res.status === 404) {
-    return [];
-  }
+  if (res.status === 404) return [];
 
   if (!res.ok) {
     throw new Error(
@@ -754,7 +763,7 @@ export async function fetchTokenBlueprintsByBrandHTTP(
     ? json
     : json?.items ?? json?.Items ?? [];
 
-  const mapped: TokenBlueprintForMintDTO[] = rawItems
+  return rawItems
     .map((tb) => ({
       id: (tb.id ?? tb.ID ?? "").trim(),
       name: (tb.name ?? tb.Name ?? "").trim(),
@@ -762,21 +771,12 @@ export async function fetchTokenBlueprintsByBrandHTTP(
       iconUrl: (tb.iconUrl ?? tb.IconUrl ?? "").trim() || undefined,
     }))
     .filter((tb) => tb.id && tb.name && tb.symbol);
-
-  return mapped;
 }
 
 // ===============================
 // HTTP Repository (model variations for Mint)
 // ===============================
 
-/**
- * modelId(=variationId) から ModelVariation を取得して表示用メタに変換する（GetModelVariationByID 相当）
- *
- * NOTE:
- * - ルート名が環境で揺れる可能性があるため候補を順に試します。
- * - ここでは console.log 等のログは入れません（要望通り）。
- */
 export type ModelVariationForMintDTO = {
   id: string;
   modelNumber: string | null;
@@ -795,7 +795,6 @@ function normalizeModelVariationForMintDTO(v: any): ModelVariationForMintDTO | n
     String(v?.modelNumber ?? v?.ModelNumber ?? "").trim() || null;
   const size = String(v?.size ?? v?.Size ?? "").trim() || null;
 
-  // color の揺れ吸収（{ name, rgb } or 直で colorName/rgb）
   const colorObj = v?.color ?? v?.Color ?? null;
 
   const colorName =
@@ -807,8 +806,7 @@ function normalizeModelVariationForMintDTO(v: any): ModelVariationForMintDTO | n
         "",
     ).trim() || null;
 
-  const rgbRaw =
-    v?.rgb ?? v?.RGB ?? colorObj?.rgb ?? colorObj?.RGB ?? null;
+  const rgbRaw = v?.rgb ?? v?.RGB ?? colorObj?.rgb ?? colorObj?.RGB ?? null;
 
   const rgb =
     typeof rgbRaw === "number"
@@ -831,25 +829,14 @@ export async function fetchModelVariationByIdForMintHTTP(
   const candidates = [
     `${API_BASE}/models/variations/${encodeURIComponent(vid)}`,
     `${API_BASE}/model/variations/${encodeURIComponent(vid)}`,
-    // 必要なら将来ここに候補を追加
   ];
-
-  let lastStatus: number | null = null;
-  let lastText: string | null = null;
 
   for (const url of candidates) {
     try {
-      const res = await fetch(url, {
-        method: "GET",
-        headers: buildHeaders(idToken),
-      });
+      const res = await fetch(url, { method: "GET", headers: buildHeaders(idToken) });
 
-      lastStatus = res.status;
-      lastText = res.statusText || null;
-
-      // 次の候補を試す条件
-      if (res.status === 404 || res.status === 405) continue; // ルートなし/メソッド違い
-      if (res.status >= 500) continue; // サーバ側内部エラーなら別ルートを試す
+      if (res.status === 404 || res.status === 405) continue;
+      if (res.status >= 500) continue;
 
       if (!res.ok) {
         throw new Error(
@@ -860,22 +847,73 @@ export async function fetchModelVariationByIdForMintHTTP(
       const json = (await res.json()) as any;
       return normalizeModelVariationForMintDTO(json);
     } catch (_e: any) {
-      // ネットワークエラー等も含めて次の候補へ
       continue;
     }
   }
 
-  // どの候補もダメなら「無い」として扱う（画面を止めない）
-  // ※「絶対に落としたい」ならここで throw に変えてください
   return null;
 }
-
 
 // ===============================
 // HTTP Repository (mints)
 // ===============================
 
-async function fetchMintsMapRaw(
+function normalizeMintRequestsRows(json: any): MintRequestRowRaw[] {
+  if (!json) return [];
+  if (Array.isArray(json)) return json as MintRequestRowRaw[];
+
+  const rows =
+    (json as any)?.rows ??
+    (json as any)?.Rows ??
+    (json as any)?.items ??
+    (json as any)?.Items ??
+    (json as any)?.data ??
+    (json as any)?.Data ??
+    null;
+
+  return Array.isArray(rows) ? (rows as MintRequestRowRaw[]) : [];
+}
+
+function extractRowKeyAsProductionId(row: any): string {
+  return String(
+    row?.productionId ??
+      row?.ProductionID ??
+      row?.ProductionId ??
+      row?.inspectionId ??
+      row?.InspectionID ??
+      row?.InspectionId ??
+      row?.id ??
+      row?.ID ??
+      "",
+  ).trim();
+}
+
+async function fetchMintRequestsRowsRaw(
+  ids: string[],
+  view: "management" | "dto" | "list" | null,
+): Promise<MintRequestRowRaw[]> {
+  const idToken = await getIdTokenOrThrow();
+
+  const base = `${API_BASE}/mint/requests?productionIds=${encodeURIComponent(
+    ids.join(","),
+  )}`;
+  const url = view ? `${base}&view=${encodeURIComponent(view)}` : base;
+
+  const res = await fetch(url, { method: "GET", headers: buildHeaders(idToken) });
+
+  if (res.status === 404) return [];
+  if (!res.ok) {
+    throw new Error(
+      `Failed to fetch mint requests: ${res.status} ${res.statusText}`,
+    );
+  }
+
+  const json = (await res.json()) as MintRequestsPayloadRaw | null | undefined;
+  return normalizeMintRequestsRows(json);
+}
+
+// legacy (/mint/mints) fallback
+async function fetchMintsMapRawLegacy(
   ids: string[],
   view: "list" | "dto" | null,
 ): Promise<Record<string, any>> {
@@ -886,10 +924,7 @@ async function fetchMintsMapRaw(
   )}`;
   const url = view ? `${base}&view=${encodeURIComponent(view)}` : base;
 
-  const res = await fetch(url, {
-    method: "GET",
-    headers: buildHeaders(idToken),
-  });
+  const res = await fetch(url, { method: "GET", headers: buildHeaders(idToken) });
 
   if (res.status === 404) return {};
   if (!res.ok) {
@@ -897,11 +932,10 @@ async function fetchMintsMapRaw(
   }
 
   const json = (await res.json()) as Record<string, any> | null | undefined;
-  const raw = json ?? {};
-  return raw;
+  return json ?? {};
 }
 
-export async function fetchMintByInspectionIdHTTP(
+async function fetchMintByInspectionIdLegacyHTTP(
   inspectionId: string,
 ): Promise<MintDTO | null> {
   const iid = String(inspectionId ?? "").trim();
@@ -911,10 +945,7 @@ export async function fetchMintByInspectionIdHTTP(
 
   const url = `${API_BASE}/mint/mints/${encodeURIComponent(iid)}`;
 
-  const res = await fetch(url, {
-    method: "GET",
-    headers: buildHeaders(idToken),
-  });
+  const res = await fetch(url, { method: "GET", headers: buildHeaders(idToken) });
 
   if (res.status === 404) return null;
 
@@ -927,8 +958,32 @@ export async function fetchMintByInspectionIdHTTP(
   const json = (await res.json()) as any;
   if (!json) return null;
 
-  const out = normalizeMintDTO(json);
-  return out;
+  return normalizeMintDTO(json);
+}
+
+export async function fetchMintByInspectionIdHTTP(
+  inspectionId: string,
+): Promise<MintDTO | null> {
+  const iid = String(inspectionId ?? "").trim();
+  if (!iid) throw new Error("inspectionId が空です");
+
+  try {
+    const rows = await fetchMintRequestsRowsRaw([iid], "management");
+    const row =
+      (rows ?? []).find((r) => extractRowKeyAsProductionId(r) === iid) ??
+      rows?.[0] ??
+      null;
+    if (!row) return null;
+
+    const mintRaw = row?.mint ?? row?.Mint ?? null;
+    if (mintRaw) return normalizeMintDTO(mintRaw);
+
+    return normalizeMintDTO(row);
+  } catch (_e: any) {
+    // legacy
+  }
+
+  return await fetchMintByInspectionIdLegacyHTTP(iid);
 }
 
 async function fetchMintListRowsByInspectionIdsFallback(
@@ -943,7 +998,7 @@ async function fetchMintListRowsByInspectionIdsFallback(
   const settled = await Promise.all(
     ids.map(async (inspectionId) => {
       try {
-        const m = await fetchMintByInspectionIdHTTP(inspectionId);
+        const m = await fetchMintByInspectionIdLegacyHTTP(inspectionId);
         return { inspectionId, mint: m };
       } catch (_e: any) {
         return { inspectionId, mint: null };
@@ -981,11 +1036,44 @@ export async function fetchMintListRowsByInspectionIdsHTTP(
   if (ids.length === 0) return {};
 
   try {
+    const rows = await fetchMintRequestsRowsRaw(ids, "management");
+
+    const out: Record<string, MintListRowDTO> = {};
+    for (const r of rows ?? []) {
+      const key = extractRowKeyAsProductionId(r);
+      if (!key) continue;
+
+      const base =
+        (r?.mint ?? r?.Mint ?? null) ? (r?.mint ?? r?.Mint) : (r as any);
+
+      const merged = {
+        ...(base ?? {}),
+        inspectionId: key,
+        productionId: key,
+        tokenName: (r as any)?.tokenName ?? (base as any)?.tokenName ?? null,
+        createdByName:
+          (r as any)?.createdByName ?? (base as any)?.createdByName ?? null,
+        mintedAt: (r as any)?.mintedAt ?? (base as any)?.mintedAt ?? null,
+        minted:
+          typeof (r as any)?.minted === "boolean"
+            ? (r as any).minted
+            : (base as any)?.minted,
+      };
+
+      out[key] = normalizeMintListRow(merged);
+    }
+
+    return out;
+  } catch (_e: any) {
+    // legacy
+  }
+
+  try {
     let raw: Record<string, any> = {};
     try {
-      raw = await fetchMintsMapRaw(ids, "list");
+      raw = await fetchMintsMapRawLegacy(ids, "list");
     } catch (_e: any) {
-      raw = await fetchMintsMapRaw(ids, null);
+      raw = await fetchMintsMapRawLegacy(ids, null);
     }
 
     const out: Record<string, MintListRowDTO> = {};
@@ -1010,11 +1098,32 @@ export async function fetchMintsByInspectionIdsHTTP(
 
   if (ids.length === 0) return {};
 
+  try {
+    const rows = await fetchMintRequestsRowsRaw(ids, "management");
+
+    const out: Record<string, MintDTO> = {};
+    for (const r of rows ?? []) {
+      const key = extractRowKeyAsProductionId(r);
+      if (!key) continue;
+
+      const mintRaw = r?.mint ?? r?.Mint ?? null;
+      if (mintRaw) {
+        out[key] = normalizeMintDTO(mintRaw);
+        continue;
+      }
+      out[key] = normalizeMintDTO(r);
+    }
+
+    return out;
+  } catch (_e: any) {
+    // legacy
+  }
+
   let raw: Record<string, any> = {};
   try {
-    raw = await fetchMintsMapRaw(ids, "dto");
+    raw = await fetchMintsMapRawLegacy(ids, "dto");
   } catch (_e: any) {
-    raw = await fetchMintsMapRaw(ids, null);
+    raw = await fetchMintsMapRawLegacy(ids, null);
   }
 
   const out: Record<string, MintDTO> = {};
@@ -1043,9 +1152,7 @@ export async function postMintRequestHTTP(
   scheduledBurnDate?: string,
 ): Promise<InspectionBatchDTO | null> {
   const trimmed = productionId.trim();
-  if (!trimmed) {
-    throw new Error("productionId が空です");
-  }
+  if (!trimmed) throw new Error("productionId が空です");
 
   const idToken = await getIdTokenOrThrow();
 

@@ -1,14 +1,15 @@
-// backend\internal\domain\inventory\entity.go
+// backend/internal/domain/inventory/entity.go
 package inventory
 
 import (
 	"errors"
+	"sort"
 	"strings"
 	"time"
 )
 
 // ------------------------------------------------------
-// Entity: Mint (mints テーブル 1 レコード)
+// Entity: Mint (inventories / mints テーブル 1 レコード)
 // ------------------------------------------------------
 //
 // Firestore 上の想定構造（★この定義を正）:
@@ -16,16 +17,16 @@ import (
 // - id                 : string
 // - tokenBlueprintId   : string
 // - productBlueprintId : string
-// - products           : map[string]string      // ★ productId → mintAddress（作成時は "" でよい）
+// - products           : []string            // ★ productId のみ
 // - accumulation       : integer
 // - createdAt          : time.Time
 // - updatedAt          : time.Time
 type Mint struct {
 	ID string `json:"id"`
 
-	TokenBlueprintID   string            `json:"tokenBlueprintId"`
-	ProductBlueprintID string            `json:"productBlueprintId"`
-	Products           map[string]string `json:"products"` // ★ productId → mintAddress
+	TokenBlueprintID   string   `json:"tokenBlueprintId"`
+	ProductBlueprintID string   `json:"productBlueprintId"`
+	Products           []string `json:"products"` // ★ productId のみ
 
 	Accumulation int `json:"accumulation"`
 
@@ -81,9 +82,7 @@ func NewMint(
 		return Mint{}, ErrInvalidCreatedAt
 	}
 
-	// productId 群を map[productId]mintAddress に詰め替える。
-	// 作成時点では mintAddress は未定なので "" を入れておく。
-	productMap := normalizeIDListToMap(productIDs)
+	products := normalizeIDs(productIDs)
 
 	ca := createdAt.UTC()
 
@@ -91,10 +90,10 @@ func NewMint(
 		ID:                 strings.TrimSpace(id),
 		TokenBlueprintID:   tbID,
 		ProductBlueprintID: pbID,
-		Products:           productMap,
+		Products:           products,
 		Accumulation:       accumulation,
 		CreatedAt:          ca,
-		UpdatedAt:          ca, // 作成時は createdAt と同一で初期化
+		UpdatedAt:          ca,
 	}
 
 	if err := m.validate(); err != nil {
@@ -109,13 +108,10 @@ func NewMint(
 // ------------------------------------------------------
 //
 // Products については：
-//   - nil でも OK（empty map と同等扱い）
-//   - 非空の場合、キー(productId) が空文字でないことだけを見る
-//   - 件数 0 でエラーにはしない（Usecase 側でチェックする前提）
+//   - nil でも OK（empty slice と同等扱い）
+//   - 非空の場合、要素が空文字でないこと
+//   - 重複は許容しない（normalize で除去される想定だが念のため弾く）
 func (m Mint) validate() error {
-	// （ID は採番を repo 側に任せるケースがあるため、ここでは必須にしない）
-	// if strings.TrimSpace(m.ID) == "" { return ErrInvalidMintID }
-
 	if strings.TrimSpace(m.TokenBlueprintID) == "" {
 		return ErrInvalidTokenBlueprintID
 	}
@@ -137,12 +133,17 @@ func (m Mint) validate() error {
 		return ErrInvalidUpdatedAt
 	}
 
-	// products チェック（「ゼロ件 NG」はしない）
 	if m.Products != nil {
-		for pid := range m.Products {
-			if strings.TrimSpace(pid) == "" {
+		seen := map[string]struct{}{}
+		for _, pid := range m.Products {
+			pid = strings.TrimSpace(pid)
+			if pid == "" {
 				return ErrInvalidProducts
 			}
+			if _, ok := seen[pid]; ok {
+				return ErrInvalidProducts
+			}
+			seen[pid] = struct{}{}
 		}
 	}
 
@@ -153,25 +154,20 @@ func (m Mint) validate() error {
 // Helpers
 // ------------------------------------------------------
 
-// normalizeIDListToMap は raw な productId 配列から
-// map[productId]mintAddress(string) を作るヘルパ。
-// ・空文字は除外
-// ・重複 productId は 1 つにまとめる
-// ・mintAddress は作成時点では "" で初期化
-func normalizeIDListToMap(raw []string) map[string]string {
-	out := make(map[string]string, len(raw))
-
-	for _, id := range raw {
-		id = strings.TrimSpace(id)
-		if id == "" {
+func normalizeIDs(raw []string) []string {
+	seen := map[string]struct{}{}
+	out := make([]string, 0, len(raw))
+	for _, s := range raw {
+		s = strings.TrimSpace(s)
+		if s == "" {
 			continue
 		}
-		// すでに登録済みならスキップ（productId はユニーク）
-		if _, ok := out[id]; ok {
+		if _, ok := seen[s]; ok {
 			continue
 		}
-		out[id] = "" // mintAddress はミント完了後に埋める想定
+		seen[s] = struct{}{}
+		out = append(out, s)
 	}
-
+	sort.Strings(out)
 	return out
 }

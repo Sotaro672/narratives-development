@@ -41,13 +41,13 @@ func (r *InventoryRepositoryFS) col() *firestore.CollectionRef {
 // ------------------------------------------------------------
 
 type inventoryRecord struct {
-	ID                 string            `firestore:"id"`
-	TokenBlueprintID   string            `firestore:"tokenBlueprintId"`
-	ProductBlueprintID string            `firestore:"productBlueprintId"`
-	Products           map[string]string `firestore:"products"`
-	Accumulation       int               `firestore:"accumulation"`
-	CreatedAt          time.Time         `firestore:"createdAt"`
-	UpdatedAt          time.Time         `firestore:"updatedAt"`
+	ID                 string    `firestore:"id"`
+	TokenBlueprintID   string    `firestore:"tokenBlueprintId"`
+	ProductBlueprintID string    `firestore:"productBlueprintId"`
+	Products           []string  `firestore:"products"` // ★ []string only
+	Accumulation       int       `firestore:"accumulation"`
+	CreatedAt          time.Time `firestore:"createdAt"`
+	UpdatedAt          time.Time `firestore:"updatedAt"`
 }
 
 func toRecord(m invdom.Mint) inventoryRecord {
@@ -55,7 +55,7 @@ func toRecord(m invdom.Mint) inventoryRecord {
 		ID:                 strings.TrimSpace(m.ID),
 		TokenBlueprintID:   strings.TrimSpace(m.TokenBlueprintID),
 		ProductBlueprintID: strings.TrimSpace(m.ProductBlueprintID),
-		Products:           m.Products,
+		Products:           normalizeIDs(m.Products),
 		Accumulation:       m.Accumulation,
 		CreatedAt:          m.CreatedAt,
 		UpdatedAt:          m.UpdatedAt,
@@ -71,7 +71,7 @@ func fromRecord(docID string, rec inventoryRecord) invdom.Mint {
 		ID:                 id,
 		TokenBlueprintID:   rec.TokenBlueprintID,
 		ProductBlueprintID: rec.ProductBlueprintID,
-		Products:           rec.Products,
+		Products:           normalizeIDs(rec.Products),
 		Accumulation:       rec.Accumulation,
 		CreatedAt:          rec.CreatedAt,
 		UpdatedAt:          rec.UpdatedAt,
@@ -92,12 +92,7 @@ func (r *InventoryRepositoryFS) Create(ctx context.Context, m invdom.Mint) (invd
 		strings.TrimSpace(m.ID),
 		strings.TrimSpace(m.TokenBlueprintID),
 		strings.TrimSpace(m.ProductBlueprintID),
-		func() int {
-			if m.Products == nil {
-				return 0
-			}
-			return len(m.Products)
-		}(),
+		len(m.Products),
 		m.Accumulation,
 		m.CreatedAt.IsZero(),
 		m.UpdatedAt.IsZero(),
@@ -116,6 +111,8 @@ func (r *InventoryRepositoryFS) Create(ctx context.Context, m invdom.Mint) (invd
 	if m.UpdatedAt.IsZero() {
 		m.UpdatedAt = m.CreatedAt
 	}
+
+	m.Products = normalizeIDs(m.Products)
 
 	var doc *firestore.DocumentRef
 	if strings.TrimSpace(m.ID) == "" {
@@ -146,12 +143,7 @@ func (r *InventoryRepositoryFS) Create(ctx context.Context, m invdom.Mint) (invd
 		m.CreatedAt.UTC().Format(time.RFC3339),
 		m.UpdatedAt.UTC().Format(time.RFC3339),
 		m.Accumulation,
-		func() int {
-			if m.Products == nil {
-				return 0
-			}
-			return len(m.Products)
-		}(),
+		len(m.Products),
 	)
 
 	return m, nil
@@ -186,6 +178,7 @@ func (r *InventoryRepositoryFS) Update(ctx context.Context, m invdom.Mint) (invd
 	}
 
 	m.UpdatedAt = time.Now().UTC()
+	m.Products = normalizeIDs(m.Products)
 
 	if m.CreatedAt.IsZero() {
 		existing, err := r.GetByID(ctx, id)
@@ -292,7 +285,6 @@ func (r *InventoryRepositoryFS) IncrementAccumulation(ctx context.Context, id st
 	doc := r.col().Doc(id)
 	now := time.Now().UTC()
 
-	// ✅ firestore.Client.RunTransaction は error だけ返すため、代入は 1 つだけ
 	err := r.Client.RunTransaction(ctx, func(ctx context.Context, tx *firestore.Transaction) error {
 		snap, err := tx.Get(doc)
 		if err != nil {
@@ -335,11 +327,7 @@ func (r *InventoryRepositoryFS) IncrementAccumulationByMintProducts(ctx context.
 		return invdom.Mint{}, err
 	}
 
-	delta := 0
-	if m.Products != nil {
-		delta = len(m.Products)
-	}
-	return r.IncrementAccumulation(ctx, id, delta)
+	return r.IncrementAccumulation(ctx, id, len(m.Products))
 }
 
 func (r *InventoryRepositoryFS) DecrementAccumulationByOrderItemsCount(ctx context.Context, id string, orderItemsCount int) (invdom.Mint, error) {
@@ -360,9 +348,6 @@ func (r *InventoryRepositoryFS) DecrementAccumulationByOrderItemsCount(ctx conte
 // Upsert helpers (for InventoryUsecase / mint flow)
 // ============================================================
 
-// UpsertByTokenAndProductBlueprintID:
-// - docID は buildInventoryDocID(tokenBlueprintID, productBlueprintID) 固定
-// - 既存があれば products をマージし、added 分だけ accumulation を増やします（idempotent）
 func (r *InventoryRepositoryFS) UpsertByTokenAndProductBlueprintID(
 	ctx context.Context,
 	tokenBlueprintID string,
@@ -395,17 +380,10 @@ func (r *InventoryRepositoryFS) UpsertByTokenAndProductBlueprintID(
 		docID, tbID, pbID, len(ids),
 	)
 
-	// Transaction で: 既存取得 -> products マージ -> accumulation を増減なしで増やす（addedのみ）
 	err := r.Client.RunTransaction(ctx, func(ctx context.Context, tx *firestore.Transaction) error {
 		snap, err := tx.Get(doc)
 		if err != nil {
 			if status.Code(err) == codes.NotFound {
-				// create
-				products := map[string]string{}
-				for _, pid := range ids {
-					products[pid] = "" // mintAddress は後から埋める想定
-				}
-
 				ent, err := invdom.NewMint(
 					docID,
 					tbID,
@@ -417,12 +395,7 @@ func (r *InventoryRepositoryFS) UpsertByTokenAndProductBlueprintID(
 				if err != nil {
 					return err
 				}
-
-				// NewMint が Products を map にしていない可能性があるため、ここで確実化
 				ent.ID = docID
-				ent.TokenBlueprintID = tbID
-				ent.ProductBlueprintID = pbID
-				ent.Products = products
 				ent.CreatedAt = now
 				ent.UpdatedAt = now
 
@@ -438,8 +411,10 @@ func (r *InventoryRepositoryFS) UpsertByTokenAndProductBlueprintID(
 			return err
 		}
 
-		if rec.Products == nil {
-			rec.Products = map[string]string{}
+		existing := normalizeIDs(rec.Products)
+		seen := map[string]struct{}{}
+		for _, p := range existing {
+			seen[p] = struct{}{}
 		}
 
 		added := 0
@@ -447,15 +422,17 @@ func (r *InventoryRepositoryFS) UpsertByTokenAndProductBlueprintID(
 			if pid == "" {
 				continue
 			}
-			if _, ok := rec.Products[pid]; ok {
+			if _, ok := seen[pid]; ok {
 				continue
 			}
-			rec.Products[pid] = ""
+			seen[pid] = struct{}{}
+			existing = append(existing, pid)
 			added++
 		}
+		sort.Strings(existing)
 
 		updates := []firestore.Update{
-			{Path: "products", Value: rec.Products},
+			{Path: "products", Value: existing},
 			{Path: "updatedAt", Value: now},
 		}
 		if added > 0 {
@@ -482,12 +459,7 @@ func (r *InventoryRepositoryFS) UpsertByTokenAndProductBlueprintID(
 		"[inventory_repo_fs] UpsertByTokenAndProductBlueprintID done docId=%q accumulation=%d products=%d elapsed=%s",
 		docID,
 		out.Accumulation,
-		func() int {
-			if out.Products == nil {
-				return 0
-			}
-			return len(out.Products)
-		}(),
+		len(out.Products),
 		time.Since(start),
 	)
 
