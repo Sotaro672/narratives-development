@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"log"
+	"reflect"
 	"sort"
 	"strings"
 	"time"
@@ -15,7 +16,7 @@ import (
 	appusecase "narratives/internal/application/usecase"
 	branddom "narratives/internal/domain/brand"
 	inspectiondom "narratives/internal/domain/inspection"
-	invdom "narratives/internal/domain/inventory" // ★ 追加: inventory 連携
+	invdom "narratives/internal/domain/inventory" // inventory 連携
 	mintdom "narratives/internal/domain/mint"
 	pbpdom "narratives/internal/domain/productBlueprint"
 	tokendom "narratives/internal/domain/token"
@@ -30,6 +31,21 @@ import (
 // TokenUsecase がこのインターフェースを実装する想定です。
 type TokenMintPort interface {
 	MintFromMintRequest(ctx context.Context, mintID string) (*tokendom.MintResult, error)
+}
+
+// ============================================================
+// Inventory Upsert Port（A案）
+// ============================================================
+
+// InventoryUpserter は inventories の upsert を行うための最小インターフェースです。
+// 実体は *usecase.InventoryUsecase を想定します。
+type InventoryUpserter interface {
+	UpsertFromMint(
+		ctx context.Context,
+		tokenBlueprintID string,
+		productBlueprintID string,
+		productIDs []string,
+	) (invdom.Mint, error)
 }
 
 // ============================================================
@@ -58,16 +74,16 @@ type MintUsecase struct {
 	// チェーンミント実行用ポート（TokenUsecase を想定）
 	tokenMinter TokenMintPort
 
-	// ★ 追加: Inventory 連携（DI で注入）
-	inventoryRepo invdom.RepositoryPort
+	// ★ A案: inventories への反映は InventoryUsecase(=UpsertFromMint) に委譲する
+	inventoryUC InventoryUpserter
 
-	// ★ 追加: createdBy(memberId) → 氏名 を解決するため（A案）
+	// createdBy(memberId) → 氏名 を解決するため（A案）
 	// 既存DIを壊さないため、Setterで後から差し込む
 	nameResolver *resolver.NameResolver
 }
 
 // NewMintUsecase は MintUsecase のコンストラクタです。
-// NameResolver / InventoryRepo は任意依存（Setterで後から差し込む）とする。
+// NameResolver / InventoryUC は任意依存（Setterで後から差し込む）とする。
 func NewMintUsecase(
 	pbRepo mintdom.MintProductBlueprintRepo,
 	prodRepo mintdom.MintProductionRepo,
@@ -89,12 +105,12 @@ func NewMintUsecase(
 		mintRepo:            mintRepo,
 		passedProductLister: passedProductLister,
 		tokenMinter:         tokenMinter,
-		inventoryRepo:       nil,
+		inventoryUC:         nil,
 		nameResolver:        nil,
 	}
 }
 
-// ★ 追加: DI 側で nameResolver を後から注入できるようにする（既存constructorを壊さない）
+// DI 側で nameResolver を後から注入できるようにする
 func (u *MintUsecase) SetNameResolver(r *resolver.NameResolver) {
 	if u == nil {
 		return
@@ -102,12 +118,20 @@ func (u *MintUsecase) SetNameResolver(r *resolver.NameResolver) {
 	u.nameResolver = r
 }
 
-// ★ 追加: DI 側で InventoryRepo を後から注入できるようにする
-func (u *MintUsecase) SetInventoryRepo(repo invdom.RepositoryPort) {
+// ★ A案: DI 側で InventoryUsecase（または互換の Upserter）を後から注入できるようにする
+func (u *MintUsecase) SetInventoryUsecase(uc *appusecase.InventoryUsecase) {
 	if u == nil {
 		return
 	}
-	u.inventoryRepo = repo
+	u.inventoryUC = uc
+}
+
+// 互換: interface 注入したいケース用
+func (u *MintUsecase) SetInventoryUpserter(up InventoryUpserter) {
+	if u == nil {
+		return
+	}
+	u.inventoryUC = up
 }
 
 // internal helper: createdBy(memberId) -> display name
@@ -118,54 +142,135 @@ func (u *MintUsecase) resolveCreatedByName(ctx context.Context, memberID string)
 		return ""
 	}
 
-	// ★ A案: nameResolver があれば ResolveMemberName を使う
 	if u != nil && u.nameResolver != nil {
 		if name := strings.TrimSpace(u.nameResolver.ResolveMemberName(ctx, memberID)); name != "" {
 			return name
 		}
 	}
-
-	// fallback
 	return memberID
+}
+
+// production から ProductBlueprintID を（存在すれば）取り出す
+// ※ prodRepo の具体型に依存しないため、GetByID/Get を reflect で試す
+func (u *MintUsecase) resolveProductBlueprintIDFromProduction(ctx context.Context, productionID string) string {
+	if u == nil || u.prodRepo == nil {
+		return ""
+	}
+
+	call := func(methodName string) (any, error) {
+		rv := reflect.ValueOf(u.prodRepo)
+		m := rv.MethodByName(methodName)
+		if !m.IsValid() {
+			return nil, errors.New("method not found: " + methodName)
+		}
+		out := m.Call([]reflect.Value{reflect.ValueOf(ctx), reflect.ValueOf(productionID)})
+		if len(out) != 2 {
+			return nil, errors.New("unexpected return values from " + methodName)
+		}
+		if !out[1].IsNil() {
+			if err, ok := out[1].Interface().(error); ok {
+				return nil, err
+			}
+			return nil, errors.New("non-error type returned as error")
+		}
+		return out[0].Interface(), nil
+	}
+
+	var prod any
+	if p, err := call("GetByID"); err == nil {
+		prod = p
+	} else if p, err := call("Get"); err == nil {
+		prod = p
+	} else {
+		return ""
+	}
+
+	v := reflect.ValueOf(prod)
+	if v.Kind() == reflect.Ptr {
+		v = v.Elem()
+	}
+	if v.Kind() != reflect.Struct {
+		return ""
+	}
+
+	for _, name := range []string{"ProductBlueprintID", "ProductBlueprintId"} {
+		f := v.FieldByName(name)
+		if !f.IsValid() {
+			continue
+		}
+		if f.Kind() == reflect.String {
+			return strings.TrimSpace(f.String())
+		}
+		if f.Kind() == reflect.Ptr && !f.IsNil() && f.Elem().Kind() == reflect.String {
+			return strings.TrimSpace(f.Elem().String())
+		}
+	}
+
+	return ""
 }
 
 // ErrCompanyIDMissing は context から companyId が解決できない場合のエラーです。
 var ErrCompanyIDMissing = errors.New("companyId not found in context")
 
 // ============================================================
-// ★ NEW: POST /mint/requests/{mintRequestId}/mint 用
-// - handler は tokenUC 直呼びをやめ、mintUC 経由で呼ぶ（A案）
+// ★ A案: POST /mint/requests/{mintRequestId}/mint 用
+// - handler は tokenUC 直呼びをやめ、mintUC 経由で呼ぶ
+// - ここで「オンチェーンmint + TokenBlueprint更新 + mints更新 + inventories Upsert」を行う
 // ============================================================
 
 // MintFromMintRequest runs onchain mint for an existing mint request (docId = mintRequestID).
 func (u *MintUsecase) MintFromMintRequest(ctx context.Context, mintRequestID string) (*tokendom.MintResult, error) {
+	start := time.Now()
+
+	log.Printf(
+		"[mint_usecase] MintFromMintRequest start mintRequestId=%q usecase_nil=%t tokenMinter_nil=%t mintRepo_nil=%t tbRepo_nil=%t inventoryUC_nil=%t",
+		strings.TrimSpace(mintRequestID),
+		u == nil,
+		u == nil || u.tokenMinter == nil,
+		u == nil || u.mintRepo == nil,
+		u == nil || u.tbRepo == nil,
+		u == nil || u.inventoryUC == nil,
+	)
+
 	if u == nil {
+		log.Printf("[mint_usecase] MintFromMintRequest abort reason=usecase_nil elapsed=%s", time.Since(start))
 		return nil, errors.New("mint usecase is nil")
 	}
 	mintRequestID = strings.TrimSpace(mintRequestID)
 	if mintRequestID == "" {
+		log.Printf("[mint_usecase] MintFromMintRequest abort reason=empty_mintRequestId elapsed=%s", time.Since(start))
 		return nil, errors.New("mintRequestID is empty")
 	}
 	if u.tokenMinter == nil {
+		log.Printf("[mint_usecase] MintFromMintRequest abort reason=token_minter_nil mintRequestId=%q elapsed=%s", mintRequestID, time.Since(start))
 		return nil, errors.New("token minter is nil")
 	}
 
-	// actor（更新者）
 	actorID := strings.TrimSpace(appusecase.MemberIDFromContext(ctx))
 	if actorID == "" {
+		log.Printf("[mint_usecase] MintFromMintRequest abort reason=memberId_missing mintRequestId=%q elapsed=%s", mintRequestID, time.Since(start))
 		return nil, errors.New("memberID not found in context")
 	}
+	log.Printf("[mint_usecase] MintFromMintRequest actorId=%q mintRequestId=%q", actorID, mintRequestID)
 
-	// 1) まず Mint を取得（tokenBlueprintId を取り出す / 後処理に使う）
+	// 1) Mint を取得（tokenBlueprintId / products を後処理に使う）
 	var mintEnt *mintdom.Mint
 	if u.mintRepo != nil {
-		// 最優先: GetByID
 		if getter, ok := any(u.mintRepo).(interface {
 			GetByID(ctx context.Context, id string) (mintdom.Mint, error)
 		}); ok {
 			m, err := getter.GetByID(ctx, mintRequestID)
 			if err == nil {
 				mintEnt = &m
+				log.Printf(
+					"[mint_usecase] MintFromMintRequest loaded mint(GetByID) id=%q tokenBlueprintId=%q minted=%t products=%d",
+					strings.TrimSpace(m.ID),
+					strings.TrimSpace(m.TokenBlueprintID),
+					m.Minted,
+					len(normalizeMintProducts(any(m.Products))),
+				)
+			} else {
+				log.Printf("[mint_usecase] MintFromMintRequest mint(GetByID) miss id=%q err=%v", mintRequestID, err)
 			}
 		} else if getter, ok := any(u.mintRepo).(interface {
 			Get(ctx context.Context, id string) (mintdom.Mint, error)
@@ -173,22 +278,86 @@ func (u *MintUsecase) MintFromMintRequest(ctx context.Context, mintRequestID str
 			m, err := getter.Get(ctx, mintRequestID)
 			if err == nil {
 				mintEnt = &m
+				log.Printf(
+					"[mint_usecase] MintFromMintRequest loaded mint(Get) id=%q tokenBlueprintId=%q minted=%t products=%d",
+					strings.TrimSpace(m.ID),
+					strings.TrimSpace(m.TokenBlueprintID),
+					m.Minted,
+					len(normalizeMintProducts(any(m.Products))),
+				)
+			} else {
+				log.Printf("[mint_usecase] MintFromMintRequest mint(Get) miss id=%q err=%v", mintRequestID, err)
 			}
+		} else {
+			log.Printf("[mint_usecase] MintFromMintRequest mintRepo has no GetByID/Get (type=%T)", u.mintRepo)
 		}
+	} else {
+		log.Printf("[mint_usecase] MintFromMintRequest mintRepo is nil (skip preload)")
 	}
 
-	// 2) オンチェーンミント実行（TokenUsecase 実装を想定）
+	// 2) オンチェーンミント実行
+	log.Printf("[mint_usecase] MintFromMintRequest onchain mint start mintRequestId=%q", mintRequestID)
+
+	onchainStart := time.Now()
 	result, err := u.tokenMinter.MintFromMintRequest(ctx, mintRequestID)
+	onchainElapsed := time.Since(onchainStart)
+
 	if err != nil {
+		log.Printf(
+			"[mint_usecase] MintFromMintRequest onchain mint error mintRequestId=%q err=%v elapsed=%s totalElapsed=%s",
+			mintRequestID, err, onchainElapsed, time.Since(start),
+		)
 		return nil, err
 	}
 
-	// 3) TokenBlueprint の minted=true（未mint の場合のみ）
+	log.Printf(
+		"[mint_usecase] MintFromMintRequest onchain mint ok mintRequestId=%q elapsed=%s signature=%q mintAddress=%q slot=%d",
+		mintRequestID,
+		onchainElapsed,
+		func() string {
+			if result == nil {
+				return ""
+			}
+			return strings.TrimSpace(result.Signature)
+		}(),
+		func() string {
+			if result == nil {
+				return ""
+			}
+			return strings.TrimSpace(result.MintAddress)
+		}(),
+		func() uint64 {
+			if result == nil {
+				return 0
+			}
+			return result.Slot
+		}(),
+	)
+
+	// 3) TokenBlueprint minted=true（未mint の場合のみ）
 	if mintEnt != nil {
 		tbID := strings.TrimSpace(mintEnt.TokenBlueprintID)
 		if tbID != "" {
-			_ = u.markTokenBlueprintMinted(ctx, tbID, actorID)
+			tbStart := time.Now()
+			errTB := u.markTokenBlueprintMinted(ctx, tbID, actorID)
+			tbElapsed := time.Since(tbStart)
+
+			if errTB != nil {
+				log.Printf(
+					"[mint_usecase] MintFromMintRequest markTokenBlueprintMinted error tokenBlueprintId=%q actorId=%q err=%v elapsed=%s",
+					tbID, actorID, errTB, tbElapsed,
+				)
+			} else {
+				log.Printf(
+					"[mint_usecase] MintFromMintRequest markTokenBlueprintMinted ok tokenBlueprintId=%q actorId=%q elapsed=%s",
+					tbID, actorID, tbElapsed,
+				)
+			}
+		} else {
+			log.Printf("[mint_usecase] MintFromMintRequest skip markTokenBlueprintMinted reason=empty_tokenBlueprintId")
 		}
+	} else {
+		log.Printf("[mint_usecase] MintFromMintRequest skip markTokenBlueprintMinted reason=mintEnt_nil")
 	}
 
 	// 4) （任意）mints 側 minted/mintedAt を更新（TokenUsecase 側で更新済みでも安全に無害）
@@ -200,9 +369,80 @@ func (u *MintUsecase) MintFromMintRequest(ctx context.Context, mintRequestID str
 			m := *mintEnt
 			m.Minted = true
 			m.MintedAt = &now
-			_, _ = updater.Update(ctx, m)
+
+			updStart := time.Now()
+			updated, errUpd := updater.Update(ctx, m)
+			updElapsed := time.Since(updStart)
+
+			if errUpd != nil {
+				log.Printf(
+					"[mint_usecase] MintFromMintRequest mintRepo.Update error mintRequestId=%q err=%v elapsed=%s",
+					mintRequestID, errUpd, updElapsed,
+				)
+			} else {
+				log.Printf(
+					"[mint_usecase] MintFromMintRequest mintRepo.Update ok mintRequestId=%q minted=%t mintedAt=%v elapsed=%s",
+					mintRequestID, updated.Minted, updated.MintedAt, updElapsed,
+				)
+			}
+		} else {
+			log.Printf("[mint_usecase] MintFromMintRequest skip mintRepo.Update reason=no_update_method")
+		}
+	} else {
+		log.Printf("[mint_usecase] MintFromMintRequest skip mintRepo.Update reason=mintEnt_nil_or_mintRepo_nil")
+	}
+
+	// 5) inventories Upsert（A案: InventoryUsecase.UpsertFromMint に委譲）
+	if u.inventoryUC == nil {
+		log.Printf("[mint_usecase] MintFromMintRequest inventoryUC is nil -> skip inventory upsert mintRequestId=%q", mintRequestID)
+	} else if mintEnt == nil {
+		log.Printf("[mint_usecase] MintFromMintRequest inventory upsert skip reason=mintEnt_nil mintRequestId=%q", mintRequestID)
+	} else {
+		tbID := strings.TrimSpace(mintEnt.TokenBlueprintID)
+		pbID := strings.TrimSpace(u.resolveProductBlueprintIDFromProduction(ctx, mintRequestID))
+		productIDs := normalizeMintProducts(any(mintEnt.Products))
+
+		log.Printf(
+			"[mint_usecase] MintFromMintRequest inventory upsert start mintRequestId=%q tokenBlueprintId=%q productBlueprintId=%q products=%d",
+			mintRequestID, tbID, pbID, len(productIDs),
+		)
+
+		if tbID == "" || pbID == "" || len(productIDs) == 0 {
+			log.Printf(
+				"[mint_usecase] MintFromMintRequest inventory upsert skip reason=missing_fields mintRequestId=%q tbID=%q pbID=%q products=%d",
+				mintRequestID, tbID, pbID, len(productIDs),
+			)
+		} else {
+			invStart := time.Now()
+			invEnt, invErr := u.inventoryUC.UpsertFromMint(ctx, tbID, pbID, productIDs)
+			invElapsed := time.Since(invStart)
+
+			if invErr != nil {
+				log.Printf(
+					"[mint_usecase] MintFromMintRequest inventory upsert error mintRequestId=%q tokenBlueprintId=%q productBlueprintId=%q err=%v elapsed=%s",
+					mintRequestID, tbID, pbID, invErr, invElapsed,
+				)
+			} else {
+				log.Printf(
+					"[mint_usecase] MintFromMintRequest inventory upsert ok inventoryId=%q accumulation=%d products=%d elapsed=%s",
+					strings.TrimSpace(invEnt.ID),
+					invEnt.Accumulation,
+					func() int {
+						if invEnt.Products == nil {
+							return 0
+						}
+						return len(invEnt.Products)
+					}(),
+					invElapsed,
+				)
+			}
 		}
 	}
+
+	log.Printf(
+		"[mint_usecase] MintFromMintRequest done mintRequestId=%q elapsed=%s result_nil=%t",
+		mintRequestID, time.Since(start), result == nil,
+	)
 
 	return result, nil
 }
@@ -435,7 +675,7 @@ func (u *MintUsecase) GetProductBlueprintPatchByID(
 }
 
 // ============================================================
-// ★ NEW: model variations -> modelMeta（任意）
+// model variations -> modelMeta（任意）
 // ============================================================
 
 type modelMetaLister interface {
@@ -529,7 +769,8 @@ func (u *MintUsecase) ResolveModelMetaFromInspectionBatch(
 }
 
 // ============================================================
-// Additional API: Inspection へ mintId を記録 + mints 作成 + チェーンミント
+// ★ A案: /mint/inspections/{id}/request は「申請作成だけ」
+// - Inspection へ mintId を記録 + mints 作成（ここではチェーンmintしない / inventory触らない）
 // ============================================================
 
 func (u *MintUsecase) UpdateRequestInfo(
@@ -629,15 +870,10 @@ func (u *MintUsecase) UpdateRequestInfo(
 		return empty, err
 	}
 
-	if u.tokenMinter != nil {
-		if _, err := u.tokenMinter.MintFromMintRequest(ctx, mid); err != nil {
-			return empty, err
-		}
-
-		if err := u.markTokenBlueprintMinted(ctx, tbID, memberID); err != nil {
-			return empty, err
-		}
-	}
+	// A案ではここでチェーンmintしない（/mint/requests/{id}/mint が担当）
+	log.Printf("[mint_usecase] UpdateRequestInfo done (request only) productionId=%q mintId=%q tokenBlueprintId=%q passedProducts=%d",
+		pid, mid, tbID, len(passedProductIDs),
+	)
 
 	return batch, nil
 }
@@ -772,7 +1008,7 @@ func (u *MintUsecase) ListInspectionBatchesByProductionIDs(
 }
 
 // ============================================================
-// ★ NEW: Detail API for GET /mint/inspections/{productionId}
+// Detail API for GET /mint/inspections/{productionId}
 // ============================================================
 
 func (u *MintUsecase) GetMintRequestDetail(
@@ -806,4 +1042,75 @@ func (u *MintUsecase) GetMintRequestDetail(
 	}
 
 	return batches[0], nil
+}
+
+// ============================================================
+// Local helpers
+// ============================================================
+
+// normalizeMintProducts は、Mint.Products の型が []string / map[string]string のどちらでも
+// 取り出せるようにしておくためのヘルパです（将来の型変更に強くする）。
+func normalizeMintProducts(raw any) []string {
+	if raw == nil {
+		return []string{}
+	}
+
+	rv := reflect.ValueOf(raw)
+	if rv.Kind() == reflect.Ptr {
+		if rv.IsNil() {
+			return []string{}
+		}
+		rv = rv.Elem()
+	}
+
+	switch rv.Kind() {
+	case reflect.Slice, reflect.Array:
+		out := make([]string, 0, rv.Len())
+		for i := 0; i < rv.Len(); i++ {
+			it := rv.Index(i)
+			if it.Kind() == reflect.String {
+				s := strings.TrimSpace(it.String())
+				if s != "" {
+					out = append(out, s)
+				}
+			}
+		}
+		return normalizeIDs(out)
+
+	case reflect.Map:
+		// map[string]... のキーを productId として扱う
+		out := make([]string, 0, rv.Len())
+		iter := rv.MapRange()
+		for iter.Next() {
+			k := iter.Key()
+			if k.Kind() == reflect.String {
+				s := strings.TrimSpace(k.String())
+				if s != "" {
+					out = append(out, s)
+				}
+			}
+		}
+		return normalizeIDs(out)
+
+	default:
+		return []string{}
+	}
+}
+
+func normalizeIDs(raw []string) []string {
+	seen := map[string]struct{}{}
+	out := make([]string, 0, len(raw))
+	for _, s := range raw {
+		s = strings.TrimSpace(s)
+		if s == "" {
+			continue
+		}
+		if _, ok := seen[s]; ok {
+			continue
+		}
+		seen[s] = struct{}{}
+		out = append(out, s)
+	}
+	sort.Strings(out)
+	return out
 }

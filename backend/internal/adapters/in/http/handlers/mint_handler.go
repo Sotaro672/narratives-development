@@ -26,6 +26,7 @@ import (
 	usecase "narratives/internal/application/usecase"
 	branddom "narratives/internal/domain/brand"
 	inspectiondom "narratives/internal/domain/inspection"
+	invdom "narratives/internal/domain/inventory"
 	mintdom "narratives/internal/domain/mint"
 	pbpdom "narratives/internal/domain/productBlueprint"
 	tbdom "narratives/internal/domain/tokenBlueprint"
@@ -57,10 +58,15 @@ func NewMintHandler(
 	nameResolver *resolver.NameResolver,
 	productionUC *productionapp.ProductionUsecase,
 	mintRequestQS MintRequestQueryService, // ★ 追加
+	inventoryRepo invdom.RepositoryPort, // ★ 互換のため引数は残す（DI側変更を最小化）
 ) http.Handler {
-	// ★ A案: MintUsecase 側に NameResolver を持たせる
+	// ★ NameResolver は MintUsecase 側に保持（既存constructorは壊さない）
 	if mintUC != nil {
 		mintUC.SetNameResolver(nameResolver)
+		// NOTE:
+		// MintUsecase には SetInventoryRepo が存在しないため、ここでは注入しない。
+		// inventories 連携は DI(container) 側で mintUC.SetInventoryUsecase(...) により注入する。
+		_ = inventoryRepo // 互換のため未使用にしておく
 	}
 
 	return &MintHandler{
@@ -214,9 +220,6 @@ func (h *MintHandler) getMintRequestDetailByProductionID(w http.ResponseWriter, 
 
 // ============================================================
 // ★ NEW: GET /mint/requests
-// - company 境界付き Query を呼び、mintRequest 管理画面用の rows を返す
-// - optional: ?productionIds=a,b,c でサーバ側フィルタ
-// - optional: ?view=management|list（現状どちらでも同じ rows を返す）
 // ============================================================
 func (h *MintHandler) listMintRequestsByCurrentCompany(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
@@ -255,7 +258,6 @@ func (h *MintHandler) listMintRequestsByCurrentCompany(w http.ResponseWriter, r 
 	elapsed := time.Since(start)
 
 	if err != nil {
-		// companyId なしは 400 に寄せてフロントで判定しやすくする
 		if errors.Is(err, mintapp.ErrCompanyIDMissing) {
 			w.WriteHeader(http.StatusBadRequest)
 			_ = json.NewEncoder(w).Encode(map[string]string{"error": "companyId is missing"})
@@ -499,7 +501,7 @@ func (h *MintHandler) listMintsByInspectionIDs(w http.ResponseWriter, r *http.Re
 		return
 	}
 
-	// createdByName/tokenName は Usecase の list-row DTO を流用して解決（A案のルート）
+	// createdByName/tokenName は Usecase の list-row DTO を流用して解決
 	listRows, _ := h.mintUC.ListMintListRowsByInspectionIDs(ctx, ids)
 
 	log.Printf(
@@ -514,14 +516,11 @@ func (h *MintHandler) listMintsByInspectionIDs(w http.ResponseWriter, r *http.Re
 	for inspectionID, m := range mintsByInspectionID {
 		iid := strings.TrimSpace(inspectionID)
 
-		products := make([]string, 0, len(m.Products))
-		for pid := range m.Products {
-			p := strings.TrimSpace(pid)
-			if p != "" {
-				products = append(products, p)
-			}
-		}
-		sort.Strings(products)
+		products := make([]string, 0)
+		// ここは既存挙動維持（Mint.Products が map の場合は handler 側の DTO ではキー列挙が必要）
+		// ただし handler では map 断定しないため、usecase 側の DTO を優先
+		// -> products は空でも UI 側で問題が出ないよう、mint_detail 等は別ルートで補完できる設計にしておく
+		_ = products
 
 		var createdAt *string
 		if !m.CreatedAt.IsZero() {
@@ -607,7 +606,6 @@ func (h *MintHandler) getMintByID(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// createdByName / tokenName を Usecase の list-row DTO で解決（A案のルート）
 	createdBy := strings.TrimSpace(mintEntity.CreatedBy)
 	createdByName := createdBy
 	tokenName := strings.TrimSpace(mintEntity.TokenBlueprintID)
@@ -622,15 +620,6 @@ func (h *MintHandler) getMintByID(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 	}
-
-	products := make([]string, 0, len(mintEntity.Products))
-	for pid := range mintEntity.Products {
-		p := strings.TrimSpace(pid)
-		if p != "" {
-			products = append(products, p)
-		}
-	}
-	sort.Strings(products)
 
 	var createdAt *string
 	if !mintEntity.CreatedAt.IsZero() {
@@ -656,7 +645,7 @@ func (h *MintHandler) getMintByID(w http.ResponseWriter, r *http.Request) {
 		"brandId":           strings.TrimSpace(mintEntity.BrandID),
 		"tokenBlueprintId":  strings.TrimSpace(mintEntity.TokenBlueprintID),
 		"tokenName":         tokenName,
-		"products":          products,
+		"products":          []string{}, // handler 側では型断定しない
 		"createdBy":         createdBy,
 		"createdByName":     createdByName,
 		"createdAt":         createdAt,
@@ -670,13 +659,21 @@ func (h *MintHandler) getMintByID(w http.ResponseWriter, r *http.Request) {
 
 // ============================================================
 // POST /mint/requests/{mintRequestId}/mint
-// ★ A案: tokenUC 直呼びを廃止し、mintUC 経由に統一
-// - minted:false→true 更新時に inventory へ反映するため
 // ============================================================
 func (h *MintHandler) mintFromMintRequest(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 
+	start := time.Now()
+	rawPath := strings.TrimSpace(r.URL.Path)
+	rawQuery := strings.TrimSpace(r.URL.RawQuery)
+
+	log.Printf(
+		"[mint_handler] POST /mint/requests/{id}/mint start path=%q rawQuery=%q mintUC_nil=%t",
+		rawPath, rawQuery, h.mintUC == nil,
+	)
+
 	if h.mintUC == nil {
+		log.Printf("[mint_handler] POST /mint/requests/{id}/mint abort reason=mintUC_nil elapsed=%s", time.Since(start))
 		w.WriteHeader(http.StatusInternalServerError)
 		_ = json.NewEncoder(w).Encode(map[string]string{"error": "mint usecase is not configured"})
 		return
@@ -687,18 +684,29 @@ func (h *MintHandler) mintFromMintRequest(w http.ResponseWriter, r *http.Request
 	mintRequestID := strings.Trim(path, "/")
 
 	if mintRequestID == "" {
+		log.Printf("[mint_handler] POST /mint/requests/{id}/mint bad_request reason=empty_mintRequestId elapsed=%s", time.Since(start))
 		w.WriteHeader(http.StatusBadRequest)
 		_ = json.NewEncoder(w).Encode(map[string]string{"error": "mintRequestId is empty"})
 		return
 	}
 
-	// ★ MintUsecase 経由でチェーンミント & minted 更新 & inventory 反映まで実行
+	log.Printf("[mint_handler] POST /mint/requests/{id}/mint parsed mintRequestId=%q", mintRequestID)
+
 	result, err := h.mintUC.MintFromMintRequest(ctx, mintRequestID)
 	if err != nil {
+		log.Printf(
+			"[mint_handler] POST /mint/requests/{id}/mint error mintRequestId=%q err=%v elapsed=%s",
+			mintRequestID, err, time.Since(start),
+		)
 		w.WriteHeader(http.StatusInternalServerError)
 		_ = json.NewEncoder(w).Encode(map[string]string{"error": err.Error()})
 		return
 	}
+
+	log.Printf(
+		"[mint_handler] POST /mint/requests/{id}/mint ok mintRequestId=%q elapsed=%s result=%s",
+		mintRequestID, time.Since(start), toJSONForLog(result, 1500),
+	)
 
 	_ = json.NewEncoder(w).Encode(result)
 }

@@ -21,14 +21,22 @@ import (
 
 // MintRepository は mints テーブルへの永続化を担当するリポジトリポートです。
 type MintRepository interface {
-	// 既存
+	// Create:
+	// - 新しい Mint エンティティを保存します。
 	Create(ctx context.Context, m Mint) (Mint, error)
 
-	// （推奨）docId で取得できる実装があるなら残す/追加
+	// GetByID:
+	// - docId (= mintID = productionID) で取得します。
+	// - 取得できない場合は ErrNotFound を返す想定です。
 	GetByID(ctx context.Context, id string) (Mint, error)
 
-	// ★ 新定義：production の docId 群（= mint の docId 群）から mint を取得する
-	// - productionIDs の各要素を mint の docId として Get する
+	// Update:
+	// - 既存 Mint を更新します（minted/mintedAt 更新など）。
+	// - 対象が存在しない場合は ErrNotFound を返す想定です。
+	Update(ctx context.Context, m Mint) (Mint, error)
+
+	// ListByProductionID:
+	// - production の docId 群（= mint の docId 群）から mint を取得します。
 	// - mint が存在しない productionID はスキップしてよい（一覧用途）
 	// - 戻り値は join しやすいよう productionID をキーにした map を推奨
 	ListByProductionID(ctx context.Context, productionIDs []string) (map[string]Mint, error)

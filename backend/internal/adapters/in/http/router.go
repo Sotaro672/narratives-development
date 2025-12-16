@@ -424,6 +424,7 @@ func NewRouter(deps RouterDeps) http.Handler {
 			deps.NameResolver,
 			deps.ProductionUC,            // ★ 追加（既存）
 			deps.MintRequestQueryService, // ★ NEW: query service を渡す
+			nil,                          // ★ 追加: inventory.RepositoryPort（現状 RouterDeps に無いので nil で満たす）
 		)
 
 		if mh, ok := mintH.(*handlers.MintHandler); ok {

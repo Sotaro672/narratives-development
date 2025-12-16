@@ -6,6 +6,7 @@ import (
 	"log"
 	"os"
 	"strings"
+	"time"
 
 	firebase "firebase.google.com/go/v4"
 	firebaseauth "firebase.google.com/go/v4/auth"
@@ -41,6 +42,7 @@ import (
 	branddom "narratives/internal/domain/brand"
 	companydom "narratives/internal/domain/company"
 	memdom "narratives/internal/domain/member"
+	mintdom "narratives/internal/domain/mint"
 	productbpdom "narratives/internal/domain/productBlueprint"
 
 	appcfg "narratives/internal/infra/config"
@@ -159,6 +161,71 @@ func (a *pbQueryRepoAdapter) GetByID(ctx context.Context, id string) (productbpd
 	return a.repo.GetByID(ctx, id)
 }
 
+// ============================================================
+// Adapter: MintRepositoryFS -> mintdom.MintRepository (Update補完)
+// ============================================================
+//
+// 現状の *fs.MintRepositoryFS が mintdom.MintRepository の Update を実装していないため、
+// DI 側でラップして Update を補完する。
+// ※ Create/GetByID/ListByProductionID... 等は埋め込みで MintRepositoryFS の実装をそのまま使う。
+type mintRepoWithUpdate struct {
+	*fs.MintRepositoryFS
+	Client *firestore.Client
+}
+
+// Update は Firestore の mints ドキュメントを MergeAll で更新する。
+func (r *mintRepoWithUpdate) Update(ctx context.Context, m mintdom.Mint) (mintdom.Mint, error) {
+	if r == nil || r.Client == nil {
+		return mintdom.Mint{}, errorsNew("mint repo is nil")
+	}
+
+	id := strings.TrimSpace(m.ID)
+	if id == "" {
+		return mintdom.Mint{}, errorsNew("mint id is empty")
+	}
+	m.ID = id
+
+	// NOTE:
+	// - mintdom.Mint に InspectionID が無い（今は存在しない）ため参照しない
+	// - Products は map[string]string が現状の型なのでそれに合わせる
+	type mintRecord struct {
+		ID                string            `firestore:"id"`
+		BrandID           string            `firestore:"brandId"`
+		TokenBlueprintID  string            `firestore:"tokenBlueprintId"`
+		Products          map[string]string `firestore:"products"`
+		CreatedAt         time.Time         `firestore:"createdAt"`
+		CreatedBy         string            `firestore:"createdBy"`
+		MintedAt          *time.Time        `firestore:"mintedAt"`
+		Minted            bool              `firestore:"minted"`
+		ScheduledBurnDate *time.Time        `firestore:"scheduledBurnDate"`
+	}
+
+	rec := mintRecord{
+		ID:                id,
+		BrandID:           strings.TrimSpace(m.BrandID),
+		TokenBlueprintID:  strings.TrimSpace(m.TokenBlueprintID),
+		Products:          m.Products,
+		CreatedAt:         m.CreatedAt,
+		CreatedBy:         strings.TrimSpace(m.CreatedBy),
+		MintedAt:          m.MintedAt,
+		Minted:            m.Minted,
+		ScheduledBurnDate: m.ScheduledBurnDate,
+	}
+
+	_, err := r.Client.Collection("mints").Doc(id).Set(ctx, rec, firestore.MergeAll)
+	if err != nil {
+		return mintdom.Mint{}, err
+	}
+	return m, nil
+}
+
+// errorsNew: container.go 内でのみ使う最小ヘルパ（標準 errors.New の import 増加回避用）
+func errorsNew(msg string) error { return &simpleErr{s: msg} }
+
+type simpleErr struct{ s string }
+
+func (e *simpleErr) Error() string { return e.s }
+
 // ========================================
 // NewContainer
 // ========================================
@@ -238,7 +305,14 @@ func NewContainer(ctx context.Context) (*Container, error) {
 	memberRepo := fs.NewMemberRepositoryFS(fsClient)
 	messageRepo := fs.NewMessageRepositoryFS(fsClient)
 	modelRepo := fs.NewModelRepositoryFS(fsClient)
-	mintRepo := fs.NewMintRepositoryFS(fsClient)
+
+	// ★ MintRepositoryFS（Update未実装分は mintRepoWithUpdate で補完）
+	mintRepoFS := fs.NewMintRepositoryFS(fsClient)
+	mintRepo := &mintRepoWithUpdate{
+		MintRepositoryFS: mintRepoFS,
+		Client:           fsClient,
+	}
+
 	orderRepo := fs.NewOrderRepositoryFS(fsClient)
 	paymentRepo := fs.NewPaymentRepositoryFS(fsClient)
 	permissionRepo := fs.NewPermissionRepositoryFS(fsClient)
@@ -312,9 +386,6 @@ func NewContainer(ctx context.Context) (*Container, error) {
 	tokenIconRepo := gcso.NewTokenIconRepositoryGCS(gcsClient, cfg.TokenIconBucket)
 
 	// ★ Token contents repository (GCS)
-	// - ここが nil だと TokenBlueprint の CreateWithUploads が「usecase/repo is nil」等で落ちる実装になりやすいので、
-	//   最低でも Repository を差し込んでおく。
-	// - バケット名は環境変数 TOKEN_CONTENTS_BUCKET を優先し、無ければ narratives-development-token を使う。
 	tokenContentsBucket := strings.TrimSpace(os.Getenv("TOKEN_CONTENTS_BUCKET"))
 	if tokenContentsBucket == "" {
 		tokenContentsBucket = "narratives-development-token"
@@ -434,7 +505,7 @@ func NewContainer(ctx context.Context) (*Container, error) {
 		modelRepo,            // mint.MintModelRepo
 		tokenBlueprintRepo,   // tokenBlueprint.RepositoryPort
 		brandSvc,             // *brand.Service
-		mintRepo,             // mint.MintRepository
+		mintRepo,             // ✅ mint.MintRepository（Update補完済みラッパ）
 		inspectionRepo,       // mint.PassedProductLister（InspectionRepositoryFS が実装している前提）
 		tokenUC,              // mint.TokenMintPort（TokenUsecase が実装している前提）
 	)
@@ -442,8 +513,8 @@ func NewContainer(ctx context.Context) (*Container, error) {
 	// ✅ 追加: MintUsecase に NameResolver を差し込む（createdByName 解決用）
 	mintUC.SetNameResolver(nameResolver)
 
-	// ✅ NEW: minted:false→true のタイミングで Inventory へ反映するため、InventoryRepo を差し込む
-	mintUC.SetInventoryRepo(inventoryRepo)
+	// ✅ 修正: MintUsecase 側の setter 名に合わせる
+	mintUC.SetInventoryUsecase(inventoryUC)
 
 	// ★ NEW: MintRequestQueryService（GET /mint/requests 一覧専用）
 	mintRequestQueryService := companyquery.NewMintRequestQueryService(
@@ -467,7 +538,7 @@ func NewContainer(ctx context.Context) (*Container, error) {
 		tokenContentsRepo,    // ✅ tcRepo (GCS)
 		tokenIconRepo,        // ✅ tiRepo (token icon repo, GCS)
 		memberSvc,            // *member.Service
-		arweaveUploader,      // ArweaveUploader（cfg.ArweaveBaseURL が空なら nil のまま）
+		arweaveUploader,      // ArweaveUploader
 		tokenMetadataBuilder, // *TokenMetadataBuilder
 	)
 
@@ -476,10 +547,10 @@ func NewContainer(ctx context.Context) (*Container, error) {
 	userUC := uc.NewUserUsecase(userRepo)
 	walletUC := uc.NewWalletUsecase(walletRepo)
 
-	// ★ Invitation 用メールクライアント & メーラー
+	// ★ Invitation 用メーラー
 	invitationMailer := mailadp.NewInvitationMailerWithSendGrid(
-		companySvc, // CompanyNameResolver
-		brandSvc,   // BrandNameResolver
+		companySvc,
+		brandSvc,
 	)
 
 	// ★ Invitation 用 Usecase（Query / Command）
@@ -487,7 +558,7 @@ func NewContainer(ctx context.Context) (*Container, error) {
 	invitationCommandUC := uc.NewInvitationCommandService(
 		invitationTokenUCRepo,
 		memberRepo,
-		invitationMailer, // ← SendGrid 経由でメール送信（会社名 + ブランド名表示）
+		invitationMailer,
 	)
 
 	// ★ auth/bootstrap 用 Usecase
@@ -511,13 +582,9 @@ func NewContainer(ctx context.Context) (*Container, error) {
 		MemberRepo:  memberRepo,
 		MessageRepo: messageRepo,
 
-		// member.Service
 		MemberService: memberSvc,
+		BrandService:  brandSvc,
 
-		// brand.Service
-		BrandService: brandSvc,
-
-		// History Repos
 		ProductBlueprintHistoryRepo: productBlueprintHistoryRepo,
 		ModelHistoryRepo:            modelHistoryRepo,
 
@@ -551,17 +618,12 @@ func NewContainer(ctx context.Context) (*Container, error) {
 		UserUC:             userUC,
 		WalletUC:           walletUC,
 
-		// ★ QueryService（GET /productions）
 		CompanyProductionQueryService: companyProductionQueryService,
+		MintRequestQueryService:       mintRequestQueryService,
 
-		// ★ NEW: QueryService（GET /mint/requests）
-		MintRequestQueryService: mintRequestQueryService,
-
-		// 検品アプリ用
 		ProductUC:    productUC,
 		InspectionUC: inspectionUC,
 
-		// Mint 系
 		MintUC: mintUC,
 
 		InvitationQuery:   invitationQueryUC,
@@ -569,11 +631,8 @@ func NewContainer(ctx context.Context) (*Container, error) {
 
 		AuthBootstrap: authBootstrapSvc,
 
-		// Solana ミント権限鍵
 		MintAuthorityKey: mintKey,
-
-		// NameResolver
-		NameResolver: nameResolver,
+		NameResolver:     nameResolver,
 	}, nil
 }
 
@@ -602,6 +661,7 @@ func (c *Container) RouterDeps() httpin.RouterDeps {
 		PaymentUC:          c.PaymentUC,
 		PermissionUC:       c.PermissionUC,
 		PrintUC:            c.PrintUC,
+		TokenUC:            c.TokenUC, // ✅ 追加（router 側で使用）
 		ProductionUC:       c.ProductionUC,
 		ProductBlueprintUC: c.ProductBlueprintUC,
 		SaleUC:             c.SaleUC,
@@ -612,40 +672,26 @@ func (c *Container) RouterDeps() httpin.RouterDeps {
 		UserUC:             c.UserUC,
 		WalletUC:           c.WalletUC,
 
-		// ★ 追加: GET /productions 一覧（Company境界付き）
 		CompanyProductionQueryService: c.CompanyProductionQueryService,
+		MintRequestQueryService:       c.MintRequestQueryService,
 
-		// ★ NEW: GET /mint/requests 一覧（Company境界付き）
-		MintRequestQueryService: c.MintRequestQueryService,
-
-		// 検品アプリ用 Usecase
 		ProductUC:    c.ProductUC,
 		InspectionUC: c.InspectionUC,
 
-		// ★ Mint 用 Usecase
 		MintUC: c.MintUC,
 
-		// 招待関連 Usecase
 		InvitationQuery:   c.InvitationQuery,
 		InvitationCommand: c.InvitationCommand,
 
-		// auth/bootstrap 用
 		AuthBootstrap: c.AuthBootstrap,
 
-		// AuthMiddleware 用
 		FirebaseAuth: c.FirebaseAuth,
 		MemberRepo:   c.MemberRepo,
 
-		// ★ TokenBlueprintHandler で assigneeName 解決に使う
 		MemberService: c.MemberService,
+		BrandService:  c.BrandService,
+		NameResolver:  c.NameResolver,
 
-		// ★ TokenBlueprintHandler で brandName 解決に使う
-		BrandService: c.BrandService,
-
-		// ★ NameResolver（ID→名前/型番解決）
-		NameResolver: c.NameResolver,
-
-		// MessageHandler 用
 		MessageRepo: c.MessageRepo,
 	}
 }
