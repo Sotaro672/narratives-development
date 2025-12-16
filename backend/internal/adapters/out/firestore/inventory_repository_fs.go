@@ -1,4 +1,3 @@
-// backend/internal/adapters/out/firestore/inventory_repository_fs.go
 package firestore
 
 import (
@@ -17,11 +16,6 @@ import (
 	invdom "narratives/internal/domain/inventory"
 )
 
-// ============================================================
-// Firestore-based Inventory Repository
-// (inventory domain: inventories collection)
-// ============================================================
-
 const collectionNameInventories = "inventories"
 
 type InventoryRepositoryFS struct {
@@ -36,18 +30,17 @@ func (r *InventoryRepositoryFS) col() *firestore.CollectionRef {
 	return r.Client.Collection(collectionNameInventories)
 }
 
-// ------------------------------------------------------------
 // Firestore record shape
-// ------------------------------------------------------------
-
 type inventoryRecord struct {
-	ID                 string    `firestore:"id"`
-	TokenBlueprintID   string    `firestore:"tokenBlueprintId"`
-	ProductBlueprintID string    `firestore:"productBlueprintId"`
-	Products           []string  `firestore:"products"` // ★ []string only
-	Accumulation       int       `firestore:"accumulation"`
-	CreatedAt          time.Time `firestore:"createdAt"`
-	UpdatedAt          time.Time `firestore:"updatedAt"`
+	ID                 string `firestore:"id"`
+	TokenBlueprintID   string `firestore:"tokenBlueprintId"`
+	ProductBlueprintID string `firestore:"productBlueprintId"` // 参照用（docId には使わない）
+	ModelID            string `firestore:"modelId"`            // ★ NEW
+
+	Products     []string  `firestore:"products"`
+	Accumulation int       `firestore:"accumulation"`
+	CreatedAt    time.Time `firestore:"createdAt"`
+	UpdatedAt    time.Time `firestore:"updatedAt"`
 }
 
 func toRecord(m invdom.Mint) inventoryRecord {
@@ -55,6 +48,7 @@ func toRecord(m invdom.Mint) inventoryRecord {
 		ID:                 strings.TrimSpace(m.ID),
 		TokenBlueprintID:   strings.TrimSpace(m.TokenBlueprintID),
 		ProductBlueprintID: strings.TrimSpace(m.ProductBlueprintID),
+		ModelID:            strings.TrimSpace(m.ModelID),
 		Products:           normalizeIDs(m.Products),
 		Accumulation:       m.Accumulation,
 		CreatedAt:          m.CreatedAt,
@@ -67,15 +61,21 @@ func fromRecord(docID string, rec inventoryRecord) invdom.Mint {
 	if id == "" {
 		id = docID
 	}
-	return invdom.Mint{
+	out := invdom.Mint{
 		ID:                 id,
-		TokenBlueprintID:   rec.TokenBlueprintID,
-		ProductBlueprintID: rec.ProductBlueprintID,
+		TokenBlueprintID:   strings.TrimSpace(rec.TokenBlueprintID),
+		ProductBlueprintID: strings.TrimSpace(rec.ProductBlueprintID),
+		ModelID:            strings.TrimSpace(rec.ModelID),
 		Products:           normalizeIDs(rec.Products),
 		Accumulation:       rec.Accumulation,
 		CreatedAt:          rec.CreatedAt,
 		UpdatedAt:          rec.UpdatedAt,
 	}
+	// accumulation が壊れている/空の場合の保険
+	if out.Accumulation <= 0 && len(out.Products) > 0 {
+		out.Accumulation = len(out.Products)
+	}
+	return out
 }
 
 // ============================================================
@@ -83,28 +83,11 @@ func fromRecord(docID string, rec inventoryRecord) invdom.Mint {
 // ============================================================
 
 func (r *InventoryRepositoryFS) Create(ctx context.Context, m invdom.Mint) (invdom.Mint, error) {
-	start := time.Now()
-
-	log.Printf(
-		"[inventory_repo_fs] Create start repo_nil=%t client_nil=%t id=%q tokenBlueprintId=%q productBlueprintId=%q products=%d accumulation=%d createdAtZero=%t updatedAtZero=%t",
-		r == nil,
-		r == nil || r.Client == nil,
-		strings.TrimSpace(m.ID),
-		strings.TrimSpace(m.TokenBlueprintID),
-		strings.TrimSpace(m.ProductBlueprintID),
-		len(m.Products),
-		m.Accumulation,
-		m.CreatedAt.IsZero(),
-		m.UpdatedAt.IsZero(),
-	)
-
 	if r == nil || r.Client == nil {
-		log.Printf("[inventory_repo_fs] Create abort reason=repo_or_client_nil elapsed=%s", time.Since(start))
 		return invdom.Mint{}, errors.New("inventory repo is nil")
 	}
 
 	now := time.Now().UTC()
-
 	if m.CreatedAt.IsZero() {
 		m.CreatedAt = now
 	}
@@ -112,40 +95,28 @@ func (r *InventoryRepositoryFS) Create(ctx context.Context, m invdom.Mint) (invd
 		m.UpdatedAt = m.CreatedAt
 	}
 
-	m.Products = normalizeIDs(m.Products)
+	m.ID = strings.TrimSpace(m.ID)
+	m.TokenBlueprintID = strings.TrimSpace(m.TokenBlueprintID)
+	m.ProductBlueprintID = strings.TrimSpace(m.ProductBlueprintID)
+	m.ModelID = strings.TrimSpace(m.ModelID)
 
-	var doc *firestore.DocumentRef
-	if strings.TrimSpace(m.ID) == "" {
-		doc = r.col().NewDoc()
-		m.ID = doc.ID
-		log.Printf("[inventory_repo_fs] Create allocated new doc docId=%q", doc.ID)
-	} else {
-		doc = r.col().Doc(strings.TrimSpace(m.ID))
-		log.Printf("[inventory_repo_fs] Create using provided id docId=%q", doc.ID)
+	m.Products = normalizeIDs(m.Products)
+	if m.Accumulation <= 0 {
+		m.Accumulation = len(m.Products)
 	}
 
+	if m.ID == "" {
+		return invdom.Mint{}, invdom.ErrInvalidMintID
+	}
+
+	doc := r.col().Doc(m.ID)
 	rec := toRecord(m)
 	rec.ID = doc.ID
 	m.ID = doc.ID
 
 	if _, err := doc.Set(ctx, rec); err != nil {
-		log.Printf(
-			"[inventory_repo_fs] Create error docId=%q err=%v elapsed=%s",
-			doc.ID, err, time.Since(start),
-		)
 		return invdom.Mint{}, err
 	}
-
-	log.Printf(
-		"[inventory_repo_fs] Create done docId=%q elapsed=%s createdAt=%s updatedAt=%s accumulation=%d products=%d",
-		doc.ID,
-		time.Since(start),
-		m.CreatedAt.UTC().Format(time.RFC3339),
-		m.UpdatedAt.UTC().Format(time.RFC3339),
-		m.Accumulation,
-		len(m.Products),
-	)
-
 	return m, nil
 }
 
@@ -179,6 +150,9 @@ func (r *InventoryRepositoryFS) Update(ctx context.Context, m invdom.Mint) (invd
 
 	m.UpdatedAt = time.Now().UTC()
 	m.Products = normalizeIDs(m.Products)
+	if m.Accumulation <= 0 {
+		m.Accumulation = len(m.Products)
+	}
 
 	if m.CreatedAt.IsZero() {
 		existing, err := r.GetByID(ctx, id)
@@ -201,7 +175,6 @@ func (r *InventoryRepositoryFS) Update(ctx context.Context, m invdom.Mint) (invd
 		}
 		return invdom.Mint{}, err
 	}
-
 	return m, nil
 }
 
@@ -249,20 +222,32 @@ func (r *InventoryRepositoryFS) ListByProductBlueprintID(ctx context.Context, pr
 	return readAllInventoryDocs(iter)
 }
 
-func (r *InventoryRepositoryFS) ListByTokenAndProductBlueprintID(ctx context.Context, tokenBlueprintID, productBlueprintID string) ([]invdom.Mint, error) {
+func (r *InventoryRepositoryFS) ListByModelID(ctx context.Context, modelID string) ([]invdom.Mint, error) {
+	modelID = strings.TrimSpace(modelID)
+	if modelID == "" {
+		return nil, invdom.ErrInvalidModelID
+	}
+
+	iter := r.col().Where("modelId", "==", modelID).Documents(ctx)
+	defer iter.Stop()
+
+	return readAllInventoryDocs(iter)
+}
+
+func (r *InventoryRepositoryFS) ListByTokenAndModelID(ctx context.Context, tokenBlueprintID, modelID string) ([]invdom.Mint, error) {
 	tokenBlueprintID = strings.TrimSpace(tokenBlueprintID)
-	productBlueprintID = strings.TrimSpace(productBlueprintID)
+	modelID = strings.TrimSpace(modelID)
 
 	if tokenBlueprintID == "" {
 		return nil, invdom.ErrInvalidTokenBlueprintID
 	}
-	if productBlueprintID == "" {
-		return nil, invdom.ErrInvalidProductBlueprintID
+	if modelID == "" {
+		return nil, invdom.ErrInvalidModelID
 	}
 
 	iter := r.col().
 		Where("tokenBlueprintId", "==", tokenBlueprintID).
-		Where("productBlueprintId", "==", productBlueprintID).
+		Where("modelId", "==", modelID).
 		Documents(ctx)
 	defer iter.Stop()
 
@@ -316,42 +301,15 @@ func (r *InventoryRepositoryFS) IncrementAccumulation(ctx context.Context, id st
 	return r.GetByID(ctx, id)
 }
 
-func (r *InventoryRepositoryFS) IncrementAccumulationByMintProducts(ctx context.Context, id string) (invdom.Mint, error) {
-	id = strings.TrimSpace(id)
-	if id == "" {
-		return invdom.Mint{}, invdom.ErrInvalidMintID
-	}
-
-	m, err := r.GetByID(ctx, id)
-	if err != nil {
-		return invdom.Mint{}, err
-	}
-
-	return r.IncrementAccumulation(ctx, id, len(m.Products))
-}
-
-func (r *InventoryRepositoryFS) DecrementAccumulationByOrderItemsCount(ctx context.Context, id string, orderItemsCount int) (invdom.Mint, error) {
-	id = strings.TrimSpace(id)
-	if id == "" {
-		return invdom.Mint{}, invdom.ErrInvalidMintID
-	}
-	if orderItemsCount < 0 {
-		return invdom.Mint{}, invdom.ErrInvalidAccumulation
-	}
-	if orderItemsCount == 0 {
-		return r.GetByID(ctx, id)
-	}
-	return r.IncrementAccumulation(ctx, id, -orderItemsCount)
-}
-
 // ============================================================
-// Upsert helpers (for InventoryUsecase / mint flow)
+// ★ NEW: Upsert (docId = modelId__tokenBlueprintId)
 // ============================================================
 
-func (r *InventoryRepositoryFS) UpsertByTokenAndProductBlueprintID(
+func (r *InventoryRepositoryFS) UpsertByModelAndToken(
 	ctx context.Context,
 	tokenBlueprintID string,
 	productBlueprintID string,
+	modelID string,
 	productIDs []string,
 ) (invdom.Mint, error) {
 
@@ -363,21 +321,29 @@ func (r *InventoryRepositoryFS) UpsertByTokenAndProductBlueprintID(
 
 	tbID := strings.TrimSpace(tokenBlueprintID)
 	pbID := strings.TrimSpace(productBlueprintID)
+	mID := strings.TrimSpace(modelID)
 	if tbID == "" {
 		return invdom.Mint{}, invdom.ErrInvalidTokenBlueprintID
 	}
 	if pbID == "" {
 		return invdom.Mint{}, invdom.ErrInvalidProductBlueprintID
 	}
+	if mID == "" {
+		return invdom.Mint{}, invdom.ErrInvalidModelID
+	}
 
 	ids := normalizeIDs(productIDs)
-	docID := buildInventoryDocID(tbID, pbID)
+	if len(ids) == 0 {
+		return invdom.Mint{}, invdom.ErrInvalidProducts
+	}
+
+	docID := buildInventoryDocIDByModel(tbID, mID) // modelId__tokenBlueprintId
 	doc := r.col().Doc(docID)
 	now := time.Now().UTC()
 
 	log.Printf(
-		"[inventory_repo_fs] UpsertByTokenAndProductBlueprintID start docId=%q tokenBlueprintId=%q productBlueprintId=%q productIds=%d",
-		docID, tbID, pbID, len(ids),
+		"[inventory_repo_fs] UpsertByModelAndToken start docId=%q tokenBlueprintId=%q productBlueprintId=%q modelId=%q productIds=%d",
+		docID, tbID, pbID, mID, len(ids),
 	)
 
 	err := r.Client.RunTransaction(ctx, func(ctx context.Context, tx *firestore.Transaction) error {
@@ -388,6 +354,7 @@ func (r *InventoryRepositoryFS) UpsertByTokenAndProductBlueprintID(
 					docID,
 					tbID,
 					pbID,
+					mID,
 					ids,
 					len(ids),
 					now,
@@ -434,7 +401,12 @@ func (r *InventoryRepositoryFS) UpsertByTokenAndProductBlueprintID(
 		updates := []firestore.Update{
 			{Path: "products", Value: existing},
 			{Path: "updatedAt", Value: now},
+			// 参照用に保持（docId には使わないが値は更新しておく）
+			{Path: "tokenBlueprintId", Value: tbID},
+			{Path: "productBlueprintId", Value: pbID},
+			{Path: "modelId", Value: mID},
 		}
+
 		if added > 0 {
 			updates = append(updates, firestore.Update{
 				Path:  "accumulation",
@@ -445,22 +417,19 @@ func (r *InventoryRepositoryFS) UpsertByTokenAndProductBlueprintID(
 		return tx.Update(doc, updates)
 	})
 	if err != nil {
-		log.Printf("[inventory_repo_fs] UpsertByTokenAndProductBlueprintID error docId=%q err=%v elapsed=%s", docID, err, time.Since(start))
+		log.Printf("[inventory_repo_fs] UpsertByModelAndToken error docId=%q err=%v elapsed=%s", docID, err, time.Since(start))
 		return invdom.Mint{}, err
 	}
 
 	out, err := r.GetByID(ctx, docID)
 	if err != nil {
-		log.Printf("[inventory_repo_fs] UpsertByTokenAndProductBlueprintID GetByID error docId=%q err=%v elapsed=%s", docID, err, time.Since(start))
+		log.Printf("[inventory_repo_fs] UpsertByModelAndToken GetByID error docId=%q err=%v elapsed=%s", docID, err, time.Since(start))
 		return invdom.Mint{}, err
 	}
 
 	log.Printf(
-		"[inventory_repo_fs] UpsertByTokenAndProductBlueprintID done docId=%q accumulation=%d products=%d elapsed=%s",
-		docID,
-		out.Accumulation,
-		len(out.Products),
-		time.Since(start),
+		"[inventory_repo_fs] UpsertByModelAndToken done docId=%q accumulation=%d products=%d elapsed=%s",
+		docID, out.Accumulation, len(out.Products), time.Since(start),
 	)
 
 	return out, nil
@@ -510,11 +479,12 @@ func normalizeIDs(raw []string) []string {
 	return out
 }
 
-func buildInventoryDocID(tokenBlueprintID, productBlueprintID string) string {
+// ★ docId = modelId__tokenBlueprintId
+func buildInventoryDocIDByModel(tokenBlueprintID, modelID string) string {
 	sanitize := func(s string) string {
 		s = strings.TrimSpace(s)
 		s = strings.ReplaceAll(s, "/", "_")
 		return s
 	}
-	return sanitize(tokenBlueprintID) + "__" + sanitize(productBlueprintID)
+	return sanitize(modelID) + "__" + sanitize(tokenBlueprintID)
 }

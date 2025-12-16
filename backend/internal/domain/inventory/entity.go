@@ -1,4 +1,3 @@
-// backend/internal/domain/inventory/entity.go
 package inventory
 
 import (
@@ -8,62 +7,38 @@ import (
 	"time"
 )
 
-// ------------------------------------------------------
-// Entity: Mint (inventories / mints テーブル 1 レコード)
-// ------------------------------------------------------
-//
-// Firestore 上の想定構造（★この定義を正）:
-//
-// - id                 : string
-// - tokenBlueprintId   : string
-// - productBlueprintId : string
-// - products           : []string            // ★ productId のみ
-// - accumulation       : integer
-// - createdAt          : time.Time
-// - updatedAt          : time.Time
-type Mint struct {
-	ID string `json:"id"`
-
-	TokenBlueprintID   string   `json:"tokenBlueprintId"`
-	ProductBlueprintID string   `json:"productBlueprintId"`
-	Products           []string `json:"products"` // ★ productId のみ
-
-	Accumulation int `json:"accumulation"`
-
-	CreatedAt time.Time `json:"createdAt"`
-	UpdatedAt time.Time `json:"updatedAt"`
-}
-
-// ------------------------------------------------------
-// Errors
-// ------------------------------------------------------
-
 var (
-	ErrInvalidMintID             = errors.New("mint: invalid id")
-	ErrInvalidTokenBlueprintID   = errors.New("mint: invalid tokenBlueprintId")
-	ErrInvalidProductBlueprintID = errors.New("mint: invalid productBlueprintId")
-	ErrInvalidProducts           = errors.New("mint: invalid products")
-	ErrInvalidAccumulation       = errors.New("mint: invalid accumulation")
-	ErrInvalidCreatedAt          = errors.New("mint: invalid createdAt")
-	ErrInvalidUpdatedAt          = errors.New("mint: invalid updatedAt")
-	ErrNotFound                  = errors.New("mint: not found")
+	ErrNotFound                  = errors.New("inventory not found")
+	ErrInvalidMintID             = errors.New("invalid inventory id")
+	ErrInvalidTokenBlueprintID   = errors.New("invalid tokenBlueprintID")
+	ErrInvalidProductBlueprintID = errors.New("invalid productBlueprintID")
+	ErrInvalidModelID            = errors.New("invalid modelID")
+	ErrInvalidProducts           = errors.New("invalid products")
+	ErrInvalidAccumulation       = errors.New("invalid accumulation")
 )
 
-// ------------------------------------------------------
-// Constructors
-// ------------------------------------------------------
-//
-// NewMint : tokenBlueprintId / productBlueprintId / products / accumulation / createdAt を受け取って
-// Mint エンティティを生成する。
+type Mint struct {
+	ID                 string
+	TokenBlueprintID   string
+	ProductBlueprintID string // 互換/参照用に残す（docId には使わない）
+	ModelID            string // ★ NEW: docId の主キー側
+
+	Products     []string
+	Accumulation int
+
+	CreatedAt time.Time
+	UpdatedAt time.Time
+}
+
 func NewMint(
 	id string,
 	tokenBlueprintID string,
 	productBlueprintID string,
-	productIDs []string, // ★ productBlueprint から取得した productId の一覧
+	modelID string,
+	products []string,
 	accumulation int,
-	createdAt time.Time,
+	now time.Time,
 ) (Mint, error) {
-
 	tbID := strings.TrimSpace(tokenBlueprintID)
 	if tbID == "" {
 		return Mint{}, ErrInvalidTokenBlueprintID
@@ -74,85 +49,36 @@ func NewMint(
 		return Mint{}, ErrInvalidProductBlueprintID
 	}
 
-	if accumulation < 0 {
-		return Mint{}, ErrInvalidAccumulation
+	mID := strings.TrimSpace(modelID)
+	if mID == "" {
+		return Mint{}, ErrInvalidModelID
 	}
 
-	if createdAt.IsZero() {
-		return Mint{}, ErrInvalidCreatedAt
+	ps := normalizeIDs(products)
+	if len(ps) == 0 {
+		return Mint{}, ErrInvalidProducts
 	}
 
-	products := normalizeIDs(productIDs)
+	if accumulation <= 0 {
+		// accumulation は「保持している products の数」を基本とする
+		accumulation = len(ps)
+	}
 
-	ca := createdAt.UTC()
+	if now.IsZero() {
+		now = time.Now().UTC()
+	}
 
-	m := Mint{
+	return Mint{
 		ID:                 strings.TrimSpace(id),
 		TokenBlueprintID:   tbID,
 		ProductBlueprintID: pbID,
-		Products:           products,
+		ModelID:            mID,
+		Products:           ps,
 		Accumulation:       accumulation,
-		CreatedAt:          ca,
-		UpdatedAt:          ca,
-	}
-
-	if err := m.validate(); err != nil {
-		return Mint{}, err
-	}
-
-	return m, nil
+		CreatedAt:          now,
+		UpdatedAt:          now,
+	}, nil
 }
-
-// ------------------------------------------------------
-// validation
-// ------------------------------------------------------
-//
-// Products については：
-//   - nil でも OK（empty slice と同等扱い）
-//   - 非空の場合、要素が空文字でないこと
-//   - 重複は許容しない（normalize で除去される想定だが念のため弾く）
-func (m Mint) validate() error {
-	if strings.TrimSpace(m.TokenBlueprintID) == "" {
-		return ErrInvalidTokenBlueprintID
-	}
-	if strings.TrimSpace(m.ProductBlueprintID) == "" {
-		return ErrInvalidProductBlueprintID
-	}
-
-	if m.Accumulation < 0 {
-		return ErrInvalidAccumulation
-	}
-
-	if m.CreatedAt.IsZero() {
-		return ErrInvalidCreatedAt
-	}
-	if m.UpdatedAt.IsZero() {
-		return ErrInvalidUpdatedAt
-	}
-	if m.UpdatedAt.Before(m.CreatedAt) {
-		return ErrInvalidUpdatedAt
-	}
-
-	if m.Products != nil {
-		seen := map[string]struct{}{}
-		for _, pid := range m.Products {
-			pid = strings.TrimSpace(pid)
-			if pid == "" {
-				return ErrInvalidProducts
-			}
-			if _, ok := seen[pid]; ok {
-				return ErrInvalidProducts
-			}
-			seen[pid] = struct{}{}
-		}
-	}
-
-	return nil
-}
-
-// ------------------------------------------------------
-// Helpers
-// ------------------------------------------------------
 
 func normalizeIDs(raw []string) []string {
 	seen := map[string]struct{}{}

@@ -1,4 +1,3 @@
-// backend/internal/application/usecase/inventory_usecase.go
 package usecase
 
 import (
@@ -19,11 +18,14 @@ func NewInventoryUsecase(repo invdom.RepositoryPort) *InventoryUsecase {
 	return &InventoryUsecase{repo: repo}
 }
 
-// UpsertFromMint
-func (uc *InventoryUsecase) UpsertFromMint(
+// UpsertFromMintByModel
+// docId = modelId__tokenBlueprintId
+// products / accumulation は modelId ごとに更新される
+func (uc *InventoryUsecase) UpsertFromMintByModel(
 	ctx context.Context,
 	tokenBlueprintID string,
 	productBlueprintID string,
+	modelID string,
 	productIDs []string,
 ) (invdom.Mint, error) {
 	if uc == nil || uc.repo == nil {
@@ -32,11 +34,16 @@ func (uc *InventoryUsecase) UpsertFromMint(
 
 	tbID := strings.TrimSpace(tokenBlueprintID)
 	pbID := strings.TrimSpace(productBlueprintID)
+	mID := strings.TrimSpace(modelID)
+
 	if tbID == "" {
 		return invdom.Mint{}, invdom.ErrInvalidTokenBlueprintID
 	}
 	if pbID == "" {
 		return invdom.Mint{}, invdom.ErrInvalidProductBlueprintID
+	}
+	if mID == "" {
+		return invdom.Mint{}, invdom.ErrInvalidModelID
 	}
 
 	ids := normalizeIDs(productIDs)
@@ -44,67 +51,26 @@ func (uc *InventoryUsecase) UpsertFromMint(
 		return invdom.Mint{}, invdom.ErrInvalidProducts
 	}
 
-	docID := buildInventoryDocID(tbID, pbID)
+	// ✅ repo が atomic upsert を持つ前提で使う（最も安全）
+	return uc.repo.UpsertByModelAndToken(ctx, tbID, pbID, mID, ids)
+}
 
-	existing, err := uc.repo.GetByID(ctx, docID)
-	if err != nil {
-		if errors.Is(err, invdom.ErrNotFound) {
-			now := time.Now().UTC()
-			ent, err := invdom.NewMint(
-				docID,
-				tbID,
-				pbID,
-				ids,
-				len(ids),
-				now,
-			)
-			if err != nil {
-				return invdom.Mint{}, err
-			}
-			return uc.repo.Create(ctx, ent)
-		}
-		return invdom.Mint{}, err
-	}
-
-	// 既存あり → products に未登録分だけ追加
-	current := normalizeIDs(existing.Products)
-	seen := map[string]struct{}{}
-	for _, p := range current {
-		seen[p] = struct{}{}
-	}
-
-	added := 0
-	for _, pid := range ids {
-		if _, ok := seen[pid]; ok {
-			continue
-		}
-		seen[pid] = struct{}{}
-		current = append(current, pid)
-		added++
-	}
-	sort.Strings(current)
-
-	existing.Products = current
-
-	updated, err := uc.repo.Update(ctx, existing)
-	if err != nil {
-		return invdom.Mint{}, err
-	}
-
-	if added > 0 {
-		updated, err = uc.repo.IncrementAccumulation(ctx, docID, added)
-		if err != nil {
-			return invdom.Mint{}, err
-		}
-	}
-
-	return updated, nil
+// 互換：既存コードが UpsertFromMint を呼んでいる場合に備えて残す
+// ※ 旧仕様( tokenBlueprint + productBlueprint ) ではなく、modelID が必要なのでエラーに寄せる
+func (uc *InventoryUsecase) UpsertFromMint(
+	ctx context.Context,
+	tokenBlueprintID string,
+	productBlueprintID string,
+	productIDs []string,
+) (invdom.Mint, error) {
+	return invdom.Mint{}, errors.New("UpsertFromMint is deprecated: use UpsertFromMintByModel(tokenBlueprintID, productBlueprintID, modelID, productIDs)")
 }
 
 func (uc *InventoryUsecase) CreateMint(
 	ctx context.Context,
 	tokenBlueprintID string,
 	productBlueprintID string,
+	modelID string,
 	productIDs []string,
 	accumulation int,
 ) (invdom.Mint, error) {
@@ -114,6 +80,7 @@ func (uc *InventoryUsecase) CreateMint(
 		"",
 		tokenBlueprintID,
 		productBlueprintID,
+		modelID,
 		productIDs,
 		accumulation,
 		now,
@@ -134,6 +101,9 @@ func (uc *InventoryUsecase) UpdateMint(
 	}
 	m.UpdatedAt = time.Now().UTC()
 	m.Products = normalizeIDs(m.Products)
+	if m.Accumulation <= 0 {
+		m.Accumulation = len(m.Products)
+	}
 	return uc.repo.Update(ctx, m)
 }
 
@@ -146,7 +116,6 @@ func (uc *InventoryUsecase) DeleteMint(ctx context.Context, id string) error {
 }
 
 // Queries
-
 func (uc *InventoryUsecase) GetMintByID(ctx context.Context, id string) (invdom.Mint, error) {
 	id = strings.TrimSpace(id)
 	if id == "" {
@@ -163,12 +132,15 @@ func (uc *InventoryUsecase) ListByProductBlueprintID(ctx context.Context, produc
 	return uc.repo.ListByProductBlueprintID(ctx, productBlueprintID)
 }
 
-func (uc *InventoryUsecase) ListByTokenAndProductBlueprintID(ctx context.Context, tokenBlueprintID, productBlueprintID string) ([]invdom.Mint, error) {
-	return uc.repo.ListByTokenAndProductBlueprintID(ctx, tokenBlueprintID, productBlueprintID)
+func (uc *InventoryUsecase) ListByModelID(ctx context.Context, modelID string) ([]invdom.Mint, error) {
+	return uc.repo.ListByModelID(ctx, modelID)
+}
+
+func (uc *InventoryUsecase) ListByTokenAndModelID(ctx context.Context, tokenBlueprintID, modelID string) ([]invdom.Mint, error) {
+	return uc.repo.ListByTokenAndModelID(ctx, tokenBlueprintID, modelID)
 }
 
 // Helpers (local)
-
 func normalizeIDs(raw []string) []string {
 	seen := map[string]struct{}{}
 	out := make([]string, 0, len(raw))
@@ -185,13 +157,4 @@ func normalizeIDs(raw []string) []string {
 	}
 	sort.Strings(out)
 	return out
-}
-
-func buildInventoryDocID(tokenBlueprintID, productBlueprintID string) string {
-	sanitize := func(s string) string {
-		s = strings.TrimSpace(s)
-		s = strings.ReplaceAll(s, "/", "_")
-		return s
-	}
-	return sanitize(tokenBlueprintID) + "__" + sanitize(productBlueprintID)
 }

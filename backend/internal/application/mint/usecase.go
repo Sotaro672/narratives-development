@@ -34,16 +34,17 @@ type TokenMintPort interface {
 }
 
 // ============================================================
-// Inventory Upsert Port（A案）
+// Inventory Upsert Port（modelId 単位）
 // ============================================================
 
 // InventoryUpserter は inventories の upsert を行うための最小インターフェースです。
-// 実体は *usecase.InventoryUsecase を想定します。
+// inventories の docId を modelId_tokenBlueprintId にする方針のため、modelID を必須にする。
 type InventoryUpserter interface {
-	UpsertFromMint(
+	UpsertFromMintByModel(
 		ctx context.Context,
 		tokenBlueprintID string,
 		productBlueprintID string,
+		modelID string,
 		productIDs []string,
 	) (invdom.Mint, error)
 }
@@ -74,10 +75,10 @@ type MintUsecase struct {
 	// チェーンミント実行用ポート（TokenUsecase を想定）
 	tokenMinter TokenMintPort
 
-	// ★ A案: inventories への反映は InventoryUsecase(=UpsertFromMint) に委譲する
+	// inventories への反映（modelId 単位）
 	inventoryUC InventoryUpserter
 
-	// createdBy(memberId) → 氏名 を解決するため（A案）
+	// createdBy(memberId) → 氏名 を解決するため
 	// 既存DIを壊さないため、Setterで後から差し込む
 	nameResolver *resolver.NameResolver
 }
@@ -118,11 +119,14 @@ func (u *MintUsecase) SetNameResolver(r *resolver.NameResolver) {
 	u.nameResolver = r
 }
 
-// ★ A案: DI 側で InventoryUsecase（または互換の Upserter）を後から注入できるようにする
+// ★ DI 側で InventoryUsecase（または互換の Upserter）を後から注入できるようにする
+// ※ *usecase.InventoryUsecase が UpsertFromMintByModel を実装している前提
 func (u *MintUsecase) SetInventoryUsecase(uc *appusecase.InventoryUsecase) {
 	if u == nil {
 		return
 	}
+	// コンパイル時に interface 実装を保証したいので代入時点でチェック
+	var _ InventoryUpserter = uc
 	u.inventoryUC = uc
 }
 
@@ -209,6 +213,53 @@ func (u *MintUsecase) resolveProductBlueprintIDFromProduction(ctx context.Contex
 	return ""
 }
 
+// inspection batch を productionId から 1件取得（互換）
+func (u *MintUsecase) loadInspectionBatchByProductionID(ctx context.Context, productionID string) (*inspectiondom.InspectionBatch, error) {
+	if u == nil || u.inspRepo == nil {
+		return nil, errors.New("inspection repo is nil")
+	}
+
+	pid := strings.TrimSpace(productionID)
+	if pid == "" {
+		return nil, errors.New("productionID is empty")
+	}
+
+	// 1) GetByProductionID があれば最優先
+	if getter, ok := any(u.inspRepo).(interface {
+		GetByProductionID(ctx context.Context, productionID string) (inspectiondom.InspectionBatch, error)
+	}); ok {
+		b, err := getter.GetByProductionID(ctx, pid)
+		if err != nil {
+			return nil, err
+		}
+		return &b, nil
+	}
+
+	// 2) ListByProductionID のみでもOK
+	if lister, ok := any(u.inspRepo).(interface {
+		ListByProductionID(ctx context.Context, productionIDs []string) ([]inspectiondom.InspectionBatch, error)
+	}); ok {
+		list, err := lister.ListByProductionID(ctx, []string{pid})
+		if err != nil {
+			return nil, err
+		}
+		if len(list) == 0 {
+			return nil, inspectiondom.ErrNotFound
+		}
+		// productionId 一致を優先
+		for i := range list {
+			if strings.TrimSpace(list[i].ProductionID) == pid {
+				b := list[i]
+				return &b, nil
+			}
+		}
+		b := list[0]
+		return &b, nil
+	}
+
+	return nil, errors.New("inspection repo does not support GetByProductionID/ListByProductionID")
+}
+
 // ErrCompanyIDMissing は context から companyId が解決できない場合のエラーです。
 var ErrCompanyIDMissing = errors.New("companyId not found in context")
 
@@ -217,6 +268,7 @@ var ErrCompanyIDMissing = errors.New("companyId not found in context")
 // - actorId は context memberId ではなく mint.createdBy を優先
 // - 二重mint防止
 // - mints に onchain結果（署名/ミントアドレス）を保存（フィールドが存在する場合）
+// - inventories は modelId ごとに UpsertFromMintByModel を呼ぶ
 // ============================================================
 
 // MintFromMintRequest runs onchain mint for an existing mint request (docId = mintRequestID).
@@ -266,7 +318,6 @@ func (u *MintUsecase) MintFromMintRequest(ctx context.Context, mintRequestID str
 			if errors.Is(err, mintdom.ErrNotFound) {
 				return nil
 			}
-			// 互換: ErrNotFound を包んでいる実装対策
 			if strings.Contains(strings.ToLower(err.Error()), "not found") {
 				return nil
 			}
@@ -300,19 +351,20 @@ func (u *MintUsecase) MintFromMintRequest(ctx context.Context, mintRequestID str
 		return nil, mintdom.ErrNotFound
 	}
 
+	passedProductIDs := normalizeMintProducts(any(mintEnt.Products))
+
 	log.Printf(
 		"[mint_usecase] MintFromMintRequest loaded mint id=%q tokenBlueprintId=%q minted=%t products=%d createdBy=%q",
 		strings.TrimSpace(mintEnt.ID),
 		strings.TrimSpace(mintEnt.TokenBlueprintID),
 		mintEnt.Minted,
-		len(normalizeMintProducts(any(mintEnt.Products))),
+		len(passedProductIDs),
 		strings.TrimSpace(mintEnt.CreatedBy),
 	)
 
-	// actorID は mint.createdBy を優先（あなたの前提どおり）
+	// actorID は mint.createdBy を優先
 	actorID := strings.TrimSpace(mintEnt.CreatedBy)
 	if actorID == "" {
-		// 互換: 万一 createdBy が欠けているデータの場合は ctx をフォールバック
 		actorID = strings.TrimSpace(appusecase.MemberIDFromContext(ctx))
 	}
 	if actorID == "" {
@@ -321,7 +373,7 @@ func (u *MintUsecase) MintFromMintRequest(ctx context.Context, mintRequestID str
 	}
 	log.Printf("[mint_usecase] MintFromMintRequest actorId=%q mintRequestId=%q", actorID, mintRequestID)
 
-	// 0) 二重mint防止: 既に minted=true ならオンチェーンは走らせない
+	// 0) 二重mint防止
 	if mintEnt.Minted {
 		existing := buildMintResultFromMint(*mintEnt)
 		log.Printf(
@@ -405,7 +457,7 @@ func (u *MintUsecase) MintFromMintRequest(ctx context.Context, mintRequestID str
 		log.Printf("[mint_usecase] MintFromMintRequest skip markTokenBlueprintMinted reason=empty_tokenBlueprintId")
 	}
 
-	// 4) mints 側 minted/mintedAt + onchain結果（存在するフィールドにだけ）を更新
+	// 4) mints 側 minted/mintedAt + onchain結果を更新（失敗してもログだけ）
 	if u.mintRepo != nil {
 		if updater, ok := any(u.mintRepo).(interface {
 			Update(ctx context.Context, m mintdom.Mint) (mintdom.Mint, error)
@@ -415,18 +467,15 @@ func (u *MintUsecase) MintFromMintRequest(ctx context.Context, mintRequestID str
 
 			// Policy A: docId を必ず mintRequestId に揃える
 			m.ID = mintRequestID
-			// InspectionID を持つ実装なら同値で揃える（存在しない場合もあるので reflect で安全に）
 			setIfExistsString(&m, "InspectionID", mintRequestID)
 
 			m.Minted = true
 			m.MintedAt = &now
 
-			// ✅ onchain結果を保存（フィールドが存在する場合のみ）
 			if result != nil {
 				sig := strings.TrimSpace(result.Signature)
 				addr := strings.TrimSpace(result.MintAddress)
 
-				// よくあるフィールド名候補を複数試す（存在するものだけセットされる）
 				if sig != "" {
 					setIfExistsString(&m, "OnChainTxSignature", sig)
 					setIfExistsString(&m, "OnchainTxSignature", sig)
@@ -462,46 +511,99 @@ func (u *MintUsecase) MintFromMintRequest(ctx context.Context, mintRequestID str
 		log.Printf("[mint_usecase] MintFromMintRequest skip mintRepo.Update reason=mintRepo_nil")
 	}
 
-	// 5) inventories Upsert（A案: InventoryUsecase.UpsertFromMint に委譲）
+	// 5) inventories Upsert（modelId ごとに UpsertFromMintByModel）
 	if u.inventoryUC == nil {
 		log.Printf("[mint_usecase] MintFromMintRequest inventoryUC is nil -> skip inventory upsert mintRequestId=%q", mintRequestID)
 	} else {
 		pbID := strings.TrimSpace(u.resolveProductBlueprintIDFromProduction(ctx, mintRequestID))
-		productIDs := normalizeMintProducts(any(mintEnt.Products))
 
 		log.Printf(
-			"[mint_usecase] MintFromMintRequest inventory upsert start mintRequestId=%q tokenBlueprintId=%q productBlueprintId=%q products=%d",
-			mintRequestID, tbID, pbID, len(productIDs),
+			"[mint_usecase] MintFromMintRequest inventory upsert(by-model) start mintRequestId=%q tokenBlueprintId=%q productBlueprintId=%q passedProducts=%d",
+			mintRequestID, tbID, pbID, len(passedProductIDs),
 		)
 
-		if tbID == "" || pbID == "" || len(productIDs) == 0 {
+		if tbID == "" || pbID == "" || len(passedProductIDs) == 0 {
 			log.Printf(
-				"[mint_usecase] MintFromMintRequest inventory upsert skip reason=missing_fields mintRequestId=%q tbID=%q pbID=%q products=%d",
-				mintRequestID, tbID, pbID, len(productIDs),
+				"[mint_usecase] MintFromMintRequest inventory upsert(by-model) skip reason=missing_fields mintRequestId=%q tbID=%q pbID=%q products=%d",
+				mintRequestID, tbID, pbID, len(passedProductIDs),
 			)
 		} else {
-			invStart := time.Now()
-			invEnt, invErr := u.inventoryUC.UpsertFromMint(ctx, tbID, pbID, productIDs)
-			invElapsed := time.Since(invStart)
-
-			if invErr != nil {
+			// inspection から modelId を引いて、modelId ごとに productId を束ねる
+			batch, berr := u.loadInspectionBatchByProductionID(ctx, mintRequestID)
+			if berr != nil || batch == nil {
 				log.Printf(
-					"[mint_usecase] MintFromMintRequest inventory upsert error mintRequestId=%q tokenBlueprintId=%q productBlueprintId=%q err=%v elapsed=%s",
-					mintRequestID, tbID, pbID, invErr, invElapsed,
+					"[mint_usecase] MintFromMintRequest inventory upsert(by-model) skip reason=inspection_load_failed mintRequestId=%q err=%v",
+					mintRequestID, berr,
 				)
 			} else {
-				log.Printf(
-					"[mint_usecase] MintFromMintRequest inventory upsert ok inventoryId=%q accumulation=%d products=%d elapsed=%s",
-					strings.TrimSpace(invEnt.ID),
-					invEnt.Accumulation,
-					func() int {
-						if invEnt.Products == nil {
-							return 0
+				passedSet := make(map[string]struct{}, len(passedProductIDs))
+				for _, p := range passedProductIDs {
+					passedSet[p] = struct{}{}
+				}
+
+				byModel := map[string][]string{}
+				for _, it := range batch.Inspections {
+					pid := strings.TrimSpace(it.ProductID)
+					if pid == "" {
+						continue
+					}
+					if _, ok := passedSet[pid]; !ok {
+						continue
+					}
+					mid := strings.TrimSpace(it.ModelID)
+					if mid == "" {
+						// modelId がないデータは upsert できない（docId 方針に合わない）
+						continue
+					}
+					byModel[mid] = append(byModel[mid], pid)
+				}
+
+				modelIDs := make([]string, 0, len(byModel))
+				for mid := range byModel {
+					modelIDs = append(modelIDs, mid)
+				}
+				sort.Strings(modelIDs)
+
+				if len(modelIDs) == 0 {
+					log.Printf(
+						"[mint_usecase] MintFromMintRequest inventory upsert(by-model) skip reason=no_model_groups mintRequestId=%q passed=%d inspections=%d",
+						mintRequestID, len(passedProductIDs), len(batch.Inspections),
+					)
+				} else {
+					for _, mid := range modelIDs {
+						pids := normalizeIDs(byModel[mid])
+						if len(pids) == 0 {
+							continue
 						}
-						return len(invEnt.Products)
-					}(),
-					invElapsed,
-				)
+
+						invStart := time.Now()
+						invEnt, invErr := u.inventoryUC.UpsertFromMintByModel(ctx, tbID, pbID, mid, pids)
+						invElapsed := time.Since(invStart)
+
+						if invErr != nil {
+							log.Printf(
+								"[mint_usecase] MintFromMintRequest inventory upsert(by-model) error mintRequestId=%q tokenBlueprintId=%q productBlueprintId=%q modelId=%q products=%d err=%v elapsed=%s",
+								mintRequestID, tbID, pbID, mid, len(pids), invErr, invElapsed,
+							)
+							// ここで return しても良いが、現状は mint 成功を優先してログのみ
+							continue
+						}
+
+						log.Printf(
+							"[mint_usecase] MintFromMintRequest inventory upsert(by-model) ok inventoryId=%q modelId=%q accumulation=%d products=%d elapsed=%s",
+							strings.TrimSpace(invEnt.ID),
+							mid,
+							invEnt.Accumulation,
+							func() int {
+								if invEnt.Products == nil {
+									return 0
+								}
+								return len(invEnt.Products)
+							}(),
+							invElapsed,
+						)
+					}
+				}
 			}
 		}
 	}
@@ -953,7 +1055,7 @@ func (u *MintUsecase) UpdateRequestInfo(
 		pid, mid, tbID, len(passedProductIDs),
 	)
 
-	// ✅ ここで従来通り、チェーンmintまで起動する（既存ルート POST /mint/requests/{id}/mint 相当の処理本体）
+	// ✅ mint request 作成直後に MintFromMintRequest を自動実行（維持）
 	if u.tokenMinter == nil {
 		return empty, errors.New("token minter is nil")
 	}
@@ -1166,7 +1268,6 @@ func normalizeMintProducts(raw any) []string {
 		return normalizeIDs(out)
 
 	case reflect.Map:
-		// map[string]... のキーを productId として扱う
 		out := make([]string, 0, rv.Len())
 		iter := rv.MapRange()
 		for iter.Next() {
@@ -1255,7 +1356,6 @@ func getIfExistsString(target any, fieldName string) string {
 
 // buildMintResultFromMint は minted 済みの Mint から、保存済みの署名/アドレスがあれば返す（無ければ空）
 func buildMintResultFromMint(m mintdom.Mint) *tokendom.MintResult {
-	// 代表的な候補名を順に探す
 	sig := ""
 	for _, name := range []string{
 		"OnChainTxSignature",

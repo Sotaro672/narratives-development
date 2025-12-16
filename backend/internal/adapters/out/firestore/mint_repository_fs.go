@@ -39,7 +39,7 @@ func getStringFieldIfExists(v any, fieldName string) string {
 	if !rv.IsValid() {
 		return ""
 	}
-	if rv.Kind() == reflect.Pointer {
+	if rv.Kind() == reflect.Ptr {
 		if rv.IsNil() {
 			return ""
 		}
@@ -57,7 +57,7 @@ func getStringFieldIfExists(v any, fieldName string) string {
 
 func setStringFieldIfExists(ptr any, fieldName string, value string) {
 	rv := reflect.ValueOf(ptr)
-	if !rv.IsValid() || rv.Kind() != reflect.Pointer || rv.IsNil() {
+	if !rv.IsValid() || rv.Kind() != reflect.Ptr || rv.IsNil() {
 		return
 	}
 	rv = rv.Elem()
@@ -69,6 +69,15 @@ func setStringFieldIfExists(ptr any, fieldName string, value string) {
 		return
 	}
 	f.SetString(strings.TrimSpace(value))
+}
+
+func pickFirstNonEmptyStringField(v any, candidates []string) string {
+	for _, name := range candidates {
+		if s := strings.TrimSpace(getStringFieldIfExists(v, name)); s != "" {
+			return s
+		}
+	}
+	return ""
 }
 
 // normalizeProductsToIDs converts Mint.Products into []string (productId list) and removes empty strings.
@@ -83,6 +92,12 @@ func normalizeProductsToIDs(products any) []string {
 	v := reflect.ValueOf(products)
 	if !v.IsValid() {
 		return []string{}
+	}
+	if v.Kind() == reflect.Ptr {
+		if v.IsNil() {
+			return []string{}
+		}
+		v = v.Elem()
 	}
 
 	switch v.Kind() {
@@ -219,6 +234,7 @@ func decodeMintFromDoc(doc *firestore.DocumentSnapshot) (mintdom.Mint, error) {
 
 	// products: Firestore は array を正とする（互換で map も吸える）
 	ids := normalizeProductsToIDs(data["products"])
+	sort.Strings(ids)
 	m.Products = idsToProductsMap(ids)
 
 	m.CreatedBy = asString(data["createdBy"])
@@ -228,6 +244,34 @@ func decodeMintFromDoc(doc *firestore.DocumentSnapshot) (mintdom.Mint, error) {
 	m.MintedAt = asTimePtr(data["mintedAt"])
 
 	m.ScheduledBurnDate = asTimePtr(data["scheduledBurnDate"])
+
+	// ✅ onchain結果（任意）
+	txSig := ""
+	for _, k := range []string{"onChainTxSignature", "onchainTxSignature", "txSignature", "signature"} {
+		if s := asString(data[k]); s != "" {
+			txSig = s
+			break
+		}
+	}
+	if txSig != "" {
+		setStringFieldIfExists(&m, "OnChainTxSignature", txSig)
+		setStringFieldIfExists(&m, "OnchainTxSignature", txSig)
+		setStringFieldIfExists(&m, "TxSignature", txSig)
+		setStringFieldIfExists(&m, "Signature", txSig)
+	}
+
+	mintAddr := ""
+	for _, k := range []string{"onChainMintAddress", "onchainMintAddress", "mintAddress"} {
+		if s := asString(data[k]); s != "" {
+			mintAddr = s
+			break
+		}
+	}
+	if mintAddr != "" {
+		setStringFieldIfExists(&m, "MintAddress", mintAddr)
+		setStringFieldIfExists(&m, "OnChainMintAddress", mintAddr)
+		setStringFieldIfExists(&m, "OnchainMintAddress", mintAddr)
+	}
 
 	if err := m.Validate(); err != nil {
 		return mintdom.Mint{}, err
@@ -284,13 +328,14 @@ func (r *MintRepositoryFS) Create(ctx context.Context, m mintdom.Mint) (mintdom.
 		return mintdom.Mint{}, getErr
 	}
 
-	data := map[string]interface{}{
+	data := map[string]any{
 		"brandId":          strings.TrimSpace(m.BrandID),
 		"tokenBlueprintId": strings.TrimSpace(m.TokenBlueprintID),
 		"products":         productIDs,
 		"createdBy":        strings.TrimSpace(m.CreatedBy),
 		"minted":           m.Minted,
 	}
+
 	// createdAt は「新規時のみ」入れる（既存がある場合は上書きしない）
 	if !exists {
 		data["createdAt"] = m.CreatedAt.UTC()
@@ -303,7 +348,15 @@ func (r *MintRepositoryFS) Create(ctx context.Context, m mintdom.Mint) (mintdom.
 		data["scheduledBurnDate"] = m.ScheduledBurnDate.UTC()
 	}
 
-	// 既存があっても idempotent に更新できるよう Merge で保存
+	// ✅ onchain結果（MintUsecase が reflect で詰める想定の値を拾う）
+	if sig := pickFirstNonEmptyStringField(m, []string{"OnChainTxSignature", "OnchainTxSignature", "TxSignature", "Signature"}); sig != "" {
+		data["txSignature"] = sig
+	}
+	if addr := pickFirstNonEmptyStringField(m, []string{"MintAddress", "OnChainMintAddress", "OnchainMintAddress"}); addr != "" {
+		data["mintAddress"] = addr
+	}
+
+	// ✅ MergeAll は「map を渡す」ことが必須（struct を渡すと例のエラーになる）
 	if _, err := docRef.Set(ctx, data, firestore.MergeAll); err != nil {
 		return mintdom.Mint{}, err
 	}
@@ -350,7 +403,7 @@ func (r *MintRepositoryFS) Update(ctx context.Context, m mintdom.Mint) (mintdom.
 	productIDs := normalizeProductsToIDs(any(m.Products))
 	sort.Strings(productIDs)
 
-	data := map[string]interface{}{
+	data := map[string]any{
 		"brandId":          strings.TrimSpace(m.BrandID),
 		"tokenBlueprintId": strings.TrimSpace(m.TokenBlueprintID),
 		"products":         productIDs,
@@ -359,7 +412,7 @@ func (r *MintRepositoryFS) Update(ctx context.Context, m mintdom.Mint) (mintdom.
 	}
 
 	// mintedAt / scheduledBurnDate は「値がある時だけ」上書き。
-	// 値を消したい場合は、別途 FieldValueDelete を使うAPIを用意してください。
+	// 値を消したい場合は FieldValueDelete を別APIで用意してください。
 	if m.MintedAt != nil && !m.MintedAt.IsZero() {
 		data["mintedAt"] = m.MintedAt.UTC()
 	}
@@ -367,6 +420,15 @@ func (r *MintRepositoryFS) Update(ctx context.Context, m mintdom.Mint) (mintdom.
 		data["scheduledBurnDate"] = m.ScheduledBurnDate.UTC()
 	}
 
+	// ✅ onchain結果（任意）
+	if sig := pickFirstNonEmptyStringField(m, []string{"OnChainTxSignature", "OnchainTxSignature", "TxSignature", "Signature"}); sig != "" {
+		data["txSignature"] = sig
+	}
+	if addr := pickFirstNonEmptyStringField(m, []string{"MintAddress", "OnChainMintAddress", "OnchainMintAddress"}); addr != "" {
+		data["mintAddress"] = addr
+	}
+
+	// ✅ ここも必ず map を Set する（struct を Set すると MergeAll エラー）
 	_, err := docRef.Set(ctx, data, firestore.MergeAll)
 	if err != nil {
 		if status.Code(err) == codes.NotFound {

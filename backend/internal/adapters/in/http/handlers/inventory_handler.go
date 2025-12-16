@@ -61,6 +61,7 @@ func (h *InventoryHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 type createInventoryMintRequest struct {
 	TokenBlueprintID   string   `json:"tokenBlueprintId"`
 	ProductBlueprintID string   `json:"productBlueprintId"`
+	ModelID            string   `json:"modelId"` // ★ NEW
 	ProductIDs         []string `json:"productIds"`
 	Accumulation       int      `json:"accumulation"`
 }
@@ -85,6 +86,7 @@ func (h *InventoryHandler) Create(w http.ResponseWriter, r *http.Request) {
 		ctx,
 		req.TokenBlueprintID,
 		req.ProductBlueprintID,
+		req.ModelID, // ★ NEW
 		req.ProductIDs,
 		req.Accumulation,
 	)
@@ -102,9 +104,12 @@ func (h *InventoryHandler) List(w http.ResponseWriter, r *http.Request) {
 	q := r.URL.Query()
 	tbID := strings.TrimSpace(q.Get("tokenBlueprintId"))
 	pbID := strings.TrimSpace(q.Get("productBlueprintId"))
+	modelID := strings.TrimSpace(q.Get("modelId"))
 
-	if tbID == "" && pbID == "" {
-		writeError(w, http.StatusBadRequest, "tokenBlueprintId or productBlueprintId is required")
+	// 旧: tokenBlueprintId or productBlueprintId 必須
+	// 新: modelId も条件に追加
+	if tbID == "" && pbID == "" && modelID == "" {
+		writeError(w, http.StatusBadRequest, "tokenBlueprintId or productBlueprintId or modelId is required")
 		return
 	}
 
@@ -113,11 +118,21 @@ func (h *InventoryHandler) List(w http.ResponseWriter, r *http.Request) {
 		err  error
 	)
 
+	// ✅ 新仕様の優先順位：
+	// 1) tokenBlueprintId + modelId -> 1レコードに近い検索（docIdは modelId__tokenBlueprintId）
+	// 2) tokenBlueprintId のみ
+	// 3) modelId のみ
+	// 4) productBlueprintId のみ（参照用途として残す）
 	switch {
-	case tbID != "" && pbID != "":
-		list, err = h.UC.ListByTokenAndProductBlueprintID(ctx, tbID, pbID)
+	case tbID != "" && modelID != "":
+		list, err = h.UC.ListByTokenAndModelID(ctx, tbID, modelID)
+
 	case tbID != "":
 		list, err = h.UC.ListByTokenBlueprintID(ctx, tbID)
+
+	case modelID != "":
+		list, err = h.UC.ListByModelID(ctx, modelID)
+
 	default:
 		list, err = h.UC.ListByProductBlueprintID(ctx, pbID)
 	}
@@ -172,6 +187,12 @@ func (h *InventoryHandler) Update(w http.ResponseWriter, r *http.Request) {
 	// Products は「指定されたら置き換え」
 	if req.Products != nil {
 		current.Products = req.Products
+
+		// ✅ products を置き換えたのに accumulation が来ない場合は、
+		//    Usecase/Repo 側で len(products) に揃えられるよう 0 に寄せる
+		if req.Accumulation == nil {
+			current.Accumulation = 0
+		}
 	}
 	if req.Accumulation != nil {
 		current.Accumulation = *req.Accumulation
@@ -225,10 +246,9 @@ func writeDomainError(w http.ResponseWriter, err error) {
 	case errors.Is(err, invdom.ErrInvalidMintID),
 		errors.Is(err, invdom.ErrInvalidTokenBlueprintID),
 		errors.Is(err, invdom.ErrInvalidProductBlueprintID),
+		errors.Is(err, invdom.ErrInvalidModelID), // ★ NEW
 		errors.Is(err, invdom.ErrInvalidProducts),
-		errors.Is(err, invdom.ErrInvalidAccumulation),
-		errors.Is(err, invdom.ErrInvalidCreatedAt),
-		errors.Is(err, invdom.ErrInvalidUpdatedAt):
+		errors.Is(err, invdom.ErrInvalidAccumulation):
 		writeError(w, http.StatusBadRequest, err.Error())
 
 	default:
