@@ -19,23 +19,16 @@ import (
 // ============================================================
 
 type InventoryDetailDTO struct {
-	// 互換のため残す（pbId query の場合は pbId を入れる）
-	InventoryID string `json:"inventoryId"`
-
-	TokenBlueprintID   string `json:"tokenBlueprintId"`   // pbId query の場合は空
-	ProductBlueprintID string `json:"productBlueprintId"` // pbId query の場合に必ず入る
-	ModelID            string `json:"modelId"`            // pbId query の場合は空
-
-	ProductBlueprintPatch ProductBlueprintPatchDTO `json:"productBlueprintPatch"`
-
-	// 表示用途の summary（pbId query の場合、token は rows の token 列で表現）
-	TokenBlueprint   TokenBlueprintSummaryDTO   `json:"tokenBlueprint"`
-	ProductBlueprint ProductBlueprintSummaryDTO `json:"productBlueprint"`
-
-	Rows       []InventoryRowDTO `json:"rows"`
-	TotalStock int               `json:"totalStock"`
-
-	UpdatedAt time.Time `json:"updatedAt"`
+	InventoryID           string                     `json:"inventoryId"`
+	TokenBlueprintID      string                     `json:"tokenBlueprintId"`   // pbId query の場合は空
+	ProductBlueprintID    string                     `json:"productBlueprintId"` // pbId query の場合に必ず入る
+	ModelID               string                     `json:"modelId"`            // pbId query の場合は空
+	ProductBlueprintPatch ProductBlueprintPatchDTO   `json:"productBlueprintPatch"`
+	TokenBlueprint        TokenBlueprintSummaryDTO   `json:"tokenBlueprint"`
+	ProductBlueprint      ProductBlueprintSummaryDTO `json:"productBlueprint"`
+	Rows                  []InventoryRowDTO          `json:"rows"`
+	TotalStock            int                        `json:"totalStock"`
+	UpdatedAt             time.Time                  `json:"updatedAt"`
 }
 
 type TokenBlueprintSummaryDTO struct {
@@ -84,11 +77,9 @@ type InventoryRowDTO struct {
 type InventoryManagementRowDTO struct {
 	ProductBlueprintID string `json:"productBlueprintId"`
 	ProductName        string `json:"productName"`
-
-	TokenName   string `json:"tokenName"`
-	ModelNumber string `json:"modelNumber"`
-
-	Stock int `json:"stock"`
+	TokenName          string `json:"tokenName"`
+	ModelNumber        string `json:"modelNumber"`
+	Stock              int    `json:"stock"`
 }
 
 // ============================================================
@@ -96,16 +87,11 @@ type InventoryManagementRowDTO struct {
 // ============================================================
 
 type InventoryQuery struct {
-	invRepo inventoryReader
-
-	// companyId -> その会社の productBlueprintId 一覧
-	pbRepo productBlueprintIDsByCompanyReader
-
+	invRepo       inventoryReader
+	pbRepo        productBlueprintIDsByCompanyReader // companyId -> その会社の productBlueprintId 一覧
 	pbPatchReader productBlueprintPatchReader
 	prReader      productReader
-
-	// ✅ tokenName / modelNumber / productName 解決
-	nameResolver *resolver.NameResolver
+	nameResolver  *resolver.NameResolver // ✅ tokenName / modelNumber / productName 解決
 }
 
 func NewInventoryQuery(

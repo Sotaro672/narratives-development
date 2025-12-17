@@ -66,14 +66,20 @@ export function buildUpdatePayloadFromCardVm(
 
     /**
      * 注意:
-     * - 画像アップロードと iconId の確定は別フロー（PUT完了後に objectPath を入れる）
+     * - 画像アップロードと icon の確定は別フロー（PUT完了後に iconUrl を入れる）
      * - ここでは「UI が iconId を文字列で持っていても」通常はそのまま反映してしまうと、
-     *   PUTせずに iconId だけ更新される事故が起きるので、呼び出し側で制御する。
+     *   PUTせずに icon だけ更新される事故が起きるので、呼び出し側で制御する。
      */
     iconId:
       typeof fields.iconId === "string"
         ? fields.iconId
         : (blueprint as any)?.iconId ?? null,
+
+    // ★ NEW: iconUrl を持っている場合（detail 表示など）もここに載せられるようにする
+    iconUrl:
+      typeof fields.iconUrl === "string"
+        ? fields.iconUrl
+        : ((blueprint as any)?.iconUrl as any) ?? null,
 
     contentFiles:
       (fields.contentFiles as string[] | undefined) ??
@@ -86,7 +92,7 @@ export function buildUpdatePayloadFromCardVm(
 
 type UpdateFromCardOptions = {
   /**
-   * ★ 選択されたアイコンファイル（あれば Signed URL PUT → iconId 反映まで行う）
+   * ★ 選択されたアイコンファイル（あれば Signed URL PUT → iconUrl 反映まで行う）
    */
   iconFile?: File | null;
 
@@ -101,8 +107,8 @@ type UpdateFromCardOptions = {
  * TokenBlueprintCard の VM から update API を呼び出し、更新後の TokenBlueprint を返す
  *
  * ★重要（今回の不具合対策）:
- * - iconFile がある場合は「PUT前に iconId を入れない」
- * - update → (iconUpload取得) → PUT → iconId(objectPath)更新 の順で行う
+ * - iconFile がある場合は「PUT前に iconUrl / iconId を入れない」
+ * - update → (iconUpload取得) → PUT → iconUrl(publicUrl)更新 の順で行う
  */
 export async function updateTokenBlueprintFromCard(
   blueprint: TokenBlueprint,
@@ -115,10 +121,10 @@ export async function updateTokenBlueprintFromCard(
   // 1) まず通常の payload を組み立てる
   const payload = buildUpdatePayloadFromCardVm(blueprint, cardVm);
 
-  // ★ 画像がある場合、ここで iconId を更新してはいけない（PUT前に確定してしまう）
-  // - UI 側で "id/icon" を入れていても無視して、あとで objectPath を確定させる
+  // ★ 画像がある場合、ここで iconId / iconUrl を更新してはいけない（PUT前に確定してしまう）
   if (iconFile) {
     delete (payload as any).iconId;
+    delete (payload as any).iconUrl;
   }
 
   // デバッグ用: 更新リクエストペイロードを確認
@@ -148,7 +154,7 @@ export async function updateTokenBlueprintFromCard(
   const iconUpload = (updated as any)?.iconUpload as SignedIconUpload | undefined;
 
   const uploadUrl = String(iconUpload?.uploadUrl ?? "").trim();
-  const objectPath = String(iconUpload?.objectPath ?? "").trim();
+  const publicUrl = String((iconUpload as any)?.publicUrl ?? "").trim();
   const signedContentType = String(iconUpload?.contentType ?? "").trim();
 
   // eslint-disable-next-line no-console
@@ -158,7 +164,7 @@ export async function updateTokenBlueprintFromCard(
       id: (updated as any)?.id,
       iconUpload,
       uploadUrlPresent: Boolean(uploadUrl),
-      objectPathPresent: Boolean(objectPath),
+      publicUrlPresent: Boolean(publicUrl),
       signedContentType,
     },
   );
@@ -169,7 +175,7 @@ export async function updateTokenBlueprintFromCard(
   }
 
   // iconUpload が無い場合はアップロードできない（backend 側の返却条件 or env不足）
-  if (!uploadUrl || !objectPath) {
+  if (!uploadUrl || !publicUrl) {
     // eslint-disable-next-line no-console
     console.warn(
       "[tokenBlueprintDetailService.updateTokenBlueprintFromCard] icon upload skipped: iconUpload is missing on update response.",
@@ -184,7 +190,6 @@ export async function updateTokenBlueprintFromCard(
     "[tokenBlueprintDetailService.updateTokenBlueprintFromCard] icon PUT start",
     {
       id: (updated as any)?.id,
-      objectPath,
       file: { name: iconFile.name, type: iconFile.type, size: iconFile.size },
       signedContentType,
     },
@@ -195,16 +200,14 @@ export async function updateTokenBlueprintFromCard(
   // eslint-disable-next-line no-console
   console.log(
     "[tokenBlueprintDetailService.updateTokenBlueprintFromCard] icon PUT success",
-    {
-      id: (updated as any)?.id,
-      objectPath,
-    },
+    { id: (updated as any)?.id },
   );
 
-  // 6) iconId を objectPath で確定（= DBに紐付け）
+  // 6) icon を publicUrl で確定（= DBに紐付け）
+  //    ※ backend 側 imageUrl_resolver が publicUrl を保存用に加工し、加工後URLを返す想定
   const attached = await attachTokenBlueprintIcon({
     tokenBlueprintId: String((updated as any)?.id ?? blueprint.id),
-    objectPath,
+    iconUrl: publicUrl,
   });
 
   // eslint-disable-next-line no-console
