@@ -265,10 +265,6 @@ var ErrCompanyIDMissing = errors.New("companyId not found in context")
 
 // ============================================================
 // ★ 修復: POST /mint/requests/{mintRequestId}/mint 用
-// - actorId は context memberId ではなく mint.createdBy を優先
-// - 二重mint防止
-// - mints に onchain結果（署名/ミントアドレス）を保存（フィールドが存在する場合）
-// - inventories は modelId ごとに UpsertFromMintByModel を呼ぶ
 // ============================================================
 
 // MintFromMintRequest runs onchain mint for an existing mint request (docId = mintRequestID).
@@ -344,7 +340,7 @@ func (u *MintUsecase) MintFromMintRequest(ctx context.Context, mintRequestID str
 		return nil
 	}
 
-	// 1) Mint を事前取得（actorId/ tokenBlueprintId / products / 二重mint判定に必須）
+	// 1) Mint を事前取得
 	mintEnt := loadMint()
 	if mintEnt == nil {
 		log.Printf("[mint_usecase] MintFromMintRequest abort reason=mint_not_found mintRequestId=%q elapsed=%s", mintRequestID, time.Since(start))
@@ -585,21 +581,28 @@ func (u *MintUsecase) MintFromMintRequest(ctx context.Context, mintRequestID str
 								"[mint_usecase] MintFromMintRequest inventory upsert(by-model) error mintRequestId=%q tokenBlueprintId=%q productBlueprintId=%q modelId=%q products=%d err=%v elapsed=%s",
 								mintRequestID, tbID, pbID, mid, len(pids), invErr, invElapsed,
 							)
-							// ここで return しても良いが、現状は mint 成功を優先してログのみ
 							continue
+						}
+
+						// ★ 修正点: inventory.Mint に Accumulation/Products が無いので Stock[modelId] から件数を出す
+						productsCount := len(pids) // fallback
+						accumulation := len(pids)  // fallback
+
+						if invEnt.Stock != nil {
+							if ms, ok := invEnt.Stock[mid]; ok {
+								// ms.Products が slice/map なら len が効く
+								// （構造変更に強くしたい場合は inventory 側の型に合わせてここを調整）
+								productsCount = len(ms.Products)
+								accumulation = productsCount
+							}
 						}
 
 						log.Printf(
 							"[mint_usecase] MintFromMintRequest inventory upsert(by-model) ok inventoryId=%q modelId=%q accumulation=%d products=%d elapsed=%s",
 							strings.TrimSpace(invEnt.ID),
 							mid,
-							invEnt.Accumulation,
-							func() int {
-								if invEnt.Products == nil {
-									return 0
-								}
-								return len(invEnt.Products)
-							}(),
+							accumulation,
+							productsCount,
 							invElapsed,
 						)
 					}
@@ -939,8 +942,6 @@ func (u *MintUsecase) ResolveModelMetaFromInspectionBatch(
 
 // ============================================================
 // ★ 修復: /mint/inspections/{id}/request を「従来どおりミントまで実行」に戻す
-// - Inspection へ mintId を記録 + mints 作成
-// - そのまま MintFromMintRequest を起動（オンチェーン + 更新）
 // ============================================================
 
 func (u *MintUsecase) UpdateRequestInfo(
@@ -1238,8 +1239,6 @@ func (u *MintUsecase) GetMintRequestDetail(
 // Local helpers
 // ============================================================
 
-// normalizeMintProducts は、Mint.Products の型が []string / map[string]string のどちらでも
-// 取り出せるようにしておくためのヘルパです（将来の型変更に強くする）。
 func normalizeMintProducts(raw any) []string {
 	if raw == nil {
 		return []string{}
@@ -1304,7 +1303,6 @@ func normalizeIDs(raw []string) []string {
 	return out
 }
 
-// setIfExistsString は struct の string field が存在する場合だけ値をセットする（互換用）
 func setIfExistsString(target any, fieldName string, value string) {
 	rv := reflect.ValueOf(target)
 	if !rv.IsValid() {
@@ -1326,7 +1324,6 @@ func setIfExistsString(target any, fieldName string, value string) {
 	f.SetString(strings.TrimSpace(value))
 }
 
-// getIfExistsString は struct に fieldName の string フィールドがあれば取得する（互換用）
 func getIfExistsString(target any, fieldName string) string {
 	rv := reflect.ValueOf(target)
 	if !rv.IsValid() {
@@ -1354,7 +1351,6 @@ func getIfExistsString(target any, fieldName string) string {
 	return ""
 }
 
-// buildMintResultFromMint は minted 済みの Mint から、保存済みの署名/アドレスがあれば返す（無ければ空）
 func buildMintResultFromMint(m mintdom.Mint) *tokendom.MintResult {
 	sig := ""
 	for _, name := range []string{

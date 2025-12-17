@@ -587,16 +587,12 @@ func NewContainer(ctx context.Context) (*Container, error) {
 	}
 
 	// ★ NEW: InventoryQuery（GET /inventory/...）
-	// ✅ NewInventoryQuery のシグネチャに合わせて 5 引数を注入する。
-	// - pbRepo: companyId -> productBlueprintIds の取得に使用
-	// - pbPatchReader: ProductBlueprintCard 用 patch
-	// - prReader: まだ不要なら nil（詳細で size/color を使いたいタイミングで実装）
+	// ✅ 現在の NewInventoryQuery シグネチャに合わせて 3 引数にする。
+	// want: (query.inventoryReader, query.productBlueprintIDsByCompanyReader, *resolver.NameResolver)
 	inventoryQuery := companyquery.NewInventoryQuery(
-		inventoryRepo, // invRepo
-		&pbIDsByCompanyAdapter{repo: productBlueprintRepo}, // pbRepo (ListIDsByCompanyID)
-		productBlueprintRepo, // pbPatchReader (GetPatchByID)
-		nil,                  // prReader (optional)
-		nameResolver,         // ✅ tokenName / modelNumber 解決
+		inventoryRepo, // invReader
+		&pbIDsByCompanyAdapter{repo: productBlueprintRepo}, // pbIDsByCompanyReader
+		nameResolver, // NameResolver
 	)
 
 	// 6. Assemble container

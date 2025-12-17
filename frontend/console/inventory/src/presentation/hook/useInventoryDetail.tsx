@@ -1,29 +1,42 @@
 // frontend/console/inventory/src/presentation/hook/useInventoryDetail.tsx
+
 import * as React from "react";
-import { fetchInventoryDetailDTO } from "../../infrastructure/http/inventoryRepositoryHTTP";
 import type { InventoryRow } from "../components/inventoryCard";
+import {
+  queryInventoryDetailByProductAndToken,
+  type InventoryDetailViewModel,
+} from "../../application/inventoryDetailService";
 
 export type UseInventoryDetailResult = {
+  vm: InventoryDetailViewModel | null;
   rows: InventoryRow[];
   loading: boolean;
   error: string | null;
 };
 
 export function useInventoryDetail(
-  inventoryId: string | undefined,
+  productBlueprintId: string | undefined,
+  tokenBlueprintId: string | undefined,
 ): UseInventoryDetailResult {
+  const [vm, setVm] = React.useState<InventoryDetailViewModel | null>(null);
   const [rows, setRows] = React.useState<InventoryRow[]>([]);
   const [loading, setLoading] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
 
   // 画面マウント確認ログ（遷移できてるか）
   React.useEffect(() => {
-    console.log("[inventory/useInventoryDetail] mounted", { inventoryId });
+    console.log("[inventory/useInventoryDetail] mounted", {
+      productBlueprintId,
+      tokenBlueprintId,
+    });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   React.useEffect(() => {
-    if (!inventoryId) return;
+    const pbId = String(productBlueprintId ?? "").trim();
+    const tbId = String(tokenBlueprintId ?? "").trim();
+
+    if (!pbId || !tbId) return;
 
     let cancelled = false;
 
@@ -32,30 +45,36 @@ export function useInventoryDetail(
         setLoading(true);
         setError(null);
 
-        console.log("[inventory/useInventoryDetail] fetch start", { inventoryId });
+        console.log("[inventory/useInventoryDetail] fetch start", { pbId, tbId });
 
-        const dto = await fetchInventoryDetailDTO(inventoryId);
+        // ✅ 方針A: pbId + tbId -> inventoryIds -> details -> merge(viewModel)
+        const merged = await queryInventoryDetailByProductAndToken(pbId, tbId);
 
         if (cancelled) return;
 
         console.log("[inventory/useInventoryDetail] fetch ok", {
-          inventoryId,
-          rowsCount: dto.rows?.length ?? 0,
-          totalStock: dto.totalStock,
-          dto,
+          inventoryKey: merged.inventoryKey,
+          inventoryIds: merged.inventoryIds?.length ?? 0,
+          rowsCount: merged.rows?.length ?? 0,
+          totalStock: merged.totalStock,
+          updatedAt: merged.updatedAt,
+          vm: merged,
         });
 
-        setRows(dto.rows as unknown as InventoryRow[]);
+        setVm(merged);
+        setRows(Array.isArray(merged.rows) ? merged.rows : []);
       } catch (e: any) {
         if (cancelled) return;
 
         console.error("[inventory/useInventoryDetail] fetch error", {
-          inventoryId,
+          productBlueprintId,
+          tokenBlueprintId,
           error: String(e?.message ?? e),
           raw: e,
         });
 
         setError(String(e?.message ?? e));
+        setVm(null);
         setRows([]);
       } finally {
         if (cancelled) return;
@@ -66,7 +85,7 @@ export function useInventoryDetail(
     return () => {
       cancelled = true;
     };
-  }, [inventoryId]);
+  }, [productBlueprintId, tokenBlueprintId]);
 
-  return { rows, loading, error };
+  return { vm, rows, loading, error };
 }

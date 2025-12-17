@@ -1,9 +1,11 @@
+// backend/internal/adapters/out/firestore/inventory_repository_fs.go
 package firestore
 
 import (
 	"context"
 	"errors"
 	"log"
+	"reflect"
 	"sort"
 	"strings"
 	"time"
@@ -31,16 +33,14 @@ func (r *InventoryRepositoryFS) col() *firestore.CollectionRef {
 }
 
 // Firestore record shape
+// - stock は Firestore では map[string][]string（modelId -> []productId）で保持する
 type inventoryRecord struct {
-	ID                 string `firestore:"id"`
-	TokenBlueprintID   string `firestore:"tokenBlueprintId"`
-	ProductBlueprintID string `firestore:"productBlueprintId"` // 参照用（docId には使わない）
-	ModelID            string `firestore:"modelId"`            // ★ NEW
-
-	Products     []string  `firestore:"products"`
-	Accumulation int       `firestore:"accumulation"`
-	CreatedAt    time.Time `firestore:"createdAt"`
-	UpdatedAt    time.Time `firestore:"updatedAt"`
+	ID                 string              `firestore:"id"`
+	TokenBlueprintID   string              `firestore:"tokenBlueprintId"`
+	ProductBlueprintID string              `firestore:"productBlueprintId"`
+	Stock              map[string][]string `firestore:"stock"`
+	CreatedAt          time.Time           `firestore:"createdAt"`
+	UpdatedAt          time.Time           `firestore:"updatedAt"`
 }
 
 func toRecord(m invdom.Mint) inventoryRecord {
@@ -48,9 +48,7 @@ func toRecord(m invdom.Mint) inventoryRecord {
 		ID:                 strings.TrimSpace(m.ID),
 		TokenBlueprintID:   strings.TrimSpace(m.TokenBlueprintID),
 		ProductBlueprintID: strings.TrimSpace(m.ProductBlueprintID),
-		ModelID:            strings.TrimSpace(m.ModelID),
-		Products:           normalizeIDs(m.Products),
-		Accumulation:       m.Accumulation,
+		Stock:              normalizeStockRecord(stockRecordFromDomain(m.Stock)),
 		CreatedAt:          m.CreatedAt,
 		UpdatedAt:          m.UpdatedAt,
 	}
@@ -61,19 +59,19 @@ func fromRecord(docID string, rec inventoryRecord) invdom.Mint {
 	if id == "" {
 		id = docID
 	}
+
 	out := invdom.Mint{
 		ID:                 id,
 		TokenBlueprintID:   strings.TrimSpace(rec.TokenBlueprintID),
 		ProductBlueprintID: strings.TrimSpace(rec.ProductBlueprintID),
-		ModelID:            strings.TrimSpace(rec.ModelID),
-		Products:           normalizeIDs(rec.Products),
-		Accumulation:       rec.Accumulation,
+		Stock:              stockDomainFromRecord(normalizeStockRecord(rec.Stock)),
 		CreatedAt:          rec.CreatedAt,
 		UpdatedAt:          rec.UpdatedAt,
 	}
-	// accumulation が壊れている/空の場合の保険
-	if out.Accumulation <= 0 && len(out.Products) > 0 {
-		out.Accumulation = len(out.Products)
+
+	// CreatedAt が壊れているケースの保険
+	if out.CreatedAt.IsZero() {
+		out.CreatedAt = out.UpdatedAt
 	}
 	return out
 }
@@ -95,18 +93,20 @@ func (r *InventoryRepositoryFS) Create(ctx context.Context, m invdom.Mint) (invd
 		m.UpdatedAt = m.CreatedAt
 	}
 
-	m.ID = strings.TrimSpace(m.ID)
 	m.TokenBlueprintID = strings.TrimSpace(m.TokenBlueprintID)
 	m.ProductBlueprintID = strings.TrimSpace(m.ProductBlueprintID)
-	m.ModelID = strings.TrimSpace(m.ModelID)
 
-	m.Products = normalizeIDs(m.Products)
-	if m.Accumulation <= 0 {
-		m.Accumulation = len(m.Products)
+	if m.TokenBlueprintID == "" {
+		return invdom.Mint{}, invdom.ErrInvalidTokenBlueprintID
+	}
+	if m.ProductBlueprintID == "" {
+		return invdom.Mint{}, invdom.ErrInvalidProductBlueprintID
 	}
 
+	// id が空なら docId = productBlueprintId__tokenBlueprintId を採用
+	m.ID = strings.TrimSpace(m.ID)
 	if m.ID == "" {
-		return invdom.Mint{}, invdom.ErrInvalidMintID
+		m.ID = buildInventoryDocIDByProduct(m.TokenBlueprintID, m.ProductBlueprintID)
 	}
 
 	doc := r.col().Doc(m.ID)
@@ -148,11 +148,16 @@ func (r *InventoryRepositoryFS) Update(ctx context.Context, m invdom.Mint) (invd
 		return invdom.Mint{}, invdom.ErrInvalidMintID
 	}
 
-	m.UpdatedAt = time.Now().UTC()
-	m.Products = normalizeIDs(m.Products)
-	if m.Accumulation <= 0 {
-		m.Accumulation = len(m.Products)
+	m.TokenBlueprintID = strings.TrimSpace(m.TokenBlueprintID)
+	m.ProductBlueprintID = strings.TrimSpace(m.ProductBlueprintID)
+	if m.TokenBlueprintID == "" {
+		return invdom.Mint{}, invdom.ErrInvalidTokenBlueprintID
 	}
+	if m.ProductBlueprintID == "" {
+		return invdom.Mint{}, invdom.ErrInvalidProductBlueprintID
+	}
+
+	m.UpdatedAt = time.Now().UTC()
 
 	if m.CreatedAt.IsZero() {
 		existing, err := r.GetByID(ctx, id)
@@ -165,16 +170,23 @@ func (r *InventoryRepositoryFS) Update(ctx context.Context, m invdom.Mint) (invd
 		}
 	}
 
+	// ✅ Firestore Go SDK: MergeAll は map データでのみ使用可能。
+	// ここでは record 全体を Set で上書きする（在庫は常に完全形で保持する前提）。
 	rec := toRecord(m)
 	rec.ID = id
 
-	_, err := r.col().Doc(id).Set(ctx, rec, firestore.MergeAll)
-	if err != nil {
+	// NotFound を返したい場合は存在確認（Set は存在しなくても作れてしまうため）
+	if _, err := r.col().Doc(id).Get(ctx); err != nil {
 		if status.Code(err) == codes.NotFound {
 			return invdom.Mint{}, invdom.ErrNotFound
 		}
 		return invdom.Mint{}, err
 	}
+
+	if _, err := r.col().Doc(id).Set(ctx, rec); err != nil {
+		return invdom.Mint{}, err
+	}
+
 	return m, nil
 }
 
@@ -222,16 +234,28 @@ func (r *InventoryRepositoryFS) ListByProductBlueprintID(ctx context.Context, pr
 	return readAllInventoryDocs(iter)
 }
 
+// ListByModelID は Firestore のクエリで stock のキー存在判定ができないため、全件走査でフィルタ
 func (r *InventoryRepositoryFS) ListByModelID(ctx context.Context, modelID string) ([]invdom.Mint, error) {
 	modelID = strings.TrimSpace(modelID)
 	if modelID == "" {
 		return nil, invdom.ErrInvalidModelID
 	}
 
-	iter := r.col().Where("modelId", "==", modelID).Documents(ctx)
+	iter := r.col().Documents(ctx)
 	defer iter.Stop()
 
-	return readAllInventoryDocs(iter)
+	all, err := readAllInventoryDocs(iter)
+	if err != nil {
+		return nil, err
+	}
+
+	out := make([]invdom.Mint, 0, len(all))
+	for _, m := range all {
+		if hasModelStock(m.Stock, modelID) {
+			out = append(out, m)
+		}
+	}
+	return out, nil
 }
 
 func (r *InventoryRepositoryFS) ListByTokenAndModelID(ctx context.Context, tokenBlueprintID, modelID string) ([]invdom.Mint, error) {
@@ -245,64 +269,38 @@ func (r *InventoryRepositoryFS) ListByTokenAndModelID(ctx context.Context, token
 		return nil, invdom.ErrInvalidModelID
 	}
 
-	iter := r.col().
-		Where("tokenBlueprintId", "==", tokenBlueprintID).
-		Where("modelId", "==", modelID).
-		Documents(ctx)
+	iter := r.col().Where("tokenBlueprintId", "==", tokenBlueprintID).Documents(ctx)
 	defer iter.Stop()
 
-	return readAllInventoryDocs(iter)
-}
-
-// ============================================================
-// Accumulation operations (atomic)
-// ============================================================
-
-func (r *InventoryRepositoryFS) IncrementAccumulation(ctx context.Context, id string, delta int) (invdom.Mint, error) {
-	id = strings.TrimSpace(id)
-	if id == "" {
-		return invdom.Mint{}, invdom.ErrInvalidMintID
-	}
-	if delta == 0 {
-		return r.GetByID(ctx, id)
-	}
-
-	doc := r.col().Doc(id)
-	now := time.Now().UTC()
-
-	err := r.Client.RunTransaction(ctx, func(ctx context.Context, tx *firestore.Transaction) error {
-		snap, err := tx.Get(doc)
-		if err != nil {
-			if status.Code(err) == codes.NotFound {
-				return invdom.ErrNotFound
-			}
-			return err
-		}
-
-		var rec inventoryRecord
-		if err := snap.DataTo(&rec); err != nil {
-			return err
-		}
-
-		newAccum := rec.Accumulation + delta
-		if newAccum < 0 {
-			return invdom.ErrInvalidAccumulation
-		}
-
-		return tx.Update(doc, []firestore.Update{
-			{Path: "accumulation", Value: firestore.Increment(int64(delta))},
-			{Path: "updatedAt", Value: now},
-		})
-	})
+	all, err := readAllInventoryDocs(iter)
 	if err != nil {
-		return invdom.Mint{}, err
+		return nil, err
 	}
 
-	return r.GetByID(ctx, id)
+	out := make([]invdom.Mint, 0, len(all))
+	for _, m := range all {
+		if hasModelStock(m.Stock, modelID) {
+			out = append(out, m)
+		}
+	}
+	return out, nil
 }
 
 // ============================================================
-// ★ NEW: Upsert (docId = modelId__tokenBlueprintId)
+// Accumulation operations (deprecated)
+// ============================================================
+
+// Accumulation は廃止方針のため、互換のためだけに残す（呼ばれたらエラー）
+func (r *InventoryRepositoryFS) IncrementAccumulation(ctx context.Context, id string, delta int) (invdom.Mint, error) {
+	_ = ctx
+	_ = id
+	_ = delta
+	return invdom.Mint{}, errors.New("IncrementAccumulation is deprecated (use Stock accumulation per modelId/productId)")
+}
+
+// ============================================================
+// Upsert (docId = productBlueprintId__tokenBlueprintId)
+// - Stock[modelId] に productId を追記（UNION）
 // ============================================================
 
 func (r *InventoryRepositoryFS) UpsertByModelAndToken(
@@ -337,7 +335,7 @@ func (r *InventoryRepositoryFS) UpsertByModelAndToken(
 		return invdom.Mint{}, invdom.ErrInvalidProducts
 	}
 
-	docID := buildInventoryDocIDByModel(tbID, mID) // modelId__tokenBlueprintId
+	docID := buildInventoryDocIDByProduct(tbID, pbID) // productBlueprintId__tokenBlueprintId
 	doc := r.col().Doc(docID)
 	now := time.Now().UTC()
 
@@ -350,24 +348,17 @@ func (r *InventoryRepositoryFS) UpsertByModelAndToken(
 		snap, err := tx.Get(doc)
 		if err != nil {
 			if status.Code(err) == codes.NotFound {
-				ent, err := invdom.NewMint(
-					docID,
-					tbID,
-					pbID,
-					mID,
-					ids,
-					len(ids),
-					now,
-				)
-				if err != nil {
-					return err
+				// new record
+				rec := inventoryRecord{
+					ID:                 docID,
+					TokenBlueprintID:   tbID,
+					ProductBlueprintID: pbID,
+					Stock:              map[string][]string{},
+					CreatedAt:          now,
+					UpdatedAt:          now,
 				}
-				ent.ID = docID
-				ent.CreatedAt = now
-				ent.UpdatedAt = now
-
-				rec := toRecord(ent)
-				rec.ID = docID
+				rec.Stock[mID] = ids
+				rec.Stock = normalizeStockRecord(rec.Stock)
 				return tx.Set(doc, rec)
 			}
 			return err
@@ -378,40 +369,23 @@ func (r *InventoryRepositoryFS) UpsertByModelAndToken(
 			return err
 		}
 
-		existing := normalizeIDs(rec.Products)
-		seen := map[string]struct{}{}
-		for _, p := range existing {
-			seen[p] = struct{}{}
+		stock := rec.Stock
+		if stock == nil {
+			stock = map[string][]string{}
 		}
 
-		added := 0
-		for _, pid := range ids {
-			if pid == "" {
-				continue
-			}
-			if _, ok := seen[pid]; ok {
-				continue
-			}
-			seen[pid] = struct{}{}
-			existing = append(existing, pid)
-			added++
-		}
-		sort.Strings(existing)
+		// merge (UNION)
+		existing := stock[mID]
+		merged := normalizeIDs(append(existing, ids...))
+		stock[mID] = merged
+		stock = normalizeStockRecord(stock)
 
 		updates := []firestore.Update{
-			{Path: "products", Value: existing},
+			{Path: "stock", Value: stock},
 			{Path: "updatedAt", Value: now},
-			// 参照用に保持（docId には使わないが値は更新しておく）
 			{Path: "tokenBlueprintId", Value: tbID},
 			{Path: "productBlueprintId", Value: pbID},
-			{Path: "modelId", Value: mID},
-		}
-
-		if added > 0 {
-			updates = append(updates, firestore.Update{
-				Path:  "accumulation",
-				Value: firestore.Increment(int64(added)),
-			})
+			{Path: "id", Value: docID},
 		}
 
 		return tx.Update(doc, updates)
@@ -428,11 +402,27 @@ func (r *InventoryRepositoryFS) UpsertByModelAndToken(
 	}
 
 	log.Printf(
-		"[inventory_repo_fs] UpsertByModelAndToken done docId=%q accumulation=%d products=%d elapsed=%s",
-		docID, out.Accumulation, len(out.Products), time.Since(start),
+		"[inventory_repo_fs] UpsertByModelAndToken done docId=%q models=%d elapsed=%s",
+		docID, len(out.Stock), time.Since(start),
 	)
 
 	return out, nil
+}
+
+// ============================================================
+// Compatibility method required by inventory.RepositoryPort
+// ============================================================
+
+// UpsertByProductBlueprintAndToken is kept for interface compatibility.
+// It delegates to UpsertByModelAndToken with the canonical docId rule.
+func (r *InventoryRepositoryFS) UpsertByProductBlueprintAndToken(
+	ctx context.Context,
+	productBlueprintID string,
+	tokenBlueprintID string,
+	modelID string,
+	productIDs []string,
+) (invdom.Mint, error) {
+	return r.UpsertByModelAndToken(ctx, tokenBlueprintID, productBlueprintID, modelID, productIDs)
 }
 
 // ============================================================
@@ -479,12 +469,266 @@ func normalizeIDs(raw []string) []string {
 	return out
 }
 
-// ★ docId = modelId__tokenBlueprintId
-func buildInventoryDocIDByModel(tokenBlueprintID, modelID string) string {
+// stock record normalizer (trim + remove empty + dedupe + sort)
+func normalizeStockRecord(raw map[string][]string) map[string][]string {
+	if raw == nil {
+		return nil
+	}
+	out := map[string][]string{}
+	for modelID, ids := range raw {
+		modelID = strings.TrimSpace(modelID)
+		if modelID == "" {
+			continue
+		}
+		nids := normalizeIDs(ids)
+		if len(nids) == 0 {
+			continue
+		}
+		out[modelID] = nids
+	}
+	if len(out) == 0 {
+		return nil
+	}
+	return out
+}
+
+// docId = productBlueprintId__tokenBlueprintId（期待値どおりの順序）
+// NOTE: 引数順は (tokenBlueprintID, productBlueprintID) だが、出力は product__token
+func buildInventoryDocIDByProduct(tokenBlueprintID, productBlueprintID string) string {
 	sanitize := func(s string) string {
 		s = strings.TrimSpace(s)
 		s = strings.ReplaceAll(s, "/", "_")
 		return s
 	}
-	return sanitize(modelID) + "__" + sanitize(tokenBlueprintID)
+	return sanitize(productBlueprintID) + "__" + sanitize(tokenBlueprintID)
+}
+
+// ------------------------------------------------------------
+// domain <-> record stock conversion
+// ------------------------------------------------------------
+
+// domain: map[string]invdom.ModelStock -> record: map[string][]string
+func stockRecordFromDomain(raw map[string]invdom.ModelStock) map[string][]string {
+	if raw == nil {
+		return nil
+	}
+	out := map[string][]string{}
+	for modelID, ms := range raw {
+		modelID = strings.TrimSpace(modelID)
+		if modelID == "" {
+			continue
+		}
+		ids := modelStockToIDs(ms)
+		if len(ids) == 0 {
+			continue
+		}
+		out[modelID] = ids
+	}
+	if len(out) == 0 {
+		return nil
+	}
+	return out
+}
+
+// record: map[string][]string -> domain: map[string]invdom.ModelStock
+func stockDomainFromRecord(raw map[string][]string) map[string]invdom.ModelStock {
+	if raw == nil {
+		return nil
+	}
+	out := map[string]invdom.ModelStock{}
+	for modelID, ids := range raw {
+		modelID = strings.TrimSpace(modelID)
+		if modelID == "" {
+			continue
+		}
+		nids := normalizeIDs(ids)
+		if len(nids) == 0 {
+			continue
+		}
+		out[modelID] = modelStockFromIDs(nids)
+	}
+	if len(out) == 0 {
+		return nil
+	}
+	return out
+}
+
+func hasModelStock(stock map[string]invdom.ModelStock, modelID string) bool {
+	if stock == nil {
+		return false
+	}
+	ms, ok := stock[modelID]
+	if !ok {
+		return false
+	}
+	return len(modelStockToIDs(ms)) > 0
+}
+
+// ------------------------------------------------------------
+// ModelStock reflection helpers
+// - ModelStock が []string の alias でも、struct{Products []string} でも、map 系でも吸収
+// ------------------------------------------------------------
+
+// ModelStock -> []string（コピーして返す）
+func modelStockToIDs(ms invdom.ModelStock) []string {
+	rv := reflect.ValueOf(ms)
+	if !rv.IsValid() {
+		return nil
+	}
+	if rv.Kind() == reflect.Ptr {
+		if rv.IsNil() {
+			return nil
+		}
+		rv = rv.Elem()
+	}
+
+	switch rv.Kind() {
+	case reflect.Slice, reflect.Array:
+		out := make([]string, 0, rv.Len())
+		for i := 0; i < rv.Len(); i++ {
+			it := rv.Index(i)
+			if it.Kind() == reflect.String {
+				s := strings.TrimSpace(it.String())
+				if s != "" {
+					out = append(out, s)
+				}
+			}
+		}
+		return normalizeIDs(out)
+
+	case reflect.Map:
+		// map[string]T のキーを productId として扱う
+		if rv.Type().Key().Kind() != reflect.String {
+			return nil
+		}
+		out := make([]string, 0, rv.Len())
+		iter := rv.MapRange()
+		for iter.Next() {
+			s := strings.TrimSpace(iter.Key().String())
+			if s != "" {
+				out = append(out, s)
+			}
+		}
+		return normalizeIDs(out)
+
+	case reflect.Struct:
+		// struct{ Products ... } を探す
+		pf := rv.FieldByName("Products")
+		if pf.IsValid() {
+			switch pf.Kind() {
+			case reflect.Slice, reflect.Array:
+				out := make([]string, 0, pf.Len())
+				for i := 0; i < pf.Len(); i++ {
+					it := pf.Index(i)
+					if it.Kind() == reflect.String {
+						s := strings.TrimSpace(it.String())
+						if s != "" {
+							out = append(out, s)
+						}
+					}
+				}
+				return normalizeIDs(out)
+
+			case reflect.Map:
+				if pf.Type().Key().Kind() != reflect.String {
+					return nil
+				}
+				out := make([]string, 0, pf.Len())
+				iter := pf.MapRange()
+				for iter.Next() {
+					s := strings.TrimSpace(iter.Key().String())
+					if s != "" {
+						out = append(out, s)
+					}
+				}
+				return normalizeIDs(out)
+			}
+		}
+	}
+
+	return nil
+}
+
+// []string -> ModelStock（struct でも slice alias でも詰められるだけ詰める）
+func modelStockFromIDs(ids []string) invdom.ModelStock {
+	var ms invdom.ModelStock
+	ids = normalizeIDs(ids)
+	if len(ids) == 0 {
+		return ms
+	}
+
+	rv := reflect.ValueOf(&ms).Elem()
+	if !rv.IsValid() {
+		return ms
+	}
+
+	// 1) ModelStock 自体が slice/array の alias
+	if rv.Kind() == reflect.Slice {
+		if rv.Type().Elem().Kind() == reflect.String {
+			s := reflect.MakeSlice(rv.Type(), 0, len(ids))
+			for _, id := range ids {
+				s = reflect.Append(s, reflect.ValueOf(id))
+			}
+			rv.Set(s)
+			return ms
+		}
+	}
+
+	// 2) ModelStock 自体が map の alias（キーに productId を入れる）
+	if rv.Kind() == reflect.Map {
+		if rv.Type().Key().Kind() == reflect.String {
+			rv.Set(reflect.MakeMapWithSize(rv.Type(), len(ids)))
+			for _, id := range ids {
+				var v reflect.Value
+				switch rv.Type().Elem().Kind() {
+				case reflect.Bool:
+					v = reflect.ValueOf(true).Convert(rv.Type().Elem())
+				case reflect.Struct:
+					v = reflect.New(rv.Type().Elem()).Elem()
+				default:
+					v = reflect.Zero(rv.Type().Elem())
+				}
+				rv.SetMapIndex(reflect.ValueOf(id), v)
+			}
+			return ms
+		}
+	}
+
+	// 3) struct の Products フィールドへ
+	if rv.Kind() == reflect.Struct {
+		pf := rv.FieldByName("Products")
+		if pf.IsValid() && pf.CanSet() {
+			switch pf.Kind() {
+			case reflect.Slice:
+				if pf.Type().Elem().Kind() == reflect.String {
+					s := reflect.MakeSlice(pf.Type(), 0, len(ids))
+					for _, id := range ids {
+						s = reflect.Append(s, reflect.ValueOf(id))
+					}
+					pf.Set(s)
+					return ms
+				}
+			case reflect.Map:
+				if pf.Type().Key().Kind() == reflect.String {
+					mm := reflect.MakeMapWithSize(pf.Type(), len(ids))
+					for _, id := range ids {
+						var v reflect.Value
+						switch pf.Type().Elem().Kind() {
+						case reflect.Bool:
+							v = reflect.ValueOf(true).Convert(pf.Type().Elem())
+						case reflect.Struct:
+							v = reflect.New(pf.Type().Elem()).Elem()
+						default:
+							v = reflect.Zero(pf.Type().Elem())
+						}
+						mm.SetMapIndex(reflect.ValueOf(id), v)
+					}
+					pf.Set(mm)
+					return ms
+				}
+			}
+		}
+	}
+
+	return ms
 }

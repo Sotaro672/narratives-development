@@ -1,3 +1,4 @@
+// backend/internal/adapters/in/http/handlers/inventory_handler.go
 package handlers
 
 import (
@@ -5,9 +6,11 @@ import (
 	"errors"
 	"log"
 	"net/http"
+	"reflect"
 	"strings"
 
 	invquery "narratives/internal/application/query"
+	querydto "narratives/internal/application/query/dto"
 	usecase "narratives/internal/application/usecase"
 	invdom "narratives/internal/domain/inventory"
 )
@@ -15,17 +18,13 @@ import (
 type InventoryHandler struct {
 	UC *usecase.InventoryUsecase
 
-	// Read-model(Query) for detail DTO (view-only)
+	// Read-model(Query) for management list (view-only)
+	// ✅ only: currentMember.companyId -> productBlueprintIds -> inventories(docId)
 	Q *invquery.InventoryQuery
 }
 
 func NewInventoryHandler(uc *usecase.InventoryUsecase, q *invquery.InventoryQuery) *InventoryHandler {
 	return &InventoryHandler{UC: uc, Q: q}
-}
-
-// 互換: 既存 DI が NewInventoryHandler(uc) を呼ぶ場合
-func NewInventoryHandlerUCOnly(uc *usecase.InventoryUsecase) *InventoryHandler {
-	return &InventoryHandler{UC: uc, Q: nil}
 }
 
 func (h *InventoryHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
@@ -38,34 +37,15 @@ func (h *InventoryHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	// ============================================================
 	// Query endpoints (read-only DTO)
-	//
-	// ✅ NEW (期待値):
-	//   GET /inventory?productBlueprintId={pbId}
-	//
-	// 既存:
-	//   GET /inventory/{inventoryId}  (docId 指定)
+	// - ✅ only: current company inventory management list
 	// ============================================================
 
-	// ✅ GET /inventory?productBlueprintId=...
+	// ✅ GET /inventory  (currentMember.companyId -> productBlueprintIds -> inventories)
 	if path == "/inventory" {
 		switch r.Method {
 		case http.MethodGet:
-			log.Printf("[inventory_handler] route=Query.GetDetailByProductBlueprintIDQuery")
-			h.GetDetailByProductBlueprintIDQuery(w, r)
-			return
-		default:
-			log.Printf("[inventory_handler] METHOD_NOT_ALLOWED %s %s", r.Method, path)
-			w.WriteHeader(http.StatusMethodNotAllowed)
-			return
-		}
-	}
-
-	// GET /inventory/{inventoryId}
-	if strings.HasPrefix(path, "/inventory/") {
-		switch r.Method {
-		case http.MethodGet:
-			log.Printf("[inventory_handler] route=Query.GetDetail (by inventoryId/docId)")
-			h.GetDetail(w, r)
+			log.Printf("[inventory_handler] route=Query.ListByCurrentCompany")
+			h.ListByCurrentCompanyQuery(w, r)
 			return
 		default:
 			log.Printf("[inventory_handler] METHOD_NOT_ALLOWED %s %s", r.Method, path)
@@ -76,14 +56,12 @@ func (h *InventoryHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	// ============================================================
 	// CRUD endpoints (domain/usecase)
-	// - /inventories
-	// - /inventories/{id}
 	// ============================================================
 
 	if path == "/inventories" {
 		switch r.Method {
 		case http.MethodPost:
-			log.Printf("[inventory_handler] route=CRUD.Create")
+			log.Printf("[inventory_handler] route=CRUD.Upsert (POST /inventories)")
 			h.Create(w, r)
 			return
 		case http.MethodGet:
@@ -104,7 +82,7 @@ func (h *InventoryHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			h.GetByID(w, r)
 			return
 		case http.MethodPatch:
-			log.Printf("[inventory_handler] route=CRUD.Update")
+			log.Printf("[inventory_handler] route=CRUD.UpsertModelStock (PATCH /inventories/{id})")
 			h.Update(w, r)
 			return
 		case http.MethodDelete:
@@ -131,110 +109,43 @@ type createInventoryMintRequest struct {
 	ProductBlueprintID string   `json:"productBlueprintId"`
 	ModelID            string   `json:"modelId"`
 	ProductIDs         []string `json:"productIds"`
-	Accumulation       int      `json:"accumulation"`
 }
 
 type updateInventoryMintRequest struct {
-	Products     []string `json:"products"`
-	Accumulation *int     `json:"accumulation,omitempty"`
+	ModelID    string   `json:"modelId"`
+	ProductIDs []string `json:"productIds"`
 }
 
 // ============================================================
-// Query Handlers (Read-only DTO)
+// Query Handler (Read-only DTO)
 // ============================================================
 
-// GET /inventory/{inventoryId}
-func (h *InventoryHandler) GetDetail(w http.ResponseWriter, r *http.Request) {
+func (h *InventoryHandler) ListByCurrentCompanyQuery(w http.ResponseWriter, r *http.Request) {
 	if h.Q == nil {
-		log.Printf("[inventory_handler][GetDetail] QueryNotConfigured")
+		log.Printf("[inventory_handler][ListByCurrentCompany] QueryNotConfigured")
 		writeError(w, http.StatusNotImplemented, "inventory query is not configured")
 		return
 	}
 
 	ctx := r.Context()
+	log.Printf("[inventory_handler][ListByCurrentCompany] start rawQuery=%q", r.URL.RawQuery)
 
-	id := strings.TrimSpace(pathParamLast(r.URL.Path))
-	log.Printf("[inventory_handler][GetDetail] start inventoryId=%q", id)
-
-	if id == "" {
-		log.Printf("[inventory_handler][GetDetail] BAD_REQUEST missing inventoryId")
-		writeError(w, http.StatusBadRequest, "missing inventoryId")
-		return
-	}
-
-	dto, err := h.Q.GetDetail(ctx, id)
+	rows, err := h.Q.ListByCurrentCompany(ctx)
 	if err != nil {
-		log.Printf("[inventory_handler][GetDetail] failed inventoryId=%q err=%v", id, err)
-		writeQueryError(w, err)
+		log.Printf("[inventory_handler][ListByCurrentCompany] failed err=%v", err)
+		writeError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
 
-	log.Printf("[inventory_handler][GetDetail] ok inventoryId=%q pbId=%q rows=%d totalStock=%d",
-		dto.InventoryID, dto.ProductBlueprintID, len(dto.Rows), dto.TotalStock,
-	)
-	writeJSON(w, http.StatusOK, dto)
-}
-
-// ✅ NEW: GET /inventory?productBlueprintId={pbId}
-func (h *InventoryHandler) GetDetailByProductBlueprintIDQuery(w http.ResponseWriter, r *http.Request) {
-	if h.Q == nil {
-		log.Printf("[inventory_handler][GetDetailByPBID] QueryNotConfigured")
-		writeError(w, http.StatusNotImplemented, "inventory query is not configured")
-		return
+	sample := ""
+	if len(rows) > 0 {
+		sample = rows[0].ProductBlueprintID
 	}
+	log.Printf("[inventory_handler][ListByCurrentCompany] ok count=%d samplePbId=%q", len(rows), sample)
 
-	ctx := r.Context()
-
-	pbID := strings.TrimSpace(r.URL.Query().Get("productBlueprintId"))
-	log.Printf("[inventory_handler][GetDetailByPBID] start productBlueprintId=%q rawQuery=%q", pbID, r.URL.RawQuery)
-
-	if pbID == "" {
-		log.Printf("[inventory_handler][GetDetailByPBID] BAD_REQUEST productBlueprintId is required")
-		writeError(w, http.StatusBadRequest, "productBlueprintId is required")
-		return
-	}
-
-	dto, err := h.Q.GetDetailByProductBlueprintID(ctx, pbID)
-	if err != nil {
-		log.Printf("[inventory_handler][GetDetailByPBID] failed productBlueprintId=%q err=%v", pbID, err)
-		writeQueryError(w, err)
-		return
-	}
-
-	log.Printf("[inventory_handler][GetDetailByPBID] ok resolved inventoryId=%q pbId=%q rows=%d totalStock=%d",
-		dto.InventoryID, dto.ProductBlueprintID, len(dto.Rows), dto.TotalStock,
-	)
-	writeJSON(w, http.StatusOK, dto)
-}
-
-// query error mapping
-func writeQueryError(w http.ResponseWriter, err error) {
-	msg := err.Error()
-	lower := strings.ToLower(msg)
-
-	switch {
-	case errors.Is(err, invdom.ErrNotFound):
-		log.Printf("[inventory_handler][QueryError] 404 ErrNotFound err=%v", err)
-		writeError(w, http.StatusNotFound, msg)
-
-	case errors.Is(err, invdom.ErrInvalidMintID),
-		errors.Is(err, invdom.ErrInvalidTokenBlueprintID),
-		errors.Is(err, invdom.ErrInvalidProductBlueprintID),
-		errors.Is(err, invdom.ErrInvalidModelID),
-		errors.Is(err, invdom.ErrInvalidProducts),
-		errors.Is(err, invdom.ErrInvalidAccumulation):
-		log.Printf("[inventory_handler][QueryError] 400 DomainValidation err=%v", err)
-		writeError(w, http.StatusBadRequest, msg)
-
-	// errors.New("... not found ...") の救済
-	case strings.Contains(lower, "not found"):
-		log.Printf("[inventory_handler][QueryError] 404 ContainsNotFound err=%v", err)
-		writeError(w, http.StatusNotFound, msg)
-
-	default:
-		log.Printf("[inventory_handler][QueryError] 500 err=%v", err)
-		writeError(w, http.StatusInternalServerError, msg)
-	}
+	// 互換のため DTO 型は維持
+	_ = querydto.InventoryManagementRowDTO{}
+	writeJSON(w, http.StatusOK, rows)
 }
 
 // ============================================================
@@ -242,6 +153,12 @@ func writeQueryError(w http.ResponseWriter, err error) {
 // ============================================================
 
 func (h *InventoryHandler) Create(w http.ResponseWriter, r *http.Request) {
+	if h.UC == nil {
+		log.Printf("[inventory_handler][Create] UsecaseNotConfigured")
+		writeError(w, http.StatusNotImplemented, "inventory usecase is not configured")
+		return
+	}
+
 	ctx := r.Context()
 
 	var req createInventoryMintRequest
@@ -251,21 +168,19 @@ func (h *InventoryHandler) Create(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	log.Printf("[inventory_handler][Create] start tbId=%q pbId=%q modelId=%q products=%d accumulation=%d",
+	log.Printf("[inventory_handler][Create] start tbId=%q pbId=%q modelId=%q productIds=%d",
 		strings.TrimSpace(req.TokenBlueprintID),
 		strings.TrimSpace(req.ProductBlueprintID),
 		strings.TrimSpace(req.ModelID),
 		len(req.ProductIDs),
-		req.Accumulation,
 	)
 
-	m, err := h.UC.CreateMint(
+	m, err := h.UC.UpsertFromMintByModel(
 		ctx,
 		req.TokenBlueprintID,
 		req.ProductBlueprintID,
 		req.ModelID,
 		req.ProductIDs,
-		req.Accumulation,
 	)
 	if err != nil {
 		log.Printf("[inventory_handler][Create] failed err=%v", err)
@@ -273,14 +188,24 @@ func (h *InventoryHandler) Create(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	log.Printf("[inventory_handler][Create] ok id=%q pbId=%q modelId=%q products=%d accumulation=%d",
-		m.ID, m.ProductBlueprintID, m.ModelID, len(m.Products), m.Accumulation,
+	log.Printf("[inventory_handler][Create] ok id=%q pbId=%q tbId=%q models=%d totalProducts=%d",
+		strings.TrimSpace(m.ID),
+		strings.TrimSpace(m.ProductBlueprintID),
+		strings.TrimSpace(m.TokenBlueprintID),
+		len(m.Stock),
+		totalProducts(m),
 	)
 
 	writeJSON(w, http.StatusCreated, m)
 }
 
 func (h *InventoryHandler) List(w http.ResponseWriter, r *http.Request) {
+	if h.UC == nil {
+		log.Printf("[inventory_handler][List] UsecaseNotConfigured")
+		writeError(w, http.StatusNotImplemented, "inventory usecase is not configured")
+		return
+	}
+
 	ctx := r.Context()
 
 	q := r.URL.Query()
@@ -306,6 +231,19 @@ func (h *InventoryHandler) List(w http.ResponseWriter, r *http.Request) {
 	switch {
 	case tbID != "" && modelID != "":
 		list, err = h.UC.ListByTokenAndModelID(ctx, tbID, modelID)
+	case tbID != "" && pbID != "":
+		all, e := h.UC.ListByProductBlueprintID(ctx, pbID)
+		if e != nil {
+			err = e
+			break
+		}
+		tmp := make([]invdom.Mint, 0, len(all))
+		for _, m := range all {
+			if strings.TrimSpace(m.TokenBlueprintID) == tbID {
+				tmp = append(tmp, m)
+			}
+		}
+		list = tmp
 	case tbID != "":
 		list, err = h.UC.ListByTokenBlueprintID(ctx, tbID)
 	case modelID != "":
@@ -330,6 +268,12 @@ func (h *InventoryHandler) List(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *InventoryHandler) GetByID(w http.ResponseWriter, r *http.Request) {
+	if h.UC == nil {
+		log.Printf("[inventory_handler][GetByID] UsecaseNotConfigured")
+		writeError(w, http.StatusNotImplemented, "inventory usecase is not configured")
+		return
+	}
+
 	ctx := r.Context()
 
 	id := strings.TrimSpace(pathParamLast(r.URL.Path))
@@ -341,21 +285,31 @@ func (h *InventoryHandler) GetByID(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	m, err := h.UC.GetMintByID(ctx, id)
+	m, err := h.UC.GetByID(ctx, id)
 	if err != nil {
 		log.Printf("[inventory_handler][GetByID] failed id=%q err=%v", id, err)
 		writeDomainError(w, err)
 		return
 	}
 
-	log.Printf("[inventory_handler][GetByID] ok id=%q pbId=%q modelId=%q products=%d accumulation=%d",
-		m.ID, m.ProductBlueprintID, m.ModelID, len(m.Products), m.Accumulation,
+	log.Printf("[inventory_handler][GetByID] ok id=%q pbId=%q tbId=%q models=%d totalProducts=%d",
+		strings.TrimSpace(m.ID),
+		strings.TrimSpace(m.ProductBlueprintID),
+		strings.TrimSpace(m.TokenBlueprintID),
+		len(m.Stock),
+		totalProducts(m),
 	)
 
 	writeJSON(w, http.StatusOK, m)
 }
 
 func (h *InventoryHandler) Update(w http.ResponseWriter, r *http.Request) {
+	if h.UC == nil {
+		log.Printf("[inventory_handler][Update] UsecaseNotConfigured")
+		writeError(w, http.StatusNotImplemented, "inventory usecase is not configured")
+		return
+	}
+
 	ctx := r.Context()
 
 	id := strings.TrimSpace(pathParamLast(r.URL.Path))
@@ -374,45 +328,60 @@ func (h *InventoryHandler) Update(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	log.Printf("[inventory_handler][Update] payload id=%q productsProvided=%t products=%d accumulationProvided=%t",
-		id,
-		req.Products != nil,
-		len(req.Products),
-		req.Accumulation != nil,
+	req.ModelID = strings.TrimSpace(req.ModelID)
+
+	log.Printf("[inventory_handler][Update] payload id=%q modelId=%q productIds=%d",
+		id, req.ModelID, len(req.ProductIDs),
 	)
 
-	current, err := h.UC.GetMintByID(ctx, id)
+	if req.ModelID == "" {
+		log.Printf("[inventory_handler][Update] BAD_REQUEST missing modelId")
+		writeError(w, http.StatusBadRequest, "modelId is required")
+		return
+	}
+	if len(req.ProductIDs) == 0 {
+		log.Printf("[inventory_handler][Update] BAD_REQUEST missing productIds")
+		writeError(w, http.StatusBadRequest, "productIds is required")
+		return
+	}
+
+	current, err := h.UC.GetByID(ctx, id)
 	if err != nil {
 		log.Printf("[inventory_handler][Update] failed to load current id=%q err=%v", id, err)
 		writeDomainError(w, err)
 		return
 	}
 
-	if req.Products != nil {
-		current.Products = req.Products
-		if req.Accumulation == nil {
-			current.Accumulation = 0
-		}
-	}
-	if req.Accumulation != nil {
-		current.Accumulation = *req.Accumulation
-	}
-
-	updated, err := h.UC.UpdateMint(ctx, current)
+	updated, err := h.UC.UpsertFromMintByModel(
+		ctx,
+		current.TokenBlueprintID,
+		current.ProductBlueprintID,
+		req.ModelID,
+		req.ProductIDs,
+	)
 	if err != nil {
 		log.Printf("[inventory_handler][Update] failed id=%q err=%v", id, err)
 		writeDomainError(w, err)
 		return
 	}
 
-	log.Printf("[inventory_handler][Update] ok id=%q products=%d accumulation=%d",
-		updated.ID, len(updated.Products), updated.Accumulation,
+	log.Printf("[inventory_handler][Update] ok id=%q modelId=%q models=%d totalProducts=%d",
+		strings.TrimSpace(updated.ID),
+		req.ModelID,
+		len(updated.Stock),
+		totalProducts(updated),
 	)
 
 	writeJSON(w, http.StatusOK, updated)
 }
 
 func (h *InventoryHandler) Delete(w http.ResponseWriter, r *http.Request) {
+	if h.UC == nil {
+		log.Printf("[inventory_handler][Delete] UsecaseNotConfigured")
+		writeError(w, http.StatusNotImplemented, "inventory usecase is not configured")
+		return
+	}
+
 	ctx := r.Context()
 
 	id := strings.TrimSpace(pathParamLast(r.URL.Path))
@@ -424,7 +393,7 @@ func (h *InventoryHandler) Delete(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := h.UC.DeleteMint(ctx, id); err != nil {
+	if err := h.UC.Delete(ctx, id); err != nil {
 		log.Printf("[inventory_handler][Delete] failed id=%q err=%v", id, err)
 		writeDomainError(w, err)
 		return
@@ -438,6 +407,42 @@ func (h *InventoryHandler) Delete(w http.ResponseWriter, r *http.Request) {
 // Helpers
 // ============================================================
 
+// totalProducts counts total productIds across all model stocks (Stock-based).
+func totalProducts(m invdom.Mint) int {
+	if m.Stock == nil {
+		return 0
+	}
+	total := 0
+	for _, ms := range m.Stock {
+		total += modelStockLen(ms)
+	}
+	return total
+}
+
+// ModelStock -> len(map) (map alias or struct{ map[string]bool } supported)
+func modelStockLen(ms invdom.ModelStock) int {
+	rv := reflect.ValueOf(ms)
+	if !rv.IsValid() {
+		return 0
+	}
+	if rv.Kind() == reflect.Map {
+		return rv.Len()
+	}
+	if rv.Kind() == reflect.Struct {
+		for i := 0; i < rv.NumField(); i++ {
+			f := rv.Field(i)
+			if f.Kind() != reflect.Map {
+				continue
+			}
+			if f.Type().Key().Kind() != reflect.String || f.Type().Elem().Kind() != reflect.Bool {
+				continue
+			}
+			return f.Len()
+		}
+	}
+	return 0
+}
+
 func writeJSON(w http.ResponseWriter, status int, v any) {
 	w.Header().Set("Content-Type", "application/json; charset=utf-8")
 	w.WriteHeader(status)
@@ -445,12 +450,8 @@ func writeJSON(w http.ResponseWriter, status int, v any) {
 }
 
 func writeError(w http.ResponseWriter, status int, msg string) {
-	// ✅ どのエラーを返したかをログ
 	log.Printf("[inventory_handler] RESP_ERROR status=%d msg=%q", status, msg)
-
-	writeJSON(w, status, map[string]any{
-		"error": msg,
-	})
+	writeJSON(w, status, map[string]any{"error": msg})
 }
 
 func writeDomainError(w http.ResponseWriter, err error) {
@@ -463,8 +464,7 @@ func writeDomainError(w http.ResponseWriter, err error) {
 		errors.Is(err, invdom.ErrInvalidTokenBlueprintID),
 		errors.Is(err, invdom.ErrInvalidProductBlueprintID),
 		errors.Is(err, invdom.ErrInvalidModelID),
-		errors.Is(err, invdom.ErrInvalidProducts),
-		errors.Is(err, invdom.ErrInvalidAccumulation):
+		errors.Is(err, invdom.ErrInvalidProducts):
 		log.Printf("[inventory_handler][DomainError] 400 err=%v", err)
 		writeError(w, http.StatusBadRequest, err.Error())
 

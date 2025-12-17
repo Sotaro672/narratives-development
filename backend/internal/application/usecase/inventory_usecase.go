@@ -1,12 +1,13 @@
-// backend\internal\application\usecase\inventory_usecase.go
+// backend/internal/application/usecase/inventory_usecase.go
 package usecase
 
 import (
 	"context"
 	"errors"
+	"log"
+	"reflect"
 	"sort"
 	"strings"
-	"time"
 
 	invdom "narratives/internal/domain/inventory"
 )
@@ -19,9 +20,13 @@ func NewInventoryUsecase(repo invdom.RepositoryPort) *InventoryUsecase {
 	return &InventoryUsecase{repo: repo}
 }
 
-// UpsertFromMintByModel
-// docId = modelId__tokenBlueprintId
-// products / accumulation は modelId ごとに更新される
+// ============================================================
+// Upsert entry (NEW / no legacy)
+// ============================================================
+//
+// - mint から在庫へ反映する唯一の入口
+// - docId は「productBlueprintId__tokenBlueprintId」に統一（旧式互換なし）
+// - 在庫の蓄積は Stock（modelId -> {Products: ...}）で表現する前提
 func (uc *InventoryUsecase) UpsertFromMintByModel(
 	ctx context.Context,
 	tokenBlueprintID string,
@@ -52,63 +57,90 @@ func (uc *InventoryUsecase) UpsertFromMintByModel(
 		return invdom.Mint{}, invdom.ErrInvalidProducts
 	}
 
-	// ✅ repo が atomic upsert を持つ前提で使う（最も安全）
-	return uc.repo.UpsertByModelAndToken(ctx, tbID, pbID, mID, ids)
-}
+	// ✅ docId をここで確定（repo 側の sanitize と揃える）
+	inventoryID := buildInventoryID(pbID, tbID)
 
-// 互換：既存コードが UpsertFromMint を呼んでいる場合に備えて残す
-// ※ 旧仕様( tokenBlueprint + productBlueprint ) ではなく、modelID が必要なのでエラーに寄せる
-func (uc *InventoryUsecase) UpsertFromMint(
-	ctx context.Context,
-	tokenBlueprintID string,
-	productBlueprintID string,
-	productIDs []string,
-) (invdom.Mint, error) {
-	return invdom.Mint{}, errors.New("UpsertFromMint is deprecated: use UpsertFromMintByModel(tokenBlueprintID, productBlueprintID, modelID, productIDs)")
-}
-
-func (uc *InventoryUsecase) CreateMint(
-	ctx context.Context,
-	tokenBlueprintID string,
-	productBlueprintID string,
-	modelID string,
-	productIDs []string,
-	accumulation int,
-) (invdom.Mint, error) {
-	now := time.Now().UTC()
-
-	m, err := invdom.NewMint(
-		"",
-		tokenBlueprintID,
-		productBlueprintID,
-		modelID,
-		productIDs,
-		accumulation,
-		now,
+	log.Printf(
+		"[inventory_uc] UpsertFromMintByModel start inventoryId=%q tokenBlueprintId=%q productBlueprintId=%q modelId=%q products=%d",
+		inventoryID, tbID, pbID, mID, len(ids),
 	)
+
+	// 1) 既存取得
+	current, err := uc.repo.GetByID(ctx, inventoryID)
 	if err != nil {
+		// ✅ NotFound の判定を堅牢化（inventory not found を取りこぼさない）
+		if isNotFoundInventory(err) {
+			// 2) 新規作成
+			var m invdom.Mint
+			setStringFieldIfExists(&m, "ID", inventoryID)
+			setStringFieldIfExists(&m, "TokenBlueprintID", tbID)
+			setStringFieldIfExists(&m, "ProductBlueprintID", pbID)
+
+			// Stock[modelId] を構築してセット（※「蓄積」なので追加マージ）
+			if err := upsertStockByModel(&m, mID, ids); err != nil {
+				return invdom.Mint{}, err
+			}
+
+			created, cerr := uc.repo.Create(ctx, m)
+			if cerr != nil {
+				log.Printf("[inventory_uc] UpsertFromMintByModel create error inventoryId=%q err=%v", inventoryID, cerr)
+				return invdom.Mint{}, cerr
+			}
+
+			log.Printf("[inventory_uc] UpsertFromMintByModel create ok inventoryId=%q", inventoryID)
+			return created, nil
+		}
+
+		log.Printf("[inventory_uc] UpsertFromMintByModel GetByID error inventoryId=%q err=%v", inventoryID, err)
 		return invdom.Mint{}, err
 	}
 
+	// 3) 既存更新
+	// 念のためID/TB/PBを揃える
+	setStringFieldIfExists(&current, "ID", inventoryID)
+	setStringFieldIfExists(&current, "TokenBlueprintID", tbID)
+	setStringFieldIfExists(&current, "ProductBlueprintID", pbID)
+
+	if err := upsertStockByModel(&current, mID, ids); err != nil {
+		return invdom.Mint{}, err
+	}
+
+	updated, uerr := uc.repo.Update(ctx, current)
+	if uerr != nil {
+		log.Printf("[inventory_uc] UpsertFromMintByModel update error inventoryId=%q err=%v", inventoryID, uerr)
+		return invdom.Mint{}, uerr
+	}
+
+	log.Printf("[inventory_uc] UpsertFromMintByModel update ok inventoryId=%q", inventoryID)
+	return updated, nil
+}
+
+// ============================================================
+// CRUD (raw persistence access; no legacy fields assumed here)
+// ============================================================
+
+func (uc *InventoryUsecase) Create(ctx context.Context, m invdom.Mint) (invdom.Mint, error) {
+	if uc == nil || uc.repo == nil {
+		return invdom.Mint{}, errors.New("inventory usecase/repo is nil")
+	}
 	return uc.repo.Create(ctx, m)
 }
 
-func (uc *InventoryUsecase) UpdateMint(
-	ctx context.Context,
-	m invdom.Mint,
-) (invdom.Mint, error) {
-	if strings.TrimSpace(m.ID) == "" {
-		return invdom.Mint{}, invdom.ErrInvalidMintID
+func (uc *InventoryUsecase) Update(ctx context.Context, m invdom.Mint) (invdom.Mint, error) {
+	if uc == nil || uc.repo == nil {
+		return invdom.Mint{}, errors.New("inventory usecase/repo is nil")
 	}
-	m.UpdatedAt = time.Now().UTC()
-	m.Products = normalizeIDs(m.Products)
-	if m.Accumulation <= 0 {
-		m.Accumulation = len(m.Products)
+	if strings.TrimSpace(getStringFieldIfExists(m, "ID")) == "" && strings.TrimSpace(getStringFieldIfExists(m, "Id")) == "" {
+		// 基本は ID フィールドを想定するが、念のため Id も見る
+		return invdom.Mint{}, invdom.ErrInvalidMintID
 	}
 	return uc.repo.Update(ctx, m)
 }
 
-func (uc *InventoryUsecase) DeleteMint(ctx context.Context, id string) error {
+func (uc *InventoryUsecase) Delete(ctx context.Context, id string) error {
+	if uc == nil || uc.repo == nil {
+		return errors.New("inventory usecase/repo is nil")
+	}
 	id = strings.TrimSpace(id)
 	if id == "" {
 		return invdom.ErrInvalidMintID
@@ -116,8 +148,14 @@ func (uc *InventoryUsecase) DeleteMint(ctx context.Context, id string) error {
 	return uc.repo.Delete(ctx, id)
 }
 
+// ============================================================
 // Queries
-func (uc *InventoryUsecase) GetMintByID(ctx context.Context, id string) (invdom.Mint, error) {
+// ============================================================
+
+func (uc *InventoryUsecase) GetByID(ctx context.Context, id string) (invdom.Mint, error) {
+	if uc == nil || uc.repo == nil {
+		return invdom.Mint{}, errors.New("inventory usecase/repo is nil")
+	}
 	id = strings.TrimSpace(id)
 	if id == "" {
 		return invdom.Mint{}, invdom.ErrInvalidMintID
@@ -126,22 +164,49 @@ func (uc *InventoryUsecase) GetMintByID(ctx context.Context, id string) (invdom.
 }
 
 func (uc *InventoryUsecase) ListByTokenBlueprintID(ctx context.Context, tokenBlueprintID string) ([]invdom.Mint, error) {
+	if uc == nil || uc.repo == nil {
+		return nil, errors.New("inventory usecase/repo is nil")
+	}
 	return uc.repo.ListByTokenBlueprintID(ctx, tokenBlueprintID)
 }
 
 func (uc *InventoryUsecase) ListByProductBlueprintID(ctx context.Context, productBlueprintID string) ([]invdom.Mint, error) {
+	if uc == nil || uc.repo == nil {
+		return nil, errors.New("inventory usecase/repo is nil")
+	}
 	return uc.repo.ListByProductBlueprintID(ctx, productBlueprintID)
 }
 
 func (uc *InventoryUsecase) ListByModelID(ctx context.Context, modelID string) ([]invdom.Mint, error) {
+	if uc == nil || uc.repo == nil {
+		return nil, errors.New("inventory usecase/repo is nil")
+	}
 	return uc.repo.ListByModelID(ctx, modelID)
 }
 
 func (uc *InventoryUsecase) ListByTokenAndModelID(ctx context.Context, tokenBlueprintID, modelID string) ([]invdom.Mint, error) {
+	if uc == nil || uc.repo == nil {
+		return nil, errors.New("inventory usecase/repo is nil")
+	}
 	return uc.repo.ListByTokenAndModelID(ctx, tokenBlueprintID, modelID)
 }
 
-// Helpers (local)
+// ============================================================
+// Helpers
+// ============================================================
+
+func buildInventoryID(productBlueprintID, tokenBlueprintID string) string {
+	sanitize := func(s string) string {
+		s = strings.TrimSpace(s)
+		// Firestore docId に "/" が入ると階層扱いになるので repo と揃えて潰す
+		s = strings.ReplaceAll(s, "/", "_")
+		return s
+	}
+	pb := sanitize(productBlueprintID)
+	tb := sanitize(tokenBlueprintID)
+	return pb + "__" + tb
+}
+
 func normalizeIDs(raw []string) []string {
 	seen := map[string]struct{}{}
 	out := make([]string, 0, len(raw))
@@ -158,4 +223,255 @@ func normalizeIDs(raw []string) []string {
 	}
 	sort.Strings(out)
 	return out
+}
+
+// isNotFoundInventory: repo が返す NotFound を取りこぼさないためのヘルパ
+func isNotFoundInventory(err error) bool {
+	if err == nil {
+		return false
+	}
+	if errors.Is(err, invdom.ErrNotFound) {
+		return true
+	}
+	// 念のため文字列も見る（"inventory not found" など）
+	msg := strings.ToLower(strings.TrimSpace(err.Error()))
+	if msg == "" {
+		return false
+	}
+	return strings.Contains(msg, "not found")
+}
+
+// upsertStockByModel merges Stock[modelId].Products with productIDs (accumulation).
+// - Stock が map である前提
+// - Products が []string / map[string]bool / map[string]struct{} などでも対応
+func upsertStockByModel(m *invdom.Mint, modelID string, productIDs []string) error {
+	if m == nil {
+		return errors.New("mint is nil")
+	}
+	modelID = strings.TrimSpace(modelID)
+	if modelID == "" {
+		return invdom.ErrInvalidModelID
+	}
+
+	add := normalizeIDs(productIDs)
+	if len(add) == 0 {
+		return invdom.ErrInvalidProducts
+	}
+
+	rv := reflect.ValueOf(m)
+	if rv.Kind() != reflect.Ptr || rv.IsNil() {
+		return errors.New("mint must be a non-nil pointer")
+	}
+	rv = rv.Elem()
+	if rv.Kind() != reflect.Struct {
+		return errors.New("mint must be a struct")
+	}
+
+	stock := rv.FieldByName("Stock")
+	if !stock.IsValid() || !stock.CanSet() {
+		return errors.New("inventory.Mint.Stock is missing or cannot be set")
+	}
+	if stock.Kind() != reflect.Map {
+		return errors.New("inventory.Mint.Stock must be a map")
+	}
+
+	// Stock map を初期化
+	if stock.IsNil() {
+		stock.Set(reflect.MakeMap(stock.Type()))
+	}
+
+	key := reflect.ValueOf(modelID)
+	if key.Type() != stock.Type().Key() {
+		return errors.New("inventory.Mint.Stock key type is not string")
+	}
+
+	// 既存の Stock[modelID] があれば、それをベースに「追加マージ」する
+	existing := stock.MapIndex(key)
+
+	mergedSet := map[string]struct{}{}
+	// 既存分
+	if existing.IsValid() && existing.Kind() != reflect.Invalid && !(existing.Kind() == reflect.Ptr && existing.IsNil()) {
+		for _, id := range extractProductIDsFromModelStockValue(existing) {
+			id = strings.TrimSpace(id)
+			if id == "" {
+				continue
+			}
+			mergedSet[id] = struct{}{}
+		}
+	}
+	// 追加分
+	for _, id := range add {
+		id = strings.TrimSpace(id)
+		if id == "" {
+			continue
+		}
+		mergedSet[id] = struct{}{}
+	}
+
+	merged := make([]string, 0, len(mergedSet))
+	for id := range mergedSet {
+		merged = append(merged, id)
+	}
+	sort.Strings(merged)
+
+	valType := stock.Type().Elem()
+
+	// val を作る（struct の場合は既存を可能な限り維持）
+	var val reflect.Value
+	if existing.IsValid() && existing.Kind() == valType.Kind() && existing.Type() == valType {
+		// 同型なら既存をコピーして維持（他フィールドがあっても壊さない）
+		val = existing
+	} else {
+		val = reflect.New(valType).Elem()
+	}
+
+	// val.ModelID = modelID があればセット
+	if val.Kind() == reflect.Struct {
+		f := val.FieldByName("ModelID")
+		if f.IsValid() && f.CanSet() && f.Kind() == reflect.String {
+			f.SetString(modelID)
+		}
+	}
+
+	// val.Products をセット
+	if val.Kind() == reflect.Struct {
+		pf := val.FieldByName("Products")
+		if pf.IsValid() && pf.CanSet() {
+			switch pf.Kind() {
+			case reflect.Slice:
+				// []string 想定
+				if pf.Type().Elem().Kind() == reflect.String {
+					s := reflect.MakeSlice(pf.Type(), 0, len(merged))
+					for _, id := range merged {
+						s = reflect.Append(s, reflect.ValueOf(id))
+					}
+					pf.Set(s)
+				}
+			case reflect.Map:
+				// map[string]bool / map[string]struct{} 想定
+				if pf.Type().Key().Kind() == reflect.String {
+					mm := reflect.MakeMapWithSize(pf.Type(), len(merged))
+					for _, id := range merged {
+						var mv reflect.Value
+						switch pf.Type().Elem().Kind() {
+						case reflect.Bool:
+							mv = reflect.ValueOf(true).Convert(pf.Type().Elem())
+						case reflect.Struct:
+							mv = reflect.New(pf.Type().Elem()).Elem() // struct{} など
+						default:
+							mv = reflect.Zero(pf.Type().Elem())
+						}
+						mm.SetMapIndex(reflect.ValueOf(id), mv)
+					}
+					pf.Set(mm)
+				}
+			}
+		}
+	}
+
+	// Stock[modelID] = val
+	stock.SetMapIndex(key, val)
+	return nil
+}
+
+// extractProductIDsFromModelStockValue reads Products from a model-stock value (struct) into []string.
+func extractProductIDsFromModelStockValue(v reflect.Value) []string {
+	if !v.IsValid() {
+		return nil
+	}
+	if v.Kind() == reflect.Ptr {
+		if v.IsNil() {
+			return nil
+		}
+		v = v.Elem()
+	}
+	if v.Kind() != reflect.Struct {
+		return nil
+	}
+
+	pf := v.FieldByName("Products")
+	if !pf.IsValid() {
+		return nil
+	}
+
+	switch pf.Kind() {
+	case reflect.Slice:
+		if pf.Type().Elem().Kind() != reflect.String {
+			return nil
+		}
+		out := make([]string, 0, pf.Len())
+		for i := 0; i < pf.Len(); i++ {
+			s := strings.TrimSpace(pf.Index(i).String())
+			if s != "" {
+				out = append(out, s)
+			}
+		}
+		return out
+
+	case reflect.Map:
+		if pf.Type().Key().Kind() != reflect.String {
+			return nil
+		}
+		out := make([]string, 0, pf.Len())
+		iter := pf.MapRange()
+		for iter.Next() {
+			k := iter.Key()
+			if k.Kind() != reflect.String {
+				continue
+			}
+			s := strings.TrimSpace(k.String())
+			if s != "" {
+				out = append(out, s)
+			}
+		}
+		return out
+
+	default:
+		return nil
+	}
+}
+
+func setStringFieldIfExists(target any, fieldName string, value string) {
+	rv := reflect.ValueOf(target)
+	if !rv.IsValid() {
+		return
+	}
+	if rv.Kind() == reflect.Ptr {
+		if rv.IsNil() {
+			return
+		}
+		rv = rv.Elem()
+	}
+	if rv.Kind() != reflect.Struct {
+		return
+	}
+	f := rv.FieldByName(fieldName)
+	if !f.IsValid() || !f.CanSet() || f.Kind() != reflect.String {
+		return
+	}
+	f.SetString(strings.TrimSpace(value))
+}
+
+func getStringFieldIfExists(target any, fieldName string) string {
+	rv := reflect.ValueOf(target)
+	if !rv.IsValid() {
+		return ""
+	}
+	if rv.Kind() == reflect.Ptr {
+		if rv.IsNil() {
+			return ""
+		}
+		rv = rv.Elem()
+	}
+	if rv.Kind() != reflect.Struct {
+		return ""
+	}
+	f := rv.FieldByName(fieldName)
+	if !f.IsValid() {
+		return ""
+	}
+	if f.Kind() == reflect.String {
+		return strings.TrimSpace(f.String())
+	}
+	return ""
 }

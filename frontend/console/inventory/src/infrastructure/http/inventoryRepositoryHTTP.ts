@@ -226,6 +226,90 @@ export type InventoryDetailDTO = {
 };
 
 // ---------------------------------------------------------
+// ✅ NEW: inventoryIds 解決 DTO（方針A）
+// ---------------------------------------------------------
+
+export type InventoryIDsByProductAndTokenDTO = {
+  productBlueprintId: string;
+  tokenBlueprintId: string;
+  inventoryIds: string[];
+};
+
+/**
+ * ✅ NEW（方針A）:
+ * pbId + tokenBlueprintId から inventoryIds を解決
+ *
+ * GET /inventory/ids?productBlueprintId={pbId}&tokenBlueprintId={tbId}
+ */
+export async function fetchInventoryIDsByProductAndTokenDTO(
+  productBlueprintId: string,
+  tokenBlueprintId: string,
+): Promise<InventoryIDsByProductAndTokenDTO> {
+  const pbId = String(productBlueprintId ?? "").trim();
+  const tbId = String(tokenBlueprintId ?? "").trim();
+  if (!pbId) throw new Error("productBlueprintId is empty");
+  if (!tbId) throw new Error("tokenBlueprintId is empty");
+
+  const token = await getIdTokenOrThrow();
+
+  const url = `${API_BASE}/inventory/ids?productBlueprintId=${encodeURIComponent(
+    pbId,
+  )}&tokenBlueprintId=${encodeURIComponent(tbId)}`;
+
+  console.log("[inventory/fetchInventoryIDsByProductAndTokenDTO] start", {
+    pbId,
+    tbId,
+    url,
+  });
+
+  const res = await fetch(url, {
+    method: "GET",
+    headers: {
+      Authorization: `Bearer ${token}`,
+    },
+  });
+
+  if (!res.ok) {
+    const text = await res.text().catch(() => "");
+    console.error("[inventory/fetchInventoryIDsByProductAndTokenDTO] failed", {
+      pbId,
+      tbId,
+      url,
+      status: res.status,
+      statusText: res.statusText,
+      body: text,
+    });
+    throw new Error(
+      `Failed to fetch inventory ids: ${res.status} ${res.statusText}`,
+    );
+  }
+
+  const data = await res.json();
+
+  // 返却形式が「配列だけ」でも「{inventoryIds:[...] }」でも受けられるようにする
+  const idsRaw = Array.isArray(data) ? data : (data?.inventoryIds ?? []);
+  const inventoryIds = Array.isArray(idsRaw)
+    ? idsRaw.map((x: any) => String(x ?? "").trim()).filter(Boolean)
+    : [];
+
+  const mapped: InventoryIDsByProductAndTokenDTO = {
+    productBlueprintId: pbId,
+    tokenBlueprintId: tbId,
+    inventoryIds,
+  };
+
+  console.log("[inventory/fetchInventoryIDsByProductAndTokenDTO] ok", {
+    pbId,
+    tbId,
+    count: mapped.inventoryIds.length,
+    sample: mapped.inventoryIds.slice(0, 10),
+    raw: data,
+  });
+
+  return mapped;
+}
+
+// ---------------------------------------------------------
 // Helpers (DTO mapping)
 // ---------------------------------------------------------
 
@@ -397,10 +481,6 @@ export async function fetchInventoryDetailDTOByProductBlueprintId(
  * 互換: 在庫詳細画面（閲覧専用）のDTOを取得
  *
  * GET /inventory/{inventoryId}
- *
- * NOTE:
- * いまの期待値（pbId query）に寄せる場合は、
- * 画面側は fetchInventoryDetailDTOByProductBlueprintId(pbId) を呼んでください。
  */
 export async function fetchInventoryDetailDTO(
   inventoryId: string,

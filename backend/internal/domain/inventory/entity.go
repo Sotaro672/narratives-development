@@ -14,29 +14,44 @@ var (
 	ErrInvalidProductBlueprintID = errors.New("invalid productBlueprintID")
 	ErrInvalidModelID            = errors.New("invalid modelID")
 	ErrInvalidProducts           = errors.New("invalid products")
-	ErrInvalidAccumulation       = errors.New("invalid accumulation")
 )
 
+// ModelStock は modelId ごとの在庫を表します。
+// - Products: productId -> true
+// - Accumulation: その model の在庫数（= len(Products)）
+type ModelStock struct {
+	Products     map[string]bool
+	Accumulation int
+}
+
+// Mint は inventories の 1 ドキュメント（= inventory）を表します。
+// 期待値：
+// - id: productBlueprintId__tokenBlueprintId
+// - stock: modelId ごとに products + accumulation を並列保持
 type Mint struct {
 	ID                 string
 	TokenBlueprintID   string
-	ProductBlueprintID string // 互換/参照用に残す（docId には使わない）
-	ModelID            string // ★ NEW: docId の主キー側
+	ProductBlueprintID string
 
-	Products     []string
-	Accumulation int
+	// modelId -> { products, accumulation }
+	Stock map[string]ModelStock
+
+	// クエリ用（Firestore の array-contains などで検索するための補助）
+	ModelIDs []string
 
 	CreatedAt time.Time
 	UpdatedAt time.Time
 }
 
+// NewMint は「1つの modelId の在庫」を起点に inventories ドキュメントを作るコンストラクタです。
+// docId（ID）は repo 側で productBlueprintId__tokenBlueprintId を採用して設定する想定のため、
+// ここでは id をそのまま受け取ります（空でも可）。
 func NewMint(
 	id string,
 	tokenBlueprintID string,
 	productBlueprintID string,
 	modelID string,
 	products []string,
-	accumulation int,
 	now time.Time,
 ) (Mint, error) {
 	tbID := strings.TrimSpace(tokenBlueprintID)
@@ -59,22 +74,29 @@ func NewMint(
 		return Mint{}, ErrInvalidProducts
 	}
 
-	if accumulation <= 0 {
-		// accumulation は「保持している products の数」を基本とする
-		accumulation = len(ps)
-	}
-
 	if now.IsZero() {
 		now = time.Now().UTC()
+	}
+
+	// productId -> true
+	prodMap := make(map[string]bool, len(ps))
+	for _, pid := range ps {
+		prodMap[pid] = true
+	}
+
+	stock := map[string]ModelStock{
+		mID: {
+			Products:     prodMap,
+			Accumulation: len(prodMap),
+		},
 	}
 
 	return Mint{
 		ID:                 strings.TrimSpace(id),
 		TokenBlueprintID:   tbID,
 		ProductBlueprintID: pbID,
-		ModelID:            mID,
-		Products:           ps,
-		Accumulation:       accumulation,
+		Stock:              stock,
+		ModelIDs:           []string{mID},
 		CreatedAt:          now,
 		UpdatedAt:          now,
 	}, nil
