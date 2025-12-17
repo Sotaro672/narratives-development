@@ -19,10 +19,9 @@ export function isValidListStatus(s: string): s is ListStatus {
  * ListPrice
  * backend/internal/domain/list/entity.go の ListPrice に対応。
  *
- * - modelNumber ごとに price (JPY) を定義
+ * - Prices は [inventoryId: price] 形式なので、ListPrice は price のみ
  */
 export interface ListPrice {
-  modelNumber: string;
   price: number; // JPY
 }
 
@@ -33,15 +32,17 @@ export interface ListPrice {
  * - 日付は ISO8601 文字列（例: "2025-01-10T00:00:00Z"）
  * - updatedBy/updatedAt/deletedAt/deletedBy は任意
  * - imageId は ListImage.id を想定（必須）
+ * - prices は { [inventoryId]: ListPrice } の map
  */
 export interface List {
   id: string;
-  inventoryId: string;
   status: ListStatus;
   assigneeId: string;
+  title: string;
+
   imageId: string;
   description: string;
-  prices: ListPrice[];
+  prices: Record<string, ListPrice>;
 
   createdBy: string;
   createdAt: string;
@@ -91,41 +92,33 @@ export function isDateTimeOrderValid(
 export function validateListPrice(p: ListPrice): string[] {
   const errors: string[] = [];
 
-  if (!p.modelNumber?.trim()) {
-    errors.push("modelNumber is required");
-  }
-
   if (p.price == null || Number.isNaN(p.price)) {
     errors.push("price is required");
   } else if (p.price < MIN_PRICE || p.price > MAX_PRICE) {
-    errors.push(
-      `price must be between ${MIN_PRICE} and ${MAX_PRICE}`,
-    );
+    errors.push(`price must be between ${MIN_PRICE} and ${MAX_PRICE}`);
   }
 
   return errors;
 }
 
-/** ListPrice 配列全体の妥当性チェック（重複 modelNumber 禁止含む） */
-export function validateListPrices(prices: ListPrice[]): string[] {
+/** Prices(map) 全体の妥当性チェック（キー inventoryId の検証含む） */
+export function validateListPrices(
+  prices: Record<string, ListPrice>,
+): string[] {
   const errors: string[] = [];
-  const seen = new Set<string>();
+  const p = prices || {};
 
-  for (const p of prices) {
-    const prefix = `price[${p.modelNumber || "?"}]: `;
-    for (const err of validateListPrice(p)) {
-      errors.push(prefix + err);
+  for (const [inventoryIdRaw, lp] of Object.entries(p)) {
+    const inventoryId = (inventoryIdRaw || "").trim();
+    const prefix = `prices[${inventoryId || "?"}]: `;
+
+    if (!inventoryId) {
+      errors.push(prefix + "inventoryId key is required");
+      continue;
     }
 
-    const key = p.modelNumber?.trim();
-    if (key) {
-      if (seen.has(key)) {
-        errors.push(
-          `duplicate modelNumber: ${p.modelNumber}`,
-        );
-      } else {
-        seen.add(key);
-      }
+    for (const err of validateListPrice(lp)) {
+      errors.push(prefix + err);
     }
   }
 
@@ -140,12 +133,9 @@ export function validateList(list: List): string[] {
   const errors: string[] = [];
 
   if (!list.id?.trim()) errors.push("id is required");
-  if (!list.inventoryId?.trim())
-    errors.push("inventoryId is required");
-  if (!list.assigneeId?.trim())
-    errors.push("assigneeId is required");
-  if (!list.imageId?.trim())
-    errors.push("imageId is required");
+  if (!list.assigneeId?.trim()) errors.push("assigneeId is required");
+  if (!list.title?.trim()) errors.push("title is required");
+  if (!list.imageId?.trim()) errors.push("imageId is required");
 
   if (!list.description?.trim()) {
     errors.push("description is required");
@@ -155,20 +145,17 @@ export function validateList(list: List): string[] {
     );
   }
 
-  if (!list.createdBy?.trim())
-    errors.push("createdBy is required");
+  if (!list.createdBy?.trim()) errors.push("createdBy is required");
   if (!isValidDateTimeString(list.createdAt)) {
     errors.push("createdAt must be a valid datetime");
   }
 
   if (!isValidListStatus(list.status)) {
-    errors.push(
-      "status must be 'listing' | 'suspended' | 'deleted'",
-    );
+    errors.push("status must be 'listing' | 'suspended' | 'deleted'");
   }
 
-  // prices
-  errors.push(...validateListPrices(list.prices || []));
+  // prices(map)
+  errors.push(...validateListPrices(list.prices || {}));
 
   // updatedAt / updatedBy
   const hasUpdatedAt = !!list.updatedAt?.trim();
@@ -177,14 +164,12 @@ export function validateList(list: List): string[] {
     errors.push("updatedAt must be a valid datetime when set");
   }
   if (!hasUpdatedAt && hasUpdatedBy) {
-    errors.push(
-      "updatedBy must not be set without updatedAt",
-    );
+    errors.push("updatedBy must not be set without updatedAt");
   }
-  if (hasUpdatedAt && !isDateTimeOrderValid(
-    list.createdAt,
-    list.updatedAt!,
-  )) {
+  if (
+    hasUpdatedAt &&
+    !isDateTimeOrderValid(list.createdAt, list.updatedAt!)
+  ) {
     errors.push("updatedAt must be >= createdAt");
   }
 
@@ -199,10 +184,10 @@ export function validateList(list: List): string[] {
       "deletedAt and deletedBy must be both set or both null",
     );
   }
-  if (hasDeletedAt && !isDateTimeOrderValid(
-    list.createdAt,
-    list.deletedAt!,
-  )) {
+  if (
+    hasDeletedAt &&
+    !isDateTimeOrderValid(list.createdAt, list.deletedAt!)
+  ) {
     errors.push("deletedAt must be >= createdAt");
   }
 
@@ -214,45 +199,39 @@ export function validateList(list: List): string[] {
  * =======================================================*/
 
 /**
- * ListPrice 配列を Go 実装と同様のルールで集約:
- * - modelNumber を trim
- * - 空 modelNumber は無視
+ * Prices(map) を Go 実装の意図に合わせて正規化:
+ * - key(inventoryId) を trim
+ * - 空 key は無視
  * - price が範囲外の場合は無視
- * - 同一 modelNumber が複数ある場合は「最後の値」が採用される
  */
 export function aggregateListPrices(
-  prices: ListPrice[],
-): ListPrice[] {
-  const tmp = new Map<string, number>();
-  const order: string[] = [];
+  prices: Record<string, ListPrice>,
+): Record<string, ListPrice> {
+  const src = prices || {};
+  const out: Record<string, ListPrice> = {};
 
-  for (const p of prices || []) {
-    const mn = (p.modelNumber || "").trim();
-    if (!mn) continue;
+  for (const [k, v] of Object.entries(src)) {
+    const inventoryId = (k || "").trim();
+    if (!inventoryId) continue;
 
-    if (!tmp.has(mn)) {
-      order.push(mn);
-    }
-
+    const price = v?.price;
     if (
-      typeof p.price === "number" &&
-      p.price >= MIN_PRICE &&
-      p.price <= MAX_PRICE
+      typeof price === "number" &&
+      !Number.isNaN(price) &&
+      price >= MIN_PRICE &&
+      price <= MAX_PRICE
     ) {
-      tmp.set(mn, p.price);
+      out[inventoryId] = { price };
     }
   }
 
-  return order.map((mn) => ({
-    modelNumber: mn,
-    price: tmp.get(mn)!,
-  }));
+  return out;
 }
 
 /**
  * List の正規化ヘルパ
  * - trim
- * - prices を aggregateListPrices で集約
+ * - prices を aggregateListPrices で正規化
  * - optional 日付/文字列は空文字なら null 扱い
  */
 export function normalizeList(input: List): List {
@@ -264,12 +243,12 @@ export function normalizeList(input: List): List {
   return {
     ...input,
     id: input.id.trim(),
-    inventoryId: input.inventoryId.trim(),
     assigneeId: input.assigneeId.trim(),
+    title: input.title.trim(),
     imageId: input.imageId.trim(),
     description: input.description.trim(),
     status: input.status,
-    prices: aggregateListPrices(input.prices || []),
+    prices: aggregateListPrices(input.prices || {}),
     createdBy: input.createdBy.trim(),
     createdAt: input.createdAt.trim(),
     updatedBy: norm(input.updatedBy),

@@ -118,11 +118,8 @@ export default function ListCreate() {
       <AdminCard
         title="管理情報"
         assigneeName={assignee}
-        createdByName={creator}
-        createdAt={createdAt}
         onEditAssignee={() => setAssignee("変更済み担当者")}
         onClickAssignee={() => console.log("Assignee clicked:", assignee)}
-        onClickCreatedBy={() => console.log("CreatedBy clicked:", creator)}
       />
     </PageStyle>
   );
