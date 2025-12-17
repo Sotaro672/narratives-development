@@ -164,6 +164,18 @@ func (a *pbQueryRepoAdapter) GetByID(ctx context.Context, id string) (productbpd
 	return a.repo.GetByID(ctx, id)
 }
 
+// pbIDsByCompanyAdapter adapts ProductBlueprintRepositoryFS to query.productBlueprintIDsByCompanyReader
+// (InventoryQuery 用: ListIDsByCompanyID を満たす)
+type pbIDsByCompanyAdapter struct {
+	repo interface {
+		ListIDsByCompany(ctx context.Context, companyID string) ([]string, error)
+	}
+}
+
+func (a *pbIDsByCompanyAdapter) ListIDsByCompanyID(ctx context.Context, companyID string) ([]string, error) {
+	return a.repo.ListIDsByCompany(ctx, companyID)
+}
+
 // ============================================================
 // Adapter: MintRepositoryFS -> mintdom.MintRepository (Update補完)
 // ============================================================
@@ -575,12 +587,16 @@ func NewContainer(ctx context.Context) (*Container, error) {
 	}
 
 	// ★ NEW: InventoryQuery（GET /inventory/...）
-	// まずは ProductBlueprintCard 用に Patch を返せれば良いので tbReader/prReader は nil でOK。
+	// ✅ NewInventoryQuery のシグネチャに合わせて 5 引数を注入する。
+	// - pbRepo: companyId -> productBlueprintIds の取得に使用
+	// - pbPatchReader: ProductBlueprintCard 用 patch
+	// - prReader: まだ不要なら nil（詳細で size/color を使いたいタイミングで実装）
 	inventoryQuery := companyquery.NewInventoryQuery(
-		inventoryRepo,        // invRepo
-		nil,                  // tbReader (optional)
+		inventoryRepo, // invRepo
+		&pbIDsByCompanyAdapter{repo: productBlueprintRepo}, // pbRepo (ListIDsByCompanyID)
 		productBlueprintRepo, // pbPatchReader (GetPatchByID)
 		nil,                  // prReader (optional)
+		nameResolver,         // ✅ tokenName / modelNumber 解決
 	)
 
 	// 6. Assemble container

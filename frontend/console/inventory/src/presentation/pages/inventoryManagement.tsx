@@ -11,11 +11,12 @@ import { buildInventoryHeaders } from "../../application/inventoryManagementServ
 export default function InventoryManagementPage() {
   const {
     rows,
-    options: { productOptions, tokenOptions },
-    state: { productFilter, tokenFilter, sortKey, sortDir },
+    options: { productOptions, tokenOptions, modelNumberOptions },
+    state: { productFilter, tokenFilter, modelNumberFilter, sortKey, sortDir },
     handlers: {
       setProductFilter,
       setTokenFilter,
+      setModelNumberFilter,
       setSortKey,
       setSortDir,
       handleRowClick,
@@ -27,16 +28,23 @@ export default function InventoryManagementPage() {
     <div className="p-0 inv-page">
       <List
         title="在庫管理"
-        headerCells={buildInventoryHeaders(productOptions, tokenOptions, {
-          productFilter,
-          tokenFilter,
-          setProductFilter,
-          setTokenFilter,
-          sortKey,
-          sortDir,
-          setSortKey,
-          setSortDir,
-        })}
+        headerCells={buildInventoryHeaders(
+          productOptions,
+          tokenOptions,
+          modelNumberOptions,
+          {
+            productFilter,
+            tokenFilter,
+            modelNumberFilter,
+            setProductFilter,
+            setTokenFilter,
+            setModelNumberFilter,
+            sortKey,
+            sortDir,
+            setSortKey,
+            setSortDir,
+          },
+        )}
         showCreateButton={false}
         showResetButton
         onReset={handleReset}

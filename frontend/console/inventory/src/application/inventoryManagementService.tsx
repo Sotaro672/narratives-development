@@ -163,8 +163,11 @@ export type InventorySortKey = "productName" | "tokenName" | "modelNumber" | "st
 export type InventoryHeaderContext = {
   productFilter: string[];
   tokenFilter: string[];
+  modelNumberFilter: string[];
+
   setProductFilter: (v: string[]) => void;
   setTokenFilter: (v: string[]) => void;
+  setModelNumberFilter: (v: string[]) => void;
 
   sortKey: InventorySortKey;
   sortDir: "asc" | "desc" | null;
@@ -175,15 +178,19 @@ export type InventoryHeaderContext = {
 export function buildInventoryFilterOptionsFromRows(rows: InventoryManagementRow[]): {
   productOptions: Array<{ value: string; label: string }>;
   tokenOptions: Array<{ value: string; label: string }>;
+  modelNumberOptions: Array<{ value: string; label: string }>;
 } {
   const productMap = new Map<string, string>();
   const tokenMap = new Map<string, string>();
+  const modelNumberMap = new Map<string, string>();
 
   for (const r of rows) {
     const p = String(r.productName ?? "").trim();
     const t = String(r.tokenName ?? "").trim();
+    const m = String(r.modelNumber ?? "").trim();
     if (p) productMap.set(p, p);
     if (t) tokenMap.set(t, t);
+    if (m) modelNumberMap.set(m, m);
   }
 
   const toOptions = (m: Map<string, string>) =>
@@ -192,6 +199,7 @@ export function buildInventoryFilterOptionsFromRows(rows: InventoryManagementRow
   return {
     productOptions: toOptions(productMap),
     tokenOptions: toOptions(tokenMap),
+    modelNumberOptions: toOptions(modelNumberMap),
   };
 }
 
@@ -299,6 +307,7 @@ export async function loadInventoryRowsFromBackend(): Promise<InventoryManagemen
 export function buildInventoryHeaders(
   productOptions: Array<{ value: string; label: string }>,
   tokenOptions: Array<{ value: string; label: string }>,
+  modelNumberOptions: Array<{ value: string; label: string }>,
   ctx: InventoryHeaderContext,
 ): React.ReactNode[] {
   return [
@@ -316,16 +325,13 @@ export function buildInventoryHeaders(
       selected={ctx.tokenFilter}
       onChange={(vals: string[]) => ctx.setTokenFilter(vals)}
     />,
-    <SortableTableHeader
+    // ✅ 型番列：FilterableTableHeader
+    <FilterableTableHeader
       key="modelNumber"
       label="型番"
-      sortKey="modelNumber"
-      activeKey={ctx.sortKey}
-      direction={ctx.sortDir ?? null}
-      onChange={(key, dir) => {
-        ctx.setSortKey(key as InventorySortKey);
-        ctx.setSortDir(dir);
-      }}
+      options={modelNumberOptions}
+      selected={ctx.modelNumberFilter}
+      onChange={(vals: string[]) => ctx.setModelNumberFilter(vals)}
     />,
     <SortableTableHeader
       key="stock"
