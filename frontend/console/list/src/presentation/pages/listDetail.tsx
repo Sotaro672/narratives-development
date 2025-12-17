@@ -1,6 +1,5 @@
 // frontend/list/src/pages/listDetail.tsx
 import * as React from "react";
-import { useNavigate, useParams } from "react-router-dom";
 import PageStyle from "../../../../shell/src/layout/PageStyle/PageStyle";
 import AdminCard from "../../../../admin/src/presentation/components/AdminCard";
 import {
@@ -21,105 +20,16 @@ import {
 } from "../../../../shell/src/shared/ui/popover";
 import "../styles/list.css";
 
-type InventoryItem = {
-  id: string;
-  sku: string;
-  productName: string;
-  color: string;
-  size: string;
-  stock: number;
-};
+import { useListDetail } from "../../../../list/src/presentation/hook/useListDetail";
 
 export default function ListDetail() {
-  const navigate = useNavigate();
-  const { listId } = useParams<{ listId: string }>();
-
-  // モック在庫データ（後でAPI連携に差し替え）
-  const [items] = React.useState<InventoryItem[]>([
-    {
-      id: "inv-001",
-      sku: "LUM-SS25-001-BLK-S",
-      productName: "シルクブラウス プレミアムライン",
-      color: "ブラック",
-      size: "S",
-      stock: 30,
-    },
-    {
-      id: "inv-002",
-      sku: "LUM-SS25-001-BLK-M",
-      productName: "シルクブラウス プレミアムライン",
-      color: "ブラック",
-      size: "M",
-      stock: 42,
-    },
-    {
-      id: "inv-003",
-      sku: "LUM-SS25-002-IVR-F",
-      productName: "リネンシャツ リラックスフィット",
-      color: "アイボリー",
-      size: "F",
-      stock: 18,
-    },
-  ]);
-
-  // 選択状態（在庫選択カード用）
-  const [selected, setSelected] = React.useState<Record<string, boolean>>({});
-  const [quantities, setQuantities] = React.useState<Record<string, number>>({});
-
-  const handleToggle = (id: string) => {
-    setSelected((prev) => ({
-      ...prev,
-      [id]: !prev[id],
-    }));
-    setQuantities((prev) =>
-      prev[id] != null
-        ? prev
-        : {
-            ...prev,
-            [id]: 1,
-          }
-    );
-  };
-
-  const handleQuantityChange = (id: string, value: string) => {
-    const num = Number(value);
-    if (Number.isNaN(num) || num < 0) return;
-    setQuantities((prev) => ({
-      ...prev,
-      [id]: num,
-    }));
-  };
-
-  const totalSelected = React.useMemo(
-    () =>
-      items.reduce((sum, item) => {
-        if (!selected[item.id]) return sum;
-        const q = quantities[item.id] ?? 0;
-        return sum + q;
-      }, 0),
-    [items, selected, quantities]
-  );
-
-  // InventoryCard 用 rows: InventoryRow 定義に準拠（閲覧専用表示）
-  const inventoryRows: InventoryRow[] = React.useMemo(
-    () =>
-      items.map((item) => ({
-        modelCode: item.sku, // SKUを型番として扱う
-        size: item.size,
-        colorName: item.color,
-        stock: item.stock,
-        // colorCode は任意。必要になったらここで割り当て
-      })),
-    [items]
-  );
-
-  const onBack = React.useCallback(() => navigate(-1), [navigate]);
+  const vm = useListDetail();
 
   return (
     <PageStyle
       layout="grid-2"
-      title={`リスト詳細：${listId ?? "不明ID"}`}
-      onBack={onBack}
+      title={vm.pageTitle}
+      onBack={vm.onBack}
       onSave={undefined}
     >
       {/* 左カラム：在庫選択カード + 下部カード群 */}
@@ -128,9 +38,7 @@ export default function ListDetail() {
         <Card className="inventory-select-card">
           <CardHeader className="inventory-select-header">
             <div className="inventory-select-header-left">
-              <CardTitle className="inventory-select-title">
-                在庫選択
-              </CardTitle>
+              <CardTitle className="inventory-select-title">在庫選択</CardTitle>
 
               {/* 仕様ヘルプ／ガイド用ポップオーバー */}
               <Popover>
@@ -143,13 +51,8 @@ export default function ListDetail() {
                     ?
                   </button>
                 </PopoverTrigger>
-                <PopoverContent
-                  align="start"
-                  className="inventory-popover"
-                >
-                  <div className="inventory-popover-title">
-                    在庫選択について
-                  </div>
+                <PopoverContent align="start" className="inventory-popover">
+                  <div className="inventory-popover-title">在庫選択について</div>
                   <ul className="inventory-popover-list">
                     <li>チェックした行のみ「選択在庫」として確定されます。</li>
                     <li>選択数は在庫数以内で入力してください。</li>
@@ -163,7 +66,7 @@ export default function ListDetail() {
 
             <div className="inventory-select-summary">
               <span className="summary-label">選択合計数</span>
-              <span className="summary-value">{totalSelected}</span>
+              <span className="summary-value">{vm.totalSelected}</span>
             </div>
           </CardHeader>
 
@@ -181,9 +84,11 @@ export default function ListDetail() {
                   </tr>
                 </thead>
                 <tbody>
-                  {items.map((item) => {
-                    const isChecked = !!selected[item.id];
-                    const qty = quantities[item.id] ?? (isChecked ? 1 : 0);
+                  {vm.items.map((item) => {
+                    const isChecked = !!vm.selected[item.id];
+                    const qty =
+                      vm.quantities[item.id] ?? (isChecked ? 1 : 0);
+
                     return (
                       <tr
                         key={item.id}
@@ -193,13 +98,11 @@ export default function ListDetail() {
                           <input
                             type="checkbox"
                             checked={isChecked}
-                            onChange={() => handleToggle(item.id)}
+                            onChange={() => vm.handleToggle(item.id)}
                           />
                         </td>
                         <td>
-                          <div className="cell-main-text">
-                            {item.productName}
-                          </div>
+                          <div className="cell-main-text">{item.productName}</div>
                           <div className="cell-sub-text">{item.sku}</div>
                         </td>
                         <td>{item.color}</td>
@@ -213,7 +116,7 @@ export default function ListDetail() {
                             disabled={!isChecked}
                             value={qty}
                             onChange={(e) =>
-                              handleQuantityChange(item.id, e.target.value)
+                              vm.handleQuantityChange(item.id, e.target.value)
                             }
                             className="qty-input"
                           />
@@ -226,17 +129,7 @@ export default function ListDetail() {
             </div>
 
             <div className="inventory-select-actions">
-              <button
-                className="primary-button"
-                onClick={() => {
-                  console.log("選択在庫:", {
-                    items,
-                    selected,
-                    quantities,
-                    totalSelected,
-                  });
-                }}
-              >
+              <button className="primary-button" onClick={vm.onConfirmSelected}>
                 選択在庫を確定
               </button>
             </div>
@@ -245,28 +138,20 @@ export default function ListDetail() {
 
         {/* 下部カード群：設計〜在庫〜トークン設計（閲覧モード想定） */}
         <div className="list-detail-linked-cards">
-          {/* ProductBlueprintCard / TokenBlueprintCard は閲覧専用想定 */}
-          <ProductBlueprintCard
-            {...({ mode: "view" } as any)}
-          />
-          <InventoryCard
-            title="モデル別在庫一覧（参照）"
-            rows={inventoryRows}
-          />
-          <TokenBlueprintCard
-            {...({ mode: "view" } as any)}
-          />
+          <ProductBlueprintCard {...({ mode: "view" } as any)} />
+          <InventoryCard title="モデル別在庫一覧（参照）" rows={vm.inventoryRows as InventoryRow[]} />
+          <TokenBlueprintCard {...({ mode: "view" } as any)} />
         </div>
       </div>
 
       {/* 右カラム：管理情報 */}
       <AdminCard
         title="管理情報"
-        assigneeName={"佐藤 美咲"}
-        createdByName={"山田 太郎"}
-        createdAt={"2025/10/25 14:30"}
-        onEditAssignee={() => console.log("edit assignee")}
-        onClickAssignee={() => console.log("assignee clicked")}
+        assigneeName={vm.admin.assigneeName}
+        createdByName={vm.admin.createdByName}
+        createdAt={vm.admin.createdAt}
+        onEditAssignee={vm.admin.onEditAssignee}
+        onClickAssignee={vm.admin.onClickAssignee}
       />
     </PageStyle>
   );
