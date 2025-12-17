@@ -58,6 +58,7 @@ type ProductBlueprintSummaryDTO = {
 };
 
 type InventoryDetailRowDTO = {
+  tokenBlueprintId?: string; // ★追加: 集計キーとして使う
   token?: string;
   modelNumber: string;
   stock: number;
@@ -118,11 +119,16 @@ async function fetchInventoryDetailByProductBlueprintId(
     productBlueprint: data?.productBlueprint
       ? {
           id: String(data.productBlueprint.id ?? ""),
-          name: data.productBlueprint.name ? String(data.productBlueprint.name) : undefined,
+          name: data.productBlueprint.name
+            ? String(data.productBlueprint.name)
+            : undefined,
         }
       : undefined,
     rows: Array.isArray(data?.rows)
       ? data.rows.map((r: any) => ({
+          tokenBlueprintId: r?.tokenBlueprintId
+            ? String(r.tokenBlueprintId)
+            : undefined, // ★追加
           token: r?.token ? String(r.token) : undefined,
           modelNumber: String(r?.modelNumber ?? ""),
           stock: Number(r?.stock ?? 0),
@@ -144,30 +150,29 @@ async function fetchInventoryDetailByProductBlueprintId(
 
 // ============================================================
 // ViewModel for Inventory Management table
-//   columns: [productName, tokenName, modelNumber, stock]
+//   columns: [productName, tokenName, stock]
+//   - modelNumber 列は廃止（期待値: pbId + tokenBlueprintId で1行集約）
 // ============================================================
 
 export type InventoryManagementRow = {
   productBlueprintId: string;
   productName: string;
 
+  tokenBlueprintId: string; // ★追加: 集計キー
   tokenName: string;
-  modelNumber: string;
 
   stock: number;
 };
 
-export type InventorySortKey = "productName" | "tokenName" | "modelNumber" | "stock";
+export type InventorySortKey = "productName" | "tokenName" | "stock";
 
 /** ヘッダー生成時に必要なコンテキスト型 */
 export type InventoryHeaderContext = {
   productFilter: string[];
   tokenFilter: string[];
-  modelNumberFilter: string[];
 
   setProductFilter: (v: string[]) => void;
   setTokenFilter: (v: string[]) => void;
-  setModelNumberFilter: (v: string[]) => void;
 
   sortKey: InventorySortKey;
   sortDir: "asc" | "desc" | null;
@@ -178,19 +183,15 @@ export type InventoryHeaderContext = {
 export function buildInventoryFilterOptionsFromRows(rows: InventoryManagementRow[]): {
   productOptions: Array<{ value: string; label: string }>;
   tokenOptions: Array<{ value: string; label: string }>;
-  modelNumberOptions: Array<{ value: string; label: string }>;
 } {
   const productMap = new Map<string, string>();
   const tokenMap = new Map<string, string>();
-  const modelNumberMap = new Map<string, string>();
 
   for (const r of rows) {
     const p = String(r.productName ?? "").trim();
     const t = String(r.tokenName ?? "").trim();
-    const m = String(r.modelNumber ?? "").trim();
     if (p) productMap.set(p, p);
     if (t) tokenMap.set(t, t);
-    if (m) modelNumberMap.set(m, m);
   }
 
   const toOptions = (m: Map<string, string>) =>
@@ -199,7 +200,6 @@ export function buildInventoryFilterOptionsFromRows(rows: InventoryManagementRow
   return {
     productOptions: toOptions(productMap),
     tokenOptions: toOptions(tokenMap),
-    modelNumberOptions: toOptions(modelNumberMap),
   };
 }
 
@@ -209,7 +209,7 @@ export function buildInventoryFilterOptionsFromRows(rows: InventoryManagementRow
  * 方針:
  * 1) printed の ProductBlueprint 一覧を取得（既存の入口）
  * 2) 各 productBlueprintId について GET /inventory?productBlueprintId=... を叩く
- * 3) rows を [tokenName + modelNumber] で集計して一覧用行にする
+ * 3) rows を [tokenBlueprintId] で集計して一覧用行にする（型番行は作らない）
  */
 export async function loadInventoryRowsFromBackend(): Promise<InventoryManagementRow[]> {
   console.log("[inventoryMgmt/loadInventoryRowsFromBackend] start");
@@ -239,33 +239,46 @@ export async function loadInventoryRowsFromBackend(): Promise<InventoryManagemen
         String(s.productName ?? "").trim() ||
         "-";
 
-      // ③ rows を token+modelNumber で集計（size/color/rgb は一覧では落とす）
-      const agg = new Map<string, { tokenName: string; modelNumber: string; stock: number }>();
+      // ③ rows を tokenBlueprintId で集計（表示名 token は保持、modelNumber は無視）
+      const agg = new Map<
+        string,
+        { tokenBlueprintId: string; tokenName: string; stock: number }
+      >();
 
       const rows = Array.isArray(dto.rows) ? dto.rows : [];
       for (const r of rows) {
+        const tokenBlueprintId = String(r?.tokenBlueprintId ?? "").trim();
+        if (!tokenBlueprintId) {
+          // backend が未対応 or データ欠損の場合は「集計できない」のでスキップ（ログだけ出す）
+          console.warn("[inventoryMgmt/loadInventoryRowsFromBackend] row missing tokenBlueprintId", {
+            productBlueprintId: pbId,
+            row: r,
+          });
+          continue;
+        }
+
         const tokenName = String(r?.token ?? "").trim() || "-";
-        const modelNumber = String(r?.modelNumber ?? "").trim() || "-";
         const stock = Number(r?.stock ?? 0);
 
-        const key = `${tokenName}__${modelNumber}`;
+        const key = tokenBlueprintId;
         const cur = agg.get(key);
         if (!cur) {
-          agg.set(key, { tokenName, modelNumber, stock });
+          agg.set(key, { tokenBlueprintId, tokenName, stock });
         } else {
           cur.stock += stock;
+          // tokenName は先勝ち（後続で変わっても一覧は壊さない）
         }
       }
 
-      // rows が空なら totalStock を 1行で出す（最低限の見え方）
+      // rows が空（or 全行 tokenBlueprintId 欠損）なら totalStock を 1行で出す（最低限の見え方）
       if (agg.size === 0) {
         const fallbackStock = Number(dto.totalStock ?? 0);
         if (fallbackStock > 0) {
           out.push({
             productBlueprintId: pbId,
             productName,
+            tokenBlueprintId: "-", // 不明
             tokenName: "-",
-            modelNumber: "-",
             stock: fallbackStock,
           });
         }
@@ -276,8 +289,8 @@ export async function loadInventoryRowsFromBackend(): Promise<InventoryManagemen
         out.push({
           productBlueprintId: pbId,
           productName,
+          tokenBlueprintId: v.tokenBlueprintId,
           tokenName: v.tokenName,
-          modelNumber: v.modelNumber,
           stock: v.stock,
         });
       }
@@ -302,12 +315,11 @@ export async function loadInventoryRowsFromBackend(): Promise<InventoryManagemen
 
 /**
  * 在庫管理一覧テーブルのヘッダー生成ロジック
- * 列順: [プロダクト名, トークン名, 型番, 在庫数]
+ * 列順: [プロダクト名, トークン名, 在庫数]
  */
 export function buildInventoryHeaders(
   productOptions: Array<{ value: string; label: string }>,
   tokenOptions: Array<{ value: string; label: string }>,
-  modelNumberOptions: Array<{ value: string; label: string }>,
   ctx: InventoryHeaderContext,
 ): React.ReactNode[] {
   return [
@@ -324,14 +336,6 @@ export function buildInventoryHeaders(
       options={tokenOptions}
       selected={ctx.tokenFilter}
       onChange={(vals: string[]) => ctx.setTokenFilter(vals)}
-    />,
-    // ✅ 型番列：FilterableTableHeader
-    <FilterableTableHeader
-      key="modelNumber"
-      label="型番"
-      options={modelNumberOptions}
-      selected={ctx.modelNumberFilter}
-      onChange={(vals: string[]) => ctx.setModelNumberFilter(vals)}
     />,
     <SortableTableHeader
       key="stock"

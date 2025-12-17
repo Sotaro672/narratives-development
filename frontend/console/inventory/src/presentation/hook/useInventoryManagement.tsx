@@ -14,15 +14,17 @@ export type SortDirection = "asc" | "desc" | null;
 
 /**
  * ✅ InventoryRow は inventory_query.go の結果を元にした一覧用の行。
- * 列順: [プロダクト名, トークン名, 型番, 在庫数]
+ * 列順: [プロダクト名, トークン名, 在庫数]
  */
 export type InventoryRow = {
   id: string; // 一覧の主キー（UI用）
   productBlueprintId: string;
 
   productName: string;
+
+  tokenBlueprintId: string; // ★追加: 集計キー
   tokenName: string;
-  modelNumber: string;
+
   stock: number;
 };
 
@@ -32,19 +34,16 @@ export type UseInventoryManagementResult = {
   options: {
     productOptions: Array<{ value: string; label: string }>;
     tokenOptions: Array<{ value: string; label: string }>;
-    modelNumberOptions: Array<{ value: string; label: string }>;
   };
   state: {
     productFilter: string[];
     tokenFilter: string[];
-    modelNumberFilter: string[];
     sortKey: InventorySortKey;
     sortDir: SortDirection;
   };
   handlers: {
     setProductFilter: (v: string[]) => void;
     setTokenFilter: (v: string[]) => void;
-    setModelNumberFilter: (v: string[]) => void;
     setSortKey: (k: InventorySortKey) => void;
     setSortDir: (d: SortDirection) => void;
     handleRowClick: (row: InventoryRow) => void;
@@ -54,13 +53,15 @@ export type UseInventoryManagementResult = {
 
 function mapToRows(items: InventoryManagementRow[]): InventoryRow[] {
   return items.map((x, i) => ({
-    // productBlueprintId + token + modelNumber で一意になる想定
-    id: `${x.productBlueprintId}__${x.tokenName}__${x.modelNumber}__${i}`,
+    // ★ productBlueprintId + tokenBlueprintId で一意になる想定（念のため i も付与）
+    id: `${x.productBlueprintId}__${x.tokenBlueprintId}__${i}`,
     productBlueprintId: x.productBlueprintId,
 
     productName: x.productName,
+
+    tokenBlueprintId: x.tokenBlueprintId,
     tokenName: x.tokenName,
-    modelNumber: x.modelNumber,
+
     stock: x.stock,
   }));
 }
@@ -75,7 +76,6 @@ export function useInventoryManagement(): UseInventoryManagementResult {
   // ===== filters =====
   const [productFilter, setProductFilter] = useState<string[]>([]);
   const [tokenFilter, setTokenFilter] = useState<string[]>([]);
-  const [modelNumberFilter, setModelNumberFilter] = useState<string[]>([]);
 
   // ===== sort =====
   const [sortKey, setSortKey] = useState<InventorySortKey>("productName");
@@ -115,14 +115,9 @@ export function useInventoryManagement(): UseInventoryManagementResult {
       const productOk =
         productFilter.length === 0 || productFilter.includes(r.productName);
 
-      const tokenOk =
-        tokenFilter.length === 0 || tokenFilter.includes(r.tokenName);
+      const tokenOk = tokenFilter.length === 0 || tokenFilter.includes(r.tokenName);
 
-      const modelOk =
-        modelNumberFilter.length === 0 ||
-        modelNumberFilter.includes(r.modelNumber);
-
-      return productOk && tokenOk && modelOk;
+      return productOk && tokenOk;
     });
 
     if (sortKey && sortDir) {
@@ -136,8 +131,6 @@ export function useInventoryManagement(): UseInventoryManagementResult {
           return dir * as(a.productName).localeCompare(as(b.productName));
         if (sortKey === "tokenName")
           return dir * as(a.tokenName).localeCompare(as(b.tokenName));
-        if (sortKey === "modelNumber")
-          return dir * as(a.modelNumber).localeCompare(as(b.modelNumber));
         if (sortKey === "stock") return dir * (an(a.stock) - an(b.stock));
 
         return 0;
@@ -145,39 +138,26 @@ export function useInventoryManagement(): UseInventoryManagementResult {
     }
 
     return data;
-  }, [
-    inventoryRows,
-    productFilter,
-    tokenFilter,
-    modelNumberFilter,
-    sortKey,
-    sortDir,
-  ]);
+  }, [inventoryRows, productFilter, tokenFilter, sortKey, sortDir]);
 
   /* ---------------------------------------------------------
    * options（フィルタ選択肢）
    * ※ product/token は Service helper を利用
-   * ※ modelNumber はここで生成（要件: 型番列を Filterable に）
    * --------------------------------------------------------- */
   const options = useMemo(() => {
     const asServiceRows: InventoryManagementRow[] = filteredSortedRows.map((r) => ({
       productBlueprintId: r.productBlueprintId,
       productName: r.productName,
+      tokenBlueprintId: r.tokenBlueprintId,
       tokenName: r.tokenName,
-      modelNumber: r.modelNumber,
       stock: r.stock,
     }));
 
     const base = buildInventoryFilterOptionsFromRows(asServiceRows);
 
-    const modelNumberOptions = Array.from(
-      new Set(filteredSortedRows.map((r) => String(r.modelNumber ?? "").trim()).filter(Boolean)),
-    ).map((v) => ({ value: v, label: v }));
-
     return {
       productOptions: base.productOptions,
       tokenOptions: base.tokenOptions,
-      modelNumberOptions,
     };
   }, [filteredSortedRows]);
 
@@ -195,7 +175,6 @@ export function useInventoryManagement(): UseInventoryManagementResult {
   const handleReset = useCallback(() => {
     setProductFilter([]);
     setTokenFilter([]);
-    setModelNumberFilter([]);
     setSortKey("productName");
     setSortDir("asc");
   }, []);
@@ -205,19 +184,16 @@ export function useInventoryManagement(): UseInventoryManagementResult {
     options: {
       productOptions: options.productOptions,
       tokenOptions: options.tokenOptions,
-      modelNumberOptions: options.modelNumberOptions,
     },
     state: {
       productFilter,
       tokenFilter,
-      modelNumberFilter,
       sortKey,
       sortDir,
     },
     handlers: {
       setProductFilter,
       setTokenFilter,
-      setModelNumberFilter,
       setSortKey,
       setSortDir,
       handleRowClick,

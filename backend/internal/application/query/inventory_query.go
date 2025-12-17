@@ -1,4 +1,3 @@
-// backend/internal/application/query/inventory_query.go
 package query
 
 import (
@@ -9,78 +8,11 @@ import (
 	"strings"
 	"time"
 
+	querydto "narratives/internal/application/query/dto"
 	resolver "narratives/internal/application/resolver"
 	invdom "narratives/internal/domain/inventory"
 	pbdom "narratives/internal/domain/productBlueprint"
 )
-
-// ============================================================
-// DTOs for InventoryDetail page (read-only)
-// ============================================================
-
-type InventoryDetailDTO struct {
-	InventoryID           string                     `json:"inventoryId"`
-	TokenBlueprintID      string                     `json:"tokenBlueprintId"`   // pbId query の場合は空
-	ProductBlueprintID    string                     `json:"productBlueprintId"` // pbId query の場合に必ず入る
-	ModelID               string                     `json:"modelId"`            // pbId query の場合は空
-	ProductBlueprintPatch ProductBlueprintPatchDTO   `json:"productBlueprintPatch"`
-	TokenBlueprint        TokenBlueprintSummaryDTO   `json:"tokenBlueprint"`
-	ProductBlueprint      ProductBlueprintSummaryDTO `json:"productBlueprint"`
-	Rows                  []InventoryRowDTO          `json:"rows"`
-	TotalStock            int                        `json:"totalStock"`
-	UpdatedAt             time.Time                  `json:"updatedAt"`
-}
-
-type TokenBlueprintSummaryDTO struct {
-	ID     string `json:"id"`
-	Name   string `json:"name,omitempty"`
-	Symbol string `json:"symbol,omitempty"`
-}
-
-type ProductBlueprintSummaryDTO struct {
-	ID   string `json:"id"`
-	Name string `json:"name,omitempty"`
-}
-
-type ProductBlueprintPatchDTO struct {
-	ProductName      *string             `json:"productName,omitempty"`
-	BrandID          *string             `json:"brandId,omitempty"`
-	ItemType         *pbdom.ItemType     `json:"itemType,omitempty"`
-	Fit              *string             `json:"fit,omitempty"`
-	Material         *string             `json:"material,omitempty"`
-	Weight           *float64            `json:"weight,omitempty"`
-	QualityAssurance *[]string           `json:"qualityAssurance,omitempty"`
-	ProductIdTag     *pbdom.ProductIDTag `json:"productIdTag,omitempty"`
-	AssigneeID       *string             `json:"assigneeId,omitempty"`
-}
-
-// InventoryCard 用（フロント側の命名に合わせる）
-//   - token 列を左に追加
-//   - modelCode -> modelNumber
-//   - colorName -> color
-//   - colorCode -> rgb（数値 or 変換可能な文字列を想定）
-//     ※ JSON では数値(int)で返す（rgbIntToHex が使える）
-type InventoryRowDTO struct {
-	Token       string `json:"token"`
-	ModelNumber string `json:"modelNumber"`
-	Size        string `json:"size"`
-	Color       string `json:"color"`
-	RGB         *int   `json:"rgb,omitempty"`
-	Stock       int    `json:"stock"`
-}
-
-// ============================================================
-// DTOs (Inventory Management List)
-// - 列: プロダクト名 / トークン名 / 型番 / 在庫数
-// ============================================================
-
-type InventoryManagementRowDTO struct {
-	ProductBlueprintID string `json:"productBlueprintId"`
-	ProductName        string `json:"productName"`
-	TokenName          string `json:"tokenName"`
-	ModelNumber        string `json:"modelNumber"`
-	Stock              int    `json:"stock"`
-}
 
 // ============================================================
 // Query Service (Read-model assembler)
@@ -114,18 +46,18 @@ func NewInventoryQuery(
 // A) inventoryId(docId) を直接指定して Detail DTO
 // ------------------------------------------------------------
 
-func (q *InventoryQuery) GetDetail(ctx context.Context, inventoryID string) (InventoryDetailDTO, error) {
+func (q *InventoryQuery) GetDetail(ctx context.Context, inventoryID string) (querydto.InventoryDetailDTO, error) {
 	if q == nil || q.invRepo == nil {
-		return InventoryDetailDTO{}, errors.New("inventory query/invRepo is nil")
+		return querydto.InventoryDetailDTO{}, errors.New("inventory query/invRepo is nil")
 	}
 	id := strings.TrimSpace(inventoryID)
 	if id == "" {
-		return InventoryDetailDTO{}, invdom.ErrInvalidMintID
+		return querydto.InventoryDetailDTO{}, invdom.ErrInvalidMintID
 	}
 
 	m, err := q.invRepo.GetByID(ctx, id)
 	if err != nil {
-		return InventoryDetailDTO{}, err
+		return querydto.InventoryDetailDTO{}, err
 	}
 
 	return q.buildDetailFromSingleMint(ctx, m)
@@ -136,33 +68,33 @@ func (q *InventoryQuery) GetDetail(ctx context.Context, inventoryID string) (Inv
 //    GET /inventory?productBlueprintId={pbId}
 // ------------------------------------------------------------
 
-func (q *InventoryQuery) GetDetailByProductBlueprintID(ctx context.Context, productBlueprintID string) (InventoryDetailDTO, error) {
+func (q *InventoryQuery) GetDetailByProductBlueprintID(ctx context.Context, productBlueprintID string) (querydto.InventoryDetailDTO, error) {
 	if q == nil || q.invRepo == nil {
-		return InventoryDetailDTO{}, errors.New("inventory query/invRepo is nil")
+		return querydto.InventoryDetailDTO{}, errors.New("inventory query/invRepo is nil")
 	}
 
 	pbID := strings.TrimSpace(productBlueprintID)
 	if pbID == "" {
-		return InventoryDetailDTO{}, invdom.ErrInvalidProductBlueprintID
+		return querydto.InventoryDetailDTO{}, invdom.ErrInvalidProductBlueprintID
 	}
 
 	mints, err := q.invRepo.ListByProductBlueprintID(ctx, pbID)
 	if err != nil {
-		return InventoryDetailDTO{}, err
+		return querydto.InventoryDetailDTO{}, err
 	}
 	if len(mints) == 0 {
-		return InventoryDetailDTO{}, invdom.ErrNotFound
+		return querydto.InventoryDetailDTO{}, invdom.ErrNotFound
 	}
 
 	// ProductBlueprint patch は 1回だけ
-	pbSummary := ProductBlueprintSummaryDTO{ID: pbID}
-	pbPatchDTO := ProductBlueprintPatchDTO{}
+	pbSummary := querydto.InventoryProductBlueprintSummaryDTO{ID: pbID}
+	pbPatchDTO := querydto.InventoryProductBlueprintPatchDTO{}
 	if q.pbPatchReader != nil {
 		patch, err := q.pbPatchReader.GetPatchByID(ctx, pbID)
 		if err != nil {
-			return InventoryDetailDTO{}, err
+			return querydto.InventoryDetailDTO{}, err
 		}
-		pbPatchDTO = ProductBlueprintPatchDTO{
+		pbPatchDTO = querydto.InventoryProductBlueprintPatchDTO{
 			ProductName:      patch.ProductName,
 			BrandID:          patch.BrandID,
 			ItemType:         patch.ItemType,
@@ -179,14 +111,15 @@ func (q *InventoryQuery) GetDetailByProductBlueprintID(ctx context.Context, prod
 	}
 
 	type rowKey struct {
-		token       string
-		modelNumber string
-		size        string
-		color       string
-		rgb         int // -1 = nil
+		tokenBlueprintID string
+		token            string
+		modelNumber      string
+		size             string
+		color            string
+		rgb              int // -1 = nil
 	}
 
-	group := map[rowKey]*InventoryRowDTO{}
+	group := map[rowKey]*querydto.InventoryRowDTO{}
 	maxUpdated := time.Time{}
 
 	for _, m := range mints {
@@ -196,6 +129,11 @@ func (q *InventoryQuery) GetDetailByProductBlueprintID(ctx context.Context, prod
 		}
 		if maxUpdated.IsZero() || t.After(maxUpdated) {
 			maxUpdated = t
+		}
+
+		tokenBlueprintID := strings.TrimSpace(m.TokenBlueprintID)
+		if tokenBlueprintID == "" {
+			tokenBlueprintID = "-"
 		}
 
 		// ✅ tokenName 解決（NameResolver）
@@ -219,7 +157,7 @@ func (q *InventoryQuery) GetDetailByProductBlueprintID(ctx context.Context, prod
 		if q.prReader != nil && len(m.Products) > 0 {
 			prods, err := q.prReader.ListByIDs(ctx, m.Products)
 			if err != nil {
-				return InventoryDetailDTO{}, err
+				return querydto.InventoryDetailDTO{}, err
 			}
 
 			for _, p := range prods {
@@ -248,21 +186,23 @@ func (q *InventoryQuery) GetDetailByProductBlueprintID(ctx context.Context, prod
 				}
 
 				k := rowKey{
-					token:       tokenLabel,
-					modelNumber: modelNumber,
-					size:        size,
-					color:       color,
-					rgb:         rgbKey,
+					tokenBlueprintID: tokenBlueprintID,
+					token:            tokenLabel,
+					modelNumber:      modelNumber,
+					size:             size,
+					color:            color,
+					rgb:              rgbKey,
 				}
 
 				if group[k] == nil {
-					group[k] = &InventoryRowDTO{
-						Token:       tokenLabel,
-						ModelNumber: modelNumber,
-						Size:        size,
-						Color:       color,
-						RGB:         rgbPtr,
-						Stock:       0,
+					group[k] = &querydto.InventoryRowDTO{
+						TokenBlueprintID: tokenBlueprintID,
+						Token:            tokenLabel,
+						ModelNumber:      modelNumber,
+						Size:             size,
+						Color:            color,
+						RGB:              rgbPtr,
+						Stock:            0,
 					}
 				}
 				group[k].Stock++
@@ -279,26 +219,28 @@ func (q *InventoryQuery) GetDetailByProductBlueprintID(ctx context.Context, prod
 		}
 
 		k := rowKey{
-			token:       tokenLabel,
-			modelNumber: defaultModelNumber,
-			size:        "-",
-			color:       "-",
-			rgb:         -1,
+			tokenBlueprintID: tokenBlueprintID,
+			token:            tokenLabel,
+			modelNumber:      defaultModelNumber,
+			size:             "-",
+			color:            "-",
+			rgb:              -1,
 		}
 		if group[k] == nil {
-			group[k] = &InventoryRowDTO{
-				Token:       tokenLabel,
-				ModelNumber: defaultModelNumber,
-				Size:        "-",
-				Color:       "-",
-				RGB:         nil,
-				Stock:       0,
+			group[k] = &querydto.InventoryRowDTO{
+				TokenBlueprintID: tokenBlueprintID,
+				Token:            tokenLabel,
+				ModelNumber:      defaultModelNumber,
+				Size:             "-",
+				Color:            "-",
+				RGB:              nil,
+				Stock:            0,
 			}
 		}
 		group[k].Stock += stock
 	}
 
-	rows := make([]InventoryRowDTO, 0, len(group))
+	rows := make([]querydto.InventoryRowDTO, 0, len(group))
 	for _, v := range group {
 		rows = append(rows, *v)
 	}
@@ -332,7 +274,7 @@ func (q *InventoryQuery) GetDetailByProductBlueprintID(ctx context.Context, prod
 		total += r.Stock
 	}
 
-	return InventoryDetailDTO{
+	return querydto.InventoryDetailDTO{
 		InventoryID: pbID, // 互換
 
 		TokenBlueprintID:   "",
@@ -341,7 +283,7 @@ func (q *InventoryQuery) GetDetailByProductBlueprintID(ctx context.Context, prod
 
 		ProductBlueprintPatch: pbPatchDTO,
 
-		TokenBlueprint:   TokenBlueprintSummaryDTO{},
+		TokenBlueprint:   querydto.InventoryTokenBlueprintSummaryDTO{},
 		ProductBlueprint: pbSummary,
 
 		Rows:       rows,
@@ -354,7 +296,7 @@ func (q *InventoryQuery) GetDetailByProductBlueprintID(ctx context.Context, prod
 // ✅ NEW: currentMember.companyId -> productBlueprintIds -> inventories list
 // ============================================================
 
-func (q *InventoryQuery) ListByCurrentCompany(ctx context.Context) ([]InventoryManagementRowDTO, error) {
+func (q *InventoryQuery) ListByCurrentCompany(ctx context.Context) ([]querydto.InventoryManagementRowDTO, error) {
 	if q == nil || q.invRepo == nil || q.pbRepo == nil {
 		return nil, errors.New("inventory query repositories are not configured")
 	}
@@ -370,7 +312,7 @@ func (q *InventoryQuery) ListByCurrentCompany(ctx context.Context) ([]InventoryM
 		return nil, err
 	}
 	if len(pbIDs) == 0 {
-		return []InventoryManagementRowDTO{}, nil
+		return []querydto.InventoryManagementRowDTO{}, nil
 	}
 
 	type key struct {
@@ -434,9 +376,9 @@ func (q *InventoryQuery) ListByCurrentCompany(ctx context.Context) ([]InventoryM
 		}
 	}
 
-	rows := make([]InventoryManagementRowDTO, 0, len(group))
+	rows := make([]querydto.InventoryManagementRowDTO, 0, len(group))
 	for k, stock := range group {
-		rows = append(rows, InventoryManagementRowDTO{
+		rows = append(rows, querydto.InventoryManagementRowDTO{
 			ProductBlueprintID: k.pbID,
 			ProductName:        productNameCache[k.pbID],
 			TokenName:          k.tokenName,
@@ -465,23 +407,34 @@ func (q *InventoryQuery) ListByCurrentCompany(ctx context.Context) ([]InventoryM
 // internal: 単一 inventory(mint) 用の DTO
 // ------------------------------------------------------------
 
-func (q *InventoryQuery) buildDetailFromSingleMint(ctx context.Context, m invdom.Mint) (InventoryDetailDTO, error) {
+func (q *InventoryQuery) buildDetailFromSingleMint(ctx context.Context, m invdom.Mint) (querydto.InventoryDetailDTO, error) {
+	tokenBlueprintID := strings.TrimSpace(m.TokenBlueprintID)
+	if tokenBlueprintID == "" {
+		tokenBlueprintID = "-"
+	}
+
 	tokenLabel := q.resolveTokenName(ctx, m.TokenBlueprintID)
 	if tokenLabel == "" {
 		tokenLabel = strings.TrimSpace(m.TokenBlueprintID)
 	}
+	if tokenLabel == "" {
+		tokenLabel = "-"
+	}
 
-	tb := TokenBlueprintSummaryDTO{ID: strings.TrimSpace(m.TokenBlueprintID)}
+	tb := querydto.InventoryTokenBlueprintSummaryDTO{
+		ID:   strings.TrimSpace(m.TokenBlueprintID),
+		Name: tokenLabel,
+	}
 
 	pbID := strings.TrimSpace(m.ProductBlueprintID)
-	pbSummary := ProductBlueprintSummaryDTO{ID: pbID}
-	pbPatchDTO := ProductBlueprintPatchDTO{}
+	pbSummary := querydto.InventoryProductBlueprintSummaryDTO{ID: pbID}
+	pbPatchDTO := querydto.InventoryProductBlueprintPatchDTO{}
 	if q.pbPatchReader != nil && pbID != "" {
 		patch, err := q.pbPatchReader.GetPatchByID(ctx, pbID)
 		if err != nil {
-			return InventoryDetailDTO{}, err
+			return querydto.InventoryDetailDTO{}, err
 		}
-		pbPatchDTO = ProductBlueprintPatchDTO{
+		pbPatchDTO = querydto.InventoryProductBlueprintPatchDTO{
 			ProductName:      patch.ProductName,
 			BrandID:          patch.BrandID,
 			ItemType:         patch.ItemType,
@@ -505,11 +458,11 @@ func (q *InventoryQuery) buildDetailFromSingleMint(ctx context.Context, m invdom
 		defaultModelNumber = "-"
 	}
 
-	rows := make([]InventoryRowDTO, 0, 16)
+	rows := make([]querydto.InventoryRowDTO, 0, 16)
 	if q.prReader != nil && len(m.Products) > 0 {
 		prods, err := q.prReader.ListByIDs(ctx, m.Products)
 		if err != nil {
-			return InventoryDetailDTO{}, err
+			return querydto.InventoryDetailDTO{}, err
 		}
 
 		type key struct {
@@ -518,7 +471,7 @@ func (q *InventoryQuery) buildDetailFromSingleMint(ctx context.Context, m invdom
 			color       string
 			rgb         int
 		}
-		group := map[key]*InventoryRowDTO{}
+		group := map[key]*querydto.InventoryRowDTO{}
 
 		for _, p := range prods {
 			modelNumber := strings.TrimSpace(p.ModelCode)
@@ -548,13 +501,14 @@ func (q *InventoryQuery) buildDetailFromSingleMint(ctx context.Context, m invdom
 			k := key{modelNumber: modelNumber, size: size, color: color, rgb: rgbKey}
 
 			if group[k] == nil {
-				group[k] = &InventoryRowDTO{
-					Token:       tokenLabel,
-					ModelNumber: modelNumber,
-					Size:        size,
-					Color:       color,
-					RGB:         rgbPtr,
-					Stock:       0,
+				group[k] = &querydto.InventoryRowDTO{
+					TokenBlueprintID: tokenBlueprintID,
+					Token:            tokenLabel,
+					ModelNumber:      modelNumber,
+					Size:             size,
+					Color:            color,
+					RGB:              rgbPtr,
+					Stock:            0,
 				}
 			}
 			group[k].Stock++
@@ -568,13 +522,14 @@ func (q *InventoryQuery) buildDetailFromSingleMint(ctx context.Context, m invdom
 		if stock <= 0 {
 			stock = len(m.Products)
 		}
-		rows = append(rows, InventoryRowDTO{
-			Token:       tokenLabel,
-			ModelNumber: defaultModelNumber,
-			Size:        "-",
-			Color:       "-",
-			RGB:         nil,
-			Stock:       stock,
+		rows = append(rows, querydto.InventoryRowDTO{
+			TokenBlueprintID: tokenBlueprintID,
+			Token:            tokenLabel,
+			ModelNumber:      defaultModelNumber,
+			Size:             "-",
+			Color:            "-",
+			RGB:              nil,
+			Stock:            stock,
 		})
 	}
 
@@ -604,7 +559,7 @@ func (q *InventoryQuery) buildDetailFromSingleMint(ctx context.Context, m invdom
 		total += r.Stock
 	}
 
-	return InventoryDetailDTO{
+	return querydto.InventoryDetailDTO{
 		InventoryID: strings.TrimSpace(m.ID),
 
 		TokenBlueprintID:   strings.TrimSpace(m.TokenBlueprintID),

@@ -1,49 +1,73 @@
-// frontend/list/src/pages/listCreate.tsx
+// frontend/console/list/src/presentation/pages/listCreate.tsx
 import * as React from "react";
-import { useNavigate } from "react-router-dom";
 import PageStyle from "../../../../shell/src/layout/PageStyle/PageStyle";
 import AdminCard from "../../../../admin/src/presentation/components/AdminCard";
 
-/**
- * ListCreate
- * - 出品の新規作成ページ
- * - 左ペイン: 出品情報入力フォーム
- * - 右ペイン: 管理情報 (AdminCard)
- */
+import {
+  Card,
+  CardHeader,
+  CardTitle,
+  CardContent,
+} from "../../../../shell/src/shared/ui/card";
+
+import {
+  Popover,
+  PopoverTrigger,
+  PopoverContent,
+} from "../../../../shell/src/shared/ui/popover";
+
+// Table UI
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "../../../../shell/src/shared/ui/table";
+
+import { useListCreate, type CandidateRow } from "../hook/useListCreate";
+
 export default function ListCreate() {
-  const navigate = useNavigate();
+  const {
+    onBack,
+    onCreate,
 
-  // ──────────────────────────────────────────────
-  // 入力フォーム状態（プリフィルは空）
-  // ──────────────────────────────────────────────
-  const [product, setProduct] = React.useState("");
-  const [brand, setBrand] = React.useState("");
-  const [token, setToken] = React.useState("");
-  const [stock, setStock] = React.useState<number | "">("");
-  const [manager, setManager] = React.useState("");
-  const [status, setStatus] = React.useState<"出品中" | "停止中" | "">("");
+    product,
+    setProduct,
+    brand,
+    setBrand,
+    token,
+    setToken,
+    stock,
+    setStock,
+    manager,
+    setManager,
+    status,
+    setStatus,
 
-  // 管理情報
-  const [assignee, setAssignee] = React.useState("未設定");
-  const [creator] = React.useState("現在のユーザー");
-  const [createdAt] = React.useState(new Date().toLocaleDateString());
+    assigneeName,
+    assigneeOptions,
+    loadingMembers,
+    onSelectAssignee,
 
-  // ハンドラ
-  const onCreate = () => {
-    alert("出品情報を作成しました（ダミー）");
-    navigate("/list");
-  };
+    selectedBrand,
+    brandOptions,
+    selectBrand,
 
-  const onBack = () => navigate(-1);
+    candidateRows,
+    selectedCandidateId,
+    selectCandidateById,
+  } = useListCreate();
 
   return (
     <PageStyle
       layout="grid-2"
       title="出品の作成"
       onBack={onBack}
-      onSave={onCreate} // 保存ボタン → 作成ボタンとして利用
+      onSave={onCreate}
     >
-      {/* --- 左ペイン（出品作成フォーム） --- */}
+      {/* ========== 左ペイン（出品作成フォーム） ========== */}
       <div className="list-create-form">
         <h2 className="section-title">出品情報</h2>
 
@@ -65,6 +89,9 @@ export default function ListCreate() {
             onChange={(e) => setBrand(e.target.value)}
             placeholder="例: LUMINA Fashion"
           />
+          <div className="text-xs text-gray-500 mt-1">
+            ※ 右カラムの「ブランド選択」と同期します
+          </div>
         </div>
 
         <div className="form-group">
@@ -114,13 +141,97 @@ export default function ListCreate() {
         </div>
       </div>
 
-      {/* --- 右ペイン（管理情報カード） --- */}
-      <AdminCard
-        title="管理情報"
-        assigneeName={assignee}
-        onEditAssignee={() => setAssignee("変更済み担当者")}
-        onClickAssignee={() => console.log("Assignee clicked:", assignee)}
-      />
+      {/* ========== 右ペイン ========== */}
+      <div className="space-y-4">
+        {/* 管理情報カード */}
+        <AdminCard
+          mode="edit"
+          title="管理情報"
+          assigneeName={assigneeName}
+          assigneeCandidates={assigneeOptions}
+          loadingMembers={loadingMembers}
+          onSelectAssignee={onSelectAssignee}
+        />
+
+        {/* 対象一覧（ヘッダー左にブランド選択ボタン） */}
+        <Card className="pb-select">
+          <CardHeader>
+            <CardTitle>対象一覧</CardTitle>
+          </CardHeader>
+
+          <CardContent>
+            <Table className="border rounded">
+              <TableHeader>
+                <TableRow>
+                  <TableHead>
+                    <div className="flex items-center justify-start gap-2">
+                      <Popover>
+                        <PopoverTrigger>
+                          <div className="pb-select__trigger">
+                            {selectedBrand || "ブランド選択"}
+                          </div>
+                        </PopoverTrigger>
+
+                        <PopoverContent>
+                          <div className="pb-select__list">
+                            {brandOptions.map((b: string) => (
+                              <button
+                                key={b}
+                                className={
+                                  "pb-select__row" +
+                                  (selectedBrand === b ? " is-active" : "")
+                                }
+                                onClick={() => selectBrand(b)}
+                              >
+                                {b}
+                              </button>
+                            ))}
+
+                            {brandOptions.length === 0 && (
+                              <div className="pb-select__empty">
+                                ブランドが登録されていません。
+                              </div>
+                            )}
+                          </div>
+                        </PopoverContent>
+                      </Popover>
+                    </div>
+                  </TableHead>
+                </TableRow>
+              </TableHeader>
+
+              <TableBody>
+                {candidateRows.map((row: CandidateRow) => (
+                  <TableRow
+                    key={row.id}
+                    className={
+                      "cursor-pointer hover:bg-blue-50" +
+                      (selectedCandidateId === row.id ? " bg-blue-100" : "")
+                    }
+                    onClick={() => selectCandidateById(row.id)}
+                  >
+                    <TableCell>{row.name}</TableCell>
+                  </TableRow>
+                ))}
+
+                {candidateRows.length === 0 && (
+                  <TableRow>
+                    <TableCell className="text-center text-gray-500">
+                      対象がありません
+                    </TableCell>
+                  </TableRow>
+                )}
+              </TableBody>
+            </Table>
+
+            {selectedCandidateId && (
+              <div className="mt-2 text-xs text-gray-500">
+                選択中: {selectedCandidateId}
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      </div>
     </PageStyle>
   );
 }
