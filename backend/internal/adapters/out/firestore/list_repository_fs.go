@@ -4,6 +4,7 @@ package firestore
 import (
 	"context"
 	"errors"
+	"sort"
 	"strings"
 	"time"
 
@@ -141,7 +142,7 @@ func (r *ListRepositoryFS) Count(ctx context.Context, filter ldom.Filter) (int, 
 func (r *ListRepositoryFS) List(
 	ctx context.Context,
 	filter ldom.Filter,
-	sort ldom.Sort,
+	sortOpt ldom.Sort,
 	page ldom.Page,
 ) (ldom.PageResult[ldom.List], error) {
 	if r.Client == nil {
@@ -151,7 +152,7 @@ func (r *ListRepositoryFS) List(
 	pageNum, perPage, _ := fscommon.NormalizePage(page.Number, page.PerPage, 50, 0)
 
 	q := r.col().Query
-	q = applyListSortToQuery(q, sort)
+	q = applyListSortToQuery(q, sortOpt)
 
 	it := q.Documents(ctx)
 	defer it.Stop()
@@ -422,6 +423,12 @@ func (r *ListRepositoryFS) Update(
 			changed = true
 		}
 
+		// Title
+		if patch.Title != nil {
+			cur.Title = strings.TrimSpace(*patch.Title)
+			changed = true
+		}
+
 		// Description
 		if patch.Description != nil {
 			cur.Description = strings.TrimSpace(*patch.Description)
@@ -591,9 +598,9 @@ func (r *ListRepositoryFS) Save(ctx context.Context, l ldom.List, _ *ldom.SaveOp
 
 func decodeListDoc(doc *gfs.DocumentSnapshot) (ldom.List, error) {
 	var raw struct {
-		InventoryID string     `firestore:"inventory_id"`
 		Status      string     `firestore:"status"`
 		AssigneeID  string     `firestore:"assignee_id"`
+		Title       string     `firestore:"title"`
 		ImageID     string     `firestore:"image_id"`
 		Description *string    `firestore:"description"`
 		CreatedBy   string     `firestore:"created_by"`
@@ -638,31 +645,33 @@ func decodeListDoc(doc *gfs.DocumentSnapshot) (ldom.List, error) {
 	}
 
 	return ldom.List{
-		ID:          id,
-		InventoryID: strings.TrimSpace(raw.InventoryID),
-		Status:      ldom.ListStatus(strings.TrimSpace(raw.Status)),
-		AssigneeID:  strings.TrimSpace(raw.AssigneeID),
-		ImageID:     strings.TrimSpace(raw.ImageID),
+		ID:         id,
+		Status:     ldom.ListStatus(strings.TrimSpace(raw.Status)),
+		AssigneeID: strings.TrimSpace(raw.AssigneeID),
+		Title:      strings.TrimSpace(raw.Title),
+		ImageID:    strings.TrimSpace(raw.ImageID),
+
 		Description: desc,
 		Prices:      nil, // filled later
-		CreatedBy:   strings.TrimSpace(raw.CreatedBy),
-		CreatedAt:   raw.CreatedAt.UTC(),
-		UpdatedBy:   updatedBy,
-		UpdatedAt:   updatedAt,
-		DeletedAt:   deletedAt,
-		DeletedBy:   deletedBy,
+
+		CreatedBy: strings.TrimSpace(raw.CreatedBy),
+		CreatedAt: raw.CreatedAt.UTC(),
+		UpdatedBy: updatedBy,
+		UpdatedAt: updatedAt,
+		DeletedAt: deletedAt,
+		DeletedBy: deletedBy,
 	}, nil
 }
 
 func encodeListDoc(l ldom.List) map[string]any {
 	m := map[string]any{
-		"inventory_id": strings.TrimSpace(l.InventoryID),
-		"status":       strings.TrimSpace(string(l.Status)),
-		"assignee_id":  strings.TrimSpace(l.AssigneeID),
-		"image_id":     strings.TrimSpace(l.ImageID),
-		"description":  strings.TrimSpace(l.Description),
-		"created_by":   strings.TrimSpace(l.CreatedBy),
-		"created_at":   l.CreatedAt.UTC(),
+		"status":      strings.TrimSpace(string(l.Status)),
+		"assignee_id": strings.TrimSpace(l.AssigneeID),
+		"title":       strings.TrimSpace(l.Title),
+		"image_id":    strings.TrimSpace(l.ImageID),
+		"description": strings.TrimSpace(l.Description),
+		"created_by":  strings.TrimSpace(l.CreatedBy),
+		"created_at":  l.CreatedAt.UTC(),
 	}
 
 	if l.UpdatedBy != nil {
@@ -700,7 +709,7 @@ func (r *ListRepositoryFS) enrichListsWithPrices(ctx context.Context, lists []ld
 	return nil
 }
 
-func (r *ListRepositoryFS) loadListPricesForOne(ctx context.Context, listID string) ([]ldom.ListPrice, error) {
+func (r *ListRepositoryFS) loadListPricesForOne(ctx context.Context, listID string) (map[string]ldom.ListPrice, error) {
 	if strings.TrimSpace(listID) == "" {
 		return nil, nil
 	}
@@ -708,11 +717,11 @@ func (r *ListRepositoryFS) loadListPricesForOne(ctx context.Context, listID stri
 	it := r.col().
 		Doc(listID).
 		Collection(listPricesSub).
-		OrderBy("model_number", gfs.Asc).
+		OrderBy("inventory_id", gfs.Asc).
 		Documents(ctx)
 	defer it.Stop()
 
-	var out []ldom.ListPrice
+	out := map[string]ldom.ListPrice{}
 	for {
 		doc, err := it.Next()
 		if errors.Is(err, iterator.Done) {
@@ -721,21 +730,29 @@ func (r *ListRepositoryFS) loadListPricesForOne(ctx context.Context, listID stri
 		if err != nil {
 			return nil, err
 		}
+
 		var raw struct {
-			ModelNumber string `firestore:"model_number"`
+			InventoryID string `firestore:"inventory_id"`
 			Price       int    `firestore:"price"`
 		}
 		if err := doc.DataTo(&raw); err != nil {
 			return nil, err
 		}
-		mn := strings.TrimSpace(raw.ModelNumber)
-		if mn == "" {
+
+		invID := strings.TrimSpace(raw.InventoryID)
+		if invID == "" {
+			// fallback: use doc id if the field is missing
+			invID = strings.TrimSpace(doc.Ref.ID)
+		}
+		if invID == "" {
 			continue
 		}
-		out = append(out, ldom.ListPrice{
-			ModelNumber: mn,
-			Price:       raw.Price,
-		})
+
+		out[invID] = ldom.ListPrice{Price: raw.Price}
+	}
+
+	if len(out) == 0 {
+		return nil, nil
 	}
 	return out, nil
 }
@@ -744,7 +761,7 @@ func (r *ListRepositoryFS) txReplaceListPrices(
 	ctx context.Context,
 	tx *gfs.Transaction,
 	listRef *gfs.DocumentRef,
-	prices []ldom.ListPrice,
+	prices map[string]ldom.ListPrice,
 ) error {
 	// delete existing prices
 	it := listRef.Collection(listPricesSub).Documents(ctx)
@@ -765,16 +782,23 @@ func (r *ListRepositoryFS) txReplaceListPrices(
 		return nil
 	}
 
-	agg := aggregateListPrices(prices)
+	// normalize + stable order
+	np := normalizeListPrices(prices)
+	if len(np) == 0 {
+		return nil
+	}
 
-	for _, p := range agg {
-		mn := strings.TrimSpace(p.ModelNumber)
-		if mn == "" {
-			continue
-		}
-		itemRef := listRef.Collection(listPricesSub).Doc(mn)
+	keys := make([]string, 0, len(np))
+	for k := range np {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+
+	for _, invID := range keys {
+		p := np[invID]
+		itemRef := listRef.Collection(listPricesSub).Doc(invID)
 		if err := tx.Set(itemRef, map[string]any{
-			"model_number": mn,
+			"inventory_id": invID,
 			"price":        p.Price,
 		}); err != nil {
 			return err
@@ -783,25 +807,17 @@ func (r *ListRepositoryFS) txReplaceListPrices(
 	return nil
 }
 
-func aggregateListPrices(prices []ldom.ListPrice) []ldom.ListPrice {
-	tmp := make(map[string]int, len(prices))
-	order := make([]string, 0, len(prices))
-	for _, p := range prices {
-		mn := strings.TrimSpace(p.ModelNumber)
-		if mn == "" {
+func normalizeListPrices(in map[string]ldom.ListPrice) map[string]ldom.ListPrice {
+	if in == nil {
+		return nil
+	}
+	out := make(map[string]ldom.ListPrice, len(in))
+	for k, v := range in {
+		invID := strings.TrimSpace(k)
+		if invID == "" {
 			continue
 		}
-		if _, ok := tmp[mn]; !ok {
-			order = append(order, mn)
-		}
-		tmp[mn] = p.Price
-	}
-	out := make([]ldom.ListPrice, 0, len(tmp))
-	for _, mn := range order {
-		out = append(out, ldom.ListPrice{
-			ModelNumber: mn,
-			Price:       tmp[mn],
-		})
+		out[invID] = ldom.ListPrice{Price: v.Price}
 	}
 	return out
 }
@@ -811,6 +827,10 @@ func aggregateListPrices(prices []ldom.ListPrice) []ldom.ListPrice {
 // =======================
 
 func needsPriceFilter(f ldom.Filter) bool {
+	// Filter の Price 条件は
+	// - ModelNumbers (Prices の key=inventoryId に対する条件)
+	// - MinPrice / MaxPrice
+	// のみを解釈する（domain/list の Filter を正とする）
 	return len(f.ModelNumbers) > 0 || f.MinPrice != nil || f.MaxPrice != nil
 }
 
@@ -821,10 +841,10 @@ func matchListFilterMeta(l ldom.List, f ldom.Filter) bool {
 		lq := strings.ToLower(sq)
 		haystack := strings.ToLower(
 			l.ID + " " +
+				l.Title + " " +
 				l.Description + " " +
 				l.ImageID + " " +
 				l.AssigneeID + " " +
-				l.InventoryID + " " +
 				l.CreatedBy + " " +
 				ptrToString(l.UpdatedBy) + " " +
 				ptrToString(l.DeletedBy),
@@ -839,25 +859,6 @@ func matchListFilterMeta(l ldom.List, f ldom.Filter) bool {
 		found := false
 		for _, v := range f.IDs {
 			if strings.TrimSpace(v) == l.ID {
-				found = true
-				break
-			}
-		}
-		if !found {
-			return false
-		}
-	}
-
-	// InventoryID
-	if f.InventoryID != nil && strings.TrimSpace(*f.InventoryID) != "" {
-		if l.InventoryID != strings.TrimSpace(*f.InventoryID) {
-			return false
-		}
-	}
-	if len(f.InventoryIDs) > 0 {
-		found := false
-		for _, v := range f.InventoryIDs {
-			if strings.TrimSpace(v) == l.InventoryID {
 				found = true
 				break
 			}
@@ -938,26 +939,34 @@ func matchListFilterMeta(l ldom.List, f ldom.Filter) bool {
 }
 
 // Price-based filters (EXISTS semantics).
-func matchListFilterPrice(prices []ldom.ListPrice, f ldom.Filter) bool {
+// - prices: map[inventoryId]ListPrice
+// - f.ModelNumbers は「inventoryId の集合」として解釈する
+func matchListFilterPrice(prices map[string]ldom.ListPrice, f ldom.Filter) bool {
 	if len(f.ModelNumbers) == 0 && f.MinPrice == nil && f.MaxPrice == nil {
 		return true
 	}
+	if len(prices) == 0 {
+		return false
+	}
 
-	allowedMN := map[string]struct{}{}
+	allowed := map[string]struct{}{}
 	if len(f.ModelNumbers) > 0 {
-		for _, mn := range f.ModelNumbers {
-			mn = strings.TrimSpace(mn)
-			if mn != "" {
-				allowedMN[mn] = struct{}{}
+		for _, id := range f.ModelNumbers {
+			id = strings.TrimSpace(id)
+			if id != "" {
+				allowed[id] = struct{}{}
 			}
 		}
 	}
 
-	for _, p := range aggregateListPrices(prices) {
-		mn := strings.TrimSpace(p.ModelNumber)
+	for invID, p := range prices {
+		invID = strings.TrimSpace(invID)
+		if invID == "" {
+			continue
+		}
 
-		if len(allowedMN) > 0 {
-			if _, ok := allowedMN[mn]; !ok {
+		if len(allowed) > 0 {
+			if _, ok := allowed[invID]; !ok {
 				continue
 			}
 		}
@@ -983,8 +992,8 @@ func ptrToString(p *string) string {
 	return *p
 }
 
-func applyListSortToQuery(q gfs.Query, sort ldom.Sort) gfs.Query {
-	field, dir := mapListSort(sort)
+func applyListSortToQuery(q gfs.Query, sortOpt ldom.Sort) gfs.Query {
+	field, dir := mapListSort(sortOpt)
 	if field == "" {
 		// Firestore can't do COALESCE; approximate:
 		// primary sort by updated_at DESC (if present), then created_at DESC, then ID DESC.
@@ -998,19 +1007,19 @@ func applyListSortToQuery(q gfs.Query, sort ldom.Sort) gfs.Query {
 		OrderBy(gfs.DocumentID, gfs.Asc)
 }
 
-func mapListSort(sort ldom.Sort) (string, gfs.Direction) {
-	col := strings.ToLower(string(sort.Column))
+func mapListSort(sortOpt ldom.Sort) (string, gfs.Direction) {
+	col := strings.ToLower(string(sortOpt.Column))
 	var field string
 
 	switch col {
 	case "id":
 		field = gfs.DocumentID
-	case "inventoryid", "inventory_id":
-		field = "inventory_id"
 	case "status":
 		field = "status"
 	case "assigneeid", "assignee_id":
 		field = "assignee_id"
+	case "title":
+		field = "title"
 	case "imageid", "image_id", "imageurl", "image_url":
 		field = "image_id"
 	case "createdat", "created_at":
@@ -1024,7 +1033,7 @@ func mapListSort(sort ldom.Sort) (string, gfs.Direction) {
 	}
 
 	dir := gfs.Asc
-	if strings.EqualFold(string(sort.Order), "desc") {
+	if strings.EqualFold(string(sortOpt.Order), "desc") {
 		dir = gfs.Desc
 	}
 	return field, dir

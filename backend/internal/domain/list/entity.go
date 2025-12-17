@@ -28,46 +28,54 @@ func IsValidStatus(s ListStatus) bool {
 	}
 }
 
-// ListPrice mirrors TS
+// ListPrice mirrors TS (price per inventoryId)
 type ListPrice struct {
-	ModelNumber string
-	Price       int // JPY
+	Price int // JPY
 }
 
-// List mirrors TS (dates are time.Time; updated*/deleted* are optional)
+// List mirrors requested shape
+// - Prices: map[inventoryId]ListPrice
+// - Title: listing title
 type List struct {
-	ID          string
-	InventoryID string
-	Status      ListStatus
-	AssigneeID  string
+	ID         string
+	Status     ListStatus
+	AssigneeID string
+	Title      string
+
 	ImageID     string
 	Description string
-	Prices      []ListPrice
-	CreatedBy   string
-	CreatedAt   time.Time
-	UpdatedBy   *string
-	UpdatedAt   *time.Time
-	DeletedAt   *time.Time
-	DeletedBy   *string
+
+	Prices map[string]ListPrice // key = inventoryId
+
+	CreatedBy string
+	CreatedAt time.Time
+
+	UpdatedBy *string
+	UpdatedAt *time.Time
+	DeletedAt *time.Time
+	DeletedBy *string
 }
 
 // Errors
 var (
 	ErrInvalidID          = errors.New("list: invalid id")
-	ErrInvalidInventoryID = errors.New("list: invalid inventoryId")
+	ErrInvalidStatus      = errors.New("list: invalid status")
+	ErrInvalidAssigneeID  = errors.New("list: invalid assigneeId")
+	ErrInvalidTitle       = errors.New("list: invalid title")
 	ErrInvalidImageID     = errors.New("list: invalid imageId")
 	ErrInvalidDescription = errors.New("list: invalid description")
-	ErrInvalidPrices      = errors.New("list: invalid prices")
-	ErrInvalidModelNumber = errors.New("list: invalid modelNumber")
-	ErrInvalidPrice       = errors.New("list: invalid price")
-	ErrInvalidStatus      = errors.New("list: invalid status")
-	ErrInvalidCreatedBy   = errors.New("list: invalid createdBy")
-	ErrInvalidCreatedAt   = errors.New("list: invalid createdAt")
-	ErrInvalidAssigneeID  = errors.New("list: invalid assigneeId")
-	ErrInvalidUpdatedAt   = errors.New("list: invalid updatedAt")
-	ErrInvalidUpdatedBy   = errors.New("list: invalid updatedBy")
-	ErrInvalidDeletedAt   = errors.New("list: invalid deletedAt")
-	ErrInvalidDeletedBy   = errors.New("list: invalid deletedBy")
+
+	ErrInvalidPrices           = errors.New("list: invalid prices")
+	ErrInvalidPrice            = errors.New("list: invalid price")
+	ErrInvalidPriceInventoryID = errors.New("list: invalid inventoryId in prices")
+
+	ErrInvalidCreatedBy = errors.New("list: invalid createdBy")
+	ErrInvalidCreatedAt = errors.New("list: invalid createdAt")
+
+	ErrInvalidUpdatedAt = errors.New("list: invalid updatedAt")
+	ErrInvalidUpdatedBy = errors.New("list: invalid updatedBy")
+	ErrInvalidDeletedAt = errors.New("list: invalid deletedAt")
+	ErrInvalidDeletedBy = errors.New("list: invalid deletedBy")
 
 	// ImageID が空のとき
 	ErrEmptyImageID = errors.New("list: imageId must not be empty")
@@ -77,6 +85,7 @@ var (
 
 // Policy (align with listConstants.ts as needed)
 var (
+	MaxTitleLength       = 200
 	MaxDescriptionLength = 2000
 	MinPrice             = 0
 	MaxPrice             = 10_000_000
@@ -87,31 +96,40 @@ var (
 // New creates a List with required fields only. Optional updated*/deleted* are nil.
 // imageId refers to ListImage.id
 func New(
-	id, inventoryID, imageID, description string,
-	prices []ListPrice,
-	createdBy string,
-	createdAt time.Time,
+	id string,
 	status ListStatus,
 	assigneeID string,
+	title string,
+	imageID string,
+	description string,
+	prices map[string]ListPrice,
+	createdBy string,
+	createdAt time.Time,
 ) (List, error) {
 	if status == "" {
 		status = StatusListing
 	}
+
 	l := List{
-		ID:          strings.TrimSpace(id),
-		InventoryID: strings.TrimSpace(inventoryID),
-		Status:      status,
-		AssigneeID:  strings.TrimSpace(assigneeID),
+		ID:         strings.TrimSpace(id),
+		Status:     status,
+		AssigneeID: strings.TrimSpace(assigneeID),
+		Title:      strings.TrimSpace(title),
+
 		ImageID:     strings.TrimSpace(imageID),
 		Description: strings.TrimSpace(description),
-		Prices:      aggregatePrices(prices),
-		CreatedBy:   strings.TrimSpace(createdBy),
-		CreatedAt:   createdAt.UTC(),
-		UpdatedBy:   nil,
-		UpdatedAt:   nil,
-		DeletedAt:   nil,
-		DeletedBy:   nil,
+
+		Prices: normalizePrices(prices),
+
+		CreatedBy: strings.TrimSpace(createdBy),
+		CreatedAt: createdAt.UTC(),
+
+		UpdatedBy: nil,
+		UpdatedAt: nil,
+		DeletedAt: nil,
+		DeletedBy: nil,
 	}
+
 	if err := l.validate(); err != nil {
 		return List{}, err
 	}
@@ -119,21 +137,34 @@ func New(
 }
 
 func NewFromStringTime(
-	id, inventoryID, imageID, description string,
-	prices []ListPrice,
-	createdBy string,
-	createdAt string,
+	id string,
 	status ListStatus,
 	assigneeID string,
+	title string,
+	imageID string,
+	description string,
+	prices map[string]ListPrice,
+	createdBy string,
+	createdAt string,
 ) (List, error) {
 	t, err := parseTime(createdAt)
 	if err != nil {
 		return List{}, fmt.Errorf("%w: %v", ErrInvalidCreatedAt, err)
 	}
-	return New(id, inventoryID, imageID, description, prices, createdBy, t, status, assigneeID)
+	return New(id, status, assigneeID, title, imageID, description, prices, createdBy, t)
 }
 
 // Behavior
+
+func (l *List) UpdateTitle(title string, now time.Time) error {
+	title = strings.TrimSpace(title)
+	if title == "" || len(title) > MaxTitleLength {
+		return ErrInvalidTitle
+	}
+	l.Title = title
+	l.touch(now)
+	return nil
+}
 
 func (l *List) UpdateImageID(imageID string, now time.Time) error {
 	imageID = strings.TrimSpace(imageID)
@@ -181,52 +212,39 @@ func (l *List) UpdateDescription(desc string, now time.Time) error {
 	return nil
 }
 
-func (l *List) ReplacePrices(prices []ListPrice, now time.Time) error {
-	agg := aggregatePrices(prices)
-	if err := validatePrices(agg); err != nil {
+func (l *List) ReplacePrices(prices map[string]ListPrice, now time.Time) error {
+	np := normalizePrices(prices)
+	if err := validatePrices(np); err != nil {
 		return err
 	}
-	l.Prices = agg
+	l.Prices = np
 	l.touch(now)
 	return nil
 }
 
-func (l *List) SetPrice(modelNumber string, price int, now time.Time) error {
-	modelNumber = strings.TrimSpace(modelNumber)
-	if modelNumber == "" {
-		return ErrInvalidModelNumber
+// SetPrice sets price by inventoryId.
+func (l *List) SetPrice(inventoryID string, price int, now time.Time) error {
+	inventoryID = strings.TrimSpace(inventoryID)
+	if inventoryID == "" {
+		return ErrInvalidPriceInventoryID
 	}
 	if !priceAllowed(price) {
 		return ErrInvalidPrice
 	}
-	found := false
-	for i := range l.Prices {
-		if l.Prices[i].ModelNumber == modelNumber {
-			l.Prices[i].Price = price
-			found = true
-			break
-		}
+	if l.Prices == nil {
+		l.Prices = make(map[string]ListPrice, 1)
 	}
-	if !found {
-		l.Prices = append(l.Prices, ListPrice{ModelNumber: modelNumber, Price: price})
-	}
-	l.Prices = aggregatePrices(l.Prices)
+	l.Prices[inventoryID] = ListPrice{Price: price}
 	l.touch(now)
 	return nil
 }
 
-func (l *List) RemovePrice(modelNumber string, now time.Time) {
-	modelNumber = strings.TrimSpace(modelNumber)
-	if modelNumber == "" {
+func (l *List) RemovePrice(inventoryID string, now time.Time) {
+	inventoryID = strings.TrimSpace(inventoryID)
+	if inventoryID == "" || l.Prices == nil {
 		return
 	}
-	out := l.Prices[:0]
-	for _, p := range l.Prices {
-		if p.ModelNumber != modelNumber {
-			out = append(out, p)
-		}
-	}
-	l.Prices = out
+	delete(l.Prices, inventoryID)
 	l.touch(now)
 }
 
@@ -258,8 +276,14 @@ func (l List) validate() error {
 	if l.ID == "" {
 		return ErrInvalidID
 	}
-	if l.InventoryID == "" {
-		return ErrInvalidInventoryID
+	if !IsValidStatus(l.Status) {
+		return ErrInvalidStatus
+	}
+	if l.AssigneeID == "" {
+		return ErrInvalidAssigneeID
+	}
+	if l.Title == "" || len(l.Title) > MaxTitleLength {
+		return ErrInvalidTitle
 	}
 	if l.ImageID == "" {
 		return ErrInvalidImageID
@@ -273,15 +297,10 @@ func (l List) validate() error {
 	if l.CreatedBy == "" {
 		return ErrInvalidCreatedBy
 	}
-	if l.AssigneeID == "" {
-		return ErrInvalidAssigneeID
-	}
 	if l.CreatedAt.IsZero() {
 		return ErrInvalidCreatedAt
 	}
-	if !IsValidStatus(l.Status) {
-		return ErrInvalidStatus
-	}
+
 	// Optional fields validation
 	if l.UpdatedAt != nil && (l.UpdatedAt.IsZero() || l.UpdatedAt.Before(l.CreatedAt)) {
 		return ErrInvalidUpdatedAt
@@ -298,19 +317,18 @@ func (l List) validate() error {
 	return nil
 }
 
-func validatePrices(prices []ListPrice) error {
-	seen := make(map[string]struct{}, len(prices))
-	for _, p := range prices {
-		if strings.TrimSpace(p.ModelNumber) == "" {
-			return ErrInvalidModelNumber
+func validatePrices(prices map[string]ListPrice) error {
+	if prices == nil {
+		// allow empty map / nil (必要ならここを「必須」に変更)
+		return nil
+	}
+	for inventoryID, p := range prices {
+		if strings.TrimSpace(inventoryID) == "" {
+			return ErrInvalidPriceInventoryID
 		}
 		if !priceAllowed(p.Price) {
 			return ErrInvalidPrice
 		}
-		if _, ok := seen[p.ModelNumber]; ok {
-			return ErrInvalidPrices
-		}
-		seen[p.ModelNumber] = struct{}{}
 	}
 	return nil
 }
@@ -352,25 +370,20 @@ func parseTime(s string) (time.Time, error) {
 	return time.Time{}, fmt.Errorf("cannot parse time: %q", s)
 }
 
-func aggregatePrices(prices []ListPrice) []ListPrice {
-	// last write wins per modelNumber
-	tmp := make(map[string]int, len(prices))
-	order := make([]string, 0, len(prices))
-	for _, p := range prices {
-		mn := strings.TrimSpace(p.ModelNumber)
-		if mn == "" {
+func normalizePrices(in map[string]ListPrice) map[string]ListPrice {
+	if in == nil {
+		return nil
+	}
+	out := make(map[string]ListPrice, len(in))
+	for k, v := range in {
+		id := strings.TrimSpace(k)
+		if id == "" {
 			continue
 		}
-		if _, ok := tmp[mn]; !ok {
-			order = append(order, mn)
+		if !priceAllowed(v.Price) {
+			continue
 		}
-		if priceAllowed(p.Price) {
-			tmp[mn] = p.Price
-		}
-	}
-	out := make([]ListPrice, 0, len(tmp))
-	for _, mn := range order {
-		out = append(out, ListPrice{ModelNumber: mn, Price: tmp[mn]})
+		out[id] = ListPrice{Price: v.Price}
 	}
 	return out
 }

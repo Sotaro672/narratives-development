@@ -10,11 +10,13 @@ import (
 
 // Patch（部分更新）: nil のフィールドは更新しない
 type ListPatch struct {
-	Status      *ListStatus
-	AssigneeID  *string
-	ImageID     *string // ListImage.id を指す
+	Status     *ListStatus
+	AssigneeID *string
+	Title      *string
+	ImageID    *string // ListImage.id を指す
+
 	Description *string
-	Prices      *[]ListPrice
+	Prices      *map[string]ListPrice // key = inventoryId
 
 	UpdatedAt *time.Time
 	UpdatedBy *string
@@ -24,19 +26,19 @@ type ListPatch struct {
 
 // フィルタ/検索条件（実装側で適宜解釈）
 type Filter struct {
-	// フリーテキスト（id, description 等の部分一致などは実装側で解釈）
+	// フリーテキスト（id, title, description 等の部分一致などは実装側で解釈）
 	SearchQuery string
 
 	// 絞り込み
-	IDs          []string
-	InventoryID  *string
-	InventoryIDs []string
-	AssigneeID   *string
-	Status       *ListStatus
-	Statuses     []ListStatus
+	IDs        []string
+	AssigneeID *string
+	Status     *ListStatus
+	Statuses   []ListStatus
 
-	// 価格条件（prices[].price に対する閾値）
-	ModelNumbers []string // prices[].modelNumber に含まれるもの
+	// 価格条件（Prices[inventoryId].Price に対する閾値）
+	// NOTE: 旧命名の互換のため ModelNumbers を残しているが、
+	//       実際の意味は「Prices の key（= inventoryId）」として扱う。
+	ModelNumbers []string
 	MinPrice     *int
 	MaxPrice     *int
 
