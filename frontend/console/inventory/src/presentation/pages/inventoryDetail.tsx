@@ -3,7 +3,6 @@
 import * as React from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import PageStyle from "../../../../shell/src/layout/PageStyle/PageStyle";
-import AdminCard from "../../../../admin/src/presentation/components/AdminCard";
 import ProductBlueprintCard from "../../../../productBlueprint/src/presentation/components/productBlueprintCard";
 import InventoryCard from "../components/inventoryCard";
 
@@ -48,15 +47,50 @@ export default function InventoryDetail() {
     : `在庫詳細：${productBlueprintId ?? ""} / ${tokenBlueprintId ?? ""}`;
 
   return (
-    <PageStyle
-      layout="grid-2"
-      title={title}
-      onBack={onBack}
-      onSave={undefined}
-    >
-      {/* 左カラム：商品情報カード + 在庫一覧カード */}
+    <PageStyle layout="grid-2" title={title} onBack={onBack} onSave={undefined}>
+      {/* 左カラム：商品情報カード + デバッグ情報 + 在庫一覧カード */}
       <div>
         <ProductBlueprintCard mode="view" />
+
+        {/* --- hook 取得データの可視化（確認用） --- */}
+        <div className="mt-3 rounded-md border border-[hsl(var(--border))] bg-[hsl(var(--card))] p-3">
+          <div className="text-sm font-semibold">取得データ（hook）</div>
+
+          <div className="mt-2 text-xs text-[hsl(var(--muted-foreground))] space-y-1">
+            <div>
+              <span className="font-medium">productBlueprintId:</span>{" "}
+              {vm?.productBlueprintId ?? productBlueprintId ?? "-"}
+            </div>
+            <div>
+              <span className="font-medium">tokenBlueprintId:</span>{" "}
+              {vm?.tokenBlueprintId ?? tokenBlueprintId ?? "-"}
+            </div>
+            <div>
+              <span className="font-medium">inventoryKey:</span> {vm?.inventoryKey ?? "-"}
+            </div>
+            <div>
+              <span className="font-medium">inventoryIds:</span>{" "}
+              {Array.isArray(vm?.inventoryIds) ? vm!.inventoryIds.length : 0}
+            </div>
+            {Array.isArray(vm?.inventoryIds) && vm!.inventoryIds.length > 0 && (
+              <div className="break-all">
+                <span className="font-medium">inventoryIds(sample):</span>{" "}
+                {vm!.inventoryIds.slice(0, 10).join(", ")}
+                {vm!.inventoryIds.length > 10 ? " ..." : ""}
+              </div>
+            )}
+            <div>
+              <span className="font-medium">totalStock:</span> {vm?.totalStock ?? 0}
+            </div>
+            <div>
+              <span className="font-medium">rows:</span> {Array.isArray(rows) ? rows.length : 0}
+            </div>
+            <div>
+              <span className="font-medium">updatedAt:</span> {vm?.updatedAt ?? "-"}
+            </div>
+          </div>
+        </div>
+        {/* --- /hook 取得データの可視化 --- */}
 
         {/* --- style elements only --- */}
         {loading && (
@@ -75,8 +109,8 @@ export default function InventoryDetail() {
         <InventoryCard rows={rows} />
       </div>
 
-      {/* 右カラム：AdminCard のみ */}
-      <AdminCard title="管理情報" />
+      {/* 右カラム：削除（空要素を置いて grid-2 を維持） */}
+      <div />
     </PageStyle>
   );
 }

@@ -6,159 +6,23 @@ import {
   SortableTableHeader,
 } from "../../../shell/src/layout/List/List";
 
-// Firebase Auth から ID トークンを取得
-import { auth } from "../../../shell/src/auth/infrastructure/config/firebaseClient";
-
-import { fetchPrintedInventorySummaries } from "../infrastructure/http/inventoryRepositoryHTTP";
-import type { InventoryProductSummary } from "../infrastructure/http/inventoryRepositoryHTTP";
-
-// ============================================================
-// Backend base URL
-// ============================================================
-
-const ENV_BASE =
-  ((import.meta as any).env?.VITE_BACKEND_BASE_URL as string | undefined)?.replace(
-    /\/+$/g,
-    "",
-  ) ?? "";
-
-const FALLBACK_BASE =
-  "https://narratives-backend-871263659099.asia-northeast1.run.app";
-
-export const API_BASE = ENV_BASE || FALLBACK_BASE;
-
-// ---------------------------------------------------------
-// 共通: Firebase トークン取得
-// ---------------------------------------------------------
-async function getIdTokenOrThrow(): Promise<string> {
-  const user = auth.currentUser;
-  if (!user) {
-    throw new Error("Not authenticated");
-  }
-  const token = await user.getIdToken();
-  if (!token) {
-    throw new Error("Failed to acquire ID token");
-  }
-  return token;
-}
+import {
+  fetchPrintedInventorySummaries,
+  fetchInventoryListDTO,
+  type InventoryProductSummary,
+} from "../infrastructure/http/inventoryRepositoryHTTP";
 
 // ============================================================
-// Inventory Query DTO (GET /inventory?productBlueprintId=...)
-// ============================================================
-
-type ProductBlueprintPatchDTO = {
-  productName?: string | null;
-  brandId?: string | null;
-  assigneeId?: string | null;
-};
-
-type ProductBlueprintSummaryDTO = {
-  id: string;
-  name?: string;
-};
-
-type InventoryDetailRowDTO = {
-  tokenBlueprintId?: string; // ★追加: 集計キーとして使う
-  token?: string;
-  modelNumber: string;
-  stock: number;
-  // size/color/rgb などは一覧表示では使わない
-};
-
-type InventoryDetailDTO = {
-  inventoryId: string; // pbId が入る想定（互換）
-  productBlueprintId: string;
-  productBlueprintPatch?: ProductBlueprintPatchDTO;
-  productBlueprint?: ProductBlueprintSummaryDTO;
-  rows: InventoryDetailRowDTO[];
-  totalStock: number;
-  updatedAt?: string;
-};
-
-async function fetchInventoryDetailByProductBlueprintId(
-  productBlueprintId: string,
-): Promise<InventoryDetailDTO> {
-  const token = await getIdTokenOrThrow();
-
-  const url = `${API_BASE}/inventory?productBlueprintId=${encodeURIComponent(
-    productBlueprintId,
-  )}`;
-
-  console.log("[inventoryMgmt/fetchInventoryDetailByPB] start", {
-    productBlueprintId,
-    url,
-  });
-
-  const res = await fetch(url, {
-    method: "GET",
-    headers: {
-      Authorization: `Bearer ${token}`,
-    },
-  });
-
-  if (!res.ok) {
-    const text = await res.text().catch(() => "");
-    console.warn("[inventoryMgmt/fetchInventoryDetailByPB] failed", {
-      productBlueprintId,
-      url,
-      status: res.status,
-      statusText: res.statusText,
-      body: text,
-    });
-    throw new Error(
-      `Failed to fetch inventory by productBlueprintId: ${res.status} ${res.statusText}`,
-    );
-  }
-
-  const data = (await res.json()) as any;
-
-  const mapped: InventoryDetailDTO = {
-    inventoryId: String(data?.inventoryId ?? ""),
-    productBlueprintId: String(data?.productBlueprintId ?? productBlueprintId ?? ""),
-    productBlueprintPatch: data?.productBlueprintPatch ?? undefined,
-    productBlueprint: data?.productBlueprint
-      ? {
-          id: String(data.productBlueprint.id ?? ""),
-          name: data.productBlueprint.name
-            ? String(data.productBlueprint.name)
-            : undefined,
-        }
-      : undefined,
-    rows: Array.isArray(data?.rows)
-      ? data.rows.map((r: any) => ({
-          tokenBlueprintId: r?.tokenBlueprintId
-            ? String(r.tokenBlueprintId)
-            : undefined, // ★追加
-          token: r?.token ? String(r.token) : undefined,
-          modelNumber: String(r?.modelNumber ?? ""),
-          stock: Number(r?.stock ?? 0),
-        }))
-      : [],
-    totalStock: Number(data?.totalStock ?? 0),
-    updatedAt: data?.updatedAt ? String(data.updatedAt) : undefined,
-  };
-
-  console.log("[inventoryMgmt/fetchInventoryDetailByPB] ok", {
-    productBlueprintId,
-    rowsCount: mapped.rows.length,
-    totalStock: mapped.totalStock,
-    sampleRows: mapped.rows.slice(0, 5),
-  });
-
-  return mapped;
-}
-
-// ============================================================
-// ViewModel for Inventory Management table
+// Types (ViewModel for Inventory Management table)
 //   columns: [productName, tokenName, stock]
-//   - modelNumber 列は廃止（期待値: pbId + tokenBlueprintId で1行集約）
+//   - key: productBlueprintId + tokenBlueprintId
 // ============================================================
 
 export type InventoryManagementRow = {
   productBlueprintId: string;
   productName: string;
 
-  tokenBlueprintId: string; // ★追加: 集計キー
+  tokenBlueprintId: string;
   tokenName: string;
 
   stock: number;
@@ -180,6 +44,19 @@ export type InventoryHeaderContext = {
   setSortDir: (d: "asc" | "desc" | null) => void;
 };
 
+// ============================================================
+// helpers
+// ============================================================
+
+function asString(v: unknown): string {
+  return String(v ?? "").trim();
+}
+
+function asNumber(v: unknown): number {
+  const n = Number(v ?? 0);
+  return Number.isFinite(n) ? n : 0;
+}
+
 export function buildInventoryFilterOptionsFromRows(rows: InventoryManagementRow[]): {
   productOptions: Array<{ value: string; label: string }>;
   tokenOptions: Array<{ value: string; label: string }>;
@@ -188,8 +65,8 @@ export function buildInventoryFilterOptionsFromRows(rows: InventoryManagementRow
   const tokenMap = new Map<string, string>();
 
   for (const r of rows) {
-    const p = String(r.productName ?? "").trim();
-    const t = String(r.tokenName ?? "").trim();
+    const p = asString(r.productName);
+    const t = asString(r.tokenName);
     if (p) productMap.set(p, p);
     if (t) tokenMap.set(t, t);
   }
@@ -203,13 +80,19 @@ export function buildInventoryFilterOptionsFromRows(rows: InventoryManagementRow
   };
 }
 
+// ============================================================
+// Inventory List load
+// 方針A（確定版）:
+// - backend /inventory は tokenBlueprintId を返す前提
+// - 文字揺れ吸収や tbId="-" の暫定は削除
+// ============================================================
+
 /**
- * ✅ inventory_query.go の結果を画面表示用にロードする
- *
+ * ✅ 一覧DTO担当:
  * 方針:
- * 1) printed の ProductBlueprint 一覧を取得（既存の入口）
- * 2) 各 productBlueprintId について GET /inventory?productBlueprintId=... を叩く
- * 3) rows を [tokenBlueprintId] で集計して一覧用行にする（型番行は作らない）
+ * 1) printed の ProductBlueprint 一覧を取得（一覧の母集団）
+ * 2) GET /inventory（ListByCurrentCompany の一覧DTO）を 1 回だけ取得
+ * 3) inventories を (pbId, tbId) で集約して表示用 rows を返す
  */
 export async function loadInventoryRowsFromBackend(): Promise<InventoryManagementRow[]> {
   console.log("[inventoryMgmt/loadInventoryRowsFromBackend] start");
@@ -222,88 +105,82 @@ export async function loadInventoryRowsFromBackend(): Promise<InventoryManagemen
     sample: summaries.slice(0, 5),
   });
 
-  const out: InventoryManagementRow[] = [];
+  const printedByPbId = new Map<string, InventoryProductSummary>();
+  for (const s of summaries) {
+    const pbId = asString(s.id);
+    if (pbId) printedByPbId.set(pbId, s);
+  }
 
-  // ② pbId ごとに inventory query を叩く（並列）
-  const tasks = summaries.map(async (s) => {
-    const pbId = String(s.id ?? "").trim();
-    if (!pbId) return;
+  // ② inventories（一覧DTO）を 1 回だけ
+  // 期待: [{ productBlueprintId, productName, tokenBlueprintId, tokenName, modelNumber, stock }, ...]
+  const items: any[] = await fetchInventoryListDTO();
 
-    try {
-      const dto = await fetchInventoryDetailByProductBlueprintId(pbId);
-
-      // productName: patch -> summary -> fallback
-      const productName =
-        String(dto?.productBlueprint?.name ?? "").trim() ||
-        String(dto?.productBlueprintPatch?.productName ?? "").trim() ||
-        String(s.productName ?? "").trim() ||
-        "-";
-
-      // ③ rows を tokenBlueprintId で集計（表示名 token は保持、modelNumber は無視）
-      const agg = new Map<
-        string,
-        { tokenBlueprintId: string; tokenName: string; stock: number }
-      >();
-
-      const rows = Array.isArray(dto.rows) ? dto.rows : [];
-      for (const r of rows) {
-        const tokenBlueprintId = String(r?.tokenBlueprintId ?? "").trim();
-        if (!tokenBlueprintId) {
-          // backend が未対応 or データ欠損の場合は「集計できない」のでスキップ（ログだけ出す）
-          console.warn("[inventoryMgmt/loadInventoryRowsFromBackend] row missing tokenBlueprintId", {
-            productBlueprintId: pbId,
-            row: r,
-          });
-          continue;
-        }
-
-        const tokenName = String(r?.token ?? "").trim() || "-";
-        const stock = Number(r?.stock ?? 0);
-
-        const key = tokenBlueprintId;
-        const cur = agg.get(key);
-        if (!cur) {
-          agg.set(key, { tokenBlueprintId, tokenName, stock });
-        } else {
-          cur.stock += stock;
-          // tokenName は先勝ち（後続で変わっても一覧は壊さない）
-        }
-      }
-
-      // rows が空（or 全行 tokenBlueprintId 欠損）なら totalStock を 1行で出す（最低限の見え方）
-      if (agg.size === 0) {
-        const fallbackStock = Number(dto.totalStock ?? 0);
-        if (fallbackStock > 0) {
-          out.push({
-            productBlueprintId: pbId,
-            productName,
-            tokenBlueprintId: "-", // 不明
-            tokenName: "-",
-            stock: fallbackStock,
-          });
-        }
-        return;
-      }
-
-      for (const v of agg.values()) {
-        out.push({
-          productBlueprintId: pbId,
-          productName,
-          tokenBlueprintId: v.tokenBlueprintId,
-          tokenName: v.tokenName,
-          stock: v.stock,
-        });
-      }
-    } catch (e: any) {
-      // inventory が無い pb は一覧から落として OK（必要ならここで 0 行を作る）
-      console.warn("[inventoryMgmt/loadInventoryRowsFromBackend] skip pbId (fetch failed)", {
-        productBlueprintId: pbId,
-        error: String(e?.message ?? e),
-      });
-    }
+  console.log("[inventoryMgmt/loadInventoryRowsFromBackend] inventory list raw", {
+    count: items.length,
+    sample: items.slice(0, 5),
   });
 
-  await Promise.all(tasks);
+  // ③ (pbId, tbId) で集約
+  const agg = new Map<
+    string,
+    {
+      productBlueprintId: string;
+      tokenBlueprintId: string;
+      tokenName: string;
+      stock: number;
+    }
+  >();
+
+  for (const it of items) {
+    const pbId = asString(it?.productBlueprintId);
+    const tbId = asString(it?.tokenBlueprintId);
+
+    // ✅ 方針A: pbId/tbId は必須（無いなら集計不能）
+    if (!pbId || !tbId) {
+      console.warn("[inventoryMgmt/loadInventoryRowsFromBackend] skip: missing ids", {
+        pbId,
+        tbId,
+        raw: it,
+      });
+      continue;
+    }
+
+    // printed に含まれない PB の在庫は一覧では出さない
+    if (!printedByPbId.has(pbId)) continue;
+
+    const tokenName = asString(it?.tokenName) || tbId;
+    const stock = asNumber(it?.stock);
+
+    if (stock <= 0) continue;
+
+    const key = `${pbId}__${tbId}`;
+    const cur = agg.get(key);
+    if (!cur) {
+      agg.set(key, {
+        productBlueprintId: pbId,
+        tokenBlueprintId: tbId,
+        tokenName,
+        stock,
+      });
+    } else {
+      cur.stock += stock;
+      // tokenName は先勝ち
+    }
+  }
+
+  const out: InventoryManagementRow[] = [];
+  for (const v of agg.values()) {
+    const s = printedByPbId.get(v.productBlueprintId);
+    const productName = asString(s?.productName) || "-";
+
+    out.push({
+      productBlueprintId: v.productBlueprintId,
+      productName,
+      tokenBlueprintId: v.tokenBlueprintId, // ✅ "-" 埋めをしない
+      tokenName: v.tokenName || "-",
+      stock: v.stock,
+    });
+  }
 
   console.log("[inventoryMgmt/loadInventoryRowsFromBackend] done", {
     rows: out.length,
@@ -312,6 +189,10 @@ export async function loadInventoryRowsFromBackend(): Promise<InventoryManagemen
 
   return out;
 }
+
+// ============================================================
+// UI header builder
+// ============================================================
 
 /**
  * 在庫管理一覧テーブルのヘッダー生成ロジック

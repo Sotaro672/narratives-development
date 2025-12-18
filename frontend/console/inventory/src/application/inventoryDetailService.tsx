@@ -2,11 +2,70 @@
 
 import type { InventoryRow } from "../presentation/components/inventoryCard";
 import {
-  fetchInventoryDetailDTO,
+  API_BASE,
   fetchInventoryIDsByProductAndTokenDTO,
-  type InventoryDetailDTO,
-  type ProductBlueprintPatchDTO,
 } from "../infrastructure/http/inventoryRepositoryHTTP";
+
+// Firebase Auth から ID トークンを取得（detail fetch に必要）
+import { auth } from "../../../shell/src/auth/infrastructure/config/firebaseClient";
+
+// ============================================================
+// DTOs (local, to avoid missing exports)
+// ============================================================
+
+export type TokenBlueprintSummaryDTO = {
+  id: string;
+  name?: string;
+  symbol?: string;
+};
+
+export type ProductBlueprintSummaryDTO = {
+  id: string;
+  name?: string;
+};
+
+export type ProductBlueprintPatchDTO = {
+  productName?: string | null;
+  brandId?: string | null;
+  itemType?: string | null;
+  fit?: string | null;
+  material?: string | null;
+  weight?: number | null;
+  qualityAssurance?: string[] | null;
+  productIdTag?: any;
+  assigneeId?: string | null;
+};
+
+export type InventoryDetailRowDTO = {
+  tokenBlueprintId?: string;
+  token?: string;
+  modelNumber: string;
+  size: string;
+  color: string;
+  rgb?: number | null;
+  stock: number;
+};
+
+export type InventoryDetailDTO = {
+  inventoryId: string;
+
+  // ✅ NEW: backend DTO が返す場合がある（方針A）
+  inventoryIds?: string[];
+
+  tokenBlueprintId: string;
+  productBlueprintId: string;
+  modelId: string;
+
+  productBlueprintPatch: ProductBlueprintPatchDTO;
+
+  tokenBlueprint?: TokenBlueprintSummaryDTO;
+  productBlueprint?: ProductBlueprintSummaryDTO;
+
+  rows: InventoryDetailRowDTO[];
+  totalStock: number;
+
+  updatedAt?: string;
+};
 
 // ============================================================
 // ViewModel (Screen-friendly shape)
@@ -22,13 +81,11 @@ export type InventoryDetailViewModel = {
   tokenBlueprintId: string;
   productBlueprintId: string;
 
-  /** 単一Mint前提だった名残り。方針Aでは原則空でOK（必要なら modelIds[] にする） */
+  /** 方針Aでは原則空 */
   modelId: string;
 
-  // ProductBlueprintCard に流し込むため（GetPatchByID の結果）
   productBlueprintPatch: ProductBlueprintPatchDTO;
 
-  // InventoryCard rows（複数 inventory の集計結果）
   rows: InventoryRow[];
   totalStock: number;
 
@@ -37,20 +94,217 @@ export type InventoryDetailViewModel = {
 };
 
 // ============================================================
+// helpers
+// ============================================================
+
+function asString(v: unknown): string {
+  return String(v ?? "").trim();
+}
+
+function uniqStrings(xs: string[]): string[] {
+  const out: string[] = [];
+  const seen = new Set<string>();
+  for (const x of xs) {
+    const s = asString(x);
+    if (!s) continue;
+    if (seen.has(s)) continue;
+    seen.add(s);
+    out.push(s);
+  }
+  return out;
+}
+
+function toOptionalString(v: any): string | undefined {
+  const s = asString(v);
+  return s ? s : undefined;
+}
+
+function toRgbNumberOrNull(v: any): number | null | undefined {
+  if (v === undefined) return undefined;
+  if (v === null) return null;
+
+  if (typeof v === "number" && Number.isFinite(v)) return v;
+
+  const s = asString(v);
+  if (!s) return null;
+
+  const normalized = s.replace(/^#/, "").replace(/^0x/i, "");
+  if (/^[0-9a-fA-F]{6}$/.test(normalized)) {
+    const n = Number.parseInt(normalized, 16);
+    return Number.isFinite(n) ? n : null;
+  }
+
+  const d = Number.parseInt(s, 10);
+  return Number.isFinite(d) ? d : null;
+}
+
+async function getIdTokenOrThrow(): Promise<string> {
+  const user = auth.currentUser;
+  if (!user) throw new Error("Not authenticated");
+  const token = await user.getIdToken();
+  if (!token) throw new Error("Failed to acquire ID token");
+  return token;
+}
+
+function mapProductBlueprintPatch(raw: any): ProductBlueprintPatchDTO {
+  const patchRaw = (raw ?? {}) as any;
+
+  return {
+    productName:
+      patchRaw.productName !== undefined ? (patchRaw.productName as any) : undefined,
+    brandId: patchRaw.brandId !== undefined ? (patchRaw.brandId as any) : undefined,
+    itemType: patchRaw.itemType !== undefined ? String(patchRaw.itemType) : undefined,
+    fit: patchRaw.fit !== undefined ? (patchRaw.fit as any) : undefined,
+    material: patchRaw.material !== undefined ? (patchRaw.material as any) : undefined,
+    weight:
+      patchRaw.weight !== undefined && patchRaw.weight !== null
+        ? Number(patchRaw.weight)
+        : undefined,
+    qualityAssurance: Array.isArray(patchRaw.qualityAssurance)
+      ? patchRaw.qualityAssurance.map((x: any) => String(x))
+      : undefined,
+    productIdTag:
+      patchRaw.productIdTag !== undefined ? patchRaw.productIdTag : undefined,
+    assigneeId:
+      patchRaw.assigneeId !== undefined ? (patchRaw.assigneeId as any) : undefined,
+  };
+}
+
+function pickPatch(dtos: InventoryDetailDTO[]): ProductBlueprintPatchDTO {
+  const found =
+    dtos.find(
+      (d) =>
+        d?.productBlueprintPatch && Object.keys(d.productBlueprintPatch).length > 0,
+    )?.productBlueprintPatch ?? {};
+  return found as any;
+}
+
+function pickTokenNameFromDTO(dto: any): string {
+  return (
+    asString(dto?.tokenBlueprint?.name) ||
+    asString(dto?.TokenBlueprint?.name) ||
+    asString(dto?.tokenBlueprintName) ||
+    ""
+  );
+}
+
+function pickUpdatedAtMax(dtos: InventoryDetailDTO[]): string | undefined {
+  let maxUpdated: string | undefined = undefined;
+  for (const d of dtos as any[]) {
+    const t = d?.updatedAt ? String(d.updatedAt) : "";
+    if (!t) continue;
+    if (!maxUpdated || t > maxUpdated) maxUpdated = t;
+  }
+  return maxUpdated;
+}
+
+// ============================================================
+// HTTP (detail)
+// - /inventory/{inventoryId}
+// ============================================================
+
+async function fetchInventoryDetailDTO(inventoryId: string): Promise<InventoryDetailDTO> {
+  const id = asString(inventoryId);
+  if (!id) throw new Error("inventoryId is empty");
+
+  const token = await getIdTokenOrThrow();
+  const url = `${API_BASE}/inventory/${encodeURIComponent(id)}`;
+
+  const res = await fetch(url, {
+    method: "GET",
+    headers: { Authorization: `Bearer ${token}` },
+  });
+
+  if (!res.ok) {
+    const text = await res.text().catch(() => "");
+    throw new Error(`Failed to fetch inventory detail: ${res.status} ${res.statusText} ${text}`);
+  }
+
+  const data = await res.json();
+
+  const rows: InventoryDetailRowDTO[] = Array.isArray(data?.rows)
+    ? data.rows.map((r: any) => ({
+        tokenBlueprintId: toOptionalString(
+          r?.tokenBlueprintId ?? r?.TokenBlueprintID ?? r?.token_blueprint_id,
+        ),
+        token: toOptionalString(r?.token ?? r?.Token),
+        modelNumber: asString(r?.modelNumber ?? r?.ModelNumber),
+        size: asString(r?.size ?? r?.Size),
+        color: asString(r?.color ?? r?.Color),
+        rgb: toRgbNumberOrNull(r?.rgb ?? r?.RGB),
+        stock: Number(r?.stock ?? r?.Stock ?? 0),
+      }))
+    : [];
+
+  return {
+    inventoryId: asString(data?.inventoryId ?? data?.id ?? id),
+    inventoryIds: Array.isArray(data?.inventoryIds)
+      ? data.inventoryIds.map((x: any) => asString(x)).filter(Boolean)
+      : undefined,
+
+    tokenBlueprintId: asString(data?.tokenBlueprintId ?? data?.TokenBlueprintID),
+    productBlueprintId: asString(data?.productBlueprintId ?? data?.ProductBlueprintID),
+    modelId: asString(data?.modelId ?? data?.ModelID),
+
+    productBlueprintPatch: mapProductBlueprintPatch(data?.productBlueprintPatch),
+
+    tokenBlueprint: data?.tokenBlueprint
+      ? {
+          id: asString(data.tokenBlueprint.id),
+          name: data.tokenBlueprint.name ? asString(data.tokenBlueprint.name) : undefined,
+          symbol: data.tokenBlueprint.symbol
+            ? asString(data.tokenBlueprint.symbol)
+            : undefined,
+        }
+      : undefined,
+
+    productBlueprint: data?.productBlueprint
+      ? {
+          id: asString(data.productBlueprint.id),
+          name: data.productBlueprint.name
+            ? asString(data.productBlueprint.name)
+            : undefined,
+        }
+      : undefined,
+
+    rows,
+    totalStock: Number(data?.totalStock ?? 0),
+    updatedAt: data?.updatedAt ? String(data.updatedAt) : undefined,
+  };
+}
+
+// ============================================================
 // Mapper (DTO row -> InventoryRow)
 // ============================================================
 
-function mapDtoToRows(dto: InventoryDetailDTO): InventoryRow[] {
-  const rows = Array.isArray(dto.rows) ? dto.rows : [];
+function mapDtoToRows(
+  dto: InventoryDetailDTO,
+  opts?: { expectedTokenBlueprintId?: string; fallbackTokenName?: string },
+): InventoryRow[] {
+  const expectedTbId = asString(opts?.expectedTokenBlueprintId);
+  const fallbackToken = asString(opts?.fallbackTokenName);
 
-  return rows.map((r) => ({
-    token: r.token ?? undefined,
-    modelNumber: String(r.modelNumber ?? ""),
-    size: String(r.size ?? ""),
-    color: String(r.color ?? ""),
-    rgb: (r.rgb ?? null) as any,
-    stock: Number(r.stock ?? 0),
-  }));
+  const rowsRaw: any[] = Array.isArray((dto as any)?.rows) ? ((dto as any).rows as any[]) : [];
+  const out: InventoryRow[] = [];
+
+  for (const r of rowsRaw) {
+    const rowTbId = asString(r?.tokenBlueprintId ?? r?.TokenBlueprintID ?? r?.token_blueprint_id);
+
+    if (expectedTbId && rowTbId && rowTbId !== expectedTbId) continue;
+
+    const token = asString(r?.token ?? r?.Token) || fallbackToken || "-";
+
+    out.push({
+      token,
+      modelNumber: asString(r?.modelNumber ?? r?.ModelNumber ?? ""),
+      size: asString(r?.size ?? r?.Size ?? ""),
+      color: asString(r?.color ?? r?.Color ?? ""),
+      rgb: (r?.rgb ?? r?.RGB ?? null) as any,
+      stock: Number(r?.stock ?? r?.Stock ?? 0),
+    });
+  }
+
+  return out;
 }
 
 // ============================================================
@@ -63,42 +317,23 @@ function mergeDetailDTOs(
   inventoryIds: string[],
   dtos: InventoryDetailDTO[],
 ): InventoryDetailViewModel {
-  // patch は最初に取れたものを優先
-  const patch =
-    dtos.find(
-      (d) =>
-        d?.productBlueprintPatch &&
-        Object.keys(d.productBlueprintPatch).length > 0,
-    )?.productBlueprintPatch ?? {};
+  const patch = pickPatch(dtos);
+  const maxUpdated = pickUpdatedAtMax(dtos);
 
-  // updatedAt は max
-  let maxUpdated: string | undefined = undefined;
-  for (const d of dtos) {
-    const t = d?.updatedAt ? String(d.updatedAt) : "";
-    if (!t) continue;
-    if (!maxUpdated || t > maxUpdated) maxUpdated = t;
-  }
-
-  // rows を結合 → 同一キーで合算
-  // キー: token + modelNumber + size + color + rgb
+  // rows を結合 → 同一キーで合算（表示安定）
   const agg = new Map<
     string,
-    {
-      token?: string;
-      modelNumber: string;
-      size: string;
-      color: string;
-      rgb: any;
-      stock: number;
-    }
+    { token?: string; modelNumber: string; size: string; color: string; rgb: any; stock: number }
   >();
 
-  for (const d of dtos) {
-    for (const r of mapDtoToRows(d)) {
-      const token = String(r.token ?? "").trim() || "-";
-      const modelNumber = String(r.modelNumber ?? "").trim() || "-";
-      const size = String(r.size ?? "").trim() || "-";
-      const color = String(r.color ?? "").trim() || "-";
+  for (const d of dtos as any[]) {
+    const fallbackTokenName = pickTokenNameFromDTO(d);
+
+    for (const r of mapDtoToRows(d as any, { expectedTokenBlueprintId: tbId, fallbackTokenName })) {
+      const token = asString(r.token) || "-";
+      const modelNumber = asString(r.modelNumber) || "-";
+      const size = asString(r.size) || "-";
+      const color = asString(r.color) || "-";
       const rgbKey = r.rgb == null ? "nil" : String(r.rgb);
 
       const key = `${token}__${modelNumber}__${size}__${color}__${rgbKey}`;
@@ -128,10 +363,8 @@ function mergeDetailDTOs(
     stock: v.stock,
   }));
 
-  // totalStock は rows 合計（DTOの totalStock を足すより確実）
   const totalStock = mergedRows.reduce((sum, r) => sum + Number(r.stock ?? 0), 0);
 
-  // 表示安定のため sort
   mergedRows.sort((a, b) => {
     const as = (x: any) => String(x ?? "");
     if (as(a.token) !== as(b.token)) return as(a.token).localeCompare(as(b.token));
@@ -160,127 +393,58 @@ function mergeDetailDTOs(
 
 // ============================================================
 // Query Request (Application Layer)
-// - 方針A: pbId + tbId -> inventoryIds -> details -> merge
+// - ✅ 方針Aのみ: pbId + tbId -> inventoryIds -> details -> merge
 // ============================================================
 
 export async function queryInventoryDetailByProductAndToken(
   productBlueprintId: string,
   tokenBlueprintId: string,
 ): Promise<InventoryDetailViewModel> {
-  const pbId = String(productBlueprintId ?? "").trim();
-  const tbId = String(tokenBlueprintId ?? "").trim();
+  const pbId = asString(productBlueprintId);
+  const tbId = asString(tokenBlueprintId);
 
   if (!pbId) throw new Error("productBlueprintId is empty");
   if (!tbId) throw new Error("tokenBlueprintId is empty");
 
-  console.log("[inventory/queryInventoryDetailByProductAndToken] start", { pbId, tbId });
-
   // ① inventoryIds 解決
   const idsDto = await fetchInventoryIDsByProductAndTokenDTO(pbId, tbId);
-  const inventoryIds = Array.isArray(idsDto?.inventoryIds)
-    ? idsDto.inventoryIds.map((x: unknown) => String(x ?? "").trim()).filter(Boolean)
+  const idsFromResolver = Array.isArray((idsDto as any)?.inventoryIds)
+    ? (idsDto as any).inventoryIds.map((x: unknown) => asString(x)).filter(Boolean)
     : [];
 
-  console.log("[inventory/queryInventoryDetailByProductAndToken] ids resolved", {
-    pbId,
-    tbId,
-    count: inventoryIds.length,
-    sample: inventoryIds.slice(0, 10),
-    raw: idsDto,
-  });
-
-  if (inventoryIds.length === 0) {
-    // 404にしたいなら repository 側で 404 を投げてもOK。ここではUI表示を考えて空で返すのも手。
-    throw new Error(
-      "inventoryIds is empty (no inventory for productBlueprintId + tokenBlueprintId)",
-    );
+  if (idsFromResolver.length === 0) {
+    throw new Error("inventoryIds is empty (no inventory for productBlueprintId + tokenBlueprintId)");
   }
 
   // ② 各 inventoryId の詳細を並列取得
-  const results: PromiseSettledResult<InventoryDetailDTO>[] =
-    await Promise.allSettled(
-      inventoryIds.map(async (id: string): Promise<InventoryDetailDTO> => {
-        const dto = await fetchInventoryDetailDTO(id);
-        return dto;
-      }),
-    );
+  const results: PromiseSettledResult<InventoryDetailDTO>[] = await Promise.allSettled(
+    idsFromResolver.map(async (id: string): Promise<InventoryDetailDTO> => {
+      return await fetchInventoryDetailDTO(id);
+    }),
+  );
 
   const ok: InventoryDetailDTO[] = [];
   const failed: Array<{ id: string; reason: string }> = [];
 
-  results.forEach((r: PromiseSettledResult<InventoryDetailDTO>, idx: number) => {
-    const id = inventoryIds[idx];
+  results.forEach((r, idx) => {
+    const id = idsFromResolver[idx];
     if (r.status === "fulfilled") ok.push(r.value);
     else failed.push({ id, reason: String((r.reason as any)?.message ?? r.reason) });
   });
 
-  console.log("[inventory/queryInventoryDetailByProductAndToken] detail fetched", {
-    pbId,
-    tbId,
-    ok: ok.length,
-    failed: failed.length,
-    failedSample: failed.slice(0, 5),
-  });
-
   if (ok.length === 0) {
-    throw new Error(
-      `failed to fetch any inventory detail: ${failed.map((x) => x.id).join(", ")}`,
-    );
+    throw new Error(`failed to fetch any inventory detail: ${failed.map((x) => x.id).join(", ")}`);
   }
+
+  // ✅ backend DTO に inventoryIds が入ってくる場合は union
+  const idsFromDTO: string[] = [];
+  for (const d of ok as any[]) {
+    const xs = Array.isArray(d?.inventoryIds) ? d.inventoryIds : [];
+    for (const x of xs) idsFromDTO.push(asString(x));
+  }
+
+  const inventoryIds = uniqStrings([...idsFromResolver, ...idsFromDTO]);
 
   // ③ マージしてViewModel化
-  const vm = mergeDetailDTOs(pbId, tbId, inventoryIds, ok);
-
-  console.log("[inventory/queryInventoryDetailByProductAndToken] merged viewModel", {
-    inventoryKey: vm.inventoryKey,
-    inventoryIds: vm.inventoryIds.length,
-    totalStock: vm.totalStock,
-    rowsCount: vm.rows.length,
-    rowsSample: vm.rows.slice(0, 5),
-    productBlueprintPatch: vm.productBlueprintPatch,
-    updatedAt: vm.updatedAt,
-  });
-
-  return vm;
-}
-
-/**
- * 互換: 旧ルート（/inventory/detail/:inventoryId）を残す場合のみ使う
- * ※ 方針Aへ移行後は、基本は queryInventoryDetailByProductAndToken を呼ぶ
- */
-export async function queryInventoryDetail(
-  inventoryId: string,
-): Promise<InventoryDetailViewModel> {
-  const id = String(inventoryId ?? "").trim();
-  if (!id) {
-    throw new Error("inventoryId is empty");
-  }
-
-  console.log("[inventory/queryInventoryDetail] start", { inventoryId: id });
-
-  const dto = await fetchInventoryDetailDTO(id);
-
-  console.log("[inventory/queryInventoryDetail] dto received", {
-    inventoryId: id,
-    tokenBlueprintId: dto.tokenBlueprintId,
-    productBlueprintId: dto.productBlueprintId,
-    modelId: dto.modelId,
-    totalStock: dto.totalStock,
-    rowsCount: Array.isArray(dto.rows) ? dto.rows.length : 0,
-  });
-
-  // 単一DTOを merge と同じ形へ寄せる（見た目・ロジック共通化）
-  const pbId = String(dto.productBlueprintId ?? "").trim();
-  const tbId = String(dto.tokenBlueprintId ?? "").trim();
-
-  const vm = mergeDetailDTOs(pbId || "-", tbId || "-", [id], [dto]);
-
-  console.log("[inventory/queryInventoryDetail] mapped viewModel", {
-    inventoryKey: vm.inventoryKey,
-    totalStock: vm.totalStock,
-    rowsCount: vm.rows.length,
-    rowsSample: vm.rows.slice(0, 5),
-  });
-
-  return vm;
+  return mergeDetailDTOs(pbId, tbId, inventoryIds, ok);
 }

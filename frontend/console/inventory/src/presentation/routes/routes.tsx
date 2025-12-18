@@ -5,11 +5,12 @@ import InventoryDetailPage from "../../presentation/pages/inventoryDetail";
 
 /**
  * Inventory Module Routes
- * 在庫一覧・詳細ページのルーティング設定
  *
  * 方針A:
  * - URL に productBlueprintId + tokenBlueprintId を渡す
  * - 詳細側で inventoryIds を解決して表示する
+ *
+ * ※ 旧URL (/inventory/detail/:productBlueprintId) の互換は削除
  */
 const routes: RouteObject[] = [
   // /inventory → 一覧

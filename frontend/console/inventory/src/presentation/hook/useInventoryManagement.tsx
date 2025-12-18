@@ -66,6 +66,10 @@ function mapToRows(items: InventoryManagementRow[]): InventoryRow[] {
   }));
 }
 
+function normalizeId(v: unknown): string {
+  return String(v ?? "").trim();
+}
+
 /** 在庫管理ページ用 ロジックフック */
 export function useInventoryManagement(): UseInventoryManagementResult {
   const navigate = useNavigate();
@@ -115,7 +119,8 @@ export function useInventoryManagement(): UseInventoryManagementResult {
       const productOk =
         productFilter.length === 0 || productFilter.includes(r.productName);
 
-      const tokenOk = tokenFilter.length === 0 || tokenFilter.includes(r.tokenName);
+      const tokenOk =
+        tokenFilter.length === 0 || tokenFilter.includes(r.tokenName);
 
       return productOk && tokenOk;
     });
@@ -145,13 +150,15 @@ export function useInventoryManagement(): UseInventoryManagementResult {
    * ※ product/token は Service helper を利用
    * --------------------------------------------------------- */
   const options = useMemo(() => {
-    const asServiceRows: InventoryManagementRow[] = filteredSortedRows.map((r) => ({
-      productBlueprintId: r.productBlueprintId,
-      productName: r.productName,
-      tokenBlueprintId: r.tokenBlueprintId,
-      tokenName: r.tokenName,
-      stock: r.stock,
-    }));
+    const asServiceRows: InventoryManagementRow[] = filteredSortedRows.map(
+      (r) => ({
+        productBlueprintId: r.productBlueprintId,
+        productName: r.productName,
+        tokenBlueprintId: r.tokenBlueprintId,
+        tokenName: r.tokenName,
+        stock: r.stock,
+      }),
+    );
 
     const base = buildInventoryFilterOptionsFromRows(asServiceRows);
 
@@ -166,8 +173,21 @@ export function useInventoryManagement(): UseInventoryManagementResult {
    * --------------------------------------------------------- */
   const handleRowClick = useCallback(
     (row: InventoryRow) => {
-      // ✅ 詳細は pbId を渡して query させる（期待値）
-      navigate(`/inventory/detail/${encodeURIComponent(row.productBlueprintId)}`);
+      // ✅ 方針A: 詳細は pbId + tbId の両方をURLに渡す
+      const pbId = normalizeId(row.productBlueprintId);
+      const tbId = normalizeId(row.tokenBlueprintId);
+
+      if (!pbId || !tbId || tbId === "-") {
+        console.warn(
+          "[inventory/useInventoryManagement] missing tokenBlueprintId; cannot navigate detail",
+          { pbId, tbId, row },
+        );
+        return;
+      }
+
+      navigate(
+        `/inventory/detail/${encodeURIComponent(pbId)}/${encodeURIComponent(tbId)}`,
+      );
     },
     [navigate],
   );

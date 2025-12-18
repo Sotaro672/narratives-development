@@ -42,9 +42,10 @@ func NewInventoryQuery(
 // ✅ currentMember.companyId -> productBlueprintIds -> inventories list
 // ============================================================
 //
-// 返す Row は従来互換のため
-// - ProductBlueprintID / ProductName / TokenName / ModelNumber / Stock
-// を維持しつつ、Stock は m.Stock[modelId] の件数で算出する。
+// 返す Row は（管理一覧）として
+// - ProductBlueprintID / ProductName / TokenBlueprintID / TokenName / ModelNumber / Stock
+// を返す。
+// ✅ Stock は m.Stock[modelId] の件数で算出する。
 func (q *InventoryQuery) ListByCurrentCompany(ctx context.Context) ([]querydto.InventoryManagementRowDTO, error) {
 	if q == nil || q.invRepo == nil || q.pbRepo == nil {
 		return nil, errors.New("inventory query repositories are not configured")
@@ -64,14 +65,20 @@ func (q *InventoryQuery) ListByCurrentCompany(ctx context.Context) ([]querydto.I
 		return []querydto.InventoryManagementRowDTO{}, nil
 	}
 
+	// ✅ 集計キーは tokenName ではなく tokenBlueprintId を正とする（detail遷移に必須）
 	type key struct {
-		pbID      string
-		tokenName string
-		modelNum  string
+		pbID     string
+		tbID     string
+		modelNum string
 	}
 
+	// key -> stock sum
 	group := map[key]int{}
+
+	// caches
 	productNameCache := map[string]string{}
+	tokenNameCache := map[string]string{}
+	modelNumberCache := map[string]string{}
 
 	for _, pbID := range pbIDs {
 		pbID = strings.TrimSpace(pbID)
@@ -98,14 +105,31 @@ func (q *InventoryQuery) ListByCurrentCompany(ctx context.Context) ([]querydto.I
 		}
 
 		for _, inv := range invs {
+			// ✅ tokenBlueprintId は inv.TokenBlueprintID が空でも
+			// inventoryId(=docId) の後半から復元する
 			tbID := strings.TrimSpace(inv.TokenBlueprintID)
-
-			tokenName := q.resolveTokenName(ctx, tbID)
-			if tokenName == "" {
-				tokenName = tbID
+			if tbID == "" {
+				_, parsedTbID, ok := parseInventoryID(strings.TrimSpace(inv.ID))
+				if ok {
+					tbID = parsedTbID
+				}
 			}
-			if tokenName == "" {
-				tokenName = "-"
+
+			// ✅ 方針A: tokenBlueprintId が無い在庫は detail へ遷移できないので一覧にも出さない
+			if tbID == "" {
+				continue
+			}
+
+			// token name cache（表示用）
+			if _, ok := tokenNameCache[tbID]; !ok {
+				name := q.resolveTokenName(ctx, tbID)
+				if name == "" {
+					name = tbID
+				}
+				if name == "" {
+					name = "-"
+				}
+				tokenNameCache[tbID] = name
 			}
 
 			// Stock から model 別に集計
@@ -120,20 +144,25 @@ func (q *InventoryQuery) ListByCurrentCompany(ctx context.Context) ([]querydto.I
 					continue
 				}
 
-				modelNumber := q.resolveModelNumber(ctx, modelID)
-				if modelNumber == "" {
-					modelNumber = modelID
+				// model number cache
+				if _, ok := modelNumberCache[modelID]; !ok {
+					mn := q.resolveModelNumber(ctx, modelID)
+					if mn == "" {
+						mn = modelID
+					}
+					if mn == "" {
+						mn = "-"
+					}
+					modelNumberCache[modelID] = mn
 				}
-				if modelNumber == "" {
-					modelNumber = "-"
-				}
+				modelNumber := modelNumberCache[modelID]
 
 				stock := modelStockLen(ms) // ✅ Products/Accumulation は使わず Stock で算出
 				if stock <= 0 {
 					continue
 				}
 
-				k := key{pbID: pbID, tokenName: tokenName, modelNum: modelNumber}
+				k := key{pbID: pbID, tbID: tbID, modelNum: modelNumber}
 				group[k] += stock
 			}
 		}
@@ -144,9 +173,13 @@ func (q *InventoryQuery) ListByCurrentCompany(ctx context.Context) ([]querydto.I
 		rows = append(rows, querydto.InventoryManagementRowDTO{
 			ProductBlueprintID: k.pbID,
 			ProductName:        productNameCache[k.pbID],
-			TokenName:          k.tokenName,
-			ModelNumber:        k.modelNum,
-			Stock:              stock,
+
+			// ✅ ここが今回の本命（フロントが detail URL を作るのに必要）
+			TokenBlueprintID: k.tbID,
+
+			TokenName:   tokenNameCache[k.tbID],
+			ModelNumber: k.modelNum,
+			Stock:       stock,
 		})
 	}
 
@@ -154,6 +187,7 @@ func (q *InventoryQuery) ListByCurrentCompany(ctx context.Context) ([]querydto.I
 		if rows[i].ProductName != rows[j].ProductName {
 			return rows[i].ProductName < rows[j].ProductName
 		}
+		// tokenName より tbId のほうが安定。表示順は tokenName でもOK
 		if rows[i].TokenName != rows[j].TokenName {
 			return rows[i].TokenName < rows[j].TokenName
 		}
@@ -201,6 +235,32 @@ type inventoryReader interface {
 
 type productBlueprintIDsByCompanyReader interface {
 	ListIDsByCompanyID(ctx context.Context, companyID string) ([]string, error)
+}
+
+// ============================================================
+// ID helpers
+// - inventoryId := "{productBlueprintId}__{tokenBlueprintId}"
+//   → 後半から tokenBlueprintId を復元できる
+// ============================================================
+
+func parseInventoryID(inventoryID string) (pbID, tbID string, ok bool) {
+	id := strings.TrimSpace(inventoryID)
+	if id == "" {
+		return "", "", false
+	}
+
+	const sep = "__"
+	i := strings.LastIndex(id, sep)
+	if i <= 0 || i+len(sep) >= len(id) {
+		return "", "", false
+	}
+
+	pbID = strings.TrimSpace(id[:i])
+	tbID = strings.TrimSpace(id[i+len(sep):])
+	if pbID == "" || tbID == "" {
+		return "", "", false
+	}
+	return pbID, tbID, true
 }
 
 // ============================================================

@@ -14,6 +14,10 @@ export type UseInventoryDetailResult = {
   error: string | null;
 };
 
+function asString(v: any): string {
+  return String(v ?? "").trim();
+}
+
 export function useInventoryDetail(
   productBlueprintId: string | undefined,
   tokenBlueprintId: string | undefined,
@@ -23,20 +27,29 @@ export function useInventoryDetail(
   const [loading, setLoading] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
 
+  // ✅ サービス層（queryInventoryDetailByProductAndToken）を正として、入力正規化は hook 側で最小限のみ
+  const pbId = React.useMemo(() => asString(productBlueprintId), [productBlueprintId]);
+  const tbId = React.useMemo(() => asString(tokenBlueprintId), [tokenBlueprintId]);
+
   // 画面マウント確認ログ（遷移できてるか）
   React.useEffect(() => {
     console.log("[inventory/useInventoryDetail] mounted", {
       productBlueprintId,
       tokenBlueprintId,
+      normalized: { pbId, tbId },
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   React.useEffect(() => {
-    const pbId = String(productBlueprintId ?? "").trim();
-    const tbId = String(tokenBlueprintId ?? "").trim();
-
-    if (!pbId || !tbId) return;
+    // 入力不足なら何もしない（サービス層が正なので、ここでの補完ロジックは持たない）
+    if (!pbId || !tbId) {
+      setVm(null);
+      setRows([]);
+      setLoading(false);
+      setError(null);
+      return;
+    }
 
     let cancelled = false;
 
@@ -48,32 +61,36 @@ export function useInventoryDetail(
         console.log("[inventory/useInventoryDetail] fetch start", { pbId, tbId });
 
         // ✅ 方針A: pbId + tbId -> inventoryIds -> details -> merge(viewModel)
+        // ✅ 取得・集計・揺れ吸収はサービス層を正として任せる
         const merged = await queryInventoryDetailByProductAndToken(pbId, tbId);
 
         if (cancelled) return;
 
+        const nextRows = Array.isArray(merged.rows) ? merged.rows : [];
+
         console.log("[inventory/useInventoryDetail] fetch ok", {
           inventoryKey: merged.inventoryKey,
           inventoryIds: merged.inventoryIds?.length ?? 0,
-          rowsCount: merged.rows?.length ?? 0,
+          rowsCount: nextRows.length,
           totalStock: merged.totalStock,
           updatedAt: merged.updatedAt,
-          vm: merged,
         });
 
         setVm(merged);
-        setRows(Array.isArray(merged.rows) ? merged.rows : []);
+        setRows(nextRows);
       } catch (e: any) {
         if (cancelled) return;
 
+        const msg = String(e?.message ?? e);
+
         console.error("[inventory/useInventoryDetail] fetch error", {
-          productBlueprintId,
-          tokenBlueprintId,
-          error: String(e?.message ?? e),
+          pbId,
+          tbId,
+          error: msg,
           raw: e,
         });
 
-        setError(String(e?.message ?? e));
+        setError(msg);
         setVm(null);
         setRows([]);
       } finally {
@@ -85,7 +102,7 @@ export function useInventoryDetail(
     return () => {
       cancelled = true;
     };
-  }, [productBlueprintId, tokenBlueprintId]);
+  }, [pbId, tbId]);
 
   return { vm, rows, loading, error };
 }
