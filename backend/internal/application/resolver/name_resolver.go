@@ -3,6 +3,8 @@ package resolver
 
 import (
 	"context"
+	"log"
+	"reflect"
 	"strings"
 
 	branddom "narratives/internal/domain/brand"
@@ -100,7 +102,6 @@ func (r *NameResolver) ResolveBrandName(ctx context.Context, brandID string) str
 		return ""
 	}
 
-	// Brand ドメインの Name フィールドを想定
 	return strings.TrimSpace(b.Name)
 }
 
@@ -124,7 +125,6 @@ func (r *NameResolver) ResolveCompanyName(ctx context.Context, companyID string)
 		return ""
 	}
 
-	// Company ドメインの Name フィールドを想定
 	return strings.TrimSpace(c.Name)
 }
 
@@ -171,7 +171,6 @@ func (r *NameResolver) ResolveMemberName(ctx context.Context, memberID string) s
 		return ""
 	}
 
-	// ★ Member ドメイン構造体に合わせて LastName / FirstName を使用
 	family := strings.TrimSpace(m.LastName) // 姓
 	given := strings.TrimSpace(m.FirstName) // 名
 
@@ -189,7 +188,6 @@ func (r *NameResolver) ResolveMemberName(ctx context.Context, memberID string) s
 
 // ---- memberId 派生フィールド向けヘルパ ----
 
-// 内部共通: *string 型の memberId から氏名を解決
 func (r *NameResolver) resolveMemberNameFromPtr(ctx context.Context, memberID *string) string {
 	if memberID == nil {
 		return ""
@@ -197,32 +195,26 @@ func (r *NameResolver) resolveMemberNameFromPtr(ctx context.Context, memberID *s
 	return r.ResolveMemberName(ctx, *memberID)
 }
 
-// ResolveAssigneeName は assigneeId → 氏名を解決する。
 func (r *NameResolver) ResolveAssigneeName(ctx context.Context, assigneeID string) string {
 	return r.ResolveMemberName(ctx, assigneeID)
 }
 
-// ResolveCreatedByName は createdBy (memberId) → 氏名を解決する。
 func (r *NameResolver) ResolveCreatedByName(ctx context.Context, createdBy *string) string {
 	return r.resolveMemberNameFromPtr(ctx, createdBy)
 }
 
-// ResolveUpdatedByName は updatedBy (memberId) → 氏名を解決する。
 func (r *NameResolver) ResolveUpdatedByName(ctx context.Context, updatedBy *string) string {
 	return r.resolveMemberNameFromPtr(ctx, updatedBy)
 }
 
-// ResolveRequestedByName は requestedBy (memberId) → 氏名を解決する。
 func (r *NameResolver) ResolveRequestedByName(ctx context.Context, requestedBy *string) string {
 	return r.resolveMemberNameFromPtr(ctx, requestedBy)
 }
 
-// ResolveInspectedByName は inspectedBy (memberId) → 氏名を解決する。
 func (r *NameResolver) ResolveInspectedByName(ctx context.Context, inspectedBy *string) string {
 	return r.resolveMemberNameFromPtr(ctx, inspectedBy)
 }
 
-// ResolvePrintedByName は printedBy (memberId) → 氏名を解決する。
 func (r *NameResolver) ResolvePrintedByName(ctx context.Context, printedBy *string) string {
 	return r.resolveMemberNameFromPtr(ctx, printedBy)
 }
@@ -251,6 +243,195 @@ func (r *NameResolver) ResolveModelNumber(ctx context.Context, variationID strin
 }
 
 // ------------------------------------------------------------
+// ✅ ModelVariation (modelId → modelNumber/size/colorLabel/rgb)
+// - Firestore の保存形式を正とする（名揺れ吸収はしない）
+//   - modelNumber: mv.ModelNumber
+//   - size:        mv.Size
+//   - colorLabel:  mv.Color.label（無ければ mv.Color.name を読む）
+//   - rgb:         mv.Color.rgb
+// ------------------------------------------------------------
+
+type ModelResolved struct {
+	ModelNumber string
+	Size        string
+	Color       string
+	RGB         *int
+}
+
+func (r *NameResolver) ResolveModelResolved(ctx context.Context, variationID string) ModelResolved {
+	if r == nil || r.modelNumberRepo == nil {
+		return ModelResolved{}
+	}
+	id := strings.TrimSpace(variationID)
+	if id == "" {
+		return ModelResolved{}
+	}
+
+	mv, err := r.modelNumberRepo.GetModelVariationByID(ctx, id)
+	if err != nil || mv == nil {
+		log.Printf("[name_resolver][ResolveModelResolved] GetModelVariationByID failed modelId=%q err=%v mvNil=%v",
+			id, err, mv == nil,
+		)
+		return ModelResolved{}
+	}
+
+	modelNumber := strings.TrimSpace(mv.ModelNumber)
+	size := strings.TrimSpace(mv.Size)
+
+	// Firestore: color(map){ label or name, rgb }
+	colorLabel, rgb, dbg := extractColorLabelAndRGBFromModelVariation(mv)
+
+	log.Printf("[name_resolver][ResolveModelResolved] fromModelVariation modelId=%q modelNumber=%q size=%q color=%q rgb=%v rgbType=%T dbg=%s",
+		id, modelNumber, size, colorLabel, rgb, rgb, dbg,
+	)
+
+	return ModelResolved{
+		ModelNumber: modelNumber,
+		Size:        size,
+		Color:       strings.TrimSpace(colorLabel),
+		RGB:         rgb,
+	}
+}
+
+// Firestore の保存形式を正として読む（名揺れ吸収しない）
+func extractColorLabelAndRGBFromModelVariation(mv *modeldom.ModelVariation) (string, *int, string) {
+	if mv == nil {
+		return "", nil, "mv=nil"
+	}
+
+	// mv.Color を reflect で読む（Color の型が struct/map どちらでも対応）
+	rv := reflect.ValueOf(mv)
+	rv = deref(rv)
+	if !rv.IsValid() || rv.Kind() != reflect.Struct {
+		return "", nil, "mv!=struct"
+	}
+
+	f := rv.FieldByName("Color")
+	if !f.IsValid() {
+		return "", nil, "field Color not found"
+	}
+	f = deref(f)
+	if !f.IsValid() {
+		return "", nil, "Color invalid"
+	}
+
+	switch f.Kind() {
+	case reflect.Map:
+		// color(map)
+		label := mapString(f, "label")
+		if strings.TrimSpace(label) == "" {
+			// 互換：既存データが name の場合（同一フィールド内のキー差分のみ）
+			label = mapString(f, "name")
+		}
+		rgb := mapIntPtr(f, "rgb")
+		return strings.TrimSpace(label), rgb, "Color.kind=map"
+
+	case reflect.Struct:
+		// color(struct)
+		// label が正。無い場合は name（同一 struct 内のフィールド差分のみ）
+		label := structString(f, "Label")
+		if strings.TrimSpace(label) == "" {
+			label = structString(f, "Name")
+		}
+		rgb := structIntPtr(f, "RGB")
+		if rgb == nil {
+			// struct 側が rgb の場合
+			rgb = structIntPtr(f, "Rgb")
+		}
+		return strings.TrimSpace(label), rgb, "Color.kind=struct"
+
+	default:
+		return "", nil, "Color unsupported kind=" + f.Kind().String()
+	}
+}
+
+func deref(v reflect.Value) reflect.Value {
+	if !v.IsValid() {
+		return v
+	}
+	for v.Kind() == reflect.Pointer || v.Kind() == reflect.Interface {
+		if v.IsNil() {
+			return reflect.Value{}
+		}
+		v = v.Elem()
+	}
+	return v
+}
+
+func mapString(m reflect.Value, key string) string {
+	if !m.IsValid() || m.Kind() != reflect.Map {
+		return ""
+	}
+	kv := m.MapIndex(reflect.ValueOf(key))
+	kv = deref(kv)
+	if !kv.IsValid() || kv.Kind() != reflect.String {
+		return ""
+	}
+	return kv.String()
+}
+
+func mapIntPtr(m reflect.Value, key string) *int {
+	if !m.IsValid() || m.Kind() != reflect.Map {
+		return nil
+	}
+	kv := m.MapIndex(reflect.ValueOf(key))
+	kv = deref(kv)
+	if !kv.IsValid() {
+		return nil
+	}
+	if n, ok := asInt(kv); ok {
+		x := n
+		return &x
+	}
+	return nil
+}
+
+func structString(s reflect.Value, fieldName string) string {
+	if !s.IsValid() || s.Kind() != reflect.Struct {
+		return ""
+	}
+	f := s.FieldByName(fieldName)
+	f = deref(f)
+	if !f.IsValid() || f.Kind() != reflect.String {
+		return ""
+	}
+	return f.String()
+}
+
+func structIntPtr(s reflect.Value, fieldName string) *int {
+	if !s.IsValid() || s.Kind() != reflect.Struct {
+		return nil
+	}
+	f := s.FieldByName(fieldName)
+	f = deref(f)
+	if !f.IsValid() {
+		return nil
+	}
+	if n, ok := asInt(f); ok {
+		x := n
+		return &x
+	}
+	return nil
+}
+
+func asInt(v reflect.Value) (int, bool) {
+	if !v.IsValid() {
+		return 0, false
+	}
+	switch v.Kind() {
+	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
+		return int(v.Int()), true
+	case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64:
+		return int(v.Uint()), true
+	case reflect.Float32, reflect.Float64:
+		// Firestore number が float で入ってくるケース
+		return int(v.Float()), true
+	default:
+		return 0, false
+	}
+}
+
+// ------------------------------------------------------------
 // TokenBlueprint 関連
 // ------------------------------------------------------------
 
@@ -270,7 +451,6 @@ func (r *NameResolver) ResolveTokenName(ctx context.Context, tokenBlueprintID st
 		return ""
 	}
 
-	// TokenBlueprint ドメインの Name を優先し、なければ Symbol を表示
 	name := strings.TrimSpace(tb.Name)
 	if name != "" {
 		return name

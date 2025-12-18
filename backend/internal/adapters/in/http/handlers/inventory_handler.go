@@ -2,7 +2,6 @@
 package handlers
 
 import (
-	"context"
 	"encoding/json"
 	"errors"
 	"log"
@@ -31,7 +30,6 @@ func NewInventoryHandler(uc *usecase.InventoryUsecase, q *invquery.InventoryQuer
 func (h *InventoryHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	path := strings.TrimSuffix(r.URL.Path, "/")
 
-	// ✅ 入口ログ：画面から何が来たか
 	log.Printf("[inventory_handler] IN %s %s rawPath=%s query=%q",
 		r.Method, path, r.URL.Path, r.URL.RawQuery,
 	)
@@ -40,7 +38,6 @@ func (h *InventoryHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	// Query endpoints (read-only DTO)
 	// ============================================================
 
-	// ✅ GET /inventory/ids  (pbId+tbId -> inventoryIds)
 	if path == "/inventory/ids" {
 		switch r.Method {
 		case http.MethodGet:
@@ -54,7 +51,6 @@ func (h *InventoryHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	// ✅ GET /inventory  (currentMember.companyId -> productBlueprintIds -> inventories)
 	if path == "/inventory" {
 		switch r.Method {
 		case http.MethodGet:
@@ -68,8 +64,7 @@ func (h *InventoryHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	// ✅ NEW: GET /inventory/{id}  (detail)
-	// - /inventory/ids は上で処理済みなので、ここでは /inventory/{anything} を detail として扱う
+	// ✅ GET /inventory/{id}
 	if strings.HasPrefix(path, "/inventory/") {
 		switch r.Method {
 		case http.MethodGet:
@@ -79,7 +74,7 @@ func (h *InventoryHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 				writeError(w, http.StatusBadRequest, "invalid inventory id")
 				return
 			}
-			log.Printf("[inventory_handler] route=QueryOrFallback.Detail id=%q", id)
+			log.Printf("[inventory_handler] route=Query.Detail id=%q", id)
 			h.GetDetailByIDQueryOrFallback(w, r, id)
 			return
 		default:
@@ -182,7 +177,6 @@ func (h *InventoryHandler) ListByCurrentCompanyQuery(w http.ResponseWriter, r *h
 	writeJSON(w, http.StatusOK, rows)
 }
 
-// ✅ NEW: pbId + tbId -> inventoryIds
 func (h *InventoryHandler) ResolveInventoryIDsByProductAndTokenQuery(w http.ResponseWriter, r *http.Request) {
 	if h.Q == nil {
 		log.Printf("[inventory_handler][ResolveInventoryIDsByProductAndToken] QueryNotConfigured")
@@ -230,8 +224,9 @@ func (h *InventoryHandler) ResolveInventoryIDsByProductAndTokenQuery(w http.Resp
 }
 
 // ============================================================
-// ✅ NEW: Detail endpoint (Query preferred, fallback to UC)
-// GET /inventory/{id}
+// ✅ Detail endpoint（確定）
+// - Query があれば必ず GetDetailByID を呼ぶ
+// - Query が無い場合のみ UC fallback
 // ============================================================
 
 func (h *InventoryHandler) GetDetailByIDQueryOrFallback(w http.ResponseWriter, r *http.Request, inventoryID string) {
@@ -245,23 +240,44 @@ func (h *InventoryHandler) GetDetailByIDQueryOrFallback(w http.ResponseWriter, r
 		return
 	}
 
-	// 1) Query があれば detail DTO を試す（メソッド名の揺れを reflect で吸収）
+	// 1) Query があるなら確定で呼ぶ
 	if h.Q != nil {
-		if dto, ok, err := tryCallInventoryQueryDetail(ctx, h.Q, id); ok {
-			if err != nil {
-				log.Printf("[inventory_handler][Detail] query failed id=%q err=%v", id, err)
-				// not found を 404 に寄せたい場合はここで判定してもOK
-				writeError(w, http.StatusInternalServerError, err.Error())
+		dto, err := h.Q.GetDetailByID(ctx, id)
+		if err != nil {
+			log.Printf("[inventory_handler][Detail] query failed id=%q err=%v", id, err)
+			// not found を 404 に寄せたい場合はここで判定してもOK
+			if errors.Is(err, invdom.ErrNotFound) {
+				writeError(w, http.StatusNotFound, err.Error())
 				return
 			}
-			log.Printf("[inventory_handler][Detail] query ok id=%q", id)
-			writeJSON(w, http.StatusOK, dto)
+			writeError(w, http.StatusInternalServerError, err.Error())
 			return
 		}
-		log.Printf("[inventory_handler][Detail] query detail method not found (fallback to usecase) id=%q", id)
+
+		// ✅ 画面へ渡す rows をログで可視化（欠損が分かるように）
+		missColor := 0
+		missRGB := 0
+		for i, row := range dto.Rows {
+			if strings.TrimSpace(row.Color) == "" || row.Color == "-" {
+				missColor++
+			}
+			if row.RGB == nil {
+				missRGB++
+			}
+			log.Printf("[inventory_handler][RESP][/inventory/{id}][query] row[%d] modelNumber=%q size=%q color=%q rgb=%v rgbType=%T stock=%d",
+				i, row.ModelNumber, row.Size, row.Color, row.RGB, row.RGB, row.Stock,
+			)
+		}
+		log.Printf("[inventory_handler][RESP][/inventory/{id}][query] summary id=%q rows=%d totalStock=%d missing={color:%d,rgb:%d}",
+			id, len(dto.Rows), dto.TotalStock, missColor, missRGB,
+		)
+
+		log.Printf("[inventory_handler][Detail] query ok id=%q", id)
+		writeJSON(w, http.StatusOK, dto)
+		return
 	}
 
-	// 2) fallback: UC.GetByID（※DTOの完全一致は Query 側推奨）
+	// 2) fallback: UC.GetByID
 	if h.UC == nil {
 		log.Printf("[inventory_handler][Detail] UsecaseNotConfigured")
 		writeError(w, http.StatusNotImplemented, "inventory usecase is not configured")
@@ -275,8 +291,6 @@ func (h *InventoryHandler) GetDetailByIDQueryOrFallback(w http.ResponseWriter, r
 		return
 	}
 
-	// fallback DTO（最低限）
-	// フロントの mapper は rows が無くても落ちないので、まず 200 を返すことを優先。
 	resp := map[string]any{
 		"inventoryId":        strings.TrimSpace(m.ID),
 		"id":                 strings.TrimSpace(m.ID),
@@ -298,80 +312,6 @@ func (h *InventoryHandler) GetDetailByIDQueryOrFallback(w http.ResponseWriter, r
 	)
 
 	writeJSON(w, http.StatusOK, resp)
-}
-
-// tryCallInventoryQueryDetail tries to call a detail method on InventoryQuery without compile-time dependency.
-// It returns (dto, ok(method found), err).
-func tryCallInventoryQueryDetail(ctx context.Context, q any, id string) (any, bool, error) {
-	// 候補名（プロジェクトの変遷を吸収）
-	candidates := []string{
-		"GetDetail",
-		"GetDetailByID",
-		"GetDetailByInventoryID",
-		"GetByIDDetail",
-		"Detail",
-		"GetInventoryDetail",
-	}
-
-	rv := reflect.ValueOf(q)
-
-	for _, name := range candidates {
-		m := rv.MethodByName(name)
-		if !m.IsValid() {
-			continue
-		}
-
-		// シグネチャが違っても panic しうるので保護
-		var (
-			out any
-			err error
-		)
-		func() {
-			defer func() {
-				if rec := recover(); rec != nil {
-					log.Printf("[inventory_handler][Detail] reflect call panic name=%s rec=%v", name, rec)
-					out = nil
-					err = errors.New("reflect call panic")
-				}
-			}()
-
-			mt := m.Type()
-			// 期待: func(context.Context, string) (any, error)
-			if mt.NumIn() != 2 || mt.NumOut() != 2 {
-				// 合わないなら次へ
-				out = nil
-				err = nil
-				return
-			}
-
-			outs := m.Call([]reflect.Value{reflect.ValueOf(ctx), reflect.ValueOf(id)})
-			if len(outs) != 2 {
-				out = nil
-				err = nil
-				return
-			}
-
-			// 1st return: dto
-			out = outs[0].Interface()
-
-			// 2nd return: error
-			if !outs[1].IsValid() || outs[1].IsNil() {
-				err = nil
-				return
-			}
-			if e, ok := outs[1].Interface().(error); ok {
-				err = e
-				return
-			}
-			err = errors.New("second return is not error")
-		}()
-
-		// ここまで来たら「候補名のメソッドは存在した」
-		// err が reflect panic 由来なら次候補へ進めても良いが、ここでは ok 扱いで返す
-		return out, true, err
-	}
-
-	return nil, false, nil
 }
 
 // ============================================================
@@ -650,17 +590,12 @@ func modelStockLen(ms invdom.ModelStock) int {
 		return 0
 	}
 
-	// ✅ map[string]bool / map[string]T
 	if rv.Kind() == reflect.Map {
 		return rv.Len()
 	}
-
-	// ✅ []string / []T / [N]T
 	if rv.Kind() == reflect.Slice || rv.Kind() == reflect.Array {
 		return rv.Len()
 	}
-
-	// ✅ struct 内に map[string]bool を持つケース
 	if rv.Kind() == reflect.Struct {
 		for i := 0; i < rv.NumField(); i++ {
 			f := rv.Field(i)

@@ -1,0 +1,27 @@
+package dto
+
+// 画面（detail）向けの最小 DTO（まずは count を通す）
+type InventoryDetailRowDTO struct {
+	ModelID     string `json:"modelId"`
+	ModelNumber string `json:"modelNumber"`
+
+	// まずは count を stock に入れる
+	Stock int `json:"stock"`
+
+	// あとで拡張（取れない間は "-" / "" / null でOK）
+	Size  string `json:"size"`
+	Color string `json:"color"`
+	RGB   *int   `json:"rgb,omitempty"`
+}
+
+type InventoryDetailDTO struct {
+	InventoryID string `json:"inventoryId"`
+
+	TokenBlueprintID   string `json:"tokenBlueprintId"`
+	ProductBlueprintID string `json:"productBlueprintId"`
+
+	Rows       []InventoryDetailRowDTO `json:"rows"`
+	TotalStock int                     `json:"totalStock"`
+
+	UpdatedAt string `json:"updatedAt,omitempty"`
+}
