@@ -110,7 +110,9 @@ export async function fetchInventoryListDTO(): Promise<InventoryListRowDTO[]> {
 
   if (!res.ok) {
     const text = await res.text().catch(() => "");
-    throw new Error(`Failed to fetch inventory list: ${res.status} ${res.statusText} ${text}`);
+    throw new Error(
+      `Failed to fetch inventory list: ${res.status} ${res.statusText} ${text}`,
+    );
   }
 
   const data = (await res.json()) as any;
@@ -154,7 +156,9 @@ export async function fetchInventoryProductSummary(
 
   if (!res.ok) {
     const text = await res.text().catch(() => "");
-    throw new Error(`Failed to fetch product blueprint: ${res.status} ${res.statusText} ${text}`);
+    throw new Error(
+      `Failed to fetch product blueprint: ${res.status} ${res.statusText} ${text}`,
+    );
   }
 
   const data = await res.json();
@@ -177,7 +181,9 @@ export async function fetchInventoryProductSummary(
  *
  * GET /product-blueprints/printed
  */
-export async function fetchPrintedInventorySummaries(): Promise<InventoryProductSummary[]> {
+export async function fetchPrintedInventorySummaries(): Promise<
+  InventoryProductSummary[]
+> {
   const token = await getIdTokenOrThrow();
   const url = `${API_BASE}/product-blueprints/printed`;
 
@@ -244,7 +250,9 @@ export async function fetchInventoryIDsByProductAndTokenDTO(
 
   if (!res.ok) {
     const text = await res.text().catch(() => "");
-    throw new Error(`Failed to fetch inventory ids: ${res.status} ${res.statusText} ${text}`);
+    throw new Error(
+      `Failed to fetch inventory ids: ${res.status} ${res.statusText} ${text}`,
+    );
   }
 
   const data = await res.json();
@@ -295,6 +303,18 @@ export type ProductBlueprintPatchDTO = {
   assigneeId?: string | null;
 };
 
+// ✅ NEW: TokenBlueprint patch（Inventory 詳細で使用）
+export type TokenBlueprintPatchDTO = {
+  tokenName?: string | null;
+  symbol?: string | null;
+  brandId?: string | null;
+  brandName?: string | null;
+  description?: string | null;
+  minted?: boolean | null;
+  metadataUri?: string | null;
+  iconUrl?: string | null;
+};
+
 export type InventoryDetailRowDTO = {
   tokenBlueprintId?: string;
   token?: string;
@@ -316,6 +336,9 @@ export type InventoryDetailDTO = {
   modelId: string;
 
   productBlueprintPatch: ProductBlueprintPatchDTO;
+
+  // ✅ NEW: tokenBlueprint patch を保持できるようにする
+  tokenBlueprintPatch?: TokenBlueprintPatchDTO;
 
   tokenBlueprint?: TokenBlueprintSummaryDTO;
   productBlueprint?: ProductBlueprintSummaryDTO;
@@ -441,11 +464,83 @@ function mapProductBlueprintPatch(raw: any): ProductBlueprintPatchDTO {
   };
 }
 
+function mapTokenBlueprintPatch(raw: any): TokenBlueprintPatchDTO | undefined {
+  if (raw === undefined) return undefined;
+  if (raw === null) return undefined;
+
+  const p = raw as any;
+
+  const mintedRaw = p?.minted;
+  const minted =
+    mintedRaw === undefined
+      ? undefined
+      : mintedRaw === null
+        ? null
+        : typeof mintedRaw === "boolean"
+          ? mintedRaw
+          : String(mintedRaw).trim().toLowerCase() === "true";
+
+  const iconUrl = s(p?.iconUrl);
+  const metadataUri = s(p?.metadataUri ?? p?.metadataURI);
+
+  return {
+    tokenName:
+      p?.tokenName !== undefined
+        ? (p.tokenName as any)
+        : p?.name !== undefined
+          ? (p.name as any)
+          : undefined,
+    symbol: p?.symbol !== undefined ? (p.symbol as any) : undefined,
+    brandId: p?.brandId !== undefined ? (p.brandId as any) : undefined,
+    brandName: p?.brandName !== undefined ? (p.brandName as any) : undefined,
+    description: p?.description !== undefined ? (p.description as any) : undefined,
+    minted: minted as any,
+    metadataUri: metadataUri ? metadataUri : undefined,
+    iconUrl: iconUrl ? iconUrl : undefined,
+  };
+}
+
+/**
+ * ✅ NEW: TokenBlueprint Patch DTO
+ * GET /token-blueprints/{tokenBlueprintId}/patch
+ *
+ * - inventoryDetailService が import して呼べるように export する
+ * - backend が未実装の場合は 404/501 等になるので、呼び出し側で try/catch する想定
+ */
+export async function fetchTokenBlueprintPatchDTO(
+  tokenBlueprintId: string,
+): Promise<TokenBlueprintPatchDTO> {
+  const token = await getIdTokenOrThrow();
+
+  const tbId = s(tokenBlueprintId);
+  if (!tbId) throw new Error("tokenBlueprintId is empty");
+
+  const url = `${API_BASE}/token-blueprints/${encodeURIComponent(tbId)}/patch`;
+
+  const res = await fetch(url, {
+    method: "GET",
+    headers: { Authorization: `Bearer ${token}` },
+  });
+
+  if (!res.ok) {
+    const text = await res.text().catch(() => "");
+    throw new Error(
+      `Failed to fetch token blueprint patch: ${res.status} ${res.statusText} ${text}`,
+    );
+  }
+
+  const data = await res.json();
+  const patch = mapTokenBlueprintPatch(data) ?? {};
+  return patch;
+}
+
 /**
  * ✅ Inventory Detail DTO
  * GET /inventory/{inventoryId}
  */
-export async function fetchInventoryDetailDTO(inventoryId: string): Promise<InventoryDetailDTO> {
+export async function fetchInventoryDetailDTO(
+  inventoryId: string,
+): Promise<InventoryDetailDTO> {
   const id = s(inventoryId);
   if (!id) throw new Error("inventoryId is empty");
 
@@ -467,16 +562,7 @@ export async function fetchInventoryDetailDTO(inventoryId: string): Promise<Inve
   const data = await res.json();
 
   const patch = mapProductBlueprintPatch(data?.productBlueprintPatch);
-
-  // ✅ 追加: productBlueprint patch に brandId と brandName を持てているか確認
-  console.log("[inventory/fetchInventoryDetailDTO] pbPatch brand check", {
-    inventoryId: id,
-    pbId: s(data?.productBlueprintId ?? data?.ProductBlueprintID),
-    brandId: patch.brandId ?? null,
-    brandName: patch.brandName ?? null,
-    hasBrandId: !!s(patch.brandId ?? ""),
-    hasBrandName: !!s(patch.brandName ?? ""),
-  });
+  const tokenBlueprintPatch = mapTokenBlueprintPatch(data?.tokenBlueprintPatch);
 
   const rows: InventoryDetailRowDTO[] = Array.isArray(data?.rows)
     ? data.rows.map((r: any) => ({
@@ -503,6 +589,9 @@ export async function fetchInventoryDetailDTO(inventoryId: string): Promise<Inve
     modelId: s(data?.modelId ?? data?.ModelID),
 
     productBlueprintPatch: patch,
+
+    // ✅ tokenBlueprintPatch を持てている（backend が返せば格納される）
+    tokenBlueprintPatch,
 
     tokenBlueprint: data?.tokenBlueprint
       ? {

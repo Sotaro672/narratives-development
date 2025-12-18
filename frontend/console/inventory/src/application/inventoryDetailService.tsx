@@ -4,8 +4,12 @@ import type { InventoryRow } from "../presentation/components/inventoryCard";
 import {
   fetchInventoryIDsByProductAndTokenDTO,
   fetchInventoryDetailDTO,
+  // ✅ NEW: tokenBlueprint patch を取得する関数
+  fetchTokenBlueprintPatchDTO,
   type InventoryDetailDTO,
   type ProductBlueprintPatchDTO,
+  // ✅ NEW: tokenBlueprint patch DTO 型
+  type TokenBlueprintPatchDTO,
 } from "../infrastructure/http/inventoryRepositoryHTTP";
 
 // ============================================================
@@ -17,6 +21,13 @@ export type ProductBlueprintPatchDTOEx = ProductBlueprintPatchDTO & {
   brandId?: string;
   brandName?: string;
   productName?: string;
+};
+
+// ✅ NEW: tokenBlueprint patch を ViewModel に保持できるようにする
+export type TokenBlueprintPatchDTOEx = TokenBlueprintPatchDTO & {
+  tokenName?: string;
+  brandId?: string;
+  brandName?: string;
 };
 
 export type InventoryDetailViewModel = {
@@ -36,6 +47,9 @@ export type InventoryDetailViewModel = {
   productName?: string;
   brandId?: string;
   brandName?: string;
+
+  // ✅ NEW: tokenBlueprint patch（token名など）
+  tokenBlueprintPatch?: TokenBlueprintPatchDTOEx;
 
   // 元データも保持（編集フォームなどで利用する想定）
   productBlueprintPatch: ProductBlueprintPatchDTOEx;
@@ -79,6 +93,35 @@ function pickPatch(dtos: InventoryDetailDTO[]): ProductBlueprintPatchDTOEx {
   return (found ?? {}) as any;
 }
 
+// ✅ NEW: tokenBlueprint patch を DTO群 or 外部取得結果から拾う
+function pickTokenBlueprintPatch(
+  dtos: InventoryDetailDTO[],
+  external?: TokenBlueprintPatchDTO | null,
+): TokenBlueprintPatchDTOEx | undefined {
+  // 1) DTO 内（embedded）を優先…ただし「実体が薄い / 期待キーが無い」場合があるので注意して扱う
+  const embedded =
+    (dtos.find(
+      (d: any) => d?.tokenBlueprintPatch && Object.keys(d.tokenBlueprintPatch).length > 0,
+    ) as any)?.tokenBlueprintPatch ?? undefined;
+
+  const embeddedTokenName = asString((embedded as any)?.tokenName ?? (embedded as any)?.name);
+  const embeddedSymbol = asString((embedded as any)?.symbol);
+
+  // embedded が “あるが中身が空っぽ” っぽい場合は external を優先
+  const shouldPreferExternal =
+    (!!embedded && !embeddedTokenName && !embeddedSymbol) || embedded === null;
+
+  const base = (shouldPreferExternal ? (external ?? embedded) : (embedded ?? external)) as any;
+  if (!base) return undefined;
+
+  return {
+    ...base,
+    tokenName: asString(base?.tokenName ?? base?.name) || undefined,
+    brandId: asString(base?.brandId) || undefined,
+    brandName: asString(base?.brandName) || undefined,
+  } as any;
+}
+
 function pickTokenNameFromDTO(dto: any): string {
   return (
     asString(dto?.tokenBlueprint?.name) ||
@@ -108,18 +151,10 @@ function pickBrandId(patch: any): string {
   );
 }
 function pickBrandName(patch: any): string {
-  return (
-    asString(patch?.brandName) ||
-    asString(patch?.BrandName) ||
-    ""
-  );
+  return asString(patch?.brandName) || asString(patch?.BrandName) || "";
 }
 function pickProductName(patch: any): string {
-  return (
-    asString(patch?.productName) ||
-    asString(patch?.ProductName) ||
-    ""
-  );
+  return asString(patch?.productName) || asString(patch?.ProductName) || "";
 }
 
 // ============================================================
@@ -138,7 +173,9 @@ function mapDtoToRows(
 
   for (const r of rowsRaw) {
     // row 側に tbId が入っていない実装も多いので、ある時だけフィルタする
-    const rowTbId = asString(r?.tokenBlueprintId ?? r?.TokenBlueprintID ?? r?.token_blueprint_id);
+    const rowTbId = asString(
+      r?.tokenBlueprintId ?? r?.TokenBlueprintID ?? r?.token_blueprint_id,
+    );
     if (expectedTbId && rowTbId && rowTbId !== expectedTbId) continue;
 
     const token = asString(r?.token ?? r?.Token) || fallbackToken || "-";
@@ -165,6 +202,7 @@ function mergeDetailDTOs(
   tbId: string,
   inventoryIds: string[],
   dtos: InventoryDetailDTO[],
+  tokenBlueprintPatchExternal?: TokenBlueprintPatchDTO | null,
 ): InventoryDetailViewModel {
   const patch = pickPatch(dtos);
   const maxUpdated = pickUpdatedAtMax(dtos);
@@ -173,6 +211,9 @@ function mergeDetailDTOs(
   const brandId = pickBrandId(patch);
   const brandName = pickBrandName(patch);
   const productName = pickProductName(patch);
+
+  // ✅ NEW: tokenBlueprint patch を確定
+  const tokenBlueprintPatch = pickTokenBlueprintPatch(dtos, tokenBlueprintPatchExternal);
 
   // rows を結合 → 同一キーで合算（表示安定）
   const agg = new Map<
@@ -241,6 +282,8 @@ function mergeDetailDTOs(
     brandId: brandId || undefined,
     brandName: brandName || undefined,
 
+    tokenBlueprintPatch,
+
     productBlueprintPatch: patch,
     rows: mergedRows,
     totalStock,
@@ -252,6 +295,7 @@ function mergeDetailDTOs(
 // ============================================================
 // Query Request (Application Layer)
 // - ✅ 方針Aのみ: pbId + tbId -> inventoryIds -> details -> merge
+// - ✅ NEW: tokenBlueprint patch を追加で取得して ViewModel に載せる
 // ============================================================
 
 export async function queryInventoryDetailByProductAndToken(
@@ -271,7 +315,9 @@ export async function queryInventoryDetailByProductAndToken(
     : [];
 
   if (idsFromResolver.length === 0) {
-    throw new Error("inventoryIds is empty (no inventory for productBlueprintId + tokenBlueprintId)");
+    throw new Error(
+      "inventoryIds is empty (no inventory for productBlueprintId + tokenBlueprintId)",
+    );
   }
 
   // ② 各 inventoryId の詳細を並列取得（HTTPは repository 側へ移譲済み）
@@ -291,7 +337,9 @@ export async function queryInventoryDetailByProductAndToken(
   });
 
   if (ok.length === 0) {
-    throw new Error(`failed to fetch any inventory detail: ${failed.map((x) => x.id).join(", ")}`);
+    throw new Error(
+      `failed to fetch any inventory detail: ${failed.map((x) => x.id).join(", ")}`,
+    );
   }
 
   // ✅ backend DTO に inventoryIds が入ってくる場合は union
@@ -303,6 +351,17 @@ export async function queryInventoryDetailByProductAndToken(
 
   const inventoryIds = uniqStrings([...idsFromResolver, ...idsFromDTO]);
 
+  // ✅ NEW: tokenBlueprint patch を追加で取得
+  // - endpoint が未実装/失敗しても inventory detail 自体は返す（optional）
+  let tokenBlueprintPatch: TokenBlueprintPatchDTO | null = null;
+  try {
+    tokenBlueprintPatch = await fetchTokenBlueprintPatchDTO(tbId);
+  } catch {
+    tokenBlueprintPatch = null;
+  }
+
   // ③ マージしてViewModel化
-  return mergeDetailDTOs(pbId, tbId, inventoryIds, ok);
+  const vm = mergeDetailDTOs(pbId, tbId, inventoryIds, ok, tokenBlueprintPatch);
+
+  return vm;
 }

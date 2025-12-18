@@ -20,15 +20,6 @@ const FALLBACK_BASE =
 
 export const API_BASE = ENV_BASE || FALLBACK_BASE;
 
-console.log(
-  "[tokenBlueprint/tokenBlueprintRepositoryHTTP] API_BASE resolved =",
-  API_BASE,
-  {
-    ENV_BASE,
-    usingFallback: !ENV_BASE,
-  },
-);
-
 // ---------------------------------------------------------
 // 共通: Firebase トークン取得
 // ---------------------------------------------------------

@@ -14,6 +14,10 @@ import TokenBlueprintCard, {
 
 import { useInventoryDetail } from "../hook/useInventoryDetail";
 
+function s(v: unknown): string {
+  return String(v ?? "").trim();
+}
+
 export default function InventoryDetail() {
   const navigate = useNavigate();
 
@@ -48,8 +52,8 @@ export default function InventoryDetail() {
     tokenBlueprintId,
   );
 
-  const pbId = (vm?.productBlueprintId ?? productBlueprintId ?? "").trim();
-  const tbId = (vm?.tokenBlueprintId ?? tokenBlueprintId ?? "").trim();
+  const pbId = s(vm?.productBlueprintId ?? productBlueprintId);
+  const tbId = s(vm?.tokenBlueprintId ?? tokenBlueprintId);
   const pbPatch = vm?.productBlueprintPatch;
 
   const title = pbPatch?.productName
@@ -60,32 +64,56 @@ export default function InventoryDetail() {
 
   // ============================================================
   // ✅ TokenBlueprintCard (view only) 用の VM/Handlers を組み立て
-  //  - useInventoryDetail が tokenBlueprintPatch を返していればそれを利用
-  //  - 無い場合でも型を満たすように fallback を入れて表示だけできるようにする
+  // 重要:
+  // - TokenBlueprintCard は vm.name を表示する
+  // - 在庫詳細で取れているのは tokenBlueprintPatch.tokenName のため
+  //   「tokenName -> name」へ正しくマップする
   // ============================================================
 
-  const tbPatchAny = (vm as any)?.tokenBlueprintPatch ?? (vm as any)?.tokenBlueprint ?? null;
+  const tbPatchAny =
+    (vm as any)?.tokenBlueprintPatch ??
+    (vm as any)?.tokenBlueprint ??
+    (vm as any)?.TokenBlueprint ??
+    null;
 
-  const tokenCardVM: TokenBlueprintCardViewModel = React.useMemo(
-    () => ({
+  const tokenCardVM: TokenBlueprintCardViewModel = React.useMemo(() => {
+    const tokenName = s(tbPatchAny?.tokenName ?? tbPatchAny?.TokenName);
+    const nameFallback = s(tbPatchAny?.name ?? tbPatchAny?.Name);
+    const nameToShow = tokenName || nameFallback;
+
+    const symbol = s(tbPatchAny?.symbol ?? tbPatchAny?.Symbol);
+    const brandId = s(
+      tbPatchAny?.brandId ?? tbPatchAny?.BrandID ?? tbPatchAny?.BrandId,
+    );
+    const brandName = s(tbPatchAny?.brandName ?? tbPatchAny?.BrandName);
+    const description = String(
+      tbPatchAny?.description ?? tbPatchAny?.Description ?? "",
+    );
+    const iconUrl =
+      s(tbPatchAny?.iconUrl) ||
+      s(tbPatchAny?.iconURL) ||
+      s(tbPatchAny?.IconURL) ||
+      undefined;
+
+    // minted は在庫詳細では view-only に寄せる（trueにするとアイコン編集UIが出るため）
+    const minted = false;
+
+    return {
       id: tbId,
-      name: String(tbPatchAny?.name ?? ""),
-      symbol: String(tbPatchAny?.symbol ?? ""),
-      brandId: String(tbPatchAny?.brandId ?? ""),
-      brandName: String(tbPatchAny?.brandName ?? ""),
-      description: String(tbPatchAny?.description ?? ""),
-      iconUrl: tbPatchAny?.iconUrl ?? tbPatchAny?.iconURL ?? undefined,
+      name: nameToShow, // ✅ tokenName -> name に変換して渡す
+      symbol,
+      brandId,
+      brandName,
+      description,
+      iconUrl,
 
-      // ここは「在庫詳細では基本 view」運用に寄せるなら false 固定でもOK
-      // （minted:true だとアイコン編集UIが出るため）
-      minted: false,
-
+      minted,
       iconFile: null,
       isEditMode: false,
       brandOptions: [],
-    }),
-    [tbId, tbPatchAny],
-  );
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tbId, tbPatchAny]);
 
   const tokenCardHandlers: TokenBlueprintCardHandlers = React.useMemo(
     () => ({
@@ -100,7 +128,7 @@ export default function InventoryDetail() {
 
   return (
     <PageStyle layout="grid-2" title={title} onBack={onBack} onSave={undefined}>
-      {/* 左カラム：商品情報カード + デバッグ情報 + 在庫一覧カード */}
+      {/* 左カラム：商品情報カード + TokenBlueprintCard + 在庫一覧カード */}
       <div>
         {/* ✅ ProductBlueprintCardProps に productBlueprintId が無いので渡さない */}
         {/* ✅ inventory 側で取れた patch をそのまま渡す */}
@@ -115,61 +143,6 @@ export default function InventoryDetail() {
             <TokenBlueprintCard vm={tokenCardVM} handlers={tokenCardHandlers} />
           </div>
         )}
-
-        {/* --- hook 取得データの可視化（確認用） --- */}
-        <div className="mt-3 rounded-md border border-[hsl(var(--border))] bg-[hsl(var(--card))] p-3">
-          <div className="text-sm font-semibold">取得データ（hook）</div>
-
-          <div className="mt-2 text-xs text-[hsl(var(--muted-foreground))] space-y-1">
-            <div>
-              <span className="font-medium">productBlueprintId:</span>{" "}
-              {pbId || "-"}
-            </div>
-            <div>
-              <span className="font-medium">tokenBlueprintId:</span> {tbId || "-"}
-            </div>
-            <div>
-              <span className="font-medium">inventoryKey:</span>{" "}
-              {vm?.inventoryKey ?? "-"}
-            </div>
-            <div>
-              <span className="font-medium">inventoryIds:</span>{" "}
-              {Array.isArray(vm?.inventoryIds) ? vm!.inventoryIds.length : 0}
-            </div>
-            {Array.isArray(vm?.inventoryIds) && vm!.inventoryIds.length > 0 && (
-              <div className="break-all">
-                <span className="font-medium">inventoryIds(sample):</span>{" "}
-                {vm!.inventoryIds.slice(0, 10).join(", ")}
-                {vm!.inventoryIds.length > 10 ? " ..." : ""}
-              </div>
-            )}
-            <div>
-              <span className="font-medium">totalStock:</span>{" "}
-              {vm?.totalStock ?? 0}
-            </div>
-            <div>
-              <span className="font-medium">rows:</span>{" "}
-              {Array.isArray(rows) ? rows.length : 0}
-            </div>
-            <div>
-              <span className="font-medium">updatedAt:</span>{" "}
-              {vm?.updatedAt ?? "-"}
-            </div>
-
-            {/* ✅ Patch が取れているか可視化 */}
-            <div className="pt-2">
-              <span className="font-medium">productBlueprintPatch:</span>{" "}
-              {pbPatch ? "✅ ok" : "❌ none"}
-            </div>
-            {pbPatch && (
-              <div className="break-all">
-                <span className="font-medium">patchKeys:</span>{" "}
-                {Object.keys(pbPatch as any).join(", ")}
-              </div>
-            )}
-          </div>
-        </div>
-        {/* --- /hook 取得データの可視化 --- */}
 
         {/* --- style elements only --- */}
         {loading && (

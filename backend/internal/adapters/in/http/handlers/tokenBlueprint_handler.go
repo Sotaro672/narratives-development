@@ -4,6 +4,7 @@ package handlers
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"log"
 	"net/http"
 	"os"
@@ -81,6 +82,31 @@ func readTokenIconPublicBucket() string {
 	return ""
 }
 
+// path helpers -------------------------------------------------------------
+
+func trimSlashSuffix(p string) string {
+	p = strings.TrimSpace(p)
+	if p == "" {
+		return ""
+	}
+	return strings.TrimSuffix(p, "/")
+}
+
+// extractFirstSegmentAfterPrefix returns "{id}" from "/token-blueprints/{id}/xxx".
+func extractFirstSegmentAfterPrefix(path, prefix string) string {
+	path = trimSlashSuffix(path)
+	if !strings.HasPrefix(path, prefix) {
+		return ""
+	}
+	rest := strings.TrimPrefix(path, prefix)
+	rest = strings.TrimPrefix(rest, "/")
+	if rest == "" {
+		return ""
+	}
+	parts := strings.SplitN(rest, "/", 2)
+	return strings.TrimSpace(parts[0])
+}
+
 // DTO --------------------------------------------------------------------
 
 type createTokenBlueprintRequest struct {
@@ -152,6 +178,23 @@ type tokenBlueprintPageResponse struct {
 	TotalPages int                      `json:"totalPages"`
 	Page       int                      `json:"page"`
 	PerPage    int                      `json:"perPage"`
+}
+
+// ★ NEW: TokenBlueprintCard 用 patch
+// GET /token-blueprints/{id}/patch
+type tokenBlueprintPatchResponse struct {
+	ID          string `json:"id"`
+	TokenName   string `json:"tokenName"`
+	Symbol      string `json:"symbol"`
+	BrandID     string `json:"brandId"`
+	BrandName   string `json:"brandName"`
+	Description string `json:"description"`
+
+	Minted      bool   `json:"minted"`
+	MetadataURI string `json:"metadataUri"`
+
+	IconID  *string `json:"iconId,omitempty"`
+	IconURL string  `json:"iconUrl,omitempty"`
 }
 
 // name resolver helpers ----------------------------------------------------
@@ -245,40 +288,80 @@ func (h *TokenBlueprintHandler) toResponse(ctx context.Context, tb *tbdom.TokenB
 	}
 }
 
+func (h *TokenBlueprintHandler) toPatchResponse(ctx context.Context, tb *tbdom.TokenBlueprint) tokenBlueprintPatchResponse {
+	if tb == nil {
+		return tokenBlueprintPatchResponse{}
+	}
+	return tokenBlueprintPatchResponse{
+		ID:          strings.TrimSpace(tb.ID),
+		TokenName:   strings.TrimSpace(tb.Name),
+		Symbol:      strings.TrimSpace(tb.Symbol),
+		BrandID:     strings.TrimSpace(tb.BrandID),
+		BrandName:   h.resolveBrandName(ctx, tb.BrandID),
+		Description: strings.TrimSpace(tb.Description),
+		Minted:      tb.Minted,
+		MetadataURI: strings.TrimSpace(tb.MetadataURI),
+		IconID:      tb.IconID,
+		IconURL:     h.resolveIconURL(ctx, tb.IconID),
+	}
+}
+
 // ServeHTTP ---------------------------------------------------------------
 
 func (h *TokenBlueprintHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set("Content-Type", "application/json; charset=utf-8")
+
+	path := trimSlashSuffix(r.URL.Path)
 
 	switch {
-	case r.Method == http.MethodPost && r.URL.Path == "/token-blueprints":
+	case r.Method == http.MethodPost && path == "/token-blueprints":
 		h.create(w, r)
+		return
 
-	case r.Method == http.MethodGet && r.URL.Path == "/token-blueprints":
+	case r.Method == http.MethodGet && path == "/token-blueprints":
 		h.list(w, r)
+		return
 
 	// ★ 追加: 署名付きURL発行（id は /token-blueprints/{id}/icon-upload-url の {id}）
-	case r.Method == http.MethodGet && strings.HasPrefix(r.URL.Path, "/token-blueprints/") && strings.HasSuffix(r.URL.Path, "/icon-upload-url"):
-		id := strings.TrimPrefix(r.URL.Path, "/token-blueprints/")
-		id = strings.TrimSuffix(id, "/icon-upload-url")
+	case r.Method == http.MethodGet &&
+		strings.HasPrefix(path, "/token-blueprints/") &&
+		strings.HasSuffix(path, "/icon-upload-url"):
+		id := strings.TrimSuffix(strings.TrimPrefix(path, "/token-blueprints/"), "/icon-upload-url")
+		id = strings.Trim(id, "/")
 		h.issueIconUploadURL(w, r, id)
+		return
 
+	// ★ 追加: TokenBlueprintCard 用 patch
+	// GET /token-blueprints/{id}/patch
+	case r.Method == http.MethodGet &&
+		strings.HasPrefix(path, "/token-blueprints/") &&
+		strings.HasSuffix(path, "/patch"):
+		id := strings.TrimSuffix(strings.TrimPrefix(path, "/token-blueprints/"), "/patch")
+		id = strings.Trim(id, "/")
+		h.getPatch(w, r, id)
+		return
+
+	// update/delete/get は「{id} の次に余計なセグメントが来ても巻き込まない」ように first segment を取る
 	case (r.Method == http.MethodPatch || r.Method == http.MethodPut) &&
-		strings.HasPrefix(r.URL.Path, "/token-blueprints/"):
-		id := strings.TrimPrefix(r.URL.Path, "/token-blueprints/")
+		strings.HasPrefix(path, "/token-blueprints/"):
+		id := extractFirstSegmentAfterPrefix(path, "/token-blueprints/")
 		h.update(w, r, id)
+		return
 
-	case r.Method == http.MethodDelete && strings.HasPrefix(r.URL.Path, "/token-blueprints/"):
-		id := strings.TrimPrefix(r.URL.Path, "/token-blueprints/")
+	case r.Method == http.MethodDelete && strings.HasPrefix(path, "/token-blueprints/"):
+		id := extractFirstSegmentAfterPrefix(path, "/token-blueprints/")
 		h.delete(w, r, id)
+		return
 
-	case r.Method == http.MethodGet && strings.HasPrefix(r.URL.Path, "/token-blueprints/"):
-		id := strings.TrimPrefix(r.URL.Path, "/token-blueprints/")
+	case r.Method == http.MethodGet && strings.HasPrefix(path, "/token-blueprints/"):
+		id := extractFirstSegmentAfterPrefix(path, "/token-blueprints/")
 		h.get(w, r, id)
+		return
 
 	default:
 		w.WriteHeader(http.StatusNotFound)
 		_ = json.NewEncoder(w).Encode(map[string]string{"error": "not_found"})
+		return
 	}
 }
 
@@ -448,6 +531,56 @@ func (h *TokenBlueprintHandler) issueIconUploadURL(w http.ResponseWriter, r *htt
 		ExpiresAt:   upl.ExpiresAt,
 		ContentType: strings.TrimSpace(ct),
 	})
+}
+
+// getPatch -----------------------------------------------------------------
+
+func (h *TokenBlueprintHandler) getPatch(w http.ResponseWriter, r *http.Request, id string) {
+	ctx := r.Context()
+
+	companyID := strings.TrimSpace(uc.CompanyIDFromContext(ctx))
+	id = strings.TrimSpace(id)
+
+	log.Printf("[tokenBlueprint_handler] getPatch start id=%q companyId(ctx)=%q", id, companyID)
+
+	if companyID == "" {
+		w.WriteHeader(http.StatusForbidden)
+		_ = json.NewEncoder(w).Encode(map[string]string{"error": "companyId not found in context"})
+		return
+	}
+	if id == "" {
+		w.WriteHeader(http.StatusBadRequest)
+		_ = json.NewEncoder(w).Encode(map[string]string{"error": "id is empty"})
+		return
+	}
+
+	tb, err := h.uc.GetByID(ctx, id)
+	if err != nil {
+		log.Printf("[tokenBlueprint_handler] getPatch failed id=%q err=%v", id, err)
+		writeTokenBlueprintErr(w, err)
+		return
+	}
+
+	// tenant boundary
+	if strings.TrimSpace(tb.CompanyID) != companyID {
+		w.WriteHeader(http.StatusForbidden)
+		_ = json.NewEncoder(w).Encode(map[string]string{"error": "forbidden"})
+		return
+	}
+
+	resp := h.toPatchResponse(ctx, tb)
+
+	log.Printf("[tokenBlueprint_handler] getPatch success id=%q brandId=%q minted=%v metadataUri=%q iconId=%q",
+		resp.ID, resp.BrandID, resp.Minted, resp.MetadataURI,
+		strings.TrimSpace(func() string {
+			if resp.IconID == nil {
+				return ""
+			}
+			return *resp.IconID
+		}()),
+	)
+
+	_ = json.NewEncoder(w).Encode(resp)
 }
 
 // get ---------------------------------------------------------------------
@@ -728,6 +861,22 @@ func (h *TokenBlueprintHandler) delete(w http.ResponseWriter, r *http.Request, i
 // error utility ------------------------------------------------------------
 
 func writeTokenBlueprintErr(w http.ResponseWriter, err error) {
-	w.WriteHeader(http.StatusInternalServerError)
-	_ = json.NewEncoder(w).Encode(map[string]string{"error": err.Error()})
+	// ここが「/patch が /{id} に誤ルーティングされた時に 500 になる」原因になりやすいので、
+	// not found を 404 に寄せておく（UI 側の切り分けが容易になる）
+	switch {
+	case errors.Is(err, tbdom.ErrNotFound):
+		w.WriteHeader(http.StatusNotFound)
+		_ = json.NewEncoder(w).Encode(map[string]string{"error": err.Error()})
+		return
+
+	case errors.Is(err, tbdom.ErrConflict):
+		w.WriteHeader(http.StatusConflict)
+		_ = json.NewEncoder(w).Encode(map[string]string{"error": err.Error()})
+		return
+
+	default:
+		w.WriteHeader(http.StatusInternalServerError)
+		_ = json.NewEncoder(w).Encode(map[string]string{"error": err.Error()})
+		return
+	}
 }

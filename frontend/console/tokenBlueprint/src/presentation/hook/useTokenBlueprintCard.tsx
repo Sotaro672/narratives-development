@@ -23,7 +23,12 @@ import {
  * - minted:true でも「トークンアイコンは編集できる」(=アイコンだけアップロード可能)
  */
 export function useTokenBlueprintCard(params: {
-  initialTokenBlueprint?: Partial<TokenBlueprint> & { brandName?: string };
+  initialTokenBlueprint?: Partial<TokenBlueprint> & {
+    brandName?: string;
+    // inventory など別VMから渡る揺れ吸収
+    tokenName?: string;
+    TokenName?: string;
+  };
   initialBurnAt?: string;
   initialIconUrl?: string;
   initialEditMode?: boolean;
@@ -33,17 +38,33 @@ export function useTokenBlueprintCard(params: {
 }) {
   const tb = params.initialTokenBlueprint ?? {};
 
+  // ---------------------------------------
+  // helper: name の揺れ吸収（src.name が無い場合に tokenName を拾う）
+  // ---------------------------------------
+  const pickName = React.useCallback((src: any): string => {
+    const n1 = src?.name;
+    const n2 = src?.tokenName;
+    const n3 = src?.TokenName;
+    return String(n1 ?? n2 ?? n3 ?? "").trim();
+  }, []);
+
+  const pickBrandName = React.useCallback((src: any): string => {
+    return String(src?.brandName ?? src?.BrandName ?? "").trim();
+  }, []);
+
+  const pickString = React.useCallback((v: any): string => String(v ?? "").trim(), []);
+
   // -------------------------
   // Local UI states
   // -------------------------
-  const [id, setId] = React.useState(tb.id ?? "");
-  const [name, setName] = React.useState(tb.name ?? "");
-  const [symbol, setSymbol] = React.useState(tb.symbol ?? "");
+  const [id, setId] = React.useState(pickString((tb as any).id));
+  const [name, setName] = React.useState(pickName(tb as any));
+  const [symbol, setSymbol] = React.useState(pickString((tb as any).symbol));
 
-  const [brandId, setBrandId] = React.useState(tb.brandId ?? "");
-  const [brandName, setBrandName] = React.useState((tb as any).brandName ?? "");
+  const [brandId, setBrandId] = React.useState(pickString((tb as any).brandId));
+  const [brandName, setBrandName] = React.useState(pickBrandName(tb as any));
 
-  const [description, setDescription] = React.useState(tb.description ?? "");
+  const [description, setDescription] = React.useState(pickString((tb as any).description));
   const [burnAt, setBurnAt] = React.useState(params.initialBurnAt ?? "");
 
   // ★ minted は boolean（未設定は false 扱い）
@@ -52,30 +73,22 @@ export function useTokenBlueprintCard(params: {
   );
 
   // ★ backend 反映済み iconUrl（初期値）
-  const [remoteIconUrl, setRemoteIconUrl] = React.useState(
-    params.initialIconUrl ?? "",
-  );
+  const [remoteIconUrl, setRemoteIconUrl] = React.useState(params.initialIconUrl ?? "");
 
   // ★ ローカルプレビュー（アップロード前に表示したい場合）
   const [localPreviewUrl, setLocalPreviewUrl] = React.useState<string>("");
 
   // ★ 選択したアイコンファイル（service に渡すために保持）
-  const [selectedIconFile, setSelectedIconFile] = React.useState<File | null>(
-    null,
-  );
+  const [selectedIconFile, setSelectedIconFile] = React.useState<File | null>(null);
 
   // ⭐ 編集モード切り替え可能に変更
-  const [isEditMode, setIsEditMode] = React.useState(
-    params.initialEditMode ?? false,
-  );
+  const [isEditMode, setIsEditMode] = React.useState(params.initialEditMode ?? false);
 
-  const [brandOptions, setBrandOptions] = React.useState<
-    { id: string; name: string }[]
-  >([]);
+  const [brandOptions, setBrandOptions] = React.useState<{ id: string; name: string }[]>([]);
 
   // リセット用に「バックエンドからもらった元データ」を保持
   const initialRef = React.useRef<
-    (Partial<TokenBlueprint> & { brandName?: string }) | null
+    (Partial<TokenBlueprint> & { brandName?: string; tokenName?: string; TokenName?: string }) | null
   >(tb);
 
   // ★ UI refs（component からはスタイルだけにするため、ここで管理）
@@ -102,8 +115,23 @@ export function useTokenBlueprintCard(params: {
 
   // backend から initialTokenBlueprint が更新されたら（= 詳細取得完了したら）state に反映
   React.useEffect(() => {
-    const src = params.initialTokenBlueprint;
+    const src = params.initialTokenBlueprint as any;
     if (!src) return;
+
+    // ★ 受け取ったデータ確認ログ（name / tokenName 揺れ確認）
+    // eslint-disable-next-line no-console
+    console.log("[useTokenBlueprintCard] initialTokenBlueprint check", {
+      id: src?.id,
+      name: src?.name,
+      tokenName: src?.tokenName,
+      TokenName: src?.TokenName,
+      symbol: src?.symbol,
+      brandId: src?.brandId,
+      brandName: src?.brandName,
+      descriptionLen: String(src?.description ?? "").length,
+      minted: src?.minted,
+      keys: Object.keys(src ?? {}),
+    });
 
     // リセット用に保持
     initialRef.current = src;
@@ -112,16 +140,14 @@ export function useTokenBlueprintCard(params: {
     if (isEditMode) return;
 
     setId(src.id ?? "");
-    setName(src.name ?? "");
+    setName(pickName(src));
     setSymbol(src.symbol ?? "");
     setBrandId(src.brandId ?? "");
-    setBrandName((src as any).brandName ?? "");
+    setBrandName(pickBrandName(src));
     setDescription(src.description ?? "");
 
     // ★ minted(boolean) を反映（未設定は false）
-    setMinted(
-      typeof (src as any).minted === "boolean" ? (src as any).minted : false,
-    );
+    setMinted(typeof src.minted === "boolean" ? src.minted : false);
 
     // ★ 詳細取得で状態が置き換わったタイミングでは「未アップロードの選択ファイル」は消して安全側に倒す
     setSelectedIconFile(null);
@@ -134,9 +160,8 @@ export function useTokenBlueprintCard(params: {
       setLocalPreviewUrl("");
     }
 
-    // burnAt は今のところ別初期値を優先
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [params.initialTokenBlueprint, isEditMode]);
+  }, [params.initialTokenBlueprint, isEditMode, pickName, pickBrandName]);
 
   // ★ 初期 iconUrl が更新された場合（詳細取得後など）
   React.useEffect(() => {
@@ -292,20 +317,18 @@ export function useTokenBlueprintCard(params: {
 
     // ⭐ 追加：元データにリセット
     reset: () => {
-      const src = initialRef.current;
+      const src = initialRef.current as any;
       if (!src) return;
 
       setId(src.id ?? "");
-      setName(src.name ?? "");
+      setName(pickName(src));
       setSymbol(src.symbol ?? "");
       setBrandId(src.brandId ?? "");
-      setBrandName((src as any).brandName ?? "");
+      setBrandName(pickBrandName(src));
       setDescription(src.description ?? "");
 
       // ★ minted(boolean) を元に戻す
-      setMinted(
-        typeof (src as any).minted === "boolean" ? (src as any).minted : false,
-      );
+      setMinted(typeof src.minted === "boolean" ? src.minted : false);
 
       // burnAt は今のところそのまま
 
@@ -322,6 +345,16 @@ export function useTokenBlueprintCard(params: {
         }
         setLocalPreviewUrl("");
       }
+
+      // eslint-disable-next-line no-console
+      console.log("[useTokenBlueprintCard] reset applied", {
+        id: src?.id ?? "",
+        name: pickName(src),
+        symbol: src?.symbol ?? "",
+        brandId: src?.brandId ?? "",
+        brandName: pickBrandName(src),
+        minted: typeof src?.minted === "boolean" ? src.minted : false,
+      });
     },
   };
 
