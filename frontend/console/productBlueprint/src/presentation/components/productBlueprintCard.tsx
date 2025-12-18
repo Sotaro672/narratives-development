@@ -1,4 +1,4 @@
-// frontend/console/productBlueprint/src/presentation/components/productBlueprintCard.tsx 
+// frontend/console/productBlueprint/src/presentation/components/productBlueprintCard.tsx
 
 import * as React from "react";
 import { ShieldCheck, X, Package2 } from "lucide-react";
@@ -44,7 +44,27 @@ type BrandOption = {
   name: string;
 };
 
+/**
+ * ✅ Inventory / Query から来る "Patch" を受け取るための型
+ * - backend の Patch 形式（ポインタ相当）を JS/TS で表現
+ * - ProductBlueprintCard 内部で既存 props へマッピングする
+ */
+export type ProductBlueprintPatchInput = {
+  productName?: string | null;
+  brandId?: string | null;
+  itemType?: string | null;
+  fit?: string | null;
+  material?: string | null;
+  weight?: number | null;
+  qualityAssurance?: string[] | null; // = washTags 相当
+  productIdTag?: any; // string / object どちらでも来うる
+  assigneeId?: string | null;
+};
+
 type ProductBlueprintCardProps = {
+  // ✅ NEW: Patch を丸ごと受け取れるようにする（view で使う想定）
+  productBlueprintPatch?: ProductBlueprintPatchInput;
+
   productName?: string;
   /** 選択中ブランドの「表示名」（閲覧モードなどで使用） */
   brand?: string;
@@ -63,6 +83,7 @@ type ProductBlueprintCardProps = {
   weight?: number;
   washTags?: string[];
   productIdTag?: string;
+
   onChangeProductName?: (v: string) => void;
   onChangeItemType?: (v: ItemType) => void;
   onChangeFit?: (v: Fit) => void;
@@ -70,11 +91,37 @@ type ProductBlueprintCardProps = {
   onChangeWeight?: (v: number) => void;
   onChangeWashTags?: (nextTags: string[]) => void;
   onChangeProductIdTag?: (v: string) => void;
+
   /** 表示モード（既定: "edit"） */
   mode?: "edit" | "view";
 };
 
+function normalizeProductIdTagToString(v: any): string {
+  if (v === null || v === undefined) return "";
+  if (typeof v === "string") return v;
+
+  // よくある形: { value: "xxx" }
+  const value = (v as any)?.value;
+  if (typeof value === "string") return value;
+
+  // よくある形: { type: "xxx" } / { tagType: "xxx" }
+  const type = (v as any)?.type;
+  if (typeof type === "string") return type;
+
+  const tagType = (v as any)?.tagType;
+  if (typeof tagType === "string") return tagType;
+
+  // 最後の手段: JSON 文字列化（view 表示向け）
+  try {
+    return JSON.stringify(v);
+  } catch {
+    return String(v);
+  }
+}
+
 const ProductBlueprintCard: React.FC<ProductBlueprintCardProps> = ({
+  productBlueprintPatch,
+
   productName,
   brand,
   brandId,
@@ -99,20 +146,59 @@ const ProductBlueprintCard: React.FC<ProductBlueprintCardProps> = ({
 }) => {
   const isEdit = mode === "edit";
 
+  // ✅ Patch を "既存 props へ寄せる"（props が優先、無ければ patch）
+  const mergedProductName = productName ?? productBlueprintPatch?.productName ?? "";
+  const mergedBrandId = brandId ?? productBlueprintPatch?.brandId ?? "";
+  const mergedItemType =
+    itemType ??
+    ((typeof productBlueprintPatch?.itemType === "string"
+      ? (productBlueprintPatch.itemType as ItemType)
+      : undefined) as ItemType | undefined) ??
+    ("" as ItemType);
+
+  const mergedFit =
+    fit ??
+    ((typeof productBlueprintPatch?.fit === "string"
+      ? (productBlueprintPatch.fit as Fit)
+      : undefined) as Fit | undefined) ??
+    ("" as Fit);
+
+  const mergedMaterials = materials ?? productBlueprintPatch?.material ?? "";
+  const mergedWeight =
+    typeof weight === "number"
+      ? weight
+      : typeof productBlueprintPatch?.weight === "number"
+        ? productBlueprintPatch.weight
+        : 0;
+
+  const mergedWashTags =
+    Array.isArray(washTags)
+      ? washTags
+      : Array.isArray(productBlueprintPatch?.qualityAssurance)
+        ? productBlueprintPatch!.qualityAssurance!.filter(
+            (x): x is string => typeof x === "string" && x.trim() !== "",
+          )
+        : [];
+
+  const mergedProductIdTag =
+    productIdTag ?? normalizeProductIdTagToString(productBlueprintPatch?.productIdTag);
+
   // サニタイズ（UI 用の安全値に整形）
-  const safeProductName = productName ?? "";
+  const safeProductName = mergedProductName ?? "";
   const safeBrand = brand ?? "";
-  const safeMaterials = materials ?? "";
+  const safeMaterials = mergedMaterials ?? "";
   const safeWeight =
-    typeof weight === "number" && !Number.isNaN(weight) ? weight : 0;
-  const safeWashTags = Array.isArray(washTags) ? washTags : [];
-  const safeProductIdTag = productIdTag ?? "";
-  const safeFit = fit ?? ("" as Fit);
-  const safeItemType = itemType ?? ("" as ItemType);
+    typeof mergedWeight === "number" && !Number.isNaN(mergedWeight) ? mergedWeight : 0;
+  const safeWashTags = Array.isArray(mergedWashTags) ? mergedWashTags : [];
+  const safeProductIdTag = mergedProductIdTag ?? "";
+  const safeFit = mergedFit ?? ("" as Fit);
+  const safeItemType = mergedItemType ?? ("" as ItemType);
 
   // ブランド名の表示用（brandId から name を引く）
   const selectedBrandName =
-    brandOptions?.find((b) => b.id === brandId)?.name ?? "";
+    brandOptions?.find((b) => b.id === mergedBrandId)?.name ?? "";
+
+  const displayBrandName = safeBrand || selectedBrandName;
 
   // 品質保証タグをカテゴリごとにグルーピング
   const washTagGroups = React.useMemo(() => {
@@ -182,7 +268,7 @@ const ProductBlueprintCard: React.FC<ProductBlueprintCardProps> = ({
                   <div
                     key={b.id}
                     className={`px-3 py-2 rounded-md cursor-pointer hover:bg-blue-50 ${
-                      brandId === b.id
+                      mergedBrandId === b.id
                         ? "bg-blue-100 text-blue-700 font-medium"
                         : ""
                     }`}
@@ -204,9 +290,8 @@ const ProductBlueprintCard: React.FC<ProductBlueprintCardProps> = ({
             )}
           </div>
         ) : (
-          // ブランド選択情報が無い場合や閲覧モード時は従来どおり読み取り専用表示
           <Input
-            value={safeBrand}
+            value={displayBrandName}
             variant="readonly"
             readOnly
             aria-label="ブランド"
@@ -288,12 +373,7 @@ const ProductBlueprintCard: React.FC<ProductBlueprintCardProps> = ({
                 </PopoverContent>
               </Popover>
             ) : (
-              <Input
-                value={safeFit}
-                variant="readonly"
-                readOnly
-                aria-label="フィット"
-              />
+              <Input value={safeFit} variant="readonly" readOnly aria-label="フィット" />
             )}
           </div>
 
@@ -347,12 +427,7 @@ const ProductBlueprintCard: React.FC<ProductBlueprintCardProps> = ({
             aria-label="素材"
           />
         ) : (
-          <Input
-            value={safeMaterials}
-            variant="readonly"
-            readOnly
-            aria-label="素材"
-          />
+          <Input value={safeMaterials} variant="readonly" readOnly aria-label="素材" />
         )}
 
         {/* 重さ */}
@@ -363,9 +438,7 @@ const ProductBlueprintCard: React.FC<ProductBlueprintCardProps> = ({
               <Input
                 type="number"
                 value={safeWeight}
-                onChange={(e) =>
-                  onChangeWeight?.(Number(e.target.value) || 0)
-                }
+                onChange={(e) => onChangeWeight?.(Number(e.target.value) || 0)}
                 aria-label="重さ"
               />
               <span className="suffix">g</span>
@@ -387,17 +460,12 @@ const ProductBlueprintCard: React.FC<ProductBlueprintCardProps> = ({
         <div className="label">品質保証（洗濯方法タグ）</div>
         <div className="chips flex flex-wrap gap-2">
           {safeWashTags.map((t) => (
-            <Badge
-              key={t}
-              className="chip inline-flex items-center gap-1.5 px-2 py-1"
-            >
+            <Badge key={t} className="chip inline-flex items-center gap-1.5 px-2 py-1">
               <ShieldCheck size={14} />
               {t}
               {isEdit && onChangeWashTags && (
                 <button
-                  onClick={() =>
-                    onChangeWashTags(safeWashTags.filter((x) => x !== t))
-                  }
+                  onClick={() => onChangeWashTags(safeWashTags.filter((x) => x !== t))}
                   className="chip-remove"
                   aria-label={`${t} を削除`}
                 >
@@ -436,9 +504,7 @@ const ProductBlueprintCard: React.FC<ProductBlueprintCardProps> = ({
                         <Checkbox
                           id={checkboxId}
                           checked={checked}
-                          onCheckedChange={() =>
-                            handleToggleWashTag(opt.value)
-                          }
+                          onCheckedChange={() => handleToggleWashTag(opt.value)}
                         />
                         <span>{opt.label}</span>
                       </label>

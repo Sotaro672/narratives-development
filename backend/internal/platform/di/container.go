@@ -176,6 +176,18 @@ func (a *pbIDsByCompanyAdapter) ListIDsByCompanyID(ctx context.Context, companyI
 	return a.repo.ListIDsByCompany(ctx, companyID)
 }
 
+// ✅ NEW: pbPatchByIDAdapter adapts ProductBlueprintRepositoryFS to query.productBlueprintPatchReader
+// (InventoryQuery 用: GetPatchByID を満たす)
+type pbPatchByIDAdapter struct {
+	repo interface {
+		GetPatchByID(ctx context.Context, id string) (productbpdom.Patch, error)
+	}
+}
+
+func (a *pbPatchByIDAdapter) GetPatchByID(ctx context.Context, id string) (productbpdom.Patch, error) {
+	return a.repo.GetPatchByID(ctx, id)
+}
+
 // ============================================================
 // Adapter: MintRepositoryFS -> mintdom.MintRepository (Update補完)
 // ============================================================
@@ -587,11 +599,11 @@ func NewContainer(ctx context.Context) (*Container, error) {
 	}
 
 	// ★ NEW: InventoryQuery（GET /inventory/...）
-	// ✅ 現在の NewInventoryQuery シグネチャに合わせて 3 引数にする。
-	// want: (query.inventoryReader, query.productBlueprintIDsByCompanyReader, *resolver.NameResolver)
+	// want: (query.inventoryReader, query.productBlueprintIDsByCompanyReader, query.productBlueprintPatchReader, *resolver.NameResolver)
 	inventoryQuery := companyquery.NewInventoryQuery(
 		inventoryRepo, // invReader
 		&pbIDsByCompanyAdapter{repo: productBlueprintRepo}, // pbIDsByCompanyReader
+		&pbPatchByIDAdapter{repo: productBlueprintRepo},    // ✅ productBlueprintPatchReader
 		nameResolver, // NameResolver
 	)
 

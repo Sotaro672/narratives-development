@@ -101,8 +101,6 @@ export async function fetchInventoryListDTO(): Promise<InventoryListRowDTO[]> {
   const token = await getIdTokenOrThrow();
   const url = `${API_BASE}/inventory`;
 
-  console.log("[inventory/fetchInventoryListDTO] start", { url });
-
   const res = await fetch(url, {
     method: "GET",
     headers: {
@@ -112,13 +110,7 @@ export async function fetchInventoryListDTO(): Promise<InventoryListRowDTO[]> {
 
   if (!res.ok) {
     const text = await res.text().catch(() => "");
-    console.error("[inventory/fetchInventoryListDTO] failed", {
-      url,
-      status: res.status,
-      statusText: res.statusText,
-      body: text,
-    });
-    throw new Error(`Failed to fetch inventory list: ${res.status} ${res.statusText}`);
+    throw new Error(`Failed to fetch inventory list: ${res.status} ${res.statusText} ${text}`);
   }
 
   const data = (await res.json()) as any;
@@ -133,12 +125,6 @@ export async function fetchInventoryListDTO(): Promise<InventoryListRowDTO[]> {
   const mapped = rawItems
     .map(normalizeInventoryListRow)
     .filter((x): x is InventoryListRowDTO => x !== null);
-
-  console.log("[inventory/fetchInventoryListDTO] ok", {
-    rawCount: rawItems.length,
-    mappedCount: mapped.length,
-    sample: mapped.slice(0, 3),
-  });
 
   return mapped;
 }
@@ -159,11 +145,6 @@ export async function fetchInventoryProductSummary(
 
   const url = `${API_BASE}/product-blueprints/${encodeURIComponent(pbId)}`;
 
-  console.log("[inventory/fetchInventoryProductSummary] start", {
-    productBlueprintId: pbId,
-    url,
-  });
-
   const res = await fetch(url, {
     method: "GET",
     headers: {
@@ -173,14 +154,7 @@ export async function fetchInventoryProductSummary(
 
   if (!res.ok) {
     const text = await res.text().catch(() => "");
-    console.error("[inventory/fetchInventoryProductSummary] failed", {
-      productBlueprintId: pbId,
-      url,
-      status: res.status,
-      statusText: res.statusText,
-      body: text,
-    });
-    throw new Error(`Failed to fetch product blueprint: ${res.status} ${res.statusText}`);
+    throw new Error(`Failed to fetch product blueprint: ${res.status} ${res.statusText} ${text}`);
   }
 
   const data = await res.json();
@@ -193,11 +167,6 @@ export async function fetchInventoryProductSummary(
     assigneeId: s(data?.assigneeId),
     assigneeName: data?.assigneeName ? s(data.assigneeName) : undefined,
   };
-
-  console.log("[inventory/fetchInventoryProductSummary] ok", {
-    productBlueprintId: pbId,
-    mapped,
-  });
 
   return mapped;
 }
@@ -212,8 +181,6 @@ export async function fetchPrintedInventorySummaries(): Promise<InventoryProduct
   const token = await getIdTokenOrThrow();
   const url = `${API_BASE}/product-blueprints/printed`;
 
-  console.log("[inventory/fetchPrintedInventorySummaries] start", { url });
-
   const res = await fetch(url, {
     method: "GET",
     headers: {
@@ -223,13 +190,9 @@ export async function fetchPrintedInventorySummaries(): Promise<InventoryProduct
 
   if (!res.ok) {
     const text = await res.text().catch(() => "");
-    console.error("[inventory/fetchPrintedInventorySummaries] failed", {
-      url,
-      status: res.status,
-      statusText: res.statusText,
-      body: text,
-    });
-    throw new Error(`Failed to fetch printed product blueprints: ${res.status} ${res.statusText}`);
+    throw new Error(
+      `Failed to fetch printed product blueprints: ${res.status} ${res.statusText} ${text}`,
+    );
   }
 
   const data = await res.json();
@@ -243,11 +206,6 @@ export async function fetchPrintedInventorySummaries(): Promise<InventoryProduct
     assigneeId: s(row?.assigneeId),
     assigneeName: row?.assigneeName ? s(row.assigneeName) : undefined,
   }));
-
-  console.log("[inventory/fetchPrintedInventorySummaries] ok", {
-    count: mapped.length,
-    sample: mapped.slice(0, 5),
-  });
 
   return mapped;
 }
@@ -277,8 +235,6 @@ export async function fetchInventoryIDsByProductAndTokenDTO(
     pbId,
   )}&tokenBlueprintId=${encodeURIComponent(tbId)}`;
 
-  console.log("[inventory/fetchInventoryIDsByProductAndTokenDTO] start", { pbId, tbId, url });
-
   const res = await fetch(url, {
     method: "GET",
     headers: {
@@ -288,15 +244,7 @@ export async function fetchInventoryIDsByProductAndTokenDTO(
 
   if (!res.ok) {
     const text = await res.text().catch(() => "");
-    console.error("[inventory/fetchInventoryIDsByProductAndTokenDTO] failed", {
-      pbId,
-      tbId,
-      url,
-      status: res.status,
-      statusText: res.statusText,
-      body: text,
-    });
-    throw new Error(`Failed to fetch inventory ids: ${res.status} ${res.statusText}`);
+    throw new Error(`Failed to fetch inventory ids: ${res.status} ${res.statusText} ${text}`);
   }
 
   const data = await res.json();
@@ -311,13 +259,6 @@ export async function fetchInventoryIDsByProductAndTokenDTO(
     tokenBlueprintId: tbId,
     inventoryIds,
   };
-
-  console.log("[inventory/fetchInventoryIDsByProductAndTokenDTO] ok", {
-    pbId,
-    tbId,
-    count: mapped.inventoryIds.length,
-    sample: mapped.inventoryIds.slice(0, 10),
-  });
 
   return mapped;
 }
@@ -337,15 +278,20 @@ export type ProductBlueprintSummaryDTO = {
   name?: string;
 };
 
+// ✅ ProductBlueprintCard に合わせる（productIdTag は string）
 export type ProductBlueprintPatchDTO = {
   productName?: string | null;
+
+  // ✅ 追加: brandName を保持できるようにする（view モードで表示用）
   brandId?: string | null;
+  brandName?: string | null;
+
   itemType?: string | null;
   fit?: string | null;
   material?: string | null;
   weight?: number | null;
   qualityAssurance?: string[] | null;
-  productIdTag?: any;
+  productIdTag?: string | null;
   assigneeId?: string | null;
 };
 
@@ -404,13 +350,78 @@ function toRgbNumberOrNull(v: any): number | null | undefined {
   return Number.isFinite(d) ? d : null;
 }
 
+// ✅ productIdTag を "QRコード" のような表示用文字列に正規化する
+function toProductIdTagString(v: any): string | null | undefined {
+  if (v === undefined) return undefined;
+  if (v === null) return null;
+
+  // 既に文字列
+  if (typeof v === "string") {
+    const str = s(v);
+    if (!str) return null;
+
+    // JSON文字列っぽい場合は parse してから抽出を試す
+    const looksJson = str.startsWith("{") && str.endsWith("}");
+    if (looksJson) {
+      try {
+        const obj = JSON.parse(str);
+        const fromObj = toProductIdTagString(obj);
+        return fromObj ?? str;
+      } catch {
+        return str;
+      }
+    }
+    return str;
+  }
+
+  // 数値/boolean 等
+  if (typeof v === "number" || typeof v === "boolean") {
+    return String(v);
+  }
+
+  // オブジェクト: { Type: "QRコード" } など
+  if (typeof v === "object") {
+    const o: any = v;
+
+    const candidates = [
+      o?.label,
+      o?.Label,
+      o?.type,
+      o?.Type,
+      o?.value,
+      o?.Value,
+      o?.name,
+      o?.Name,
+    ];
+
+    for (const c of candidates) {
+      const str = s(c);
+      if (str) return str;
+    }
+
+    // どうしても取れない場合は null（"[object Object]" を出さない）
+    return null;
+  }
+
+  return null;
+}
+
 function mapProductBlueprintPatch(raw: any): ProductBlueprintPatchDTO {
   const patchRaw = (raw ?? {}) as any;
 
   return {
     productName:
       patchRaw.productName !== undefined ? (patchRaw.productName as any) : undefined,
+
     brandId: patchRaw.brandId !== undefined ? (patchRaw.brandId as any) : undefined,
+    // ✅ brandName も保持（無ければ undefined のまま）
+    brandName:
+      patchRaw.brandName !== undefined
+        ? (patchRaw.brandName as any)
+        : patchRaw.brand !== undefined
+          ? (patchRaw.brand as any)
+          : undefined,
+
     itemType: patchRaw.itemType !== undefined ? String(patchRaw.itemType) : undefined,
     fit: patchRaw.fit !== undefined ? (patchRaw.fit as any) : undefined,
     material: patchRaw.material !== undefined ? (patchRaw.material as any) : undefined,
@@ -421,7 +432,10 @@ function mapProductBlueprintPatch(raw: any): ProductBlueprintPatchDTO {
     qualityAssurance: Array.isArray(patchRaw.qualityAssurance)
       ? patchRaw.qualityAssurance.map((x: any) => String(x))
       : undefined,
-    productIdTag: patchRaw.productIdTag !== undefined ? patchRaw.productIdTag : undefined,
+
+    // ✅ object → "QRコード" に変換
+    productIdTag: toProductIdTagString(patchRaw.productIdTag),
+
     assigneeId:
       patchRaw.assigneeId !== undefined ? (patchRaw.assigneeId as any) : undefined,
   };
@@ -438,8 +452,6 @@ export async function fetchInventoryDetailDTO(inventoryId: string): Promise<Inve
   const token = await getIdTokenOrThrow();
   const url = `${API_BASE}/inventory/${encodeURIComponent(id)}`;
 
-  console.log("[inventory/fetchInventoryDetailDTO] start", { id, url });
-
   const res = await fetch(url, {
     method: "GET",
     headers: { Authorization: `Bearer ${token}` },
@@ -447,19 +459,24 @@ export async function fetchInventoryDetailDTO(inventoryId: string): Promise<Inve
 
   if (!res.ok) {
     const text = await res.text().catch(() => "");
-    console.error("[inventory/fetchInventoryDetailDTO] failed", {
-      id,
-      url,
-      status: res.status,
-      statusText: res.statusText,
-      body: text,
-    });
     throw new Error(
       `Failed to fetch inventory detail: ${res.status} ${res.statusText} ${text}`,
     );
   }
 
   const data = await res.json();
+
+  const patch = mapProductBlueprintPatch(data?.productBlueprintPatch);
+
+  // ✅ 追加: productBlueprint patch に brandId と brandName を持てているか確認
+  console.log("[inventory/fetchInventoryDetailDTO] pbPatch brand check", {
+    inventoryId: id,
+    pbId: s(data?.productBlueprintId ?? data?.ProductBlueprintID),
+    brandId: patch.brandId ?? null,
+    brandName: patch.brandName ?? null,
+    hasBrandId: !!s(patch.brandId ?? ""),
+    hasBrandName: !!s(patch.brandName ?? ""),
+  });
 
   const rows: InventoryDetailRowDTO[] = Array.isArray(data?.rows)
     ? data.rows.map((r: any) => ({
@@ -485,7 +502,7 @@ export async function fetchInventoryDetailDTO(inventoryId: string): Promise<Inve
     productBlueprintId: s(data?.productBlueprintId ?? data?.ProductBlueprintID),
     modelId: s(data?.modelId ?? data?.ModelID),
 
-    productBlueprintPatch: mapProductBlueprintPatch(data?.productBlueprintPatch),
+    productBlueprintPatch: patch,
 
     tokenBlueprint: data?.tokenBlueprint
       ? {
@@ -506,13 +523,6 @@ export async function fetchInventoryDetailDTO(inventoryId: string): Promise<Inve
     totalStock: Number(data?.totalStock ?? 0),
     updatedAt: data?.updatedAt ? String(data.updatedAt) : undefined,
   };
-
-  console.log("[inventory/fetchInventoryDetailDTO] ok", {
-    id,
-    rows: mapped.rows.length,
-    totalStock: mapped.totalStock,
-    updatedAt: mapped.updatedAt,
-  });
 
   return mapped;
 }

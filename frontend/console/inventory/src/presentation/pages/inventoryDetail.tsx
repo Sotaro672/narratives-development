@@ -42,15 +42,24 @@ export default function InventoryDetail() {
     tokenBlueprintId,
   );
 
-  const title = vm
-    ? `在庫詳細：${vm.productBlueprintId} / ${vm.tokenBlueprintId}`
-    : `在庫詳細：${productBlueprintId ?? ""} / ${tokenBlueprintId ?? ""}`;
+  const pbId = (vm?.productBlueprintId ?? productBlueprintId ?? "").trim();
+  const tbId = (vm?.tokenBlueprintId ?? tokenBlueprintId ?? "").trim();
+  const pbPatch = vm?.productBlueprintPatch;
+
+  const title = pbPatch?.productName
+    ? `在庫詳細：${pbPatch.productName}`
+    : vm
+      ? `在庫詳細：${vm.productBlueprintId} / ${vm.tokenBlueprintId}`
+      : `在庫詳細：${productBlueprintId ?? ""} / ${tokenBlueprintId ?? ""}`;
 
   return (
     <PageStyle layout="grid-2" title={title} onBack={onBack} onSave={undefined}>
       {/* 左カラム：商品情報カード + デバッグ情報 + 在庫一覧カード */}
       <div>
-        <ProductBlueprintCard mode="view" />
+        {/* ✅ ProductBlueprintCardProps に productBlueprintId が無いので渡さない */}
+        {/* ✅ inventory 側で取れた patch をそのまま渡す */}
+        <ProductBlueprintCard mode="view" productBlueprintPatch={vm?.productBlueprintPatch} />
+
 
         {/* --- hook 取得データの可視化（確認用） --- */}
         <div className="mt-3 rounded-md border border-[hsl(var(--border))] bg-[hsl(var(--card))] p-3">
@@ -59,11 +68,10 @@ export default function InventoryDetail() {
           <div className="mt-2 text-xs text-[hsl(var(--muted-foreground))] space-y-1">
             <div>
               <span className="font-medium">productBlueprintId:</span>{" "}
-              {vm?.productBlueprintId ?? productBlueprintId ?? "-"}
+              {pbId || "-"}
             </div>
             <div>
-              <span className="font-medium">tokenBlueprintId:</span>{" "}
-              {vm?.tokenBlueprintId ?? tokenBlueprintId ?? "-"}
+              <span className="font-medium">tokenBlueprintId:</span> {tbId || "-"}
             </div>
             <div>
               <span className="font-medium">inventoryKey:</span> {vm?.inventoryKey ?? "-"}
@@ -88,6 +96,18 @@ export default function InventoryDetail() {
             <div>
               <span className="font-medium">updatedAt:</span> {vm?.updatedAt ?? "-"}
             </div>
+
+            {/* ✅ Patch が取れているか可視化 */}
+            <div className="pt-2">
+              <span className="font-medium">productBlueprintPatch:</span>{" "}
+              {pbPatch ? "✅ ok" : "❌ none"}
+            </div>
+            {pbPatch && (
+              <div className="break-all">
+                <span className="font-medium">patchKeys:</span>{" "}
+                {Object.keys(pbPatch as any).join(", ")}
+              </div>
+            )}
           </div>
         </div>
         {/* --- /hook 取得データの可視化 --- */}

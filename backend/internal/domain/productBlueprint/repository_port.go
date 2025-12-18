@@ -21,14 +21,20 @@ type CreateInput struct {
 	ProductIdTag     ProductIDTag `json:"productIdTag"`
 	AssigneeID       string       `json:"assigneeId"`
 	CompanyID        string       `json:"companyId"`
-
-	CreatedBy *string    `json:"createdBy,omitempty"`
-	CreatedAt *time.Time `json:"createdAt,omitempty"` // repo may set if nil
+	CreatedBy        *string      `json:"createdBy,omitempty"`
+	CreatedAt        *time.Time   `json:"createdAt,omitempty"` // repo may set if nil
 }
 
 type Patch struct {
-	ProductName      *string       `json:"productName,omitempty"`
-	BrandID          *string       `json:"brandId,omitempty"`
+	ProductName *string `json:"productName,omitempty"`
+
+	// ✅ brandId は既存のまま
+	BrandID *string `json:"brandId,omitempty"`
+
+	// ✅ NEW: 画面表示用（NameResolver などで動的に埋める用途）
+	// - Firestore に保存しない運用でも、DTO として返すために必要
+	BrandName *string `json:"brandName,omitempty"`
+
 	ItemType         *ItemType     `json:"itemType,omitempty"`
 	Fit              *string       `json:"fit,omitempty"`
 	Material         *string       `json:"material,omitempty"`
@@ -43,18 +49,13 @@ type Patch struct {
 // ========================================
 
 type Filter struct {
-	// ★ 必須: マルチテナント境界
-	CompanyID string
-
-	SearchTerm string
-
+	CompanyID   string // ★ 必須: マルチテナント境界
+	SearchTerm  string
 	BrandIDs    []string
 	AssigneeIDs []string
 	ItemTypes   []ItemType
 	TagTypes    []ProductIDTagType
-
 	OnlyDeleted bool
-
 	CreatedFrom *time.Time
 	CreatedTo   *time.Time
 	UpdatedFrom *time.Time
