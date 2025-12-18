@@ -292,24 +292,26 @@ func (q *InventoryQuery) GetDetailByID(ctx context.Context, inventoryID string) 
 	if q.pbPatchRepo != nil {
 		pbPatch, e := q.pbPatchRepo.GetPatchByID(ctx, pbID) // value
 		if e == nil {
-			// ✅ brandId -> brandName を NameResolver で解決して Patch に詰める（フィールドがあれば）
-			brandID := strings.TrimSpace(getStringField(pbPatch, "BrandID", "BrandId", "brandId"))
+			// ✅ ここが重要：Patch の BrandID/BrandName が「*string」前提で直接扱う
+			hasBrandID := pbPatch.BrandID != nil && strings.TrimSpace(*pbPatch.BrandID) != ""
+			brandID := ""
+			if pbPatch.BrandID != nil {
+				brandID = strings.TrimSpace(*pbPatch.BrandID)
+			}
+
 			brandName := strings.TrimSpace(q.resolveBrandName(ctx, brandID))
 
 			setOK := false
-			if brandName != "" {
-				setOK = setStringField(&pbPatch, brandName, "BrandName", "brandName", "Brand", "brand")
+			if hasBrandID && brandName != "" {
+				// Patch に BrandName フィールド（*string）がある前提
+				pbPatch.BrandName = &brandName
+				setOK = true
 			}
 
 			log.Printf(
-				"[inventory_query][GetDetailByID] patch brand resolve pbId=%q brandId=%q brandName=%q setOK=%t",
-				pbID, brandID, brandName, setOK,
+				"[inventory_query][GetDetailByID] patch brand resolve pbId=%q hasBrandId=%t brandId=%q brandName=%q setOK=%t",
+				pbID, hasBrandID, brandID, brandName, setOK,
 			)
-			if brandName != "" && !setOK {
-				log.Printf(
-					"[inventory_query][GetDetailByID] WARN: pbdom.Patch has no brandName field. Add `BrandName string `json:\"brandName,omitempty\"`` to productBlueprint.Patch to expose it.",
-				)
-			}
 
 			pbPatchPtr = &pbPatch // ✅ *Patch に合わせてアドレスを渡す
 		} else {
@@ -479,7 +481,6 @@ func (q *InventoryQuery) resolveProductName(ctx context.Context, productBlueprin
 	return strings.TrimSpace(q.nameResolver.ResolveProductName(ctx, productBlueprintID))
 }
 
-// ✅ brandId -> brandName（NameResolver のメソッド名差異に備えて reflection で呼ぶ）
 func (q *InventoryQuery) resolveBrandName(ctx context.Context, brandID string) string {
 	if q == nil || q.nameResolver == nil {
 		return ""
@@ -488,30 +489,7 @@ func (q *InventoryQuery) resolveBrandName(ctx context.Context, brandID string) s
 	if id == "" {
 		return ""
 	}
-
-	rv := reflect.ValueOf(q.nameResolver)
-
-	// 1) ResolveBrandName(ctx, id) string
-	if m := rv.MethodByName("ResolveBrandName"); m.IsValid() {
-		out := m.Call([]reflect.Value{reflect.ValueOf(ctx), reflect.ValueOf(id)})
-		if len(out) >= 1 {
-			if s, ok := out[0].Interface().(string); ok {
-				return strings.TrimSpace(s)
-			}
-		}
-	}
-
-	// 2) ResolveBrand(ctx, id) string（念のため）
-	if m := rv.MethodByName("ResolveBrand"); m.IsValid() {
-		out := m.Call([]reflect.Value{reflect.ValueOf(ctx), reflect.ValueOf(id)})
-		if len(out) >= 1 {
-			if s, ok := out[0].Interface().(string); ok {
-				return strings.TrimSpace(s)
-			}
-		}
-	}
-
-	return ""
+	return strings.TrimSpace(q.nameResolver.ResolveBrandName(ctx, id))
 }
 
 // ✅ modelId から modelNumber/size/color/rgb をまとめて解決
@@ -575,63 +553,4 @@ func modelStockLen(ms invdom.ModelStock) int {
 	}
 
 	return 0
-}
-
-// ============================================================
-// Reflection helpers for Patch enrichment
-// ============================================================
-
-// getStringField: struct から候補名のいずれかで string を取り出す（見つからなければ ""）
-func getStringField(v any, fieldNames ...string) string {
-	rv := reflect.ValueOf(v)
-	if !rv.IsValid() {
-		return ""
-	}
-	if rv.Kind() == reflect.Pointer {
-		if rv.IsNil() {
-			return ""
-		}
-		rv = rv.Elem()
-	}
-	if rv.Kind() != reflect.Struct {
-		return ""
-	}
-
-	for _, name := range fieldNames {
-		f := rv.FieldByName(name)
-		if !f.IsValid() {
-			continue
-		}
-		if f.Kind() == reflect.String {
-			return strings.TrimSpace(f.String())
-		}
-	}
-	return ""
-}
-
-// setStringField: ptr-to-struct の候補フィールドへ string をセット（成功したら true）
-func setStringField(ptr any, value string, fieldNames ...string) bool {
-	rv := reflect.ValueOf(ptr)
-	if !rv.IsValid() || rv.Kind() != reflect.Pointer || rv.IsNil() {
-		return false
-	}
-	ev := rv.Elem()
-	if !ev.IsValid() || ev.Kind() != reflect.Struct {
-		return false
-	}
-
-	for _, name := range fieldNames {
-		f := ev.FieldByName(name)
-		if !f.IsValid() {
-			continue
-		}
-		if !f.CanSet() {
-			continue
-		}
-		if f.Kind() == reflect.String {
-			f.SetString(value)
-			return true
-		}
-	}
-	return false
 }

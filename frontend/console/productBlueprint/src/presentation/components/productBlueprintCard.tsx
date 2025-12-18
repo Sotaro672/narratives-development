@@ -52,6 +52,7 @@ type BrandOption = {
 export type ProductBlueprintPatchInput = {
   productName?: string | null;
   brandId?: string | null;
+  brandName?: string | null; // ✅ NEW: InventoryQuery が詰めた brandName を受け取る
   itemType?: string | null;
   fit?: string | null;
   material?: string | null;
@@ -149,6 +150,10 @@ const ProductBlueprintCard: React.FC<ProductBlueprintCardProps> = ({
   // ✅ Patch を "既存 props へ寄せる"（props が優先、無ければ patch）
   const mergedProductName = productName ?? productBlueprintPatch?.productName ?? "";
   const mergedBrandId = brandId ?? productBlueprintPatch?.brandId ?? "";
+
+  // ✅ NEW: brand 表示名は props.brand を優先し、無ければ patch.brandName を利用
+  const mergedBrandName = brand ?? productBlueprintPatch?.brandName ?? "";
+
   const mergedItemType =
     itemType ??
     ((typeof productBlueprintPatch?.itemType === "string"
@@ -185,7 +190,6 @@ const ProductBlueprintCard: React.FC<ProductBlueprintCardProps> = ({
 
   // サニタイズ（UI 用の安全値に整形）
   const safeProductName = mergedProductName ?? "";
-  const safeBrand = brand ?? "";
   const safeMaterials = mergedMaterials ?? "";
   const safeWeight =
     typeof mergedWeight === "number" && !Number.isNaN(mergedWeight) ? mergedWeight : 0;
@@ -198,7 +202,11 @@ const ProductBlueprintCard: React.FC<ProductBlueprintCardProps> = ({
   const selectedBrandName =
     brandOptions?.find((b) => b.id === mergedBrandId)?.name ?? "";
 
-  const displayBrandName = safeBrand || selectedBrandName;
+  // ✅ view モードでも表示できるように、patch.brandName を優先候補に含める
+  const displayBrandName =
+    String(mergedBrandName ?? "").trim() ||
+    String(selectedBrandName ?? "").trim() ||
+    (mergedBrandId ? `(${mergedBrandId})` : "");
 
   // 品質保証タグをカテゴリごとにグルーピング
   const washTagGroups = React.useMemo(() => {
@@ -364,7 +372,7 @@ const ProductBlueprintCard: React.FC<ProductBlueprintCardProps> = ({
                         safeFit === opt.value
                           ? "bg-blue-100 text-blue-700 font-medium"
                           : ""
-                      }`}
+                    }`}
                       onClick={() => onChangeFit?.(opt.value)}
                     >
                       {opt.label}
@@ -399,7 +407,7 @@ const ProductBlueprintCard: React.FC<ProductBlueprintCardProps> = ({
                         safeProductIdTag === opt.value
                           ? "bg-blue-100 text-blue-700 font-medium"
                           : ""
-                      }`}
+                    }`}
                       onClick={() => onChangeProductIdTag?.(opt.value)}
                     >
                       {opt.label}

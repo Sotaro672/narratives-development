@@ -12,6 +12,13 @@ import {
 // ViewModel (Screen-friendly shape)
 // ============================================================
 
+// DTO 側に brandName が増えても落とさないための拡張型（UIで参照しやすくする）
+export type ProductBlueprintPatchDTOEx = ProductBlueprintPatchDTO & {
+  brandId?: string;
+  brandName?: string;
+  productName?: string;
+};
+
 export type InventoryDetailViewModel = {
   /** 画面用の一意キー（pbId + tbId） */
   inventoryKey: string;
@@ -25,7 +32,13 @@ export type InventoryDetailViewModel = {
   /** 方針Aでは原則空 */
   modelId: string;
 
-  productBlueprintPatch: ProductBlueprintPatchDTO;
+  // ✅ 画面でそのまま表示できるように ViewModel 直下にも持つ（重要）
+  productName?: string;
+  brandId?: string;
+  brandName?: string;
+
+  // 元データも保持（編集フォームなどで利用する想定）
+  productBlueprintPatch: ProductBlueprintPatchDTOEx;
 
   rows: InventoryRow[];
   totalStock: number;
@@ -55,13 +68,15 @@ function uniqStrings(xs: string[]): string[] {
   return out;
 }
 
-function pickPatch(dtos: InventoryDetailDTO[]): ProductBlueprintPatchDTO {
+function pickPatch(dtos: InventoryDetailDTO[]): ProductBlueprintPatchDTOEx {
   const found =
     dtos.find(
       (d) =>
         d?.productBlueprintPatch && Object.keys(d.productBlueprintPatch).length > 0,
     )?.productBlueprintPatch ?? {};
-  return found as any;
+
+  // brandName 等の “増えがちなフィールド” を any 経由でも保持する
+  return (found ?? {}) as any;
 }
 
 function pickTokenNameFromDTO(dto: any): string {
@@ -83,6 +98,30 @@ function pickUpdatedAtMax(dtos: InventoryDetailDTO[]): string | undefined {
   return maxUpdated;
 }
 
+// Patch から “ありがちな揺れ” を吸収して brandId/brandName を抜く
+function pickBrandId(patch: any): string {
+  return (
+    asString(patch?.brandId) ||
+    asString(patch?.BrandID) ||
+    asString(patch?.BrandId) ||
+    ""
+  );
+}
+function pickBrandName(patch: any): string {
+  return (
+    asString(patch?.brandName) ||
+    asString(patch?.BrandName) ||
+    ""
+  );
+}
+function pickProductName(patch: any): string {
+  return (
+    asString(patch?.productName) ||
+    asString(patch?.ProductName) ||
+    ""
+  );
+}
+
 // ============================================================
 // Mapper (DTO row -> InventoryRow)
 // ============================================================
@@ -98,8 +137,8 @@ function mapDtoToRows(
   const out: InventoryRow[] = [];
 
   for (const r of rowsRaw) {
+    // row 側に tbId が入っていない実装も多いので、ある時だけフィルタする
     const rowTbId = asString(r?.tokenBlueprintId ?? r?.TokenBlueprintID ?? r?.token_blueprint_id);
-
     if (expectedTbId && rowTbId && rowTbId !== expectedTbId) continue;
 
     const token = asString(r?.token ?? r?.Token) || fallbackToken || "-";
@@ -129,6 +168,11 @@ function mergeDetailDTOs(
 ): InventoryDetailViewModel {
   const patch = pickPatch(dtos);
   const maxUpdated = pickUpdatedAtMax(dtos);
+
+  // ✅ 画面で表示しやすいように直下にも展開
+  const brandId = pickBrandId(patch);
+  const brandName = pickBrandName(patch);
+  const productName = pickProductName(patch);
 
   // rows を結合 → 同一キーで合算（表示安定）
   const agg = new Map<
@@ -192,6 +236,10 @@ function mergeDetailDTOs(
     tokenBlueprintId: tbId,
     productBlueprintId: pbId,
     modelId: "",
+
+    productName: productName || undefined,
+    brandId: brandId || undefined,
+    brandName: brandName || undefined,
 
     productBlueprintPatch: patch,
     rows: mergedRows,

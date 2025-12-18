@@ -28,11 +28,11 @@ type CreateInput struct {
 type Patch struct {
 	ProductName *string `json:"productName,omitempty"`
 
-	// ✅ brandId は既存のまま
+	// ✅ 既存：更新に使うID
 	BrandID *string `json:"brandId,omitempty"`
 
-	// ✅ NEW: 画面表示用（NameResolver などで動的に埋める用途）
-	// - Firestore に保存しない運用でも、DTO として返すために必要
+	// ✅ 追加：表示用（InventoryDetailなど read-model で埋める）
+	// NOTE: Update入力として受け取っても、永続化に使わない想定（表示専用）。
 	BrandName *string `json:"brandName,omitempty"`
 
 	ItemType         *ItemType     `json:"itemType,omitempty"`
