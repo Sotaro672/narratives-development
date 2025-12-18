@@ -47,6 +47,23 @@ type UpdateTokenBlueprintInput struct {
 }
 
 // ===============================
+// Patch（表示用）
+// ===============================
+//
+// TokenBlueprintCard に表示するための最小情報。
+// - inventory/detail 側の ViewModel に埋め込む用途を想定
+// - 取得できない項目は nil のままでも OK（フロントで "" へフォールバック可能）
+type Patch struct {
+	Name        *string `json:"name,omitempty"`
+	Symbol      *string `json:"symbol,omitempty"`
+	BrandID     *string `json:"brandId,omitempty"`
+	BrandName   *string `json:"brandName,omitempty"`
+	Description *string `json:"description,omitempty"`
+	IconURL     *string `json:"iconUrl,omitempty"`
+	Minted      *bool   `json:"minted,omitempty"`
+}
+
+// ===============================
 // Filter（検索条件）
 // ===============================
 type Filter struct {

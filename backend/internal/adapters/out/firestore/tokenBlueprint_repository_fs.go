@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"reflect"
 	"strings"
 	"time"
 
@@ -61,6 +62,77 @@ func (r *TokenBlueprintRepositoryFS) GetByID(ctx context.Context, id string) (*t
 		return nil, err
 	}
 	return &tb, nil
+}
+
+// ✅ NEW: GetPatchByID returns a lightweight Patch used by read-models (e.g. Inventory detail).
+// - 実装は Firestore から必要最小限を読み出し、tbdom.Patch に詰める。
+// - Patch のフィールド名が将来変わっても壊れにくいよう、reflect で「存在するフィールドだけ」セットする。
+func (r *TokenBlueprintRepositoryFS) GetPatchByID(ctx context.Context, id string) (tbdom.Patch, error) {
+	if r.Client == nil {
+		return tbdom.Patch{}, errors.New("firestore client is nil")
+	}
+
+	id = strings.TrimSpace(id)
+	if id == "" {
+		return tbdom.Patch{}, tbdom.ErrNotFound
+	}
+
+	snap, err := r.col().Doc(id).Get(ctx)
+	if status.Code(err) == codes.NotFound {
+		return tbdom.Patch{}, tbdom.ErrNotFound
+	}
+	if err != nil {
+		return tbdom.Patch{}, err
+	}
+
+	// Patch 用に最低限だけ読む（TokenBlueprint 全体に依存しない）
+	var raw struct {
+		Name        string  `firestore:"name"`
+		Symbol      string  `firestore:"symbol"`
+		BrandID     string  `firestore:"brandId"`
+		CompanyID   string  `firestore:"companyId"`
+		Description string  `firestore:"description"`
+		IconID      *string `firestore:"iconId"`
+		MetadataURI string  `firestore:"metadataUri"`
+		Minted      any     `firestore:"minted"` // bool / string / nil 想定
+	}
+	if err := snap.DataTo(&raw); err != nil {
+		return tbdom.Patch{}, err
+	}
+
+	// minted 旧データ互換
+	var mintedBool bool
+	switch v := raw.Minted.(type) {
+	case bool:
+		mintedBool = v
+	case string:
+		mintedBool = strings.TrimSpace(v) == "minted"
+	case nil:
+		mintedBool = false
+	default:
+		mintedBool = false
+	}
+
+	patch := tbdom.Patch{}
+	setPatchString(&patch, []string{"ID", "TokenBlueprintID"}, strings.TrimSpace(id))
+	setPatchString(&patch, []string{"Name", "TokenName", "TokenBlueprintName"}, strings.TrimSpace(raw.Name))
+	setPatchString(&patch, []string{"Symbol"}, strings.TrimSpace(raw.Symbol))
+	setPatchString(&patch, []string{"BrandID"}, strings.TrimSpace(raw.BrandID))
+	setPatchString(&patch, []string{"CompanyID"}, strings.TrimSpace(raw.CompanyID))
+	setPatchString(&patch, []string{"Description"}, strings.TrimSpace(raw.Description))
+	setPatchBool(&patch, []string{"Minted"}, mintedBool)
+	setPatchString(&patch, []string{"MetadataURI", "MetadataUrl", "MetadataURL"}, strings.TrimSpace(raw.MetadataURI))
+
+	// iconId は *string / string どちらでも入れられるようにする
+	if raw.IconID != nil {
+		v := strings.TrimSpace(*raw.IconID)
+		if v != "" {
+			setPatchPtrString(&patch, []string{"IconID", "IconId"}, v)
+			setPatchString(&patch, []string{"IconID", "IconId"}, v)
+		}
+	}
+
+	return patch, nil
 }
 
 // GetNameByID returns only the Name field of a TokenBlueprint.
@@ -735,7 +807,7 @@ func docToTokenBlueprint(doc *firestore.DocumentSnapshot) (tbdom.TokenBlueprint,
 		switch strings.TrimSpace(v) {
 		case "minted":
 			mintedBool = true
-		default: // "notYet", "", その他未知値 → false
+		default:
 			mintedBool = false
 		}
 	case nil:
@@ -758,7 +830,7 @@ func docToTokenBlueprint(doc *firestore.DocumentSnapshot) (tbdom.TokenBlueprint,
 		CreatedBy:    strings.TrimSpace(raw.CreatedBy),
 		UpdatedAt:    raw.UpdatedAt.UTC(),
 		UpdatedBy:    strings.TrimSpace(raw.UpdatedBy),
-		MetadataURI:  strings.TrimSpace(raw.MetadataURI), // ★ ここでドメインへ反映
+		MetadataURI:  strings.TrimSpace(raw.MetadataURI),
 	}
 
 	if raw.IconID != nil {
@@ -865,4 +937,60 @@ func sanitizeStrings(xs []string) []string {
 		out = append(out, v)
 	}
 	return out
+}
+
+// ========================================
+// Patch setters (reflect-based; tolerate Patch schema changes)
+// ========================================
+
+func setPatchString(p *tbdom.Patch, names []string, v string) {
+	if p == nil {
+		return
+	}
+	rv := reflect.ValueOf(p).Elem()
+	for _, name := range names {
+		f := rv.FieldByName(name)
+		if !f.IsValid() || !f.CanSet() {
+			continue
+		}
+		if f.Kind() == reflect.String {
+			f.SetString(v)
+			return
+		}
+	}
+}
+
+func setPatchBool(p *tbdom.Patch, names []string, v bool) {
+	if p == nil {
+		return
+	}
+	rv := reflect.ValueOf(p).Elem()
+	for _, name := range names {
+		f := rv.FieldByName(name)
+		if !f.IsValid() || !f.CanSet() {
+			continue
+		}
+		if f.Kind() == reflect.Bool {
+			f.SetBool(v)
+			return
+		}
+	}
+}
+
+func setPatchPtrString(p *tbdom.Patch, names []string, v string) {
+	if p == nil {
+		return
+	}
+	rv := reflect.ValueOf(p).Elem()
+	for _, name := range names {
+		f := rv.FieldByName(name)
+		if !f.IsValid() || !f.CanSet() {
+			continue
+		}
+		if f.Kind() == reflect.Pointer && f.Type().Elem().Kind() == reflect.String {
+			s := v
+			f.Set(reflect.ValueOf(&s))
+			return
+		}
+	}
 }

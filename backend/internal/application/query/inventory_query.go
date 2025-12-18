@@ -14,6 +14,7 @@ import (
 	resolver "narratives/internal/application/resolver"
 	invdom "narratives/internal/domain/inventory"
 	pbdom "narratives/internal/domain/productBlueprint"
+	tbdom "narratives/internal/domain/tokenBlueprint"
 )
 
 // ============================================================
@@ -24,6 +25,7 @@ type InventoryQuery struct {
 	invRepo      inventoryReader
 	pbRepo       productBlueprintIDsByCompanyReader
 	pbPatchRepo  productBlueprintPatchReader
+	tbPatchRepo  tokenBlueprintPatchReader // ✅ NEW: tokenBlueprint patch
 	nameResolver *resolver.NameResolver
 }
 
@@ -37,6 +39,24 @@ func NewInventoryQuery(
 		invRepo:      invRepo,
 		pbRepo:       pbRepo,
 		pbPatchRepo:  pbPatchRepo,
+		tbPatchRepo:  nil, // ✅ optional (backward compatible)
+		nameResolver: nameResolver,
+	}
+}
+
+// ✅ NEW: tokenBlueprint patch も注入できるコンストラクタ（DI でこちらを使う）
+func NewInventoryQueryWithTokenBlueprintPatch(
+	invRepo inventoryReader,
+	pbRepo productBlueprintIDsByCompanyReader,
+	pbPatchRepo productBlueprintPatchReader,
+	tbPatchRepo tokenBlueprintPatchReader,
+	nameResolver *resolver.NameResolver,
+) *InventoryQuery {
+	return &InventoryQuery{
+		invRepo:      invRepo,
+		pbRepo:       pbRepo,
+		pbPatchRepo:  pbPatchRepo,
+		tbPatchRepo:  tbPatchRepo,
 		nameResolver: nameResolver,
 	}
 }
@@ -246,8 +266,58 @@ func (q *InventoryQuery) ListInventoryIDsByProductAndToken(ctx context.Context, 
 }
 
 // ============================================================
+// ✅ TokenBlueprint Patch: tbId -> Patch
+// - Patch.BrandID -> brandName を NameResolver で解決して詰める
+// - tbPatchRepo が未注入の場合は nil を返して detail を壊さない
+// ============================================================
+
+func (q *InventoryQuery) GetTokenBlueprintPatchByID(ctx context.Context, tokenBlueprintID string) (*tbdom.Patch, error) {
+	if q == nil {
+		return nil, errors.New("inventory query is nil")
+	}
+
+	tbID := strings.TrimSpace(tokenBlueprintID)
+	if tbID == "" {
+		return nil, errors.New("tokenBlueprintId is required")
+	}
+
+	if q.tbPatchRepo == nil {
+		log.Printf("[inventory_query][GetTokenBlueprintPatchByID] WARN tbPatchRepo is nil tbId=%q", tbID)
+		return nil, nil
+	}
+
+	patch, err := q.tbPatchRepo.GetPatchByID(ctx, tbID) // value
+	if err != nil {
+		return nil, err
+	}
+
+	// brand name resolve（可能なら埋める）
+	hasBrandID := patch.BrandID != nil && strings.TrimSpace(*patch.BrandID) != ""
+	brandID := ""
+	if patch.BrandID != nil {
+		brandID = strings.TrimSpace(*patch.BrandID)
+	}
+
+	brandName := strings.TrimSpace(q.resolveBrandName(ctx, brandID))
+
+	setOK := false
+	if hasBrandID && brandName != "" {
+		patch.BrandName = &brandName
+		setOK = true
+	}
+
+	log.Printf(
+		"[inventory_query][GetTokenBlueprintPatchByID] brand resolve tbId=%q hasBrandId=%t brandId=%q brandName=%q setOK=%t",
+		tbID, hasBrandID, brandID, brandName, setOK,
+	)
+
+	return &patch, nil
+}
+
+// ============================================================
 // ✅ Detail: inventoryId -> DTO
 // - productBlueprintPatch の brandId -> brandName を NameResolver で解決して詰める
+// - tokenBlueprintPatch を取得して DTO に詰める（TokenBlueprintCard 用）
 // ============================================================
 
 func (q *InventoryQuery) GetDetailByID(ctx context.Context, inventoryID string) (*querydto.InventoryDetailDTO, error) {
@@ -317,6 +387,18 @@ func (q *InventoryQuery) GetDetailByID(ctx context.Context, inventoryID string) 
 		} else {
 			log.Printf("[inventory_query][GetDetailByID] WARN GetPatchByID failed pbId=%q err=%v", pbID, e)
 			pbPatchPtr = nil
+		}
+	}
+
+	// ✅ tokenBlueprintPatch（取れない場合は省略）
+	var tbPatchPtr *tbdom.Patch
+	{
+		p, e := q.GetTokenBlueprintPatchByID(ctx, tbID)
+		if e != nil {
+			log.Printf("[inventory_query][GetDetailByID] WARN GetTokenBlueprintPatchByID failed tbId=%q err=%v", tbID, e)
+			tbPatchPtr = nil
+		} else {
+			tbPatchPtr = p
 		}
 	}
 
@@ -404,6 +486,7 @@ func (q *InventoryQuery) GetDetailByID(ctx context.Context, inventoryID string) 
 		TokenBlueprintID:      tbID,
 		ProductBlueprintID:    pbID,
 		ProductBlueprintPatch: pbPatchPtr, // ✅ *Patch（nil なら omitempty で出ない）
+		TokenBlueprintPatch:   tbPatchPtr, // ✅ NEW: TokenBlueprintCard 用
 		Rows:                  rows,
 		TotalStock:            total,
 		UpdatedAt:             updatedAt,
@@ -516,9 +599,14 @@ type productBlueprintIDsByCompanyReader interface {
 	ListIDsByCompanyID(ctx context.Context, companyID string) ([]string, error)
 }
 
-// ✅ 追加: detail 用に Patch を引ける最小ポート
+// ✅ detail 用に PB Patch を引ける最小ポート
 type productBlueprintPatchReader interface {
 	GetPatchByID(ctx context.Context, id string) (pbdom.Patch, error)
+}
+
+// ✅ NEW: detail 用に TokenBlueprint Patch を引ける最小ポート
+type tokenBlueprintPatchReader interface {
+	GetPatchByID(ctx context.Context, id string) (tbdom.Patch, error)
 }
 
 // ============================================================

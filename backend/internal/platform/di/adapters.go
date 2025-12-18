@@ -293,3 +293,25 @@ func (a *tokenBlueprintNameRepoAdapter) GetByID(
 	}
 	return *tb, nil
 }
+
+// ========================================
+// InventoryQuery 用 TokenBlueprint Patch アダプタ
+// ========================================
+//
+// InventoryQuery が期待する tokenBlueprintPatchReader:
+//
+//	GetPatchByID(ctx, id) (tokenBlueprint.Patch, error)
+//
+// を TokenBlueprintRepositoryFS に委譲する薄いアダプタです。
+type tbPatchByIDAdapter struct {
+	repo interface {
+		GetPatchByID(ctx context.Context, id string) (tbdom.Patch, error)
+	}
+}
+
+func (a *tbPatchByIDAdapter) GetPatchByID(ctx context.Context, id string) (tbdom.Patch, error) {
+	if a == nil || a.repo == nil {
+		return tbdom.Patch{}, errors.New("tbPatchByIDAdapter: repo is nil")
+	}
+	return a.repo.GetPatchByID(ctx, strings.TrimSpace(id))
+}

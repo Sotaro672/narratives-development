@@ -151,7 +151,7 @@ type Container struct {
 type pbQueryRepoAdapter struct {
 	repo interface {
 		ListIDsByCompany(ctx context.Context, companyID string) ([]string, error)
-		GetByID(ctx context.Context, id string) (productbpdom.ProductBlueprint, error) // ★ value 戻りに修正
+		GetByID(ctx context.Context, id string) (productbpdom.ProductBlueprint, error) // ★ value 戻り
 	}
 }
 
@@ -160,7 +160,6 @@ func (a *pbQueryRepoAdapter) ListIDsByCompany(ctx context.Context, companyID str
 }
 
 func (a *pbQueryRepoAdapter) GetByID(ctx context.Context, id string) (productbpdom.ProductBlueprint, error) {
-	// ★ そのまま repo に委譲（NotFound などは repo の err をそのまま返す）
 	return a.repo.GetByID(ctx, id)
 }
 
@@ -176,7 +175,7 @@ func (a *pbIDsByCompanyAdapter) ListIDsByCompanyID(ctx context.Context, companyI
 	return a.repo.ListIDsByCompany(ctx, companyID)
 }
 
-// ✅ NEW: pbPatchByIDAdapter adapts ProductBlueprintRepositoryFS to query.productBlueprintPatchReader
+// pbPatchByIDAdapter adapts ProductBlueprintRepositoryFS to query.productBlueprintPatchReader
 // (InventoryQuery 用: GetPatchByID を満たす)
 type pbPatchByIDAdapter struct {
 	repo interface {
@@ -212,9 +211,6 @@ func (r *mintRepoWithUpdate) Update(ctx context.Context, m mintdom.Mint) (mintdo
 	}
 	m.ID = id
 
-	// NOTE:
-	// - mintdom.Mint に InspectionID が無い（今は存在しない）ため参照しない
-	// - Products は map[string]string が現状の型なのでそれに合わせる
 	type mintRecord struct {
 		ID                string            `firestore:"id"`
 		BrandID           string            `firestore:"brandId"`
@@ -280,7 +276,7 @@ func NewContainer(ctx context.Context) (*Container, error) {
 	)
 	if err != nil {
 		log.Printf("[container] WARN: failed to load mint authority key: %v", err)
-		// 開発中は nil 許容。本番で必須にする場合はここで return err にしても良い
+		// 開発中は nil 許容
 		mintKey = nil
 	}
 
@@ -382,7 +378,7 @@ func NewContainer(ctx context.Context) (*Container, error) {
 
 	// ★ productBlueprint.Service（ProductName / BrandID 解決用）
 	pbDomainRepo := &productBlueprintDomainRepoAdapter{
-		repo: productBlueprintRepo, // uc.ProductBlueprintRepo として扱う
+		repo: productBlueprintRepo,
 	}
 	pbSvc := productbpdom.NewService(pbDomainRepo)
 
@@ -390,16 +386,14 @@ func NewContainer(ctx context.Context) (*Container, error) {
 	mintRequestPort := fs.NewMintRequestPortFS(
 		fsClient,
 		"mints",            // mintsColName
-		"token_blueprints", // tokenBlueprintsColName（実際の名前に合わせて）
-		"brands",           // brandsColName（実際の名前に合わせて）
+		"token_blueprints", // tokenBlueprintsColName
+		"brands",           // brandsColName
 	)
 
 	// ★ NameResolver（ID→名前/型番解決）
-	//    TokenBlueprint はアダプタで value 戻りに揃える
 	tokenBlueprintNameRepo := &tokenBlueprintNameRepoAdapter{
 		repo: tokenBlueprintRepo,
 	}
-
 	nameResolver := resolver.NewNameResolver(
 		brandRepo,              // BrandNameRepository
 		companyRepo,            // CompanyNameRepository
@@ -446,9 +440,9 @@ func NewContainer(ctx context.Context) (*Container, error) {
 
 	avatarUC := uc.NewAvatarUsecase(
 		avatarRepo,
-		nil, // state repo not wired yet
-		nil, // icon repo not wired yet
-		nil, // GCS not wired yet
+		nil,
+		nil,
+		nil,
 	)
 
 	billingAddressUC := uc.NewBillingAddressUsecase(billingAddressRepo)
@@ -493,9 +487,9 @@ func NewContainer(ctx context.Context) (*Container, error) {
 		repo: productBlueprintRepo,
 	}
 	companyProductionQueryService := companyquery.NewCompanyProductionQueryService(
-		pbQueryRepo,    // ProductBlueprintQueryRepo
-		productionRepo, // ProductionQueryRepo
-		nameResolver,   // NameResolver
+		pbQueryRepo,
+		productionRepo,
+		nameResolver,
 	)
 
 	// ★ ProductBlueprintUsecase に HistoryRepo を注入
@@ -511,8 +505,8 @@ func NewContainer(ctx context.Context) (*Container, error) {
 
 	// ★ InspectionUsecase（検品アプリ専用）※ moved
 	inspectionUC := inspectionapp.NewInspectionUsecase(
-		inspectionRepo,        // inspections テーブル
-		inspectionProductRepo, // products テーブル（inspectionResult 同期用, アダプタ経由）
+		inspectionRepo,
+		inspectionProductRepo,
 	)
 
 	// ★ ProductUsecase（Inspector 詳細画面用）
@@ -526,21 +520,21 @@ func NewContainer(ctx context.Context) (*Container, error) {
 
 	// ★ MintUsecase（MintRequest / NFT 発行候補一覧など）
 	mintUC := mintapp.NewMintUsecase(
-		productBlueprintRepo, // mint.MintProductBlueprintRepo
-		productionRepo,       // mint.MintProductionRepo
-		inspectionRepo,       // mint.MintInspectionRepo
-		modelRepo,            // mint.MintModelRepo
-		tokenBlueprintRepo,   // tokenBlueprint.RepositoryPort
-		brandSvc,             // *brand.Service
-		mintRepo,             // ✅ mint.MintRepository（Update補完済みラッパ）
-		inspectionRepo,       // mint.PassedProductLister（InspectionRepositoryFS が実装している前提）
-		tokenUC,              // mint.TokenMintPort（TokenUsecase が実装している前提）
+		productBlueprintRepo,
+		productionRepo,
+		inspectionRepo,
+		modelRepo,
+		tokenBlueprintRepo,
+		brandSvc,
+		mintRepo,
+		inspectionRepo,
+		tokenUC,
 	)
 
 	// ✅ 追加: MintUsecase に NameResolver を差し込む（createdByName 解決用）
 	mintUC.SetNameResolver(nameResolver)
 
-	// ✅ 修正: MintUsecase 側の setter 名に合わせる
+	// ✅ MintUsecase に InventoryUsecase を差し込む
 	mintUC.SetInventoryUsecase(inventoryUC)
 
 	// ★ NEW: MintRequestQueryService（GET /mint/requests 一覧専用）
@@ -549,7 +543,6 @@ func NewContainer(ctx context.Context) (*Container, error) {
 		productionUC,
 		nameResolver,
 	)
-
 	// ✅ 追加: MintRequestQueryService に modelRepo を差し込む
 	mintRequestQueryService.SetModelRepo(modelRepo)
 
@@ -562,8 +555,8 @@ func NewContainer(ctx context.Context) (*Container, error) {
 	// ★ TokenBlueprintUsecase に member.Service と Arweave 関連を注入
 	tokenBlueprintUC := uc.NewTokenBlueprintUsecase(
 		tokenBlueprintRepo,   // tbRepo
-		tokenContentsRepo,    // ✅ tcRepo (GCS)
-		tokenIconRepo,        // ✅ tiRepo (token icon repo, GCS)
+		tokenContentsRepo,    // tcRepo (GCS)
+		tokenIconRepo,        // tiRepo (GCS)
 		memberSvc,            // *member.Service
 		arweaveUploader,      // ArweaveUploader
 		tokenMetadataBuilder, // *TokenMetadataBuilder
@@ -599,11 +592,12 @@ func NewContainer(ctx context.Context) (*Container, error) {
 	}
 
 	// ★ NEW: InventoryQuery（GET /inventory/...）
-	// want: (query.inventoryReader, query.productBlueprintIDsByCompanyReader, query.productBlueprintPatchReader, *resolver.NameResolver)
-	inventoryQuery := companyquery.NewInventoryQuery(
+	// want: (inventoryReader, productBlueprintIDsByCompanyReader, productBlueprintPatchReader, tokenBlueprintPatchReader, *resolver.NameResolver)
+	inventoryQuery := companyquery.NewInventoryQueryWithTokenBlueprintPatch(
 		inventoryRepo, // invReader
 		&pbIDsByCompanyAdapter{repo: productBlueprintRepo}, // pbIDsByCompanyReader
-		&pbPatchByIDAdapter{repo: productBlueprintRepo},    // ✅ productBlueprintPatchReader
+		&pbPatchByIDAdapter{repo: productBlueprintRepo},    // productBlueprintPatchReader
+		&tbPatchByIDAdapter{repo: tokenBlueprintRepo},      // ✅ tokenBlueprintPatchReader（adapters.go）
 		nameResolver, // NameResolver
 	)
 
@@ -657,7 +651,6 @@ func NewContainer(ctx context.Context) (*Container, error) {
 		CompanyProductionQueryService: companyProductionQueryService,
 		MintRequestQueryService:       mintRequestQueryService,
 
-		// ✅ NEW
 		InventoryQuery: inventoryQuery,
 
 		ProductUC:    productUC,
@@ -700,7 +693,7 @@ func (c *Container) RouterDeps() httpin.RouterDeps {
 		PaymentUC:          c.PaymentUC,
 		PermissionUC:       c.PermissionUC,
 		PrintUC:            c.PrintUC,
-		TokenUC:            c.TokenUC, // ✅ 追加（router 側で使用）
+		TokenUC:            c.TokenUC,
 		ProductionUC:       c.ProductionUC,
 		ProductBlueprintUC: c.ProductBlueprintUC,
 		SaleUC:             c.SaleUC,
@@ -714,7 +707,6 @@ func (c *Container) RouterDeps() httpin.RouterDeps {
 		CompanyProductionQueryService: c.CompanyProductionQueryService,
 		MintRequestQueryService:       c.MintRequestQueryService,
 
-		// ✅ NEW
 		InventoryQuery: c.InventoryQuery,
 
 		ProductUC:    c.ProductUC,

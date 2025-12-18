@@ -6,6 +6,12 @@ import PageStyle from "../../../../shell/src/layout/PageStyle/PageStyle";
 import ProductBlueprintCard from "../../../../productBlueprint/src/presentation/components/productBlueprintCard";
 import InventoryCard from "../components/inventoryCard";
 
+// ✅ 追加：TokenBlueprintCard
+import TokenBlueprintCard, {
+  type TokenBlueprintCardViewModel,
+  type TokenBlueprintCardHandlers,
+} from "../../../../tokenBlueprint/src/presentation/components/tokenBlueprintCard";
+
 import { useInventoryDetail } from "../hook/useInventoryDetail";
 
 export default function InventoryDetail() {
@@ -52,14 +58,63 @@ export default function InventoryDetail() {
       ? `在庫詳細：${vm.productBlueprintId} / ${vm.tokenBlueprintId}`
       : `在庫詳細：${productBlueprintId ?? ""} / ${tokenBlueprintId ?? ""}`;
 
+  // ============================================================
+  // ✅ TokenBlueprintCard (view only) 用の VM/Handlers を組み立て
+  //  - useInventoryDetail が tokenBlueprintPatch を返していればそれを利用
+  //  - 無い場合でも型を満たすように fallback を入れて表示だけできるようにする
+  // ============================================================
+
+  const tbPatchAny = (vm as any)?.tokenBlueprintPatch ?? (vm as any)?.tokenBlueprint ?? null;
+
+  const tokenCardVM: TokenBlueprintCardViewModel = React.useMemo(
+    () => ({
+      id: tbId,
+      name: String(tbPatchAny?.name ?? ""),
+      symbol: String(tbPatchAny?.symbol ?? ""),
+      brandId: String(tbPatchAny?.brandId ?? ""),
+      brandName: String(tbPatchAny?.brandName ?? ""),
+      description: String(tbPatchAny?.description ?? ""),
+      iconUrl: tbPatchAny?.iconUrl ?? tbPatchAny?.iconURL ?? undefined,
+
+      // ここは「在庫詳細では基本 view」運用に寄せるなら false 固定でもOK
+      // （minted:true だとアイコン編集UIが出るため）
+      minted: false,
+
+      iconFile: null,
+      isEditMode: false,
+      brandOptions: [],
+    }),
+    [tbId, tbPatchAny],
+  );
+
+  const tokenCardHandlers: TokenBlueprintCardHandlers = React.useMemo(
+    () => ({
+      // 在庫詳細では view-only 想定：プレビューは軽い動作だけ入れておく
+      onPreview: () => {
+        const url = tokenCardVM.iconUrl;
+        if (url) window.open(url, "_blank", "noopener,noreferrer");
+      },
+    }),
+    [tokenCardVM.iconUrl],
+  );
+
   return (
     <PageStyle layout="grid-2" title={title} onBack={onBack} onSave={undefined}>
       {/* 左カラム：商品情報カード + デバッグ情報 + 在庫一覧カード */}
       <div>
         {/* ✅ ProductBlueprintCardProps に productBlueprintId が無いので渡さない */}
         {/* ✅ inventory 側で取れた patch をそのまま渡す */}
-        <ProductBlueprintCard mode="view" productBlueprintPatch={vm?.productBlueprintPatch} />
+        <ProductBlueprintCard
+          mode="view"
+          productBlueprintPatch={vm?.productBlueprintPatch}
+        />
 
+        {/* ✅ 追加：ProductBlueprintCard の直下に TokenBlueprintCard を表示 */}
+        {tbId && (
+          <div className="mt-3">
+            <TokenBlueprintCard vm={tokenCardVM} handlers={tokenCardHandlers} />
+          </div>
+        )}
 
         {/* --- hook 取得データの可視化（確認用） --- */}
         <div className="mt-3 rounded-md border border-[hsl(var(--border))] bg-[hsl(var(--card))] p-3">
@@ -74,7 +129,8 @@ export default function InventoryDetail() {
               <span className="font-medium">tokenBlueprintId:</span> {tbId || "-"}
             </div>
             <div>
-              <span className="font-medium">inventoryKey:</span> {vm?.inventoryKey ?? "-"}
+              <span className="font-medium">inventoryKey:</span>{" "}
+              {vm?.inventoryKey ?? "-"}
             </div>
             <div>
               <span className="font-medium">inventoryIds:</span>{" "}
@@ -88,13 +144,16 @@ export default function InventoryDetail() {
               </div>
             )}
             <div>
-              <span className="font-medium">totalStock:</span> {vm?.totalStock ?? 0}
+              <span className="font-medium">totalStock:</span>{" "}
+              {vm?.totalStock ?? 0}
             </div>
             <div>
-              <span className="font-medium">rows:</span> {Array.isArray(rows) ? rows.length : 0}
+              <span className="font-medium">rows:</span>{" "}
+              {Array.isArray(rows) ? rows.length : 0}
             </div>
             <div>
-              <span className="font-medium">updatedAt:</span> {vm?.updatedAt ?? "-"}
+              <span className="font-medium">updatedAt:</span>{" "}
+              {vm?.updatedAt ?? "-"}
             </div>
 
             {/* ✅ Patch が取れているか可視化 */}
