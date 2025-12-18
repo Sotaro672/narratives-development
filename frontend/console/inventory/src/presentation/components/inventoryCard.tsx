@@ -34,6 +34,7 @@ function rgbIntToHex(rgb: number | string | null | undefined): string | null {
 
 export type InventoryRow = {
   /** トークン表示（例: "Token A" / "TB-xxxx" / tokenBlueprint name など） */
+  // NOTE: 互換のため残す（画面では表示しない）
   token?: string;
 
   /** 型番 (例: "LM-SB-S-WHT") */
@@ -94,7 +95,7 @@ const InventoryCard: React.FC<InventoryCardProps> = ({
           <Table className="ivc__table">
             <TableHeader>
               <TableRow>
-                <TableHead className="ivc__th ivc__th--left">トークン</TableHead>
+                {/* ✅ トークン列を削除 */}
                 <TableHead className="ivc__th ivc__th--left">型番</TableHead>
                 <TableHead className="ivc__th">サイズ</TableHead>
                 <TableHead className="ivc__th">カラー</TableHead>
@@ -106,15 +107,14 @@ const InventoryCard: React.FC<InventoryCardProps> = ({
               {rows.map((row, idx) => {
                 const rgbHex = rgbIntToHex(row.rgb);
                 const bgColor =
-                  row.rgb && typeof row.rgb === "string" && row.rgb.trim().startsWith("#")
+                  row.rgb &&
+                  typeof row.rgb === "string" &&
+                  row.rgb.trim().startsWith("#")
                     ? row.rgb.trim()
                     : rgbHex ?? "#ffffff";
 
                 return (
                   <TableRow key={`${row.modelNumber}-${idx}`} className="ivc__tr">
-                    {/* トークン */}
-                    <TableCell className="ivc__token">{row.token ?? "-"}</TableCell>
-
                     {/* 型番 */}
                     <TableCell className="ivc__model">{row.modelNumber}</TableCell>
 
@@ -144,7 +144,8 @@ const InventoryCard: React.FC<InventoryCardProps> = ({
 
               {rows.length === 0 && (
                 <TableRow>
-                  <TableCell colSpan={5} className="ivc__empty">
+                  {/* ✅ 列数が4になったので colSpan も 4 */}
+                  <TableCell colSpan={4} className="ivc__empty">
                     表示できる在庫データがありません。
                   </TableCell>
                 </TableRow>
@@ -152,7 +153,8 @@ const InventoryCard: React.FC<InventoryCardProps> = ({
 
               {rows.length > 0 && (
                 <TableRow className="ivc__total-row">
-                  <TableCell colSpan={4} className="ivc__total-label ivc__th--right">
+                  {/* ✅ 先頭3列に「合計」、最後1列に数値 */}
+                  <TableCell colSpan={3} className="ivc__total-label ivc__th--right">
                     合計
                   </TableCell>
                   <TableCell className="ivc__total-value">

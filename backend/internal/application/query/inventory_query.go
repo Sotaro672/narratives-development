@@ -16,14 +16,13 @@ import (
 // ============================================================
 // Query Service (Read-model assembler)
 // - ✅ currentMember.companyId -> productBlueprintIds -> inventoryId(docId)
-// - ❌ inventory.Mint の legacy fields (ModelID/Products/Accumulation) は参照しない
-// - ✅ Stock(map[modelId]ModelStock) から model 別に在庫数を集計する
+// - ✅ tokenBlueprintId は inv.TokenBlueprintID が空でも inventoryId から推測する
 // ============================================================
 
 type InventoryQuery struct {
 	invRepo      inventoryReader
-	pbRepo       productBlueprintIDsByCompanyReader // companyId -> productBlueprintIds
-	nameResolver *resolver.NameResolver             // tokenName / modelNumber / productName 解決
+	pbRepo       productBlueprintIDsByCompanyReader
+	nameResolver *resolver.NameResolver
 }
 
 func NewInventoryQuery(
@@ -45,13 +44,11 @@ func NewInventoryQuery(
 // 返す Row は（管理一覧）として
 // - ProductBlueprintID / ProductName / TokenBlueprintID / TokenName / ModelNumber / Stock
 // を返す。
-// ✅ Stock は m.Stock[modelId] の件数で算出する。
 func (q *InventoryQuery) ListByCurrentCompany(ctx context.Context) ([]querydto.InventoryManagementRowDTO, error) {
 	if q == nil || q.invRepo == nil || q.pbRepo == nil {
 		return nil, errors.New("inventory query repositories are not configured")
 	}
 
-	// NOTE: companyIDFromContext は package query 内で 1箇所だけ定義してください（重複禁止）
 	companyID := companyIDFromContext(ctx)
 	if strings.TrimSpace(companyID) == "" {
 		return nil, errors.New("companyId is missing in context")
@@ -65,17 +62,14 @@ func (q *InventoryQuery) ListByCurrentCompany(ctx context.Context) ([]querydto.I
 		return []querydto.InventoryManagementRowDTO{}, nil
 	}
 
-	// ✅ 集計キーは tokenName ではなく tokenBlueprintId を正とする（detail遷移に必須）
 	type key struct {
 		pbID     string
 		tbID     string
 		modelNum string
 	}
 
-	// key -> stock sum
 	group := map[key]int{}
 
-	// caches
 	productNameCache := map[string]string{}
 	tokenNameCache := map[string]string{}
 	modelNumberCache := map[string]string{}
@@ -86,7 +80,6 @@ func (q *InventoryQuery) ListByCurrentCompany(ctx context.Context) ([]querydto.I
 			continue
 		}
 
-		// product name cache
 		if _, ok := productNameCache[pbID]; !ok {
 			name := q.resolveProductName(ctx, pbID)
 			if name == "" {
@@ -95,7 +88,6 @@ func (q *InventoryQuery) ListByCurrentCompany(ctx context.Context) ([]querydto.I
 			productNameCache[pbID] = name
 		}
 
-		// inventories (docId = inventoryId) を pbID で取得
 		invs, err := q.invRepo.ListByProductBlueprintID(ctx, pbID)
 		if err != nil {
 			return nil, err
@@ -105,22 +97,18 @@ func (q *InventoryQuery) ListByCurrentCompany(ctx context.Context) ([]querydto.I
 		}
 
 		for _, inv := range invs {
-			// ✅ tokenBlueprintId は inv.TokenBlueprintID が空でも
-			// inventoryId(=docId) の後半から復元する
+			// ✅ tbId は field が空なら inventoryId から推測する
 			tbID := strings.TrimSpace(inv.TokenBlueprintID)
 			if tbID == "" {
-				_, parsedTbID, ok := parseInventoryID(strings.TrimSpace(inv.ID))
-				if ok {
-					tbID = parsedTbID
-				}
+				tbID = parseTokenBlueprintIDFromInventoryID(inv.ID, pbID)
 			}
+			tbID = strings.TrimSpace(tbID)
 
-			// ✅ 方針A: tokenBlueprintId が無い在庫は detail へ遷移できないので一覧にも出さない
+			// detail 遷移に必須なので、取れないものは出さない
 			if tbID == "" {
 				continue
 			}
 
-			// token name cache（表示用）
 			if _, ok := tokenNameCache[tbID]; !ok {
 				name := q.resolveTokenName(ctx, tbID)
 				if name == "" {
@@ -132,9 +120,7 @@ func (q *InventoryQuery) ListByCurrentCompany(ctx context.Context) ([]querydto.I
 				tokenNameCache[tbID] = name
 			}
 
-			// Stock から model 別に集計
 			if len(inv.Stock) == 0 {
-				// 在庫ゼロでも行を出したいならここで出す（現状はスキップ）
 				continue
 			}
 
@@ -144,7 +130,6 @@ func (q *InventoryQuery) ListByCurrentCompany(ctx context.Context) ([]querydto.I
 					continue
 				}
 
-				// model number cache
 				if _, ok := modelNumberCache[modelID]; !ok {
 					mn := q.resolveModelNumber(ctx, modelID)
 					if mn == "" {
@@ -157,7 +142,7 @@ func (q *InventoryQuery) ListByCurrentCompany(ctx context.Context) ([]querydto.I
 				}
 				modelNumber := modelNumberCache[modelID]
 
-				stock := modelStockLen(ms) // ✅ Products/Accumulation は使わず Stock で算出
+				stock := modelStockLen(ms)
 				if stock <= 0 {
 					continue
 				}
@@ -173,13 +158,10 @@ func (q *InventoryQuery) ListByCurrentCompany(ctx context.Context) ([]querydto.I
 		rows = append(rows, querydto.InventoryManagementRowDTO{
 			ProductBlueprintID: k.pbID,
 			ProductName:        productNameCache[k.pbID],
-
-			// ✅ ここが今回の本命（フロントが detail URL を作るのに必要）
-			TokenBlueprintID: k.tbID,
-
-			TokenName:   tokenNameCache[k.tbID],
-			ModelNumber: k.modelNum,
-			Stock:       stock,
+			TokenBlueprintID:   k.tbID,
+			TokenName:          tokenNameCache[k.tbID],
+			ModelNumber:        k.modelNum,
+			Stock:              stock,
 		})
 	}
 
@@ -187,7 +169,6 @@ func (q *InventoryQuery) ListByCurrentCompany(ctx context.Context) ([]querydto.I
 		if rows[i].ProductName != rows[j].ProductName {
 			return rows[i].ProductName < rows[j].ProductName
 		}
-		// tokenName より tbId のほうが安定。表示順は tokenName でもOK
 		if rows[i].TokenName != rows[j].TokenName {
 			return rows[i].TokenName < rows[j].TokenName
 		}
@@ -198,6 +179,82 @@ func (q *InventoryQuery) ListByCurrentCompany(ctx context.Context) ([]querydto.I
 	})
 
 	return rows, nil
+}
+
+// ============================================================
+// ✅ NEW: pbId + tbId -> inventoryIds
+// ============================================================
+
+func (q *InventoryQuery) ListInventoryIDsByProductAndToken(ctx context.Context, productBlueprintID, tokenBlueprintID string) ([]string, error) {
+	if q == nil || q.invRepo == nil {
+		return nil, errors.New("inventory query repositories are not configured")
+	}
+
+	pbID := strings.TrimSpace(productBlueprintID)
+	tbID := strings.TrimSpace(tokenBlueprintID)
+	if pbID == "" || tbID == "" {
+		return nil, errors.New("productBlueprintId and tokenBlueprintId are required")
+	}
+
+	invs, err := q.invRepo.ListByProductBlueprintID(ctx, pbID)
+	if err != nil {
+		return nil, err
+	}
+	if len(invs) == 0 {
+		return []string{}, nil
+	}
+
+	out := make([]string, 0, len(invs))
+	seen := map[string]struct{}{}
+
+	for _, inv := range invs {
+		invID := strings.TrimSpace(inv.ID)
+		if invID == "" {
+			continue
+		}
+
+		gotTbID := strings.TrimSpace(inv.TokenBlueprintID)
+		if gotTbID == "" {
+			gotTbID = parseTokenBlueprintIDFromInventoryID(invID, pbID)
+		}
+		gotTbID = strings.TrimSpace(gotTbID)
+
+		if gotTbID != tbID {
+			continue
+		}
+
+		if _, ok := seen[invID]; ok {
+			continue
+		}
+		seen[invID] = struct{}{}
+		out = append(out, invID)
+	}
+
+	sort.Strings(out)
+	return out, nil
+}
+
+// inventoryId = "{pbId}__{tbId}" から tbId を抜く
+func parseTokenBlueprintIDFromInventoryID(inventoryID, productBlueprintID string) string {
+	id := strings.TrimSpace(inventoryID)
+	pb := strings.TrimSpace(productBlueprintID)
+	if id == "" || pb == "" {
+		return ""
+	}
+
+	prefix := pb + "__"
+	if !strings.HasPrefix(id, prefix) {
+		return ""
+	}
+
+	suffix := strings.TrimSpace(strings.TrimPrefix(id, prefix))
+	if suffix == "" {
+		return ""
+	}
+
+	// 念のため "__" が複数ある場合は最後を tbId とみなす
+	parts := strings.Split(suffix, "__")
+	return strings.TrimSpace(parts[len(parts)-1])
 }
 
 // ============================================================
@@ -238,34 +295,7 @@ type productBlueprintIDsByCompanyReader interface {
 }
 
 // ============================================================
-// ID helpers
-// - inventoryId := "{productBlueprintId}__{tokenBlueprintId}"
-//   → 後半から tokenBlueprintId を復元できる
-// ============================================================
-
-func parseInventoryID(inventoryID string) (pbID, tbID string, ok bool) {
-	id := strings.TrimSpace(inventoryID)
-	if id == "" {
-		return "", "", false
-	}
-
-	const sep = "__"
-	i := strings.LastIndex(id, sep)
-	if i <= 0 || i+len(sep) >= len(id) {
-		return "", "", false
-	}
-
-	pbID = strings.TrimSpace(id[:i])
-	tbID = strings.TrimSpace(id[i+len(sep):])
-	if pbID == "" || tbID == "" {
-		return "", "", false
-	}
-	return pbID, tbID, true
-}
-
-// ============================================================
 // Stock helpers
-// - invdom.ModelStock が map alias でも struct でも安全に len を取る
 // ============================================================
 
 func modelStockLen(ms invdom.ModelStock) int {
@@ -274,12 +304,10 @@ func modelStockLen(ms invdom.ModelStock) int {
 		return 0
 	}
 
-	// map alias
 	if rv.Kind() == reflect.Map {
 		return rv.Len()
 	}
 
-	// struct 内に map[string]bool フィールドがあるケース
 	if rv.Kind() == reflect.Struct {
 		for i := 0; i < rv.NumField(); i++ {
 			f := rv.Field(i)

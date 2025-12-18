@@ -61,18 +61,23 @@ type InventoryRowDTO struct {
 
 // ============================================================
 // DTOs (Inventory Management List)
-// - 列: プロダクト名 / トークン名 / 型番 / 在庫数
-// ✅ 方針A: detail遷移に tokenBlueprintId が必須なので追加
 // ============================================================
 
 type InventoryManagementRowDTO struct {
 	ProductBlueprintID string `json:"productBlueprintId"`
 	ProductName        string `json:"productName"`
+	TokenBlueprintID   string `json:"tokenBlueprintId"` // ✅ 必須
+	TokenName          string `json:"tokenName"`
+	ModelNumber        string `json:"modelNumber"`
+	Stock              int    `json:"stock"`
+}
 
-	// ✅ これが無いとフロントが detail URL を作れず tbId="-" になる
-	TokenBlueprintID string `json:"tokenBlueprintId"`
+// ============================================================
+// ✅ NEW: /inventory/ids response
+// ============================================================
 
-	TokenName   string `json:"tokenName"`
-	ModelNumber string `json:"modelNumber"`
-	Stock       int    `json:"stock"`
+type InventoryIDsByProductAndTokenDTO struct {
+	ProductBlueprintID string   `json:"productBlueprintId"`
+	TokenBlueprintID   string   `json:"tokenBlueprintId"`
+	InventoryIDs       []string `json:"inventoryIds"`
 }

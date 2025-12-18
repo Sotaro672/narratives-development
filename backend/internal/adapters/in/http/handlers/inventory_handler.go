@@ -2,6 +2,7 @@
 package handlers
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"log"
@@ -37,8 +38,21 @@ func (h *InventoryHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	// ============================================================
 	// Query endpoints (read-only DTO)
-	// - ✅ only: current company inventory management list
 	// ============================================================
+
+	// ✅ GET /inventory/ids  (pbId+tbId -> inventoryIds)
+	if path == "/inventory/ids" {
+		switch r.Method {
+		case http.MethodGet:
+			log.Printf("[inventory_handler] route=Query.ResolveInventoryIDsByProductAndToken")
+			h.ResolveInventoryIDsByProductAndTokenQuery(w, r)
+			return
+		default:
+			log.Printf("[inventory_handler] METHOD_NOT_ALLOWED %s %s", r.Method, path)
+			w.WriteHeader(http.StatusMethodNotAllowed)
+			return
+		}
+	}
 
 	// ✅ GET /inventory  (currentMember.companyId -> productBlueprintIds -> inventories)
 	if path == "/inventory" {
@@ -46,6 +60,27 @@ func (h *InventoryHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		case http.MethodGet:
 			log.Printf("[inventory_handler] route=Query.ListByCurrentCompany")
 			h.ListByCurrentCompanyQuery(w, r)
+			return
+		default:
+			log.Printf("[inventory_handler] METHOD_NOT_ALLOWED %s %s", r.Method, path)
+			w.WriteHeader(http.StatusMethodNotAllowed)
+			return
+		}
+	}
+
+	// ✅ NEW: GET /inventory/{id}  (detail)
+	// - /inventory/ids は上で処理済みなので、ここでは /inventory/{anything} を detail として扱う
+	if strings.HasPrefix(path, "/inventory/") {
+		switch r.Method {
+		case http.MethodGet:
+			id := strings.TrimSpace(strings.TrimPrefix(path, "/inventory/"))
+			if id == "" || id == "ids" {
+				log.Printf("[inventory_handler] BAD_REQUEST invalid inventory id=%q", id)
+				writeError(w, http.StatusBadRequest, "invalid inventory id")
+				return
+			}
+			log.Printf("[inventory_handler] route=QueryOrFallback.Detail id=%q", id)
+			h.GetDetailByIDQueryOrFallback(w, r, id)
 			return
 		default:
 			log.Printf("[inventory_handler] METHOD_NOT_ALLOWED %s %s", r.Method, path)
@@ -143,9 +178,200 @@ func (h *InventoryHandler) ListByCurrentCompanyQuery(w http.ResponseWriter, r *h
 	}
 	log.Printf("[inventory_handler][ListByCurrentCompany] ok count=%d samplePbId=%q", len(rows), sample)
 
-	// 互換のため DTO 型は維持
 	_ = querydto.InventoryManagementRowDTO{}
 	writeJSON(w, http.StatusOK, rows)
+}
+
+// ✅ NEW: pbId + tbId -> inventoryIds
+func (h *InventoryHandler) ResolveInventoryIDsByProductAndTokenQuery(w http.ResponseWriter, r *http.Request) {
+	if h.Q == nil {
+		log.Printf("[inventory_handler][ResolveInventoryIDsByProductAndToken] QueryNotConfigured")
+		writeError(w, http.StatusNotImplemented, "inventory query is not configured")
+		return
+	}
+
+	ctx := r.Context()
+
+	pbID := strings.TrimSpace(r.URL.Query().Get("productBlueprintId"))
+	tbID := strings.TrimSpace(r.URL.Query().Get("tokenBlueprintId"))
+
+	log.Printf("[inventory_handler][ResolveInventoryIDsByProductAndToken] start pbId=%q tbId=%q rawQuery=%q",
+		pbID, tbID, r.URL.RawQuery,
+	)
+
+	if pbID == "" || tbID == "" {
+		writeError(w, http.StatusBadRequest, "productBlueprintId and tokenBlueprintId are required")
+		return
+	}
+
+	ids, err := h.Q.ListInventoryIDsByProductAndToken(ctx, pbID, tbID)
+	if err != nil {
+		log.Printf("[inventory_handler][ResolveInventoryIDsByProductAndToken] failed err=%v", err)
+		writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+
+	resp := querydto.InventoryIDsByProductAndTokenDTO{
+		ProductBlueprintID: pbID,
+		TokenBlueprintID:   tbID,
+		InventoryIDs:       ids,
+	}
+
+	log.Printf("[inventory_handler][ResolveInventoryIDsByProductAndToken] ok count=%d sample=%v",
+		len(ids), func() []string {
+			if len(ids) > 5 {
+				return ids[:5]
+			}
+			return ids
+		}(),
+	)
+
+	writeJSON(w, http.StatusOK, resp)
+}
+
+// ============================================================
+// ✅ NEW: Detail endpoint (Query preferred, fallback to UC)
+// GET /inventory/{id}
+// ============================================================
+
+func (h *InventoryHandler) GetDetailByIDQueryOrFallback(w http.ResponseWriter, r *http.Request, inventoryID string) {
+	ctx := r.Context()
+	id := strings.TrimSpace(inventoryID)
+
+	log.Printf("[inventory_handler][Detail] start id=%q", id)
+
+	if id == "" {
+		writeError(w, http.StatusBadRequest, "missing id")
+		return
+	}
+
+	// 1) Query があれば detail DTO を試す（メソッド名の揺れを reflect で吸収）
+	if h.Q != nil {
+		if dto, ok, err := tryCallInventoryQueryDetail(ctx, h.Q, id); ok {
+			if err != nil {
+				log.Printf("[inventory_handler][Detail] query failed id=%q err=%v", id, err)
+				// not found を 404 に寄せたい場合はここで判定してもOK
+				writeError(w, http.StatusInternalServerError, err.Error())
+				return
+			}
+			log.Printf("[inventory_handler][Detail] query ok id=%q", id)
+			writeJSON(w, http.StatusOK, dto)
+			return
+		}
+		log.Printf("[inventory_handler][Detail] query detail method not found (fallback to usecase) id=%q", id)
+	}
+
+	// 2) fallback: UC.GetByID（※DTOの完全一致は Query 側推奨）
+	if h.UC == nil {
+		log.Printf("[inventory_handler][Detail] UsecaseNotConfigured")
+		writeError(w, http.StatusNotImplemented, "inventory usecase is not configured")
+		return
+	}
+
+	m, err := h.UC.GetByID(ctx, id)
+	if err != nil {
+		log.Printf("[inventory_handler][Detail] usecase failed id=%q err=%v", id, err)
+		writeDomainError(w, err)
+		return
+	}
+
+	// fallback DTO（最低限）
+	// フロントの mapper は rows が無くても落ちないので、まず 200 を返すことを優先。
+	resp := map[string]any{
+		"inventoryId":        strings.TrimSpace(m.ID),
+		"id":                 strings.TrimSpace(m.ID),
+		"inventoryIds":       []string{strings.TrimSpace(m.ID)},
+		"tokenBlueprintId":   strings.TrimSpace(m.TokenBlueprintID),
+		"productBlueprintId": strings.TrimSpace(m.ProductBlueprintID),
+		"modelId":            "",
+
+		"productBlueprintPatch": map[string]any{},
+		"rows":                  []any{},
+		"totalStock":            totalProducts(m),
+	}
+
+	log.Printf("[inventory_handler][Detail] fallback ok id=%q pbId=%q tbId=%q totalStock=%v",
+		strings.TrimSpace(m.ID),
+		strings.TrimSpace(m.ProductBlueprintID),
+		strings.TrimSpace(m.TokenBlueprintID),
+		resp["totalStock"],
+	)
+
+	writeJSON(w, http.StatusOK, resp)
+}
+
+// tryCallInventoryQueryDetail tries to call a detail method on InventoryQuery without compile-time dependency.
+// It returns (dto, ok(method found), err).
+func tryCallInventoryQueryDetail(ctx context.Context, q any, id string) (any, bool, error) {
+	// 候補名（プロジェクトの変遷を吸収）
+	candidates := []string{
+		"GetDetail",
+		"GetDetailByID",
+		"GetDetailByInventoryID",
+		"GetByIDDetail",
+		"Detail",
+		"GetInventoryDetail",
+	}
+
+	rv := reflect.ValueOf(q)
+
+	for _, name := range candidates {
+		m := rv.MethodByName(name)
+		if !m.IsValid() {
+			continue
+		}
+
+		// シグネチャが違っても panic しうるので保護
+		var (
+			out any
+			err error
+		)
+		func() {
+			defer func() {
+				if rec := recover(); rec != nil {
+					log.Printf("[inventory_handler][Detail] reflect call panic name=%s rec=%v", name, rec)
+					out = nil
+					err = errors.New("reflect call panic")
+				}
+			}()
+
+			mt := m.Type()
+			// 期待: func(context.Context, string) (any, error)
+			if mt.NumIn() != 2 || mt.NumOut() != 2 {
+				// 合わないなら次へ
+				out = nil
+				err = nil
+				return
+			}
+
+			outs := m.Call([]reflect.Value{reflect.ValueOf(ctx), reflect.ValueOf(id)})
+			if len(outs) != 2 {
+				out = nil
+				err = nil
+				return
+			}
+
+			// 1st return: dto
+			out = outs[0].Interface()
+
+			// 2nd return: error
+			if !outs[1].IsValid() || outs[1].IsNil() {
+				err = nil
+				return
+			}
+			if e, ok := outs[1].Interface().(error); ok {
+				err = e
+				return
+			}
+			err = errors.New("second return is not error")
+		}()
+
+		// ここまで来たら「候補名のメソッドは存在した」
+		// err が reflect panic 由来なら次候補へ進めても良いが、ここでは ok 扱いで返す
+		return out, true, err
+	}
+
+	return nil, false, nil
 }
 
 // ============================================================
@@ -407,7 +633,6 @@ func (h *InventoryHandler) Delete(w http.ResponseWriter, r *http.Request) {
 // Helpers
 // ============================================================
 
-// totalProducts counts total productIds across all model stocks (Stock-based).
 func totalProducts(m invdom.Mint) int {
 	if m.Stock == nil {
 		return 0
@@ -419,27 +644,38 @@ func totalProducts(m invdom.Mint) int {
 	return total
 }
 
-// ModelStock -> len(map) (map alias or struct{ map[string]bool } supported)
 func modelStockLen(ms invdom.ModelStock) int {
 	rv := reflect.ValueOf(ms)
 	if !rv.IsValid() {
 		return 0
 	}
+
+	// ✅ map[string]bool / map[string]T
 	if rv.Kind() == reflect.Map {
 		return rv.Len()
 	}
+
+	// ✅ []string / []T / [N]T
+	if rv.Kind() == reflect.Slice || rv.Kind() == reflect.Array {
+		return rv.Len()
+	}
+
+	// ✅ struct 内に map[string]bool を持つケース
 	if rv.Kind() == reflect.Struct {
 		for i := 0; i < rv.NumField(); i++ {
 			f := rv.Field(i)
-			if f.Kind() != reflect.Map {
-				continue
+
+			if f.Kind() == reflect.Map {
+				if f.Type().Key().Kind() == reflect.String {
+					return f.Len()
+				}
 			}
-			if f.Type().Key().Kind() != reflect.String || f.Type().Elem().Kind() != reflect.Bool {
-				continue
+			if f.Kind() == reflect.Slice || f.Kind() == reflect.Array {
+				return f.Len()
 			}
-			return f.Len()
 		}
 	}
+
 	return 0
 }
 

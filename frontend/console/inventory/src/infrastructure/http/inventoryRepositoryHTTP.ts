@@ -159,7 +159,10 @@ export async function fetchInventoryProductSummary(
 
   const url = `${API_BASE}/product-blueprints/${encodeURIComponent(pbId)}`;
 
-  console.log("[inventory/fetchInventoryProductSummary] start", { productBlueprintId: pbId, url });
+  console.log("[inventory/fetchInventoryProductSummary] start", {
+    productBlueprintId: pbId,
+    url,
+  });
 
   const res = await fetch(url, {
     method: "GET",
@@ -191,7 +194,10 @@ export async function fetchInventoryProductSummary(
     assigneeName: data?.assigneeName ? s(data.assigneeName) : undefined,
   };
 
-  console.log("[inventory/fetchInventoryProductSummary] ok", { productBlueprintId: pbId, mapped });
+  console.log("[inventory/fetchInventoryProductSummary] ok", {
+    productBlueprintId: pbId,
+    mapped,
+  });
 
   return mapped;
 }
@@ -311,6 +317,201 @@ export async function fetchInventoryIDsByProductAndTokenDTO(
     tbId,
     count: mapped.inventoryIds.length,
     sample: mapped.inventoryIds.slice(0, 10),
+  });
+
+  return mapped;
+}
+
+// ---------------------------------------------------------
+// ✅ Inventory Detail DTOs (exported)
+// GET /inventory/{inventoryId}
+// ---------------------------------------------------------
+export type TokenBlueprintSummaryDTO = {
+  id: string;
+  name?: string;
+  symbol?: string;
+};
+
+export type ProductBlueprintSummaryDTO = {
+  id: string;
+  name?: string;
+};
+
+export type ProductBlueprintPatchDTO = {
+  productName?: string | null;
+  brandId?: string | null;
+  itemType?: string | null;
+  fit?: string | null;
+  material?: string | null;
+  weight?: number | null;
+  qualityAssurance?: string[] | null;
+  productIdTag?: any;
+  assigneeId?: string | null;
+};
+
+export type InventoryDetailRowDTO = {
+  tokenBlueprintId?: string;
+  token?: string;
+  modelNumber: string;
+  size: string;
+  color: string;
+  rgb?: number | null;
+  stock: number;
+};
+
+export type InventoryDetailDTO = {
+  inventoryId: string;
+
+  // ✅ NEW: backend DTO が返す場合がある（方針A）
+  inventoryIds?: string[];
+
+  tokenBlueprintId: string;
+  productBlueprintId: string;
+  modelId: string;
+
+  productBlueprintPatch: ProductBlueprintPatchDTO;
+
+  tokenBlueprint?: TokenBlueprintSummaryDTO;
+  productBlueprint?: ProductBlueprintSummaryDTO;
+
+  rows: InventoryDetailRowDTO[];
+  totalStock: number;
+
+  updatedAt?: string;
+};
+
+function toOptionalString(v: any): string | undefined {
+  const x = s(v);
+  return x ? x : undefined;
+}
+
+function toRgbNumberOrNull(v: any): number | null | undefined {
+  if (v === undefined) return undefined;
+  if (v === null) return null;
+
+  if (typeof v === "number" && Number.isFinite(v)) return v;
+
+  const str = s(v);
+  if (!str) return null;
+
+  const normalized = str.replace(/^#/, "").replace(/^0x/i, "");
+  if (/^[0-9a-fA-F]{6}$/.test(normalized)) {
+    const nn = Number.parseInt(normalized, 16);
+    return Number.isFinite(nn) ? nn : null;
+  }
+
+  const d = Number.parseInt(str, 10);
+  return Number.isFinite(d) ? d : null;
+}
+
+function mapProductBlueprintPatch(raw: any): ProductBlueprintPatchDTO {
+  const patchRaw = (raw ?? {}) as any;
+
+  return {
+    productName:
+      patchRaw.productName !== undefined ? (patchRaw.productName as any) : undefined,
+    brandId: patchRaw.brandId !== undefined ? (patchRaw.brandId as any) : undefined,
+    itemType: patchRaw.itemType !== undefined ? String(patchRaw.itemType) : undefined,
+    fit: patchRaw.fit !== undefined ? (patchRaw.fit as any) : undefined,
+    material: patchRaw.material !== undefined ? (patchRaw.material as any) : undefined,
+    weight:
+      patchRaw.weight !== undefined && patchRaw.weight !== null
+        ? Number(patchRaw.weight)
+        : undefined,
+    qualityAssurance: Array.isArray(patchRaw.qualityAssurance)
+      ? patchRaw.qualityAssurance.map((x: any) => String(x))
+      : undefined,
+    productIdTag: patchRaw.productIdTag !== undefined ? patchRaw.productIdTag : undefined,
+    assigneeId:
+      patchRaw.assigneeId !== undefined ? (patchRaw.assigneeId as any) : undefined,
+  };
+}
+
+/**
+ * ✅ Inventory Detail DTO
+ * GET /inventory/{inventoryId}
+ */
+export async function fetchInventoryDetailDTO(inventoryId: string): Promise<InventoryDetailDTO> {
+  const id = s(inventoryId);
+  if (!id) throw new Error("inventoryId is empty");
+
+  const token = await getIdTokenOrThrow();
+  const url = `${API_BASE}/inventory/${encodeURIComponent(id)}`;
+
+  console.log("[inventory/fetchInventoryDetailDTO] start", { id, url });
+
+  const res = await fetch(url, {
+    method: "GET",
+    headers: { Authorization: `Bearer ${token}` },
+  });
+
+  if (!res.ok) {
+    const text = await res.text().catch(() => "");
+    console.error("[inventory/fetchInventoryDetailDTO] failed", {
+      id,
+      url,
+      status: res.status,
+      statusText: res.statusText,
+      body: text,
+    });
+    throw new Error(
+      `Failed to fetch inventory detail: ${res.status} ${res.statusText} ${text}`,
+    );
+  }
+
+  const data = await res.json();
+
+  const rows: InventoryDetailRowDTO[] = Array.isArray(data?.rows)
+    ? data.rows.map((r: any) => ({
+        tokenBlueprintId: toOptionalString(
+          r?.tokenBlueprintId ?? r?.TokenBlueprintID ?? r?.token_blueprint_id,
+        ),
+        token: toOptionalString(r?.token ?? r?.Token),
+        modelNumber: s(r?.modelNumber ?? r?.ModelNumber),
+        size: s(r?.size ?? r?.Size),
+        color: s(r?.color ?? r?.Color),
+        rgb: toRgbNumberOrNull(r?.rgb ?? r?.RGB),
+        stock: Number(r?.stock ?? r?.Stock ?? 0),
+      }))
+    : [];
+
+  const mapped: InventoryDetailDTO = {
+    inventoryId: s(data?.inventoryId ?? data?.id ?? id),
+    inventoryIds: Array.isArray(data?.inventoryIds)
+      ? data.inventoryIds.map((x: any) => s(x)).filter(Boolean)
+      : undefined,
+
+    tokenBlueprintId: s(data?.tokenBlueprintId ?? data?.TokenBlueprintID),
+    productBlueprintId: s(data?.productBlueprintId ?? data?.ProductBlueprintID),
+    modelId: s(data?.modelId ?? data?.ModelID),
+
+    productBlueprintPatch: mapProductBlueprintPatch(data?.productBlueprintPatch),
+
+    tokenBlueprint: data?.tokenBlueprint
+      ? {
+          id: s(data.tokenBlueprint.id),
+          name: data.tokenBlueprint.name ? s(data.tokenBlueprint.name) : undefined,
+          symbol: data.tokenBlueprint.symbol ? s(data.tokenBlueprint.symbol) : undefined,
+        }
+      : undefined,
+
+    productBlueprint: data?.productBlueprint
+      ? {
+          id: s(data.productBlueprint.id),
+          name: data.productBlueprint.name ? s(data.productBlueprint.name) : undefined,
+        }
+      : undefined,
+
+    rows,
+    totalStock: Number(data?.totalStock ?? 0),
+    updatedAt: data?.updatedAt ? String(data.updatedAt) : undefined,
+  };
+
+  console.log("[inventory/fetchInventoryDetailDTO] ok", {
+    id,
+    rows: mapped.rows.length,
+    totalStock: mapped.totalStock,
+    updatedAt: mapped.updatedAt,
   });
 
   return mapped;

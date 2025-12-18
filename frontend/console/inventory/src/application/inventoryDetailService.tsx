@@ -2,70 +2,11 @@
 
 import type { InventoryRow } from "../presentation/components/inventoryCard";
 import {
-  API_BASE,
   fetchInventoryIDsByProductAndTokenDTO,
+  fetchInventoryDetailDTO,
+  type InventoryDetailDTO,
+  type ProductBlueprintPatchDTO,
 } from "../infrastructure/http/inventoryRepositoryHTTP";
-
-// Firebase Auth から ID トークンを取得（detail fetch に必要）
-import { auth } from "../../../shell/src/auth/infrastructure/config/firebaseClient";
-
-// ============================================================
-// DTOs (local, to avoid missing exports)
-// ============================================================
-
-export type TokenBlueprintSummaryDTO = {
-  id: string;
-  name?: string;
-  symbol?: string;
-};
-
-export type ProductBlueprintSummaryDTO = {
-  id: string;
-  name?: string;
-};
-
-export type ProductBlueprintPatchDTO = {
-  productName?: string | null;
-  brandId?: string | null;
-  itemType?: string | null;
-  fit?: string | null;
-  material?: string | null;
-  weight?: number | null;
-  qualityAssurance?: string[] | null;
-  productIdTag?: any;
-  assigneeId?: string | null;
-};
-
-export type InventoryDetailRowDTO = {
-  tokenBlueprintId?: string;
-  token?: string;
-  modelNumber: string;
-  size: string;
-  color: string;
-  rgb?: number | null;
-  stock: number;
-};
-
-export type InventoryDetailDTO = {
-  inventoryId: string;
-
-  // ✅ NEW: backend DTO が返す場合がある（方針A）
-  inventoryIds?: string[];
-
-  tokenBlueprintId: string;
-  productBlueprintId: string;
-  modelId: string;
-
-  productBlueprintPatch: ProductBlueprintPatchDTO;
-
-  tokenBlueprint?: TokenBlueprintSummaryDTO;
-  productBlueprint?: ProductBlueprintSummaryDTO;
-
-  rows: InventoryDetailRowDTO[];
-  totalStock: number;
-
-  updatedAt?: string;
-};
 
 // ============================================================
 // ViewModel (Screen-friendly shape)
@@ -114,62 +55,6 @@ function uniqStrings(xs: string[]): string[] {
   return out;
 }
 
-function toOptionalString(v: any): string | undefined {
-  const s = asString(v);
-  return s ? s : undefined;
-}
-
-function toRgbNumberOrNull(v: any): number | null | undefined {
-  if (v === undefined) return undefined;
-  if (v === null) return null;
-
-  if (typeof v === "number" && Number.isFinite(v)) return v;
-
-  const s = asString(v);
-  if (!s) return null;
-
-  const normalized = s.replace(/^#/, "").replace(/^0x/i, "");
-  if (/^[0-9a-fA-F]{6}$/.test(normalized)) {
-    const n = Number.parseInt(normalized, 16);
-    return Number.isFinite(n) ? n : null;
-  }
-
-  const d = Number.parseInt(s, 10);
-  return Number.isFinite(d) ? d : null;
-}
-
-async function getIdTokenOrThrow(): Promise<string> {
-  const user = auth.currentUser;
-  if (!user) throw new Error("Not authenticated");
-  const token = await user.getIdToken();
-  if (!token) throw new Error("Failed to acquire ID token");
-  return token;
-}
-
-function mapProductBlueprintPatch(raw: any): ProductBlueprintPatchDTO {
-  const patchRaw = (raw ?? {}) as any;
-
-  return {
-    productName:
-      patchRaw.productName !== undefined ? (patchRaw.productName as any) : undefined,
-    brandId: patchRaw.brandId !== undefined ? (patchRaw.brandId as any) : undefined,
-    itemType: patchRaw.itemType !== undefined ? String(patchRaw.itemType) : undefined,
-    fit: patchRaw.fit !== undefined ? (patchRaw.fit as any) : undefined,
-    material: patchRaw.material !== undefined ? (patchRaw.material as any) : undefined,
-    weight:
-      patchRaw.weight !== undefined && patchRaw.weight !== null
-        ? Number(patchRaw.weight)
-        : undefined,
-    qualityAssurance: Array.isArray(patchRaw.qualityAssurance)
-      ? patchRaw.qualityAssurance.map((x: any) => String(x))
-      : undefined,
-    productIdTag:
-      patchRaw.productIdTag !== undefined ? patchRaw.productIdTag : undefined,
-    assigneeId:
-      patchRaw.assigneeId !== undefined ? (patchRaw.assigneeId as any) : undefined,
-  };
-}
-
 function pickPatch(dtos: InventoryDetailDTO[]): ProductBlueprintPatchDTO {
   const found =
     dtos.find(
@@ -196,81 +81,6 @@ function pickUpdatedAtMax(dtos: InventoryDetailDTO[]): string | undefined {
     if (!maxUpdated || t > maxUpdated) maxUpdated = t;
   }
   return maxUpdated;
-}
-
-// ============================================================
-// HTTP (detail)
-// - /inventory/{inventoryId}
-// ============================================================
-
-async function fetchInventoryDetailDTO(inventoryId: string): Promise<InventoryDetailDTO> {
-  const id = asString(inventoryId);
-  if (!id) throw new Error("inventoryId is empty");
-
-  const token = await getIdTokenOrThrow();
-  const url = `${API_BASE}/inventory/${encodeURIComponent(id)}`;
-
-  const res = await fetch(url, {
-    method: "GET",
-    headers: { Authorization: `Bearer ${token}` },
-  });
-
-  if (!res.ok) {
-    const text = await res.text().catch(() => "");
-    throw new Error(`Failed to fetch inventory detail: ${res.status} ${res.statusText} ${text}`);
-  }
-
-  const data = await res.json();
-
-  const rows: InventoryDetailRowDTO[] = Array.isArray(data?.rows)
-    ? data.rows.map((r: any) => ({
-        tokenBlueprintId: toOptionalString(
-          r?.tokenBlueprintId ?? r?.TokenBlueprintID ?? r?.token_blueprint_id,
-        ),
-        token: toOptionalString(r?.token ?? r?.Token),
-        modelNumber: asString(r?.modelNumber ?? r?.ModelNumber),
-        size: asString(r?.size ?? r?.Size),
-        color: asString(r?.color ?? r?.Color),
-        rgb: toRgbNumberOrNull(r?.rgb ?? r?.RGB),
-        stock: Number(r?.stock ?? r?.Stock ?? 0),
-      }))
-    : [];
-
-  return {
-    inventoryId: asString(data?.inventoryId ?? data?.id ?? id),
-    inventoryIds: Array.isArray(data?.inventoryIds)
-      ? data.inventoryIds.map((x: any) => asString(x)).filter(Boolean)
-      : undefined,
-
-    tokenBlueprintId: asString(data?.tokenBlueprintId ?? data?.TokenBlueprintID),
-    productBlueprintId: asString(data?.productBlueprintId ?? data?.ProductBlueprintID),
-    modelId: asString(data?.modelId ?? data?.ModelID),
-
-    productBlueprintPatch: mapProductBlueprintPatch(data?.productBlueprintPatch),
-
-    tokenBlueprint: data?.tokenBlueprint
-      ? {
-          id: asString(data.tokenBlueprint.id),
-          name: data.tokenBlueprint.name ? asString(data.tokenBlueprint.name) : undefined,
-          symbol: data.tokenBlueprint.symbol
-            ? asString(data.tokenBlueprint.symbol)
-            : undefined,
-        }
-      : undefined,
-
-    productBlueprint: data?.productBlueprint
-      ? {
-          id: asString(data.productBlueprint.id),
-          name: data.productBlueprint.name
-            ? asString(data.productBlueprint.name)
-            : undefined,
-        }
-      : undefined,
-
-    rows,
-    totalStock: Number(data?.totalStock ?? 0),
-    updatedAt: data?.updatedAt ? String(data.updatedAt) : undefined,
-  };
 }
 
 // ============================================================
@@ -416,7 +226,7 @@ export async function queryInventoryDetailByProductAndToken(
     throw new Error("inventoryIds is empty (no inventory for productBlueprintId + tokenBlueprintId)");
   }
 
-  // ② 各 inventoryId の詳細を並列取得
+  // ② 各 inventoryId の詳細を並列取得（HTTPは repository 側へ移譲済み）
   const results: PromiseSettledResult<InventoryDetailDTO>[] = await Promise.allSettled(
     idsFromResolver.map(async (id: string): Promise<InventoryDetailDTO> => {
       return await fetchInventoryDetailDTO(id);
