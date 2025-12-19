@@ -1,8 +1,12 @@
+// backend/internal/adapters/in/http/handlers/list_handler.go
 package handlers
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
+	"io"
+	"log"
 	"net/http"
 	"strings"
 	"time"
@@ -25,31 +29,37 @@ func NewListHandler(uc *usecase.ListUsecase) http.Handler {
 func (h *ListHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 
+	// ✅ 末尾スラッシュの揺れを吸収
+	path := strings.TrimSuffix(r.URL.Path, "/")
+
+	// ✅ 入口ログ（Cloud Run で最初に見える）
+	log.Printf("[list_handler] request method=%s path=%s rawQuery=%q", r.Method, path, r.URL.RawQuery)
+
 	// ✅ /lists 直下
-	if r.URL.Path == "/lists" {
+	if path == "/lists" {
 		switch r.Method {
 		case http.MethodPost:
+			log.Printf("[list_handler] POST /lists start")
 			h.create(w, r)
 			return
+		case http.MethodGet:
+			// 一覧 GET は未対応（現状維持）
+			w.WriteHeader(http.StatusNotImplemented)
+			_ = json.NewEncoder(w).Encode(map[string]string{"error": "not_implemented"})
+			return
 		default:
-			// 一覧 GET はこのユースケースでは未対応（現状維持）
-			if r.Method == http.MethodGet {
-				w.WriteHeader(http.StatusNotImplemented)
-				_ = json.NewEncoder(w).Encode(map[string]string{"error": "not_implemented"})
-				return
-			}
 			methodNotAllowed(w)
 			return
 		}
 	}
 
-	if !strings.HasPrefix(r.URL.Path, "/lists/") {
+	if !strings.HasPrefix(path, "/lists/") {
 		w.WriteHeader(http.StatusNotFound)
 		_ = json.NewEncoder(w).Encode(map[string]string{"error": "not_found"})
 		return
 	}
 
-	rest := strings.TrimPrefix(r.URL.Path, "/lists/")
+	rest := strings.TrimPrefix(path, "/lists/")
 	parts := strings.Split(rest, "/")
 	id := strings.TrimSpace(parts[0])
 	if id == "" {
@@ -68,6 +78,7 @@ func (h *ListHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			}
 			h.getAggregate(w, r, id)
 			return
+
 		case "images":
 			switch r.Method {
 			case http.MethodGet:
@@ -80,6 +91,7 @@ func (h *ListHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 				methodNotAllowed(w)
 				return
 			}
+
 		case "primary-image":
 			// 代表画像の設定
 			if r.Method != http.MethodPut && r.Method != http.MethodPost && r.Method != http.MethodPatch {
@@ -88,6 +100,7 @@ func (h *ListHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			}
 			h.setPrimaryImage(w, r, id)
 			return
+
 		default:
 			w.WriteHeader(http.StatusNotFound)
 			_ = json.NewEncoder(w).Encode(map[string]string{"error": "not_found"})
@@ -103,49 +116,87 @@ func (h *ListHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	h.get(w, r, id)
 }
 
+// ==============================
 // ✅ POST /lists
-// - frontend/console/inventory/src/presentation/pages/listCreate.tsx の入力を List レコードとして作成する想定
-// - ListUsecase に Create が無い場合は 501 を返す
+// ==============================
+
+// listCreator は ListUsecase に Create が実装されたときに呼べるようにするための最小インターフェースです。
+// ※ ListUsecase に Create を追加していない段階でも、この handler はコンパイルできます。
+type listCreator interface {
+	Create(ctx context.Context, item listdom.List) (listdom.List, error)
+}
+
+// create: POST /lists
+// - frontend の入力を List レコードとして作成する想定
 func (h *ListHandler) create(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 
+	// ✅ uc が nil の場合もログで分かるようにする
+	if h == nil || h.uc == nil {
+		log.Printf("[list_handler] POST /lists aborted: usecase is nil")
+		w.WriteHeader(http.StatusInternalServerError)
+		_ = json.NewEncoder(w).Encode(map[string]string{"error": "usecase is nil"})
+		return
+	}
+
+	// ✅ body を一度読み取り、ログと decode の両方に使う（サイズ上限あり）
+	body, err := io.ReadAll(io.LimitReader(r.Body, 1<<20)) // 1MB
+	if err != nil {
+		log.Printf("[list_handler] POST /lists read body failed: %v", err)
+		w.WriteHeader(http.StatusBadRequest)
+		_ = json.NewEncoder(w).Encode(map[string]string{"error": "invalid body"})
+		return
+	}
+
+	// ✅ 叩かれていること＆payload が来ていることが分かるログ（長すぎる場合は切る）
+	raw := string(body)
+	if len(raw) > 4000 {
+		raw = raw[:4000] + "...(truncated)"
+	}
+	log.Printf("[list_handler] POST /lists body=%s", raw)
+
 	// まずは domain の List をそのまま受ける（UI → API の形はこの JSON に合わせる）
-	// ※ List の JSON タグ/構造は listdom 側で定義されている前提
 	var item listdom.List
-	if err := json.NewDecoder(r.Body).Decode(&item); err != nil {
+	if err := json.Unmarshal(body, &item); err != nil {
+		log.Printf("[list_handler] POST /lists invalid json: %v", err)
 		w.WriteHeader(http.StatusBadRequest)
 		_ = json.NewEncoder(w).Encode(map[string]string{"error": "invalid json"})
 		return
 	}
 
-	// createdAt が空（zero）でも良いが、最低限 now を与えたい場合はここで補完
-	// listdom.List のフィールドが分からないため「必須」にはしない（usecase 側で補完してOK）
-	now := time.Now().UTC()
-	_ = now
-
-	// 最も一般的な形：Create(ctx context.Context, item listdom.List)
-	if c, ok := any(h.uc).(interface {
-		Create(ctx interface {
-			Deadline() (time.Time, bool)
-			Done() <-chan struct{}
-			Err() error
-			Value(key any) any
-		}, item listdom.List) (listdom.List, error)
-	}); ok {
-		created, err := c.Create(ctx, item)
-		if err != nil {
-			writeListErr(w, err)
-			return
-		}
-		w.WriteHeader(http.StatusCreated)
-		_ = json.NewEncoder(w).Encode(created)
+	// ✅ Create があるか確認して呼び出す（uc.Create を呼ぶ）
+	c, ok := any(h.uc).(listCreator)
+	if !ok {
+		log.Printf("[list_handler] POST /lists not supported: uc.Create is missing")
+		w.WriteHeader(http.StatusNotImplemented)
+		_ = json.NewEncoder(w).Encode(map[string]string{"error": "not_implemented_create"})
 		return
 	}
 
-	// Create が実装されていない
-	w.WriteHeader(http.StatusNotImplemented)
-	_ = json.NewEncoder(w).Encode(map[string]string{"error": "not_implemented_create"})
+	// ✅ 呼び出し前ログ
+	log.Printf("[list_handler] POST /lists calling uc.Create")
+
+	created, err := c.Create(ctx, item)
+	if err != nil {
+		log.Printf("[list_handler] POST /lists uc.Create failed: %v", err)
+		if isNotSupported(err) {
+			w.WriteHeader(http.StatusNotImplemented)
+			_ = json.NewEncoder(w).Encode(map[string]string{"error": "not_implemented"})
+			return
+		}
+		writeListErr(w, err)
+		return
+	}
+
+	// ✅ 成功ログ
+	log.Printf("[list_handler] POST /lists uc.Create success")
+	w.WriteHeader(http.StatusCreated)
+	_ = json.NewEncoder(w).Encode(created)
 }
+
+// ==============================
+// Existing endpoints
+// ==============================
 
 // GET /lists/{id}
 func (h *ListHandler) get(w http.ResponseWriter, r *http.Request, id string) {

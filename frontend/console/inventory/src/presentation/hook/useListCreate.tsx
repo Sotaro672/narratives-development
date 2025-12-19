@@ -7,10 +7,7 @@ import { useNavigate, useParams } from "react-router-dom";
 import { useAdminCard as useAdminCardHook } from "../../../../admin/src/presentation/hook/useAdminCard";
 
 // ✅ PriceCard hook（PriceRow 型もここから取り込む）
-import {
-  usePriceCard,
-  type PriceRow,
-} from "../../../../list/src/presentation/hook/usePriceCard";
+import { usePriceCard, type PriceRow } from "../../../../list/src/presentation/hook/usePriceCard";
 
 // ✅ application service に移譲
 import {
@@ -93,6 +90,21 @@ function dedupeFiles(prev: File[], add: File[]): File[] {
   return [...prev, ...filtered];
 }
 
+// ✅ NEW: trim helper
+function s(v: unknown): string {
+  return String(v ?? "").trim();
+}
+
+// ✅ NEW: price validation helper
+function toNumberOrNaN(v: unknown): number {
+  if (typeof v === "number") return v;
+  if (typeof v === "string") {
+    const n = Number(v.trim());
+    return n;
+  }
+  return Number.NaN;
+}
+
 export function useListCreate(): UseListCreateResult {
   const navigate = useNavigate();
 
@@ -139,8 +151,6 @@ export function useListCreate(): UseListCreateResult {
 
   // ============================================================
   // ✅ NEW: images (moved from page)
-  // - main: large preview
-  // - 2nd+ : thumbnails + add tile
   // ============================================================
   const [images, setImages] = React.useState<File[]>([]);
   const [mainImageIndex, setMainImageIndex] = React.useState<number>(0);
@@ -312,23 +322,61 @@ export function useListCreate(): UseListCreateResult {
     navigate(buildBackPath(resolvedParams));
   }, [navigate, inventoryId, productBlueprintId, tokenBlueprintId, resolvedParams]);
 
-  const onCreate = React.useCallback(() => {
-    // eslint-disable-next-line no-console
-    console.log("[inventory/useListCreate] onCreate (stub)", {
-      inventoryId,
-      productBlueprintId,
-      tokenBlueprintId,
-      decision,
-      listingTitle,
-      descriptionLen: description.length,
-      imagesCount: images.length,
-      priceRowsCount: priceRows.length,
-      priceRowsSample: priceRows.slice(0, 5),
+  // ✅ NEW: validation
+  const validateBeforeCreate = React.useCallback(() => {
+    const titleTrim = s(listingTitle);
+    if (!titleTrim) {
+      throw new Error("タイトルを入力してください。");
+    }
+
+    if (!Array.isArray(priceRows) || priceRows.length === 0) {
+      throw new Error("価格が未設定です（価格行がありません）。");
+    }
+
+    // price が 0 / null / NaN の行が1つでもあれば NG
+    const bad = priceRows.find((r) => {
+      const p = (r as any)?.price;
+      // null/undefined -> NG
+      if (p === null || p === undefined) return true;
+      const n = toNumberOrNaN(p);
+      // NaN -> NG / 0 or less -> NG（要件: price:0 でエラー）
+      if (!Number.isFinite(n)) return true;
+      if (n <= 0) return true;
+      return false;
     });
 
-    alert("作成しました（仮）");
-    navigate(buildAfterCreatePath(resolvedParams));
+    if (bad) {
+      throw new Error("価格が未入力、または 0 円の行があります。各行の価格を 1 円以上に設定してください。");
+    }
+  }, [listingTitle, priceRows]);
+
+  const onCreate = React.useCallback(() => {
+    try {
+      validateBeforeCreate();
+
+      // eslint-disable-next-line no-console
+      console.log("[inventory/useListCreate] onCreate validated", {
+        inventoryId,
+        productBlueprintId,
+        tokenBlueprintId,
+        decision,
+        listingTitle,
+        descriptionLen: description.length,
+        imagesCount: images.length,
+        priceRowsCount: priceRows.length,
+        priceRowsSample: priceRows.slice(0, 5),
+      });
+
+      alert("作成しました（仮）");
+      navigate(buildAfterCreatePath(resolvedParams));
+    } catch (e) {
+      const msg = String(e instanceof Error ? e.message : e);
+      // eslint-disable-next-line no-console
+      console.warn("[inventory/useListCreate] onCreate validation failed", { msg, raw: e });
+      alert(msg);
+    }
   }, [
+    validateBeforeCreate,
     navigate,
     inventoryId,
     productBlueprintId,

@@ -1,6 +1,7 @@
 // frontend/console/inventory/src/application/listCreateService.tsx
 
-import type * as React from "react";
+import type { RefObject } from "react";
+
 import type { PriceRow } from "../../../list/src/presentation/hook/usePriceCard";
 
 import {
@@ -8,12 +9,19 @@ import {
   type ListCreateDTO,
 } from "../infrastructure/http/inventoryRepositoryHTTP";
 
+// ✅ NEW: list create (POST /lists)
+import {
+  createListHTTP,
+  type CreateListInput,
+  type ListDTO,
+} from "../../../list/src/infrastructure/http/listRepositoryHTTP";
+
 function s(v: unknown): string {
   return String(v ?? "").trim();
 }
 
-// ✅ NEW: RefObject は null を含むのが正しい（useRef(initial=null) のため）
-export type ImageInputRef = React.RefObject<HTMLInputElement | null>;
+// ✅ Hook 側で使う Ref 型（useRef<HTMLInputElement | null>(null) を許容）
+export type ImageInputRef = RefObject<HTMLInputElement | null>;
 
 export type ListCreateRouteParams = {
   inventoryId?: string;
@@ -44,7 +52,10 @@ export function computeListCreateTitle(inventoryId: string): string {
 }
 
 export function canFetchListCreate(p: ResolvedListCreateParams): boolean {
-  return Boolean(p.inventoryId) || (Boolean(p.productBlueprintId) && Boolean(p.tokenBlueprintId));
+  return (
+    Boolean(p.inventoryId) ||
+    (Boolean(p.productBlueprintId) && Boolean(p.tokenBlueprintId))
+  );
 }
 
 export function buildListCreateFetchInput(p: ResolvedListCreateParams): {
@@ -132,7 +143,6 @@ export function mapDTOToPriceRows(dto: ListCreateDTO | null): PriceRow[] {
     const rgb = r?.rgb ?? r?.RGB; // number|null|undefined 想定
     const price = r?.price ?? r?.Price;
 
-    // stock が数値でない場合の防御
     const safeStock = Number.isFinite(stock) ? stock : 0;
 
     const row: PriceRow = {
@@ -155,4 +165,96 @@ export async function loadListCreateDTOFromParams(
 ): Promise<ListCreateDTO> {
   const input = buildListCreateFetchInput(p);
   return await fetchListCreateDTO(input);
+}
+
+/**
+ * ✅ POST /lists 用の payload を組み立てる（inventory の listCreate 画面入力 → list 作成）
+ */
+export function buildCreateListInput(args: {
+  params: ResolvedListCreateParams;
+  listingTitle: string;
+  description: string;
+  priceRows: PriceRow[];
+  decision: "list" | "hold";
+  assigneeId?: string;
+}): CreateListInput {
+  const title = s(args.listingTitle);
+  const desc = s(args.description);
+
+  return {
+    inventoryId: s(args.params.inventoryId) || undefined,
+    title,
+    description: desc,
+    decision: args.decision,
+    assigneeId: s(args.assigneeId) || undefined,
+    priceRows: (args.priceRows ?? []).map((r) => ({
+      size: s(r.size) || "-",
+      color: s(r.color) || "-",
+      stock: Number.isFinite(Number(r.stock)) ? Number(r.stock) : 0,
+      price: r.price === undefined ? null : (r.price as any),
+      rgb: (r as any).rgb ?? null,
+    })),
+  };
+}
+
+/**
+ * ✅ 入力バリデーション（UI 側の要件）
+ * - title が空欄 → エラー
+ * - price が 0（または未入力/0のみ） → エラー
+ */
+export function validateCreateListInput(input: CreateListInput): void {
+  const title = s(input.title);
+  if (!title) {
+    throw new Error("タイトルを入力してください。");
+  }
+
+  const rows = Array.isArray(input.priceRows) ? input.priceRows : [];
+  // 価格が1つも入っていない or 0 しか無い場合は NG
+  const hasPositivePrice = rows.some((r: any) => {
+    const p = r?.price;
+    const n = typeof p === "number" ? p : Number(p);
+    return Number.isFinite(n) && n > 0;
+  });
+  if (!hasPositivePrice) {
+    throw new Error("価格を入力してください。（0 円は指定できません）");
+  }
+
+  // 念のため「0円」の行が混ざっていたらエラーにする（在庫>0 の行だけ見る等にしたければここを調整）
+  const hasZeroPrice = rows.some((r: any) => {
+    const p = r?.price;
+    const n = typeof p === "number" ? p : Number(p);
+    return Number.isFinite(n) && n === 0;
+  });
+  if (hasZeroPrice) {
+    throw new Error("価格に 0 円が含まれています。0 円は指定できません。");
+  }
+}
+
+/**
+ * ✅ list 作成（POST /lists）
+ * - listRepositoryHTTP.tsx 経由で Backend へ POST
+ */
+export async function postCreateList(input: CreateListInput): Promise<ListDTO> {
+  // eslint-disable-next-line no-console
+  console.log("[inventory/listCreateService] postCreateList (before validate)", {
+    inventoryId: input.inventoryId,
+    title: input.title,
+    descriptionLen: String(input.description ?? "").length,
+    decision: input.decision,
+    priceRowsCount: Array.isArray(input.priceRows) ? input.priceRows.length : 0,
+    payload: input,
+  });
+
+  // ✅ validate
+  validateCreateListInput(input);
+
+  // eslint-disable-next-line no-console
+  console.log("[inventory/listCreateService] postCreateList (validated)", {
+    inventoryId: input.inventoryId,
+    title: input.title,
+    decision: input.decision,
+    priceRowsCount: Array.isArray(input.priceRows) ? input.priceRows.length : 0,
+  });
+
+  return await createListHTTP(input);
 }
