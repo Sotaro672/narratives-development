@@ -6,18 +6,27 @@ import { useNavigate, useParams } from "react-router-dom";
 // ★ Admin 用 hook（担当者候補の取得・選択）
 import { useAdminCard as useAdminCardHook } from "../../../../admin/src/presentation/hook/useAdminCard";
 
-// ✅ NEW: PriceCard の row 型（state は hook 側で保持）
-import type { PriceRow } from "../../../../list/src/presentation/components/priceCard";
+// ✅ PriceCard hook（PriceRow 型もここから取り込む）
+import { usePriceCard, type PriceRow } from "../../../../list/src/presentation/hook/usePriceCard";
 
-// ✅ HTTP は repository に寄せる
+// ✅ application service に移譲
 import {
-  fetchListCreateDTO,
-  type ListCreateDTO,
-} from "../../infrastructure/http/inventoryRepositoryHTTP";
+  resolveListCreateParams,
+  computeListCreateTitle,
+  canFetchListCreate,
+  loadListCreateDTOFromParams,
+  getInventoryIdFromDTO,
+  shouldRedirectToInventoryIdRoute,
+  buildInventoryListCreatePath,
+  buildBackPath,
+  buildAfterCreatePath,
+  extractDisplayStrings,
+  mapDTOToPriceRows,
+  type ListCreateRouteParams,
+  type ResolvedListCreateParams,
+} from "../../application/listCreateService";
 
-function s(v: unknown): string {
-  return String(v ?? "").trim();
-}
+import type { ListCreateDTO } from "../../infrastructure/http/inventoryRepositoryHTTP";
 
 export type ListingDecision = "list" | "hold";
 
@@ -37,9 +46,12 @@ export type UseListCreateResult = {
   tokenBrandName: string;
   tokenName: string;
 
-  // price
+  // price (PriceCard 用)
   priceRows: PriceRow[];
   onChangePrice: (index: number, price: number | null) => void;
+
+  // ✅ PriceCard hook の結果
+  priceCard: ReturnType<typeof usePriceCard>;
 
   // assignee
   assigneeName: string;
@@ -55,44 +67,108 @@ export type UseListCreateResult = {
 export function useListCreate(): UseListCreateResult {
   const navigate = useNavigate();
 
-  // ✅ routes.tsx で定義した param を受け取る（inventoryId or pb/tb）
-  const params = useParams<{
-    inventoryId?: string;
-    productBlueprintId?: string;
-    tokenBlueprintId?: string;
-  }>();
+  // ✅ routes.tsx で定義した param を受け取る
+  const params = useParams<ListCreateRouteParams>();
 
-  const inventoryId = React.useMemo(() => s(params.inventoryId), [params.inventoryId]);
-  const productBlueprintId = React.useMemo(
-    () => s(params.productBlueprintId),
-    [params.productBlueprintId],
+  // ✅ params の trim/正規化は service へ
+  const resolvedParams: ResolvedListCreateParams = React.useMemo(
+    () => resolveListCreateParams(params),
+    [params],
   );
-  const tokenBlueprintId = React.useMemo(
-    () => s(params.tokenBlueprintId),
-    [params.tokenBlueprintId],
-  );
+
+  const { inventoryId, productBlueprintId, tokenBlueprintId } = resolvedParams;
 
   // eslint-disable-next-line no-console
   console.log("[inventory/useListCreate] params resolved", {
     inventoryId,
     productBlueprintId,
     tokenBlueprintId,
-    raw: {
-      inventoryId: params.inventoryId,
-      productBlueprintId: params.productBlueprintId,
-      tokenBlueprintId: params.tokenBlueprintId,
-    },
+    raw: resolvedParams.raw,
   });
 
-  // ✅ PageHeader（title）には pb/tb を出さない
-  const title = React.useMemo(() => {
-    return inventoryId ? `出品作成（inventoryId: ${inventoryId}）` : "出品作成";
-  }, [inventoryId]);
+  // ✅ title 計算は service へ
+  const title = React.useMemo(() => computeListCreateTitle(inventoryId), [inventoryId]);
 
   // eslint-disable-next-line no-console
   console.log("[inventory/useListCreate] title computed", { title, inventoryId });
 
-  // ✅ 戻るは inventoryDetail へ絶対遷移
+  // ============================================================
+  // ✅ 出品｜保留
+  // ============================================================
+  const [decision, setDecision] = React.useState<ListingDecision>("list");
+
+  React.useEffect(() => {
+    // eslint-disable-next-line no-console
+    console.log("[inventory/useListCreate] decision changed", { decision });
+  }, [decision]);
+
+  // ============================================================
+  // ✅ PriceRows（DTOから初期化し、以後はユーザー入力を保持）
+  // ============================================================
+  const [priceRows, setPriceRows] = React.useState<PriceRow[]>([]);
+  const initializedPriceRowsRef = React.useRef(false);
+
+  React.useEffect(() => {
+    // eslint-disable-next-line no-console
+    console.log("[inventory/useListCreate] priceRows changed", {
+      count: priceRows.length,
+      sample: priceRows.slice(0, 5),
+    });
+  }, [priceRows]);
+
+  const onChangePrice = React.useCallback((index: number, price: number | null) => {
+    // eslint-disable-next-line no-console
+    console.log("[inventory/useListCreate] onChangePrice", { index, price });
+
+    setPriceRows((prev) => {
+      const next = [...prev];
+      if (!next[index]) return prev;
+      next[index] = { ...next[index], price };
+      return next;
+    });
+  }, []);
+
+  // ✅ PriceCard hook
+  const priceCard = usePriceCard({
+    title: "価格",
+    rows: priceRows,
+    mode: "edit",
+    currencySymbol: "¥",
+    showTotal: true,
+    onChangePrice: (index, price, row) => {
+      // eslint-disable-next-line no-console
+      console.log("[inventory/useListCreate] priceCard.onChangePrice", {
+        index,
+        price,
+        row,
+      });
+      onChangePrice(index, price);
+    },
+  });
+
+  React.useEffect(() => {
+    // eslint-disable-next-line no-console
+    console.log("[inventory/useListCreate] priceCard snapshot", {
+      isEdit: priceCard.isEdit,
+      mode: priceCard.mode,
+      totalStock: priceCard.totalStock,
+      totalPrice: priceCard.totalPrice,
+      rowsCount: priceCard.rowsVM.length,
+      sample: priceCard.rowsVM.slice(0, 3).map((r) => ({
+        key: r.key,
+        size: r.size,
+        color: r.color,
+        stock: r.stock,
+        bgColor: r.bgColor,
+        priceInputValue: r.priceInputValue,
+        priceDisplayText: r.priceDisplayText,
+      })),
+    });
+  }, [priceCard]);
+
+  // ============================================================
+  // ✅ 戻る / 作成（path 組み立ては service へ）
+  // ============================================================
   const onBack = React.useCallback(() => {
     // eslint-disable-next-line no-console
     console.log("[inventory/useListCreate] onBack", {
@@ -101,52 +177,54 @@ export function useListCreate(): UseListCreateResult {
       tokenBlueprintId,
     });
 
-    // ✅ inventoryId ルートで来ていても、詳細は pb/tb で戻る
-    if (productBlueprintId && tokenBlueprintId) {
-      navigate(`/inventory/detail/${productBlueprintId}/${tokenBlueprintId}`);
-      return;
-    }
-    navigate("/inventory");
-  }, [navigate, inventoryId, productBlueprintId, tokenBlueprintId]);
+    navigate(buildBackPath(resolvedParams));
+  }, [navigate, inventoryId, productBlueprintId, tokenBlueprintId, resolvedParams]);
 
-  // ✅ 作成ボタン（PageHeader）
   const onCreate = React.useCallback(() => {
     // eslint-disable-next-line no-console
     console.log("[inventory/useListCreate] onCreate (stub)", {
       inventoryId,
       productBlueprintId,
       tokenBlueprintId,
+      decision,
+      priceRowsCount: priceRows.length,
+      priceRowsSample: priceRows.slice(0, 5),
     });
 
-    // TODO: 出品作成APIを呼ぶ（今は仮）
     alert("作成しました（仮）");
+    navigate(buildAfterCreatePath(resolvedParams));
+  }, [
+    navigate,
+    inventoryId,
+    productBlueprintId,
+    tokenBlueprintId,
+    decision,
+    priceRows,
+    resolvedParams,
+  ]);
 
-    if (productBlueprintId && tokenBlueprintId) {
-      navigate(`/inventory/detail/${productBlueprintId}/${tokenBlueprintId}`);
-      return;
-    }
-    navigate("/inventory");
-  }, [navigate, inventoryId, productBlueprintId, tokenBlueprintId]);
+  // eslint-disable-next-line no-console
+  React.useEffect(() => {
+    console.log("[inventory/useListCreate] create snapshot", {
+      decision,
+      priceRowsCount: priceRows.length,
+    });
+  }, [decision, priceRows]);
 
   // ============================================================
-  // ✅ listCreate 用 DTO を取得（pb/tb または inventoryId から）
+  // ✅ listCreate DTO 取得（service へ移譲）
   // ============================================================
   const [dto, setDTO] = React.useState<ListCreateDTO | null>(null);
   const [loadingDTO, setLoadingDTO] = React.useState(false);
   const [dtoError, setDTOError] = React.useState<string>("");
 
-  // ✅ 手順A: DTOで inventoryId を得たら、URLを /inventory/list/create/:inventoryId に正規化する
-  // - 無限ループ防止のため 1 回だけ実行
   const redirectedRef = React.useRef(false);
 
   React.useEffect(() => {
     let cancelled = false;
 
     const run = async () => {
-      // inventoryId が無い場合は pb/tb が必須
-      const canFetch =
-        Boolean(inventoryId) ||
-        (Boolean(productBlueprintId) && Boolean(tokenBlueprintId));
+      const canFetch = canFetchListCreate(resolvedParams);
 
       // eslint-disable-next-line no-console
       console.log("[inventory/useListCreate] load start", {
@@ -162,17 +240,7 @@ export function useListCreate(): UseListCreateResult {
       setDTOError("");
 
       try {
-        const input = {
-          inventoryId: inventoryId || undefined,
-          productBlueprintId: productBlueprintId || undefined,
-          tokenBlueprintId: tokenBlueprintId || undefined,
-        };
-
-        // eslint-disable-next-line no-console
-        console.log("[inventory/useListCreate] fetchListCreateDTO input", input);
-
-        const data = await fetchListCreateDTO(input);
-
+        const data = await loadListCreateDTOFromParams(resolvedParams);
         if (cancelled) return;
 
         // eslint-disable-next-line no-console
@@ -186,33 +254,46 @@ export function useListCreate(): UseListCreateResult {
           productName: (data as any)?.productName,
           tokenBrandName: (data as any)?.tokenBrandName,
           tokenName: (data as any)?.tokenName,
+          priceRowsCount: Array.isArray((data as any)?.priceRows)
+            ? (data as any).priceRows.length
+            : 0,
           raw: data,
         });
 
-        // ✅ 手順A: inventoryId パスで来ていない場合、DTOで得た inventoryId へ置き換え
-        const gotInventoryId = s((data as any)?.inventoryId);
-        if (!inventoryId && gotInventoryId && !redirectedRef.current) {
+        // ✅ inventoryId ルートへ正規化（手順A）
+        const gotInventoryId = getInventoryIdFromDTO(data);
+        if (
+          shouldRedirectToInventoryIdRoute({
+            currentInventoryId: inventoryId,
+            gotInventoryId,
+            alreadyRedirected: redirectedRef.current,
+          })
+        ) {
           redirectedRef.current = true;
 
           // eslint-disable-next-line no-console
           console.log("[inventory/useListCreate] redirect to inventoryId route", {
-            from: {
-              inventoryId,
-              productBlueprintId,
-              tokenBlueprintId,
-            },
-            to: {
-              inventoryId: gotInventoryId,
-            },
+            from: { inventoryId, productBlueprintId, tokenBlueprintId },
+            to: { inventoryId: gotInventoryId },
           });
 
-          // ✅ URL を正規化（history を汚さない）
-          navigate(`/inventory/list/create/${encodeURIComponent(gotInventoryId)}`, {
-            replace: true,
-          });
+          navigate(buildInventoryListCreatePath(gotInventoryId), { replace: true });
         }
 
         setDTO(data);
+
+        // ✅ priceRows 初期化（DTOの modelResolver 結果を PriceCard に渡す）
+        if (!initializedPriceRowsRef.current) {
+          const nextRows = mapDTOToPriceRows(data);
+          setPriceRows(nextRows);
+          initializedPriceRowsRef.current = true;
+
+          // eslint-disable-next-line no-console
+          console.log("[inventory/useListCreate] init priceRows from dto", {
+            count: nextRows.length,
+            sample: nextRows.slice(0, 5),
+          });
+        }
       } catch (e) {
         if (cancelled) return;
 
@@ -246,12 +327,13 @@ export function useListCreate(): UseListCreateResult {
     return () => {
       cancelled = true;
     };
-  }, [navigate, inventoryId, productBlueprintId, tokenBlueprintId]);
+  }, [navigate, inventoryId, productBlueprintId, tokenBlueprintId, resolvedParams]);
 
-  const productBrandName = React.useMemo(() => s(dto?.productBrandName), [dto]);
-  const productName = React.useMemo(() => s(dto?.productName), [dto]);
-  const tokenBrandName = React.useMemo(() => s(dto?.tokenBrandName), [dto]);
-  const tokenName = React.useMemo(() => s(dto?.tokenName), [dto]);
+  // ✅ 表示文字列は service へ
+  const { productBrandName, productName, tokenBrandName, tokenName } = React.useMemo(
+    () => extractDisplayStrings(dto),
+    [dto],
+  );
 
   React.useEffect(() => {
     // eslint-disable-next-line no-console
@@ -266,35 +348,7 @@ export function useListCreate(): UseListCreateResult {
   }, [productBrandName, productName, tokenBrandName, tokenName, dto]);
 
   // ============================================================
-  // ✅ 左カラム：PriceCard（価格入力）
-  // ============================================================
-  // NOTE:
-  // - いまの ListCreateDTO にはサイズ/カラー/在庫の行情報が無いので、初期は空配列。
-  // - 将来、list-create DTO に rows を追加 or 別APIで rows を取れるようになったらここで set してください。
-  const [priceRows, setPriceRows] = React.useState<PriceRow[]>([]);
-
-  React.useEffect(() => {
-    // eslint-disable-next-line no-console
-    console.log("[inventory/useListCreate] priceRows changed", {
-      count: priceRows.length,
-      sample: priceRows.slice(0, 5),
-    });
-  }, [priceRows]);
-
-  const onChangePrice = React.useCallback((index: number, price: number | null) => {
-    // eslint-disable-next-line no-console
-    console.log("[inventory/useListCreate] onChangePrice", { index, price });
-
-    setPriceRows((prev) => {
-      const next = [...prev];
-      if (!next[index]) return prev;
-      next[index] = { ...next[index], price };
-      return next;
-    });
-  }, []);
-
-  // ============================================================
-  // ✅ 右カラム：担当者選択（ボタンのみ表示）
+  // ✅ 担当者選択
   // ============================================================
   const { assigneeName, assigneeCandidates, loadingMembers, onSelectAssignee } =
     useAdminCardHook();
@@ -321,16 +375,6 @@ export function useListCreate(): UseListCreateResult {
     [onSelectAssignee],
   );
 
-  // ============================================================
-  // ✅ 出品｜保留 選択
-  // ============================================================
-  const [decision, setDecision] = React.useState<ListingDecision>("list");
-
-  React.useEffect(() => {
-    // eslint-disable-next-line no-console
-    console.log("[inventory/useListCreate] decision changed", { decision });
-  }, [decision]);
-
   return {
     title,
     onBack,
@@ -347,6 +391,7 @@ export function useListCreate(): UseListCreateResult {
 
     priceRows,
     onChangePrice,
+    priceCard,
 
     assigneeName,
     assigneeCandidates: (assigneeCandidates ?? []) as Array<{ id: string; name: string }>,

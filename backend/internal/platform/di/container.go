@@ -533,8 +533,9 @@ func NewContainer(ctx context.Context) (*Container, error) {
 		nameResolver,
 	)
 
-	// ✅ NEW: ListCreateQuery（pb/tb -> brandName/productName/tokenName）
-	listCreateQuery := companyquery.NewListCreateQuery(
+	// ✅ NEW: ListCreateQuery（pb/tb -> brandName/productName/tokenName + inventory rows）
+	listCreateQuery := companyquery.NewListCreateQueryWithInventory(
+		inventoryRepo, // ★ これが無いと priceRows は常に空
 		&pbPatchByIDAdapter{repo: productBlueprintRepo},
 		&tbPatchByIDAdapter{repo: tokenBlueprintRepo},
 		nameResolver,

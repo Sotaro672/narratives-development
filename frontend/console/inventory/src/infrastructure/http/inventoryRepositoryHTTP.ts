@@ -416,10 +416,20 @@ export async function fetchTokenBlueprintPatchDTO(
   return mapTokenBlueprintPatch(data) ?? {};
 }
 
-/**
- * ✅ ListCreate DTO（出品作成画面）
- * backend/internal/application/query/dto/list_create_dto.go と対応
- */
+// ---------------------------------------------------------
+// ✅ ListCreate DTO（出品作成画面）
+// - backend/internal/application/query/dto/list_create_dto.go と対応
+// - modelResolver 結果を PriceCard に渡すため priceRows/totalStock を追加
+// ---------------------------------------------------------
+export type ListCreatePriceRowDTO = {
+  modelId: string;
+  size: string;
+  color: string;
+  rgb?: number | null;
+  stock: number;
+  price?: number | null;
+};
+
 export type ListCreateDTO = {
   inventoryId?: string;
   productBlueprintId?: string;
@@ -430,6 +440,10 @@ export type ListCreateDTO = {
 
   tokenBrandName: string;
   tokenName: string;
+
+  // ✅ NEW: PriceCard 用（modelResolver の結果）
+  priceRows?: ListCreatePriceRowDTO[];
+  totalStock?: number;
 };
 
 /**
@@ -445,16 +459,68 @@ export async function fetchListCreateDTO(input: {
 }): Promise<ListCreateDTO> {
   const data = await getListCreateRaw(input);
 
+  const rawRows: any[] = Array.isArray(data?.priceRows)
+    ? data.priceRows
+    : Array.isArray(data?.PriceRows)
+      ? data.PriceRows
+      : [];
+
+  // ✅ null を返さない（flatMap で安全に配列化）
+  const priceRows: ListCreatePriceRowDTO[] = rawRows.flatMap((r: any) => {
+    const modelId = s(r?.modelId ?? r?.ModelID ?? r?.modelID);
+    if (!modelId) return [];
+
+    const rgbVal = toRgbNumberOrNull(r?.rgb ?? r?.RGB);
+    const stock = n(r?.stock ?? r?.Stock);
+
+    const rawPrice = r?.price ?? r?.Price;
+    const hasPriceField = r?.price !== undefined || r?.Price !== undefined;
+    const price: number | null | undefined =
+      !hasPriceField ? undefined : rawPrice === null ? null : n(rawPrice);
+
+    const row: ListCreatePriceRowDTO = {
+      modelId,
+      size: s(r?.size ?? r?.Size) || "-",
+      color: s(r?.color ?? r?.Color) || "-",
+      stock,
+      ...(rgbVal === undefined ? {} : { rgb: rgbVal }), // ✅ rgb が undefined のときはプロパティ自体を持たない
+      ...(price === undefined ? {} : { price }), // ✅ price も同様
+    };
+
+    return [row];
+  });
+
+  const totalStockRaw = data?.totalStock ?? data?.TotalStock;
+
   return {
-    inventoryId: data?.inventoryId ? s(data.inventoryId) : undefined,
-    productBlueprintId: data?.productBlueprintId ? s(data.productBlueprintId) : undefined,
-    tokenBlueprintId: data?.tokenBlueprintId ? s(data.tokenBlueprintId) : undefined,
+    inventoryId: data?.inventoryId
+      ? s(data.inventoryId)
+      : data?.InventoryID
+        ? s(data.InventoryID)
+        : undefined,
+    productBlueprintId: data?.productBlueprintId
+      ? s(data.productBlueprintId)
+      : data?.ProductBlueprintID
+        ? s(data.ProductBlueprintID)
+        : undefined,
+    tokenBlueprintId: data?.tokenBlueprintId
+      ? s(data.tokenBlueprintId)
+      : data?.TokenBlueprintID
+        ? s(data.TokenBlueprintID)
+        : undefined,
 
-    productBrandName: s(data?.productBrandName),
-    productName: s(data?.productName),
+    productBrandName: s(data?.productBrandName ?? data?.ProductBrandName),
+    productName: s(data?.productName ?? data?.ProductName),
 
-    tokenBrandName: s(data?.tokenBrandName),
-    tokenName: s(data?.tokenName),
+    tokenBrandName: s(data?.tokenBrandName ?? data?.TokenBrandName),
+    tokenName: s(data?.tokenName ?? data?.TokenName),
+
+    // ✅ NEW
+    priceRows,
+    totalStock:
+      totalStockRaw === undefined || totalStockRaw === null
+        ? undefined
+        : n(totalStockRaw),
   };
 }
 

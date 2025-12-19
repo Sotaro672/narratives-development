@@ -62,6 +62,112 @@ func NewListCreateQueryWithInventory(
 	}
 }
 
+// ============================================================
+// ✅ NEW: inventoryId から ListCreateDTO を組み立てる
+//   - inventoryId = "{pbId}__{tbId}" 前提（方針A）
+//   - inventory の stock から modelId を列挙し、NameResolver.ResolveModelResolved を使って
+//     size/color/rgb を解決する
+//
+// ============================================================
+func (q *ListCreateQuery) GetByInventoryID(
+	ctx context.Context,
+	inventoryID string,
+) (*querydto.ListCreateDTO, error) {
+	if q == nil {
+		return nil, errors.New("list create query is nil")
+	}
+
+	invID := strings.TrimSpace(inventoryID)
+	if invID == "" {
+		return nil, errors.New("inventoryId is required")
+	}
+
+	// inventoryId = "{pbId}__{tbId}" を正として parse（名揺れ吸収しない）
+	pbID, tbID, ok := parseInventoryID(invID)
+	if !ok || pbID == "" || tbID == "" {
+		return nil, errors.New("invalid inventoryId format (expected {pbId}__{tbId})")
+	}
+
+	// ------------------------------------------------------------
+	// ProductBlueprint: productName / brandName
+	// ------------------------------------------------------------
+	productName := ""
+	productBrandName := ""
+
+	// productName は resolver（pbRepo:GetProductNameByID）から取るのが正
+	if q.nameResolver != nil {
+		productName = strings.TrimSpace(q.nameResolver.ResolveProductName(ctx, pbID))
+	}
+
+	// brandName は pbPatch.BrandID -> resolver.ResolveBrandName
+	if q.pbPatchRepo != nil {
+		if patch, err := q.pbPatchRepo.GetPatchByID(ctx, pbID); err == nil {
+			brandID := ""
+			if patch.BrandID != nil {
+				brandID = strings.TrimSpace(*patch.BrandID)
+			}
+			if brandID != "" && q.nameResolver != nil {
+				productBrandName = strings.TrimSpace(q.nameResolver.ResolveBrandName(ctx, brandID))
+			}
+			// fallback: Patch に BrandName が入っていれば使う
+			if productBrandName == "" && patch.BrandName != nil {
+				productBrandName = strings.TrimSpace(*patch.BrandName)
+			}
+		}
+	}
+
+	// ------------------------------------------------------------
+	// TokenBlueprint: tokenName / brandName
+	// ------------------------------------------------------------
+	tokenName := ""
+	tokenBrandName := ""
+
+	// tokenName は resolver（tokenBlueprintRepo:GetByID の Name/Symbol）から取るのが正
+	if q.nameResolver != nil {
+		tokenName = strings.TrimSpace(q.nameResolver.ResolveTokenName(ctx, tbID))
+	}
+
+	// brandName は tbPatch.BrandID -> resolver.ResolveBrandName
+	if q.tbPatchRepo != nil {
+		if patch, err := q.tbPatchRepo.GetPatchByID(ctx, tbID); err == nil {
+			brandID := ""
+			if patch.BrandID != nil {
+				brandID = strings.TrimSpace(*patch.BrandID)
+			}
+			if brandID != "" && q.nameResolver != nil {
+				tokenBrandName = strings.TrimSpace(q.nameResolver.ResolveBrandName(ctx, brandID))
+			}
+			// fallback: Patch に BrandName が入っていれば使う
+			if tokenBrandName == "" && patch.BrandName != nil {
+				tokenBrandName = strings.TrimSpace(*patch.BrandName)
+			}
+		}
+	}
+
+	// ------------------------------------------------------------
+	// ✅ inventory: modelId ごとの metadata + stock（PriceCard 用）
+	// ------------------------------------------------------------
+	priceRows, totalStock := q.buildPriceRowsFromInventoryByInventoryID(ctx, invID)
+
+	dto := &querydto.ListCreateDTO{
+		InventoryID:        invID,
+		ProductBlueprintID: pbID,
+		TokenBlueprintID:   tbID,
+
+		ProductBrandName: productBrandName,
+		ProductName:      productName,
+
+		TokenBrandName: tokenBrandName,
+		TokenName:      tokenName,
+
+		// ✅ PriceCard 用
+		PriceRows:  priceRows,
+		TotalStock: totalStock,
+	}
+
+	return dto, nil
+}
+
 // GetByIDs assembles ListCreateDTO from pbId/tbId.
 // inventoryId は "{pbId}__{tbId}" 前提で生成する（1出品=1inventory）。
 func (q *ListCreateQuery) GetByIDs(
@@ -164,6 +270,23 @@ func buildInventoryID(productBlueprintID, tokenBlueprintID string) string {
 	return strings.TrimSpace(productBlueprintID) + "__" + strings.TrimSpace(tokenBlueprintID)
 }
 
+func parseInventoryID(inventoryID string) (pbID string, tbID string, ok bool) {
+	id := strings.TrimSpace(inventoryID)
+	if id == "" {
+		return "", "", false
+	}
+	parts := strings.SplitN(id, "__", 2)
+	if len(parts) != 2 {
+		return "", "", false
+	}
+	pb := strings.TrimSpace(parts[0])
+	tb := strings.TrimSpace(parts[1])
+	if pb == "" || tb == "" {
+		return "", "", false
+	}
+	return pb, tb, true
+}
+
 // ============================================================
 // internal: inventory -> priceRows
 // - inventory.Stock から modelId ごとの stock を集計
@@ -233,6 +356,7 @@ func (q *ListCreateQuery) buildPriceRowsFromInventory(
 
 		attr := resolver.ModelResolved{}
 		if q.nameResolver != nil {
+			// ✅ ここで model metadata（size/color/rgb）を取得
 			attr = q.nameResolver.ResolveModelResolved(ctx, mid)
 		}
 
@@ -255,6 +379,110 @@ func (q *ListCreateQuery) buildPriceRowsFromInventory(
 			Price:   nil,
 		})
 
+		total += stock
+	}
+
+	sort.Slice(rows, func(i, j int) bool {
+		if rows[i].Size != rows[j].Size {
+			return rows[i].Size < rows[j].Size
+		}
+		if rows[i].Color != rows[j].Color {
+			return rows[i].Color < rows[j].Color
+		}
+		return rows[i].ModelID < rows[j].ModelID
+	})
+
+	return rows, total
+}
+
+// ============================================================
+// ✅ NEW: inventoryId から priceRows を組み立てる
+// - inventoryId を正として inventory を特定
+// - pbId を split で得て ListByProductBlueprintID から検索
+// ============================================================
+
+func (q *ListCreateQuery) buildPriceRowsFromInventoryByInventoryID(
+	ctx context.Context,
+	inventoryID string,
+) ([]querydto.ListCreatePriceRowDTO, int) {
+	if q == nil || q.invRepo == nil {
+		return nil, 0
+	}
+
+	invID := strings.TrimSpace(inventoryID)
+	if invID == "" {
+		return nil, 0
+	}
+
+	pbID, tbID, ok := parseInventoryID(invID)
+	if !ok {
+		return nil, 0
+	}
+
+	invs, err := q.invRepo.ListByProductBlueprintID(ctx, pbID)
+	if err != nil || len(invs) == 0 {
+		return nil, 0
+	}
+
+	// inventoryId を最優先で一致させる
+	var picked *invdom.Mint
+	for i := range invs {
+		if strings.TrimSpace(invs[i].ID) == invID {
+			picked = &invs[i]
+			break
+		}
+	}
+	// フォールバック: tokenBlueprintId で一致するもの
+	if picked == nil {
+		for i := range invs {
+			if strings.TrimSpace(invs[i].TokenBlueprintID) == tbID {
+				picked = &invs[i]
+				break
+			}
+		}
+	}
+
+	if picked == nil || picked.Stock == nil {
+		return nil, 0
+	}
+
+	rows := make([]querydto.ListCreatePriceRowDTO, 0, len(picked.Stock))
+	total := 0
+
+	for modelID, ms := range picked.Stock {
+		mid := strings.TrimSpace(modelID)
+		if mid == "" {
+			continue
+		}
+
+		stock := modelStockLen(ms) // defined in inventory_query.go
+		if stock <= 0 {
+			continue
+		}
+
+		attr := resolver.ModelResolved{}
+		if q.nameResolver != nil {
+			// ✅ ここで model metadata（size/color/rgb）を取得
+			attr = q.nameResolver.ResolveModelResolved(ctx, mid)
+		}
+
+		sz := strings.TrimSpace(attr.Size)
+		cl := strings.TrimSpace(attr.Color)
+		if sz == "" {
+			sz = "-"
+		}
+		if cl == "" {
+			cl = "-"
+		}
+
+		rows = append(rows, querydto.ListCreatePriceRowDTO{
+			ModelID: mid,
+			Stock:   stock,
+			Size:    sz,
+			Color:   cl,
+			RGB:     attr.RGB,
+			Price:   nil,
+		})
 		total += stock
 	}
 
