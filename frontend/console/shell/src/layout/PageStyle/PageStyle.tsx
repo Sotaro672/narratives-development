@@ -8,6 +8,7 @@ import {
   Trash2,
   X,
   RotateCw, // ★ 復旧（Restore）
+  Tag, // ★ 出品
 } from "lucide-react";
 import "./PageStyle.css";
 
@@ -31,8 +32,11 @@ interface PageStyleProps {
   onCancel?: () => void;
 
   // ★ 新規追加
-  onPurge?: () => void;   // 物理削除
+  onPurge?: () => void; // 物理削除
   onRestore?: () => void; // 復旧
+
+  // ★ 出品
+  onList?: () => void;
 
   title?: string;
   badge?: ReactNode;
@@ -52,6 +56,7 @@ export default function PageStyle({
   onCancel,
   onPurge,
   onRestore,
+  onList, // ★ 出品
   title,
   badge,
   actions,
@@ -137,6 +142,18 @@ export default function PageStyle({
               >
                 <X size={16} style={{ marginRight: 4 }} />
                 キャンセル
+              </button>
+            )}
+
+            {/* ★ 出品 */}
+            {onList && (
+              <button
+                type="button"
+                className="page-header__btn"
+                onClick={onList}
+              >
+                <Tag size={16} style={{ marginRight: 4 }} />
+                出品
               </button>
             )}
 

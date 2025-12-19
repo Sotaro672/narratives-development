@@ -62,6 +62,14 @@ export default function InventoryDetail() {
       ? `在庫詳細：${vm.productBlueprintId} / ${vm.tokenBlueprintId}`
       : `在庫詳細：${productBlueprintId ?? ""} / ${tokenBlueprintId ?? ""}`;
 
+  // ★ 出品ボタン（PageHeader）
+  // ✅ 新方針: inventory ドメイン内の /inventory/list/create/:productBlueprintId/:tokenBlueprintId へ遷移
+  const onList = React.useCallback(() => {
+    if (!pbId || !tbId) return;
+
+    navigate(`/inventory/list/create/${pbId}/${tbId}`);
+  }, [navigate, pbId, tbId]);
+
   // ============================================================
   // ✅ TokenBlueprintCard (view only) 用の VM/Handlers を組み立て
   // 重要:
@@ -127,7 +135,13 @@ export default function InventoryDetail() {
   );
 
   return (
-    <PageStyle layout="grid-2" title={title} onBack={onBack} onSave={undefined}>
+    <PageStyle
+      layout="grid-2"
+      title={title}
+      onBack={onBack}
+      onSave={undefined}
+      onList={onList} // ✅ 出品ボタン -> inventory/list/create へ
+    >
       {/* 左カラム：商品情報カード + TokenBlueprintCard + 在庫一覧カード */}
       <div>
         {/* ✅ ProductBlueprintCardProps に productBlueprintId が無いので渡さない */}

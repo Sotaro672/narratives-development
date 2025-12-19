@@ -1,19 +1,21 @@
-// frontend/list/src/routes.tsx
 import type { RouteObject } from "react-router-dom";
 import ListManagement from "../../presentation/pages/listManagement";
 import ListDetail from "../../presentation/pages/listDetail";
 import ListCreate from "../../presentation/pages/listCreate";
 
-/**
- * ListingsRoutes
- * 出品モジュールのルート構成。
- * shell から import("listings/routes") でロードされる。
- */
 const routes: RouteObject[] = [
   { path: "", element: <ListManagement /> },
-  { path: ":listId", element: <ListDetail /> },
+
+  // ✅ create（素のcreate）
   { path: "create", element: <ListCreate /> },
-  // 他のルート定義
+
+  // ✅ create に inventoryId を渡すルート（推奨）
+  { path: "create/:inventoryId", element: <ListCreate /> },
+
+  // ✅ create に pbId/tbId を渡すルート（必要なら）
+  { path: "create/:productBlueprintId/:tokenBlueprintId", element: <ListCreate /> },
+
+  { path: ":listId", element: <ListDetail /> },
 ];
 
 export default routes;

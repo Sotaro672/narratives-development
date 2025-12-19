@@ -1,6 +1,6 @@
 // frontend/console/list/src/presentation/hook/useListCreate.tsx
 import * as React from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useParams, useSearchParams } from "react-router-dom";
 import type { AdminAssigneeCandidate } from "../../../../admin/src/presentation/components/AdminCard";
 
 export type ListCreateStatusJa = "出品中" | "停止中" | "";
@@ -10,8 +10,36 @@ export type CandidateRow = {
   name: string;
 };
 
+function s(v: unknown): string {
+  return String(v ?? "").trim();
+}
+
 export function useListCreate() {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+
+  // ✅ ルート param と query の両方に対応
+  // - /listings/create/:inventoryId
+  // - /listings/create/:productBlueprintId/:tokenBlueprintId
+  // - /listings/create?inventoryId=xxx
+  // - /listings/create?productBlueprintId=...&tokenBlueprintId=...
+  const params = useParams<{
+    inventoryId?: string;
+    productBlueprintId?: string;
+    tokenBlueprintId?: string;
+  }>();
+
+  const inventoryId = React.useMemo(() => {
+    return s(params.inventoryId || searchParams.get("inventoryId"));
+  }, [params.inventoryId, searchParams]);
+
+  const productBlueprintId = React.useMemo(() => {
+    return s(params.productBlueprintId || searchParams.get("productBlueprintId"));
+  }, [params.productBlueprintId, searchParams]);
+
+  const tokenBlueprintId = React.useMemo(() => {
+    return s(params.tokenBlueprintId || searchParams.get("tokenBlueprintId"));
+  }, [params.tokenBlueprintId, searchParams]);
 
   // ──────────────────────────────────────────────
   // 入力フォーム状態（プリフィルは空）
@@ -25,20 +53,16 @@ export function useListCreate() {
 
   // ──────────────────────────────────────────────
   // 管理情報（AdminCard）
+  // ※ モック削除：API/Query で取得する前提。未設定だけは固定で残す。
   // ──────────────────────────────────────────────
   const [assigneeOptions] = React.useState<AdminAssigneeCandidate[]>([
     { id: "unassigned", name: "未設定" },
-    { id: "yamada", name: "山田 太郎" },
-    { id: "sato", name: "佐藤 美咲" },
-    { id: "suzuki", name: "鈴木 一郎" },
   ]);
 
   const [assigneeId, setAssigneeId] = React.useState<string>("unassigned");
 
   const assigneeName = React.useMemo(() => {
-    return (
-      assigneeOptions.find((c) => c.id === assigneeId)?.name ?? "未設定"
-    );
+    return assigneeOptions.find((c) => c.id === assigneeId)?.name ?? "未設定";
   }, [assigneeId, assigneeOptions]);
 
   const [loadingMembers] = React.useState(false);
@@ -50,6 +74,7 @@ export function useListCreate() {
 
   // ──────────────────────────────────────────────
   // ブランド選択（Popover）
+  // ※ モック削除：API/Query で取得する前提
   // ──────────────────────────────────────────────
   const [selectedBrand, setSelectedBrand] = React.useState<string>("");
 
@@ -68,27 +93,27 @@ export function useListCreate() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedBrand]);
 
-  const [brandOptions] = React.useState<string[]>([
-    "LUMINA Fashion",
-    "NARRATIVES Studio",
-    "TOKYO Atelier",
-  ]);
+  const [brandOptions] = React.useState<string[]>([]);
 
   const selectBrand = React.useCallback((b: string) => {
     setSelectedBrand(b);
   }, []);
 
   // ──────────────────────────────────────────────
-  // 右カラムの一覧テーブル（ダミー）
+  // 右カラムの一覧テーブル
+  // ※ モック削除：inventoryId を受け取って、それを初期選択に使う
   // ──────────────────────────────────────────────
-  const [candidateRows] = React.useState<CandidateRow[]>([
-    { id: "inv-001", name: "シルクブラウス プレミアムライン / LUM-SS25-001" },
-    { id: "inv-002", name: "リネンシャツ リラックスフィット / LUM-SS25-002" },
-    { id: "inv-003", name: "ウールコート クラシック / LUM-AW25-010" },
-  ]);
+  const [candidateRows] = React.useState<CandidateRow[]>([]);
 
   const [selectedCandidateId, setSelectedCandidateId] =
     React.useState<string>("");
+
+  // ✅ inventoryId が渡されたら初期選択として反映
+  React.useEffect(() => {
+    if (!selectedCandidateId && inventoryId) {
+      setSelectedCandidateId(inventoryId);
+    }
+  }, [inventoryId, selectedCandidateId]);
 
   const selectCandidateById = React.useCallback((id: string) => {
     setSelectedCandidateId(id);
@@ -98,13 +123,18 @@ export function useListCreate() {
   // ハンドラ
   // ──────────────────────────────────────────────
   const onCreate = React.useCallback(() => {
-    alert("出品情報を作成しました（ダミー）");
+    // TODO: 実装（API へ作成リクエスト等）
     navigate("/list");
   }, [navigate]);
 
   const onBack = React.useCallback(() => navigate(-1), [navigate]);
 
   return {
+    // ✅ incoming
+    inventoryId,
+    productBlueprintId,
+    tokenBlueprintId,
+
     // page actions
     onBack,
     onCreate,
