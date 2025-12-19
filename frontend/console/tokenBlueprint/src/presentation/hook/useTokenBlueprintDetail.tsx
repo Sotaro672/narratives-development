@@ -55,13 +55,6 @@ export function useTokenBlueprintDetail(): UseTokenBlueprintDetailResult {
   // ─────────────────────────────
   useEffect(() => {
     const id = tokenBlueprintId?.trim();
-
-    // eslint-disable-next-line no-console
-    console.log("[useTokenBlueprintDetail] effect start", {
-      tokenBlueprintIdRaw: tokenBlueprintId ?? "",
-      tokenBlueprintId: id ?? "",
-    });
-
     if (!id) return;
 
     let cancelled = false;
@@ -70,47 +63,12 @@ export function useTokenBlueprintDetail(): UseTokenBlueprintDetailResult {
       try {
         setLoading(true);
 
-        // eslint-disable-next-line no-console
-        console.log("[useTokenBlueprintDetail] fetchTokenBlueprintDetail start", {
-          id,
-        });
-
         const tb = await fetchTokenBlueprintDetail(id);
-
-        // eslint-disable-next-line no-console
-        console.log("[useTokenBlueprintDetail] fetchTokenBlueprintDetail success (raw)", {
-          id,
-          tb,
-        });
-
-        // eslint-disable-next-line no-console
-        console.log("[useTokenBlueprintDetail] fetchTokenBlueprintDetail success (fields)", {
-          id: (tb as any)?.id,
-          name: (tb as any)?.name,
-          symbol: (tb as any)?.symbol,
-          brandId: (tb as any)?.brandId,
-          brandName: (tb as any)?.brandName,
-          assigneeId: (tb as any)?.assigneeId,
-          assigneeName: (tb as any)?.assigneeName,
-          minted: (tb as any)?.minted,
-          iconId: (tb as any)?.iconId,
-          iconUrl: (tb as any)?.iconUrl,
-          metadataUri: (tb as any)?.metadataUri,
-          createdAt: (tb as any)?.createdAt,
-          updatedAt: (tb as any)?.updatedAt,
-        });
-
         if (cancelled) return;
 
         setBlueprint(tb);
         setAssignee((prev) => prev || tb.assigneeName || tb.assigneeId || "");
-      } catch (e) {
-        // eslint-disable-next-line no-console
-        console.error("[useTokenBlueprintDetail] fetchTokenBlueprintDetail failed", {
-          id,
-          error: e,
-        });
-
+      } catch (_e) {
         if (!cancelled) navigate("/tokenBlueprint", { replace: true });
       } finally {
         if (!cancelled) setLoading(false);
@@ -134,21 +92,10 @@ export function useTokenBlueprintDetail(): UseTokenBlueprintDetailResult {
     [blueprint],
   );
 
-  // ★ Card に渡す initialIconUrl を可視化
+  // Card に渡す initialIconUrl
   const initialIconUrl = useMemo(() => {
     const url = String((blueprint as any)?.iconUrl ?? "").trim();
-    const out = url || undefined;
-
-    // eslint-disable-next-line no-console
-    console.log("[useTokenBlueprintDetail] initialIconUrl computed", {
-      blueprintId: String((blueprint as any)?.id ?? ""),
-      rawIconUrl: (blueprint as any)?.iconUrl,
-      computed: out ?? "",
-      iconId: String((blueprint as any)?.iconId ?? ""),
-      hasBlueprint: Boolean(blueprint),
-    });
-
-    return out;
+    return url || undefined;
   }, [blueprint]);
 
   // ─────────────────────────────
@@ -157,24 +104,11 @@ export function useTokenBlueprintDetail(): UseTokenBlueprintDetailResult {
   const { vm: cardVm, handlers: cardHandlers } = useTokenBlueprintCard({
     initialTokenBlueprint: (blueprint ?? {}) as Partial<TokenBlueprint>,
     initialBurnAt: "",
-    initialIconUrl, // ★ ここに blueprint.iconUrl が入る想定
+    initialIconUrl, // ここに blueprint.iconUrl が入る想定
     initialEditMode: false,
   });
 
   const isEditMode: boolean = cardVm?.isEditMode ?? false;
-
-  // ★ cardVm 側の iconUrl の最終値もログで追う
-  useEffect(() => {
-    // eslint-disable-next-line no-console
-    console.log("[useTokenBlueprintDetail] cardVm updated", {
-      blueprintId: String((blueprint as any)?.id ?? ""),
-      cardIconUrl: String(cardVm?.iconUrl ?? ""),
-      cardBrandId: String(cardVm?.brandId ?? ""),
-      cardBrandName: String(cardVm?.brandName ?? ""),
-      cardMinted: Boolean(cardVm?.minted),
-      isEditMode: Boolean(cardVm?.isEditMode),
-    });
-  }, [cardVm, blueprint]);
 
   // ─────────────────────────────
   // UI handlers（ナビゲーション周りのみ保持）
@@ -201,21 +135,12 @@ export function useTokenBlueprintDetail(): UseTokenBlueprintDetailResult {
 
       const updated = await updateTokenBlueprintFromCard(blueprint, cardVm);
 
-      // eslint-disable-next-line no-console
-      console.log("[useTokenBlueprintDetail] updateTokenBlueprintFromCard result", {
-        id: (updated as any)?.id,
-        iconId: (updated as any)?.iconId,
-        iconUrl: (updated as any)?.iconUrl,
-        minted: (updated as any)?.minted,
-      });
-
       setBlueprint(updated);
       setAssignee((prev) => prev || updated.assigneeName || updated.assigneeId || "");
 
       cardHandlers?.setEditMode?.(false);
-    } catch (err) {
-      // eslint-disable-next-line no-console
-      console.error("[TokenBlueprintDetail] update failed:", err);
+    } catch (_err) {
+      // noop (or show toast)
     } finally {
       setLoading(false);
     }

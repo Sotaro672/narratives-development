@@ -118,21 +118,6 @@ export function useTokenBlueprintCard(params: {
     const src = params.initialTokenBlueprint as any;
     if (!src) return;
 
-    // ★ 受け取ったデータ確認ログ（name / tokenName 揺れ確認）
-    // eslint-disable-next-line no-console
-    console.log("[useTokenBlueprintCard] initialTokenBlueprint check", {
-      id: src?.id,
-      name: src?.name,
-      tokenName: src?.tokenName,
-      TokenName: src?.TokenName,
-      symbol: src?.symbol,
-      brandId: src?.brandId,
-      brandName: src?.brandName,
-      descriptionLen: String(src?.description ?? "").length,
-      minted: src?.minted,
-      keys: Object.keys(src ?? {}),
-    });
-
     // リセット用に保持
     initialRef.current = src;
 
@@ -247,19 +232,8 @@ export function useTokenBlueprintCard(params: {
       } catch {
         // ignore
       }
-
-      // eslint-disable-next-line no-console
-      console.log("[useTokenBlueprintCard] icon selected", {
-        tokenBlueprintId: id,
-        fileName: file.name,
-        size: file.size,
-        type: file.type,
-        minted,
-        isEditMode,
-        storedToState: true,
-      });
     },
-    [canEditIcon, id, isEditMode, localPreviewUrl, minted],
+    [canEditIcon, localPreviewUrl],
   );
 
   const shownIconUrl = localPreviewUrl || remoteIconUrl;
@@ -345,16 +319,6 @@ export function useTokenBlueprintCard(params: {
         }
         setLocalPreviewUrl("");
       }
-
-      // eslint-disable-next-line no-console
-      console.log("[useTokenBlueprintCard] reset applied", {
-        id: src?.id ?? "",
-        name: pickName(src),
-        symbol: src?.symbol ?? "",
-        brandId: src?.brandId ?? "",
-        brandName: pickBrandName(src),
-        minted: typeof src?.minted === "boolean" ? src.minted : false,
-      });
     },
   };
 

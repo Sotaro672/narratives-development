@@ -19,6 +19,11 @@ import { auth } from "../../../../shell/src/auth/infrastructure/config/firebaseC
 // ★ Admin 用 hook（担当者候補の取得・選択）
 import { useAdminCard as useAdminCardHook } from "../../../../admin/src/presentation/hook/useAdminCard";
 
+// ✅ NEW: PriceCard（list app 側に作ったコンポーネントを流用）
+import PriceCard, {
+  type PriceRow,
+} from "../../../../list/src/presentation/components/priceCard";
+
 function s(v: unknown): string {
   return String(v ?? "").trim();
 }
@@ -51,8 +56,6 @@ async function fetchListCreateDTO(input: {
   // ✅ 想定エンドポイント（Inventory ドメイン配下に寄せる）
   // - /inventory/list-create/:inventoryId
   // - /inventory/list-create/:productBlueprintId/:tokenBlueprintId
-  //
-  // ※ backend 側の handler ルーティングに合わせて調整してください。
   let path = "";
   if (input.inventoryId) {
     path = `/inventory/list-create/${encodeURIComponent(input.inventoryId)}`;
@@ -103,7 +106,9 @@ export default function InventoryListCreate() {
   const tokenBlueprintId = s(params.tokenBlueprintId);
 
   // ✅ PageHeader（title）には pb/tb を出さない
-  const title = inventoryId ? `出品作成（inventoryId: ${inventoryId}）` : "出品作成";
+  const title = inventoryId
+    ? `出品作成（inventoryId: ${inventoryId}）`
+    : "出品作成";
 
   // ✅ 戻るは inventoryDetail へ絶対遷移
   const onBack = React.useCallback(() => {
@@ -167,6 +172,26 @@ export default function InventoryListCreate() {
   }, [inventoryId, productBlueprintId, tokenBlueprintId]);
 
   // ============================================================
+  // ✅ 左カラム：PriceCard（価格入力）
+  // ============================================================
+  // NOTE:
+  // - いまの ListCreateDTO にはサイズ/カラー/在庫の行情報が無いので、初期は空配列。
+  // - 将来、list-create DTO に rows を追加 or 別APIで rows を取れるようになったらここで set してください。
+  const [priceRows, setPriceRows] = React.useState<PriceRow[]>([]);
+
+  const onChangePrice = React.useCallback(
+    (index: number, price: number | null) => {
+      setPriceRows((prev) => {
+        const next = [...prev];
+        if (!next[index]) return prev;
+        next[index] = { ...next[index], price };
+        return next;
+      });
+    },
+    [],
+  );
+
+  // ============================================================
   // ✅ 右カラム：担当者選択（ボタンのみ表示）
   // ============================================================
   const { assigneeName, assigneeCandidates, loadingMembers, onSelectAssignee } =
@@ -191,10 +216,29 @@ export default function InventoryListCreate() {
       onBack={onBack}
       onCreate={onCreate} // ✅ PageHeader に「作成」ボタンを表示
     >
-      {/* 左カラム：空（grid-2 のレイアウト維持） */}
-      <div />
+      {/* =========================
+          左カラム：PriceCard
+          ========================= */}
+      <div className="space-y-4">
+        <PriceCard
+          title="価格"
+          rows={priceRows}
+          mode="edit"
+          currencySymbol="¥"
+          onChangePrice={(idx, price) => onChangePrice(idx, price)}
+        />
 
-      {/* 右カラム */}
+        {/* 補足（必要なら削除OK） */}
+        {priceRows.length === 0 && (
+          <div className="text-xs text-[hsl(var(--muted-foreground))]">
+            価格行データは未取得です（DTO/別APIから rows を供給する実装が必要です）。
+          </div>
+        )}
+      </div>
+
+      {/* =========================
+          右カラム
+          ========================= */}
       <div className="space-y-4">
         {/* DTO 読み込み状態（style elements only） */}
         {loadingDTO && (

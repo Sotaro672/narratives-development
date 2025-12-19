@@ -20,4 +20,33 @@ type ListCreateDTO struct {
 	// From TokenBlueprint
 	TokenBrandName string `json:"tokenBrandName"`
 	TokenName      string `json:"tokenName"`
+
+	// ------------------------------------------------------------
+	// ✅ PriceCard 用（サイズ/カラー別に価格を入力するための行）
+	// - inventory_detail_dto.go の InventoryDetailRowDTO を参照しつつ、
+	//   PriceCard では「型番列を出さない」前提なので ModelNumber は持たない
+	// - price は未入力を許容するため *int（null）にする
+	// ------------------------------------------------------------
+	PriceRows   []ListCreatePriceRowDTO `json:"priceRows,omitempty"`
+	TotalStock  int                     `json:"totalStock,omitempty"`
+	PriceNote   string                  `json:"priceNote,omitempty"`   // 任意: 画面メモ用途（未使用なら空）
+	CurrencyJPY bool                    `json:"currencyJpy,omitempty"` // 任意: フロントで "¥" を固定する用途（未使用なら false）
+}
+
+// ListCreatePriceRowDTO is a row DTO for PriceCard.
+// - 型番列は出さないが、更新や作成 payload で識別できるよう ModelID は保持する。
+type ListCreatePriceRowDTO struct {
+	ModelID string `json:"modelId"`
+
+	// 在庫数（まずは stock のみ通す）
+	Stock int `json:"stock"`
+
+	// 表示用
+	Size  string `json:"size"`
+	Color string `json:"color"`
+	RGB   *int   `json:"rgb,omitempty"`
+
+	// ✅ 追加: 価格（JPY想定）
+	// - 未入力: null
+	Price *int `json:"price,omitempty"`
 }

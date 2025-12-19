@@ -91,21 +91,10 @@ export function useInventoryManagement(): UseInventoryManagementResult {
   useEffect(() => {
     (async () => {
       try {
-        console.log("[inventory/useInventoryManagement] load start");
-
         const vmRows = await loadInventoryRowsFromBackend();
         const mapped = mapToRows(vmRows);
-
-        console.log("[inventory/useInventoryManagement] load ok", {
-          rows: mapped.length,
-          sample: mapped.slice(0, 10),
-        });
-
         setInventoryRows(mapped);
-      } catch (e: any) {
-        console.warn("[inventory/useInventoryManagement] load failed", {
-          error: String(e?.message ?? e),
-        });
+      } catch (_e: any) {
         setInventoryRows([]);
       }
     })();
@@ -119,8 +108,7 @@ export function useInventoryManagement(): UseInventoryManagementResult {
       const productOk =
         productFilter.length === 0 || productFilter.includes(r.productName);
 
-      const tokenOk =
-        tokenFilter.length === 0 || tokenFilter.includes(r.tokenName);
+      const tokenOk = tokenFilter.length === 0 || tokenFilter.includes(r.tokenName);
 
       return productOk && tokenOk;
     });
@@ -150,15 +138,13 @@ export function useInventoryManagement(): UseInventoryManagementResult {
    * ※ product/token は Service helper を利用
    * --------------------------------------------------------- */
   const options = useMemo(() => {
-    const asServiceRows: InventoryManagementRow[] = filteredSortedRows.map(
-      (r) => ({
-        productBlueprintId: r.productBlueprintId,
-        productName: r.productName,
-        tokenBlueprintId: r.tokenBlueprintId,
-        tokenName: r.tokenName,
-        stock: r.stock,
-      }),
-    );
+    const asServiceRows: InventoryManagementRow[] = filteredSortedRows.map((r) => ({
+      productBlueprintId: r.productBlueprintId,
+      productName: r.productName,
+      tokenBlueprintId: r.tokenBlueprintId,
+      tokenName: r.tokenName,
+      stock: r.stock,
+    }));
 
     const base = buildInventoryFilterOptionsFromRows(asServiceRows);
 
@@ -178,10 +164,6 @@ export function useInventoryManagement(): UseInventoryManagementResult {
       const tbId = normalizeId(row.tokenBlueprintId);
 
       if (!pbId || !tbId || tbId === "-") {
-        console.warn(
-          "[inventory/useInventoryManagement] missing tokenBlueprintId; cannot navigate detail",
-          { pbId, tbId, row },
-        );
         return;
       }
 
