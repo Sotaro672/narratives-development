@@ -7,7 +7,10 @@ import { useNavigate, useParams } from "react-router-dom";
 import { useAdminCard as useAdminCardHook } from "../../../../admin/src/presentation/hook/useAdminCard";
 
 // ✅ PriceCard hook（PriceRow 型もここから取り込む）
-import { usePriceCard, type PriceRow } from "../../../../list/src/presentation/hook/usePriceCard";
+import {
+  usePriceCard,
+  type PriceRow,
+} from "../../../../list/src/presentation/hook/usePriceCard";
 
 // ✅ application service に移譲
 import {
@@ -24,6 +27,7 @@ import {
   mapDTOToPriceRows,
   type ListCreateRouteParams,
   type ResolvedListCreateParams,
+  type ImageInputRef,
 } from "../../application/listCreateService";
 
 import type { ListCreateDTO } from "../../infrastructure/http/inventoryRepositoryHTTP";
@@ -53,6 +57,25 @@ export type UseListCreateResult = {
   // ✅ PriceCard hook の結果
   priceCard: ReturnType<typeof usePriceCard>;
 
+  // ✅ NEW: listing local states (moved from page)
+  listingTitle: string;
+  setListingTitle: React.Dispatch<React.SetStateAction<string>>;
+  description: string;
+  setDescription: React.Dispatch<React.SetStateAction<string>>;
+
+  // ✅ NEW: images (moved from page)
+  images: File[];
+  imagePreviewUrls: string[];
+  mainImageIndex: number;
+  setMainImageIndex: React.Dispatch<React.SetStateAction<number>>;
+  imageInputRef: ImageInputRef; // ✅ null を含む RefObject
+  openImagePicker: () => void;
+  onSelectImages: (e: React.ChangeEvent<HTMLInputElement>) => void;
+  onDropImages: (e: React.DragEvent<HTMLDivElement>) => void;
+  onDragOverImages: (e: React.DragEvent<HTMLDivElement>) => void;
+  removeImageAt: (idx: number) => void;
+  clearImages: () => void;
+
   // assignee
   assigneeName: string;
   assigneeCandidates: Array<{ id: string; name: string }>;
@@ -63,6 +86,12 @@ export type UseListCreateResult = {
   decision: ListingDecision;
   setDecision: React.Dispatch<React.SetStateAction<ListingDecision>>;
 };
+
+function dedupeFiles(prev: File[], add: File[]): File[] {
+  const exists = new Set(prev.map((f) => `${f.name}__${f.size}__${f.lastModified}`));
+  const filtered = add.filter((f) => !exists.has(`${f.name}__${f.size}__${f.lastModified}`));
+  return [...prev, ...filtered];
+}
 
 export function useListCreate(): UseListCreateResult {
   const navigate = useNavigate();
@@ -101,6 +130,109 @@ export function useListCreate(): UseListCreateResult {
     // eslint-disable-next-line no-console
     console.log("[inventory/useListCreate] decision changed", { decision });
   }, [decision]);
+
+  // ============================================================
+  // ✅ NEW: listing fields (moved from page)
+  // ============================================================
+  const [listingTitle, setListingTitle] = React.useState<string>("");
+  const [description, setDescription] = React.useState<string>("");
+
+  // ============================================================
+  // ✅ NEW: images (moved from page)
+  // - main: large preview
+  // - 2nd+ : thumbnails + add tile
+  // ============================================================
+  const [images, setImages] = React.useState<File[]>([]);
+  const [mainImageIndex, setMainImageIndex] = React.useState<number>(0);
+
+  // ✅ null を含むのが正しい（useRef 初期値 null のため）
+  const imageInputRef = React.useRef<HTMLInputElement | null>(null);
+
+  const openImagePicker = React.useCallback(() => {
+    imageInputRef.current?.click();
+  }, []);
+
+  const onSelectImages = React.useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(e.target.files ?? []).filter(Boolean) as File[];
+    if (files.length === 0) return;
+
+    setImages((prev) => {
+      const next = dedupeFiles(prev, files);
+      return next;
+    });
+
+    // 同じファイルを再選択できるように
+    e.currentTarget.value = "";
+  }, []);
+
+  const onDropImages = React.useCallback((e: React.DragEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    e.stopPropagation();
+
+    const files = Array.from(e.dataTransfer.files ?? [])
+      .filter(Boolean)
+      .filter((f) => String(f.type || "").startsWith("image/")) as File[];
+
+    if (files.length === 0) return;
+
+    setImages((prev) => dedupeFiles(prev, files));
+  }, []);
+
+  const onDragOverImages = React.useCallback((e: React.DragEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    e.stopPropagation();
+  }, []);
+
+  const removeImageAt = React.useCallback(
+    (idx: number) => {
+      setImages((prev) => prev.filter((_, i) => i !== idx));
+
+      setMainImageIndex((prevMain) => {
+        if (idx === prevMain) return 0;
+        if (idx < prevMain) return Math.max(0, prevMain - 1);
+        return prevMain;
+      });
+    },
+    [setImages],
+  );
+
+  const clearImages = React.useCallback(() => {
+    setImages([]);
+    setMainImageIndex(0);
+  }, []);
+
+  // preview urls
+  const [imagePreviewUrls, setImagePreviewUrls] = React.useState<string[]>([]);
+  React.useEffect(() => {
+    if (images.length === 0) {
+      setImagePreviewUrls([]);
+      return;
+    }
+
+    const urls = images.map((f) => URL.createObjectURL(f));
+    setImagePreviewUrls(urls);
+
+    return () => {
+      urls.forEach((u) => {
+        try {
+          URL.revokeObjectURL(u);
+        } catch {
+          // noop
+        }
+      });
+    };
+  }, [images]);
+
+  // main index guard
+  React.useEffect(() => {
+    if (images.length === 0) {
+      if (mainImageIndex !== 0) setMainImageIndex(0);
+      return;
+    }
+    if (mainImageIndex < 0 || mainImageIndex > images.length - 1) {
+      setMainImageIndex(0);
+    }
+  }, [images.length, mainImageIndex]);
 
   // ============================================================
   // ✅ PriceRows（DTOから初期化し、以後はユーザー入力を保持）
@@ -187,6 +319,9 @@ export function useListCreate(): UseListCreateResult {
       productBlueprintId,
       tokenBlueprintId,
       decision,
+      listingTitle,
+      descriptionLen: description.length,
+      imagesCount: images.length,
       priceRowsCount: priceRows.length,
       priceRowsSample: priceRows.slice(0, 5),
     });
@@ -199,6 +334,9 @@ export function useListCreate(): UseListCreateResult {
     productBlueprintId,
     tokenBlueprintId,
     decision,
+    listingTitle,
+    description,
+    images,
     priceRows,
     resolvedParams,
   ]);
@@ -208,8 +346,11 @@ export function useListCreate(): UseListCreateResult {
     console.log("[inventory/useListCreate] create snapshot", {
       decision,
       priceRowsCount: priceRows.length,
+      listingTitleLen: listingTitle.length,
+      descriptionLen: description.length,
+      imagesCount: images.length,
     });
-  }, [decision, priceRows]);
+  }, [decision, priceRows, listingTitle, description, images]);
 
   // ============================================================
   // ✅ listCreate DTO 取得（service へ移譲）
@@ -359,9 +500,7 @@ export function useListCreate(): UseListCreateResult {
       assigneeName,
       loadingMembers: Boolean(loadingMembers),
       candidatesCount: Array.isArray(assigneeCandidates) ? assigneeCandidates.length : 0,
-      sample: Array.isArray(assigneeCandidates)
-        ? assigneeCandidates.slice(0, 5)
-        : [],
+      sample: Array.isArray(assigneeCandidates) ? assigneeCandidates.slice(0, 5) : [],
     });
   }, [assigneeName, assigneeCandidates, loadingMembers]);
 
@@ -392,6 +531,23 @@ export function useListCreate(): UseListCreateResult {
     priceRows,
     onChangePrice,
     priceCard,
+
+    listingTitle,
+    setListingTitle,
+    description,
+    setDescription,
+
+    images,
+    imagePreviewUrls,
+    mainImageIndex,
+    setMainImageIndex,
+    imageInputRef, // ✅ ここで型を value として使わない
+    openImagePicker,
+    onSelectImages,
+    onDropImages,
+    onDragOverImages,
+    removeImageAt,
+    clearImages,
 
     assigneeName,
     assigneeCandidates: (assigneeCandidates ?? []) as Array<{ id: string; name: string }>,

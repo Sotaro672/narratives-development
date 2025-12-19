@@ -42,7 +42,6 @@ type RouterDeps struct {
 	BrandUC          *usecase.BrandUsecase
 	CampaignUC       *usecase.CampaignUsecase
 	CompanyUC        *usecase.CompanyUsecase
-	DiscountUC       *usecase.DiscountUsecase
 	FulfillmentUC    *usecase.FulfillmentUsecase
 	InquiryUC        *usecase.InquiryUsecase
 	InventoryUC      *usecase.InventoryUsecase
@@ -60,7 +59,6 @@ type RouterDeps struct {
 	// ★ここだけ型を新パッケージに変更
 	ProductionUC       *productionapp.ProductionUsecase
 	ProductBlueprintUC *usecase.ProductBlueprintUsecase
-	SaleUC             *usecase.SaleUsecase
 	ShippingAddressUC  *usecase.ShippingAddressUsecase
 	TokenBlueprintUC   *usecase.TokenBlueprintUsecase
 	TokenOperationUC   *usecase.TokenOperationUsecase

@@ -1,5 +1,6 @@
 // frontend/console/inventory/src/application/listCreateService.tsx
 
+import type * as React from "react";
 import type { PriceRow } from "../../../list/src/presentation/hook/usePriceCard";
 
 import {
@@ -10,6 +11,9 @@ import {
 function s(v: unknown): string {
   return String(v ?? "").trim();
 }
+
+// ✅ NEW: RefObject は null を含むのが正しい（useRef(initial=null) のため）
+export type ImageInputRef = React.RefObject<HTMLInputElement | null>;
 
 export type ListCreateRouteParams = {
   inventoryId?: string;

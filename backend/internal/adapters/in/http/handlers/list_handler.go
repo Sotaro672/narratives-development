@@ -25,11 +25,22 @@ func NewListHandler(uc *usecase.ListUsecase) http.Handler {
 func (h *ListHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 
-	// /lists 直下（一覧）はこのユースケースでは未対応
+	// ✅ /lists 直下
 	if r.URL.Path == "/lists" {
-		w.WriteHeader(http.StatusNotImplemented)
-		_ = json.NewEncoder(w).Encode(map[string]string{"error": "not_implemented"})
-		return
+		switch r.Method {
+		case http.MethodPost:
+			h.create(w, r)
+			return
+		default:
+			// 一覧 GET はこのユースケースでは未対応（現状維持）
+			if r.Method == http.MethodGet {
+				w.WriteHeader(http.StatusNotImplemented)
+				_ = json.NewEncoder(w).Encode(map[string]string{"error": "not_implemented"})
+				return
+			}
+			methodNotAllowed(w)
+			return
+		}
 	}
 
 	if !strings.HasPrefix(r.URL.Path, "/lists/") {
@@ -90,6 +101,50 @@ func (h *ListHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	h.get(w, r, id)
+}
+
+// ✅ POST /lists
+// - frontend/console/inventory/src/presentation/pages/listCreate.tsx の入力を List レコードとして作成する想定
+// - ListUsecase に Create が無い場合は 501 を返す
+func (h *ListHandler) create(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+
+	// まずは domain の List をそのまま受ける（UI → API の形はこの JSON に合わせる）
+	// ※ List の JSON タグ/構造は listdom 側で定義されている前提
+	var item listdom.List
+	if err := json.NewDecoder(r.Body).Decode(&item); err != nil {
+		w.WriteHeader(http.StatusBadRequest)
+		_ = json.NewEncoder(w).Encode(map[string]string{"error": "invalid json"})
+		return
+	}
+
+	// createdAt が空（zero）でも良いが、最低限 now を与えたい場合はここで補完
+	// listdom.List のフィールドが分からないため「必須」にはしない（usecase 側で補完してOK）
+	now := time.Now().UTC()
+	_ = now
+
+	// 最も一般的な形：Create(ctx context.Context, item listdom.List)
+	if c, ok := any(h.uc).(interface {
+		Create(ctx interface {
+			Deadline() (time.Time, bool)
+			Done() <-chan struct{}
+			Err() error
+			Value(key any) any
+		}, item listdom.List) (listdom.List, error)
+	}); ok {
+		created, err := c.Create(ctx, item)
+		if err != nil {
+			writeListErr(w, err)
+			return
+		}
+		w.WriteHeader(http.StatusCreated)
+		_ = json.NewEncoder(w).Encode(created)
+		return
+	}
+
+	// Create が実装されていない
+	w.WriteHeader(http.StatusNotImplemented)
+	_ = json.NewEncoder(w).Encode(map[string]string{"error": "not_implemented_create"})
 }
 
 // GET /lists/{id}

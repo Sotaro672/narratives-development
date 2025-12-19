@@ -83,7 +83,6 @@ type Container struct {
 	BrandUC            *uc.BrandUsecase
 	CampaignUC         *uc.CampaignUsecase
 	CompanyUC          *uc.CompanyUsecase
-	DiscountUC         *uc.DiscountUsecase
 	InquiryUC          *uc.InquiryUsecase
 	InventoryUC        *uc.InventoryUsecase
 	InvoiceUC          *uc.InvoiceUsecase
@@ -97,7 +96,6 @@ type Container struct {
 	PrintUC            *uc.PrintUsecase
 	ProductionUC       *productionapp.ProductionUsecase
 	ProductBlueprintUC *uc.ProductBlueprintUsecase
-	SaleUC             *uc.SaleUsecase
 	ShippingAddressUC  *uc.ShippingAddressUsecase
 	TokenUC            *uc.TokenUsecase
 	TokenBlueprintUC   *uc.TokenBlueprintUsecase
@@ -310,7 +308,6 @@ func NewContainer(ctx context.Context) (*Container, error) {
 	brandRepo := fs.NewBrandRepositoryFS(fsClient)
 	campaignRepo := fs.NewCampaignRepositoryFS(fsClient)
 	companyRepo := fs.NewCompanyRepositoryFS(fsClient)
-	discountRepo := fs.NewDiscountRepositoryFS(fsClient)
 	inquiryRepo := fs.NewInquiryRepositoryFS(fsClient)
 	inventoryRepo := fs.NewInventoryRepositoryFS(fsClient)
 	invoiceRepo := fs.NewInvoiceRepositoryFS(fsClient)
@@ -331,7 +328,6 @@ func NewContainer(ctx context.Context) (*Container, error) {
 	productRepo := fs.NewProductRepositoryFS(fsClient)
 	productBlueprintRepo := fs.NewProductBlueprintRepositoryFS(fsClient)
 	productionRepo := fs.NewProductionRepositoryFS(fsClient)
-	saleRepo := fs.NewSaleRepositoryFS(fsClient)
 	shippingAddressRepo := fs.NewShippingAddressRepositoryFS(fsClient)
 	tokenBlueprintRepo := fs.NewTokenBlueprintRepositoryFS(fsClient)
 	tokenOperationRepo := fs.NewTokenOperationRepositoryFS(fsClient)
@@ -414,7 +410,7 @@ func NewContainer(ctx context.Context) (*Container, error) {
 
 	campaignUC := uc.NewCampaignUsecase(campaignRepo, nil, nil, nil)
 	companyUC := uc.NewCompanyUsecase(companyRepo)
-	discountUC := uc.NewDiscountUsecase(discountRepo)
+
 	inquiryUC := uc.NewInquiryUsecase(inquiryRepo, nil, nil)
 	inventoryUC := uc.NewInventoryUsecase(inventoryRepo)
 	invoiceUC := uc.NewInvoiceUsecase(invoiceRepo)
@@ -489,7 +485,6 @@ func NewContainer(ctx context.Context) (*Container, error) {
 	)
 	mintRequestQueryService.SetModelRepo(modelRepo)
 
-	saleUC := uc.NewSaleUsecase(saleRepo)
 	shippingAddressUC := uc.NewShippingAddressUsecase(shippingAddressRepo)
 
 	tokenMetadataBuilder := uc.NewTokenMetadataBuilder()
@@ -565,7 +560,6 @@ func NewContainer(ctx context.Context) (*Container, error) {
 		BrandUC:            brandUC,
 		CampaignUC:         campaignUC,
 		CompanyUC:          companyUC,
-		DiscountUC:         discountUC,
 		InquiryUC:          inquiryUC,
 		InventoryUC:        inventoryUC,
 		InvoiceUC:          invoiceUC,
@@ -579,7 +573,6 @@ func NewContainer(ctx context.Context) (*Container, error) {
 		PrintUC:            printUC,
 		ProductionUC:       productionUC,
 		ProductBlueprintUC: productBlueprintUC,
-		SaleUC:             saleUC,
 		ShippingAddressUC:  shippingAddressUC,
 		TokenUC:            tokenUC,
 		TokenBlueprintUC:   tokenBlueprintUC,
@@ -622,7 +615,6 @@ func (c *Container) RouterDeps() httpin.RouterDeps {
 		BrandUC:            c.BrandUC,
 		CampaignUC:         c.CampaignUC,
 		CompanyUC:          c.CompanyUC,
-		DiscountUC:         c.DiscountUC,
 		InquiryUC:          c.InquiryUC,
 		InventoryUC:        c.InventoryUC,
 		InvoiceUC:          c.InvoiceUC,
@@ -637,7 +629,6 @@ func (c *Container) RouterDeps() httpin.RouterDeps {
 		TokenUC:            c.TokenUC,
 		ProductionUC:       c.ProductionUC,
 		ProductBlueprintUC: c.ProductBlueprintUC,
-		SaleUC:             c.SaleUC,
 		ShippingAddressUC:  c.ShippingAddressUC,
 		TokenBlueprintUC:   c.TokenBlueprintUC,
 		TokenOperationUC:   c.TokenOperationUC,
