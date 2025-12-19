@@ -1,4 +1,3 @@
-// backend/internal/adapters/out/firestore/tokenBlueprint_repository_fs.go
 package firestore
 
 import (
@@ -67,6 +66,8 @@ func (r *TokenBlueprintRepositoryFS) GetByID(ctx context.Context, id string) (*t
 // ✅ NEW: GetPatchByID returns a lightweight Patch used by read-models (e.g. Inventory detail).
 // - 実装は Firestore から必要最小限を読み出し、tbdom.Patch に詰める。
 // - Patch のフィールド名が将来変わっても壊れにくいよう、reflect で「存在するフィールドだけ」セットする。
+// - ★重要: Patch 側が string / *string のどちらでも値が入るように「両方セット」する
+// ✅ NEW: GetPatchByID returns a lightweight Patch used by read-models (e.g. Inventory detail).
 func (r *TokenBlueprintRepositoryFS) GetPatchByID(ctx context.Context, id string) (tbdom.Patch, error) {
 	if r.Client == nil {
 		return tbdom.Patch{}, errors.New("firestore client is nil")
@@ -113,19 +114,41 @@ func (r *TokenBlueprintRepositoryFS) GetPatchByID(ctx context.Context, id string
 		mintedBool = false
 	}
 
+	trim := func(s string) string { return strings.TrimSpace(s) }
+
+	// ★ 先に patch を作る（これが無いと undefined: patch になる）
 	patch := tbdom.Patch{}
-	setPatchString(&patch, []string{"ID", "TokenBlueprintID"}, strings.TrimSpace(id))
-	setPatchString(&patch, []string{"Name", "TokenName", "TokenBlueprintName"}, strings.TrimSpace(raw.Name))
-	setPatchString(&patch, []string{"Symbol"}, strings.TrimSpace(raw.Symbol))
-	setPatchString(&patch, []string{"BrandID"}, strings.TrimSpace(raw.BrandID))
-	setPatchString(&patch, []string{"CompanyID"}, strings.TrimSpace(raw.CompanyID))
-	setPatchString(&patch, []string{"Description"}, strings.TrimSpace(raw.Description))
+
+	// ★ Patch が string / *string どちらでも入るように両方セットする
+	setBoth := func(names []string, v string) {
+		v = trim(v)
+		// string フィールドがあれば入る
+		setPatchString(&patch, names, v)
+		// *string フィールドがあれば入る（v=="" は nil にしたいので弾く）
+		if v != "" {
+			setPatchPtrString(&patch, names, v)
+		}
+	}
+
+	// id
+	setPatchString(&patch, []string{"ID", "TokenBlueprintID"}, trim(id))
+
+	// name/symbol
+	setBoth([]string{"Name", "TokenName", "TokenBlueprintName"}, raw.Name)
+	setBoth([]string{"Symbol"}, raw.Symbol)
+
+	// ★重要: list_create_query.go は patch.BrandID(*string) を参照するので必ず入れる
+	setBoth([]string{"BrandID", "BrandId"}, raw.BrandID)
+	setBoth([]string{"CompanyID", "CompanyId"}, raw.CompanyID)
+
+	// description / metadataUri / minted
+	setBoth([]string{"Description"}, raw.Description)
 	setPatchBool(&patch, []string{"Minted"}, mintedBool)
-	setPatchString(&patch, []string{"MetadataURI", "MetadataUrl", "MetadataURL"}, strings.TrimSpace(raw.MetadataURI))
+	setBoth([]string{"MetadataURI", "MetadataUrl", "MetadataURL"}, raw.MetadataURI)
 
 	// iconId は *string / string どちらでも入れられるようにする
 	if raw.IconID != nil {
-		v := strings.TrimSpace(*raw.IconID)
+		v := trim(*raw.IconID)
 		if v != "" {
 			setPatchPtrString(&patch, []string{"IconID", "IconId"}, v)
 			setPatchString(&patch, []string{"IconID", "IconId"}, v)
@@ -795,10 +818,7 @@ func docToTokenBlueprint(doc *firestore.DocumentSnapshot) (tbdom.TokenBlueprint,
 		return tbdom.TokenBlueprint{}, err
 	}
 
-	// minted は Firestore に存在しない旧データもある前提で、
-	// - bool 型: そのまま利用
-	// - string 型: "minted" → true, それ以外（"notYet"/空/未知）は false
-	// - nil/その他: false
+	// minted 互換
 	var mintedBool bool
 	switch v := raw.Minted.(type) {
 	case bool:
@@ -874,7 +894,6 @@ func matchTBFilter(tb tbdom.TokenBlueprint, f tbdom.Filter) bool {
 	if len(f.BrandIDs) > 0 && !inList(tb.BrandID, f.BrandIDs) {
 		return false
 	}
-	// companyId フィルタ
 	if len(f.CompanyIDs) > 0 && !inList(tb.CompanyID, f.CompanyIDs) {
 		return false
 	}

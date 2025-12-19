@@ -28,7 +28,7 @@ import (
 	// ★ ProductionUsecase（application/production）
 	productionapp "narratives/internal/application/production"
 
-	// ★ CompanyProductionQueryService / MintRequestQueryService / InventoryQuery
+	// ★ CompanyProductionQueryService / MintRequestQueryService / InventoryQuery / ListCreateQuery
 	companyquery "narratives/internal/application/query"
 
 	resolver "narratives/internal/application/resolver"
@@ -51,9 +51,6 @@ import (
 // ========================================
 // Container (Firestore + Firebase edition)
 // ========================================
-//
-// Firestore クライアントと Firebase Auth クライアントを中心に、
-// 各 Repository と Usecase / QueryService を初期化して束ねる。
 type Container struct {
 	// Infra
 	Config       *appcfg.Config
@@ -118,6 +115,9 @@ type Container struct {
 	// ★ NEW: Inventory detail の read-model assembler（GET /inventory/...）
 	InventoryQuery *companyquery.InventoryQuery
 
+	// ✅ NEW: listCreate 画面用 DTO（GET /inventory/list-create/...）
+	ListCreateQuery *companyquery.ListCreateQuery
+
 	// ★ 検品アプリ用 ProductUsecase（/inspector/products/{id}）
 	ProductUC *uc.ProductUsecase
 
@@ -146,8 +146,6 @@ type Container struct {
 // ============================================================
 
 // pbQueryRepoAdapter adapts ProductBlueprintRepositoryFS to query.ProductBlueprintQueryRepo.
-//
-// ProductBlueprintRepositoryFS.GetByID が value 戻りの場合は、ここも value に合わせる。
 type pbQueryRepoAdapter struct {
 	repo interface {
 		ListIDsByCompany(ctx context.Context, companyID string) ([]string, error)
@@ -164,7 +162,6 @@ func (a *pbQueryRepoAdapter) GetByID(ctx context.Context, id string) (productbpd
 }
 
 // pbIDsByCompanyAdapter adapts ProductBlueprintRepositoryFS to query.productBlueprintIDsByCompanyReader
-// (InventoryQuery 用: ListIDsByCompanyID を満たす)
 type pbIDsByCompanyAdapter struct {
 	repo interface {
 		ListIDsByCompany(ctx context.Context, companyID string) ([]string, error)
@@ -176,7 +173,6 @@ func (a *pbIDsByCompanyAdapter) ListIDsByCompanyID(ctx context.Context, companyI
 }
 
 // pbPatchByIDAdapter adapts ProductBlueprintRepositoryFS to query.productBlueprintPatchReader
-// (InventoryQuery 用: GetPatchByID を満たす)
 type pbPatchByIDAdapter struct {
 	repo interface {
 		GetPatchByID(ctx context.Context, id string) (productbpdom.Patch, error)
@@ -190,16 +186,12 @@ func (a *pbPatchByIDAdapter) GetPatchByID(ctx context.Context, id string) (produ
 // ============================================================
 // Adapter: MintRepositoryFS -> mintdom.MintRepository (Update補完)
 // ============================================================
-//
-// 現状の *fs.MintRepositoryFS が mintdom.MintRepository の Update を実装していないため、
-// DI 側でラップして Update を補完する。
-// ※ Create/GetByID/ListByProductionID... 等は埋め込みで MintRepositoryFS の実装をそのまま使う。
+
 type mintRepoWithUpdate struct {
 	*fs.MintRepositoryFS
 	Client *firestore.Client
 }
 
-// Update は Firestore の mints ドキュメントを MergeAll で更新する。
 func (r *mintRepoWithUpdate) Update(ctx context.Context, m mintdom.Mint) (mintdom.Mint, error) {
 	if r == nil || r.Client == nil {
 		return mintdom.Mint{}, errorsNew("mint repo is nil")
@@ -242,7 +234,6 @@ func (r *mintRepoWithUpdate) Update(ctx context.Context, m mintdom.Mint) (mintdo
 	return m, nil
 }
 
-// errorsNew: container.go 内でのみ使う最小ヘルパ（標準 errors.New の import 増加回避用）
 func errorsNew(msg string) error { return &simpleErr{s: msg} }
 
 type simpleErr struct{ s string }
@@ -252,8 +243,7 @@ func (e *simpleErr) Error() string { return e.s }
 // ========================================
 // NewContainer
 // ========================================
-//
-// Firestore / Firebase クライアントを初期化し、各 Usecase / QueryService を構築して返す。
+
 func NewContainer(ctx context.Context) (*Container, error) {
 	// 1. Load config
 	cfg := appcfg.Load()
@@ -271,30 +261,29 @@ func NewContainer(ctx context.Context) (*Container, error) {
 	// 1.5 Solana ミント権限ウォレットの鍵を Secret Manager から読み込む
 	mintKey, err := solanainfra.LoadMintAuthorityKey(
 		ctx,
-		cfg.FirestoreProjectID,             // = narratives-development-26c2d
-		"narratives-solana-mint-authority", // Secret 名
+		cfg.FirestoreProjectID,
+		"narratives-solana-mint-authority",
 	)
 	if err != nil {
 		log.Printf("[container] WARN: failed to load mint authority key: %v", err)
-		// 開発中は nil 許容
 		mintKey = nil
 	}
 
-	// 2. Initialize Firestore client (Application Default Credentials 前提)
+	// 2. Initialize Firestore client
 	fsClient, err := firestore.NewClient(ctx, cfg.FirestoreProjectID)
 	if err != nil {
 		return nil, err
 	}
 	log.Println("[container] Firestore connected to project:", cfg.FirestoreProjectID)
 
-	// 2.5 Initialize GCS client (Token icon uploader etc.)
+	// 2.5 Initialize GCS client
 	gcsClient, err := storage.NewClient(ctx)
 	if err != nil {
 		return nil, err
 	}
 	log.Println("[container] GCS storage client initialized")
 
-	// 3. Initialize Firebase App & Auth（AuthMiddleware 用）
+	// 3. Initialize Firebase App & Auth
 	var fbApp *firebase.App
 	var fbAuth *firebaseauth.Client
 
@@ -313,7 +302,7 @@ func NewContainer(ctx context.Context) (*Container, error) {
 		}
 	}
 
-	// 4. Outbound adapters (repositories) — Firestore 版
+	// 4. Outbound adapters (repositories)
 	accountRepo := fs.NewAccountRepositoryFS(fsClient)
 	announcementRepo := fs.NewAnnouncementRepositoryFS(fsClient)
 	avatarRepo := fs.NewAvatarRepositoryFS(fsClient)
@@ -350,13 +339,9 @@ func NewContainer(ctx context.Context) (*Container, error) {
 	userRepo := fs.NewUserRepositoryFS(fsClient)
 	walletRepo := fs.NewWalletRepositoryFS(fsClient)
 
-	// ★ PrintLog 用リポジトリ
 	printLogRepo := fs.NewPrintLogRepositoryFS(fsClient)
-
-	// ★ Inspection 用リポジトリ（inspections）
 	inspectionRepo := fs.NewInspectionRepositoryFS(fsClient)
 
-	// ★ History repositories
 	productBlueprintHistoryRepo := fs.NewProductBlueprintHistoryRepositoryFS(fsClient)
 	modelHistoryRepo := fs.NewModelHistoryRepositoryFS(fsClient)
 
@@ -366,44 +351,40 @@ func NewContainer(ctx context.Context) (*Container, error) {
 		fsRepo: invitationTokenFSRepo,
 	}
 
-	// ★ Company / Brand 用ドメインサービス（表示名解決用）
+	// ★ Company / Brand 用ドメインサービス
 	companySvc := companydom.NewService(companyRepo)
 	brandSvc := branddom.NewService(brandRepo)
 
-	// ★ Solana Brand Wallet Service（ブランド専用ウォレット開設 + 秘密鍵 SecretManager 保管）
+	// ★ Solana Brand Wallet Service
 	brandWalletSvc := solanainfra.NewBrandWalletService(cfg.FirestoreProjectID)
 
-	// ★ member.Service（表示名解決用）
+	// ★ member.Service
 	memberSvc := memdom.NewService(memberRepo)
 
 	// ★ productBlueprint.Service（ProductName / BrandID 解決用）
-	pbDomainRepo := &productBlueprintDomainRepoAdapter{
-		repo: productBlueprintRepo,
-	}
+	pbDomainRepo := &productBlueprintDomainRepoAdapter{repo: productBlueprintRepo}
 	pbSvc := productbpdom.NewService(pbDomainRepo)
 
 	// ★ MintRequestPort（TokenUsecase 用）
 	mintRequestPort := fs.NewMintRequestPortFS(
 		fsClient,
-		"mints",            // mintsColName
-		"token_blueprints", // tokenBlueprintsColName
-		"brands",           // brandsColName
+		"mints",
+		"token_blueprints",
+		"brands",
 	)
 
-	// ★ NameResolver（ID→名前/型番解決）
-	tokenBlueprintNameRepo := &tokenBlueprintNameRepoAdapter{
-		repo: tokenBlueprintRepo,
-	}
+	// ★ NameResolver
+	tokenBlueprintNameRepo := &tokenBlueprintNameRepoAdapter{repo: tokenBlueprintRepo}
 	nameResolver := resolver.NewNameResolver(
-		brandRepo,              // BrandNameRepository
-		companyRepo,            // CompanyNameRepository
-		productBlueprintRepo,   // ProductBlueprintNameRepository
-		memberRepo,             // MemberNameRepository
-		modelRepo,              // ModelNumberRepository
-		tokenBlueprintNameRepo, // TokenBlueprintNameRepository
+		brandRepo,
+		companyRepo,
+		productBlueprintRepo,
+		memberRepo,
+		modelRepo,
+		tokenBlueprintNameRepo,
 	)
 
-	// ★ Token icon repository (GCS: public bucket)
+	// ★ Token icon repository (GCS)
 	tokenIconRepo := gcso.NewTokenIconRepositoryGCS(gcsClient, cfg.TokenIconBucket)
 
 	// ★ Token contents repository (GCS)
@@ -415,39 +396,20 @@ func NewContainer(ctx context.Context) (*Container, error) {
 
 	// 5. Application-layer usecases
 
-	// ★ TokenUsecase（Solana ミント権限ウォレット + MintRequestPort）
+	// ★ TokenUsecase
 	var tokenUC *uc.TokenUsecase
 	if mintKey != nil {
 		solanaClient := solanainfra.NewMintClient(mintKey)
-		tokenUC = uc.NewTokenUsecase(
-			solanaClient,    // tokendom.MintAuthorityWalletPort
-			mintRequestPort, // usecase.MintRequestPort
-		)
+		tokenUC = uc.NewTokenUsecase(solanaClient, mintRequestPort)
 	} else {
-		tokenUC = uc.NewTokenUsecase(
-			nil,             // tokendom.MintAuthorityWalletPort (nil 許容)
-			mintRequestPort, // usecase.MintRequestPort
-		)
+		tokenUC = uc.NewTokenUsecase(nil, mintRequestPort)
 	}
 
 	accountUC := uc.NewAccountUsecase(accountRepo)
-
-	announcementUC := uc.NewAnnouncementUsecase(
-		announcementRepo,
-		nil, // attachmentRepo not used yet
-		nil, // object storage not wired yet
-	)
-
-	avatarUC := uc.NewAvatarUsecase(
-		avatarRepo,
-		nil,
-		nil,
-		nil,
-	)
-
+	announcementUC := uc.NewAnnouncementUsecase(announcementRepo, nil, nil)
+	avatarUC := uc.NewAvatarUsecase(avatarRepo, nil, nil, nil)
 	billingAddressUC := uc.NewBillingAddressUsecase(billingAddressRepo)
 
-	// ★ walletSvc 付き BrandUsecase
 	brandUC := uc.NewBrandUsecaseWithWallet(brandRepo, memberRepo, brandWalletSvc)
 
 	campaignUC := uc.NewCampaignUsecase(campaignRepo, nil, nil, nil)
@@ -460,7 +422,6 @@ func NewContainer(ctx context.Context) (*Container, error) {
 	memberUC := uc.NewMemberUsecase(memberRepo)
 	messageUC := uc.NewMessageUsecase(messageRepo, nil, nil)
 
-	// ★ ModelUsecase に HistoryRepo を注入
 	modelUC := uc.NewModelUsecase(modelRepo, modelHistoryRepo)
 
 	orderUC := uc.NewOrderUsecase(orderRepo)
@@ -475,41 +436,30 @@ func NewContainer(ctx context.Context) (*Container, error) {
 		nameResolver,
 	)
 
-	// ★ ProductionUsecase（application/production）
 	productionUC := productionapp.NewProductionUsecase(
-		productionRepo, // ProductionRepo
-		pbSvc,          // *productBlueprint.Service
-		nameResolver,   // *resolver.NameResolver
+		productionRepo,
+		pbSvc,
+		nameResolver,
 	)
 
-	// ★ CompanyProductionQueryService（GET /productions 一覧専用）
-	pbQueryRepo := &pbQueryRepoAdapter{
-		repo: productBlueprintRepo,
-	}
+	pbQueryRepo := &pbQueryRepoAdapter{repo: productBlueprintRepo}
 	companyProductionQueryService := companyquery.NewCompanyProductionQueryService(
 		pbQueryRepo,
 		productionRepo,
 		nameResolver,
 	)
 
-	// ★ ProductBlueprintUsecase に HistoryRepo を注入
 	productBlueprintUC := uc.NewProductBlueprintUsecase(
 		productBlueprintRepo,
 		productBlueprintHistoryRepo,
 	)
 
-	// ★ products テーブル用アダプタ（inspection.Result → product.Result 変換）
-	inspectionProductRepo := &inspectionProductRepoAdapter{
-		repo: productRepo,
-	}
-
-	// ★ InspectionUsecase（検品アプリ専用）※ moved
+	inspectionProductRepo := &inspectionProductRepoAdapter{repo: productRepo}
 	inspectionUC := inspectionapp.NewInspectionUsecase(
 		inspectionRepo,
 		inspectionProductRepo,
 	)
 
-	// ★ ProductUsecase（Inspector 詳細画面用）
 	productQueryRepo := &productQueryRepoAdapter{
 		productRepo:          productRepo,
 		modelRepo:            modelRepo,
@@ -518,7 +468,6 @@ func NewContainer(ctx context.Context) (*Container, error) {
 	}
 	productUC := uc.NewProductUsecase(productQueryRepo, brandSvc, companySvc)
 
-	// ★ MintUsecase（MintRequest / NFT 発行候補一覧など）
 	mintUC := mintapp.NewMintUsecase(
 		productBlueprintRepo,
 		productionRepo,
@@ -530,36 +479,27 @@ func NewContainer(ctx context.Context) (*Container, error) {
 		inspectionRepo,
 		tokenUC,
 	)
-
-	// ✅ 追加: MintUsecase に NameResolver を差し込む（createdByName 解決用）
 	mintUC.SetNameResolver(nameResolver)
-
-	// ✅ MintUsecase に InventoryUsecase を差し込む
 	mintUC.SetInventoryUsecase(inventoryUC)
 
-	// ★ NEW: MintRequestQueryService（GET /mint/requests 一覧専用）
 	mintRequestQueryService := companyquery.NewMintRequestQueryService(
 		mintUC,
 		productionUC,
 		nameResolver,
 	)
-	// ✅ 追加: MintRequestQueryService に modelRepo を差し込む
 	mintRequestQueryService.SetModelRepo(modelRepo)
 
 	saleUC := uc.NewSaleUsecase(saleRepo)
 	shippingAddressUC := uc.NewShippingAddressUsecase(shippingAddressRepo)
 
-	// ★ TokenBlueprint 用メタデータビルダー
 	tokenMetadataBuilder := uc.NewTokenMetadataBuilder()
-
-	// ★ TokenBlueprintUsecase に member.Service と Arweave 関連を注入
 	tokenBlueprintUC := uc.NewTokenBlueprintUsecase(
-		tokenBlueprintRepo,   // tbRepo
-		tokenContentsRepo,    // tcRepo (GCS)
-		tokenIconRepo,        // tiRepo (GCS)
-		memberSvc,            // *member.Service
-		arweaveUploader,      // ArweaveUploader
-		tokenMetadataBuilder, // *TokenMetadataBuilder
+		tokenBlueprintRepo,
+		tokenContentsRepo,
+		tokenIconRepo,
+		memberSvc,
+		arweaveUploader,
+		tokenMetadataBuilder,
 	)
 
 	tokenOperationUC := uc.NewTokenOperationUsecase(tokenOperationRepo)
@@ -567,13 +507,9 @@ func NewContainer(ctx context.Context) (*Container, error) {
 	userUC := uc.NewUserUsecase(userRepo)
 	walletUC := uc.NewWalletUsecase(walletRepo)
 
-	// ★ Invitation 用メーラー
-	invitationMailer := mailadp.NewInvitationMailerWithSendGrid(
-		companySvc,
-		brandSvc,
-	)
+	invitationMailer := mailadp.NewInvitationMailerWithSendGrid(companySvc, brandSvc)
 
-	// ★ Invitation 用 Usecase（Query / Command）
+	// ✅ invitationTokenUCRepo を定義済みなので undefined にならない
 	invitationQueryUC := uc.NewInvitationService(invitationTokenUCRepo, memberRepo)
 	invitationCommandUC := uc.NewInvitationCommandService(
 		invitationTokenUCRepo,
@@ -581,24 +517,27 @@ func NewContainer(ctx context.Context) (*Container, error) {
 		invitationMailer,
 	)
 
-	// ★ auth/bootstrap 用 Usecase
 	authBootstrapSvc := &authuc.BootstrapService{
-		Members: &authMemberRepoAdapter{
-			repo: memberRepo,
-		},
+		Members: &authMemberRepoAdapter{repo: memberRepo},
 		Companies: &authCompanyRepoAdapter{
 			repo: companyRepo,
 		},
 	}
 
-	// ★ NEW: InventoryQuery（GET /inventory/...）
-	// want: (inventoryReader, productBlueprintIDsByCompanyReader, productBlueprintPatchReader, tokenBlueprintPatchReader, *resolver.NameResolver)
+	// ★ NEW: InventoryQuery
 	inventoryQuery := companyquery.NewInventoryQueryWithTokenBlueprintPatch(
-		inventoryRepo, // invReader
-		&pbIDsByCompanyAdapter{repo: productBlueprintRepo}, // pbIDsByCompanyReader
-		&pbPatchByIDAdapter{repo: productBlueprintRepo},    // productBlueprintPatchReader
-		&tbPatchByIDAdapter{repo: tokenBlueprintRepo},      // ✅ tokenBlueprintPatchReader（adapters.go）
-		nameResolver, // NameResolver
+		inventoryRepo,
+		&pbIDsByCompanyAdapter{repo: productBlueprintRepo},
+		&pbPatchByIDAdapter{repo: productBlueprintRepo},
+		&tbPatchByIDAdapter{repo: tokenBlueprintRepo}, // adapters.go 側
+		nameResolver,
+	)
+
+	// ✅ NEW: ListCreateQuery（pb/tb -> brandName/productName/tokenName）
+	listCreateQuery := companyquery.NewListCreateQuery(
+		&pbPatchByIDAdapter{repo: productBlueprintRepo},
+		&tbPatchByIDAdapter{repo: tokenBlueprintRepo},
+		nameResolver,
 	)
 
 	// 6. Assemble container
@@ -651,7 +590,8 @@ func NewContainer(ctx context.Context) (*Container, error) {
 		CompanyProductionQueryService: companyProductionQueryService,
 		MintRequestQueryService:       mintRequestQueryService,
 
-		InventoryQuery: inventoryQuery,
+		InventoryQuery:  inventoryQuery,
+		ListCreateQuery: listCreateQuery, // ✅ 追加
 
 		ProductUC:    productUC,
 		InspectionUC: inspectionUC,
@@ -709,6 +649,10 @@ func (c *Container) RouterDeps() httpin.RouterDeps {
 
 		InventoryQuery: c.InventoryQuery,
 
+		// ✅ router.go の RouterDeps にこのフィールドが存在する前提
+		// （もし router.go に未追加なら、RouterDeps に ListCreateQuery を追加してください）
+		ListCreateQuery: c.ListCreateQuery,
+
 		ProductUC:    c.ProductUC,
 		InspectionUC: c.InspectionUC,
 
@@ -733,8 +677,7 @@ func (c *Container) RouterDeps() httpin.RouterDeps {
 // ========================================
 // Close
 // ========================================
-//
-// Firestore / GCS クライアントを安全に閉じる。
+
 func (c *Container) Close() error {
 	if c.Firestore != nil {
 		_ = c.Firestore.Close()

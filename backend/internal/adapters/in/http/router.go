@@ -18,7 +18,7 @@ import (
 	// ★ new: Production 用の新パッケージ
 	productionapp "narratives/internal/application/production"
 
-	// ★ new: Query services (CompanyProductionQueryService / InventoryQuery)
+	// ★ new: Query services (CompanyProductionQueryService / InventoryQuery / ListCreateQuery)
 	companyquery "narratives/internal/application/query"
 
 	// ハンドラ群
@@ -74,6 +74,9 @@ type RouterDeps struct {
 	// ★ NEW: Inventory detail の read-model assembler（/inventory/...）
 	InventoryQuery *companyquery.InventoryQuery
 
+	// ✅ NEW: listCreate DTO assembler（/inventory/list-create/...）
+	ListCreateQuery *companyquery.ListCreateQuery
+
 	// ★ NameResolver（ID→名前/型番解決）
 	NameResolver *resolver.NameResolver
 
@@ -103,6 +106,7 @@ type RouterDeps struct {
 
 	// Message 用の Firestore Repository
 	MessageRepo *msgrepo.MessageRepositoryFS
+
 	// ★ MintRequest の query（productionIds を company 境界で取得する等に使う）
 	MintRequestQueryService handlers.MintRequestQueryService
 }
@@ -237,7 +241,12 @@ func NewRouter(deps RouterDeps) http.Handler {
 	// ================================
 	if deps.InventoryUC != nil {
 		// ✅ Query を注入（nil の場合は /inventory 側が NotImplemented を返す想定）
-		inventoryH := handlers.NewInventoryHandler(deps.InventoryUC, deps.InventoryQuery)
+		// ✅ listCreateQuery も注入する
+		inventoryH := handlers.NewInventoryHandlerWithListCreateQuery(
+			deps.InventoryUC,
+			deps.InventoryQuery,
+			deps.ListCreateQuery,
+		)
 
 		var h http.Handler = inventoryH
 		if authMw != nil {
@@ -249,8 +258,6 @@ func NewRouter(deps RouterDeps) http.Handler {
 		mux.Handle("/inventories/", h)
 
 		// Query (read-only DTO)
-		// - GET /inventory/{inventoryId}
-		// - GET /inventory/by-product-blueprint/{productBlueprintId}
 		mux.Handle("/inventory", h)
 		mux.Handle("/inventory/", h)
 	}
@@ -377,14 +384,10 @@ func NewRouter(deps RouterDeps) http.Handler {
 	// ================================
 	// Productions
 	// ================================
-	// 方針:
-	// - GET /productions は CompanyProductionQueryService
-	// - CRUD は ProductionUsecase
-	// NewProductionHandler(companyQueryService, uc) の順で渡す
 	if deps.ProductionUC != nil && deps.CompanyProductionQueryService != nil {
 		productionH := handlers.NewProductionHandler(
-			deps.CompanyProductionQueryService, // ★ 第1引数: QueryService
-			deps.ProductionUC,                  // ★ 第2引数: Usecase
+			deps.CompanyProductionQueryService,
+			deps.ProductionUC,
 		)
 
 		var h http.Handler = productionH
@@ -435,9 +438,9 @@ func NewRouter(deps RouterDeps) http.Handler {
 			deps.MintUC,
 			deps.TokenUC,
 			deps.NameResolver,
-			deps.ProductionUC,            // ★ 追加（既存）
-			deps.MintRequestQueryService, // ★ NEW: query service を渡す
-			nil,                          // ★ 追加: inventory.RepositoryPort（現状 RouterDeps に無いので nil で満たす）
+			deps.ProductionUC,
+			deps.MintRequestQueryService,
+			nil,
 		)
 
 		if mh, ok := mintH.(*handlers.MintHandler); ok {
@@ -449,15 +452,7 @@ func NewRouter(deps RouterDeps) http.Handler {
 			h = authMw.Handler(h)
 		}
 
-		// ✅ MintHandler は /mint 配下をサブツリーで受けるのが安全（/mint/mints/{id} を確実に拾う）
 		mux.Handle("/mint/", h)
-
-		// （任意）明示したい場合は残してOKだが、/mint/ があれば不要
-		// mux.Handle("/mint/inspections", h)
-		// mux.Handle("/mint/inspections/", h)
-		// mux.Handle("/mint/mints", h)
-		// mux.Handle("/mint/mints/", h)
-		// mux.Handle("/mint/requests", h)
 	}
 
 	return mux
