@@ -47,7 +47,8 @@ export default function InventoryDetail() {
   }, [navigate]);
 
   // ✅ hook（方針A）: pbId + tbId -> inventoryIds -> details -> merge
-  const { rows, loading, error, vm } = useInventoryDetail(
+  // ✅ 最小差分: tokenBlueprintPatch も受け取って、こちらを正として使う
+  const { rows, loading, error, vm, tokenBlueprintPatch } = useInventoryDetail(
     productBlueprintId,
     tokenBlueprintId,
   );
@@ -72,17 +73,20 @@ export default function InventoryDetail() {
 
   // ============================================================
   // ✅ TokenBlueprintCard (view only) 用の VM/Handlers を組み立て
-  // 重要:
-  // - TokenBlueprintCard は vm.name を表示する
-  // - 在庫詳細で取れているのは tokenBlueprintPatch.tokenName のため
-  //   「tokenName -> name」へ正しくマップする
+  // 最小差分:
+  // - tokenBlueprintPatch を正とする（hook state で取得した patch を優先）
+  // - vm.tokenBlueprintPatch はフォールバックとしてのみ利用
   // ============================================================
 
-  const tbPatchAny =
-    (vm as any)?.tokenBlueprintPatch ??
-    (vm as any)?.tokenBlueprint ??
-    (vm as any)?.TokenBlueprint ??
-    null;
+  const tbPatchAny = React.useMemo(() => {
+    return (
+      (tokenBlueprintPatch as any) ??
+      (vm as any)?.tokenBlueprintPatch ??
+      (vm as any)?.tokenBlueprint ??
+      (vm as any)?.TokenBlueprint ??
+      null
+    );
+  }, [tokenBlueprintPatch, vm]);
 
   const tokenCardVM: TokenBlueprintCardViewModel = React.useMemo(() => {
     const tokenName = s(tbPatchAny?.tokenName ?? tbPatchAny?.TokenName);
@@ -97,6 +101,8 @@ export default function InventoryDetail() {
     const description = String(
       tbPatchAny?.description ?? tbPatchAny?.Description ?? "",
     );
+
+    // ✅ iconUrl の揺れ吸収（tokenBlueprintPatch を正としつつ柔軟に拾う）
     const iconUrl =
       s(tbPatchAny?.iconUrl) ||
       s(tbPatchAny?.iconURL) ||
@@ -120,7 +126,6 @@ export default function InventoryDetail() {
       isEditMode: false,
       brandOptions: [],
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tbId, tbPatchAny]);
 
   const tokenCardHandlers: TokenBlueprintCardHandlers = React.useMemo(
