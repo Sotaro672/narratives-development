@@ -1,6 +1,4 @@
 // frontend/console/inventory/src/presentation/pages/listCreate.tsx
-
-import * as React from "react";
 import PageStyle from "../../../../shell/src/layout/PageStyle/PageStyle";
 
 import { Card, CardContent } from "../../../../shell/src/shared/ui/card";

@@ -1,38 +1,17 @@
 // frontend/console/inventory/src/infrastructure/http/inventoryRepositoryHTTP.ts
 
-// Firebase Auth から ID トークンを取得
-import { auth } from "../../../../shell/src/auth/infrastructure/config/firebaseClient";
+// ✅ API_BASE 互換が必要な箇所があるかもしれないので re-export（任意）
+export { API_BASE } from "../api/inventoryApi";
 
-/**
- * Backend base URL
- * - .env の VITE_BACKEND_BASE_URL を優先
- * - 未設定時は Cloud Run の固定 URL を利用
- */
-const ENV_BASE =
-  ((import.meta as any).env?.VITE_BACKEND_BASE_URL as string | undefined)?.replace(
-    /\/+$/g,
-    "",
-  ) ?? "";
-
-const FALLBACK_BASE =
-  "https://narratives-backend-871263659099.asia-northeast1.run.app";
-
-export const API_BASE = ENV_BASE || FALLBACK_BASE;
-
-// ---------------------------------------------------------
-// 共通: Firebase トークン取得
-// ---------------------------------------------------------
-async function getIdTokenOrThrow(): Promise<string> {
-  const user = auth.currentUser;
-  if (!user) {
-    throw new Error("Not authenticated");
-  }
-  const token = await user.getIdToken();
-  if (!token) {
-    throw new Error("Failed to acquire ID token");
-  }
-  return token;
-}
+import {
+  getInventoryListRaw,
+  getProductBlueprintRaw,
+  getPrintedProductBlueprintsRaw,
+  getInventoryIDsByProductAndTokenRaw,
+  getTokenBlueprintPatchRaw,
+  getListCreateRaw,
+  getInventoryDetailRaw,
+} from "../api/inventoryApi";
 
 function s(v: unknown): string {
   return String(v ?? "").trim();
@@ -98,24 +77,7 @@ function normalizeInventoryListRow(raw: any): InventoryListRowDTO | null {
  * - 戻り値は "必ず tokenBlueprintId を含む" 正規化済み配列
  */
 export async function fetchInventoryListDTO(): Promise<InventoryListRowDTO[]> {
-  const token = await getIdTokenOrThrow();
-  const url = `${API_BASE}/inventory`;
-
-  const res = await fetch(url, {
-    method: "GET",
-    headers: {
-      Authorization: `Bearer ${token}`,
-    },
-  });
-
-  if (!res.ok) {
-    const text = await res.text().catch(() => "");
-    throw new Error(
-      `Failed to fetch inventory list: ${res.status} ${res.statusText} ${text}`,
-    );
-  }
-
-  const data = (await res.json()) as any;
+  const data = (await getInventoryListRaw()) as any;
 
   // ✅ 互換吸収を減らす：基本は配列を期待。どうしても違う場合のみ items を許容。
   const rawItems: any[] = Array.isArray(data)
@@ -124,11 +86,9 @@ export async function fetchInventoryListDTO(): Promise<InventoryListRowDTO[]> {
       ? data.items
       : [];
 
-  const mapped = rawItems
+  return rawItems
     .map(normalizeInventoryListRow)
     .filter((x): x is InventoryListRowDTO => x !== null);
-
-  return mapped;
 }
 
 /**
@@ -140,30 +100,12 @@ export async function fetchInventoryListDTO(): Promise<InventoryListRowDTO[]> {
 export async function fetchInventoryProductSummary(
   productBlueprintId: string,
 ): Promise<InventoryProductSummary> {
-  const token = await getIdTokenOrThrow();
-
   const pbId = s(productBlueprintId);
   if (!pbId) throw new Error("productBlueprintId is empty");
 
-  const url = `${API_BASE}/product-blueprints/${encodeURIComponent(pbId)}`;
+  const data = await getProductBlueprintRaw(pbId);
 
-  const res = await fetch(url, {
-    method: "GET",
-    headers: {
-      Authorization: `Bearer ${token}`,
-    },
-  });
-
-  if (!res.ok) {
-    const text = await res.text().catch(() => "");
-    throw new Error(
-      `Failed to fetch product blueprint: ${res.status} ${res.statusText} ${text}`,
-    );
-  }
-
-  const data = await res.json();
-
-  const mapped: InventoryProductSummary = {
+  return {
     id: s(data?.id),
     productName: s(data?.productName),
     brandId: s(data?.brandId),
@@ -171,8 +113,6 @@ export async function fetchInventoryProductSummary(
     assigneeId: s(data?.assigneeId),
     assigneeName: data?.assigneeName ? s(data.assigneeName) : undefined,
   };
-
-  return mapped;
 }
 
 /**
@@ -184,27 +124,10 @@ export async function fetchInventoryProductSummary(
 export async function fetchPrintedInventorySummaries(): Promise<
   InventoryProductSummary[]
 > {
-  const token = await getIdTokenOrThrow();
-  const url = `${API_BASE}/product-blueprints/printed`;
-
-  const res = await fetch(url, {
-    method: "GET",
-    headers: {
-      Authorization: `Bearer ${token}`,
-    },
-  });
-
-  if (!res.ok) {
-    const text = await res.text().catch(() => "");
-    throw new Error(
-      `Failed to fetch printed product blueprints: ${res.status} ${res.statusText} ${text}`,
-    );
-  }
-
-  const data = await res.json();
+  const data = await getPrintedProductBlueprintsRaw();
   if (!Array.isArray(data)) return [];
 
-  const mapped: InventoryProductSummary[] = data.map((row: any) => ({
+  return data.map((row: any) => ({
     id: s(row?.id),
     productName: s(row?.productName),
     brandId: s(row?.brandId),
@@ -212,8 +135,6 @@ export async function fetchPrintedInventorySummaries(): Promise<
     assigneeId: s(row?.assigneeId),
     assigneeName: row?.assigneeName ? s(row.assigneeName) : undefined,
   }));
-
-  return mapped;
 }
 
 // ---------------------------------------------------------
@@ -235,40 +156,21 @@ export async function fetchInventoryIDsByProductAndTokenDTO(
   if (!pbId) throw new Error("productBlueprintId is empty");
   if (!tbId) throw new Error("tokenBlueprintId is empty");
 
-  const token = await getIdTokenOrThrow();
-
-  const url = `${API_BASE}/inventory/ids?productBlueprintId=${encodeURIComponent(
-    pbId,
-  )}&tokenBlueprintId=${encodeURIComponent(tbId)}`;
-
-  const res = await fetch(url, {
-    method: "GET",
-    headers: {
-      Authorization: `Bearer ${token}`,
-    },
+  const data = await getInventoryIDsByProductAndTokenRaw({
+    productBlueprintId: pbId,
+    tokenBlueprintId: tbId,
   });
-
-  if (!res.ok) {
-    const text = await res.text().catch(() => "");
-    throw new Error(
-      `Failed to fetch inventory ids: ${res.status} ${res.statusText} ${text}`,
-    );
-  }
-
-  const data = await res.json();
 
   const idsRaw = Array.isArray(data) ? data : data?.inventoryIds;
   const inventoryIds = Array.isArray(idsRaw)
     ? idsRaw.map((x: any) => s(x)).filter(Boolean)
     : [];
 
-  const mapped: InventoryIDsByProductAndTokenDTO = {
+  return {
     productBlueprintId: pbId,
     tokenBlueprintId: tbId,
     inventoryIds,
   };
-
-  return mapped;
 }
 
 // ---------------------------------------------------------
@@ -503,35 +405,15 @@ function mapTokenBlueprintPatch(raw: any): TokenBlueprintPatchDTO | undefined {
 /**
  * ✅ NEW: TokenBlueprint Patch DTO
  * GET /token-blueprints/{tokenBlueprintId}/patch
- *
- * - inventoryDetailService が import して呼べるように export する
- * - backend が未実装の場合は 404/501 等になるので、呼び出し側で try/catch する想定
  */
 export async function fetchTokenBlueprintPatchDTO(
   tokenBlueprintId: string,
 ): Promise<TokenBlueprintPatchDTO> {
-  const token = await getIdTokenOrThrow();
-
   const tbId = s(tokenBlueprintId);
   if (!tbId) throw new Error("tokenBlueprintId is empty");
 
-  const url = `${API_BASE}/token-blueprints/${encodeURIComponent(tbId)}/patch`;
-
-  const res = await fetch(url, {
-    method: "GET",
-    headers: { Authorization: `Bearer ${token}` },
-  });
-
-  if (!res.ok) {
-    const text = await res.text().catch(() => "");
-    throw new Error(
-      `Failed to fetch token blueprint patch: ${res.status} ${res.statusText} ${text}`,
-    );
-  }
-
-  const data = await res.json();
-  const patch = mapTokenBlueprintPatch(data) ?? {};
-  return patch;
+  const data = await getTokenBlueprintPatchRaw(tbId);
+  return mapTokenBlueprintPatch(data) ?? {};
 }
 
 /**
@@ -561,33 +443,19 @@ export async function fetchListCreateDTO(input: {
   productBlueprintId?: string;
   tokenBlueprintId?: string;
 }): Promise<ListCreateDTO> {
-  const token = await getIdTokenOrThrow();
+  const data = await getListCreateRaw(input);
 
-  let path = "";
-  if (input.inventoryId) {
-    path = `/inventory/list-create/${encodeURIComponent(input.inventoryId)}`;
-  } else if (input.productBlueprintId && input.tokenBlueprintId) {
-    path =
-      `/inventory/list-create/${encodeURIComponent(
-        input.productBlueprintId,
-      )}/${encodeURIComponent(input.tokenBlueprintId)}`;
-  } else {
-    throw new Error("missing params");
-  }
+  return {
+    inventoryId: data?.inventoryId ? s(data.inventoryId) : undefined,
+    productBlueprintId: data?.productBlueprintId ? s(data.productBlueprintId) : undefined,
+    tokenBlueprintId: data?.tokenBlueprintId ? s(data.tokenBlueprintId) : undefined,
 
-  const res = await fetch(`${API_BASE}${path}`, {
-    method: "GET",
-    headers: {
-      Authorization: `Bearer ${token}`,
-    },
-  });
+    productBrandName: s(data?.productBrandName),
+    productName: s(data?.productName),
 
-  if (!res.ok) {
-    const text = await res.text().catch(() => "");
-    throw new Error(`request failed: ${res.status} ${text}`);
-  }
-
-  return (await res.json()) as ListCreateDTO;
+    tokenBrandName: s(data?.tokenBrandName),
+    tokenName: s(data?.tokenName),
+  };
 }
 
 /**
@@ -600,22 +468,7 @@ export async function fetchInventoryDetailDTO(
   const id = s(inventoryId);
   if (!id) throw new Error("inventoryId is empty");
 
-  const token = await getIdTokenOrThrow();
-  const url = `${API_BASE}/inventory/${encodeURIComponent(id)}`;
-
-  const res = await fetch(url, {
-    method: "GET",
-    headers: { Authorization: `Bearer ${token}` },
-  });
-
-  if (!res.ok) {
-    const text = await res.text().catch(() => "");
-    throw new Error(
-      `Failed to fetch inventory detail: ${res.status} ${res.statusText} ${text}`,
-    );
-  }
-
-  const data = await res.json();
+  const data = await getInventoryDetailRaw(id);
 
   const patch = mapProductBlueprintPatch(data?.productBlueprintPatch);
   const tokenBlueprintPatch = mapTokenBlueprintPatch(data?.tokenBlueprintPatch);
@@ -634,7 +487,7 @@ export async function fetchInventoryDetailDTO(
       }))
     : [];
 
-  const mapped: InventoryDetailDTO = {
+  return {
     inventoryId: s(data?.inventoryId ?? data?.id ?? id),
     inventoryIds: Array.isArray(data?.inventoryIds)
       ? data.inventoryIds.map((x: any) => s(x)).filter(Boolean)
@@ -645,8 +498,6 @@ export async function fetchInventoryDetailDTO(
     modelId: s(data?.modelId ?? data?.ModelID),
 
     productBlueprintPatch: patch,
-
-    // ✅ tokenBlueprintPatch を持てている（backend が返せば格納される）
     tokenBlueprintPatch,
 
     tokenBlueprint: data?.tokenBlueprint
@@ -668,6 +519,4 @@ export async function fetchInventoryDetailDTO(
     totalStock: Number(data?.totalStock ?? 0),
     updatedAt: data?.updatedAt ? String(data.updatedAt) : undefined,
   };
-
-  return mapped;
 }

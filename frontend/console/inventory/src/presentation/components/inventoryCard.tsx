@@ -33,27 +33,12 @@ function rgbIntToHex(rgb: number | string | null | undefined): string | null {
 }
 
 export type InventoryRow = {
-  /** トークン表示（例: "Token A" / "TB-xxxx" / tokenBlueprint name など） */
-  // NOTE: 互換のため残す（画面では表示しない）
-  token?: string;
-
-  /** 型番 (例: "LM-SB-S-WHT") */
-  modelNumber: string;
-
-  /** サイズ (例: "S" | "M" | "L") */
-  size: string;
-
-  /** カラー表示名 (例: "ホワイト") */
-  color: string;
-
-  /**
-   * RGB
-   * - int(0xRRGGBB) で来ることもあるので、表示時に hex 化して dot に反映する
-   */
-  rgb?: number | string | null;
-
-  /** 在庫数 */
-  stock: number;
+  token?:       string;/** トークン表示（例: "Token A" / "TB-xxxx" / tokenBlueprint name など） */
+  modelNumber:  string;/** 型番 (例: "LM-SB-S-WHT") */  
+  size:         string;/** サイズ (例: "S" | "M" | "L") */
+  color:        string;/** カラー表示名 (例: "ホワイト") */
+  rgb?:         number | string | null;/* RGB - int(0xRRGGBB) で来ることもあるので、表示時に hex 化して dot に反映する*/
+  stock:        number;/** 在庫数 */
 };
 
 type InventoryCardProps = {
