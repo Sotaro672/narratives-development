@@ -535,6 +535,62 @@ export async function fetchTokenBlueprintPatchDTO(
 }
 
 /**
+ * ✅ ListCreate DTO（出品作成画面）
+ * backend/internal/application/query/dto/list_create_dto.go と対応
+ */
+export type ListCreateDTO = {
+  inventoryId?: string;
+  productBlueprintId?: string;
+  tokenBlueprintId?: string;
+
+  productBrandName: string;
+  productName: string;
+
+  tokenBrandName: string;
+  tokenName: string;
+};
+
+/**
+ * ✅ ListCreate DTO 取得
+ * GET
+ * - /inventory/list-create/:inventoryId
+ * - /inventory/list-create/:productBlueprintId/:tokenBlueprintId
+ */
+export async function fetchListCreateDTO(input: {
+  inventoryId?: string;
+  productBlueprintId?: string;
+  tokenBlueprintId?: string;
+}): Promise<ListCreateDTO> {
+  const token = await getIdTokenOrThrow();
+
+  let path = "";
+  if (input.inventoryId) {
+    path = `/inventory/list-create/${encodeURIComponent(input.inventoryId)}`;
+  } else if (input.productBlueprintId && input.tokenBlueprintId) {
+    path =
+      `/inventory/list-create/${encodeURIComponent(
+        input.productBlueprintId,
+      )}/${encodeURIComponent(input.tokenBlueprintId)}`;
+  } else {
+    throw new Error("missing params");
+  }
+
+  const res = await fetch(`${API_BASE}${path}`, {
+    method: "GET",
+    headers: {
+      Authorization: `Bearer ${token}`,
+    },
+  });
+
+  if (!res.ok) {
+    const text = await res.text().catch(() => "");
+    throw new Error(`request failed: ${res.status} ${text}`);
+  }
+
+  return (await res.json()) as ListCreateDTO;
+}
+
+/**
  * ✅ Inventory Detail DTO
  * GET /inventory/{inventoryId}
  */

@@ -149,57 +149,25 @@ function asMaybeString(v: any): string | null {
 }
 
 // ---------------------------------------------------------
-// helper: list row normalize（バックエンド返却差異に強くする）
+// helper: list row normalize（hook 側の “正” を前提に最小限）
 // ---------------------------------------------------------
 function normalizeMintListRow(v: any): MintListRowDTO {
-  const inspectionId =
-    String(
-      v?.inspectionId ??
-        v?.InspectionID ??
-        v?.inspectionID ??
-        v?.InspectionId ??
-        v?.productionId ??
-        v?.ProductionID ??
-        v?.id ??
-        v?.ID ??
-        "",
-    ).trim() || null;
+  // ここは UI（hook/service）側で inspectionId を正として扱っているため、
+  // 返却側のキーは “inspectionId として” 揃える（productionId/id 揺れは rowKey 側で吸収）
+  const inspectionId = asMaybeString(v?.inspectionId ?? v?.productionId ?? v?.id) ?? null;
 
-  const mintId =
-    String(v?.mintId ?? v?.MintID ?? v?.MintId ?? v?.id ?? v?.ID ?? "").trim() ||
-    null;
+  const mintId = asMaybeString(v?.mintId ?? v?.id) ?? null;
 
-  const tokenBlueprintId =
-    String(
-      v?.tokenBlueprintId ??
-        v?.tokenBlueprintID ??
-        v?.TokenBlueprintID ??
-        v?.TokenBlueprintId ??
-        v?.tokenBlueprint ??
-        v?.TokenBlueprint ??
-        "",
-    ).trim() || null;
+  // ✅ tokenBlueprintId は lowerCamel を正として扱う（名揺れ吸収を削減）
+  const tokenBlueprintId = asMaybeString(v?.tokenBlueprintId) ?? null;
 
-  const tokenName =
-    String(
-      v?.tokenName ??
-        v?.tokenBlueprintName ??
-        v?.TokenBlueprintName ??
-        v?.name ??
-        tokenBlueprintId ??
-        "",
-    ).trim() || null;
+  // ✅ tokenName も “tokenName” を正とする
+  const tokenName = asMaybeString(v?.tokenName) ?? null;
 
-  const createdByName =
-    String(
-      v?.createdByName ?? v?.CreatedByName ?? v?.createdBy ?? v?.CreatedBy ?? "",
-    ).trim() || null;
+  const createdByName = asMaybeString(v?.createdByName) ?? null;
 
-  const mintedAtRaw = v?.mintedAt ?? v?.MintedAt ?? v?.minted_at ?? null;
   const mintedAt =
-    typeof mintedAtRaw === "string" && mintedAtRaw.trim()
-      ? mintedAtRaw.trim()
-      : null;
+    typeof v?.mintedAt === "string" && v.mintedAt.trim() ? v.mintedAt.trim() : null;
 
   const minted = typeof v?.minted === "boolean" ? v.minted : Boolean(mintedAt);
 
@@ -215,46 +183,34 @@ function normalizeMintListRow(v: any): MintListRowDTO {
 }
 
 // ---------------------------------------------------------
-// helper: MintDTO normalize（バックエンド返却差異に強くする）
+// helper: MintDTO normalize（tokenBlueprint 周りの名揺れ吸収を削減）
 // ---------------------------------------------------------
 function normalizeMintDTO(v: any): MintDTO {
   const obj: any = { ...(v ?? {}) };
 
-  obj.id = obj.id ?? obj.ID ?? obj.MintID ?? obj.MintId ?? "";
-  obj.brandId = obj.brandId ?? obj.BrandID ?? obj.BrandId ?? "";
-  obj.tokenBlueprintId =
-    obj.tokenBlueprintId ?? obj.TokenBlueprintID ?? obj.TokenBlueprintId ?? "";
+  // id
+  obj.id = obj.id ?? "";
 
-  obj.inspectionId =
-    obj.inspectionId ??
-    obj.InspectionID ??
-    obj.InspectionId ??
-    obj.inspectionID ??
-    obj.productionId ??
-    obj.ProductionID ??
-    obj.ProductionId ??
-    "";
+  // ✅ tokenBlueprintId / brandId は lowerCamel を正として扱う
+  obj.brandId = obj.brandId ?? "";
+  obj.tokenBlueprintId = obj.tokenBlueprintId ?? "";
 
-  obj.createdAt = obj.createdAt ?? obj.CreatedAt ?? null;
-  obj.createdBy = obj.createdBy ?? obj.CreatedBy ?? "";
-  obj.createdByName = obj.createdByName ?? obj.CreatedByName ?? null;
+  // inspectionId（ここは productionId と同一視される実装が残り得るため、最小限の互換は維持）
+  obj.inspectionId = obj.inspectionId ?? obj.productionId ?? obj.ProductionID ?? "";
 
-  // tokenName を返す実装がある場合の保険（TokenBlueprintCard 側で使う可能性）
-  obj.tokenName = obj.tokenName ?? obj.TokenName ?? null;
+  obj.createdAt = obj.createdAt ?? null;
+  obj.createdBy = obj.createdBy ?? "";
+  obj.createdByName = obj.createdByName ?? null;
+
+  // tokenName（あれば）
+  obj.tokenName = obj.tokenName ?? null;
 
   obj.minted =
-    typeof obj.minted === "boolean"
-      ? obj.minted
-      : typeof obj.Minted === "boolean"
-        ? obj.Minted
-        : Boolean(obj.mintedAt ?? obj.MintedAt);
-  obj.mintedAt = obj.mintedAt ?? obj.MintedAt ?? null;
+    typeof obj.minted === "boolean" ? obj.minted : Boolean(obj.mintedAt ?? null);
+  obj.mintedAt = obj.mintedAt ?? null;
 
-  obj.scheduledBurnDate =
-    obj.scheduledBurnDate ?? obj.ScheduledBurnDate ?? null;
-
-  obj.onChainTxSignature =
-    obj.onChainTxSignature ?? obj.OnChainTxSignature ?? null;
+  obj.scheduledBurnDate = obj.scheduledBurnDate ?? null;
+  obj.onChainTxSignature = obj.onChainTxSignature ?? null;
 
   return obj as MintDTO;
 }
@@ -514,19 +470,9 @@ function normalizeMintRequestDetail(v: any): MintRequestDetailDTO | null {
     modelMetaRaw && typeof modelMetaRaw === "object" ? modelMetaRaw : null;
 
   // ✅ detail の主要フィールド（UI 側で使うキー）
-  // まず v 直下、無ければ mint から補完
-  const tokenBlueprintIdFromTop =
-    asMaybeString(
-      v?.tokenBlueprintId ??
-        v?.TokenBlueprintID ??
-        v?.TokenBlueprintId ??
-        v?.tokenBlueprintID,
-    ) ?? null;
-
-  const tokenBlueprintIdFromMint =
-    asMaybeString((mint as any)?.tokenBlueprintId ?? (mint as any)?.TokenBlueprintID ?? (mint as any)?.TokenBlueprintId) ??
-    null;
-
+  // tokenBlueprintId は lowerCamel を正として扱う（名揺れ吸収を削減）
+  const tokenBlueprintIdFromTop = asMaybeString(v?.tokenBlueprintId) ?? null;
+  const tokenBlueprintIdFromMint = asMaybeString((mint as any)?.tokenBlueprintId) ?? null;
   const tokenBlueprintId = tokenBlueprintIdFromTop ?? tokenBlueprintIdFromMint ?? null;
 
   const productName =
@@ -535,8 +481,8 @@ function normalizeMintRequestDetail(v: any): MintRequestDetailDTO | null {
     null;
 
   const tokenName =
-    asMaybeString(v?.tokenName ?? v?.TokenName) ??
-    asMaybeString((mint as any)?.tokenName ?? (mint as any)?.TokenName) ??
+    asMaybeString(v?.tokenName) ??
+    asMaybeString((mint as any)?.tokenName) ??
     null;
 
   return {
@@ -855,7 +801,7 @@ export async function fetchModelVariationByIdForMintHTTP(
 }
 
 // ===============================
-// HTTP Repository (mints)
+// HTTP Repository (mints via /mint/requests only)
 // ===============================
 
 function normalizeMintRequestsRows(json: any): MintRequestRowRaw[] {
@@ -912,55 +858,6 @@ async function fetchMintRequestsRowsRaw(
   return normalizeMintRequestsRows(json);
 }
 
-// legacy (/mint/mints) fallback
-async function fetchMintsMapRawLegacy(
-  ids: string[],
-  view: "list" | "dto" | null,
-): Promise<Record<string, any>> {
-  const idToken = await getIdTokenOrThrow();
-
-  const base = `${API_BASE}/mint/mints?inspectionIds=${encodeURIComponent(
-    ids.join(","),
-  )}`;
-  const url = view ? `${base}&view=${encodeURIComponent(view)}` : base;
-
-  const res = await fetch(url, { method: "GET", headers: buildHeaders(idToken) });
-
-  if (res.status === 404) return {};
-  if (!res.ok) {
-    throw new Error(`Failed to fetch mints: ${res.status} ${res.statusText}`);
-  }
-
-  const json = (await res.json()) as Record<string, any> | null | undefined;
-  return json ?? {};
-}
-
-async function fetchMintByInspectionIdLegacyHTTP(
-  inspectionId: string,
-): Promise<MintDTO | null> {
-  const iid = String(inspectionId ?? "").trim();
-  if (!iid) throw new Error("inspectionId が空です");
-
-  const idToken = await getIdTokenOrThrow();
-
-  const url = `${API_BASE}/mint/mints/${encodeURIComponent(iid)}`;
-
-  const res = await fetch(url, { method: "GET", headers: buildHeaders(idToken) });
-
-  if (res.status === 404) return null;
-
-  if (!res.ok) {
-    throw new Error(
-      `Failed to fetch mint by inspectionId: ${res.status} ${res.statusText}`,
-    );
-  }
-
-  const json = (await res.json()) as any;
-  if (!json) return null;
-
-  return normalizeMintDTO(json);
-}
-
 export async function fetchMintByInspectionIdHTTP(
   inspectionId: string,
 ): Promise<MintDTO | null> {
@@ -980,50 +877,8 @@ export async function fetchMintByInspectionIdHTTP(
 
     return normalizeMintDTO(row);
   } catch (_e: any) {
-    // legacy
+    return null;
   }
-
-  return await fetchMintByInspectionIdLegacyHTTP(iid);
-}
-
-async function fetchMintListRowsByInspectionIdsFallback(
-  inspectionIds: string[],
-): Promise<Record<string, MintListRowDTO>> {
-  const ids = (inspectionIds ?? [])
-    .map((s) => String(s ?? "").trim())
-    .filter(Boolean);
-
-  if (ids.length === 0) return {};
-
-  const settled = await Promise.all(
-    ids.map(async (inspectionId) => {
-      try {
-        const m = await fetchMintByInspectionIdLegacyHTTP(inspectionId);
-        return { inspectionId, mint: m };
-      } catch (_e: any) {
-        return { inspectionId, mint: null };
-      }
-    }),
-  );
-
-  const out: Record<string, MintListRowDTO> = {};
-  for (const it of settled) {
-    if (!it.mint) continue;
-
-    const v = {
-      ...(it.mint as any),
-      inspectionId: it.inspectionId,
-      mintId: (it.mint as any).id ?? null,
-      tokenBlueprintId: (it.mint as any).tokenBlueprintId ?? null,
-      createdByName:
-        (it.mint as any).createdByName ?? (it.mint as any).createdBy ?? null,
-      mintedAt: (it.mint as any).mintedAt ?? null,
-    };
-
-    out[it.inspectionId] = normalizeMintListRow(v);
-  }
-
-  return out;
 }
 
 export async function fetchMintListRowsByInspectionIdsHTTP(
@@ -1065,27 +920,7 @@ export async function fetchMintListRowsByInspectionIdsHTTP(
 
     return out;
   } catch (_e: any) {
-    // legacy
-  }
-
-  try {
-    let raw: Record<string, any> = {};
-    try {
-      raw = await fetchMintsMapRawLegacy(ids, "list");
-    } catch (_e: any) {
-      raw = await fetchMintsMapRawLegacy(ids, null);
-    }
-
-    const out: Record<string, MintListRowDTO> = {};
-    for (const [k, v] of Object.entries(raw ?? {})) {
-      const key = String(k ?? "").trim();
-      if (!key) continue;
-      out[key] = normalizeMintListRow(v);
-    }
-
-    return out;
-  } catch (_e: any) {
-    return await fetchMintListRowsByInspectionIdsFallback(ids);
+    return {};
   }
 }
 
@@ -1116,24 +951,8 @@ export async function fetchMintsByInspectionIdsHTTP(
 
     return out;
   } catch (_e: any) {
-    // legacy
+    return {};
   }
-
-  let raw: Record<string, any> = {};
-  try {
-    raw = await fetchMintsMapRawLegacy(ids, "dto");
-  } catch (_e: any) {
-    raw = await fetchMintsMapRawLegacy(ids, null);
-  }
-
-  const out: Record<string, MintDTO> = {};
-  for (const [k, v] of Object.entries(raw ?? {})) {
-    const key = String(k ?? "").trim();
-    if (!key) continue;
-    out[key] = normalizeMintDTO(v);
-  }
-
-  return out;
 }
 
 export async function listMintsByInspectionIDsHTTP(
