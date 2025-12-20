@@ -219,6 +219,16 @@ async function requestJSON<T>(args: {
   return json as T;
 }
 
+function extractItemsArrayFromAny(json: any): any[] {
+  if (Array.isArray(json)) return json;
+  if (json && typeof json === "object") {
+    if (Array.isArray((json as any).items)) return (json as any).items;
+    if (Array.isArray((json as any).Items)) return (json as any).Items;
+    if (Array.isArray((json as any).data)) return (json as any).data;
+  }
+  return [];
+}
+
 /**
  * ===========
  * API
@@ -226,6 +236,7 @@ async function requestJSON<T>(args: {
  *
  * Backend:
  * - POST /lists            (create)
+ * - GET  /lists            (list)  ✅ NEW: 一覧取得
  * - GET  /lists/{id}       (detail)
  * - GET  /lists/{id}/aggregate
  * - GET  /lists/{id}/images
@@ -273,6 +284,28 @@ export async function createListHTTP(input: CreateListInput): Promise<ListDTO> {
     path: "/lists",
     body: payload,
   });
+}
+
+/**
+ * ✅ List lists
+ * GET /lists
+ * - レスポンス形が揺れても配列として返す（service 側が HTTP 差分を気にしないで済むように）
+ */
+export async function fetchListsHTTP(): Promise<ListDTO[]> {
+  const json = await requestJSON<any>({
+    method: "GET",
+    path: "/lists",
+  });
+
+  const items = extractItemsArrayFromAny(json);
+
+  // eslint-disable-next-line no-console
+  console.log("[list/listRepositoryHTTP] fetchListsHTTP extracted", {
+    count: items.length,
+    sample: items.slice(0, 3),
+  });
+
+  return items as ListDTO[];
 }
 
 /**

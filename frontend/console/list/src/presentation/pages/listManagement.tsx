@@ -26,17 +26,9 @@ export default function ListManagementPage() {
             onClick={() => handlers.onRowClick(l.id)}
             onKeyDown={(e) => handlers.onRowKeyDown(e, l.id)}
           >
-            <td>{l.id}</td>
+            {/* ✅ 左から：プロダクト名、トークン名、担当者、ステータス（出品中｜保留中） */}
             <td>{l.productName}</td>
-            <td>
-              <span className="lp-brand-pill">{l.brandName}</span>
-            </td>
-            <td>
-              <span className="lp-brand-pill">{l.tokenName}</span>
-            </td>
-            <td>
-              <span className="list-stock-pill">{l.stock}</span>
-            </td>
+            <td>{l.tokenName}</td>
             <td>{l.assigneeName}</td>
             <td>
               <span className={l.statusBadgeClass}>{l.statusBadgeText}</span>
