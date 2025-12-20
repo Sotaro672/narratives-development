@@ -3,6 +3,7 @@ package di
 
 import (
 	"context"
+	"errors"
 	"log"
 	"os"
 	"strings"
@@ -41,6 +42,7 @@ import (
 
 	branddom "narratives/internal/domain/brand"
 	companydom "narratives/internal/domain/company"
+	listdom "narratives/internal/domain/list"
 	memdom "narratives/internal/domain/member"
 	mintdom "narratives/internal/domain/mint"
 	productbpdom "narratives/internal/domain/productBlueprint"
@@ -182,6 +184,37 @@ func (a *pbPatchByIDAdapter) GetPatchByID(ctx context.Context, id string) (produ
 }
 
 // ============================================================
+// ✅ Adapter: ListRepositoryFS -> usecase.ListPatcher
+// - ListPatcher.UpdateImageID を listRepo.Update(...) に変換する
+// ============================================================
+type listPatcherAdapter struct {
+	repo interface {
+		Update(ctx context.Context, id string, patch listdom.ListPatch) (listdom.List, error)
+	}
+}
+
+func (a *listPatcherAdapter) UpdateImageID(
+	ctx context.Context,
+	listID string,
+	imageID string,
+	now time.Time,
+	updatedBy *string,
+) (listdom.List, error) {
+	listID = strings.TrimSpace(listID)
+	imageID = strings.TrimSpace(imageID)
+	if listID == "" {
+		return listdom.List{}, listdom.ErrNotFound
+	}
+
+	patch := listdom.ListPatch{
+		ImageID:   &imageID,
+		UpdatedAt: &now,
+		UpdatedBy: updatedBy,
+	}
+	return a.repo.Update(ctx, listID, patch)
+}
+
+// ============================================================
 // Adapter: MintRepositoryFS -> mintdom.MintRepository (Update補完)
 // ============================================================
 
@@ -192,12 +225,12 @@ type mintRepoWithUpdate struct {
 
 func (r *mintRepoWithUpdate) Update(ctx context.Context, m mintdom.Mint) (mintdom.Mint, error) {
 	if r == nil || r.Client == nil {
-		return mintdom.Mint{}, errorsNew("mint repo is nil")
+		return mintdom.Mint{}, errors.New("mint repo is nil")
 	}
 
 	id := strings.TrimSpace(m.ID)
 	if id == "" {
-		return mintdom.Mint{}, errorsNew("mint id is empty")
+		return mintdom.Mint{}, errors.New("mint id is empty")
 	}
 	m.ID = id
 
@@ -231,12 +264,6 @@ func (r *mintRepoWithUpdate) Update(ctx context.Context, m mintdom.Mint) (mintdo
 	}
 	return m, nil
 }
-
-func errorsNew(msg string) error { return &simpleErr{s: msg} }
-
-type simpleErr struct{ s string }
-
-func (e *simpleErr) Error() string { return e.s }
 
 // ========================================
 // NewContainer
@@ -311,6 +338,10 @@ func NewContainer(ctx context.Context) (*Container, error) {
 	inquiryRepo := fs.NewInquiryRepositoryFS(fsClient)
 	inventoryRepo := fs.NewInventoryRepositoryFS(fsClient)
 	invoiceRepo := fs.NewInvoiceRepositoryFS(fsClient)
+
+	// ✅ List (Firestore)
+	listRepo := fs.NewListRepositoryFS(fsClient)
+
 	memberRepo := fs.NewMemberRepositoryFS(fsClient)
 	messageRepo := fs.NewMessageRepositoryFS(fsClient)
 	modelRepo := fs.NewModelRepositoryFS(fsClient)
@@ -390,6 +421,13 @@ func NewContainer(ctx context.Context) (*Container, error) {
 	}
 	tokenContentsRepo := gcso.NewTokenContentsRepositoryGCS(gcsClient, tokenContentsBucket)
 
+	// ✅ ListImage repository (GCS)
+	listImageBucket := strings.TrimSpace(os.Getenv("LIST_IMAGE_BUCKET"))
+	listImageRepo := gcso.NewListImageRepositoryGCS(gcsClient, listImageBucket)
+
+	// ✅ ListPatcher adapter
+	listPatcher := &listPatcherAdapter{repo: listRepo}
+
 	// 5. Application-layer usecases
 
 	// ★ TokenUsecase
@@ -414,7 +452,19 @@ func NewContainer(ctx context.Context) (*Container, error) {
 	inquiryUC := uc.NewInquiryUsecase(inquiryRepo, nil, nil)
 	inventoryUC := uc.NewInventoryUsecase(inventoryRepo)
 	invoiceUC := uc.NewInvoiceUsecase(invoiceRepo)
-	var listUC *uc.ListUsecase = nil
+
+	// ✅ ListUsecase
+	// - listRepo は Create/GetByID を担当
+	// - patcher は adapter 経由で UpdateImageID を実装
+	listUC := uc.NewListUsecaseWithCreator(
+		listRepo,      // ListReader
+		listRepo,      // ListCreator
+		listPatcher,   // ListPatcher (adapter)
+		listImageRepo, // ListImageReader
+		listImageRepo, // ListImageByIDReader
+		listImageRepo, // ListImageObjectSaver
+	)
+
 	memberUC := uc.NewMemberUsecase(memberRepo)
 	messageUC := uc.NewMessageUsecase(messageRepo, nil, nil)
 
@@ -504,7 +554,6 @@ func NewContainer(ctx context.Context) (*Container, error) {
 
 	invitationMailer := mailadp.NewInvitationMailerWithSendGrid(companySvc, brandSvc)
 
-	// ✅ invitationTokenUCRepo を定義済みなので undefined にならない
 	invitationQueryUC := uc.NewInvitationService(invitationTokenUCRepo, memberRepo)
 	invitationCommandUC := uc.NewInvitationCommandService(
 		invitationTokenUCRepo,
@@ -524,13 +573,13 @@ func NewContainer(ctx context.Context) (*Container, error) {
 		inventoryRepo,
 		&pbIDsByCompanyAdapter{repo: productBlueprintRepo},
 		&pbPatchByIDAdapter{repo: productBlueprintRepo},
-		&tbPatchByIDAdapter{repo: tokenBlueprintRepo}, // adapters.go 側
+		&tbPatchByIDAdapter{repo: tokenBlueprintRepo},
 		nameResolver,
 	)
 
 	// ✅ NEW: ListCreateQuery（pb/tb -> brandName/productName/tokenName + inventory rows）
 	listCreateQuery := companyquery.NewListCreateQueryWithInventory(
-		inventoryRepo, // ★ これが無いと priceRows は常に空
+		inventoryRepo,
 		&pbPatchByIDAdapter{repo: productBlueprintRepo},
 		&tbPatchByIDAdapter{repo: tokenBlueprintRepo},
 		nameResolver,
@@ -585,7 +634,7 @@ func NewContainer(ctx context.Context) (*Container, error) {
 		MintRequestQueryService:       mintRequestQueryService,
 
 		InventoryQuery:  inventoryQuery,
-		ListCreateQuery: listCreateQuery, // ✅ 追加
+		ListCreateQuery: listCreateQuery,
 
 		ProductUC:    productUC,
 		InspectionUC: inspectionUC,
@@ -642,7 +691,6 @@ func (c *Container) RouterDeps() httpin.RouterDeps {
 		InventoryQuery: c.InventoryQuery,
 
 		// ✅ router.go の RouterDeps にこのフィールドが存在する前提
-		// （もし router.go に未追加なら、RouterDeps に ListCreateQuery を追加してください）
 		ListCreateQuery: c.ListCreateQuery,
 
 		ProductUC:    c.ProductUC,

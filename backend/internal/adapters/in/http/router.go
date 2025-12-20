@@ -1,4 +1,3 @@
-// backend/internal/adapters/in/http/router.go
 package httpin
 
 import (
@@ -258,6 +257,19 @@ func NewRouter(deps RouterDeps) http.Handler {
 		// Query (read-only DTO)
 		mux.Handle("/inventory", h)
 		mux.Handle("/inventory/", h)
+	}
+
+	// ================================
+	// ✅ Lists（/lists）
+	// ================================
+	if deps.ListUC != nil {
+		listH := handlers.NewListHandler(deps.ListUC)
+		var h http.Handler = listH
+		if authMw != nil {
+			h = authMw.Handler(h)
+		}
+		mux.Handle("/lists", h)
+		mux.Handle("/lists/", h)
 	}
 
 	// ================================

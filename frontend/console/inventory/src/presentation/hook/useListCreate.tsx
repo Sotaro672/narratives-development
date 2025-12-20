@@ -22,6 +22,9 @@ import {
   buildAfterCreatePath,
   extractDisplayStrings,
   mapDTOToPriceRows,
+  // ✅ NEW: POST /lists 用
+  buildCreateListInput,
+  postCreateList,
   type ListCreateRouteParams,
   type ResolvedListCreateParams,
   type ImageInputRef,
@@ -90,12 +93,12 @@ function dedupeFiles(prev: File[], add: File[]): File[] {
   return [...prev, ...filtered];
 }
 
-// ✅ NEW: trim helper
+// ✅ trim helper
 function s(v: unknown): string {
   return String(v ?? "").trim();
 }
 
-// ✅ NEW: price validation helper
+// ✅ price validation helper
 function toNumberOrNaN(v: unknown): number {
   if (typeof v === "number") return v;
   if (typeof v === "string") {
@@ -309,7 +312,7 @@ export function useListCreate(): UseListCreateResult {
   }, [priceCard]);
 
   // ============================================================
-  // ✅ 戻る / 作成（path 組み立ては service へ）
+  // ✅ 戻る
   // ============================================================
   const onBack = React.useCallback(() => {
     // eslint-disable-next-line no-console
@@ -322,7 +325,7 @@ export function useListCreate(): UseListCreateResult {
     navigate(buildBackPath(resolvedParams));
   }, [navigate, inventoryId, productBlueprintId, tokenBlueprintId, resolvedParams]);
 
-  // ✅ NEW: validation
+  // ✅ validation
   const validateBeforeCreate = React.useCallback(() => {
     const titleTrim = s(listingTitle);
     if (!titleTrim) {
@@ -336,26 +339,61 @@ export function useListCreate(): UseListCreateResult {
     // price が 0 / null / NaN の行が1つでもあれば NG
     const bad = priceRows.find((r) => {
       const p = (r as any)?.price;
-      // null/undefined -> NG
       if (p === null || p === undefined) return true;
       const n = toNumberOrNaN(p);
-      // NaN -> NG / 0 or less -> NG（要件: price:0 でエラー）
       if (!Number.isFinite(n)) return true;
-      if (n <= 0) return true;
+      if (n <= 0) return true; // ✅ 要件: price:0 はエラー
       return false;
     });
 
     if (bad) {
-      throw new Error("価格が未入力、または 0 円の行があります。各行の価格を 1 円以上に設定してください。");
+      throw new Error(
+        "価格が未入力、または 0 円の行があります。各行の価格を 1 円以上に設定してください。",
+      );
     }
   }, [listingTitle, priceRows]);
 
+  // ============================================================
+  // ✅ 担当者選択（ID を保持して POST に渡せるようにする）
+  // ============================================================
+  const { assigneeName, assigneeCandidates, loadingMembers, onSelectAssignee } =
+    useAdminCardHook();
+
+  // ✅ 選択された担当者ID（hook側がIDを返さない場合のため、ここで保持）
+  const [assigneeId, setAssigneeId] = React.useState<string | undefined>(undefined);
+
+  React.useEffect(() => {
+    // eslint-disable-next-line no-console
+    console.log("[inventory/useListCreate] admin candidates snapshot", {
+      assigneeName,
+      assigneeId,
+      loadingMembers: Boolean(loadingMembers),
+      candidatesCount: Array.isArray(assigneeCandidates) ? assigneeCandidates.length : 0,
+      sample: Array.isArray(assigneeCandidates) ? assigneeCandidates.slice(0, 5) : [],
+    });
+  }, [assigneeName, assigneeCandidates, loadingMembers, assigneeId]);
+
+  const handleSelectAssignee = React.useCallback(
+    (id: string) => {
+      const tid = s(id);
+      // eslint-disable-next-line no-console
+      console.log("[inventory/useListCreate] handleSelectAssignee", { id: tid });
+
+      setAssigneeId(tid || undefined);
+      onSelectAssignee(tid);
+    },
+    [onSelectAssignee],
+  );
+
+  // ============================================================
+  // ✅ 作成（POST /lists を実行）
+  // ============================================================
   const onCreate = React.useCallback(() => {
     try {
       validateBeforeCreate();
 
       // eslint-disable-next-line no-console
-      console.log("[inventory/useListCreate] onCreate validated", {
+      console.log("[inventory/useListCreate] onCreate -> POST /lists start", {
         inventoryId,
         productBlueprintId,
         tokenBlueprintId,
@@ -365,19 +403,40 @@ export function useListCreate(): UseListCreateResult {
         imagesCount: images.length,
         priceRowsCount: priceRows.length,
         priceRowsSample: priceRows.slice(0, 5),
+        assigneeId,
       });
 
-      alert("作成しました（仮）");
-      navigate(buildAfterCreatePath(resolvedParams));
+      void (async () => {
+        const input = buildCreateListInput({
+          params: resolvedParams,
+          listingTitle,
+          description,
+          priceRows,
+          decision,
+          assigneeId,
+        });
+
+        // eslint-disable-next-line no-console
+        console.log("[inventory/useListCreate] postCreateList input", input);
+
+        const created = await postCreateList(input);
+
+        // eslint-disable-next-line no-console
+        console.log("[inventory/useListCreate] onCreate -> POST /lists success", {
+          created,
+        });
+
+        alert("作成しました");
+        navigate(buildAfterCreatePath(resolvedParams));
+      })();
     } catch (e) {
       const msg = String(e instanceof Error ? e.message : e);
       // eslint-disable-next-line no-console
-      console.warn("[inventory/useListCreate] onCreate validation failed", { msg, raw: e });
+      console.warn("[inventory/useListCreate] onCreate failed", { msg, raw: e });
       alert(msg);
     }
   }, [
     validateBeforeCreate,
-    navigate,
     inventoryId,
     productBlueprintId,
     tokenBlueprintId,
@@ -386,6 +445,8 @@ export function useListCreate(): UseListCreateResult {
     description,
     images,
     priceRows,
+    assigneeId,
+    navigate,
     resolvedParams,
   ]);
 
@@ -397,8 +458,9 @@ export function useListCreate(): UseListCreateResult {
       listingTitleLen: listingTitle.length,
       descriptionLen: description.length,
       imagesCount: images.length,
+      assigneeId,
     });
-  }, [decision, priceRows, listingTitle, description, images]);
+  }, [decision, priceRows, listingTitle, description, images, assigneeId]);
 
   // ============================================================
   // ✅ listCreate DTO 取得（service へ移譲）
@@ -535,32 +597,6 @@ export function useListCreate(): UseListCreateResult {
       dtoKeys: Object.keys((dto as any) ?? {}),
     });
   }, [productBrandName, productName, tokenBrandName, tokenName, dto]);
-
-  // ============================================================
-  // ✅ 担当者選択
-  // ============================================================
-  const { assigneeName, assigneeCandidates, loadingMembers, onSelectAssignee } =
-    useAdminCardHook();
-
-  React.useEffect(() => {
-    // eslint-disable-next-line no-console
-    console.log("[inventory/useListCreate] admin candidates snapshot", {
-      assigneeName,
-      loadingMembers: Boolean(loadingMembers),
-      candidatesCount: Array.isArray(assigneeCandidates) ? assigneeCandidates.length : 0,
-      sample: Array.isArray(assigneeCandidates) ? assigneeCandidates.slice(0, 5) : [],
-    });
-  }, [assigneeName, assigneeCandidates, loadingMembers]);
-
-  const handleSelectAssignee = React.useCallback(
-    (id: string) => {
-      // eslint-disable-next-line no-console
-      console.log("[inventory/useListCreate] handleSelectAssignee", { id });
-
-      onSelectAssignee(id);
-    },
-    [onSelectAssignee],
-  );
 
   return {
     title,

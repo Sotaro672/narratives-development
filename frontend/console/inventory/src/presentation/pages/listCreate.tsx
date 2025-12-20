@@ -285,10 +285,6 @@ export default function InventoryListCreate() {
                 </div>
               </>
             )}
-
-            <div className="text-xs text-[hsl(var(--muted-foreground))]">
-              ※アップロード処理は後で実装（現状は選択UIのみ）。
-            </div>
           </CardContent>
         </Card>
 
@@ -302,9 +298,6 @@ export default function InventoryListCreate() {
               placeholder="例: Solid State シャツ1（赤 / S・M）"
               className="w-full h-10 px-3 rounded-md border border-slate-200 bg-white text-sm outline-none focus:ring-2 focus:ring-slate-200"
             />
-            <div className="text-xs text-[hsl(var(--muted-foreground))]">
-              出品一覧で表示されるタイトルです。
-            </div>
           </CardContent>
         </Card>
 
@@ -319,9 +312,6 @@ export default function InventoryListCreate() {
               rows={5}
               className="w-full px-3 py-2 rounded-md border border-slate-200 bg-white text-sm outline-none focus:ring-2 focus:ring-slate-200"
             />
-            <div className="text-xs text-[hsl(var(--muted-foreground))]">
-              購入者に伝えたいポイントを記入してください。
-            </div>
           </CardContent>
         </Card>
 

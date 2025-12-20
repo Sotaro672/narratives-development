@@ -3,6 +3,8 @@ package handlers
 
 import (
 	"context"
+	"crypto/rand"
+	"encoding/base32"
 	"encoding/json"
 	"errors"
 	"io"
@@ -53,7 +55,9 @@ func (h *ListHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	// ✅ /lists/{id} 以下
 	if !strings.HasPrefix(path, "/lists/") {
+		log.Printf("[list_handler] not_found (handler mismatch) method=%s path=%s", r.Method, path)
 		w.WriteHeader(http.StatusNotFound)
 		_ = json.NewEncoder(w).Encode(map[string]string{"error": "not_found"})
 		return
@@ -63,6 +67,7 @@ func (h *ListHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	parts := strings.Split(rest, "/")
 	id := strings.TrimSpace(parts[0])
 	if id == "" {
+		log.Printf("[list_handler] invalid id method=%s path=%s rest=%q", r.Method, path, rest)
 		w.WriteHeader(http.StatusBadRequest)
 		_ = json.NewEncoder(w).Encode(map[string]string{"error": "invalid id"})
 		return
@@ -102,6 +107,7 @@ func (h *ListHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			return
 
 		default:
+			log.Printf("[list_handler] not_found (unknown subresource) method=%s path=%s sub=%q", r.Method, path, parts[1])
 			w.WriteHeader(http.StatusNotFound)
 			_ = json.NewEncoder(w).Encode(map[string]string{"error": "not_found"})
 			return
@@ -127,11 +133,12 @@ type listCreator interface {
 }
 
 // create: POST /lists
-// - frontend の入力を List レコードとして作成する想定
+//
+// ✅ frontend は { "input": { ... } } 形式で送ってくるため、
+// まず wrapper を剥がしてから domain へマッピングする。
 func (h *ListHandler) create(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 
-	// ✅ uc が nil の場合もログで分かるようにする
 	if h == nil || h.uc == nil {
 		log.Printf("[list_handler] POST /lists aborted: usecase is nil")
 		w.WriteHeader(http.StatusInternalServerError)
@@ -148,21 +155,96 @@ func (h *ListHandler) create(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// ✅ 叩かれていること＆payload が来ていることが分かるログ（長すぎる場合は切る）
+	// ✅ raw log（長すぎる場合は切る）
 	raw := string(body)
 	if len(raw) > 4000 {
 		raw = raw[:4000] + "...(truncated)"
 	}
 	log.Printf("[list_handler] POST /lists body=%s", raw)
 
-	// まずは domain の List をそのまま受ける（UI → API の形はこの JSON に合わせる）
-	var item listdom.List
-	if err := json.Unmarshal(body, &item); err != nil {
-		log.Printf("[list_handler] POST /lists invalid json: %v", err)
+	// ✅ まず wrapper を剥がす: { input: {...} }
+	var wrap struct {
+		Input json.RawMessage `json:"input"`
+	}
+	_ = json.Unmarshal(body, &wrap)
+
+	var inputBytes []byte
+	if len(wrap.Input) > 0 {
+		inputBytes = wrap.Input
+	} else {
+		// 互換: もし input wrapper が無ければ body を input として扱う
+		inputBytes = body
+	}
+
+	// ✅ 入力を map で受けて柔軟に読む（frontend 側の key 名揺れに耐える）
+	var in map[string]any
+	if err := json.Unmarshal(inputBytes, &in); err != nil {
+		log.Printf("[list_handler] POST /lists invalid json (input): %v", err)
 		w.WriteHeader(http.StatusBadRequest)
 		_ = json.NewEncoder(w).Encode(map[string]string{"error": "invalid json"})
 		return
 	}
+
+	log.Printf("[list_handler] POST /lists input keys=%v", mapKeys(in))
+
+	// --- Extract fields (best-effort) ---
+	id := firstString(in, "id", "listId", "listID")
+	if strings.TrimSpace(id) == "" {
+		id = newListID()
+	}
+
+	title := firstString(in, "title", "listingTitle")
+	description := firstString(in, "description")
+	assigneeID := firstString(in, "assigneeId", "assigneeID")
+
+	// decision -> status
+	decision := firstString(in, "decision", "status")
+	status := strings.TrimSpace(decision)
+	if status == "" {
+		// ここは domain 側のデフォルトに任せたいが、空で弾かれることがあるので最低限 "hold" を入れる
+		status = "hold"
+	}
+
+	createdBy := firstString(in, "createdBy")
+	if strings.TrimSpace(createdBy) == "" {
+		createdBy = "system"
+	}
+
+	createdAt := time.Now().UTC()
+	if s := firstString(in, "createdAt"); strings.TrimSpace(s) != "" {
+		if t, err := time.Parse(time.RFC3339, strings.TrimSpace(s)); err == nil {
+			createdAt = t.UTC()
+		}
+	}
+
+	// prices: priceRows[] or prices(map)
+	prices := extractPrices(in)
+
+	// ✅ domain List を構築（repo が ID 必須のため、ここで必ず ID を入れる）
+	item := listdom.List{
+		ID:          strings.TrimSpace(id),
+		Status:      listdom.ListStatus(strings.TrimSpace(status)),
+		AssigneeID:  strings.TrimSpace(assigneeID),
+		Title:       strings.TrimSpace(title),
+		ImageID:     "", // create 時点では未設定
+		Description: strings.TrimSpace(description),
+		Prices:      prices, // nil でもOK（repoはlen(prices)==0で何もしない）
+
+		CreatedBy: strings.TrimSpace(createdBy),
+		CreatedAt: createdAt,
+		// UpdatedBy / UpdatedAt / DeletedAt / DeletedBy は作成時点では空でOK（repo側で補完）
+	}
+
+	log.Printf("[list_handler] POST /lists mapped id=%s status=%s assigneeId=%s titleLen=%d descLen=%d prices=%d createdBy=%s createdAt=%s",
+		item.ID,
+		string(item.Status),
+		item.AssigneeID,
+		len(item.Title),
+		len(item.Description),
+		len(item.Prices),
+		item.CreatedBy,
+		item.CreatedAt.UTC().Format(time.RFC3339),
+	)
 
 	// ✅ Create があるか確認して呼び出す（uc.Create を呼ぶ）
 	c, ok := any(h.uc).(listCreator)
@@ -173,8 +255,7 @@ func (h *ListHandler) create(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// ✅ 呼び出し前ログ
-	log.Printf("[list_handler] POST /lists calling uc.Create")
+	log.Printf("[list_handler] POST /lists calling uc.Create id=%s", item.ID)
 
 	created, err := c.Create(ctx, item)
 	if err != nil {
@@ -188,8 +269,7 @@ func (h *ListHandler) create(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// ✅ 成功ログ
-	log.Printf("[list_handler] POST /lists uc.Create success")
+	log.Printf("[list_handler] POST /lists uc.Create success id=%s", created.ID)
 	w.WriteHeader(http.StatusCreated)
 	_ = json.NewEncoder(w).Encode(created)
 }
@@ -221,18 +301,6 @@ func (h *ListHandler) listImages(w http.ResponseWriter, r *http.Request, id stri
 }
 
 // POST /lists/{id}/images
-// Body:
-//
-//	{
-//	  "id":"...",           // ListImage.ID（必須）
-//	  "fileName":"...",     // 任意（実装による）
-//	  "bucket":"",          // optional, empty = default bucket
-//	  "objectPath":"...",
-//	  "size":123,           // bytes
-//	  "displayOrder":0,     // int
-//	  "createdBy":"user",   // optional（実装で system 等にフォールバック可）
-//	  "createdAt":"..."     // optional RFC3339, default now
-//	}
 func (h *ListHandler) saveImageFromGCS(w http.ResponseWriter, r *http.Request, listID string) {
 	ctx := r.Context()
 
@@ -290,13 +358,6 @@ func (h *ListHandler) saveImageFromGCS(w http.ResponseWriter, r *http.Request, l
 }
 
 // PUT|POST|PATCH /lists/{id}/primary-image
-// Body:
-//
-//	{
-//	  "imageId":"...",
-//	  "updatedBy":"...",     // optional
-//	  "now":"..."            // optional RFC3339, default now
-//	}
 func (h *ListHandler) setPrimaryImage(w http.ResponseWriter, r *http.Request, listID string) {
 	ctx := r.Context()
 
@@ -372,7 +433,11 @@ func methodNotAllowed(w http.ResponseWriter) {
 
 // 共通の not supported エラー型は非公開のため、メッセージベースで判定
 func isNotSupported(err error) bool {
-	return strings.Contains(strings.ToLower(err.Error()), "not supported")
+	if err == nil {
+		return false
+	}
+	msg := strings.ToLower(err.Error())
+	return strings.Contains(msg, "not supported") || strings.Contains(msg, "not_supported")
 }
 
 // 空白トリムして空なら nil、値があればポインタを返す
@@ -385,4 +450,123 @@ func normalizeStrPtr(p *string) *string {
 		return nil
 	}
 	return &s
+}
+
+// --- JSON helpers ---
+
+func mapKeys(m map[string]any) []string {
+	if m == nil {
+		return nil
+	}
+	out := make([]string, 0, len(m))
+	for k := range m {
+		out = append(out, k)
+	}
+	return out
+}
+
+func firstString(m map[string]any, keys ...string) string {
+	for _, k := range keys {
+		v, ok := m[k]
+		if !ok || v == nil {
+			continue
+		}
+		if s, ok := v.(string); ok {
+			if strings.TrimSpace(s) != "" {
+				return s
+			}
+			continue
+		}
+		// number -> string は不要（id など）
+	}
+	return ""
+}
+
+// extractPrices は input の価格情報を map[inventoryId]ListPrice に変換します。
+// 対応:
+// - priceRows: [{ inventoryId, price }, ...]
+// - prices: { "<inventoryId>": { price: 123 } , ... }
+func extractPrices(in map[string]any) map[string]listdom.ListPrice {
+	// 1) priceRows
+	if v, ok := in["priceRows"]; ok && v != nil {
+		if rows, ok := v.([]any); ok && len(rows) > 0 {
+			out := map[string]listdom.ListPrice{}
+			for _, rowAny := range rows {
+				row, ok := rowAny.(map[string]any)
+				if !ok || row == nil {
+					continue
+				}
+				invID, _ := row["inventoryId"].(string)
+				invID = strings.TrimSpace(invID)
+				if invID == "" {
+					// 他のキー名も一応見る
+					if s, ok := row["inventoryID"].(string); ok {
+						invID = strings.TrimSpace(s)
+					}
+				}
+				if invID == "" {
+					continue
+				}
+
+				price := 0
+				if pv, ok := row["price"]; ok && pv != nil {
+					switch t := pv.(type) {
+					case float64:
+						price = int(t)
+					case int:
+						price = t
+					}
+				}
+
+				out[invID] = listdom.ListPrice{Price: price}
+			}
+			if len(out) > 0 {
+				return out
+			}
+		}
+	}
+
+	// 2) prices map
+	if v, ok := in["prices"]; ok && v != nil {
+		if pm, ok := v.(map[string]any); ok && len(pm) > 0 {
+			out := map[string]listdom.ListPrice{}
+			for k, vv := range pm {
+				invID := strings.TrimSpace(k)
+				if invID == "" || vv == nil {
+					continue
+				}
+				switch t := vv.(type) {
+				case map[string]any:
+					price := 0
+					if pv, ok := t["price"]; ok && pv != nil {
+						switch x := pv.(type) {
+						case float64:
+							price = int(x)
+						case int:
+							price = x
+						}
+					}
+					out[invID] = listdom.ListPrice{Price: price}
+				}
+			}
+			if len(out) > 0 {
+				return out
+			}
+		}
+	}
+
+	return nil
+}
+
+// newListID は repo が "missing id" を出さないよう、サーバ側で listID を採番します。
+// Firestore の doc id と同等である必要はありません（文字列で一意ならOK）。
+func newListID() string {
+	// 16 bytes -> base32 (no padding) => 26 chars 程度
+	b := make([]byte, 16)
+	if _, err := rand.Read(b); err != nil {
+		// fallback（最悪）
+		return "list_" + time.Now().UTC().Format("20060102150405.000000000")
+	}
+	enc := base32.StdEncoding.WithPadding(base32.NoPadding)
+	return strings.ToLower(enc.EncodeToString(b))
 }
