@@ -216,10 +216,10 @@ func (h *MemberHandler) list(w http.ResponseWriter, r *http.Request) {
 	f.Status = strings.TrimSpace(qv.Get("status"))
 
 	if v := strings.TrimSpace(qv.Get("brandIds")); v != "" {
-		f.BrandIDs = splitCSV(v)
+		f.BrandIDs = splitCSV(v) // ✅ helpers.go に集約
 	}
 	if v := strings.TrimSpace(qv.Get("brands")); v != "" {
-		f.Brands = splitCSV(v)
+		f.Brands = splitCSV(v) // ✅ helpers.go に集約
 	}
 
 	var sort common.Sort
@@ -259,9 +259,6 @@ func (h *MemberHandler) list(w http.ResponseWriter, r *http.Request) {
 // -----------------------------------------------------------------------------
 // GET /members/by-company
 // -----------------------------------------------------------------------------
-// currentMember の companyId を使って domain の ListMembersByCompanyID を叩く
-// 返却時には各メンバーに displayName を付与する。
-// 叩かれたかは log で確認できる。
 func (h *MemberHandler) listByCompanyID(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 
@@ -286,7 +283,6 @@ func (h *MemberHandler) listByCompanyID(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	// レスポンス用 DTO: Member + displayName
 	type memberWithDisplayName struct {
 		memberdom.Member
 		DisplayName string `json:"displayName"`
@@ -375,20 +371,6 @@ func writeMemberErr(w http.ResponseWriter, err error) {
 // -----------------------------------------------------------------------------
 // Helpers
 // -----------------------------------------------------------------------------
-func splitCSV(s string) []string {
-	if s == "" {
-		return nil
-	}
-	parts := strings.Split(s, ",")
-	out := make([]string, 0, len(parts))
-	for _, p := range parts {
-		if t := strings.TrimSpace(p); t != "" {
-			out = append(out, t)
-		}
-	}
-	return out
-}
-
 func clampInt(v, min, max int) int {
 	if v < min {
 		return min
@@ -398,5 +380,3 @@ func clampInt(v, min, max int) int {
 	}
 	return v
 }
-
-// parseIntDefault は既存実装前提

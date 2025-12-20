@@ -609,6 +609,9 @@ func decodeListDoc(doc *gfs.DocumentSnapshot) (ldom.List, error) {
 		UpdatedAt   *time.Time `firestore:"updated_at"`
 		DeletedAt   *time.Time `firestore:"deleted_at"`
 		DeletedBy   *string    `firestore:"deleted_by"`
+
+		// ✅ NEW: inventory id (ListQuery が tokenName 解決に使う)
+		InventoryID string `firestore:"inventory_id"`
 	}
 
 	if err := doc.DataTo(&raw); err != nil {
@@ -644,12 +647,33 @@ func decodeListDoc(doc *gfs.DocumentSnapshot) (ldom.List, error) {
 		deletedBy = fscommon.TrimPtr(raw.DeletedBy)
 	}
 
+	// ✅ backward compatible: camelCase で保存されている既存データも拾う
+	invID := strings.TrimSpace(raw.InventoryID)
+	if invID == "" {
+		if m := doc.Data(); m != nil {
+			// よくある表記揺れを拾う
+			for _, key := range []string{"inventoryId", "inventoryID", "inventory_id"} {
+				if v, ok := m[key]; ok {
+					if s, ok := v.(string); ok {
+						invID = strings.TrimSpace(s)
+						if invID != "" {
+							break
+						}
+					}
+				}
+			}
+		}
+	}
+
 	return ldom.List{
 		ID:         id,
 		Status:     ldom.ListStatus(strings.TrimSpace(raw.Status)),
 		AssigneeID: strings.TrimSpace(raw.AssigneeID),
 		Title:      strings.TrimSpace(raw.Title),
 		ImageID:    strings.TrimSpace(raw.ImageID),
+
+		// ✅ NEW
+		InventoryID: invID,
 
 		Description: desc,
 		Prices:      nil, // filled later
@@ -672,6 +696,11 @@ func encodeListDoc(l ldom.List) map[string]any {
 		"description": strings.TrimSpace(l.Description),
 		"created_by":  strings.TrimSpace(l.CreatedBy),
 		"created_at":  l.CreatedAt.UTC(),
+	}
+
+	// ✅ NEW: inventory_id を保存（空なら保存しない）
+	if v := strings.TrimSpace(l.InventoryID); v != "" {
+		m["inventory_id"] = v
 	}
 
 	if l.UpdatedBy != nil {

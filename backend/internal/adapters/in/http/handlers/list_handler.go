@@ -10,16 +10,23 @@ import (
 	"strings"
 	"time"
 
+	query "narratives/internal/application/query"
 	usecase "narratives/internal/application/usecase"
 	listdom "narratives/internal/domain/list"
 )
 
 type ListHandler struct {
 	uc *usecase.ListUsecase
+	q  *query.ListQuery
 }
 
 func NewListHandler(uc *usecase.ListUsecase) http.Handler {
-	return &ListHandler{uc: uc}
+	return &ListHandler{uc: uc, q: nil}
+}
+
+// ✅ NEW: Query を注入できる ctor
+func NewListHandlerWithQuery(uc *usecase.ListUsecase, q *query.ListQuery) http.Handler {
+	return &ListHandler{uc: uc, q: q}
 }
 
 func (h *ListHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
@@ -122,29 +129,29 @@ func (h *ListHandler) listIndex(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	q := r.URL.Query()
+	qp := r.URL.Query()
 
 	// ---- filter ----
 	var f listdom.Filter
 
-	if s := strings.TrimSpace(q.Get("q")); s != "" {
+	if s := strings.TrimSpace(qp.Get("q")); s != "" {
 		f.SearchQuery = s
-	} else if s := strings.TrimSpace(q.Get("search")); s != "" {
+	} else if s := strings.TrimSpace(qp.Get("search")); s != "" {
 		f.SearchQuery = s
 	}
 
-	if v := strings.TrimSpace(q.Get("assigneeId")); v != "" {
+	if v := strings.TrimSpace(qp.Get("assigneeId")); v != "" {
 		f.AssigneeID = &v
-	} else if v := strings.TrimSpace(q.Get("assignee_id")); v != "" {
+	} else if v := strings.TrimSpace(qp.Get("assignee_id")); v != "" {
 		f.AssigneeID = &v
 	}
 
-	statusesRaw := strings.TrimSpace(q.Get("statuses"))
+	statusesRaw := strings.TrimSpace(qp.Get("statuses"))
 	if statusesRaw == "" {
-		statusesRaw = strings.TrimSpace(q.Get("status"))
+		statusesRaw = strings.TrimSpace(qp.Get("status"))
 	}
 	if statusesRaw != "" {
-		ss := splitCSV(statusesRaw)
+		ss := splitCSV(statusesRaw) // ✅ helpers.go の splitCSV を利用
 		if len(ss) == 1 {
 			st := listdom.ListStatus(strings.TrimSpace(ss[0]))
 			if st != "" {
@@ -162,81 +169,97 @@ func (h *ListHandler) listIndex(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	if dv := strings.TrimSpace(q.Get("deleted")); dv != "" {
+	if dv := strings.TrimSpace(qp.Get("deleted")); dv != "" {
 		if b, err := strconv.ParseBool(dv); err == nil {
 			f.Deleted = &b
 		}
 	}
 
-	if v := strings.TrimSpace(q.Get("minPrice")); v != "" {
+	if v := strings.TrimSpace(qp.Get("minPrice")); v != "" {
 		if n, err := strconv.Atoi(v); err == nil {
 			f.MinPrice = &n
 		}
 	}
-	if v := strings.TrimSpace(q.Get("maxPrice")); v != "" {
+	if v := strings.TrimSpace(qp.Get("maxPrice")); v != "" {
 		if n, err := strconv.Atoi(v); err == nil {
 			f.MaxPrice = &n
 		}
 	}
 
-	if vv := q["modelNumbers"]; len(vv) > 0 {
+	if vv := qp["modelNumbers"]; len(vv) > 0 {
 		for _, x := range vv {
 			x = strings.TrimSpace(x)
 			if x != "" {
 				f.ModelNumbers = append(f.ModelNumbers, x)
 			}
 		}
-	} else if vv := q["inventoryIds"]; len(vv) > 0 {
+	} else if vv := qp["inventoryIds"]; len(vv) > 0 {
 		for _, x := range vv {
 			x = strings.TrimSpace(x)
 			if x != "" {
+				// 現状仕様に合わせて ModelNumbers に寄せる（既存コード踏襲）
 				f.ModelNumbers = append(f.ModelNumbers, x)
 			}
 		}
 	}
 
-	if t := parseRFC3339Ptr(q.Get("createdFrom")); t != nil {
+	if t := parseRFC3339Ptr(qp.Get("createdFrom")); t != nil {
 		f.CreatedFrom = t
 	}
-	if t := parseRFC3339Ptr(q.Get("createdTo")); t != nil {
+	if t := parseRFC3339Ptr(qp.Get("createdTo")); t != nil {
 		f.CreatedTo = t
 	}
-	if t := parseRFC3339Ptr(q.Get("updatedFrom")); t != nil {
+	if t := parseRFC3339Ptr(qp.Get("updatedFrom")); t != nil {
 		f.UpdatedFrom = t
 	}
-	if t := parseRFC3339Ptr(q.Get("updatedTo")); t != nil {
+	if t := parseRFC3339Ptr(qp.Get("updatedTo")); t != nil {
 		f.UpdatedTo = t
 	}
-	if t := parseRFC3339Ptr(q.Get("deletedFrom")); t != nil {
+	if t := parseRFC3339Ptr(qp.Get("deletedFrom")); t != nil {
 		f.DeletedFrom = t
 	}
-	if t := parseRFC3339Ptr(q.Get("deletedTo")); t != nil {
+	if t := parseRFC3339Ptr(qp.Get("deletedTo")); t != nil {
 		f.DeletedTo = t
 	}
 
 	// ---- sort ----
-	// ✅ domain/list 側に SortColumn 型が無いので、ここでは “パースのみ” してログに残す。
-	//    並び順は repository 側の default（applyListSortToQuery の fallback）に任せる。
-	sortCol := strings.TrimSpace(q.Get("sort"))
-	if sortCol == "" {
-		sortCol = strings.TrimSpace(q.Get("sortBy"))
-	}
-	sortOrder := strings.TrimSpace(q.Get("order"))
-	if sortOrder == "" {
-		sortOrder = strings.TrimSpace(q.Get("sortOrder"))
-	}
+	sort := listdom.Sort{} // repo側のデフォルトに任せる
 
 	// ---- page ----
-	pageNum := parseIntDefault(q.Get("page"), 1)
-	perPage := parseIntDefault(q.Get("perPage"), 50)
+	pageNum := parseIntDefault(qp.Get("page"), 1)
+	perPage := parseIntDefault(qp.Get("perPage"), 50)
 	page := listdom.Page{Number: pageNum, PerPage: perPage}
 
-	log.Printf("[list_handler] GET /lists parsed page=%d perPage=%d sort=%q order=%q filter={q:%q assignee:%v status:%v statuses:%d deleted:%v}",
-		pageNum, perPage, sortCol, sortOrder, f.SearchQuery, ptrStr(f.AssigneeID), ptrStatus(f.Status), len(f.Statuses), ptrBool(f.Deleted),
+	log.Printf("[list_handler] GET /lists parsed page=%d perPage=%d filter={q:%q assignee:%v status:%v statuses:%d deleted:%v}",
+		pageNum, perPage, f.SearchQuery, ptrStr(f.AssigneeID), ptrStatus(f.Status), len(f.Statuses), ptrBool(f.Deleted),
 	)
 
-	// ✅ Sort はゼロ値で渡す（domain 側の型が不明なため）
-	result, err := h.uc.List(ctx, f, listdom.Sort{}, page)
+	// ✅ Query があれば query 経由で tokenName/assigneeName を解決して返す
+	if h.q != nil {
+		pr, err := h.q.ListRows(ctx, f, sort, page)
+		if err != nil {
+			if isNotSupported(err) {
+				w.WriteHeader(http.StatusNotImplemented)
+				_ = json.NewEncoder(w).Encode(map[string]string{"error": "not_implemented"})
+				return
+			}
+			log.Printf("[list_handler] GET /lists (query) failed: %v", err)
+			writeListErr(w, err)
+			return
+		}
+
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"items":      pr.Items,
+			"totalCount": pr.TotalCount,
+			"totalPages": pr.TotalPages,
+			"page":       pr.Page,
+			"perPage":    pr.PerPage,
+		})
+		return
+	}
+
+	// fallback: usecase のまま返す
+	result, err := h.uc.List(ctx, f, sort, page)
 	if err != nil {
 		if isNotSupported(err) {
 			w.WriteHeader(http.StatusNotImplemented)
@@ -459,22 +482,6 @@ func writeListErr(w http.ResponseWriter, err error) {
 	_ = json.NewEncoder(w).Encode(map[string]string{"error": err.Error()})
 }
 
-func methodNotAllowed(w http.ResponseWriter) {
-	w.WriteHeader(http.StatusMethodNotAllowed)
-	_ = json.NewEncoder(w).Encode(map[string]string{"error": "method_not_allowed"})
-}
-
-// usecase.ErrNotSupported は型が見えないので message 判定
-func isNotSupported(err error) bool {
-	if err == nil {
-		return false
-	}
-	msg := strings.ToLower(err.Error())
-	return strings.Contains(msg, "not supported") ||
-		strings.Contains(msg, "not_supported") ||
-		strings.Contains(msg, "notsupported")
-}
-
 func normalizeStrPtr(p *string) *string {
 	if p == nil {
 		return nil
@@ -484,31 +491,6 @@ func normalizeStrPtr(p *string) *string {
 		return nil
 	}
 	return &s
-}
-
-func parseIntDefault(s string, def int) int {
-	s = strings.TrimSpace(s)
-	if s == "" {
-		return def
-	}
-	n, err := strconv.Atoi(s)
-	if err != nil || n <= 0 {
-		return def
-	}
-	return n
-}
-
-func parseRFC3339Ptr(s string) *time.Time {
-	s = strings.TrimSpace(s)
-	if s == "" {
-		return nil
-	}
-	t, err := time.Parse(time.RFC3339, s)
-	if err != nil {
-		return nil
-	}
-	tt := t.UTC()
-	return &tt
 }
 
 func ptrStr(p *string) string {

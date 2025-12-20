@@ -29,7 +29,7 @@ import (
 	// ★ ProductionUsecase（application/production）
 	productionapp "narratives/internal/application/production"
 
-	// ★ CompanyProductionQueryService / MintRequestQueryService / InventoryQuery / ListCreateQuery
+	// ★ CompanyProductionQueryService / MintRequestQueryService / InventoryQuery / ListCreateQuery / ListQuery
 	companyquery "narratives/internal/application/query"
 
 	resolver "narratives/internal/application/resolver"
@@ -118,6 +118,9 @@ type Container struct {
 	// ✅ NEW: listCreate 画面用 DTO（GET /inventory/list-create/...）
 	ListCreateQuery *companyquery.ListCreateQuery
 
+	// ✅ NEW: lists 一覧 DTO（GET /lists）
+	ListQuery *companyquery.ListQuery
+
 	// ★ 検品アプリ用 ProductUsecase（/inspector/products/{id}）
 	ProductUC *uc.ProductUsecase
 
@@ -185,7 +188,6 @@ func (a *pbPatchByIDAdapter) GetPatchByID(ctx context.Context, id string) (produ
 
 // ============================================================
 // ✅ Adapter: ListRepositoryFS -> usecase.ListPatcher
-// - ListPatcher.UpdateImageID を listRepo.Update(...) に変換する
 // ============================================================
 type listPatcherAdapter struct {
 	repo interface {
@@ -454,8 +456,6 @@ func NewContainer(ctx context.Context) (*Container, error) {
 	invoiceUC := uc.NewInvoiceUsecase(invoiceRepo)
 
 	// ✅ ListUsecase
-	// - listRepo は Create/GetByID を担当
-	// - patcher は adapter 経由で UpdateImageID を実装
 	listUC := uc.NewListUsecaseWithCreator(
 		listRepo,      // ListReader
 		listRepo,      // ListCreator
@@ -577,13 +577,16 @@ func NewContainer(ctx context.Context) (*Container, error) {
 		nameResolver,
 	)
 
-	// ✅ NEW: ListCreateQuery（pb/tb -> brandName/productName/tokenName + inventory rows）
+	// ✅ NEW: ListCreateQuery
 	listCreateQuery := companyquery.NewListCreateQueryWithInventory(
 		inventoryRepo,
 		&pbPatchByIDAdapter{repo: productBlueprintRepo},
 		&tbPatchByIDAdapter{repo: tokenBlueprintRepo},
 		nameResolver,
 	)
+
+	// ✅ NEW: ListQuery（listRepo の List(...) をそのまま使えるよう、query 側を合わせた）
+	listQuery := companyquery.NewListQuery(listRepo, nameResolver)
 
 	// 6. Assemble container
 	return &Container{
@@ -635,6 +638,7 @@ func NewContainer(ctx context.Context) (*Container, error) {
 
 		InventoryQuery:  inventoryQuery,
 		ListCreateQuery: listCreateQuery,
+		ListQuery:       listQuery,
 
 		ProductUC:    productUC,
 		InspectionUC: inspectionUC,
@@ -690,8 +694,10 @@ func (c *Container) RouterDeps() httpin.RouterDeps {
 
 		InventoryQuery: c.InventoryQuery,
 
-		// ✅ router.go の RouterDeps にこのフィールドが存在する前提
 		ListCreateQuery: c.ListCreateQuery,
+
+		// ✅ NEW
+		ListQuery: c.ListQuery,
 
 		ProductUC:    c.ProductUC,
 		InspectionUC: c.InspectionUC,

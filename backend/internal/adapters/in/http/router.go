@@ -17,7 +17,7 @@ import (
 	// ★ new: Production 用の新パッケージ
 	productionapp "narratives/internal/application/production"
 
-	// ★ new: Query services (CompanyProductionQueryService / InventoryQuery / ListCreateQuery)
+	// ★ new: Query services (CompanyProductionQueryService / InventoryQuery / ListCreateQuery / ListQuery)
 	companyquery "narratives/internal/application/query"
 
 	// ハンドラ群
@@ -73,6 +73,9 @@ type RouterDeps struct {
 
 	// ✅ NEW: listCreate DTO assembler（/inventory/list-create/...）
 	ListCreateQuery *companyquery.ListCreateQuery
+
+	// ✅ NEW: Lists の read-model assembler（/lists 一覧 DTO）
+	ListQuery *companyquery.ListQuery
 
 	// ★ NameResolver（ID→名前/型番解決）
 	NameResolver *resolver.NameResolver
@@ -263,7 +266,13 @@ func NewRouter(deps RouterDeps) http.Handler {
 	// ✅ Lists（/lists）
 	// ================================
 	if deps.ListUC != nil {
-		listH := handlers.NewListHandler(deps.ListUC)
+		var listH http.Handler
+		if deps.ListQuery != nil {
+			listH = handlers.NewListHandlerWithQuery(deps.ListUC, deps.ListQuery)
+		} else {
+			listH = handlers.NewListHandler(deps.ListUC)
+		}
+
 		var h http.Handler = listH
 		if authMw != nil {
 			h = authMw.Handler(h)
