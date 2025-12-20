@@ -5,13 +5,6 @@ import { FilterableTableHeader } from "../../../shell/src/layout/List/List";
 
 import type { ListStatus } from "../../../shell/src/shared/types/list";
 
-// 既存 mock（バックエンド未実装/障害時のフォールバック用）
-import {
-  LISTINGS,
-  getListStatusLabel as getListStatusLabelMock,
-  type ListingRow,
-} from "../infrastructure/mockdata/mockdata";
-
 // ✅ HTTP は repository へ移譲
 import { fetchListsHTTP } from "../infrastructure/http/listRepositoryHTTP";
 
@@ -81,22 +74,6 @@ export function buildStatusBadge(
   return { text: "削除済み", className: "list-status-badge is-paused" };
 }
 
-function buildFallbackRowsFromMock(): ListManagementRowVM[] {
-  return (LISTINGS as ListingRow[]).map((r) => {
-    const badge = buildStatusBadge(r.status);
-    return {
-      id: r.id,
-      productName: r.productName,
-      tokenName: r.tokenName,
-      assigneeName: r.assigneeName,
-      status: r.status,
-      statusLabel: getListStatusLabelMock(r.status),
-      statusBadgeText: badge.text,
-      statusBadgeClass: badge.className,
-    };
-  });
-}
-
 /**
  * DTO -> ViewModel（best-effort）
  * ※ backend の DTO が enrich 済みなら productName/tokenName/assigneeName を優先
@@ -132,13 +109,12 @@ export function mapAnyToVMRow(x: any): ListManagementRowVM {
 }
 
 /**
- * ✅ 一覧ロード（バックエンド → 失敗時は mock）
- * - HTTP は listRepositoryHTTP.tsx 側に寄せた
+ * ✅ 一覧ロード（バックエンドのみ）
+ * - mockdata フォールバックは削除
  */
 export async function loadListManagementRows(): Promise<{
   rows: ListManagementRowVM[];
   error: string | null;
-  usedFallback: boolean;
 }> {
   try {
     const items = await fetchListsHTTP(); // ✅ repository 経由
@@ -150,17 +126,16 @@ export async function loadListManagementRows(): Promise<{
       sample: mapped.slice(0, 3),
     });
 
-    return { rows: mapped, error: null, usedFallback: false };
+    return { rows: mapped, error: null };
   } catch (e: any) {
     // eslint-disable-next-line no-console
-    console.log("[list/listManagementService] fetch lists failed -> fallback to mock", {
+    console.log("[list/listManagementService] fetch lists failed", {
       error: String(e?.message ?? e),
     });
 
     return {
-      rows: buildFallbackRowsFromMock(),
+      rows: [],
       error: String(e?.message ?? e),
-      usedFallback: true,
     };
   }
 }

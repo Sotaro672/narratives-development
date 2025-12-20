@@ -17,6 +17,12 @@ type ListReader interface {
 	GetByID(ctx context.Context, id string) (listdom.List, error)
 }
 
+// ✅ NEW: ListLister は List 一覧取得の契約です（GET /lists 用）。
+type ListLister interface {
+	List(ctx context.Context, filter listdom.Filter, sort listdom.Sort, page listdom.Page) (listdom.PageResult[listdom.List], error)
+	Count(ctx context.Context, filter listdom.Filter) (int, error)
+}
+
 // ✅ NEW: ListCreator は List 作成の契約です。
 type ListCreator interface {
 	// Create は list を永続化し、保存結果（ID採番等を含む）を返します。
@@ -64,7 +70,8 @@ type ListAggregate struct {
 // ListUsecase は List と ListImage をまとめて扱います。
 type ListUsecase struct {
 	listReader       ListReader
-	listCreator      ListCreator // ✅ NEW
+	listLister       ListLister  // ✅ NEW: GET /lists 用
+	listCreator      ListCreator // ✅ optional
 	listPatcher      ListPatcher
 	imageReader      ListImageReader
 	imageByIDReader  ListImageByIDReader
@@ -80,14 +87,24 @@ func NewListUsecase(
 	imageByIDReader ListImageByIDReader,
 	imageObjectSaver ListImageObjectSaver,
 ) *ListUsecase {
-	return &ListUsecase{
+	uc := &ListUsecase{
 		listReader:       listReader,
-		listCreator:      nil, // ✅ optional
+		listLister:       nil, // ✅ auto-wire below
+		listCreator:      nil,
 		listPatcher:      listPatcher,
 		imageReader:      imageReader,
 		imageByIDReader:  imageByIDReader,
 		imageObjectSaver: imageObjectSaver,
 	}
+
+	// ✅ 重要: 既存DIを壊さずに、listReader(実体はrepo)が ListLister を実装していれば自動で配線
+	if listReader != nil {
+		if lister, ok := any(listReader).(ListLister); ok {
+			uc.listLister = lister
+		}
+	}
+
+	return uc
 }
 
 // ✅ NEW: 作成にも対応したコンストラクタ（既存呼び出しを壊さない）
@@ -99,14 +116,67 @@ func NewListUsecaseWithCreator(
 	imageByIDReader ListImageByIDReader,
 	imageObjectSaver ListImageObjectSaver,
 ) *ListUsecase {
-	return &ListUsecase{
+	uc := &ListUsecase{
 		listReader:       listReader,
+		listLister:       nil, // ✅ auto-wire below
 		listCreator:      listCreator,
 		listPatcher:      listPatcher,
 		imageReader:      imageReader,
 		imageByIDReader:  imageByIDReader,
 		imageObjectSaver: imageObjectSaver,
 	}
+
+	// ✅ 重要: listReader が ListLister を実装していればそれを優先して配線
+	if listReader != nil {
+		if lister, ok := any(listReader).(ListLister); ok {
+			uc.listLister = lister
+		}
+	}
+	// ✅ 念のため: listReader がダメでも listCreator(同じrepoを渡しているケース)が実装していれば配線
+	if uc.listLister == nil && listCreator != nil {
+		if lister, ok := any(listCreator).(ListLister); ok {
+			uc.listLister = lister
+		}
+	}
+
+	return uc
+}
+
+// ✅ NEW: List は List 一覧を返します（GET /lists）
+func (uc *ListUsecase) List(ctx context.Context, filter listdom.Filter, sort listdom.Sort, page listdom.Page) (listdom.PageResult[listdom.List], error) {
+	log.Printf("[list_usecase] List called filter=%s sort=%s page=%s",
+		dumpAsJSON(filter),
+		dumpAsJSON(sort),
+		dumpAsJSON(page),
+	)
+
+	if uc.listLister == nil {
+		log.Printf("[list_usecase] List NOT supported (listLister is nil)")
+		return listdom.PageResult[listdom.List]{}, ErrNotSupported("List.List")
+	}
+
+	out, err := uc.listLister.List(ctx, filter, sort, page)
+	if err != nil {
+		log.Printf("[list_usecase] List failed err=%v", err)
+		return listdom.PageResult[listdom.List]{}, err
+	}
+
+	log.Printf("[list_usecase] List ok count=%d page=%d perPage=%d totalPages=%d",
+		len(out.Items),
+		out.Page,
+		out.PerPage,
+		out.TotalPages,
+	)
+
+	return out, nil
+}
+
+// ✅ NEW: Count も必要なら使えるようにしておく（任意）
+func (uc *ListUsecase) Count(ctx context.Context, filter listdom.Filter) (int, error) {
+	if uc.listLister == nil {
+		return 0, ErrNotSupported("List.Count")
+	}
+	return uc.listLister.Count(ctx, filter)
 }
 
 // ✅ NEW: Create は List を作成します。
