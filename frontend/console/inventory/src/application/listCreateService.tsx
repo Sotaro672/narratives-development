@@ -128,6 +128,9 @@ export function extractDisplayStrings(dto: ListCreateDTO | null): {
 /**
  * ✅ backend の ListCreateDTO.priceRows を PriceCard 用 PriceRow[] に変換
  * - dto 側に priceRows が無ければ []
+ *
+ * ※ ここは UI 用のため、size/color/stock/rgb を残してOK
+ *    （POST /lists に送る形は buildCreateListInput で「modelId+price のみ」に射影する）
  */
 export function mapDTOToPriceRows(dto: ListCreateDTO | null): PriceRow[] {
   const rowsAny: any[] = Array.isArray((dto as any)?.priceRows)
@@ -140,7 +143,7 @@ export function mapDTOToPriceRows(dto: ListCreateDTO | null): PriceRow[] {
     const size = s(r?.size ?? r?.Size) || "-";
     const color = s(r?.color ?? r?.Color) || "-";
     const stock = Number(r?.stock ?? r?.Stock ?? 0);
-    const rgb = r?.rgb ?? r?.RGB; // number|null|undefined 想定
+    const rgb = r?.rgb ?? r?.RGB; // number|string|null|undefined 想定
     const price = r?.price ?? r?.Price;
 
     const safeStock = Number.isFinite(stock) ? stock : 0;
@@ -167,19 +170,54 @@ export async function loadListCreateDTOFromParams(
   return await fetchListCreateDTO(input);
 }
 
+// ============================================================
+// ✅ POST /lists: 期待値どおり「modelId + price のみ」
+// ============================================================
+
+export type CreateListPriceRow = {
+  modelId: string;
+  price: number | null;
+};
+
+function toNumberOrNull(v: unknown): number | null {
+  if (v === null || v === undefined) return null;
+  const n = typeof v === "number" ? v : Number(String(v).trim());
+  if (!Number.isFinite(n)) return null;
+  return Math.floor(n);
+}
+
 /**
- * ✅ POST /lists 用の payload を組み立てる（inventory の listCreate 画面入力 → list 作成）
+ * ✅ Hook から渡された priceRows を「modelId+price」に正規化する
+ * - Hook 側が PriceRowEx を渡してくる想定（modelId を含む）
+ * - 互換のため ModelID なども拾う
+ * - size/color/stock/rgb 等は POST には一切含めない
+ */
+export function normalizeCreateListPriceRows(rows: any[]): CreateListPriceRow[] {
+  const arr = Array.isArray(rows) ? rows : [];
+  return arr.map((r) => {
+    const modelId = s((r as any)?.modelId ?? (r as any)?.ModelID);
+    const price = toNumberOrNull((r as any)?.price);
+    return { modelId, price };
+  });
+}
+
+/**
+ * ✅ POST /lists 用の payload を組み立てる
+ * - 期待値：listRepositoryHTTP.tsx へは {modelId, price} のみ渡す
  */
 export function buildCreateListInput(args: {
   params: ResolvedListCreateParams;
   listingTitle: string;
   description: string;
-  priceRows: PriceRow[];
+  // ✅ Hook 側が PriceRowEx（modelId含む）を渡してくるので any[] で受ける
+  priceRows: any[];
   decision: "list" | "hold";
   assigneeId?: string;
 }): CreateListInput {
   const title = s(args.listingTitle);
   const desc = s(args.description);
+
+  const priceRows = normalizeCreateListPriceRows(args.priceRows);
 
   return {
     inventoryId: s(args.params.inventoryId) || undefined,
@@ -187,43 +225,46 @@ export function buildCreateListInput(args: {
     description: desc,
     decision: args.decision,
     assigneeId: s(args.assigneeId) || undefined,
-    priceRows: (args.priceRows ?? []).map((r) => ({
-      size: s(r.size) || "-",
-      color: s(r.color) || "-",
-      stock: Number.isFinite(Number(r.stock)) ? Number(r.stock) : 0,
-      price: r.price === undefined ? null : (r.price as any),
-      rgb: (r as any).rgb ?? null,
-    })),
-  };
+    // ✅ ここが重要：modelId と price 以外は送らない
+    priceRows: priceRows as any,
+  } as CreateListInput;
 }
 
 /**
  * ✅ 入力バリデーション（UI 側の要件）
  * - title が空欄 → エラー
+ * - modelId が欠ける行がある → エラー
  * - price が 0（または未入力/0のみ） → エラー
  */
 export function validateCreateListInput(input: CreateListInput): void {
-  const title = s(input.title);
+  const title = s((input as any)?.title);
   if (!title) {
     throw new Error("タイトルを入力してください。");
   }
 
-  const rows = Array.isArray(input.priceRows) ? input.priceRows : [];
+  const rows = Array.isArray((input as any)?.priceRows) ? (input as any).priceRows : [];
+  if (rows.length === 0) {
+    throw new Error("価格が未設定です（価格行がありません）。");
+  }
+
+  const missingModelId = rows.find((r: any) => !s(r?.modelId ?? r?.ModelID));
+  if (missingModelId) {
+    throw new Error("価格行に modelId が含まれていません。");
+  }
+
   // 価格が1つも入っていない or 0 しか無い場合は NG
   const hasPositivePrice = rows.some((r: any) => {
-    const p = r?.price;
-    const n = typeof p === "number" ? p : Number(p);
-    return Number.isFinite(n) && n > 0;
+    const n = toNumberOrNull(r?.price);
+    return n !== null && n > 0;
   });
   if (!hasPositivePrice) {
     throw new Error("価格を入力してください。（0 円は指定できません）");
   }
 
-  // 念のため「0円」の行が混ざっていたらエラーにする（在庫>0 の行だけ見る等にしたければここを調整）
+  // 念のため「0円」の行が混ざっていたらエラー
   const hasZeroPrice = rows.some((r: any) => {
-    const p = r?.price;
-    const n = typeof p === "number" ? p : Number(p);
-    return Number.isFinite(n) && n === 0;
+    const n = toNumberOrNull(r?.price);
+    return n !== null && n === 0;
   });
   if (hasZeroPrice) {
     throw new Error("価格に 0 円が含まれています。0 円は指定できません。");
@@ -237,12 +278,13 @@ export function validateCreateListInput(input: CreateListInput): void {
 export async function postCreateList(input: CreateListInput): Promise<ListDTO> {
   // eslint-disable-next-line no-console
   console.log("[inventory/listCreateService] postCreateList (before validate)", {
-    inventoryId: input.inventoryId,
-    title: input.title,
-    descriptionLen: String(input.description ?? "").length,
-    decision: input.decision,
-    priceRowsCount: Array.isArray(input.priceRows) ? input.priceRows.length : 0,
-    payload: input,
+    inventoryId: (input as any).inventoryId,
+    title: (input as any).title,
+    descriptionLen: String((input as any).description ?? "").length,
+    decision: (input as any).decision,
+    priceRowsCount: Array.isArray((input as any).priceRows) ? (input as any).priceRows.length : 0,
+    // ✅ payload は大きいので、先頭だけ確認できるようにする
+    priceRowsSample: Array.isArray((input as any).priceRows) ? (input as any).priceRows.slice(0, 5) : [],
   });
 
   // ✅ validate
@@ -250,10 +292,10 @@ export async function postCreateList(input: CreateListInput): Promise<ListDTO> {
 
   // eslint-disable-next-line no-console
   console.log("[inventory/listCreateService] postCreateList (validated)", {
-    inventoryId: input.inventoryId,
-    title: input.title,
-    decision: input.decision,
-    priceRowsCount: Array.isArray(input.priceRows) ? input.priceRows.length : 0,
+    inventoryId: (input as any).inventoryId,
+    title: (input as any).title,
+    decision: (input as any).decision,
+    priceRowsCount: Array.isArray((input as any).priceRows) ? (input as any).priceRows.length : 0,
   });
 
   return await createListHTTP(input);

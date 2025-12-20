@@ -1,3 +1,4 @@
+// backend/internal/application/query/list_query.go
 package query
 
 import (
@@ -33,6 +34,18 @@ type ListRowDTO struct {
 	Status       string `json:"status"`
 }
 
+// ✅ NEW: ListCreateSeedDTO は「list新規作成画面」に必要な材料のみを返す DTO。
+// - ここでは「画面情報を揃える」だけが責務で、永続化(Create)は usecase に移譲する。
+// - prices は [modelId: priceValue] の map を返す（値は初期値 0）。
+type ListCreateSeedDTO struct {
+	InventoryID        string           `json:"inventoryId"`
+	ProductBlueprintID string           `json:"productBlueprintId"`
+	TokenBlueprintID   string           `json:"tokenBlueprintId"`
+	ProductName        string           `json:"productName"`
+	TokenName          string           `json:"tokenName"`
+	Prices             map[string]int64 `json:"prices"` // modelId -> price value
+}
+
 // ============================================================
 // ListQuery
 // ============================================================
@@ -60,8 +73,6 @@ func (q *ListQuery) ListRows(ctx context.Context, filter listdom.Filter, sort li
 		}, nil
 	}
 
-	// ✅ 入口ログ（filter/page）
-	// NOTE: listdom.Filter には InventoryIDs が無いので参照しない
 	log.Printf("[ListQuery] ListRows ENTER page=%d perPage=%d filter={q:%q assigneeID:%v status:%v statuses:%d deleted:%v modelNumbers:%d}",
 		page.Number,
 		page.PerPage,
@@ -97,16 +108,15 @@ func (q *ListQuery) ListRows(ctx context.Context, filter listdom.Filter, sort li
 		productName := strings.TrimSpace(it.Title)
 
 		invID := strings.TrimSpace(it.InventoryID)
-		pbID, tbID, ok := parseInventoryIDForListQuery(invID)
+		pbID, tbID, ok := parseInventoryIDStrict(invID)
 
-		// ✅ 入力材料ログ（tokenName が空の原因特定用）
+		// 入力材料ログ
 		log.Printf("[ListQuery] row input listID=%q invID=%q parsed={ok:%v pbID:%q tbID:%q} title=%q assigneeID=%q status=%q",
 			id, invID, ok, pbID, tbID, strings.TrimSpace(it.Title), strings.TrimSpace(it.AssigneeID), strings.TrimSpace(string(it.Status)),
 		)
 
-		// 解析できない場合はログで可視化（tokenName が空の原因特定用）
 		if !ok && invID != "" {
-			log.Printf("[ListQuery] WARN inventoryID not parseable invID=%q listID=%q", invID, id)
+			log.Printf("[ListQuery] WARN inventoryID not parseable (expected {pbId}__{tbId}) invID=%q listID=%q", invID, id)
 		}
 
 		// product name resolve
@@ -115,17 +125,13 @@ func (q *ListQuery) ListRows(ctx context.Context, filter listdom.Filter, sort li
 				if cached != "" {
 					productName = cached
 				}
-				log.Printf("[ListQuery] productName cache pbID=%q -> %q", pbID, cached)
 			} else {
 				resolved := strings.TrimSpace(q.nameResolver.ResolveProductName(ctx, pbID))
 				productNameCache[pbID] = resolved
-				log.Printf("[ListQuery] productName resolved pbID=%q -> %q", pbID, resolved)
 				if resolved != "" {
 					productName = resolved
 				}
 			}
-		} else {
-			log.Printf("[ListQuery] productName skipped ok=%v pbID=%q nameResolverNil=%v", ok, pbID, q.nameResolver == nil)
 		}
 
 		// tokenName resolve
@@ -133,18 +139,11 @@ func (q *ListQuery) ListRows(ctx context.Context, filter listdom.Filter, sort li
 		if ok && tbID != "" && q.nameResolver != nil {
 			if cached, ok := tokenNameCache[tbID]; ok {
 				tokenName = cached
-				log.Printf("[ListQuery] tokenName cache tbID=%q -> %q", tbID, cached)
 			} else {
 				resolved := strings.TrimSpace(q.nameResolver.ResolveTokenName(ctx, tbID))
 				tokenNameCache[tbID] = resolved
 				tokenName = resolved
-				log.Printf("[ListQuery] tokenName resolved tbID=%q -> %q", tbID, resolved)
 			}
-		} else {
-			// ✅ tokenName が空の「理由」
-			log.Printf("[ListQuery] tokenName skipped ok=%v tbID=%q nameResolverNil=%v (invID=%q listID=%q)",
-				ok, tbID, q.nameResolver == nil, invID, id,
-			)
 		}
 
 		// assigneeName resolve
@@ -153,15 +152,11 @@ func (q *ListQuery) ListRows(ctx context.Context, filter listdom.Filter, sort li
 		if assigneeID != "" && q.nameResolver != nil {
 			if cached, ok := memberNameCache[assigneeID]; ok {
 				assigneeName = cached
-				log.Printf("[ListQuery] assigneeName cache assigneeID=%q -> %q", assigneeID, cached)
 			} else {
 				resolved := strings.TrimSpace(q.nameResolver.ResolveAssigneeName(ctx, assigneeID))
 				memberNameCache[assigneeID] = resolved
 				assigneeName = resolved
-				log.Printf("[ListQuery] assigneeName resolved assigneeID=%q -> %q", assigneeID, resolved)
 			}
-		} else {
-			log.Printf("[ListQuery] assigneeName skipped assigneeID=%q nameResolverNil=%v", assigneeID, q.nameResolver == nil)
 		}
 		if assigneeName == "" {
 			assigneeName = "未設定"
@@ -175,23 +170,11 @@ func (q *ListQuery) ListRows(ctx context.Context, filter listdom.Filter, sort li
 			Status:       strings.TrimSpace(string(it.Status)),
 		}
 
-		// ✅ 画面へ渡す 1 行分の最終ログ
-		log.Printf("[ListQuery] row output listID=%q productName=%q tokenName=%q assigneeName=%q status=%q",
-			row.ID, row.ProductName, row.TokenName, row.AssigneeName, row.Status,
-		)
-
 		out = append(out, row)
 	}
 
-	// ✅ まとめログ（空が多いかを見る）
-	emptyToken := 0
-	for _, r := range out {
-		if strings.TrimSpace(r.TokenName) == "" {
-			emptyToken++
-		}
-	}
-	log.Printf("[ListQuery] ListRows EXIT items=%d emptyTokenName=%d page=%d perPage=%d total=%d totalPages=%d",
-		len(out), emptyToken, pr.Page, pr.PerPage, pr.TotalCount, pr.TotalPages,
+	log.Printf("[ListQuery] ListRows EXIT items=%d page=%d perPage=%d total=%d totalPages=%d",
+		len(out), pr.Page, pr.PerPage, pr.TotalCount, pr.TotalPages,
 	)
 
 	return listdom.PageResult[ListRowDTO]{
@@ -201,6 +184,55 @@ func (q *ListQuery) ListRows(ctx context.Context, filter listdom.Filter, sort li
 		TotalCount: pr.TotalCount,
 		TotalPages: pr.TotalPages,
 	}, nil
+}
+
+// ✅ NEW: BuildCreateSeed は list新規作成画面に必要な情報を揃えて返します。
+// - ここでは永続化(Create)は行いません（usecase に移譲）。
+// - inventoryID は "{pbId}__{tbId}" のみ許可します（名揺れ吸収しない）。
+// - prices は [modelId: priceValue] の map を返します。初期値は 0。
+func (q *ListQuery) BuildCreateSeed(ctx context.Context, inventoryID string, modelIDs []string) (ListCreateSeedDTO, error) {
+	inventoryID = strings.TrimSpace(inventoryID)
+
+	pbID, tbID, ok := parseInventoryIDStrict(inventoryID)
+	if !ok {
+		// ここは "画面情報を揃える" 以前の入力エラーなので明示的にログ
+		log.Printf("[ListQuery] BuildCreateSeed invalid inventoryID (expected {pbId}__{tbId}) inventoryID=%q", inventoryID)
+		return ListCreateSeedDTO{}, listdom.ErrInvalidInventoryID
+	}
+
+	productName := ""
+	tokenName := ""
+
+	if q != nil && q.nameResolver != nil {
+		productName = strings.TrimSpace(q.nameResolver.ResolveProductName(ctx, pbID))
+		tokenName = strings.TrimSpace(q.nameResolver.ResolveTokenName(ctx, tbID))
+	}
+
+	// prices: modelId -> 0 (初期値)
+	prices := map[string]int64{}
+	for _, mid := range modelIDs {
+		mid = strings.TrimSpace(mid)
+		if mid == "" {
+			continue
+		}
+		// 重複は上書きでOK（同じキーは1つ）
+		prices[mid] = 0
+	}
+
+	out := ListCreateSeedDTO{
+		InventoryID:        inventoryID,
+		ProductBlueprintID: pbID,
+		TokenBlueprintID:   tbID,
+		ProductName:        productName,
+		TokenName:          tokenName,
+		Prices:             prices,
+	}
+
+	log.Printf("[ListQuery] BuildCreateSeed ok inventoryID=%q pbID=%q tbID=%q modelIDs=%d pricesKeys=%d",
+		inventoryID, pbID, tbID, len(modelIDs), len(prices),
+	)
+
+	return out, nil
 }
 
 // ============================================================
@@ -236,40 +268,25 @@ func ptrStatus(p *listdom.ListStatus) any {
 	return string(*p)
 }
 
-// parseInventoryIDForListQuery は List.InventoryID の表記揺れに強いパーサです。
+// parseInventoryIDStrict は List.InventoryID を厳密にパースします。
 // 期待： "{pbId}__{tbId}"
-// 実際：pbId / tbId 単体や、区切りが違うケースを拾えるようにしておく。
-func parseInventoryIDForListQuery(invID string) (pbID string, tbID string, ok bool) {
+// 名揺れ吸収はしません（正規フォーマットのみ許可）。
+func parseInventoryIDStrict(invID string) (pbID string, tbID string, ok bool) {
 	invID = strings.TrimSpace(invID)
 	if invID == "" {
 		return "", "", false
 	}
-
-	// 1) 正：pb__tb
-	if strings.Contains(invID, "__") {
-		parts := strings.Split(invID, "__")
-		// pb__tb__... のように増えても先頭2つを採用
-		if len(parts) >= 2 {
-			pb := strings.TrimSpace(parts[0])
-			tb := strings.TrimSpace(parts[1])
-			if pb != "" && tb != "" {
-				return pb, tb, true
-			}
-		}
+	if !strings.Contains(invID, "__") {
+		return "", "", false
 	}
-
-	// 2) 念のため：pb|tb
-	if strings.Contains(invID, "|") {
-		parts := strings.Split(invID, "|")
-		if len(parts) >= 2 {
-			pb := strings.TrimSpace(parts[0])
-			tb := strings.TrimSpace(parts[1])
-			if pb != "" && tb != "" {
-				return pb, tb, true
-			}
-		}
+	parts := strings.Split(invID, "__")
+	if len(parts) < 2 {
+		return "", "", false
 	}
-
-	// 3) ここまで来るなら「解析できない」扱い
-	return "", "", false
+	pb := strings.TrimSpace(parts[0])
+	tb := strings.TrimSpace(parts[1])
+	if pb == "" || tb == "" {
+		return "", "", false
+	}
+	return pb, tb, true
 }

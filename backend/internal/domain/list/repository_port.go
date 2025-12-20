@@ -1,3 +1,4 @@
+// backend/internal/domain/list/repository_port.go
 package list
 
 import (
@@ -16,7 +17,10 @@ type ListPatch struct {
 	ImageID    *string // ListImage.id を指す
 
 	Description *string
-	Prices      *map[string]ListPrice // key = inventoryId
+
+	// ✅ prices は配列のみ（フロント標準）
+	// nil の場合は prices を更新しない
+	Prices *[]ListPriceRow
 
 	UpdatedAt *time.Time
 	UpdatedBy *string
@@ -25,6 +29,10 @@ type ListPatch struct {
 }
 
 // フィルタ/検索条件（実装側で適宜解釈）
+//
+// NOTE:
+// - 旧命名互換のため ModelNumbers を残しているが、ここでの意味は「modelId の集合」。
+// - 価格条件は Prices[] の (modelId, price) に対して適用される。
 type Filter struct {
 	// フリーテキスト（id, title, description 等の部分一致などは実装側で解釈）
 	SearchQuery string
@@ -35,9 +43,9 @@ type Filter struct {
 	Status     *ListStatus
 	Statuses   []ListStatus
 
-	// 価格条件（Prices[inventoryId].Price に対する閾値）
-	// NOTE: 旧命名の互換のため ModelNumbers を残しているが、
-	//       実際の意味は「Prices の key（= inventoryId）」として扱う。
+	// 価格条件
+	// - ModelNumbers: 対象 modelId の集合（旧名互換）
+	// - MinPrice/MaxPrice: price の閾値
 	ModelNumbers []string
 	MinPrice     *int
 	MaxPrice     *int

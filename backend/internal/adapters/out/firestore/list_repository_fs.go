@@ -327,10 +327,10 @@ func (r *ListRepositoryFS) Create(ctx context.Context, l ldom.List) (ldom.List, 
 		return ldom.List{}, errors.New("firestore client is nil")
 	}
 
+	// ✅ ABテスト前提: 同一 inventoryId に複数 List を許容するため、
+	// docId を inventoryId に固定しない。
+	// - l.ID が空なら Firestore の自動採番で docId を発行する
 	id := strings.TrimSpace(l.ID)
-	if id == "" {
-		return ldom.List{}, errors.New("missing id")
-	}
 
 	now := time.Now().UTC()
 	if l.CreatedAt.IsZero() {
@@ -340,17 +340,27 @@ func (r *ListRepositoryFS) Create(ctx context.Context, l ldom.List) (ldom.List, 
 		l.UpdatedAt = &now
 	}
 
-	l.ID = id
-	ref := r.col().Doc(id)
+	var ref *gfs.DocumentRef
+	if id == "" {
+		ref = r.col().NewDoc()
+		l.ID = ref.ID
+		id = ref.ID
+	} else {
+		ref = r.col().Doc(id)
+		l.ID = id
+	}
 
 	// conflict check + create main doc + prices in a transaction
 	err := r.Client.RunTransaction(ctx, func(ctx context.Context, tx *gfs.Transaction) error {
-		_, err := tx.Get(ref)
-		if err == nil {
-			return ldom.ErrConflict
-		}
-		if status.Code(err) != codes.NotFound {
-			return err
+		// ID 指定の場合のみ conflict check
+		if strings.TrimSpace(ref.ID) != "" && strings.TrimSpace(l.ID) != "" && strings.TrimSpace(l.ID) == strings.TrimSpace(ref.ID) {
+			_, err := tx.Get(ref)
+			if err == nil {
+				return ldom.ErrConflict
+			}
+			if status.Code(err) != codes.NotFound {
+				return err
+			}
 		}
 
 		if err := tx.Create(ref, encodeListDoc(l)); err != nil {
@@ -359,6 +369,7 @@ func (r *ListRepositoryFS) Create(ctx context.Context, l ldom.List) (ldom.List, 
 			}
 			return err
 		}
+
 		return r.txReplaceListPrices(ctx, tx, ref, l.Prices)
 	})
 	if err != nil {
@@ -564,9 +575,6 @@ func (r *ListRepositoryFS) Save(ctx context.Context, l ldom.List, _ *ldom.SaveOp
 	}
 
 	id := strings.TrimSpace(l.ID)
-	if id == "" {
-		return ldom.List{}, errors.New("missing id")
-	}
 
 	now := time.Now().UTC()
 	if l.CreatedAt.IsZero() {
@@ -576,8 +584,15 @@ func (r *ListRepositoryFS) Save(ctx context.Context, l ldom.List, _ *ldom.SaveOp
 		l.UpdatedAt = &now
 	}
 
-	l.ID = id
-	ref := r.col().Doc(id)
+	var ref *gfs.DocumentRef
+	if id == "" {
+		ref = r.col().NewDoc()
+		l.ID = ref.ID
+		id = ref.ID
+	} else {
+		ref = r.col().Doc(id)
+		l.ID = id
+	}
 
 	err := r.Client.RunTransaction(ctx, func(ctx context.Context, tx *gfs.Transaction) error {
 		if err := tx.Set(ref, encodeListDoc(l), gfs.MergeAll); err != nil {
@@ -610,7 +625,6 @@ func decodeListDoc(doc *gfs.DocumentSnapshot) (ldom.List, error) {
 		DeletedAt   *time.Time `firestore:"deleted_at"`
 		DeletedBy   *string    `firestore:"deleted_by"`
 
-		// ✅ NEW: inventory id (ListQuery が tokenName 解決に使う)
 		InventoryID string `firestore:"inventory_id"`
 	}
 
@@ -647,11 +661,10 @@ func decodeListDoc(doc *gfs.DocumentSnapshot) (ldom.List, error) {
 		deletedBy = fscommon.TrimPtr(raw.DeletedBy)
 	}
 
-	// ✅ backward compatible: camelCase で保存されている既存データも拾う
+	// backward compatible: camelCase で保存されている既存データも拾う
 	invID := strings.TrimSpace(raw.InventoryID)
 	if invID == "" {
 		if m := doc.Data(); m != nil {
-			// よくある表記揺れを拾う
 			for _, key := range []string{"inventoryId", "inventoryID", "inventory_id"} {
 				if v, ok := m[key]; ok {
 					if s, ok := v.(string); ok {
@@ -666,13 +679,11 @@ func decodeListDoc(doc *gfs.DocumentSnapshot) (ldom.List, error) {
 	}
 
 	return ldom.List{
-		ID:         id,
-		Status:     ldom.ListStatus(strings.TrimSpace(raw.Status)),
-		AssigneeID: strings.TrimSpace(raw.AssigneeID),
-		Title:      strings.TrimSpace(raw.Title),
-		ImageID:    strings.TrimSpace(raw.ImageID),
-
-		// ✅ NEW
+		ID:          id,
+		Status:      ldom.ListStatus(strings.TrimSpace(raw.Status)),
+		AssigneeID:  strings.TrimSpace(raw.AssigneeID),
+		Title:       strings.TrimSpace(raw.Title),
+		ImageID:     strings.TrimSpace(raw.ImageID),
 		InventoryID: invID,
 
 		Description: desc,
@@ -698,7 +709,7 @@ func encodeListDoc(l ldom.List) map[string]any {
 		"created_at":  l.CreatedAt.UTC(),
 	}
 
-	// ✅ NEW: inventory_id を保存（空なら保存しない）
+	// inventory_id を保存（空なら保存しない）
 	if v := strings.TrimSpace(l.InventoryID); v != "" {
 		m["inventory_id"] = v
 	}
@@ -724,7 +735,7 @@ func encodeListDoc(l ldom.List) map[string]any {
 }
 
 // =======================
-// Helpers - prices
+// Helpers - prices (✅ array only)
 // =======================
 
 func (r *ListRepositoryFS) enrichListsWithPrices(ctx context.Context, lists []ldom.List) error {
@@ -738,19 +749,24 @@ func (r *ListRepositoryFS) enrichListsWithPrices(ctx context.Context, lists []ld
 	return nil
 }
 
-func (r *ListRepositoryFS) loadListPricesForOne(ctx context.Context, listID string) (map[string]ldom.ListPrice, error) {
+// loadListPricesForOne loads prices as []{modelId, price}.
+// Backward compatible:
+// - old docs might have "inventory_id" instead of "model_id" (we read both)
+func (r *ListRepositoryFS) loadListPricesForOne(ctx context.Context, listID string) ([]ldom.ListPriceRow, error) {
 	if strings.TrimSpace(listID) == "" {
 		return nil, nil
 	}
 
+	// ✅ order by DocumentID to avoid schema-dependent OrderBy errors
 	it := r.col().
 		Doc(listID).
 		Collection(listPricesSub).
-		OrderBy("inventory_id", gfs.Asc).
+		OrderBy(gfs.DocumentID, gfs.Asc).
 		Documents(ctx)
 	defer it.Stop()
 
-	out := map[string]ldom.ListPrice{}
+	out := make([]ldom.ListPriceRow, 0, 8)
+
 	for {
 		doc, err := it.Next()
 		if errors.Is(err, iterator.Done) {
@@ -760,7 +776,10 @@ func (r *ListRepositoryFS) loadListPricesForOne(ctx context.Context, listID stri
 			return nil, err
 		}
 
+		// ✅ new: model_id
+		// ✅ old: inventory_id (fallback)
 		var raw struct {
+			ModelID     string `firestore:"model_id"`
 			InventoryID string `firestore:"inventory_id"`
 			Price       int    `firestore:"price"`
 		}
@@ -768,21 +787,32 @@ func (r *ListRepositoryFS) loadListPricesForOne(ctx context.Context, listID stri
 			return nil, err
 		}
 
-		invID := strings.TrimSpace(raw.InventoryID)
-		if invID == "" {
-			// fallback: use doc id if the field is missing
-			invID = strings.TrimSpace(doc.Ref.ID)
+		modelID := strings.TrimSpace(raw.ModelID)
+		if modelID == "" {
+			modelID = strings.TrimSpace(raw.InventoryID) // backward compat
 		}
-		if invID == "" {
+		if modelID == "" {
+			modelID = strings.TrimSpace(doc.Ref.ID) // final fallback
+		}
+		if modelID == "" {
 			continue
 		}
 
-		out[invID] = ldom.ListPrice{Price: raw.Price}
+		out = append(out, ldom.ListPriceRow{
+			ModelID: modelID,
+			Price:   raw.Price,
+		})
 	}
 
 	if len(out) == 0 {
 		return nil, nil
 	}
+
+	// stable order
+	sort.Slice(out, func(i, j int) bool {
+		return strings.TrimSpace(out[i].ModelID) < strings.TrimSpace(out[j].ModelID)
+	})
+
 	return out, nil
 }
 
@@ -790,7 +820,7 @@ func (r *ListRepositoryFS) txReplaceListPrices(
 	ctx context.Context,
 	tx *gfs.Transaction,
 	listRef *gfs.DocumentRef,
-	prices map[string]ldom.ListPrice,
+	prices []ldom.ListPriceRow,
 ) error {
 	// delete existing prices
 	it := listRef.Collection(listPricesSub).Documents(ctx)
@@ -811,42 +841,50 @@ func (r *ListRepositoryFS) txReplaceListPrices(
 		return nil
 	}
 
-	// normalize + stable order
 	np := normalizeListPrices(prices)
 	if len(np) == 0 {
 		return nil
 	}
 
+	// stable order by modelId
 	keys := make([]string, 0, len(np))
 	for k := range np {
 		keys = append(keys, k)
 	}
 	sort.Strings(keys)
 
-	for _, invID := range keys {
-		p := np[invID]
-		itemRef := listRef.Collection(listPricesSub).Doc(invID)
+	for _, modelID := range keys {
+		p := np[modelID]
+		itemRef := listRef.Collection(listPricesSub).Doc(modelID)
 		if err := tx.Set(itemRef, map[string]any{
-			"inventory_id": invID,
-			"price":        p.Price,
+			"model_id": modelID,
+			"price":    p.Price,
 		}); err != nil {
 			return err
 		}
 	}
+
 	return nil
 }
 
-func normalizeListPrices(in map[string]ldom.ListPrice) map[string]ldom.ListPrice {
-	if in == nil {
+func normalizeListPrices(in []ldom.ListPriceRow) map[string]ldom.ListPriceRow {
+	if len(in) == 0 {
 		return nil
 	}
-	out := make(map[string]ldom.ListPrice, len(in))
-	for k, v := range in {
-		invID := strings.TrimSpace(k)
-		if invID == "" {
+	out := make(map[string]ldom.ListPriceRow, len(in))
+	for _, row := range in {
+		mid := strings.TrimSpace(row.ModelID)
+		if mid == "" {
 			continue
 		}
-		out[invID] = ldom.ListPrice{Price: v.Price}
+		// ドメイン側で価格制約がある前提だが、ここでも最低限の整形だけしておく
+		out[mid] = ldom.ListPriceRow{
+			ModelID: mid,
+			Price:   row.Price,
+		}
+	}
+	if len(out) == 0 {
+		return nil
 	}
 	return out
 }
@@ -857,9 +895,8 @@ func normalizeListPrices(in map[string]ldom.ListPrice) map[string]ldom.ListPrice
 
 func needsPriceFilter(f ldom.Filter) bool {
 	// Filter の Price 条件は
-	// - ModelNumbers (Prices の key=inventoryId に対する条件)
+	// - ModelNumbers (≒ modelId の集合)
 	// - MinPrice / MaxPrice
-	// のみを解釈する（domain/list の Filter を正とする）
 	return len(f.ModelNumbers) > 0 || f.MinPrice != nil || f.MaxPrice != nil
 }
 
@@ -968,9 +1005,9 @@ func matchListFilterMeta(l ldom.List, f ldom.Filter) bool {
 }
 
 // Price-based filters (EXISTS semantics).
-// - prices: map[inventoryId]ListPrice
-// - f.ModelNumbers は「inventoryId の集合」として解釈する
-func matchListFilterPrice(prices map[string]ldom.ListPrice, f ldom.Filter) bool {
+// - prices: []{modelId, price}
+// - f.ModelNumbers は「modelId の集合」として解釈する
+func matchListFilterPrice(prices []ldom.ListPriceRow, f ldom.Filter) bool {
 	if len(f.ModelNumbers) == 0 && f.MinPrice == nil && f.MaxPrice == nil {
 		return true
 	}
@@ -988,22 +1025,22 @@ func matchListFilterPrice(prices map[string]ldom.ListPrice, f ldom.Filter) bool 
 		}
 	}
 
-	for invID, p := range prices {
-		invID = strings.TrimSpace(invID)
-		if invID == "" {
+	for _, row := range prices {
+		modelID := strings.TrimSpace(row.ModelID)
+		if modelID == "" {
 			continue
 		}
 
 		if len(allowed) > 0 {
-			if _, ok := allowed[invID]; !ok {
+			if _, ok := allowed[modelID]; !ok {
 				continue
 			}
 		}
 
-		if f.MinPrice != nil && p.Price < *f.MinPrice {
+		if f.MinPrice != nil && row.Price < *f.MinPrice {
 			continue
 		}
-		if f.MaxPrice != nil && p.Price > *f.MaxPrice {
+		if f.MaxPrice != nil && row.Price > *f.MaxPrice {
 			continue
 		}
 

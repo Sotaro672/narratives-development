@@ -31,6 +31,9 @@ console.log("[list/listRepositoryHTTP] API_BASE resolved =", API_BASE, {
  */
 
 export type CreateListInput = {
+  // backend が docId を要求する場合に備えて（未指定なら inventoryId を採用）
+  id?: string;
+
   // ルート（inventory/list/create から作成する想定）
   inventoryId?: string;
 
@@ -38,17 +41,19 @@ export type CreateListInput = {
   title: string;
   description: string;
 
-  // PriceCard の rows（必要に応じて拡張）
-  // 例: [{ size:"S", color:"Red", stock:10, price:1000, rgb:123 }]
+  // PriceCard の rows（UI 側は保持していてOK / backend には modelId + price のみ送る）
   priceRows?: Array<{
+    modelId?: string;
+    price: number | null;
+
+    // UI 用（backend には送らない）
     size: string;
     color: string;
     stock: number;
-    price: number | null;
     rgb?: number | null;
   }>;
 
-  // 画面の「出品｜保留」
+  // 画面の「出品｜保留」（※ create payload には送らない）
   decision?: "list" | "hold";
 
   // 担当者など（必要に応じて）
@@ -80,77 +85,113 @@ function toNumberOrNull(v: unknown): number | null {
 }
 
 /**
- * priceRows の 1行に "inventoryId" を付与して backend が拾える形にする。
- * - 現状の UI 行には id がないため、size+color を安定キーとして使う（空なら index）
- * - backend 側（list_handler.go）の extractPrices が
- *   priceRows[].inventoryId と priceRows[].price を読む想定
+ * ✅ create 用の prices を正規化する（modelId + price ONLY）
+ *
+ * - modelId が無い行があれば例外（送信しない）
+ * - price が null / NaN なら例外（Go 側が非nullableの可能性が高い）
  */
-function normalizePriceRowsForBackend(
+function normalizePricesForBackend(
   rows: CreateListInput["priceRows"],
-): Array<{
-  inventoryId: string; // ✅ backend が拾う
-  price: number | null; // ✅ backend が拾う
-  // 以降はデバッグ/将来拡張用（backend が無視してもOK）
-  size: string;
-  color: string;
-  stock: number;
-  rgb?: number | null;
-}> {
+): Array<{ modelId: string; price: number }> {
   if (!Array.isArray(rows)) return [];
+
   return rows.map((r, i) => {
-    const size = s((r as any)?.size);
-    const color = s((r as any)?.color);
-    const stock = Number((r as any)?.stock ?? 0);
-    const price = toNumberOrNull((r as any)?.price);
-    const rgb = (r as any)?.rgb ?? null;
+    const modelId = s((r as any)?.modelId);
+    const priceMaybe = toNumberOrNull((r as any)?.price);
 
-    const keyBase = `${size}__${color}`.trim();
-    const inventoryId = keyBase !== "__" && keyBase !== "" ? keyBase : `row_${i}`;
+    if (!modelId) {
+      // eslint-disable-next-line no-console
+      console.error("[list/listRepositoryHTTP] priceRows row missing modelId", {
+        index: i,
+        row: r,
+      });
+      throw new Error("missing_modelId_in_priceRows");
+    }
 
-    return {
-      inventoryId,
-      price,
-      size,
-      color,
-      stock: Number.isFinite(stock) ? stock : 0,
-      rgb: rgb === null || rgb === undefined ? null : toNumberOrNull(rgb),
-    };
+    if (priceMaybe === null) {
+      // eslint-disable-next-line no-console
+      console.error("[list/listRepositoryHTTP] priceRows row missing price", {
+        index: i,
+        row: r,
+        modelId,
+        rawPrice: (r as any)?.price,
+      });
+      throw new Error("missing_price_in_priceRows");
+    }
+
+    return { modelId, price: priceMaybe };
   });
 }
 
 /**
- * CreateList の最終 payload を組み立てる
- * - createdBy を currentUser.uid で補完（未指定なら）
- * - priceRows を backend が拾える shape に正規化（inventoryId / price）
+ * ✅ CreateList payload（最小）
+ * - 「create時に送るのは modelId と price」の方針を厳守
+ * - decision/status/priceRows 等は送らない（DisallowUnknownFields対策）
  */
-function buildCreateListPayload(input: CreateListInput): Record<string, any> {
+function buildCreateListPayloadArray(input: CreateListInput): Record<string, any> {
   const u = auth.currentUser;
   const uid = s(u?.uid);
 
-  const priceRowsNormalized = normalizePriceRowsForBackend(input?.priceRows);
+  const inventoryId = s(input?.inventoryId);
+  const id = s(input?.id) || inventoryId;
 
-  const payload = {
-    inventoryId: s(input?.inventoryId),
-    title: s(input?.title),
-    description: String(input?.description ?? ""), // description は空文字を許容したいので trim しない（UIの意図尊重）
-    decision: input?.decision,
+  if (!id) {
+    // eslint-disable-next-line no-console
+    console.error("[list/listRepositoryHTTP] missing id (and inventoryId)", {
+      input,
+      inventoryId,
+      id,
+    });
+    throw new Error("missing_id");
+  }
+
+  const title = s(input?.title);
+  if (!title) {
+    // eslint-disable-next-line no-console
+    console.error("[list/listRepositoryHTTP] missing title", { input });
+    throw new Error("missing_title");
+  }
+
+  const prices = normalizePricesForBackend(input?.priceRows);
+
+  return {
+    id,
+    inventoryId,
+    title,
+    description: String(input?.description ?? ""),
     assigneeId: s(input?.assigneeId) || undefined,
-
-    // ✅ 重要: createdBy を currentMember(uid) に寄せる
     createdBy: s(input?.createdBy) || uid || "system",
 
-    // ✅ 重要: backend が拾える priceRows にする
-    priceRows: priceRowsNormalized,
+    // ✅ backendへ送るのは modelId + price のみ
+    prices, // Array<{modelId, price}>
   };
+}
 
-  return payload;
+/**
+ * ✅ fallback: prices を map で送る版
+ * backend が `map[string]number` を期待している場合に通る
+ */
+function buildCreateListPayloadMap(input: CreateListInput): Record<string, any> {
+  const base = buildCreateListPayloadArray(input);
+  const pricesArray = Array.isArray((base as any).prices) ? ((base as any).prices as any[]) : [];
+
+  const pricesMap: Record<string, number> = {};
+  for (const p of pricesArray) {
+    const modelId = s((p as any)?.modelId);
+    const price = Number((p as any)?.price);
+    if (!modelId || !Number.isFinite(price)) continue;
+    pricesMap[modelId] = price;
+  }
+
+  return {
+    ...base,
+    prices: pricesMap, // Record<string, number>
+  };
 }
 
 async function getIdToken(): Promise<string> {
   const u = auth.currentUser;
-  if (!u) {
-    throw new Error("not_authenticated");
-  }
+  if (!u) throw new Error("not_authenticated");
   return await u.getIdToken();
 }
 
@@ -162,24 +203,34 @@ async function requestJSON<T>(args: {
   const token = await getIdToken();
   const url = `${API_BASE}${args.path.startsWith("/") ? "" : "/"}${args.path}`;
 
-  // ✅ backend に渡す payload が “分かる” ログ（JSON 文字列も出す / 長い場合は truncate）
-  let bodyPreview: any = args.body;
-  let bodyJSON = "";
-  try {
-    bodyJSON = args.body === undefined ? "" : JSON.stringify(args.body);
-  } catch {
-    bodyJSON = "<json_stringify_failed>";
+  let bodyText: string | undefined = undefined;
+  if (args.body !== undefined) {
+    try {
+      bodyText = JSON.stringify(args.body);
+    } catch (e) {
+      // eslint-disable-next-line no-console
+      console.error("[list/listRepositoryHTTP] JSON.stringify failed", {
+        method: args.method,
+        url,
+        body: args.body,
+        error: String(e instanceof Error ? e.message : e),
+        raw: e,
+      });
+      throw new Error("invalid_json_stringify");
+    }
   }
-  const bodyJSONPreview =
-    bodyJSON.length > 3000 ? bodyJSON.slice(0, 3000) + "...(truncated)" : bodyJSON;
+
+  const bodyJsonLen = bodyText ? bodyText.length : 0;
+  const bodyJsonPreview =
+    bodyText && bodyText.length > 3000 ? bodyText.slice(0, 3000) + "...(truncated)" : bodyText;
 
   // eslint-disable-next-line no-console
   console.log("[list/listRepositoryHTTP] request", {
     method: args.method,
     url,
-    body: bodyPreview,
-    bodyJsonLen: bodyJSON.length,
-    bodyJsonPreview: bodyJSONPreview,
+    bodyText,
+    bodyJsonLen,
+    bodyJsonPreview,
   });
 
   const res = await fetch(url, {
@@ -188,7 +239,7 @@ async function requestJSON<T>(args: {
       "Content-Type": "application/json",
       Authorization: `Bearer ${token}`,
     },
-    body: args.body === undefined ? undefined : JSON.stringify(args.body),
+    body: bodyText,
   });
 
   const text = await res.text();
@@ -213,6 +264,17 @@ async function requestJSON<T>(args: {
     const msg =
       (json && typeof json === "object" && (json.error || json.message)) ||
       `http_error_${res.status}`;
+
+    // eslint-disable-next-line no-console
+    console.error("[list/listRepositoryHTTP] http error", {
+      method: args.method,
+      url,
+      status: res.status,
+      message: String(msg),
+      body: json,
+      requestBodyPreview: bodyJsonPreview,
+    });
+
     throw new Error(String(msg));
   }
 
@@ -233,63 +295,70 @@ function extractItemsArrayFromAny(json: any): any[] {
  * ===========
  * API
  * ===========
- *
- * Backend:
- * - POST /lists            (create)
- * - GET  /lists            (list)  ✅ NEW: 一覧取得
- * - GET  /lists/{id}       (detail)
- * - GET  /lists/{id}/aggregate
- * - GET  /lists/{id}/images
- * - POST /lists/{id}/images
- * - PUT|POST|PATCH /lists/{id}/primary-image
  */
 
 /**
  * ✅ Create list
  * POST /lists
+ *
+ * 1) prices: Array<{modelId, price}> で送る
+ * 2) 400 invalid json のときだけ prices: map にして1回だけリトライ
  */
 export async function createListHTTP(input: CreateListInput): Promise<ListDTO> {
   const u = auth.currentUser;
   const uid = s(u?.uid);
   const email = s((u as any)?.email);
 
-  // ✅ 修正: backend が拾える payload に変換（createdBy / priceRows）
-  const payload = buildCreateListPayload(input);
+  const payloadArray = buildCreateListPayloadArray(input);
 
   // eslint-disable-next-line no-console
   console.log("[list/listRepositoryHTTP] createListHTTP (input)", {
     uid,
     email,
-    input,
     titleLen: String(input?.title ?? "").length,
     descriptionLen: String(input?.description ?? "").length,
     priceRowsCount: Array.isArray(input?.priceRows) ? input.priceRows.length : 0,
   });
 
   // eslint-disable-next-line no-console
-  console.log("[list/listRepositoryHTTP] createListHTTP (payload to backend)", {
-    payload,
-    createdByResolved: payload.createdBy,
-    priceRowsCount: Array.isArray((payload as any)?.priceRows)
-      ? (payload as any).priceRows.length
-      : 0,
-    priceRowsSample:
-      Array.isArray((payload as any)?.priceRows) && (payload as any).priceRows.length > 0
-        ? (payload as any).priceRows.slice(0, 5)
-        : [],
+  console.log("[list/listRepositoryHTTP] createListHTTP (payload:Array)", {
+    payload: payloadArray,
+    pricesType: "array",
   });
 
-  return await requestJSON<ListDTO>({
-    method: "POST",
-    path: "/lists",
-    body: payload,
-  });
+  try {
+    return await requestJSON<ListDTO>({
+      method: "POST",
+      path: "/lists",
+      body: payloadArray,
+    });
+  } catch (e) {
+    const msg = String(e instanceof Error ? e.message : e);
+
+    // 400で返ってくる "invalid json" は「構造がDTOと合ってない」可能性が高いので map で再試行
+    if (msg === "invalid json") {
+      const payloadMap = buildCreateListPayloadMap(input);
+
+      // eslint-disable-next-line no-console
+      console.warn("[list/listRepositoryHTTP] retry with prices map payload", {
+        pricesType: "map",
+        payload: payloadMap,
+      });
+
+      return await requestJSON<ListDTO>({
+        method: "POST",
+        path: "/lists",
+        body: payloadMap,
+      });
+    }
+
+    throw e;
+  }
 }
 
 /**
  * ✅ List lists
  * GET /lists
- * - レスポンス形が揺れても配列として返す（service 側が HTTP 差分を気にしないで済むように）
  */
 export async function fetchListsHTTP(): Promise<ListDTO[]> {
   const json = await requestJSON<any>({
@@ -313,7 +382,11 @@ export async function fetchListsHTTP(): Promise<ListDTO[]> {
  */
 export async function fetchListByIdHTTP(listId: string): Promise<ListDTO> {
   const id = String(listId ?? "").trim();
-  if (!id) throw new Error("invalid_list_id");
+  if (!id) {
+    // eslint-disable-next-line no-console
+    console.error("[list/listRepositoryHTTP] invalid_list_id (empty)", { listId });
+    throw new Error("invalid_list_id");
+  }
 
   return await requestJSON<ListDTO>({
     method: "GET",
@@ -326,7 +399,11 @@ export async function fetchListByIdHTTP(listId: string): Promise<ListDTO> {
  */
 export async function fetchListAggregateHTTP(listId: string): Promise<ListAggregateDTO> {
   const id = String(listId ?? "").trim();
-  if (!id) throw new Error("invalid_list_id");
+  if (!id) {
+    // eslint-disable-next-line no-console
+    console.error("[list/listRepositoryHTTP] invalid_list_id (empty)", { listId });
+    throw new Error("invalid_list_id");
+  }
 
   return await requestJSON<ListAggregateDTO>({
     method: "GET",
@@ -339,7 +416,11 @@ export async function fetchListAggregateHTTP(listId: string): Promise<ListAggreg
  */
 export async function fetchListImagesHTTP(listId: string): Promise<ListImageDTO[]> {
   const id = String(listId ?? "").trim();
-  if (!id) throw new Error("invalid_list_id");
+  if (!id) {
+    // eslint-disable-next-line no-console
+    console.error("[list/listRepositoryHTTP] invalid_list_id (empty)", { listId });
+    throw new Error("invalid_list_id");
+  }
 
   return await requestJSON<ListImageDTO[]>({
     method: "GET",
@@ -363,7 +444,11 @@ export async function saveListImageFromGCSHTTP(args: {
   createdAt?: string; // RFC3339 optional
 }): Promise<ListImageDTO> {
   const listId = String(args.listId ?? "").trim();
-  if (!listId) throw new Error("invalid_list_id");
+  if (!listId) {
+    // eslint-disable-next-line no-console
+    console.error("[list/listRepositoryHTTP] invalid_list_id (empty)", { args });
+    throw new Error("invalid_list_id");
+  }
 
   const payload = {
     id: String(args.id ?? "").trim(),
@@ -396,7 +481,11 @@ export async function setListPrimaryImageHTTP(args: {
   now?: string; // RFC3339 optional
 }): Promise<ListDTO> {
   const listId = String(args.listId ?? "").trim();
-  if (!listId) throw new Error("invalid_list_id");
+  if (!listId) {
+    // eslint-disable-next-line no-console
+    console.error("[list/listRepositoryHTTP] invalid_list_id (empty)", { args });
+    throw new Error("invalid_list_id");
+  }
 
   const payload = {
     imageId: String(args.imageId ?? "").trim(),

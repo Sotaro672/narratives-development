@@ -1,6 +1,8 @@
 package handlers
 
 import (
+	"crypto/rand"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"io"
@@ -34,6 +36,19 @@ func (h *ListHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	path := strings.TrimSuffix(r.URL.Path, "/")
 	log.Printf("[list_handler] request method=%s path=%s rawQuery=%q", r.Method, path, r.URL.RawQuery)
+
+	// ✅ NEW: list新規作成画面のための seed を返す（ここでは永続化しない）
+	// GET /lists/create-seed?inventoryId={pbId}__{tbId}&modelIds=a,b,c
+	// GET /lists/create-seed?inventoryId=...&modelIds=a&modelIds=b
+	if path == "/lists/create-seed" {
+		if r.Method != http.MethodGet {
+			methodNotAllowed(w)
+			return
+		}
+		log.Printf("[list_handler] GET /lists/create-seed start")
+		h.createSeed(w, r)
+		return
+	}
 
 	if path == "/lists" {
 		switch r.Method {
@@ -116,6 +131,112 @@ func (h *ListHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 }
 
 // ==============================
+// GET /lists/create-seed
+// ==============================
+
+// createSeed は list新規作成画面に必要な情報だけを揃えて返します。
+// - 実際の create（永続化）は POST /lists（usecase.Create）に移譲します。
+func (h *ListHandler) createSeed(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+
+	if h == nil {
+		log.Printf("[list_handler] GET /lists/create-seed aborted: handler is nil")
+		w.WriteHeader(http.StatusInternalServerError)
+		_ = json.NewEncoder(w).Encode(map[string]string{"error": "handler is nil"})
+		return
+	}
+
+	// Query が無ければ "画面情報を揃える" ができないため Not Implemented 扱い
+	if h.q == nil {
+		log.Printf("[list_handler] GET /lists/create-seed NOT supported (query is nil)")
+		w.WriteHeader(http.StatusNotImplemented)
+		_ = json.NewEncoder(w).Encode(map[string]string{"error": "not_implemented"})
+		return
+	}
+
+	qp := r.URL.Query()
+
+	invID := strings.TrimSpace(qp.Get("inventoryId"))
+	if invID == "" {
+		invID = strings.TrimSpace(qp.Get("inventory_id"))
+	}
+	if invID == "" {
+		w.WriteHeader(http.StatusBadRequest)
+		_ = json.NewEncoder(w).Encode(map[string]string{"error": "inventoryId is required"})
+		return
+	}
+
+	// modelIds:
+	// - modelIds=a&modelIds=b
+	// - modelIds=a,b,c
+	modelIDs := []string{}
+	if vv := qp["modelIds"]; len(vv) > 0 {
+		for _, x := range vv {
+			x = strings.TrimSpace(x)
+			if x == "" {
+				continue
+			}
+			for _, s := range splitCSV(x) {
+				s = strings.TrimSpace(s)
+				if s != "" {
+					modelIDs = append(modelIDs, s)
+				}
+			}
+		}
+	} else if vv := qp["model_ids"]; len(vv) > 0 {
+		for _, x := range vv {
+			x = strings.TrimSpace(x)
+			if x == "" {
+				continue
+			}
+			for _, s := range splitCSV(x) {
+				s = strings.TrimSpace(s)
+				if s != "" {
+					modelIDs = append(modelIDs, s)
+				}
+			}
+		}
+	} else {
+		raw := strings.TrimSpace(qp.Get("modelIds"))
+		if raw == "" {
+			raw = strings.TrimSpace(qp.Get("model_ids"))
+		}
+		if raw != "" {
+			for _, s := range splitCSV(raw) {
+				s = strings.TrimSpace(s)
+				if s != "" {
+					modelIDs = append(modelIDs, s)
+				}
+			}
+		}
+	}
+
+	log.Printf("[list_handler] GET /lists/create-seed parsed inventoryId=%q modelIDs=%d", invID, len(modelIDs))
+
+	out, err := h.q.BuildCreateSeed(ctx, invID, modelIDs)
+	if err != nil {
+		if isNotSupported(err) {
+			w.WriteHeader(http.StatusNotImplemented)
+			_ = json.NewEncoder(w).Encode(map[string]string{"error": "not_implemented"})
+			return
+		}
+
+		msg := strings.TrimSpace(err.Error())
+		if strings.Contains(strings.ToLower(msg), "invalid") || strings.Contains(strings.ToLower(msg), "inventory") {
+			w.WriteHeader(http.StatusBadRequest)
+			_ = json.NewEncoder(w).Encode(map[string]string{"error": msg})
+			return
+		}
+
+		log.Printf("[list_handler] GET /lists/create-seed failed: %v", err)
+		writeListErr(w, err)
+		return
+	}
+
+	_ = json.NewEncoder(w).Encode(out)
+}
+
+// ==============================
 // GET /lists
 // ==============================
 
@@ -151,7 +272,7 @@ func (h *ListHandler) listIndex(w http.ResponseWriter, r *http.Request) {
 		statusesRaw = strings.TrimSpace(qp.Get("status"))
 	}
 	if statusesRaw != "" {
-		ss := splitCSV(statusesRaw) // ✅ helpers.go の splitCSV を利用
+		ss := splitCSV(statusesRaw)
 		if len(ss) == 1 {
 			st := listdom.ListStatus(strings.TrimSpace(ss[0]))
 			if st != "" {
@@ -186,6 +307,7 @@ func (h *ListHandler) listIndex(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	// 互換枠: modelNumbers を使っている既存クライアントもいるため残す
 	if vv := qp["modelNumbers"]; len(vv) > 0 {
 		for _, x := range vv {
 			x = strings.TrimSpace(x)
@@ -193,11 +315,10 @@ func (h *ListHandler) listIndex(w http.ResponseWriter, r *http.Request) {
 				f.ModelNumbers = append(f.ModelNumbers, x)
 			}
 		}
-	} else if vv := qp["inventoryIds"]; len(vv) > 0 {
+	} else if vv := qp["modelIds"]; len(vv) > 0 {
 		for _, x := range vv {
 			x = strings.TrimSpace(x)
 			if x != "" {
-				// 現状仕様に合わせて ModelNumbers に寄せる（既存コード踏襲）
 				f.ModelNumbers = append(f.ModelNumbers, x)
 			}
 		}
@@ -308,6 +429,8 @@ func (h *ListHandler) create(w http.ResponseWriter, r *http.Request) {
 	}
 	log.Printf("[list_handler] POST /lists body=%s", raw)
 
+	// ✅ prices はフロント標準の配列（[{modelId, price}, ...]）を正とするため、
+	// domain の List 型へ直接 Unmarshal する（domain 側の json tag を正とする）
 	var item listdom.List
 	if err := json.Unmarshal(body, &item); err != nil {
 		log.Printf("[list_handler] POST /lists invalid json: %v", err)
@@ -316,6 +439,61 @@ func (h *ListHandler) create(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// ---- normalize / server-side fixups ----
+	item.ID = strings.TrimSpace(item.ID)
+	item.Title = strings.TrimSpace(item.Title)
+	item.AssigneeID = strings.TrimSpace(item.AssigneeID)
+	item.InventoryID = strings.TrimSpace(item.InventoryID)
+	item.ImageID = strings.TrimSpace(item.ImageID) // ✅ create 時は必須にしない（後で images/primary-image で設定）
+	item.Description = strings.TrimSpace(item.Description)
+	item.CreatedBy = strings.TrimSpace(item.CreatedBy)
+
+	if item.InventoryID == "" {
+		w.WriteHeader(http.StatusBadRequest)
+		_ = json.NewEncoder(w).Encode(map[string]string{"error": "inventoryId is required"})
+		return
+	}
+	if item.AssigneeID == "" {
+		w.WriteHeader(http.StatusBadRequest)
+		_ = json.NewEncoder(w).Encode(map[string]string{"error": "assigneeId is required"})
+		return
+	}
+	if item.Title == "" {
+		w.WriteHeader(http.StatusBadRequest)
+		_ = json.NewEncoder(w).Encode(map[string]string{"error": "title is required"})
+		return
+	}
+	// ❌ imageId 必須はやめる（後で /images + /primary-image で確定）
+	// if item.ImageID == "" { ... }
+
+	if item.CreatedBy == "" {
+		w.WriteHeader(http.StatusBadRequest)
+		_ = json.NewEncoder(w).Encode(map[string]string{"error": "createdBy is required"})
+		return
+	}
+
+	// ✅ ABテスト前提:
+	// 1 inventoryId に複数 List を作れるように、ID が inventoryId 固定（または空）の場合はサーバが採番する
+	if item.ID == "" || item.ID == item.InventoryID {
+		item.ID = buildListID(item.InventoryID)
+	}
+
+	// status default
+	if strings.TrimSpace(string(item.Status)) == "" {
+		item.Status = listdom.ListStatus("listing")
+	}
+
+	now := time.Now().UTC()
+
+	// createdAt はサーバ時刻を正とする
+	item.CreatedAt = now
+
+	// UpdatedAt もサーバで付与（create 時点で持たせる）
+	item.UpdatedAt = &now
+	item.UpdatedBy = nil
+	item.DeletedAt = nil
+	item.DeletedBy = nil
+
 	created, err := h.uc.Create(ctx, item)
 	if err != nil {
 		if isNotSupported(err) {
@@ -323,13 +501,40 @@ func (h *ListHandler) create(w http.ResponseWriter, r *http.Request) {
 			_ = json.NewEncoder(w).Encode(map[string]string{"error": "not_implemented"})
 			return
 		}
-		log.Printf("[list_handler] POST /lists uc.Create failed: %v", err)
+		log.Printf("[list_handler] POST /lists uc.Create failed: %v item=%s", err, dumpAsJSON(item))
 		writeListErr(w, err)
 		return
 	}
 
 	w.WriteHeader(http.StatusCreated)
 	_ = json.NewEncoder(w).Encode(created)
+}
+
+func buildListID(inventoryID string) string {
+	inventoryID = strings.TrimSpace(inventoryID)
+	suffix := randomHex(8) // 16 chars
+	if inventoryID == "" {
+		return suffix
+	}
+	// 読みやすさのため inventoryID を prefix にする（衝突回避は suffix）
+	return inventoryID + "__" + suffix
+}
+
+func randomHex(nBytes int) string {
+	if nBytes <= 0 {
+		nBytes = 8
+	}
+	b := make([]byte, nBytes)
+	if _, err := rand.Read(b); err != nil {
+		// 失敗しても「空」にならないように時刻でフォールバック
+		t := time.Now().UTC().UnixNano()
+		buf := make([]byte, 8)
+		for i := 0; i < 8; i++ {
+			buf[i] = byte((t >> (8 * i)) & 0xff)
+		}
+		return hex.EncodeToString(buf)
+	}
+	return hex.EncodeToString(b)
 }
 
 // ==============================
@@ -472,12 +677,23 @@ func (h *ListHandler) getAggregate(w http.ResponseWriter, r *http.Request, id st
 
 func writeListErr(w http.ResponseWriter, err error) {
 	code := http.StatusInternalServerError
+
+	// ✅ domain/list 側の exported error に寄せる（存在しない ErrInvalid* を参照しない）
 	switch {
-	case errors.Is(err, listdom.ErrInvalidID):
-		code = http.StatusBadRequest
 	case errors.Is(err, listdom.ErrNotFound):
 		code = http.StatusNotFound
+	case errors.Is(err, listdom.ErrConflict):
+		code = http.StatusConflict
+	default:
+		// 文字列ベースで 400 寄せ（domain 側のエラー定義変更に強くする）
+		msg := strings.ToLower(strings.TrimSpace(err.Error()))
+		if strings.Contains(msg, "invalid") ||
+			strings.Contains(msg, "required") ||
+			strings.Contains(msg, "must") {
+			code = http.StatusBadRequest
+		}
 	}
+
 	w.WriteHeader(code)
 	_ = json.NewEncoder(w).Encode(map[string]string{"error": err.Error()})
 }
@@ -512,4 +728,12 @@ func ptrStatus(p *listdom.ListStatus) any {
 		return nil
 	}
 	return string(*p)
+}
+
+func dumpAsJSON(v any) string {
+	b, err := json.Marshal(v)
+	if err != nil {
+		return "<json_marshal_failed>"
+	}
+	return string(b)
 }

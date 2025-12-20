@@ -34,6 +34,22 @@ import type { ListCreateDTO } from "../../infrastructure/http/inventoryRepositor
 
 export type ListingDecision = "list" | "hold";
 
+/**
+ * ✅ PriceRow に modelId を保持させる（POST /lists で必須）
+ * - usePriceCard は余分なフィールドがあっても問題ないので、そのまま渡せる
+ */
+export type PriceRowEx = PriceRow & {
+  modelId: string; // ✅ 必須
+};
+
+/**
+ * ✅ POST /lists に渡す最小形（期待値：modelId と price のみ）
+ */
+export type CreateListPriceRow = {
+  modelId: string;
+  price: number | null;
+};
+
 export type UseListCreateResult = {
   title: string;
   onBack: () => void;
@@ -51,7 +67,7 @@ export type UseListCreateResult = {
   tokenName: string;
 
   // price (PriceCard 用)
-  priceRows: PriceRow[];
+  priceRows: PriceRowEx[];
   onChangePrice: (index: number, price: number | null) => void;
 
   // ✅ PriceCard hook の結果
@@ -106,6 +122,65 @@ function toNumberOrNaN(v: unknown): number {
     return n;
   }
   return Number.NaN;
+}
+
+/**
+ * ✅ DTO の priceRows から modelId を埋める
+ * - dto.priceRows[].modelId を唯一の行IDとして扱う（後方互換 id/inventoryId は使わない）
+ * - マッチは (size,color) を基本にし、最後に index fallback（DTO順が一致する場合）を使う
+ */
+function attachModelIdsFromDTO(dto: any, baseRows: PriceRow[]): PriceRowEx[] {
+  const dtoRows: any[] = Array.isArray(dto?.priceRows) ? dto.priceRows : [];
+
+  const keyToModelId = new Map<string, string>();
+  for (const dr of dtoRows) {
+    const size = s(dr?.size);
+    const color = s(dr?.color);
+    const modelId = s(dr?.modelId);
+    if (!size || !color || !modelId) continue;
+    keyToModelId.set(`${size}__${color}`, modelId);
+  }
+
+  const rowsEx: PriceRowEx[] = baseRows.map((r, idx) => {
+    const size = s((r as any)?.size);
+    const color = s((r as any)?.color);
+    const byKey = keyToModelId.get(`${size}__${color}`) ?? "";
+    const byIndex = s(dtoRows[idx]?.modelId);
+    const modelId = byKey || byIndex;
+
+    if (!modelId) {
+      // eslint-disable-next-line no-console
+      console.error("[inventory/useListCreate] modelId missing after attach", {
+        idx,
+        row: r,
+        dtoRow: dtoRows[idx],
+        size,
+        color,
+        dtoPriceRowsCount: dtoRows.length,
+      });
+    }
+
+    return {
+      ...(r as any),
+      modelId, // ✅ ここで保持
+    } as PriceRowEx;
+  });
+
+  return rowsEx;
+}
+
+/**
+ * ✅ POST /lists 用に、priceRows を最小形へ射影
+ * - 期待値：listRepositoryHTTP へは {modelId, price} のみが渡る
+ */
+function toCreateListPriceRows(rows: PriceRowEx[]): CreateListPriceRow[] {
+  return rows.map((r) => ({
+    modelId: s((r as any)?.modelId),
+    price:
+      (r as any)?.price === undefined || (r as any)?.price === null
+        ? null
+        : (r as any).price,
+  }));
 }
 
 export function useListCreate(): UseListCreateResult {
@@ -250,7 +325,7 @@ export function useListCreate(): UseListCreateResult {
   // ============================================================
   // ✅ PriceRows（DTOから初期化し、以後はユーザー入力を保持）
   // ============================================================
-  const [priceRows, setPriceRows] = React.useState<PriceRow[]>([]);
+  const [priceRows, setPriceRows] = React.useState<PriceRowEx[]>([]);
   const initializedPriceRowsRef = React.useRef(false);
 
   React.useEffect(() => {
@@ -276,7 +351,7 @@ export function useListCreate(): UseListCreateResult {
   // ✅ PriceCard hook
   const priceCard = usePriceCard({
     title: "価格",
-    rows: priceRows,
+    rows: priceRows as unknown as PriceRow[], // usePriceCard は余分なフィールドを気にしない
     mode: "edit",
     currencySymbol: "¥",
     showTotal: true,
@@ -336,6 +411,19 @@ export function useListCreate(): UseListCreateResult {
       throw new Error("価格が未設定です（価格行がありません）。");
     }
 
+    // ✅ modelId が無い行が1つでもあれば NG（後方互換は使わない）
+    const missingModel = priceRows.find((r) => !s((r as any)?.modelId));
+    if (missingModel) {
+      // eslint-disable-next-line no-console
+      console.error("[inventory/useListCreate] validate failed: missing modelId", {
+        missingModel,
+        priceRowsSample: priceRows.slice(0, 5),
+      });
+      throw new Error(
+        "価格行に modelId が付与されていません（DTOの priceRows に modelId が必要です）。",
+      );
+    }
+
     // price が 0 / null / NaN の行が1つでもあれば NG
     const bad = priceRows.find((r) => {
       const p = (r as any)?.price;
@@ -392,6 +480,9 @@ export function useListCreate(): UseListCreateResult {
     try {
       validateBeforeCreate();
 
+      // ✅ ここで「期待値どおり」最小形に射影（modelId + price のみ）
+      const createPriceRows = toCreateListPriceRows(priceRows);
+
       // eslint-disable-next-line no-console
       console.log("[inventory/useListCreate] onCreate -> POST /lists start", {
         inventoryId,
@@ -403,18 +494,26 @@ export function useListCreate(): UseListCreateResult {
         imagesCount: images.length,
         priceRowsCount: priceRows.length,
         priceRowsSample: priceRows.slice(0, 5),
+        createPriceRowsSample: createPriceRows.slice(0, 5),
         assigneeId,
       });
 
       void (async () => {
-        const input = buildCreateListInput({
+        const baseInput = buildCreateListInput({
           params: resolvedParams,
           listingTitle,
           description,
-          priceRows,
+          priceRows: priceRows as any, // ✅ service 側の既存仕様を壊さないため、元の行も渡す
           decision,
           assigneeId,
         });
+
+        // ✅ 最終的に postCreateList に渡す input は、priceRows を最小形で上書きする
+        //    - これにより listRepositoryHTTP へ「modelId と price のみ」が渡る
+        const input = {
+          ...(baseInput as any),
+          priceRows: createPriceRows,
+        } as any;
 
         // eslint-disable-next-line no-console
         console.log("[inventory/useListCreate] postCreateList input", input);
@@ -535,7 +634,22 @@ export function useListCreate(): UseListCreateResult {
 
         // ✅ priceRows 初期化（DTOの modelResolver 結果を PriceCard に渡す）
         if (!initializedPriceRowsRef.current) {
-          const nextRows = mapDTOToPriceRows(data);
+          const baseRows = mapDTOToPriceRows(data) as PriceRow[];
+          const nextRows = attachModelIdsFromDTO(data, baseRows);
+
+          // modelId が欠ける場合はここで分かるようにログ
+          const missing = nextRows.filter((r) => !s((r as any)?.modelId));
+          if (missing.length > 0) {
+            // eslint-disable-next-line no-console
+            console.error("[inventory/useListCreate] DTO->PriceRows missing modelId", {
+              missingCount: missing.length,
+              sample: missing.slice(0, 5),
+              dtoPriceRowsSample: Array.isArray((data as any)?.priceRows)
+                ? (data as any).priceRows.slice(0, 5)
+                : [],
+            });
+          }
+
           setPriceRows(nextRows);
           initializedPriceRowsRef.current = true;
 
@@ -625,7 +739,7 @@ export function useListCreate(): UseListCreateResult {
     imagePreviewUrls,
     mainImageIndex,
     setMainImageIndex,
-    imageInputRef, // ✅ ここで型を value として使わない
+    imageInputRef,
     openImagePicker,
     onSelectImages,
     onDropImages,

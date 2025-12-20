@@ -65,6 +65,11 @@ function PlusIcon() {
   );
 }
 
+// local trim helper (UI-only)
+function s(v: unknown): string {
+  return String(v ?? "").trim();
+}
+
 export default function InventoryListCreate() {
   const {
     title,
@@ -123,6 +128,11 @@ export default function InventoryListCreate() {
       .map((_, idx) => idx)
       .filter((idx) => idx !== mainImageIndex);
   }, [hasImages, images, mainImageIndex]);
+
+  // ✅ modelId 付与チェック（UIで検知できるように）
+  const missingModelIdCount = React.useMemo(() => {
+    return (priceRows ?? []).filter((r: any) => !s(r?.modelId)).length;
+  }, [priceRows]);
 
   return (
     <PageStyle
@@ -211,11 +221,21 @@ export default function InventoryListCreate() {
                       {images.length} 枚選択中（クリックでサブ画像をメインにできます）
                     </div>
                     <div className="flex items-center gap-2">
-                      <Button type="button" variant="outline" size="sm" onClick={openImagePicker}>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        onClick={openImagePicker}
+                      >
                         画像を追加
                       </Button>
                       {images.length > 0 && (
-                        <Button type="button" variant="ghost" size="sm" onClick={clearImages}>
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          onClick={clearImages}
+                        >
                           クリア
                         </Button>
                       )}
@@ -318,15 +338,24 @@ export default function InventoryListCreate() {
         {/* ✅ PriceCard */}
         <PriceCard
           title="価格"
-          rows={priceRows}
+          // ✅ rows は UI 用に size/color/stock を含んでOK（POSTは service 側で modelId+price のみに射影する）
+          rows={priceRows as any}
           mode="edit"
           currencySymbol="¥"
-          onChangePrice={(idx, price) => onChangePrice(idx, price)}
+          onChangePrice={(idx: number, price: number | null) => onChangePrice(idx, price)}
         />
 
         {priceRows.length === 0 && (
           <div className="text-xs text-[hsl(var(--muted-foreground))]">
             価格行データは未取得です（DTO/別APIから rows を供給する実装が必要です）。
+          </div>
+        )}
+
+        {/* ✅ modelId が欠けていると POST で落ちるので、UI 上でも見えるように */}
+        {priceRows.length > 0 && missingModelIdCount > 0 && (
+          <div className="text-xs text-red-600">
+            価格行に modelId が付与されていない行があります（{missingModelIdCount} 件）。
+            DTO の priceRows に modelId が含まれているか確認してください。
           </div>
         )}
       </div>
@@ -393,8 +422,12 @@ export default function InventoryListCreate() {
         <Card>
           <CardContent className="p-4">
             <div className="text-sm font-medium mb-2">選択商品</div>
-            <div className="text-sm text-slate-800 break-all">{productBrandName || "未選択"}</div>
-            <div className="text-sm text-slate-800 break-all">{productName || "未選択"}</div>
+            <div className="text-sm text-slate-800 break-all">
+              {productBrandName || "未選択"}
+            </div>
+            <div className="text-sm text-slate-800 break-all">
+              {productName || "未選択"}
+            </div>
           </CardContent>
         </Card>
 
@@ -402,8 +435,12 @@ export default function InventoryListCreate() {
         <Card>
           <CardContent className="p-4">
             <div className="text-sm font-medium mb-2">選択トークン</div>
-            <div className="text-sm text-slate-800 break-all">{tokenBrandName || "未選択"}</div>
-            <div className="text-sm text-slate-800 break-all">{tokenName || "未選択"}</div>
+            <div className="text-sm text-slate-800 break-all">
+              {tokenBrandName || "未選択"}
+            </div>
+            <div className="text-sm text-slate-800 break-all">
+              {tokenName || "未選択"}
+            </div>
           </CardContent>
         </Card>
 
