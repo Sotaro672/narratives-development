@@ -1,188 +1,275 @@
 // frontend/console/list/src/presentation/hook/useListDetail.tsx
+
 import * as React from "react";
 import { useNavigate, useParams } from "react-router-dom";
-import type { InventoryRow } from "../../../../inventory/src/presentation/components/inventoryCard";
 
-export type InventoryItem = {
-  id: string;
-  sku: string;
-  productName: string;
-  color: string;
-  size: string;
-  stock: number;
-};
+// ✅ PriceCard hook（PriceRow 型もここから取り込む）
+import { usePriceCard, type PriceRow } from "../../../../list/src/presentation/hook/usePriceCard";
 
-export type UseListDetailVM = {
-  listId: string | null;
+// ✅ それ以外は service へ
+import {
+  resolveListDetailParams,
+  loadListDetailDTO,
+  deriveListDetail,
+  computeListDetailPageTitle,
+  useMainImageIndexGuard,
+  useCancelledRef,
+  type ListDetailRouteParams,
+  type ListDetailDTO,
+  s,
+} from "../../application/listDetailService";
+
+export type UseListDetailResult = {
   pageTitle: string;
-
-  items: InventoryItem[];
-  selected: Record<string, boolean>;
-  quantities: Record<string, number>;
-
-  totalSelected: number;
-  inventoryRows: InventoryRow[];
-
-  handleToggle: (id: string) => void;
-  handleQuantityChange: (id: string, value: string) => void;
-
-  onConfirmSelected: () => void;
   onBack: () => void;
 
-  admin: {
-    assigneeName: string;
-    createdByName: string;
-    createdAt: string;
-    onEditAssignee: () => void;
-    onClickAssignee: () => void;
-  };
+  // loading/error
+  loading: boolean;
+  error: string;
+
+  // raw dto
+  dto: ListDetailDTO | null;
+
+  // listing (view)
+  listingTitle: string;
+  description: string;
+
+  // decision/status (view)
+  decision: "list" | "hold" | "" | string;
+
+  // ✅ display strings (already trimmed)
+  productBrandId: string;
+  productBrandName: string;
+  productName: string;
+
+  tokenBrandId: string;
+  tokenBrandName: string;
+  tokenName: string;
+
+  // images (view)
+  imageUrls: string[];
+  mainImageIndex: number;
+  setMainImageIndex: React.Dispatch<React.SetStateAction<number>>;
+
+  // price (PriceCard 用)
+  priceRows: PriceRow[];
+  priceCard: ReturnType<typeof usePriceCard>;
+
+  // ✅ admin (view) : assigneeId + assigneeName を返す
+  assigneeId: string;
+  assigneeName: string;
+
+  createdByName: string;
+  createdAt: string;
 };
 
-export function useListDetail(): UseListDetailVM {
+export function useListDetail(): UseListDetailResult {
   const navigate = useNavigate();
-  const { listId } = useParams<{ listId: string }>();
+  const params = useParams<ListDetailRouteParams>();
 
-  // モック在庫データ（後でAPI連携に差し替え）
-  const [items] = React.useState<InventoryItem[]>([
-    {
-      id: "inv-001",
-      sku: "LUM-SS25-001-BLK-S",
-      productName: "シルクブラウス プレミアムライン",
-      color: "ブラック",
-      size: "S",
-      stock: 30,
-    },
-    {
-      id: "inv-002",
-      sku: "LUM-SS25-001-BLK-M",
-      productName: "シルクブラウス プレミアムライン",
-      color: "ブラック",
-      size: "M",
-      stock: 42,
-    },
-    {
-      id: "inv-003",
-      sku: "LUM-SS25-002-IVR-F",
-      productName: "リネンシャツ リラックスフィット",
-      color: "アイボリー",
-      size: "F",
-      stock: 18,
-    },
+  const resolved = React.useMemo(() => resolveListDetailParams(params), [params]);
+  const { listId, inventoryId } = resolved;
+
+  // eslint-disable-next-line no-console
+  console.log("[console/list/useListDetail] params resolved", {
+    listId,
+    inventoryId,
+    raw: resolved.raw,
+  });
+
+  const onBack = React.useCallback(() => {
+    // eslint-disable-next-line no-console
+    console.log("[console/list/useListDetail] onBack");
+    navigate(-1);
+  }, [navigate]);
+
+  // -----------------------------
+  // Load DTO
+  // -----------------------------
+  const [dto, setDTO] = React.useState<ListDetailDTO | null>(null);
+  const [loading, setLoading] = React.useState(false);
+  const [error, setError] = React.useState("");
+
+  const cancelledRef = useCancelledRef();
+
+  React.useEffect(() => {
+    const run = async () => {
+      const id = s(listId);
+      if (!id) {
+        setDTO(null);
+        setError("listId がありません（ルートパラメータを確認してください）。");
+        return;
+      }
+
+      setLoading(true);
+      setError("");
+
+      try {
+        // eslint-disable-next-line no-console
+        console.log("[console/list/useListDetail] load start", { listId: id, inventoryId });
+
+        const data = await loadListDetailDTO({ listId: id, inventoryIdHint: inventoryId });
+        if (cancelledRef.current) return;
+
+        // eslint-disable-next-line no-console
+        console.log("[console/list/useListDetail] load success", {
+          keys: Object.keys((data as any) ?? {}),
+          id: (data as any)?.id,
+          inventoryId: (data as any)?.inventoryId,
+          assigneeId: (data as any)?.assigneeId,
+          assigneeName: (data as any)?.assigneeName,
+          productBrandId: (data as any)?.productBrandId,
+          productBrandName: (data as any)?.productBrandName,
+          productName: (data as any)?.productName,
+          tokenBrandId: (data as any)?.tokenBrandId,
+          tokenBrandName: (data as any)?.tokenBrandName,
+          tokenName: (data as any)?.tokenName,
+        });
+
+        setDTO(data);
+      } catch (e) {
+        if (cancelledRef.current) return;
+        const msg = String(e instanceof Error ? e.message : e);
+
+        // eslint-disable-next-line no-console
+        console.warn("[console/list/useListDetail] load failed", { msg, raw: e });
+        setError(msg);
+        setDTO(null);
+      } finally {
+        if (cancelledRef.current) return;
+        setLoading(false);
+
+        // eslint-disable-next-line no-console
+        console.log("[console/list/useListDetail] load end", { listId });
+      }
+    };
+
+    void run();
+  }, [listId, inventoryId, cancelledRef]);
+
+  // -----------------------------
+  // Derived view fields (service)
+  // -----------------------------
+  const derived = React.useMemo(() => deriveListDetail<PriceRow>(dto), [dto]);
+
+  const {
+    listingTitle,
+    description,
+    decision,
+
+    productBrandId,
+    productBrandName,
+    productName,
+
+    tokenBrandId,
+    tokenBrandName,
+    tokenName,
+
+    imageUrls,
+    priceRows,
+
+    assigneeId,
+    assigneeName,
+
+    createdByName,
+    createdAt,
+  } = derived;
+
+  // images
+  const [mainImageIndex, setMainImageIndex] = React.useState(0);
+  useMainImageIndexGuard({ imageUrls, mainImageIndex, setMainImageIndex });
+
+  // ✅ PriceCard hook（view）
+  const priceCard = usePriceCard({
+    title: "価格",
+    rows: priceRows,
+    mode: "view",
+    currencySymbol: "¥",
+    showTotal: true,
+    onChangePrice: undefined,
+  });
+
+  React.useEffect(() => {
+    // eslint-disable-next-line no-console
+    console.log("[console/list/useListDetail] snapshot", {
+      loading,
+      hasDTO: Boolean(dto),
+      decision,
+      listingTitleLen: listingTitle.length,
+      descriptionLen: description.length,
+      imageUrlsCount: imageUrls.length,
+      priceRowsCount: priceRows.length,
+
+      productBrandId,
+      productBrandName,
+      productName,
+
+      tokenBrandId,
+      tokenBrandName,
+      tokenName,
+
+      assigneeId,
+      assigneeName,
+    });
+  }, [
+    loading,
+    dto,
+    decision,
+    listingTitle,
+    description,
+    imageUrls.length,
+    priceRows.length,
+
+    productBrandId,
+    productBrandName,
+    productName,
+
+    tokenBrandId,
+    tokenBrandName,
+    tokenName,
+
+    assigneeId,
+    assigneeName,
   ]);
 
-  // 選択状態（在庫選択カード用）
-  const [selected, setSelected] = React.useState<Record<string, boolean>>({});
-  const [quantities, setQuantities] = React.useState<Record<string, number>>({});
-
-  const handleToggle = React.useCallback((id: string) => {
-    setSelected((prev) => ({
-      ...prev,
-      [id]: !prev[id],
-    }));
-
-    // 初回選択時は数量のデフォルトを 1 にする（既に値があるなら維持）
-    setQuantities((prev) =>
-      prev[id] != null
-        ? prev
-        : {
-            ...prev,
-            [id]: 1,
-          },
-    );
-  }, []);
-
-  const handleQuantityChange = React.useCallback((id: string, value: string) => {
-    const num = Number(value);
-    if (Number.isNaN(num) || num < 0) return;
-
-    setQuantities((prev) => ({
-      ...prev,
-      [id]: num,
-    }));
-  }, []);
-
-  const totalSelected = React.useMemo(() => {
-    return items.reduce((sum, item) => {
-      if (!selected[item.id]) return sum;
-      const q = quantities[item.id] ?? 0;
-      return sum + q;
-    }, 0);
-  }, [items, selected, quantities]);
-
-  // InventoryCard 用 rows: InventoryRow 定義に準拠（閲覧専用表示）
-  // - InventoryRow は modelNumber / color が必須
-  const inventoryRows: InventoryRow[] = React.useMemo(
-    () =>
-      items.map((item) => ({
-        modelNumber: item.sku, // SKUを型番として扱う
-        size: item.size,
-        color: item.color,
-        stock: item.stock,
-      })),
-    [items],
-  );
-
-  const onConfirmSelected = React.useCallback(() => {
-    const picked = items
-      .filter((it) => !!selected[it.id])
-      .map((it) => ({
-        inventoryId: it.id,
-        sku: it.sku,
-        quantity: quantities[it.id] ?? 0,
-        stock: it.stock,
-      }));
-
-    // TODO: API連携（確定処理）
-    // eslint-disable-next-line no-console
-    console.log("選択在庫:", {
-      listId,
-      picked,
-      totalSelected,
-      selected,
-      quantities,
-    });
-  }, [items, listId, quantities, selected, totalSelected]);
-
-  const onBack = React.useCallback(() => navigate(-1), [navigate]);
-
-  const pageTitle = React.useMemo(() => {
-    return `リスト詳細：${listId ?? "不明ID"}`;
-  }, [listId]);
-
-  const admin = React.useMemo(
-    () => ({
-      assigneeName: "佐藤 美咲",
-      createdByName: "山田 太郎",
-      createdAt: "2025/10/25 14:30",
-      onEditAssignee: () => {
-        // eslint-disable-next-line no-console
-        console.log("edit assignee");
-      },
-      onClickAssignee: () => {
-        // eslint-disable-next-line no-console
-        console.log("assignee clicked");
-      },
-    }),
-    [],
+  const pageTitle = React.useMemo(
+    () => computeListDetailPageTitle({ listId, listingTitle }),
+    [listId, listingTitle],
   );
 
   return {
-    listId: listId ?? null,
     pageTitle,
-
-    items,
-    selected,
-    quantities,
-
-    totalSelected,
-    inventoryRows,
-
-    handleToggle,
-    handleQuantityChange,
-
-    onConfirmSelected,
     onBack,
 
-    admin,
+    loading,
+    error,
+
+    dto,
+
+    listingTitle,
+    description,
+
+    decision,
+
+    productBrandId,
+    productBrandName,
+    productName,
+
+    tokenBrandId,
+    tokenBrandName,
+    tokenName,
+
+    imageUrls,
+    mainImageIndex,
+    setMainImageIndex,
+
+    priceRows,
+    priceCard,
+
+    assigneeId,
+    assigneeName,
+
+    createdByName,
+    createdAt,
   };
 }

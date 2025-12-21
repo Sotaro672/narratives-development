@@ -110,6 +110,11 @@ type Repository interface {
 	// printed == true のみを対象にページング取得
 	ListPrinted(ctx context.Context, filter Filter, page Page) (PageResult, error)
 
+	// ★ 追加: productBlueprintId から brandId だけを取得するヘルパ
+	//   MintRequest 一覧 / InventoryDetail などで「ID → BrandID」だけ欲しい場合に使用。
+	//   実装側では（可能なら）投影（brandId フィールドのみ取得）で効率化する。
+	GetBrandIDByID(ctx context.Context, id string) (string, error)
+
 	// ★ 追加: productBlueprintId から productName だけを取得するヘルパ
 	//   MintRequest 一覧などで「ID → 名前」の名前解決だけを行いたいときに使用。
 	GetProductNameByID(ctx context.Context, id string) (string, error)

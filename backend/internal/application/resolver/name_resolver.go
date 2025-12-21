@@ -1,3 +1,4 @@
+// backend/internal/application/resolver/name_resolver.go
 package resolver
 
 import (

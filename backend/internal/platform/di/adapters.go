@@ -5,11 +5,16 @@ import (
 	"context"
 	"errors"
 	"strings"
+	"time"
+
+	"cloud.google.com/go/firestore"
 
 	fs "narratives/internal/adapters/out/firestore"
 	companydom "narratives/internal/domain/company"
 	inspectiondom "narratives/internal/domain/inspection"
+	listdom "narratives/internal/domain/list"
 	memdom "narratives/internal/domain/member"
+	mintdom "narratives/internal/domain/mint"
 	modeldom "narratives/internal/domain/model"
 	productdom "narratives/internal/domain/product"
 	productbpdom "narratives/internal/domain/productBlueprint"
@@ -314,4 +319,151 @@ func (a *tbPatchByIDAdapter) GetPatchByID(ctx context.Context, id string) (tbdom
 		return tbdom.Patch{}, errors.New("tbPatchByIDAdapter: repo is nil")
 	}
 	return a.repo.GetPatchByID(ctx, strings.TrimSpace(id))
+}
+
+//
+// ========================================
+// Query / List 用アダプタ（container.go から移譲）
+// ========================================
+//
+
+// pbQueryRepoAdapter adapts ProductBlueprintRepositoryFS to query.ProductBlueprintQueryRepo.
+type pbQueryRepoAdapter struct {
+	repo interface {
+		ListIDsByCompany(ctx context.Context, companyID string) ([]string, error)
+		GetByID(ctx context.Context, id string) (productbpdom.ProductBlueprint, error) // ★ value 戻り
+	}
+}
+
+func (a *pbQueryRepoAdapter) ListIDsByCompany(ctx context.Context, companyID string) ([]string, error) {
+	return a.repo.ListIDsByCompany(ctx, companyID)
+}
+
+func (a *pbQueryRepoAdapter) GetByID(ctx context.Context, id string) (productbpdom.ProductBlueprint, error) {
+	return a.repo.GetByID(ctx, id)
+}
+
+// pbIDsByCompanyAdapter adapts ProductBlueprintRepositoryFS to query.productBlueprintIDsByCompanyReader
+type pbIDsByCompanyAdapter struct {
+	repo interface {
+		ListIDsByCompany(ctx context.Context, companyID string) ([]string, error)
+	}
+}
+
+func (a *pbIDsByCompanyAdapter) ListIDsByCompanyID(ctx context.Context, companyID string) ([]string, error) {
+	return a.repo.ListIDsByCompany(ctx, companyID)
+}
+
+// pbPatchByIDAdapter adapts ProductBlueprintRepositoryFS to query.productBlueprintPatchReader
+type pbPatchByIDAdapter struct {
+	repo interface {
+		GetPatchByID(ctx context.Context, id string) (productbpdom.Patch, error)
+	}
+}
+
+func (a *pbPatchByIDAdapter) GetPatchByID(ctx context.Context, id string) (productbpdom.Patch, error) {
+	return a.repo.GetPatchByID(ctx, id)
+}
+
+// ✅ tbGetterAdapter adapts TokenBlueprintRepositoryFS (pointer return) to query.TokenBlueprintGetter (value return).
+// ListQuery は TokenBlueprintGetter に「値」を要求するが、Firestore repo は「ポインタ」を返すため変換する。
+type tbGetterAdapter struct {
+	repo interface {
+		GetByID(ctx context.Context, id string) (*tbdom.TokenBlueprint, error)
+	}
+}
+
+func (a *tbGetterAdapter) GetByID(ctx context.Context, id string) (tbdom.TokenBlueprint, error) {
+	if a == nil || a.repo == nil {
+		return tbdom.TokenBlueprint{}, errors.New("tokenBlueprint getter adapter is nil")
+	}
+	tb, err := a.repo.GetByID(ctx, id)
+	if err != nil {
+		return tbdom.TokenBlueprint{}, err
+	}
+	if tb == nil {
+		return tbdom.TokenBlueprint{}, errors.New("tokenBlueprint not found")
+	}
+	return *tb, nil
+}
+
+// ============================================================
+// ✅ Adapter: ListRepositoryFS -> usecase.ListPatcher
+// ============================================================
+type listPatcherAdapter struct {
+	repo interface {
+		Update(ctx context.Context, id string, patch listdom.ListPatch) (listdom.List, error)
+	}
+}
+
+func (a *listPatcherAdapter) UpdateImageID(
+	ctx context.Context,
+	listID string,
+	imageID string,
+	now time.Time,
+	updatedBy *string,
+) (listdom.List, error) {
+	listID = strings.TrimSpace(listID)
+	imageID = strings.TrimSpace(imageID)
+	if listID == "" {
+		return listdom.List{}, listdom.ErrNotFound
+	}
+
+	patch := listdom.ListPatch{
+		ImageID:   &imageID,
+		UpdatedAt: &now,
+		UpdatedBy: updatedBy,
+	}
+	return a.repo.Update(ctx, listID, patch)
+}
+
+// ============================================================
+// Adapter: MintRepositoryFS -> mintdom.MintRepository (Update補完)
+// ============================================================
+
+type mintRepoWithUpdate struct {
+	*fs.MintRepositoryFS
+	Client *firestore.Client
+}
+
+func (r *mintRepoWithUpdate) Update(ctx context.Context, m mintdom.Mint) (mintdom.Mint, error) {
+	if r == nil || r.Client == nil {
+		return mintdom.Mint{}, errors.New("mint repo is nil")
+	}
+
+	id := strings.TrimSpace(m.ID)
+	if id == "" {
+		return mintdom.Mint{}, errors.New("mint id is empty")
+	}
+	m.ID = id
+
+	type mintRecord struct {
+		ID                string            `firestore:"id"`
+		BrandID           string            `firestore:"brandId"`
+		TokenBlueprintID  string            `firestore:"tokenBlueprintId"`
+		Products          map[string]string `firestore:"products"`
+		CreatedAt         time.Time         `firestore:"createdAt"`
+		CreatedBy         string            `firestore:"createdBy"`
+		MintedAt          *time.Time        `firestore:"mintedAt"`
+		Minted            bool              `firestore:"minted"`
+		ScheduledBurnDate *time.Time        `firestore:"scheduledBurnDate"`
+	}
+
+	rec := mintRecord{
+		ID:                id,
+		BrandID:           strings.TrimSpace(m.BrandID),
+		TokenBlueprintID:  strings.TrimSpace(m.TokenBlueprintID),
+		Products:          m.Products,
+		CreatedAt:         m.CreatedAt,
+		CreatedBy:         strings.TrimSpace(m.CreatedBy),
+		MintedAt:          m.MintedAt,
+		Minted:            m.Minted,
+		ScheduledBurnDate: m.ScheduledBurnDate,
+	}
+
+	_, err := r.Client.Collection("mints").Doc(id).Set(ctx, rec, firestore.MergeAll)
+	if err != nil {
+		return mintdom.Mint{}, err
+	}
+	return m, nil
 }

@@ -291,6 +291,21 @@ function extractItemsArrayFromAny(json: any): any[] {
   return [];
 }
 
+function extractFirstItemFromAny(json: any): any | null {
+  if (!json) return null;
+  if (Array.isArray(json)) return json[0] ?? null;
+
+  if (json && typeof json === "object") {
+    // list が単体で返る場合
+    if ((json as any).id) return json;
+
+    const items = extractItemsArrayFromAny(json);
+    return items[0] ?? null;
+  }
+
+  return null;
+}
+
 /**
  * ===========
  * API
@@ -392,6 +407,64 @@ export async function fetchListByIdHTTP(listId: string): Promise<ListDTO> {
     method: "GET",
     path: `/lists/${encodeURIComponent(id)}`,
   });
+}
+
+/**
+ * ✅ ListDetail 用（hook から移譲）
+ * - 1) GET /lists/{id}
+ * - 2) fallback: GET /lists?inventoryId=xxx（環境差分吸収）
+ */
+export async function fetchListDetailHTTP(args: {
+  listId: string;
+  inventoryIdHint?: string;
+}): Promise<ListDTO> {
+  const listId = String(args.listId ?? "").trim();
+  if (!listId) {
+    // eslint-disable-next-line no-console
+    console.error("[list/listRepositoryHTTP] invalid_list_id (empty)", { args });
+    throw new Error("invalid_list_id");
+  }
+
+  try {
+    return await fetchListByIdHTTP(listId);
+  } catch (e1) {
+    const msg1 = String(e1 instanceof Error ? e1.message : e1);
+
+    // eslint-disable-next-line no-console
+    console.warn("[list/listRepositoryHTTP] fetchListByIdHTTP failed -> fallback", {
+      listId,
+      inventoryIdHint: s(args.inventoryIdHint),
+      message: msg1,
+      raw: e1,
+    });
+
+    // fallback inventoryId は hint を優先、無ければ listId を使う（後方互換）
+    const inv = s(args.inventoryIdHint) || listId;
+
+    // クエリAPIが無い環境もありえるため、fallback も失敗したら e1 を投げる
+    try {
+      const json = await requestJSON<any>({
+        method: "GET",
+        path: `/lists?inventoryId=${encodeURIComponent(inv)}`,
+      });
+
+      const first = extractFirstItemFromAny(json);
+      if (!first) {
+        throw new Error("not_found");
+      }
+      return first as ListDTO;
+    } catch (e2) {
+      // eslint-disable-next-line no-console
+      console.warn("[list/listRepositoryHTTP] fallback /lists?inventoryId failed", {
+        listId,
+        inventoryId: inv,
+        message: String(e2 instanceof Error ? e2.message : e2),
+        raw: e2,
+      });
+
+      throw e1;
+    }
+  }
 }
 
 /**

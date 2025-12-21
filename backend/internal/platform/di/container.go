@@ -3,11 +3,9 @@ package di
 
 import (
 	"context"
-	"errors"
 	"log"
 	"os"
 	"strings"
-	"time"
 
 	firebase "firebase.google.com/go/v4"
 	firebaseauth "firebase.google.com/go/v4/auth"
@@ -42,9 +40,7 @@ import (
 
 	branddom "narratives/internal/domain/brand"
 	companydom "narratives/internal/domain/company"
-	listdom "narratives/internal/domain/list"
 	memdom "narratives/internal/domain/member"
-	mintdom "narratives/internal/domain/mint"
 	productbpdom "narratives/internal/domain/productBlueprint"
 
 	appcfg "narratives/internal/infra/config"
@@ -142,129 +138,6 @@ type Container struct {
 
 	// ★ NameResolver（ID→名前/型番解決用）
 	NameResolver *resolver.NameResolver
-}
-
-// ============================================================
-// Adapters (for query ports)
-// ============================================================
-
-// pbQueryRepoAdapter adapts ProductBlueprintRepositoryFS to query.ProductBlueprintQueryRepo.
-type pbQueryRepoAdapter struct {
-	repo interface {
-		ListIDsByCompany(ctx context.Context, companyID string) ([]string, error)
-		GetByID(ctx context.Context, id string) (productbpdom.ProductBlueprint, error) // ★ value 戻り
-	}
-}
-
-func (a *pbQueryRepoAdapter) ListIDsByCompany(ctx context.Context, companyID string) ([]string, error) {
-	return a.repo.ListIDsByCompany(ctx, companyID)
-}
-
-func (a *pbQueryRepoAdapter) GetByID(ctx context.Context, id string) (productbpdom.ProductBlueprint, error) {
-	return a.repo.GetByID(ctx, id)
-}
-
-// pbIDsByCompanyAdapter adapts ProductBlueprintRepositoryFS to query.productBlueprintIDsByCompanyReader
-type pbIDsByCompanyAdapter struct {
-	repo interface {
-		ListIDsByCompany(ctx context.Context, companyID string) ([]string, error)
-	}
-}
-
-func (a *pbIDsByCompanyAdapter) ListIDsByCompanyID(ctx context.Context, companyID string) ([]string, error) {
-	return a.repo.ListIDsByCompany(ctx, companyID)
-}
-
-// pbPatchByIDAdapter adapts ProductBlueprintRepositoryFS to query.productBlueprintPatchReader
-type pbPatchByIDAdapter struct {
-	repo interface {
-		GetPatchByID(ctx context.Context, id string) (productbpdom.Patch, error)
-	}
-}
-
-func (a *pbPatchByIDAdapter) GetPatchByID(ctx context.Context, id string) (productbpdom.Patch, error) {
-	return a.repo.GetPatchByID(ctx, id)
-}
-
-// ============================================================
-// ✅ Adapter: ListRepositoryFS -> usecase.ListPatcher
-// ============================================================
-type listPatcherAdapter struct {
-	repo interface {
-		Update(ctx context.Context, id string, patch listdom.ListPatch) (listdom.List, error)
-	}
-}
-
-func (a *listPatcherAdapter) UpdateImageID(
-	ctx context.Context,
-	listID string,
-	imageID string,
-	now time.Time,
-	updatedBy *string,
-) (listdom.List, error) {
-	listID = strings.TrimSpace(listID)
-	imageID = strings.TrimSpace(imageID)
-	if listID == "" {
-		return listdom.List{}, listdom.ErrNotFound
-	}
-
-	patch := listdom.ListPatch{
-		ImageID:   &imageID,
-		UpdatedAt: &now,
-		UpdatedBy: updatedBy,
-	}
-	return a.repo.Update(ctx, listID, patch)
-}
-
-// ============================================================
-// Adapter: MintRepositoryFS -> mintdom.MintRepository (Update補完)
-// ============================================================
-
-type mintRepoWithUpdate struct {
-	*fs.MintRepositoryFS
-	Client *firestore.Client
-}
-
-func (r *mintRepoWithUpdate) Update(ctx context.Context, m mintdom.Mint) (mintdom.Mint, error) {
-	if r == nil || r.Client == nil {
-		return mintdom.Mint{}, errors.New("mint repo is nil")
-	}
-
-	id := strings.TrimSpace(m.ID)
-	if id == "" {
-		return mintdom.Mint{}, errors.New("mint id is empty")
-	}
-	m.ID = id
-
-	type mintRecord struct {
-		ID                string            `firestore:"id"`
-		BrandID           string            `firestore:"brandId"`
-		TokenBlueprintID  string            `firestore:"tokenBlueprintId"`
-		Products          map[string]string `firestore:"products"`
-		CreatedAt         time.Time         `firestore:"createdAt"`
-		CreatedBy         string            `firestore:"createdBy"`
-		MintedAt          *time.Time        `firestore:"mintedAt"`
-		Minted            bool              `firestore:"minted"`
-		ScheduledBurnDate *time.Time        `firestore:"scheduledBurnDate"`
-	}
-
-	rec := mintRecord{
-		ID:                id,
-		BrandID:           strings.TrimSpace(m.BrandID),
-		TokenBlueprintID:  strings.TrimSpace(m.TokenBlueprintID),
-		Products:          m.Products,
-		CreatedAt:         m.CreatedAt,
-		CreatedBy:         strings.TrimSpace(m.CreatedBy),
-		MintedAt:          m.MintedAt,
-		Minted:            m.Minted,
-		ScheduledBurnDate: m.ScheduledBurnDate,
-	}
-
-	_, err := r.Client.Collection("mints").Doc(id).Set(ctx, rec, firestore.MergeAll)
-	if err != nil {
-		return mintdom.Mint{}, err
-	}
-	return m, nil
 }
 
 // ========================================
@@ -585,8 +458,14 @@ func NewContainer(ctx context.Context) (*Container, error) {
 		nameResolver,
 	)
 
-	// ✅ NEW: ListQuery（listRepo の List(...) をそのまま使えるよう、query 側を合わせた）
-	listQuery := companyquery.NewListQuery(listRepo, nameResolver)
+	// ✅ FIX: ListQuery は brandId 解決のため pb/tb getter を注入する
+	// - TokenBlueprintRepo は GetByID が *TokenBlueprint 戻りなので adapter で value に変換
+	listQuery := companyquery.NewListQueryWithBrandGetters(
+		listRepo,
+		nameResolver,
+		productBlueprintRepo, // pbGetter（value 戻り）
+		&tbGetterAdapter{repo: tokenBlueprintRepo}, // tbGetter（pointer->value 変換）
+	)
 
 	// 6. Assemble container
 	return &Container{
