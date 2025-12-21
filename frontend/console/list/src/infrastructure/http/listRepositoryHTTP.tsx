@@ -213,7 +213,8 @@ function buildUpdateListPayloadArray(input: UpdateListInput): Record<string, any
   const uid = s(u?.uid);
 
   const title = s(input?.title);
-  const description = input?.description === undefined ? undefined : String(input?.description ?? "");
+  const description =
+    input?.description === undefined ? undefined : String(input?.description ?? "");
 
   const prices = normalizePricesForBackendUpdate(input?.priceRows);
 
@@ -233,7 +234,10 @@ function buildUpdateListPayloadArray(input: UpdateListInput): Record<string, any
 
     // ✅ backend が status 更新を受ける場合のみ
     status,
-    decision: undefined, // 絶対に送らない（名揺れ吸収しない）
+
+    // 絶対に送らない（名揺れ吸収しない）
+    decision: undefined,
+
     updatedBy: s(input?.updatedBy) || uid || undefined,
   };
 
@@ -302,9 +306,39 @@ async function requestJSON<T>(args: {
   method: "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
   path: string;
   body?: unknown;
+
+  // ✅ debug log
+  debug?: {
+    tag: string;
+    url: string;
+    method: string;
+    body?: unknown;
+  };
 }): Promise<T> {
   const token = await getIdToken();
   const url = `${API_BASE}${args.path.startsWith("/") ? "" : "/"}${args.path}`;
+
+  // ✅ debug: request payload
+  if (args.debug) {
+    try {
+      // NOTE: ここで stringify すると "実際に送る JSON" が見える
+      const bodyStr =
+        args.debug.body === undefined ? undefined : JSON.stringify(args.debug.body);
+      console.log(`[list/listRepositoryHTTP] ${args.debug.tag}`, {
+        method: args.debug.method,
+        url: args.debug.url,
+        body: args.debug.body,
+        bodyJSON: bodyStr,
+      });
+    } catch (e) {
+      console.log(`[list/listRepositoryHTTP] ${args.debug.tag} (stringify_failed)`, {
+        method: args.debug.method,
+        url: args.debug.url,
+        body: args.debug.body,
+        err: String(e),
+      });
+    }
+  }
 
   let bodyText: string | undefined = undefined;
   if (args.body !== undefined) {
@@ -336,6 +370,16 @@ async function requestJSON<T>(args: {
     const msg =
       (json && typeof json === "object" && (json.error || json.message)) ||
       `http_error_${res.status}`;
+
+    // ✅ debug: response error
+    console.log(`[list/listRepositoryHTTP] response error`, {
+      method: args.method,
+      url,
+      status: res.status,
+      raw: text,
+      json,
+    });
+
     throw new Error(String(msg));
   }
 
@@ -383,21 +427,39 @@ function extractFirstItemFromAny(json: any): any | null {
 export async function createListHTTP(input: CreateListInput): Promise<ListDTO> {
   const payloadArray = buildCreateListPayloadArray(input);
 
+  // ✅ debug: create payload
+  console.log("[list/listRepositoryHTTP] createListHTTP payload", payloadArray);
+
   try {
     return await requestJSON<ListDTO>({
       method: "POST",
       path: "/lists",
       body: payloadArray,
+      debug: {
+        tag: "POST /lists",
+        url: `${API_BASE}/lists`,
+        method: "POST",
+        body: payloadArray,
+      },
     });
   } catch (e) {
     const msg = String(e instanceof Error ? e.message : e);
 
     if (msg === "invalid json") {
       const payloadMap = buildCreateListPayloadMap(input);
+
+      console.log("[list/listRepositoryHTTP] createListHTTP retry payload(map)", payloadMap);
+
       return await requestJSON<ListDTO>({
         method: "POST",
         path: "/lists",
         body: payloadMap,
+        debug: {
+          tag: "POST /lists (retry map)",
+          url: `${API_BASE}/lists`,
+          method: "POST",
+          body: payloadMap,
+        },
       });
     }
 
@@ -406,7 +468,7 @@ export async function createListHTTP(input: CreateListInput): Promise<ListDTO> {
 }
 
 /**
- * ✅ NEW: Update list
+ * ✅ Update list
  * PUT /lists/{id}
  *
  * 1) prices: Array<{modelId, price}> で送る
@@ -418,21 +480,45 @@ export async function updateListByIdHTTP(input: UpdateListInput): Promise<ListDT
 
   const payloadArray = buildUpdateListPayloadArray(input);
 
+  // ✅ debug: update payload
+  console.log("[list/listRepositoryHTTP] updateListByIdHTTP payload", {
+    listId,
+    payload: payloadArray,
+  });
+
   try {
     return await requestJSON<ListDTO>({
       method: "PUT",
       path: `/lists/${encodeURIComponent(listId)}`,
       body: payloadArray,
+      debug: {
+        tag: `PUT /lists/${listId}`,
+        url: `${API_BASE}/lists/${encodeURIComponent(listId)}`,
+        method: "PUT",
+        body: payloadArray,
+      },
     });
   } catch (e) {
     const msg = String(e instanceof Error ? e.message : e);
 
     if (msg === "invalid json") {
       const payloadMap = buildUpdateListPayloadMap(input);
+
+      console.log("[list/listRepositoryHTTP] updateListByIdHTTP retry payload(map)", {
+        listId,
+        payload: payloadMap,
+      });
+
       return await requestJSON<ListDTO>({
         method: "PUT",
         path: `/lists/${encodeURIComponent(listId)}`,
         body: payloadMap,
+        debug: {
+          tag: `PUT /lists/${listId} (retry map)`,
+          url: `${API_BASE}/lists/${encodeURIComponent(listId)}`,
+          method: "PUT",
+          body: payloadMap,
+        },
       });
     }
 

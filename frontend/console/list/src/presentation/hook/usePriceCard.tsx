@@ -5,6 +5,9 @@ import * as React from "react";
 // Types
 // ----------------------------------------------------------
 export type PriceRow = {
+  /** ✅ optional: id (= modelId) を持てるようにする（hook 連携とデバッグのため） */
+  id?: string;
+
   /** サイズ (例: "S" | "M" | "L") */
   size: string;
 
@@ -67,11 +70,31 @@ function rgbIntToHex(rgb: number | string | null | undefined): string | null {
   return `#${hex}`;
 }
 
-function parsePriceInput(v: string): number | null {
-  const trimmed = s(v);
-  if (!trimmed) return null;
+/**
+ * ✅ 数値入力の正規化
+ * - 全角数字 → 半角
+ * - カンマ除去（1,000 → 1000）
+ * - 空白除去
+ */
+function normalizeNumericString(raw: string): string {
+  const t = s(raw);
+  if (!t) return "";
 
-  const num = Number(trimmed);
+  // 全角 ０-９ → 半角 0-9
+  const half = t.replace(/[０-９]/g, (ch) => {
+    const code = ch.charCodeAt(0) - 0xfee0;
+    return String.fromCharCode(code);
+  });
+
+  // カンマ/スペース除去
+  return half.replace(/[, \t]/g, "");
+}
+
+function parsePriceInput(v: string): number | null {
+  const normalized = normalizeNumericString(v);
+  if (!normalized) return null;
+
+  const num = Number(normalized);
   if (!Number.isFinite(num)) return null;
 
   // number input なので基本は整数想定（step=1）。念のため floor。
@@ -124,6 +147,26 @@ export function usePriceCard(props: PriceCardProps): UsePriceCardResult {
   const isEdit = mode === "edit";
   const showModeBadge = mode !== "view";
 
+  // ✅ rows が更新されているかどうかを確定させるログ
+  React.useEffect(() => {
+    const sample = (Array.isArray(rows) ? rows : []).slice(0, 4).map((r, idx) => ({
+      idx,
+      id: s((r as any)?.id),
+      size: s(r?.size),
+      color: s(r?.color),
+      price: r?.price ?? null,
+      stock: Number.isFinite(Number(r?.stock)) ? Number(r?.stock) : 0,
+    }));
+
+    // eslint-disable-next-line no-console
+    console.log("[console/list/priceCard] props changed", {
+      mode,
+      rowsCount: Array.isArray(rows) ? rows.length : 0,
+      hasOnChangePrice: typeof onChangePrice === "function",
+      sample,
+    });
+  }, [mode, rows, onChangePrice]);
+
   const rowsVM = React.useMemo<PriceRowVM[]>(() => {
     return rows.map((row, idx) => {
       const rgbHex = rgbIntToHex(row.rgb);
@@ -144,12 +187,31 @@ export function usePriceCard(props: PriceCardProps): UsePriceCardResult {
           : `${currencySymbol ?? ""}${row.price}`;
 
       const onChangePriceInput = (e: React.ChangeEvent<HTMLInputElement>) => {
-        const next = parsePriceInput(e.target.value);
+        const raw = e.target.value;
+        const next = parsePriceInput(raw);
+
+        // eslint-disable-next-line no-console
+        console.log("[console/list/priceCard] onChangePriceInput", {
+          idx,
+          rowId: s((row as any)?.id),
+          size: s(row?.size),
+          color: s(row?.color),
+          prevPrice: row?.price ?? null,
+          raw,
+          normalized: normalizeNumericString(raw),
+          parsedNext: next,
+          hasOnChangePrice: typeof onChangePrice === "function",
+        });
+
         onChangePrice?.(idx, next, row);
       };
 
+      // ✅ key をより安定化（id がある場合は id を優先して含める）
+      const stableId = s((row as any)?.id);
+      const keyBase = stableId || `${String(row.size)}-${String(row.color)}-${idx}`;
+
       return {
-        key: `${String(row.size)}-${String(row.color)}-${idx}`,
+        key: keyBase,
         size: row.size,
         color: row.color,
         stock: row.stock,

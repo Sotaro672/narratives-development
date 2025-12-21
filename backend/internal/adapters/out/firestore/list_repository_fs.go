@@ -940,6 +940,15 @@ func (r *ListRepositoryForUsecase) Update(ctx context.Context, item ldom.List) (
 		patch.Description = p
 	}
 
+	// ✅ prices: nil = 未指定(keep), 空配列 = 変更しない(keep), 要素あり = replace
+	// ここが無かったため prices が更新されず、結果として price が 1 に戻っていました。
+	if item.Prices != nil {
+		if len(item.Prices) > 0 {
+			pr := item.Prices
+			patch.Prices = &pr
+		}
+	}
+
 	// updatedBy: 空なら変更しない（keep）
 	if item.UpdatedBy != nil {
 		if p := strPtrIfNonEmpty(*item.UpdatedBy); p != nil {

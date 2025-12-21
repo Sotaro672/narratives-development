@@ -232,7 +232,6 @@ func (uc *ListUsecase) Update(ctx context.Context, item listdom.List) (listdom.L
 	}
 
 	// ✅ 最優先: domain.Repository 互換の patch Update(Update(ctx, id, patch)) が叩けるならそれを使う
-	// （このルートは Firestore 実装が map を Set する形に揃っているため、MergeAll 事故を避けられる）
 	patch := buildPatchFromItem(item)
 
 	if uc.listReader != nil {
@@ -321,7 +320,6 @@ func (uc *ListUsecase) GetAggregate(ctx context.Context, id string) (ListAggrega
 }
 
 // SaveImageFromGCS は GCS の bucket/objectPath から ListImage を保存します。
-// bucket が空なら実装側で listimgdom.DefaultBucket を使用してください。
 func (uc *ListUsecase) SaveImageFromGCS(
 	ctx context.Context,
 	id string,
@@ -428,7 +426,12 @@ func buildPatchFromItem(item listdom.List) listdom.ListPatch {
 		updatedAtV = item.UpdatedAt.UTC()
 	}
 
-	pricesV := item.Prices
+	// ✅ prices: nil(未指定)なら patch に入れない（意図せず全削除を防ぐ）
+	var pricesPtr *[]listdom.ListPriceRow
+	if item.Prices != nil {
+		pv := item.Prices
+		pricesPtr = &pv
+	}
 
 	return listdom.ListPatch{
 		Status:      &statusV,
@@ -438,7 +441,7 @@ func buildPatchFromItem(item listdom.List) listdom.ListPatch {
 		Description: &descV,
 		UpdatedBy:   updatedByV,
 		UpdatedAt:   &updatedAtV,
-		Prices:      &pricesV,
+		Prices:      pricesPtr,
 	}
 }
 

@@ -181,6 +181,11 @@ export function normalizePriceRows<TRow extends Record<string, any> = any>(dto: 
  * - backend が受け取るのは prices: [{modelId, price}] を想定
  * - PriceCard row は modelId を持たないので、id を modelId として扱う
  * - price が null の行は送らない（= 変更無し扱いにしたい）
+ *
+ * NOTE:
+ * - 現在の update は repositoryHTTP 側で priceRows -> prices 正規化するため、
+ *   service で prices を作って渡す必要はありません。
+ * - ただし他用途で使えるので関数自体は残しておく。
  */
 export function buildPricesForUpdateFromPriceRows(
   rows: any[] | null | undefined,
@@ -361,9 +366,9 @@ export function computeListDetailPageTitle(args: { listId?: string; listingTitle
 }
 
 // ---------------------------------------------------------
-// ✅ NEW: Update API (hook / page から呼べる)
-// - list_handler の PUT /lists/{id} を叩くための入口
-// - ここで prices を正規化して送る（id=modelId）
+// ✅ Update API (hook / page から呼べる)
+// - 重要: repositoryHTTP 側が priceRows を受けて prices を正規化するので、
+//         service からは priceRows を渡す（prices を渡すと落ちる）
 // ---------------------------------------------------------
 export async function updateListDetailDTO(args: {
   listId: string;
@@ -375,28 +380,30 @@ export async function updateListDetailDTO(args: {
   // PriceCard rows（id = modelId）
   priceRows?: any[];
 
+  // decision (optional)
+  decision?: "list" | "hold";
+
+  // assignee (optional)
+  assigneeId?: string;
+
   // audit
   updatedBy?: string;
 }): Promise<ListDTO> {
   const listId = s(args.listId);
   if (!listId) throw new Error("invalid_list_id");
 
-  const payload: any = {};
-
-  if (args.title !== undefined) payload.title = String(args.title ?? "");
-  if (args.description !== undefined) payload.description = String(args.description ?? "");
-
-  // ✅ backend が受けるのは prices（modelId+price）想定
-  if (args.priceRows !== undefined) {
-    payload.prices = buildPricesForUpdateFromPriceRows(args.priceRows);
-  }
-
-  if (args.updatedBy !== undefined) payload.updatedBy = s(args.updatedBy) || undefined;
-
-  // ✅ ここが「list_handler が叩かれる」唯一の確実な入口になる
+  // ✅ repositoryHTTP が期待する UpdateListInput に合わせる
   return await updateListByIdHTTP({
     listId,
-    ...payload,
+    title: args.title,
+    description: args.description,
+
+    // ✅ ここが修正点: prices ではなく priceRows を渡す
+    priceRows: args.priceRows,
+
+    decision: args.decision,
+    assigneeId: args.assigneeId,
+    updatedBy: args.updatedBy,
   });
 }
 

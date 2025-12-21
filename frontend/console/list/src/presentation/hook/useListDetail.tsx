@@ -28,16 +28,31 @@ import {
   s,
 } from "../../application/listDetailService";
 
+export type ListingDecisionNorm = "listing" | "holding" | "";
+
+export type DraftImage = {
+  url: string;
+  isNew: boolean;
+  file?: File;
+};
+
 export type UseListDetailResult = {
   pageTitle: string;
   onBack: () => void;
 
-  // loading/error
+  // loading/error (load)
   loading: boolean;
   error: string;
 
+  // save state (save)
+  saving: boolean;
+  saveError: string;
+
   // raw dto
   dto: ListDetailDTO | null;
+
+  // reload (optional but handy)
+  reload: () => Promise<void>;
 
   // =========================
   // ✅ Edit mode (page header)
@@ -46,11 +61,8 @@ export type UseListDetailResult = {
   onEdit: () => void;
   onCancel: () => void;
 
-  // ✅ listDetail.tsx が payload を渡してくるので受け取れる形にする
-  // (payload は使えるものだけ使う / 未指定でも保存できる)
+  // ✅ listDetail.tsx が payload を渡してくるので受け取れる形にする（payload 無しでも動く）
   onSave: (payload?: any) => Promise<void>;
-
-  // ✅ 互換: onSaveEdit を探す UI があるため alias を用意
   onSaveEdit: (payload?: any) => Promise<void>;
 
   // =========================
@@ -65,10 +77,18 @@ export type UseListDetailResult = {
   draftDescription: string;
   setDraftDescription: React.Dispatch<React.SetStateAction<string>>;
 
-  // decision/status (view)
-  decision: "list" | "hold" | "" | string;
+  // =========================
+  // decision/status (view/edit)
+  // =========================
+  decision: "list" | "hold" | "" | string; // raw(view)
+  decisionNorm: ListingDecisionNorm; // normalized(view)
+  draftDecision: ListingDecisionNorm; // normalized(edit)
+  setDraftDecision: React.Dispatch<React.SetStateAction<ListingDecisionNorm>>;
+  onToggleDecision: (next: ListingDecisionNorm) => void;
 
-  // ✅ display strings (already trimmed)
+  // =========================
+  // display strings (already trimmed)
+  // =========================
   productBrandId: string;
   productBrandName: string;
   productName: string;
@@ -77,19 +97,29 @@ export type UseListDetailResult = {
   tokenBrandName: string;
   tokenName: string;
 
-  // images (view) ※ edit は UI 側で切替（この hook では URL のみ返す）
-  imageUrls: string[];
+  // =========================
+  // images (view/edit)
+  // =========================
+  imageUrls: string[]; // effective (view or edit)
+  draftImages: DraftImage[]; // edit 用（UI-only）
+  onAddImages: (files: FileList | null) => void;
+  onRemoveImageAt: (idx: number) => void;
+
   mainImageIndex: number;
   setMainImageIndex: React.Dispatch<React.SetStateAction<number>>;
 
+  // =========================
   // price (PriceCard 用)
-  // ✅ edit 中は draftPriceRows を返す
-  priceRows: PriceRow[];
-  draftPriceRows: PriceRow[];
+  // =========================
+  priceRows: PriceRow[]; // view
+  draftPriceRows: PriceRow[]; // edit
   setDraftPriceRows: React.Dispatch<React.SetStateAction<PriceRow[]>>;
+  onChangePrice: (index: number, price: number | null, row: PriceRow) => void;
+
+  // 互換: 呼び出し側で使っている可能性があるため残す
   priceCard: ReturnType<typeof usePriceCard>;
 
-  // ✅ admin (view) : assigneeId + assigneeName を返す
+  // admin (view)
   assigneeId: string;
   assigneeName: string;
 
@@ -98,7 +128,7 @@ export type UseListDetailResult = {
 };
 
 // ==============================
-// local helpers (no duplication with backend helpers.go etc.)
+// local helpers
 // ==============================
 
 async function getIdToken(): Promise<string> {
@@ -122,6 +152,8 @@ async function requestJSON<T>(args: {
     method: args.method,
     url,
     bodyBytes: bodyText ? bodyText.length : 0,
+    body: args.body,
+    bodyJSON: bodyText,
   });
 
   const res = await fetch(url, {
@@ -142,6 +174,16 @@ async function requestJSON<T>(args: {
     json = { raw: text };
   }
 
+  // eslint-disable-next-line no-console
+  console.log("[console/list/update] response", {
+    method: args.method,
+    url,
+    status: res.status,
+    ok: res.ok,
+    responseBytes: text ? text.length : 0,
+    json,
+  });
+
   if (!res.ok) {
     const msg =
       (json && typeof json === "object" && (json.error || json.message)) ||
@@ -159,17 +201,17 @@ function toNumberOrNull(v: unknown): number | null {
   return n;
 }
 
-function normalizePricesFromPriceRows(rows: PriceRow[]): Array<{ modelId: string; price: number }> {
+function normalizePricesFromPriceRows(
+  rows: PriceRow[],
+): Array<{ modelId: string; price: number }> {
   const out: Array<{ modelId: string; price: number }> = [];
 
   for (const r of Array.isArray(rows) ? rows : []) {
-    const modelId = s((r as any)?.id); // ✅ PriceRow は id (= modelId) が正
+    const modelId = s((r as any)?.id); // ✅ PriceRow は id (= modelId)
     const price = toNumberOrNull((r as any)?.price);
 
-    // modelId が空の行は送らない（UI側の暫定行など）
     if (!modelId) continue;
 
-    // price が null の行は保存不可（backend が number 前提の可能性が高い）
     if (price === null) {
       throw new Error("missing_price_in_priceRows");
     }
@@ -180,14 +222,50 @@ function normalizePricesFromPriceRows(rows: PriceRow[]): Array<{ modelId: string
   return out;
 }
 
-// decision -> backend status (best-effort)
-function decisionToBackendStatus(decision: unknown): string | undefined {
-  const d = s(decision).toLowerCase();
+// ✅ 出品/保留の正規化（backend: listing/holding を想定、旧: list/hold も吸収）
+function normalizeDecision(v: unknown): ListingDecisionNorm {
+  const x = s(v).toLowerCase();
+  if (x === "listing" || x === "list") return "listing";
+  if (x === "holding" || x === "hold") return "holding";
+  return "";
+}
+
+// decision/status -> backend status (best-effort)
+function decisionToBackendStatus(v: unknown): string | undefined {
+  const d = s(v).toLowerCase();
   if (!d) return undefined;
+
+  // already normalized
+  if (d === "listing" || d === "holding") return d;
+
+  // legacy
   if (d === "list") return "listing";
-  if (d === "hold") return "hold";
-  // それ以外は backend が受けられるならそのまま
+  if (d === "hold") return "holding";
+
   return d;
+}
+
+function clonePriceRows(rows: PriceRow[]): PriceRow[] {
+  return Array.isArray(rows) ? rows.map((x) => ({ ...(x as any) })) : [];
+}
+
+function cloneDraftImagesFromUrls(urls: string[]): DraftImage[] {
+  return (Array.isArray(urls) ? urls : [])
+    .map((u) => s(u))
+    .filter(Boolean)
+    .map((u) => ({ url: u, isNew: false as const }));
+}
+
+function revokeDraftBlobUrls(items: DraftImage[]) {
+  for (const x of Array.isArray(items) ? items : []) {
+    if (x?.isNew && typeof x?.url === "string" && x.url.startsWith("blob:")) {
+      try {
+        URL.revokeObjectURL(x.url);
+      } catch {
+        // noop
+      }
+    }
+  }
 }
 
 export function useListDetail(): UseListDetailResult {
@@ -261,8 +339,8 @@ export function useListDetail(): UseListDetailResult {
     tokenBrandName,
     tokenName,
 
-    imageUrls,
-    priceRows,
+    imageUrls: viewImageUrls,
+    priceRows: viewPriceRows,
 
     assigneeId,
     assigneeName,
@@ -271,9 +349,7 @@ export function useListDetail(): UseListDetailResult {
     createdAt,
   } = derived;
 
-  // images
-  const [mainImageIndex, setMainImageIndex] = React.useState(0);
-  useMainImageIndexGuard({ imageUrls, mainImageIndex, setMainImageIndex });
+  const decisionNorm = React.useMemo(() => normalizeDecision(decision), [decision]);
 
   // ============================================================
   // ✅ Edit state + drafts
@@ -282,54 +358,208 @@ export function useListDetail(): UseListDetailResult {
 
   const [draftListingTitle, setDraftListingTitle] = React.useState(listingTitle);
   const [draftDescription, setDraftDescription] = React.useState(description);
-  const [draftPriceRows, setDraftPriceRows] = React.useState<PriceRow[]>(priceRows);
+
+  const [draftPriceRows, setDraftPriceRows] = React.useState<PriceRow[]>(
+    clonePriceRows(viewPriceRows),
+  );
+
+  const [draftDecision, setDraftDecision] = React.useState<ListingDecisionNorm>(
+    decisionNorm,
+  );
+
+  const [draftImages, setDraftImages] = React.useState<DraftImage[]>(
+    cloneDraftImagesFromUrls(viewImageUrls),
+  );
+
+  // save state
+  const [saving, setSaving] = React.useState(false);
+  const [saveError, setSaveError] = React.useState("");
 
   // DTO/derived が更新されたら、編集していない時だけ draft を同期
   React.useEffect(() => {
     if (isEdit) return;
+
     setDraftListingTitle(listingTitle);
     setDraftDescription(description);
-    setDraftPriceRows(priceRows);
-  }, [isEdit, listingTitle, description, priceRows]);
+    setDraftPriceRows(clonePriceRows(viewPriceRows));
+    setDraftDecision(decisionNorm);
+    setDraftImages(cloneDraftImagesFromUrls(viewImageUrls));
+  }, [isEdit, listingTitle, description, viewPriceRows, decisionNorm, viewImageUrls]);
 
   const onEdit = React.useCallback(() => {
-    // enter edit: 最新の view 値で draft を初期化
     setDraftListingTitle(listingTitle);
     setDraftDescription(description);
-    setDraftPriceRows(priceRows);
+    setDraftPriceRows(clonePriceRows(viewPriceRows));
+    setDraftDecision(decisionNorm);
+    setDraftImages(cloneDraftImagesFromUrls(viewImageUrls));
+    setSaveError("");
+
+    // eslint-disable-next-line no-console
+    console.log("[console/list/edit] enter", {
+      listId: s(listId),
+      listingTitle,
+      descriptionLen: s(description).length,
+      decision: decisionNorm,
+      priceRowsCount: Array.isArray(viewPriceRows) ? viewPriceRows.length : 0,
+    });
+
     setIsEdit(true);
-  }, [listingTitle, description, priceRows]);
+  }, [listId, listingTitle, description, viewPriceRows, decisionNorm, viewImageUrls]);
 
   const onCancel = React.useCallback(() => {
-    // cancel: view に巻き戻す
+    // blob 解放
+    revokeDraftBlobUrls(draftImages);
+
     setDraftListingTitle(listingTitle);
     setDraftDescription(description);
-    setDraftPriceRows(priceRows);
+    setDraftPriceRows(clonePriceRows(viewPriceRows));
+    setDraftDecision(decisionNorm);
+    setDraftImages(cloneDraftImagesFromUrls(viewImageUrls));
+    setSaveError("");
+
     setIsEdit(false);
-  }, [listingTitle, description, priceRows]);
+  }, [draftImages, listingTitle, description, viewPriceRows, decisionNorm, viewImageUrls]);
+
+  const onToggleDecision = React.useCallback(
+    (next: ListingDecisionNorm) => {
+      if (!isEdit) return;
+      if (saving) return;
+      setDraftDecision(next);
+    },
+    [isEdit, saving],
+  );
+
+  // ============================================================
+  // ✅ images (UI-only)
+  // ============================================================
+  const onAddImages = React.useCallback(
+    (files: FileList | null) => {
+      if (!isEdit) return;
+      if (!files || files.length === 0) return;
+
+      const next: DraftImage[] = [];
+      for (let i = 0; i < files.length; i++) {
+        const f = files.item(i);
+        if (!f) continue;
+        const url = URL.createObjectURL(f);
+        next.push({ url, file: f, isNew: true });
+      }
+
+      setDraftImages((prev) => [...(Array.isArray(prev) ? prev : []), ...next]);
+    },
+    [isEdit],
+  );
+
+  const onRemoveImageAt = React.useCallback(
+    (idx: number) => {
+      if (!isEdit) return;
+
+      setDraftImages((prev) => {
+        const arr = Array.isArray(prev) ? prev : [];
+        if (idx < 0 || idx >= arr.length) return arr;
+
+        const target = arr[idx];
+        if (target?.isNew && target?.url?.startsWith("blob:")) {
+          try {
+            URL.revokeObjectURL(target.url);
+          } catch {
+            // noop
+          }
+        }
+
+        return arr.slice(0, idx).concat(arr.slice(idx + 1));
+      });
+    },
+    [isEdit],
+  );
+
+  // ============================================================
+  // ✅ effective image urls (view/edit)
+  // ============================================================
+  const effectiveImageUrls = React.useMemo(() => {
+    if (isEdit) {
+      return (Array.isArray(draftImages) ? draftImages : [])
+        .map((x) => s(x?.url))
+        .filter(Boolean);
+    }
+    return (Array.isArray(viewImageUrls) ? viewImageUrls : []).map((u) => s(u)).filter(Boolean);
+  }, [isEdit, draftImages, viewImageUrls]);
+
+  // images: main index
+  const [mainImageIndex, setMainImageIndex] = React.useState(0);
+  useMainImageIndexGuard({
+    imageUrls: effectiveImageUrls,
+    mainImageIndex,
+    setMainImageIndex,
+  });
+
+  // ============================================================
+  // ✅ Price change (PriceCard -> draftPriceRows)
+  // ============================================================
+  const onChangePrice = React.useCallback(
+    (index: number, price: number | null, row: PriceRow) => {
+      if (!isEdit) return;
+
+      // eslint-disable-next-line no-console
+      console.log("[console/list/priceCard] onChangePrice", {
+        listId: s(listId),
+        index,
+        nextPrice: price,
+        rowSnapshot: {
+          id: s((row as any)?.id),
+          size: s((row as any)?.size),
+          color: s((row as any)?.color),
+          prevPrice: (row as any)?.price ?? null,
+        },
+      });
+
+      setDraftPriceRows((prev) => {
+        const next = Array.isArray(prev) ? [...prev] : [];
+        if (!next[index]) return prev;
+
+        next[index] = {
+          ...next[index],
+          price,
+          size: next[index].size,
+          color: next[index].color,
+          rgb: (next[index] as any).rgb,
+          stock: (next[index] as any).stock,
+        };
+
+        return next;
+      });
+    },
+    [isEdit, listId],
+  );
 
   // ============================================================
   // ✅ Save (PUT /lists/{id})
-  // - ここで PUT を飛ばすので list_handler.go が確実に叩かれる
-  // - 失敗時は edit を維持し、error を表示できるようにする
+  //
+  // ✅重要:
+  // - backend 更新は `prices` が本命（listRepositoryHTTP と合わせる）
+  // - PUT のレスポンスは信用せず、成功後に必ず GET で取り直して dto を更新
   // ============================================================
   const onSave = React.useCallback(
     async (payload?: any) => {
       const id = s(listId);
       if (!id) {
-        setError("invalid_list_id");
+        setSaveError("invalid_list_id");
         return;
       }
 
-      // payload が渡ってくる場合は title/description/priceRows を尊重（ただし draft を優先）
-      const nextTitle = s(draftListingTitle) || s(payload?.title) || s(payload?.listingTitle) || "";
-      const nextDesc =
-        s(draftDescription) ||
-        s(payload?.description) ||
-        s(payload?.detail?.description) ||
+      // ✅ タイトル/説明は payload があれば優先、無ければ draft を採用
+      const nextTitle =
+        s(payload?.title) ||
+        s(payload?.listingTitle) ||
+        s(draftListingTitle) ||
         "";
 
-      // price rows: draft を正とする（UI側の編集結果）
+      const nextDesc =
+        payload && payload.description !== undefined
+          ? String(payload.description ?? "")
+          : String(draftDescription ?? "");
+
+      // ✅ 価格は draft が正
       const nextPriceRows = Array.isArray(draftPriceRows) ? draftPriceRows : [];
 
       let prices: Array<{ modelId: string; price: number }> = [];
@@ -337,66 +567,73 @@ export function useListDetail(): UseListDetailResult {
         prices = normalizePricesFromPriceRows(nextPriceRows);
       } catch (e) {
         const msg = String(e instanceof Error ? e.message : e);
-        setError(msg);
+        setSaveError(msg);
         return;
       }
 
-      // ✅ backend status（既存 decision を維持する。payload に decision が来ても一応使える）
+      // ✅ status/decision は draftDecision を正とし、payload があれば吸収
       const backendStatus =
+        decisionToBackendStatus(payload?.status) ||
         decisionToBackendStatus(payload?.decision) ||
-        decisionToBackendStatus(decision) ||
+        decisionToBackendStatus(draftDecision) ||
+        decisionToBackendStatus(decisionNorm) ||
         undefined;
 
-      // ✅ updatedBy（auth.uid）
       const uid = s(auth.currentUser?.uid) || "system";
 
-      // ✅ update payload（最小）
-      // NOTE: backend が「domain List を丸ごと Unmarshal」する場合に備えて id/inventoryId/assigneeId も入れる
       const updatePayload: Record<string, any> = {
         id, // 互換: body id
         title: nextTitle,
         description: nextDesc,
-        prices, // [{modelId, price}]
-        status: backendStatus, // optional
-        updatedBy: uid, // optional
+        prices, // ✅ 本命
+        status: backendStatus,
+        updatedBy: uid,
       };
 
-      // body に余計なものを入れない（DisallowUnknownFields 対策）
+      // DisallowUnknownFields 対策で余計なものは入れない
       if (s(dto?.inventoryId)) updatePayload.inventoryId = s(dto?.inventoryId);
       if (s(dto?.assigneeId)) updatePayload.assigneeId = s(dto?.assigneeId);
 
       // eslint-disable-next-line no-console
-      console.log("[console/list/update] PUT start", {
+      console.log("[console/list/update] PUT payload(final)", {
         listId: id,
-        titleLen: nextTitle.length,
-        descLen: nextDesc.length,
-        pricesCount: prices.length,
+        keys: Object.keys(updatePayload),
+        status: backendStatus,
+        pricesCount: Array.isArray(updatePayload.prices) ? updatePayload.prices.length : 0,
+        pricesSample: (Array.isArray(updatePayload.prices) ? updatePayload.prices : []).slice(0, 4),
       });
 
-      setLoading(true);
-      setError("");
+      setSaving(true);
+      setSaveError("");
 
       try {
-        const updated = await requestJSON<any>({
+        await requestJSON<any>({
           method: "PUT",
           path: `/lists/${encodeURIComponent(id)}`,
           body: updatePayload,
         });
 
-        // eslint-disable-next-line no-console
-        console.log("[console/list/update] PUT ok", { listId: id });
+        // ✅ PUT レスポンスは信用せず GET で取り直す
+        const fresh = await loadListDetailDTO({
+          listId: id,
+          inventoryIdHint: inventoryId,
+        });
 
         if (cancelledRef.current) return;
 
-        // backend が detail dto を返す/返さない両方に耐える（best-effort）
-        if (updated && typeof updated === "object") {
-          setDTO(updated as ListDetailDTO);
-        } else {
-          // 返ってこないなら reload
-          await reload();
-        }
+        // blob 解放（edit 終了で参照しなくなる）
+        revokeDraftBlobUrls(draftImages);
 
+        setDTO(fresh);
         setIsEdit(false);
+
+        // eslint-disable-next-line no-console
+        console.log("[console/list/update] after-save reload ok", {
+          listId: id,
+          freshPricesCount: Array.isArray((fresh as any)?.prices)
+            ? (fresh as any).prices.length
+            : undefined,
+        });
       } catch (e) {
         const msg = String(e instanceof Error ? e.message : e);
 
@@ -404,65 +641,39 @@ export function useListDetail(): UseListDetailResult {
         console.log("[console/list/update] PUT failed", { listId: id, error: msg });
 
         if (cancelledRef.current) return;
-        setError(msg);
-
-        // edit は維持（ユーザが修正できるように）
+        setSaveError(msg);
       } finally {
         if (cancelledRef.current) return;
-        setLoading(false);
+        setSaving(false);
       }
     },
     [
       listId,
+      inventoryId,
       dto,
-      decision,
+      decisionNorm,
+      draftDecision,
       draftListingTitle,
       draftDescription,
       draftPriceRows,
+      draftImages,
       cancelledRef,
-      reload,
     ],
   );
 
-  // 互換 alias
   const onSaveEdit = onSave;
 
   // ============================================================
-  // ✅ PriceCard hook（view/edit 切替）
-  // - edit 中は draftPriceRows を rows に渡す
-  // - edit 中は onChangePrice で draft を更新
+  // ✅ PriceCard hook（互換で残す）
   // ============================================================
-  const handleChangePrice = React.useCallback(
-    (index: number, price: number | null, row: PriceRow) => {
-      setDraftPriceRows((prev) => {
-        const next = Array.isArray(prev) ? [...prev] : [];
-        if (!next[index]) return prev;
-
-        // row 自体は信頼せず、index で更新（size/color/stock/rgb は維持）
-        next[index] = {
-          ...next[index],
-          price,
-          // 念のため既存 row の主要フィールドは維持（prev 側が正）
-          size: next[index].size,
-          color: next[index].color,
-          rgb: (next[index] as any).rgb,
-          stock: (next[index] as any).stock,
-        };
-        return next;
-      });
-    },
-    [],
-  );
-
-  const effectivePriceRows = isEdit ? draftPriceRows : priceRows;
+  const effectiveForPriceCard = isEdit ? draftPriceRows : viewPriceRows;
 
   const priceCard = usePriceCard({
     title: "価格",
-    rows: effectivePriceRows,
+    rows: effectiveForPriceCard,
     mode: isEdit ? "edit" : "view",
     currencySymbol: "¥",
-    onChangePrice: isEdit ? handleChangePrice : undefined,
-    // showTotal は既に削除済み前提（PriceCard 側も合計行無し）
+    onChangePrice: isEdit ? onChangePrice : undefined,
   });
 
   const pageTitle = React.useMemo(
@@ -477,26 +688,31 @@ export function useListDetail(): UseListDetailResult {
     loading,
     error,
 
-    dto,
+    saving,
+    saveError,
 
-    // edit
+    dto,
+    reload,
+
     isEdit,
     onEdit,
     onCancel,
     onSave,
     onSaveEdit,
 
-    // view
     listingTitle,
     description,
 
-    // draft
     draftListingTitle,
     setDraftListingTitle,
     draftDescription,
     setDraftDescription,
 
     decision,
+    decisionNorm,
+    draftDecision,
+    setDraftDecision,
+    onToggleDecision,
 
     productBrandId,
     productBrandName,
@@ -506,14 +722,18 @@ export function useListDetail(): UseListDetailResult {
     tokenBrandName,
     tokenName,
 
-    imageUrls,
+    imageUrls: effectiveImageUrls,
+    draftImages,
+    onAddImages,
+    onRemoveImageAt,
+
     mainImageIndex,
     setMainImageIndex,
 
-    // price
-    priceRows: effectivePriceRows,
+    priceRows: viewPriceRows,
     draftPriceRows,
     setDraftPriceRows,
+    onChangePrice,
     priceCard,
 
     assigneeId,
