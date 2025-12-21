@@ -6,6 +6,7 @@ import * as React from "react";
 import {
   fetchListByIdHTTP,
   fetchListsHTTP,
+  updateListByIdHTTP,
   type ListDTO,
 } from "../infrastructure/http/listRepositoryHTTP";
 
@@ -66,6 +67,10 @@ export type UseListDetailResult = {
   assigneeName: string;
   createdByName: string;
   createdAt: string;
+
+  // ✅ NEW: edit helpers (optional)
+  listId?: string;
+  inventoryId?: string;
 };
 
 // ---------------------------------------------------------
@@ -171,6 +176,31 @@ export function normalizePriceRows<TRow extends Record<string, any> = any>(dto: 
   });
 }
 
+/**
+ * ✅ draft(priceRows) -> backend update payload の prices
+ * - backend が受け取るのは prices: [{modelId, price}] を想定
+ * - PriceCard row は modelId を持たないので、id を modelId として扱う
+ * - price が null の行は送らない（= 変更無し扱いにしたい）
+ */
+export function buildPricesForUpdateFromPriceRows(
+  rows: any[] | null | undefined,
+): Array<{ modelId: string; price: number }> {
+  const rr = Array.isArray(rows) ? rows : [];
+  const out: Array<{ modelId: string; price: number }> = [];
+
+  for (const r of rr) {
+    const modelId = s(r?.modelId) || s(r?.id); // ✅ id = modelId
+    if (!modelId) continue;
+
+    const price = toNumberOrNull(r?.price);
+    if (price === null) continue;
+
+    out.push({ modelId, price });
+  }
+
+  return out;
+}
+
 // ---------------------------------------------------------
 // ✅ Backend query(ListQuery.ListRows) 経由で product/token/assignee/brand を補完する
 // - GET /lists は ListQuery.ListRows を通る想定
@@ -267,6 +297,9 @@ export async function loadListDetailDTO(args: {
     if (!s(merged?.tokenBrandName)) merged.tokenBrandName = s(row?.tokenBrandName);
   }
 
+  // ✅ 一応 id を正規化して持っておく（view 側で拾えるように）
+  if (!s(merged?.id)) merged.id = listId;
+
   return merged as ListDetailDTO;
 }
 
@@ -325,6 +358,46 @@ export function computeListDetailPageTitle(args: { listId?: string; listingTitle
   const id = s(args.listId);
   const t = s(args.listingTitle) || "出品詳細";
   return id ? `${t}（listId: ${id}）` : t;
+}
+
+// ---------------------------------------------------------
+// ✅ NEW: Update API (hook / page から呼べる)
+// - list_handler の PUT /lists/{id} を叩くための入口
+// - ここで prices を正規化して送る（id=modelId）
+// ---------------------------------------------------------
+export async function updateListDetailDTO(args: {
+  listId: string;
+
+  // editable fields
+  title?: string;
+  description?: string;
+
+  // PriceCard rows（id = modelId）
+  priceRows?: any[];
+
+  // audit
+  updatedBy?: string;
+}): Promise<ListDTO> {
+  const listId = s(args.listId);
+  if (!listId) throw new Error("invalid_list_id");
+
+  const payload: any = {};
+
+  if (args.title !== undefined) payload.title = String(args.title ?? "");
+  if (args.description !== undefined) payload.description = String(args.description ?? "");
+
+  // ✅ backend が受けるのは prices（modelId+price）想定
+  if (args.priceRows !== undefined) {
+    payload.prices = buildPricesForUpdateFromPriceRows(args.priceRows);
+  }
+
+  if (args.updatedBy !== undefined) payload.updatedBy = s(args.updatedBy) || undefined;
+
+  // ✅ ここが「list_handler が叩かれる」唯一の確実な入口になる
+  return await updateListByIdHTTP({
+    listId,
+    ...payload,
+  });
 }
 
 // ---------------------------------------------------------

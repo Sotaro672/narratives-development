@@ -34,12 +34,12 @@ const (
 	listPricesSub = "prices" // subcollection under each list doc
 )
 
-// Compile-time check
+// Compile-time check (domain repository)
 var _ ldom.Repository = (*ListRepositoryFS)(nil)
 
-// =======================
+// ============================================================
 // Queries
-// =======================
+// ============================================================
 
 func (r *ListRepositoryFS) GetByID(ctx context.Context, id string) (ldom.List, error) {
 	if r.Client == nil {
@@ -93,8 +93,8 @@ func (r *ListRepositoryFS) Exists(ctx context.Context, id string) (bool, error) 
 	return true, nil
 }
 
-// Count: best-effort via scanning and applying Filter in-memory.
-func (r *ListRepositoryFS) Count(ctx context.Context, filter ldom.Filter) (int, error) {
+// ✅ filter はフロントが担うため、Count は全件数のみ返す（best-effort scan）
+func (r *ListRepositoryFS) Count(ctx context.Context, _ ldom.Filter) (int, error) {
 	if r.Client == nil {
 		return 0, errors.New("firestore client is nil")
 	}
@@ -103,46 +103,24 @@ func (r *ListRepositoryFS) Count(ctx context.Context, filter ldom.Filter) (int, 
 	defer it.Stop()
 
 	total := 0
-	priceFilterNeeded := needsPriceFilter(filter)
-
 	for {
-		doc, err := it.Next()
+		_, err := it.Next()
 		if errors.Is(err, iterator.Done) {
 			break
 		}
 		if err != nil {
 			return 0, err
 		}
-
-		l, err := decodeListDoc(doc)
-		if err != nil {
-			return 0, err
-		}
-
-		if !matchListFilterMeta(l, filter) {
-			continue
-		}
-
-		if priceFilterNeeded {
-			prices, err := r.loadListPricesForOne(ctx, l.ID)
-			if err != nil {
-				return 0, err
-			}
-			if !matchListFilterPrice(prices, filter) {
-				continue
-			}
-		}
-
 		total++
 	}
-
 	return total, nil
 }
 
+// ✅ filter/sort/search はフロントが担うため、List は全件対象 + ページングのみ（順序は固定）
 func (r *ListRepositoryFS) List(
 	ctx context.Context,
-	filter ldom.Filter,
-	sortOpt ldom.Sort,
+	_ ldom.Filter,
+	_ ldom.Sort,
 	page ldom.Page,
 ) (ldom.PageResult[ldom.List], error) {
 	if r.Client == nil {
@@ -150,52 +128,18 @@ func (r *ListRepositoryFS) List(
 	}
 
 	pageNum, perPage, _ := fscommon.NormalizePage(page.Number, page.PerPage, 50, 0)
-
-	q := r.col().Query
-	q = applyListSortToQuery(q, sortOpt)
-
-	it := q.Documents(ctx)
-	defer it.Stop()
-
-	var all []ldom.List
-	for {
-		doc, err := it.Next()
-		if errors.Is(err, iterator.Done) {
-			break
-		}
-		if err != nil {
-			return ldom.PageResult[ldom.List]{}, err
-		}
-
-		l, err := decodeListDoc(doc)
-		if err != nil {
-			return ldom.PageResult[ldom.List]{}, err
-		}
-
-		if matchListFilterMeta(l, filter) {
-			all = append(all, l)
-		}
+	if perPage <= 0 {
+		perPage = 50
+	}
+	if pageNum <= 0 {
+		pageNum = 1
 	}
 
-	priceFilterNeeded := needsPriceFilter(filter)
-
-	// Enrich with prices (needed both for response & price-based filtering)
-	if err := r.enrichListsWithPrices(ctx, all); err != nil {
+	// total count (scan)
+	total, err := r.Count(ctx, ldom.Filter{})
+	if err != nil {
 		return ldom.PageResult[ldom.List]{}, err
 	}
-
-	// Apply price-based filters if any
-	if priceFilterNeeded {
-		filtered := make([]ldom.List, 0, len(all))
-		for _, l := range all {
-			if matchListFilterPrice(l.Prices, filter) {
-				filtered = append(filtered, l)
-			}
-		}
-		all = filtered
-	}
-
-	total := len(all)
 	if total == 0 {
 		return ldom.PageResult[ldom.List]{
 			Items:      []ldom.List{},
@@ -207,14 +151,43 @@ func (r *ListRepositoryFS) List(
 	}
 
 	offset := (pageNum - 1) * perPage
-	if offset > total {
-		offset = total
+	if offset < 0 {
+		offset = 0
 	}
-	end := offset + perPage
-	if end > total {
-		end = total
+
+	// stable order:
+	// updated_at DESC, created_at DESC, docID DESC
+	q := r.col().Query.
+		OrderBy("updated_at", gfs.Desc).
+		OrderBy("created_at", gfs.Desc).
+		OrderBy(gfs.DocumentID, gfs.Desc).
+		Offset(offset).
+		Limit(perPage)
+
+	it := q.Documents(ctx)
+	defer it.Stop()
+
+	items := make([]ldom.List, 0, perPage)
+	for {
+		doc, err := it.Next()
+		if errors.Is(err, iterator.Done) {
+			break
+		}
+		if err != nil {
+			return ldom.PageResult[ldom.List]{}, err
+		}
+
+		l, err := decodeListDoc(doc)
+		if err != nil {
+			return ldom.PageResult[ldom.List]{}, err
+		}
+		items = append(items, l)
 	}
-	items := all[offset:end]
+
+	// enrich with prices for returned items only
+	if err := r.enrichListsWithPrices(ctx, items); err != nil {
+		return ldom.PageResult[ldom.List]{}, err
+	}
 
 	totalPages := fscommon.ComputeTotalPages(total, perPage)
 
@@ -227,9 +200,10 @@ func (r *ListRepositoryFS) List(
 	}, nil
 }
 
+// ✅ filter/sort/search はフロントが担うため、cursor も全件対象（cursor/paging のみ）
 func (r *ListRepositoryFS) ListByCursor(
 	ctx context.Context,
-	filter ldom.Filter,
+	_ ldom.Filter,
 	_ ldom.Sort,
 	cpage ldom.CursorPage,
 ) (ldom.CursorPageResult[ldom.List], error) {
@@ -277,10 +251,6 @@ func (r *ListRepositoryFS) ListByCursor(
 			skipping = false
 		}
 
-		if !matchListFilterMeta(l, filter) {
-			continue
-		}
-
 		items = append(items, l)
 		last = l.ID
 
@@ -292,17 +262,6 @@ func (r *ListRepositoryFS) ListByCursor(
 	// Enrich prices
 	if err := r.enrichListsWithPrices(ctx, items); err != nil {
 		return ldom.CursorPageResult[ldom.List]{}, err
-	}
-
-	// Apply price-filter if needed
-	if needsPriceFilter(filter) {
-		filtered := make([]ldom.List, 0, len(items))
-		for _, l := range items {
-			if matchListFilterPrice(l.Prices, filter) {
-				filtered = append(filtered, l)
-			}
-		}
-		items = filtered
 	}
 
 	var next *string
@@ -318,9 +277,9 @@ func (r *ListRepositoryFS) ListByCursor(
 	}, nil
 }
 
-// =======================
+// ============================================================
 // Mutations
-// =======================
+// ============================================================
 
 func (r *ListRepositoryFS) Create(ctx context.Context, l ldom.List) (ldom.List, error) {
 	if r.Client == nil {
@@ -382,6 +341,8 @@ func (r *ListRepositoryFS) Create(ctx context.Context, l ldom.List) (ldom.List, 
 	return r.GetByID(ctx, id)
 }
 
+// ✅ domain.Repository としての patch update（既存互換を維持）
+// ✅ main doc 更新は "map + MergeAll" に統一（既存フィールドを残し、将来の追加フィールドも壊さない）
 func (r *ListRepositoryFS) Update(
 	ctx context.Context,
 	id string,
@@ -414,6 +375,12 @@ func (r *ListRepositoryFS) Update(
 
 		changed := false
 
+		// “削除”の意図がある場合だけ delete sentinel を入れるためのフラグ
+		clearUpdatedBy := false
+		clearUpdatedAt := false
+		clearDeletedAt := false
+		clearDeletedBy := false
+
 		// Status
 		if patch.Status != nil {
 			cur.Status = *patch.Status
@@ -422,15 +389,13 @@ func (r *ListRepositoryFS) Update(
 
 		// AssigneeID
 		if patch.AssigneeID != nil {
-			v := strings.TrimSpace(*patch.AssigneeID)
-			cur.AssigneeID = v
+			cur.AssigneeID = strings.TrimSpace(*patch.AssigneeID)
 			changed = true
 		}
 
 		// ImageID
 		if patch.ImageID != nil {
-			v := strings.TrimSpace(*patch.ImageID)
-			cur.ImageID = v
+			cur.ImageID = strings.TrimSpace(*patch.ImageID)
 			changed = true
 		}
 
@@ -451,6 +416,7 @@ func (r *ListRepositoryFS) Update(
 			v := strings.TrimSpace(*patch.UpdatedBy)
 			if v == "" {
 				cur.UpdatedBy = nil
+				clearUpdatedBy = true
 			} else {
 				cur.UpdatedBy = &v
 			}
@@ -461,6 +427,7 @@ func (r *ListRepositoryFS) Update(
 		if patch.DeletedAt != nil {
 			if patch.DeletedAt.IsZero() {
 				cur.DeletedAt = nil
+				clearDeletedAt = true
 			} else {
 				t := patch.DeletedAt.UTC()
 				cur.DeletedAt = &t
@@ -473,6 +440,7 @@ func (r *ListRepositoryFS) Update(
 			v := strings.TrimSpace(*patch.DeletedBy)
 			if v == "" {
 				cur.DeletedBy = nil
+				clearDeletedBy = true
 			} else {
 				cur.DeletedBy = &v
 			}
@@ -485,6 +453,7 @@ func (r *ListRepositoryFS) Update(
 		if patch.UpdatedAt != nil {
 			if patch.UpdatedAt.IsZero() {
 				cur.UpdatedAt = nil
+				clearUpdatedAt = true
 			} else {
 				t := patch.UpdatedAt.UTC()
 				cur.UpdatedAt = &t
@@ -494,9 +463,26 @@ func (r *ListRepositoryFS) Update(
 			cur.UpdatedAt = &t
 		}
 
-		// persist main doc
+		// persist main doc（map + MergeAll）
 		if changed || pricesWillChange {
-			if err := tx.Set(ref, encodeListDoc(cur)); err != nil {
+			data := encodeListDoc(cur)
+
+			// ✅ 明示的に「消す」意図があった場合だけ delete を入れる
+			if clearUpdatedBy {
+				data["updated_by"] = gfs.Delete
+			}
+			if clearUpdatedAt {
+				data["updated_at"] = gfs.Delete
+			}
+			if clearDeletedAt {
+				data["deleted_at"] = gfs.Delete
+			}
+			if clearDeletedBy {
+				data["deleted_by"] = gfs.Delete
+			}
+
+			// ✅ MergeAll は map data のみに使える（ここは map なのでOK）
+			if err := tx.Set(ref, data, gfs.MergeAll); err != nil {
 				return err
 			}
 		}
@@ -569,6 +555,7 @@ func (r *ListRepositoryFS) Delete(ctx context.Context, id string) error {
 	return nil
 }
 
+// Save は upsert です（既存互換）。main doc は map + MergeAll に統一。
 func (r *ListRepositoryFS) Save(ctx context.Context, l ldom.List, _ *ldom.SaveOptions) (ldom.List, error) {
 	if r.Client == nil {
 		return ldom.List{}, errors.New("firestore client is nil")
@@ -595,6 +582,7 @@ func (r *ListRepositoryFS) Save(ctx context.Context, l ldom.List, _ *ldom.SaveOp
 	}
 
 	err := r.Client.RunTransaction(ctx, func(ctx context.Context, tx *gfs.Transaction) error {
+		// ✅ MergeAll は map data のみに使える（encodeListDoc は map）
 		if err := tx.Set(ref, encodeListDoc(l), gfs.MergeAll); err != nil {
 			return err
 		}
@@ -607,9 +595,9 @@ func (r *ListRepositoryFS) Save(ctx context.Context, l ldom.List, _ *ldom.SaveOp
 	return r.GetByID(ctx, id)
 }
 
-// =======================
+// ============================================================
 // Helpers - encode/decode
-// =======================
+// ============================================================
 
 func decodeListDoc(doc *gfs.DocumentSnapshot) (ldom.List, error) {
 	var raw struct {
@@ -734,9 +722,9 @@ func encodeListDoc(l ldom.List) map[string]any {
 	return m
 }
 
-// =======================
-// Helpers - prices (✅ array only)
-// =======================
+// ============================================================
+// Helpers - prices (✅ subcollection)
+// ============================================================
 
 func (r *ListRepositoryFS) enrichListsWithPrices(ctx context.Context, lists []ldom.List) error {
 	for i := range lists {
@@ -877,7 +865,6 @@ func normalizeListPrices(in []ldom.ListPriceRow) map[string]ldom.ListPriceRow {
 		if mid == "" {
 			continue
 		}
-		// ドメイン側で価格制約がある前提だが、ここでも最低限の整形だけしておく
 		out[mid] = ldom.ListPriceRow{
 			ModelID: mid,
 			Price:   row.Price,
@@ -889,218 +876,80 @@ func normalizeListPrices(in []ldom.ListPriceRow) map[string]ldom.ListPriceRow {
 	return out
 }
 
-// =======================
-// Helpers - filtering & sort
-// =======================
+// ============================================================
+// ✅ Adapter for application/usecase.ListUpdater (Update(ctx, item))
+// - ListRepositoryFS は domain.Repository の都合で Update(ctx, id, patch) を持つため、
+//   同名で Update(ctx, item) を追加できない（Go の制約）。
+// - このラッパーを DI で listReader/listCreator として渡すと、usecase 側の auto-wire が成立します。
+// ============================================================
 
-func needsPriceFilter(f ldom.Filter) bool {
-	// Filter の Price 条件は
-	// - ModelNumbers (≒ modelId の集合)
-	// - MinPrice / MaxPrice
-	return len(f.ModelNumbers) > 0 || f.MinPrice != nil || f.MaxPrice != nil
+type ListRepositoryForUsecase struct {
+	*ListRepositoryFS
 }
 
-// Filters that depend only on list document fields (no Prices).
-func matchListFilterMeta(l ldom.List, f ldom.Filter) bool {
-	// Free text search
-	if sq := strings.TrimSpace(f.SearchQuery); sq != "" {
-		lq := strings.ToLower(sq)
-		haystack := strings.ToLower(
-			l.ID + " " +
-				l.Title + " " +
-				l.Description + " " +
-				l.ImageID + " " +
-				l.AssigneeID + " " +
-				l.CreatedBy + " " +
-				ptrToString(l.UpdatedBy) + " " +
-				ptrToString(l.DeletedBy),
-		)
-		if !strings.Contains(haystack, lq) {
-			return false
-		}
-	}
-
-	// IDs
-	if len(f.IDs) > 0 {
-		found := false
-		for _, v := range f.IDs {
-			if strings.TrimSpace(v) == l.ID {
-				found = true
-				break
-			}
-		}
-		if !found {
-			return false
-		}
-	}
-
-	// Assignee
-	if f.AssigneeID != nil && strings.TrimSpace(*f.AssigneeID) != "" {
-		if l.AssigneeID != strings.TrimSpace(*f.AssigneeID) {
-			return false
-		}
-	}
-
-	// Status
-	if f.Status != nil && strings.TrimSpace(string(*f.Status)) != "" {
-		if l.Status != *f.Status {
-			return false
-		}
-	}
-	if len(f.Statuses) > 0 {
-		ok := false
-		for _, st := range f.Statuses {
-			if l.Status == st {
-				ok = true
-				break
-			}
-		}
-		if !ok {
-			return false
-		}
-	}
-
-	// Date ranges
-	if f.CreatedFrom != nil && l.CreatedAt.Before(f.CreatedFrom.UTC()) {
-		return false
-	}
-	if f.CreatedTo != nil && !l.CreatedAt.Before(f.CreatedTo.UTC()) {
-		return false
-	}
-	if f.UpdatedFrom != nil {
-		if l.UpdatedAt == nil || l.UpdatedAt.Before(f.UpdatedFrom.UTC()) {
-			return false
-		}
-	}
-	if f.UpdatedTo != nil {
-		if l.UpdatedAt == nil || !l.UpdatedAt.Before(f.UpdatedTo.UTC()) {
-			return false
-		}
-	}
-	if f.DeletedFrom != nil {
-		if l.DeletedAt == nil || l.DeletedAt.Before(f.DeletedFrom.UTC()) {
-			return false
-		}
-	}
-	if f.DeletedTo != nil {
-		if l.DeletedAt == nil || !l.DeletedAt.Before(f.DeletedTo.UTC()) {
-			return false
-		}
-	}
-
-	// Deleted tri-state
-	if f.Deleted != nil {
-		if *f.Deleted {
-			if l.DeletedAt == nil {
-				return false
-			}
-		} else {
-			if l.DeletedAt != nil {
-				return false
-			}
-		}
-	}
-
-	return true
+// NewListRepositoryForUsecase creates a wrapper for application layer.
+func NewListRepositoryForUsecase(repo *ListRepositoryFS) *ListRepositoryForUsecase {
+	return &ListRepositoryForUsecase{ListRepositoryFS: repo}
 }
 
-// Price-based filters (EXISTS semantics).
-// - prices: []{modelId, price}
-// - f.ModelNumbers は「modelId の集合」として解釈する
-func matchListFilterPrice(prices []ldom.ListPriceRow, f ldom.Filter) bool {
-	if len(f.ModelNumbers) == 0 && f.MinPrice == nil && f.MaxPrice == nil {
-		return true
+func strPtrIfNonEmpty(s string) *string {
+	t := strings.TrimSpace(s)
+	if t == "" {
+		return nil
 	}
-	if len(prices) == 0 {
-		return false
-	}
-
-	allowed := map[string]struct{}{}
-	if len(f.ModelNumbers) > 0 {
-		for _, id := range f.ModelNumbers {
-			id = strings.TrimSpace(id)
-			if id != "" {
-				allowed[id] = struct{}{}
-			}
-		}
-	}
-
-	for _, row := range prices {
-		modelID := strings.TrimSpace(row.ModelID)
-		if modelID == "" {
-			continue
-		}
-
-		if len(allowed) > 0 {
-			if _, ok := allowed[modelID]; !ok {
-				continue
-			}
-		}
-
-		if f.MinPrice != nil && row.Price < *f.MinPrice {
-			continue
-		}
-		if f.MaxPrice != nil && row.Price > *f.MaxPrice {
-			continue
-		}
-
-		// found one that matches all conditions
-		return true
-	}
-
-	return false
+	return &t
 }
 
-func ptrToString(p *string) string {
-	if p == nil {
-		return ""
-	}
-	return *p
-}
-
-func applyListSortToQuery(q gfs.Query, sortOpt ldom.Sort) gfs.Query {
-	field, dir := mapListSort(sortOpt)
-	if field == "" {
-		// Firestore can't do COALESCE; approximate:
-		// primary sort by updated_at DESC (if present), then created_at DESC, then ID DESC.
-		return q.
-			OrderBy("updated_at", gfs.Desc).
-			OrderBy("created_at", gfs.Desc).
-			OrderBy(gfs.DocumentID, gfs.Desc)
-	}
-	return q.
-		OrderBy(field, dir).
-		OrderBy(gfs.DocumentID, gfs.Asc)
-}
-
-func mapListSort(sortOpt ldom.Sort) (string, gfs.Direction) {
-	col := strings.ToLower(string(sortOpt.Column))
-	var field string
-
-	switch col {
-	case "id":
-		field = gfs.DocumentID
-	case "status":
-		field = "status"
-	case "assigneeid", "assignee_id":
-		field = "assignee_id"
-	case "title":
-		field = "title"
-	case "imageid", "image_id", "imageurl", "image_url":
-		field = "image_id"
-	case "createdat", "created_at":
-		field = "created_at"
-	case "updatedat", "updated_at":
-		field = "updated_at"
-	case "deletedat", "deleted_at":
-		field = "deleted_at"
-	default:
-		return "", gfs.Desc
+// Update implements "usecase.ListUpdater" contract by translating full item -> patch.
+// ✅ “空文字/空配列は変更しない” を徹底（＝既存フィールド維持）
+func (r *ListRepositoryForUsecase) Update(ctx context.Context, item ldom.List) (ldom.List, error) {
+	if r == nil || r.ListRepositoryFS == nil {
+		return ldom.List{}, errors.New("list repo is nil")
 	}
 
-	dir := gfs.Asc
-	if strings.EqualFold(string(sortOpt.Order), "desc") {
-		dir = gfs.Desc
+	id := strings.TrimSpace(item.ID)
+	if id == "" {
+		return ldom.List{}, ldom.ErrNotFound
 	}
-	return field, dir
+
+	patch := ldom.ListPatch{}
+
+	// status: 空なら変更しない（keep）
+	if strings.TrimSpace(string(item.Status)) != "" {
+		v := item.Status
+		patch.Status = &v
+	}
+
+	// assigneeId: 空なら変更しない（keep）
+	if p := strPtrIfNonEmpty(item.AssigneeID); p != nil {
+		patch.AssigneeID = p
+	}
+
+	// imageId: 空なら変更しない（keep）
+	if p := strPtrIfNonEmpty(item.ImageID); p != nil {
+		patch.ImageID = p
+	}
+
+	// title: 空なら変更しない（keep）
+	if p := strPtrIfNonEmpty(item.Title); p != nil {
+		patch.Title = p
+	}
+
+	// description: 空なら変更しない（keep）
+	if p := strPtrIfNonEmpty(item.Description); p != nil {
+		patch.Description = p
+	}
+
+	// updatedBy: 空なら変更しない（keep）
+	if item.UpdatedBy != nil {
+		if p := strPtrIfNonEmpty(*item.UpdatedBy); p != nil {
+			patch.UpdatedBy = p
+		}
+	}
+
+	// updatedAt: 常に更新（サーバ側で更新時刻を確実に進める）
+	now := time.Now().UTC()
+	patch.UpdatedAt = &now
+
+	return r.ListRepositoryFS.Update(ctx, id, patch)
 }

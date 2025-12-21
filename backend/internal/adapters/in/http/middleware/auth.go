@@ -3,6 +3,7 @@ package middleware
 
 import (
 	"context"
+	"errors"
 	"log"
 	"net/http"
 	"strings"
@@ -27,6 +28,12 @@ var (
 	ctxKeyFullName  = ctxKey{name: "fullName"}
 )
 
+// MemberCompanyIDReader は「member entity を作らずに companyId だけ」取得するためのオプショナル拡張。
+// Firestore 側の repo が実装していれば利用する（validate 失敗による companyId 欠落を回避）。
+type MemberCompanyIDReader interface {
+	GetCompanyIDByFirebaseUID(ctx context.Context, uid string) (string, error)
+}
+
 // AuthMiddleware は Bearer <ID_TOKEN> を検証し、member と各情報を context に詰める。
 type AuthMiddleware struct {
 	FirebaseAuth *FirebaseAuthClient
@@ -35,7 +42,6 @@ type AuthMiddleware struct {
 
 func (m *AuthMiddleware) Handler(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-
 		if m.FirebaseAuth == nil || m.MemberRepo == nil {
 			http.Error(w, "auth middleware not initialized", http.StatusServiceUnavailable)
 			return
@@ -53,8 +59,6 @@ func (m *AuthMiddleware) Handler(next http.Handler) http.Handler {
 			return
 		}
 
-		// ✅ ID TOKEN の完全表示・ファイル保存は削除
-		// （必要なら最小限の存在確認ログのみ）
 		log.Printf("[auth] bearer token received (len=%d)", len(idToken))
 
 		// Firebase ID トークン検証
@@ -70,21 +74,76 @@ func (m *AuthMiddleware) Handler(next http.Handler) http.Handler {
 			return
 		}
 
-		// uid → Member
-		member, err := m.MemberRepo.GetByFirebaseUID(r.Context(), uid)
-		if err != nil {
-			http.Error(w, "member not found", http.StatusForbidden)
+		// ------------------------------------------------------------
+		// uid → Member（失敗しても companyId だけは回収できるようにする）
+		// ------------------------------------------------------------
+		var member memdom.Member
+		memberOK := false
+
+		memberVal, mErr := m.MemberRepo.GetByFirebaseUID(r.Context(), uid)
+		if mErr == nil {
+			member = memberVal
+			memberOK = true
+		}
+
+		// companyId は「member.CompanyID」優先。ただし空なら repo 拡張から回収を試みる。
+		companyID := strings.TrimSpace(member.CompanyID)
+
+		if companyID == "" {
+			if r2, ok := any(m.MemberRepo).(MemberCompanyIDReader); ok {
+				if cid, e := r2.GetCompanyIDByFirebaseUID(r.Context(), uid); e == nil {
+					companyID = strings.TrimSpace(cid)
+					// member が取れていない場合でも、最低限 ctx に積めるように placeholder を作る
+					if !memberOK && companyID != "" {
+						member = memdom.Member{
+							ID:        uid,
+							CompanyID: companyID,
+						}
+						memberOK = true
+					}
+				}
+			}
+		}
+
+		// ✅ company 境界必須：companyId が取れないなら downstream で 500 にせず、ここで止める
+		if strings.TrimSpace(companyID) == "" {
+			// member が取れていないなら "member not found" に寄せる
+			if !memberOK {
+				http.Error(w, "member not found", http.StatusForbidden)
+				return
+			}
+			http.Error(w, "companyId not resolved for current user", http.StatusForbidden)
 			return
 		}
 
+		// ------------------------------------------------------------
 		// context に格納
-		ctx := context.WithValue(r.Context(), ctxKeyMember, member)
-		ctx = context.WithValue(ctx, ctxKeyUID, uid)
+		// ------------------------------------------------------------
+		ctx := r.Context()
 
-		// ★★★ usecase に memberID をセット（今回の 500 の原因修正ポイント）★★★
-		if strings.TrimSpace(member.ID) != "" {
-			ctx = usecase.WithMemberID(ctx, member.ID)
+		if memberOK {
+			ctx = context.WithValue(ctx, ctxKeyMember, member)
+
+			// ★★★ usecase に memberID をセット（従来互換）★★★
+			if strings.TrimSpace(member.ID) != "" {
+				ctx = usecase.WithMemberID(ctx, member.ID)
+			} else {
+				// 互換: placeholder 等で member.ID が空の場合
+				ctx = usecase.WithMemberID(ctx, uid)
+			}
+
+			// fullName（member が正常に取れている時だけ）
+			fullName := memdom.FormatLastFirst(member.LastName, member.FirstName)
+			if strings.TrimSpace(fullName) != "" {
+				ctx = context.WithValue(ctx, ctxKeyFullName, strings.TrimSpace(fullName))
+			}
+		} else {
+			// ここに来ることは基本ない（companyId 解決できない時点で return するため）
+			returnErr(w, errors.New("member not found"))
+			return
 		}
+
+		ctx = context.WithValue(ctx, ctxKeyUID, uid)
 
 		// email 格納
 		if emailRaw, ok := token.Claims["email"]; ok {
@@ -93,30 +152,29 @@ func (m *AuthMiddleware) Handler(next http.Handler) http.Handler {
 			}
 		}
 
-		// fullName 格納
-		fullName := memdom.FormatLastFirst(member.LastName, member.FirstName)
-		if strings.TrimSpace(fullName) != "" {
-			ctx = context.WithValue(ctx, ctxKeyFullName, strings.TrimSpace(fullName))
-		}
-
 		// ★ 互換のため、application 側の companyIDFromContext が拾える "文字列キー" も追加で積む
-		//   staticcheck SA1029 は、下の helper で意図的に握りつぶします。
 		ctx = withLegacyStringKey(ctx, "currentMember", member)
 		ctx = withLegacyStringKey(ctx, "member", member)
 
-		// companyId 格納
-		if cid := strings.TrimSpace(member.CompanyID); cid != "" {
-			ctx = usecase.WithCompanyID(ctx, cid)
-			ctx = context.WithValue(ctx, ctxKeyCompanyID, cid)
+		// companyId 格納（必須）
+		ctx = usecase.WithCompanyID(ctx, companyID)
+		ctx = context.WithValue(ctx, ctxKeyCompanyID, companyID)
 
-			// ★ 互換: 文字列キーでも companyId を積む
-			ctx = withLegacyStringKey(ctx, "companyId", cid)
-			ctx = withLegacyStringKey(ctx, "companyID", cid)
-			ctx = withLegacyStringKey(ctx, "company_id", cid)
-		}
+		// ★ 互換: 文字列キーでも companyId を積む
+		ctx = withLegacyStringKey(ctx, "companyId", companyID)
+		ctx = withLegacyStringKey(ctx, "companyID", companyID)
+		ctx = withLegacyStringKey(ctx, "company_id", companyID)
 
 		next.ServeHTTP(w, r.WithContext(ctx))
 	})
+}
+
+func returnErr(w http.ResponseWriter, err error) {
+	if err == nil {
+		http.Error(w, "error", http.StatusInternalServerError)
+		return
+	}
+	http.Error(w, err.Error(), http.StatusInternalServerError)
 }
 
 // withLegacyStringKey is intentionally using string keys for backward compatibility.

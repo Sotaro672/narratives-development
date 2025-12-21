@@ -63,6 +63,13 @@ type List struct {
 	DeletedBy *string    `json:"deletedBy,omitempty"`
 }
 
+// ✅ NEW: GetID makes List satisfy interfaces like `interface{ GetID() string }`
+// used by generic usecase helpers (e.g. ListUsecase.Update).
+// NOTE: value receiver is important so `List` (not only `*List`) satisfies it.
+func (l List) GetID() string {
+	return strings.TrimSpace(l.ID)
+}
+
 // Errors
 var (
 	// For persisted entity

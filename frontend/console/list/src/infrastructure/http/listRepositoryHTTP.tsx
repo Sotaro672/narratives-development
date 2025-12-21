@@ -57,6 +57,43 @@ export type CreateListInput = {
   createdBy?: string;
 };
 
+/**
+ * ✅ NEW: Update 用
+ * - listDetail 側の PriceRow は id = modelId なので、row.id も受ける
+ * - backend に送るのは modelId + price だけ（DisallowUnknownFields 対策）
+ */
+export type UpdateListInput = {
+  listId: string;
+
+  title?: string;
+  description?: string;
+
+  // detail 側の priceRows（id=modelId）
+  priceRows?: Array<{
+    // create系: modelId
+    modelId?: string;
+
+    // detail系: id (= modelId)
+    id?: string;
+
+    price: number | null;
+
+    // UI 用（backend には送らない）
+    size?: string;
+    color?: string;
+    stock?: number;
+    rgb?: number | null;
+  }>;
+
+  // UI の "list" | "hold" を backend の status に変換して送る（必要な場合のみ）
+  decision?: "list" | "hold";
+
+  assigneeId?: string;
+
+  // バックエンドで auth から取るなら省略可
+  updatedBy?: string;
+};
+
 export type ListDTO = Record<string, any>;
 export type ListAggregateDTO = Record<string, any>;
 export type ListImageDTO = Record<string, any>;
@@ -106,6 +143,30 @@ function normalizePricesForBackend(
 }
 
 /**
+ * ✅ update 用: modelId を row.modelId または row.id から取得する
+ */
+function normalizePricesForBackendUpdate(
+  rows: UpdateListInput["priceRows"],
+): Array<{ modelId: string; price: number }> {
+  if (!Array.isArray(rows)) return [];
+
+  return rows.map((r, idx) => {
+    const modelId = s((r as any)?.modelId) || s((r as any)?.id);
+    const priceMaybe = toNumberOrNull((r as any)?.price);
+
+    if (!modelId) {
+      // update時も modelId が無いと更新できない
+      throw new Error(`missing_modelId_in_priceRows_at_${idx}`);
+    }
+    if (priceMaybe === null) {
+      throw new Error(`missing_price_in_priceRows_at_${idx}`);
+    }
+
+    return { modelId, price: priceMaybe };
+  });
+}
+
+/**
  * ✅ CreateList payload（最小）
  * - 「create時に送るのは modelId と price」の方針を厳守
  * - decision/status/priceRows 等は送らない（DisallowUnknownFields対策）
@@ -142,11 +203,77 @@ function buildCreateListPayloadArray(input: CreateListInput): Record<string, any
 }
 
 /**
+ * ✅ NEW: Update payload（最小）
+ * - unknown fields を送らない
+ * - prices は Array<{modelId, price}> のみ
+ * - decision は backend が status を受ける場合のみ送る（listing/hold）
+ */
+function buildUpdateListPayloadArray(input: UpdateListInput): Record<string, any> {
+  const u = auth.currentUser;
+  const uid = s(u?.uid);
+
+  const title = s(input?.title);
+  const description = input?.description === undefined ? undefined : String(input?.description ?? "");
+
+  const prices = normalizePricesForBackendUpdate(input?.priceRows);
+
+  // decision -> status (backend の status が "listing"/"hold" を想定するため)
+  let status: string | undefined = undefined;
+  if (input?.decision === "list") status = "listing";
+  if (input?.decision === "hold") status = "hold";
+
+  const payload: Record<string, any> = {
+    // id は path で渡すので body に必須ではない（ただし backend 実装次第で必要なら入れてもOK）
+    title: title || undefined,
+    description,
+    assigneeId: s(input?.assigneeId) || undefined,
+
+    // ✅ backendへ送るのは modelId + price のみ
+    prices,
+
+    // ✅ backend が status 更新を受ける場合のみ
+    status,
+    decision: undefined, // 絶対に送らない（名揺れ吸収しない）
+    updatedBy: s(input?.updatedBy) || uid || undefined,
+  };
+
+  // undefined を落とす
+  for (const k of Object.keys(payload)) {
+    if (payload[k] === undefined) delete payload[k];
+  }
+
+  return payload;
+}
+
+/**
  * ✅ fallback: prices を map で送る版
  * backend が `map[string]number` を期待している場合に通る
  */
 function buildCreateListPayloadMap(input: CreateListInput): Record<string, any> {
   const base = buildCreateListPayloadArray(input);
+  const pricesArray = Array.isArray((base as any).prices)
+    ? ((base as any).prices as any[])
+    : [];
+
+  const pricesMap: Record<string, number> = {};
+  for (const p of pricesArray) {
+    const modelId = s((p as any)?.modelId);
+    const price = Number((p as any)?.price);
+    if (!modelId || !Number.isFinite(price)) continue;
+    pricesMap[modelId] = price;
+  }
+
+  return {
+    ...base,
+    prices: pricesMap, // Record<string, number>
+  };
+}
+
+/**
+ * ✅ NEW: update fallback: prices を map で送る版
+ */
+function buildUpdateListPayloadMap(input: UpdateListInput): Record<string, any> {
+  const base = buildUpdateListPayloadArray(input);
   const pricesArray = Array.isArray((base as any).prices)
     ? ((base as any).prices as any[])
     : [];
@@ -270,6 +397,41 @@ export async function createListHTTP(input: CreateListInput): Promise<ListDTO> {
       return await requestJSON<ListDTO>({
         method: "POST",
         path: "/lists",
+        body: payloadMap,
+      });
+    }
+
+    throw e;
+  }
+}
+
+/**
+ * ✅ NEW: Update list
+ * PUT /lists/{id}
+ *
+ * 1) prices: Array<{modelId, price}> で送る
+ * 2) 400 invalid json のときだけ prices: map にして1回だけリトライ
+ */
+export async function updateListByIdHTTP(input: UpdateListInput): Promise<ListDTO> {
+  const listId = s(input?.listId);
+  if (!listId) throw new Error("invalid_list_id");
+
+  const payloadArray = buildUpdateListPayloadArray(input);
+
+  try {
+    return await requestJSON<ListDTO>({
+      method: "PUT",
+      path: `/lists/${encodeURIComponent(listId)}`,
+      body: payloadArray,
+    });
+  } catch (e) {
+    const msg = String(e instanceof Error ? e.message : e);
+
+    if (msg === "invalid json") {
+      const payloadMap = buildUpdateListPayloadMap(input);
+      return await requestJSON<ListDTO>({
+        method: "PUT",
+        path: `/lists/${encodeURIComponent(listId)}`,
         body: payloadMap,
       });
     }

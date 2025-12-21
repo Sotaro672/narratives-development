@@ -215,13 +215,17 @@ func NewContainer(ctx context.Context) (*Container, error) {
 	invoiceRepo := fs.NewInvoiceRepositoryFS(fsClient)
 
 	// ✅ List (Firestore)
-	listRepo := fs.NewListRepositoryFS(fsClient)
+	// - struct をそのまま Set(MergeAll) すると保存フィールド名がズレて「反映されない」原因になる
+	// - fs 側の usecase 用 wrapper（encodeListDoc(map) / tx.Update / tx.Set(map)）を使用する
+	listRepoFS := fs.NewListRepositoryFS(fsClient)
+	listRepo := fs.NewListRepositoryForUsecase(listRepoFS)
 
 	memberRepo := fs.NewMemberRepositoryFS(fsClient)
 	messageRepo := fs.NewMessageRepositoryFS(fsClient)
 	modelRepo := fs.NewModelRepositoryFS(fsClient)
 
 	// ★ MintRepositoryFS（Update未実装分は mintRepoWithUpdate で補完）
+	// ※ mintRepoWithUpdate は adapters.go 側に定義済み（container.go に再定義しない）
 	mintRepoFS := fs.NewMintRepositoryFS(fsClient)
 	mintRepo := &mintRepoWithUpdate{
 		MintRepositoryFS: mintRepoFS,
@@ -300,8 +304,9 @@ func NewContainer(ctx context.Context) (*Container, error) {
 	listImageBucket := strings.TrimSpace(os.Getenv("LIST_IMAGE_BUCKET"))
 	listImageRepo := gcso.NewListImageRepositoryGCS(gcsClient, listImageBucket)
 
-	// ✅ ListPatcher adapter
-	listPatcher := &listPatcherAdapter{repo: listRepo}
+	// ✅ ListPatcher adapter（imageId 更新専用）
+	// ここは Update ではなく UpdateImageID のみなので、従来通り listRepoFS を渡す
+	listPatcher := &listPatcherAdapter{repo: listRepoFS}
 
 	// 5. Application-layer usecases
 
@@ -329,10 +334,12 @@ func NewContainer(ctx context.Context) (*Container, error) {
 	invoiceUC := uc.NewInvoiceUsecase(invoiceRepo)
 
 	// ✅ ListUsecase
+	// - listReader/listCreator に usecase 用 wrapper を渡すことで、
+	//   保存は必ず encodeListDoc(map) 経由になり snake_case の読み取りと整合する
 	listUC := uc.NewListUsecaseWithCreator(
-		listRepo,      // ListReader
+		listRepo,      // ListReader (+ ListLister/ListUpdater)
 		listRepo,      // ListCreator
-		listPatcher,   // ListPatcher (adapter)
+		listPatcher,   // ListPatcher (imageId only)
 		listImageRepo, // ListImageReader
 		listImageRepo, // ListImageByIDReader
 		listImageRepo, // ListImageObjectSaver
@@ -458,15 +465,14 @@ func NewContainer(ctx context.Context) (*Container, error) {
 		nameResolver,
 	)
 
-	// ✅ FIX: ListQuery は brandId 解決のため pb/tb getter を注入する
-	// ✅ NEW: ListQuery は inventoryId から stock を count するため InventoryQuery(GetDetailByID) も注入する
-	// - TokenBlueprintRepo は GetByID が *TokenBlueprint 戻りなので adapter で value に変換
-	listQuery := companyquery.NewListQueryWithBrandAndInventoryGetters(
-		listRepo,
+	// ✅ ListQuery: brandId 解決 + inventory stock + company boundary
+	listQuery := companyquery.NewListQueryWithBrandInventoryAndInventoryRows(
+		listRepo, // ✅ ListLister/Count (wrapper 経由)
 		nameResolver,
-		productBlueprintRepo, // pbGetter（value 戻り）
-		&tbGetterAdapter{repo: tokenBlueprintRepo}, // tbGetter（pointer->value 変換）
-		inventoryQuery, // ✅ invGetter（inventoryId -> stock count）
+		productBlueprintRepo,
+		&tbGetterAdapter{repo: tokenBlueprintRepo},
+		inventoryQuery,
+		inventoryQuery,
 	)
 
 	// 6. Assemble container
@@ -604,7 +610,6 @@ func (c *Container) RouterDeps() httpin.RouterDeps {
 // ========================================
 // Close
 // ========================================
-
 func (c *Container) Close() error {
 	if c.Firestore != nil {
 		_ = c.Firestore.Close()

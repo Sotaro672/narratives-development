@@ -2,6 +2,7 @@ package auth
 
 import (
 	"context"
+	"errors"
 	"log"
 	"strings"
 	"time"
@@ -27,14 +28,15 @@ type CompanyRepository interface {
 
 // -------------------------------------------------------
 // フロントから受け取るプロフィール
+// - ✅ omitted と empty string を区別するため pointer にする
 // -------------------------------------------------------
 
 type SignUpProfile struct {
-	LastName      string `json:"lastName"`
-	FirstName     string `json:"firstName"`
-	LastNameKana  string `json:"lastNameKana"`
-	FirstNameKana string `json:"firstNameKana"`
-	CompanyName   string `json:"companyName"`
+	LastName      *string `json:"lastName,omitempty"`
+	FirstName     *string `json:"firstName,omitempty"`
+	LastNameKana  *string `json:"lastNameKana,omitempty"`
+	FirstNameKana *string `json:"firstNameKana,omitempty"`
+	CompanyName   *string `json:"companyName,omitempty"`
 }
 
 // -------------------------------------------------------
@@ -48,6 +50,8 @@ type BootstrapService struct {
 
 // -------------------------------------------------------
 // Bootstrap（管理アカウントの初回ログイン時に呼ばれる想定）
+// - ✅ 冪等: 既に member が存在するなら基本 no-op
+// - ✅ 新規作成時のみ firstName/lastName を必須
 // -------------------------------------------------------
 
 func (s *BootstrapService) Bootstrap(
@@ -57,22 +61,56 @@ func (s *BootstrapService) Bootstrap(
 	profile *SignUpProfile,
 ) error {
 	now := time.Now().UTC()
+	uid = strings.TrimSpace(uid)
+	email = strings.TrimSpace(email)
+
 	log.Printf("[bootstrap] request received: uid=%s email=%s", uid, email)
 
-	// nil セーフ
+	if uid == "" {
+		return errors.New("bootstrap: uid is empty")
+	}
+	if s == nil || s.Members == nil || s.Companies == nil {
+		return errors.New("bootstrap: service not initialized")
+	}
+
+	// ---------------------------------------------------------
+	// 0) 既に member がいるなら（冪等）基本は何もしない
+	// ---------------------------------------------------------
+	if m, err := s.Members.GetByID(ctx, uid); err == nil && m != nil {
+		log.Printf("[bootstrap] member already exists: uid=%s companyID=%s (noop)", uid, strings.TrimSpace(m.CompanyID))
+		return nil
+	} else if err != nil && !isNotFoundLike(err) {
+		// NotFound 以外は異常として返す
+		log.Printf("[bootstrap] failed to check existing member: uid=%s err=%v", uid, err)
+		return err
+	}
+
+	// ---------------------------------------------------------
+	// 1) profile 取り出し（nil-safe）
+	// ---------------------------------------------------------
 	var p SignUpProfile
 	if profile != nil {
 		p = *profile
 	}
 
-	companyName := strings.TrimSpace(p.CompanyName)
+	companyName := sPtr(p.CompanyName)
+	firstName := sPtr(p.FirstName)
+	lastName := sPtr(p.LastName)
+	firstNameKana := sPtr(p.FirstNameKana)
+	lastNameKana := sPtr(p.LastNameKana)
 
-	//---------------------------------------------------------
-	// 0) companyName がある場合は先に Company を作る
-	//    - ここで失敗したら member は作らない（中途半端状態を防ぐ）
-	//---------------------------------------------------------
+	// ---------------------------------------------------------
+	// 2) 新規作成時は名前必須（空なら invalid firstName を起こす前に分かりやすく）
+	// ---------------------------------------------------------
+	if firstName == "" || lastName == "" {
+		log.Printf("[bootstrap] invalid profile for new member: uid=%s firstName=%q lastName=%q", uid, firstName, lastName)
+		return errors.New("member: invalid firstName") // 既存フロントの期待に合わせてメッセージ維持
+	}
+
+	// ---------------------------------------------------------
+	// 3) companyName がある場合は先に Company を作る
+	// ---------------------------------------------------------
 	companyID := ""
-
 	if companyName != "" {
 		issuedID, err := s.Companies.NewID(ctx)
 		if err != nil {
@@ -105,20 +143,16 @@ func (s *BootstrapService) Bootstrap(
 		log.Printf("[bootstrap] no companyName provided, will create member only: uid=%s", uid)
 	}
 
-	//---------------------------------------------------------
-	// 1) Member 新規作成
-	//    - status = "active"
-	//    - permissions = 全権限（backend catalog 由来）
-	//    - companyName がある場合は companyID を紐付けて保存
-	//---------------------------------------------------------
-
+	// ---------------------------------------------------------
+	// 4) Member 新規作成
+	// ---------------------------------------------------------
 	allPermNames := permdom.AllPermissionNames()
 
 	memberEntity, err := memberdom.New(
 		uid,
 		now,
-		memberdom.WithName(p.FirstName, p.LastName),
-		memberdom.WithNameKana(p.FirstNameKana, p.LastNameKana),
+		memberdom.WithName(firstName, lastName),
+		memberdom.WithNameKana(firstNameKana, lastNameKana),
 		memberdom.WithEmail(email),
 		memberdom.WithStatus("active"),
 		memberdom.WithPermissions(allPermNames),
@@ -128,7 +162,6 @@ func (s *BootstrapService) Bootstrap(
 		return err
 	}
 
-	// ★ company が作れている場合のみ紐付け（保存は1回で済ませる）
 	if companyID != "" {
 		memberEntity.CompanyID = companyID
 	}
@@ -142,4 +175,30 @@ func (s *BootstrapService) Bootstrap(
 		uid, companyID, len(memberEntity.Permissions), memberEntity.Status)
 
 	return nil
+}
+
+// -------------------------------------------------------
+// helpers
+// -------------------------------------------------------
+
+func sPtr(p *string) string {
+	if p == nil {
+		return ""
+	}
+	return strings.TrimSpace(*p)
+}
+
+// ここは実装依存（Firestore NotFound / domain ErrNotFound 等）なので “それっぽい” 判定で安全側に倒す
+func isNotFoundLike(err error) bool {
+	if err == nil {
+		return false
+	}
+	msg := strings.ToLower(strings.TrimSpace(err.Error()))
+	if msg == "" {
+		return false
+	}
+	return strings.Contains(msg, "not found") ||
+		strings.Contains(msg, "notfound") ||
+		strings.Contains(msg, "no documents") ||
+		strings.Contains(msg, "document") && strings.Contains(msg, "missing")
 }

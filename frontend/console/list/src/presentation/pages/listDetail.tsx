@@ -4,12 +4,17 @@ import * as React from "react";
 import PageStyle from "../../../../shell/src/layout/PageStyle/PageStyle";
 
 import { Card, CardContent } from "../../../../shell/src/shared/ui/card";
+import { Input } from "../../../../shell/src/shared/ui/input";
+import { Button } from "../../../../shell/src/shared/ui/button";
 
 // ✅ PriceCard（list app 側のコンポーネント）
 import PriceCard from "../../../../list/src/presentation/components/priceCard";
 
 // ✅ hook
 import { useListDetail } from "../../../../list/src/presentation/hook/useListDetail";
+
+// ✅ NEW: PUT /lists/{id} を叩く（hook 側が未実装でもここで直接更新できる）
+import { updateListByIdHTTP } from "../../../../../console/list/src/infrastructure/http/listRepositoryHTTP";
 
 function ImageIcon() {
   return (
@@ -44,6 +49,24 @@ function s(v: unknown): string {
   return String(v ?? "").trim();
 }
 
+type DraftImage = {
+  url: string;
+  isNew: boolean;
+  file?: File;
+};
+
+function revokeDraftBlobUrls(items: DraftImage[]) {
+  for (const x of items) {
+    if (x?.isNew && typeof x?.url === "string" && x.url.startsWith("blob:")) {
+      try {
+        URL.revokeObjectURL(x.url);
+      } catch {
+        // noop
+      }
+    }
+  }
+}
+
 export default function ListDetail() {
   // ✅ listDetail hook の返却型差分に強くする（UI 側で必要な情報を any で吸収）
   const vm = useListDetail() as any;
@@ -54,101 +77,440 @@ export default function ListDetail() {
   const loading = !!vm?.loading;
   const error = s(vm?.error || vm?.dtoError);
 
+  // ✅ NEW: listId を best-effort で抽出（PUT /lists/{id} のため）
+  const listId = React.useMemo(() => {
+    return s(
+      vm?.listId ||
+        vm?.id ||
+        vm?.dto?.id ||
+        vm?.dto?.listId ||
+        vm?.dto?.ID ||
+        vm?.detail?.id ||
+        vm?.detail?.listId ||
+        vm?.list?.id ||
+        vm?.list?.listId ||
+        vm?.resolved?.listId ||
+        vm?.resolved?.id,
+    );
+  }, [vm]);
+
   const listingTitle =
     s(vm?.listingTitle) || s(vm?.title) || s(vm?.list?.title) || "";
   const description =
-    s(vm?.description) || s(vm?.list?.description) || s(vm?.detail?.description) || "";
+    s(vm?.description) ||
+    s(vm?.list?.description) ||
+    s(vm?.detail?.description) ||
+    "";
 
   const assigneeName =
     s(vm?.assigneeName) || s(vm?.admin?.assigneeName) || "未設定";
 
   const productBrandName =
-    s(vm?.productBrandName) || s(vm?.product?.brandName) || s(vm?.productBlueprint?.brandName);
+    s(vm?.productBrandName) ||
+    s(vm?.product?.brandName) ||
+    s(vm?.productBlueprint?.brandName);
   const productName =
-    s(vm?.productName) || s(vm?.product?.name) || s(vm?.productBlueprint?.productName);
+    s(vm?.productName) ||
+    s(vm?.product?.name) ||
+    s(vm?.productBlueprint?.productName);
 
   const tokenBrandName =
-    s(vm?.tokenBrandName) || s(vm?.token?.brandName) || s(vm?.tokenBlueprint?.brandName);
+    s(vm?.tokenBrandName) ||
+    s(vm?.token?.brandName) ||
+    s(vm?.tokenBlueprint?.brandName);
   const tokenName =
-    s(vm?.tokenName) || s(vm?.token?.name) || s(vm?.tokenBlueprint?.tokenName);
+    s(vm?.tokenName) ||
+    s(vm?.token?.name) ||
+    s(vm?.tokenBlueprint?.tokenName);
 
   // decision/status (view)
   const decision =
-    s(vm?.decision) ||
-    s(vm?.status) ||
-    s(vm?.list?.status) ||
-    "";
+    s(vm?.decision) || s(vm?.status) || s(vm?.list?.status) || "";
 
   // price rows (view)
-  const priceRows = (vm?.priceRows || vm?.prices || vm?.list?.priceRows || vm?.list?.prices || []) as any[];
+  const basePriceRows = (vm?.priceRows ||
+    vm?.prices ||
+    vm?.list?.priceRows ||
+    vm?.list?.prices ||
+    []) as any[];
 
   // images (view)
-  // - create 画面の images: File[]
   // - detail 画面は URL 配列 or image objects を想定（best-effort で拾う）
-  const imageUrls: string[] = React.useMemo(() => {
+  const baseImageUrls: string[] = React.useMemo(() => {
     const urls =
       (vm?.imagePreviewUrls as string[]) ||
       (vm?.imageUrls as string[]) ||
-      (vm?.images as any[])?.map((x: any) => s(x?.url || x?.src || x?.publicUrl || x?.downloadUrl)).filter(Boolean) ||
-      (vm?.list?.images as any[])?.map((x: any) => s(x?.url || x?.src || x?.publicUrl || x?.downloadUrl)).filter(Boolean) ||
+      (vm?.images as any[])
+        ?.map((x: any) => s(x?.url || x?.src || x?.publicUrl || x?.downloadUrl))
+        .filter(Boolean) ||
+      (vm?.list?.images as any[])
+        ?.map((x: any) => s(x?.url || x?.src || x?.publicUrl || x?.downloadUrl))
+        .filter(Boolean) ||
       [];
     return urls.filter((u) => !!s(u));
   }, [vm]);
 
-  const hasImages = imageUrls.length > 0;
+  // ============================================================
+  // ✅ pageHeader edit mode (single source of truth, best-effort)
+  // - hook 側に isEdit / onEdit / onCancel / onSave があれば使う
+  // - 無ければ local state でフォールバック
+  // ============================================================
+  const externalIsEdit =
+    typeof vm?.isEdit === "boolean" ? (vm.isEdit as boolean) : undefined;
 
-  // メイン画像は detail 側ではローカル state で切替（view only）
+  const [localIsEdit, setLocalIsEdit] = React.useState(false);
+  const isEdit = externalIsEdit ?? localIsEdit;
+
+  // drafts（hook に draft があればそれを優先）
+  const [draftTitle, setDraftTitle] = React.useState(listingTitle);
+  const [draftDescription, setDraftDescription] = React.useState(description);
+  const [draftPriceRows, setDraftPriceRows] =
+    React.useState<any[]>(basePriceRows);
+
+  const [draftImages, setDraftImages] = React.useState<DraftImage[]>(() =>
+    (baseImageUrls ?? []).map((u) => ({ url: u, isNew: false })),
+  );
+
+  // 保存状態（ページ側で持つ：hook 側未実装でも UI が破綻しない）
+  const [saving, setSaving] = React.useState(false);
+  const [saveError, setSaveError] = React.useState("");
+
+  // edit 開始時に、最新の base から draft を再初期化
+  React.useEffect(() => {
+    if (!isEdit) return;
+
+    // hook 側に draft があれば尊重（無ければ base をコピー）
+    const t = s(vm?.draftListingTitle) || listingTitle;
+    const d = s(vm?.draftDescription) || description;
+
+    setDraftTitle(t);
+    setDraftDescription(d);
+
+    const pr =
+      (vm?.draftPriceRows as any[]) ||
+      (vm?.draftPrices as any[]) ||
+      basePriceRows;
+    setDraftPriceRows(Array.isArray(pr) ? pr.map((x) => ({ ...x })) : []);
+
+    const imgs = (vm?.draftImages as any[]) || null;
+    if (Array.isArray(imgs) && imgs.length > 0) {
+      // draftImages が hook から来る場合は url を拾う（best-effort）
+      const next = imgs
+        .map((x) => s(x?.url || x?.src || x?.publicUrl || x?.downloadUrl))
+        .filter(Boolean)
+        .map((u) => ({ url: u, isNew: false as const }));
+      setDraftImages(next);
+    } else {
+      setDraftImages((baseImageUrls ?? []).map((u) => ({ url: u, isNew: false })));
+    }
+
+    setSaveError("");
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isEdit]);
+
+  const handleEdit = React.useCallback(() => {
+    if (typeof vm?.onEdit === "function") {
+      try {
+        vm.onEdit();
+        return;
+      } catch {
+        // fallthrough
+      }
+    }
+    setLocalIsEdit(true);
+  }, [vm]);
+
+  const handleCancel = React.useCallback(() => {
+    // hook 側キャンセルがあれば呼ぶ
+    if (typeof vm?.onCancel === "function") {
+      try {
+        vm.onCancel();
+      } catch {
+        // noop
+      }
+    } else if (typeof vm?.onCancelEdit === "function") {
+      try {
+        vm.onCancelEdit();
+      } catch {
+        // noop
+      }
+    }
+
+    // ✅ 追加した blob URL を解放
+    revokeDraftBlobUrls(draftImages);
+
+    // local draft を base に戻す
+    setDraftTitle(listingTitle);
+    setDraftDescription(description);
+    setDraftPriceRows(
+      Array.isArray(basePriceRows) ? basePriceRows.map((x) => ({ ...x })) : [],
+    );
+    setDraftImages((baseImageUrls ?? []).map((u) => ({ url: u, isNew: false })));
+
+    setSaveError("");
+
+    // local edit を終了
+    if (externalIsEdit === undefined) {
+      setLocalIsEdit(false);
+    }
+  }, [
+    vm,
+    listingTitle,
+    description,
+    basePriceRows,
+    baseImageUrls,
+    externalIsEdit,
+    draftImages,
+  ]);
+
+  const handleSave = React.useCallback(async () => {
+    setSaveError("");
+    setSaving(true);
+
+    // ✅ 画像はこの PUT では更新しない（サーバ側の対応が無い前提）
+    // ✅ priceRows は id (= modelId) / modelId を含む shape をそのまま渡す
+    const payloadForHook = {
+      title: draftTitle,
+      description: draftDescription,
+      priceRows: draftPriceRows,
+      keepImageUrls: draftImages.filter((x) => !x.isNew).map((x) => x.url),
+      newImageFiles: draftImages
+        .filter((x) => x.isNew && x.file)
+        .map((x) => x.file as File),
+    };
+
+    try {
+      // 1) hook 側保存が実装されているなら、それを優先して呼ぶ
+      if (typeof vm?.onSaveEdit === "function") {
+        await vm.onSaveEdit(payloadForHook);
+      } else if (typeof vm?.onSave === "function") {
+        await vm.onSave(payloadForHook);
+      } else if (typeof vm?.save === "function") {
+        await vm.save(payloadForHook);
+      } else {
+        // 2) ✅ hook 側が未実装なら、このページから直接 PUT /lists/{id} を叩く
+        const id = s(listId);
+        if (!id) {
+          throw new Error("missing_list_id_for_update");
+        }
+
+        await updateListByIdHTTP({
+          listId: id,
+          title: draftTitle,
+          description: draftDescription,
+          priceRows: draftPriceRows,
+          // decision はこの画面では編集していないため送らない
+        });
+
+        // 3) 更新後に再取得できる関数があれば呼ぶ（best-effort）
+        if (typeof vm?.reload === "function") {
+          try {
+            await vm.reload();
+          } catch {
+            // noop
+          }
+        } else if (typeof vm?.refetch === "function") {
+          try {
+            await vm.refetch();
+          } catch {
+            // noop
+          }
+        } else if (typeof vm?.refresh === "function") {
+          try {
+            await vm.refresh();
+          } catch {
+            // noop
+          }
+        }
+      }
+
+      // ✅ 追加した blob URL を解放（edit 終了で参照されなくなるため）
+      revokeDraftBlobUrls(draftImages);
+
+      // local edit を終了
+      if (externalIsEdit === undefined) {
+        setLocalIsEdit(false);
+      }
+    } catch (e) {
+      const msg = s(e instanceof Error ? e.message : e) || "save_failed";
+      setSaveError(msg);
+      return;
+    } finally {
+      setSaving(false);
+    }
+  }, [
+    vm,
+    draftTitle,
+    draftDescription,
+    draftPriceRows,
+    draftImages,
+    externalIsEdit,
+    listId,
+  ]);
+
+  // ============================================================
+  // ✅ Effective view based on mode
+  // ============================================================
+  const effectiveTitle = isEdit ? s(draftTitle) : listingTitle;
+  const effectiveDescription = isEdit ? s(draftDescription) : description;
+  const effectivePriceRows = isEdit ? draftPriceRows : basePriceRows;
+
+  const effectiveImageUrls = isEdit
+    ? draftImages.map((x) => x.url).filter((u) => !!s(u))
+    : baseImageUrls;
+
+  const hasImages = effectiveImageUrls.length > 0;
+
+  // メイン画像はローカル state で切替（view/edit 共通）
   const [mainImageIndex, setMainImageIndex] = React.useState(0);
 
   React.useEffect(() => {
-    // 画像が減った時のガード
     if (!hasImages) {
       setMainImageIndex(0);
       return;
     }
-    if (mainImageIndex >= imageUrls.length) {
+    if (mainImageIndex >= effectiveImageUrls.length) {
       setMainImageIndex(0);
     }
-  }, [hasImages, imageUrls.length, mainImageIndex]);
+  }, [hasImages, effectiveImageUrls.length, mainImageIndex]);
 
-  const mainUrl = hasImages ? imageUrls[mainImageIndex] : "";
+  const mainUrl = hasImages ? effectiveImageUrls[mainImageIndex] : "";
 
   const thumbIndices = React.useMemo(() => {
     if (!hasImages) return [];
-    return imageUrls.map((_, idx) => idx).filter((idx) => idx !== mainImageIndex);
-  }, [hasImages, imageUrls, mainImageIndex]);
+    return effectiveImageUrls
+      .map((_, idx) => idx)
+      .filter((idx) => idx !== mainImageIndex);
+  }, [hasImages, effectiveImageUrls, mainImageIndex]);
+
+  // ============================================================
+  // ✅ Edit handlers inside cards
+  // ============================================================
+  const onChangePrice = React.useCallback(
+    (index: number, price: number | null, row: any) => {
+      // hook 側ハンドラがあるなら先に委譲
+      if (typeof vm?.onChangePrice === "function") {
+        try {
+          vm.onChangePrice(index, price, row);
+        } catch {
+          // noop
+        }
+      }
+      setDraftPriceRows((prev) => {
+        const next = Array.isArray(prev) ? prev.map((x) => ({ ...x })) : [];
+        if (index < 0 || index >= next.length) return next;
+        next[index] = { ...next[index], price };
+        return next;
+      });
+    },
+    [vm],
+  );
+
+  const onAddImages = React.useCallback((files: FileList | null) => {
+    if (!files || files.length === 0) return;
+
+    const next: DraftImage[] = [];
+    for (let i = 0; i < files.length; i++) {
+      const f = files.item(i);
+      if (!f) continue;
+      const url = URL.createObjectURL(f);
+      next.push({ url, file: f, isNew: true });
+    }
+
+    setDraftImages((prev) => [...prev, ...next]);
+  }, []);
+
+  const onRemoveImageAt = React.useCallback((idx: number) => {
+    setDraftImages((prev) => {
+      if (!Array.isArray(prev)) return prev;
+      if (idx < 0 || idx >= prev.length) return prev;
+
+      const target = prev[idx];
+      // 新規 blob URL は revoke しておく
+      if (target?.isNew && target?.url?.startsWith("blob:")) {
+        try {
+          URL.revokeObjectURL(target.url);
+        } catch {
+          // noop
+        }
+      }
+
+      const next = prev.slice(0, idx).concat(prev.slice(idx + 1));
+      return next;
+    });
+  }, []);
 
   return (
     <PageStyle
       layout="grid-2"
-      title={s(vm?.pageTitle) || "出品詳細"}
+      // ✅ header には title のみ（id は出さない）
+      title={effectiveTitle || "出品詳細"}
       onBack={vm?.onBack}
-      onSave={undefined}
+      // ✅ view 中は編集、edit 中はキャンセル/保存
+      onEdit={!isEdit ? handleEdit : undefined}
+      onCancel={isEdit ? handleCancel : undefined}
+      onSave={isEdit ? handleSave : undefined}
+      onCreate={undefined}
     >
       {/* =========================
-          左カラム（create 画面を模倣 / view-only）
-          - 商品画像
-          - タイトル
-          - 説明
-          - 価格（PriceCard view）
+          左カラム
+          - 商品画像（edit 対応）
+          - タイトル（edit 対応）
+          - 説明（edit 対応）
+          - 価格（PriceCard: edit 対応）
           ========================= */}
       <div className="space-y-4">
         {/* 状態表示（任意） */}
         {loading && (
-          <div className="text-sm text-[hsl(var(--muted-foreground))]">読み込み中...</div>
+          <div className="text-sm text-[hsl(var(--muted-foreground))]">
+            読み込み中...
+          </div>
         )}
         {error && (
-          <div className="text-sm text-red-600">読み込みに失敗しました: {error}</div>
+          <div className="text-sm text-red-600">
+            読み込みに失敗しました: {error}
+          </div>
         )}
 
-        {/* ✅ 商品画像カード（view-only） */}
+        {/* ✅ 保存エラー（ページ側フォールバック時も表示できる） */}
+        {isEdit && saveError && (
+          <div className="text-sm text-red-600">
+            保存に失敗しました: {saveError}
+          </div>
+        )}
+        {isEdit && saving && (
+          <div className="text-xs text-[hsl(var(--muted-foreground))]">
+            保存中...
+          </div>
+        )}
+
+        {/* ✅ 商品画像カード（view/edit） */}
         <Card>
           <CardContent className="p-4 space-y-3">
-            <div className="text-sm font-medium flex items-center gap-2">
-              <span className="inline-flex items-center justify-center w-6 h-6 rounded-md bg-slate-50 border border-slate-200">
-                <ImageIcon />
-              </span>
-              商品画像
+            <div className="text-sm font-medium flex items-center justify-between gap-2">
+              <div className="flex items-center gap-2">
+                <span className="inline-flex items-center justify-center w-6 h-6 rounded-md bg-slate-50 border border-slate-200">
+                  <ImageIcon />
+                </span>
+                商品画像
+              </div>
+
+              {isEdit && (
+                <div className="flex items-center gap-2">
+                  <label className="cursor-pointer">
+                    <input
+                      type="file"
+                      accept="image/*"
+                      multiple
+                      className="hidden"
+                      onChange={(e) => onAddImages(e.target.files)}
+                    />
+                    <Button type="button" variant="outline" className="h-8" disabled={saving}>
+                      追加
+                    </Button>
+                  </label>
+                </div>
+              )}
             </div>
 
             {!hasImages && (
@@ -158,7 +520,9 @@ export default function ListDetail() {
                 </div>
                 <div className="text-sm text-slate-700">画像は未設定です</div>
                 <div className="text-xs text-[hsl(var(--muted-foreground))]">
-                  画像を追加する場合は「画像」機能（別画面/別操作）から追加してください。
+                  {isEdit
+                    ? "右上の「追加」から画像を追加できます。"
+                    : "画像を追加する場合は「画像」機能（別画面/別操作）から追加してください。"}
                 </div>
               </div>
             )}
@@ -179,8 +543,23 @@ export default function ListDetail() {
 
                   <div className="px-3 py-2 border-t border-slate-200 flex items-center justify-between">
                     <div className="text-xs text-[hsl(var(--muted-foreground))]">
-                      {imageUrls.length} 枚（クリックでサブ画像をメインにできます）
+                      {effectiveImageUrls.length} 枚
+                      {isEdit
+                        ? "（サムネから削除できます）"
+                        : "（クリックでサブ画像をメインにできます）"}
                     </div>
+
+                    {isEdit && effectiveImageUrls.length > 0 && (
+                      <Button
+                        type="button"
+                        variant="outline"
+                        className="h-8"
+                        onClick={() => onRemoveImageAt(mainImageIndex)}
+                        disabled={saving}
+                      >
+                        この画像を削除
+                      </Button>
+                    )}
                   </div>
                 </div>
 
@@ -188,25 +567,38 @@ export default function ListDetail() {
                 {thumbIndices.length > 0 && (
                   <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
                     {thumbIndices.map((idx) => {
-                      const url = imageUrls[idx];
+                      const url = effectiveImageUrls[idx];
                       return (
-                        <div
-                          key={`${url}-${idx}`}
-                          className="relative rounded-xl overflow-hidden border border-slate-200 bg-white cursor-pointer"
-                          onClick={() => setMainImageIndex(idx)}
-                          role="button"
-                          tabIndex={0}
-                          title="クリックでメインに設定"
-                        >
-                          <div className="w-full aspect-square bg-slate-50">
-                            {url && (
-                              <img
-                                src={url}
-                                alt={`sub-${idx}`}
-                                className="w-full h-full object-cover"
-                              />
-                            )}
+                        <div key={`${url}-${idx}`} className="space-y-2">
+                          <div
+                            className="relative rounded-xl overflow-hidden border border-slate-200 bg-white cursor-pointer"
+                            onClick={() => setMainImageIndex(idx)}
+                            role="button"
+                            tabIndex={0}
+                            title="クリックでメインに設定"
+                          >
+                            <div className="w-full aspect-square bg-slate-50">
+                              {url && (
+                                <img
+                                  src={url}
+                                  alt={`sub-${idx}`}
+                                  className="w-full h-full object-cover"
+                                />
+                              )}
+                            </div>
                           </div>
+
+                          {isEdit && (
+                            <Button
+                              type="button"
+                              variant="outline"
+                              className="h-8 w-full"
+                              onClick={() => onRemoveImageAt(idx)}
+                              disabled={saving}
+                            >
+                              削除
+                            </Button>
+                          )}
                         </div>
                       );
                     })}
@@ -217,36 +609,61 @@ export default function ListDetail() {
           </CardContent>
         </Card>
 
-        {/* ✅ タイトル（view-only） */}
+        {/* ✅ タイトル（view/edit） */}
         <Card>
           <CardContent className="p-4 space-y-2">
             <div className="text-sm font-medium">タイトル</div>
-            <div className="text-sm text-slate-800 break-words">
-              {listingTitle || "未設定"}
-            </div>
+
+            {!isEdit && (
+              <div className="text-sm text-slate-800 break-words">
+                {listingTitle || "未設定"}
+              </div>
+            )}
+
+            {isEdit && (
+              <Input
+                value={draftTitle}
+                placeholder="タイトルを入力"
+                onChange={(e) => setDraftTitle(e.target.value)}
+                disabled={saving}
+              />
+            )}
           </CardContent>
         </Card>
 
-        {/* ✅ 説明（view-only） */}
+        {/* ✅ 説明（view/edit） */}
         <Card>
           <CardContent className="p-4 space-y-2">
             <div className="text-sm font-medium">説明</div>
-            <div className="text-sm text-slate-800 whitespace-pre-wrap break-words">
-              {description || "未設定"}
-            </div>
+
+            {!isEdit && (
+              <div className="text-sm text-slate-800 whitespace-pre-wrap break-words">
+                {description || "未設定"}
+              </div>
+            )}
+
+            {isEdit && (
+              <textarea
+                value={draftDescription}
+                placeholder="説明を入力"
+                onChange={(e) => setDraftDescription(e.target.value)}
+                className="w-full min-h-[120px] rounded-md border border-slate-200 bg-white px-3 py-2 text-sm outline-none"
+                disabled={saving}
+              />
+            )}
           </CardContent>
         </Card>
 
-        {/* ✅ PriceCard（view mode） */}
+        {/* ✅ PriceCard（view/edit） */}
         <PriceCard
           title="価格"
-          rows={priceRows as any}
-          mode="view"
+          rows={effectivePriceRows as any}
+          mode={isEdit ? "edit" : "view"}
           currencySymbol="¥"
-          // view なので onChangePrice は渡さない
+          onChangePrice={isEdit ? onChangePrice : undefined}
         />
 
-        {Array.isArray(priceRows) && priceRows.length === 0 && (
+        {Array.isArray(effectivePriceRows) && effectivePriceRows.length === 0 && (
           <div className="text-xs text-[hsl(var(--muted-foreground))]">
             価格情報がありません。
           </div>
@@ -254,7 +671,7 @@ export default function ListDetail() {
       </div>
 
       {/* =========================
-          右カラム（create 画面を模倣 / view-only）
+          右カラム（view-only）
           - 担当者
           - 選択商品
           - 選択トークン
@@ -273,9 +690,7 @@ export default function ListDetail() {
                 {vm?.admin?.createdByName && (
                   <div>作成者: {s(vm.admin.createdByName)}</div>
                 )}
-                {vm?.admin?.createdAt && (
-                  <div>作成日時: {s(vm.admin.createdAt)}</div>
-                )}
+                {vm?.admin?.createdAt && <div>作成日時: {s(vm.admin.createdAt)}</div>}
               </div>
             )}
           </CardContent>
@@ -343,6 +758,18 @@ export default function ListDetail() {
             )}
           </CardContent>
         </Card>
+
+        {/* ✅ 編集中のヒント */}
+        {isEdit && (
+          <div className="text-xs text-[hsl(var(--muted-foreground))]">
+            編集モードです（保存すると反映されます）。
+            {!s(listId) && (
+              <span className="block text-red-600 mt-1">
+                ※ listId が取得できていないため、ページ側の直接PUT更新はできません（hook 側 onSaveEdit 実装が必要）。
+              </span>
+            )}
+          </div>
+        )}
       </div>
     </PageStyle>
   );

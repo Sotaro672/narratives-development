@@ -27,6 +27,10 @@ function messageForAuthError(code?: string): string {
   }
 }
 
+function s(v: unknown): string {
+  return String(v ?? "").trim();
+}
+
 export type SignUpProfile = {
   lastName?: string;
   firstName?: string;
@@ -62,6 +66,7 @@ const BOOTSTRAP_URL = `${FINAL_BASE}/auth/bootstrap`;
 // 共通 HTTP ラッパ
 async function httpRequest<T>(input: string, init: RequestInit = {}): Promise<T> {
   const res = await fetch(input, {
+    mode: "cors",
     ...init,
     headers: {
       "Content-Type": "application/json",
@@ -75,10 +80,7 @@ async function httpRequest<T>(input: string, init: RequestInit = {}): Promise<T>
 
   if (!res.ok) {
     throw new Error(
-      `[useAuthActions] ${res.status} ${res.statusText} :: ${text?.slice(
-        0,
-        300,
-      )}`,
+      `[useAuthActions] ${res.status} ${res.statusText} :: ${text?.slice(0, 300)}`,
     );
   }
 
@@ -92,35 +94,61 @@ async function httpRequest<T>(input: string, init: RequestInit = {}): Promise<T>
 }
 
 /**
- * ★ Bootstrap API 呼び出し
- * backend に member / company の作成を委譲する
+ * サーバに送る profile body を「空文字を送らない」形で組み立てる。
+ * - backend が *string（nil許容）で validation している場合に、
+ *   空文字で上書きして "member: invalid firstName" を起こすのを防ぐ。
  */
-async function callBootstrap(
-  uid: string, // 実際のリクエストボディには含めない
-  email: string, // 同上
-  profile?: SignUpProfile,
-): Promise<void> {
+function buildBootstrapBody(profile?: SignUpProfile): Record<string, string> {
+  const body: Record<string, string> = {};
+
+  const lastName = s(profile?.lastName);
+  const firstName = s(profile?.firstName);
+  const lastNameKana = s(profile?.lastNameKana);
+  const firstNameKana = s(profile?.firstNameKana);
+  const companyName = s(profile?.companyName);
+
+  if (lastName) body.lastName = lastName;
+  if (firstName) body.firstName = firstName;
+  if (lastNameKana) body.lastNameKana = lastNameKana;
+  if (firstNameKana) body.firstNameKana = firstNameKana;
+  if (companyName) body.companyName = companyName;
+
+  return body;
+}
+
+/**
+ * ★ Bootstrap API 呼び出し
+ * backend に member / company の作成を委譲する（冪等想定）
+ */
+async function callBootstrap(profile?: SignUpProfile): Promise<void> {
   const token = await auth.currentUser?.getIdToken();
   if (!token) {
     throw new Error("[useAuthActions] Not authenticated (no ID token).");
   }
 
-  // サーバが期待する形に合わせて「プロフィールだけ」を送る
-  const body = {
-    lastName: (profile?.lastName ?? "").trim(),
-    firstName: (profile?.firstName ?? "").trim(),
-    lastNameKana: (profile?.lastNameKana ?? "").trim(),
-    firstNameKana: (profile?.firstNameKana ?? "").trim(),
-    companyName: (profile?.companyName ?? "").trim(),
-  };
+  // ✅ 空文字を送らない（送ると backend で invalid firstName になりやすい）
+  const body = buildBootstrapBody(profile);
 
   await httpRequest<void>(BOOTSTRAP_URL, {
     method: "POST",
-    body: JSON.stringify(body),
+    body: JSON.stringify(body), // 空なら {}
     headers: {
       Authorization: `Bearer ${token}`,
     },
   });
+}
+
+/**
+ * signUp で backend が member/company 作成をする場合、
+ * 最低限の名前が必要ならフロントで止める（無駄な Firebase ユーザー作成を避ける）
+ */
+function validateProfileForSignUp(profile?: SignUpProfile): string | null {
+  const lastName = s(profile?.lastName);
+  const firstName = s(profile?.firstName);
+  if (!lastName || !firstName) {
+    return "姓・名を入力してください。";
+  }
+  return null;
 }
 
 export function useAuthActions() {
@@ -130,7 +158,7 @@ export function useAuthActions() {
   /**
    * サインアップ
    * - Firebase Auth でユーザー作成
-   * - ログイン状態になったタイミングで backend.bootstrap を即呼び出す
+   * - ログイン状態になったタイミングで backend.bootstrap を呼ぶ
    */
   async function signUp(
     email: string,
@@ -139,6 +167,15 @@ export function useAuthActions() {
   ) {
     setSubmitting(true);
     setError(null);
+
+    // ✅ 先に入力チェック（ここで止めれば Firebase にユーザーが増えない）
+    const vErr = validateProfileForSignUp(profile);
+    if (vErr) {
+      setError(vErr);
+      setSubmitting(false);
+      return;
+    }
+
     try {
       const cred = await createUserWithEmailAndPassword(auth, email, password);
       const user = cred.user;
@@ -146,12 +183,12 @@ export function useAuthActions() {
         throw new Error("ユーザー作成後に uid を取得できませんでした。");
       }
 
-      // 新規登録直後に bootstrap を実行
+      // 新規登録直後に bootstrap を実行（profile は空文字を送らない形で送信される）
       try {
-        await callBootstrap(user.uid, user.email ?? email, profile);
+        await callBootstrap(profile);
       } catch (e) {
         console.error("[useAuthActions] bootstrap on signUp failed:", e);
-        // ここで失敗してもいったん新規登録自体は成功扱いにする
+        // 新規登録自体は成功しているので、ここでは致命にしない
       }
     } catch (e: any) {
       console.error("signUp error", e);
@@ -165,6 +202,10 @@ export function useAuthActions() {
    * サインイン
    * - email / password でログイン
    * - ログイン成功後に backend.bootstrap を呼ぶ（冪等想定）
+   *
+   * ✅ 重要:
+   * - profile が未入力のときに空文字を送ると backend 側で member を空文字で更新しようとして
+   *   "member: invalid firstName" を起こしがちなので、空文字は送らない。
    */
   async function signIn(
     email: string,
@@ -174,11 +215,10 @@ export function useAuthActions() {
     setSubmitting(true);
     setError(null);
     try {
-      const cred = await signInWithEmailAndPassword(auth, email, password);
-      const user = cred.user;
+      await signInWithEmailAndPassword(auth, email, password);
 
       try {
-        await callBootstrap(user.uid, user.email ?? email, profile);
+        await callBootstrap(profile);
       } catch (e) {
         console.error("[useAuthActions] bootstrap failed:", e);
         // bootstrap 失敗してもログイン自体は成功とする
@@ -204,5 +244,12 @@ export function useAuthActions() {
     }
   }
 
-  return { signUp, signIn, signOut: signOutCurrentUser, submitting, error, setError };
+  return {
+    signUp,
+    signIn,
+    signOut: signOutCurrentUser,
+    submitting,
+    error,
+    setError,
+  };
 }
