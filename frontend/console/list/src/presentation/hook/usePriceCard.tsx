@@ -44,7 +44,7 @@ export type PriceCardProps = {
   /** 表示用（例: "¥" / "$"）。未指定なら空 */
   currencySymbol?: string;
 
-  /** 合計行の表示（デフォルト true） */
+  /** ✅ 互換のため残す（合計行は廃止。受け取っても無視） */
   showTotal?: boolean;
 };
 
@@ -107,13 +107,9 @@ export type UsePriceCardResult = {
   showModeBadge: boolean;
 
   currencySymbol: string;
-  showTotal: boolean;
 
   rowsVM: PriceRowVM[];
   isEmpty: boolean;
-
-  totalStock: number;
-  totalPrice: number;
 };
 
 export function usePriceCard(props: PriceCardProps): UsePriceCardResult {
@@ -123,30 +119,17 @@ export function usePriceCard(props: PriceCardProps): UsePriceCardResult {
     mode = "view",
     onChangePrice,
     currencySymbol = "¥",
-    showTotal = true,
   } = props;
 
   const isEdit = mode === "edit";
   const showModeBadge = mode !== "view";
-
-  const totalStock = React.useMemo(
-    () => rows.reduce((sum, r) => sum + (r.stock || 0), 0),
-    [rows],
-  );
-
-  const totalPrice = React.useMemo(
-    () => rows.reduce((sum, r) => sum + (Number(r.price) || 0), 0),
-    [rows],
-  );
 
   const rowsVM = React.useMemo<PriceRowVM[]>(() => {
     return rows.map((row, idx) => {
       const rgbHex = rgbIntToHex(row.rgb);
 
       const bgColor =
-        row.rgb &&
-        typeof row.rgb === "string" &&
-        row.rgb.trim().startsWith("#")
+        row.rgb && typeof row.rgb === "string" && row.rgb.trim().startsWith("#")
           ? row.rgb.trim()
           : rgbHex ?? "#ffffff";
 
@@ -184,14 +167,8 @@ export function usePriceCard(props: PriceCardProps): UsePriceCardResult {
     mode,
     isEdit,
     showModeBadge,
-
     currencySymbol,
-    showTotal,
-
     rowsVM,
     isEmpty: rows.length === 0,
-
-    totalStock,
-    totalPrice,
   };
 }

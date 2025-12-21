@@ -32,11 +32,8 @@ const PriceCard: React.FC<PriceCardProps> = (props) => {
     isEdit,
     showModeBadge,
     currencySymbol,
-    showTotal,
     rowsVM,
     isEmpty,
-    totalStock,
-    totalPrice,
   } = usePriceCard(props);
 
   return (
@@ -128,23 +125,6 @@ const PriceCard: React.FC<PriceCardProps> = (props) => {
                 <TableRow>
                   <TableCell colSpan={4} className="prc__empty">
                     表示できるデータがありません。
-                  </TableCell>
-                </TableRow>
-              )}
-
-              {showTotal && !isEmpty && (
-                <TableRow className="prc__total-row">
-                  <TableCell colSpan={2} className="prc__total-label text-right">
-                    合計
-                  </TableCell>
-                  <TableCell className="prc__total-value text-right">
-                    <strong>{totalStock}</strong>
-                  </TableCell>
-                  <TableCell className="prc__total-value text-right">
-                    <strong>
-                      {currencySymbol ?? ""}
-                      {totalPrice}
-                    </strong>
                   </TableCell>
                 </TableRow>
               )}

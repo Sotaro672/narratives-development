@@ -38,6 +38,11 @@ type TokenBlueprintGetter interface {
 	GetByID(ctx context.Context, id string) (tbdom.TokenBlueprint, error)
 }
 
+// ✅ inventoryId から modelId ごとの stock を count して返す（InventoryQuery.GetDetailByID を利用）
+type InventoryDetailGetter interface {
+	GetDetailByID(ctx context.Context, inventoryID string) (*querydto.InventoryDetailDTO, error)
+}
+
 // ============================================================
 // DTO (query -> handler)
 // ============================================================
@@ -88,19 +93,33 @@ type ListQuery struct {
 	// brand resolve用
 	pbGetter ProductBlueprintGetter
 	tbGetter TokenBlueprintGetter
+
+	// ✅ stock resolve用（inventoryId -> count）
+	invGetter InventoryDetailGetter
 }
 
-// 互換 ctor（brand は出せないが既存 DI を壊さない）
+// 互換 ctor（brand/stock は出せないが既存 DI を壊さない）
 func NewListQuery(lister ListLister, nameResolver *resolver.NameResolver) *ListQuery {
-	return NewListQueryWithBrandGetters(lister, nameResolver, nil, nil)
+	return NewListQueryWithBrandAndInventoryGetters(lister, nameResolver, nil, nil, nil)
 }
 
-// ✅ NEW: brandId を引く repo を注入できる ctor
+// 互換 ctor（brand は出せるが stock は出せない）
 func NewListQueryWithBrandGetters(
 	lister ListLister,
 	nameResolver *resolver.NameResolver,
 	pbGetter ProductBlueprintGetter,
 	tbGetter TokenBlueprintGetter,
+) *ListQuery {
+	return NewListQueryWithBrandAndInventoryGetters(lister, nameResolver, pbGetter, tbGetter, nil)
+}
+
+// ✅ NEW: brand + inventory(stock) まで注入できる ctor
+func NewListQueryWithBrandAndInventoryGetters(
+	lister ListLister,
+	nameResolver *resolver.NameResolver,
+	pbGetter ProductBlueprintGetter,
+	tbGetter TokenBlueprintGetter,
+	invGetter InventoryDetailGetter,
 ) *ListQuery {
 	// ✅ lister が GetByID を実装していれば getter にも流用する（DI変更不要）
 	var lg ListGetter
@@ -114,6 +133,7 @@ func NewListQueryWithBrandGetters(
 		nameResolver: nameResolver,
 		pbGetter:     pbGetter,
 		tbGetter:     tbGetter,
+		invGetter:    invGetter,
 	}
 }
 
@@ -293,8 +313,8 @@ func (q *ListQuery) ListRows(ctx context.Context, filter listdom.Filter, sort li
 }
 
 // ------------------------------------------------------------
-// ✅ NEW: ListDetailDTO を作る（PriceRows に size/color/rgb を埋める）
-// - `dto.ListDetailDTO.PriceRows[].Size/Color/RGB` へ組み込むのが期待値
+// ✅ ListDetailDTO を作る（PriceRows に size/color/rgb を埋める）
+// - 在庫(stock)は inventoryId から数える（lists に保存しない前提）
 // ------------------------------------------------------------
 func (q *ListQuery) BuildListDetailDTO(ctx context.Context, listID string) (querydto.ListDetailDTO, error) {
 	if q == nil || q.getter == nil {
@@ -361,8 +381,8 @@ func (q *ListQuery) BuildListDetailDTO(ctx context.Context, listID string) (quer
 		}
 	}
 
-	// ---- priceRows (modelId -> size/color/rgb) ----
-	priceRows, totalStock, metaLog := q.buildDetailPriceRows(ctx, it)
+	// ---- priceRows (modelId -> price) + stock(size/color/rgb) ----
+	priceRows, totalStock, metaLog := q.buildDetailPriceRows(ctx, it, invID)
 
 	// ✅ model metadata の取得状況が分かる最小ログ（spam しない）
 	if metaLog != "" {
@@ -402,7 +422,7 @@ func (q *ListQuery) BuildListDetailDTO(ctx context.Context, listID string) (quer
 		ImageURLs: []string{}, // 画像URLは別層（aggregate等）で埋める想定
 		PriceRows: priceRows,
 
-		TotalStock:  totalStock,
+		TotalStock:  totalStock, // ✅ inventoryId から数えた値
 		CurrencyJPY: true,
 	}
 
@@ -410,14 +430,50 @@ func (q *ListQuery) BuildListDetailDTO(ctx context.Context, listID string) (quer
 }
 
 // buildDetailPriceRows は List の価格行から ListDetailPriceRowDTO を作り、
-// modelId -> size/color/rgb を NameResolver.ResolveModelResolved で埋めます。
-func (q *ListQuery) buildDetailPriceRows(ctx context.Context, it listdom.List) ([]querydto.ListDetailPriceRowDTO, int, string) {
+// 1) price は list の prices から
+// 2) stock は inventoryId から count（InventoryQuery.GetDetailByID）
+// 3) size/color/rgb は inventory 側で取れていればそれを優先し、無ければ NameResolver で補完
+func (q *ListQuery) buildDetailPriceRows(ctx context.Context, it listdom.List, inventoryID string) ([]querydto.ListDetailPriceRowDTO, int, string) {
 	rowsAny := extractPriceRowsFromList(it)
 	if len(rowsAny) == 0 {
+		// prices(map) も拾えるようにしているが、完全に無い場合は空
 		return []querydto.ListDetailPriceRowDTO{}, 0, "rows=0"
 	}
 
-	// request-scope cache
+	// ---------------------------------------------------------
+	// ✅ inventoryId -> modelId -> (stock,size,color,rgb)
+	// ---------------------------------------------------------
+	stockByModel := map[string]int{}
+	attrByModel := map[string]resolver.ModelResolved{}
+	invUsed := false
+	invErrMsg := ""
+
+	invID := strings.TrimSpace(inventoryID)
+	if invID != "" && q != nil && q.invGetter != nil {
+		if invDTO, err := q.invGetter.GetDetailByID(ctx, invID); err != nil {
+			invErrMsg = "invErr=" + strings.TrimSpace(err.Error())
+		} else if invDTO != nil {
+			invUsed = true
+			for _, r := range invDTO.Rows {
+				mid := strings.TrimSpace(r.ModelID)
+				if mid == "" {
+					continue
+				}
+				stockByModel[mid] = r.Stock
+
+				// InventoryQuery 側で解決済みの属性があるので優先利用
+				attrByModel[mid] = resolver.ModelResolved{
+					Size:  strings.TrimSpace(r.Size),
+					Color: strings.TrimSpace(r.Color),
+					RGB:   r.RGB,
+				}
+			}
+		}
+	}
+
+	// ---------------------------------------------------------
+	// request-scope cache（resolver fallback用）
+	// ---------------------------------------------------------
 	modelResolvedCache := map[string]resolver.ModelResolved{}
 
 	out := make([]querydto.ListDetailPriceRowDTO, 0, len(rowsAny))
@@ -426,14 +482,35 @@ func (q *ListQuery) buildDetailPriceRows(ctx context.Context, it listdom.List) (
 	resolvedNonEmpty := 0
 	resolvedEmpty := 0
 
+	stockFromInv := 0
+	stockFromList := 0
+
 	for _, r := range rowsAny {
-		// ✅ Firestore の保存を正: Go field は ModelID / Stock / Price を想定（名揺れ吸収はしない）
-		modelID := strings.TrimSpace(readStringField(r, "ModelID"))
+		// ✅ list の保存形式に合わせて広めに読む
+		modelID := strings.TrimSpace(readStringField(r, "ModelID", "ModelId", "ID", "Id"))
 		if modelID == "" {
+			// map形式で {modelId: price} を拾った場合は "ModelID" が入っている想定
 			continue
 		}
-		stock := readIntField(r, "Stock")
-		pricePtr := readIntPtrField(r, "Price")
+
+		// price は list 側
+		pricePtr := readIntPtrField(r, "Price", "price")
+
+		// stock は inventory 側が正
+		stock := 0
+		if invUsed {
+			if v, ok := stockByModel[modelID]; ok {
+				stock = v
+				stockFromInv++
+			} else {
+				stock = 0
+				stockFromInv++
+			}
+		} else {
+			// 互換: もし list に stock が残っている環境なら拾える
+			stock = readIntField(r, "Stock", "stock")
+			stockFromList++
+		}
 
 		dtoRow := querydto.ListDetailPriceRowDTO{
 			ModelID: modelID,
@@ -441,11 +518,17 @@ func (q *ListQuery) buildDetailPriceRows(ctx context.Context, it listdom.List) (
 			Price:   pricePtr,
 		}
 
-		// ✅ ここで組み込む（期待値）：Size/Color/RGB
-		mr := q.resolveModelResolvedCached(ctx, modelID, modelResolvedCache)
-		dtoRow.Size = strings.TrimSpace(mr.Size)
-		dtoRow.Color = strings.TrimSpace(mr.Color)
-		dtoRow.RGB = mr.RGB
+		// ✅ 属性: inventory で取れていればそれを使う。無ければ resolver fallback。
+		if mr, ok := attrByModel[modelID]; ok {
+			dtoRow.Size = strings.TrimSpace(mr.Size)
+			dtoRow.Color = strings.TrimSpace(mr.Color)
+			dtoRow.RGB = mr.RGB
+		} else {
+			mr := q.resolveModelResolvedCached(ctx, modelID, modelResolvedCache)
+			dtoRow.Size = strings.TrimSpace(mr.Size)
+			dtoRow.Color = strings.TrimSpace(mr.Color)
+			dtoRow.RGB = mr.RGB
+		}
 
 		if dtoRow.Size != "" || dtoRow.Color != "" || dtoRow.RGB != nil {
 			resolvedNonEmpty++
@@ -457,7 +540,16 @@ func (q *ListQuery) buildDetailPriceRows(ctx context.Context, it listdom.List) (
 		total += stock
 	}
 
-	meta := "rows=" + itoa(len(out)) + " resolvedNonEmpty=" + itoa(resolvedNonEmpty) + " resolvedEmpty=" + itoa(resolvedEmpty)
+	meta := "rows=" + itoa(len(out)) +
+		" resolvedNonEmpty=" + itoa(resolvedNonEmpty) +
+		" resolvedEmpty=" + itoa(resolvedEmpty) +
+		" invUsed=" + bool01(invUsed) +
+		" stockFromInv=" + itoa(stockFromInv) +
+		" stockFromList=" + itoa(stockFromList)
+	if invErrMsg != "" {
+		meta += " " + invErrMsg
+	}
+
 	return out, total, meta
 }
 
@@ -566,9 +658,10 @@ func parseInventoryIDStrict(invID string) (pbID string, tbID string, ok bool) {
 // PriceRows extractor (reflect)
 // ------------------------------------------------------------
 
-// extractPriceRowsFromList は listdom.List から price row スライスを拾う。
-// フィールドは最小限のみ許容:
-// - PriceRows / Prices
+// extractPriceRowsFromList は listdom.List から price row を拾う。
+// 許容:
+// - PriceRows: []struct or []map
+// - Prices:    []struct or []map or map[string]number (modelId -> price)
 func extractPriceRowsFromList(it listdom.List) []any {
 	rv := reflect.ValueOf(it)
 	rv = deref(rv)
@@ -576,13 +669,65 @@ func extractPriceRowsFromList(it listdom.List) []any {
 		return nil
 	}
 
+	// PriceRows (slice)
 	if f := rv.FieldByName("PriceRows"); f.IsValid() {
-		return sliceToAny(f)
+		if out := sliceToAny(f); len(out) > 0 {
+			return out
+		}
 	}
+
+	// Prices: slice or map
 	if f := rv.FieldByName("Prices"); f.IsValid() {
-		return sliceToAny(f)
+		// slice
+		if out := sliceToAny(f); len(out) > 0 {
+			return out
+		}
+		// map[string]number
+		if out := mapPricesToAnyRows(f); len(out) > 0 {
+			return out
+		}
 	}
+
 	return nil
+}
+
+func mapPricesToAnyRows(v reflect.Value) []any {
+	v = deref(v)
+	if !v.IsValid() || v.Kind() != reflect.Map {
+		return nil
+	}
+	if v.Type().Key().Kind() != reflect.String {
+		return nil
+	}
+
+	out := make([]any, 0, v.Len())
+	iter := v.MapRange()
+	for iter.Next() {
+		k := iter.Key()
+		val := iter.Value()
+
+		modelID := ""
+		if k.IsValid() && k.Kind() == reflect.String {
+			modelID = strings.TrimSpace(k.String())
+		}
+		if modelID == "" {
+			continue
+		}
+
+		// price
+		priceInt := 0
+		if n, ok := asInt(deref(val)); ok {
+			priceInt = n
+		}
+
+		// map で擬似 row を作る（readXxxField が拾えるように "ModelID"/"Price" を置く）
+		out = append(out, map[string]any{
+			"ModelID": modelID,
+			"Price":   priceInt,
+		})
+	}
+
+	return out
 }
 
 func sliceToAny(v reflect.Value) []any {
@@ -597,56 +742,116 @@ func sliceToAny(v reflect.Value) []any {
 	return out
 }
 
+// struct or map を読む（FireStore の map decode などにも耐える）
 func readStringField(v any, fieldNames ...string) string {
 	rv := reflect.ValueOf(v)
 	rv = deref(rv)
-	if !rv.IsValid() || rv.Kind() != reflect.Struct {
+	if !rv.IsValid() {
 		return ""
 	}
-	for _, fn := range fieldNames {
-		f := rv.FieldByName(fn)
-		f = deref(f)
-		if f.IsValid() && f.Kind() == reflect.String {
-			return f.String()
+
+	// struct
+	if rv.Kind() == reflect.Struct {
+		for _, fn := range fieldNames {
+			f := rv.FieldByName(fn)
+			f = deref(f)
+			if f.IsValid() && f.Kind() == reflect.String {
+				return f.String()
+			}
 		}
+		return ""
 	}
+
+	// map[string]...
+	if rv.Kind() == reflect.Map && rv.Type().Key().Kind() == reflect.String {
+		for _, fn := range fieldNames {
+			mv := rv.MapIndex(reflect.ValueOf(fn))
+			mv = deref(mv)
+			if mv.IsValid() && mv.Kind() == reflect.String {
+				return mv.String()
+			}
+		}
+		return ""
+	}
+
 	return ""
 }
 
 func readIntField(v any, fieldNames ...string) int {
 	rv := reflect.ValueOf(v)
 	rv = deref(rv)
-	if !rv.IsValid() || rv.Kind() != reflect.Struct {
+	if !rv.IsValid() {
 		return 0
 	}
-	for _, fn := range fieldNames {
-		f := rv.FieldByName(fn)
-		f = deref(f)
-		if f.IsValid() {
-			if n, ok := asInt(f); ok {
-				return n
+
+	// struct
+	if rv.Kind() == reflect.Struct {
+		for _, fn := range fieldNames {
+			f := rv.FieldByName(fn)
+			f = deref(f)
+			if f.IsValid() {
+				if n, ok := asInt(f); ok {
+					return n
+				}
 			}
 		}
+		return 0
 	}
+
+	// map[string]...
+	if rv.Kind() == reflect.Map && rv.Type().Key().Kind() == reflect.String {
+		for _, fn := range fieldNames {
+			mv := rv.MapIndex(reflect.ValueOf(fn))
+			mv = deref(mv)
+			if mv.IsValid() {
+				if n, ok := asInt(mv); ok {
+					return n
+				}
+			}
+		}
+		return 0
+	}
+
 	return 0
 }
 
 func readIntPtrField(v any, fieldNames ...string) *int {
 	rv := reflect.ValueOf(v)
 	rv = deref(rv)
-	if !rv.IsValid() || rv.Kind() != reflect.Struct {
+	if !rv.IsValid() {
 		return nil
 	}
-	for _, fn := range fieldNames {
-		f := rv.FieldByName(fn)
-		f = deref(f)
-		if f.IsValid() {
-			if n, ok := asInt(f); ok {
-				x := n
-				return &x
+
+	// struct
+	if rv.Kind() == reflect.Struct {
+		for _, fn := range fieldNames {
+			f := rv.FieldByName(fn)
+			f = deref(f)
+			if f.IsValid() {
+				if n, ok := asInt(f); ok {
+					x := n
+					return &x
+				}
 			}
 		}
+		return nil
 	}
+
+	// map[string]...
+	if rv.Kind() == reflect.Map && rv.Type().Key().Kind() == reflect.String {
+		for _, fn := range fieldNames {
+			mv := rv.MapIndex(reflect.ValueOf(fn))
+			mv = deref(mv)
+			if mv.IsValid() {
+				if n, ok := asInt(mv); ok {
+					x := n
+					return &x
+				}
+			}
+		}
+		return nil
+	}
+
 	return nil
 }
 
@@ -677,6 +882,13 @@ func asInt(v reflect.Value) (int, bool) {
 	default:
 		return 0, false
 	}
+}
+
+func bool01(b bool) string {
+	if b {
+		return "1"
+	}
+	return "0"
 }
 
 // itoa: strconv を増やさないための最小実装

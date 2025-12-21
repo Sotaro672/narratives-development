@@ -459,12 +459,14 @@ func NewContainer(ctx context.Context) (*Container, error) {
 	)
 
 	// ✅ FIX: ListQuery は brandId 解決のため pb/tb getter を注入する
+	// ✅ NEW: ListQuery は inventoryId から stock を count するため InventoryQuery(GetDetailByID) も注入する
 	// - TokenBlueprintRepo は GetByID が *TokenBlueprint 戻りなので adapter で value に変換
-	listQuery := companyquery.NewListQueryWithBrandGetters(
+	listQuery := companyquery.NewListQueryWithBrandAndInventoryGetters(
 		listRepo,
 		nameResolver,
 		productBlueprintRepo, // pbGetter（value 戻り）
 		&tbGetterAdapter{repo: tokenBlueprintRepo}, // tbGetter（pointer->value 変換）
+		inventoryQuery, // ✅ invGetter（inventoryId -> stock count）
 	)
 
 	// 6. Assemble container

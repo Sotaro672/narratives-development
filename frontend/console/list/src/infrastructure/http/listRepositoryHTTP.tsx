@@ -17,12 +17,6 @@ const FALLBACK_BASE =
 
 export const API_BASE = ENV_BASE || FALLBACK_BASE;
 
-// eslint-disable-next-line no-console
-console.log("[list/listRepositoryHTTP] API_BASE resolved =", API_BASE, {
-  ENV_BASE,
-  usingFallback: !ENV_BASE,
-});
-
 /**
  * ===========
  * Types
@@ -95,27 +89,15 @@ function normalizePricesForBackend(
 ): Array<{ modelId: string; price: number }> {
   if (!Array.isArray(rows)) return [];
 
-  return rows.map((r, i) => {
+  return rows.map((r) => {
     const modelId = s((r as any)?.modelId);
     const priceMaybe = toNumberOrNull((r as any)?.price);
 
     if (!modelId) {
-      // eslint-disable-next-line no-console
-      console.error("[list/listRepositoryHTTP] priceRows row missing modelId", {
-        index: i,
-        row: r,
-      });
       throw new Error("missing_modelId_in_priceRows");
     }
 
     if (priceMaybe === null) {
-      // eslint-disable-next-line no-console
-      console.error("[list/listRepositoryHTTP] priceRows row missing price", {
-        index: i,
-        row: r,
-        modelId,
-        rawPrice: (r as any)?.price,
-      });
       throw new Error("missing_price_in_priceRows");
     }
 
@@ -136,19 +118,11 @@ function buildCreateListPayloadArray(input: CreateListInput): Record<string, any
   const id = s(input?.id) || inventoryId;
 
   if (!id) {
-    // eslint-disable-next-line no-console
-    console.error("[list/listRepositoryHTTP] missing id (and inventoryId)", {
-      input,
-      inventoryId,
-      id,
-    });
     throw new Error("missing_id");
   }
 
   const title = s(input?.title);
   if (!title) {
-    // eslint-disable-next-line no-console
-    console.error("[list/listRepositoryHTTP] missing title", { input });
     throw new Error("missing_title");
   }
 
@@ -173,7 +147,9 @@ function buildCreateListPayloadArray(input: CreateListInput): Record<string, any
  */
 function buildCreateListPayloadMap(input: CreateListInput): Record<string, any> {
   const base = buildCreateListPayloadArray(input);
-  const pricesArray = Array.isArray((base as any).prices) ? ((base as any).prices as any[]) : [];
+  const pricesArray = Array.isArray((base as any).prices)
+    ? ((base as any).prices as any[])
+    : [];
 
   const pricesMap: Record<string, number> = {};
   for (const p of pricesArray) {
@@ -207,31 +183,10 @@ async function requestJSON<T>(args: {
   if (args.body !== undefined) {
     try {
       bodyText = JSON.stringify(args.body);
-    } catch (e) {
-      // eslint-disable-next-line no-console
-      console.error("[list/listRepositoryHTTP] JSON.stringify failed", {
-        method: args.method,
-        url,
-        body: args.body,
-        error: String(e instanceof Error ? e.message : e),
-        raw: e,
-      });
+    } catch {
       throw new Error("invalid_json_stringify");
     }
   }
-
-  const bodyJsonLen = bodyText ? bodyText.length : 0;
-  const bodyJsonPreview =
-    bodyText && bodyText.length > 3000 ? bodyText.slice(0, 3000) + "...(truncated)" : bodyText;
-
-  // eslint-disable-next-line no-console
-  console.log("[list/listRepositoryHTTP] request", {
-    method: args.method,
-    url,
-    bodyText,
-    bodyJsonLen,
-    bodyJsonPreview,
-  });
 
   const res = await fetch(url, {
     method: args.method,
@@ -250,31 +205,10 @@ async function requestJSON<T>(args: {
     json = { raw: text };
   }
 
-  // eslint-disable-next-line no-console
-  console.log("[list/listRepositoryHTTP] response", {
-    method: args.method,
-    url,
-    status: res.status,
-    ok: res.ok,
-    keys: json && typeof json === "object" ? Object.keys(json) : [],
-    body: json,
-  });
-
   if (!res.ok) {
     const msg =
       (json && typeof json === "object" && (json.error || json.message)) ||
       `http_error_${res.status}`;
-
-    // eslint-disable-next-line no-console
-    console.error("[list/listRepositoryHTTP] http error", {
-      method: args.method,
-      url,
-      status: res.status,
-      message: String(msg),
-      body: json,
-      requestBodyPreview: bodyJsonPreview,
-    });
-
     throw new Error(String(msg));
   }
 
@@ -320,26 +254,7 @@ function extractFirstItemFromAny(json: any): any | null {
  * 2) 400 invalid json のときだけ prices: map にして1回だけリトライ
  */
 export async function createListHTTP(input: CreateListInput): Promise<ListDTO> {
-  const u = auth.currentUser;
-  const uid = s(u?.uid);
-  const email = s((u as any)?.email);
-
   const payloadArray = buildCreateListPayloadArray(input);
-
-  // eslint-disable-next-line no-console
-  console.log("[list/listRepositoryHTTP] createListHTTP (input)", {
-    uid,
-    email,
-    titleLen: String(input?.title ?? "").length,
-    descriptionLen: String(input?.description ?? "").length,
-    priceRowsCount: Array.isArray(input?.priceRows) ? input.priceRows.length : 0,
-  });
-
-  // eslint-disable-next-line no-console
-  console.log("[list/listRepositoryHTTP] createListHTTP (payload:Array)", {
-    payload: payloadArray,
-    pricesType: "array",
-  });
 
   try {
     return await requestJSON<ListDTO>({
@@ -350,16 +265,8 @@ export async function createListHTTP(input: CreateListInput): Promise<ListDTO> {
   } catch (e) {
     const msg = String(e instanceof Error ? e.message : e);
 
-    // 400で返ってくる "invalid json" は「構造がDTOと合ってない」可能性が高いので map で再試行
     if (msg === "invalid json") {
       const payloadMap = buildCreateListPayloadMap(input);
-
-      // eslint-disable-next-line no-console
-      console.warn("[list/listRepositoryHTTP] retry with prices map payload", {
-        pricesType: "map",
-        payload: payloadMap,
-      });
-
       return await requestJSON<ListDTO>({
         method: "POST",
         path: "/lists",
@@ -382,13 +289,6 @@ export async function fetchListsHTTP(): Promise<ListDTO[]> {
   });
 
   const items = extractItemsArrayFromAny(json);
-
-  // eslint-disable-next-line no-console
-  console.log("[list/listRepositoryHTTP] fetchListsHTTP extracted", {
-    count: items.length,
-    sample: items.slice(0, 3),
-  });
-
   return items as ListDTO[];
 }
 
@@ -398,8 +298,6 @@ export async function fetchListsHTTP(): Promise<ListDTO[]> {
 export async function fetchListByIdHTTP(listId: string): Promise<ListDTO> {
   const id = String(listId ?? "").trim();
   if (!id) {
-    // eslint-disable-next-line no-console
-    console.error("[list/listRepositoryHTTP] invalid_list_id (empty)", { listId });
     throw new Error("invalid_list_id");
   }
 
@@ -420,28 +318,14 @@ export async function fetchListDetailHTTP(args: {
 }): Promise<ListDTO> {
   const listId = String(args.listId ?? "").trim();
   if (!listId) {
-    // eslint-disable-next-line no-console
-    console.error("[list/listRepositoryHTTP] invalid_list_id (empty)", { args });
     throw new Error("invalid_list_id");
   }
 
   try {
     return await fetchListByIdHTTP(listId);
   } catch (e1) {
-    const msg1 = String(e1 instanceof Error ? e1.message : e1);
-
-    // eslint-disable-next-line no-console
-    console.warn("[list/listRepositoryHTTP] fetchListByIdHTTP failed -> fallback", {
-      listId,
-      inventoryIdHint: s(args.inventoryIdHint),
-      message: msg1,
-      raw: e1,
-    });
-
-    // fallback inventoryId は hint を優先、無ければ listId を使う（後方互換）
     const inv = s(args.inventoryIdHint) || listId;
 
-    // クエリAPIが無い環境もありえるため、fallback も失敗したら e1 を投げる
     try {
       const json = await requestJSON<any>({
         method: "GET",
@@ -449,19 +333,9 @@ export async function fetchListDetailHTTP(args: {
       });
 
       const first = extractFirstItemFromAny(json);
-      if (!first) {
-        throw new Error("not_found");
-      }
+      if (!first) throw new Error("not_found");
       return first as ListDTO;
-    } catch (e2) {
-      // eslint-disable-next-line no-console
-      console.warn("[list/listRepositoryHTTP] fallback /lists?inventoryId failed", {
-        listId,
-        inventoryId: inv,
-        message: String(e2 instanceof Error ? e2.message : e2),
-        raw: e2,
-      });
-
+    } catch {
       throw e1;
     }
   }
@@ -472,11 +346,7 @@ export async function fetchListDetailHTTP(args: {
  */
 export async function fetchListAggregateHTTP(listId: string): Promise<ListAggregateDTO> {
   const id = String(listId ?? "").trim();
-  if (!id) {
-    // eslint-disable-next-line no-console
-    console.error("[list/listRepositoryHTTP] invalid_list_id (empty)", { listId });
-    throw new Error("invalid_list_id");
-  }
+  if (!id) throw new Error("invalid_list_id");
 
   return await requestJSON<ListAggregateDTO>({
     method: "GET",
@@ -489,11 +359,7 @@ export async function fetchListAggregateHTTP(listId: string): Promise<ListAggreg
  */
 export async function fetchListImagesHTTP(listId: string): Promise<ListImageDTO[]> {
   const id = String(listId ?? "").trim();
-  if (!id) {
-    // eslint-disable-next-line no-console
-    console.error("[list/listRepositoryHTTP] invalid_list_id (empty)", { listId });
-    throw new Error("invalid_list_id");
-  }
+  if (!id) throw new Error("invalid_list_id");
 
   return await requestJSON<ListImageDTO[]>({
     method: "GET",
@@ -517,11 +383,7 @@ export async function saveListImageFromGCSHTTP(args: {
   createdAt?: string; // RFC3339 optional
 }): Promise<ListImageDTO> {
   const listId = String(args.listId ?? "").trim();
-  if (!listId) {
-    // eslint-disable-next-line no-console
-    console.error("[list/listRepositoryHTTP] invalid_list_id (empty)", { args });
-    throw new Error("invalid_list_id");
-  }
+  if (!listId) throw new Error("invalid_list_id");
 
   const payload = {
     id: String(args.id ?? "").trim(),
@@ -533,9 +395,6 @@ export async function saveListImageFromGCSHTTP(args: {
     createdBy: String(args.createdBy ?? "").trim(),
     createdAt: args.createdAt ? String(args.createdAt).trim() : undefined,
   };
-
-  // eslint-disable-next-line no-console
-  console.log("[list/listRepositoryHTTP] saveListImageFromGCSHTTP payload", payload);
 
   return await requestJSON<ListImageDTO>({
     method: "POST",
@@ -554,20 +413,13 @@ export async function setListPrimaryImageHTTP(args: {
   now?: string; // RFC3339 optional
 }): Promise<ListDTO> {
   const listId = String(args.listId ?? "").trim();
-  if (!listId) {
-    // eslint-disable-next-line no-console
-    console.error("[list/listRepositoryHTTP] invalid_list_id (empty)", { args });
-    throw new Error("invalid_list_id");
-  }
+  if (!listId) throw new Error("invalid_list_id");
 
   const payload = {
     imageId: String(args.imageId ?? "").trim(),
     updatedBy: args.updatedBy ? String(args.updatedBy).trim() : undefined,
     now: args.now ? String(args.now).trim() : undefined,
   };
-
-  // eslint-disable-next-line no-console
-  console.log("[list/listRepositoryHTTP] setListPrimaryImageHTTP payload", payload);
 
   return await requestJSON<ListDTO>({
     method: "PUT",
