@@ -131,17 +131,6 @@ func (q *ListQuery) ListRows(ctx context.Context, filter listdom.Filter, sort li
 		}, nil
 	}
 
-	log.Printf("[ListQuery] ListRows ENTER page=%d perPage=%d filter={q:%q assigneeID:%v status:%v statuses:%d deleted:%v modelNumbers:%d}",
-		page.Number,
-		page.PerPage,
-		strings.TrimSpace(filter.SearchQuery),
-		ptrStr(filter.AssigneeID),
-		ptrStatus(filter.Status),
-		len(filter.Statuses),
-		ptrBool(filter.Deleted),
-		len(filter.ModelNumbers),
-	)
-
 	pr, err := q.lister.List(ctx, filter, sort, page)
 	if err != nil {
 		log.Printf("[ListQuery] ERROR lister.List failed: %v", err)
@@ -167,13 +156,6 @@ func (q *ListQuery) ListRows(ctx context.Context, filter listdom.Filter, sort li
 		assigneeID := strings.TrimSpace(it.AssigneeID)
 
 		pbID, tbID, ok := parseInventoryIDStrict(invID)
-
-		log.Printf("[ListQuery] row input listID=%q invID=%q parsed={ok:%v pbID:%q tbID:%q} title=%q assigneeID=%q status=%q",
-			id, invID, ok, pbID, tbID,
-			strings.TrimSpace(it.Title),
-			assigneeID,
-			strings.TrimSpace(string(it.Status)),
-		)
 
 		// ------------------------------------------------------
 		// productName (fallback: title)
@@ -301,10 +283,6 @@ func (q *ListQuery) ListRows(ctx context.Context, filter listdom.Filter, sort li
 		out = append(out, row)
 	}
 
-	log.Printf("[ListQuery] ListRows EXIT items=%d page=%d perPage=%d total=%d totalPages=%d",
-		len(out), pr.Page, pr.PerPage, pr.TotalCount, pr.TotalPages,
-	)
-
 	return listdom.PageResult[ListRowDTO]{
 		Items:      out,
 		Page:       pr.Page,
@@ -384,7 +362,12 @@ func (q *ListQuery) BuildListDetailDTO(ctx context.Context, listID string) (quer
 	}
 
 	// ---- priceRows (modelId -> size/color/rgb) ----
-	priceRows, totalStock := q.buildDetailPriceRows(ctx, it)
+	priceRows, totalStock, metaLog := q.buildDetailPriceRows(ctx, it)
+
+	// ✅ model metadata の取得状況が分かる最小ログ（spam しない）
+	if metaLog != "" {
+		log.Printf("[ListQuery] [modelMetadata] listID=%q %s", strings.TrimSpace(it.ID), metaLog)
+	}
 
 	dto := querydto.ListDetailDTO{
 		ID:          strings.TrimSpace(it.ID),
@@ -428,10 +411,10 @@ func (q *ListQuery) BuildListDetailDTO(ctx context.Context, listID string) (quer
 
 // buildDetailPriceRows は List の価格行から ListDetailPriceRowDTO を作り、
 // modelId -> size/color/rgb を NameResolver.ResolveModelResolved で埋めます。
-func (q *ListQuery) buildDetailPriceRows(ctx context.Context, it listdom.List) ([]querydto.ListDetailPriceRowDTO, int) {
+func (q *ListQuery) buildDetailPriceRows(ctx context.Context, it listdom.List) ([]querydto.ListDetailPriceRowDTO, int, string) {
 	rowsAny := extractPriceRowsFromList(it)
 	if len(rowsAny) == 0 {
-		return []querydto.ListDetailPriceRowDTO{}, 0
+		return []querydto.ListDetailPriceRowDTO{}, 0, "rows=0"
 	}
 
 	// request-scope cache
@@ -440,13 +423,17 @@ func (q *ListQuery) buildDetailPriceRows(ctx context.Context, it listdom.List) (
 	out := make([]querydto.ListDetailPriceRowDTO, 0, len(rowsAny))
 	total := 0
 
+	resolvedNonEmpty := 0
+	resolvedEmpty := 0
+
 	for _, r := range rowsAny {
-		modelID := strings.TrimSpace(readStringField(r, "ModelID", "ModelId", "modelId", "modelID"))
+		// ✅ Firestore の保存を正: Go field は ModelID / Stock / Price を想定（名揺れ吸収はしない）
+		modelID := strings.TrimSpace(readStringField(r, "ModelID"))
 		if modelID == "" {
 			continue
 		}
-		stock := readIntField(r, "Stock", "stock", "Quantity", "quantity")
-		pricePtr := readIntPtrField(r, "Price", "price", "Amount", "amount")
+		stock := readIntField(r, "Stock")
+		pricePtr := readIntPtrField(r, "Price")
 
 		dtoRow := querydto.ListDetailPriceRowDTO{
 			ModelID: modelID,
@@ -460,11 +447,18 @@ func (q *ListQuery) buildDetailPriceRows(ctx context.Context, it listdom.List) (
 		dtoRow.Color = strings.TrimSpace(mr.Color)
 		dtoRow.RGB = mr.RGB
 
+		if dtoRow.Size != "" || dtoRow.Color != "" || dtoRow.RGB != nil {
+			resolvedNonEmpty++
+		} else {
+			resolvedEmpty++
+		}
+
 		out = append(out, dtoRow)
 		total += stock
 	}
 
-	return out, total
+	meta := "rows=" + itoa(len(out)) + " resolvedNonEmpty=" + itoa(resolvedNonEmpty) + " resolvedEmpty=" + itoa(resolvedEmpty)
+	return out, total, meta
 }
 
 // resolveModelResolvedCached は modelVariationId -> size/color/rgb を解決し、cache する。
@@ -533,10 +527,6 @@ func (q *ListQuery) BuildCreateSeed(ctx context.Context, inventoryID string, mod
 		Prices:             prices,
 	}
 
-	log.Printf("[ListQuery] BuildCreateSeed ok inventoryID=%q pbID=%q tbID=%q modelIDs=%d pricesKeys=%d",
-		inventoryID, pbID, tbID, len(modelIDs), len(prices),
-	)
-
 	return out, nil
 }
 
@@ -552,30 +542,6 @@ func nonEmpty(v string, fallback string) string {
 	return v
 }
 
-func ptrStr(p *string) string {
-	if p == nil {
-		return ""
-	}
-	return strings.TrimSpace(*p)
-}
-
-func ptrBool(p *bool) any {
-	if p == nil {
-		return nil
-	}
-	return *p
-}
-
-func ptrStatus(p *listdom.ListStatus) any {
-	if p == nil {
-		return nil
-	}
-	return string(*p)
-}
-
-// parseInventoryIDStrict は List.InventoryID を厳密にパースします。
-// 期待： "{pbId}__{tbId}"
-// 名揺れ吸収はしません（正規フォーマットのみ許可）。
 func parseInventoryIDStrict(invID string) (pbID string, tbID string, ok bool) {
 	invID = strings.TrimSpace(invID)
 	if invID == "" {
@@ -601,7 +567,7 @@ func parseInventoryIDStrict(invID string) (pbID string, tbID string, ok bool) {
 // ------------------------------------------------------------
 
 // extractPriceRowsFromList は listdom.List から price row スライスを拾う。
-// フィールド名揺れを最小限許容:
+// フィールドは最小限のみ許容:
 // - PriceRows / Prices
 func extractPriceRowsFromList(it listdom.List) []any {
 	rv := reflect.ValueOf(it)
@@ -610,11 +576,9 @@ func extractPriceRowsFromList(it listdom.List) []any {
 		return nil
 	}
 
-	// PriceRows
 	if f := rv.FieldByName("PriceRows"); f.IsValid() {
 		return sliceToAny(f)
 	}
-	// Prices
 	if f := rv.FieldByName("Prices"); f.IsValid() {
 		return sliceToAny(f)
 	}
@@ -713,4 +677,28 @@ func asInt(v reflect.Value) (int, bool) {
 	default:
 		return 0, false
 	}
+}
+
+// itoa: strconv を増やさないための最小実装
+func itoa(n int) string {
+	if n == 0 {
+		return "0"
+	}
+	neg := false
+	if n < 0 {
+		neg = true
+		n = -n
+	}
+	var b [32]byte
+	i := len(b)
+	for n > 0 {
+		i--
+		b[i] = byte('0' + (n % 10))
+		n /= 10
+	}
+	if neg {
+		i--
+		b[i] = '-'
+	}
+	return string(b[i:])
 }

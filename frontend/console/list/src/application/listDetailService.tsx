@@ -87,9 +87,19 @@ export function resolveListDetailParams(params: ListDetailRouteParams | undefine
   };
 }
 
-// ✅ decision は backend の status/decision をそのまま使う（名揺れ吸収しない）
+/**
+ * ✅ decision は UI で "list" | "hold" を使うため、backend の status/decision を最小限変換する
+ * - "listing" => "list"（出品）
+ * - "hold"    => "hold"（保留）
+ * - それ以外はそのまま返す
+ */
 export function normalizeDecision(dto: any): string {
-  return s(dto?.decision) || s(dto?.status);
+  const raw = (s(dto?.decision) || s(dto?.status)).toLowerCase();
+
+  if (raw === "listing") return "list";
+  if (raw === "hold") return "hold";
+
+  return raw;
 }
 
 // ✅ imageUrls は dto.imageUrls のみ採用（名揺れ吸収しない）
@@ -108,47 +118,62 @@ export function normalizeImageUrls(dto: any): string[] {
   return out;
 }
 
-// ✅ prices は dto.prices のみ採用（名揺れ吸収しない）
+function toInt(v: unknown): number {
+  const n = Number(v);
+  if (!Number.isFinite(n)) return 0;
+  return Math.trunc(n);
+}
+
+function toNumberOrNull(v: unknown): number | null {
+  if (v === null || v === undefined) return null;
+  const n = Number(v);
+  if (!Number.isFinite(n)) return null;
+  return n;
+}
+
+/**
+ * ✅ priceRows は dto.priceRows のみ採用（名揺れ吸収しない）
+ *
+ * 重要:
+ * - PriceCard の PriceRow 型は "modelId" を持たないため、ここでは絶対に返さない
+ * - UI 側では id を正として扱う（id = modelId）
+ * - ts2353（'modelId' does not exist in type 'PriceRow'）回避のため、
+ *   返却オブジェクトは any/unknown 経由でキャストして返す
+ */
 export function normalizePriceRows<TRow extends Record<string, any> = any>(dto: any): TRow[] {
-  const rowsRaw = Array.isArray(dto?.prices) ? dto.prices : [];
+  const rowsRaw = Array.isArray(dto?.priceRows) ? dto.priceRows : [];
 
   return rowsRaw.map((r: any, idx: number) => {
     const modelId = s(r?.modelId);
+
     const size = s(r?.size);
     const color = s(r?.color);
 
-    const stockRaw = r?.stock;
-    const stock = Number.isFinite(Number(stockRaw)) ? Number(stockRaw) : 0;
+    const stock = toInt(r?.stock);
+    const price = toNumberOrNull(r?.price);
 
-    const priceRaw = r?.price;
-    const price =
-      priceRaw === null || priceRaw === undefined
-        ? null
-        : Number.isFinite(Number(priceRaw))
-          ? Number(priceRaw)
-          : null;
+    const rgbNum = toNumberOrNull(r?.rgb);
+    const rgb = rgbNum === null ? undefined : rgbNum;
 
-    const rgbRaw = r?.rgb;
-    const rgb = Number.isFinite(Number(rgbRaw)) ? Number(rgbRaw) : null;
-
-    const row: any = {
-      modelId,
+    // ✅ PriceRow 互換（modelId を含めない）
+    // id が空になると行が消える実装があり得るので、最後に idx フォールバック
+    const rowAny = {
+      id: modelId || String(idx),
       size,
       color,
-      rgb: rgb === null ? undefined : rgb,
+      rgb,
       stock,
       price,
-      _idx: idx,
-      _raw: r,
     };
 
-    return row as TRow;
+    // ✅ generic を指定されても excess property check を発生させない
+    return rowAny as unknown as TRow;
   });
 }
 
 // ---------------------------------------------------------
 // ✅ Backend query(ListQuery.ListRows) 経由で product/token/assignee/brand を補完する
-// - GET /lists は ListQuery.ListRows を通る想定（ログの通り）
+// - GET /lists は ListQuery.ListRows を通る想定
 // ---------------------------------------------------------
 async function fetchRowFromListRows(args: { listId: string }): Promise<any | null> {
   const id = s(args.listId);
@@ -157,33 +182,44 @@ async function fetchRowFromListRows(args: { listId: string }): Promise<any | nul
   try {
     const rows = await fetchListsHTTP();
     const hit = Array.isArray(rows) ? rows.find((r: any) => s(r?.id) === id) : null;
-
-    // eslint-disable-next-line no-console
-    console.log("[console/list/listDetailService] row resolved via /lists(ListRows)", {
-      listId: id,
-      found: Boolean(hit),
-      inventoryId: s(hit?.inventoryId),
-      assigneeId: s(hit?.assigneeId),
-      productBrandId: s(hit?.productBrandId),
-      productBrandName: s(hit?.productBrandName),
-      productName: s(hit?.productName),
-      tokenBrandId: s(hit?.tokenBrandId),
-      tokenBrandName: s(hit?.tokenBrandName),
-      tokenName: s(hit?.tokenName),
-      assigneeName: s(hit?.assigneeName),
-      status: s(hit?.status),
-    });
-
     return hit || null;
-  } catch (e) {
-    // eslint-disable-next-line no-console
-    console.warn("[console/list/listDetailService] fetchRowFromListRows failed", {
-      listId: id,
-      error: String(e instanceof Error ? e.message : e),
-      raw: e,
-    });
+  } catch {
+    // ✅ 失敗しても detail は返せるので静かに null
     return null;
   }
+}
+
+// ---------------------------------------------------------
+// ✅ Model metadata ログ（取得できたことが分かるログ）
+// - 取得タイミング: loadListDetailDTO の A) /lists/{id} 取得直後
+// ---------------------------------------------------------
+function logModelMetadataFromDetail(args: { listId: string; dto: any }) {
+  const listId = s(args.listId);
+  const dto = args.dto;
+
+  const rowsRaw = Array.isArray(dto?.priceRows) ? dto.priceRows : [];
+  const count = rowsRaw.length;
+
+  const sample = rowsRaw.slice(0, 4).map((r: any) => ({
+    modelId: s(r?.modelId),
+    size: s(r?.size),
+    color: s(r?.color),
+    rgb: Number.isFinite(Number(r?.rgb)) ? Number(r?.rgb) : null,
+    stock: Number.isFinite(Number(r?.stock)) ? Number(r?.stock) : 0,
+    price:
+      r?.price === null || r?.price === undefined
+        ? null
+        : Number.isFinite(Number(r?.price))
+          ? Number(r?.price)
+          : null,
+  }));
+
+  // eslint-disable-next-line no-console
+  console.log("[console/list/modelMetadata] priceRows(model metadata) resolved", {
+    listId,
+    count,
+    sample,
+  });
 }
 
 // ---------------------------------------------------------
@@ -191,22 +227,22 @@ async function fetchRowFromListRows(args: { listId: string }): Promise<any | nul
 // ---------------------------------------------------------
 export async function loadListDetailDTO(args: {
   listId: string;
-  inventoryIdHint?: string; // ✅ ルートから来る想定（ログ通り）
+  inventoryIdHint?: string; // ✅ ルートから来る想定
 }): Promise<ListDetailDTO> {
   const listId = s(args.listId);
   const inventoryIdHint = s(args.inventoryIdHint);
 
   if (!listId) throw new Error("invalid_list_id");
 
-  // eslint-disable-next-line no-console
-  console.log("[console/list/listDetailService] loadListDetailDTO start", {
-    listId,
-    inventoryIdHint,
-  });
-
-  // A) 詳細：GET /lists/{id}
+  // A) 詳細：GET /lists/{id} （ListDetailDTO を返す想定）
   // B) rows：GET /lists（ListQuery.ListRows）
-  const [detail, row] = await Promise.all([fetchListByIdHTTP(listId), fetchRowFromListRows({ listId })]);
+  const [detail, row] = await Promise.all([
+    fetchListByIdHTTP(listId),
+    fetchRowFromListRows({ listId }),
+  ]);
+
+  // ✅ Model metadata が取れていることが分かるログ（ここだけ残す）
+  logModelMetadataFromDetail({ listId, dto: detail });
 
   const merged: any = { ...(detail as any) };
 
@@ -217,7 +253,7 @@ export async function loadListDetailDTO(args: {
   // ✅ assigneeId は detail を優先。無ければ row。
   if (!s(merged?.assigneeId) && row) merged.assigneeId = s(row?.assigneeId);
 
-  // ✅ 表示名/ブランド/商品名/トークン名/ステータスは row が正（ログ通り）なので、row があれば入れる
+  // ✅ 表示名/ブランド/商品名/トークン名/ステータスは row があれば補完
   if (row) {
     if (!s(merged?.productName)) merged.productName = s(row?.productName);
     if (!s(merged?.tokenName)) merged.tokenName = s(row?.tokenName);
@@ -230,20 +266,6 @@ export async function loadListDetailDTO(args: {
     if (!s(merged?.tokenBrandId)) merged.tokenBrandId = s(row?.tokenBrandId);
     if (!s(merged?.tokenBrandName)) merged.tokenBrandName = s(row?.tokenBrandName);
   }
-
-  // eslint-disable-next-line no-console
-  console.log("[console/list/listDetailService] loadListDetailDTO end", {
-    listId,
-    inventoryId: s(merged?.inventoryId),
-    assigneeId: s(merged?.assigneeId),
-    assigneeName: s(merged?.assigneeName),
-    productBrandId: s(merged?.productBrandId),
-    productBrandName: s(merged?.productBrandName),
-    productName: s(merged?.productName),
-    tokenBrandId: s(merged?.tokenBrandId),
-    tokenBrandName: s(merged?.tokenBrandName),
-    tokenName: s(merged?.tokenName),
-  });
 
   return merged as ListDetailDTO;
 }
@@ -271,6 +293,8 @@ export function deriveListDetail<TRow extends Record<string, any> = any>(dto: an
   const createdAt = s(dto?.createdAt);
 
   const imageUrls = normalizeImageUrls(dto);
+
+  // ✅ priceRows は detail の priceRows を読む（id=modelId, size/color/rgb/stock/price）
   const priceRows = normalizePriceRows<TRow>(dto);
 
   return {

@@ -543,12 +543,50 @@ func randomHex(nBytes int) string {
 
 func (h *ListHandler) get(w http.ResponseWriter, r *http.Request, id string) {
 	ctx := r.Context()
-	item, err := h.uc.GetByID(ctx, id)
+
+	// ✅ A) 採用: GET /lists/{id} は ListDetailDTO を返す
+	// - PriceRows に Size/Color/RGB が入る
+	// - そのため Query(ListQuery) が必須
+	if h == nil || h.q == nil {
+		log.Printf("[list_handler] GET /lists/{id} NOT supported (query is nil) id=%q", strings.TrimSpace(id))
+		w.WriteHeader(http.StatusNotImplemented)
+		_ = json.NewEncoder(w).Encode(map[string]string{"error": "not_implemented"})
+		return
+	}
+
+	dto, err := h.q.BuildListDetailDTO(ctx, id)
 	if err != nil {
+		if isNotSupported(err) {
+			w.WriteHeader(http.StatusNotImplemented)
+			_ = json.NewEncoder(w).Encode(map[string]string{"error": "not_implemented"})
+			return
+		}
 		writeListErr(w, err)
 		return
 	}
-	_ = json.NewEncoder(w).Encode(item)
+
+	// ✅ model metadata が埋まっているか観測できるログ
+	if len(dto.PriceRows) > 0 {
+		s0 := dto.PriceRows[0]
+		log.Printf("[list_handler] GET /lists/{id} detail dto ok id=%q inventoryId=%q priceRows=%d sample={modelId:%q size:%q color:%q rgb:%v stock:%d price:%v}",
+			strings.TrimSpace(dto.ID),
+			strings.TrimSpace(dto.InventoryID),
+			len(dto.PriceRows),
+			strings.TrimSpace(s0.ModelID),
+			strings.TrimSpace(s0.Size),
+			strings.TrimSpace(s0.Color),
+			s0.RGB,
+			s0.Stock,
+			s0.Price,
+		)
+	} else {
+		log.Printf("[list_handler] GET /lists/{id} detail dto ok id=%q inventoryId=%q priceRows=0",
+			strings.TrimSpace(dto.ID),
+			strings.TrimSpace(dto.InventoryID),
+		)
+	}
+
+	_ = json.NewEncoder(w).Encode(dto)
 }
 
 // GET /lists/{id}/images

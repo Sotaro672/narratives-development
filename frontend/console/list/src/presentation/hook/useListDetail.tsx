@@ -70,16 +70,7 @@ export function useListDetail(): UseListDetailResult {
   const resolved = React.useMemo(() => resolveListDetailParams(params), [params]);
   const { listId, inventoryId } = resolved;
 
-  // eslint-disable-next-line no-console
-  console.log("[console/list/useListDetail] params resolved", {
-    listId,
-    inventoryId,
-    raw: resolved.raw,
-  });
-
   const onBack = React.useCallback(() => {
-    // eslint-disable-next-line no-console
-    console.log("[console/list/useListDetail] onBack");
     navigate(-1);
   }, [navigate]);
 
@@ -105,42 +96,17 @@ export function useListDetail(): UseListDetailResult {
       setError("");
 
       try {
-        // eslint-disable-next-line no-console
-        console.log("[console/list/useListDetail] load start", { listId: id, inventoryId });
-
         const data = await loadListDetailDTO({ listId: id, inventoryIdHint: inventoryId });
         if (cancelledRef.current) return;
-
-        // eslint-disable-next-line no-console
-        console.log("[console/list/useListDetail] load success", {
-          keys: Object.keys((data as any) ?? {}),
-          id: (data as any)?.id,
-          inventoryId: (data as any)?.inventoryId,
-          assigneeId: (data as any)?.assigneeId,
-          assigneeName: (data as any)?.assigneeName,
-          productBrandId: (data as any)?.productBrandId,
-          productBrandName: (data as any)?.productBrandName,
-          productName: (data as any)?.productName,
-          tokenBrandId: (data as any)?.tokenBrandId,
-          tokenBrandName: (data as any)?.tokenBrandName,
-          tokenName: (data as any)?.tokenName,
-        });
-
         setDTO(data);
       } catch (e) {
         if (cancelledRef.current) return;
         const msg = String(e instanceof Error ? e.message : e);
-
-        // eslint-disable-next-line no-console
-        console.warn("[console/list/useListDetail] load failed", { msg, raw: e });
         setError(msg);
         setDTO(null);
       } finally {
         if (cancelledRef.current) return;
         setLoading(false);
-
-        // eslint-disable-next-line no-console
-        console.log("[console/list/useListDetail] load end", { listId });
       }
     };
 
@@ -188,49 +154,6 @@ export function useListDetail(): UseListDetailResult {
     showTotal: true,
     onChangePrice: undefined,
   });
-
-  React.useEffect(() => {
-    // eslint-disable-next-line no-console
-    console.log("[console/list/useListDetail] snapshot", {
-      loading,
-      hasDTO: Boolean(dto),
-      decision,
-      listingTitleLen: listingTitle.length,
-      descriptionLen: description.length,
-      imageUrlsCount: imageUrls.length,
-      priceRowsCount: priceRows.length,
-
-      productBrandId,
-      productBrandName,
-      productName,
-
-      tokenBrandId,
-      tokenBrandName,
-      tokenName,
-
-      assigneeId,
-      assigneeName,
-    });
-  }, [
-    loading,
-    dto,
-    decision,
-    listingTitle,
-    description,
-    imageUrls.length,
-    priceRows.length,
-
-    productBrandId,
-    productBrandName,
-    productName,
-
-    tokenBrandId,
-    tokenBrandName,
-    tokenName,
-
-    assigneeId,
-    assigneeName,
-  ]);
 
   const pageTitle = React.useMemo(
     () => computeListDetailPageTitle({ listId, listingTitle }),
