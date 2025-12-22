@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"log"
 	"net/http"
@@ -140,7 +141,7 @@ func (h *ListHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 					h.listImages(w, r, id)
 					return
 				case http.MethodPost:
-					// 既存: signed URL PUT 後の object をレコード化
+					// signed URL PUT 後の object をレコード化
 					h.saveImageFromGCS(w, r, id)
 					return
 				default:
@@ -150,9 +151,22 @@ func (h *ListHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			}
 
 			// /lists/{id}/images/{sub}
-			sub := strings.TrimSpace(parts[2])
+			sub := ""
+			if len(parts) >= 3 {
+				sub = strings.TrimSpace(parts[2])
+			}
 
-			// ✅ NEW: /lists/{id}/images/upload で dataURL を受けてアップロード＋レコード作成
+			// ✅ NEW: /lists/{id}/images/signed-url で signed URL を発行
+			if strings.EqualFold(sub, "signed-url") {
+				if r.Method != http.MethodPost {
+					methodNotAllowed(w)
+					return
+				}
+				h.issueSignedURL(w, r, id)
+				return
+			}
+
+			// ✅ NEW: /lists/{id}/images/upload（dataURL 直アップロード） ※旧方式互換
 			if strings.EqualFold(sub, "upload") {
 				if r.Method != http.MethodPost {
 					methodNotAllowed(w)
@@ -162,13 +176,12 @@ func (h *ListHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 				return
 			}
 
-			// ✅ NEW: /lists/{id}/images/{imageId} DELETE で画像削除（実装が注入されている場合のみ）
-			if r.Method == http.MethodDelete {
+			// ✅ NEW: /lists/{id}/images/{imageId} DELETE
+			if r.Method == http.MethodDelete && sub != "" {
 				h.deleteImage(w, r, id, sub)
 				return
 			}
 
-			// GET は現状未提供（必要なら Query/Usecase に追加）
 			w.WriteHeader(http.StatusNotFound)
 			_ = json.NewEncoder(w).Encode(map[string]string{"error": "not_found"})
 			return
@@ -203,11 +216,237 @@ func (h *ListHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 }
 
 // ==============================
+// POST /lists/{id}/images/signed-url
+// ==============================
+//
+// ✅ フロントが `signed_url_response_invalid` を出さないように、
+//
+//	必須キーを handler 側で "固定の形" に正規化して返す。
+//	- uploadUrl / bucket / objectPath / id / publicUrl を必ず返す（可能な限り）
+func (h *ListHandler) issueSignedURL(w http.ResponseWriter, r *http.Request, listID string) {
+	ctx := r.Context()
+
+	if h == nil || h.uc == nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		_ = json.NewEncoder(w).Encode(map[string]string{"error": "usecase is nil"})
+		return
+	}
+
+	var req struct {
+		FileName         string `json:"fileName"`
+		ContentType      string `json:"contentType"`
+		Size             int64  `json:"size"`
+		DisplayOrder     int    `json:"displayOrder"`
+		ExpiresInSeconds int    `json:"expiresInSeconds"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		w.WriteHeader(http.StatusBadRequest)
+		_ = json.NewEncoder(w).Encode(map[string]string{"error": "invalid json"})
+		return
+	}
+
+	listID = strings.TrimSpace(listID)
+	if listID == "" {
+		w.WriteHeader(http.StatusBadRequest)
+		_ = json.NewEncoder(w).Encode(map[string]string{"error": "invalid listId"})
+		return
+	}
+
+	ct := strings.ToLower(strings.TrimSpace(req.ContentType))
+	if ct == "" {
+		w.WriteHeader(http.StatusBadRequest)
+		_ = json.NewEncoder(w).Encode(map[string]string{"error": "contentType is required"})
+		return
+	}
+
+	// ✅ map[string]struct{} の value(struct{})を TrimSpace しない（以前のコンパイルエラー対策）
+	if _, ok := listimgdom.SupportedImageMIMEs[ct]; !ok {
+		w.WriteHeader(http.StatusBadRequest)
+		_ = json.NewEncoder(w).Encode(map[string]string{"error": "unsupported contentType"})
+		return
+	}
+
+	if req.Size > 0 && req.Size > int64(listimgdom.DefaultMaxImageSizeBytes) {
+		w.WriteHeader(http.StatusBadRequest)
+		_ = json.NewEncoder(w).Encode(map[string]string{"error": "file too large"})
+		return
+	}
+
+	rawOut, err := h.uc.IssueImageSignedURL(ctx, usecase.ListImageIssueSignedURLInput{
+		ListID:           listID,
+		FileName:         strings.TrimSpace(req.FileName),
+		ContentType:      ct,
+		Size:             req.Size,
+		DisplayOrder:     req.DisplayOrder,
+		ExpiresInSeconds: req.ExpiresInSeconds,
+	})
+	if err != nil {
+		if isNotSupported(err) {
+			w.WriteHeader(http.StatusNotImplemented)
+			_ = json.NewEncoder(w).Encode(map[string]string{"error": "not_implemented"})
+			return
+		}
+		writeListErr(w, err)
+		return
+	}
+
+	// ------------------------------------------------------------
+	// ✅ 正規化（usecase の返却形が多少ズレてもフロントが壊れないようにする）
+	// ------------------------------------------------------------
+	bs, _ := json.Marshal(rawOut)
+	var m map[string]any
+	_ = json.Unmarshal(bs, &m)
+
+	getString := func(keys ...string) string {
+		for _, k := range keys {
+			if v, ok := m[k]; ok {
+				switch t := v.(type) {
+				case string:
+					if s := strings.TrimSpace(t); s != "" {
+						return s
+					}
+				}
+			}
+		}
+		return ""
+	}
+	getInt64 := func(keys ...string) int64 {
+		for _, k := range keys {
+			if v, ok := m[k]; ok {
+				switch t := v.(type) {
+				case float64:
+					return int64(t)
+				case int64:
+					return t
+				case int:
+					return int64(t)
+				case string:
+					s := strings.TrimSpace(t)
+					if s == "" {
+						continue
+					}
+					if n, e := strconv.ParseInt(s, 10, 64); e == nil {
+						return n
+					}
+				}
+			}
+		}
+		return 0
+	}
+	getInt := func(keys ...string) int {
+		for _, k := range keys {
+			if v, ok := m[k]; ok {
+				switch t := v.(type) {
+				case float64:
+					return int(t)
+				case int:
+					return t
+				case int64:
+					return int(t)
+				case string:
+					s := strings.TrimSpace(t)
+					if s == "" {
+						continue
+					}
+					if n, e := strconv.Atoi(s); e == nil {
+						return n
+					}
+				}
+			}
+		}
+		return 0
+	}
+
+	// 互換候補キーを広めに吸収
+	id := getString("id", "imageId", "imageID")
+	bucket := getString("bucket")
+	objectPath := getString("objectPath", "object_path", "object", "path")
+	publicURL := getString("publicUrl", "publicURL", "public_url", "url")
+	uploadURL := getString("uploadUrl", "uploadURL", "signedUrl", "signedURL", "signed_url", "upload_url", "putUrl", "putURL")
+	expiresAt := getString("expiresAt", "expires_at", "expireAt", "expire_at")
+	fileName := getString("fileName", "filename", "file_name")
+	contentType := getString("contentType", "content_type", "mime")
+
+	// 値の補完
+	if strings.TrimSpace(fileName) == "" {
+		fileName = strings.TrimSpace(req.FileName)
+	}
+	if strings.TrimSpace(contentType) == "" {
+		contentType = ct
+	}
+	if strings.TrimSpace(publicURL) == "" && strings.TrimSpace(bucket) != "" && strings.TrimSpace(objectPath) != "" {
+		publicURL = fmt.Sprintf("https://storage.googleapis.com/%s/%s", strings.TrimSpace(bucket), strings.TrimLeft(strings.TrimSpace(objectPath), "/"))
+	}
+	if strings.TrimSpace(id) == "" {
+		// objectPath が {listId}/{imageId}/{fileName} の想定なら imageId を抜く
+		p := strings.TrimLeft(strings.TrimSpace(objectPath), "/")
+		pp := strings.Split(p, "/")
+		if len(pp) >= 3 && strings.TrimSpace(pp[1]) != "" {
+			id = strings.TrimSpace(pp[1])
+		} else if p != "" {
+			// 最終フォールバック（フロントが "id が必須" の場合に落ちないように）
+			id = p
+		}
+	}
+
+	size := getInt64("size")
+	if size <= 0 {
+		size = req.Size
+	}
+	displayOrder := getInt("displayOrder", "display_order", "order")
+	if displayOrder == 0 {
+		displayOrder = req.DisplayOrder
+	}
+
+	// expiresAt が無い場合は計算して埋める（フロントが必須扱いの場合の保険）
+	if strings.TrimSpace(expiresAt) == "" {
+		sec := req.ExpiresInSeconds
+		if sec <= 0 {
+			sec = 15 * 60
+		}
+		expiresAt = time.Now().UTC().Add(time.Duration(sec) * time.Second).Format(time.RFC3339)
+	}
+
+	// ✅ フロントが "uploadUrl が無い" と invalid 扱いするケースが多いので、ここで弾く
+	if strings.TrimSpace(uploadURL) == "" || strings.TrimSpace(bucket) == "" || strings.TrimSpace(objectPath) == "" || strings.TrimSpace(id) == "" {
+		// 期待形にできない＝フロントが invalid になるので 500 で明示
+		w.WriteHeader(http.StatusInternalServerError)
+		_ = json.NewEncoder(w).Encode(map[string]string{"error": "signed_url_response_invalid"})
+		return
+	}
+
+	type resp struct {
+		ID           string `json:"id"`
+		Bucket       string `json:"bucket"`
+		ObjectPath   string `json:"objectPath"`
+		PublicURL    string `json:"publicUrl"`
+		UploadURL    string `json:"uploadUrl"`
+		ExpiresAt    string `json:"expiresAt"`
+		ContentType  string `json:"contentType"`
+		Size         int64  `json:"size"`
+		DisplayOrder int    `json:"displayOrder"`
+		FileName     string `json:"fileName"`
+	}
+
+	w.WriteHeader(http.StatusCreated)
+	_ = json.NewEncoder(w).Encode(resp{
+		ID:           strings.TrimSpace(id),
+		Bucket:       strings.TrimSpace(bucket),
+		ObjectPath:   strings.TrimLeft(strings.TrimSpace(objectPath), "/"),
+		PublicURL:    strings.TrimSpace(publicURL),
+		UploadURL:    strings.TrimSpace(uploadURL),
+		ExpiresAt:    strings.TrimSpace(expiresAt),
+		ContentType:  strings.TrimSpace(contentType),
+		Size:         size,
+		DisplayOrder: displayOrder,
+		FileName:     strings.TrimSpace(fileName),
+	})
+}
+
+// ==============================
 // GET /lists/create-seed
 // ==============================
 
-// createSeed は list新規作成画面に必要な情報だけを揃えて返します。
-// - 実際の create（永続化）は POST /lists（usecase.Create）に移譲します。
 func (h *ListHandler) createSeed(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 
@@ -481,7 +720,6 @@ func (h *ListHandler) create(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// prices はフロント標準の配列（[{modelId, price}, ...]）を正として domain の List 型へ Unmarshal
 	var item listdom.List
 	if err := json.Unmarshal(body, &item); err != nil {
 		w.WriteHeader(http.StatusBadRequest)
@@ -489,7 +727,6 @@ func (h *ListHandler) create(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// ---- normalize / server-side fixups ----
 	item.ID = strings.TrimSpace(item.ID)
 	item.Title = strings.TrimSpace(item.Title)
 	item.AssigneeID = strings.TrimSpace(item.AssigneeID)
@@ -519,20 +756,16 @@ func (h *ListHandler) create(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// ✅ 方針: listId は inventoryId と独立したIDを使う
-	// - item.ID が空なら、repo(Firestore) 側の自動採番に任せる
-	// - item.ID が inventoryId と同じ値で来た場合は事故防止でクリアする
+	// ✅ listId は inventoryId と独立したIDを使う（事故防止）
 	if item.ID == item.InventoryID {
 		item.ID = ""
 	}
 
-	// status default
 	if strings.TrimSpace(string(item.Status)) == "" {
 		item.Status = listdom.ListStatus("listing")
 	}
 
 	now := time.Now().UTC()
-
 	item.CreatedAt = now
 	item.UpdatedAt = &now
 	item.UpdatedBy = nil
@@ -574,7 +807,6 @@ func (h *ListHandler) update(w http.ResponseWriter, r *http.Request, id string) 
 		return
 	}
 
-	// ✅ UPDATE PUT/PATCH を受け取れているか分かるログ（これだけ残す）
 	log.Printf("[list_handler] UPDATE received method=%s id=%q bytes=%d", r.Method, strings.TrimSpace(id), len(body))
 
 	var in listdom.List
@@ -637,7 +869,6 @@ func (h *ListHandler) update(w http.ResponseWriter, r *http.Request, id string) 
 		return
 	}
 
-	// ✅ detail 画面は DTO が欲しいので、detail query があれば detail DTO を返す
 	if h.qDetail != nil {
 		if dto, e := h.qDetail.BuildListDetailDTO(ctx, id); e == nil {
 			_ = json.NewEncoder(w).Encode(dto)
@@ -655,7 +886,6 @@ func (h *ListHandler) update(w http.ResponseWriter, r *http.Request, id string) 
 func (h *ListHandler) get(w http.ResponseWriter, r *http.Request, id string) {
 	ctx := r.Context()
 
-	// GET /lists/{id} は ListDetailDTO を返す（detail query 必須）
 	if h == nil || h.qDetail == nil {
 		w.WriteHeader(http.StatusNotImplemented)
 		_ = json.NewEncoder(w).Encode(map[string]string{"error": "not_implemented"})
@@ -687,7 +917,7 @@ func (h *ListHandler) listImages(w http.ResponseWriter, r *http.Request, id stri
 	_ = json.NewEncoder(w).Encode(items)
 }
 
-// ✅ NEW: POST /lists/{id}/images/upload
+// ✅ 旧方式互換: POST /lists/{id}/images/upload
 func (h *ListHandler) uploadImage(w http.ResponseWriter, r *http.Request, listID string) {
 	ctx := r.Context()
 

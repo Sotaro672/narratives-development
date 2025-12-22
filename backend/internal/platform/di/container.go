@@ -304,6 +304,8 @@ func NewContainer(ctx context.Context) (*Container, error) {
 	tokenContentsRepo := gcso.NewTokenContentsRepositoryGCS(gcsClient, tokenContentsBucket)
 
 	// ✅ ListImage repository (GCS)
+	// - /lists/{id}/images/signed-url の Signed URL 発行元（IssueSignedURL）もこの repo が担う想定
+	// - bucket 未指定なら repo.ResolveBucket() が env/fallback を使う
 	listImageBucket := strings.TrimSpace(os.Getenv("LIST_IMAGE_BUCKET"))
 	listImageRepo := gcso.NewListImageRepositoryGCS(gcsClient, listImageBucket)
 
@@ -339,13 +341,15 @@ func NewContainer(ctx context.Context) (*Container, error) {
 	// ✅ ListUsecase
 	// - listReader/listCreator に usecase 用 wrapper を渡すことで、
 	//   保存は必ず encodeListDoc(map) 経由になり snake_case の読み取りと整合する
+	// - listImageRepo は ListImageReader / ListImageByIDReader / ListImageObjectSaver を満たす想定
+	//   さらに IssueSignedURL を実装していれば usecase 側で自動配線され、/images/signed-url が動作する
 	listUC := uc.NewListUsecaseWithCreator(
 		listRepo,      // ListReader (+ ListLister/ListUpdater)
 		listRepo,      // ListCreator
 		listPatcher,   // ListPatcher (imageId only)
 		listImageRepo, // ListImageReader
 		listImageRepo, // ListImageByIDReader
-		listImageRepo, // ListImageObjectSaver
+		listImageRepo, // ListImageObjectSaver (+ SignedURLIssuer)
 	)
 
 	memberUC := uc.NewMemberUsecase(memberRepo)

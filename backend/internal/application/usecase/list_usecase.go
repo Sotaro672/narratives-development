@@ -12,6 +12,46 @@ import (
 	listimgdom "narratives/internal/domain/listImage"
 )
 
+// ==============================
+// Signed URL (A) ports & DTOs
+// ==============================
+
+type ListImageIssueSignedURLInput struct {
+	ListID           string `json:"listId"`
+	FileName         string `json:"fileName"`
+	ContentType      string `json:"contentType"`
+	Size             int64  `json:"size"`
+	DisplayOrder     int    `json:"displayOrder"`
+	ExpiresInSeconds int    `json:"expiresInSeconds"` // optional
+}
+
+type ListImageIssueSignedURLOutput struct {
+	// id は objectPath を採用（SaveFromBucketObject / GetByID で一意に引ける）
+	ID         string `json:"id"`
+	ImageID    string `json:"imageId"` // ✅ alias (frontend 互換)
+	Bucket     string `json:"bucket"`
+	ObjectPath string `json:"objectPath"`
+
+	// ✅ signed url
+	UploadURL string `json:"uploadUrl"`
+	SignedURL string `json:"signedUrl"` // ✅ alias (frontend 互換)
+
+	// ✅ public url
+	PublicURL string `json:"publicUrl"`
+	URL       string `json:"url"` // ✅ alias (frontend 互換)
+
+	FileName     string `json:"fileName"`
+	ContentType  string `json:"contentType"`
+	Size         int64  `json:"size"`
+	DisplayOrder int    `json:"displayOrder"`
+	ExpiresAt    string `json:"expiresAt"` // RFC3339
+}
+
+// GCS adapter 側が実装する（例：IssueSignedURL）
+type ListImageSignedURLIssuer interface {
+	IssueSignedURL(ctx context.Context, in ListImageIssueSignedURLInput) (ListImageIssueSignedURLOutput, error)
+}
+
 // ListReader は List 単体取得の契約です。
 type ListReader interface {
 	GetByID(ctx context.Context, id string) (listdom.List, error)
@@ -87,14 +127,16 @@ type ListAggregate struct {
 
 // ListUsecase は List と ListImage をまとめて扱います。
 type ListUsecase struct {
-	listReader       ListReader
-	listLister       ListLister  // GET /lists
-	listCreator      ListCreator // POST /lists (optional)
-	listUpdater      ListUpdater // PUT/PATCH /lists/{id} (optional)
-	listPatcher      ListPatcher
-	imageReader      ListImageReader
-	imageByIDReader  ListImageByIDReader
-	imageObjectSaver ListImageObjectSaver
+	listReader  ListReader
+	listLister  ListLister  // GET /lists
+	listCreator ListCreator // POST /lists (optional)
+	listUpdater ListUpdater // PUT/PATCH /lists/{id} (optional)
+	listPatcher ListPatcher
+
+	imageReader          ListImageReader
+	imageByIDReader      ListImageByIDReader
+	imageObjectSaver     ListImageObjectSaver
+	imageSignedURLIssuer ListImageSignedURLIssuer // ✅ NEW
 }
 
 // NewListUsecase はユースケースを初期化します。
@@ -115,6 +157,8 @@ func NewListUsecase(
 		imageReader:      imageReader,
 		imageByIDReader:  imageByIDReader,
 		imageObjectSaver: imageObjectSaver,
+
+		imageSignedURLIssuer: nil, // auto-wire below
 	}
 
 	// 既存DIを壊さずに、listReader(実体はrepo)が ListLister/ListUpdater を実装していれば自動で配線
@@ -124,6 +168,13 @@ func NewListUsecase(
 		}
 		if updater, ok := any(listReader).(ListUpdater); ok {
 			uc.listUpdater = updater
+		}
+	}
+
+	// ✅ signed-url: imageObjectSaver が issuer を実装していれば自動で配線
+	if imageObjectSaver != nil {
+		if issuer, ok := any(imageObjectSaver).(ListImageSignedURLIssuer); ok {
+			uc.imageSignedURLIssuer = issuer
 		}
 	}
 
@@ -148,6 +199,8 @@ func NewListUsecaseWithCreator(
 		imageReader:      imageReader,
 		imageByIDReader:  imageByIDReader,
 		imageObjectSaver: imageObjectSaver,
+
+		imageSignedURLIssuer: nil, // auto-wire below
 	}
 
 	// listReader が ListLister/ListUpdater を実装していれば優先
@@ -171,7 +224,97 @@ func NewListUsecaseWithCreator(
 		}
 	}
 
+	// ✅ signed-url: imageObjectSaver が issuer を実装していれば自動で配線
+	if imageObjectSaver != nil {
+		if issuer, ok := any(imageObjectSaver).(ListImageSignedURLIssuer); ok {
+			uc.imageSignedURLIssuer = issuer
+		}
+	}
+
 	return uc
+}
+
+// ✅ NEW: IssueImageSignedURL は GCS signed-url を発行します。
+// - フロントの「signed_url_response_invalid」対策として、ここで必須フィールドを正規化して返す。
+// - uploadUrl/signedUrl、publicUrl/url、id/imageId を必ず揃える。
+func (uc *ListUsecase) IssueImageSignedURL(ctx context.Context, in ListImageIssueSignedURLInput) (ListImageIssueSignedURLOutput, error) {
+	if uc.imageSignedURLIssuer == nil {
+		return ListImageIssueSignedURLOutput{}, ErrNotSupported("List.IssueImageSignedURL")
+	}
+
+	in.ListID = strings.TrimSpace(in.ListID)
+	in.FileName = strings.TrimSpace(in.FileName)
+	in.ContentType = strings.TrimSpace(in.ContentType)
+
+	out, err := uc.imageSignedURLIssuer.IssueSignedURL(ctx, in)
+	if err != nil {
+		return ListImageIssueSignedURLOutput{}, err
+	}
+
+	// ---- normalize (trim + alias + defaults) ----
+	out.ID = strings.TrimSpace(out.ID)
+	out.ImageID = strings.TrimSpace(out.ImageID)
+	out.Bucket = strings.TrimSpace(out.Bucket)
+	out.ObjectPath = strings.TrimLeft(strings.TrimSpace(out.ObjectPath), "/")
+	out.UploadURL = strings.TrimSpace(out.UploadURL)
+	out.SignedURL = strings.TrimSpace(out.SignedURL)
+	out.PublicURL = strings.TrimSpace(out.PublicURL)
+	out.URL = strings.TrimSpace(out.URL)
+	out.FileName = strings.TrimSpace(out.FileName)
+	out.ContentType = strings.TrimSpace(out.ContentType)
+	out.ExpiresAt = strings.TrimSpace(out.ExpiresAt)
+
+	// aliases: uploadUrl <-> signedUrl
+	if out.UploadURL == "" && out.SignedURL != "" {
+		out.UploadURL = out.SignedURL
+	}
+	if out.SignedURL == "" && out.UploadURL != "" {
+		out.SignedURL = out.UploadURL
+	}
+
+	// aliases: publicUrl <-> url
+	if out.PublicURL == "" && out.URL != "" {
+		out.PublicURL = out.URL
+	}
+	if out.URL == "" && out.PublicURL != "" {
+		out.URL = out.PublicURL
+	}
+
+	// id defaults: objectPath を採用（方針）
+	if out.ID == "" && out.ObjectPath != "" {
+		out.ID = out.ObjectPath
+	}
+	// alias: imageId
+	if out.ImageID == "" && out.ID != "" {
+		out.ImageID = out.ID
+	}
+
+	// bucket default
+	if out.Bucket == "" {
+		out.Bucket = listimgdom.DefaultBucket
+	}
+
+	// public url default（空なら生成）
+	if out.PublicURL == "" && out.Bucket != "" && out.ObjectPath != "" {
+		out.PublicURL = listimgdom.PublicURL(out.Bucket, out.ObjectPath)
+		out.URL = out.PublicURL
+	}
+
+	// expiresAt default（空なら計算）
+	if out.ExpiresAt == "" {
+		sec := in.ExpiresInSeconds
+		if sec <= 0 {
+			sec = 15 * 60
+		}
+		out.ExpiresAt = time.Now().UTC().Add(time.Duration(sec) * time.Second).Format(time.RFC3339)
+	}
+
+	// 最低限の必須チェック（ここで落とすと handler も 500 にできる）
+	if out.UploadURL == "" || out.Bucket == "" || out.ObjectPath == "" || out.ID == "" {
+		return ListImageIssueSignedURLOutput{}, errors.New("signed_url_response_invalid")
+	}
+
+	return out, nil
 }
 
 // List は List 一覧を返します（GET /lists）
@@ -206,7 +349,7 @@ func (uc *ListUsecase) Create(ctx context.Context, item listdom.List) (listdom.L
 	listID := strings.TrimSpace(created.ID)
 	if listID != "" && uc.imageObjectSaver != nil {
 		if init, ok := any(uc.imageObjectSaver).(ListImageBucketInitializer); ok {
-			_ = init.EnsureListBucket(ctx, listID) // 失敗しても list 作成は成立しているので握りつぶし（必要なら上位で扱う）
+			_ = init.EnsureListBucket(ctx, listID) // 失敗しても list 作成は成立しているので握りつぶし
 		}
 	}
 
@@ -358,14 +501,7 @@ func (uc *ListUsecase) SetPrimaryImage(
 
 	// 1) URL が直接渡されている場合（方針: URL を List.ImageID に格納）
 	if isImageURL(iid) {
-		// ✅ ここだけログ：URLがそのまま使えるか
-		log.Printf(
-			"[list_usecase] listImage URL resolved=%t url=%q listID=%s imageID=%s",
-			true,
-			iid,
-			lid,
-			iid,
-		)
+		log.Printf("[list_usecase] listImage URL resolved=%t url=%q listID=%s imageID=%s", true, iid, lid, iid)
 
 		return uc.listPatcher.UpdateImageID(
 			ctx,
@@ -393,34 +529,18 @@ func (uc *ListUsecase) SetPrimaryImage(
 
 	imageURL := strings.TrimSpace(img.URL)
 	if imageURL == "" {
-		// 互換: もし ID が URL の形ならそれを使う
 		if isImageURL(strings.TrimSpace(img.ID)) {
 			imageURL = strings.TrimSpace(img.ID)
 		} else if strings.TrimSpace(img.ID) != "" {
-			// 最終フォールバック: DefaultBucket + objectPath(ID) で public URL を生成
 			imageURL = listimgdom.PublicURL(listimgdom.DefaultBucket, strings.TrimSpace(img.ID))
 		}
 	}
 	if strings.TrimSpace(imageURL) == "" {
-		// ✅ ここだけログ：URL 解決に失敗したことが分かるように
-		log.Printf(
-			"[list_usecase] listImage URL resolved=%t url=%q listID=%s imageID=%s",
-			false,
-			"",
-			lid,
-			iid,
-		)
+		log.Printf("[list_usecase] listImage URL resolved=%t url=%q listID=%s imageID=%s", false, "", lid, iid)
 		return listdom.List{}, listdom.ErrInvalidImageID
 	}
 
-	// ✅ ここだけログ：ListImage から URL 解決できたか
-	log.Printf(
-		"[list_usecase] listImage URL resolved=%t url=%q listID=%s imageID=%s",
-		true,
-		imageURL,
-		lid,
-		iid,
-	)
+	log.Printf("[list_usecase] listImage URL resolved=%t url=%q listID=%s imageID=%s", true, imageURL, lid, iid)
 
 	return uc.listPatcher.UpdateImageID(
 		ctx,
@@ -441,7 +561,6 @@ func isImageURL(v string) bool {
 }
 
 func buildPatchFromItem(item listdom.List) listdom.ListPatch {
-	// PUT 相当: 主要フィールドは常に送られてくる前提で patch を埋める
 	statusV := item.Status
 	assigneeV := strings.TrimSpace(item.AssigneeID)
 	imageV := strings.TrimSpace(item.ImageID) // ✅ URL格納方針

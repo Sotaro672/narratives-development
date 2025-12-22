@@ -14,8 +14,10 @@ import (
 	"time"
 
 	"cloud.google.com/go/storage"
+	"google.golang.org/api/googleapi"
 	"google.golang.org/api/iterator"
 
+	usecase "narratives/internal/application/usecase"
 	listimagedom "narratives/internal/domain/listImage"
 )
 
@@ -30,7 +32,7 @@ const FallbackListImageBucket = "narratives-development-list"
 // - objectPath: {listId}/{imageId}/{fileName}
 //
 // NOTE:
-// - gcs/tokenIcon_repository_gcs.go に sanitizeFileName が既にあるため、こちらでは定義しない。
+// - gcs/tokenIcon_repository_gcs.go に sanitizeFileName / isKeepObject が既にあるため、こちらでは定義しない。
 // - ファイル名の正規化は tokenIcon 側 sanitizeFileName を再利用する（同一 package gcs）。
 type ListImageRepositoryGCS struct {
 	Client *storage.Client
@@ -58,6 +60,156 @@ func (r *ListImageRepositoryGCS) ResolveBucket() string {
 		return b
 	}
 	return FallbackListImageBucket
+}
+
+// ============================================================
+// ✅ (Optional) Create-time init: EnsureListBucket
+// - usecase.ListImageBucketInitializer implementation
+// - "bucket を作る" ではなく "{listId}/.keep" を作る方式（prefix 初期化）
+// ============================================================
+
+func (r *ListImageRepositoryGCS) EnsureListBucket(ctx context.Context, listID string) error {
+	if r == nil || r.Client == nil {
+		return fmt.Errorf("ListImageRepositoryGCS.EnsureListBucket: storage client is nil")
+	}
+
+	listID = strings.TrimSpace(listID)
+	if listID == "" {
+		return fmt.Errorf("ListImageRepositoryGCS.EnsureListBucket: listID is empty")
+	}
+
+	bucket := r.ResolveBucket()
+
+	prefix := sanitizePathSegment(listID)
+	if prefix == "" {
+		return fmt.Errorf("ListImageRepositoryGCS.EnsureListBucket: invalid listID")
+	}
+
+	keepObject := path.Join(prefix, ".keep")
+	obj := r.Client.Bucket(bucket).Object(keepObject)
+
+	// Only create if not exist (best-effort)
+	w := obj.If(storage.Conditions{DoesNotExist: true}).NewWriter(ctx)
+	w.ContentType = "text/plain"
+	_, _ = w.Write([]byte("keep"))
+	if err := w.Close(); err != nil {
+		// If already exists, it's OK
+		if ge, ok := err.(*googleapi.Error); ok && ge.Code == 412 {
+			return nil
+		}
+		return fmt.Errorf("ListImageRepositoryGCS.EnsureListBucket: write keep failed: %w", err)
+	}
+
+	return nil
+}
+
+// ============================================================
+// ✅ A) signed-url: IssueSignedURL (usecase port implementation)
+// - handler → usecase → (this repo)
+// ============================================================
+
+// IssueSignedURL issues a signed PUT url for uploading list images.
+// ObjectPath policy: {listId}/{imageId}/{fileName}
+// Returns ID as objectPath (so POST /lists/{id}/images can SaveFromBucketObject using it).
+func (r *ListImageRepositoryGCS) IssueSignedURL(
+	ctx context.Context,
+	in usecase.ListImageIssueSignedURLInput,
+) (usecase.ListImageIssueSignedURLOutput, error) {
+	_ = ctx // SignedURL generation itself doesn't require ctx; kept for interface consistency.
+
+	if r == nil || r.Client == nil {
+		return usecase.ListImageIssueSignedURLOutput{}, fmt.Errorf("ListImageRepositoryGCS.IssueSignedURL: storage client is nil")
+	}
+
+	listID := strings.TrimSpace(in.ListID)
+	if listID == "" {
+		return usecase.ListImageIssueSignedURLOutput{}, fmt.Errorf("ListImageRepositoryGCS.IssueSignedURL: listID is empty")
+	}
+
+	ct := strings.ToLower(strings.TrimSpace(in.ContentType))
+	if ct == "" {
+		return usecase.ListImageIssueSignedURLOutput{}, fmt.Errorf("ListImageRepositoryGCS.IssueSignedURL: contentType is empty")
+	}
+	if !isSupportedListImageMIME(ct) {
+		return usecase.ListImageIssueSignedURLOutput{}, fmt.Errorf("ListImageRepositoryGCS.IssueSignedURL: unsupported contentType=%q", ct)
+	}
+
+	// optional: size validation (if provided)
+	if in.Size > 0 && in.Size > int64(listimagedom.DefaultMaxImageSizeBytes) {
+		return usecase.ListImageIssueSignedURLOutput{}, fmt.Errorf(
+			"ListImageRepositoryGCS.IssueSignedURL: file too large: %d > %d",
+			in.Size,
+			listimagedom.DefaultMaxImageSizeBytes,
+		)
+	}
+
+	// Normalize fileName (reuse sanitizeFileName from tokenIcon_repository_gcs.go)
+	normName := strings.TrimSpace(in.FileName)
+	if normName == "" {
+		normName = "image"
+	}
+	normName = sanitizeFileName(normName)
+	normName = ensureExtensionByMIME(normName, ct)
+
+	// Resolve imageID (always generate for signed-url flow)
+	imgID := newObjectID()
+
+	objPath, err := buildListImageObjectPath(listID, imgID, normName)
+	if err != nil {
+		return usecase.ListImageIssueSignedURLOutput{}, err
+	}
+
+	bucket := r.ResolveBucket()
+
+	// expiry
+	sec := in.ExpiresInSeconds
+	if sec <= 0 {
+		sec = 15 * 60 // default 15 minutes
+	}
+	if sec > 60*60 {
+		sec = 60 * 60 // cap 60 minutes
+	}
+	expiresAt := time.Now().UTC().Add(time.Duration(sec) * time.Second)
+
+	// Signed PUT URL (V4)
+	uploadURL, err := r.Client.Bucket(bucket).SignedURL(objPath, &storage.SignedURLOptions{
+		Scheme:      storage.SigningSchemeV4,
+		Method:      "PUT",
+		Expires:     expiresAt,
+		ContentType: ct,
+	})
+	if err != nil {
+		return usecase.ListImageIssueSignedURLOutput{}, fmt.Errorf("ListImageRepositoryGCS.IssueSignedURL: signed url failed: %w", err)
+	}
+
+	publicURL := fmt.Sprintf("https://storage.googleapis.com/%s/%s", bucket, objPath)
+
+	return usecase.ListImageIssueSignedURLOutput{
+		// ✅ 方針: ID = objectPath
+		ID:           objPath,
+		Bucket:       bucket,
+		ObjectPath:   objPath,
+		UploadURL:    uploadURL,
+		PublicURL:    publicURL,
+		FileName:     normName,
+		ContentType:  ct,
+		Size:         in.Size,
+		DisplayOrder: in.DisplayOrder,
+		ExpiresAt:    expiresAt.UTC().Format(time.RFC3339),
+	}, nil
+}
+
+func isSupportedListImageMIME(mime string) bool {
+	mime = strings.ToLower(strings.TrimSpace(mime))
+	if mime == "" {
+		return false
+	}
+	for k := range listimagedom.SupportedImageMIMEs {
+		if strings.ToLower(strings.TrimSpace(k)) == mime {
+			return true
+		}
+	}
+	return false
 }
 
 // UploadResult is a pure GCS result (record creation is handled elsewhere).
@@ -180,7 +332,7 @@ func (r *ListImageRepositoryGCS) DeleteObject(ctx context.Context, bucket string
 // usecase required methods (方針A)
 // - ListByListID(ctx, listID) ([]ListImage, error)
 // - GetByID(ctx, id) (ListImage, error)
-// - SaveFromBucketObject(ctx, bucket, objectPath, listID, fileName, size, displayOrder, createdBy, createdAt) (ListImage, error)
+// - SaveFromBucketObject(ctx, id, listID, bucket, objectPath, size, displayOrder, createdBy, createdAt) (ListImage, error)
 // ============================================================
 
 // ListByListID lists images under "{listId}/" prefix.
@@ -277,10 +429,10 @@ func (r *ListImageRepositoryGCS) GetByID(ctx context.Context, id string) (listim
 // - usecase interface 互換のため引数は残す（未使用）。
 func (r *ListImageRepositoryGCS) SaveFromBucketObject(
 	ctx context.Context,
+	id string,
+	listID string,
 	bucket string,
 	objectPath string,
-	listID string,
-	fileName string,
 	size int64,
 	displayOrder int,
 	createdBy string, // unused (kept for compatibility)
@@ -303,9 +455,24 @@ func (r *ListImageRepositoryGCS) SaveFromBucketObject(
 		b = r.ResolveBucket()
 	}
 
+	// prefer explicit objectPath; fallback to id (which is expected to be objectPath)
 	obj := strings.TrimLeft(strings.TrimSpace(objectPath), "/")
 	if obj == "" {
+		obj = strings.TrimLeft(strings.TrimSpace(id), "/")
+	}
+	if obj == "" {
 		return listimagedom.ListImage{}, fmt.Errorf("ListImageRepositoryGCS.SaveFromBucketObject: objectPath is empty")
+	}
+
+	// final id: policy = objectPath
+	finalID := strings.TrimSpace(id)
+	if finalID == "" {
+		finalID = obj
+	} else {
+		// id が URL で来た場合でも、ここでは objectPath を採用（GetByID と整合）
+		if _, _, ok := listimagedom.ParseGCSURL(finalID); ok {
+			finalID = obj
+		}
 	}
 
 	// object exists?
@@ -324,7 +491,11 @@ func (r *ListImageRepositoryGCS) SaveFromBucketObject(
 		imageID = newObjectID()
 	}
 
-	fn := strings.TrimSpace(fileName)
+	// fileName: metadata 優先 → objectPath の base
+	fn := ""
+	if attrs.Metadata != nil {
+		fn = strings.TrimSpace(attrs.Metadata["fileName"])
+	}
 	if fn == "" {
 		fn = path.Base(obj)
 	}
@@ -350,6 +521,7 @@ func (r *ListImageRepositoryGCS) SaveFromBucketObject(
 		meta[k] = v
 	}
 
+	// ✅ listId は引数を優先して正す（prefix 側 sanitize の影響を受けない）
 	meta["listId"] = listID
 	meta["imageId"] = imageID
 	meta["fileName"] = fn
@@ -365,18 +537,18 @@ func (r *ListImageRepositoryGCS) SaveFromBucketObject(
 
 	// domain object (id = objectPath)
 	li, derr := listimagedom.NewFromGCSObject(
-		strings.TrimSpace(newAttrs.Name), // id
+		strings.TrimSpace(finalID), // ✅ id
 		listID,
 		fn,
 		finalSize,
 		displayOrder,
 		b,
-		newAttrs.Name,
+		strings.TrimSpace(newAttrs.Name), // objectPath
 	)
 	if derr != nil {
 		// best-effort fallback（domain validate が落ちても UI を止めない）
 		tmp := listimagedom.ListImage{
-			ID:           strings.TrimSpace(newAttrs.Name),
+			ID:           strings.TrimSpace(finalID),
 			ListID:       listID,
 			URL:          publicURL,
 			FileName:     fn,
@@ -507,10 +679,15 @@ func buildListImageFromAttrs(bucket string, attrs *storage.ObjectAttrs) (listima
 		return strings.TrimSpace(meta[k])
 	}
 
-	listID, _, ok := splitListImageObjectPath(obj)
-	if !ok {
-		// 期待ポリシー外の object は除外（安全側）
-		return listimagedom.ListImage{}, false
+	// listID: metadata 優先（sanitize の影響を受けない）
+	listID := getMeta("listId")
+	if listID == "" {
+		lid, _, ok := splitListImageObjectPath(obj)
+		if !ok {
+			// 期待ポリシー外の object は除外（安全側）
+			return listimagedom.ListImage{}, false
+		}
+		listID = lid
 	}
 
 	// fileName

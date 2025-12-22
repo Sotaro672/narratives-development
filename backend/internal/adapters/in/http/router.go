@@ -81,6 +81,11 @@ type RouterDeps struct {
 	// ✅ NEW: List detail DTO assembler（/lists/{id} detail DTO）
 	ListDetailQuery *companyquery.ListDetailQuery
 
+	// ✅ NEW: ListImage uploader/deleter（/lists/{id}/images/... 用）
+	// - DI で注入できるように router deps に足す
+	ListImageUploader handlers.ListImageUploader
+	ListImageDeleter  handlers.ListImageDeleter
+
 	// ★ NameResolver（ID→名前/型番解決）
 	NameResolver *resolver.NameResolver
 
@@ -272,8 +277,17 @@ func NewRouter(deps RouterDeps) http.Handler {
 	if deps.ListUC != nil {
 		var listH http.Handler
 
-		// ✅ listManagement / listDetail を分離した Query を注入
-		if deps.ListManagementQuery != nil || deps.ListDetailQuery != nil {
+		// ✅ ListImage が注入されているなら、必ず AndListImage ctor を使う
+		if deps.ListImageUploader != nil || deps.ListImageDeleter != nil {
+			listH = handlers.NewListHandlerWithQueriesAndListImage(
+				deps.ListUC,
+				deps.ListManagementQuery,
+				deps.ListDetailQuery,
+				deps.ListImageUploader,
+				deps.ListImageDeleter,
+			)
+		} else if deps.ListManagementQuery != nil || deps.ListDetailQuery != nil {
+			// ✅ listManagement / listDetail を分離した Query を注入
 			listH = handlers.NewListHandlerWithQueries(
 				deps.ListUC,
 				deps.ListManagementQuery,

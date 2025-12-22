@@ -1,4 +1,4 @@
-// Firebase Auth から ID トークンを取得
+// frontend\console\list\src\infrastructure\http\listRepositoryHTTP.tsx
 import { auth } from "../../../../shell/src/auth/infrastructure/config/firebaseClient";
 
 /**
@@ -40,6 +40,7 @@ export type CreateListInput = {
   id?: string;
 
   // ルート（inventory/list/create から作成する想定）
+  // ✅ 方針A: inventoryId は「pb__tb」をそのまま通す（絶対に split しない）
   inventoryId?: string;
 
   // UI 入力
@@ -116,12 +117,32 @@ export type ListImageDTO = Record<string, any>;
 
 /**
  * ✅ Signed URL 発行の戻り（Policy A）
+ *
+ * IMPORTANT:
+ * - backend の返却は uploadUrl/publicUrl/objectPath/id... になりがち
+ * - UI/呼び出し側は signedUrl を使いたいケースがあるため、この DTO では signedUrl を正とし、
+ *   issueListImageSignedUrlHTTP 内で uploadUrl → signedUrl に正規化する
  */
 export type SignedListImageUploadDTO = {
+  id?: string;
+
   bucket?: string;
+
+  // ✅ 必須（= GCS 上の objectPath / key）
   objectPath: string;
+
+  // ✅ PUT 先（= signed URL）
   signedUrl: string;
+
+  // ✅ 表示用（public access を想定）
   publicUrl?: string;
+
+  // optional metadata
+  expiresAt?: string;
+  contentType?: string;
+  size?: number;
+  displayOrder?: number;
+  fileName?: string;
 };
 
 /**
@@ -153,10 +174,11 @@ function s(v: unknown): string {
 }
 
 /**
- * ✅ listId に "__{something}" が混入しても事故らないように正規化
- * - 例: "listId__imageId" / "inventoryId__pbId__xxx" のような混入を除去
+ * ✅ list のドキュメントID用の正規化
+ * - これは "listId__imageId" など事故混入の保険
+ * - ただし inventoryId (pb__tb) には絶対に使わない（方針A）
  */
-function normalizeListId(v: unknown): string {
+function normalizeListDocId(v: unknown): string {
   const id = s(v);
   if (!id) return "";
   return id.split("__")[0];
@@ -169,9 +191,24 @@ function toNumberOrNull(v: unknown): number | null {
   return n;
 }
 
+/**
+ * ✅ objectPath を URL パスとして安全にする
+ * - "/" はパス区切りとして残したいのでセグメント単位で encodeURIComponent
+ * - 例: "lists/xxx/スクショ (1).png" を安全なURLへ
+ */
+function encodeGcsObjectPath(objectPath: string): string {
+  const raw = String(objectPath ?? "").trim().replace(/^\/+/, "");
+  if (!raw) return "";
+  return raw
+    .split("/")
+    .map((seg) => encodeURIComponent(seg))
+    .join("/");
+}
+
 function buildPublicGcsUrl(bucket: string, objectPath: string): string {
   const b = s(bucket) || LIST_IMAGE_BUCKET;
-  const op = String(objectPath ?? "").trim().replace(/^\/+/, "");
+  const opRaw = String(objectPath ?? "").trim().replace(/^\/+/, "");
+  const op = encodeGcsObjectPath(opRaw);
   if (!b || !op) return "";
   return `https://storage.googleapis.com/${b}/${op}`;
 }
@@ -179,8 +216,8 @@ function buildPublicGcsUrl(bucket: string, objectPath: string): string {
 /**
  * ✅ ListImage から "表示用URL" を解決
  * 優先順位:
- * 1) publicUrl/url/signedUrl 等
- * 2) bucket + objectPath から public URL を組み立て
+ * 1) publicUrl/url/signedUrl 等（= backend が完成URLを返す場合）
+ * 2) bucket + objectPath から public URL を組み立て（objectPathはURLエンコード）
  */
 function resolveListImageUrl(img: ListImageDTO): string {
   const u =
@@ -189,8 +226,11 @@ function resolveListImageUrl(img: ListImageDTO): string {
     s((img as any)?.url) ||
     s((img as any)?.URL) ||
     s((img as any)?.signedUrl) ||
-    s((img as any)?.signedURL);
+    s((img as any)?.signedURL) ||
+    s((img as any)?.uploadUrl) ||
+    s((img as any)?.uploadURL);
 
+  // ✅ ここは backend が返したURLを尊重（既にエンコード済み/署名付き等の可能性）
   if (u) return u;
 
   const bucket = s((img as any)?.bucket) || s((img as any)?.Bucket) || "";
@@ -219,7 +259,10 @@ function parseDateMs(v: unknown): number {
   return ms;
 }
 
-function normalizeListImageUrls(listImages: ListImageDTO[], primaryImageId?: string): string[] {
+function normalizeListImageUrls(
+  listImages: ListImageDTO[],
+  primaryImageId?: string,
+): string[] {
   const pid = s(primaryImageId);
 
   const rows = (Array.isArray(listImages) ? listImages : [])
@@ -272,7 +315,7 @@ function normalizeListImageUrls(listImages: ListImageDTO[], primaryImageId?: str
  * - 空なら /lists/{id}/images から組み立てて補完
  */
 async function ensureDetailHasImageUrls(dto: ListDTO, listIdRaw: string): Promise<ListDTO> {
-  const listId = normalizeListId(listIdRaw);
+  const listId = normalizeListDocId(listIdRaw);
   const anyDto = dto as any;
 
   const currentUrls = Array.isArray(anyDto?.imageUrls) ? (anyDto.imageUrls as any[]) : [];
@@ -355,13 +398,14 @@ function normalizePricesForBackendUpdate(
 /**
  * ✅ CreateList payload（最小）
  * - 「create時に送るのは modelId と price」の方針を厳守
+ * - ✅ 方針A: inventoryId は pb__tb をそのまま送る
  */
 function buildCreateListPayloadArray(input: CreateListInput): Record<string, any> {
   const u = auth.currentUser;
   const uid = s(u?.uid);
 
-  const inventoryId = normalizeListId(input?.inventoryId);
-  const id = normalizeListId(input?.id) || inventoryId;
+  const inventoryId = s(input?.inventoryId); // ✅ splitしない
+  const id = normalizeListDocId(input?.id) || inventoryId; // ✅ id未指定なら inventoryId を採用（従来方針）
 
   if (!id) {
     throw new Error("missing_id");
@@ -578,6 +622,62 @@ function extractFirstItemFromAny(json: any): any | null {
 }
 
 /**
+ * ✅ Signed URL レスポンスを “呼び出し側が使える形” に正規化する
+ * - backend: uploadUrl/publicUrl/objectPath/id...
+ * - legacy: signedUrl/publicUrl/objectPath...
+ */
+function normalizeSignedListImageUploadDTO(raw: any): SignedListImageUploadDTO {
+  const id = s(raw?.id) || s(raw?.ID) || undefined;
+  const bucket = s(raw?.bucket) || s(raw?.Bucket) || undefined;
+
+  const objectPath =
+    s(raw?.objectPath) ||
+    s(raw?.ObjectPath) ||
+    s(raw?.path) ||
+    s(raw?.Path) ||
+    s(raw?.id) || // backend では id=objectPath のことがある
+    "";
+
+  const signedUrl =
+    s(raw?.signedUrl) ||
+    s(raw?.signedURL) ||
+    s(raw?.uploadUrl) ||
+    s(raw?.uploadURL) ||
+    "";
+
+  const publicUrl =
+    s(raw?.publicUrl) || s(raw?.publicURL) || s(raw?.url) || s(raw?.URL) || "";
+
+  // もし publicUrl が無いなら bucket+objectPath から組み立て（表示用）
+  const builtPublicUrl = publicUrl || buildPublicGcsUrl(bucket || "", objectPath);
+
+  const expiresAt = s(raw?.expiresAt) || s(raw?.ExpiresAt) || undefined;
+  const contentType = s(raw?.contentType) || s(raw?.ContentType) || undefined;
+
+  const size = Number(raw?.size);
+  const displayOrder = Number(raw?.displayOrder);
+  const fileName = s(raw?.fileName) || s(raw?.FileName) || undefined;
+
+  if (!objectPath || !signedUrl) {
+    // inventory 側のエラーハンドリングが msg === "signed_url_response_invalid" を見てるので合わせる
+    throw new Error("signed_url_response_invalid");
+  }
+
+  return {
+    id,
+    bucket,
+    objectPath,
+    signedUrl,
+    publicUrl: builtPublicUrl || undefined,
+    expiresAt,
+    contentType,
+    size: Number.isFinite(size) ? size : undefined,
+    displayOrder: Number.isFinite(displayOrder) ? displayOrder : undefined,
+    fileName,
+  };
+}
+
+/**
  * ===========
  * API
  * ===========
@@ -634,7 +734,7 @@ export async function createListHTTP(input: CreateListInput): Promise<ListDTO> {
  * PUT /lists/{id}
  */
 export async function updateListByIdHTTP(input: UpdateListInput): Promise<ListDTO> {
-  const listId = normalizeListId(input?.listId);
+  const listId = normalizeListDocId(input?.listId);
   if (!listId) throw new Error("invalid_list_id");
 
   const payloadArray = buildUpdateListPayloadArray(input);
@@ -702,7 +802,7 @@ export async function fetchListsHTTP(): Promise<ListDTO[]> {
  * GET /lists/{id}
  */
 export async function fetchListByIdHTTP(listId: string): Promise<ListDTO> {
-  const id = normalizeListId(listId);
+  const id = normalizeListDocId(listId);
   if (!id) {
     throw new Error("invalid_list_id");
   }
@@ -752,7 +852,7 @@ export async function fetchListDetailHTTP(args: {
   listId: string;
   inventoryIdHint?: string;
 }): Promise<ListDTO> {
-  const listId = normalizeListId(args.listId);
+  const listId = normalizeListDocId(args.listId);
   if (!listId) {
     throw new Error("invalid_list_id");
   }
@@ -771,13 +871,16 @@ export async function fetchListDetailHTTP(args: {
       listId,
       createdByName: s((dto as any)?.createdByName),
       updatedByName: s((dto as any)?.updatedByName),
-      imageUrlsCount: Array.isArray((dto as any)?.imageUrls) ? (dto as any).imageUrls.length : 0,
+      imageUrlsCount: Array.isArray((dto as any)?.imageUrls)
+        ? (dto as any).imageUrls.length
+        : 0,
       dto,
     });
 
     return dto;
   } catch (e1) {
-    const inv = normalizeListId(args.inventoryIdHint) || listId;
+    // ✅ inventoryIdHint は pb__tb をそのまま使う（splitしない）
+    const inv = s(args.inventoryIdHint) || listId;
 
     console.log("[list/listRepositoryHTTP] fetchListDetailHTTP fallback start", {
       listId,
@@ -808,7 +911,9 @@ export async function fetchListDetailHTTP(args: {
         inventoryId: inv,
         createdByName: s((first as any)?.createdByName),
         updatedByName: s((first as any)?.updatedByName),
-        imageUrlsCount: Array.isArray((first as any)?.imageUrls) ? (first as any).imageUrls.length : 0,
+        imageUrlsCount: Array.isArray((first as any)?.imageUrls)
+          ? (first as any).imageUrls.length
+          : 0,
         dto: first,
         raw: json,
       });
@@ -829,7 +934,7 @@ export async function fetchListDetailHTTP(args: {
  * GET /lists/{id}/aggregate
  */
 export async function fetchListAggregateHTTP(listId: string): Promise<ListAggregateDTO> {
-  const id = normalizeListId(listId);
+  const id = normalizeListDocId(listId);
   if (!id) throw new Error("invalid_list_id");
 
   return await requestJSON<ListAggregateDTO>({
@@ -842,7 +947,7 @@ export async function fetchListAggregateHTTP(listId: string): Promise<ListAggreg
  * GET /lists/{id}/images
  */
 export async function fetchListImagesHTTP(listId: string): Promise<ListImageDTO[]> {
-  const id = normalizeListId(listId);
+  const id = normalizeListDocId(listId);
   if (!id) throw new Error("invalid_list_id");
 
   return await requestJSON<ListImageDTO[]>({
@@ -858,7 +963,7 @@ export async function fetchListImageUrlsHTTP(args: {
   listId: string;
   primaryImageId?: string;
 }): Promise<string[]> {
-  const listId = normalizeListId(args.listId);
+  const listId = normalizeListDocId(args.listId);
   if (!listId) throw new Error("invalid_list_id");
 
   const imgs = await fetchListImagesHTTP(listId);
@@ -868,8 +973,6 @@ export async function fetchListImageUrlsHTTP(args: {
 /**
  * ✅ NEW: signed-url 発行（Policy A）
  * POST /lists/{id}/images/signed-url
- *
- * ※ listId は必ず normalize してから叩く（404対策）
  */
 export async function issueListImageSignedUrlHTTP(args: {
   listId: string;
@@ -878,7 +981,8 @@ export async function issueListImageSignedUrlHTTP(args: {
   size: number;
   displayOrder: number;
 }): Promise<SignedListImageUploadDTO> {
-  const listId = normalizeListId(args.listId);
+  // ✅ ここは list の docId なので normalize してOK（事故混入対策）
+  const listId = normalizeListDocId(args.listId);
   if (!listId) throw new Error("invalid_list_id");
 
   const payload = {
@@ -888,7 +992,8 @@ export async function issueListImageSignedUrlHTTP(args: {
     displayOrder: Number(args.displayOrder || 0),
   };
 
-  return await requestJSON<SignedListImageUploadDTO>({
+  // backend の返却キー揺れ（uploadUrl / signedUrl / publicUrl など）をここで吸収する
+  const raw = await requestJSON<any>({
     method: "POST",
     path: `/lists/${encodeURIComponent(listId)}/images/signed-url`,
     body: payload,
@@ -899,6 +1004,8 @@ export async function issueListImageSignedUrlHTTP(args: {
       body: payload,
     },
   });
+
+  return normalizeSignedListImageUploadDTO(raw);
 }
 
 /**
@@ -916,7 +1023,7 @@ export async function saveListImageFromGCSHTTP(args: {
   createdBy?: string;
   createdAt?: string; // RFC3339 optional
 }): Promise<ListImageDTO> {
-  const listId = normalizeListId(args.listId);
+  const listId = normalizeListDocId(args.listId);
   if (!listId) throw new Error("invalid_list_id");
 
   const payload = {
@@ -946,7 +1053,7 @@ export async function setListPrimaryImageHTTP(args: {
   updatedBy?: string;
   now?: string; // RFC3339 optional
 }): Promise<ListDTO> {
-  const listId = normalizeListId(args.listId);
+  const listId = normalizeListDocId(args.listId);
   if (!listId) throw new Error("invalid_list_id");
 
   const payload = {
