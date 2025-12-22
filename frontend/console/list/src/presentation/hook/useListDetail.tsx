@@ -151,15 +151,6 @@ async function requestJSON<T>(args: {
 
   const bodyText = args.body === undefined ? undefined : JSON.stringify(args.body);
 
-  // eslint-disable-next-line no-console
-  console.log("[console/list/update] request", {
-    method: args.method,
-    url,
-    bodyBytes: bodyText ? bodyText.length : 0,
-    body: args.body,
-    bodyJSON: bodyText,
-  });
-
   const res = await fetch(url, {
     method: args.method,
     headers: {
@@ -177,16 +168,6 @@ async function requestJSON<T>(args: {
   } catch {
     json = { raw: text };
   }
-
-  // eslint-disable-next-line no-console
-  console.log("[console/list/update] response", {
-    method: args.method,
-    url,
-    status: res.status,
-    ok: res.ok,
-    responseBytes: text ? text.length : 0,
-    json,
-  });
 
   if (!res.ok) {
     const msg =
@@ -272,6 +253,27 @@ function revokeDraftBlobUrls(items: DraftImage[]) {
   }
 }
 
+function pad2(n: number): string {
+  return String(n).padStart(2, "0");
+}
+
+// ✅ yyyy/mm/dd/hh/mm 形式（入力が不正ならそのまま返す）
+function formatYMDHM(v: unknown): string {
+  const raw = s(v);
+  if (!raw) return "";
+
+  const d = new Date(raw);
+  if (!Number.isFinite(d.getTime())) return raw;
+
+  const yyyy = d.getFullYear();
+  const mm = pad2(d.getMonth() + 1);
+  const dd = pad2(d.getDate());
+  const hh = pad2(d.getHours());
+  const mi = pad2(d.getMinutes());
+
+  return `${yyyy}/${mm}/${dd}/${hh}/${mi}`;
+}
+
 export function useListDetail(): UseListDetailResult {
   const navigate = useNavigate();
   const params = useParams<ListDetailRouteParams>();
@@ -350,12 +352,16 @@ export function useListDetail(): UseListDetailResult {
     assigneeName,
 
     createdByName,
-    createdAt,
+    createdAt: createdAtRaw,
   } = derived;
 
   // ✅ NEW: deriveListDetail が返している可能性がある更新情報を best-effort で拾う
   const updatedByName = s((derived as any)?.updatedByName);
-  const updatedAt = s((derived as any)?.updatedAt);
+  const updatedAtRaw = s((derived as any)?.updatedAt);
+
+  // ✅ 表示用フォーマット
+  const createdAt = React.useMemo(() => formatYMDHM(createdAtRaw), [createdAtRaw]);
+  const updatedAt = React.useMemo(() => formatYMDHM(updatedAtRaw), [updatedAtRaw]);
 
   const decisionNorm = React.useMemo(() => normalizeDecision(decision), [decision]);
 
@@ -401,18 +407,8 @@ export function useListDetail(): UseListDetailResult {
     setDraftDecision(decisionNorm);
     setDraftImages(cloneDraftImagesFromUrls(viewImageUrls));
     setSaveError("");
-
-    // eslint-disable-next-line no-console
-    console.log("[console/list/edit] enter", {
-      listId: s(listId),
-      listingTitle,
-      descriptionLen: s(description).length,
-      decision: decisionNorm,
-      priceRowsCount: Array.isArray(viewPriceRows) ? viewPriceRows.length : 0,
-    });
-
     setIsEdit(true);
-  }, [listId, listingTitle, description, viewPriceRows, decisionNorm, viewImageUrls]);
+  }, [listingTitle, description, viewPriceRows, decisionNorm, viewImageUrls]);
 
   const onCancel = React.useCallback(() => {
     // blob 解放
@@ -510,19 +506,6 @@ export function useListDetail(): UseListDetailResult {
     (index: number, price: number | null, row: PriceRow) => {
       if (!isEdit) return;
 
-      // eslint-disable-next-line no-console
-      console.log("[console/list/priceCard] onChangePrice", {
-        listId: s(listId),
-        index,
-        nextPrice: price,
-        rowSnapshot: {
-          id: s((row as any)?.id),
-          size: s((row as any)?.size),
-          color: s((row as any)?.color),
-          prevPrice: (row as any)?.price ?? null,
-        },
-      });
-
       setDraftPriceRows((prev) => {
         const next = Array.isArray(prev) ? [...prev] : [];
         if (!next[index]) return prev;
@@ -539,7 +522,7 @@ export function useListDetail(): UseListDetailResult {
         return next;
       });
     },
-    [isEdit, listId],
+    [isEdit],
   );
 
   // ============================================================
@@ -596,15 +579,6 @@ export function useListDetail(): UseListDetailResult {
       if (s(dto?.inventoryId)) updatePayload.inventoryId = s(dto?.inventoryId);
       if (s(dto?.assigneeId)) updatePayload.assigneeId = s(dto?.assigneeId);
 
-      // eslint-disable-next-line no-console
-      console.log("[console/list/update] PUT payload(final)", {
-        listId: id,
-        keys: Object.keys(updatePayload),
-        status: backendStatus,
-        pricesCount: Array.isArray(updatePayload.prices) ? updatePayload.prices.length : 0,
-        pricesSample: (Array.isArray(updatePayload.prices) ? updatePayload.prices : []).slice(0, 4),
-      });
-
       setSaving(true);
       setSaveError("");
 
@@ -626,20 +600,8 @@ export function useListDetail(): UseListDetailResult {
 
         setDTO(fresh);
         setIsEdit(false);
-
-        // eslint-disable-next-line no-console
-        console.log("[console/list/update] after-save reload ok", {
-          listId: id,
-          freshPricesCount: Array.isArray((fresh as any)?.prices)
-            ? (fresh as any).prices.length
-            : undefined,
-        });
       } catch (e) {
         const msg = String(e instanceof Error ? e.message : e);
-
-        // eslint-disable-next-line no-console
-        console.log("[console/list/update] PUT failed", { listId: id, error: msg });
-
         if (cancelledRef.current) return;
         setSaveError(msg);
       } finally {

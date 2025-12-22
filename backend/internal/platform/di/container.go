@@ -27,7 +27,7 @@ import (
 	// ★ ProductionUsecase（application/production）
 	productionapp "narratives/internal/application/production"
 
-	// ★ CompanyProductionQueryService / MintRequestQueryService / InventoryQuery / ListCreateQuery / ListQuery
+	// ★ CompanyProductionQueryService / MintRequestQueryService / InventoryQuery / ListCreateQuery / ListManagementQuery / ListDetailQuery
 	companyquery "narratives/internal/application/query"
 
 	resolver "narratives/internal/application/resolver"
@@ -114,8 +114,11 @@ type Container struct {
 	// ✅ NEW: listCreate 画面用 DTO（GET /inventory/list-create/...）
 	ListCreateQuery *companyquery.ListCreateQuery
 
-	// ✅ NEW: lists 一覧 DTO（GET /lists）
-	ListQuery *companyquery.ListQuery
+	// ✅ NEW: lists 一覧 DTO（GET /lists）= listManagement.tsx 用
+	ListManagementQuery *companyquery.ListManagementQuery
+
+	// ✅ NEW: list detail DTO（GET /lists/{id}）= listDetail.tsx 用
+	ListDetailQuery *companyquery.ListDetailQuery
 
 	// ★ 検品アプリ用 ProductUsecase（/inspector/products/{id}）
 	ProductUC *uc.ProductUsecase
@@ -465,14 +468,26 @@ func NewContainer(ctx context.Context) (*Container, error) {
 		nameResolver,
 	)
 
-	// ✅ ListQuery: brandId 解決 + inventory stock + company boundary
-	listQuery := companyquery.NewListQueryWithBrandInventoryAndInventoryRows(
-		listRepo, // ✅ ListLister/Count (wrapper 経由)
+	// ✅ NEW: ListManagementQuery（/lists 一覧 = listManagement.tsx 用）
+	// - company boundary は inventoryQuery の ListByCurrentCompany を使う想定
+	listManagementQuery := companyquery.NewListManagementQueryWithBrandInventoryAndInventoryRows(
+		listRepo, // ListLister (+ GetByID 実装なら内部で流用される)
 		nameResolver,
 		productBlueprintRepo,
 		&tbGetterAdapter{repo: tokenBlueprintRepo},
-		inventoryQuery,
-		inventoryQuery,
+		inventoryQuery, // InventoryRowsLister
+	)
+
+	// ✅ NEW: ListDetailQuery（/lists/{id} = listDetail.tsx 用）
+	// - stock は inventoryQuery の GetDetailByID を使う想定
+	// - company boundary は inventoryQuery の ListByCurrentCompany を使う想定
+	listDetailQuery := companyquery.NewListDetailQueryWithBrandInventoryAndInventoryRows(
+		listRepo, // ListGetter (GetByID) を満たす想定（listRepo が実装していればOK）
+		nameResolver,
+		productBlueprintRepo,
+		&tbGetterAdapter{repo: tokenBlueprintRepo},
+		inventoryQuery, // InventoryDetailGetter (stock)
+		inventoryQuery, // InventoryRowsLister (company boundary)
 	)
 
 	// 6. Assemble container
@@ -525,7 +540,9 @@ func NewContainer(ctx context.Context) (*Container, error) {
 
 		InventoryQuery:  inventoryQuery,
 		ListCreateQuery: listCreateQuery,
-		ListQuery:       listQuery,
+
+		ListManagementQuery: listManagementQuery,
+		ListDetailQuery:     listDetailQuery,
 
 		ProductUC:    productUC,
 		InspectionUC: inspectionUC,
@@ -579,12 +596,12 @@ func (c *Container) RouterDeps() httpin.RouterDeps {
 		CompanyProductionQueryService: c.CompanyProductionQueryService,
 		MintRequestQueryService:       c.MintRequestQueryService,
 
-		InventoryQuery: c.InventoryQuery,
-
+		InventoryQuery:  c.InventoryQuery,
 		ListCreateQuery: c.ListCreateQuery,
 
-		// ✅ NEW
-		ListQuery: c.ListQuery,
+		// ✅ NEW: listManagement / listDetail 分離
+		ListManagementQuery: c.ListManagementQuery,
+		ListDetailQuery:     c.ListDetailQuery,
 
 		ProductUC:    c.ProductUC,
 		InspectionUC: c.InspectionUC,

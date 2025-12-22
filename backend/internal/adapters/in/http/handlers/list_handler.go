@@ -1,3 +1,4 @@
+// backend/internal/adapters/in/http/handlers/list_handler.go
 package handlers
 
 import (
@@ -20,16 +21,33 @@ import (
 
 type ListHandler struct {
 	uc *usecase.ListUsecase
-	q  *query.ListQuery
+
+	// ✅ split: listManagement.tsx / listCreate.tsx 向け
+	qMgmt *query.ListManagementQuery
+
+	// ✅ split: listDetail.tsx 向け
+	qDetail *query.ListDetailQuery
 }
 
 func NewListHandler(uc *usecase.ListUsecase) http.Handler {
-	return &ListHandler{uc: uc, q: nil}
+	return &ListHandler{uc: uc, qMgmt: nil, qDetail: nil}
 }
 
-// ✅ Query を注入できる ctor
-func NewListHandlerWithQuery(uc *usecase.ListUsecase, q *query.ListQuery) http.Handler {
-	return &ListHandler{uc: uc, q: q}
+// ✅ NEW: 2種類の Query を注入できる ctor
+func NewListHandlerWithQueries(
+	uc *usecase.ListUsecase,
+	qMgmt *query.ListManagementQuery,
+	qDetail *query.ListDetailQuery,
+) http.Handler {
+	return &ListHandler{uc: uc, qMgmt: qMgmt, qDetail: qDetail}
+}
+
+// ✅ backward-ish: 片方だけ注入したい場合
+func NewListHandlerWithManagementQuery(uc *usecase.ListUsecase, q *query.ListManagementQuery) http.Handler {
+	return &ListHandler{uc: uc, qMgmt: q, qDetail: nil}
+}
+func NewListHandlerWithDetailQuery(uc *usecase.ListUsecase, q *query.ListDetailQuery) http.Handler {
+	return &ListHandler{uc: uc, qMgmt: nil, qDetail: q}
 }
 
 func (h *ListHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
@@ -143,8 +161,8 @@ func (h *ListHandler) createSeed(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Query が無ければ "画面情報を揃える" ができないため Not Implemented 扱い
-	if h.q == nil {
+	// ✅ management query が無いと seed を作れない
+	if h.qMgmt == nil {
 		w.WriteHeader(http.StatusNotImplemented)
 		_ = json.NewEncoder(w).Encode(map[string]string{"error": "not_implemented"})
 		return
@@ -207,7 +225,7 @@ func (h *ListHandler) createSeed(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	out, err := h.q.BuildCreateSeed(ctx, invID, modelIDs)
+	out, err := h.qMgmt.BuildCreateSeed(ctx, invID, modelIDs)
 	if err != nil {
 		if isNotSupported(err) {
 			w.WriteHeader(http.StatusNotImplemented)
@@ -307,7 +325,7 @@ func (h *ListHandler) listIndex(w http.ResponseWriter, r *http.Request) {
 				f.ModelNumbers = append(f.ModelNumbers, x)
 			}
 		}
-	} else if vv := qp["model_ids"]; len(vv) > 0 { // snake_case 互換（必要なら）
+	} else if vv := qp["model_ids"]; len(vv) > 0 {
 		for _, x := range vv {
 			x = strings.TrimSpace(x)
 			if x != "" {
@@ -343,9 +361,9 @@ func (h *ListHandler) listIndex(w http.ResponseWriter, r *http.Request) {
 	perPage := parseIntDefault(qp.Get("perPage"), 50)
 	page := listdom.Page{Number: pageNum, PerPage: perPage}
 
-	// ✅ Query があれば query 経由で tokenName/assigneeName を解決して返す
-	if h.q != nil {
-		pr, err := h.q.ListRows(ctx, f, sort, page)
+	// ✅ management query があれば query 経由で返す
+	if h.qMgmt != nil {
+		pr, err := h.qMgmt.ListRows(ctx, f, sort, page)
 		if err != nil {
 			if isNotSupported(err) {
 				w.WriteHeader(http.StatusNotImplemented)
@@ -420,7 +438,7 @@ func (h *ListHandler) create(w http.ResponseWriter, r *http.Request) {
 	item.Title = strings.TrimSpace(item.Title)
 	item.AssigneeID = strings.TrimSpace(item.AssigneeID)
 	item.InventoryID = strings.TrimSpace(item.InventoryID)
-	item.ImageID = strings.TrimSpace(item.ImageID) // create 時は必須にしない（後で images/primary-image で設定）
+	item.ImageID = strings.TrimSpace(item.ImageID)
 	item.Description = strings.TrimSpace(item.Description)
 	item.CreatedBy = strings.TrimSpace(item.CreatedBy)
 
@@ -457,10 +475,7 @@ func (h *ListHandler) create(w http.ResponseWriter, r *http.Request) {
 
 	now := time.Now().UTC()
 
-	// createdAt はサーバ時刻を正とする
 	item.CreatedAt = now
-
-	// UpdatedAt もサーバで付与（create 時点で持たせる）
 	item.UpdatedAt = &now
 	item.UpdatedBy = nil
 	item.DeletedAt = nil
@@ -504,7 +519,6 @@ func (h *ListHandler) update(w http.ResponseWriter, r *http.Request, id string) 
 	// ✅ UPDATE PUT/PATCH を受け取れているか分かるログ（これだけ残す）
 	log.Printf("[list_handler] UPDATE received method=%s id=%q bytes=%d", r.Method, strings.TrimSpace(id), len(body))
 
-	// フロントは List を送ってくる前提（title/description/prices/status など）
 	var in listdom.List
 	if err := json.Unmarshal(body, &in); err != nil {
 		w.WriteHeader(http.StatusBadRequest)
@@ -512,7 +526,6 @@ func (h *ListHandler) update(w http.ResponseWriter, r *http.Request, id string) 
 		return
 	}
 
-	// 現在値を取得して差分適用（Created* などは保持）
 	current, err := h.uc.GetByID(ctx, id)
 	if err != nil {
 		if isNotSupported(err) {
@@ -524,12 +537,9 @@ func (h *ListHandler) update(w http.ResponseWriter, r *http.Request, id string) 
 		return
 	}
 
-	// ---- apply patch (best-effort) ----
 	if t := strings.TrimSpace(in.Title); t != "" {
 		current.Title = t
 	}
-	// description は空にしたい可能性があるが、string だと「未指定」と区別できないため、
-	// ここでは空文字は上書きしない扱いにしている。
 	if d := strings.TrimSpace(in.Description); d != "" {
 		current.Description = d
 	}
@@ -538,7 +548,6 @@ func (h *ListHandler) update(w http.ResponseWriter, r *http.Request, id string) 
 		current.Status = listdom.ListStatus(st)
 	}
 
-	// prices: 指定があれば上書き（domain 側のフィールド名が Prices の前提）
 	if in.Prices != nil {
 		current.Prices = in.Prices
 	}
@@ -550,7 +559,6 @@ func (h *ListHandler) update(w http.ResponseWriter, r *http.Request, id string) 
 	now := time.Now().UTC()
 	current.UpdatedAt = &now
 
-	// usecase に Update が実装されている場合のみ実行
 	updater, ok := any(h.uc).(interface {
 		Update(ctx context.Context, item listdom.List) (listdom.List, error)
 	})
@@ -571,9 +579,9 @@ func (h *ListHandler) update(w http.ResponseWriter, r *http.Request, id string) 
 		return
 	}
 
-	// detail 画面は DTO が欲しいので、Query があれば detail DTO を返す
-	if h.q != nil {
-		if dto, e := h.q.BuildListDetailDTO(ctx, id); e == nil {
+	// ✅ detail 画面は DTO が欲しいので、detail query があれば detail DTO を返す
+	if h.qDetail != nil {
+		if dto, e := h.qDetail.BuildListDetailDTO(ctx, id); e == nil {
 			_ = json.NewEncoder(w).Encode(dto)
 			return
 		}
@@ -589,14 +597,14 @@ func (h *ListHandler) update(w http.ResponseWriter, r *http.Request, id string) 
 func (h *ListHandler) get(w http.ResponseWriter, r *http.Request, id string) {
 	ctx := r.Context()
 
-	// GET /lists/{id} は ListDetailDTO を返す（Query 必須）
-	if h == nil || h.q == nil {
+	// GET /lists/{id} は ListDetailDTO を返す（detail query 必須）
+	if h == nil || h.qDetail == nil {
 		w.WriteHeader(http.StatusNotImplemented)
 		_ = json.NewEncoder(w).Encode(map[string]string{"error": "not_implemented"})
 		return
 	}
 
-	dto, err := h.q.BuildListDetailDTO(ctx, id)
+	dto, err := h.qDetail.BuildListDetailDTO(ctx, id)
 	if err != nil {
 		if isNotSupported(err) {
 			w.WriteHeader(http.StatusNotImplemented)

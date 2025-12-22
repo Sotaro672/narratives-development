@@ -1,3 +1,4 @@
+// backend/internal/adapters/in/http/router.go
 package httpin
 
 import (
@@ -17,7 +18,7 @@ import (
 	// ★ new: Production 用の新パッケージ
 	productionapp "narratives/internal/application/production"
 
-	// ★ new: Query services (CompanyProductionQueryService / InventoryQuery / ListCreateQuery / ListQuery)
+	// ★ new: Query services (CompanyProductionQueryService / InventoryQuery / ListCreateQuery / ListManagementQuery / ListDetailQuery)
 	companyquery "narratives/internal/application/query"
 
 	// ハンドラ群
@@ -75,7 +76,10 @@ type RouterDeps struct {
 	ListCreateQuery *companyquery.ListCreateQuery
 
 	// ✅ NEW: Lists の read-model assembler（/lists 一覧 DTO）
-	ListQuery *companyquery.ListQuery
+	ListManagementQuery *companyquery.ListManagementQuery
+
+	// ✅ NEW: List detail DTO assembler（/lists/{id} detail DTO）
+	ListDetailQuery *companyquery.ListDetailQuery
 
 	// ★ NameResolver（ID→名前/型番解決）
 	NameResolver *resolver.NameResolver
@@ -267,8 +271,14 @@ func NewRouter(deps RouterDeps) http.Handler {
 	// ================================
 	if deps.ListUC != nil {
 		var listH http.Handler
-		if deps.ListQuery != nil {
-			listH = handlers.NewListHandlerWithQuery(deps.ListUC, deps.ListQuery)
+
+		// ✅ listManagement / listDetail を分離した Query を注入
+		if deps.ListManagementQuery != nil || deps.ListDetailQuery != nil {
+			listH = handlers.NewListHandlerWithQueries(
+				deps.ListUC,
+				deps.ListManagementQuery,
+				deps.ListDetailQuery,
+			)
 		} else {
 			listH = handlers.NewListHandler(deps.ListUC)
 		}
