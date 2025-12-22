@@ -3,7 +3,7 @@ package usecase
 
 import (
 	"context"
-	"encoding/json"
+	"errors"
 	"log"
 	"strings"
 	"time"
@@ -42,6 +42,7 @@ type ListPatchUpdater interface {
 // ListPatcher は List.ImageID を更新できる契約です。
 type ListPatcher interface {
 	// List.ImageID を imageID に更新し、更新済み List を返します。
+	// NOTE: 現方針では imageID は「画像URL（bucket上のURL）」を格納する。
 	UpdateImageID(ctx context.Context, listID string, imageID string, now time.Time, updatedBy *string) (listdom.List, error)
 }
 
@@ -71,11 +72,11 @@ type ListImageObjectSaver interface {
 	) (listimgdom.ListImage, error)
 }
 
-// ✅ Create 時に「listId/」配下を初期化したい場合のオプショナル契約。
-//   - GCS の bucket 自体は通常「新規作成」できない（global resource）ので、
-//     ここでは疑似フォルダ（prefix）を .keep オブジェクトなどで作る実装を想定。
-type ListImageFolderInitializer interface {
-	EnsureListFolder(ctx context.Context, listID string) error
+// ✅ Create 時に「listId の名前のバケット」を初期化したい場合のオプショナル契約。
+// - 実装側（GCS adapter）が "bucket を作る" or "prefix を作る(.keep)" のどちらでもよい。
+// - usecase は「list 作成後に listID を渡して初期化する」だけを責務にする。
+type ListImageBucketInitializer interface {
+	EnsureListBucket(ctx context.Context, listID string) error
 }
 
 // ListAggregate は List とその画像一覧のビューです。
@@ -175,31 +176,10 @@ func NewListUsecaseWithCreator(
 
 // List は List 一覧を返します（GET /lists）
 func (uc *ListUsecase) List(ctx context.Context, filter listdom.Filter, sort listdom.Sort, page listdom.Page) (listdom.PageResult[listdom.List], error) {
-	log.Printf("[list_usecase] List called filter=%s sort=%s page=%s",
-		dumpAsJSON(filter),
-		dumpAsJSON(sort),
-		dumpAsJSON(page),
-	)
-
 	if uc.listLister == nil {
-		log.Printf("[list_usecase] List NOT supported (listLister is nil)")
 		return listdom.PageResult[listdom.List]{}, ErrNotSupported("List.List")
 	}
-
-	out, err := uc.listLister.List(ctx, filter, sort, page)
-	if err != nil {
-		log.Printf("[list_usecase] List failed err=%v", err)
-		return listdom.PageResult[listdom.List]{}, err
-	}
-
-	log.Printf("[list_usecase] List ok count=%d page=%d perPage=%d totalPages=%d",
-		len(out.Items),
-		out.Page,
-		out.PerPage,
-		out.TotalPages,
-	)
-
-	return out, nil
+	return uc.listLister.List(ctx, filter, sort, page)
 }
 
 // Count も必要なら使えるようにしておく（任意）
@@ -211,43 +191,30 @@ func (uc *ListUsecase) Count(ctx context.Context, filter listdom.Filter) (int, e
 }
 
 // Create は List を作成します。
-// ✅ 追加: 作成後に listId/ 配下（疑似フォルダ）を初期化する（実装があれば）。
+// ✅ 期待値更新: 作成後に「listId の名前のバケット」を初期化する（実装があれば）。
 func (uc *ListUsecase) Create(ctx context.Context, item listdom.List) (listdom.List, error) {
-	log.Printf("[list_usecase] Create called item=%s", dumpAsJSON(item))
-
 	if uc.listCreator == nil {
-		log.Printf("[list_usecase] Create NOT supported (listCreator is nil)")
 		return listdom.List{}, ErrNotSupported("List.Create")
 	}
 
 	created, err := uc.listCreator.Create(ctx, item)
 	if err != nil {
-		log.Printf("[list_usecase] Create failed err=%v item=%s", err, dumpAsJSON(item))
 		return listdom.List{}, err
 	}
 
-	// ✅ listId 画像用 prefix 初期化（.keep など）
-	// - 失敗しても list 自体は既に作成されているため、ここは "WARN で継続" をデフォルトにする
-	//   （ここで error return すると、呼び出し側のリトライで二重作成が起きやすい）
+	// ✅ listId 名のバケット（または prefix）初期化（実装があれば）
 	listID := strings.TrimSpace(created.ID)
 	if listID != "" && uc.imageObjectSaver != nil {
-		if init, ok := any(uc.imageObjectSaver).(ListImageFolderInitializer); ok {
-			if e := init.EnsureListFolder(ctx, listID); e != nil {
-				log.Printf("[list_usecase] WARN: EnsureListFolder failed listID=%s err=%v", listID, e)
-			} else {
-				log.Printf("[list_usecase] EnsureListFolder ok listID=%s", listID)
-			}
+		if init, ok := any(uc.imageObjectSaver).(ListImageBucketInitializer); ok {
+			_ = init.EnsureListBucket(ctx, listID) // 失敗しても list 作成は成立しているので握りつぶし（必要なら上位で扱う）
 		}
 	}
 
-	log.Printf("[list_usecase] Create ok created=%s", dumpAsJSON(created))
 	return created, nil
 }
 
 // Update は List 本体を更新します（タイトル/説明/価格/ステータス等）。
 func (uc *ListUsecase) Update(ctx context.Context, item listdom.List) (listdom.List, error) {
-	log.Printf("[list_usecase] Update called item=%s", dumpAsJSON(item))
-
 	id := strings.TrimSpace(item.ID)
 	if id == "" {
 		return listdom.List{}, listdom.ErrInvalidID
@@ -258,41 +225,20 @@ func (uc *ListUsecase) Update(ctx context.Context, item listdom.List) (listdom.L
 
 	if uc.listReader != nil {
 		if pu, ok := any(uc.listReader).(ListPatchUpdater); ok {
-			updated, err := pu.Update(ctx, id, patch)
-			if err != nil {
-				log.Printf("[list_usecase] Update failed (patch via listReader) err=%v item=%s", err, dumpAsJSON(item))
-				return listdom.List{}, err
-			}
-			log.Printf("[list_usecase] Update ok (patch via listReader) updated=%s", dumpAsJSON(updated))
-			return updated, nil
+			return pu.Update(ctx, id, patch)
 		}
 	}
 	if uc.listCreator != nil {
 		if pu, ok := any(uc.listCreator).(ListPatchUpdater); ok {
-			updated, err := pu.Update(ctx, id, patch)
-			if err != nil {
-				log.Printf("[list_usecase] Update failed (patch via listCreator) err=%v item=%s", err, dumpAsJSON(item))
-				return listdom.List{}, err
-			}
-			log.Printf("[list_usecase] Update ok (patch via listCreator) updated=%s", dumpAsJSON(updated))
-			return updated, nil
+			return pu.Update(ctx, id, patch)
 		}
 	}
 
 	// fallback: Update(ctx, item) が配線されているならそれを使う
 	if uc.listUpdater == nil {
-		log.Printf("[list_usecase] Update NOT supported (listUpdater is nil)")
 		return listdom.List{}, ErrNotSupported("List.Update")
 	}
-
-	updated, err := uc.listUpdater.Update(ctx, item)
-	if err != nil {
-		log.Printf("[list_usecase] Update failed err=%v item=%s", err, dumpAsJSON(item))
-		return listdom.List{}, err
-	}
-
-	log.Printf("[list_usecase] Update ok updated=%s", dumpAsJSON(updated))
-	return updated, nil
+	return uc.listUpdater.Update(ctx, item)
 }
 
 // GetByID は List を返します。
@@ -353,23 +299,11 @@ func (uc *ListUsecase) SaveImageFromGCS(
 	createdBy string,
 	createdAt time.Time,
 ) (listimgdom.ListImage, error) {
-	log.Printf("[list_usecase] SaveImageFromGCS called listID=%s imageID=%s bucket=%s objectPath=%s size=%d displayOrder=%d createdBy=%s createdAt=%s",
-		strings.TrimSpace(listID),
-		strings.TrimSpace(id),
-		strings.TrimSpace(bucket),
-		strings.TrimSpace(objectPath),
-		size,
-		displayOrder,
-		strings.TrimSpace(createdBy),
-		createdAt.UTC().Format(time.RFC3339),
-	)
-
 	if uc.imageObjectSaver == nil {
-		log.Printf("[list_usecase] SaveImageFromGCS NOT supported (imageObjectSaver is nil)")
 		return listimgdom.ListImage{}, ErrNotSupported("List.SaveImageFromGCS")
 	}
 
-	return uc.imageObjectSaver.SaveFromBucketObject(
+	img, err := uc.imageObjectSaver.SaveFromBucketObject(
 		ctx,
 		strings.TrimSpace(id),
 		strings.TrimSpace(listID),
@@ -380,9 +314,28 @@ func (uc *ListUsecase) SaveImageFromGCS(
 		strings.TrimSpace(createdBy),
 		createdAt.UTC(),
 	)
+	if err != nil {
+		return listimgdom.ListImage{}, err
+	}
+
+	// ✅ ここだけログを残す：listImage バケットURLが作成/解決できたか
+	log.Printf(
+		"[list_usecase] listImage URL resolved=%t url=%q listID=%s imageID=%s bucketHint=%s objectPath=%s",
+		strings.TrimSpace(img.URL) != "",
+		strings.TrimSpace(img.URL),
+		strings.TrimSpace(listID),
+		strings.TrimSpace(id),
+		strings.TrimSpace(bucket),
+		strings.TrimSpace(objectPath),
+	)
+
+	return img, nil
 }
 
 // SetPrimaryImage は指定の ListImage を List の代表画像に設定します。
+// ✅ 方針更新: List.ImageID には「画像URL（bucket上のURL）」を格納する。
+// - imageID が URL の場合: そのまま List.ImageID に設定
+// - imageID が ListImage の ID の場合: ListImage を取得して URL を解決して設定
 func (uc *ListUsecase) SetPrimaryImage(
 	ctx context.Context,
 	listID string,
@@ -390,33 +343,89 @@ func (uc *ListUsecase) SetPrimaryImage(
 	now time.Time,
 	updatedBy *string,
 ) (listdom.List, error) {
-	log.Printf("[list_usecase] SetPrimaryImage called listID=%s imageID=%s now=%s updatedBy=%v",
-		strings.TrimSpace(listID),
-		strings.TrimSpace(imageID),
-		now.UTC().Format(time.RFC3339),
-		normalizeStrPtr(updatedBy),
-	)
-
 	if uc.listPatcher == nil {
-		log.Printf("[list_usecase] SetPrimaryImage NOT supported (listPatcher is nil)")
 		return listdom.List{}, ErrNotSupported("List.SetPrimaryImage")
 	}
 
-	// 画像の所属整合性チェック（可能なら）
-	if uc.imageByIDReader != nil {
-		img, err := uc.imageByIDReader.GetByID(ctx, imageID)
-		if err != nil {
-			return listdom.List{}, err
-		}
-		if strings.TrimSpace(img.ListID) != strings.TrimSpace(listID) {
-			return listdom.List{}, listdom.ErrImageBelongsToOtherList
+	lid := strings.TrimSpace(listID)
+	iid := strings.TrimSpace(imageID)
+	if lid == "" {
+		return listdom.List{}, listdom.ErrInvalidID
+	}
+	if iid == "" {
+		return listdom.List{}, listdom.ErrEmptyImageID
+	}
+
+	// 1) URL が直接渡されている場合（方針: URL を List.ImageID に格納）
+	if isImageURL(iid) {
+		// ✅ ここだけログ：URLがそのまま使えるか
+		log.Printf(
+			"[list_usecase] listImage URL resolved=%t url=%q listID=%s imageID=%s",
+			true,
+			iid,
+			lid,
+			iid,
+		)
+
+		return uc.listPatcher.UpdateImageID(
+			ctx,
+			lid,
+			iid, // ✅ URL
+			now.UTC(),
+			normalizeStrPtr(updatedBy),
+		)
+	}
+
+	// 2) それ以外は ListImage.ID とみなして解決 → URL を設定
+	if uc.imageByIDReader == nil {
+		return listdom.List{}, ErrNotSupported("List.SetPrimaryImage (imageByIDReader)")
+	}
+
+	img, err := uc.imageByIDReader.GetByID(ctx, iid)
+	if err != nil {
+		return listdom.List{}, err
+	}
+
+	// 所属整合性チェック（可能なら）
+	if strings.TrimSpace(img.ListID) != lid {
+		return listdom.List{}, errors.New("list: image belongs to other list")
+	}
+
+	imageURL := strings.TrimSpace(img.URL)
+	if imageURL == "" {
+		// 互換: もし ID が URL の形ならそれを使う
+		if isImageURL(strings.TrimSpace(img.ID)) {
+			imageURL = strings.TrimSpace(img.ID)
+		} else if strings.TrimSpace(img.ID) != "" {
+			// 最終フォールバック: DefaultBucket + objectPath(ID) で public URL を生成
+			imageURL = listimgdom.PublicURL(listimgdom.DefaultBucket, strings.TrimSpace(img.ID))
 		}
 	}
+	if strings.TrimSpace(imageURL) == "" {
+		// ✅ ここだけログ：URL 解決に失敗したことが分かるように
+		log.Printf(
+			"[list_usecase] listImage URL resolved=%t url=%q listID=%s imageID=%s",
+			false,
+			"",
+			lid,
+			iid,
+		)
+		return listdom.List{}, listdom.ErrInvalidImageID
+	}
+
+	// ✅ ここだけログ：ListImage から URL 解決できたか
+	log.Printf(
+		"[list_usecase] listImage URL resolved=%t url=%q listID=%s imageID=%s",
+		true,
+		imageURL,
+		lid,
+		iid,
+	)
 
 	return uc.listPatcher.UpdateImageID(
 		ctx,
-		strings.TrimSpace(listID),
-		strings.TrimSpace(imageID),
+		lid,
+		imageURL, // ✅ URL を格納
 		now.UTC(),
 		normalizeStrPtr(updatedBy),
 	)
@@ -426,11 +435,16 @@ func (uc *ListUsecase) SetPrimaryImage(
 // helpers
 // ==============================
 
+func isImageURL(v string) bool {
+	s := strings.TrimSpace(v)
+	return strings.HasPrefix(s, "https://") || strings.HasPrefix(s, "http://") || strings.HasPrefix(s, "gs://")
+}
+
 func buildPatchFromItem(item listdom.List) listdom.ListPatch {
 	// PUT 相当: 主要フィールドは常に送られてくる前提で patch を埋める
 	statusV := item.Status
 	assigneeV := strings.TrimSpace(item.AssigneeID)
-	imageV := strings.TrimSpace(item.ImageID)
+	imageV := strings.TrimSpace(item.ImageID) // ✅ URL格納方針
 	titleV := strings.TrimSpace(item.Title)
 	descV := strings.TrimSpace(item.Description)
 
@@ -476,12 +490,4 @@ func normalizeStrPtr(p *string) *string {
 		return nil
 	}
 	return &t
-}
-
-func dumpAsJSON(v any) string {
-	b, err := json.Marshal(v)
-	if err != nil {
-		return "<json_marshal_failed>"
-	}
-	return string(b)
 }

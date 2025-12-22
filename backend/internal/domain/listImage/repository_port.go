@@ -3,7 +3,6 @@ package listImage
 import (
 	"context"
 	"errors"
-	"time"
 
 	common "narratives/internal/domain/common"
 )
@@ -36,11 +35,6 @@ type ListImagePatch struct {
 	FileName     *string
 	Size         *int64
 	DisplayOrder *int
-
-	UpdatedAt *time.Time
-	UpdatedBy *string
-	DeletedAt *time.Time
-	DeletedBy *string
 }
 
 // フィルタ/検索条件（実装側で解釈）
@@ -56,16 +50,6 @@ type Filter struct {
 	MaxSize       *int64
 	MinDisplayOrd *int
 	MaxDisplayOrd *int
-	CreatedBy     *string
-	UpdatedBy     *string
-	DeletedBy     *string
-	CreatedFrom   *time.Time
-	CreatedTo     *time.Time
-	UpdatedFrom   *time.Time
-	UpdatedTo     *time.Time
-	DeletedFrom   *time.Time
-	DeletedTo     *time.Time
-	Deleted       *bool // nil: 全件 / true: 削除済のみ / false: 未削除のみ
 }
 
 // 共通型エイリアス（インフラ非依存）
@@ -93,7 +77,6 @@ type RepositoryPort interface {
 	// 一覧・検索
 	List(ctx context.Context, filter Filter, sort Sort, page Page) (PageResult[ListImage], error)
 	ListByCursor(ctx context.Context, filter Filter, sort Sort, cpage CursorPage) (CursorPageResult[ListImage], error)
-	Count(ctx context.Context, filter Filter) (int, error)
 
 	// 取得
 	FindByID(ctx context.Context, imageID string) (*ListImage, error)

@@ -272,7 +272,9 @@ func (r *ListImageRepositoryGCS) GetByID(ctx context.Context, id string) (listim
 // - objectPath policy は "{listId}/{imageId}/{fileName}" を推奨。
 // - id は objectPath を採用（= GetByID で一意に引ける）
 //
-// NOTE: usecase 側 interface に合わせたシグネチャ
+// NOTE:
+// - createdAt/createdBy は domain から削除されたため、この adapter では保持・検証しない。
+// - usecase interface 互換のため引数は残す（未使用）。
 func (r *ListImageRepositoryGCS) SaveFromBucketObject(
 	ctx context.Context,
 	bucket string,
@@ -281,9 +283,12 @@ func (r *ListImageRepositoryGCS) SaveFromBucketObject(
 	fileName string,
 	size int64,
 	displayOrder int,
-	createdBy string,
-	createdAt time.Time,
+	createdBy string, // unused (kept for compatibility)
+	createdAt time.Time, // unused (kept for compatibility)
 ) (listimagedom.ListImage, error) {
+	_ = createdBy
+	_ = createdAt
+
 	if r == nil || r.Client == nil {
 		return listimagedom.ListImage{}, fmt.Errorf("ListImageRepositoryGCS.SaveFromBucketObject: storage client is nil")
 	}
@@ -291,11 +296,6 @@ func (r *ListImageRepositoryGCS) SaveFromBucketObject(
 	listID = strings.TrimSpace(listID)
 	if listID == "" {
 		return listimagedom.ListImage{}, listimagedom.ErrInvalidListID
-	}
-
-	createdBy = strings.TrimSpace(createdBy)
-	if createdBy == "" {
-		return listimagedom.ListImage{}, listimagedom.ErrInvalidCreatedBy
 	}
 
 	b := strings.TrimSpace(bucket)
@@ -342,13 +342,6 @@ func (r *ListImageRepositoryGCS) SaveFromBucketObject(
 		finalSize = 0
 	}
 
-	// createdAt default
-	if createdAt.IsZero() {
-		createdAt = time.Now().UTC()
-	} else {
-		createdAt = createdAt.UTC()
-	}
-
 	publicURL := fmt.Sprintf("https://storage.googleapis.com/%s/%s", b, obj)
 
 	// merge metadata
@@ -363,8 +356,6 @@ func (r *ListImageRepositoryGCS) SaveFromBucketObject(
 	meta["url"] = publicURL
 	meta["size"] = fmt.Sprint(finalSize)
 	meta["displayOrder"] = fmt.Sprint(displayOrder)
-	meta["createdAt"] = createdAt.Format(time.RFC3339Nano)
-	meta["createdBy"] = createdBy
 
 	// metadata update
 	newAttrs, err := o.Update(ctx, storage.ObjectAttrsToUpdate{Metadata: meta})
@@ -381,9 +372,6 @@ func (r *ListImageRepositoryGCS) SaveFromBucketObject(
 		displayOrder,
 		b,
 		newAttrs.Name,
-		createdAt,
-		createdBy,
-		nil, nil, nil, nil,
 	)
 	if derr != nil {
 		// best-effort fallback（domain validate が落ちても UI を止めない）
@@ -394,8 +382,6 @@ func (r *ListImageRepositoryGCS) SaveFromBucketObject(
 			FileName:     fn,
 			Size:         finalSize,
 			DisplayOrder: displayOrder,
-			CreatedAt:    createdAt,
-			CreatedBy:    createdBy,
 		}
 		return tmp, nil
 	}
@@ -559,18 +545,6 @@ func buildListImageFromAttrs(bucket string, attrs *storage.ObjectAttrs) (listima
 		}
 	}
 
-	// createdAt / createdBy（domain は必須なので best-effort）
-	createdAt := attrs.Created
-	if v := getMeta("createdAt"); v != "" {
-		if t, e := time.Parse(time.RFC3339, v); e == nil {
-			createdAt = t.UTC()
-		}
-	}
-	createdBy := getMeta("createdBy")
-	if createdBy == "" {
-		createdBy = "system"
-	}
-
 	// id は objectPath を採用（= GetByID で一意）
 	id := obj
 
@@ -582,9 +556,6 @@ func buildListImageFromAttrs(bucket string, attrs *storage.ObjectAttrs) (listima
 		displayOrder,
 		strings.TrimSpace(bucket),
 		obj,
-		createdAt,
-		createdBy,
-		nil, nil, nil, nil,
 	)
 	if err != nil {
 		// best-effort fallback
@@ -595,8 +566,6 @@ func buildListImageFromAttrs(bucket string, attrs *storage.ObjectAttrs) (listima
 			FileName:     fileName,
 			Size:         size,
 			DisplayOrder: displayOrder,
-			CreatedAt:    createdAt.UTC(),
-			CreatedBy:    createdBy,
 		}
 		return tmp, true
 	}

@@ -7,10 +7,7 @@ import { useNavigate, useParams } from "react-router-dom";
 import { useAdminCard as useAdminCardHook } from "../../../../admin/src/presentation/hook/useAdminCard";
 
 // ✅ PriceCard hook（PriceRow 型もここから取り込む）
-import {
-  usePriceCard,
-  type PriceRow,
-} from "../../../../list/src/presentation/hook/usePriceCard";
+import { usePriceCard, type PriceRow } from "../../../../list/src/presentation/hook/usePriceCard";
 
 // ✅ application service に移譲（hook には state/handler のみ残す）
 import {
@@ -94,10 +91,7 @@ export function useListCreate(): UseListCreateResult {
 
   const params = useParams<ListCreateRouteParams>();
 
-  const resolvedParams: ResolvedListCreateParams = React.useMemo(
-    () => resolveListCreateParams(params),
-    [params],
-  );
+  const resolvedParams: ResolvedListCreateParams = React.useMemo(() => resolveListCreateParams(params), [params]);
 
   const { inventoryId } = resolvedParams;
 
@@ -126,11 +120,20 @@ export function useListCreate(): UseListCreateResult {
     const files = Array.from(e.target.files ?? []).filter(Boolean) as File[];
     if (files.length === 0) return;
 
-    setImages((prev) => dedupeFiles(prev, files));
+    const next = dedupeFiles(images, files);
+    setImages(next);
+
+    // ✅ listImage: 画像を渡せているか確認するログ
+    // eslint-disable-next-line no-console
+    console.log("[inventory/listImage] selected", {
+      addedCount: files.length,
+      totalCount: next.length,
+      names: next.slice(0, 6).map((f) => f.name),
+    });
 
     // 同じファイルを再選択できるように
     e.currentTarget.value = "";
-  }, []);
+  }, [images]);
 
   const onDropImages = React.useCallback((e: React.DragEvent<HTMLDivElement>) => {
     e.preventDefault();
@@ -142,8 +145,17 @@ export function useListCreate(): UseListCreateResult {
 
     if (files.length === 0) return;
 
-    setImages((prev) => dedupeFiles(prev, files));
-  }, []);
+    const next = dedupeFiles(images, files);
+    setImages(next);
+
+    // ✅ listImage: 画像を渡せているか確認するログ
+    // eslint-disable-next-line no-console
+    console.log("[inventory/listImage] dropped", {
+      addedCount: files.length,
+      totalCount: next.length,
+      names: next.slice(0, 6).map((f) => f.name),
+    });
+  }, [images]);
 
   const onDragOverImages = React.useCallback((e: React.DragEvent<HTMLDivElement>) => {
     e.preventDefault();
@@ -151,7 +163,19 @@ export function useListCreate(): UseListCreateResult {
   }, []);
 
   const removeImageAt = React.useCallback((idx: number) => {
-    setImages((prev) => prev.filter((_, i) => i !== idx));
+    setImages((prev) => {
+      const next = prev.filter((_, i) => i !== idx);
+
+      // ✅ listImage: 画像を渡せているか確認するログ
+      // eslint-disable-next-line no-console
+      console.log("[inventory/listImage] removed", {
+        removedIndex: idx,
+        totalCount: next.length,
+        names: next.slice(0, 6).map((f) => f.name),
+      });
+
+      return next;
+    });
 
     setMainImageIndex((prevMain) => {
       if (idx === prevMain) return 0;
@@ -162,6 +186,11 @@ export function useListCreate(): UseListCreateResult {
 
   const clearImages = React.useCallback(() => {
     setImages([]);
+
+    // ✅ listImage: 画像を渡せているか確認するログ
+    // eslint-disable-next-line no-console
+    console.log("[inventory/listImage] cleared", { totalCount: 0 });
+
     setMainImageIndex(0);
   }, []);
 
@@ -232,8 +261,7 @@ export function useListCreate(): UseListCreateResult {
   // ============================================================
   // ✅ 担当者
   // ============================================================
-  const { assigneeName, assigneeCandidates, loadingMembers, onSelectAssignee } =
-    useAdminCardHook();
+  const { assigneeName, assigneeCandidates, loadingMembers, onSelectAssignee } = useAdminCardHook();
 
   const [assigneeId, setAssigneeId] = React.useState<string | undefined>(undefined);
 
@@ -246,18 +274,34 @@ export function useListCreate(): UseListCreateResult {
   );
 
   // ============================================================
-  // ✅ 作成（listImage関連ログのみ残す）
+  // ✅ 作成（ListImage 1枚必須 + listImageログのみ）
   // ============================================================
   const onCreate = React.useCallback(() => {
     void (async () => {
       try {
-        if (images.length > 0) {
+        // ✅ 1枚必須バリデーション（0枚ならエラー）
+        if (images.length === 0) {
+          const msg = "商品画像は1枚以上必須です。画像を追加してください。";
+
           // eslint-disable-next-line no-console
-          console.log("[inventory/listImage] create start", {
+          console.log("[inventory/listImage] validation failed (no images)", {
             imagesCount: images.length,
             mainImageIndex,
           });
+
+          alert(msg);
+          throw new Error(msg);
         }
+
+        // ✅ listImage: 画像を渡せているか確認するログ（必ず出す）
+        // eslint-disable-next-line no-console
+        console.log("[inventory/listImage] create start", {
+          imagesCount: images.length,
+          mainImageIndex,
+          names: images.slice(0, 8).map((f) => f.name),
+          sizes: images.slice(0, 8).map((f) => f.size),
+          types: images.slice(0, 8).map((f) => f.type),
+        });
 
         await createListWithImages({
           params: resolvedParams,
@@ -270,15 +314,24 @@ export function useListCreate(): UseListCreateResult {
           mainImageIndex,
         });
 
+        // eslint-disable-next-line no-console
+        console.log("[inventory/listImage] create success", {
+          imagesCount: images.length,
+          mainImageIndex,
+        });
+
         alert("作成しました");
         navigate(buildAfterCreatePath(resolvedParams));
       } catch (e) {
         const msg = String(e instanceof Error ? e.message : e);
 
-        if (images.length > 0) {
-          // eslint-disable-next-line no-console
-          console.log("[inventory/listImage] create failed", { msg });
-        }
+        // ✅ listImage: 失敗ログ（常に出す）
+        // eslint-disable-next-line no-console
+        console.log("[inventory/listImage] create failed", {
+          msg,
+          imagesCount: images.length,
+          mainImageIndex,
+        });
 
         alert(msg);
       }
@@ -401,4 +454,3 @@ export function useListCreate(): UseListCreateResult {
     setDecision,
   };
 }
-

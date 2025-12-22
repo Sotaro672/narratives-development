@@ -1,4 +1,4 @@
-// backend\internal\domain\listImage\entity.go
+// backend/internal/domain/listImage/entity.go
 package listImage
 
 import (
@@ -8,7 +8,6 @@ import (
 	"net/url"
 	"path/filepath"
 	"strings"
-	"time"
 )
 
 // Default GCS bucket for ListImage files.
@@ -26,7 +25,7 @@ type GCSDeleteOp struct {
 }
 
 // ListImage mirrors web-app/src/shared/types/listImage.ts
-// TS source of truth:
+// TS source of truth (updated):
 //
 //	export interface ListImage {
 //	  id: string;
@@ -35,12 +34,6 @@ type GCSDeleteOp struct {
 //	  fileName: string;
 //	  size: number;
 //	  displayOrder: number;
-//	  createdAt: Date | string;
-//	  createdBy: string;
-//	  updatedAt?: Date | string;
-//	  updatedBy?: string;
-//	  deletedAt: Date | string | null;
-//	  deletedBy?: string | null;
 //	}
 type ListImage struct {
 	ID           string
@@ -49,13 +42,6 @@ type ListImage struct {
 	FileName     string
 	Size         int64
 	DisplayOrder int
-
-	CreatedAt time.Time
-	CreatedBy string
-	UpdatedAt *time.Time
-	UpdatedBy *string
-	DeletedAt *time.Time
-	DeletedBy *string
 }
 
 // ImageFileValidation - 画像ファイルのバリデーション結果
@@ -82,12 +68,6 @@ var (
 	ErrInvalidFileName     = errors.New("listImage: invalid fileName")
 	ErrInvalidSize         = errors.New("listImage: invalid size")
 	ErrInvalidDisplayOrder = errors.New("listImage: invalid displayOrder")
-	ErrInvalidCreatedAt    = errors.New("listImage: invalid createdAt")
-	ErrInvalidCreatedBy    = errors.New("listImage: invalid createdBy")
-	ErrInvalidUpdatedAt    = errors.New("listImage: invalid updatedAt")
-	ErrInvalidUpdatedBy    = errors.New("listImage: invalid updatedBy")
-	ErrInvalidDeletedAt    = errors.New("listImage: invalid deletedAt")
-	ErrInvalidDeletedBy    = errors.New("listImage: invalid deletedBy")
 )
 
 // NewImageFileValidation - エラーから検証結果を作成
@@ -174,17 +154,10 @@ var (
 // ========================================
 
 // New creates a ListImage with validation.
-// Optional fields updatedAt/updatedBy/deletedAt/deletedBy can be nil.
 func New(
 	id, listID, u, fileName string,
 	size int64,
 	displayOrder int,
-	createdAt time.Time,
-	createdBy string,
-	updatedAt *time.Time,
-	updatedBy *string,
-	deletedAt *time.Time,
-	deletedBy *string,
 ) (ListImage, error) {
 	li := ListImage{
 		ID:           strings.TrimSpace(id),
@@ -193,13 +166,6 @@ func New(
 		FileName:     strings.TrimSpace(fileName),
 		Size:         size,
 		DisplayOrder: displayOrder,
-
-		CreatedAt: createdAt.UTC(),
-		CreatedBy: strings.TrimSpace(createdBy),
-		UpdatedAt: normalizeTimePtr(updatedAt),
-		UpdatedBy: normalizeStrPtr(updatedBy),
-		DeletedAt: normalizeTimePtr(deletedAt),
-		DeletedBy: normalizeStrPtr(deletedBy),
 	}
 	if err := li.validate(); err != nil {
 		return ListImage{}, err
@@ -207,47 +173,13 @@ func New(
 	return li, nil
 }
 
-// NewMinimal - 必須項目のみで作成
+// NewMinimal - 必須項目のみで作成（New と同義）
 func NewMinimal(
 	id, listID, u, fileName string,
 	size int64,
 	displayOrder int,
-	createdAt time.Time,
-	createdBy string,
 ) (ListImage, error) {
-	return New(id, listID, u, fileName, size, displayOrder, createdAt, createdBy, nil, nil, nil, nil)
-}
-
-// NewFromStringTimes parses createdAt/updatedAt/deletedAt from ISO8601 string (RFC3339優先)
-func NewFromStringTimes(
-	id, listID, u, fileName string,
-	size int64,
-	displayOrder int,
-	createdAtStr, createdBy string,
-	updatedAtStr, deletedAtStr *string,
-	updatedBy, deletedBy *string,
-) (ListImage, error) {
-	ca, err := parseTime(createdAtStr, ErrInvalidCreatedAt)
-	if err != nil {
-		return ListImage{}, err
-	}
-	var ua *time.Time
-	if updatedAtStr != nil {
-		t, e := parseTime(*updatedAtStr, ErrInvalidUpdatedAt)
-		if e != nil {
-			return ListImage{}, e
-		}
-		ua = &t
-	}
-	var da *time.Time
-	if deletedAtStr != nil {
-		t, e := parseTime(*deletedAtStr, ErrInvalidDeletedAt)
-		if e != nil {
-			return ListImage{}, e
-		}
-		da = &t
-	}
-	return New(id, listID, u, fileName, size, displayOrder, ca, createdBy, ua, updatedBy, da, deletedBy)
+	return New(id, listID, u, fileName, size, displayOrder)
 }
 
 // NewFromGCSObject builds public URL from GCS bucket/object and constructs ListImage.
@@ -258,12 +190,6 @@ func NewFromGCSObject(
 	displayOrder int,
 	bucket string,
 	objectPath string,
-	createdAt time.Time,
-	createdBy string,
-	updatedAt *time.Time,
-	updatedBy *string,
-	deletedAt *time.Time,
-	deletedBy *string,
 ) (ListImage, error) {
 	b := strings.TrimSpace(bucket)
 	if b == "" {
@@ -274,7 +200,7 @@ func NewFromGCSObject(
 		return ListImage{}, fmt.Errorf("listImage: empty objectPath")
 	}
 	publicURL := PublicURL(b, obj)
-	return New(id, listID, publicURL, fileName, size, displayOrder, createdAt, createdBy, updatedAt, updatedBy, deletedAt, deletedBy)
+	return New(id, listID, publicURL, fileName, size, displayOrder)
 }
 
 // NewMinimalFromGCSObject - minimal constructor using GCS bucket/object.
@@ -284,10 +210,8 @@ func NewMinimalFromGCSObject(
 	displayOrder int,
 	bucket string,
 	objectPath string,
-	createdAt time.Time,
-	createdBy string,
 ) (ListImage, error) {
-	return NewFromGCSObject(id, listID, fileName, size, displayOrder, bucket, objectPath, createdAt, createdBy, nil, nil, nil, nil)
+	return NewFromGCSObject(id, listID, fileName, size, displayOrder, bucket, objectPath)
 }
 
 // ========================================
@@ -334,43 +258,6 @@ func (l *ListImage) SetDisplayOrder(order int) error {
 	return nil
 }
 
-func (l *ListImage) TouchUpdated(now time.Time, by *string) error {
-	if now.IsZero() {
-		return ErrInvalidUpdatedAt
-	}
-	t := now.UTC()
-	l.UpdatedAt = &t
-	if by != nil {
-		b := strings.TrimSpace(*by)
-		if b == "" {
-			return ErrInvalidUpdatedBy
-		}
-		l.UpdatedBy = &b
-	}
-	return nil
-}
-
-func (l *ListImage) MarkDeleted(now time.Time, by *string) error {
-	if now.IsZero() {
-		return ErrInvalidDeletedAt
-	}
-	t := now.UTC()
-	l.DeletedAt = &t
-	if by != nil {
-		b := strings.TrimSpace(*by)
-		if b == "" {
-			return ErrInvalidDeletedBy
-		}
-		l.DeletedBy = &b
-	}
-	return nil
-}
-
-func (l *ListImage) ClearDeleted() {
-	l.DeletedAt = nil
-	l.DeletedBy = nil
-}
-
 // ========================================
 // Validation
 // ========================================
@@ -396,24 +283,6 @@ func (l ListImage) validate() error {
 	}
 	if l.DisplayOrder < 0 {
 		return ErrInvalidDisplayOrder
-	}
-	if l.CreatedAt.IsZero() {
-		return ErrInvalidCreatedAt
-	}
-	if strings.TrimSpace(l.CreatedBy) == "" {
-		return ErrInvalidCreatedBy
-	}
-	if l.UpdatedAt != nil && (l.UpdatedAt.IsZero() || l.UpdatedAt.Before(l.CreatedAt)) {
-		return ErrInvalidUpdatedAt
-	}
-	if l.UpdatedBy != nil && strings.TrimSpace(*l.UpdatedBy) == "" {
-		return ErrInvalidUpdatedBy
-	}
-	if l.DeletedAt != nil && l.DeletedAt.Before(l.CreatedAt) {
-		return ErrInvalidDeletedAt
-	}
-	if l.DeletedBy != nil && strings.TrimSpace(*l.DeletedBy) == "" {
-		return ErrInvalidDeletedBy
 	}
 	return nil
 }
@@ -443,47 +312,6 @@ func extAllowed(name string) bool {
 	ext := strings.ToLower(filepath.Ext(name))
 	_, ok := AllowedExtensions[ext]
 	return ok
-}
-
-func normalizeStrPtr(p *string) *string {
-	if p == nil {
-		return nil
-	}
-	s := strings.TrimSpace(*p)
-	if s == "" {
-		return nil
-	}
-	return &s
-}
-
-func normalizeTimePtr(p *time.Time) *time.Time {
-	if p == nil || p.IsZero() {
-		return nil
-	}
-	t := p.UTC()
-	return &t
-}
-
-func parseTime(s string, classify error) (time.Time, error) {
-	s = strings.TrimSpace(s)
-	if s == "" {
-		return time.Time{}, classify
-	}
-	if t, err := time.Parse(time.RFC3339, s); err == nil {
-		return t.UTC(), nil
-	}
-	layouts := []string{
-		time.RFC3339Nano,
-		"2006-01-02T15:04:05Z07:00",
-		"2006-01-02 15:04:05",
-		"2006-01-02",
-	}
-	for _, l := range layouts {
-		if t, err := time.Parse(l, s); err == nil {
-			return t.UTC(), nil
-		}
-	}
-	return time.Time{}, fmt.Errorf("cannot parse time: %q", s)
 }
 
 // PublicURL returns the HTTPS public URL for a GCS object:

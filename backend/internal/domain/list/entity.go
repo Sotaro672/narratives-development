@@ -5,8 +5,6 @@ import (
 	"errors"
 	"strings"
 	"time"
-
-	listimagedom "narratives/internal/domain/listImage"
 )
 
 // ListStatus mirrors TS: 'listing' | 'suspended' | 'deleted'
@@ -48,7 +46,8 @@ type List struct {
 	// ✅ 1 inventory can have multiple lists (A/B test)
 	InventoryID string `json:"inventoryId,omitempty"`
 
-	// Optional at create; can be set later via SetPrimaryImage
+	// ✅ Policy: List.ImageID stores "image URL on bucket" (NOT image entity id)
+	// Optional at create; can be set later via SetPrimaryImageURL
 	ImageID string `json:"imageId,omitempty"`
 
 	Description string         `json:"description,omitempty"`
@@ -93,9 +92,9 @@ var (
 	ErrInvalidDeletedAt = errors.New("list: invalid deletedAt")
 	ErrInvalidDeletedBy = errors.New("list: invalid deletedBy")
 
-	// Image linkage errors
-	ErrEmptyImageID            = errors.New("list: imageId must not be empty")
-	ErrImageBelongsToOtherList = errors.New("list: image belongs to another list")
+	// Image linkage errors (now "URL")
+	ErrEmptyImageID   = errors.New("list: imageId must not be empty")
+	ErrInvalidImageID = errors.New("list: invalid imageId (url)")
 )
 
 // Policy (align with listConstants.ts as needed)
@@ -104,6 +103,9 @@ var (
 	MaxDescriptionLength = 2000
 	MinPrice             = 0
 	MaxPrice             = 10_000_000
+
+	// ✅ URL length guard (practical limit)
+	MaxImageURLLength = 2048
 )
 
 // =====================
@@ -113,7 +115,7 @@ var (
 // NewForCreate creates a List for Create flow.
 // - ID can be empty (server generates)
 // - CreatedAt can be zero (repo fills)
-// - ImageID can be empty (set later)
+// - ImageID(URL) can be empty (set later)
 func NewForCreate(
 	status ListStatus,
 	assigneeID string,
@@ -132,7 +134,7 @@ func NewForCreate(
 		AssigneeID:  strings.TrimSpace(assigneeID),
 		Title:       strings.TrimSpace(title),
 		InventoryID: strings.TrimSpace(inventoryID),
-		ImageID:     "",
+		ImageID:     "", // optional at create
 		Description: strings.TrimSpace(description),
 		Prices:      normalizePriceRows(prices),
 		CreatedBy:   strings.TrimSpace(createdBy),
@@ -210,33 +212,36 @@ func (l *List) Resume(now time.Time) error {
 	return nil
 }
 
-// SetPrimaryImage sets List.ImageID.
-// - img.ID -> List.ImageID
-// - img.ListID must match List.ID (persisted list only)
-func (l *List) SetPrimaryImage(img listimagedom.ListImage) error {
+// SetPrimaryImageURL sets List.ImageID as "image URL".
+// - persisted list only (ID required) is recommended, but URL自体はセットできる
+func (l *List) SetPrimaryImageURL(imageURL string, now time.Time) error {
 	if l == nil {
 		return nil
 	}
-	id := strings.TrimSpace(img.ID)
-	if id == "" {
+	u := strings.TrimSpace(imageURL)
+	if u == "" {
 		return ErrEmptyImageID
 	}
-	// ListID整合性は persisted 前提（IDが空ならチェック不能なので許容しない）
+	if !isValidImageURL(u) {
+		return ErrInvalidImageID
+	}
+	// persisted 前提で運用するなら、ここを必須にしてもよい
 	if strings.TrimSpace(l.ID) == "" {
 		return ErrInvalidID
 	}
-	if strings.TrimSpace(img.ListID) != strings.TrimSpace(l.ID) {
-		return ErrImageBelongsToOtherList
-	}
-	l.ImageID = id
+	l.ImageID = u
+	l.touch(now)
 	return nil
 }
 
-// ValidateImageLink checks only "if ImageID is set, it's non-empty trimmed".
-// Existence check is upper layer responsibility.
+// ValidateImageLink checks only "if ImageID is set, it's a valid URL".
 func (l List) ValidateImageLink() error {
-	if strings.TrimSpace(l.ImageID) == "" {
+	u := strings.TrimSpace(l.ImageID)
+	if u == "" {
 		return ErrEmptyImageID
+	}
+	if !isValidImageURL(u) {
+		return ErrInvalidImageID
 	}
 	return nil
 }
@@ -248,7 +253,7 @@ func (l List) ValidateImageLink() error {
 // ValidateForCreate validates fields required at Create time.
 // - ID can be empty
 // - CreatedAt can be zero (repo fills)
-// - ImageID can be empty
+// - ImageID can be empty (set later)
 func (l List) ValidateForCreate() error {
 	if l.Status == "" {
 		// allow default
@@ -276,6 +281,12 @@ func (l List) ValidateForCreate() error {
 	}
 
 	// Optional fields
+	if strings.TrimSpace(l.ImageID) != "" {
+		if !isValidImageURL(strings.TrimSpace(l.ImageID)) {
+			return ErrInvalidImageID
+		}
+	}
+
 	if l.UpdatedAt != nil && (l.UpdatedAt.IsZero() || (!l.CreatedAt.IsZero() && l.UpdatedAt.Before(l.CreatedAt))) {
 		return ErrInvalidUpdatedAt
 	}
@@ -321,6 +332,13 @@ func (l List) ValidateForPersist() error {
 	}
 	if l.CreatedAt.IsZero() {
 		return ErrInvalidCreatedAt
+	}
+
+	// Optional but if set must be valid
+	if strings.TrimSpace(l.ImageID) != "" {
+		if !isValidImageURL(strings.TrimSpace(l.ImageID)) {
+			return ErrInvalidImageID
+		}
 	}
 
 	if l.UpdatedAt != nil && (l.UpdatedAt.IsZero() || l.UpdatedAt.Before(l.CreatedAt)) {
@@ -399,4 +417,23 @@ func normalizePriceRows(in []ListPriceRow) []ListPriceRow {
 		return nil
 	}
 	return out
+}
+
+// isValidImageURL validates bucket URL.
+// Accept:
+// - https://... (public URL or signed URL)
+// - http://...  (dev)
+// - gs://...    (GCS URL)
+func isValidImageURL(u string) bool {
+	u = strings.TrimSpace(u)
+	if u == "" {
+		return false
+	}
+	if len(u) > MaxImageURLLength {
+		return false
+	}
+	if strings.HasPrefix(u, "https://") || strings.HasPrefix(u, "http://") || strings.HasPrefix(u, "gs://") {
+		return true
+	}
+	return false
 }
