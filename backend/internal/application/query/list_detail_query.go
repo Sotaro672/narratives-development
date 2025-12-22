@@ -5,11 +5,15 @@ import (
 	"context"
 	"errors"
 	"log"
+	"reflect"
+	"sort"
 	"strings"
+	"time"
 
 	querydto "narratives/internal/application/query/dto"
 	resolver "narratives/internal/application/resolver"
 	listdom "narratives/internal/domain/list"
+	listimgdom "narratives/internal/domain/listImage"
 )
 
 // ============================================================
@@ -22,6 +26,12 @@ type ListGetter interface {
 
 type InventoryDetailGetter interface {
 	GetDetailByID(ctx context.Context, inventoryID string) (*querydto.InventoryDetailDTO, error)
+}
+
+// ✅ NEW: ListImage を listID で取得できる port（任意）
+// - 未DIでも画面が壊れないように nil を許容する
+type ListImageLister interface {
+	ListByListID(ctx context.Context, listID string) ([]listimgdom.ListImage, error)
 }
 
 // ============================================================
@@ -37,6 +47,9 @@ type ListDetailQuery struct {
 
 	invGetter InventoryDetailGetter
 	invRows   InventoryRowsLister
+
+	// ✅ NEW: listImage bucket の画像（= ListImage 由来のURL）を返すため
+	imgLister ListImageLister
 }
 
 func NewListDetailQuery(getter ListGetter, nameResolver *resolver.NameResolver) *ListDetailQuery {
@@ -66,6 +79,7 @@ func NewListDetailQueryWithBrandAndInventoryGetters(
 		tbGetter:     tbGetter,
 		invGetter:    invGetter,
 		invRows:      nil,
+		imgLister:    nil, // optional
 	}
 }
 
@@ -79,6 +93,21 @@ func NewListDetailQueryWithBrandInventoryAndInventoryRows(
 ) *ListDetailQuery {
 	q := NewListDetailQueryWithBrandAndInventoryGetters(getter, nameResolver, pbGetter, tbGetter, invGetter)
 	q.invRows = invRows
+	return q
+}
+
+// ✅ NEW: listImage も注入できる ctor（既存DIを壊さないため別名で追加）
+func NewListDetailQueryWithBrandInventoryRowsAndImages(
+	getter ListGetter,
+	nameResolver *resolver.NameResolver,
+	pbGetter ProductBlueprintGetter,
+	tbGetter TokenBlueprintGetter,
+	invGetter InventoryDetailGetter,
+	invRows InventoryRowsLister,
+	imgLister ListImageLister,
+) *ListDetailQuery {
+	q := NewListDetailQueryWithBrandInventoryAndInventoryRows(getter, nameResolver, pbGetter, tbGetter, invGetter, invRows)
+	q.imgLister = imgLister
 	return q
 }
 
@@ -223,12 +252,17 @@ func (q *ListDetailQuery) BuildListDetailDTO(ctx context.Context, listID string)
 		TokenBrandName: tokenBrandName,
 		TokenName:      tokenName,
 
+		// ✅ listImage bucket の画像URL（ListImage から組み立てる）
 		ImageURLs: []string{},
+
 		PriceRows: priceRows,
 
 		TotalStock:  totalStock,
 		CurrencyJPY: true,
 	}
+
+	// ✅ NEW: listImage bucket の画像を返せるようにする（未DIなら空のまま）
+	dto.ImageURLs = q.buildListImageURLs(ctx, strings.TrimSpace(it.ID), strings.TrimSpace(it.ImageID))
 
 	return dto, nil
 }
@@ -361,4 +395,205 @@ func (q *ListDetailQuery) resolveModelResolvedCached(
 		cache[id] = v
 	}
 	return v
+}
+
+// ============================================================
+// ✅ NEW: listImage bucket の画像URLを組み立てる
+// - ListImage.PublicURL/URL があればそれを優先
+// - なければ bucket + objectPath から https://storage.googleapis.com/{bucket}/{objectPath} を組み立て
+// - primaryImageID がある場合は先頭に寄せる（取れる範囲で）
+// ============================================================
+
+type listImageURLRow struct {
+	id        string
+	url       string
+	order     int
+	createdAt time.Time
+}
+
+func (q *ListDetailQuery) buildListImageURLs(ctx context.Context, listID string, primaryImageID string) []string {
+	if q == nil || q.imgLister == nil {
+		return []string{}
+	}
+
+	lid := strings.TrimSpace(listID)
+	if lid == "" {
+		return []string{}
+	}
+
+	items, err := q.imgLister.ListByListID(ctx, lid)
+	if err != nil || len(items) == 0 {
+		return []string{}
+	}
+
+	rows := make([]listImageURLRow, 0, len(items))
+
+	for _, it := range items {
+		// ID
+		id := strings.TrimSpace(readStringFieldAny(it, "ID", "Id", "ImageID", "ImageId"))
+		// URL fields (optional)
+		u := strings.TrimSpace(readStringFieldAny(it, "PublicURL", "PublicUrl", "URL", "Url", "SignedURL", "SignedUrl"))
+		// bucket/objectPath fields
+		b := strings.TrimSpace(readStringFieldAny(it, "Bucket", "bucket"))
+		op := strings.TrimLeft(strings.TrimSpace(readStringFieldAny(it, "ObjectPath", "objectPath", "Path", "path")), "/")
+
+		if u == "" && op != "" {
+			if b == "" {
+				// usecase の契約に合わせて、bucket が空なら DefaultBucket を採用
+				b = strings.TrimSpace(listimgdom.DefaultBucket)
+			}
+			if b != "" {
+				u = "https://storage.googleapis.com/" + b + "/" + op
+			}
+		}
+
+		if u == "" {
+			continue
+		}
+
+		order := readIntFieldAny(it, "DisplayOrder", "displayOrder", "Order", "order")
+		ca := readTimeFieldAny(it, "CreatedAt", "createdAt")
+
+		rows = append(rows, listImageURLRow{
+			id:        id,
+			url:       u,
+			order:     order,
+			createdAt: ca,
+		})
+	}
+
+	if len(rows) == 0 {
+		return []string{}
+	}
+
+	// sort: displayOrder asc -> createdAt asc -> id
+	sort.Slice(rows, func(i, j int) bool {
+		if rows[i].order != rows[j].order {
+			return rows[i].order < rows[j].order
+		}
+		if !rows[i].createdAt.Equal(rows[j].createdAt) {
+			// zero time は後ろへ
+			if rows[i].createdAt.IsZero() && !rows[j].createdAt.IsZero() {
+				return false
+			}
+			if !rows[i].createdAt.IsZero() && rows[j].createdAt.IsZero() {
+				return true
+			}
+			return rows[i].createdAt.Before(rows[j].createdAt)
+		}
+		return rows[i].id < rows[j].id
+	})
+
+	// dedupe by url (keep order)
+	seen := map[string]bool{}
+	out := make([]string, 0, len(rows))
+	primaryURL := ""
+	wantPrimary := strings.TrimSpace(primaryImageID)
+
+	for _, r := range rows {
+		u := strings.TrimSpace(r.url)
+		if u == "" || seen[u] {
+			continue
+		}
+		seen[u] = true
+
+		if wantPrimary != "" && strings.TrimSpace(r.id) == wantPrimary && primaryURL == "" {
+			primaryURL = u
+			continue
+		}
+		out = append(out, u)
+	}
+
+	// primary を先頭に
+	if primaryURL != "" {
+		return append([]string{primaryURL}, out...)
+	}
+
+	return out
+}
+
+// --- reflection helpers (ListImage のフィールド名差分に強くする) ---
+
+func readStringFieldAny(v any, names ...string) string {
+	rv := reflect.ValueOf(v)
+	if !rv.IsValid() {
+		return ""
+	}
+	if rv.Kind() == reflect.Pointer {
+		if rv.IsNil() {
+			return ""
+		}
+		rv = rv.Elem()
+	}
+	if rv.Kind() != reflect.Struct {
+		return ""
+	}
+
+	for _, name := range names {
+		f := rv.FieldByName(name)
+		if f.IsValid() && f.CanInterface() && f.Kind() == reflect.String {
+			s := strings.TrimSpace(f.Interface().(string))
+			if s != "" {
+				return s
+			}
+		}
+	}
+	return ""
+}
+
+func readIntFieldAny(v any, names ...string) int {
+	rv := reflect.ValueOf(v)
+	if !rv.IsValid() {
+		return 0
+	}
+	if rv.Kind() == reflect.Pointer {
+		if rv.IsNil() {
+			return 0
+		}
+		rv = rv.Elem()
+	}
+	if rv.Kind() != reflect.Struct {
+		return 0
+	}
+
+	for _, name := range names {
+		f := rv.FieldByName(name)
+		if !f.IsValid() || !f.CanInterface() {
+			continue
+		}
+		switch f.Kind() {
+		case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
+			return int(f.Int())
+		case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64:
+			return int(f.Uint())
+		}
+	}
+	return 0
+}
+
+func readTimeFieldAny(v any, names ...string) time.Time {
+	rv := reflect.ValueOf(v)
+	if !rv.IsValid() {
+		return time.Time{}
+	}
+	if rv.Kind() == reflect.Pointer {
+		if rv.IsNil() {
+			return time.Time{}
+		}
+		rv = rv.Elem()
+	}
+	if rv.Kind() != reflect.Struct {
+		return time.Time{}
+	}
+
+	for _, name := range names {
+		f := rv.FieldByName(name)
+		if !f.IsValid() || !f.CanInterface() {
+			continue
+		}
+		if t, ok := f.Interface().(time.Time); ok {
+			return t
+		}
+	}
+	return time.Time{}
 }

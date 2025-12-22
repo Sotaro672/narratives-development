@@ -9,10 +9,25 @@ import (
 )
 
 // アップロード入力（インフラ非依存の契約）
+// B案: bucket を入力で受け取れるようにする（任意）
 type UploadImageInput struct {
-	ImageData string `json:"imageData"`        // Base64エンコード済み画像
-	FileName  string `json:"fileName"`         // ファイル名
-	ListID    string `json:"listId,omitempty"` // 紐づくリストID（任意）
+	// data URL 形式を推奨: data:<mime>;base64,<payload>
+	// ※ entity.go の ValidateDataURL と整合させるため
+	ImageData string `json:"imageData"`
+
+	// 元ファイル名（拡張子チェック等に利用）
+	FileName string `json:"fileName"`
+
+	// 紐づくリストID（期待値: objectPath の親ディレクトリに使うため必須想定）
+	ListID string `json:"listId"`
+
+	// ✅ NEW: アップロード先バケット（任意）
+	// 空なら実装側でデフォルト（env or domain DefaultBucket）を使う
+	Bucket string `json:"bucket,omitempty"`
+
+	// ✅ NEW: objectPath の衝突防止（任意）
+	// 例: {listId}/{imageId}/{fileName} の imageId に使う
+	ImageID string `json:"imageId,omitempty"`
 }
 
 // 部分更新: nil のフィールドは更新しない
@@ -36,21 +51,21 @@ type Filter struct {
 	ListID  *string
 	ListIDs []string
 
-	FileNameLike   *string
-	MinSize        *int64
-	MaxSize        *int64
-	MinDisplayOrd  *int
-	MaxDisplayOrd  *int
-	CreatedBy      *string
-	UpdatedBy      *string
-	DeletedBy      *string
-	CreatedFrom    *time.Time
-	CreatedTo      *time.Time
-	UpdatedFrom    *time.Time
-	UpdatedTo      *time.Time
-	DeletedFrom    *time.Time
-	DeletedTo      *time.Time
-	Deleted        *bool // nil: 全件 / true: 削除済のみ / false: 未削除のみ
+	FileNameLike  *string
+	MinSize       *int64
+	MaxSize       *int64
+	MinDisplayOrd *int
+	MaxDisplayOrd *int
+	CreatedBy     *string
+	UpdatedBy     *string
+	DeletedBy     *string
+	CreatedFrom   *time.Time
+	CreatedTo     *time.Time
+	UpdatedFrom   *time.Time
+	UpdatedTo     *time.Time
+	DeletedFrom   *time.Time
+	DeletedTo     *time.Time
+	Deleted       *bool // nil: 全件 / true: 削除済のみ / false: 未削除のみ
 }
 
 // 共通型エイリアス（インフラ非依存）
@@ -90,7 +105,8 @@ type RepositoryPort interface {
 	Update(ctx context.Context, imageID string, patch ListImagePatch) (ListImage, error)
 	Save(ctx context.Context, img ListImage, opts *SaveOptions) (ListImage, error)
 
-	// アップロード（データURL等を受け取り、保存＋レコード作成まで行うユースケース向け）
+	// アップロード（data URL 等を受け取り、保存＋レコード作成まで行うユースケース向け）
+	// B案: UploadImageInput に bucket を含め、呼び出し側からアップロード先を指定可能にする
 	Upload(ctx context.Context, in UploadImageInput) (*ListImage, error)
 
 	// 削除

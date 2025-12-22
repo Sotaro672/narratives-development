@@ -19,6 +19,10 @@ import (
 // - tbId から: tokenName / brandName
 // - inventory から: modelId ごとの model metadata (size/color/rgb) + stock
 //
+// ✅ NEW:
+// - listImage の「入力情報（例: listImageUrl）」を受け取り、DTO にそのまま載せられるようにする
+//   -> 既存呼び出しを壊さないために WithListImage のメソッドを追加し、既存メソッドはそれを呼ぶ
+//
 // NOTE:
 // - productBlueprintPatchReader / tokenBlueprintPatchReader / inventoryReader / modelStockLen は
 //   inventory_query.go 側の定義を正として「重複定義しない」
@@ -63,15 +67,20 @@ func NewListCreateQueryWithInventory(
 }
 
 // ============================================================
-// ✅ NEW: inventoryId から ListCreateDTO を組み立てる
-//   - inventoryId = "{pbId}__{tbId}" 前提（方針A）
-//   - inventory の stock から modelId を列挙し、NameResolver.ResolveModelResolved を使って
-//     size/color/rgb を解決する
-//
+// ✅ NEW: inventoryId から ListCreateDTO を組み立てる（互換: listImage 入力無し）
 // ============================================================
 func (q *ListCreateQuery) GetByInventoryID(
 	ctx context.Context,
 	inventoryID string,
+) (*querydto.ListCreateDTO, error) {
+	return q.GetByInventoryIDWithListImage(ctx, inventoryID, "")
+}
+
+// ✅ NEW: inventoryId から ListCreateDTO を組み立てる（listImage 入力あり）
+func (q *ListCreateQuery) GetByInventoryIDWithListImage(
+	ctx context.Context,
+	inventoryID string,
+	listImageURL string, // ✅ 入力（画面側が持っている代表画像URLなどをそのまま返したい場合）
 ) (*querydto.ListCreateDTO, error) {
 	if q == nil {
 		return nil, errors.New("list create query is nil")
@@ -165,6 +174,10 @@ func (q *ListCreateQuery) GetByInventoryID(
 		TotalStock: totalStock,
 	}
 
+	// ✅ NEW: listImage 入力（DTO 側にフィールドが追加されている前提）
+	// - list_create_dto.go に `ListImageURL string `json:"listImageUrl,omitempty"` を追加してください
+	dto.ListImageURL = strings.TrimSpace(listImageURL)
+
 	return dto, nil
 }
 
@@ -174,6 +187,16 @@ func (q *ListCreateQuery) GetByIDs(
 	ctx context.Context,
 	productBlueprintID string,
 	tokenBlueprintID string,
+) (*querydto.ListCreateDTO, error) {
+	return q.GetByIDsWithListImage(ctx, productBlueprintID, tokenBlueprintID, "")
+}
+
+// ✅ NEW: pb/tb から組み立て（listImage 入力あり）
+func (q *ListCreateQuery) GetByIDsWithListImage(
+	ctx context.Context,
+	productBlueprintID string,
+	tokenBlueprintID string,
+	listImageURL string,
 ) (*querydto.ListCreateDTO, error) {
 	if q == nil {
 		return nil, errors.New("list create query is nil")
@@ -261,6 +284,9 @@ func (q *ListCreateQuery) GetByIDs(
 		PriceRows:  priceRows,
 		TotalStock: totalStock,
 	}
+
+	// ✅ NEW: listImage 入力（DTO 側にフィールドが追加されている前提）
+	dto.ListImageURL = strings.TrimSpace(listImageURL)
 
 	return dto, nil
 }

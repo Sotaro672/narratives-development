@@ -17,7 +17,16 @@ import (
 	query "narratives/internal/application/query"
 	usecase "narratives/internal/application/usecase"
 	listdom "narratives/internal/domain/list"
+	listimgdom "narratives/internal/domain/listImage"
 )
+
+type ListImageUploader interface {
+	Upload(ctx context.Context, in listimgdom.UploadImageInput) (*listimgdom.ListImage, error)
+}
+
+type ListImageDeleter interface {
+	Delete(ctx context.Context, imageID string) error
+}
 
 type ListHandler struct {
 	uc *usecase.ListUsecase
@@ -27,10 +36,14 @@ type ListHandler struct {
 
 	// ✅ split: listDetail.tsx 向け
 	qDetail *query.ListDetailQuery
+
+	// ✅ ListImage (optional)
+	imgUploader ListImageUploader
+	imgDeleter  ListImageDeleter
 }
 
 func NewListHandler(uc *usecase.ListUsecase) http.Handler {
-	return &ListHandler{uc: uc, qMgmt: nil, qDetail: nil}
+	return &ListHandler{uc: uc, qMgmt: nil, qDetail: nil, imgUploader: nil, imgDeleter: nil}
 }
 
 // ✅ NEW: 2種類の Query を注入できる ctor
@@ -39,15 +52,32 @@ func NewListHandlerWithQueries(
 	qMgmt *query.ListManagementQuery,
 	qDetail *query.ListDetailQuery,
 ) http.Handler {
-	return &ListHandler{uc: uc, qMgmt: qMgmt, qDetail: qDetail}
+	return &ListHandler{uc: uc, qMgmt: qMgmt, qDetail: qDetail, imgUploader: nil, imgDeleter: nil}
+}
+
+// ✅ NEW: ListImage も注入できる ctor（既存呼び出しを壊さない）
+func NewListHandlerWithQueriesAndListImage(
+	uc *usecase.ListUsecase,
+	qMgmt *query.ListManagementQuery,
+	qDetail *query.ListDetailQuery,
+	uploader ListImageUploader,
+	deleter ListImageDeleter,
+) http.Handler {
+	return &ListHandler{
+		uc:          uc,
+		qMgmt:       qMgmt,
+		qDetail:     qDetail,
+		imgUploader: uploader,
+		imgDeleter:  deleter,
+	}
 }
 
 // ✅ backward-ish: 片方だけ注入したい場合
 func NewListHandlerWithManagementQuery(uc *usecase.ListUsecase, q *query.ListManagementQuery) http.Handler {
-	return &ListHandler{uc: uc, qMgmt: q, qDetail: nil}
+	return &ListHandler{uc: uc, qMgmt: q, qDetail: nil, imgUploader: nil, imgDeleter: nil}
 }
 func NewListHandlerWithDetailQuery(uc *usecase.ListUsecase, q *query.ListDetailQuery) http.Handler {
-	return &ListHandler{uc: uc, qMgmt: nil, qDetail: q}
+	return &ListHandler{uc: uc, qMgmt: nil, qDetail: q, imgUploader: nil, imgDeleter: nil}
 }
 
 func (h *ListHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
@@ -105,17 +135,45 @@ func (h *ListHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			return
 
 		case "images":
-			switch r.Method {
-			case http.MethodGet:
-				h.listImages(w, r, id)
-				return
-			case http.MethodPost:
-				h.saveImageFromGCS(w, r, id)
-				return
-			default:
-				methodNotAllowed(w)
+			// /lists/{id}/images
+			if len(parts) == 2 {
+				switch r.Method {
+				case http.MethodGet:
+					h.listImages(w, r, id)
+					return
+				case http.MethodPost:
+					// 既存: signed URL PUT 後の object をレコード化
+					h.saveImageFromGCS(w, r, id)
+					return
+				default:
+					methodNotAllowed(w)
+					return
+				}
+			}
+
+			// /lists/{id}/images/{sub}
+			sub := strings.TrimSpace(parts[2])
+
+			// ✅ NEW: /lists/{id}/images/upload で dataURL を受けてアップロード＋レコード作成
+			if strings.EqualFold(sub, "upload") {
+				if r.Method != http.MethodPost {
+					methodNotAllowed(w)
+					return
+				}
+				h.uploadImage(w, r, id)
 				return
 			}
+
+			// ✅ NEW: /lists/{id}/images/{imageId} DELETE で画像削除（実装が注入されている場合のみ）
+			if r.Method == http.MethodDelete {
+				h.deleteImage(w, r, id, sub)
+				return
+			}
+
+			// GET は現状未提供（必要なら Query/Usecase に追加）
+			w.WriteHeader(http.StatusNotFound)
+			_ = json.NewEncoder(w).Encode(map[string]string{"error": "not_found"})
+			return
 
 		case "primary-image":
 			if r.Method != http.MethodPut && r.Method != http.MethodPost && r.Method != http.MethodPatch {
@@ -627,6 +685,116 @@ func (h *ListHandler) listImages(w http.ResponseWriter, r *http.Request, id stri
 		return
 	}
 	_ = json.NewEncoder(w).Encode(items)
+}
+
+// ✅ NEW: POST /lists/{id}/images/upload
+// - dataURL(base64) を受けてアップロードし、ListImage レコードを返す。
+// - imgUploader が注入されていない場合は not_implemented。
+func (h *ListHandler) uploadImage(w http.ResponseWriter, r *http.Request, listID string) {
+	ctx := r.Context()
+
+	if h == nil || h.uc == nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		_ = json.NewEncoder(w).Encode(map[string]string{"error": "usecase is nil"})
+		return
+	}
+	if h.imgUploader == nil {
+		w.WriteHeader(http.StatusNotImplemented)
+		_ = json.NewEncoder(w).Encode(map[string]string{"error": "not_implemented"})
+		return
+	}
+
+	var req struct {
+		ImageData    string  `json:"imageData"` // dataURL or base64 (domain が解釈)
+		FileName     string  `json:"fileName"`
+		SetAsPrimary bool    `json:"setAsPrimary"`
+		DisplayOrder *int    `json:"displayOrder"` // 任意: 実装側で使わないなら無視される
+		CreatedBy    string  `json:"createdBy"`
+		UpdatedBy    *string `json:"updatedBy"` // 任意: primary 更新に使いたい場合
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		w.WriteHeader(http.StatusBadRequest)
+		_ = json.NewEncoder(w).Encode(map[string]string{"error": "invalid json"})
+		return
+	}
+
+	listID = strings.TrimSpace(listID)
+	if listID == "" {
+		w.WriteHeader(http.StatusBadRequest)
+		_ = json.NewEncoder(w).Encode(map[string]string{"error": "invalid listId"})
+		return
+	}
+
+	createdBy := strings.TrimSpace(req.CreatedBy)
+	if createdBy == "" {
+		w.WriteHeader(http.StatusBadRequest)
+		_ = json.NewEncoder(w).Encode(map[string]string{"error": "createdBy is required"})
+		return
+	}
+
+	in := listimgdom.UploadImageInput{
+		ImageData: strings.TrimSpace(req.ImageData),
+		FileName:  strings.TrimSpace(req.FileName),
+		ListID:    listID,
+	}
+
+	img, err := h.imgUploader.Upload(ctx, in)
+	if err != nil {
+		writeListErr(w, err)
+		return
+	}
+	if img == nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		_ = json.NewEncoder(w).Encode(map[string]string{"error": "upload returned nil"})
+		return
+	}
+
+	// 必要なら代表画像に設定
+	if req.SetAsPrimary {
+		now := time.Now().UTC()
+		_, e := h.uc.SetPrimaryImage(ctx, listID, strings.TrimSpace(img.ID), now, normalizeStrPtr(req.UpdatedBy))
+		if e != nil {
+			// 画像自体は作れているので WARN で返す（フロントで再試行可能）
+			log.Printf("[list_handler] WARN: SetPrimaryImage failed listID=%s imageID=%s err=%v", listID, strings.TrimSpace(img.ID), e)
+		}
+	}
+
+	w.WriteHeader(http.StatusCreated)
+	_ = json.NewEncoder(w).Encode(img)
+}
+
+// ✅ NEW: DELETE /lists/{id}/images/{imageId}
+func (h *ListHandler) deleteImage(w http.ResponseWriter, r *http.Request, listID string, imageID string) {
+	ctx := r.Context()
+
+	if h == nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		_ = json.NewEncoder(w).Encode(map[string]string{"error": "handler is nil"})
+		return
+	}
+	if h.imgDeleter == nil {
+		w.WriteHeader(http.StatusNotImplemented)
+		_ = json.NewEncoder(w).Encode(map[string]string{"error": "not_implemented"})
+		return
+	}
+
+	imageID = strings.TrimSpace(imageID)
+	if imageID == "" {
+		w.WriteHeader(http.StatusBadRequest)
+		_ = json.NewEncoder(w).Encode(map[string]string{"error": "imageId is required"})
+		return
+	}
+
+	if err := h.imgDeleter.Delete(ctx, imageID); err != nil {
+		writeListErr(w, err)
+		return
+	}
+
+	_ = json.NewEncoder(w).Encode(map[string]any{
+		"ok":      true,
+		"listId":  strings.TrimSpace(listID),
+		"imageId": imageID,
+	})
 }
 
 // POST /lists/{id}/images

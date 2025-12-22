@@ -21,6 +21,11 @@ type ListCreateDTO struct {
 	TokenBrandName string `json:"tokenBrandName"`
 	TokenName      string `json:"tokenName"`
 
+	// ✅ NEW: list image url (primary / representative)
+	// - list 作成画面で代表画像をプレビューする用途
+	// - 未設定の場合は空文字
+	ListImageURL string `json:"listImageUrl,omitempty"`
+
 	// ------------------------------------------------------------
 	// ✅ PriceCard 用（サイズ/カラー別に価格を入力するための行）
 	// - inventory_detail_dto.go の InventoryDetailRowDTO を参照しつつ、

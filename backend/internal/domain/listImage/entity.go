@@ -12,7 +12,12 @@ import (
 )
 
 // Default GCS bucket for ListImage files.
-const DefaultBucket = "narratives_development_list_image"
+// Expected layout:
+//
+//	gs://narratives-development-list/{listId}/{fileName}
+//
+// (listId folder can contain multiple images)
+const DefaultBucket = "narratives-development-list"
 
 // GCSDeleteOp represents a delete operation target in GCS.
 type GCSDeleteOp struct {
@@ -156,8 +161,9 @@ func ValidateDataURL(data string, maxBytes int, supported map[string]struct{}) (
 // Policy (align with listImageConstants.ts as needed)
 var (
 	// Allowed file extensions for listing images (empty map disables the check)
+	// NOTE: gif is NOT allowed unless SupportedImageMIMEs also supports image/gif.
 	AllowedExtensions = map[string]struct{}{
-		".png": {}, ".jpg": {}, ".jpeg": {}, ".webp": {}, ".gif": {},
+		".png": {}, ".jpg": {}, ".jpeg": {}, ".webp": {},
 	}
 	// 0 disables the upper limit check
 	MaxFileSize int64 = 20 * 1024 * 1024 // 20MB
@@ -245,7 +251,7 @@ func NewFromStringTimes(
 }
 
 // NewFromGCSObject builds public URL from GCS bucket/object and constructs ListImage.
-// If bucket is empty, DefaultBucket (narratives_development_list_image) is used.
+// If bucket is empty, DefaultBucket (narratives-development-list) is used.
 func NewFromGCSObject(
 	id, listID, fileName string,
 	size int64,
@@ -520,13 +526,13 @@ func ParseGCSURL(u string) (string, string, bool) {
 // ToGCSDeleteOp tries to resolve the GCS delete target from this ListImage.
 // Priority:
 // 1) Parse from URL if it points to storage.googleapis.com/cloud.google.com
-// 2) Fallback to DefaultBucket + "list_images/{listID}/{fileName}"
+// 2) Fallback to DefaultBucket + "{listId}/{fileName}"
 func (l ListImage) ToGCSDeleteOp() GCSDeleteOp {
 	if b, obj, ok := ParseGCSURL(l.URL); ok {
 		return GCSDeleteOp{Bucket: b, ObjectPath: obj}
 	}
 	return GCSDeleteOp{
 		Bucket:     DefaultBucket,
-		ObjectPath: "list_images/" + strings.TrimSpace(l.ListID) + "/" + strings.TrimSpace(l.FileName),
+		ObjectPath: strings.TrimSpace(l.ListID) + "/" + strings.TrimSpace(l.FileName),
 	}
 }

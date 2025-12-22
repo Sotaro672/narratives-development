@@ -42,6 +42,10 @@ type ListDetailDTO struct {
 	// primary image
 	ImageID string `json:"imageId,omitempty"`
 
+	// ✅ NEW: primary list image url (representative image)
+	// - ImageID に対応する URL を返す（なければ空文字）
+	ListImageURL string `json:"listImageUrl,omitempty"`
+
 	// ids derived from inventoryId
 	ProductBlueprintID string `json:"productBlueprintId,omitempty"`
 	TokenBlueprintID   string `json:"tokenBlueprintId,omitempty"`

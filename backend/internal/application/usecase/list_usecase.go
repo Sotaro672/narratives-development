@@ -71,6 +71,13 @@ type ListImageObjectSaver interface {
 	) (listimgdom.ListImage, error)
 }
 
+// ✅ Create 時に「listId/」配下を初期化したい場合のオプショナル契約。
+//   - GCS の bucket 自体は通常「新規作成」できない（global resource）ので、
+//     ここでは疑似フォルダ（prefix）を .keep オブジェクトなどで作る実装を想定。
+type ListImageFolderInitializer interface {
+	EnsureListFolder(ctx context.Context, listID string) error
+}
+
 // ListAggregate は List とその画像一覧のビューです。
 type ListAggregate struct {
 	List   listdom.List           `json:"list"`
@@ -204,6 +211,7 @@ func (uc *ListUsecase) Count(ctx context.Context, filter listdom.Filter) (int, e
 }
 
 // Create は List を作成します。
+// ✅ 追加: 作成後に listId/ 配下（疑似フォルダ）を初期化する（実装があれば）。
 func (uc *ListUsecase) Create(ctx context.Context, item listdom.List) (listdom.List, error) {
 	log.Printf("[list_usecase] Create called item=%s", dumpAsJSON(item))
 
@@ -216,6 +224,20 @@ func (uc *ListUsecase) Create(ctx context.Context, item listdom.List) (listdom.L
 	if err != nil {
 		log.Printf("[list_usecase] Create failed err=%v item=%s", err, dumpAsJSON(item))
 		return listdom.List{}, err
+	}
+
+	// ✅ listId 画像用 prefix 初期化（.keep など）
+	// - 失敗しても list 自体は既に作成されているため、ここは "WARN で継続" をデフォルトにする
+	//   （ここで error return すると、呼び出し側のリトライで二重作成が起きやすい）
+	listID := strings.TrimSpace(created.ID)
+	if listID != "" && uc.imageObjectSaver != nil {
+		if init, ok := any(uc.imageObjectSaver).(ListImageFolderInitializer); ok {
+			if e := init.EnsureListFolder(ctx, listID); e != nil {
+				log.Printf("[list_usecase] WARN: EnsureListFolder failed listID=%s err=%v", listID, e)
+			} else {
+				log.Printf("[list_usecase] EnsureListFolder ok listID=%s", listID)
+			}
+		}
 	}
 
 	log.Printf("[list_usecase] Create ok created=%s", dumpAsJSON(created))
