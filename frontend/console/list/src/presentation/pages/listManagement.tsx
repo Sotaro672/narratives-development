@@ -1,6 +1,4 @@
 // frontend/list/src/presentation/pages/listManagement.tsx
-
-import React from "react";
 import List from "../../../../shell/src/layout/List/List";
 import "../styles/list.css";
 

@@ -14,7 +14,7 @@ export type ListManagementRowVM = {
   id: string;
 
   // ✅ 画面表示（左から）
-  title: string; // ✅ NEW: タイトル列（最左）
+  title: string; // ✅ タイトル列（最左）
   productName: string;
   tokenName: string;
   assigneeName: string;
@@ -28,7 +28,7 @@ export type ListManagementRowVM = {
 };
 
 export type FilterOptions = {
-  titleOptions: Array<{ value: string; label: string }>; // ✅ NEW
+  titleOptions: Array<{ value: string; label: string }>;
   productOptions: Array<{ value: string; label: string }>;
   tokenOptions: Array<{ value: string; label: string }>;
   managerOptions: Array<{ value: string; label: string }>;
@@ -36,7 +36,7 @@ export type FilterOptions = {
 };
 
 export type Filters = {
-  titleFilter: string[]; // ✅ NEW
+  titleFilter: string[];
   productFilter: string[];
   tokenFilter: string[];
   managerFilter: string[];
@@ -85,7 +85,15 @@ export function buildStatusBadge(
 export function mapAnyToVMRow(x: any): ListManagementRowVM {
   const id = String(x?.id ?? x?.ID ?? "").trim();
 
-  const title = String(x?.title ?? x?.Title ?? "").trim();
+  // ✅ title の名揺れを吸収（一覧DTO側が listingTitle で返ってくる可能性がある）
+  const title = String(
+    x?.title ??
+      x?.Title ??
+      x?.listingTitle ??
+      x?.ListingTitle ??
+      x?.listing_title ??
+      "",
+  ).trim();
 
   const productName = String(x?.productName ?? x?.product_name ?? "").trim();
 
@@ -223,7 +231,7 @@ export function buildHeaders(args: {
   options: FilterOptions;
   selected: Filters;
   onChange: {
-    setTitleFilter: (v: string[]) => void; // ✅ NEW
+    setTitleFilter: (v: string[]) => void;
     setProductFilter: (v: string[]) => void;
     setTokenFilter: (v: string[]) => void;
     setManagerFilter: (v: string[]) => void;

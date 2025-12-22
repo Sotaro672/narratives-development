@@ -1,10 +1,6 @@
 // frontend/console/list/src/presentation/hook/useListManagement.tsx
-
 import React, { useMemo, useState, useCallback, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
-
-import type { ListStatus } from "../../../../shell/src/shared/types/list";
-
 import {
   type SortKey,
   type ListManagementRowVM,
@@ -62,11 +58,12 @@ export function useListManagement(): UseListManagementResult {
   }, []);
 
   // ── Filter states（5列に合わせて最小化） ──────────────────
-  const [titleFilter, setTitleFilter] = useState<string[]>([]); // ✅ NEW
+  // ✅ titleFilter は型/フィルタ適用のために保持するが、ヘッダーUIには出さない（＝filterable-table-headerを導入しない）
+  const [titleFilter, setTitleFilter] = useState<string[]>([]);
   const [productFilter, setProductFilter] = useState<string[]>([]);
   const [tokenFilter, setTokenFilter] = useState<string[]>([]);
   const [managerFilter, setManagerFilter] = useState<string[]>([]);
-  const [statusFilter, setStatusFilter] = useState<string[]>([]); // holds ListStatus as string
+  const [statusFilter, setStatusFilter] = useState<string[]>([]);
 
   const filters: Filters = useMemo(
     () => ({ titleFilter, productFilter, tokenFilter, managerFilter, statusFilter }),
@@ -86,30 +83,39 @@ export function useListManagement(): UseListManagementResult {
     return applySort(filtered, activeKey, direction);
   }, [vmRowsSource, filters, activeKey, direction]);
 
-  // ── Headers（serviceへ移譲） ──────────────────────────────
-  const headers: React.ReactNode[] = useMemo(
-    () =>
-      buildHeaders({
-        options,
-        selected: filters,
-        onChange: {
-          setTitleFilter, // ✅ NEW
-          setProductFilter,
-          setTokenFilter,
-          setManagerFilter,
-          setStatusFilter,
-        },
-      }),
-    [
+  // ── Headers ───────────────────────────────────────────────
+  const headers: React.ReactNode[] = useMemo(() => {
+    // まず service 側のヘッダー（title含む）を生成
+    const built = buildHeaders({
       options,
-      filters,
-      setTitleFilter,
-      setProductFilter,
-      setTokenFilter,
-      setManagerFilter,
-      setStatusFilter,
-    ],
-  );
+      selected: filters,
+      onChange: {
+        // NOTE: titleFilter の setter は渡すが、表示上は使わない（後で差し替える）
+        setTitleFilter,
+        setProductFilter,
+        setTokenFilter,
+        setManagerFilter,
+        setStatusFilter,
+      },
+    });
+
+    // ✅ タイトル列だけは filterable-table-header を使わず固定の見出しに差し替える
+    // buildHeaders が 先頭=タイトル列 の前提（5列構成）で運用
+    const plainTitleHeader = <span key="title-header">タイトル</span>;
+
+    if (Array.isArray(built) && built.length > 0) {
+      return [plainTitleHeader, ...built.slice(1)];
+    }
+    return [plainTitleHeader];
+  }, [
+    options,
+    filters,
+    setTitleFilter,
+    setProductFilter,
+    setTokenFilter,
+    setManagerFilter,
+    setStatusFilter,
+  ]);
 
   // handlers
   const onRowClick = useCallback(
@@ -130,7 +136,7 @@ export function useListManagement(): UseListManagementResult {
   );
 
   const onReset = useCallback(() => {
-    setTitleFilter([]); // ✅ NEW
+    setTitleFilter([]);
     setProductFilter([]);
     setTokenFilter([]);
     setManagerFilter([]);

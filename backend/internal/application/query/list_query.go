@@ -54,11 +54,14 @@ type InventoryRowsLister interface {
 // ============================================================
 
 // ListRowDTO はフロントの listManagement / listDetail に渡す 1 行分（最小 + 詳細補完用）。
-// - 画面要件: productName, tokenName, assigneeName, status
+// - 画面要件: title, productName, tokenName, assigneeName, status
 // - 追加: inventoryId, assigneeId, pbId/tbId, brandId/brandName
 type ListRowDTO struct {
 	ID          string `json:"id"`
 	InventoryID string `json:"inventoryId"`
+
+	// ✅ NEW: 一覧に title を返す（フロントの最左列用）
+	Title string `json:"title"`
 
 	ProductBlueprintID string `json:"productBlueprintId"`
 	TokenBlueprintID   string `json:"tokenBlueprintId"`
@@ -318,9 +321,14 @@ func (q *ListQuery) ListRows(ctx context.Context, filter listdom.Filter, sort li
 			}
 
 			// ------------------------------------------------------
+			// ✅ title（一覧の最左列で使う）
+			// ------------------------------------------------------
+			title := strings.TrimSpace(it.Title)
+
+			// ------------------------------------------------------
 			// productName (fallback: title)
 			// ------------------------------------------------------
-			productName := strings.TrimSpace(it.Title)
+			productName := title
 			if pbID != "" && q.nameResolver != nil {
 				if cached, ok := productNameCache[pbID]; ok {
 					if cached != "" {
@@ -422,6 +430,9 @@ func (q *ListQuery) ListRows(ctx context.Context, filter listdom.Filter, sort li
 			allowedAll = append(allowedAll, ListRowDTO{
 				ID:          nonEmpty(id, "(missing id)"),
 				InventoryID: invID,
+
+				// ✅ NEW: title を返す
+				Title: title,
 
 				ProductBlueprintID: pbID,
 				TokenBlueprintID:   tbID,
