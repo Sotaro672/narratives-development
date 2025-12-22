@@ -26,7 +26,8 @@ export default function ListManagementPage() {
             onClick={() => handlers.onRowClick(l.id)}
             onKeyDown={(e) => handlers.onRowKeyDown(e, l.id)}
           >
-            {/* ✅ 左から：プロダクト名、トークン名、担当者、ステータス（出品中｜保留中） */}
+            {/* ✅ 左から：タイトル、プロダクト名、トークン名、担当者、ステータス（出品中｜保留中） */}
+            <td>{l.title}</td>
             <td>{l.productName}</td>
             <td>{l.tokenName}</td>
             <td>{l.assigneeName}</td>

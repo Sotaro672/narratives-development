@@ -14,6 +14,7 @@ export type ListManagementRowVM = {
   id: string;
 
   // ✅ 画面表示（左から）
+  title: string; // ✅ NEW: タイトル列（最左）
   productName: string;
   tokenName: string;
   assigneeName: string;
@@ -27,6 +28,7 @@ export type ListManagementRowVM = {
 };
 
 export type FilterOptions = {
+  titleOptions: Array<{ value: string; label: string }>; // ✅ NEW
   productOptions: Array<{ value: string; label: string }>;
   tokenOptions: Array<{ value: string; label: string }>;
   managerOptions: Array<{ value: string; label: string }>;
@@ -34,6 +36,7 @@ export type FilterOptions = {
 };
 
 export type Filters = {
+  titleFilter: string[]; // ✅ NEW
   productFilter: string[];
   tokenFilter: string[];
   managerFilter: string[];
@@ -76,14 +79,15 @@ export function buildStatusBadge(
 
 /**
  * DTO -> ViewModel（best-effort）
- * ※ backend の DTO が enrich 済みなら productName/tokenName/assigneeName を優先
- * ※ 未 enrich の場合は title を productName として表示（最低限の可視化）
+ * ※ backend の DTO が enrich 済みなら title/productName/tokenName/assigneeName を優先
+ * ※ 未 enrich の場合でも title は表示できるようにする（最低限の可視化）
  */
 export function mapAnyToVMRow(x: any): ListManagementRowVM {
   const id = String(x?.id ?? x?.ID ?? "").trim();
 
-  const productName =
-    String(x?.productName ?? x?.product_name ?? x?.title ?? x?.Title ?? "").trim();
+  const title = String(x?.title ?? x?.Title ?? "").trim();
+
+  const productName = String(x?.productName ?? x?.product_name ?? "").trim();
 
   const tokenName = String(x?.tokenName ?? x?.token_name ?? "").trim();
 
@@ -96,6 +100,8 @@ export function mapAnyToVMRow(x: any): ListManagementRowVM {
 
   return {
     id: id || "(missing id)",
+
+    title: title || "",
     productName: productName || "",
     tokenName: tokenName || "",
     assigneeName,
@@ -144,6 +150,10 @@ export async function loadListManagementRows(): Promise<{
  * ✅ Filter options（現在の rows から生成）
  */
 export function buildFilterOptions(rows: ListManagementRowVM[]): FilterOptions {
+  const titleOptions = Array.from(new Set(rows.map((r) => r.title)))
+    .filter((v) => String(v ?? "").trim() !== "")
+    .map((v) => ({ value: v, label: v }));
+
   const productOptions = Array.from(new Set(rows.map((r) => r.productName)))
     .filter((v) => String(v ?? "").trim() !== "")
     .map((v) => ({ value: v, label: v }));
@@ -162,11 +172,17 @@ export function buildFilterOptions(rows: ListManagementRowVM[]): FilterOptions {
     label: getStatusLabelJP(status),
   }));
 
-  return { productOptions, tokenOptions, managerOptions, statusOptions };
+  return {
+    titleOptions,
+    productOptions,
+    tokenOptions,
+    managerOptions,
+    statusOptions,
+  };
 }
 
 /**
- * ✅ フィルタ適用（4列）
+ * ✅ フィルタ適用（5列）
  */
 export function applyFilters(
   rows: ListManagementRowVM[],
@@ -174,6 +190,7 @@ export function applyFilters(
 ): ListManagementRowVM[] {
   return rows.filter(
     (r) =>
+      (f.titleFilter.length === 0 || f.titleFilter.includes(r.title)) &&
       (f.productFilter.length === 0 || f.productFilter.includes(r.productName)) &&
       (f.tokenFilter.length === 0 || f.tokenFilter.includes(r.tokenName)) &&
       (f.managerFilter.length === 0 || f.managerFilter.includes(r.assigneeName)) &&
@@ -200,12 +217,13 @@ export function applySort(
 }
 
 /**
- * ✅ ヘッダ生成（4列）
+ * ✅ ヘッダ生成（5列）
  */
 export function buildHeaders(args: {
   options: FilterOptions;
   selected: Filters;
   onChange: {
+    setTitleFilter: (v: string[]) => void; // ✅ NEW
     setProductFilter: (v: string[]) => void;
     setTokenFilter: (v: string[]) => void;
     setManagerFilter: (v: string[]) => void;
@@ -215,6 +233,13 @@ export function buildHeaders(args: {
   const { options, selected, onChange } = args;
 
   return [
+    <FilterableTableHeader
+      key="title"
+      label="タイトル"
+      options={options.titleOptions}
+      selected={selected.titleFilter}
+      onChange={onChange.setTitleFilter}
+    />,
     <FilterableTableHeader
       key="product"
       label="プロダクト名"

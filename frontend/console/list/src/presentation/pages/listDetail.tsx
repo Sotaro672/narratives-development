@@ -2,6 +2,7 @@
 // ✅ style 要素中心（状態/処理は hook に寄せる）
 
 import * as React from "react";
+import { useNavigate } from "react-router-dom";
 import PageStyle from "../../../../shell/src/layout/PageStyle/PageStyle";
 
 import { Card, CardContent } from "../../../../shell/src/shared/ui/card";
@@ -10,6 +11,9 @@ import { Button } from "../../../../shell/src/shared/ui/button";
 
 // ✅ PriceCard（list app 側のコンポーネント）
 import PriceCard from "../../../../list/src/presentation/components/priceCard";
+
+// ✅ AdminCard（担当者編集 + 作成/更新情報表示）
+import AdminCard from "../../../../admin/src/presentation/components/AdminCard";
 
 // ✅ hook（同一 app 内なので相対でOK）
 import { useListDetail } from "../hook/useListDetail";
@@ -47,12 +51,20 @@ function s(v: unknown): string {
 }
 
 export default function ListDetail() {
+  const navigate = useNavigate();
+
   const vm = useListDetail();
+  const anyVm = vm as any;
 
   const isEdit = vm.isEdit;
 
   const headerTitle =
     (isEdit ? s(vm.draftListingTitle) : s(vm.listingTitle)) || "出品詳細";
+
+  // ✅ 戻るは -1 ではなく、一覧（listManagement.tsx）へ絶対遷移
+  const onBackToListManagement = React.useCallback(() => {
+    navigate("/list");
+  }, [navigate]);
 
   // ✅ 型を固定して noImplicitAny を回避
   const effectiveImageUrls: string[] = React.useMemo(() => {
@@ -75,11 +87,28 @@ export default function ListDetail() {
 
   const effectivePriceRows = isEdit ? vm.draftPriceRows : vm.priceRows;
 
+  // ✅ AdminCard: 担当者選択の通知（hook 側に存在しうる関数を吸収）
+  const handleSelectAssignee = React.useCallback(
+    (id: string) => {
+      // 代表的な命名を吸収（存在するものだけ呼ぶ）
+      if (typeof anyVm.setDraftAssigneeId === "function") {
+        anyVm.setDraftAssigneeId(id);
+      }
+      if (typeof anyVm.onSelectAssignee === "function") {
+        anyVm.onSelectAssignee(id);
+      }
+      if (typeof anyVm.onChangeAssignee === "function") {
+        anyVm.onChangeAssignee(id);
+      }
+    },
+    [anyVm],
+  );
+
   return (
     <PageStyle
       layout="grid-2"
       title={headerTitle}
-      onBack={vm.onBack}
+      onBack={onBackToListManagement}
       // ✅ 編集開始は PageHeader の編集ボタンだけ
       onEdit={!isEdit ? vm.onEdit : undefined}
       onCancel={isEdit ? vm.onCancel : undefined}
@@ -309,28 +338,25 @@ export default function ListDetail() {
 
       {/* =========================
           右カラム
-          - 担当者
+          - 担当者（AdminCard: edit 対応）
           - 選択商品
           - 選択トークン
           - 出品｜保留（edit 対応）
           ========================= */}
       <div className="space-y-4">
-        {/* 担当者 */}
-        <Card>
-          <CardContent className="p-4">
-            <div className="text-sm font-medium mb-2">担当者</div>
-            <div className="text-sm text-slate-800 break-all">
-              {vm.assigneeName || "未設定"}
-            </div>
-
-            {(vm.createdByName || vm.createdAt) && (
-              <div className="mt-3 text-xs text-[hsl(var(--muted-foreground))] space-y-1">
-                {vm.createdByName && <div>作成者: {vm.createdByName}</div>}
-                {vm.createdAt && <div>作成日時: {vm.createdAt}</div>}
-              </div>
-            )}
-          </CardContent>
-        </Card>
+        {/* ✅ 担当者（edit 時に編集可能） */}
+        <AdminCard
+          title="担当者"
+          mode={isEdit ? "edit" : "view"}
+          assigneeName={vm.assigneeName}
+          onSelectAssignee={isEdit ? handleSelectAssignee : undefined}
+          onEditAssignee={isEdit ? anyVm.onEditAssignee : undefined}
+          onClickAssignee={isEdit ? anyVm.onClickAssignee : undefined}
+          createdByName={vm.createdByName}
+          createdAt={vm.createdAt}
+          updatedByName={vm.updatedByName}
+          updatedAt={vm.updatedAt}
+        />
 
         {/* 選択商品 */}
         <Card>
@@ -403,7 +429,9 @@ export default function ListDetail() {
                       vm.draftDecision === "listing"
                         ? "bg-slate-900 text-white border-slate-900"
                         : "bg-white text-slate-700 border-slate-200",
-                      vm.saving ? "opacity-60 cursor-not-allowed" : "cursor-pointer",
+                      vm.saving
+                        ? "opacity-60 cursor-not-allowed"
+                        : "cursor-pointer",
                     ].join(" ")}
                     onClick={() => vm.onToggleDecision("listing")}
                     disabled={vm.saving}
@@ -418,7 +446,9 @@ export default function ListDetail() {
                       vm.draftDecision === "holding"
                         ? "bg-slate-900 text-white border-slate-900"
                         : "bg-white text-slate-700 border-slate-200",
-                      vm.saving ? "opacity-60 cursor-not-allowed" : "cursor-pointer",
+                      vm.saving
+                        ? "opacity-60 cursor-not-allowed"
+                        : "cursor-pointer",
                     ].join(" ")}
                     onClick={() => vm.onToggleDecision("holding")}
                     disabled={vm.saving}

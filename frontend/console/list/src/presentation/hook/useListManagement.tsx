@@ -61,15 +61,16 @@ export function useListManagement(): UseListManagementResult {
     };
   }, []);
 
-  // ── Filter states（4列に合わせて最小化） ──────────────────
+  // ── Filter states（5列に合わせて最小化） ──────────────────
+  const [titleFilter, setTitleFilter] = useState<string[]>([]); // ✅ NEW
   const [productFilter, setProductFilter] = useState<string[]>([]);
   const [tokenFilter, setTokenFilter] = useState<string[]>([]);
   const [managerFilter, setManagerFilter] = useState<string[]>([]);
   const [statusFilter, setStatusFilter] = useState<string[]>([]); // holds ListStatus as string
 
   const filters: Filters = useMemo(
-    () => ({ productFilter, tokenFilter, managerFilter, statusFilter }),
-    [productFilter, tokenFilter, managerFilter, statusFilter],
+    () => ({ titleFilter, productFilter, tokenFilter, managerFilter, statusFilter }),
+    [titleFilter, productFilter, tokenFilter, managerFilter, statusFilter],
   );
 
   // ── Sort state（必要最低限：id だけ） ─────────────────────
@@ -92,13 +93,22 @@ export function useListManagement(): UseListManagementResult {
         options,
         selected: filters,
         onChange: {
+          setTitleFilter, // ✅ NEW
           setProductFilter,
           setTokenFilter,
           setManagerFilter,
           setStatusFilter,
         },
       }),
-    [options, filters, setProductFilter, setTokenFilter, setManagerFilter, setStatusFilter],
+    [
+      options,
+      filters,
+      setTitleFilter,
+      setProductFilter,
+      setTokenFilter,
+      setManagerFilter,
+      setStatusFilter,
+    ],
   );
 
   // handlers
@@ -120,6 +130,7 @@ export function useListManagement(): UseListManagementResult {
   );
 
   const onReset = useCallback(() => {
+    setTitleFilter([]); // ✅ NEW
     setProductFilter([]);
     setTokenFilter([]);
     setManagerFilter([]);

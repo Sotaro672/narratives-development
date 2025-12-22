@@ -68,6 +68,10 @@ export type UseListDetailResult = {
   createdByName: string;
   createdAt: string;
 
+  // ✅ NEW: 更新者/更新日時（AdminCard などで表示するため）
+  updatedByName: string;
+  updatedAt: string;
+
   // ✅ NEW: edit helpers (optional)
   listId?: string;
   inventoryId?: string;
@@ -288,6 +292,12 @@ export async function loadListDetailDTO(args: {
   // ✅ assigneeId は detail を優先。無ければ row。
   if (!s(merged?.assigneeId) && row) merged.assigneeId = s(row?.assigneeId);
 
+  // ✅ updatedAt / updatedBy も detail を優先。無ければ row（best-effort）
+  if (!s(merged?.updatedAt) && row) merged.updatedAt = s(row?.updatedAt);
+  if (!s(merged?.updatedBy) && row) {
+    merged.updatedBy = s(row?.updatedBy) || s(row?.updatedByName);
+  }
+
   // ✅ 表示名/ブランド/商品名/トークン名/ステータスは row があれば補完
   if (row) {
     if (!s(merged?.productName)) merged.productName = s(row?.productName);
@@ -330,6 +340,12 @@ export function deriveListDetail<TRow extends Record<string, any> = any>(dto: an
   const createdByName = s(dto?.createdBy);
   const createdAt = s(dto?.createdAt);
 
+  // ✅ NEW: updatedByName / updatedAt
+  // - 基本は dto.updatedBy / dto.updatedAt
+  // - もし updatedByName が別フィールドで来ても表示できるように best-effort で拾う
+  const updatedByName = s(dto?.updatedBy) || s((dto as any)?.updatedByName);
+  const updatedAt = s(dto?.updatedAt);
+
   const imageUrls = normalizeImageUrls(dto);
 
   // ✅ priceRows は detail の priceRows を読む（id=modelId, size/color/rgb/stock/price）
@@ -356,6 +372,10 @@ export function deriveListDetail<TRow extends Record<string, any> = any>(dto: an
 
     createdByName,
     createdAt,
+
+    // ✅ NEW
+    updatedByName,
+    updatedAt,
   };
 }
 

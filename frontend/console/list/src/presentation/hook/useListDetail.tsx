@@ -125,6 +125,10 @@ export type UseListDetailResult = {
 
   createdByName: string;
   createdAt: string;
+
+  // ✅ NEW: 更新者/更新日時（listDetail.tsx 側で参照するため）
+  updatedByName: string;
+  updatedAt: string;
 };
 
 // ==============================
@@ -349,6 +353,10 @@ export function useListDetail(): UseListDetailResult {
     createdAt,
   } = derived;
 
+  // ✅ NEW: deriveListDetail が返している可能性がある更新情報を best-effort で拾う
+  const updatedByName = s((derived as any)?.updatedByName);
+  const updatedAt = s((derived as any)?.updatedAt);
+
   const decisionNorm = React.useMemo(() => normalizeDecision(decision), [decision]);
 
   // ============================================================
@@ -482,7 +490,9 @@ export function useListDetail(): UseListDetailResult {
         .map((x) => s(x?.url))
         .filter(Boolean);
     }
-    return (Array.isArray(viewImageUrls) ? viewImageUrls : []).map((u) => s(u)).filter(Boolean);
+    return (Array.isArray(viewImageUrls) ? viewImageUrls : [])
+      .map((u) => s(u))
+      .filter(Boolean);
   }, [isEdit, draftImages, viewImageUrls]);
 
   // images: main index
@@ -534,10 +544,6 @@ export function useListDetail(): UseListDetailResult {
 
   // ============================================================
   // ✅ Save (PUT /lists/{id})
-  //
-  // ✅重要:
-  // - backend 更新は `prices` が本命（listRepositoryHTTP と合わせる）
-  // - PUT のレスポンスは信用せず、成功後に必ず GET で取り直して dto を更新
   // ============================================================
   const onSave = React.useCallback(
     async (payload?: any) => {
@@ -547,7 +553,6 @@ export function useListDetail(): UseListDetailResult {
         return;
       }
 
-      // ✅ タイトル/説明は payload があれば優先、無ければ draft を採用
       const nextTitle =
         s(payload?.title) ||
         s(payload?.listingTitle) ||
@@ -559,7 +564,6 @@ export function useListDetail(): UseListDetailResult {
           ? String(payload.description ?? "")
           : String(draftDescription ?? "");
 
-      // ✅ 価格は draft が正
       const nextPriceRows = Array.isArray(draftPriceRows) ? draftPriceRows : [];
 
       let prices: Array<{ modelId: string; price: number }> = [];
@@ -571,7 +575,6 @@ export function useListDetail(): UseListDetailResult {
         return;
       }
 
-      // ✅ status/decision は draftDecision を正とし、payload があれば吸収
       const backendStatus =
         decisionToBackendStatus(payload?.status) ||
         decisionToBackendStatus(payload?.decision) ||
@@ -582,15 +585,14 @@ export function useListDetail(): UseListDetailResult {
       const uid = s(auth.currentUser?.uid) || "system";
 
       const updatePayload: Record<string, any> = {
-        id, // 互換: body id
+        id,
         title: nextTitle,
         description: nextDesc,
-        prices, // ✅ 本命
+        prices,
         status: backendStatus,
         updatedBy: uid,
       };
 
-      // DisallowUnknownFields 対策で余計なものは入れない
       if (s(dto?.inventoryId)) updatePayload.inventoryId = s(dto?.inventoryId);
       if (s(dto?.assigneeId)) updatePayload.assigneeId = s(dto?.assigneeId);
 
@@ -613,7 +615,6 @@ export function useListDetail(): UseListDetailResult {
           body: updatePayload,
         });
 
-        // ✅ PUT レスポンスは信用せず GET で取り直す
         const fresh = await loadListDetailDTO({
           listId: id,
           inventoryIdHint: inventoryId,
@@ -621,7 +622,6 @@ export function useListDetail(): UseListDetailResult {
 
         if (cancelledRef.current) return;
 
-        // blob 解放（edit 終了で参照しなくなる）
         revokeDraftBlobUrls(draftImages);
 
         setDTO(fresh);
@@ -741,5 +741,9 @@ export function useListDetail(): UseListDetailResult {
 
     createdByName,
     createdAt,
+
+    // ✅ NEW
+    updatedByName,
+    updatedAt,
   };
 }
