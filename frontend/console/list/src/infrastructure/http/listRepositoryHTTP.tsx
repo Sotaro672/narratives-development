@@ -99,6 +99,22 @@ export type ListAggregateDTO = Record<string, any>;
 export type ListImageDTO = Record<string, any>;
 
 /**
+ * ✅ ListDetail DTO（型ガイド用）
+ * - ListDTO は Record<string, any> なので createdByName 等は “そのまま受け取れる”
+ * - ただし UI 側で見落としやすいのでここで明示しておく
+ */
+export type ListDetailDTO = ListDTO & {
+  createdByName?: string;
+  updatedByName?: string;
+
+  createdBy?: string;
+  updatedBy?: string;
+
+  createdAt?: string;
+  updatedAt?: string;
+};
+
+/**
  * ===========
  * Internal helpers
  * ===========
@@ -542,6 +558,8 @@ export async function fetchListsHTTP(): Promise<ListDTO[]> {
 
 /**
  * GET /lists/{id}
+ *
+ * ✅ ListDetail で使うので、レスポンスに createdByName が入っているか確認できるログを追加
  */
 export async function fetchListByIdHTTP(listId: string): Promise<ListDTO> {
   const id = String(listId ?? "").trim();
@@ -549,16 +567,47 @@ export async function fetchListByIdHTTP(listId: string): Promise<ListDTO> {
     throw new Error("invalid_list_id");
   }
 
-  return await requestJSON<ListDTO>({
+  const dto = await requestJSON<ListDTO>({
     method: "GET",
     path: `/lists/${encodeURIComponent(id)}`,
+    debug: {
+      tag: `GET /lists/${id}`,
+      url: `${API_BASE}/lists/${encodeURIComponent(id)}`,
+      method: "GET",
+    },
   });
+
+  // ✅ ListDetail 取得内容が分かるログ（createdByName もチェック）
+  try {
+    const anyDto = dto as any;
+    console.log("[list/listRepositoryHTTP] fetchListByIdHTTP ok", {
+      listId: id,
+      hasCreatedByName: Boolean(s(anyDto?.createdByName)),
+      createdBy: s(anyDto?.createdBy),
+      createdByName: s(anyDto?.createdByName),
+      updatedBy: s(anyDto?.updatedBy),
+      updatedByName: s(anyDto?.updatedByName),
+      createdAt: s(anyDto?.createdAt),
+      updatedAt: s(anyDto?.updatedAt),
+      keys: anyDto && typeof anyDto === "object" ? Object.keys(anyDto) : [],
+      dto,
+    });
+  } catch (e) {
+    console.log("[list/listRepositoryHTTP] fetchListByIdHTTP ok (log_failed)", {
+      listId: id,
+      err: String(e),
+    });
+  }
+
+  return dto;
 }
 
 /**
  * ✅ ListDetail 用（hook から移譲）
  * - 1) GET /lists/{id}
  * - 2) fallback: GET /lists?inventoryId=xxx（環境差分吸収）
+ *
+ * ✅ 「ListDetail画面を開いた際に取得したデータ」が分かるログをここにも追加
  */
 export async function fetchListDetailHTTP(args: {
   listId: string;
@@ -569,21 +618,68 @@ export async function fetchListDetailHTTP(args: {
     throw new Error("invalid_list_id");
   }
 
+  // ✅ ListDetail open log
+  console.log("[list/listRepositoryHTTP] fetchListDetailHTTP start", {
+    listId,
+    inventoryIdHint: s(args.inventoryIdHint),
+    url: `${API_BASE}/lists/${encodeURIComponent(listId)}`,
+  });
+
   try {
-    return await fetchListByIdHTTP(listId);
+    const dto = await fetchListByIdHTTP(listId);
+
+    // ✅ ListDetail resolved log (primary)
+    console.log("[list/listRepositoryHTTP] fetchListDetailHTTP resolved", {
+      source: "GET /lists/{id}",
+      listId,
+      createdByName: s((dto as any)?.createdByName),
+      updatedByName: s((dto as any)?.updatedByName),
+      dto,
+    });
+
+    return dto;
   } catch (e1) {
     const inv = s(args.inventoryIdHint) || listId;
+
+    console.log("[list/listRepositoryHTTP] fetchListDetailHTTP fallback start", {
+      listId,
+      inventoryId: inv,
+      url: `${API_BASE}/lists?inventoryId=${encodeURIComponent(inv)}`,
+      err: String(e1 instanceof Error ? e1.message : e1),
+    });
 
     try {
       const json = await requestJSON<any>({
         method: "GET",
         path: `/lists?inventoryId=${encodeURIComponent(inv)}`,
+        debug: {
+          tag: `GET /lists?inventoryId=${inv}`,
+          url: `${API_BASE}/lists?inventoryId=${encodeURIComponent(inv)}`,
+          method: "GET",
+        },
       });
 
       const first = extractFirstItemFromAny(json);
       if (!first) throw new Error("not_found");
+
+      // ✅ ListDetail resolved log (fallback)
+      console.log("[list/listRepositoryHTTP] fetchListDetailHTTP resolved", {
+        source: "GET /lists?inventoryId=xxx",
+        listId,
+        inventoryId: inv,
+        createdByName: s((first as any)?.createdByName),
+        updatedByName: s((first as any)?.updatedByName),
+        dto: first,
+        raw: json,
+      });
+
       return first as ListDTO;
-    } catch {
+    } catch (e2) {
+      console.log("[list/listRepositoryHTTP] fetchListDetailHTTP fallback failed", {
+        listId,
+        inventoryId: inv,
+        err: String(e2 instanceof Error ? e2.message : e2),
+      });
       throw e1;
     }
   }

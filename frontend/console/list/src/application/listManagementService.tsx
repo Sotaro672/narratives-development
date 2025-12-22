@@ -1,14 +1,17 @@
 // frontend/console/list/src/application/listManagementService.tsx
 
 import React from "react";
-import { FilterableTableHeader } from "../../../shell/src/layout/List/List";
+import {
+  FilterableTableHeader,
+  SortableTableHeader,
+} from "../../../shell/src/layout/List/List";
 
 import type { ListStatus } from "../../../shell/src/shared/types/list";
 
 // ✅ HTTP は repository へ移譲
 import { fetchListsHTTP } from "../infrastructure/http/listRepositoryHTTP";
 
-export type SortKey = "id" | null;
+export type SortKey = "id" | "createdAt" | null;
 
 export type ListManagementRowVM = {
   id: string;
@@ -21,6 +24,12 @@ export type ListManagementRowVM = {
 
   status: ListStatus;
   statusLabel: string;
+
+  // ✅ NEW: 作成日（ステータスの右隣）
+  createdAt: string;
+
+  // ✅ NEW: sort 用（ISO/RFC3339 を保持）
+  createdAtRaw: string;
 
   // view-only (page keeps className only)
   statusBadgeText: string;
@@ -77,6 +86,27 @@ export function buildStatusBadge(
   return { text: "削除済み", className: "list-status-badge is-paused" };
 }
 
+function pad2(n: number): string {
+  return String(n).padStart(2, "0");
+}
+
+// ✅ yyyy/mm/dd hh:mm 形式（入力が不正ならそのまま返す）
+function formatYMDHM(v: unknown): string {
+  const raw = String(v ?? "").trim();
+  if (!raw) return "";
+
+  const d = new Date(raw);
+  if (!Number.isFinite(d.getTime())) return raw;
+
+  const yyyy = d.getFullYear();
+  const mm = pad2(d.getMonth() + 1);
+  const dd = pad2(d.getDate());
+  const hh = pad2(d.getHours());
+  const mi = pad2(d.getMinutes());
+
+  return `${yyyy}/${mm}/${dd} ${hh}:${mi}`;
+}
+
 /**
  * DTO -> ViewModel（best-effort）
  * ※ backend の DTO が enrich 済みなら title/productName/tokenName/assigneeName を優先
@@ -106,6 +136,12 @@ export function mapAnyToVMRow(x: any): ListManagementRowVM {
 
   const badge = buildStatusBadge(st);
 
+  // ✅ NEW: createdAt（名揺れ吸収 + 表示フォーマット）
+  const createdAtRaw = String(
+    x?.createdAt ?? x?.CreatedAt ?? x?.created_at ?? "",
+  ).trim();
+  const createdAt = formatYMDHM(createdAtRaw);
+
   return {
     id: id || "(missing id)",
 
@@ -116,6 +152,9 @@ export function mapAnyToVMRow(x: any): ListManagementRowVM {
 
     status: st,
     statusLabel: getStatusLabelJP(st),
+
+    createdAt,
+    createdAtRaw,
 
     statusBadgeText: badge.text,
     statusBadgeClass: badge.className,
@@ -206,8 +245,14 @@ export function applyFilters(
   );
 }
 
+function toTimeMs(v: string): number {
+  const d = new Date(String(v ?? "").trim());
+  const t = d.getTime();
+  return Number.isFinite(t) ? t : 0;
+}
+
 /**
- * ✅ ソート（必要最低限：id）
+ * ✅ ソート（id / createdAt）
  */
 export function applySort(
   rows: ListManagementRowVM[],
@@ -218,6 +263,14 @@ export function applySort(
 
   const data = [...rows];
   data.sort((a, b) => {
+    if (activeKey === "createdAt") {
+      const ta = toTimeMs(a.createdAtRaw);
+      const tb = toTimeMs(b.createdAtRaw);
+      const cmp = ta - tb;
+      return direction === "asc" ? cmp : -cmp;
+    }
+
+    // default: id
     const cmp = a.id.localeCompare(b.id);
     return direction === "asc" ? cmp : -cmp;
   });
@@ -225,7 +278,8 @@ export function applySort(
 }
 
 /**
- * ✅ ヘッダ生成（5列）
+ * ✅ ヘッダ生成（6列）
+ * - createdAt は「ステータスの右隣」+ SortableTableHeader
  */
 export function buildHeaders(args: {
   options: FilterOptions;
@@ -237,8 +291,22 @@ export function buildHeaders(args: {
     setManagerFilter: (v: string[]) => void;
     setStatusFilter: (v: string[]) => void;
   };
+
+  // ✅ NEW: SortableTableHeader 用（hook から渡す）
+  sort: {
+    activeKey: SortKey;
+    direction: "asc" | "desc" | null;
+    onChange: (key: SortKey, dir: "asc" | "desc" | null) => void;
+  };
 }): React.ReactNode[] {
-  const { options, selected, onChange } = args;
+  const { options, selected, onChange, sort } = args;
+
+  // ✅ SortableTableHeader の onChange 型に合わせる（key は string で来る）
+  const onChangeCreatedAt = (key: string, nextDirection: "asc" | "desc") => {
+    // key は "createdAt" 固定運用（念のためガード）
+    const k: SortKey = key === "createdAt" ? "createdAt" : null;
+    sort.onChange(k, nextDirection);
+  };
 
   return [
     <FilterableTableHeader
@@ -275,6 +343,16 @@ export function buildHeaders(args: {
       options={options.statusOptions}
       selected={selected.statusFilter}
       onChange={onChange.setStatusFilter}
+    />,
+
+    // ✅ NEW: ステータスの右隣に作成日列（ソートあり / フィルタなし）
+    <SortableTableHeader
+      key="createdAt"
+      label="作成日"
+      sortKey="createdAt"
+      activeKey={sort.activeKey ?? undefined}
+      direction={sort.direction ?? undefined}
+      onChange={onChangeCreatedAt}
     />,
   ];
 }

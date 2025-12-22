@@ -24,7 +24,7 @@ export default function ListManagementPage() {
             onClick={() => handlers.onRowClick(l.id)}
             onKeyDown={(e) => handlers.onRowKeyDown(e, l.id)}
           >
-            {/* ✅ 左から：タイトル、プロダクト名、トークン名、担当者、ステータス（出品中｜保留中） */}
+            {/* ✅ 左から：タイトル、プロダクト名、トークン名、担当者、ステータス、作成日 */}
             <td>{l.title}</td>
             <td>{l.productName}</td>
             <td>{l.tokenName}</td>
@@ -32,6 +32,7 @@ export default function ListManagementPage() {
             <td>
               <span className={l.statusBadgeClass}>{l.statusBadgeText}</span>
             </td>
+            <td>{(l as any).createdAt ?? ""}</td>
           </tr>
         ))}
       </List>

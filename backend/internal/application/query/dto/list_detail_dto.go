@@ -29,8 +29,14 @@ type ListDetailDTO struct {
 	AssigneeName string `json:"assigneeName,omitempty"`
 
 	// audit
-	CreatedBy string `json:"createdBy,omitempty"`
-	CreatedAt string `json:"createdAt,omitempty"`
+	CreatedBy     string `json:"createdBy,omitempty"`
+	CreatedByName string `json:"createdByName,omitempty"` // ✅ createdBy の表示名
+	CreatedAt     string `json:"createdAt,omitempty"`
+
+	// ✅ NEW: 更新者（UID）と表示名
+	UpdatedBy     string `json:"updatedBy,omitempty"`
+	UpdatedByName string `json:"updatedByName,omitempty"`
+
 	UpdatedAt string `json:"updatedAt,omitempty"`
 
 	// primary image

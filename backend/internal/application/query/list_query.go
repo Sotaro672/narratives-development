@@ -5,6 +5,7 @@ import (
 	"context"
 	"log"
 	"strings"
+	"time"
 
 	querydto "narratives/internal/application/query/dto"
 	resolver "narratives/internal/application/resolver"
@@ -58,6 +59,10 @@ type ListRowDTO struct {
 	AssigneeName string `json:"assigneeName"`
 
 	Status string `json:"status"`
+
+	// ✅ NEW: listManagement に表示する作成日
+	// RFC3339 で返す（frontend 側で表示整形する）
+	CreatedAt string `json:"createdAt,omitempty"`
 }
 
 type ListCreateSeedDTO struct {
@@ -277,6 +282,13 @@ func (q *ListManagementQuery) ListRows(ctx context.Context, filter listdom.Filte
 				}
 			}
 
+			createdAt := ""
+			// it.CreatedAt が time.Time 前提（ListDetailQuery でも Format しているため）
+			// 万一ゼロ値なら空で返す
+			if !it.CreatedAt.IsZero() {
+				createdAt = it.CreatedAt.UTC().Format(time.RFC3339)
+			}
+
 			allowedAll = append(allowedAll, ListRowDTO{
 				ID:          nonEmpty(id, "(missing id)"),
 				InventoryID: invID,
@@ -297,6 +309,8 @@ func (q *ListManagementQuery) ListRows(ctx context.Context, filter listdom.Filte
 				AssigneeName: assigneeName,
 
 				Status: strings.TrimSpace(string(it.Status)),
+
+				CreatedAt: createdAt, // ✅ NEW
 			})
 		}
 

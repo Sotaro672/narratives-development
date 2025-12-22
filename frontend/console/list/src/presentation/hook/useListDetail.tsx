@@ -311,6 +311,31 @@ export function useListDetail(): UseListDetailResult {
         inventoryIdHint: inventoryId,
       });
       if (cancelledRef.current) return;
+
+      // ✅ Debug: ListDetail open -> fetched DTO visibility
+      try {
+        const anyData: any = data as any;
+        const keys =
+          anyData && typeof anyData === "object" ? Object.keys(anyData) : [];
+        console.log("[console/list/useListDetail] fetched dto", {
+          listId: id,
+          inventoryIdHint: s(inventoryId),
+          keys,
+          createdBy: s(anyData?.createdBy),
+          createdByName: s(anyData?.createdByName),
+          updatedBy: s(anyData?.updatedBy),
+          updatedByName: s(anyData?.updatedByName),
+          createdAt: s(anyData?.createdAt),
+          updatedAt: s(anyData?.updatedAt),
+          assigneeId: s(anyData?.assigneeId),
+          assigneeName: s(anyData?.assigneeName),
+        });
+      } catch (e) {
+        console.log("[console/list/useListDetail] fetched dto (log_failed)", {
+          err: String(e),
+        });
+      }
+
       setDTO(data);
     } catch (e) {
       if (cancelledRef.current) return;
@@ -351,17 +376,58 @@ export function useListDetail(): UseListDetailResult {
     assigneeId,
     assigneeName,
 
-    createdByName,
-    createdAt: createdAtRaw,
+    createdByName: createdByNameFromDerived,
+    createdAt: createdAtRawFromDerived,
   } = derived;
 
-  // ✅ NEW: deriveListDetail が返している可能性がある更新情報を best-effort で拾う
-  const updatedByName = s((derived as any)?.updatedByName);
-  const updatedAtRaw = s((derived as any)?.updatedAt);
+  // ✅ dto 側を最優先にして createdByName/createdAt を確定する
+  const dtoAny: any = dto as any;
+
+  const createdBy = s(dtoAny?.createdBy);
+  const createdByNameFromDTO = s(dtoAny?.createdByName);
+  const effectiveCreatedByName = createdByNameFromDTO || s(createdByNameFromDerived) || createdBy;
+
+  const createdAtRaw =
+    s(dtoAny?.createdAt) || s(createdAtRawFromDerived);
+
+  // ✅ updated も dto を最優先で拾う（deriveListDetail 側の差分吸収）
+  const updatedBy = s(dtoAny?.updatedBy);
+  const updatedByNameFromDTO = s(dtoAny?.updatedByName);
+  const updatedByNameFromDerived = s((derived as any)?.updatedByName);
+  const effectiveUpdatedByName =
+    updatedByNameFromDTO || updatedByNameFromDerived || updatedBy;
+
+  const updatedAtRaw =
+    s(dtoAny?.updatedAt) || s((derived as any)?.updatedAt);
 
   // ✅ 表示用フォーマット
   const createdAt = React.useMemo(() => formatYMDHM(createdAtRaw), [createdAtRaw]);
   const updatedAt = React.useMemo(() => formatYMDHM(updatedAtRaw), [updatedAtRaw]);
+
+  // ✅ Debug: final values that are actually passed to UI
+  React.useEffect(() => {
+    if (!dto) return;
+    try {
+      console.log("[console/list/useListDetail] effective admin fields", {
+        listId: s((dto as any)?.id) || s(listId),
+        createdBy,
+        createdByNameFromDTO,
+        createdByNameFromDerived: s(createdByNameFromDerived),
+        effectiveCreatedByName,
+        updatedBy,
+        updatedByNameFromDTO,
+        updatedByNameFromDerived,
+        effectiveUpdatedByName,
+        createdAtRaw,
+        updatedAtRaw,
+      });
+    } catch (e) {
+      console.log("[console/list/useListDetail] effective admin fields (log_failed)", {
+        err: String(e),
+      });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [dto]);
 
   const decisionNorm = React.useMemo(() => normalizeDecision(decision), [decision]);
 
@@ -701,11 +767,11 @@ export function useListDetail(): UseListDetailResult {
     assigneeId,
     assigneeName,
 
-    createdByName,
+    // ✅ ここが今回の本命：DTO優先で確定した name を返す
+    createdByName: effectiveCreatedByName,
     createdAt,
 
-    // ✅ NEW
-    updatedByName,
+    updatedByName: effectiveUpdatedByName,
     updatedAt,
   };
 }

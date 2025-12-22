@@ -118,6 +118,15 @@ func (q *ListDetailQuery) BuildListDetailDTO(ctx context.Context, listID string)
 	tokenName := ""
 	assigneeName := ""
 
+	createdByName := ""
+
+	// ✅ UpdatedBy is *string in domain
+	updatedByID := ""
+	if it.UpdatedBy != nil {
+		updatedByID = strings.TrimSpace(*it.UpdatedBy)
+	}
+	updatedByName := ""
+
 	if q.nameResolver != nil {
 		if pbID != "" {
 			productName = strings.TrimSpace(q.nameResolver.ResolveProductName(ctx, pbID))
@@ -128,9 +137,22 @@ func (q *ListDetailQuery) BuildListDetailDTO(ctx context.Context, listID string)
 		if strings.TrimSpace(it.AssigneeID) != "" {
 			assigneeName = strings.TrimSpace(q.nameResolver.ResolveAssigneeName(ctx, it.AssigneeID))
 		}
+		// ✅ createdBy は string（ポインタではない）なので ResolveMemberName を直接使う
+		if strings.TrimSpace(it.CreatedBy) != "" {
+			createdByName = strings.TrimSpace(q.nameResolver.ResolveMemberName(ctx, it.CreatedBy))
+		}
+		// ✅ updatedBy は *string（nil可）なので Resolver の *string 用ヘルパを使う
+		updatedByName = strings.TrimSpace(q.nameResolver.ResolveUpdatedByName(ctx, it.UpdatedBy))
 	}
+
 	if assigneeName == "" && strings.TrimSpace(it.AssigneeID) != "" {
 		assigneeName = "未設定"
+	}
+	if createdByName == "" && strings.TrimSpace(it.CreatedBy) != "" {
+		createdByName = "未設定"
+	}
+	if updatedByName == "" && updatedByID != "" {
+		updatedByName = "未設定"
 	}
 
 	// ---- brand ----
@@ -179,9 +201,14 @@ func (q *ListDetailQuery) BuildListDetailDTO(ctx context.Context, listID string)
 		AssigneeID:   strings.TrimSpace(it.AssigneeID),
 		AssigneeName: strings.TrimSpace(assigneeName),
 
-		CreatedBy: strings.TrimSpace(it.CreatedBy),
-		CreatedAt: it.CreatedAt.Format("2006-01-02T15:04:05Z07:00"),
-		UpdatedAt: it.UpdatedAt.Format("2006-01-02T15:04:05Z07:00"),
+		CreatedBy:     strings.TrimSpace(it.CreatedBy),
+		CreatedByName: strings.TrimSpace(createdByName),
+		CreatedAt:     it.CreatedAt.Format("2006-01-02T15:04:05Z07:00"),
+
+		// ✅ UpdatedBy/UpdatedByName（UpdatedBy は domain 側が *string）
+		UpdatedBy:     updatedByID,
+		UpdatedByName: strings.TrimSpace(updatedByName),
+		UpdatedAt:     it.UpdatedAt.Format("2006-01-02T15:04:05Z07:00"),
 
 		ImageID: strings.TrimSpace(it.ImageID),
 

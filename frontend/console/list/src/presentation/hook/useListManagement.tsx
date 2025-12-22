@@ -58,7 +58,7 @@ export function useListManagement(): UseListManagementResult {
   }, []);
 
   // ── Filter states（5列に合わせて最小化） ──────────────────
-  // ✅ titleFilter は型/フィルタ適用のために保持するが、ヘッダーUIには出さない（＝filterable-table-headerを導入しない）
+  // ✅ titleFilter は型/フィルタ適用のために保持するが、ヘッダーUIには出さない
   const [titleFilter, setTitleFilter] = useState<string[]>([]);
   const [productFilter, setProductFilter] = useState<string[]>([]);
   const [tokenFilter, setTokenFilter] = useState<string[]>([]);
@@ -70,9 +70,15 @@ export function useListManagement(): UseListManagementResult {
     [titleFilter, productFilter, tokenFilter, managerFilter, statusFilter],
   );
 
-  // ── Sort state（必要最低限：id だけ） ─────────────────────
+  // ── Sort state（id / createdAt） ──────────────────────────
   const [activeKey, setActiveKey] = useState<SortKey>(null);
   const [direction, setDirection] = useState<"asc" | "desc" | null>(null);
+
+  // sort handler（service の buildHeaders が要求する形に合わせる）
+  const onChangeSort = useCallback((key: SortKey, dir: "asc" | "desc" | null) => {
+    setActiveKey(key);
+    setDirection(dir);
+  }, []);
 
   // options
   const options = useMemo(() => buildFilterOptions(vmRowsSource), [vmRowsSource]);
@@ -85,7 +91,7 @@ export function useListManagement(): UseListManagementResult {
 
   // ── Headers ───────────────────────────────────────────────
   const headers: React.ReactNode[] = useMemo(() => {
-    // まず service 側のヘッダー（title含む）を生成
+    // service 側のヘッダー（status の右隣に createdAt を含む）を生成
     const built = buildHeaders({
       options,
       selected: filters,
@@ -97,19 +103,27 @@ export function useListManagement(): UseListManagementResult {
         setManagerFilter,
         setStatusFilter,
       },
+      sort: {
+        activeKey,
+        direction,
+        onChange: onChangeSort,
+      },
     });
 
     // ✅ タイトル列だけは filterable-table-header を使わず固定の見出しに差し替える
-    // buildHeaders が 先頭=タイトル列 の前提（5列構成）で運用
     const plainTitleHeader = <span key="title-header">タイトル</span>;
 
     if (Array.isArray(built) && built.length > 0) {
+      // built は [title, product, token, manager, status, createdAt] の想定
       return [plainTitleHeader, ...built.slice(1)];
     }
     return [plainTitleHeader];
   }, [
     options,
     filters,
+    activeKey,
+    direction,
+    onChangeSort,
     setTitleFilter,
     setProductFilter,
     setTokenFilter,
