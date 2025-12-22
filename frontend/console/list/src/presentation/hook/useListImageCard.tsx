@@ -57,6 +57,24 @@ export type UseListImageCardResult = {
   onDragOverImages?: (e: React.DragEvent<HTMLDivElement>) => void;
 };
 
+function pickFallbackUrls(anyVm: any): string[] {
+  // よくある揺れ吸収：anyVm 側に URL 配列がある場合に拾う
+  const candidates: any[] = [
+    anyVm?.imageUrls,
+    anyVm?.effectiveImageUrls,
+    anyVm?.urls,
+    anyVm?.previewUrls,
+    anyVm?.images?.map?.((x: any) => x?.url ?? x?.publicUrl ?? x?.src ?? ""),
+  ];
+
+  for (const c of candidates) {
+    if (Array.isArray(c) && c.length > 0) {
+      return c;
+    }
+  }
+  return [];
+}
+
 export function useListImageCard(args: UseListImageCardArgs): UseListImageCardResult {
   const anyVm = args.anyVm as any;
 
@@ -64,21 +82,34 @@ export function useListImageCard(args: UseListImageCardArgs): UseListImageCardRe
   const internalRef = React.useRef<HTMLInputElement | null>(null);
   const imageInputRef = (args.imageInputRef ?? internalRef) as React.RefObject<HTMLInputElement | null>;
 
+  // ✅ 親から imageUrls が空でも anyVm から拾えるように（互換/揺れ吸収）
   const effectiveImageUrls: string[] = React.useMemo(() => {
-    const arr = Array.isArray(args.imageUrls) ? args.imageUrls : [];
+    const base = Array.isArray(args.imageUrls) ? args.imageUrls : [];
+    const fallback = base.length > 0 ? [] : pickFallbackUrls(anyVm);
+    const arr = base.length > 0 ? base : fallback;
     return arr.map((u) => s(u)).filter(Boolean);
-  }, [args.imageUrls]);
+  }, [args.imageUrls, anyVm]);
 
   const hasImages = effectiveImageUrls.length > 0;
 
-  const mainUrl = hasImages ? effectiveImageUrls[args.mainImageIndex] ?? "" : "";
+  // main index を範囲内に丸める（親stateがズレても表示が壊れないように）
+  const safeMainIndex = React.useMemo(() => {
+    if (!hasImages) return 0;
+    const n = effectiveImageUrls.length;
+    const idx = Number.isFinite(args.mainImageIndex) ? args.mainImageIndex : 0;
+    if (idx < 0) return 0;
+    if (idx >= n) return 0;
+    return idx;
+  }, [hasImages, effectiveImageUrls.length, args.mainImageIndex]);
+
+  const mainUrl = hasImages ? effectiveImageUrls[safeMainIndex] ?? "" : "";
 
   const thumbIndices: number[] = React.useMemo(() => {
     if (!hasImages) return [];
     return effectiveImageUrls
       .map((_, idx) => idx)
-      .filter((idx) => idx !== args.mainImageIndex);
-  }, [hasImages, effectiveImageUrls, args.mainImageIndex]);
+      .filter((idx) => idx !== safeMainIndex);
+  }, [hasImages, effectiveImageUrls, safeMainIndex]);
 
   const openPicker = React.useCallback(() => {
     if (!args.isEdit) return;
@@ -116,7 +147,6 @@ export function useListImageCard(args: UseListImageCardArgs): UseListImageCardRe
 
   const handleSetMainIndex = React.useCallback(
     (idx: number) => {
-      // view/edit どちらでも main 切替は許可（既存挙動に合わせる）
       args.setMainImageIndex(idx);
     },
     [args.setMainImageIndex],

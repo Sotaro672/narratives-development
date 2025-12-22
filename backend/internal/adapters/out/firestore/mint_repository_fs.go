@@ -1,4 +1,4 @@
-// backend/internal/adapters/out/firestore/mint_repository_fs.go
+// backend\internal\adapters\out\firestore\mint_repository_fs.go
 package firestore
 
 import (
@@ -211,6 +211,41 @@ func asTimePtr(v any) *time.Time {
 	}
 }
 
+// ============================================================
+// minted/mintedAt normalization (self-heal)
+// ============================================================
+
+// normalizeMintedFields ensures Mint.Validate() won't fail due to inconsistency.
+// Rules:
+// - mintedAt != nil => minted must be true
+// - minted == true but mintedAt == nil => mintedAt is auto-filled with now (UTC)
+// - otherwise => minted=false, mintedAt=nil
+func normalizeMintedFields(minted bool, mintedAt *time.Time) (bool, *time.Time) {
+	if mintedAt != nil && !mintedAt.IsZero() {
+		return true, mintedAt
+	}
+	if minted {
+		now := time.Now().UTC()
+		return true, &now
+	}
+	return false, nil
+}
+
+// If Firestore doc is inconsistent (minted=false but mintedAt exists), fix minted=true in Firestore.
+func healDocMintedInconsistency(ctx context.Context, doc *firestore.DocumentSnapshot) {
+	if doc == nil || !doc.Exists() {
+		return
+	}
+	data := doc.Data()
+	minted := asBool(data["minted"])
+	mintedAt := asTimePtr(data["mintedAt"])
+	if mintedAt != nil && !mintedAt.IsZero() && !minted {
+		_, _ = doc.Ref.Update(ctx, []firestore.Update{
+			{Path: "minted", Value: true},
+		})
+	}
+}
+
 func decodeMintFromDoc(doc *firestore.DocumentSnapshot) (mintdom.Mint, error) {
 	if doc == nil || !doc.Exists() {
 		return mintdom.Mint{}, errors.New("doc is nil or not exists")
@@ -240,8 +275,10 @@ func decodeMintFromDoc(doc *firestore.DocumentSnapshot) (mintdom.Mint, error) {
 	m.CreatedBy = asString(data["createdBy"])
 	m.CreatedAt = asTime(data["createdAt"])
 
-	m.Minted = asBool(data["minted"])
-	m.MintedAt = asTimePtr(data["mintedAt"])
+	// minted/mintedAt を必ず整合させる
+	rawMinted := asBool(data["minted"])
+	rawMintedAt := asTimePtr(data["mintedAt"])
+	m.Minted, m.MintedAt = normalizeMintedFields(rawMinted, rawMintedAt)
 
 	m.ScheduledBurnDate = asTimePtr(data["scheduledBurnDate"])
 
@@ -313,19 +350,48 @@ func (r *MintRepositoryFS) Create(ctx context.Context, m mintdom.Mint) (mintdom.
 		m.CreatedAt = time.Now().UTC()
 	}
 
-	if err := m.Validate(); err != nil {
-		return mintdom.Mint{}, err
-	}
-
 	// Firestore には products を []string で保存する（正テーブル準拠）
 	productIDs := normalizeProductsToIDs(any(m.Products))
 	sort.Strings(productIDs)
 
-	// まず存在チェックして「createdAt を上書きしない」ようにする
-	_, getErr := docRef.Get(ctx)
+	// まず存在チェックして「createdAt を上書きしない」かつ「minted を壊さない」ようにする
+	existingSnap, getErr := docRef.Get(ctx)
 	exists := getErr == nil
 	if getErr != nil && status.Code(getErr) != codes.NotFound {
 		return mintdom.Mint{}, getErr
+	}
+
+	// ---- exists の場合は「既存の minted/mintedAt/txSignature/mintAddress」を優先して保持する ----
+	existingMinted := false
+	var existingMintedAt *time.Time
+	existingTxSig := ""
+	existingMintAddr := ""
+
+	if exists && existingSnap != nil && existingSnap.Exists() {
+		edata := existingSnap.Data()
+
+		rawMinted := asBool(edata["minted"])
+		rawMintedAt := asTimePtr(edata["mintedAt"])
+		existingMinted, existingMintedAt = normalizeMintedFields(rawMinted, rawMintedAt)
+
+		for _, k := range []string{"onChainTxSignature", "onchainTxSignature", "txSignature", "signature"} {
+			if s := asString(edata[k]); s != "" {
+				existingTxSig = s
+				break
+			}
+		}
+		for _, k := range []string{"onChainMintAddress", "onchainMintAddress", "mintAddress"} {
+			if s := asString(edata[k]); s != "" {
+				existingMintAddr = s
+				break
+			}
+		}
+	}
+
+	// minted/mintedAt を正規化して Validate
+	m.Minted, m.MintedAt = normalizeMintedFields(m.Minted, m.MintedAt)
+	if err := m.Validate(); err != nil {
+		return mintdom.Mint{}, err
 	}
 
 	data := map[string]any{
@@ -333,32 +399,61 @@ func (r *MintRepositoryFS) Create(ctx context.Context, m mintdom.Mint) (mintdom.
 		"tokenBlueprintId": strings.TrimSpace(m.TokenBlueprintID),
 		"products":         productIDs,
 		"createdBy":        strings.TrimSpace(m.CreatedBy),
-		"minted":           m.Minted,
 	}
 
-	// createdAt は「新規時のみ」入れる（既存がある場合は上書きしない）
+	// createdAt は「新規時のみ」入れる
 	if !exists {
 		data["createdAt"] = m.CreatedAt.UTC()
 	}
 
-	if m.MintedAt != nil && !m.MintedAt.IsZero() {
-		data["mintedAt"] = m.MintedAt.UTC()
+	// minted/mintedAt は「exists の場合は既存を優先」
+	if exists {
+		data["minted"] = existingMinted
+		if existingMintedAt != nil && !existingMintedAt.IsZero() {
+			data["mintedAt"] = existingMintedAt.UTC()
+		}
+	} else {
+		data["minted"] = m.Minted
+		if m.MintedAt != nil && !m.MintedAt.IsZero() {
+			data["mintedAt"] = m.MintedAt.UTC()
+		}
 	}
+
 	if m.ScheduledBurnDate != nil && !m.ScheduledBurnDate.IsZero() {
 		data["scheduledBurnDate"] = m.ScheduledBurnDate.UTC()
 	}
 
-	// ✅ onchain結果（MintUsecase が reflect で詰める想定の値を拾う）
-	if sig := pickFirstNonEmptyStringField(m, []string{"OnChainTxSignature", "OnchainTxSignature", "TxSignature", "Signature"}); sig != "" {
+	// ✅ onchain結果（exists の場合は既存があれば既存優先）
+	sig := strings.TrimSpace(existingTxSig)
+	if sig == "" {
+		sig = pickFirstNonEmptyStringField(m, []string{"OnChainTxSignature", "OnchainTxSignature", "TxSignature", "Signature"})
+	}
+	if sig != "" {
 		data["txSignature"] = sig
 	}
-	if addr := pickFirstNonEmptyStringField(m, []string{"MintAddress", "OnChainMintAddress", "OnchainMintAddress"}); addr != "" {
+
+	addr := strings.TrimSpace(existingMintAddr)
+	if addr == "" {
+		addr = pickFirstNonEmptyStringField(m, []string{"MintAddress", "OnChainMintAddress", "OnchainMintAddress"})
+	}
+	if addr != "" {
 		data["mintAddress"] = addr
 	}
 
-	// ✅ MergeAll は「map を渡す」ことが必須（struct を渡すと例のエラーになる）
-	if _, err := docRef.Set(ctx, data, firestore.MergeAll); err != nil {
-		return mintdom.Mint{}, err
+	// 新規は Create、既存は MergeAll
+	if !exists {
+		if _, err := docRef.Create(ctx, data); err != nil {
+			if status.Code(err) != codes.AlreadyExists {
+				return mintdom.Mint{}, err
+			}
+			if _, err2 := docRef.Set(ctx, data, firestore.MergeAll); err2 != nil {
+				return mintdom.Mint{}, err2
+			}
+		}
+	} else {
+		if _, err := docRef.Set(ctx, data, firestore.MergeAll); err != nil {
+			return mintdom.Mint{}, err
+		}
 	}
 
 	return m, nil
@@ -372,7 +467,6 @@ func (r *MintRepositoryFS) Update(ctx context.Context, m mintdom.Mint) (mintdom.
 
 	docID := strings.TrimSpace(m.ID)
 	if docID == "" {
-		// 互換: InspectionID があればそこから docId を確定
 		docID = getStringFieldIfExists(m, "InspectionID")
 		if docID == "" {
 			docID = getStringFieldIfExists(m, "InspectionId")
@@ -396,6 +490,9 @@ func (r *MintRepositoryFS) Update(ctx context.Context, m mintdom.Mint) (mintdom.
 		m.CreatedAt = existing.CreatedAt
 	}
 
+	// Update も minted/mintedAt を正規化して Validate
+	m.Minted, m.MintedAt = normalizeMintedFields(m.Minted, m.MintedAt)
+
 	if err := m.Validate(); err != nil {
 		return mintdom.Mint{}, err
 	}
@@ -411,8 +508,6 @@ func (r *MintRepositoryFS) Update(ctx context.Context, m mintdom.Mint) (mintdom.
 		"minted":           m.Minted,
 	}
 
-	// mintedAt / scheduledBurnDate は「値がある時だけ」上書き。
-	// 値を消したい場合は FieldValueDelete を別APIで用意してください。
 	if m.MintedAt != nil && !m.MintedAt.IsZero() {
 		data["mintedAt"] = m.MintedAt.UTC()
 	}
@@ -420,7 +515,6 @@ func (r *MintRepositoryFS) Update(ctx context.Context, m mintdom.Mint) (mintdom.
 		data["scheduledBurnDate"] = m.ScheduledBurnDate.UTC()
 	}
 
-	// ✅ onchain結果（任意）
 	if sig := pickFirstNonEmptyStringField(m, []string{"OnChainTxSignature", "OnchainTxSignature", "TxSignature", "Signature"}); sig != "" {
 		data["txSignature"] = sig
 	}
@@ -428,7 +522,6 @@ func (r *MintRepositoryFS) Update(ctx context.Context, m mintdom.Mint) (mintdom.
 		data["mintAddress"] = addr
 	}
 
-	// ✅ ここも必ず map を Set する（struct を Set すると MergeAll エラー）
 	_, err := docRef.Set(ctx, data, firestore.MergeAll)
 	if err != nil {
 		if status.Code(err) == codes.NotFound {
@@ -484,6 +577,9 @@ func (r *MintRepositoryFS) GetByID(ctx context.Context, id string) (mintdom.Mint
 		return mintdom.Mint{}, err
 	}
 
+	// 自己修復: mintedAt があるのに minted=false の doc は minted=true に戻す
+	healDocMintedInconsistency(ctx, doc)
+
 	return decodeMintFromDoc(doc)
 }
 
@@ -520,17 +616,19 @@ func (r *MintRepositoryFS) ListByProductionID(ctx context.Context, productionIDs
 		doc, err := r.col().Doc(id).Get(ctx)
 		if err != nil {
 			if status.Code(err) == codes.NotFound {
-				continue // mint 未作成
+				continue
 			}
 			return nil, err
 		}
+
+		healDocMintedInconsistency(ctx, doc)
 
 		m, err := decodeMintFromDoc(doc)
 		if err != nil {
 			return nil, err
 		}
 
-		key := strings.TrimSpace(doc.Ref.ID) // = productionId (= docId)
+		key := strings.TrimSpace(doc.Ref.ID)
 		if key == "" {
 			continue
 		}

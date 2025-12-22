@@ -3,8 +3,6 @@ package handlers
 
 import (
 	"context"
-	"crypto/rand"
-	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"io"
@@ -459,7 +457,7 @@ func (h *ListHandler) listIndex(w http.ResponseWriter, r *http.Request) {
 		"totalCount": result.TotalCount,
 		"totalPages": result.TotalPages,
 		"page":       result.Page,
-		"perPage":    result.PerPage,
+		"perPage":    perPage,
 	})
 }
 
@@ -521,9 +519,11 @@ func (h *ListHandler) create(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// 1 inventoryId に複数 List を作れるように、ID が inventoryId 固定（または空）の場合はサーバが採番
-	if item.ID == "" || item.ID == item.InventoryID {
-		item.ID = buildListID(item.InventoryID)
+	// ✅ 方針: listId は inventoryId と独立したIDを使う
+	// - item.ID が空なら、repo(Firestore) 側の自動採番に任せる
+	// - item.ID が inventoryId と同じ値で来た場合は事故防止でクリアする
+	if item.ID == item.InventoryID {
+		item.ID = ""
 	}
 
 	// status default
@@ -688,8 +688,6 @@ func (h *ListHandler) listImages(w http.ResponseWriter, r *http.Request, id stri
 }
 
 // ✅ NEW: POST /lists/{id}/images/upload
-// - dataURL(base64) を受けてアップロードし、ListImage レコードを返す。
-// - imgUploader が注入されていない場合は not_implemented。
 func (h *ListHandler) uploadImage(w http.ResponseWriter, r *http.Request, listID string) {
 	ctx := r.Context()
 
@@ -705,12 +703,12 @@ func (h *ListHandler) uploadImage(w http.ResponseWriter, r *http.Request, listID
 	}
 
 	var req struct {
-		ImageData    string  `json:"imageData"` // dataURL or base64 (domain が解釈)
+		ImageData    string  `json:"imageData"`
 		FileName     string  `json:"fileName"`
 		SetAsPrimary bool    `json:"setAsPrimary"`
-		DisplayOrder *int    `json:"displayOrder"` // 任意: 実装側で使わないなら無視される
+		DisplayOrder *int    `json:"displayOrder"`
 		CreatedBy    string  `json:"createdBy"`
-		UpdatedBy    *string `json:"updatedBy"` // 任意: primary 更新に使いたい場合
+		UpdatedBy    *string `json:"updatedBy"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		w.WriteHeader(http.StatusBadRequest)
@@ -749,12 +747,10 @@ func (h *ListHandler) uploadImage(w http.ResponseWriter, r *http.Request, listID
 		return
 	}
 
-	// 必要なら代表画像に設定
 	if req.SetAsPrimary {
 		now := time.Now().UTC()
 		_, e := h.uc.SetPrimaryImage(ctx, listID, strings.TrimSpace(img.ID), now, normalizeStrPtr(req.UpdatedBy))
 		if e != nil {
-			// 画像自体は作れているので WARN で返す（フロントで再試行可能）
 			log.Printf("[list_handler] WARN: SetPrimaryImage failed listID=%s imageID=%s err=%v", listID, strings.TrimSpace(img.ID), e)
 		}
 	}
@@ -904,35 +900,6 @@ func (h *ListHandler) getAggregate(w http.ResponseWriter, r *http.Request, id st
 		return
 	}
 	_ = json.NewEncoder(w).Encode(agg)
-}
-
-// ==============================
-// ID helpers
-// ==============================
-
-func buildListID(inventoryID string) string {
-	inventoryID = strings.TrimSpace(inventoryID)
-	suffix := randomHex(8) // 16 chars
-	if inventoryID == "" {
-		return suffix
-	}
-	return inventoryID + "__" + suffix
-}
-
-func randomHex(nBytes int) string {
-	if nBytes <= 0 {
-		nBytes = 8
-	}
-	b := make([]byte, nBytes)
-	if _, err := rand.Read(b); err != nil {
-		t := time.Now().UTC().UnixNano()
-		buf := make([]byte, 8)
-		for i := 0; i < 8; i++ {
-			buf[i] = byte((t >> (8 * i)) & 0xff)
-		}
-		return hex.EncodeToString(buf)
-	}
-	return hex.EncodeToString(b)
 }
 
 // ==============================

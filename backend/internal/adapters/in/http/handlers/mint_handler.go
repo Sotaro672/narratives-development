@@ -5,8 +5,10 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"io"
 	"log"
 	"net/http"
+	"runtime/debug"
 	"sort"
 	"strconv"
 	"strings"
@@ -792,7 +794,7 @@ func (h *MintHandler) updateRequestInfo(w http.ResponseWriter, r *http.Request) 
 
 	path := strings.TrimPrefix(r.URL.Path, "/mint/inspections/")
 	path = strings.TrimSuffix(path, "/request")
-	productionID := strings.TrimSpace(path)
+	productionID := strings.TrimSpace(strings.Trim(path, "/"))
 
 	if productionID == "" {
 		w.WriteHeader(http.StatusBadRequest)
@@ -800,11 +802,31 @@ func (h *MintHandler) updateRequestInfo(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
+	// ✅ panic を握ってスタックを必ず出す（原因確定用）
+	defer func() {
+		if rec := recover(); rec != nil {
+			log.Printf(
+				"[mint_handler] updateRequestInfo PANIC productionId=%q rec=%v stack=%s",
+				productionID, rec, string(debug.Stack()),
+			)
+			w.WriteHeader(http.StatusInternalServerError)
+			_ = json.NewEncoder(w).Encode(map[string]string{"error": "internal server error"})
+		}
+	}()
+
+	// ✅ body を生で読む（Decode 後だと読めない）
+	raw, _ := io.ReadAll(r.Body)
+	log.Printf(
+		"[mint_handler] /mint/inspections/{productionId}/request rawBody productionId=%q body=%s",
+		productionID, string(raw),
+	)
+
 	var body struct {
 		TokenBlueprintID  string  `json:"tokenBlueprintId"`
 		ScheduledBurnDate *string `json:"scheduledBurnDate,omitempty"`
 	}
-	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+	if err := json.Unmarshal(raw, &body); err != nil {
+		log.Printf("[mint_handler] updateRequestInfo bad_request json_unmarshal_err=%v raw=%s", err, string(raw))
 		w.WriteHeader(http.StatusBadRequest)
 		_ = json.NewEncoder(w).Encode(map[string]string{"error": "invalid body"})
 		return
@@ -817,14 +839,23 @@ func (h *MintHandler) updateRequestInfo(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
+	// ✅ scheduledBurnDate の “値” を出す（ポインタアドレスじゃなく）
+	sbd := "<nil>"
+	if body.ScheduledBurnDate != nil {
+		sbd = strings.TrimSpace(*body.ScheduledBurnDate)
+	}
+
 	log.Printf(
-		"[mint_handler] /mint/inspections/{productionId}/request productionId=%q tokenBlueprintId=%q scheduledBurnDate=%v",
-		productionID, tokenBlueprintID, body.ScheduledBurnDate,
+		"[mint_handler] /mint/inspections/{productionId}/request parsed productionId=%q tokenBlueprintId=%q scheduledBurnDate=%q",
+		productionID, tokenBlueprintID, sbd,
 	)
 
 	updated, err := h.mintUC.UpdateRequestInfo(ctx, productionID, tokenBlueprintID, body.ScheduledBurnDate)
 	if err != nil {
-		log.Printf("[mint_handler] updateRequestInfo error=%v", err)
+		log.Printf(
+			"[mint_handler] updateRequestInfo ERROR productionId=%q tokenBlueprintId=%q scheduledBurnDate=%q err=%T %v",
+			productionID, tokenBlueprintID, sbd, err, err,
+		)
 		w.WriteHeader(http.StatusInternalServerError)
 		_ = json.NewEncoder(w).Encode(map[string]string{"error": err.Error()})
 		return

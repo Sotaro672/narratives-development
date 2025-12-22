@@ -5,6 +5,7 @@ import (
 	"context"
 	"fmt"
 	"strings"
+	"time"
 
 	"cloud.google.com/go/firestore"
 	"google.golang.org/grpc/codes"
@@ -52,12 +53,6 @@ type MintRequestPortFS struct {
 var _ usecase.MintRequestPort = (*MintRequestPortFS)(nil)
 
 // NewMintRequestPortFS は mints ベースの MintRequestPort 実装を生成します。
-//
-// mintsColName / tokenBlueprintsColName / brandsColName は、
-// それぞれ Firestore の実際のコレクション名に合わせて渡してください。
-// 例:
-//
-//	NewMintRequestPortFS(client, "mints", "token_blueprints", "brands")
 func NewMintRequestPortFS(
 	client *firestore.Client,
 	mintsColName string,
@@ -73,6 +68,52 @@ func NewMintRequestPortFS(
 		// ★ トークン保存先はひとまず固定で "tokens" コレクションを想定
 		tokensCol: client.Collection("tokens"),
 	}
+}
+
+// ------------------------------------------------------------
+// helpers
+// ------------------------------------------------------------
+
+func nonEmptyStringAny(v any) string {
+	s, ok := v.(string)
+	if !ok {
+		return ""
+	}
+	return strings.TrimSpace(s)
+}
+
+func hasNonZeroTimestampAny(v any) bool {
+	if v == nil {
+		return false
+	}
+	switch t := v.(type) {
+	case time.Time:
+		return !t.IsZero()
+	case *time.Time:
+		return t != nil && !t.IsZero()
+	default:
+		// Firestore の Data() は通常 time.Time を返すが、念のため fallback
+		return false
+	}
+}
+
+// minted=false なのに mintedAt / 署名があるなど、
+// 「既にミント済みの痕跡」があるかを判定する。
+func hasMintedEvidence(raw map[string]any) bool {
+	if raw == nil {
+		return false
+	}
+	// mintedAt がある
+	if v, ok := raw["mintedAt"]; ok && hasNonZeroTimestampAny(v) {
+		return true
+	}
+	// tx signature がある（どれか1つ）
+	for _, k := range []string{"onChainTxSignature", "onchainTxSignature", "txSignature", "signature"} {
+		if s := nonEmptyStringAny(raw[k]); s != "" {
+			return true
+		}
+	}
+	return false
 }
 
 // LoadForMinting は mintID を受け取り、
@@ -106,6 +147,22 @@ func (p *MintRequestPortFS) LoadForMinting(
 		return nil, fmt.Errorf("decode mint %s: %w", mintID, err)
 	}
 
+	raw := mintSnap.Data()
+
+	// ★ 重要: minted=false でも mintedAt/署名が入っている「不整合状態」を検知したら
+	// その場で minted=true に修復して、以降は "already minted" 扱いにする。
+	//
+	// これを入れないと:
+	// - MintRepositoryFS 側で Validate が落ちる（inconsistent minted/mintedAt）
+	// - MintUsecase が mint をロードできず 500 になる
+	if !m.Minted && hasMintedEvidence(raw) {
+		// best-effort repair（失敗しても read は止めない）
+		_, _ = p.mintsCol.Doc(mintID).Update(ctx, []firestore.Update{
+			{Path: "minted", Value: true},
+		})
+		return nil, fmt.Errorf("mint %s is already minted", mintID)
+	}
+
 	// すでに minted 済みならエラーにする（ or スキップ）
 	if m.Minted {
 		return nil, fmt.Errorf("mint %s is already minted", mintID)
@@ -122,13 +179,11 @@ func (p *MintRequestPortFS) LoadForMinting(
 
 	// 1-2) products は「配列（productId一覧）」のみ対応する
 	// ※ map[productId]"" / map[productId]mintAddress 形式は廃止（互換コード削除）
-	raw := mintSnap.Data()
 	productIDs := make([]string, 0)
 
 	if v, ok := raw["products"]; ok {
 		switch vv := v.(type) {
 		case []interface{}:
-			// products: [ "productId1", "productId2", ... ]
 			for _, x := range vv {
 				if s, ok := x.(string); ok {
 					s = strings.TrimSpace(s)
@@ -146,11 +201,10 @@ func (p *MintRequestPortFS) LoadForMinting(
 			}
 		default:
 			// 型が想定外の場合は何もしない（ProductIDs 空のまま）
-			// 旧データが map 形式の場合は、ここで productIDs が空になり、後段でエラーになります。
 		}
 	}
 
-	// ★ 追加: すでに tokens に存在する productId がないか検査
+	// ★ tokens 既存チェック（既にミント済みの product があれば止める）
 	if len(productIDs) > 0 && p.tokensCol != nil {
 		already := make([]string, 0, len(productIDs))
 
@@ -160,19 +214,14 @@ func (p *MintRequestPortFS) LoadForMinting(
 				continue
 			}
 
-			// tokens/{productId} をチェック
 			_, err := p.tokensCol.Doc(pid).Get(ctx)
 			if err == nil {
-				// ドキュメントが存在 = すでにミント済み
 				already = append(already, pid)
 				continue
 			}
 			if status.Code(err) == codes.NotFound {
-				// まだミントされていないので OK
 				continue
 			}
-
-			// それ以外のエラーはそのまま返す
 			return nil, fmt.Errorf("check token for product %s: %w", pid, err)
 		}
 
@@ -258,19 +307,9 @@ func (p *MintRequestPortFS) MarkAsMinted(
 	}
 
 	updates := []firestore.Update{
-		{
-			Path:  "minted",
-			Value: true,
-		},
-		{
-			Path:  "mintedAt",
-			Value: firestore.ServerTimestamp,
-		},
-		{
-			Path:  "onChainTxSignature",
-			Value: result.Signature,
-		},
-		// ★ mintAddress は mints に保存しない
+		{Path: "minted", Value: true},
+		{Path: "mintedAt", Value: firestore.ServerTimestamp},
+		{Path: "onChainTxSignature", Value: strings.TrimSpace(result.Signature)},
 	}
 
 	_, err := p.mintsCol.Doc(mintID).Update(ctx, updates)
@@ -317,8 +356,21 @@ func (p *MintRequestPortFS) MarkProductsAsMinted(
 		return fmt.Errorf("decode mint %s in MarkProductsAsMinted: %w", mintID, err)
 	}
 
-	// tokens コレクションに 1商品=1トークンのレコードを作成
-	// ここでは「productId を docID」にして 1:1 を保証する方針。
+	// 代表として最後の MintResult を利用
+	var lastResult *tokendom.MintResult
+	for _, mt := range minted {
+		if mt.Result != nil {
+			lastResult = mt.Result
+		}
+	}
+	if lastResult == nil {
+		return fmt.Errorf("no valid MintResult found in minted list")
+	}
+
+	// ★ tokens upsert と mint の minted 更新を batch でまとめて atomic にする
+	batch := p.client.Batch()
+
+	// tokens: 1 productId = 1 token（docID=productId）
 	for _, mt := range minted {
 		productID := strings.TrimSpace(mt.ProductID)
 		if productID == "" {
@@ -331,35 +383,27 @@ func (p *MintRequestPortFS) MarkProductsAsMinted(
 		docID := productID
 
 		data := map[string]interface{}{
-			"brandId":            m.BrandID,
-			"tokenBlueprintId":   m.TokenBlueprintID,
+			"brandId":            strings.TrimSpace(m.BrandID),
+			"tokenBlueprintId":   strings.TrimSpace(m.TokenBlueprintID),
 			"productId":          productID,
-			"mintAddress":        mt.Result.MintAddress, // ★ tokens には mintAddress を保存（削除しない）
-			"onChainTxSignature": mt.Result.Signature,
+			"mintAddress":        strings.TrimSpace(mt.Result.MintAddress), // ★ tokens には mintAddress を保存（削除しない）
+			"onChainTxSignature": strings.TrimSpace(mt.Result.Signature),
 			"mintedAt":           firestore.ServerTimestamp,
-			// 必要に応じて scheduledBurnDate 等もここへコピーしてよい
 		}
 
-		// 既に存在していた場合は上書き (1 productId = 1 token の前提)
-		if _, err := p.tokensCol.Doc(docID).Set(ctx, data); err != nil {
-			return fmt.Errorf("failed to upsert token doc for product %s: %w", productID, err)
-		}
+		batch.Set(p.tokensCol.Doc(docID), data, firestore.MergeAll)
 	}
 
-	// mints/{id} 自体も minted=true に更新（代表として最後の MintResult を利用）
-	// ※ MarkAsMinted 側で mintAddress は保存しない方針
-	var lastResult *tokendom.MintResult
-	for _, mt := range minted {
-		if mt.Result != nil {
-			lastResult = mt.Result
-		}
-	}
-	if lastResult == nil {
-		return fmt.Errorf("no valid MintResult found in minted list")
-	}
+	// mints/{id}: minted=true + mintedAt + 署名
+	batch.Update(p.mintsCol.Doc(mintID), []firestore.Update{
+		{Path: "minted", Value: true},
+		{Path: "mintedAt", Value: firestore.ServerTimestamp},
+		{Path: "onChainTxSignature", Value: strings.TrimSpace(lastResult.Signature)},
+	})
 
-	if err := p.MarkAsMinted(ctx, mintID, lastResult); err != nil {
-		return fmt.Errorf("failed to mark mint %s as minted after per-product tokens: %w", mintID, err)
+	_, err = batch.Commit(ctx)
+	if err != nil {
+		return fmt.Errorf("batch commit failed in MarkProductsAsMinted mintID=%s: %w", mintID, err)
 	}
 
 	return nil

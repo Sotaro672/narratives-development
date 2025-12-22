@@ -1,5 +1,3 @@
-// frontend/console/list/src/infrastructure/http/listRepositoryHTTP.tsx
-
 // Firebase Auth から ID トークンを取得
 import { auth } from "../../../../shell/src/auth/infrastructure/config/firebaseClient";
 
@@ -117,9 +115,17 @@ export type ListAggregateDTO = Record<string, any>;
 export type ListImageDTO = Record<string, any>;
 
 /**
+ * ✅ Signed URL 発行の戻り（Policy A）
+ */
+export type SignedListImageUploadDTO = {
+  bucket?: string;
+  objectPath: string;
+  signedUrl: string;
+  publicUrl?: string;
+};
+
+/**
  * ✅ ListDetail DTO（型ガイド用）
- * - ListDTO は Record<string, any> なので createdByName 等は “そのまま受け取れる”
- * - ただし UI 側で見落としやすいのでここで明示しておく
  */
 export type ListDetailDTO = ListDTO & {
   createdByName?: string;
@@ -144,6 +150,16 @@ export type ListDetailDTO = ListDTO & {
 
 function s(v: unknown): string {
   return String(v ?? "").trim();
+}
+
+/**
+ * ✅ listId に "__{something}" が混入しても事故らないように正規化
+ * - 例: "listId__imageId" / "inventoryId__pbId__xxx" のような混入を除去
+ */
+function normalizeListId(v: unknown): string {
+  const id = s(v);
+  if (!id) return "";
+  return id.split("__")[0];
 }
 
 function toNumberOrNull(v: unknown): number | null {
@@ -255,8 +271,10 @@ function normalizeListImageUrls(listImages: ListImageDTO[], primaryImageId?: str
  * - backend が imageUrls を返していればそれを優先
  * - 空なら /lists/{id}/images から組み立てて補完
  */
-async function ensureDetailHasImageUrls(dto: ListDTO, listId: string): Promise<ListDTO> {
+async function ensureDetailHasImageUrls(dto: ListDTO, listIdRaw: string): Promise<ListDTO> {
+  const listId = normalizeListId(listIdRaw);
   const anyDto = dto as any;
+
   const currentUrls = Array.isArray(anyDto?.imageUrls) ? (anyDto.imageUrls as any[]) : [];
   const normalizedCurrent = currentUrls.map((x) => s(x)).filter(Boolean);
 
@@ -324,7 +342,6 @@ function normalizePricesForBackendUpdate(
     const priceMaybe = toNumberOrNull((r as any)?.price);
 
     if (!modelId) {
-      // update時も modelId が無いと更新できない
       throw new Error(`missing_modelId_in_priceRows_at_${idx}`);
     }
     if (priceMaybe === null) {
@@ -338,14 +355,13 @@ function normalizePricesForBackendUpdate(
 /**
  * ✅ CreateList payload（最小）
  * - 「create時に送るのは modelId と price」の方針を厳守
- * - decision/status/priceRows 等は送らない（DisallowUnknownFields対策）
  */
 function buildCreateListPayloadArray(input: CreateListInput): Record<string, any> {
   const u = auth.currentUser;
   const uid = s(u?.uid);
 
-  const inventoryId = s(input?.inventoryId);
-  const id = s(input?.id) || inventoryId;
+  const inventoryId = normalizeListId(input?.inventoryId);
+  const id = normalizeListId(input?.id) || inventoryId;
 
   if (!id) {
     throw new Error("missing_id");
@@ -365,17 +381,12 @@ function buildCreateListPayloadArray(input: CreateListInput): Record<string, any
     description: String(input?.description ?? ""),
     assigneeId: s(input?.assigneeId) || undefined,
     createdBy: s(input?.createdBy) || uid || "system",
-
-    // ✅ backendへ送るのは modelId + price のみ
     prices, // Array<{modelId, price}>
   };
 }
 
 /**
  * ✅ NEW: Update payload（最小）
- * - unknown fields を送らない
- * - prices は Array<{modelId, price}> のみ
- * - decision は backend が status を受ける場合のみ送る（listing/hold）
  */
 function buildUpdateListPayloadArray(input: UpdateListInput): Record<string, any> {
   const u = auth.currentUser;
@@ -387,30 +398,21 @@ function buildUpdateListPayloadArray(input: UpdateListInput): Record<string, any
 
   const prices = normalizePricesForBackendUpdate(input?.priceRows);
 
-  // decision -> status (backend の status が "listing"/"hold" を想定するため)
+  // decision -> status
   let status: string | undefined = undefined;
   if (input?.decision === "list") status = "listing";
   if (input?.decision === "hold") status = "hold";
 
   const payload: Record<string, any> = {
-    // id は path で渡すので body に必須ではない（ただし backend 実装次第で必要なら入れてもOK）
     title: title || undefined,
     description,
     assigneeId: s(input?.assigneeId) || undefined,
-
-    // ✅ backendへ送るのは modelId + price のみ
     prices,
-
-    // ✅ backend が status 更新を受ける場合のみ
     status,
-
-    // 絶対に送らない（名揺れ吸収しない）
     decision: undefined,
-
     updatedBy: s(input?.updatedBy) || uid || undefined,
   };
 
-  // undefined を落とす
   for (const k of Object.keys(payload)) {
     if (payload[k] === undefined) delete payload[k];
   }
@@ -420,7 +422,6 @@ function buildUpdateListPayloadArray(input: UpdateListInput): Record<string, any
 
 /**
  * ✅ fallback: prices を map で送る版
- * backend が `map[string]number` を期待している場合に通る
  */
 function buildCreateListPayloadMap(input: CreateListInput): Record<string, any> {
   const base = buildCreateListPayloadArray(input);
@@ -438,7 +439,7 @@ function buildCreateListPayloadMap(input: CreateListInput): Record<string, any> 
 
   return {
     ...base,
-    prices: pricesMap, // Record<string, number>
+    prices: pricesMap,
   };
 }
 
@@ -461,7 +462,7 @@ function buildUpdateListPayloadMap(input: UpdateListInput): Record<string, any> 
 
   return {
     ...base,
-    prices: pricesMap, // Record<string, number>
+    prices: pricesMap,
   };
 }
 
@@ -487,10 +488,8 @@ async function requestJSON<T>(args: {
   const token = await getIdToken();
   const url = `${API_BASE}${args.path.startsWith("/") ? "" : "/"}${args.path}`;
 
-  // ✅ debug: request payload
   if (args.debug) {
     try {
-      // NOTE: ここで stringify すると "実際に送る JSON" が見える
       const bodyStr =
         args.debug.body === undefined ? undefined : JSON.stringify(args.debug.body);
       console.log(`[list/listRepositoryHTTP] ${args.debug.tag}`, {
@@ -540,7 +539,6 @@ async function requestJSON<T>(args: {
       (json && typeof json === "object" && (json.error || json.message)) ||
       `http_error_${res.status}`;
 
-    // ✅ debug: response error
     console.log(`[list/listRepositoryHTTP] response error`, {
       method: args.method,
       url,
@@ -570,7 +568,6 @@ function extractFirstItemFromAny(json: any): any | null {
   if (Array.isArray(json)) return json[0] ?? null;
 
   if (json && typeof json === "object") {
-    // list が単体で返る場合
     if ((json as any).id) return json;
 
     const items = extractItemsArrayFromAny(json);
@@ -589,14 +586,10 @@ function extractFirstItemFromAny(json: any): any | null {
 /**
  * ✅ Create list
  * POST /lists
- *
- * 1) prices: Array<{modelId, price}> で送る
- * 2) 400 invalid json のときだけ prices: map にして1回だけリトライ
  */
 export async function createListHTTP(input: CreateListInput): Promise<ListDTO> {
   const payloadArray = buildCreateListPayloadArray(input);
 
-  // ✅ debug: create payload
   console.log("[list/listRepositoryHTTP] createListHTTP payload", payloadArray);
 
   try {
@@ -639,17 +632,13 @@ export async function createListHTTP(input: CreateListInput): Promise<ListDTO> {
 /**
  * ✅ Update list
  * PUT /lists/{id}
- *
- * 1) prices: Array<{modelId, price}> で送る
- * 2) 400 invalid json のときだけ prices: map にして1回だけリトライ
  */
 export async function updateListByIdHTTP(input: UpdateListInput): Promise<ListDTO> {
-  const listId = s(input?.listId);
+  const listId = normalizeListId(input?.listId);
   if (!listId) throw new Error("invalid_list_id");
 
   const payloadArray = buildUpdateListPayloadArray(input);
 
-  // ✅ debug: update payload
   console.log("[list/listRepositoryHTTP] updateListByIdHTTP payload", {
     listId,
     payload: payloadArray,
@@ -711,12 +700,9 @@ export async function fetchListsHTTP(): Promise<ListDTO[]> {
 
 /**
  * GET /lists/{id}
- *
- * ✅ ListDetail で使うので、レスポンスに createdByName が入っているか確認できるログを追加
- * ✅ listImage bucket の imageUrls も（空なら）補完して返す
  */
 export async function fetchListByIdHTTP(listId: string): Promise<ListDTO> {
-  const id = String(listId ?? "").trim();
+  const id = normalizeListId(listId);
   if (!id) {
     throw new Error("invalid_list_id");
   }
@@ -733,7 +719,6 @@ export async function fetchListByIdHTTP(listId: string): Promise<ListDTO> {
 
   const dto = await ensureDetailHasImageUrls(dto0, id);
 
-  // ✅ ListDetail 取得内容が分かるログ（createdByName もチェック）
   try {
     const anyDto = dto as any;
     console.log("[list/listRepositoryHTTP] fetchListByIdHTTP ok", {
@@ -745,10 +730,8 @@ export async function fetchListByIdHTTP(listId: string): Promise<ListDTO> {
       updatedByName: s(anyDto?.updatedByName),
       createdAt: s(anyDto?.createdAt),
       updatedAt: s(anyDto?.updatedAt),
-
       imageId: s(anyDto?.imageId),
       imageUrlsCount: Array.isArray(anyDto?.imageUrls) ? anyDto.imageUrls.length : 0,
-
       keys: anyDto && typeof anyDto === "object" ? Object.keys(anyDto) : [],
       dto,
     });
@@ -763,23 +746,17 @@ export async function fetchListByIdHTTP(listId: string): Promise<ListDTO> {
 }
 
 /**
- * ✅ ListDetail 用（hook から移譲）
- * - 1) GET /lists/{id}
- * - 2) fallback: GET /lists?inventoryId=xxx（環境差分吸収）
- *
- * ✅ 「ListDetail画面を開いた際に取得したデータ」が分かるログをここにも追加
- * ✅ listImage bucket の imageUrls も（空なら）補完して返す
+ * ✅ ListDetail 用
  */
 export async function fetchListDetailHTTP(args: {
   listId: string;
   inventoryIdHint?: string;
 }): Promise<ListDTO> {
-  const listId = String(args.listId ?? "").trim();
+  const listId = normalizeListId(args.listId);
   if (!listId) {
     throw new Error("invalid_list_id");
   }
 
-  // ✅ ListDetail open log
   console.log("[list/listRepositoryHTTP] fetchListDetailHTTP start", {
     listId,
     inventoryIdHint: s(args.inventoryIdHint),
@@ -789,7 +766,6 @@ export async function fetchListDetailHTTP(args: {
   try {
     const dto = await fetchListByIdHTTP(listId);
 
-    // ✅ ListDetail resolved log (primary)
     console.log("[list/listRepositoryHTTP] fetchListDetailHTTP resolved", {
       source: "GET /lists/{id}",
       listId,
@@ -801,7 +777,7 @@ export async function fetchListDetailHTTP(args: {
 
     return dto;
   } catch (e1) {
-    const inv = s(args.inventoryIdHint) || listId;
+    const inv = normalizeListId(args.inventoryIdHint) || listId;
 
     console.log("[list/listRepositoryHTTP] fetchListDetailHTTP fallback start", {
       listId,
@@ -826,7 +802,6 @@ export async function fetchListDetailHTTP(args: {
 
       const first = await ensureDetailHasImageUrls(first0 as ListDTO, listId);
 
-      // ✅ ListDetail resolved log (fallback)
       console.log("[list/listRepositoryHTTP] fetchListDetailHTTP resolved", {
         source: "GET /lists?inventoryId=xxx",
         listId,
@@ -854,7 +829,7 @@ export async function fetchListDetailHTTP(args: {
  * GET /lists/{id}/aggregate
  */
 export async function fetchListAggregateHTTP(listId: string): Promise<ListAggregateDTO> {
-  const id = String(listId ?? "").trim();
+  const id = normalizeListId(listId);
   if (!id) throw new Error("invalid_list_id");
 
   return await requestJSON<ListAggregateDTO>({
@@ -867,7 +842,7 @@ export async function fetchListAggregateHTTP(listId: string): Promise<ListAggreg
  * GET /lists/{id}/images
  */
 export async function fetchListImagesHTTP(listId: string): Promise<ListImageDTO[]> {
-  const id = String(listId ?? "").trim();
+  const id = normalizeListId(listId);
   if (!id) throw new Error("invalid_list_id");
 
   return await requestJSON<ListImageDTO[]>({
@@ -878,17 +853,52 @@ export async function fetchListImagesHTTP(listId: string): Promise<ListImageDTO[
 
 /**
  * ✅ NEW: listImage bucket の「表示用URL配列」を取得
- * - /lists/{id} が imageUrls を返さない環境でも UI 側で扱える
  */
 export async function fetchListImageUrlsHTTP(args: {
   listId: string;
   primaryImageId?: string;
 }): Promise<string[]> {
-  const listId = s(args.listId);
+  const listId = normalizeListId(args.listId);
   if (!listId) throw new Error("invalid_list_id");
 
   const imgs = await fetchListImagesHTTP(listId);
   return normalizeListImageUrls(imgs, args.primaryImageId);
+}
+
+/**
+ * ✅ NEW: signed-url 発行（Policy A）
+ * POST /lists/{id}/images/signed-url
+ *
+ * ※ listId は必ず normalize してから叩く（404対策）
+ */
+export async function issueListImageSignedUrlHTTP(args: {
+  listId: string;
+  fileName: string;
+  contentType: string;
+  size: number;
+  displayOrder: number;
+}): Promise<SignedListImageUploadDTO> {
+  const listId = normalizeListId(args.listId);
+  if (!listId) throw new Error("invalid_list_id");
+
+  const payload = {
+    fileName: s(args.fileName),
+    contentType: s(args.contentType) || "application/octet-stream",
+    size: Number(args.size || 0),
+    displayOrder: Number(args.displayOrder || 0),
+  };
+
+  return await requestJSON<SignedListImageUploadDTO>({
+    method: "POST",
+    path: `/lists/${encodeURIComponent(listId)}/images/signed-url`,
+    body: payload,
+    debug: {
+      tag: `POST /lists/${listId}/images/signed-url`,
+      url: `${API_BASE}/lists/${encodeURIComponent(listId)}/images/signed-url`,
+      method: "POST",
+      body: payload,
+    },
+  });
 }
 
 /**
@@ -906,7 +916,7 @@ export async function saveListImageFromGCSHTTP(args: {
   createdBy?: string;
   createdAt?: string; // RFC3339 optional
 }): Promise<ListImageDTO> {
-  const listId = String(args.listId ?? "").trim();
+  const listId = normalizeListId(args.listId);
   if (!listId) throw new Error("invalid_list_id");
 
   const payload = {
@@ -928,7 +938,7 @@ export async function saveListImageFromGCSHTTP(args: {
 }
 
 /**
- * PUT|POST|PATCH /lists/{id}/primary-image
+ * PUT /lists/{id}/primary-image
  */
 export async function setListPrimaryImageHTTP(args: {
   listId: string;
@@ -936,7 +946,7 @@ export async function setListPrimaryImageHTTP(args: {
   updatedBy?: string;
   now?: string; // RFC3339 optional
 }): Promise<ListDTO> {
-  const listId = String(args.listId ?? "").trim();
+  const listId = normalizeListId(args.listId);
   if (!listId) throw new Error("invalid_list_id");
 
   const payload = {

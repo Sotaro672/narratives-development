@@ -7,7 +7,10 @@ import { useNavigate, useParams } from "react-router-dom";
 import { useAdminCard as useAdminCardHook } from "../../../../admin/src/presentation/hook/useAdminCard";
 
 // ✅ PriceCard hook（PriceRow 型もここから取り込む）
-import { usePriceCard, type PriceRow } from "../../../../list/src/presentation/hook/usePriceCard";
+import {
+  usePriceCard,
+  type PriceRow,
+} from "../../../../list/src/presentation/hook/usePriceCard";
 
 // ✅ application service に移譲（hook には state/handler のみ残す）
 import {
@@ -91,11 +94,17 @@ export function useListCreate(): UseListCreateResult {
 
   const params = useParams<ListCreateRouteParams>();
 
-  const resolvedParams: ResolvedListCreateParams = React.useMemo(() => resolveListCreateParams(params), [params]);
+  const resolvedParams: ResolvedListCreateParams = React.useMemo(
+    () => resolveListCreateParams(params),
+    [params],
+  );
 
   const { inventoryId } = resolvedParams;
 
-  const title = React.useMemo(() => computeListCreateTitle(inventoryId), [inventoryId]);
+  const title = React.useMemo(
+    () => computeListCreateTitle(inventoryId),
+    [inventoryId],
+  );
 
   // ============================================================
   // ✅ 出品｜保留
@@ -116,51 +125,60 @@ export function useListCreate(): UseListCreateResult {
 
   const imageInputRef = React.useRef<HTMLInputElement | null>(null);
 
-  const onSelectImages = React.useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
-    const files = Array.from(e.target.files ?? []).filter(Boolean) as File[];
-    if (files.length === 0) return;
+  const onSelectImages = React.useCallback(
+    (e: React.ChangeEvent<HTMLInputElement>) => {
+      const files = Array.from(e.target.files ?? []).filter(Boolean) as File[];
+      if (files.length === 0) return;
 
-    const next = dedupeFiles(images, files);
-    setImages(next);
+      const next = dedupeFiles(images, files);
+      setImages(next);
 
-    // ✅ listImage: 画像を渡せているか確認するログ
-    // eslint-disable-next-line no-console
-    console.log("[inventory/listImage] selected", {
-      addedCount: files.length,
-      totalCount: next.length,
-      names: next.slice(0, 6).map((f) => f.name),
-    });
+      // ✅ listImage: 画像を渡せているか確認するログ
+      // eslint-disable-next-line no-console
+      console.log("[inventory/listImage] selected", {
+        addedCount: files.length,
+        totalCount: next.length,
+        names: next.slice(0, 6).map((f) => f.name),
+      });
 
-    // 同じファイルを再選択できるように
-    e.currentTarget.value = "";
-  }, [images]);
+      // 同じファイルを再選択できるように
+      e.currentTarget.value = "";
+    },
+    [images],
+  );
 
-  const onDropImages = React.useCallback((e: React.DragEvent<HTMLDivElement>) => {
-    e.preventDefault();
-    e.stopPropagation();
+  const onDropImages = React.useCallback(
+    (e: React.DragEvent<HTMLDivElement>) => {
+      e.preventDefault();
+      e.stopPropagation();
 
-    const files = Array.from(e.dataTransfer.files ?? [])
-      .filter(Boolean)
-      .filter((f) => String(f.type || "").startsWith("image/")) as File[];
+      const files = Array.from(e.dataTransfer.files ?? [])
+        .filter(Boolean)
+        .filter((f) => String(f.type || "").startsWith("image/")) as File[];
 
-    if (files.length === 0) return;
+      if (files.length === 0) return;
 
-    const next = dedupeFiles(images, files);
-    setImages(next);
+      const next = dedupeFiles(images, files);
+      setImages(next);
 
-    // ✅ listImage: 画像を渡せているか確認するログ
-    // eslint-disable-next-line no-console
-    console.log("[inventory/listImage] dropped", {
-      addedCount: files.length,
-      totalCount: next.length,
-      names: next.slice(0, 6).map((f) => f.name),
-    });
-  }, [images]);
+      // ✅ listImage: 画像を渡せているか確認するログ
+      // eslint-disable-next-line no-console
+      console.log("[inventory/listImage] dropped", {
+        addedCount: files.length,
+        totalCount: next.length,
+        names: next.slice(0, 6).map((f) => f.name),
+      });
+    },
+    [images],
+  );
 
-  const onDragOverImages = React.useCallback((e: React.DragEvent<HTMLDivElement>) => {
-    e.preventDefault();
-    e.stopPropagation();
-  }, []);
+  const onDragOverImages = React.useCallback(
+    (e: React.DragEvent<HTMLDivElement>) => {
+      e.preventDefault();
+      e.stopPropagation();
+    },
+    [],
+  );
 
   const removeImageAt = React.useCallback((idx: number) => {
     setImages((prev) => {
@@ -261,7 +279,12 @@ export function useListCreate(): UseListCreateResult {
   // ============================================================
   // ✅ 担当者
   // ============================================================
-  const { assigneeName, assigneeCandidates, loadingMembers, onSelectAssignee } = useAdminCardHook();
+  const {
+    assigneeName,
+    assigneeCandidates,
+    loadingMembers,
+    onSelectAssignee,
+  } = useAdminCardHook();
 
   const [assigneeId, setAssigneeId] = React.useState<string | undefined>(undefined);
 
@@ -303,8 +326,13 @@ export function useListCreate(): UseListCreateResult {
           types: images.slice(0, 8).map((f) => f.type),
         });
 
+        // ✅ A. inventoryId を切り捨てない（最重要）
+        // - inventoryId は仕様として "pbId__tbId" を含むため、"__" 以降を捨てるのは誤り
+        const rawInventoryId = String(resolvedParams.inventoryId ?? "");
+        const safeInventoryId = rawInventoryId; // ✅ split("__") しない
+
         await createListWithImages({
-          params: resolvedParams,
+          params: { ...resolvedParams, inventoryId: safeInventoryId },
           listingTitle,
           description,
           priceRows: priceRows as any,

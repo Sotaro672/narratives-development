@@ -119,6 +119,39 @@ const FALLBACK_BASE =
 export const API_BASE = ENV_BASE || FALLBACK_BASE;
 
 // ---------------------------------------------------------
+// ✅ DEBUG: HTTP ログ（渡したリクエストが分かる）
+// - DEV では常に出す
+// - 本番で出したい場合は VITE_DEBUG_HTTP=1
+// ---------------------------------------------------------
+const DEBUG_HTTP =
+  Boolean((import.meta as any).env?.DEV) ||
+  String((import.meta as any).env?.VITE_DEBUG_HTTP ?? "") === "1";
+
+function safeTokenHint(idToken: string): string {
+  const t = String(idToken ?? "");
+  if (!t) return "(empty)";
+  return `${t.slice(0, 10)}...(${t.length})`;
+}
+
+function logHttpRequest(tag: string, info: any) {
+  if (!DEBUG_HTTP) return;
+  // eslint-disable-next-line no-console
+  console.log(`[mintRequest/mintRequestRepositoryHTTP] ${tag} request`, info);
+}
+
+function logHttpResponse(tag: string, info: any) {
+  if (!DEBUG_HTTP) return;
+  // eslint-disable-next-line no-console
+  console.log(`[mintRequest/mintRequestRepositoryHTTP] ${tag} response`, info);
+}
+
+function logHttpError(tag: string, info: any) {
+  if (!DEBUG_HTTP) return;
+  // eslint-disable-next-line no-console
+  console.log(`[mintRequest/mintRequestRepositoryHTTP] ${tag} error`, info);
+}
+
+// ---------------------------------------------------------
 // 共通: Firebase トークン取得
 // ---------------------------------------------------------
 async function getIdTokenOrThrow(): Promise<string> {
@@ -154,7 +187,8 @@ function asMaybeString(v: any): string | null {
 function normalizeMintListRow(v: any): MintListRowDTO {
   // ここは UI（hook/service）側で inspectionId を正として扱っているため、
   // 返却側のキーは “inspectionId として” 揃える（productionId/id 揺れは rowKey 側で吸収）
-  const inspectionId = asMaybeString(v?.inspectionId ?? v?.productionId ?? v?.id) ?? null;
+  const inspectionId =
+    asMaybeString(v?.inspectionId ?? v?.productionId ?? v?.id) ?? null;
 
   const mintId = asMaybeString(v?.mintId ?? v?.id) ?? null;
 
@@ -337,23 +371,57 @@ export async function fetchProductBlueprintIdByProductionIdHTTP(
   const url1 = `${API_BASE}/productions/${encodeURIComponent(pid)}`;
 
   try {
+    logHttpRequest("fetchProductBlueprintIdByProductionIdHTTP(primary)", {
+      method: "GET",
+      url: url1,
+      headers: { Authorization: `Bearer ${safeTokenHint(idToken)}`, "Content-Type": "application/json" },
+    });
+
     const res1 = await fetch(url1, { method: "GET", headers: buildHeaders(idToken) });
+
+    logHttpResponse("fetchProductBlueprintIdByProductionIdHTTP(primary)", {
+      method: "GET",
+      url: url1,
+      status: res1.status,
+      statusText: res1.statusText,
+    });
 
     if (res1.ok) {
       const j1 = (await res1.json()) as any;
       const pb1 = normalizeProductBlueprintIdFromProductionListItem(j1);
       return pb1 ? pb1 : null;
     }
-  } catch (_e: any) {
+  } catch (e: any) {
+    logHttpError("fetchProductBlueprintIdByProductionIdHTTP(primary)", {
+      method: "GET",
+      url: url1,
+      error: String(e?.message ?? e),
+    });
     // noop
   }
 
   const url2 = `${API_BASE}/productions`;
 
+  logHttpRequest("fetchProductBlueprintIdByProductionIdHTTP(fallback)", {
+    method: "GET",
+    url: url2,
+    headers: { Authorization: `Bearer ${safeTokenHint(idToken)}`, "Content-Type": "application/json" },
+  });
+
   const res2 = await fetch(url2, { method: "GET", headers: buildHeaders(idToken) });
 
+  logHttpResponse("fetchProductBlueprintIdByProductionIdHTTP(fallback)", {
+    method: "GET",
+    url: url2,
+    status: res2.status,
+    statusText: res2.statusText,
+  });
+
   if (!res2.ok) {
-    throw new Error(`Failed to fetch productions: ${res2.status} ${res2.statusText}`);
+    const body = await res2.text().catch(() => "");
+    throw new Error(
+      `Failed to fetch productions: ${res2.status} ${res2.statusText}${body ? ` body=${body.slice(0, 400)}` : ""}`,
+    );
   }
 
   const json2 = await res2.json();
@@ -373,10 +441,26 @@ async function fetchProductionIdsForCurrentCompanyHTTP(): Promise<string[]> {
 
   const url = `${API_BASE}/productions`;
 
+  logHttpRequest("fetchProductionIdsForCurrentCompanyHTTP", {
+    method: "GET",
+    url,
+    headers: { Authorization: `Bearer ${safeTokenHint(idToken)}`, "Content-Type": "application/json" },
+  });
+
   const res = await fetch(url, { method: "GET", headers: buildHeaders(idToken) });
 
+  logHttpResponse("fetchProductionIdsForCurrentCompanyHTTP", {
+    method: "GET",
+    url,
+    status: res.status,
+    statusText: res.statusText,
+  });
+
   if (!res.ok) {
-    throw new Error(`Failed to fetch productions: ${res.status} ${res.statusText}`);
+    const body = await res.text().catch(() => "");
+    throw new Error(
+      `Failed to fetch productions: ${res.status} ${res.statusText}${body ? ` body=${body.slice(0, 400)}` : ""}`,
+    );
   }
 
   const json = await res.json();
@@ -511,13 +595,28 @@ export async function fetchMintRequestDetailByProductionIdHTTP(
 
   const url = `${API_BASE}/mint/inspections/${encodeURIComponent(pid)}`;
 
+  logHttpRequest("fetchMintRequestDetailByProductionIdHTTP", {
+    method: "GET",
+    url,
+    headers: { Authorization: `Bearer ${safeTokenHint(idToken)}`, "Content-Type": "application/json" },
+    productionId: pid,
+  });
+
   const res = await fetch(url, { method: "GET", headers: buildHeaders(idToken) });
+
+  logHttpResponse("fetchMintRequestDetailByProductionIdHTTP", {
+    method: "GET",
+    url,
+    status: res.status,
+    statusText: res.statusText,
+  });
 
   if (res.status === 404) return null;
 
   if (!res.ok) {
+    const body = await res.text().catch(() => "");
     throw new Error(
-      `Failed to fetch mint request detail: ${res.status} ${res.statusText}`,
+      `Failed to fetch mint request detail: ${res.status} ${res.statusText}${body ? ` body=${body.slice(0, 400)}` : ""}`,
     );
   }
 
@@ -547,11 +646,26 @@ export async function fetchInspectionBatchesByProductionIdsHTTP(
     ids.join(","),
   )}`;
 
+  logHttpRequest("fetchInspectionBatchesByProductionIdsHTTP", {
+    method: "GET",
+    url,
+    headers: { Authorization: `Bearer ${safeTokenHint(idToken)}`, "Content-Type": "application/json" },
+    productionIds: ids,
+  });
+
   const res = await fetch(url, { method: "GET", headers: buildHeaders(idToken) });
 
+  logHttpResponse("fetchInspectionBatchesByProductionIdsHTTP", {
+    method: "GET",
+    url,
+    status: res.status,
+    statusText: res.statusText,
+  });
+
   if (!res.ok) {
+    const body = await res.text().catch(() => "");
     throw new Error(
-      `Failed to fetch inspections (mint): ${res.status} ${res.statusText}`,
+      `Failed to fetch inspections (mint): ${res.status} ${res.statusText}${body ? ` body=${body.slice(0, 400)}` : ""}`,
     );
   }
 
@@ -601,13 +715,28 @@ export async function fetchProductBlueprintPatchHTTP(
     productBlueprintId,
   )}/patch`;
 
+  logHttpRequest("fetchProductBlueprintPatchHTTP", {
+    method: "GET",
+    url,
+    headers: { Authorization: `Bearer ${safeTokenHint(idToken)}`, "Content-Type": "application/json" },
+    productBlueprintId,
+  });
+
   const res = await fetch(url, { method: "GET", headers: buildHeaders(idToken) });
+
+  logHttpResponse("fetchProductBlueprintPatchHTTP", {
+    method: "GET",
+    url,
+    status: res.status,
+    statusText: res.statusText,
+  });
 
   if (res.status === 404) return null;
 
   if (!res.ok) {
+    const body = await res.text().catch(() => "");
     throw new Error(
-      `Failed to fetch productBlueprintPatch: ${res.status} ${res.statusText}`,
+      `Failed to fetch productBlueprintPatch: ${res.status} ${res.statusText}${body ? ` body=${body.slice(0, 400)}` : ""}`,
     );
   }
 
@@ -636,11 +765,25 @@ export async function fetchBrandsForMintHTTP(): Promise<BrandForMintDTO[]> {
 
   const url = `${API_BASE}/mint/brands`;
 
+  logHttpRequest("fetchBrandsForMintHTTP", {
+    method: "GET",
+    url,
+    headers: { Authorization: `Bearer ${safeTokenHint(idToken)}`, "Content-Type": "application/json" },
+  });
+
   const res = await fetch(url, { method: "GET", headers: buildHeaders(idToken) });
 
+  logHttpResponse("fetchBrandsForMintHTTP", {
+    method: "GET",
+    url,
+    status: res.status,
+    statusText: res.statusText,
+  });
+
   if (!res.ok) {
+    const body = await res.text().catch(() => "");
     throw new Error(
-      `Failed to fetch brands (mint): ${res.status} ${res.statusText}`,
+      `Failed to fetch brands (mint): ${res.status} ${res.statusText}${body ? ` body=${body.slice(0, 400)}` : ""}`,
     );
   }
 
@@ -689,13 +832,28 @@ export async function fetchTokenBlueprintsByBrandHTTP(
     trimmed,
   )}`;
 
+  logHttpRequest("fetchTokenBlueprintsByBrandHTTP", {
+    method: "GET",
+    url,
+    headers: { Authorization: `Bearer ${safeTokenHint(idToken)}`, "Content-Type": "application/json" },
+    brandId: trimmed,
+  });
+
   const res = await fetch(url, { method: "GET", headers: buildHeaders(idToken) });
+
+  logHttpResponse("fetchTokenBlueprintsByBrandHTTP", {
+    method: "GET",
+    url,
+    status: res.status,
+    statusText: res.statusText,
+  });
 
   if (res.status === 404) return [];
 
   if (!res.ok) {
+    const body = await res.text().catch(() => "");
     throw new Error(
-      `Failed to fetch tokenBlueprints (mint): ${res.status} ${res.statusText}`,
+      `Failed to fetch tokenBlueprints (mint): ${res.status} ${res.statusText}${body ? ` body=${body.slice(0, 400)}` : ""}`,
     );
   }
 
@@ -779,14 +937,29 @@ export async function fetchModelVariationByIdForMintHTTP(
 
   for (const url of candidates) {
     try {
+      logHttpRequest("fetchModelVariationByIdForMintHTTP", {
+        method: "GET",
+        url,
+        headers: { Authorization: `Bearer ${safeTokenHint(idToken)}`, "Content-Type": "application/json" },
+        variationId: vid,
+      });
+
       const res = await fetch(url, { method: "GET", headers: buildHeaders(idToken) });
+
+      logHttpResponse("fetchModelVariationByIdForMintHTTP", {
+        method: "GET",
+        url,
+        status: res.status,
+        statusText: res.statusText,
+      });
 
       if (res.status === 404 || res.status === 405) continue;
       if (res.status >= 500) continue;
 
       if (!res.ok) {
+        const body = await res.text().catch(() => "");
         throw new Error(
-          `Failed to fetch model variation: ${res.status} ${res.statusText}`,
+          `Failed to fetch model variation: ${res.status} ${res.statusText}${body ? ` body=${body.slice(0, 400)}` : ""}`,
         );
       }
 
@@ -845,12 +1018,36 @@ async function fetchMintRequestsRowsRaw(
   )}`;
   const url = view ? `${base}&view=${encodeURIComponent(view)}` : base;
 
+  // ✅ ここで「渡した productionIds / view / URL」が分かる
+  logHttpRequest("fetchMintRequestsRowsRaw", {
+    method: "GET",
+    url,
+    headers: { Authorization: `Bearer ${safeTokenHint(idToken)}`, "Content-Type": "application/json" },
+    productionIds: ids,
+    view,
+  });
+
   const res = await fetch(url, { method: "GET", headers: buildHeaders(idToken) });
+
+  logHttpResponse("fetchMintRequestsRowsRaw", {
+    method: "GET",
+    url,
+    status: res.status,
+    statusText: res.statusText,
+  });
 
   if (res.status === 404) return [];
   if (!res.ok) {
+    const body = await res.text().catch(() => "");
+    logHttpError("fetchMintRequestsRowsRaw", {
+      method: "GET",
+      url,
+      status: res.status,
+      statusText: res.statusText,
+      bodyPreview: body ? body.slice(0, 800) : "",
+    });
     throw new Error(
-      `Failed to fetch mint requests: ${res.status} ${res.statusText}`,
+      `Failed to fetch mint requests: ${res.status} ${res.statusText}${body ? ` body=${body.slice(0, 400)}` : ""}`,
     );
   }
 
@@ -988,20 +1185,58 @@ export async function postMintRequestHTTP(
     payload.scheduledBurnDate = scheduledBurnDate.trim();
   }
 
+  // ✅ ここで「押下時に渡したリクエスト（URL + payload）」が分かる
+  logHttpRequest("postMintRequestHTTP", {
+    method: "POST",
+    url,
+    headers: { Authorization: `Bearer ${safeTokenHint(idToken)}`, "Content-Type": "application/json" },
+    productionId: trimmed,
+    payload,
+  });
+
   const res = await fetch(url, {
     method: "POST",
     headers: buildHeaders(idToken),
     body: JSON.stringify(payload),
   });
 
+  logHttpResponse("postMintRequestHTTP", {
+    method: "POST",
+    url,
+    status: res.status,
+    statusText: res.statusText,
+  });
+
   if (res.status === 404) return null;
 
   if (!res.ok) {
+    const body = await res.text().catch(() => "");
+    logHttpError("postMintRequestHTTP", {
+      method: "POST",
+      url,
+      status: res.status,
+      statusText: res.statusText,
+      payload,
+      bodyPreview: body ? body.slice(0, 1200) : "",
+    });
     throw new Error(
-      `Failed to post mint request: ${res.status} ${res.statusText}`,
+      `Failed to post mint request: ${res.status} ${res.statusText}${body ? ` body=${body.slice(0, 400)}` : ""}`,
     );
   }
 
-  const json = (await res.json()) as InspectionBatchDTO | null | undefined;
-  return json ?? null;
+  // 200/201 で JSON が返る想定。空の場合も落とさない。
+  const text = await res.text().catch(() => "");
+  if (!text.trim()) return null;
+
+  try {
+    const json = JSON.parse(text) as InspectionBatchDTO | null | undefined;
+    return json ?? null;
+  } catch (e: any) {
+    logHttpError("postMintRequestHTTP(parse)", {
+      url,
+      error: String(e?.message ?? e),
+      bodyPreview: text.slice(0, 800),
+    });
+    return null;
+  }
 }

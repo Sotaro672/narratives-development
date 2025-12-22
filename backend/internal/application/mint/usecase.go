@@ -300,48 +300,51 @@ func (u *MintUsecase) MintFromMintRequest(ctx context.Context, mintRequestID str
 	}
 
 	// helper: mintEnt を安全に取得する（Policy A: docId = productionId）
-	loadMint := func() *mintdom.Mint {
+	// ✅ 重要: NotFound 以外のエラー（例: inconsistent minted/mintedAt）は握り潰さず上位へ返す
+	loadMint := func() (*mintdom.Mint, error) {
 		if u.mintRepo == nil {
-			return nil
+			return nil, errors.New("mint repo is nil")
 		}
+
 		if getter, ok := any(u.mintRepo).(interface {
 			GetByID(ctx context.Context, id string) (mintdom.Mint, error)
 		}); ok {
 			m, err := getter.GetByID(ctx, mintRequestID)
 			if err == nil {
-				return &m
+				return &m, nil
 			}
-			if errors.Is(err, mintdom.ErrNotFound) {
-				return nil
-			}
-			if strings.Contains(strings.ToLower(err.Error()), "not found") {
-				return nil
+			if isNotFoundErr(err) {
+				return nil, nil
 			}
 			log.Printf("[mint_usecase] MintFromMintRequest mint(GetByID) error id=%q err=%v", mintRequestID, err)
-			return nil
+			return nil, err
 		}
+
 		if getter, ok := any(u.mintRepo).(interface {
 			Get(ctx context.Context, id string) (mintdom.Mint, error)
 		}); ok {
 			m, err := getter.Get(ctx, mintRequestID)
 			if err == nil {
-				return &m
+				return &m, nil
 			}
-			if errors.Is(err, mintdom.ErrNotFound) {
-				return nil
-			}
-			if strings.Contains(strings.ToLower(err.Error()), "not found") {
-				return nil
+			if isNotFoundErr(err) {
+				return nil, nil
 			}
 			log.Printf("[mint_usecase] MintFromMintRequest mint(Get) error id=%q err=%v", mintRequestID, err)
-			return nil
+			return nil, err
 		}
+
 		log.Printf("[mint_usecase] MintFromMintRequest mintRepo has no GetByID/Get (type=%T)", u.mintRepo)
-		return nil
+		return nil, errors.New("mint repo does not support GetByID/Get")
 	}
 
 	// 1) Mint を事前取得
-	mintEnt := loadMint()
+	mintEnt, loadErr := loadMint()
+	if loadErr != nil {
+		// ✅ not found 偽装をやめる（原因が見えるようにする）
+		log.Printf("[mint_usecase] MintFromMintRequest abort reason=mint_load_error mintRequestId=%q err=%v elapsed=%s", mintRequestID, loadErr, time.Since(start))
+		return nil, loadErr
+	}
 	if mintEnt == nil {
 		log.Printf("[mint_usecase] MintFromMintRequest abort reason=mint_not_found mintRequestId=%q elapsed=%s", mintRequestID, time.Since(start))
 		return nil, mintdom.ErrNotFound
@@ -590,8 +593,6 @@ func (u *MintUsecase) MintFromMintRequest(ctx context.Context, mintRequestID str
 
 						if invEnt.Stock != nil {
 							if ms, ok := invEnt.Stock[mid]; ok {
-								// ms.Products が slice/map なら len が効く
-								// （構造変更に強くしたい場合は inventory 側の型に合わせてここを調整）
 								productsCount = len(ms.Products)
 								accumulation = productsCount
 							}
@@ -673,7 +674,12 @@ func (u *MintUsecase) ListMintsByInspectionIDs(
 		for _, id := range ids {
 			m, err := getter.GetByID(ctx, id)
 			if err != nil {
-				if errors.Is(err, mintdom.ErrNotFound) || strings.Contains(strings.ToLower(err.Error()), "not found") {
+				if isNotFoundErr(err) {
+					continue
+				}
+				// ✅ 一部レコードの整合性エラーで一覧全体を 500 にしない（ログしてスキップ）
+				if isInconsistentMintErr(err) {
+					log.Printf("[mint_usecase] ListMintsByInspectionIDs skip inconsistent mint id=%q err=%v", id, err)
 					continue
 				}
 				return nil, err
@@ -690,7 +696,12 @@ func (u *MintUsecase) ListMintsByInspectionIDs(
 		for _, id := range ids {
 			m, err := getter.Get(ctx, id)
 			if err != nil {
-				if errors.Is(err, mintdom.ErrNotFound) || strings.Contains(strings.ToLower(err.Error()), "not found") {
+				if isNotFoundErr(err) {
+					continue
+				}
+				// ✅ 一部レコードの整合性エラーで一覧全体を 500 にしない（ログしてスキップ）
+				if isInconsistentMintErr(err) {
+					log.Printf("[mint_usecase] ListMintsByInspectionIDs skip inconsistent mint id=%q err=%v", id, err)
 					continue
 				}
 				return nil, err
@@ -1056,14 +1067,15 @@ func (u *MintUsecase) UpdateRequestInfo(
 		pid, mid, tbID, len(passedProductIDs),
 	)
 
-	// ✅ mint request 作成直後に MintFromMintRequest を自動実行（維持）
+	// ✅ 自動 mint は best-effort（失敗しても request 作成は成功扱いで返す）
 	if u.tokenMinter == nil {
-		return empty, errors.New("token minter is nil")
+		log.Printf("[mint_usecase] UpdateRequestInfo auto MintFromMintRequest skipped reason=token_minter_nil productionId=%q", pid)
+		return batch, nil
 	}
 
 	if _, err := u.MintFromMintRequest(ctx, pid); err != nil {
 		log.Printf("[mint_usecase] UpdateRequestInfo auto MintFromMintRequest failed productionId=%q err=%v", pid, err)
-		return empty, err
+		// ★ ここで return err しない（500 を止める）
 	}
 
 	return batch, nil
@@ -1382,4 +1394,30 @@ func buildMintResultFromMint(m mintdom.Mint) *tokendom.MintResult {
 		MintAddress: addr,
 		Slot:        0,
 	}
+}
+
+func isNotFoundErr(err error) bool {
+	if err == nil {
+		return false
+	}
+	if errors.Is(err, mintdom.ErrNotFound) {
+		return true
+	}
+	msg := strings.ToLower(strings.TrimSpace(err.Error()))
+	return strings.Contains(msg, "not found")
+}
+
+func isInconsistentMintErr(err error) bool {
+	if err == nil {
+		return false
+	}
+	msg := strings.ToLower(strings.TrimSpace(err.Error()))
+	// 例: "mint: inconsistent minted / mintedAt"
+	if strings.Contains(msg, "inconsistent minted") {
+		return true
+	}
+	if strings.Contains(msg, "minted") && strings.Contains(msg, "mintedat") && strings.Contains(msg, "inconsistent") {
+		return true
+	}
+	return false
 }
