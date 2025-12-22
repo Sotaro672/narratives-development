@@ -274,6 +274,134 @@ function formatYMDHM(v: unknown): string {
   return `${yyyy}/${mm}/${dd}/${hh}/${mi}`;
 }
 
+// ==============================
+// ✅ NEW: listImage を扱う hook（UI-only）
+// - edit 時だけ追加/削除できる
+// - 複数ファイルをまとめて追加できる
+// - isNew(blob) は revoke 対応
+// ==============================
+
+function fileKey(f: File): string {
+  return `${f.name}__${f.size}__${f.lastModified}`;
+}
+
+function isImageFile(f: File): boolean {
+  return String((f as any)?.type ?? "").startsWith("image/");
+}
+
+function useListImages(args: {
+  isEdit: boolean;
+  saving: boolean;
+  initialUrls: string[];
+}) {
+  const { isEdit, saving, initialUrls } = args;
+
+  const [draftImages, setDraftImages] = React.useState<DraftImage[]>(
+    cloneDraftImagesFromUrls(initialUrls),
+  );
+
+  // 初期URLが変わったら、編集していない時だけ同期（外側でも同期するが二重でも安全）
+  React.useEffect(() => {
+    if (isEdit) return;
+    setDraftImages(cloneDraftImagesFromUrls(initialUrls));
+  }, [isEdit, initialUrls]);
+
+  const addFiles = React.useCallback(
+    (files: File[]) => {
+      if (!isEdit) return;
+      if (saving) return;
+
+      const incoming = (Array.isArray(files) ? files : [])
+        .filter(Boolean)
+        .filter(isImageFile);
+
+      if (incoming.length === 0) return;
+
+      setDraftImages((prev) => {
+        const prevArr = Array.isArray(prev) ? prev : [];
+        const exists = new Set(
+          prevArr
+            .filter((x) => x?.isNew && x?.file)
+            .map((x) => fileKey(x.file as File)),
+        );
+
+        const next: DraftImage[] = [];
+
+        for (const f of incoming) {
+          const k = fileKey(f);
+          if (exists.has(k)) continue;
+          exists.add(k);
+
+          const url = URL.createObjectURL(f);
+          next.push({ url, file: f, isNew: true });
+        }
+
+        return [...prevArr, ...next];
+      });
+    },
+    [isEdit, saving],
+  );
+
+  const onAddImages = React.useCallback(
+    (files: FileList | null) => {
+      if (!files || files.length === 0) return;
+      const arr = Array.from(files).filter(Boolean) as File[];
+      addFiles(arr);
+    },
+    [addFiles],
+  );
+
+  const onRemoveImageAt = React.useCallback(
+    (idx: number) => {
+      if (!isEdit) return;
+      if (saving) return;
+
+      setDraftImages((prev) => {
+        const arr = Array.isArray(prev) ? prev : [];
+        if (idx < 0 || idx >= arr.length) return arr;
+
+        const target = arr[idx];
+        if (target?.isNew && target?.url?.startsWith("blob:")) {
+          try {
+            URL.revokeObjectURL(target.url);
+          } catch {
+            // noop
+          }
+        }
+
+        return arr.slice(0, idx).concat(arr.slice(idx + 1));
+      });
+    },
+    [isEdit, saving],
+  );
+
+  const clearImages = React.useCallback(() => {
+    if (!isEdit) return;
+    if (saving) return;
+
+    setDraftImages((prev) => {
+      revokeDraftBlobUrls(prev);
+      return [];
+    });
+  }, [isEdit, saving]);
+
+  const imageUrls = React.useMemo(() => {
+    return (Array.isArray(draftImages) ? draftImages : [])
+      .map((x) => s(x?.url))
+      .filter(Boolean);
+  }, [draftImages]);
+
+  return {
+    draftImages,
+    setDraftImages,
+    imageUrls,
+    onAddImages,
+    onRemoveImageAt,
+    clearImages,
+    addFiles,
+  };
+}
+
 export function useListDetail(): UseListDetailResult {
   const navigate = useNavigate();
   const params = useParams<ListDetailRouteParams>();
@@ -385,10 +513,10 @@ export function useListDetail(): UseListDetailResult {
 
   const createdBy = s(dtoAny?.createdBy);
   const createdByNameFromDTO = s(dtoAny?.createdByName);
-  const effectiveCreatedByName = createdByNameFromDTO || s(createdByNameFromDerived) || createdBy;
+  const effectiveCreatedByName =
+    createdByNameFromDTO || s(createdByNameFromDerived) || createdBy;
 
-  const createdAtRaw =
-    s(dtoAny?.createdAt) || s(createdAtRawFromDerived);
+  const createdAtRaw = s(dtoAny?.createdAt) || s(createdAtRawFromDerived);
 
   // ✅ updated も dto を最優先で拾う（deriveListDetail 側の差分吸収）
   const updatedBy = s(dtoAny?.updatedBy);
@@ -397,8 +525,7 @@ export function useListDetail(): UseListDetailResult {
   const effectiveUpdatedByName =
     updatedByNameFromDTO || updatedByNameFromDerived || updatedBy;
 
-  const updatedAtRaw =
-    s(dtoAny?.updatedAt) || s((derived as any)?.updatedAt);
+  const updatedAtRaw = s(dtoAny?.updatedAt) || s((derived as any)?.updatedAt);
 
   // ✅ 表示用フォーマット
   const createdAt = React.useMemo(() => formatYMDHM(createdAtRaw), [createdAtRaw]);
@@ -447,13 +574,18 @@ export function useListDetail(): UseListDetailResult {
     decisionNorm,
   );
 
-  const [draftImages, setDraftImages] = React.useState<DraftImage[]>(
-    cloneDraftImagesFromUrls(viewImageUrls),
-  );
-
   // save state
   const [saving, setSaving] = React.useState(false);
   const [saveError, setSaveError] = React.useState("");
+
+  // ============================================================
+  // ✅ NEW: listImage hook（draftImages / add / remove / clear）
+  // ============================================================
+  const img = useListImages({
+    isEdit,
+    saving,
+    initialUrls: viewImageUrls,
+  });
 
   // DTO/derived が更新されたら、編集していない時だけ draft を同期
   React.useEffect(() => {
@@ -463,32 +595,42 @@ export function useListDetail(): UseListDetailResult {
     setDraftDescription(description);
     setDraftPriceRows(clonePriceRows(viewPriceRows));
     setDraftDecision(decisionNorm);
-    setDraftImages(cloneDraftImagesFromUrls(viewImageUrls));
-  }, [isEdit, listingTitle, description, viewPriceRows, decisionNorm, viewImageUrls]);
+
+    // images は hook 側 effect で同期されるが、二重でも安全
+    img.setDraftImages(cloneDraftImagesFromUrls(viewImageUrls));
+  }, [
+    isEdit,
+    listingTitle,
+    description,
+    viewPriceRows,
+    decisionNorm,
+    viewImageUrls,
+    img,
+  ]);
 
   const onEdit = React.useCallback(() => {
     setDraftListingTitle(listingTitle);
     setDraftDescription(description);
     setDraftPriceRows(clonePriceRows(viewPriceRows));
     setDraftDecision(decisionNorm);
-    setDraftImages(cloneDraftImagesFromUrls(viewImageUrls));
+    img.setDraftImages(cloneDraftImagesFromUrls(viewImageUrls));
     setSaveError("");
     setIsEdit(true);
-  }, [listingTitle, description, viewPriceRows, decisionNorm, viewImageUrls]);
+  }, [listingTitle, description, viewPriceRows, decisionNorm, viewImageUrls, img]);
 
   const onCancel = React.useCallback(() => {
     // blob 解放
-    revokeDraftBlobUrls(draftImages);
+    revokeDraftBlobUrls(img.draftImages);
 
     setDraftListingTitle(listingTitle);
     setDraftDescription(description);
     setDraftPriceRows(clonePriceRows(viewPriceRows));
     setDraftDecision(decisionNorm);
-    setDraftImages(cloneDraftImagesFromUrls(viewImageUrls));
+    img.setDraftImages(cloneDraftImagesFromUrls(viewImageUrls));
     setSaveError("");
 
     setIsEdit(false);
-  }, [draftImages, listingTitle, description, viewPriceRows, decisionNorm, viewImageUrls]);
+  }, [img.draftImages, listingTitle, description, viewPriceRows, decisionNorm, viewImageUrls, img]);
 
   const onToggleDecision = React.useCallback(
     (next: ListingDecisionNorm) => {
@@ -500,62 +642,14 @@ export function useListDetail(): UseListDetailResult {
   );
 
   // ============================================================
-  // ✅ images (UI-only)
-  // ============================================================
-  const onAddImages = React.useCallback(
-    (files: FileList | null) => {
-      if (!isEdit) return;
-      if (!files || files.length === 0) return;
-
-      const next: DraftImage[] = [];
-      for (let i = 0; i < files.length; i++) {
-        const f = files.item(i);
-        if (!f) continue;
-        const url = URL.createObjectURL(f);
-        next.push({ url, file: f, isNew: true });
-      }
-
-      setDraftImages((prev) => [...(Array.isArray(prev) ? prev : []), ...next]);
-    },
-    [isEdit],
-  );
-
-  const onRemoveImageAt = React.useCallback(
-    (idx: number) => {
-      if (!isEdit) return;
-
-      setDraftImages((prev) => {
-        const arr = Array.isArray(prev) ? prev : [];
-        if (idx < 0 || idx >= arr.length) return arr;
-
-        const target = arr[idx];
-        if (target?.isNew && target?.url?.startsWith("blob:")) {
-          try {
-            URL.revokeObjectURL(target.url);
-          } catch {
-            // noop
-          }
-        }
-
-        return arr.slice(0, idx).concat(arr.slice(idx + 1));
-      });
-    },
-    [isEdit],
-  );
-
-  // ============================================================
   // ✅ effective image urls (view/edit)
   // ============================================================
   const effectiveImageUrls = React.useMemo(() => {
-    if (isEdit) {
-      return (Array.isArray(draftImages) ? draftImages : [])
-        .map((x) => s(x?.url))
-        .filter(Boolean);
-    }
+    if (isEdit) return img.imageUrls;
     return (Array.isArray(viewImageUrls) ? viewImageUrls : [])
       .map((u) => s(u))
       .filter(Boolean);
-  }, [isEdit, draftImages, viewImageUrls]);
+  }, [isEdit, img.imageUrls, viewImageUrls]);
 
   // images: main index
   const [mainImageIndex, setMainImageIndex] = React.useState(0);
@@ -593,6 +687,8 @@ export function useListDetail(): UseListDetailResult {
 
   // ============================================================
   // ✅ Save (PUT /lists/{id})
+  // - 画像は現時点では UI-only（保存payloadには含めない）
+  //   ※ backend が listImage 受け入れ可能になったらここで upload/attach を実装する
   // ============================================================
   const onSave = React.useCallback(
     async (payload?: any) => {
@@ -642,8 +738,8 @@ export function useListDetail(): UseListDetailResult {
         updatedBy: uid,
       };
 
-      if (s(dto?.inventoryId)) updatePayload.inventoryId = s(dto?.inventoryId);
-      if (s(dto?.assigneeId)) updatePayload.assigneeId = s(dto?.assigneeId);
+      if (s(dto?.inventoryId)) updatePayload.inventoryId = s((dto as any)?.inventoryId);
+      if (s((dto as any)?.assigneeId)) updatePayload.assigneeId = s((dto as any)?.assigneeId);
 
       setSaving(true);
       setSaveError("");
@@ -662,7 +758,8 @@ export function useListDetail(): UseListDetailResult {
 
         if (cancelledRef.current) return;
 
-        revokeDraftBlobUrls(draftImages);
+        // blob 解放（draft 由来のみ）
+        revokeDraftBlobUrls(img.draftImages);
 
         setDTO(fresh);
         setIsEdit(false);
@@ -684,7 +781,7 @@ export function useListDetail(): UseListDetailResult {
       draftListingTitle,
       draftDescription,
       draftPriceRows,
-      draftImages,
+      img.draftImages,
       cancelledRef,
     ],
   );
@@ -751,9 +848,9 @@ export function useListDetail(): UseListDetailResult {
     tokenName,
 
     imageUrls: effectiveImageUrls,
-    draftImages,
-    onAddImages,
-    onRemoveImageAt,
+    draftImages: img.draftImages,
+    onAddImages: img.onAddImages,
+    onRemoveImageAt: img.onRemoveImageAt,
 
     mainImageIndex,
     setMainImageIndex,

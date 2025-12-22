@@ -18,6 +18,19 @@ const FALLBACK_BASE =
 export const API_BASE = ENV_BASE || FALLBACK_BASE;
 
 /**
+ * ✅ ListImage bucket (public access想定: https://storage.googleapis.com/{bucket}/{objectPath})
+ * - backend 側の fallback と合わせる
+ * - 将来 env を増やす場合に備えて VITE_LIST_IMAGE_BUCKET も見ておく
+ */
+const ENV_LIST_IMAGE_BUCKET = String(
+  (import.meta as any).env?.VITE_LIST_IMAGE_BUCKET ?? "",
+).trim();
+
+const FALLBACK_LIST_IMAGE_BUCKET = "narratives-development-list";
+
+export const LIST_IMAGE_BUCKET = ENV_LIST_IMAGE_BUCKET || FALLBACK_LIST_IMAGE_BUCKET;
+
+/**
  * ===========
  * Types
  * ===========
@@ -96,6 +109,11 @@ export type UpdateListInput = {
 
 export type ListDTO = Record<string, any>;
 export type ListAggregateDTO = Record<string, any>;
+
+/**
+ * ✅ ListImage DTO（backend 依存を避けるため Record<any> を基本にする）
+ * - ただし bucket/objectPath/publicUrl 等、URL 生成に必要なキーは代表的な候補を吸収する
+ */
 export type ListImageDTO = Record<string, any>;
 
 /**
@@ -112,6 +130,10 @@ export type ListDetailDTO = ListDTO & {
 
   createdAt?: string;
   updatedAt?: string;
+
+  // ✅ listImage bucket からの画像URL
+  imageId?: string;
+  imageUrls?: string[];
 };
 
 /**
@@ -129,6 +151,137 @@ function toNumberOrNull(v: unknown): number | null {
   const n = Number(v);
   if (!Number.isFinite(n)) return null;
   return n;
+}
+
+function buildPublicGcsUrl(bucket: string, objectPath: string): string {
+  const b = s(bucket) || LIST_IMAGE_BUCKET;
+  const op = String(objectPath ?? "").trim().replace(/^\/+/, "");
+  if (!b || !op) return "";
+  return `https://storage.googleapis.com/${b}/${op}`;
+}
+
+/**
+ * ✅ ListImage から "表示用URL" を解決
+ * 優先順位:
+ * 1) publicUrl/url/signedUrl 等
+ * 2) bucket + objectPath から public URL を組み立て
+ */
+function resolveListImageUrl(img: ListImageDTO): string {
+  const u =
+    s((img as any)?.publicUrl) ||
+    s((img as any)?.publicURL) ||
+    s((img as any)?.url) ||
+    s((img as any)?.URL) ||
+    s((img as any)?.signedUrl) ||
+    s((img as any)?.signedURL);
+
+  if (u) return u;
+
+  const bucket = s((img as any)?.bucket) || s((img as any)?.Bucket) || "";
+  const objectPath =
+    s((img as any)?.objectPath) ||
+    s((img as any)?.ObjectPath) ||
+    s((img as any)?.path) ||
+    s((img as any)?.Path) ||
+    "";
+
+  const built = buildPublicGcsUrl(bucket, objectPath);
+  return built;
+}
+
+function asNumber(v: unknown, fallback = 0): number {
+  const n = Number(v);
+  if (!Number.isFinite(n)) return fallback;
+  return n;
+}
+
+function parseDateMs(v: unknown): number {
+  const t = s(v);
+  if (!t) return 0;
+  const ms = Date.parse(t);
+  if (!Number.isFinite(ms)) return 0;
+  return ms;
+}
+
+function normalizeListImageUrls(listImages: ListImageDTO[], primaryImageId?: string): string[] {
+  const pid = s(primaryImageId);
+
+  const rows = (Array.isArray(listImages) ? listImages : [])
+    .map((img) => {
+      const id = s((img as any)?.id) || s((img as any)?.ID) || s((img as any)?.imageId);
+      const url = resolveListImageUrl(img);
+      const displayOrder =
+        asNumber((img as any)?.displayOrder, 0) ||
+        asNumber((img as any)?.DisplayOrder, 0) ||
+        0;
+
+      const createdAtMs =
+        parseDateMs((img as any)?.createdAt) ||
+        parseDateMs((img as any)?.CreatedAt) ||
+        0;
+
+      return { id, url, displayOrder, createdAtMs };
+    })
+    .filter((x) => Boolean(x.url));
+
+  rows.sort((a, b) => {
+    if (a.displayOrder !== b.displayOrder) return a.displayOrder - b.displayOrder;
+    if (a.createdAtMs !== b.createdAtMs) return a.createdAtMs - b.createdAtMs;
+    return a.id.localeCompare(b.id);
+  });
+
+  const out: string[] = [];
+  const seen = new Set<string>();
+  let primaryUrl = "";
+
+  for (const r of rows) {
+    const url = s(r.url);
+    if (!url || seen.has(url)) continue;
+    seen.add(url);
+
+    if (pid && s(r.id) === pid && !primaryUrl) {
+      primaryUrl = url;
+      continue;
+    }
+    out.push(url);
+  }
+
+  if (primaryUrl) return [primaryUrl, ...out];
+  return out;
+}
+
+/**
+ * ✅ ListDetailDTO の imageUrls を保証する
+ * - backend が imageUrls を返していればそれを優先
+ * - 空なら /lists/{id}/images から組み立てて補完
+ */
+async function ensureDetailHasImageUrls(dto: ListDTO, listId: string): Promise<ListDTO> {
+  const anyDto = dto as any;
+  const currentUrls = Array.isArray(anyDto?.imageUrls) ? (anyDto.imageUrls as any[]) : [];
+  const normalizedCurrent = currentUrls.map((x) => s(x)).filter(Boolean);
+
+  if (normalizedCurrent.length > 0) {
+    return {
+      ...dto,
+      imageUrls: normalizedCurrent,
+    };
+  }
+
+  // fallback: images endpoint から生成
+  try {
+    const imgs = await fetchListImagesHTTP(listId);
+    const urls = normalizeListImageUrls(imgs, s(anyDto?.imageId));
+
+    if (urls.length === 0) return dto;
+
+    return {
+      ...dto,
+      imageUrls: urls,
+    };
+  } catch {
+    // 画像取得に失敗しても detail 自体は返す（画面を壊さない）
+    return dto;
+  }
 }
 
 /**
@@ -560,6 +713,7 @@ export async function fetchListsHTTP(): Promise<ListDTO[]> {
  * GET /lists/{id}
  *
  * ✅ ListDetail で使うので、レスポンスに createdByName が入っているか確認できるログを追加
+ * ✅ listImage bucket の imageUrls も（空なら）補完して返す
  */
 export async function fetchListByIdHTTP(listId: string): Promise<ListDTO> {
   const id = String(listId ?? "").trim();
@@ -567,7 +721,7 @@ export async function fetchListByIdHTTP(listId: string): Promise<ListDTO> {
     throw new Error("invalid_list_id");
   }
 
-  const dto = await requestJSON<ListDTO>({
+  const dto0 = await requestJSON<ListDTO>({
     method: "GET",
     path: `/lists/${encodeURIComponent(id)}`,
     debug: {
@@ -576,6 +730,8 @@ export async function fetchListByIdHTTP(listId: string): Promise<ListDTO> {
       method: "GET",
     },
   });
+
+  const dto = await ensureDetailHasImageUrls(dto0, id);
 
   // ✅ ListDetail 取得内容が分かるログ（createdByName もチェック）
   try {
@@ -589,6 +745,10 @@ export async function fetchListByIdHTTP(listId: string): Promise<ListDTO> {
       updatedByName: s(anyDto?.updatedByName),
       createdAt: s(anyDto?.createdAt),
       updatedAt: s(anyDto?.updatedAt),
+
+      imageId: s(anyDto?.imageId),
+      imageUrlsCount: Array.isArray(anyDto?.imageUrls) ? anyDto.imageUrls.length : 0,
+
       keys: anyDto && typeof anyDto === "object" ? Object.keys(anyDto) : [],
       dto,
     });
@@ -608,6 +768,7 @@ export async function fetchListByIdHTTP(listId: string): Promise<ListDTO> {
  * - 2) fallback: GET /lists?inventoryId=xxx（環境差分吸収）
  *
  * ✅ 「ListDetail画面を開いた際に取得したデータ」が分かるログをここにも追加
+ * ✅ listImage bucket の imageUrls も（空なら）補完して返す
  */
 export async function fetchListDetailHTTP(args: {
   listId: string;
@@ -634,6 +795,7 @@ export async function fetchListDetailHTTP(args: {
       listId,
       createdByName: s((dto as any)?.createdByName),
       updatedByName: s((dto as any)?.updatedByName),
+      imageUrlsCount: Array.isArray((dto as any)?.imageUrls) ? (dto as any).imageUrls.length : 0,
       dto,
     });
 
@@ -659,8 +821,10 @@ export async function fetchListDetailHTTP(args: {
         },
       });
 
-      const first = extractFirstItemFromAny(json);
-      if (!first) throw new Error("not_found");
+      const first0 = extractFirstItemFromAny(json);
+      if (!first0) throw new Error("not_found");
+
+      const first = await ensureDetailHasImageUrls(first0 as ListDTO, listId);
 
       // ✅ ListDetail resolved log (fallback)
       console.log("[list/listRepositoryHTTP] fetchListDetailHTTP resolved", {
@@ -669,6 +833,7 @@ export async function fetchListDetailHTTP(args: {
         inventoryId: inv,
         createdByName: s((first as any)?.createdByName),
         updatedByName: s((first as any)?.updatedByName),
+        imageUrlsCount: Array.isArray((first as any)?.imageUrls) ? (first as any).imageUrls.length : 0,
         dto: first,
         raw: json,
       });
@@ -709,6 +874,21 @@ export async function fetchListImagesHTTP(listId: string): Promise<ListImageDTO[
     method: "GET",
     path: `/lists/${encodeURIComponent(id)}/images`,
   });
+}
+
+/**
+ * ✅ NEW: listImage bucket の「表示用URL配列」を取得
+ * - /lists/{id} が imageUrls を返さない環境でも UI 側で扱える
+ */
+export async function fetchListImageUrlsHTTP(args: {
+  listId: string;
+  primaryImageId?: string;
+}): Promise<string[]> {
+  const listId = s(args.listId);
+  if (!listId) throw new Error("invalid_list_id");
+
+  const imgs = await fetchListImagesHTTP(listId);
+  return normalizeListImageUrls(imgs, args.primaryImageId);
 }
 
 /**

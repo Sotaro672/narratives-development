@@ -135,12 +135,7 @@ export default function InventoryListCreate() {
   }, [priceRows]);
 
   return (
-    <PageStyle
-      layout="grid-2"
-      title={title}
-      onBack={onBack}
-      onCreate={onCreate}
-    >
+    <PageStyle layout="grid-2" title={title} onBack={onBack} onCreate={onCreate}>
       {/* =========================
           左カラム
           - 商品画像（メイン大 + サブ小 + 追加タイル）
@@ -149,7 +144,7 @@ export default function InventoryListCreate() {
           - PriceCard
           ========================= */}
       <div className="space-y-4">
-        {/* ✅ 商品画像カード（期待値: メイン大 / 2枚目以降小 + 追加） */}
+        {/* ✅ 商品画像カード（複数枚アップロード対応） */}
         <Card>
           <CardContent className="p-4 space-y-3">
             <div className="text-sm font-medium flex items-center gap-2">
@@ -159,7 +154,7 @@ export default function InventoryListCreate() {
               商品画像
             </div>
 
-            {/* hidden input */}
+            {/* ✅ hidden input: multiple を有効化 */}
             <input
               ref={imageInputRef}
               type="file"
@@ -169,7 +164,7 @@ export default function InventoryListCreate() {
               onChange={onSelectImages}
             />
 
-            {/* empty state (2枚目画像のイメージ) */}
+            {/* empty state */}
             {!hasImages && (
               <div
                 className="rounded-xl border border-dashed border-slate-300 bg-slate-50/30 w-full aspect-[16/9] flex flex-col items-center justify-center gap-3 cursor-pointer select-none"
@@ -178,23 +173,34 @@ export default function InventoryListCreate() {
                 onDragOver={onDragOverImages}
                 role="button"
                 tabIndex={0}
+                title="クリック or ドロップで複数画像を追加"
               >
                 <div className="w-12 h-12 rounded-lg bg-white border border-slate-200 flex items-center justify-center">
                   <ImageIcon />
                 </div>
                 <div className="text-sm text-slate-700">画像をドロップ</div>
                 <div className="text-xs text-[hsl(var(--muted-foreground))]">
-                  またはクリックして選択
+                  またはクリックして選択（複数可）
                 </div>
               </div>
             )}
 
-            {/* filled state (1枚目画像のイメージ) */}
+            {/* filled state */}
             {hasImages && (
               <>
                 {/* メイン（大） */}
-                <div className="relative rounded-xl overflow-hidden border border-slate-200 bg-white">
-                  <div className="w-full aspect-[16/9] bg-slate-50">
+                <div
+                  className="relative rounded-xl overflow-hidden border border-slate-200 bg-white"
+                  onDrop={onDropImages}
+                  onDragOver={onDragOverImages}
+                  title="ここに画像をドロップして追加できます"
+                >
+                  <div
+                    className="w-full aspect-[16/9] bg-slate-50 cursor-pointer"
+                    onClick={openImagePicker}
+                    role="button"
+                    tabIndex={0}
+                  >
                     {mainUrl && (
                       <img
                         src={mainUrl}
@@ -218,7 +224,7 @@ export default function InventoryListCreate() {
                   {/* footer */}
                   <div className="px-3 py-2 border-t border-slate-200 flex items-center justify-between">
                     <div className="text-xs text-[hsl(var(--muted-foreground))]">
-                      {images.length} 枚選択中（クリックでサブ画像をメインにできます）
+                      {images.length} 枚選択中（サムネをクリックするとメインにできます）
                     </div>
                     <div className="flex items-center gap-2">
                       <Button
@@ -287,7 +293,7 @@ export default function InventoryListCreate() {
                     );
                   })}
 
-                  {/* 追加タイル（アップロードと並列表示） */}
+                  {/* 追加タイル（複数枚の追加入力） */}
                   <div
                     className="rounded-xl border border-dashed border-slate-300 bg-slate-50/30 cursor-pointer flex flex-col items-center justify-center gap-2 aspect-square"
                     onClick={openImagePicker}
@@ -295,7 +301,7 @@ export default function InventoryListCreate() {
                     onDragOver={onDragOverImages}
                     role="button"
                     tabIndex={0}
-                    title="画像を追加"
+                    title="画像を追加（複数可）"
                   >
                     <div className="w-10 h-10 rounded-lg bg-white border border-slate-200 flex items-center justify-center">
                       <PlusIcon />
@@ -368,9 +374,7 @@ export default function InventoryListCreate() {
         {loadingDTO && (
           <div className="text-sm text-[hsl(var(--muted-foreground))]">読み込み中...</div>
         )}
-        {dtoError && (
-          <div className="text-sm text-red-600">読み込みに失敗しました: {dtoError}</div>
-        )}
+        {dtoError && <div className="text-sm text-red-600">読み込みに失敗しました: {dtoError}</div>}
 
         {/* ✅ 担当者 */}
         <Card>
@@ -379,21 +383,14 @@ export default function InventoryListCreate() {
 
             <Popover>
               <PopoverTrigger>
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  className="w-full justify-between"
-                >
+                <Button type="button" variant="outline" size="sm" className="w-full justify-between">
                   <span>{assigneeName || "未設定"}</span>
                   <span className="text-[11px] text-slate-400" />
                 </Button>
               </PopoverTrigger>
 
               <PopoverContent className="p-2 space-y-1">
-                {loadingMembers && (
-                  <p className="text-xs text-slate-400">担当者を読み込み中です…</p>
-                )}
+                {loadingMembers && <p className="text-xs text-slate-400">担当者を読み込み中です…</p>}
 
                 {!loadingMembers && assigneeCandidates.length > 0 && (
                   <div className="space-y-1">
@@ -422,12 +419,8 @@ export default function InventoryListCreate() {
         <Card>
           <CardContent className="p-4">
             <div className="text-sm font-medium mb-2">選択商品</div>
-            <div className="text-sm text-slate-800 break-all">
-              {productBrandName || "未選択"}
-            </div>
-            <div className="text-sm text-slate-800 break-all">
-              {productName || "未選択"}
-            </div>
+            <div className="text-sm text-slate-800 break-all">{productBrandName || "未選択"}</div>
+            <div className="text-sm text-slate-800 break-all">{productName || "未選択"}</div>
           </CardContent>
         </Card>
 
@@ -435,12 +428,8 @@ export default function InventoryListCreate() {
         <Card>
           <CardContent className="p-4">
             <div className="text-sm font-medium mb-2">選択トークン</div>
-            <div className="text-sm text-slate-800 break-all">
-              {tokenBrandName || "未選択"}
-            </div>
-            <div className="text-sm text-slate-800 break-all">
-              {tokenName || "未選択"}
-            </div>
+            <div className="text-sm text-slate-800 break-all">{tokenBrandName || "未選択"}</div>
+            <div className="text-sm text-slate-800 break-all">{tokenName || "未選択"}</div>
           </CardContent>
         </Card>
 

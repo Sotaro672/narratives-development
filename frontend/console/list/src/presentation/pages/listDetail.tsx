@@ -46,6 +46,25 @@ function ImageIcon() {
   );
 }
 
+function PlusIcon() {
+  return (
+    <svg
+      width="20"
+      height="20"
+      viewBox="0 0 24 24"
+      fill="none"
+      className="text-slate-500"
+    >
+      <path
+        d="M12 5v14M5 12h14"
+        stroke="currentColor"
+        strokeWidth="1.8"
+        strokeLinecap="round"
+      />
+    </svg>
+  );
+}
+
 function s(v: unknown): string {
   return String(v ?? "").trim();
 }
@@ -145,7 +164,7 @@ export default function ListDetail() {
           </div>
         )}
 
-        {/* ✅ 商品画像カード */}
+        {/* ✅ 商品画像カード（複数枚アップロード UI に更新） */}
         <Card>
           <CardContent className="p-4 space-y-3">
             <div className="text-sm font-medium flex items-center justify-between gap-2">
@@ -172,27 +191,63 @@ export default function ListDetail() {
                       className="h-8"
                       disabled={vm.saving}
                     >
-                      追加
+                      画像を追加
                     </Button>
                   </label>
+
+                  {effectiveImageUrls.length > 0 && (
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      className="h-8"
+                      onClick={() => {
+                        // hook に「全削除」が無い場合は、存在する分だけ呼べるようにする
+                        if (typeof anyVm.onClearImages === "function") {
+                          anyVm.onClearImages();
+                          return;
+                        }
+                        // fallback: 末尾から削除（indexがずれるのを避ける）
+                        if (typeof vm.onRemoveImageAt === "function") {
+                          for (let i = effectiveImageUrls.length - 1; i >= 0; i--) {
+                            vm.onRemoveImageAt(i);
+                          }
+                          vm.setMainImageIndex(0);
+                        }
+                      }}
+                      disabled={vm.saving}
+                    >
+                      クリア
+                    </Button>
+                  )}
                 </div>
               )}
             </div>
 
+            {/* empty state */}
             {!hasImages && (
-              <div className="rounded-xl border border-dashed border-slate-300 bg-slate-50/30 w-full aspect-[16/9] flex flex-col items-center justify-center gap-3 select-none">
+              <div
+                className={[
+                  "rounded-xl border border-dashed border-slate-300 bg-slate-50/30 w-full aspect-[16/9]",
+                  "flex flex-col items-center justify-center gap-3 select-none",
+                  isEdit ? "cursor-pointer" : "",
+                ].join(" ")}
+                onClick={() => {
+                  // edit時は「追加」ボタンがあるので、カードクリックは何もしない（誤タップ防止）
+                }}
+              >
                 <div className="w-12 h-12 rounded-lg bg-white border border-slate-200 flex items-center justify-center">
                   <ImageIcon />
                 </div>
                 <div className="text-sm text-slate-700">画像は未設定です</div>
                 <div className="text-xs text-[hsl(var(--muted-foreground))]">
                   {isEdit
-                    ? "右上の「追加」から画像を追加できます。"
-                    : "画像を追加する場合は「画像」機能（別画面/別操作）から追加してください。"}
+                    ? "右上の「画像を追加」から複数画像を追加できます。"
+                    : "画像を追加する場合は編集モードに切り替えてください。"}
                 </div>
               </div>
             )}
 
+            {/* filled state */}
             {hasImages && (
               <>
                 {/* メイン（大） */}
@@ -207,69 +262,98 @@ export default function ListDetail() {
                     )}
                   </div>
 
+                  {/* remove main */}
+                  {isEdit && (
+                    <button
+                      type="button"
+                      className="absolute top-3 right-3 w-8 h-8 rounded-full bg-white/90 border border-slate-200 flex items-center justify-center hover:bg-white"
+                      onClick={() => vm.onRemoveImageAt(vm.mainImageIndex)}
+                      aria-label="remove main image"
+                      title="削除"
+                      disabled={vm.saving}
+                    >
+                      <span className="text-slate-600 leading-none">×</span>
+                    </button>
+                  )}
+
+                  {/* footer */}
                   <div className="px-3 py-2 border-t border-slate-200 flex items-center justify-between">
                     <div className="text-xs text-[hsl(var(--muted-foreground))]">
                       {effectiveImageUrls.length} 枚
                       {isEdit
-                        ? "（サムネから削除できます）"
-                        : "（クリックでサブ画像をメインにできます）"}
+                        ? "（サムネの×で削除できます）"
+                        : "（サムネをクリックしてメイン切替できます）"}
                     </div>
-
-                    {isEdit && effectiveImageUrls.length > 0 && (
-                      <Button
-                        type="button"
-                        variant="outline"
-                        className="h-8"
-                        onClick={() => vm.onRemoveImageAt(vm.mainImageIndex)}
-                        disabled={vm.saving}
-                      >
-                        この画像を削除
-                      </Button>
+                    {!isEdit && (
+                      <div className="text-[11px] text-slate-400">
+                        ※ 画像変更は編集モードで行えます
+                      </div>
                     )}
                   </div>
                 </div>
 
-                {/* サブ（小） */}
-                {thumbIndices.length > 0 && (
-                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-                    {thumbIndices.map((idx: number) => {
-                      const url = effectiveImageUrls[idx] ?? "";
-                      return (
-                        <div key={`${url}-${idx}`} className="space-y-2">
-                          <div
-                            className="relative rounded-xl overflow-hidden border border-slate-200 bg-white cursor-pointer"
-                            onClick={() => vm.setMainImageIndex(idx)}
-                            role="button"
-                            tabIndex={0}
-                            title="クリックでメインに設定"
-                          >
-                            <div className="w-full aspect-square bg-slate-50">
-                              {url && (
-                                <img
-                                  src={url}
-                                  alt={`sub-${idx}`}
-                                  className="w-full h-full object-cover"
-                                />
-                              )}
-                            </div>
-                          </div>
-
-                          {isEdit && (
-                            <Button
-                              type="button"
-                              variant="outline"
-                              className="h-8 w-full"
-                              onClick={() => vm.onRemoveImageAt(idx)}
-                              disabled={vm.saving}
-                            >
-                              削除
-                            </Button>
+                {/* サブ（小） + 追加タイル（edit時のみ表示） */}
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                  {thumbIndices.map((idx: number) => {
+                    const url = effectiveImageUrls[idx] ?? "";
+                    return (
+                      <div
+                        key={`${url}-${idx}`}
+                        className="relative rounded-xl overflow-hidden border border-slate-200 bg-white cursor-pointer"
+                        onClick={() => vm.setMainImageIndex(idx)}
+                        role="button"
+                        tabIndex={0}
+                        title="クリックでメインに設定"
+                      >
+                        <div className="w-full aspect-square bg-slate-50">
+                          {url && (
+                            <img
+                              src={url}
+                              alt={`sub-${idx}`}
+                              className="w-full h-full object-cover"
+                            />
                           )}
                         </div>
-                      );
-                    })}
-                  </div>
-                )}
+
+                        {isEdit && (
+                          <button
+                            type="button"
+                            className="absolute top-2 right-2 w-7 h-7 rounded-full bg-white/90 border border-slate-200 flex items-center justify-center hover:bg-white"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              vm.onRemoveImageAt(idx);
+                            }}
+                            aria-label="remove image"
+                            title="削除"
+                            disabled={vm.saving}
+                          >
+                            <span className="text-slate-600 leading-none">×</span>
+                          </button>
+                        )}
+                      </div>
+                    );
+                  })}
+
+                  {/* 追加タイル（edit時のみ） */}
+                  {isEdit && (
+                    <label
+                      className="rounded-xl border border-dashed border-slate-300 bg-slate-50/30 cursor-pointer flex flex-col items-center justify-center gap-2 aspect-square"
+                      title="画像を追加（複数可）"
+                    >
+                      <input
+                        type="file"
+                        accept="image/*"
+                        multiple
+                        className="hidden"
+                        onChange={(e) => vm.onAddImages(e.target.files)}
+                      />
+                      <div className="w-10 h-10 rounded-lg bg-white border border-slate-200 flex items-center justify-center">
+                        <PlusIcon />
+                      </div>
+                      <div className="text-xs text-slate-700">画像を追加</div>
+                    </label>
+                  )}
+                </div>
               </>
             )}
           </CardContent>
@@ -429,9 +513,7 @@ export default function ListDetail() {
                       vm.draftDecision === "listing"
                         ? "bg-slate-900 text-white border-slate-900"
                         : "bg-white text-slate-700 border-slate-200",
-                      vm.saving
-                        ? "opacity-60 cursor-not-allowed"
-                        : "cursor-pointer",
+                      vm.saving ? "opacity-60 cursor-not-allowed" : "cursor-pointer",
                     ].join(" ")}
                     onClick={() => vm.onToggleDecision("listing")}
                     disabled={vm.saving}
@@ -446,9 +528,7 @@ export default function ListDetail() {
                       vm.draftDecision === "holding"
                         ? "bg-slate-900 text-white border-slate-900"
                         : "bg-white text-slate-700 border-slate-200",
-                      vm.saving
-                        ? "opacity-60 cursor-not-allowed"
-                        : "cursor-pointer",
+                      vm.saving ? "opacity-60 cursor-not-allowed" : "cursor-pointer",
                     ].join(" ")}
                     onClick={() => vm.onToggleDecision("holding")}
                     disabled={vm.saving}

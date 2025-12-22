@@ -111,20 +111,174 @@ export function normalizeDecision(dto: any): string {
   return raw;
 }
 
-// ✅ imageUrls は dto.imageUrls のみ採用（名揺れ吸収しない）
-export function normalizeImageUrls(dto: any): string[] {
-  const direct = Array.isArray(dto?.imageUrls) ? dto.imageUrls : [];
-  const urls = direct.map((u: any) => s(u)).filter(Boolean);
+// ---------------------------------------------------------
+// ✅ listImage helpers（NEW）
+// - backend が listImages (推奨) / listImage を返す or 受け取るケースに備える
+// - UI は imageUrls を使うので、ここで url 配列へも変換できるようにする
+// ---------------------------------------------------------
 
-  // dedupe (keep order)
+export type ListImage = {
+  url: string;
+  objectPath?: string; // GCS 等の objectPath を持たせたい場合の拡張（無くてもOK）
+};
+
+// DraftImage（presentation hook 側）互換を緩く受ける
+type DraftImageLike = {
+  url?: unknown;
+  isNew?: unknown;
+  file?: unknown;
+  objectPath?: unknown;
+};
+
+function dedupeUrlsKeepOrder(urls: string[]): string[] {
   const seen = new Set<string>();
   const out: string[] = [];
   for (const u of urls) {
-    if (seen.has(u)) continue;
-    seen.add(u);
-    out.push(u);
+    const x = s(u);
+    if (!x) continue;
+    if (seen.has(x)) continue;
+    seen.add(x);
+    out.push(x);
   }
   return out;
+}
+
+function toListImage(x: any): ListImage | null {
+  // string のみでも受ける（url として扱う）
+  if (typeof x === "string") {
+    const u = s(x);
+    return u ? { url: u } : null;
+  }
+
+  const url = s(x?.url);
+  if (!url) return null;
+
+  const objectPath = s(x?.objectPath);
+  return objectPath ? { url, objectPath } : { url };
+}
+
+/**
+ * ✅ dto から listImages を正として読む
+ * - listImages が無ければ listImage を見る（配列想定）
+ * - それも無ければ []（imageUrls は別関数が fallback する）
+ */
+export function normalizeListImages(dto: any): ListImage[] {
+  const arr =
+    (Array.isArray(dto?.listImages) ? dto.listImages : null) ??
+    (Array.isArray(dto?.listImage) ? dto.listImage : null) ??
+    [];
+
+  const mapped: ListImage[] = [];
+  for (const x of arr) {
+    const li = toListImage(x);
+    if (!li) continue;
+    mapped.push(li);
+  }
+
+  // url 重複排除（順序維持）
+  const urls = dedupeUrlsKeepOrder(mapped.map((x) => x.url));
+  const urlSet = new Set(urls);
+
+  // 先に dedupe した url の順序に沿って、最初に出現した objectPath を保持
+  const firstByUrl = new Map<string, ListImage>();
+  for (const x of mapped) {
+    const u = x.url;
+    if (!urlSet.has(u)) continue;
+    if (!firstByUrl.has(u)) firstByUrl.set(u, x);
+  }
+
+  return urls.map((u) => firstByUrl.get(u) ?? { url: u });
+}
+
+/**
+ * ✅ UI 用の imageUrls を生成
+ * - 優先: dto.listImages / dto.listImage から url を作る
+ * - fallback: dto.imageUrls（旧フィールド）
+ */
+export function normalizeImageUrls(dto: any): string[] {
+  const listImages = normalizeListImages(dto);
+  if (listImages.length > 0) {
+    return dedupeUrlsKeepOrder(listImages.map((x) => x.url));
+  }
+
+  const direct = Array.isArray(dto?.imageUrls) ? dto.imageUrls : [];
+  const urls = direct.map((u: any) => s(u)).filter(Boolean);
+  return dedupeUrlsKeepOrder(urls);
+}
+
+/**
+ * ✅ hook の draftImages から「既存URL」と「新規File」を取り出す
+ * - backend 実装（署名URL発行→PUT→attach）で使える形
+ */
+export function splitDraftImages(args: {
+  draftImages: DraftImageLike[] | null | undefined;
+}): {
+  existingUrls: string[];
+  newFiles: File[];
+  listImages: ListImage[]; // 既存URLを listImages へ正規化（objectPathは持っていれば保持）
+} {
+  const src = Array.isArray(args.draftImages) ? args.draftImages : [];
+
+  const existingUrls: string[] = [];
+  const newFiles: File[] = [];
+  const listImages: ListImage[] = [];
+
+  for (const x of src) {
+    const url = s((x as any)?.url);
+    const isNew = Boolean((x as any)?.isNew);
+
+    const objectPath = s((x as any)?.objectPath);
+
+    if (url) {
+      // 既存URLとして保持（isNew=true の blob: は existingUrls には入れない）
+      if (!isNew && !url.startsWith("blob:")) {
+        existingUrls.push(url);
+        listImages.push(objectPath ? { url, objectPath } : { url });
+      }
+    }
+
+    if (isNew) {
+      const f = (x as any)?.file;
+      // File 判定はブラウザ依存なのでゆるく
+      if (f && typeof (f as any).name === "string") {
+        newFiles.push(f as File);
+      }
+    }
+  }
+
+  const existingUrlsD = dedupeUrlsKeepOrder(existingUrls);
+
+  // listImages も url ベースで dedupe（順序は existingUrlsD に合わせる）
+  const first = new Map<string, ListImage>();
+  for (const li of listImages) {
+    if (!first.has(li.url)) first.set(li.url, li);
+  }
+
+  return {
+    existingUrls: existingUrlsD,
+    newFiles,
+    listImages: existingUrlsD.map((u) => first.get(u) ?? { url: u }),
+  };
+}
+
+/**
+ * ✅ 更新payloadへ入れる listImages を作る（UI側が string[] でも DraftImage[] でもOK）
+ * - 現段階では updateListByIdHTTP が listImages を受けるか不明なので、
+ *   「payload を作る関数」だけ提供する（service からの呼び出しは後で）
+ */
+export function buildListImagesForUpdate(input: {
+  imageUrls?: string[] | null;
+  draftImages?: DraftImageLike[] | null;
+}): ListImage[] {
+  const urls = Array.isArray(input.imageUrls) ? input.imageUrls : [];
+  if (urls.length > 0) {
+    return dedupeUrlsKeepOrder(urls.map((u) => s(u)).filter(Boolean)).map((u) => ({
+      url: u,
+    }));
+  }
+
+  const { listImages } = splitDraftImages({ draftImages: input.draftImages });
+  return listImages;
 }
 
 function toInt(v: unknown): number {
@@ -310,6 +464,14 @@ export async function loadListDetailDTO(args: {
 
     if (!s(merged?.tokenBrandId)) merged.tokenBrandId = s(row?.tokenBrandId);
     if (!s(merged?.tokenBrandName)) merged.tokenBrandName = s(row?.tokenBrandName);
+
+    // ✅ listImages が row にある場合だけ補完（detail を正とする）
+    if (!Array.isArray(merged?.listImages) && Array.isArray((row as any)?.listImages)) {
+      merged.listImages = (row as any).listImages;
+    }
+    if (!Array.isArray(merged?.listImage) && Array.isArray((row as any)?.listImage)) {
+      merged.listImage = (row as any).listImage;
+    }
   }
 
   // ✅ 一応 id を正規化して持っておく（view 側で拾えるように）
@@ -346,6 +508,7 @@ export function deriveListDetail<TRow extends Record<string, any> = any>(dto: an
   const updatedByName = s(dto?.updatedBy) || s((dto as any)?.updatedByName);
   const updatedAt = s(dto?.updatedAt);
 
+  // ✅ listImages 対応：優先して listImages/listImage から作る（無ければ imageUrls）
   const imageUrls = normalizeImageUrls(dto);
 
   // ✅ priceRows は detail の priceRows を読む（id=modelId, size/color/rgb/stock/price）
@@ -408,6 +571,10 @@ export async function updateListDetailDTO(args: {
 
   // audit
   updatedBy?: string;
+
+  // ✅ NEW: listImages (optional)
+  // NOTE: repositoryHTTP がまだ受けない場合があるので、必要になったら実装側で対応。
+  // listImages?: ListImage[];
 }): Promise<ListDTO> {
   const listId = s(args.listId);
   if (!listId) throw new Error("invalid_list_id");
