@@ -15,55 +15,11 @@ import {
 // ✅ PriceCard（list app 側に作ったコンポーネントを流用）
 import PriceCard from "../../../../list/src/presentation/components/priceCard";
 
+// ✅ NEW: 既存の商品画像カードを list app から流用
+import ListImageCard from "../../../../list/src/presentation/components/listImageCard";
+
 // ✅ logic は hook 側へ（UI state も hook に寄せた）
 import { useListCreate } from "../hook/useListCreate";
-
-function ImageIcon() {
-  return (
-    <svg
-      width="28"
-      height="28"
-      viewBox="0 0 24 24"
-      fill="none"
-      className="text-slate-400"
-    >
-      <path
-        d="M21 19V5a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2Z"
-        stroke="currentColor"
-        strokeWidth="1.6"
-      />
-      <path
-        d="M8.5 10.5a1.5 1.5 0 1 0 0-3 1.5 1.5 0 0 0 0 3Z"
-        stroke="currentColor"
-        strokeWidth="1.6"
-      />
-      <path
-        d="M21 16l-5.5-5.5a2 2 0 0 0-2.8 0L5 18"
-        stroke="currentColor"
-        strokeWidth="1.6"
-      />
-    </svg>
-  );
-}
-
-function PlusIcon() {
-  return (
-    <svg
-      width="20"
-      height="20"
-      viewBox="0 0 24 24"
-      fill="none"
-      className="text-slate-500"
-    >
-      <path
-        d="M12 5v14M5 12h14"
-        stroke="currentColor"
-        strokeWidth="1.8"
-        strokeLinecap="round"
-      />
-    </svg>
-  );
-}
 
 // local trim helper (UI-only)
 function s(v: unknown): string {
@@ -99,11 +55,7 @@ export default function InventoryListCreate() {
     imagePreviewUrls,
     mainImageIndex,
     setMainImageIndex,
-    imageInputRef,
-    openImagePicker,
     onSelectImages,
-    onDropImages,
-    onDragOverImages,
     removeImageAt,
     clearImages,
 
@@ -118,201 +70,48 @@ export default function InventoryListCreate() {
     setDecision,
   } = useListCreate();
 
-  const hasImages = images.length > 0;
-  const mainUrl = hasImages ? imagePreviewUrls[mainImageIndex] : "";
-
-  // thumbnails = all except main (order preserved)
-  const thumbIndices = React.useMemo(() => {
-    if (!hasImages) return [];
-    return images
-      .map((_, idx) => idx)
-      .filter((idx) => idx !== mainImageIndex);
-  }, [hasImages, images, mainImageIndex]);
-
   // ✅ modelId 付与チェック（UIで検知できるように）
   const missingModelIdCount = React.useMemo(() => {
     return (priceRows ?? []).filter((r: any) => !s(r?.modelId)).length;
   }, [priceRows]);
 
+  // ✅ ListImageCard が要求する onAddImages(FileList|null) へアダプト
+  // - hook 側の onSelectImages(ChangeEvent<HTMLInputElement>) を流用するため、最小限の疑似イベントを渡す
+  const onAddImages = React.useCallback(
+    (files: FileList | null) => {
+      if (!files || files.length === 0) return;
+
+      const fakeEvent = {
+        target: { files },
+        currentTarget: { value: "" },
+      } as any;
+
+      onSelectImages(fakeEvent);
+    },
+    [onSelectImages],
+  );
+
   return (
     <PageStyle layout="grid-2" title={title} onBack={onBack} onCreate={onCreate}>
       {/* =========================
           左カラム
-          - 商品画像（メイン大 + サブ小 + 追加タイル）
+          - 商品画像（ListImageCard を流用）
           - タイトル
           - 説明
           - PriceCard
           ========================= */}
       <div className="space-y-4">
-        {/* ✅ 商品画像カード（複数枚アップロード対応） */}
-        <Card>
-          <CardContent className="p-4 space-y-3">
-            <div className="text-sm font-medium flex items-center gap-2">
-              <span className="inline-flex items-center justify-center w-6 h-6 rounded-md bg-slate-50 border border-slate-200">
-                <ImageIcon />
-              </span>
-              商品画像
-            </div>
-
-            {/* ✅ hidden input: multiple を有効化 */}
-            <input
-              ref={imageInputRef}
-              type="file"
-              accept="image/*"
-              multiple
-              className="hidden"
-              onChange={onSelectImages}
-            />
-
-            {/* empty state */}
-            {!hasImages && (
-              <div
-                className="rounded-xl border border-dashed border-slate-300 bg-slate-50/30 w-full aspect-[16/9] flex flex-col items-center justify-center gap-3 cursor-pointer select-none"
-                onClick={openImagePicker}
-                onDrop={onDropImages}
-                onDragOver={onDragOverImages}
-                role="button"
-                tabIndex={0}
-                title="クリック or ドロップで複数画像を追加"
-              >
-                <div className="w-12 h-12 rounded-lg bg-white border border-slate-200 flex items-center justify-center">
-                  <ImageIcon />
-                </div>
-                <div className="text-sm text-slate-700">画像をドロップ</div>
-                <div className="text-xs text-[hsl(var(--muted-foreground))]">
-                  またはクリックして選択（複数可）
-                </div>
-              </div>
-            )}
-
-            {/* filled state */}
-            {hasImages && (
-              <>
-                {/* メイン（大） */}
-                <div
-                  className="relative rounded-xl overflow-hidden border border-slate-200 bg-white"
-                  onDrop={onDropImages}
-                  onDragOver={onDragOverImages}
-                  title="ここに画像をドロップして追加できます"
-                >
-                  <div
-                    className="w-full aspect-[16/9] bg-slate-50 cursor-pointer"
-                    onClick={openImagePicker}
-                    role="button"
-                    tabIndex={0}
-                  >
-                    {mainUrl && (
-                      <img
-                        src={mainUrl}
-                        alt="main"
-                        className="w-full h-full object-cover"
-                      />
-                    )}
-                  </div>
-
-                  {/* remove main */}
-                  <button
-                    type="button"
-                    className="absolute top-3 right-3 w-8 h-8 rounded-full bg-white/90 border border-slate-200 flex items-center justify-center hover:bg-white"
-                    onClick={() => removeImageAt(mainImageIndex)}
-                    aria-label="remove main image"
-                    title="削除"
-                  >
-                    <span className="text-slate-600 leading-none">×</span>
-                  </button>
-
-                  {/* footer */}
-                  <div className="px-3 py-2 border-t border-slate-200 flex items-center justify-between">
-                    <div className="text-xs text-[hsl(var(--muted-foreground))]">
-                      {images.length} 枚選択中（サムネをクリックするとメインにできます）
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <Button
-                        type="button"
-                        variant="outline"
-                        size="sm"
-                        onClick={openImagePicker}
-                      >
-                        画像を追加
-                      </Button>
-                      {images.length > 0 && (
-                        <Button
-                          type="button"
-                          variant="ghost"
-                          size="sm"
-                          onClick={clearImages}
-                        >
-                          クリア
-                        </Button>
-                      )}
-                    </div>
-                  </div>
-                </div>
-
-                {/* サブ（小） + 追加タイル */}
-                <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-                  {thumbIndices.map((idx) => {
-                    const url = imagePreviewUrls[idx];
-                    const f = images[idx];
-                    return (
-                      <div
-                        key={`${f.name}-${f.size}-${f.lastModified}-${idx}`}
-                        className="relative rounded-xl overflow-hidden border border-slate-200 bg-white cursor-pointer"
-                        onClick={() => setMainImageIndex(idx)}
-                        role="button"
-                        tabIndex={0}
-                        title="クリックでメインに設定"
-                      >
-                        <div className="w-full aspect-square bg-slate-50">
-                          {url && (
-                            <img
-                              src={url}
-                              alt={`sub-${idx}`}
-                              className="w-full h-full object-cover"
-                            />
-                          )}
-                        </div>
-
-                        <button
-                          type="button"
-                          className="absolute top-2 right-2 w-7 h-7 rounded-full bg-white/90 border border-slate-200 flex items-center justify-center hover:bg-white"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            removeImageAt(idx);
-                          }}
-                          aria-label="remove image"
-                          title="削除"
-                        >
-                          <span className="text-slate-600 leading-none">×</span>
-                        </button>
-
-                        <div className="px-2 py-2 border-t border-slate-200">
-                          <div className="text-xs truncate">{f.name}</div>
-                        </div>
-                      </div>
-                    );
-                  })}
-
-                  {/* 追加タイル（複数枚の追加入力） */}
-                  <div
-                    className="rounded-xl border border-dashed border-slate-300 bg-slate-50/30 cursor-pointer flex flex-col items-center justify-center gap-2 aspect-square"
-                    onClick={openImagePicker}
-                    onDrop={onDropImages}
-                    onDragOver={onDragOverImages}
-                    role="button"
-                    tabIndex={0}
-                    title="画像を追加（複数可）"
-                  >
-                    <div className="w-10 h-10 rounded-lg bg-white border border-slate-200 flex items-center justify-center">
-                      <PlusIcon />
-                    </div>
-                    <div className="text-xs text-slate-700">画像を追加</div>
-                  </div>
-                </div>
-              </>
-            )}
-          </CardContent>
-        </Card>
+        {/* ✅ 商品画像カード（list app の既存コンポーネントを流用） */}
+        <ListImageCard
+          isEdit={true}
+          saving={false}
+          imageUrls={Array.isArray(imagePreviewUrls) ? imagePreviewUrls : []}
+          mainImageIndex={Number.isFinite(Number(mainImageIndex)) ? mainImageIndex : 0}
+          setMainImageIndex={(idx) => setMainImageIndex(idx)}
+          onAddImages={onAddImages}
+          onRemoveImageAt={(idx) => removeImageAt(idx)}
+          onClearImages={() => clearImages()}
+        />
 
         {/* ✅ タイトル入力カード（商品画像の下に配置） */}
         <Card>
@@ -374,7 +173,11 @@ export default function InventoryListCreate() {
         {loadingDTO && (
           <div className="text-sm text-[hsl(var(--muted-foreground))]">読み込み中...</div>
         )}
-        {dtoError && <div className="text-sm text-red-600">読み込みに失敗しました: {dtoError}</div>}
+        {dtoError && (
+          <div className="text-sm text-red-600">
+            読み込みに失敗しました: {dtoError}
+          </div>
+        )}
 
         {/* ✅ 担当者 */}
         <Card>
@@ -383,14 +186,21 @@ export default function InventoryListCreate() {
 
             <Popover>
               <PopoverTrigger>
-                <Button type="button" variant="outline" size="sm" className="w-full justify-between">
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="w-full justify-between"
+                >
                   <span>{assigneeName || "未設定"}</span>
                   <span className="text-[11px] text-slate-400" />
                 </Button>
               </PopoverTrigger>
 
               <PopoverContent className="p-2 space-y-1">
-                {loadingMembers && <p className="text-xs text-slate-400">担当者を読み込み中です…</p>}
+                {loadingMembers && (
+                  <p className="text-xs text-slate-400">担当者を読み込み中です…</p>
+                )}
 
                 {!loadingMembers && assigneeCandidates.length > 0 && (
                   <div className="space-y-1">
@@ -419,8 +229,12 @@ export default function InventoryListCreate() {
         <Card>
           <CardContent className="p-4">
             <div className="text-sm font-medium mb-2">選択商品</div>
-            <div className="text-sm text-slate-800 break-all">{productBrandName || "未選択"}</div>
-            <div className="text-sm text-slate-800 break-all">{productName || "未選択"}</div>
+            <div className="text-sm text-slate-800 break-all">
+              {productBrandName || "未選択"}
+            </div>
+            <div className="text-sm text-slate-800 break-all">
+              {productName || "未選択"}
+            </div>
           </CardContent>
         </Card>
 
@@ -428,8 +242,12 @@ export default function InventoryListCreate() {
         <Card>
           <CardContent className="p-4">
             <div className="text-sm font-medium mb-2">選択トークン</div>
-            <div className="text-sm text-slate-800 break-all">{tokenBrandName || "未選択"}</div>
-            <div className="text-sm text-slate-800 break-all">{tokenName || "未選択"}</div>
+            <div className="text-sm text-slate-800 break-all">
+              {tokenBrandName || "未選択"}
+            </div>
+            <div className="text-sm text-slate-800 break-all">
+              {tokenName || "未選択"}
+            </div>
           </CardContent>
         </Card>
 

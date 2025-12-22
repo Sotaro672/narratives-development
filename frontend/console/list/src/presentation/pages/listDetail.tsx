@@ -7,7 +7,6 @@ import PageStyle from "../../../../shell/src/layout/PageStyle/PageStyle";
 
 import { Card, CardContent } from "../../../../shell/src/shared/ui/card";
 import { Input } from "../../../../shell/src/shared/ui/input";
-import { Button } from "../../../../shell/src/shared/ui/button";
 
 // ✅ PriceCard（list app 側のコンポーネント）
 import PriceCard from "../../../../list/src/presentation/components/priceCard";
@@ -15,55 +14,11 @@ import PriceCard from "../../../../list/src/presentation/components/priceCard";
 // ✅ AdminCard（担当者編集 + 作成/更新情報表示）
 import AdminCard from "../../../../admin/src/presentation/components/AdminCard";
 
+// ✅ NEW: 商品画像カード（分離）
+import ListImageCard from "../components/listImageCard";
+
 // ✅ hook（同一 app 内なので相対でOK）
 import { useListDetail } from "../hook/useListDetail";
-
-function ImageIcon() {
-  return (
-    <svg
-      width="28"
-      height="28"
-      viewBox="0 0 24 24"
-      fill="none"
-      className="text-slate-400"
-    >
-      <path
-        d="M21 19V5a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2Z"
-        stroke="currentColor"
-        strokeWidth="1.6"
-      />
-      <path
-        d="M8.5 10.5a1.5 1.5 0 1 0 0-3 1.5 1.5 0 0 0 0 3Z"
-        stroke="currentColor"
-        strokeWidth="1.6"
-      />
-      <path
-        d="M21 16l-5.5-5.5a2 2 0 0 0-2.8 0L5 18"
-        stroke="currentColor"
-        strokeWidth="1.6"
-      />
-    </svg>
-  );
-}
-
-function PlusIcon() {
-  return (
-    <svg
-      width="20"
-      height="20"
-      viewBox="0 0 24 24"
-      fill="none"
-      className="text-slate-500"
-    >
-      <path
-        d="M12 5v14M5 12h14"
-        stroke="currentColor"
-        strokeWidth="1.8"
-        strokeLinecap="round"
-      />
-    </svg>
-  );
-}
 
 function s(v: unknown): string {
   return String(v ?? "").trim();
@@ -84,23 +39,6 @@ export default function ListDetail() {
   const onBackToListManagement = React.useCallback(() => {
     navigate("/list");
   }, [navigate]);
-
-  // ✅ 型を固定して noImplicitAny を回避
-  const effectiveImageUrls: string[] = React.useMemo(() => {
-    const arr = Array.isArray(vm.imageUrls) ? vm.imageUrls : [];
-    return arr.map((u) => s(u)).filter(Boolean);
-  }, [vm.imageUrls]);
-
-  const hasImages = effectiveImageUrls.length > 0;
-
-  const mainUrl = hasImages ? effectiveImageUrls[vm.mainImageIndex] : "";
-
-  const thumbIndices: number[] = React.useMemo(() => {
-    if (!hasImages) return [];
-    return effectiveImageUrls
-      .map((_: string, idx: number) => idx)
-      .filter((idx: number) => idx !== vm.mainImageIndex);
-  }, [hasImages, effectiveImageUrls, vm.mainImageIndex]);
 
   const effectiveDecision = isEdit ? vm.draftDecision : vm.decisionNorm;
 
@@ -164,200 +102,18 @@ export default function ListDetail() {
           </div>
         )}
 
-        {/* ✅ 商品画像カード（複数枚アップロード UI に更新） */}
-        <Card>
-          <CardContent className="p-4 space-y-3">
-            <div className="text-sm font-medium flex items-center justify-between gap-2">
-              <div className="flex items-center gap-2">
-                <span className="inline-flex items-center justify-center w-6 h-6 rounded-md bg-slate-50 border border-slate-200">
-                  <ImageIcon />
-                </span>
-                商品画像
-              </div>
-
-              {isEdit && (
-                <div className="flex items-center gap-2">
-                  <label className="cursor-pointer">
-                    <input
-                      type="file"
-                      accept="image/*"
-                      multiple
-                      className="hidden"
-                      onChange={(e) => vm.onAddImages(e.target.files)}
-                    />
-                    <Button
-                      type="button"
-                      variant="outline"
-                      className="h-8"
-                      disabled={vm.saving}
-                    >
-                      画像を追加
-                    </Button>
-                  </label>
-
-                  {effectiveImageUrls.length > 0 && (
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      className="h-8"
-                      onClick={() => {
-                        // hook に「全削除」が無い場合は、存在する分だけ呼べるようにする
-                        if (typeof anyVm.onClearImages === "function") {
-                          anyVm.onClearImages();
-                          return;
-                        }
-                        // fallback: 末尾から削除（indexがずれるのを避ける）
-                        if (typeof vm.onRemoveImageAt === "function") {
-                          for (let i = effectiveImageUrls.length - 1; i >= 0; i--) {
-                            vm.onRemoveImageAt(i);
-                          }
-                          vm.setMainImageIndex(0);
-                        }
-                      }}
-                      disabled={vm.saving}
-                    >
-                      クリア
-                    </Button>
-                  )}
-                </div>
-              )}
-            </div>
-
-            {/* empty state */}
-            {!hasImages && (
-              <div
-                className={[
-                  "rounded-xl border border-dashed border-slate-300 bg-slate-50/30 w-full aspect-[16/9]",
-                  "flex flex-col items-center justify-center gap-3 select-none",
-                  isEdit ? "cursor-pointer" : "",
-                ].join(" ")}
-                onClick={() => {
-                  // edit時は「追加」ボタンがあるので、カードクリックは何もしない（誤タップ防止）
-                }}
-              >
-                <div className="w-12 h-12 rounded-lg bg-white border border-slate-200 flex items-center justify-center">
-                  <ImageIcon />
-                </div>
-                <div className="text-sm text-slate-700">画像は未設定です</div>
-                <div className="text-xs text-[hsl(var(--muted-foreground))]">
-                  {isEdit
-                    ? "右上の「画像を追加」から複数画像を追加できます。"
-                    : "画像を追加する場合は編集モードに切り替えてください。"}
-                </div>
-              </div>
-            )}
-
-            {/* filled state */}
-            {hasImages && (
-              <>
-                {/* メイン（大） */}
-                <div className="relative rounded-xl overflow-hidden border border-slate-200 bg-white">
-                  <div className="w-full aspect-[16/9] bg-slate-50">
-                    {mainUrl && (
-                      <img
-                        src={mainUrl}
-                        alt="main"
-                        className="w-full h-full object-cover"
-                      />
-                    )}
-                  </div>
-
-                  {/* remove main */}
-                  {isEdit && (
-                    <button
-                      type="button"
-                      className="absolute top-3 right-3 w-8 h-8 rounded-full bg-white/90 border border-slate-200 flex items-center justify-center hover:bg-white"
-                      onClick={() => vm.onRemoveImageAt(vm.mainImageIndex)}
-                      aria-label="remove main image"
-                      title="削除"
-                      disabled={vm.saving}
-                    >
-                      <span className="text-slate-600 leading-none">×</span>
-                    </button>
-                  )}
-
-                  {/* footer */}
-                  <div className="px-3 py-2 border-t border-slate-200 flex items-center justify-between">
-                    <div className="text-xs text-[hsl(var(--muted-foreground))]">
-                      {effectiveImageUrls.length} 枚
-                      {isEdit
-                        ? "（サムネの×で削除できます）"
-                        : "（サムネをクリックしてメイン切替できます）"}
-                    </div>
-                    {!isEdit && (
-                      <div className="text-[11px] text-slate-400">
-                        ※ 画像変更は編集モードで行えます
-                      </div>
-                    )}
-                  </div>
-                </div>
-
-                {/* サブ（小） + 追加タイル（edit時のみ表示） */}
-                <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-                  {thumbIndices.map((idx: number) => {
-                    const url = effectiveImageUrls[idx] ?? "";
-                    return (
-                      <div
-                        key={`${url}-${idx}`}
-                        className="relative rounded-xl overflow-hidden border border-slate-200 bg-white cursor-pointer"
-                        onClick={() => vm.setMainImageIndex(idx)}
-                        role="button"
-                        tabIndex={0}
-                        title="クリックでメインに設定"
-                      >
-                        <div className="w-full aspect-square bg-slate-50">
-                          {url && (
-                            <img
-                              src={url}
-                              alt={`sub-${idx}`}
-                              className="w-full h-full object-cover"
-                            />
-                          )}
-                        </div>
-
-                        {isEdit && (
-                          <button
-                            type="button"
-                            className="absolute top-2 right-2 w-7 h-7 rounded-full bg-white/90 border border-slate-200 flex items-center justify-center hover:bg-white"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              vm.onRemoveImageAt(idx);
-                            }}
-                            aria-label="remove image"
-                            title="削除"
-                            disabled={vm.saving}
-                          >
-                            <span className="text-slate-600 leading-none">×</span>
-                          </button>
-                        )}
-                      </div>
-                    );
-                  })}
-
-                  {/* 追加タイル（edit時のみ） */}
-                  {isEdit && (
-                    <label
-                      className="rounded-xl border border-dashed border-slate-300 bg-slate-50/30 cursor-pointer flex flex-col items-center justify-center gap-2 aspect-square"
-                      title="画像を追加（複数可）"
-                    >
-                      <input
-                        type="file"
-                        accept="image/*"
-                        multiple
-                        className="hidden"
-                        onChange={(e) => vm.onAddImages(e.target.files)}
-                      />
-                      <div className="w-10 h-10 rounded-lg bg-white border border-slate-200 flex items-center justify-center">
-                        <PlusIcon />
-                      </div>
-                      <div className="text-xs text-slate-700">画像を追加</div>
-                    </label>
-                  )}
-                </div>
-              </>
-            )}
-          </CardContent>
-        </Card>
+        {/* ✅ 商品画像カード（分離） */}
+        <ListImageCard
+          isEdit={isEdit}
+          saving={vm.saving}
+          imageUrls={(vm as any).imageUrls ?? []}
+          mainImageIndex={(vm as any).mainImageIndex ?? 0}
+          setMainImageIndex={(idx) => vm.setMainImageIndex(idx)}
+          onAddImages={(files) => vm.onAddImages(files)}
+          onRemoveImageAt={(idx) => vm.onRemoveImageAt(idx)}
+          onClearImages={typeof anyVm.onClearImages === "function" ? anyVm.onClearImages : undefined}
+          anyVm={anyVm}
+        />
 
         {/* ✅ タイトル */}
         <Card>
