@@ -1,3 +1,5 @@
+/* frontend/console/list/src/presentation/components/listImageCard.css */
+
 /* モデル別在庫一覧カード */
 .ivc {
   background-color: var(--pbp-surface, #ffffff);
@@ -35,132 +37,228 @@
   padding: 0 20px 16px;
 }
 
-.ivc__table-wrap {
-  margin-top: 8px;
-  border-radius: 16px;
-  border: 1px solid var(--pbp-border-soft, rgba(148, 163, 253, 0.16));
-  padding: 4px 0;
-  background-color: #ffffff;
-}
+/* ============================================================
+   ListImageCard 専用（Tailwind から移譲）
+   ============================================================ */
 
-/* Table */
-.ivc__table {
-  width: 100%;
-  border-collapse: collapse;
-  font-size: 0.9rem;
-}
-
-.ivc__th {
-  padding: 10px 16px;
-  font-size: 0.8rem;
-  font-weight: 600;
-  color: var(--pbp-text-soft, #6b7280);
-  border-bottom: 1px solid var(--pbp-border-soft, #e5e7eb);
-}
-
-.ivc__th--left {
-  text-align: left;
-}
-.ivc__th--right {
-  text-align: right;
-}
-
-.ivc__tr {
-  border-bottom: 1px solid var(--pbp-border-soft, #f1f5f9);
-}
-
-.ivc__tr:last-of-type {
-  border-bottom: none;
-}
-
-.ivc__model {
-  padding: 10px 16px;
-  color: var(--pbp-text, #111827);
-  white-space: nowrap;
-}
-
-.ivc__size {
-  padding: 10px 16px;
-  color: var(--pbp-text, #111827);
-  white-space: nowrap;
-}
-
-.ivc__color-cell {
-  padding: 10px 16px;
+.lic__header {
   display: flex;
   align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.lic__header-left {
+  display: inline-flex;
+  align-items: center;
   gap: 8px;
-  color: var(--pbp-text, #111827);
-  white-space: nowrap;
 }
 
-.ivc__color-dot {
-  width: 14px;
-  height: 14px;
-  border-radius: 999px;
-  display: inline-block;
+.lic__icon-wrap {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  border-radius: 10px;
+  background: rgba(248, 250, 252, 1);
+  border: 1px solid rgba(226, 232, 240, 1);
 }
 
-.ivc__color-label {
+.lic__actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+/* アップロードエリア（empty） */
+.lic__empty {
+  border-radius: 16px;
+  border: 1px dashed rgba(203, 213, 225, 1);
+  background: rgba(248, 250, 252, 0.3);
+  width: 100%;
+  aspect-ratio: 16 / 9;
+
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+
+  user-select: none;
+}
+
+.lic__empty--clickable {
+  cursor: pointer;
+}
+
+.lic__empty-icon {
+  width: 48px;
+  height: 48px;
+  border-radius: 14px;
+  background: #ffffff;
+  border: 1px solid rgba(226, 232, 240, 1);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.lic__empty-title {
   font-size: 0.9rem;
+  color: rgba(51, 65, 85, 1);
 }
 
-/* 在庫数（右寄せ＋グリーン） */
-.ivc__stock {
-  padding: 10px 16px;
-  text-align: right;
-}
-
-.ivc__stock-number {
-  color: #16a34a;
-  font-weight: 600;
-}
-
-/* 空行 */
-.ivc__empty {
-  padding: 18px 16px;
+.lic__empty-sub {
+  font-size: 0.75rem;
+  color: hsl(var(--muted-foreground));
   text-align: center;
-  font-size: 0.85rem;
-  color: var(--pbp-text-soft, #9ca3af);
+  padding: 0 12px;
 }
 
-/* 行ホバー */
-.ivc__tr:hover {
-  background-color: rgba(249, 250, 251, 0.7);
+/* メイン（大） */
+.lic__main {
+  position: relative;
+  border-radius: 16px;
+  overflow: hidden;
+  border: 1px solid rgba(226, 232, 240, 1);
+  background: #ffffff;
 }
 
-/* ✅ 合計行 */
-.ivc__total-row {
-  border-top: 1px solid var(--pbp-border-soft, #e5e7eb);
-  background-color: rgba(249, 250, 251, 0.7);
+.lic__main-media {
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  background: rgba(248, 250, 252, 1);
 }
 
-.ivc__total-label {
-  padding: 10px 16px;
-  font-size: 0.85rem;
-  font-weight: 600;
-  color: var(--pbp-text-soft, #6b7280);
-  text-align: right;
+.lic__main-media--clickable {
+  cursor: pointer;
 }
 
-.ivc__total-value {
-  padding: 10px 16px;
-  text-align: right; /* ✅ 合計値を右寄せ */
-  font-weight: 700;
-  color: var(--pbp-text, #111827);
+.lic__img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
 }
 
-.inv__total-pill {
-  display: inline-block;
-  min-width: 2.25rem;
-  text-align: center;
+.lic__remove-btn {
+  position: absolute;
+  top: 12px;
+  right: 12px;
 
-  padding: 0.2rem 0.6rem;
-  border-radius: 9999px;
+  width: 32px;
+  height: 32px;
+  border-radius: 999px;
 
-  font-size: 0.8rem;
-  font-weight: 600;
+  background: rgba(255, 255, 255, 0.9);
+  border: 1px solid rgba(226, 232, 240, 1);
 
-  background: hsl(var(--foreground, 222 47% 11%)); /* fallback ~#0b0f1a */
-  color: hsl(var(--card, 0 0% 100%));               /* fallback ~#ffffff */
+  display: flex;
+  align-items: center;
+  justify-content: center;
+
+  cursor: pointer;
+}
+
+.lic__remove-btn:hover {
+  background: rgba(255, 255, 255, 1);
+}
+
+.lic__remove-x {
+  color: rgba(71, 85, 105, 1);
+  line-height: 1;
+}
+
+/* footer */
+.lic__footer {
+  padding: 8px 12px;
+  border-top: 1px solid rgba(226, 232, 240, 1);
+
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.lic__footer-left {
+  font-size: 0.75rem;
+  color: hsl(var(--muted-foreground));
+}
+
+.lic__footer-note {
+  font-size: 11px;
+  color: rgba(148, 163, 184, 1);
+}
+
+/* サムネ grid */
+.lic__grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+@media (min-width: 640px) {
+  .lic__grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+.lic__thumb {
+  position: relative;
+  border-radius: 16px;
+  overflow: hidden;
+  border: 1px solid rgba(226, 232, 240, 1);
+  background: #ffffff;
+  cursor: pointer;
+}
+
+.lic__thumb-media {
+  width: 100%;
+  aspect-ratio: 1 / 1;
+  background: rgba(248, 250, 252, 1);
+}
+
+.lic__thumb-remove {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+
+  width: 28px;
+  height: 28px;
+  border-radius: 999px;
+
+  background: rgba(255, 255, 255, 0.9);
+  border: 1px solid rgba(226, 232, 240, 1);
+
+  display: flex;
+  align-items: center;
+  justify-content: center;
+
+  cursor: pointer;
+}
+
+.lic__thumb-remove:hover {
+  background: rgba(255, 255, 255, 1);
+}
+
+/* 追加タイル（ボタン廃止の代替） */
+.lic__add-tile {
+  border-radius: 16px;
+  border: 1px dashed rgba(203, 213, 225, 1);
+  background: rgba(248, 250, 252, 0.3);
+  cursor: pointer;
+
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+
+  aspect-ratio: 1 / 1;
+  user-select: none;
+}
+
+.lic__add-title {
+  font-size: 0.75rem;
+  color: rgba(51, 65, 85, 1);
 }

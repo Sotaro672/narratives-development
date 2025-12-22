@@ -14,7 +14,7 @@ import PriceCard from "../../../../list/src/presentation/components/priceCard";
 // ✅ AdminCard（担当者編集 + 作成/更新情報表示）
 import AdminCard from "../../../../admin/src/presentation/components/AdminCard";
 
-// ✅ NEW: 商品画像カード（分離）
+// ✅ 商品画像カード（共通）
 import ListImageCard from "../components/listImageCard";
 
 // ✅ hook（同一 app 内なので相対でOK）
@@ -41,13 +41,11 @@ export default function ListDetail() {
   }, [navigate]);
 
   const effectiveDecision = isEdit ? vm.draftDecision : vm.decisionNorm;
-
   const effectivePriceRows = isEdit ? vm.draftPriceRows : vm.priceRows;
 
   // ✅ AdminCard: 担当者選択の通知（hook 側に存在しうる関数を吸収）
   const handleSelectAssignee = React.useCallback(
     (id: string) => {
-      // 代表的な命名を吸収（存在するものだけ呼ぶ）
       if (typeof anyVm.setDraftAssigneeId === "function") {
         anyVm.setDraftAssigneeId(id);
       }
@@ -102,16 +100,18 @@ export default function ListDetail() {
           </div>
         )}
 
-        {/* ✅ 商品画像カード（分離） */}
+        {/* ✅ 商品画像カード（共通コンポーネント） */}
         <ListImageCard
           isEdit={isEdit}
           saving={vm.saving}
-          imageUrls={(vm as any).imageUrls ?? []}
-          mainImageIndex={(vm as any).mainImageIndex ?? 0}
-          setMainImageIndex={(idx) => vm.setMainImageIndex(idx)}
-          onAddImages={(files) => vm.onAddImages(files)}
-          onRemoveImageAt={(idx) => vm.onRemoveImageAt(idx)}
-          onClearImages={typeof anyVm.onClearImages === "function" ? anyVm.onClearImages : undefined}
+          imageUrls={Array.isArray(vm.imageUrls) ? vm.imageUrls : []}
+          mainImageIndex={vm.mainImageIndex}
+          setMainImageIndex={vm.setMainImageIndex}
+          onAddImages={(files) => vm.onAddImages?.(files)}
+          onRemoveImageAt={(idx) => vm.onRemoveImageAt?.(idx)}
+          onClearImages={
+            typeof anyVm.onClearImages === "function" ? anyVm.onClearImages : undefined
+          }
           anyVm={anyVm}
         />
 
@@ -231,68 +231,64 @@ export default function ListDetail() {
 
             {/* view */}
             {!isEdit && (
-              <>
-                <div className="flex gap-2">
-                  <div
-                    className={[
-                      "flex-1 h-9 rounded-md border text-sm flex items-center justify-center",
-                      effectiveDecision === "listing"
-                        ? "bg-slate-900 text-white border-slate-900"
-                        : "bg-white text-slate-700 border-slate-200",
-                    ].join(" ")}
-                  >
-                    出品
-                  </div>
-
-                  <div
-                    className={[
-                      "flex-1 h-9 rounded-md border text-sm flex items-center justify-center",
-                      effectiveDecision === "holding"
-                        ? "bg-slate-900 text-white border-slate-900"
-                        : "bg-white text-slate-700 border-slate-200",
-                    ].join(" ")}
-                  >
-                    保留
-                  </div>
+              <div className="flex gap-2">
+                <div
+                  className={[
+                    "flex-1 h-9 rounded-md border text-sm flex items-center justify-center",
+                    effectiveDecision === "listing"
+                      ? "bg-slate-900 text-white border-slate-900"
+                      : "bg-white text-slate-700 border-slate-200",
+                  ].join(" ")}
+                >
+                  出品
                 </div>
-              </>
+
+                <div
+                  className={[
+                    "flex-1 h-9 rounded-md border text-sm flex items-center justify-center",
+                    effectiveDecision === "holding"
+                      ? "bg-slate-900 text-white border-slate-900"
+                      : "bg-white text-slate-700 border-slate-200",
+                  ].join(" ")}
+                >
+                  保留
+                </div>
+              </div>
             )}
 
             {/* edit */}
             {isEdit && (
-              <>
-                <div className="flex gap-2">
-                  <button
-                    type="button"
-                    className={[
-                      "flex-1 h-9 rounded-md border text-sm flex items-center justify-center transition",
-                      vm.draftDecision === "listing"
-                        ? "bg-slate-900 text-white border-slate-900"
-                        : "bg-white text-slate-700 border-slate-200",
-                      vm.saving ? "opacity-60 cursor-not-allowed" : "cursor-pointer",
-                    ].join(" ")}
-                    onClick={() => vm.onToggleDecision("listing")}
-                    disabled={vm.saving}
-                  >
-                    出品
-                  </button>
+              <div className="flex gap-2">
+                <button
+                  type="button"
+                  className={[
+                    "flex-1 h-9 rounded-md border text-sm flex items-center justify-center transition",
+                    vm.draftDecision === "listing"
+                      ? "bg-slate-900 text-white border-slate-900"
+                      : "bg-white text-slate-700 border-slate-200",
+                    vm.saving ? "opacity-60 cursor-not-allowed" : "cursor-pointer",
+                  ].join(" ")}
+                  onClick={() => vm.onToggleDecision("listing")}
+                  disabled={vm.saving}
+                >
+                  出品
+                </button>
 
-                  <button
-                    type="button"
-                    className={[
-                      "flex-1 h-9 rounded-md border text-sm flex items-center justify-center transition",
-                      vm.draftDecision === "holding"
-                        ? "bg-slate-900 text-white border-slate-900"
-                        : "bg-white text-slate-700 border-slate-200",
-                      vm.saving ? "opacity-60 cursor-not-allowed" : "cursor-pointer",
-                    ].join(" ")}
-                    onClick={() => vm.onToggleDecision("holding")}
-                    disabled={vm.saving}
-                  >
-                    保留
-                  </button>
-                </div>
-              </>
+                <button
+                  type="button"
+                  className={[
+                    "flex-1 h-9 rounded-md border text-sm flex items-center justify-center transition",
+                    vm.draftDecision === "holding"
+                      ? "bg-slate-900 text-white border-slate-900"
+                      : "bg-white text-slate-700 border-slate-200",
+                    vm.saving ? "opacity-60 cursor-not-allowed" : "cursor-pointer",
+                  ].join(" ")}
+                  onClick={() => vm.onToggleDecision("holding")}
+                  disabled={vm.saving}
+                >
+                  保留
+                </button>
+              </div>
             )}
           </CardContent>
         </Card>

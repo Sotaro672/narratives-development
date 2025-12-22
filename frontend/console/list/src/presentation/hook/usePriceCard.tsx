@@ -59,7 +59,6 @@ function s(v: unknown): string {
 }
 
 // RGB(int) → HEX (#RRGGBB)
-// - row.rgb は string | number | null どれでも来うる前提で安全に変換
 function rgbIntToHex(rgb: number | string | null | undefined): string | null {
   if (rgb === null || rgb === undefined) return null;
   const n = typeof rgb === "string" ? Number(rgb) : rgb;
@@ -97,7 +96,6 @@ function parsePriceInput(v: string): number | null {
   const num = Number(normalized);
   if (!Number.isFinite(num)) return null;
 
-  // number input なので基本は整数想定（step=1）。念のため floor。
   const int = Math.floor(num);
   return int < 0 ? 0 : int;
 }
@@ -147,26 +145,6 @@ export function usePriceCard(props: PriceCardProps): UsePriceCardResult {
   const isEdit = mode === "edit";
   const showModeBadge = mode !== "view";
 
-  // ✅ rows が更新されているかどうかを確定させるログ
-  React.useEffect(() => {
-    const sample = (Array.isArray(rows) ? rows : []).slice(0, 4).map((r, idx) => ({
-      idx,
-      id: s((r as any)?.id),
-      size: s(r?.size),
-      color: s(r?.color),
-      price: r?.price ?? null,
-      stock: Number.isFinite(Number(r?.stock)) ? Number(r?.stock) : 0,
-    }));
-
-    // eslint-disable-next-line no-console
-    console.log("[console/list/priceCard] props changed", {
-      mode,
-      rowsCount: Array.isArray(rows) ? rows.length : 0,
-      hasOnChangePrice: typeof onChangePrice === "function",
-      sample,
-    });
-  }, [mode, rows, onChangePrice]);
-
   const rowsVM = React.useMemo<PriceRowVM[]>(() => {
     return rows.map((row, idx) => {
       const rgbHex = rgbIntToHex(row.rgb);
@@ -189,24 +167,9 @@ export function usePriceCard(props: PriceCardProps): UsePriceCardResult {
       const onChangePriceInput = (e: React.ChangeEvent<HTMLInputElement>) => {
         const raw = e.target.value;
         const next = parsePriceInput(raw);
-
-        // eslint-disable-next-line no-console
-        console.log("[console/list/priceCard] onChangePriceInput", {
-          idx,
-          rowId: s((row as any)?.id),
-          size: s(row?.size),
-          color: s(row?.color),
-          prevPrice: row?.price ?? null,
-          raw,
-          normalized: normalizeNumericString(raw),
-          parsedNext: next,
-          hasOnChangePrice: typeof onChangePrice === "function",
-        });
-
         onChangePrice?.(idx, next, row);
       };
 
-      // ✅ key をより安定化（id がある場合は id を優先して含める）
       const stableId = s((row as any)?.id);
       const keyBase = stableId || `${String(row.size)}-${String(row.color)}-${idx}`;
 

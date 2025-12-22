@@ -72,7 +72,6 @@ export type UseListCreateResult = {
   mainImageIndex: number;
   setMainImageIndex: React.Dispatch<React.SetStateAction<number>>;
   imageInputRef: ImageInputRef; // ✅ null を含む RefObject
-  openImagePicker: () => void;
   onSelectImages: (e: React.ChangeEvent<HTMLInputElement>) => void;
   onDropImages: (e: React.DragEvent<HTMLDivElement>) => void;
   onDragOverImages: (e: React.DragEvent<HTMLDivElement>) => void;
@@ -93,26 +92,15 @@ export type UseListCreateResult = {
 export function useListCreate(): UseListCreateResult {
   const navigate = useNavigate();
 
-  // ✅ routes.tsx で定義した param を受け取る
   const params = useParams<ListCreateRouteParams>();
 
-  // ✅ params の trim/正規化は service へ
   const resolvedParams: ResolvedListCreateParams = React.useMemo(
     () => resolveListCreateParams(params),
     [params],
   );
 
-  const { inventoryId, productBlueprintId, tokenBlueprintId } = resolvedParams;
+  const { inventoryId } = resolvedParams;
 
-  // eslint-disable-next-line no-console
-  console.log("[inventory/useListCreate] params resolved", {
-    inventoryId,
-    productBlueprintId,
-    tokenBlueprintId,
-    raw: resolvedParams.raw,
-  });
-
-  // ✅ title 計算は service へ
   const title = React.useMemo(() => computeListCreateTitle(inventoryId), [inventoryId]);
 
   // ============================================================
@@ -132,12 +120,7 @@ export function useListCreate(): UseListCreateResult {
   const [images, setImages] = React.useState<File[]>([]);
   const [mainImageIndex, setMainImageIndex] = React.useState<number>(0);
 
-  // ✅ null を含むのが正しい（useRef 初期値 null のため）
   const imageInputRef = React.useRef<HTMLInputElement | null>(null);
-
-  const openImagePicker = React.useCallback(() => {
-    imageInputRef.current?.click();
-  }, []);
 
   const onSelectImages = React.useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
     const files = Array.from(e.target.files ?? []).filter(Boolean) as File[];
@@ -167,18 +150,15 @@ export function useListCreate(): UseListCreateResult {
     e.stopPropagation();
   }, []);
 
-  const removeImageAt = React.useCallback(
-    (idx: number) => {
-      setImages((prev) => prev.filter((_, i) => i !== idx));
+  const removeImageAt = React.useCallback((idx: number) => {
+    setImages((prev) => prev.filter((_, i) => i !== idx));
 
-      setMainImageIndex((prevMain) => {
-        if (idx === prevMain) return 0;
-        if (idx < prevMain) return Math.max(0, prevMain - 1);
-        return prevMain;
-      });
-    },
-    [setImages],
-  );
+    setMainImageIndex((prevMain) => {
+      if (idx === prevMain) return 0;
+      if (idx < prevMain) return Math.max(0, prevMain - 1);
+      return prevMain;
+    });
+  }, []);
 
   const clearImages = React.useCallback(() => {
     setImages([]);
@@ -219,7 +199,7 @@ export function useListCreate(): UseListCreateResult {
   }, [images.length, mainImageIndex]);
 
   // ============================================================
-  // ✅ PriceRows（DTOから初期化し、以後はユーザー入力を保持）
+  // ✅ PriceRows
   // ============================================================
   const [priceRows, setPriceRows] = React.useState<PriceRowEx[]>([]);
   const initializedPriceRowsRef = React.useRef(false);
@@ -233,10 +213,9 @@ export function useListCreate(): UseListCreateResult {
     });
   }, []);
 
-  // ✅ PriceCard hook
   const priceCard = usePriceCard({
     title: "価格",
-    rows: priceRows as unknown as PriceRow[], // usePriceCard は余分なフィールドを気にしない
+    rows: priceRows as unknown as PriceRow[],
     mode: "edit",
     currencySymbol: "¥",
     showTotal: true,
@@ -251,7 +230,7 @@ export function useListCreate(): UseListCreateResult {
   }, [navigate, resolvedParams]);
 
   // ============================================================
-  // ✅ 担当者選択（ID を保持して POST に渡せるようにする）
+  // ✅ 担当者
   // ============================================================
   const { assigneeName, assigneeCandidates, loadingMembers, onSelectAssignee } =
     useAdminCardHook();
@@ -267,24 +246,18 @@ export function useListCreate(): UseListCreateResult {
   );
 
   // ============================================================
-  // ✅ 作成（POST /lists） + ✅ Policy A: signedUrl で画像アップロード&登録（serviceへ移譲）
+  // ✅ 作成（listImage関連ログのみ残す）
   // ============================================================
   const onCreate = React.useCallback(() => {
     void (async () => {
       try {
-        // eslint-disable-next-line no-console
-        console.log("[inventory/useListCreate] onCreate start", {
-          inventoryId,
-          productBlueprintId,
-          tokenBlueprintId,
-          decision,
-          listingTitleLen: listingTitle.length,
-          descriptionLen: description.length,
-          imagesCount: images.length,
-          mainImageIndex,
-          priceRowsCount: priceRows.length,
-          assigneeId,
-        });
+        if (images.length > 0) {
+          // eslint-disable-next-line no-console
+          console.log("[inventory/listImage] create start", {
+            imagesCount: images.length,
+            mainImageIndex,
+          });
+        }
 
         await createListWithImages({
           params: resolvedParams,
@@ -301,28 +274,29 @@ export function useListCreate(): UseListCreateResult {
         navigate(buildAfterCreatePath(resolvedParams));
       } catch (e) {
         const msg = String(e instanceof Error ? e.message : e);
-        // eslint-disable-next-line no-console
-        console.warn("[inventory/useListCreate] onCreate failed", { msg, raw: e });
+
+        if (images.length > 0) {
+          // eslint-disable-next-line no-console
+          console.log("[inventory/listImage] create failed", { msg });
+        }
+
         alert(msg);
       }
     })();
   }, [
-    inventoryId,
-    productBlueprintId,
-    tokenBlueprintId,
     decision,
-    listingTitle,
     description,
     images,
+    listingTitle,
     mainImageIndex,
-    priceRows,
-    assigneeId,
     navigate,
+    priceRows,
     resolvedParams,
+    assigneeId,
   ]);
 
   // ============================================================
-  // ✅ listCreate DTO 取得（service へ移譲）
+  // ✅ listCreate DTO 取得
   // ============================================================
   const [dto, setDTO] = React.useState<ListCreateDTO | null>(null);
   const [loadingDTO, setLoadingDTO] = React.useState(false);
@@ -344,7 +318,6 @@ export function useListCreate(): UseListCreateResult {
         const data = await loadListCreateDTOFromParams(resolvedParams);
         if (cancelled) return;
 
-        // ✅ inventoryId ルートへ正規化（手順A）
         const gotInventoryId = getInventoryIdFromDTO(data);
         if (
           shouldRedirectToInventoryIdRoute({
@@ -359,7 +332,6 @@ export function useListCreate(): UseListCreateResult {
 
         setDTO(data);
 
-        // ✅ priceRows 初期化（DTOの modelResolver 結果を PriceCard に渡す）
         if (!initializedPriceRowsRef.current) {
           const nextRows = initPriceRowsFromDTO(data);
           setPriceRows(nextRows);
@@ -367,7 +339,6 @@ export function useListCreate(): UseListCreateResult {
         }
       } catch (e) {
         if (cancelled) return;
-
         const msg = String(e instanceof Error ? e.message : e);
         setDTOError(msg);
       } finally {
@@ -382,7 +353,6 @@ export function useListCreate(): UseListCreateResult {
     };
   }, [navigate, inventoryId, resolvedParams]);
 
-  // ✅ 表示文字列は service へ
   const { productBrandName, productName, tokenBrandName, tokenName } = React.useMemo(
     () => extractDisplayStrings(dto),
     [dto],
@@ -416,7 +386,6 @@ export function useListCreate(): UseListCreateResult {
     mainImageIndex,
     setMainImageIndex,
     imageInputRef,
-    openImagePicker,
     onSelectImages,
     onDropImages,
     onDragOverImages,
@@ -432,3 +401,4 @@ export function useListCreate(): UseListCreateResult {
     setDecision,
   };
 }
+

@@ -15,7 +15,7 @@ import {
 // ✅ PriceCard（list app 側に作ったコンポーネントを流用）
 import PriceCard from "../../../../list/src/presentation/components/priceCard";
 
-// ✅ NEW: 既存の商品画像カードを list app から流用
+// ✅ 商品画像カード（list 側の共通コンポーネント）
 import ListImageCard from "../../../../list/src/presentation/components/listImageCard";
 
 // ✅ logic は hook 側へ（UI state も hook に寄せた）
@@ -51,11 +51,13 @@ export default function InventoryListCreate() {
     setDescription,
 
     // images (moved to hook)
-    images,
     imagePreviewUrls,
     mainImageIndex,
     setMainImageIndex,
+    imageInputRef,
     onSelectImages,
+    onDropImages,
+    onDragOverImages,
     removeImageAt,
     clearImages,
 
@@ -75,42 +77,29 @@ export default function InventoryListCreate() {
     return (priceRows ?? []).filter((r: any) => !s(r?.modelId)).length;
   }, [priceRows]);
 
-  // ✅ ListImageCard が要求する onAddImages(FileList|null) へアダプト
-  // - hook 側の onSelectImages(ChangeEvent<HTMLInputElement>) を流用するため、最小限の疑似イベントを渡す
-  const onAddImages = React.useCallback(
-    (files: FileList | null) => {
-      if (!files || files.length === 0) return;
-
-      const fakeEvent = {
-        target: { files },
-        currentTarget: { value: "" },
-      } as any;
-
-      onSelectImages(fakeEvent);
-    },
-    [onSelectImages],
-  );
-
   return (
     <PageStyle layout="grid-2" title={title} onBack={onBack} onCreate={onCreate}>
       {/* =========================
           左カラム
-          - 商品画像（ListImageCard を流用）
+          - 商品画像（共通カード）
           - タイトル
           - 説明
           - PriceCard
           ========================= */}
       <div className="space-y-4">
-        {/* ✅ 商品画像カード（list app の既存コンポーネントを流用） */}
+        {/* ✅ 商品画像カード（ボタン廃止 / クリックでエクスプローラー） */}
         <ListImageCard
           isEdit={true}
           saving={false}
           imageUrls={Array.isArray(imagePreviewUrls) ? imagePreviewUrls : []}
-          mainImageIndex={Number.isFinite(Number(mainImageIndex)) ? mainImageIndex : 0}
-          setMainImageIndex={(idx) => setMainImageIndex(idx)}
-          onAddImages={onAddImages}
-          onRemoveImageAt={(idx) => removeImageAt(idx)}
-          onClearImages={() => clearImages()}
+          mainImageIndex={mainImageIndex}
+          setMainImageIndex={setMainImageIndex}
+          imageInputRef={imageInputRef}
+          onSelectImages={onSelectImages}
+          onDropImages={onDropImages}
+          onDragOverImages={onDragOverImages}
+          onRemoveImageAt={removeImageAt}
+          onClearImages={clearImages}
         />
 
         {/* ✅ タイトル入力カード（商品画像の下に配置） */}
@@ -173,11 +162,7 @@ export default function InventoryListCreate() {
         {loadingDTO && (
           <div className="text-sm text-[hsl(var(--muted-foreground))]">読み込み中...</div>
         )}
-        {dtoError && (
-          <div className="text-sm text-red-600">
-            読み込みに失敗しました: {dtoError}
-          </div>
-        )}
+        {dtoError && <div className="text-sm text-red-600">読み込みに失敗しました: {dtoError}</div>}
 
         {/* ✅ 担当者 */}
         <Card>
@@ -186,21 +171,14 @@ export default function InventoryListCreate() {
 
             <Popover>
               <PopoverTrigger>
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  className="w-full justify-between"
-                >
+                <Button type="button" variant="outline" size="sm" className="w-full justify-between">
                   <span>{assigneeName || "未設定"}</span>
                   <span className="text-[11px] text-slate-400" />
                 </Button>
               </PopoverTrigger>
 
               <PopoverContent className="p-2 space-y-1">
-                {loadingMembers && (
-                  <p className="text-xs text-slate-400">担当者を読み込み中です…</p>
-                )}
+                {loadingMembers && <p className="text-xs text-slate-400">担当者を読み込み中です…</p>}
 
                 {!loadingMembers && assigneeCandidates.length > 0 && (
                   <div className="space-y-1">
@@ -229,12 +207,8 @@ export default function InventoryListCreate() {
         <Card>
           <CardContent className="p-4">
             <div className="text-sm font-medium mb-2">選択商品</div>
-            <div className="text-sm text-slate-800 break-all">
-              {productBrandName || "未選択"}
-            </div>
-            <div className="text-sm text-slate-800 break-all">
-              {productName || "未選択"}
-            </div>
+            <div className="text-sm text-slate-800 break-all">{productBrandName || "未選択"}</div>
+            <div className="text-sm text-slate-800 break-all">{productName || "未選択"}</div>
           </CardContent>
         </Card>
 
@@ -242,12 +216,8 @@ export default function InventoryListCreate() {
         <Card>
           <CardContent className="p-4">
             <div className="text-sm font-medium mb-2">選択トークン</div>
-            <div className="text-sm text-slate-800 break-all">
-              {tokenBrandName || "未選択"}
-            </div>
-            <div className="text-sm text-slate-800 break-all">
-              {tokenName || "未選択"}
-            </div>
+            <div className="text-sm text-slate-800 break-all">{tokenBrandName || "未選択"}</div>
+            <div className="text-sm text-slate-800 break-all">{tokenName || "未選択"}</div>
           </CardContent>
         </Card>
 
