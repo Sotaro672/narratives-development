@@ -13,6 +13,13 @@ import (
 
 	httpin "narratives/internal/adapters/in/http"
 	"narratives/internal/adapters/in/http/middleware"
+
+	// ✅ SNS query (company boundary なし)
+	snsquery "narratives/internal/application/query/sns"
+
+	// ✅ Firestore repository adapter (implements domain/list.Repository)
+	fs "narratives/internal/adapters/out/firestore"
+
 	"narratives/internal/platform/di"
 )
 
@@ -64,7 +71,25 @@ func main() {
 			log.Printf("[boot] RouterDeps.MemberRepo: %T", deps.MemberRepo)
 		}
 
-		// Attach app router under "/"
+		// ✅ SNS Query（companyId 境界なしで status=listing を取る）
+		// NewSNSListQuery は domain/list.Repository を要求するため、
+		// Firestore Client ではなく ListRepositoryFS（adapter）を渡す。
+		var snsListQuery *snsquery.SNSListQuery
+		if cont.Firestore != nil {
+			listRepo := fs.NewListRepositoryFS(cont.Firestore) // implements list.Repository
+			snsListQuery = snsquery.NewSNSListQuery(listRepo)
+		} else {
+			log.Printf("[boot] WARN: Firestore client is NIL; sns list query will be nil")
+		}
+
+		// ✅ SNS routes（/sns/...）を top-level mux に登録（DIで組み立て）
+		snsDeps := di.NewSNSDeps(
+			deps.ListUC,
+			snsListQuery,
+		)
+		di.RegisterSNSRoutes(mux, snsDeps)
+
+		// ✅ Console/Admin routes（既存）
 		router := httpin.NewRouter(deps)
 		mux.Handle("/", router)
 	}

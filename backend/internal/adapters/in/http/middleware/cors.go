@@ -1,3 +1,4 @@
+// backend/internal/adapters/in/http/middleware/cors.go
 package middleware
 
 import (
@@ -13,6 +14,10 @@ func CORS(next http.Handler) http.Handler {
 		"https://narratives-development-26c2d.web.app": true, // 検品アプリ dev
 		"http://localhost:5173":                        true, // ローカル dev (Vite)
 		"http://127.0.0.1:5173":                        true, // ローカル dev
+
+		// ✅ SNS (buyer-facing)
+		"https://narratives-development-sns.web.app":         true,
+		"https://narratives-development-sns.firebaseapp.com": true,
 	}
 
 	// ★ 許可するヘッダ（preflight の Access-Control-Request-Headers と突合される）
@@ -70,8 +75,6 @@ func CORS(next http.Handler) http.Handler {
 		}
 
 		// ★ プリフライトならここで終了（許可されない origin でも 204 は返す）
-		// - ブラウザ側は CORS ヘッダが無ければ結局ブロックするが、
-		//   ここで 4xx を返すより問題切り分けがしやすい
 		if r.Method == http.MethodOptions {
 			w.WriteHeader(http.StatusNoContent)
 			return
