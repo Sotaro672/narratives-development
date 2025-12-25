@@ -37,7 +37,6 @@ type SnsListItem struct {
 	Prices      []ldom.ListPriceRow `json:"prices"`
 
 	// ✅ optional (catalog で inventory を引くための補助)
-	// - フロントは未使用でも問題ない（extra fields は無視される）
 	InventoryID        string `json:"inventoryId,omitempty"`
 	ProductBlueprintID string `json:"productBlueprintId,omitempty"`
 	TokenBlueprintID   string `json:"tokenBlueprintId,omitempty"`
@@ -186,18 +185,14 @@ func (h *SNSListHandler) get(w http.ResponseWriter, r *http.Request, id string) 
 // ------------------------------
 
 func toSnsListItem(l ldom.List) SnsListItem {
-	// ✅ list.id はランダムID想定のため、inventoryId / pbId / tbId は
-	//   domain struct に存在していれば拾い、無ければ空のまま返す（破壊的変更しない）
 	invID, pbID, tbID := extractInventoryAndBlueprintIDs(l)
 
 	return SnsListItem{
 		ID:          strings.TrimSpace(l.ID),
 		Title:       strings.TrimSpace(l.Title),
 		Description: strings.TrimSpace(l.Description),
-
-		// 既存互換: list.ImageID をそのまま image に返す
-		Image:  strings.TrimSpace(l.ImageID),
-		Prices: l.Prices,
+		Image:       strings.TrimSpace(l.ImageID),
+		Prices:      l.Prices,
 
 		InventoryID:        invID,
 		ProductBlueprintID: pbID,
@@ -206,8 +201,6 @@ func toSnsListItem(l ldom.List) SnsListItem {
 }
 
 func extractInventoryAndBlueprintIDs(l ldom.List) (inventoryID, productBlueprintID, tokenBlueprintID string) {
-	// ldom.List のフィールドに依存しないよう、json 経由で "それっぽいキー" を探索する
-	// （SNSは read-only / 公開用途で、柔軟に拾える方が運用上ラク）
 	var m map[string]any
 	{
 		b, err := json.Marshal(l)
@@ -216,7 +209,6 @@ func extractInventoryAndBlueprintIDs(l ldom.List) (inventoryID, productBlueprint
 		}
 	}
 
-	// inventoryId candidates
 	if m != nil {
 		if s, ok := getString(m, "inventoryId", "inventoryID", "inventory_id"); ok {
 			inventoryID = strings.TrimSpace(s)
@@ -229,7 +221,6 @@ func extractInventoryAndBlueprintIDs(l ldom.List) (inventoryID, productBlueprint
 		}
 	}
 
-	// inventories docId rule: productBlueprintId__tokenBlueprintId
 	if (productBlueprintID == "" || tokenBlueprintID == "") && inventoryID != "" && strings.Contains(inventoryID, "__") {
 		parts := strings.SplitN(inventoryID, "__", 2)
 		if productBlueprintID == "" {
@@ -247,7 +238,6 @@ func isPublicListing(st ldom.ListStatus) bool {
 	return strings.EqualFold(strings.TrimSpace(string(st)), string(ldom.StatusListing))
 }
 
-// SNS用の最低限のエラー変換
 func writeListErr(w http.ResponseWriter, err error) {
 	code := http.StatusInternalServerError
 

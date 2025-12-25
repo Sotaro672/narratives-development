@@ -4,9 +4,13 @@ import 'package:flutter/material.dart';
 import '../../../inventory/infrastructure/inventory_repository_http.dart';
 import '../../../list/infrastructure/list_repository_http.dart';
 
+// ✅ NEW: productBlueprint を引く
+import '../../../productBlueprint/infrastructure/product_blueprint_repository_http.dart';
+
 /// 商品詳細ページ（buyer-facing）
 /// - list 詳細: GET /sns/lists/{listId}
 /// - inventory: GET /sns/inventories/{id} OR GET /sns/inventories?pb&tb
+/// - productBlueprint: GET /sns/product-blueprints/{productBlueprintId}
 class CatalogPage extends StatefulWidget {
   const CatalogPage({super.key, required this.listId, this.initialItem});
 
@@ -27,6 +31,9 @@ class _CatalogPageState extends State<CatalogPage> {
   late final ListRepositoryHttp _listRepo;
   late final InventoryRepositoryHttp _invRepo;
 
+  // ✅ NEW
+  late final ProductBlueprintRepositoryHttp _pbRepo;
+
   late Future<_CatalogPayload> _future;
 
   @override
@@ -34,6 +41,7 @@ class _CatalogPageState extends State<CatalogPage> {
     super.initState();
     _listRepo = ListRepositoryHttp();
     _invRepo = InventoryRepositoryHttp();
+    _pbRepo = ProductBlueprintRepositoryHttp();
     _future = _load();
   }
 
@@ -41,6 +49,7 @@ class _CatalogPageState extends State<CatalogPage> {
   void dispose() {
     _listRepo.dispose();
     _invRepo.dispose();
+    _pbRepo.dispose();
     super.dispose();
   }
 
@@ -51,33 +60,50 @@ class _CatalogPageState extends State<CatalogPage> {
     // 1) inventoryId があれば /sns/inventories/{id}
     // 2) productBlueprintId + tokenBlueprintId があれば /sns/inventories?pb&tb
     final invId = list.inventoryId.trim();
-    final pbId = list.productBlueprintId.trim();
-    final tbId = list.tokenBlueprintId.trim();
+    final listPbId = list.productBlueprintId.trim();
+    final listTbId = list.tokenBlueprintId.trim();
 
-    if (invId.isEmpty && (pbId.isEmpty || tbId.isEmpty)) {
-      return _CatalogPayload(
-        list: list,
-        inventory: null,
-        inventoryError: 'inventory linkage is missing (inventoryId or pb/tb)',
-      );
+    SnsInventoryResponse? inv;
+    String? invErr;
+
+    if (invId.isEmpty && (listPbId.isEmpty || listTbId.isEmpty)) {
+      invErr = 'inventory linkage is missing (inventoryId or pb/tb)';
+    } else {
+      try {
+        inv = invId.isNotEmpty
+            ? await _invRepo.fetchInventoryById(invId)
+            : await _invRepo.fetchInventoryByQuery(
+                productBlueprintId: listPbId,
+                tokenBlueprintId: listTbId,
+              );
+      } catch (e) {
+        invErr = e.toString();
+      }
     }
 
-    try {
-      final inv = invId.isNotEmpty
-          ? await _invRepo.fetchInventoryById(invId)
-          : await _invRepo.fetchInventoryByQuery(
-              productBlueprintId: pbId,
-              tokenBlueprintId: tbId,
-            );
+    // ✅ productBlueprintId は inventory 側が取れたらそちらを優先
+    final pbId = (inv?.productBlueprintId ?? list.productBlueprintId).trim();
 
-      return _CatalogPayload(list: list, inventory: inv, inventoryError: null);
-    } catch (e) {
-      return _CatalogPayload(
-        list: list,
-        inventory: null,
-        inventoryError: e.toString(),
-      );
+    SnsProductBlueprintResponse? pb;
+    String? pbErr;
+
+    if (pbId.isNotEmpty) {
+      try {
+        pb = await _pbRepo.fetchProductBlueprintById(pbId);
+      } catch (e) {
+        pbErr = e.toString();
+      }
+    } else {
+      pbErr = 'productBlueprintId is empty';
     }
+
+    return _CatalogPayload(
+      list: list,
+      inventory: inv,
+      inventoryError: invErr,
+      productBlueprint: pb,
+      productBlueprintError: pbErr,
+    );
   }
 
   Future<void> _reload() async {
@@ -138,6 +164,9 @@ class _CatalogPageState extends State<CatalogPage> {
 
           final inv = payload?.inventory;
           final invErr = payload?.inventoryError;
+
+          final pb = payload?.productBlueprint;
+          final pbErr = payload?.productBlueprintError;
 
           final imageUrl = list.image.trim();
           final hasImage = imageUrl.isNotEmpty;
@@ -292,6 +321,133 @@ class _CatalogPageState extends State<CatalogPage> {
                   ),
                 ),
               ),
+
+              const SizedBox(height: 12),
+
+              // -------- product blueprint (NEW) --------
+              Card(
+                child: Padding(
+                  padding: const EdgeInsets.all(12),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Product',
+                        style: Theme.of(context).textTheme.titleMedium,
+                      ),
+                      const SizedBox(height: 8),
+
+                      // ✅ 要件:
+                      // - productBlueprintId から情報表示
+                      // - assigneeId / createdAt / createdBy / updatedAt / updatedBy は表示しない
+                      // - deletedAt / deletedBy も拾わない（＝表示しない）
+                      if (pb != null) ...[
+                        _KeyValueRow(
+                          label: 'productName',
+                          value: pb.productName.isNotEmpty
+                              ? pb.productName
+                              : '(empty)',
+                        ),
+                        const SizedBox(height: 6),
+                        _KeyValueRow(
+                          label: 'brandId',
+                          value: pb.brandId.isNotEmpty ? pb.brandId : '(empty)',
+                        ),
+                        const SizedBox(height: 6),
+                        _KeyValueRow(
+                          label: 'companyId',
+                          value: pb.companyId.isNotEmpty
+                              ? pb.companyId
+                              : '(empty)',
+                        ),
+                        const SizedBox(height: 6),
+                        _KeyValueRow(
+                          label: 'itemType',
+                          value: pb.itemType.isNotEmpty
+                              ? pb.itemType
+                              : '(empty)',
+                        ),
+                        const SizedBox(height: 6),
+                        _KeyValueRow(
+                          label: 'fit',
+                          value: pb.fit.isNotEmpty ? pb.fit : '(empty)',
+                        ),
+                        const SizedBox(height: 6),
+                        _KeyValueRow(
+                          label: 'material',
+                          value: pb.material.isNotEmpty
+                              ? pb.material
+                              : '(empty)',
+                        ),
+                        const SizedBox(height: 6),
+                        _KeyValueRow(
+                          label: 'weight',
+                          value: pb.weight != null ? '${pb.weight}' : '(empty)',
+                        ),
+                        const SizedBox(height: 6),
+                        _KeyValueRow(
+                          label: 'printed',
+                          value: pb.printed == true ? 'true' : 'false',
+                        ),
+                        const SizedBox(height: 12),
+                        Text(
+                          'Quality assurance',
+                          style: Theme.of(context).textTheme.titleSmall,
+                        ),
+                        const SizedBox(height: 6),
+                        if (pb.qualityAssurance.isEmpty)
+                          Text(
+                            '(empty)',
+                            style: Theme.of(context).textTheme.bodyMedium,
+                          )
+                        else
+                          Wrap(
+                            spacing: 8,
+                            runSpacing: 8,
+                            children: pb.qualityAssurance
+                                .map(
+                                  (s) => Chip(
+                                    label: Text(s),
+                                    visualDensity: VisualDensity.compact,
+                                  ),
+                                )
+                                .toList(),
+                          ),
+                        const SizedBox(height: 12),
+                        Text(
+                          'ProductId tag',
+                          style: Theme.of(context).textTheme.titleSmall,
+                        ),
+                        const SizedBox(height: 6),
+                        _KeyValueRow(
+                          label: 'type',
+                          value: pb.productIdTagType.isNotEmpty
+                              ? pb.productIdTagType
+                              : '(empty)',
+                        ),
+                      ] else ...[
+                        _KeyValueRow(
+                          label: 'productBlueprintId',
+                          value: pbId.isNotEmpty ? pbId : '(unknown)',
+                        ),
+                        if (pbErr != null && pbErr.trim().isNotEmpty) ...[
+                          const SizedBox(height: 10),
+                          Text(
+                            'product error: $pbErr',
+                            style: Theme.of(context).textTheme.labelSmall,
+                          ),
+                        ] else ...[
+                          const SizedBox(height: 10),
+                          Text(
+                            'product is not loaded',
+                            style: Theme.of(context).textTheme.labelSmall,
+                          ),
+                        ],
+                      ],
+                    ],
+                  ),
+                ),
+              ),
             ],
           );
         },
@@ -305,11 +461,17 @@ class _CatalogPayload {
     required this.list,
     required this.inventory,
     required this.inventoryError,
+    required this.productBlueprint,
+    required this.productBlueprintError,
   });
 
   final SnsListItem list;
   final SnsInventoryResponse? inventory;
   final String? inventoryError;
+
+  // ✅ NEW
+  final SnsProductBlueprintResponse? productBlueprint;
+  final String? productBlueprintError;
 }
 
 class _KeyValueRow extends StatelessWidget {

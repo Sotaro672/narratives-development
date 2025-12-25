@@ -65,14 +65,7 @@ func main() {
 			log.Printf("[boot] RouterDeps.MemberRepo: %T", deps.MemberRepo)
 		}
 
-		// ✅ SNS routes（/sns/...）を top-level mux に登録（DIで組み立て）
-		// - /sns/lists, /sns/lists/{id}
-		// - /sns/inventories, /sns/inventories/{id}
-		snsDeps := di.NewSNSDeps(
-			deps.ListUC,
-			deps.InventoryUC,
-		)
-		di.RegisterSNSRoutes(mux, snsDeps)
+		di.RegisterSNSFromContainer(mux, cont)
 
 		// ✅ Console/Admin routes（既存）
 		router := httpin.NewRouter(deps)

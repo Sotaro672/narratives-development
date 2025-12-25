@@ -10,11 +10,11 @@ import (
 )
 
 // SNSDeps is a buyer-facing (sns) HTTP dependency set.
-// Keep it minimal and independent from console/admin routing.
 type SNSDeps struct {
 	// Handlers
-	List      http.Handler
-	Inventory http.Handler
+	List             http.Handler
+	Inventory        http.Handler
+	ProductBlueprint http.Handler // ✅ NEW
 }
 
 // NewSNSDeps wires SNS handlers.
@@ -23,9 +23,11 @@ type SNSDeps struct {
 func NewSNSDeps(
 	listUC *usecase.ListUsecase,
 	invUC *usecase.InventoryUsecase,
+	pbUC *usecase.ProductBlueprintUsecase, // ✅ NEW
 ) SNSDeps {
 	var listHandler http.Handler
 	var invHandler http.Handler
+	var pbHandler http.Handler
 
 	if listUC != nil {
 		listHandler = snshandler.NewSNSListHandler(listUC)
@@ -35,10 +37,33 @@ func NewSNSDeps(
 		invHandler = snshandler.NewSNSInventoryHandler(invUC)
 	}
 
-	return SNSDeps{
-		List:      listHandler,
-		Inventory: invHandler,
+	if pbUC != nil {
+		pbHandler = snshandler.NewSNSProductBlueprintHandler(pbUC) // ✅ NEW
 	}
+
+	return SNSDeps{
+		List:             listHandler,
+		Inventory:        invHandler,
+		ProductBlueprint: pbHandler,
+	}
+}
+
+// RegisterSNSFromContainer registers SNS routes using *Container.
+// RouterDeps 型に依存しないため、main.go 側が SNS の依存増減を意識しなくてよい。
+func RegisterSNSFromContainer(mux *http.ServeMux, cont *Container) {
+	if mux == nil || cont == nil {
+		return
+	}
+
+	// cont.RouterDeps() の戻り値が「無名struct」でもここでは受けられる（型名不要）
+	deps := cont.RouterDeps()
+
+	snsDeps := NewSNSDeps(
+		deps.ListUC,
+		deps.InventoryUC,
+		deps.ProductBlueprintUC,
+	)
+	RegisterSNSRoutes(mux, snsDeps)
 }
 
 // RegisterSNSRoutes registers buyer-facing routes onto mux.
@@ -47,7 +72,8 @@ func RegisterSNSRoutes(mux *http.ServeMux, deps SNSDeps) {
 		return
 	}
 	snshttp.Register(mux, snshttp.Deps{
-		List:      deps.List,
-		Inventory: deps.Inventory,
+		List:             deps.List,
+		Inventory:        deps.Inventory,
+		ProductBlueprint: deps.ProductBlueprint, // ✅ NEW
 	})
 }

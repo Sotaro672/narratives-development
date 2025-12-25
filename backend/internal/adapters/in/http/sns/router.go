@@ -5,8 +5,9 @@ import "net/http"
 
 // Deps is a buyer-facing (sns) handler set.
 type Deps struct {
-	List      http.Handler
-	Inventory http.Handler
+	List             http.Handler
+	Inventory        http.Handler
+	ProductBlueprint http.Handler // ✅ NEW
 }
 
 // Register registers buyer-facing routes onto mux.
@@ -16,6 +17,7 @@ type Deps struct {
 // - GET /sns/lists/{id}
 // - GET /sns/inventories?productBlueprintId=&tokenBlueprintId=
 // - GET /sns/inventories/{id}
+// - GET /sns/product-blueprints/{id}          ✅ NEW
 func Register(mux *http.ServeMux, deps Deps) {
 	if mux == nil {
 		return
@@ -31,5 +33,11 @@ func Register(mux *http.ServeMux, deps Deps) {
 	if deps.Inventory != nil {
 		mux.Handle("/sns/inventories", deps.Inventory)
 		mux.Handle("/sns/inventories/", deps.Inventory)
+	}
+
+	// product blueprints ✅ NEW
+	if deps.ProductBlueprint != nil {
+		mux.Handle("/sns/product-blueprints", deps.ProductBlueprint)
+		mux.Handle("/sns/product-blueprints/", deps.ProductBlueprint)
 	}
 }

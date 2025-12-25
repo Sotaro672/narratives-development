@@ -1,11 +1,71 @@
+// backend\internal\adapters\in\http\sns\handler\helper_handler.go
 package handler
 
 import (
+	"context"
 	"encoding/json"
 	"net/http"
 	"strconv"
 	"strings"
+
+	pbdom "narratives/internal/domain/productBlueprint"
 )
+
+// ============================================================
+// Shared types (avoid DuplicateDecl in same package)
+// ============================================================
+
+// productBlueprintGetter: SNS handlers 用（read-only）
+type productBlueprintGetter interface {
+	GetByID(ctx context.Context, id string) (pbdom.ProductBlueprint, error)
+}
+
+// SnsProductIDTag: 複数 handler で共通利用
+type SnsProductIDTag struct {
+	Type string `json:"type"`
+}
+
+// ============================================================
+// Shared helpers (avoid UndeclaredName)
+// ============================================================
+
+// getString tries keys in order and returns the first string value found.
+// - accepts string / []byte / fmt.Stringer っぽいものは避け、まずは安全な string/[]byte のみ
+func getString(m map[string]any, keys ...string) (string, bool) {
+	if m == nil {
+		return "", false
+	}
+	for _, k := range keys {
+		k = strings.TrimSpace(k)
+		if k == "" {
+			continue
+		}
+		v, ok := m[k]
+		if !ok || v == nil {
+			continue
+		}
+		switch t := v.(type) {
+		case string:
+			s := strings.TrimSpace(t)
+			if s != "" {
+				return s, true
+			}
+		case []byte:
+			s := strings.TrimSpace(string(t))
+			if s != "" {
+				return s, true
+			}
+		default:
+			// json.Unmarshal 由来なら string 以外は基本来ない想定。
+			// ここで無理に fmt.Sprint すると意図しない値拾いが起きるので無視。
+		}
+	}
+	return "", false
+}
+
+// ============================================================
+// HTTP helpers
+// ============================================================
 
 func writeJSON(w http.ResponseWriter, code int, v any) {
 	w.Header().Set("Content-Type", "application/json")
@@ -39,64 +99,4 @@ func parseIntDefault(s string, def int) int {
 		return def
 	}
 	return n
-}
-
-// getString picks the first non-empty string value from map by keys.
-// - value types supported: string / []byte / fmt.Stringer / numbers/bools (stringified)
-func getString(m map[string]any, keys ...string) (string, bool) {
-	if m == nil || len(keys) == 0 {
-		return "", false
-	}
-
-	for _, k := range keys {
-		k = strings.TrimSpace(k)
-		if k == "" {
-			continue
-		}
-
-		v, ok := m[k]
-		if !ok || v == nil {
-			continue
-		}
-
-		switch x := v.(type) {
-		case string:
-			s := strings.TrimSpace(x)
-			if s != "" {
-				return s, true
-			}
-		case []byte:
-			s := strings.TrimSpace(string(x))
-			if s != "" {
-				return s, true
-			}
-		default:
-			// fallback: stringify common primitives without importing fmt
-			// (keep helper tiny; enough for ids)
-			switch y := v.(type) {
-			case int:
-				s := strconv.Itoa(y)
-				if strings.TrimSpace(s) != "" {
-					return s, true
-				}
-			case int64:
-				s := strconv.FormatInt(y, 10)
-				if strings.TrimSpace(s) != "" {
-					return s, true
-				}
-			case float64:
-				s := strconv.FormatFloat(y, 'f', -1, 64)
-				if strings.TrimSpace(s) != "" {
-					return s, true
-				}
-			case bool:
-				if y {
-					return "true", true
-				}
-				return "false", true
-			}
-		}
-	}
-
-	return "", false
 }
