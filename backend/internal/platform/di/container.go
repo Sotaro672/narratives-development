@@ -3,8 +3,10 @@ package di
 
 import (
 	"context"
+	"errors"
 	"log"
 	"os"
+	"reflect"
 	"strings"
 
 	firebase "firebase.google.com/go/v4"
@@ -30,6 +32,9 @@ import (
 	// ★ CompanyProductionQueryService / MintRequestQueryService / InventoryQuery / ListCreateQuery / ListManagementQuery / ListDetailQuery
 	companyquery "narratives/internal/application/query"
 
+	// ✅ SNS catalog query
+	snsquery "narratives/internal/application/query/sns"
+
 	resolver "narratives/internal/application/resolver"
 
 	// ★ InspectionUsecase 移動先
@@ -41,7 +46,7 @@ import (
 	branddom "narratives/internal/domain/brand"
 	companydom "narratives/internal/domain/company"
 	memdom "narratives/internal/domain/member"
-	productbpdom "narratives/internal/domain/productBlueprint"
+	pbdom "narratives/internal/domain/productBlueprint"
 
 	appcfg "narratives/internal/infra/config"
 )
@@ -119,6 +124,9 @@ type Container struct {
 
 	// ✅ NEW: list detail DTO（GET /lists/{id}）= listDetail.tsx 用
 	ListDetailQuery *companyquery.ListDetailQuery
+
+	// ✅ NEW: SNS catalog query（/sns/catalog/{listId}）
+	SNSCatalogQ *snsquery.SNSCatalogQuery
 
 	// ★ 検品アプリ用 ProductUsecase（/inspector/products/{id}）
 	ProductUC *uc.ProductUsecase
@@ -272,7 +280,7 @@ func NewContainer(ctx context.Context) (*Container, error) {
 
 	// ★ productBlueprint.Service（ProductName / BrandID 解決用）
 	pbDomainRepo := &productBlueprintDomainRepoAdapter{repo: productBlueprintRepo}
-	pbSvc := productbpdom.NewService(pbDomainRepo)
+	pbSvc := pbdom.NewService(pbDomainRepo)
 
 	// ★ MintRequestPort（TokenUsecase 用）
 	mintRequestPort := fs.NewMintRequestPortFS(
@@ -494,6 +502,14 @@ func NewContainer(ctx context.Context) (*Container, error) {
 		inventoryQuery, // InventoryRowsLister (company boundary)
 	)
 
+	// ✅ NEW: SNSCatalogQuery（buyer-facing /sns/catalog/{listId} 用）
+	snsCatalogQ := snsquery.NewSNSCatalogQuery(
+		listRepoFS, // buyer-facing query は write しないので FS repo を直接利用
+		&snsCatalogInventoryRepoAdapter{repo: inventoryRepo},
+		&snsCatalogProductBlueprintRepoAdapter{repo: productBlueprintRepo},
+		modelRepo, // modeldom.RepositoryPort を満たす想定
+	)
+
 	// 6. Assemble container
 	return &Container{
 		Config:       cfg,
@@ -548,6 +564,8 @@ func NewContainer(ctx context.Context) (*Container, error) {
 		ListManagementQuery: listManagementQuery,
 		ListDetailQuery:     listDetailQuery,
 
+		SNSCatalogQ: snsCatalogQ,
+
 		ProductUC:    productUC,
 		InspectionUC: inspectionUC,
 
@@ -561,6 +579,14 @@ func NewContainer(ctx context.Context) (*Container, error) {
 		MintAuthorityKey: mintKey,
 		NameResolver:     nameResolver,
 	}, nil
+}
+
+// ✅ sns_container.go から reflection で呼ばれる想定の getter
+func (c *Container) SNSCatalogQuery() *snsquery.SNSCatalogQuery {
+	if c == nil {
+		return nil
+	}
+	return c.SNSCatalogQ
 }
 
 // ========================================
@@ -639,4 +665,224 @@ func (c *Container) Close() error {
 		_ = c.GCS.Close()
 	}
 	return nil
+}
+
+// ============================================================
+// sns catalog adapters (DI-only helpers)
+// - compile-time で inventory domain 型に依存しないため、reflection で吸収する
+// ============================================================
+
+type snsCatalogInventoryRepoAdapter struct {
+	repo any
+}
+
+func (a *snsCatalogInventoryRepoAdapter) GetByID(ctx context.Context, id string) (*snsquery.SNSCatalogInventoryDTO, error) {
+	if a == nil || a.repo == nil {
+		return nil, errors.New("sns catalog inventory repo: repo is nil")
+	}
+	v, err := callRepo(a.repo, []string{"GetByID", "GetById"}, ctx, strings.TrimSpace(id))
+	if err != nil {
+		return nil, err
+	}
+	return toSNSCatalogInventoryDTO(v)
+}
+
+func (a *snsCatalogInventoryRepoAdapter) GetByProductAndTokenBlueprintID(ctx context.Context, productBlueprintID, tokenBlueprintID string) (*snsquery.SNSCatalogInventoryDTO, error) {
+	if a == nil || a.repo == nil {
+		return nil, errors.New("sns catalog inventory repo: repo is nil")
+	}
+	pb := strings.TrimSpace(productBlueprintID)
+	tb := strings.TrimSpace(tokenBlueprintID)
+
+	// method 名揺れ吸収
+	methods := []string{
+		"GetByProductAndTokenBlueprintID",
+		"GetByProductAndTokenBlueprintId",
+		"GetByProductAndTokenBlueprintIDs",
+		"GetByProductAndTokenBlueprintIds",
+	}
+	v, err := callRepo(a.repo, methods, ctx, pb, tb)
+	if err != nil {
+		return nil, err
+	}
+	return toSNSCatalogInventoryDTO(v)
+}
+
+type snsCatalogProductBlueprintRepoAdapter struct {
+	repo any
+}
+
+func (a *snsCatalogProductBlueprintRepoAdapter) GetByID(ctx context.Context, id string) (*pbdom.ProductBlueprint, error) {
+	if a == nil || a.repo == nil {
+		return nil, errors.New("sns catalog product repo: repo is nil")
+	}
+	v, err := callRepo(a.repo, []string{"GetByID", "GetById"}, ctx, strings.TrimSpace(id))
+	if err != nil {
+		return nil, err
+	}
+	if v == nil {
+		return nil, errors.New("productBlueprint is nil")
+	}
+	if pb, ok := v.(*pbdom.ProductBlueprint); ok {
+		return pb, nil
+	}
+	if pb, ok := v.(pbdom.ProductBlueprint); ok {
+		cp := pb
+		return &cp, nil
+	}
+
+	// 最後の手段：pointer/struct を reflection で解釈（型が一致しない場合はエラー）
+	rv := reflect.ValueOf(v)
+	if rv.IsValid() && rv.Kind() == reflect.Pointer && !rv.IsNil() {
+		if x, ok := rv.Interface().(*pbdom.ProductBlueprint); ok {
+			return x, nil
+		}
+	}
+	return nil, errors.New("unexpected productBlueprint type")
+}
+
+func callRepo(repo any, methodNames []string, args ...any) (any, error) {
+	rv := reflect.ValueOf(repo)
+	if !rv.IsValid() {
+		return nil, errors.New("repo is invalid")
+	}
+
+	for _, name := range methodNames {
+		m := rv.MethodByName(name)
+		if !m.IsValid() {
+			continue
+		}
+
+		in := make([]reflect.Value, 0, len(args))
+		for _, a := range args {
+			in = append(in, reflect.ValueOf(a))
+		}
+
+		out := m.Call(in)
+		if len(out) == 0 {
+			return nil, nil
+		}
+
+		// (T, error) を想定。最後が error なら拾う
+		if len(out) >= 2 {
+			if e, ok := out[len(out)-1].Interface().(error); ok && e != nil {
+				return nil, e
+			}
+		}
+		return out[0].Interface(), nil
+	}
+
+	return nil, errors.New("method not found on repo")
+}
+
+func toSNSCatalogInventoryDTO(v any) (*snsquery.SNSCatalogInventoryDTO, error) {
+	if v == nil {
+		return nil, errors.New("inventory is nil")
+	}
+
+	rv := reflect.ValueOf(v)
+	if !rv.IsValid() {
+		return nil, errors.New("inventory is invalid")
+	}
+	if rv.Kind() == reflect.Pointer {
+		if rv.IsNil() {
+			return nil, errors.New("inventory is nil")
+		}
+		rv = rv.Elem()
+	}
+	if rv.Kind() != reflect.Struct {
+		return nil, errors.New("inventory is not struct")
+	}
+
+	getStr := func(names ...string) string {
+		for _, n := range names {
+			f := rv.FieldByName(n)
+			if !f.IsValid() {
+				continue
+			}
+			if f.Kind() == reflect.String {
+				return strings.TrimSpace(f.String())
+			}
+		}
+		return ""
+	}
+
+	id := getStr("ID", "Id", "InventoryID", "InventoryId")
+	pbID := getStr("ProductBlueprintID", "ProductBlueprintId", "productBlueprintId")
+	tbID := getStr("TokenBlueprintID", "TokenBlueprintId", "tokenBlueprintId")
+
+	stock := map[string]snsquery.SNSCatalogStockDTO{}
+
+	// map field name tolerant
+	var sf reflect.Value
+	for _, n := range []string{"Stock", "Stocks", "stock"} {
+		f := rv.FieldByName(n)
+		if f.IsValid() {
+			sf = f
+			break
+		}
+	}
+	if sf.IsValid() {
+		if sf.Kind() == reflect.Pointer {
+			if !sf.IsNil() {
+				sf = sf.Elem()
+			}
+		}
+		if sf.IsValid() && sf.Kind() == reflect.Map {
+			iter := sf.MapRange()
+			for iter.Next() {
+				k := iter.Key()
+				val := iter.Value()
+
+				modelID := ""
+				if k.IsValid() && k.Kind() == reflect.String {
+					modelID = strings.TrimSpace(k.String())
+				}
+				if modelID == "" {
+					continue
+				}
+
+				acc := extractAccumulation(val)
+				stock[modelID] = snsquery.SNSCatalogStockDTO{Accumulation: acc}
+			}
+		}
+	}
+
+	return &snsquery.SNSCatalogInventoryDTO{
+		ID:                 id,
+		ProductBlueprintID: pbID,
+		TokenBlueprintID:   tbID,
+		Stock:              stock,
+	}, nil
+}
+
+func extractAccumulation(v reflect.Value) int {
+	if !v.IsValid() {
+		return 0
+	}
+	if v.Kind() == reflect.Pointer {
+		if v.IsNil() {
+			return 0
+		}
+		v = v.Elem()
+	}
+
+	switch v.Kind() {
+	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
+		return int(v.Int())
+	case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64:
+		return int(v.Uint())
+	case reflect.Float32, reflect.Float64:
+		return int(v.Float())
+	case reflect.Struct:
+		// field name tolerant
+		for _, n := range []string{"Accumulation", "accumulation", "Quantity", "quantity", "Count", "count"} {
+			f := v.FieldByName(n)
+			if !f.IsValid() {
+				continue
+			}
+			return extractAccumulation(f)
+		}
+	}
+	return 0
 }

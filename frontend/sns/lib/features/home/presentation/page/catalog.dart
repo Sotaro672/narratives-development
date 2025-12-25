@@ -1,16 +1,24 @@
 // frontend/sns/lib/features/home/presentation/page/catalog.dart
+import 'dart:convert';
+
 import 'package:flutter/material.dart';
+import 'package:http/http.dart' as http;
 
 import '../../../inventory/infrastructure/inventory_repository_http.dart';
 import '../../../list/infrastructure/list_repository_http.dart';
 
-// ✅ NEW: productBlueprint を引く
+// ✅ productBlueprint
 import '../../../productBlueprint/infrastructure/product_blueprint_repository_http.dart';
 
-// ✅ NEW: model を引く
+// ✅ model
 import '../../../model/infrastructure/model_repository_http.dart';
 
 /// 商品詳細ページ（buyer-facing）
+///
+/// ✅ 推奨（新）:
+/// - catalog DTO: GET /sns/catalog/{listId}
+///
+/// fallback（旧）:
 /// - list 詳細: GET /sns/lists/{listId}
 /// - inventory: GET /sns/inventories/{id} OR GET /sns/inventories?pb&tb
 /// - productBlueprint: GET /sns/product-blueprints/{productBlueprintId}
@@ -32,13 +40,13 @@ class CatalogPage extends StatefulWidget {
 }
 
 class _CatalogPageState extends State<CatalogPage> {
+  // ✅ NEW: catalog endpoint
+  late final CatalogRepositoryHttp _catalogRepo;
+
+  // fallback legacy repos
   late final ListRepositoryHttp _listRepo;
   late final InventoryRepositoryHttp _invRepo;
-
-  // ✅ NEW
   late final ProductBlueprintRepositoryHttp _pbRepo;
-
-  // ✅ NEW
   late final ModelRepositoryHTTP _modelRepo;
 
   late Future<_CatalogPayload> _future;
@@ -46,15 +54,20 @@ class _CatalogPageState extends State<CatalogPage> {
   @override
   void initState() {
     super.initState();
+    _catalogRepo = CatalogRepositoryHttp();
+
     _listRepo = ListRepositoryHttp();
     _invRepo = InventoryRepositoryHttp();
     _pbRepo = ProductBlueprintRepositoryHttp();
     _modelRepo = ModelRepositoryHTTP();
+
     _future = _load();
   }
 
   @override
   void dispose() {
+    _catalogRepo.dispose();
+
     _listRepo.dispose();
     _invRepo.dispose();
     _pbRepo.dispose();
@@ -63,6 +76,26 @@ class _CatalogPageState extends State<CatalogPage> {
   }
 
   Future<_CatalogPayload> _load() async {
+    // 1) try catalog endpoint first
+    try {
+      final dto = await _catalogRepo.fetchCatalogByListId(widget.listId);
+
+      return _CatalogPayload(
+        list: dto.list,
+        inventory: dto.inventory,
+        inventoryError: dto.inventoryError,
+        productBlueprint: dto.productBlueprint,
+        productBlueprintError: dto.productBlueprintError,
+        modelVariations: dto.modelVariations,
+        modelVariationsError: dto.modelVariationsError,
+      );
+    } catch (_) {
+      // 2) fallback to legacy multi-fetch (keeps the app usable while backend is being wired)
+      return _loadLegacy();
+    }
+  }
+
+  Future<_CatalogPayload> _loadLegacy() async {
     final list = await _listRepo.fetchListById(widget.listId);
 
     // ✅ inventory linkage (優先順位)
@@ -106,7 +139,7 @@ class _CatalogPageState extends State<CatalogPage> {
       pbErr = 'productBlueprintId is empty';
     }
 
-    // ✅ NEW: model variations（productBlueprintId が取れたら取得）
+    // ✅ model variations（productBlueprintId が取れたら取得）
     List<ModelVariationDTO>? models;
     String? modelErr;
 
@@ -505,7 +538,7 @@ class _CatalogPageState extends State<CatalogPage> {
 
               const SizedBox(height: 12),
 
-              // -------- model variations (NEW) --------
+              // -------- model variations --------
               Card(
                 child: Padding(
                   padding: const EdgeInsets.all(12),
@@ -609,10 +642,124 @@ class _CatalogPayload {
   final SnsProductBlueprintResponse? productBlueprint;
   final String? productBlueprintError;
 
-  // ✅ NEW
   final List<ModelVariationDTO>? modelVariations;
   final String? modelVariationsError;
 }
+
+// ============================================================
+// ✅ NEW: CatalogRepositoryHttp + DTO (matches backend SNSCatalogDTO)
+// ============================================================
+
+class SnsCatalogDTO {
+  const SnsCatalogDTO({
+    required this.list,
+    required this.inventory,
+    required this.inventoryError,
+    required this.productBlueprint,
+    required this.productBlueprintError,
+    required this.modelVariations,
+    required this.modelVariationsError,
+  });
+
+  final SnsListItem list;
+
+  final SnsInventoryResponse? inventory;
+  final String? inventoryError;
+
+  final SnsProductBlueprintResponse? productBlueprint;
+  final String? productBlueprintError;
+
+  final List<ModelVariationDTO>? modelVariations;
+  final String? modelVariationsError;
+
+  static String? _asNonEmptyString(dynamic v) {
+    final s = (v ?? '').toString().trim();
+    return s.isEmpty ? null : s;
+  }
+
+  factory SnsCatalogDTO.fromJson(Map<String, dynamic> json) {
+    // NOTE:
+    // - list / inventory / productBlueprint / modelVariations are nested objects
+    // - errors are strings (empty string means "no error" from backend)
+    final listJson =
+        (json['list'] as Map?)?.cast<String, dynamic>() ?? const {};
+    final invJson = (json['inventory'] as Map?)?.cast<String, dynamic>();
+    final pbJson = (json['productBlueprint'] as Map?)?.cast<String, dynamic>();
+    final mvJson = json['modelVariations'];
+
+    return SnsCatalogDTO(
+      list: SnsListItem.fromJson(listJson),
+      inventory: invJson != null
+          ? SnsInventoryResponse.fromJson(invJson)
+          : null,
+      inventoryError: _asNonEmptyString(json['inventoryError']),
+      productBlueprint: pbJson != null
+          ? SnsProductBlueprintResponse.fromJson(pbJson)
+          : null,
+      productBlueprintError: _asNonEmptyString(json['productBlueprintError']),
+      modelVariations: (mvJson is List)
+          ? mvJson
+                .whereType<Map>()
+                .map(
+                  (e) => ModelVariationDTO.fromJson(e.cast<String, dynamic>()),
+                )
+                .toList()
+          : null,
+      modelVariationsError: _asNonEmptyString(json['modelVariationsError']),
+    );
+  }
+}
+
+class CatalogRepositoryHttp {
+  CatalogRepositoryHttp({http.Client? client})
+    : _client = client ?? http.Client();
+
+  final http.Client _client;
+
+  void dispose() {
+    _client.close();
+  }
+
+  static String _resolveApiBase() {
+    // flutter run --dart-define=API_BASE=https://...
+    const env = String.fromEnvironment('API_BASE');
+    if (env.trim().isNotEmpty) return env.trim();
+
+    // fallback (Cloud Run)
+    return 'https://narratives-backend-871263659099.asia-northeast1.run.app';
+  }
+
+  static Uri _buildUri(String path) {
+    final base = _resolveApiBase().replaceAll(RegExp(r'\/+$'), '');
+    final p = path.startsWith('/') ? path : '/$path';
+    return Uri.parse('$base$p');
+  }
+
+  Future<SnsCatalogDTO> fetchCatalogByListId(String listId) async {
+    final id = listId.trim();
+    if (id.isEmpty) {
+      throw Exception('catalog: listId is empty');
+    }
+
+    final uri = _buildUri('/sns/catalog/$id');
+    final res = await _client.get(uri, headers: {'accept': 'application/json'});
+
+    if (res.statusCode < 200 || res.statusCode >= 300) {
+      throw Exception('catalog: http ${res.statusCode} body=${res.body}');
+    }
+
+    final jsonObj = jsonDecode(res.body);
+    if (jsonObj is! Map) {
+      throw Exception('catalog: invalid json (not an object)');
+    }
+
+    return SnsCatalogDTO.fromJson(jsonObj.cast<String, dynamic>());
+  }
+}
+
+// ============================================================
+// UI components
+// ============================================================
 
 class _KeyValueRow extends StatelessWidget {
   const _KeyValueRow({required this.label, required this.value});

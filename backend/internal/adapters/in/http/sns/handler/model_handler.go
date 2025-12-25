@@ -2,28 +2,57 @@
 package handler
 
 import (
+	"context"
+	"errors"
 	"net/http"
 	"reflect"
 	"strings"
 
+	ldom "narratives/internal/domain/list"
 	modeldom "narratives/internal/domain/model"
 )
+
+// SNSCatalogQuery is the minimal contract to serve /sns/catalog/{listId}.
+// NOTE: We keep this as an interface here to avoid tight coupling.
+// The concrete implementation is:
+// - backend/internal/application/query/sns/catalog_query.go  (SNSCatalogQuery)
+type SNSCatalogQuery interface {
+	GetByListID(ctx context.Context, listID string) (any, error)
+}
 
 // SNSModelHandler serves buyer-facing model endpoints.
 //
 // Routes (intended):
 // - GET /sns/models?productBlueprintId=xxxx
 // - GET /sns/models/{modelId}
+//
+// Additionally (to avoid new catalog_handler.go):
+// - GET /sns/catalog/{listId}
+//
+// IMPORTANT:
+// This handler can be mounted to both:
+// - mux.Handle("/sns/models", handler)
+// - mux.Handle("/sns/models/", handler)
+// - mux.Handle("/sns/catalog", handler)
+// - mux.Handle("/sns/catalog/", handler)
 type SNSModelHandler struct {
 	Repo modeldom.RepositoryPort
+
+	// ✅ optional: catalog DTO builder
+	Catalog SNSCatalogQuery
 }
 
 func NewSNSModelHandler(repo modeldom.RepositoryPort) http.Handler {
-	return &SNSModelHandler{Repo: repo}
+	return &SNSModelHandler{Repo: repo, Catalog: nil}
+}
+
+// ✅ NEW: use this when you also want to serve /sns/catalog/{listId}
+func NewSNSModelHandlerWithCatalog(repo modeldom.RepositoryPort, catalog SNSCatalogQuery) http.Handler {
+	return &SNSModelHandler{Repo: repo, Catalog: catalog}
 }
 
 func (h *SNSModelHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	if h == nil || h.Repo == nil {
+	if h == nil {
 		internalError(w, "model handler is not ready")
 		return
 	}
@@ -33,6 +62,33 @@ func (h *SNSModelHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 
 	path := strings.TrimSuffix(r.URL.Path, "/")
+
+	// ============================================================
+	// catalog: /sns/catalog/{listId}
+	// ============================================================
+	if strings.HasPrefix(path, "/sns/catalog/") {
+		id := strings.TrimPrefix(path, "/sns/catalog/")
+		id = strings.TrimSpace(id)
+		if id == "" {
+			notFound(w)
+			return
+		}
+		h.handleGetCatalogByListID(w, r, id)
+		return
+	}
+	if path == "/sns/catalog" {
+		// collection endpoint is not defined
+		notFound(w)
+		return
+	}
+
+	// ============================================================
+	// models: /sns/models
+	// ============================================================
+	if h.Repo == nil {
+		internalError(w, "model repo is nil")
+		return
+	}
 
 	// collection: /sns/models
 	if path == "/sns/models" {
@@ -149,7 +205,6 @@ func (h *SNSModelHandler) handleListByProductBlueprintID(w http.ResponseWriter, 
 func (h *SNSModelHandler) handleGetByID(w http.ResponseWriter, r *http.Request, id string) {
 	mv, err := h.Repo.GetModelVariationByID(r.Context(), id)
 	if err != nil {
-		// domain ErrNotFound の判定が必要ならここで errors.Is(err, modeldom.ErrNotFound) を使う
 		internalError(w, err.Error())
 		return
 	}
@@ -158,6 +213,27 @@ func (h *SNSModelHandler) handleGetByID(w http.ResponseWriter, r *http.Request, 
 		ModelID:  id,
 		Metadata: mv,
 	})
+}
+
+// GET /sns/catalog/{listId}
+func (h *SNSModelHandler) handleGetCatalogByListID(w http.ResponseWriter, r *http.Request, listID string) {
+	if h.Catalog == nil {
+		internalError(w, "catalog query is nil")
+		return
+	}
+
+	dto, err := h.Catalog.GetByListID(r.Context(), listID)
+	if err != nil {
+		// list not found / not listing -> 404
+		if errors.Is(err, ldom.ErrNotFound) {
+			notFound(w)
+			return
+		}
+		internalError(w, err.Error())
+		return
+	}
+
+	writeJSON(w, http.StatusOK, dto)
 }
 
 // extractID tries common field names (ID/Id/ModelID/ModelId) by reflection.

@@ -6,6 +6,7 @@ import (
 
 	snshttp "narratives/internal/adapters/in/http/sns"
 	snshandler "narratives/internal/adapters/in/http/sns/handler"
+	snsquery "narratives/internal/application/query/sns"
 	usecase "narratives/internal/application/usecase"
 )
 
@@ -16,6 +17,7 @@ type SNSDeps struct {
 	Inventory        http.Handler
 	ProductBlueprint http.Handler // ✅ NEW
 	Model            http.Handler // ✅ NEW
+	Catalog          http.Handler // ✅ NEW
 }
 
 // NewSNSDeps wires SNS handlers.
@@ -26,11 +28,15 @@ func NewSNSDeps(
 	invUC *usecase.InventoryUsecase,
 	pbUC *usecase.ProductBlueprintUsecase, // ✅ NEW
 	modelUC *usecase.ModelUsecase, // ✅ NEW
+
+	// ✅ NEW: catalog query
+	catalogQ *snsquery.SNSCatalogQuery,
 ) SNSDeps {
 	var listHandler http.Handler
 	var invHandler http.Handler
 	var pbHandler http.Handler
 	var modelHandler http.Handler
+	var catalogHandler http.Handler
 
 	if listUC != nil {
 		listHandler = snshandler.NewSNSListHandler(listUC)
@@ -48,11 +54,16 @@ func NewSNSDeps(
 		modelHandler = snshandler.NewSNSModelHandler(modelUC) // ✅ NEW
 	}
 
+	if catalogQ != nil {
+		catalogHandler = snshandler.NewSNSCatalogHandler(catalogQ) // ✅ NEW
+	}
+
 	return SNSDeps{
 		List:             listHandler,
 		Inventory:        invHandler,
 		ProductBlueprint: pbHandler,
 		Model:            modelHandler,
+		Catalog:          catalogHandler,
 	}
 }
 
@@ -66,11 +77,36 @@ func RegisterSNSFromContainer(mux *http.ServeMux, cont *Container) {
 	// cont.RouterDeps() の戻り値が「無名struct」でもここでは受けられる（型名不要）
 	deps := cont.RouterDeps()
 
+	// ✅ NEW: try to obtain catalog query from Container without touching RouterDeps fields.
+	// （RouterDeps に ListRepo/ModelRepo 等が無いので、ここで作れないため）
+	var catalogQ *snsquery.SNSCatalogQuery
+	{
+		// Prefer: func (c *Container) SNSCatalogQuery() *snsquery.SNSCatalogQuery
+		if x, ok := any(cont).(interface {
+			SNSCatalogQuery() *snsquery.SNSCatalogQuery
+		}); ok {
+			catalogQ = x.SNSCatalogQuery()
+		} else if x, ok := any(cont).(interface {
+			GetSNSCatalogQuery() *snsquery.SNSCatalogQuery
+		}); ok {
+			catalogQ = x.GetSNSCatalogQuery()
+		} else if x, ok := any(cont).(interface {
+			CatalogQuery() *snsquery.SNSCatalogQuery
+		}); ok {
+			catalogQ = x.CatalogQuery()
+		} else if x, ok := any(cont).(interface {
+			SNSCatalogQ() *snsquery.SNSCatalogQuery
+		}); ok {
+			catalogQ = x.SNSCatalogQ()
+		}
+	}
+
 	snsDeps := NewSNSDeps(
 		deps.ListUC,
 		deps.InventoryUC,
 		deps.ProductBlueprintUC,
 		deps.ModelUC, // ✅ NEW
+		catalogQ,     // ✅ NEW
 	)
 	RegisterSNSRoutes(mux, snsDeps)
 }
@@ -83,7 +119,8 @@ func RegisterSNSRoutes(mux *http.ServeMux, deps SNSDeps) {
 	snshttp.Register(mux, snshttp.Deps{
 		List:             deps.List,
 		Inventory:        deps.Inventory,
-		ProductBlueprint: deps.ProductBlueprint, // ✅ NEW
-		Model:            deps.Model,            // ✅ NEW
+		ProductBlueprint: deps.ProductBlueprint,
+		Model:            deps.Model,
+		Catalog:          deps.Catalog, // ✅ NEW
 	})
 }
