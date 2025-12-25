@@ -10,39 +10,6 @@ import (
 )
 
 // ------------------------------------------------------------
-// ModelRepo
-// ------------------------------------------------------------
-
-type ModelRepo interface {
-	// productID などのキーで ModelData を取得
-	GetModelData(ctx context.Context, id string) (*modeldom.ModelData, error)
-
-	// ProductBlueprintID ベースで ModelData を取得
-	GetModelDataByBlueprintID(ctx context.Context, blueprintID string) (*modeldom.ModelData, error)
-
-	// id（productID / blueprintID など）をキーとして ModelData を更新
-	UpdateModelData(ctx context.Context, id string, updates modeldom.ModelDataUpdate) (*modeldom.ModelData, error)
-
-	// 単一の ModelVariation を ID で取得
-	GetModelVariationByID(ctx context.Context, variationID string) (*modeldom.ModelVariation, error)
-
-	// ModelVariation 作成
-	CreateModelVariation(ctx context.Context, variation modeldom.NewModelVariation) (*modeldom.ModelVariation, error)
-
-	// ModelVariation 更新
-	UpdateModelVariation(ctx context.Context, variationID string, updates modeldom.ModelVariationUpdate) (*modeldom.ModelVariation, error)
-
-	// ModelVariation 削除（具体的な削除方法は実装に委譲）
-	DeleteModelVariation(ctx context.Context, variationID string) (*modeldom.ModelVariation, error)
-
-	// 全入れ替え
-	ReplaceModelVariations(ctx context.Context, vars []modeldom.NewModelVariation) ([]modeldom.ModelVariation, error)
-
-	// productBlueprintID ごとにモデル一覧
-	ListModelVariationsByProductBlueprintID(ctx context.Context, productBlueprintID string) ([]modeldom.ModelVariation, error)
-}
-
-// ------------------------------------------------------------
 // ModelHistoryRepo
 // ------------------------------------------------------------
 //   Firestore 保存パス（例）：
@@ -66,13 +33,17 @@ type ModelHistoryRepo interface {
 // ------------------------------------------------------------
 // ModelUsecase
 // ------------------------------------------------------------
+//
+// ✅ SNS handler から model.RepositoryPort として渡したいので、
+//   ModelUsecase 自体が modeldom.RepositoryPort を実装する（= repo に委譲する）
+// ------------------------------------------------------------
 
 type ModelUsecase struct {
-	repo        ModelRepo
+	repo        modeldom.RepositoryPort
 	historyRepo ModelHistoryRepo
 }
 
-func NewModelUsecase(repo ModelRepo, historyRepo ModelHistoryRepo) *ModelUsecase {
+func NewModelUsecase(repo modeldom.RepositoryPort, historyRepo ModelHistoryRepo) *ModelUsecase {
 	return &ModelUsecase{
 		repo:        repo,
 		historyRepo: historyRepo,
@@ -84,14 +55,16 @@ func NewModelUsecase(repo ModelRepo, historyRepo ModelHistoryRepo) *ModelUsecase
 // ------------------------------------------------------------
 
 // 履歴スナップショット保存（失敗してもビジネス処理は失敗させない）
-func (u *ModelUsecase) saveHistorySnapshot(
-	ctx context.Context,
-	blueprintID string,
-) {
+func (u *ModelUsecase) saveHistorySnapshot(ctx context.Context, blueprintID string) {
 	if u.historyRepo == nil {
 		log.Printf("[ModelUsecase] saveHistorySnapshot skipped: historyRepo is nil (blueprintID=%s)", blueprintID)
 		return
 	}
+	if u.repo == nil {
+		log.Printf("[ModelUsecase] saveHistorySnapshot skipped: repo is nil (blueprintID=%s)", blueprintID)
+		return
+	}
+
 	blueprintID = strings.TrimSpace(blueprintID)
 	if blueprintID == "" {
 		log.Printf("[ModelUsecase] saveHistorySnapshot skipped: empty blueprintID")
@@ -100,22 +73,44 @@ func (u *ModelUsecase) saveHistorySnapshot(
 
 	log.Printf("[ModelUsecase] saveHistorySnapshot start: blueprintID=%s", blueprintID)
 
-	vars, err := u.repo.ListModelVariationsByProductBlueprintID(ctx, blueprintID)
-	if err != nil {
-		log.Printf("[ModelUsecase] saveHistorySnapshot: list variations failed: %v", err)
-		return
+	// ✅ RepositoryPort には ListModelVariationsByProductBlueprintID が無いので、
+	//   ListVariations(filter.ProductBlueprintID) で全件取得する
+	var all []modeldom.ModelVariation
+	page := modeldom.Page{Number: 1, PerPage: 500}
+	filter := modeldom.VariationFilter{ProductBlueprintID: blueprintID}
+
+	for {
+		res, err := u.repo.ListVariations(ctx, filter, page)
+		if err != nil {
+			log.Printf("[ModelUsecase] saveHistorySnapshot: list variations failed: %v", err)
+			return
+		}
+
+		all = append(all, res.Items...)
+
+		// guard: 0 件 or 最終ページ
+		if len(res.Items) == 0 || res.TotalPages <= 0 || page.Number >= res.TotalPages {
+			break
+		}
+
+		// guard: 無限ループ防止
+		page.Number++
+		if page.Number > 10000 {
+			log.Printf("[ModelUsecase] saveHistorySnapshot aborted: too many pages (blueprintID=%s)", blueprintID)
+			break
+		}
 	}
 
-	if err := u.historyRepo.SaveSnapshot(ctx, blueprintID, vars); err != nil {
+	if err := u.historyRepo.SaveSnapshot(ctx, blueprintID, all); err != nil {
 		log.Printf("[ModelUsecase] saveHistorySnapshot: save snapshot failed: %v", err)
 		return
 	}
 
-	log.Printf("[ModelUsecase] saveHistorySnapshot done: blueprintID=%s count=%d", blueprintID, len(vars))
+	log.Printf("[ModelUsecase] saveHistorySnapshot done: blueprintID=%s count=%d", blueprintID, len(all))
 }
 
 // ------------------------------------------------------------
-// Queries
+// Queries (compat / convenience)
 // ------------------------------------------------------------
 
 // GetByID is a legacy-style alias: variationID を受け取り、ModelVariation を返す
@@ -124,30 +119,78 @@ func (u *ModelUsecase) GetByID(ctx context.Context, id string) (*modeldom.ModelV
 	if id == "" {
 		return nil, modeldom.ErrInvalidID
 	}
-	return u.repo.GetModelVariationByID(ctx, id)
+	return u.GetModelVariationByID(ctx, id)
 }
 
 // ★追加：HTTP の GET /models/variations/{variationId} 用の明示メソッド
-// （mintRequest の modelId (= variationId) から modelNumber/size/color を取得する用途）
-func (u *ModelUsecase) GetModelVariationByID(
-	ctx context.Context,
-	variationID string,
-) (*modeldom.ModelVariation, error) {
-	return u.GetByID(ctx, variationID)
+func (u *ModelUsecase) GetModelVariationByID(ctx context.Context, variationID string) (*modeldom.ModelVariation, error) {
+	if u.repo == nil {
+		return nil, modeldom.ErrNotFound
+	}
+	variationID = strings.TrimSpace(variationID)
+	if variationID == "" {
+		return nil, modeldom.ErrInvalidID
+	}
+	return u.repo.GetModelVariationByID(ctx, variationID)
 }
 
-func (u *ModelUsecase) GetModelData(ctx context.Context, id string) (*modeldom.ModelData, error) {
-	id = strings.TrimSpace(id)
-	if id == "" {
+// 互換：既存コードが呼んでいる可能性があるため残す
+func (u *ModelUsecase) GetModelDataByProductBlueprintID(ctx context.Context, productBlueprintID string) (*modeldom.ModelData, error) {
+	return u.GetModelDataByBlueprintID(ctx, productBlueprintID)
+}
+
+// 互換：既存コードが呼んでいる可能性があるため残す
+func (u *ModelUsecase) ListModelVariationsByProductBlueprintID(ctx context.Context, productBlueprintID string) ([]modeldom.ModelVariation, error) {
+	productBlueprintID = strings.TrimSpace(productBlueprintID)
+	if productBlueprintID == "" {
+		return nil, modeldom.ErrInvalidBlueprintID
+	}
+	if u.repo == nil {
+		return nil, modeldom.ErrNotFound
+	}
+
+	var all []modeldom.ModelVariation
+	page := modeldom.Page{Number: 1, PerPage: 500}
+	filter := modeldom.VariationFilter{ProductBlueprintID: productBlueprintID}
+
+	for {
+		res, err := u.repo.ListVariations(ctx, filter, page)
+		if err != nil {
+			return nil, err
+		}
+		all = append(all, res.Items...)
+
+		if len(res.Items) == 0 || res.TotalPages <= 0 || page.Number >= res.TotalPages {
+			break
+		}
+		page.Number++
+		if page.Number > 10000 {
+			break
+		}
+	}
+
+	return all, nil
+}
+
+// ------------------------------------------------------------
+// RepositoryPort implementation (delegate to u.repo)
+// ------------------------------------------------------------
+
+func (u *ModelUsecase) GetModelData(ctx context.Context, productID string) (*modeldom.ModelData, error) {
+	if u.repo == nil {
+		return nil, modeldom.ErrNotFound
+	}
+	productID = strings.TrimSpace(productID)
+	if productID == "" {
 		return nil, modeldom.ErrInvalidProductID
 	}
-	return u.repo.GetModelData(ctx, id)
+	return u.repo.GetModelData(ctx, productID)
 }
 
-func (u *ModelUsecase) GetModelDataByProductBlueprintID(
-	ctx context.Context,
-	productBlueprintID string,
-) (*modeldom.ModelData, error) {
+func (u *ModelUsecase) GetModelDataByBlueprintID(ctx context.Context, productBlueprintID string) (*modeldom.ModelData, error) {
+	if u.repo == nil {
+		return nil, modeldom.ErrNotFound
+	}
 	productBlueprintID = strings.TrimSpace(productBlueprintID)
 	if productBlueprintID == "" {
 		return nil, modeldom.ErrInvalidBlueprintID
@@ -155,38 +198,40 @@ func (u *ModelUsecase) GetModelDataByProductBlueprintID(
 	return u.repo.GetModelDataByBlueprintID(ctx, productBlueprintID)
 }
 
-func (u *ModelUsecase) ListModelVariationsByProductBlueprintID(
-	ctx context.Context,
-	productBlueprintID string,
-) ([]modeldom.ModelVariation, error) {
-	productBlueprintID = strings.TrimSpace(productBlueprintID)
-	if productBlueprintID == "" {
-		return nil, modeldom.ErrInvalidBlueprintID
+func (u *ModelUsecase) UpdateModelData(ctx context.Context, productID string, updates modeldom.ModelDataUpdate) (*modeldom.ModelData, error) {
+	if u.repo == nil {
+		return nil, modeldom.ErrNotFound
 	}
-	return u.repo.ListModelVariationsByProductBlueprintID(ctx, productBlueprintID)
-}
-
-// ------------------------------------------------------------
-// Commands
-// ------------------------------------------------------------
-
-func (u *ModelUsecase) UpdateModelData(
-	ctx context.Context,
-	id string,
-	updates modeldom.ModelDataUpdate,
-) (*modeldom.ModelData, error) {
-	id = strings.TrimSpace(id)
-	if id == "" {
+	productID = strings.TrimSpace(productID)
+	if productID == "" {
 		return nil, modeldom.ErrInvalidProductID
 	}
-	return u.repo.UpdateModelData(ctx, id, updates)
+	return u.repo.UpdateModelData(ctx, productID, updates)
+}
+
+func (u *ModelUsecase) ListVariations(ctx context.Context, filter modeldom.VariationFilter, page modeldom.Page) (modeldom.VariationPageResult, error) {
+	if u.repo == nil {
+		return modeldom.VariationPageResult{}, modeldom.ErrNotFound
+	}
+	return u.repo.ListVariations(ctx, filter, page)
+}
+
+func (u *ModelUsecase) GetModelVariations(ctx context.Context, productID string) ([]modeldom.ModelVariation, error) {
+	if u.repo == nil {
+		return nil, modeldom.ErrNotFound
+	}
+	productID = strings.TrimSpace(productID)
+	if productID == "" {
+		return nil, modeldom.ErrInvalidProductID
+	}
+	return u.repo.GetModelVariations(ctx, productID)
 }
 
 // Create ModelVariation → 履歴保存のみ（version は扱わない）
-func (u *ModelUsecase) CreateModelVariation(
-	ctx context.Context,
-	v modeldom.NewModelVariation,
-) (*modeldom.ModelVariation, error) {
+func (u *ModelUsecase) CreateModelVariation(ctx context.Context, v modeldom.NewModelVariation) (*modeldom.ModelVariation, error) {
+	if u.repo == nil {
+		return nil, modeldom.ErrNotFound
+	}
 
 	created, err := u.repo.CreateModelVariation(ctx, v)
 	if err != nil {
@@ -200,11 +245,10 @@ func (u *ModelUsecase) CreateModelVariation(
 }
 
 // Update ModelVariation → 履歴保存のみ（version は扱わない）
-func (u *ModelUsecase) UpdateModelVariation(
-	ctx context.Context,
-	variationID string,
-	updates modeldom.ModelVariationUpdate,
-) (*modeldom.ModelVariation, error) {
+func (u *ModelUsecase) UpdateModelVariation(ctx context.Context, variationID string, updates modeldom.ModelVariationUpdate) (*modeldom.ModelVariation, error) {
+	if u.repo == nil {
+		return nil, modeldom.ErrNotFound
+	}
 
 	variationID = strings.TrimSpace(variationID)
 	if variationID == "" {
@@ -222,26 +266,23 @@ func (u *ModelUsecase) UpdateModelVariation(
 	return updated, nil
 }
 
-// Delete
-func (u *ModelUsecase) DeleteModelVariation(
-	ctx context.Context,
-	variationID string,
-) (*modeldom.ModelVariation, error) {
+func (u *ModelUsecase) DeleteModelVariation(ctx context.Context, variationID string) (*modeldom.ModelVariation, error) {
+	if u.repo == nil {
+		return nil, modeldom.ErrNotFound
+	}
 
 	variationID = strings.TrimSpace(variationID)
 	if variationID == "" {
 		return nil, modeldom.ErrInvalidID
 	}
 
-	// ※必要なら削除前に saveHistorySnapshot を呼ぶこともできる
 	return u.repo.DeleteModelVariation(ctx, variationID)
 }
 
-// Replace all variations
-func (u *ModelUsecase) ReplaceModelVariations(
-	ctx context.Context,
-	vars []modeldom.NewModelVariation,
-) ([]modeldom.ModelVariation, error) {
+func (u *ModelUsecase) ReplaceModelVariations(ctx context.Context, vars []modeldom.NewModelVariation) ([]modeldom.ModelVariation, error) {
+	if u.repo == nil {
+		return nil, modeldom.ErrNotFound
+	}
 
 	updated, err := u.repo.ReplaceModelVariations(ctx, vars)
 	if err != nil {
@@ -261,4 +302,26 @@ func (u *ModelUsecase) ReplaceModelVariations(
 	}
 
 	return updated, nil
+}
+
+func (u *ModelUsecase) GetSizeVariations(ctx context.Context, productID string) ([]modeldom.SizeVariation, error) {
+	if u.repo == nil {
+		return nil, modeldom.ErrNotFound
+	}
+	productID = strings.TrimSpace(productID)
+	if productID == "" {
+		return nil, modeldom.ErrInvalidProductID
+	}
+	return u.repo.GetSizeVariations(ctx, productID)
+}
+
+func (u *ModelUsecase) GetModelNumbers(ctx context.Context, productID string) ([]modeldom.ModelNumber, error) {
+	if u.repo == nil {
+		return nil, modeldom.ErrNotFound
+	}
+	productID = strings.TrimSpace(productID)
+	if productID == "" {
+		return nil, modeldom.ErrInvalidProductID
+	}
+	return u.repo.GetModelNumbers(ctx, productID)
 }

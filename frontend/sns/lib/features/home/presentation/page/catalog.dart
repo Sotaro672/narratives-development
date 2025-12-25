@@ -7,10 +7,14 @@ import '../../../list/infrastructure/list_repository_http.dart';
 // ✅ NEW: productBlueprint を引く
 import '../../../productBlueprint/infrastructure/product_blueprint_repository_http.dart';
 
+// ✅ NEW: model を引く
+import '../../../model/infrastructure/model_repository_http.dart';
+
 /// 商品詳細ページ（buyer-facing）
 /// - list 詳細: GET /sns/lists/{listId}
 /// - inventory: GET /sns/inventories/{id} OR GET /sns/inventories?pb&tb
 /// - productBlueprint: GET /sns/product-blueprints/{productBlueprintId}
+/// - model variations: GET /sns/models?productBlueprintId=...
 class CatalogPage extends StatefulWidget {
   const CatalogPage({super.key, required this.listId, this.initialItem});
 
@@ -34,6 +38,9 @@ class _CatalogPageState extends State<CatalogPage> {
   // ✅ NEW
   late final ProductBlueprintRepositoryHttp _pbRepo;
 
+  // ✅ NEW
+  late final ModelRepositoryHTTP _modelRepo;
+
   late Future<_CatalogPayload> _future;
 
   @override
@@ -42,6 +49,7 @@ class _CatalogPageState extends State<CatalogPage> {
     _listRepo = ListRepositoryHttp();
     _invRepo = InventoryRepositoryHttp();
     _pbRepo = ProductBlueprintRepositoryHttp();
+    _modelRepo = ModelRepositoryHTTP();
     _future = _load();
   }
 
@@ -50,6 +58,7 @@ class _CatalogPageState extends State<CatalogPage> {
     _listRepo.dispose();
     _invRepo.dispose();
     _pbRepo.dispose();
+    // NOTE: ModelRepositoryHTTP currently has no dispose(). Keep it as-is.
     super.dispose();
   }
 
@@ -97,12 +106,30 @@ class _CatalogPageState extends State<CatalogPage> {
       pbErr = 'productBlueprintId is empty';
     }
 
+    // ✅ NEW: model variations（productBlueprintId が取れたら取得）
+    List<ModelVariationDTO>? models;
+    String? modelErr;
+
+    if (pbId.isNotEmpty) {
+      try {
+        models = await _modelRepo.fetchModelVariationsByProductBlueprintId(
+          pbId,
+        );
+      } catch (e) {
+        modelErr = e.toString();
+      }
+    } else {
+      modelErr = 'productBlueprintId is empty (skip model fetch)';
+    }
+
     return _CatalogPayload(
       list: list,
       inventory: inv,
       inventoryError: invErr,
       productBlueprint: pb,
       productBlueprintError: pbErr,
+      modelVariations: models,
+      modelVariationsError: modelErr,
     );
   }
 
@@ -129,6 +156,16 @@ class _CatalogPageState extends State<CatalogPage> {
       sum += v.accumulation;
     }
     return sum;
+  }
+
+  String _modelLabel(ModelVariationDTO v) {
+    final parts = <String>[];
+    if (v.modelNumber.trim().isNotEmpty) parts.add(v.modelNumber.trim());
+    if (v.size.trim().isNotEmpty) parts.add(v.size.trim());
+    final color = v.color.name.trim();
+    if (color.isNotEmpty) parts.add(color);
+    if (parts.isEmpty) return '(empty)';
+    return parts.join(' / ');
   }
 
   @override
@@ -168,6 +205,9 @@ class _CatalogPageState extends State<CatalogPage> {
           final pb = payload?.productBlueprint;
           final pbErr = payload?.productBlueprintError;
 
+          final models = payload?.modelVariations;
+          final modelErr = payload?.modelVariationsError;
+
           final imageUrl = list.image.trim();
           final hasImage = imageUrl.isNotEmpty;
           final price = _priceText(list.prices);
@@ -178,6 +218,15 @@ class _CatalogPageState extends State<CatalogPage> {
           final pbId = (inv?.productBlueprintId ?? list.productBlueprintId)
               .trim();
           final tbId = (inv?.tokenBlueprintId ?? list.tokenBlueprintId).trim();
+
+          // modelId -> metadata (variation)
+          final modelMap = <String, ModelVariationDTO>{};
+          if (models != null) {
+            for (final v in models) {
+              final id = v.id.trim();
+              if (id.isNotEmpty) modelMap[id] = v;
+            }
+          }
 
           return ListView(
             padding: const EdgeInsets.all(12),
@@ -294,16 +343,26 @@ class _CatalogPageState extends State<CatalogPage> {
                         ...inv.stock.entries.map((e) {
                           final modelId = e.key;
                           final stock = e.value;
+                          final meta = modelMap[modelId.trim()];
+
                           return Padding(
                             padding: const EdgeInsets.symmetric(vertical: 6),
-                            child: Row(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
-                                Expanded(
-                                  child: Text(
-                                    modelId.isNotEmpty ? modelId : '(no model)',
-                                  ),
+                                Text(
+                                  meta != null
+                                      ? _modelLabel(meta)
+                                      : (modelId.isNotEmpty
+                                            ? modelId
+                                            : '(no model)'),
+                                  style: Theme.of(context).textTheme.bodyMedium,
                                 ),
-                                Text('stock: ${stock.accumulation}'),
+                                const SizedBox(height: 2),
+                                Text(
+                                  'modelId: ${modelId.isNotEmpty ? modelId : '(empty)'}   stock: ${stock.accumulation}',
+                                  style: Theme.of(context).textTheme.labelSmall,
+                                ),
                               ],
                             ),
                           );
@@ -324,7 +383,7 @@ class _CatalogPageState extends State<CatalogPage> {
 
               const SizedBox(height: 12),
 
-              // -------- product blueprint (NEW) --------
+              // -------- product blueprint --------
               Card(
                 child: Padding(
                   padding: const EdgeInsets.all(12),
@@ -336,11 +395,6 @@ class _CatalogPageState extends State<CatalogPage> {
                         style: Theme.of(context).textTheme.titleMedium,
                       ),
                       const SizedBox(height: 8),
-
-                      // ✅ 要件:
-                      // - productBlueprintId から情報表示
-                      // - assigneeId / createdAt / createdBy / updatedAt / updatedBy は表示しない
-                      // - deletedAt / deletedBy も拾わない（＝表示しない）
                       if (pb != null) ...[
                         _KeyValueRow(
                           label: 'productName',
@@ -448,6 +502,87 @@ class _CatalogPageState extends State<CatalogPage> {
                   ),
                 ),
               ),
+
+              const SizedBox(height: 12),
+
+              // -------- model variations (NEW) --------
+              Card(
+                child: Padding(
+                  padding: const EdgeInsets.all(12),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Model',
+                        style: Theme.of(context).textTheme.titleMedium,
+                      ),
+                      const SizedBox(height: 8),
+                      _KeyValueRow(
+                        label: 'productBlueprintId',
+                        value: pbId.isNotEmpty ? pbId : '(unknown)',
+                      ),
+                      const SizedBox(height: 10),
+                      if (models != null) ...[
+                        if (models.isEmpty)
+                          Text(
+                            '(empty)',
+                            style: Theme.of(context).textTheme.bodyMedium,
+                          )
+                        else ...[
+                          ...models.map((v) {
+                            final mId = v.id.trim();
+                            return Padding(
+                              padding: const EdgeInsets.symmetric(vertical: 8),
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    _modelLabel(v),
+                                    style: Theme.of(
+                                      context,
+                                    ).textTheme.bodyLarge,
+                                  ),
+                                  const SizedBox(height: 4),
+                                  Text(
+                                    'modelId: ${mId.isNotEmpty ? mId : '(empty)'}',
+                                    style: Theme.of(
+                                      context,
+                                    ).textTheme.labelSmall,
+                                  ),
+                                  if (v.measurements.isNotEmpty) ...[
+                                    const SizedBox(height: 6),
+                                    Wrap(
+                                      spacing: 8,
+                                      runSpacing: 8,
+                                      children: v.measurements.entries.map((e) {
+                                        return Chip(
+                                          label: Text('${e.key}: ${e.value}'),
+                                          visualDensity: VisualDensity.compact,
+                                        );
+                                      }).toList(),
+                                    ),
+                                  ],
+                                ],
+                              ),
+                            );
+                          }),
+                        ],
+                      ] else ...[
+                        if (modelErr != null && modelErr.trim().isNotEmpty)
+                          Text(
+                            'model error: $modelErr',
+                            style: Theme.of(context).textTheme.labelSmall,
+                          )
+                        else
+                          Text(
+                            'model is not loaded',
+                            style: Theme.of(context).textTheme.labelSmall,
+                          ),
+                      ],
+                    ],
+                  ),
+                ),
+              ),
             ],
           );
         },
@@ -463,15 +598,20 @@ class _CatalogPayload {
     required this.inventoryError,
     required this.productBlueprint,
     required this.productBlueprintError,
+    required this.modelVariations,
+    required this.modelVariationsError,
   });
 
   final SnsListItem list;
   final SnsInventoryResponse? inventory;
   final String? inventoryError;
 
-  // ✅ NEW
   final SnsProductBlueprintResponse? productBlueprint;
   final String? productBlueprintError;
+
+  // ✅ NEW
+  final List<ModelVariationDTO>? modelVariations;
+  final String? modelVariationsError;
 }
 
 class _KeyValueRow extends StatelessWidget {

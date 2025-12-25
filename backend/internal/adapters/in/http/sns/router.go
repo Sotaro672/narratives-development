@@ -8,6 +8,7 @@ type Deps struct {
 	List             http.Handler
 	Inventory        http.Handler
 	ProductBlueprint http.Handler // ✅ NEW
+	Model            http.Handler // ✅ NEW
 }
 
 // Register registers buyer-facing routes onto mux.
@@ -18,6 +19,8 @@ type Deps struct {
 // - GET /sns/inventories?productBlueprintId=&tokenBlueprintId=
 // - GET /sns/inventories/{id}
 // - GET /sns/product-blueprints/{id}          ✅ NEW
+// - GET /sns/models?productBlueprintId=       ✅ NEW
+// - GET /sns/models/{id}                      ✅ NEW
 func Register(mux *http.ServeMux, deps Deps) {
 	if mux == nil {
 		return
@@ -39,5 +42,11 @@ func Register(mux *http.ServeMux, deps Deps) {
 	if deps.ProductBlueprint != nil {
 		mux.Handle("/sns/product-blueprints", deps.ProductBlueprint)
 		mux.Handle("/sns/product-blueprints/", deps.ProductBlueprint)
+	}
+
+	// models ✅ NEW
+	if deps.Model != nil {
+		mux.Handle("/sns/models", deps.Model)
+		mux.Handle("/sns/models/", deps.Model)
 	}
 }

@@ -5,6 +5,8 @@ import (
 	"errors"
 	"fmt"
 	"log"
+	"reflect"
+	"sort"
 	"strings"
 	"time"
 
@@ -180,11 +182,7 @@ func (r *ModelRepositoryFS) UpdateModelData(ctx context.Context, productBlueprin
 // Variation CRUD（ライブの models コレクション）
 // ------------------------------------------------------------
 
-// ★ ここをポインタ戻りに戻す（ModelUsecase の ModelRepo と合わせる）
-func (r *ModelRepositoryFS) GetModelVariationByID(
-	ctx context.Context,
-	variationID string,
-) (*modeldom.ModelVariation, error) {
+func (r *ModelRepositoryFS) GetModelVariationByID(ctx context.Context, variationID string) (*modeldom.ModelVariation, error) {
 	if r.Client == nil {
 		return nil, errors.New("firestore client is nil")
 	}
@@ -206,11 +204,7 @@ func (r *ModelRepositoryFS) GetModelVariationByID(
 	return &v, nil
 }
 
-// CreateModelVariation（productBlueprintID は NewModelVariation から利用）
-func (r *ModelRepositoryFS) CreateModelVariation(
-	ctx context.Context,
-	variation modeldom.NewModelVariation,
-) (*modeldom.ModelVariation, error) {
+func (r *ModelRepositoryFS) CreateModelVariation(ctx context.Context, variation modeldom.NewModelVariation) (*modeldom.ModelVariation, error) {
 	if r.Client == nil {
 		return nil, errors.New("firestore client is nil")
 	}
@@ -247,11 +241,7 @@ func (r *ModelRepositoryFS) CreateModelVariation(
 	return &saved, nil
 }
 
-func (r *ModelRepositoryFS) UpdateModelVariation(
-	ctx context.Context,
-	variationID string,
-	updates modeldom.ModelVariationUpdate,
-) (*modeldom.ModelVariation, error) {
+func (r *ModelRepositoryFS) UpdateModelVariation(ctx context.Context, variationID string, updates modeldom.ModelVariationUpdate) (*modeldom.ModelVariation, error) {
 	if r.Client == nil {
 		return nil, errors.New("firestore client is nil")
 	}
@@ -303,7 +293,6 @@ func (r *ModelRepositoryFS) UpdateModelVariation(
 	return r.GetModelVariationByID(ctx, variationID)
 }
 
-// ★ DeleteModelVariation: 物理削除（論理削除要素はドメインから削除済み）
 func (r *ModelRepositoryFS) DeleteModelVariation(ctx context.Context, variationID string) (*modeldom.ModelVariation, error) {
 	if r.Client == nil {
 		return nil, errors.New("firestore client is nil")
@@ -345,35 +334,26 @@ func (r *ModelRepositoryFS) DeleteModelVariation(ctx context.Context, variationI
 // ReplaceModelVariations（大量更新、ライブ）
 // ------------------------------------------------------------
 
-func (r *ModelRepositoryFS) ReplaceModelVariations(
-	ctx context.Context,
-	vars []modeldom.NewModelVariation,
-) ([]modeldom.ModelVariation, error) {
-
+func (r *ModelRepositoryFS) ReplaceModelVariations(ctx context.Context, vars []modeldom.NewModelVariation) ([]modeldom.ModelVariation, error) {
 	if r.Client == nil {
 		return nil, errors.New("firestore client is nil")
 	}
 
-	// 空なら何もしない（必要であればここをエラーに変えてもよい）
 	if len(vars) == 0 {
 		return []modeldom.ModelVariation{}, nil
 	}
 
-	// NewModelVariation 側の ProductBlueprintID から紐付けキーを解決
 	productBlueprintID := strings.TrimSpace(vars[0].ProductBlueprintID)
 	if productBlueprintID == "" {
 		return nil, modeldom.ErrInvalidBlueprintID
 	}
 
-	// 安全のため、全要素が同じ ProductBlueprintID を持っているか確認
 	for _, v := range vars {
 		if strings.TrimSpace(v.ProductBlueprintID) != productBlueprintID {
 			return nil, fmt.Errorf("ReplaceModelVariations: mixed ProductBlueprintID is not allowed")
 		}
 	}
 
-	// 既存 variations を削除（productBlueprint 単位で）
-	// ※ここは依然として物理削除。
 	const chunkSize = 400
 
 	existing, err := r.listVariationsByProductBlueprintID(ctx, productBlueprintID)
@@ -388,7 +368,6 @@ func (r *ModelRepositoryFS) ReplaceModelVariations(
 		}
 		chunk := existing[i:end]
 
-		// Transaction を使用して削除
 		err := r.Client.RunTransaction(ctx, func(ctx context.Context, tx *firestore.Transaction) error {
 			for _, v := range chunk {
 				ref := r.variationsCol().Doc(v.ID)
@@ -403,7 +382,6 @@ func (r *ModelRepositoryFS) ReplaceModelVariations(
 		}
 	}
 
-	// 新規 variations を挿入
 	for i := 0; i < len(vars); i += chunkSize {
 		end := i + chunkSize
 		if end > len(vars) {
@@ -441,19 +419,254 @@ func (r *ModelRepositoryFS) ReplaceModelVariations(
 		}
 	}
 
-	// 挿入後の最新 variations を返す
 	return r.listVariationsByProductBlueprintID(ctx, productBlueprintID)
 }
 
 // ------------------------------------------------------------
-// ModelRepo interface の追加メソッド実装
+// RepositoryPort 追加（不足メソッド）
 // ------------------------------------------------------------
 
-// 与えられた productBlueprintID に紐づく ModelVariation 一覧を返す
-func (r *ModelRepositoryFS) ListModelVariationsByProductBlueprintID(
+// ListVariations implements model.RepositoryPort.
+// Firestore 側のクエリ制約を避けるため、まず blueprint 単位で取得 → in-memory filter → paginate.
+func (r *ModelRepositoryFS) ListVariations(
 	ctx context.Context,
-	productBlueprintID string,
-) ([]modeldom.ModelVariation, error) {
+	filter modeldom.VariationFilter,
+	page modeldom.Page,
+) (modeldom.VariationPageResult, error) {
+	if r.Client == nil {
+		return modeldom.VariationPageResult{}, errors.New("firestore client is nil")
+	}
+
+	// このFS実装は「ProductBlueprintID」を主キーとして扱う（ProductID は互換として受ける）
+	pbID := strings.TrimSpace(filter.ProductBlueprintID)
+	if pbID == "" {
+		pbID = strings.TrimSpace(filter.ProductID)
+	}
+	if pbID == "" {
+		return modeldom.VariationPageResult{}, modeldom.ErrInvalidBlueprintID
+	}
+
+	all, err := r.listVariationsByProductBlueprintID(ctx, pbID)
+	if err != nil {
+		return modeldom.VariationPageResult{}, err
+	}
+
+	// ---- in-memory filter ----
+	inSet := func(s string, xs []string) bool {
+		if len(xs) == 0 {
+			return true
+		}
+		for _, x := range xs {
+			if strings.EqualFold(strings.TrimSpace(x), s) {
+				return true
+			}
+		}
+		return false
+	}
+
+	q := strings.ToLower(strings.TrimSpace(filter.SearchQuery))
+
+	var filtered []modeldom.ModelVariation
+	for _, v := range all {
+		if !inSet(v.Size, filter.Sizes) {
+			continue
+		}
+		if !inSet(v.Color.Name, filter.Colors) {
+			continue
+		}
+		if !inSet(v.ModelNumber, filter.ModelNumbers) {
+			continue
+		}
+
+		if filter.CreatedFrom != nil && !v.CreatedAt.IsZero() && v.CreatedAt.Before(filter.CreatedFrom.UTC()) {
+			continue
+		}
+		if filter.CreatedTo != nil && !v.CreatedAt.IsZero() && v.CreatedAt.After(filter.CreatedTo.UTC()) {
+			continue
+		}
+		if filter.UpdatedFrom != nil && !v.UpdatedAt.IsZero() && v.UpdatedAt.Before(filter.UpdatedFrom.UTC()) {
+			continue
+		}
+		if filter.UpdatedTo != nil && !v.UpdatedAt.IsZero() && v.UpdatedAt.After(filter.UpdatedTo.UTC()) {
+			continue
+		}
+
+		// deleted はドメインから削除済み（常に非deleted扱い）
+		if filter.Deleted != nil && *filter.Deleted {
+			continue
+		}
+
+		if q != "" {
+			hay := strings.ToLower(strings.TrimSpace(v.ModelNumber) + " " + strings.TrimSpace(v.Size) + " " + strings.TrimSpace(v.Color.Name))
+			if !strings.Contains(hay, q) {
+				continue
+			}
+		}
+
+		filtered = append(filtered, v)
+	}
+
+	// sort: UpdatedAt desc, then CreatedAt desc, then ID
+	sort.Slice(filtered, func(i, j int) bool {
+		a, b := filtered[i], filtered[j]
+		if !a.UpdatedAt.Equal(b.UpdatedAt) {
+			return a.UpdatedAt.After(b.UpdatedAt)
+		}
+		if !a.CreatedAt.Equal(b.CreatedAt) {
+			return a.CreatedAt.After(b.CreatedAt)
+		}
+		return a.ID < b.ID
+	})
+
+	// paginate
+	per := page.PerPage
+	if per <= 0 {
+		per = 50
+	}
+	num := page.Number
+	if num <= 0 {
+		num = 1
+	}
+
+	total := len(filtered)
+	totalPages := (total + per - 1) / per
+	start := (num - 1) * per
+	if start > total {
+		start = total
+	}
+	end := start + per
+	if end > total {
+		end = total
+	}
+
+	items := make([]modeldom.ModelVariation, 0, end-start)
+	if start < end {
+		items = append(items, filtered[start:end]...)
+	}
+
+	return modeldom.VariationPageResult{
+		Items:      items,
+		TotalCount: total,
+		TotalPages: totalPages,
+		Page:       num,
+		PerPage:    per,
+	}, nil
+}
+
+// GetModelVariations implements model.RepositoryPort.
+// このFS実装では productID も productBlueprintID として扱う（互換）。
+func (r *ModelRepositoryFS) GetModelVariations(ctx context.Context, productID string) ([]modeldom.ModelVariation, error) {
+	if r.Client == nil {
+		return nil, errors.New("firestore client is nil")
+	}
+	productID = strings.TrimSpace(productID)
+	if productID == "" {
+		return nil, modeldom.ErrInvalidProductID
+	}
+	return r.listVariationsByProductBlueprintID(ctx, productID)
+}
+
+// GetSizeVariations implements model.RepositoryPort.
+// 型定義の差異に強いように reflect で値を詰める（struct/alias/string どれでもOK）。
+func (r *ModelRepositoryFS) GetSizeVariations(ctx context.Context, productID string) ([]modeldom.SizeVariation, error) {
+	vars, err := r.GetModelVariations(ctx, productID)
+	if err != nil {
+		return nil, err
+	}
+
+	seen := map[string]struct{}{}
+	var sizes []string
+	for _, v := range vars {
+		s := strings.TrimSpace(v.Size)
+		if s == "" {
+			continue
+		}
+		if _, ok := seen[s]; ok {
+			continue
+		}
+		seen[s] = struct{}{}
+		sizes = append(sizes, s)
+	}
+	sort.Strings(sizes)
+
+	makeSizeVariation := func(size string) modeldom.SizeVariation {
+		var out modeldom.SizeVariation
+		rv := reflect.ValueOf(&out).Elem()
+		switch rv.Kind() {
+		case reflect.String:
+			rv.SetString(size)
+		case reflect.Struct:
+			for _, fn := range []string{"Size", "Name", "Value"} {
+				f := rv.FieldByName(fn)
+				if f.IsValid() && f.CanSet() && f.Kind() == reflect.String {
+					f.SetString(size)
+					break
+				}
+			}
+		}
+		return out
+	}
+
+	res := make([]modeldom.SizeVariation, 0, len(sizes))
+	for _, s := range sizes {
+		res = append(res, makeSizeVariation(s))
+	}
+	return res, nil
+}
+
+// GetModelNumbers implements model.RepositoryPort.
+// 型定義の差異に強いように reflect で値を詰める（struct/alias/string どれでもOK）。
+func (r *ModelRepositoryFS) GetModelNumbers(ctx context.Context, productID string) ([]modeldom.ModelNumber, error) {
+	vars, err := r.GetModelVariations(ctx, productID)
+	if err != nil {
+		return nil, err
+	}
+
+	seen := map[string]struct{}{}
+	var nums []string
+	for _, v := range vars {
+		s := strings.TrimSpace(v.ModelNumber)
+		if s == "" {
+			continue
+		}
+		if _, ok := seen[s]; ok {
+			continue
+		}
+		seen[s] = struct{}{}
+		nums = append(nums, s)
+	}
+	sort.Strings(nums)
+
+	makeModelNumber := func(mn string) modeldom.ModelNumber {
+		var out modeldom.ModelNumber
+		rv := reflect.ValueOf(&out).Elem()
+		switch rv.Kind() {
+		case reflect.String:
+			rv.SetString(mn)
+		case reflect.Struct:
+			for _, fn := range []string{"ModelNumber", "Number", "Name", "Value"} {
+				f := rv.FieldByName(fn)
+				if f.IsValid() && f.CanSet() && f.Kind() == reflect.String {
+					f.SetString(mn)
+					break
+				}
+			}
+		}
+		return out
+	}
+
+	res := make([]modeldom.ModelNumber, 0, len(nums))
+	for _, s := range nums {
+		res = append(res, makeModelNumber(s))
+	}
+	return res, nil
+}
+
+// ------------------------------------------------------------
+// 互換: 以前の usecase / 旧インターフェース用
+// ------------------------------------------------------------
+
+func (r *ModelRepositoryFS) ListModelVariationsByProductBlueprintID(ctx context.Context, productBlueprintID string) ([]modeldom.ModelVariation, error) {
 	if r.Client == nil {
 		return nil, errors.New("firestore client is nil")
 	}
@@ -488,7 +701,6 @@ func (r *ModelRepositoryFS) listVariationsByProductBlueprintID(ctx context.Conte
 		if err != nil {
 			return nil, err
 		}
-		// DeletedAt / DeletedBy はドメインから削除済みなのでフィルタ不要
 		out = append(out, v)
 	}
 	return out, nil
@@ -507,7 +719,6 @@ func docToModelVariation(doc *firestore.DocumentSnapshot) (modeldom.ModelVariati
 		return ""
 	}
 
-	// Color は { name, rgb } として保存されている前提
 	var color modeldom.Color
 	if raw, ok := data["color"]; ok && raw != nil {
 		if v, ok := raw.(map[string]any); ok {
@@ -525,7 +736,6 @@ func docToModelVariation(doc *firestore.DocumentSnapshot) (modeldom.ModelVariati
 		}
 	}
 
-	// measurements: map[string]int として扱う
 	getMeasurements := func() modeldom.Measurements {
 		raw, ok := data["measurements"]
 		if !ok || raw == nil {

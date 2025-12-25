@@ -15,6 +15,7 @@ type SNSDeps struct {
 	List             http.Handler
 	Inventory        http.Handler
 	ProductBlueprint http.Handler // ✅ NEW
+	Model            http.Handler // ✅ NEW
 }
 
 // NewSNSDeps wires SNS handlers.
@@ -24,10 +25,12 @@ func NewSNSDeps(
 	listUC *usecase.ListUsecase,
 	invUC *usecase.InventoryUsecase,
 	pbUC *usecase.ProductBlueprintUsecase, // ✅ NEW
+	modelUC *usecase.ModelUsecase, // ✅ NEW
 ) SNSDeps {
 	var listHandler http.Handler
 	var invHandler http.Handler
 	var pbHandler http.Handler
+	var modelHandler http.Handler
 
 	if listUC != nil {
 		listHandler = snshandler.NewSNSListHandler(listUC)
@@ -41,10 +44,15 @@ func NewSNSDeps(
 		pbHandler = snshandler.NewSNSProductBlueprintHandler(pbUC) // ✅ NEW
 	}
 
+	if modelUC != nil {
+		modelHandler = snshandler.NewSNSModelHandler(modelUC) // ✅ NEW
+	}
+
 	return SNSDeps{
 		List:             listHandler,
 		Inventory:        invHandler,
 		ProductBlueprint: pbHandler,
+		Model:            modelHandler,
 	}
 }
 
@@ -62,6 +70,7 @@ func RegisterSNSFromContainer(mux *http.ServeMux, cont *Container) {
 		deps.ListUC,
 		deps.InventoryUC,
 		deps.ProductBlueprintUC,
+		deps.ModelUC, // ✅ NEW
 	)
 	RegisterSNSRoutes(mux, snsDeps)
 }
@@ -75,5 +84,6 @@ func RegisterSNSRoutes(mux *http.ServeMux, deps SNSDeps) {
 		List:             deps.List,
 		Inventory:        deps.Inventory,
 		ProductBlueprint: deps.ProductBlueprint, // ✅ NEW
+		Model:            deps.Model,            // ✅ NEW
 	})
 }
