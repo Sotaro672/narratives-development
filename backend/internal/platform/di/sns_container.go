@@ -6,7 +6,6 @@ import (
 
 	snshttp "narratives/internal/adapters/in/http/sns"
 	snshandler "narratives/internal/adapters/in/http/sns/handler"
-	snsquery "narratives/internal/application/query/sns"
 	usecase "narratives/internal/application/usecase"
 )
 
@@ -14,50 +13,41 @@ import (
 // Keep it minimal and independent from console/admin routing.
 type SNSDeps struct {
 	// Handlers
-	List http.Handler
+	List      http.Handler
+	Inventory http.Handler
 }
 
 // NewSNSDeps wires SNS handlers.
 //
-// ✅ SNS は companyId 境界が無い（公開一覧）ため、console 用 query は使わない。
-// ✅ SNSListQuery を注入することで、status=listing のみを companyId 非依存で取得できる。
-//
-// Minimum:
-// - q があれば /sns/lists と /sns/lists/{id} が動く
-// Optional:
-// - listUC は将来の互換/フォールバック用（基本は不要）
+// SNS は companyId 境界が無い（公開）ため、console 用 query は使わない。
 func NewSNSDeps(
 	listUC *usecase.ListUsecase,
-	q *snsquery.SNSListQuery,
+	invUC *usecase.InventoryUsecase,
 ) SNSDeps {
 	var listHandler http.Handler
+	var invHandler http.Handler
 
-	switch {
-	case q != nil:
-		// ✅ preferred: SNS query
-		listHandler = snshandler.NewSNSListHandlerWithQueries(listUC, q)
-	case listUC != nil:
-		// fallback (company boundary を要求する実装だと SNS では期待通り動かない可能性あり)
+	if listUC != nil {
 		listHandler = snshandler.NewSNSListHandler(listUC)
-	default:
-		listHandler = nil
+	}
+
+	if invUC != nil {
+		invHandler = snshandler.NewSNSInventoryHandler(invUC)
 	}
 
 	return SNSDeps{
-		List: listHandler,
+		List:      listHandler,
+		Inventory: invHandler,
 	}
 }
 
 // RegisterSNSRoutes registers buyer-facing routes onto mux.
-//
-// Routes:
-// - GET /sns/lists
-// - GET /sns/lists/{id}
 func RegisterSNSRoutes(mux *http.ServeMux, deps SNSDeps) {
 	if mux == nil {
 		return
 	}
 	snshttp.Register(mux, snshttp.Deps{
-		List: deps.List,
+		List:      deps.List,
+		Inventory: deps.Inventory,
 	})
 }

@@ -2,10 +2,17 @@
   {
     "origin": [
       "https://narratives.jp",
-      "https://narratives-console-dev.web.app"
+      "https://narratives-console-dev.web.app",
+      "https://narratives-development-sns.web.app"
     ],
-    "method": ["GET", "HEAD", "PUT", "OPTIONS"],
-    "responseHeader": ["Content-Type", "ETag"],
+    "method": ["GET", "HEAD", "OPTIONS"],
+    "responseHeader": [
+      "Content-Type",
+      "Content-Length",
+      "ETag",
+      "Cache-Control",
+      "Content-Disposition"
+    ],
     "maxAgeSeconds": 3600
   }
 ]

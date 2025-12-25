@@ -5,42 +5,24 @@ import (
 	"encoding/json"
 	"errors"
 	"net/http"
-	"strconv"
 	"strings"
 
-	snsquery "narratives/internal/application/query/sns"
 	usecase "narratives/internal/application/usecase"
 	ldom "narratives/internal/domain/list"
 )
 
 // SNSListHandler serves buyer-facing list endpoints.
-// Only returns: title, description, image(url), prices.
+// Only returns: title, description, image(url), prices (+ optional inventory/product/token ids).
 //
 // Routes:
 // - GET /sns/lists
 // - GET /sns/lists/{id}
 type SNSListHandler struct {
-	// optional (legacy/fallback; SNSでは基本使わない)
 	uc *usecase.ListUsecase
-
-	// ✅ SNS専用Query（companyId境界なし・status=listingのみ）
-	q *snsquery.SNSListQuery
 }
 
-// NewSNSListHandler keeps backward compatibility.
-// NOTE: SNSでは companyId が無いので、この ctor だけだと期待通り動かない可能性があります。
-// 可能なら NewSNSListHandlerWithQueries を使って q を注入してください。
 func NewSNSListHandler(uc *usecase.ListUsecase) http.Handler {
-	return &SNSListHandler{uc: uc, q: nil}
-}
-
-// NewSNSListHandlerWithQueries injects SNS query (preferred).
-// - uc は nil でもOK
-func NewSNSListHandlerWithQueries(
-	uc *usecase.ListUsecase,
-	q *snsquery.SNSListQuery,
-) http.Handler {
-	return &SNSListHandler{uc: uc, q: q}
+	return &SNSListHandler{uc: uc}
 }
 
 // ------------------------------
@@ -48,11 +30,17 @@ func NewSNSListHandlerWithQueries(
 // ------------------------------
 
 type SnsListItem struct {
-	ID          string              `json:"id,omitempty"`
+	ID          string              `json:"id"`
 	Title       string              `json:"title"`
 	Description string              `json:"description"`
-	Image       string              `json:"image"` // List.ImageID (URL)
+	Image       string              `json:"image"` // URL
 	Prices      []ldom.ListPriceRow `json:"prices"`
+
+	// ✅ optional (catalog で inventory を引くための補助)
+	// - フロントは未使用でも問題ない（extra fields は無視される）
+	InventoryID        string `json:"inventoryId,omitempty"`
+	ProductBlueprintID string `json:"productBlueprintId,omitempty"`
+	TokenBlueprintID   string `json:"tokenBlueprintId,omitempty"`
 }
 
 type SnsListIndexResponse struct {
@@ -91,7 +79,6 @@ func (h *SNSListHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			badRequest(w, "invalid id")
 			return
 		}
-		// SNS: no sub routes for now
 		if len(parts) > 1 {
 			notFound(w)
 			return
@@ -114,9 +101,8 @@ func (h *SNSListHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 func (h *SNSListHandler) listIndex(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 
-	// SNSは company boundary を使わない Query が必須
-	if h == nil || h.q == nil {
-		internalError(w, "sns query is nil (inject snsquery.SNSListQuery)")
+	if h == nil || h.uc == nil {
+		internalError(w, "usecase is nil")
 		return
 	}
 
@@ -126,33 +112,41 @@ func (h *SNSListHandler) listIndex(w http.ResponseWriter, r *http.Request) {
 	if perPage <= 0 {
 		perPage = 20
 	}
-	if perPage > 200 {
-		perPage = 200
+	if perPage > 50 {
+		perPage = 50
 	}
+	page := ldom.Page{Number: pageNum, PerPage: perPage}
 
-	dto, err := h.q.ListListing(ctx, pageNum, perPage)
+	// SNS: public-only safety filter
+	var f ldom.Filter
+	{
+		st := ldom.StatusListing
+		f.Status = &st
+		deleted := false
+		f.Deleted = &deleted
+	}
+	sort := ldom.Sort{} // default
+
+	result, err := h.uc.List(ctx, f, sort, page)
 	if err != nil {
 		writeListErr(w, err)
 		return
 	}
 
-	items := make([]SnsListItem, 0, len(dto.Items))
-	for _, it := range dto.Items {
-		items = append(items, SnsListItem{
-			ID:          strings.TrimSpace(it.ID),
-			Title:       strings.TrimSpace(it.Title),
-			Description: strings.TrimSpace(it.Description),
-			Image:       strings.TrimSpace(it.Image),
-			Prices:      it.Prices,
-		})
+	items := make([]SnsListItem, 0, len(result.Items))
+	for _, l := range result.Items {
+		if !isPublicListing(l.Status) {
+			continue
+		}
+		items = append(items, toSnsListItem(l))
 	}
 
 	writeJSON(w, http.StatusOK, SnsListIndexResponse{
 		Items:      items,
-		TotalCount: dto.TotalCount,
-		TotalPages: dto.TotalPages,
-		Page:       dto.Page,
-		PerPage:    dto.PerPage,
+		TotalCount: result.TotalCount,
+		TotalPages: result.TotalPages,
+		Page:       result.Page,
+		PerPage:    perPage,
 	})
 }
 
@@ -163,12 +157,12 @@ func (h *SNSListHandler) listIndex(w http.ResponseWriter, r *http.Request) {
 func (h *SNSListHandler) get(w http.ResponseWriter, r *http.Request, id string) {
 	ctx := r.Context()
 
-	if h == nil || h.q == nil {
-		internalError(w, "sns query is nil (inject snsquery.SNSListQuery)")
+	if h == nil || h.uc == nil {
+		internalError(w, "usecase is nil")
 		return
 	}
 
-	dto, err := h.q.GetListingDetail(ctx, id)
+	l, err := h.uc.GetByID(ctx, id)
 	if err != nil {
 		if errors.Is(err, ldom.ErrNotFound) {
 			notFound(w)
@@ -178,51 +172,79 @@ func (h *SNSListHandler) get(w http.ResponseWriter, r *http.Request, id string) 
 		return
 	}
 
-	// detailは最小情報のみ（IDは不要だが、クライアント都合で付けても問題ないので付ける）
-	writeJSON(w, http.StatusOK, SnsListItem{
-		ID:          strings.TrimSpace(id),
-		Title:       strings.TrimSpace(dto.Title),
-		Description: strings.TrimSpace(dto.Description),
-		Image:       strings.TrimSpace(dto.Image),
-		Prices:      dto.Prices,
-	})
+	// public-only safety
+	if !isPublicListing(l.Status) {
+		notFound(w)
+		return
+	}
+
+	writeJSON(w, http.StatusOK, toSnsListItem(l))
 }
 
 // ------------------------------
-// Helpers
+// Mapping
 // ------------------------------
 
-func writeJSON(w http.ResponseWriter, code int, v any) {
-	w.WriteHeader(code)
-	_ = json.NewEncoder(w).Encode(v)
-}
+func toSnsListItem(l ldom.List) SnsListItem {
+	// ✅ list.id はランダムID想定のため、inventoryId / pbId / tbId は
+	//   domain struct に存在していれば拾い、無ければ空のまま返す（破壊的変更しない）
+	invID, pbID, tbID := extractInventoryAndBlueprintIDs(l)
 
-func methodNotAllowed(w http.ResponseWriter) {
-	writeJSON(w, http.StatusMethodNotAllowed, map[string]string{"error": "method_not_allowed"})
-}
+	return SnsListItem{
+		ID:          strings.TrimSpace(l.ID),
+		Title:       strings.TrimSpace(l.Title),
+		Description: strings.TrimSpace(l.Description),
 
-func notFound(w http.ResponseWriter) {
-	writeJSON(w, http.StatusNotFound, map[string]string{"error": "not_found"})
-}
+		// 既存互換: list.ImageID をそのまま image に返す
+		Image:  strings.TrimSpace(l.ImageID),
+		Prices: l.Prices,
 
-func badRequest(w http.ResponseWriter, msg string) {
-	writeJSON(w, http.StatusBadRequest, map[string]string{"error": strings.TrimSpace(msg)})
-}
-
-func internalError(w http.ResponseWriter, msg string) {
-	writeJSON(w, http.StatusInternalServerError, map[string]string{"error": strings.TrimSpace(msg)})
-}
-
-func parseIntDefault(s string, def int) int {
-	s = strings.TrimSpace(s)
-	if s == "" {
-		return def
+		InventoryID:        invID,
+		ProductBlueprintID: pbID,
+		TokenBlueprintID:   tbID,
 	}
-	n, err := strconv.Atoi(s)
-	if err != nil {
-		return def
+}
+
+func extractInventoryAndBlueprintIDs(l ldom.List) (inventoryID, productBlueprintID, tokenBlueprintID string) {
+	// ldom.List のフィールドに依存しないよう、json 経由で "それっぽいキー" を探索する
+	// （SNSは read-only / 公開用途で、柔軟に拾える方が運用上ラク）
+	var m map[string]any
+	{
+		b, err := json.Marshal(l)
+		if err == nil {
+			_ = json.Unmarshal(b, &m)
+		}
 	}
-	return n
+
+	// inventoryId candidates
+	if m != nil {
+		if s, ok := getString(m, "inventoryId", "inventoryID", "inventory_id"); ok {
+			inventoryID = strings.TrimSpace(s)
+		}
+		if s, ok := getString(m, "productBlueprintId", "productBlueprintID", "product_blueprint_id"); ok {
+			productBlueprintID = strings.TrimSpace(s)
+		}
+		if s, ok := getString(m, "tokenBlueprintId", "tokenBlueprintID", "token_blueprint_id"); ok {
+			tokenBlueprintID = strings.TrimSpace(s)
+		}
+	}
+
+	// inventories docId rule: productBlueprintId__tokenBlueprintId
+	if (productBlueprintID == "" || tokenBlueprintID == "") && inventoryID != "" && strings.Contains(inventoryID, "__") {
+		parts := strings.SplitN(inventoryID, "__", 2)
+		if productBlueprintID == "" {
+			productBlueprintID = strings.TrimSpace(parts[0])
+		}
+		if len(parts) == 2 && tokenBlueprintID == "" {
+			tokenBlueprintID = strings.TrimSpace(parts[1])
+		}
+	}
+
+	return inventoryID, productBlueprintID, tokenBlueprintID
+}
+
+func isPublicListing(st ldom.ListStatus) bool {
+	return strings.EqualFold(strings.TrimSpace(string(st)), string(ldom.StatusListing))
 }
 
 // SNS用の最低限のエラー変換

@@ -9,9 +9,6 @@ import 'package:http/http.dart' as http;
 /// Priority:
 /// 1) --dart-define=API_BASE_URL=https://...
 /// 2) (fallback) Cloud Run default (edit as needed)
-///
-/// Example:
-/// flutter run -d chrome --dart-define=API_BASE_URL=https://your-backend.run.app
 const String _fallbackBaseUrl =
     'https://narratives-backend-871263659099.asia-northeast1.run.app';
 
@@ -30,17 +27,29 @@ class SnsListItem {
     required this.description,
     required this.image,
     required this.prices,
+
+    // ✅ optional linkage fields
+    required this.inventoryId,
+    required this.productBlueprintId,
+    required this.tokenBlueprintId,
   });
 
   final String id;
   final String title;
   final String description;
 
-  /// Image URL (List.ImageID)
+  /// Image URL
   final String image;
 
   /// prices: [{modelId, price}, ...]
   final List<SnsListPriceRow> prices;
+
+  /// Optional: inventory doc id (e.g. productBlueprintId__tokenBlueprintId)
+  final String inventoryId;
+
+  /// Optional: for fallback query
+  final String productBlueprintId;
+  final String tokenBlueprintId;
 
   factory SnsListItem.fromJson(Map<String, dynamic> json) {
     final pricesRaw = (json['prices'] as List?) ?? const [];
@@ -49,12 +58,19 @@ class SnsListItem {
         .map((m) => SnsListPriceRow.fromJson(m.cast<String, dynamic>()))
         .toList();
 
+    String s(dynamic v) => (v ?? '').toString().trim();
+
     return SnsListItem(
-      id: (json['id'] ?? '').toString().trim(),
-      title: (json['title'] ?? '').toString().trim(),
-      description: (json['description'] ?? '').toString().trim(),
-      image: (json['image'] ?? '').toString().trim(),
+      id: s(json['id']),
+      title: s(json['title']),
+      description: s(json['description']),
+      image: s(json['image']),
       prices: prices,
+
+      // ✅ backend が返していれば使う／無ければ空文字
+      inventoryId: s(json['inventoryId']),
+      productBlueprintId: s(json['productBlueprintId']),
+      tokenBlueprintId: s(json['tokenBlueprintId']),
     );
   }
 }

@@ -1,29 +1,8 @@
 // frontend/sns/lib/features/home/presentation/page/home_page.dart
-import 'dart:convert';
-
 import 'package:flutter/material.dart';
-import 'package:http/http.dart' as http;
 
-/// Priority:
-/// 1) --dart-define=API_BASE_URL=https://...
-/// 2) fallback (edit if needed)
-const String _fallbackBaseUrl =
-    'https://narratives-backend-871263659099.asia-northeast1.run.app';
-
-String _resolveApiBase() {
-  const fromDefine = String.fromEnvironment('API_BASE_URL');
-  final base = (fromDefine.isNotEmpty ? fromDefine : _fallbackBaseUrl).trim();
-  return base.endsWith('/') ? base.substring(0, base.length - 1) : base;
-}
-
-String _prettyJsonIfPossible(String raw) {
-  try {
-    final decoded = jsonDecode(raw);
-    return const JsonEncoder.withIndent('  ').convert(decoded);
-  } catch (_) {
-    return raw; // JSON じゃなければそのまま
-  }
-}
+import '../../../list/infrastructure/list_repository_http.dart';
+import 'catalog.dart';
 
 class HomePage extends StatefulWidget {
   const HomePage({super.key});
@@ -35,35 +14,25 @@ class HomePage extends StatefulWidget {
 }
 
 class _HomePageState extends State<HomePage> {
-  late Future<_HomePayload> _future;
+  late final ListRepositoryHttp _repo;
+  late Future<SnsListIndexResponse> _future;
 
   @override
   void initState() {
     super.initState();
-    _future = _load();
+    _repo = ListRepositoryHttp();
+    _future = _repo.fetchLists(page: 1, perPage: 20);
   }
 
-  Future<_HomePayload> _load() async {
-    final base = _resolveApiBase();
-    final uri = Uri.parse(
-      '$base/sns/lists',
-    ).replace(queryParameters: const {'page': '1', 'perPage': '20'});
-
-    final res = await http.get(
-      uri,
-      headers: const {'Accept': 'application/json'},
-    );
-
-    return _HomePayload(
-      url: uri.toString(),
-      statusCode: res.statusCode,
-      rawBody: res.body,
-    );
+  @override
+  void dispose() {
+    _repo.dispose();
+    super.dispose();
   }
 
-  void _reload() {
+  Future<void> _reload() async {
     setState(() {
-      _future = _load();
+      _future = _repo.fetchLists(page: 1, perPage: 20);
     });
   }
 
@@ -71,7 +40,7 @@ class _HomePageState extends State<HomePage> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Home'),
+        title: const Text('SNS'),
         actions: [
           IconButton(
             onPressed: _reload,
@@ -80,7 +49,7 @@ class _HomePageState extends State<HomePage> {
           ),
         ],
       ),
-      body: FutureBuilder<_HomePayload>(
+      body: FutureBuilder<SnsListIndexResponse>(
         future: _future,
         builder: (context, snap) {
           if (snap.connectionState == ConnectionState.waiting) {
@@ -91,44 +60,21 @@ class _HomePageState extends State<HomePage> {
           }
 
           final data = snap.data!;
-          final pretty = _prettyJsonIfPossible(data.rawBody);
+          final items = data.items;
 
-          return Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              Container(
-                padding: const EdgeInsets.all(12),
-                color: Theme.of(context).colorScheme.surfaceContainerHighest,
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      'GET ${data.url}',
-                      style: Theme.of(context).textTheme.labelLarge,
-                    ),
-                    const SizedBox(height: 4),
-                    Text(
-                      'Status: ${data.statusCode}',
-                      style: Theme.of(context).textTheme.labelMedium,
-                    ),
-                  ],
-                ),
-              ),
-              const Divider(height: 1),
-              Expanded(
-                child: SingleChildScrollView(
-                  padding: const EdgeInsets.all(12),
-                  child: SelectableText(
-                    pretty,
-                    style: const TextStyle(
-                      fontFamily: 'monospace',
-                      fontSize: 12,
-                      height: 1.35,
-                    ),
-                  ),
-                ),
-              ),
-            ],
+          if (items.isEmpty) {
+            return const Center(child: Text('No listings'));
+          }
+
+          return RefreshIndicator(
+            onRefresh: _reload,
+            child: ListView.builder(
+              padding: const EdgeInsets.all(12),
+              itemCount: items.length,
+              itemBuilder: (context, i) {
+                return _ListCard(item: items[i]);
+              },
+            ),
           );
         },
       ),
@@ -136,23 +82,147 @@ class _HomePageState extends State<HomePage> {
   }
 }
 
-class _HomePayload {
-  const _HomePayload({
-    required this.url,
-    required this.statusCode,
-    required this.rawBody,
-  });
+class _ListCard extends StatelessWidget {
+  const _ListCard({required this.item});
 
-  final String url;
-  final int statusCode;
-  final String rawBody;
+  final SnsListItem item;
+
+  String _safeUrl(String raw) => Uri.encodeFull(raw.trim());
+
+  String _priceText(List<SnsListPriceRow> rows) {
+    if (rows.isEmpty) return '';
+    // ひとまず最小価格～最大価格のレンジ表示（要件に合わせて変更OK）
+    final prices = rows.map((e) => e.price).toList()..sort();
+    final min = prices.first;
+    final max = prices.last;
+    if (min == max) return '¥$min';
+    return '¥$min 〜 ¥$max';
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final imageUrl = item.image.trim();
+    final hasImage = imageUrl.isNotEmpty;
+    final price = _priceText(item.prices);
+
+    return Card(
+      margin: const EdgeInsets.only(bottom: 12),
+      clipBehavior: Clip.antiAlias,
+      child: InkWell(
+        onTap: () {
+          Navigator.of(
+            context,
+          ).push(CatalogPage.route(listId: item.id, initialItem: item));
+        },
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            // -------- image --------
+            AspectRatio(
+              aspectRatio: 16 / 9,
+              child: hasImage
+                  ? Image.network(
+                      _safeUrl(imageUrl),
+                      fit: BoxFit.cover,
+                      errorBuilder: (context, err, st) {
+                        return _ImageFallback(
+                          label: 'image failed',
+                          detail: err.toString(),
+                        );
+                      },
+                      loadingBuilder: (context, child, progress) {
+                        if (progress == null) return child;
+                        return const Center(child: CircularProgressIndicator());
+                      },
+                    )
+                  : const _ImageFallback(label: 'no image'),
+            ),
+
+            // -------- content --------
+            Padding(
+              padding: const EdgeInsets.all(12),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    item.title.isNotEmpty ? item.title : '(no title)',
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    style: Theme.of(context).textTheme.titleMedium,
+                  ),
+                  const SizedBox(height: 6),
+                  if (item.description.trim().isNotEmpty)
+                    Text(
+                      item.description.trim(),
+                      maxLines: 3,
+                      overflow: TextOverflow.ellipsis,
+                      style: Theme.of(context).textTheme.bodyMedium,
+                    ),
+                  const SizedBox(height: 10),
+                  Row(
+                    children: [
+                      if (price.isNotEmpty)
+                        Text(
+                          price,
+                          style: Theme.of(context).textTheme.titleSmall,
+                        ),
+                      const Spacer(),
+                      Text(
+                        'items: ${item.prices.length}',
+                        style: Theme.of(context).textTheme.labelMedium,
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _ImageFallback extends StatelessWidget {
+  const _ImageFallback({required this.label, this.detail});
+
+  final String label;
+  final String? detail;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      color: Theme.of(context).colorScheme.surfaceContainerHighest,
+      padding: const EdgeInsets.all(12),
+      child: Center(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Icon(Icons.image_not_supported_outlined, size: 36),
+            const SizedBox(height: 8),
+            Text(label),
+            if (detail != null) ...[
+              const SizedBox(height: 6),
+              Text(
+                detail!,
+                textAlign: TextAlign.center,
+                maxLines: 3,
+                overflow: TextOverflow.ellipsis,
+                style: Theme.of(context).textTheme.labelSmall,
+              ),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
 }
 
 class _ErrorView extends StatelessWidget {
   const _ErrorView({required this.error, required this.onRetry});
 
   final Object? error;
-  final VoidCallback onRetry;
+  final Future<void> Function() onRetry;
 
   @override
   Widget build(BuildContext context) {
@@ -174,7 +244,10 @@ class _ErrorView extends StatelessWidget {
               textAlign: TextAlign.center,
             ),
             const SizedBox(height: 12),
-            ElevatedButton(onPressed: onRetry, child: const Text('Retry')),
+            ElevatedButton(
+              onPressed: () => onRetry(),
+              child: const Text('Retry'),
+            ),
           ],
         ),
       ),

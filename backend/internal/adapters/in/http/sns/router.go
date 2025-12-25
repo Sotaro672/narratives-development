@@ -1,38 +1,35 @@
+// backend/internal/adapters/in/http/sns/sns.go
 package sns
 
-import (
-	"net/http"
+import "net/http"
 
-	usecase "narratives/internal/application/usecase"
-
-	snshandler "narratives/internal/adapters/in/http/sns/handler"
-)
-
-// Deps: SNS 側で公開する handler を束ねる
+// Deps is a buyer-facing (sns) handler set.
 type Deps struct {
-	List http.Handler
+	List      http.Handler
+	Inventory http.Handler
 }
 
-// Register registers SNS routes onto mux.
-// NOTE: ServeMux は "/sns/lists" と "/sns/lists/" の両方を登録しておくと安全。
+// Register registers buyer-facing routes onto mux.
+//
+// Routes:
+// - GET /sns/lists
+// - GET /sns/lists/{id}
+// - GET /sns/inventories?productBlueprintId=&tokenBlueprintId=
+// - GET /sns/inventories/{id}
 func Register(mux *http.ServeMux, deps Deps) {
 	if mux == nil {
 		return
 	}
+
+	// lists
 	if deps.List != nil {
 		mux.Handle("/sns/lists", deps.List)
 		mux.Handle("/sns/lists/", deps.List)
 	}
-}
 
-// NewDeps builds SNS handlers from application layer deps.
-// - SNS は購入客向けの read-only 想定なので、List の参照(usecase/query)だけ注入すれば十分。
-func NewDeps(listUC *usecase.ListUsecase) Deps {
-	if listUC == nil {
-		return Deps{}
-	}
-
-	return Deps{
-		List: snshandler.NewSNSListHandler(listUC),
+	// inventories
+	if deps.Inventory != nil {
+		mux.Handle("/sns/inventories", deps.Inventory)
+		mux.Handle("/sns/inventories/", deps.Inventory)
 	}
 }
