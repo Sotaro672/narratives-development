@@ -215,18 +215,58 @@ func (q *SNSCatalogQuery) GetByListID(ctx context.Context, listID string) (SNSCa
 	}
 
 	// ------------------------------------------------------------
-	// Models (by productBlueprintId)
+	// Models (modelsコレクションから productBlueprintId 一致の一覧を返す)
+	// - まず ListVariations(ProductBlueprintID=...) で「同一 pbId の modelId 一覧」を引く
+	// - その modelId ごとに GetModelVariationByID で詳細を取得して DTO 化
 	// ------------------------------------------------------------
 	if q.ModelRepo == nil {
 		out.ModelVariationsError = "model repo is nil"
 	} else if resolvedPBID == "" {
 		out.ModelVariationsError = "productBlueprintId is empty (skip model fetch)"
 	} else {
-		md, e := q.ModelRepo.GetModelDataByBlueprintID(ctx, resolvedPBID)
+		deletedFalse := false
+
+		res, e := q.ModelRepo.ListVariations(
+			ctx,
+			modeldom.VariationFilter{
+				ProductBlueprintID: resolvedPBID,
+				Deleted:            &deletedFalse,
+			},
+			modeldom.Page{
+				Number:  1,
+				PerPage: 200,
+			},
+		)
 		if e != nil {
 			out.ModelVariationsError = e.Error()
-		} else if md != nil {
-			out.ModelVariations = toCatalogModelVariationsDTO(md.Variations)
+		} else {
+			items := make([]SNSCatalogModelVariationDTO, 0, len(res.Items))
+
+			// 欠損許容：個別取得失敗があっても可能な限り返す（error には最初の1件だけ入れる）
+			for _, it := range res.Items {
+				modelID := extractID(it)
+				if modelID == "" {
+					continue
+				}
+
+				mv, ge := q.ModelRepo.GetModelVariationByID(ctx, modelID)
+				if ge != nil {
+					if out.ModelVariationsError == "" {
+						out.ModelVariationsError = ge.Error()
+					}
+					continue
+				}
+
+				dto, ok := toCatalogModelVariationDTOAny(mv)
+				if !ok {
+					// mv の型が想定外でも、ID だけは最低入れて返す
+					items = append(items, SNSCatalogModelVariationDTO{ID: strings.TrimSpace(modelID)})
+					continue
+				}
+				items = append(items, dto)
+			}
+
+			out.ModelVariations = items
 		}
 	}
 
@@ -276,32 +316,90 @@ func toCatalogProductBlueprintDTO(pb *pbdom.ProductBlueprint) SNSCatalogProductB
 	return out
 }
 
-func toCatalogModelVariationsDTO(vars []modeldom.ModelVariation) []SNSCatalogModelVariationDTO {
-	out := make([]SNSCatalogModelVariationDTO, 0, len(vars))
-	for _, v := range vars {
-		dto := SNSCatalogModelVariationDTO{
-			ID:                 strings.TrimSpace(v.ID),
-			ProductBlueprintID: strings.TrimSpace(v.ProductBlueprintID),
-			ModelNumber:        strings.TrimSpace(v.ModelNumber),
-			Size:               strings.TrimSpace(v.Size),
-			Color: SNSCatalogColorDTO{
-				Name: strings.TrimSpace(v.Color.Name),
-				RGB:  v.Color.RGB,
-			},
-		}
-
-		// ✅ S1009: len(nilMap) は 0 なので nil チェック不要
-		if len(v.Measurements) > 0 {
-			m := make(map[string]int, len(v.Measurements))
-			for k, val := range v.Measurements {
-				m[strings.TrimSpace(k)] = val
-			}
-			dto.Measurements = m
-		}
-
-		out = append(out, dto)
+// toCatalogModelVariationDTOAny converts *any* ModelVariation-like struct into DTO by reflection.
+// - 依存を減らしつつ、models コレクションの形（id/pbId/modelNumber/size/color/measurements）を拾う
+func toCatalogModelVariationDTOAny(v any) (SNSCatalogModelVariationDTO, bool) {
+	if v == nil {
+		return SNSCatalogModelVariationDTO{}, false
 	}
-	return out
+
+	rv := reflect.ValueOf(v)
+	if !rv.IsValid() {
+		return SNSCatalogModelVariationDTO{}, false
+	}
+	if rv.Kind() == reflect.Pointer {
+		if rv.IsNil() {
+			return SNSCatalogModelVariationDTO{}, false
+		}
+		rv = rv.Elem()
+	}
+	if rv.Kind() != reflect.Struct {
+		return SNSCatalogModelVariationDTO{}, false
+	}
+
+	// strings
+	id := pickStringField(v, "ID", "Id", "ModelID", "ModelId", "modelId")
+	if id == "" {
+		id = pickStringField(rv.Interface(), "ID", "Id", "ModelID", "ModelId", "modelId")
+	}
+	if strings.TrimSpace(id) == "" {
+		return SNSCatalogModelVariationDTO{}, false
+	}
+
+	pbID := pickStringField(rv.Interface(), "ProductBlueprintID", "ProductBlueprintId", "productBlueprintId")
+	modelNumber := pickStringField(rv.Interface(), "ModelNumber", "modelNumber")
+	size := pickStringField(rv.Interface(), "Size", "size")
+
+	dto := SNSCatalogModelVariationDTO{
+		ID:                 strings.TrimSpace(id),
+		ProductBlueprintID: strings.TrimSpace(pbID),
+		ModelNumber:        strings.TrimSpace(modelNumber),
+		Size:               strings.TrimSpace(size),
+	}
+
+	// color: Color.{Name,RGB}
+	if c := rv.FieldByName("Color"); c.IsValid() {
+		if c.Kind() == reflect.Pointer {
+			if !c.IsNil() {
+				c = c.Elem()
+			}
+		}
+		if c.IsValid() && c.Kind() == reflect.Struct {
+			name := ""
+			rgb := 0
+
+			nf := c.FieldByName("Name")
+			if nf.IsValid() && nf.Kind() == reflect.String {
+				name = strings.TrimSpace(nf.String())
+			}
+			rf := c.FieldByName("RGB")
+			if rf.IsValid() {
+				rgb = toInt(rf)
+			}
+
+			dto.Color = SNSCatalogColorDTO{Name: name, RGB: rgb}
+		}
+	}
+
+	// measurements: map[string]int (or map[string]any/number)
+	if m := rv.FieldByName("Measurements"); m.IsValid() {
+		if m.Kind() == reflect.Map && m.Type().Key().Kind() == reflect.String {
+			out := make(map[string]int)
+			iter := m.MapRange()
+			for iter.Next() {
+				k := strings.TrimSpace(iter.Key().String())
+				if k == "" {
+					continue
+				}
+				out[k] = toInt(iter.Value())
+			}
+			if len(out) > 0 {
+				dto.Measurements = out
+			}
+		}
+	}
+
+	return dto, true
 }
 
 // ============================================================
@@ -379,4 +477,62 @@ func pickProductIDTagType(pb *pbdom.ProductBlueprint) string {
 	}
 
 	return ""
+}
+
+// extractID tries common field names (ID/Id/ModelID/ModelId) by reflection.
+// ListVariations の Items 型に依存しないためのヘルパー。
+func extractID(v any) string {
+	if v == nil {
+		return ""
+	}
+
+	rv := reflect.ValueOf(v)
+	if !rv.IsValid() {
+		return ""
+	}
+	if rv.Kind() == reflect.Pointer {
+		if rv.IsNil() {
+			return ""
+		}
+		rv = rv.Elem()
+	}
+	if rv.Kind() != reflect.Struct {
+		return ""
+	}
+
+	for _, name := range []string{"ID", "Id", "ModelID", "ModelId"} {
+		f := rv.FieldByName(name)
+		if !f.IsValid() {
+			continue
+		}
+		if f.Kind() == reflect.String {
+			return strings.TrimSpace(f.String())
+		}
+	}
+
+	return ""
+}
+
+// toInt converts common numeric kinds into int (best-effort).
+func toInt(v reflect.Value) int {
+	if !v.IsValid() {
+		return 0
+	}
+	if v.Kind() == reflect.Pointer {
+		if v.IsNil() {
+			return 0
+		}
+		v = v.Elem()
+	}
+
+	switch v.Kind() {
+	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
+		return int(v.Int())
+	case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64, reflect.Uintptr:
+		return int(v.Uint())
+	case reflect.Float32, reflect.Float64:
+		return int(v.Float())
+	default:
+		return 0
+	}
 }
