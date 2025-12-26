@@ -20,13 +20,11 @@ String _resolveApiBase() {
 
 @immutable
 class SnsInventoryModelStock {
-  const SnsInventoryModelStock({
-    required this.products,
-    required this.accumulation,
-  });
+  const SnsInventoryModelStock({required this.products});
 
+  /// productId -> true
+  /// ※ backend が products を返さない（stockKeys only）場合は空になる
   final Map<String, bool> products;
-  final int accumulation;
 
   factory SnsInventoryModelStock.fromJson(Map<String, dynamic> json) {
     final rawProducts = json['products'];
@@ -39,18 +37,7 @@ class SnsInventoryModelStock {
         products[k] = v == true;
       }
     }
-
-    int asInt(dynamic v, {int def = 0}) {
-      if (v is int) return v;
-      if (v is num) return v.toInt();
-      if (v is String) return int.tryParse(v.trim()) ?? def;
-      return def;
-    }
-
-    return SnsInventoryModelStock(
-      products: products,
-      accumulation: asInt(json['accumulation']),
-    );
+    return SnsInventoryModelStock(products: products);
   }
 }
 
@@ -61,15 +48,24 @@ class SnsInventoryResponse {
     required this.tokenBlueprintId,
     required this.productBlueprintId,
     required this.modelIds,
+    required this.stockKeys,
     required this.stock,
   });
 
   final String id;
   final String tokenBlueprintId;
   final String productBlueprintId;
+
+  /// UI が “モデル一覧” 表示に使う想定
+  /// - backend が modelIds を返さない場合は stockKeys から補完する
   final List<String> modelIds;
 
-  /// modelId -> stock
+  /// ✅ stockKeys（modelId の集合）
+  /// - backend が stockKeys-only を返す場合もここが埋まる
+  final List<String> stockKeys;
+
+  /// modelId -> stock detail（products）
+  /// - backend が stockKeys-only の場合は、キーだけ拾って空 products を入れる
   final Map<String, SnsInventoryModelStock> stock;
 
   factory SnsInventoryResponse.fromJson(Map<String, dynamic> json) {
@@ -77,6 +73,45 @@ class SnsInventoryResponse {
     final tb = (json['tokenBlueprintId'] ?? '').toString().trim();
     final pb = (json['productBlueprintId'] ?? '').toString().trim();
 
+    // -------------------------
+    // stock / stockKeys
+    // -------------------------
+    final Map<String, SnsInventoryModelStock> stock = {};
+    final List<String> stockKeys = [];
+
+    final stockRaw = json['stock'];
+    if (stockRaw is Map) {
+      for (final e in stockRaw.entries) {
+        final modelId = e.key.toString().trim();
+        if (modelId.isEmpty) continue;
+
+        stockKeys.add(modelId);
+
+        final v = e.value;
+        if (v is Map) {
+          stock[modelId] = SnsInventoryModelStock.fromJson(
+            v.cast<String, dynamic>(),
+          );
+        } else {
+          // stockKeys-only（value が bool/int など）でもキーだけ拾って空の products を入れる
+          stock[modelId] = const SnsInventoryModelStock(products: {});
+        }
+      }
+    } else if (stockRaw is List) {
+      // 念のため: stock が配列で返るケース
+      for (final v in stockRaw) {
+        final modelId = v.toString().trim();
+        if (modelId.isEmpty) continue;
+        stockKeys.add(modelId);
+        stock[modelId] = const SnsInventoryModelStock(products: {});
+      }
+    }
+
+    final normalizedStockKeys = _uniqPreserveOrder(stockKeys);
+
+    // -------------------------
+    // modelIds（なければ stockKeys から補完）
+    // -------------------------
     final modelIdsRaw = json['modelIds'];
     final modelIds = <String>[];
     if (modelIdsRaw is List) {
@@ -85,29 +120,29 @@ class SnsInventoryResponse {
         if (s.isNotEmpty) modelIds.add(s);
       }
     }
-
-    final stockRaw = json['stock'];
-    final Map<String, SnsInventoryModelStock> stock = {};
-    if (stockRaw is Map) {
-      for (final e in stockRaw.entries) {
-        final modelId = e.key.toString().trim();
-        if (modelId.isEmpty) continue;
-        final v = e.value;
-        if (v is Map) {
-          stock[modelId] = SnsInventoryModelStock.fromJson(
-            v.cast<String, dynamic>(),
-          );
-        }
-      }
-    }
+    final normalizedModelIds = modelIds.isNotEmpty
+        ? _uniqPreserveOrder(modelIds)
+        : normalizedStockKeys;
 
     return SnsInventoryResponse(
       id: id,
       tokenBlueprintId: tb,
       productBlueprintId: pb,
-      modelIds: modelIds,
+      modelIds: normalizedModelIds,
+      stockKeys: normalizedStockKeys,
       stock: stock,
     );
+  }
+
+  static List<String> _uniqPreserveOrder(List<String> xs) {
+    final seen = <String>{};
+    final out = <String>[];
+    for (final x in xs) {
+      final s = x.trim();
+      if (s.isEmpty) continue;
+      if (seen.add(s)) out.add(s);
+    }
+    return out;
   }
 }
 

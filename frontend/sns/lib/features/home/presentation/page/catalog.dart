@@ -20,7 +20,7 @@ import '../../../model/infrastructure/model_repository_http.dart';
 ///
 /// fallback（旧）:
 /// - list 詳細: GET /sns/lists/{listId}
-/// - inventory: GET /sns/inventories/{id} OR GET /sns/inventories?pb&tb
+/// - inventory: GET /sns/inventories/{id}  ※ inventoryId がある場合のみ
 /// - productBlueprint: GET /sns/product-blueprints/{productBlueprintId}
 /// - model variations: GET /sns/models?productBlueprintId=...
 class CatalogPage extends StatefulWidget {
@@ -98,34 +98,28 @@ class _CatalogPageState extends State<CatalogPage> {
   Future<_CatalogPayload> _loadLegacy() async {
     final list = await _listRepo.fetchListById(widget.listId);
 
-    // ✅ inventory linkage (優先順位)
-    // 1) inventoryId があれば /sns/inventories/{id}
-    // 2) productBlueprintId + tokenBlueprintId があれば /sns/inventories?pb&tb
+    // ✅ inventory linkage（方針変更）
+    // - inventoryId があれば /sns/inventories/{id} のみにする
+    // - inventoryId が無ければ以降の fallback は行わず、単純なエラーにする
     final invId = list.inventoryId.trim();
-    final listPbId = list.productBlueprintId.trim();
-    final listTbId = list.tokenBlueprintId.trim();
 
     SnsInventoryResponse? inv;
     String? invErr;
 
-    if (invId.isEmpty && (listPbId.isEmpty || listTbId.isEmpty)) {
-      invErr = 'inventory linkage is missing (inventoryId or pb/tb)';
+    if (invId.isEmpty) {
+      invErr = 'inventoryId is empty';
     } else {
       try {
-        inv = invId.isNotEmpty
-            ? await _invRepo.fetchInventoryById(invId)
-            : await _invRepo.fetchInventoryByQuery(
-                productBlueprintId: listPbId,
-                tokenBlueprintId: listTbId,
-              );
+        inv = await _invRepo.fetchInventoryById(invId);
       } catch (e) {
         invErr = e.toString();
       }
     }
 
-    // ✅ productBlueprintId は inventory 側が取れたらそちらを優先
-    final pbId = (inv?.productBlueprintId ?? list.productBlueprintId).trim();
+    // ✅ productBlueprintId / tokenBlueprintId は inventory 側が取れた場合のみ利用（fallback しない）
+    final pbId = (inv?.productBlueprintId ?? '').trim();
 
+    // productBlueprint
     SnsProductBlueprintResponse? pb;
     String? pbErr;
 
@@ -136,10 +130,10 @@ class _CatalogPageState extends State<CatalogPage> {
         pbErr = e.toString();
       }
     } else {
-      pbErr = 'productBlueprintId is empty';
+      pbErr = 'productBlueprintId is unavailable (inventory not loaded)';
     }
 
-    // ✅ model variations（productBlueprintId が取れたら取得）
+    // model variations
     List<ModelVariationDTO>? models;
     String? modelErr;
 
@@ -152,7 +146,7 @@ class _CatalogPageState extends State<CatalogPage> {
         modelErr = e.toString();
       }
     } else {
-      modelErr = 'productBlueprintId is empty (skip model fetch)';
+      modelErr = 'productBlueprintId is unavailable (skip model fetch)';
     }
 
     return _CatalogPayload(
@@ -183,10 +177,21 @@ class _CatalogPageState extends State<CatalogPage> {
     return '¥$min 〜 ¥$max';
   }
 
+  // ✅ accumulation を廃止し、stock(products) からカウントする
+  int _stockCount(SnsInventoryModelStock s) {
+    if (s.products.isEmpty) return 0;
+
+    var n = 0;
+    for (final v in s.products.values) {
+      if (v == true) n++;
+    }
+    return n;
+  }
+
   int _totalStock(SnsInventoryResponse inv) {
     var sum = 0;
     for (final v in inv.stock.values) {
-      sum += v.accumulation;
+      sum += _stockCount(v);
     }
     return sum;
   }
@@ -247,10 +252,9 @@ class _CatalogPageState extends State<CatalogPage> {
 
           final total = inv != null ? _totalStock(inv) : null;
 
-          // 表示用（inventory 側が取れたらそれを優先）
-          final pbId = (inv?.productBlueprintId ?? list.productBlueprintId)
-              .trim();
-          final tbId = (inv?.tokenBlueprintId ?? list.tokenBlueprintId).trim();
+          // 表示用（inventory が取れたらそれのみを使用。fallback しない）
+          final pbId = (inv?.productBlueprintId ?? '').trim();
+          final tbId = (inv?.tokenBlueprintId ?? '').trim();
 
           // modelId -> metadata (variation)
           final modelMap = <String, ModelVariationDTO>{};
@@ -378,6 +382,8 @@ class _CatalogPageState extends State<CatalogPage> {
                           final stock = e.value;
                           final meta = modelMap[modelId.trim()];
 
+                          final count = _stockCount(stock);
+
                           return Padding(
                             padding: const EdgeInsets.symmetric(vertical: 6),
                             child: Column(
@@ -393,7 +399,7 @@ class _CatalogPageState extends State<CatalogPage> {
                                 ),
                                 const SizedBox(height: 2),
                                 Text(
-                                  'modelId: ${modelId.isNotEmpty ? modelId : '(empty)'}   stock: ${stock.accumulation}',
+                                  'modelId: ${modelId.isNotEmpty ? modelId : '(empty)'}   stock: $count',
                                   style: Theme.of(context).textTheme.labelSmall,
                                 ),
                               ],
@@ -725,8 +731,10 @@ class CatalogRepositoryHttp {
     const env = String.fromEnvironment('API_BASE');
     if (env.trim().isNotEmpty) return env.trim();
 
-    // fallback (Cloud Run)
-    return 'https://narratives-backend-871263659099.asia-northeast1.run.app';
+    // ✅ 方針変更: 未指定時の Cloud Run URL fallback はしない
+    throw Exception(
+      'API_BASE is not set (use --dart-define=API_BASE=https://...)',
+    );
   }
 
   static Uri _buildUri(String path) {

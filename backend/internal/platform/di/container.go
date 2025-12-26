@@ -226,8 +226,6 @@ func NewContainer(ctx context.Context) (*Container, error) {
 	invoiceRepo := fs.NewInvoiceRepositoryFS(fsClient)
 
 	// ✅ List (Firestore)
-	// - struct をそのまま Set(MergeAll) すると保存フィールド名がズレて「反映されない」原因になる
-	// - fs 側の usecase 用 wrapper（encodeListDoc(map) / tx.Update / tx.Set(map)）を使用する
 	listRepoFS := fs.NewListRepositoryFS(fsClient)
 	listRepo := fs.NewListRepositoryForUsecase(listRepoFS)
 
@@ -236,7 +234,6 @@ func NewContainer(ctx context.Context) (*Container, error) {
 	modelRepo := fs.NewModelRepositoryFS(fsClient)
 
 	// ★ MintRepositoryFS（Update未実装分は mintRepoWithUpdate で補完）
-	// ※ mintRepoWithUpdate は adapters.go 側に定義済み（container.go に再定義しない）
 	mintRepoFS := fs.NewMintRepositoryFS(fsClient)
 	mintRepo := &mintRepoWithUpdate{
 		MintRepositoryFS: mintRepoFS,
@@ -312,13 +309,10 @@ func NewContainer(ctx context.Context) (*Container, error) {
 	tokenContentsRepo := gcso.NewTokenContentsRepositoryGCS(gcsClient, tokenContentsBucket)
 
 	// ✅ ListImage repository (GCS)
-	// - /lists/{id}/images/signed-url の Signed URL 発行元（IssueSignedURL）もこの repo が担う想定
-	// - bucket 未指定なら repo.ResolveBucket() が env/fallback を使う
 	listImageBucket := strings.TrimSpace(os.Getenv("LIST_IMAGE_BUCKET"))
 	listImageRepo := gcso.NewListImageRepositoryGCS(gcsClient, listImageBucket)
 
 	// ✅ ListPatcher adapter（imageId 更新専用）
-	// ここは Update ではなく UpdateImageID のみなので、従来通り listRepoFS を渡す
 	listPatcher := &listPatcherAdapter{repo: listRepoFS}
 
 	// 5. Application-layer usecases
@@ -346,11 +340,6 @@ func NewContainer(ctx context.Context) (*Container, error) {
 	inventoryUC := uc.NewInventoryUsecase(inventoryRepo)
 	invoiceUC := uc.NewInvoiceUsecase(invoiceRepo)
 
-	// ✅ ListUsecase
-	// - listReader/listCreator に usecase 用 wrapper を渡すことで、
-	//   保存は必ず encodeListDoc(map) 経由になり snake_case の読み取りと整合する
-	// - listImageRepo は ListImageReader / ListImageByIDReader / ListImageObjectSaver を満たす想定
-	//   さらに IssueSignedURL を実装していれば usecase 側で自動配線され、/images/signed-url が動作する
 	listUC := uc.NewListUsecaseWithCreator(
 		listRepo,      // ListReader (+ ListLister/ListUpdater)
 		listRepo,      // ListCreator
@@ -481,33 +470,30 @@ func NewContainer(ctx context.Context) (*Container, error) {
 	)
 
 	// ✅ NEW: ListManagementQuery（/lists 一覧 = listManagement.tsx 用）
-	// - company boundary は inventoryQuery の ListByCurrentCompany を使う想定
 	listManagementQuery := companyquery.NewListManagementQueryWithBrandInventoryAndInventoryRows(
-		listRepo, // ListLister (+ GetByID 実装なら内部で流用される)
+		listRepo,
 		nameResolver,
 		productBlueprintRepo,
 		&tbGetterAdapter{repo: tokenBlueprintRepo},
-		inventoryQuery, // InventoryRowsLister
+		inventoryQuery,
 	)
 
 	// ✅ NEW: ListDetailQuery（/lists/{id} = listDetail.tsx 用）
-	// - stock は inventoryQuery の GetDetailByID を使う想定
-	// - company boundary は inventoryQuery の ListByCurrentCompany を使う想定
 	listDetailQuery := companyquery.NewListDetailQueryWithBrandInventoryAndInventoryRows(
-		listRepo, // ListGetter (GetByID) を満たす想定（listRepo が実装していればOK）
+		listRepo,
 		nameResolver,
 		productBlueprintRepo,
 		&tbGetterAdapter{repo: tokenBlueprintRepo},
-		inventoryQuery, // InventoryDetailGetter (stock)
-		inventoryQuery, // InventoryRowsLister (company boundary)
+		inventoryQuery,
+		inventoryQuery,
 	)
 
 	// ✅ NEW: SNSCatalogQuery（buyer-facing /sns/catalog/{listId} 用）
 	snsCatalogQ := snsquery.NewSNSCatalogQuery(
-		listRepoFS, // buyer-facing query は write しないので FS repo を直接利用
+		listRepoFS,
 		&snsCatalogInventoryRepoAdapter{repo: inventoryRepo},
 		&snsCatalogProductBlueprintRepoAdapter{repo: productBlueprintRepo},
-		modelRepo, // modeldom.RepositoryPort を満たす想定
+		modelRepo,
 	)
 
 	// 6. Assemble container
@@ -629,7 +615,6 @@ func (c *Container) RouterDeps() httpin.RouterDeps {
 		InventoryQuery:  c.InventoryQuery,
 		ListCreateQuery: c.ListCreateQuery,
 
-		// ✅ NEW: listManagement / listDetail 分離
 		ListManagementQuery: c.ListManagementQuery,
 		ListDetailQuery:     c.ListDetailQuery,
 
@@ -811,7 +796,8 @@ func toSNSCatalogInventoryDTO(v any) (*snsquery.SNSCatalogInventoryDTO, error) {
 	pbID := getStr("ProductBlueprintID", "ProductBlueprintId", "productBlueprintId")
 	tbID := getStr("TokenBlueprintID", "TokenBlueprintId", "tokenBlueprintId")
 
-	stock := map[string]snsquery.SNSCatalogStockDTO{}
+	// ✅ Stock を products 付きで詰める（value も活用）
+	stock := map[string]snsquery.SNSCatalogInventoryModelStockDTO{}
 
 	// map field name tolerant
 	var sf reflect.Value
@@ -822,28 +808,64 @@ func toSNSCatalogInventoryDTO(v any) (*snsquery.SNSCatalogInventoryDTO, error) {
 			break
 		}
 	}
+
 	if sf.IsValid() {
 		if sf.Kind() == reflect.Pointer {
 			if !sf.IsNil() {
 				sf = sf.Elem()
 			}
 		}
-		if sf.IsValid() && sf.Kind() == reflect.Map {
-			iter := sf.MapRange()
-			for iter.Next() {
-				k := iter.Key()
-				val := iter.Value()
 
-				modelID := ""
-				if k.IsValid() && k.Kind() == reflect.String {
-					modelID = strings.TrimSpace(k.String())
+		switch sf.Kind() {
+		case reflect.Map:
+			// map[string]X を想定（X: slice/map/struct{Products...}/etc）
+			if sf.Type().Key().Kind() == reflect.String {
+				iter := sf.MapRange()
+				for iter.Next() {
+					modelID := strings.TrimSpace(iter.Key().String())
+					if modelID == "" {
+						continue
+					}
+
+					ids := extractProductIDsFromStockValue(iter.Value())
+					products := make(map[string]bool, len(ids))
+					for _, pid := range ids {
+						pid = strings.TrimSpace(pid)
+						if pid == "" {
+							continue
+						}
+						products[pid] = true
+					}
+
+					stock[modelID] = snsquery.SNSCatalogInventoryModelStockDTO{
+						Products: products,
+					}
 				}
-				if modelID == "" {
+			}
+
+		case reflect.Slice, reflect.Array:
+			// 万一 []string / []any で「modelId の配列」が入っているだけのケース（best-effort）
+			// → products は空で入れる
+			for i := 0; i < sf.Len(); i++ {
+				it := sf.Index(i)
+				if it.Kind() == reflect.Interface && !it.IsNil() {
+					it = it.Elem()
+				}
+				if it.Kind() == reflect.Pointer && !it.IsNil() {
+					it = it.Elem()
+				}
+				if !it.IsValid() {
 					continue
 				}
-
-				acc := extractAccumulation(val)
-				stock[modelID] = snsquery.SNSCatalogStockDTO{Accumulation: acc}
+				if it.Kind() == reflect.String {
+					modelID := strings.TrimSpace(it.String())
+					if modelID == "" {
+						continue
+					}
+					if _, ok := stock[modelID]; !ok {
+						stock[modelID] = snsquery.SNSCatalogInventoryModelStockDTO{Products: map[string]bool{}}
+					}
+				}
 			}
 		}
 	}
@@ -856,33 +878,98 @@ func toSNSCatalogInventoryDTO(v any) (*snsquery.SNSCatalogInventoryDTO, error) {
 	}, nil
 }
 
-func extractAccumulation(v reflect.Value) int {
+// ------------------------------------------------------------
+// stock reflection helpers (modelId -> products)
+// ------------------------------------------------------------
+
+// extractProductIDsFromStockValue supports:
+// - stock[modelId] = []string
+// - stock[modelId] = map[string]bool / map[string]any (key = productId)
+// - stock[modelId] = struct{ Products ... } (Products is slice/map)
+// - pointers/interfaces nested
+func extractProductIDsFromStockValue(v reflect.Value) []string {
 	if !v.IsValid() {
-		return 0
+		return nil
+	}
+	if v.Kind() == reflect.Interface && !v.IsNil() {
+		v = v.Elem()
 	}
 	if v.Kind() == reflect.Pointer {
 		if v.IsNil() {
-			return 0
+			return nil
+		}
+		v = v.Elem()
+	}
+
+	// struct { Products: ... }
+	if v.Kind() == reflect.Struct {
+		pf := v.FieldByName("Products")
+		if pf.IsValid() {
+			return extractStringIDs(pf)
+		}
+	}
+
+	// direct map/slice
+	return extractStringIDs(v)
+}
+
+func extractStringIDs(v reflect.Value) []string {
+	if !v.IsValid() {
+		return nil
+	}
+	if v.Kind() == reflect.Interface && !v.IsNil() {
+		v = v.Elem()
+	}
+	if v.Kind() == reflect.Pointer {
+		if v.IsNil() {
+			return nil
 		}
 		v = v.Elem()
 	}
 
 	switch v.Kind() {
-	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
-		return int(v.Int())
-	case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64:
-		return int(v.Uint())
-	case reflect.Float32, reflect.Float64:
-		return int(v.Float())
-	case reflect.Struct:
-		// field name tolerant
-		for _, n := range []string{"Accumulation", "accumulation", "Quantity", "quantity", "Count", "count"} {
-			f := v.FieldByName(n)
-			if !f.IsValid() {
+	case reflect.Slice, reflect.Array:
+		out := make([]string, 0, v.Len())
+		for i := 0; i < v.Len(); i++ {
+			e := v.Index(i)
+			if e.Kind() == reflect.Interface && !e.IsNil() {
+				e = e.Elem()
+			}
+			if e.Kind() == reflect.Pointer {
+				if e.IsNil() {
+					continue
+				}
+				e = e.Elem()
+			}
+			if e.Kind() == reflect.String {
+				s := strings.TrimSpace(e.String())
+				if s != "" {
+					out = append(out, s)
+				}
+			}
+		}
+		return out
+
+	case reflect.Map:
+		// map[string]bool / map[string]any など: key を productId とみなす
+		if v.Type().Key().Kind() != reflect.String {
+			return nil
+		}
+		out := make([]string, 0, v.Len())
+		iter := v.MapRange()
+		for iter.Next() {
+			k := iter.Key()
+			if k.Kind() != reflect.String {
 				continue
 			}
-			return extractAccumulation(f)
+			s := strings.TrimSpace(k.String())
+			if s != "" {
+				out = append(out, s)
+			}
 		}
+		return out
+
+	default:
+		return nil
 	}
-	return 0
 }

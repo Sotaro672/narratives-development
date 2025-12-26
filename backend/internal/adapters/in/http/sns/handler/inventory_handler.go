@@ -1,3 +1,4 @@
+// backend\internal\adapters\in\http\sns\handler\inventory_handler.go
 package handler
 
 import (
@@ -33,8 +34,7 @@ func NewSNSInventoryHandler(uc *usecase.InventoryUsecase) http.Handler {
 // ------------------------------
 
 type SnsInventoryModelStock struct {
-	Products     map[string]bool `json:"products"`
-	Accumulation int             `json:"accumulation"`
+	Products map[string]bool `json:"products"`
 }
 
 type SnsInventoryResponse struct {
@@ -132,7 +132,8 @@ func (h *SNSInventoryHandler) getByID(w http.ResponseWriter, r *http.Request, id
 // Mapping
 // ------------------------------
 
-// ✅ countStockByModel を使って Accumulation を必ず算出する（stock をDBに持たない/配列で持つケースを吸収）
+// ✅ accumulation は返さない。stock.products (productId set) のみを返す。
+// ✅ inventory.Stock の実データ表現差（slice/map/struct）を吸収して products を作る。
 func toSnsInventoryResponse(m invdom.Mint) SnsInventoryResponse {
 	// modelId -> []productId（重複除去済み） を抽出
 	byModel := countStockByModel(m)
@@ -157,8 +158,7 @@ func toSnsInventoryResponse(m invdom.Mint) SnsInventoryResponse {
 		}
 
 		stock[modelID] = SnsInventoryModelStock{
-			Products:     products,
-			Accumulation: len(products), // ✅ productId を count
+			Products: products,
 		}
 	}
 

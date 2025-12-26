@@ -5,9 +5,13 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log"
 	"reflect"
+	"sort"
 	"strings"
+	"time"
 
+	invdom "narratives/internal/domain/inventory"
 	ldom "narratives/internal/domain/list"
 	modeldom "narratives/internal/domain/model"
 	pbdom "narratives/internal/domain/productBlueprint"
@@ -43,15 +47,22 @@ type SNSCatalogListDTO struct {
 	TokenBlueprintID   string `json:"tokenBlueprintId,omitempty"`
 }
 
-type SNSCatalogInventoryDTO struct {
-	ID                 string                        `json:"id"`
-	ProductBlueprintID string                        `json:"productBlueprintId"`
-	TokenBlueprintID   string                        `json:"tokenBlueprintId"`
-	Stock              map[string]SNSCatalogStockDTO `json:"stock"` // key=modelId
+// ✅ inventory stock model value (same shape as SNS inventory response)
+type SNSCatalogInventoryModelStockDTO struct {
+	Products map[string]bool `json:"products"`
 }
 
-type SNSCatalogStockDTO struct {
-	Accumulation int `json:"accumulation"`
+type SNSCatalogInventoryDTO struct {
+	ID                 string `json:"id"`
+	ProductBlueprintID string `json:"productBlueprintId"`
+	TokenBlueprintID   string `json:"tokenBlueprintId"`
+
+	// (optional) inventory handler has this; keep it compatible
+	ModelIDs []string `json:"modelIds,omitempty"`
+
+	// ✅ NEW: stock を扱えるようにする（products を含める）
+	// key=modelId
+	Stock map[string]SNSCatalogInventoryModelStockDTO `json:"stock"`
 }
 
 type SNSCatalogProductBlueprintDTO struct {
@@ -80,6 +91,9 @@ type SNSCatalogModelVariationDTO struct {
 	Size               string             `json:"size"`
 	Color              SNSCatalogColorDTO `json:"color"`
 	Measurements       map[string]int     `json:"measurements,omitempty"`
+
+	// ✅ NEW: 在庫の「件数（key数）」だけ画面へ渡す
+	StockKeys int `json:"stockKeys,omitempty"`
 }
 
 type SNSCatalogColorDTO struct {
@@ -92,10 +106,17 @@ type SNSCatalogColorDTO struct {
 // ============================================================
 
 // InventoryRepository returns already-shaped buyer-facing inventory DTO.
-// （domain の型名揺れを避けるため、ここでは DTO で受ける）
+// ✅ stock(products) を含んだ shape を返す前提
 type InventoryRepository interface {
 	GetByID(ctx context.Context, id string) (*SNSCatalogInventoryDTO, error)
 	GetByProductAndTokenBlueprintID(ctx context.Context, productBlueprintID, tokenBlueprintID string) (*SNSCatalogInventoryDTO, error)
+}
+
+// ✅ OPTIONAL: Stock の “key集合” を domain Mint.Stock(=Products) から復元するための追加口
+// - 既存実装を壊さないため、InventoryRepo が実装している場合だけ利用する
+type InventoryMintStockSource interface {
+	GetMintByID(ctx context.Context, id string) (invdom.Mint, error)
+	GetMintByProductAndTokenBlueprintID(ctx context.Context, productBlueprintID, tokenBlueprintID string) (invdom.Mint, error)
 }
 
 type ProductBlueprintRepository interface {
@@ -142,11 +163,18 @@ func (q *SNSCatalogQuery) GetByListID(ctx context.Context, listID string) (SNSCa
 		return SNSCatalogDTO{}, ldom.ErrNotFound
 	}
 
+	reqID := fmt.Sprintf("%d", time.Now().UnixNano())
+	start := time.Now()
+
+	log.Printf("[sns_catalog] start reqId=%s listId=%q", reqID, listID)
+
 	l, err := q.ListRepo.GetByID(ctx, listID)
 	if err != nil {
+		log.Printf("[sns_catalog] list get error reqId=%s listId=%q err=%v", reqID, listID, err)
 		return SNSCatalogDTO{}, err
 	}
 	if l.Status != ldom.StatusListing {
+		log.Printf("[sns_catalog] list not listing reqId=%s listId=%q status=%v", reqID, listID, l.Status)
 		return SNSCatalogDTO{}, ldom.ErrNotFound
 	}
 
@@ -159,35 +187,80 @@ func (q *SNSCatalogQuery) GetByListID(ctx context.Context, listID string) (SNSCa
 	// ------------------------------------------------------------
 	var invDTO *SNSCatalogInventoryDTO
 
+	var invID string
+	var pbID string
+	var tbID string
+
 	if q.InventoryRepo == nil {
 		out.InventoryError = "inventory repo is nil"
+		log.Printf("[sns_catalog] inventory repo nil reqId=%s listId=%q", reqID, listID)
 	} else {
-		invID := strings.TrimSpace(out.List.InventoryID)
-		pbID := strings.TrimSpace(out.List.ProductBlueprintID)
-		tbID := strings.TrimSpace(out.List.TokenBlueprintID)
+		invID = strings.TrimSpace(out.List.InventoryID)
+		pbID = strings.TrimSpace(out.List.ProductBlueprintID)
+		tbID = strings.TrimSpace(out.List.TokenBlueprintID)
+
+		log.Printf("[sns_catalog] linkage reqId=%s listId=%q invId=%q pbId=%q tbId=%q",
+			reqID, listID, invID, pbID, tbID,
+		)
 
 		switch {
 		case invID != "":
 			v, e := q.InventoryRepo.GetByID(ctx, invID)
 			if e != nil {
 				out.InventoryError = e.Error()
+				log.Printf("[sns_catalog] inventory getById error reqId=%s invId=%q err=%v", reqID, invID, e)
 			} else {
+				normalizeInventoryStock(v)
+
 				invDTO = v
 				out.Inventory = v
+
+				log.Printf("[sns_catalog] inventory getById ok reqId=%s invId=%q stockKeys=%d",
+					reqID, invID, stockKeyCount(v.Stock),
+				)
+				logInventoryStockKeySample("sns_catalog", "inventory.dto.stockKeys", v.Stock, 5)
 			}
 
 		case pbID != "" && tbID != "":
 			v, e := q.InventoryRepo.GetByProductAndTokenBlueprintID(ctx, pbID, tbID)
 			if e != nil {
 				out.InventoryError = e.Error()
+				log.Printf("[sns_catalog] inventory getByPbTb error reqId=%s pbId=%q tbId=%q err=%v", reqID, pbID, tbID, e)
 			} else {
+				normalizeInventoryStock(v)
+
 				invDTO = v
 				out.Inventory = v
+
+				log.Printf("[sns_catalog] inventory getByPbTb ok reqId=%s pbId=%q tbId=%q stockKeys=%d",
+					reqID, pbID, tbID, stockKeyCount(v.Stock),
+				)
+				logInventoryStockKeySample("sns_catalog", "inventory.dto.stockKeys", v.Stock, 5)
 			}
 
 		default:
 			out.InventoryError = "inventory linkage is missing (inventoryId or productBlueprintId+tokenBlueprintId)"
+			log.Printf("[sns_catalog] inventory linkage missing reqId=%s listId=%q", reqID, listID)
 		}
+	}
+
+	// ✅ NEW: inventory.Stock が空なら、domain Mint.Stock から「modelId の集合(key)」を復元して埋める
+	// - InventoryRepo が InventoryMintStockSource を実装している場合のみ有効
+	if invDTO != nil {
+		beforeKeys := stockKeyCount(invDTO.Stock)
+
+		log.Printf("[sns_catalog] ensureStockKeysFromMint pre reqId=%s invId=%q stockKeys=%d",
+			reqID, strings.TrimSpace(invDTO.ID), beforeKeys,
+		)
+
+		ensureInventoryStockKeysFromMintIfNeeded(ctx, q.InventoryRepo, invDTO, invID, pbID, tbID)
+
+		afterKeys := stockKeyCount(invDTO.Stock)
+
+		log.Printf("[sns_catalog] ensureStockKeysFromMint post reqId=%s invId=%q stockKeys=%d",
+			reqID, strings.TrimSpace(invDTO.ID), afterKeys,
+		)
+		logInventoryStockKeySample("sns_catalog", "inventory.after.ensure.stockKeys", invDTO.Stock, 5)
 	}
 
 	// ------------------------------------------------------------
@@ -202,27 +275,37 @@ func (q *SNSCatalogQuery) GetByListID(ctx context.Context, listID string) (SNSCa
 
 	if q.ProductRepo == nil {
 		out.ProductBlueprintError = "product repo is nil"
+		log.Printf("[sns_catalog] product repo nil reqId=%s", reqID)
 	} else if resolvedPBID == "" {
 		out.ProductBlueprintError = "productBlueprintId is empty"
+		log.Printf("[sns_catalog] productBlueprintId empty reqId=%s", reqID)
 	} else {
 		pb, e := q.ProductRepo.GetByID(ctx, resolvedPBID)
 		if e != nil {
 			out.ProductBlueprintError = e.Error()
+			log.Printf("[sns_catalog] productBlueprint getById error reqId=%s pbId=%q err=%v", reqID, resolvedPBID, e)
 		} else if pb != nil {
 			dto := toCatalogProductBlueprintDTO(pb)
 			out.ProductBlueprint = &dto
+			log.Printf("[sns_catalog] productBlueprint getById ok reqId=%s pbId=%q", reqID, resolvedPBID)
+		} else {
+			out.ProductBlueprintError = "productBlueprint is nil"
+			log.Printf("[sns_catalog] productBlueprint nil reqId=%s pbId=%q", reqID, resolvedPBID)
 		}
 	}
 
 	// ------------------------------------------------------------
-	// Models (modelsコレクションから productBlueprintId 一致の一覧を返す)
-	// - まず ListVariations(ProductBlueprintID=...) で「同一 pbId の modelId 一覧」を引く
-	// - その modelId ごとに GetModelVariationByID で詳細を取得して DTO 化
+	// Models
+	// - ListVariations(pbId=...) -> modelId list
+	// - GetModelVariationByID -> dto
+	// - dto.StockKeys に「inventory の stockKeys（key数）」を入れて返す
 	// ------------------------------------------------------------
 	if q.ModelRepo == nil {
 		out.ModelVariationsError = "model repo is nil"
+		log.Printf("[sns_catalog] model repo nil reqId=%s", reqID)
 	} else if resolvedPBID == "" {
 		out.ModelVariationsError = "productBlueprintId is empty (skip model fetch)"
+		log.Printf("[sns_catalog] model skip pbId empty reqId=%s", reqID)
 	} else {
 		deletedFalse := false
 
@@ -239,10 +322,18 @@ func (q *SNSCatalogQuery) GetByListID(ctx context.Context, listID string) (SNSCa
 		)
 		if e != nil {
 			out.ModelVariationsError = e.Error()
+			log.Printf("[sns_catalog] models listVariations error reqId=%s pbId=%q err=%v", reqID, resolvedPBID, e)
 		} else {
+			log.Printf("[sns_catalog] models listVariations ok reqId=%s pbId=%q items=%d", reqID, resolvedPBID, len(res.Items))
+
 			items := make([]SNSCatalogModelVariationDTO, 0, len(res.Items))
 
-			// 欠損許容：個別取得失敗があっても可能な限り返す（error には最初の1件だけ入れる）
+			stockKeys := 0
+			if invDTO != nil {
+				stockKeys = stockKeyCount(invDTO.Stock)
+			}
+			log.Printf("[sns_catalog] models stockKeys resolved reqId=%s stockKeys=%d", reqID, stockKeys)
+
 			for _, it := range res.Items {
 				modelID := extractID(it)
 				if modelID == "" {
@@ -254,15 +345,18 @@ func (q *SNSCatalogQuery) GetByListID(ctx context.Context, listID string) (SNSCa
 					if out.ModelVariationsError == "" {
 						out.ModelVariationsError = ge.Error()
 					}
+					log.Printf("[sns_catalog] model getById error reqId=%s modelId=%q err=%v", reqID, modelID, ge)
 					continue
 				}
 
 				dto, ok := toCatalogModelVariationDTOAny(mv)
 				if !ok {
-					// mv の型が想定外でも、ID だけは最低入れて返す
-					items = append(items, SNSCatalogModelVariationDTO{ID: strings.TrimSpace(modelID)})
-					continue
+					dto = SNSCatalogModelVariationDTO{ID: strings.TrimSpace(modelID)}
 				}
+
+				// ✅ 画面へ渡すのは key数のみ（modelIdの種類数）
+				dto.StockKeys = stockKeys
+
 				items = append(items, dto)
 			}
 
@@ -270,7 +364,216 @@ func (q *SNSCatalogQuery) GetByListID(ctx context.Context, listID string) (SNSCa
 		}
 	}
 
+	invKeys := 0
+	if invDTO != nil {
+		invKeys = stockKeyCount(invDTO.Stock)
+	}
+
+	log.Printf("[sns_catalog] done reqId=%s listId=%q invStockKeys=%d modelVariations=%d dur=%s",
+		reqID,
+		listID,
+		invKeys,
+		len(out.ModelVariations),
+		time.Since(start).String(),
+	)
+
 	return out, nil
+}
+
+// ============================================================
+// inventory stock helpers (keys + products safety)
+// ============================================================
+
+// normalizeInventoryStock ensures:
+// - Stock map is non-nil (if empty, keep nil OK)
+// - each stock[modelId].Products is non-nil (so JSON includes {} not null when needed)
+func normalizeInventoryStock(inv *SNSCatalogInventoryDTO) {
+	if inv == nil {
+		return
+	}
+	if inv.Stock == nil {
+		// nil のままでもOK（keys count は 0）
+		return
+	}
+	for k, v := range inv.Stock {
+		m := strings.TrimSpace(k)
+		if m == "" {
+			continue
+		}
+		if v.Products == nil {
+			v.Products = map[string]bool{}
+			inv.Stock[k] = v
+		}
+	}
+}
+
+func ensureInventoryStockKeysFromMintIfNeeded(
+	ctx context.Context,
+	invRepo InventoryRepository,
+	invDTO *SNSCatalogInventoryDTO,
+	invID, pbID, tbID string,
+) {
+	if invRepo == nil || invDTO == nil {
+		return
+	}
+
+	// 既に key が入っているなら何もしない
+	if stockKeyCount(invDTO.Stock) > 0 {
+		return
+	}
+
+	src, ok := invRepo.(InventoryMintStockSource)
+	if !ok {
+		log.Printf("[sns_catalog] ensureStockKeysFromMint skip: InventoryRepo does NOT implement InventoryMintStockSource")
+		return
+	}
+	log.Printf("[sns_catalog] ensureStockKeysFromMint: InventoryRepo implements InventoryMintStockSource")
+
+	// mint を取りに行けるなら取り、Stock の key(modelId) を復元
+	var mint invdom.Mint
+	var err error
+
+	invID = strings.TrimSpace(invID)
+	pbID = strings.TrimSpace(pbID)
+	tbID = strings.TrimSpace(tbID)
+
+	switch {
+	case invID != "":
+		log.Printf("[sns_catalog] ensureStockKeysFromMint mintGetById invId=%q", invID)
+		mint, err = src.GetMintByID(ctx, invID)
+	case pbID != "" && tbID != "":
+		log.Printf("[sns_catalog] ensureStockKeysFromMint mintGetByPbTb pbId=%q tbId=%q", pbID, tbID)
+		mint, err = src.GetMintByProductAndTokenBlueprintID(ctx, pbID, tbID)
+	default:
+		log.Printf("[sns_catalog] ensureStockKeysFromMint skip: linkage missing invId=%q pbId=%q tbId=%q", invID, pbID, tbID)
+		return
+	}
+	if err != nil {
+		log.Printf("[sns_catalog] ensureStockKeysFromMint mintGet error err=%v", err)
+		return
+	}
+
+	keys := ExtractStockModelIDsFromMint(mint)
+	log.Printf("[sns_catalog] ensureStockKeysFromMint extracted keys=%d", len(keys))
+	logStringSample("sns_catalog", "mint.stock.modelIds", keys, 5)
+
+	if len(keys) == 0 {
+		return
+	}
+	if invDTO.Stock == nil {
+		invDTO.Stock = map[string]SNSCatalogInventoryModelStockDTO{}
+	}
+
+	// value は products empty で良い（フロントは key数も products も扱える）
+	for _, modelID := range keys {
+		m := strings.TrimSpace(modelID)
+		if m == "" {
+			continue
+		}
+		if _, exists := invDTO.Stock[m]; !exists {
+			invDTO.Stock[m] = SNSCatalogInventoryModelStockDTO{Products: map[string]bool{}}
+		}
+	}
+
+	normalizeInventoryStock(invDTO)
+}
+
+// ExtractStockModelIDsFromMint extracts modelId keys by reading Mint.Stock map keys.
+func ExtractStockModelIDsFromMint(m invdom.Mint) []string {
+	rv := reflect.ValueOf(m)
+	if !rv.IsValid() {
+		return nil
+	}
+	if rv.Kind() == reflect.Pointer {
+		if rv.IsNil() {
+			return nil
+		}
+		rv = rv.Elem()
+	}
+	if rv.Kind() != reflect.Struct {
+		return nil
+	}
+
+	stock := rv.FieldByName("Stock")
+	if !stock.IsValid() {
+		return nil
+	}
+	if stock.Kind() == reflect.Pointer {
+		if stock.IsNil() {
+			return nil
+		}
+		stock = stock.Elem()
+	}
+	if stock.Kind() != reflect.Map {
+		return nil
+	}
+	if stock.Type().Key().Kind() != reflect.String {
+		return nil
+	}
+
+	keys := make([]string, 0, stock.Len())
+	iter := stock.MapRange()
+	for iter.Next() {
+		k := strings.TrimSpace(iter.Key().String())
+		if k == "" {
+			continue
+		}
+		keys = append(keys, k)
+	}
+
+	sort.Strings(keys)
+	return keys
+}
+
+// ============================================================
+// debug log helpers
+// ============================================================
+
+func stockKeyCount(stock map[string]SNSCatalogInventoryModelStockDTO) int {
+	return len(stock)
+}
+
+func logInventoryStockKeySample(tag, label string, stock map[string]SNSCatalogInventoryModelStockDTO, max int) {
+	if max <= 0 {
+		return
+	}
+	if len(stock) == 0 {
+		log.Printf("[%s] %s empty", tag, label)
+		return
+	}
+
+	keys := make([]string, 0, len(stock))
+	for k := range stock {
+		k = strings.TrimSpace(k)
+		if k != "" {
+			keys = append(keys, k)
+		}
+	}
+	sort.Strings(keys)
+
+	if len(keys) > max {
+		keys = keys[:max]
+	}
+
+	for _, k := range keys {
+		log.Printf("[%s] %s sample modelId=%q", tag, label, k)
+	}
+}
+
+func logStringSample(tag, label string, items []string, max int) {
+	if max <= 0 {
+		return
+	}
+	if len(items) == 0 {
+		log.Printf("[%s] %s empty", tag, label)
+		return
+	}
+	if len(items) > max {
+		items = items[:max]
+	}
+	for _, s := range items {
+		log.Printf("[%s] %s sample value=%q", tag, label, strings.TrimSpace(s))
+	}
 }
 
 // ============================================================
@@ -300,7 +603,6 @@ func toCatalogProductBlueprintDTO(pb *pbdom.ProductBlueprint) SNSCatalogProductB
 		BrandID:     strings.TrimSpace(pb.BrandID),
 		CompanyID:   strings.TrimSpace(pb.CompanyID),
 
-		// named type でも安全に string 化する
 		ItemType: fmt.Sprint(pb.ItemType),
 		Fit:      fmt.Sprint(pb.Fit),
 		Material: fmt.Sprint(pb.Material),
@@ -310,14 +612,12 @@ func toCatalogProductBlueprintDTO(pb *pbdom.ProductBlueprint) SNSCatalogProductB
 
 		QualityAssurance: append([]string{}, pb.QualityAssurance...),
 
-		// ✅ フィールド名揺れ / ネスト（ProductIDTag.Type 等）を吸収
 		ProductIDTagType: pickProductIDTagType(pb),
 	}
 	return out
 }
 
 // toCatalogModelVariationDTOAny converts *any* ModelVariation-like struct into DTO by reflection.
-// - 依存を減らしつつ、models コレクションの形（id/pbId/modelNumber/size/color/measurements）を拾う
 func toCatalogModelVariationDTOAny(v any) (SNSCatalogModelVariationDTO, bool) {
 	if v == nil {
 		return SNSCatalogModelVariationDTO{}, false
@@ -480,7 +780,6 @@ func pickProductIDTagType(pb *pbdom.ProductBlueprint) string {
 }
 
 // extractID tries common field names (ID/Id/ModelID/ModelId) by reflection.
-// ListVariations の Items 型に依存しないためのヘルパー。
 func extractID(v any) string {
 	if v == nil {
 		return ""
