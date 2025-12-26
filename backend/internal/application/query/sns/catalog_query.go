@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log"
 	"reflect"
 	"sort"
 	"strings"
@@ -15,6 +16,7 @@ import (
 	ldom "narratives/internal/domain/list"
 	modeldom "narratives/internal/domain/model"
 	pbdom "narratives/internal/domain/productBlueprint"
+	tbdom "narratives/internal/domain/tokenBlueprint"
 )
 
 // ============================================================
@@ -39,6 +41,11 @@ type ProductBlueprintRepository interface {
 	GetByID(ctx context.Context, id string) (*pbdom.ProductBlueprint, error)
 }
 
+// ✅ NEW: tokenBlueprint patch getter (buyer-facing minimal info)
+type TokenBlueprintPatchRepository interface {
+	GetPatchByID(ctx context.Context, id string) (tbdom.Patch, error)
+}
+
 // ============================================================
 // Query
 // ============================================================
@@ -48,6 +55,7 @@ type SNSCatalogQuery struct {
 
 	InventoryRepo InventoryRepository
 	ProductRepo   ProductBlueprintRepository
+	TokenRepo     TokenBlueprintPatchRepository // ✅ NEW
 
 	ModelRepo modeldom.RepositoryPort
 }
@@ -62,13 +70,31 @@ func NewSNSCatalogQuery(
 		ListRepo:      listRepo,
 		InventoryRepo: invRepo,
 		ProductRepo:   productRepo,
+		TokenRepo:     nil, // keep backward compatible
+		ModelRepo:     modelRepo,
+	}
+}
+
+// ✅ NEW: ctor with tokenBlueprint patch getter
+func NewSNSCatalogQueryWithTokenBlueprintPatch(
+	listRepo ldom.Repository,
+	invRepo InventoryRepository,
+	productRepo ProductBlueprintRepository,
+	tokenRepo TokenBlueprintPatchRepository,
+	modelRepo modeldom.RepositoryPort,
+) *SNSCatalogQuery {
+	return &SNSCatalogQuery{
+		ListRepo:      listRepo,
+		InventoryRepo: invRepo,
+		ProductRepo:   productRepo,
+		TokenRepo:     tokenRepo,
 		ModelRepo:     modelRepo,
 	}
 }
 
 // GetByListID builds catalog payload by listId.
 // - list must be status=listing, otherwise ErrNotFound.
-// - inventory/product/model are best-effort; failures populate "*Error" fields.
+// - inventory/product/model/tokenBlueprint are best-effort; failures populate "*Error" fields.
 func (q *SNSCatalogQuery) GetByListID(ctx context.Context, listID string) (snsdto.SNSCatalogDTO, error) {
 	if q == nil || q.ListRepo == nil {
 		return snsdto.SNSCatalogDTO{}, errors.New("sns catalog query: list repo is nil")
@@ -79,11 +105,15 @@ func (q *SNSCatalogQuery) GetByListID(ctx context.Context, listID string) (snsdt
 		return snsdto.SNSCatalogDTO{}, ldom.ErrNotFound
 	}
 
+	log.Printf("[sns_catalog] GetByListID start listId=%q", listID)
+
 	l, err := q.ListRepo.GetByID(ctx, listID)
 	if err != nil {
+		log.Printf("[sns_catalog] list getById error listId=%q err=%q", listID, err.Error())
 		return snsdto.SNSCatalogDTO{}, err
 	}
 	if l.Status != ldom.StatusListing {
+		log.Printf("[sns_catalog] list not listing listId=%q status=%q", listID, fmt.Sprint(l.Status))
 		return snsdto.SNSCatalogDTO{}, ldom.ErrNotFound
 	}
 
@@ -102,43 +132,57 @@ func (q *SNSCatalogQuery) GetByListID(ctx context.Context, listID string) (snsdt
 
 	if q.InventoryRepo == nil {
 		out.InventoryError = "inventory repo is nil"
+		log.Printf("[sns_catalog] inventory repo is nil listId=%q", listID)
 	} else {
 		invID = strings.TrimSpace(out.List.InventoryID)
 		pbID = strings.TrimSpace(out.List.ProductBlueprintID)
 		tbID = strings.TrimSpace(out.List.TokenBlueprintID)
+
+		log.Printf(
+			"[sns_catalog] inventory linkage listId=%q inventoryId=%q pbId=%q tbId=%q",
+			listID, invID, pbID, tbID,
+		)
 
 		switch {
 		case invID != "":
 			v, e := q.InventoryRepo.GetByID(ctx, invID)
 			if e != nil {
 				out.InventoryError = e.Error()
+				log.Printf("[sns_catalog] inventory getById error listId=%q invId=%q err=%q", listID, invID, e.Error())
 			} else {
 				normalizeInventoryStock(v)
-
 				invDTO = v
 				out.Inventory = v
+				log.Printf("[sns_catalog] inventory getById ok listId=%q invId=%q stockKeys=%d", listID, invID, stockKeyCount(v.Stock))
 			}
 
 		case pbID != "" && tbID != "":
 			v, e := q.InventoryRepo.GetByProductAndTokenBlueprintID(ctx, pbID, tbID)
 			if e != nil {
 				out.InventoryError = e.Error()
+				log.Printf("[sns_catalog] inventory getByPbTb error listId=%q pbId=%q tbId=%q err=%q", listID, pbID, tbID, e.Error())
 			} else {
 				normalizeInventoryStock(v)
-
 				invDTO = v
 				out.Inventory = v
+				log.Printf("[sns_catalog] inventory getByPbTb ok listId=%q pbId=%q tbId=%q stockKeys=%d", listID, pbID, tbID, stockKeyCount(v.Stock))
 			}
 
 		default:
 			out.InventoryError = "inventory linkage is missing (inventoryId or productBlueprintId+tokenBlueprintId)"
+			log.Printf("[sns_catalog] inventory linkage missing listId=%q", listID)
 		}
 	}
 
 	// ✅ NEW: inventory.Stock が空なら、domain Mint.Stock から「modelId の集合(key)」を復元して埋める
 	// - InventoryRepo が InventoryMintStockSource を実装している場合のみ有効
 	if invDTO != nil {
+		before := stockKeyCount(invDTO.Stock)
 		ensureInventoryStockKeysFromMintIfNeeded(ctx, q.InventoryRepo, invDTO, invID, pbID, tbID)
+		after := stockKeyCount(invDTO.Stock)
+		if after != before {
+			log.Printf("[sns_catalog] inventory stockKeys restored from mint listId=%q before=%d after=%d", listID, before, after)
+		}
 	}
 
 	// ------------------------------------------------------------
@@ -153,17 +197,79 @@ func (q *SNSCatalogQuery) GetByListID(ctx context.Context, listID string) (snsdt
 
 	if q.ProductRepo == nil {
 		out.ProductBlueprintError = "product repo is nil"
+		log.Printf("[sns_catalog] product repo is nil listId=%q", listID)
 	} else if resolvedPBID == "" {
 		out.ProductBlueprintError = "productBlueprintId is empty"
+		log.Printf("[sns_catalog] productBlueprintId is empty listId=%q", listID)
 	} else {
 		pb, e := q.ProductRepo.GetByID(ctx, resolvedPBID)
 		if e != nil {
 			out.ProductBlueprintError = e.Error()
+			log.Printf("[sns_catalog] product getById error listId=%q pbId=%q err=%q", listID, resolvedPBID, e.Error())
 		} else if pb != nil {
 			dto := toCatalogProductBlueprintDTO(pb)
 			out.ProductBlueprint = &dto
+			log.Printf("[sns_catalog] product getById ok listId=%q pbId=%q brandId=%q", listID, resolvedPBID, strings.TrimSpace(dto.BrandID))
 		} else {
 			out.ProductBlueprintError = "productBlueprint is nil"
+			log.Printf("[sns_catalog] product is nil listId=%q pbId=%q", listID, resolvedPBID)
+		}
+	}
+
+	// ------------------------------------------------------------
+	// ✅ NEW: TokenBlueprint patch (inventory side wins)
+	// ------------------------------------------------------------
+	resolvedTBID := strings.TrimSpace(out.List.TokenBlueprintID)
+	if invDTO != nil {
+		if s := strings.TrimSpace(invDTO.TokenBlueprintID); s != "" {
+			resolvedTBID = s
+		}
+	}
+
+	log.Printf("[sns_catalog] tokenBlueprint resolve listId=%q resolvedTbId=%q (list.tbId=%q inv.tbId=%q)",
+		listID,
+		resolvedTBID,
+		strings.TrimSpace(out.List.TokenBlueprintID),
+		func() string {
+			if invDTO == nil {
+				return ""
+			}
+			return strings.TrimSpace(invDTO.TokenBlueprintID)
+		}(),
+	)
+
+	if q.TokenRepo == nil {
+		// linkage が無いケースと区別したいので、ID がある時だけエラーにする
+		if resolvedTBID != "" {
+			out.TokenBlueprintError = "tokenBlueprint repo is nil"
+			log.Printf("[sns_catalog] tokenBlueprint repo is nil listId=%q tbId=%q", listID, resolvedTBID)
+		} else {
+			log.Printf("[sns_catalog] tokenBlueprint skip (tbId empty & repo nil) listId=%q", listID)
+		}
+	} else if resolvedTBID == "" {
+		out.TokenBlueprintError = "tokenBlueprintId is empty"
+		log.Printf("[sns_catalog] tokenBlueprintId is empty listId=%q", listID)
+	} else {
+		log.Printf("[sns_catalog] tokenBlueprint getPatchById start listId=%q tbId=%q", listID, resolvedTBID)
+
+		patch, e := q.TokenRepo.GetPatchByID(ctx, resolvedTBID)
+		if e != nil {
+			out.TokenBlueprintError = e.Error()
+			log.Printf("[sns_catalog] tokenBlueprint getPatchById error listId=%q tbId=%q err=%q", listID, resolvedTBID, e.Error())
+		} else {
+			p := patch
+			out.TokenBlueprint = &p
+			log.Printf(
+				"[sns_catalog] tokenBlueprint getPatchById ok listId=%q tbId=%q name=%q symbol=%q brandId=%q brandName=%q minted=%s hasIconUrl=%t",
+				listID,
+				resolvedTBID,
+				ptrStr(p.Name),
+				ptrStr(p.Symbol),
+				ptrStr(p.BrandID),
+				ptrStr(p.BrandName),
+				ptrBoolStr(p.Minted),
+				strings.TrimSpace(ptrStr(p.IconURL)) != "",
+			)
 		}
 	}
 
@@ -175,8 +281,10 @@ func (q *SNSCatalogQuery) GetByListID(ctx context.Context, listID string) (snsdt
 	// ------------------------------------------------------------
 	if q.ModelRepo == nil {
 		out.ModelVariationsError = "model repo is nil"
+		log.Printf("[sns_catalog] model repo is nil listId=%q", listID)
 	} else if resolvedPBID == "" {
 		out.ModelVariationsError = "productBlueprintId is empty (skip model fetch)"
+		log.Printf("[sns_catalog] model skip (pbId empty) listId=%q", listID)
 	} else {
 		deletedFalse := false
 
@@ -193,6 +301,7 @@ func (q *SNSCatalogQuery) GetByListID(ctx context.Context, listID string) (snsdt
 		)
 		if e != nil {
 			out.ModelVariationsError = e.Error()
+			log.Printf("[sns_catalog] model listVariations error listId=%q pbId=%q err=%q", listID, resolvedPBID, e.Error())
 		} else {
 			items := make([]snsdto.SNSCatalogModelVariationDTO, 0, len(res.Items))
 
@@ -227,8 +336,17 @@ func (q *SNSCatalogQuery) GetByListID(ctx context.Context, listID string) (snsdt
 			}
 
 			out.ModelVariations = items
+			log.Printf("[sns_catalog] model variations ok listId=%q pbId=%q items=%d stockKeys=%d", listID, resolvedPBID, len(items), stockKeys)
 		}
 	}
+
+	log.Printf("[sns_catalog] GetByListID done listId=%q invErr=%q pbErr=%q tbErr=%q modelErr=%q",
+		listID,
+		strings.TrimSpace(out.InventoryError),
+		strings.TrimSpace(out.ProductBlueprintError),
+		strings.TrimSpace(out.TokenBlueprintError),
+		strings.TrimSpace(out.ModelVariationsError),
+	)
 
 	return out, nil
 }
@@ -631,4 +749,25 @@ func toInt(v reflect.Value) int {
 	default:
 		return 0
 	}
+}
+
+// ============================================================
+// log helpers (avoid nil pointer noise)
+// ============================================================
+
+func ptrStr(s *string) string {
+	if s == nil {
+		return ""
+	}
+	return strings.TrimSpace(*s)
+}
+
+func ptrBoolStr(b *bool) string {
+	if b == nil {
+		return "(nil)"
+	}
+	if *b {
+		return "true"
+	}
+	return "false"
 }

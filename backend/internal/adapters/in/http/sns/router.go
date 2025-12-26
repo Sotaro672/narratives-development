@@ -1,4 +1,4 @@
-// backend\internal\adapters\in\http\sns\router.go
+// backend/internal/adapters/in/http/sns/router.go
 package sns
 
 import "net/http"
@@ -10,6 +10,8 @@ type Deps struct {
 	ProductBlueprint http.Handler // ✅ NEW
 	Model            http.Handler // ✅ NEW
 	Catalog          http.Handler // ✅ NEW
+
+	TokenBlueprint http.Handler // ✅ NEW (patch)
 }
 
 // Register registers buyer-facing routes onto mux.
@@ -22,7 +24,8 @@ type Deps struct {
 // - GET /sns/product-blueprints/{id}
 // - GET /sns/models?productBlueprintId=
 // - GET /sns/models/{id}
-// - GET /sns/catalog/{listId}                ✅ NEW
+// - GET /sns/catalog/{listId}                          ✅ NEW
+// - GET /sns/token-blueprints/{id}/patch               ✅ NEW
 func Register(mux *http.ServeMux, deps Deps) {
 	if mux == nil {
 		return
@@ -58,5 +61,13 @@ func Register(mux *http.ServeMux, deps Deps) {
 		mux.Handle("/sns/catalog/", deps.Catalog)
 		// （必要なら将来 /sns/catalog を index に使う）
 		mux.Handle("/sns/catalog", deps.Catalog)
+	}
+
+	// token blueprints ✅ NEW
+	// NOTE: only patch is required now: /sns/token-blueprints/{id}/patch
+	if deps.TokenBlueprint != nil {
+		mux.Handle("/sns/token-blueprints/", deps.TokenBlueprint)
+		// （必要なら将来 /sns/token-blueprints を index に使う）
+		mux.Handle("/sns/token-blueprints", deps.TokenBlueprint)
 	}
 }

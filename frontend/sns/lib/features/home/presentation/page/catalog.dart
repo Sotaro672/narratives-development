@@ -1,28 +1,11 @@
 // frontend/sns/lib/features/home/presentation/page/catalog.dart
-import 'dart:convert';
-
 import 'package:flutter/material.dart';
-import 'package:http/http.dart' as http;
 
-import '../../../inventory/infrastructure/inventory_repository_http.dart';
-import '../../../list/infrastructure/list_repository_http.dart';
+import '../../../list/infrastructure/list_repository_http.dart'; // SnsListItem, SnsListPriceRow
+import '../../../tokenBlueprint/infrastructure/token_blueprint_repository_http.dart'
+    show TokenBlueprintPatch;
+import '../hook/use_catalog.dart';
 
-// ✅ productBlueprint
-import '../../../productBlueprint/infrastructure/product_blueprint_repository_http.dart';
-
-// ✅ model
-import '../../../model/infrastructure/model_repository_http.dart';
-
-/// 商品詳細ページ（buyer-facing）
-///
-/// ✅ 推奨（新）:
-/// - catalog DTO: GET /sns/catalog/{listId}
-///
-/// fallback（旧）:
-/// - list 詳細: GET /sns/lists/{listId}
-/// - inventory: GET /sns/inventories/{id}  ※ inventoryId がある場合のみ
-/// - productBlueprint: GET /sns/product-blueprints/{productBlueprintId}
-/// - model variations: GET /sns/models?productBlueprintId=...
 class CatalogPage extends StatefulWidget {
   const CatalogPage({super.key, required this.listId, this.initialItem});
 
@@ -40,170 +23,66 @@ class CatalogPage extends StatefulWidget {
 }
 
 class _CatalogPageState extends State<CatalogPage> {
-  // ✅ NEW: catalog endpoint
-  late final CatalogRepositoryHttp _catalogRepo;
+  late final UseCatalog _uc;
+  late Future<CatalogState> _future;
 
-  // fallback legacy repos
-  late final ListRepositoryHttp _listRepo;
-  late final InventoryRepositoryHttp _invRepo;
-  late final ProductBlueprintRepositoryHttp _pbRepo;
-  late final ModelRepositoryHTTP _modelRepo;
+  // ✅ Render時に「画面へ渡っているか」を確認するログ（スパム抑制）
+  String _lastVmLogKey = '';
 
-  late Future<_CatalogPayload> _future;
+  void _log(String msg) {
+    // ignore: avoid_print
+    print('[CatalogPage] $msg');
+  }
+
+  void _logVmOnce(CatalogState vm) {
+    final key = [
+      vm.list.id,
+      vm.inventory != null ? 'inv' : 'noinv',
+      vm.productBlueprintId,
+      vm.tokenBlueprintId,
+      vm.tokenBlueprintPatch?.name ?? '',
+      vm.tokenBlueprintPatch?.symbol ?? '',
+      vm.tokenBlueprintPatch?.brandId ?? '',
+      (vm.tokenBlueprintPatch?.minted ?? '').toString(),
+      vm.tokenBlueprintError ?? '',
+      (vm.tokenIconUrlEncoded ?? '').isNotEmpty ? 'icon' : 'noicon',
+    ].join('|');
+
+    if (key == _lastVmLogKey) return;
+    _lastVmLogKey = key;
+
+    _log(
+      'vm received '
+      'listId=${vm.list.id} '
+      'inv?=${vm.inventory != null} '
+      'pbId="${vm.productBlueprintId}" '
+      'tbId="${vm.tokenBlueprintId}" '
+      'patch.name="${vm.tokenBlueprintPatch?.name ?? ''}" '
+      'patch.symbol="${vm.tokenBlueprintPatch?.symbol ?? ''}" '
+      'patch.brandId="${vm.tokenBlueprintPatch?.brandId ?? ''}" '
+      'patch.minted=${vm.tokenBlueprintPatch?.minted} '
+      'tbErr="${vm.tokenBlueprintError ?? ''}" '
+      'hasTokenIcon=${(vm.tokenIconUrlEncoded ?? '').trim().isNotEmpty}',
+    );
+  }
 
   @override
   void initState() {
     super.initState();
-    _catalogRepo = CatalogRepositoryHttp();
-
-    _listRepo = ListRepositoryHttp();
-    _invRepo = InventoryRepositoryHttp();
-    _pbRepo = ProductBlueprintRepositoryHttp();
-    _modelRepo = ModelRepositoryHTTP();
-
-    _future = _load();
+    _uc = UseCatalog();
+    _future = _uc.load(listId: widget.listId);
   }
 
   @override
   void dispose() {
-    _catalogRepo.dispose();
-
-    _listRepo.dispose();
-    _invRepo.dispose();
-    _pbRepo.dispose();
-    // NOTE: ModelRepositoryHTTP currently has no dispose(). Keep it as-is.
+    _uc.dispose();
     super.dispose();
-  }
-
-  Future<_CatalogPayload> _load() async {
-    // 1) try catalog endpoint first
-    try {
-      final dto = await _catalogRepo.fetchCatalogByListId(widget.listId);
-
-      return _CatalogPayload(
-        list: dto.list,
-        inventory: dto.inventory,
-        inventoryError: dto.inventoryError,
-        productBlueprint: dto.productBlueprint,
-        productBlueprintError: dto.productBlueprintError,
-        modelVariations: dto.modelVariations,
-        modelVariationsError: dto.modelVariationsError,
-      );
-    } catch (_) {
-      // 2) fallback to legacy multi-fetch (keeps the app usable while backend is being wired)
-      return _loadLegacy();
-    }
-  }
-
-  Future<_CatalogPayload> _loadLegacy() async {
-    final list = await _listRepo.fetchListById(widget.listId);
-
-    // ✅ inventory linkage（方針変更）
-    // - inventoryId があれば /sns/inventories/{id} のみにする
-    // - inventoryId が無ければ以降の fallback は行わず、単純なエラーにする
-    final invId = list.inventoryId.trim();
-
-    SnsInventoryResponse? inv;
-    String? invErr;
-
-    if (invId.isEmpty) {
-      invErr = 'inventoryId is empty';
-    } else {
-      try {
-        inv = await _invRepo.fetchInventoryById(invId);
-      } catch (e) {
-        invErr = e.toString();
-      }
-    }
-
-    // ✅ productBlueprintId / tokenBlueprintId は inventory 側が取れた場合のみ利用（fallback しない）
-    final pbId = (inv?.productBlueprintId ?? '').trim();
-
-    // productBlueprint
-    SnsProductBlueprintResponse? pb;
-    String? pbErr;
-
-    if (pbId.isNotEmpty) {
-      try {
-        pb = await _pbRepo.fetchProductBlueprintById(pbId);
-      } catch (e) {
-        pbErr = e.toString();
-      }
-    } else {
-      pbErr = 'productBlueprintId is unavailable (inventory not loaded)';
-    }
-
-    // model variations
-    List<ModelVariationDTO>? models;
-    String? modelErr;
-
-    if (pbId.isNotEmpty) {
-      try {
-        models = await _modelRepo.fetchModelVariationsByProductBlueprintId(
-          pbId,
-        );
-      } catch (e) {
-        modelErr = e.toString();
-      }
-    } else {
-      modelErr = 'productBlueprintId is unavailable (skip model fetch)';
-    }
-
-    return _CatalogPayload(
-      list: list,
-      inventory: inv,
-      inventoryError: invErr,
-      productBlueprint: pb,
-      productBlueprintError: pbErr,
-      modelVariations: models,
-      modelVariationsError: modelErr,
-    );
   }
 
   Future<void> _reload() async {
     setState(() {
-      _future = _load();
+      _future = _uc.load(listId: widget.listId);
     });
-  }
-
-  String _safeUrl(String raw) => Uri.encodeFull(raw.trim());
-
-  String _priceText(List<SnsListPriceRow> rows) {
-    if (rows.isEmpty) return '';
-    final prices = rows.map((e) => e.price).toList()..sort();
-    final min = prices.first;
-    final max = prices.last;
-    if (min == max) return '¥$min';
-    return '¥$min 〜 ¥$max';
-  }
-
-  // ✅ accumulation を廃止し、stock(products) からカウントする
-  int _stockCount(SnsInventoryModelStock s) {
-    if (s.products.isEmpty) return 0;
-
-    var n = 0;
-    for (final v in s.products.values) {
-      if (v == true) n++;
-    }
-    return n;
-  }
-
-  int _totalStock(SnsInventoryResponse inv) {
-    var sum = 0;
-    for (final v in inv.stock.values) {
-      sum += _stockCount(v);
-    }
-    return sum;
-  }
-
-  String _modelLabel(ModelVariationDTO v) {
-    final parts = <String>[];
-    if (v.modelNumber.trim().isNotEmpty) parts.add(v.modelNumber.trim());
-    if (v.size.trim().isNotEmpty) parts.add(v.size.trim());
-    final color = v.color.name.trim();
-    if (color.isNotEmpty) parts.add(color);
-    if (parts.isEmpty) return '(empty)';
-    return parts.join(' / ');
   }
 
   @override
@@ -221,11 +100,11 @@ class _CatalogPageState extends State<CatalogPage> {
           ),
         ],
       ),
-      body: FutureBuilder<_CatalogPayload>(
+      body: FutureBuilder<CatalogState>(
         future: _future,
         builder: (context, snap) {
-          final payload = snap.data;
-          final list = payload?.list ?? initial;
+          final vm = snap.data;
+          final list = vm?.list ?? initial;
 
           if (snap.connectionState == ConnectionState.waiting && list == null) {
             return const Center(child: CircularProgressIndicator());
@@ -237,33 +116,36 @@ class _CatalogPageState extends State<CatalogPage> {
             return const Center(child: Text('No data'));
           }
 
-          final inv = payload?.inventory;
-          final invErr = payload?.inventoryError;
-
-          final pb = payload?.productBlueprint;
-          final pbErr = payload?.productBlueprintError;
-
-          final models = payload?.modelVariations;
-          final modelErr = payload?.modelVariationsError;
-
-          final imageUrl = list.image.trim();
-          final hasImage = imageUrl.isNotEmpty;
-          final price = _priceText(list.prices);
-
-          final total = inv != null ? _totalStock(inv) : null;
-
-          // 表示用（inventory が取れたらそれのみを使用。fallback しない）
-          final pbId = (inv?.productBlueprintId ?? '').trim();
-          final tbId = (inv?.tokenBlueprintId ?? '').trim();
-
-          // modelId -> metadata (variation)
-          final modelMap = <String, ModelVariationDTO>{};
-          if (models != null) {
-            for (final v in models) {
-              final id = v.id.trim();
-              if (id.isNotEmpty) modelMap[id] = v;
-            }
+          // ✅ ここで「画面へ渡っている vm」をログで確認
+          if (vm != null) {
+            _logVmOnce(vm);
+          } else {
+            _log(
+              'vm is null (initial only) listId=${list.id} title="${list.title}"',
+            );
           }
+
+          final priceText = vm?.priceText ?? '';
+          final hasImage = vm?.hasImage ?? list.image.trim().isNotEmpty;
+
+          final imageUrlEncoded = vm?.imageUrlEncoded;
+          final pbId = vm?.productBlueprintId ?? '';
+          final tbId = vm?.tokenBlueprintId ?? '';
+
+          final inv = vm?.inventory;
+          final invErr = vm?.inventoryError;
+
+          final pb = vm?.productBlueprint;
+          final pbErr = vm?.productBlueprintError;
+
+          final models = vm?.modelVariations;
+          final modelErr = vm?.modelVariationsError;
+
+          final totalStock = vm?.totalStock;
+
+          final tbPatch = vm?.tokenBlueprintPatch;
+          final tbErr = vm?.tokenBlueprintError;
+          final tokenIconUrlEncoded = vm?.tokenIconUrlEncoded;
 
           return ListView(
             padding: const EdgeInsets.all(12),
@@ -276,9 +158,9 @@ class _CatalogPageState extends State<CatalogPage> {
                   children: [
                     AspectRatio(
                       aspectRatio: 16 / 9,
-                      child: hasImage
+                      child: hasImage && imageUrlEncoded != null
                           ? Image.network(
-                              _safeUrl(imageUrl),
+                              imageUrlEncoded,
                               fit: BoxFit.cover,
                               errorBuilder: (context, err, st) {
                                 return _ImageFallback(
@@ -305,9 +187,9 @@ class _CatalogPageState extends State<CatalogPage> {
                             style: Theme.of(context).textTheme.titleLarge,
                           ),
                           const SizedBox(height: 8),
-                          if (price.isNotEmpty)
+                          if (priceText.isNotEmpty)
                             Text(
-                              price,
+                              priceText,
                               style: Theme.of(context).textTheme.titleMedium,
                             ),
                           const SizedBox(height: 10),
@@ -342,6 +224,16 @@ class _CatalogPageState extends State<CatalogPage> {
 
               const SizedBox(height: 12),
 
+              // ✅ token blueprint card (patch)
+              _TokenBlueprintCard(
+                tokenBlueprintId: tbId,
+                patch: tbPatch,
+                error: tbErr,
+                iconUrlEncoded: tokenIconUrlEncoded,
+              ),
+
+              const SizedBox(height: 12),
+
               // -------- inventory --------
               Card(
                 child: Padding(
@@ -366,8 +258,8 @@ class _CatalogPageState extends State<CatalogPage> {
                       const SizedBox(height: 6),
                       _KeyValueRow(
                         label: 'total stock',
-                        value: total != null
-                            ? total.toString()
+                        value: totalStock != null
+                            ? totalStock.toString()
                             : '(not loaded)',
                       ),
                       if (inv != null) ...[
@@ -377,12 +269,9 @@ class _CatalogPageState extends State<CatalogPage> {
                           style: Theme.of(context).textTheme.titleSmall,
                         ),
                         const SizedBox(height: 6),
-                        ...inv.stock.entries.map((e) {
-                          final modelId = e.key;
-                          final stock = e.value;
-                          final meta = modelMap[modelId.trim()];
-
-                          final count = _stockCount(stock);
+                        ...vm!.modelStockRows.map((r) {
+                          final modelId = r.modelId;
+                          final count = r.stockCount;
 
                           return Padding(
                             padding: const EdgeInsets.symmetric(vertical: 6),
@@ -390,11 +279,7 @@ class _CatalogPageState extends State<CatalogPage> {
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
                                 Text(
-                                  meta != null
-                                      ? _modelLabel(meta)
-                                      : (modelId.isNotEmpty
-                                            ? modelId
-                                            : '(no model)'),
+                                  r.label,
                                   style: Theme.of(context).textTheme.bodyMedium,
                                 ),
                                 const SizedBox(height: 2),
@@ -567,7 +452,7 @@ class _CatalogPageState extends State<CatalogPage> {
                             '(empty)',
                             style: Theme.of(context).textTheme.bodyMedium,
                           )
-                        else ...[
+                        else
                           ...models.map((v) {
                             final mId = v.id.trim();
                             return Padding(
@@ -576,7 +461,11 @@ class _CatalogPageState extends State<CatalogPage> {
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
                                   Text(
-                                    _modelLabel(v),
+                                    [
+                                      v.modelNumber.trim(),
+                                      v.size.trim(),
+                                      v.color.name.trim(),
+                                    ].where((s) => s.isNotEmpty).join(' / '),
                                     style: Theme.of(
                                       context,
                                     ).textTheme.bodyLarge,
@@ -605,7 +494,6 @@ class _CatalogPageState extends State<CatalogPage> {
                               ),
                             );
                           }),
-                        ],
                       ] else ...[
                         if (modelErr != null && modelErr.trim().isNotEmpty)
                           Text(
@@ -630,144 +518,120 @@ class _CatalogPageState extends State<CatalogPage> {
   }
 }
 
-class _CatalogPayload {
-  const _CatalogPayload({
-    required this.list,
-    required this.inventory,
-    required this.inventoryError,
-    required this.productBlueprint,
-    required this.productBlueprintError,
-    required this.modelVariations,
-    required this.modelVariationsError,
-  });
-
-  final SnsListItem list;
-  final SnsInventoryResponse? inventory;
-  final String? inventoryError;
-
-  final SnsProductBlueprintResponse? productBlueprint;
-  final String? productBlueprintError;
-
-  final List<ModelVariationDTO>? modelVariations;
-  final String? modelVariationsError;
-}
-
 // ============================================================
-// ✅ NEW: CatalogRepositoryHttp + DTO (matches backend SNSCatalogDTO)
+// UI components (style-only)
 // ============================================================
 
-class SnsCatalogDTO {
-  const SnsCatalogDTO({
-    required this.list,
-    required this.inventory,
-    required this.inventoryError,
-    required this.productBlueprint,
-    required this.productBlueprintError,
-    required this.modelVariations,
-    required this.modelVariationsError,
+class _TokenBlueprintCard extends StatelessWidget {
+  const _TokenBlueprintCard({
+    required this.tokenBlueprintId,
+    required this.patch,
+    required this.error,
+    required this.iconUrlEncoded,
   });
 
-  final SnsListItem list;
+  final String tokenBlueprintId;
+  final TokenBlueprintPatch? patch;
+  final String? error;
+  final String? iconUrlEncoded;
 
-  final SnsInventoryResponse? inventory;
-  final String? inventoryError;
-
-  final SnsProductBlueprintResponse? productBlueprint;
-  final String? productBlueprintError;
-
-  final List<ModelVariationDTO>? modelVariations;
-  final String? modelVariationsError;
-
-  static String? _asNonEmptyString(dynamic v) {
-    final s = (v ?? '').toString().trim();
-    return s.isEmpty ? null : s;
+  void _log(String msg) {
+    // ignore: avoid_print
+    print('[TokenCard] $msg');
   }
 
-  factory SnsCatalogDTO.fromJson(Map<String, dynamic> json) {
-    // NOTE:
-    // - list / inventory / productBlueprint / modelVariations are nested objects
-    // - errors are strings (empty string means "no error" from backend)
-    final listJson =
-        (json['list'] as Map?)?.cast<String, dynamic>() ?? const {};
-    final invJson = (json['inventory'] as Map?)?.cast<String, dynamic>();
-    final pbJson = (json['productBlueprint'] as Map?)?.cast<String, dynamic>();
-    final mvJson = json['modelVariations'];
+  String _s(String? v, {String fallback = '(empty)'}) {
+    final t = (v ?? '').trim();
+    return t.isNotEmpty ? t : fallback;
+  }
 
-    return SnsCatalogDTO(
-      list: SnsListItem.fromJson(listJson),
-      inventory: invJson != null
-          ? SnsInventoryResponse.fromJson(invJson)
-          : null,
-      inventoryError: _asNonEmptyString(json['inventoryError']),
-      productBlueprint: pbJson != null
-          ? SnsProductBlueprintResponse.fromJson(pbJson)
-          : null,
-      productBlueprintError: _asNonEmptyString(json['productBlueprintError']),
-      modelVariations: (mvJson is List)
-          ? mvJson
-                .whereType<Map>()
-                .map(
-                  (e) => ModelVariationDTO.fromJson(e.cast<String, dynamic>()),
+  @override
+  Widget build(BuildContext context) {
+    final tbId = tokenBlueprintId.trim();
+    final p = patch;
+
+    // ✅ このカードが「実際に受け取った patch」をログで確認
+    _log(
+      'build tbId="${tbId.isNotEmpty ? tbId : '(empty)'}" '
+      'patch?=${p != null} '
+      'name="${p?.name ?? ''}" symbol="${p?.symbol ?? ''}" brandId="${p?.brandId ?? ''}" '
+      'minted=${p?.minted} '
+      'hasIcon=${(iconUrlEncoded ?? '').trim().isNotEmpty} '
+      'err="${(error ?? '').trim()}"',
+    );
+
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(12),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('Token', style: Theme.of(context).textTheme.titleMedium),
+            const SizedBox(height: 8),
+            _KeyValueRow(
+              label: 'tokenBlueprintId',
+              value: tbId.isNotEmpty ? tbId : '(unknown)',
+            ),
+            const SizedBox(height: 10),
+            if (p != null) ...[
+              if ((iconUrlEncoded ?? '').trim().isNotEmpty) ...[
+                AspectRatio(
+                  aspectRatio: 1,
+                  child: Image.network(
+                    iconUrlEncoded!,
+                    fit: BoxFit.cover,
+                    errorBuilder: (context, err, st) {
+                      return _ImageFallback(
+                        label: 'token icon failed',
+                        detail: err.toString(),
+                      );
+                    },
+                    loadingBuilder: (context, child, progress) {
+                      if (progress == null) return child;
+                      return const Center(child: CircularProgressIndicator());
+                    },
+                  ),
+                ),
+                const SizedBox(height: 10),
+              ],
+              _KeyValueRow(label: 'name', value: _s(p.name)),
+              const SizedBox(height: 6),
+              _KeyValueRow(label: 'symbol', value: _s(p.symbol)),
+              const SizedBox(height: 6),
+              _KeyValueRow(label: 'brandId', value: _s(p.brandId)),
+              const SizedBox(height: 6),
+              _KeyValueRow(label: 'brandName', value: _s(p.brandName)),
+              const SizedBox(height: 6),
+              _KeyValueRow(
+                label: 'minted',
+                value: p.minted == null
+                    ? '(unknown)'
+                    : (p.minted! ? 'true' : 'false'),
+              ),
+              const SizedBox(height: 10),
+              if ((p.description ?? '').trim().isNotEmpty)
+                Text(
+                  p.description!.trim(),
+                  style: Theme.of(context).textTheme.bodyMedium,
+                ),
+            ] else ...[
+              if (error != null && error!.trim().isNotEmpty)
+                Text(
+                  'token error: ${error!.trim()}',
+                  style: Theme.of(context).textTheme.labelSmall,
                 )
-                .toList()
-          : null,
-      modelVariationsError: _asNonEmptyString(json['modelVariationsError']),
+              else
+                Text(
+                  'token is not loaded',
+                  style: Theme.of(context).textTheme.labelSmall,
+                ),
+            ],
+          ],
+        ),
+      ),
     );
   }
 }
-
-class CatalogRepositoryHttp {
-  CatalogRepositoryHttp({http.Client? client})
-    : _client = client ?? http.Client();
-
-  final http.Client _client;
-
-  void dispose() {
-    _client.close();
-  }
-
-  static String _resolveApiBase() {
-    // flutter run --dart-define=API_BASE=https://...
-    const env = String.fromEnvironment('API_BASE');
-    if (env.trim().isNotEmpty) return env.trim();
-
-    // ✅ 方針変更: 未指定時の Cloud Run URL fallback はしない
-    throw Exception(
-      'API_BASE is not set (use --dart-define=API_BASE=https://...)',
-    );
-  }
-
-  static Uri _buildUri(String path) {
-    final base = _resolveApiBase().replaceAll(RegExp(r'\/+$'), '');
-    final p = path.startsWith('/') ? path : '/$path';
-    return Uri.parse('$base$p');
-  }
-
-  Future<SnsCatalogDTO> fetchCatalogByListId(String listId) async {
-    final id = listId.trim();
-    if (id.isEmpty) {
-      throw Exception('catalog: listId is empty');
-    }
-
-    final uri = _buildUri('/sns/catalog/$id');
-    final res = await _client.get(uri, headers: {'accept': 'application/json'});
-
-    if (res.statusCode < 200 || res.statusCode >= 300) {
-      throw Exception('catalog: http ${res.statusCode} body=${res.body}');
-    }
-
-    final jsonObj = jsonDecode(res.body);
-    if (jsonObj is! Map) {
-      throw Exception('catalog: invalid json (not an object)');
-    }
-
-    return SnsCatalogDTO.fromJson(jsonObj.cast<String, dynamic>());
-  }
-}
-
-// ============================================================
-// UI components
-// ============================================================
 
 class _KeyValueRow extends StatelessWidget {
   const _KeyValueRow({required this.label, required this.value});

@@ -24,6 +24,8 @@ type SNSDeps struct {
 	ProductBlueprint http.Handler // ✅ NEW
 	Model            http.Handler // ✅ NEW
 	Catalog          http.Handler // ✅ NEW
+
+	TokenBlueprint http.Handler // ✅ NEW (patch)
 }
 
 // NewSNSDeps wires SNS handlers.
@@ -34,6 +36,7 @@ func NewSNSDeps(
 	invUC *usecase.InventoryUsecase,
 	pbUC *usecase.ProductBlueprintUsecase, // ✅ NEW
 	modelUC *usecase.ModelUsecase, // ✅ NEW
+	tokenBlueprintUC *usecase.TokenBlueprintUsecase, // ✅ NEW (patch)
 
 	// ✅ NEW: catalog query
 	catalogQ *snsquery.SNSCatalogQuery,
@@ -43,6 +46,7 @@ func NewSNSDeps(
 	var pbHandler http.Handler
 	var modelHandler http.Handler
 	var catalogHandler http.Handler
+	var tokenBlueprintHandler http.Handler
 
 	if listUC != nil {
 		listHandler = snshandler.NewSNSListHandler(listUC)
@@ -64,12 +68,18 @@ func NewSNSDeps(
 		catalogHandler = snshandler.NewSNSCatalogHandler(catalogQ) // ✅ NEW
 	}
 
+	// ✅ NEW: tokenBlueprint patch handler
+	if tokenBlueprintUC != nil {
+		tokenBlueprintHandler = snshandler.NewSNSTokenBlueprintHandler(tokenBlueprintUC)
+	}
+
 	return SNSDeps{
 		List:             listHandler,
 		Inventory:        invHandler,
 		ProductBlueprint: pbHandler,
 		Model:            modelHandler,
 		Catalog:          catalogHandler,
+		TokenBlueprint:   tokenBlueprintHandler, // ✅ NEW
 	}
 }
 
@@ -111,8 +121,9 @@ func RegisterSNSFromContainer(mux *http.ServeMux, cont *Container) {
 		deps.ListUC,
 		deps.InventoryUC,
 		deps.ProductBlueprintUC,
-		deps.ModelUC, // ✅ NEW
-		catalogQ,     // ✅ NEW
+		deps.ModelUC,          // ✅ NEW
+		deps.TokenBlueprintUC, // ✅ NEW
+		catalogQ,              // ✅ NEW
 	)
 	RegisterSNSRoutes(mux, snsDeps)
 }
@@ -128,6 +139,8 @@ func RegisterSNSRoutes(mux *http.ServeMux, deps SNSDeps) {
 		ProductBlueprint: deps.ProductBlueprint,
 		Model:            deps.Model,
 		Catalog:          deps.Catalog, // ✅ NEW
+
+		TokenBlueprint: deps.TokenBlueprint, // ✅ NEW
 	})
 }
 

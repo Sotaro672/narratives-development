@@ -3,6 +3,7 @@ package dto
 
 import (
 	ldom "narratives/internal/domain/list"
+	tbdom "narratives/internal/domain/tokenBlueprint"
 )
 
 // ============================================================
@@ -17,6 +18,10 @@ type SNSCatalogDTO struct {
 
 	ProductBlueprint      *SNSCatalogProductBlueprintDTO `json:"productBlueprint,omitempty"`
 	ProductBlueprintError string                         `json:"productBlueprintError,omitempty"`
+
+	// ✅ NEW: tokenBlueprint patch
+	TokenBlueprint      *tbdom.Patch `json:"tokenBlueprint,omitempty"`
+	TokenBlueprintError string       `json:"tokenBlueprintError,omitempty"`
 
 	ModelVariations      []SNSCatalogModelVariationDTO `json:"modelVariations,omitempty"`
 	ModelVariationsError string                        `json:"modelVariationsError,omitempty"`
