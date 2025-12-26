@@ -1,3 +1,4 @@
+// frontend\sns\lib\features\home\presentation\hook\use_catalog.dart
 import 'dart:convert';
 
 import 'package:http/http.dart' as http;
@@ -7,6 +8,8 @@ import '../../../list/infrastructure/list_repository_http.dart';
 import '../../../model/infrastructure/model_repository_http.dart';
 import '../../../productBlueprint/infrastructure/product_blueprint_repository_http.dart';
 import '../../../tokenBlueprint/infrastructure/token_blueprint_repository_http.dart';
+import 'use_catalog_inventory.dart'; // ✅ NEW
+import 'use_catalog_model.dart'; // ✅ NEW
 import 'use_catalog_product.dart';
 import 'use_catalog_token.dart';
 
@@ -17,6 +20,8 @@ class UseCatalog {
       _listRepo = ListRepositoryHttp(),
       _invRepo = InventoryRepositoryHttp(),
       _modelRepo = ModelRepositoryHTTP(),
+      _inventory = const UseCatalogInventory(), // ✅ NEW
+      _model = const UseCatalogModel(), // ✅ NEW
       _product = UseCatalogProduct(),
       _token = UseCatalogToken();
 
@@ -25,6 +30,12 @@ class UseCatalog {
   final ListRepositoryHttp _listRepo;
   final InventoryRepositoryHttp _invRepo;
   final ModelRepositoryHTTP _modelRepo;
+
+  // ✅ inventory card 用 hook（計算だけ）
+  final UseCatalogInventory _inventory;
+
+  // ✅ model card 用 hook（取得/補完）
+  final UseCatalogModel _model;
 
   // ✅ product card 用 hook
   final UseCatalogProduct _product;
@@ -83,14 +94,22 @@ class UseCatalog {
         initialError: dto.productBlueprintError,
       );
 
+      // ✅ model (DTO優先 / 無ければ pbId から補完 fetch)
+      final modelRes = await _model.load(
+        modelRepo: _modelRepo,
+        productBlueprintId: pbId,
+        initial: dto.modelVariations,
+        initialError: dto.modelVariationsError,
+      );
+
       final state = _buildState(
         list: dto.list,
         inventory: dto.inventory,
         inventoryError: dto.inventoryError,
         productBlueprint: prod.productBlueprint,
         productBlueprintError: prod.productBlueprintError,
-        modelVariations: dto.modelVariations,
-        modelVariationsError: dto.modelVariationsError,
+        modelVariations: modelRes.models,
+        modelVariationsError: modelRes.error,
         tokenBlueprintPatch: token.patch,
         tokenBlueprintError: token.error,
         // ✅ ここで resolvedTbId を渡す（inventory 無くてもIDが落ちない）
@@ -173,25 +192,13 @@ class UseCatalog {
     final pb = prod.productBlueprint;
     final pbErr = prod.productBlueprintError;
 
-    // model variations
-    List<ModelVariationDTO>? models;
-    String? modelErr;
-
-    if (pbId.isNotEmpty) {
-      try {
-        _log('legacy fetch model variations start pbId=$pbId');
-        models = await _modelRepo.fetchModelVariationsByProductBlueprintId(
-          pbId,
-        );
-        _log('legacy model variations ok count=${models.length}');
-      } catch (e) {
-        modelErr = e.toString();
-        _log('legacy model variations error: $modelErr');
-      }
-    } else {
-      modelErr = 'productBlueprintId is unavailable (skip model fetch)';
-      _log('legacy model variations skip: $modelErr');
-    }
+    // ✅ model variations（hook に移譲）
+    final modelRes = await _model.load(
+      modelRepo: _modelRepo,
+      productBlueprintId: pbId,
+      initial: null,
+      initialError: null,
+    );
 
     // ✅ token patch（hook に移譲）
     final token = await _token.load(resolvedTokenBlueprintId: resolvedTbId);
@@ -202,8 +209,8 @@ class UseCatalog {
       inventoryError: invErr,
       productBlueprint: pb,
       productBlueprintError: pbErr,
-      modelVariations: models,
-      modelVariationsError: modelErr,
+      modelVariations: modelRes.models,
+      modelVariationsError: modelRes.error,
       tokenBlueprintPatch: token.patch,
       tokenBlueprintError: token.error,
       // ✅ legacy でも resolvedTbId を渡す
@@ -248,39 +255,11 @@ class UseCatalog {
     // ✅ tokenBlueprintId は resolved（inventory優先→list fallback）
     final tbId = resolvedTokenBlueprintId.trim();
 
-    final totalStock = inventory != null ? _totalStock(inventory) : null;
-
-    // modelId -> variation
-    final modelMap = <String, ModelVariationDTO>{};
-    if (modelVariations != null) {
-      for (final v in modelVariations) {
-        final id = v.id.trim();
-        if (id.isNotEmpty) modelMap[id] = v;
-      }
-    }
-
-    final modelStockRows = <CatalogModelStockRow>[];
-    if (inventory != null) {
-      for (final e in inventory.stock.entries) {
-        final modelId = e.key.trim();
-        final stock = e.value;
-        final meta = modelMap[modelId];
-
-        final label = meta != null
-            ? _modelLabel(meta)
-            : (modelId.isNotEmpty ? modelId : '(no model)');
-
-        final count = _stockCount(stock);
-
-        modelStockRows.add(
-          CatalogModelStockRow(
-            modelId: modelId,
-            label: label,
-            stockCount: count,
-          ),
-        );
-      }
-    }
+    // ✅ inventory 計算は hook に分離
+    final invComputed = _inventory.compute(
+      inventory: inventory,
+      modelVariations: modelVariations,
+    );
 
     final tokenIconUrl = (tokenBlueprintPatch?.iconUrl ?? '').trim();
 
@@ -300,8 +279,8 @@ class UseCatalog {
 
       productBlueprintId: pbId,
       tokenBlueprintId: tbId, // ✅ resolved を反映
-      totalStock: totalStock,
-      modelStockRows: modelStockRows,
+      totalStock: invComputed.totalStock,
+      modelStockRows: invComputed.modelStockRows,
 
       tokenBlueprintPatch: tokenBlueprintPatch,
       tokenBlueprintError: _asNonEmptyString(tokenBlueprintError),
@@ -335,33 +314,6 @@ class UseCatalog {
     final max = prices.last;
     if (min == max) return '¥$min';
     return '¥$min 〜 ¥$max';
-  }
-
-  static int _stockCount(SnsInventoryModelStock s) {
-    if (s.products.isEmpty) return 0;
-    var n = 0;
-    for (final v in s.products.values) {
-      if (v == true) n++;
-    }
-    return n;
-  }
-
-  static int _totalStock(SnsInventoryResponse inv) {
-    var sum = 0;
-    for (final v in inv.stock.values) {
-      sum += _stockCount(v);
-    }
-    return sum;
-  }
-
-  static String _modelLabel(ModelVariationDTO v) {
-    final parts = <String>[];
-    if (v.modelNumber.trim().isNotEmpty) parts.add(v.modelNumber.trim());
-    if (v.size.trim().isNotEmpty) parts.add(v.size.trim());
-    final color = v.color.name.trim();
-    if (color.isNotEmpty) parts.add(color);
-    if (parts.isEmpty) return '(empty)';
-    return parts.join(' / ');
   }
 }
 
@@ -417,18 +369,6 @@ class CatalogState {
   final TokenBlueprintPatch? tokenBlueprintPatch;
   final String? tokenBlueprintError;
   final String? tokenIconUrlEncoded;
-}
-
-class CatalogModelStockRow {
-  const CatalogModelStockRow({
-    required this.modelId,
-    required this.label,
-    required this.stockCount,
-  });
-
-  final String modelId;
-  final String label;
-  final int stockCount;
 }
 
 // ============================================================

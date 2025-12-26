@@ -1,6 +1,9 @@
+// frontend\sns\lib\features\home\presentation\page\catalog.dart
 import 'package:flutter/material.dart';
 
+import 'package:sns/features/home/presentation/components/catalog_inventory.dart'; // ✅ FIX: package import
 import '../../../list/infrastructure/list_repository_http.dart'; // SnsListItem, SnsListPriceRow
+import '../components/catalog_model.dart'; // ✅ NEW
 import '../components/catalog_product.dart';
 import '../components/catalog_token.dart';
 import '../hook/use_catalog.dart';
@@ -233,75 +236,14 @@ class _CatalogPageState extends State<CatalogPage> {
 
               const SizedBox(height: 12),
 
-              // -------- inventory --------
-              Card(
-                child: Padding(
-                  padding: const EdgeInsets.all(12),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        'Inventory',
-                        style: Theme.of(context).textTheme.titleMedium,
-                      ),
-                      const SizedBox(height: 8),
-                      _KeyValueRow(
-                        label: 'productBlueprintId',
-                        value: pbId.isNotEmpty ? pbId : '(unknown)',
-                      ),
-                      const SizedBox(height: 6),
-                      _KeyValueRow(
-                        label: 'tokenBlueprintId',
-                        value: tbId.isNotEmpty ? tbId : '(unknown)',
-                      ),
-                      const SizedBox(height: 6),
-                      _KeyValueRow(
-                        label: 'total stock',
-                        value: totalStock != null
-                            ? totalStock.toString()
-                            : '(not loaded)',
-                      ),
-                      if (inv != null) ...[
-                        const SizedBox(height: 12),
-                        Text(
-                          'By model',
-                          style: Theme.of(context).textTheme.titleSmall,
-                        ),
-                        const SizedBox(height: 6),
-                        ...vm!.modelStockRows.map((r) {
-                          final modelId = r.modelId;
-                          final count = r.stockCount;
-
-                          return Padding(
-                            padding: const EdgeInsets.symmetric(vertical: 6),
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(
-                                  r.label,
-                                  style: Theme.of(context).textTheme.bodyMedium,
-                                ),
-                                const SizedBox(height: 2),
-                                Text(
-                                  'modelId: ${modelId.isNotEmpty ? modelId : '(empty)'}   stock: $count',
-                                  style: Theme.of(context).textTheme.labelSmall,
-                                ),
-                              ],
-                            ),
-                          );
-                        }),
-                      ] else ...[
-                        if (invErr != null && invErr.trim().isNotEmpty) ...[
-                          const SizedBox(height: 10),
-                          Text(
-                            'inventory error: $invErr',
-                            style: Theme.of(context).textTheme.labelSmall,
-                          ),
-                        ],
-                      ],
-                    ],
-                  ),
-                ),
+              // ✅ inventory card (extracted)
+              CatalogInventoryCard(
+                productBlueprintId: pbId,
+                tokenBlueprintId: tbId,
+                totalStock: totalStock,
+                inventory: inv,
+                inventoryError: invErr,
+                modelStockRows: vm?.modelStockRows,
               ),
 
               const SizedBox(height: 12),
@@ -315,86 +257,11 @@ class _CatalogPageState extends State<CatalogPage> {
 
               const SizedBox(height: 12),
 
-              // -------- model variations --------
-              Card(
-                child: Padding(
-                  padding: const EdgeInsets.all(12),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        'Model',
-                        style: Theme.of(context).textTheme.titleMedium,
-                      ),
-                      const SizedBox(height: 8),
-                      _KeyValueRow(
-                        label: 'productBlueprintId',
-                        value: pbId.isNotEmpty ? pbId : '(unknown)',
-                      ),
-                      const SizedBox(height: 10),
-                      if (models != null) ...[
-                        if (models.isEmpty)
-                          Text(
-                            '(empty)',
-                            style: Theme.of(context).textTheme.bodyMedium,
-                          )
-                        else
-                          ...models.map((v) {
-                            final mId = v.id.trim();
-                            return Padding(
-                              padding: const EdgeInsets.symmetric(vertical: 8),
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Text(
-                                    [
-                                      v.modelNumber.trim(),
-                                      v.size.trim(),
-                                      v.color.name.trim(),
-                                    ].where((s) => s.isNotEmpty).join(' / '),
-                                    style: Theme.of(
-                                      context,
-                                    ).textTheme.bodyLarge,
-                                  ),
-                                  const SizedBox(height: 4),
-                                  Text(
-                                    'modelId: ${mId.isNotEmpty ? mId : '(empty)'}',
-                                    style: Theme.of(
-                                      context,
-                                    ).textTheme.labelSmall,
-                                  ),
-                                  if (v.measurements.isNotEmpty) ...[
-                                    const SizedBox(height: 6),
-                                    Wrap(
-                                      spacing: 8,
-                                      runSpacing: 8,
-                                      children: v.measurements.entries.map((e) {
-                                        return Chip(
-                                          label: Text('${e.key}: ${e.value}'),
-                                          visualDensity: VisualDensity.compact,
-                                        );
-                                      }).toList(),
-                                    ),
-                                  ],
-                                ],
-                              ),
-                            );
-                          }),
-                      ] else ...[
-                        if (modelErr != null && modelErr.trim().isNotEmpty)
-                          Text(
-                            'model error: $modelErr',
-                            style: Theme.of(context).textTheme.labelSmall,
-                          )
-                        else
-                          Text(
-                            'model is not loaded',
-                            style: Theme.of(context).textTheme.labelSmall,
-                          ),
-                      ],
-                    ],
-                  ),
-                ),
+              // ✅ model card (extracted)
+              CatalogModelCard(
+                productBlueprintId: pbId,
+                models: models,
+                modelError: modelErr,
               ),
             ],
           );
@@ -407,26 +274,6 @@ class _CatalogPageState extends State<CatalogPage> {
 // ============================================================
 // UI components (style-only)
 // ============================================================
-
-class _KeyValueRow extends StatelessWidget {
-  const _KeyValueRow({required this.label, required this.value});
-
-  final String label;
-  final String value;
-
-  @override
-  Widget build(BuildContext context) {
-    return Row(
-      children: [
-        SizedBox(
-          width: 160,
-          child: Text(label, style: Theme.of(context).textTheme.labelMedium),
-        ),
-        Expanded(child: Text(value)),
-      ],
-    );
-  }
-}
 
 class _ImageFallback extends StatelessWidget {
   const _ImageFallback({required this.label, this.detail});
