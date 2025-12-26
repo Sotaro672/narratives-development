@@ -1,9 +1,8 @@
-// frontend/sns/lib/features/home/presentation/page/catalog.dart
 import 'package:flutter/material.dart';
 
 import '../../../list/infrastructure/list_repository_http.dart'; // SnsListItem, SnsListPriceRow
-import '../../../tokenBlueprint/infrastructure/token_blueprint_repository_http.dart'
-    show TokenBlueprintPatch;
+import '../components/catalog_product.dart';
+import '../components/catalog_token.dart';
 import '../hook/use_catalog.dart';
 
 class CatalogPage extends StatefulWidget {
@@ -224,8 +223,8 @@ class _CatalogPageState extends State<CatalogPage> {
 
               const SizedBox(height: 12),
 
-              // ✅ token blueprint card (patch)
-              _TokenBlueprintCard(
+              // ✅ token blueprint card (moved)
+              CatalogTokenCard(
                 tokenBlueprintId: tbId,
                 patch: tbPatch,
                 error: tbErr,
@@ -307,124 +306,11 @@ class _CatalogPageState extends State<CatalogPage> {
 
               const SizedBox(height: 12),
 
-              // -------- product blueprint --------
-              Card(
-                child: Padding(
-                  padding: const EdgeInsets.all(12),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        'Product',
-                        style: Theme.of(context).textTheme.titleMedium,
-                      ),
-                      const SizedBox(height: 8),
-                      if (pb != null) ...[
-                        _KeyValueRow(
-                          label: 'productName',
-                          value: pb.productName.isNotEmpty
-                              ? pb.productName
-                              : '(empty)',
-                        ),
-                        const SizedBox(height: 6),
-                        _KeyValueRow(
-                          label: 'brandId',
-                          value: pb.brandId.isNotEmpty ? pb.brandId : '(empty)',
-                        ),
-                        const SizedBox(height: 6),
-                        _KeyValueRow(
-                          label: 'companyId',
-                          value: pb.companyId.isNotEmpty
-                              ? pb.companyId
-                              : '(empty)',
-                        ),
-                        const SizedBox(height: 6),
-                        _KeyValueRow(
-                          label: 'itemType',
-                          value: pb.itemType.isNotEmpty
-                              ? pb.itemType
-                              : '(empty)',
-                        ),
-                        const SizedBox(height: 6),
-                        _KeyValueRow(
-                          label: 'fit',
-                          value: pb.fit.isNotEmpty ? pb.fit : '(empty)',
-                        ),
-                        const SizedBox(height: 6),
-                        _KeyValueRow(
-                          label: 'material',
-                          value: pb.material.isNotEmpty
-                              ? pb.material
-                              : '(empty)',
-                        ),
-                        const SizedBox(height: 6),
-                        _KeyValueRow(
-                          label: 'weight',
-                          value: pb.weight != null ? '${pb.weight}' : '(empty)',
-                        ),
-                        const SizedBox(height: 6),
-                        _KeyValueRow(
-                          label: 'printed',
-                          value: pb.printed == true ? 'true' : 'false',
-                        ),
-                        const SizedBox(height: 12),
-                        Text(
-                          'Quality assurance',
-                          style: Theme.of(context).textTheme.titleSmall,
-                        ),
-                        const SizedBox(height: 6),
-                        if (pb.qualityAssurance.isEmpty)
-                          Text(
-                            '(empty)',
-                            style: Theme.of(context).textTheme.bodyMedium,
-                          )
-                        else
-                          Wrap(
-                            spacing: 8,
-                            runSpacing: 8,
-                            children: pb.qualityAssurance
-                                .map(
-                                  (s) => Chip(
-                                    label: Text(s),
-                                    visualDensity: VisualDensity.compact,
-                                  ),
-                                )
-                                .toList(),
-                          ),
-                        const SizedBox(height: 12),
-                        Text(
-                          'ProductId tag',
-                          style: Theme.of(context).textTheme.titleSmall,
-                        ),
-                        const SizedBox(height: 6),
-                        _KeyValueRow(
-                          label: 'type',
-                          value: pb.productIdTagType.isNotEmpty
-                              ? pb.productIdTagType
-                              : '(empty)',
-                        ),
-                      ] else ...[
-                        _KeyValueRow(
-                          label: 'productBlueprintId',
-                          value: pbId.isNotEmpty ? pbId : '(unknown)',
-                        ),
-                        if (pbErr != null && pbErr.trim().isNotEmpty) ...[
-                          const SizedBox(height: 10),
-                          Text(
-                            'product error: $pbErr',
-                            style: Theme.of(context).textTheme.labelSmall,
-                          ),
-                        ] else ...[
-                          const SizedBox(height: 10),
-                          Text(
-                            'product is not loaded',
-                            style: Theme.of(context).textTheme.labelSmall,
-                          ),
-                        ],
-                      ],
-                    ],
-                  ),
-                ),
+              // ✅ product blueprint card (moved)
+              CatalogProductCard(
+                productBlueprintId: pbId,
+                productBlueprint: pb,
+                error: pbErr,
               ),
 
               const SizedBox(height: 12),
@@ -521,117 +407,6 @@ class _CatalogPageState extends State<CatalogPage> {
 // ============================================================
 // UI components (style-only)
 // ============================================================
-
-class _TokenBlueprintCard extends StatelessWidget {
-  const _TokenBlueprintCard({
-    required this.tokenBlueprintId,
-    required this.patch,
-    required this.error,
-    required this.iconUrlEncoded,
-  });
-
-  final String tokenBlueprintId;
-  final TokenBlueprintPatch? patch;
-  final String? error;
-  final String? iconUrlEncoded;
-
-  void _log(String msg) {
-    // ignore: avoid_print
-    print('[TokenCard] $msg');
-  }
-
-  String _s(String? v, {String fallback = '(empty)'}) {
-    final t = (v ?? '').trim();
-    return t.isNotEmpty ? t : fallback;
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final tbId = tokenBlueprintId.trim();
-    final p = patch;
-
-    // ✅ このカードが「実際に受け取った patch」をログで確認
-    _log(
-      'build tbId="${tbId.isNotEmpty ? tbId : '(empty)'}" '
-      'patch?=${p != null} '
-      'name="${p?.name ?? ''}" symbol="${p?.symbol ?? ''}" brandId="${p?.brandId ?? ''}" '
-      'minted=${p?.minted} '
-      'hasIcon=${(iconUrlEncoded ?? '').trim().isNotEmpty} '
-      'err="${(error ?? '').trim()}"',
-    );
-
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(12),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text('Token', style: Theme.of(context).textTheme.titleMedium),
-            const SizedBox(height: 8),
-            _KeyValueRow(
-              label: 'tokenBlueprintId',
-              value: tbId.isNotEmpty ? tbId : '(unknown)',
-            ),
-            const SizedBox(height: 10),
-            if (p != null) ...[
-              if ((iconUrlEncoded ?? '').trim().isNotEmpty) ...[
-                AspectRatio(
-                  aspectRatio: 1,
-                  child: Image.network(
-                    iconUrlEncoded!,
-                    fit: BoxFit.cover,
-                    errorBuilder: (context, err, st) {
-                      return _ImageFallback(
-                        label: 'token icon failed',
-                        detail: err.toString(),
-                      );
-                    },
-                    loadingBuilder: (context, child, progress) {
-                      if (progress == null) return child;
-                      return const Center(child: CircularProgressIndicator());
-                    },
-                  ),
-                ),
-                const SizedBox(height: 10),
-              ],
-              _KeyValueRow(label: 'name', value: _s(p.name)),
-              const SizedBox(height: 6),
-              _KeyValueRow(label: 'symbol', value: _s(p.symbol)),
-              const SizedBox(height: 6),
-              _KeyValueRow(label: 'brandId', value: _s(p.brandId)),
-              const SizedBox(height: 6),
-              _KeyValueRow(label: 'brandName', value: _s(p.brandName)),
-              const SizedBox(height: 6),
-              _KeyValueRow(
-                label: 'minted',
-                value: p.minted == null
-                    ? '(unknown)'
-                    : (p.minted! ? 'true' : 'false'),
-              ),
-              const SizedBox(height: 10),
-              if ((p.description ?? '').trim().isNotEmpty)
-                Text(
-                  p.description!.trim(),
-                  style: Theme.of(context).textTheme.bodyMedium,
-                ),
-            ] else ...[
-              if (error != null && error!.trim().isNotEmpty)
-                Text(
-                  'token error: ${error!.trim()}',
-                  style: Theme.of(context).textTheme.labelSmall,
-                )
-              else
-                Text(
-                  'token is not loaded',
-                  style: Theme.of(context).textTheme.labelSmall,
-                ),
-            ],
-          ],
-        ),
-      ),
-    );
-  }
-}
 
 class _KeyValueRow extends StatelessWidget {
   const _KeyValueRow({required this.label, required this.value});

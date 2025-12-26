@@ -35,6 +35,11 @@ type Patch struct {
 	// NOTE: Update入力として受け取っても、永続化に使わない想定（表示専用）。
 	BrandName *string `json:"brandName,omitempty"`
 
+	// ✅ NEW: company (read-only display fields)
+	// NOTE: Update入力として受け取っても、永続化に使わない想定（表示専用）。
+	CompanyID   *string `json:"companyId,omitempty"`
+	CompanyName *string `json:"companyName,omitempty"`
+
 	ItemType         *ItemType     `json:"itemType,omitempty"`
 	Fit              *string       `json:"fit,omitempty"`
 	Material         *string       `json:"material,omitempty"`

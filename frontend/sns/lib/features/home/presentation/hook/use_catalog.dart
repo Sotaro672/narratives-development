@@ -1,4 +1,3 @@
-// frontend/sns/lib/features/home/presentation/hook/use_catalog.dart
 import 'dart:convert';
 
 import 'package:http/http.dart' as http;
@@ -8,6 +7,8 @@ import '../../../list/infrastructure/list_repository_http.dart';
 import '../../../model/infrastructure/model_repository_http.dart';
 import '../../../productBlueprint/infrastructure/product_blueprint_repository_http.dart';
 import '../../../tokenBlueprint/infrastructure/token_blueprint_repository_http.dart';
+import 'use_catalog_product.dart';
+import 'use_catalog_token.dart';
 
 /// ✅ state/logic holder for CatalogPage
 class UseCatalog {
@@ -15,27 +16,29 @@ class UseCatalog {
     : _catalogRepo = CatalogRepositoryHttp(client: client),
       _listRepo = ListRepositoryHttp(),
       _invRepo = InventoryRepositoryHttp(),
-      _pbRepo = ProductBlueprintRepositoryHttp(),
       _modelRepo = ModelRepositoryHTTP(),
-      _tbRepo = TokenBlueprintRepositoryHTTP();
+      _product = UseCatalogProduct(),
+      _token = UseCatalogToken();
 
   final CatalogRepositoryHttp _catalogRepo;
 
   final ListRepositoryHttp _listRepo;
   final InventoryRepositoryHttp _invRepo;
-  final ProductBlueprintRepositoryHttp _pbRepo;
   final ModelRepositoryHTTP _modelRepo;
 
-  // NOTE: TokenBlueprintRepositoryHTTP has no dispose() (same as ModelRepositoryHTTP).
-  final TokenBlueprintRepositoryHTTP _tbRepo;
+  // ✅ product card 用 hook
+  final UseCatalogProduct _product;
+
+  // ✅ token card 用 hook
+  final UseCatalogToken _token;
 
   void dispose() {
     _catalogRepo.dispose();
     _listRepo.dispose();
     _invRepo.dispose();
-    _pbRepo.dispose();
     // ModelRepositoryHTTP: no dispose()
-    // TokenBlueprintRepositoryHTTP: no dispose()
+    _product.dispose();
+    _token.dispose();
   }
 
   void _log(String msg) {
@@ -64,54 +67,32 @@ class UseCatalog {
         'inv.tbId="${(dto.inventory?.tokenBlueprintId ?? '').trim()}"',
       );
 
-      // ✅ tokenBlueprint patch (best-effort)
-      // - inventory があれば inventory の tokenBlueprintId を優先
-      // - なければ list.tokenBlueprintId を使う
+      // ✅ tokenBlueprintId resolve (inventory優先 → list fallback)
       final resolvedTbId =
           (dto.inventory?.tokenBlueprintId ?? dto.list.tokenBlueprintId).trim();
-
       _log('resolved tokenBlueprintId="$resolvedTbId"');
 
-      TokenBlueprintPatch? tbPatch;
-      String? tbErr;
+      // ✅ token patch（hook に移譲）
+      final token = await _token.load(resolvedTokenBlueprintId: resolvedTbId);
 
-      if (resolvedTbId.isNotEmpty) {
-        try {
-          _log('fetchPatch start tokenBlueprintId=$resolvedTbId');
-          tbPatch = await _tbRepo.fetchPatch(resolvedTbId);
-
-          if (tbPatch == null) {
-            tbErr = 'tokenBlueprint patch not found (404)';
-            _log('fetchPatch result: null (404)');
-          } else {
-            _log(
-              'fetchPatch ok '
-              'name="${(tbPatch.name ?? '').trim()}" '
-              'symbol="${(tbPatch.symbol ?? '').trim()}" '
-              'brandId="${(tbPatch.brandId ?? '').trim()}" '
-              'minted=${tbPatch.minted} '
-              'hasIconUrl=${(tbPatch.iconUrl ?? '').trim().isNotEmpty}',
-            );
-          }
-        } catch (e) {
-          tbErr = e.toString();
-          _log('fetchPatch error: $tbErr');
-        }
-      } else {
-        tbErr = 'tokenBlueprintId is empty';
-        _log('skip fetchPatch: tokenBlueprintId is empty');
-      }
+      // ✅ product (catalog DTO が返す場合はそれを優先 / 無い場合は pbId から補完)
+      final pbId = (dto.inventory?.productBlueprintId ?? '').trim();
+      final prod = await _product.load(
+        productBlueprintId: pbId,
+        initial: dto.productBlueprint,
+        initialError: dto.productBlueprintError,
+      );
 
       final state = _buildState(
         list: dto.list,
         inventory: dto.inventory,
         inventoryError: dto.inventoryError,
-        productBlueprint: dto.productBlueprint,
-        productBlueprintError: dto.productBlueprintError,
+        productBlueprint: prod.productBlueprint,
+        productBlueprintError: prod.productBlueprintError,
         modelVariations: dto.modelVariations,
         modelVariationsError: dto.modelVariationsError,
-        tokenBlueprintPatch: tbPatch,
-        tokenBlueprintError: tbErr,
+        tokenBlueprintPatch: token.patch,
+        tokenBlueprintError: token.error,
         // ✅ ここで resolvedTbId を渡す（inventory 無くてもIDが落ちない）
         resolvedTokenBlueprintId: resolvedTbId,
       );
@@ -178,28 +159,19 @@ class UseCatalog {
 
     final pbId = (inv?.productBlueprintId ?? '').trim();
 
-    // ✅ tokenBlueprintId は inventory が取れたらそれを優先し、無ければ list の tokenBlueprintId を利用
+    // ✅ tokenBlueprintId resolve (inventory優先 → list fallback)
     final resolvedTbId = (inv?.tokenBlueprintId ?? list.tokenBlueprintId)
         .trim();
     _log('legacy resolved tokenBlueprintId="$resolvedTbId"');
 
-    // product blueprint
-    SnsProductBlueprintResponse? pb;
-    String? pbErr;
-
-    if (pbId.isNotEmpty) {
-      try {
-        _log('legacy fetch productBlueprint start pbId=$pbId');
-        pb = await _pbRepo.fetchProductBlueprintById(pbId);
-        _log('legacy productBlueprint ok productName="${pb.productName}"');
-      } catch (e) {
-        pbErr = e.toString();
-        _log('legacy productBlueprint error: $pbErr');
-      }
-    } else {
-      pbErr = 'productBlueprintId is unavailable (inventory not loaded)';
-      _log('legacy productBlueprint skip: $pbErr');
-    }
+    // ✅ product blueprint（hook に移譲）
+    final prod = await _product.load(
+      productBlueprintId: pbId,
+      initial: null,
+      initialError: null,
+    );
+    final pb = prod.productBlueprint;
+    final pbErr = prod.productBlueprintError;
 
     // model variations
     List<ModelVariationDTO>? models;
@@ -221,36 +193,8 @@ class UseCatalog {
       _log('legacy model variations skip: $modelErr');
     }
 
-    // token blueprint patch
-    TokenBlueprintPatch? tbPatch;
-    String? tbErr;
-
-    if (resolvedTbId.isNotEmpty) {
-      try {
-        _log('legacy fetchPatch start tokenBlueprintId=$resolvedTbId');
-        tbPatch = await _tbRepo.fetchPatch(resolvedTbId);
-
-        if (tbPatch == null) {
-          tbErr = 'tokenBlueprint patch not found (404)';
-          _log('legacy fetchPatch result: null (404)');
-        } else {
-          _log(
-            'legacy fetchPatch ok '
-            'name="${(tbPatch.name ?? '').trim()}" '
-            'symbol="${(tbPatch.symbol ?? '').trim()}" '
-            'brandId="${(tbPatch.brandId ?? '').trim()}" '
-            'minted=${tbPatch.minted} '
-            'hasIconUrl=${(tbPatch.iconUrl ?? '').trim().isNotEmpty}',
-          );
-        }
-      } catch (e) {
-        tbErr = e.toString();
-        _log('legacy fetchPatch error: $tbErr');
-      }
-    } else {
-      tbErr = 'tokenBlueprintId is empty';
-      _log('legacy fetchPatch skip: tokenBlueprintId is empty');
-    }
+    // ✅ token patch（hook に移譲）
+    final token = await _token.load(resolvedTokenBlueprintId: resolvedTbId);
 
     return _buildState(
       list: list,
@@ -260,8 +204,8 @@ class UseCatalog {
       productBlueprintError: pbErr,
       modelVariations: models,
       modelVariationsError: modelErr,
-      tokenBlueprintPatch: tbPatch,
-      tokenBlueprintError: tbErr,
+      tokenBlueprintPatch: token.patch,
+      tokenBlueprintError: token.error,
       // ✅ legacy でも resolvedTbId を渡す
       resolvedTokenBlueprintId: resolvedTbId,
     );

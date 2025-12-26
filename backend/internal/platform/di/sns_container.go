@@ -12,6 +12,7 @@ import (
 	snshandler "narratives/internal/adapters/in/http/sns/handler"
 	snsquery "narratives/internal/application/query/sns"
 	snsdto "narratives/internal/application/query/sns/dto"
+	appresolver "narratives/internal/application/resolver"
 	usecase "narratives/internal/application/usecase"
 	pbdom "narratives/internal/domain/productBlueprint"
 )
@@ -29,14 +30,39 @@ type SNSDeps struct {
 }
 
 // NewSNSDeps wires SNS handlers.
-//
-// SNS は companyId 境界が無い（公開）ため、console 用 query は使わない。
+// （後方互換のため、NameResolver なしの関数を残す）
 func NewSNSDeps(
 	listUC *usecase.ListUsecase,
 	invUC *usecase.InventoryUsecase,
 	pbUC *usecase.ProductBlueprintUsecase, // ✅ NEW
 	modelUC *usecase.ModelUsecase, // ✅ NEW
 	tokenBlueprintUC *usecase.TokenBlueprintUsecase, // ✅ NEW (patch)
+	catalogQ *snsquery.SNSCatalogQuery, // ✅ NEW
+) SNSDeps {
+	return NewSNSDepsWithNameResolver(
+		listUC,
+		invUC,
+		pbUC,
+		modelUC,
+		tokenBlueprintUC,
+		nil, // nameResolver
+		catalogQ,
+	)
+}
+
+// NewSNSDepsWithNameResolver wires SNS handlers with optional NameResolver.
+//
+// SNS は companyId 境界が無い（公開）ため、console 用 query は使わない。
+// NameResolver は「brandName / companyName 解決」に利用する。
+func NewSNSDepsWithNameResolver(
+	listUC *usecase.ListUsecase,
+	invUC *usecase.InventoryUsecase,
+	pbUC *usecase.ProductBlueprintUsecase, // ✅ NEW
+	modelUC *usecase.ModelUsecase, // ✅ NEW
+	tokenBlueprintUC *usecase.TokenBlueprintUsecase, // ✅ NEW (patch)
+
+	// ✅ NEW: name resolver (brandName/companyName)
+	nameResolver *appresolver.NameResolver,
 
 	// ✅ NEW: catalog query
 	catalogQ *snsquery.SNSCatalogQuery,
@@ -68,9 +94,28 @@ func NewSNSDeps(
 		catalogHandler = snshandler.NewSNSCatalogHandler(catalogQ) // ✅ NEW
 	}
 
-	// ✅ NEW: tokenBlueprint patch handler
+	// ✅ tokenBlueprint patch handler
+	//
+	// 重要:
+	// - ここでは「確実に存在する ctor」だけを呼ぶ（= NewSNSTokenBlueprintHandler）。
+	// - brand/company 名解決や iconUrl 補完は、handler にフィールドがあれば reflection で注入する。
+	//   （handler 側の ctor 名揺れ / 差し替えで DI が壊れるのを防ぐ）
 	if tokenBlueprintUC != nil {
 		tokenBlueprintHandler = snshandler.NewSNSTokenBlueprintHandler(tokenBlueprintUC)
+
+		// brand/company name resolver（handler 側にフィールドがあれば入る）
+		if nameResolver != nil {
+			setOptionalResolverField(tokenBlueprintHandler, "BrandNameResolver", nameResolver)
+			setOptionalResolverField(tokenBlueprintHandler, "CompanyNameResolver", nameResolver)
+			setOptionalResolverField(tokenBlueprintHandler, "NameResolver", nameResolver) // 将来用
+		}
+
+		// icon url resolver（handler 側にフィールドがあれば入る）
+		// - env: TOKEN_ICON_PUBLIC_BUCKET を使う（resolver 実装に従う）
+		imgResolver := appresolver.NewImageURLResolver("")
+		setOptionalResolverField(tokenBlueprintHandler, "ImageResolver", imgResolver)
+		setOptionalResolverField(tokenBlueprintHandler, "ImageURLResolver", imgResolver)
+		setOptionalResolverField(tokenBlueprintHandler, "IconURLResolver", imgResolver)
 	}
 
 	return SNSDeps{
@@ -93,11 +138,9 @@ func RegisterSNSFromContainer(mux *http.ServeMux, cont *Container) {
 	// cont.RouterDeps() の戻り値が「無名struct」でもここでは受けられる（型名不要）
 	deps := cont.RouterDeps()
 
-	// ✅ NEW: try to obtain catalog query from Container without touching RouterDeps fields.
-	// （RouterDeps に ListRepo/ModelRepo 等が無いので、ここで作れないため）
+	// ✅ try to obtain catalog query from Container without touching RouterDeps fields.
 	var catalogQ *snsquery.SNSCatalogQuery
 	{
-		// Prefer: func (c *Container) SNSCatalogQuery() *snsquery.SNSCatalogQuery
 		if x, ok := any(cont).(interface {
 			SNSCatalogQuery() *snsquery.SNSCatalogQuery
 		}); ok {
@@ -117,13 +160,32 @@ func RegisterSNSFromContainer(mux *http.ServeMux, cont *Container) {
 		}
 	}
 
-	snsDeps := NewSNSDeps(
+	// ✅ NEW: try to obtain NameResolver from Container (brandName/companyName)
+	var nameResolver *appresolver.NameResolver
+	{
+		if x, ok := any(cont).(interface {
+			NameResolver() *appresolver.NameResolver
+		}); ok {
+			nameResolver = x.NameResolver()
+		} else if x, ok := any(cont).(interface {
+			GetNameResolver() *appresolver.NameResolver
+		}); ok {
+			nameResolver = x.GetNameResolver()
+		} else if x, ok := any(cont).(interface {
+			Resolver() *appresolver.NameResolver
+		}); ok {
+			nameResolver = x.Resolver()
+		}
+	}
+
+	snsDeps := NewSNSDepsWithNameResolver(
 		deps.ListUC,
 		deps.InventoryUC,
 		deps.ProductBlueprintUC,
-		deps.ModelUC,          // ✅ NEW
-		deps.TokenBlueprintUC, // ✅ NEW
-		catalogQ,              // ✅ NEW
+		deps.ModelUC,
+		deps.TokenBlueprintUC,
+		nameResolver,
+		catalogQ,
 	)
 	RegisterSNSRoutes(mux, snsDeps)
 }
@@ -142,6 +204,50 @@ func RegisterSNSRoutes(mux *http.ServeMux, deps SNSDeps) {
 
 		TokenBlueprint: deps.TokenBlueprint, // ✅ NEW
 	})
+}
+
+// setOptionalResolverField sets handler.<fieldName> = value when possible (best-effort).
+func setOptionalResolverField(handler http.Handler, fieldName string, value any) {
+	if handler == nil || value == nil || strings.TrimSpace(fieldName) == "" {
+		return
+	}
+
+	rv := reflect.ValueOf(handler)
+	if !rv.IsValid() {
+		return
+	}
+	if rv.Kind() == reflect.Interface && !rv.IsNil() {
+		rv = rv.Elem()
+	}
+	if rv.Kind() == reflect.Pointer {
+		if rv.IsNil() {
+			return
+		}
+		rv = rv.Elem()
+	}
+	if rv.Kind() != reflect.Struct {
+		return
+	}
+
+	f := rv.FieldByName(fieldName)
+	if !f.IsValid() || !f.CanSet() {
+		return
+	}
+
+	vv := reflect.ValueOf(value)
+	if !vv.IsValid() {
+		return
+	}
+
+	if vv.Type().AssignableTo(f.Type()) {
+		f.Set(vv)
+		return
+	}
+
+	if f.Kind() == reflect.Interface && vv.Type().Implements(f.Type()) {
+		f.Set(vv)
+		return
+	}
 }
 
 // ============================================================
@@ -172,7 +278,6 @@ func (a *snsCatalogInventoryRepoAdapter) GetByProductAndTokenBlueprintID(ctx con
 	pb := strings.TrimSpace(productBlueprintID)
 	tb := strings.TrimSpace(tokenBlueprintID)
 
-	// method 名揺れ吸収
 	methods := []string{
 		"GetByProductAndTokenBlueprintID",
 		"GetByProductAndTokenBlueprintId",
@@ -209,7 +314,6 @@ func (a *snsCatalogProductBlueprintRepoAdapter) GetByID(ctx context.Context, id 
 		return &cp, nil
 	}
 
-	// 最後の手段：pointer/struct を reflection で解釈（型が一致しない場合はエラー）
 	rv := reflect.ValueOf(v)
 	if rv.IsValid() && rv.Kind() == reflect.Pointer && !rv.IsNil() {
 		if x, ok := rv.Interface().(*pbdom.ProductBlueprint); ok {
@@ -241,7 +345,6 @@ func callRepo(repo any, methodNames []string, args ...any) (any, error) {
 			return nil, nil
 		}
 
-		// (T, error) を想定。最後が error なら拾う
 		if len(out) >= 2 {
 			if e, ok := out[len(out)-1].Interface().(error); ok && e != nil {
 				return nil, e
@@ -289,10 +392,8 @@ func toSNSCatalogInventoryDTO(v any) (*snsdto.SNSCatalogInventoryDTO, error) {
 	pbID := getStr("ProductBlueprintID", "ProductBlueprintId", "productBlueprintId")
 	tbID := getStr("TokenBlueprintID", "TokenBlueprintId", "tokenBlueprintId")
 
-	// ✅ Stock を products 付きで詰める（value も活用）
 	stock := map[string]snsdto.SNSCatalogInventoryModelStockDTO{}
 
-	// map field name tolerant
 	var sf reflect.Value
 	for _, n := range []string{"Stock", "Stocks", "stock"} {
 		f := rv.FieldByName(n)
@@ -311,7 +412,6 @@ func toSNSCatalogInventoryDTO(v any) (*snsdto.SNSCatalogInventoryDTO, error) {
 
 		switch sf.Kind() {
 		case reflect.Map:
-			// map[string]X を想定（X: slice/map/struct{Products...}/etc）
 			if sf.Type().Key().Kind() == reflect.String {
 				iter := sf.MapRange()
 				for iter.Next() {
@@ -337,8 +437,6 @@ func toSNSCatalogInventoryDTO(v any) (*snsdto.SNSCatalogInventoryDTO, error) {
 			}
 
 		case reflect.Slice, reflect.Array:
-			// 万一 []string / []any で「modelId の配列」が入っているだけのケース（best-effort）
-			// → products は空で入れる
 			for i := 0; i < sf.Len(); i++ {
 				it := sf.Index(i)
 				if it.Kind() == reflect.Interface && !it.IsNil() {
@@ -375,11 +473,6 @@ func toSNSCatalogInventoryDTO(v any) (*snsdto.SNSCatalogInventoryDTO, error) {
 // stock reflection helpers (modelId -> products)
 // ------------------------------------------------------------
 
-// extractProductIDsFromStockValue supports:
-// - stock[modelId] = []string
-// - stock[modelId] = map[string]bool / map[string]any (key = productId)
-// - stock[modelId] = struct{ Products ... } (Products is slice/map)
-// - pointers/interfaces nested
 func extractProductIDsFromStockValue(v reflect.Value) []string {
 	if !v.IsValid() {
 		return nil
@@ -394,7 +487,6 @@ func extractProductIDsFromStockValue(v reflect.Value) []string {
 		v = v.Elem()
 	}
 
-	// struct { Products: ... }
 	if v.Kind() == reflect.Struct {
 		pf := v.FieldByName("Products")
 		if pf.IsValid() {
@@ -402,7 +494,6 @@ func extractProductIDsFromStockValue(v reflect.Value) []string {
 		}
 	}
 
-	// direct map/slice
 	return extractStringIDs(v)
 }
 
@@ -444,7 +535,6 @@ func extractStringIDs(v reflect.Value) []string {
 		return out
 
 	case reflect.Map:
-		// map[string]bool / map[string]any など: key を productId とみなす
 		if v.Type().Key().Kind() != reflect.String {
 			return nil
 		}

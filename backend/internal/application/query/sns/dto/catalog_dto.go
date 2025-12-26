@@ -42,7 +42,7 @@ type SNSCatalogListDTO struct {
 
 // ✅ inventory stock model value (same shape as SNS inventory response)
 type SNSCatalogInventoryModelStockDTO struct {
-	Products map[string]bool `json:"products"`
+	Products map[string]bool `json:"products,omitempty"`
 }
 
 type SNSCatalogInventoryDTO struct {
@@ -55,7 +55,7 @@ type SNSCatalogInventoryDTO struct {
 
 	// ✅ NEW: stock を扱えるようにする（products を含める）
 	// key=modelId
-	Stock map[string]SNSCatalogInventoryModelStockDTO `json:"stock"`
+	Stock map[string]SNSCatalogInventoryModelStockDTO `json:"stock,omitempty"`
 }
 
 type SNSCatalogProductBlueprintDTO struct {
@@ -63,6 +63,10 @@ type SNSCatalogProductBlueprintDTO struct {
 	ProductName string `json:"productName"`
 	BrandID     string `json:"brandId"`
 	CompanyID   string `json:"companyId"`
+
+	// ✅ NEW: 表示用（catalog_query.go 側で name_resolver などから埋める）
+	BrandName   string `json:"brandName,omitempty"`
+	CompanyName string `json:"companyName,omitempty"`
 
 	ItemType string `json:"itemType"`
 	Fit      string `json:"fit"`

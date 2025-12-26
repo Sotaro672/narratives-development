@@ -3,15 +3,6 @@ import "dart:convert";
 
 import "package:http/http.dart" as http;
 
-/// Buyer-facing TokenBlueprint repository (HTTP).
-///
-/// Backend routes (expected):
-/// - GET /sns/token-blueprints/{id}/patch  -> Patch JSON
-///   (fallback) GET /sns/token-blueprints/{id}
-///
-/// How to configure API base:
-/// - --dart-define=API_BASE=https://your-backend.example.com
-/// If omitted, it falls back to Cloud Run default below.
 class TokenBlueprintRepositoryHTTP {
   TokenBlueprintRepositoryHTTP({http.Client? client, String? apiBase})
     : _client = client ?? http.Client(),
@@ -25,22 +16,23 @@ class TokenBlueprintRepositoryHTTP {
     final s = env.trim();
     if (s.isNotEmpty) return s;
 
-    // Fallback (your current Cloud Run backend)
     return "https://narratives-backend-871263659099.asia-northeast1.run.app";
   }
 
   static String _normalizeBaseUrl(String s) {
     s = s.trim();
     if (s.isEmpty) return s;
-    // remove trailing slash
     while (s.endsWith("/")) {
       s = s.substring(0, s.length - 1);
     }
     return s;
   }
 
+  void dispose() {
+    _client.close();
+  }
+
   void _log(String msg) {
-    // ✅ Flutter/Dart コンソールに出る確認ログ
     // ignore: avoid_print
     print("[TokenBlueprintRepositoryHTTP] $msg");
   }
@@ -51,9 +43,37 @@ class TokenBlueprintRepositoryHTTP {
     return "${t.substring(0, max)}...(truncated ${t.length - max} chars)";
   }
 
-  /// Fetch TokenBlueprint patch by ID.
-  ///
-  /// Returns null if not found (404).
+  String _previewUrl(String s, {int max = 120}) {
+    final t = s.trim();
+    if (t.isEmpty) return "";
+    if (t.length <= max) return t;
+    return "${t.substring(0, max)}...(len=${t.length})";
+  }
+
+  bool _looksLikeHttpUrl(String s) {
+    final t = s.trim();
+    if (t.isEmpty) return false;
+    try {
+      final u = Uri.parse(t);
+      return u.hasScheme && (u.scheme == "http" || u.scheme == "https");
+    } catch (_) {
+      return false;
+    }
+  }
+
+  void _logIconUrlDebug(String label, TokenBlueprintPatch patch) {
+    final raw = (patch.iconUrl ?? "").trim();
+    final encoded = raw.isNotEmpty ? Uri.encodeFull(raw) : "";
+
+    _log(
+      "$label "
+      "iconUrl.raw='${_previewUrl(raw)}' "
+      "rawIsHttp=${_looksLikeHttpUrl(raw)} "
+      "iconUrl.encoded='${_previewUrl(encoded)}' "
+      "encodedIsHttp=${_looksLikeHttpUrl(encoded)}",
+    );
+  }
+
   Future<TokenBlueprintPatch?> fetchPatch(String tokenBlueprintId) async {
     final id = tokenBlueprintId.trim();
     if (id.isEmpty) {
@@ -62,7 +82,6 @@ class TokenBlueprintRepositoryHTTP {
 
     _log("fetchPatch start tokenBlueprintId=$id apiBase=$_apiBase");
 
-    // Prefer /patch route
     final u1 = Uri.parse("$_apiBase/sns/token-blueprints/$id/patch");
     _log("request GET $u1");
     final r1 = await _client.get(u1, headers: _jsonHeaders());
@@ -84,13 +103,15 @@ class TokenBlueprintRepositoryHTTP {
         "hasIconUrl=${(patch.iconUrl ?? '').trim().isNotEmpty}",
       );
 
+      // ✅ iconUrl が「取れているか」を確実に判断できるログ
+      _logIconUrlDebug("iconUrl debug (patch)", patch);
+
       return patch;
     }
 
     if (r1.statusCode == 404) {
       _log("patch route returned 404. fallback to /sns/token-blueprints/$id");
 
-      // fallback to /{id} route (in case handler uses a simpler route)
       final u2 = Uri.parse("$_apiBase/sns/token-blueprints/$id");
       _log("request GET $u2");
       final r2 = await _client.get(u2, headers: _jsonHeaders());
@@ -111,6 +132,9 @@ class TokenBlueprintRepositoryHTTP {
           "minted=${patch.minted} "
           "hasIconUrl=${(patch.iconUrl ?? '').trim().isNotEmpty}",
         );
+
+        // ✅ fallback 側でも同じログ
+        _logIconUrlDebug("iconUrl debug (fallback)", patch);
 
         return patch;
       }
@@ -142,10 +166,6 @@ class TokenBlueprintRepositoryHTTP {
   }
 }
 
-/// TokenBlueprint patch DTO (buyer-facing).
-///
-/// Backend JSON (confirmed):
-/// {"name": "...", "symbol": "...", "brandId": "...", "minted": true, ...}
 class TokenBlueprintPatch {
   const TokenBlueprintPatch({
     this.name,
@@ -181,13 +201,21 @@ class TokenBlueprintPatch {
       return null;
     }
 
+    // ✅ iconUrl: キー揺れ吸収
+    final icon =
+        s(json["iconUrl"]) ??
+        s(json["iconURL"]) ??
+        s(json["IconUrl"]) ??
+        s(json["IconURL"]) ??
+        s(json["icon_url"]);
+
     return TokenBlueprintPatch(
       name: s(json["name"]),
       symbol: s(json["symbol"]),
       brandId: s(json["brandId"]),
       brandName: s(json["brandName"]),
       description: s(json["description"]),
-      iconUrl: s(json["iconUrl"]),
+      iconUrl: icon,
       minted: b(json["minted"]),
     );
   }

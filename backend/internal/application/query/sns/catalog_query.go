@@ -11,6 +11,7 @@ import (
 	"strings"
 
 	snsdto "narratives/internal/application/query/sns/dto"
+	appresolver "narratives/internal/application/resolver"
 
 	invdom "narratives/internal/domain/inventory"
 	ldom "narratives/internal/domain/list"
@@ -55,9 +56,12 @@ type SNSCatalogQuery struct {
 
 	InventoryRepo InventoryRepository
 	ProductRepo   ProductBlueprintRepository
-	TokenRepo     TokenBlueprintPatchRepository // ✅ NEW
+	TokenRepo     TokenBlueprintPatchRepository // ✅ NEW (optional)
 
 	ModelRepo modeldom.RepositoryPort
+
+	// ✅ OPTIONAL: name resolver (brand/company) for display fields
+	NameResolver *appresolver.NameResolver
 }
 
 func NewSNSCatalogQuery(
@@ -72,6 +76,7 @@ func NewSNSCatalogQuery(
 		ProductRepo:   productRepo,
 		TokenRepo:     nil, // keep backward compatible
 		ModelRepo:     modelRepo,
+		NameResolver:  nil, // keep backward compatible
 	}
 }
 
@@ -89,6 +94,44 @@ func NewSNSCatalogQueryWithTokenBlueprintPatch(
 		ProductRepo:   productRepo,
 		TokenRepo:     tokenRepo,
 		ModelRepo:     modelRepo,
+		NameResolver:  nil, // keep backward compatible
+	}
+}
+
+// ✅ NEW: ctor with name resolver (brand/company)
+func NewSNSCatalogQueryWithNameResolver(
+	listRepo ldom.Repository,
+	invRepo InventoryRepository,
+	productRepo ProductBlueprintRepository,
+	modelRepo modeldom.RepositoryPort,
+	nameResolver *appresolver.NameResolver,
+) *SNSCatalogQuery {
+	return &SNSCatalogQuery{
+		ListRepo:      listRepo,
+		InventoryRepo: invRepo,
+		ProductRepo:   productRepo,
+		TokenRepo:     nil,
+		ModelRepo:     modelRepo,
+		NameResolver:  nameResolver,
+	}
+}
+
+// ✅ NEW: ctor with tokenBlueprint patch + name resolver
+func NewSNSCatalogQueryWithTokenBlueprintPatchAndNameResolver(
+	listRepo ldom.Repository,
+	invRepo InventoryRepository,
+	productRepo ProductBlueprintRepository,
+	tokenRepo TokenBlueprintPatchRepository,
+	modelRepo modeldom.RepositoryPort,
+	nameResolver *appresolver.NameResolver,
+) *SNSCatalogQuery {
+	return &SNSCatalogQuery{
+		ListRepo:      listRepo,
+		InventoryRepo: invRepo,
+		ProductRepo:   productRepo,
+		TokenRepo:     tokenRepo,
+		ModelRepo:     modelRepo,
+		NameResolver:  nameResolver,
 	}
 }
 
@@ -208,8 +251,22 @@ func (q *SNSCatalogQuery) GetByListID(ctx context.Context, listID string) (snsdt
 			log.Printf("[sns_catalog] product getById error listId=%q pbId=%q err=%q", listID, resolvedPBID, e.Error())
 		} else if pb != nil {
 			dto := toCatalogProductBlueprintDTO(pb)
+
+			// ✅ NEW: resolve brandName/companyName (best-effort)
+			if q.NameResolver != nil {
+				fillProductBlueprintNames(ctx, q.NameResolver, &dto)
+			}
+
 			out.ProductBlueprint = &dto
-			log.Printf("[sns_catalog] product getById ok listId=%q pbId=%q brandId=%q", listID, resolvedPBID, strings.TrimSpace(dto.BrandID))
+			log.Printf(
+				"[sns_catalog] product getById ok listId=%q pbId=%q brandId=%q companyId=%q brandName=%q companyName=%q",
+				listID,
+				resolvedPBID,
+				strings.TrimSpace(dto.BrandID),
+				strings.TrimSpace(dto.CompanyID),
+				getStringFieldBestEffort(dto, "BrandName"),
+				getStringFieldBestEffort(dto, "CompanyName"),
+			)
 		} else {
 			out.ProductBlueprintError = "productBlueprint is nil"
 			log.Printf("[sns_catalog] product is nil listId=%q pbId=%q", listID, resolvedPBID)
@@ -349,6 +406,108 @@ func (q *SNSCatalogQuery) GetByListID(ctx context.Context, listID string) (snsdt
 	)
 
 	return out, nil
+}
+
+// ============================================================
+// name resolving (productBlueprint -> brandName/companyName)
+// ============================================================
+
+func fillProductBlueprintNames(ctx context.Context, r *appresolver.NameResolver, dto *snsdto.SNSCatalogProductBlueprintDTO) {
+	if r == nil || dto == nil {
+		return
+	}
+
+	brandID := strings.TrimSpace(dto.BrandID)
+	companyID := strings.TrimSpace(dto.CompanyID)
+
+	// BrandName
+	if brandID != "" {
+		bn := strings.TrimSpace(r.ResolveBrandName(ctx, brandID))
+		if bn != "" {
+			// DTO に BrandName フィールドがある場合だけセット（無い場合でもコンパイルは通る）
+			setStringFieldBestEffort(dto, "BrandName", bn)
+		}
+	}
+
+	// CompanyName
+	if companyID != "" {
+		cn := strings.TrimSpace(r.ResolveCompanyName(ctx, companyID))
+		if cn != "" {
+			setStringFieldBestEffort(dto, "CompanyName", cn)
+		}
+	}
+}
+
+// setStringFieldBestEffort sets either:
+// - field string
+// - field *string
+// if the exported field exists.
+// (DTO に該当フィールドが無くても安全に no-op)
+func setStringFieldBestEffort(target any, fieldName string, value string) {
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return
+	}
+
+	rv := reflect.ValueOf(target)
+	if !rv.IsValid() {
+		return
+	}
+	if rv.Kind() != reflect.Pointer || rv.IsNil() {
+		return
+	}
+	rv = rv.Elem()
+	if !rv.IsValid() || rv.Kind() != reflect.Struct {
+		return
+	}
+
+	f := rv.FieldByName(fieldName)
+	if !f.IsValid() || !f.CanSet() {
+		return
+	}
+
+	switch f.Kind() {
+	case reflect.String:
+		f.SetString(value)
+	case reflect.Pointer:
+		if f.Type().Elem().Kind() == reflect.String {
+			s := value
+			f.Set(reflect.ValueOf(&s))
+		}
+	}
+}
+
+// getStringFieldBestEffort reads either string or *string field (exported), else "".
+func getStringFieldBestEffort(target any, fieldName string) string {
+	rv := reflect.ValueOf(target)
+	if !rv.IsValid() {
+		return ""
+	}
+	if rv.Kind() == reflect.Pointer {
+		if rv.IsNil() {
+			return ""
+		}
+		rv = rv.Elem()
+	}
+	if rv.Kind() != reflect.Struct {
+		return ""
+	}
+
+	f := rv.FieldByName(fieldName)
+	if !f.IsValid() {
+		return ""
+	}
+
+	if f.Kind() == reflect.Pointer {
+		if f.IsNil() {
+			return ""
+		}
+		f = f.Elem()
+	}
+	if f.Kind() == reflect.String {
+		return strings.TrimSpace(f.String())
+	}
+	return ""
 }
 
 // ============================================================

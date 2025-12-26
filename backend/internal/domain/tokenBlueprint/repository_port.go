@@ -58,6 +58,8 @@ type Patch struct {
 	Symbol      *string `json:"symbol,omitempty"`
 	BrandID     *string `json:"brandId,omitempty"`
 	BrandName   *string `json:"brandName,omitempty"`
+	CompanyID   *string `json:"companyId,omitempty"`
+	CompanyName *string `json:"companyName,omitempty"`
 	Description *string `json:"description,omitempty"`
 	IconURL     *string `json:"iconUrl,omitempty"`
 	Minted      *bool   `json:"minted,omitempty"`
