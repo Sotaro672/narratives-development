@@ -1,4 +1,4 @@
-//frontend\sns\lib\features\home\presentation\page\catalog.dart
+// frontend/sns/lib/features/home/presentation/page/catalog.dart
 import 'package:flutter/material.dart';
 
 import 'package:sns/features/home/presentation/components/catalog_inventory.dart';
@@ -12,12 +12,6 @@ class CatalogPage extends StatefulWidget {
 
   final String listId;
   final SnsListItem? initialItem;
-
-  static Route<void> route({required String listId, SnsListItem? initialItem}) {
-    return MaterialPageRoute(
-      builder: (_) => CatalogPage(listId: listId, initialItem: initialItem),
-    );
-  }
 
   @override
   State<CatalogPage> createState() => _CatalogPageState();
@@ -84,58 +78,57 @@ class _CatalogPageState extends State<CatalogPage> {
   Widget build(BuildContext context) {
     final initial = widget.initialItem;
 
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('Catalog'),
-        actions: [
-          IconButton(
-            onPressed: _reload,
-            icon: const Icon(Icons.refresh),
-            tooltip: 'Reload',
-          ),
-        ],
-      ),
-      body: FutureBuilder<CatalogState>(
-        future: _future,
-        builder: (context, snap) {
-          final vm = snap.data;
-          final list = vm?.list ?? initial;
+    // ✅ AppShell が Scaffold / Scroll を持つ前提なので、ここは「中身だけ」
+    return FutureBuilder<CatalogState>(
+      future: _future,
+      builder: (context, snap) {
+        final vm = snap.data;
+        final list = vm?.list ?? initial;
 
-          if (snap.connectionState == ConnectionState.waiting && list == null) {
-            return const Center(child: CircularProgressIndicator());
-          }
-          if (snap.hasError && list == null) {
-            return _ErrorView(error: snap.error, onRetry: _reload);
-          }
-          if (list == null) {
-            return const Center(child: Text('No data'));
-          }
+        if (snap.connectionState == ConnectionState.waiting && list == null) {
+          return const Center(child: CircularProgressIndicator());
+        }
+        if (snap.hasError && list == null) {
+          return _ErrorView(error: snap.error, onRetry: _reload);
+        }
+        if (list == null) {
+          return const Center(child: Text('No data'));
+        }
 
-          if (vm != null) {
-            _logVmOnce(vm);
-          }
+        if (vm != null) {
+          _logVmOnce(vm);
+        }
 
-          final priceText = vm?.priceText ?? '';
-          final hasImage = vm?.hasImage ?? list.image.trim().isNotEmpty;
+        final priceText = vm?.priceText ?? '';
+        final hasImage = vm?.hasImage ?? list.image.trim().isNotEmpty;
 
-          final imageUrlEncoded = vm?.imageUrlEncoded;
-          final pbId = vm?.productBlueprintId ?? '';
-          final tbId = vm?.tokenBlueprintId ?? '';
+        // vm に imageUrlEncoded が無い場合でも list.image を使って出せるようにする
+        final imageUrlEncoded =
+            (vm?.imageUrlEncoded ??
+            (list.image.trim().isNotEmpty
+                ? Uri.encodeFull(list.image.trim())
+                : null));
 
-          final inv = vm?.inventory;
-          final invErr = vm?.inventoryError;
+        final pbId = vm?.productBlueprintId ?? '';
+        final tbId = vm?.tokenBlueprintId ?? '';
 
-          final pb = vm?.productBlueprint;
-          final pbErr = vm?.productBlueprintError;
+        final inv = vm?.inventory;
+        final invErr = vm?.inventoryError;
 
-          final totalStock = vm?.totalStock;
+        final pb = vm?.productBlueprint;
+        final pbErr = vm?.productBlueprintError;
 
-          final tbPatch = vm?.tokenBlueprintPatch;
-          final tbErr = vm?.tokenBlueprintError;
-          final tokenIconUrlEncoded = vm?.tokenIconUrlEncoded;
+        final totalStock = vm?.totalStock;
 
-          return ListView(
-            padding: const EdgeInsets.all(12),
+        final tbPatch = vm?.tokenBlueprintPatch;
+        final tbErr = vm?.tokenBlueprintError;
+        final tokenIconUrlEncoded = vm?.tokenIconUrlEncoded;
+
+        // ✅ リフレッシュボタン行を削除（ヘッダーのような行スペースも消える）
+        return Padding(
+          padding: const EdgeInsets.all(12),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               Card(
                 clipBehavior: Clip.antiAlias,
@@ -184,8 +177,6 @@ class _CatalogPageState extends State<CatalogPage> {
                               list.description.trim(),
                               style: Theme.of(context).textTheme.bodyMedium,
                             ),
-
-                          // ✅ listId / inventoryId / productBlueprintId / tokenBlueprintId の表示行は削除
                         ],
                       ),
                     ),
@@ -204,7 +195,6 @@ class _CatalogPageState extends State<CatalogPage> {
 
               const SizedBox(height: 12),
 
-              // ✅ モデル表示もここに統合済み（catalog_model.dart は廃止）
               CatalogInventoryCard(
                 productBlueprintId: pbId,
                 tokenBlueprintId: tbId,
@@ -221,10 +211,12 @@ class _CatalogPageState extends State<CatalogPage> {
                 productBlueprint: pb,
                 error: pbErr,
               ),
+
+              const SizedBox(height: 24),
             ],
-          );
-        },
-      ),
+          ),
+        );
+      },
     );
   }
 }

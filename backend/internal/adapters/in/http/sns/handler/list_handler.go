@@ -4,6 +4,7 @@ package handler
 import (
 	"encoding/json"
 	"errors"
+	"log"
 	"net/http"
 	"strings"
 
@@ -126,27 +127,63 @@ func (h *SNSListHandler) listIndex(w http.ResponseWriter, r *http.Request) {
 	}
 	sort := ldom.Sort{} // default
 
+	log.Printf(`[sns_list] request GET /sns/lists page=%d perPage=%d`, pageNum, perPage)
+
 	result, err := h.uc.List(ctx, f, sort, page)
 	if err != nil {
+		log.Printf(`[sns_list] response GET /sns/lists error=%q`, err.Error())
 		writeListErr(w, err)
 		return
 	}
 
 	items := make([]SnsListItem, 0, len(result.Items))
+	var loggedSample bool
+
 	for _, l := range result.Items {
 		if !isPublicListing(l.Status) {
 			continue
 		}
-		items = append(items, toSnsListItem(l))
+		dto := toSnsListItem(l)
+		items = append(items, dto)
+
+		// ✅ フロントへ返す DTO shape をサンプルで1件だけログ
+		if !loggedSample {
+			minPrice, maxPrice := minMaxPrice(dto.Prices)
+			log.Printf(
+				`[sns_list] dto sample id=%q title=%q invId=%q pbId=%q tbId=%q prices=%d priceMin=%d priceMax=%d image=%q`,
+				dto.ID,
+				dto.Title,
+				dto.InventoryID,
+				dto.ProductBlueprintID,
+				dto.TokenBlueprintID,
+				len(dto.Prices),
+				minPrice,
+				maxPrice,
+				dto.Image,
+			)
+			loggedSample = true
+		}
 	}
 
-	writeJSON(w, http.StatusOK, SnsListIndexResponse{
+	resp := SnsListIndexResponse{
 		Items:      items,
 		TotalCount: result.TotalCount,
 		TotalPages: result.TotalPages,
 		Page:       result.Page,
 		PerPage:    perPage,
-	})
+	}
+
+	// ✅ 返す直前に summary をログ（payload全量は重いので件数中心）
+	log.Printf(
+		`[sns_list] response GET /sns/lists items=%d total=%d totalPages=%d page=%d perPage=%d`,
+		len(resp.Items),
+		resp.TotalCount,
+		resp.TotalPages,
+		resp.Page,
+		resp.PerPage,
+	)
+
+	writeJSON(w, http.StatusOK, resp)
 }
 
 // ------------------------------
@@ -161,23 +198,45 @@ func (h *SNSListHandler) get(w http.ResponseWriter, r *http.Request, id string) 
 		return
 	}
 
+	log.Printf(`[sns_list] request GET /sns/lists/{id} id=%q`, id)
+
 	l, err := h.uc.GetByID(ctx, id)
 	if err != nil {
 		if errors.Is(err, ldom.ErrNotFound) {
+			log.Printf(`[sns_list] response GET /sns/lists/{id} notFound id=%q`, id)
 			notFound(w)
 			return
 		}
+		log.Printf(`[sns_list] response GET /sns/lists/{id} error id=%q err=%q`, id, err.Error())
 		writeListErr(w, err)
 		return
 	}
 
 	// public-only safety
 	if !isPublicListing(l.Status) {
+		log.Printf(`[sns_list] response GET /sns/lists/{id} notPublic id=%q status=%q`, id, string(l.Status))
 		notFound(w)
 		return
 	}
 
-	writeJSON(w, http.StatusOK, toSnsListItem(l))
+	dto := toSnsListItem(l)
+	minPrice, maxPrice := minMaxPrice(dto.Prices)
+
+	// ✅ フロントへ返す DTO をログ（1件なので詳細OK）
+	log.Printf(
+		`[sns_list] dto item id=%q title=%q invId=%q pbId=%q tbId=%q prices=%d priceMin=%d priceMax=%d image=%q`,
+		dto.ID,
+		dto.Title,
+		dto.InventoryID,
+		dto.ProductBlueprintID,
+		dto.TokenBlueprintID,
+		len(dto.Prices),
+		minPrice,
+		maxPrice,
+		dto.Image,
+	)
+
+	writeJSON(w, http.StatusOK, dto)
 }
 
 // ------------------------------
@@ -256,4 +315,30 @@ func writeListErr(w http.ResponseWriter, err error) {
 	}
 
 	writeJSON(w, code, map[string]string{"error": err.Error()})
+}
+
+// ------------------------------
+// logging helpers
+// ------------------------------
+
+// minMaxPrice returns (min, max). If no prices, returns (0, 0).
+func minMaxPrice(rows []ldom.ListPriceRow) (int, int) {
+	if len(rows) == 0 {
+		return 0, 0
+	}
+	min := int(^uint(0) >> 1) // max int
+	max := 0
+	for _, r := range rows {
+		p := int(r.Price)
+		if p < min {
+			min = p
+		}
+		if p > max {
+			max = p
+		}
+	}
+	if min == int(^uint(0)>>1) {
+		min = 0
+	}
+	return min, max
 }

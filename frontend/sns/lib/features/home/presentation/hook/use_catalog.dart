@@ -1,3 +1,4 @@
+// frontend/sns/lib/features/home/presentation/hook/use_catalog.dart
 import 'dart:convert';
 
 import 'package:http/http.dart' as http;
@@ -209,9 +210,11 @@ class UseCatalog {
     final tbId = resolvedTokenBlueprintId.trim();
 
     // ✅ inventory計算（モデル一覧をベースに stock を追記）
+    // ✅ FIX: prices を渡す（missing_required_argument 対策）
     final invComputed = _inventory.compute(
       inventory: inventory,
       modelVariations: modelVariations,
+      prices: list.prices,
     );
 
     final tokenIconUrl = (tokenBlueprintPatch?.iconUrl ?? '').trim();

@@ -1,16 +1,26 @@
-//frontend\sns\lib\features\home\presentation\hook\use_catalog_inventory.dart
+// frontend/sns/lib/features/home/presentation/hook/use_catalog_inventory.dart
 import '../../../inventory/infrastructure/inventory_repository_http.dart';
+import '../../../list/infrastructure/list_repository_http.dart'; // ✅ 追加
 
 class CatalogModelStockRow {
   const CatalogModelStockRow({
     required this.modelId,
     required this.label,
     required this.stockCount,
+    required this.price, // ✅ NEW
+    required this.rgb, // ✅ NEW: colorRGB（24bit想定）
   });
 
   final String modelId;
   final String label;
   final int stockCount;
+
+  /// ✅ modelId に紐づく価格（無ければ null）
+  final int? price;
+
+  /// ✅ modelId に紐づく色（24bit RGB: 0xRRGGBB / 無ければ null）
+  /// CatalogInventoryCard 側が r.rgb / r.colorRGB などを拾うので rgb で持たせる。
+  final int? rgb;
 }
 
 class CatalogInventoryComputed {
@@ -20,8 +30,6 @@ class CatalogInventoryComputed {
   });
 
   final int? totalStock;
-
-  /// ✅ “model一覧 + stock(あれば)” を統合した表示行
   final List<CatalogModelStockRow> modelStockRows;
 }
 
@@ -32,10 +40,6 @@ class UseCatalogModelsResult {
   final String? error;
 }
 
-/// ✅ Inventory card 用の “モデル取得 + 計算” をまとめる hook
-/// - pbId -> /sns/models で metadata を取得（UseCatalogModel を統合）
-/// - modelId -> label 解決
-/// - stockCount 解決（stock が無い/空なら 0）
 class UseCatalogInventory {
   const UseCatalogInventory();
 
@@ -44,35 +48,26 @@ class UseCatalogInventory {
     print('[UseCatalogInventory] $msg');
   }
 
-  // ============================================================
-  // Load models (replaces deleted UseCatalogModel)
-  // ============================================================
-
   Future<UseCatalogModelsResult> loadModels({
     required InventoryRepositoryHttp invRepo,
     required String productBlueprintId,
-
-    /// catalog endpoint などで既に modelVariations が渡っている場合はそれを優先
     List<SnsModelVariationDTO>? initial,
     String? initialError,
   }) async {
     final pbId = productBlueprintId.trim();
 
-    // 1) initial があるならそれを返す
     if (initial != null) {
       final err = _asNonEmptyString(initialError);
       _log('use initial models count=${initial.length} err="${err ?? ''}"');
       return UseCatalogModelsResult(models: initial, error: err);
     }
 
-    // 2) pbId が無いなら fetch 不可
     if (pbId.isEmpty) {
       final err = 'productBlueprintId is unavailable (skip model fetch)';
       _log('skip fetch: $err');
       return const UseCatalogModelsResult(models: null, error: null);
     }
 
-    // 3) fetch
     try {
       _log('fetch models start pbId=$pbId');
       final models = await invRepo.fetchModelsByProductBlueprintId(pbId);
@@ -88,13 +83,12 @@ class UseCatalogInventory {
     }
   }
 
-  // ============================================================
-  // Compute rows (models + stock)
-  // ============================================================
-
   CatalogInventoryComputed compute({
     required SnsInventoryResponse? inventory,
     required List<SnsModelVariationDTO>? modelVariations,
+
+    /// ✅ NEW: list.prices を渡して modelId -> price を結合
+    required List<SnsListPriceRow> prices,
   }) {
     final inv = inventory;
 
@@ -111,7 +105,7 @@ class UseCatalogInventory {
       }
     }
 
-    // fallback: models が無いなら inventory 側の keys を使う
+    // fallback: models が無いなら inventory 側の keys
     if (modelIds.isEmpty && inv != null) {
       modelIds.addAll(
         inv.modelIds.map((e) => e.trim()).where((e) => e.isNotEmpty),
@@ -125,33 +119,46 @@ class UseCatalogInventory {
 
     final uniqModelIds = _uniqPreserveOrder(modelIds);
 
+    // ✅ priceMap
+    final priceMap = <String, int>{};
+    for (final row in prices) {
+      final mid = row.modelId.trim();
+      if (mid.isEmpty) continue;
+      priceMap[mid] = row.price;
+    }
+
     final rows = <CatalogModelStockRow>[];
     for (final modelId in uniqModelIds) {
       final meta = modelMap[modelId];
       final label = meta != null ? _modelLabel(meta) : modelId;
 
-      // ✅ inventory が無い / stock が無い / 対象キーが無い -> 0
       final stock = inv?.stock[modelId];
       final count = stock != null ? _stockCount(stock) : 0;
 
+      // ✅ attach price (may be null if not found)
+      final price = priceMap[modelId];
+
+      // ✅ attach rgb (meta.colorRGB). 0/負数は「無し」とみなす
+      final int? rgb = (meta != null && meta.colorRGB > 0)
+          ? meta.colorRGB
+          : null;
+
       rows.add(
-        CatalogModelStockRow(modelId: modelId, label: label, stockCount: count),
+        CatalogModelStockRow(
+          modelId: modelId,
+          label: label,
+          stockCount: count,
+          price: price,
+          rgb: rgb,
+        ),
       );
     }
 
     rows.sort((a, b) => a.label.compareTo(b.label));
 
-    // ✅ totalStock:
-    // - inventory が無いなら null（まだ inventory が取れていない）
-    // - inventory があるが stock が空なら 0
     final total = (inv == null) ? null : _totalStock(inv, rows);
-
     return CatalogInventoryComputed(totalStock: total, modelStockRows: rows);
   }
-
-  // ============================================================
-  // helpers
-  // ============================================================
 
   static int _stockCount(SnsInventoryModelStock s) {
     if (s.products.isEmpty) return 0;
@@ -166,7 +173,6 @@ class UseCatalogInventory {
     SnsInventoryResponse inv,
     List<CatalogModelStockRow> rows,
   ) {
-    // rows は “モデル一覧の正規形” なので rows 合計で良い（stock map 直走査だと model が消える）
     var sum = 0;
     for (final r in rows) {
       sum += r.stockCount;

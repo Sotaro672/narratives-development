@@ -1,4 +1,4 @@
-//frontend\sns\lib\features\home\presentation\components\catalog_inventory.dart
+// frontend/sns/lib/features/home/presentation/components/catalog_inventory.dart
 import 'package:flutter/material.dart';
 
 class CatalogInventoryCard extends StatelessWidget {
@@ -24,10 +24,11 @@ class CatalogInventoryCard extends StatelessWidget {
 
   /// vm.modelStockRows（elements must have: label, modelId, stockCount）
   /// さらに best-effort で colorRGB/rgb も拾う
+  /// price も best-effort で拾う
   final List<dynamic>? modelStockRows;
 
   // ------------------------------------------------------------
-  // color helpers (best-effort)
+  // number helpers (best-effort)
   // ------------------------------------------------------------
 
   int? _toInt(dynamic v) {
@@ -40,12 +41,77 @@ class CatalogInventoryCard extends StatelessWidget {
     return int.tryParse(s);
   }
 
-  /// modelStockRows の要素から rgb を可能な限り拾う
-  /// 想定:
-  /// - r.rgb
-  /// - r.colorRgb / r.colorRGB
-  /// - r.color?.rgb
-  /// - r.metadata?.colorRGB / r.metadata?.colorRgb / r.metadata?.color?.rgb
+  // ------------------------------------------------------------
+  // price helpers (best-effort)
+  // ------------------------------------------------------------
+
+  int? _pickPrice(dynamic r) {
+    if (r == null) return null;
+
+    // direct fields
+    try {
+      final x = _toInt(r.price);
+      if (x != null) return x;
+    } catch (_) {}
+    try {
+      final x = _toInt(r.priceYen);
+      if (x != null) return x;
+    } catch (_) {}
+    try {
+      final x = _toInt(r.amount);
+      if (x != null) return x;
+    } catch (_) {}
+    try {
+      final x = _toInt(r.value);
+      if (x != null) return x;
+    } catch (_) {}
+
+    // nested: metadata.*
+    try {
+      final m = r.metadata;
+      if (m != null) {
+        try {
+          final x = _toInt(m.price);
+          if (x != null) return x;
+        } catch (_) {}
+        try {
+          final x = _toInt(m.priceYen);
+          if (x != null) return x;
+        } catch (_) {}
+        try {
+          final x = _toInt(m.amount);
+          if (x != null) return x;
+        } catch (_) {}
+      }
+    } catch (_) {}
+
+    // map access
+    if (r is Map) {
+      final m = r;
+
+      final x1 = _toInt(
+        m['price'] ?? m['priceYen'] ?? m['amount'] ?? m['value'],
+      );
+      if (x1 != null) return x1;
+
+      final meta = m['metadata'];
+      if (meta is Map) {
+        final x2 = _toInt(
+          meta['price'] ?? meta['priceYen'] ?? meta['amount'] ?? meta['value'],
+        );
+        if (x2 != null) return x2;
+      }
+    }
+
+    return null;
+  }
+
+  String _formatYen(int price) => '¥$price';
+
+  // ------------------------------------------------------------
+  // color helpers (best-effort)
+  // ------------------------------------------------------------
+
   int? _pickRgb(dynamic r) {
     if (r == null) return null;
 
@@ -101,7 +167,7 @@ class CatalogInventoryCard extends StatelessWidget {
       }
     } catch (_) {}
 
-    // map access (in case rows are Map)
+    // map access
     if (r is Map) {
       final m = r;
       final x1 = _toInt(m['colorRGB'] ?? m['colorRgb'] ?? m['rgb']);
@@ -129,19 +195,13 @@ class CatalogInventoryCard extends StatelessWidget {
     return null;
   }
 
-  /// backend の rgb(int) を Flutter の Color に変換
-  /// - 24bit (0xRRGGBB) 想定 → alpha を FF 付与
-  /// - すでに ARGB (>= 0xFF000000) っぽい場合はそのまま
   Color? _rgbToColor(int? rgb) {
     if (rgb == null) return null;
     if (rgb <= 0) return null;
 
-    // already ARGB?
     if (rgb >= 0xFF000000) {
       return Color(rgb);
     }
-
-    // 24-bit RGB -> 0xFFRRGGBB
     final v = (0xFF000000 | (rgb & 0x00FFFFFF));
     return Color(v);
   }
@@ -156,6 +216,28 @@ class CatalogInventoryCard extends StatelessWidget {
         border: Border.all(color: Colors.black12),
       ),
     );
+  }
+
+  // ------------------------------------------------------------
+  // label helpers
+  // ------------------------------------------------------------
+
+  /// label が "modelNumber / size / color" の形なら先頭(modelNumber)だけ落とす
+  /// ✅ データ自体は変えず、表示だけ変える
+  String _stripModelNumberFromLabel(String label) {
+    final s = label.trim();
+    if (s.isEmpty) return s;
+
+    // " / " 区切りを想定（UseCatalogInventory 側の join(' / ') と一致）
+    final parts = s
+        .split(' / ')
+        .map((e) => e.trim())
+        .where((e) => e.isNotEmpty)
+        .toList();
+    if (parts.length <= 1) return s;
+
+    // 先頭を落として残りを表示
+    return parts.sublist(1).join(' / ');
   }
 
   @override
@@ -181,15 +263,22 @@ class CatalogInventoryCard extends StatelessWidget {
             else
               ...rows.map((r) {
                 final count = (r.stockCount ?? 0).toString();
-                final label = (r.label ?? '').toString();
+                final rawLabel = (r.label ?? '').toString();
 
-                // ✅ rgb を拾って色として表示
+                // ✅ 表示だけ modelNumber を削除（データはそのまま）
+                final label = _stripModelNumberFromLabel(rawLabel);
+
+                // ✅ rgb を拾って色の丸だけ表示（文字列RGBは表示しない）
                 final rgb = _pickRgb(r);
                 final color = _rgbToColor(rgb);
 
-                // ✅ model metadata (label) と stock を 1 行で表示
+                // ✅ price を拾う
+                final price = _pickPrice(r);
+                final priceText = (price != null) ? _formatYen(price) : '(未設定)';
+
+                // ✅ RGB文字列は削除
                 final line =
-                    '${label.isNotEmpty ? label : '(名称なし)'}　/　在庫: $count';
+                    '${label.isNotEmpty ? label : '(名称なし)'}　/　在庫: $count　/　価格: $priceText';
 
                 return Padding(
                   padding: const EdgeInsets.symmetric(vertical: 6),
@@ -211,7 +300,6 @@ class CatalogInventoryCard extends StatelessWidget {
                 );
               }),
 
-            // ✅ totalStock / productBlueprintId / tokenBlueprintId の表示行は削除
             if (inv == null && (invErr ?? '').trim().isNotEmpty) ...[
               const SizedBox(height: 10),
               Text(

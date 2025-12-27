@@ -1,8 +1,8 @@
 // frontend/sns/lib/features/home/presentation/page/home_page.dart
 import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
 
 import '../../../list/infrastructure/list_repository_http.dart';
-import 'catalog.dart';
 
 class HomePage extends StatefulWidget {
   const HomePage({super.key});
@@ -38,46 +38,54 @@ class _HomePageState extends State<HomePage> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('SNS'),
-        actions: [
-          IconButton(
-            onPressed: _reload,
-            icon: const Icon(Icons.refresh),
-            tooltip: 'Reload',
-          ),
-        ],
-      ),
-      body: FutureBuilder<SnsListIndexResponse>(
-        future: _future,
-        builder: (context, snap) {
-          if (snap.connectionState == ConnectionState.waiting) {
-            return const Center(child: CircularProgressIndicator());
-          }
-          if (snap.hasError) {
-            return _ErrorView(error: snap.error, onRetry: _reload);
-          }
+    // ✅ Scaffold は AppShell 側で持つ前提
+    //    ここでは「中身」だけを返す
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        // ✅ 見出し行（SNS + refresh）を削除して、ヘッダーっぽい行スペースを消す
 
-          final data = snap.data!;
-          final items = data.items;
+        // ✅ 本文（一覧）
+        FutureBuilder<SnsListIndexResponse>(
+          future: _future,
+          builder: (context, snap) {
+            if (snap.connectionState == ConnectionState.waiting) {
+              return const Padding(
+                padding: EdgeInsets.only(top: 24),
+                child: Center(child: CircularProgressIndicator()),
+              );
+            }
+            if (snap.hasError) {
+              return _ErrorView(error: snap.error, onRetry: _reload);
+            }
 
-          if (items.isEmpty) {
-            return const Center(child: Text('No listings'));
-          }
+            final data = snap.data!;
+            final items = data.items;
 
-          return RefreshIndicator(
-            onRefresh: _reload,
-            child: ListView.builder(
-              padding: const EdgeInsets.all(12),
-              itemCount: items.length,
-              itemBuilder: (context, i) {
-                return _ListCard(item: items[i]);
-              },
-            ),
-          );
-        },
-      ),
+            if (items.isEmpty) {
+              return const Padding(
+                padding: EdgeInsets.only(top: 24),
+                child: Center(child: Text('No listings')),
+              );
+            }
+
+            // ✅ AppShell(AppMain) がスクロールを持つ前提なので、
+            //    ここでは shrinkWrap で ListView を使う
+            return RefreshIndicator(
+              onRefresh: _reload,
+              child: ListView.builder(
+                shrinkWrap: true,
+                physics: const AlwaysScrollableScrollPhysics(),
+                padding: const EdgeInsets.only(bottom: 12),
+                itemCount: items.length,
+                itemBuilder: (context, i) {
+                  return _ListCard(item: items[i]);
+                },
+              ),
+            );
+          },
+        ),
+      ],
     );
   }
 }
@@ -91,7 +99,6 @@ class _ListCard extends StatelessWidget {
 
   String _priceText(List<SnsListPriceRow> rows) {
     if (rows.isEmpty) return '';
-    // ひとまず最小価格～最大価格のレンジ表示（要件に合わせて変更OK）
     final prices = rows.map((e) => e.price).toList()..sort();
     final min = prices.first;
     final max = prices.last;
@@ -110,9 +117,12 @@ class _ListCard extends StatelessWidget {
       clipBehavior: Clip.antiAlias,
       child: InkWell(
         onTap: () {
-          Navigator.of(
-            context,
-          ).push(CatalogPage.route(listId: item.id, initialItem: item));
+          // ✅ go_router で遷移（ShellRoute(AppShell) が必ず効く）
+          context.pushNamed(
+            'catalog',
+            pathParameters: {'listId': item.id},
+            extra: item, // Catalog 側で initialItem として使いたい場合
+          );
         },
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
