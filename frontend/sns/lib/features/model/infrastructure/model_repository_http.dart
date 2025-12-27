@@ -1,3 +1,4 @@
+//frontend\sns\lib\features\model\infrastructure\model_repository_http.dart
 import 'dart:convert';
 
 import 'package:http/http.dart' as http;
@@ -130,6 +131,35 @@ class ModelVariationDTO {
     return out;
   }
 
+  /// ✅ backend が返す色の取り方を統一吸収
+  /// - 旧: color: { name, rgb }
+  /// - 新: colorName, colorRGB（フラット）
+  static ModelColorDTO _color(dynamic json) {
+    if (json is! Map<String, dynamic>) {
+      return const ModelColorDTO(name: '', rgb: 0);
+    }
+
+    // 1) 旧/別実装: color object
+    final colorRaw = json['color'] ?? json['Color'];
+    if (colorRaw is Map) {
+      return ModelColorDTO.fromJson(colorRaw.cast<String, dynamic>());
+    }
+
+    // 2) ✅ 現状backend: flat fields
+    final name = _s(json['colorName'] ?? json['ColorName']);
+    final rgb = _toInt(
+      json['colorRGB'] ??
+          json['colorRgb'] ??
+          json['ColorRGB'] ??
+          json['ColorRgb'],
+    );
+
+    if (name.isEmpty && rgb == 0) {
+      return const ModelColorDTO(name: '', rgb: 0);
+    }
+    return ModelColorDTO(name: name, rgb: rgb);
+  }
+
   factory ModelVariationDTO.fromJson(Map<String, dynamic> json) {
     // tolerate field-name variants
     final id = _s(json['id'] ?? json['ID'] ?? json['variationId']);
@@ -139,17 +169,12 @@ class ModelVariationDTO {
           json['product_blueprint_id'],
     );
 
-    final colorRaw = json['color'];
-    final color = (colorRaw is Map)
-        ? ModelColorDTO.fromJson(colorRaw.cast<String, dynamic>())
-        : const ModelColorDTO(name: '', rgb: 0);
-
     return ModelVariationDTO(
       id: id,
       productBlueprintId: pbId,
       modelNumber: _s(json['modelNumber']),
       size: _s(json['size']),
-      color: color,
+      color: _color(json), // ✅ ここが変更点（flat対応）
       measurements: _measurements(json['measurements']),
     );
   }
@@ -171,6 +196,10 @@ class ModelColorDTO {
   }
 
   factory ModelColorDTO.fromJson(Map<String, dynamic> json) {
-    return ModelColorDTO(name: _s(json['name']), rgb: _toInt(json['rgb']));
+    // tolerate variants too
+    return ModelColorDTO(
+      name: _s(json['name'] ?? json['Name']),
+      rgb: _toInt(json['rgb'] ?? json['RGB']),
+    );
   }
 }

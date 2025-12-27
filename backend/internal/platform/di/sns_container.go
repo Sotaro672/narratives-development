@@ -131,6 +131,13 @@ func NewSNSDepsWithNameResolverAndOrgHandlers(
 
 	if pbUC != nil {
 		pbHandler = snshandler.NewSNSProductBlueprintHandler(pbUC)
+
+		// ✅ NEW: productBlueprint 側にも name resolver を注入（handler 側にフィールドがあれば入る）
+		if nameResolver != nil {
+			setOptionalResolverField(pbHandler, "BrandNameResolver", nameResolver)
+			setOptionalResolverField(pbHandler, "CompanyNameResolver", nameResolver)
+			setOptionalResolverField(pbHandler, "NameResolver", nameResolver) // 将来用
+		}
 	}
 
 	if modelUC != nil {
@@ -220,7 +227,7 @@ func RegisterSNSFromContainer(mux *http.ServeMux, cont *Container) {
 	// ✅ SNS name resolver (brandName/companyName)
 	// - prefer: SNSNameResolver()
 	// - fallback: GetSNSNameResolver()
-	// - fallback: cont.NameResolver field
+	// - fallback: reflect field (sns_name_resolver 方針でも compile を壊さない)
 	var nameResolver *appresolver.NameResolver
 	{
 		if x, ok := any(cont).(interface {
@@ -233,9 +240,8 @@ func RegisterSNSFromContainer(mux *http.ServeMux, cont *Container) {
 			nameResolver = x.GetSNSNameResolver()
 		}
 
-		// final fallback: field (di package can access)
-		if nameResolver == nil && cont.NameResolver != nil {
-			nameResolver = cont.NameResolver
+		if nameResolver == nil {
+			nameResolver = getSNSNameResolverFieldBestEffort(cont)
 		}
 	}
 
@@ -340,6 +346,77 @@ func setOptionalResolverField(handler http.Handler, fieldName string, value any)
 		f.Set(vv)
 		return
 	}
+}
+
+// getSNSNameResolverFieldBestEffort tries to read a resolver from Container fields
+// without compile-time dependency on a specific field name.
+// (sns_name_resolver 方針でも compile を壊さない)
+func getSNSNameResolverFieldBestEffort(cont *Container) *appresolver.NameResolver {
+	if cont == nil {
+		return nil
+	}
+
+	// *Container -> Elem()
+	rv := reflect.ValueOf(cont)
+	if !rv.IsValid() {
+		return nil
+	}
+	if rv.Kind() == reflect.Pointer {
+		if rv.IsNil() {
+			return nil
+		}
+		rv = rv.Elem()
+	}
+	if rv.Kind() != reflect.Struct {
+		return nil
+	}
+
+	tryField := func(name string) *appresolver.NameResolver {
+		f := rv.FieldByName(name)
+		if !f.IsValid() {
+			return nil
+		}
+		// allow *T, interface{...}, or embedded
+		if f.Kind() == reflect.Interface {
+			if f.IsNil() {
+				return nil
+			}
+			v := f.Interface()
+			if nr, ok := v.(*appresolver.NameResolver); ok {
+				return nr
+			}
+			return nil
+		}
+		if f.Kind() == reflect.Pointer {
+			if f.IsNil() {
+				return nil
+			}
+			if nr, ok := f.Interface().(*appresolver.NameResolver); ok {
+				return nr
+			}
+			return nil
+		}
+		// not pointer/interface -> can't be *NameResolver
+		return nil
+	}
+
+	// 優先順（想定される命名ゆれ）
+	for _, n := range []string{
+		// exported
+		"SNSNameResolver",
+		"SnsNameResolver",
+		// unexported camel
+		"snsNameResolver",
+		// legacy (もし残っているなら)
+		"NameResolver",
+		"nameResolver",
+	} {
+		if nr := tryField(n); nr != nil {
+			return nr
+		}
+	}
+
+	return nil
 }
 
 // ============================================================

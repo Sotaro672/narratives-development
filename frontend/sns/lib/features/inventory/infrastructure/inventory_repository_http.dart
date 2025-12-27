@@ -1,3 +1,4 @@
+//frontend\sns\lib\features\inventory\infrastructure\inventory_repository_http.dart
 import 'dart:convert';
 
 import 'package:flutter/foundation.dart';
@@ -185,9 +186,22 @@ class SnsModelVariationDTO {
 
   /// ✅ flattened (catalogcolor を統合した形)
   final String colorName;
+
+  /// ✅ backend: colorRGB (int)
+  /// ここを CatalogInventory 側で色表示に利用する
   final int colorRGB;
 
   final Map<String, int> measurements;
+
+  static int _toInt(dynamic v) {
+    if (v == null) return 0;
+    if (v is int) return v;
+    if (v is double) return v.toInt();
+    if (v is num) return v.toInt();
+    final s = v.toString().trim();
+    if (s.isEmpty) return 0;
+    return int.tryParse(s) ?? 0;
+  }
 
   factory SnsModelVariationDTO.fromJson(Map<String, dynamic> json) {
     final id = (json['id'] ?? '').toString().trim();
@@ -196,8 +210,10 @@ class SnsModelVariationDTO {
     final sz = (json['size'] ?? '').toString().trim();
 
     final cn = (json['colorName'] ?? '').toString().trim();
-    final cr = json['colorRGB'];
-    final int rgb = (cr is num) ? cr.toInt() : int.tryParse('$cr') ?? 0;
+
+    // ✅ 重要：backend は "colorRGB"（大文字RGB）で返す
+    // ただし念のため "colorRgb" / "rgb" も拾う
+    final rgb = _toInt(json['colorRGB'] ?? json['colorRgb'] ?? json['rgb']);
 
     final Map<String, int> measurements = {};
     final m = json['measurements'];
@@ -205,9 +221,7 @@ class SnsModelVariationDTO {
       for (final e in m.entries) {
         final k = e.key.toString().trim();
         if (k.isEmpty) continue;
-        final v = e.value;
-        final int iv = (v is num) ? v.toInt() : int.tryParse(v.toString()) ?? 0;
-        measurements[k] = iv;
+        measurements[k] = _toInt(e.value);
       }
     }
 
@@ -233,6 +247,8 @@ class _SnsModelItemDTO {
   factory _SnsModelItemDTO.fromJson(Map<String, dynamic> json) {
     final modelId = (json['modelId'] ?? '').toString().trim();
     final metaRaw = json['metadata'];
+
+    // ✅ metadata は Map でも、すでに flatten 済みの shape を想定
     final meta = (metaRaw is Map)
         ? SnsModelVariationDTO.fromJson(metaRaw.cast<String, dynamic>())
         : SnsModelVariationDTO(

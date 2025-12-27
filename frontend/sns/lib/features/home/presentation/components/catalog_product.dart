@@ -21,6 +21,46 @@ class CatalogProductCard extends StatelessWidget {
     return t.isNotEmpty ? t : fallback;
   }
 
+  // ✅ productIdTag の type を best-effort で取り出す（Map / class / 既存string すべて対応）
+  String _productIdTagType(dynamic pb) {
+    if (pb == null) return '';
+
+    // 1) 既存: pb.productIdTagType が string の場合
+    try {
+      final v = pb.productIdTagType;
+      if (v != null) {
+        final s = v.toString().trim();
+        if (s.isNotEmpty) return s;
+      }
+    } catch (_) {}
+
+    // 2) pb.productIdTag が Map の場合（jsonDecode由来）
+    try {
+      final tag = pb.productIdTag;
+      if (tag is Map) {
+        final t = tag['type'] ?? tag['Type'];
+        if (t != null) {
+          final s = t.toString().trim();
+          if (s.isNotEmpty) return s;
+        }
+      }
+    } catch (_) {}
+
+    // 3) pb.productIdTag が class の場合（tag.type）
+    try {
+      final tag = pb.productIdTag;
+      if (tag != null) {
+        final t = tag.type;
+        if (t != null) {
+          final s = t.toString().trim();
+          if (s.isNotEmpty) return s;
+        }
+      }
+    } catch (_) {}
+
+    return '';
+  }
+
   @override
   Widget build(BuildContext context) {
     final pbId = productBlueprintId.trim();
@@ -32,35 +72,31 @@ class CatalogProductCard extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text('Product', style: Theme.of(context).textTheme.titleMedium),
+            Text('商品', style: Theme.of(context).textTheme.titleMedium),
             const SizedBox(height: 8),
             if (pb != null) ...[
-              _KeyValueRow(label: 'productName', value: _s(pb.productName)),
+              _KeyValueRow(label: '商品名', value: _s(pb.productName)),
               const SizedBox(height: 6),
-              _KeyValueRow(label: 'brandId', value: _s(pb.brandId)),
+
+              // ✅ 名前解決結果（SNS側で付与される想定）
+              _KeyValueRow(label: '会社名', value: _s(pb.companyName)),
               const SizedBox(height: 6),
-              _KeyValueRow(label: 'companyId', value: _s(pb.companyId)),
+              _KeyValueRow(label: 'ブランド名', value: _s(pb.brandName)),
               const SizedBox(height: 6),
-              _KeyValueRow(label: 'itemType', value: _s(pb.itemType)),
+
+              _KeyValueRow(label: 'カテゴリ', value: _s(pb.itemType)),
               const SizedBox(height: 6),
-              _KeyValueRow(label: 'fit', value: _s(pb.fit)),
+              _KeyValueRow(label: 'フィット', value: _s(pb.fit)),
               const SizedBox(height: 6),
-              _KeyValueRow(label: 'material', value: _s(pb.material)),
+              _KeyValueRow(label: '素材', value: _s(pb.material)),
               const SizedBox(height: 6),
               _KeyValueRow(
-                label: 'weight',
+                label: '重量',
                 value: pb.weight != null ? '${pb.weight}' : '(empty)',
               ),
-              const SizedBox(height: 6),
-              _KeyValueRow(
-                label: 'printed',
-                value: pb.printed == true ? 'true' : 'false',
-              ),
+
               const SizedBox(height: 12),
-              Text(
-                'Quality assurance',
-                style: Theme.of(context).textTheme.titleSmall,
-              ),
+              Text('品質保証', style: Theme.of(context).textTheme.titleSmall),
               const SizedBox(height: 6),
               if ((pb.qualityAssurance ?? const <dynamic>[]).isEmpty)
                 Text('(empty)', style: Theme.of(context).textTheme.bodyMedium)
@@ -71,35 +107,32 @@ class CatalogProductCard extends StatelessWidget {
                   children: (pb.qualityAssurance as List)
                       .map(
                         (s) => Chip(
-                          // ✅ String(s) は不可 → toString() / '$s'
                           label: Text(s.toString()),
                           visualDensity: VisualDensity.compact,
                         ),
                       )
                       .toList(),
                 ),
+
               const SizedBox(height: 12),
-              Text(
-                'ProductId tag',
-                style: Theme.of(context).textTheme.titleSmall,
-              ),
+              Text('商品IDタグ', style: Theme.of(context).textTheme.titleSmall),
               const SizedBox(height: 6),
-              _KeyValueRow(label: 'type', value: _s(pb.productIdTagType)),
+              _KeyValueRow(label: 'タグ種別', value: _s(_productIdTagType(pb))),
             ] else ...[
               _KeyValueRow(
-                label: 'productBlueprintId',
+                label: '商品ブループリントID',
                 value: pbId.isNotEmpty ? pbId : '(unknown)',
               ),
               if (error != null && error!.trim().isNotEmpty) ...[
                 const SizedBox(height: 10),
                 Text(
-                  'product error: ${error!.trim()}',
+                  '商品エラー: ${error!.trim()}',
                   style: Theme.of(context).textTheme.labelSmall,
                 ),
               ] else ...[
                 const SizedBox(height: 10),
                 Text(
-                  'product is not loaded',
+                  '商品が読み込まれていません',
                   style: Theme.of(context).textTheme.labelSmall,
                 ),
               ],

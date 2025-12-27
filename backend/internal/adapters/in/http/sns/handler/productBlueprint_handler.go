@@ -1,8 +1,10 @@
-// backend\internal\adapters\in\http\sns\handler\productBlueprint_handler.go
+// backend/internal/adapters/in/http/sns/handler/productBlueprint_handler.go
 package handler
 
 import (
+	"context"
 	"errors"
+	"log"
 	"net/http"
 	"strings"
 
@@ -20,10 +22,23 @@ import (
 // - deletedAt / deletedBy は “拾わない” (= 返さない)。ただし DeletedAt による公開遮断はする。
 type SNSProductBlueprintHandler struct {
 	uc productBlueprintGetter
+
+	// ✅ NEW: name resolver injection (best-effort)
+	BrandNameResolver   any
+	CompanyNameResolver any
 }
 
 func NewSNSProductBlueprintHandler(uc productBlueprintGetter) http.Handler {
 	return &SNSProductBlueprintHandler{uc: uc}
+}
+
+// ✅ optional ctor: NameResolver を明示注入したい場合
+func NewSNSProductBlueprintHandlerWithNameResolver(uc productBlueprintGetter, nameResolver any) http.Handler {
+	return &SNSProductBlueprintHandler{
+		uc:                  uc,
+		BrandNameResolver:   nameResolver,
+		CompanyNameResolver: nameResolver,
+	}
 }
 
 // ------------------------------
@@ -36,7 +51,9 @@ type SnsProductBlueprintResponse struct {
 
 	ProductName string         `json:"productName"`
 	CompanyID   string         `json:"companyId"`
+	CompanyName string         `json:"companyName"` // ✅ NEW
 	BrandID     string         `json:"brandId"`
+	BrandName   string         `json:"brandName"` // ✅ NEW
 	ItemType    pbdom.ItemType `json:"itemType"`
 	Fit         string         `json:"fit"`
 	Material    string         `json:"material"`
@@ -91,6 +108,12 @@ func (h *SNSProductBlueprintHandler) ServeHTTP(w http.ResponseWriter, r *http.Re
 func (h *SNSProductBlueprintHandler) getByID(w http.ResponseWriter, r *http.Request, id string) {
 	ctx := r.Context()
 
+	log.Printf("[sns_productBlueprint] getById start id=%q resolverBrand=%t resolverCompany=%t",
+		strings.TrimSpace(id),
+		h.BrandNameResolver != nil,
+		h.CompanyNameResolver != nil,
+	)
+
 	p, err := h.uc.GetByID(ctx, strings.TrimSpace(id))
 	if err != nil {
 		if isPBNotFound(err) {
@@ -107,19 +130,57 @@ func (h *SNSProductBlueprintHandler) getByID(w http.ResponseWriter, r *http.Requ
 		return
 	}
 
-	writeJSON(w, http.StatusOK, toSnsProductBlueprintResponse(p))
+	resp := toSnsProductBlueprintResponse(ctx, p, h.BrandNameResolver, h.CompanyNameResolver)
+
+	log.Printf("[sns_productBlueprint] ok id=%q productName=%q brandId=%q brandName=%q companyId=%q companyName=%q",
+		resp.ID,
+		resp.ProductName,
+		resp.BrandID,
+		resp.BrandName,
+		resp.CompanyID,
+		resp.CompanyName,
+	)
+
+	writeJSON(w, http.StatusOK, resp)
 }
 
 // ------------------------------
 // Mapping
 // ------------------------------
 
-func toSnsProductBlueprintResponse(p pbdom.ProductBlueprint) SnsProductBlueprintResponse {
+func toSnsProductBlueprintResponse(
+	ctx context.Context,
+	p pbdom.ProductBlueprint,
+	brandNameResolver any,
+	companyNameResolver any,
+) SnsProductBlueprintResponse {
+	pbID := strings.TrimSpace(p.ID)
+	productName := strings.TrimSpace(p.ProductName)
+	companyID := strings.TrimSpace(p.CompanyID)
+	brandID := strings.TrimSpace(p.BrandID)
+
+	// ✅ name resolve (best-effort)
+	brandName := ""
+	companyName := ""
+
+	if brandID != "" && brandNameResolver != nil {
+		if s, ok := resolveBrandNameBestEffort(ctx, brandNameResolver, brandID); ok {
+			brandName = strings.TrimSpace(s)
+		}
+	}
+	if companyID != "" && companyNameResolver != nil {
+		if s, ok := resolveCompanyNameBestEffort(ctx, companyNameResolver, companyID); ok {
+			companyName = strings.TrimSpace(s)
+		}
+	}
+
 	return SnsProductBlueprintResponse{
-		ID:               strings.TrimSpace(p.ID),
-		ProductName:      strings.TrimSpace(p.ProductName),
-		CompanyID:        strings.TrimSpace(p.CompanyID),
-		BrandID:          strings.TrimSpace(p.BrandID),
+		ID:               pbID,
+		ProductName:      productName,
+		CompanyID:        companyID,
+		CompanyName:      companyName, // ✅ NEW
+		BrandID:          brandID,
+		BrandName:        brandName, // ✅ NEW
 		ItemType:         p.ItemType,
 		Fit:              strings.TrimSpace(p.Fit),
 		Material:         strings.TrimSpace(p.Material),
