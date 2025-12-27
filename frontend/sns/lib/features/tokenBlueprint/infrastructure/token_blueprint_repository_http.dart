@@ -32,114 +32,29 @@ class TokenBlueprintRepositoryHTTP {
     _client.close();
   }
 
-  void _log(String msg) {
-    // ignore: avoid_print
-    print("[TokenBlueprintRepositoryHTTP] $msg");
-  }
-
-  String _bodyPreview(String body, {int max = 500}) {
-    final t = body.trim();
-    if (t.length <= max) return t;
-    return "${t.substring(0, max)}...(truncated ${t.length - max} chars)";
-  }
-
-  String _previewUrl(String s, {int max = 120}) {
-    final t = s.trim();
-    if (t.isEmpty) return "";
-    if (t.length <= max) return t;
-    return "${t.substring(0, max)}...(len=${t.length})";
-  }
-
-  bool _looksLikeHttpUrl(String s) {
-    final t = s.trim();
-    if (t.isEmpty) return false;
-    try {
-      final u = Uri.parse(t);
-      return u.hasScheme && (u.scheme == "http" || u.scheme == "https");
-    } catch (_) {
-      return false;
-    }
-  }
-
-  void _logIconUrlDebug(String label, TokenBlueprintPatch patch) {
-    final raw = (patch.iconUrl ?? "").trim();
-    final encoded = raw.isNotEmpty ? Uri.encodeFull(raw) : "";
-
-    _log(
-      "$label "
-      "iconUrl.raw='${_previewUrl(raw)}' "
-      "rawIsHttp=${_looksLikeHttpUrl(raw)} "
-      "iconUrl.encoded='${_previewUrl(encoded)}' "
-      "encodedIsHttp=${_looksLikeHttpUrl(encoded)}",
-    );
-  }
-
   Future<TokenBlueprintPatch?> fetchPatch(String tokenBlueprintId) async {
     final id = tokenBlueprintId.trim();
     if (id.isEmpty) {
       throw ArgumentError("tokenBlueprintId is empty");
     }
 
-    _log("fetchPatch start tokenBlueprintId=$id apiBase=$_apiBase");
-
     final u1 = Uri.parse("$_apiBase/sns/token-blueprints/$id/patch");
-    _log("request GET $u1");
     final r1 = await _client.get(u1, headers: _jsonHeaders());
-    _log("response ${r1.statusCode} from $u1 body=${_bodyPreview(r1.body)}");
 
     if (r1.statusCode == 200) {
       final m = _decodeJsonMap(r1.body);
-      _log("json keys (patch) = ${m.keys.toList()}");
-
-      final patch = TokenBlueprintPatch.fromJson(m);
-
-      _log(
-        "parsed patch ok "
-        "name='${patch.name ?? ""}' "
-        "symbol='${patch.symbol ?? ""}' "
-        "brandId='${patch.brandId ?? ""}' "
-        "brandName='${patch.brandName ?? ""}' "
-        "minted=${patch.minted} "
-        "hasIconUrl=${(patch.iconUrl ?? '').trim().isNotEmpty}",
-      );
-
-      // ✅ iconUrl が「取れているか」を確実に判断できるログ
-      _logIconUrlDebug("iconUrl debug (patch)", patch);
-
-      return patch;
+      return TokenBlueprintPatch.fromJson(m);
     }
 
     if (r1.statusCode == 404) {
-      _log("patch route returned 404. fallback to /sns/token-blueprints/$id");
-
       final u2 = Uri.parse("$_apiBase/sns/token-blueprints/$id");
-      _log("request GET $u2");
       final r2 = await _client.get(u2, headers: _jsonHeaders());
-      _log("response ${r2.statusCode} from $u2 body=${_bodyPreview(r2.body)}");
 
       if (r2.statusCode == 200) {
         final m = _decodeJsonMap(r2.body);
-        _log("json keys (fallback) = ${m.keys.toList()}");
-
-        final patch = TokenBlueprintPatch.fromJson(m);
-
-        _log(
-          "parsed patch (fallback) ok "
-          "name='${patch.name ?? ""}' "
-          "symbol='${patch.symbol ?? ""}' "
-          "brandId='${patch.brandId ?? ""}' "
-          "brandName='${patch.brandName ?? ""}' "
-          "minted=${patch.minted} "
-          "hasIconUrl=${(patch.iconUrl ?? '').trim().isNotEmpty}",
-        );
-
-        // ✅ fallback 側でも同じログ
-        _logIconUrlDebug("iconUrl debug (fallback)", patch);
-
-        return patch;
+        return TokenBlueprintPatch.fromJson(m);
       }
       if (r2.statusCode == 404) {
-        _log("fallback route also returned 404 -> return null");
         return null;
       }
       throw HttpException(
@@ -201,13 +116,8 @@ class TokenBlueprintPatch {
       return null;
     }
 
-    // ✅ iconUrl: キー揺れ吸収
-    final icon =
-        s(json["iconUrl"]) ??
-        s(json["iconURL"]) ??
-        s(json["IconUrl"]) ??
-        s(json["IconURL"]) ??
-        s(json["icon_url"]);
+    // ✅ iconUrl: 名揺れ吸収を削除（正: "iconUrl" のみ）
+    final icon = s(json["iconUrl"]);
 
     return TokenBlueprintPatch(
       name: s(json["name"]),

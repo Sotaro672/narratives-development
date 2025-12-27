@@ -1,4 +1,3 @@
-// frontend/sns/lib/features/inventory/infrastructure/inventory_repository_http.dart
 import 'dart:convert';
 
 import 'package:flutter/foundation.dart';
@@ -8,15 +7,31 @@ import 'package:http/http.dart' as http;
 ///
 /// Priority:
 /// 1) --dart-define=API_BASE_URL=https://...
-/// 2) fallback
+/// 2) --dart-define=API_BASE=https://...   (backward compatible)
+/// 3) fallback
 const String _fallbackBaseUrl =
     'https://narratives-backend-871263659099.asia-northeast1.run.app';
 
+/// ✅ make this public within library (no underscore) so other files (e.g. use_catalog.dart)
+/// can reuse the exact same resolution logic without duplicating fallback constants.
+String resolveSnsApiBase() => _resolveApiBase();
+
 String _resolveApiBase() {
-  const fromDefine = String.fromEnvironment('API_BASE_URL');
-  final base = (fromDefine.isNotEmpty ? fromDefine : _fallbackBaseUrl).trim();
-  return base.endsWith('/') ? base.substring(0, base.length - 1) : base;
+  const fromDefineUrl = String.fromEnvironment('API_BASE_URL');
+  const fromDefine = String.fromEnvironment('API_BASE');
+
+  final raw =
+      (fromDefineUrl.trim().isNotEmpty
+              ? fromDefineUrl
+              : (fromDefine.trim().isNotEmpty ? fromDefine : _fallbackBaseUrl))
+          .trim();
+
+  return raw.endsWith('/') ? raw.substring(0, raw.length - 1) : raw;
 }
+
+// ============================================================
+// Inventory DTOs
+// ============================================================
 
 @immutable
 class SnsInventoryModelStock {
@@ -146,6 +161,152 @@ class SnsInventoryResponse {
   }
 }
 
+// ============================================================
+// Models DTOs (/sns/models)
+// - backend log: dto.keys=[id productBlueprintId modelNumber size colorName colorRGB measurements]
+// ============================================================
+
+@immutable
+class SnsModelVariationDTO {
+  const SnsModelVariationDTO({
+    required this.id,
+    required this.productBlueprintId,
+    required this.modelNumber,
+    required this.size,
+    required this.colorName,
+    required this.colorRGB,
+    required this.measurements,
+  });
+
+  final String id;
+  final String productBlueprintId;
+  final String modelNumber;
+  final String size;
+
+  /// ✅ flattened (catalogcolor を統合した形)
+  final String colorName;
+  final int colorRGB;
+
+  final Map<String, int> measurements;
+
+  factory SnsModelVariationDTO.fromJson(Map<String, dynamic> json) {
+    final id = (json['id'] ?? '').toString().trim();
+    final pb = (json['productBlueprintId'] ?? '').toString().trim();
+    final mn = (json['modelNumber'] ?? '').toString().trim();
+    final sz = (json['size'] ?? '').toString().trim();
+
+    final cn = (json['colorName'] ?? '').toString().trim();
+    final cr = json['colorRGB'];
+    final int rgb = (cr is num) ? cr.toInt() : int.tryParse('$cr') ?? 0;
+
+    final Map<String, int> measurements = {};
+    final m = json['measurements'];
+    if (m is Map) {
+      for (final e in m.entries) {
+        final k = e.key.toString().trim();
+        if (k.isEmpty) continue;
+        final v = e.value;
+        final int iv = (v is num) ? v.toInt() : int.tryParse(v.toString()) ?? 0;
+        measurements[k] = iv;
+      }
+    }
+
+    return SnsModelVariationDTO(
+      id: id,
+      productBlueprintId: pb,
+      modelNumber: mn,
+      size: sz,
+      colorName: cn,
+      colorRGB: rgb,
+      measurements: measurements,
+    );
+  }
+}
+
+@immutable
+class _SnsModelItemDTO {
+  const _SnsModelItemDTO({required this.modelId, required this.metadata});
+
+  final String modelId;
+  final SnsModelVariationDTO metadata;
+
+  factory _SnsModelItemDTO.fromJson(Map<String, dynamic> json) {
+    final modelId = (json['modelId'] ?? '').toString().trim();
+    final metaRaw = json['metadata'];
+    final meta = (metaRaw is Map)
+        ? SnsModelVariationDTO.fromJson(metaRaw.cast<String, dynamic>())
+        : SnsModelVariationDTO(
+            id: modelId,
+            productBlueprintId: '',
+            modelNumber: '',
+            size: '',
+            colorName: '',
+            colorRGB: 0,
+            measurements: const {},
+          );
+
+    // id が空なら modelId で補完
+    final fixed = (meta.id.trim().isNotEmpty)
+        ? meta
+        : SnsModelVariationDTO(
+            id: modelId,
+            productBlueprintId: meta.productBlueprintId,
+            modelNumber: meta.modelNumber,
+            size: meta.size,
+            colorName: meta.colorName,
+            colorRGB: meta.colorRGB,
+            measurements: meta.measurements,
+          );
+
+    return _SnsModelItemDTO(modelId: modelId, metadata: fixed);
+  }
+}
+
+@immutable
+class _SnsModelListResponseDTO {
+  const _SnsModelListResponseDTO({
+    required this.items,
+    required this.totalCount,
+    required this.totalPages,
+    required this.page,
+    required this.perPage,
+  });
+
+  final List<_SnsModelItemDTO> items;
+  final int totalCount;
+  final int totalPages;
+  final int page;
+  final int perPage;
+
+  factory _SnsModelListResponseDTO.fromJson(Map<String, dynamic> json) {
+    final itemsRaw = json['items'];
+    final items = <_SnsModelItemDTO>[];
+    if (itemsRaw is List) {
+      for (final v in itemsRaw) {
+        if (v is Map) {
+          items.add(_SnsModelItemDTO.fromJson(v.cast<String, dynamic>()));
+        }
+      }
+    }
+
+    // ✅ lint: no leading underscore for local identifiers
+    int asInt(dynamic v) =>
+        (v is num) ? v.toInt() : int.tryParse(v.toString()) ?? 0;
+
+    return _SnsModelListResponseDTO(
+      items: items,
+      totalCount: asInt(json['totalCount']),
+      totalPages: asInt(json['totalPages']),
+      page: asInt(json['page']),
+      perPage: asInt(json['perPage']),
+    );
+  }
+}
+
+// ============================================================
+// Repository
+// ============================================================
+
 class InventoryRepositoryHttp {
   InventoryRepositoryHttp({http.Client? client})
     : _client = client ?? http.Client();
@@ -225,6 +386,55 @@ class InventoryRepositoryHttp {
       throw FormatException('Invalid JSON shape (expected object)');
     }
     return SnsInventoryResponse.fromJson(decoded);
+  }
+
+  /// ✅ GET /sns/models?productBlueprintId=...   (buyer-facing)
+  Future<List<SnsModelVariationDTO>> fetchModelsByProductBlueprintId(
+    String productBlueprintId, {
+    int page = 1,
+    int perPage = 200,
+  }) async {
+    final pb = productBlueprintId.trim();
+    if (pb.isEmpty) {
+      throw ArgumentError('productBlueprintId is required');
+    }
+
+    final p = page <= 0 ? 1 : page;
+    final pp = (perPage <= 0) ? 200 : (perPage > 200 ? 200 : perPage);
+
+    final uri = _uri('/sns/models', {
+      'productBlueprintId': pb,
+      'page': '$p',
+      'perPage': '$pp',
+    });
+
+    final res = await _client.get(
+      uri,
+      headers: const {'Accept': 'application/json'},
+    );
+
+    final body = res.body;
+    if (res.statusCode < 200 || res.statusCode >= 300) {
+      throw SnsHttpException(
+        statusCode: res.statusCode,
+        message: _extractError(body) ?? 'request failed',
+        url: uri.toString(),
+      );
+    }
+
+    final decoded = jsonDecode(body);
+    if (decoded is! Map) {
+      throw FormatException('Invalid JSON shape (expected object)');
+    }
+
+    final dto = _SnsModelListResponseDTO.fromJson(
+      decoded.cast<String, dynamic>(),
+    );
+    final out = <SnsModelVariationDTO>[];
+    for (final it in dto.items) {
+      out.add(it.metadata);
+    }
+    return out;
   }
 
   void dispose() {

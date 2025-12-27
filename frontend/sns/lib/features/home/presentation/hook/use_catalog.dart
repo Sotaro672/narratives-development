@@ -1,14 +1,12 @@
-// frontend\sns\lib\features\home\presentation\hook\use_catalog.dart
 import 'dart:convert';
 
 import 'package:http/http.dart' as http;
 
 import '../../../inventory/infrastructure/inventory_repository_http.dart';
 import '../../../list/infrastructure/list_repository_http.dart';
-import '../../../model/infrastructure/model_repository_http.dart';
 import '../../../productBlueprint/infrastructure/product_blueprint_repository_http.dart';
 import '../../../tokenBlueprint/infrastructure/token_blueprint_repository_http.dart';
-import 'use_catalog_inventory.dart'; // ✅ inventory + model load統合
+import 'use_catalog_inventory.dart';
 import 'use_catalog_product.dart';
 import 'use_catalog_token.dart';
 
@@ -18,8 +16,7 @@ class UseCatalog {
     : _catalogRepo = CatalogRepositoryHttp(client: client),
       _listRepo = ListRepositoryHttp(),
       _invRepo = InventoryRepositoryHttp(),
-      _modelRepo = ModelRepositoryHTTP(),
-      _inventory = const UseCatalogInventory(), // ✅ model loadもここに統合
+      _inventory = const UseCatalogInventory(),
       _product = UseCatalogProduct(),
       _token = UseCatalogToken();
 
@@ -27,24 +24,25 @@ class UseCatalog {
 
   final ListRepositoryHttp _listRepo;
   final InventoryRepositoryHttp _invRepo;
-  final ModelRepositoryHTTP _modelRepo;
 
-  // ✅ inventory card 用 hook（計算 + model load を統合）
+  // ✅ inventory hook（モデル取得 + 計算）
   final UseCatalogInventory _inventory;
 
-  // ✅ product card 用 hook
+  // ✅ product / token
   final UseCatalogProduct _product;
-
-  // ✅ token card 用 hook
   final UseCatalogToken _token;
 
   void dispose() {
     _catalogRepo.dispose();
     _listRepo.dispose();
     _invRepo.dispose();
-    // ModelRepositoryHTTP: no dispose()
     _product.dispose();
     _token.dispose();
+  }
+
+  void _log(String msg) {
+    // ignore: avoid_print
+    print('[UseCatalog] $msg');
   }
 
   Future<CatalogState> load({required String listId}) async {
@@ -53,18 +51,30 @@ class UseCatalog {
       throw Exception('catalog: listId is empty');
     }
 
+    _log('load start listId=$id');
+
     // 1) try catalog endpoint first
     try {
+      _log('try catalog endpoint: GET /sns/catalog/$id');
       final dto = await _catalogRepo.fetchCatalogByListId(id);
+
+      _log(
+        'catalog ok '
+        'listId=${dto.list.id} '
+        'inventoryId="${dto.list.inventoryId.trim()}" '
+        'list.tbId="${(dto.list.tokenBlueprintId).trim()}" '
+        'inv.tbId="${(dto.inventory?.tokenBlueprintId ?? '').trim()}"',
+      );
 
       // ✅ tokenBlueprintId resolve (inventory優先 → list fallback)
       final resolvedTbId =
           (dto.inventory?.tokenBlueprintId ?? dto.list.tokenBlueprintId).trim();
+      _log('resolved tokenBlueprintId="$resolvedTbId"');
 
-      // ✅ token patch（hook に移譲）
+      // ✅ token patch
       final token = await _token.load(resolvedTokenBlueprintId: resolvedTbId);
 
-      // ✅ product (catalog DTO が返す場合はそれを優先 / 無い場合は pbId から補完)
+      // ✅ product
       final pbId = (dto.inventory?.productBlueprintId ?? '').trim();
       final prod = await _product.load(
         productBlueprintId: pbId,
@@ -72,9 +82,9 @@ class UseCatalog {
         initialError: dto.productBlueprintError,
       );
 
-      // ✅ model (DTO優先 / 無ければ pbId から補完 fetch) -> UseCatalogInventory に統合
-      final modelRes = await _inventory.loadModels(
-        modelRepo: _modelRepo,
+      // ✅ models（catalog DTO優先 / 無ければ /sns/models で補完）
+      final modelsRes = await _inventory.loadModels(
+        invRepo: _invRepo,
         productBlueprintId: pbId,
         initial: dto.modelVariations,
         initialError: dto.modelVariationsError,
@@ -86,26 +96,32 @@ class UseCatalog {
         inventoryError: dto.inventoryError,
         productBlueprint: prod.productBlueprint,
         productBlueprintError: prod.productBlueprintError,
-        modelVariations: modelRes.models,
-        modelVariationsError: modelRes.error,
+        modelVariations: modelsRes.models,
+        modelVariationsError: modelsRes.error,
         tokenBlueprintPatch: token.patch,
         tokenBlueprintError: token.error,
-        // ✅ ここで resolvedTbId を渡す（inventory 無くてもIDが落ちない）
         resolvedTokenBlueprintId: resolvedTbId,
       );
 
       return state;
     } catch (e) {
-      // 2) fallback to legacy multi-fetch
-      final state = await _loadLegacy(id);
-      return state;
+      _log('catalog endpoint failed -> fallback legacy. error=$e');
+      return _loadLegacy(id);
     }
   }
 
   Future<CatalogState> _loadLegacy(String listId) async {
-    final list = await _listRepo.fetchListById(listId);
+    _log('legacy start listId=$listId');
 
-    // inventory (must have inventoryId)
+    final list = await _listRepo.fetchListById(listId);
+    _log(
+      'legacy list ok '
+      'listId=${list.id} '
+      'inventoryId="${list.inventoryId.trim()}" '
+      'list.tbId="${list.tokenBlueprintId.trim()}"',
+    );
+
+    // inventory
     final invId = list.inventoryId.trim();
 
     SnsInventoryResponse? inv;
@@ -113,51 +129,58 @@ class UseCatalog {
 
     if (invId.isEmpty) {
       invErr = 'inventoryId is empty';
+      _log('legacy inventory skip: inventoryId is empty');
     } else {
       try {
+        _log('legacy fetch inventory start invId=$invId');
         inv = await _invRepo.fetchInventoryById(invId);
+        _log(
+          'legacy inventory ok '
+          'pbId="${inv.productBlueprintId.trim()}" '
+          'tbId="${inv.tokenBlueprintId.trim()}" '
+          'stockKeys=${inv.stock.length}',
+        );
       } catch (e) {
         invErr = e.toString();
+        _log('legacy inventory error: $invErr');
       }
     }
 
     final pbId = (inv?.productBlueprintId ?? '').trim();
 
-    // ✅ tokenBlueprintId resolve (inventory優先 → list fallback)
+    // ✅ tokenBlueprintId resolve
     final resolvedTbId = (inv?.tokenBlueprintId ?? list.tokenBlueprintId)
         .trim();
+    _log('legacy resolved tokenBlueprintId="$resolvedTbId"');
 
-    // ✅ product blueprint（hook に移譲）
+    // ✅ product
     final prod = await _product.load(
       productBlueprintId: pbId,
       initial: null,
       initialError: null,
     );
-    final pb = prod.productBlueprint;
-    final pbErr = prod.productBlueprintError;
 
-    // ✅ model variations（UseCatalogInventory に統合）
-    final modelRes = await _inventory.loadModels(
-      modelRepo: _modelRepo,
+    // ✅ models (/sns/models)
+    final modelsRes = await _inventory.loadModels(
+      invRepo: _invRepo,
       productBlueprintId: pbId,
       initial: null,
       initialError: null,
     );
 
-    // ✅ token patch（hook に移譲）
+    // ✅ token patch
     final token = await _token.load(resolvedTokenBlueprintId: resolvedTbId);
 
     return _buildState(
       list: list,
       inventory: inv,
       inventoryError: invErr,
-      productBlueprint: pb,
-      productBlueprintError: pbErr,
-      modelVariations: modelRes.models,
-      modelVariationsError: modelRes.error,
+      productBlueprint: prod.productBlueprint,
+      productBlueprintError: prod.productBlueprintError,
+      modelVariations: modelsRes.models,
+      modelVariationsError: modelsRes.error,
       tokenBlueprintPatch: token.patch,
       tokenBlueprintError: token.error,
-      // ✅ legacy でも resolvedTbId を渡す
       resolvedTokenBlueprintId: resolvedTbId,
     );
   }
@@ -168,12 +191,10 @@ class UseCatalog {
     required String? inventoryError,
     required SnsProductBlueprintResponse? productBlueprint,
     required String? productBlueprintError,
-    required List<ModelVariationDTO>? modelVariations,
+    required List<SnsModelVariationDTO>? modelVariations,
     required String? modelVariationsError,
     required TokenBlueprintPatch? tokenBlueprintPatch,
     required String? tokenBlueprintError,
-
-    // ✅ NEW: tokenBlueprintId を inventory だけに依存させないための引数
     required String resolvedTokenBlueprintId,
   }) {
     final imageUrl = list.image.trim();
@@ -184,10 +205,10 @@ class UseCatalog {
     // ✅ productBlueprintId は inventory 優先（list には基本無い/信頼しない方針）
     final pbId = (inventory?.productBlueprintId ?? '').trim();
 
-    // ✅ tokenBlueprintId は resolved（inventory優先→list fallback）
+    // ✅ tokenBlueprintId は resolved
     final tbId = resolvedTokenBlueprintId.trim();
 
-    // ✅ inventory 計算は hook に分離
+    // ✅ inventory計算（モデル一覧をベースに stock を追記）
     final invComputed = _inventory.compute(
       inventory: inventory,
       modelVariations: modelVariations,
@@ -195,33 +216,28 @@ class UseCatalog {
 
     final tokenIconUrl = (tokenBlueprintPatch?.iconUrl ?? '').trim();
 
-    final state = CatalogState(
+    return CatalogState(
       list: list,
       priceText: priceText,
       imageUrl: imageUrl,
       imageUrlEncoded: _safeUrl(imageUrl),
       hasImage: hasImage,
-
       inventory: inventory,
       inventoryError: _asNonEmptyString(inventoryError),
       productBlueprint: productBlueprint,
       productBlueprintError: _asNonEmptyString(productBlueprintError),
       modelVariations: modelVariations,
       modelVariationsError: _asNonEmptyString(modelVariationsError),
-
       productBlueprintId: pbId,
-      tokenBlueprintId: tbId, // ✅ resolved を反映
+      tokenBlueprintId: tbId,
       totalStock: invComputed.totalStock,
       modelStockRows: invComputed.modelStockRows,
-
       tokenBlueprintPatch: tokenBlueprintPatch,
       tokenBlueprintError: _asNonEmptyString(tokenBlueprintError),
       tokenIconUrlEncoded: tokenIconUrl.isNotEmpty
           ? _safeUrl(tokenIconUrl)
           : null,
     );
-
-    return state;
   }
 
   static String? _asNonEmptyString(String? v) {
@@ -281,7 +297,7 @@ class CatalogState {
   final SnsProductBlueprintResponse? productBlueprint;
   final String? productBlueprintError;
 
-  final List<ModelVariationDTO>? modelVariations;
+  final List<SnsModelVariationDTO>? modelVariations;
   final String? modelVariationsError;
 
   final String productBlueprintId;
@@ -318,7 +334,7 @@ class SnsCatalogDTO {
   final SnsProductBlueprintResponse? productBlueprint;
   final String? productBlueprintError;
 
-  final List<ModelVariationDTO>? modelVariations;
+  final List<SnsModelVariationDTO>? modelVariations;
   final String? modelVariationsError;
 
   static String? _asNonEmptyString(dynamic v) {
@@ -347,7 +363,8 @@ class SnsCatalogDTO {
           ? mvJson
                 .whereType<Map>()
                 .map(
-                  (e) => ModelVariationDTO.fromJson(e.cast<String, dynamic>()),
+                  (e) =>
+                      SnsModelVariationDTO.fromJson(e.cast<String, dynamic>()),
                 )
                 .toList()
           : null,
@@ -366,16 +383,10 @@ class CatalogRepositoryHttp {
     _client.close();
   }
 
-  static String _resolveApiBase() {
-    const env = String.fromEnvironment('API_BASE');
-    if (env.trim().isNotEmpty) return env.trim();
-    throw Exception(
-      'API_BASE is not set (use --dart-define=API_BASE=https://...)',
-    );
-  }
-
+  /// ✅ inventory_repository_http.dart の解決ロジックを使う（重複排除）
   static Uri _buildUri(String path) {
-    final base = _resolveApiBase().replaceAll(RegExp(r'\/+$'), '');
+    // resolveSnsApiBase() is defined in inventory_repository_http.dart
+    final base = resolveSnsApiBase().replaceAll(RegExp(r'\/+$'), '');
     final p = path.startsWith('/') ? path : '/$path';
     return Uri.parse('$base$p');
   }

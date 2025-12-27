@@ -315,15 +315,25 @@ func (q *SNSCatalogQuery) GetByListID(ctx context.Context, listID string) (snsdt
 			log.Printf("[sns_catalog] tokenBlueprint getPatchById error listId=%q tbId=%q err=%q", listID, resolvedTBID, e.Error())
 		} else {
 			p := patch
+
+			// ✅ NEW: token patch にも brandName/companyName を補完して「画面へ渡す」
+			// - /sns/token-blueprints/{id}/patch 側で埋められていないケースでも、
+			//   catalog 側で埋めて返せるようにする。
+			if q.NameResolver != nil {
+				fillTokenBlueprintPatchNames(ctx, q.NameResolver, &p)
+			}
+
 			out.TokenBlueprint = &p
 			log.Printf(
-				"[sns_catalog] tokenBlueprint getPatchById ok listId=%q tbId=%q name=%q symbol=%q brandId=%q brandName=%q minted=%s hasIconUrl=%t",
+				"[sns_catalog] tokenBlueprint getPatchById ok listId=%q tbId=%q name=%q symbol=%q brandId=%q brandName=%q companyId=%q companyName=%q minted=%s hasIconUrl=%t",
 				listID,
 				resolvedTBID,
 				ptrStr(p.Name),
 				ptrStr(p.Symbol),
 				ptrStr(p.BrandID),
 				ptrStr(p.BrandName),
+				ptrStr(p.CompanyID),
+				ptrStr(p.CompanyName),
 				ptrBoolStr(p.Minted),
 				strings.TrimSpace(ptrStr(p.IconURL)) != "",
 			)
@@ -445,6 +455,32 @@ func fillProductBlueprintNames(ctx context.Context, r *appresolver.NameResolver,
 		cn := strings.TrimSpace(r.ResolveCompanyName(ctx, companyID))
 		if cn != "" {
 			setStringFieldBestEffort(dto, "CompanyName", cn)
+		}
+	}
+}
+
+// ✅ NEW: tokenBlueprint patch -> brandName/companyName
+func fillTokenBlueprintPatchNames(ctx context.Context, r *appresolver.NameResolver, p *tbdom.Patch) {
+	if r == nil || p == nil {
+		return
+	}
+
+	brandID := strings.TrimSpace(ptrStr(p.BrandID))
+	companyID := strings.TrimSpace(ptrStr(p.CompanyID))
+
+	// brandName (only if empty)
+	if brandID != "" && strings.TrimSpace(ptrStr(p.BrandName)) == "" {
+		if bn := strings.TrimSpace(r.ResolveBrandName(ctx, brandID)); bn != "" {
+			s := bn
+			p.BrandName = &s
+		}
+	}
+
+	// companyName (only if empty)
+	if companyID != "" && strings.TrimSpace(ptrStr(p.CompanyName)) == "" {
+		if cn := strings.TrimSpace(r.ResolveCompanyName(ctx, companyID)); cn != "" {
+			s := cn
+			p.CompanyName = &s
 		}
 	}
 }

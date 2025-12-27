@@ -1,8 +1,7 @@
-// frontend\sns\lib\features\home\presentation\page\catalog.dart
 import 'package:flutter/material.dart';
 
-import 'package:sns/features/home/presentation/components/catalog_inventory.dart'; // ✅ package import
-import '../../../list/infrastructure/list_repository_http.dart'; // SnsListItem
+import 'package:sns/features/home/presentation/components/catalog_inventory.dart';
+import '../../../list/infrastructure/list_repository_http.dart';
 import '../components/catalog_product.dart';
 import '../components/catalog_token.dart';
 import '../hook/use_catalog.dart';
@@ -27,7 +26,6 @@ class _CatalogPageState extends State<CatalogPage> {
   late final UseCatalog _uc;
   late Future<CatalogState> _future;
 
-  // ✅ Render時に「画面へ渡っているか」を確認するログ（スパム抑制）
   String _lastVmLogKey = '';
 
   void _log(String msg) {
@@ -58,12 +56,7 @@ class _CatalogPageState extends State<CatalogPage> {
       'inv?=${vm.inventory != null} '
       'pbId="${vm.productBlueprintId}" '
       'tbId="${vm.tokenBlueprintId}" '
-      'patch.name="${vm.tokenBlueprintPatch?.name ?? ''}" '
-      'patch.symbol="${vm.tokenBlueprintPatch?.symbol ?? ''}" '
-      'patch.brandId="${vm.tokenBlueprintPatch?.brandId ?? ''}" '
-      'patch.minted=${vm.tokenBlueprintPatch?.minted} '
-      'tbErr="${vm.tokenBlueprintError ?? ''}" '
-      'hasTokenIcon=${(vm.tokenIconUrlEncoded ?? '').trim().isNotEmpty}',
+      'tbErr="${vm.tokenBlueprintError ?? ''}"',
     );
   }
 
@@ -117,13 +110,8 @@ class _CatalogPageState extends State<CatalogPage> {
             return const Center(child: Text('No data'));
           }
 
-          // ✅ ここで「画面へ渡っている vm」をログで確認
           if (vm != null) {
             _logVmOnce(vm);
-          } else {
-            _log(
-              'vm is null (initial only) listId=${list.id} title="${list.title}"',
-            );
           }
 
           final priceText = vm?.priceText ?? '';
@@ -139,10 +127,6 @@ class _CatalogPageState extends State<CatalogPage> {
           final pb = vm?.productBlueprint;
           final pbErr = vm?.productBlueprintError;
 
-          // ✅ model一覧は inventory card で表示する（catalog_model.dart は廃止）
-          final models = vm?.modelVariations;
-          final modelErr = vm?.modelVariationsError;
-
           final totalStock = vm?.totalStock;
 
           final tbPatch = vm?.tokenBlueprintPatch;
@@ -152,7 +136,6 @@ class _CatalogPageState extends State<CatalogPage> {
           return ListView(
             padding: const EdgeInsets.all(12),
             children: [
-              // -------- list --------
               Card(
                 clipBehavior: Clip.antiAlias,
                 child: Column(
@@ -226,7 +209,6 @@ class _CatalogPageState extends State<CatalogPage> {
 
               const SizedBox(height: 12),
 
-              // ✅ token blueprint card
               CatalogTokenCard(
                 tokenBlueprintId: tbId,
                 patch: tbPatch,
@@ -236,24 +218,18 @@ class _CatalogPageState extends State<CatalogPage> {
 
               const SizedBox(height: 12),
 
-              // ✅ inventory + models (統合表示)
-              // - productBlueprintId から model一覧を並べる
-              // - inventory.stock が無い model は 0 表記（Card 内で扱う）
+              // ✅ モデル表示もここに統合済み（catalog_model.dart は廃止）
               CatalogInventoryCard(
                 productBlueprintId: pbId,
                 tokenBlueprintId: tbId,
                 totalStock: totalStock,
                 inventory: inv,
                 inventoryError: invErr,
-
-                // ✅ REQUIRED (catalog_model.dart 廃止に伴い、inventory card 側で表示)
-                modelVariations: models,
-                modelVariationsError: modelErr,
+                modelStockRows: vm?.modelStockRows,
               ),
 
               const SizedBox(height: 12),
 
-              // ✅ product blueprint card
               CatalogProductCard(
                 productBlueprintId: pbId,
                 productBlueprint: pb,
@@ -267,8 +243,6 @@ class _CatalogPageState extends State<CatalogPage> {
   }
 }
 
-// ============================================================
-// UI components (style-only)
 // ============================================================
 
 class _ImageFallback extends StatelessWidget {

@@ -7,11 +7,14 @@ import "net/http"
 type Deps struct {
 	List             http.Handler
 	Inventory        http.Handler
-	ProductBlueprint http.Handler // ✅ NEW
-	Model            http.Handler // ✅ NEW
-	Catalog          http.Handler // ✅ NEW
+	ProductBlueprint http.Handler
+	Model            http.Handler
+	Catalog          http.Handler
+	TokenBlueprint   http.Handler // patch
 
-	TokenBlueprint http.Handler // ✅ NEW (patch)
+	// ✅ NEW: name resolver endpoints (for NameResolver)
+	Company http.Handler
+	Brand   http.Handler
 }
 
 // Register registers buyer-facing routes onto mux.
@@ -24,8 +27,10 @@ type Deps struct {
 // - GET /sns/product-blueprints/{id}
 // - GET /sns/models?productBlueprintId=
 // - GET /sns/models/{id}
-// - GET /sns/catalog/{listId}                          ✅ NEW
-// - GET /sns/token-blueprints/{id}/patch               ✅ NEW
+// - GET /sns/catalog/{listId}
+// - GET /sns/token-blueprints/{id}/patch
+// - GET /sns/companies/{id}     ✅ NEW (name resolver)
+// - GET /sns/brands/{id}        ✅ NEW (name resolver)
 func Register(mux *http.ServeMux, deps Deps) {
 	if mux == nil {
 		return
@@ -55,19 +60,31 @@ func Register(mux *http.ServeMux, deps Deps) {
 		mux.Handle("/sns/models/", deps.Model)
 	}
 
-	// catalog ✅ NEW
+	// catalog
 	// NOTE: only detail is required now: /sns/catalog/{listId}
 	if deps.Catalog != nil {
 		mux.Handle("/sns/catalog/", deps.Catalog)
-		// （必要なら将来 /sns/catalog を index に使う）
 		mux.Handle("/sns/catalog", deps.Catalog)
 	}
 
-	// token blueprints ✅ NEW
+	// token blueprints
 	// NOTE: only patch is required now: /sns/token-blueprints/{id}/patch
 	if deps.TokenBlueprint != nil {
 		mux.Handle("/sns/token-blueprints/", deps.TokenBlueprint)
-		// （必要なら将来 /sns/token-blueprints を index に使う）
 		mux.Handle("/sns/token-blueprints", deps.TokenBlueprint)
+	}
+
+	// companies ✅ NEW
+	// NOTE: only detail is required now: /sns/companies/{id}
+	if deps.Company != nil {
+		mux.Handle("/sns/companies/", deps.Company)
+		mux.Handle("/sns/companies", deps.Company)
+	}
+
+	// brands ✅ NEW
+	// NOTE: only detail is required now: /sns/brands/{id}
+	if deps.Brand != nil {
+		mux.Handle("/sns/brands/", deps.Brand)
+		mux.Handle("/sns/brands", deps.Brand)
 	}
 }

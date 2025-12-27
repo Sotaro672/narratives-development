@@ -22,22 +22,30 @@ type SNSDeps struct {
 	// Handlers
 	List             http.Handler
 	Inventory        http.Handler
-	ProductBlueprint http.Handler // ✅ NEW
-	Model            http.Handler // ✅ NEW
-	Catalog          http.Handler // ✅ NEW
+	ProductBlueprint http.Handler
+	Model            http.Handler
+	Catalog          http.Handler
 
-	TokenBlueprint http.Handler // ✅ NEW (patch)
+	TokenBlueprint http.Handler // patch
+
+	// ✅ NEW: name resolver endpoints
+	Company http.Handler
+	Brand   http.Handler
 }
 
 // NewSNSDeps wires SNS handlers.
 // （後方互換のため、NameResolver なしの関数を残す）
+//
+// NOTE:
+// - Company/Brand は v2 関数（NewSNSDepsWithNameResolverAndOrgHandlers）側で注入する。
+// - 既存呼び出しを壊さないため、ここでは nil 注入で OK（ルーティングは RegisterSNSFromContainer 側が担当）。
 func NewSNSDeps(
 	listUC *usecase.ListUsecase,
 	invUC *usecase.InventoryUsecase,
-	pbUC *usecase.ProductBlueprintUsecase, // ✅ NEW
-	modelUC *usecase.ModelUsecase, // ✅ NEW
-	tokenBlueprintUC *usecase.TokenBlueprintUsecase, // ✅ NEW (patch)
-	catalogQ *snsquery.SNSCatalogQuery, // ✅ NEW
+	pbUC *usecase.ProductBlueprintUsecase,
+	modelUC *usecase.ModelUsecase,
+	tokenBlueprintUC *usecase.TokenBlueprintUsecase,
+	catalogQ *snsquery.SNSCatalogQuery,
 ) SNSDeps {
 	return NewSNSDepsWithNameResolver(
 		listUC,
@@ -57,22 +65,61 @@ func NewSNSDeps(
 func NewSNSDepsWithNameResolver(
 	listUC *usecase.ListUsecase,
 	invUC *usecase.InventoryUsecase,
-	pbUC *usecase.ProductBlueprintUsecase, // ✅ NEW
-	modelUC *usecase.ModelUsecase, // ✅ NEW
-	tokenBlueprintUC *usecase.TokenBlueprintUsecase, // ✅ NEW (patch)
+	pbUC *usecase.ProductBlueprintUsecase,
+	modelUC *usecase.ModelUsecase,
+	tokenBlueprintUC *usecase.TokenBlueprintUsecase,
 
-	// ✅ NEW: name resolver (brandName/companyName)
+	// name resolver (brandName/companyName)
 	nameResolver *appresolver.NameResolver,
 
-	// ✅ NEW: catalog query
+	// catalog query
 	catalogQ *snsquery.SNSCatalogQuery,
 ) SNSDeps {
+	return NewSNSDepsWithNameResolverAndOrgHandlers(
+		listUC,
+		invUC,
+		pbUC,
+		modelUC,
+		tokenBlueprintUC,
+		nil, // companyUC
+		nil, // brandUC
+		nameResolver,
+		catalogQ,
+	)
+}
+
+// NewSNSDepsWithNameResolverAndOrgHandlers wires SNS handlers with optional NameResolver + GET-only org handlers.
+//
+// - /sns/companies/{id}
+// - /sns/brands/{id}
+func NewSNSDepsWithNameResolverAndOrgHandlers(
+	listUC *usecase.ListUsecase,
+	invUC *usecase.InventoryUsecase,
+	pbUC *usecase.ProductBlueprintUsecase,
+	modelUC *usecase.ModelUsecase,
+	tokenBlueprintUC *usecase.TokenBlueprintUsecase,
+
+	companyUC *usecase.CompanyUsecase,
+	brandUC *usecase.BrandUsecase,
+
+	nameResolver *appresolver.NameResolver,
+	catalogQ *snsquery.SNSCatalogQuery,
+) SNSDeps {
+	// ✅ IMPORTANT:
+	// CatalogQuery 側にも NameResolver を注入しないと、
+	// sns_catalog の fillProductBlueprintNames() が呼ばれず、name_resolver のログも出ない。
+	if catalogQ != nil && nameResolver != nil && catalogQ.NameResolver == nil {
+		catalogQ.NameResolver = nameResolver
+	}
+
 	var listHandler http.Handler
 	var invHandler http.Handler
 	var pbHandler http.Handler
 	var modelHandler http.Handler
 	var catalogHandler http.Handler
 	var tokenBlueprintHandler http.Handler
+	var companyHandler http.Handler
+	var brandHandler http.Handler
 
 	if listUC != nil {
 		listHandler = snshandler.NewSNSListHandler(listUC)
@@ -83,23 +130,30 @@ func NewSNSDepsWithNameResolver(
 	}
 
 	if pbUC != nil {
-		pbHandler = snshandler.NewSNSProductBlueprintHandler(pbUC) // ✅ NEW
+		pbHandler = snshandler.NewSNSProductBlueprintHandler(pbUC)
 	}
 
 	if modelUC != nil {
-		modelHandler = snshandler.NewSNSModelHandler(modelUC) // ✅ NEW
+		modelHandler = snshandler.NewSNSModelHandler(modelUC)
 	}
 
 	if catalogQ != nil {
-		catalogHandler = snshandler.NewSNSCatalogHandler(catalogQ) // ✅ NEW
+		catalogHandler = snshandler.NewSNSCatalogHandler(catalogQ)
 	}
 
-	// ✅ tokenBlueprint patch handler
+	// ✅ NEW: companies/brands (GET only)
+	if companyUC != nil {
+		companyHandler = snshandler.NewSNSCompanyHandler(companyUC)
+	}
+	if brandUC != nil {
+		brandHandler = snshandler.NewSNSBrandHandler(brandUC)
+	}
+
+	// tokenBlueprint patch handler
 	//
 	// 重要:
 	// - ここでは「確実に存在する ctor」だけを呼ぶ（= NewSNSTokenBlueprintHandler）。
 	// - brand/company 名解決や iconUrl 補完は、handler にフィールドがあれば reflection で注入する。
-	//   （handler 側の ctor 名揺れ / 差し替えで DI が壊れるのを防ぐ）
 	if tokenBlueprintUC != nil {
 		tokenBlueprintHandler = snshandler.NewSNSTokenBlueprintHandler(tokenBlueprintUC)
 
@@ -124,7 +178,10 @@ func NewSNSDepsWithNameResolver(
 		ProductBlueprint: pbHandler,
 		Model:            modelHandler,
 		Catalog:          catalogHandler,
-		TokenBlueprint:   tokenBlueprintHandler, // ✅ NEW
+		TokenBlueprint:   tokenBlueprintHandler,
+
+		Company: companyHandler,
+		Brand:   brandHandler,
 	}
 }
 
@@ -160,30 +217,62 @@ func RegisterSNSFromContainer(mux *http.ServeMux, cont *Container) {
 		}
 	}
 
-	// ✅ NEW: try to obtain NameResolver from Container (brandName/companyName)
+	// ✅ SNS name resolver (brandName/companyName)
+	// - prefer: SNSNameResolver()
+	// - fallback: GetSNSNameResolver()
+	// - fallback: cont.NameResolver field
 	var nameResolver *appresolver.NameResolver
 	{
 		if x, ok := any(cont).(interface {
-			NameResolver() *appresolver.NameResolver
+			SNSNameResolver() *appresolver.NameResolver
 		}); ok {
-			nameResolver = x.NameResolver()
+			nameResolver = x.SNSNameResolver()
 		} else if x, ok := any(cont).(interface {
-			GetNameResolver() *appresolver.NameResolver
+			GetSNSNameResolver() *appresolver.NameResolver
 		}); ok {
-			nameResolver = x.GetNameResolver()
-		} else if x, ok := any(cont).(interface {
-			Resolver() *appresolver.NameResolver
-		}); ok {
-			nameResolver = x.Resolver()
+			nameResolver = x.GetSNSNameResolver()
+		}
+
+		// final fallback: field (di package can access)
+		if nameResolver == nil && cont.NameResolver != nil {
+			nameResolver = cont.NameResolver
 		}
 	}
 
-	snsDeps := NewSNSDepsWithNameResolver(
+	// ✅ try to obtain CompanyUsecase / BrandUsecase from Container (best-effort)
+	var companyUC *usecase.CompanyUsecase
+	{
+		if x, ok := any(cont).(interface {
+			CompanyUsecase() *usecase.CompanyUsecase
+		}); ok {
+			companyUC = x.CompanyUsecase()
+		} else if x, ok := any(cont).(interface {
+			GetCompanyUsecase() *usecase.CompanyUsecase
+		}); ok {
+			companyUC = x.GetCompanyUsecase()
+		}
+	}
+	var brandUC *usecase.BrandUsecase
+	{
+		if x, ok := any(cont).(interface {
+			BrandUsecase() *usecase.BrandUsecase
+		}); ok {
+			brandUC = x.BrandUsecase()
+		} else if x, ok := any(cont).(interface {
+			GetBrandUsecase() *usecase.BrandUsecase
+		}); ok {
+			brandUC = x.GetBrandUsecase()
+		}
+	}
+
+	snsDeps := NewSNSDepsWithNameResolverAndOrgHandlers(
 		deps.ListUC,
 		deps.InventoryUC,
 		deps.ProductBlueprintUC,
 		deps.ModelUC,
 		deps.TokenBlueprintUC,
+		companyUC,
+		brandUC,
 		nameResolver,
 		catalogQ,
 	)
@@ -200,9 +289,12 @@ func RegisterSNSRoutes(mux *http.ServeMux, deps SNSDeps) {
 		Inventory:        deps.Inventory,
 		ProductBlueprint: deps.ProductBlueprint,
 		Model:            deps.Model,
-		Catalog:          deps.Catalog, // ✅ NEW
+		Catalog:          deps.Catalog,
 
-		TokenBlueprint: deps.TokenBlueprint, // ✅ NEW
+		TokenBlueprint: deps.TokenBlueprint,
+
+		Company: deps.Company,
+		Brand:   deps.Brand,
 	})
 }
 
