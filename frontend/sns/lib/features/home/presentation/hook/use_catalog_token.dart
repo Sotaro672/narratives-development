@@ -1,3 +1,4 @@
+//frontend\sns\lib\features\home\presentation\hook\use_catalog_token.dart
 import '../../../tokenBlueprint/infrastructure/token_blueprint_repository_http.dart';
 
 /// TokenCard 用の “token blueprint patch 解決” 専用 hook
@@ -13,18 +14,12 @@ class UseCatalogToken {
     // TokenBlueprintRepositoryHTTP: no dispose()
   }
 
-  void _log(String msg) {
-    // ignore: avoid_print
-    print('[UseCatalogToken] $msg');
-  }
-
   Future<CatalogTokenResult> load({
     required String resolvedTokenBlueprintId,
   }) async {
     final tbId = resolvedTokenBlueprintId.trim();
     if (tbId.isEmpty) {
       const err = 'tokenBlueprintId is empty';
-      _log('skip fetchPatch: $err');
       return const CatalogTokenResult(patch: null, error: err);
     }
 
@@ -32,25 +27,13 @@ class UseCatalogToken {
     String? tbErr;
 
     try {
-      _log('fetchPatch start tokenBlueprintId=$tbId');
       tbPatch = await _tbRepo.fetchPatch(tbId);
 
       if (tbPatch == null) {
         tbErr = 'tokenBlueprint patch not found (404)';
-        _log('fetchPatch result: null (404)');
-      } else {
-        _log(
-          'fetchPatch ok '
-          'name="${(tbPatch.name ?? '').trim()}" '
-          'symbol="${(tbPatch.symbol ?? '').trim()}" '
-          'brandId="${(tbPatch.brandId ?? '').trim()}" '
-          'minted=${tbPatch.minted} '
-          'hasIconUrl=${(tbPatch.iconUrl ?? '').trim().isNotEmpty}',
-        );
       }
     } catch (e) {
       tbErr = e.toString();
-      _log('fetchPatch error: $tbErr');
     }
 
     return CatalogTokenResult(patch: tbPatch, error: _asNonEmptyString(tbErr));

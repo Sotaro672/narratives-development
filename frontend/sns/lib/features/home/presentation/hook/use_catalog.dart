@@ -8,8 +8,7 @@ import '../../../list/infrastructure/list_repository_http.dart';
 import '../../../model/infrastructure/model_repository_http.dart';
 import '../../../productBlueprint/infrastructure/product_blueprint_repository_http.dart';
 import '../../../tokenBlueprint/infrastructure/token_blueprint_repository_http.dart';
-import 'use_catalog_inventory.dart'; // ✅ NEW
-import 'use_catalog_model.dart'; // ✅ NEW
+import 'use_catalog_inventory.dart'; // ✅ inventory + model load統合
 import 'use_catalog_product.dart';
 import 'use_catalog_token.dart';
 
@@ -20,8 +19,7 @@ class UseCatalog {
       _listRepo = ListRepositoryHttp(),
       _invRepo = InventoryRepositoryHttp(),
       _modelRepo = ModelRepositoryHTTP(),
-      _inventory = const UseCatalogInventory(), // ✅ NEW
-      _model = const UseCatalogModel(), // ✅ NEW
+      _inventory = const UseCatalogInventory(), // ✅ model loadもここに統合
       _product = UseCatalogProduct(),
       _token = UseCatalogToken();
 
@@ -31,11 +29,8 @@ class UseCatalog {
   final InventoryRepositoryHttp _invRepo;
   final ModelRepositoryHTTP _modelRepo;
 
-  // ✅ inventory card 用 hook（計算だけ）
+  // ✅ inventory card 用 hook（計算 + model load を統合）
   final UseCatalogInventory _inventory;
-
-  // ✅ model card 用 hook（取得/補完）
-  final UseCatalogModel _model;
 
   // ✅ product card 用 hook
   final UseCatalogProduct _product;
@@ -52,36 +47,19 @@ class UseCatalog {
     _token.dispose();
   }
 
-  void _log(String msg) {
-    // ignore: avoid_print
-    print('[UseCatalog] $msg');
-  }
-
   Future<CatalogState> load({required String listId}) async {
     final id = listId.trim();
     if (id.isEmpty) {
       throw Exception('catalog: listId is empty');
     }
 
-    _log('load start listId=$id');
-
     // 1) try catalog endpoint first
     try {
-      _log('try catalog endpoint: GET /sns/catalog/$id');
       final dto = await _catalogRepo.fetchCatalogByListId(id);
-
-      _log(
-        'catalog ok '
-        'listId=${dto.list.id} '
-        'inventoryId="${dto.list.inventoryId.trim()}" '
-        'list.tbId="${(dto.list.tokenBlueprintId).trim()}" '
-        'inv.tbId="${(dto.inventory?.tokenBlueprintId ?? '').trim()}"',
-      );
 
       // ✅ tokenBlueprintId resolve (inventory優先 → list fallback)
       final resolvedTbId =
           (dto.inventory?.tokenBlueprintId ?? dto.list.tokenBlueprintId).trim();
-      _log('resolved tokenBlueprintId="$resolvedTbId"');
 
       // ✅ token patch（hook に移譲）
       final token = await _token.load(resolvedTokenBlueprintId: resolvedTbId);
@@ -94,8 +72,8 @@ class UseCatalog {
         initialError: dto.productBlueprintError,
       );
 
-      // ✅ model (DTO優先 / 無ければ pbId から補完 fetch)
-      final modelRes = await _model.load(
+      // ✅ model (DTO優先 / 無ければ pbId から補完 fetch) -> UseCatalogInventory に統合
+      final modelRes = await _inventory.loadModels(
         modelRepo: _modelRepo,
         productBlueprintId: pbId,
         initial: dto.modelVariations,
@@ -116,40 +94,16 @@ class UseCatalog {
         resolvedTokenBlueprintId: resolvedTbId,
       );
 
-      _log(
-        'load done(catalog) '
-        'state.tbId="${state.tokenBlueprintId}" '
-        'state.tbPatch.name="${(state.tokenBlueprintPatch?.name ?? '').trim()}" '
-        'state.tbErr="${state.tokenBlueprintError ?? ''}"',
-      );
-
       return state;
     } catch (e) {
-      _log('catalog endpoint failed -> fallback legacy. error=$e');
       // 2) fallback to legacy multi-fetch
       final state = await _loadLegacy(id);
-
-      _log(
-        'load done(legacy) '
-        'state.tbId="${state.tokenBlueprintId}" '
-        'state.tbPatch.name="${(state.tokenBlueprintPatch?.name ?? '').trim()}" '
-        'state.tbErr="${state.tokenBlueprintError ?? ''}"',
-      );
-
       return state;
     }
   }
 
   Future<CatalogState> _loadLegacy(String listId) async {
-    _log('legacy start listId=$listId');
-
     final list = await _listRepo.fetchListById(listId);
-    _log(
-      'legacy list ok '
-      'listId=${list.id} '
-      'inventoryId="${list.inventoryId.trim()}" '
-      'list.tbId="${list.tokenBlueprintId.trim()}"',
-    );
 
     // inventory (must have inventoryId)
     final invId = list.inventoryId.trim();
@@ -159,20 +113,11 @@ class UseCatalog {
 
     if (invId.isEmpty) {
       invErr = 'inventoryId is empty';
-      _log('legacy inventory skip: inventoryId is empty');
     } else {
       try {
-        _log('legacy fetch inventory start invId=$invId');
         inv = await _invRepo.fetchInventoryById(invId);
-        _log(
-          'legacy inventory ok '
-          'pbId="${inv.productBlueprintId.trim()}" '
-          'tbId="${inv.tokenBlueprintId.trim()}" '
-          'stockKeys=${inv.stock.length}',
-        );
       } catch (e) {
         invErr = e.toString();
-        _log('legacy inventory error: $invErr');
       }
     }
 
@@ -181,7 +126,6 @@ class UseCatalog {
     // ✅ tokenBlueprintId resolve (inventory優先 → list fallback)
     final resolvedTbId = (inv?.tokenBlueprintId ?? list.tokenBlueprintId)
         .trim();
-    _log('legacy resolved tokenBlueprintId="$resolvedTbId"');
 
     // ✅ product blueprint（hook に移譲）
     final prod = await _product.load(
@@ -192,8 +136,8 @@ class UseCatalog {
     final pb = prod.productBlueprint;
     final pbErr = prod.productBlueprintError;
 
-    // ✅ model variations（hook に移譲）
-    final modelRes = await _model.load(
+    // ✅ model variations（UseCatalogInventory に統合）
+    final modelRes = await _inventory.loadModels(
       modelRepo: _modelRepo,
       productBlueprintId: pbId,
       initial: null,
@@ -232,18 +176,6 @@ class UseCatalog {
     // ✅ NEW: tokenBlueprintId を inventory だけに依存させないための引数
     required String resolvedTokenBlueprintId,
   }) {
-    _log(
-      '_buildState in '
-      'listId=${list.id} '
-      'inv?=${inventory != null} '
-      'resolvedTbId="${resolvedTokenBlueprintId.trim()}" '
-      'patch.name="${(tokenBlueprintPatch?.name ?? '').trim()}" '
-      'patch.symbol="${(tokenBlueprintPatch?.symbol ?? '').trim()}" '
-      'patch.brandId="${(tokenBlueprintPatch?.brandId ?? '').trim()}" '
-      'patch.minted=${tokenBlueprintPatch?.minted} '
-      'tbErr="${tokenBlueprintError ?? ''}"',
-    );
-
     final imageUrl = list.image.trim();
     final hasImage = imageUrl.isNotEmpty;
 
@@ -287,14 +219,6 @@ class UseCatalog {
       tokenIconUrlEncoded: tokenIconUrl.isNotEmpty
           ? _safeUrl(tokenIconUrl)
           : null,
-    );
-
-    _log(
-      '_buildState out '
-      'state.tbId="${state.tokenBlueprintId}" '
-      'state.tbPatch.name="${(state.tokenBlueprintPatch?.name ?? '').trim()}" '
-      'state.tbErr="${state.tokenBlueprintError ?? ''}" '
-      'state.hasTokenIcon=${(state.tokenIconUrlEncoded ?? '').trim().isNotEmpty}',
     );
 
     return state;

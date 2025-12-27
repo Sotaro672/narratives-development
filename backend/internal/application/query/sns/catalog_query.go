@@ -252,7 +252,7 @@ func (q *SNSCatalogQuery) GetByListID(ctx context.Context, listID string) (snsdt
 		} else if pb != nil {
 			dto := toCatalogProductBlueprintDTO(pb)
 
-			// ✅ NEW: resolve brandName/companyName (best-effort)
+			// ✅ resolve brandName/companyName (best-effort)
 			if q.NameResolver != nil {
 				fillProductBlueprintNames(ctx, q.NameResolver, &dto)
 			}
@@ -274,7 +274,7 @@ func (q *SNSCatalogQuery) GetByListID(ctx context.Context, listID string) (snsdt
 	}
 
 	// ------------------------------------------------------------
-	// ✅ NEW: TokenBlueprint patch (inventory side wins)
+	// TokenBlueprint patch (inventory side wins)
 	// ------------------------------------------------------------
 	resolvedTBID := strings.TrimSpace(out.List.TokenBlueprintID)
 	if invDTO != nil {
@@ -331,10 +331,8 @@ func (q *SNSCatalogQuery) GetByListID(ctx context.Context, listID string) (snsdt
 	}
 
 	// ------------------------------------------------------------
-	// Models
-	// - ListVariations(pbId=...) -> modelId list
-	// - GetModelVariationByID -> dto
-	// - dto.StockKeys に「inventory の stockKeys（key数）」を入れて返す
+	// Models (UNIFIED)
+	// pbId -> modelId list -> modelmetadata -> attach stock(products)
 	// ------------------------------------------------------------
 	if q.ModelRepo == nil {
 		out.ModelVariationsError = "model repo is nil"
@@ -362,11 +360,7 @@ func (q *SNSCatalogQuery) GetByListID(ctx context.Context, listID string) (snsdt
 		} else {
 			items := make([]snsdto.SNSCatalogModelVariationDTO, 0, len(res.Items))
 
-			stockKeys := 0
-			if invDTO != nil {
-				stockKeys = stockKeyCount(invDTO.Stock)
-			}
-
+			// 1) まず metadata で items を作る
 			for _, it := range res.Items {
 				modelID := extractID(it)
 				if modelID == "" {
@@ -375,7 +369,7 @@ func (q *SNSCatalogQuery) GetByListID(ctx context.Context, listID string) (snsdt
 
 				mv, ge := q.ModelRepo.GetModelVariationByID(ctx, modelID)
 				if ge != nil {
-					if out.ModelVariationsError == "" {
+					if strings.TrimSpace(out.ModelVariationsError) == "" {
 						out.ModelVariationsError = ge.Error()
 					}
 					continue
@@ -383,17 +377,34 @@ func (q *SNSCatalogQuery) GetByListID(ctx context.Context, listID string) (snsdt
 
 				dto, ok := toCatalogModelVariationDTOAny(mv)
 				if !ok {
-					dto = snsdto.SNSCatalogModelVariationDTO{ID: strings.TrimSpace(modelID)}
+					dto = snsdto.SNSCatalogModelVariationDTO{
+						ID:           strings.TrimSpace(modelID),
+						Measurements: map[string]int{}, // ✅ {} を保証
+					}
 				}
-
-				// ✅ 画面へ渡すのは key数のみ（modelIdの種類数）
-				dto.StockKeys = stockKeys
+				if dto.Measurements == nil {
+					dto.Measurements = map[string]int{}
+				}
 
 				items = append(items, dto)
 			}
 
+			// 2) その後、同じ items に stock(products) を追記
+			attachStockToModelVariations(&items, invDTO)
+
 			out.ModelVariations = items
-			log.Printf("[sns_catalog] model variations ok listId=%q pbId=%q items=%d stockKeys=%d", listID, resolvedPBID, len(items), stockKeys)
+			log.Printf(
+				"[sns_catalog] model variations ok(list unified) listId=%q pbId=%q items=%d stockKeys=%d",
+				listID,
+				resolvedPBID,
+				len(items),
+				func() int {
+					if invDTO == nil {
+						return 0
+					}
+					return stockKeyCount(invDTO.Stock)
+				}(),
+			)
 		}
 	}
 
@@ -650,6 +661,40 @@ func stockKeyCount(stock map[string]snsdto.SNSCatalogInventoryModelStockDTO) int
 	return len(stock)
 }
 
+// attachStockToModelVariations merges inv.Stock[modelId].Products into modelVariations items.
+// Also sets StockKeys (= number of model keys in inventory stock map).
+func attachStockToModelVariations(items *[]snsdto.SNSCatalogModelVariationDTO, inv *snsdto.SNSCatalogInventoryDTO) {
+	if items == nil || len(*items) == 0 {
+		return
+	}
+
+	stockKeys := 0
+	var stock map[string]snsdto.SNSCatalogInventoryModelStockDTO
+
+	if inv != nil {
+		stock = inv.Stock
+		stockKeys = stockKeyCount(inv.Stock)
+	}
+
+	for i := range *items {
+		(*items)[i].StockKeys = stockKeys
+
+		id := strings.TrimSpace((*items)[i].ID)
+		if id == "" || stock == nil {
+			continue
+		}
+
+		if s, ok := stock[id]; ok {
+			// nil を避けたい場合は空map化
+			if s.Products != nil {
+				(*items)[i].Products = s.Products
+			} else {
+				(*items)[i].Products = map[string]bool{}
+			}
+		}
+	}
+}
+
 // ============================================================
 // mappers
 // ============================================================
@@ -729,6 +774,17 @@ func toCatalogModelVariationDTOAny(v any) (snsdto.SNSCatalogModelVariationDTO, b
 		ProductBlueprintID: strings.TrimSpace(pbID),
 		ModelNumber:        strings.TrimSpace(modelNumber),
 		Size:               strings.TrimSpace(size),
+
+		// ✅ CatalogColor 統合
+		ColorName: "",
+		ColorRGB:  0,
+
+		// ✅ JSONで null を避けたいので常に non-nil
+		Measurements: map[string]int{},
+
+		// ✅ 後段で埋める
+		Products:  nil,
+		StockKeys: 0,
 	}
 
 	// color: Color.{Name,RGB}
@@ -739,19 +795,14 @@ func toCatalogModelVariationDTOAny(v any) (snsdto.SNSCatalogModelVariationDTO, b
 			}
 		}
 		if c.IsValid() && c.Kind() == reflect.Struct {
-			name := ""
-			rgb := 0
-
 			nf := c.FieldByName("Name")
 			if nf.IsValid() && nf.Kind() == reflect.String {
-				name = strings.TrimSpace(nf.String())
+				dto.ColorName = strings.TrimSpace(nf.String())
 			}
 			rf := c.FieldByName("RGB")
 			if rf.IsValid() {
-				rgb = toInt(rf)
+				dto.ColorRGB = toInt(rf)
 			}
-
-			dto.Color = snsdto.SNSCatalogColorDTO{Name: name, RGB: rgb}
 		}
 	}
 
@@ -767,10 +818,13 @@ func toCatalogModelVariationDTOAny(v any) (snsdto.SNSCatalogModelVariationDTO, b
 				}
 				out[k] = toInt(iter.Value())
 			}
-			if len(out) > 0 {
-				dto.Measurements = out
-			}
+			// ✅ len==0 でも {} を返せるように代入（nilにしない）
+			dto.Measurements = out
 		}
+	}
+
+	if dto.Measurements == nil {
+		dto.Measurements = map[string]int{}
 	}
 
 	return dto, true

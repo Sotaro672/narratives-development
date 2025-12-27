@@ -1,3 +1,4 @@
+//frontend\sns\lib\features\home\presentation\hook\use_catalog_product.dart
 import '../../../productBlueprint/infrastructure/product_blueprint_repository_http.dart';
 
 /// ProductCard 用の “product blueprint 解決” 専用 hook
@@ -11,11 +12,6 @@ class UseCatalogProduct {
 
   void dispose() {
     _pbRepo.dispose();
-  }
-
-  void _log(String msg) {
-    // ignore: avoid_print
-    print('[UseCatalogProduct] $msg');
   }
 
   Future<CatalogProductResult> load({
@@ -32,7 +28,6 @@ class UseCatalogProduct {
 
     // 1) 既に product があるならそれを返す（追加 fetch しない）
     if (initial != null) {
-      _log('use initial product (no fetch) pbId="$pbId"');
       return CatalogProductResult(
         productBlueprint: initial,
         productBlueprintError: initErr,
@@ -41,7 +36,6 @@ class UseCatalogProduct {
 
     // 2) 既に上位が error を確定しているなら、それを尊重して fetch しない
     if (initErr != null) {
-      _log('use initial error (no fetch) pbId="$pbId" err="$initErr"');
       return CatalogProductResult(
         productBlueprint: null,
         productBlueprintError: initErr,
@@ -51,7 +45,6 @@ class UseCatalogProduct {
     // 3) pbId が無いならここで終了
     if (pbId.isEmpty) {
       const err = 'productBlueprintId is unavailable (inventory not loaded)';
-      _log('skip fetch: $err');
       return const CatalogProductResult(
         productBlueprint: null,
         productBlueprintError: err,
@@ -60,16 +53,13 @@ class UseCatalogProduct {
 
     // 4) best-effort fetch
     try {
-      _log('fetch start pbId=$pbId');
       final pb = await _pbRepo.fetchProductBlueprintById(pbId);
-      _log('fetch ok productName="${pb.productName}"');
       return CatalogProductResult(
         productBlueprint: pb,
         productBlueprintError: null,
       );
     } catch (e) {
       final err = e.toString();
-      _log('fetch error: $err');
       return CatalogProductResult(
         productBlueprint: null,
         productBlueprintError: err,

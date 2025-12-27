@@ -1,3 +1,4 @@
+//frontend\sns\lib\features\home\presentation\components\catalog_token.dart
 import 'package:flutter/material.dart';
 
 import '../../../tokenBlueprint/infrastructure/token_blueprint_repository_http.dart'
@@ -17,11 +18,6 @@ class CatalogTokenCard extends StatelessWidget {
   final String? error;
   final String? iconUrlEncoded;
 
-  void _log(String msg) {
-    // ignore: avoid_print
-    print('[TokenCard] $msg');
-  }
-
   String _s(String? v, {String fallback = '(empty)'}) {
     final t = (v ?? '').trim();
     return t.isNotEmpty ? t : fallback;
@@ -31,16 +27,6 @@ class CatalogTokenCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final tbId = tokenBlueprintId.trim();
     final p = patch;
-
-    // ✅ このカードが「実際に受け取った patch」をログで確認
-    _log(
-      'build tbId="${tbId.isNotEmpty ? tbId : '(empty)'}" '
-      'patch?=${p != null} '
-      'name="${p?.name ?? ''}" symbol="${p?.symbol ?? ''}" brandId="${p?.brandId ?? ''}" '
-      'minted=${p?.minted} '
-      'hasIcon=${(iconUrlEncoded ?? '').trim().isNotEmpty} '
-      'err="${(error ?? '').trim()}"',
-    );
 
     return Card(
       child: Padding(

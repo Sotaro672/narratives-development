@@ -1,9 +1,8 @@
 // frontend\sns\lib\features\home\presentation\page\catalog.dart
 import 'package:flutter/material.dart';
 
-import 'package:sns/features/home/presentation/components/catalog_inventory.dart'; // ✅ FIX: package import
-import '../../../list/infrastructure/list_repository_http.dart'; // SnsListItem, SnsListPriceRow
-import '../components/catalog_model.dart'; // ✅ NEW
+import 'package:sns/features/home/presentation/components/catalog_inventory.dart'; // ✅ package import
+import '../../../list/infrastructure/list_repository_http.dart'; // SnsListItem
 import '../components/catalog_product.dart';
 import '../components/catalog_token.dart';
 import '../hook/use_catalog.dart';
@@ -140,6 +139,7 @@ class _CatalogPageState extends State<CatalogPage> {
           final pb = vm?.productBlueprint;
           final pbErr = vm?.productBlueprintError;
 
+          // ✅ model一覧は inventory card で表示する（catalog_model.dart は廃止）
           final models = vm?.modelVariations;
           final modelErr = vm?.modelVariationsError;
 
@@ -226,7 +226,7 @@ class _CatalogPageState extends State<CatalogPage> {
 
               const SizedBox(height: 12),
 
-              // ✅ token blueprint card (moved)
+              // ✅ token blueprint card
               CatalogTokenCard(
                 tokenBlueprintId: tbId,
                 patch: tbPatch,
@@ -236,32 +236,28 @@ class _CatalogPageState extends State<CatalogPage> {
 
               const SizedBox(height: 12),
 
-              // ✅ inventory card (extracted)
+              // ✅ inventory + models (統合表示)
+              // - productBlueprintId から model一覧を並べる
+              // - inventory.stock が無い model は 0 表記（Card 内で扱う）
               CatalogInventoryCard(
                 productBlueprintId: pbId,
                 tokenBlueprintId: tbId,
                 totalStock: totalStock,
                 inventory: inv,
                 inventoryError: invErr,
-                modelStockRows: vm?.modelStockRows,
+
+                // ✅ REQUIRED (catalog_model.dart 廃止に伴い、inventory card 側で表示)
+                modelVariations: models,
+                modelVariationsError: modelErr,
               ),
 
               const SizedBox(height: 12),
 
-              // ✅ product blueprint card (moved)
+              // ✅ product blueprint card
               CatalogProductCard(
                 productBlueprintId: pbId,
                 productBlueprint: pb,
                 error: pbErr,
-              ),
-
-              const SizedBox(height: 12),
-
-              // ✅ model card (extracted)
-              CatalogModelCard(
-                productBlueprintId: pbId,
-                models: models,
-                modelError: modelErr,
               ),
             ],
           );
