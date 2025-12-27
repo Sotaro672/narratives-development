@@ -18,14 +18,13 @@ class CatalogTokenCard extends StatelessWidget {
   final String? error;
   final String? iconUrlEncoded;
 
-  String _s(String? v, {String fallback = '(empty)'}) {
+  String _s(String? v, {String fallback = '(未設定)'}) {
     final t = (v ?? '').trim();
     return t.isNotEmpty ? t : fallback;
   }
 
   @override
   Widget build(BuildContext context) {
-    final tbId = tokenBlueprintId.trim();
     final p = patch;
 
     return Card(
@@ -34,12 +33,7 @@ class CatalogTokenCard extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text('Token', style: Theme.of(context).textTheme.titleMedium),
-            const SizedBox(height: 8),
-            _KeyValueRow(
-              label: 'tokenBlueprintId',
-              value: tbId.isNotEmpty ? tbId : '(unknown)',
-            ),
+            Text('トークン', style: Theme.of(context).textTheme.titleMedium),
             const SizedBox(height: 10),
             if (p != null) ...[
               if ((iconUrlEncoded ?? '').trim().isNotEmpty) ...[
@@ -50,7 +44,7 @@ class CatalogTokenCard extends StatelessWidget {
                     fit: BoxFit.cover,
                     errorBuilder: (context, err, st) {
                       return _ImageFallback(
-                        label: 'token icon failed',
+                        label: 'トークン画像の読み込みに失敗しました',
                         detail: err.toString(),
                       );
                     },
@@ -62,21 +56,17 @@ class CatalogTokenCard extends StatelessWidget {
                 ),
                 const SizedBox(height: 10),
               ],
-              _KeyValueRow(label: 'name', value: _s(p.name)),
+              _KeyValueRow(label: 'トークン名', value: _s(p.name)),
               const SizedBox(height: 6),
-              _KeyValueRow(label: 'symbol', value: _s(p.symbol)),
+              _KeyValueRow(label: 'シンボル', value: _s(p.symbol)),
               const SizedBox(height: 6),
-              _KeyValueRow(label: 'brandId', value: _s(p.brandId)),
+
+              // ✅ brandId / companyId / minted / tokenBlueprintId は表示しない
+              _KeyValueRow(label: 'ブランド名', value: _s(p.brandName)),
               const SizedBox(height: 6),
-              _KeyValueRow(label: 'brandName', value: _s(p.brandName)),
-              const SizedBox(height: 6),
-              _KeyValueRow(
-                label: 'minted',
-                value: p.minted == null
-                    ? '(unknown)'
-                    : (p.minted! ? 'true' : 'false'),
-              ),
+              _KeyValueRow(label: '会社名', value: _s(p.companyName)),
               const SizedBox(height: 10),
+
               if ((p.description ?? '').trim().isNotEmpty)
                 Text(
                   p.description!.trim(),
@@ -85,12 +75,12 @@ class CatalogTokenCard extends StatelessWidget {
             ] else ...[
               if (error != null && error!.trim().isNotEmpty)
                 Text(
-                  'token error: ${error!.trim()}',
+                  'トークン取得エラー: ${error!.trim()}',
                   style: Theme.of(context).textTheme.labelSmall,
                 )
               else
                 Text(
-                  'token is not loaded',
+                  'トークン情報が未取得です',
                   style: Theme.of(context).textTheme.labelSmall,
                 ),
             ],

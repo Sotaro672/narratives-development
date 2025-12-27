@@ -1,3 +1,4 @@
+//frontend\sns\lib\features\home\presentation\page\catalog.dart
 import 'package:flutter/material.dart';
 
 import 'package:sns/features/home/presentation/components/catalog_inventory.dart';
@@ -183,23 +184,8 @@ class _CatalogPageState extends State<CatalogPage> {
                               list.description.trim(),
                               style: Theme.of(context).textTheme.bodyMedium,
                             ),
-                          const SizedBox(height: 12),
-                          Text(
-                            'listId: ${list.id}',
-                            style: Theme.of(context).textTheme.labelSmall,
-                          ),
-                          Text(
-                            'inventoryId: ${list.inventoryId.isNotEmpty ? list.inventoryId : '(empty)'}',
-                            style: Theme.of(context).textTheme.labelSmall,
-                          ),
-                          Text(
-                            'productBlueprintId: ${pbId.isNotEmpty ? pbId : '(empty)'}',
-                            style: Theme.of(context).textTheme.labelSmall,
-                          ),
-                          Text(
-                            'tokenBlueprintId: ${tbId.isNotEmpty ? tbId : '(empty)'}',
-                            style: Theme.of(context).textTheme.labelSmall,
-                          ),
+
+                          // ✅ listId / inventoryId / productBlueprintId / tokenBlueprintId の表示行は削除
                         ],
                       ),
                     ),

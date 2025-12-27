@@ -87,6 +87,8 @@ class TokenBlueprintPatch {
     this.symbol,
     this.brandId,
     this.brandName,
+    this.companyId,
+    this.companyName,
     this.description,
     this.iconUrl,
     this.minted,
@@ -94,8 +96,14 @@ class TokenBlueprintPatch {
 
   final String? name;
   final String? symbol;
+
   final String? brandId;
   final String? brandName;
+
+  // ✅ NEW: company
+  final String? companyId;
+  final String? companyName;
+
   final String? description;
   final String? iconUrl;
   final bool? minted;
@@ -122,8 +130,14 @@ class TokenBlueprintPatch {
     return TokenBlueprintPatch(
       name: s(json["name"]),
       symbol: s(json["symbol"]),
+
       brandId: s(json["brandId"]),
       brandName: s(json["brandName"]),
+
+      // ✅ NEW: companyId/companyName を受け取る
+      companyId: s(json["companyId"]),
+      companyName: s(json["companyName"]),
+
       description: s(json["description"]),
       iconUrl: icon,
       minted: b(json["minted"]),

@@ -27,12 +27,8 @@ class CatalogInventoryCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final pbId = productBlueprintId.trim();
-    final tbId = tokenBlueprintId.trim();
-
     final inv = inventory;
     final invErr = inventoryError;
-
     final rows = modelStockRows ?? const [];
 
     return Card(
@@ -41,86 +37,44 @@ class CatalogInventoryCard extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text('Inventory', style: Theme.of(context).textTheme.titleMedium),
-            const SizedBox(height: 8),
-            _KeyValueRow(
-              label: 'productBlueprintId',
-              value: pbId.isNotEmpty ? pbId : '(unknown)',
-            ),
-            const SizedBox(height: 6),
-            _KeyValueRow(
-              label: 'tokenBlueprintId',
-              value: tbId.isNotEmpty ? tbId : '(unknown)',
-            ),
-            const SizedBox(height: 6),
-            _KeyValueRow(
-              label: 'total stock',
-              value: totalStock != null
-                  ? totalStock.toString()
-                  : '(not loaded)',
-            ),
-
+            Text('在庫', style: Theme.of(context).textTheme.titleMedium),
             const SizedBox(height: 12),
-            Text('By model', style: Theme.of(context).textTheme.titleSmall),
+
+            Text('モデル別', style: Theme.of(context).textTheme.titleSmall),
             const SizedBox(height: 6),
 
             if (rows.isEmpty)
-              Text('(empty)', style: Theme.of(context).textTheme.bodyMedium)
+              Text('(空)', style: Theme.of(context).textTheme.bodyMedium)
             else
               ...rows.map((r) {
-                final modelId = (r.modelId ?? '').toString();
                 final count = (r.stockCount ?? 0).toString();
                 final label = (r.label ?? '').toString();
 
+                // ✅ modelId の表示は削除
+                // ✅ model metadata (label) と stock を 1 行で表示
+                final line =
+                    '${label.isNotEmpty ? label : '(名称なし)'}　/　在庫: $count';
+
                 return Padding(
                   padding: const EdgeInsets.symmetric(vertical: 6),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        label.isNotEmpty ? label : '(no label)',
-                        style: Theme.of(context).textTheme.bodyMedium,
-                      ),
-                      const SizedBox(height: 2),
-                      Text(
-                        'modelId: ${modelId.isNotEmpty ? modelId : '(empty)'}   stock: $count',
-                        style: Theme.of(context).textTheme.labelSmall,
-                      ),
-                    ],
+                  child: Text(
+                    line,
+                    style: Theme.of(context).textTheme.bodyMedium,
                   ),
                 );
               }),
 
+            // ✅ totalStock / productBlueprintId / tokenBlueprintId の表示行は削除
             if (inv == null && (invErr ?? '').trim().isNotEmpty) ...[
               const SizedBox(height: 10),
               Text(
-                'inventory error: ${invErr!.trim()}',
+                '在庫エラー: ${invErr!.trim()}',
                 style: Theme.of(context).textTheme.labelSmall,
               ),
             ],
           ],
         ),
       ),
-    );
-  }
-}
-
-class _KeyValueRow extends StatelessWidget {
-  const _KeyValueRow({required this.label, required this.value});
-
-  final String label;
-  final String value;
-
-  @override
-  Widget build(BuildContext context) {
-    return Row(
-      children: [
-        SizedBox(
-          width: 160,
-          child: Text(label, style: Theme.of(context).textTheme.labelMedium),
-        ),
-        Expanded(child: Text(value)),
-      ],
     );
   }
 }

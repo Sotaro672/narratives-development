@@ -123,7 +123,12 @@ func (h *SNSTokenBlueprintHandler) getPatchByID(ctx context.Context, id string) 
 	}
 
 	// ✅ 注入確認ログ（ここが重要）
-	log.Printf("[sns_tokenBlueprint] imageResolver injected? %t type=%T", h.ImageResolver != nil, h.ImageResolver)
+	log.Printf(
+		"[sns_tokenBlueprint] injected? brandResolver=%t(%T) companyResolver=%t(%T) imageResolver=%t(%T)",
+		h.BrandNameResolver != nil, h.BrandNameResolver,
+		h.CompanyNameResolver != nil, h.CompanyNameResolver,
+		h.ImageResolver != nil, h.ImageResolver,
+	)
 
 	v, err := callAny(h.Repo, []string{"GetByID", "GetById"}, ctx, id)
 	if err != nil {
@@ -189,7 +194,36 @@ func (h *SNSTokenBlueprintHandler) getPatchByID(ctx context.Context, id string) 
 		strings.TrimSpace(ptrStr(patch.IconURL)) != "",
 	)
 
-	// fill BrandName (optional)
+	// ============================================================
+	// ✅ companyId / companyName の期待値を満たすための補完ロジック
+	// ============================================================
+
+	// 0) companyId が tokenBlueprint から取れたかログ
+	log.Printf(
+		"[sns_tokenBlueprint] mapped ids: brandId=%q companyId=%q",
+		ptrStr(patch.BrandID),
+		ptrStr(patch.CompanyID),
+	)
+
+	// 1) companyId が空なら、brandId から companyId を補完する（resolver 経由）
+	if strings.TrimSpace(ptrStr(patch.CompanyID)) == "" && strings.TrimSpace(ptrStr(patch.BrandID)) != "" {
+		brandID := strings.TrimSpace(ptrStr(patch.BrandID))
+
+		// まず BrandNameResolver を優先（無ければ CompanyNameResolver）
+		res := h.BrandNameResolver
+		if res == nil {
+			res = h.CompanyNameResolver
+		}
+
+		if cid, ok := resolveCompanyIDFromBrandBestEffort(ctx, res, brandID); ok {
+			patch.CompanyID = strPtr(cid)
+			log.Printf("[sns_tokenBlueprint] derived companyId from brandId brandId=%q -> companyId=%q", brandID, cid)
+		} else {
+			log.Printf("[sns_tokenBlueprint] derive companyId from brandId failed brandId=%q resolver=%T", brandID, res)
+		}
+	}
+
+	// 2) fill BrandName (optional)
 	if patch.BrandName == nil {
 		if bn := pickStringPtrField(v, "BrandName", "brandName"); bn != nil && strings.TrimSpace(*bn) != "" {
 			patch.BrandName = trimPtr(bn)
@@ -198,10 +232,13 @@ func (h *SNSTokenBlueprintHandler) getPatchByID(ctx context.Context, id string) 
 	if patch.BrandName == nil && patch.BrandID != nil && strings.TrimSpace(*patch.BrandID) != "" {
 		if name, ok := resolveBrandNameBestEffort(ctx, h.BrandNameResolver, strings.TrimSpace(*patch.BrandID)); ok {
 			patch.BrandName = strPtr(name)
+			log.Printf("[sns_tokenBlueprint] brandName resolved brandId=%q -> %q", strings.TrimSpace(*patch.BrandID), name)
+		} else {
+			log.Printf("[sns_tokenBlueprint] brandName resolve failed brandId=%q resolver=%T", strings.TrimSpace(*patch.BrandID), h.BrandNameResolver)
 		}
 	}
 
-	// fill CompanyName (optional)
+	// 3) fill CompanyName (optional)
 	if patch.CompanyName == nil {
 		if cn := pickStringPtrField(v, "CompanyName", "companyName"); cn != nil && strings.TrimSpace(*cn) != "" {
 			patch.CompanyName = trimPtr(cn)
@@ -210,8 +247,19 @@ func (h *SNSTokenBlueprintHandler) getPatchByID(ctx context.Context, id string) 
 	if patch.CompanyName == nil && patch.CompanyID != nil && strings.TrimSpace(*patch.CompanyID) != "" {
 		if name, ok := resolveCompanyNameBestEffort(ctx, h.CompanyNameResolver, strings.TrimSpace(*patch.CompanyID)); ok {
 			patch.CompanyName = strPtr(name)
+			log.Printf("[sns_tokenBlueprint] companyName resolved companyId=%q -> %q", strings.TrimSpace(*patch.CompanyID), name)
+		} else {
+			log.Printf("[sns_tokenBlueprint] companyName resolve failed companyId=%q resolver=%T", strings.TrimSpace(*patch.CompanyID), h.CompanyNameResolver)
 		}
 	}
+
+	log.Printf(
+		"[sns_tokenBlueprint] final patch: brandId=%q brandName=%q companyId=%q companyName=%q",
+		ptrStr(patch.BrandID),
+		ptrStr(patch.BrandName),
+		ptrStr(patch.CompanyID),
+		ptrStr(patch.CompanyName),
+	)
 
 	return patch, nil
 }
@@ -471,6 +519,34 @@ func resolveCompanyNameBestEffort(ctx context.Context, resolver any, companyID s
 			if t != "" {
 				return t, true
 			}
+		}
+	}
+
+	return "", false
+}
+
+// ✅ NEW: brandId から companyId を解決する（NameResolver に ResolveBrandCompanyID を追加した前提）
+// 返り値: (companyId, ok)
+func resolveCompanyIDFromBrandBestEffort(ctx context.Context, resolver any, brandID string) (string, bool) {
+	if resolver == nil {
+		return "", false
+	}
+	brandID = strings.TrimSpace(brandID)
+	if brandID == "" {
+		return "", false
+	}
+
+	for _, m := range []string{
+		"ResolveBrandCompanyID", // ✅ 追加した正攻法
+		"ResolveBrandCompanyId", // 揺れ
+		"ResolveCompanyIDByBrandID",
+		"ResolveCompanyIdByBrandId",
+		"CompanyIDByBrandID",
+		"CompanyIdByBrandId",
+	} {
+		s, ok := callStringWithCtxAndID(resolver, m, ctx, brandID)
+		if ok {
+			return s, true
 		}
 	}
 
