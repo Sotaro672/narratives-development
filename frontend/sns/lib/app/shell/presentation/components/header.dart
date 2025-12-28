@@ -1,11 +1,14 @@
-// frontend/sns/lib/app/shell/presentation/component/header.dart
+// frontend/sns/lib/app/shell/presentation/components/header.dart
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
 /// Minimal public header for SNS (no-auth).
-/// - Back button (optional)
+/// - Back button (optional)  ※ showBack のみで制御
 /// - Title (optional)
 /// - Right-side actions (optional)
+///
+/// ✅ Sign in ボタンはここで固定表示しない
+/// - 右側ボタン（Sign in / Sign out など）は router.dart から actions で注入する
 class AppHeader extends StatelessWidget {
   const AppHeader({
     super.key,
@@ -13,13 +16,12 @@ class AppHeader extends StatelessWidget {
     this.showBack = true,
     this.onTapTitle,
     this.actions,
-    this.homePath = '/',
+    this.backTo = '/',
   });
 
   final String? title;
 
-  /// If true, show back button when we can go back (router/navigator),
-  /// otherwise fallback to [homePath].
+  /// ✅ showBack=true の時だけ「戻る」を表示する
   final bool showBack;
 
   /// Optional callback when title is tapped (e.g., navigate to home).
@@ -28,60 +30,18 @@ class AppHeader extends StatelessWidget {
   /// Optional action widgets on the right side.
   final List<Widget>? actions;
 
-  /// Fallback destination when we can't pop.
-  final String homePath;
-
-  bool _canPop(BuildContext context) {
-    // ✅ go_router がいる場合はそちらを優先
-    try {
-      if (context.canPop()) return true;
-    } catch (_) {
-      // ignore
-    }
-
-    // ✅ Navigator が取れる場合のみ
-    final nav = Navigator.maybeOf(context);
-    return nav?.canPop() ?? false;
-  }
+  /// ✅ 「戻る」押下時の遷移先（popは使わず go で戻す）
+  final String backTo;
 
   void _handleBack(BuildContext context) {
-    // ✅ まずは pop を試す（go_router）
-    try {
-      if (context.canPop()) {
-        context.pop();
-        return;
-      }
-    } catch (_) {
-      // ignore
-    }
-
-    // ✅ 次に Navigator
-    final nav = Navigator.maybeOf(context);
-    if (nav != null && nav.canPop()) {
-      nav.maybePop();
-      return;
-    }
-
-    // ✅ それでも無理なら home へ戻す（直リンク/リロード対策）
-    try {
-      context.go(homePath);
-      return;
-    } catch (_) {
-      // ignore
-    }
-
-    // ✅ 最後の砦：タイトルタップの挙動があればそれ
-    onTapTitle?.call();
+    // pop は使わない（ブラウザ直リンク等で破綻しやすい）
+    context.go(backTo);
   }
 
   @override
   Widget build(BuildContext context) {
     final t = (title ?? '').trim();
     final titleText = t.isNotEmpty ? t : 'sns';
-
-    // ✅ “戻れるか” を判定し、戻れない場合はホームへ戻す挙動にする
-    final canPop = _canPop(context);
-    final shouldShowBack = showBack;
 
     return Material(
       color: Theme.of(context).cardColor,
@@ -91,14 +51,22 @@ class AppHeader extends StatelessWidget {
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
         child: Row(
           children: [
-            if (shouldShowBack)
-              IconButton(
-                tooltip: canPop ? 'Back' : 'Home',
+            if (showBack)
+              TextButton(
                 onPressed: () => _handleBack(context),
-                icon: Icon(canPop ? Icons.arrow_back : Icons.home),
+                style: TextButton.styleFrom(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 8,
+                    vertical: 8,
+                  ),
+                ),
+                child: Text(
+                  '← Back',
+                  style: Theme.of(context).textTheme.titleMedium,
+                ),
               )
             else
-              const SizedBox(width: 44),
+              const SizedBox(width: 44), // layout stability
 
             Expanded(
               child: GestureDetector(
@@ -116,6 +84,7 @@ class AppHeader extends StatelessWidget {
               ),
             ),
 
+            // ✅ 右側 actions（Sign in / Sign out 等）は外から注入
             if (actions != null) ...actions!,
           ],
         ),

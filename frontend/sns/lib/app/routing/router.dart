@@ -22,6 +22,7 @@ GoRouter buildAppRouter() {
   return GoRouter(
     initialLocation: '/',
 
+    // ✅ Firebase OK のときだけ authStateChanges を使う
     refreshListenable: GoRouterRefreshStream(
       FirebaseAuth.instance.authStateChanges(),
     ),
@@ -40,10 +41,12 @@ GoRouter buildAppRouter() {
       return null;
     },
 
-    routes: _routes(),
+    routes: _routes(firebaseReady: true),
+
     errorBuilder: (context, state) => AppShell(
       title: 'Not Found',
       showBack: true,
+      actions: _headerActionsFor(state, allowLogin: true, firebaseReady: true),
       child: Center(child: Text(state.error?.toString() ?? 'Not Found')),
     ),
   );
@@ -52,6 +55,9 @@ GoRouter buildAppRouter() {
 /// ✅ Firebase 初期化に失敗した場合の “閲覧専用” ルーター
 /// - catalog 閲覧は可能
 /// - login は「Firebase未設定」画面にする（落とさない）
+///
+/// ⚠️ 重要:
+///   このルーターでは FirebaseAuth.instance に一切触れない（minified type error 回避）
 GoRouter buildPublicOnlyRouter({required Object initError}) {
   return GoRouter(
     initialLocation: '/',
@@ -69,7 +75,13 @@ GoRouter buildPublicOnlyRouter({required Object initError}) {
         builder: (context, state, child) {
           return AppShell(
             title: _titleFor(state),
-            showBack: true,
+            showBack: _showBackFor(state),
+            // ✅ Firebase 未設定でも「Sign in」は出す（ただし Auth 判定はしない）
+            actions: _headerActionsFor(
+              state,
+              allowLogin: true,
+              firebaseReady: false,
+            ),
             child: child,
           );
         },
@@ -96,13 +108,15 @@ GoRouter buildPublicOnlyRouter({required Object initError}) {
     errorBuilder: (context, state) => AppShell(
       title: 'Not Found',
       showBack: true,
+      actions: _headerActionsFor(state, allowLogin: true, firebaseReady: false),
       child: Center(child: Text(state.error?.toString() ?? 'Not Found')),
     ),
   );
 }
 
-List<RouteBase> _routes() {
+List<RouteBase> _routes({required bool firebaseReady}) {
   return [
+    // ✅ login は ShellRoute の外（ヘッダー/フッター不要）
     GoRoute(
       path: '/login',
       name: 'login',
@@ -114,9 +128,19 @@ List<RouteBase> _routes() {
         );
       },
     ),
+
     ShellRoute(
       builder: (context, state, child) {
-        return AppShell(title: _titleFor(state), showBack: true, child: child);
+        return AppShell(
+          title: _titleFor(state),
+          showBack: _showBackFor(state),
+          actions: _headerActionsFor(
+            state,
+            allowLogin: true,
+            firebaseReady: firebaseReady,
+          ),
+          child: child,
+        );
       },
       routes: [
         GoRoute(
@@ -140,6 +164,16 @@ List<RouteBase> _routes() {
   ];
 }
 
+bool _showBackFor(GoRouterState state) {
+  final path = state.uri.path;
+
+  // ✅ Homeは戻るボタンを出さない
+  if (path == '/') return false;
+
+  // ✅ それ以外は表示（例: /catalog/:listId）
+  return true;
+}
+
 String? _titleFor(GoRouterState state) {
   final loc = state.uri.path;
   if (loc == '/') return null;
@@ -147,6 +181,42 @@ String? _titleFor(GoRouterState state) {
   return null;
 }
 
+/// ✅ ヘッダー右側 actions（Sign in / Sign out）
+///
+/// firebaseReady=false の場合は FirebaseAuth を触らない（Webのminified type error 回避）
+List<Widget> _headerActionsFor(
+  GoRouterState state, {
+  required bool allowLogin,
+  required bool firebaseReady,
+}) {
+  final path = state.uri.path;
+
+  // login 画面では何も出さない（ループ/見た目の二重化防止）
+  if (path == '/login') return const [];
+
+  if (!allowLogin) return const [];
+
+  // from は “今いる場所に戻す” ために、クエリ含めた URI を使う
+  final from = state.uri.toString();
+
+  // ✅ Firebase が未初期化/未設定の時は「常に Sign in」だけを出す（Auth判定しない）
+  if (!firebaseReady) {
+    final loginUri = Uri(path: '/login', queryParameters: {'from': from});
+    return [_HeaderSignInButton(to: loginUri.toString())];
+  }
+
+  // ✅ Firebase OK の時だけ Auth 判定
+  final isLoggedIn = FirebaseAuth.instance.currentUser != null;
+
+  if (!isLoggedIn) {
+    final loginUri = Uri(path: '/login', queryParameters: {'from': from});
+    return [_HeaderSignInButton(to: loginUri.toString())];
+  }
+
+  return const [_HeaderSignedInButton()];
+}
+
+/// Stream を listen して GoRouter を refresh するための Listenable
 class GoRouterRefreshStream extends ChangeNotifier {
   GoRouterRefreshStream(Stream<dynamic> stream) {
     _sub = stream.listen((_) => notifyListeners());
@@ -158,6 +228,39 @@ class GoRouterRefreshStream extends ChangeNotifier {
   void dispose() {
     _sub.cancel();
     super.dispose();
+  }
+}
+
+class _HeaderSignInButton extends StatelessWidget {
+  const _HeaderSignInButton({required this.to});
+
+  final String to;
+
+  @override
+  Widget build(BuildContext context) {
+    return TextButton(
+      onPressed: () => context.go(to),
+      child: const Text('Sign in'),
+    );
+  }
+}
+
+class _HeaderSignedInButton extends StatelessWidget {
+  const _HeaderSignedInButton();
+
+  @override
+  Widget build(BuildContext context) {
+    return TextButton(
+      onPressed: () async {
+        try {
+          await FirebaseAuth.instance.signOut();
+          if (context.mounted) context.go('/');
+        } catch (_) {
+          // ignore
+        }
+      },
+      child: const Text('Sign out'),
+    );
   }
 }
 
