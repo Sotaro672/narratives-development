@@ -18,6 +18,8 @@ import '../../features/list/infrastructure/list_repository_http.dart';
 import '../../features/auth/presentation/page/login_page.dart';
 import '../../features/auth/presentation/page/create_account.dart';
 import '../../features/auth/presentation/page/shipping_address.dart';
+import '../../features/auth/presentation/page/billing_address.dart';
+import '../../features/auth/presentation/page/avatar_create.dart';
 
 /// ✅ Firebase OK 前提のルーター（Auth 連動）
 GoRouter buildAppRouter() {
@@ -56,7 +58,7 @@ GoRouter buildAppRouter() {
 
 /// ✅ Firebase 初期化に失敗した場合の “閲覧専用” ルーター
 /// - catalog 閲覧は可能
-/// - login/create-account/shipping-address は「Firebase未設定」画面にする（落とさない）
+/// - login/create-account/shipping-address/billing-address/avatar-create は「Firebase未設定」画面にする（落とさない）
 ///
 /// ⚠️ 重要:
 ///   このルーターでは FirebaseAuth.instance に一切触れない（minified type error 回避）
@@ -89,6 +91,28 @@ GoRouter buildPublicOnlyRouter({required Object initError}) {
       GoRoute(
         path: '/shipping-address',
         name: 'shippingAddress',
+        pageBuilder: (context, state) {
+          return NoTransitionPage(
+            child: _FirebaseInitErrorPage(error: initError),
+          );
+        },
+      ),
+
+      // ✅ Firebase 未設定時は billing-address も “設定エラー画面” に落とす
+      GoRoute(
+        path: '/billing-address',
+        name: 'billingAddress',
+        pageBuilder: (context, state) {
+          return NoTransitionPage(
+            child: _FirebaseInitErrorPage(error: initError),
+          );
+        },
+      ),
+
+      // ✅ Firebase 未設定時は avatar-create も “設定エラー画面” に落とす
+      GoRoute(
+        path: '/avatar-create',
+        name: 'avatarCreate',
         pageBuilder: (context, state) {
           return NoTransitionPage(
             child: _FirebaseInitErrorPage(error: initError),
@@ -187,6 +211,26 @@ List<RouteBase> _routes({required bool firebaseReady}) {
       },
     ),
 
+    // ✅ 請求先（決済）情報入力（ShellRoute の外）
+    GoRoute(
+      path: '/billing-address',
+      name: 'billingAddress',
+      pageBuilder: (context, state) {
+        final from = state.uri.queryParameters['from'];
+        return NoTransitionPage(child: BillingAddressPage(from: from));
+      },
+    ),
+
+    // ✅ アバター作成（ShellRoute の外）
+    GoRoute(
+      path: '/avatar-create',
+      name: 'avatarCreate',
+      pageBuilder: (context, state) {
+        final from = state.uri.queryParameters['from'];
+        return NoTransitionPage(child: AvatarCreatePage(from: from));
+      },
+    ),
+
     ShellRoute(
       builder: (context, state, child) {
         return AppShell(
@@ -252,7 +296,9 @@ List<Widget> _headerActionsFor(
   // ✅ 認証系ページでは何も出さない（ループ/二重表示防止）
   if (path == '/login' ||
       path == '/create-account' ||
-      path == '/shipping-address') {
+      path == '/shipping-address' ||
+      path == '/billing-address' ||
+      path == '/avatar-create') {
     return const [];
   }
 

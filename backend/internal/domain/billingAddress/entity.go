@@ -1,4 +1,4 @@
-// backend\internal\domain\billingAddress\entity.go
+// backend/internal/domain/billingAddress/entity.go
 package billingAddress
 
 import (
@@ -9,141 +9,81 @@ import (
 	"time"
 )
 
-// BillingAddress mirrors web-app/src/shared/types/billingAddress.ts
+// BillingAddress エンティティ（SNSアプリの billing_address.dart の入力欄に準拠）
+//
+// frontend/sns/lib/features/auth/presentation/page/billing_address.dart
+// - クレジットカード番号: cardNumber
+// - 契約者名義: cardholderName
+// - 裏の3桁コード: cvc
+//
+// 注意:
+// - これは「入力欄に一致するドメイン表現」です（トークン化/ブランド/有効期限などは今は扱わない）。
+// - 本番では cardNumber/cvc を保存しない（PCI DSS）ことが一般的。ここでは要件に合わせて“いったん保持可能”にしています。
 type BillingAddress struct {
-	ID            string  `json:"id"`            // UUID
-	UserID        string  `json:"userId"`        // user_id (UUID or TEXT)
-	NameOnAccount *string `json:"nameOnAccount"` // optional
+	ID             string `json:"id"`
+	UserID         string `json:"userId"`
+	CardNumber     string `json:"cardNumber"`     // 入力欄: クレジットカード番号
+	CardholderName string `json:"cardholderName"` // 入力欄: 契約者名義
+	CVC            string `json:"cvc"`            // 入力欄: 裏の3桁コード（AMEX等は4桁の可能性あり）
 
-	BillingType  string  `json:"billingType"` // NOT NULL
-	CardBrand    *string `json:"cardBrand"`
-	CardLast4    *string `json:"cardLast4"`
-	CardExpMonth *int    `json:"cardExpMonth"`
-	CardExpYear  *int    `json:"cardExpYear"`
-	CardToken    *string `json:"cardToken"`
-
-	PostalCode *int    `json:"postalCode"` // optional INTEGER
-	State      *string `json:"state"`
-	City       *string `json:"city"`
-	Street     *string `json:"street"`
-	Country    *string `json:"country"`
-
-	IsDefault bool      `json:"isDefault"` // NOT NULL
-	CreatedAt time.Time `json:"createdAt"` // NOT NULL
-	UpdatedAt time.Time `json:"updatedAt"` // NOT NULL
+	CreatedAt time.Time `json:"createdAt"`
+	UpdatedAt time.Time `json:"updatedAt"`
 }
 
 // Errors
 var (
-	ErrInvalidID           = errors.New("billingAddress: invalid id")
-	ErrInvalidUserID       = errors.New("billingAddress: invalid userId")
-	ErrInvalidBillingType  = errors.New("billingAddress: invalid billingType")
-	ErrInvalidCardLast4    = errors.New("billingAddress: invalid cardLast4")
-	ErrInvalidCardExpMonth = errors.New("billingAddress: invalid cardExpMonth")
-	ErrInvalidCardExpYear  = errors.New("billingAddress: invalid cardExpYear")
-	ErrInvalidPostalCode   = errors.New("billingAddress: invalid postalCode")
-	ErrInvalidCreatedAt    = errors.New("billingAddress: invalid createdAt")
-	ErrInvalidUpdatedAt    = errors.New("billingAddress: invalid updatedAt")
+	ErrInvalidID             = errors.New("billingAddress: invalid id")
+	ErrInvalidUserID         = errors.New("billingAddress: invalid userId")
+	ErrInvalidCardNumber     = errors.New("billingAddress: invalid cardNumber")
+	ErrInvalidCardholderName = errors.New("billingAddress: invalid cardholderName")
+	ErrInvalidCVC            = errors.New("billingAddress: invalid cvc")
+	ErrInvalidCreatedAt      = errors.New("billingAddress: invalid createdAt")
+	ErrInvalidUpdatedAt      = errors.New("billingAddress: invalid updatedAt")
 )
 
-// Basic policies/regex
 var (
-	uuidRe     = regexp.MustCompile(`^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-5][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$`)
-	last4Re    = regexp.MustCompile(`^\d{4}$`)
-	minExpYear = 2000
-	maxExpYear = 2100
+	// 既存ポリシーを踏襲（UUID）
+	uuidRe = regexp.MustCompile(`^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-5][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$`)
+
+	// CVC: 3桁（要件どおり）。※将来 AMEX(4桁) 対応するなら {3,4} にする。
+	cvc3Re = regexp.MustCompile(`^\d{3}$`)
 )
 
-// Constructors
-
-func New(
-	id string,
-	userID string,
-	billingType string,
-	isDefault bool,
-	createdAt, updatedAt time.Time,
-	// optional fields
-	nameOnAccount, cardBrand, cardLast4, cardToken, state, city, street, country *string,
-	cardExpMonth, cardExpYear, postalCode *int,
-) (BillingAddress, error) {
-	ba := BillingAddress{
-		ID:            strings.TrimSpace(id),
-		UserID:        strings.TrimSpace(userID),
-		NameOnAccount: trimPtr(nameOnAccount),
-		BillingType:   strings.TrimSpace(billingType),
-		CardBrand:     trimPtr(cardBrand),
-		CardLast4:     trimPtr(cardLast4),
-		CardExpMonth:  cardExpMonth,
-		CardExpYear:   cardExpYear,
-		CardToken:     trimPtr(cardToken),
-		PostalCode:    postalCode,
-		State:         trimPtr(state),
-		City:          trimPtr(city),
-		Street:        trimPtr(street),
-		Country:       trimPtr(country),
-		IsDefault:     isDefault,
-		CreatedAt:     createdAt.UTC(),
-		UpdatedAt:     updatedAt.UTC(),
-	}
-	if err := ba.validate(); err != nil {
-		return BillingAddress{}, err
-	}
-	return ba, nil
-}
-
-func NewFromStringTimes(
-	id string,
-	userID string,
-	billingType string,
-	isDefault bool,
-	createdAtStr, updatedAtStr string,
-	// optional fields
-	nameOnAccount, cardBrand, cardLast4, cardToken, state, city, street, country *string,
-	cardExpMonth, cardExpYear, postalCode *int,
-) (BillingAddress, error) {
-	ca, err := parseTime(createdAtStr)
-	if err != nil {
-		return BillingAddress{}, fmt.Errorf("%w: %v", ErrInvalidCreatedAt, err)
-	}
-	ua, err := parseTime(updatedAtStr)
-	if err != nil {
-		return BillingAddress{}, fmt.Errorf("%w: %v", ErrInvalidUpdatedAt, err)
-	}
-	return New(
-		id, userID, billingType, isDefault, ca, ua,
-		nameOnAccount, cardBrand, cardLast4, cardToken, state, city, street, country,
-		cardExpMonth, cardExpYear, postalCode,
-	)
-}
-
+// ============================================================
 // Validation
+// ============================================================
 
 func (b BillingAddress) validate() error {
-	if strings.TrimSpace(b.ID) == "" || !uuidRe.MatchString(b.ID) {
+	if strings.TrimSpace(b.ID) == "" || !uuidRe.MatchString(strings.TrimSpace(b.ID)) {
 		return ErrInvalidID
 	}
 	if strings.TrimSpace(b.UserID) == "" {
 		return ErrInvalidUserID
 	}
-	if strings.TrimSpace(b.BillingType) == "" {
-		return ErrInvalidBillingType
+
+	// cardNumber: 数字のみ（空白/ハイフンは許容して正規化する）
+	n := normalizeCardNumber(b.CardNumber)
+	if n == "" {
+		return ErrInvalidCardNumber
 	}
-	if b.CardLast4 != nil && !last4Re.MatchString(*b.CardLast4) {
-		return ErrInvalidCardLast4
+	// ざっくり長さチェック（一般的な範囲 12-19）
+	if ln := len(n); ln < 12 || ln > 19 {
+		return ErrInvalidCardNumber
 	}
-	if b.CardExpMonth != nil {
-		if *b.CardExpMonth < 1 || *b.CardExpMonth > 12 {
-			return ErrInvalidCardExpMonth
-		}
+	// Luhn チェック（一般的なカード番号検証）
+	if !luhnValid(n) {
+		return ErrInvalidCardNumber
 	}
-	if b.CardExpYear != nil {
-		if *b.CardExpYear < minExpYear || *b.CardExpYear > maxExpYear {
-			return ErrInvalidCardExpYear
-		}
+
+	if strings.TrimSpace(b.CardholderName) == "" {
+		return ErrInvalidCardholderName
 	}
-	if b.PostalCode != nil && *b.PostalCode < 0 {
-		return ErrInvalidPostalCode
+
+	c := normalizeDigits(b.CVC)
+	if !cvc3Re.MatchString(c) {
+		return ErrInvalidCVC
 	}
+
 	if b.CreatedAt.IsZero() {
 		return ErrInvalidCreatedAt
 	}
@@ -153,17 +93,116 @@ func (b BillingAddress) validate() error {
 	return nil
 }
 
-// Helpers
+// ============================================================
+// Behavior
+// ============================================================
 
-func trimPtr(s *string) *string {
-	if s == nil {
-		return nil
+// UpdateFromForm は billing_address.dart の入力欄に対応する更新メソッドです。
+func (b *BillingAddress) UpdateFromForm(cardNumber, cardholderName, cvc string, now time.Time) error {
+	cardNumber = strings.TrimSpace(cardNumber)
+	cardholderName = strings.TrimSpace(cardholderName)
+	cvc = strings.TrimSpace(cvc)
+
+	// 正規化してから保持
+	n := normalizeCardNumber(cardNumber)
+	if n == "" {
+		return ErrInvalidCardNumber
 	}
-	v := strings.TrimSpace(*s)
-	if v == "" {
-		return nil
+	if ln := len(n); ln < 12 || ln > 19 {
+		return ErrInvalidCardNumber
 	}
-	return &v
+	if !luhnValid(n) {
+		return ErrInvalidCardNumber
+	}
+
+	if cardholderName == "" {
+		return ErrInvalidCardholderName
+	}
+
+	cc := normalizeDigits(cvc)
+	if !cvc3Re.MatchString(cc) {
+		return ErrInvalidCVC
+	}
+
+	b.CardNumber = n
+	b.CardholderName = cardholderName
+	b.CVC = cc
+
+	return b.touch(now)
+}
+
+// ============================================================
+// Constructors
+// ============================================================
+
+func New(
+	id string,
+	userID string,
+	cardNumber string,
+	cardholderName string,
+	cvc string,
+	createdAt, updatedAt time.Time,
+) (BillingAddress, error) {
+	ba := BillingAddress{
+		ID:             strings.TrimSpace(id),
+		UserID:         strings.TrimSpace(userID),
+		CardNumber:     strings.TrimSpace(cardNumber),
+		CardholderName: strings.TrimSpace(cardholderName),
+		CVC:            strings.TrimSpace(cvc),
+		CreatedAt:      createdAt.UTC(),
+		UpdatedAt:      updatedAt.UTC(),
+	}
+	// 保存用の正規化（バリデーション前に整形）
+	ba.CardNumber = normalizeCardNumber(ba.CardNumber)
+	ba.CVC = normalizeDigits(ba.CVC)
+
+	if err := ba.validate(); err != nil {
+		return BillingAddress{}, err
+	}
+	return ba, nil
+}
+
+func NewWithNow(
+	id string,
+	userID string,
+	cardNumber string,
+	cardholderName string,
+	cvc string,
+	now time.Time,
+) (BillingAddress, error) {
+	now = now.UTC()
+	return New(id, userID, cardNumber, cardholderName, cvc, now, now)
+}
+
+func NewFromStringTimes(
+	id string,
+	userID string,
+	cardNumber string,
+	cardholderName string,
+	cvc string,
+	createdAtStr, updatedAtStr string,
+) (BillingAddress, error) {
+	ca, err := parseTime(createdAtStr)
+	if err != nil {
+		return BillingAddress{}, fmt.Errorf("%w: %v", ErrInvalidCreatedAt, err)
+	}
+	ua, err := parseTime(updatedAtStr)
+	if err != nil {
+		return BillingAddress{}, fmt.Errorf("%w: %v", ErrInvalidUpdatedAt, err)
+	}
+	return New(id, userID, cardNumber, cardholderName, cvc, ca, ua)
+}
+
+// ============================================================
+// Helpers
+// ============================================================
+
+func (b *BillingAddress) touch(now time.Time) error {
+	if now.IsZero() {
+		return ErrInvalidUpdatedAt
+	}
+	b.UpdatedAt = now.UTC()
+	return nil
 }
 
 func parseTime(s string) (time.Time, error) {
@@ -188,19 +227,61 @@ func parseTime(s string) (time.Time, error) {
 	return time.Time{}, fmt.Errorf("cannot parse time: %q", s)
 }
 
-// 部分更新用のパッチ型（nilは未変更を意味します）
-type BillingAddressPatch struct {
-	FullName   *string
-	Company    *string
-	Country    *string
-	PostalCode *string
-	State      *string
-	City       *string
-	Address1   *string
-	Address2   *string
-	Phone      *string
+// normalizeDigits: 数字以外を除去
+func normalizeDigits(s string) string {
+	s = strings.TrimSpace(s)
+	if s == "" {
+		return ""
+	}
+	var b strings.Builder
+	b.Grow(len(s))
+	for _, r := range s {
+		if r >= '0' && r <= '9' {
+			b.WriteRune(r)
+		}
+	}
+	return b.String()
+}
 
-	UpdatedBy *string
-	DeletedAt *time.Time
-	DeletedBy *string
+// normalizeCardNumber: 空白/ハイフン等を除去して数字のみへ
+func normalizeCardNumber(s string) string {
+	return normalizeDigits(s)
+}
+
+// luhnValid performs Luhn checksum validation.
+func luhnValid(number string) bool {
+	// number must be digits only
+	if number == "" {
+		return false
+	}
+	sum := 0
+	alt := false
+	for i := len(number) - 1; i >= 0; i-- {
+		c := number[i]
+		if c < '0' || c > '9' {
+			return false
+		}
+		n := int(c - '0')
+		if alt {
+			n *= 2
+			if n > 9 {
+				n -= 9
+			}
+		}
+		sum += n
+		alt = !alt
+	}
+	return sum%10 == 0
+}
+
+// ============================================================
+// Patch type (partial update; nil means "no change")
+// ============================================================
+
+type BillingAddressPatch struct {
+	CardNumber     *string
+	CardholderName *string
+	CVC            *string
+
+	UpdatedAt *time.Time
 }

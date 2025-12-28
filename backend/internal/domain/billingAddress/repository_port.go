@@ -1,4 +1,4 @@
-// backend\internal\domain\billingAddress\repository_port.go
+// backend/internal/domain/billingAddress/repository_port.go
 package billingAddress
 
 import (
@@ -10,61 +10,41 @@ import (
 // 契約（インターフェース）のみ定義。実装はインフラ層に委譲します。
 
 // Create input (IDは実装側で採番可)
+// ✅ entity.go（billing_address.dart 入力）準拠:
+// - cardNumber（クレジットカード番号）
+// - cardholderName（契約者名義）
+// - cvc（裏の3桁コード）
 type CreateBillingAddressInput struct {
-	UserID        string     `json:"userId"`
-	BillingType   string     `json:"billingType"`
-	NameOnAccount *string    `json:"nameOnAccount,omitempty"`
-	CardBrand     *string    `json:"cardBrand,omitempty"`
-	CardLast4     *string    `json:"cardLast4,omitempty"`
-	CardExpMonth  *int       `json:"cardExpMonth,omitempty"`
-	CardExpYear   *int       `json:"cardExpYear,omitempty"`
-	CardToken     *string    `json:"cardToken,omitempty"`
-	PostalCode    *int       `json:"postalCode,omitempty"`
-	State         *string    `json:"state,omitempty"`
-	City          *string    `json:"city,omitempty"`
-	Street        *string    `json:"street,omitempty"`
-	Country       *string    `json:"country,omitempty"`
-	IsDefault     bool       `json:"isDefault"`
-	CreatedAt     *time.Time `json:"createdAt,omitempty"`
-	UpdatedAt     *time.Time `json:"updatedAt,omitempty"`
+	UserID         string     `json:"userId"`
+	CardNumber     string     `json:"cardNumber"`
+	CardholderName string     `json:"cardholderName"`
+	CVC            string     `json:"cvc"`
+	CreatedAt      *time.Time `json:"createdAt,omitempty"`
+	UpdatedAt      *time.Time `json:"updatedAt,omitempty"`
 }
 
 // Update input (部分更新)
 type UpdateBillingAddressInput struct {
-	BillingType   *string    `json:"billingType,omitempty"`
-	NameOnAccount *string    `json:"nameOnAccount,omitempty"`
-	CardBrand     *string    `json:"cardBrand,omitempty"`
-	CardLast4     *string    `json:"cardLast4,omitempty"`
-	CardExpMonth  *int       `json:"cardExpMonth,omitempty"`
-	CardExpYear   *int       `json:"cardExpYear,omitempty"`
-	CardToken     *string    `json:"cardToken,omitempty"`
-	PostalCode    *int       `json:"postalCode,omitempty"`
-	State         *string    `json:"state,omitempty"`
-	City          *string    `json:"city,omitempty"`
-	Street        *string    `json:"street,omitempty"`
-	Country       *string    `json:"country,omitempty"`
-	IsDefault     *bool      `json:"isDefault,omitempty"`
-	UpdatedAt     *time.Time `json:"updatedAt,omitempty"`
+	CardNumber     *string    `json:"cardNumber,omitempty"`
+	CardholderName *string    `json:"cardholderName,omitempty"`
+	CVC            *string    `json:"cvc,omitempty"`
+	UpdatedAt      *time.Time `json:"updatedAt,omitempty"`
 }
 
-// クエリ条件
+// クエリ条件（entity.go 準拠：最小）
+// - 互換のためIDsは保持
+// - 旧: billingType/cardBrand/isDefault/住所系フィールドは削除
 type Filter struct {
-	IDs          []string
-	UserIDs      []string
-	BillingTypes []string
-	CardBrands   []string
-	IsDefault    *bool
-
-	PostalCodeMin *int
-	PostalCodeMax *int
+	IDs     []string
+	UserIDs []string
 
 	CreatedFrom *time.Time
 	CreatedTo   *time.Time
 	UpdatedFrom *time.Time
 	UpdatedTo   *time.Time
 
-	NameLike *string // name_on_account の部分一致など、実装依存
-	CityLike *string
+	// 部分一致（実装依存）
+	CardholderNameLike *string
 }
 
 // 並び順
@@ -76,11 +56,8 @@ type Sort struct {
 type SortColumn string
 
 const (
-	SortByCreatedAt   SortColumn = "createdAt"
-	SortByUpdatedAt   SortColumn = "updatedAt"
-	SortByBillingType SortColumn = "billingType"
-	SortByIsDefault   SortColumn = "isDefault"
-	SortByPostalCode  SortColumn = "postalCode"
+	SortByCreatedAt SortColumn = "createdAt"
+	SortByUpdatedAt SortColumn = "updatedAt"
 )
 
 type SortOrder string
@@ -109,7 +86,11 @@ type RepositoryPort interface {
 	// 取得系
 	GetByID(ctx context.Context, id string) (*BillingAddress, error)
 	GetByUser(ctx context.Context, userID string) ([]BillingAddress, error)
+
+	// 互換: 旧契約に存在していたため残す（entity.go では default の概念なし）
+	// 実装側では「最新1件」などの規約で返す。
 	GetDefaultByUser(ctx context.Context, userID string) (*BillingAddress, error)
+
 	List(ctx context.Context, filter Filter, sort Sort, page Page) (PageResult, error)
 	Count(ctx context.Context, filter Filter) (int, error)
 
@@ -118,7 +99,8 @@ type RepositoryPort interface {
 	Update(ctx context.Context, id string, in UpdateBillingAddressInput) (*BillingAddress, error)
 	Delete(ctx context.Context, id string) error
 
-	// ユーザーのデフォルト住所設定（他の住所のis_defaultを落とす規約は実装側で担保）
+	// 互換: 旧契約に存在していたため残す（entity.go では default の概念なし）
+	// 実装側では no-op または独自規約で担保。
 	SetDefault(ctx context.Context, id string) error
 
 	// 任意: トランザクション境界/メンテ

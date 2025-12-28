@@ -4,7 +4,6 @@ package firestore
 import (
 	"context"
 	"errors"
-	"net/mail"
 	"sort"
 	"strings"
 	"time"
@@ -139,16 +138,6 @@ func (r *UserRepositoryFS) Create(ctx context.Context, v udom.User) (udom.User, 
 			data["lastName"] = s
 		}
 	}
-	if v.Email != nil {
-		if ev := normalizeEmail(*v.Email); ev != "" {
-			data["email"] = ev
-		}
-	}
-	if v.PhoneNumber != nil {
-		if s := strings.TrimSpace(*v.PhoneNumber); s != "" {
-			data["phoneNumber"] = s
-		}
-	}
 
 	if _, err := ref.Create(ctx, data); err != nil {
 		if status.Code(err) == codes.AlreadyExists {
@@ -190,8 +179,6 @@ func (r *UserRepositoryFS) Save(ctx context.Context, v udom.User) (udom.User, er
 		FirstNameKana: copyIfTrimmedNonEmpty(v.FirstNameKana),
 		LastNameKana:  copyIfTrimmedNonEmpty(v.LastNameKana),
 		LastName:      copyIfTrimmedNonEmpty(v.LastName),
-		Email:         copyIfTrimmedNonEmpty(v.Email),
-		PhoneNumber:   copyIfTrimmedNonEmpty(v.PhoneNumber),
 		UpdatedAt: func(t time.Time) *time.Time {
 			if t.IsZero() {
 				return nil
@@ -223,38 +210,6 @@ func (r *UserRepositoryFS) Save(ctx context.Context, v udom.User) (udom.User, er
 // ======================================================================
 // Lower-level / richer query methods (PG版互換)
 // ======================================================================
-
-func (r *UserRepositoryFS) GetByEmail(ctx context.Context, email string) (*udom.User, error) {
-	if r.Client == nil {
-		return nil, errors.New("firestore client is nil")
-	}
-
-	email = normalizeEmail(email)
-	if email == "" {
-		return nil, udom.ErrNotFound
-	}
-
-	q := r.col().
-		Where("email", "==", email).
-		Limit(1)
-
-	it := q.Documents(ctx)
-	defer it.Stop()
-
-	snap, err := it.Next()
-	if errors.Is(err, iterator.Done) {
-		return nil, udom.ErrNotFound
-	}
-	if err != nil {
-		return nil, err
-	}
-
-	u, err := docToUser(snap)
-	if err != nil {
-		return nil, err
-	}
-	return &u, nil
-}
 
 // List: Firestore 制約により全件取得してメモリ上で Filter/Sort/Paging を適用。
 func (r *UserRepositoryFS) List(ctx context.Context, filter udom.Filter, sortOpt udom.Sort, page udom.Page) (udom.PageResult, error) {
@@ -360,9 +315,17 @@ func (r *UserRepositoryFS) Update(ctx context.Context, id string, in udom.Update
 
 	setStr := func(path string, p *string) {
 		if p != nil {
+			v := strings.TrimSpace(*p)
+			if v == "" {
+				updates = append(updates, firestore.Update{
+					Path:  path,
+					Value: firestore.Delete,
+				})
+				return
+			}
 			updates = append(updates, firestore.Update{
 				Path:  path,
-				Value: strings.TrimSpace(*p),
+				Value: v,
 			})
 		}
 	}
@@ -372,31 +335,6 @@ func (r *UserRepositoryFS) Update(ctx context.Context, id string, in udom.Update
 	setStr("firstNameKana", in.FirstNameKana)
 	setStr("lastNameKana", in.LastNameKana)
 	setStr("lastName", in.LastName)
-
-	// email (空文字 -> 削除 / NULL 相当)
-	if in.Email != nil {
-		v := strings.TrimSpace(*in.Email)
-		if v == "" {
-			updates = append(updates, firestore.Update{
-				Path:  "email",
-				Value: firestore.Delete,
-			})
-		} else {
-			_ = validateEmail(v) // best-effort; エラーでもブロックしない
-			updates = append(updates, firestore.Update{
-				Path:  "email",
-				Value: v,
-			})
-		}
-	}
-
-	// phoneNumber
-	if in.PhoneNumber != nil {
-		updates = append(updates, firestore.Update{
-			Path:  "phoneNumber",
-			Value: strings.TrimSpace(*in.PhoneNumber),
-		})
-	}
 
 	// updatedAt: 指定なければ NOW()
 	if in.UpdatedAt != nil {
@@ -558,8 +496,6 @@ func docToUser(doc *firestore.DocumentSnapshot) (udom.User, error) {
 		FirstNameKana: getStrPtr("firstNameKana", "first_name_kana"),
 		LastNameKana:  getStrPtr("lastNameKana", "last_name_kana"),
 		LastName:      getStrPtr("lastName", "last_name"),
-		Email:         getStrPtr("email"),
-		PhoneNumber:   getStrPtr("phoneNumber", "phone_number"),
 		CreatedAt:     getTime("createdAt", "created_at"),
 		UpdatedAt:     getTime("updatedAt", "updated_at"),
 		DeletedAt:     getTime("deletedAt", "deleted_at"),
@@ -576,27 +512,6 @@ func matchUserFilter(u udom.User, f udom.Filter) bool {
 		match := false
 		for _, id := range f.IDs {
 			if strings.TrimSpace(id) == u.ID {
-				match = true
-				break
-			}
-		}
-		if !match {
-			return false
-		}
-	}
-
-	// Emails
-	if len(f.Emails) > 0 {
-		email := ""
-		if u.Email != nil {
-			email = strings.TrimSpace(*u.Email)
-		}
-		if email == "" {
-			return false
-		}
-		match := false
-		for _, e := range f.Emails {
-			if strings.EqualFold(strings.TrimSpace(e), email) {
 				match = true
 				break
 			}
@@ -642,18 +557,6 @@ func matchUserFilter(u udom.User, f udom.Filter) bool {
 			ln = strings.ToLower(strings.TrimSpace(*u.LastName))
 		}
 		if !strings.Contains(fn, p) && !strings.Contains(ln, p) {
-			return false
-		}
-	}
-
-	// PhoneLike
-	if v := strings.TrimSpace(f.PhoneLike); v != "" {
-		p := strings.ToLower(v)
-		ph := ""
-		if u.PhoneNumber != nil {
-			ph = strings.ToLower(strings.TrimSpace(*u.PhoneNumber))
-		}
-		if !strings.Contains(ph, p) {
 			return false
 		}
 	}
@@ -768,25 +671,6 @@ func sortUsers(items []udom.User, s udom.Sort) {
 			}
 			return al > bl
 
-		case "email":
-			var ae, be string
-			if a.Email != nil {
-				ae = *a.Email
-			}
-			if b.Email != nil {
-				be = *b.Email
-			}
-			if ae == be {
-				if asc {
-					return a.ID < b.ID
-				}
-				return a.ID > b.ID
-			}
-			if asc {
-				return ae < be
-			}
-			return ae > be
-
 		default:
 			// デフォルト: createdAt DESC, id DESC
 			if a.CreatedAt.Equal(b.CreatedAt) {
@@ -812,18 +696,4 @@ func copyIfTrimmedNonEmpty(p *string) *string {
 		return nil
 	}
 	return &s
-}
-
-func normalizeEmail(v string) string {
-	s := strings.TrimSpace(v)
-	if s == "" {
-		return ""
-	}
-	_ = validateEmail(s) // best-effort
-	return s
-}
-
-func validateEmail(v string) error {
-	_, err := mail.ParseAddress(v)
-	return err
 }

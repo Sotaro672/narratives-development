@@ -1,4 +1,4 @@
-// backend\internal\domain\avatar\repository_port.go
+// backend/internal/domain/avatar/repository_port.go
 package avatar
 
 import (
@@ -12,21 +12,28 @@ import (
 // Patch（部分更新）
 // ========================================
 // nil のフィールドは更新しない契約
+//
+// ✅ entity.go を正として:
+// - AvatarIconID → AvatarIconURL / AvatarIconPath
+// - Bio          → Profile
+// - Website      → ExternalLink
 type AvatarPatch struct {
-	AvatarName    *string    `json:"avatarName,omitempty"`
-	AvatarIconID  *string    `json:"avatarIconId,omitempty"`
-	WalletAddress *string    `json:"walletAddress,omitempty"`
-	Bio           *string    `json:"bio,omitempty"`
-	Website       *string    `json:"website,omitempty"`
-	DeletedAt     *time.Time `json:"deletedAt,omitempty"` // soft delete/restore 用（必要な場合のみ使用）
+	AvatarName     *string    `json:"avatarName,omitempty"`
+	AvatarIconURL  *string    `json:"avatarIconUrl,omitempty"`
+	AvatarIconPath *string    `json:"avatarIconPath,omitempty"`
+	WalletAddress  *string    `json:"walletAddress,omitempty"`
+	Profile        *string    `json:"profile,omitempty"`
+	ExternalLink   *string    `json:"externalLink,omitempty"`
+	DeletedAt      *time.Time `json:"deletedAt,omitempty"` // soft delete/restore 用（必要な場合のみ使用）
 }
 
 // ========================================
 // フィルタ/ソート/ページング
 // ========================================
-
+//
+// ✅ entity.go を正として検索対象も更新（bio/website → profile/externalLink）
 type Filter struct {
-	// 部分一致検索対象: id, avatarName, bio, website, walletAddress
+	// 部分一致検索対象: id, avatarName, profile, externalLink, walletAddress, avatarIconUrl, avatarIconPath
 	SearchQuery string
 
 	// 絞り込み
@@ -55,7 +62,6 @@ type Sort struct {
 }
 
 type SortColumn string
-
 type SortOrder string
 
 const (

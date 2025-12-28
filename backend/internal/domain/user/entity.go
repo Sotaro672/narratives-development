@@ -4,8 +4,6 @@ package user
 import (
 	"errors"
 	"fmt"
-	"net/mail"
-	"regexp"
 	"strings"
 	"time"
 )
@@ -17,8 +15,6 @@ import (
 // - first_name_kana?: string
 // - last_name_kana?: string
 // - last_name?: string
-// - email?: string
-// - phone_number?: string
 // - createdAt: Date | string
 // - updatedAt: Date | string
 // - deletedAt: Date | string
@@ -28,8 +24,6 @@ type User struct {
 	FirstNameKana *string   `json:"first_name_kana,omitempty"`
 	LastNameKana  *string   `json:"last_name_kana,omitempty"`
 	LastName      *string   `json:"last_name,omitempty"`
-	Email         *string   `json:"email,omitempty"`
-	PhoneNumber   *string   `json:"phone_number,omitempty"`
 	CreatedAt     time.Time `json:"createdAt"`
 	UpdatedAt     time.Time `json:"updatedAt"`
 	DeletedAt     time.Time `json:"deletedAt"`
@@ -42,11 +36,14 @@ var (
 	ErrInvalidFirstNameKana = errors.New("user: invalid first_name_kana")
 	ErrInvalidLastNameKana  = errors.New("user: invalid last_name_kana")
 	ErrInvalidLastName      = errors.New("user: invalid last_name")
-	ErrInvalidEmail         = errors.New("user: invalid email")
-	ErrInvalidPhone         = errors.New("user: invalid phone_number")
 	ErrInvalidCreatedAt     = errors.New("user: invalid createdAt")
 	ErrInvalidUpdatedAt     = errors.New("user: invalid updatedAt")
 	ErrInvalidDeletedAt     = errors.New("user: invalid deletedAt")
+)
+
+// Policy
+var (
+	MaxNameLength = 100
 )
 
 // Mutators
@@ -86,24 +83,6 @@ func (u *User) SetLastNameKana(v *string) error {
 	return nil
 }
 
-func (u *User) SetEmail(v *string) error {
-	v = normalizePtr(v)
-	if v != nil && !emailValid(*v) {
-		return ErrInvalidEmail
-	}
-	u.Email = v
-	return nil
-}
-
-func (u *User) SetPhoneNumber(v *string) error {
-	v = normalizePtr(v)
-	if v != nil && !phoneValid(*v) {
-		return ErrInvalidPhone
-	}
-	u.PhoneNumber = v
-	return nil
-}
-
 func (u *User) TouchUpdatedAt(now time.Time) error {
 	if now.IsZero() {
 		return ErrInvalidUpdatedAt
@@ -129,12 +108,6 @@ func (u User) validate() error {
 	if u.LastNameKana != nil && len([]rune(*u.LastNameKana)) > MaxNameLength {
 		return ErrInvalidLastNameKana
 	}
-	if u.Email != nil && !emailValid(*u.Email) {
-		return ErrInvalidEmail
-	}
-	if u.PhoneNumber != nil && !phoneValid(*u.PhoneNumber) {
-		return ErrInvalidPhone
-	}
 	if u.CreatedAt.IsZero() {
 		return ErrInvalidCreatedAt
 	}
@@ -147,19 +120,11 @@ func (u User) validate() error {
 	return nil
 }
 
-// Policy
-var (
-	// Accepts E.164 (+xxxxxxxxxxxx up to 15 digits) or simple local format digits/spaces/hyphens/paren
-	e164Re        = regexp.MustCompile(`^\+[1-9]\d{1,14}$`)
-	localTel      = regexp.MustCompile(`^[0-9\-\s()]{7,20}$`)
-	MaxNameLength = 100
-)
-
 // Constructors
 
 func New(
 	id string,
-	firstName, firstNameKana, lastNameKana, lastName, email, phone *string,
+	firstName, firstNameKana, lastNameKana, lastName *string,
 	createdAt, updatedAt, deletedAt time.Time,
 ) (User, error) {
 	u := User{
@@ -168,8 +133,6 @@ func New(
 		FirstNameKana: normalizePtr(firstNameKana),
 		LastNameKana:  normalizePtr(lastNameKana),
 		LastName:      normalizePtr(lastName),
-		Email:         normalizePtr(email),
-		PhoneNumber:   normalizePtr(phone),
 		CreatedAt:     createdAt.UTC(),
 		UpdatedAt:     updatedAt.UTC(),
 		DeletedAt:     deletedAt.UTC(),
@@ -183,18 +146,18 @@ func New(
 // NewWithNow is convenient for CreateUserInput (server sets created/updated).
 func NewWithNow(
 	id string,
-	firstName, firstNameKana, lastNameKana, lastName, email, phone *string,
+	firstName, firstNameKana, lastNameKana, lastName *string,
 	now time.Time,
 	deletedAt time.Time,
 ) (User, error) {
 	now = now.UTC()
-	return New(id, firstName, firstNameKana, lastNameKana, lastName, email, phone, now, now, deletedAt)
+	return New(id, firstName, firstNameKana, lastNameKana, lastName, now, now, deletedAt)
 }
 
 // NewFromStringTimes parses createdAt/updatedAt/deletedAt from RFC3339 strings.
 func NewFromStringTimes(
 	id string,
-	firstName, firstNameKana, lastNameKana, lastName, email, phone *string,
+	firstName, firstNameKana, lastNameKana, lastName *string,
 	createdAt, updatedAt, deletedAt string,
 ) (User, error) {
 	ct, err := parseTime(createdAt)
@@ -209,7 +172,7 @@ func NewFromStringTimes(
 	if err != nil {
 		return User{}, fmt.Errorf("%w: %v", ErrInvalidDeletedAt, err)
 	}
-	return New(id, firstName, firstNameKana, lastNameKana, lastName, email, phone, ct, ut, dt)
+	return New(id, firstName, firstNameKana, lastNameKana, lastName, ct, ut, dt)
 }
 
 // Helpers
@@ -223,16 +186,6 @@ func normalizePtr(p *string) *string {
 		return nil
 	}
 	return &s
-}
-
-func emailValid(e string) bool {
-	// net/mail is permissive but good enough for domain validation
-	_, err := mail.ParseAddress(e)
-	return err == nil
-}
-
-func phoneValid(p string) bool {
-	return e164Re.MatchString(p) || localTel.MatchString(p)
 }
 
 func parseTime(s string) (time.Time, error) {

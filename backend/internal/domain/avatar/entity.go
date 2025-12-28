@@ -1,4 +1,4 @@
-// backend\internal\domain\avatar\entity.go
+// backend/internal/domain/avatar/entity.go
 package avatar
 
 import (
@@ -14,37 +14,51 @@ import (
 )
 
 // Avatar - ドメインエンティティ
-// web 側の Avatar に準拠しつつ、avatarState は別ドメインのエンティティ型を参照します。
+//
+// ✅ avatar_create.dart の入力を正として:
+// - アバターアイコン画像 → AvatarIconURL / AvatarIconPath（保存先/URL）
+// - アバター名           → AvatarName
+// - プロフィール         → Profile
+// - 外部リンク           → ExternalLink
+//
+// それ以外（AvatarState / WalletAddress / timestamps / deleted）はシステム側で管理され得るため保持します。
 type Avatar struct {
-	ID            string                  `json:"id"`
-	UserID        string                  `json:"userId"`
-	AvatarName    string                  `json:"avatarName"`
-	AvatarIconID  *string                 `json:"avatarIconId,omitempty"`
-	AvatarState   avatarstate.AvatarState `json:"avatarState"`             // avatarState パッケージの型を使用
-	WalletAddress *string                 `json:"walletAddress,omitempty"` // wallet ドメインへの外部キー
-	Bio           *string                 `json:"bio,omitempty"`
-	Website       *string                 `json:"website,omitempty"`
-	CreatedAt     time.Time               `json:"createdAt"`
-	UpdatedAt     time.Time               `json:"updatedAt"`
-	DeletedAt     *time.Time              `json:"deletedAt,omitempty"` // null 許容
+	ID             string                  `json:"id"`
+	UserID         string                  `json:"userId"`
+	AvatarName     string                  `json:"avatarName"`
+	AvatarIconURL  *string                 `json:"avatarIconUrl,omitempty"`  // 表示用URL（例: GCS署名付き/公開URL）
+	AvatarIconPath *string                 `json:"avatarIconPath,omitempty"` // 保存パス（例: gs://bucket/path or avatars/...）
+	AvatarState    avatarstate.AvatarState `json:"avatarState"`              // avatarState パッケージの型を使用
+	WalletAddress  *string                 `json:"walletAddress,omitempty"`  // wallet ドメインへの外部キー（UIに表示しない前提）
+	Profile        *string                 `json:"profile,omitempty"`
+	ExternalLink   *string                 `json:"externalLink,omitempty"`
+	CreatedAt      time.Time               `json:"createdAt"`
+	UpdatedAt      time.Time               `json:"updatedAt"`
+	DeletedAt      *time.Time              `json:"deletedAt,omitempty"` // null 許容
 }
 
 // Policy
 var (
-	MaxAvatarNameLength = 50
-	MaxBioLength        = 1000
+	MaxAvatarNameLength   = 50
+	MaxProfileLength      = 1000
+	MaxExternalLinkLength = 2048
+	MaxIconURLLength      = 2048
+	MaxIconPathLength     = 2048
 )
 
 // Errors
 var (
-	ErrInvalidID         = errors.New("avatar: invalid id")
-	ErrInvalidUserID     = errors.New("avatar: invalid userId")
-	ErrInvalidAvatarName = errors.New("avatar: invalid avatarName")
-	ErrInvalidBio        = errors.New("avatar: invalid bio")
-	ErrInvalidWebsite    = errors.New("avatar: invalid website")
-	ErrInvalidCreatedAt  = errors.New("avatar: invalid createdAt")
-	ErrInvalidUpdatedAt  = errors.New("avatar: invalid updatedAt")
-	ErrInvalidDeletedAt  = errors.New("avatar: invalid deletedAt")
+	ErrInvalidID           = errors.New("avatar: invalid id")
+	ErrInvalidUserID       = errors.New("avatar: invalid userId")
+	ErrInvalidAvatarName   = errors.New("avatar: invalid avatarName")
+	ErrInvalidProfile      = errors.New("avatar: invalid profile")
+	ErrInvalidExternalLink = errors.New("avatar: invalid externalLink")
+	ErrInvalidIconURL      = errors.New("avatar: invalid avatarIconUrl")
+	ErrInvalidIconPath     = errors.New("avatar: invalid avatarIconPath")
+	ErrInvalidCreatedAt    = errors.New("avatar: invalid createdAt")
+	ErrInvalidUpdatedAt    = errors.New("avatar: invalid updatedAt")
+	ErrInvalidDeletedAt    = errors.New("avatar: invalid deletedAt")
+
 	// Link errors
 	ErrInvalidWalletAddressLink = errors.New("avatar: invalid walletAddress link")
 )
@@ -55,21 +69,23 @@ var (
 func NewWithState(
 	id, userID, avatarName string,
 	state avatarstate.AvatarState,
-	iconID, walletAddr, bio, website *string,
+	iconURL, iconPath, walletAddr, profile, externalLink *string,
 	createdAt, updatedAt time.Time,
 	deletedAt *time.Time,
 ) (Avatar, error) {
 	a := Avatar{
-		ID:           strings.TrimSpace(id),
-		UserID:       strings.TrimSpace(userID),
-		AvatarName:   strings.TrimSpace(avatarName),
-		AvatarIconID: normalizePtr(iconID),
-		Bio:          normalizePtr(bio),
-		Website:      normalizePtr(website),
-		CreatedAt:    createdAt.UTC(),
-		UpdatedAt:    updatedAt.UTC(),
-		AvatarState:  state,
+		ID:             strings.TrimSpace(id),
+		UserID:         strings.TrimSpace(userID),
+		AvatarName:     strings.TrimSpace(avatarName),
+		AvatarIconURL:  normalizePtr(iconURL),
+		AvatarIconPath: normalizePtr(iconPath),
+		Profile:        normalizePtr(profile),
+		ExternalLink:   normalizePtr(externalLink),
+		CreatedAt:      createdAt.UTC(),
+		UpdatedAt:      updatedAt.UTC(),
+		AvatarState:    state,
 	}
+
 	// walletAddress はオプショナル
 	a.WalletAddress = normalizePtr(walletAddr)
 
@@ -89,14 +105,14 @@ func NewWithState(
 // 既存互換: 旧 New は AvatarState を与えず NewWithState を呼びます（ゼロ値のまま）。
 func New(
 	id, userID, avatarName string,
-	iconID, walletAddr, bio, website *string,
+	iconURL, iconPath, walletAddr, profile, externalLink *string,
 	createdAt, updatedAt time.Time,
 	deletedAt *time.Time,
 ) (Avatar, error) {
 	return NewWithState(
 		id, userID, avatarName,
-		avatarstate.AvatarState{}, // フィールドはゼロ値のまま（必要に応じて後で別ユースケースで設定）
-		iconID, walletAddr, bio, website,
+		avatarstate.AvatarState{},
+		iconURL, iconPath, walletAddr, profile, externalLink,
 		createdAt, updatedAt, deletedAt,
 	)
 }
@@ -106,12 +122,13 @@ func NewForCreateWithState(
 	id string,
 	state avatarstate.AvatarState,
 	input struct {
-		UserID       string
-		AvatarName   string
-		AvatarIconID *string
-		WalletAddr   *string
-		Bio          *string
-		Website      *string
+		UserID         string
+		AvatarName     string
+		AvatarIconURL  *string
+		AvatarIconPath *string
+		WalletAddr     *string
+		Profile        *string
+		ExternalLink   *string
 	},
 	now time.Time,
 ) (Avatar, error) {
@@ -121,10 +138,11 @@ func NewForCreateWithState(
 		input.UserID,
 		input.AvatarName,
 		state,
-		input.AvatarIconID,
+		input.AvatarIconURL,
+		input.AvatarIconPath,
 		input.WalletAddr,
-		input.Bio,
-		input.Website,
+		input.Profile,
+		input.ExternalLink,
 		now,
 		now,
 		nil,
@@ -135,12 +153,13 @@ func NewForCreateWithState(
 func NewForCreate(
 	id string,
 	input struct {
-		UserID       string
-		AvatarName   string
-		AvatarIconID *string
-		WalletAddr   *string
-		Bio          *string
-		Website      *string
+		UserID         string
+		AvatarName     string
+		AvatarIconURL  *string
+		AvatarIconPath *string
+		WalletAddr     *string
+		Profile        *string
+		ExternalLink   *string
 	},
 	now time.Time,
 ) (Avatar, error) {
@@ -151,7 +170,7 @@ func NewForCreate(
 func NewFromStringTimesWithState(
 	id, userID, avatarName string,
 	state avatarstate.AvatarState,
-	iconID, walletAddr, bio, website *string,
+	iconURL, iconPath, walletAddr, profile, externalLink *string,
 	createdAt, updatedAt string,
 	deletedAt *string,
 ) (Avatar, error) {
@@ -173,28 +192,52 @@ func NewFromStringTimesWithState(
 		dtPtr = &dt
 	}
 
-	return NewWithState(id, userID, avatarName, state, iconID, walletAddr, bio, website, ct, ut, dtPtr)
+	return NewWithState(
+		id, userID, avatarName,
+		state,
+		iconURL, iconPath, walletAddr, profile, externalLink,
+		ct, ut, dtPtr,
+	)
 }
 
 // 既存互換: 旧 NewFromStringTimes は AvatarState を与えずゼロ値のまま
 func NewFromStringTimes(
 	id, userID, avatarName string,
-	iconID, walletAddr, bio, website *string,
+	iconURL, iconPath, walletAddr, profile, externalLink *string,
 	createdAt, updatedAt string,
 	deletedAt *string,
 ) (Avatar, error) {
 	return NewFromStringTimesWithState(
 		id, userID, avatarName,
 		avatarstate.AvatarState{},
-		iconID, walletAddr, bio, website,
+		iconURL, iconPath, walletAddr, profile, externalLink,
 		createdAt, updatedAt, deletedAt,
 	)
 }
 
 // Mutators
 
-func (a *Avatar) SetIconID(v *string) error {
-	a.AvatarIconID = normalizePtr(v)
+func (a *Avatar) SetIconURL(v *string) error {
+	v = normalizePtr(v)
+	if v != nil {
+		if len([]rune(*v)) > MaxIconURLLength {
+			return ErrInvalidIconURL
+		}
+		// URLとして妥当であること（http/httpsのみ）
+		if err := validateExternalLink(*v); err != nil {
+			return ErrInvalidIconURL
+		}
+	}
+	a.AvatarIconURL = v
+	return nil
+}
+
+func (a *Avatar) SetIconPath(v *string) error {
+	v = normalizePtr(v)
+	if v != nil && len([]rune(*v)) > MaxIconPathLength {
+		return ErrInvalidIconPath
+	}
+	a.AvatarIconPath = v
 	return nil
 }
 
@@ -203,23 +246,26 @@ func (a *Avatar) SetWalletAddress(v *string) error {
 	return nil
 }
 
-func (a *Avatar) SetBio(v *string) error {
+func (a *Avatar) SetProfile(v *string) error {
 	v = normalizePtr(v)
-	if v != nil && len([]rune(*v)) > MaxBioLength {
-		return ErrInvalidBio
+	if v != nil && len([]rune(*v)) > MaxProfileLength {
+		return ErrInvalidProfile
 	}
-	a.Bio = v
+	a.Profile = v
 	return nil
 }
 
-func (a *Avatar) SetWebsite(v *string) error {
+func (a *Avatar) SetExternalLink(v *string) error {
 	v = normalizePtr(v)
 	if v != nil {
-		if err := validateWebsite(*v); err != nil {
+		if len([]rune(*v)) > MaxExternalLinkLength {
+			return ErrInvalidExternalLink
+		}
+		if err := validateExternalLink(*v); err != nil {
 			return err
 		}
 	}
-	a.Website = v
+	a.ExternalLink = v
 	return nil
 }
 
@@ -307,14 +353,31 @@ func (a Avatar) validate() error {
 	if a.AvatarName == "" || len([]rune(a.AvatarName)) > MaxAvatarNameLength {
 		return ErrInvalidAvatarName
 	}
-	if a.Bio != nil && len([]rune(*a.Bio)) > MaxBioLength {
-		return ErrInvalidBio
+
+	if a.AvatarIconURL != nil {
+		if len([]rune(*a.AvatarIconURL)) > MaxIconURLLength {
+			return ErrInvalidIconURL
+		}
+		if err := validateExternalLink(*a.AvatarIconURL); err != nil {
+			return ErrInvalidIconURL
+		}
 	}
-	if a.Website != nil {
-		if err := validateWebsite(*a.Website); err != nil {
+	if a.AvatarIconPath != nil && len([]rune(*a.AvatarIconPath)) > MaxIconPathLength {
+		return ErrInvalidIconPath
+	}
+
+	if a.Profile != nil && len([]rune(*a.Profile)) > MaxProfileLength {
+		return ErrInvalidProfile
+	}
+	if a.ExternalLink != nil {
+		if len([]rune(*a.ExternalLink)) > MaxExternalLinkLength {
+			return ErrInvalidExternalLink
+		}
+		if err := validateExternalLink(*a.ExternalLink); err != nil {
 			return err
 		}
 	}
+
 	if a.CreatedAt.IsZero() {
 		return ErrInvalidCreatedAt
 	}
@@ -350,21 +413,21 @@ func parseTime(s string) (time.Time, error) {
 	return time.Time{}, fmt.Errorf("cannot parse time: %q", s)
 }
 
-// Website validator
-func validateWebsite(s string) error {
+// External link validator (http/https only)
+func validateExternalLink(s string) error {
 	s = strings.TrimSpace(s)
 	if s == "" {
 		return nil
 	}
 	u, err := url.ParseRequestURI(s)
 	if err != nil {
-		return ErrInvalidWebsite
+		return ErrInvalidExternalLink
 	}
 	if u.Scheme != "http" && u.Scheme != "https" {
-		return ErrInvalidWebsite
+		return ErrInvalidExternalLink
 	}
 	if u.Host == "" {
-		return ErrInvalidWebsite
+		return ErrInvalidExternalLink
 	}
 	return nil
 }

@@ -1,117 +1,114 @@
+// backend/internal/application/usecase/billing_address_usecase.go
 package usecase
 
 import (
-    "context"
-    "strings"
-    "time"
+	"context"
+	"strings"
+	"time"
 
-    baddr "narratives/internal/domain/billingAddress"
+	baddr "narratives/internal/domain/billingAddress"
 )
 
 type BillingAddressUsecase struct {
-    repo baddr.RepositoryPort
-    now  func() time.Time
+	repo baddr.RepositoryPort
+	now  func() time.Time
 }
 
 func NewBillingAddressUsecase(repo baddr.RepositoryPort) *BillingAddressUsecase {
-    return &BillingAddressUsecase{
-        repo: repo,
-        now:  time.Now,
-    }
+	return &BillingAddressUsecase{
+		repo: repo,
+		now:  time.Now,
+	}
 }
 
+// ============================================================
 // Queries
+// ============================================================
 
 func (u *BillingAddressUsecase) GetByID(ctx context.Context, id string) (*baddr.BillingAddress, error) {
-    return u.repo.GetByID(ctx, strings.TrimSpace(id))
+	return u.repo.GetByID(ctx, strings.TrimSpace(id))
 }
 
 func (u *BillingAddressUsecase) GetByUser(ctx context.Context, userID string) ([]baddr.BillingAddress, error) {
-    return u.repo.GetByUser(ctx, strings.TrimSpace(userID))
+	return u.repo.GetByUser(ctx, strings.TrimSpace(userID))
 }
 
+// 互換: entity.go には default 概念がないが、RepositoryPort 互換のため残す
 func (u *BillingAddressUsecase) GetDefaultByUser(ctx context.Context, userID string) (*baddr.BillingAddress, error) {
-    return u.repo.GetDefaultByUser(ctx, strings.TrimSpace(userID))
+	return u.repo.GetDefaultByUser(ctx, strings.TrimSpace(userID))
 }
 
 func (u *BillingAddressUsecase) Count(ctx context.Context, f baddr.Filter) (int, error) {
-    return u.repo.Count(ctx, f)
+	return u.repo.Count(ctx, f)
 }
 
 func (u *BillingAddressUsecase) List(ctx context.Context, f baddr.Filter, s baddr.Sort, p baddr.Page) (baddr.PageResult, error) {
-    return u.repo.List(ctx, f, s, p)
+	return u.repo.List(ctx, f, s, p)
 }
 
+// ============================================================
 // Commands
+// ============================================================
 
 func (u *BillingAddressUsecase) Create(ctx context.Context, in baddr.CreateBillingAddressInput) (*baddr.BillingAddress, error) {
-    now := u.now().UTC()
+	now := u.now().UTC()
 
-    // Defaults
-    if in.CreatedAt == nil || in.CreatedAt.IsZero() {
-        t := now
-        in.CreatedAt = &t
-    }
-    if in.UpdatedAt == nil || in.UpdatedAt.IsZero() {
-        t := now
-        in.UpdatedAt = &t
-    }
+	// Defaults
+	if in.CreatedAt == nil || in.CreatedAt.IsZero() {
+		t := now
+		in.CreatedAt = &t
+	}
+	if in.UpdatedAt == nil || in.UpdatedAt.IsZero() {
+		t := now
+		in.UpdatedAt = &t
+	}
 
-    // Normalize string pointers (trim spaces)
-    in.UserID = strings.TrimSpace(in.UserID)
-    in.BillingType = strings.TrimSpace(in.BillingType)
-    in.NameOnAccount = trimPtr(in.NameOnAccount)
-    in.CardBrand = trimPtr(in.CardBrand)
-    in.CardLast4 = trimPtr(in.CardLast4)
-    in.CardToken = trimPtr(in.CardToken)
-    in.State = trimPtr(in.State)
-    in.City = trimPtr(in.City)
-    in.Street = trimPtr(in.Street)
-    in.Country = trimPtr(in.Country)
+	// Normalize (entity.go 準拠)
+	in.UserID = strings.TrimSpace(in.UserID)
+	in.CardNumber = strings.TrimSpace(in.CardNumber)
+	in.CardholderName = strings.TrimSpace(in.CardholderName)
+	in.CVC = strings.TrimSpace(in.CVC)
 
-    return u.repo.Create(ctx, in)
+	return u.repo.Create(ctx, in)
 }
 
 func (u *BillingAddressUsecase) Update(ctx context.Context, id string, in baddr.UpdateBillingAddressInput) (*baddr.BillingAddress, error) {
-    now := u.now().UTC()
+	now := u.now().UTC()
 
-    // Normalize
-    id = strings.TrimSpace(id)
-    in.BillingType = trimPtr(in.BillingType)
-    in.NameOnAccount = trimPtr(in.NameOnAccount)
-    in.CardBrand = trimPtr(in.CardBrand)
-    in.CardLast4 = trimPtr(in.CardLast4)
-    in.CardToken = trimPtr(in.CardToken)
-    in.State = trimPtr(in.State)
-    in.City = trimPtr(in.City)
-    in.Street = trimPtr(in.Street)
-    in.Country = trimPtr(in.Country)
+	// Normalize
+	id = strings.TrimSpace(id)
+	in.CardNumber = trimPtr(in.CardNumber)
+	in.CardholderName = trimPtr(in.CardholderName)
+	in.CVC = trimPtr(in.CVC)
 
-    // UpdatedAt default
-    if in.UpdatedAt == nil || in.UpdatedAt.IsZero() {
-        t := now
-        in.UpdatedAt = &t
-    }
+	// UpdatedAt default
+	if in.UpdatedAt == nil || in.UpdatedAt.IsZero() {
+		t := now
+		in.UpdatedAt = &t
+	}
 
-    return u.repo.Update(ctx, id, in)
+	return u.repo.Update(ctx, id, in)
 }
 
 func (u *BillingAddressUsecase) Delete(ctx context.Context, id string) error {
-    return u.repo.Delete(ctx, strings.TrimSpace(id))
+	return u.repo.Delete(ctx, strings.TrimSpace(id))
 }
 
+// 互換: entity.go には default 概念がないが、RepositoryPort 互換のため残す
 func (u *BillingAddressUsecase) SetDefault(ctx context.Context, id string) error {
-    return u.repo.SetDefault(ctx, strings.TrimSpace(id))
+	return u.repo.SetDefault(ctx, strings.TrimSpace(id))
 }
 
+// ============================================================
 // Utilities (dev/testing)
+// ============================================================
 
 func (u *BillingAddressUsecase) WithTx(ctx context.Context, fn func(ctx context.Context) error) error {
-    return u.repo.WithTx(ctx, fn)
+	return u.repo.WithTx(ctx, fn)
 }
 
 func (u *BillingAddressUsecase) Reset(ctx context.Context) error {
-    return u.repo.Reset(ctx)
+	return u.repo.Reset(ctx)
 }
 
 // Helpers は common_usecase.go に移動しました（trimPtr を使用してください）.

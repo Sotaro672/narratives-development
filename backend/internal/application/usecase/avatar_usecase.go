@@ -11,9 +11,12 @@ import (
 	avatarstate "narratives/internal/domain/avatarState"
 )
 
+// AvatarRepo は Avatar 本体の永続化ポートです。
+// Firestore 実装（avatar_repository_fs.go）が Create/Update/Delete を提供する前提で揃えます。
 type AvatarRepo interface {
 	GetByID(ctx context.Context, id string) (avatardom.Avatar, error)
-	// Update は内製Repoの署名と乖離があるため未使用。必要時にパッチ方式へ拡張してください。
+	Create(ctx context.Context, a avatardom.Avatar) (avatardom.Avatar, error)
+	Update(ctx context.Context, id string, patch avatardom.AvatarPatch) (avatardom.Avatar, error)
 	Delete(ctx context.Context, id string) error
 }
 
@@ -66,10 +69,14 @@ func (u *AvatarUsecase) WithNow(now func() time.Time) *AvatarUsecase {
 // =======================
 // Queries
 // =======================
+
 func (u *AvatarUsecase) GetByID(ctx context.Context, id string) (avatardom.Avatar, error) {
 	id = strings.TrimSpace(id)
 	if id == "" {
-		return avatardom.Avatar{}, errors.New("avatar: invalid id")
+		return avatardom.Avatar{}, avatardom.ErrInvalidID
+	}
+	if u.avRepo == nil {
+		return avatardom.Avatar{}, errors.New("avatar repo not configured")
 	}
 	return u.avRepo.GetByID(ctx, id)
 }
@@ -85,24 +92,112 @@ func (u *AvatarUsecase) GetAggregate(ctx context.Context, id string) (AvatarAggr
 	if err != nil {
 		return AvatarAggregate{}, err
 	}
+
 	var stPtr *avatarstate.AvatarState
 	if u.stRepo != nil {
-		if st, err := u.stRepo.GetByAvatarID(ctx, id); err == nil && st.AvatarID != "" {
+		if st, err := u.stRepo.GetByAvatarID(ctx, id); err == nil && strings.TrimSpace(st.AvatarID) != "" {
 			tmp := st
 			stPtr = &tmp
 		}
 	}
+
 	var icons []avataricon.AvatarIcon
 	if u.icRepo != nil {
 		if list, err := u.icRepo.GetByAvatarID(ctx, id); err == nil {
 			icons = list
 		}
 	}
+
 	return AvatarAggregate{Avatar: a, State: stPtr, Icons: icons}, nil
 }
 
 // =======================
-// Commands
+// Commands (Avatar CRUD for handler)
+// =======================
+
+// CreateAvatarInput は avatar_create.dart の入力を正とした作成入力です。
+// ※ アイコンは「画像そのもの」ではなく、アップロード後の URL / パスを受け取る想定です。
+type CreateAvatarInput struct {
+	UserID         string  `json:"userId"`
+	AvatarName     string  `json:"avatarName"`
+	AvatarIconURL  *string `json:"avatarIconUrl,omitempty"`
+	AvatarIconPath *string `json:"avatarIconPath,omitempty"`
+	Profile        *string `json:"profile,omitempty"`
+	ExternalLink   *string `json:"externalLink,omitempty"`
+}
+
+// Create は /avatars POST 用の作成コマンドです。
+func (u *AvatarUsecase) Create(ctx context.Context, in CreateAvatarInput) (avatardom.Avatar, error) {
+	if u.avRepo == nil {
+		return avatardom.Avatar{}, errors.New("avatar repo not configured")
+	}
+
+	userID := strings.TrimSpace(in.UserID)
+	if userID == "" {
+		return avatardom.Avatar{}, avatardom.ErrInvalidUserID
+	}
+	name := strings.TrimSpace(in.AvatarName)
+	if name == "" {
+		return avatardom.Avatar{}, avatardom.ErrInvalidAvatarName
+	}
+
+	now := u.now().UTC()
+
+	// entity.go のフィールド（avatar_create.dart 入力）に合わせる
+	a := avatardom.Avatar{
+		// ID は実装側で採番可（空で渡す）
+		UserID:         userID,
+		AvatarName:     name,
+		AvatarIconURL:  trimPtr(in.AvatarIconURL),
+		AvatarIconPath: trimPtr(in.AvatarIconPath),
+		Profile:        trimPtr(in.Profile),
+		ExternalLink:   trimPtr(in.ExternalLink),
+		CreatedAt:      now,
+		UpdatedAt:      now,
+	}
+
+	return u.avRepo.Create(ctx, a)
+}
+
+// Update は /avatars/{id} PATCH/PUT 用の部分更新コマンドです。
+func (u *AvatarUsecase) Update(ctx context.Context, id string, patch avatardom.AvatarPatch) (avatardom.Avatar, error) {
+	if u.avRepo == nil {
+		return avatardom.Avatar{}, errors.New("avatar repo not configured")
+	}
+
+	id = strings.TrimSpace(id)
+	if id == "" {
+		return avatardom.Avatar{}, avatardom.ErrInvalidID
+	}
+
+	// 正規化（nil は「更新しない」契約）
+	if patch.AvatarName != nil {
+		v := strings.TrimSpace(*patch.AvatarName)
+		patch.AvatarName = &v
+	}
+	if patch.AvatarIconURL != nil {
+		patch.AvatarIconURL = trimPtr(patch.AvatarIconURL)
+	}
+	if patch.AvatarIconPath != nil {
+		patch.AvatarIconPath = trimPtr(patch.AvatarIconPath)
+	}
+	if patch.Profile != nil {
+		patch.Profile = trimPtr(patch.Profile)
+	}
+	if patch.ExternalLink != nil {
+		patch.ExternalLink = trimPtr(patch.ExternalLink)
+	}
+
+	return u.avRepo.Update(ctx, id, patch)
+}
+
+// Delete は /avatars/{id} DELETE 用です（既存の cascade delete を利用）。
+func (u *AvatarUsecase) Delete(ctx context.Context, avatarID string) error {
+	return u.DeleteAvatarCascade(ctx, avatarID)
+}
+
+// =======================
+// Commands (existing)
 // =======================
 
 type ReplaceIconInput struct {
@@ -115,8 +210,9 @@ type ReplaceIconInput struct {
 func (u *AvatarUsecase) ReplaceAvatarIcon(ctx context.Context, avatarID string, in ReplaceIconInput) (avataricon.AvatarIcon, error) {
 	avatarID = strings.TrimSpace(avatarID)
 	if avatarID == "" {
-		return avataricon.AvatarIcon{}, errors.New("avatar: invalid id")
+		return avataricon.AvatarIcon{}, avatardom.ErrInvalidID
 	}
+
 	var oldIcons []avataricon.AvatarIcon
 	if u.icRepo != nil {
 		if list, err := u.icRepo.GetByAvatarID(ctx, avatarID); err == nil {
@@ -164,7 +260,7 @@ func (u *AvatarUsecase) ReplaceAvatarIcon(ctx context.Context, avatarID string, 
 func (u *AvatarUsecase) TouchLastActive(ctx context.Context, avatarID string) (avatarstate.AvatarState, error) {
 	avatarID = strings.TrimSpace(avatarID)
 	if avatarID == "" {
-		return avatarstate.AvatarState{}, errors.New("avatar: invalid id")
+		return avatarstate.AvatarState{}, avatardom.ErrInvalidID
 	}
 	if u.stRepo == nil {
 		return avatarstate.AvatarState{}, errors.New("avatarState repo not configured")
@@ -181,7 +277,7 @@ func (u *AvatarUsecase) TouchLastActive(ctx context.Context, avatarID string) (a
 func (u *AvatarUsecase) DeleteAvatarCascade(ctx context.Context, avatarID string) error {
 	avatarID = strings.TrimSpace(avatarID)
 	if avatarID == "" {
-		return errors.New("avatar: invalid id")
+		return avatardom.ErrInvalidID
 	}
 
 	// icons: best-effort GCS delete（メタデータ削除はRepo機能がない場合スキップ）
@@ -205,7 +301,6 @@ func (u *AvatarUsecase) DeleteAvatarCascade(ctx context.Context, avatarID string
 	return u.avRepo.Delete(ctx, avatarID)
 }
 
-// --- helpers ---
 func toGCSDeleteOp(ic avataricon.AvatarIcon) avataricon.GCSDeleteOp {
 	if b, obj, ok := avataricon.ParseGCSURL(ic.URL); ok {
 		return avataricon.GCSDeleteOp{Bucket: b, ObjectPath: obj}

@@ -1,4 +1,3 @@
-// backend\internal\domain\shippingAddress\entity.go
 package shippingAddress
 
 import (
@@ -8,25 +7,34 @@ import (
 	"time"
 )
 
-// ShippingAddress エンティティ（TSの ShippingAddressSchema に準拠）
+// ShippingAddress エンティティ（SNSアプリの配送先入力欄に準拠）
+//
+// frontend/sns/lib/features/auth/presentation/page/shipping_address.dart
+// - 郵便番号: zipCode
+// - 都道府県: state
+// - 市区町村: city
+// - 住所１（番地など）: street
+// - 住所２（建物名・部屋番号など）: street2（任意）
 type ShippingAddress struct {
-	ID        string    `json:"id"`
-	UserID    string    `json:"userId"`
-	Street    string    `json:"street"`
-	City      string    `json:"city"`
-	State     string    `json:"state"`
-	ZipCode   string    `json:"zipCode"`
-	Country   string    `json:"country"`
+	ID      string `json:"id"`
+	UserID  string `json:"userId"`
+	ZipCode string `json:"zipCode"` // 郵便番号
+	State   string `json:"state"`   // 都道府県
+	City    string `json:"city"`    // 市区町村
+	Street  string `json:"street"`  // 住所１（番地など）
+	Street2 string `json:"street2"` // 住所２（建物名・部屋番号など）任意
+	Country string `json:"country"` // 国（UI入力が無い場合は実装側で "JP"/"日本" を入れる想定）
+
 	CreatedAt time.Time `json:"createdAt"`
 	UpdatedAt time.Time `json:"updatedAt"`
 }
 
-// Errors: moved to error.go
-// Errors (moved from entity.go)
+// Errors
 var (
 	ErrInvalidID        = errors.New("shippingAddress: invalid id")
 	ErrInvalidUserID    = errors.New("shippingAddress: invalid userId")
 	ErrInvalidStreet    = errors.New("shippingAddress: invalid street")
+	ErrInvalidStreet2   = errors.New("shippingAddress: invalid street2")
 	ErrInvalidCity      = errors.New("shippingAddress: invalid city")
 	ErrInvalidState     = errors.New("shippingAddress: invalid state")
 	ErrInvalidZipCode   = errors.New("shippingAddress: invalid zipCode")
@@ -35,29 +43,37 @@ var (
 	ErrInvalidUpdatedAt = errors.New("shippingAddress: invalid updatedAt")
 )
 
-// Validation (moved from entity.go)
+// Validation
 func (a ShippingAddress) validate() error {
-	if a.ID == "" {
+	if strings.TrimSpace(a.ID) == "" {
 		return ErrInvalidID
 	}
-	if a.UserID == "" {
+	if strings.TrimSpace(a.UserID) == "" {
 		return ErrInvalidUserID
 	}
-	if a.Street == "" {
-		return ErrInvalidStreet
-	}
-	if a.City == "" {
-		return ErrInvalidCity
-	}
-	if a.State == "" {
-		return ErrInvalidState
-	}
-	if a.ZipCode == "" {
+
+	if strings.TrimSpace(a.ZipCode) == "" {
 		return ErrInvalidZipCode
 	}
-	if a.Country == "" {
+	if strings.TrimSpace(a.State) == "" {
+		return ErrInvalidState
+	}
+	if strings.TrimSpace(a.City) == "" {
+		return ErrInvalidCity
+	}
+	if strings.TrimSpace(a.Street) == "" {
+		return ErrInvalidStreet
+	}
+
+	// Street2 は任意（ただし値が入るなら trim して空は不可扱いにする）
+	if a.Street2 != "" && strings.TrimSpace(a.Street2) == "" {
+		return ErrInvalidStreet2
+	}
+
+	if strings.TrimSpace(a.Country) == "" {
 		return ErrInvalidCountry
 	}
+
 	if a.CreatedAt.IsZero() {
 		return ErrInvalidCreatedAt
 	}
@@ -67,36 +83,49 @@ func (a ShippingAddress) validate() error {
 	return nil
 }
 
-// Behavior (moved from entity.go)
-
-func (a *ShippingAddress) UpdateLines(street, city, state, zip, country string, now time.Time) error {
-	street = strings.TrimSpace(street)
-	city = strings.TrimSpace(city)
+// Behavior
+//
+// フロントの入力欄に対応する更新メソッド
+func (a *ShippingAddress) UpdateFromForm(
+	zipCode, state, city, street, street2, country string,
+	now time.Time,
+) error {
+	zipCode = strings.TrimSpace(zipCode)
 	state = strings.TrimSpace(state)
-	zip = strings.TrimSpace(zip)
+	city = strings.TrimSpace(city)
+	street = strings.TrimSpace(street)
+	street2 = strings.TrimSpace(street2)
 	country = strings.TrimSpace(country)
 
-	if street == "" {
-		return ErrInvalidStreet
-	}
-	if city == "" {
-		return ErrInvalidCity
+	if zipCode == "" {
+		return ErrInvalidZipCode
 	}
 	if state == "" {
 		return ErrInvalidState
 	}
-	if zip == "" {
-		return ErrInvalidZipCode
+	if city == "" {
+		return ErrInvalidCity
 	}
+	if street == "" {
+		return ErrInvalidStreet
+	}
+	// street2 は任意
+	// country は必須（UI入力が無い場合は呼び出し側で "JP"/"日本" を入れる）
 	if country == "" {
 		return ErrInvalidCountry
 	}
-	a.Street, a.City, a.State, a.ZipCode, a.Country = street, city, state, zip, country
+
+	a.ZipCode = zipCode
+	a.State = state
+	a.City = city
+	a.Street = street
+	a.Street2 = street2
+	a.Country = country
+
 	return a.touch(now)
 }
 
-// Helpers (moved from entity.go)
-
+// Helpers
 func (a *ShippingAddress) touch(now time.Time) error {
 	if now.IsZero() {
 		return ErrInvalidUpdatedAt
@@ -106,19 +135,19 @@ func (a *ShippingAddress) touch(now time.Time) error {
 }
 
 // Constructors
-
 func New(
 	id, userID string,
-	street, city, state, zip, country string,
+	zipCode, state, city, street, street2, country string,
 	createdAt, updatedAt time.Time,
 ) (ShippingAddress, error) {
 	a := ShippingAddress{
 		ID:        strings.TrimSpace(id),
 		UserID:    strings.TrimSpace(userID),
-		Street:    strings.TrimSpace(street),
-		City:      strings.TrimSpace(city),
+		ZipCode:   strings.TrimSpace(zipCode),
 		State:     strings.TrimSpace(state),
-		ZipCode:   strings.TrimSpace(zip),
+		City:      strings.TrimSpace(city),
+		Street:    strings.TrimSpace(street),
+		Street2:   strings.TrimSpace(street2),
 		Country:   strings.TrimSpace(country),
 		CreatedAt: createdAt.UTC(),
 		UpdatedAt: updatedAt.UTC(),
@@ -131,17 +160,17 @@ func New(
 
 func NewWithNow(
 	id, userID string,
-	street, city, state, zip, country string,
+	zipCode, state, city, street, street2, country string,
 	now time.Time,
 ) (ShippingAddress, error) {
 	now = now.UTC()
-	return New(id, userID, street, city, state, zip, country, now, now)
+	return New(id, userID, zipCode, state, city, street, street2, country, now, now)
 }
 
 // From DTO-like strings (createdAt/updatedAt as RFC3339)
 func NewFromStringTimes(
 	id, userID string,
-	street, city, state, zip, country string,
+	zipCode, state, city, street, street2, country string,
 	createdAt, updatedAt string,
 ) (ShippingAddress, error) {
 	ct, err := parseTime(createdAt)
@@ -152,11 +181,9 @@ func NewFromStringTimes(
 	if err != nil {
 		return ShippingAddress{}, fmt.Errorf("%w: %v", ErrInvalidUpdatedAt, err)
 	}
-	return New(id, userID, street, city, state, zip, country, ct, ut)
+	return New(id, userID, zipCode, state, city, street, street2, country, ct, ut)
 }
 
-// Helpers
-// touch moved to error.go
 // parseTime is kept here for constructors that parse timestamps.
 func parseTime(s string) (time.Time, error) {
 	s = strings.TrimSpace(s)

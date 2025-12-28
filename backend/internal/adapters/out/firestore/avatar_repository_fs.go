@@ -34,8 +34,9 @@ func (r *AvatarRepositoryFS) col() *firestore.CollectionRef {
 var _ avdom.Repository = (*AvatarRepositoryFS)(nil)
 
 var (
-	errNotFound = errors.New("avatar: not found")
-	errConflict = errors.New("avatar: conflict")
+	errNotFound  = errors.New("avatar: not found")
+	errConflict  = errors.New("avatar: conflict")
+	errBadClient = errors.New("firestore client is nil")
 )
 
 // ==============================
@@ -96,7 +97,7 @@ func (r *AvatarRepositoryFS) List(
 		items = append(items, a)
 	}
 
-	// NOTE: 厳密な TotalCount を取るには別クエリ or 集計が必要。
+	// NOTE: Firestore で厳密な TotalCount を取るには別クエリ/集計が必要。
 	totalCount := len(items)
 
 	return common.PageResult[avdom.Avatar]{
@@ -332,30 +333,44 @@ func (r *AvatarRepositoryFS) Update(ctx context.Context, id string, patch avdom.
 			Value: strings.TrimSpace(*patch.AvatarName),
 		})
 	}
-	if patch.AvatarIconID != nil {
+
+	// ✅ entity.go 正: AvatarIconID -> AvatarIconURL / AvatarIconPath
+	if patch.AvatarIconURL != nil {
 		updates = append(updates, firestore.Update{
-			Path:  "avatarIconId",
-			Value: optionalString(*patch.AvatarIconID),
+			Path:  "avatarIconUrl",
+			Value: optionalString(*patch.AvatarIconURL),
 		})
 	}
+	if patch.AvatarIconPath != nil {
+		updates = append(updates, firestore.Update{
+			Path:  "avatarIconPath",
+			Value: optionalString(*patch.AvatarIconPath),
+		})
+	}
+
 	if patch.WalletAddress != nil {
 		updates = append(updates, firestore.Update{
 			Path:  "walletAddress",
 			Value: optionalString(*patch.WalletAddress),
 		})
 	}
-	if patch.Bio != nil {
+
+	// ✅ entity.go 正: Bio -> Profile
+	if patch.Profile != nil {
 		updates = append(updates, firestore.Update{
-			Path:  "bio",
-			Value: optionalString(*patch.Bio),
+			Path:  "profile",
+			Value: optionalString(*patch.Profile),
 		})
 	}
-	if patch.Website != nil {
+
+	// ✅ entity.go 正: Website -> ExternalLink
+	if patch.ExternalLink != nil {
 		updates = append(updates, firestore.Update{
-			Path:  "website",
-			Value: optionalString(*patch.Website),
+			Path:  "externalLink",
+			Value: optionalString(*patch.ExternalLink),
 		})
 	}
+
 	if patch.DeletedAt != nil {
 		if patch.DeletedAt.IsZero() {
 			updates = append(updates, firestore.Update{
@@ -484,24 +499,39 @@ func (r *AvatarRepositoryFS) Search(ctx context.Context, query string) ([]avdom.
 		if err != nil {
 			return nil, err
 		}
+
 		name := strings.ToLower(strings.TrimSpace(a.AvatarName))
+
 		wallet := ""
 		if a.WalletAddress != nil {
 			wallet = strings.ToLower(strings.TrimSpace(*a.WalletAddress))
 		}
-		bio := ""
-		if a.Bio != nil {
-			bio = strings.ToLower(strings.TrimSpace(*a.Bio))
+
+		profile := ""
+		if a.Profile != nil {
+			profile = strings.ToLower(strings.TrimSpace(*a.Profile))
 		}
-		website := ""
-		if a.Website != nil {
-			website = strings.ToLower(strings.TrimSpace(*a.Website))
+
+		link := ""
+		if a.ExternalLink != nil {
+			link = strings.ToLower(strings.TrimSpace(*a.ExternalLink))
+		}
+
+		iconURL := ""
+		if a.AvatarIconURL != nil {
+			iconURL = strings.ToLower(strings.TrimSpace(*a.AvatarIconURL))
+		}
+		iconPath := ""
+		if a.AvatarIconPath != nil {
+			iconPath = strings.ToLower(strings.TrimSpace(*a.AvatarIconPath))
 		}
 
 		if strings.Contains(name, lowerQ) ||
 			strings.Contains(wallet, lowerQ) ||
-			strings.Contains(bio, lowerQ) ||
-			strings.Contains(website, lowerQ) {
+			strings.Contains(profile, lowerQ) ||
+			strings.Contains(link, lowerQ) ||
+			strings.Contains(iconURL, lowerQ) ||
+			strings.Contains(iconPath, lowerQ) {
 			list = append(list, a)
 		}
 	}
@@ -546,7 +576,7 @@ func (r *AvatarRepositoryFS) ListTopByFollowers(ctx context.Context, limit int) 
 
 func (r *AvatarRepositoryFS) Reset(ctx context.Context) error {
 	if r.Client == nil {
-		return errors.New("firestore client is nil")
+		return errBadClient
 	}
 
 	// まず全ドキュメントIDを取得
@@ -607,15 +637,16 @@ func (r *AvatarRepositoryFS) Reset(ctx context.Context) error {
 
 func (r *AvatarRepositoryFS) docToDomain(doc *firestore.DocumentSnapshot) (avdom.Avatar, error) {
 	var raw struct {
-		UserID        string     `firestore:"userId"`
-		AvatarName    string     `firestore:"avatarName"`
-		AvatarIconID  *string    `firestore:"avatarIconId"`
-		WalletAddress *string    `firestore:"walletAddress"`
-		Bio           *string    `firestore:"bio"`
-		Website       *string    `firestore:"website"`
-		CreatedAt     time.Time  `firestore:"createdAt"`
-		UpdatedAt     time.Time  `firestore:"updatedAt"`
-		DeletedAt     *time.Time `firestore:"deletedAt"`
+		UserID         string     `firestore:"userId"`
+		AvatarName     string     `firestore:"avatarName"`
+		AvatarIconURL  *string    `firestore:"avatarIconUrl"`
+		AvatarIconPath *string    `firestore:"avatarIconPath"`
+		WalletAddress  *string    `firestore:"walletAddress"`
+		Profile        *string    `firestore:"profile"`
+		ExternalLink   *string    `firestore:"externalLink"`
+		CreatedAt      time.Time  `firestore:"createdAt"`
+		UpdatedAt      time.Time  `firestore:"updatedAt"`
+		DeletedAt      *time.Time `firestore:"deletedAt"`
 	}
 
 	if err := doc.DataTo(&raw); err != nil {
@@ -630,21 +661,25 @@ func (r *AvatarRepositoryFS) docToDomain(doc *firestore.DocumentSnapshot) (avdom
 		UpdatedAt:  raw.UpdatedAt.UTC(),
 	}
 
-	if raw.AvatarIconID != nil && strings.TrimSpace(*raw.AvatarIconID) != "" {
-		v := strings.TrimSpace(*raw.AvatarIconID)
-		a.AvatarIconID = &v
+	if raw.AvatarIconURL != nil && strings.TrimSpace(*raw.AvatarIconURL) != "" {
+		v := strings.TrimSpace(*raw.AvatarIconURL)
+		a.AvatarIconURL = &v
+	}
+	if raw.AvatarIconPath != nil && strings.TrimSpace(*raw.AvatarIconPath) != "" {
+		v := strings.TrimSpace(*raw.AvatarIconPath)
+		a.AvatarIconPath = &v
 	}
 	if raw.WalletAddress != nil && strings.TrimSpace(*raw.WalletAddress) != "" {
 		v := strings.TrimSpace(*raw.WalletAddress)
 		a.WalletAddress = &v
 	}
-	if raw.Bio != nil && strings.TrimSpace(*raw.Bio) != "" {
-		v := strings.TrimSpace(*raw.Bio)
-		a.Bio = &v
+	if raw.Profile != nil && strings.TrimSpace(*raw.Profile) != "" {
+		v := strings.TrimSpace(*raw.Profile)
+		a.Profile = &v
 	}
-	if raw.Website != nil && strings.TrimSpace(*raw.Website) != "" {
-		v := strings.TrimSpace(*raw.Website)
-		a.Website = &v
+	if raw.ExternalLink != nil && strings.TrimSpace(*raw.ExternalLink) != "" {
+		v := strings.TrimSpace(*raw.ExternalLink)
+		a.ExternalLink = &v
 	}
 	if raw.DeletedAt != nil && !raw.DeletedAt.IsZero() {
 		t := raw.DeletedAt.UTC()
@@ -662,17 +697,20 @@ func (r *AvatarRepositoryFS) domainToDocData(a avdom.Avatar) map[string]any {
 		"updatedAt":  a.UpdatedAt.UTC(),
 	}
 
-	if a.AvatarIconID != nil && strings.TrimSpace(*a.AvatarIconID) != "" {
-		data["avatarIconId"] = strings.TrimSpace(*a.AvatarIconID)
+	if a.AvatarIconURL != nil && strings.TrimSpace(*a.AvatarIconURL) != "" {
+		data["avatarIconUrl"] = strings.TrimSpace(*a.AvatarIconURL)
+	}
+	if a.AvatarIconPath != nil && strings.TrimSpace(*a.AvatarIconPath) != "" {
+		data["avatarIconPath"] = strings.TrimSpace(*a.AvatarIconPath)
 	}
 	if a.WalletAddress != nil && strings.TrimSpace(*a.WalletAddress) != "" {
 		data["walletAddress"] = strings.TrimSpace(*a.WalletAddress)
 	}
-	if a.Bio != nil && strings.TrimSpace(*a.Bio) != "" {
-		data["bio"] = strings.TrimSpace(*a.Bio)
+	if a.Profile != nil && strings.TrimSpace(*a.Profile) != "" {
+		data["profile"] = strings.TrimSpace(*a.Profile)
 	}
-	if a.Website != nil && strings.TrimSpace(*a.Website) != "" {
-		data["website"] = strings.TrimSpace(*a.Website)
+	if a.ExternalLink != nil && strings.TrimSpace(*a.ExternalLink) != "" {
+		data["externalLink"] = strings.TrimSpace(*a.ExternalLink)
 	}
 	if a.DeletedAt != nil && !a.DeletedAt.IsZero() {
 		data["deletedAt"] = a.DeletedAt.UTC()
@@ -732,30 +770,46 @@ func matchFilterPostLoad(a avdom.Avatar, f avdom.Filter) bool {
 		return false
 	}
 
-	// SearchQuery: id, avatarName, bio, website, walletAddress の部分一致
+	// SearchQuery: id, avatarName, profile, externalLink, walletAddress, avatarIconUrl, avatarIconPath の部分一致
 	sq := strings.TrimSpace(f.SearchQuery)
 	if sq != "" {
 		q := strings.ToLower(sq)
+
 		id := strings.ToLower(strings.TrimSpace(a.ID))
 		name := strings.ToLower(strings.TrimSpace(a.AvatarName))
+
 		wallet := ""
 		if a.WalletAddress != nil {
 			wallet = strings.ToLower(strings.TrimSpace(*a.WalletAddress))
 		}
-		bio := ""
-		if a.Bio != nil {
-			bio = strings.ToLower(strings.TrimSpace(*a.Bio))
+
+		profile := ""
+		if a.Profile != nil {
+			profile = strings.ToLower(strings.TrimSpace(*a.Profile))
 		}
-		website := ""
-		if a.Website != nil {
-			website = strings.ToLower(strings.TrimSpace(*a.Website))
+
+		link := ""
+		if a.ExternalLink != nil {
+			link = strings.ToLower(strings.TrimSpace(*a.ExternalLink))
+		}
+
+		iconURL := ""
+		if a.AvatarIconURL != nil {
+			iconURL = strings.ToLower(strings.TrimSpace(*a.AvatarIconURL))
+		}
+
+		iconPath := ""
+		if a.AvatarIconPath != nil {
+			iconPath = strings.ToLower(strings.TrimSpace(*a.AvatarIconPath))
 		}
 
 		if !strings.Contains(id, q) &&
 			!strings.Contains(name, q) &&
 			!strings.Contains(wallet, q) &&
-			!strings.Contains(bio, q) &&
-			!strings.Contains(website, q) {
+			!strings.Contains(profile, q) &&
+			!strings.Contains(link, q) &&
+			!strings.Contains(iconURL, q) &&
+			!strings.Contains(iconPath, q) {
 			return false
 		}
 	}

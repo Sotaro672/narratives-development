@@ -4,6 +4,7 @@ package firestore
 import (
 	"context"
 	"errors"
+	"sort"
 	"strings"
 	"time"
 
@@ -18,7 +19,6 @@ import (
 
 // ============================================================
 // Firestore-based ShippingAddress Repository
-// (Firestore implementation corresponding to ShippingAddressRepositoryPG)
 // ============================================================
 
 type ShippingAddressRepositoryFS struct {
@@ -30,14 +30,14 @@ func NewShippingAddressRepositoryFS(client *firestore.Client) *ShippingAddressRe
 }
 
 func (r *ShippingAddressRepositoryFS) col() *firestore.CollectionRef {
-	return r.Client.Collection("shipping_addresses")
+	// ✅ 期待値: shippingAddresses コレクション
+	return r.Client.Collection("shippingAddresses")
 }
 
 // ============================================================
-// Facade to satisfy usecase.ShippingAddressRepo
+// Facade (usecase port)
 // ============================================================
 
-// GetByID returns value (not pointer) to match usecase interface.
 func (r *ShippingAddressRepositoryFS) GetByID(ctx context.Context, id string) (shipdom.ShippingAddress, error) {
 	if r.Client == nil {
 		return shipdom.ShippingAddress{}, errors.New("firestore client is nil")
@@ -59,7 +59,6 @@ func (r *ShippingAddressRepositoryFS) GetByID(ctx context.Context, id string) (s
 	return docToShippingAddress(snap)
 }
 
-// Exists checks if an address with given ID exists.
 func (r *ShippingAddressRepositoryFS) Exists(ctx context.Context, id string) (bool, error) {
 	if r.Client == nil {
 		return false, errors.New("firestore client is nil")
@@ -80,7 +79,6 @@ func (r *ShippingAddressRepositoryFS) Exists(ctx context.Context, id string) (bo
 	return true, nil
 }
 
-// Create inserts using full domain entity and returns the created document.
 func (r *ShippingAddressRepositoryFS) Create(ctx context.Context, v shipdom.ShippingAddress) (shipdom.ShippingAddress, error) {
 	if r.Client == nil {
 		return shipdom.ShippingAddress{}, errors.New("firestore client is nil")
@@ -105,6 +103,11 @@ func (r *ShippingAddressRepositoryFS) Create(ctx context.Context, v shipdom.Ship
 		v.ID = id
 	}
 
+	// ✅ UI入力が無い場合は実装側でJP
+	if strings.TrimSpace(v.Country) == "" {
+		v.Country = "JP"
+	}
+
 	data := shippingAddressToDocData(v)
 
 	if _, err := ref.Create(ctx, data); err != nil {
@@ -121,10 +124,6 @@ func (r *ShippingAddressRepositoryFS) Create(ctx context.Context, v shipdom.Ship
 	return docToShippingAddress(snap)
 }
 
-// Save provides an upsert-like behavior:
-// - if v.ID == ""           -> Create
-// - if v.ID exists          -> Update
-// - if v.ID doesn't exist   -> Create new with that ID
 func (r *ShippingAddressRepositoryFS) Save(ctx context.Context, v shipdom.ShippingAddress) (shipdom.ShippingAddress, error) {
 	if r.Client == nil {
 		return shipdom.ShippingAddress{}, errors.New("firestore client is nil")
@@ -135,21 +134,21 @@ func (r *ShippingAddressRepositoryFS) Save(ctx context.Context, v shipdom.Shippi
 		return r.Create(ctx, v)
 	}
 
-	exists, err := r.Exists(ctx, id)
-	if err != nil {
-		return shipdom.ShippingAddress{}, err
-	}
-	if !exists {
-		// Create new with given ID
+	ref := r.col().Doc(id)
+
+	snap, err := ref.Get(ctx)
+	if status.Code(err) == codes.NotFound {
 		now := time.Now().UTC()
 		if v.CreatedAt.IsZero() {
 			v.CreatedAt = now
 		}
 		if v.UpdatedAt.IsZero() {
-			v.UpdatedAt = now
+			v.UpdatedAt = v.CreatedAt
 		}
-		ref := r.col().Doc(id)
 		v.ID = id
+		if strings.TrimSpace(v.Country) == "" {
+			v.Country = "JP"
+		}
 		data := shippingAddressToDocData(v)
 		if _, err := ref.Create(ctx, data); err != nil {
 			if status.Code(err) == codes.AlreadyExists {
@@ -163,25 +162,72 @@ func (r *ShippingAddressRepositoryFS) Save(ctx context.Context, v shipdom.Shippi
 		}
 		return docToShippingAddress(snap)
 	}
-
-	// exists -> Update using UpdateShippingAddressInput (similar semantics to PG版)
-	patch := shipdom.UpdateShippingAddressInput{
-		AddressLine1: optString(v.Street),
-		// AddressLine2 omitted; no separate field in domain ShippingAddress.
-		City:       optString(v.City),
-		Prefecture: optString(v.State),
-		PostalCode: optString(v.ZipCode),
-		Country:    optString(v.Country),
-	}
-
-	updated, err := r.updateInternal(ctx, id, patch)
 	if err != nil {
 		return shipdom.ShippingAddress{}, err
 	}
-	return updated, nil
+
+	current, err := docToShippingAddress(snap)
+	if err != nil {
+		return shipdom.ShippingAddress{}, err
+	}
+
+	createdAt := current.CreatedAt
+	if !v.CreatedAt.IsZero() {
+		createdAt = v.CreatedAt.UTC()
+	}
+	if createdAt.IsZero() {
+		createdAt = time.Now().UTC()
+	}
+
+	updatedAt := time.Now().UTC()
+	if !v.UpdatedAt.IsZero() && v.UpdatedAt.After(createdAt) {
+		updatedAt = v.UpdatedAt.UTC()
+	}
+
+	country := strings.TrimSpace(v.Country)
+	if country == "" {
+		country = strings.TrimSpace(current.Country)
+	}
+	if country == "" {
+		country = "JP"
+	}
+
+	next := shipdom.ShippingAddress{
+		ID:        id,
+		UserID:    pickNonEmpty(v.UserID, current.UserID),
+		ZipCode:   pickNonEmpty(v.ZipCode, current.ZipCode),
+		State:     pickNonEmpty(v.State, current.State),
+		City:      pickNonEmpty(v.City, current.City),
+		Street:    pickNonEmpty(v.Street, current.Street),
+		Street2:   pickStreet2(v.Street2),
+		Country:   country,
+		CreatedAt: createdAt,
+		UpdatedAt: updatedAt,
+	}
+
+	data := shippingAddressToDocData(next)
+
+	if _, err := ref.Set(ctx, data, firestore.MergeAll); err != nil {
+		if status.Code(err) == codes.NotFound {
+			return shipdom.ShippingAddress{}, shipdom.ErrNotFound
+		}
+		if status.Code(err) == codes.AlreadyExists {
+			return shipdom.ShippingAddress{}, shipdom.ErrConflict
+		}
+		return shipdom.ShippingAddress{}, err
+	}
+
+	snap, err = ref.Get(ctx)
+	if err != nil {
+		if status.Code(err) == codes.NotFound {
+			return shipdom.ShippingAddress{}, shipdom.ErrNotFound
+		}
+		return shipdom.ShippingAddress{}, err
+	}
+
+	return docToShippingAddress(snap)
 }
 
-// Delete performs hard delete.
 func (r *ShippingAddressRepositoryFS) Delete(ctx context.Context, id string) error {
 	if r.Client == nil {
 		return errors.New("firestore client is nil")
@@ -201,19 +247,18 @@ func (r *ShippingAddressRepositoryFS) Delete(ctx context.Context, id string) err
 		return err
 	}
 
-	if _, err := ref.Delete(ctx); err != nil {
-		return err
-	}
-	return nil
+	_, err = ref.Delete(ctx)
+	return err
 }
 
-// Reset deletes all shipping address documents (for tests/dev).
 func (r *ShippingAddressRepositoryFS) Reset(ctx context.Context) error {
 	if r.Client == nil {
 		return errors.New("firestore client is nil")
 	}
 
 	it := r.col().Documents(ctx)
+	defer it.Stop()
+
 	var snaps []*firestore.DocumentSnapshot
 	for {
 		doc, err := it.Next()
@@ -226,18 +271,6 @@ func (r *ShippingAddressRepositoryFS) Reset(ctx context.Context) error {
 		snaps = append(snaps, doc)
 	}
 
-	// OLD (deprecated):
-	// b := r.Client.Batch()
-	// for i, snap := range snaps {
-	//   b.Delete(snap.Ref)
-	//   if (i+1)%400 == 0 {
-	//     if _, err := b.Commit(ctx); err != nil { return err }
-	//     b = r.Client.Batch()
-	//   }
-	// }
-	// if _, err := b.Commit(ctx); err != nil { return err }
-
-	// NEW (transaction, chunked):
 	const chunkSize = 400
 	for i := 0; i < len(snaps); i += chunkSize {
 		end := i + chunkSize
@@ -259,14 +292,21 @@ func (r *ShippingAddressRepositoryFS) Reset(ctx context.Context) error {
 	return nil
 }
 
+func (r *ShippingAddressRepositoryFS) WithTx(ctx context.Context, fn func(ctx context.Context) error) error {
+	if r.Client == nil {
+		return errors.New("firestore client is nil")
+	}
+	return fn(ctx)
+}
+
 // ============================================================
-// List / Count (Filter + Sort + Paging)
+// List / Count
 // ============================================================
 
 func (r *ShippingAddressRepositoryFS) List(
 	ctx context.Context,
 	filter shipdom.Filter,
-	sort shipdom.Sort,
+	sortOpt shipdom.Sort,
 	page shipdom.Page,
 ) (shipdom.PageResult, error) {
 	if r.Client == nil {
@@ -274,7 +314,7 @@ func (r *ShippingAddressRepositoryFS) List(
 	}
 
 	q := r.col().Query
-	q = applyAddrOrderByFS(q, sort)
+	q = applyAddrOrderByFS(q, sortOpt)
 
 	it := q.Documents(ctx)
 	defer it.Stop()
@@ -296,6 +336,8 @@ func (r *ShippingAddressRepositoryFS) List(
 			all = append(all, a)
 		}
 	}
+
+	sortShippingAddresses(all, sortOpt)
 
 	pageNum, perPage, offset := fscommon.NormalizePage(page.Number, page.PerPage, 50, 200)
 	total := len(all)
@@ -357,95 +399,17 @@ func (r *ShippingAddressRepositoryFS) Count(ctx context.Context, filter shipdom.
 }
 
 // ============================================================
-// Internal Update logic (Firestore equivalent of updateInternal in PG版)
-// ============================================================
-
-func (r *ShippingAddressRepositoryFS) updateInternal(
-	ctx context.Context,
-	id string,
-	in shipdom.UpdateShippingAddressInput,
-) (shipdom.ShippingAddress, error) {
-	if r.Client == nil {
-		return shipdom.ShippingAddress{}, errors.New("firestore client is nil")
-	}
-
-	id = strings.TrimSpace(id)
-	if id == "" {
-		return shipdom.ShippingAddress{}, shipdom.ErrNotFound
-	}
-
-	ref := r.col().Doc(id)
-	snap, err := ref.Get(ctx)
-	if status.Code(err) == codes.NotFound {
-		return shipdom.ShippingAddress{}, shipdom.ErrNotFound
-	}
-	if err != nil {
-		return shipdom.ShippingAddress{}, err
-	}
-
-	current, err := docToShippingAddress(snap)
-	if err != nil {
-		return shipdom.ShippingAddress{}, err
-	}
-
-	// Apply patch to current (similar semantics to PG版)
-	if in.AddressLine1 != nil {
-		current.Street = strings.TrimSpace(*in.AddressLine1)
-	}
-	if in.AddressLine2 != nil {
-		line2 := strings.TrimSpace(*in.AddressLine2)
-		if line2 != "" {
-			if current.Street == "" {
-				current.Street = line2
-			} else {
-				current.Street = strings.TrimSpace(current.Street + " " + line2)
-			}
-		}
-	}
-	if in.City != nil {
-		current.City = strings.TrimSpace(*in.City)
-	}
-	if in.Prefecture != nil {
-		current.State = strings.TrimSpace(*in.Prefecture)
-	}
-	if in.PostalCode != nil {
-		current.ZipCode = strings.TrimSpace(*in.PostalCode)
-	}
-	if in.Country != nil {
-		current.Country = strings.TrimSpace(*in.Country)
-	}
-
-	// Always bump UpdatedAt
-	current.UpdatedAt = time.Now().UTC()
-
-	data := shippingAddressToDocData(current)
-
-	if _, err := ref.Set(ctx, data, firestore.MergeAll); err != nil {
-		return shipdom.ShippingAddress{}, err
-	}
-
-	snap, err = ref.Get(ctx)
-	if err != nil {
-		if status.Code(err) == codes.NotFound {
-			return shipdom.ShippingAddress{}, shipdom.ErrNotFound
-		}
-		return shipdom.ShippingAddress{}, err
-	}
-
-	return docToShippingAddress(snap)
-}
-
-// ============================================================
-// Mapping Helpers
+// Mapping
 // ============================================================
 
 func docToShippingAddress(doc *firestore.DocumentSnapshot) (shipdom.ShippingAddress, error) {
 	var raw struct {
 		UserID    string    `firestore:"userId"`
-		Street    string    `firestore:"street"`
-		City      string    `firestore:"city"`
-		State     string    `firestore:"state"`
 		ZipCode   string    `firestore:"zipCode"`
+		State     string    `firestore:"state"`
+		City      string    `firestore:"city"`
+		Street    string    `firestore:"street"`
+		Street2   string    `firestore:"street2"`
 		Country   string    `firestore:"country"`
 		CreatedAt time.Time `firestore:"createdAt"`
 		UpdatedAt time.Time `firestore:"updatedAt"`
@@ -456,10 +420,10 @@ func docToShippingAddress(doc *firestore.DocumentSnapshot) (shipdom.ShippingAddr
 	}
 
 	createdAt := raw.CreatedAt.UTC()
+	updatedAt := raw.UpdatedAt.UTC()
 	if raw.CreatedAt.IsZero() {
 		createdAt = time.Time{}
 	}
-	updatedAt := raw.UpdatedAt.UTC()
 	if raw.UpdatedAt.IsZero() {
 		updatedAt = createdAt
 	}
@@ -467,10 +431,11 @@ func docToShippingAddress(doc *firestore.DocumentSnapshot) (shipdom.ShippingAddr
 	return shipdom.ShippingAddress{
 		ID:        strings.TrimSpace(doc.Ref.ID),
 		UserID:    strings.TrimSpace(raw.UserID),
-		Street:    strings.TrimSpace(raw.Street),
-		City:      strings.TrimSpace(raw.City),
-		State:     strings.TrimSpace(raw.State),
 		ZipCode:   strings.TrimSpace(raw.ZipCode),
+		State:     strings.TrimSpace(raw.State),
+		City:      strings.TrimSpace(raw.City),
+		Street:    strings.TrimSpace(raw.Street),
+		Street2:   strings.TrimSpace(raw.Street2),
 		Country:   strings.TrimSpace(raw.Country),
 		CreatedAt: createdAt,
 		UpdatedAt: updatedAt,
@@ -479,29 +444,31 @@ func docToShippingAddress(doc *firestore.DocumentSnapshot) (shipdom.ShippingAddr
 
 func shippingAddressToDocData(v shipdom.ShippingAddress) map[string]any {
 	data := map[string]any{
-		"userId":  strings.TrimSpace(v.UserID),
-		"street":  strings.TrimSpace(v.Street),
-		"city":    strings.TrimSpace(v.City),
-		"state":   strings.TrimSpace(v.State),
-		"zipCode": strings.TrimSpace(v.ZipCode),
-		"country": strings.TrimSpace(v.Country),
+		"userId":    strings.TrimSpace(v.UserID),
+		"zipCode":   strings.TrimSpace(v.ZipCode),
+		"state":     strings.TrimSpace(v.State),
+		"city":      strings.TrimSpace(v.City),
+		"street":    strings.TrimSpace(v.Street),
+		"street2":   strings.TrimSpace(v.Street2),
+		"country":   strings.TrimSpace(v.Country),
+		"createdAt": v.CreatedAt.UTC(),
+		"updatedAt": v.UpdatedAt.UTC(),
 	}
 
-	if !v.CreatedAt.IsZero() {
-		data["createdAt"] = v.CreatedAt.UTC()
+	if v.CreatedAt.IsZero() {
+		delete(data, "createdAt")
 	}
-	if !v.UpdatedAt.IsZero() {
-		data["updatedAt"] = v.UpdatedAt.UTC()
+	if v.UpdatedAt.IsZero() {
+		delete(data, "updatedAt")
 	}
 
 	return data
 }
 
 // ============================================================
-// Filter / Sort Helpers
+// Filter / Sort
 // ============================================================
 
-// matchAddrFilter applies shipdom.Filter in-memory.
 func matchAddrFilter(a shipdom.ShippingAddress, f shipdom.Filter) bool {
 	trim := func(s string) string { return strings.TrimSpace(s) }
 
@@ -524,23 +491,22 @@ func matchAddrFilter(a shipdom.ShippingAddress, f shipdom.Filter) bool {
 		return false
 	}
 
-	if f.CreatedFrom != nil && a.CreatedAt.Before(f.CreatedFrom.UTC()) {
+	if f.CreatedFrom != nil && !a.CreatedAt.IsZero() && a.CreatedAt.Before(f.CreatedFrom.UTC()) {
 		return false
 	}
-	if f.CreatedTo != nil && !a.CreatedAt.Before(f.CreatedTo.UTC()) {
+	if f.CreatedTo != nil && !a.CreatedAt.IsZero() && !a.CreatedAt.Before(f.CreatedTo.UTC()) {
 		return false
 	}
-	if f.UpdatedFrom != nil && a.UpdatedAt.Before(f.UpdatedFrom.UTC()) {
+	if f.UpdatedFrom != nil && !a.UpdatedAt.IsZero() && a.UpdatedAt.Before(f.UpdatedFrom.UTC()) {
 		return false
 	}
-	if f.UpdatedTo != nil && !a.UpdatedAt.Before(f.UpdatedTo.UTC()) {
+	if f.UpdatedTo != nil && !a.UpdatedAt.IsZero() && !a.UpdatedAt.Before(f.UpdatedTo.UTC()) {
 		return false
 	}
 
 	return true
 }
 
-// applyAddrOrderByFS maps shipdom.Sort to Firestore orderBy.
 func applyAddrOrderByFS(q firestore.Query, s shipdom.Sort) firestore.Query {
 	col := strings.ToLower(strings.TrimSpace(string(s.Column)))
 	var field string
@@ -559,7 +525,6 @@ func applyAddrOrderByFS(q firestore.Query, s shipdom.Sort) firestore.Query {
 	case "zipcode", "zip_code":
 		field = "zipCode"
 	default:
-		// default: updatedAt DESC, id DESC
 		return q.OrderBy("updatedAt", firestore.Desc).
 			OrderBy(firestore.DocumentID, firestore.Desc)
 	}
@@ -576,15 +541,104 @@ func applyAddrOrderByFS(q firestore.Query, s shipdom.Sort) firestore.Query {
 		OrderBy(firestore.DocumentID, dir)
 }
 
+func sortShippingAddresses(items []shipdom.ShippingAddress, s shipdom.Sort) {
+	col := strings.ToLower(strings.TrimSpace(string(s.Column)))
+	dir := strings.ToUpper(strings.TrimSpace(string(s.Order)))
+	if dir != "ASC" && dir != "DESC" {
+		dir = "DESC"
+	}
+	asc := dir == "ASC"
+
+	less := func(i, j int) bool {
+		a := items[i]
+		b := items[j]
+
+		switch col {
+		case "createdat", "created_at":
+			if a.CreatedAt.Equal(b.CreatedAt) {
+				if asc {
+					return a.ID < b.ID
+				}
+				return a.ID > b.ID
+			}
+			if asc {
+				return a.CreatedAt.Before(b.CreatedAt)
+			}
+			return a.CreatedAt.After(b.CreatedAt)
+
+		case "updatedat", "updated_at":
+			if a.UpdatedAt.Equal(b.UpdatedAt) {
+				if asc {
+					return a.ID < b.ID
+				}
+				return a.ID > b.ID
+			}
+			if asc {
+				return a.UpdatedAt.Before(b.UpdatedAt)
+			}
+			return a.UpdatedAt.After(b.UpdatedAt)
+
+		case "city":
+			if a.City == b.City {
+				if asc {
+					return a.ID < b.ID
+				}
+				return a.ID > b.ID
+			}
+			if asc {
+				return a.City < b.City
+			}
+			return a.City > b.City
+
+		case "state":
+			if a.State == b.State {
+				if asc {
+					return a.ID < b.ID
+				}
+				return a.ID > b.ID
+			}
+			if asc {
+				return a.State < b.State
+			}
+			return a.State > b.State
+
+		case "zipcode", "zip_code":
+			if a.ZipCode == b.ZipCode {
+				if asc {
+					return a.ID < b.ID
+				}
+				return a.ID > b.ID
+			}
+			if asc {
+				return a.ZipCode < b.ZipCode
+			}
+			return a.ZipCode > b.ZipCode
+
+		default:
+			if a.UpdatedAt.Equal(b.UpdatedAt) {
+				return a.ID > b.ID
+			}
+			return a.UpdatedAt.After(b.UpdatedAt)
+		}
+	}
+
+	sort.SliceStable(items, less)
+}
+
 // ============================================================
 // Small helpers
 // ============================================================
 
-// optString converts non-empty string to *string, else nil.
-func optString(s string) *string {
-	t := strings.TrimSpace(s)
-	if t == "" {
-		return nil
+func pickNonEmpty(a, b string) string {
+	aa := strings.TrimSpace(a)
+	if aa != "" {
+		return aa
 	}
-	return &t
+	return strings.TrimSpace(b)
+}
+
+// Street2 は任意。Save(v) は「エンティティを正として保存」なので v を採用。
+// （空文字なら空文字で保存＝削除扱い）
+func pickStreet2(v string) string {
+	return strings.TrimSpace(v)
 }

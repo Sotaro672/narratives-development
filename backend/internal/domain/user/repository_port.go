@@ -14,12 +14,10 @@ import (
 // ========================================
 
 type CreateUserInput struct {
-	FirstName     *string    `json:"first_name,omitempty"`
-	FirstNameKana *string    `json:"first_name_kana,omitempty"`
-	LastNameKana  *string    `json:"last_name_kana,omitempty"`
-	LastName      *string    `json:"last_name,omitempty"`
-	Email         *string    `json:"email,omitempty"`
-	PhoneNumber   *string    `json:"phone_number,omitempty"`
+	FirstName     *string `json:"first_name,omitempty"`
+	FirstNameKana *string `json:"first_name_kana,omitempty"`
+	LastNameKana  *string `json:"last_name_kana,omitempty"`
+	LastName      *string `json:"last_name,omitempty"`
 
 	// nil の場合は実装側で現在時刻を付与可
 	CreatedAt *time.Time `json:"createdAt,omitempty"`
@@ -28,12 +26,10 @@ type CreateUserInput struct {
 }
 
 type UpdateUserInput struct {
-	FirstName     *string    `json:"first_name,omitempty"`
-	FirstNameKana *string    `json:"first_name_kana,omitempty"`
-	LastNameKana  *string    `json:"last_name_kana,omitempty"`
-	LastName      *string    `json:"last_name,omitempty"`
-	Email         *string    `json:"email,omitempty"`
-	PhoneNumber   *string    `json:"phone_number,omitempty"`
+	FirstName     *string `json:"first_name,omitempty"`
+	FirstNameKana *string `json:"first_name_kana,omitempty"`
+	LastNameKana  *string `json:"last_name_kana,omitempty"`
+	LastName      *string `json:"last_name,omitempty"`
 
 	UpdatedAt *time.Time `json:"updatedAt,omitempty"`
 	DeletedAt *time.Time `json:"deletedAt,omitempty"`
@@ -44,13 +40,11 @@ type UpdateUserInput struct {
 // ========================================
 
 type Filter struct {
-	IDs    []string
-	Emails []string
+	IDs []string
 
 	FirstNameLike string
 	LastNameLike  string
 	NameLike      string // 氏名のあいまい検索に利用（実装に委ねる）
-	PhoneLike     string
 
 	CreatedFrom *time.Time
 	CreatedTo   *time.Time
@@ -73,7 +67,6 @@ const (
 	SortByDeletedAt SortColumn = "deletedAt"
 	SortByFirstName SortColumn = "first_name"
 	SortByLastName  SortColumn = "last_name"
-	SortByEmail     SortColumn = "email"
 )
 
 type SortOrder string
@@ -103,7 +96,6 @@ type PageResult struct {
 type RepositoryPort interface {
 	// 取得系
 	GetByID(ctx context.Context, id string) (*User, error)
-	GetByEmail(ctx context.Context, email string) (*User, error)
 	List(ctx context.Context, filter Filter, sort Sort, page Page) (PageResult, error)
 	Count(ctx context.Context, filter Filter) (int, error)
 
