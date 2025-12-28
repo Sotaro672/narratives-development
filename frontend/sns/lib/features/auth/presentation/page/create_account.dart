@@ -1,4 +1,4 @@
-//frontend\sns\lib\features\auth\presentation\page\create_account.dart
+//frontend/sns/lib/features/auth/presentation/page/create_account.dart
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:firebase_auth/firebase_auth.dart';
@@ -26,6 +26,9 @@ class _CreateAccountPageState extends State<CreateAccountPage> {
   bool _agree = false;
   bool _loading = false;
   String? _error;
+
+  /// ✅ 認証メール送信後に画面内へ表示するメッセージ
+  String? _sentMessage;
 
   @override
   void dispose() {
@@ -70,31 +73,29 @@ class _CreateAccountPageState extends State<CreateAccountPage> {
     return uri.toString();
   }
 
-  String _afterSuccessDest() {
-    final dest = (widget.from ?? '/').trim();
-    return dest.isNotEmpty ? dest : '/';
-  }
-
   Future<void> _createAndSendVerification() async {
-    setState(() => _error = null);
+    setState(() {
+      _error = null;
+      _sentMessage = null; // ✅ 再送などで古い成功メッセージを消す
+    });
 
     final email = _s(_emailCtrl.text);
     final pass = _passCtrl.text;
 
     if (!_isEmailValid) {
-      setState(() => _error = 'Enter a valid email address.');
+      setState(() => _error = '有効なメールアドレスを入力してください。');
       return;
     }
     if (!_isPasswordValid) {
-      setState(() => _error = 'Password must be at least 6 characters.');
+      setState(() => _error = 'パスワードは6文字以上にしてください。');
       return;
     }
     if (!_isPasswordMatch) {
-      setState(() => _error = 'Passwords do not match.');
+      setState(() => _error = 'パスワードが一致しません。');
       return;
     }
     if (!_agree) {
-      setState(() => _error = 'Please accept the Terms.');
+      setState(() => _error = '利用規約に同意してください。');
       return;
     }
 
@@ -108,7 +109,7 @@ class _CreateAccountPageState extends State<CreateAccountPage> {
 
       final user = cred.user ?? FirebaseAuth.instance.currentUser;
       if (user == null) {
-        throw StateError('User is null after sign up.');
+        throw StateError('アカウント作成後にユーザー情報が取得できませんでした。');
       }
 
       // ✅ 認証メール送信
@@ -116,14 +117,14 @@ class _CreateAccountPageState extends State<CreateAccountPage> {
 
       if (!mounted) return;
 
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Verification email sent. Please check your inbox.'),
-        ),
-      );
+      // ✅ 画面内に成功メッセージを表示（SnackBar ではなく “画面へ表示”）
+      setState(() {
+        _sentMessage =
+            '認証メールを送信しました。受信ボックスを確認してください。\n'
+            '認証メールからアカウント作成を続行してください。';
+      });
 
-      // ✅ そのまま閲覧に戻す（必要なら後で「未認証は購入不可」等の制御を追加）
-      context.go(_afterSuccessDest());
+      // ✅ ここでは遷移しない（ユーザーがメッセージを確認できるように）
     } on FirebaseAuthException catch (e) {
       setState(() => _error = _friendlyAuthError(e));
     } catch (e) {
@@ -136,15 +137,15 @@ class _CreateAccountPageState extends State<CreateAccountPage> {
   String _friendlyAuthError(FirebaseAuthException e) {
     switch (e.code) {
       case 'invalid-email':
-        return 'Invalid email address.';
+        return 'メールアドレスの形式が正しくありません。';
       case 'email-already-in-use':
-        return 'Email is already in use.';
+        return 'このメールアドレスは既に使用されています。';
       case 'weak-password':
-        return 'Password is too weak.';
+        return 'パスワードが弱すぎます。';
       case 'operation-not-allowed':
-        return 'This sign-in method is not enabled.';
+        return 'このログイン方法は有効化されていません。';
       default:
-        return e.message ?? 'Create account failed.';
+        return e.message ?? 'アカウント作成に失敗しました。';
     }
   }
 
@@ -152,16 +153,16 @@ class _CreateAccountPageState extends State<CreateAccountPage> {
   Widget build(BuildContext context) {
     final intent = (widget.intent ?? '').trim();
     final topMessage = intent == 'purchase'
-        ? 'Create an account to continue your purchase.'
-        : 'Create an account to continue.';
+        ? '購入を続けるにはアカウント作成が必要です。'
+        : '続けるにはアカウント作成が必要です。';
 
     return Scaffold(
       body: SafeArea(
         child: Column(
           children: [
-            // ✅ ヘッダー：右側に Sign in は出さない。戻るだけ。
+            // ✅ ヘッダー：右側にサインインは出さない。戻るだけ。
             AppHeader(
-              title: 'Create account',
+              title: 'アカウント作成',
               showBack: true,
               backTo: _loginBackTo(),
               actions: const [],
@@ -184,6 +185,25 @@ class _CreateAccountPageState extends State<CreateAccountPage> {
                           style: Theme.of(context).textTheme.bodyMedium,
                         ),
                         const SizedBox(height: 16),
+
+                        // ✅ 成功メッセージ（画面へ表示）
+                        if (_sentMessage != null) ...[
+                          Container(
+                            padding: const EdgeInsets.all(12),
+                            decoration: BoxDecoration(
+                              color: Theme.of(context)
+                                  .colorScheme
+                                  .secondaryContainer
+                                  .withValues(alpha: 0.6),
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                            child: Text(
+                              _sentMessage!,
+                              style: Theme.of(context).textTheme.bodyMedium,
+                            ),
+                          ),
+                          const SizedBox(height: 12),
+                        ],
 
                         if (_error != null) ...[
                           Container(
@@ -209,7 +229,7 @@ class _CreateAccountPageState extends State<CreateAccountPage> {
                           autofillHints: const [AutofillHints.email],
                           enabled: !_loading,
                           decoration: const InputDecoration(
-                            labelText: 'Email',
+                            labelText: 'メールアドレス',
                             border: OutlineInputBorder(),
                           ),
                           onChanged: (_) => setState(() {}),
@@ -222,7 +242,7 @@ class _CreateAccountPageState extends State<CreateAccountPage> {
                           autofillHints: const [AutofillHints.newPassword],
                           enabled: !_loading,
                           decoration: const InputDecoration(
-                            labelText: 'Password (min 6 chars)',
+                            labelText: 'パスワード（6文字以上）',
                             border: OutlineInputBorder(),
                           ),
                           onChanged: (_) => setState(() {}),
@@ -235,7 +255,7 @@ class _CreateAccountPageState extends State<CreateAccountPage> {
                           autofillHints: const [AutofillHints.newPassword],
                           enabled: !_loading,
                           decoration: const InputDecoration(
-                            labelText: 'Confirm password',
+                            labelText: 'パスワード（確認）',
                             border: OutlineInputBorder(),
                           ),
                           onChanged: (_) => setState(() {}),
@@ -249,7 +269,7 @@ class _CreateAccountPageState extends State<CreateAccountPage> {
                               : (v) => setState(() => _agree = v ?? false),
                           controlAffinity: ListTileControlAffinity.leading,
                           contentPadding: EdgeInsets.zero,
-                          title: const Text('I agree to the Terms of Service'),
+                          title: const Text('利用規約に同意します'),
                         ),
 
                         const SizedBox(height: 12),
@@ -266,17 +286,10 @@ class _CreateAccountPageState extends State<CreateAccountPage> {
                                     strokeWidth: 2,
                                   ),
                                 )
-                              : const Text('Send verification email'),
+                              : const Text('認証メールを送信'),
                         ),
 
-                        const SizedBox(height: 8),
-
-                        TextButton(
-                          onPressed: _loading
-                              ? null
-                              : () => context.go(_loginBackTo()),
-                          child: const Text('Back to Sign in'),
-                        ),
+                        // ✅ 「サインインに戻る」ボタンは削除（戻るはヘッダーに集約）
                       ],
                     ),
                   ),
