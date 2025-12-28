@@ -170,7 +170,12 @@ class UserRepositoryHttp {
           handler.next(response);
         },
         onError: (e, handler) {
+          // ✅ 既存の DioError ログ
           _logDioError(e);
+
+          // ✅ NEW: “失敗時のログ” を追加（原因調査用）
+          _logFailureSummary(e);
+
           handler.next(e);
         },
       ),
@@ -200,6 +205,8 @@ class UserRepositoryHttp {
       final data = _asMap(res.data);
       return UserDTO.fromJson(data);
     } on DioException catch (e) {
+      // ✅ NEW: 失敗時に “throw 前” にも要約ログを出す（呼び出し側で握りつぶされるケース対策）
+      _logFailureSummary(e, op: 'GET /users/$trimmed');
       throw _toException(e, op: 'GET /users/$trimmed');
     }
   }
@@ -216,6 +223,8 @@ class UserRepositoryHttp {
       final data = _asMap(res.data);
       return UserDTO.fromJson(data);
     } on DioException catch (e) {
+      // ✅ NEW: 失敗時ログ（request payload / response body / status）
+      _logFailureSummary(e, op: 'POST /users');
       throw _toException(e, op: 'POST /users');
     }
   }
@@ -232,6 +241,8 @@ class UserRepositoryHttp {
       final data = _asMap(res.data);
       return UserDTO.fromJson(data);
     } on DioException catch (e) {
+      // ✅ NEW: 失敗時ログ
+      _logFailureSummary(e, op: 'PATCH /users/$trimmed');
       throw _toException(e, op: 'PATCH /users/$trimmed');
     }
   }
@@ -246,6 +257,8 @@ class UserRepositoryHttp {
     try {
       await _dio.delete('/users/$trimmed');
     } on DioException catch (e) {
+      // ✅ NEW: 失敗時ログ
+      _logFailureSummary(e, op: 'DELETE /users/$trimmed');
       throw _toException(e, op: 'DELETE /users/$trimmed');
     }
   }
@@ -418,6 +431,99 @@ class UserRepositoryHttp {
     }
     if (resBody.isNotEmpty) {
       b.writeln('  responseBody=${_truncate(resBody, 1500)}');
+    }
+    debugPrint(b.toString());
+  }
+
+  // ✅ NEW: Failure summary logger (request payload + response headers/body)
+  void _logFailureSummary(DioException e, {String? op}) {
+    if (!kDebugMode) return;
+
+    final o = e.requestOptions;
+    final method = o.method.toUpperCase();
+    final url = o.uri.toString();
+
+    final status = e.response?.statusCode;
+    final statusLine = status != null ? 'status=$status' : 'status=?';
+
+    // --- request headers (mask auth) ---
+    final reqHeaders = <String, dynamic>{};
+    o.headers.forEach((k, v) {
+      if (k.toLowerCase() == 'authorization') {
+        reqHeaders[k] = 'Bearer ***';
+      } else {
+        reqHeaders[k] = v;
+      }
+    });
+
+    // --- request body ---
+    String reqBody = '';
+    try {
+      final d = o.data;
+      if (d == null) {
+        reqBody = '';
+      } else if (d is String) {
+        reqBody = d;
+      } else if (d is Map || d is List) {
+        reqBody = jsonEncode(d);
+      } else {
+        reqBody = d.toString();
+      }
+    } catch (ex) {
+      reqBody = '(failed to encode request body: $ex)';
+    }
+
+    // --- response headers ---
+    final resHeaders = <String, dynamic>{};
+    try {
+      final h = e.response?.headers.map;
+      if (h != null) {
+        h.forEach((k, v) {
+          resHeaders[k] = v;
+        });
+      }
+    } catch (_) {
+      // ignore
+    }
+
+    // --- response body ---
+    String resBody = '';
+    try {
+      final d = e.response?.data;
+      if (d == null) {
+        resBody = '';
+      } else if (d is String) {
+        resBody = d;
+      } else if (d is Map || d is List) {
+        resBody = jsonEncode(d);
+      } else {
+        resBody = d.toString();
+      }
+    } catch (ex) {
+      resBody = '(failed to encode response body: $ex)';
+    }
+
+    final b = StringBuffer();
+    b.writeln('[UserRepositoryHttp] FAILURE');
+    if ((op ?? '').trim().isNotEmpty) {
+      b.writeln('  op=$op');
+    }
+    b.writeln('  $statusLine');
+    b.writeln('  method=$method');
+    b.writeln('  url=$url');
+    b.writeln('  dioType=${e.type}');
+    if ((e.message ?? '').trim().isNotEmpty) {
+      b.writeln('  message=${e.message}');
+    }
+    b.writeln('  requestHeaders=${_truncate(jsonEncode(reqHeaders), 1500)}');
+    if (reqBody.isNotEmpty) {
+      b.writeln('  requestBody=${_truncate(reqBody, 1500)}');
+    }
+    if (resHeaders.isNotEmpty) {
+      b.writeln('  responseHeaders=${_truncate(jsonEncode(resHeaders), 1500)}');
+    }
+    if (resBody.isNotEmpty) {
+      b.writeln('  responseBody=${_truncate(resBody, 2000)}');
     }
     debugPrint(b.toString());
   }
