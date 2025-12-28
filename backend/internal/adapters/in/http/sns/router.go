@@ -15,6 +15,12 @@ type Deps struct {
 	// ✅ NEW: name resolver endpoints (for NameResolver)
 	Company http.Handler
 	Brand   http.Handler
+
+	// ✅ NEW: auth onboarding resources
+	User            http.Handler
+	ShippingAddress http.Handler
+	BillingAddress  http.Handler
+	Avatar          http.Handler
 }
 
 // Register registers buyer-facing routes onto mux.
@@ -31,6 +37,12 @@ type Deps struct {
 // - GET /sns/token-blueprints/{id}/patch
 // - GET /sns/companies/{id}     ✅ NEW (name resolver)
 // - GET /sns/brands/{id}        ✅ NEW (name resolver)
+//
+// ✅ NEW (auth onboarding; buyer-facing)
+// - POST/GET /sns/users/{id?}
+// - POST/GET /sns/shipping-addresses/{id?}
+// - POST/GET /sns/billing-addresses/{id?}
+// - POST/GET /sns/avatars/{id?}
 func Register(mux *http.ServeMux, deps Deps) {
 	if mux == nil {
 		return
@@ -86,5 +98,29 @@ func Register(mux *http.ServeMux, deps Deps) {
 	if deps.Brand != nil {
 		mux.Handle("/sns/brands/", deps.Brand)
 		mux.Handle("/sns/brands", deps.Brand)
+	}
+
+	// users ✅ NEW
+	if deps.User != nil {
+		mux.Handle("/sns/users", deps.User)
+		mux.Handle("/sns/users/", deps.User)
+	}
+
+	// shipping addresses ✅ NEW
+	if deps.ShippingAddress != nil {
+		mux.Handle("/sns/shipping-addresses", deps.ShippingAddress)
+		mux.Handle("/sns/shipping-addresses/", deps.ShippingAddress)
+	}
+
+	// billing addresses ✅ NEW
+	if deps.BillingAddress != nil {
+		mux.Handle("/sns/billing-addresses", deps.BillingAddress)
+		mux.Handle("/sns/billing-addresses/", deps.BillingAddress)
+	}
+
+	// avatars ✅ NEW
+	if deps.Avatar != nil {
+		mux.Handle("/sns/avatars", deps.Avatar)
+		mux.Handle("/sns/avatars/", deps.Avatar)
 	}
 }

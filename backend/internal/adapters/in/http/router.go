@@ -498,5 +498,61 @@ func NewRouter(deps RouterDeps) http.Handler {
 		mux.Handle("/mint/", h)
 	}
 
+	// ============================================================
+	// ✅ Buyer onboarding resources (to avoid 404 for /users etc.)
+	// - authMw は member 前提になりがちなので bootstrapMw 優先
+	// ============================================================
+
+	// ================================
+	// ✅ Users
+	// ================================
+	if deps.UserUC != nil {
+		userH := handlers.NewUserHandler(deps.UserUC)
+
+		var h http.Handler = userH
+		if bootstrapMw != nil {
+			h = bootstrapMw.Handler(h)
+		} else if authMw != nil {
+			h = authMw.Handler(h)
+		}
+
+		mux.Handle("/users", h)
+		mux.Handle("/users/", h)
+	}
+
+	// ================================
+	// ✅ Shipping Addresses
+	// ================================
+	if deps.ShippingAddressUC != nil {
+		shipH := handlers.NewShippingAddressHandler(deps.ShippingAddressUC)
+
+		var h http.Handler = shipH
+		if bootstrapMw != nil {
+			h = bootstrapMw.Handler(h)
+		} else if authMw != nil {
+			h = authMw.Handler(h)
+		}
+
+		mux.Handle("/shipping-addresses", h)
+		mux.Handle("/shipping-addresses/", h)
+	}
+
+	// ================================
+	// ✅ Billing Addresses
+	// ================================
+	if deps.BillingAddressUC != nil {
+		billH := handlers.NewBillingAddressHandler(deps.BillingAddressUC)
+
+		var h http.Handler = billH
+		if bootstrapMw != nil {
+			h = bootstrapMw.Handler(h)
+		} else if authMw != nil {
+			h = authMw.Handler(h)
+		}
+
+		mux.Handle("/billing-addresses", h)
+		mux.Handle("/billing-addresses/", h)
+	}
+
 	return mux
 }

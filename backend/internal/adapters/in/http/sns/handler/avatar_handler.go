@@ -1,0 +1,257 @@
+package handler
+
+import (
+	"encoding/json"
+	"errors"
+	"net/http"
+	"strings"
+
+	uc "narratives/internal/application/usecase"
+	avatardom "narratives/internal/domain/avatar"
+)
+
+// AvatarHandler は /avatars 関連のエンドポイントを担当します。
+// 新しい usecase.AvatarUsecase を利用します。
+type AvatarHandler struct {
+	uc *uc.AvatarUsecase
+}
+
+// NewAvatarHandler はHTTPハンドラを初期化します。
+func NewAvatarHandler(avatarUC *uc.AvatarUsecase) http.Handler {
+	return &AvatarHandler{uc: avatarUC}
+}
+
+// ServeHTTP はHTTPルーティングの入口です。
+func (h *AvatarHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "application/json")
+	path := strings.TrimSuffix(r.URL.Path, "/")
+
+	switch {
+	case r.Method == http.MethodGet && path == "/avatars":
+		// 現行の AvatarUsecase は一覧取得を提供しないため 501 で返す
+		w.WriteHeader(http.StatusNotImplemented)
+		_ = json.NewEncoder(w).Encode(map[string]string{"error": "not_implemented"})
+
+	case r.Method == http.MethodPost && path == "/avatars":
+		h.post(w, r)
+
+	case r.Method == http.MethodGet && strings.HasPrefix(path, "/avatars/"):
+		id := strings.TrimPrefix(path, "/avatars/")
+		h.get(w, r, id)
+
+	case (r.Method == http.MethodPatch || r.Method == http.MethodPut) && strings.HasPrefix(path, "/avatars/"):
+		id := strings.TrimPrefix(path, "/avatars/")
+		h.update(w, r, id)
+
+	case r.Method == http.MethodDelete && strings.HasPrefix(path, "/avatars/"):
+		id := strings.TrimPrefix(path, "/avatars/")
+		h.delete(w, r, id)
+
+	default:
+		w.WriteHeader(http.StatusNotFound)
+		_ = json.NewEncoder(w).Encode(map[string]string{"error": "not_found"})
+	}
+}
+
+// GET /avatars/{id}
+// aggregate=1|true を付けると Avatar + State + Icons の集約を返します。
+func (h *AvatarHandler) get(w http.ResponseWriter, r *http.Request, id string) {
+	ctx := r.Context()
+	id = strings.TrimSpace(id)
+	if id == "" {
+		w.WriteHeader(http.StatusBadRequest)
+		_ = json.NewEncoder(w).Encode(map[string]string{"error": "invalid id"})
+		return
+	}
+
+	q := r.URL.Query()
+	agg := strings.EqualFold(q.Get("aggregate"), "1") || strings.EqualFold(q.Get("aggregate"), "true")
+
+	if agg {
+		data, err := h.uc.GetAggregate(ctx, id)
+		if err != nil {
+			writeAvatarErr(w, err)
+			return
+		}
+		_ = json.NewEncoder(w).Encode(data)
+		return
+	}
+
+	avatar, err := h.uc.GetByID(ctx, id)
+	if err != nil {
+		writeAvatarErr(w, err)
+		return
+	}
+	_ = json.NewEncoder(w).Encode(avatar)
+}
+
+// POST /avatars
+//
+// body:
+//
+//	{
+//	  "userId": "xxx",
+//	  "avatarName": "name",
+//	  "avatarIconUrl": "https://... (optional)",
+//	  "avatarIconPath": "gs://... or path (optional)",
+//	  "profile": "... (optional)",
+//	  "externalLink": "https://... (optional)"
+//	}
+//
+// ※ walletAddress は UI/要件上は入力しない想定だが、必要なら後で Patch で更新できる想定。
+func (h *AvatarHandler) post(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+
+	var body struct {
+		UserID         string  `json:"userId"`
+		AvatarName     string  `json:"avatarName"`
+		AvatarIconURL  *string `json:"avatarIconUrl,omitempty"`
+		AvatarIconPath *string `json:"avatarIconPath,omitempty"`
+		Profile        *string `json:"profile,omitempty"`
+		ExternalLink   *string `json:"externalLink,omitempty"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		w.WriteHeader(http.StatusBadRequest)
+		_ = json.NewEncoder(w).Encode(map[string]string{"error": "invalid json"})
+		return
+	}
+
+	in := uc.CreateAvatarInput{
+		UserID:         strings.TrimSpace(body.UserID),
+		AvatarName:     strings.TrimSpace(body.AvatarName),
+		AvatarIconURL:  trimPtr(body.AvatarIconURL),
+		AvatarIconPath: trimPtr(body.AvatarIconPath),
+		Profile:        trimPtr(body.Profile),
+		ExternalLink:   trimPtr(body.ExternalLink),
+	}
+
+	created, err := h.uc.Create(ctx, in)
+	if err != nil {
+		writeAvatarErr(w, err)
+		return
+	}
+
+	w.WriteHeader(http.StatusCreated)
+	_ = json.NewEncoder(w).Encode(created)
+}
+
+// PATCH/PUT /avatars/{id}
+//
+// body (patch):
+//
+//	{
+//	  "avatarName": "name (optional)",
+//	  "avatarIconUrl": "https://... (optional, empty => null)",
+//	  "avatarIconPath": "path (optional, empty => null)",
+//	  "profile": "... (optional, empty => null)",
+//	  "externalLink": "https://... (optional, empty => null)"
+//	}
+func (h *AvatarHandler) update(w http.ResponseWriter, r *http.Request, id string) {
+	ctx := r.Context()
+	id = strings.TrimSpace(id)
+	if id == "" {
+		w.WriteHeader(http.StatusBadRequest)
+		_ = json.NewEncoder(w).Encode(map[string]string{"error": "invalid id"})
+		return
+	}
+
+	var body struct {
+		AvatarName     *string `json:"avatarName,omitempty"`
+		AvatarIconURL  *string `json:"avatarIconUrl,omitempty"`
+		AvatarIconPath *string `json:"avatarIconPath,omitempty"`
+		Profile        *string `json:"profile,omitempty"`
+		ExternalLink   *string `json:"externalLink,omitempty"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		w.WriteHeader(http.StatusBadRequest)
+		_ = json.NewEncoder(w).Encode(map[string]string{"error": "invalid json"})
+		return
+	}
+
+	patch := avatardom.AvatarPatch{
+		AvatarName:     trimPtrNilAware(body.AvatarName),     // nil => no update, "" => set null? (name is non-nullable; so "" will be treated as invalid by domain/usecase)
+		AvatarIconURL:  trimPtrNilAware(body.AvatarIconURL),  // "" => nil (clear)
+		AvatarIconPath: trimPtrNilAware(body.AvatarIconPath), // "" => nil (clear)
+		Profile:        trimPtrNilAware(body.Profile),        // "" => nil (clear)
+		ExternalLink:   trimPtrNilAware(body.ExternalLink),   // "" => nil (clear)
+	}
+
+	updated, err := h.uc.Update(ctx, id, patch)
+	if err != nil {
+		writeAvatarErr(w, err)
+		return
+	}
+	_ = json.NewEncoder(w).Encode(updated)
+}
+
+// DELETE /avatars/{id}
+func (h *AvatarHandler) delete(w http.ResponseWriter, r *http.Request, id string) {
+	ctx := r.Context()
+	id = strings.TrimSpace(id)
+	if id == "" {
+		w.WriteHeader(http.StatusBadRequest)
+		_ = json.NewEncoder(w).Encode(map[string]string{"error": "invalid id"})
+		return
+	}
+
+	if err := h.uc.Delete(ctx, id); err != nil {
+		writeAvatarErr(w, err)
+		return
+	}
+
+	w.WriteHeader(http.StatusNoContent)
+}
+
+// エラーハンドリング
+func writeAvatarErr(w http.ResponseWriter, err error) {
+	code := http.StatusInternalServerError
+
+	// invalid id / invalid input
+	if errors.Is(err, avatardom.ErrInvalidID) ||
+		errors.Is(err, avatardom.ErrInvalidUserID) ||
+		errors.Is(err, avatardom.ErrInvalidAvatarName) ||
+		errors.Is(err, avatardom.ErrInvalidProfile) ||
+		errors.Is(err, avatardom.ErrInvalidExternalLink) {
+		code = http.StatusBadRequest
+	}
+
+	// NotFound が存在する場合だけ 404 にする（存在しない環境でもコンパイルを壊さない）
+	// ※ avatardom.ErrNotFound を導入済みならここで拾われます
+	if hasErrNotFound(err) {
+		code = http.StatusNotFound
+	}
+
+	w.WriteHeader(code)
+	_ = json.NewEncoder(w).Encode(map[string]string{"error": err.Error()})
+}
+
+// ------------------------------
+// small helpers
+// ------------------------------
+
+// nil は「更新しない」
+// non-nil かつ空文字は「null にする（クリア）」扱いにしたいフィールドで使う
+func trimPtrNilAware(p *string) *string {
+	if p == nil {
+		return nil
+	}
+	s := strings.TrimSpace(*p)
+	if s == "" {
+		// 明示クリア（repository 側は optionalString により nil 保存）
+		return ptr("")
+	}
+	return &s
+}
+
+func ptr[T any](v T) *T { return &v }
+
+// avatardom.ErrNotFound が無い環境でもコンパイルを壊さないための判定。
+// - message 文字列に頼る best-effort（暫定）
+// - ドメイン側で ErrNotFound を定義したら、この関数を削除して errors.Is(err, avatardom.ErrNotFound) に置き換えてOK
+func hasErrNotFound(err error) bool {
+	if err == nil {
+		return false
+	}
+	msg := strings.ToLower(err.Error())
+	return strings.Contains(msg, "not found") || strings.Contains(msg, "not_found")
+}

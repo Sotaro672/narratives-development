@@ -56,11 +56,23 @@ class _BillingAddressPageState extends State<BillingAddressPage> {
     return true;
   }
 
-  String _normalizeDigits(String s) => s.replaceAll(RegExp(r'[^0-9]'), '');
+  // 全角数字を半角に寄せる（日本語IME対策）
+  String _toAsciiDigits(String s) {
+    return s.replaceAllMapped(RegExp(r'[０-９]'), (m) {
+      final code = m[0]!.codeUnitAt(0);
+      return String.fromCharCode(code - 0xFEE0);
+    });
+  }
+
+  String _normalizeDigits(String s) {
+    final ascii = _toAsciiDigits(s);
+    return ascii.replaceAll(RegExp(r'[^0-9]'), '');
+  }
 
   String _normalizeCardNumber(String s) {
-    // ハイフン/スペースを除去
-    return s.replaceAll(RegExp(r'[^0-9]'), '');
+    // ハイフン/スペース/全角数字などを除去して数字だけに
+    final ascii = _toAsciiDigits(s);
+    return ascii.replaceAll(RegExp(r'[^0-9]'), '');
   }
 
   String _formatCardNumberForDisplay(String s) {
@@ -163,7 +175,10 @@ class _BillingAddressPageState extends State<BillingAddressPage> {
                         TextField(
                           controller: _cardNumberCtrl,
                           keyboardType: TextInputType.number,
-                          onChanged: (_) => _onCardNumberChanged(),
+                          onChanged: (_) {
+                            _onCardNumberChanged();
+                            if (mounted) setState(() {}); // ✅ ボタン有効/無効を更新
+                          },
                           decoration: const InputDecoration(
                             labelText: 'カード番号',
                             border: OutlineInputBorder(),
@@ -180,6 +195,9 @@ class _BillingAddressPageState extends State<BillingAddressPage> {
                         TextField(
                           controller: _cardHolderCtrl,
                           textInputAction: TextInputAction.next,
+                          onChanged: (_) {
+                            if (mounted) setState(() {}); // ✅
+                          },
                           decoration: const InputDecoration(
                             labelText: '名義（カードに記載の英字）',
                             border: OutlineInputBorder(),
@@ -198,6 +216,9 @@ class _BillingAddressPageState extends State<BillingAddressPage> {
                           keyboardType: TextInputType.number,
                           obscureText: true,
                           maxLength: 3,
+                          onChanged: (_) {
+                            if (mounted) setState(() {}); // ✅
+                          },
                           decoration: const InputDecoration(
                             labelText: 'CVC',
                             border: OutlineInputBorder(),

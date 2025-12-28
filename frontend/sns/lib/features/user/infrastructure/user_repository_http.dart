@@ -1,6 +1,8 @@
 // frontend/sns/lib/features/user/infrastructure/user_repository_http.dart
 import 'dart:async';
+import 'dart:convert';
 
+import 'package:flutter/foundation.dart';
 import 'package:dio/dio.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 
@@ -128,25 +130,48 @@ class UserRepositoryHttp {
       );
     }
 
+    final normalized = resolved.endsWith('/')
+        ? resolved.substring(0, resolved.length - 1)
+        : resolved;
+
     _dio.options = BaseOptions(
-      baseUrl: resolved,
+      baseUrl: normalized,
       connectTimeout: const Duration(seconds: 12),
       receiveTimeout: const Duration(seconds: 12),
       sendTimeout: const Duration(seconds: 12),
-      headers: <String, dynamic>{'Content-Type': 'application/json'},
+      headers: <String, dynamic>{
+        'Content-Type': 'application/json',
+        'Accept': 'application/json',
+      },
       // backend 側が /users 等なので、ここは素直に baseUrl を使う
     );
 
+    // ✅ Request/Response logger + Firebase token injector
     _dio.interceptors.add(
       InterceptorsWrapper(
         onRequest: (options, handler) async {
-          // Firebase ID token を自動付与
-          final u = _auth.currentUser;
-          if (u != null) {
-            final token = await u.getIdToken();
-            options.headers['Authorization'] = 'Bearer $token';
+          try {
+            // Firebase ID token を自動付与
+            final u = _auth.currentUser;
+            if (u != null) {
+              final token = await u.getIdToken();
+              options.headers['Authorization'] = 'Bearer $token';
+            }
+          } catch (e) {
+            // token取得失敗はログだけ（request自体は流す）
+            _log('[UserRepositoryHttp] token error: $e');
           }
+
+          _logRequest(options);
           handler.next(options);
+        },
+        onResponse: (response, handler) {
+          _logResponse(response);
+          handler.next(response);
+        },
+        onError: (e, handler) {
+          _logDioError(e);
+          handler.next(e);
         },
       ),
     );
@@ -242,7 +267,9 @@ class UserRepositoryHttp {
     final data = e.response?.data;
 
     String msg = '$op failed';
-    if (status != null) msg += ' (status=$status)';
+    if (status != null) {
+      msg += ' (status=$status)';
+    }
 
     // backend が {"error": "..."} 返す想定
     if (data is Map && data['error'] != null) {
@@ -259,5 +286,147 @@ class UserRepositoryHttp {
       msg += ': ${e.message}';
     }
     return Exception(msg);
+  }
+
+  // ----------------------------
+  // logging (debug only)
+  // ----------------------------
+
+  void _log(String msg) {
+    if (!kDebugMode) {
+      return;
+    }
+    debugPrint(msg);
+  }
+
+  void _logRequest(RequestOptions o) {
+    if (!kDebugMode) {
+      return;
+    }
+
+    final method = o.method.toUpperCase();
+    final url = o.uri.toString();
+
+    // Authorization は伏せる
+    final headers = <String, dynamic>{};
+    o.headers.forEach((k, v) {
+      if (k.toLowerCase() == 'authorization') {
+        headers[k] = 'Bearer ***';
+      } else {
+        headers[k] = v;
+      }
+    });
+
+    // JSON payload（Map/List/String）を可能な範囲で出す
+    String body = '';
+    final d = o.data;
+    if (d != null) {
+      try {
+        if (d is String) {
+          body = d;
+        } else if (d is Map || d is List) {
+          body = jsonEncode(d);
+        } else {
+          body = d.toString();
+        }
+      } catch (e) {
+        body = '(failed to encode body: $e)';
+      }
+    }
+
+    final b = StringBuffer();
+    b.writeln('[UserRepositoryHttp] request');
+    b.writeln('  method=$method');
+    b.writeln('  url=$url');
+    b.writeln('  headers=${jsonEncode(headers)}');
+    if (body.isNotEmpty) {
+      b.writeln('  body=${_truncate(body, 1500)}');
+    }
+    debugPrint(b.toString());
+  }
+
+  void _logResponse(Response r) {
+    if (!kDebugMode) {
+      return;
+    }
+
+    final method = r.requestOptions.method.toUpperCase();
+    final url = r.requestOptions.uri.toString();
+
+    String body = '';
+    try {
+      final d = r.data;
+      if (d == null) {
+        body = '';
+      } else if (d is String) {
+        body = d;
+      } else if (d is Map || d is List) {
+        body = jsonEncode(d);
+      } else {
+        body = d.toString();
+      }
+    } catch (e) {
+      body = '(failed to encode response body: $e)';
+    }
+
+    final b = StringBuffer();
+    b.writeln('[UserRepositoryHttp] response');
+    b.writeln('  method=$method');
+    b.writeln('  url=$url');
+    b.writeln('  status=${r.statusCode}');
+    if (body.isNotEmpty) {
+      b.writeln('  body=${_truncate(body, 1500)}');
+    }
+    debugPrint(b.toString());
+  }
+
+  void _logDioError(DioException e) {
+    if (!kDebugMode) {
+      return;
+    }
+
+    final o = e.requestOptions;
+    final method = o.method.toUpperCase();
+    final url = o.uri.toString();
+    final status = e.response?.statusCode;
+
+    String resBody = '';
+    try {
+      final d = e.response?.data;
+      if (d == null) {
+        resBody = '';
+      } else if (d is String) {
+        resBody = d;
+      } else if (d is Map || d is List) {
+        resBody = jsonEncode(d);
+      } else {
+        resBody = d.toString();
+      }
+    } catch (_) {
+      resBody = '(failed to encode error response body)';
+    }
+
+    final b = StringBuffer();
+    b.writeln('[UserRepositoryHttp] error');
+    b.writeln('  method=$method');
+    b.writeln('  url=$url');
+    if (status != null) {
+      b.writeln('  status=$status');
+    }
+    if ((e.message ?? '').trim().isNotEmpty) {
+      b.writeln('  message=${e.message}');
+    }
+    if (resBody.isNotEmpty) {
+      b.writeln('  responseBody=${_truncate(resBody, 1500)}');
+    }
+    debugPrint(b.toString());
+  }
+
+  String _truncate(String s, int max) {
+    final t = s.trim();
+    if (t.length <= max) {
+      return t;
+    }
+    return '${t.substring(0, max)}...(truncated ${t.length - max} chars)';
   }
 }

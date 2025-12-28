@@ -31,6 +31,12 @@ type SNSDeps struct {
 	// ✅ NEW: name resolver endpoints
 	Company http.Handler
 	Brand   http.Handler
+
+	// ✅ NEW: auth onboarding resources
+	User            http.Handler
+	ShippingAddress http.Handler
+	BillingAddress  http.Handler
+	Avatar          http.Handler
 }
 
 // NewSNSDeps wires SNS handlers.
@@ -189,6 +195,12 @@ func NewSNSDepsWithNameResolverAndOrgHandlers(
 
 		Company: companyHandler,
 		Brand:   brandHandler,
+
+		// ✅ onboarding handlers are injected at RegisterSNSFromContainer() best-effort
+		User:            nil,
+		ShippingAddress: nil,
+		BillingAddress:  nil,
+		Avatar:          nil,
 	}
 }
 
@@ -200,7 +212,7 @@ func RegisterSNSFromContainer(mux *http.ServeMux, cont *Container) {
 	}
 
 	// cont.RouterDeps() の戻り値が「無名struct」でもここでは受けられる（型名不要）
-	deps := cont.RouterDeps()
+	depsAny := any(cont.RouterDeps())
 
 	// ✅ try to obtain catalog query from Container without touching RouterDeps fields.
 	var catalogQ *snsquery.SNSCatalogQuery
@@ -271,17 +283,45 @@ func RegisterSNSFromContainer(mux *http.ServeMux, cont *Container) {
 		}
 	}
 
+	// ✅ obtain core usecases from RouterDeps without compile-time dependency on its field set
+	listUC := getFieldPtr[*usecase.ListUsecase](depsAny, "ListUC", "ListUsecase")
+	invUC := getFieldPtr[*usecase.InventoryUsecase](depsAny, "InventoryUC", "InventoryUsecase")
+	pbUC := getFieldPtr[*usecase.ProductBlueprintUsecase](depsAny, "ProductBlueprintUC", "ProductBlueprintUsecase")
+	modelUC := getFieldPtr[*usecase.ModelUsecase](depsAny, "ModelUC", "ModelUsecase")
+	tokenBlueprintUC := getFieldPtr[*usecase.TokenBlueprintUsecase](depsAny, "TokenBlueprintUC", "TokenBlueprintUsecase")
+
 	snsDeps := NewSNSDepsWithNameResolverAndOrgHandlers(
-		deps.ListUC,
-		deps.InventoryUC,
-		deps.ProductBlueprintUC,
-		deps.ModelUC,
-		deps.TokenBlueprintUC,
+		listUC,
+		invUC,
+		pbUC,
+		modelUC,
+		tokenBlueprintUC,
 		companyUC,
 		brandUC,
 		nameResolver,
 		catalogQ,
 	)
+
+	// ✅ NEW: try to inject onboarding handlers (user/shipping/billing/avatar) best-effort
+	// - prioritize Container methods
+	// - fallback to RouterDeps fields (http.Handler)
+	snsDeps.User = getHandlerBestEffort(cont, depsAny,
+		[]string{"SNSUserHandler", "SNSUserHandler", "UserHandler", "SNSUser"},
+		[]string{"User", "UserHandler", "SNSUser", "SNSUser"},
+	)
+	snsDeps.ShippingAddress = getHandlerBestEffort(cont, depsAny,
+		[]string{"SNSShippingAddressHandler", "SNSShippingHandler", "ShippingAddressHandler", "SNSShippingAddress"},
+		[]string{"ShippingAddress", "ShippingAddressHandler", "SNSShippingAddress", "SNSShipping"},
+	)
+	snsDeps.BillingAddress = getHandlerBestEffort(cont, depsAny,
+		[]string{"SNSBillingAddressHandler", "SNSBillingHandler", "BillingAddressHandler", "SNSBillingAddress"},
+		[]string{"BillingAddress", "BillingAddressHandler", "SNSBillingAddress", "SNSBilling"},
+	)
+	snsDeps.Avatar = getHandlerBestEffort(cont, depsAny,
+		[]string{"SNSAvatarHandler", "SnsAvatarHandler", "AvatarHandler", "SNSAvatar"},
+		[]string{"Avatar", "AvatarHandler", "SNSAvatar", "SnsAvatar"},
+	)
+
 	RegisterSNSRoutes(mux, snsDeps)
 }
 
@@ -301,6 +341,12 @@ func RegisterSNSRoutes(mux *http.ServeMux, deps SNSDeps) {
 
 		Company: deps.Company,
 		Brand:   deps.Brand,
+
+		// ✅ NEW
+		User:            deps.User,
+		ShippingAddress: deps.ShippingAddress,
+		BillingAddress:  deps.BillingAddress,
+		Avatar:          deps.Avatar,
 	})
 }
 
@@ -413,6 +459,133 @@ func getSNSNameResolverFieldBestEffort(cont *Container) *appresolver.NameResolve
 	} {
 		if nr := tryField(n); nr != nil {
 			return nr
+		}
+	}
+
+	return nil
+}
+
+// getFieldPtr reads a pointer field from an arbitrary struct (or *struct) by name, best-effort.
+// - If not found / type mismatch, returns nil.
+// - T should be a pointer type (e.g. *usecase.ListUsecase).
+func getFieldPtr[T any](src any, names ...string) T {
+	var zero T
+	if src == nil {
+		return zero
+	}
+
+	rv := reflect.ValueOf(src)
+	if !rv.IsValid() {
+		return zero
+	}
+	if rv.Kind() == reflect.Interface && !rv.IsNil() {
+		rv = rv.Elem()
+	}
+	if rv.Kind() == reflect.Pointer {
+		if rv.IsNil() {
+			return zero
+		}
+		rv = rv.Elem()
+	}
+	if rv.Kind() != reflect.Struct {
+		return zero
+	}
+
+	for _, n := range names {
+		n = strings.TrimSpace(n)
+		if n == "" {
+			continue
+		}
+		f := rv.FieldByName(n)
+		if !f.IsValid() {
+			continue
+		}
+		if !f.CanInterface() {
+			continue
+		}
+		if v, ok := f.Interface().(T); ok {
+			return v
+		}
+	}
+
+	return zero
+}
+
+// getHandlerBestEffort finds a handler from Container (methods/fields) or RouterDeps fields, best-effort.
+func getHandlerBestEffort(cont *Container, depsAny any, containerMethodNames []string, depsFieldNames []string) http.Handler {
+	// 1) container method
+	if cont != nil {
+		rv := reflect.ValueOf(cont)
+		for _, mname := range containerMethodNames {
+			mname = strings.TrimSpace(mname)
+			if mname == "" {
+				continue
+			}
+			m := rv.MethodByName(mname)
+			if !m.IsValid() {
+				continue
+			}
+			// expect func() http.Handler
+			if m.Type().NumIn() != 0 || m.Type().NumOut() != 1 {
+				continue
+			}
+			out := m.Call(nil)
+			if len(out) != 1 {
+				continue
+			}
+			if h, ok := out[0].Interface().(http.Handler); ok {
+				return h
+			}
+		}
+
+		// 2) container field
+		rve := reflect.ValueOf(cont)
+		if rve.IsValid() && rve.Kind() == reflect.Pointer && !rve.IsNil() {
+			rve = rve.Elem()
+		}
+		if rve.IsValid() && rve.Kind() == reflect.Struct {
+			for _, fname := range containerMethodNames { // reuse same names as field candidates
+				fname = strings.TrimSpace(fname)
+				if fname == "" {
+					continue
+				}
+				f := rve.FieldByName(fname)
+				if !f.IsValid() || !f.CanInterface() {
+					continue
+				}
+				if h, ok := f.Interface().(http.Handler); ok {
+					return h
+				}
+			}
+		}
+	}
+
+	// 3) deps field
+	if depsAny != nil {
+		rv := reflect.ValueOf(depsAny)
+		if rv.Kind() == reflect.Interface && !rv.IsNil() {
+			rv = rv.Elem()
+		}
+		if rv.Kind() == reflect.Pointer {
+			if rv.IsNil() {
+				return nil
+			}
+			rv = rv.Elem()
+		}
+		if rv.Kind() == reflect.Struct {
+			for _, fname := range depsFieldNames {
+				fname = strings.TrimSpace(fname)
+				if fname == "" {
+					continue
+				}
+				f := rv.FieldByName(fname)
+				if !f.IsValid() || !f.CanInterface() {
+					continue
+				}
+				if h, ok := f.Interface().(http.Handler); ok {
+					return h
+				}
+			}
 		}
 	}
 

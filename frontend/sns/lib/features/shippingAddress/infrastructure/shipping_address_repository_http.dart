@@ -1,4 +1,7 @@
 // frontend/sns/lib/features/shippingAddress/infrastructure/shipping_address_repository_http.dart
+import 'dart:convert';
+
+import 'package:flutter/foundation.dart';
 import 'package:dio/dio.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 
@@ -10,7 +13,8 @@ String _resolveApiBase() {
       'API_BASE is not set (use --dart-define=API_BASE=https://...)',
     );
   }
-  return s;
+  // Ensure no trailing slash
+  return s.endsWith('/') ? s.substring(0, s.length - 1) : s;
 }
 
 /// Domain-ish model for SNS shipping address (matches backend shippingAddress.entity.go)
@@ -134,7 +138,9 @@ class UpdateShippingAddressInput {
     final m = <String, dynamic>{};
 
     void put(String k, String? v) {
-      if (v == null) return;
+      if (v == null) {
+        return;
+      }
       m[k] = v.trim();
     }
 
@@ -151,37 +157,63 @@ class UpdateShippingAddressInput {
 }
 
 class ShippingAddressRepositoryHttp {
-  ShippingAddressRepositoryHttp({Dio? dio})
-    : _dio =
-          dio ??
-          Dio(
-            BaseOptions(
-              baseUrl: _resolveApiBase(),
-              connectTimeout: const Duration(seconds: 12),
-              receiveTimeout: const Duration(seconds: 20),
-              headers: const {'Content-Type': 'application/json'},
-            ),
-          );
+  ShippingAddressRepositoryHttp({Dio? dio, FirebaseAuth? auth, String? baseUrl})
+    : _auth = auth ?? FirebaseAuth.instance,
+      _dio = dio ?? Dio() {
+    final resolved = (baseUrl ?? _resolveApiBase()).trim();
+    final normalized = resolved.endsWith('/')
+        ? resolved.substring(0, resolved.length - 1)
+        : resolved;
+
+    _dio.options = BaseOptions(
+      baseUrl: normalized,
+      connectTimeout: const Duration(seconds: 12),
+      receiveTimeout: const Duration(seconds: 20),
+      sendTimeout: const Duration(seconds: 20),
+      headers: <String, dynamic>{
+        'Content-Type': 'application/json',
+        'Accept': 'application/json',
+      },
+    );
+
+    // ✅ Request/Response logger + Firebase token injector
+    _dio.interceptors.add(
+      InterceptorsWrapper(
+        onRequest: (options, handler) async {
+          try {
+            final u = _auth.currentUser;
+            if (u != null) {
+              final token = await u.getIdToken();
+              options.headers['Authorization'] = 'Bearer $token';
+            }
+          } catch (e) {
+            _log('[ShippingAddressRepositoryHttp] token error: $e');
+          }
+
+          _logRequest(options);
+          handler.next(options);
+        },
+        onResponse: (response, handler) {
+          _logResponse(response);
+          handler.next(response);
+        },
+        onError: (e, handler) {
+          _logDioError(e);
+          handler.next(e);
+        },
+      ),
+    );
+  }
 
   final Dio _dio;
+  final FirebaseAuth _auth;
   final CancelToken _cancelToken = CancelToken();
 
   void dispose() {
     if (!_cancelToken.isCancelled) {
       _cancelToken.cancel('disposed');
     }
-  }
-
-  Future<Map<String, String>> _authHeader() async {
-    final user = FirebaseAuth.instance.currentUser;
-    if (user == null) return {};
-
-    // firebase_auth のバージョン差分で nullable になるケースに備える
-    final String? token = await user.getIdToken();
-    final t = (token ?? '').trim();
-    if (t.isEmpty) return {};
-
-    return {'Authorization': 'Bearer $t'};
+    _dio.close(force: true);
   }
 
   Exception _normalizeDioError(Object e) {
@@ -203,17 +235,16 @@ class ShippingAddressRepositoryHttp {
   /// GET /shipping-addresses/{id}
   Future<ShippingAddress> getById(String id) async {
     final s = id.trim();
-    if (s.isEmpty) throw Exception('invalid id');
+    if (s.isEmpty) {
+      throw Exception('invalid id');
+    }
 
     try {
       final res = await _dio.get(
         '/shipping-addresses/$s',
-        options: Options(headers: await _authHeader()),
         cancelToken: _cancelToken,
       );
-      final data = (res.data is Map)
-          ? Map<String, dynamic>.from(res.data as Map)
-          : <String, dynamic>{};
+      final data = _asMap(res.data);
       return ShippingAddress.fromJson(data);
     } catch (e) {
       throw _normalizeDioError(e);
@@ -226,12 +257,9 @@ class ShippingAddressRepositoryHttp {
       final res = await _dio.post(
         '/shipping-addresses',
         data: inData.toJson(),
-        options: Options(headers: await _authHeader()),
         cancelToken: _cancelToken,
       );
-      final data = (res.data is Map)
-          ? Map<String, dynamic>.from(res.data as Map)
-          : <String, dynamic>{};
+      final data = _asMap(res.data);
       return ShippingAddress.fromJson(data);
     } catch (e) {
       throw _normalizeDioError(e);
@@ -246,11 +274,12 @@ class ShippingAddressRepositoryHttp {
     UpdateShippingAddressInput inData,
   ) async {
     final s = id.trim();
-    if (s.isEmpty) throw Exception('invalid id');
+    if (s.isEmpty) {
+      throw Exception('invalid id');
+    }
 
     final body = inData.toJson();
     if (body.isEmpty) {
-      // no-op: still fetch current
       return getById(s);
     }
 
@@ -258,12 +287,9 @@ class ShippingAddressRepositoryHttp {
       final res = await _dio.patch(
         '/shipping-addresses/$s',
         data: body,
-        options: Options(headers: await _authHeader()),
         cancelToken: _cancelToken,
       );
-      final data = (res.data is Map)
-          ? Map<String, dynamic>.from(res.data as Map)
-          : <String, dynamic>{};
+      final data = _asMap(res.data);
       return ShippingAddress.fromJson(data);
     } catch (e) {
       throw _normalizeDioError(e);
@@ -273,16 +299,204 @@ class ShippingAddressRepositoryHttp {
   /// DELETE /shipping-addresses/{id}
   Future<void> delete(String id) async {
     final s = id.trim();
-    if (s.isEmpty) throw Exception('invalid id');
+    if (s.isEmpty) {
+      throw Exception('invalid id');
+    }
 
     try {
-      await _dio.delete(
-        '/shipping-addresses/$s',
-        options: Options(headers: await _authHeader()),
-        cancelToken: _cancelToken,
-      );
+      await _dio.delete('/shipping-addresses/$s', cancelToken: _cancelToken);
     } catch (e) {
       throw _normalizeDioError(e);
     }
+  }
+
+  // ------------------------------------------------------------
+  // helpers
+  // ------------------------------------------------------------
+
+  Map<String, dynamic> _asMap(dynamic v) {
+    if (v is Map<String, dynamic>) {
+      return v;
+    }
+    if (v is Map) {
+      return Map<String, dynamic>.from(v);
+    }
+    if (v is String) {
+      try {
+        final decoded = jsonDecode(v);
+        if (decoded is Map<String, dynamic>) {
+          return decoded;
+        }
+        if (decoded is Map) {
+          return Map<String, dynamic>.from(decoded);
+        }
+      } catch (_) {
+        // ignore
+      }
+    }
+    throw Exception(
+      'Invalid response body: expected object, got ${v.runtimeType}',
+    );
+  }
+
+  // ------------------------------------------------------------
+  // logging (debug only)
+  // ------------------------------------------------------------
+
+  void _log(String msg) {
+    if (!kDebugMode) {
+      return;
+    }
+    debugPrint(msg);
+  }
+
+  void _logRequest(RequestOptions o) {
+    if (!kDebugMode) {
+      return;
+    }
+
+    final method = o.method.toUpperCase();
+    final url = o.uri.toString();
+
+    // Authorization は伏せる
+    final headers = <String, dynamic>{};
+    o.headers.forEach((k, v) {
+      if (k.toLowerCase() == 'authorization') {
+        headers[k] = 'Bearer ***';
+      } else {
+        headers[k] = v;
+      }
+    });
+
+    String body = '';
+    final d = o.data;
+    if (d != null) {
+      try {
+        if (d is String) {
+          body = d;
+        } else if (d is Map || d is List) {
+          body = jsonEncode(d);
+        } else {
+          body = d.toString();
+        }
+      } catch (e) {
+        body = '(failed to encode body: $e)';
+      }
+    }
+
+    final b = StringBuffer();
+    b.writeln('[ShippingAddressRepositoryHttp] request');
+    b.writeln('  method=$method');
+    b.writeln('  url=$url');
+    b.writeln('  headers=${jsonEncode(headers)}');
+    if (body.isNotEmpty) {
+      b.writeln('  body=${_truncate(body, 1500)}');
+    }
+    debugPrint(b.toString());
+  }
+
+  void _logResponse(Response r) {
+    if (!kDebugMode) {
+      return;
+    }
+
+    final method = r.requestOptions.method.toUpperCase();
+    final url = r.requestOptions.uri.toString();
+
+    String body = '';
+    try {
+      final d = r.data;
+      if (d == null) {
+        body = '';
+      } else if (d is String) {
+        body = d;
+      } else if (d is Map || d is List) {
+        body = jsonEncode(d);
+      } else {
+        body = d.toString();
+      }
+    } catch (e) {
+      body = '(failed to encode response body: $e)';
+    }
+
+    final b = StringBuffer();
+    b.writeln('[ShippingAddressRepositoryHttp] response');
+    b.writeln('  method=$method');
+    b.writeln('  url=$url');
+    b.writeln('  status=${r.statusCode}');
+    if (body.isNotEmpty) {
+      b.writeln('  body=${_truncate(body, 1500)}');
+    }
+    debugPrint(b.toString());
+  }
+
+  void _logDioError(DioException e) {
+    if (!kDebugMode) {
+      return;
+    }
+
+    final o = e.requestOptions;
+    final method = o.method.toUpperCase();
+    final url = o.uri.toString();
+    final status = e.response?.statusCode;
+
+    String resBody = '';
+    try {
+      final d = e.response?.data;
+      if (d == null) {
+        resBody = '';
+      } else if (d is String) {
+        resBody = d;
+      } else if (d is Map || d is List) {
+        resBody = jsonEncode(d);
+      } else {
+        resBody = d.toString();
+      }
+    } catch (_) {
+      resBody = '(failed to encode error response body)';
+    }
+
+    // request body
+    String reqBody = '';
+    try {
+      final d = o.data;
+      if (d == null) {
+        reqBody = '';
+      } else if (d is String) {
+        reqBody = d;
+      } else if (d is Map || d is List) {
+        reqBody = jsonEncode(d);
+      } else {
+        reqBody = d.toString();
+      }
+    } catch (_) {
+      reqBody = '(failed to encode request body)';
+    }
+
+    final b = StringBuffer();
+    b.writeln('[ShippingAddressRepositoryHttp] error');
+    b.writeln('  method=$method');
+    b.writeln('  url=$url');
+    if (status != null) {
+      b.writeln('  status=$status');
+    }
+    if ((e.message ?? '').trim().isNotEmpty) {
+      b.writeln('  message=${e.message}');
+    }
+    if (reqBody.isNotEmpty) {
+      b.writeln('  requestBody=${_truncate(reqBody, 1500)}');
+    }
+    if (resBody.isNotEmpty) {
+      b.writeln('  responseBody=${_truncate(resBody, 1500)}');
+    }
+    debugPrint(b.toString());
+  }
+
+  String _truncate(String s, int max) {
+    final t = s.trim();
+    if (t.length <= max) {
+      return t;
+    }
+    return '${t.substring(0, max)}...(truncated ${t.length - max} chars)';
   }
 }
