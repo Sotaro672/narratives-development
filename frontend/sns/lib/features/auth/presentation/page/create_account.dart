@@ -1,27 +1,29 @@
-// frontend/sns/lib/features/auth/presentation/page/login_page.dart
+//frontend\sns\lib\features\auth\presentation\page\create_account.dart
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 
 import '../../../../app/shell/presentation/components/header.dart';
 
-class LoginPage extends StatefulWidget {
-  const LoginPage({super.key, this.from, this.intent});
+class CreateAccountPage extends StatefulWidget {
+  const CreateAccountPage({super.key, this.from, this.intent});
 
-  /// Optional: where to go after login (e.g. /catalog/xxx)
+  /// Optional: where to go after signup (e.g. /catalog/xxx)
   final String? from;
 
   /// Optional: why user was redirected (e.g. "purchase")
   final String? intent;
 
   @override
-  State<LoginPage> createState() => _LoginPageState();
+  State<CreateAccountPage> createState() => _CreateAccountPageState();
 }
 
-class _LoginPageState extends State<LoginPage> {
+class _CreateAccountPageState extends State<CreateAccountPage> {
   final _emailCtrl = TextEditingController();
   final _passCtrl = TextEditingController();
+  final _pass2Ctrl = TextEditingController();
 
+  bool _agree = false;
   bool _loading = false;
   String? _error;
 
@@ -29,82 +31,99 @@ class _LoginPageState extends State<LoginPage> {
   void dispose() {
     _emailCtrl.dispose();
     _passCtrl.dispose();
+    _pass2Ctrl.dispose();
     super.dispose();
   }
 
   String _s(String v) => v.trim();
 
-  String _backTo() {
+  bool get _isEmailValid {
+    final email = _s(_emailCtrl.text);
+    // ざっくり判定（厳密でなくてOK）
+    return email.isNotEmpty && email.contains('@') && email.contains('.');
+  }
+
+  bool get _isPasswordValid {
+    final pass = _passCtrl.text;
+    return pass.length >= 6;
+  }
+
+  bool get _isPasswordMatch {
+    return _passCtrl.text == _pass2Ctrl.text && _pass2Ctrl.text.isNotEmpty;
+  }
+
+  bool get _canSubmit {
+    return !_loading &&
+        _agree &&
+        _isEmailValid &&
+        _isPasswordValid &&
+        _isPasswordMatch;
+  }
+
+  String _loginBackTo() {
+    final qp = <String, String>{};
+    final from = (widget.from ?? '').trim();
+    final intent = (widget.intent ?? '').trim();
+    if (from.isNotEmpty) qp['from'] = from;
+    if (intent.isNotEmpty) qp['intent'] = intent;
+    final uri = Uri(path: '/login', queryParameters: qp.isEmpty ? null : qp);
+    return uri.toString();
+  }
+
+  String _afterSuccessDest() {
     final dest = (widget.from ?? '/').trim();
     return dest.isNotEmpty ? dest : '/';
   }
 
-  Future<void> _signIn() async {
+  Future<void> _createAndSendVerification() async {
+    setState(() => _error = null);
+
     final email = _s(_emailCtrl.text);
     final pass = _passCtrl.text;
 
-    setState(() => _error = null);
-
-    if (email.isEmpty || pass.isEmpty) {
-      setState(() => _error = 'Email and password are required.');
+    if (!_isEmailValid) {
+      setState(() => _error = 'Enter a valid email address.');
+      return;
+    }
+    if (!_isPasswordValid) {
+      setState(() => _error = 'Password must be at least 6 characters.');
+      return;
+    }
+    if (!_isPasswordMatch) {
+      setState(() => _error = 'Passwords do not match.');
+      return;
+    }
+    if (!_agree) {
+      setState(() => _error = 'Please accept the Terms.');
       return;
     }
 
     setState(() => _loading = true);
 
     try {
-      await FirebaseAuth.instance.signInWithEmailAndPassword(
+      final cred = await FirebaseAuth.instance.createUserWithEmailAndPassword(
         email: email,
         password: pass,
       );
 
-      final dest = _backTo();
-      if (!mounted) return;
-      context.go(dest);
-    } on FirebaseAuthException catch (e) {
-      setState(() => _error = _friendlyAuthError(e));
-    } catch (e) {
-      setState(() => _error = e.toString());
-    } finally {
-      if (mounted) setState(() => _loading = false);
-    }
-  }
+      final user = cred.user ?? FirebaseAuth.instance.currentUser;
+      if (user == null) {
+        throw StateError('User is null after sign up.');
+      }
 
-  void _goCreateAccount() {
-    final from = _backTo();
-    final intent = (widget.intent ?? '').trim();
+      // ✅ 認証メール送信
+      await user.sendEmailVerification();
 
-    final qp = <String, String>{};
-    if (from.trim().isNotEmpty) qp['from'] = from;
-    if (intent.isNotEmpty) qp['intent'] = intent;
-
-    final uri = Uri(
-      path: '/create-account',
-      queryParameters: qp.isEmpty ? null : qp,
-    );
-
-    context.go(uri.toString());
-  }
-
-  Future<void> _sendPasswordReset() async {
-    final email = _s(_emailCtrl.text);
-
-    setState(() => _error = null);
-
-    if (email.isEmpty) {
-      setState(() => _error = 'Enter your email to reset password.');
-      return;
-    }
-
-    setState(() => _loading = true);
-
-    try {
-      await FirebaseAuth.instance.sendPasswordResetEmail(email: email);
       if (!mounted) return;
 
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Password reset email sent.')),
+        const SnackBar(
+          content: Text('Verification email sent. Please check your inbox.'),
+        ),
       );
+
+      // ✅ そのまま閲覧に戻す（必要なら後で「未認証は購入不可」等の制御を追加）
+      context.go(_afterSuccessDest());
     } on FirebaseAuthException catch (e) {
       setState(() => _error = _friendlyAuthError(e));
     } catch (e) {
@@ -118,22 +137,14 @@ class _LoginPageState extends State<LoginPage> {
     switch (e.code) {
       case 'invalid-email':
         return 'Invalid email address.';
-      case 'user-disabled':
-        return 'This account is disabled.';
-      case 'user-not-found':
-        return 'Account not found.';
-      case 'wrong-password':
-        return 'Incorrect password.';
       case 'email-already-in-use':
         return 'Email is already in use.';
       case 'weak-password':
         return 'Password is too weak.';
-      case 'too-many-requests':
-        return 'Too many attempts. Try again later.';
       case 'operation-not-allowed':
         return 'This sign-in method is not enabled.';
       default:
-        return e.message ?? 'Login failed.';
+        return e.message ?? 'Create account failed.';
     }
   }
 
@@ -141,41 +152,32 @@ class _LoginPageState extends State<LoginPage> {
   Widget build(BuildContext context) {
     final intent = (widget.intent ?? '').trim();
     final topMessage = intent == 'purchase'
-        ? 'Log in to complete your purchase.'
-        : 'Log in to continue.';
-
-    final backTo = _backTo();
+        ? 'Create an account to continue your purchase.'
+        : 'Create an account to continue.';
 
     return Scaffold(
       body: SafeArea(
         child: Column(
           children: [
-            // ✅ Login では「戻る」だけ表示（Sign in は出さない）
-            // ✅ ここが “Continue without login” の移譲先
+            // ✅ ヘッダー：右側に Sign in は出さない。戻るだけ。
             AppHeader(
-              title: 'Sign in',
+              title: 'Create account',
               showBack: true,
-              backTo: backTo,
-              actions: const [], // ← ここ重要（右側ボタン非表示）
+              backTo: _loginBackTo(),
+              actions: const [],
               onTapTitle: () => context.go('/'),
             ),
 
             Expanded(
               child: Center(
                 child: ConstrainedBox(
-                  constraints: const BoxConstraints(maxWidth: 420),
+                  constraints: const BoxConstraints(maxWidth: 460),
                   child: Padding(
                     padding: const EdgeInsets.all(16),
                     child: Column(
                       mainAxisSize: MainAxisSize.min,
                       crossAxisAlignment: CrossAxisAlignment.stretch,
                       children: [
-                        Text(
-                          'sns',
-                          textAlign: TextAlign.center,
-                          style: Theme.of(context).textTheme.headlineSmall,
-                        ),
-                        const SizedBox(height: 6),
                         Text(
                           topMessage,
                           textAlign: TextAlign.center,
@@ -204,33 +206,58 @@ class _LoginPageState extends State<LoginPage> {
                         TextField(
                           controller: _emailCtrl,
                           keyboardType: TextInputType.emailAddress,
-                          autofillHints: const [
-                            AutofillHints.username,
-                            AutofillHints.email,
-                          ],
+                          autofillHints: const [AutofillHints.email],
                           enabled: !_loading,
                           decoration: const InputDecoration(
                             labelText: 'Email',
                             border: OutlineInputBorder(),
                           ),
-                          onSubmitted: (_) => _signIn(),
-                        ),
-                        const SizedBox(height: 12),
-                        TextField(
-                          controller: _passCtrl,
-                          obscureText: true,
-                          autofillHints: const [AutofillHints.password],
-                          enabled: !_loading,
-                          decoration: const InputDecoration(
-                            labelText: 'Password',
-                            border: OutlineInputBorder(),
-                          ),
-                          onSubmitted: (_) => _signIn(),
+                          onChanged: (_) => setState(() {}),
                         ),
                         const SizedBox(height: 12),
 
+                        TextField(
+                          controller: _passCtrl,
+                          obscureText: true,
+                          autofillHints: const [AutofillHints.newPassword],
+                          enabled: !_loading,
+                          decoration: const InputDecoration(
+                            labelText: 'Password (min 6 chars)',
+                            border: OutlineInputBorder(),
+                          ),
+                          onChanged: (_) => setState(() {}),
+                        ),
+                        const SizedBox(height: 12),
+
+                        TextField(
+                          controller: _pass2Ctrl,
+                          obscureText: true,
+                          autofillHints: const [AutofillHints.newPassword],
+                          enabled: !_loading,
+                          decoration: const InputDecoration(
+                            labelText: 'Confirm password',
+                            border: OutlineInputBorder(),
+                          ),
+                          onChanged: (_) => setState(() {}),
+                        ),
+                        const SizedBox(height: 12),
+
+                        CheckboxListTile(
+                          value: _agree,
+                          onChanged: _loading
+                              ? null
+                              : (v) => setState(() => _agree = v ?? false),
+                          controlAffinity: ListTileControlAffinity.leading,
+                          contentPadding: EdgeInsets.zero,
+                          title: const Text('I agree to the Terms of Service'),
+                        ),
+
+                        const SizedBox(height: 12),
+
                         ElevatedButton(
-                          onPressed: _loading ? null : _signIn,
+                          onPressed: _canSubmit
+                              ? _createAndSendVerification
+                              : null,
                           child: _loading
                               ? const SizedBox(
                                   width: 18,
@@ -239,23 +266,17 @@ class _LoginPageState extends State<LoginPage> {
                                     strokeWidth: 2,
                                   ),
                                 )
-                              : const Text('Log in'),
-                        ),
-                        const SizedBox(height: 8),
-
-                        // ✅ Create account は “作成ページへ遷移” に変更
-                        OutlinedButton(
-                          onPressed: _loading ? null : _goCreateAccount,
-                          child: const Text('Create account'),
+                              : const Text('Send verification email'),
                         ),
 
                         const SizedBox(height: 8),
+
                         TextButton(
-                          onPressed: _loading ? null : _sendPasswordReset,
-                          child: const Text('Forgot password?'),
+                          onPressed: _loading
+                              ? null
+                              : () => context.go(_loginBackTo()),
+                          child: const Text('Back to Sign in'),
                         ),
-
-                        // ✅ Continue without login は削除（戻るボタンへ移譲済み）
                       ],
                     ),
                   ),

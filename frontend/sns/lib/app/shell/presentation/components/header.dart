@@ -3,12 +3,9 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
 /// Minimal public header for SNS (no-auth).
-/// - Back button (optional)  ※ showBack のみで制御
+/// - Back button (optional) ※ showBack のみで制御
 /// - Title (optional)
-/// - Right-side actions (optional)
-///
-/// ✅ Sign in ボタンはここで固定表示しない
-/// - 右側ボタン（Sign in / Sign out など）は router.dart から actions で注入する
+/// - Right-side actions (optional)  ← Sign in / Sign out は router 側から渡す
 class AppHeader extends StatelessWidget {
   const AppHeader({
     super.key,
@@ -34,7 +31,6 @@ class AppHeader extends StatelessWidget {
   final String backTo;
 
   void _handleBack(BuildContext context) {
-    // pop は使わない（ブラウザ直リンク等で破綻しやすい）
     context.go(backTo);
   }
 
@@ -84,7 +80,6 @@ class AppHeader extends StatelessWidget {
               ),
             ),
 
-            // ✅ 右側 actions（Sign in / Sign out 等）は外から注入
             if (actions != null) ...actions!,
           ],
         ),

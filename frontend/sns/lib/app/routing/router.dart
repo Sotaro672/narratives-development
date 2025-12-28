@@ -14,8 +14,9 @@ import '../../features/home/presentation/page/catalog.dart';
 // ✅ SnsListItem 型
 import '../../features/list/infrastructure/list_repository_http.dart';
 
-// auth page
+// auth pages
 import '../../features/auth/presentation/page/login_page.dart';
+import '../../features/auth/presentation/page/create_account.dart';
 
 /// ✅ Firebase OK 前提のルーター（Auth 連動）
 GoRouter buildAppRouter() {
@@ -65,6 +66,15 @@ GoRouter buildPublicOnlyRouter({required Object initError}) {
       GoRoute(
         path: '/login',
         name: 'login',
+        pageBuilder: (context, state) {
+          return NoTransitionPage(
+            child: _FirebaseInitErrorPage(error: initError),
+          );
+        },
+      ),
+      GoRoute(
+        path: '/create-account',
+        name: 'createAccount',
         pageBuilder: (context, state) {
           return NoTransitionPage(
             child: _FirebaseInitErrorPage(error: initError),
@@ -125,6 +135,19 @@ List<RouteBase> _routes({required bool firebaseReady}) {
         final intent = state.uri.queryParameters['intent'];
         return NoTransitionPage(
           child: LoginPage(from: from, intent: intent),
+        );
+      },
+    ),
+
+    // ✅ create account も ShellRoute の外（ヘッダー/フッター不要）
+    GoRoute(
+      path: '/create-account',
+      name: 'createAccount',
+      pageBuilder: (context, state) {
+        final from = state.uri.queryParameters['from'];
+        final intent = state.uri.queryParameters['intent'];
+        return NoTransitionPage(
+          child: CreateAccountPage(from: from, intent: intent),
         );
       },
     ),
@@ -191,8 +214,8 @@ List<Widget> _headerActionsFor(
 }) {
   final path = state.uri.path;
 
-  // login 画面では何も出さない（ループ/見た目の二重化防止）
-  if (path == '/login') return const [];
+  // ✅ auth系ページでは出さない（Sign in 二重表示を防ぐ）
+  if (path == '/login' || path == '/create-account') return const [];
 
   if (!allowLogin) return const [];
 
