@@ -117,16 +117,15 @@ class UpdateUserBody {
 }
 
 /// SNS Flutter 用 UserRepository (HTTP)
-/// - API_BASE は `--dart-define=API_BASE=https://...` で渡す想定
+/// - API_BASE or API_BASE_URL は `--dart-define=...` で渡す想定
 class UserRepositoryHttp {
   UserRepositoryHttp({Dio? dio, FirebaseAuth? auth, String? baseUrl})
     : _auth = auth ?? FirebaseAuth.instance,
       _dio = dio ?? Dio() {
-    final resolved = (baseUrl ?? const String.fromEnvironment('API_BASE'))
-        .trim();
+    final resolved = _resolveApiBase(override: baseUrl).trim();
     if (resolved.isEmpty) {
       throw Exception(
-        'API_BASE is not set (use --dart-define=API_BASE=https://...)',
+        'API_BASE is not set (use --dart-define=API_BASE=https://... or API_BASE_URL=https://...)',
       );
     }
 
@@ -143,7 +142,6 @@ class UserRepositoryHttp {
         'Content-Type': 'application/json',
         'Accept': 'application/json',
       },
-      // backend 側が /users 等なので、ここは素直に baseUrl を使う
     );
 
     // ✅ Request/Response logger + Firebase token injector
@@ -173,13 +171,15 @@ class UserRepositoryHttp {
           // ✅ 既存の DioError ログ
           _logDioError(e);
 
-          // ✅ NEW: “失敗時のログ” を追加（原因調査用）
+          // ✅ “失敗時のログ” を追加（原因調査用）
           _logFailureSummary(e);
 
           handler.next(e);
         },
       ),
     );
+
+    _log('[UserRepositoryHttp] init baseUrl=$normalized');
   }
 
   final Dio _dio;
@@ -205,14 +205,12 @@ class UserRepositoryHttp {
       final data = _asMap(res.data);
       return UserDTO.fromJson(data);
     } on DioException catch (e) {
-      // ✅ NEW: 失敗時に “throw 前” にも要約ログを出す（呼び出し側で握りつぶされるケース対策）
       _logFailureSummary(e, op: 'GET /users/$trimmed');
       throw _toException(e, op: 'GET /users/$trimmed');
     }
   }
 
   /// POST /users
-  /// - 想定: id は Firebase uid を渡す（users/{uid} にする設計なら handler 側で対応）
   Future<UserDTO> create(CreateUserBody body) async {
     if (body.id.trim().isEmpty) {
       throw ArgumentError('id is empty');
@@ -223,7 +221,6 @@ class UserRepositoryHttp {
       final data = _asMap(res.data);
       return UserDTO.fromJson(data);
     } on DioException catch (e) {
-      // ✅ NEW: 失敗時ログ（request payload / response body / status）
       _logFailureSummary(e, op: 'POST /users');
       throw _toException(e, op: 'POST /users');
     }
@@ -241,7 +238,6 @@ class UserRepositoryHttp {
       final data = _asMap(res.data);
       return UserDTO.fromJson(data);
     } on DioException catch (e) {
-      // ✅ NEW: 失敗時ログ
       _logFailureSummary(e, op: 'PATCH /users/$trimmed');
       throw _toException(e, op: 'PATCH /users/$trimmed');
     }
@@ -257,7 +253,6 @@ class UserRepositoryHttp {
     try {
       await _dio.delete('/users/$trimmed');
     } on DioException catch (e) {
-      // ✅ NEW: 失敗時ログ
       _logFailureSummary(e, op: 'DELETE /users/$trimmed');
       throw _toException(e, op: 'DELETE /users/$trimmed');
     }
@@ -266,6 +261,23 @@ class UserRepositoryHttp {
   // ----------------------------
   // helpers
   // ----------------------------
+
+  static const bool _envHttpLog = bool.fromEnvironment(
+    'ENABLE_HTTP_LOG',
+    defaultValue: false,
+  );
+
+  bool get _logEnabled => kDebugMode || _envHttpLog;
+
+  static String _resolveApiBase({String? override}) {
+    final o = (override ?? '').trim();
+    if (o.isNotEmpty) return o;
+
+    const v1 = String.fromEnvironment('API_BASE_URL'); // newer
+    const v2 = String.fromEnvironment('API_BASE'); // legacy
+    final raw = (v1.isNotEmpty ? v1 : v2).trim();
+    return raw;
+  }
 
   Map<String, dynamic> _asMap(dynamic v) {
     if (v is Map<String, dynamic>) return v;
@@ -302,20 +314,16 @@ class UserRepositoryHttp {
   }
 
   // ----------------------------
-  // logging (debug only)
+  // logging
   // ----------------------------
 
   void _log(String msg) {
-    if (!kDebugMode) {
-      return;
-    }
+    if (!_logEnabled) return;
     debugPrint(msg);
   }
 
   void _logRequest(RequestOptions o) {
-    if (!kDebugMode) {
-      return;
-    }
+    if (!_logEnabled) return;
 
     final method = o.method.toUpperCase();
     final url = o.uri.toString();
@@ -359,9 +367,7 @@ class UserRepositoryHttp {
   }
 
   void _logResponse(Response r) {
-    if (!kDebugMode) {
-      return;
-    }
+    if (!_logEnabled) return;
 
     final method = r.requestOptions.method.toUpperCase();
     final url = r.requestOptions.uri.toString();
@@ -394,9 +400,7 @@ class UserRepositoryHttp {
   }
 
   void _logDioError(DioException e) {
-    if (!kDebugMode) {
-      return;
-    }
+    if (!_logEnabled) return;
 
     final o = e.requestOptions;
     final method = o.method.toUpperCase();
@@ -435,9 +439,9 @@ class UserRepositoryHttp {
     debugPrint(b.toString());
   }
 
-  // ✅ NEW: Failure summary logger (request payload + response headers/body)
+  // Failure summary logger (request payload + response headers/body)
   void _logFailureSummary(DioException e, {String? op}) {
-    if (!kDebugMode) return;
+    if (!_logEnabled) return;
 
     final o = e.requestOptions;
     final method = o.method.toUpperCase();

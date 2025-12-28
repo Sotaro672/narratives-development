@@ -6,15 +6,18 @@ import 'package:dio/dio.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 
 String _resolveApiBase() {
-  const v = String.fromEnvironment('API_BASE', defaultValue: '');
-  final s = v.trim();
-  if (s.isEmpty) {
+  // ✅ API_BASE_URL / API_BASE の両対応（どちらでもOK）
+  const v1 = String.fromEnvironment('API_BASE_URL', defaultValue: '');
+  const v2 = String.fromEnvironment('API_BASE', defaultValue: '');
+  final raw = (v1.isNotEmpty ? v1 : v2).trim();
+
+  if (raw.isEmpty) {
     throw Exception(
-      'API_BASE is not set (use --dart-define=API_BASE=https://...)',
+      'API_BASE is not set (use --dart-define=API_BASE=https://... or API_BASE_URL=https://...)',
     );
   }
   // Ensure no trailing slash
-  return s.endsWith('/') ? s.substring(0, s.length - 1) : s;
+  return raw.endsWith('/') ? raw.substring(0, raw.length - 1) : raw;
 }
 
 /// Domain-ish model for SNS shipping address (matches backend shippingAddress.entity.go)
@@ -201,18 +204,28 @@ class ShippingAddressRepositoryHttp {
           // ✅ 既存のエラー詳細ログ
           _logDioError(e);
 
-          // ✅ NEW: 失敗時の “要約ログ” を追加（request/response をまとめて出す）
+          // ✅ 失敗時の “要約ログ” を追加（request/response をまとめて出す）
           _logFailureSummary(e);
 
           handler.next(e);
         },
       ),
     );
+
+    _log('[ShippingAddressRepositoryHttp] init baseUrl=$normalized');
   }
 
   final Dio _dio;
   final FirebaseAuth _auth;
   final CancelToken _cancelToken = CancelToken();
+
+  // ✅ release でもログを出したい場合: --dart-define=ENABLE_HTTP_LOG=true
+  static const bool _envHttpLog = bool.fromEnvironment(
+    'ENABLE_HTTP_LOG',
+    defaultValue: false,
+  );
+
+  bool get _logEnabled => kDebugMode || _envHttpLog;
 
   void dispose() {
     if (!_cancelToken.isCancelled) {
@@ -252,7 +265,7 @@ class ShippingAddressRepositoryHttp {
       final data = _asMap(res.data);
       return ShippingAddress.fromJson(data);
     } on DioException catch (e) {
-      // ✅ NEW: throw 前にも要約ログ（呼び出し側で握りつぶされる対策）
+      // ✅ throw 前にも要約ログ（呼び出し側で握りつぶされる対策）
       _logFailureSummary(e, op: 'GET /shipping-addresses/$s');
       throw _normalizeDioError(e);
     } catch (e) {
@@ -358,20 +371,16 @@ class ShippingAddressRepositoryHttp {
   }
 
   // ------------------------------------------------------------
-  // logging (debug only)
+  // logging (debug or ENABLE_HTTP_LOG=true)
   // ------------------------------------------------------------
 
   void _log(String msg) {
-    if (!kDebugMode) {
-      return;
-    }
+    if (!_logEnabled) return;
     debugPrint(msg);
   }
 
   void _logRequest(RequestOptions o) {
-    if (!kDebugMode) {
-      return;
-    }
+    if (!_logEnabled) return;
 
     final method = o.method.toUpperCase();
     final url = o.uri.toString();
@@ -414,9 +423,7 @@ class ShippingAddressRepositoryHttp {
   }
 
   void _logResponse(Response r) {
-    if (!kDebugMode) {
-      return;
-    }
+    if (!_logEnabled) return;
 
     final method = r.requestOptions.method.toUpperCase();
     final url = r.requestOptions.uri.toString();
@@ -449,9 +456,7 @@ class ShippingAddressRepositoryHttp {
   }
 
   void _logDioError(DioException e) {
-    if (!kDebugMode) {
-      return;
-    }
+    if (!_logEnabled) return;
 
     final o = e.requestOptions;
     final method = o.method.toUpperCase();
@@ -510,9 +515,9 @@ class ShippingAddressRepositoryHttp {
     debugPrint(b.toString());
   }
 
-  // ✅ NEW: Failure summary logger (request headers/body + response headers/body + status)
+  // Failure summary logger (request headers/body + response headers/body + status)
   void _logFailureSummary(DioException e, {String? op}) {
-    if (!kDebugMode) return;
+    if (!_logEnabled) return;
 
     final o = e.requestOptions;
     final method = o.method.toUpperCase();
