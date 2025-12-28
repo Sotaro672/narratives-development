@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../../app/shell/presentation/components/header.dart';
+import '../hook/use_billing_address.dart';
 
 /// ✅ 請求先（決済）情報入力（雛形）
 /// - クレジットカード番号
@@ -19,126 +20,29 @@ class BillingAddressPage extends StatefulWidget {
 }
 
 class _BillingAddressPageState extends State<BillingAddressPage> {
-  final _cardNumberCtrl = TextEditingController();
-  final _cardHolderCtrl = TextEditingController();
-  final _cvcCtrl = TextEditingController();
+  late final UseBillingAddress _vm;
 
-  bool _saving = false;
-  String? _msg;
+  @override
+  void initState() {
+    super.initState();
+    _vm = UseBillingAddress(from: widget.from);
+    _vm.addListener(_onVmChanged);
+  }
+
+  void _onVmChanged() {
+    if (mounted) setState(() {});
+  }
 
   @override
   void dispose() {
-    _cardNumberCtrl.dispose();
-    _cardHolderCtrl.dispose();
-    _cvcCtrl.dispose();
+    _vm.removeListener(_onVmChanged);
+    _vm.dispose();
     super.dispose();
-  }
-
-  String _s(String? v) => (v ?? '').trim();
-
-  String _backTo() {
-    final from = _s(widget.from);
-    if (from.isNotEmpty) return from;
-    return '/shipping-address';
-  }
-
-  bool get _canSave {
-    if (_saving) return false;
-
-    final card = _normalizeCardNumber(_cardNumberCtrl.text);
-    final holder = _s(_cardHolderCtrl.text);
-    final cvc = _normalizeDigits(_cvcCtrl.text);
-
-    // 雛形: ざっくり必須チェック（Luhn等は後で）
-    if (card.length < 12) return false; // AMEX等も考慮し ">=12" 程度に
-    if (holder.isEmpty) return false;
-    if (cvc.length != 3) return false;
-    return true;
-  }
-
-  // 全角数字を半角に寄せる（日本語IME対策）
-  String _toAsciiDigits(String s) {
-    return s.replaceAllMapped(RegExp(r'[０-９]'), (m) {
-      final code = m[0]!.codeUnitAt(0);
-      return String.fromCharCode(code - 0xFEE0);
-    });
-  }
-
-  String _normalizeDigits(String s) {
-    final ascii = _toAsciiDigits(s);
-    return ascii.replaceAll(RegExp(r'[^0-9]'), '');
-  }
-
-  String _normalizeCardNumber(String s) {
-    // ハイフン/スペース/全角数字などを除去して数字だけに
-    final ascii = _toAsciiDigits(s);
-    return ascii.replaceAll(RegExp(r'[^0-9]'), '');
-  }
-
-  String _formatCardNumberForDisplay(String s) {
-    final digits = _normalizeCardNumber(s);
-    final buf = StringBuffer();
-    for (var i = 0; i < digits.length; i++) {
-      if (i != 0 && i % 4 == 0) buf.write(' ');
-      buf.write(digits[i]);
-    }
-    return buf.toString();
-  }
-
-  void _onCardNumberChanged() {
-    // 入力中の見た目を整える（強制しすぎない程度）
-    final current = _cardNumberCtrl.text;
-    final formatted = _formatCardNumberForDisplay(current);
-    if (formatted == current) return;
-
-    final sel = _cardNumberCtrl.selection;
-    _cardNumberCtrl.value = TextEditingValue(
-      text: formatted,
-      selection: TextSelection.collapsed(
-        offset: (sel.baseOffset + (formatted.length - current.length)).clamp(
-          0,
-          formatted.length,
-        ),
-      ),
-    );
-  }
-
-  Future<void> _saveDummy() async {
-    if (mounted) {
-      setState(() {
-        _saving = true;
-        _msg = null;
-      });
-    }
-
-    try {
-      await Future<void>.delayed(const Duration(milliseconds: 600));
-
-      if (!mounted) return;
-      setState(() {
-        _msg = '請求情報を保存しました（ダミー）。';
-      });
-
-      // ✅ 保存後に avatar_create へ遷移
-      context.go('/avatar-create');
-    } catch (e) {
-      if (mounted) {
-        setState(() {
-          _msg = e.toString();
-        });
-      }
-    } finally {
-      if (mounted) {
-        setState(() {
-          _saving = false;
-        });
-      }
-    }
   }
 
   @override
   Widget build(BuildContext context) {
-    final backTo = _backTo();
+    final backTo = _vm.backTo();
 
     return Scaffold(
       body: SafeArea(
@@ -173,12 +77,9 @@ class _BillingAddressPageState extends State<BillingAddressPage> {
                         ),
                         const SizedBox(height: 8),
                         TextField(
-                          controller: _cardNumberCtrl,
+                          controller: _vm.cardNumberCtrl,
                           keyboardType: TextInputType.number,
-                          onChanged: (_) {
-                            _onCardNumberChanged();
-                            if (mounted) setState(() {}); // ✅ ボタン有効/無効を更新
-                          },
+                          onChanged: (_) => _vm.onCardNumberChanged(),
                           decoration: const InputDecoration(
                             labelText: 'カード番号',
                             border: OutlineInputBorder(),
@@ -193,11 +94,9 @@ class _BillingAddressPageState extends State<BillingAddressPage> {
                         ),
                         const SizedBox(height: 8),
                         TextField(
-                          controller: _cardHolderCtrl,
+                          controller: _vm.cardHolderCtrl,
                           textInputAction: TextInputAction.next,
-                          onChanged: (_) {
-                            if (mounted) setState(() {}); // ✅
-                          },
+                          onChanged: (_) => _vm.onFormChanged(),
                           decoration: const InputDecoration(
                             labelText: '名義（カードに記載の英字）',
                             border: OutlineInputBorder(),
@@ -212,13 +111,11 @@ class _BillingAddressPageState extends State<BillingAddressPage> {
                         ),
                         const SizedBox(height: 8),
                         TextField(
-                          controller: _cvcCtrl,
+                          controller: _vm.cvcCtrl,
                           keyboardType: TextInputType.number,
                           obscureText: true,
                           maxLength: 3,
-                          onChanged: (_) {
-                            if (mounted) setState(() {}); // ✅
-                          },
+                          onChanged: (_) => _vm.onFormChanged(),
                           decoration: const InputDecoration(
                             labelText: 'CVC',
                             border: OutlineInputBorder(),
@@ -229,8 +126,10 @@ class _BillingAddressPageState extends State<BillingAddressPage> {
                         const SizedBox(height: 20),
 
                         ElevatedButton(
-                          onPressed: _canSave ? _saveDummy : null,
-                          child: _saving
+                          onPressed: _vm.canSave
+                              ? () => _vm.saveDummy(context)
+                              : null,
+                          child: _vm.saving
                               ? const SizedBox(
                                   width: 18,
                                   height: 18,
@@ -241,13 +140,13 @@ class _BillingAddressPageState extends State<BillingAddressPage> {
                               : const Text('この請求情報を保存する'),
                         ),
 
-                        if (_msg != null) ...[
+                        if (_vm.msg != null) ...[
                           const SizedBox(height: 12),
                           _InfoBox(
-                            kind: _msg!.contains('保存しました')
+                            kind: _vm.msg!.contains('保存しました')
                                 ? _InfoKind.ok
                                 : _InfoKind.error,
-                            text: _msg!,
+                            text: _vm.msg!,
                           ),
                         ],
                       ],

@@ -1,11 +1,11 @@
 // frontend/sns/lib/features/auth/presentation/page/avatar_create.dart
-import 'dart:async';
 import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../../app/shell/presentation/components/header.dart';
+import '../hook/use_avatar_create.dart';
 
 /// ✅ アバター作成（雛形）
 /// - アバターアイコン画像（現状はダミー選択）
@@ -25,108 +25,29 @@ class AvatarCreatePage extends StatefulWidget {
 }
 
 class _AvatarCreatePageState extends State<AvatarCreatePage> {
-  final _nameCtrl = TextEditingController();
-  final _profileCtrl = TextEditingController();
-  final _linkCtrl = TextEditingController();
+  late final UseAvatarCreate _vm;
 
-  Uint8List? _iconBytes; // ダミー
-  bool _saving = false;
-  String? _msg;
+  @override
+  void initState() {
+    super.initState();
+    _vm = UseAvatarCreate(from: widget.from);
+    _vm.addListener(_onVmChanged);
+  }
+
+  void _onVmChanged() {
+    if (mounted) setState(() {});
+  }
 
   @override
   void dispose() {
-    _nameCtrl.dispose();
-    _profileCtrl.dispose();
-    _linkCtrl.dispose();
+    _vm.removeListener(_onVmChanged);
+    _vm.dispose();
     super.dispose();
-  }
-
-  String _s(String? v) => (v ?? '').trim();
-
-  String _backTo() {
-    final from = _s(widget.from);
-    if (from.isNotEmpty) return from;
-    return '/billing-address';
-  }
-
-  bool get _canSave {
-    if (_saving) return false;
-    if (_s(_nameCtrl.text).isEmpty) return false;
-    // 画像を必須にする場合:
-    // if (_iconBytes == null) return false;
-    return true;
-  }
-
-  bool _isValidUrlOrEmpty(String s) {
-    final v = _s(s);
-    if (v.isEmpty) return true;
-    final uri = Uri.tryParse(v);
-    if (uri == null) return false;
-    if (!uri.hasScheme) return false;
-    if (uri.scheme != 'http' && uri.scheme != 'https') return false;
-    return uri.host.isNotEmpty;
-  }
-
-  Future<void> _pickIconDummy() async {
-    if (!mounted) return;
-    setState(() {
-      _iconBytes = Uint8List.fromList(List<int>.generate(64, (i) => i));
-      _msg = 'アイコン画像を選択しました（ダミー）。';
-    });
-  }
-
-  Future<void> _saveDummy() async {
-    final link = _s(_linkCtrl.text);
-    if (!_isValidUrlOrEmpty(link)) {
-      if (!mounted) return;
-      setState(() {
-        _msg = '外部リンクは http(s) のURLを入力してください。';
-      });
-      return;
-    }
-
-    if (!mounted) return;
-    setState(() {
-      _saving = true;
-      _msg = null;
-    });
-
-    Object? caught;
-    try {
-      await Future<void>.delayed(const Duration(milliseconds: 700));
-
-      if (!mounted) return;
-
-      setState(() {
-        _msg = 'アバターを作成しました（ダミー）。';
-      });
-
-      // ✅ 保存後は Home に戻る
-      context.go('/');
-    } catch (e) {
-      caught = e;
-      if (mounted) {
-        setState(() {
-          _msg = e.toString();
-        });
-      }
-    } finally {
-      // ✅ finally 内で return しない（linter対策）
-      if (mounted) {
-        setState(() {
-          _saving = false;
-        });
-      }
-    }
-
-    // caught は将来ログ用途などに使える（未使用でもOK）
-    // ignore: unused_local_variable
-    final _ = caught;
   }
 
   @override
   Widget build(BuildContext context) {
-    final backTo = _backTo();
+    final backTo = _vm.backTo();
 
     return Scaffold(
       body: SafeArea(
@@ -161,9 +82,9 @@ class _AvatarCreatePageState extends State<AvatarCreatePage> {
                         ),
                         const SizedBox(height: 8),
                         _IconPickerCard(
-                          bytes: _iconBytes,
-                          onPick: _pickIconDummy,
-                          onClear: () => setState(() => _iconBytes = null),
+                          bytes: _vm.iconBytes,
+                          onPick: _vm.pickIconDummy,
+                          onClear: _vm.clearIcon,
                         ),
                         const SizedBox(height: 16),
 
@@ -173,14 +94,14 @@ class _AvatarCreatePageState extends State<AvatarCreatePage> {
                         ),
                         const SizedBox(height: 8),
                         TextField(
-                          controller: _nameCtrl,
+                          controller: _vm.nameCtrl,
                           textInputAction: TextInputAction.next,
                           decoration: const InputDecoration(
                             labelText: 'アバター名',
                             border: OutlineInputBorder(),
                             hintText: '例: sotaro',
                           ),
-                          onChanged: (_) => setState(() {}),
+                          onChanged: (_) => _vm.onNameChanged(),
                         ),
                         const SizedBox(height: 16),
 
@@ -190,7 +111,7 @@ class _AvatarCreatePageState extends State<AvatarCreatePage> {
                         ),
                         const SizedBox(height: 8),
                         TextField(
-                          controller: _profileCtrl,
+                          controller: _vm.profileCtrl,
                           maxLines: 4,
                           decoration: const InputDecoration(
                             labelText: 'プロフィール',
@@ -206,7 +127,7 @@ class _AvatarCreatePageState extends State<AvatarCreatePage> {
                         ),
                         const SizedBox(height: 8),
                         TextField(
-                          controller: _linkCtrl,
+                          controller: _vm.linkCtrl,
                           keyboardType: TextInputType.url,
                           decoration: const InputDecoration(
                             labelText: '外部リンク（任意）',
@@ -217,8 +138,10 @@ class _AvatarCreatePageState extends State<AvatarCreatePage> {
                         const SizedBox(height: 20),
 
                         ElevatedButton(
-                          onPressed: _canSave ? _saveDummy : null,
-                          child: _saving
+                          onPressed: _vm.canSave
+                              ? () => _vm.saveDummy(context)
+                              : null,
+                          child: _vm.saving
                               ? const SizedBox(
                                   width: 18,
                                   height: 18,
@@ -229,15 +152,15 @@ class _AvatarCreatePageState extends State<AvatarCreatePage> {
                               : const Text('このアバターを保存する'),
                         ),
 
-                        if (_msg != null) ...[
+                        if (_vm.msg != null) ...[
                           const SizedBox(height: 12),
                           _InfoBox(
                             kind:
-                                _msg!.contains('作成しました') ||
-                                    _msg!.contains('選択しました')
+                                _vm.msg!.contains('作成しました') ||
+                                    _vm.msg!.contains('選択しました')
                                 ? _InfoKind.ok
                                 : _InfoKind.error,
-                            text: _msg!,
+                            text: _vm.msg!,
                           ),
                         ],
                       ],
@@ -261,7 +184,7 @@ class _IconPickerCard extends StatelessWidget {
   });
 
   final Uint8List? bytes;
-  final VoidCallback onPick;
+  final Future<void> Function() onPick;
   final VoidCallback onClear;
 
   @override
@@ -293,7 +216,7 @@ class _IconPickerCard extends StatelessWidget {
                   runSpacing: 8,
                   children: [
                     OutlinedButton(
-                      onPressed: onPick,
+                      onPressed: () => onPick(),
                       child: const Text('画像を選択する'),
                     ),
                     if (bytes != null)

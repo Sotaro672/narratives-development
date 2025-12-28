@@ -1,9 +1,9 @@
-//frontend/sns/lib/features/auth/presentation/page/create_account.dart
+// frontend/sns/lib/features/auth/presentation/page/create_account.dart
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
-import 'package:firebase_auth/firebase_auth.dart';
 
 import '../../../../app/shell/presentation/components/header.dart';
+import '../hook/use_create_account.dart';
 
 class CreateAccountPage extends StatefulWidget {
   const CreateAccountPage({super.key, this.from, this.intent});
@@ -19,142 +19,29 @@ class CreateAccountPage extends StatefulWidget {
 }
 
 class _CreateAccountPageState extends State<CreateAccountPage> {
-  final _emailCtrl = TextEditingController();
-  final _passCtrl = TextEditingController();
-  final _pass2Ctrl = TextEditingController();
+  late final UseCreateAccount _vm;
 
-  bool _agree = false;
-  bool _loading = false;
-  String? _error;
+  @override
+  void initState() {
+    super.initState();
+    _vm = UseCreateAccount(from: widget.from, intent: widget.intent);
+    _vm.addListener(_onVmChanged);
+  }
 
-  /// ✅ 認証メール送信後に画面内へ表示するメッセージ
-  String? _sentMessage;
+  void _onVmChanged() {
+    if (mounted) setState(() {});
+  }
 
   @override
   void dispose() {
-    _emailCtrl.dispose();
-    _passCtrl.dispose();
-    _pass2Ctrl.dispose();
+    _vm.removeListener(_onVmChanged);
+    _vm.dispose();
     super.dispose();
-  }
-
-  String _s(String v) => v.trim();
-
-  bool get _isEmailValid {
-    final email = _s(_emailCtrl.text);
-    // ざっくり判定（厳密でなくてOK）
-    return email.isNotEmpty && email.contains('@') && email.contains('.');
-  }
-
-  bool get _isPasswordValid {
-    final pass = _passCtrl.text;
-    return pass.length >= 6;
-  }
-
-  bool get _isPasswordMatch {
-    return _passCtrl.text == _pass2Ctrl.text && _pass2Ctrl.text.isNotEmpty;
-  }
-
-  bool get _canSubmit {
-    return !_loading &&
-        _agree &&
-        _isEmailValid &&
-        _isPasswordValid &&
-        _isPasswordMatch;
-  }
-
-  String _loginBackTo() {
-    final qp = <String, String>{};
-    final from = (widget.from ?? '').trim();
-    final intent = (widget.intent ?? '').trim();
-    if (from.isNotEmpty) qp['from'] = from;
-    if (intent.isNotEmpty) qp['intent'] = intent;
-    final uri = Uri(path: '/login', queryParameters: qp.isEmpty ? null : qp);
-    return uri.toString();
-  }
-
-  Future<void> _createAndSendVerification() async {
-    setState(() {
-      _error = null;
-      _sentMessage = null; // ✅ 再送などで古い成功メッセージを消す
-    });
-
-    final email = _s(_emailCtrl.text);
-    final pass = _passCtrl.text;
-
-    if (!_isEmailValid) {
-      setState(() => _error = '有効なメールアドレスを入力してください。');
-      return;
-    }
-    if (!_isPasswordValid) {
-      setState(() => _error = 'パスワードは6文字以上にしてください。');
-      return;
-    }
-    if (!_isPasswordMatch) {
-      setState(() => _error = 'パスワードが一致しません。');
-      return;
-    }
-    if (!_agree) {
-      setState(() => _error = '利用規約に同意してください。');
-      return;
-    }
-
-    setState(() => _loading = true);
-
-    try {
-      final cred = await FirebaseAuth.instance.createUserWithEmailAndPassword(
-        email: email,
-        password: pass,
-      );
-
-      final user = cred.user ?? FirebaseAuth.instance.currentUser;
-      if (user == null) {
-        throw StateError('アカウント作成後にユーザー情報が取得できませんでした。');
-      }
-
-      // ✅ 認証メール送信
-      await user.sendEmailVerification();
-
-      if (!mounted) return;
-
-      // ✅ 画面内に成功メッセージを表示（SnackBar ではなく “画面へ表示”）
-      setState(() {
-        _sentMessage =
-            '認証メールを送信しました。受信ボックスを確認してください。\n'
-            '認証メールからアカウント作成を続行してください。';
-      });
-
-      // ✅ ここでは遷移しない（ユーザーがメッセージを確認できるように）
-    } on FirebaseAuthException catch (e) {
-      setState(() => _error = _friendlyAuthError(e));
-    } catch (e) {
-      setState(() => _error = e.toString());
-    } finally {
-      if (mounted) setState(() => _loading = false);
-    }
-  }
-
-  String _friendlyAuthError(FirebaseAuthException e) {
-    switch (e.code) {
-      case 'invalid-email':
-        return 'メールアドレスの形式が正しくありません。';
-      case 'email-already-in-use':
-        return 'このメールアドレスは既に使用されています。';
-      case 'weak-password':
-        return 'パスワードが弱すぎます。';
-      case 'operation-not-allowed':
-        return 'このログイン方法は有効化されていません。';
-      default:
-        return e.message ?? 'アカウント作成に失敗しました。';
-    }
   }
 
   @override
   Widget build(BuildContext context) {
-    final intent = (widget.intent ?? '').trim();
-    final topMessage = intent == 'purchase'
-        ? '購入を続けるにはアカウント作成が必要です。'
-        : '続けるにはアカウント作成が必要です。';
+    final topMessage = _vm.topMessage();
 
     return Scaffold(
       body: SafeArea(
@@ -164,7 +51,7 @@ class _CreateAccountPageState extends State<CreateAccountPage> {
             AppHeader(
               title: 'アカウント作成',
               showBack: true,
-              backTo: _loginBackTo(),
+              backTo: _vm.loginBackTo(),
               actions: const [],
               onTapTitle: () => context.go('/'),
             ),
@@ -187,7 +74,7 @@ class _CreateAccountPageState extends State<CreateAccountPage> {
                         const SizedBox(height: 16),
 
                         // ✅ 成功メッセージ（画面へ表示）
-                        if (_sentMessage != null) ...[
+                        if (_vm.sentMessage != null) ...[
                           Container(
                             padding: const EdgeInsets.all(12),
                             decoration: BoxDecoration(
@@ -198,14 +85,14 @@ class _CreateAccountPageState extends State<CreateAccountPage> {
                               borderRadius: BorderRadius.circular(12),
                             ),
                             child: Text(
-                              _sentMessage!,
+                              _vm.sentMessage!,
                               style: Theme.of(context).textTheme.bodyMedium,
                             ),
                           ),
                           const SizedBox(height: 12),
                         ],
 
-                        if (_error != null) ...[
+                        if (_vm.error != null) ...[
                           Container(
                             padding: const EdgeInsets.all(12),
                             decoration: BoxDecoration(
@@ -216,7 +103,7 @@ class _CreateAccountPageState extends State<CreateAccountPage> {
                               borderRadius: BorderRadius.circular(12),
                             ),
                             child: Text(
-                              _error!,
+                              _vm.error!,
                               style: Theme.of(context).textTheme.bodyMedium,
                             ),
                           ),
@@ -224,49 +111,49 @@ class _CreateAccountPageState extends State<CreateAccountPage> {
                         ],
 
                         TextField(
-                          controller: _emailCtrl,
+                          controller: _vm.emailCtrl,
                           keyboardType: TextInputType.emailAddress,
                           autofillHints: const [AutofillHints.email],
-                          enabled: !_loading,
+                          enabled: !_vm.loading,
                           decoration: const InputDecoration(
                             labelText: 'メールアドレス',
                             border: OutlineInputBorder(),
                           ),
-                          onChanged: (_) => setState(() {}),
+                          onChanged: (_) => _vm.onChanged(),
                         ),
                         const SizedBox(height: 12),
 
                         TextField(
-                          controller: _passCtrl,
+                          controller: _vm.passCtrl,
                           obscureText: true,
                           autofillHints: const [AutofillHints.newPassword],
-                          enabled: !_loading,
+                          enabled: !_vm.loading,
                           decoration: const InputDecoration(
                             labelText: 'パスワード（6文字以上）',
                             border: OutlineInputBorder(),
                           ),
-                          onChanged: (_) => setState(() {}),
+                          onChanged: (_) => _vm.onChanged(),
                         ),
                         const SizedBox(height: 12),
 
                         TextField(
-                          controller: _pass2Ctrl,
+                          controller: _vm.pass2Ctrl,
                           obscureText: true,
                           autofillHints: const [AutofillHints.newPassword],
-                          enabled: !_loading,
+                          enabled: !_vm.loading,
                           decoration: const InputDecoration(
                             labelText: 'パスワード（確認）',
                             border: OutlineInputBorder(),
                           ),
-                          onChanged: (_) => setState(() {}),
+                          onChanged: (_) => _vm.onChanged(),
                         ),
                         const SizedBox(height: 12),
 
                         CheckboxListTile(
-                          value: _agree,
-                          onChanged: _loading
+                          value: _vm.agree,
+                          onChanged: _vm.loading
                               ? null
-                              : (v) => setState(() => _agree = v ?? false),
+                              : (v) => _vm.setAgree(v ?? false),
                           controlAffinity: ListTileControlAffinity.leading,
                           contentPadding: EdgeInsets.zero,
                           title: const Text('利用規約に同意します'),
@@ -275,10 +162,10 @@ class _CreateAccountPageState extends State<CreateAccountPage> {
                         const SizedBox(height: 12),
 
                         ElevatedButton(
-                          onPressed: _canSubmit
-                              ? _createAndSendVerification
+                          onPressed: _vm.canSubmit
+                              ? _vm.createAndSendVerification
                               : null,
-                          child: _loading
+                          child: _vm.loading
                               ? const SizedBox(
                                   width: 18,
                                   height: 18,

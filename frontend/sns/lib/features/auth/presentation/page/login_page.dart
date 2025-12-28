@@ -1,17 +1,17 @@
 // frontend/sns/lib/features/auth/presentation/page/login_page.dart
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
-import 'package:firebase_auth/firebase_auth.dart';
 
 import '../../../../app/shell/presentation/components/header.dart';
+import '../hook/use_login_page.dart';
 
 class LoginPage extends StatefulWidget {
   const LoginPage({super.key, this.from, this.intent});
 
-  /// Optional: where to go after login (e.g. /catalog/xxx)
+  /// 任意: ログイン後に戻る先（例: /catalog/xxx）
   final String? from;
 
-  /// Optional: why user was redirected (e.g. "purchase")
+  /// 任意: リダイレクトされた理由（例: "purchase"）
   final String? intent;
 
   @override
@@ -19,132 +19,31 @@ class LoginPage extends StatefulWidget {
 }
 
 class _LoginPageState extends State<LoginPage> {
-  final _emailCtrl = TextEditingController();
-  final _passCtrl = TextEditingController();
+  late final UseLoginPage _vm;
 
-  bool _loading = false;
-  String? _error;
+  @override
+  void initState() {
+    super.initState();
+    _vm = UseLoginPage(from: widget.from, intent: widget.intent);
+    _vm.addListener(_onVmChanged);
+  }
+
+  void _onVmChanged() {
+    if (mounted) setState(() {});
+  }
 
   @override
   void dispose() {
-    _emailCtrl.dispose();
-    _passCtrl.dispose();
+    _vm.removeListener(_onVmChanged);
+    _vm.disposeControllers();
+    _vm.dispose();
     super.dispose();
-  }
-
-  String _s(String v) => v.trim();
-
-  String _backTo() {
-    final dest = (widget.from ?? '/').trim();
-    return dest.isNotEmpty ? dest : '/';
-  }
-
-  Future<void> _signIn() async {
-    final email = _s(_emailCtrl.text);
-    final pass = _passCtrl.text;
-
-    setState(() => _error = null);
-
-    if (email.isEmpty || pass.isEmpty) {
-      setState(() => _error = 'Email and password are required.');
-      return;
-    }
-
-    setState(() => _loading = true);
-
-    try {
-      await FirebaseAuth.instance.signInWithEmailAndPassword(
-        email: email,
-        password: pass,
-      );
-
-      final dest = _backTo();
-      if (!mounted) return;
-      context.go(dest);
-    } on FirebaseAuthException catch (e) {
-      setState(() => _error = _friendlyAuthError(e));
-    } catch (e) {
-      setState(() => _error = e.toString());
-    } finally {
-      if (mounted) setState(() => _loading = false);
-    }
-  }
-
-  void _goCreateAccount() {
-    final from = _backTo();
-    final intent = (widget.intent ?? '').trim();
-
-    final qp = <String, String>{};
-    if (from.trim().isNotEmpty) qp['from'] = from;
-    if (intent.isNotEmpty) qp['intent'] = intent;
-
-    final uri = Uri(
-      path: '/create-account',
-      queryParameters: qp.isEmpty ? null : qp,
-    );
-
-    context.go(uri.toString());
-  }
-
-  Future<void> _sendPasswordReset() async {
-    final email = _s(_emailCtrl.text);
-
-    setState(() => _error = null);
-
-    if (email.isEmpty) {
-      setState(() => _error = 'Enter your email to reset password.');
-      return;
-    }
-
-    setState(() => _loading = true);
-
-    try {
-      await FirebaseAuth.instance.sendPasswordResetEmail(email: email);
-      if (!mounted) return;
-
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Password reset email sent.')),
-      );
-    } on FirebaseAuthException catch (e) {
-      setState(() => _error = _friendlyAuthError(e));
-    } catch (e) {
-      setState(() => _error = e.toString());
-    } finally {
-      if (mounted) setState(() => _loading = false);
-    }
-  }
-
-  String _friendlyAuthError(FirebaseAuthException e) {
-    switch (e.code) {
-      case 'invalid-email':
-        return 'Invalid email address.';
-      case 'user-disabled':
-        return 'This account is disabled.';
-      case 'user-not-found':
-        return 'Account not found.';
-      case 'wrong-password':
-        return 'Incorrect password.';
-      case 'email-already-in-use':
-        return 'Email is already in use.';
-      case 'weak-password':
-        return 'Password is too weak.';
-      case 'too-many-requests':
-        return 'Too many attempts. Try again later.';
-      case 'operation-not-allowed':
-        return 'This sign-in method is not enabled.';
-      default:
-        return e.message ?? 'Login failed.';
-    }
   }
 
   @override
   Widget build(BuildContext context) {
-    final intent = (widget.intent ?? '').trim();
-    final topMessage = intent == 'purchase'
-        ? 'Log in to complete your purchase.'
-        : 'Log in to continue.';
-
-    final backTo = _backTo();
+    final topMessage = _vm.topMessage();
+    final backTo = _vm.backTo();
 
     return Scaffold(
       body: SafeArea(
@@ -153,13 +52,12 @@ class _LoginPageState extends State<LoginPage> {
             // ✅ Login では「戻る」だけ表示（Sign in は出さない）
             // ✅ ここが “Continue without login” の移譲先
             AppHeader(
-              title: 'Sign in',
+              title: 'ログイン',
               showBack: true,
               backTo: backTo,
               actions: const [], // ← ここ重要（右側ボタン非表示）
               onTapTitle: () => context.go('/'),
             ),
-
             Expanded(
               child: Center(
                 child: ConstrainedBox(
@@ -182,8 +80,7 @@ class _LoginPageState extends State<LoginPage> {
                           style: Theme.of(context).textTheme.bodyMedium,
                         ),
                         const SizedBox(height: 16),
-
-                        if (_error != null) ...[
+                        if (_vm.error != null) ...[
                           Container(
                             padding: const EdgeInsets.all(12),
                             decoration: BoxDecoration(
@@ -194,44 +91,44 @@ class _LoginPageState extends State<LoginPage> {
                               borderRadius: BorderRadius.circular(12),
                             ),
                             child: Text(
-                              _error!,
+                              _vm.error!,
                               style: Theme.of(context).textTheme.bodyMedium,
                             ),
                           ),
                           const SizedBox(height: 12),
                         ],
-
                         TextField(
-                          controller: _emailCtrl,
+                          controller: _vm.emailCtrl,
                           keyboardType: TextInputType.emailAddress,
                           autofillHints: const [
                             AutofillHints.username,
                             AutofillHints.email,
                           ],
-                          enabled: !_loading,
+                          enabled: !_vm.loading,
                           decoration: const InputDecoration(
-                            labelText: 'Email',
+                            labelText: 'メールアドレス',
                             border: OutlineInputBorder(),
                           ),
-                          onSubmitted: (_) => _signIn(),
+                          onSubmitted: (_) => _vm.signIn(context),
                         ),
                         const SizedBox(height: 12),
                         TextField(
-                          controller: _passCtrl,
+                          controller: _vm.passCtrl,
                           obscureText: true,
                           autofillHints: const [AutofillHints.password],
-                          enabled: !_loading,
+                          enabled: !_vm.loading,
                           decoration: const InputDecoration(
-                            labelText: 'Password',
+                            labelText: 'パスワード',
                             border: OutlineInputBorder(),
                           ),
-                          onSubmitted: (_) => _signIn(),
+                          onSubmitted: (_) => _vm.signIn(context),
                         ),
                         const SizedBox(height: 12),
-
                         ElevatedButton(
-                          onPressed: _loading ? null : _signIn,
-                          child: _loading
+                          onPressed: _vm.loading
+                              ? null
+                              : () => _vm.signIn(context),
+                          child: _vm.loading
                               ? const SizedBox(
                                   width: 18,
                                   height: 18,
@@ -239,20 +136,23 @@ class _LoginPageState extends State<LoginPage> {
                                     strokeWidth: 2,
                                   ),
                                 )
-                              : const Text('Log in'),
+                              : const Text('ログイン'),
                         ),
                         const SizedBox(height: 8),
 
                         // ✅ Create account は “作成ページへ遷移” に変更
                         OutlinedButton(
-                          onPressed: _loading ? null : _goCreateAccount,
-                          child: const Text('Create account'),
+                          onPressed: _vm.loading
+                              ? null
+                              : () => _vm.goCreateAccount(context),
+                          child: const Text('アカウントを作成'),
                         ),
-
                         const SizedBox(height: 8),
                         TextButton(
-                          onPressed: _loading ? null : _sendPasswordReset,
-                          child: const Text('Forgot password?'),
+                          onPressed: _vm.loading
+                              ? null
+                              : () => _vm.sendPasswordReset(context),
+                          child: const Text('パスワードをお忘れですか？'),
                         ),
 
                         // ✅ Continue without login は削除（戻るボタンへ移譲済み）
