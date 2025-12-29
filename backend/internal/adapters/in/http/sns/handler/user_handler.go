@@ -365,20 +365,6 @@ func writeUserErr(w http.ResponseWriter, err error) {
 	_ = json.NewEncoder(w).Encode(map[string]string{"error": err.Error()})
 }
 
-// helpers
-func headString(b []byte, max int) string {
-	if len(b) == 0 {
-		return ""
-	}
-	if len(b) > max {
-		b = b[:max]
-	}
-	s := string(b)
-	s = strings.ReplaceAll(s, "\n", "\\n")
-	s = strings.ReplaceAll(s, "\r", "\\r")
-	return s
-}
-
 func sPtr(p *string) string {
 	if p == nil {
 		return "<nil>"

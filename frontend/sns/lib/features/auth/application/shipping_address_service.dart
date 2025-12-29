@@ -356,9 +356,9 @@ class ShippingAddressService {
       // ----------------------------
       // 2) upsert shipping address (required)
       // ----------------------------
-      log('[ShippingAddress] upsert shippingAddress userId=$uid');
+      log('[ShippingAddress] upsert shippingAddress uid=$uid');
 
-      final created = await tryUpsertShippingAddress(
+      final saved = await upsertShippingAddress(
         uid: uid,
         zip7: zip7,
         pref: st,
@@ -369,7 +369,7 @@ class ShippingAddressService {
 
       final sb = StringBuffer()
         ..writeln('配送先情報を保存しました。')
-        ..writeln('shippingAddressId=${created.id} userId=${created.userId}');
+        ..writeln('shippingAddressId=${saved.id} userId=${saved.userId}');
       if (userSaved) {
         sb.writeln('user: saved');
       } else if (userErr != null) {
@@ -382,7 +382,8 @@ class ShippingAddressService {
     }
   }
 
-  Future<ShippingAddress> tryUpsertShippingAddress({
+  /// ✅ docId=uid 前提の upsert（PATCH 1回で作成/更新）
+  Future<ShippingAddress> upsertShippingAddress({
     required String uid,
     required String zip7,
     required String pref,
@@ -390,33 +391,25 @@ class ShippingAddressService {
     required String addr1,
     required String addr2,
   }) async {
-    try {
-      return await _shipRepoInst.create(
-        CreateShippingAddressInput(
-          userId: uid,
-          zipCode: zip7,
-          state: pref,
-          city: city,
-          street: addr1,
-          street2: addr2.isEmpty ? null : addr2,
-          country: 'JP',
-        ),
-      );
-    } catch (e) {
-      log('[ShippingAddress] shipping create failed -> try update. err=$e');
+    // repo 側で uid 強制されるが、ここでも明示する（ログと意図の明確化）
+    log(
+      '[ShippingAddress] upsertShippingAddress '
+      'id(uid)=$uid zip=$zip7 state="$pref" city="$city" street="$addr1" street2="$addr2"',
+    );
 
-      // NOTE: id=uid 前提（あなたの backend の設計に合わせて）
-      return await _shipRepoInst.update(
-        uid,
-        UpdateShippingAddressInput(
-          zipCode: zip7,
-          state: pref,
-          city: city,
-          street: addr1,
-          street2: addr2, // "" を渡すと消去扱いにできる
-          country: 'JP',
-        ),
-      );
-    }
+    // ✅ CreateShippingAddressInput は廃止済み
+    // ✅ UpsertShippingAddressInput を使う（id=userId=uid）
+    return await _shipRepoInst.create(
+      UpsertShippingAddressInput(
+        id: uid,
+        userId: uid,
+        zipCode: zip7,
+        state: pref,
+        city: city,
+        street: addr1,
+        street2: addr2.isEmpty ? null : addr2,
+        country: 'JP',
+      ),
+    );
   }
 }

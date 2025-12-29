@@ -100,3 +100,17 @@ func parseIntDefault(s string, def int) int {
 	}
 	return n
 }
+
+// helpers (PII漏洩を避けるため短く)
+func headString(b []byte, max int) string {
+	if len(b) == 0 {
+		return ""
+	}
+	if len(b) > max {
+		b = b[:max]
+	}
+	s := string(b)
+	s = strings.ReplaceAll(s, "\n", "\\n")
+	s = strings.ReplaceAll(s, "\r", "\\r")
+	return s
+}

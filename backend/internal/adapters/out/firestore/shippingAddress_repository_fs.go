@@ -1,4 +1,3 @@
-// backend/internal/adapters/out/firestore/shippingAddress_repository_fs.go
 package firestore
 
 import (
@@ -84,6 +83,12 @@ func (r *ShippingAddressRepositoryFS) Create(ctx context.Context, v shipdom.Ship
 		return shipdom.ShippingAddress{}, errors.New("firestore client is nil")
 	}
 
+	// ✅ docId=UID 統一方針: 空IDでの自動採番を禁止（方針を崩さない）
+	id := strings.TrimSpace(v.ID)
+	if id == "" {
+		return shipdom.ShippingAddress{}, shipdom.ErrInvalidID
+	}
+
 	now := time.Now().UTC()
 	if v.CreatedAt.IsZero() {
 		v.CreatedAt = now
@@ -92,16 +97,8 @@ func (r *ShippingAddressRepositoryFS) Create(ctx context.Context, v shipdom.Ship
 		v.UpdatedAt = v.CreatedAt
 	}
 
-	// Firestore: generate ID if empty, otherwise use provided ID.
-	var ref *firestore.DocumentRef
-	id := strings.TrimSpace(v.ID)
-	if id == "" {
-		ref = r.col().NewDoc()
-		v.ID = ref.ID
-	} else {
-		ref = r.col().Doc(id)
-		v.ID = id
-	}
+	ref := r.col().Doc(id)
+	v.ID = id
 
 	// ✅ UI入力が無い場合は実装側でJP
 	if strings.TrimSpace(v.Country) == "" {
@@ -131,7 +128,8 @@ func (r *ShippingAddressRepositoryFS) Save(ctx context.Context, v shipdom.Shippi
 
 	id := strings.TrimSpace(v.ID)
 	if id == "" {
-		return r.Create(ctx, v)
+		// ✅ docId=UID 統一方針: Save も空IDを許容しない
+		return shipdom.ShippingAddress{}, shipdom.ErrInvalidID
 	}
 
 	ref := r.col().Doc(id)

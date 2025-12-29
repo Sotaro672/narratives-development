@@ -84,10 +84,13 @@ class ShippingAddress {
   };
 }
 
-/// POST body
-class CreateShippingAddressInput {
-  CreateShippingAddressInput({
-    required this.userId,
+/// ✅ Upsert body (create/update)
+/// - docId = Firebase UID
+/// - backend: POST requires id OR PATCH /shipping-addresses/{id} does upsert
+class UpsertShippingAddressInput {
+  UpsertShippingAddressInput({
+    required this.id, // ✅ uid (docId)
+    required this.userId, // ✅ uid (redundant but needed for backend upsert-create path)
     required this.zipCode,
     required this.state,
     required this.city,
@@ -96,6 +99,7 @@ class CreateShippingAddressInput {
     this.country = 'JP',
   });
 
+  final String id;
   final String userId;
   final String zipCode;
   final String state;
@@ -105,6 +109,8 @@ class CreateShippingAddressInput {
   final String country;
 
   Map<String, dynamic> toJson() => {
+    // ✅ backend 側 post/upsert 用
+    'id': id.trim(),
     'userId': userId.trim(),
     'zipCode': zipCode.trim(),
     'state': state.trim(),
@@ -117,8 +123,10 @@ class CreateShippingAddressInput {
 }
 
 /// PATCH body (only non-null fields will be sent)
+/// ✅ backend の “not_found -> upsert-create” 分岐で userId が必要なので送れるようにする
 class UpdateShippingAddressInput {
   UpdateShippingAddressInput({
+    this.userId,
     this.zipCode,
     this.state,
     this.city,
@@ -127,6 +135,7 @@ class UpdateShippingAddressInput {
     this.country,
   });
 
+  final String? userId; // ✅ add
   final String? zipCode;
   final String? state;
   final String? city;
@@ -141,6 +150,9 @@ class UpdateShippingAddressInput {
       if (v == null) return;
       m[k] = v.trim();
     }
+
+    // ✅ 初回作成 fallback のため
+    put('userId', userId);
 
     put('zipCode', zipCode);
     put('state', state);
@@ -250,8 +262,27 @@ class ShippingAddressRepositoryHttp {
   }
 
   // ------------------------------------------------------------
+  // auth helpers
+  // ------------------------------------------------------------
+
+  String _requireUid() {
+    final u = _auth.currentUser;
+    final uid = (u?.uid ?? '').trim();
+    if (uid.isEmpty) {
+      throw Exception('not signed in');
+    }
+    return uid;
+  }
+
+  // ------------------------------------------------------------
   // API
   // ------------------------------------------------------------
+
+  /// ✅ Get "my" shipping address (docId = uid)
+  Future<ShippingAddress> getMine() async {
+    final uid = _requireUid();
+    return getById(uid);
+  }
 
   /// GET /shipping-addresses/{id}
   Future<ShippingAddress> getById(String id) async {
@@ -276,27 +307,68 @@ class ShippingAddressRepositoryHttp {
     }
   }
 
-  /// POST /shipping-addresses
-  Future<ShippingAddress> create(CreateShippingAddressInput inData) async {
+  /// ✅ UPSERT (create/update) for "my" shipping address
+  /// - backend 仕様に合わせて PATCH /shipping-addresses/{uid} を基本にする
+  /// - これで「初回作成も PATCH で作れる」前提に寄せる
+  Future<ShippingAddress> upsertMine(UpsertShippingAddressInput inData) async {
+    final uid = _requireUid();
+
+    // ✅ docId=uid を強制
+    final fixed = UpsertShippingAddressInput(
+      id: uid,
+      userId: uid,
+      zipCode: inData.zipCode,
+      state: inData.state,
+      city: inData.city,
+      street: inData.street,
+      street2: inData.street2,
+      country: inData.country,
+    );
+
     try {
-      final res = await _dio.post(
-        '/shipping-addresses',
-        data: inData.toJson(),
+      final res = await _dio.patch(
+        '/shipping-addresses/$uid',
+        data: fixed.toJson(),
         cancelToken: _cancelToken,
       );
       final data = _asMap(res.data);
       return ShippingAddress.fromJson(data);
     } on DioException catch (e) {
-      _logFailureSummary(e, op: 'POST /shipping-addresses');
+      _logFailureSummary(e, op: 'PATCH /shipping-addresses/$uid (upsertMine)');
       throw _normalizeDioError(e);
     } catch (e) {
       throw _normalizeDioError(e);
     }
   }
 
+  /// ⚠️ 互換: 旧 create API 名
+  /// - 実体は PATCH(upsert) に変更
+  Future<ShippingAddress> create(UpsertShippingAddressInput inData) async {
+    return upsertMine(inData);
+  }
+
   /// PATCH /shipping-addresses/{id}
   ///
-  /// backend が PUT の場合は `.patch` を `.put` に変更してください。
+  /// ✅ docId=uid 前提: id を渡さず "mine" だけ更新したいケースを想定して
+  /// `updateMine()` を用意し、update(id, ...) は低レベルAPIとして残す
+  Future<ShippingAddress> updateMine(UpdateShippingAddressInput inData) async {
+    final uid = _requireUid();
+
+    // ✅ not_found -> create 分岐で userId が必要になる可能性があるので、ここで補完
+    final fixed = UpdateShippingAddressInput(
+      userId: (inData.userId ?? uid),
+      zipCode: inData.zipCode,
+      state: inData.state,
+      city: inData.city,
+      street: inData.street,
+      street2: inData.street2,
+      country: inData.country,
+    );
+
+    return update(uid, fixed);
+  }
+
+  /// PATCH /shipping-addresses/{id}
   Future<ShippingAddress> update(
     String id,
     UpdateShippingAddressInput inData,
@@ -342,6 +414,12 @@ class ShippingAddressRepositoryHttp {
     } catch (e) {
       throw _normalizeDioError(e);
     }
+  }
+
+  /// ✅ Delete "my" shipping address (docId=uid)
+  Future<void> deleteMine() async {
+    final uid = _requireUid();
+    return delete(uid);
   }
 
   // ------------------------------------------------------------

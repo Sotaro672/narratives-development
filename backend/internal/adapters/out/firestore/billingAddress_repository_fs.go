@@ -4,7 +4,6 @@ package firestore
 import (
 	"context"
 	"errors"
-	"fmt"
 	"log"
 	"strings"
 	"time"
@@ -28,7 +27,9 @@ func NewBillingAddressRepositoryFS(client *firestore.Client) *BillingAddressRepo
 }
 
 func (r *BillingAddressRepositoryFS) col() *firestore.CollectionRef {
-	return r.Client.Collection("billing_addresses")
+	// ✅ shippingAddresses と同様の命名に寄せる（camelCase）
+	// 期待値: billingAddresses コレクション
+	return r.Client.Collection("billingAddresses")
 }
 
 // Compile-time check
@@ -36,7 +37,13 @@ var _ badom.RepositoryPort = (*BillingAddressRepositoryFS)(nil)
 
 // ========== Public API ==========
 
+// docId = UID 前提
 func (r *BillingAddressRepositoryFS) GetByID(ctx context.Context, id string) (*badom.BillingAddress, error) {
+	id = strings.TrimSpace(id)
+	if id == "" {
+		return nil, badom.ErrNotFound
+	}
+
 	doc, err := r.col().Doc(id).Get(ctx)
 	if err != nil {
 		if status.Code(err) == codes.NotFound {
@@ -44,6 +51,7 @@ func (r *BillingAddressRepositoryFS) GetByID(ctx context.Context, id string) (*b
 		}
 		return nil, err
 	}
+
 	ba, err := r.docToDomain(doc)
 	if err != nil {
 		return nil, err
@@ -51,57 +59,30 @@ func (r *BillingAddressRepositoryFS) GetByID(ctx context.Context, id string) (*b
 	return &ba, nil
 }
 
+// ✅ userId フィールドは廃止し、docId=UID で引く
 func (r *BillingAddressRepositoryFS) GetByUser(ctx context.Context, userID string) ([]badom.BillingAddress, error) {
-	q := r.col().
-		Where("userId", "==", strings.TrimSpace(userID)).
-		OrderBy("updatedAt", firestore.Desc).
-		OrderBy("id", firestore.Desc)
-
-	iter := q.Documents(ctx)
-	defer iter.Stop()
-
-	var list []badom.BillingAddress
-	for {
-		doc, err := iter.Next()
-		if errors.Is(err, iterator.Done) {
-			break
-		}
-		if err != nil {
-			return nil, err
-		}
-		ba, err := r.docToDomain(doc)
-		if err != nil {
-			return nil, err
-		}
-		list = append(list, ba)
+	uid := strings.TrimSpace(userID)
+	if uid == "" {
+		return []badom.BillingAddress{}, nil
 	}
-	return list, nil
+
+	ba, err := r.GetByID(ctx, uid)
+	if err != nil {
+		if errors.Is(err, badom.ErrNotFound) {
+			return []badom.BillingAddress{}, nil
+		}
+		return nil, err
+	}
+	return []badom.BillingAddress{*ba}, nil
 }
 
-// 旧仕様は isDefault を持っていたが、現ドメイン（billing_address.dart 入力準拠）では不要。
-// 互換のため「最新1件」を default とみなして返す。
+// 互換: 「最新1件」を返す（docId=UID なので実質 0 or 1）
 func (r *BillingAddressRepositoryFS) GetDefaultByUser(ctx context.Context, userID string) (*badom.BillingAddress, error) {
-	q := r.col().
-		Where("userId", "==", strings.TrimSpace(userID)).
-		OrderBy("updatedAt", firestore.Desc).
-		OrderBy("id", firestore.Desc).
-		Limit(1)
-
-	iter := q.Documents(ctx)
-	defer iter.Stop()
-
-	doc, err := iter.Next()
-	if errors.Is(err, iterator.Done) {
+	uid := strings.TrimSpace(userID)
+	if uid == "" {
 		return nil, badom.ErrNotFound
 	}
-	if err != nil {
-		return nil, err
-	}
-	ba, err := r.docToDomain(doc)
-	if err != nil {
-		return nil, err
-	}
-	return &ba, nil
+	return r.GetByID(ctx, uid)
 }
 
 func (r *BillingAddressRepositoryFS) List(
@@ -119,22 +100,12 @@ func (r *BillingAddressRepositoryFS) List(
 		orderField = "updatedAt"
 		orderDir = firestore.Desc
 	}
-	q = q.OrderBy(orderField, orderDir).OrderBy("id", firestore.Desc)
+
+	// docId=UID なので id も DocumentID で安定ソート
+	q = q.OrderBy(orderField, orderDir).OrderBy(firestore.DocumentID, firestore.Desc)
 
 	// Paging (offset ベース)
-	perPage := page.PerPage
-	if perPage <= 0 {
-		perPage = 50
-	}
-	if perPage > 200 {
-		perPage = 200
-	}
-	number := page.Number
-	if number <= 0 {
-		number = 1
-	}
-	offset := (number - 1) * perPage
-
+	perPage, number, offset := fscmn.NormalizePage(page.Number, page.PerPage, 50, 200)
 	if offset > 0 {
 		q = q.Offset(offset)
 	}
@@ -161,8 +132,8 @@ func (r *BillingAddressRepositoryFS) List(
 
 	return badom.PageResult{
 		Items:      items,
-		TotalCount: len(items), // 簡易。正確な件数が必要なら別途集計。
-		TotalPages: number,
+		TotalCount: len(items), // 簡易
+		TotalPages: number,     // 簡易
 		Page:       number,
 		PerPage:    perPage,
 	}, nil
@@ -190,29 +161,30 @@ func (r *BillingAddressRepositoryFS) Count(ctx context.Context, filter badom.Fil
 }
 
 // Create implements RepositoryPort.Create.
+// ✅ docId = UID 前提（userId フィールドは保存しない）
 func (r *BillingAddressRepositoryFS) Create(ctx context.Context, in badom.CreateBillingAddressInput) (*badom.BillingAddress, error) {
 	now := time.Now().UTC()
-	ref := r.col().NewDoc()
 
-	// CreatedAt
-	var createdAt time.Time
-	if in.CreatedAt != nil && !in.CreatedAt.IsZero() {
-		createdAt = in.CreatedAt.UTC()
-	} else {
-		createdAt = now
+	// ✅ 互換のため input.UserID を「docId(=UID)」として扱う
+	uid := strings.TrimSpace(in.UserID)
+	if uid == "" {
+		return nil, badom.ErrInvalidUserID
 	}
 
-	// UpdatedAt
-	var updatedAt time.Time
+	ref := r.col().Doc(uid)
+
+	createdAt := now
+	if in.CreatedAt != nil && !in.CreatedAt.IsZero() {
+		createdAt = in.CreatedAt.UTC()
+	}
+	updatedAt := createdAt
 	if in.UpdatedAt != nil && !in.UpdatedAt.IsZero() {
 		updatedAt = in.UpdatedAt.UTC()
-	} else {
-		updatedAt = createdAt
 	}
 
 	ba := badom.BillingAddress{
-		ID:             ref.ID,
-		UserID:         strings.TrimSpace(in.UserID),
+		ID:             uid, // ✅ docId=UID
+		UserID:         "",  // ✅ フィールド廃止（レスポンスにも載せたくないなら空に）
 		CardNumber:     strings.TrimSpace(in.CardNumber),
 		CardholderName: strings.TrimSpace(in.CardholderName),
 		CVC:            strings.TrimSpace(in.CVC),
@@ -221,13 +193,22 @@ func (r *BillingAddressRepositoryFS) Create(ctx context.Context, in badom.Create
 	}
 
 	if _, err := ref.Create(ctx, r.domainToDocData(ba)); err != nil {
+		if status.Code(err) == codes.AlreadyExists {
+			return nil, badom.ErrConflict
+		}
 		return nil, err
 	}
 
 	return &ba, nil
 }
 
+// Update: docId=UID 前提（userId フィールドは保存しない）
 func (r *BillingAddressRepositoryFS) Update(ctx context.Context, id string, in badom.UpdateBillingAddressInput) (*badom.BillingAddress, error) {
+	id = strings.TrimSpace(id)
+	if id == "" {
+		return nil, badom.ErrNotFound
+	}
+
 	ref := r.col().Doc(id)
 
 	// 存在確認
@@ -272,22 +253,6 @@ func (r *BillingAddressRepositoryFS) Update(ctx context.Context, id string, in b
 		})
 	}
 
-	// no-op のときは現状値を返す（updatedAt は常に入るので基本 no-op にならないが念のため）
-	if len(updates) == 0 {
-		doc, err := ref.Get(ctx)
-		if err != nil {
-			if status.Code(err) == codes.NotFound {
-				return nil, badom.ErrNotFound
-			}
-			return nil, err
-		}
-		ba, err := r.docToDomain(doc)
-		if err != nil {
-			return nil, err
-		}
-		return &ba, nil
-	}
-
 	if _, err := ref.Update(ctx, updates); err != nil {
 		if status.Code(err) == codes.NotFound {
 			return nil, badom.ErrNotFound
@@ -297,16 +262,28 @@ func (r *BillingAddressRepositoryFS) Update(ctx context.Context, id string, in b
 
 	doc, err := ref.Get(ctx)
 	if err != nil {
+		if status.Code(err) == codes.NotFound {
+			return nil, badom.ErrNotFound
+		}
 		return nil, err
 	}
+
 	ba, err := r.docToDomain(doc)
 	if err != nil {
 		return nil, err
 	}
+
+	// ✅ docId=UID なので userId は常に空
+	ba.UserID = ""
 	return &ba, nil
 }
 
 func (r *BillingAddressRepositoryFS) Delete(ctx context.Context, id string) error {
+	id = strings.TrimSpace(id)
+	if id == "" {
+		return badom.ErrNotFound
+	}
+
 	ref := r.col().Doc(id)
 	if _, err := ref.Get(ctx); err != nil {
 		if status.Code(err) == codes.NotFound {
@@ -319,9 +296,11 @@ func (r *BillingAddressRepositoryFS) Delete(ctx context.Context, id string) erro
 }
 
 // SetDefault: 旧インターフェース互換のため残すが、現ドメインでは不要。
-// 仕様上は「何もしない」で成功とする（既存呼び出しがあっても落とさない）。
 func (r *BillingAddressRepositoryFS) SetDefault(ctx context.Context, id string) error {
-	// id の存在だけ確認しておく（NotFound は返す）
+	id = strings.TrimSpace(id)
+	if id == "" {
+		return badom.ErrNotFound
+	}
 	_, err := r.col().Doc(id).Get(ctx)
 	if err != nil {
 		if status.Code(err) == codes.NotFound {
@@ -340,7 +319,6 @@ func (r *BillingAddressRepositoryFS) WithTx(ctx context.Context, fn func(ctx con
 }
 
 // Reset (development/testing):
-// WriteBatch を使用せず、トランザクションを用いて全ドキュメント削除
 func (r *BillingAddressRepositoryFS) Reset(ctx context.Context) error {
 	iter := r.col().Documents(ctx)
 	defer iter.Stop()
@@ -358,7 +336,7 @@ func (r *BillingAddressRepositoryFS) Reset(ctx context.Context) error {
 	}
 
 	if len(refs) == 0 {
-		log.Printf("[firestore] Reset billing_addresses: no docs to delete\n")
+		log.Printf("[firestore] Reset billingAddresses: no docs to delete\n")
 		return nil
 	}
 
@@ -387,7 +365,7 @@ func (r *BillingAddressRepositoryFS) Reset(ctx context.Context) error {
 		deletedCount += len(chunk)
 	}
 
-	log.Printf("[firestore] Reset billing_addresses (transactional): deleted %d docs\n", deletedCount)
+	log.Printf("[firestore] Reset billingAddresses (transactional): deleted %d docs\n", deletedCount)
 	return nil
 }
 
@@ -395,7 +373,6 @@ func (r *BillingAddressRepositoryFS) Reset(ctx context.Context) error {
 
 func (r *BillingAddressRepositoryFS) docToDomain(doc *firestore.DocumentSnapshot) (badom.BillingAddress, error) {
 	var raw struct {
-		UserID         string    `firestore:"userId"`
 		CardNumber     string    `firestore:"cardNumber"`
 		CardholderName string    `firestore:"cardholderName"`
 		CVC            string    `firestore:"cvc"`
@@ -407,37 +384,34 @@ func (r *BillingAddressRepositoryFS) docToDomain(doc *firestore.DocumentSnapshot
 		return badom.BillingAddress{}, err
 	}
 
-	ba := badom.BillingAddress{
-		ID:             doc.Ref.ID,
-		UserID:         strings.TrimSpace(raw.UserID),
+	return badom.BillingAddress{
+		ID:             strings.TrimSpace(doc.Ref.ID), // ✅ docId=UID
+		UserID:         "",                            // ✅ 保存しない
 		CardNumber:     strings.TrimSpace(raw.CardNumber),
 		CardholderName: strings.TrimSpace(raw.CardholderName),
 		CVC:            strings.TrimSpace(raw.CVC),
 		CreatedAt:      raw.CreatedAt.UTC(),
 		UpdatedAt:      raw.UpdatedAt.UTC(),
-	}
-	return ba, nil
+	}, nil
 }
 
 func (r *BillingAddressRepositoryFS) domainToDocData(ba badom.BillingAddress) map[string]any {
-	data := map[string]any{
-		"userId":         strings.TrimSpace(ba.UserID),
+	// ✅ userId は保存しない
+	return map[string]any{
 		"cardNumber":     strings.TrimSpace(ba.CardNumber),
 		"cardholderName": strings.TrimSpace(ba.CardholderName),
 		"cvc":            strings.TrimSpace(ba.CVC),
 		"createdAt":      ba.CreatedAt.UTC(),
 		"updatedAt":      ba.UpdatedAt.UTC(),
 	}
-	return data
 }
 
 // 部分的に Filter を Firestore クエリへ反映
+// ✅ userId フィールドが無いので DocumentID で絞る
 func applyBillingAddressFilterToQuery(q firestore.Query, f badom.Filter) firestore.Query {
 	if len(f.UserIDs) == 1 {
-		q = q.Where("userId", "==", strings.TrimSpace(f.UserIDs[0]))
+		q = q.Where(firestore.DocumentID, "==", strings.TrimSpace(f.UserIDs[0]))
 	}
-	// 旧: BillingTypes/CardBrands/IsDefault は現ドメインでは無いので無視（互換のため落とさない）
-	_ = fscmn.TrimPtr // unused import guard (このファイルでは未使用になる可能性があるため参照)
 	return q
 }
 
@@ -460,5 +434,3 @@ func mapSort(sort badom.Sort) (field string, dir firestore.Direction) {
 	}
 	return
 }
-
-var _ = fmt.Sprintf // fmt が未使用になった場合のガード（将来削除してOK）

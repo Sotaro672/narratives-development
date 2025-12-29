@@ -114,7 +114,7 @@ class _BillingAddressPageState extends State<BillingAddressPage> {
                           controller: _vm.cvcCtrl,
                           keyboardType: TextInputType.number,
                           obscureText: true,
-                          maxLength: 3,
+                          maxLength: 4, // AMEX 4桁も許容（vm 側でも許容）
                           onChanged: (_) => _vm.onFormChanged(),
                           decoration: const InputDecoration(
                             labelText: 'CVC',
@@ -127,7 +127,7 @@ class _BillingAddressPageState extends State<BillingAddressPage> {
 
                         ElevatedButton(
                           onPressed: _vm.canSave
-                              ? () => _vm.saveDummy(context)
+                              ? () => _vm.save(context)
                               : null,
                           child: _vm.saving
                               ? const SizedBox(

@@ -1,8 +1,12 @@
 // frontend/sns/lib/features/auth/presentation/hook/use_billing_address.dart
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 
-/// BillingAddressPage の状態/処理をまとめる（Flutter では ChangeNotifier で hook 風にする）
+import '../../../billingAddress/infrastructure/billing_address_repository_http.dart';
+
+/// BillingAddressPage の状態/処理（ChangeNotifier で hook 風）
 class UseBillingAddress extends ChangeNotifier {
   UseBillingAddress({required this.from});
 
@@ -13,6 +17,9 @@ class UseBillingAddress extends ChangeNotifier {
   final cardHolderCtrl = TextEditingController();
   final cvcCtrl = TextEditingController();
 
+  final BillingAddressRepositoryHttp _repo = BillingAddressRepositoryHttp();
+  final FirebaseAuth _auth = FirebaseAuth.instance;
+
   bool saving = false;
   String? msg;
 
@@ -21,10 +28,16 @@ class UseBillingAddress extends ChangeNotifier {
     cardNumberCtrl.dispose();
     cardHolderCtrl.dispose();
     cvcCtrl.dispose();
+    _repo.dispose();
     super.dispose();
   }
 
   String _s(String? v) => (v ?? '').trim();
+
+  void _log(String s) {
+    if (!kDebugMode) return;
+    debugPrint('[UseBillingAddress] $s');
+  }
 
   String backTo() {
     final f = _s(from);
@@ -76,7 +89,6 @@ class UseBillingAddress extends ChangeNotifier {
   }
 
   void onCardNumberChanged() {
-    // 入力中の見た目を整える（強制しすぎない程度）
     final current = cardNumberCtrl.text;
     final formatted = formatCardNumberForDisplay(current);
     if (formatted == current) return;
@@ -96,27 +108,52 @@ class UseBillingAddress extends ChangeNotifier {
   }
 
   void onFormChanged() {
-    // holder/cvc など、単にボタン enable 更新のため
     notifyListeners();
   }
 
-  Future<void> saveDummy(BuildContext context) async {
+  /// ✅ 実処理: uid を docId として PATCH /sns/billing-addresses/{uid}（shipping と同じ方針）
+  Future<void> save(BuildContext context) async {
     saving = true;
     msg = null;
     notifyListeners();
 
     try {
-      await Future<void>.delayed(const Duration(milliseconds: 600));
+      final user = _auth.currentUser;
+      if (user == null) {
+        msg = 'サインインが必要です。';
+        return;
+      }
 
-      msg = '請求情報を保存しました（ダミー）。';
-      notifyListeners();
+      final uid = user.uid.trim();
+      if (uid.isEmpty) {
+        msg = 'uid が取得できませんでした。';
+        return;
+      }
+
+      final card = normalizeCardNumber(cardNumberCtrl.text);
+      final holder = _s(cardHolderCtrl.text);
+      final cvc = normalizeDigits(cvcCtrl.text);
+
+      _log(
+        'save start uid=$uid cardDigitsLen=${card.length} holder="$holder" cvcLen=${cvc.length}',
+      );
+
+      // ✅ ここがポイント：POST ではなく PATCH を叩く（docId=uid 前提）
+      await _repo.update(
+        id: uid,
+        cardNumber: card,
+        cardholderName: holder,
+        cvc: cvc,
+      );
+
+      msg = '請求情報を保存しました。';
+      _log('save ok uid=$uid');
 
       if (!context.mounted) return;
-      // ✅ 保存後に avatar_create へ遷移
       context.go('/avatar-create');
     } catch (e) {
+      _log('save failed err=$e');
       msg = e.toString();
-      notifyListeners();
     } finally {
       saving = false;
       notifyListeners();
