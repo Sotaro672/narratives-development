@@ -7,7 +7,6 @@ import (
 )
 
 func CORS(next http.Handler) http.Handler {
-	// ★ 許可する Origin を動的に管理する
 	allowedOrigins := map[string]bool{
 		"https://narratives.jp":                        true, // 本番
 		"https://narratives-console-dev.web.app":       true, // 管理画面フロント dev
@@ -20,8 +19,6 @@ func CORS(next http.Handler) http.Handler {
 		"https://narratives-development-sns.firebaseapp.com": true,
 	}
 
-	// ★ 許可するヘッダ（preflight の Access-Control-Request-Headers と突合される）
-	// - 実運用では「フロントが送る可能性があるもの」を広めに許可しておく
 	allowedHeaders := strings.Join([]string{
 		"Authorization",
 		"Content-Type",
@@ -34,7 +31,6 @@ func CORS(next http.Handler) http.Handler {
 		"X-Icon-Content-Type",
 		"X-Icon-File-Name",
 
-		// もし将来使う場合もあるので許可しておく（害は少ない）
 		"X-CSRF-Token",
 	}, ", ")
 
@@ -43,7 +39,7 @@ func CORS(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		origin := strings.TrimSpace(r.Header.Get("Origin"))
 
-		// ブラウザ以外（Originなし）はそのまま通す
+		// ブラウザ以外（Originなし）
 		if origin == "" {
 			if r.Method == http.MethodOptions {
 				w.WriteHeader(http.StatusNoContent)
@@ -53,28 +49,31 @@ func CORS(next http.Handler) http.Handler {
 			return
 		}
 
-		// Origin が許可されている場合のみ CORS ヘッダ付与
-		if allowedOrigins[origin] {
-			// ★ requested origin をそのまま返す（credentials を使うため "*" は不可）
-			w.Header().Set("Access-Control-Allow-Origin", origin)
-
-			// ★ Cookie / Authorization 等を伴う可能性があるため
-			w.Header().Set("Access-Control-Allow-Credentials", "true")
-
-			// ★ Origin によって応答が変わるので Vary が必須
-			// - ここを "Set" すると他 middleware の Vary を潰す可能性があるので Add を使う
-			w.Header().Add("Vary", "Origin")
-			w.Header().Add("Vary", "Access-Control-Request-Method")
-			w.Header().Add("Vary", "Access-Control-Request-Headers")
-
-			w.Header().Set("Access-Control-Allow-Methods", allowedMethods)
-			w.Header().Set("Access-Control-Allow-Headers", allowedHeaders)
-
-			// ★ preflight の結果をキャッシュ（秒）
-			w.Header().Set("Access-Control-Max-Age", "600")
+		// Origin が許可されていない場合
+		if !allowedOrigins[origin] {
+			// preflight はここで明示的に拒否（デバッグしやすくする）
+			if r.Method == http.MethodOptions {
+				w.WriteHeader(http.StatusForbidden)
+				return
+			}
+			// 非preflightはCORSヘッダ無しで通す（ブラウザ側でブロックされる）
+			next.ServeHTTP(w, r)
+			return
 		}
 
-		// ★ プリフライトならここで終了（許可されない origin でも 204 は返す）
+		// ✅ 許可 origin の場合のみ CORS ヘッダ付与
+		w.Header().Set("Access-Control-Allow-Origin", origin)
+		w.Header().Set("Access-Control-Allow-Credentials", "true")
+
+		appendVary(w, "Origin")
+		appendVary(w, "Access-Control-Request-Method")
+		appendVary(w, "Access-Control-Request-Headers")
+
+		w.Header().Set("Access-Control-Allow-Methods", allowedMethods)
+		w.Header().Set("Access-Control-Allow-Headers", allowedHeaders)
+		w.Header().Set("Access-Control-Max-Age", "600")
+
+		// preflight
 		if r.Method == http.MethodOptions {
 			w.WriteHeader(http.StatusNoContent)
 			return
@@ -82,4 +81,22 @@ func CORS(next http.Handler) http.Handler {
 
 		next.ServeHTTP(w, r)
 	})
+}
+
+func appendVary(w http.ResponseWriter, value string) {
+	const key = "Vary"
+	cur := w.Header().Get(key)
+	if cur == "" {
+		w.Header().Set(key, value)
+		return
+	}
+
+	// すでに含まれていれば何もしない
+	parts := strings.Split(cur, ",")
+	for _, p := range parts {
+		if strings.EqualFold(strings.TrimSpace(p), value) {
+			return
+		}
+	}
+	w.Header().Set(key, cur+", "+value)
 }

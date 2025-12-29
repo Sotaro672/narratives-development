@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../../app/shell/presentation/components/header.dart';
+import '../../../../di/container.dart';
 import '../hook/use_shipping_address.dart';
 
 /// ✅ 認証メールリンクの着地点 + 配送先住所入力
@@ -37,6 +38,9 @@ class _ShippingAddressPageState extends State<ShippingAddressPage> {
   @override
   void initState() {
     super.initState();
+
+    // ✅ DI: container から service を注入（直newをやめる）
+    // これにより API_BASE 統一・repo logger が確実に動く
     _vm = UseShippingAddress(
       mode: widget.mode,
       oobCode: widget.oobCode,
@@ -44,7 +48,9 @@ class _ShippingAddressPageState extends State<ShippingAddressPage> {
       lang: widget.lang,
       from: widget.from,
       intent: widget.intent,
+      service: AppContainer.I.shippingAddressService,
     );
+
     _vm.init();
     _vm.addListener(_onVmChanged);
   }

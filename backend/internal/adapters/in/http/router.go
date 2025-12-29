@@ -24,6 +24,10 @@ import (
 	// ハンドラ群
 	"narratives/internal/adapters/in/http/handlers"
 	"narratives/internal/adapters/in/http/middleware"
+
+	// ✅ SNS router
+	snsh "narratives/internal/adapters/in/http/sns"
+
 	resolver "narratives/internal/application/resolver"
 
 	// MessageHandler 用 Repository
@@ -118,6 +122,9 @@ type RouterDeps struct {
 
 	// ★ MintRequest の query（productionIds を company 境界で取得する等に使う）
 	MintRequestQueryService handlers.MintRequestQueryService
+
+	// ✅ SNS buyer-facing handlers set (/sns/** + aliases)
+	SNS snsh.Deps
 }
 
 func NewRouter(deps RouterDeps) http.Handler {
@@ -191,19 +198,6 @@ func NewRouter(deps RouterDeps) http.Handler {
 		}
 		mux.Handle("/permissions", h)
 		mux.Handle("/permissions/", h)
-	}
-
-	// ================================
-	// Avatars
-	// ================================
-	if deps.AvatarUC != nil {
-		avatarH := handlers.NewAvatarHandler(deps.AvatarUC)
-		var h http.Handler = avatarH
-		if authMw != nil {
-			h = authMw.Handler(h)
-		}
-		mux.Handle("/avatars", h)
-		mux.Handle("/avatars/", h)
 	}
 
 	// ================================
@@ -498,61 +492,59 @@ func NewRouter(deps RouterDeps) http.Handler {
 		mux.Handle("/mint/", h)
 	}
 
-	// ============================================================
-	// ✅ Buyer onboarding resources (to avoid 404 for /users etc.)
-	// - authMw は member 前提になりがちなので bootstrapMw 優先
-	// ============================================================
-
 	// ================================
-	// ✅ Users
+	// ✅ SNS buyer-facing routes (/sns/**) + aliases (/users, /shipping-addresses, ...)
+	//
+	// ✅ FIX:
+	// - sns/router.go (snsh.Register) 側が /users 等の alias も登録するため、
+	//   ここで alias を再登録すると ServeMux が panic ("multiple registrations") します。
+	// - したがって、この router.go では
+	//   1) snsh.Register(mux, deps.SNS) を呼ぶだけ
+	//   2) nil handler の場合に限って /sns/* 側に 501 stub を置く
+	//   3) /users 等の alias はここでは一切登録しない（snsh.Register に任せる）
 	// ================================
-	if deps.UserUC != nil {
-		userH := handlers.NewUserHandler(deps.UserUC)
+	snsh.Register(mux, deps.SNS)
 
-		var h http.Handler = userH
-		if bootstrapMw != nil {
-			h = bootstrapMw.Handler(h)
-		} else if authMw != nil {
-			h = authMw.Handler(h)
-		}
-
-		mux.Handle("/users", h)
-		mux.Handle("/users/", h)
+	notWired := func(name string) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Set("content-type", "text/plain; charset=utf-8")
+			w.WriteHeader(http.StatusNotImplemented)
+			_, _ = w.Write([]byte("not implemented: " + name + " handler is nil (DI wiring required)"))
+		})
 	}
 
-	// ================================
-	// ✅ Shipping Addresses
-	// ================================
-	if deps.ShippingAddressUC != nil {
-		shipH := handlers.NewShippingAddressHandler(deps.ShippingAddressUC)
-
-		var h http.Handler = shipH
-		if bootstrapMw != nil {
-			h = bootstrapMw.Handler(h)
-		} else if authMw != nil {
-			h = authMw.Handler(h)
-		}
-
-		mux.Handle("/shipping-addresses", h)
-		mux.Handle("/shipping-addresses/", h)
+	// ---- /sns/* stubs (only when nil) ----
+	// NOTE: snsh.Register は nil handler を登録しないため、
+	//       nil のときだけ /sns 側に stub を置くと「404 か未配線か」を切り分けできる。
+	if deps.SNS.User == nil {
+		h := notWired("sns users")
+		mux.Handle("/sns/users", h)
+		mux.Handle("/sns/users/", h)
+	}
+	if deps.SNS.ShippingAddress == nil {
+		h := notWired("sns shipping-addresses")
+		mux.Handle("/sns/shipping-addresses", h)
+		mux.Handle("/sns/shipping-addresses/", h)
+	}
+	if deps.SNS.BillingAddress == nil {
+		h := notWired("sns billing-addresses")
+		mux.Handle("/sns/billing-addresses", h)
+		mux.Handle("/sns/billing-addresses/", h)
+	}
+	if deps.SNS.Avatar == nil {
+		h := notWired("sns avatars")
+		mux.Handle("/sns/avatars", h)
+		mux.Handle("/sns/avatars/", h)
+	}
+	if deps.SNS.SignIn == nil {
+		h := notWired("sns sign-in")
+		mux.Handle("/sns/sign-in", h)
+		mux.Handle("/sns/sign-in/", h)
 	}
 
-	// ================================
-	// ✅ Billing Addresses
-	// ================================
-	if deps.BillingAddressUC != nil {
-		billH := handlers.NewBillingAddressHandler(deps.BillingAddressUC)
-
-		var h http.Handler = billH
-		if bootstrapMw != nil {
-			h = bootstrapMw.Handler(h)
-		} else if authMw != nil {
-			h = authMw.Handler(h)
-		}
-
-		mux.Handle("/billing-addresses", h)
-		mux.Handle("/billing-addresses/", h)
-	}
+	// ✅ IMPORTANT:
+	// alias (/users, /shipping-addresses, /billing-addresses, /avatars, /sign-in) は
+	// snsh.Register 側が rewriteToSNS() を使って登録するので、ここでは登録しない。
 
 	return mux
 }

@@ -1,3 +1,4 @@
+// backend\internal\adapters\in\http\sns\handler\shippingAddress_handler.go
 package handler
 
 import (
@@ -25,6 +26,12 @@ func (h *ShippingAddressHandler) ServeHTTP(w http.ResponseWriter, r *http.Reques
 	w.Header().Set("Content-Type", "application/json")
 
 	path := strings.TrimSuffix(r.URL.Path, "/")
+
+	// ✅ /sns プレフィックスを吸収（/sns/shipping-addresses -> /shipping-addresses）
+	// - mux 側が /sns/** にハンドラを登録していても、このハンドラの内部ルーティングが一致するようにする
+	if strings.HasPrefix(path, "/sns/") {
+		path = strings.TrimPrefix(path, "/sns")
+	}
 
 	switch {
 	// GET /shipping-addresses/{id}

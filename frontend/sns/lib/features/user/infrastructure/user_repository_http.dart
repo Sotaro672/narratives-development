@@ -117,7 +117,8 @@ class UpdateUserBody {
 }
 
 /// SNS Flutter 用 UserRepository (HTTP)
-/// - API_BASE or API_BASE_URL は `--dart-define=...` で渡す想定
+/// - API_BASE に統一（module federation 前提で container から baseUrl 注入する想定）
+/// - ただし「単体で new された場合」も落ちないように API_BASE を見る
 class UserRepositoryHttp {
   UserRepositoryHttp({Dio? dio, FirebaseAuth? auth, String? baseUrl})
     : _auth = auth ?? FirebaseAuth.instance,
@@ -125,7 +126,7 @@ class UserRepositoryHttp {
     final resolved = _resolveApiBase(override: baseUrl).trim();
     if (resolved.isEmpty) {
       throw Exception(
-        'API_BASE is not set (use --dart-define=API_BASE=https://... or API_BASE_URL=https://...)',
+        'API_BASE is not set (use --dart-define=API_BASE=https://...)',
       );
     }
 
@@ -171,7 +172,7 @@ class UserRepositoryHttp {
           // ✅ 既存の DioError ログ
           _logDioError(e);
 
-          // ✅ “失敗時のログ” を追加（原因調査用）
+          // ✅ 失敗時の “要約ログ” を追加（request/response をまとめて出す）
           _logFailureSummary(e);
 
           handler.next(e);
@@ -205,6 +206,7 @@ class UserRepositoryHttp {
       final data = _asMap(res.data);
       return UserDTO.fromJson(data);
     } on DioException catch (e) {
+      // ✅ throw 前にも要約ログ（呼び出し側で握りつぶされるケース対策）
       _logFailureSummary(e, op: 'GET /users/$trimmed');
       throw _toException(e, op: 'GET /users/$trimmed');
     }
@@ -262,6 +264,7 @@ class UserRepositoryHttp {
   // helpers
   // ----------------------------
 
+  /// Web/Release でもログを出したい場合用（`--dart-define=ENABLE_HTTP_LOG=true`）
   static const bool _envHttpLog = bool.fromEnvironment(
     'ENABLE_HTTP_LOG',
     defaultValue: false,
@@ -269,14 +272,14 @@ class UserRepositoryHttp {
 
   bool get _logEnabled => kDebugMode || _envHttpLog;
 
+  /// ✅ API_BASE に統一（module federation の container から baseUrl 注入が基本）
   static String _resolveApiBase({String? override}) {
     final o = (override ?? '').trim();
     if (o.isNotEmpty) return o;
 
-    const v1 = String.fromEnvironment('API_BASE_URL'); // newer
-    const v2 = String.fromEnvironment('API_BASE'); // legacy
-    final raw = (v1.isNotEmpty ? v1 : v2).trim();
-    return raw;
+    // 統一: API_BASE
+    const v = String.fromEnvironment('API_BASE', defaultValue: '');
+    return v.trim();
   }
 
   Map<String, dynamic> _asMap(dynamic v) {

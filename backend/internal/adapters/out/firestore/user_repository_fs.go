@@ -21,6 +21,11 @@ import (
 // Firestore User Repository
 // (PostgreSQL 実装相当のインターフェースを Firestore で提供)
 // =====================================================
+//
+// IMPORTANT:
+// - users コレクションの DocID は "user.ID(=Firebase Auth UID)" に統一する。
+// - これにより「userId と UID が一致しない」問題を根本的に解消する。
+// =====================================================
 
 type UserRepositoryFS struct {
 	Client *firestore.Client
@@ -46,7 +51,8 @@ func (r *UserRepositoryFS) GetByID(ctx context.Context, id string) (udom.User, e
 
 	id = strings.TrimSpace(id)
 	if id == "" {
-		return udom.User{}, udom.ErrNotFound
+		// 「存在しない」とは別なので invalid とする（ハンドラが 400 にできる）
+		return udom.User{}, udom.ErrInvalidID
 	}
 
 	snap, err := r.col().Doc(id).Get(ctx)
@@ -82,10 +88,19 @@ func (r *UserRepositoryFS) Exists(ctx context.Context, id string) (bool, error) 
 }
 
 // Create(ctx, v udom.User) (udom.User, error)
-// Firestore では ID は自動採番（Postgres の gen_random_uuid 相当）。
+//
+// IMPORTANT:
+// - Firestore の自動採番(NewDoc/Add)は使わない。
+// - DocID は v.ID (Firebase Auth UID) を使う。
+// - 既に存在する場合は conflict。
 func (r *UserRepositoryFS) Create(ctx context.Context, v udom.User) (udom.User, error) {
 	if r.Client == nil {
 		return udom.User{}, errors.New("firestore client is nil")
+	}
+
+	id := strings.TrimSpace(v.ID)
+	if id == "" {
+		return udom.User{}, udom.ErrInvalidID
 	}
 
 	now := time.Now().UTC()
@@ -110,7 +125,7 @@ func (r *UserRepositoryFS) Create(ctx context.Context, v udom.User) (udom.User, 
 		}
 	}
 
-	ref := r.col().NewDoc()
+	ref := r.col().Doc(id)
 
 	data := map[string]any{
 		"createdAt": createdAt,
@@ -154,7 +169,11 @@ func (r *UserRepositoryFS) Create(ctx context.Context, v udom.User) (udom.User, 
 }
 
 // Save(ctx, v udom.User) (udom.User, error)
-// Upsert 的挙動: ID 無し or 存在しない場合は Create。それ以外は Update。
+//
+// Upsert 的挙動:
+// - ID が空 → invalid
+// - 存在する → Update
+// - 存在しない → Create (DocID は指定 ID のまま)
 func (r *UserRepositoryFS) Save(ctx context.Context, v udom.User) (udom.User, error) {
 	if r.Client == nil {
 		return udom.User{}, errors.New("firestore client is nil")
@@ -162,7 +181,7 @@ func (r *UserRepositoryFS) Save(ctx context.Context, v udom.User) (udom.User, er
 
 	id := strings.TrimSpace(v.ID)
 	if id == "" {
-		return r.Create(ctx, v)
+		return udom.User{}, udom.ErrInvalidID
 	}
 
 	exists, err := r.Exists(ctx, id)
@@ -170,7 +189,8 @@ func (r *UserRepositoryFS) Save(ctx context.Context, v udom.User) (udom.User, er
 		return udom.User{}, err
 	}
 	if !exists {
-		// Postgres 実装同様: 指定 ID が存在しなければ新規作成扱い（新ID採番）
+		// 指定 ID (UID) で新規作成
+		// createdAt/updatedAt/deletedAt は Create 側で整形される
 		return r.Create(ctx, v)
 	}
 
@@ -299,7 +319,7 @@ func (r *UserRepositoryFS) Update(ctx context.Context, id string, in udom.Update
 
 	id = strings.TrimSpace(id)
 	if id == "" {
-		return nil, udom.ErrNotFound
+		return nil, udom.ErrInvalidID
 	}
 
 	ref := r.col().Doc(id)
@@ -389,7 +409,7 @@ func (r *UserRepositoryFS) Delete(ctx context.Context, id string) error {
 
 	id = strings.TrimSpace(id)
 	if id == "" {
-		return udom.ErrNotFound
+		return udom.ErrInvalidID
 	}
 
 	ref := r.col().Doc(id)

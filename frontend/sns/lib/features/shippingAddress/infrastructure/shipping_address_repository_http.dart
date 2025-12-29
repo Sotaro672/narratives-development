@@ -5,19 +5,14 @@ import 'package:flutter/foundation.dart';
 import 'package:dio/dio.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 
-String _resolveApiBase() {
-  // ✅ API_BASE_URL / API_BASE の両対応（どちらでもOK）
-  const v1 = String.fromEnvironment('API_BASE_URL', defaultValue: '');
-  const v2 = String.fromEnvironment('API_BASE', defaultValue: '');
-  final raw = (v1.isNotEmpty ? v1 : v2).trim();
+/// ✅ API_BASE に統一（module federation 前提で container から baseUrl 注入が基本）
+/// - ただし「単体で new された場合」も落ちないように API_BASE を見る
+String _resolveApiBase({String? override}) {
+  final o = (override ?? '').trim();
+  if (o.isNotEmpty) return o;
 
-  if (raw.isEmpty) {
-    throw Exception(
-      'API_BASE is not set (use --dart-define=API_BASE=https://... or API_BASE_URL=https://...)',
-    );
-  }
-  // Ensure no trailing slash
-  return raw.endsWith('/') ? raw.substring(0, raw.length - 1) : raw;
+  const v = String.fromEnvironment('API_BASE', defaultValue: '');
+  return v.trim();
 }
 
 /// Domain-ish model for SNS shipping address (matches backend shippingAddress.entity.go)
@@ -41,8 +36,10 @@ class ShippingAddress {
   final String state;
   final String city;
   final String street;
-  final String
-  street2; // optional in UI, but backend entity currently has string (can be "")
+
+  /// optional in UI, but backend entity currently has string (can be "")
+  final String street2;
+
   final String country;
   final DateTime createdAt;
   final DateTime updatedAt;
@@ -141,9 +138,7 @@ class UpdateShippingAddressInput {
     final m = <String, dynamic>{};
 
     void put(String k, String? v) {
-      if (v == null) {
-        return;
-      }
+      if (v == null) return;
       m[k] = v.trim();
     }
 
@@ -151,8 +146,10 @@ class UpdateShippingAddressInput {
     put('state', state);
     put('city', city);
     put('street', street);
+
     // street2 は「消す」ケースがあり得るので、呼び出し側で "" を渡せば消去扱いにできます
     put('street2', street2);
+
     put('country', country);
 
     return m;
@@ -163,7 +160,13 @@ class ShippingAddressRepositoryHttp {
   ShippingAddressRepositoryHttp({Dio? dio, FirebaseAuth? auth, String? baseUrl})
     : _auth = auth ?? FirebaseAuth.instance,
       _dio = dio ?? Dio() {
-    final resolved = (baseUrl ?? _resolveApiBase()).trim();
+    final resolved = _resolveApiBase(override: baseUrl).trim();
+    if (resolved.isEmpty) {
+      throw Exception(
+        'API_BASE is not set (use --dart-define=API_BASE=https://...)',
+      );
+    }
+
     final normalized = resolved.endsWith('/')
         ? resolved.substring(0, resolved.length - 1)
         : resolved;

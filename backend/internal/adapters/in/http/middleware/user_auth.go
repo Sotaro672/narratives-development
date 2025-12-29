@@ -3,6 +3,7 @@ package middleware
 
 import (
 	"context"
+	"encoding/json"
 	"log"
 	"net/http"
 	"strings"
@@ -17,35 +18,48 @@ type UserAuthMiddleware struct {
 
 func (m *UserAuthMiddleware) Handler(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// ✅ Allow CORS preflight to pass through without auth
+		if r.Method == http.MethodOptions {
+			next.ServeHTTP(w, r)
+			return
+		}
+
 		if m.FirebaseAuth == nil {
-			http.Error(w, "user auth middleware not initialized", http.StatusServiceUnavailable)
+			writeJSONError(w, http.StatusServiceUnavailable, "user_auth_not_initialized")
 			return
 		}
 
-		authHeader := r.Header.Get("Authorization")
-		if !strings.HasPrefix(authHeader, "Bearer ") {
-			http.Error(w, "unauthorized: missing bearer token", http.StatusUnauthorized)
+		authHeader := strings.TrimSpace(r.Header.Get("Authorization"))
+		if authHeader == "" {
+			writeJSONError(w, http.StatusUnauthorized, "unauthorized: missing authorization header")
 			return
 		}
 
-		idToken := strings.TrimSpace(strings.TrimPrefix(authHeader, "Bearer "))
+		// ✅ Case-insensitive "Bearer "
+		// (keep original header for token extraction)
+		if !strings.HasPrefix(strings.ToLower(authHeader), "bearer ") {
+			writeJSONError(w, http.StatusUnauthorized, "unauthorized: missing bearer token")
+			return
+		}
+
+		idToken := strings.TrimSpace(authHeader[len("Bearer "):])
 		if idToken == "" {
-			http.Error(w, "unauthorized: empty bearer token", http.StatusUnauthorized)
+			writeJSONError(w, http.StatusUnauthorized, "unauthorized: empty bearer token")
 			return
 		}
-
-		log.Printf("[user_auth] bearer token received (len=%d)", len(idToken))
 
 		// Firebase ID token verification
 		token, err := m.FirebaseAuth.VerifyIDToken(r.Context(), idToken)
 		if err != nil {
-			http.Error(w, "invalid token", http.StatusUnauthorized)
+			// NOTE: Do not leak internal details to clients
+			log.Printf("[user_auth] invalid token: %v", err)
+			writeJSONError(w, http.StatusUnauthorized, "invalid token")
 			return
 		}
 
 		uid := strings.TrimSpace(token.UID)
 		if uid == "" {
-			http.Error(w, "invalid uid in token", http.StatusUnauthorized)
+			writeJSONError(w, http.StatusUnauthorized, "invalid uid in token")
 			return
 		}
 
@@ -57,7 +71,7 @@ func (m *UserAuthMiddleware) Handler(next http.Handler) http.Handler {
 			}
 		}
 
-		// fullName (optional) - if provided by Firebase/OIDC
+		// fullName (optional)
 		fullName := ""
 		if nameRaw, ok := token.Claims["name"]; ok {
 			if s, ok2 := nameRaw.(string); ok2 {
@@ -108,14 +122,24 @@ func (m *UserAuthMiddleware) Handler(next http.Handler) http.Handler {
 	})
 }
 
+func writeJSONError(w http.ResponseWriter, status int, msg string) {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(status)
+	_ = json.NewEncoder(w).Encode(map[string]string{"error": msg})
+}
+
 // CurrentUserUID returns Firebase UID for buyer/user side.
 func CurrentUserUID(r *http.Request) (string, bool) {
 	vUID := r.Context().Value(ctxKeyUID)
 	u, ok := vUID.(string)
-	if !ok || strings.TrimSpace(u) == "" {
+	if !ok {
 		return "", false
 	}
-	return strings.TrimSpace(u), true
+	u = strings.TrimSpace(u)
+	if u == "" {
+		return "", false
+	}
+	return u, true
 }
 
 // CurrentUserUIDAndEmail returns uid/email (email can be empty).
@@ -141,8 +165,12 @@ func CurrentUserFullName(r *http.Request) (string, bool) {
 		return "", false
 	}
 	s, ok := v.(string)
-	if !ok || strings.TrimSpace(s) == "" {
+	if !ok {
 		return "", false
 	}
-	return strings.TrimSpace(s), true
+	s = strings.TrimSpace(s)
+	if s == "" {
+		return "", false
+	}
+	return s, true
 }

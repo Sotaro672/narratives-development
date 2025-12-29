@@ -163,22 +163,15 @@ func NewSNSDepsWithNameResolverAndOrgHandlers(
 	}
 
 	// tokenBlueprint patch handler
-	//
-	// 重要:
-	// - ここでは「確実に存在する ctor」だけを呼ぶ（= NewSNSTokenBlueprintHandler）。
-	// - brand/company 名解決や iconUrl 補完は、handler にフィールドがあれば reflection で注入する。
 	if tokenBlueprintUC != nil {
 		tokenBlueprintHandler = snshandler.NewSNSTokenBlueprintHandler(tokenBlueprintUC)
 
-		// brand/company name resolver（handler 側にフィールドがあれば入る）
 		if nameResolver != nil {
 			setOptionalResolverField(tokenBlueprintHandler, "BrandNameResolver", nameResolver)
 			setOptionalResolverField(tokenBlueprintHandler, "CompanyNameResolver", nameResolver)
 			setOptionalResolverField(tokenBlueprintHandler, "NameResolver", nameResolver) // 将来用
 		}
 
-		// icon url resolver（handler 側にフィールドがあれば入る）
-		// - env: TOKEN_ICON_PUBLIC_BUCKET を使う（resolver 実装に従う）
 		imgResolver := appresolver.NewImageURLResolver("")
 		setOptionalResolverField(tokenBlueprintHandler, "ImageResolver", imgResolver)
 		setOptionalResolverField(tokenBlueprintHandler, "ImageURLResolver", imgResolver)
@@ -205,13 +198,11 @@ func NewSNSDepsWithNameResolverAndOrgHandlers(
 }
 
 // RegisterSNSFromContainer registers SNS routes using *Container.
-// RouterDeps 型に依存しないため、main.go 側が SNS の依存増減を意識しなくてよい。
 func RegisterSNSFromContainer(mux *http.ServeMux, cont *Container) {
 	if mux == nil || cont == nil {
 		return
 	}
 
-	// cont.RouterDeps() の戻り値が「無名struct」でもここでは受けられる（型名不要）
 	depsAny := any(cont.RouterDeps())
 
 	// ✅ try to obtain catalog query from Container without touching RouterDeps fields.
@@ -236,10 +227,7 @@ func RegisterSNSFromContainer(mux *http.ServeMux, cont *Container) {
 		}
 	}
 
-	// ✅ SNS name resolver (brandName/companyName)
-	// - prefer: SNSNameResolver()
-	// - fallback: GetSNSNameResolver()
-	// - fallback: reflect field (sns_name_resolver 方針でも compile を壊さない)
+	// ✅ SNS name resolver
 	var nameResolver *appresolver.NameResolver
 	{
 		if x, ok := any(cont).(interface {
@@ -283,7 +271,7 @@ func RegisterSNSFromContainer(mux *http.ServeMux, cont *Container) {
 		}
 	}
 
-	// ✅ obtain core usecases from RouterDeps without compile-time dependency on its field set
+	// ✅ obtain core usecases from RouterDeps
 	listUC := getFieldPtr[*usecase.ListUsecase](depsAny, "ListUC", "ListUsecase")
 	invUC := getFieldPtr[*usecase.InventoryUsecase](depsAny, "InventoryUC", "InventoryUsecase")
 	pbUC := getFieldPtr[*usecase.ProductBlueprintUsecase](depsAny, "ProductBlueprintUC", "ProductBlueprintUsecase")
@@ -302,25 +290,47 @@ func RegisterSNSFromContainer(mux *http.ServeMux, cont *Container) {
 		catalogQ,
 	)
 
-	// ✅ NEW: try to inject onboarding handlers (user/shipping/billing/avatar) best-effort
+	// ✅ try to inject onboarding handlers (user/shipping/billing/avatar)
 	// - prioritize Container methods
 	// - fallback to RouterDeps fields (http.Handler)
 	snsDeps.User = getHandlerBestEffort(cont, depsAny,
-		[]string{"SNSUserHandler", "SNSUserHandler", "UserHandler", "SNSUser"},
-		[]string{"User", "UserHandler", "SNSUser", "SNSUser"},
+		[]string{"SNSUserHandler", "SNSUser", "UserHandler", "User"},
+		[]string{"User", "UserHandler", "SNSUser", "SNSUserHandler"},
 	)
 	snsDeps.ShippingAddress = getHandlerBestEffort(cont, depsAny,
-		[]string{"SNSShippingAddressHandler", "SNSShippingHandler", "ShippingAddressHandler", "SNSShippingAddress"},
-		[]string{"ShippingAddress", "ShippingAddressHandler", "SNSShippingAddress", "SNSShipping"},
+		[]string{"SNSShippingAddressHandler", "SNSShippingAddress", "ShippingAddressHandler", "ShippingAddress"},
+		[]string{"ShippingAddress", "ShippingAddressHandler", "SNSShippingAddress", "SNSShippingAddressHandler"},
 	)
 	snsDeps.BillingAddress = getHandlerBestEffort(cont, depsAny,
-		[]string{"SNSBillingAddressHandler", "SNSBillingHandler", "BillingAddressHandler", "SNSBillingAddress"},
-		[]string{"BillingAddress", "BillingAddressHandler", "SNSBillingAddress", "SNSBilling"},
+		[]string{"SNSBillingAddressHandler", "SNSBillingAddress", "BillingAddressHandler", "BillingAddress"},
+		[]string{"BillingAddress", "BillingAddressHandler", "SNSBillingAddress", "SNSBillingAddressHandler"},
 	)
 	snsDeps.Avatar = getHandlerBestEffort(cont, depsAny,
-		[]string{"SNSAvatarHandler", "SnsAvatarHandler", "AvatarHandler", "SNSAvatar"},
-		[]string{"Avatar", "AvatarHandler", "SNSAvatar", "SnsAvatar"},
+		[]string{"SNSAvatarHandler", "SNSAvatar", "AvatarHandler", "Avatar"},
+		[]string{"Avatar", "AvatarHandler", "SNSAvatar", "SNSAvatarHandler"},
 	)
+
+	// ✅ NEW: if handler is still nil, build it from Usecase pointers in RouterDeps (best-effort)
+	if snsDeps.User == nil {
+		if userUC := getFieldPtr[*usecase.UserUsecase](depsAny, "UserUC", "UserUsecase"); userUC != nil {
+			snsDeps.User = snshandler.NewUserHandler(userUC)
+		}
+	}
+	if snsDeps.ShippingAddress == nil {
+		if uc := getFieldPtr[*usecase.ShippingAddressUsecase](depsAny, "ShippingAddressUC", "ShippingAddressUsecase"); uc != nil {
+			snsDeps.ShippingAddress = snshandler.NewShippingAddressHandler(uc)
+		}
+	}
+	if snsDeps.BillingAddress == nil {
+		if uc := getFieldPtr[*usecase.BillingAddressUsecase](depsAny, "BillingAddressUC", "BillingAddressUsecase"); uc != nil {
+			snsDeps.BillingAddress = snshandler.NewBillingAddressHandler(uc)
+		}
+	}
+	if snsDeps.Avatar == nil {
+		if uc := getFieldPtr[*usecase.AvatarUsecase](depsAny, "AvatarUC", "AvatarUsecase"); uc != nil {
+			snsDeps.Avatar = snshandler.NewAvatarHandler(uc)
+		}
+	}
 
 	RegisterSNSRoutes(mux, snsDeps)
 }
@@ -330,6 +340,11 @@ func RegisterSNSRoutes(mux *http.ServeMux, deps SNSDeps) {
 	if mux == nil {
 		return
 	}
+
+	// ✅ IMPORTANT:
+	// snshttp.Register() は /sns/** だけでなく alias (/users, /avatars, ...) も登録します。
+	// ここで重ねて mux.Handle すると「multiple registrations」で panic するため、
+	// 追加の alias 登録は一切しない。
 	snshttp.Register(mux, snshttp.Deps{
 		List:             deps.List,
 		Inventory:        deps.Inventory,
@@ -342,7 +357,6 @@ func RegisterSNSRoutes(mux *http.ServeMux, deps SNSDeps) {
 		Company: deps.Company,
 		Brand:   deps.Brand,
 
-		// ✅ NEW
 		User:            deps.User,
 		ShippingAddress: deps.ShippingAddress,
 		BillingAddress:  deps.BillingAddress,
@@ -395,14 +409,11 @@ func setOptionalResolverField(handler http.Handler, fieldName string, value any)
 }
 
 // getSNSNameResolverFieldBestEffort tries to read a resolver from Container fields
-// without compile-time dependency on a specific field name.
-// (sns_name_resolver 方針でも compile を壊さない)
 func getSNSNameResolverFieldBestEffort(cont *Container) *appresolver.NameResolver {
 	if cont == nil {
 		return nil
 	}
 
-	// *Container -> Elem()
 	rv := reflect.ValueOf(cont)
 	if !rv.IsValid() {
 		return nil
@@ -422,7 +433,6 @@ func getSNSNameResolverFieldBestEffort(cont *Container) *appresolver.NameResolve
 		if !f.IsValid() {
 			return nil
 		}
-		// allow *T, interface{...}, or embedded
 		if f.Kind() == reflect.Interface {
 			if f.IsNil() {
 				return nil
@@ -442,18 +452,13 @@ func getSNSNameResolverFieldBestEffort(cont *Container) *appresolver.NameResolve
 			}
 			return nil
 		}
-		// not pointer/interface -> can't be *NameResolver
 		return nil
 	}
 
-	// 優先順（想定される命名ゆれ）
 	for _, n := range []string{
-		// exported
 		"SNSNameResolver",
 		"SnsNameResolver",
-		// unexported camel
 		"snsNameResolver",
-		// legacy (もし残っているなら)
 		"NameResolver",
 		"nameResolver",
 	} {
@@ -466,8 +471,6 @@ func getSNSNameResolverFieldBestEffort(cont *Container) *appresolver.NameResolve
 }
 
 // getFieldPtr reads a pointer field from an arbitrary struct (or *struct) by name, best-effort.
-// - If not found / type mismatch, returns nil.
-// - T should be a pointer type (e.g. *usecase.ListUsecase).
 func getFieldPtr[T any](src any, names ...string) T {
 	var zero T
 	if src == nil {
@@ -525,7 +528,6 @@ func getHandlerBestEffort(cont *Container, depsAny any, containerMethodNames []s
 			if !m.IsValid() {
 				continue
 			}
-			// expect func() http.Handler
 			if m.Type().NumIn() != 0 || m.Type().NumOut() != 1 {
 				continue
 			}
@@ -544,7 +546,7 @@ func getHandlerBestEffort(cont *Container, depsAny any, containerMethodNames []s
 			rve = rve.Elem()
 		}
 		if rve.IsValid() && rve.Kind() == reflect.Struct {
-			for _, fname := range containerMethodNames { // reuse same names as field candidates
+			for _, fname := range containerMethodNames {
 				fname = strings.TrimSpace(fname)
 				if fname == "" {
 					continue
@@ -594,8 +596,6 @@ func getHandlerBestEffort(cont *Container, depsAny any, containerMethodNames []s
 
 // ============================================================
 // sns catalog adapters (DI-only helpers)
-// - compile-time で inventory domain 型に依存しないため、reflection で吸収する
-// - moved from container.go
 // ============================================================
 
 type snsCatalogInventoryRepoAdapter struct {
@@ -811,9 +811,7 @@ func toSNSCatalogInventoryDTO(v any) (*snsdto.SNSCatalogInventoryDTO, error) {
 	}, nil
 }
 
-// ------------------------------------------------------------
 // stock reflection helpers (modelId -> products)
-// ------------------------------------------------------------
 
 func extractProductIDsFromStockValue(v reflect.Value) []string {
 	if !v.IsValid() {
