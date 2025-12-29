@@ -12,6 +12,17 @@ import (
 	avatarstate "narratives/internal/domain/avatarState"
 )
 
+// ----------------------------------------
+// Local errors (usecase-level validation)
+// ----------------------------------------
+
+var (
+	ErrInvalidUserUID             = errors.New("avatar: invalid userUid")
+	ErrAvatarWalletAlreadyOpened  = errors.New("avatar: wallet already opened")
+	ErrAvatarWalletServiceMissing = errors.New("avatar: wallet service not configured")
+	ErrAvatarWalletAddressEmpty   = errors.New("avatar: opened wallet address is empty")
+)
+
 // AvatarRepo は Avatar 本体の永続化ポートです。
 // Firestore 実装（avatar_repository_fs.go）が Create/Update/Delete を提供する前提で揃えます。
 type AvatarRepo interface {
@@ -36,6 +47,16 @@ type AvatarIconRepo interface {
 
 type AvatarIconObjectStoragePort interface {
 	DeleteObjects(ctx context.Context, ops []avataricon.GCSDeleteOp) error
+
+	// ✅ NEW: 画像が空でも avatarDocId/ の “入れ物” を作る（例: <avatarId>/.keep を作成）
+	EnsurePrefix(ctx context.Context, bucket, prefix string) error
+}
+
+// AvatarWalletService は Avatar 作成時に Solana wallet を開設するためのポートです。
+// - 秘密鍵は Secret Manager に保存される想定
+// - 公開鍵(base58) を avatar.WalletAddress に反映する
+type AvatarWalletService interface {
+	OpenAvatarWallet(ctx context.Context, a avatardom.Avatar) (avatardom.SolanaAvatarWallet, error)
 }
 
 type AvatarUsecase struct {
@@ -43,6 +64,8 @@ type AvatarUsecase struct {
 	stRepo   AvatarStateRepo
 	icRepo   AvatarIconRepo
 	objStore AvatarIconObjectStoragePort
+
+	walletSvc AvatarWalletService
 
 	now func() time.Time
 }
@@ -64,6 +87,12 @@ func NewAvatarUsecase(
 
 func (u *AvatarUsecase) WithNow(now func() time.Time) *AvatarUsecase {
 	u.now = now
+	return u
+}
+
+// WithWalletService injects wallet opener (optional).
+func (u *AvatarUsecase) WithWalletService(svc AvatarWalletService) *AvatarUsecase {
+	u.walletSvc = svc
 	return u
 }
 
@@ -118,10 +147,13 @@ func (u *AvatarUsecase) GetAggregate(ctx context.Context, id string) (AvatarAggr
 
 // CreateAvatarInput は avatar_create.dart の入力を正とした作成入力です。
 // ※ アイコンは「画像そのもの」ではなく、アップロード後の AvatarIcon（URL/Path統一）を受け取る想定です。
-// ✅ entity.go を正として firebaseUid を追加
 type CreateAvatarInput struct {
-	UserID       string  `json:"userId"`
-	FirebaseUID  string  `json:"firebaseUid"`
+	UserID string `json:"userId"`
+
+	// ✅ firebaseUid ではなく userUid へ移譲（認証主体の UID）
+	// NOTE: Avatar ドメインには保持しない（必要なら上位の auth context / user domain で管理）。
+	UserUID string `json:"userUid"`
+
 	AvatarName   string  `json:"avatarName"`
 	AvatarIcon   *string `json:"avatarIcon,omitempty"`
 	Profile      *string `json:"profile,omitempty"`
@@ -129,6 +161,9 @@ type CreateAvatarInput struct {
 }
 
 // Create は /avatars POST 用の作成コマンドです。
+// ✅ 期待値:
+// - avatar 作成と同時に Solana wallet を開設し、秘密鍵は Secret Manager に保存される。
+// - narratives-development_avatar_icon に <avatarDocId>/ の “入れ物” を作成する（画像が空でも）。
 func (u *AvatarUsecase) Create(ctx context.Context, in CreateAvatarInput) (avatardom.Avatar, error) {
 	if u.avRepo == nil {
 		return avatardom.Avatar{}, errors.New("avatar repo not configured")
@@ -139,9 +174,9 @@ func (u *AvatarUsecase) Create(ctx context.Context, in CreateAvatarInput) (avata
 		return avatardom.Avatar{}, avatardom.ErrInvalidUserID
 	}
 
-	fuid := strings.TrimSpace(in.FirebaseUID)
-	if fuid == "" {
-		return avatardom.Avatar{}, avatardom.ErrInvalidFirebaseUID
+	userUID := strings.TrimSpace(in.UserUID)
+	if userUID == "" {
+		return avatardom.Avatar{}, ErrInvalidUserUID
 	}
 
 	name := strings.TrimSpace(in.AvatarName)
@@ -151,11 +186,10 @@ func (u *AvatarUsecase) Create(ctx context.Context, in CreateAvatarInput) (avata
 
 	now := u.now().UTC()
 
-	// entity.go のフィールドに合わせる
+	// entity.go のフィールドに合わせる（firebaseUid は保持しない）
 	a := avatardom.Avatar{
 		// ID は実装側で採番可（空で渡す）
 		UserID:       userID,
-		FirebaseUID:  fuid,
 		AvatarName:   name,
 		AvatarIcon:   trimPtr(in.AvatarIcon),
 		Profile:      trimPtr(in.Profile),
@@ -164,7 +198,76 @@ func (u *AvatarUsecase) Create(ctx context.Context, in CreateAvatarInput) (avata
 		UpdatedAt:    now,
 	}
 
-	return u.avRepo.Create(ctx, a)
+	created, err := u.avRepo.Create(ctx, a)
+	if err != nil {
+		return avatardom.Avatar{}, err
+	}
+
+	// ✅ 画像が空でも “入れ物” を作成（best-effort）
+	// - GCS はフォルダを作れないので <avatarId>/.keep のような空オブジェクトを置く想定。
+	if u.objStore != nil && strings.TrimSpace(created.ID) != "" {
+		_ = u.objStore.EnsurePrefix(ctx, "narratives-development_avatar_icon", strings.TrimSpace(created.ID)+"/")
+	}
+
+	// ✅ Wallet open (walletSvc が DI 済みなら strict に実行)
+	if u.walletSvc != nil {
+		w, werr := u.walletSvc.OpenAvatarWallet(ctx, created)
+		if werr != nil {
+			return avatardom.Avatar{}, werr
+		}
+
+		addr := strings.TrimSpace(w.Address)
+		if addr == "" {
+			return avatardom.Avatar{}, ErrAvatarWalletAddressEmpty
+		}
+
+		patch := avatardom.AvatarPatch{WalletAddress: &addr}
+		updated, uerr := u.avRepo.Update(ctx, strings.TrimSpace(created.ID), patch)
+		if uerr != nil {
+			return avatardom.Avatar{}, uerr
+		}
+		created = updated
+	}
+
+	_ = userUID // NOTE: 現状は保持しない。必要なら auth/handler 層で整合チェックに利用。
+
+	return created, nil
+}
+
+// ✅ NEW: OpenWallet は既存 Avatar に対して Solana wallet を開設し、walletAddress を反映します。
+// - handler の POST /avatars/{id}/wallet から呼ばれる想定
+func (u *AvatarUsecase) OpenWallet(ctx context.Context, avatarID string) (avatardom.Avatar, error) {
+	avatarID = strings.TrimSpace(avatarID)
+	if avatarID == "" {
+		return avatardom.Avatar{}, avatardom.ErrInvalidID
+	}
+	if u.avRepo == nil {
+		return avatardom.Avatar{}, errors.New("avatar repo not configured")
+	}
+	if u.walletSvc == nil {
+		return avatardom.Avatar{}, ErrAvatarWalletServiceMissing
+	}
+
+	a, err := u.avRepo.GetByID(ctx, avatarID)
+	if err != nil {
+		return avatardom.Avatar{}, err
+	}
+
+	if a.WalletAddress != nil && strings.TrimSpace(*a.WalletAddress) != "" {
+		return avatardom.Avatar{}, ErrAvatarWalletAlreadyOpened
+	}
+
+	w, err := u.walletSvc.OpenAvatarWallet(ctx, a)
+	if err != nil {
+		return avatardom.Avatar{}, err
+	}
+	addr := strings.TrimSpace(w.Address)
+	if addr == "" {
+		return avatardom.Avatar{}, ErrAvatarWalletAddressEmpty
+	}
+
+	patch := avatardom.AvatarPatch{WalletAddress: &addr}
+	return u.avRepo.Update(ctx, avatarID, patch)
 }
 
 // Update は /avatars/{id} PATCH/PUT 用の部分更新コマンドです。
@@ -179,10 +282,6 @@ func (u *AvatarUsecase) Update(ctx context.Context, id string, patch avatardom.A
 	}
 
 	// 正規化（nil は「更新しない」契約）
-	if patch.FirebaseUID != nil {
-		v := strings.TrimSpace(*patch.FirebaseUID)
-		patch.FirebaseUID = &v
-	}
 	if patch.AvatarName != nil {
 		v := strings.TrimSpace(*patch.AvatarName)
 		patch.AvatarName = &v
@@ -195,6 +294,14 @@ func (u *AvatarUsecase) Update(ctx context.Context, id string, patch avatardom.A
 	}
 	if patch.ExternalLink != nil {
 		patch.ExternalLink = trimPtr(patch.ExternalLink)
+	}
+	if patch.WalletAddress != nil {
+		v := strings.TrimSpace(*patch.WalletAddress)
+		if v == "" {
+			patch.WalletAddress = nil
+		} else {
+			patch.WalletAddress = &v
+		}
 	}
 
 	return u.avRepo.Update(ctx, id, patch)

@@ -38,6 +38,7 @@ String _normalizeBase(String base) {
 /// - DELETE /sns/avatars/{id}
 /// - GET    /sns/avatars/{id}
 /// - GET    /sns/avatars/{id}?aggregate=1|true  (Avatar + State + Icons)
+/// - POST   /sns/avatars/{id}/wallet            (open wallet)
 ///
 /// NOTE:
 /// - Authorization: Firebase ID token (Bearer)
@@ -149,6 +150,11 @@ class AvatarRepositoryHttp {
   }
 
   /// POST /sns/avatars
+  ///
+  /// ✅ Back-end expects:
+  /// - userId
+  /// - userUid   (firebaseUid ではなく移譲後の認証UID)
+  /// - avatarName
   Future<AvatarDTO> create({required CreateAvatarRequest request}) async {
     final uri = _uri('/sns/avatars');
 
@@ -173,6 +179,46 @@ class AvatarRepositoryHttp {
         message: _extractError(body) ?? 'request failed',
         url: uri.toString(),
       );
+    }
+
+    final decoded = _decodeObject(body);
+    return AvatarDTO.fromJson(decoded);
+  }
+
+  /// POST /sns/avatars/{id}/wallet
+  ///
+  /// ✅ Open wallet for existing avatar (server will set walletAddress).
+  Future<AvatarDTO> openWallet({required String id}) async {
+    final rid = id.trim();
+    if (rid.isEmpty) throw ArgumentError('id is empty');
+
+    final uri = _uri('/sns/avatars/$rid/wallet');
+
+    final headers = await _authHeaders();
+    headers['Content-Type'] = 'application/json';
+
+    _logRequest('POST', uri, headers: headers, payload: const {});
+
+    final res = await _client.post(
+      uri,
+      headers: headers,
+      body: jsonEncode(const <String, dynamic>{}),
+    );
+
+    _logResponse('POST', uri, res.statusCode, res.body);
+
+    final body = res.body;
+    if (res.statusCode < 200 || res.statusCode >= 300) {
+      throw HttpException(
+        statusCode: res.statusCode,
+        message: _extractError(body) ?? 'request failed',
+        url: uri.toString(),
+      );
+    }
+
+    // backend が空返却する可能性に備えて GET
+    if (body.trim().isEmpty) {
+      return getById(id: rid);
     }
 
     final decoded = _decodeObject(body);
@@ -361,18 +407,18 @@ class AvatarDTO {
   const AvatarDTO({
     required this.id,
     required this.userId,
-    required this.firebaseUid,
     required this.avatarName,
     required this.avatarIcon,
     required this.profile,
     required this.externalLink,
+    required this.walletAddress,
     required this.createdAt,
     required this.updatedAt,
   });
 
   final String id;
   final String userId;
-  final String firebaseUid;
+
   final String avatarName;
 
   /// Optional: URL/gs://path
@@ -380,6 +426,9 @@ class AvatarDTO {
 
   final String? profile;
   final String? externalLink;
+
+  /// Optional: Solana public key (base58)
+  final String? walletAddress;
 
   final DateTime createdAt;
   final DateTime updatedAt;
@@ -403,12 +452,16 @@ class AvatarDTO {
 
     final id = pick(json, const ['id', 'ID', 'avatarId', 'AvatarID']);
     final userId = pick(json, const ['userId', 'UserID']);
-    final firebaseUid = pick(json, const ['firebaseUid', 'FirebaseUID']);
     final avatarName = pick(json, const ['avatarName', 'AvatarName']);
+
     final avatarIcon = _optS(pickAny(json, const ['avatarIcon', 'AvatarIcon']));
     final profile = _optS(pickAny(json, const ['profile', 'Profile']));
     final externalLink = _optS(
       pickAny(json, const ['externalLink', 'ExternalLink']),
+    );
+
+    final walletAddress = _optS(
+      pickAny(json, const ['walletAddress', 'WalletAddress']),
     );
 
     final createdAt = _parseDateTime(
@@ -421,11 +474,11 @@ class AvatarDTO {
     return AvatarDTO(
       id: id,
       userId: userId,
-      firebaseUid: firebaseUid,
       avatarName: avatarName,
       avatarIcon: avatarIcon,
       profile: profile,
       externalLink: externalLink,
+      walletAddress: walletAddress,
       createdAt: createdAt,
       updatedAt: updatedAt,
     );
@@ -581,7 +634,7 @@ class AvatarAggregateDTO {
 class CreateAvatarRequest {
   const CreateAvatarRequest({
     required this.userId,
-    required this.firebaseUid,
+    required this.userUid,
     required this.avatarName,
     this.avatarIcon,
     this.profile,
@@ -589,7 +642,10 @@ class CreateAvatarRequest {
   });
 
   final String userId;
-  final String firebaseUid;
+
+  /// ✅ firebaseUid ではなく userUid
+  final String userUid;
+
   final String avatarName;
 
   /// Optional: URL/gs://path
@@ -601,7 +657,7 @@ class CreateAvatarRequest {
   Map<String, dynamic> toJson() {
     final m = <String, dynamic>{
       'userId': userId.trim(),
-      'firebaseUid': firebaseUid.trim(),
+      'userUid': userUid.trim(),
       'avatarName': avatarName.trim(),
     };
 
@@ -627,29 +683,32 @@ class CreateAvatarRequest {
 @immutable
 class UpdateAvatarRequest {
   const UpdateAvatarRequest({
-    this.firebaseUid,
     this.avatarName,
     this.avatarIcon,
     this.profile,
     this.externalLink,
+    this.walletAddress,
   });
 
-  final String? firebaseUid;
   final String? avatarName;
   final String? avatarIcon;
   final String? profile;
   final String? externalLink;
 
+  /// Optional: allow patch walletAddress if backend supports it (usually opened by /wallet)
+  final String? walletAddress;
+
   Map<String, dynamic> toJson() {
     final m = <String, dynamic>{};
 
-    if (firebaseUid != null) m['firebaseUid'] = firebaseUid!.trim();
     if (avatarName != null) m['avatarName'] = avatarName!.trim();
 
     // clear したい場合は "" を送る（= trim で "" になっても送る）
     if (avatarIcon != null) m['avatarIcon'] = avatarIcon!.trim();
     if (profile != null) m['profile'] = profile!.trim();
     if (externalLink != null) m['externalLink'] = externalLink!.trim();
+
+    if (walletAddress != null) m['walletAddress'] = walletAddress!.trim();
 
     return m;
   }

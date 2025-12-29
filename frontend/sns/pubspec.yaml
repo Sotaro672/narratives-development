@@ -25,6 +25,9 @@ dependencies:
   firebase_core: ^3.6.0
   firebase_auth: ^5.3.1
 
+  # ✅ Web DOM bindings (dart:html replacement)
+  web: ^1.1.1
+
 dev_dependencies:
   flutter_test:
     sdk: flutter

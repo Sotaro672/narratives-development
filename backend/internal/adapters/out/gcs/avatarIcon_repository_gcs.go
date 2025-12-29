@@ -87,6 +87,50 @@ func (r *AvatarIconRepositoryGCS) EnsureAvatarFolder(ctx context.Context, avatar
 	return nil
 }
 
+// ✅ NEW: AvatarUsecase 側から呼ぶ「prefix 確保」用メソッド
+// - interface(AvatarIconObjectStoragePort) に合わせて bucket/prefix を受け取る
+// - prefix は "docId/" を想定（末尾 "/" はあってもなくてもOK）
+func (r *AvatarIconRepositoryGCS) EnsurePrefix(ctx context.Context, bucket, prefix string) error {
+	if r.Client == nil {
+		return errors.New("AvatarIconRepositoryGCS: nil storage client")
+	}
+
+	bucketName := strings.TrimSpace(bucket)
+	if bucketName == "" {
+		// 明示 bucket が無い場合は repository の bucket を使う
+		b, err := r.effectiveBucket()
+		if err != nil {
+			return err
+		}
+		bucketName = b
+	}
+
+	prefix = strings.TrimSpace(prefix)
+	prefix = strings.TrimLeft(prefix, "/")
+	if prefix == "" {
+		return errors.New("AvatarIconRepositoryGCS: prefix is empty")
+	}
+	if !strings.HasSuffix(prefix, "/") {
+		prefix += "/"
+	}
+
+	objName := prefix + ".keep"
+
+	oh := r.Client.Bucket(bucketName).Object(objName).If(storage.Conditions{DoesNotExist: true})
+	w := oh.NewWriter(ctx)
+	w.ContentType = "text/plain; charset=utf-8"
+
+	_, _ = w.Write([]byte("keep"))
+	if err := w.Close(); err != nil {
+		var gerr *googleapi.Error
+		if errors.As(err, &gerr) && gerr.Code == 412 {
+			return nil
+		}
+		return err
+	}
+	return nil
+}
+
 func isFolderMarkerObject(name string) bool {
 	n := strings.TrimSpace(name)
 	if n == "" {
@@ -97,6 +141,10 @@ func isFolderMarkerObject(name string) bool {
 		return true
 	}
 	if strings.HasSuffix(n, "/.keep") {
+		return true
+	}
+	// EnsurePrefix が ".keep" を作るので、これも除外
+	if strings.HasSuffix(n, "/.keep") || strings.HasSuffix(n, ".keep") {
 		return true
 	}
 	return false

@@ -26,9 +26,6 @@ type Avatar struct {
 	ID     string `json:"id"`
 	UserID string `json:"userId"`
 
-	// ✅ NEW: Firebase Authentication の UID（認証主体）
-	FirebaseUID string `json:"firebaseUid"`
-
 	AvatarName string `json:"avatarName"`
 
 	// ✅ CHANGED: URL と Path を統一して 1 フィールドに
@@ -44,6 +41,15 @@ type Avatar struct {
 	DeletedAt     *time.Time              `json:"deletedAt,omitempty"` // null 許容
 }
 
+// SolanaAvatarWallet
+// Avatar 作成時に Solana ウォレットを開設し、秘密鍵は Secret Manager に保存する設計のため、
+// ドメイン上は「公開鍵アドレス」と「秘密鍵参照（Secret の Version 名など）」だけを保持します。
+type SolanaAvatarWallet struct {
+	AvatarID   string `json:"avatarId"`
+	Address    string `json:"address"`    // base58 public key
+	SecretName string `json:"secretName"` // projects/<p>/secrets/<s>/versions/<v>
+}
+
 // Policy
 var (
 	MaxAvatarNameLength   = 50
@@ -56,7 +62,6 @@ var (
 var (
 	ErrInvalidID           = errors.New("avatar: invalid id")
 	ErrInvalidUserID       = errors.New("avatar: invalid userId")
-	ErrInvalidFirebaseUID  = errors.New("avatar: invalid firebaseUid")
 	ErrInvalidAvatarName   = errors.New("avatar: invalid avatarName")
 	ErrInvalidProfile      = errors.New("avatar: invalid profile")
 	ErrInvalidExternalLink = errors.New("avatar: invalid externalLink")
@@ -73,7 +78,7 @@ var (
 
 // NewWithState は AvatarState(別ドメイン型) を含む新しいコンストラクタです。
 func NewWithState(
-	id, userID, firebaseUID, avatarName string,
+	id, userID, avatarName string,
 	state avatarstate.AvatarState,
 	avatarIcon, walletAddr, profile, externalLink *string,
 	createdAt, updatedAt time.Time,
@@ -82,7 +87,6 @@ func NewWithState(
 	a := Avatar{
 		ID:           strings.TrimSpace(id),
 		UserID:       strings.TrimSpace(userID),
-		FirebaseUID:  strings.TrimSpace(firebaseUID),
 		AvatarName:   strings.TrimSpace(avatarName),
 		AvatarIcon:   normalizePtr(avatarIcon),
 		Profile:      normalizePtr(profile),
@@ -108,28 +112,12 @@ func NewWithState(
 	return a, nil
 }
 
-// 既存互換: 旧 New は AvatarState を与えず NewWithState を呼びます（ゼロ値のまま）。
-func New(
-	id, userID, firebaseUID, avatarName string,
-	avatarIcon, walletAddr, profile, externalLink *string,
-	createdAt, updatedAt time.Time,
-	deletedAt *time.Time,
-) (Avatar, error) {
-	return NewWithState(
-		id, userID, firebaseUID, avatarName,
-		avatarstate.AvatarState{},
-		avatarIcon, walletAddr, profile, externalLink,
-		createdAt, updatedAt, deletedAt,
-	)
-}
-
 // NewForCreateWithState は作成用（now を使い回す）コンストラクタです。
 func NewForCreateWithState(
 	id string,
 	state avatarstate.AvatarState,
 	input struct {
 		UserID       string
-		FirebaseUID  string
 		AvatarName   string
 		AvatarIcon   *string
 		WalletAddr   *string
@@ -142,7 +130,6 @@ func NewForCreateWithState(
 	return NewWithState(
 		id,
 		input.UserID,
-		input.FirebaseUID,
 		input.AvatarName,
 		state,
 		input.AvatarIcon,
@@ -155,26 +142,9 @@ func NewForCreateWithState(
 	)
 }
 
-// 既存互換: 旧 NewForCreate は AvatarState を与えずゼロ値のまま
-func NewForCreate(
-	id string,
-	input struct {
-		UserID       string
-		FirebaseUID  string
-		AvatarName   string
-		AvatarIcon   *string
-		WalletAddr   *string
-		Profile      *string
-		ExternalLink *string
-	},
-	now time.Time,
-) (Avatar, error) {
-	return NewForCreateWithState(id, avatarstate.AvatarState{}, input, now)
-}
-
 // NewFromStringTimesWithState parses times and delegates to NewWithState.
 func NewFromStringTimesWithState(
-	id, userID, firebaseUID, avatarName string,
+	id, userID, avatarName string,
 	state avatarstate.AvatarState,
 	avatarIcon, walletAddr, profile, externalLink *string,
 	createdAt, updatedAt string,
@@ -199,25 +169,10 @@ func NewFromStringTimesWithState(
 	}
 
 	return NewWithState(
-		id, userID, firebaseUID, avatarName,
+		id, userID, avatarName,
 		state,
 		avatarIcon, walletAddr, profile, externalLink,
 		ct, ut, dtPtr,
-	)
-}
-
-// 既存互換: 旧 NewFromStringTimes は AvatarState を与えずゼロ値のまま
-func NewFromStringTimes(
-	id, userID, firebaseUID, avatarName string,
-	avatarIcon, walletAddr, profile, externalLink *string,
-	createdAt, updatedAt string,
-	deletedAt *string,
-) (Avatar, error) {
-	return NewFromStringTimesWithState(
-		id, userID, firebaseUID, avatarName,
-		avatarstate.AvatarState{},
-		avatarIcon, walletAddr, profile, externalLink,
-		createdAt, updatedAt, deletedAt,
 	)
 }
 
@@ -288,16 +243,6 @@ func (a *Avatar) SetUser(u userdom.User) error {
 	return nil
 }
 
-// SetFirebaseUID sets firebase auth uid.
-func (a *Avatar) SetFirebaseUID(uid string) error {
-	uid = strings.TrimSpace(uid)
-	if uid == "" {
-		return ErrInvalidFirebaseUID
-	}
-	a.FirebaseUID = uid
-	return nil
-}
-
 // SetWallet sets the wallet link from a Wallet domain object (uses Wallet.WalletAddress).
 func (a *Avatar) SetWallet(w walletdom.Wallet) error {
 	addr := strings.TrimSpace(w.WalletAddress)
@@ -318,14 +263,6 @@ func (a *Avatar) ClearWallet() {
 func (a Avatar) ValidateUserLink() error {
 	if strings.TrimSpace(a.UserID) == "" {
 		return ErrInvalidUserID
-	}
-	return nil
-}
-
-// ValidateFirebaseUID ensures FirebaseUID is present.
-func (a Avatar) ValidateFirebaseUID() error {
-	if strings.TrimSpace(a.FirebaseUID) == "" {
-		return ErrInvalidFirebaseUID
 	}
 	return nil
 }
@@ -358,9 +295,6 @@ func (a Avatar) validate() error {
 	}
 	if a.UserID == "" {
 		return ErrInvalidUserID
-	}
-	if strings.TrimSpace(a.FirebaseUID) == "" {
-		return ErrInvalidFirebaseUID
 	}
 	if a.AvatarName == "" || len([]rune(a.AvatarName)) > MaxAvatarNameLength {
 		return ErrInvalidAvatarName

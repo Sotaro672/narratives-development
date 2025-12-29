@@ -1,3 +1,4 @@
+// backend/internal/adapters/in/http/sns/handler/avatar_handler.go
 package handler
 
 import (
@@ -24,7 +25,20 @@ func NewAvatarHandler(avatarUC *uc.AvatarUsecase) http.Handler {
 // ServeHTTP はHTTPルーティングの入口です。
 func (h *AvatarHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
+
+	// 元のパス（末尾 / を落とす）
 	path := strings.TrimSuffix(r.URL.Path, "/")
+
+	// ✅ /sns/avatars にも対応するため /sns を剥がして /avatars 系に正規化する
+	// - /sns/avatars        -> /avatars
+	// - /sns/avatars/{id}   -> /avatars/{id}
+	// - /avatars            -> /avatars (そのまま)
+	if strings.HasPrefix(path, "/sns/") {
+		path = strings.TrimPrefix(path, "/sns")
+		if path == "" {
+			path = "/"
+		}
+	}
 
 	switch {
 	case r.Method == http.MethodGet && path == "/avatars":
@@ -38,6 +52,12 @@ func (h *AvatarHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	case r.Method == http.MethodGet && strings.HasPrefix(path, "/avatars/"):
 		id := strings.TrimPrefix(path, "/avatars/")
 		h.get(w, r, id)
+
+	// ✅ NEW: wallet open endpoint
+	// POST /avatars/{id}/wallet
+	case r.Method == http.MethodPost && strings.HasPrefix(path, "/avatars/") && strings.HasSuffix(path, "/wallet"):
+		id := strings.TrimSuffix(strings.TrimPrefix(path, "/avatars/"), "/wallet")
+		h.openWallet(w, r, id)
 
 	case (r.Method == http.MethodPatch || r.Method == http.MethodPut) && strings.HasPrefix(path, "/avatars/"):
 		id := strings.TrimPrefix(path, "/avatars/")
@@ -91,20 +111,20 @@ func (h *AvatarHandler) get(w http.ResponseWriter, r *http.Request, id string) {
 //
 //	{
 //	  "userId": "xxx",
-//	  "firebaseUid": "firebase-auth-uid",
+//	  "userUid": "firebase-auth-uid",
 //	  "avatarName": "name",
 //	  "avatarIcon": "https://... or gs://... or path (optional)",
 //	  "profile": "... (optional)",
 //	  "externalLink": "https://... (optional)"
 //	}
 //
-// ※ walletAddress は UI/要件上は入力しない想定だが、必要なら後で Patch で更新できる想定。
+// ✅ 期待値: AvatarUsecase 側で avatar 作成と同時に wallet を開設（walletSvc が DI 済みの場合）。
 func (h *AvatarHandler) post(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 
 	var body struct {
 		UserID       string  `json:"userId"`
-		FirebaseUID  string  `json:"firebaseUid"`
+		UserUID      string  `json:"userUid"`
 		AvatarName   string  `json:"avatarName"`
 		AvatarIcon   *string `json:"avatarIcon,omitempty"`
 		Profile      *string `json:"profile,omitempty"`
@@ -118,7 +138,7 @@ func (h *AvatarHandler) post(w http.ResponseWriter, r *http.Request) {
 
 	in := uc.CreateAvatarInput{
 		UserID:       strings.TrimSpace(body.UserID),
-		FirebaseUID:  strings.TrimSpace(body.FirebaseUID),
+		UserUID:      strings.TrimSpace(body.UserUID),
 		AvatarName:   strings.TrimSpace(body.AvatarName),
 		AvatarIcon:   trimPtr(body.AvatarIcon),
 		Profile:      trimPtr(body.Profile),
@@ -135,16 +155,49 @@ func (h *AvatarHandler) post(w http.ResponseWriter, r *http.Request) {
 	_ = json.NewEncoder(w).Encode(created)
 }
 
+// POST /avatars/{id}/wallet
+//
+// 任意で wallet 開設を単独実行したい場合のエンドポイント。
+// - 既に walletAddress がある場合は 409 Conflict で返す。
+func (h *AvatarHandler) openWallet(w http.ResponseWriter, r *http.Request, id string) {
+	ctx := r.Context()
+	id = strings.TrimSpace(id)
+	if id == "" {
+		w.WriteHeader(http.StatusBadRequest)
+		_ = json.NewEncoder(w).Encode(map[string]string{"error": "invalid id"})
+		return
+	}
+
+	// すでに walletAddress があるなら衝突扱い
+	a, err := h.uc.GetByID(ctx, id)
+	if err != nil {
+		writeAvatarErr(w, err)
+		return
+	}
+	if a.WalletAddress != nil && strings.TrimSpace(*a.WalletAddress) != "" {
+		w.WriteHeader(http.StatusConflict)
+		_ = json.NewEncoder(w).Encode(map[string]string{"error": "wallet already opened"})
+		return
+	}
+
+	updated, err := h.uc.OpenWallet(ctx, id)
+	if err != nil {
+		writeAvatarErr(w, err)
+		return
+	}
+	_ = json.NewEncoder(w).Encode(updated)
+}
+
 // PATCH/PUT /avatars/{id}
 //
 // body (patch):
 //
 //	{
-//	  "firebaseUid": "firebase-auth-uid (optional)",
 //	  "avatarName": "name (optional)",
 //	  "avatarIcon": "https://... or path (optional, empty => null)",
 //	  "profile": "... (optional, empty => null)",
-//	  "externalLink": "https://... (optional, empty => null)"
+//	  "externalLink": "https://... (optional, empty => null)",
+//	  "walletAddress": "base58 (optional, empty => null)"
 //	}
 func (h *AvatarHandler) update(w http.ResponseWriter, r *http.Request, id string) {
 	ctx := r.Context()
@@ -156,11 +209,11 @@ func (h *AvatarHandler) update(w http.ResponseWriter, r *http.Request, id string
 	}
 
 	var body struct {
-		FirebaseUID  *string `json:"firebaseUid,omitempty"`
-		AvatarName   *string `json:"avatarName,omitempty"`
-		AvatarIcon   *string `json:"avatarIcon,omitempty"`
-		Profile      *string `json:"profile,omitempty"`
-		ExternalLink *string `json:"externalLink,omitempty"`
+		AvatarName    *string `json:"avatarName,omitempty"`
+		AvatarIcon    *string `json:"avatarIcon,omitempty"`
+		Profile       *string `json:"profile,omitempty"`
+		ExternalLink  *string `json:"externalLink,omitempty"`
+		WalletAddress *string `json:"walletAddress,omitempty"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 		w.WriteHeader(http.StatusBadRequest)
@@ -169,11 +222,11 @@ func (h *AvatarHandler) update(w http.ResponseWriter, r *http.Request, id string
 	}
 
 	patch := avatardom.AvatarPatch{
-		FirebaseUID:  trimPtrNilAware(body.FirebaseUID),  // "" => clear (ただし entity の必須なら usecase/domain 側で弾く)
-		AvatarName:   trimPtrNilAware(body.AvatarName),   // nil => no update, "" => invalid になる想定
-		AvatarIcon:   trimPtrNilAware(body.AvatarIcon),   // "" => nil (clear)
-		Profile:      trimPtrNilAware(body.Profile),      // "" => nil (clear)
-		ExternalLink: trimPtrNilAware(body.ExternalLink), // "" => nil (clear)
+		AvatarName:    trimPtrNilAware(body.AvatarName),    // nil => no update, "" => invalid になる想定
+		AvatarIcon:    trimPtrNilAware(body.AvatarIcon),    // "" => nil (clear)
+		Profile:       trimPtrNilAware(body.Profile),       // "" => nil (clear)
+		ExternalLink:  trimPtrNilAware(body.ExternalLink),  // "" => nil (clear)
+		WalletAddress: trimPtrNilAware(body.WalletAddress), // "" => nil (clear)
 	}
 
 	updated, err := h.uc.Update(ctx, id, patch)
@@ -209,7 +262,7 @@ func writeAvatarErr(w http.ResponseWriter, err error) {
 	// invalid id / invalid input
 	if errors.Is(err, avatardom.ErrInvalidID) ||
 		errors.Is(err, avatardom.ErrInvalidUserID) ||
-		errors.Is(err, avatardom.ErrInvalidFirebaseUID) ||
+		errors.Is(err, uc.ErrInvalidUserUID) ||
 		errors.Is(err, avatardom.ErrInvalidAvatarName) ||
 		errors.Is(err, avatardom.ErrInvalidProfile) ||
 		errors.Is(err, avatardom.ErrInvalidExternalLink) {
@@ -225,10 +278,6 @@ func writeAvatarErr(w http.ResponseWriter, err error) {
 	w.WriteHeader(code)
 	_ = json.NewEncoder(w).Encode(map[string]string{"error": err.Error()})
 }
-
-// ------------------------------
-// small helpers
-// ------------------------------
 
 // nil は「更新しない」
 // non-nil かつ空文字は「null にする（クリア）」扱いにしたいフィールドで使う

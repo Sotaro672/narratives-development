@@ -291,6 +291,7 @@ func (r *AvatarRepositoryFS) Create(ctx context.Context, a avdom.Avatar) (avdom.
 		ref = r.col().Doc(a.ID)
 	}
 
+	// ✅ firebaseUid は保存しない（不要）
 	data := r.domainToDocData(a)
 
 	if _, err := ref.Create(ctx, data); err != nil {
@@ -327,12 +328,8 @@ func (r *AvatarRepositoryFS) Update(ctx context.Context, id string, patch avdom.
 
 	var updates []firestore.Update
 
-	if patch.FirebaseUID != nil {
-		updates = append(updates, firestore.Update{
-			Path:  "firebaseUid",
-			Value: strings.TrimSpace(*patch.FirebaseUID),
-		})
-	}
+	// ✅ firebaseUid は不要なので、更新もしない（互換のため受け取っても無視）
+	// if patch.FirebaseUID != nil { ... }  // <- removed
 
 	if patch.AvatarName != nil {
 		updates = append(updates, firestore.Update{
@@ -456,6 +453,7 @@ func (r *AvatarRepositoryFS) Save(ctx context.Context, a avdom.Avatar, _ *avdom.
 		ref = r.col().Doc(a.ID)
 	}
 
+	// ✅ firebaseUid は保存しない（不要）
 	data := r.domainToDocData(a)
 
 	if _, err := ref.Set(ctx, data, firestore.MergeAll); err != nil {
@@ -499,7 +497,7 @@ func (r *AvatarRepositoryFS) Search(ctx context.Context, query string) ([]avdom.
 			return nil, err
 		}
 
-		fuid := strings.ToLower(strings.TrimSpace(a.FirebaseUID))
+		// ✅ firebaseUid は検索対象から外す（不要）
 		name := strings.ToLower(strings.TrimSpace(a.AvatarName))
 
 		wallet := ""
@@ -522,8 +520,7 @@ func (r *AvatarRepositoryFS) Search(ctx context.Context, query string) ([]avdom.
 			icon = strings.ToLower(strings.TrimSpace(*a.AvatarIcon))
 		}
 
-		if strings.Contains(fuid, lowerQ) ||
-			strings.Contains(name, lowerQ) ||
+		if strings.Contains(name, lowerQ) ||
 			strings.Contains(wallet, lowerQ) ||
 			strings.Contains(profile, lowerQ) ||
 			strings.Contains(link, lowerQ) ||
@@ -632,9 +629,10 @@ func (r *AvatarRepositoryFS) Reset(ctx context.Context) error {
 // ==============================
 
 func (r *AvatarRepositoryFS) docToDomain(doc *firestore.DocumentSnapshot) (avdom.Avatar, error) {
+	// ✅ firebaseUid は Firestore から読み取らない（不要）
+	// ただし、既存データに firebaseUid が残っていても DataTo はそれを無視するだけなので安全
 	var raw struct {
 		UserID        string     `firestore:"userId"`
-		FirebaseUID   string     `firestore:"firebaseUid"`
 		AvatarName    string     `firestore:"avatarName"`
 		AvatarIcon    *string    `firestore:"avatarIcon"`
 		WalletAddress *string    `firestore:"walletAddress"`
@@ -650,12 +648,12 @@ func (r *AvatarRepositoryFS) docToDomain(doc *firestore.DocumentSnapshot) (avdom
 	}
 
 	a := avdom.Avatar{
-		ID:          doc.Ref.ID,
-		UserID:      strings.TrimSpace(raw.UserID),
-		FirebaseUID: strings.TrimSpace(raw.FirebaseUID),
-		AvatarName:  strings.TrimSpace(raw.AvatarName),
-		CreatedAt:   raw.CreatedAt.UTC(),
-		UpdatedAt:   raw.UpdatedAt.UTC(),
+		ID:         doc.Ref.ID,
+		UserID:     strings.TrimSpace(raw.UserID),
+		AvatarName: strings.TrimSpace(raw.AvatarName),
+		CreatedAt:  raw.CreatedAt.UTC(),
+		UpdatedAt:  raw.UpdatedAt.UTC(),
+		// FirebaseUID: （不要なのでセットしない）
 	}
 
 	if raw.AvatarIcon != nil && strings.TrimSpace(*raw.AvatarIcon) != "" {
@@ -683,12 +681,12 @@ func (r *AvatarRepositoryFS) docToDomain(doc *firestore.DocumentSnapshot) (avdom
 }
 
 func (r *AvatarRepositoryFS) domainToDocData(a avdom.Avatar) map[string]any {
+	// ✅ firebaseUid は保存しない（不要）
 	data := map[string]any{
-		"userId":      strings.TrimSpace(a.UserID),
-		"firebaseUid": strings.TrimSpace(a.FirebaseUID),
-		"avatarName":  strings.TrimSpace(a.AvatarName),
-		"createdAt":   a.CreatedAt.UTC(),
-		"updatedAt":   a.UpdatedAt.UTC(),
+		"userId":     strings.TrimSpace(a.UserID),
+		"avatarName": strings.TrimSpace(a.AvatarName),
+		"createdAt":  a.CreatedAt.UTC(),
+		"updatedAt":  a.UpdatedAt.UTC(),
 	}
 
 	if a.AvatarIcon != nil && strings.TrimSpace(*a.AvatarIcon) != "" {
@@ -719,9 +717,8 @@ func applyAvatarFilterToQuery(q firestore.Query, f avdom.Filter) firestore.Query
 	if f.UserID != nil && strings.TrimSpace(*f.UserID) != "" {
 		q = q.Where("userId", "==", strings.TrimSpace(*f.UserID))
 	}
-	if f.FirebaseUID != nil && strings.TrimSpace(*f.FirebaseUID) != "" {
-		q = q.Where("firebaseUid", "==", strings.TrimSpace(*f.FirebaseUID))
-	}
+	// ✅ firebaseUid は不要なのでクエリ対象から外す（互換のため Filter にあっても無視）
+	// if f.FirebaseUID != nil { ... } // <- removed
 	if f.WalletAddress != nil && strings.TrimSpace(*f.WalletAddress) != "" {
 		q = q.Where("walletAddress", "==", strings.TrimSpace(*f.WalletAddress))
 	}
@@ -764,13 +761,12 @@ func matchFilterPostLoad(a avdom.Avatar, f avdom.Filter) bool {
 		return false
 	}
 
-	// SearchQuery: id, firebaseUid, avatarName, profile, externalLink, walletAddress, avatarIcon の部分一致
+	// SearchQuery: id, avatarName, profile, externalLink, walletAddress, avatarIcon の部分一致
 	sq := strings.TrimSpace(f.SearchQuery)
 	if sq != "" {
 		q := strings.ToLower(sq)
 
 		id := strings.ToLower(strings.TrimSpace(a.ID))
-		fuid := strings.ToLower(strings.TrimSpace(a.FirebaseUID))
 		name := strings.ToLower(strings.TrimSpace(a.AvatarName))
 
 		wallet := ""
@@ -794,7 +790,6 @@ func matchFilterPostLoad(a avdom.Avatar, f avdom.Filter) bool {
 		}
 
 		if !strings.Contains(id, q) &&
-			!strings.Contains(fuid, q) &&
 			!strings.Contains(name, q) &&
 			!strings.Contains(wallet, q) &&
 			!strings.Contains(profile, q) &&

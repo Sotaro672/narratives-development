@@ -1,12 +1,10 @@
-// ignore_for_file: avoid_web_libraries_in_flutter, deprecated_member_use
-
-import 'dart:typed_data';
+// frontend\sns\lib\features\auth\application\avatar_create_service.dart
 
 import 'package:flutter/foundation.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:http/http.dart' as http;
 
-// ✅ 依存追加なしで Web のファイル選択を実現（lint は上で抑制）
-import 'dart:html' as html;
+import 'package:web/web.dart' as web;
 
 import '../../avatar/avatar_repository_http.dart';
 
@@ -91,8 +89,11 @@ class AvatarCreateService {
       );
     }
 
+    String? objectUrl;
+
     try {
-      final input = html.FileUploadInputElement()
+      final input = web.HTMLInputElement()
+        ..type = 'file'
         ..accept = 'image/*'
         ..multiple = false;
 
@@ -100,34 +101,26 @@ class AvatarCreateService {
       await input.onChange.first;
 
       final files = input.files;
-      if (files == null || files.isEmpty) return null;
+      if (files == null || files.length == 0) return null;
 
-      final file = files.first;
+      final f = files.item(0);
+      if (f == null) return null;
 
-      final reader = html.FileReader();
-      reader.readAsArrayBuffer(file);
-      await reader.onLoad.first;
+      // ✅ ブラウザに一時URLを作らせる
+      objectUrl = web.URL.createObjectURL(f);
 
-      final result = reader.result;
-
-      Uint8List? bytes;
-      if (result is ByteBuffer) {
-        // ✅ 安全のため copy（view だと環境によって不安定なことがある）
-        bytes = Uint8List.fromList(result.asUint8List());
-      } else if (result is Uint8List) {
-        bytes = Uint8List.fromList(result);
-      } else {
-        return const PickIconResult(
+      // ✅ そのURLを HTTP GET して bytes を取得（ArrayBuffer/Uint8Array 不要）
+      final res = await http.get(Uri.parse(objectUrl));
+      if (res.statusCode < 200 || res.statusCode >= 300) {
+        return PickIconResult(
           bytes: null,
           fileName: null,
           mimeType: null,
-          error: '画像の読み込みに失敗しました（result の型が不明です）。',
+          error: '画像の取得に失敗しました: status=${res.statusCode}',
         );
       }
 
-      final name = s(file.name).isEmpty ? null : file.name;
-      final mime = s(file.type).isEmpty ? null : file.type;
-
+      final bytes = res.bodyBytes;
       if (bytes.isEmpty) {
         return const PickIconResult(
           bytes: null,
@@ -137,6 +130,13 @@ class AvatarCreateService {
         );
       }
 
+      // ✅ package:web の File.name/type は（この環境では）Dart String
+      final nameStr = s(f.name);
+      final typeStr = s(f.type);
+
+      final name = nameStr.isEmpty ? null : nameStr;
+      final mime = typeStr.isEmpty ? null : typeStr;
+
       return PickIconResult(bytes: bytes, fileName: name, mimeType: mime);
     } catch (e) {
       return PickIconResult(
@@ -145,6 +145,15 @@ class AvatarCreateService {
         mimeType: null,
         error: '画像の選択に失敗しました: $e',
       );
+    } finally {
+      // ✅ 一時URLは必ず破棄
+      if (objectUrl != null) {
+        try {
+          web.URL.revokeObjectURL(objectUrl);
+        } catch (_) {
+          // ignore
+        }
+      }
     }
   }
 
@@ -166,6 +175,7 @@ class AvatarCreateService {
         return AvatarCreateResult(ok: false, message: 'サインインが必要です。');
       }
 
+      // ✅ 認証主体 UID
       final uid = user.uid.trim();
       if (uid.isEmpty) {
         return AvatarCreateResult(ok: false, message: 'uid が取得できませんでした。');
@@ -193,10 +203,12 @@ class AvatarCreateService {
       );
 
       // ✅ いまは avatarIcon を送らない（アップロード連携は次のステップ）
+      // ✅ backend 仕様変更に合わせて firebaseUid -> userUid
+      // ✅ userId は (現状) uid を流用
       final created = await _repo.create(
         request: CreateAvatarRequest(
           userId: uid,
-          firebaseUid: uid,
+          userUid: uid,
           avatarName: avatarName,
           avatarIcon: null,
           profile: profile.isEmpty ? null : profile,
