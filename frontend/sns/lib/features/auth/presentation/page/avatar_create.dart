@@ -1,6 +1,4 @@
-// frontend/sns/lib/features/auth/presentation/page/avatar_create.dart
-import 'dart:typed_data';
-
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
@@ -8,7 +6,7 @@ import '../../../../app/shell/presentation/components/header.dart';
 import '../hook/use_avatar_create.dart';
 
 /// ✅ アバター作成
-/// - アバターアイコン画像（実ファイル選択：Web対応）
+/// - アバターアイコン画像（Web対応：ファイル選択→bytes保持→プレビュー）
 /// - アバター名
 /// - プロフィール
 /// - 外部リンク
@@ -43,6 +41,15 @@ class _AvatarCreatePageState extends State<AvatarCreatePage> {
     super.dispose();
   }
 
+  Future<void> _onSave() async {
+    final ok = await _vm.save();
+    if (!mounted) return;
+
+    if (ok) {
+      context.go('/');
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final backTo = _vm.backTo();
@@ -70,7 +77,7 @@ class _AvatarCreatePageState extends State<AvatarCreatePage> {
                         const _InfoBox(
                           kind: _InfoKind.info,
                           text:
-                              'アバター情報を登録してください。\n※ アイコン画像は選択したファイルの bytes を保持します（アップロード連携は次のステップ）。',
+                              'アバター情報を登録してください。\n※ アイコン画像は「選択→プレビュー」まで実装済みです。アップロード連携は次のステップで行います。',
                         ),
                         const SizedBox(height: 16),
 
@@ -137,9 +144,7 @@ class _AvatarCreatePageState extends State<AvatarCreatePage> {
                         const SizedBox(height: 20),
 
                         ElevatedButton(
-                          onPressed: _vm.canSave
-                              ? () => _vm.saveDummy(context)
-                              : null,
+                          onPressed: _vm.canSave ? _onSave : null,
                           child: _vm.saving
                               ? const SizedBox(
                                   width: 18,
@@ -154,12 +159,18 @@ class _AvatarCreatePageState extends State<AvatarCreatePage> {
                         if (_vm.msg != null) ...[
                           const SizedBox(height: 12),
                           _InfoBox(
-                            kind:
-                                _vm.msg!.contains('作成しました') ||
-                                    _vm.msg!.contains('選択しました')
+                            kind: _vm.isSuccessMessage
                                 ? _InfoKind.ok
                                 : _InfoKind.error,
                             text: _vm.msg!,
+                          ),
+                        ],
+
+                        if (kDebugMode && _vm.iconBytes != null) ...[
+                          const SizedBox(height: 12),
+                          Text(
+                            'debug: iconBytesLen=${_vm.iconBytes!.lengthInBytes}',
+                            style: Theme.of(context).textTheme.bodySmall,
                           ),
                         ],
                       ],
@@ -259,7 +270,6 @@ class _AvatarPreview extends StatelessWidget {
       );
     }
 
-    // ✅ 実 bytes を表示
     return ClipOval(
       child: Image.memory(
         bytes!,

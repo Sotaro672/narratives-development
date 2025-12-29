@@ -1,16 +1,17 @@
-// frontend/sns/lib/features/auth/presentation/hook/use_avatar_create.dart
-
-import 'dart:typed_data';
-
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
-import 'package:go_router/go_router.dart';
 
 import '../../application/avatar_create_service.dart';
 
 /// AvatarCreatePage の状態/処理をまとめる（Flutter では ChangeNotifier で hook 風にする）
+///
+/// 方針:
+/// - use_build_context_synchronously を避けるため、Hook 側では BuildContext を受け取らない
+/// - 画面遷移（GoRouter）は Page 側の責務に寄せる
+/// - 保存完了/失敗は msg と saving を通じて Page に通知する
 class UseAvatarCreate extends ChangeNotifier {
   UseAvatarCreate({required this.from, AvatarCreateService? service})
-    : _service = service ?? const AvatarCreateService();
+    : _service = service ?? AvatarCreateService();
 
   /// optional back route
   final String? from;
@@ -36,22 +37,15 @@ class UseAvatarCreate extends ChangeNotifier {
     nameCtrl.dispose();
     profileCtrl.dispose();
     linkCtrl.dispose();
+    _service.dispose();
     super.dispose();
   }
 
-  String backTo() {
-    final f = _service.s(from);
-    if (f.isNotEmpty) return f;
-    return '/billing-address';
-  }
+  String backTo() => _service.backTo(from);
 
   bool get canSave {
     if (saving) return false;
     if (_service.s(nameCtrl.text).isEmpty) return false;
-
-    // 画像を必須にする場合:
-    // if (iconBytes == null) return false;
-
     return true;
   }
 
@@ -68,7 +62,12 @@ class UseAvatarCreate extends ChangeNotifier {
     notifyListeners();
 
     final res = await _service.pickIconWeb();
-    if (res == null) return;
+    if (res == null) {
+      // cancel
+      msg = '画像選択をキャンセルしました。';
+      notifyListeners();
+      return;
+    }
 
     if (res.error != null) {
       msg = res.error;
@@ -80,7 +79,11 @@ class UseAvatarCreate extends ChangeNotifier {
     iconFileName = res.fileName;
     iconMimeType = res.mimeType;
 
-    msg = 'アイコン画像を選択しました。';
+    if (iconBytes == null || iconBytes!.isEmpty) {
+      msg = '画像の読み込みに失敗しました（bytes が空です）。';
+    } else {
+      msg = 'アイコン画像を選択しました。';
+    }
     notifyListeners();
   }
 
@@ -92,40 +95,48 @@ class UseAvatarCreate extends ChangeNotifier {
   }
 
   // ============================
-  // Save (still dummy for now)
+  // Save
   // ============================
 
-  Future<void> saveDummy(BuildContext context) async {
-    final link = _service.s(linkCtrl.text);
-    if (!_service.isValidUrlOrEmpty(link)) {
-      msg = '外部リンクは http(s) のURLを入力してください。';
-      notifyListeners();
-      return;
-    }
-
+  /// ✅ BuildContext を受け取らない（Page 側で遷移する）
+  /// 成功したら true / 失敗したら false を返す
+  Future<bool> save() async {
     saving = true;
     msg = null;
     notifyListeners();
 
-    Object? caught;
     try {
-      await _service.saveDummyDelay();
+      final res = await _service.save(
+        avatarNameRaw: nameCtrl.text,
+        profileRaw: profileCtrl.text,
+        externalLinkRaw: linkCtrl.text,
+        // NOTE: 現段階では iconBytes は「プレビュー用」に保持するだけ。
+        // アップロード連携（署名付きURL等）を入れたら service 側で利用する。
+        iconBytes: iconBytes,
+        iconFileName: iconFileName,
+        iconMimeType: iconMimeType,
+      );
 
-      msg = 'アバターを作成しました（ダミー）。';
+      msg = res.message;
       notifyListeners();
-
-      if (!context.mounted) return;
-      context.go('/');
+      return res.ok;
     } catch (e) {
-      caught = e;
       msg = e.toString();
       notifyListeners();
+      return false;
     } finally {
       saving = false;
       notifyListeners();
     }
+  }
 
-    // ignore: unused_local_variable
-    final _ = caught;
+  // ============================
+  // Helpers for Page
+  // ============================
+
+  bool get isSuccessMessage {
+    final m = (msg ?? '').trim();
+    if (m.isEmpty) return false;
+    return m.contains('作成しました') || m.contains('保存しました');
   }
 }

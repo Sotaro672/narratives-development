@@ -271,6 +271,56 @@ func RegisterSNSFromContainer(mux *http.ServeMux, cont *Container) {
 		}
 	}
 
+	// ✅ NEW: obtain onboarding usecases from Container (best-effort)
+	var userUCFromCont *usecase.UserUsecase
+	{
+		if x, ok := any(cont).(interface {
+			UserUsecase() *usecase.UserUsecase
+		}); ok {
+			userUCFromCont = x.UserUsecase()
+		} else if x, ok := any(cont).(interface {
+			GetUserUsecase() *usecase.UserUsecase
+		}); ok {
+			userUCFromCont = x.GetUserUsecase()
+		}
+	}
+	var shipUCFromCont *usecase.ShippingAddressUsecase
+	{
+		if x, ok := any(cont).(interface {
+			ShippingAddressUsecase() *usecase.ShippingAddressUsecase
+		}); ok {
+			shipUCFromCont = x.ShippingAddressUsecase()
+		} else if x, ok := any(cont).(interface {
+			GetShippingAddressUsecase() *usecase.ShippingAddressUsecase
+		}); ok {
+			shipUCFromCont = x.GetShippingAddressUsecase()
+		}
+	}
+	var billUCFromCont *usecase.BillingAddressUsecase
+	{
+		if x, ok := any(cont).(interface {
+			BillingAddressUsecase() *usecase.BillingAddressUsecase
+		}); ok {
+			billUCFromCont = x.BillingAddressUsecase()
+		} else if x, ok := any(cont).(interface {
+			GetBillingAddressUsecase() *usecase.BillingAddressUsecase
+		}); ok {
+			billUCFromCont = x.GetBillingAddressUsecase()
+		}
+	}
+	var avatarUCFromCont *usecase.AvatarUsecase
+	{
+		if x, ok := any(cont).(interface {
+			AvatarUsecase() *usecase.AvatarUsecase
+		}); ok {
+			avatarUCFromCont = x.AvatarUsecase()
+		} else if x, ok := any(cont).(interface {
+			GetAvatarUsecase() *usecase.AvatarUsecase
+		}); ok {
+			avatarUCFromCont = x.GetAvatarUsecase()
+		}
+	}
+
 	// ✅ obtain core usecases from RouterDeps
 	listUC := getFieldPtr[*usecase.ListUsecase](depsAny, "ListUC", "ListUsecase")
 	invUC := getFieldPtr[*usecase.InventoryUsecase](depsAny, "InventoryUC", "InventoryUsecase")
@@ -310,24 +360,40 @@ func RegisterSNSFromContainer(mux *http.ServeMux, cont *Container) {
 		[]string{"Avatar", "AvatarHandler", "SNSAvatar", "SNSAvatarHandler"},
 	)
 
-	// ✅ NEW: if handler is still nil, build it from Usecase pointers in RouterDeps (best-effort)
+	// ✅ NEW: if handler is still nil, build it from Usecase pointers (Container -> RouterDeps)
 	if snsDeps.User == nil {
-		if userUC := getFieldPtr[*usecase.UserUsecase](depsAny, "UserUC", "UserUsecase"); userUC != nil {
-			snsDeps.User = snshandler.NewUserHandler(userUC)
+		uc := userUCFromCont
+		if uc == nil {
+			uc = getFieldPtr[*usecase.UserUsecase](depsAny, "UserUC", "UserUsecase")
+		}
+		if uc != nil {
+			snsDeps.User = snshandler.NewUserHandler(uc)
 		}
 	}
 	if snsDeps.ShippingAddress == nil {
-		if uc := getFieldPtr[*usecase.ShippingAddressUsecase](depsAny, "ShippingAddressUC", "ShippingAddressUsecase"); uc != nil {
+		uc := shipUCFromCont
+		if uc == nil {
+			uc = getFieldPtr[*usecase.ShippingAddressUsecase](depsAny, "ShippingAddressUC", "ShippingAddressUsecase")
+		}
+		if uc != nil {
 			snsDeps.ShippingAddress = snshandler.NewShippingAddressHandler(uc)
 		}
 	}
 	if snsDeps.BillingAddress == nil {
-		if uc := getFieldPtr[*usecase.BillingAddressUsecase](depsAny, "BillingAddressUC", "BillingAddressUsecase"); uc != nil {
+		uc := billUCFromCont
+		if uc == nil {
+			uc = getFieldPtr[*usecase.BillingAddressUsecase](depsAny, "BillingAddressUC", "BillingAddressUsecase")
+		}
+		if uc != nil {
 			snsDeps.BillingAddress = snshandler.NewBillingAddressHandler(uc)
 		}
 	}
 	if snsDeps.Avatar == nil {
-		if uc := getFieldPtr[*usecase.AvatarUsecase](depsAny, "AvatarUC", "AvatarUsecase"); uc != nil {
+		uc := avatarUCFromCont
+		if uc == nil {
+			uc = getFieldPtr[*usecase.AvatarUsecase](depsAny, "AvatarUC", "AvatarUsecase")
+		}
+		if uc != nil {
 			snsDeps.Avatar = snshandler.NewAvatarHandler(uc)
 		}
 	}
