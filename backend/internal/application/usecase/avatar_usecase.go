@@ -1,4 +1,4 @@
-// backend\internal\application\usecase\avatar_usecase.go
+// backend/internal/application/usecase/avatar_usecase.go
 package usecase
 
 import (
@@ -117,14 +117,15 @@ func (u *AvatarUsecase) GetAggregate(ctx context.Context, id string) (AvatarAggr
 // =======================
 
 // CreateAvatarInput は avatar_create.dart の入力を正とした作成入力です。
-// ※ アイコンは「画像そのもの」ではなく、アップロード後の URL / パスを受け取る想定です。
+// ※ アイコンは「画像そのもの」ではなく、アップロード後の AvatarIcon（URL/Path統一）を受け取る想定です。
+// ✅ entity.go を正として firebaseUid を追加
 type CreateAvatarInput struct {
-	UserID         string  `json:"userId"`
-	AvatarName     string  `json:"avatarName"`
-	AvatarIconURL  *string `json:"avatarIconUrl,omitempty"`
-	AvatarIconPath *string `json:"avatarIconPath,omitempty"`
-	Profile        *string `json:"profile,omitempty"`
-	ExternalLink   *string `json:"externalLink,omitempty"`
+	UserID       string  `json:"userId"`
+	FirebaseUID  string  `json:"firebaseUid"`
+	AvatarName   string  `json:"avatarName"`
+	AvatarIcon   *string `json:"avatarIcon,omitempty"`
+	Profile      *string `json:"profile,omitempty"`
+	ExternalLink *string `json:"externalLink,omitempty"`
 }
 
 // Create は /avatars POST 用の作成コマンドです。
@@ -137,6 +138,12 @@ func (u *AvatarUsecase) Create(ctx context.Context, in CreateAvatarInput) (avata
 	if userID == "" {
 		return avatardom.Avatar{}, avatardom.ErrInvalidUserID
 	}
+
+	fuid := strings.TrimSpace(in.FirebaseUID)
+	if fuid == "" {
+		return avatardom.Avatar{}, avatardom.ErrInvalidFirebaseUID
+	}
+
 	name := strings.TrimSpace(in.AvatarName)
 	if name == "" {
 		return avatardom.Avatar{}, avatardom.ErrInvalidAvatarName
@@ -144,17 +151,17 @@ func (u *AvatarUsecase) Create(ctx context.Context, in CreateAvatarInput) (avata
 
 	now := u.now().UTC()
 
-	// entity.go のフィールド（avatar_create.dart 入力）に合わせる
+	// entity.go のフィールドに合わせる
 	a := avatardom.Avatar{
 		// ID は実装側で採番可（空で渡す）
-		UserID:         userID,
-		AvatarName:     name,
-		AvatarIconURL:  trimPtr(in.AvatarIconURL),
-		AvatarIconPath: trimPtr(in.AvatarIconPath),
-		Profile:        trimPtr(in.Profile),
-		ExternalLink:   trimPtr(in.ExternalLink),
-		CreatedAt:      now,
-		UpdatedAt:      now,
+		UserID:       userID,
+		FirebaseUID:  fuid,
+		AvatarName:   name,
+		AvatarIcon:   trimPtr(in.AvatarIcon),
+		Profile:      trimPtr(in.Profile),
+		ExternalLink: trimPtr(in.ExternalLink),
+		CreatedAt:    now,
+		UpdatedAt:    now,
 	}
 
 	return u.avRepo.Create(ctx, a)
@@ -172,15 +179,16 @@ func (u *AvatarUsecase) Update(ctx context.Context, id string, patch avatardom.A
 	}
 
 	// 正規化（nil は「更新しない」契約）
+	if patch.FirebaseUID != nil {
+		v := strings.TrimSpace(*patch.FirebaseUID)
+		patch.FirebaseUID = &v
+	}
 	if patch.AvatarName != nil {
 		v := strings.TrimSpace(*patch.AvatarName)
 		patch.AvatarName = &v
 	}
-	if patch.AvatarIconURL != nil {
-		patch.AvatarIconURL = trimPtr(patch.AvatarIconURL)
-	}
-	if patch.AvatarIconPath != nil {
-		patch.AvatarIconPath = trimPtr(patch.AvatarIconPath)
+	if patch.AvatarIcon != nil {
+		patch.AvatarIcon = trimPtr(patch.AvatarIcon)
 	}
 	if patch.Profile != nil {
 		patch.Profile = trimPtr(patch.Profile)

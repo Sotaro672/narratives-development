@@ -114,3 +114,14 @@ func headString(b []byte, max int) string {
 	s = strings.ReplaceAll(s, "\r", "\\r")
 	return s
 }
+
+func trimPtr(p *string) *string {
+	if p == nil {
+		return nil
+	}
+	s := strings.TrimSpace(*p)
+	if s == "" {
+		return nil
+	}
+	return &s
+}

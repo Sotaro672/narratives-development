@@ -16,25 +16,32 @@ import (
 // Avatar - ドメインエンティティ
 //
 // ✅ avatar_create.dart の入力を正として:
-// - アバターアイコン画像 → AvatarIconURL / AvatarIconPath（保存先/URL）
+// - アバターアイコン画像 → AvatarIcon（保存先/URL いずれでも可。アプリ側で統一した値を渡す）
 // - アバター名           → AvatarName
 // - プロフィール         → Profile
 // - 外部リンク           → ExternalLink
 //
 // それ以外（AvatarState / WalletAddress / timestamps / deleted）はシステム側で管理され得るため保持します。
 type Avatar struct {
-	ID             string                  `json:"id"`
-	UserID         string                  `json:"userId"`
-	AvatarName     string                  `json:"avatarName"`
-	AvatarIconURL  *string                 `json:"avatarIconUrl,omitempty"`  // 表示用URL（例: GCS署名付き/公開URL）
-	AvatarIconPath *string                 `json:"avatarIconPath,omitempty"` // 保存パス（例: gs://bucket/path or avatars/...）
-	AvatarState    avatarstate.AvatarState `json:"avatarState"`              // avatarState パッケージの型を使用
-	WalletAddress  *string                 `json:"walletAddress,omitempty"`  // wallet ドメインへの外部キー（UIに表示しない前提）
-	Profile        *string                 `json:"profile,omitempty"`
-	ExternalLink   *string                 `json:"externalLink,omitempty"`
-	CreatedAt      time.Time               `json:"createdAt"`
-	UpdatedAt      time.Time               `json:"updatedAt"`
-	DeletedAt      *time.Time              `json:"deletedAt,omitempty"` // null 許容
+	ID     string `json:"id"`
+	UserID string `json:"userId"`
+
+	// ✅ NEW: Firebase Authentication の UID（認証主体）
+	FirebaseUID string `json:"firebaseUid"`
+
+	AvatarName string `json:"avatarName"`
+
+	// ✅ CHANGED: URL と Path を統一して 1 フィールドに
+	// - 例: "https://..." でも "gs://bucket/..." でも "avatars/..." でも可
+	AvatarIcon *string `json:"avatarIcon,omitempty"`
+
+	AvatarState   avatarstate.AvatarState `json:"avatarState"`             // avatarState パッケージの型を使用
+	WalletAddress *string                 `json:"walletAddress,omitempty"` // wallet ドメインへの外部キー（UIに表示しない前提）
+	Profile       *string                 `json:"profile,omitempty"`
+	ExternalLink  *string                 `json:"externalLink,omitempty"`
+	CreatedAt     time.Time               `json:"createdAt"`
+	UpdatedAt     time.Time               `json:"updatedAt"`
+	DeletedAt     *time.Time              `json:"deletedAt,omitempty"` // null 許容
 }
 
 // Policy
@@ -42,19 +49,18 @@ var (
 	MaxAvatarNameLength   = 50
 	MaxProfileLength      = 1000
 	MaxExternalLinkLength = 2048
-	MaxIconURLLength      = 2048
-	MaxIconPathLength     = 2048
+	MaxIconLength         = 2048
 )
 
 // Errors
 var (
 	ErrInvalidID           = errors.New("avatar: invalid id")
 	ErrInvalidUserID       = errors.New("avatar: invalid userId")
+	ErrInvalidFirebaseUID  = errors.New("avatar: invalid firebaseUid")
 	ErrInvalidAvatarName   = errors.New("avatar: invalid avatarName")
 	ErrInvalidProfile      = errors.New("avatar: invalid profile")
 	ErrInvalidExternalLink = errors.New("avatar: invalid externalLink")
-	ErrInvalidIconURL      = errors.New("avatar: invalid avatarIconUrl")
-	ErrInvalidIconPath     = errors.New("avatar: invalid avatarIconPath")
+	ErrInvalidAvatarIcon   = errors.New("avatar: invalid avatarIcon")
 	ErrInvalidCreatedAt    = errors.New("avatar: invalid createdAt")
 	ErrInvalidUpdatedAt    = errors.New("avatar: invalid updatedAt")
 	ErrInvalidDeletedAt    = errors.New("avatar: invalid deletedAt")
@@ -67,23 +73,23 @@ var (
 
 // NewWithState は AvatarState(別ドメイン型) を含む新しいコンストラクタです。
 func NewWithState(
-	id, userID, avatarName string,
+	id, userID, firebaseUID, avatarName string,
 	state avatarstate.AvatarState,
-	iconURL, iconPath, walletAddr, profile, externalLink *string,
+	avatarIcon, walletAddr, profile, externalLink *string,
 	createdAt, updatedAt time.Time,
 	deletedAt *time.Time,
 ) (Avatar, error) {
 	a := Avatar{
-		ID:             strings.TrimSpace(id),
-		UserID:         strings.TrimSpace(userID),
-		AvatarName:     strings.TrimSpace(avatarName),
-		AvatarIconURL:  normalizePtr(iconURL),
-		AvatarIconPath: normalizePtr(iconPath),
-		Profile:        normalizePtr(profile),
-		ExternalLink:   normalizePtr(externalLink),
-		CreatedAt:      createdAt.UTC(),
-		UpdatedAt:      updatedAt.UTC(),
-		AvatarState:    state,
+		ID:           strings.TrimSpace(id),
+		UserID:       strings.TrimSpace(userID),
+		FirebaseUID:  strings.TrimSpace(firebaseUID),
+		AvatarName:   strings.TrimSpace(avatarName),
+		AvatarIcon:   normalizePtr(avatarIcon),
+		Profile:      normalizePtr(profile),
+		ExternalLink: normalizePtr(externalLink),
+		CreatedAt:    createdAt.UTC(),
+		UpdatedAt:    updatedAt.UTC(),
+		AvatarState:  state,
 	}
 
 	// walletAddress はオプショナル
@@ -104,15 +110,15 @@ func NewWithState(
 
 // 既存互換: 旧 New は AvatarState を与えず NewWithState を呼びます（ゼロ値のまま）。
 func New(
-	id, userID, avatarName string,
-	iconURL, iconPath, walletAddr, profile, externalLink *string,
+	id, userID, firebaseUID, avatarName string,
+	avatarIcon, walletAddr, profile, externalLink *string,
 	createdAt, updatedAt time.Time,
 	deletedAt *time.Time,
 ) (Avatar, error) {
 	return NewWithState(
-		id, userID, avatarName,
+		id, userID, firebaseUID, avatarName,
 		avatarstate.AvatarState{},
-		iconURL, iconPath, walletAddr, profile, externalLink,
+		avatarIcon, walletAddr, profile, externalLink,
 		createdAt, updatedAt, deletedAt,
 	)
 }
@@ -122,13 +128,13 @@ func NewForCreateWithState(
 	id string,
 	state avatarstate.AvatarState,
 	input struct {
-		UserID         string
-		AvatarName     string
-		AvatarIconURL  *string
-		AvatarIconPath *string
-		WalletAddr     *string
-		Profile        *string
-		ExternalLink   *string
+		UserID       string
+		FirebaseUID  string
+		AvatarName   string
+		AvatarIcon   *string
+		WalletAddr   *string
+		Profile      *string
+		ExternalLink *string
 	},
 	now time.Time,
 ) (Avatar, error) {
@@ -136,10 +142,10 @@ func NewForCreateWithState(
 	return NewWithState(
 		id,
 		input.UserID,
+		input.FirebaseUID,
 		input.AvatarName,
 		state,
-		input.AvatarIconURL,
-		input.AvatarIconPath,
+		input.AvatarIcon,
 		input.WalletAddr,
 		input.Profile,
 		input.ExternalLink,
@@ -153,13 +159,13 @@ func NewForCreateWithState(
 func NewForCreate(
 	id string,
 	input struct {
-		UserID         string
-		AvatarName     string
-		AvatarIconURL  *string
-		AvatarIconPath *string
-		WalletAddr     *string
-		Profile        *string
-		ExternalLink   *string
+		UserID       string
+		FirebaseUID  string
+		AvatarName   string
+		AvatarIcon   *string
+		WalletAddr   *string
+		Profile      *string
+		ExternalLink *string
 	},
 	now time.Time,
 ) (Avatar, error) {
@@ -168,9 +174,9 @@ func NewForCreate(
 
 // NewFromStringTimesWithState parses times and delegates to NewWithState.
 func NewFromStringTimesWithState(
-	id, userID, avatarName string,
+	id, userID, firebaseUID, avatarName string,
 	state avatarstate.AvatarState,
-	iconURL, iconPath, walletAddr, profile, externalLink *string,
+	avatarIcon, walletAddr, profile, externalLink *string,
 	createdAt, updatedAt string,
 	deletedAt *string,
 ) (Avatar, error) {
@@ -193,51 +199,36 @@ func NewFromStringTimesWithState(
 	}
 
 	return NewWithState(
-		id, userID, avatarName,
+		id, userID, firebaseUID, avatarName,
 		state,
-		iconURL, iconPath, walletAddr, profile, externalLink,
+		avatarIcon, walletAddr, profile, externalLink,
 		ct, ut, dtPtr,
 	)
 }
 
 // 既存互換: 旧 NewFromStringTimes は AvatarState を与えずゼロ値のまま
 func NewFromStringTimes(
-	id, userID, avatarName string,
-	iconURL, iconPath, walletAddr, profile, externalLink *string,
+	id, userID, firebaseUID, avatarName string,
+	avatarIcon, walletAddr, profile, externalLink *string,
 	createdAt, updatedAt string,
 	deletedAt *string,
 ) (Avatar, error) {
 	return NewFromStringTimesWithState(
-		id, userID, avatarName,
+		id, userID, firebaseUID, avatarName,
 		avatarstate.AvatarState{},
-		iconURL, iconPath, walletAddr, profile, externalLink,
+		avatarIcon, walletAddr, profile, externalLink,
 		createdAt, updatedAt, deletedAt,
 	)
 }
 
 // Mutators
 
-func (a *Avatar) SetIconURL(v *string) error {
+func (a *Avatar) SetAvatarIcon(v *string) error {
 	v = normalizePtr(v)
-	if v != nil {
-		if len([]rune(*v)) > MaxIconURLLength {
-			return ErrInvalidIconURL
-		}
-		// URLとして妥当であること（http/httpsのみ）
-		if err := validateExternalLink(*v); err != nil {
-			return ErrInvalidIconURL
-		}
+	if v != nil && len([]rune(*v)) > MaxIconLength {
+		return ErrInvalidAvatarIcon
 	}
-	a.AvatarIconURL = v
-	return nil
-}
-
-func (a *Avatar) SetIconPath(v *string) error {
-	v = normalizePtr(v)
-	if v != nil && len([]rune(*v)) > MaxIconPathLength {
-		return ErrInvalidIconPath
-	}
-	a.AvatarIconPath = v
+	a.AvatarIcon = v
 	return nil
 }
 
@@ -297,6 +288,16 @@ func (a *Avatar) SetUser(u userdom.User) error {
 	return nil
 }
 
+// SetFirebaseUID sets firebase auth uid.
+func (a *Avatar) SetFirebaseUID(uid string) error {
+	uid = strings.TrimSpace(uid)
+	if uid == "" {
+		return ErrInvalidFirebaseUID
+	}
+	a.FirebaseUID = uid
+	return nil
+}
+
 // SetWallet sets the wallet link from a Wallet domain object (uses Wallet.WalletAddress).
 func (a *Avatar) SetWallet(w walletdom.Wallet) error {
 	addr := strings.TrimSpace(w.WalletAddress)
@@ -317,6 +318,14 @@ func (a *Avatar) ClearWallet() {
 func (a Avatar) ValidateUserLink() error {
 	if strings.TrimSpace(a.UserID) == "" {
 		return ErrInvalidUserID
+	}
+	return nil
+}
+
+// ValidateFirebaseUID ensures FirebaseUID is present.
+func (a Avatar) ValidateFirebaseUID() error {
+	if strings.TrimSpace(a.FirebaseUID) == "" {
+		return ErrInvalidFirebaseUID
 	}
 	return nil
 }
@@ -350,20 +359,15 @@ func (a Avatar) validate() error {
 	if a.UserID == "" {
 		return ErrInvalidUserID
 	}
+	if strings.TrimSpace(a.FirebaseUID) == "" {
+		return ErrInvalidFirebaseUID
+	}
 	if a.AvatarName == "" || len([]rune(a.AvatarName)) > MaxAvatarNameLength {
 		return ErrInvalidAvatarName
 	}
 
-	if a.AvatarIconURL != nil {
-		if len([]rune(*a.AvatarIconURL)) > MaxIconURLLength {
-			return ErrInvalidIconURL
-		}
-		if err := validateExternalLink(*a.AvatarIconURL); err != nil {
-			return ErrInvalidIconURL
-		}
-	}
-	if a.AvatarIconPath != nil && len([]rune(*a.AvatarIconPath)) > MaxIconPathLength {
-		return ErrInvalidIconPath
+	if a.AvatarIcon != nil && len([]rune(*a.AvatarIcon)) > MaxIconLength {
+		return ErrInvalidAvatarIcon
 	}
 
 	if a.Profile != nil && len([]rune(*a.Profile)) > MaxProfileLength {

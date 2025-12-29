@@ -7,13 +7,11 @@ import 'package:go_router/go_router.dart';
 import '../../../../app/shell/presentation/components/header.dart';
 import '../hook/use_avatar_create.dart';
 
-/// ✅ アバター作成（雛形）
-/// - アバターアイコン画像（現状はダミー選択）
+/// ✅ アバター作成
+/// - アバターアイコン画像（実ファイル選択：Web対応）
 /// - アバター名
 /// - プロフィール
 /// - 外部リンク
-///
-/// ※ 実運用では image_picker 等で画像選択し、署名付きURL→GCSアップロード→URL保存 の流れにする想定。
 class AvatarCreatePage extends StatefulWidget {
   const AvatarCreatePage({super.key, this.from});
 
@@ -72,7 +70,7 @@ class _AvatarCreatePageState extends State<AvatarCreatePage> {
                         const _InfoBox(
                           kind: _InfoKind.info,
                           text:
-                              'アバター情報を登録してください。\n※ 実運用ではアイコン画像はアップロードしてURLを保存します。',
+                              'アバター情報を登録してください。\n※ アイコン画像は選択したファイルの bytes を保持します（アップロード連携は次のステップ）。',
                         ),
                         const SizedBox(height: 16),
 
@@ -83,7 +81,8 @@ class _AvatarCreatePageState extends State<AvatarCreatePage> {
                         const SizedBox(height: 8),
                         _IconPickerCard(
                           bytes: _vm.iconBytes,
-                          onPick: _vm.pickIconDummy,
+                          fileName: _vm.iconFileName,
+                          onPick: _vm.pickIcon,
                           onClear: _vm.clearIcon,
                         ),
                         const SizedBox(height: 16),
@@ -179,11 +178,13 @@ class _AvatarCreatePageState extends State<AvatarCreatePage> {
 class _IconPickerCard extends StatelessWidget {
   const _IconPickerCard({
     required this.bytes,
+    required this.fileName,
     required this.onPick,
     required this.onClear,
   });
 
   final Uint8List? bytes;
+  final String? fileName;
   final Future<void> Function() onPick;
   final VoidCallback onClear;
 
@@ -207,9 +208,18 @@ class _IconPickerCard extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  bytes == null ? '未選択' : '選択済み（ダミー）',
+                  bytes == null ? '未選択' : '選択済み',
                   style: Theme.of(context).textTheme.bodyLarge,
                 ),
+                if (bytes != null && (fileName ?? '').trim().isNotEmpty) ...[
+                  const SizedBox(height: 2),
+                  Text(
+                    fileName!,
+                    style: Theme.of(context).textTheme.bodySmall,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ],
                 const SizedBox(height: 6),
                 Wrap(
                   spacing: 8,
@@ -249,11 +259,21 @@ class _AvatarPreview extends StatelessWidget {
       );
     }
 
-    // ダミー：実際の画像 bytes ではないのでプレースホルダ表示
-    return CircleAvatar(
-      radius: 28,
-      backgroundColor: scheme.primaryContainer,
-      child: Icon(Icons.image, color: scheme.onPrimaryContainer),
+    // ✅ 実 bytes を表示
+    return ClipOval(
+      child: Image.memory(
+        bytes!,
+        width: 56,
+        height: 56,
+        fit: BoxFit.cover,
+        errorBuilder: (_, __, ___) {
+          return CircleAvatar(
+            radius: 28,
+            backgroundColor: scheme.primaryContainer,
+            child: Icon(Icons.broken_image, color: scheme.onPrimaryContainer),
+          );
+        },
+      ),
     );
   }
 }

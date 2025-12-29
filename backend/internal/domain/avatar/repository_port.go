@@ -14,17 +14,18 @@ import (
 // nil のフィールドは更新しない契約
 //
 // ✅ entity.go を正として:
-// - AvatarIconID → AvatarIconURL / AvatarIconPath
+// - AvatarIconURL / AvatarIconPath → AvatarIcon
 // - Bio          → Profile
 // - Website      → ExternalLink
+// - FirebaseUID  を追加
 type AvatarPatch struct {
-	AvatarName     *string    `json:"avatarName,omitempty"`
-	AvatarIconURL  *string    `json:"avatarIconUrl,omitempty"`
-	AvatarIconPath *string    `json:"avatarIconPath,omitempty"`
-	WalletAddress  *string    `json:"walletAddress,omitempty"`
-	Profile        *string    `json:"profile,omitempty"`
-	ExternalLink   *string    `json:"externalLink,omitempty"`
-	DeletedAt      *time.Time `json:"deletedAt,omitempty"` // soft delete/restore 用（必要な場合のみ使用）
+	FirebaseUID   *string    `json:"firebaseUid,omitempty"`
+	AvatarName    *string    `json:"avatarName,omitempty"`
+	AvatarIcon    *string    `json:"avatarIcon,omitempty"`
+	WalletAddress *string    `json:"walletAddress,omitempty"`
+	Profile       *string    `json:"profile,omitempty"`
+	ExternalLink  *string    `json:"externalLink,omitempty"`
+	DeletedAt     *time.Time `json:"deletedAt,omitempty"` // soft delete/restore 用（必要な場合のみ使用）
 }
 
 // ========================================
@@ -32,12 +33,15 @@ type AvatarPatch struct {
 // ========================================
 //
 // ✅ entity.go を正として検索対象も更新（bio/website → profile/externalLink）
+// ✅ avatarIconUrl/avatarIconPath → avatarIcon
+// ✅ firebaseUid を検索・絞り込み対象に追加（必要に応じて実装側で利用）
 type Filter struct {
-	// 部分一致検索対象: id, avatarName, profile, externalLink, walletAddress, avatarIconUrl, avatarIconPath
+	// 部分一致検索対象: id, firebaseUid, avatarName, profile, externalLink, walletAddress, avatarIcon
 	SearchQuery string
 
 	// 絞り込み
 	UserID        *string
+	FirebaseUID   *string
 	WalletAddress *string
 
 	// 日付範囲（created_at ベース）

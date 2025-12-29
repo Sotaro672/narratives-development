@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	"cloud.google.com/go/storage"
+	"google.golang.org/api/googleapi"
 	"google.golang.org/api/iterator"
 
 	dbcommon "narratives/internal/adapters/out/firestore/common"
@@ -17,15 +18,10 @@ import (
 
 // AvatarIconRepositoryGCS implements avatarIcon.Repository backed by Google Cloud Storage.
 //
-// 想定:
-// - アイコンファイル本体は GCS バケットに保存される。
-// - Repository は GCS オブジェクト情報から AvatarIcon ドメインモデルを構築する。
-// - オブジェクト名は以下いずれか:
-//  1. "<avatarID>/<fileName>"
-//  2. 任意のパス文字列（この場合 ID = objectName, AvatarID/FileName はパース可能な範囲で解決）
-//
-// アップロード自体（書き込み）は別レイヤーで行い、ここでは主に
-// 一覧取得・参照・削除などの読み取り/管理を担当する。
+// ✅ 追加方針（docId フォルダ作成）:
+//   - GCS は「フォルダ/バケット」を階層として作れない（実体は object の prefix）ため、
+//     "docId/.keep" のような 0byte(or小さな)オブジェクトを作成して Console 上で prefix を見せる。
+//   - List/GetByAvatarID などで ".keep" はアイコンとして扱わないように除外する。
 type AvatarIconRepositoryGCS struct {
 	Client *storage.Client
 	Bucket string
@@ -45,9 +41,65 @@ func NewAvatarIconRepositoryGCS(client *storage.Client, bucket string) *AvatarIc
 func (r *AvatarIconRepositoryGCS) effectiveBucket() (string, error) {
 	b := strings.TrimSpace(r.Bucket)
 	if b == "" {
+		// ドメイン側に DefaultBucket がある場合はそれをフォールバックにする
+		if strings.TrimSpace(avicon.DefaultBucket) != "" {
+			return strings.TrimSpace(avicon.DefaultBucket), nil
+		}
 		return "", errors.New("AvatarIconRepositoryGCS: bucket is empty")
 	}
 	return b, nil
+}
+
+// EnsureAvatarFolder ensures "<avatarID>/" prefix is visible on GCS console.
+//
+// GCS はフォルダを作れないため "avatarID/.keep" を作成する。
+// 既に存在する場合は no-op 扱い。
+func (r *AvatarIconRepositoryGCS) EnsureAvatarFolder(ctx context.Context, avatarID string) error {
+	if r.Client == nil {
+		return errors.New("AvatarIconRepositoryGCS: nil storage client")
+	}
+	bucketName, err := r.effectiveBucket()
+	if err != nil {
+		return err
+	}
+
+	avatarID = strings.TrimSpace(avatarID)
+	if avatarID == "" {
+		return errors.New("AvatarIconRepositoryGCS: avatarID is empty")
+	}
+
+	objName := strings.TrimLeft(avatarID, "/") + "/.keep"
+
+	oh := r.Client.Bucket(bucketName).Object(objName).If(storage.Conditions{DoesNotExist: true})
+	w := oh.NewWriter(ctx)
+	w.ContentType = "text/plain; charset=utf-8"
+
+	// 0byteでもOKだが、ツールやUI都合で「空」を嫌うことがあるので 1行だけ入れておく
+	_, _ = w.Write([]byte("keep"))
+	if err := w.Close(); err != nil {
+		// すでに存在する場合は 412 になるので無視
+		var gerr *googleapi.Error
+		if errors.As(err, &gerr) && gerr.Code == 412 {
+			return nil
+		}
+		return err
+	}
+	return nil
+}
+
+func isFolderMarkerObject(name string) bool {
+	n := strings.TrimSpace(name)
+	if n == "" {
+		return false
+	}
+	// "folder/" 形式や ".keep" を常に除外
+	if strings.HasSuffix(n, "/") {
+		return true
+	}
+	if strings.HasSuffix(n, "/.keep") {
+		return true
+	}
+	return false
 }
 
 // ==============================
@@ -86,6 +138,9 @@ func (r *AvatarIconRepositoryGCS) List(
 		}
 		if err != nil {
 			return avicon.PageResult[avicon.AvatarIcon]{}, err
+		}
+		if isFolderMarkerObject(attrs.Name) {
+			continue
 		}
 		icon := buildAvatarIconFromAttrs(bucketName, attrs)
 		if matchAvatarIconFilter(icon, filter) {
@@ -164,6 +219,9 @@ func (r *AvatarIconRepositoryGCS) ListByCursor(
 		if err != nil {
 			return avicon.CursorPageResult[avicon.AvatarIcon]{}, err
 		}
+		if isFolderMarkerObject(attrs.Name) {
+			continue
+		}
 		icon := buildAvatarIconFromAttrs(bucketName, attrs)
 		if matchAvatarIconFilter(icon, filter) {
 			all = append(all, icon)
@@ -230,7 +288,7 @@ func (r *AvatarIconRepositoryGCS) GetByID(ctx context.Context, id string) (avico
 	}
 
 	id = strings.TrimSpace(id)
-	if id == "" {
+	if id == "" || isFolderMarkerObject(id) {
 		return avicon.AvatarIcon{}, avicon.ErrNotFound
 	}
 
@@ -242,6 +300,9 @@ func (r *AvatarIconRepositoryGCS) GetByID(ctx context.Context, id string) (avico
 		return avicon.AvatarIcon{}, err
 	}
 
+	if isFolderMarkerObject(attrs.Name) {
+		return avicon.AvatarIcon{}, avicon.ErrNotFound
+	}
 	return buildAvatarIconFromAttrs(bucketName, attrs), nil
 }
 
@@ -272,6 +333,9 @@ func (r *AvatarIconRepositoryGCS) GetByAvatarID(ctx context.Context, avatarID st
 		if err != nil {
 			return nil, err
 		}
+		if isFolderMarkerObject(attrs.Name) {
+			continue
+		}
 		icon := buildAvatarIconFromAttrs(bucketName, attrs)
 		if icon.AvatarID != nil && *icon.AvatarID == avatarID {
 			items = append(items, icon)
@@ -301,6 +365,9 @@ func (r *AvatarIconRepositoryGCS) Create(ctx context.Context, a avicon.AvatarIco
 	if err != nil {
 		return avicon.AvatarIcon{}, err
 	}
+	if isFolderMarkerObject(path) {
+		return avicon.AvatarIcon{}, avicon.ErrNotFound
+	}
 
 	attrs, err := r.Client.Bucket(bucketName).Object(path).Attrs(ctx)
 	if err != nil {
@@ -308,6 +375,9 @@ func (r *AvatarIconRepositoryGCS) Create(ctx context.Context, a avicon.AvatarIco
 			return avicon.AvatarIcon{}, avicon.ErrNotFound
 		}
 		return avicon.AvatarIcon{}, err
+	}
+	if isFolderMarkerObject(attrs.Name) {
+		return avicon.AvatarIcon{}, avicon.ErrNotFound
 	}
 
 	return buildAvatarIconFromAttrs(bucketName, attrs), nil
@@ -330,7 +400,7 @@ func (r *AvatarIconRepositoryGCS) Delete(ctx context.Context, id string) error {
 	}
 
 	id = strings.TrimSpace(id)
-	if id == "" {
+	if id == "" || isFolderMarkerObject(id) {
 		return avicon.ErrNotFound
 	}
 
@@ -372,6 +442,9 @@ func (r *AvatarIconRepositoryGCS) Count(ctx context.Context, filter avicon.Filte
 		if err != nil {
 			return 0, err
 		}
+		if isFolderMarkerObject(attrs.Name) {
+			continue
+		}
 		icon := buildAvatarIconFromAttrs(bucketName, attrs)
 		if matchAvatarIconFilter(icon, filter) {
 			count++
@@ -399,6 +472,9 @@ func (r *AvatarIconRepositoryGCS) Save(
 	if err != nil {
 		return avicon.AvatarIcon{}, err
 	}
+	if isFolderMarkerObject(path) {
+		return avicon.AvatarIcon{}, avicon.ErrNotFound
+	}
 
 	attrs, err := r.Client.Bucket(bucketName).Object(path).Attrs(ctx)
 	if err != nil {
@@ -406,6 +482,9 @@ func (r *AvatarIconRepositoryGCS) Save(
 			return avicon.AvatarIcon{}, avicon.ErrNotFound
 		}
 		return avicon.AvatarIcon{}, err
+	}
+	if isFolderMarkerObject(attrs.Name) {
+		return avicon.AvatarIcon{}, avicon.ErrNotFound
 	}
 
 	return buildAvatarIconFromAttrs(bucketName, attrs), nil

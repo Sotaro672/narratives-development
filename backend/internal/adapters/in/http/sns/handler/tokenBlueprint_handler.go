@@ -423,18 +423,6 @@ func pickBoolPtrField(v any, names ...string) *bool {
 	return nil
 }
 
-func trimPtr(s *string) *string {
-	if s == nil {
-		return nil
-	}
-	t := strings.TrimSpace(*s)
-	if t == "" {
-		return nil
-	}
-	x := t
-	return &x
-}
-
 func strPtr(s string) *string {
 	x := s
 	return &x

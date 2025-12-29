@@ -1,21 +1,33 @@
 // frontend/sns/lib/features/auth/presentation/hook/use_avatar_create.dart
+
 import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../application/avatar_create_service.dart';
+
 /// AvatarCreatePage の状態/処理をまとめる（Flutter では ChangeNotifier で hook 風にする）
 class UseAvatarCreate extends ChangeNotifier {
-  UseAvatarCreate({required this.from});
+  UseAvatarCreate({required this.from, AvatarCreateService? service})
+    : _service = service ?? const AvatarCreateService();
 
   /// optional back route
   final String? from;
+
+  final AvatarCreateService _service;
 
   final nameCtrl = TextEditingController();
   final profileCtrl = TextEditingController();
   final linkCtrl = TextEditingController();
 
-  Uint8List? iconBytes; // ダミー
+  // ✅ 実画像ファイルの bytes
+  Uint8List? iconBytes;
+
+  // ✅ ファイルメタ
+  String? iconFileName; // 例: "avatar.png"
+  String? iconMimeType; // 例: "image/png"
+
   bool saving = false;
   String? msg;
 
@@ -27,50 +39,65 @@ class UseAvatarCreate extends ChangeNotifier {
     super.dispose();
   }
 
-  String _s(String? v) => (v ?? '').trim();
-
   String backTo() {
-    final f = _s(from);
+    final f = _service.s(from);
     if (f.isNotEmpty) return f;
     return '/billing-address';
   }
 
   bool get canSave {
     if (saving) return false;
-    if (_s(nameCtrl.text).isEmpty) return false;
+    if (_service.s(nameCtrl.text).isEmpty) return false;
+
     // 画像を必須にする場合:
     // if (iconBytes == null) return false;
-    return true;
-  }
 
-  bool isValidUrlOrEmpty(String s) {
-    final v = _s(s);
-    if (v.isEmpty) return true;
-    final uri = Uri.tryParse(v);
-    if (uri == null) return false;
-    if (!uri.hasScheme) return false;
-    if (uri.scheme != 'http' && uri.scheme != 'https') return false;
-    return uri.host.isNotEmpty;
+    return true;
   }
 
   void onNameChanged() {
     notifyListeners();
   }
 
-  Future<void> pickIconDummy() async {
-    iconBytes = Uint8List.fromList(List<int>.generate(64, (i) => i));
-    msg = 'アイコン画像を選択しました（ダミー）。';
+  // ============================
+  // Icon picker (REAL image file)
+  // ============================
+
+  Future<void> pickIcon() async {
+    msg = null;
+    notifyListeners();
+
+    final res = await _service.pickIconWeb();
+    if (res == null) return;
+
+    if (res.error != null) {
+      msg = res.error;
+      notifyListeners();
+      return;
+    }
+
+    iconBytes = res.bytes;
+    iconFileName = res.fileName;
+    iconMimeType = res.mimeType;
+
+    msg = 'アイコン画像を選択しました。';
     notifyListeners();
   }
 
   void clearIcon() {
     iconBytes = null;
+    iconFileName = null;
+    iconMimeType = null;
     notifyListeners();
   }
 
+  // ============================
+  // Save (still dummy for now)
+  // ============================
+
   Future<void> saveDummy(BuildContext context) async {
-    final link = _s(linkCtrl.text);
-    if (!isValidUrlOrEmpty(link)) {
+    final link = _service.s(linkCtrl.text);
+    if (!_service.isValidUrlOrEmpty(link)) {
       msg = '外部リンクは http(s) のURLを入力してください。';
       notifyListeners();
       return;
@@ -82,13 +109,12 @@ class UseAvatarCreate extends ChangeNotifier {
 
     Object? caught;
     try {
-      await Future<void>.delayed(const Duration(milliseconds: 700));
+      await _service.saveDummyDelay();
 
       msg = 'アバターを作成しました（ダミー）。';
       notifyListeners();
 
       if (!context.mounted) return;
-      // ✅ 保存後は Home に戻る
       context.go('/');
     } catch (e) {
       caught = e;
@@ -99,7 +125,6 @@ class UseAvatarCreate extends ChangeNotifier {
       notifyListeners();
     }
 
-    // caught は将来ログ用途などに使える（未使用でもOK）
     // ignore: unused_local_variable
     final _ = caught;
   }

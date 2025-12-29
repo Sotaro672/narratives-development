@@ -91,9 +91,9 @@ func (h *AvatarHandler) get(w http.ResponseWriter, r *http.Request, id string) {
 //
 //	{
 //	  "userId": "xxx",
+//	  "firebaseUid": "firebase-auth-uid",
 //	  "avatarName": "name",
-//	  "avatarIconUrl": "https://... (optional)",
-//	  "avatarIconPath": "gs://... or path (optional)",
+//	  "avatarIcon": "https://... or gs://... or path (optional)",
 //	  "profile": "... (optional)",
 //	  "externalLink": "https://... (optional)"
 //	}
@@ -103,12 +103,12 @@ func (h *AvatarHandler) post(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 
 	var body struct {
-		UserID         string  `json:"userId"`
-		AvatarName     string  `json:"avatarName"`
-		AvatarIconURL  *string `json:"avatarIconUrl,omitempty"`
-		AvatarIconPath *string `json:"avatarIconPath,omitempty"`
-		Profile        *string `json:"profile,omitempty"`
-		ExternalLink   *string `json:"externalLink,omitempty"`
+		UserID       string  `json:"userId"`
+		FirebaseUID  string  `json:"firebaseUid"`
+		AvatarName   string  `json:"avatarName"`
+		AvatarIcon   *string `json:"avatarIcon,omitempty"`
+		Profile      *string `json:"profile,omitempty"`
+		ExternalLink *string `json:"externalLink,omitempty"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 		w.WriteHeader(http.StatusBadRequest)
@@ -117,12 +117,12 @@ func (h *AvatarHandler) post(w http.ResponseWriter, r *http.Request) {
 	}
 
 	in := uc.CreateAvatarInput{
-		UserID:         strings.TrimSpace(body.UserID),
-		AvatarName:     strings.TrimSpace(body.AvatarName),
-		AvatarIconURL:  trimPtr(body.AvatarIconURL),
-		AvatarIconPath: trimPtr(body.AvatarIconPath),
-		Profile:        trimPtr(body.Profile),
-		ExternalLink:   trimPtr(body.ExternalLink),
+		UserID:       strings.TrimSpace(body.UserID),
+		FirebaseUID:  strings.TrimSpace(body.FirebaseUID),
+		AvatarName:   strings.TrimSpace(body.AvatarName),
+		AvatarIcon:   trimPtr(body.AvatarIcon),
+		Profile:      trimPtr(body.Profile),
+		ExternalLink: trimPtr(body.ExternalLink),
 	}
 
 	created, err := h.uc.Create(ctx, in)
@@ -140,9 +140,9 @@ func (h *AvatarHandler) post(w http.ResponseWriter, r *http.Request) {
 // body (patch):
 //
 //	{
+//	  "firebaseUid": "firebase-auth-uid (optional)",
 //	  "avatarName": "name (optional)",
-//	  "avatarIconUrl": "https://... (optional, empty => null)",
-//	  "avatarIconPath": "path (optional, empty => null)",
+//	  "avatarIcon": "https://... or path (optional, empty => null)",
 //	  "profile": "... (optional, empty => null)",
 //	  "externalLink": "https://... (optional, empty => null)"
 //	}
@@ -156,11 +156,11 @@ func (h *AvatarHandler) update(w http.ResponseWriter, r *http.Request, id string
 	}
 
 	var body struct {
-		AvatarName     *string `json:"avatarName,omitempty"`
-		AvatarIconURL  *string `json:"avatarIconUrl,omitempty"`
-		AvatarIconPath *string `json:"avatarIconPath,omitempty"`
-		Profile        *string `json:"profile,omitempty"`
-		ExternalLink   *string `json:"externalLink,omitempty"`
+		FirebaseUID  *string `json:"firebaseUid,omitempty"`
+		AvatarName   *string `json:"avatarName,omitempty"`
+		AvatarIcon   *string `json:"avatarIcon,omitempty"`
+		Profile      *string `json:"profile,omitempty"`
+		ExternalLink *string `json:"externalLink,omitempty"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 		w.WriteHeader(http.StatusBadRequest)
@@ -169,11 +169,11 @@ func (h *AvatarHandler) update(w http.ResponseWriter, r *http.Request, id string
 	}
 
 	patch := avatardom.AvatarPatch{
-		AvatarName:     trimPtrNilAware(body.AvatarName),     // nil => no update, "" => set null? (name is non-nullable; so "" will be treated as invalid by domain/usecase)
-		AvatarIconURL:  trimPtrNilAware(body.AvatarIconURL),  // "" => nil (clear)
-		AvatarIconPath: trimPtrNilAware(body.AvatarIconPath), // "" => nil (clear)
-		Profile:        trimPtrNilAware(body.Profile),        // "" => nil (clear)
-		ExternalLink:   trimPtrNilAware(body.ExternalLink),   // "" => nil (clear)
+		FirebaseUID:  trimPtrNilAware(body.FirebaseUID),  // "" => clear (ただし entity の必須なら usecase/domain 側で弾く)
+		AvatarName:   trimPtrNilAware(body.AvatarName),   // nil => no update, "" => invalid になる想定
+		AvatarIcon:   trimPtrNilAware(body.AvatarIcon),   // "" => nil (clear)
+		Profile:      trimPtrNilAware(body.Profile),      // "" => nil (clear)
+		ExternalLink: trimPtrNilAware(body.ExternalLink), // "" => nil (clear)
 	}
 
 	updated, err := h.uc.Update(ctx, id, patch)
@@ -209,6 +209,7 @@ func writeAvatarErr(w http.ResponseWriter, err error) {
 	// invalid id / invalid input
 	if errors.Is(err, avatardom.ErrInvalidID) ||
 		errors.Is(err, avatardom.ErrInvalidUserID) ||
+		errors.Is(err, avatardom.ErrInvalidFirebaseUID) ||
 		errors.Is(err, avatardom.ErrInvalidAvatarName) ||
 		errors.Is(err, avatardom.ErrInvalidProfile) ||
 		errors.Is(err, avatardom.ErrInvalidExternalLink) {
