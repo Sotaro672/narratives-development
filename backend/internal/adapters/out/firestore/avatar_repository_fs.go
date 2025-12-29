@@ -34,9 +34,11 @@ func (r *AvatarRepositoryFS) col() *firestore.CollectionRef {
 var _ avdom.Repository = (*AvatarRepositoryFS)(nil)
 
 var (
-	errNotFound  = errors.New("avatar: not found")
-	errConflict  = errors.New("avatar: conflict")
-	errBadClient = errors.New("firestore client is nil")
+	errNotFound           = errors.New("avatar: not found")
+	errConflict           = errors.New("avatar: conflict")
+	errBadClient          = errors.New("firestore client is nil")
+	errInvalidWalletAddr  = errors.New("avatar: invalid walletAddress")
+	errWalletAlreadyBound = errors.New("avatar: walletAddress already set")
 )
 
 // ==============================
@@ -311,13 +313,160 @@ func (r *AvatarRepositoryFS) Create(ctx context.Context, a avdom.Avatar) (avdom.
 // ==============================
 // Update (patch)
 // ==============================
-
+//
+// ✅ 重要: walletAddress は「avatar につき 1回だけ」設定可能。
+// - すでに walletAddress が入っている場合は上書きしない（Conflict）。
+// - 空文字/nil で walletAddress を消すことも許可しない。
+// - 競合を避けるため walletAddress を含む更新は Transaction で行う。
 func (r *AvatarRepositoryFS) Update(ctx context.Context, id string, patch avdom.AvatarPatch) (avdom.Avatar, error) {
 	id = strings.TrimSpace(id)
 	if id == "" {
 		return avdom.Avatar{}, errNotFound
 	}
 	ref := r.col().Doc(id)
+
+	// walletAddress を含む場合は transaction で「未設定ならセット」を保証
+	if patch.WalletAddress != nil {
+		want := strings.TrimSpace(*patch.WalletAddress)
+		if want == "" {
+			return avdom.Avatar{}, errInvalidWalletAddr
+		}
+
+		if r.Client == nil {
+			return avdom.Avatar{}, errBadClient
+		}
+
+		// sanitize optional strings (empty -> nil)
+		sAvatarIcon := trimPtr(patch.AvatarIcon)
+		sProfile := trimPtr(patch.Profile)
+		sExternalLink := trimPtr(patch.ExternalLink)
+
+		err := r.Client.RunTransaction(ctx, func(ctx context.Context, tx *firestore.Transaction) error {
+			snap, err := tx.Get(ref)
+			if status.Code(err) == codes.NotFound {
+				return errNotFound
+			}
+			if err != nil {
+				return err
+			}
+
+			// 既に walletAddress があるなら上書き禁止
+			existing := getStringFieldTrimmed(snap, "walletAddress")
+			if existing != "" {
+				// 既に同じ値が入っている場合も「もう開設済み」として Conflict 扱い
+				return errWalletAlreadyBound
+			}
+
+			var updates []firestore.Update
+
+			// walletAddress はこの transaction で一度だけセット可能
+			updates = append(updates, firestore.Update{
+				Path:  "walletAddress",
+				Value: want,
+			})
+
+			// ✅ firebaseUid は不要なので、更新もしない（互換のため受け取っても無視）
+			// if patch.FirebaseUID != nil { ... }  // <- removed
+
+			if patch.AvatarName != nil {
+				updates = append(updates, firestore.Update{
+					Path:  "avatarName",
+					Value: strings.TrimSpace(*patch.AvatarName),
+				})
+			}
+
+			// ✅ entity.go 正: AvatarIconURL/Path -> AvatarIcon
+			if patch.AvatarIcon != nil {
+				var v any
+				if sAvatarIcon == nil {
+					v = nil
+				} else {
+					v = *sAvatarIcon
+				}
+				updates = append(updates, firestore.Update{
+					Path:  "avatarIcon",
+					Value: v,
+				})
+			}
+
+			if patch.Profile != nil {
+				var v any
+				if sProfile == nil {
+					v = nil
+				} else {
+					v = *sProfile
+				}
+				updates = append(updates, firestore.Update{
+					Path:  "profile",
+					Value: v,
+				})
+			}
+
+			if patch.ExternalLink != nil {
+				var v any
+				if sExternalLink == nil {
+					v = nil
+				} else {
+					v = *sExternalLink
+				}
+				updates = append(updates, firestore.Update{
+					Path:  "externalLink",
+					Value: v,
+				})
+			}
+
+			if patch.DeletedAt != nil {
+				if patch.DeletedAt.IsZero() {
+					updates = append(updates, firestore.Update{
+						Path:  "deletedAt",
+						Value: nil,
+					})
+				} else {
+					updates = append(updates, firestore.Update{
+						Path:  "deletedAt",
+						Value: patch.DeletedAt.UTC(),
+					})
+				}
+			}
+
+			// Always bump updatedAt
+			updates = append(updates, firestore.Update{
+				Path:  "updatedAt",
+				Value: time.Now().UTC(),
+			})
+
+			if err := tx.Update(ref, updates); err != nil {
+				if status.Code(err) == codes.NotFound {
+					return errNotFound
+				}
+				return err
+			}
+			return nil
+		})
+		if err != nil {
+			// wallet already set は conflict として返す
+			if errors.Is(err, errWalletAlreadyBound) {
+				return avdom.Avatar{}, errConflict
+			}
+			if errors.Is(err, errNotFound) {
+				return avdom.Avatar{}, errNotFound
+			}
+			return avdom.Avatar{}, err
+		}
+
+		snap, err := ref.Get(ctx)
+		if err != nil {
+			if status.Code(err) == codes.NotFound {
+				return avdom.Avatar{}, errNotFound
+			}
+			return avdom.Avatar{}, err
+		}
+		return r.docToDomain(snap)
+	}
+
+	// ------------------------------
+	// walletAddress を含まない通常更新
+	// ------------------------------
 
 	// Ensure exists
 	if _, err := ref.Get(ctx); status.Code(err) == codes.NotFound {
@@ -346,12 +495,8 @@ func (r *AvatarRepositoryFS) Update(ctx context.Context, id string, patch avdom.
 		})
 	}
 
-	if patch.WalletAddress != nil {
-		updates = append(updates, firestore.Update{
-			Path:  "walletAddress",
-			Value: optionalString(*patch.WalletAddress),
-		})
-	}
+	// ❌ walletAddress は通常 Update では扱わない（上書き防止のため）
+	// if patch.WalletAddress != nil { ... } // <- intentionally ignored here
 
 	if patch.Profile != nil {
 		updates = append(updates, firestore.Update{
@@ -833,4 +978,34 @@ func optionalString(v string) any {
 		return nil
 	}
 	return s
+}
+
+func trimPtr(p *string) *string {
+	if p == nil {
+		return nil
+	}
+	s := strings.TrimSpace(*p)
+	if s == "" {
+		return nil
+	}
+	return &s
+}
+
+func getStringFieldTrimmed(snap *firestore.DocumentSnapshot, field string) string {
+	if snap == nil {
+		return ""
+	}
+	m := snap.Data()
+	if m == nil {
+		return ""
+	}
+	v, ok := m[field]
+	if !ok || v == nil {
+		return ""
+	}
+	str, ok := v.(string)
+	if !ok {
+		return ""
+	}
+	return strings.TrimSpace(str)
 }

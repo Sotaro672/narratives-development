@@ -270,6 +270,11 @@ func NewContainer(ctx context.Context) (*Container, error) {
 	// ★ Solana Brand Wallet Service
 	brandWalletSvc := solanainfra.NewBrandWalletService(cfg.FirestoreProjectID)
 
+	// ✅ Solana Avatar Wallet Service (Wallet Open for Avatar)
+	// - Secret Manager: avatar-wallet-<avatarID>
+	// - usecase.AvatarWalletService は (ctx, avatarID string) を期待するので Adapter 不要
+	avatarWalletSvc := solanainfra.NewAvatarWalletService(cfg.FirestoreProjectID)
+
 	// ★ member.Service
 	memberSvc := memdom.NewService(memberRepo)
 
@@ -326,7 +331,13 @@ func NewContainer(ctx context.Context) (*Container, error) {
 
 	accountUC := uc.NewAccountUsecase(accountRepo)
 	announcementUC := uc.NewAnnouncementUsecase(announcementRepo, nil, nil)
-	avatarUC := uc.NewAvatarUsecase(avatarRepo, nil, nil, nil)
+
+	// ✅ FIX:
+	// - NewAvatarUsecase の第4引数は AvatarIconObjectStoragePort（DeleteObjects / EnsurePrefix）で wallet ではない
+	// - wallet は WithWalletService で注入する
+	avatarUC := uc.NewAvatarUsecase(avatarRepo, nil, nil, nil).
+		WithWalletService(avatarWalletSvc)
+
 	billingAddressUC := uc.NewBillingAddressUsecase(billingAddressRepo)
 
 	brandUC := uc.NewBrandUsecaseWithWallet(brandRepo, memberRepo, brandWalletSvc)

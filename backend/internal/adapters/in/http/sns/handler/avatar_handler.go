@@ -4,6 +4,7 @@ package handler
 import (
 	"encoding/json"
 	"errors"
+	"log"
 	"net/http"
 	"strings"
 
@@ -84,6 +85,8 @@ func (h *AvatarHandler) get(w http.ResponseWriter, r *http.Request, id string) {
 		return
 	}
 
+	log.Printf("[sns.avatar] GET /avatars/%s aggregate=%q\n", id, r.URL.Query().Get("aggregate"))
+
 	q := r.URL.Query()
 	agg := strings.EqualFold(q.Get("aggregate"), "1") || strings.EqualFold(q.Get("aggregate"), "true")
 
@@ -118,7 +121,8 @@ func (h *AvatarHandler) get(w http.ResponseWriter, r *http.Request, id string) {
 //	  "externalLink": "https://... (optional)"
 //	}
 //
-// ✅ 期待値: AvatarUsecase 側で avatar 作成と同時に wallet を開設（walletSvc が DI 済みの場合）。
+// ✅ 期待値: AvatarUsecase 側で avatar 作成と同時に wallet を開設。
+// ✅ LOG: 受け取ったデータ（PIIはマスク/長さのみ）
 func (h *AvatarHandler) post(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 
@@ -140,16 +144,33 @@ func (h *AvatarHandler) post(w http.ResponseWriter, r *http.Request) {
 		UserID:       strings.TrimSpace(body.UserID),
 		UserUID:      strings.TrimSpace(body.UserUID),
 		AvatarName:   strings.TrimSpace(body.AvatarName),
-		AvatarIcon:   trimPtr(body.AvatarIcon),
-		Profile:      trimPtr(body.Profile),
-		ExternalLink: trimPtr(body.ExternalLink),
+		AvatarIcon:   trimPtr(body.AvatarIcon),   // shared helper_handler.go
+		Profile:      trimPtr(body.Profile),      // shared helper_handler.go
+		ExternalLink: trimPtr(body.ExternalLink), // shared helper_handler.go
 	}
+
+	log.Printf(
+		"[sns.avatar] POST /avatars request userId=%q userUid=%q avatarName=%q avatarIcon=%q profile_len=%d externalLink=%q\n",
+		in.UserID,
+		maskUID(in.UserUID), // shared
+		in.AvatarName,
+		ptrStr(in.AvatarIcon),   // shared
+		ptrLen(in.Profile),      // shared
+		ptrStr(in.ExternalLink), // shared
+	)
 
 	created, err := h.uc.Create(ctx, in)
 	if err != nil {
+		log.Printf("[sns.avatar] POST /avatars error=%v\n", err)
 		writeAvatarErr(w, err)
 		return
 	}
+
+	log.Printf(
+		"[sns.avatar] POST /avatars ok avatarId=%q walletAddress=%q\n",
+		created.ID,
+		ptrStr(created.WalletAddress),
+	)
 
 	w.WriteHeader(http.StatusCreated)
 	_ = json.NewEncoder(w).Encode(created)
@@ -168,13 +189,17 @@ func (h *AvatarHandler) openWallet(w http.ResponseWriter, r *http.Request, id st
 		return
 	}
 
+	log.Printf("[sns.avatar] POST /avatars/%s/wallet request\n", id)
+
 	// すでに walletAddress があるなら衝突扱い
 	a, err := h.uc.GetByID(ctx, id)
 	if err != nil {
+		log.Printf("[sns.avatar] POST /avatars/%s/wallet get error=%v\n", id, err)
 		writeAvatarErr(w, err)
 		return
 	}
 	if a.WalletAddress != nil && strings.TrimSpace(*a.WalletAddress) != "" {
+		log.Printf("[sns.avatar] POST /avatars/%s/wallet conflict walletAddress=%q\n", id, ptrStr(a.WalletAddress))
 		w.WriteHeader(http.StatusConflict)
 		_ = json.NewEncoder(w).Encode(map[string]string{"error": "wallet already opened"})
 		return
@@ -182,9 +207,16 @@ func (h *AvatarHandler) openWallet(w http.ResponseWriter, r *http.Request, id st
 
 	updated, err := h.uc.OpenWallet(ctx, id)
 	if err != nil {
+		log.Printf("[sns.avatar] POST /avatars/%s/wallet error=%v\n", id, err)
 		writeAvatarErr(w, err)
 		return
 	}
+
+	log.Printf(
+		"[sns.avatar] POST /avatars/%s/wallet ok walletAddress=%q\n",
+		id,
+		ptrStr(updated.WalletAddress),
+	)
 	_ = json.NewEncoder(w).Encode(updated)
 }
 
@@ -196,9 +228,11 @@ func (h *AvatarHandler) openWallet(w http.ResponseWriter, r *http.Request, id st
 //	  "avatarName": "name (optional)",
 //	  "avatarIcon": "https://... or path (optional, empty => null)",
 //	  "profile": "... (optional, empty => null)",
-//	  "externalLink": "https://... (optional, empty => null)",
-//	  "walletAddress": "base58 (optional, empty => null)"
+//	  "externalLink": "https://... (optional, empty => null)"
 //	}
+//
+// ✅ SECURITY: walletAddress は受け付けない（開設は POST /avatars または POST /avatars/{id}/wallet のみ）
+// ✅ LOG: 受け取ったデータ（raw JSON 先頭のみも出す）
 func (h *AvatarHandler) update(w http.ResponseWriter, r *http.Request, id string) {
 	ctx := r.Context()
 	id = strings.TrimSpace(id)
@@ -208,32 +242,68 @@ func (h *AvatarHandler) update(w http.ResponseWriter, r *http.Request, id string
 		return
 	}
 
-	var body struct {
-		AvatarName    *string `json:"avatarName,omitempty"`
-		AvatarIcon    *string `json:"avatarIcon,omitempty"`
-		Profile       *string `json:"profile,omitempty"`
-		ExternalLink  *string `json:"externalLink,omitempty"`
-		WalletAddress *string `json:"walletAddress,omitempty"`
+	// Raw で受ける（walletAddress 混入を検知する）
+	var raw map[string]any
+	if err := json.NewDecoder(r.Body).Decode(&raw); err != nil {
+		w.WriteHeader(http.StatusBadRequest)
+		_ = json.NewEncoder(w).Encode(map[string]string{"error": "invalid json"})
+		return
 	}
-	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+
+	// walletAddress が含まれていたら明示的に拒否
+	if _, ok := raw["walletAddress"]; ok {
+		log.Printf("[sns.avatar] PATCH/PUT /avatars/%s rejected: walletAddress field is not allowed\n", id)
+		w.WriteHeader(http.StatusBadRequest)
+		_ = json.NewEncoder(w).Encode(map[string]string{"error": "walletAddress is not allowed in update"})
+		return
+	}
+
+	// raw をログ（PIIを避けるため先頭だけ）
+	bs, merr := json.Marshal(raw)
+	if merr != nil {
+		w.WriteHeader(http.StatusBadRequest)
+		_ = json.NewEncoder(w).Encode(map[string]string{"error": "invalid json"})
+		return
+	}
+	log.Printf("[sns.avatar] PATCH/PUT /avatars/%s raw=%q\n", id, headString(bs, 300))
+
+	// raw → typed
+	var body struct {
+		AvatarName   *string `json:"avatarName,omitempty"`
+		AvatarIcon   *string `json:"avatarIcon,omitempty"`
+		Profile      *string `json:"profile,omitempty"`
+		ExternalLink *string `json:"externalLink,omitempty"`
+	}
+	if err := json.Unmarshal(bs, &body); err != nil {
 		w.WriteHeader(http.StatusBadRequest)
 		_ = json.NewEncoder(w).Encode(map[string]string{"error": "invalid json"})
 		return
 	}
 
 	patch := avatardom.AvatarPatch{
-		AvatarName:    trimPtrNilAware(body.AvatarName),    // nil => no update, "" => invalid になる想定
-		AvatarIcon:    trimPtrNilAware(body.AvatarIcon),    // "" => nil (clear)
-		Profile:       trimPtrNilAware(body.Profile),       // "" => nil (clear)
-		ExternalLink:  trimPtrNilAware(body.ExternalLink),  // "" => nil (clear)
-		WalletAddress: trimPtrNilAware(body.WalletAddress), // "" => nil (clear)
+		AvatarName:   trimPtrNilAware(body.AvatarName),   // nil => no update, "" => invalid の想定
+		AvatarIcon:   trimPtrNilAware(body.AvatarIcon),   // "" => nil (clear)
+		Profile:      trimPtrNilAware(body.Profile),      // "" => nil (clear)
+		ExternalLink: trimPtrNilAware(body.ExternalLink), // "" => nil (clear)
 	}
+
+	log.Printf(
+		"[sns.avatar] PATCH/PUT /avatars/%s request avatarName=%q avatarIcon=%q profile_len=%d externalLink=%q\n",
+		id,
+		ptrStr(patch.AvatarName),
+		ptrStr(patch.AvatarIcon),
+		ptrLen(patch.Profile),
+		ptrStr(patch.ExternalLink),
+	)
 
 	updated, err := h.uc.Update(ctx, id, patch)
 	if err != nil {
+		log.Printf("[sns.avatar] PATCH/PUT /avatars/%s error=%v\n", id, err)
 		writeAvatarErr(w, err)
 		return
 	}
+
+	log.Printf("[sns.avatar] PATCH/PUT /avatars/%s ok\n", id)
 	_ = json.NewEncoder(w).Encode(updated)
 }
 
@@ -247,11 +317,15 @@ func (h *AvatarHandler) delete(w http.ResponseWriter, r *http.Request, id string
 		return
 	}
 
+	log.Printf("[sns.avatar] DELETE /avatars/%s request\n", id)
+
 	if err := h.uc.Delete(ctx, id); err != nil {
+		log.Printf("[sns.avatar] DELETE /avatars/%s error=%v\n", id, err)
 		writeAvatarErr(w, err)
 		return
 	}
 
+	log.Printf("[sns.avatar] DELETE /avatars/%s ok\n", id)
 	w.WriteHeader(http.StatusNoContent)
 }
 
@@ -270,7 +344,6 @@ func writeAvatarErr(w http.ResponseWriter, err error) {
 	}
 
 	// NotFound が存在する場合だけ 404 にする（存在しない環境でもコンパイルを壊さない）
-	// ※ avatardom.ErrNotFound を導入済みならここで拾われます
 	if hasErrNotFound(err) {
 		code = http.StatusNotFound
 	}
@@ -297,7 +370,6 @@ func ptr[T any](v T) *T { return &v }
 
 // avatardom.ErrNotFound が無い環境でもコンパイルを壊さないための判定。
 // - message 文字列に頼る best-effort（暫定）
-// - ドメイン側で ErrNotFound を定義したら、この関数を削除して errors.Is(err, avatardom.ErrNotFound) に置き換えてOK
 func hasErrNotFound(err error) bool {
 	if err == nil {
 		return false

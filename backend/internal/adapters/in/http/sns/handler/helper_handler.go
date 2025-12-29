@@ -1,4 +1,4 @@
-// backend\internal\adapters\in\http\sns\handler\helper_handler.go
+// backend/internal/adapters/in/http/sns/handler/helper_handler.go
 package handler
 
 import (
@@ -30,7 +30,7 @@ type SnsProductIDTag struct {
 // ============================================================
 
 // getString tries keys in order and returns the first string value found.
-// - accepts string / []byte / fmt.Stringer っぽいものは避け、まずは安全な string/[]byte のみ
+// - accepts string / []byte only (avoid fmt.Sprint surprises)
 func getString(m map[string]any, keys ...string) (string, bool) {
 	if m == nil {
 		return "", false
@@ -56,8 +56,7 @@ func getString(m map[string]any, keys ...string) (string, bool) {
 				return s, true
 			}
 		default:
-			// json.Unmarshal 由来なら string 以外は基本来ない想定。
-			// ここで無理に fmt.Sprint すると意図しない値拾いが起きるので無視。
+			// ignore
 		}
 	}
 	return "", false
@@ -115,6 +114,7 @@ func headString(b []byte, max int) string {
 	return s
 }
 
+// trimPtr: shared
 func trimPtr(p *string) *string {
 	if p == nil {
 		return nil
@@ -124,4 +124,32 @@ func trimPtr(p *string) *string {
 		return nil
 	}
 	return &s
+}
+
+// ptrStr: shared
+func ptrStr(p *string) string {
+	if p == nil {
+		return ""
+	}
+	return strings.TrimSpace(*p)
+}
+
+// ptrLen: shared (rune length)
+func ptrLen(p *string) int {
+	if p == nil {
+		return 0
+	}
+	return len([]rune(strings.TrimSpace(*p)))
+}
+
+// maskUID: shared (Firebase UID をそのまま出さない)
+func maskUID(uid string) string {
+	uid = strings.TrimSpace(uid)
+	if uid == "" {
+		return ""
+	}
+	if len(uid) <= 6 {
+		return "***"
+	}
+	return "***" + uid[len(uid)-6:]
 }

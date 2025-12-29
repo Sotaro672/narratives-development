@@ -428,13 +428,6 @@ func strPtr(s string) *string {
 	return &x
 }
 
-func ptrStr(s *string) string {
-	if s == nil {
-		return ""
-	}
-	return strings.TrimSpace(*s)
-}
-
 func ptrBoolStr(b *bool) string {
 	if b == nil {
 		return "(nil)"

@@ -3,6 +3,7 @@ package avatar
 
 import (
 	"context"
+	"strings"
 	"time"
 
 	common "narratives/internal/domain/common"
@@ -26,6 +27,21 @@ type AvatarPatch struct {
 	Profile       *string    `json:"profile,omitempty"`
 	ExternalLink  *string    `json:"externalLink,omitempty"`
 	DeletedAt     *time.Time `json:"deletedAt,omitempty"` // soft delete/restore 用（必要な場合のみ使用）
+}
+
+// Sanitize normalizes patch fields (trim + empty -> nil).
+func (p *AvatarPatch) Sanitize() {
+	if p == nil {
+		return
+	}
+	p.FirebaseUID = normalizePtr(p.FirebaseUID)
+	p.AvatarName = normalizePtr(p.AvatarName)
+	p.AvatarIcon = normalizePtr(p.AvatarIcon)
+	p.WalletAddress = normalizePtr(p.WalletAddress)
+	p.Profile = normalizePtr(p.Profile)
+	p.ExternalLink = normalizePtr(p.ExternalLink)
+
+	// DeletedAt: keep as-is (nil means "no change")
 }
 
 // ========================================
@@ -58,6 +74,21 @@ type Filter struct {
 	// 論理削除フィルタ
 	// nil: すべて / true: DeletedAt IS NOT NULL / false: DeletedAt IS NULL
 	Deleted *bool
+}
+
+// Sanitize normalizes filter fields (trim + empty -> nil).
+func (f *Filter) Sanitize() {
+	if f == nil {
+		return
+	}
+	f.SearchQuery = strings.TrimSpace(f.SearchQuery)
+
+	f.UserID = normalizePtr(f.UserID)
+	f.FirebaseUID = normalizePtr(f.FirebaseUID)
+	f.WalletAddress = normalizePtr(f.WalletAddress)
+
+	// time fields: keep as-is (upper layer / repository decides validation)
+	// Deleted: keep as-is
 }
 
 type Sort struct {
