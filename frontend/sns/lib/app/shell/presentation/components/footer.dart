@@ -56,13 +56,11 @@ class SignedInFooter extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return StreamBuilder<User?>(
-      // ✅ photoURL/displayName 更新も拾う（authStateChanges だと拾えないことがある）
+      // ✅ photoURL/displayName 更新も拾う
       stream: FirebaseAuth.instance.userChanges(),
       builder: (context, snap) {
-        // ✅ まず currentUser を優先（snapshot が null の瞬間があるため）
         final user = FirebaseAuth.instance.currentUser ?? snap.data;
 
-        // ✅ Not signed in -> don't show footer
         if (user == null) return const SizedBox.shrink();
 
         return Material(
@@ -77,7 +75,7 @@ class SignedInFooter extends StatelessWidget {
                   _FooterItem(
                     icon: Icons.storefront_outlined,
                     label: 'Shop',
-                    onTap: () => context.go('/'), // HomePage
+                    onTap: () => context.go('/'),
                   ),
                   const Spacer(),
                   _FooterItem(
@@ -94,7 +92,6 @@ class SignedInFooter extends StatelessWidget {
                       if (!context.mounted) return;
                       if (code == null || code.trim().isEmpty) return;
 
-                      // ✅ 仕様未確定なので、まずは結果を表示（次で遷移ロジックに置換OK）
                       await showDialog<void>(
                         context: context,
                         builder: (_) => AlertDialog(
@@ -111,6 +108,8 @@ class SignedInFooter extends StatelessWidget {
                     },
                   ),
                   const Spacer(),
+
+                  // ✅ Avatar は /avatar へ
                   _AvatarIconButton(user: user),
                 ],
               ),
@@ -163,20 +162,12 @@ class _AvatarIconButton extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final photo = (user.photoURL ?? '').trim();
-    final fallback = (user.email ?? user.uid).trim();
+    final fallback = (user.displayName ?? user.email ?? user.uid).trim();
     final initial = fallback.isNotEmpty ? fallback[0].toUpperCase() : '?';
 
     return InkWell(
       borderRadius: BorderRadius.circular(999),
-      onTap: () {
-        // いったん既存ルートへ（将来: /avatar や /me などに差し替え）
-        final from = GoRouterState.of(context).uri.toString();
-        final uri = Uri(
-          path: '/avatar-create',
-          queryParameters: {'from': from},
-        );
-        context.go(uri.toString());
-      },
+      onTap: () => context.go('/avatar'),
       child: Padding(
         padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
         child: Column(
@@ -241,7 +232,6 @@ class _QrScanSheetState extends State<_QrScanSheet> {
           children: [
             MobileScanner(controller: _controller, onDetect: _onDetect),
 
-            // Top bar
             Positioned(
               left: 0,
               right: 0,
@@ -269,7 +259,6 @@ class _QrScanSheetState extends State<_QrScanSheet> {
               ),
             ),
 
-            // Simple scan guide
             Positioned(
               left: 0,
               right: 0,

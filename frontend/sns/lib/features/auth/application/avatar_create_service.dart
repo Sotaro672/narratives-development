@@ -2,10 +2,8 @@
 import 'package:flutter/foundation.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:http/http.dart' as http;
-
 import 'package:web/web.dart' as web;
-
-import '../../avatar/avatar_repository_http.dart';
+import '../../avatar/infrastructure/avatar_repository_http.dart';
 
 class PickIconResult {
   const PickIconResult({
@@ -196,29 +194,37 @@ class AvatarCreateService {
     return 'application/octet-stream';
   }
 
-  /// gs:// だけだと UI で使えないので、public bucket 前提の https URL を作るフォールバック
-  /// objectPath は `/` で分割して encode します
-  String _publicUrlFromBucketObject(String bucket, String objectPath) {
-    final b = s(bucket);
-    final p = s(objectPath);
-    if (b.isEmpty || p.isEmpty) return '';
-    final encPath = p.split('/').map(Uri.encodeComponent).join('/');
-    return 'https://storage.googleapis.com/$b/$encPath';
+  bool _isHttpUrl(String v) {
+    final u = s(v);
+    if (u.isEmpty) return false;
+    return u.startsWith('http://') || u.startsWith('https://');
   }
 
-  Future<void> _updateFirebasePhotoUrlIfPossible(String url) async {
-    final u = _auth.currentUser;
-    final v = s(url);
-    if (u == null) return;
-    if (v.isEmpty) return;
-
+  /// ✅ FirebaseAuth の displayName / photoURL を同期
+  Future<void> _syncAuthProfile({
+    required User user,
+    required String avatarName,
+    String? photoUrl,
+  }) async {
     try {
-      await u.updatePhotoURL(v);
-      await u.reload(); // ✅ UI反映の保険
-      _log('firebase photoURL updated url="$v"');
+      final name = s(avatarName);
+      if (name.isNotEmpty && s(user.displayName) != name) {
+        await user.updateDisplayName(name);
+        _log('auth profile updated displayName="$name"');
+      }
+
+      final p = s(photoUrl);
+      if (p.isNotEmpty && s(user.photoURL) != p) {
+        await user.updatePhotoURL(p);
+        _log('auth profile updated photoURL="$p"');
+      }
+
+      // ✅ userChanges() へ反映（Web でも安定させる）
+      await user.reload();
+      _log('auth profile reload done');
     } catch (e) {
-      // photoURL 更新が失敗しても、アバター作成自体は成功扱いにしたいので握りつぶす
-      _log('firebase photoURL update failed err=$e');
+      // ここは致命にしない（作成は成功しているため）
+      _log('auth profile sync skipped err=$e');
     }
   }
 
@@ -289,6 +295,9 @@ class AvatarCreateService {
 
       _log('avatar create ok avatarId=$avatarId uid=$uid');
 
+      // ✅ まず「表示名」は確定できるので先に同期（email表示を防ぐ）
+      await _syncAuthProfile(user: user, avatarName: avatarName);
+
       // (2) ✅ アイコンがあれば：署名付きURL→PUTアップロード→/avatars/{id}/icon 登録
       if (hasIcon) {
         // 2-1) 署名付きURLを発行（/avatars 配下に寄せる）
@@ -350,20 +359,22 @@ class AvatarCreateService {
         );
 
         final iconUrl = s(icon.url);
-        final fallbackPublicUrl = _publicUrlFromBucketObject(
-          bucket,
-          objectPath,
-        );
-        final finalPhotoUrl = iconUrl.isNotEmpty ? iconUrl : fallbackPublicUrl;
 
         _log(
-          'icon register ok avatarId=$avatarId iconId="${s(icon.id)}" '
-          'url="${iconUrl.isNotEmpty ? iconUrl : "-"}" '
-          'publicFallback="${fallbackPublicUrl.isNotEmpty ? fallbackPublicUrl : "-"}"',
+          'icon register ok avatarId=$avatarId iconId="${s(icon.id)}" url="${iconUrl.isEmpty ? "-" : iconUrl}"',
         );
 
-        // ✅ 本命: icon 確定時に FirebaseAuth photoURL を更新
-        await _updateFirebasePhotoUrlIfPossible(finalPhotoUrl);
+        // ✅ photoURL を FirebaseAuth に同期（footer/AvatarPage はここを見る）
+        // - icon.url が空なら https://storage.googleapis.com/<bucket>/<objectPath> をfallback
+        final photoUrl = _isHttpUrl(iconUrl)
+            ? iconUrl
+            : 'https://storage.googleapis.com/$bucket/$objectPath';
+
+        await _syncAuthProfile(
+          user: user,
+          avatarName: avatarName,
+          photoUrl: photoUrl,
+        );
       }
 
       _log('avatar save done avatarId=$avatarId uid=$uid');

@@ -1,4 +1,4 @@
-// frontend/sns/lib/features/avatar/avatar_repository_http.dart
+// frontend\sns\lib\features\avatar\infrastructure\avatar_repository_http.dart
 import 'dart:convert';
 
 import 'package:flutter/foundation.dart';
