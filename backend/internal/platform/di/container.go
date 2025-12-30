@@ -272,7 +272,6 @@ func NewContainer(ctx context.Context) (*Container, error) {
 
 	// ✅ Solana Avatar Wallet Service (Wallet Open for Avatar)
 	// - Secret Manager: avatar-wallet-<avatarID>
-	// - usecase.AvatarWalletService は (ctx, avatarID string) を期待するので Adapter 不要
 	avatarWalletSvc := solanainfra.NewAvatarWalletService(cfg.FirestoreProjectID)
 
 	// ★ member.Service
@@ -315,6 +314,13 @@ func NewContainer(ctx context.Context) (*Container, error) {
 	listImageBucket := strings.TrimSpace(os.Getenv("LIST_IMAGE_BUCKET"))
 	listImageRepo := gcso.NewListImageRepositoryGCS(gcsClient, listImageBucket)
 
+	// ✅ AvatarIcon repository (GCS)  ※ AvatarUC の Icons + ObjectStoragePort に配線
+	avatarIconBucket := strings.TrimSpace(os.Getenv("AVATAR_ICON_BUCKET"))
+	if avatarIconBucket == "" {
+		avatarIconBucket = "narratives-development_avatar_icon"
+	}
+	avatarIconRepo := gcso.NewAvatarIconRepositoryGCS(gcsClient, avatarIconBucket)
+
 	// ✅ ListPatcher adapter（imageId 更新専用）
 	listPatcher := &listPatcherAdapter{repo: listRepoFS}
 
@@ -333,10 +339,14 @@ func NewContainer(ctx context.Context) (*Container, error) {
 	announcementUC := uc.NewAnnouncementUsecase(announcementRepo, nil, nil)
 
 	// ✅ FIX:
-	// - NewAvatarUsecase の第4引数は AvatarIconObjectStoragePort（DeleteObjects / EnsurePrefix）で wallet ではない
+	// - AvatarIconRepo と AvatarIconObjectStoragePort(DeleteObjects/EnsurePrefix) を GCS repo に寄せる
 	// - wallet は WithWalletService で注入する
-	avatarUC := uc.NewAvatarUsecase(avatarRepo, nil, nil, nil).
-		WithWalletService(avatarWalletSvc)
+	avatarUC := uc.NewAvatarUsecase(
+		avatarRepo,
+		nil,            // AvatarStateRepo (optional)
+		avatarIconRepo, // AvatarIconRepo (GetByAvatarID/Save)
+		avatarIconRepo, // AvatarIconObjectStoragePort (DeleteObjects/EnsurePrefix)
+	).WithWalletService(avatarWalletSvc)
 
 	billingAddressUC := uc.NewBillingAddressUsecase(billingAddressRepo)
 

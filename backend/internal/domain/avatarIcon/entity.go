@@ -1,4 +1,4 @@
-// backend\internal\domain\avatarIcon\entity.go
+// backend/internal/domain/avatarIcon/entity.go
 package avatarIcon
 
 import (
@@ -11,7 +11,11 @@ import (
 )
 
 // Default GCS bucket for AvatarIcon objects.
-const DefaultBucket = "narratives_development_avatar_icon"
+//
+// NOTE:
+// - GCS bucket 名は DNS 準拠が推奨（underscore は基本NG）
+// - 既存バケット名に合わせて必要なら変更してください
+const DefaultBucket = "narratives-development-avatar-icon"
 
 // GCSDeleteOp represents a delete operation target in GCS.
 type GCSDeleteOp struct {
@@ -41,6 +45,11 @@ var (
 	AllowedExtensions = map[string]struct{}{
 		".png": {}, ".jpg": {}, ".jpeg": {}, ".webp": {}, ".gif": {},
 	}
+
+	// ✅ 旧参照（avicon.DefaultMaxIconSizeBytes）を吸収するため const を用意
+	DefaultMaxIconSizeBytes int64 = 10 * 1024 * 1024 // 10MB
+
+	// MaxFileSize は実行時に調整したい場合のため var のまま
 	MaxFileSize int64 = 10 * 1024 * 1024 // 10MB
 )
 
@@ -107,6 +116,7 @@ func NewFromBucketObject(
 	if obj == "" {
 		return AvatarIcon{}, fmt.Errorf("avatarIcon: empty objectPath")
 	}
+
 	// Derive fileName from objectPath if not provided
 	var fn *string
 	if fileName != nil && strings.TrimSpace(*fileName) != "" {
@@ -226,6 +236,7 @@ func validateURL(u string) error {
 	if err != nil || parsed.Scheme == "" || parsed.Host == "" {
 		return ErrInvalidURL
 	}
+
 	// Allow generic http(s)
 	if parsed.Scheme == "http" || parsed.Scheme == "https" {
 		// If it's a GCS URL, minimally validate bucket/object presence
@@ -239,6 +250,7 @@ func validateURL(u string) error {
 		}
 		return nil
 	}
+
 	return ErrInvalidURL
 }
 

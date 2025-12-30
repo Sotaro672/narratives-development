@@ -5,7 +5,7 @@
       "https://narratives-console-dev.web.app",
       "https://narratives-development-sns.web.app"
     ],
-    "method": ["GET", "HEAD", "OPTIONS"],
+    "method": ["GET", "HEAD", "OPTIONS", "PUT"],
     "responseHeader": [
       "Content-Type",
       "Content-Length",

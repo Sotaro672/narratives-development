@@ -39,6 +39,10 @@ String _normalizeBase(String base) {
 /// - GET    /sns/avatars/{id}
 /// - GET    /sns/avatars/{id}?aggregate=1|true  (Avatar + State + Icons)
 /// - POST   /sns/avatars/{id}/wallet            (open wallet)
+/// - POST   /sns/avatars/{id}/icon              (register/replace icon)
+///
+/// ✅ SignedURL (B案 /avatars 配下に寄せる):
+/// - POST   /sns/avatars/{id}/icon-upload-url   (issue signed upload url)
 ///
 /// NOTE:
 /// - Authorization: Firebase ID token (Bearer)
@@ -106,7 +110,6 @@ class AvatarRepositoryHttp {
     _logRequest('GET', uri, headers: headers, payload: null);
 
     final res = await _client.get(uri, headers: headers);
-
     _logResponse('GET', uri, res.statusCode, res.body);
 
     final body = res.body;
@@ -133,7 +136,6 @@ class AvatarRepositoryHttp {
     _logRequest('GET', uri, headers: headers, payload: null);
 
     final res = await _client.get(uri, headers: headers);
-
     _logResponse('GET', uri, res.statusCode, res.body);
 
     final body = res.body;
@@ -150,11 +152,6 @@ class AvatarRepositoryHttp {
   }
 
   /// POST /sns/avatars
-  ///
-  /// ✅ Back-end expects:
-  /// - userId
-  /// - userUid   (firebaseUid ではなく移譲後の認証UID)
-  /// - avatarName
   Future<AvatarDTO> create({required CreateAvatarRequest request}) async {
     final uri = _uri('/sns/avatars');
 
@@ -183,6 +180,116 @@ class AvatarRepositoryHttp {
 
     final decoded = _decodeObject(body);
     return AvatarDTO.fromJson(decoded);
+  }
+
+  // ---------------------------------------------------------------------------
+  // ✅ NEW: Signed upload URL for avatar icon (B案)
+  // ---------------------------------------------------------------------------
+
+  /// POST /sns/avatars/{id}/icon-upload-url
+  ///
+  /// body:
+  /// {
+  ///   "fileName": "xxx.png",
+  ///   "mimeType": "image/png",
+  ///   "size": 12345
+  /// }
+  ///
+  /// response (example):
+  /// {
+  ///   "uploadUrl": "https://storage.googleapis.com/....signed....",
+  ///   "bucket": "narratives-development_avatar_icon",
+  ///   "expiresAt": "2025-01-01T00:00:00Z"
+  /// }
+  Future<AvatarIconUploadUrlDTO> issueAvatarIconUploadUrl({
+    required String avatarId,
+    required String fileName,
+    required String mimeType,
+    required int size,
+  }) async {
+    final aid = avatarId.trim();
+    if (aid.isEmpty) throw ArgumentError('avatarId is empty');
+
+    final fn = fileName.trim();
+    if (fn.isEmpty) throw ArgumentError('fileName is empty');
+
+    final mt = mimeType.trim();
+    if (mt.isEmpty) throw ArgumentError('mimeType is empty');
+
+    final uri = _uri('/sns/avatars/$aid/icon-upload-url');
+
+    final headers = await _authHeaders();
+    headers['Content-Type'] = 'application/json';
+
+    final payload = <String, dynamic>{
+      'fileName': fn,
+      'mimeType': mt,
+      'size': size,
+    };
+
+    _logRequest('POST', uri, headers: headers, payload: payload);
+
+    final res = await _client.post(
+      uri,
+      headers: headers,
+      body: jsonEncode(payload),
+    );
+
+    _logResponse('POST', uri, res.statusCode, res.body);
+
+    final body = res.body;
+    if (res.statusCode < 200 || res.statusCode >= 300) {
+      throw HttpException(
+        statusCode: res.statusCode,
+        message: _extractError(body) ?? 'request failed',
+        url: uri.toString(),
+      );
+    }
+
+    final decoded = _decodeObject(body);
+    return AvatarIconUploadUrlDTO.fromJson(decoded);
+  }
+
+  /// PUT to signed URL (upload icon bytes)
+  ///
+  /// - Signed URL は Authorization 不要（署名が認証）
+  /// - headers は Content-Type を合わせる（署名と一致しないと 403 になる）
+  Future<void> uploadToSignedUrl({
+    required String uploadUrl,
+    required Uint8List bytes,
+    required String contentType,
+  }) async {
+    final u = uploadUrl.trim();
+    if (u.isEmpty) throw ArgumentError('uploadUrl is empty');
+    if (bytes.isEmpty) throw ArgumentError('bytes is empty');
+
+    final ct = contentType.trim().isEmpty
+        ? 'application/octet-stream'
+        : contentType.trim();
+
+    final uri = Uri.parse(u);
+
+    // ✅ 署名付きURLは OAuth ヘッダ等を付けない
+    final headers = <String, String>{'Content-Type': ct};
+
+    _logRequest(
+      'PUT',
+      uri,
+      headers: headers,
+      payload: {'bytes': bytes.lengthInBytes, 'contentType': ct},
+    );
+
+    final res = await _client.put(uri, headers: headers, body: bytes);
+
+    _logResponse('PUT', uri, res.statusCode, res.body);
+
+    if (res.statusCode < 200 || res.statusCode >= 300) {
+      throw HttpException(
+        statusCode: res.statusCode,
+        message: 'upload failed (status=${res.statusCode})',
+        url: uri.toString(),
+      );
+    }
   }
 
   /// POST /sns/avatars/{id}/wallet
@@ -216,13 +323,76 @@ class AvatarRepositoryHttp {
       );
     }
 
-    // backend が空返却する可能性に備えて GET
     if (body.trim().isEmpty) {
       return getById(id: rid);
     }
 
     final decoded = _decodeObject(body);
     return AvatarDTO.fromJson(decoded);
+  }
+
+  /// POST /sns/avatars/{id}/icon
+  ///
+  /// ✅ 事前に GCS にアップロード済みの object を AvatarIcon として登録（置換）
+  Future<AvatarIconDTO> replaceAvatarIcon({
+    required String avatarId,
+    String? bucket,
+    String? objectPath,
+    String? fileName,
+    int? size,
+    String? avatarIcon,
+  }) async {
+    final rid = avatarId.trim();
+    if (rid.isEmpty) throw ArgumentError('avatarId is empty');
+
+    final uri = _uri('/sns/avatars/$rid/icon');
+
+    final headers = await _authHeaders();
+    headers['Content-Type'] = 'application/json';
+
+    final payload = <String, dynamic>{};
+
+    final b = (bucket ?? '').trim();
+    if (b.isNotEmpty) payload['bucket'] = b;
+
+    final op = (objectPath ?? '').trim();
+    if (op.isNotEmpty) payload['objectPath'] = op;
+
+    final fn = (fileName ?? '').trim();
+    if (fn.isNotEmpty) payload['fileName'] = fn;
+
+    if (size != null) payload['size'] = size;
+
+    final ai = (avatarIcon ?? '').trim();
+    if (ai.isNotEmpty) payload['avatarIcon'] = ai;
+
+    _logRequest('POST', uri, headers: headers, payload: payload);
+
+    final res = await _client.post(
+      uri,
+      headers: headers,
+      body: jsonEncode(payload),
+    );
+
+    _logResponse('POST', uri, res.statusCode, res.body);
+
+    final body = res.body;
+    if (res.statusCode < 200 || res.statusCode >= 300) {
+      throw HttpException(
+        statusCode: res.statusCode,
+        message: _extractError(body) ?? 'request failed',
+        url: uri.toString(),
+      );
+    }
+
+    if (body.trim().isEmpty) {
+      throw const FormatException(
+        'Empty response body (expected AvatarIconDTO)',
+      );
+    }
+
+    final decoded = _decodeObject(body);
+    return AvatarIconDTO.fromJson(decoded);
   }
 
   /// PATCH /sns/avatars/{id}
@@ -400,6 +570,59 @@ String? _optS(dynamic v) {
   final s = _s(v);
   if (s.isEmpty) return null;
   return s;
+}
+
+@immutable
+class AvatarIconUploadUrlDTO {
+  const AvatarIconUploadUrlDTO({
+    required this.uploadUrl,
+    required this.bucket,
+    required this.objectPath,
+    required this.gsUrl,
+    required this.expiresAt,
+  });
+
+  /// PUT 先の署名付きURL
+  final String uploadUrl;
+
+  /// GCS bucket
+  final String bucket;
+
+  /// GCS object path
+  final String objectPath;
+
+  /// gs://bucket/object
+  final String gsUrl;
+
+  /// RFC3339 (UTC)
+  final String expiresAt;
+
+  factory AvatarIconUploadUrlDTO.fromJson(Map<String, dynamic> json) {
+    dynamic pickAny(List<String> keys) {
+      for (final k in keys) {
+        if (json.containsKey(k)) return json[k];
+      }
+      return null;
+    }
+
+    final uploadUrl = _s(
+      pickAny(const ['uploadUrl', 'UploadURL', 'signedUrl', 'SignedUrl']),
+    );
+    final bucket = _s(pickAny(const ['bucket', 'Bucket']));
+    final objectPath = _s(
+      pickAny(const ['objectPath', 'ObjectPath', 'path', 'Path']),
+    );
+    final gsUrl = _s(pickAny(const ['gsUrl', 'GsUrl', 'gsURL', 'GsURL']));
+    final expiresAt = _s(pickAny(const ['expiresAt', 'ExpiresAt']));
+
+    return AvatarIconUploadUrlDTO(
+      uploadUrl: uploadUrl,
+      bucket: bucket,
+      objectPath: objectPath,
+      gsUrl: gsUrl,
+      expiresAt: expiresAt,
+    );
+  }
 }
 
 @immutable

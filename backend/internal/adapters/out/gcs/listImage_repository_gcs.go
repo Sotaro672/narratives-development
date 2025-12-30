@@ -3,8 +3,6 @@ package gcs
 
 import (
 	"context"
-	"crypto/rand"
-	"encoding/hex"
 	"errors"
 	"fmt"
 	"os"
@@ -589,55 +587,6 @@ func buildListImageObjectPath(listID, imageID, fileName string) (string, error) 
 
 	// {listId}/{imageId}/{fileName}
 	return path.Join(lid, iid, fn), nil
-}
-
-func sanitizePathSegment(s string) string {
-	s = strings.TrimSpace(s)
-	if s == "" {
-		return ""
-	}
-	// prohibit separators
-	s = strings.ReplaceAll(s, "\\", "_")
-	s = strings.ReplaceAll(s, "/", "_")
-	// trim dots/spaces to avoid weird paths
-	s = strings.Trim(s, ". ")
-	return s
-}
-
-func ensureExtensionByMIME(fileName string, mime string) string {
-	lower := strings.ToLower(strings.TrimSpace(fileName))
-
-	// If already has an extension, keep it
-	if strings.Contains(path.Base(lower), ".") {
-		return fileName
-	}
-
-	ext := ""
-	switch strings.ToLower(strings.TrimSpace(mime)) {
-	case "image/jpeg", "image/jpg":
-		ext = ".jpg"
-	case "image/png":
-		ext = ".png"
-	case "image/webp":
-		ext = ".webp"
-	default:
-		ext = ""
-	}
-
-	if ext == "" {
-		return fileName
-	}
-	return fileName + ext
-}
-
-func newObjectID() string {
-	// 12 bytes random => 24 hex chars
-	b := make([]byte, 12)
-	if _, err := rand.Read(b); err == nil {
-		return hex.EncodeToString(b)
-	}
-	// fallback
-	return fmt.Sprintf("%d", time.Now().UTC().UnixNano())
 }
 
 func resolveBucketObjectForListImage(id string, fallbackBucket string) (bucket string, objectPath string, err error) {

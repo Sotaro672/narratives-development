@@ -1,5 +1,4 @@
 // frontend\sns\lib\features\auth\application\avatar_create_service.dart
-
 import 'package:flutter/foundation.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:http/http.dart' as http;
@@ -109,7 +108,7 @@ class AvatarCreateService {
       // ✅ ブラウザに一時URLを作らせる
       objectUrl = web.URL.createObjectURL(f);
 
-      // ✅ そのURLを HTTP GET して bytes を取得（ArrayBuffer/Uint8Array 不要）
+      // ✅ そのURLを HTTP GET して bytes を取得
       final res = await http.get(Uri.parse(objectUrl));
       if (res.statusCode < 200 || res.statusCode >= 300) {
         return PickIconResult(
@@ -130,7 +129,6 @@ class AvatarCreateService {
         );
       }
 
-      // ✅ package:web の File.name/type は（この環境では）Dart String
       final nameStr = s(f.name);
       final typeStr = s(f.type);
 
@@ -146,7 +144,6 @@ class AvatarCreateService {
         error: '画像の選択に失敗しました: $e',
       );
     } finally {
-      // ✅ 一時URLは必ず破棄
       if (objectUrl != null) {
         try {
           web.URL.revokeObjectURL(objectUrl);
@@ -158,8 +155,46 @@ class AvatarCreateService {
   }
 
   // ============================
-  // Save (create avatar)
+  // Save (create avatar + upload icon + register icon)
   // ============================
+
+  String _extFromMime(String mime) {
+    final m = s(mime).toLowerCase();
+    switch (m) {
+      case 'image/png':
+        return '.png';
+      case 'image/jpeg':
+      case 'image/jpg':
+        return '.jpg';
+      case 'image/webp':
+        return '.webp';
+      case 'image/gif':
+        return '.gif';
+      default:
+        return '';
+    }
+  }
+
+  String _ensureFileName(String? name, String? mimeType) {
+    final n = s(name);
+    if (n.isNotEmpty) return n;
+
+    final ext = _extFromMime(s(mimeType));
+    final ts = DateTime.now().toUtc().millisecondsSinceEpoch;
+    return ext.isEmpty ? 'avatar_$ts' : 'avatar_$ts$ext';
+  }
+
+  String _ensureMimeType(String? mimeType, String fileName) {
+    final m = s(mimeType);
+    if (m.isNotEmpty) return m;
+
+    final lower = fileName.toLowerCase();
+    if (lower.endsWith('.png')) return 'image/png';
+    if (lower.endsWith('.jpg') || lower.endsWith('.jpeg')) return 'image/jpeg';
+    if (lower.endsWith('.webp')) return 'image/webp';
+    if (lower.endsWith('.gif')) return 'image/gif';
+    return 'application/octet-stream';
+  }
 
   Future<AvatarCreateResult> save({
     required String avatarNameRaw,
@@ -196,15 +231,20 @@ class AvatarCreateService {
 
       final profile = s(profileRaw);
 
+      final bytes = iconBytes;
+      final hasIcon = bytes != null && bytes.isNotEmpty;
+
+      final fileName = _ensureFileName(iconFileName, iconMimeType);
+      final mimeType = _ensureMimeType(iconMimeType, fileName);
+      final size = hasIcon ? bytes.lengthInBytes : 0;
+
       _log(
         'avatar save start uid=$uid name="$avatarName" '
         'profileLen=${profile.length} link="${link.isEmpty ? "-" : link}" '
-        'iconBytesLen=${iconBytes?.lengthInBytes ?? 0} file="${s(iconFileName)}" mime="${s(iconMimeType)}"',
+        'hasIcon=$hasIcon iconBytesLen=$size file="$fileName" mime="$mimeType"',
       );
 
-      // ✅ いまは avatarIcon を送らない（アップロード連携は次のステップ）
-      // ✅ backend 仕様変更に合わせて firebaseUid -> userUid
-      // ✅ userId は (現状) uid を流用
+      // (1) ✅ まず Avatar を作成（アイコンなし）
       final created = await _repo.create(
         request: CreateAvatarRequest(
           userId: uid,
@@ -216,13 +256,85 @@ class AvatarCreateService {
         ),
       );
 
-      _log('avatar save ok avatarId=${created.id} uid=$uid');
+      final avatarId = s(created.id);
+      if (avatarId.isEmpty) {
+        return AvatarCreateResult(ok: false, message: 'avatarId が取得できませんでした。');
+      }
+
+      _log('avatar create ok avatarId=$avatarId uid=$uid');
+
+      // (2) ✅ アイコンがあれば：署名付きURL→PUTアップロード→/avatars/{id}/icon 登録
+      if (hasIcon) {
+        // 2-1) 署名付きURLを発行（/avatars 配下に寄せる）
+        final signed = await _repo.issueAvatarIconUploadUrl(
+          avatarId: avatarId,
+          fileName: fileName,
+          mimeType: mimeType,
+          size: size,
+        );
+
+        final uploadUrl = s(signed.uploadUrl);
+        final bucket = s(signed.bucket);
+        final objectPath = s(signed.objectPath);
+        final gsUrl = s(signed.gsUrl);
+        final expiresAt = s(signed.expiresAt);
+
+        if (uploadUrl.isEmpty || bucket.isEmpty || objectPath.isEmpty) {
+          _log(
+            'icon signed url invalid avatarId=$avatarId '
+            'uploadUrl="$uploadUrl" bucket="$bucket" objectPath="$objectPath"',
+          );
+          return AvatarCreateResult(
+            ok: false,
+            message: 'アイコンアップロードURLの取得に失敗しました。',
+            createdAvatarId: avatarId,
+          );
+        }
+
+        final short = uploadUrl.length > 64
+            ? '${uploadUrl.substring(0, 64)}...'
+            : uploadUrl;
+
+        _log(
+          'icon signed url ok avatarId=$avatarId bucket="$bucket" objectPath="$objectPath" '
+          'expiresAt="${expiresAt.isEmpty ? "-" : expiresAt}" uploadUrl="$short"',
+        );
+
+        // 2-2) PUT アップロード（署名と一致する Content-Type を必ず付ける）
+        await _repo.uploadToSignedUrl(
+          uploadUrl: uploadUrl,
+          bytes: bytes,
+          contentType: mimeType,
+        );
+
+        _log('icon upload ok bytes=$size');
+
+        // 2-3) /avatars/{id}/icon 登録（置換）
+        final avatarIconCompat = gsUrl.isNotEmpty
+            ? gsUrl
+            : 'gs://$bucket/$objectPath';
+
+        final icon = await _repo.replaceAvatarIcon(
+          avatarId: avatarId,
+          bucket: bucket,
+          objectPath: objectPath,
+          fileName: fileName,
+          size: size,
+          avatarIcon: avatarIconCompat,
+        );
+
+        _log(
+          'icon register ok avatarId=$avatarId iconId="${s(icon.id)}" url="${s(icon.url).isEmpty ? "-" : s(icon.url)}"',
+        );
+      }
+
+      _log('avatar save done avatarId=$avatarId uid=$uid');
 
       return AvatarCreateResult(
         ok: true,
         message: 'アバターを作成しました。',
         nextRoute: '/',
-        createdAvatarId: created.id,
+        createdAvatarId: avatarId,
       );
     } catch (e) {
       _log('avatar save failed err=$e');

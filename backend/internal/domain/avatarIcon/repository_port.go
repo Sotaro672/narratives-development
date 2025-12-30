@@ -1,3 +1,4 @@
+// backend/internal/domain/avatarIcon/port.go
 package avatarIcon
 
 import (
@@ -6,6 +7,36 @@ import (
 
 	common "narratives/internal/domain/common"
 )
+
+// ------------------------------
+// Signed URL DTOs (方案2)
+// ------------------------------
+
+// IssueSignedURLInput is a domain-level DTO for issuing signed PUT URL.
+type IssueSignedURLInput struct {
+	AvatarID         string
+	FileName         string
+	ContentType      string
+	Size             int64
+	ExpiresInSeconds int
+}
+
+// IssueSignedURLOutput is a domain-level DTO for signed PUT URL response.
+type IssueSignedURLOutput struct {
+	ID          string
+	Bucket      string
+	ObjectPath  string
+	UploadURL   string
+	PublicURL   string
+	FileName    string
+	ContentType string
+	Size        int64
+	ExpiresAt   string
+}
+
+// ------------------------------
+// Patch / Filter / Paging / Sort
+// ------------------------------
 
 // Patch（部分更新）: nil のフィールドは更新しない
 // entity.go 準拠（監査系は排除）

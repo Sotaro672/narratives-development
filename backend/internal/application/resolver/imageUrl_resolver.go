@@ -1,4 +1,4 @@
-// backend/internal/application/resolver/image_url_resolver.go
+// backend\internal\application\resolver\imageUrl_resolver.go
 package resolver
 
 import (

@@ -5,31 +5,36 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"sort"
+	"os"
+	"path"
+	"strconv"
 	"strings"
+	"time"
 
 	"cloud.google.com/go/storage"
 	"google.golang.org/api/googleapi"
 	"google.golang.org/api/iterator"
 
-	dbcommon "narratives/internal/adapters/out/firestore/common"
 	avicon "narratives/internal/domain/avatarIcon"
 )
 
-// AvatarIconRepositoryGCS implements avatarIcon.Repository backed by Google Cloud Storage.
+// Env var key (Cloud Run / local .env) for avatar icon bucket.
+const EnvAvatarIconBucket = "AVATAR_ICON_BUCKET"
+
+// Fallback bucket name (domain const を優先し、空ならこちら).
+const FallbackAvatarIconBucket = "narratives-development_avatar_icon"
+
+// AvatarIconRepositoryGCS is a small GCS adapter for Avatar icons.
+// - objectPath: {avatarId}/{iconId}/{fileName} を推奨（複数対応）
+// - SignedURL の ID は objectPath を返す方針
 //
-// ✅ 追加方針（docId フォルダ作成）:
-//   - GCS は「フォルダ/バケット」を階層として作れない（実体は object の prefix）ため、
-//     "docId/.keep" のような 0byte(or小さな)オブジェクトを作成して Console 上で prefix を見せる。
-//   - List/GetByAvatarID などで ".keep" はアイコンとして扱わないように除外する。
+// NOTE:
+// - gcs/tokenIcon_repository_gcs.go に sanitizeFileName / isKeepObject が既にある前提で再利用する（同一 package gcs）。
 type AvatarIconRepositoryGCS struct {
 	Client *storage.Client
-	Bucket string
+	Bucket string // optional (if empty, use env or fallback)
 }
 
-// NewAvatarIconRepositoryGCS creates a new GCS-based avatar icon repository.
-// bucket が空の場合はそのまま保持し、利用時にエラーとします。
-// （必要なら設定側で必須指定してください）
 func NewAvatarIconRepositoryGCS(client *storage.Client, bucket string) *AvatarIconRepositoryGCS {
 	return &AvatarIconRepositoryGCS{
 		Client: client,
@@ -37,331 +42,206 @@ func NewAvatarIconRepositoryGCS(client *storage.Client, bucket string) *AvatarIc
 	}
 }
 
-// effectiveBucket resolves the bucket name or returns error if empty.
-func (r *AvatarIconRepositoryGCS) effectiveBucket() (string, error) {
-	b := strings.TrimSpace(r.Bucket)
-	if b == "" {
-		// ドメイン側に DefaultBucket がある場合はそれをフォールバックにする
-		if strings.TrimSpace(avicon.DefaultBucket) != "" {
-			return strings.TrimSpace(avicon.DefaultBucket), nil
+// ResolveBucket decides bucket by:
+// 1) repository.Bucket
+// 2) env AVATAR_ICON_BUCKET
+// 3) domain DefaultBucket
+// 4) FallbackAvatarIconBucket
+func (r *AvatarIconRepositoryGCS) ResolveBucket() string {
+	if r != nil {
+		if b := strings.TrimSpace(r.Bucket); b != "" {
+			return b
 		}
-		return "", errors.New("AvatarIconRepositoryGCS: bucket is empty")
 	}
-	return b, nil
+	if b := strings.TrimSpace(os.Getenv(EnvAvatarIconBucket)); b != "" {
+		return b
+	}
+	if b := strings.TrimSpace(avicon.DefaultBucket); b != "" {
+		return b
+	}
+	return FallbackAvatarIconBucket
 }
 
-// EnsureAvatarFolder ensures "<avatarID>/" prefix is visible on GCS console.
-//
-// GCS はフォルダを作れないため "avatarID/.keep" を作成する。
-// 既に存在する場合は no-op 扱い。
-func (r *AvatarIconRepositoryGCS) EnsureAvatarFolder(ctx context.Context, avatarID string) error {
-	if r.Client == nil {
-		return errors.New("AvatarIconRepositoryGCS: nil storage client")
-	}
-	bucketName, err := r.effectiveBucket()
-	if err != nil {
-		return err
-	}
+// ============================================================
+// Object storage port (usecase.AvatarIconObjectStoragePort 互換)
+// ============================================================
 
-	avatarID = strings.TrimSpace(avatarID)
-	if avatarID == "" {
-		return errors.New("AvatarIconRepositoryGCS: avatarID is empty")
-	}
-
-	objName := strings.TrimLeft(avatarID, "/") + "/.keep"
-
-	oh := r.Client.Bucket(bucketName).Object(objName).If(storage.Conditions{DoesNotExist: true})
-	w := oh.NewWriter(ctx)
-	w.ContentType = "text/plain; charset=utf-8"
-
-	// 0byteでもOKだが、ツールやUI都合で「空」を嫌うことがあるので 1行だけ入れておく
-	_, _ = w.Write([]byte("keep"))
-	if err := w.Close(); err != nil {
-		// すでに存在する場合は 412 になるので無視
-		var gerr *googleapi.Error
-		if errors.As(err, &gerr) && gerr.Code == 412 {
-			return nil
-		}
-		return err
-	}
-	return nil
-}
-
-// ✅ NEW: AvatarUsecase 側から呼ぶ「prefix 確保」用メソッド
-// - interface(AvatarIconObjectStoragePort) に合わせて bucket/prefix を受け取る
-// - prefix は "docId/" を想定（末尾 "/" はあってもなくてもOK）
+// EnsurePrefix creates "<prefix>/.keep" object (best-effort).
 func (r *AvatarIconRepositoryGCS) EnsurePrefix(ctx context.Context, bucket, prefix string) error {
-	if r.Client == nil {
-		return errors.New("AvatarIconRepositoryGCS: nil storage client")
+	if r == nil || r.Client == nil {
+		return fmt.Errorf("AvatarIconRepositoryGCS.EnsurePrefix: storage client is nil")
 	}
-
-	bucketName := strings.TrimSpace(bucket)
-	if bucketName == "" {
-		// 明示 bucket が無い場合は repository の bucket を使う
-		b, err := r.effectiveBucket()
-		if err != nil {
-			return err
-		}
-		bucketName = b
+	b := strings.TrimSpace(bucket)
+	if b == "" {
+		b = r.ResolveBucket()
 	}
 
 	prefix = strings.TrimSpace(prefix)
 	prefix = strings.TrimLeft(prefix, "/")
 	if prefix == "" {
-		return errors.New("AvatarIconRepositoryGCS: prefix is empty")
+		return fmt.Errorf("AvatarIconRepositoryGCS.EnsurePrefix: prefix is empty")
 	}
 	if !strings.HasSuffix(prefix, "/") {
 		prefix += "/"
 	}
 
-	objName := prefix + ".keep"
+	keepObject := path.Join(prefix, ".keep")
+	obj := r.Client.Bucket(b).Object(keepObject)
 
-	oh := r.Client.Bucket(bucketName).Object(objName).If(storage.Conditions{DoesNotExist: true})
-	w := oh.NewWriter(ctx)
-	w.ContentType = "text/plain; charset=utf-8"
-
+	w := obj.If(storage.Conditions{DoesNotExist: true}).NewWriter(ctx)
+	w.ContentType = "text/plain"
 	_, _ = w.Write([]byte("keep"))
 	if err := w.Close(); err != nil {
-		var gerr *googleapi.Error
-		if errors.As(err, &gerr) && gerr.Code == 412 {
+		// already exists is OK
+		if ge, ok := err.(*googleapi.Error); ok && ge.Code == 412 {
 			return nil
 		}
-		return err
+		return fmt.Errorf("AvatarIconRepositoryGCS.EnsurePrefix: write keep failed: %w", err)
 	}
 	return nil
 }
 
-func isFolderMarkerObject(name string) bool {
-	n := strings.TrimSpace(name)
-	if n == "" {
-		return false
+// DeleteObjects deletes multiple GCS objects (best-effort).
+func (r *AvatarIconRepositoryGCS) DeleteObjects(ctx context.Context, ops []avicon.GCSDeleteOp) error {
+	if r == nil || r.Client == nil {
+		return fmt.Errorf("AvatarIconRepositoryGCS.DeleteObjects: storage client is nil")
 	}
-	// "folder/" 形式や ".keep" を常に除外
-	if strings.HasSuffix(n, "/") {
-		return true
-	}
-	if strings.HasSuffix(n, "/.keep") {
-		return true
-	}
-	// EnsurePrefix が ".keep" を作るので、これも除外
-	if strings.HasSuffix(n, "/.keep") || strings.HasSuffix(n, ".keep") {
-		return true
-	}
-	return false
-}
-
-// ==============================
-// List (page-based)
-// ==============================
-
-func (r *AvatarIconRepositoryGCS) List(
-	ctx context.Context,
-	filter avicon.Filter,
-	sortCfg avicon.Sort,
-	page avicon.Page,
-) (avicon.PageResult[avicon.AvatarIcon], error) {
-	if r.Client == nil {
-		return avicon.PageResult[avicon.AvatarIcon]{}, errors.New("AvatarIconRepositoryGCS: nil storage client")
-	}
-	bucketName, err := r.effectiveBucket()
-	if err != nil {
-		return avicon.PageResult[avicon.AvatarIcon]{}, err
+	if len(ops) == 0 {
+		return nil
 	}
 
-	q := &storage.Query{}
-	// AvatarID が指定されている場合は prefix を絞る
-	if filter.AvatarID != nil {
-		if v := strings.TrimSpace(*filter.AvatarID); v != "" {
-			q.Prefix = v + "/"
+	var firstErr error
+	for _, op := range ops {
+		b := strings.TrimSpace(op.Bucket)
+		if b == "" {
+			b = r.ResolveBucket()
 		}
-	}
-
-	it := r.Client.Bucket(bucketName).Objects(ctx, q)
-
-	var all []avicon.AvatarIcon
-	for {
-		attrs, err := it.Next()
-		if err == iterator.Done {
-			break
-		}
-		if err != nil {
-			return avicon.PageResult[avicon.AvatarIcon]{}, err
-		}
-		if isFolderMarkerObject(attrs.Name) {
+		obj := strings.TrimLeft(strings.TrimSpace(op.ObjectPath), "/")
+		if obj == "" {
 			continue
 		}
-		icon := buildAvatarIconFromAttrs(bucketName, attrs)
-		if matchAvatarIconFilter(icon, filter) {
-			all = append(all, icon)
-		}
-	}
-
-	sortAvatarIcons(all, sortCfg)
-
-	pageNum, perPage, offset := dbcommon.NormalizePage(page.Number, page.PerPage, 50, 200)
-	total := len(all)
-
-	if total == 0 {
-		return avicon.PageResult[avicon.AvatarIcon]{
-			Items:      []avicon.AvatarIcon{},
-			TotalCount: 0,
-			TotalPages: 0,
-			Page:       pageNum,
-			PerPage:    perPage,
-		}, nil
-	}
-
-	if offset > total {
-		offset = total
-	}
-	end := offset + perPage
-	if end > total {
-		end = total
-	}
-
-	items := all[offset:end]
-	totalPages := dbcommon.ComputeTotalPages(total, perPage)
-
-	return avicon.PageResult[avicon.AvatarIcon]{
-		Items:      items,
-		TotalCount: total,
-		TotalPages: totalPages,
-		Page:       pageNum,
-		PerPage:    perPage,
-	}, nil
-}
-
-// ==============================
-// ListByCursor (cursor-based)
-// ==============================
-
-func (r *AvatarIconRepositoryGCS) ListByCursor(
-	ctx context.Context,
-	filter avicon.Filter,
-	_ avicon.Sort, // for now we fix ordering by ID ASC (object name)
-	cpage avicon.CursorPage,
-) (avicon.CursorPageResult[avicon.AvatarIcon], error) {
-	if r.Client == nil {
-		return avicon.CursorPageResult[avicon.AvatarIcon]{}, errors.New("AvatarIconRepositoryGCS: nil storage client")
-	}
-	bucketName, err := r.effectiveBucket()
-	if err != nil {
-		return avicon.CursorPageResult[avicon.AvatarIcon]{}, err
-	}
-
-	q := &storage.Query{}
-	if filter.AvatarID != nil {
-		if v := strings.TrimSpace(*filter.AvatarID); v != "" {
-			q.Prefix = v + "/"
-		}
-	}
-
-	it := r.Client.Bucket(bucketName).Objects(ctx, q)
-
-	var all []avicon.AvatarIcon
-	for {
-		attrs, err := it.Next()
-		if err == iterator.Done {
-			break
-		}
-		if err != nil {
-			return avicon.CursorPageResult[avicon.AvatarIcon]{}, err
-		}
-		if isFolderMarkerObject(attrs.Name) {
-			continue
-		}
-		icon := buildAvatarIconFromAttrs(bucketName, attrs)
-		if matchAvatarIconFilter(icon, filter) {
-			all = append(all, icon)
-		}
-	}
-
-	// 並び順は ID (object 名) 昇順
-	sort.SliceStable(all, func(i, j int) bool {
-		return all[i].ID < all[j].ID
-	})
-
-	limit := cpage.Limit
-	if limit <= 0 || limit > 200 {
-		limit = 50
-	}
-
-	after := strings.TrimSpace(cpage.After)
-	start := 0
-	if after != "" {
-		for i, v := range all {
-			if v.ID > after {
-				start = i
-				break
+		if err := r.Client.Bucket(b).Object(obj).Delete(ctx); err != nil {
+			if errors.Is(err, storage.ErrObjectNotExist) {
+				continue
+			}
+			if firstErr == nil {
+				firstErr = err
 			}
 		}
 	}
+	return firstErr
+}
 
-	if start > len(all) {
-		start = len(all)
+// ============================================================
+// ✅ Signed URL (domain DTO へ切替 / 方案2)
+// ============================================================
+
+// IssueSignedURL issues a signed PUT url for uploading avatar icon images.
+// ObjectPath policy: {avatarId}/{iconId}/{fileName}
+// Returns ID as objectPath.
+func (r *AvatarIconRepositoryGCS) IssueSignedURL(
+	ctx context.Context,
+	in avicon.IssueSignedURLInput,
+) (avicon.IssueSignedURLOutput, error) {
+	_ = ctx // SignedURL generation doesn't require ctx; kept for consistency.
+
+	if r == nil || r.Client == nil {
+		return avicon.IssueSignedURLOutput{}, fmt.Errorf("AvatarIconRepositoryGCS.IssueSignedURL: storage client is nil")
 	}
 
-	end := start + limit
-	if end > len(all) {
-		end = len(all)
+	avatarID := strings.TrimSpace(in.AvatarID)
+	if avatarID == "" {
+		return avicon.IssueSignedURLOutput{}, fmt.Errorf("AvatarIconRepositoryGCS.IssueSignedURL: avatarId is empty")
 	}
 
-	items := all[start:end]
-
-	var next *string
-	if end < len(all) && len(items) > 0 {
-		lastID := items[len(items)-1].ID
-		next = &lastID
+	ct := strings.ToLower(strings.TrimSpace(in.ContentType))
+	if ct == "" {
+		return avicon.IssueSignedURLOutput{}, fmt.Errorf("AvatarIconRepositoryGCS.IssueSignedURL: contentType is empty")
+	}
+	if !isSupportedAvatarIconMIME(ct) {
+		return avicon.IssueSignedURLOutput{}, fmt.Errorf("AvatarIconRepositoryGCS.IssueSignedURL: unsupported contentType=%q", ct)
 	}
 
-	return avicon.CursorPageResult[avicon.AvatarIcon]{
-		Items:      items,
-		NextCursor: next,
-		Limit:      limit,
+	// optional: size validation (if provided)
+	if in.Size > 0 && avicon.DefaultMaxIconSizeBytes > 0 && in.Size > avicon.DefaultMaxIconSizeBytes {
+		return avicon.IssueSignedURLOutput{}, fmt.Errorf(
+			"AvatarIconRepositoryGCS.IssueSignedURL: file too large: %d > %d",
+			in.Size,
+			avicon.DefaultMaxIconSizeBytes,
+		)
+	}
+
+	// Normalize fileName (reuse sanitizeFileName from tokenIcon_repository_gcs.go)
+	normName := strings.TrimSpace(in.FileName)
+	if normName == "" {
+		normName = "icon"
+	}
+	normName = sanitizeFileName(normName)
+	normName = ensureExtensionByMIME(normName, ct)
+
+	// iconID
+	iconID := newObjectID()
+
+	// objectPath
+	objPath, err := buildAvatarIconObjectPath(avatarID, iconID, normName)
+	if err != nil {
+		return avicon.IssueSignedURLOutput{}, err
+	}
+
+	bucket := r.ResolveBucket()
+
+	// expiry
+	sec := in.ExpiresInSeconds
+	if sec <= 0 {
+		sec = 15 * 60 // default 15m
+	}
+	if sec > 60*60 {
+		sec = 60 * 60 // cap 60m
+	}
+	expiresAt := time.Now().UTC().Add(time.Duration(sec) * time.Second)
+
+	uploadURL, err := r.Client.Bucket(bucket).SignedURL(objPath, &storage.SignedURLOptions{
+		Scheme:      storage.SigningSchemeV4,
+		Method:      "PUT",
+		Expires:     expiresAt,
+		ContentType: ct,
+	})
+	if err != nil {
+		return avicon.IssueSignedURLOutput{}, fmt.Errorf("AvatarIconRepositoryGCS.IssueSignedURL: signed url failed: %w", err)
+	}
+
+	publicURL := avicon.PublicURL(bucket, objPath)
+
+	return avicon.IssueSignedURLOutput{
+		ID:          objPath, // ✅ 方針: ID = objectPath
+		Bucket:      bucket,
+		ObjectPath:  objPath,
+		UploadURL:   uploadURL,
+		PublicURL:   publicURL,
+		FileName:    normName,
+		ContentType: ct,
+		Size:        in.Size,
+		ExpiresAt:   expiresAt.UTC().Format(time.RFC3339),
 	}, nil
 }
 
-// ==============================
-// Getters
-// ==============================
-
-// GetByID fetches a single avatar icon by its ID (object name).
-func (r *AvatarIconRepositoryGCS) GetByID(ctx context.Context, id string) (avicon.AvatarIcon, error) {
-	if r.Client == nil {
-		return avicon.AvatarIcon{}, errors.New("AvatarIconRepositoryGCS: nil storage client")
+func isSupportedAvatarIconMIME(mime string) bool {
+	switch strings.ToLower(strings.TrimSpace(mime)) {
+	case "image/jpeg", "image/jpg", "image/png", "image/webp", "image/gif":
+		return true
+	default:
+		return false
 	}
-	bucketName, err := r.effectiveBucket()
-	if err != nil {
-		return avicon.AvatarIcon{}, err
-	}
-
-	id = strings.TrimSpace(id)
-	if id == "" || isFolderMarkerObject(id) {
-		return avicon.AvatarIcon{}, avicon.ErrNotFound
-	}
-
-	attrs, err := r.Client.Bucket(bucketName).Object(id).Attrs(ctx)
-	if err != nil {
-		if errors.Is(err, storage.ErrObjectNotExist) {
-			return avicon.AvatarIcon{}, avicon.ErrNotFound
-		}
-		return avicon.AvatarIcon{}, err
-	}
-
-	if isFolderMarkerObject(attrs.Name) {
-		return avicon.AvatarIcon{}, avicon.ErrNotFound
-	}
-	return buildAvatarIconFromAttrs(bucketName, attrs), nil
 }
 
-// GetByAvatarID lists icons under "<avatarID>/" prefix.
+// ============================================================
+// ✅ usecase.AvatarIconRepo を満たす最小実装（Save 必須）
+// ============================================================
+
+// GetByAvatarID lists objects under "{avatarId}/" prefix and returns domain AvatarIcon list.
 func (r *AvatarIconRepositoryGCS) GetByAvatarID(ctx context.Context, avatarID string) ([]avicon.AvatarIcon, error) {
-	if r.Client == nil {
-		return nil, errors.New("AvatarIconRepositoryGCS: nil storage client")
-	}
-	bucketName, err := r.effectiveBucket()
-	if err != nil {
-		return nil, err
+	if r == nil || r.Client == nil {
+		return nil, fmt.Errorf("AvatarIconRepositoryGCS.GetByAvatarID: storage client is nil")
 	}
 
 	avatarID = strings.TrimSpace(avatarID)
@@ -369,374 +249,306 @@ func (r *AvatarIconRepositoryGCS) GetByAvatarID(ctx context.Context, avatarID st
 		return []avicon.AvatarIcon{}, nil
 	}
 
-	q := &storage.Query{Prefix: avatarID + "/"}
-	it := r.Client.Bucket(bucketName).Objects(ctx, q)
+	bucket := r.ResolveBucket()
+	prefix := sanitizePathSegment(avatarID)
+	if prefix == "" {
+		return []avicon.AvatarIcon{}, nil
+	}
+	prefix = prefix + "/"
 
-	var items []avicon.AvatarIcon
+	it := r.Client.Bucket(bucket).Objects(ctx, &storage.Query{Prefix: prefix})
+
+	out := make([]avicon.AvatarIcon, 0, 8)
 	for {
 		attrs, err := it.Next()
-		if err == iterator.Done {
+		if errors.Is(err, iterator.Done) {
 			break
 		}
 		if err != nil {
-			return nil, err
+			return nil, fmt.Errorf("AvatarIconRepositoryGCS.GetByAvatarID: iterate failed: %w", err)
 		}
-		if isFolderMarkerObject(attrs.Name) {
+		if attrs == nil {
 			continue
 		}
-		icon := buildAvatarIconFromAttrs(bucketName, attrs)
-		if icon.AvatarID != nil && *icon.AvatarID == avatarID {
-			items = append(items, icon)
-		}
-	}
-	return items, nil
-}
 
-// ==============================
-// Mutations
-// ==============================
-
-// Create "registers" an avatar icon based on an existing GCS object.
-//
-// 実ファイルのアップロードは別途行われている前提で、ここでは指定情報から
-// 対応するオブジェクトが存在するか確認し、存在すれば AvatarIcon を返します。
-func (r *AvatarIconRepositoryGCS) Create(ctx context.Context, a avicon.AvatarIcon) (avicon.AvatarIcon, error) {
-	if r.Client == nil {
-		return avicon.AvatarIcon{}, errors.New("AvatarIconRepositoryGCS: nil storage client")
-	}
-	bucketName, err := r.effectiveBucket()
-	if err != nil {
-		return avicon.AvatarIcon{}, err
-	}
-
-	path, err := r.objectPathFromAvatarIcon(a)
-	if err != nil {
-		return avicon.AvatarIcon{}, err
-	}
-	if isFolderMarkerObject(path) {
-		return avicon.AvatarIcon{}, avicon.ErrNotFound
-	}
-
-	attrs, err := r.Client.Bucket(bucketName).Object(path).Attrs(ctx)
-	if err != nil {
-		if errors.Is(err, storage.ErrObjectNotExist) {
-			return avicon.AvatarIcon{}, avicon.ErrNotFound
-		}
-		return avicon.AvatarIcon{}, err
-	}
-	if isFolderMarkerObject(attrs.Name) {
-		return avicon.AvatarIcon{}, avicon.ErrNotFound
-	}
-
-	return buildAvatarIconFromAttrs(bucketName, attrs), nil
-}
-
-// Update currently does not mutate GCS objects; it just returns the latest state.
-// （アイコンメタ情報は GCS オブジェクト名/サイズから導出するのみとする簡易実装）
-func (r *AvatarIconRepositoryGCS) Update(ctx context.Context, id string, _ avicon.AvatarIconPatch) (avicon.AvatarIcon, error) {
-	return r.GetByID(ctx, id)
-}
-
-// Delete removes the underlying GCS object by id (object name).
-func (r *AvatarIconRepositoryGCS) Delete(ctx context.Context, id string) error {
-	if r.Client == nil {
-		return errors.New("AvatarIconRepositoryGCS: nil storage client")
-	}
-	bucketName, err := r.effectiveBucket()
-	if err != nil {
-		return err
-	}
-
-	id = strings.TrimSpace(id)
-	if id == "" || isFolderMarkerObject(id) {
-		return avicon.ErrNotFound
-	}
-
-	err = r.Client.Bucket(bucketName).Object(id).Delete(ctx)
-	if err != nil {
-		if errors.Is(err, storage.ErrObjectNotExist) {
-			return avicon.ErrNotFound
-		}
-		return err
-	}
-	return nil
-}
-
-// Count counts icons matching the filter by scanning objects.
-func (r *AvatarIconRepositoryGCS) Count(ctx context.Context, filter avicon.Filter) (int, error) {
-	if r.Client == nil {
-		return 0, errors.New("AvatarIconRepositoryGCS: nil storage client")
-	}
-	bucketName, err := r.effectiveBucket()
-	if err != nil {
-		return 0, err
-	}
-
-	q := &storage.Query{}
-	if filter.AvatarID != nil {
-		if v := strings.TrimSpace(*filter.AvatarID); v != "" {
-			q.Prefix = v + "/"
-		}
-	}
-
-	it := r.Client.Bucket(bucketName).Objects(ctx, q)
-
-	count := 0
-	for {
-		attrs, err := it.Next()
-		if err == iterator.Done {
-			break
-		}
-		if err != nil {
-			return 0, err
-		}
-		if isFolderMarkerObject(attrs.Name) {
+		// ".keep" などは除外（tokenIcon 側 helper を再利用）
+		if isKeepObject(attrs.Name) {
 			continue
 		}
-		icon := buildAvatarIconFromAttrs(bucketName, attrs)
-		if matchAvatarIconFilter(icon, filter) {
-			count++
+
+		ic, ok := buildAvatarIconFromAttrs(bucket, attrs)
+		if !ok {
+			continue
 		}
+
+		// 念のため avatarId で絞る
+		if ic.AvatarID == nil || strings.TrimSpace(*ic.AvatarID) != avatarID {
+			continue
+		}
+
+		out = append(out, ic)
 	}
-	return count, nil
+
+	return out, nil
 }
 
-// Save behaves as an upsert-like "refresh" based on existing GCS object.
-// opts は現状未使用。
+// Save updates GCS metadata for an already-uploaded object and returns AvatarIcon.
+// - opts は現状未使用（互換のため受ける）
 func (r *AvatarIconRepositoryGCS) Save(
 	ctx context.Context,
-	a avicon.AvatarIcon,
-	_ *avicon.SaveOptions,
+	ic avicon.AvatarIcon,
+	opts *avicon.SaveOptions, // unused
 ) (avicon.AvatarIcon, error) {
-	if r.Client == nil {
-		return avicon.AvatarIcon{}, errors.New("AvatarIconRepositoryGCS: nil storage client")
-	}
-	bucketName, err := r.effectiveBucket()
-	if err != nil {
-		return avicon.AvatarIcon{}, err
+	_ = opts
+
+	if r == nil || r.Client == nil {
+		return avicon.AvatarIcon{}, fmt.Errorf("AvatarIconRepositoryGCS.Save: storage client is nil")
 	}
 
-	path, err := r.objectPathFromAvatarIcon(a)
-	if err != nil {
-		return avicon.AvatarIcon{}, err
+	// bucket/objectPath を URL から解決（基本は NewFromBucketObject が public URL を作る）
+	bucket := r.ResolveBucket()
+	objectPath := ""
+
+	if b, obj, ok := avicon.ParseGCSURL(strings.TrimSpace(ic.URL)); ok {
+		if strings.TrimSpace(b) != "" {
+			bucket = strings.TrimSpace(b)
+		}
+		objectPath = strings.TrimLeft(strings.TrimSpace(obj), "/")
 	}
-	if isFolderMarkerObject(path) {
+	if objectPath == "" {
+		// fallback: ID を objectPath とみなす
+		objectPath = strings.TrimLeft(strings.TrimSpace(ic.ID), "/")
+	}
+	if objectPath == "" {
 		return avicon.AvatarIcon{}, avicon.ErrNotFound
 	}
 
-	attrs, err := r.Client.Bucket(bucketName).Object(path).Attrs(ctx)
+	// object exists?
+	o := r.Client.Bucket(bucket).Object(objectPath)
+	attrs, err := o.Attrs(ctx)
 	if err != nil {
 		if errors.Is(err, storage.ErrObjectNotExist) {
 			return avicon.AvatarIcon{}, avicon.ErrNotFound
 		}
-		return avicon.AvatarIcon{}, err
-	}
-	if isFolderMarkerObject(attrs.Name) {
-		return avicon.AvatarIcon{}, avicon.ErrNotFound
+		return avicon.AvatarIcon{}, fmt.Errorf("AvatarIconRepositoryGCS.Save: attrs failed: %w", err)
 	}
 
-	return buildAvatarIconFromAttrs(bucketName, attrs), nil
-}
-
-// ==============================
-// Helpers
-// ==============================
-
-// objectPathFromAvatarIcon 推論:
-// - a.ID が非空ならそれを object path とみなす
-// - そうでなければ AvatarID/FileName から "<avatarID>/<fileName>" を構築
-func (r *AvatarIconRepositoryGCS) objectPathFromAvatarIcon(a avicon.AvatarIcon) (string, error) {
-	if id := strings.TrimSpace(a.ID); id != "" {
-		return strings.TrimLeft(id, "/"), nil
+	// avatarId
+	aid := ""
+	if ic.AvatarID != nil {
+		aid = strings.TrimSpace(*ic.AvatarID)
 	}
-	if a.AvatarID != nil && a.FileName != nil {
-		aid := strings.TrimSpace(*a.AvatarID)
-		fn := strings.TrimSpace(*a.FileName)
-		if aid != "" && fn != "" {
-			return fmt.Sprintf("%s/%s", aid, fn), nil
-		}
-	}
-	return "", errors.New("avatar icon: missing id or (avatarID, fileName)")
-}
-
-// buildAvatarIconFromAttrs converts GCS ObjectAttrs into AvatarIcon.
-func buildAvatarIconFromAttrs(bucket string, attrs *storage.ObjectAttrs) avicon.AvatarIcon {
-	name := strings.TrimSpace(attrs.Name)
-
-	var avatarIDPtr *string
-	var fileNamePtr *string
-
-	if name != "" {
-		parts := strings.SplitN(name, "/", 2)
-		if len(parts) == 2 {
-			if v := strings.TrimSpace(parts[0]); v != "" {
-				vCopy := v
-				avatarIDPtr = &vCopy
-			}
-			if v := strings.TrimSpace(parts[1]); v != "" {
-				vCopy := v
-				fileNamePtr = &vCopy
-			}
-		} else {
-			// パスに / が無い場合は fileName のみとみなす
-			if v := strings.TrimSpace(name); v != "" {
-				vCopy := v
-				fileNamePtr = &vCopy
-			}
+	if aid == "" {
+		// objectPath から推定（"{avatarId}/{...}"）
+		if p0, _, ok := splitAvatarIconObjectPath(objectPath); ok {
+			aid = p0
 		}
 	}
 
+	// fileName
+	fn := ""
+	if ic.FileName != nil {
+		fn = strings.TrimSpace(*ic.FileName)
+	}
+	if fn == "" {
+		fn = path.Base(objectPath)
+	}
+	fn = sanitizeFileName(fn)
+	if fn == "" {
+		return avicon.AvatarIcon{}, avicon.ErrInvalidFileName
+	}
+
+	// size
 	var sizePtr *int64
-	if attrs.Size > 0 {
-		s := attrs.Size
-		sizePtr = &s
+	if ic.Size != nil && *ic.Size >= 0 {
+		tmp := *ic.Size
+		sizePtr = &tmp
+	} else if attrs.Size >= 0 {
+		tmp := attrs.Size
+		sizePtr = &tmp
 	}
 
-	url := fmt.Sprintf("gs://%s/%s", bucket, attrs.Name)
+	publicURL := avicon.PublicURL(bucket, objectPath)
 
-	return avicon.AvatarIcon{
-		ID:       name,
-		AvatarID: avatarIDPtr,
-		URL:      url,
-		FileName: fileNamePtr,
-		Size:     sizePtr,
+	// merge metadata
+	meta := map[string]string{}
+	for k, v := range attrs.Metadata {
+		meta[k] = v
 	}
+	if aid != "" {
+		meta["avatarId"] = aid
+	}
+	meta["fileName"] = fn
+	meta["url"] = publicURL
+	if sizePtr != nil {
+		meta["size"] = fmt.Sprint(*sizePtr)
+	}
+
+	// metadata update
+	newAttrs, err := o.Update(ctx, storage.ObjectAttrsToUpdate{Metadata: meta})
+	if err != nil {
+		return avicon.AvatarIcon{}, fmt.Errorf("AvatarIconRepositoryGCS.Save: update metadata failed: %w", err)
+	}
+
+	// build domain
+	id := strings.TrimSpace(ic.ID)
+	if id == "" {
+		id = strings.TrimSpace(newAttrs.Name) // policy: id = objectPath
+	}
+	// AvatarIcon.NewFromBucketObject は public URL を生成するので、そのままでもOK
+	out, derr := avicon.NewFromBucketObject(
+		id,
+		bucket,
+		newAttrs.Name,
+		&fn,
+		sizePtr,
+	)
+	if derr != nil {
+		// best-effort fallback
+		tmp := avicon.AvatarIcon{
+			ID:       id,
+			URL:      publicURL,
+			FileName: &fn,
+			Size:     sizePtr,
+		}
+		if aid != "" {
+			aid2 := aid
+			tmp.AvatarID = &aid2
+		}
+		return tmp, nil
+	}
+
+	// avatarId を反映（NewFromBucketObject では nil）
+	if aid != "" {
+		aid2 := aid
+		out.SetAvatarID(&aid2)
+	}
+
+	// url をメタ優先で差し替え
+	_ = out.UpdateURL(publicURL)
+
+	return out, nil
 }
 
-// matchAvatarIconFilter applies avicon.Filter in-memory.
-func matchAvatarIconFilter(a avicon.AvatarIcon, f avicon.Filter) bool {
-	// SearchQuery: ID / URL / FileName 部分一致
-	if sq := strings.TrimSpace(f.SearchQuery); sq != "" {
-		lq := strings.ToLower(sq)
-		fn := ""
-		if a.FileName != nil {
-			fn = *a.FileName
-		}
-		haystack := strings.ToLower(a.ID + " " + a.URL + " " + fn)
-		if !strings.Contains(haystack, lq) {
-			return false
-		}
+// ============================================================
+// Helpers
+// ============================================================
+
+func buildAvatarIconObjectPath(avatarID, iconID, fileName string) (string, error) {
+	aid := sanitizePathSegment(avatarID)
+	iid := sanitizePathSegment(iconID)
+	fn := strings.TrimSpace(fileName) // sanitizeFileName 済み想定
+
+	if aid == "" {
+		return "", fmt.Errorf("avatarIcon: invalid avatarID for object path")
+	}
+	if iid == "" {
+		return "", fmt.Errorf("avatarIcon: invalid iconID for object path")
+	}
+	if fn == "" {
+		return "", fmt.Errorf("avatarIcon: invalid fileName for object path")
 	}
 
-	// AvatarID
-	if f.AvatarID != nil {
-		want := strings.TrimSpace(*f.AvatarID)
-		got := ""
-		if a.AvatarID != nil {
-			got = strings.TrimSpace(*a.AvatarID)
-		}
-		if want != "" && want != got {
-			return false
-		}
-	}
-
-	// HasAvatarID
-	if f.HasAvatarID != nil {
-		has := a.AvatarID != nil && strings.TrimSpace(*a.AvatarID) != ""
-		if *f.HasAvatarID && !has {
-			return false
-		}
-		if !*f.HasAvatarID && has {
-			return false
-		}
-	}
-
-	// Size range
-	if f.SizeMin != nil {
-		if a.Size == nil || *a.Size < *f.SizeMin {
-			return false
-		}
-	}
-	if f.SizeMax != nil {
-		if a.Size == nil || *a.Size > *f.SizeMax {
-			return false
-		}
-	}
-
-	return true
+	// {avatarId}/{iconId}/{fileName}
+	return path.Join(aid, iid, fn), nil
 }
 
-// sortAvatarIcons orders icons based on avicon.Sort (id/size/file_name/url).
-func sortAvatarIcons(items []avicon.AvatarIcon, sortCfg avicon.Sort) {
-	if len(items) == 0 {
-		return
+// buildAvatarIconFromAttrs converts GCS attrs to domain AvatarIcon (best-effort).
+func buildAvatarIconFromAttrs(bucket string, attrs *storage.ObjectAttrs) (avicon.AvatarIcon, bool) {
+	if attrs == nil {
+		return avicon.AvatarIcon{}, false
 	}
 
-	col := strings.ToLower(string(sortCfg.Column))
-	dir := strings.ToUpper(string(sortCfg.Order))
-	if dir != "ASC" && dir != "DESC" {
-		dir = "ASC"
+	obj := strings.TrimSpace(attrs.Name)
+	if obj == "" {
+		return avicon.AvatarIcon{}, false
 	}
-	asc := dir == "ASC"
 
-	less := func(i, j int) bool {
-		a, b := items[i], items[j]
+	meta := attrs.Metadata
+	getMeta := func(k string) string {
+		if meta == nil {
+			return ""
+		}
+		return strings.TrimSpace(meta[k])
+	}
 
-		switch col {
-		case "id":
-			if asc {
-				return a.ID < b.ID
-			}
-			return a.ID > b.ID
-
-		case "size":
-			var sa, sb int64
-			if a.Size != nil {
-				sa = *a.Size
-			}
-			if b.Size != nil {
-				sb = *b.Size
-			}
-			if sa == sb {
-				if asc {
-					return a.ID < b.ID
-				}
-				return a.ID > b.ID
-			}
-			if asc {
-				return sa < sb
-			}
-			return sa > sb
-
-		case "filename", "file_name":
-			var fa, fb string
-			if a.FileName != nil {
-				fa = *a.FileName
-			}
-			if b.FileName != nil {
-				fb = *b.FileName
-			}
-			if fa == fb {
-				if asc {
-					return a.ID < b.ID
-				}
-				return a.ID > b.ID
-			}
-			if asc {
-				return fa < fb
-			}
-			return fa > fb
-
-		case "url":
-			if a.URL == b.URL {
-				if asc {
-					return a.ID < b.ID
-				}
-				return a.ID > b.ID
-			}
-			if asc {
-				return a.URL < b.URL
-			}
-			return a.URL > b.URL
-
-		default:
-			// デフォルトは ID ASC
-			if asc {
-				return a.ID < b.ID
-			}
-			return a.ID > b.ID
+	avatarID := getMeta("avatarId")
+	if avatarID == "" {
+		if aid, _, ok := splitAvatarIconObjectPath(obj); ok {
+			avatarID = aid
 		}
 	}
+	var aidPtr *string
+	if strings.TrimSpace(avatarID) != "" {
+		tmp := strings.TrimSpace(avatarID)
+		aidPtr = &tmp
+	}
 
-	sort.SliceStable(items, less)
+	fileName := getMeta("fileName")
+	if fileName == "" {
+		fileName = path.Base(obj)
+	}
+	fileName = sanitizeFileName(fileName)
+	if fileName == "" {
+		return avicon.AvatarIcon{}, false
+	}
+	fnPtr := &fileName
+
+	// url
+	urlStr := getMeta("url")
+	if urlStr == "" {
+		urlStr = avicon.PublicURL(strings.TrimSpace(bucket), obj)
+	}
+
+	// size
+	var sizePtr *int64
+	size := attrs.Size
+	if v := getMeta("size"); v != "" {
+		if n, e := strconv.ParseInt(v, 10, 64); e == nil {
+			size = n
+		}
+	}
+	if size >= 0 {
+		tmp := size
+		sizePtr = &tmp
+	}
+
+	id := obj // policy: id = objectPath
+	ic, err := avicon.New(
+		id,
+		urlStr,
+		aidPtr,
+		fnPtr,
+		sizePtr,
+	)
+	if err != nil {
+		// best-effort fallback
+		tmp := avicon.AvatarIcon{
+			ID:       id,
+			AvatarID: aidPtr,
+			URL:      urlStr,
+			FileName: fnPtr,
+			Size:     sizePtr,
+		}
+		return tmp, true
+	}
+	return ic, true
+}
+
+// splitAvatarIconObjectPath expects "{avatarId}/{iconId}/{fileName}".
+func splitAvatarIconObjectPath(objectPath string) (avatarID string, iconID string, ok bool) {
+	p := strings.TrimLeft(strings.TrimSpace(objectPath), "/")
+	if p == "" {
+		return "", "", false
+	}
+	parts := strings.Split(p, "/")
+	if len(parts) < 3 {
+		return "", "", false
+	}
+	avatarID = strings.TrimSpace(parts[0])
+	iconID = strings.TrimSpace(parts[1])
+	if avatarID == "" || iconID == "" {
+		return "", "", false
+	}
+	return avatarID, iconID, true
 }
