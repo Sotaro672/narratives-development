@@ -6,8 +6,6 @@ import '../components/header.dart';
 import '../components/contents.dart';
 
 /// App-wide shell (Header + Main + Footer).
-/// - Designed for public pages (no auth required)
-/// - Main content is provided via [child]
 class AppShell extends StatelessWidget {
   const AppShell({
     super.key,
@@ -17,6 +15,9 @@ class AppShell extends StatelessWidget {
     this.actions,
     this.backgroundColor,
 
+    // ✅ NEW: footer slot
+    this.footer,
+
     // ✅ main customization
     this.mainPadding = const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
     this.mainMaxWidth = 960,
@@ -24,35 +25,18 @@ class AppShell extends StatelessWidget {
     this.mainScrollable = true,
   });
 
-  /// Main content (page)
   final Widget child;
-
-  /// Optional title shown in the header.
   final String? title;
-
-  /// Show back button in header (actual pop-ability is judged in AppHeader).
   final bool showBack;
-
-  /// Optional header actions (right side)
   final List<Widget>? actions;
-
-  /// Optional background color for the whole page
   final Color? backgroundColor;
 
-  // ------------------------------------------------------------
-  // Main props
-  // ------------------------------------------------------------
+  /// ✅ footer widget (ex: SignedInFooter / null / AppFooter)
+  final Widget? footer;
 
-  /// Inner padding for main area.
   final EdgeInsets mainPadding;
-
-  /// Max width for main content.
   final double mainMaxWidth;
-
-  /// Alignment for main container.
   final AlignmentGeometry mainAlignment;
-
-  /// If true, wraps main content in SingleChildScrollView.
   final bool mainScrollable;
 
   @override
@@ -64,16 +48,8 @@ class AppShell extends StatelessWidget {
       body: SafeArea(
         child: Column(
           children: [
-            // Header
-            AppHeader(
-              title: title,
-              // ✅ ここで canPop 判定して潰さない（ShellRoute だと誤判定しやすい）
-              // ✅ 実際に戻れるかどうか & fallback は AppHeader 側で処理する
-              showBack: showBack,
-              actions: actions,
-            ),
+            AppHeader(title: title, showBack: showBack, actions: actions),
 
-            // Main
             Expanded(
               child: AppMain(
                 padding: mainPadding,
@@ -84,8 +60,8 @@ class AppShell extends StatelessWidget {
               ),
             ),
 
-            // Footer
-            const AppFooter(),
+            // ✅ footer: 渡されなければデフォルト AppFooter
+            footer ?? const AppFooter(),
           ],
         ),
       ),

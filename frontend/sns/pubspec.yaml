@@ -28,6 +28,9 @@ dependencies:
   # ✅ Web DOM bindings (dart:html replacement)
   web: ^1.1.1
 
+  # ✅ QR / Barcode scanner (camera)
+  mobile_scanner: ^7.1.4
+
 dev_dependencies:
   flutter_test:
     sdk: flutter

@@ -7,6 +7,9 @@ import 'package:firebase_auth/firebase_auth.dart';
 
 import '../shell/presentation/layout/app_shell.dart';
 
+// ✅ NEW: signed-in footer
+import '../shell/presentation/components/footer.dart';
+
 // pages
 import '../../features/home/presentation/page/home_page.dart';
 import '../../features/home/presentation/page/catalog.dart';
@@ -20,6 +23,17 @@ import '../../features/auth/presentation/page/create_account.dart';
 import '../../features/auth/presentation/page/shipping_address.dart';
 import '../../features/auth/presentation/page/billing_address.dart';
 import '../../features/auth/presentation/page/avatar_create.dart';
+
+/// ✅ router の入口を 1 本化（bootstrap はこれだけ呼べばOK）
+///
+/// - firebaseReady=true  -> Auth 連動 router
+/// - firebaseReady=false -> 公開閲覧 router（initError を表示）
+GoRouter buildRouter({required bool firebaseReady, Object? initError}) {
+  if (firebaseReady) return buildAppRouter();
+  return buildPublicOnlyRouter(
+    initError: initError ?? Exception('Firebase init failed'),
+  );
+}
 
 /// ✅ Firebase OK 前提のルーター（Auth 連動）
 GoRouter buildAppRouter() {
@@ -51,6 +65,8 @@ GoRouter buildAppRouter() {
       title: 'Not Found',
       showBack: true,
       actions: _headerActionsFor(state, allowLogin: true, firebaseReady: true),
+      // ✅ Signed-in のときだけ表示（内部で authStateChanges を見て hidden になる）
+      footer: const SignedInFooter(),
       child: Center(child: Text(state.error?.toString() ?? 'Not Found')),
     ),
   );
@@ -76,7 +92,6 @@ GoRouter buildPublicOnlyRouter({required Object initError}) {
         },
       ),
 
-      // ✅ Firebase 未設定時は create-account も “設定エラー画面” に落とす
       GoRoute(
         path: '/create-account',
         name: 'createAccount',
@@ -87,7 +102,6 @@ GoRouter buildPublicOnlyRouter({required Object initError}) {
         },
       ),
 
-      // ✅ Firebase 未設定時は shipping-address も “設定エラー画面” に落とす
       GoRoute(
         path: '/shipping-address',
         name: 'shippingAddress',
@@ -98,7 +112,6 @@ GoRouter buildPublicOnlyRouter({required Object initError}) {
         },
       ),
 
-      // ✅ Firebase 未設定時は billing-address も “設定エラー画面” に落とす
       GoRoute(
         path: '/billing-address',
         name: 'billingAddress',
@@ -109,7 +122,6 @@ GoRouter buildPublicOnlyRouter({required Object initError}) {
         },
       ),
 
-      // ✅ Firebase 未設定時は avatar-create も “設定エラー画面” に落とす
       GoRoute(
         path: '/avatar-create',
         name: 'avatarCreate',
@@ -125,12 +137,13 @@ GoRouter buildPublicOnlyRouter({required Object initError}) {
           return AppShell(
             title: _titleFor(state),
             showBack: _showBackFor(state),
-            // ✅ Firebase 未設定でも「Sign in」は出す（ただし Auth 判定はしない）
             actions: _headerActionsFor(
               state,
               allowLogin: true,
               firebaseReady: false,
             ),
+            // ✅ Firebase 未設定時は footer なし（認証前提UIを出さない）
+            footer: null,
             child: child,
           );
         },
@@ -158,6 +171,7 @@ GoRouter buildPublicOnlyRouter({required Object initError}) {
       title: 'Not Found',
       showBack: true,
       actions: _headerActionsFor(state, allowLogin: true, firebaseReady: false),
+      footer: null,
       child: Center(child: Text(state.error?.toString() ?? 'Not Found')),
     ),
   );
@@ -165,7 +179,6 @@ GoRouter buildPublicOnlyRouter({required Object initError}) {
 
 List<RouteBase> _routes({required bool firebaseReady}) {
   return [
-    // ✅ login は ShellRoute の外（ヘッダー/フッター不要）
     GoRoute(
       path: '/login',
       name: 'login',
@@ -178,7 +191,6 @@ List<RouteBase> _routes({required bool firebaseReady}) {
       },
     ),
 
-    // ✅ Create account（ShellRoute の外）
     GoRoute(
       path: '/create-account',
       name: 'createAccount',
@@ -191,8 +203,6 @@ List<RouteBase> _routes({required bool firebaseReady}) {
       },
     ),
 
-    // ✅ 認証メールリンクの着地点（ShellRoute の外）
-    // - Firebase の verifyEmail リンク: ?mode=verifyEmail&oobCode=... が付いて来る
     GoRoute(
       path: '/shipping-address',
       name: 'shippingAddress',
@@ -211,7 +221,6 @@ List<RouteBase> _routes({required bool firebaseReady}) {
       },
     ),
 
-    // ✅ 請求先（決済）情報入力（ShellRoute の外）
     GoRoute(
       path: '/billing-address',
       name: 'billingAddress',
@@ -221,7 +230,6 @@ List<RouteBase> _routes({required bool firebaseReady}) {
       },
     ),
 
-    // ✅ アバター作成（ShellRoute の外）
     GoRoute(
       path: '/avatar-create',
       name: 'avatarCreate',
@@ -241,6 +249,8 @@ List<RouteBase> _routes({required bool firebaseReady}) {
             allowLogin: true,
             firebaseReady: firebaseReady,
           ),
+          // ✅ signed-in のときだけ表示（中で auth 判定して hidden になる）
+          footer: const SignedInFooter(),
           child: child,
         );
       },
@@ -268,11 +278,7 @@ List<RouteBase> _routes({required bool firebaseReady}) {
 
 bool _showBackFor(GoRouterState state) {
   final path = state.uri.path;
-
-  // ✅ Homeは戻るボタンを出さない
   if (path == '/') return false;
-
-  // ✅ それ以外は表示（例: /catalog/:listId）
   return true;
 }
 
@@ -283,9 +289,6 @@ String? _titleFor(GoRouterState state) {
   return null;
 }
 
-/// ✅ ヘッダー右側 actions（Sign in / Sign out）
-///
-/// firebaseReady=false の場合は FirebaseAuth を触らない（Webのminified type error 回避）
 List<Widget> _headerActionsFor(
   GoRouterState state, {
   required bool allowLogin,
@@ -293,7 +296,6 @@ List<Widget> _headerActionsFor(
 }) {
   final path = state.uri.path;
 
-  // ✅ 認証系ページでは何も出さない（ループ/二重表示防止）
   if (path == '/login' ||
       path == '/create-account' ||
       path == '/shipping-address' ||
@@ -304,16 +306,13 @@ List<Widget> _headerActionsFor(
 
   if (!allowLogin) return const [];
 
-  // from は “今いる場所に戻す” ために、クエリ含めた URI を使う
   final from = state.uri.toString();
 
-  // ✅ Firebase が未初期化/未設定の時は「常に Sign in」だけを出す（Auth判定しない）
   if (!firebaseReady) {
     final loginUri = Uri(path: '/login', queryParameters: {'from': from});
     return [_HeaderSignInButton(to: loginUri.toString())];
   }
 
-  // ✅ Firebase OK の時だけ Auth 判定
   final isLoggedIn = FirebaseAuth.instance.currentUser != null;
 
   if (!isLoggedIn) {
@@ -324,7 +323,6 @@ List<Widget> _headerActionsFor(
   return const [_HeaderSignedInButton()];
 }
 
-/// Stream を listen して GoRouter を refresh するための Listenable
 class GoRouterRefreshStream extends ChangeNotifier {
   GoRouterRefreshStream(Stream<dynamic> stream) {
     _sub = stream.listen((_) => notifyListeners());

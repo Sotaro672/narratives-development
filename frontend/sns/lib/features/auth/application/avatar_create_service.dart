@@ -196,6 +196,32 @@ class AvatarCreateService {
     return 'application/octet-stream';
   }
 
+  /// gs:// だけだと UI で使えないので、public bucket 前提の https URL を作るフォールバック
+  /// objectPath は `/` で分割して encode します
+  String _publicUrlFromBucketObject(String bucket, String objectPath) {
+    final b = s(bucket);
+    final p = s(objectPath);
+    if (b.isEmpty || p.isEmpty) return '';
+    final encPath = p.split('/').map(Uri.encodeComponent).join('/');
+    return 'https://storage.googleapis.com/$b/$encPath';
+  }
+
+  Future<void> _updateFirebasePhotoUrlIfPossible(String url) async {
+    final u = _auth.currentUser;
+    final v = s(url);
+    if (u == null) return;
+    if (v.isEmpty) return;
+
+    try {
+      await u.updatePhotoURL(v);
+      await u.reload(); // ✅ UI反映の保険
+      _log('firebase photoURL updated url="$v"');
+    } catch (e) {
+      // photoURL 更新が失敗しても、アバター作成自体は成功扱いにしたいので握りつぶす
+      _log('firebase photoURL update failed err=$e');
+    }
+  }
+
   Future<AvatarCreateResult> save({
     required String avatarNameRaw,
     required String profileRaw,
@@ -323,9 +349,21 @@ class AvatarCreateService {
           avatarIcon: avatarIconCompat,
         );
 
-        _log(
-          'icon register ok avatarId=$avatarId iconId="${s(icon.id)}" url="${s(icon.url).isEmpty ? "-" : s(icon.url)}"',
+        final iconUrl = s(icon.url);
+        final fallbackPublicUrl = _publicUrlFromBucketObject(
+          bucket,
+          objectPath,
         );
+        final finalPhotoUrl = iconUrl.isNotEmpty ? iconUrl : fallbackPublicUrl;
+
+        _log(
+          'icon register ok avatarId=$avatarId iconId="${s(icon.id)}" '
+          'url="${iconUrl.isNotEmpty ? iconUrl : "-"}" '
+          'publicFallback="${fallbackPublicUrl.isNotEmpty ? fallbackPublicUrl : "-"}"',
+        );
+
+        // ✅ 本命: icon 確定時に FirebaseAuth photoURL を更新
+        await _updateFirebasePhotoUrlIfPossible(finalPhotoUrl);
       }
 
       _log('avatar save done avatarId=$avatarId uid=$uid');
