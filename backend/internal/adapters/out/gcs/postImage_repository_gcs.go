@@ -3,13 +3,16 @@ package gcs
 
 import (
 	"context"
+	"encoding/base64"
 	"errors"
 	"fmt"
 	"net/url"
+	"os"
 	"strings"
 	"time"
 
 	"cloud.google.com/go/storage"
+	"google.golang.org/api/iamcredentials/v1"
 	"google.golang.org/api/iterator"
 
 	postimagedom "narratives/internal/domain/postImage"
@@ -215,6 +218,179 @@ func (r *PostImageRepositoryGCS) PublicURL(bucket, objectPath string) string {
 	}
 	encoded := strings.Join(parts, "/")
 	return fmt.Sprintf("%s/%s/%s", strings.TrimRight(base, "/"), b, encoded)
+}
+
+// ==============================
+// Signed URL (postImage_signed_url.go)
+// ==============================
+
+// IssueSignedUploadURL issues a V4 signed URL for uploading an object via HTTP PUT.
+//
+// NOTE:
+//   - This implementation uses IAMCredentials SignBlob (no JSON private key required).
+//   - You must provide the signer service account email via env.
+//     Recommended: GCS_SIGNER_EMAIL (or GOOGLE_SERVICE_ACCOUNT_EMAIL / SERVICE_ACCOUNT_EMAIL).
+//
+// Required IAM:
+//   - The runtime identity must be allowed to call iamcredentials.signBlob for that SA
+//     (typically the same SA in Cloud Run).
+func (r *PostImageRepositoryGCS) IssueSignedUploadURL(
+	ctx context.Context,
+	bucket string,
+	objectPath string,
+	contentType string,
+	expiresIn time.Duration,
+) (string, error) {
+	if r == nil {
+		return "", errors.New("postImage_repository_gcs: repo is nil")
+	}
+	b := strings.TrimSpace(bucketOrDefault(bucket, r.Bucket))
+	if b == "" {
+		return "", errors.New("postImage_repository_gcs: bucket is empty")
+	}
+	obj := strings.TrimSpace(objectPath)
+	if obj == "" {
+		return "", errors.New("postImage_repository_gcs: objectPath is empty")
+	}
+
+	// default / clamp
+	if expiresIn <= 0 {
+		expiresIn = 15 * time.Minute
+	}
+	if expiresIn > time.Hour {
+		expiresIn = time.Hour
+	}
+
+	accessID := strings.TrimSpace(firstNonEmptyEnv(
+		"GCS_SIGNER_EMAIL",
+		"GOOGLE_SERVICE_ACCOUNT_EMAIL",
+		"SERVICE_ACCOUNT_EMAIL",
+	))
+	if accessID == "" {
+		return "", errors.New("postImage_repository_gcs: signer email not configured (set GCS_SIGNER_EMAIL)")
+	}
+
+	svc, err := iamcredentials.NewService(ctx)
+	if err != nil {
+		return "", fmt.Errorf("postImage_repository_gcs: iamcredentials init failed: %w", err)
+	}
+
+	signBytes := func(bts []byte) ([]byte, error) {
+		name := fmt.Sprintf("projects/-/serviceAccounts/%s", accessID)
+		req := &iamcredentials.SignBlobRequest{
+			Payload: base64.StdEncoding.EncodeToString(bts),
+		}
+		resp, err := svc.Projects.ServiceAccounts.SignBlob(name, req).Do()
+		if err != nil {
+			return nil, err
+		}
+		sig, err := base64.StdEncoding.DecodeString(resp.SignedBlob)
+		if err != nil {
+			return nil, err
+		}
+		return sig, nil
+	}
+
+	opts := &storage.SignedURLOptions{
+		Scheme:         storage.SigningSchemeV4,
+		Method:         "PUT",
+		GoogleAccessID: accessID,
+		SignBytes:      signBytes,
+		Expires:        time.Now().UTC().Add(expiresIn),
+	}
+	if ct := strings.TrimSpace(contentType); ct != "" {
+		opts.ContentType = ct
+	}
+
+	u, err := storage.SignedURL(b, obj, opts)
+	if err != nil {
+		return "", err
+	}
+	return u, nil
+}
+
+// (Optional) Useful for private buckets: GET signed URL.
+func (r *PostImageRepositoryGCS) IssueSignedDownloadURL(
+	ctx context.Context,
+	bucket string,
+	objectPath string,
+	expiresIn time.Duration,
+) (string, error) {
+	if r == nil {
+		return "", errors.New("postImage_repository_gcs: repo is nil")
+	}
+	b := strings.TrimSpace(bucketOrDefault(bucket, r.Bucket))
+	if b == "" {
+		return "", errors.New("postImage_repository_gcs: bucket is empty")
+	}
+	obj := strings.TrimSpace(objectPath)
+	if obj == "" {
+		return "", errors.New("postImage_repository_gcs: objectPath is empty")
+	}
+
+	if expiresIn <= 0 {
+		expiresIn = 10 * time.Minute
+	}
+	if expiresIn > time.Hour {
+		expiresIn = time.Hour
+	}
+
+	accessID := strings.TrimSpace(firstNonEmptyEnv(
+		"GCS_SIGNER_EMAIL",
+		"GOOGLE_SERVICE_ACCOUNT_EMAIL",
+		"SERVICE_ACCOUNT_EMAIL",
+	))
+	if accessID == "" {
+		return "", errors.New("postImage_repository_gcs: signer email not configured (set GCS_SIGNER_EMAIL)")
+	}
+
+	svc, err := iamcredentials.NewService(ctx)
+	if err != nil {
+		return "", fmt.Errorf("postImage_repository_gcs: iamcredentials init failed: %w", err)
+	}
+
+	signBytes := func(bts []byte) ([]byte, error) {
+		name := fmt.Sprintf("projects/-/serviceAccounts/%s", accessID)
+		req := &iamcredentials.SignBlobRequest{
+			Payload: base64.StdEncoding.EncodeToString(bts),
+		}
+		resp, err := svc.Projects.ServiceAccounts.SignBlob(name, req).Do()
+		if err != nil {
+			return nil, err
+		}
+		sig, err := base64.StdEncoding.DecodeString(resp.SignedBlob)
+		if err != nil {
+			return nil, err
+		}
+		return sig, nil
+	}
+
+	opts := &storage.SignedURLOptions{
+		Scheme:         storage.SigningSchemeV4,
+		Method:         "GET",
+		GoogleAccessID: accessID,
+		SignBytes:      signBytes,
+		Expires:        time.Now().UTC().Add(expiresIn),
+	}
+
+	u, err := storage.SignedURL(b, obj, opts)
+	if err != nil {
+		return "", err
+	}
+	return u, nil
+}
+
+func firstNonEmptyEnv(keys ...string) string {
+	for _, k := range keys {
+		k = strings.TrimSpace(k)
+		if k == "" {
+			continue
+		}
+		if v := strings.TrimSpace(os.Getenv(k)); v != "" {
+			return v
+		}
+	}
+	return ""
 }
 
 func bucketOrDefault(v, def string) string {

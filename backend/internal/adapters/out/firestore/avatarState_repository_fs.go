@@ -30,6 +30,57 @@ func (r *AvatarStateRepositoryFS) col() *firestore.CollectionRef {
 }
 
 // ==============================
+// Upsert (required by usecase.AvatarStateRepo)
+// ==============================
+
+// Upsert ensures avatar_state exists for the given avatarId.
+// - If not found: create with zero counts
+// - If exists: touch lastActiveAt / updatedAt
+func (r *AvatarStateRepositoryFS) Upsert(ctx context.Context, avatarID string) error {
+	if r == nil || r.Client == nil {
+		return errors.New("avatarState_repository_fs: client is nil")
+	}
+	avatarID = strings.TrimSpace(avatarID)
+	if avatarID == "" {
+		return errors.New("avatarState_repository_fs: avatarID is empty")
+	}
+
+	// Exists -> touch
+	if _, err := r.GetByAvatarID(ctx, avatarID); err == nil {
+		now := time.Now().UTC()
+		patch := avatarstate.AvatarStatePatch{
+			LastActiveAt: &now,
+			UpdatedAt:    &now,
+		}
+		_, uerr := r.UpdateByAvatarID(ctx, avatarID, patch)
+		return uerr
+	} else {
+		// NotFound -> create
+		if errors.Is(err, avatarstate.ErrNotFound) {
+			now := time.Now().UTC()
+			updatedAt := now
+
+			zero := int64(0)
+			st, nerr := avatarstate.New(
+				"",       // id (auto)
+				avatarID, // avatarId
+				&zero,    // followerCount
+				&zero,    // followingCount
+				&zero,    // postCount
+				now,      // lastActiveAt
+				&updatedAt,
+			)
+			if nerr != nil {
+				return nerr
+			}
+			_, serr := r.Save(ctx, st, nil)
+			return serr
+		}
+		return err
+	}
+}
+
+// ==============================
 // List (Filter + Sort + Paging)
 // ==============================
 

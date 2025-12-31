@@ -1,21 +1,63 @@
 // frontend/sns/lib/features/avatar/presentation/page/avatar.dart
+import 'dart:async';
+
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
-class AvatarPage extends StatelessWidget {
+import '../../../wallet/infrastructure/wallet_repository_http.dart';
+
+class _ProfileCounts {
+  const _ProfileCounts({
+    required this.postCount,
+    required this.followerCount,
+    required this.followingCount,
+    required this.tokenCount,
+  });
+
+  final int postCount;
+  final int followerCount;
+  final int followingCount;
+  final int tokenCount;
+}
+
+class AvatarPage extends StatefulWidget {
   const AvatarPage({super.key, this.from});
 
   /// ✅ router.dart から渡される「遷移元」
   final String? from;
 
-  String _s(String? v) => (v ?? '').trim();
+  @override
+  State<AvatarPage> createState() => _AvatarPageState();
+}
+
+class _AvatarPageState extends State<AvatarPage> {
+  late final WalletRepositoryHttp _walletRepo;
+
+  Future<WalletDTO?>? _walletFuture;
+
+  String s(String? v) => (v ?? '').trim();
+
+  @override
+  void initState() {
+    super.initState();
+    _walletRepo = WalletRepositoryHttp(
+      // apiBase: 'https://narratives-backend-....run.app', // 必要なら注入
+      // logger: (m) => debugPrint(m),
+    );
+  }
+
+  @override
+  void dispose() {
+    _walletRepo.dispose();
+    super.dispose();
+  }
 
   String _displayNameFor(User u) {
-    final dn = _s(u.displayName);
+    final dn = s(u.displayName);
     if (dn.isNotEmpty) return dn;
 
-    final email = _s(u.email);
+    final email = s(u.email);
     if (email.isNotEmpty) return email.split('@').first;
 
     return 'My Profile';
@@ -26,20 +68,79 @@ class AvatarPage extends StatelessWidget {
   }
 
   String _effectiveFrom(BuildContext context) {
-    final v = _s(from);
+    final v = s(widget.from);
     if (v.isNotEmpty) return v;
     return _currentUri(context);
+  }
+
+  // 暫定: avatarId = Firebase UID（本来は選択中 avatarId を使う）
+  String _resolveAvatarId(User user) {
+    return s(user.uid);
+  }
+
+  Widget _statItem(BuildContext context, String label, int value) {
+    return Expanded(
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text(
+            value.toString(),
+            style: Theme.of(
+              context,
+            ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700),
+          ),
+          const SizedBox(height: 2),
+          Text(
+            label,
+            style: Theme.of(context).textTheme.bodySmall?.copyWith(
+              color: Theme.of(context).colorScheme.onSurfaceVariant,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _tokenChips(BuildContext context, List<String> tokens) {
+    if (tokens.isEmpty) {
+      return Text(
+        'トークンはまだありません。',
+        style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+          color: Theme.of(context).colorScheme.onSurfaceVariant,
+        ),
+      );
+    }
+
+    String shortMint(String m) {
+      final t = m.trim();
+      if (t.length <= 12) return t;
+      return '${t.substring(0, 6)}…${t.substring(t.length - 4)}';
+    }
+
+    return Wrap(
+      spacing: 8,
+      runSpacing: 8,
+      children: tokens.map((m) {
+        return Chip(
+          label: Text(shortMint(m)),
+          visualDensity: VisualDensity.compact,
+        );
+      }).toList(),
+    );
+  }
+
+  void _kickoffLoads(User user) {
+    final avatarId = _resolveAvatarId(user);
+    _walletFuture ??= _walletRepo.fetchByAvatarId(avatarId);
   }
 
   @override
   Widget build(BuildContext context) {
     return StreamBuilder<User?>(
-      // ✅ photoURL / displayName 更新を拾う
       stream: FirebaseAuth.instance.userChanges(),
       builder: (context, snap) {
         final user = FirebaseAuth.instance.currentUser ?? snap.data;
 
-        // 念のため：未ログインならログインへ誘導
         if (user == null) {
           final backTo = _effectiveFrom(context);
           final loginUri = Uri(
@@ -78,10 +179,11 @@ class AvatarPage extends StatelessWidget {
           );
         }
 
-        final photoUrl = _s(user.photoURL);
+        _kickoffLoads(user);
+
+        final photoUrl = s(user.photoURL);
         final name = _displayNameFor(user);
 
-        // Instagram 風：上部に丸アイコン + 名前、中央寄せのカードっぽい余白
         return Center(
           child: ConstrainedBox(
             constraints: const BoxConstraints(maxWidth: 560),
@@ -137,28 +239,97 @@ class AvatarPage extends StatelessWidget {
                       ),
                     ],
                   ),
-                  const SizedBox(height: 16),
+                  const SizedBox(height: 14),
+
+                  FutureBuilder<WalletDTO?>(
+                    future: _walletFuture,
+                    builder: (context, wsnap) {
+                      final wallet = wsnap.data;
+                      final tokens = wallet?.tokens ?? const <String>[];
+
+                      // 現状は未接続のため 0（AvatarState 連携時に置換）
+                      final postCount = 0;
+                      final followerCount = 0;
+                      final followingCount = 0;
+
+                      final counts = _ProfileCounts(
+                        postCount: postCount,
+                        followerCount: followerCount,
+                        followingCount: followingCount,
+                        tokenCount: tokens.length,
+                      );
+
+                      return Row(
+                        children: [
+                          _statItem(context, '投稿', counts.postCount),
+                          _statItem(context, 'フォロワー', counts.followerCount),
+                          _statItem(context, 'フォロー中', counts.followingCount),
+                          _statItem(context, 'トークン', counts.tokenCount),
+                        ],
+                      );
+                    },
+                  ),
+
+                  const SizedBox(height: 12),
                   const Divider(height: 1),
                   const SizedBox(height: 12),
 
-                  // ✅ ここから先は次のステップで拡張（bio/link/grid等）
                   Text(
-                    '（次）ここにプロフィール文・リンク・投稿グリッドを追加します。',
-                    style: Theme.of(context).textTheme.bodyMedium,
+                    'Tokens',
+                    style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+
+                  FutureBuilder<WalletDTO?>(
+                    future: _walletFuture,
+                    builder: (context, wsnap) {
+                      if (wsnap.connectionState == ConnectionState.waiting) {
+                        return const Padding(
+                          padding: EdgeInsets.symmetric(vertical: 8),
+                          child: LinearProgressIndicator(),
+                        );
+                      }
+                      if (wsnap.hasError) {
+                        return Text(
+                          'トークンの取得に失敗しました: ${wsnap.error}',
+                          style: Theme.of(context).textTheme.bodyMedium
+                              ?.copyWith(
+                                color: Theme.of(context).colorScheme.error,
+                              ),
+                        );
+                      }
+                      final wallet = wsnap.data;
+                      final tokens = wallet?.tokens ?? const <String>[];
+                      return _tokenChips(context, tokens);
+                    },
                   ),
 
-                  const SizedBox(height: 24),
-                  OutlinedButton(
-                    onPressed: () {
-                      // いまは既存の作成/編集画面へ
-                      final here = _currentUri(context);
-                      final uri = Uri(
-                        path: '/avatar-create',
-                        queryParameters: {'from': here},
-                      );
-                      context.go(uri.toString());
-                    },
-                    child: const Text('Edit profile'),
+                  const SizedBox(height: 18),
+
+                  Text(
+                    'Posts',
+                    style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  Container(
+                    height: 180,
+                    alignment: Alignment.center,
+                    decoration: BoxDecoration(
+                      borderRadius: BorderRadius.circular(12),
+                      color: Theme.of(
+                        context,
+                      ).colorScheme.surfaceContainerHighest,
+                    ),
+                    child: Text(
+                      '（次）ここに投稿グリッドを表示します',
+                      style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                        color: Theme.of(context).colorScheme.onSurfaceVariant,
+                      ),
+                    ),
                   ),
                 ],
               ),

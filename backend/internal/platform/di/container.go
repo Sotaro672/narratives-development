@@ -3,9 +3,12 @@ package di
 
 import (
 	"context"
+	"errors"
 	"log"
 	"os"
+	"reflect"
 	"strings"
+	"time"
 
 	firebase "firebase.google.com/go/v4"
 	firebaseauth "firebase.google.com/go/v4/auth"
@@ -45,6 +48,8 @@ import (
 	companydom "narratives/internal/domain/company"
 	memdom "narratives/internal/domain/member"
 	pbdom "narratives/internal/domain/productBlueprint"
+
+	avatarstate "narratives/internal/domain/avatarState"
 
 	appcfg "narratives/internal/infra/config"
 )
@@ -104,6 +109,10 @@ type Container struct {
 	TrackingUC         *uc.TrackingUsecase
 	UserUC             *uc.UserUsecase
 	WalletUC           *uc.WalletUsecase
+
+	// ✅ NEW: Cart / Post
+	CartUC *uc.CartUsecase
+	PostUC *uc.PostUsecase
 
 	// ★ 追加: QueryService（GET /productions 一覧専用、Company境界付き）
 	CompanyProductionQueryService *companyquery.CompanyProductionQueryService
@@ -215,6 +224,11 @@ func NewContainer(ctx context.Context) (*Container, error) {
 	accountRepo := fs.NewAccountRepositoryFS(fsClient)
 	announcementRepo := fs.NewAnnouncementRepositoryFS(fsClient)
 	avatarRepo := fs.NewAvatarRepositoryFS(fsClient)
+
+	// ✅ AvatarState repo（Firestore実装）を usecase 互換にする（Upsert の揺れ吸収）
+	avatarStateRepoFS := fs.NewAvatarStateRepositoryFS(fsClient)
+	avatarStateRepo := &avatarStateRepoAdapter{repo: avatarStateRepoFS}
+
 	billingAddressRepo := fs.NewBillingAddressRepositoryFS(fsClient)
 	brandRepo := fs.NewBrandRepositoryFS(fsClient)
 	campaignRepo := fs.NewCampaignRepositoryFS(fsClient)
@@ -251,6 +265,10 @@ func NewContainer(ctx context.Context) (*Container, error) {
 	userRepo := fs.NewUserRepositoryFS(fsClient)
 	walletRepo := fs.NewWalletRepositoryFS(fsClient)
 
+	// ✅ NEW: Cart / Post repositories
+	cartRepo := fs.NewCartRepositoryFS(fsClient)
+	postRepo := fs.NewPostRepositoryFS(fsClient)
+
 	printLogRepo := fs.NewPrintLogRepositoryFS(fsClient)
 	inspectionRepo := fs.NewInspectionRepositoryFS(fsClient)
 
@@ -271,7 +289,6 @@ func NewContainer(ctx context.Context) (*Container, error) {
 	brandWalletSvc := solanainfra.NewBrandWalletService(cfg.FirestoreProjectID)
 
 	// ✅ Solana Avatar Wallet Service (Wallet Open for Avatar)
-	// - Secret Manager: avatar-wallet-<avatarID>
 	avatarWalletSvc := solanainfra.NewAvatarWalletService(cfg.FirestoreProjectID)
 
 	// ★ member.Service
@@ -314,12 +331,20 @@ func NewContainer(ctx context.Context) (*Container, error) {
 	listImageBucket := strings.TrimSpace(os.Getenv("LIST_IMAGE_BUCKET"))
 	listImageRepo := gcso.NewListImageRepositoryGCS(gcsClient, listImageBucket)
 
-	// ✅ AvatarIcon repository (GCS)  ※ AvatarUC の Icons + ObjectStoragePort に配線
+	// ✅ AvatarIcon repository (GCS)
 	avatarIconBucket := strings.TrimSpace(os.Getenv("AVATAR_ICON_BUCKET"))
 	if avatarIconBucket == "" {
 		avatarIconBucket = "narratives-development_avatar_icon"
 	}
 	avatarIconRepo := gcso.NewAvatarIconRepositoryGCS(gcsClient, avatarIconBucket)
+
+	// ✅ PostImage repository (GCS) を usecase 互換にする（戻り値3つ + objectPath/publicURL を要求）
+	postImageBucket := strings.TrimSpace(os.Getenv("POST_IMAGE_BUCKET"))
+	if postImageBucket == "" {
+		postImageBucket = "narratives-development-posts"
+	}
+	postImageRepoGCS := gcso.NewPostImageRepositoryGCS(gcsClient, postImageBucket)
+	postImageRepo := &postImageRepoAdapter{repo: postImageRepoGCS}
 
 	// ✅ ListPatcher adapter（imageId 更新専用）
 	listPatcher := &listPatcherAdapter{repo: listRepoFS}
@@ -338,23 +363,23 @@ func NewContainer(ctx context.Context) (*Container, error) {
 	accountUC := uc.NewAccountUsecase(accountRepo)
 	announcementUC := uc.NewAnnouncementUsecase(announcementRepo, nil, nil)
 
-	// ✅ FIX:
-	// - AvatarIconRepo と AvatarIconObjectStoragePort(DeleteObjects/EnsurePrefix) を GCS repo に寄せる
-	// - wallet は WithWalletService で注入する
+	// ✅ AvatarUsecase
 	avatarUC := uc.NewAvatarUsecase(
 		avatarRepo,
-		nil,            // AvatarStateRepo (optional)
-		avatarIconRepo, // AvatarIconRepo (GetByAvatarID/Save)
-		avatarIconRepo, // AvatarIconObjectStoragePort (DeleteObjects/EnsurePrefix)
-	).WithWalletService(avatarWalletSvc)
+		avatarStateRepo, // ✅ usecase.AvatarStateRepo
+		avatarIconRepo,  // AvatarIconRepo
+		avatarIconRepo,  // AvatarIconObjectStoragePort
+	).
+		WithWalletService(avatarWalletSvc).
+		WithWalletRepo(walletRepo)
+
+	// ✅ optional: avatar 作成時に cart を同時起票したい実装が入っている場合に備えて best-effort 注入
+	callOptionalMethod(avatarUC, "WithCartRepo", cartRepo)
 
 	billingAddressUC := uc.NewBillingAddressUsecase(billingAddressRepo)
-
 	brandUC := uc.NewBrandUsecaseWithWallet(brandRepo, memberRepo, brandWalletSvc)
-
 	campaignUC := uc.NewCampaignUsecase(campaignRepo, nil, nil, nil)
 	companyUC := uc.NewCompanyUsecase(companyRepo)
-
 	inquiryUC := uc.NewInquiryUsecase(inquiryRepo, nil, nil)
 	inventoryUC := uc.NewInventoryUsecase(inventoryRepo)
 	invoiceUC := uc.NewInvoiceUsecase(invoiceRepo)
@@ -370,7 +395,6 @@ func NewContainer(ctx context.Context) (*Container, error) {
 
 	memberUC := uc.NewMemberUsecase(memberRepo)
 	messageUC := uc.NewMessageUsecase(messageRepo, nil, nil)
-
 	modelUC := uc.NewModelUsecase(modelRepo, modelHistoryRepo)
 
 	orderUC := uc.NewOrderUsecase(orderRepo)
@@ -455,6 +479,10 @@ func NewContainer(ctx context.Context) (*Container, error) {
 	userUC := uc.NewUserUsecase(userRepo)
 	walletUC := uc.NewWalletUsecase(walletRepo)
 
+	// ✅ NEW: Cart / Post usecases
+	cartUC := uc.NewCartUsecase(cartRepo)
+	postUC := uc.NewPostUsecase(postRepo, postImageRepo)
+
 	invitationMailer := mailadp.NewInvitationMailerWithSendGrid(companySvc, brandSvc)
 
 	invitationQueryUC := uc.NewInvitationService(invitationTokenUCRepo, memberRepo)
@@ -508,7 +536,6 @@ func NewContainer(ctx context.Context) (*Container, error) {
 	)
 
 	// ✅ NEW: SNSCatalogQuery（buyer-facing /sns/catalog/{listId} 用）
-	// ✅ adapters は sns_container.go に移譲済み（同一 package di なので参照は可能）
 	snsCatalogQ := snsquery.NewSNSCatalogQuery(
 		listRepoFS,
 		&snsCatalogInventoryRepoAdapter{repo: inventoryRepo},
@@ -561,6 +588,9 @@ func NewContainer(ctx context.Context) (*Container, error) {
 		UserUC:             userUC,
 		WalletUC:           walletUC,
 
+		CartUC: cartUC,
+		PostUC: postUC,
+
 		CompanyProductionQueryService: companyProductionQueryService,
 		MintRequestQueryService:       mintRequestQueryService,
 
@@ -593,6 +623,51 @@ func (c *Container) SNSCatalogQuery() *snsquery.SNSCatalogQuery {
 		return nil
 	}
 	return c.SNSCatalogQ
+}
+
+// ✅ sns_container.go から取得される想定（best-effort）
+func (c *Container) CartUsecase() *uc.CartUsecase {
+	if c == nil {
+		return nil
+	}
+	return c.CartUC
+}
+
+// ✅ post を DI に入れたので getter も用意（sns 側で参照する場合に備える）
+func (c *Container) PostUsecase() *uc.PostUsecase {
+	if c == nil {
+		return nil
+	}
+	return c.PostUC
+}
+
+// callOptionalMethod calls obj.<methodName>(arg) when such method exists (best-effort).
+func callOptionalMethod(obj any, methodName string, arg any) {
+	if obj == nil || strings.TrimSpace(methodName) == "" || arg == nil {
+		return
+	}
+	rv := reflect.ValueOf(obj)
+	m := rv.MethodByName(methodName)
+	if !m.IsValid() {
+		return
+	}
+	// expect 1 input
+	if m.Type().NumIn() != 1 {
+		return
+	}
+	av := reflect.ValueOf(arg)
+	if !av.IsValid() {
+		return
+	}
+	// assignable only
+	if !av.Type().AssignableTo(m.Type().In(0)) {
+		// if method expects interface, and arg implements it
+		if m.Type().In(0).Kind() == reflect.Interface && av.Type().Implements(m.Type().In(0)) {
+			m.Call([]reflect.Value{av})
+		}
+		return
+	}
+	m.Call([]reflect.Value{av})
 }
 
 // ========================================
@@ -662,6 +737,7 @@ func (c *Container) RouterDeps() httpin.RouterDeps {
 // ========================================
 // Close
 // ========================================
+
 func (c *Container) Close() error {
 	if c.Firestore != nil {
 		_ = c.Firestore.Close()
@@ -670,4 +746,92 @@ func (c *Container) Close() error {
 		_ = c.GCS.Close()
 	}
 	return nil
+}
+
+// ============================================================
+// Adapters (DI layer) to absorb signature drift
+// ============================================================
+
+// ---- AvatarState adapter ----
+
+type avatarStateGetter interface {
+	GetByAvatarID(ctx context.Context, avatarID string) (avatarstate.AvatarState, error)
+}
+
+// new (expected) signature
+type avatarStateUpserterV2 interface {
+	Upsert(ctx context.Context, s avatarstate.AvatarState) (avatarstate.AvatarState, error)
+}
+
+// old signature (seen in compiler error)
+type avatarStateUpserterV1 interface {
+	Upsert(ctx context.Context, avatarID string) error
+}
+
+type avatarStateRepoAdapter struct {
+	repo any
+}
+
+func (a *avatarStateRepoAdapter) GetByAvatarID(ctx context.Context, avatarID string) (avatarstate.AvatarState, error) {
+	if a == nil || a.repo == nil {
+		return avatarstate.AvatarState{}, errors.New("avatarState repo not configured")
+	}
+	g, ok := a.repo.(avatarStateGetter)
+	if !ok {
+		return avatarstate.AvatarState{}, errors.New("avatarState repo missing GetByAvatarID")
+	}
+	return g.GetByAvatarID(ctx, avatarID)
+}
+
+func (a *avatarStateRepoAdapter) Upsert(ctx context.Context, s avatarstate.AvatarState) (avatarstate.AvatarState, error) {
+	if a == nil || a.repo == nil {
+		return avatarstate.AvatarState{}, errors.New("avatarState repo not configured")
+	}
+	// Prefer correct signature
+	if v2, ok := a.repo.(avatarStateUpserterV2); ok {
+		return v2.Upsert(ctx, s)
+	}
+	// Fallback: old signature Upsert(ctx, avatarID) error
+	if v1, ok := a.repo.(avatarStateUpserterV1); ok {
+		aid := strings.TrimSpace(s.AvatarID)
+		if aid == "" {
+			return avatarstate.AvatarState{}, errors.New("avatarState upsert: avatarId is empty")
+		}
+		if err := v1.Upsert(ctx, aid); err != nil {
+			return avatarstate.AvatarState{}, err
+		}
+		// Restore value by re-fetch
+		return a.GetByAvatarID(ctx, aid)
+	}
+	return avatarstate.AvatarState{}, errors.New("avatarState repo missing Upsert")
+}
+
+// ---- PostImage adapter ----
+
+// expected signature (usecase.PostImageRepo)
+type postImageIssuerV2 interface {
+	IssueSignedUploadURL(ctx context.Context, avatarID, fileName, contentType string, expiresIn time.Duration) (string, string, string, error)
+}
+
+// old signature (seen in compiler error)
+type postImageIssuerV1 interface {
+	IssueSignedUploadURL(ctx context.Context, avatarID, fileName, contentType string, expiresIn time.Duration) (string, error)
+}
+
+type postImageRepoAdapter struct {
+	repo any
+}
+
+func (a *postImageRepoAdapter) IssueSignedUploadURL(ctx context.Context, avatarID, fileName, contentType string, expiresIn time.Duration) (string, string, string, error) {
+	if a == nil || a.repo == nil {
+		return "", "", "", errors.New("postImage repo not configured")
+	}
+	if v2, ok := a.repo.(postImageIssuerV2); ok {
+		return v2.IssueSignedUploadURL(ctx, avatarID, fileName, contentType, expiresIn)
+	}
+	// If only old signature exists, we cannot reconstruct publicURL/objectPath safely.
+	if _, ok := a.repo.(postImageIssuerV1); ok {
+		return "", "", "", errors.New("postImage repo has legacy IssueSignedUploadURL signature; expected (uploadURL, publicURL, objectPath, error)")
+	}
+	return "", "", "", errors.New("postImage repo missing IssueSignedUploadURL")
 }

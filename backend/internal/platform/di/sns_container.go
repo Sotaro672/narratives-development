@@ -28,14 +28,26 @@ type SNSDeps struct {
 	Company http.Handler
 	Brand   http.Handler
 
-	// ✅ NEW: auth onboarding resources
+	// ✅ auth entry (cart empty ok)
+	SignIn http.Handler
+
+	// ✅ auth onboarding resources
 	User            http.Handler
 	ShippingAddress http.Handler
 	BillingAddress  http.Handler
 	Avatar          http.Handler
 
+	// ✅ NEW: avatar state
+	AvatarState http.Handler
+
+	// ✅ NEW: wallet
+	Wallet http.Handler
+
 	// ✅ NEW: cart
 	Cart http.Handler
+
+	// ✅ NEW: posts
+	Post http.Handler
 }
 
 // NewSNSDeps wires SNS handlers.
@@ -188,14 +200,16 @@ func NewSNSDepsWithNameResolverAndOrgHandlers(
 		Company: companyHandler,
 		Brand:   brandHandler,
 
-		// ✅ onboarding handlers are injected at RegisterSNSFromContainer() best-effort
+		// ✅ sign-in / onboarding / other resources are injected at RegisterSNSFromContainer() best-effort
+		SignIn:          nil,
 		User:            nil,
 		ShippingAddress: nil,
 		BillingAddress:  nil,
 		Avatar:          nil,
-
-		// ✅ cart handler is injected at RegisterSNSFromContainer() best-effort
-		Cart: nil,
+		AvatarState:     nil,
+		Wallet:          nil,
+		Cart:            nil,
+		Post:            nil,
 	}
 }
 
@@ -356,6 +370,12 @@ func RegisterSNSFromContainer(mux *http.ServeMux, cont *Container) {
 		catalogQ,
 	)
 
+	// ✅ sign-in
+	snsDeps.SignIn = getHandlerBestEffort(cont, depsAny,
+		[]string{"SNSSignInHandler", "SNSSignIn", "SignInHandler", "SignIn"},
+		[]string{"SignIn", "SignInHandler", "SNSSignIn", "SNSSignInHandler"},
+	)
+
 	// ✅ try to inject onboarding handlers (user/shipping/billing/avatar)
 	// - prioritize Container methods
 	// - fallback to RouterDeps fields (http.Handler)
@@ -376,13 +396,33 @@ func RegisterSNSFromContainer(mux *http.ServeMux, cont *Container) {
 		[]string{"Avatar", "AvatarHandler", "SNSAvatar", "SNSAvatarHandler"},
 	)
 
-	// ✅ NEW: try to inject cart handler
+	// ✅ avatar state
+	snsDeps.AvatarState = getHandlerBestEffort(cont, depsAny,
+		[]string{"SNSAvatarStateHandler", "SNSAvatarState", "AvatarStateHandler", "AvatarState"},
+		[]string{"AvatarState", "AvatarStateHandler", "SNSAvatarState", "SNSAvatarStateHandler"},
+	)
+
+	// ✅ wallet
+	snsDeps.Wallet = getHandlerBestEffort(cont, depsAny,
+		[]string{"SNSWalletHandler", "SNSWallet", "WalletHandler", "Wallet"},
+		[]string{"Wallet", "WalletHandler", "SNSWallet", "SNSWalletHandler"},
+	)
+
+	// ✅ cart
 	snsDeps.Cart = getHandlerBestEffort(cont, depsAny,
 		[]string{"SNSCartHandler", "SNSCart", "CartHandler", "Cart"},
 		[]string{"Cart", "CartHandler", "SNSCart", "SNSCartHandler"},
 	)
 
+	// ✅ posts
+	snsDeps.Post = getHandlerBestEffort(cont, depsAny,
+		[]string{"SNSPostHandler", "SNSPost", "PostHandler", "Post"},
+		[]string{"Post", "PostHandler", "SNSPost", "SNSPostHandler"},
+	)
+
 	// ✅ NEW: if handler is still nil, build it from Usecase pointers (Container -> RouterDeps)
+	// NOTE:
+	// - 既存の constructor が確実に存在するものだけ生成する（コンパイルを壊さないため）。
 	if snsDeps.User == nil {
 		uc := userUCFromCont
 		if uc == nil {
@@ -454,13 +494,20 @@ func RegisterSNSRoutes(mux *http.ServeMux, deps SNSDeps) {
 		Company: deps.Company,
 		Brand:   deps.Brand,
 
+		// ✅ auth entry
+		SignIn: deps.SignIn,
+
+		// ✅ onboarding
 		User:            deps.User,
 		ShippingAddress: deps.ShippingAddress,
 		BillingAddress:  deps.BillingAddress,
 		Avatar:          deps.Avatar,
 
-		// ✅ NEW: cart
-		Cart: deps.Cart,
+		// ✅ NEW
+		AvatarState: deps.AvatarState,
+		Wallet:      deps.Wallet,
+		Cart:        deps.Cart,
+		Post:        deps.Post,
 	})
 }
 

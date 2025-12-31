@@ -25,8 +25,17 @@ type Deps struct {
 	BillingAddress  http.Handler
 	Avatar          http.Handler
 
+	// ✅ NEW: avatar state (follower/following/post counts)
+	AvatarState http.Handler
+
+	// ✅ NEW: wallet (tokens)
+	Wallet http.Handler
+
 	// ✅ NEW: cart
 	Cart http.Handler
+
+	// ✅ NEW: posts
+	Post http.Handler
 }
 
 // Register registers buyer-facing routes onto mux.
@@ -53,6 +62,14 @@ type Deps struct {
 // - POST/GET/PATCH/DELETE /sns/billing-addresses/{id?}
 // - POST/GET/PATCH/DELETE /sns/avatars/{id?}
 //
+// ✅ AvatarState
+// - GET /sns/avatar-states/{avatarId}
+// - PATCH/PUT /sns/avatar-states/{avatarId} (必要になったら)
+//
+// ✅ Wallet
+// - GET /sns/wallet
+// - POST /sns/wallet/sync (必要になったら)
+//
 // ✅ Cart
 // - GET    /sns/cart
 // - POST   /sns/cart/items
@@ -60,6 +77,10 @@ type Deps struct {
 // - DELETE /sns/cart/items
 // - DELETE /sns/cart
 // - POST   /sns/cart/ordered
+//
+// ✅ Posts
+// - GET/POST /sns/posts
+// - GET/PATCH/DELETE /sns/posts/{id}
 func Register(mux *http.ServeMux, deps Deps) {
 	if mux == nil {
 		return
@@ -147,9 +168,27 @@ func Register(mux *http.ServeMux, deps Deps) {
 		mux.Handle("/sns/avatars/", deps.Avatar)
 	}
 
+	// ✅ avatarStates
+	if deps.AvatarState != nil {
+		mux.Handle("/sns/avatar-states", deps.AvatarState)
+		mux.Handle("/sns/avatar-states/", deps.AvatarState)
+	}
+
+	// ✅ wallet
+	if deps.Wallet != nil {
+		mux.Handle("/sns/wallet", deps.Wallet)
+		mux.Handle("/sns/wallet/", deps.Wallet)
+	}
+
 	// ✅ cart
 	if deps.Cart != nil {
 		mux.Handle("/sns/cart", deps.Cart)
 		mux.Handle("/sns/cart/", deps.Cart)
+	}
+
+	// ✅ posts
+	if deps.Post != nil {
+		mux.Handle("/sns/posts", deps.Post)
+		mux.Handle("/sns/posts/", deps.Post)
 	}
 }

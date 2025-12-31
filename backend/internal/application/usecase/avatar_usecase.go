@@ -10,6 +10,7 @@ import (
 	avatardom "narratives/internal/domain/avatar"
 	avataricon "narratives/internal/domain/avatarIcon"
 	avatarstate "narratives/internal/domain/avatarState"
+	cartdom "narratives/internal/domain/cart"
 	walletdom "narratives/internal/domain/wallet"
 )
 
@@ -58,6 +59,12 @@ type WalletRepo interface {
 	Save(ctx context.Context, w walletdom.Wallet) error
 }
 
+// ✅ NEW: Cart 永続化ポート（avatar 作成と同時に cart レコードも起票する）
+type CartRepo interface {
+	Upsert(ctx context.Context, c *cartdom.Cart) error
+	DeleteByAvatarID(ctx context.Context, avatarID string) error
+}
+
 // AvatarWalletService は Avatar 作成時に Solana wallet を開設するためのポートです。
 // - 秘密鍵は Secret Manager に保存される想定
 // - 公開鍵(base58) を avatar.WalletAddress に反映する
@@ -80,6 +87,9 @@ type AvatarUsecase struct {
 	// wallet
 	walletSvc  AvatarWalletService
 	walletRepo WalletRepo // ✅ NEW
+
+	// cart
+	cartRepo CartRepo // ✅ NEW
 
 	now func() time.Time
 }
@@ -113,6 +123,12 @@ func (u *AvatarUsecase) WithWalletService(svc AvatarWalletService) *AvatarUsecas
 // ✅ NEW: WithWalletRepo injects wallet persistence.
 func (u *AvatarUsecase) WithWalletRepo(r WalletRepo) *AvatarUsecase {
 	u.walletRepo = r
+	return u
+}
+
+// ✅ NEW: WithCartRepo injects cart persistence.
+func (u *AvatarUsecase) WithCartRepo(r CartRepo) *AvatarUsecase {
+	u.cartRepo = r
 	return u
 }
 
@@ -183,6 +199,7 @@ type CreateAvatarInput struct {
 // Create は /avatars POST 用の作成コマンドです。
 // ✅ 期待値:
 // - avatar 作成と同時に AvatarState を作成する（avatarState doc を確実に用意する）。
+// - avatar 作成と同時に cart テーブル（carts）も起票する（空カート）。
 // - avatar 作成と同時に Solana wallet を開設し、秘密鍵は Secret Manager に保存される。
 // - さらに wallet テーブル（wallets）も avatarId を保持して起票する。
 // - 開設できなかった場合はエラーを返す（= 作成処理は成功扱いにしない）。
@@ -195,6 +212,11 @@ func (u *AvatarUsecase) Create(ctx context.Context, in CreateAvatarInput) (avata
 	// ✅ avatarState は「同時作成したい」ので Create では必須
 	if u.stRepo == nil {
 		return avatardom.Avatar{}, errors.New("avatarState repo not configured")
+	}
+
+	// ✅ cart は「同時作成したい」ので Create では必須
+	if u.cartRepo == nil {
+		return avatardom.Avatar{}, errors.New("cart repo not configured")
 	}
 
 	// ✅ walletSvc は Create では必須（期待値）
@@ -247,6 +269,17 @@ func (u *AvatarUsecase) Create(ctx context.Context, in CreateAvatarInput) (avata
 		return avatardom.Avatar{}, avatardom.ErrInvalidID
 	}
 
+	rollback := func() {
+		// best-effort cleanup
+		if u.cartRepo != nil {
+			_ = u.cartRepo.DeleteByAvatarID(ctx, avatarID)
+		}
+		if u.avRepo != nil {
+			_ = u.avRepo.Delete(ctx, avatarID)
+		}
+		// AvatarState / Wallet は削除ポートが無いのでここでは触らない（必要なら後日追加）
+	}
+
 	// ✅ AvatarState doc を「同時作成」(strict)
 	// - wallet を開く前に作る（失敗時に wallet/secret を作らないため）
 	zero := int64(0)
@@ -260,24 +293,36 @@ func (u *AvatarUsecase) Create(ctx context.Context, in CreateAvatarInput) (avata
 		&now,
 	)
 	if aerr != nil {
-		_ = u.avRepo.Delete(ctx, avatarID)
+		rollback()
 		return avatardom.Avatar{}, aerr
 	}
 	if _, err := u.stRepo.Upsert(ctx, as); err != nil {
-		_ = u.avRepo.Delete(ctx, avatarID)
+		rollback()
+		return avatardom.Avatar{}, err
+	}
+
+	// ✅ Cart doc を「同時作成」(strict)
+	// - まず空カートを作る（items=nil or empty）
+	cartRow, cerr := cartdom.NewCart(avatarID, nil, now)
+	if cerr != nil {
+		rollback()
+		return avatardom.Avatar{}, cerr
+	}
+	if err := u.cartRepo.Upsert(ctx, cartRow); err != nil {
+		rollback()
 		return avatardom.Avatar{}, err
 	}
 
 	// ✅ Wallet open (strict)
 	w, werr := u.walletSvc.OpenAvatarWallet(ctx, avatarID)
 	if werr != nil {
-		_ = u.avRepo.Delete(ctx, avatarID)
+		rollback()
 		return avatardom.Avatar{}, werr
 	}
 
 	addr := strings.TrimSpace(w.Address)
 	if addr == "" {
-		_ = u.avRepo.Delete(ctx, avatarID)
+		rollback()
 		return avatardom.Avatar{}, ErrAvatarWalletAddressEmpty
 	}
 
@@ -285,7 +330,7 @@ func (u *AvatarUsecase) Create(ctx context.Context, in CreateAvatarInput) (avata
 	patch := avatardom.AvatarPatch{WalletAddress: &addr}
 	updated, uerr := u.avRepo.Update(ctx, avatarID, patch)
 	if uerr != nil {
-		_ = u.avRepo.Delete(ctx, avatarID)
+		rollback()
 		return avatardom.Avatar{}, uerr
 	}
 	created = updated
@@ -295,11 +340,11 @@ func (u *AvatarUsecase) Create(ctx context.Context, in CreateAvatarInput) (avata
 	// - lastUpdatedAt は now
 	walletRow, werr2 := walletdom.New(avatarID, addr, nil, now)
 	if werr2 != nil {
-		_ = u.avRepo.Delete(ctx, avatarID)
+		rollback()
 		return avatardom.Avatar{}, werr2
 	}
 	if err := u.walletRepo.Save(ctx, walletRow); err != nil {
-		_ = u.avRepo.Delete(ctx, avatarID)
+		rollback()
 		return avatardom.Avatar{}, err
 	}
 
@@ -502,6 +547,11 @@ func (u *AvatarUsecase) DeleteAvatarCascade(ctx context.Context, avatarID string
 				}
 			}
 		}
+	}
+
+	// cart: best-effort delete
+	if u.cartRepo != nil {
+		_ = u.cartRepo.DeleteByAvatarID(ctx, avatarID)
 	}
 
 	if u.avRepo == nil {
