@@ -1,4 +1,4 @@
-// frontend\sns\lib\app\routing\router.dart
+// frontend/sns/lib/app/routing/router.dart
 import 'dart:async';
 
 import 'package:flutter/material.dart';
@@ -22,6 +22,9 @@ import '../../features/avatar/presentation/page/avatar_edit.dart';
 
 // ✅ User edit page
 import '../../features/user/presentation/page/user_edit.dart';
+
+// ✅ Cart page
+import '../../features/cart/presentation/page/cart.dart';
 
 // ✅ SnsListItem 型
 import '../../features/list/infrastructure/list_repository_http.dart';
@@ -114,6 +117,14 @@ GoRouter buildPublicOnlyRouter({required Object initError}) {
       GoRoute(
         path: '/avatar',
         name: 'avatar',
+        pageBuilder: (context, state) =>
+            NoTransitionPage(child: _FirebaseInitErrorPage(error: initError)),
+      ),
+
+      // ✅ NEW: /cart も init error ページへ（firebase 未初期化時の 404 回避）
+      GoRoute(
+        path: '/cart',
+        name: 'cart',
         pageBuilder: (context, state) =>
             NoTransitionPage(child: _FirebaseInitErrorPage(error: initError)),
       ),
@@ -288,6 +299,20 @@ List<RouteBase> _routes({required bool firebaseReady}) {
             return NoTransitionPage(child: AvatarPage(from: from));
           },
         ),
+
+        // ✅ NEW: /cart（ShellRoute 内なので header/footer が出る）
+        GoRoute(
+          path: '/cart',
+          name: 'cart',
+          pageBuilder: (context, state) {
+            final qp = state.uri.queryParameters;
+            final avatarId = (qp['avatarId'] ?? '').trim();
+            final from = qp['from'];
+            return NoTransitionPage(
+              child: CartPage(avatarId: avatarId, from: from),
+            );
+          },
+        ),
       ],
     ),
   ];
@@ -304,6 +329,7 @@ String? _titleFor(GoRouterState state) {
   if (loc == '/') return null;
   if (loc.startsWith('/catalog/')) return 'Catalog';
   if (loc == '/avatar') return 'Profile';
+  if (loc == '/cart') return 'Cart';
   if (loc == '/avatar-edit') return 'Edit Avatar';
   if (loc == '/user-edit') return 'Account';
   return null;
@@ -332,13 +358,14 @@ List<Widget> _headerActionsFor(
   if (!allowLogin) return const [];
 
   final from = state.uri.toString();
+  final avatarId = (state.uri.queryParameters['avatarId'] ?? '').trim();
 
   // firebase 未初期化時は Sign in（+ Home のときだけ Cart）
   if (!firebaseReady) {
     final loginUri = Uri(path: '/login', queryParameters: {'from': from});
     if (isHome) {
       return [
-        _HeaderCartButton(from: from),
+        _HeaderCartButton(from: from, avatarId: avatarId),
         _HeaderSignInButton(to: loginUri.toString()),
       ];
     }
@@ -352,7 +379,7 @@ List<Widget> _headerActionsFor(
     final loginUri = Uri(path: '/login', queryParameters: {'from': from});
     if (isHome) {
       return [
-        _HeaderCartButton(from: from),
+        _HeaderCartButton(from: from, avatarId: avatarId),
         _HeaderSignInButton(to: loginUri.toString()),
       ];
     }
@@ -367,7 +394,7 @@ List<Widget> _headerActionsFor(
 
   // - list.dart（/）はカートのみ
   if (isHome) {
-    return [_HeaderCartButton(from: from)];
+    return [_HeaderCartButton(from: from, avatarId: avatarId)];
   }
 
   return const [];
@@ -400,10 +427,11 @@ class _HeaderSignInButton extends StatelessWidget {
   }
 }
 
-/// ✅ NEW: list.dart（/）用のカートボタン（header の右側に出す）
+/// ✅ list.dart（/）用のカートボタン（header の右側に出す）
 class _HeaderCartButton extends StatelessWidget {
-  const _HeaderCartButton({required this.from});
+  const _HeaderCartButton({required this.from, required this.avatarId});
   final String from;
+  final String avatarId;
 
   @override
   Widget build(BuildContext context) {
@@ -411,8 +439,9 @@ class _HeaderCartButton extends StatelessWidget {
       tooltip: 'Cart',
       icon: const Icon(Icons.shopping_cart_outlined),
       onPressed: () {
-        // ルートがある前提。未実装なら後で /cart を追加してください。
-        final uri = Uri(path: '/cart', queryParameters: {'from': from});
+        final qp = <String, String>{'from': from};
+        if (avatarId.trim().isNotEmpty) qp['avatarId'] = avatarId.trim();
+        final uri = Uri(path: '/cart', queryParameters: qp);
         context.go(uri.toString());
       },
     );

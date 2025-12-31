@@ -27,6 +27,9 @@ class CatalogTokenCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final p = patch;
 
+    final icon = (iconUrlEncoded ?? '').trim();
+    final hasIcon = icon.isNotEmpty;
+
     return Card(
       child: Padding(
         padding: const EdgeInsets.all(12),
@@ -35,43 +38,56 @@ class CatalogTokenCard extends StatelessWidget {
           children: [
             Text('トークン', style: Theme.of(context).textTheme.titleMedium),
             const SizedBox(height: 10),
+
             if (p != null) ...[
-              if ((iconUrlEncoded ?? '').trim().isNotEmpty) ...[
-                AspectRatio(
-                  aspectRatio: 1,
-                  child: Image.network(
-                    iconUrlEncoded!,
-                    fit: BoxFit.cover,
-                    errorBuilder: (context, err, st) {
-                      return _ImageFallback(
-                        label: 'トークン画像の読み込みに失敗しました',
-                        detail: err.toString(),
-                      );
-                    },
-                    loadingBuilder: (context, child, progress) {
-                      if (progress == null) return child;
-                      return const Center(child: CircularProgressIndicator());
-                    },
+              // ✅ Avatar と同じ大きさ（CircleAvatar radius: 44）
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  CircleAvatar(
+                    radius: 44,
+                    backgroundColor: Theme.of(
+                      context,
+                    ).colorScheme.surfaceContainerHighest,
+                    backgroundImage: hasIcon ? NetworkImage(icon) : null,
+                    onBackgroundImageError: (_, __) {},
+                    child: !hasIcon
+                        ? Icon(
+                            Icons.image_not_supported_outlined,
+                            size: 44,
+                            color: Theme.of(
+                              context,
+                            ).colorScheme.onSurfaceVariant,
+                          )
+                        : null,
                   ),
-                ),
-                const SizedBox(height: 10),
-              ],
-              _KeyValueRow(label: 'トークン名', value: _s(p.name)),
-              const SizedBox(height: 6),
-              _KeyValueRow(label: 'シンボル', value: _s(p.symbol)),
-              const SizedBox(height: 6),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        _KeyValueRow(label: 'トークン名', value: _s(p.name)),
+                        const SizedBox(height: 6),
+                        _KeyValueRow(label: 'シンボル', value: _s(p.symbol)),
+                        const SizedBox(height: 6),
 
-              // ✅ brandId / companyId / minted / tokenBlueprintId は表示しない
-              _KeyValueRow(label: 'ブランド名', value: _s(p.brandName)),
-              const SizedBox(height: 6),
-              _KeyValueRow(label: '会社名', value: _s(p.companyName)),
-              const SizedBox(height: 10),
+                        // ✅ brandId / companyId / minted / tokenBlueprintId は表示しない
+                        _KeyValueRow(label: 'ブランド名', value: _s(p.brandName)),
+                        const SizedBox(height: 6),
+                        _KeyValueRow(label: '会社名', value: _s(p.companyName)),
 
-              if ((p.description ?? '').trim().isNotEmpty)
-                Text(
-                  p.description!.trim(),
-                  style: Theme.of(context).textTheme.bodyMedium,
-                ),
+                        if ((p.description ?? '').trim().isNotEmpty) ...[
+                          const SizedBox(height: 10),
+                          Text(
+                            p.description!.trim(),
+                            style: Theme.of(context).textTheme.bodyMedium,
+                          ),
+                        ],
+                      ],
+                    ),
+                  ),
+                ],
+              ),
             ] else ...[
               if (error != null && error!.trim().isNotEmpty)
                 Text(
@@ -107,41 +123,6 @@ class _KeyValueRow extends StatelessWidget {
         ),
         Expanded(child: Text(value)),
       ],
-    );
-  }
-}
-
-class _ImageFallback extends StatelessWidget {
-  const _ImageFallback({required this.label, this.detail});
-
-  final String label;
-  final String? detail;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      color: Theme.of(context).colorScheme.surfaceContainerHighest,
-      padding: const EdgeInsets.all(12),
-      child: Center(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const Icon(Icons.image_not_supported_outlined, size: 36),
-            const SizedBox(height: 8),
-            Text(label),
-            if (detail != null) ...[
-              const SizedBox(height: 6),
-              Text(
-                detail!,
-                textAlign: TextAlign.center,
-                maxLines: 3,
-                overflow: TextOverflow.ellipsis,
-                style: Theme.of(context).textTheme.labelSmall,
-              ),
-            ],
-          ],
-        ),
-      ),
     );
   }
 }

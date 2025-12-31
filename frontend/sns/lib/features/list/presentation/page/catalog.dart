@@ -21,40 +21,6 @@ class _CatalogPageState extends State<CatalogPage> {
   late final UseCatalog _uc;
   late Future<CatalogState> _future;
 
-  String _lastVmLogKey = '';
-
-  void _log(String msg) {
-    // ignore: avoid_print
-    print('[CatalogPage] $msg');
-  }
-
-  void _logVmOnce(CatalogState vm) {
-    final key = [
-      vm.list.id,
-      vm.inventory != null ? 'inv' : 'noinv',
-      vm.productBlueprintId,
-      vm.tokenBlueprintId,
-      vm.tokenBlueprintPatch?.name ?? '',
-      vm.tokenBlueprintPatch?.symbol ?? '',
-      vm.tokenBlueprintPatch?.brandId ?? '',
-      (vm.tokenBlueprintPatch?.minted ?? '').toString(),
-      vm.tokenBlueprintError ?? '',
-      (vm.tokenIconUrlEncoded ?? '').isNotEmpty ? 'icon' : 'noicon',
-    ].join('|');
-
-    if (key == _lastVmLogKey) return;
-    _lastVmLogKey = key;
-
-    _log(
-      'vm received '
-      'listId=${vm.list.id} '
-      'inv?=${vm.inventory != null} '
-      'pbId="${vm.productBlueprintId}" '
-      'tbId="${vm.tokenBlueprintId}" '
-      'tbErr="${vm.tokenBlueprintError ?? ''}"',
-    );
-  }
-
   @override
   void initState() {
     super.initState();
@@ -93,10 +59,6 @@ class _CatalogPageState extends State<CatalogPage> {
         }
         if (list == null) {
           return const Center(child: Text('No data'));
-        }
-
-        if (vm != null) {
-          _logVmOnce(vm);
         }
 
         final priceText = vm?.priceText ?? '';
@@ -183,18 +145,14 @@ class _CatalogPageState extends State<CatalogPage> {
                   ],
                 ),
               ),
-
               const SizedBox(height: 12),
-
               CatalogTokenCard(
                 tokenBlueprintId: tbId,
                 patch: tbPatch,
                 error: tbErr,
                 iconUrlEncoded: tokenIconUrlEncoded,
               ),
-
               const SizedBox(height: 12),
-
               CatalogInventoryCard(
                 productBlueprintId: pbId,
                 tokenBlueprintId: tbId,
@@ -203,15 +161,12 @@ class _CatalogPageState extends State<CatalogPage> {
                 inventoryError: invErr,
                 modelStockRows: vm?.modelStockRows,
               ),
-
               const SizedBox(height: 12),
-
               CatalogProductCard(
                 productBlueprintId: pbId,
                 productBlueprint: pb,
                 error: pbErr,
               ),
-
               const SizedBox(height: 24),
             ],
           ),
