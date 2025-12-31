@@ -24,6 +24,9 @@ type Deps struct {
 	ShippingAddress http.Handler
 	BillingAddress  http.Handler
 	Avatar          http.Handler
+
+	// ✅ NEW: cart
+	Cart http.Handler
 }
 
 // Register registers buyer-facing routes onto mux.
@@ -49,6 +52,14 @@ type Deps struct {
 // - POST/GET/PATCH/DELETE /sns/shipping-addresses/{id?}
 // - POST/GET/PATCH/DELETE /sns/billing-addresses/{id?}
 // - POST/GET/PATCH/DELETE /sns/avatars/{id?}
+//
+// ✅ Cart
+// - GET    /sns/cart
+// - POST   /sns/cart/items
+// - PUT    /sns/cart/items
+// - DELETE /sns/cart/items
+// - DELETE /sns/cart
+// - POST   /sns/cart/ordered
 func Register(mux *http.ServeMux, deps Deps) {
 	if mux == nil {
 		return
@@ -134,5 +145,11 @@ func Register(mux *http.ServeMux, deps Deps) {
 	if deps.Avatar != nil {
 		mux.Handle("/sns/avatars", deps.Avatar)
 		mux.Handle("/sns/avatars/", deps.Avatar)
+	}
+
+	// ✅ cart
+	if deps.Cart != nil {
+		mux.Handle("/sns/cart", deps.Cart)
+		mux.Handle("/sns/cart/", deps.Cart)
 	}
 }

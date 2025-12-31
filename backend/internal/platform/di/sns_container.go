@@ -33,6 +33,9 @@ type SNSDeps struct {
 	ShippingAddress http.Handler
 	BillingAddress  http.Handler
 	Avatar          http.Handler
+
+	// ✅ NEW: cart
+	Cart http.Handler
 }
 
 // NewSNSDeps wires SNS handlers.
@@ -190,6 +193,9 @@ func NewSNSDepsWithNameResolverAndOrgHandlers(
 		ShippingAddress: nil,
 		BillingAddress:  nil,
 		Avatar:          nil,
+
+		// ✅ cart handler is injected at RegisterSNSFromContainer() best-effort
+		Cart: nil,
 	}
 }
 
@@ -317,6 +323,20 @@ func RegisterSNSFromContainer(mux *http.ServeMux, cont *Container) {
 		}
 	}
 
+	// ✅ NEW: obtain cart usecase from Container (best-effort)
+	var cartUCFromCont *usecase.CartUsecase
+	{
+		if x, ok := any(cont).(interface {
+			CartUsecase() *usecase.CartUsecase
+		}); ok {
+			cartUCFromCont = x.CartUsecase()
+		} else if x, ok := any(cont).(interface {
+			GetCartUsecase() *usecase.CartUsecase
+		}); ok {
+			cartUCFromCont = x.GetCartUsecase()
+		}
+	}
+
 	// ✅ obtain core usecases from RouterDeps
 	listUC := getFieldPtr[*usecase.ListUsecase](depsAny, "ListUC", "ListUsecase")
 	invUC := getFieldPtr[*usecase.InventoryUsecase](depsAny, "InventoryUC", "InventoryUsecase")
@@ -356,6 +376,12 @@ func RegisterSNSFromContainer(mux *http.ServeMux, cont *Container) {
 		[]string{"Avatar", "AvatarHandler", "SNSAvatar", "SNSAvatarHandler"},
 	)
 
+	// ✅ NEW: try to inject cart handler
+	snsDeps.Cart = getHandlerBestEffort(cont, depsAny,
+		[]string{"SNSCartHandler", "SNSCart", "CartHandler", "Cart"},
+		[]string{"Cart", "CartHandler", "SNSCart", "SNSCartHandler"},
+	)
+
 	// ✅ NEW: if handler is still nil, build it from Usecase pointers (Container -> RouterDeps)
 	if snsDeps.User == nil {
 		uc := userUCFromCont
@@ -393,6 +419,15 @@ func RegisterSNSFromContainer(mux *http.ServeMux, cont *Container) {
 			snsDeps.Avatar = snshandler.NewAvatarHandler(uc)
 		}
 	}
+	if snsDeps.Cart == nil {
+		uc := cartUCFromCont
+		if uc == nil {
+			uc = getFieldPtr[*usecase.CartUsecase](depsAny, "CartUC", "CartUsecase")
+		}
+		if uc != nil {
+			snsDeps.Cart = snshandler.NewCartHandler(uc)
+		}
+	}
 
 	RegisterSNSRoutes(mux, snsDeps)
 }
@@ -423,6 +458,9 @@ func RegisterSNSRoutes(mux *http.ServeMux, deps SNSDeps) {
 		ShippingAddress: deps.ShippingAddress,
 		BillingAddress:  deps.BillingAddress,
 		Avatar:          deps.Avatar,
+
+		// ✅ NEW: cart
+		Cart: deps.Cart,
 	})
 }
 
