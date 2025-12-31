@@ -4,9 +4,11 @@ package handler
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"strconv"
 	"strings"
+	"time"
 
 	pbdom "narratives/internal/domain/productBlueprint"
 )
@@ -152,4 +154,20 @@ func maskUID(uid string) string {
 		return "***"
 	}
 	return "***" + uid[len(uid)-6:]
+}
+
+func toRFC3339(t time.Time) string {
+	if t.IsZero() {
+		return ""
+	}
+	return t.UTC().Format(time.RFC3339)
+}
+
+func readJSON(r *http.Request, dst any) error {
+	if dst == nil {
+		return errors.New("dst is nil")
+	}
+	dec := json.NewDecoder(http.MaxBytesReader(nil, r.Body, 1<<20)) // 1MB
+	dec.DisallowUnknownFields()
+	return dec.Decode(dst)
 }

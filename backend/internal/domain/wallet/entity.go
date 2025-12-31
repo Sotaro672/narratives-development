@@ -5,15 +5,15 @@ import (
 	"errors"
 	"fmt"
 	"regexp"
+	"strings"
 	"time"
 )
 
 // Domain errors
 var (
+	ErrInvalidAvatarID      = errors.New("wallet: invalid avatarId")
 	ErrInvalidWalletAddress = errors.New("wallet: invalid walletAddress")
 	ErrInvalidMintAddress   = errors.New("wallet: invalid mintAddress")
-	ErrInvalidCreatedAt     = errors.New("wallet: invalid createdAt")
-	ErrInvalidUpdatedAt     = errors.New("wallet: invalid updatedAt")
 	ErrInvalidLastUpdatedAt = errors.New("wallet: invalid lastUpdatedAt")
 	ErrInvalidStatus        = errors.New("wallet: invalid status")
 	// 追加: NotFound 用のドメインエラー
@@ -43,35 +43,32 @@ func isValidMint(s string) bool {
 	return base58Re.MatchString(s)
 }
 
-// Wallet mirrors web-app/src/shared/types/wallet.ts
+// Wallet mirrors web-app/src/shared/types/wallet.ts (updated)
 //
 //	interface Wallet {
+//	  avatarId: string;
 //	  walletAddress: string;
 //	  tokens: string[];
 //	  lastUpdatedAt: string;
 //	  status: 'active' | 'inactive';
-//	  createdAt: string;
-//	  updatedAt: string;
 //	}
 type Wallet struct {
+	AvatarID      string
 	WalletAddress string
 	Tokens        []string
 	LastUpdatedAt time.Time
 	Status        WalletStatus
-	CreatedAt     time.Time
-	UpdatedAt     time.Time
 }
 
-// New constructs a Wallet (backward-compatible constructor).
-// It sets CreatedAt, UpdatedAt, and LastUpdatedAt to updatedAt, and Status to 'active'.
-func New(addr string, tokens []string, updatedAt time.Time) (Wallet, error) {
+// New constructs a Wallet.
+// It sets LastUpdatedAt to updatedAt, and Status to 'active'.
+func New(avatarID, addr string, tokens []string, updatedAt time.Time) (Wallet, error) {
 	w := Wallet{
+		AvatarID:      strings.TrimSpace(avatarID),
 		WalletAddress: addr,
 		Tokens:        nil,
 		LastUpdatedAt: updatedAt.UTC(),
 		Status:        StatusActive,
-		CreatedAt:     updatedAt.UTC(),
-		UpdatedAt:     updatedAt.UTC(),
 	}
 	if err := w.setTokens(tokens); err != nil {
 		return Wallet{}, err
@@ -83,14 +80,13 @@ func New(addr string, tokens []string, updatedAt time.Time) (Wallet, error) {
 }
 
 // NewFull constructs a Wallet with all fields explicitly provided.
-func NewFull(addr string, tokens []string, lastUpdatedAt, createdAt, updatedAt time.Time, status WalletStatus) (Wallet, error) {
+func NewFull(avatarID, addr string, tokens []string, lastUpdatedAt time.Time, status WalletStatus) (Wallet, error) {
 	w := Wallet{
+		AvatarID:      strings.TrimSpace(avatarID),
 		WalletAddress: addr,
 		Tokens:        nil,
 		LastUpdatedAt: lastUpdatedAt.UTC(),
 		Status:        status,
-		CreatedAt:     createdAt.UTC(),
-		UpdatedAt:     updatedAt.UTC(),
 	}
 	if err := w.setTokens(tokens); err != nil {
 		return Wallet{}, err
@@ -101,45 +97,37 @@ func NewFull(addr string, tokens []string, lastUpdatedAt, createdAt, updatedAt t
 	return w, nil
 }
 
-// NewNow constructs Wallet using current time for CreatedAt/UpdatedAt/LastUpdatedAt.
-func NewNow(addr string, tokens []string, status WalletStatus) (Wallet, error) {
+// NewNow constructs Wallet using current time for LastUpdatedAt.
+func NewNow(avatarID, addr string, tokens []string, status WalletStatus) (Wallet, error) {
 	now := time.Now().UTC()
-	return NewFull(addr, tokens, now, now, now, status)
+	return NewFull(avatarID, addr, tokens, now, status)
 }
 
-// NewFromStringTime accepts lastUpdatedAt as string (ISO8601). Status becomes 'active' and created/updated are set to lastUpdatedAt.
-func NewFromStringTime(addr string, tokens []string, lastUpdatedAt string) (Wallet, error) {
+// NewFromStringTime accepts lastUpdatedAt as string (ISO8601). Status becomes 'active'.
+func NewFromStringTime(avatarID, addr string, tokens []string, lastUpdatedAt string) (Wallet, error) {
 	t, err := parseTime(lastUpdatedAt)
 	if err != nil {
 		return Wallet{}, fmt.Errorf("%w: %v", ErrInvalidLastUpdatedAt, err)
 	}
-	return New(addr, tokens, t)
+	return New(avatarID, addr, tokens, t)
 }
 
-// NewFromStringTimes accepts ISO8601 strings for created/updated/lastUpdated and status.
-func NewFromStringTimes(addr string, tokens []string, lastUpdatedAt, createdAt, updatedAt, status string) (Wallet, error) {
+// NewFromStringTimes accepts ISO8601 string for lastUpdated and status.
+func NewFromStringTimes(avatarID, addr string, tokens []string, lastUpdatedAt, status string) (Wallet, error) {
 	lut, err := parseTime(lastUpdatedAt)
 	if err != nil {
 		return Wallet{}, fmt.Errorf("%w: %v", ErrInvalidLastUpdatedAt, err)
-	}
-	ct, err := parseTime(createdAt)
-	if err != nil {
-		return Wallet{}, fmt.Errorf("%w: %v", ErrInvalidCreatedAt, err)
-	}
-	ut, err := parseTime(updatedAt)
-	if err != nil {
-		return Wallet{}, fmt.Errorf("%w: %v", ErrInvalidUpdatedAt, err)
 	}
 	ws := WalletStatus(status)
 	if !isValidStatus(ws) {
 		return Wallet{}, ErrInvalidStatus
 	}
-	return NewFull(addr, tokens, lut, ct, ut, ws)
+	return NewFull(avatarID, addr, tokens, lut, ws)
 }
 
 // Behavior
 
-// AddToken appends a mint if not present and updates UpdatedAt/LastUpdatedAt.
+// AddToken appends a mint if not present and updates LastUpdatedAt.
 func (w *Wallet) AddToken(mint string, now time.Time) error {
 	if !isValidMint(mint) {
 		return ErrInvalidMintAddress
@@ -151,7 +139,7 @@ func (w *Wallet) AddToken(mint string, now time.Time) error {
 	return nil
 }
 
-// RemoveToken removes a mint if present and updates UpdatedAt/LastUpdatedAt when changed.
+// RemoveToken removes a mint if present and updates LastUpdatedAt when changed.
 func (w *Wallet) RemoveToken(mint string, now time.Time) bool {
 	if mint == "" {
 		return false
@@ -178,32 +166,26 @@ func (w *Wallet) HasToken(mint string) bool {
 	return contains(w.Tokens, mint)
 }
 
-// SetStatus updates status and UpdatedAt.
+// SetStatus updates status and LastUpdatedAt.
 func (w *Wallet) SetStatus(s WalletStatus, now time.Time) error {
 	if !isValidStatus(s) {
 		return ErrInvalidStatus
 	}
 	w.Status = s
-	if now.IsZero() {
-		now = time.Now().UTC()
-	}
-	w.UpdatedAt = now.UTC()
+	w.touch(now)
 	return nil
 }
 
 // Validation and helpers
 
 func (w Wallet) validate() error {
+	if strings.TrimSpace(w.AvatarID) == "" {
+		return ErrInvalidAvatarID
+	}
 	if !isValidWallet(w.WalletAddress) {
 		return ErrInvalidWalletAddress
 	}
-	if w.CreatedAt.IsZero() {
-		return ErrInvalidCreatedAt
-	}
-	if w.UpdatedAt.IsZero() || w.UpdatedAt.Before(w.CreatedAt) {
-		return ErrInvalidUpdatedAt
-	}
-	if w.LastUpdatedAt.IsZero() || w.LastUpdatedAt.Before(w.CreatedAt) {
+	if w.LastUpdatedAt.IsZero() {
 		return ErrInvalidLastUpdatedAt
 	}
 	if !isValidStatus(w.Status) {
@@ -232,9 +214,7 @@ func (w *Wallet) touch(now time.Time) {
 	if now.IsZero() {
 		now = time.Now().UTC()
 	}
-	now = now.UTC()
-	w.LastUpdatedAt = now
-	w.UpdatedAt = now
+	w.LastUpdatedAt = now.UTC()
 }
 
 func contains(xs []string, v string) bool {
@@ -274,7 +254,7 @@ func dedup(xs []string) []string {
 
 func parseTime(s string) (time.Time, error) {
 	if s == "" {
-		return time.Time{}, ErrInvalidUpdatedAt
+		return time.Time{}, ErrInvalidLastUpdatedAt
 	}
 	if t, err := time.Parse(time.RFC3339, s); err == nil {
 		return t.UTC(), nil

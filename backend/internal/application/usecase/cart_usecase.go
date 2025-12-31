@@ -133,16 +133,17 @@ func (uc *CartUsecase) SetItemQty(ctx context.Context, avatarID, modelID string,
 	if err != nil {
 		return nil, err
 	}
+
+	now := uc.clock.Now()
+
 	if c == nil {
 		// policy: cart absent -> create (then apply)
-		now := uc.clock.Now()
 		c, err = cartdom.NewCart(aid, nil, now)
 		if err != nil {
 			return nil, err
 		}
 	}
 
-	now := uc.clock.Now()
 	if err := c.SetQty(mid, qty, now); err != nil {
 		return nil, err
 	}
@@ -166,28 +167,10 @@ func (uc *CartUsecase) Clear(ctx context.Context, avatarID string) error {
 	return uc.repo.DeleteByAvatarID(ctx, aid)
 }
 
-// MarkOrdered sets Ordered=true for the cart (does not delete).
-// (If you prefer "order completes -> cart deleted", call Clear() after this in application flow.)
-func (uc *CartUsecase) MarkOrdered(ctx context.Context, avatarID string) (*cartdom.Cart, error) {
-	aid := strings.TrimSpace(avatarID)
-	if aid == "" {
-		return nil, ErrCartInvalidArgument
-	}
-
-	c, err := uc.repo.GetByAvatarID(ctx, aid)
-	if err != nil {
-		return nil, err
-	}
-	if c == nil {
-		return nil, ErrCartNotFound
-	}
-
-	now := uc.clock.Now()
-	if err := c.MarkOrdered(now); err != nil {
-		return nil, err
-	}
-	if err := uc.repo.Upsert(ctx, c); err != nil {
-		return nil, err
-	}
-	return c, nil
-}
+// ✅ Ordered フィールド廃止により MarkOrdered は usecase からも削除。
+// 以後の「注文確定」は Order を作成するユースケース（例: OrderUsecase）で扱い、
+// その中で以下のいずれかを実施してください:
+// - 成功後に uc.Clear(ctx, avatarID) でカートを空にする
+// - もしくは「注文作成時に items を消す」ドメインメソッドを追加して Upsert する
+//
+// ※今回の変更ではコンパイルを通すため、MarkOrdered を実装しません。

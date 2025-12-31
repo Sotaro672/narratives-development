@@ -8,7 +8,7 @@ import "context"
 // Storage recommendation (Firestore):
 // - collection: carts
 // - docId: avatarId
-// - fields: avatarId, items(map), createdAt, updatedAt, expiresAt, ordered
+// - fields: avatarId, items(map), createdAt, updatedAt, expiresAt
 //
 // TTL:
 // - Configure Firestore TTL on the "expiresAt" field.

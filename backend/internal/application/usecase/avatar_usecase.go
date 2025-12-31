@@ -10,6 +10,7 @@ import (
 	avatardom "narratives/internal/domain/avatar"
 	avataricon "narratives/internal/domain/avatarIcon"
 	avatarstate "narratives/internal/domain/avatarState"
+	walletdom "narratives/internal/domain/wallet"
 )
 
 // ----------------------------------------
@@ -48,8 +49,13 @@ type AvatarIconRepo interface {
 type AvatarIconObjectStoragePort interface {
 	DeleteObjects(ctx context.Context, ops []avataricon.GCSDeleteOp) error
 
-	// ✅ NEW: 画像が空でも avatarDocId/ の “入れ物” を作る（例: <avatarId>/.keep を作成）
+	// ✅ 画像が空でも avatarDocId/ の “入れ物” を作る（例: <avatarId>/.keep を作成）
 	EnsurePrefix(ctx context.Context, bucket, prefix string) error
+}
+
+// ✅ NEW: Wallet 永続化ポート（avatar 作成と同時に wallet レコードも起票する）
+type WalletRepo interface {
+	Save(ctx context.Context, w walletdom.Wallet) error
 }
 
 // AvatarWalletService は Avatar 作成時に Solana wallet を開設するためのポートです。
@@ -64,12 +70,16 @@ type AvatarWalletService interface {
 }
 
 type AvatarUsecase struct {
-	avRepo   AvatarRepo
-	stRepo   AvatarStateRepo
-	icRepo   AvatarIconRepo
+	avRepo AvatarRepo
+	stRepo AvatarStateRepo
+	icRepo AvatarIconRepo
+
+	// object storage (icons)
 	objStore AvatarIconObjectStoragePort
 
-	walletSvc AvatarWalletService
+	// wallet
+	walletSvc  AvatarWalletService
+	walletRepo WalletRepo // ✅ NEW
 
 	now func() time.Time
 }
@@ -97,6 +107,12 @@ func (u *AvatarUsecase) WithNow(now func() time.Time) *AvatarUsecase {
 // WithWalletService injects wallet opener.
 func (u *AvatarUsecase) WithWalletService(svc AvatarWalletService) *AvatarUsecase {
 	u.walletSvc = svc
+	return u
+}
+
+// ✅ NEW: WithWalletRepo injects wallet persistence.
+func (u *AvatarUsecase) WithWalletRepo(r WalletRepo) *AvatarUsecase {
+	u.walletRepo = r
 	return u
 }
 
@@ -166,7 +182,9 @@ type CreateAvatarInput struct {
 
 // Create は /avatars POST 用の作成コマンドです。
 // ✅ 期待値:
+// - avatar 作成と同時に AvatarState を作成する（avatarState doc を確実に用意する）。
 // - avatar 作成と同時に Solana wallet を開設し、秘密鍵は Secret Manager に保存される。
+// - さらに wallet テーブル（wallets）も avatarId を保持して起票する。
 // - 開設できなかった場合はエラーを返す（= 作成処理は成功扱いにしない）。
 // - narratives-development_avatar_icon に <avatarDocId>/ の “入れ物” を作成する（画像が空でも）。
 func (u *AvatarUsecase) Create(ctx context.Context, in CreateAvatarInput) (avatardom.Avatar, error) {
@@ -174,9 +192,19 @@ func (u *AvatarUsecase) Create(ctx context.Context, in CreateAvatarInput) (avata
 		return avatardom.Avatar{}, errors.New("avatar repo not configured")
 	}
 
+	// ✅ avatarState は「同時作成したい」ので Create では必須
+	if u.stRepo == nil {
+		return avatardom.Avatar{}, errors.New("avatarState repo not configured")
+	}
+
 	// ✅ walletSvc は Create では必須（期待値）
 	if u.walletSvc == nil {
 		return avatardom.Avatar{}, ErrAvatarWalletServiceMissing
+	}
+
+	// ✅ wallet table も同時起票したいので必須
+	if u.walletRepo == nil {
+		return avatardom.Avatar{}, errors.New("wallet repo not configured")
 	}
 
 	userID := strings.TrimSpace(in.UserID)
@@ -215,15 +243,34 @@ func (u *AvatarUsecase) Create(ctx context.Context, in CreateAvatarInput) (avata
 
 	avatarID := strings.TrimSpace(created.ID)
 	if avatarID == "" {
-		// repo が ID を採番しないのは契約違反なので、作成したものは best-effort で削除してエラー
 		_ = u.avRepo.Delete(ctx, created.ID)
 		return avatardom.Avatar{}, avatardom.ErrInvalidID
+	}
+
+	// ✅ AvatarState doc を「同時作成」(strict)
+	// - wallet を開く前に作る（失敗時に wallet/secret を作らないため）
+	zero := int64(0)
+	as, aerr := avatarstate.New(
+		"",       // id: repo 実装側で採番 or avatarId を docId にする想定
+		avatarID, // avatarId
+		&zero,
+		&zero,
+		&zero,
+		now,
+		&now,
+	)
+	if aerr != nil {
+		_ = u.avRepo.Delete(ctx, avatarID)
+		return avatardom.Avatar{}, aerr
+	}
+	if _, err := u.stRepo.Upsert(ctx, as); err != nil {
+		_ = u.avRepo.Delete(ctx, avatarID)
+		return avatardom.Avatar{}, err
 	}
 
 	// ✅ Wallet open (strict)
 	w, werr := u.walletSvc.OpenAvatarWallet(ctx, avatarID)
 	if werr != nil {
-		// wallet を作れなかった場合は「作成失敗」扱いにするため best-effort rollback
 		_ = u.avRepo.Delete(ctx, avatarID)
 		return avatardom.Avatar{}, werr
 	}
@@ -234,14 +281,27 @@ func (u *AvatarUsecase) Create(ctx context.Context, in CreateAvatarInput) (avata
 		return avatardom.Avatar{}, ErrAvatarWalletAddressEmpty
 	}
 
+	// ✅ avatar に walletAddress を反映 (strict)
 	patch := avatardom.AvatarPatch{WalletAddress: &addr}
 	updated, uerr := u.avRepo.Update(ctx, avatarID, patch)
 	if uerr != nil {
-		// Avatar に walletAddress を反映できない場合も「作成失敗」扱い（best-effort rollback）
 		_ = u.avRepo.Delete(ctx, avatarID)
 		return avatardom.Avatar{}, uerr
 	}
 	created = updated
+
+	// ✅ wallet テーブルを起票 (strict)
+	// - tokens は初期空
+	// - lastUpdatedAt は now
+	walletRow, werr2 := walletdom.New(avatarID, addr, nil, now)
+	if werr2 != nil {
+		_ = u.avRepo.Delete(ctx, avatarID)
+		return avatardom.Avatar{}, werr2
+	}
+	if err := u.walletRepo.Save(ctx, walletRow); err != nil {
+		_ = u.avRepo.Delete(ctx, avatarID)
+		return avatardom.Avatar{}, err
+	}
 
 	// ✅ 画像が空でも “入れ物” を作成（best-effort）
 	// - GCS はフォルダを作れないので <avatarId>/.keep のような空オブジェクトを置く想定。
@@ -254,7 +314,7 @@ func (u *AvatarUsecase) Create(ctx context.Context, in CreateAvatarInput) (avata
 	return created, nil
 }
 
-// ✅ NEW: OpenWallet は既存 Avatar に対して Solana wallet を開設し、walletAddress を反映します。
+// ✅ OpenWallet は既存 Avatar に対して Solana wallet を開設し、walletAddress を反映します。
 // - handler の POST /avatars/{id}/wallet から呼ばれる想定
 func (u *AvatarUsecase) OpenWallet(ctx context.Context, avatarID string) (avatardom.Avatar, error) {
 	avatarID = strings.TrimSpace(avatarID)
@@ -287,7 +347,20 @@ func (u *AvatarUsecase) OpenWallet(ctx context.Context, avatarID string) (avatar
 	}
 
 	patch := avatardom.AvatarPatch{WalletAddress: &addr}
-	return u.avRepo.Update(ctx, avatarID, patch)
+	updated, err := u.avRepo.Update(ctx, avatarID, patch)
+	if err != nil {
+		return avatardom.Avatar{}, err
+	}
+
+	// best-effort: wallet テーブルも整合させたい場合
+	if u.walletRepo != nil {
+		now := u.now().UTC()
+		if wrow, e := walletdom.New(avatarID, addr, nil, now); e == nil {
+			_ = u.walletRepo.Save(ctx, wrow)
+		}
+	}
+
+	return updated, nil
 }
 
 // Update は /avatars/{id} PATCH/PUT 用の部分更新コマンドです。

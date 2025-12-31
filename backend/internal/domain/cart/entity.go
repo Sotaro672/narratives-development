@@ -9,8 +9,7 @@ import (
 )
 
 var (
-	ErrInvalidCart        = errors.New("cart: invalid")
-	ErrCartAlreadyOrdered = errors.New("cart: already ordered")
+	ErrInvalidCart = errors.New("cart: invalid")
 )
 
 // DefaultCartTTL is the inactivity window after which the cart becomes eligible for auto deletion
@@ -21,8 +20,11 @@ const DefaultCartTTL = 7 * 24 * time.Hour
 // Cart represents "avatar's cart".
 // - AvatarID: who owns this cart
 // - Items: modelId -> quantity
-// - Ordered: true once converted to an order (locked)
 // - ExpiresAt: for Firestore TTL (auto deletion), updated on each cart mutation
+//
+// NOTE:
+// - ordered フラグは持たない
+// - order テーブル作成（注文確定）に合わせて、items から modelId を削除（消費）する
 type Cart struct {
 	AvatarID string
 
@@ -35,12 +37,10 @@ type Cart struct {
 	// ExpiresAt is used for Firestore TTL.
 	// This should be set to a future timestamp and refreshed on each update.
 	ExpiresAt time.Time
-
-	Ordered bool
 }
 
 // NewCart creates a new cart for an avatar.
-// items can be nil (treated as empty). ordered is always false at creation.
+// items can be nil (treated as empty).
 func NewCart(avatarID string, items map[string]int, now time.Time) (*Cart, error) {
 	c := &Cart{
 		AvatarID:  strings.TrimSpace(avatarID),
@@ -48,7 +48,6 @@ func NewCart(avatarID string, items map[string]int, now time.Time) (*Cart, error
 		CreatedAt: now,
 		UpdatedAt: now,
 		ExpiresAt: now.Add(DefaultCartTTL),
-		Ordered:   false,
 	}
 	if err := c.validate(); err != nil {
 		return nil, err
@@ -61,9 +60,6 @@ func NewCart(avatarID string, items map[string]int, now time.Time) (*Cart, error
 func (c *Cart) Add(modelID string, qty int, now time.Time) error {
 	if c == nil {
 		return ErrInvalidCart
-	}
-	if c.Ordered {
-		return ErrCartAlreadyOrdered
 	}
 	mid := strings.TrimSpace(modelID)
 	if mid == "" || qty <= 0 {
@@ -82,9 +78,6 @@ func (c *Cart) Add(modelID string, qty int, now time.Time) error {
 func (c *Cart) SetQty(modelID string, qty int, now time.Time) error {
 	if c == nil {
 		return ErrInvalidCart
-	}
-	if c.Ordered {
-		return ErrCartAlreadyOrdered
 	}
 	mid := strings.TrimSpace(modelID)
 	if mid == "" {
@@ -107,16 +100,55 @@ func (c *Cart) Remove(modelID string, now time.Time) error {
 	return c.SetQty(modelID, 0, now)
 }
 
-// MarkOrdered locks the cart.
-// (Usually you will delete the cart after creating an order, but TTL is still refreshed here.)
-func (c *Cart) MarkOrdered(now time.Time) error {
+// ConsumeAll clears items for order creation and returns a snapshot of items.
+// 想定ユースケース:
+// 1) cart.Items を元に order を作成（order テーブルに保存）
+// 2) 同トランザクション/同リクエスト内で cart.ConsumeAll() を呼び、items を空にする
+//
+// これにより「order が作成されることで items から modelId が削除される」を実現する。
+func (c *Cart) ConsumeAll(now time.Time) (map[string]int, error) {
+	if c == nil {
+		return nil, ErrInvalidCart
+	}
+	// snapshot
+	snap := cloneItems(c.Items)
+
+	// clear
+	if c.Items == nil {
+		c.Items = map[string]int{}
+	} else {
+		for k := range c.Items {
+			delete(c.Items, k)
+		}
+	}
+
+	c.touch(now)
+	if err := c.validate(); err != nil {
+		return nil, err
+	}
+	return snap, nil
+}
+
+// Consume removes specific modelIDs from the cart (partial consumption).
+// order テーブル側が「一部の items を注文確定」する設計の場合に使う。
+func (c *Cart) Consume(modelIDs []string, now time.Time) error {
 	if c == nil {
 		return ErrInvalidCart
 	}
-	if c.Ordered {
-		return ErrCartAlreadyOrdered
+	if len(modelIDs) == 0 {
+		return nil
 	}
-	c.Ordered = true
+	if c.Items == nil {
+		c.Items = map[string]int{}
+		return nil
+	}
+	for _, id := range modelIDs {
+		mid := strings.TrimSpace(id)
+		if mid == "" {
+			continue
+		}
+		delete(c.Items, mid)
+	}
 	c.touch(now)
 	return c.validate()
 }

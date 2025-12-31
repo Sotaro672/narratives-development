@@ -19,7 +19,7 @@ import (
 // Collection design (recommended):
 // - collection: carts
 // - docId: avatarId
-// - fields: avatarId, items(map), createdAt, updatedAt, expiresAt, ordered
+// - fields: avatarId, items(map), createdAt, updatedAt, expiresAt
 //
 // TTL:
 // - Configure Firestore TTL on "expiresAt".
@@ -110,8 +110,6 @@ type cartDoc struct {
 	CreatedAt time.Time `firestore:"createdAt"`
 	UpdatedAt time.Time `firestore:"updatedAt"`
 	ExpiresAt time.Time `firestore:"expiresAt"`
-
-	Ordered bool `firestore:"ordered"`
 }
 
 func cartDocFromDomain(c *cartdom.Cart) cartDoc {
@@ -132,7 +130,6 @@ func cartDocFromDomain(c *cartdom.Cart) cartDoc {
 		CreatedAt: c.CreatedAt,
 		UpdatedAt: c.UpdatedAt,
 		ExpiresAt: c.ExpiresAt,
-		Ordered:   c.Ordered,
 	}
 }
 
@@ -154,6 +151,5 @@ func (d cartDoc) toDomain() *cartdom.Cart {
 		CreatedAt: d.CreatedAt,
 		UpdatedAt: d.UpdatedAt,
 		ExpiresAt: d.ExpiresAt,
-		Ordered:   d.Ordered,
 	}
 }

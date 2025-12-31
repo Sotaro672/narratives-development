@@ -3,6 +3,8 @@ package usecase
 
 import (
 	"context"
+	"errors"
+	"strings"
 	"time"
 
 	walletdom "narratives/internal/domain/wallet"
@@ -39,28 +41,40 @@ func (uc *WalletUsecase) WithOnchainReader(r OnchainWalletReader) *WalletUsecase
 // - OnchainReader が設定されていれば Solana から mint 一覧を取得して Wallet.Tokens を更新
 // - OnchainReader が nil の場合は、DB の Wallet を取得（または新規作成）するだけ
 func (uc *WalletUsecase) SyncWalletTokens(ctx context.Context, addr string) (walletdom.Wallet, error) {
+	a := strings.TrimSpace(addr)
+	if a == "" {
+		return walletdom.Wallet{}, walletdom.ErrInvalidWalletAddress
+	}
+
 	var mints []string
 	var err error
 
 	// 1. On-chain の mint 一覧を取得（OnchainReader があれば）
 	if uc.OnchainReader != nil {
-		mints, err = uc.OnchainReader.ListOwnedTokenMints(ctx, addr)
+		mints, err = uc.OnchainReader.ListOwnedTokenMints(ctx, a)
 		if err != nil {
 			return walletdom.Wallet{}, err
 		}
 	}
 
 	// 2. DB 上の Wallet を取得（なければ新規作成）
-	w, err := uc.WalletRepo.GetByAddress(ctx, addr)
+	w, err := uc.WalletRepo.GetByAddress(ctx, a)
 	if err != nil {
-		// NotFound の扱い：Wallet レコードを新規作成
+		// NotFound の扱い：Wallet レコードを新規作成（それ以外のエラーは返す）
+		if !errors.Is(err, walletdom.ErrNotFound) {
+			return walletdom.Wallet{}, err
+		}
+
 		now := time.Now().UTC()
 		initialTokens := mints
 		if uc.OnchainReader == nil {
 			// OnchainReader 無しの場合はトークン情報は空で作成
 			initialTokens = nil
 		}
-		w, err = walletdom.NewFull(addr, initialTokens, now, now, now, walletdom.StatusActive)
+
+		// ✅ 新シグネチャ: NewFull(avatarId, walletAddress, tokens, lastUpdatedAt, status)
+		// avatarId はここでは不明なため空で作る（後で紐付け更新する想定）
+		w, err = walletdom.NewFull("", a, initialTokens, now, walletdom.StatusActive)
 		if err != nil {
 			return walletdom.Wallet{}, err
 		}
