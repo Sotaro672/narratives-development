@@ -2,7 +2,7 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
-import '../../../list/infrastructure/list_repository_http.dart';
+import '../../infrastructure/list_repository_http.dart';
 
 class HomePage extends StatefulWidget {
   const HomePage({super.key});

@@ -1,4 +1,4 @@
-//frontend\sns\lib\app\routing\router.dart
+// frontend\sns\lib\app\routing\router.dart
 import 'dart:async';
 
 import 'package:flutter/material.dart';
@@ -11,11 +11,14 @@ import '../shell/presentation/layout/app_shell.dart';
 import '../shell/presentation/components/footer.dart';
 
 // pages
-import '../../features/home/presentation/page/home_page.dart';
-import '../../features/home/presentation/page/catalog.dart';
+import '../../features/list/presentation/page/list.dart';
+import '../../features/list/presentation/page/catalog.dart';
 
 // ✅ Profile page
 import '../../features/avatar/presentation/page/avatar.dart';
+
+// ✅ Profile (edit)
+import '../../features/avatar/presentation/page/avatar_edit.dart';
 
 // ✅ User edit page
 import '../../features/user/presentation/page/user_edit.dart';
@@ -100,6 +103,21 @@ GoRouter buildPublicOnlyRouter({required Object initError}) {
         pageBuilder: (context, state) =>
             NoTransitionPage(child: _FirebaseInitErrorPage(error: initError)),
       ),
+      GoRoute(
+        path: '/avatar-edit',
+        name: 'avatarEdit',
+        pageBuilder: (context, state) =>
+            NoTransitionPage(child: _FirebaseInitErrorPage(error: initError)),
+      ),
+
+      // ✅ NEW: /avatar も init error ページへ（firebase 未初期化時の 404 回避）
+      GoRoute(
+        path: '/avatar',
+        name: 'avatar',
+        pageBuilder: (context, state) =>
+            NoTransitionPage(child: _FirebaseInitErrorPage(error: initError)),
+      ),
+
       GoRoute(
         path: '/user-edit',
         name: 'userEdit',
@@ -209,17 +227,17 @@ List<RouteBase> _routes({required bool firebaseReady}) {
       },
     ),
 
-    // ✅ Profile
+    // ✅ Profile edit は単独ルートのまま（AvatarEditPage 自前 header を使っているため）
     GoRoute(
-      path: '/avatar',
-      name: 'avatar',
+      path: '/avatar-edit',
+      name: 'avatarEdit',
       pageBuilder: (context, state) {
         final from = state.uri.queryParameters['from'];
-        return NoTransitionPage(child: AvatarPage(from: from));
+        return NoTransitionPage(child: AvatarEditPage(from: from));
       },
     ),
 
-    // ✅ User edit（ここが今回のポイント：from を渡す）
+    // ✅ User edit（from を渡す）
     GoRoute(
       path: '/user-edit',
       name: 'userEdit',
@@ -260,6 +278,16 @@ List<RouteBase> _routes({required bool firebaseReady}) {
             return CatalogPage(listId: listId, initialItem: initialItem);
           },
         ),
+
+        // ✅ 重要: /avatar を ShellRoute 内へ移動 -> AppShell(header/footer) が必ず出る
+        GoRoute(
+          path: '/avatar',
+          name: 'avatar',
+          pageBuilder: (context, state) {
+            final from = state.uri.queryParameters['from'];
+            return NoTransitionPage(child: AvatarPage(from: from));
+          },
+        ),
       ],
     ),
   ];
@@ -276,6 +304,7 @@ String? _titleFor(GoRouterState state) {
   if (loc == '/') return null;
   if (loc.startsWith('/catalog/')) return 'Catalog';
   if (loc == '/avatar') return 'Profile';
+  if (loc == '/avatar-edit') return 'Edit Avatar';
   if (loc == '/user-edit') return 'Account';
   return null;
 }
@@ -292,6 +321,7 @@ List<Widget> _headerActionsFor(
       path == '/shipping-address' ||
       path == '/billing-address' ||
       path == '/avatar-create' ||
+      path == '/avatar-edit' ||
       path == '/user-edit') {
     return const [];
   }
@@ -414,19 +444,16 @@ class _AccountMenuSheet extends StatelessWidget {
             ),
           ),
           const SizedBox(height: 6),
-
           Expanded(
             child: ListView(
               children: [
                 ListTile(
                   leading: const Icon(Icons.account_circle_outlined),
                   title: const Text('アバター情報'),
-                  subtitle: const Text('プロフィール表示'),
-                  onTap: () => _go(context, '/avatar', qp: {'from': from}),
+                  subtitle: const Text('プロフィール編集'),
+                  onTap: () => _go(context, '/avatar-edit', qp: {'from': from}),
                 ),
                 _divider(context),
-
-                // ✅ ここ：ユーザー情報 -> /user-edit へ遷移
                 ListTile(
                   leading: const Icon(Icons.manage_accounts_outlined),
                   title: const Text('ユーザー情報'),
@@ -434,7 +461,6 @@ class _AccountMenuSheet extends StatelessWidget {
                   onTap: () => _go(context, '/user-edit', qp: {'from': from}),
                 ),
                 _divider(context),
-
                 ListTile(
                   leading: const Icon(Icons.local_shipping_outlined),
                   title: const Text('配送先住所'),
@@ -446,7 +472,6 @@ class _AccountMenuSheet extends StatelessWidget {
                   ),
                 ),
                 _divider(context),
-
                 ListTile(
                   leading: const Icon(Icons.receipt_long_outlined),
                   title: const Text('支払情報'),
@@ -455,7 +480,6 @@ class _AccountMenuSheet extends StatelessWidget {
                       _go(context, '/billing-address', qp: {'from': from}),
                 ),
                 _divider(context),
-
                 ListTile(
                   leading: const Icon(Icons.email_outlined),
                   title: const Text('メールアドレス'),
@@ -467,7 +491,6 @@ class _AccountMenuSheet extends StatelessWidget {
                   ),
                 ),
                 _divider(context),
-
                 ListTile(
                   leading: const Icon(Icons.lock_outline),
                   title: const Text('パスワード'),
@@ -479,7 +502,6 @@ class _AccountMenuSheet extends StatelessWidget {
                   ),
                 ),
                 _divider(context),
-
                 ListTile(
                   leading: const Icon(Icons.logout),
                   title: const Text('サインアウト'),
@@ -494,7 +516,6 @@ class _AccountMenuSheet extends StatelessWidget {
               ],
             ),
           ),
-
           const SizedBox(height: 8),
         ],
       ),

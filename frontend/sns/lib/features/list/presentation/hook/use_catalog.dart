@@ -4,7 +4,7 @@ import 'dart:convert';
 import 'package:http/http.dart' as http;
 
 import '../../../inventory/infrastructure/inventory_repository_http.dart';
-import '../../../list/infrastructure/list_repository_http.dart';
+import '../../infrastructure/list_repository_http.dart';
 import '../../../productBlueprint/infrastructure/product_blueprint_repository_http.dart';
 import '../../../tokenBlueprint/infrastructure/token_blueprint_repository_http.dart';
 import 'use_catalog_inventory.dart';

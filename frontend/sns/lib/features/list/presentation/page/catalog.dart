@@ -1,8 +1,8 @@
 // frontend/sns/lib/features/home/presentation/page/catalog.dart
 import 'package:flutter/material.dart';
 
-import 'package:sns/features/home/presentation/components/catalog_inventory.dart';
-import '../../../list/infrastructure/list_repository_http.dart';
+import 'package:sns/features/list/presentation/components/catalog_inventory.dart';
+import '../../infrastructure/list_repository_http.dart';
 import '../components/catalog_product.dart';
 import '../components/catalog_token.dart';
 import '../hook/use_catalog.dart';

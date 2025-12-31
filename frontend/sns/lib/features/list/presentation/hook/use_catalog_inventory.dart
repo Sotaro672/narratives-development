@@ -1,6 +1,6 @@
 // frontend/sns/lib/features/home/presentation/hook/use_catalog_inventory.dart
 import '../../../inventory/infrastructure/inventory_repository_http.dart';
-import '../../../list/infrastructure/list_repository_http.dart'; // ✅ 追加
+import '../../infrastructure/list_repository_http.dart'; // ✅ 追加
 
 class CatalogModelStockRow {
   const CatalogModelStockRow({
