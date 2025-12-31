@@ -18,27 +18,64 @@ class CartPage extends StatefulWidget {
 }
 
 class _CartPageState extends State<CartPage> {
-  late final UseCartController _ctl;
+  UseCartController? _ctl;
+
+  String get _avatarId => widget.avatarId.trim();
+
+  void _ensureController() {
+    final avatarId = _avatarId;
+    if (avatarId.isEmpty) return;
+
+    // 既に初期化済みなら何もしない
+    if (_ctl != null) return;
+
+    _ctl = UseCartController(avatarId: avatarId, context: context)..init();
+  }
+
+  void _disposeController() {
+    _ctl?.dispose();
+    _ctl = null;
+  }
 
   @override
   void initState() {
     super.initState();
-    _ctl = UseCartController(avatarId: widget.avatarId, context: context)
-      ..init();
+    // ✅ avatarId が空のときは init しない（空でAPIを叩くとUncaught Errorの原因）
+    _ensureController();
+  }
+
+  @override
+  void didUpdateWidget(covariant CartPage oldWidget) {
+    super.didUpdateWidget(oldWidget);
+
+    final prev = (oldWidget.avatarId).trim();
+    final next = _avatarId;
+
+    // avatarId が変わったら作り直す
+    if (prev != next) {
+      _disposeController();
+      _ensureController();
+      if (mounted) setState(() {});
+    }
   }
 
   @override
   void dispose() {
-    _ctl.dispose();
+    _disposeController();
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
-    final avatarId = widget.avatarId.trim();
+    final avatarId = _avatarId;
+
+    // ✅ avatarId が無ければ controller を作らず、APIも叩かない
     if (avatarId.isEmpty) {
       return const Center(child: Text('avatarId is required'));
     }
+
+    // ここに来た時点で avatarId はあるはずなので、念のため初期化
+    _ensureController();
 
     // ✅ SetStateFn: void Function(VoidCallback fn)
     void safeSetState(VoidCallback fn) {
@@ -46,7 +83,13 @@ class _CartPageState extends State<CartPage> {
       setState(fn);
     }
 
-    final vm = _ctl.buildResult(safeSetState);
+    final ctl = _ctl;
+    if (ctl == null) {
+      // 念のため（通常ここには来ない）
+      return const Center(child: CircularProgressIndicator());
+    }
+
+    final vm = ctl.buildResult(safeSetState);
 
     return FutureBuilder<CartDTO>(
       future: vm.future,

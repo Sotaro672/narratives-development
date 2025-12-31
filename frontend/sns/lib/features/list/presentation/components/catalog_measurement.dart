@@ -78,7 +78,6 @@ class _MeasurementTable extends StatelessWidget {
       ),
       children: [
         cell('サイズ', bold: true),
-        if (vm.showColor) cell('色', bold: true),
         ...vm.keys.map(
           (k) => cell(k, bold: true, align: Alignment.centerRight),
         ),
@@ -106,7 +105,6 @@ class _MeasurementTable extends StatelessWidget {
     return TableRow(
       children: [
         cellText(r.size),
-        if (vm.showColor) cellText(r.colorName.isNotEmpty ? r.colorName : '-'),
         ...vm.keys.map((k) => cellText(val(k), align: Alignment.centerRight)),
       ],
     );
@@ -123,9 +121,8 @@ class _MeasurementTable extends StatelessWidget {
           border: TableBorder.all(
             color: Theme.of(context).dividerColor.withValues(alpha: 0.4),
           ),
-          columnWidths: <int, TableColumnWidth>{
-            0: const IntrinsicColumnWidth(),
-            if (vm.showColor) 1: const IntrinsicColumnWidth(),
+          columnWidths: const <int, TableColumnWidth>{
+            0: IntrinsicColumnWidth(),
           },
           children: [
             _headerRow(context),

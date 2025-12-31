@@ -6,24 +6,17 @@ import 'package:go_router/go_router.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 
 import '../shell/presentation/layout/app_shell.dart';
-
-// ✅ signed-in footer
 import '../shell/presentation/components/footer.dart';
+
+// ✅ route defs
+import 'routes.dart';
 
 // pages
 import '../../features/list/presentation/page/list.dart';
 import '../../features/list/presentation/page/catalog.dart';
-
-// ✅ Profile page
 import '../../features/avatar/presentation/page/avatar.dart';
-
-// ✅ Profile (edit)
 import '../../features/avatar/presentation/page/avatar_edit.dart';
-
-// ✅ User edit page
 import '../../features/user/presentation/page/user_edit.dart';
-
-// ✅ Cart page
 import '../../features/cart/presentation/page/cart.dart';
 
 // ✅ SnsListItem 型
@@ -36,6 +29,25 @@ import '../../features/auth/presentation/page/shipping_address.dart';
 import '../../features/auth/presentation/page/billing_address.dart';
 import '../../features/auth/presentation/page/avatar_create.dart';
 
+/// ------------------------------------------------------------
+/// ✅ avatarId の “現在値” をアプリ側で保持（URLに無い時の補完に使う）
+class AvatarIdStore extends ChangeNotifier {
+  AvatarIdStore._();
+  static final AvatarIdStore I = AvatarIdStore._();
+
+  String _avatarId = '';
+
+  String get avatarId => _avatarId;
+
+  void set(String v) {
+    final next = v.trim();
+    if (next.isEmpty) return;
+    if (next == _avatarId) return;
+    _avatarId = next;
+    notifyListeners();
+  }
+}
+
 GoRouter buildRouter({required bool firebaseReady, Object? initError}) {
   if (firebaseReady) return buildAppRouter();
   return buildPublicOnlyRouter(
@@ -44,21 +56,37 @@ GoRouter buildRouter({required bool firebaseReady, Object? initError}) {
 }
 
 GoRouter buildAppRouter() {
+  final authRefresh = GoRouterRefreshStream(
+    FirebaseAuth.instance.authStateChanges(),
+  );
+
   return GoRouter(
-    initialLocation: '/',
-    refreshListenable: GoRouterRefreshStream(
-      FirebaseAuth.instance.authStateChanges(),
-    ),
+    initialLocation: AppRoutePath.home,
+    refreshListenable: Listenable.merge([authRefresh, AvatarIdStore.I]),
     redirect: (context, state) {
       final isLoggedIn = FirebaseAuth.instance.currentUser != null;
       final path = state.uri.path;
-      final isLoginRoute = path == '/login';
+      final isLoginRoute = path == AppRoutePath.login;
 
+      // login -> from or /
       if (isLoggedIn && isLoginRoute) {
-        final from = state.uri.queryParameters['from'];
+        final from = state.uri.queryParameters[AppQueryKey.from];
         if (from != null && from.trim().isNotEmpty) return from;
-        return '/';
+        return AppRoutePath.home;
       }
+
+      // ✅ /cart は avatarId が無ければ store から補完して URL を正規化（Web直打ち対策）
+      if (path == AppRoutePath.cart) {
+        final qp = state.uri.queryParameters;
+        final avatarId = (qp[AppQueryKey.avatarId] ?? '').trim();
+        if (avatarId.isEmpty && AvatarIdStore.I.avatarId.isNotEmpty) {
+          final fixed = Map<String, String>.from(qp);
+          fixed[AppQueryKey.avatarId] = AvatarIdStore.I.avatarId;
+          final uri = Uri(path: AppRoutePath.cart, queryParameters: fixed);
+          return uri.toString();
+        }
+      }
+
       return null;
     },
     routes: _routes(firebaseReady: true),
@@ -74,68 +102,62 @@ GoRouter buildAppRouter() {
 
 GoRouter buildPublicOnlyRouter({required Object initError}) {
   return GoRouter(
-    initialLocation: '/',
+    initialLocation: AppRoutePath.home,
     routes: [
       GoRoute(
-        path: '/login',
-        name: 'login',
+        path: AppRoutePath.login,
+        name: AppRouteName.login,
         pageBuilder: (context, state) =>
             NoTransitionPage(child: _FirebaseInitErrorPage(error: initError)),
       ),
       GoRoute(
-        path: '/create-account',
-        name: 'createAccount',
+        path: AppRoutePath.createAccount,
+        name: AppRouteName.createAccount,
         pageBuilder: (context, state) =>
             NoTransitionPage(child: _FirebaseInitErrorPage(error: initError)),
       ),
       GoRoute(
-        path: '/shipping-address',
-        name: 'shippingAddress',
+        path: AppRoutePath.shippingAddress,
+        name: AppRouteName.shippingAddress,
         pageBuilder: (context, state) =>
             NoTransitionPage(child: _FirebaseInitErrorPage(error: initError)),
       ),
       GoRoute(
-        path: '/billing-address',
-        name: 'billingAddress',
+        path: AppRoutePath.billingAddress,
+        name: AppRouteName.billingAddress,
         pageBuilder: (context, state) =>
             NoTransitionPage(child: _FirebaseInitErrorPage(error: initError)),
       ),
       GoRoute(
-        path: '/avatar-create',
-        name: 'avatarCreate',
+        path: AppRoutePath.avatarCreate,
+        name: AppRouteName.avatarCreate,
         pageBuilder: (context, state) =>
             NoTransitionPage(child: _FirebaseInitErrorPage(error: initError)),
       ),
       GoRoute(
-        path: '/avatar-edit',
-        name: 'avatarEdit',
+        path: AppRoutePath.avatarEdit,
+        name: AppRouteName.avatarEdit,
         pageBuilder: (context, state) =>
             NoTransitionPage(child: _FirebaseInitErrorPage(error: initError)),
       ),
-
-      // ✅ NEW: /avatar も init error ページへ（firebase 未初期化時の 404 回避）
       GoRoute(
-        path: '/avatar',
-        name: 'avatar',
+        path: AppRoutePath.avatar,
+        name: AppRouteName.avatar,
         pageBuilder: (context, state) =>
             NoTransitionPage(child: _FirebaseInitErrorPage(error: initError)),
       ),
-
-      // ✅ NEW: /cart も init error ページへ（firebase 未初期化時の 404 回避）
       GoRoute(
-        path: '/cart',
-        name: 'cart',
+        path: AppRoutePath.cart,
+        name: AppRouteName.cart,
         pageBuilder: (context, state) =>
             NoTransitionPage(child: _FirebaseInitErrorPage(error: initError)),
       ),
-
       GoRoute(
-        path: '/user-edit',
-        name: 'userEdit',
+        path: AppRoutePath.userEdit,
+        name: AppRouteName.userEdit,
         pageBuilder: (context, state) =>
             NoTransitionPage(child: _FirebaseInitErrorPage(error: initError)),
       ),
-
       ShellRoute(
         builder: (context, state, child) {
           return AppShell(
@@ -152,14 +174,14 @@ GoRouter buildPublicOnlyRouter({required Object initError}) {
         },
         routes: [
           GoRoute(
-            path: '/',
-            name: HomePage.pageName,
+            path: AppRoutePath.home,
+            name: AppRouteName.home,
             pageBuilder: (context, state) =>
                 const NoTransitionPage(child: HomePage()),
           ),
           GoRoute(
-            path: '/catalog/:listId',
-            name: 'catalog',
+            path: AppRoutePath.catalog,
+            name: AppRouteName.catalog,
             builder: (context, state) {
               final listId = state.pathParameters['listId'] ?? '';
               final extra = state.extra;
@@ -183,81 +205,94 @@ GoRouter buildPublicOnlyRouter({required Object initError}) {
 List<RouteBase> _routes({required bool firebaseReady}) {
   return [
     GoRoute(
-      path: '/login',
-      name: 'login',
+      path: AppRoutePath.login,
+      name: AppRouteName.login,
       pageBuilder: (context, state) {
-        final from = state.uri.queryParameters['from'];
-        final intent = state.uri.queryParameters['intent'];
+        final from = state.uri.queryParameters[AppQueryKey.from];
+        final intent = state.uri.queryParameters[AppQueryKey.intent];
         return NoTransitionPage(
           child: LoginPage(from: from, intent: intent),
         );
       },
     ),
     GoRoute(
-      path: '/create-account',
-      name: 'createAccount',
+      path: AppRoutePath.createAccount,
+      name: AppRouteName.createAccount,
       pageBuilder: (context, state) {
-        final from = state.uri.queryParameters['from'];
-        final intent = state.uri.queryParameters['intent'];
+        final from = state.uri.queryParameters[AppQueryKey.from];
+        final intent = state.uri.queryParameters[AppQueryKey.intent];
         return NoTransitionPage(
           child: CreateAccountPage(from: from, intent: intent),
         );
       },
     ),
     GoRoute(
-      path: '/shipping-address',
-      name: 'shippingAddress',
+      path: AppRoutePath.shippingAddress,
+      name: AppRouteName.shippingAddress,
       pageBuilder: (context, state) {
         final qp = state.uri.queryParameters;
         return NoTransitionPage(
           child: ShippingAddressPage(
-            mode: qp['mode'],
-            oobCode: qp['oobCode'],
-            continueUrl: qp['continueUrl'],
-            lang: qp['lang'],
-            from: qp['from'],
-            intent: qp['intent'],
+            mode: qp[AppQueryKey.mode],
+            oobCode: qp[AppQueryKey.oobCode],
+            continueUrl: qp[AppQueryKey.continueUrl],
+            lang: qp[AppQueryKey.lang],
+            from: qp[AppQueryKey.from],
+            intent: qp[AppQueryKey.intent],
           ),
         );
       },
     ),
     GoRoute(
-      path: '/billing-address',
-      name: 'billingAddress',
+      path: AppRoutePath.billingAddress,
+      name: AppRouteName.billingAddress,
       pageBuilder: (context, state) {
-        final from = state.uri.queryParameters['from'];
+        final from = state.uri.queryParameters[AppQueryKey.from];
         return NoTransitionPage(child: BillingAddressPage(from: from));
       },
     ),
     GoRoute(
-      path: '/avatar-create',
-      name: 'avatarCreate',
+      path: AppRoutePath.avatarCreate,
+      name: AppRouteName.avatarCreate,
       pageBuilder: (context, state) {
-        final from = state.uri.queryParameters['from'];
+        final from = state.uri.queryParameters[AppQueryKey.from];
+
+        final qpId = (state.uri.queryParameters[AppQueryKey.avatarId] ?? '')
+            .trim();
+        final exId = (state.extra is String)
+            ? (state.extra as String).trim()
+            : '';
+        final id = qpId.isNotEmpty ? qpId : exId;
+        if (id.isNotEmpty) AvatarIdStore.I.set(id);
+
         return NoTransitionPage(child: AvatarCreatePage(from: from));
       },
     ),
-
-    // ✅ Profile edit は単独ルートのまま（AvatarEditPage 自前 header を使っているため）
     GoRoute(
-      path: '/avatar-edit',
-      name: 'avatarEdit',
+      path: AppRoutePath.avatarEdit,
+      name: AppRouteName.avatarEdit,
       pageBuilder: (context, state) {
-        final from = state.uri.queryParameters['from'];
+        final from = state.uri.queryParameters[AppQueryKey.from];
+
+        final qpId = (state.uri.queryParameters[AppQueryKey.avatarId] ?? '')
+            .trim();
+        final exId = (state.extra is String)
+            ? (state.extra as String).trim()
+            : '';
+        final id = qpId.isNotEmpty ? qpId : exId;
+        if (id.isNotEmpty) AvatarIdStore.I.set(id);
+
         return NoTransitionPage(child: AvatarEditPage(from: from));
       },
     ),
-
-    // ✅ User edit（from を渡す）
     GoRoute(
-      path: '/user-edit',
-      name: 'userEdit',
+      path: AppRoutePath.userEdit,
+      name: AppRouteName.userEdit,
       pageBuilder: (context, state) {
-        final from = state.uri.queryParameters['from'];
+        final from = state.uri.queryParameters[AppQueryKey.from];
         return NoTransitionPage(child: UserEditPage(from: from));
       },
     ),
-
     ShellRoute(
       builder: (context, state, child) {
         return AppShell(
@@ -274,14 +309,14 @@ List<RouteBase> _routes({required bool firebaseReady}) {
       },
       routes: [
         GoRoute(
-          path: '/',
-          name: HomePage.pageName,
+          path: AppRoutePath.home,
+          name: AppRouteName.home,
           pageBuilder: (context, state) =>
               const NoTransitionPage(child: HomePage()),
         ),
         GoRoute(
-          path: '/catalog/:listId',
-          name: 'catalog',
+          path: AppRoutePath.catalog,
+          name: AppRouteName.catalog,
           builder: (context, state) {
             final listId = state.pathParameters['listId'] ?? '';
             final extra = state.extra;
@@ -289,26 +324,40 @@ List<RouteBase> _routes({required bool firebaseReady}) {
             return CatalogPage(listId: listId, initialItem: initialItem);
           },
         ),
-
-        // ✅ 重要: /avatar を ShellRoute 内へ移動 -> AppShell(header/footer) が必ず出る
         GoRoute(
-          path: '/avatar',
-          name: 'avatar',
+          path: AppRoutePath.avatar,
+          name: AppRouteName.avatar,
           pageBuilder: (context, state) {
-            final from = state.uri.queryParameters['from'];
+            final from = state.uri.queryParameters[AppQueryKey.from];
+
+            final qpId = (state.uri.queryParameters[AppQueryKey.avatarId] ?? '')
+                .trim();
+            final exId = (state.extra is String)
+                ? (state.extra as String).trim()
+                : '';
+            final id = qpId.isNotEmpty ? qpId : exId;
+            if (id.isNotEmpty) AvatarIdStore.I.set(id);
+
             return NoTransitionPage(child: AvatarPage(from: from));
           },
         ),
-
-        // ✅ NEW: /cart（ShellRoute 内なので header/footer が出る）
         GoRoute(
-          path: '/cart',
-          name: 'cart',
+          path: AppRoutePath.cart,
+          name: AppRouteName.cart,
           pageBuilder: (context, state) {
             final qp = state.uri.queryParameters;
-            final avatarId = (qp['avatarId'] ?? '').trim();
-            final from = qp['from'];
+
+            final qpId = (qp[AppQueryKey.avatarId] ?? '').trim();
+            final avatarId = qpId.isNotEmpty ? qpId : AvatarIdStore.I.avatarId;
+
+            if (qpId.isNotEmpty) {
+              AvatarIdStore.I.set(qpId);
+            }
+
+            final from = qp[AppQueryKey.from];
+
             return NoTransitionPage(
+              key: ValueKey('cart-$avatarId'),
               child: CartPage(avatarId: avatarId, from: from),
             );
           },
@@ -320,19 +369,25 @@ List<RouteBase> _routes({required bool firebaseReady}) {
 
 bool _showBackFor(GoRouterState state) {
   final path = state.uri.path;
-  if (path == '/') return false;
+  if (path == AppRoutePath.home) return false;
   return true;
 }
 
 String? _titleFor(GoRouterState state) {
   final loc = state.uri.path;
-  if (loc == '/') return null;
+  if (loc == AppRoutePath.home) return null;
   if (loc.startsWith('/catalog/')) return 'Catalog';
-  if (loc == '/avatar') return 'Profile';
-  if (loc == '/cart') return 'Cart';
-  if (loc == '/avatar-edit') return 'Edit Avatar';
-  if (loc == '/user-edit') return 'Account';
+  if (loc == AppRoutePath.avatar) return 'Profile';
+  if (loc == AppRoutePath.cart) return 'Cart';
+  if (loc == AppRoutePath.avatarEdit) return 'Edit Avatar';
+  if (loc == AppRoutePath.userEdit) return 'Account';
   return null;
+}
+
+String _resolveAvatarIdForHeader(GoRouterState state) {
+  final qpId = (state.uri.queryParameters[AppQueryKey.avatarId] ?? '').trim();
+  if (qpId.isNotEmpty) return qpId;
+  return AvatarIdStore.I.avatarId;
 }
 
 List<Widget> _headerActionsFor(
@@ -341,28 +396,29 @@ List<Widget> _headerActionsFor(
   required bool firebaseReady,
 }) {
   final path = state.uri.path;
-  final isHome = path == '/'; // ✅ list.dart (= HomePage)
-  final isAvatar = path == '/avatar';
+  final isHome = path == AppRoutePath.home;
+  final isAvatar = path == AppRoutePath.avatar;
 
-  // これらは常にヘッダー右側アクション無し
-  if (path == '/login' ||
-      path == '/create-account' ||
-      path == '/shipping-address' ||
-      path == '/billing-address' ||
-      path == '/avatar-create' ||
-      path == '/avatar-edit' ||
-      path == '/user-edit') {
+  if (path == AppRoutePath.login ||
+      path == AppRoutePath.createAccount ||
+      path == AppRoutePath.shippingAddress ||
+      path == AppRoutePath.billingAddress ||
+      path == AppRoutePath.avatarCreate ||
+      path == AppRoutePath.avatarEdit ||
+      path == AppRoutePath.userEdit) {
     return const [];
   }
 
   if (!allowLogin) return const [];
 
   final from = state.uri.toString();
-  final avatarId = (state.uri.queryParameters['avatarId'] ?? '').trim();
+  final avatarId = _resolveAvatarIdForHeader(state);
 
-  // firebase 未初期化時は Sign in（+ Home のときだけ Cart）
   if (!firebaseReady) {
-    final loginUri = Uri(path: '/login', queryParameters: {'from': from});
+    final loginUri = Uri(
+      path: AppRoutePath.login,
+      queryParameters: {AppQueryKey.from: from},
+    );
     if (isHome) {
       return [
         _HeaderCartButton(from: from, avatarId: avatarId),
@@ -374,9 +430,11 @@ List<Widget> _headerActionsFor(
 
   final isLoggedIn = FirebaseAuth.instance.currentUser != null;
 
-  // 未ログイン時は Sign in（+ Home のときだけ Cart）
   if (!isLoggedIn) {
-    final loginUri = Uri(path: '/login', queryParameters: {'from': from});
+    final loginUri = Uri(
+      path: AppRoutePath.login,
+      queryParameters: {AppQueryKey.from: from},
+    );
     if (isHome) {
       return [
         _HeaderCartButton(from: from, avatarId: avatarId),
@@ -386,13 +444,10 @@ List<Widget> _headerActionsFor(
     return [_HeaderSignInButton(to: loginUri.toString())];
   }
 
-  // ✅ ログイン済み:
-  // - /avatar はハンバーガーのみ
   if (isAvatar) {
     return [_HeaderHamburgerMenuButton(from: from)];
   }
 
-  // - list.dart（/）はカートのみ
   if (isHome) {
     return [_HeaderCartButton(from: from, avatarId: avatarId)];
   }
@@ -427,7 +482,6 @@ class _HeaderSignInButton extends StatelessWidget {
   }
 }
 
-/// ✅ list.dart（/）用のカートボタン（header の右側に出す）
 class _HeaderCartButton extends StatelessWidget {
   const _HeaderCartButton({required this.from, required this.avatarId});
   final String from;
@@ -439,10 +493,17 @@ class _HeaderCartButton extends StatelessWidget {
       tooltip: 'Cart',
       icon: const Icon(Icons.shopping_cart_outlined),
       onPressed: () {
-        final qp = <String, String>{'from': from};
-        if (avatarId.trim().isNotEmpty) qp['avatarId'] = avatarId.trim();
-        final uri = Uri(path: '/cart', queryParameters: qp);
-        context.go(uri.toString());
+        final id = avatarId.trim().isNotEmpty
+            ? avatarId.trim()
+            : AvatarIdStore.I.avatarId;
+
+        final qp = <String, String>{AppQueryKey.from: from};
+        if (id.trim().isNotEmpty) {
+          qp[AppQueryKey.avatarId] = id;
+        }
+
+        // ✅ ここは “cart.dart へ遷移” に戻す（goNamedでOK）
+        context.goNamed(AppRouteName.cart, queryParameters: qp);
       },
     );
   }
@@ -500,19 +561,33 @@ class _AccountMenuSheet extends StatelessWidget {
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Container(
-            width: 44,
-            height: 4,
-            margin: const EdgeInsets.only(bottom: 10),
-            decoration: BoxDecoration(
-              color: scheme.outlineVariant.withValues(alpha: 0.7),
-              borderRadius: BorderRadius.circular(999),
-            ),
+          // ✅ 右上キャンセル（×）で閉じられる
+          Row(
+            children: [
+              Expanded(
+                child: Center(
+                  child: Container(
+                    width: 44,
+                    height: 4,
+                    margin: const EdgeInsets.only(bottom: 10, left: 44),
+                    decoration: BoxDecoration(
+                      color: scheme.outlineVariant.withValues(alpha: 0.7),
+                      borderRadius: BorderRadius.circular(999),
+                    ),
+                  ),
+                ),
+              ),
+              IconButton(
+                tooltip: 'Close',
+                icon: const Icon(Icons.close),
+                onPressed: () => Navigator.pop(context),
+              ),
+            ],
           ),
-          Align(
-            alignment: Alignment.centerLeft,
-            child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 6),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
+            child: Align(
+              alignment: Alignment.centerLeft,
               child: Text(
                 'Menu',
                 style: Theme.of(context).textTheme.titleMedium,
@@ -520,6 +595,7 @@ class _AccountMenuSheet extends StatelessWidget {
             ),
           ),
           const SizedBox(height: 6),
+
           Expanded(
             child: ListView(
               children: [
@@ -527,14 +603,22 @@ class _AccountMenuSheet extends StatelessWidget {
                   leading: const Icon(Icons.account_circle_outlined),
                   title: const Text('アバター情報'),
                   subtitle: const Text('プロフィール編集'),
-                  onTap: () => _go(context, '/avatar-edit', qp: {'from': from}),
+                  onTap: () => _go(
+                    context,
+                    AppRoutePath.avatarEdit,
+                    qp: {AppQueryKey.from: from},
+                  ),
                 ),
                 _divider(context),
                 ListTile(
                   leading: const Icon(Icons.manage_accounts_outlined),
                   title: const Text('ユーザー情報'),
                   subtitle: const Text('ユーザー編集'),
-                  onTap: () => _go(context, '/user-edit', qp: {'from': from}),
+                  onTap: () => _go(
+                    context,
+                    AppRoutePath.userEdit,
+                    qp: {AppQueryKey.from: from},
+                  ),
                 ),
                 _divider(context),
                 ListTile(
@@ -543,8 +627,12 @@ class _AccountMenuSheet extends StatelessWidget {
                   subtitle: const Text('Shipping address'),
                   onTap: () => _go(
                     context,
-                    '/shipping-address',
-                    qp: {'from': from, 'intent': 'settings', 'mode': 'edit'},
+                    AppRoutePath.shippingAddress,
+                    qp: {
+                      AppQueryKey.from: from,
+                      AppQueryKey.intent: 'settings',
+                      AppQueryKey.mode: 'edit',
+                    },
                   ),
                 ),
                 _divider(context),
@@ -552,8 +640,11 @@ class _AccountMenuSheet extends StatelessWidget {
                   leading: const Icon(Icons.receipt_long_outlined),
                   title: const Text('支払情報'),
                   subtitle: const Text('Billing address'),
-                  onTap: () =>
-                      _go(context, '/billing-address', qp: {'from': from}),
+                  onTap: () => _go(
+                    context,
+                    AppRoutePath.billingAddress,
+                    qp: {AppQueryKey.from: from},
+                  ),
                 ),
                 _divider(context),
                 ListTile(
@@ -562,8 +653,8 @@ class _AccountMenuSheet extends StatelessWidget {
                   subtitle: const Text('Email'),
                   onTap: () => _go(
                     context,
-                    '/user-edit',
-                    qp: {'from': from, 'tab': 'email'},
+                    AppRoutePath.userEdit,
+                    qp: {AppQueryKey.from: from, AppQueryKey.tab: 'email'},
                   ),
                 ),
                 _divider(context),
@@ -573,8 +664,8 @@ class _AccountMenuSheet extends StatelessWidget {
                   subtitle: const Text('Password'),
                   onTap: () => _go(
                     context,
-                    '/user-edit',
-                    qp: {'from': from, 'tab': 'password'},
+                    AppRoutePath.userEdit,
+                    qp: {AppQueryKey.from: from, AppQueryKey.tab: 'password'},
                   ),
                 ),
                 _divider(context),
@@ -585,7 +676,7 @@ class _AccountMenuSheet extends StatelessWidget {
                     Navigator.pop(context);
                     try {
                       await FirebaseAuth.instance.signOut();
-                      if (context.mounted) context.go('/');
+                      if (context.mounted) context.go(AppRoutePath.home);
                     } catch (_) {}
                   },
                 ),
@@ -634,7 +725,7 @@ class _FirebaseInitErrorPage extends StatelessWidget {
                   ),
                   const SizedBox(height: 16),
                   OutlinedButton(
-                    onPressed: () => context.go('/'),
+                    onPressed: () => context.go(AppRoutePath.home),
                     child: const Text('Back to Home'),
                   ),
                 ],

@@ -9,7 +9,10 @@ class CatalogMeasurementRowVM {
   });
 
   final String size;
+
+  /// 互換のため残す（UIでは未使用）
   final String colorName;
+
   final Map<String, int> measurements;
 }
 
@@ -25,23 +28,26 @@ class CatalogMeasurementVM {
   final String title;
   final List<String> keys;
   final List<CatalogMeasurementRowVM> rows;
+
+  /// 互換のため残す（UIでは未使用）
   final bool showColor;
 
   bool get hasRows => rows.isNotEmpty;
   bool get hasKeys => keys.isNotEmpty;
 }
 
-/// ✅ UseCatalog 側で使う型名（VMと同一でOK）
+/// UseCatalog 側で使う型名（VMと同一でOK）
 typedef CatalogMeasurementTable = CatalogMeasurementVM;
 
 /// 採寸テーブルの組み立て（ロジック）
+/// - 期待値: 行数は modelId ではなく「サイズ」単位
 class UseCatalogMeasurement {
   const UseCatalogMeasurement();
 
-  /// ✅ 互換のため（持つリソースがないのでno-op）
+  /// 互換のため（持つリソースがないのでno-op）
   void dispose() {}
 
-  /// ✅ UseCatalog 側が呼ぶ想定のAPI
+  /// UseCatalog 側が呼ぶ想定のAPI
   CatalogMeasurementTable compute({
     required List<dynamic>? models,
     String title = '採寸（サイズ別）',
@@ -49,51 +55,70 @@ class UseCatalogMeasurement {
     return build(models: models ?? const [], title: title);
   }
 
-  /// ✅ CatalogMeasurementCard（style側）から呼ぶVMビルダー
+  /// CatalogMeasurementCard（style側）から呼ぶVMビルダー
   CatalogMeasurementVM build({
     required List<dynamic> models,
     required String title,
   }) {
-    final rows = <CatalogMeasurementRowVM>[];
+    // ✅ size -> (measurementKey -> value)
+    final sizeMap = <String, Map<String, int>>{};
     final keySet = <String>{};
 
     for (final raw in models) {
       final meta = _unwrapMetadata(raw);
 
-      final size = _pickSize(meta);
-      final colorName = _pickColorName(meta);
+      var size = _pickSize(meta);
+      size = size.isNotEmpty ? size : '(未設定)';
+
       final meas = _pickMeasurements(meta);
 
+      // collect keys
       for (final k in meas.keys) {
         final s = k.trim();
         if (s.isNotEmpty) keySet.add(s);
       }
 
-      rows.add(
-        CatalogMeasurementRowVM(
-          size: size.isNotEmpty ? size : '(未設定)',
-          colorName: colorName,
-          measurements: meas,
-        ),
-      );
+      // merge into sizeMap (prefer larger values if duplicates)
+      final bucket = sizeMap.putIfAbsent(size, () => <String, int>{});
+      meas.forEach((k, v) {
+        final kk = _s(k);
+        if (kk.isEmpty) return;
+
+        final vv = _toInt(v);
+        final cur = bucket[kk];
+        if (cur == null) {
+          bucket[kk] = vv;
+          return;
+        }
+
+        // ✅ same size has multiple models (e.g., colors):
+        // choose max to avoid losing non-zero measurements
+        if (vv > cur) {
+          bucket[kk] = vv;
+        }
+      });
     }
 
     final keys = keySet.toList()..sort();
-    final showColor = rows.any((r) => r.colorName.trim().isNotEmpty);
 
-    // size -> colorName の順に安定ソート
-    rows.sort((a, b) {
-      final s = a.size.compareTo(b.size);
-      if (s != 0) return s;
-      return a.colorName.compareTo(b.colorName);
-    });
+    final rows =
+        sizeMap.entries
+            .map(
+              (e) => CatalogMeasurementRowVM(
+                size: e.key,
+                colorName: '', // ✅ size単位なので色は出さない（UIも色列なし）
+                measurements: e.value,
+              ),
+            )
+            .toList()
+          ..sort((a, b) => a.size.compareTo(b.size));
 
     final t = title.trim();
     return CatalogMeasurementVM(
       title: t.isNotEmpty ? t : '採寸（サイズ別）',
       keys: keys,
       rows: rows,
-      showColor: showColor,
+      showColor: false,
     );
   }
 
@@ -130,41 +155,6 @@ class UseCatalogMeasurement {
 
     try {
       return _s((meta as dynamic).size);
-    } catch (_) {}
-
-    return '';
-  }
-
-  static String _pickColorName(dynamic meta) {
-    if (meta == null) return '';
-
-    // flat: colorName
-    if (meta is Map) {
-      final flat = _s(meta['colorName'] ?? meta['ColorName']);
-      if (flat.isNotEmpty) return flat;
-
-      // nested: color: { name, rgb }
-      final c = meta['color'] ?? meta['Color'];
-      if (c is Map) {
-        final n = _s(c['name'] ?? c['Name']);
-        if (n.isNotEmpty) return n;
-      }
-      return '';
-    }
-
-    try {
-      final flat = _s((meta as dynamic).colorName);
-      if (flat.isNotEmpty) return flat;
-    } catch (_) {}
-
-    try {
-      final c = (meta as dynamic).color;
-      if (c != null) {
-        try {
-          final n = _s((c as dynamic).name);
-          if (n.isNotEmpty) return n;
-        } catch (_) {}
-      }
     } catch (_) {}
 
     return '';

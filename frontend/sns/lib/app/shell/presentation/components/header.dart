@@ -6,6 +6,9 @@ import 'package:go_router/go_router.dart';
 /// - Back button (optional) ※ showBack のみで制御
 /// - Title (optional)
 /// - Right-side actions (optional)  ← Sign in / Sign out は router 側から渡す
+///
+/// ✅ NOTE:
+/// - 戻る遷移時に、現在のURLが持つ query（例: avatarId）を必要に応じて引き継げるようにする。
 class AppHeader extends StatelessWidget {
   const AppHeader({
     super.key,
@@ -14,6 +17,7 @@ class AppHeader extends StatelessWidget {
     this.onTapTitle,
     this.actions,
     this.backTo = '/',
+    this.preserveQueryKeys = const ['avatarId'],
   });
 
   final String? title;
@@ -30,8 +34,28 @@ class AppHeader extends StatelessWidget {
   /// ✅ 「戻る」押下時の遷移先（popは使わず go で戻す）
   final String backTo;
 
+  /// ✅ backTo に query が無い場合でも、現在の query の一部を引き継ぐ
+  /// - 例: avatarId を維持して遷移
+  final List<String> preserveQueryKeys;
+
+  Uri _mergePreserveQuery(BuildContext context, String to) {
+    final current = GoRouterState.of(context).uri;
+
+    final dest = Uri.parse(to);
+    final merged = <String, String>{...dest.queryParameters};
+
+    for (final k in preserveQueryKeys) {
+      if (merged.containsKey(k)) continue;
+      final v = (current.queryParameters[k] ?? '').trim();
+      if (v.isNotEmpty) merged[k] = v;
+    }
+
+    return dest.replace(queryParameters: merged);
+  }
+
   void _handleBack(BuildContext context) {
-    context.go(backTo);
+    final uri = _mergePreserveQuery(context, backTo);
+    context.go(uri.toString());
   }
 
   @override
