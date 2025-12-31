@@ -48,10 +48,26 @@ class AppFooter extends StatelessWidget {
   }
 }
 
-/// Signed-in footer (Shop / Scan / AvatarIcon)
+/// Signed-in footer (Shop / Scan(or AddToCart) / AvatarIcon)
 /// - Shows ONLY when FirebaseAuth.currentUser != null
 class SignedInFooter extends StatelessWidget {
   const SignedInFooter({super.key});
+
+  bool _isCatalogPath(BuildContext context) {
+    final path = GoRouterState.of(context).uri.path;
+    return path.startsWith('/catalog/');
+  }
+
+  String _currentUriString(BuildContext context) {
+    return GoRouterState.of(context).uri.toString();
+  }
+
+  String _catalogListIdOrEmpty(BuildContext context) {
+    final path = GoRouterState.of(context).uri.path; // /catalog/:listId
+    final parts = path.split('/');
+    if (parts.length >= 3 && parts[1] == 'catalog') return parts[2];
+    return '';
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -62,6 +78,10 @@ class SignedInFooter extends StatelessWidget {
         final user = FirebaseAuth.instance.currentUser ?? snap.data;
 
         if (user == null) return const SizedBox.shrink();
+
+        final isCatalog = _isCatalogPath(context);
+        final from = _currentUriString(context);
+        final listId = isCatalog ? _catalogListIdOrEmpty(context) : '';
 
         return Material(
           color: Theme.of(context).cardColor,
@@ -77,37 +97,47 @@ class SignedInFooter extends StatelessWidget {
                     label: 'Shop',
                     onTap: () => context.go('/'),
                   ),
-                  const Spacer(),
-                  _FooterItem(
-                    icon: Icons.qr_code_scanner,
-                    label: 'Scan',
-                    onTap: () async {
-                      final code = await showModalBottomSheet<String>(
-                        context: context,
-                        isScrollControlled: true,
-                        backgroundColor: Colors.black,
-                        builder: (_) => const _QrScanSheet(),
-                      );
 
-                      if (!context.mounted) return;
-                      if (code == null || code.trim().isEmpty) return;
+                  const SizedBox(width: 8),
 
-                      await showDialog<void>(
-                        context: context,
-                        builder: (_) => AlertDialog(
-                          title: const Text('Scanned'),
-                          content: Text(code),
-                          actions: [
-                            TextButton(
-                              onPressed: () => Navigator.pop(context),
-                              child: const Text('OK'),
+                  // ✅ 中央：catalog では「カートに入れる」ボタン、それ以外は Scan
+                  Expanded(
+                    child: Center(
+                      child: isCatalog
+                          ? _AddToCartButton(from: from, listId: listId)
+                          : _FooterItem(
+                              icon: Icons.qr_code_scanner,
+                              label: 'Scan',
+                              onTap: () async {
+                                final code = await showModalBottomSheet<String>(
+                                  context: context,
+                                  isScrollControlled: true,
+                                  backgroundColor: Colors.black,
+                                  builder: (_) => const _QrScanSheet(),
+                                );
+
+                                if (!context.mounted) return;
+                                if (code == null || code.trim().isEmpty) return;
+
+                                await showDialog<void>(
+                                  context: context,
+                                  builder: (_) => AlertDialog(
+                                    title: const Text('Scanned'),
+                                    content: Text(code),
+                                    actions: [
+                                      TextButton(
+                                        onPressed: () => Navigator.pop(context),
+                                        child: const Text('OK'),
+                                      ),
+                                    ],
+                                  ),
+                                );
+                              },
                             ),
-                          ],
-                        ),
-                      );
-                    },
+                    ),
                   ),
-                  const Spacer(),
+
+                  const SizedBox(width: 8),
 
                   // ✅ Avatar は /avatar へ
                   _AvatarIconButton(user: user),
@@ -149,6 +179,36 @@ class _FooterItem extends StatelessWidget {
             Text(label, style: t.labelSmall),
           ],
         ),
+      ),
+    );
+  }
+}
+
+/// ✅ catalog 用：カートに入れる CTA
+/// いまは /cart に listId と from を渡すだけ（追加処理は cart 側で受ける想定）
+class _AddToCartButton extends StatelessWidget {
+  const _AddToCartButton({required this.from, required this.listId});
+
+  final String from;
+  final String listId;
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      height: 40,
+      child: ElevatedButton.icon(
+        icon: const Icon(Icons.add_shopping_cart_outlined, size: 20),
+        label: const Text('カートに入れる'),
+        onPressed: () {
+          final qp = <String, String>{
+            'from': from,
+            if (listId.trim().isNotEmpty) 'listId': listId.trim(),
+            // cart 側で「追加イベント」として扱いたい場合に使う
+            'action': 'addFromCatalog',
+          };
+          final uri = Uri(path: '/cart', queryParameters: qp);
+          context.go(uri.toString());
+        },
       ),
     );
   }

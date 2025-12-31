@@ -315,7 +315,10 @@ List<Widget> _headerActionsFor(
   required bool firebaseReady,
 }) {
   final path = state.uri.path;
+  final isHome = path == '/'; // ✅ list.dart (= HomePage)
+  final isAvatar = path == '/avatar';
 
+  // これらは常にヘッダー右側アクション無し
   if (path == '/login' ||
       path == '/create-account' ||
       path == '/shipping-address' ||
@@ -330,19 +333,44 @@ List<Widget> _headerActionsFor(
 
   final from = state.uri.toString();
 
+  // firebase 未初期化時は Sign in（+ Home のときだけ Cart）
   if (!firebaseReady) {
     final loginUri = Uri(path: '/login', queryParameters: {'from': from});
+    if (isHome) {
+      return [
+        _HeaderCartButton(from: from),
+        _HeaderSignInButton(to: loginUri.toString()),
+      ];
+    }
     return [_HeaderSignInButton(to: loginUri.toString())];
   }
 
   final isLoggedIn = FirebaseAuth.instance.currentUser != null;
 
+  // 未ログイン時は Sign in（+ Home のときだけ Cart）
   if (!isLoggedIn) {
     final loginUri = Uri(path: '/login', queryParameters: {'from': from});
+    if (isHome) {
+      return [
+        _HeaderCartButton(from: from),
+        _HeaderSignInButton(to: loginUri.toString()),
+      ];
+    }
     return [_HeaderSignInButton(to: loginUri.toString())];
   }
 
-  return [_HeaderHamburgerMenuButton(from: from)];
+  // ✅ ログイン済み:
+  // - /avatar はハンバーガーのみ
+  if (isAvatar) {
+    return [_HeaderHamburgerMenuButton(from: from)];
+  }
+
+  // - list.dart（/）はカートのみ
+  if (isHome) {
+    return [_HeaderCartButton(from: from)];
+  }
+
+  return const [];
 }
 
 class GoRouterRefreshStream extends ChangeNotifier {
@@ -368,6 +396,25 @@ class _HeaderSignInButton extends StatelessWidget {
     return TextButton(
       onPressed: () => context.go(to),
       child: const Text('Sign in'),
+    );
+  }
+}
+
+/// ✅ NEW: list.dart（/）用のカートボタン（header の右側に出す）
+class _HeaderCartButton extends StatelessWidget {
+  const _HeaderCartButton({required this.from});
+  final String from;
+
+  @override
+  Widget build(BuildContext context) {
+    return IconButton(
+      tooltip: 'Cart',
+      icon: const Icon(Icons.shopping_cart_outlined),
+      onPressed: () {
+        // ルートがある前提。未実装なら後で /cart を追加してください。
+        final uri = Uri(path: '/cart', queryParameters: {'from': from});
+        context.go(uri.toString());
+      },
     );
   }
 }
