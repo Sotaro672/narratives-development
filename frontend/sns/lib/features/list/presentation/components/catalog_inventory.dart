@@ -1,7 +1,7 @@
 // frontend/sns/lib/features/home/presentation/components/catalog_inventory.dart
 import 'package:flutter/material.dart';
 
-class CatalogInventoryCard extends StatelessWidget {
+class CatalogInventoryCard extends StatefulWidget {
   const CatalogInventoryCard({
     super.key,
     required this.productBlueprintId,
@@ -24,8 +24,16 @@ class CatalogInventoryCard extends StatelessWidget {
 
   /// vm.modelStockRows（elements must have: label, modelId, stockCount）
   /// さらに best-effort で colorRGB/rgb も拾う
-  /// price も best-effort で拾う
+  /// price / size / colorName も best-effort で拾う
   final List<dynamic>? modelStockRows;
+
+  @override
+  State<CatalogInventoryCard> createState() => _CatalogInventoryCardState();
+}
+
+class _CatalogInventoryCardState extends State<CatalogInventoryCard> {
+  String? _selectedSize; // null = all
+  int? _selectedRgb; // null = all
 
   // ------------------------------------------------------------
   // number helpers (best-effort)
@@ -48,7 +56,6 @@ class CatalogInventoryCard extends StatelessWidget {
   int? _pickPrice(dynamic r) {
     if (r == null) return null;
 
-    // direct fields
     try {
       final x = _toInt(r.price);
       if (x != null) return x;
@@ -66,7 +73,6 @@ class CatalogInventoryCard extends StatelessWidget {
       if (x != null) return x;
     } catch (_) {}
 
-    // nested: metadata.*
     try {
       final m = r.metadata;
       if (m != null) {
@@ -85,7 +91,6 @@ class CatalogInventoryCard extends StatelessWidget {
       }
     } catch (_) {}
 
-    // map access
     if (r is Map) {
       final m = r;
 
@@ -115,24 +120,19 @@ class CatalogInventoryCard extends StatelessWidget {
   int? _pickRgb(dynamic r) {
     if (r == null) return null;
 
-    // direct fields
     try {
-      final v = r.rgb;
-      final x = _toInt(v);
+      final x = _toInt(r.rgb);
       if (x != null) return x;
     } catch (_) {}
     try {
-      final v = r.colorRgb;
-      final x = _toInt(v);
+      final x = _toInt(r.colorRgb);
       if (x != null) return x;
     } catch (_) {}
     try {
-      final v = r.colorRGB;
-      final x = _toInt(v);
+      final x = _toInt(r.colorRGB);
       if (x != null) return x;
     } catch (_) {}
 
-    // nested: color.rgb
     try {
       final c = r.color;
       if (c != null) {
@@ -141,7 +141,6 @@ class CatalogInventoryCard extends StatelessWidget {
       }
     } catch (_) {}
 
-    // nested: metadata.*
     try {
       final m = r.metadata;
       if (m != null) {
@@ -167,7 +166,6 @@ class CatalogInventoryCard extends StatelessWidget {
       }
     } catch (_) {}
 
-    // map access
     if (r is Map) {
       final m = r;
       final x1 = _toInt(m['colorRGB'] ?? m['colorRgb'] ?? m['rgb']);
@@ -199,23 +197,128 @@ class CatalogInventoryCard extends StatelessWidget {
     if (rgb == null) return null;
     if (rgb <= 0) return null;
 
-    if (rgb >= 0xFF000000) {
-      return Color(rgb);
-    }
-    final v = (0xFF000000 | (rgb & 0x00FFFFFF));
-    return Color(v);
+    if (rgb >= 0xFF000000) return Color(rgb);
+    return Color(0xFF000000 | (rgb & 0x00FFFFFF));
   }
 
-  Widget _colorSwatch(Color c) {
+  Widget _colorSwatch(Color c, {double size = 12}) {
     return Container(
-      width: 12,
-      height: 12,
+      width: size,
+      height: size,
       decoration: BoxDecoration(
         color: c,
         shape: BoxShape.circle,
         border: Border.all(color: Colors.black12),
       ),
     );
+  }
+
+  // ------------------------------------------------------------
+  // size / colorName helpers (best-effort)
+  // ------------------------------------------------------------
+
+  String? _pickSize(dynamic r) {
+    if (r == null) return null;
+
+    try {
+      final s = (r.size ?? '').toString().trim();
+      if (s.isNotEmpty) return s;
+    } catch (_) {}
+
+    try {
+      final m = r.metadata;
+      if (m != null) {
+        final s = (m.size ?? '').toString().trim();
+        if (s.isNotEmpty) return s;
+      }
+    } catch (_) {}
+
+    if (r is Map) {
+      final s = (r['size'] ?? '').toString().trim();
+      if (s.isNotEmpty) return s;
+
+      final meta = r['metadata'];
+      if (meta is Map) {
+        final s2 = (meta['size'] ?? '').toString().trim();
+        if (s2.isNotEmpty) return s2;
+      }
+    }
+
+    // fallback: label parse "modelNumber / size / color"
+    final label =
+        (r is Map
+                ? (r['label'] ?? '')
+                : (() {
+                    try {
+                      return r.label ?? '';
+                    } catch (_) {
+                      return '';
+                    }
+                  })())
+            .toString();
+
+    final parts = label
+        .split(' / ')
+        .map((e) => e.trim())
+        .where((e) => e.isNotEmpty)
+        .toList();
+    if (parts.length >= 2) {
+      final s = parts[1].trim();
+      if (s.isNotEmpty) return s;
+    }
+    return null;
+  }
+
+  String? _pickColorName(dynamic r) {
+    if (r == null) return null;
+
+    try {
+      final s = (r.colorName ?? '').toString().trim();
+      if (s.isNotEmpty) return s;
+    } catch (_) {}
+
+    try {
+      final m = r.metadata;
+      if (m != null) {
+        final s = (m.colorName ?? '').toString().trim();
+        if (s.isNotEmpty) return s;
+      }
+    } catch (_) {}
+
+    if (r is Map) {
+      final s = (r['colorName'] ?? '').toString().trim();
+      if (s.isNotEmpty) return s;
+
+      final meta = r['metadata'];
+      if (meta is Map) {
+        final s2 = (meta['colorName'] ?? '').toString().trim();
+        if (s2.isNotEmpty) return s2;
+      }
+    }
+
+    // fallback: label parse "modelNumber / size / color"
+    final label =
+        (r is Map
+                ? (r['label'] ?? '')
+                : (() {
+                    try {
+                      return r.label ?? '';
+                    } catch (_) {
+                      return '';
+                    }
+                  })())
+            .toString();
+
+    final parts = label
+        .split(' / ')
+        .map((e) => e.trim())
+        .where((e) => e.isNotEmpty)
+        .toList();
+    if (parts.length >= 3) {
+      final s = parts[2].trim();
+      if (s.isNotEmpty) return s;
+    }
+    return null;
   }
 
   // ------------------------------------------------------------
@@ -228,7 +331,6 @@ class CatalogInventoryCard extends StatelessWidget {
     final s = label.trim();
     if (s.isEmpty) return s;
 
-    // " / " 区切りを想定（UseCatalogInventory 側の join(' / ') と一致）
     final parts = s
         .split(' / ')
         .map((e) => e.trim())
@@ -236,15 +338,65 @@ class CatalogInventoryCard extends StatelessWidget {
         .toList();
     if (parts.length <= 1) return s;
 
-    // 先頭を落として残りを表示
     return parts.sublist(1).join(' / ');
+  }
+
+  // ------------------------------------------------------------
+  // filter helpers
+  // ------------------------------------------------------------
+
+  List<String> _collectSizes(List<dynamic> rows) {
+    final set = <String>{};
+    for (final r in rows) {
+      final s = (_pickSize(r) ?? '').trim();
+      if (s.isNotEmpty) set.add(s);
+    }
+    final out = set.toList()..sort();
+    return out;
+  }
+
+  List<int> _collectRgbs(List<dynamic> rows) {
+    final set = <int>{};
+    for (final r in rows) {
+      final rgb = _pickRgb(r);
+      if (rgb != null && rgb > 0) set.add(rgb);
+    }
+    final out = set.toList()..sort();
+    return out;
+  }
+
+  List<dynamic> _applyFilter(List<dynamic> rows) {
+    return rows.where((r) {
+      if (_selectedSize != null) {
+        final s = (_pickSize(r) ?? '').trim();
+        if (s != _selectedSize) return false;
+      }
+      if (_selectedRgb != null) {
+        final rgb = _pickRgb(r);
+        if (rgb == null || rgb <= 0) return false;
+        if (rgb != _selectedRgb) return false;
+      }
+      return true;
+    }).toList();
   }
 
   @override
   Widget build(BuildContext context) {
-    final inv = inventory;
-    final invErr = inventoryError;
-    final rows = modelStockRows ?? const [];
+    final invErr = widget.inventoryError;
+    final rows = widget.modelStockRows ?? const <dynamic>[];
+
+    final sizes = _collectSizes(rows);
+    final rgbs = _collectRgbs(rows);
+
+    // 選択中の値が消えたらリセット
+    if (_selectedSize != null && !sizes.contains(_selectedSize)) {
+      _selectedSize = null;
+    }
+    if (_selectedRgb != null && !rgbs.contains(_selectedRgb)) {
+      _selectedRgb = null;
+    }
+
+    final filtered = _applyFilter(rows);
 
     return Card(
       child: Padding(
@@ -252,31 +404,86 @@ class CatalogInventoryCard extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text('在庫', style: Theme.of(context).textTheme.titleMedium),
-            const SizedBox(height: 12),
+            // ✅ 「在庫」タイトルは削除
+
+            // ✅ Filters（「絞り込み」テキストと「すべて」ボタンは削除）
+            if (sizes.isNotEmpty || rgbs.isNotEmpty) ...[
+              if (sizes.isNotEmpty) ...[
+                Text('サイズ', style: Theme.of(context).textTheme.labelMedium),
+                const SizedBox(height: 6),
+                Wrap(
+                  spacing: 8,
+                  runSpacing: 8,
+                  children: [
+                    ...sizes.map((s) {
+                      return ChoiceChip(
+                        label: Text(s),
+                        selected: _selectedSize == s,
+                        // ✅ 同じチップを押すと解除できる（すべてボタン無しでクリア可能）
+                        onSelected: (_) => setState(() {
+                          _selectedSize = (_selectedSize == s) ? null : s;
+                        }),
+                      );
+                    }),
+                  ],
+                ),
+                const SizedBox(height: 10),
+              ],
+
+              if (rgbs.isNotEmpty) ...[
+                Text('色', style: Theme.of(context).textTheme.labelMedium),
+                const SizedBox(height: 6),
+                Wrap(
+                  spacing: 8,
+                  runSpacing: 8,
+                  children: [
+                    ...rgbs.map((rgb) {
+                      final c = _rgbToColor(rgb);
+                      final label = _colorNameForRgb(rows, rgb) ?? '';
+                      return ChoiceChip(
+                        selected: _selectedRgb == rgb,
+                        // ✅ 同じチップを押すと解除できる
+                        onSelected: (_) => setState(() {
+                          _selectedRgb = (_selectedRgb == rgb) ? null : rgb;
+                        }),
+                        label: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            if (c != null) ...[
+                              _colorSwatch(c, size: 14),
+                              const SizedBox(width: 6),
+                            ],
+                            Text(label.isNotEmpty ? label : 'color'),
+                          ],
+                        ),
+                      );
+                    }),
+                  ],
+                ),
+                const SizedBox(height: 12),
+              ],
+            ],
 
             Text('モデル別', style: Theme.of(context).textTheme.titleSmall),
             const SizedBox(height: 6),
 
-            if (rows.isEmpty)
-              Text('(空)', style: Theme.of(context).textTheme.bodyMedium)
+            if (filtered.isEmpty)
+              Text(
+                '該当するモデルがありません',
+                style: Theme.of(context).textTheme.bodyMedium,
+              )
             else
-              ...rows.map((r) {
+              ...filtered.map((r) {
                 final count = (r.stockCount ?? 0).toString();
                 final rawLabel = (r.label ?? '').toString();
-
-                // ✅ 表示だけ modelNumber を削除（データはそのまま）
                 final label = _stripModelNumberFromLabel(rawLabel);
 
-                // ✅ rgb を拾って色の丸だけ表示（文字列RGBは表示しない）
                 final rgb = _pickRgb(r);
                 final color = _rgbToColor(rgb);
 
-                // ✅ price を拾う
                 final price = _pickPrice(r);
                 final priceText = (price != null) ? _formatYen(price) : '(未設定)';
 
-                // ✅ RGB文字列は削除
                 final line =
                     '${label.isNotEmpty ? label : '(名称なし)'}　/　在庫: $count　/　価格: $priceText';
 
@@ -300,7 +507,8 @@ class CatalogInventoryCard extends StatelessWidget {
                 );
               }),
 
-            if (inv == null && (invErr ?? '').trim().isNotEmpty) ...[
+            if (widget.inventory == null &&
+                (invErr ?? '').trim().isNotEmpty) ...[
               const SizedBox(height: 10),
               Text(
                 '在庫エラー: ${invErr!.trim()}',
@@ -311,5 +519,17 @@ class CatalogInventoryCard extends StatelessWidget {
         ),
       ),
     );
+  }
+
+  /// 同じ rgb の行から、最初に見つかった colorName を拾う（表示用）
+  String? _colorNameForRgb(List<dynamic> rows, int rgb) {
+    for (final r in rows) {
+      final rr = _pickRgb(r);
+      if (rr == rgb) {
+        final n = (_pickColorName(r) ?? '').trim();
+        if (n.isNotEmpty) return n;
+      }
+    }
+    return null;
   }
 }

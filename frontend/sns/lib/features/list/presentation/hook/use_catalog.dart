@@ -1,13 +1,16 @@
-// frontend/sns/lib/features/home/presentation/hook/use_catalog.dart
+// frontend/sns/lib/features/list/presentation/hook/use_catalog.dart
 import 'dart:convert';
 import 'package:http/http.dart' as http;
+
 import '../../../inventory/infrastructure/inventory_repository_http.dart';
 import '../../infrastructure/list_repository_http.dart';
 import '../../../productBlueprint/infrastructure/product_blueprint_repository_http.dart';
 import '../../../tokenBlueprint/infrastructure/token_blueprint_repository_http.dart';
+
 import 'use_catalog_inventory.dart';
 import 'use_catalog_product.dart';
 import 'use_catalog_token.dart';
+import 'use_catalog_measurement.dart'; // ✅ NEW
 
 /// ✅ state/logic holder for CatalogPage
 class UseCatalog {
@@ -16,6 +19,7 @@ class UseCatalog {
       _listRepo = ListRepositoryHttp(),
       _invRepo = InventoryRepositoryHttp(),
       _inventory = const UseCatalogInventory(),
+      _measurement = const UseCatalogMeasurement(), // ✅ NEW
       _product = UseCatalogProduct(),
       _token = UseCatalogToken();
 
@@ -27,6 +31,9 @@ class UseCatalog {
   // ✅ inventory hook（モデル取得 + 計算）
   final UseCatalogInventory _inventory;
 
+  // ✅ measurement hook（採寸テーブル計算）
+  final UseCatalogMeasurement _measurement;
+
   // ✅ product / token
   final UseCatalogProduct _product;
   final UseCatalogToken _token;
@@ -35,6 +42,7 @@ class UseCatalog {
     _catalogRepo.dispose();
     _listRepo.dispose();
     _invRepo.dispose();
+    _measurement.dispose();
     _product.dispose();
     _token.dispose();
   }
@@ -208,12 +216,14 @@ class UseCatalog {
     final tbId = resolvedTokenBlueprintId.trim();
 
     // ✅ inventory計算（モデル一覧をベースに stock を追記）
-    // ✅ FIX: prices を渡す（missing_required_argument 対策）
     final invComputed = _inventory.compute(
       inventory: inventory,
       modelVariations: modelVariations,
       prices: list.prices,
     );
+
+    // ✅ measurements table（サイズ×採寸キー）
+    final measTable = _measurement.compute(models: modelVariations);
 
     final tokenIconUrl = (tokenBlueprintPatch?.iconUrl ?? '').trim();
 
@@ -238,6 +248,7 @@ class UseCatalog {
       tokenIconUrlEncoded: tokenIconUrl.isNotEmpty
           ? _safeUrl(tokenIconUrl)
           : null,
+      measurementTable: measTable, // ✅ NEW
     );
   }
 
@@ -282,6 +293,7 @@ class CatalogState {
     required this.tokenBlueprintPatch,
     required this.tokenBlueprintError,
     required this.tokenIconUrlEncoded,
+    required this.measurementTable, // ✅ NEW
   });
 
   final SnsListItem list;
@@ -310,6 +322,9 @@ class CatalogState {
   final TokenBlueprintPatch? tokenBlueprintPatch;
   final String? tokenBlueprintError;
   final String? tokenIconUrlEncoded;
+
+  // ✅ measurements table
+  final CatalogMeasurementTable measurementTable;
 }
 
 // ============================================================

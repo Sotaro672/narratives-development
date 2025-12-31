@@ -2,6 +2,7 @@
 import 'package:flutter/material.dart';
 
 import 'package:sns/features/list/presentation/components/catalog_inventory.dart';
+import 'package:sns/features/list/presentation/components/catalog_measurement.dart'; // ✅ NEW
 import '../../infrastructure/list_repository_http.dart';
 import '../components/catalog_product.dart';
 import '../components/catalog_token.dart';
@@ -86,7 +87,9 @@ class _CatalogPageState extends State<CatalogPage> {
         final tbErr = vm?.tokenBlueprintError;
         final tokenIconUrlEncoded = vm?.tokenIconUrlEncoded;
 
-        // ✅ リフレッシュボタン行を削除（ヘッダーのような行スペースも消える）
+        // ✅ NEW: measurements の元データ（CatalogState にあるのは modelVariations）
+        final modelsForMeasurement = vm?.modelVariations;
+
         return Padding(
           padding: const EdgeInsets.all(12),
           child: Column(
@@ -145,14 +148,18 @@ class _CatalogPageState extends State<CatalogPage> {
                   ],
                 ),
               ),
+
               const SizedBox(height: 12),
+
               CatalogTokenCard(
                 tokenBlueprintId: tbId,
                 patch: tbPatch,
                 error: tbErr,
                 iconUrlEncoded: tokenIconUrlEncoded,
               ),
+
               const SizedBox(height: 12),
+
               CatalogInventoryCard(
                 productBlueprintId: pbId,
                 tokenBlueprintId: tbId,
@@ -161,12 +168,22 @@ class _CatalogPageState extends State<CatalogPage> {
                 inventoryError: invErr,
                 modelStockRows: vm?.modelStockRows,
               ),
+
+              // ✅ inventory の下に measurements を表示
+              if (modelsForMeasurement != null &&
+                  modelsForMeasurement.isNotEmpty) ...[
+                const SizedBox(height: 12),
+                CatalogMeasurementCard(models: modelsForMeasurement),
+              ],
+
               const SizedBox(height: 12),
+
               CatalogProductCard(
                 productBlueprintId: pbId,
                 productBlueprint: pb,
                 error: pbErr,
               ),
+
               const SizedBox(height: 24),
             ],
           ),

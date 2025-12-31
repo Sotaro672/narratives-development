@@ -12,6 +12,9 @@ import 'package:http/http.dart' as http;
 /// 3) { "modelVariations": [ ... ] }
 /// 4) { "variations": [ ... ] }
 /// 5) { "data": { "items": [ ... ] } } など
+///
+/// ✅ additionally supports backend shape:
+/// { "items": [ { "modelId": "...", "metadata": { ...measurements... } }, ... ] }
 class ModelRepositoryHTTP {
   ModelRepositoryHTTP({http.Client? client})
     : _client = client ?? http.Client();
@@ -161,21 +164,39 @@ class ModelVariationDTO {
   }
 
   factory ModelVariationDTO.fromJson(Map<String, dynamic> json) {
-    // tolerate field-name variants
-    final id = _s(json['id'] ?? json['ID'] ?? json['variationId']);
+    // ✅ unwrap: backend shape { modelId, metadata: {...} } を吸収
+    final metaRaw = json['metadata'];
+    final Map<String, dynamic> src = (metaRaw is Map)
+        ? metaRaw.cast<String, dynamic>()
+        : json;
+
+    // tolerate field-name variants (prefer src, fallback to outer json)
+    final id = _s(
+      src['id'] ??
+          src['ID'] ??
+          src['variationId'] ??
+          json['modelId'] ??
+          json['ModelID'],
+    );
+
     final pbId = _s(
-      json['productBlueprintId'] ??
-          json['productBlueprintID'] ??
-          json['product_blueprint_id'],
+      src['productBlueprintId'] ??
+          src['productBlueprintID'] ??
+          src['product_blueprint_id'],
     );
 
     return ModelVariationDTO(
       id: id,
       productBlueprintId: pbId,
-      modelNumber: _s(json['modelNumber']),
-      size: _s(json['size']),
-      color: _color(json), // ✅ ここが変更点（flat対応）
-      measurements: _measurements(json['measurements']),
+      modelNumber: _s(src['modelNumber']),
+      size: _s(src['size']),
+      color: _color(src), // ✅ flat対応
+      measurements: _measurements(
+        src['measurements'] ??
+            src['Measurements'] ??
+            src['measurement'] ??
+            src['Measurement'],
+      ),
     );
   }
 }

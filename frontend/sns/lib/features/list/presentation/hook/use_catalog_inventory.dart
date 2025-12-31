@@ -9,6 +9,8 @@ class CatalogModelStockRow {
     required this.stockCount,
     required this.price, // ✅ NEW
     required this.rgb, // ✅ NEW: colorRGB（24bit想定）
+    required this.size, // ✅ NEW
+    required this.colorName, // ✅ NEW
   });
 
   final String modelId;
@@ -19,8 +21,13 @@ class CatalogModelStockRow {
   final int? price;
 
   /// ✅ modelId に紐づく色（24bit RGB: 0xRRGGBB / 無ければ null）
-  /// CatalogInventoryCard 側が r.rgb / r.colorRGB などを拾うので rgb で持たせる。
   final int? rgb;
+
+  /// ✅ size（無ければ null）
+  final String? size;
+
+  /// ✅ colorName（無ければ null）
+  final String? colorName;
 }
 
 class CatalogInventoryComputed {
@@ -143,6 +150,13 @@ class UseCatalogInventory {
           ? meta.colorRGB
           : null;
 
+      // ✅ attach size / colorName
+      final s = (meta?.size ?? '').trim();
+      final String? size = s.isNotEmpty ? s : null;
+
+      final cn = (meta?.colorName ?? '').trim();
+      final String? colorName = cn.isNotEmpty ? cn : null;
+
       rows.add(
         CatalogModelStockRow(
           modelId: modelId,
@@ -150,6 +164,8 @@ class UseCatalogInventory {
           stockCount: count,
           price: price,
           rgb: rgb,
+          size: size,
+          colorName: colorName,
         ),
       );
     }
