@@ -21,9 +21,12 @@ dependencies:
   http: ^1.2.2
   dio: ^5.7.0
 
-  # Firebase (Auth)
+  # Firebase (Core / Auth)
   firebase_core: ^3.6.0
   firebase_auth: ^5.3.1
+
+  # ✅ Firestore (needed to resolve avatarId -> userId / userId -> avatarId)
+  cloud_firestore: ^5.4.4
 
   # ✅ Web DOM bindings (dart:html replacement)
   web: ^1.1.1

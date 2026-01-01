@@ -5,6 +5,9 @@ class AppRouteName {
   static const avatar = 'avatar';
   static const cart = 'cart';
 
+  // ✅ NEW
+  static const payment = 'payment';
+
   static const login = 'login';
   static const createAccount = 'createAccount';
   static const shippingAddress = 'shippingAddress';
@@ -19,6 +22,9 @@ class AppRoutePath {
   static const catalog = '/catalog/:listId';
   static const avatar = '/avatar';
   static const cart = '/cart';
+
+  // ✅ NEW
+  static const payment = '/payment';
 
   static const login = '/login';
   static const createAccount = '/create-account';
