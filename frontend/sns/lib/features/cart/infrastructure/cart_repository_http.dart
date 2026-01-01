@@ -223,6 +223,9 @@ class CartDTO {
   final DateTime? updatedAt;
   final DateTime? expiresAt;
 
+  /// NOTE:
+  /// 現状の Cart ドメインは ordered を持たない想定でも、backend が返す可能性があるため保持。
+  /// 返ってこない場合は false になります。
   final bool ordered;
 
   int totalQty() {
@@ -234,7 +237,8 @@ class CartDTO {
   }
 
   factory CartDTO.fromJson(Map<String, dynamic> json) {
-    final aid = (json['avatarId'] ?? '').toString().trim();
+    // avatarId が返ってこない / 別名で返るケースに備える（docId を詰める実装があるため）
+    final aid = (json['avatarId'] ?? json['id'] ?? '').toString().trim();
 
     final itemsRaw = json['items'];
     final Map<String, int> items = {};
@@ -260,7 +264,35 @@ class CartDTO {
   }
 
   static DateTime? _tryParseTime(dynamic v) {
-    final s = (v ?? '').toString().trim();
+    if (v == null) return null;
+
+    // 1) ISO8601 string
+    if (v is String) {
+      final s = v.trim();
+      if (s.isEmpty) return null;
+      return DateTime.tryParse(s);
+    }
+
+    // 2) Firestore Timestamp-like map: {seconds: ..., nanos: ...}
+    if (v is Map) {
+      final sec = v['seconds'];
+      final nanos = v['nanos'] ?? 0;
+
+      final s = (sec is int) ? sec : int.tryParse(sec?.toString() ?? '');
+      final n = (nanos is int)
+          ? nanos
+          : (int.tryParse(nanos?.toString() ?? '0') ?? 0);
+
+      if (s == null) return null;
+
+      return DateTime.fromMillisecondsSinceEpoch(
+        s * 1000 + (n ~/ 1000000),
+        isUtc: true,
+      );
+    }
+
+    // 3) fallback
+    final s = v.toString().trim();
     if (s.isEmpty) return null;
     return DateTime.tryParse(s);
   }

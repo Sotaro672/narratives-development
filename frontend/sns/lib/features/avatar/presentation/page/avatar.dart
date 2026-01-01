@@ -1,6 +1,4 @@
 // frontend/sns/lib/features/avatar/presentation/page/avatar.dart
-import 'dart:async';
-
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
@@ -35,6 +33,10 @@ class _AvatarPageState extends State<AvatarPage> {
   late final WalletRepositoryHttp _walletRepo;
 
   Future<WalletDTO?>? _walletFuture;
+
+  // ✅ URL 正規化・自動戻りの多重実行防止
+  bool _normalizedUrlOnce = false;
+  bool _returnedToFromOnce = false;
 
   String s(String? v) => (v ?? '').trim();
 
@@ -76,6 +78,72 @@ class _AvatarPageState extends State<AvatarPage> {
   // 暫定: avatarId = Firebase UID（本来は選択中 avatarId を使う）
   String _resolveAvatarId(User user) {
     return s(user.uid);
+  }
+
+  void _kickoffLoads(User user) {
+    final avatarId = _resolveAvatarId(user);
+    _walletFuture ??= _walletRepo.fetchByAvatarId(avatarId);
+  }
+
+  /// ✅ /avatar の URL に avatarId を必ず載せる（Header/Cart が拾えるようにする）
+  void _ensureAvatarIdInUrl(BuildContext context, String avatarId) {
+    if (_normalizedUrlOnce) return;
+    if (avatarId.isEmpty) return;
+
+    final state = GoRouterState.of(context);
+    final uri = state.uri;
+
+    // いまのURLに avatarId があれば何もしない
+    final current = s(uri.queryParameters['avatarId']);
+    if (current == avatarId) {
+      _normalizedUrlOnce = true;
+      return;
+    }
+
+    _normalizedUrlOnce = true;
+
+    // build中に go すると不安定なので post-frame で
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+
+      final fixed = <String, String>{...uri.queryParameters};
+      fixed['avatarId'] = avatarId;
+
+      // path は現状のまま（/avatar）
+      final next = uri.replace(queryParameters: fixed);
+      context.go(next.toString());
+    });
+  }
+
+  /// ✅ 「cart から avatarId 必須で飛ばされた」ケースだけ、from に avatarId を付与して戻す
+  void _maybeReturnToFrom(BuildContext context, String avatarId) {
+    if (_returnedToFromOnce) return;
+    if (avatarId.isEmpty) return;
+
+    // intent=requireAvatarId のときだけ自動で戻す（通常のプロフィール閲覧では勝手に遷移しない）
+    final intent = s(GoRouterState.of(context).uri.queryParameters['intent']);
+    if (intent != 'requireAvatarId') return;
+
+    final rawFrom = s(widget.from);
+    if (rawFrom.isEmpty) return;
+
+    final fromUri = Uri.tryParse(rawFrom);
+    if (fromUri == null) return;
+
+    // cart に戻す意図のときだけ（安全）
+    if (fromUri.path != '/cart') return;
+
+    final qp = <String, String>{...fromUri.queryParameters};
+    qp['avatarId'] = s(qp['avatarId']).isNotEmpty ? qp['avatarId']! : avatarId;
+
+    final fixedFrom = fromUri.replace(queryParameters: qp).toString();
+
+    _returnedToFromOnce = true;
+
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      context.go(fixedFrom);
+    });
   }
 
   Widget _statItem(BuildContext context, String label, int value) {
@@ -129,11 +197,6 @@ class _AvatarPageState extends State<AvatarPage> {
     );
   }
 
-  void _kickoffLoads(User user) {
-    final avatarId = _resolveAvatarId(user);
-    _walletFuture ??= _walletRepo.fetchByAvatarId(avatarId);
-  }
-
   @override
   Widget build(BuildContext context) {
     return StreamBuilder<User?>(
@@ -179,7 +242,17 @@ class _AvatarPageState extends State<AvatarPage> {
           );
         }
 
+        // ✅ avatarId（暫定: uid）を確定
+        final avatarId = _resolveAvatarId(user);
+
+        // ✅ Wallet 等の読み込み開始
         _kickoffLoads(user);
+
+        // ✅ 重要：/avatar URL に avatarId を載せる（Header / Cart が拾える）
+        _ensureAvatarIdInUrl(context, avatarId);
+
+        // ✅ cart -> avatar (intent=requireAvatarId) で来た場合だけ、from に avatarId を付けて戻す
+        _maybeReturnToFrom(context, avatarId);
 
         final photoUrl = s(user.photoURL);
         final name = _displayNameFor(user);
@@ -227,6 +300,16 @@ class _AvatarPageState extends State<AvatarPage> {
                             const SizedBox(height: 6),
                             Text(
                               'Profile',
+                              style: Theme.of(context).textTheme.bodySmall
+                                  ?.copyWith(
+                                    color: Theme.of(
+                                      context,
+                                    ).colorScheme.onSurfaceVariant,
+                                  ),
+                            ),
+                            const SizedBox(height: 6),
+                            Text(
+                              'avatarId: $avatarId',
                               style: Theme.of(context).textTheme.bodySmall
                                   ?.copyWith(
                                     color: Theme.of(

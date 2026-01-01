@@ -65,6 +65,28 @@ class _CartPageState extends State<CartPage> {
     super.dispose();
   }
 
+  CartDTO _emptyCart(String avatarId) {
+    return CartDTO(
+      avatarId: avatarId,
+      items: const {},
+      createdAt: null,
+      updatedAt: null,
+      expiresAt: null,
+      ordered: false,
+    );
+  }
+
+  bool _isCartNotFound(Object? err) {
+    // CartRepositoryHttp throws CartHttpException on non-2xx.
+    // Treat 404 as "empty cart" so the page can always render.
+    if (err is CartHttpException) {
+      return err.statusCode == 404;
+    }
+    // Sometimes wrapped / stringified
+    final s = err?.toString() ?? '';
+    return s.contains('statusCode=404') || s.contains('HTTP 404');
+  }
+
   @override
   Widget build(BuildContext context) {
     final avatarId = _avatarId;
@@ -94,7 +116,15 @@ class _CartPageState extends State<CartPage> {
     return FutureBuilder<CartDTO>(
       future: vm.future,
       builder: (context, snap) {
-        final cart = snap.data;
+        final isLoading =
+            snap.connectionState == ConnectionState.waiting && !snap.hasData;
+
+        // ✅ 404 は「空カート」として扱う（初回でも表示できる）
+        final bool notFoundAsEmpty =
+            snap.hasError && _isCartNotFound(snap.error);
+        final CartDTO cart =
+            (snap.data) ??
+            (notFoundAsEmpty ? _emptyCart(avatarId) : _emptyCart(avatarId));
 
         return Stack(
           children: [
@@ -103,33 +133,24 @@ class _CartPageState extends State<CartPage> {
               children: [
                 _HeaderCard(
                   avatarId: avatarId,
-                  totalQty: cart?.totalQty() ?? 0,
-                  expiresAt: cart?.expiresAt,
-                  ordered: cart?.ordered ?? false,
+                  totalQty: cart.totalQty(),
+                  expiresAt: cart.expiresAt,
+                  ordered: cart.ordered,
                   onReload: vm.reload,
+                  loading: isLoading,
                 ),
                 const SizedBox(height: 12),
 
-                if (snap.connectionState == ConnectionState.waiting &&
-                    cart == null)
+                if (isLoading)
                   const _LoadingCard()
-                else if (snap.hasError)
+                else if (snap.hasError && !notFoundAsEmpty)
                   _ErrorCard(
                     errorText: snap.error.toString(),
                     onRetry: vm.reload,
                   )
                 else
                   _ItemsCard(
-                    cart:
-                        cart ??
-                        CartDTO(
-                          avatarId: avatarId,
-                          items: const {},
-                          createdAt: null,
-                          updatedAt: null,
-                          expiresAt: null,
-                          ordered: false,
-                        ),
+                    cart: cart,
                     onInc: vm.inc,
                     onDec: vm.dec,
                     onRemove: vm.remove,
@@ -166,6 +187,7 @@ class _HeaderCard extends StatelessWidget {
     required this.expiresAt,
     required this.ordered,
     required this.onReload,
+    required this.loading,
   });
 
   final String avatarId;
@@ -173,6 +195,7 @@ class _HeaderCard extends StatelessWidget {
   final DateTime? expiresAt;
   final bool ordered;
   final Future<void> Function() onReload;
+  final bool loading;
 
   @override
   Widget build(BuildContext context) {
@@ -193,10 +216,16 @@ class _HeaderCard extends StatelessWidget {
                   const SizedBox(height: 6),
                   Text('avatarId: $avatarId', style: t.bodySmall),
                   const SizedBox(height: 4),
-                  Text('items: $totalQty', style: t.bodySmall),
+                  Text(
+                    loading ? 'items: ...' : 'items: $totalQty',
+                    style: t.bodySmall,
+                  ),
                   const SizedBox(height: 4),
-                  Text('expiresAt: $expText', style: t.bodySmall),
-                  if (ordered) ...[
+                  Text(
+                    loading ? 'expiresAt: ...' : 'expiresAt: $expText',
+                    style: t.bodySmall,
+                  ),
+                  if (!loading && ordered) ...[
                     const SizedBox(height: 6),
                     Text('ordered: true', style: t.bodySmall),
                   ],
