@@ -54,12 +54,14 @@ type AvatarIconObjectStoragePort interface {
 	EnsurePrefix(ctx context.Context, bucket, prefix string) error
 }
 
-// ✅ NEW: Wallet 永続化ポート（avatar 作成と同時に wallet レコードも起票する）
+// ✅ Wallet 永続化ポート
+// - wallets コレクションは docId=avatarId を期待値とする
 type WalletRepo interface {
-	Save(ctx context.Context, w walletdom.Wallet) error
+	Save(ctx context.Context, avatarID string, w walletdom.Wallet) error
 }
 
-// ✅ NEW: Cart 永続化ポート（avatar 作成と同時に cart レコードも起票する）
+// ✅ Cart 永続化ポート（avatar 作成と同時に cart レコードも起票する）
+// - carts コレクションは docId=avatarId を期待値とする
 type CartRepo interface {
 	Upsert(ctx context.Context, c *cartdom.Cart) error
 	DeleteByAvatarID(ctx context.Context, avatarID string) error
@@ -120,13 +122,13 @@ func (u *AvatarUsecase) WithWalletService(svc AvatarWalletService) *AvatarUsecas
 	return u
 }
 
-// ✅ NEW: WithWalletRepo injects wallet persistence.
+// ✅ WithWalletRepo injects wallet persistence.
 func (u *AvatarUsecase) WithWalletRepo(r WalletRepo) *AvatarUsecase {
 	u.walletRepo = r
 	return u
 }
 
-// ✅ NEW: WithCartRepo injects cart persistence.
+// ✅ WithCartRepo injects cart persistence.
 func (u *AvatarUsecase) WithCartRepo(r CartRepo) *AvatarUsecase {
 	u.cartRepo = r
 	return u
@@ -161,7 +163,8 @@ func (u *AvatarUsecase) GetAggregate(ctx context.Context, id string) (AvatarAggr
 
 	var stPtr *avatarstate.AvatarState
 	if u.stRepo != nil {
-		if st, err := u.stRepo.GetByAvatarID(ctx, id); err == nil && strings.TrimSpace(st.AvatarID) != "" {
+		// ✅ avatarState は docId=avatarId
+		if st, err := u.stRepo.GetByAvatarID(ctx, id); err == nil && strings.TrimSpace(st.ID) != "" {
 			tmp := st
 			stPtr = &tmp
 		}
@@ -198,10 +201,10 @@ type CreateAvatarInput struct {
 
 // Create は /avatars POST 用の作成コマンドです。
 // ✅ 期待値:
-// - avatar 作成と同時に AvatarState を作成する（avatarState doc を確実に用意する）。
-// - avatar 作成と同時に cart テーブル（carts）も起票する（空カート）。
+// - avatar 作成と同時に AvatarState を作成する（avatarState doc を確実に用意する）。※ docId=avatarId
+// - avatar 作成と同時に cart テーブル（carts）も起票する（空カート）。※ docId=avatarId
 // - avatar 作成と同時に Solana wallet を開設し、秘密鍵は Secret Manager に保存される。
-// - さらに wallet テーブル（wallets）も avatarId を保持して起票する。
+// - さらに wallet テーブル（wallets）も docId=avatarId で起票する（avatarId フィールドは保存しない）。
 // - 開設できなかった場合はエラーを返す（= 作成処理は成功扱いにしない）。
 // - narratives-development_avatar_icon に <avatarDocId>/ の “入れ物” を作成する（画像が空でも）。
 func (u *AvatarUsecase) Create(ctx context.Context, in CreateAvatarInput) (avatardom.Avatar, error) {
@@ -284,8 +287,7 @@ func (u *AvatarUsecase) Create(ctx context.Context, in CreateAvatarInput) (avata
 	// - wallet を開く前に作る（失敗時に wallet/secret を作らないため）
 	zero := int64(0)
 	as, aerr := avatarstate.New(
-		"",       // id: repo 実装側で採番 or avatarId を docId にする想定
-		avatarID, // avatarId
+		avatarID, // id (=avatarId, docId)
 		&zero,
 		&zero,
 		&zero,
@@ -302,12 +304,22 @@ func (u *AvatarUsecase) Create(ctx context.Context, in CreateAvatarInput) (avata
 	}
 
 	// ✅ Cart doc を「同時作成」(strict)
-	// - まず空カートを作る（items=nil or empty）
 	cartRow, cerr := cartdom.NewCart(avatarID, nil, now)
 	if cerr != nil {
 		rollback()
 		return avatardom.Avatar{}, cerr
 	}
+	if cartRow == nil {
+		rollback()
+		return avatardom.Avatar{}, errors.New("cart: NewCart returned nil")
+	}
+
+	// ✅ FIX: Firestore carts は docId=avatarId を必須とするため、必ず ID に入れる
+	// cart_repository_fs のエラー:
+	//   "Upsert requires docId (avatarId)"
+	// を確実に潰す。
+	cartRow.ID = avatarID
+
 	if err := u.cartRepo.Upsert(ctx, cartRow); err != nil {
 		rollback()
 		return avatardom.Avatar{}, err
@@ -336,20 +348,20 @@ func (u *AvatarUsecase) Create(ctx context.Context, in CreateAvatarInput) (avata
 	created = updated
 
 	// ✅ wallet テーブルを起票 (strict)
+	// - docId=avatarId
 	// - tokens は初期空
 	// - lastUpdatedAt は now
-	walletRow, werr2 := walletdom.New(avatarID, addr, nil, now)
+	walletRow, werr2 := walletdom.New(addr, nil, now)
 	if werr2 != nil {
 		rollback()
 		return avatardom.Avatar{}, werr2
 	}
-	if err := u.walletRepo.Save(ctx, walletRow); err != nil {
+	if err := u.walletRepo.Save(ctx, avatarID, walletRow); err != nil {
 		rollback()
 		return avatardom.Avatar{}, err
 	}
 
 	// ✅ 画像が空でも “入れ物” を作成（best-effort）
-	// - GCS はフォルダを作れないので <avatarId>/.keep のような空オブジェクトを置く想定。
 	if u.objStore != nil {
 		_ = u.objStore.EnsurePrefix(ctx, "narratives-development_avatar_icon", avatarID+"/")
 	}
@@ -400,8 +412,8 @@ func (u *AvatarUsecase) OpenWallet(ctx context.Context, avatarID string) (avatar
 	// best-effort: wallet テーブルも整合させたい場合
 	if u.walletRepo != nil {
 		now := u.now().UTC()
-		if wrow, e := walletdom.New(avatarID, addr, nil, now); e == nil {
-			_ = u.walletRepo.Save(ctx, wrow)
+		if wrow, e := walletdom.New(addr, nil, now); e == nil {
+			_ = u.walletRepo.Save(ctx, avatarID, wrow)
 		}
 	}
 
@@ -520,8 +532,10 @@ func (u *AvatarUsecase) TouchLastActive(ctx context.Context, avatarID string) (a
 		return avatarstate.AvatarState{}, errors.New("avatarState repo not configured")
 	}
 	now := u.now().UTC()
+
+	// ✅ docId=avatarId
 	state := avatarstate.AvatarState{
-		AvatarID:     avatarID,
+		ID:           avatarID,
 		LastActiveAt: now,
 		UpdatedAt:    &now,
 	}

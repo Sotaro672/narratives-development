@@ -1,4 +1,3 @@
-// backend/internal/domain/wallet/entity.go
 package wallet
 
 import (
@@ -11,7 +10,6 @@ import (
 
 // Domain errors
 var (
-	ErrInvalidAvatarID      = errors.New("wallet: invalid avatarId")
 	ErrInvalidWalletAddress = errors.New("wallet: invalid walletAddress")
 	ErrInvalidMintAddress   = errors.New("wallet: invalid mintAddress")
 	ErrInvalidLastUpdatedAt = errors.New("wallet: invalid lastUpdatedAt")
@@ -46,14 +44,12 @@ func isValidMint(s string) bool {
 // Wallet mirrors web-app/src/shared/types/wallet.ts (updated)
 //
 //	interface Wallet {
-//	  avatarId: string;
 //	  walletAddress: string;
 //	  tokens: string[];
 //	  lastUpdatedAt: string;
 //	  status: 'active' | 'inactive';
 //	}
 type Wallet struct {
-	AvatarID      string
 	WalletAddress string
 	Tokens        []string
 	LastUpdatedAt time.Time
@@ -62,10 +58,9 @@ type Wallet struct {
 
 // New constructs a Wallet.
 // It sets LastUpdatedAt to updatedAt, and Status to 'active'.
-func New(avatarID, addr string, tokens []string, updatedAt time.Time) (Wallet, error) {
+func New(addr string, tokens []string, updatedAt time.Time) (Wallet, error) {
 	w := Wallet{
-		AvatarID:      strings.TrimSpace(avatarID),
-		WalletAddress: addr,
+		WalletAddress: strings.TrimSpace(addr),
 		Tokens:        nil,
 		LastUpdatedAt: updatedAt.UTC(),
 		Status:        StatusActive,
@@ -80,10 +75,9 @@ func New(avatarID, addr string, tokens []string, updatedAt time.Time) (Wallet, e
 }
 
 // NewFull constructs a Wallet with all fields explicitly provided.
-func NewFull(avatarID, addr string, tokens []string, lastUpdatedAt time.Time, status WalletStatus) (Wallet, error) {
+func NewFull(addr string, tokens []string, lastUpdatedAt time.Time, status WalletStatus) (Wallet, error) {
 	w := Wallet{
-		AvatarID:      strings.TrimSpace(avatarID),
-		WalletAddress: addr,
+		WalletAddress: strings.TrimSpace(addr),
 		Tokens:        nil,
 		LastUpdatedAt: lastUpdatedAt.UTC(),
 		Status:        status,
@@ -98,31 +92,31 @@ func NewFull(avatarID, addr string, tokens []string, lastUpdatedAt time.Time, st
 }
 
 // NewNow constructs Wallet using current time for LastUpdatedAt.
-func NewNow(avatarID, addr string, tokens []string, status WalletStatus) (Wallet, error) {
+func NewNow(addr string, tokens []string, status WalletStatus) (Wallet, error) {
 	now := time.Now().UTC()
-	return NewFull(avatarID, addr, tokens, now, status)
+	return NewFull(addr, tokens, now, status)
 }
 
 // NewFromStringTime accepts lastUpdatedAt as string (ISO8601). Status becomes 'active'.
-func NewFromStringTime(avatarID, addr string, tokens []string, lastUpdatedAt string) (Wallet, error) {
+func NewFromStringTime(addr string, tokens []string, lastUpdatedAt string) (Wallet, error) {
 	t, err := parseTime(lastUpdatedAt)
 	if err != nil {
 		return Wallet{}, fmt.Errorf("%w: %v", ErrInvalidLastUpdatedAt, err)
 	}
-	return New(avatarID, addr, tokens, t)
+	return New(addr, tokens, t)
 }
 
 // NewFromStringTimes accepts ISO8601 string for lastUpdated and status.
-func NewFromStringTimes(avatarID, addr string, tokens []string, lastUpdatedAt, status string) (Wallet, error) {
+func NewFromStringTimes(addr string, tokens []string, lastUpdatedAt, status string) (Wallet, error) {
 	lut, err := parseTime(lastUpdatedAt)
 	if err != nil {
 		return Wallet{}, fmt.Errorf("%w: %v", ErrInvalidLastUpdatedAt, err)
 	}
-	ws := WalletStatus(status)
+	ws := WalletStatus(strings.TrimSpace(status))
 	if !isValidStatus(ws) {
 		return Wallet{}, ErrInvalidStatus
 	}
-	return NewFull(avatarID, addr, tokens, lut, ws)
+	return NewFull(addr, tokens, lut, ws)
 }
 
 // Behavior
@@ -179,9 +173,6 @@ func (w *Wallet) SetStatus(s WalletStatus, now time.Time) error {
 // Validation and helpers
 
 func (w Wallet) validate() error {
-	if strings.TrimSpace(w.AvatarID) == "" {
-		return ErrInvalidAvatarID
-	}
 	if !isValidWallet(w.WalletAddress) {
 		return ErrInvalidWalletAddress
 	}
@@ -240,6 +231,7 @@ func dedup(xs []string) []string {
 	seen := make(map[string]struct{}, len(xs))
 	out := make([]string, 0, len(xs))
 	for _, x := range xs {
+		x = strings.TrimSpace(x)
 		if x == "" {
 			continue
 		}
@@ -253,6 +245,7 @@ func dedup(xs []string) []string {
 }
 
 func parseTime(s string) (time.Time, error) {
+	s = strings.TrimSpace(s)
 	if s == "" {
 		return time.Time{}, ErrInvalidLastUpdatedAt
 	}

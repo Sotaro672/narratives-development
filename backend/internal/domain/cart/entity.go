@@ -17,8 +17,8 @@ var (
 // You can change this later to fit product policy.
 const DefaultCartTTL = 7 * 24 * time.Hour
 
-// Cart represents "avatar's cart".
-// - AvatarID: who owns this cart
+// Cart represents "a cart document".
+// - docId = avatarId (Firestore)
 // - Items: modelId -> quantity
 // - ExpiresAt: for Firestore TTL (auto deletion), updated on each cart mutation
 //
@@ -26,24 +26,29 @@ const DefaultCartTTL = 7 * 24 * time.Hour
 // - ordered フラグは持たない
 // - order テーブル作成（注文確定）に合わせて、items から modelId を削除（消費）する
 type Cart struct {
-	AvatarID string
+	// ID is Firestore docId (= avatarId).
+	// （docId と同値をフィールドにも保持しておくことで、repo 側で docId 要求があっても整合できる）
+	ID string `json:"id" firestore:"id"`
 
 	// Items is modelId -> qty
-	Items map[string]int
+	Items map[string]int `json:"items" firestore:"items"`
 
-	CreatedAt time.Time
-	UpdatedAt time.Time
+	CreatedAt time.Time `json:"createdAt" firestore:"createdAt"`
+	UpdatedAt time.Time `json:"updatedAt" firestore:"updatedAt"`
 
 	// ExpiresAt is used for Firestore TTL.
 	// This should be set to a future timestamp and refreshed on each update.
-	ExpiresAt time.Time
+	ExpiresAt time.Time `json:"expiresAt" firestore:"expiresAt"`
 }
 
-// NewCart creates a new cart for an avatar.
+// NewCart creates a new cart doc.
+// id is the Firestore docId (avatarId).
 // items can be nil (treated as empty).
-func NewCart(avatarID string, items map[string]int, now time.Time) (*Cart, error) {
+func NewCart(id string, items map[string]int, now time.Time) (*Cart, error) {
+	docID := strings.TrimSpace(id)
+
 	c := &Cart{
-		AvatarID:  strings.TrimSpace(avatarID),
+		ID:        docID,
 		Items:     cloneItems(items),
 		CreatedAt: now,
 		UpdatedAt: now,
@@ -162,9 +167,12 @@ func (c *Cart) validate() error {
 	if c == nil {
 		return ErrInvalidCart
 	}
-	if strings.TrimSpace(c.AvatarID) == "" {
+
+	// ✅ docId (= avatarId) must exist
+	if strings.TrimSpace(c.ID) == "" {
 		return ErrInvalidCart
 	}
+
 	if c.CreatedAt.IsZero() || c.UpdatedAt.IsZero() || c.ExpiresAt.IsZero() {
 		return ErrInvalidCart
 	}

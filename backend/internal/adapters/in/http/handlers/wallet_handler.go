@@ -3,6 +3,7 @@ package handlers
 
 import (
 	"encoding/json"
+	"errors"
 	"net/http"
 	"strings"
 
@@ -34,9 +35,15 @@ func (h *WalletHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-// GET /wallets/{wallet_address}
+// GET /wallets/{wallet_address}?avatarId={avatarId}
 func (h *WalletHandler) get(w http.ResponseWriter, r *http.Request, walletAddress string) {
 	ctx := r.Context()
+
+	if h == nil || h.uc == nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		_ = json.NewEncoder(w).Encode(map[string]string{"error": "wallet usecase not configured"})
+		return
+	}
 
 	walletAddress = strings.TrimSpace(walletAddress)
 	if walletAddress == "" {
@@ -45,9 +52,13 @@ func (h *WalletHandler) get(w http.ResponseWriter, r *http.Request, walletAddres
 		return
 	}
 
-	// WalletUsecase 側の公開メソッドに合わせて呼び出しを修正
-	// 例: SyncWalletTokens(ctx, walletAddress) で On-chain と同期しつつ Wallet を返す
-	wallet, err := h.uc.SyncWalletTokens(ctx, walletAddress)
+	// ✅ 新シグネチャ対応:
+	// SyncWalletTokens(ctx, avatarId, walletAddress)
+	// - docId=avatarId の永続化設計のため、可能なら avatarId を渡す。
+	// - /wallets/{address} だけでは avatarId が分からないので query で受ける（互換のため未指定は空文字でOK）。
+	avatarID := strings.TrimSpace(r.URL.Query().Get("avatarId"))
+
+	wallet, err := h.uc.SyncWalletTokens(ctx, avatarID, walletAddress)
 	if err != nil {
 		writeWalletErr(w, err)
 		return
@@ -59,8 +70,8 @@ func (h *WalletHandler) get(w http.ResponseWriter, r *http.Request, walletAddres
 // エラーハンドリング
 func writeWalletErr(w http.ResponseWriter, err error) {
 	code := http.StatusInternalServerError
-	switch err {
-	case walletdom.ErrNotFound:
+	switch {
+	case errors.Is(err, walletdom.ErrNotFound):
 		code = http.StatusNotFound
 	}
 	w.WriteHeader(code)

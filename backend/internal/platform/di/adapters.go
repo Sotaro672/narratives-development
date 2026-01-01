@@ -19,6 +19,8 @@ import (
 	productdom "narratives/internal/domain/product"
 	productbpdom "narratives/internal/domain/productBlueprint"
 	tbdom "narratives/internal/domain/tokenBlueprint"
+
+	avatarstate "narratives/internal/domain/avatarState"
 )
 
 //
@@ -86,6 +88,7 @@ func (a *authCompanyRepoAdapter) Save(ctx context.Context, c *companydom.Company
 // ========================================
 // InvitationTokenRepository 用アダプタ
 // ========================================
+//
 //
 // Firestore 実装 (*fs.InvitationTokenRepositoryFS) を
 // usecase.InvitationTokenRepository に合わせてラップする。
@@ -466,4 +469,96 @@ func (r *mintRepoWithUpdate) Update(ctx context.Context, m mintdom.Mint) (mintdo
 		return mintdom.Mint{}, err
 	}
 	return m, nil
+}
+
+// ============================================================
+// Adapters (DI layer) to absorb signature drift
+// ============================================================
+
+// ---- AvatarState adapter ----
+
+type avatarStateGetter interface {
+	GetByAvatarID(ctx context.Context, avatarID string) (avatarstate.AvatarState, error)
+}
+
+// new (expected) signature
+type avatarStateUpserterV2 interface {
+	Upsert(ctx context.Context, s avatarstate.AvatarState) (avatarstate.AvatarState, error)
+}
+
+// old signature (seen in compiler error)
+type avatarStateUpserterV1 interface {
+	Upsert(ctx context.Context, avatarID string) error
+}
+
+type avatarStateRepoAdapter struct {
+	repo any
+}
+
+func (a *avatarStateRepoAdapter) GetByAvatarID(ctx context.Context, avatarID string) (avatarstate.AvatarState, error) {
+	if a == nil || a.repo == nil {
+		return avatarstate.AvatarState{}, errors.New("avatarState repo not configured")
+	}
+	g, ok := a.repo.(avatarStateGetter)
+	if !ok {
+		return avatarstate.AvatarState{}, errors.New("avatarState repo missing GetByAvatarID")
+	}
+	return g.GetByAvatarID(ctx, avatarID)
+}
+
+func (a *avatarStateRepoAdapter) Upsert(ctx context.Context, s avatarstate.AvatarState) (avatarstate.AvatarState, error) {
+	if a == nil || a.repo == nil {
+		return avatarstate.AvatarState{}, errors.New("avatarState repo not configured")
+	}
+
+	// Prefer correct signature
+	if v2, ok := a.repo.(avatarStateUpserterV2); ok {
+		return v2.Upsert(ctx, s)
+	}
+
+	// Fallback: old signature Upsert(ctx, avatarID) error
+	if v1, ok := a.repo.(avatarStateUpserterV1); ok {
+		// ✅ avatarId は domain から削除済みなので、docId (= ID) を source of truth にする
+		aid := strings.TrimSpace(s.ID)
+		if aid == "" {
+			return avatarstate.AvatarState{}, errors.New("avatarState upsert: id is empty")
+		}
+		if err := v1.Upsert(ctx, aid); err != nil {
+			return avatarstate.AvatarState{}, err
+		}
+		// Restore value by re-fetch
+		return a.GetByAvatarID(ctx, aid)
+	}
+
+	return avatarstate.AvatarState{}, errors.New("avatarState repo missing Upsert")
+}
+
+// ---- PostImage adapter ----
+
+// expected signature (usecase.PostImageRepo)
+type postImageIssuerV2 interface {
+	IssueSignedUploadURL(ctx context.Context, avatarID, fileName, contentType string, expiresIn time.Duration) (string, string, string, error)
+}
+
+// old signature (seen in compiler error)
+type postImageIssuerV1 interface {
+	IssueSignedUploadURL(ctx context.Context, avatarID, fileName, contentType string, expiresIn time.Duration) (string, error)
+}
+
+type postImageRepoAdapter struct {
+	repo any
+}
+
+func (a *postImageRepoAdapter) IssueSignedUploadURL(ctx context.Context, avatarID, fileName, contentType string, expiresIn time.Duration) (string, string, string, error) {
+	if a == nil || a.repo == nil {
+		return "", "", "", errors.New("postImage repo not configured")
+	}
+	if v2, ok := a.repo.(postImageIssuerV2); ok {
+		return v2.IssueSignedUploadURL(ctx, avatarID, fileName, contentType, expiresIn)
+	}
+	// If only old signature exists, we cannot reconstruct publicURL/objectPath safely.
+	if _, ok := a.repo.(postImageIssuerV1); ok {
+		return "", "", "", errors.New("postImage repo has legacy IssueSignedUploadURL signature; expected (uploadURL, publicURL, objectPath, error)")
+	}
+	return "", "", "", errors.New("postImage repo missing IssueSignedUploadURL")
 }

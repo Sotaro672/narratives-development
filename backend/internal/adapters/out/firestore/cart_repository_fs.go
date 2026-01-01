@@ -18,8 +18,8 @@ import (
 //
 // Collection design (recommended):
 // - collection: carts
-// - docId: avatarId
-// - fields: avatarId, items(map), createdAt, updatedAt, expiresAt
+// - docId: avatarId  ✅ (docId is the source of truth)
+// - fields: items(map), createdAt, updatedAt, expiresAt
 //
 // TTL:
 // - Configure Firestore TTL on "expiresAt".
@@ -59,12 +59,14 @@ func (r *CartRepositoryFS) GetByAvatarID(ctx context.Context, avatarID string) (
 		return nil, err
 	}
 
-	// docId is the source of truth for avatarId
-	doc.AvatarID = aid
-
-	return doc.toDomain(), nil
+	d := doc.toDomain()
+	// ✅ docId が source of truth（doc内に id フィールドが無くても必ず埋める）
+	d.ID = aid
+	return d, nil
 }
 
+// Upsert saves cart by docId=cart.ID (= avatarId).
+// Cart ドメインに ID を持たせたので、Upsert はそれを docId として使う。
 func (r *CartRepositoryFS) Upsert(ctx context.Context, c *cartdom.Cart) error {
 	if r == nil || r.Client == nil {
 		return errors.New("cart_repository_fs: firestore client is nil")
@@ -73,14 +75,34 @@ func (r *CartRepositoryFS) Upsert(ctx context.Context, c *cartdom.Cart) error {
 		return errors.New("cart_repository_fs: cart is nil")
 	}
 
-	aid := strings.TrimSpace(c.AvatarID)
+	aid := strings.TrimSpace(c.ID)
+	if aid == "" {
+		return errors.New("cart_repository_fs: Upsert requires cart.ID (= avatarId) as docId")
+	}
+
+	doc := cartDocFromDomain(c)
+
+	// Overwrite full doc (simple & predictable).
+	_, err := r.col().Doc(aid).Set(ctx, doc)
+	return err
+}
+
+// ✅ (optional) explicit docId upsert API (kept for compatibility / explicitness)
+func (r *CartRepositoryFS) UpsertByAvatarID(ctx context.Context, avatarID string, c *cartdom.Cart) error {
+	if r == nil || r.Client == nil {
+		return errors.New("cart_repository_fs: firestore client is nil")
+	}
+	if c == nil {
+		return errors.New("cart_repository_fs: cart is nil")
+	}
+
+	aid := strings.TrimSpace(avatarID)
 	if aid == "" {
 		return errors.New("cart_repository_fs: avatarID is empty")
 	}
 
 	doc := cartDocFromDomain(c)
 
-	// Overwrite full doc (simple & predictable).
 	_, err := r.col().Doc(aid).Set(ctx, doc)
 	return err
 }
@@ -104,8 +126,7 @@ func (r *CartRepositoryFS) DeleteByAvatarID(ctx context.Context, avatarID string
 // -----------------------------------------
 
 type cartDoc struct {
-	AvatarID string         `firestore:"avatarId"`
-	Items    map[string]int `firestore:"items"`
+	Items map[string]int `firestore:"items"`
 
 	CreatedAt time.Time `firestore:"createdAt"`
 	UpdatedAt time.Time `firestore:"updatedAt"`
@@ -125,7 +146,6 @@ func cartDocFromDomain(c *cartdom.Cart) cartDoc {
 	}
 
 	return cartDoc{
-		AvatarID:  strings.TrimSpace(c.AvatarID),
 		Items:     items,
 		CreatedAt: c.CreatedAt,
 		UpdatedAt: c.UpdatedAt,
@@ -146,7 +166,7 @@ func (d cartDoc) toDomain() *cartdom.Cart {
 	}
 
 	return &cartdom.Cart{
-		AvatarID:  strings.TrimSpace(d.AvatarID),
+		// ID は呼び出し元（docId）で必ず埋める
 		Items:     items,
 		CreatedAt: d.CreatedAt,
 		UpdatedAt: d.UpdatedAt,

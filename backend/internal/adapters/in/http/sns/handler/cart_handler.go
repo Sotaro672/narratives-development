@@ -86,7 +86,7 @@ func (h *CartHandler) handleGet(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	writeJSON(w, http.StatusOK, toCartResponse(c))
+	writeJSON(w, http.StatusOK, toCartResponse(avatarID, c))
 }
 
 func (h *CartHandler) handleAddItem(w http.ResponseWriter, r *http.Request) {
@@ -109,12 +109,11 @@ func (h *CartHandler) handleAddItem(w http.ResponseWriter, r *http.Request) {
 			writeErr(w, http.StatusBadRequest, err.Error())
 			return
 		}
-		// Ordered フィールドを廃止したため、ErrCartAlreadyOrdered は存在しない
 		writeErr(w, http.StatusInternalServerError, err.Error())
 		return
 	}
 
-	writeJSON(w, http.StatusOK, toCartResponse(c))
+	writeJSON(w, http.StatusOK, toCartResponse(avatarID, c))
 }
 
 func (h *CartHandler) handleSetItemQty(w http.ResponseWriter, r *http.Request) {
@@ -138,12 +137,11 @@ func (h *CartHandler) handleSetItemQty(w http.ResponseWriter, r *http.Request) {
 			writeErr(w, http.StatusBadRequest, err.Error())
 			return
 		}
-		// Ordered フィールドを廃止したため、ErrCartAlreadyOrdered は存在しない
 		writeErr(w, http.StatusInternalServerError, err.Error())
 		return
 	}
 
-	writeJSON(w, http.StatusOK, toCartResponse(c))
+	writeJSON(w, http.StatusOK, toCartResponse(avatarID, c))
 }
 
 func (h *CartHandler) handleRemoveItem(w http.ResponseWriter, r *http.Request) {
@@ -166,12 +164,11 @@ func (h *CartHandler) handleRemoveItem(w http.ResponseWriter, r *http.Request) {
 			writeErr(w, http.StatusBadRequest, err.Error())
 			return
 		}
-		// Ordered フィールドを廃止したため、ErrCartAlreadyOrdered は存在しない
 		writeErr(w, http.StatusInternalServerError, err.Error())
 		return
 	}
 
-	writeJSON(w, http.StatusOK, toCartResponse(c))
+	writeJSON(w, http.StatusOK, toCartResponse(avatarID, c))
 }
 
 func (h *CartHandler) handleClear(w http.ResponseWriter, r *http.Request) {
@@ -205,14 +202,17 @@ type cartItemReq struct {
 }
 
 type cartResponse struct {
-	AvatarID  string         `json:"avatarId"`
-	Items     map[string]int `json:"items"` // modelId -> qty
-	CreatedAt string         `json:"createdAt"`
-	UpdatedAt string         `json:"updatedAt"`
-	ExpiresAt string         `json:"expiresAt"`
+	// ✅ docId=avatarId のため、Cart ドメインから AvatarID を削除してもレスポンスでは返す
+	AvatarID string `json:"avatarId"`
+
+	Items map[string]int `json:"items"` // modelId -> qty
+
+	CreatedAt string `json:"createdAt"`
+	UpdatedAt string `json:"updatedAt"`
+	ExpiresAt string `json:"expiresAt"`
 }
 
-func toCartResponse(c *cartdom.Cart) cartResponse {
+func toCartResponse(avatarID string, c *cartdom.Cart) cartResponse {
 	items := map[string]int{}
 	if c != nil && c.Items != nil {
 		// stable copy
@@ -226,8 +226,19 @@ func toCartResponse(c *cartdom.Cart) cartResponse {
 		}
 	}
 
+	if c == nil {
+		// ここに来るのは通常ないが、念のため
+		return cartResponse{
+			AvatarID:  strings.TrimSpace(avatarID),
+			Items:     items,
+			CreatedAt: "",
+			UpdatedAt: "",
+			ExpiresAt: "",
+		}
+	}
+
 	return cartResponse{
-		AvatarID:  c.AvatarID,
+		AvatarID:  strings.TrimSpace(avatarID),
 		Items:     items,
 		CreatedAt: toRFC3339(c.CreatedAt),
 		UpdatedAt: toRFC3339(c.UpdatedAt),

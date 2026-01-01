@@ -11,8 +11,7 @@ import (
 // AvatarState mirrors web-app/src/shared/types/avatarState.ts
 //
 //	export interface AvatarState {
-//	  id?: string;
-//	  avatarId: string;
+//	  id?: string;              // (= avatarId as docId)
 //	  followerCount?: number;
 //	  followingCount?: number;
 //	  postCount?: number;
@@ -20,8 +19,8 @@ import (
 //	  updatedAt?: Date | string;
 //	}
 type AvatarState struct {
+	// ✅ docId = avatarId
 	ID             string     `json:"id,omitempty"`
-	AvatarID       string     `json:"avatarId"`
 	FollowerCount  *int64     `json:"followerCount,omitempty"`
 	FollowingCount *int64     `json:"followingCount,omitempty"`
 	PostCount      *int64     `json:"postCount,omitempty"`
@@ -31,7 +30,7 @@ type AvatarState struct {
 
 // Errors
 var (
-	ErrInvalidAvatarID        = errors.New("avatarState: invalid avatarId")
+	ErrInvalidID              = errors.New("avatarState: invalid id")
 	ErrInvalidLastActiveAt    = errors.New("avatarState: invalid lastActiveAt")
 	ErrInvalidUpdatedAt       = errors.New("avatarState: invalid updatedAt")
 	ErrNegativeFollowerCount  = errors.New("avatarState: followerCount must be >= 0")
@@ -44,15 +43,15 @@ Constructors
 */
 
 // New constructs AvatarState with validation.
+// ✅ id is the source of truth (docId = avatarId).
 func New(
-	id, avatarID string,
+	id string,
 	followerCount, followingCount, postCount *int64,
 	lastActiveAt time.Time,
 	updatedAt *time.Time,
 ) (AvatarState, error) {
 	as := AvatarState{
 		ID:             strings.TrimSpace(id),
-		AvatarID:       strings.TrimSpace(avatarID),
 		FollowerCount:  followerCount,
 		FollowingCount: followingCount,
 		PostCount:      postCount,
@@ -67,7 +66,7 @@ func New(
 
 // NewFromStringTimes parses lastActiveAt/updatedAt from strings (RFC3339 and common variants).
 func NewFromStringTimes(
-	id, avatarID string,
+	id string,
 	followerCount, followingCount, postCount *int64,
 	lastActiveAtStr string,
 	updatedAtStr *string,
@@ -86,7 +85,7 @@ func NewFromStringTimes(
 			ua = &t
 		}
 	}
-	return New(id, avatarID, followerCount, followingCount, postCount, la, ua)
+	return New(id, followerCount, followingCount, postCount, la, ua)
 }
 
 /*
@@ -94,8 +93,8 @@ Validation
 */
 
 func (s AvatarState) validate() error {
-	if s.AvatarID == "" {
-		return ErrInvalidAvatarID
+	if strings.TrimSpace(s.ID) == "" {
+		return ErrInvalidID
 	}
 	if s.FollowerCount != nil && *s.FollowerCount < 0 {
 		return ErrNegativeFollowerCount
