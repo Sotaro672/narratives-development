@@ -8,7 +8,12 @@ import "context"
 // Storage recommendation (Firestore):
 // - collection: carts
 // - docId: avatarId
-// - fields: avatarId, items(map), createdAt, updatedAt, expiresAt
+// - fields: id, items(map), createdAt, updatedAt, expiresAt
+//
+// Items shape (after composite item adoption):
+// - items: map[itemKey]CartItem
+// - itemKey: inventoryId__listId__modelId (deterministic composite key)
+// - CartItem: {inventoryId, listId, modelId, qty}
 //
 // TTL:
 // - Configure Firestore TTL on the "expiresAt" field.

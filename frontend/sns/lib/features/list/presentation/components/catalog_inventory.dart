@@ -1,4 +1,4 @@
-// frontend/sns/lib/features/home/presentation/components/catalog_inventory.dart
+//frontend\sns\lib\features\list\presentation\components\catalog_inventory.dart
 import 'package:flutter/material.dart';
 
 class CatalogInventoryCard extends StatefulWidget {
@@ -10,6 +10,10 @@ class CatalogInventoryCard extends StatefulWidget {
     required this.inventory,
     required this.inventoryError,
     required this.modelStockRows,
+
+    // ✅ NEW: 「1 model に絞れた」時の modelId と stockCount を親へ通知
+    // それ以外は (null, null) を通知
+    this.onUniqueModelIdChanged,
   });
 
   final String productBlueprintId;
@@ -27,6 +31,9 @@ class CatalogInventoryCard extends StatefulWidget {
   /// price / size / colorName も best-effort で拾う
   final List<dynamic>? modelStockRows;
 
+  /// ✅ unique に確定した modelId / stockCount を通知（未確定なら null）
+  final void Function(String? modelId, int? stockCount)? onUniqueModelIdChanged;
+
   @override
   State<CatalogInventoryCard> createState() => _CatalogInventoryCardState();
 }
@@ -34,6 +41,8 @@ class CatalogInventoryCard extends StatefulWidget {
 class _CatalogInventoryCardState extends State<CatalogInventoryCard> {
   String? _selectedSize; // null = all
   int? _selectedRgb; // null = all
+
+  String _lastEmittedKey = '';
 
   // ------------------------------------------------------------
   // number helpers (best-effort)
@@ -47,6 +56,60 @@ class _CatalogInventoryCardState extends State<CatalogInventoryCard> {
     final s = v.toString().trim();
     if (s.isEmpty) return null;
     return int.tryParse(s);
+  }
+
+  // ------------------------------------------------------------
+  // modelId helpers (best-effort)
+  // ------------------------------------------------------------
+
+  String? _pickModelId(dynamic r) {
+    if (r == null) return null;
+
+    try {
+      final s = (r.modelId ?? '').toString().trim();
+      if (s.isNotEmpty) return s;
+    } catch (_) {}
+
+    if (r is Map) {
+      final s = (r['modelId'] ?? '').toString().trim();
+      if (s.isNotEmpty) return s;
+    }
+
+    return null;
+  }
+
+  int? _pickStockCount(dynamic r) {
+    if (r == null) return null;
+
+    try {
+      final x = _toInt(r.stockCount);
+      if (x != null) return x;
+    } catch (_) {}
+
+    if (r is Map) {
+      final x = _toInt(r['stockCount']);
+      if (x != null) return x;
+    }
+
+    return null;
+  }
+
+  void _emitUniqueSelection(String? modelId, int? stockCount) {
+    final cb = widget.onUniqueModelIdChanged;
+    if (cb == null) return;
+
+    final mid = (modelId ?? '').trim();
+    final int? sc = stockCount;
+
+    // key で重複通知を抑制（UI rebuild が多いので）
+    final key = '${mid.isEmpty ? 'null' : mid}__${sc?.toString() ?? 'null'}';
+    if (_lastEmittedKey == key) return;
+    _lastEmittedKey = key;
+
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      cb(mid.isEmpty ? null : mid, mid.isEmpty ? null : sc);
+    });
   }
 
   // ------------------------------------------------------------
@@ -322,26 +385,6 @@ class _CatalogInventoryCardState extends State<CatalogInventoryCard> {
   }
 
   // ------------------------------------------------------------
-  // label helpers
-  // ------------------------------------------------------------
-
-  /// label が "modelNumber / size / color" の形なら先頭(modelNumber)だけ落とす
-  /// ✅ データ自体は変えず、表示だけ変える
-  String _stripModelNumberFromLabel(String label) {
-    final s = label.trim();
-    if (s.isEmpty) return s;
-
-    final parts = s
-        .split(' / ')
-        .map((e) => e.trim())
-        .where((e) => e.isNotEmpty)
-        .toList();
-    if (parts.length <= 1) return s;
-
-    return parts.sublist(1).join(' / ');
-  }
-
-  // ------------------------------------------------------------
   // filter helpers
   // ------------------------------------------------------------
 
@@ -367,14 +410,14 @@ class _CatalogInventoryCardState extends State<CatalogInventoryCard> {
 
   List<dynamic> _applyFilter(List<dynamic> rows) {
     return rows.where((r) {
-      if (_selectedSize != null) {
-        final s = (_pickSize(r) ?? '').trim();
-        if (s != _selectedSize) return false;
-      }
       if (_selectedRgb != null) {
         final rgb = _pickRgb(r);
         if (rgb == null || rgb <= 0) return false;
         if (rgb != _selectedRgb) return false;
+      }
+      if (_selectedSize != null) {
+        final s = (_pickSize(r) ?? '').trim();
+        if (s != _selectedSize) return false;
       }
       return true;
     }).toList();
@@ -398,38 +441,26 @@ class _CatalogInventoryCardState extends State<CatalogInventoryCard> {
 
     final filtered = _applyFilter(rows);
 
+    // ✅ 1 model に絞れた時だけ結果表示 + modelId/stockCount通知
+    final bool showResult = filtered.length == 1;
+    final dynamic one = showResult ? filtered.first : null;
+
+    final String? uniqueModelId = showResult ? _pickModelId(one) : null;
+    final int? uniqueStockCount = showResult ? _pickStockCount(one) : null;
+
+    _emitUniqueSelection(uniqueModelId, uniqueStockCount);
+
+    final int stockCount = showResult ? (uniqueStockCount ?? 0) : 0;
+    final int? price = showResult ? _pickPrice(one) : null;
+
     return Card(
       child: Padding(
         padding: const EdgeInsets.all(12),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // ✅ 「在庫」タイトルは削除
-
-            // ✅ Filters（「絞り込み」テキストと「すべて」ボタンは削除）
+            // ✅ Filters（色 → サイズ の順）
             if (sizes.isNotEmpty || rgbs.isNotEmpty) ...[
-              if (sizes.isNotEmpty) ...[
-                Text('サイズ', style: Theme.of(context).textTheme.labelMedium),
-                const SizedBox(height: 6),
-                Wrap(
-                  spacing: 8,
-                  runSpacing: 8,
-                  children: [
-                    ...sizes.map((s) {
-                      return ChoiceChip(
-                        label: Text(s),
-                        selected: _selectedSize == s,
-                        // ✅ 同じチップを押すと解除できる（すべてボタン無しでクリア可能）
-                        onSelected: (_) => setState(() {
-                          _selectedSize = (_selectedSize == s) ? null : s;
-                        }),
-                      );
-                    }),
-                  ],
-                ),
-                const SizedBox(height: 10),
-              ],
-
               if (rgbs.isNotEmpty) ...[
                 Text('色', style: Theme.of(context).textTheme.labelMedium),
                 const SizedBox(height: 6),
@@ -442,7 +473,6 @@ class _CatalogInventoryCardState extends State<CatalogInventoryCard> {
                       final label = _colorNameForRgb(rows, rgb) ?? '';
                       return ChoiceChip(
                         selected: _selectedRgb == rgb,
-                        // ✅ 同じチップを押すと解除できる
                         onSelected: (_) => setState(() {
                           _selectedRgb = (_selectedRgb == rgb) ? null : rgb;
                         }),
@@ -460,52 +490,49 @@ class _CatalogInventoryCardState extends State<CatalogInventoryCard> {
                     }),
                   ],
                 ),
+                const SizedBox(height: 10),
+              ],
+              if (sizes.isNotEmpty) ...[
+                Text('サイズ', style: Theme.of(context).textTheme.labelMedium),
+                const SizedBox(height: 6),
+                Wrap(
+                  spacing: 8,
+                  runSpacing: 8,
+                  children: [
+                    ...sizes.map((s) {
+                      return ChoiceChip(
+                        label: Text(s),
+                        selected: _selectedSize == s,
+                        onSelected: (_) => setState(() {
+                          _selectedSize = (_selectedSize == s) ? null : s;
+                        }),
+                      );
+                    }),
+                  ],
+                ),
                 const SizedBox(height: 12),
               ],
             ],
 
-            Text('モデル別', style: Theme.of(context).textTheme.titleSmall),
-            const SizedBox(height: 6),
-
-            if (filtered.isEmpty)
+            // ✅ 結果は「1 model」に絞れたときだけ、在庫数と価格のみ表示
+            if (showResult) ...[
+              Text('在庫と価格', style: Theme.of(context).textTheme.titleSmall),
+              const SizedBox(height: 6),
               Text(
-                '該当するモデルがありません',
+                '在庫: $stockCount',
                 style: Theme.of(context).textTheme.bodyMedium,
-              )
-            else
-              ...filtered.map((r) {
-                final count = (r.stockCount ?? 0).toString();
-                final rawLabel = (r.label ?? '').toString();
-                final label = _stripModelNumberFromLabel(rawLabel);
-
-                final rgb = _pickRgb(r);
-                final color = _rgbToColor(rgb);
-
-                final price = _pickPrice(r);
-                final priceText = (price != null) ? _formatYen(price) : '(未設定)';
-
-                final line =
-                    '${label.isNotEmpty ? label : '(名称なし)'}　/　在庫: $count　/　価格: $priceText';
-
-                return Padding(
-                  padding: const EdgeInsets.symmetric(vertical: 6),
-                  child: Row(
-                    crossAxisAlignment: CrossAxisAlignment.center,
-                    children: [
-                      if (color != null) ...[
-                        _colorSwatch(color),
-                        const SizedBox(width: 8),
-                      ],
-                      Expanded(
-                        child: Text(
-                          line,
-                          style: Theme.of(context).textTheme.bodyMedium,
-                        ),
-                      ),
-                    ],
-                  ),
-                );
-              }),
+              ),
+              const SizedBox(height: 4),
+              Text(
+                '価格: ${price != null ? _formatYen(price) : '(未設定)'}',
+                style: Theme.of(context).textTheme.bodyMedium,
+              ),
+            ] else ...[
+              Text(
+                '色とサイズを選択して、1つのモデルに絞り込んでください',
+                style: Theme.of(context).textTheme.bodyMedium,
+              ),
+            ],
 
             if (widget.inventory == null &&
                 (invErr ?? '').trim().isNotEmpty) ...[

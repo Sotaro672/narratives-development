@@ -89,12 +89,18 @@ func (uc *CartUsecase) GetOrCreate(ctx context.Context, avatarID string) (*cartd
 	return newCart, nil
 }
 
-// AddItem increments qty for modelID.
+// AddItem increments qty for (inventoryId, listId, modelId).
 // qty must be >= 1.
-func (uc *CartUsecase) AddItem(ctx context.Context, avatarID, modelID string, qty int) (*cartdom.Cart, error) {
+func (uc *CartUsecase) AddItem(
+	ctx context.Context,
+	avatarID, inventoryID, listID, modelID string,
+	qty int,
+) (*cartdom.Cart, error) {
 	aid := strings.TrimSpace(avatarID)
+	inv := strings.TrimSpace(inventoryID)
+	lid := strings.TrimSpace(listID)
 	mid := strings.TrimSpace(modelID)
-	if aid == "" || mid == "" || qty <= 0 {
+	if aid == "" || inv == "" || lid == "" || mid == "" || qty <= 0 {
 		return nil, ErrCartInvalidArgument
 	}
 
@@ -111,7 +117,7 @@ func (uc *CartUsecase) AddItem(ctx context.Context, avatarID, modelID string, qt
 		}
 	}
 
-	if err := c.Add(mid, qty, now); err != nil {
+	if err := c.Add(inv, lid, mid, qty, now); err != nil {
 		return nil, err
 	}
 	if err := uc.repo.Upsert(ctx, c); err != nil {
@@ -120,12 +126,18 @@ func (uc *CartUsecase) AddItem(ctx context.Context, avatarID, modelID string, qt
 	return c, nil
 }
 
-// SetItemQty sets qty for modelID.
+// SetItemQty sets qty for (inventoryId, listId, modelId).
 // If qty <= 0, it removes the item.
-func (uc *CartUsecase) SetItemQty(ctx context.Context, avatarID, modelID string, qty int) (*cartdom.Cart, error) {
+func (uc *CartUsecase) SetItemQty(
+	ctx context.Context,
+	avatarID, inventoryID, listID, modelID string,
+	qty int,
+) (*cartdom.Cart, error) {
 	aid := strings.TrimSpace(avatarID)
+	inv := strings.TrimSpace(inventoryID)
+	lid := strings.TrimSpace(listID)
 	mid := strings.TrimSpace(modelID)
-	if aid == "" || mid == "" {
+	if aid == "" || inv == "" || lid == "" || mid == "" {
 		return nil, ErrCartInvalidArgument
 	}
 
@@ -144,7 +156,7 @@ func (uc *CartUsecase) SetItemQty(ctx context.Context, avatarID, modelID string,
 		}
 	}
 
-	if err := c.SetQty(mid, qty, now); err != nil {
+	if err := c.SetQty(inv, lid, mid, qty, now); err != nil {
 		return nil, err
 	}
 	if err := uc.repo.Upsert(ctx, c); err != nil {
@@ -153,9 +165,12 @@ func (uc *CartUsecase) SetItemQty(ctx context.Context, avatarID, modelID string,
 	return c, nil
 }
 
-// RemoveItem removes modelID from cart.
-func (uc *CartUsecase) RemoveItem(ctx context.Context, avatarID, modelID string) (*cartdom.Cart, error) {
-	return uc.SetItemQty(ctx, avatarID, modelID, 0)
+// RemoveItem removes an item (inventoryId, listId, modelId) from cart.
+func (uc *CartUsecase) RemoveItem(
+	ctx context.Context,
+	avatarID, inventoryID, listID, modelID string,
+) (*cartdom.Cart, error) {
+	return uc.SetItemQty(ctx, avatarID, inventoryID, listID, modelID, 0)
 }
 
 // Clear deletes the cart doc (useful for "empty cart" UX).

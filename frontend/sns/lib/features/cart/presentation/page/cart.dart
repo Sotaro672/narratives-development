@@ -26,7 +26,7 @@ class _CartPageState extends State<CartPage> {
     final avatarId = _avatarId;
     if (avatarId.isEmpty) return;
 
-    // 既に初期化済みなら何もしない
+    // already initialized
     if (_ctl != null) return;
 
     _ctl = UseCartController(avatarId: avatarId, context: context)..init();
@@ -40,7 +40,6 @@ class _CartPageState extends State<CartPage> {
   @override
   void initState() {
     super.initState();
-    // ✅ avatarId が空のときは init しない（空でAPIを叩くとUncaught Errorの原因）
     _ensureController();
   }
 
@@ -48,10 +47,9 @@ class _CartPageState extends State<CartPage> {
   void didUpdateWidget(covariant CartPage oldWidget) {
     super.didUpdateWidget(oldWidget);
 
-    final prev = (oldWidget.avatarId).trim();
+    final prev = oldWidget.avatarId.trim();
     final next = _avatarId;
 
-    // avatarId が変わったら作り直す
     if (prev != next) {
       _disposeController();
       _ensureController();
@@ -72,17 +70,13 @@ class _CartPageState extends State<CartPage> {
       createdAt: null,
       updatedAt: null,
       expiresAt: null,
-      ordered: false,
     );
   }
 
   bool _isCartNotFound(Object? err) {
-    // CartRepositoryHttp throws CartHttpException on non-2xx.
-    // Treat 404 as "empty cart" so the page can always render.
     if (err is CartHttpException) {
       return err.statusCode == 404;
     }
-    // Sometimes wrapped / stringified
     final s = err?.toString() ?? '';
     return s.contains('statusCode=404') || s.contains('HTTP 404');
   }
@@ -91,15 +85,12 @@ class _CartPageState extends State<CartPage> {
   Widget build(BuildContext context) {
     final avatarId = _avatarId;
 
-    // ✅ avatarId が無ければ controller を作らず、APIも叩かない
     if (avatarId.isEmpty) {
       return const Center(child: Text('avatarId is required'));
     }
 
-    // ここに来た時点で avatarId はあるはずなので、念のため初期化
     _ensureController();
 
-    // ✅ SetStateFn: void Function(VoidCallback fn)
     void safeSetState(VoidCallback fn) {
       if (!mounted) return;
       setState(fn);
@@ -107,7 +98,6 @@ class _CartPageState extends State<CartPage> {
 
     final ctl = _ctl;
     if (ctl == null) {
-      // 念のため（通常ここには来ない）
       return const Center(child: CircularProgressIndicator());
     }
 
@@ -119,57 +109,68 @@ class _CartPageState extends State<CartPage> {
         final isLoading =
             snap.connectionState == ConnectionState.waiting && !snap.hasData;
 
-        // ✅ 404 は「空カート」として扱う（初回でも表示できる）
         final bool notFoundAsEmpty =
             snap.hasError && _isCartNotFound(snap.error);
+
         final CartDTO cart =
-            (snap.data) ??
+            snap.data ??
             (notFoundAsEmpty ? _emptyCart(avatarId) : _emptyCart(avatarId));
 
-        return Stack(
-          children: [
-            ListView(
+        return LayoutBuilder(
+          builder: (context, constraints) {
+            final content = Padding(
               padding: const EdgeInsets.fromLTRB(12, 12, 12, 20),
-              children: [
-                _HeaderCard(
-                  avatarId: avatarId,
-                  totalQty: cart.totalQty(),
-                  expiresAt: cart.expiresAt,
-                  ordered: cart.ordered,
-                  onReload: vm.reload,
-                  loading: isLoading,
-                ),
-                const SizedBox(height: 12),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  _HeaderCard(
+                    avatarId: avatarId,
+                    totalQty: cart.totalQty(),
+                    expiresAt: cart.expiresAt,
+                    onReload: vm.reload,
+                    loading: isLoading,
+                  ),
+                  const SizedBox(height: 12),
+                  if (isLoading)
+                    const _LoadingCard()
+                  else if (snap.hasError && !notFoundAsEmpty)
+                    _ErrorCard(
+                      errorText: snap.error.toString(),
+                      onRetry: vm.reload,
+                    )
+                  else
+                    _ItemsCard(
+                      cart: cart,
+                      onInc: vm.inc,
+                      onDec: vm.dec,
+                      onRemove: vm.remove,
+                      onClear: vm.clear,
+                    ),
+                ],
+              ),
+            );
 
-                if (isLoading)
-                  const _LoadingCard()
-                else if (snap.hasError && !notFoundAsEmpty)
-                  _ErrorCard(
-                    errorText: snap.error.toString(),
-                    onRetry: vm.reload,
-                  )
-                else
-                  _ItemsCard(
-                    cart: cart,
-                    onInc: vm.inc,
-                    onDec: vm.dec,
-                    onRemove: vm.remove,
-                    onClear: vm.clear,
+            // ✅ bounded height のときだけスクロールを付与（unbounded だと白画面原因になり得る）
+            final body = constraints.hasBoundedHeight
+                ? SingleChildScrollView(child: content)
+                : content;
+
+            return Stack(
+              children: [
+                body,
+                if (vm.busy)
+                  Positioned.fill(
+                    child: IgnorePointer(
+                      ignoring: true,
+                      child: Container(
+                        color: Colors.black.withValues(alpha: 0.06),
+                        child: const Center(child: CircularProgressIndicator()),
+                      ),
+                    ),
                   ),
               ],
-            ),
-
-            if (vm.busy)
-              Positioned.fill(
-                child: IgnorePointer(
-                  ignoring: true,
-                  child: Container(
-                    color: Colors.black.withValues(alpha: 0.06),
-                    child: const Center(child: CircularProgressIndicator()),
-                  ),
-                ),
-              ),
-          ],
+            );
+          },
         );
       },
     );
@@ -185,7 +186,6 @@ class _HeaderCard extends StatelessWidget {
     required this.avatarId,
     required this.totalQty,
     required this.expiresAt,
-    required this.ordered,
     required this.onReload,
     required this.loading,
   });
@@ -193,7 +193,6 @@ class _HeaderCard extends StatelessWidget {
   final String avatarId;
   final int totalQty;
   final DateTime? expiresAt;
-  final bool ordered;
   final Future<void> Function() onReload;
   final bool loading;
 
@@ -225,10 +224,6 @@ class _HeaderCard extends StatelessWidget {
                     loading ? 'expiresAt: ...' : 'expiresAt: $expText',
                     style: t.bodySmall,
                   ),
-                  if (!loading && ordered) ...[
-                    const SizedBox(height: 6),
-                    Text('ordered: true', style: t.bodySmall),
-                  ],
                 ],
               ),
             ),
@@ -301,9 +296,11 @@ class _ItemsCard extends StatelessWidget {
 
   final CartDTO cart;
 
-  final Future<void> Function(String modelId) onInc;
-  final Future<void> Function(String modelId, int currentQty) onDec;
-  final Future<void> Function(String modelId) onRemove;
+  /// itemKey を受け取る
+  final Future<void> Function(String itemKey) onInc;
+  final Future<void> Function(String itemKey, int currentQty) onDec;
+  final Future<void> Function(String itemKey) onRemove;
+
   final Future<void> Function() onClear;
 
   @override
@@ -331,7 +328,6 @@ class _ItemsCard extends StatelessWidget {
               ],
             ),
             const SizedBox(height: 8),
-
             if (entries.isEmpty)
               Padding(
                 padding: const EdgeInsets.symmetric(vertical: 14),
@@ -349,36 +345,42 @@ class _ItemsCard extends StatelessWidget {
                 ),
                 itemBuilder: (context, i) {
                   final e = entries[i];
-                  final modelId = e.key;
-                  final qty = e.value;
+                  final itemKey = e.key;
+                  final it = e.value; // CartItemDTO
+
+                  final qty = it.qty;
 
                   return ListTile(
                     contentPadding: const EdgeInsets.symmetric(horizontal: 4),
                     title: Text(
-                      modelId,
+                      it.modelId,
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                     ),
-                    subtitle: Text('qty: $qty'),
+                    subtitle: Text(
+                      'inventoryId: ${it.inventoryId}\nlistId: ${it.listId}\nqty: $qty',
+                      maxLines: 3,
+                      overflow: TextOverflow.ellipsis,
+                    ),
                     trailing: Row(
                       mainAxisSize: MainAxisSize.min,
                       children: [
                         IconButton(
                           tooltip: 'Remove',
-                          onPressed: () => onRemove(modelId),
+                          onPressed: () => onRemove(itemKey),
                           icon: const Icon(Icons.close),
                         ),
                         IconButton(
                           tooltip: '-',
                           onPressed: qty <= 1
-                              ? () => onRemove(modelId)
-                              : () => onDec(modelId, qty),
+                              ? () => onRemove(itemKey)
+                              : () => onDec(itemKey, qty),
                           icon: const Icon(Icons.remove_circle_outline),
                         ),
                         Text('$qty', style: t.titleSmall),
                         IconButton(
                           tooltip: '+',
-                          onPressed: () => onInc(modelId),
+                          onPressed: () => onInc(itemKey),
                           icon: const Icon(Icons.add_circle_outline),
                         ),
                       ],

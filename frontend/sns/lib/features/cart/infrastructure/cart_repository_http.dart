@@ -3,25 +3,30 @@ import 'dart:convert';
 
 import 'package:http/http.dart' as http;
 
+import '../../inventory/infrastructure/inventory_repository_http.dart';
+
 /// Buyer-facing Cart repository (HTTP).
 ///
 /// Backend endpoints (CartHandler):
 /// - GET    /sns/cart?avatarId=...
-/// - POST   /sns/cart/items           body: {avatarId, modelId, qty}
-/// - PUT    /sns/cart/items           body: {avatarId, modelId, qty}
-/// - DELETE /sns/cart/items           body: {avatarId, modelId}
+/// - POST   /sns/cart/items           body: {avatarId, inventoryId, listId, modelId, qty}
+/// - PUT    /sns/cart/items           body: {avatarId, inventoryId, listId, modelId, qty}
+/// - DELETE /sns/cart/items           body: {avatarId, inventoryId, listId, modelId}
 /// - DELETE /sns/cart?avatarId=...
-/// - POST   /sns/cart/ordered         body: {avatarId}
 ///
 /// NOTE:
-/// - For now we send avatarId in query/body. (Header X-Avatar-Id is also supported by backend.)
-/// - This repository uses a per-instance http.Client. Call dispose().
+/// - Web(CORS) ではカスタムヘッダ（例: x-avatar-id）を送ると preflight が走り、
+///   backend 側で Access-Control-Allow-Headers に許可が無いとブロックされます。
+/// - そのため avatarId は **query/body のみ**で送ります（ヘッダには入れない）。
+/// - /sns/cart/items は backend 実装差異を踏まえ、query には avatarId を付けず **body のみに統一**します。
 class CartRepositoryHttp {
   CartRepositoryHttp({http.Client? client, String? apiBase})
     : _client = client ?? http.Client(),
       _apiBase = (apiBase ?? const String.fromEnvironment('API_BASE')).trim();
 
   final http.Client _client;
+
+  /// Optional override. If empty, resolveSnsApiBase() will be used.
   final String _apiBase;
 
   void dispose() {
@@ -44,36 +49,71 @@ class CartRepositoryHttp {
 
   Future<CartDTO> addItem({
     required String avatarId,
+    required String inventoryId,
+    required String listId,
     required String modelId,
     int qty = 1,
   }) async {
     final aid = avatarId.trim();
+    final invId = inventoryId.trim();
+    final lid = listId.trim();
     final mid = modelId.trim();
+
     if (aid.isEmpty) throw ArgumentError('avatarId is required');
+    if (invId.isEmpty) throw ArgumentError('inventoryId is required');
+    if (lid.isEmpty) throw ArgumentError('listId is required');
     if (mid.isEmpty) throw ArgumentError('modelId is required');
     if (qty <= 0) throw ArgumentError('qty must be >= 1');
 
+    // ✅ /sns/cart/items は query に avatarId を付けず、body のみに統一
     final uri = _uri('/sns/cart/items');
-    final body = jsonEncode({'avatarId': aid, 'modelId': mid, 'qty': qty});
+    final bodyMap = <String, dynamic>{
+      'avatarId': aid,
+      'inventoryId': invId,
+      'listId': lid,
+      'modelId': mid,
+      'qty': qty,
+    };
+    final body = jsonEncode(bodyMap);
+
+    // ignore: avoid_print
+    print('[CartRepositoryHttp] POST $uri body=$body');
 
     final res = await _client.post(uri, headers: _headersJson(), body: body);
     return _decodeCart(res);
   }
 
-  /// Sets quantity for a modelId.
+  /// Sets quantity for a cart item (identified by inventoryId/listId/modelId).
   /// - qty <= 0 is treated as remove by backend.
   Future<CartDTO> setItemQty({
     required String avatarId,
+    required String inventoryId,
+    required String listId,
     required String modelId,
     required int qty,
   }) async {
     final aid = avatarId.trim();
+    final invId = inventoryId.trim();
+    final lid = listId.trim();
     final mid = modelId.trim();
+
     if (aid.isEmpty) throw ArgumentError('avatarId is required');
+    if (invId.isEmpty) throw ArgumentError('inventoryId is required');
+    if (lid.isEmpty) throw ArgumentError('listId is required');
     if (mid.isEmpty) throw ArgumentError('modelId is required');
 
     final uri = _uri('/sns/cart/items');
-    final body = jsonEncode({'avatarId': aid, 'modelId': mid, 'qty': qty});
+    final bodyMap = <String, dynamic>{
+      'avatarId': aid,
+      'inventoryId': invId,
+      'listId': lid,
+      'modelId': mid,
+      'qty': qty,
+    };
+    final body = jsonEncode(bodyMap);
+
+    // ignore: avoid_print
+    print('[CartRepositoryHttp] PUT $uri body=$body');
 
     final res = await _client.put(uri, headers: _headersJson(), body: body);
     return _decodeCart(res);
@@ -81,19 +121,40 @@ class CartRepositoryHttp {
 
   Future<CartDTO> removeItem({
     required String avatarId,
+    required String inventoryId,
+    required String listId,
     required String modelId,
   }) async {
     final aid = avatarId.trim();
+    final invId = inventoryId.trim();
+    final lid = listId.trim();
     final mid = modelId.trim();
+
     if (aid.isEmpty) throw ArgumentError('avatarId is required');
+    if (invId.isEmpty) throw ArgumentError('inventoryId is required');
+    if (lid.isEmpty) throw ArgumentError('listId is required');
     if (mid.isEmpty) throw ArgumentError('modelId is required');
 
     final uri = _uri('/sns/cart/items');
-    final body = jsonEncode({'avatarId': aid, 'modelId': mid, 'qty': 0});
+    final bodyMap = <String, dynamic>{
+      'avatarId': aid,
+      'inventoryId': invId,
+      'listId': lid,
+      'modelId': mid,
+    };
+    final body = jsonEncode(bodyMap);
 
-    // NOTE: http.delete supports body in recent http package versions.
-    // If your version doesn't, switch to Request('DELETE', uri) and send manually.
-    final res = await _client.delete(uri, headers: _headersJson(), body: body);
+    // ignore: avoid_print
+    print('[CartRepositoryHttp] DELETE $uri body=$body');
+
+    // ✅ http.delete(body) が環境/バージョンで不安定なため Request で送る
+    final req = http.Request('DELETE', uri);
+    req.headers.addAll(_headersJson());
+    req.body = body;
+
+    final streamed = await _client.send(req);
+    final res = await http.Response.fromStream(streamed);
+
     return _decodeCart(res);
   }
 
@@ -102,21 +163,14 @@ class CartRepositoryHttp {
     if (aid.isEmpty) throw ArgumentError('avatarId is required');
 
     final uri = _uri('/sns/cart', qp: {'avatarId': aid});
+
+    // ignore: avoid_print
+    print('[CartRepositoryHttp] DELETE $uri (clear)');
+
     final res = await _client.delete(uri, headers: _headersJson());
 
     if (res.statusCode == 204) return;
     _throwHttpError(res);
-  }
-
-  Future<CartDTO> markOrdered({required String avatarId}) async {
-    final aid = avatarId.trim();
-    if (aid.isEmpty) throw ArgumentError('avatarId is required');
-
-    final uri = _uri('/sns/cart/ordered');
-    final body = jsonEncode({'avatarId': aid});
-
-    final res = await _client.post(uri, headers: _headersJson(), body: body);
-    return _decodeCart(res);
   }
 
   // ----------------------------
@@ -126,11 +180,9 @@ class CartRepositoryHttp {
   CartDTO _decodeCart(http.Response res) {
     if (res.statusCode >= 200 && res.statusCode < 300) {
       final map = _decodeJsonMap(res.body);
-      // backend returns {"error": "..."} for errors; ignore here (2xx only)
       return CartDTO.fromJson(map);
     }
     _throwHttpError(res);
-    // unreachable
     throw StateError('unreachable');
   }
 
@@ -152,6 +204,10 @@ class CartRepositoryHttp {
       final s = res.body.trim();
       if (s.isNotEmpty) msg = s;
     }
+
+    // ignore: avoid_print
+    print('[CartRepositoryHttp] HTTP error status=$status body="${res.body}"');
+
     throw CartHttpException(statusCode: status, message: msg);
   }
 
@@ -160,17 +216,19 @@ class CartRepositoryHttp {
   // ----------------------------
 
   Uri _uri(String path, {Map<String, String>? qp}) {
-    final base = _apiBase;
-    if (base.isEmpty) {
+    final baseRaw = (_apiBase.isNotEmpty ? _apiBase : resolveSnsApiBase())
+        .trim();
+
+    if (baseRaw.isEmpty) {
       throw StateError(
         'API_BASE is not set (use --dart-define=API_BASE=https://...)',
       );
     }
 
+    final base = baseRaw.replaceAll(RegExp(r'\/+$'), '');
+
     final b = Uri.parse(base);
     final cleanPath = path.startsWith('/') ? path : '/$path';
-
-    // join paths safely
     final joinedPath = _joinPaths(b.path, cleanPath);
 
     return Uri(
@@ -179,7 +237,7 @@ class CartRepositoryHttp {
       host: b.host,
       port: b.hasPort ? b.port : null,
       path: joinedPath,
-      queryParameters: qp?.isEmpty == true ? null : qp,
+      queryParameters: (qp == null || qp.isEmpty) ? null : qp,
       fragment: b.fragment.isEmpty ? null : b.fragment,
     );
   }
@@ -194,6 +252,7 @@ class CartRepositoryHttp {
     return aa + bb;
   }
 
+  /// ✅ CORS 的に “simple headers” 寄りにする（x- 系などカスタムは入れない）
   Map<String, String> _headersJson() => const {
     'Content-Type': 'application/json; charset=utf-8',
     'Accept': 'application/json',
@@ -211,44 +270,54 @@ class CartDTO {
     required this.createdAt,
     required this.updatedAt,
     required this.expiresAt,
-    required this.ordered,
   });
 
   final String avatarId;
 
-  /// modelId -> qty
-  final Map<String, int> items;
+  /// itemKey -> item
+  final Map<String, CartItemDTO> items;
 
   final DateTime? createdAt;
   final DateTime? updatedAt;
   final DateTime? expiresAt;
 
-  /// NOTE:
-  /// 現状の Cart ドメインは ordered を持たない想定でも、backend が返す可能性があるため保持。
-  /// 返ってこない場合は false になります。
-  final bool ordered;
-
   int totalQty() {
     var sum = 0;
-    for (final v in items.values) {
-      if (v > 0) sum += v;
+    for (final it in items.values) {
+      final q = it.qty;
+      if (q > 0) sum += q;
     }
     return sum;
   }
 
   factory CartDTO.fromJson(Map<String, dynamic> json) {
-    // avatarId が返ってこない / 別名で返るケースに備える（docId を詰める実装があるため）
     final aid = (json['avatarId'] ?? json['id'] ?? '').toString().trim();
 
     final itemsRaw = json['items'];
-    final Map<String, int> items = {};
+    final Map<String, CartItemDTO> items = {};
     if (itemsRaw is Map) {
       for (final entry in itemsRaw.entries) {
-        final k = entry.key.toString().trim();
+        final key = entry.key.toString().trim();
         final v = entry.value;
+
+        if (key.isEmpty) continue;
+
+        // New shape: itemKey -> {inventoryId, listId, modelId, qty}
+        if (v is Map) {
+          final it = CartItemDTO.fromJson(v.cast<String, dynamic>());
+          if (it.isValid) items[key] = it;
+          continue;
+        }
+
+        // Legacy shape: modelId -> qty
         final n = (v is int) ? v : int.tryParse(v.toString());
-        if (k.isNotEmpty && n != null && n > 0) {
-          items[k] = n;
+        if (n != null && n > 0) {
+          items[key] = CartItemDTO(
+            inventoryId: '',
+            listId: '',
+            modelId: key,
+            qty: n,
+          );
         }
       }
     }
@@ -259,21 +328,18 @@ class CartDTO {
       createdAt: _tryParseTime(json['createdAt']),
       updatedAt: _tryParseTime(json['updatedAt']),
       expiresAt: _tryParseTime(json['expiresAt']),
-      ordered: (json['ordered'] == true),
     );
   }
 
   static DateTime? _tryParseTime(dynamic v) {
     if (v == null) return null;
 
-    // 1) ISO8601 string
     if (v is String) {
       final s = v.trim();
       if (s.isEmpty) return null;
       return DateTime.tryParse(s);
     }
 
-    // 2) Firestore Timestamp-like map: {seconds: ..., nanos: ...}
     if (v is Map) {
       final sec = v['seconds'];
       final nanos = v['nanos'] ?? 0;
@@ -291,10 +357,48 @@ class CartDTO {
       );
     }
 
-    // 3) fallback
     final s = v.toString().trim();
     if (s.isEmpty) return null;
     return DateTime.tryParse(s);
+  }
+}
+
+class CartItemDTO {
+  CartItemDTO({
+    required this.inventoryId,
+    required this.listId,
+    required this.modelId,
+    required this.qty,
+  });
+
+  final String inventoryId;
+  final String listId;
+  final String modelId;
+  final int qty;
+
+  bool get isValid =>
+      inventoryId.trim().isNotEmpty &&
+      listId.trim().isNotEmpty &&
+      modelId.trim().isNotEmpty &&
+      qty > 0;
+
+  static int _toInt(dynamic v) {
+    if (v == null) return 0;
+    if (v is int) return v;
+    if (v is double) return v.toInt();
+    if (v is num) return v.toInt();
+    final s = v.toString().trim();
+    if (s.isEmpty) return 0;
+    return int.tryParse(s) ?? 0;
+  }
+
+  factory CartItemDTO.fromJson(Map<String, dynamic> json) {
+    final invId = (json['inventoryId'] ?? '').toString().trim();
+    final lid = (json['listId'] ?? '').toString().trim();
+    final mid = (json['modelId'] ?? '').toString().trim();
+    final qty = _toInt(json['qty']);
+
+    return CartItemDTO(inventoryId: invId, listId: lid, modelId: mid, qty: qty);
   }
 }
 

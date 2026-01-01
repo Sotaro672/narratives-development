@@ -1,32 +1,24 @@
 // frontend/sns/lib/features/home/presentation/hook/use_catalog_inventory.dart
 import '../../../inventory/infrastructure/inventory_repository_http.dart';
-import '../../infrastructure/list_repository_http.dart'; // ✅ 追加
+import '../../infrastructure/list_repository_http.dart';
 
 class CatalogModelStockRow {
   const CatalogModelStockRow({
     required this.modelId,
     required this.label,
     required this.stockCount,
-    required this.price, // ✅ NEW
-    required this.rgb, // ✅ NEW: colorRGB（24bit想定）
-    required this.size, // ✅ NEW
-    required this.colorName, // ✅ NEW
+    required this.price,
+    required this.rgb,
+    required this.size,
+    required this.colorName,
   });
 
   final String modelId;
   final String label;
   final int stockCount;
-
-  /// ✅ modelId に紐づく価格（無ければ null）
   final int? price;
-
-  /// ✅ modelId に紐づく色（24bit RGB: 0xRRGGBB / 無ければ null）
   final int? rgb;
-
-  /// ✅ size（無ければ null）
   final String? size;
-
-  /// ✅ colorName（無ければ null）
   final String? colorName;
 }
 

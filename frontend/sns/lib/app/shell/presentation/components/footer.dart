@@ -1,8 +1,12 @@
-//frontend\sns\lib\app\shell\presentation\components\footer.dart
+// frontend\sns\lib\app\shell\presentation\components\footer.dart
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
+
+import 'package:sns/features/cart/infrastructure/cart_repository_http.dart';
+
+import '../state/catalog_selection_store.dart';
 
 /// Minimal footer widget (layout primitive).
 class AppFooter extends StatelessWidget {
@@ -126,17 +130,42 @@ class SignedInFooter extends StatelessWidget {
                       context.go(uri.toString());
                     },
                   ),
-
                   const SizedBox(width: 8),
 
                   // ✅ 中央：catalog では「カートに入れる」ボタン、それ以外は Scan
                   Expanded(
                     child: Center(
                       child: isCatalog
-                          ? _AddToCartButton(
-                              from: from,
-                              listId: listId,
-                              avatarId: avatarId,
+                          ? ValueListenableBuilder<CatalogSelection>(
+                              valueListenable: CatalogSelectionStore.notifier,
+                              builder: (context, sel, _) {
+                                final sameList =
+                                    sel.listId.trim() == listId.trim();
+
+                                final mid = (sel.modelId ?? '').trim();
+                                final stock = sel.stockCount ?? 0;
+
+                                // ✅ NEW: backend が必須にした inventoryId/listId を揃える
+                                final invId = sel.inventoryId.trim();
+
+                                // ✅ 在庫 0 は押下不可 + 必須IDが揃っていること
+                                final enabled =
+                                    sameList &&
+                                    invId.isNotEmpty &&
+                                    listId.trim().isNotEmpty &&
+                                    mid.isNotEmpty &&
+                                    stock > 0;
+
+                                return _AddToCartButton(
+                                  from: from,
+                                  inventoryId: invId,
+                                  listId: listId,
+                                  avatarId: avatarId,
+                                  enabled: enabled,
+                                  modelId: sel.modelId,
+                                  stockCount: sel.stockCount,
+                                );
+                              },
                             )
                           : _FooterItem(
                               icon: Icons.qr_code_scanner,
@@ -218,40 +247,132 @@ class _FooterItem extends StatelessWidget {
 }
 
 /// ✅ catalog 用：カートに入れる CTA
-/// いまは /cart に listId と from を渡すだけ（追加処理は cart 側で受ける想定）
-/// ✅ 重要: avatarId を引き継ぐ（無いと cart が開けない）
-class _AddToCartButton extends StatelessWidget {
+/// ✅ 「model が 1つに絞れたら enabled」
+/// ✅ 在庫 0 は押下不可
+/// ✅ 押下時に CartHandler に add リクエストを投げてから /cart へ遷移する
+class _AddToCartButton extends StatefulWidget {
   const _AddToCartButton({
     required this.from,
+    required this.inventoryId,
     required this.listId,
     required this.avatarId,
+    required this.enabled,
+    required this.modelId,
+    required this.stockCount,
   });
 
   final String from;
+
+  // ✅ NEW: required by backend
+  final String inventoryId;
   final String listId;
+
   final String avatarId;
+
+  final bool enabled;
+  final String? modelId;
+  final int? stockCount;
+
+  @override
+  State<_AddToCartButton> createState() => _AddToCartButtonState();
+}
+
+class _AddToCartButtonState extends State<_AddToCartButton> {
+  bool _loading = false;
+
+  Future<void> _addThenGoCart() async {
+    final mid = (widget.modelId ?? '').trim();
+    final sc = widget.stockCount ?? 0;
+    final aid = widget.avatarId.trim();
+    final invId = widget.inventoryId.trim();
+    final listId = widget.listId.trim();
+
+    // ✅ 最終ガード（backend 必須フィールドも含める）
+    final canTap =
+        widget.enabled &&
+        !_loading &&
+        aid.isNotEmpty &&
+        invId.isNotEmpty &&
+        listId.isNotEmpty &&
+        mid.isNotEmpty &&
+        sc > 0;
+    if (!canTap) return;
+
+    setState(() => _loading = true);
+
+    try {
+      final repo = CartRepositoryHttp();
+      try {
+        await repo.addItem(
+          avatarId: aid,
+          inventoryId: invId,
+          listId: listId,
+          modelId: mid,
+          qty: 1,
+        );
+      } finally {
+        repo.dispose();
+      }
+
+      if (!mounted) return;
+
+      // ✅ 追加できたら cart へ
+      final qp = <String, String>{'from': widget.from, 'avatarId': aid};
+      final uri = Uri(path: '/cart', queryParameters: qp);
+
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('カートに追加しました')));
+
+      context.go(uri.toString());
+    } catch (e) {
+      if (!mounted) return;
+      final msg = e.toString();
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('追加に失敗しました: $msg')));
+    } finally {
+      if (mounted) {
+        setState(() => _loading = false);
+      }
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
+    final mid = (widget.modelId ?? '').trim();
+    final sc = widget.stockCount ?? 0;
+
+    final invId = widget.inventoryId.trim();
+    final listId = widget.listId.trim();
+
+    // ✅ 最終ガード：enabled が true でも在庫 0 は絶対押下不可
+    final canTap =
+        widget.enabled &&
+        !_loading &&
+        invId.isNotEmpty &&
+        listId.isNotEmpty &&
+        mid.isNotEmpty &&
+        sc > 0;
+
+    final label = _loading
+        ? '追加中...'
+        : (mid.isNotEmpty && sc <= 0)
+        ? '在庫なし'
+        : 'カートに入れる';
+
     return SizedBox(
       height: 40,
       child: ElevatedButton.icon(
-        icon: const Icon(Icons.add_shopping_cart_outlined, size: 20),
-        label: const Text('カートに入れる'),
-        onPressed: () {
-          final qp = <String, String>{
-            'from': from,
-            if (listId.trim().isNotEmpty) 'listId': listId.trim(),
-            // cart 側で「追加イベント」として扱いたい場合に使う
-            'action': 'addFromCatalog',
-
-            // ✅ cart は avatarId 必須
-            if (avatarId.trim().isNotEmpty) 'avatarId': avatarId.trim(),
-          };
-
-          final uri = Uri(path: '/cart', queryParameters: qp);
-          context.go(uri.toString());
-        },
+        icon: _loading
+            ? const SizedBox(
+                width: 18,
+                height: 18,
+                child: CircularProgressIndicator(strokeWidth: 2),
+              )
+            : const Icon(Icons.add_shopping_cart_outlined, size: 20),
+        label: Text(label),
+        onPressed: (!canTap) ? null : _addThenGoCart,
       ),
     );
   }
@@ -347,7 +468,6 @@ class _QrScanSheetState extends State<_QrScanSheet> {
         child: Stack(
           children: [
             MobileScanner(controller: _controller, onDetect: _onDetect),
-
             Positioned(
               left: 0,
               right: 0,
@@ -374,7 +494,6 @@ class _QrScanSheetState extends State<_QrScanSheet> {
                 ),
               ),
             ),
-
             Positioned(
               left: 0,
               right: 0,

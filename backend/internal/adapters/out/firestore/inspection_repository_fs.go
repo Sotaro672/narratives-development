@@ -38,7 +38,7 @@ func (r *InspectionRepositoryFS) Create(
 	v inspectiondom.InspectionBatch,
 ) (inspectiondom.InspectionBatch, error) {
 
-	if r.Client == nil {
+	if r == nil || r.Client == nil {
 		return inspectiondom.InspectionBatch{}, errors.New("firestore client is nil")
 	}
 
@@ -71,7 +71,7 @@ func (r *InspectionRepositoryFS) GetByProductionID(
 	productionID string,
 ) (inspectiondom.InspectionBatch, error) {
 
-	if r.Client == nil {
+	if r == nil || r.Client == nil {
 		return inspectiondom.InspectionBatch{}, errors.New("firestore client is nil")
 	}
 
@@ -97,7 +97,7 @@ func (r *InspectionRepositoryFS) ListByProductionID(
 	productionIDs []string,
 ) ([]inspectiondom.InspectionBatch, error) {
 
-	if r.Client == nil {
+	if r == nil || r.Client == nil {
 		return nil, errors.New("firestore client is nil")
 	}
 
@@ -150,7 +150,7 @@ func (r *InspectionRepositoryFS) Save(
 	v inspectiondom.InspectionBatch,
 ) (inspectiondom.InspectionBatch, error) {
 
-	if r.Client == nil {
+	if r == nil || r.Client == nil {
 		return inspectiondom.InspectionBatch{}, errors.New("firestore client is nil")
 	}
 
@@ -190,7 +190,7 @@ func (r *InspectionRepositoryFS) UpdateMintID(
 	mintID *string,
 ) (inspectiondom.InspectionBatch, error) {
 
-	if r.Client == nil {
+	if r == nil || r.Client == nil {
 		return inspectiondom.InspectionBatch{}, errors.New("firestore client is nil")
 	}
 
@@ -238,7 +238,7 @@ func (r *InspectionRepositoryFS) ListPassedProductIDsByProductionID(
 	productionID string,
 ) ([]string, error) {
 
-	if r.Client == nil {
+	if r == nil || r.Client == nil {
 		return nil, errors.New("firestore client is nil")
 	}
 
@@ -370,16 +370,12 @@ func docToInspectionBatch(
 		}
 	}
 
+	// quantity / totalPassed は helper_repository_fs.go の asInt(v any) int を利用
 	if v, ok := data["quantity"]; ok {
-		if n, ok := asInt(v); ok {
-			batch.Quantity = n
-		}
+		batch.Quantity = asInt(v)
 	}
-
 	if v, ok := data["totalPassed"]; ok {
-		if n, ok := asInt(v); ok {
-			batch.TotalPassed = n
-		}
+		batch.TotalPassed = asInt(v)
 	}
 
 	raw, ok := data["inspections"]
@@ -436,22 +432,4 @@ func docToInspectionBatch(
 	}
 
 	return batch, nil
-}
-
-// Firestore number → int
-func asInt(v any) (int, bool) {
-	switch n := v.(type) {
-	case int:
-		return n, true
-	case int32:
-		return int(n), true
-	case int64:
-		return int(n), true
-	case float32:
-		return int(n), true
-	case float64:
-		return int(n), true
-	default:
-		return 0, false
-	}
 }

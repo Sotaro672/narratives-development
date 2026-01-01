@@ -97,13 +97,17 @@ func (h *CartHandler) handleAddItem(w http.ResponseWriter, r *http.Request) {
 	}
 
 	avatarID := readAvatarID(r, req.AvatarID)
+
+	invID := strings.TrimSpace(req.InventoryID)
+	listID := strings.TrimSpace(req.ListID)
 	modelID := strings.TrimSpace(req.ModelID)
-	if avatarID == "" || modelID == "" || req.Qty <= 0 {
-		writeErr(w, http.StatusBadRequest, "avatarId, modelId, qty(>=1) are required")
+
+	if avatarID == "" || invID == "" || listID == "" || modelID == "" || req.Qty <= 0 {
+		writeErr(w, http.StatusBadRequest, "avatarId, inventoryId, listId, modelId, qty(>=1) are required")
 		return
 	}
 
-	c, err := h.uc.AddItem(r.Context(), avatarID, modelID, req.Qty)
+	c, err := h.uc.AddItem(r.Context(), avatarID, invID, listID, modelID, req.Qty)
 	if err != nil {
 		if errors.Is(err, usecase.ErrCartInvalidArgument) || errors.Is(err, cartdom.ErrInvalidCart) {
 			writeErr(w, http.StatusBadRequest, err.Error())
@@ -124,14 +128,18 @@ func (h *CartHandler) handleSetItemQty(w http.ResponseWriter, r *http.Request) {
 	}
 
 	avatarID := readAvatarID(r, req.AvatarID)
+
+	invID := strings.TrimSpace(req.InventoryID)
+	listID := strings.TrimSpace(req.ListID)
 	modelID := strings.TrimSpace(req.ModelID)
-	if avatarID == "" || modelID == "" {
-		writeErr(w, http.StatusBadRequest, "avatarId and modelId are required")
+
+	if avatarID == "" || invID == "" || listID == "" || modelID == "" {
+		writeErr(w, http.StatusBadRequest, "avatarId, inventoryId, listId, modelId are required")
 		return
 	}
 
 	// qty can be 0 or negative -> treated as remove
-	c, err := h.uc.SetItemQty(r.Context(), avatarID, modelID, req.Qty)
+	c, err := h.uc.SetItemQty(r.Context(), avatarID, invID, listID, modelID, req.Qty)
 	if err != nil {
 		if errors.Is(err, usecase.ErrCartInvalidArgument) || errors.Is(err, cartdom.ErrInvalidCart) {
 			writeErr(w, http.StatusBadRequest, err.Error())
@@ -152,13 +160,17 @@ func (h *CartHandler) handleRemoveItem(w http.ResponseWriter, r *http.Request) {
 	}
 
 	avatarID := readAvatarID(r, req.AvatarID)
+
+	invID := strings.TrimSpace(req.InventoryID)
+	listID := strings.TrimSpace(req.ListID)
 	modelID := strings.TrimSpace(req.ModelID)
-	if avatarID == "" || modelID == "" {
-		writeErr(w, http.StatusBadRequest, "avatarId and modelId are required")
+
+	if avatarID == "" || invID == "" || listID == "" || modelID == "" {
+		writeErr(w, http.StatusBadRequest, "avatarId, inventoryId, listId, modelId are required")
 		return
 	}
 
-	c, err := h.uc.RemoveItem(r.Context(), avatarID, modelID)
+	c, err := h.uc.RemoveItem(r.Context(), avatarID, invID, listID, modelID)
 	if err != nil {
 		if errors.Is(err, usecase.ErrCartInvalidArgument) || errors.Is(err, cartdom.ErrInvalidCart) {
 			writeErr(w, http.StatusBadRequest, err.Error())
@@ -196,24 +208,37 @@ func (h *CartHandler) handleClear(w http.ResponseWriter, r *http.Request) {
 // -------------------------
 
 type cartItemReq struct {
-	AvatarID string `json:"avatarId"`
-	ModelID  string `json:"modelId"`
-	Qty      int    `json:"qty"`
+	AvatarID     string `json:"avatarId"`
+	InventoryID  string `json:"inventoryId"`
+	ListID       string `json:"listId"`
+	ModelID      string `json:"modelId"`
+	Qty          int    `json:"qty"`
+	ItemKey      string `json:"itemKey"` // optional (future use)
+	LegacyModel  string `json:"-"`       // unused; keep for forward compatibility if needed
+	LegacyListID string `json:"-"`       // unused
 }
 
 type cartResponse struct {
 	// ✅ docId=avatarId のため、Cart ドメインから AvatarID を削除してもレスポンスでは返す
 	AvatarID string `json:"avatarId"`
 
-	Items map[string]int `json:"items"` // modelId -> qty
+	// ✅ itemKey -> item
+	Items map[string]cartItemDTO `json:"items"`
 
 	CreatedAt string `json:"createdAt"`
 	UpdatedAt string `json:"updatedAt"`
 	ExpiresAt string `json:"expiresAt"`
 }
 
+type cartItemDTO struct {
+	InventoryID string `json:"inventoryId"`
+	ListID      string `json:"listId"`
+	ModelID     string `json:"modelId"`
+	Qty         int    `json:"qty"`
+}
+
 func toCartResponse(avatarID string, c *cartdom.Cart) cartResponse {
-	items := map[string]int{}
+	items := map[string]cartItemDTO{}
 	if c != nil && c.Items != nil {
 		// stable copy
 		keys := make([]string, 0, len(c.Items))
@@ -221,8 +246,15 @@ func toCartResponse(avatarID string, c *cartdom.Cart) cartResponse {
 			keys = append(keys, k)
 		}
 		sort.Strings(keys)
+
 		for _, k := range keys {
-			items[k] = c.Items[k]
+			it := c.Items[k]
+			items[k] = cartItemDTO{
+				InventoryID: strings.TrimSpace(it.InventoryID),
+				ListID:      strings.TrimSpace(it.ListID),
+				ModelID:     strings.TrimSpace(it.ModelID),
+				Qty:         it.Qty,
+			}
 		}
 	}
 

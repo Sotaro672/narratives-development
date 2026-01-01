@@ -1,4 +1,4 @@
-// backend\internal\adapters\out\firestore\mint_repository_fs.go
+// backend/internal/adapters/out/firestore/mint_repository_fs.go
 package firestore
 
 import (
@@ -156,14 +156,6 @@ func idsToProductsMap(ids []string) map[string]string {
 	return out
 }
 
-func asString(v any) string {
-	s, ok := v.(string)
-	if !ok {
-		return ""
-	}
-	return strings.TrimSpace(s)
-}
-
 func asBool(v any) bool {
 	b, ok := v.(bool)
 	if ok {
@@ -172,21 +164,17 @@ func asBool(v any) bool {
 	return false
 }
 
-func asTime(v any) time.Time {
-	if v == nil {
-		return time.Time{}
+// s trims helper_repository_fs.go's asString(v any) result.
+func s(v any) string {
+	return strings.TrimSpace(asString(v))
+}
+
+// asTimeUTC adapts helper_repository_fs.go's asTime(v any) (time.Time, bool) to UTC time.Time.
+func asTimeUTC(v any) time.Time {
+	if tt, ok := asTime(v); ok {
+		return tt.UTC()
 	}
-	switch t := v.(type) {
-	case time.Time:
-		return t.UTC()
-	case *time.Time:
-		if t == nil {
-			return time.Time{}
-		}
-		return t.UTC()
-	default:
-		return time.Time{}
-	}
+	return time.Time{}
 }
 
 func asTimePtr(v any) *time.Time {
@@ -264,16 +252,16 @@ func decodeMintFromDoc(doc *firestore.DocumentSnapshot) (mintdom.Mint, error) {
 	setStringFieldIfExists(&m, "InspectionId", docID)
 
 	// ✅ 正テーブル（lower camelCase）
-	m.BrandID = asString(data["brandId"])
-	m.TokenBlueprintID = asString(data["tokenBlueprintId"])
+	m.BrandID = s(data["brandId"])
+	m.TokenBlueprintID = s(data["tokenBlueprintId"])
 
 	// products: Firestore は array を正とする（互換で map も吸える）
 	ids := normalizeProductsToIDs(data["products"])
 	sort.Strings(ids)
 	m.Products = idsToProductsMap(ids)
 
-	m.CreatedBy = asString(data["createdBy"])
-	m.CreatedAt = asTime(data["createdAt"])
+	m.CreatedBy = s(data["createdBy"])
+	m.CreatedAt = asTimeUTC(data["createdAt"])
 
 	// minted/mintedAt を必ず整合させる
 	rawMinted := asBool(data["minted"])
@@ -285,8 +273,8 @@ func decodeMintFromDoc(doc *firestore.DocumentSnapshot) (mintdom.Mint, error) {
 	// ✅ onchain結果（任意）
 	txSig := ""
 	for _, k := range []string{"onChainTxSignature", "onchainTxSignature", "txSignature", "signature"} {
-		if s := asString(data[k]); s != "" {
-			txSig = s
+		if sv := s(data[k]); sv != "" {
+			txSig = sv
 			break
 		}
 	}
@@ -299,8 +287,8 @@ func decodeMintFromDoc(doc *firestore.DocumentSnapshot) (mintdom.Mint, error) {
 
 	mintAddr := ""
 	for _, k := range []string{"onChainMintAddress", "onchainMintAddress", "mintAddress"} {
-		if s := asString(data[k]); s != "" {
-			mintAddr = s
+		if sv := s(data[k]); sv != "" {
+			mintAddr = sv
 			break
 		}
 	}
@@ -375,14 +363,14 @@ func (r *MintRepositoryFS) Create(ctx context.Context, m mintdom.Mint) (mintdom.
 		existingMinted, existingMintedAt = normalizeMintedFields(rawMinted, rawMintedAt)
 
 		for _, k := range []string{"onChainTxSignature", "onchainTxSignature", "txSignature", "signature"} {
-			if s := asString(edata[k]); s != "" {
-				existingTxSig = s
+			if sv := s(edata[k]); sv != "" {
+				existingTxSig = sv
 				break
 			}
 		}
 		for _, k := range []string{"onChainMintAddress", "onchainMintAddress", "mintAddress"} {
-			if s := asString(edata[k]); s != "" {
-				existingMintAddr = s
+			if sv := s(edata[k]); sv != "" {
+				existingMintAddr = sv
 				break
 			}
 		}
@@ -594,15 +582,15 @@ func (r *MintRepositoryFS) ListByProductionID(ctx context.Context, productionIDs
 	seen := make(map[string]struct{}, len(productionIDs))
 	ids := make([]string, 0, len(productionIDs))
 	for _, id := range productionIDs {
-		s := strings.TrimSpace(id)
-		if s == "" {
+		sid := strings.TrimSpace(id)
+		if sid == "" {
 			continue
 		}
-		if _, ok := seen[s]; ok {
+		if _, ok := seen[sid]; ok {
 			continue
 		}
-		seen[s] = struct{}{}
-		ids = append(ids, s)
+		seen[sid] = struct{}{}
+		ids = append(ids, sid)
 	}
 
 	out := make(map[string]mintdom.Mint, len(ids))

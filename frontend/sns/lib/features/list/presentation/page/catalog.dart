@@ -1,8 +1,9 @@
-// frontend/sns/lib/features/home/presentation/page/catalog.dart
 import 'package:flutter/material.dart';
 
+import 'package:sns/app/shell/presentation/state/catalog_selection_store.dart';
+
 import 'package:sns/features/list/presentation/components/catalog_inventory.dart';
-import 'package:sns/features/list/presentation/components/catalog_measurement.dart'; // ✅ NEW
+import 'package:sns/features/list/presentation/components/catalog_measurement.dart';
 import '../../infrastructure/list_repository_http.dart';
 import '../components/catalog_product.dart';
 import '../components/catalog_token.dart';
@@ -27,15 +28,24 @@ class _CatalogPageState extends State<CatalogPage> {
     super.initState();
     _uc = UseCatalog();
     _future = _uc.load(listId: widget.listId);
+
+    // ✅ 初期化時点では「未選択」扱いにしてCTAを無効にする
+    CatalogSelectionStore.setSelection(listId: widget.listId, modelId: null);
   }
 
   @override
   void dispose() {
+    // ✅ この catalog を離れたら選択状態を消す（別listに持ち越さない）
+    CatalogSelectionStore.clearIfList(widget.listId);
+
     _uc.dispose();
     super.dispose();
   }
 
   Future<void> _reload() async {
+    // ✅ リロード時も一旦未選択へ
+    CatalogSelectionStore.setSelection(listId: widget.listId, modelId: null);
+
     setState(() {
       _future = _uc.load(listId: widget.listId);
     });
@@ -87,7 +97,7 @@ class _CatalogPageState extends State<CatalogPage> {
         final tbErr = vm?.tokenBlueprintError;
         final tokenIconUrlEncoded = vm?.tokenIconUrlEncoded;
 
-        // ✅ NEW: measurements の元データ（CatalogState にあるのは modelVariations）
+        // ✅ measurements の元データ
         final modelsForMeasurement = vm?.modelVariations;
 
         return Padding(
@@ -167,9 +177,17 @@ class _CatalogPageState extends State<CatalogPage> {
                 inventory: inv,
                 inventoryError: invErr,
                 modelStockRows: vm?.modelStockRows,
+
+                // ✅ ここで unique modelId + stockCount を store に保存
+                onUniqueModelIdChanged: (modelId, stockCount) {
+                  CatalogSelectionStore.setSelection(
+                    listId: widget.listId,
+                    modelId: modelId,
+                    stockCount: stockCount,
+                  );
+                },
               ),
 
-              // ✅ inventory の下に measurements を表示
               if (modelsForMeasurement != null &&
                   modelsForMeasurement.isNotEmpty) ...[
                 const SizedBox(height: 12),

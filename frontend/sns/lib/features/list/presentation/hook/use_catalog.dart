@@ -10,7 +10,8 @@ import '../../../tokenBlueprint/infrastructure/token_blueprint_repository_http.d
 import 'use_catalog_inventory.dart';
 import 'use_catalog_product.dart';
 import 'use_catalog_token.dart';
-import 'use_catalog_measurement.dart'; // ✅ NEW
+import 'use_catalog_measurement.dart';
+import '../../../../app/shell/presentation/state/catalog_selection_store.dart';
 
 /// ✅ state/logic holder for CatalogPage
 class UseCatalog {
@@ -19,7 +20,7 @@ class UseCatalog {
       _listRepo = ListRepositoryHttp(),
       _invRepo = InventoryRepositoryHttp(),
       _inventory = const UseCatalogInventory(),
-      _measurement = const UseCatalogMeasurement(), // ✅ NEW
+      _measurement = const UseCatalogMeasurement(),
       _product = UseCatalogProduct(),
       _token = UseCatalogToken();
 
@@ -60,6 +61,9 @@ class UseCatalog {
 
     _log('load start listId=$id');
 
+    // ✅ 先に listId だけ入れておく（画面初期化）
+    CatalogSelectionStore.setSelection(listId: id);
+
     // 1) try catalog endpoint first
     try {
       _log('try catalog endpoint: GET /sns/catalog/$id');
@@ -72,6 +76,16 @@ class UseCatalog {
         'list.tbId="${(dto.list.tokenBlueprintId).trim()}" '
         'inv.tbId="${(dto.inventory?.tokenBlueprintId ?? '').trim()}"',
       );
+
+      // ✅ ここが重要：inventoryId を SelectionStore に確実に流し込む
+      final invId = dto.list.inventoryId.trim();
+      if (invId.isNotEmpty) {
+        CatalogSelectionStore.setSelection(
+          listId: dto.list.id.trim().isNotEmpty ? dto.list.id.trim() : id,
+          inventoryId: invId,
+          // modelId/stockCount は触らない（未選択状態にするなら null のままでOK）
+        );
+      }
 
       // ✅ tokenBlueprintId resolve (inventory優先 → list fallback)
       final resolvedTbId =
@@ -128,8 +142,15 @@ class UseCatalog {
       'list.tbId="${list.tokenBlueprintId.trim()}"',
     );
 
+    // ✅ legacyでも SelectionStore に inventoryId を流し込む
+    final legacyInvId = list.inventoryId.trim();
+    CatalogSelectionStore.setSelection(
+      listId: list.id.trim().isNotEmpty ? list.id.trim() : listId.trim(),
+      inventoryId: legacyInvId,
+    );
+
     // inventory
-    final invId = list.inventoryId.trim();
+    final invId = legacyInvId;
 
     SnsInventoryResponse? inv;
     String? invErr;

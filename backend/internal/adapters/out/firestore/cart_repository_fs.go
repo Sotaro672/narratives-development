@@ -1,4 +1,3 @@
-// backend/internal/adapters/out/firestore/cart_repository_fs.go
 package firestore
 
 import (
@@ -54,8 +53,12 @@ func (r *CartRepositoryFS) GetByAvatarID(ctx context.Context, avatarID string) (
 		return nil, err
 	}
 
-	var doc cartDoc
-	if err := snap.DataTo(&doc); err != nil {
+	// ✅ IMPORTANT:
+	// 過去に items を map[string]int で保存していた場合や、途中で schema が変わった場合、
+	// DataTo(&struct{ Items map[string]X }) が型不一致で 500 になり得る。
+	// そこで snap.Data() を取り、後方互換で自前パースする。
+	doc, err := cartDocFromSnapshot(snap)
+	if err != nil {
 		return nil, err
 	}
 
@@ -66,7 +69,6 @@ func (r *CartRepositoryFS) GetByAvatarID(ctx context.Context, avatarID string) (
 }
 
 // Upsert saves cart by docId=cart.ID (= avatarId).
-// Cart ドメインに ID を持たせたので、Upsert はそれを docId として使う。
 func (r *CartRepositoryFS) Upsert(ctx context.Context, c *cartdom.Cart) error {
 	if r == nil || r.Client == nil {
 		return errors.New("cart_repository_fs: firestore client is nil")
@@ -126,22 +128,156 @@ func (r *CartRepositoryFS) DeleteByAvatarID(ctx context.Context, avatarID string
 // -----------------------------------------
 
 type cartDoc struct {
-	Items map[string]int `firestore:"items"`
+	// ✅ Items: itemKey -> CartItem
+	// NOTE: domain struct を直接 firestore DTO にしない（後方互換 & 柔軟にするため）
+	Items map[string]cartItemDoc `firestore:"items"`
 
 	CreatedAt time.Time `firestore:"createdAt"`
 	UpdatedAt time.Time `firestore:"updatedAt"`
 	ExpiresAt time.Time `firestore:"expiresAt"`
 }
 
-func cartDocFromDomain(c *cartdom.Cart) cartDoc {
-	items := map[string]int{}
-	if c.Items != nil {
-		for k, v := range c.Items {
-			k2 := strings.TrimSpace(k)
-			if k2 == "" || v <= 0 {
+type cartItemDoc struct {
+	InventoryID string `firestore:"inventoryId"`
+	ListID      string `firestore:"listId"`
+	ModelID     string `firestore:"modelId"`
+	Qty         int    `firestore:"qty"`
+}
+
+// cartDocFromSnapshot parses Firestore document data with backward compatibility.
+//
+// Supported shapes:
+// 1) items: map[itemKey] = {inventoryId, listId, modelId, qty}
+// 2) items: map[itemKey] = qty (legacy)
+//   - in this case we keep ModelID=itemKey and Qty=qty, other IDs empty
+func cartDocFromSnapshot(snap *firestore.DocumentSnapshot) (cartDoc, error) {
+	if snap == nil {
+		return cartDoc{}, errors.New("cart_repository_fs: snapshot is nil")
+	}
+
+	raw := snap.Data()
+	if raw == nil {
+		// empty doc is unusual but handle defensively
+		return cartDoc{
+			Items: map[string]cartItemDoc{},
+		}, nil
+	}
+
+	out := cartDoc{
+		Items: map[string]cartItemDoc{},
+	}
+
+	// times
+	if t, ok := raw["createdAt"]; ok {
+		if tt, ok2 := asTime(t); ok2 {
+			out.CreatedAt = tt
+		}
+	}
+	if t, ok := raw["updatedAt"]; ok {
+		if tt, ok2 := asTime(t); ok2 {
+			out.UpdatedAt = tt
+		}
+	}
+	if t, ok := raw["expiresAt"]; ok {
+		if tt, ok2 := asTime(t); ok2 {
+			out.ExpiresAt = tt
+		}
+	}
+
+	// items
+	itemsAny, _ := raw["items"]
+	m, ok := itemsAny.(map[string]any)
+	if !ok || m == nil {
+		// no items
+		return out, nil
+	}
+
+	for k, v := range m {
+		itemKey := strings.TrimSpace(k)
+		if itemKey == "" {
+			continue
+		}
+
+		// new shape: map[string]any
+		if mv, ok := v.(map[string]any); ok {
+			inv := strings.TrimSpace(asString(mv["inventoryId"]))
+			lid := strings.TrimSpace(asString(mv["listId"]))
+			mid := strings.TrimSpace(asString(mv["modelId"]))
+			qty := asInt(mv["qty"])
+
+			// 必須チェック（qty > 0 は必須）
+			if qty <= 0 {
 				continue
 			}
-			items[k2] = items[k2] + v
+
+			out.Items[itemKey] = cartItemDoc{
+				InventoryID: inv,
+				ListID:      lid,
+				ModelID:     mid,
+				Qty:         qty,
+			}
+			continue
+		}
+
+		// legacy shape: qty only
+		qty := asInt(v)
+		if qty <= 0 {
+			continue
+		}
+		out.Items[itemKey] = cartItemDoc{
+			InventoryID: "",
+			ListID:      "",
+			ModelID:     itemKey,
+			Qty:         qty,
+		}
+	}
+
+	return out, nil
+}
+
+func cartDocFromDomain(c *cartdom.Cart) cartDoc {
+	items := map[string]cartItemDoc{}
+	if c != nil && c.Items != nil {
+		for k, it := range c.Items {
+			k2 := strings.TrimSpace(k)
+			if k2 == "" {
+				continue
+			}
+
+			inv := strings.TrimSpace(it.InventoryID)
+			lid := strings.TrimSpace(it.ListID)
+			mid := strings.TrimSpace(it.ModelID)
+			qty := it.Qty
+
+			// qty は必須、ID も必須（空は捨てる）
+			if qty <= 0 || inv == "" || lid == "" || mid == "" {
+				continue
+			}
+
+			normalized := cartItemDoc{
+				InventoryID: inv,
+				ListID:      lid,
+				ModelID:     mid,
+				Qty:         qty,
+			}
+
+			// normalize key if it had spaces
+			if existing, ok := items[k2]; ok {
+				// 同一キーは qty を合算（IDs は既存優先、ただし空なら埋める）
+				if strings.TrimSpace(existing.InventoryID) == "" {
+					existing.InventoryID = inv
+				}
+				if strings.TrimSpace(existing.ListID) == "" {
+					existing.ListID = lid
+				}
+				if strings.TrimSpace(existing.ModelID) == "" {
+					existing.ModelID = mid
+				}
+				existing.Qty = existing.Qty + qty
+				items[k2] = existing
+			} else {
+				items[k2] = normalized
+			}
 		}
 	}
 
@@ -154,14 +290,47 @@ func cartDocFromDomain(c *cartdom.Cart) cartDoc {
 }
 
 func (d cartDoc) toDomain() *cartdom.Cart {
-	items := map[string]int{}
+	items := map[string]cartdom.CartItem{}
 	if d.Items != nil {
-		for k, v := range d.Items {
+		for k, it := range d.Items {
 			k2 := strings.TrimSpace(k)
-			if k2 == "" || v <= 0 {
+			if k2 == "" {
 				continue
 			}
-			items[k2] = items[k2] + v
+
+			inv := strings.TrimSpace(it.InventoryID)
+			lid := strings.TrimSpace(it.ListID)
+			mid := strings.TrimSpace(it.ModelID)
+			qty := it.Qty
+
+			if qty <= 0 {
+				continue
+			}
+
+			normalized := cartdom.CartItem{
+				InventoryID: inv,
+				ListID:      lid,
+				ModelID:     mid,
+				Qty:         qty,
+			}
+
+			if existing, ok := items[k2]; ok {
+				// 重複キーは qty を合算
+				existing.Qty = existing.Qty + qty
+				// IDs が空なら埋める
+				if strings.TrimSpace(existing.InventoryID) == "" {
+					existing.InventoryID = inv
+				}
+				if strings.TrimSpace(existing.ListID) == "" {
+					existing.ListID = lid
+				}
+				if strings.TrimSpace(existing.ModelID) == "" {
+					existing.ModelID = mid
+				}
+				items[k2] = existing
+			} else {
+				items[k2] = normalized
+			}
 		}
 	}
 

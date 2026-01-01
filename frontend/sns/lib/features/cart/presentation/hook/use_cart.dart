@@ -22,10 +22,12 @@ class UseCartResult {
   final Future<CartDTO> future;
   final bool busy;
 
+  /// itemKey を受け取る（items は itemKey -> CartItemDTO になったため）
+  final Future<void> Function(String itemKey) inc;
+  final Future<void> Function(String itemKey, int currentQty) dec;
+  final Future<void> Function(String itemKey) remove;
+
   final Future<void> Function() reload;
-  final Future<void> Function(String modelId) inc;
-  final Future<void> Function(String modelId, int currentQty) dec;
-  final Future<void> Function(String modelId) remove;
   final Future<void> Function() clear;
 }
 
@@ -47,7 +49,6 @@ class UseCartController {
       createdAt: null,
       updatedAt: null,
       expiresAt: null,
-      ordered: false,
     ),
   );
 
@@ -89,11 +90,24 @@ class UseCartController {
     }
   }
 
-  Future<void> inc(SetStateFn setState, String modelId) async {
+  CartItemDTO? _getItemFromKey(CartDTO c, String itemKey) {
+    final key = itemKey.trim();
+    if (key.isEmpty) return null;
+    return c.items[key];
+  }
+
+  Future<void> inc(SetStateFn setState, String itemKey) async {
     await _withBusy(setState, () async {
+      // 現在の cart snapshot を取り出して itemKey から item を引く
+      final current = await future;
+      final it = _getItemFromKey(current, itemKey);
+      if (it == null) return;
+
       final c = await _repo.addItem(
         avatarId: avatarId,
-        modelId: modelId,
+        inventoryId: it.inventoryId,
+        listId: it.listId,
+        modelId: it.modelId,
         qty: 1,
       );
       if (!context.mounted) return;
@@ -104,12 +118,20 @@ class UseCartController {
     });
   }
 
-  Future<void> dec(SetStateFn setState, String modelId, int currentQty) async {
+  Future<void> dec(SetStateFn setState, String itemKey, int currentQty) async {
     await _withBusy(setState, () async {
       final next = currentQty - 1;
+
+      final current = await future;
+      final it = _getItemFromKey(current, itemKey);
+      if (it == null) return;
+
+      // qty<=0 は backend が remove 扱い
       final c = await _repo.setItemQty(
         avatarId: avatarId,
-        modelId: modelId,
+        inventoryId: it.inventoryId,
+        listId: it.listId,
+        modelId: it.modelId,
         qty: next,
       );
       if (!context.mounted) return;
@@ -120,9 +142,18 @@ class UseCartController {
     });
   }
 
-  Future<void> remove(SetStateFn setState, String modelId) async {
+  Future<void> remove(SetStateFn setState, String itemKey) async {
     await _withBusy(setState, () async {
-      final c = await _repo.removeItem(avatarId: avatarId, modelId: modelId);
+      final current = await future;
+      final it = _getItemFromKey(current, itemKey);
+      if (it == null) return;
+
+      final c = await _repo.removeItem(
+        avatarId: avatarId,
+        inventoryId: it.inventoryId,
+        listId: it.listId,
+        modelId: it.modelId,
+      );
       if (!context.mounted) return;
 
       setState(() {
@@ -165,9 +196,9 @@ class UseCartController {
       future: future,
       busy: busy,
       reload: () => reload(setState),
-      inc: (modelId) => inc(setState, modelId),
-      dec: (modelId, currentQty) => dec(setState, modelId, currentQty),
-      remove: (modelId) => remove(setState, modelId),
+      inc: (itemKey) => inc(setState, itemKey),
+      dec: (itemKey, currentQty) => dec(setState, itemKey, currentQty),
+      remove: (itemKey) => remove(setState, itemKey),
       clear: () => clear(setState),
     );
   }
