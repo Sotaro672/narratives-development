@@ -1,4 +1,4 @@
-// frontend\sns\lib\app\shell\presentation\components\footer.dart
+// frontend/sns/lib/app/shell/presentation/components/footer.dart
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:firebase_auth/firebase_auth.dart';
@@ -62,6 +62,16 @@ class SignedInFooter extends StatelessWidget {
     return path.startsWith('/catalog/');
   }
 
+  bool _isCartPath(BuildContext context) {
+    final path = GoRouterState.of(context).uri.path;
+    return path == '/cart';
+  }
+
+  bool _isPaymentPath(BuildContext context) {
+    final path = GoRouterState.of(context).uri.path;
+    return path == '/payment';
+  }
+
   String _currentUriString(BuildContext context) {
     return GoRouterState.of(context).uri.toString();
   }
@@ -107,6 +117,9 @@ class SignedInFooter extends StatelessWidget {
         if (user == null) return const SizedBox.shrink();
 
         final isCatalog = _isCatalogPath(context);
+        final isCart = _isCartPath(context);
+        final isPayment = _isPaymentPath(context);
+
         final from = _currentUriString(context);
         final listId = isCatalog ? _catalogListIdOrEmpty(context) : '';
 
@@ -132,7 +145,11 @@ class SignedInFooter extends StatelessWidget {
                   ),
                   const SizedBox(width: 8),
 
-                  // ✅ 中央：catalog では「カートに入れる」ボタン、それ以外は Scan
+                  // ✅ 中央：
+                  // - catalog: カートに入れる
+                  // - cart: 購入する（paymentへ）
+                  // - payment: 支払を確定する
+                  // - other: Scan
                   Expanded(
                     child: Center(
                       child: isCatalog
@@ -145,7 +162,7 @@ class SignedInFooter extends StatelessWidget {
                                 final mid = (sel.modelId ?? '').trim();
                                 final stock = sel.stockCount ?? 0;
 
-                                // ✅ NEW: backend が必須にした inventoryId/listId を揃える
+                                // ✅ backend が必須にした inventoryId/listId を揃える
                                 final invId = sel.inventoryId.trim();
 
                                 // ✅ 在庫 0 は押下不可 + 必須IDが揃っていること
@@ -166,6 +183,16 @@ class SignedInFooter extends StatelessWidget {
                                   stockCount: sel.stockCount,
                                 );
                               },
+                            )
+                          : isCart
+                          ? _GoToPaymentButton(
+                              avatarId: avatarId,
+                              enabled: avatarId.trim().isNotEmpty,
+                            )
+                          : isPayment
+                          ? _ConfirmPaymentButton(
+                              avatarId: avatarId,
+                              enabled: avatarId.trim().isNotEmpty,
                             )
                           : _FooterItem(
                               icon: Icons.qr_code_scanner,
@@ -241,6 +268,105 @@ class _FooterItem extends StatelessWidget {
             Text(label, style: t.labelSmall),
           ],
         ),
+      ),
+    );
+  }
+}
+
+/// ✅ /cart 用：購入する CTA（paymentへ遷移）
+class _GoToPaymentButton extends StatelessWidget {
+  const _GoToPaymentButton({required this.avatarId, required this.enabled});
+
+  final String avatarId;
+  final bool enabled;
+
+  @override
+  Widget build(BuildContext context) {
+    final aid = avatarId.trim();
+    final canTap = enabled && aid.isNotEmpty;
+
+    return SizedBox(
+      height: 40,
+      child: ElevatedButton.icon(
+        icon: const Icon(Icons.shopping_bag_outlined, size: 20),
+        label: const Text('購入する'),
+        onPressed: !canTap
+            ? null
+            : () {
+                // ✅ CartPage と同じ仕様：payment の from は /cart?avatarId=...
+                final back = Uri(
+                  path: '/cart',
+                  queryParameters: {'avatarId': aid},
+                ).toString();
+
+                final uri = Uri(
+                  path: '/payment',
+                  queryParameters: {'avatarId': aid, 'from': back},
+                );
+
+                context.go(uri.toString());
+              },
+      ),
+    );
+  }
+}
+
+/// ✅ /payment 用：支払を確定する CTA（現時点はUI導線のみ）
+class _ConfirmPaymentButton extends StatefulWidget {
+  const _ConfirmPaymentButton({required this.avatarId, required this.enabled});
+
+  final String avatarId;
+  final bool enabled;
+
+  @override
+  State<_ConfirmPaymentButton> createState() => _ConfirmPaymentButtonState();
+}
+
+class _ConfirmPaymentButtonState extends State<_ConfirmPaymentButton> {
+  bool _loading = false;
+
+  Future<void> _confirm() async {
+    final aid = widget.avatarId.trim();
+    final canTap = widget.enabled && !_loading && aid.isNotEmpty;
+    if (!canTap) return;
+
+    setState(() => _loading = true);
+    try {
+      // ✅ ここに実際の「決済確定」API呼び出しを後で追加する想定
+      // いまはUI導線のみ（壊れないように依存を増やさない）
+      await Future<void>.delayed(const Duration(milliseconds: 200));
+
+      if (!mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('支払を確定しました（仮）')));
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('確定に失敗しました: $e')));
+    } finally {
+      if (mounted) setState(() => _loading = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final aid = widget.avatarId.trim();
+    final canTap = widget.enabled && !_loading && aid.isNotEmpty;
+
+    return SizedBox(
+      height: 40,
+      child: ElevatedButton.icon(
+        icon: _loading
+            ? const SizedBox(
+                width: 18,
+                height: 18,
+                child: CircularProgressIndicator(strokeWidth: 2),
+              )
+            : const Icon(Icons.verified_outlined, size: 20),
+        label: Text(_loading ? '確定中...' : '支払を確定する'),
+        onPressed: !canTap ? null : _confirm,
       ),
     );
   }

@@ -35,6 +35,25 @@ import '../../features/auth/presentation/page/billing_address.dart';
 import '../../features/auth/presentation/page/avatar_create.dart';
 
 /// ------------------------------------------------------------
+/// ✅ `from` は URL で壊れやすい（Hash + `?` `&` 混在）ので base64url で安全に運ぶ
+String _encodeFrom(String raw) {
+  final s = raw.trim();
+  if (s.isEmpty) return '';
+  return base64UrlEncode(utf8.encode(s));
+}
+
+String _decodeFrom(String? v) {
+  final s = (v ?? '').trim();
+  if (s.isEmpty) return '';
+  // 既存の「生 from」も混在するので、失敗したらそのまま返す
+  try {
+    return utf8.decode(base64Url.decode(s));
+  } catch (_) {
+    return s;
+  }
+}
+
+/// ------------------------------------------------------------
 /// ✅ avatarId の “現在値” をアプリ側で保持（URLに無い時の補完に使う）
 class AvatarIdStore extends ChangeNotifier {
   AvatarIdStore._();
@@ -89,10 +108,25 @@ class AvatarIdStore extends ChangeNotifier {
         base,
       ).replace(path: '/sns/avatars', queryParameters: {'userId': userId});
 
-      final res = await http.get(
-        uri,
-        headers: {'Content-Type': 'application/json'},
-      );
+      // ✅ 可能なら Authorization を付ける（権限必須の環境で 401 になって redirect が暴れるのを防ぐ）
+      final headers = <String, String>{
+        'Content-Type': 'application/json',
+        'Accept': 'application/json',
+      };
+      try {
+        final u = FirebaseAuth.instance.currentUser;
+        if (u != null) {
+          final raw = await u.getIdToken(false);
+          final token = (raw ?? '').trim();
+          if (token.isNotEmpty) {
+            headers['Authorization'] = 'Bearer $token';
+          }
+        }
+      } catch (_) {
+        // best-effort
+      }
+
+      final res = await http.get(uri, headers: headers);
 
       if (res.statusCode == 404) return null;
       if (res.statusCode < 200 || res.statusCode >= 300) {
@@ -175,7 +209,8 @@ GoRouter buildAppRouter() {
       //    ※戻り先にも avatarId を必ず付与する（＝ここで解決する）
       // ------------------------------------------------------------
       if (isLoggedIn && (isLoginRoute || isCreateAccountRoute)) {
-        final rawFrom = (qp[AppQueryKey.from] ?? '').trim();
+        final rawFromEncoded = (qp[AppQueryKey.from] ?? '').trim();
+        final rawFrom = _decodeFrom(rawFromEncoded);
         final uid = user.uid.trim();
 
         // URL/store に avatarId が無ければ uid で解決
@@ -186,7 +221,7 @@ GoRouter buildAppRouter() {
           return Uri(
             path: AppRoutePath.avatarCreate,
             queryParameters: {
-              AppQueryKey.from: from,
+              AppQueryKey.from: _encodeFrom(from),
               AppQueryKey.intent: 'bootstrap',
             },
           ).toString();
@@ -229,7 +264,7 @@ GoRouter buildAppRouter() {
         return Uri(
           path: AppRoutePath.avatarCreate,
           queryParameters: {
-            AppQueryKey.from: from,
+            AppQueryKey.from: _encodeFrom(from),
             AppQueryKey.intent: 'bootstrap',
           },
         ).toString();
@@ -405,10 +440,10 @@ List<RouteBase> _routes({required bool firebaseReady}) {
       path: AppRoutePath.login,
       name: AppRouteName.login,
       pageBuilder: (context, state) {
-        final from = state.uri.queryParameters[AppQueryKey.from];
+        final from = _decodeFrom(state.uri.queryParameters[AppQueryKey.from]);
         final intent = state.uri.queryParameters[AppQueryKey.intent];
         return NoTransitionPage(
-          child: LoginPage(from: from, intent: intent),
+          child: LoginPage(from: from.isEmpty ? null : from, intent: intent),
         );
       },
     ),
@@ -416,10 +451,13 @@ List<RouteBase> _routes({required bool firebaseReady}) {
       path: AppRoutePath.createAccount,
       name: AppRouteName.createAccount,
       pageBuilder: (context, state) {
-        final from = state.uri.queryParameters[AppQueryKey.from];
+        final from = _decodeFrom(state.uri.queryParameters[AppQueryKey.from]);
         final intent = state.uri.queryParameters[AppQueryKey.intent];
         return NoTransitionPage(
-          child: CreateAccountPage(from: from, intent: intent),
+          child: CreateAccountPage(
+            from: from.isEmpty ? null : from,
+            intent: intent,
+          ),
         );
       },
     ),
@@ -434,7 +472,7 @@ List<RouteBase> _routes({required bool firebaseReady}) {
             oobCode: qp[AppQueryKey.oobCode],
             continueUrl: qp[AppQueryKey.continueUrl],
             lang: qp[AppQueryKey.lang],
-            from: qp[AppQueryKey.from],
+            from: _decodeFrom(qp[AppQueryKey.from]),
             intent: qp[AppQueryKey.intent],
           ),
         );
@@ -444,32 +482,40 @@ List<RouteBase> _routes({required bool firebaseReady}) {
       path: AppRoutePath.billingAddress,
       name: AppRouteName.billingAddress,
       pageBuilder: (context, state) {
-        final from = state.uri.queryParameters[AppQueryKey.from];
-        return NoTransitionPage(child: BillingAddressPage(from: from));
+        final from = _decodeFrom(state.uri.queryParameters[AppQueryKey.from]);
+        return NoTransitionPage(
+          child: BillingAddressPage(from: from.isEmpty ? null : from),
+        );
       },
     ),
     GoRoute(
       path: AppRoutePath.avatarCreate,
       name: AppRouteName.avatarCreate,
       pageBuilder: (context, state) {
-        final from = state.uri.queryParameters[AppQueryKey.from];
-        return NoTransitionPage(child: AvatarCreatePage(from: from));
+        final from = _decodeFrom(state.uri.queryParameters[AppQueryKey.from]);
+        return NoTransitionPage(
+          child: AvatarCreatePage(from: from.isEmpty ? null : from),
+        );
       },
     ),
     GoRoute(
       path: AppRoutePath.avatarEdit,
       name: AppRouteName.avatarEdit,
       pageBuilder: (context, state) {
-        final from = state.uri.queryParameters[AppQueryKey.from];
-        return NoTransitionPage(child: AvatarEditPage(from: from));
+        final from = _decodeFrom(state.uri.queryParameters[AppQueryKey.from]);
+        return NoTransitionPage(
+          child: AvatarEditPage(from: from.isEmpty ? null : from),
+        );
       },
     ),
     GoRoute(
       path: AppRoutePath.userEdit,
       name: AppRouteName.userEdit,
       pageBuilder: (context, state) {
-        final from = state.uri.queryParameters[AppQueryKey.from];
-        return NoTransitionPage(child: UserEditPage(from: from));
+        final from = _decodeFrom(state.uri.queryParameters[AppQueryKey.from]);
+        return NoTransitionPage(
+          child: UserEditPage(from: from.isEmpty ? null : from),
+        );
       },
     ),
     ShellRoute(
@@ -507,8 +553,12 @@ List<RouteBase> _routes({required bool firebaseReady}) {
           path: AppRoutePath.avatar,
           name: AppRouteName.avatar,
           pageBuilder: (context, state) {
-            final from = state.uri.queryParameters[AppQueryKey.from];
-            return NoTransitionPage(child: AvatarPage(from: from));
+            final from = _decodeFrom(
+              state.uri.queryParameters[AppQueryKey.from],
+            );
+            return NoTransitionPage(
+              child: AvatarPage(from: from.isEmpty ? null : from),
+            );
           },
         ),
         GoRoute(
@@ -517,11 +567,14 @@ List<RouteBase> _routes({required bool firebaseReady}) {
           pageBuilder: (context, state) {
             final qp = state.uri.queryParameters;
             final avatarId = (qp[AppQueryKey.avatarId] ?? '').trim();
-            final from = qp[AppQueryKey.from];
+            final from = _decodeFrom(qp[AppQueryKey.from]);
 
             return NoTransitionPage(
               key: ValueKey('cart-$avatarId'),
-              child: CartPage(avatarId: avatarId, from: from),
+              child: CartPage(
+                avatarId: avatarId,
+                from: from.isEmpty ? null : from,
+              ),
             );
           },
         ),
@@ -531,11 +584,14 @@ List<RouteBase> _routes({required bool firebaseReady}) {
           pageBuilder: (context, state) {
             final qp = state.uri.queryParameters;
             final avatarId = (qp[AppQueryKey.avatarId] ?? '').trim();
-            final from = qp[AppQueryKey.from];
+            final from = _decodeFrom(qp[AppQueryKey.from]);
 
             return NoTransitionPage(
               key: ValueKey('payment-$avatarId'),
-              child: PaymentPage(avatarId: avatarId, from: from),
+              child: PaymentPage(
+                avatarId: avatarId,
+                from: from.isEmpty ? null : from,
+              ),
             );
           },
         ),
@@ -596,7 +652,7 @@ List<Widget> _headerActionsFor(
   if (!firebaseReady) {
     final loginUri = Uri(
       path: AppRoutePath.login,
-      queryParameters: {AppQueryKey.from: from},
+      queryParameters: {AppQueryKey.from: _encodeFrom(from)},
     );
     if (isHome) {
       return [
@@ -612,7 +668,7 @@ List<Widget> _headerActionsFor(
   if (!isLoggedIn) {
     final loginUri = Uri(
       path: AppRoutePath.login,
-      queryParameters: {AppQueryKey.from: from},
+      queryParameters: {AppQueryKey.from: _encodeFrom(from)},
     );
     if (isHome) {
       return [
@@ -676,7 +732,7 @@ class _HeaderCartButton extends StatelessWidget {
             ? avatarId.trim()
             : AvatarIdStore.I.avatarId;
 
-        final qp = <String, String>{AppQueryKey.from: from};
+        final qp = <String, String>{AppQueryKey.from: _encodeFrom(from)};
         if (id.trim().isNotEmpty) {
           qp[AppQueryKey.avatarId] = id;
         }
@@ -782,7 +838,7 @@ class _AccountMenuSheet extends StatelessWidget {
                   onTap: () => _go(
                     context,
                     AppRoutePath.avatarEdit,
-                    qp: {AppQueryKey.from: from},
+                    qp: {AppQueryKey.from: _encodeFrom(from)},
                   ),
                 ),
                 _divider(context),
@@ -793,7 +849,7 @@ class _AccountMenuSheet extends StatelessWidget {
                   onTap: () => _go(
                     context,
                     AppRoutePath.userEdit,
-                    qp: {AppQueryKey.from: from},
+                    qp: {AppQueryKey.from: _encodeFrom(from)},
                   ),
                 ),
                 _divider(context),
@@ -805,7 +861,7 @@ class _AccountMenuSheet extends StatelessWidget {
                     context,
                     AppRoutePath.shippingAddress,
                     qp: {
-                      AppQueryKey.from: from,
+                      AppQueryKey.from: _encodeFrom(from),
                       AppQueryKey.intent: 'settings',
                       AppQueryKey.mode: 'edit',
                     },
@@ -819,7 +875,7 @@ class _AccountMenuSheet extends StatelessWidget {
                   onTap: () => _go(
                     context,
                     AppRoutePath.billingAddress,
-                    qp: {AppQueryKey.from: from},
+                    qp: {AppQueryKey.from: _encodeFrom(from)},
                   ),
                 ),
                 _divider(context),
@@ -830,7 +886,10 @@ class _AccountMenuSheet extends StatelessWidget {
                   onTap: () => _go(
                     context,
                     AppRoutePath.userEdit,
-                    qp: {AppQueryKey.from: from, AppQueryKey.tab: 'email'},
+                    qp: {
+                      AppQueryKey.from: _encodeFrom(from),
+                      AppQueryKey.tab: 'email',
+                    },
                   ),
                 ),
                 _divider(context),
@@ -841,7 +900,10 @@ class _AccountMenuSheet extends StatelessWidget {
                   onTap: () => _go(
                     context,
                     AppRoutePath.userEdit,
-                    qp: {AppQueryKey.from: from, AppQueryKey.tab: 'password'},
+                    qp: {
+                      AppQueryKey.from: _encodeFrom(from),
+                      AppQueryKey.tab: 'password',
+                    },
                   ),
                 ),
                 _divider(context),

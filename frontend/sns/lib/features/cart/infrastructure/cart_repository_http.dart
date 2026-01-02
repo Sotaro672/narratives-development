@@ -1,6 +1,7 @@
 // frontend/sns/lib/features/cart/infrastructure/cart_repository_http.dart
 import 'dart:convert';
 
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:http/http.dart' as http;
 
 import '../../inventory/infrastructure/inventory_repository_http.dart';
@@ -42,7 +43,7 @@ class CartRepositoryHttp {
     if (aid.isEmpty) throw ArgumentError('avatarId is required');
 
     final uri = _uri('/sns/cart', qp: {'avatarId': aid});
-    final res = await _client.get(uri, headers: _headersJson());
+    final res = await _sendAuthed('GET', uri);
 
     return _decodeCart(res);
   }
@@ -79,7 +80,7 @@ class CartRepositoryHttp {
     // ignore: avoid_print
     print('[CartRepositoryHttp] POST $uri body=$body');
 
-    final res = await _client.post(uri, headers: _headersJson(), body: body);
+    final res = await _sendAuthed('POST', uri, body: body);
     return _decodeCart(res);
   }
 
@@ -115,7 +116,7 @@ class CartRepositoryHttp {
     // ignore: avoid_print
     print('[CartRepositoryHttp] PUT $uri body=$body');
 
-    final res = await _client.put(uri, headers: _headersJson(), body: body);
+    final res = await _sendAuthed('PUT', uri, body: body);
     return _decodeCart(res);
   }
 
@@ -147,14 +148,7 @@ class CartRepositoryHttp {
     // ignore: avoid_print
     print('[CartRepositoryHttp] DELETE $uri body=$body');
 
-    // ✅ http.delete(body) が環境/バージョンで不安定なため Request で送る
-    final req = http.Request('DELETE', uri);
-    req.headers.addAll(_headersJson());
-    req.body = body;
-
-    final streamed = await _client.send(req);
-    final res = await http.Response.fromStream(streamed);
-
+    final res = await _sendAuthed('DELETE', uri, body: body);
     return _decodeCart(res);
   }
 
@@ -167,10 +161,106 @@ class CartRepositoryHttp {
     // ignore: avoid_print
     print('[CartRepositoryHttp] DELETE $uri (clear)');
 
-    final res = await _client.delete(uri, headers: _headersJson());
+    final res = await _sendAuthed('DELETE', uri);
 
     if (res.statusCode == 204) return;
     _throwHttpError(res);
+  }
+
+  // ----------------------------
+  // Auth / sending
+  // ----------------------------
+
+  Future<Map<String, String>> _headersJsonAuthed({
+    bool forceRefreshToken = false,
+  }) async {
+    final u = FirebaseAuth.instance.currentUser;
+    if (u == null) {
+      throw CartHttpException(statusCode: 401, message: 'not_signed_in');
+    }
+
+    final idToken = await u.getIdToken(forceRefreshToken);
+    final tok = (idToken ?? '').trim(); // ✅ null-safe
+
+    if (tok.isEmpty) {
+      throw CartHttpException(statusCode: 401, message: 'empty_id_token');
+    }
+
+    // ✅ Authorization は “simple header” ではないので Web では preflight が走る
+    // ただし /sns/payment が通っているので、backend 側は Allow-Headers に Authorization が入っている前提。
+    return <String, String>{'Authorization': 'Bearer $tok', ..._headersJson()};
+  }
+
+  /// Sends request with Firebase Authorization header.
+  /// - If 401, retry once with forceRefreshToken=true.
+  Future<http.Response> _sendAuthed(
+    String method,
+    Uri uri, {
+    String? body,
+  }) async {
+    http.Response res;
+
+    final h1 = await _headersJsonAuthed(forceRefreshToken: false);
+    res = await _sendRaw(method, uri, headers: h1, body: body);
+
+    if (res.statusCode != 401) return res;
+
+    // ignore: avoid_print
+    print(
+      '[CartRepositoryHttp] 401 received -> retry with refreshed token. uri=$uri',
+    );
+
+    final h2 = await _headersJsonAuthed(forceRefreshToken: true);
+    return _sendRaw(method, uri, headers: h2, body: body);
+  }
+
+  Future<http.Response> _sendRaw(
+    String method,
+    Uri uri, {
+    required Map<String, String> headers,
+    String? body,
+  }) async {
+    final m = method.trim().toUpperCase();
+
+    // body なし
+    if (body == null) {
+      switch (m) {
+        case 'GET':
+          return _client.get(uri, headers: headers);
+        case 'DELETE':
+          return _client.delete(uri, headers: headers);
+        case 'POST':
+          return _client.post(uri, headers: headers);
+        case 'PUT':
+          return _client.put(uri, headers: headers);
+        default:
+          final req = http.Request(m, uri);
+          req.headers.addAll(headers);
+          final streamed = await _client.send(req);
+          return http.Response.fromStream(streamed);
+      }
+    }
+
+    // body あり
+    switch (m) {
+      case 'POST':
+        return _client.post(uri, headers: headers, body: body);
+      case 'PUT':
+        return _client.put(uri, headers: headers, body: body);
+      case 'DELETE':
+        // ✅ http.delete(body) が環境/バージョンで不安定なため Request で送る
+        final req = http.Request('DELETE', uri);
+        req.headers.addAll(headers);
+        req.body = body;
+        final streamed = await _client.send(req);
+        return http.Response.fromStream(streamed);
+      default:
+        final req = http.Request(m, uri);
+        req.headers.addAll(headers);
+        req.body = body;
+        final streamed = await _client.send(req);
+        return http.Response.fromStream(streamed);
+    }
   }
 
   // ----------------------------
@@ -253,6 +343,7 @@ class CartRepositoryHttp {
   }
 
   /// ✅ CORS 的に “simple headers” 寄りにする（x- 系などカスタムは入れない）
+  /// NOTE: Authorization はここには入れない（authed 時は _headersJsonAuthed で追加）
   Map<String, String> _headersJson() => const {
     'Content-Type': 'application/json; charset=utf-8',
     'Accept': 'application/json',

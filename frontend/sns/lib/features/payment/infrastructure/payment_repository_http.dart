@@ -29,12 +29,38 @@ class PaymentRepositoryHttp {
     _client.close();
   }
 
+  // ------------------------------------------------------------
+  // Public API
+  // ------------------------------------------------------------
+
   /// ✅ uid -> avatarId / shipping / billing を backend 側で解決して返してもらう
   Future<PaymentContextDTO> fetchPaymentContext() async {
     final token = await _requireFirebaseIdToken();
 
     final uri = _uri('/sns/payment');
-    final res = await _client.get(uri, headers: _headersJsonAuth(token));
+    final headers = _headersJsonAuth(token);
+
+    // ✅ request log
+    _log('[PaymentRepository] request GET $uri');
+    _log(
+      '[PaymentRepository] request headers: '
+      'Accept=${headers['Accept']} '
+      'Content-Type=${headers['Content-Type']} '
+      'Authorization=${_maskBearer(headers['Authorization'] ?? '')}',
+    );
+
+    final startedAt = DateTime.now();
+    final res = await _client.get(uri, headers: headers);
+    final elapsedMs = DateTime.now().difference(startedAt).inMilliseconds;
+
+    // ✅ response log (status + headers + raw body)
+    _log(
+      '[PaymentRepository] response status=${res.statusCode} elapsedMs=$elapsedMs',
+    );
+    _log(
+      '[PaymentRepository] response headers: content-type=${res.headers['content-type'] ?? ''}',
+    );
+    _log('[PaymentRepository] response body(raw)=${_truncate(res.body, 8000)}');
 
     if (res.statusCode >= 200 && res.statusCode < 300) {
       final m = _decodeJsonMap(res.body);
@@ -100,6 +126,12 @@ class PaymentRepositoryHttp {
       final s = res.body.trim();
       if (s.isNotEmpty) msg = s;
     }
+
+    // ✅ error log (raw body)
+    _log(
+      '[PaymentRepository] http_error status=$status message=$msg body=${_truncate(res.body, 8000)}',
+    );
+
     throw PaymentHttpException(statusCode: status, message: msg);
   }
 
@@ -142,6 +174,30 @@ class PaymentRepositoryHttp {
     'Accept': 'application/json',
     'Authorization': 'Bearer $idToken',
   };
+
+  // ------------------------------------------------------------
+  // Logging helpers
+  // ------------------------------------------------------------
+
+  void _log(String msg) {
+    // print() は Web: DevTools Console / Mobile: run logs に出る
+    // ignore: avoid_print
+    print(msg);
+  }
+
+  String _maskBearer(String v) {
+    final s = v.trim();
+    if (!s.toLowerCase().startsWith('bearer ')) return _truncate(s, 32);
+    final token = s.substring(7);
+    if (token.length <= 16) return 'Bearer ***';
+    return 'Bearer ${token.substring(0, 8)}...${token.substring(token.length - 6)}';
+  }
+
+  String _truncate(String s, int max) {
+    final v = s.toString();
+    if (v.length <= max) return v;
+    return '${v.substring(0, max)}...(truncated ${v.length - max} chars)';
+  }
 }
 
 // ============================================================

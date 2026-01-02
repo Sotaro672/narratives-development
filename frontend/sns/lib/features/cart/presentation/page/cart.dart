@@ -1,12 +1,8 @@
 // frontend/sns/lib/features/cart/presentation/page/cart.dart
 import 'package:flutter/material.dart';
-import 'package:go_router/go_router.dart';
 
 import '../../infrastructure/cart_repository_http.dart';
 import '../hook/use_cart.dart';
-
-// ✅ routes
-import '../../../../app/routing/routes.dart';
 
 /// Cart page (buyer-facing).
 ///
@@ -85,20 +81,6 @@ class _CartPageState extends State<CartPage> {
     return s.contains('statusCode=404') || s.contains('HTTP 404');
   }
 
-  void _goToPayment(BuildContext context, {required String avatarId}) {
-    // ✅ 「戻る」用に現在地を from として URL で渡す（Uri で安全に組み立て）
-    final from = Uri(
-      path: AppRoutePath.cart,
-      queryParameters: {AppQueryKey.avatarId: avatarId},
-    ).toString();
-
-    // ✅ URL に avatarId を持たせるため go_router で遷移
-    context.goNamed(
-      AppRouteName.payment,
-      queryParameters: {AppQueryKey.avatarId: avatarId, AppQueryKey.from: from},
-    );
-  }
-
   @override
   Widget build(BuildContext context) {
     final avatarId = _avatarId;
@@ -168,11 +150,9 @@ class _CartPageState extends State<CartPage> {
                           onClear: vm.clear,
                         ),
                         const SizedBox(height: 12),
-                        _PurchaseBar(
-                          enabled: cart.totalQty() > 0,
-                          onPressed: () =>
-                              _goToPayment(context, avatarId: avatarId),
-                        ),
+
+                        // ✅ 「購入する」ボタンは footer に移譲したので削除
+                        // ✅ footer 側が /cart のときに表示する
                       ],
                     ),
                 ],
@@ -376,7 +356,6 @@ class _ItemsCard extends StatelessWidget {
                   final e = entries[i];
                   final itemKey = e.key;
                   final it = e.value; // CartItemDTO
-
                   final qty = it.qty;
 
                   return ListTile(
@@ -419,27 +398,6 @@ class _ItemsCard extends StatelessWidget {
               ),
             const SizedBox(height: 10),
           ],
-        ),
-      ),
-    );
-  }
-}
-
-class _PurchaseBar extends StatelessWidget {
-  const _PurchaseBar({required this.enabled, required this.onPressed});
-
-  final bool enabled;
-  final VoidCallback onPressed;
-
-  @override
-  Widget build(BuildContext context) {
-    return SafeArea(
-      top: false,
-      child: SizedBox(
-        height: 48,
-        child: FilledButton(
-          onPressed: enabled ? onPressed : null,
-          child: const Text('購入する'),
         ),
       ),
     );

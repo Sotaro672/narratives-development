@@ -3,14 +3,13 @@ import 'package:flutter/material.dart';
 
 import '../../infrastructure/payment_repository_http.dart';
 
+// ✅ Cart を読む
+import '../../../cart/infrastructure/cart_repository_http.dart';
+
 class PaymentPage extends StatefulWidget {
   const PaymentPage({super.key, this.avatarId = '', this.from});
 
-  /// ✅ いまは「画面引数で渡される場合は表示して比較する」用途に限定。
-  ///   実際のデータ解決は backend の /sns/payment（order_query.go）に寄せる。
   final String avatarId;
-
-  /// 画面遷移元（任意）
   final String? from;
 
   @override
@@ -18,264 +17,283 @@ class PaymentPage extends StatefulWidget {
 }
 
 class _PaymentPageState extends State<PaymentPage> {
-  late final PaymentRepositoryHttp _repo;
-  late Future<PaymentContextDTO> _future;
+  late final PaymentRepositoryHttp _paymentRepo;
+  late final CartRepositoryHttp _cartRepo;
 
-  bool _busy = false;
-
-  // ✅ incoming / resolved を比較表示する（avatarId の受け渡し撤廃に備える）
-  String _resolvedAvatarId = '';
-
-  String get _incomingAvatarId => widget.avatarId.trim();
+  late Future<_PaymentVM> _future;
 
   @override
   void initState() {
     super.initState();
-    _repo = PaymentRepositoryHttp();
-    _kickLoad();
+    _paymentRepo = PaymentRepositoryHttp();
+    _cartRepo = CartRepositoryHttp();
+    _future = _load();
   }
 
   @override
   void dispose() {
-    _repo.dispose();
+    _paymentRepo.dispose();
+    _cartRepo.dispose();
     super.dispose();
   }
 
-  void _kickLoad() {
-    _future = _load();
-  }
+  Future<_PaymentVM> _load() async {
+    final ctx = await _paymentRepo.fetchPaymentContext();
 
-  Future<PaymentContextDTO> _load() async {
-    // ✅ 画面引数 avatarId は「必須」ではなくする
-    //    - backend /sns/payment が uid -> avatarId + addresses を解決するのが前提
-    final ctx = await _repo.fetchPaymentContext();
+    // ✅ Cart は「URLで渡している avatarId（現状 uid）」で引くのが正
+    final qpAvatarId = widget.avatarId.trim();
+    final cartKey = qpAvatarId.isNotEmpty
+        ? qpAvatarId
+        : (ctx.userId.trim().isNotEmpty ? ctx.userId.trim() : ctx.uid.trim());
 
-    // 画面表示用に保持（ログ/デバッグ用）
-    _resolvedAvatarId = (ctx.avatarId).trim();
-
-    return ctx;
-  }
-
-  Future<void> _reload() async {
-    setState(() {
-      _kickLoad();
-    });
-  }
-
-  Future<void> _withBusy(Future<void> Function() fn) async {
-    if (_busy) return;
-    setState(() => _busy = true);
+    CartDTO cart;
     try {
-      await fn();
-    } finally {
-      if (mounted) setState(() => _busy = false);
+      cart = await _cartRepo.fetchCart(avatarId: cartKey);
+    } catch (e) {
+      // 404 は空カート扱い
+      if (e is CartHttpException && e.statusCode == 404) {
+        cart = _emptyCart(cartKey);
+      } else {
+        rethrow;
+      }
     }
+
+    return _PaymentVM(ctx: ctx, cart: cart, cartKey: cartKey);
   }
 
-  // ✅ ここでは「購入確定のAPI起票」はまだ実装しない（次工程）
-  Future<void> _confirmPurchase(PaymentContextDTO ctx) async {
-    await _withBusy(() async {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('購入確定は次工程で実装します（UIは準備できています）')),
-      );
-    });
+  static CartDTO _emptyCart(String avatarId) {
+    return CartDTO(
+      avatarId: avatarId,
+      items: const {},
+      createdAt: null,
+      updatedAt: null,
+      expiresAt: null,
+    );
   }
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('Payment'),
-        leading: IconButton(
-          tooltip: 'Back',
-          icon: const Icon(Icons.arrow_back),
-          onPressed: () => Navigator.of(context).maybePop(),
-        ),
-        actions: [
-          IconButton(
-            tooltip: 'Reload',
-            onPressed: _reload,
-            icon: const Icon(Icons.refresh),
-          ),
-        ],
-      ),
-      body: Stack(
-        children: [
-          FutureBuilder<PaymentContextDTO>(
-            future: _future,
-            builder: (context, snap) {
-              final isLoading =
-                  snap.connectionState == ConnectionState.waiting &&
-                  !snap.hasData;
+    // ✅ AppShell/AppMain の中で使う前提なので Scaffold は作らない
+    // ✅ AppMain が SingleChildScrollView になる可能性があるため、
+    //    このページ内で ListView を固定で返さない（unbounded 対策）
+    return SafeArea(
+      child: FutureBuilder<_PaymentVM>(
+        future: _future,
+        builder: (context, snap) {
+          if (snap.connectionState == ConnectionState.waiting &&
+              !snap.hasData) {
+            return const Center(child: CircularProgressIndicator());
+          }
 
-              if (isLoading) {
-                return const Center(child: CircularProgressIndicator());
-              }
+          if (snap.hasError) {
+            return _ErrorBox(
+              title: 'Payment load failed',
+              message: snap.error.toString(),
+            );
+          }
 
-              if (snap.hasError) {
-                return _ErrorView(
-                  errorText: snap.error.toString(),
-                  onRetry: _reload,
-                );
-              }
+          final vm = snap.data;
+          if (vm == null) {
+            return const _ErrorBox(title: 'No data', message: 'vm is null');
+          }
 
-              final ctx = snap.data;
-              if (ctx == null) {
-                return _ErrorView(errorText: 'No data', onRetry: _reload);
-              }
+          final cards = <Widget>[
+            _UserCard(ctx: vm.ctx),
+            const SizedBox(height: 12),
+            _ShippingCard(ctx: vm.ctx),
+            const SizedBox(height: 12),
+            _BillingCard(ctx: vm.ctx),
+            const SizedBox(height: 12),
+            _CartCard(cart: vm.cart),
+          ];
 
-              final canConfirm =
-                  ctx.userId.trim().isNotEmpty &&
-                  (ctx.shippingAddress?.isNotEmpty ?? false) &&
-                  (ctx.billingAddress?.isNotEmpty ?? false);
+          return Padding(
+            padding: const EdgeInsets.fromLTRB(12, 12, 12, 24),
+            child: LayoutBuilder(
+              builder: (context, constraints) {
+                // ✅ 高さが bounded の時だけ ListView（スクロールはこの中で完結できる）
+                if (constraints.hasBoundedHeight) {
+                  return ListView(children: cards);
+                }
 
-              return SingleChildScrollView(
-                padding: const EdgeInsets.fromLTRB(12, 12, 12, 24),
-                child: Column(
+                // ✅ AppMain(SingleChildScrollView) 配下などは unbounded になり得るので Column
+                return Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    _HeaderCard(
-                      incomingAvatarId: _incomingAvatarId,
-                      resolvedAvatarId: _resolvedAvatarId.isNotEmpty
-                          ? _resolvedAvatarId
-                          : ctx.avatarId,
-                      ctx: ctx,
-                    ),
-                    const SizedBox(height: 12),
-
-                    if (_incomingAvatarId.isEmpty)
-                      Padding(
-                        padding: const EdgeInsets.only(bottom: 12),
-                        child: Text(
-                          '※ avatarId は画面引数から渡されていません（/sns/payment の解決結果で表示しています）',
-                          style: Theme.of(context).textTheme.bodySmall
-                              ?.copyWith(
-                                color: Theme.of(context)
-                                    .textTheme
-                                    .bodySmall
-                                    ?.color
-                                    ?.withValues(alpha: 0.75),
-                              ),
-                          textAlign: TextAlign.center,
-                        ),
-                      ),
-
-                    _AddressCard(
-                      title: 'Shipping Address',
-                      address: ctx.shippingAddress,
-                      emptyText: '配送先住所が未登録です',
-                    ),
-                    const SizedBox(height: 12),
-
-                    _AddressCard(
-                      title: 'Billing Address',
-                      address: ctx.billingAddress,
-                      emptyText: '請求先住所が未登録です',
-                    ),
-                    const SizedBox(height: 16),
-
-                    SizedBox(
-                      height: 48,
-                      child: FilledButton(
-                        onPressed: canConfirm
-                            ? () => _confirmPurchase(ctx)
-                            : null,
-                        child: const Text('購入を確定する'),
-                      ),
-                    ),
-                    const SizedBox(height: 8),
-                    Text(
-                      canConfirm
-                          ? '※ 次工程で order/payment 起票を実装します'
-                          : '※ 住所が揃うと購入確定できます（次工程で住所登録導線も整備）',
-                      style: Theme.of(context).textTheme.bodySmall,
-                      textAlign: TextAlign.center,
-                    ),
-                  ],
-                ),
-              );
-            },
-          ),
-          if (_busy)
-            Positioned.fill(
-              child: IgnorePointer(
-                ignoring: true,
-                child: Container(
-                  color: Colors.black.withValues(alpha: 0.06),
-                  child: const Center(child: CircularProgressIndicator()),
-                ),
-              ),
+                  children: cards,
+                );
+              },
             ),
-        ],
+          );
+        },
       ),
     );
   }
 }
 
-// ============================================================
-// UI parts
-// ============================================================
+// ------------------------------------------------------------
+// ViewModel
+// ------------------------------------------------------------
 
-class _HeaderCard extends StatelessWidget {
-  const _HeaderCard({
-    required this.incomingAvatarId,
-    required this.resolvedAvatarId,
-    required this.ctx,
-  });
+class _PaymentVM {
+  _PaymentVM({required this.ctx, required this.cart, required this.cartKey});
 
-  final String incomingAvatarId;
-  final String resolvedAvatarId;
   final PaymentContextDTO ctx;
+  final CartDTO cart;
+
+  /// どのキーで cart を引いたか（必要ならログ用途）
+  final String cartKey;
+}
+
+// ------------------------------------------------------------
+// Cards
+// ------------------------------------------------------------
+
+class _UserCard extends StatelessWidget {
+  const _UserCard({required this.ctx});
+  final PaymentContextDTO ctx;
+
+  String _pickName() {
+    final d = ctx.debug;
+    final ship = ctx.shippingAddress;
+    final bill = ctx.billingAddress;
+
+    String s(dynamic v) => (v ?? '').toString().trim();
+
+    return s(d?['fullName']).isNotEmpty
+        ? s(d?['fullName'])
+        : s(ship?['fullName']).isNotEmpty
+        ? s(ship?['fullName'])
+        : s(ship?['name']).isNotEmpty
+        ? s(ship?['name'])
+        : s(bill?['cardholderName']).isNotEmpty
+        ? s(bill?['cardholderName'])
+        : '-';
+  }
 
   @override
   Widget build(BuildContext context) {
     final t = Theme.of(context).textTheme;
-
-    final uid = ctx.uid.trim();
-    final avatarId = ctx.avatarId.trim();
-    final userId = ctx.userId.trim();
+    final name = _pickName();
 
     return Card(
       child: Padding(
-        padding: const EdgeInsets.all(14),
+        padding: const EdgeInsets.all(12),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text('確認', style: t.titleMedium),
+            Text('User', style: t.titleMedium),
             const SizedBox(height: 8),
+            Text('name: $name', style: t.bodyMedium),
+          ],
+        ),
+      ),
+    );
+  }
+}
 
-            Text(
-              'incoming avatarId: ${incomingAvatarId.isEmpty ? '(none)' : incomingAvatarId}',
-              style: t.bodySmall,
-            ),
-            const SizedBox(height: 4),
-            Text('resolved avatarId: $resolvedAvatarId', style: t.bodySmall),
-            const SizedBox(height: 4),
-            Text(
-              'ctx.avatarId: ${avatarId.isEmpty ? '(empty)' : avatarId}',
-              style: t.bodySmall,
-            ),
-            const SizedBox(height: 4),
-            Text('uid: ${uid.isEmpty ? '(empty)' : uid}', style: t.bodySmall),
-            const SizedBox(height: 4),
-            Text(
-              'userId: ${userId.isEmpty ? '(not resolved)' : userId}',
-              style: t.bodySmall,
-            ),
+class _ShippingCard extends StatelessWidget {
+  const _ShippingCard({required this.ctx});
+  final PaymentContextDTO ctx;
 
-            if (ctx.debug != null && ctx.debug!.isNotEmpty) ...[
-              const SizedBox(height: 10),
-              Text('debug', style: t.labelMedium),
-              const SizedBox(height: 6),
-              ...ctx.debug!.entries
-                  .take(12)
-                  .map(
-                    (e) => Padding(
+  String _s(dynamic v) => (v ?? '').toString().trim();
+
+  @override
+  Widget build(BuildContext context) {
+    final t = Theme.of(context).textTheme;
+    final m = ctx.shippingAddress;
+
+    final zip = _s(m?['zipCode']);
+    final state = _s(m?['state']);
+    final city = _s(m?['city']);
+    final street = _s(m?['street']);
+    final street2 = _s(m?['street2']);
+    final country = _s(m?['country']);
+
+    final line1 = zip.isNotEmpty ? '〒 $zip' : '';
+    final line2 = [
+      state,
+      city,
+      street,
+      street2,
+    ].where((e) => e.trim().isNotEmpty).join(' ');
+    final line3 = country;
+
+    final lines = <String>[
+      if (line1.trim().isNotEmpty) line1,
+      if (line2.trim().isNotEmpty) line2,
+      if (line3.trim().isNotEmpty) line3,
+    ];
+
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(12),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('Shipping Address', style: t.titleMedium),
+            const SizedBox(height: 8),
+            if (m == null || m.isEmpty)
+              Text('(empty)', style: t.bodyMedium)
+            else
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  for (final line in lines)
+                    Padding(
                       padding: const EdgeInsets.only(bottom: 4),
-                      child: Text('${e.key}: ${e.value}', style: t.bodySmall),
+                      child: Text(line, style: t.bodyMedium),
                     ),
-                  ),
+                ],
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _BillingCard extends StatelessWidget {
+  const _BillingCard({required this.ctx});
+  final PaymentContextDTO ctx;
+
+  String _s(dynamic v) => (v ?? '').toString().trim();
+
+  String _maskCardNumber(String raw) {
+    final s = raw.replaceAll(' ', '').trim();
+    if (s.isEmpty) return '-';
+    final last4 = s.length >= 4 ? s.substring(s.length - 4) : s;
+    return '**** **** **** $last4';
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final t = Theme.of(context).textTheme;
+    final m = ctx.billingAddress;
+
+    final holder = _s(m?['cardholderName']);
+    final cardNumber = _maskCardNumber(_s(m?['cardNumber']));
+
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(12),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('Billing Address', style: t.titleMedium),
+            const SizedBox(height: 8),
+            if (m == null || m.isEmpty)
+              Text('(empty)', style: t.bodyMedium)
+            else ...[
+              if (holder.isNotEmpty)
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 4),
+                  child: Text('cardholderName: $holder', style: t.bodyMedium),
+                ),
+              Padding(
+                padding: const EdgeInsets.only(bottom: 4),
+                child: Text('cardNumber: $cardNumber', style: t.bodyMedium),
+              ),
+              // ⚠️ cvc は表示しない
             ],
           ],
         ),
@@ -284,96 +302,58 @@ class _HeaderCard extends StatelessWidget {
   }
 }
 
-class _AddressCard extends StatelessWidget {
-  const _AddressCard({
-    required this.title,
-    required this.address,
-    required this.emptyText,
-  });
-
-  final String title;
-  final Map<String, dynamic>? address;
-  final String emptyText;
-
-  String _s(dynamic v) => (v ?? '').toString().trim();
-
-  List<MapEntry<String, String>> _toPairs(Map<String, dynamic> m) {
-    final preferredKeys = <String>[
-      'fullName',
-      'name',
-      'phone',
-      'email',
-      'postalCode',
-      'zip',
-      'prefecture',
-      'state',
-      'city',
-      'address1',
-      'address2',
-      'line1',
-      'line2',
-      'country',
-    ];
-
-    final used = <String>{};
-    final pairs = <MapEntry<String, String>>[];
-
-    for (final k in preferredKeys) {
-      if (!m.containsKey(k)) continue;
-      final v = _s(m[k]);
-      if (v.isEmpty) continue;
-      used.add(k);
-      pairs.add(MapEntry(k, v));
-    }
-
-    for (final e in m.entries) {
-      final k = e.key.toString();
-      if (used.contains(k)) continue;
-      final v = _s(e.value);
-      if (v.isEmpty) continue;
-      pairs.add(MapEntry(k, v));
-      if (pairs.length >= 18) break;
-    }
-
-    return pairs;
-  }
+class _CartCard extends StatelessWidget {
+  const _CartCard({required this.cart});
+  final CartDTO cart;
 
   @override
   Widget build(BuildContext context) {
     final t = Theme.of(context).textTheme;
-    final m = address;
+
+    final entries = cart.items.entries.toList()
+      ..sort((a, b) => a.key.compareTo(b.key));
 
     return Card(
       child: Padding(
-        padding: const EdgeInsets.all(14),
+        padding: const EdgeInsets.fromLTRB(12, 12, 12, 10),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(title, style: t.titleMedium),
-            const SizedBox(height: 10),
-            if (m == null || m.isEmpty)
-              Text(emptyText, style: t.bodyMedium)
+            Text('Cart', style: t.titleMedium),
+            const SizedBox(height: 8),
+            if (entries.isEmpty)
+              Text('カートは空です', style: t.bodyMedium)
             else
-              ..._toPairs(m).map(
-                (e) => Padding(
-                  padding: const EdgeInsets.only(bottom: 6),
-                  child: Row(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      SizedBox(
-                        width: 110,
-                        child: Text(
-                          e.key,
-                          style: t.bodySmall?.copyWith(
-                            color: Theme.of(context).textTheme.bodySmall?.color
-                                ?.withValues(alpha: 0.7),
-                          ),
-                        ),
-                      ),
-                      Expanded(child: Text(e.value, style: t.bodySmall)),
-                    ],
-                  ),
+              ListView.separated(
+                shrinkWrap: true,
+                physics: const NeverScrollableScrollPhysics(),
+                itemCount: entries.length,
+                separatorBuilder: (_, __) => Divider(
+                  height: 1,
+                  thickness: 1,
+                  color: Theme.of(context).dividerColor.withValues(alpha: 0.35),
                 ),
+                itemBuilder: (context, i) {
+                  final e = entries[i];
+                  final itemKey = e.key;
+                  final it = e.value;
+
+                  return ListTile(
+                    contentPadding: const EdgeInsets.symmetric(horizontal: 4),
+                    title: Text(
+                      it.modelId,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: t.bodyMedium,
+                    ),
+                    subtitle: Text(
+                      'itemKey: $itemKey\ninventoryId: ${it.inventoryId}\nlistId: ${it.listId}\nqty: ${it.qty}',
+                      maxLines: 4,
+                      overflow: TextOverflow.ellipsis,
+                      style: t.bodySmall,
+                    ),
+                  );
+                },
               ),
           ],
         ),
@@ -382,29 +362,30 @@ class _AddressCard extends StatelessWidget {
   }
 }
 
-class _ErrorView extends StatelessWidget {
-  const _ErrorView({required this.errorText, required this.onRetry});
+// ------------------------------------------------------------
+// Error
+// ------------------------------------------------------------
 
-  final String errorText;
-  final Future<void> Function() onRetry;
+class _ErrorBox extends StatelessWidget {
+  const _ErrorBox({required this.title, required this.message});
+
+  final String title;
+  final String message;
 
   @override
   Widget build(BuildContext context) {
     return Center(
-      child: Padding(
-        padding: const EdgeInsets.all(18),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const Text('Error'),
-            const SizedBox(height: 8),
-            Text(errorText, textAlign: TextAlign.center),
-            const SizedBox(height: 12),
-            OutlinedButton(
-              onPressed: () => onRetry(),
-              child: const Text('Retry'),
-            ),
-          ],
+      child: Card(
+        child: Padding(
+          padding: const EdgeInsets.all(14),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(title),
+              const SizedBox(height: 8),
+              Text(message, style: const TextStyle(fontFamily: 'monospace')),
+            ],
+          ),
         ),
       ),
     );
