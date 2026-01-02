@@ -4,6 +4,7 @@ package di
 import (
 	"context"
 	"log"
+	"net/http"
 	"os"
 	"reflect"
 	"strings"
@@ -22,6 +23,9 @@ import (
 	gcso "narratives/internal/adapters/out/gcs"
 	mailadp "narratives/internal/adapters/out/mail"
 
+	// ✅ SNS handlers（Cart/Payment など）
+	snshandler "narratives/internal/adapters/in/http/sns/handler"
+
 	// ★ MintUsecase 移動先
 	mintapp "narratives/internal/application/mint"
 
@@ -31,7 +35,7 @@ import (
 	// ★ CompanyProductionQueryService / MintRequestQueryService / InventoryQuery / ListCreateQuery / ListManagementQuery / ListDetailQuery
 	companyquery "narratives/internal/application/query"
 
-	// ✅ SNS catalog query
+	// ✅ SNS queries (catalog / order)
 	snsquery "narratives/internal/application/query/sns"
 
 	resolver "narratives/internal/application/resolver"
@@ -152,6 +156,12 @@ type Container struct {
 
 	// ★ NameResolver（ID→名前/型番解決用）
 	NameResolver *resolver.NameResolver
+
+	// ✅ SNS handlers（sns_container.go が best-effort で探す対象）
+	// NOTE: Go は field と method の同名を許さないため、field は小文字にする
+	snsSignInHandler  http.Handler
+	snsCartHandler    http.Handler
+	snsPaymentHandler http.Handler
 }
 
 // ========================================
@@ -221,7 +231,7 @@ func NewContainer(ctx context.Context) (*Container, error) {
 	announcementRepo := fs.NewAnnouncementRepositoryFS(fsClient)
 	avatarRepo := fs.NewAvatarRepositoryFS(fsClient)
 
-	// ✅ AvatarState repo（Firestore実装）を usecase 互換にする（Upsert の揺れ吸収）
+	// ✅ AvatarState repo（Firestore実装）を usecase 互換（Upsert 揺れ吸収）
 	avatarStateRepoFS := fs.NewAvatarStateRepositoryFS(fsClient)
 	avatarStateRepo := &avatarStateRepoAdapter{repo: avatarStateRepoFS}
 
@@ -334,7 +344,7 @@ func NewContainer(ctx context.Context) (*Container, error) {
 	}
 	avatarIconRepo := gcso.NewAvatarIconRepositoryGCS(gcsClient, avatarIconBucket)
 
-	// ✅ PostImage repository (GCS) を usecase 互換にする（戻り値3つ + objectPath/publicURL を要求）
+	// ✅ PostImage repository (GCS) を usecase 互換（戻り値3つ + objectPath/publicURL）
 	postImageBucket := strings.TrimSpace(os.Getenv("POST_IMAGE_BUCKET"))
 	if postImageBucket == "" {
 		postImageBucket = "narratives-development-posts"
@@ -369,7 +379,7 @@ func NewContainer(ctx context.Context) (*Container, error) {
 		WithWalletService(avatarWalletSvc).
 		WithWalletRepo(walletRepo)
 
-	// ✅ optional: avatar 作成時に cart を同時起票したい実装が入っている場合に備えて best-effort 注入
+	// ✅ optional: avatar 作成時に cart を同時起票する実装に備え best-effort 注入
 	callOptionalMethod(avatarUC, "WithCartRepo", cartRepo)
 
 	billingAddressUC := uc.NewBillingAddressUsecase(billingAddressRepo)
@@ -539,6 +549,28 @@ func NewContainer(ctx context.Context) (*Container, error) {
 		modelRepo,
 	)
 
+	// ============================================================
+	// ✅ SNSOrderQuery（buyer-facing /sns/payment 用）
+	//
+	// PaymentHandler の /sns/payment は orderQ が nil だと 501 を返すため、
+	// ここで order_query.go を DI して handler に注入する。
+	//
+	// NOTE:
+	// - order_query.go の ctor は NewSNSOrderQuery(*firestore.Client) です。
+	// - repo 群を渡すのではなく fsClient を 1 つだけ渡します。
+	// ============================================================
+	orderQ := snsquery.NewSNSOrderQuery(fsClient)
+
+	// ✅ SNS handlers（sns_container.go が拾えるようにコンテナに保持）
+	// - SignIn: 既存 handler が未統合でも “存在確認” ができるよう 204 の薄い実装で保持
+	// - Cart: 実装済み handler をそのまま注入
+	// - Payment: ✅ orderQ 注入版に差し替え（/sns/payment を有効化）
+	snsSignInHandler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusNoContent)
+	})
+	snsCartHandler := snshandler.NewCartHandler(cartUC)
+	snsPaymentHandler := snshandler.NewPaymentHandlerWithOrderQuery(paymentUC, orderQ)
+
 	// 6. Assemble container
 	return &Container{
 		Config:       cfg,
@@ -610,6 +642,11 @@ func NewContainer(ctx context.Context) (*Container, error) {
 
 		MintAuthorityKey: mintKey,
 		NameResolver:     nameResolver,
+
+		// ✅ SNS handlers（private fields）
+		snsSignInHandler:  snsSignInHandler,
+		snsCartHandler:    snsCartHandler,
+		snsPaymentHandler: snsPaymentHandler,
 	}, nil
 }
 
@@ -635,6 +672,29 @@ func (c *Container) PostUsecase() *uc.PostUsecase {
 		return nil
 	}
 	return c.PostUC
+}
+
+// ✅ sns_container.go が「handler」として拾えるメソッド群
+// NOTE: field と method の同名を避けるため field は小文字、method はこの名前を維持
+func (c *Container) SNSSignInHandler() http.Handler {
+	if c == nil {
+		return nil
+	}
+	return c.snsSignInHandler
+}
+
+func (c *Container) SNSCartHandler() http.Handler {
+	if c == nil {
+		return nil
+	}
+	return c.snsCartHandler
+}
+
+func (c *Container) SNSPaymentHandler() http.Handler {
+	if c == nil {
+		return nil
+	}
+	return c.snsPaymentHandler
 }
 
 // callOptionalMethod calls obj.<methodName>(arg) when such method exists (best-effort).

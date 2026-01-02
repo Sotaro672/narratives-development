@@ -2,10 +2,15 @@
 package di
 
 import (
+	"log"
 	"net/http"
 	"reflect"
+	"sort"
 	"strings"
 
+	firebaseauth "firebase.google.com/go/v4/auth"
+
+	"narratives/internal/adapters/in/http/middleware"
 	snshttp "narratives/internal/adapters/in/http/sns"
 	snshandler "narratives/internal/adapters/in/http/sns/handler"
 	snsquery "narratives/internal/application/query/sns"
@@ -48,14 +53,12 @@ type SNSDeps struct {
 
 	// ✅ NEW: posts
 	Post http.Handler
+
+	// ✅ NEW: payment (order context / checkout)
+	Payment http.Handler
 }
 
 // NewSNSDeps wires SNS handlers.
-// （後方互換のため、NameResolver なしの関数を残す）
-//
-// NOTE:
-// - Company/Brand は v2 関数（NewSNSDepsWithNameResolverAndOrgHandlers）側で注入する。
-// - 既存呼び出しを壊さないため、ここでは nil 注入で OK（ルーティングは RegisterSNSFromContainer 側が担当）。
 func NewSNSDeps(
 	listUC *usecase.ListUsecase,
 	invUC *usecase.InventoryUsecase,
@@ -75,21 +78,13 @@ func NewSNSDeps(
 	)
 }
 
-// NewSNSDepsWithNameResolver wires SNS handlers with optional NameResolver.
-//
-// SNS は companyId 境界が無い（公開）ため、console 用 query は使わない。
-// NameResolver は「brandName / companyName 解決」に利用する。
 func NewSNSDepsWithNameResolver(
 	listUC *usecase.ListUsecase,
 	invUC *usecase.InventoryUsecase,
 	pbUC *usecase.ProductBlueprintUsecase,
 	modelUC *usecase.ModelUsecase,
 	tokenBlueprintUC *usecase.TokenBlueprintUsecase,
-
-	// name resolver (brandName/companyName)
 	nameResolver *appresolver.NameResolver,
-
-	// catalog query
 	catalogQ *snsquery.SNSCatalogQuery,
 ) SNSDeps {
 	return NewSNSDepsWithNameResolverAndOrgHandlers(
@@ -98,17 +93,13 @@ func NewSNSDepsWithNameResolver(
 		pbUC,
 		modelUC,
 		tokenBlueprintUC,
-		nil, // companyUC
-		nil, // brandUC
+		nil,
+		nil,
 		nameResolver,
 		catalogQ,
 	)
 }
 
-// NewSNSDepsWithNameResolverAndOrgHandlers wires SNS handlers with optional NameResolver + GET-only org handlers.
-//
-// - /sns/companies/{id}
-// - /sns/brands/{id}
 func NewSNSDepsWithNameResolverAndOrgHandlers(
 	listUC *usecase.ListUsecase,
 	invUC *usecase.InventoryUsecase,
@@ -122,9 +113,6 @@ func NewSNSDepsWithNameResolverAndOrgHandlers(
 	nameResolver *appresolver.NameResolver,
 	catalogQ *snsquery.SNSCatalogQuery,
 ) SNSDeps {
-	// ✅ IMPORTANT:
-	// CatalogQuery 側にも NameResolver を注入しないと、
-	// sns_catalog の fillProductBlueprintNames() が呼ばれず、name_resolver のログも出ない。
 	if catalogQ != nil && nameResolver != nil && catalogQ.NameResolver == nil {
 		catalogQ.NameResolver = nameResolver
 	}
@@ -141,31 +129,23 @@ func NewSNSDepsWithNameResolverAndOrgHandlers(
 	if listUC != nil {
 		listHandler = snshandler.NewSNSListHandler(listUC)
 	}
-
 	if invUC != nil {
 		invHandler = snshandler.NewSNSInventoryHandler(invUC)
 	}
-
 	if pbUC != nil {
 		pbHandler = snshandler.NewSNSProductBlueprintHandler(pbUC)
-
-		// ✅ NEW: productBlueprint 側にも name resolver を注入（handler 側にフィールドがあれば入る）
 		if nameResolver != nil {
 			setOptionalResolverField(pbHandler, "BrandNameResolver", nameResolver)
 			setOptionalResolverField(pbHandler, "CompanyNameResolver", nameResolver)
-			setOptionalResolverField(pbHandler, "NameResolver", nameResolver) // 将来用
+			setOptionalResolverField(pbHandler, "NameResolver", nameResolver)
 		}
 	}
-
 	if modelUC != nil {
 		modelHandler = snshandler.NewSNSModelHandler(modelUC)
 	}
-
 	if catalogQ != nil {
 		catalogHandler = snshandler.NewSNSCatalogHandler(catalogQ)
 	}
-
-	// ✅ NEW: companies/brands (GET only)
 	if companyUC != nil {
 		companyHandler = snshandler.NewSNSCompanyHandler(companyUC)
 	}
@@ -173,19 +153,17 @@ func NewSNSDepsWithNameResolverAndOrgHandlers(
 		brandHandler = snshandler.NewSNSBrandHandler(brandUC)
 	}
 
-	// tokenBlueprint patch handler
 	if tokenBlueprintUC != nil {
 		tokenBlueprintHandler = snshandler.NewSNSTokenBlueprintHandler(tokenBlueprintUC)
-
 		if nameResolver != nil {
 			setOptionalResolverField(tokenBlueprintHandler, "BrandNameResolver", nameResolver)
 			setOptionalResolverField(tokenBlueprintHandler, "CompanyNameResolver", nameResolver)
-			setOptionalResolverField(tokenBlueprintHandler, "NameResolver", nameResolver) // 将来用
+			setOptionalResolverField(tokenBlueprintHandler, "NameResolver", nameResolver)
 		}
-
 		imgResolver := appresolver.NewImageURLResolver("")
 		setOptionalResolverField(tokenBlueprintHandler, "ImageResolver", imgResolver)
 		setOptionalResolverField(tokenBlueprintHandler, "ImageURLResolver", imgResolver)
+		setOptionalResolverField(tokenBlueprintHandler, "IconURLResolver", imgResolver)
 		setOptionalResolverField(tokenBlueprintHandler, "IconURLResolver", imgResolver)
 	}
 
@@ -200,7 +178,6 @@ func NewSNSDepsWithNameResolverAndOrgHandlers(
 		Company: companyHandler,
 		Brand:   brandHandler,
 
-		// ✅ sign-in / onboarding / other resources are injected at RegisterSNSFromContainer() best-effort
 		SignIn:          nil,
 		User:            nil,
 		ShippingAddress: nil,
@@ -210,6 +187,7 @@ func NewSNSDepsWithNameResolverAndOrgHandlers(
 		Wallet:          nil,
 		Cart:            nil,
 		Post:            nil,
+		Payment:         nil,
 	}
 }
 
@@ -221,7 +199,7 @@ func RegisterSNSFromContainer(mux *http.ServeMux, cont *Container) {
 
 	depsAny := any(cont.RouterDeps())
 
-	// ✅ try to obtain catalog query from Container without touching RouterDeps fields.
+	// catalog query
 	var catalogQ *snsquery.SNSCatalogQuery
 	{
 		if x, ok := any(cont).(interface {
@@ -243,7 +221,7 @@ func RegisterSNSFromContainer(mux *http.ServeMux, cont *Container) {
 		}
 	}
 
-	// ✅ SNS name resolver
+	// name resolver
 	var nameResolver *appresolver.NameResolver
 	{
 		if x, ok := any(cont).(interface {
@@ -255,13 +233,12 @@ func RegisterSNSFromContainer(mux *http.ServeMux, cont *Container) {
 		}); ok {
 			nameResolver = x.GetSNSNameResolver()
 		}
-
 		if nameResolver == nil {
 			nameResolver = getSNSNameResolverFieldBestEffort(cont)
 		}
 	}
 
-	// ✅ try to obtain CompanyUsecase / BrandUsecase from Container (best-effort)
+	// company/brand usecase
 	var companyUC *usecase.CompanyUsecase
 	{
 		if x, ok := any(cont).(interface {
@@ -276,82 +253,14 @@ func RegisterSNSFromContainer(mux *http.ServeMux, cont *Container) {
 	}
 	var brandUC *usecase.BrandUsecase
 	{
-		if x, ok := any(cont).(interface {
-			BrandUsecase() *usecase.BrandUsecase
-		}); ok {
+		if x, ok := any(cont).(interface{ BrandUsecase() *usecase.BrandUsecase }); ok {
 			brandUC = x.BrandUsecase()
-		} else if x, ok := any(cont).(interface {
-			GetBrandUsecase() *usecase.BrandUsecase
-		}); ok {
+		} else if x, ok := any(cont).(interface{ GetBrandUsecase() *usecase.BrandUsecase }); ok {
 			brandUC = x.GetBrandUsecase()
 		}
 	}
 
-	// ✅ NEW: obtain onboarding usecases from Container (best-effort)
-	var userUCFromCont *usecase.UserUsecase
-	{
-		if x, ok := any(cont).(interface {
-			UserUsecase() *usecase.UserUsecase
-		}); ok {
-			userUCFromCont = x.UserUsecase()
-		} else if x, ok := any(cont).(interface {
-			GetUserUsecase() *usecase.UserUsecase
-		}); ok {
-			userUCFromCont = x.GetUserUsecase()
-		}
-	}
-	var shipUCFromCont *usecase.ShippingAddressUsecase
-	{
-		if x, ok := any(cont).(interface {
-			ShippingAddressUsecase() *usecase.ShippingAddressUsecase
-		}); ok {
-			shipUCFromCont = x.ShippingAddressUsecase()
-		} else if x, ok := any(cont).(interface {
-			GetShippingAddressUsecase() *usecase.ShippingAddressUsecase
-		}); ok {
-			shipUCFromCont = x.GetShippingAddressUsecase()
-		}
-	}
-	var billUCFromCont *usecase.BillingAddressUsecase
-	{
-		if x, ok := any(cont).(interface {
-			BillingAddressUsecase() *usecase.BillingAddressUsecase
-		}); ok {
-			billUCFromCont = x.BillingAddressUsecase()
-		} else if x, ok := any(cont).(interface {
-			GetBillingAddressUsecase() *usecase.BillingAddressUsecase
-		}); ok {
-			billUCFromCont = x.GetBillingAddressUsecase()
-		}
-	}
-	var avatarUCFromCont *usecase.AvatarUsecase
-	{
-		if x, ok := any(cont).(interface {
-			AvatarUsecase() *usecase.AvatarUsecase
-		}); ok {
-			avatarUCFromCont = x.AvatarUsecase()
-		} else if x, ok := any(cont).(interface {
-			GetAvatarUsecase() *usecase.AvatarUsecase
-		}); ok {
-			avatarUCFromCont = x.GetAvatarUsecase()
-		}
-	}
-
-	// ✅ NEW: obtain cart usecase from Container (best-effort)
-	var cartUCFromCont *usecase.CartUsecase
-	{
-		if x, ok := any(cont).(interface {
-			CartUsecase() *usecase.CartUsecase
-		}); ok {
-			cartUCFromCont = x.CartUsecase()
-		} else if x, ok := any(cont).(interface {
-			GetCartUsecase() *usecase.CartUsecase
-		}); ok {
-			cartUCFromCont = x.GetCartUsecase()
-		}
-	}
-
-	// ✅ obtain core usecases from RouterDeps
+	// core usecases
 	listUC := getFieldPtr[*usecase.ListUsecase](depsAny, "ListUC", "ListUsecase")
 	invUC := getFieldPtr[*usecase.InventoryUsecase](depsAny, "InventoryUC", "InventoryUsecase")
 	pbUC := getFieldPtr[*usecase.ProductBlueprintUsecase](depsAny, "ProductBlueprintUC", "ProductBlueprintUsecase")
@@ -359,113 +268,153 @@ func RegisterSNSFromContainer(mux *http.ServeMux, cont *Container) {
 	tokenBlueprintUC := getFieldPtr[*usecase.TokenBlueprintUsecase](depsAny, "TokenBlueprintUC", "TokenBlueprintUsecase")
 
 	snsDeps := NewSNSDepsWithNameResolverAndOrgHandlers(
-		listUC,
-		invUC,
-		pbUC,
-		modelUC,
-		tokenBlueprintUC,
-		companyUC,
-		brandUC,
-		nameResolver,
-		catalogQ,
+		listUC, invUC, pbUC, modelUC, tokenBlueprintUC,
+		companyUC, brandUC, nameResolver, catalogQ,
 	)
 
 	// ✅ sign-in
 	snsDeps.SignIn = getHandlerBestEffort(cont, depsAny,
-		[]string{"SNSSignInHandler", "SNSSignIn", "SignInHandler", "SignIn"},
-		[]string{"SignIn", "SignInHandler", "SNSSignIn", "SNSSignInHandler"},
-	)
-
-	// ✅ try to inject onboarding handlers (user/shipping/billing/avatar)
-	// - prioritize Container methods
-	// - fallback to RouterDeps fields (http.Handler)
-	snsDeps.User = getHandlerBestEffort(cont, depsAny,
-		[]string{"SNSUserHandler", "SNSUser", "UserHandler", "User"},
-		[]string{"User", "UserHandler", "SNSUser", "SNSUserHandler"},
-	)
-	snsDeps.ShippingAddress = getHandlerBestEffort(cont, depsAny,
-		[]string{"SNSShippingAddressHandler", "SNSShippingAddress", "ShippingAddressHandler", "ShippingAddress"},
-		[]string{"ShippingAddress", "ShippingAddressHandler", "SNSShippingAddress", "SNSShippingAddressHandler"},
-	)
-	snsDeps.BillingAddress = getHandlerBestEffort(cont, depsAny,
-		[]string{"SNSBillingAddressHandler", "SNSBillingAddress", "BillingAddressHandler", "BillingAddress"},
-		[]string{"BillingAddress", "BillingAddressHandler", "SNSBillingAddress", "SNSBillingAddressHandler"},
-	)
-	snsDeps.Avatar = getHandlerBestEffort(cont, depsAny,
-		[]string{"SNSAvatarHandler", "SNSAvatar", "AvatarHandler", "Avatar"},
-		[]string{"Avatar", "AvatarHandler", "SNSAvatar", "SNSAvatarHandler"},
+		[]string{
+			"SNSSignInHandler", "GetSNSSignInHandler",
+			"SNSSignIn", "GetSNSSignIn",
+			"SignInHandler", "GetSignInHandler",
+			"SignIn", "GetSignIn",
+		},
+		[]string{
+			"SNSSignInHandler", "SNSSignIn",
+			"SignInHandler", "SignIn",
+		},
 	)
 
 	// ✅ avatar state
 	snsDeps.AvatarState = getHandlerBestEffort(cont, depsAny,
-		[]string{"SNSAvatarStateHandler", "SNSAvatarState", "AvatarStateHandler", "AvatarState"},
-		[]string{"AvatarState", "AvatarStateHandler", "SNSAvatarState", "SNSAvatarStateHandler"},
+		[]string{
+			"SNSAvatarStateHandler", "GetSNSAvatarStateHandler",
+			"SNSAvatarState", "GetSNSAvatarState",
+			"AvatarStateHandler", "GetAvatarStateHandler",
+			"AvatarState", "GetAvatarState",
+		},
+		[]string{
+			"SNSAvatarStateHandler", "SNSAvatarState",
+			"AvatarStateHandler", "AvatarState",
+		},
 	)
 
 	// ✅ wallet
 	snsDeps.Wallet = getHandlerBestEffort(cont, depsAny,
-		[]string{"SNSWalletHandler", "SNSWallet", "WalletHandler", "Wallet"},
-		[]string{"Wallet", "WalletHandler", "SNSWallet", "SNSWalletHandler"},
+		[]string{
+			"SNSWalletHandler", "GetSNSWalletHandler",
+			"SNSWallet", "GetSNSWallet",
+			"WalletHandler", "GetWalletHandler",
+			"Wallet", "GetWallet",
+		},
+		[]string{
+			"SNSWalletHandler", "SNSWallet",
+			"WalletHandler", "Wallet",
+		},
 	)
 
 	// ✅ cart
 	snsDeps.Cart = getHandlerBestEffort(cont, depsAny,
-		[]string{"SNSCartHandler", "SNSCart", "CartHandler", "Cart"},
-		[]string{"Cart", "CartHandler", "SNSCart", "SNSCartHandler"},
+		[]string{
+			"SNSCartHandler", "GetSNSCartHandler",
+			"SNSCart", "GetSNSCart",
+			"CartHandler", "GetCartHandler",
+			"Cart", "GetCart",
+		},
+		[]string{
+			"SNSCartHandler", "SNSCart",
+			"CartHandler", "Cart",
+		},
 	)
 
 	// ✅ posts
 	snsDeps.Post = getHandlerBestEffort(cont, depsAny,
-		[]string{"SNSPostHandler", "SNSPost", "PostHandler", "Post"},
-		[]string{"Post", "PostHandler", "SNSPost", "SNSPostHandler"},
+		[]string{
+			"SNSPostHandler", "GetSNSPostHandler",
+			"SNSPost", "GetSNSPost",
+			"PostHandler", "GetPostHandler",
+			"Post", "GetPost",
+		},
+		[]string{
+			"SNSPostHandler", "SNSPost",
+			"PostHandler", "Post",
+		},
 	)
 
-	// ✅ NEW: if handler is still nil, build it from Usecase pointers (Container -> RouterDeps)
-	// NOTE:
-	// - 既存の constructor が確実に存在するものだけ生成する（コンパイルを壊さないため）。
-	if snsDeps.User == nil {
-		uc := userUCFromCont
-		if uc == nil {
-			uc = getFieldPtr[*usecase.UserUsecase](depsAny, "UserUC", "UserUsecase")
-		}
-		if uc != nil {
-			snsDeps.User = snshandler.NewUserHandler(uc)
-		}
-	}
-	if snsDeps.ShippingAddress == nil {
-		uc := shipUCFromCont
-		if uc == nil {
-			uc = getFieldPtr[*usecase.ShippingAddressUsecase](depsAny, "ShippingAddressUC", "ShippingAddressUsecase")
-		}
-		if uc != nil {
-			snsDeps.ShippingAddress = snshandler.NewShippingAddressHandler(uc)
-		}
-	}
-	if snsDeps.BillingAddress == nil {
-		uc := billUCFromCont
-		if uc == nil {
-			uc = getFieldPtr[*usecase.BillingAddressUsecase](depsAny, "BillingAddressUC", "BillingAddressUsecase")
-		}
-		if uc != nil {
-			snsDeps.BillingAddress = snshandler.NewBillingAddressHandler(uc)
-		}
-	}
-	if snsDeps.Avatar == nil {
-		uc := avatarUCFromCont
-		if uc == nil {
-			uc = getFieldPtr[*usecase.AvatarUsecase](depsAny, "AvatarUC", "AvatarUsecase")
-		}
-		if uc != nil {
-			snsDeps.Avatar = snshandler.NewAvatarHandler(uc)
-		}
+	// ✅ payment（Container が SNSPaymentHandler() を持っている前提で best-effort で取得）
+	snsDeps.Payment = getHandlerBestEffort(cont, depsAny,
+		[]string{
+			"SNSPaymentHandler", "GetSNSPaymentHandler",
+			"SNSPayment", "GetSNSPayment",
+			"PaymentHandler", "GetPaymentHandler",
+			"Payment", "GetPayment",
+		},
+		[]string{
+			"SNSPaymentHandler", "SNSPayment",
+			"PaymentHandler", "Payment",
+		},
+	)
+
+	// ✅ ここが “確定ログ”
+	log.Printf("[sns_container] inject result signIn=%t cart=%t payment=%t",
+		snsDeps.SignIn != nil, snsDeps.Cart != nil, snsDeps.Payment != nil,
+	)
+
+	// ✅ 見つからない場合、候補名をログに出す（原因特定用）
+	if snsDeps.SignIn == nil {
+		log.Printf("[sns_container] SignIn handler not found. candidates=%s", debugHandlerCandidates(cont, depsAny, "signin", "sign", "auth", "login"))
 	}
 	if snsDeps.Cart == nil {
-		uc := cartUCFromCont
-		if uc == nil {
-			uc = getFieldPtr[*usecase.CartUsecase](depsAny, "CartUC", "CartUsecase")
-		}
-		if uc != nil {
-			snsDeps.Cart = snshandler.NewCartHandler(uc)
+		log.Printf("[sns_container] Cart handler not found. candidates=%s", debugHandlerCandidates(cont, depsAny, "cart"))
+	}
+	if snsDeps.Payment == nil {
+		log.Printf("[sns_container] Payment handler not found. candidates=%s", debugHandlerCandidates(cont, depsAny, "payment", "order", "checkout"))
+	}
+
+	// ============================================================
+	// ✅ IMPORTANT:
+	// net/http.ServeMux は「パスプレフィックスで middleware を束ねる」仕組みがないため、
+	// /sns/payment のような buyer-auth 必須ルートは “handler を wrap してから mux に登録” する必要がある。
+	//
+	// ここで user_auth.go (UserAuthMiddleware) を適用して、PaymentHandler が uid を context から取れるようにする。
+	// ============================================================
+	{
+		userAuth := newUserAuthMiddlewareBestEffort(cont.FirebaseAuth)
+		if userAuth == nil {
+			log.Printf("[sns_container] WARN: user_auth middleware is not available (firebase auth client missing). payment may 401.")
+		} else {
+			wrap := func(h http.Handler) http.Handler {
+				if h == nil {
+					return nil
+				}
+				return userAuth.Handler(h)
+			}
+
+			// ✅ buyer-auth を要求するものだけ wrap（公開系は wrap しない）
+			// NOTE: SignIn は “入口” になり得るので wrap しない（token なしで叩ける余地を残す）
+			snsDeps.User = wrap(snsDeps.User)
+			snsDeps.ShippingAddress = wrap(snsDeps.ShippingAddress)
+			snsDeps.BillingAddress = wrap(snsDeps.BillingAddress)
+			snsDeps.Avatar = wrap(snsDeps.Avatar)
+
+			snsDeps.AvatarState = wrap(snsDeps.AvatarState)
+			snsDeps.Wallet = wrap(snsDeps.Wallet)
+			snsDeps.Cart = wrap(snsDeps.Cart)
+			snsDeps.Post = wrap(snsDeps.Post)
+			snsDeps.Payment = wrap(snsDeps.Payment)
+
+			log.Printf("[sns_container] user_auth applied: user=%t ship=%t bill=%t avatar=%t avatarState=%t wallet=%t cart=%t post=%t payment=%t",
+				snsDeps.User != nil,
+				snsDeps.ShippingAddress != nil,
+				snsDeps.BillingAddress != nil,
+				snsDeps.Avatar != nil,
+				snsDeps.AvatarState != nil,
+				snsDeps.Wallet != nil,
+				snsDeps.Cart != nil,
+				snsDeps.Post != nil,
+				snsDeps.Payment != nil,
+			)
 		}
 	}
 
@@ -478,10 +427,6 @@ func RegisterSNSRoutes(mux *http.ServeMux, deps SNSDeps) {
 		return
 	}
 
-	// ✅ IMPORTANT:
-	// snshttp.Register() は /sns/** だけでなく alias (/users, /avatars, ...) も登録します。
-	// ここで重ねて mux.Handle すると「multiple registrations」で panic するため、
-	// 追加の alias 登録は一切しない。
 	snshttp.Register(mux, snshttp.Deps{
 		List:             deps.List,
 		Inventory:        deps.Inventory,
@@ -494,24 +439,42 @@ func RegisterSNSRoutes(mux *http.ServeMux, deps SNSDeps) {
 		Company: deps.Company,
 		Brand:   deps.Brand,
 
-		// ✅ auth entry
 		SignIn: deps.SignIn,
 
-		// ✅ onboarding
 		User:            deps.User,
 		ShippingAddress: deps.ShippingAddress,
 		BillingAddress:  deps.BillingAddress,
 		Avatar:          deps.Avatar,
 
-		// ✅ NEW
 		AvatarState: deps.AvatarState,
 		Wallet:      deps.Wallet,
 		Cart:        deps.Cart,
 		Post:        deps.Post,
+
+		Payment: deps.Payment,
 	})
 }
 
-// setOptionalResolverField sets handler.<fieldName> = value when possible (best-effort).
+// ------------------------------------------------------------
+// Middleware builder
+// ------------------------------------------------------------
+
+// newUserAuthMiddlewareBestEffort builds middleware.UserAuthMiddleware from firebaseauth.Client.
+//
+// user_auth.go expects *middleware.FirebaseAuthClient.
+// In your codebase, middleware.FirebaseAuthClient is a type alias of firebaseauth.Client
+// (declared in member_auth.go), so we can pass it directly.
+func newUserAuthMiddlewareBestEffort(fb *firebaseauth.Client) *middleware.UserAuthMiddleware {
+	if fb == nil {
+		return nil
+	}
+	return &middleware.UserAuthMiddleware{FirebaseAuth: fb}
+}
+
+// ------------------------------------------------------------
+// Reflection helpers
+// ------------------------------------------------------------
+
 func setOptionalResolverField(handler http.Handler, fieldName string, value any) {
 	if handler == nil || value == nil || strings.TrimSpace(fieldName) == "" {
 		return
@@ -555,7 +518,6 @@ func setOptionalResolverField(handler http.Handler, fieldName string, value any)
 	}
 }
 
-// getSNSNameResolverFieldBestEffort tries to read a resolver from Container fields
 func getSNSNameResolverFieldBestEffort(cont *Container) *appresolver.NameResolver {
 	if cont == nil {
 		return nil
@@ -617,7 +579,6 @@ func getSNSNameResolverFieldBestEffort(cont *Container) *appresolver.NameResolve
 	return nil
 }
 
-// getFieldPtr reads a pointer field from an arbitrary struct (or *struct) by name, best-effort.
 func getFieldPtr[T any](src any, names ...string) T {
 	var zero T
 	if src == nil {
@@ -647,10 +608,7 @@ func getFieldPtr[T any](src any, names ...string) T {
 			continue
 		}
 		f := rv.FieldByName(n)
-		if !f.IsValid() {
-			continue
-		}
-		if !f.CanInterface() {
+		if !f.IsValid() || !f.CanInterface() {
 			continue
 		}
 		if v, ok := f.Interface().(T); ok {
@@ -661,24 +619,51 @@ func getFieldPtr[T any](src any, names ...string) T {
 	return zero
 }
 
+func normName(s string) string {
+	s = strings.TrimSpace(s)
+	s = strings.ToLower(s)
+	s = strings.ReplaceAll(s, "_", "")
+	s = strings.ReplaceAll(s, "-", "")
+	s = strings.ReplaceAll(s, " ", "")
+	// getter prefix
+	s = strings.TrimPrefix(s, "get")
+	// common suffix
+	s = strings.TrimSuffix(s, "handler")
+	return s
+}
+
+func nameMatches(candidate string, targets []string) bool {
+	cn := normName(candidate)
+	for _, t := range targets {
+		if cn == normName(t) {
+			return true
+		}
+	}
+	return false
+}
+
 // getHandlerBestEffort finds a handler from Container (methods/fields) or RouterDeps fields, best-effort.
-func getHandlerBestEffort(cont *Container, depsAny any, containerMethodNames []string, depsFieldNames []string) http.Handler {
-	// 1) container method
+// - exact + "Get*" variants
+// - case-insensitive-ish (normalize: get/handler/_/- removed)
+func getHandlerBestEffort(cont *Container, depsAny any, containerNames []string, depsFieldNames []string) http.Handler {
+	// 1) container methods (exact + normalized)
 	if cont != nil {
 		rv := reflect.ValueOf(cont)
-		for _, mname := range containerMethodNames {
-			mname = strings.TrimSpace(mname)
-			if mname == "" {
+		rt := rv.Type()
+
+		for i := 0; i < rt.NumMethod(); i++ {
+			m := rt.Method(i)
+			if !nameMatches(m.Name, containerNames) {
 				continue
 			}
-			m := rv.MethodByName(mname)
-			if !m.IsValid() {
+			mv := rv.MethodByName(m.Name)
+			if !mv.IsValid() {
 				continue
 			}
-			if m.Type().NumIn() != 0 || m.Type().NumOut() != 1 {
+			if mv.Type().NumIn() != 0 || mv.Type().NumOut() != 1 {
 				continue
 			}
-			out := m.Call(nil)
+			out := mv.Call(nil)
 			if len(out) != 1 {
 				continue
 			}
@@ -687,29 +672,30 @@ func getHandlerBestEffort(cont *Container, depsAny any, containerMethodNames []s
 			}
 		}
 
-		// 2) container field
+		// 2) container fields (normalized match)
 		rve := reflect.ValueOf(cont)
 		if rve.IsValid() && rve.Kind() == reflect.Pointer && !rve.IsNil() {
 			rve = rve.Elem()
 		}
 		if rve.IsValid() && rve.Kind() == reflect.Struct {
-			for _, fname := range containerMethodNames {
-				fname = strings.TrimSpace(fname)
-				if fname == "" {
+			rtf := rve.Type()
+			for i := 0; i < rtf.NumField(); i++ {
+				f := rtf.Field(i)
+				if !nameMatches(f.Name, containerNames) {
 					continue
 				}
-				f := rve.FieldByName(fname)
-				if !f.IsValid() || !f.CanInterface() {
+				fv := rve.Field(i)
+				if !fv.IsValid() || !fv.CanInterface() {
 					continue
 				}
-				if h, ok := f.Interface().(http.Handler); ok {
+				if h, ok := fv.Interface().(http.Handler); ok {
 					return h
 				}
 			}
 		}
 	}
 
-	// 3) deps field
+	// 3) deps fields
 	if depsAny != nil {
 		rv := reflect.ValueOf(depsAny)
 		if rv.Kind() == reflect.Interface && !rv.IsNil() {
@@ -722,16 +708,17 @@ func getHandlerBestEffort(cont *Container, depsAny any, containerMethodNames []s
 			rv = rv.Elem()
 		}
 		if rv.Kind() == reflect.Struct {
-			for _, fname := range depsFieldNames {
-				fname = strings.TrimSpace(fname)
-				if fname == "" {
+			rt := rv.Type()
+			for i := 0; i < rt.NumField(); i++ {
+				f := rt.Field(i)
+				if !nameMatches(f.Name, depsFieldNames) {
 					continue
 				}
-				f := rv.FieldByName(fname)
-				if !f.IsValid() || !f.CanInterface() {
+				fv := rv.Field(i)
+				if !fv.IsValid() || !fv.CanInterface() {
 					continue
 				}
-				if h, ok := f.Interface().(http.Handler); ok {
+				if h, ok := fv.Interface().(http.Handler); ok {
 					return h
 				}
 			}
@@ -739,4 +726,107 @@ func getHandlerBestEffort(cont *Container, depsAny any, containerMethodNames []s
 	}
 
 	return nil
+}
+
+// debugHandlerCandidates dumps "it exists but name mismatch" vs "doesn't exist at all".
+func debugHandlerCandidates(cont *Container, depsAny any, keywords ...string) string {
+	kw := make([]string, 0, len(keywords))
+	for _, k := range keywords {
+		k = strings.ToLower(strings.TrimSpace(k))
+		if k != "" {
+			kw = append(kw, k)
+		}
+	}
+	contains := func(name string) bool {
+		n := strings.ToLower(name)
+		for _, k := range kw {
+			if strings.Contains(n, k) {
+				return true
+			}
+		}
+		return false
+	}
+
+	out := make([]string, 0, 32)
+
+	// container methods
+	if cont != nil {
+		rv := reflect.ValueOf(cont)
+		rt := rv.Type()
+		for i := 0; i < rt.NumMethod(); i++ {
+			m := rt.Method(i)
+			if !contains(m.Name) {
+				continue
+			}
+			mv := rv.MethodByName(m.Name)
+			if !mv.IsValid() {
+				continue
+			}
+			// zero-arg, one-out, and out implements http.Handler
+			if mv.Type().NumIn() == 0 && mv.Type().NumOut() == 1 {
+				ot := mv.Type().Out(0)
+				if ot.Implements(reflect.TypeOf((*http.Handler)(nil)).Elem()) {
+					out = append(out, "Container.method:"+m.Name)
+				}
+			}
+		}
+
+		// container fields
+		rve := reflect.ValueOf(cont)
+		if rve.IsValid() && rve.Kind() == reflect.Pointer && !rve.IsNil() {
+			rve = rve.Elem()
+		}
+		if rve.IsValid() && rve.Kind() == reflect.Struct {
+			rtf := rve.Type()
+			for i := 0; i < rtf.NumField(); i++ {
+				f := rtf.Field(i)
+				if !contains(f.Name) {
+					continue
+				}
+				fv := rve.Field(i)
+				if fv.IsValid() && fv.CanInterface() {
+					if _, ok := fv.Interface().(http.Handler); ok {
+						out = append(out, "Container.field:"+f.Name)
+					}
+				}
+			}
+		}
+	}
+
+	// deps fields
+	if depsAny != nil {
+		rv := reflect.ValueOf(depsAny)
+		if rv.Kind() == reflect.Interface && !rv.IsNil() {
+			rv = rv.Elem()
+		}
+		if rv.Kind() == reflect.Pointer && !rv.IsNil() {
+			rv = rv.Elem()
+		}
+		if rv.IsValid() && rv.Kind() == reflect.Struct {
+			rt := rv.Type()
+			for i := 0; i < rt.NumField(); i++ {
+				f := rt.Field(i)
+				if !contains(f.Name) {
+					continue
+				}
+				fv := rv.Field(i)
+				if fv.IsValid() && fv.CanInterface() {
+					if _, ok := fv.Interface().(http.Handler); ok {
+						out = append(out, "RouterDeps.field:"+f.Name)
+					}
+				}
+			}
+		}
+	}
+
+	sort.Strings(out)
+	if len(out) == 0 {
+		return "(none)"
+	}
+	// 長すぎ防止
+	if len(out) > 24 {
+		out = out[:24]
+		out = append(out, "...(truncated)")
+	}
+	return strings.Join(out, ", ")
 }

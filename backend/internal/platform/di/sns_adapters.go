@@ -7,9 +7,70 @@ import (
 	"reflect"
 	"strings"
 
+	"cloud.google.com/go/firestore"
+
+	snsquery "narratives/internal/application/query/sns"
 	snsdto "narratives/internal/application/query/sns/dto"
 	pbdom "narratives/internal/domain/productBlueprint"
 )
+
+// ============================================================
+// sns order query (DI-only helpers)
+// - uid -> avatarId
+// - uid -> shipping/billing address
+// ============================================================
+
+// NewSNSOrderQuery wires SNSOrderQuery with Firestore client.
+func NewSNSOrderQuery(fs *firestore.Client) *snsquery.SNSOrderQuery {
+	return snsquery.NewSNSOrderQuery(fs)
+}
+
+// NewSNSOrderQueryWithCollections allows overriding collection names (best-effort).
+func NewSNSOrderQueryWithCollections(
+	fs *firestore.Client,
+	avatarsCol string,
+	shippingAddressCol string,
+	billingAddressCol string,
+) *snsquery.SNSOrderQuery {
+	q := snsquery.NewSNSOrderQuery(fs)
+	if q == nil {
+		return nil
+	}
+
+	if strings.TrimSpace(avatarsCol) != "" {
+		q.AvatarsCol = strings.TrimSpace(avatarsCol)
+	}
+	if strings.TrimSpace(shippingAddressCol) != "" {
+		q.ShippingAddressCol = strings.TrimSpace(shippingAddressCol)
+	}
+	if strings.TrimSpace(billingAddressCol) != "" {
+		q.BillingAddressCol = strings.TrimSpace(billingAddressCol)
+	}
+	return q
+}
+
+// NewSNSOrderQueryWithSchema allows overriding both collections and field names (best-effort).
+func NewSNSOrderQueryWithSchema(
+	fs *firestore.Client,
+	avatarsCol string,
+	shippingAddressCol string,
+	billingAddressCol string,
+	avatarUserIDField string,
+	addressUserIDField string,
+) *snsquery.SNSOrderQuery {
+	q := NewSNSOrderQueryWithCollections(fs, avatarsCol, shippingAddressCol, billingAddressCol)
+	if q == nil {
+		return nil
+	}
+
+	if strings.TrimSpace(avatarUserIDField) != "" {
+		q.AvatarUserIDField = strings.TrimSpace(avatarUserIDField)
+	}
+	if strings.TrimSpace(addressUserIDField) != "" {
+		q.AddressUserIDField = strings.TrimSpace(addressUserIDField)
+	}
+	return q
+}
 
 // ============================================================
 // sns catalog adapters (DI-only helpers)

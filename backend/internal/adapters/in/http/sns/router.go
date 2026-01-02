@@ -36,6 +36,9 @@ type Deps struct {
 
 	// ✅ NEW: posts
 	Post http.Handler
+
+	// ✅ NEW: payment (order context / checkout)
+	Payment http.Handler
 }
 
 // Register registers buyer-facing routes onto mux.
@@ -81,6 +84,10 @@ type Deps struct {
 // ✅ Posts
 // - GET/POST /sns/posts
 // - GET/PATCH/DELETE /sns/posts/{id}
+//
+// ✅ Payment
+// - GET/POST /sns/payment
+// - GET/POST /sns/payment/*
 func Register(mux *http.ServeMux, deps Deps) {
 	if mux == nil {
 		return
@@ -190,5 +197,11 @@ func Register(mux *http.ServeMux, deps Deps) {
 	if deps.Post != nil {
 		mux.Handle("/sns/posts", deps.Post)
 		mux.Handle("/sns/posts/", deps.Post)
+	}
+
+	// ✅ payment
+	if deps.Payment != nil {
+		mux.Handle("/sns/payment", deps.Payment)
+		mux.Handle("/sns/payment/", deps.Payment)
 	}
 }

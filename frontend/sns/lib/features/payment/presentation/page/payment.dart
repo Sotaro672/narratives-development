@@ -1,20 +1,16 @@
 // frontend/sns/lib/features/payment/presentation/page/payment.dart
-import 'dart:convert';
-
 import 'package:flutter/material.dart';
-import 'package:http/http.dart' as http;
 
-// ✅ Firebase: uid -> avatarId を Firestore から解決する
-import 'package:firebase_auth/firebase_auth.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
-
-// ✅ API_BASE 解決ロジックを既存と揃える（cart と同様）
-import '../../../inventory/infrastructure/inventory_repository_http.dart';
+import '../../infrastructure/payment_repository_http.dart';
 
 class PaymentPage extends StatefulWidget {
-  const PaymentPage({super.key, required this.avatarId, this.from});
+  const PaymentPage({super.key, this.avatarId = '', this.from});
 
+  /// ✅ いまは「画面引数で渡される場合は表示して比較する」用途に限定。
+  ///   実際のデータ解決は backend の /sns/payment（order_query.go）に寄せる。
   final String avatarId;
+
+  /// 画面遷移元（任意）
   final String? from;
 
   @override
@@ -27,7 +23,7 @@ class _PaymentPageState extends State<PaymentPage> {
 
   bool _busy = false;
 
-  // ✅ 解決済み avatarId を保持（Header 表示/デバッグにも使える）
+  // ✅ incoming / resolved を比較表示する（avatarId の受け渡し撤廃に備える）
   String _resolvedAvatarId = '';
 
   String get _incomingAvatarId => widget.avatarId.trim();
@@ -50,44 +46,14 @@ class _PaymentPageState extends State<PaymentPage> {
   }
 
   Future<PaymentContextDTO> _load() async {
-    final aid = await _resolveAvatarIdForRequest();
-    _resolvedAvatarId = aid;
-    return _repo.fetchPaymentContext(avatarId: aid);
-  }
+    // ✅ 画面引数 avatarId は「必須」ではなくする
+    //    - backend /sns/payment が uid -> avatarId + addresses を解決するのが前提
+    final ctx = await _repo.fetchPaymentContext();
 
-  /// ✅ avatarId が uid だった場合でも、Firestore から avatarId を確定して返す
-  Future<String> _resolveAvatarIdForRequest() async {
-    final incoming = _incomingAvatarId;
-    if (incoming.isEmpty) throw ArgumentError('avatarId is required');
+    // 画面表示用に保持（ログ/デバッグ用）
+    _resolvedAvatarId = (ctx.avatarId).trim();
 
-    final uid = (FirebaseAuth.instance.currentUser?.uid ?? '').trim();
-
-    // 1) 期待通り avatarId が来ているケース（uid と一致しないならそのまま採用）
-    //    ※「たまたま uid と同じ文字列の avatarId」が存在する設計はしない前提
-    if (uid.isEmpty) {
-      // 未ログインなら、渡された avatarId を信じるしかない
-      return incoming;
-    }
-    if (incoming != uid) {
-      return incoming;
-    }
-
-    // 2) incoming が uid だった → Firestore で avatars where userId==uid を引いて doc.id を avatarId とする
-    final qs = await FirebaseFirestore.instance
-        .collection('avatars')
-        .where('userId', isEqualTo: uid)
-        .limit(1)
-        .get();
-
-    if (qs.docs.isEmpty) {
-      throw StateError('No avatar found for userId=$uid');
-    }
-
-    final avatarId = qs.docs.first.id.trim();
-    if (avatarId.isEmpty) {
-      throw StateError('Resolved avatarId is empty for userId=$uid');
-    }
-    return avatarId;
+    return ctx;
   }
 
   Future<void> _reload() async {
@@ -118,10 +84,6 @@ class _PaymentPageState extends State<PaymentPage> {
 
   @override
   Widget build(BuildContext context) {
-    if (_incomingAvatarId.isEmpty) {
-      return const Scaffold(body: Center(child: Text('avatarId is required')));
-    }
-
     return Scaffold(
       appBar: AppBar(
         title: const Text('Payment'),
@@ -173,14 +135,31 @@ class _PaymentPageState extends State<PaymentPage> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
-                    // ✅ 解決済み avatarId を表示（incoming が uid でも、ここは avatarId になる）
                     _HeaderCard(
-                      avatarId: ctx.avatarId,
-                      userId: ctx.userId,
-                      resolvedAvatarId: _resolvedAvatarId,
                       incomingAvatarId: _incomingAvatarId,
+                      resolvedAvatarId: _resolvedAvatarId.isNotEmpty
+                          ? _resolvedAvatarId
+                          : ctx.avatarId,
+                      ctx: ctx,
                     ),
                     const SizedBox(height: 12),
+
+                    if (_incomingAvatarId.isEmpty)
+                      Padding(
+                        padding: const EdgeInsets.only(bottom: 12),
+                        child: Text(
+                          '※ avatarId は画面引数から渡されていません（/sns/payment の解決結果で表示しています）',
+                          style: Theme.of(context).textTheme.bodySmall
+                              ?.copyWith(
+                                color: Theme.of(context)
+                                    .textTheme
+                                    .bodySmall
+                                    ?.color
+                                    ?.withValues(alpha: 0.75),
+                              ),
+                          textAlign: TextAlign.center,
+                        ),
+                      ),
 
                     _AddressCard(
                       title: 'Shipping Address',
@@ -235,296 +214,27 @@ class _PaymentPageState extends State<PaymentPage> {
 }
 
 // ============================================================
-// Repository (PaymentContext: avatarId -> userId -> addresses)
-// ============================================================
-
-class PaymentRepositoryHttp {
-  PaymentRepositoryHttp({http.Client? client, String? apiBase})
-    : _client = client ?? http.Client(),
-      _apiBase = (apiBase ?? const String.fromEnvironment('API_BASE')).trim();
-
-  final http.Client _client;
-
-  /// Optional override. If empty, resolveSnsApiBase() will be used.
-  final String _apiBase;
-
-  void dispose() {
-    _client.close();
-  }
-
-  Future<PaymentContextDTO> fetchPaymentContext({
-    required String avatarId,
-  }) async {
-    final aid = avatarId.trim();
-    if (aid.isEmpty) throw ArgumentError('avatarId is required');
-
-    // 1) avatarId -> userId
-    final avatar = await _fetchAvatar(aid);
-    final userId = (avatar.userId).trim();
-    if (userId.isEmpty) {
-      return PaymentContextDTO(
-        avatarId: aid,
-        userId: '',
-        shippingAddress: null,
-        billingAddress: null,
-      );
-    }
-
-    // 2) userId -> addresses（複数候補エンドポイントを順に試す）
-    final shipping = await _fetchAddressFlexible(
-      kind: _AddressKind.shipping,
-      userId: userId,
-    );
-    final billing = await _fetchAddressFlexible(
-      kind: _AddressKind.billing,
-      userId: userId,
-    );
-
-    return PaymentContextDTO(
-      avatarId: aid,
-      userId: userId,
-      shippingAddress: shipping,
-      billingAddress: billing,
-    );
-  }
-
-  Future<AvatarDTO> _fetchAvatar(String avatarId) async {
-    // try 1: /sns/avatars/{avatarId}
-    try {
-      final uri = _uri('/sns/avatars/$avatarId');
-      final res = await _client.get(uri, headers: _headersJson());
-      if (res.statusCode >= 200 && res.statusCode < 300) {
-        final m = _decodeJsonMap(res.body);
-        return AvatarDTO.fromJson(m, fallbackAvatarId: avatarId);
-      }
-    } catch (_) {}
-
-    // try 2: /sns/avatar?avatarId=...
-    final uri2 = _uri('/sns/avatar', qp: {'avatarId': avatarId});
-    final res2 = await _client.get(uri2, headers: _headersJson());
-    if (res2.statusCode >= 200 && res2.statusCode < 300) {
-      final m = _decodeJsonMap(res2.body);
-      return AvatarDTO.fromJson(m, fallbackAvatarId: avatarId);
-    }
-
-    _throwHttpError(res2);
-    throw StateError('unreachable');
-  }
-
-  Future<Map<String, dynamic>?> _fetchAddressFlexible({
-    required _AddressKind kind,
-    required String userId,
-  }) async {
-    try {
-      final uri = _uri('/sns/users/$userId');
-      final res = await _client.get(uri, headers: _headersJson());
-      if (res.statusCode >= 200 && res.statusCode < 300) {
-        final m = _decodeJsonMap(res.body);
-        final picked = _pickAddressFromUserDoc(m, kind: kind);
-        if (picked != null && picked.isNotEmpty) return picked;
-      }
-    } catch (_) {}
-
-    final path = (kind == _AddressKind.shipping)
-        ? '/sns/shipping-addresses'
-        : '/sns/billing-addresses';
-
-    try {
-      final uri = _uri(path, qp: {'userId': userId});
-      final res = await _client.get(uri, headers: _headersJson());
-      if (res.statusCode >= 200 && res.statusCode < 300) {
-        final m = _decodeJsonMap(res.body);
-        final picked = _pickAddressFromAddressResponse(m);
-        if (picked != null && picked.isNotEmpty) return picked;
-      }
-    } catch (_) {}
-
-    try {
-      final uri = _uri('$path/$userId');
-      final res = await _client.get(uri, headers: _headersJson());
-      if (res.statusCode >= 200 && res.statusCode < 300) {
-        final m = _decodeJsonMap(res.body);
-        final picked = _pickAddressFromAddressResponse(m);
-        if (picked != null && picked.isNotEmpty) return picked;
-      }
-    } catch (_) {}
-
-    return null;
-  }
-
-  Map<String, dynamic>? _pickAddressFromUserDoc(
-    Map<String, dynamic> userDoc, {
-    required _AddressKind kind,
-  }) {
-    final keys = (kind == _AddressKind.shipping)
-        ? const ['shippingAddress', 'shipping_address', 'shipping', 'ship']
-        : const ['billingAddress', 'billing_address', 'billing', 'bill'];
-
-    for (final k in keys) {
-      final v = userDoc[k];
-      if (v is Map<String, dynamic>) return v;
-      if (v is Map) return v.cast<String, dynamic>();
-    }
-    return null;
-  }
-
-  Map<String, dynamic>? _pickAddressFromAddressResponse(
-    Map<String, dynamic> res,
-  ) {
-    final v = res['address'];
-    if (v is Map<String, dynamic>) return v;
-    if (v is Map) return v.cast<String, dynamic>();
-
-    final d = res['data'];
-    if (d is Map<String, dynamic>) return d;
-    if (d is Map) return d.cast<String, dynamic>();
-
-    return res;
-  }
-
-  Map<String, dynamic> _decodeJsonMap(String body) {
-    final raw = body.trim().isEmpty ? '{}' : body;
-    final v = jsonDecode(raw);
-    if (v is Map<String, dynamic>) return v;
-    if (v is Map) return v.cast<String, dynamic>();
-    throw const FormatException('invalid json response');
-  }
-
-  void _throwHttpError(http.Response res) {
-    final status = res.statusCode;
-    String msg = 'HTTP $status';
-    try {
-      final m = _decodeJsonMap(res.body);
-      final e = (m['error'] ?? '').toString().trim();
-      if (e.isNotEmpty) msg = e;
-    } catch (_) {
-      final s = res.body.trim();
-      if (s.isNotEmpty) msg = s;
-    }
-    throw PaymentHttpException(statusCode: status, message: msg);
-  }
-
-  Uri _uri(String path, {Map<String, String>? qp}) {
-    final base = (_apiBase.isNotEmpty ? _apiBase : resolveSnsApiBase()).trim();
-
-    if (base.isEmpty) {
-      throw StateError(
-        'API_BASE is not set (use --dart-define=API_BASE=https://...)',
-      );
-    }
-
-    final b = Uri.parse(base);
-    final cleanPath = path.startsWith('/') ? path : '/$path';
-    final joinedPath = _joinPaths(b.path, cleanPath);
-
-    return Uri(
-      scheme: b.scheme,
-      userInfo: b.userInfo,
-      host: b.host,
-      port: b.hasPort ? b.port : null,
-      path: joinedPath,
-      queryParameters: (qp == null || qp.isEmpty) ? null : qp,
-      fragment: b.fragment.isEmpty ? null : b.fragment,
-    );
-  }
-
-  String _joinPaths(String a, String b) {
-    final aa = a.trim();
-    final bb = b.trim();
-    if (aa.isEmpty || aa == '/') return bb;
-    if (bb.isEmpty || bb == '/') return aa;
-    if (aa.endsWith('/') && bb.startsWith('/')) return aa + bb.substring(1);
-    if (!aa.endsWith('/') && !bb.startsWith('/')) return '$aa/$bb';
-    return aa + bb;
-  }
-
-  Map<String, String> _headersJson() => const {
-    'Content-Type': 'application/json; charset=utf-8',
-    'Accept': 'application/json',
-  };
-}
-
-enum _AddressKind { shipping, billing }
-
-// ============================================================
-// DTOs
-// ============================================================
-
-class PaymentContextDTO {
-  PaymentContextDTO({
-    required this.avatarId,
-    required this.userId,
-    required this.shippingAddress,
-    required this.billingAddress,
-  });
-
-  final String avatarId;
-  final String userId;
-
-  final Map<String, dynamic>? shippingAddress;
-  final Map<String, dynamic>? billingAddress;
-}
-
-class AvatarDTO {
-  AvatarDTO({required this.avatarId, required this.userId});
-
-  final String avatarId;
-  final String userId;
-
-  factory AvatarDTO.fromJson(
-    Map<String, dynamic> json, {
-    required String fallbackAvatarId,
-  }) {
-    final aid = (json['avatarId'] ?? json['id'] ?? fallbackAvatarId)
-        .toString()
-        .trim();
-
-    final uid =
-        (json['userId'] ??
-                json['uid'] ??
-                json['memberId'] ??
-                json['ownerUserId'] ??
-                '')
-            .toString()
-            .trim();
-
-    return AvatarDTO(avatarId: aid, userId: uid);
-  }
-}
-
-class PaymentHttpException implements Exception {
-  PaymentHttpException({required this.statusCode, required this.message});
-
-  final int statusCode;
-  final String message;
-
-  @override
-  String toString() =>
-      'PaymentHttpException(statusCode=$statusCode, message=$message)';
-}
-
-// ============================================================
 // UI parts
 // ============================================================
 
 class _HeaderCard extends StatelessWidget {
   const _HeaderCard({
-    required this.avatarId,
-    required this.userId,
-    required this.resolvedAvatarId,
     required this.incomingAvatarId,
+    required this.resolvedAvatarId,
+    required this.ctx,
   });
 
-  final String avatarId;
-  final String userId;
-
-  // ✅ デバッグ用に表示（混入確認）
-  final String resolvedAvatarId;
   final String incomingAvatarId;
+  final String resolvedAvatarId;
+  final PaymentContextDTO ctx;
 
   @override
   Widget build(BuildContext context) {
     final t = Theme.of(context).textTheme;
+
+    final uid = ctx.uid.trim();
+    final avatarId = ctx.avatarId.trim();
+    final userId = ctx.userId.trim();
 
     return Card(
       child: Padding(
@@ -534,18 +244,39 @@ class _HeaderCard extends StatelessWidget {
           children: [
             Text('確認', style: t.titleMedium),
             const SizedBox(height: 8),
-            Text('incoming avatarId: $incomingAvatarId', style: t.bodySmall),
+
+            Text(
+              'incoming avatarId: ${incomingAvatarId.isEmpty ? '(none)' : incomingAvatarId}',
+              style: t.bodySmall,
+            ),
             const SizedBox(height: 4),
             Text('resolved avatarId: $resolvedAvatarId', style: t.bodySmall),
             const SizedBox(height: 4),
-            Text('ctx.avatarId: $avatarId', style: t.bodySmall),
-            const SizedBox(height: 4),
             Text(
-              userId.trim().isEmpty
-                  ? 'userId: (not resolved)'
-                  : 'userId: $userId',
+              'ctx.avatarId: ${avatarId.isEmpty ? '(empty)' : avatarId}',
               style: t.bodySmall,
             ),
+            const SizedBox(height: 4),
+            Text('uid: ${uid.isEmpty ? '(empty)' : uid}', style: t.bodySmall),
+            const SizedBox(height: 4),
+            Text(
+              'userId: ${userId.isEmpty ? '(not resolved)' : userId}',
+              style: t.bodySmall,
+            ),
+
+            if (ctx.debug != null && ctx.debug!.isNotEmpty) ...[
+              const SizedBox(height: 10),
+              Text('debug', style: t.labelMedium),
+              const SizedBox(height: 6),
+              ...ctx.debug!.entries
+                  .take(12)
+                  .map(
+                    (e) => Padding(
+                      padding: const EdgeInsets.only(bottom: 4),
+                      child: Text('${e.key}: ${e.value}', style: t.bodySmall),
+                    ),
+                  ),
+            ],
           ],
         ),
       ),
