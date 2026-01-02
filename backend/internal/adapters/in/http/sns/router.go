@@ -31,8 +31,11 @@ type Deps struct {
 	// ✅ NEW: wallet (tokens)
 	Wallet http.Handler
 
-	// ✅ NEW: cart
+	// ✅ NEW: cart (write / legacy)
 	Cart http.Handler
+
+	// ✅ NEW: cart read-model (cart_query.go)
+	CartQuery http.Handler
 
 	// ✅ NEW: posts
 	Post http.Handler
@@ -45,56 +48,6 @@ type Deps struct {
 }
 
 // Register registers buyer-facing routes onto mux.
-//
-// Routes:
-// - GET /sns/lists
-// - GET /sns/lists/{id}
-// - GET /sns/inventories?productBlueprintId=&tokenBlueprintId=
-// - GET /sns/inventories/{id}
-// - GET /sns/product-blueprints/{id}
-// - GET /sns/models?productBlueprintId=
-// - GET /sns/models/{id}
-// - GET /sns/catalog/{listId}
-// - GET /sns/token-blueprints/{id}/patch
-// - GET /sns/companies/{id}
-// - GET /sns/brands/{id}
-//
-// ✅ Auth entry (cart empty ok)
-// - POST /sns/sign-in
-//
-// ✅ Auth onboarding (buyer-facing)
-// - POST/GET/PATCH/DELETE /sns/users/{id?}
-// - POST/GET/PATCH/DELETE /sns/shipping-addresses/{id?}
-// - POST/GET/PATCH/DELETE /sns/billing-addresses/{id?}
-// - POST/GET/PATCH/DELETE /sns/avatars/{id?}
-//
-// ✅ AvatarState
-// - GET /sns/avatar-states/{avatarId}
-// - PATCH/PUT /sns/avatar-states/{avatarId} (必要になったら)
-//
-// ✅ Wallet
-// - GET /sns/wallet
-// - POST /sns/wallet/sync (必要になったら)
-//
-// ✅ Cart
-// - GET    /sns/cart
-// - POST   /sns/cart/items
-// - PUT    /sns/cart/items
-// - DELETE /sns/cart/items
-// - DELETE /sns/cart
-// - POST   /sns/cart/ordered
-//
-// ✅ Preview
-// - GET /sns/preview
-// - GET /sns/preview/*
-//
-// ✅ Posts
-// - GET/POST /sns/posts
-// - GET/PATCH/DELETE /sns/posts/{id}
-//
-// ✅ Payment
-// - GET/POST /sns/payment
-// - GET/POST /sns/payment/*
 func Register(mux *http.ServeMux, deps Deps) {
 	if mux == nil {
 		return
@@ -125,34 +78,30 @@ func Register(mux *http.ServeMux, deps Deps) {
 	}
 
 	// catalog
-	// NOTE: only detail is required now: /sns/catalog/{listId}
 	if deps.Catalog != nil {
 		mux.Handle("/sns/catalog", deps.Catalog)
 		mux.Handle("/sns/catalog/", deps.Catalog)
 	}
 
 	// token blueprints
-	// NOTE: only patch is required now: /sns/token-blueprints/{id}/patch
 	if deps.TokenBlueprint != nil {
 		mux.Handle("/sns/token-blueprints", deps.TokenBlueprint)
 		mux.Handle("/sns/token-blueprints/", deps.TokenBlueprint)
 	}
 
 	// companies
-	// NOTE: only detail is required now: /sns/companies/{id}
 	if deps.Company != nil {
 		mux.Handle("/sns/companies", deps.Company)
 		mux.Handle("/sns/companies/", deps.Company)
 	}
 
 	// brands
-	// NOTE: only detail is required now: /sns/brands/{id}
 	if deps.Brand != nil {
 		mux.Handle("/sns/brands", deps.Brand)
 		mux.Handle("/sns/brands/", deps.Brand)
 	}
 
-	// ✅ sign-in (cart empty ok)
+	// sign-in
 	if deps.SignIn != nil {
 		mux.Handle("/sns/sign-in", deps.SignIn)
 		mux.Handle("/sns/sign-in/", deps.SignIn)
@@ -182,37 +131,56 @@ func Register(mux *http.ServeMux, deps Deps) {
 		mux.Handle("/sns/avatars/", deps.Avatar)
 	}
 
-	// ✅ avatarStates
+	// avatarStates
 	if deps.AvatarState != nil {
 		mux.Handle("/sns/avatar-states", deps.AvatarState)
 		mux.Handle("/sns/avatar-states/", deps.AvatarState)
 	}
 
-	// ✅ wallet
+	// wallet
 	if deps.Wallet != nil {
 		mux.Handle("/sns/wallet", deps.Wallet)
 		mux.Handle("/sns/wallet/", deps.Wallet)
 	}
 
-	// ✅ cart
-	if deps.Cart != nil {
-		mux.Handle("/sns/cart", deps.Cart)
-		mux.Handle("/sns/cart/", deps.Cart)
+	// ✅ cart query (read-model)
+	if deps.CartQuery != nil {
+		mux.Handle("/sns/cart/query", deps.CartQuery)
+		mux.Handle("/sns/cart/query/", deps.CartQuery)
 	}
 
-	// ✅ preview
+	// ✅ cart (GET は read-model に寄せ、items 系は従来 cart に寄せる)
+	if deps.Cart != nil {
+		combined := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			// GET /sns/cart (or /sns/cart/) だけ cart_query.go を使う
+			if deps.CartQuery != nil &&
+				r.Method == http.MethodGet &&
+				(r.URL.Path == "/sns/cart" || r.URL.Path == "/sns/cart/") {
+				deps.CartQuery.ServeHTTP(w, r)
+				return
+			}
+
+			// /sns/cart/items など更新系は従来どおり
+			deps.Cart.ServeHTTP(w, r)
+		})
+
+		mux.Handle("/sns/cart", combined)
+		mux.Handle("/sns/cart/", combined)
+	}
+
+	// preview
 	if deps.Preview != nil {
 		mux.Handle("/sns/preview", deps.Preview)
 		mux.Handle("/sns/preview/", deps.Preview)
 	}
 
-	// ✅ posts
+	// posts
 	if deps.Post != nil {
 		mux.Handle("/sns/posts", deps.Post)
 		mux.Handle("/sns/posts/", deps.Post)
 	}
 
-	// ✅ payment
+	// payment
 	if deps.Payment != nil {
 		mux.Handle("/sns/payment", deps.Payment)
 		mux.Handle("/sns/payment/", deps.Payment)

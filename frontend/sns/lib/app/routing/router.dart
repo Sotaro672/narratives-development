@@ -1,4 +1,3 @@
-// frontend/sns/lib/app/routing/router.dart
 import 'dart:async';
 import 'dart:convert';
 
@@ -111,7 +110,7 @@ class AvatarIdStore extends ChangeNotifier {
         base,
       ).replace(path: '/sns/avatars', queryParameters: {'userId': userId});
 
-      // ✅ 可能なら Authorization を付ける（権限必須の環境で 401 になって redirect が暴れるのを防ぐ）
+      // ✅ 可能なら Authorization を付ける
       final headers = <String, String>{
         'Content-Type': 'application/json',
         'Accept': 'application/json',
@@ -125,9 +124,7 @@ class AvatarIdStore extends ChangeNotifier {
             headers['Authorization'] = 'Bearer $token';
           }
         }
-      } catch (_) {
-        // best-effort
-      }
+      } catch (_) {}
 
       final res = await http.get(uri, headers: headers);
 
@@ -138,7 +135,6 @@ class AvatarIdStore extends ChangeNotifier {
 
       final jsonBody = jsonDecode(res.body);
       if (jsonBody is Map<String, dynamic>) {
-        // backend が返すキー揺れを吸収
         final id = (jsonBody['id'] ?? jsonBody['avatarId'] ?? '')
             .toString()
             .trim();
@@ -151,7 +147,6 @@ class AvatarIdStore extends ChangeNotifier {
     } catch (_) {
       return null;
     } finally {
-      // 次の解決要求に備える
       _inflight = null;
     }
   }
@@ -159,7 +154,6 @@ class AvatarIdStore extends ChangeNotifier {
 
 /// ✅ API_BASE を読む（既存設計に合わせる）
 String _apiBase() {
-  // 既存ログから API_BASE を想定
   const v = String.fromEnvironment('API_BASE');
   return v.trim();
 }
@@ -189,7 +183,7 @@ GoRouter buildAppRouter() {
       final isLoginRoute = path == AppRoutePath.login;
       final isCreateAccountRoute = path == AppRoutePath.createAccount;
 
-      // ✅ サインイン中でも avatarId を要求しないページ（作成/住所登録など）
+      // ✅ サインイン中でも avatarId を要求しないページ
       final exemptForAvatarId = <String>{
         AppRoutePath.login,
         AppRoutePath.createAccount,
@@ -198,28 +192,19 @@ GoRouter buildAppRouter() {
         AppRoutePath.avatarCreate,
       };
 
-      // ------------------------------------------------------------
-      // ✅ 0) 未ログイン
-      // ------------------------------------------------------------
       if (!isLoggedIn) {
-        // store は残しても良いが、混線防止でクリア
         AvatarIdStore.I.clear();
         return null;
       }
 
-      // ------------------------------------------------------------
-      // ✅ 1) login/createAccount -> サインイン後は from or home に戻す
-      //    ※戻り先にも avatarId を必ず付与する（＝ここで解決する）
-      // ------------------------------------------------------------
+      // login/createAccount -> サインイン後は from or home に戻す
       if (isLoggedIn && (isLoginRoute || isCreateAccountRoute)) {
         final rawFromEncoded = (qp[AppQueryKey.from] ?? '').trim();
         final rawFrom = _decodeFrom(rawFromEncoded);
         final uid = user.uid.trim();
 
-        // URL/store に avatarId が無ければ uid で解決
         final resolved = await _ensureAvatarIdResolved(state, uid);
         if (resolved.isEmpty) {
-          // avatar が無い（= 初回）なら avatarCreate へ
           final from = rawFrom.isNotEmpty ? rawFrom : AppRoutePath.home;
           return Uri(
             path: AppRoutePath.avatarCreate,
@@ -247,22 +232,16 @@ GoRouter buildAppRouter() {
         ).toString();
       }
 
-      // ------------------------------------------------------------
-      // ✅ 2) サインイン後：原則「全ページ URL に avatarId を必ず持たせる」
-      //    - ただし exempt ページは除外
-      // ------------------------------------------------------------
+      // サインイン後：原則「全ページ URL に avatarId を必ず持たせる」
       final uid = user.uid.trim();
 
-      // exempt ページは avatarId 無くても通す（ただし store は解決しておく）
       if (exemptForAvatarId.contains(path)) {
         await _ensureAvatarIdResolved(state, uid);
         return null;
       }
 
-      // 通常ページ：avatarId を確定させる
       final resolved = await _ensureAvatarIdResolved(state, uid);
       if (resolved.isEmpty) {
-        // avatar が無いなら avatarCreate へ
         final from = state.uri.toString();
         return Uri(
           path: AppRoutePath.avatarCreate,
@@ -273,7 +252,6 @@ GoRouter buildAppRouter() {
         ).toString();
       }
 
-      // URLに avatarId が無い/違うなら正規化
       final qpId = (qp[AppQueryKey.avatarId] ?? '').trim();
       if (qpId != resolved) {
         final fixed = Map<String, String>.from(qp);
@@ -296,27 +274,22 @@ GoRouter buildAppRouter() {
   );
 }
 
-/// ✅ URL/store から avatarId を拾う。無ければ uid でバックエンド解決。
 Future<String> _ensureAvatarIdResolved(GoRouterState state, String uid) async {
   final qp = state.uri.queryParameters;
 
-  // 1) URL に avatarId があれば store に同期して採用
   final qpId = (qp[AppQueryKey.avatarId] ?? '').trim();
   if (qpId.isNotEmpty) {
     AvatarIdStore.I.set(qpId);
     return qpId;
   }
 
-  // 2) store にあれば採用
   final storeId = AvatarIdStore.I.avatarId.trim();
   if (storeId.isNotEmpty) return storeId;
 
-  // 3) uid で解決（= 期待値：avatars テーブルから userId で avatar を引く）
   final resolved = await AvatarIdStore.I.resolveAvatarIdByUserId(uid);
   return (resolved ?? '').trim();
 }
 
-/// ✅ 任意のURL文字列に avatarId を付与（既にあれば上書きしない）
 String _withAvatarId(String raw, String avatarId) {
   final a = avatarId.trim();
   if (a.isEmpty) return raw;
@@ -381,7 +354,6 @@ GoRouter buildPublicOnlyRouter({required Object initError}) {
         pageBuilder: (context, state) =>
             NoTransitionPage(child: _FirebaseInitErrorPage(error: initError)),
       ),
-      // ✅ NEW: preview route (public-only fallback)
       GoRoute(
         path: AppRoutePath.preview,
         name: AppRouteName.preview,
@@ -571,30 +543,34 @@ List<RouteBase> _routes({required bool firebaseReady}) {
             );
           },
         ),
+
+        // ✅ FIX: CartPage は URL から読む前提（引数注入しない）
         GoRoute(
           path: AppRoutePath.cart,
           name: AppRouteName.cart,
           pageBuilder: (context, state) {
             final qp = state.uri.queryParameters;
-            final avatarId = (qp[AppQueryKey.avatarId] ?? '').trim();
-            final from = _decodeFrom(qp[AppQueryKey.from]);
+            final qpAvatarId = (qp[AppQueryKey.avatarId] ?? '').trim();
+            final avatarId = qpAvatarId.isNotEmpty
+                ? qpAvatarId
+                : AvatarIdStore.I.avatarId;
 
             return NoTransitionPage(
               key: ValueKey('cart-$avatarId'),
-              child: CartPage(
-                avatarId: avatarId,
-                from: from.isEmpty ? null : from,
-              ),
+              child: const CartPage(),
             );
           },
         ),
-        // ✅ NEW: preview route
+
         GoRoute(
           path: AppRoutePath.preview,
           name: AppRouteName.preview,
           pageBuilder: (context, state) {
             final qp = state.uri.queryParameters;
-            final avatarId = (qp[AppQueryKey.avatarId] ?? '').trim();
+            final qpAvatarId = (qp[AppQueryKey.avatarId] ?? '').trim();
+            final avatarId = qpAvatarId.isNotEmpty
+                ? qpAvatarId
+                : AvatarIdStore.I.avatarId;
             final from = _decodeFrom(qp[AppQueryKey.from]);
 
             return NoTransitionPage(
@@ -611,7 +587,10 @@ List<RouteBase> _routes({required bool firebaseReady}) {
           name: AppRouteName.payment,
           pageBuilder: (context, state) {
             final qp = state.uri.queryParameters;
-            final avatarId = (qp[AppQueryKey.avatarId] ?? '').trim();
+            final qpAvatarId = (qp[AppQueryKey.avatarId] ?? '').trim();
+            final avatarId = qpAvatarId.isNotEmpty
+                ? qpAvatarId
+                : AvatarIdStore.I.avatarId;
             final from = _decodeFrom(qp[AppQueryKey.from]);
 
             return NoTransitionPage(

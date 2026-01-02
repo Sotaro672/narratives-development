@@ -21,6 +21,10 @@ class UseCartResult {
     required this.previewFuture,
     required this.reloadCartQuery,
     required this.reloadPreview,
+
+    // ✅ NEW: view model for Cart UI (title/price/listImage etc)
+    required this.viewFuture,
+    required this.reloadView,
   });
 
   final String avatarId;
@@ -33,6 +37,9 @@ class UseCartResult {
 
   // ✅ preview_query.go
   final Future<PreviewQueryDTO> previewFuture;
+
+  // ✅ Cart UI 用に整形済み（title/price/listImage を itemKey で引ける）
+  final Future<CartViewDTO> viewFuture;
 
   final bool busy;
 
@@ -47,6 +54,9 @@ class UseCartResult {
   // ✅ NEW: reload query models
   final Future<void> Function() reloadCartQuery;
   final Future<void> Function() reloadPreview;
+
+  // ✅ NEW: reload view model
+  final Future<void> Function() reloadView;
 }
 
 /// Hook-like controller for CartPage.
@@ -92,6 +102,11 @@ class UseCartController {
     ),
   );
 
+  // ✅ Cart 画面にそのまま渡せる “表示用” view
+  Future<CartViewDTO> viewFuture = Future.value(
+    CartViewDTO(avatarId: '', items: const {}, raw: const {}),
+  );
+
   bool busy = false;
 
   // ----------------------------
@@ -107,6 +122,9 @@ class UseCartController {
     // ✅ read-models
     cartQueryFuture = _repo.fetchCartQuery(avatarId: avatarId);
     previewFuture = _repo.fetchPreview(avatarId: avatarId);
+
+    // ✅ view model (compose legacy + cart_query)
+    viewFuture = _buildViewFuture();
   }
 
   void dispose() {
@@ -120,18 +138,27 @@ class UseCartController {
   Future<void> reload(SetStateFn setState) async {
     setState(() {
       future = _repo.fetchCart(avatarId: avatarId);
+      viewFuture = _buildViewFuture();
     });
   }
 
   Future<void> reloadCartQuery(SetStateFn setState) async {
     setState(() {
       cartQueryFuture = _repo.fetchCartQuery(avatarId: avatarId);
+      viewFuture = _buildViewFuture();
     });
   }
 
   Future<void> reloadPreview(SetStateFn setState) async {
     setState(() {
       previewFuture = _repo.fetchPreview(avatarId: avatarId);
+      // preview は Cart 画面表示に直結しないので view は触らない（必要なら reloadAll）
+    });
+  }
+
+  Future<void> reloadView(SetStateFn setState) async {
+    setState(() {
+      viewFuture = _buildViewFuture();
     });
   }
 
@@ -140,6 +167,7 @@ class UseCartController {
       future = _repo.fetchCart(avatarId: avatarId);
       cartQueryFuture = _repo.fetchCartQuery(avatarId: avatarId);
       previewFuture = _repo.fetchPreview(avatarId: avatarId);
+      viewFuture = _buildViewFuture();
     });
   }
 
@@ -188,6 +216,145 @@ class UseCartController {
     return null;
   }
 
+  // ✅ local int parser (do NOT rely on CartItemDTO._toInt (private in repository file))
+  static int _toIntAny(dynamic v) {
+    if (v == null) return 0;
+    if (v is int) return v;
+    if (v is double) return v.toInt();
+    if (v is num) return v.toInt();
+    final s = v.toString().trim();
+    if (s.isEmpty) return 0;
+    return int.tryParse(s) ?? 0;
+  }
+
+  // ----------------------------
+  // View builder (Cart UI)
+  // ----------------------------
+
+  Future<CartViewDTO> _buildViewFuture() async {
+    try {
+      final results = await Future.wait<dynamic>([future, cartQueryFuture]);
+      final CartDTO legacy = results[0] as CartDTO;
+      final CartQueryDTO cq = results[1] as CartQueryDTO;
+
+      final raw = cq.raw;
+
+      // items map のあり得る場所を総当り（壊れにくく）
+      Map<String, dynamic>? itemsMap;
+
+      dynamic items0 = raw['items'];
+      if (items0 is Map) itemsMap = items0.cast<String, dynamic>();
+
+      if (itemsMap == null && raw['cart'] is Map) {
+        final c = (raw['cart'] as Map).cast<String, dynamic>();
+        final it = c['items'];
+        if (it is Map) itemsMap = it.cast<String, dynamic>();
+      }
+
+      if (itemsMap == null && raw['data'] is Map) {
+        final d = (raw['data'] as Map).cast<String, dynamic>();
+        final it = d['items'];
+        if (it is Map) itemsMap = it.cast<String, dynamic>();
+        // さらに { data: { cart: { items: ... } } } もあり得る
+        if (itemsMap == null && d['cart'] is Map) {
+          final c = (d['cart'] as Map).cast<String, dynamic>();
+          final it2 = c['items'];
+          if (it2 is Map) itemsMap = it2.cast<String, dynamic>();
+        }
+      }
+
+      final outItems = <String, CartViewItemDTO>{};
+
+      // まず cart_query 側（表示フィールド）を基準に作る
+      if (itemsMap != null) {
+        for (final entry in itemsMap.entries) {
+          final key = entry.key.toString().trim();
+          if (key.isEmpty) continue;
+
+          final v = entry.value;
+          if (v is! Map) continue;
+          final m = v.cast<String, dynamic>();
+
+          String s(dynamic x) => (x ?? '').toString().trim();
+          int? iN(dynamic x) {
+            if (x == null) return null;
+            final n = _toIntAny(x);
+            return n == 0 ? null : n;
+          }
+
+          final title = s(m['title']);
+          final listImage = s(m['listImage'] ?? m['imageId'] ?? m['imageID']);
+          final price = iN(m['price']);
+          final productName = s(m['productName']);
+          final size = s(m['size']);
+          final color = s(m['color']);
+          final qty0 = _toIntAny(m['qty'] ?? m['quantity']);
+
+          // identifiers (server が返していれば使う)
+          final invId = s(m['inventoryId']);
+          final listId = s(m['listId']);
+          final modelId = s(m['modelId']);
+
+          // legacy から補完
+          final legacyIt = legacy.items[key];
+          final inv = invId.isNotEmpty ? invId : (legacyIt?.inventoryId ?? '');
+          final lid = listId.isNotEmpty ? listId : (legacyIt?.listId ?? '');
+          final mid = modelId.isNotEmpty ? modelId : (legacyIt?.modelId ?? '');
+
+          final qty = qty0 > 0 ? qty0 : (legacyIt?.qty ?? 0);
+
+          outItems[key] = CartViewItemDTO(
+            itemKey: key,
+            inventoryId: inv,
+            listId: lid,
+            modelId: mid,
+            title: title,
+            listImage: listImage,
+            price: price,
+            productName: productName,
+            size: size,
+            color: color,
+            qty: qty,
+            raw: m,
+          );
+        }
+      }
+
+      // cart_query が items を返さない / 空の場合でも legacy は表示できるように補完
+      if (outItems.isEmpty) {
+        for (final entry in legacy.items.entries) {
+          final key = entry.key.trim();
+          if (key.isEmpty) continue;
+          final it = entry.value;
+          outItems[key] = CartViewItemDTO(
+            itemKey: key,
+            inventoryId: it.inventoryId,
+            listId: it.listId,
+            modelId: it.modelId,
+            title: '',
+            listImage: '',
+            price: null,
+            productName: '',
+            size: '',
+            color: '',
+            qty: it.qty,
+            raw: const {},
+          );
+        }
+      }
+
+      // avatarId
+      final aid = legacy.avatarId.trim().isNotEmpty
+          ? legacy.avatarId.trim()
+          : avatarId;
+
+      return CartViewDTO(avatarId: aid, items: outItems, raw: raw);
+    } catch (_) {
+      // worst-case: 画面が落ちないように空を返す
+      return CartViewDTO(avatarId: avatarId, items: const {}, raw: const {});
+    }
+  }
+
   // ----------------------------
   // Mutations
   // ----------------------------
@@ -220,6 +387,7 @@ class UseCartController {
         future = Future.value(c);
         cartQueryFuture = _repo.fetchCartQuery(avatarId: avatarId);
         previewFuture = _repo.fetchPreview(avatarId: avatarId);
+        viewFuture = _buildViewFuture();
       });
     });
   }
@@ -252,6 +420,7 @@ class UseCartController {
         future = Future.value(c);
         cartQueryFuture = _repo.fetchCartQuery(avatarId: avatarId);
         previewFuture = _repo.fetchPreview(avatarId: avatarId);
+        viewFuture = _buildViewFuture();
       });
     });
   }
@@ -280,6 +449,7 @@ class UseCartController {
         future = Future.value(c);
         cartQueryFuture = _repo.fetchCartQuery(avatarId: avatarId);
         previewFuture = _repo.fetchPreview(avatarId: avatarId);
+        viewFuture = _buildViewFuture();
       });
     });
   }
@@ -324,14 +494,69 @@ class UseCartController {
       future: future,
       cartQueryFuture: cartQueryFuture,
       previewFuture: previewFuture,
+      viewFuture: viewFuture,
       busy: busy,
       reload: () => reload(setState),
       reloadCartQuery: () => reloadCartQuery(setState),
       reloadPreview: () => reloadPreview(setState),
+      reloadView: () => reloadView(setState),
       inc: (itemKey) => inc(setState, itemKey),
       dec: (itemKey, currentQty) => dec(setState, itemKey, currentQty),
       remove: (itemKey) => remove(setState, itemKey),
       clear: () => clear(setState),
     );
   }
+}
+
+// ----------------------------
+// View Models (Cart UI)
+// ----------------------------
+
+class CartViewDTO {
+  CartViewDTO({required this.avatarId, required this.items, required this.raw});
+
+  final String avatarId;
+
+  /// itemKey -> display item
+  final Map<String, CartViewItemDTO> items;
+
+  /// cart_query raw response (debug / fallback)
+  final Map<String, dynamic> raw;
+}
+
+class CartViewItemDTO {
+  CartViewItemDTO({
+    required this.itemKey,
+    required this.inventoryId,
+    required this.listId,
+    required this.modelId,
+    required this.title,
+    required this.listImage,
+    required this.price,
+    required this.productName,
+    required this.size,
+    required this.color,
+    required this.qty,
+    required this.raw,
+  });
+
+  final String itemKey;
+
+  // identifiers (mutations)
+  final String inventoryId;
+  final String listId;
+  final String modelId;
+
+  // display fields
+  final String title;
+  final String listImage;
+  final int? price;
+  final String productName;
+  final String size;
+  final String color;
+
+  final int qty;
+
+  /// row/item raw map (best-effort)
+  final Map<String, dynamic> raw;
 }

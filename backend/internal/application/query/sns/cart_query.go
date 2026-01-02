@@ -14,30 +14,34 @@ import (
 	snsdto "narratives/internal/application/query/sns/dto"
 	appresolver "narratives/internal/application/resolver"
 	cartdom "narratives/internal/domain/cart"
-	listdom "narratives/internal/domain/list"
+	ldom "narratives/internal/domain/list"
 )
 
 // SNSCartQuery resolves (for cart list UI):
 //   - avatarId -> cart (carts/{avatarId})
 //   - cart.items[].listId -> title/listImage
 //   - cart.items[].(listId, modelId) -> price from lists/{listId}.prices[]
-//   - cart.items[].inventoryId (= productBlueprintId__tokenBlueprintId) -> productBlueprintId (best-effort)
-//   - productBlueprintId -> productName (best-effort)
-//   - cart.items[].modelId -> size/color (via NameResolver.ResolveModelResolved)
-//   - qty
 //
 // IMPORTANT: CartDTO returns ONLY (per item):
 //
 //	inventoryId, listId, modelId, title, listImage, price, productName, size, color, qty
+//
+// ✅ NOTE:
+//   - catalog_query.go では ListRepo(ldom.Repository) 経由で List を取得しているため、
+//     Firestore の実データ構造/名揺れを adapter が吸収できている。
+//   - cart_query.go も同じく ListRepo を優先して使うことで、image/price の取りこぼしを防ぐ。
 type SNSCartQuery struct {
 	FS *firestore.Client
+
+	// ✅ NEW: prefer domain repository (same as catalog_query)
+	ListRepo ldom.Repository
 
 	// ✅ optional: inject from DI
 	Resolver *appresolver.NameResolver
 
 	// collection names (override if your firestore schema differs)
 	CartCol              string
-	ListsCol             string
+	ListsCol             string // fallback only (when ListRepo is nil)
 	InventoriesCol       string
 	ProductBlueprintsCol string
 }
@@ -45,12 +49,20 @@ type SNSCartQuery struct {
 func NewSNSCartQuery(fs *firestore.Client) *SNSCartQuery {
 	return &SNSCartQuery{
 		FS:                   fs,
+		ListRepo:             nil, // keep backward compatible
 		Resolver:             nil,
 		CartCol:              "carts",
 		ListsCol:             "lists",
 		InventoriesCol:       "inventories",
 		ProductBlueprintsCol: "productBlueprints",
 	}
+}
+
+// ✅ NEW: ctor with ListRepo
+func NewSNSCartQueryWithListRepo(fs *firestore.Client, listRepo ldom.Repository) *SNSCartQuery {
+	q := NewSNSCartQuery(fs)
+	q.ListRepo = listRepo
+	return q
 }
 
 // GetByAvatarID fetches cart document by docId (= avatarId).
@@ -161,7 +173,7 @@ func toCartDTO(
 			continue
 		}
 
-		// ✅ 画面側がすぐ使えるように IDs も同梱して返す
+		// ✅ mutation 側(inc/dec/remove)に必要な IDs は残す
 		dto := snsdto.CartItemDTO{
 			InventoryID: invID,
 			ListID:      listID,
@@ -248,16 +260,12 @@ func toRFC3339Ptr(t time.Time) *string {
 // ============================================================
 // list lookup (best-effort)
 // - listId -> prices(modelId->price) and title/imageId
+// ✅ Prefer ListRepo (same normalization path as catalog_query)
 // ============================================================
 
 func (q *SNSCartQuery) fetchListIndicesByCart(ctx context.Context, c *cartdom.Cart) (map[string]map[string]int, map[string]listMeta) {
-	if q == nil || q.FS == nil || c == nil || c.Items == nil || len(c.Items) == 0 {
+	if q == nil || c == nil || c.Items == nil || len(c.Items) == 0 {
 		return nil, nil
-	}
-
-	listsCol := strings.TrimSpace(q.ListsCol)
-	if listsCol == "" {
-		listsCol = "lists"
 	}
 
 	seen := map[string]struct{}{}
@@ -277,6 +285,81 @@ func (q *SNSCartQuery) fetchListIndicesByCart(ctx context.Context, c *cartdom.Ca
 
 	if len(listIDs) == 0 {
 		return nil, nil
+	}
+
+	// ✅ 1) Prefer domain repo (catalog_query と同じ経路)
+	if q.ListRepo != nil {
+		return q.fetchListIndicesByCartViaRepo(ctx, listIDs)
+	}
+
+	// ✅ 2) Fallback: direct firestore read (legacy)
+	return q.fetchListIndicesByCartViaFirestore(ctx, listIDs)
+}
+
+func (q *SNSCartQuery) fetchListIndicesByCartViaRepo(ctx context.Context, listIDs []string) (map[string]map[string]int, map[string]listMeta) {
+	if q == nil || q.ListRepo == nil || len(listIDs) == 0 {
+		return nil, nil
+	}
+
+	priceOut := map[string]map[string]int{}
+	metaOut := map[string]listMeta{}
+
+	for _, lid0 := range listIDs {
+		lid := strings.TrimSpace(lid0)
+		if lid == "" {
+			continue
+		}
+
+		// ✅ adapter が名揺れ/構造を吸収して返す “正規化済み List” を使う
+		l, err := q.ListRepo.GetByID(ctx, lid)
+		if err != nil {
+			// best-effort: skip
+			continue
+		}
+
+		// meta
+		mt := listMeta{
+			Title:   strings.TrimSpace(l.Title),
+			ImageID: strings.TrimSpace(l.ImageID),
+		}
+		if mt.Title != "" || mt.ImageID != "" {
+			metaOut[lid] = mt
+		}
+
+		// prices
+		if len(l.Prices) > 0 {
+			m := map[string]int{}
+			for _, row := range l.Prices {
+				mid := strings.TrimSpace(row.ModelID)
+				if mid == "" {
+					continue
+				}
+				m[mid] = row.Price
+			}
+			if len(m) > 0 {
+				priceOut[lid] = m
+			}
+		}
+	}
+
+	if len(priceOut) == 0 {
+		priceOut = nil
+	}
+	if len(metaOut) == 0 {
+		metaOut = nil
+	}
+	return priceOut, metaOut
+}
+
+// legacy fallback (kept to avoid breaking behavior when ListRepo is not injected)
+func (q *SNSCartQuery) fetchListIndicesByCartViaFirestore(ctx context.Context, listIDs []string) (map[string]map[string]int, map[string]listMeta) {
+	if q == nil || q.FS == nil || len(listIDs) == 0 {
+		return nil, nil
+	}
+
+	listsCol := strings.TrimSpace(q.ListsCol)
+	if listsCol == "" {
+		listsCol = "lists"
 	}
 
 	refs := make([]*firestore.DocumentRef, 0, len(listIDs))
@@ -302,8 +385,8 @@ func (q *SNSCartQuery) fetchListIndicesByCart(ctx context.Context, c *cartdom.Ca
 			continue
 		}
 
-		// Prefer struct decode
-		var l listdom.List
+		// Try struct decode (may fail if firestore schema differs)
+		var l ldom.List
 		if derr := snap.DataTo(&l); derr == nil {
 			mt := listMeta{
 				Title:   strings.TrimSpace(l.Title),
@@ -332,7 +415,8 @@ func (q *SNSCartQuery) fetchListIndicesByCart(ctx context.Context, c *cartdom.Ca
 		// Fallback map read
 		m := snap.Data()
 		title := pickString(m, "title", "Title")
-		image := pickString(m, "imageId", "ImageID", "imageID", "ImageId")
+		image := pickString(m, "imageId", "ImageID", "imageID", "ImageId", "image", "Image", "listImage", "ListImage", "imageUrl", "ImageUrl")
+
 		if strings.TrimSpace(title) != "" || strings.TrimSpace(image) != "" {
 			metaOut[lid] = listMeta{Title: strings.TrimSpace(title), ImageID: strings.TrimSpace(image)}
 		}
