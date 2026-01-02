@@ -1,4 +1,5 @@
 // frontend/sns/lib/app/routing/routes.dart
+
 class AppRouteName {
   static const home = 'home';
   static const catalog = 'catalog';
@@ -7,6 +8,9 @@ class AppRouteName {
 
   // ✅ NEW
   static const payment = 'payment';
+
+  // ✅ NEW: preview
+  static const preview = 'preview';
 
   static const login = 'login';
   static const createAccount = 'createAccount';
@@ -25,6 +29,9 @@ class AppRoutePath {
 
   // ✅ NEW
   static const payment = '/payment';
+
+  // ✅ NEW: preview
+  static const preview = '/preview';
 
   static const login = '/login';
   static const createAccount = '/create-account';

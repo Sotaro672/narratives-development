@@ -51,6 +51,9 @@ type SNSDeps struct {
 	// ✅ NEW: cart
 	Cart http.Handler
 
+	// ✅ NEW: preview
+	Preview http.Handler
+
 	// ✅ NEW: posts
 	Post http.Handler
 
@@ -186,6 +189,7 @@ func NewSNSDepsWithNameResolverAndOrgHandlers(
 		AvatarState:     nil,
 		Wallet:          nil,
 		Cart:            nil,
+		Preview:         nil,
 		Post:            nil,
 		Payment:         nil,
 	}
@@ -238,6 +242,61 @@ func RegisterSNSFromContainer(mux *http.ServeMux, cont *Container) {
 		}
 	}
 
+	// ✅ cart/preview queries
+	var cartQ *snsquery.SNSCartQuery
+	{
+		if x, ok := any(cont).(interface {
+			SNSCartQuery() *snsquery.SNSCartQuery
+		}); ok {
+			cartQ = x.SNSCartQuery()
+		} else if x, ok := any(cont).(interface {
+			GetSNSCartQuery() *snsquery.SNSCartQuery
+		}); ok {
+			cartQ = x.GetSNSCartQuery()
+		} else if x, ok := any(cont).(interface {
+			CartQuery() *snsquery.SNSCartQuery
+		}); ok {
+			cartQ = x.CartQuery()
+		} else if x, ok := any(cont).(interface {
+			SNSCartQ() *snsquery.SNSCartQuery
+		}); ok {
+			cartQ = x.SNSCartQ()
+		}
+		if cartQ == nil {
+			cartQ = getSNSCartQueryFieldBestEffort(cont)
+		}
+		if cartQ != nil && nameResolver != nil && cartQ.Resolver == nil {
+			cartQ.Resolver = nameResolver
+		}
+	}
+
+	var previewQ *snsquery.SNSPreviewQuery
+	{
+		if x, ok := any(cont).(interface {
+			SNSPreviewQuery() *snsquery.SNSPreviewQuery
+		}); ok {
+			previewQ = x.SNSPreviewQuery()
+		} else if x, ok := any(cont).(interface {
+			GetSNSPreviewQuery() *snsquery.SNSPreviewQuery
+		}); ok {
+			previewQ = x.GetSNSPreviewQuery()
+		} else if x, ok := any(cont).(interface {
+			PreviewQuery() *snsquery.SNSPreviewQuery
+		}); ok {
+			previewQ = x.PreviewQuery()
+		} else if x, ok := any(cont).(interface {
+			SNSPreviewQ() *snsquery.SNSPreviewQuery
+		}); ok {
+			previewQ = x.SNSPreviewQ()
+		}
+		if previewQ == nil {
+			previewQ = getSNSPreviewQueryFieldBestEffort(cont)
+		}
+		if previewQ != nil && nameResolver != nil && previewQ.Resolver == nil {
+			previewQ.Resolver = nameResolver
+		}
+	}
+
 	// company/brand usecase
 	var companyUC *usecase.CompanyUsecase
 	{
@@ -257,6 +316,20 @@ func RegisterSNSFromContainer(mux *http.ServeMux, cont *Container) {
 			brandUC = x.BrandUsecase()
 		} else if x, ok := any(cont).(interface{ GetBrandUsecase() *usecase.BrandUsecase }); ok {
 			brandUC = x.GetBrandUsecase()
+		}
+	}
+
+	// ✅ cart usecase（ここが無いと “NewCartHandlerWithQueries” を作れず、未注入になりやすい）
+	var cartUC *usecase.CartUsecase
+	{
+		if x, ok := any(cont).(interface{ CartUsecase() *usecase.CartUsecase }); ok {
+			cartUC = x.CartUsecase()
+		} else if x, ok := any(cont).(interface{ GetCartUsecase() *usecase.CartUsecase }); ok {
+			cartUC = x.GetCartUsecase()
+		}
+		if cartUC == nil {
+			// RouterDeps 側に入っているケースも拾う
+			cartUC = getFieldPtr[*usecase.CartUsecase](depsAny, "CartUC", "CartUsecase")
 		}
 	}
 
@@ -314,19 +387,68 @@ func RegisterSNSFromContainer(mux *http.ServeMux, cont *Container) {
 		},
 	)
 
-	// ✅ cart
-	snsDeps.Cart = getHandlerBestEffort(cont, depsAny,
-		[]string{
-			"SNSCartHandler", "GetSNSCartHandler",
-			"SNSCart", "GetSNSCart",
-			"CartHandler", "GetCartHandler",
-			"Cart", "GetCart",
-		},
-		[]string{
-			"SNSCartHandler", "SNSCart",
-			"CartHandler", "Cart",
-		},
-	)
+	// ============================================================
+	// ✅ cart + preview（重要）
+	//
+	// 既存の “reflection による field 注入” は、handler 側が非公開フィールドだと確実に失敗する。
+	// その結果、/sns/cart/query が "cart_query is not configured" になる。
+	//
+	// ここでは CartUsecase と Query を見つけられた場合、
+	// 明示的に NewCartHandlerWithQueries で生成して確実に注入する。
+	// ============================================================
+
+	if cartUC != nil {
+		// ✅ ここで確実に query を渡す（nil の場合は handler 側で 500 を返す仕様のまま）
+		ch := snshandler.NewCartHandlerWithQueries(cartUC, cartQ, previewQ)
+
+		// CartHandler は /sns/cart/* と /sns/preview の両方を捌ける前提。
+		snsDeps.Cart = ch
+		snsDeps.Preview = ch
+	} else {
+		// fallback: 既存の best-effort を維持（ただし query 未注入になりやすい）
+		snsDeps.Cart = getHandlerBestEffort(cont, depsAny,
+			[]string{
+				"SNSCartHandler", "GetSNSCartHandler",
+				"SNSCart", "GetSNSCart",
+				"CartHandler", "GetCartHandler",
+				"Cart", "GetCart",
+			},
+			[]string{
+				"SNSCartHandler", "SNSCart",
+				"CartHandler", "Cart",
+			},
+		)
+
+		snsDeps.Preview = getHandlerBestEffort(cont, depsAny,
+			[]string{
+				"SNSPreviewHandler", "GetSNSPreviewHandler",
+				"SNSPreview", "GetSNSPreview",
+				"PreviewHandler", "GetPreviewHandler",
+				"Preview", "GetPreview",
+			},
+			[]string{
+				"SNSPreviewHandler", "SNSPreview",
+				"PreviewHandler", "Preview",
+			},
+		)
+
+		// 片方しか見つからない場合でも、Cart が /sns/preview を捌ける前提なら補完する
+		if snsDeps.Preview == nil && snsDeps.Cart != nil {
+			snsDeps.Preview = snsDeps.Cart
+		}
+
+		// 旧: reflection 注入（exported field の場合のみ効く可能性があるため残す）
+		if snsDeps.Cart != nil && cartQ != nil {
+			setOptionalResolverField(snsDeps.Cart, "CartQuery", cartQ)
+			setOptionalResolverField(snsDeps.Cart, "Query", cartQ)
+			setOptionalResolverField(snsDeps.Cart, "CartQ", cartQ)
+		}
+		if snsDeps.Preview != nil && previewQ != nil {
+			setOptionalResolverField(snsDeps.Preview, "PreviewQuery", previewQ)
+			setOptionalResolverField(snsDeps.Preview, "Query", previewQ)
+			setOptionalResolverField(snsDeps.Preview, "PreviewQ", previewQ)
+		}
+	}
 
 	// ✅ posts
 	snsDeps.Post = getHandlerBestEffort(cont, depsAny,
@@ -357,8 +479,14 @@ func RegisterSNSFromContainer(mux *http.ServeMux, cont *Container) {
 	)
 
 	// ✅ ここが “確定ログ”
-	log.Printf("[sns_container] inject result signIn=%t cart=%t payment=%t",
-		snsDeps.SignIn != nil, snsDeps.Cart != nil, snsDeps.Payment != nil,
+	log.Printf("[sns_container] inject result signIn=%t cart=%t preview=%t payment=%t cartUC=%t cartQ=%t previewQ=%t",
+		snsDeps.SignIn != nil,
+		snsDeps.Cart != nil,
+		snsDeps.Preview != nil,
+		snsDeps.Payment != nil,
+		cartUC != nil,
+		cartQ != nil,
+		previewQ != nil,
 	)
 
 	// ✅ 見つからない場合、候補名をログに出す（原因特定用）
@@ -367,6 +495,9 @@ func RegisterSNSFromContainer(mux *http.ServeMux, cont *Container) {
 	}
 	if snsDeps.Cart == nil {
 		log.Printf("[sns_container] Cart handler not found. candidates=%s", debugHandlerCandidates(cont, depsAny, "cart"))
+	}
+	if snsDeps.Preview == nil {
+		log.Printf("[sns_container] Preview handler not found. candidates=%s", debugHandlerCandidates(cont, depsAny, "preview"))
 	}
 	if snsDeps.Payment == nil {
 		log.Printf("[sns_container] Payment handler not found. candidates=%s", debugHandlerCandidates(cont, depsAny, "payment", "order", "checkout"))
@@ -401,10 +532,11 @@ func RegisterSNSFromContainer(mux *http.ServeMux, cont *Container) {
 			snsDeps.AvatarState = wrap(snsDeps.AvatarState)
 			snsDeps.Wallet = wrap(snsDeps.Wallet)
 			snsDeps.Cart = wrap(snsDeps.Cart)
+			snsDeps.Preview = wrap(snsDeps.Preview)
 			snsDeps.Post = wrap(snsDeps.Post)
 			snsDeps.Payment = wrap(snsDeps.Payment)
 
-			log.Printf("[sns_container] user_auth applied: user=%t ship=%t bill=%t avatar=%t avatarState=%t wallet=%t cart=%t post=%t payment=%t",
+			log.Printf("[sns_container] user_auth applied: user=%t ship=%t bill=%t avatar=%t avatarState=%t wallet=%t cart=%t preview=%t post=%t payment=%t",
 				snsDeps.User != nil,
 				snsDeps.ShippingAddress != nil,
 				snsDeps.BillingAddress != nil,
@@ -412,6 +544,7 @@ func RegisterSNSFromContainer(mux *http.ServeMux, cont *Container) {
 				snsDeps.AvatarState != nil,
 				snsDeps.Wallet != nil,
 				snsDeps.Cart != nil,
+				snsDeps.Preview != nil,
 				snsDeps.Post != nil,
 				snsDeps.Payment != nil,
 			)
@@ -449,6 +582,7 @@ func RegisterSNSRoutes(mux *http.ServeMux, deps SNSDeps) {
 		AvatarState: deps.AvatarState,
 		Wallet:      deps.Wallet,
 		Cart:        deps.Cart,
+		Preview:     deps.Preview,
 		Post:        deps.Post,
 
 		Payment: deps.Payment,
@@ -573,6 +707,134 @@ func getSNSNameResolverFieldBestEffort(cont *Container) *appresolver.NameResolve
 	} {
 		if nr := tryField(n); nr != nil {
 			return nr
+		}
+	}
+
+	return nil
+}
+
+func getSNSCartQueryFieldBestEffort(cont *Container) *snsquery.SNSCartQuery {
+	if cont == nil {
+		return nil
+	}
+
+	rv := reflect.ValueOf(cont)
+	if !rv.IsValid() {
+		return nil
+	}
+	if rv.Kind() == reflect.Pointer {
+		if rv.IsNil() {
+			return nil
+		}
+		rv = rv.Elem()
+	}
+	if rv.Kind() != reflect.Struct {
+		return nil
+	}
+
+	tryField := func(name string) *snsquery.SNSCartQuery {
+		f := rv.FieldByName(name)
+		if !f.IsValid() {
+			return nil
+		}
+		if f.Kind() == reflect.Interface {
+			if f.IsNil() {
+				return nil
+			}
+			if q, ok := f.Interface().(*snsquery.SNSCartQuery); ok {
+				return q
+			}
+			return nil
+		}
+		if f.Kind() == reflect.Pointer {
+			if f.IsNil() {
+				return nil
+			}
+			if q, ok := f.Interface().(*snsquery.SNSCartQuery); ok {
+				return q
+			}
+			return nil
+		}
+		return nil
+	}
+
+	for _, n := range []string{
+		"SNSCartQuery",
+		"SNSCartQ",
+		"SnsCartQuery",
+		"snsCartQuery",
+		"snsCartQ",
+		"CartQuery",
+		"CartQ",
+		"cartQuery",
+		"cartQ",
+	} {
+		if q := tryField(n); q != nil {
+			return q
+		}
+	}
+
+	return nil
+}
+
+func getSNSPreviewQueryFieldBestEffort(cont *Container) *snsquery.SNSPreviewQuery {
+	if cont == nil {
+		return nil
+	}
+
+	rv := reflect.ValueOf(cont)
+	if !rv.IsValid() {
+		return nil
+	}
+	if rv.Kind() == reflect.Pointer {
+		if rv.IsNil() {
+			return nil
+		}
+		rv = rv.Elem()
+	}
+	if rv.Kind() != reflect.Struct {
+		return nil
+	}
+
+	tryField := func(name string) *snsquery.SNSPreviewQuery {
+		f := rv.FieldByName(name)
+		if !f.IsValid() {
+			return nil
+		}
+		if f.Kind() == reflect.Interface {
+			if f.IsNil() {
+				return nil
+			}
+			if q, ok := f.Interface().(*snsquery.SNSPreviewQuery); ok {
+				return q
+			}
+			return nil
+		}
+		if f.Kind() == reflect.Pointer {
+			if f.IsNil() {
+				return nil
+			}
+			if q, ok := f.Interface().(*snsquery.SNSPreviewQuery); ok {
+				return q
+			}
+			return nil
+		}
+		return nil
+	}
+
+	for _, n := range []string{
+		"SNSPreviewQuery",
+		"SNSPreviewQ",
+		"SnsPreviewQuery",
+		"snsPreviewQuery",
+		"snsPreviewQ",
+		"PreviewQuery",
+		"PreviewQ",
+		"previewQuery",
+		"previewQ",
+	} {
+		if q := tryField(n); q != nil {
+			return q
 		}
 	}
 

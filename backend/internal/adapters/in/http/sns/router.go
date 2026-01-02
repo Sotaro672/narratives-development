@@ -39,6 +39,9 @@ type Deps struct {
 
 	// ✅ NEW: payment (order context / checkout)
 	Payment http.Handler
+
+	// ✅ NEW: preview
+	Preview http.Handler
 }
 
 // Register registers buyer-facing routes onto mux.
@@ -80,6 +83,10 @@ type Deps struct {
 // - DELETE /sns/cart/items
 // - DELETE /sns/cart
 // - POST   /sns/cart/ordered
+//
+// ✅ Preview
+// - GET /sns/preview
+// - GET /sns/preview/*
 //
 // ✅ Posts
 // - GET/POST /sns/posts
@@ -191,6 +198,12 @@ func Register(mux *http.ServeMux, deps Deps) {
 	if deps.Cart != nil {
 		mux.Handle("/sns/cart", deps.Cart)
 		mux.Handle("/sns/cart/", deps.Cart)
+	}
+
+	// ✅ preview
+	if deps.Preview != nil {
+		mux.Handle("/sns/preview", deps.Preview)
+		mux.Handle("/sns/preview/", deps.Preview)
 	}
 
 	// ✅ posts

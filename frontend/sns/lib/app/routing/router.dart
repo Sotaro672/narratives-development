@@ -21,6 +21,9 @@ import '../../features/avatar/presentation/page/avatar_edit.dart';
 import '../../features/user/presentation/page/user_edit.dart';
 import '../../features/cart/presentation/page/cart.dart';
 
+// ✅ NEW: preview page
+import '../../features/cart/presentation/page/preview.dart';
+
 // ✅ NEW: payment page
 import '../../features/payment/presentation/page/payment.dart';
 
@@ -378,6 +381,13 @@ GoRouter buildPublicOnlyRouter({required Object initError}) {
         pageBuilder: (context, state) =>
             NoTransitionPage(child: _FirebaseInitErrorPage(error: initError)),
       ),
+      // ✅ NEW: preview route (public-only fallback)
+      GoRoute(
+        path: AppRoutePath.preview,
+        name: AppRouteName.preview,
+        pageBuilder: (context, state) =>
+            NoTransitionPage(child: _FirebaseInitErrorPage(error: initError)),
+      ),
       GoRoute(
         path: AppRoutePath.payment,
         name: AppRouteName.payment,
@@ -578,6 +588,24 @@ List<RouteBase> _routes({required bool firebaseReady}) {
             );
           },
         ),
+        // ✅ NEW: preview route
+        GoRoute(
+          path: AppRoutePath.preview,
+          name: AppRouteName.preview,
+          pageBuilder: (context, state) {
+            final qp = state.uri.queryParameters;
+            final avatarId = (qp[AppQueryKey.avatarId] ?? '').trim();
+            final from = _decodeFrom(qp[AppQueryKey.from]);
+
+            return NoTransitionPage(
+              key: ValueKey('preview-$avatarId'),
+              child: PreviewPage(
+                avatarId: avatarId,
+                from: from.isEmpty ? null : from,
+              ),
+            );
+          },
+        ),
         GoRoute(
           path: AppRoutePath.payment,
           name: AppRouteName.payment,
@@ -612,6 +640,7 @@ String? _titleFor(GoRouterState state) {
   if (loc.startsWith('/catalog/')) return 'Catalog';
   if (loc == AppRoutePath.avatar) return 'Profile';
   if (loc == AppRoutePath.cart) return 'Cart';
+  if (loc == AppRoutePath.preview) return 'Preview';
   if (loc == AppRoutePath.payment) return 'Payment';
   if (loc == AppRoutePath.avatarEdit) return 'Edit Avatar';
   if (loc == AppRoutePath.userEdit) return 'Account';
@@ -640,6 +669,7 @@ List<Widget> _headerActionsFor(
       path == AppRoutePath.avatarCreate ||
       path == AppRoutePath.avatarEdit ||
       path == AppRoutePath.userEdit ||
+      path == AppRoutePath.preview ||
       path == AppRoutePath.payment) {
     return const [];
   }

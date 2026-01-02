@@ -35,7 +35,7 @@ import (
 	// ★ CompanyProductionQueryService / MintRequestQueryService / InventoryQuery / ListCreateQuery / ListManagementQuery / ListDetailQuery
 	companyquery "narratives/internal/application/query"
 
-	// ✅ SNS queries (catalog / order)
+	// ✅ SNS queries (catalog / order / cart / preview)
 	snsquery "narratives/internal/application/query/sns"
 
 	resolver "narratives/internal/application/resolver"
@@ -134,6 +134,10 @@ type Container struct {
 
 	// ✅ NEW: SNS catalog query（/sns/catalog/{listId}）
 	SNSCatalogQ *snsquery.SNSCatalogQuery
+
+	// ✅ NEW: SNS cart / preview queries（/sns/cart, /sns/preview）
+	SNSCartQ    *snsquery.SNSCartQuery
+	SNSPreviewQ *snsquery.SNSPreviewQuery
 
 	// ★ 検品アプリ用 ProductUsecase（/inspector/products/{id}）
 	ProductUC *uc.ProductUsecase
@@ -549,6 +553,14 @@ func NewContainer(ctx context.Context) (*Container, error) {
 		modelRepo,
 	)
 
+	// ✅ NEW: SNSCartQuery（buyer-facing /sns/cart 用）
+	snsCartQ := snsquery.NewSNSCartQuery(fsClient)
+	snsCartQ.Resolver = nameResolver
+
+	// ✅ NEW: SNSPreviewQuery（buyer-facing /sns/preview 用）
+	snsPreviewQ := snsquery.NewSNSPreviewQuery(fsClient)
+	snsPreviewQ.Resolver = nameResolver
+
 	// ============================================================
 	// ✅ SNSOrderQuery（buyer-facing /sns/payment 用）
 	//
@@ -629,6 +641,8 @@ func NewContainer(ctx context.Context) (*Container, error) {
 		ListDetailQuery:     listDetailQuery,
 
 		SNSCatalogQ: snsCatalogQ,
+		SNSCartQ:    snsCartQ,
+		SNSPreviewQ: snsPreviewQ,
 
 		ProductUC:    productUC,
 		InspectionUC: inspectionUC,
@@ -656,6 +670,20 @@ func (c *Container) SNSCatalogQuery() *snsquery.SNSCatalogQuery {
 		return nil
 	}
 	return c.SNSCatalogQ
+}
+
+func (c *Container) SNSCartQuery() *snsquery.SNSCartQuery {
+	if c == nil {
+		return nil
+	}
+	return c.SNSCartQ
+}
+
+func (c *Container) SNSPreviewQuery() *snsquery.SNSPreviewQuery {
+	if c == nil {
+		return nil
+	}
+	return c.SNSPreviewQ
 }
 
 // ✅ sns_container.go から取得される想定（best-effort）

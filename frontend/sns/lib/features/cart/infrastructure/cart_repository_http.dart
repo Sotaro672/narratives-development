@@ -15,6 +15,10 @@ import '../../inventory/infrastructure/inventory_repository_http.dart';
 /// - DELETE /sns/cart/items           body: {avatarId, inventoryId, listId, modelId}
 /// - DELETE /sns/cart?avatarId=...
 ///
+/// Backend endpoints (Read-model):
+/// - GET    /sns/cart/query?avatarId=...                 (sns/cart_query.go)
+/// - GET    /sns/preview?avatarId=...&itemKey=...        (sns/preview_query.go)  ※ itemKey 必須の想定
+///
 /// NOTE:
 /// - Web(CORS) ではカスタムヘッダ（例: x-avatar-id）を送ると preflight が走り、
 ///   backend 側で Access-Control-Allow-Headers に許可が無いとブロックされます。
@@ -38,6 +42,7 @@ class CartRepositoryHttp {
   // Public API
   // ----------------------------
 
+  /// Basic cart (legacy / minimal shape).
   Future<CartDTO> fetchCart({required String avatarId}) async {
     final aid = avatarId.trim();
     if (aid.isEmpty) throw ArgumentError('avatarId is required');
@@ -46,6 +51,51 @@ class CartRepositoryHttp {
     final res = await _sendAuthed('GET', uri);
 
     return _decodeCart(res);
+  }
+
+  /// ✅ cart_query.go (read-model)
+  ///
+  /// 返却 JSON の形は実装差分が出やすいので、CartQueryDTO は raw を保持しつつ
+  /// 可能なら rows も best-effort で生成します（UI 側の移行が楽になります）。
+  Future<CartQueryDTO> fetchCartQuery({required String avatarId}) async {
+    final aid = avatarId.trim();
+    if (aid.isEmpty) throw ArgumentError('avatarId is required');
+
+    final uri = _uri('/sns/cart/query', qp: {'avatarId': aid});
+    final res = await _sendAuthed('GET', uri);
+    return _decodeCartQuery(res);
+  }
+
+  /// ✅ preview (read-model)
+  ///
+  /// 現状のバックエンド設計では /sns/preview は itemKey が必要な想定です。
+  /// ただし、フロントが「カート全体のプレビュー」を欲しいケースが多いため、
+  /// itemKey が空の場合は /sns/cart/query を叩いてプレビュー互換の形で返します。
+  ///
+  /// - itemKey != null/empty  -> GET /sns/preview?avatarId=...&itemKey=...
+  /// - itemKey is null/empty  -> GET /sns/cart/query?avatarId=...   (fallback)
+  ///
+  /// あなたが提示したレスポンス:
+  /// { avatarId, items: { itemKey: {title,size,color,qty} }, createdAt, updatedAt, expiresAt }
+  /// は後者（cart/query）型なので、この fallback で 400 を止めつつ UI を進められます。
+  Future<PreviewQueryDTO> fetchPreview({
+    required String avatarId,
+    String? itemKey,
+  }) async {
+    final aid = avatarId.trim();
+    final ik = (itemKey ?? '').trim();
+    if (aid.isEmpty) throw ArgumentError('avatarId is required');
+
+    // ✅ itemKey が無い場合は cart/query のレスポンス（あなたの提示形）をプレビューとして扱う
+    final Uri uri;
+    if (ik.isEmpty) {
+      uri = _uri('/sns/cart/query', qp: {'avatarId': aid});
+    } else {
+      uri = _uri('/sns/preview', qp: {'avatarId': aid, 'itemKey': ik});
+    }
+
+    final res = await _sendAuthed('GET', uri);
+    return _decodePreview(res);
   }
 
   Future<CartDTO> addItem({
@@ -276,6 +326,47 @@ class CartRepositoryHttp {
     throw StateError('unreachable');
   }
 
+  CartQueryDTO _decodeCartQuery(http.Response res) {
+    if (res.statusCode >= 200 && res.statusCode < 300) {
+      final map = _decodeJsonMap(res.body);
+
+      // ✅ best-effort: server shape varies
+      CartDTO? cart;
+      final c0 = map['cart'];
+      if (c0 is Map) {
+        cart = CartDTO.fromJson(c0.cast<String, dynamic>());
+      } else if (map['data'] is Map) {
+        final d = (map['data'] as Map).cast<String, dynamic>();
+        final dc = d['cart'];
+        if (dc is Map) {
+          cart = CartDTO.fromJson(dc.cast<String, dynamic>());
+        } else {
+          // sometimes data itself is cart-ish
+          cart = CartDTO.fromJson(d);
+        }
+      } else {
+        // flat cart-ish
+        cart = CartDTO.fromJson(map);
+      }
+
+      // ✅ rows 生成（items が Map のケースも吸収）
+      final rows = CartQueryRowDTO.parseListFrom(map);
+
+      return CartQueryDTO(raw: map, cart: cart, rows: rows);
+    }
+    _throwHttpError(res);
+    throw StateError('unreachable');
+  }
+
+  PreviewQueryDTO _decodePreview(http.Response res) {
+    if (res.statusCode >= 200 && res.statusCode < 300) {
+      final map = _decodeJsonMap(res.body);
+      return PreviewQueryDTO.fromJson(map);
+    }
+    _throwHttpError(res);
+    throw StateError('unreachable');
+  }
+
   Map<String, dynamic> _decodeJsonMap(String body) {
     final raw = body.trim().isEmpty ? '{}' : body;
     final v = jsonDecode(raw);
@@ -490,6 +581,360 @@ class CartItemDTO {
     final qty = _toInt(json['qty']);
 
     return CartItemDTO(inventoryId: invId, listId: lid, modelId: mid, qty: qty);
+  }
+}
+
+/// ✅ cart_query.go の結果を “受け取る” ための DTO（raw 保持 + best-effort 抽出）
+class CartQueryDTO {
+  CartQueryDTO({required this.raw, required this.cart, required this.rows});
+
+  /// server response (full)
+  final Map<String, dynamic> raw;
+
+  /// best-effort extracted cart (may be null if server doesn't include a cart-ish object)
+  final CartDTO? cart;
+
+  /// best-effort extracted rows (may be empty)
+  final List<CartQueryRowDTO> rows;
+}
+
+/// itemKey から inventoryId/listId/modelId を best-effort で復元する
+/// - 期待形: inventoryId__listId__modelId
+/// - inventoryId 自体が pb__tb の場合、全体は pb__tb__listId__modelId になり得る
+class _ItemKeyParts {
+  _ItemKeyParts({
+    required this.inventoryId,
+    required this.listId,
+    required this.modelId,
+  });
+
+  final String inventoryId;
+  final String listId;
+  final String modelId;
+
+  static _ItemKeyParts fromItemKey(String itemKey) {
+    final k = itemKey.trim();
+    if (k.isEmpty) {
+      return _ItemKeyParts(inventoryId: '', listId: '', modelId: '');
+    }
+    final parts = k
+        .split('__')
+        .map((e) => e.trim())
+        .where((e) => e.isNotEmpty)
+        .toList();
+
+    // 3 以上なら末尾2つを list/model とみなし、それ以外を inventory に結合
+    if (parts.length >= 3) {
+      final listId = parts[parts.length - 2];
+      final modelId = parts[parts.length - 1];
+      final inv = parts.sublist(0, parts.length - 2).join('__');
+      return _ItemKeyParts(inventoryId: inv, listId: listId, modelId: modelId);
+    }
+
+    // それ以外は復元不能（空で返す）
+    return _ItemKeyParts(inventoryId: '', listId: '', modelId: '');
+  }
+}
+
+/// cart_query / preview の「壊れにくい」行 DTO
+/// - 実装差分が出やすいので raw を保持
+/// - あなたが提示した items-map 形（itemKey -> {title,size,color,qty}）も rows に変換して吸収
+class CartQueryRowDTO {
+  CartQueryRowDTO({
+    required this.itemKey,
+    required this.avatarId,
+    required this.inventoryId,
+    required this.listId,
+    required this.modelId,
+    required this.qty,
+    required this.raw,
+    this.title,
+    this.size,
+    this.color,
+    this.listImage,
+    this.productName,
+    this.price,
+  });
+
+  final String itemKey;
+  final String avatarId;
+  final String inventoryId;
+  final String listId;
+  final String modelId;
+  final int qty;
+
+  // display-ish (optional)
+  final String? title;
+  final String? size;
+  final String? color;
+  final String? listImage;
+  final String? productName;
+  final int? price;
+
+  /// row raw map (may include inventory/list/model/productBlueprint/etc)
+  final Map<String, dynamic> raw;
+
+  static List<CartQueryRowDTO> parseListFrom(Map<String, dynamic> root) {
+    String s(dynamic v) => (v ?? '').toString().trim();
+    int i(dynamic v) => CartItemDTO._toInt(v);
+    int? iN(dynamic v) {
+      if (v == null) return null;
+      final n = i(v);
+      return n == 0 ? null : n;
+    }
+
+    // (A) list rows: rows/items/lineItems が List のケース
+    dynamic rowsRaw = root['rows'] ?? root['items'] ?? root['lineItems'];
+    if (rowsRaw is Map && rowsRaw['rows'] is List) rowsRaw = rowsRaw['rows'];
+
+    if (rowsRaw is! List) {
+      // sometimes nested: { data: { rows: [...] } }
+      final d = root['data'];
+      if (d is Map) {
+        rowsRaw = d['rows'] ?? d['items'] ?? d['lineItems'];
+      }
+    }
+
+    if (rowsRaw is List) {
+      final out = <CartQueryRowDTO>[];
+      for (final e in rowsRaw) {
+        if (e is! Map) continue;
+        final m = e.cast<String, dynamic>();
+
+        final itemKey = s(m['itemKey'] ?? m['key'] ?? m['id']);
+        final avatarId = s(m['avatarId'] ?? root['avatarId']);
+        var inventoryId = s(m['inventoryId']);
+        var listId = s(m['listId']);
+        var modelId = s(m['modelId']);
+
+        if (inventoryId.isEmpty || listId.isEmpty || modelId.isEmpty) {
+          final p = _ItemKeyParts.fromItemKey(itemKey);
+          if (inventoryId.isEmpty) inventoryId = p.inventoryId;
+          if (listId.isEmpty) listId = p.listId;
+          if (modelId.isEmpty) modelId = p.modelId;
+        }
+
+        final qty = i(m['qty'] ?? m['quantity']);
+
+        final title = s(m['title']);
+        final size = s(m['size']);
+        final color = s(m['color']);
+        final listImage = s(
+          m['listImage'] ?? m['image'] ?? m['imageUrl'] ?? m['imageURL'],
+        );
+        final productName = s(m['productName']);
+        final price = iN(m['price']);
+
+        out.add(
+          CartQueryRowDTO(
+            itemKey: itemKey,
+            avatarId: avatarId,
+            inventoryId: inventoryId,
+            listId: listId,
+            modelId: modelId,
+            qty: qty,
+            raw: m,
+            title: title.isEmpty ? null : title,
+            size: size.isEmpty ? null : size,
+            color: color.isEmpty ? null : color,
+            listImage: listImage.isEmpty ? null : listImage,
+            productName: productName.isEmpty ? null : productName,
+            price: price,
+          ),
+        );
+      }
+      return out;
+    }
+
+    // (B) あなたが提示した形: { avatarId, items: { itemKey: {...} }, createdAt... }
+    final items = root['items'];
+    if (items is Map) {
+      final avatarId = s(root['avatarId'] ?? root['aid']);
+
+      final out = <CartQueryRowDTO>[];
+      for (final entry in items.entries) {
+        final key = entry.key.toString().trim();
+        if (key.isEmpty) continue;
+
+        final val = entry.value;
+        final m = (val is Map)
+            ? val.cast<String, dynamic>()
+            : <String, dynamic>{'value': val};
+
+        final p = _ItemKeyParts.fromItemKey(key);
+        var inventoryId = s(m['inventoryId']);
+        var listId = s(m['listId']);
+        var modelId = s(m['modelId']);
+
+        if (inventoryId.isEmpty) inventoryId = p.inventoryId;
+        if (listId.isEmpty) listId = p.listId;
+        if (modelId.isEmpty) modelId = p.modelId;
+
+        final qty = i(m['qty'] ?? m['quantity']);
+
+        final title = s(m['title']);
+        final size = s(m['size']);
+        final color = s(m['color']);
+        final listImage = s(
+          m['listImage'] ?? m['image'] ?? m['imageUrl'] ?? m['imageURL'],
+        );
+        final productName = s(m['productName']);
+        final price = iN(m['price']);
+
+        out.add(
+          CartQueryRowDTO(
+            itemKey: key,
+            avatarId: avatarId,
+            inventoryId: inventoryId,
+            listId: listId,
+            modelId: modelId,
+            qty: qty,
+            raw: m,
+            title: title.isEmpty ? null : title,
+            size: size.isEmpty ? null : size,
+            color: color.isEmpty ? null : color,
+            listImage: listImage.isEmpty ? null : listImage,
+            productName: productName.isEmpty ? null : productName,
+            price: price,
+          ),
+        );
+      }
+      return out;
+    }
+
+    // (C) single-item preview shape: { avatarId, itemKey, title, size, color, qty, ... }
+    final itemKey = s(root['itemKey'] ?? root['key'] ?? root['id']);
+    if (itemKey.isNotEmpty) {
+      final avatarId = s(root['avatarId'] ?? root['aid']);
+      final p = _ItemKeyParts.fromItemKey(itemKey);
+
+      final inventoryId = s(root['inventoryId']).isNotEmpty
+          ? s(root['inventoryId'])
+          : p.inventoryId;
+      final listId = s(root['listId']).isNotEmpty
+          ? s(root['listId'])
+          : p.listId;
+      final modelId = s(root['modelId']).isNotEmpty
+          ? s(root['modelId'])
+          : p.modelId;
+
+      final qty = i(root['qty'] ?? root['quantity']);
+
+      final title = s(root['title']);
+      final size = s(root['size']);
+      final color = s(root['color']);
+      final listImage = s(
+        root['listImage'] ??
+            root['image'] ??
+            root['imageUrl'] ??
+            root['imageURL'],
+      );
+      final productName = s(root['productName']);
+      final price = iN(root['price']);
+
+      return [
+        CartQueryRowDTO(
+          itemKey: itemKey,
+          avatarId: avatarId,
+          inventoryId: inventoryId,
+          listId: listId,
+          modelId: modelId,
+          qty: qty,
+          raw: root,
+          title: title.isEmpty ? null : title,
+          size: size.isEmpty ? null : size,
+          color: color.isEmpty ? null : color,
+          listImage: listImage.isEmpty ? null : listImage,
+          productName: productName.isEmpty ? null : productName,
+          price: price,
+        ),
+      ];
+    }
+
+    return const [];
+  }
+}
+
+/// ✅ preview/query の結果を “受け取る” ための DTO
+/// - いまの運用では itemKey が無い場合 /sns/cart/query の返却（あなたが貼った形）をそのまま受ける
+class PreviewQueryDTO {
+  PreviewQueryDTO({
+    required this.raw,
+    required this.avatarId,
+    required this.cart,
+    required this.rows,
+    required this.total,
+    required this.subtotal,
+    required this.shippingFee,
+    required this.tax,
+  });
+
+  final Map<String, dynamic> raw;
+
+  final String avatarId;
+
+  /// best-effort: preview が cart を含む場合に拾う（多くのケースで null でもOK）
+  final CartDTO? cart;
+
+  /// best-effort: preview rows
+  final List<CartQueryRowDTO> rows;
+
+  /// best-effort: totals (implementation-dependent)
+  final int? total;
+  final int? subtotal;
+  final int? shippingFee;
+  final int? tax;
+
+  factory PreviewQueryDTO.fromJson(Map<String, dynamic> json) {
+    String s(dynamic v) => (v ?? '').toString().trim();
+    int? iN(dynamic v) {
+      if (v == null) return null;
+      final n = CartItemDTO._toInt(v);
+      return n == 0 ? null : n;
+    }
+
+    final data = (json['data'] is Map)
+        ? (json['data'] as Map).cast<String, dynamic>()
+        : null;
+
+    final root = data ?? json;
+
+    final avatarId = s(root['avatarId'] ?? root['aid'] ?? json['avatarId']);
+
+    // cart (rare)
+    CartDTO? cart;
+    final c0 = root['cart'];
+    if (c0 is Map) {
+      cart = CartDTO.fromJson(c0.cast<String, dynamic>());
+    }
+
+    // ✅ rows: list rows / items-map / single-item すべて吸収
+    final rows = CartQueryRowDTO.parseListFrom(root);
+
+    // totals (names vary)
+    final totals = (root['totals'] is Map)
+        ? (root['totals'] as Map).cast<String, dynamic>()
+        : null;
+
+    final subtotal = iN(
+      totals?['subtotal'] ?? root['subtotal'] ?? root['itemsSubtotal'],
+    );
+    final shippingFee = iN(
+      totals?['shippingFee'] ?? root['shippingFee'] ?? root['shipping'],
+    );
+    final tax = iN(totals?['tax'] ?? root['tax']);
+    final total = iN(totals?['total'] ?? root['total']);
+
+    return PreviewQueryDTO(
+      raw: json,
+      avatarId: avatarId,
+      cart: cart,
+      rows: rows,
+      total: total,
+      subtotal: subtotal,
+      shippingFee: shippingFee,
+      tax: tax,
+    );
   }
 }
 
