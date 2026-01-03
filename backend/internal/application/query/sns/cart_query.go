@@ -5,7 +5,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"log"
 	"strings"
 	"time"
 
@@ -72,17 +71,6 @@ func (q *SNSCartQuery) GetByAvatarID(ctx context.Context, avatarID string) (snsd
 		return snsdto.CartDTO{}, errors.New("avatarId is required")
 	}
 
-	log.Printf("[sns_cart_query_diag] start avatarId=%q fs=%t listRepo=%t resolver=%t cartCol=%q listsCol=%q invCol=%q pbCol=%q",
-		maskUID(avatarID),
-		q.FS != nil,
-		q.ListRepo != nil,
-		q.Resolver != nil,
-		strings.TrimSpace(q.CartCol),
-		strings.TrimSpace(q.ListsCol),
-		strings.TrimSpace(q.InventoriesCol),
-		strings.TrimSpace(q.ProductBlueprintsCol),
-	)
-
 	cartCol := strings.TrimSpace(q.CartCol)
 	if cartCol == "" {
 		cartCol = "carts"
@@ -91,14 +79,11 @@ func (q *SNSCartQuery) GetByAvatarID(ctx context.Context, avatarID string) (snsd
 	snap, err := q.FS.Collection(cartCol).Doc(avatarID).Get(ctx)
 	if err != nil {
 		if isFirestoreNotFound(err) {
-			log.Printf("[sns_cart_query_diag] cart doc not found avatarId=%q col=%q", maskUID(avatarID), cartCol)
 			return snsdto.CartDTO{}, ErrNotFound
 		}
-		log.Printf("[sns_cart_query_diag] cart doc get failed avatarId=%q col=%q err=%v", maskUID(avatarID), cartCol, err)
 		return snsdto.CartDTO{}, err
 	}
 	if snap == nil || !snap.Exists() {
-		log.Printf("[sns_cart_query_diag] cart snap missing avatarId=%q col=%q", maskUID(avatarID), cartCol)
 		return snsdto.CartDTO{}, ErrNotFound
 	}
 
@@ -107,24 +92,8 @@ func (q *SNSCartQuery) GetByAvatarID(ctx context.Context, avatarID string) (snsd
 	// DataTo(&cartdom.Cart) は使わず “後方互換パース” する。
 	c, perr := cartFromSnapshotCompat(avatarID, snap)
 	if perr != nil {
-		log.Printf("[sns_cart_query] cart parse failed avatarId=%q err=%v", maskUID(avatarID), perr)
 		return snsdto.CartDTO{}, perr
 	}
-
-	itemN := 0
-	sample := ""
-	if c.Items != nil {
-		itemN = len(c.Items)
-		for _, it := range c.Items {
-			sample = fmt.Sprintf("inv=%q list=%q model=%q qty=%d",
-				maskID(it.InventoryID), maskID(it.ListID), maskID(it.ModelID), it.Qty,
-			)
-			break
-		}
-	}
-	log.Printf("[sns_cart_query_diag] cart loaded avatarId=%q items=%d sample=%s",
-		maskUID(avatarID), itemN, sample,
-	)
 
 	priceIndex, listMetaIndex := q.fetchListIndicesByCart(ctx, c)
 	invIndex := q.fetchInventoryIndexByCart(ctx, c)
@@ -132,20 +101,6 @@ func (q *SNSCartQuery) GetByAvatarID(ctx context.Context, avatarID string) (snsd
 	productNameIndex := q.fetchProductNameIndexByCart(ctx, c, invIndex)
 
 	out := toCartDTO(c, priceIndex, listMetaIndex, invIndex, modelIndex, productNameIndex)
-
-	cover := diagCartDTOMetaCoverage(out)
-	log.Printf("[sns_cart_query_diag] dto built avatarId=%q items=%d title=%d image=%d price=%d size=%d color=%d productName=%d",
-		maskUID(avatarID),
-		cover.Items,
-		cover.WithTitle,
-		cover.WithImage,
-		cover.WithPrice,
-		cover.WithSize,
-		cover.WithColor,
-		cover.WithProductName,
-	)
-
-	log.Printf("[sns_cart_query] get ok avatarId=%q items=%d", maskUID(avatarID), len(out.Items))
 	return out, nil
 }
 
@@ -461,24 +416,15 @@ func (q *SNSCartQuery) fetchListIndicesByCart(ctx context.Context, c *cartdom.Ca
 	}
 
 	if len(listIDs) == 0 {
-		log.Printf("[sns_cart_query_diag] listIndex: no listIds in cart")
 		return nil, nil
 	}
 
 	if q.ListRepo != nil {
-		log.Printf("[sns_cart_query_diag] listIndex: via ListRepo listIds=%d sample=%q", len(listIDs), maskID(listIDs[0]))
 		price, meta := q.fetchListIndicesByCartViaRepo(ctx, listIDs)
-		log.Printf("[sns_cart_query_diag] listIndex: via ListRepo done priceLists=%d metaLists=%d",
-			countMapKeys(price), countMetaKeys(meta),
-		)
 		return price, meta
 	}
 
-	log.Printf("[sns_cart_query_diag] listIndex: via Firestore (ListRepo is nil) listIds=%d sample=%q", len(listIDs), maskID(listIDs[0]))
 	price, meta := q.fetchListIndicesByCartViaFirestore(ctx, listIDs)
-	log.Printf("[sns_cart_query_diag] listIndex: via Firestore done priceLists=%d metaLists=%d",
-		countMapKeys(price), countMetaKeys(meta),
-	)
 	return price, meta
 }
 
@@ -490,8 +436,6 @@ func (q *SNSCartQuery) fetchListIndicesByCartViaRepo(ctx context.Context, listID
 	priceOut := map[string]map[string]int{}
 	metaOut := map[string]listMeta{}
 
-	okN := 0
-	errN := 0
 	for _, lid0 := range listIDs {
 		lid := strings.TrimSpace(lid0)
 		if lid == "" {
@@ -500,11 +444,8 @@ func (q *SNSCartQuery) fetchListIndicesByCartViaRepo(ctx context.Context, listID
 
 		l, err := q.ListRepo.GetByID(ctx, lid)
 		if err != nil {
-			errN++
-			log.Printf("[sns_cart_query_diag] listRepo.GetByID failed listId=%q err=%v", maskID(lid), err)
 			continue
 		}
-		okN++
 
 		mt := listMeta{
 			Title:   strings.TrimSpace(l.Title),
@@ -527,15 +468,7 @@ func (q *SNSCartQuery) fetchListIndicesByCartViaRepo(ctx context.Context, listID
 				priceOut[lid] = m
 			}
 		}
-
-		log.Printf("[sns_cart_query_diag] listRepo ok listId=%q title=%t image=%t prices=%d",
-			maskID(lid),
-			strings.TrimSpace(mt.Title) != "",
-			strings.TrimSpace(mt.ImageID) != "",
-			len(priceOut[lid]),
-		)
 	}
-	log.Printf("[sns_cart_query_diag] listRepo summary ok=%d err=%d", okN, errN)
 
 	if len(priceOut) == 0 {
 		priceOut = nil
@@ -563,7 +496,6 @@ func (q *SNSCartQuery) fetchListIndicesByCartViaFirestore(ctx context.Context, l
 
 	snaps, err := q.FS.GetAll(ctx, refs)
 	if err != nil {
-		log.Printf("[sns_cart_query] GetAll(lists) failed col=%q listIds=%d err=%v", listsCol, len(refs), err)
 		return nil, nil
 	}
 
@@ -576,7 +508,6 @@ func (q *SNSCartQuery) fetchListIndicesByCartViaFirestore(ctx context.Context, l
 			lid = strings.TrimSpace(listIDs[i])
 		}
 		if lid == "" || snap == nil || !snap.Exists() {
-			log.Printf("[sns_cart_query_diag] list fs missing listId=%q col=%q exists=%t", maskID(lid), listsCol, snap != nil && snap.Exists())
 			continue
 		}
 
@@ -603,13 +534,6 @@ func (q *SNSCartQuery) fetchListIndicesByCartViaFirestore(ctx context.Context, l
 					priceOut[lid] = m
 				}
 			}
-
-			log.Printf("[sns_cart_query_diag] list fs(DataTo) ok listId=%q title=%t image=%t prices=%d",
-				maskID(lid),
-				strings.TrimSpace(mt.Title) != "",
-				strings.TrimSpace(mt.ImageID) != "",
-				len(priceOut[lid]),
-			)
 			continue
 		}
 
@@ -644,13 +568,6 @@ func (q *SNSCartQuery) fetchListIndicesByCartViaFirestore(ctx context.Context, l
 				}
 			}
 		}
-
-		log.Printf("[sns_cart_query_diag] list fs(map) ok listId=%q title=%t image=%t prices=%d",
-			maskID(lid),
-			strings.TrimSpace(title) != "",
-			strings.TrimSpace(image) != "",
-			len(priceOut[lid]),
-		)
 	}
 
 	if len(priceOut) == 0 {
@@ -702,12 +619,10 @@ func (q *SNSCartQuery) fetchInventoryIndexByCart(ctx context.Context, c *cartdom
 
 	snaps, err := q.FS.GetAll(ctx, refs)
 	if err != nil {
-		log.Printf("[sns_cart_query] GetAll(inventories) failed col=%q invIds=%d err=%v", invCol, len(refs), err)
 		return nil
 	}
 
 	out := map[string]invParts{}
-	okN := 0
 	for i, snap := range snaps {
 		invID := ""
 		if i >= 0 && i < len(invIDs) {
@@ -721,10 +636,8 @@ func (q *SNSCartQuery) fetchInventoryIndexByCart(ctx context.Context, c *cartdom
 		pb := pickString(m, "productBlueprintId", "productBlueprintID", "ProductBlueprintID", "ProductBlueprintId")
 		tb := pickString(m, "tokenBlueprintId", "tokenBlueprintID", "TokenBlueprintID", "TokenBlueprintId")
 
-		fallbackParsed := false
 		if pb == "" || tb == "" {
 			if p, t, ok := parseInventoryID(invID); ok {
-				fallbackParsed = true
 				if pb == "" {
 					pb = p
 				}
@@ -740,14 +653,8 @@ func (q *SNSCartQuery) fetchInventoryIndexByCart(ctx context.Context, c *cartdom
 			continue
 		}
 
-		okN++
 		out[invID] = invParts{ProductBlueprintID: pb, TokenBlueprintID: tb}
-		log.Printf("[sns_cart_query_diag] inv ok invId=%q pb=%q tb=%q parsedFallback=%t",
-			maskID(invID), maskID(pb), maskID(tb), fallbackParsed,
-		)
 	}
-
-	log.Printf("[sns_cart_query_diag] inv summary invIds=%d resolved=%d col=%q", len(invIDs), okN, invCol)
 
 	if len(out) == 0 {
 		return nil
@@ -764,7 +671,6 @@ func (q *SNSCartQuery) fetchModelSimpleIndexByCart(ctx context.Context, c *cartd
 		return nil
 	}
 	if q.Resolver == nil {
-		log.Printf("[sns_cart_query_diag] modelIndex: resolver is nil -> skip (size/color will be empty)")
 		return nil
 	}
 
@@ -788,22 +694,16 @@ func (q *SNSCartQuery) fetchModelSimpleIndexByCart(ctx context.Context, c *cartd
 	}
 
 	out := map[string]modelSimple{}
-	okN := 0
-	emptyN := 0
 
 	for _, mid := range modelIDs {
 		mr := q.Resolver.ResolveModelResolved(ctx, mid)
 		sz := strings.TrimSpace(mr.Size)
 		cl := strings.TrimSpace(mr.Color)
 		if sz == "" && cl == "" {
-			emptyN++
 			continue
 		}
-		okN++
 		out[mid] = modelSimple{Size: sz, Color: cl}
 	}
-
-	log.Printf("[sns_cart_query_diag] modelIndex: modelIds=%d resolved=%d empty=%d", len(modelIDs), okN, emptyN)
 
 	if len(out) == 0 {
 		return nil
@@ -812,14 +712,8 @@ func (q *SNSCartQuery) fetchModelSimpleIndexByCart(ctx context.Context, c *cartd
 }
 
 // ============================================================
-// productName lookup（ここを強化ログ）
+// productName lookup
 // ============================================================
-
-type pbDeriveDiag struct {
-	InvID  string
-	PbID   string
-	Source string // invIndex / parseInventoryID
-}
 
 func (q *SNSCartQuery) fetchProductNameIndexByCart(
 	ctx context.Context,
@@ -839,8 +733,6 @@ func (q *SNSCartQuery) fetchProductNameIndexByCart(
 	pbSeen := map[string]struct{}{}
 	pbIDs := make([]string, 0, 16)
 
-	diags := make([]pbDeriveDiag, 0, 4)
-
 	for _, it := range c.Items {
 		invID := strings.TrimSpace(it.InventoryID)
 		if invID == "" {
@@ -848,26 +740,15 @@ func (q *SNSCartQuery) fetchProductNameIndexByCart(
 		}
 
 		pbID := ""
-		src := ""
 		if invIndex != nil {
 			if parts, ok := invIndex[invID]; ok {
 				pbID = strings.TrimSpace(parts.ProductBlueprintID)
-				if pbID != "" {
-					src = "invIndex"
-				}
 			}
 		}
 		if pbID == "" {
 			if p, _, ok := parseInventoryID(invID); ok {
 				pbID = strings.TrimSpace(p)
-				if pbID != "" {
-					src = "parseInventoryID"
-				}
 			}
-		}
-
-		if len(diags) < 3 {
-			diags = append(diags, pbDeriveDiag{InvID: invID, PbID: pbID, Source: src})
 		}
 
 		if pbID == "" {
@@ -881,22 +762,7 @@ func (q *SNSCartQuery) fetchProductNameIndexByCart(
 	}
 
 	if len(pbIDs) == 0 {
-		log.Printf("[sns_cart_query_diag] productNameIndex: no pbIds (resolver=%t col=%q)", q.Resolver != nil, pbCol)
-		for _, d := range diags {
-			log.Printf("[sns_cart_query_diag] productNameIndex derive inv=%q pb=%q src=%s",
-				maskID(d.InvID), maskID(d.PbID), d.Source,
-			)
-		}
 		return nil
-	}
-
-	log.Printf("[sns_cart_query_diag] productNameIndex: pbIds=%d sample=%q col=%q resolver=%t",
-		len(pbIDs), maskID(pbIDs[0]), pbCol, q.Resolver != nil,
-	)
-	for _, d := range diags {
-		log.Printf("[sns_cart_query_diag] productNameIndex derive inv=%q pb=%q src=%s",
-			maskID(d.InvID), maskID(d.PbID), d.Source,
-		)
 	}
 
 	refs := make([]*firestore.DocumentRef, 0, len(pbIDs))
@@ -906,20 +772,14 @@ func (q *SNSCartQuery) fetchProductNameIndexByCart(
 
 	snaps, err := q.FS.GetAll(ctx, refs)
 	if err != nil {
-		log.Printf("[sns_cart_query] GetAll(productBlueprints) failed col=%q pbIds=%d err=%v", pbCol, len(refs), err)
-
 		if q.Resolver != nil {
 			out := map[string]string{}
 			for _, id := range pbIDs {
 				name := strings.TrimSpace(q.Resolver.ResolveProductName(ctx, id))
-				log.Printf("[sns_cart_query_diag] productNameIndex resolver-only pb=%q name=%t",
-					maskID(id), name != "",
-				)
 				if name != "" {
 					out[id] = name
 				}
 			}
-			log.Printf("[sns_cart_query_diag] productNameIndex: resolver-only resolved=%d", len(out))
 			if len(out) == 0 {
 				return nil
 			}
@@ -929,10 +789,6 @@ func (q *SNSCartQuery) fetchProductNameIndexByCart(
 	}
 
 	out := map[string]string{}
-
-	resolvedFS := 0
-	resolvedResolver := 0
-	miss := 0
 
 	for i, snap := range snaps {
 		pbID := ""
@@ -945,19 +801,10 @@ func (q *SNSCartQuery) fetchProductNameIndexByCart(
 
 		exists := snap != nil && snap.Exists()
 		if !exists {
-			miss++
-			log.Printf("[sns_cart_query_diag] productNameIndex miss pb=%q col=%q -> will try resolver=%t",
-				maskID(pbID), pbCol, q.Resolver != nil,
-			)
-
 			if q.Resolver != nil {
 				rn := strings.TrimSpace(q.Resolver.ResolveProductName(ctx, pbID))
-				log.Printf("[sns_cart_query_diag] productNameIndex resolver pb=%q name=%t",
-					maskID(pbID), rn != "",
-				)
 				if rn != "" {
 					out[pbID] = rn
-					resolvedResolver++
 				}
 			}
 			continue
@@ -967,101 +814,21 @@ func (q *SNSCartQuery) fetchProductNameIndexByCart(
 		name := strings.TrimSpace(pickString(m, "productName", "ProductName", "name", "Name"))
 		if name != "" {
 			out[pbID] = name
-			resolvedFS++
-			log.Printf("[sns_cart_query_diag] productNameIndex fs ok pb=%q name=%t", maskID(pbID), true)
 			continue
 		}
 
 		if q.Resolver != nil {
 			rn := strings.TrimSpace(q.Resolver.ResolveProductName(ctx, pbID))
-			log.Printf("[sns_cart_query_diag] productNameIndex fs empty -> resolver pb=%q name=%t",
-				maskID(pbID), rn != "",
-			)
 			if rn != "" {
 				out[pbID] = rn
-				resolvedResolver++
 			}
-		} else {
-			log.Printf("[sns_cart_query_diag] productNameIndex fs empty and resolver nil pb=%q", maskID(pbID))
 		}
 	}
-
-	log.Printf("[sns_cart_query_diag] productNameIndex summary pbIds=%d resolved=%d(fs=%d resolver=%d) miss=%d",
-		len(pbIDs), len(out), resolvedFS, resolvedResolver, miss,
-	)
 
 	if len(out) == 0 {
 		return nil
 	}
 	return out
-}
-
-// ============================================================
-// diagnostics helpers
-// ============================================================
-
-type cartCover struct {
-	Items           int
-	WithTitle       int
-	WithImage       int
-	WithPrice       int
-	WithSize        int
-	WithColor       int
-	WithProductName int
-}
-
-func diagCartDTOMetaCoverage(dto snsdto.CartDTO) cartCover {
-	c := cartCover{}
-	if dto.Items == nil {
-		return c
-	}
-	c.Items = len(dto.Items)
-	for _, it := range dto.Items {
-		if strings.TrimSpace(it.Title) != "" {
-			c.WithTitle++
-		}
-		if strings.TrimSpace(it.ListImage) != "" {
-			c.WithImage++
-		}
-		if it.Price != nil {
-			c.WithPrice++
-		}
-		if strings.TrimSpace(it.Size) != "" {
-			c.WithSize++
-		}
-		if strings.TrimSpace(it.Color) != "" {
-			c.WithColor++
-		}
-		if strings.TrimSpace(it.ProductName) != "" {
-			c.WithProductName++
-		}
-	}
-	return c
-}
-
-func countMapKeys(m map[string]map[string]int) int {
-	if m == nil {
-		return 0
-	}
-	return len(m)
-}
-
-func countMetaKeys(m map[string]listMeta) int {
-	if m == nil {
-		return 0
-	}
-	return len(m)
-}
-
-func maskID(s string) string {
-	s = strings.TrimSpace(s)
-	if s == "" {
-		return ""
-	}
-	if len(s) <= 6 {
-		return s
-	}
-	return s[:4] + "***" + s[len(s)-2:]
 }
 
 // ============================================================

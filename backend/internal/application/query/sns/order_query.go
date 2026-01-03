@@ -8,6 +8,8 @@ import (
 	"log"
 	"strings"
 
+	snsdto "narratives/internal/application/query/sns/dto"
+
 	"cloud.google.com/go/firestore"
 	"google.golang.org/api/iterator"
 	"google.golang.org/grpc/codes"
@@ -17,8 +19,13 @@ import (
 // SNSOrderQuery resolves:
 // - uid -> avatarId (avatars where userId == uid)
 // - uid -> shippingAddress / billingAddress (best-effort; multiple shapes supported)
+// - avatarId -> cartItems (via SNSCartQuery; best-effort)
 type SNSOrderQuery struct {
 	FS *firestore.Client
+
+	// ✅ optional: cart read-model
+	// - if nil, ResolveByUID will create SNSCartQuery(fs) and fetch cart items best-effort
+	CartQ *SNSCartQuery
 
 	// collection names (override if your firestore schema differs)
 	AvatarsCol         string
@@ -35,6 +42,7 @@ type SNSOrderQuery struct {
 func NewSNSOrderQuery(fs *firestore.Client) *SNSOrderQuery {
 	return &SNSOrderQuery{
 		FS:                 fs,
+		CartQ:              nil,
 		AvatarsCol:         "avatars",
 		ShippingAddressCol: "shippingAddresses",
 		BillingAddressCol:  "billingAddresses",
@@ -43,17 +51,22 @@ func NewSNSOrderQuery(fs *firestore.Client) *SNSOrderQuery {
 	}
 }
 
-// OrderContextDTO is a minimal buyer-facing payload for payment/order flow.
-type OrderContextDTO struct {
-	UID             string            `json:"uid"`
-	AvatarID        string            `json:"avatarId"`
-	UserID          string            `json:"userId"`
-	ShippingAddress map[string]any    `json:"shippingAddress,omitempty"`
-	BillingAddress  map[string]any    `json:"billingAddress,omitempty"`
-	Debug           map[string]string `json:"debug,omitempty"` // optional
+func NewSNSOrderQueryWithCartQuery(fs *firestore.Client, cartQ *SNSCartQuery) *SNSOrderQuery {
+	q := NewSNSOrderQuery(fs)
+	q.CartQ = cartQ
+	return q
 }
 
-var ErrNotFound = errors.New("not_found")
+// OrderContextDTO is a minimal buyer-facing payload for payment/order flow.
+type OrderContextDTO struct {
+	UID             string                        `json:"uid"`
+	AvatarID        string                        `json:"avatarId"`
+	UserID          string                        `json:"userId"`
+	ShippingAddress map[string]any                `json:"shippingAddress,omitempty"`
+	BillingAddress  map[string]any                `json:"billingAddress,omitempty"`
+	CartItems       map[string]snsdto.CartItemDTO `json:"cartItems,omitempty"`
+	Debug           map[string]string             `json:"debug,omitempty"` // optional
+}
 
 // ResolveAvatarIDByUID resolves uid -> avatarId only.
 // - Intended for middleware use.
@@ -74,7 +87,7 @@ func (q *SNSOrderQuery) ResolveAvatarIDByUID(ctx context.Context, uid string) (s
 	return avatarID, nil
 }
 
-// ResolveByUID resolves uid -> avatarId and addresses.
+// ResolveByUID resolves uid -> avatarId and addresses (+ cart items).
 // - If avatar is not found, returns ErrNotFound.
 func (q *SNSOrderQuery) ResolveByUID(ctx context.Context, uid string) (OrderContextDTO, error) {
 	if q == nil || q.FS == nil {
@@ -100,12 +113,16 @@ func (q *SNSOrderQuery) ResolveByUID(ctx context.Context, uid string) (OrderCont
 	ship := q.fetchAddressBestEffort(ctx, q.ShippingAddressCol, userID)
 	bill := q.fetchAddressBestEffort(ctx, q.BillingAddressCol, userID)
 
+	// ✅ cartItems（best-effort）
+	cartItems := q.fetchCartItemsBestEffort(ctx, avatarID)
+
 	out := OrderContextDTO{
 		UID:             uid,
 		AvatarID:        avatarID,
 		UserID:          userID,
 		ShippingAddress: ship,
 		BillingAddress:  bill,
+		CartItems:       cartItems,
 	}
 	return out, nil
 }
@@ -155,6 +172,40 @@ func (q *SNSOrderQuery) resolveAvatarIDByUID(ctx context.Context, uid string) (a
 
 	log.Printf("[sns_order_query] resolveAvatarIDByUID ok uid=%q avatarId=%q userId=%q", maskUID(uid), aid, maskUID(u))
 	return aid, u, nil
+}
+
+// ------------------------------------------------------------
+// avatarId -> cartItems (best-effort)
+// ------------------------------------------------------------
+
+func (q *SNSOrderQuery) fetchCartItemsBestEffort(ctx context.Context, avatarID string) map[string]snsdto.CartItemDTO {
+	if q == nil || q.FS == nil {
+		return nil
+	}
+	avatarID = strings.TrimSpace(avatarID)
+	if avatarID == "" {
+		return nil
+	}
+
+	cq := q.CartQ
+	if cq == nil {
+		// ListRepo / Resolver は nil のまま（必要なら DI 側で CartQ を注入）
+		cq = NewSNSCartQuery(q.FS)
+	}
+
+	dto, err := cq.GetByAvatarID(ctx, avatarID)
+	if err != nil {
+		// carts/{avatarId} が無いケースは “空” 扱い（決済フローを止めない）
+		if errors.Is(err, ErrNotFound) {
+			return map[string]snsdto.CartItemDTO{}
+		}
+		return nil
+	}
+
+	if dto.Items == nil {
+		return map[string]snsdto.CartItemDTO{}
+	}
+	return dto.Items
 }
 
 // ------------------------------------------------------------

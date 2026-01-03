@@ -21,6 +21,14 @@ import (
 )
 
 // ------------------------------------------------------------
+// ✅ Route name constants (freeze naming variance)
+// ------------------------------------------------------------
+
+const (
+	SNSPaymentPath = "/sns/payment" // ✅ official payment endpoint (single source of truth)
+)
+
+// ------------------------------------------------------------
 // Hit tracing (minimal / deterministic)
 // ------------------------------------------------------------
 
@@ -533,6 +541,12 @@ func RegisterSNSRoutes(mux *http.ServeMux, deps SNSDeps) {
 
 		Payment: deps.Payment,
 	})
+
+	// ✅ payment endpoint hard-bind (freeze naming variance)
+	// - Official path is SNSPaymentPath ("/sns/payment")
+	// - Register both exact and trailing-slash variants.
+	safeHandle(mux, SNSPaymentPath, deps.Payment)
+	safeHandle(mux, SNSPaymentPath+"/", deps.Payment)
 }
 
 // ------------------------------------------------------------
@@ -549,6 +563,26 @@ func newUserAuthMiddlewareBestEffort(fb *firebaseauth.Client) *middleware.UserAu
 		return nil
 	}
 	return &middleware.UserAuthMiddleware{FirebaseAuth: fb}
+}
+
+// ------------------------------------------------------------
+// ServeMux safe handle (avoid panic on duplicate registration)
+// ------------------------------------------------------------
+
+func safeHandle(mux *http.ServeMux, pattern string, h http.Handler) {
+	if mux == nil || h == nil {
+		return
+	}
+	pattern = strings.TrimSpace(pattern)
+	if pattern == "" {
+		return
+	}
+	defer func() {
+		if r := recover(); r != nil {
+			// already registered: ignore
+		}
+	}()
+	mux.Handle(pattern, h)
 }
 
 // ------------------------------------------------------------
