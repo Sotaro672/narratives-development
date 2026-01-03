@@ -34,7 +34,7 @@ func (r *OrderRepositoryFS) ordersCol() *firestore.CollectionRef {
 }
 
 // ========================
-// RepositoryPort impl
+// RepositoryPort impl (usecase.OrderRepo)
 // ========================
 
 func (r *OrderRepositoryFS) GetByID(ctx context.Context, id string) (orderdom.Order, error) {
@@ -82,7 +82,6 @@ func (r *OrderRepositoryFS) Exists(ctx context.Context, id string) (bool, error)
 	return true, nil
 }
 
-// List: usecase.OrderRepo signature (returns common.PageResult[Order])
 func (r *OrderRepositoryFS) List(
 	ctx context.Context,
 	filter uc.OrderFilter,
@@ -110,6 +109,7 @@ func (r *OrderRepositoryFS) List(
 		if err != nil {
 			return common.PageResult[orderdom.Order]{}, err
 		}
+
 		o, err := docToOrder(doc)
 		if err != nil {
 			return common.PageResult[orderdom.Order]{}, err
@@ -148,8 +148,7 @@ func (r *OrderRepositoryFS) List(
 	}, nil
 }
 
-// ListByCursor: usecase.OrderRepo signature (returns common.CursorPageResult[Order])
-// Follows the PG behavior: ordered by ID ASC, cursor = last ID.
+// ListByCursor follows the PG behavior: ordered by ID ASC, cursor = last ID.
 func (r *OrderRepositoryFS) ListByCursor(
 	ctx context.Context,
 	filter uc.OrderFilter,
@@ -167,7 +166,6 @@ func (r *OrderRepositoryFS) ListByCursor(
 
 	q := r.ordersCol().OrderBy(firestore.DocumentID, firestore.Asc)
 	if after := strings.TrimSpace(cpage.After); after != "" {
-		// Start after given document ID (same semantics as "id > after" in PG).
 		q = q.StartAfter(after)
 	}
 
@@ -189,6 +187,7 @@ func (r *OrderRepositoryFS) ListByCursor(
 		if err != nil {
 			return common.CursorPageResult[orderdom.Order]{}, err
 		}
+
 		o, err := docToOrder(doc)
 		if err != nil {
 			return common.CursorPageResult[orderdom.Order]{}, err
@@ -214,7 +213,7 @@ func (r *OrderRepositoryFS) ListByCursor(
 	}, nil
 }
 
-func (r *OrderRepositoryFS) Count(ctx context.Context, _ uc.OrderFilter) (int, error) {
+func (r *OrderRepositoryFS) Count(ctx context.Context, filter uc.OrderFilter) (int, error) {
 	if r.Client == nil {
 		return 0, errors.New("firestore client is nil")
 	}
@@ -224,14 +223,20 @@ func (r *OrderRepositoryFS) Count(ctx context.Context, _ uc.OrderFilter) (int, e
 
 	total := 0
 	for {
-		_, err := it.Next()
+		doc, err := it.Next()
 		if err == iterator.Done {
 			break
 		}
 		if err != nil {
 			return 0, err
 		}
-		total++
+		o, err := docToOrder(doc)
+		if err != nil {
+			return 0, err
+		}
+		if matchOrderFilter(o, filter) {
+			total++
+		}
 	}
 	return total, nil
 }
@@ -386,7 +391,6 @@ func (r *OrderRepositoryFS) Reset(ctx context.Context) error {
 	}
 
 	const chunkSize = 400
-
 	for start := 0; start < len(refs); start += chunkSize {
 		end := start + chunkSize
 		if end > len(refs) {
@@ -415,6 +419,7 @@ func (r *OrderRepositoryFS) Reset(ctx context.Context) error {
 // ========================
 
 // docToOrder converts a Firestore document snapshot to orderdom.Order.
+// NOTE: legacy fields (orderNumber/status/fulfillment/tracking/deleted*) are ignored safely.
 func docToOrder(doc *firestore.DocumentSnapshot) (orderdom.Order, error) {
 	data := doc.Data()
 	if data == nil {
@@ -490,49 +495,37 @@ func docToOrder(doc *firestore.DocumentSnapshot) (orderdom.Order, error) {
 
 	return orderdom.Order{
 		ID:                doc.Ref.ID,
-		OrderNumber:       getStr("orderNumber", "order_number"),
-		Status:            orderdom.LegacyOrderStatus(getStr("status")),
 		UserID:            getStr("userId", "user_id"),
+		CartID:            getStr("cartId", "cart_id"),
 		ShippingAddressID: getStr("shippingAddressId", "shipping_address_id"),
 		BillingAddressID:  getStr("billingAddressId", "billing_address_id"),
 		ListID:            getStr("listId", "list_id"),
 		Items:             getItems(),
 		InvoiceID:         getStr("invoiceId", "invoice_id"),
 		PaymentID:         getStr("paymentId", "payment_id"),
-		FulfillmentID:     getStr("fulfillmentId", "fulfillment_id"),
-		TrackingID:        getStrPtr("trackingId", "tracking_id"),
 		TransferedDate:    getTimePtr("transferedDate", "transfered_date"),
 		CreatedAt:         getTime("createdAt", "created_at"),
 		UpdatedAt:         getTime("updatedAt", "updated_at"),
 		UpdatedBy:         getStrPtr("updatedBy", "updated_by"),
-		DeletedAt:         getTimePtr("deletedAt", "deleted_at"),
-		DeletedBy:         getStrPtr("deletedBy", "deleted_by"),
 	}, nil
 }
 
 // orderToDoc converts orderdom.Order into a Firestore-storable map.
 func orderToDoc(o orderdom.Order) map[string]any {
 	m := map[string]any{
-		"orderNumber":       strings.TrimSpace(o.OrderNumber),
-		"status":            strings.TrimSpace(string(o.Status)),
 		"userId":            strings.TrimSpace(o.UserID),
+		"cartId":            strings.TrimSpace(o.CartID),
 		"shippingAddressId": strings.TrimSpace(o.ShippingAddressID),
 		"billingAddressId":  strings.TrimSpace(o.BillingAddressID),
 		"listId":            strings.TrimSpace(o.ListID),
 		"invoiceId":         strings.TrimSpace(o.InvoiceID),
 		"paymentId":         strings.TrimSpace(o.PaymentID),
-		"fulfillmentId":     strings.TrimSpace(o.FulfillmentID),
 	}
 
 	if len(o.Items) > 0 {
 		m["items"] = o.Items
 	}
 
-	if o.TrackingID != nil {
-		if s := strings.TrimSpace(*o.TrackingID); s != "" {
-			m["trackingId"] = s
-		}
-	}
 	if o.TransferedDate != nil && !o.TransferedDate.IsZero() {
 		m["transferedDate"] = o.TransferedDate.UTC()
 	}
@@ -548,27 +541,14 @@ func orderToDoc(o orderdom.Order) map[string]any {
 			m["updatedBy"] = s
 		}
 	}
-	if o.DeletedAt != nil && !o.DeletedAt.IsZero() {
-		m["deletedAt"] = o.DeletedAt.UTC()
-	}
-	if o.DeletedBy != nil {
-		if s := strings.TrimSpace(*o.DeletedBy); s != "" {
-			m["deletedBy"] = s
-		}
-	}
 
 	return m
 }
 
-// matchOrderFilter applies uc.OrderFilter in-memory (Firestore-friendly mirror of buildOrderWhere).
+// matchOrderFilter applies uc.OrderFilter in-memory.
 func matchOrderFilter(o orderdom.Order, f uc.OrderFilter) bool {
 	if f.UserID != nil {
 		if strings.TrimSpace(o.UserID) != strings.TrimSpace(*f.UserID) {
-			return false
-		}
-	}
-	if f.Status != nil {
-		if strings.TrimSpace(string(o.Status)) != strings.TrimSpace(string(*f.Status)) {
 			return false
 		}
 	}
@@ -604,17 +584,6 @@ func matchOrderFilter(o orderdom.Order, f uc.OrderFilter) bool {
 			return false
 		}
 	}
-	if f.HasTransferedDate != nil {
-		if *f.HasTransferedDate {
-			if o.TransferedDate == nil {
-				return false
-			}
-		} else {
-			if o.TransferedDate != nil {
-				return false
-			}
-		}
-	}
 
 	return true
 }
@@ -629,8 +598,6 @@ func applyOrderSort(q firestore.Query, sort common.Sort) firestore.Query {
 		field = "createdAt"
 	case "updatedat", "updated_at":
 		field = "updatedAt"
-	case "ordernumber", "order_number":
-		field = "orderNumber"
 	case "transfereddate", "transfered_date":
 		field = "transferedDate"
 	default:

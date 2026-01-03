@@ -4,9 +4,10 @@ import 'package:go_router/go_router.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
 
-import 'package:sns/features/cart/infrastructure/cart_repository_http.dart';
-
 import '../state/catalog_selection_store.dart';
+
+// ✅ NEW: 3 buttons extracted
+import 'footer_buttons.dart';
 
 /// Minimal footer widget (layout primitive).
 class AppFooter extends StatelessWidget {
@@ -173,7 +174,7 @@ class SignedInFooter extends StatelessWidget {
                                     mid.isNotEmpty &&
                                     stock > 0;
 
-                                return _AddToCartButton(
+                                return AddToCartButton(
                                   from: from,
                                   inventoryId: invId,
                                   listId: listId,
@@ -185,12 +186,12 @@ class SignedInFooter extends StatelessWidget {
                               },
                             )
                           : isCart
-                          ? _GoToPaymentButton(
+                          ? GoToPaymentButton(
                               avatarId: avatarId,
                               enabled: avatarId.trim().isNotEmpty,
                             )
                           : isPayment
-                          ? _ConfirmPaymentButton(
+                          ? ConfirmPaymentButton(
                               avatarId: avatarId,
                               enabled: avatarId.trim().isNotEmpty,
                             )
@@ -268,237 +269,6 @@ class _FooterItem extends StatelessWidget {
             Text(label, style: t.labelSmall),
           ],
         ),
-      ),
-    );
-  }
-}
-
-/// ✅ /cart 用：購入する CTA（paymentへ遷移）
-class _GoToPaymentButton extends StatelessWidget {
-  const _GoToPaymentButton({required this.avatarId, required this.enabled});
-
-  final String avatarId;
-  final bool enabled;
-
-  @override
-  Widget build(BuildContext context) {
-    final aid = avatarId.trim();
-    final canTap = enabled && aid.isNotEmpty;
-
-    return SizedBox(
-      height: 40,
-      child: ElevatedButton.icon(
-        icon: const Icon(Icons.shopping_bag_outlined, size: 20),
-        label: const Text('購入する'),
-        onPressed: !canTap
-            ? null
-            : () {
-                // ✅ CartPage と同じ仕様：payment の from は /cart?avatarId=...
-                final back = Uri(
-                  path: '/cart',
-                  queryParameters: {'avatarId': aid},
-                ).toString();
-
-                final uri = Uri(
-                  path: '/payment',
-                  queryParameters: {'avatarId': aid, 'from': back},
-                );
-
-                context.go(uri.toString());
-              },
-      ),
-    );
-  }
-}
-
-/// ✅ /payment 用：支払を確定する CTA（現時点はUI導線のみ）
-class _ConfirmPaymentButton extends StatefulWidget {
-  const _ConfirmPaymentButton({required this.avatarId, required this.enabled});
-
-  final String avatarId;
-  final bool enabled;
-
-  @override
-  State<_ConfirmPaymentButton> createState() => _ConfirmPaymentButtonState();
-}
-
-class _ConfirmPaymentButtonState extends State<_ConfirmPaymentButton> {
-  bool _loading = false;
-
-  Future<void> _confirm() async {
-    final aid = widget.avatarId.trim();
-    final canTap = widget.enabled && !_loading && aid.isNotEmpty;
-    if (!canTap) return;
-
-    setState(() => _loading = true);
-    try {
-      // ✅ ここに実際の「決済確定」API呼び出しを後で追加する想定
-      // いまはUI導線のみ（壊れないように依存を増やさない）
-      await Future<void>.delayed(const Duration(milliseconds: 200));
-
-      if (!mounted) return;
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text('支払を確定しました（仮）')));
-    } catch (e) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('確定に失敗しました: $e')));
-    } finally {
-      if (mounted) setState(() => _loading = false);
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final aid = widget.avatarId.trim();
-    final canTap = widget.enabled && !_loading && aid.isNotEmpty;
-
-    return SizedBox(
-      height: 40,
-      child: ElevatedButton.icon(
-        icon: _loading
-            ? const SizedBox(
-                width: 18,
-                height: 18,
-                child: CircularProgressIndicator(strokeWidth: 2),
-              )
-            : const Icon(Icons.verified_outlined, size: 20),
-        label: Text(_loading ? '確定中...' : '支払を確定する'),
-        onPressed: !canTap ? null : _confirm,
-      ),
-    );
-  }
-}
-
-/// ✅ catalog 用：カートに入れる CTA
-/// ✅ 「model が 1つに絞れたら enabled」
-/// ✅ 在庫 0 は押下不可
-/// ✅ 押下時に CartHandler に add リクエストを投げてから /cart へ遷移する
-class _AddToCartButton extends StatefulWidget {
-  const _AddToCartButton({
-    required this.from,
-    required this.inventoryId,
-    required this.listId,
-    required this.avatarId,
-    required this.enabled,
-    required this.modelId,
-    required this.stockCount,
-  });
-
-  final String from;
-
-  // ✅ NEW: required by backend
-  final String inventoryId;
-  final String listId;
-
-  final String avatarId;
-
-  final bool enabled;
-  final String? modelId;
-  final int? stockCount;
-
-  @override
-  State<_AddToCartButton> createState() => _AddToCartButtonState();
-}
-
-class _AddToCartButtonState extends State<_AddToCartButton> {
-  bool _loading = false;
-
-  Future<void> _addThenGoCart() async {
-    final mid = (widget.modelId ?? '').trim();
-    final sc = widget.stockCount ?? 0;
-    final aid = widget.avatarId.trim();
-    final invId = widget.inventoryId.trim();
-    final listId = widget.listId.trim();
-
-    // ✅ 最終ガード（backend 必須フィールドも含める）
-    final canTap =
-        widget.enabled &&
-        !_loading &&
-        aid.isNotEmpty &&
-        invId.isNotEmpty &&
-        listId.isNotEmpty &&
-        mid.isNotEmpty &&
-        sc > 0;
-    if (!canTap) return;
-
-    setState(() => _loading = true);
-
-    try {
-      final repo = CartRepositoryHttp();
-      try {
-        await repo.addItem(
-          avatarId: aid,
-          inventoryId: invId,
-          listId: listId,
-          modelId: mid,
-          qty: 1,
-        );
-      } finally {
-        repo.dispose();
-      }
-
-      if (!mounted) return;
-
-      // ✅ 追加できたら cart へ
-      final qp = <String, String>{'from': widget.from, 'avatarId': aid};
-      final uri = Uri(path: '/cart', queryParameters: qp);
-
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text('カートに追加しました')));
-
-      context.go(uri.toString());
-    } catch (e) {
-      if (!mounted) return;
-      final msg = e.toString();
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('追加に失敗しました: $msg')));
-    } finally {
-      if (mounted) {
-        setState(() => _loading = false);
-      }
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final mid = (widget.modelId ?? '').trim();
-    final sc = widget.stockCount ?? 0;
-
-    final invId = widget.inventoryId.trim();
-    final listId = widget.listId.trim();
-
-    // ✅ 最終ガード：enabled が true でも在庫 0 は絶対押下不可
-    final canTap =
-        widget.enabled &&
-        !_loading &&
-        invId.isNotEmpty &&
-        listId.isNotEmpty &&
-        mid.isNotEmpty &&
-        sc > 0;
-
-    final label = _loading
-        ? '追加中...'
-        : (mid.isNotEmpty && sc <= 0)
-        ? '在庫なし'
-        : 'カートに入れる';
-
-    return SizedBox(
-      height: 40,
-      child: ElevatedButton.icon(
-        icon: _loading
-            ? const SizedBox(
-                width: 18,
-                height: 18,
-                child: CircularProgressIndicator(strokeWidth: 2),
-              )
-            : const Icon(Icons.add_shopping_cart_outlined, size: 20),
-        label: Text(label),
-        onPressed: (!canTap) ? null : _addThenGoCart,
       ),
     );
   }

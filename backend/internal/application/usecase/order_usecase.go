@@ -25,16 +25,16 @@ type OrderRepo interface {
 }
 
 // OrderFilter provides basic filtering for listing orders.
+// NOTE: kept for existing app/usecase call sites; repository adapters should translate as needed.
 type OrderFilter struct {
-	UserID            *string
-	Status            *orderdom.LegacyOrderStatus
-	CreatedFrom       *time.Time
-	CreatedTo         *time.Time
-	UpdatedFrom       *time.Time
-	UpdatedTo         *time.Time
-	TransferedFrom    *time.Time
-	TransferedTo      *time.Time
-	HasTransferedDate *bool
+	UserID *string
+
+	CreatedFrom    *time.Time
+	CreatedTo      *time.Time
+	UpdatedFrom    *time.Time
+	UpdatedTo      *time.Time
+	TransferedFrom *time.Time
+	TransferedTo   *time.Time
 }
 
 // OrderUsecase orchestrates order operations.
@@ -80,22 +80,19 @@ func (u *OrderUsecase) ListByCursor(ctx context.Context, f OrderFilter, s common
 
 type CreateOrderInput struct {
 	ID                string
-	OrderNumber       string
-	Status            orderdom.LegacyOrderStatus
 	UserID            string
+	CartID            string
 	ShippingAddressID string
 	BillingAddressID  string
 	ListID            string
 	Items             []string // orderItem primary keys
 	InvoiceID         string
 	PaymentID         string
-	FulfillmentID     string
-	TrackingID        *string
-	TransferedDate    *time.Time
-	CreatedAt         *time.Time // optional; defaults to now
-	UpdatedBy         *string
-	DeletedAt         *time.Time
-	DeletedBy         *string
+
+	TransferedDate *time.Time // optional
+
+	CreatedAt *time.Time // optional; defaults to now
+	UpdatedBy *string
 }
 
 func (u *OrderUsecase) Create(ctx context.Context, in CreateOrderInput) (orderdom.Order, error) {
@@ -104,28 +101,22 @@ func (u *OrderUsecase) Create(ctx context.Context, in CreateOrderInput) (orderdo
 	if in.CreatedAt != nil && !in.CreatedAt.IsZero() {
 		createdAt = in.CreatedAt.UTC()
 	}
-	// UpdatedAt must be set; initially equal to createdAt
 	updatedAt := createdAt
 
 	o, err := orderdom.New(
 		strings.TrimSpace(in.ID),
-		strings.TrimSpace(in.OrderNumber),
-		in.Status,
 		strings.TrimSpace(in.UserID),
+		strings.TrimSpace(in.CartID),
 		strings.TrimSpace(in.ShippingAddressID),
 		strings.TrimSpace(in.BillingAddressID),
 		strings.TrimSpace(in.ListID),
 		in.Items,
 		strings.TrimSpace(in.InvoiceID),
 		strings.TrimSpace(in.PaymentID),
-		strings.TrimSpace(in.FulfillmentID),
-		in.TrackingID,
 		in.TransferedDate,
 		createdAt,
 		updatedAt,
 		in.UpdatedBy,
-		in.DeletedAt,
-		in.DeletedBy,
 	)
 	if err != nil {
 		return orderdom.Order{}, err
@@ -136,14 +127,14 @@ func (u *OrderUsecase) Create(ctx context.Context, in CreateOrderInput) (orderdo
 type UpdateOrderInput struct {
 	ID string
 
-	OrderNumber       *string
-	Status            *orderdom.LegacyOrderStatus
 	UserID            *string
+	CartID            *string
 	ShippingAddressID *string
 	BillingAddressID  *string
 	ListID            *string
-	TrackingID        *string
-	TransferedDate    *time.Time // if non-nil, set and mark transferred
+	InvoiceID         *string
+	PaymentID         *string
+	TransferedDate    *time.Time
 	UpdatedBy         *string
 
 	// Items operations (mutually composable)
@@ -160,20 +151,15 @@ func (u *OrderUsecase) Update(ctx context.Context, in UpdateOrderInput) (orderdo
 
 	now := u.now().UTC()
 
-	// Field updates via entity mutators (ensures UpdatedAt coherence)
-	if in.OrderNumber != nil {
-		o.OrderNumber = strings.TrimSpace(*in.OrderNumber)
+	// Simple field updates + Touch
+	if in.UserID != nil {
+		o.UserID = strings.TrimSpace(*in.UserID)
 		if err := o.Touch(now); err != nil {
 			return orderdom.Order{}, err
 		}
 	}
-	if in.Status != nil {
-		if err := o.SetLegacyStatus(*in.Status, now); err != nil {
-			return orderdom.Order{}, err
-		}
-	}
-	if in.UserID != nil {
-		o.UserID = strings.TrimSpace(*in.UserID)
+	if in.CartID != nil {
+		o.CartID = strings.TrimSpace(*in.CartID)
 		if err := o.Touch(now); err != nil {
 			return orderdom.Order{}, err
 		}
@@ -194,8 +180,13 @@ func (u *OrderUsecase) Update(ctx context.Context, in UpdateOrderInput) (orderdo
 			return orderdom.Order{}, err
 		}
 	}
-	if in.TrackingID != nil {
-		if err := o.SetTracking(in.TrackingID, now); err != nil {
+	if in.InvoiceID != nil {
+		if err := o.UpdateInvoice(strings.TrimSpace(*in.InvoiceID), now); err != nil {
+			return orderdom.Order{}, err
+		}
+	}
+	if in.PaymentID != nil {
+		if err := o.UpdatePayment(strings.TrimSpace(*in.PaymentID), now); err != nil {
 			return orderdom.Order{}, err
 		}
 	}
@@ -206,12 +197,8 @@ func (u *OrderUsecase) Update(ctx context.Context, in UpdateOrderInput) (orderdo
 	}
 	if in.UpdatedBy != nil {
 		v := strings.TrimSpace(*in.UpdatedBy)
-		if v == "" {
-			// Let entity validation handle invalid UpdatedBy when set
-			o.UpdatedBy = &v
-		} else {
-			o.UpdatedBy = &v
-		}
+		// nil/empty validation is handled by entity.validate() when saved (and/or upstream)
+		o.UpdatedBy = &v
 		if err := o.Touch(now); err != nil {
 			return orderdom.Order{}, err
 		}

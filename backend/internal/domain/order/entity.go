@@ -4,31 +4,9 @@ package order
 import (
 	"errors"
 	"fmt"
-	"regexp"
 	"strings"
 	"time"
 )
-
-// ========================================
-// Enums (mirror TS)
-// ========================================
-
-type LegacyOrderStatus string // persisted legacy status
-
-const (
-	// Legacy statuses
-	LegacyPaid        LegacyOrderStatus = "paid"
-	LegacyTransferred LegacyOrderStatus = "transferred"
-)
-
-func IsValidLegacyStatus(s LegacyOrderStatus) bool {
-	switch s {
-	case LegacyPaid, LegacyTransferred:
-		return true
-	default:
-		return false
-	}
-}
 
 // ========================================
 // Entity (mirror TS Order)
@@ -36,43 +14,33 @@ func IsValidLegacyStatus(s LegacyOrderStatus) bool {
 
 type Order struct {
 	ID                string
-	OrderNumber       string
-	Status            LegacyOrderStatus
 	UserID            string
+	CartID            string
 	ShippingAddressID string
 	BillingAddressID  string
 	ListID            string
 	Items             []string `json:"items"`
 	InvoiceID         string
 	PaymentID         string
-	FulfillmentID     string
-	TrackingID        *string
 	TransferedDate    *time.Time // note: mirrors TS: transferedDate
 	CreatedAt         time.Time
 	UpdatedAt         time.Time
 	UpdatedBy         *string
-	DeletedAt         *time.Time
-	DeletedBy         *string
 }
 
 // OrderPatch represents partial updates to Order fields.
 // A nil field means "no change".
 type OrderPatch struct {
-	OrderNumber       *string
-	Status            *LegacyOrderStatus
 	UserID            *string
+	CartID            *string
 	ShippingAddressID *string
 	BillingAddressID  *string
 	ListID            *string
 	Items             *[]string
 	InvoiceID         *string
 	PaymentID         *string
-	FulfillmentID     *string
-	TrackingID        *string
 	TransferedDate    *time.Time
 	UpdatedBy         *string
-	DeletedAt         *time.Time
-	DeletedBy         *string
 }
 
 // ========================================
@@ -81,23 +49,18 @@ type OrderPatch struct {
 
 var (
 	ErrInvalidID              = errors.New("order: invalid id")
-	ErrInvalidOrderNumber     = errors.New("order: invalid orderNumber")
-	ErrInvalidStatus          = errors.New("order: invalid status")
 	ErrInvalidUserID          = errors.New("order: invalid userId")
+	ErrInvalidCartID          = errors.New("order: invalid cartId")
 	ErrInvalidShippingAddress = errors.New("order: invalid shippingAddressId")
 	ErrInvalidBillingAddress  = errors.New("order: invalid billingAddressId")
 	ErrInvalidListID          = errors.New("order: invalid listId")
 	ErrInvalidItems           = errors.New("order: invalid items")
 	ErrInvalidInvoiceID       = errors.New("order: invalid invoiceId")
 	ErrInvalidPaymentID       = errors.New("order: invalid paymentId")
-	ErrInvalidFulfillmentID   = errors.New("order: invalid fulfillmentId")
-	ErrInvalidTrackingID      = errors.New("order: invalid trackingId")
 	ErrInvalidTransferredDate = errors.New("order: invalid transferredDate")
 	ErrInvalidCreatedAt       = errors.New("order: invalid createdAt")
 	ErrInvalidUpdatedAt       = errors.New("order: invalid updatedAt")
 	ErrInvalidUpdatedBy       = errors.New("order: invalid updatedBy")
-	ErrInvalidDeletedAt       = errors.New("order: invalid deletedAt")
-	ErrInvalidDeletedBy       = errors.New("order: invalid deletedBy")
 	ErrInvalidItemID          = errors.New("order: invalid item id")
 )
 
@@ -106,8 +69,6 @@ var (
 // ========================================
 
 var (
-	// Example order number format; loosen as needed. Empty regex disables format check.
-	orderNumberRe    = regexp.MustCompile(`^[A-Z0-9\-]{1,32}$`)
 	MinItemsRequired = 1
 )
 
@@ -117,43 +78,33 @@ var (
 
 func New(
 	id string,
-	orderNumber string,
-	status LegacyOrderStatus,
 	userID string,
+	cartID string,
 	shippingAddressID string,
 	billingAddressID string,
 	listID string,
 	items []string,
 	invoiceID string,
 	paymentID string,
-	fulfillmentID string,
-	trackingID *string,
 	transferedDate *time.Time,
 	createdAt time.Time,
 	updatedAt time.Time,
 	updatedBy *string,
-	deletedAt *time.Time,
-	deletedBy *string,
 ) (Order, error) {
 	o := Order{
 		ID:                strings.TrimSpace(id),
-		OrderNumber:       strings.TrimSpace(orderNumber),
-		Status:            status,
 		UserID:            strings.TrimSpace(userID),
+		CartID:            strings.TrimSpace(cartID),
 		ShippingAddressID: strings.TrimSpace(shippingAddressID),
 		BillingAddressID:  strings.TrimSpace(billingAddressID),
 		ListID:            strings.TrimSpace(listID),
 		Items:             dedupTrim(items),
 		InvoiceID:         strings.TrimSpace(invoiceID),
 		PaymentID:         strings.TrimSpace(paymentID),
-		FulfillmentID:     strings.TrimSpace(fulfillmentID),
-		TrackingID:        normalizePtr(trackingID),
 		TransferedDate:    normalizeTimePtr(transferedDate),
 		CreatedAt:         createdAt.UTC(),
 		UpdatedAt:         updatedAt.UTC(),
 		UpdatedBy:         normalizePtr(updatedBy),
-		DeletedAt:         normalizeTimePtr(deletedAt),
-		DeletedBy:         normalizePtr(deletedBy),
 	}
 	if err := o.validate(); err != nil {
 		return Order{}, err
@@ -163,23 +114,18 @@ func New(
 
 func NewFromStringTimes(
 	id string,
-	orderNumber string,
-	status LegacyOrderStatus,
 	userID string,
+	cartID string,
 	shippingAddressID string,
 	billingAddressID string,
 	listID string,
 	items []string,
 	invoiceID string,
 	paymentID string,
-	fulfillmentID string,
-	trackingID *string,
 	transferedDateStr *string,
 	createdAtStr string,
 	updatedAtStr string,
 	updatedBy *string,
-	deletedAtStr *string,
-	deletedBy *string,
 ) (Order, error) {
 	ca, err := parseTime(createdAtStr, ErrInvalidCreatedAt)
 	if err != nil {
@@ -189,7 +135,8 @@ func NewFromStringTimes(
 	if err != nil {
 		return Order{}, err
 	}
-	var td, dd *time.Time
+
+	var td *time.Time
 	if transferedDateStr != nil && strings.TrimSpace(*transferedDateStr) != "" {
 		t, err := parseTime(*transferedDateStr, ErrInvalidTransferredDate)
 		if err != nil {
@@ -197,20 +144,21 @@ func NewFromStringTimes(
 		}
 		td = &t
 	}
-	if deletedAtStr != nil && strings.TrimSpace(*deletedAtStr) != "" {
-		t, err := parseTime(*deletedAtStr, ErrInvalidDeletedAt)
-		if err != nil {
-			return Order{}, err
-		}
-		dd = &t
-	}
+
 	return New(
-		id, orderNumber, status,
-		userID, shippingAddressID, billingAddressID, listID,
-		items, invoiceID, paymentID, fulfillmentID,
-		trackingID, td,
-		ca, ua,
-		updatedBy, dd, deletedBy,
+		id,
+		userID,
+		cartID,
+		shippingAddressID,
+		billingAddressID,
+		listID,
+		items,
+		invoiceID,
+		paymentID,
+		td,
+		ca,
+		ua,
+		updatedBy,
 	)
 }
 
@@ -226,23 +174,19 @@ func (o *Order) Touch(now time.Time) error {
 	return nil
 }
 
-func (o *Order) SetLegacyStatus(s LegacyOrderStatus, now time.Time) error {
-	if !IsValidLegacyStatus(s) {
-		return ErrInvalidStatus
+// New name to mirror TS field "transferedDate"
+func (o *Order) SetTransfered(at time.Time, now time.Time) error {
+	if at.IsZero() {
+		return ErrInvalidTransferredDate
 	}
-	o.Status = s
+	utc := at.UTC()
+	o.TransferedDate = &utc
 	return o.Touch(now)
 }
 
-func (o *Order) SetTracking(id *string, now time.Time) error {
-	if id != nil {
-		ni := normalizePtr(id)
-		if ni != nil && *ni == "" {
-			return ErrInvalidTrackingID
-		}
-		o.TrackingID = ni
-	}
-	return o.Touch(now)
+// Backward-compat: keep old method name delegating to new one
+func (o *Order) SetTransferred(at time.Time, now time.Time) error {
+	return o.SetTransfered(at, now)
 }
 
 func (o *Order) ReplaceItems(items []string, now time.Time) error {
@@ -316,31 +260,6 @@ func (o *Order) UpdatePayment(paymentID string, now time.Time) error {
 	return o.Touch(now)
 }
 
-func (o *Order) UpdateFulfillment(fulfillmentID string, now time.Time) error {
-	fulfillmentID = strings.TrimSpace(fulfillmentID)
-	if fulfillmentID == "" {
-		return ErrInvalidFulfillmentID
-	}
-	o.FulfillmentID = fulfillmentID
-	return o.Touch(now)
-}
-
-// New name to mirror TS field "edDate"
-func (o *Order) SetTransfered(at time.Time, now time.Time) error {
-	if at.IsZero() {
-		return ErrInvalidTransferredDate
-	}
-	utc := at.UTC()
-	o.TransferedDate = &utc
-	o.Status = LegacyTransferred
-	return o.Touch(now)
-}
-
-// Backward-compat: keep old method name delegating to new one
-func (o *Order) SetTransferred(at time.Time, now time.Time) error {
-	return o.SetTransfered(at, now)
-}
-
 // ========================================
 // Validation
 // ========================================
@@ -349,17 +268,11 @@ func (o Order) validate() error {
 	if o.ID == "" {
 		return ErrInvalidID
 	}
-	if o.OrderNumber == "" {
-		return ErrInvalidOrderNumber
-	}
-	if orderNumberRe != nil && !orderNumberRe.MatchString(o.OrderNumber) {
-		return ErrInvalidOrderNumber
-	}
-	if !IsValidLegacyStatus(o.Status) {
-		return ErrInvalidStatus
-	}
 	if o.UserID == "" {
 		return ErrInvalidUserID
+	}
+	if o.CartID == "" {
+		return ErrInvalidCartID
 	}
 	if o.ShippingAddressID == "" {
 		return ErrInvalidShippingAddress
@@ -379,12 +292,6 @@ func (o Order) validate() error {
 	if o.PaymentID == "" {
 		return ErrInvalidPaymentID
 	}
-	if o.FulfillmentID == "" {
-		return ErrInvalidFulfillmentID
-	}
-	if o.TrackingID != nil && strings.TrimSpace(*o.TrackingID) == "" {
-		return ErrInvalidTrackingID
-	}
 	if o.CreatedAt.IsZero() {
 		return ErrInvalidCreatedAt
 	}
@@ -401,19 +308,6 @@ func (o Order) validate() error {
 	// UpdatedBy optional but if set must be non-empty
 	if o.UpdatedBy != nil && strings.TrimSpace(*o.UpdatedBy) == "" {
 		return ErrInvalidUpdatedBy
-	}
-	// Deleted pair coherence
-	if (o.DeletedAt == nil) != (o.DeletedBy == nil) {
-		if o.DeletedAt == nil {
-			return ErrInvalidDeletedAt
-		}
-		return ErrInvalidDeletedBy
-	}
-	if o.DeletedBy != nil && strings.TrimSpace(*o.DeletedBy) == "" {
-		return ErrInvalidDeletedBy
-	}
-	if o.DeletedAt != nil && o.DeletedAt.Before(o.CreatedAt) {
-		return ErrInvalidDeletedAt
 	}
 	// validate で Items が orderItem の主キー(ID)として妥当か検証します（空文字は不可）。
 	for _, id := range o.Items {

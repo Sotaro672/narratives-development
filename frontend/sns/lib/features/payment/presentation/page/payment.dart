@@ -98,12 +98,11 @@ class _PaymentPageState extends State<PaymentPage> {
           }
 
           final cards = <Widget>[
-            _UserCard(ctx: vm.ctx),
+            _BillingCard(ctx: vm.ctx),
             const SizedBox(height: 12),
             _ShippingCard(ctx: vm.ctx),
             const SizedBox(height: 12),
-            _BillingCard(ctx: vm.ctx),
-            const SizedBox(height: 12),
+            // ✅ CartItemDTO の中身を表示に使う
             _CartCard(cart: vm.cart),
           ];
 
@@ -148,49 +147,6 @@ class _PaymentVM {
 // Cards
 // ------------------------------------------------------------
 
-class _UserCard extends StatelessWidget {
-  const _UserCard({required this.ctx});
-  final PaymentContextDTO ctx;
-
-  String _pickName() {
-    final d = ctx.debug;
-    final ship = ctx.shippingAddress;
-    final bill = ctx.billingAddress;
-
-    String s(dynamic v) => (v ?? '').toString().trim();
-
-    return s(d?['fullName']).isNotEmpty
-        ? s(d?['fullName'])
-        : s(ship?['fullName']).isNotEmpty
-        ? s(ship?['fullName'])
-        : s(ship?['name']).isNotEmpty
-        ? s(ship?['name'])
-        : s(bill?['cardholderName']).isNotEmpty
-        ? s(bill?['cardholderName'])
-        : '-';
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final t = Theme.of(context).textTheme;
-    final name = _pickName();
-
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(12),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text('User', style: t.titleMedium),
-            const SizedBox(height: 8),
-            Text('name: $name', style: t.bodyMedium),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
 class _ShippingCard extends StatelessWidget {
   const _ShippingCard({required this.ctx});
   final PaymentContextDTO ctx;
@@ -216,7 +172,9 @@ class _ShippingCard extends StatelessWidget {
       street,
       street2,
     ].where((e) => e.trim().isNotEmpty).join(' ');
-    final line3 = country;
+
+    // ✅ 「JP」は表示しない（国コードが JP の場合は出さない）
+    final line3 = (country.toUpperCase() == 'JP') ? '' : country;
 
     final lines = <String>[
       if (line1.trim().isNotEmpty) line1,
@@ -230,7 +188,7 @@ class _ShippingCard extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text('Shipping Address', style: t.titleMedium),
+            Text('配送先住所', style: t.titleMedium),
             const SizedBox(height: 8),
             if (m == null || m.isEmpty)
               Text('(empty)', style: t.bodyMedium)
@@ -270,6 +228,7 @@ class _BillingCard extends StatelessWidget {
     final t = Theme.of(context).textTheme;
     final m = ctx.billingAddress;
 
+    // ✅ fullName 等は拾わない。cardholderName のみ。
     final holder = _s(m?['cardholderName']);
     final cardNumber = _maskCardNumber(_s(m?['cardNumber']));
 
@@ -279,7 +238,7 @@ class _BillingCard extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text('Billing Address', style: t.titleMedium),
+            Text('お支払い選択', style: t.titleMedium),
             const SizedBox(height: 8),
             if (m == null || m.isEmpty)
               Text('(empty)', style: t.bodyMedium)
@@ -287,11 +246,11 @@ class _BillingCard extends StatelessWidget {
               if (holder.isNotEmpty)
                 Padding(
                   padding: const EdgeInsets.only(bottom: 4),
-                  child: Text('cardholderName: $holder', style: t.bodyMedium),
+                  child: Text('カード名義: $holder', style: t.bodyMedium),
                 ),
               Padding(
                 padding: const EdgeInsets.only(bottom: 4),
-                child: Text('cardNumber: $cardNumber', style: t.bodyMedium),
+                child: Text('カード番号: $cardNumber', style: t.bodyMedium),
               ),
               // ⚠️ cvc は表示しない
             ],
@@ -306,12 +265,58 @@ class _CartCard extends StatelessWidget {
   const _CartCard({required this.cart});
   final CartDTO cart;
 
+  String _yen(int? v) {
+    if (v == null) return '-';
+    return '¥$v';
+  }
+
+  String _yen0(int v) => '¥$v';
+
+  bool _looksLikeUrl(String? s) {
+    final t = (s ?? '').trim();
+    if (t.isEmpty) return false;
+    return t.startsWith('http://') || t.startsWith('https://');
+  }
+
+  String _pickTitle(CartItemDTO it) {
+    final a = (it.title ?? '').trim();
+    if (a.isNotEmpty) return a;
+
+    final b = (it.productName ?? '').trim();
+    if (b.isNotEmpty) return b;
+
+    return it.modelId.trim().isNotEmpty ? it.modelId : '-';
+  }
+
+  String _pickVariantLine(CartItemDTO it) {
+    final size = (it.size ?? '').trim();
+    final color = (it.color ?? '').trim();
+    final parts = <String>[
+      if (size.isNotEmpty) 'サイズ: $size',
+      if (color.isNotEmpty) 'カラー: $color',
+    ];
+    return parts.join(' / ');
+  }
+
+  int _calcTotal(CartDTO cart) {
+    var sum = 0;
+    for (final it in cart.items.values) {
+      final p = it.price ?? 0;
+      final q = it.qty;
+      if (p > 0 && q > 0) sum += p * q;
+    }
+    return sum;
+  }
+
   @override
   Widget build(BuildContext context) {
     final t = Theme.of(context).textTheme;
 
+    // ✅ itemKey -> CartItemDTO を並べ替えて表示
     final entries = cart.items.entries.toList()
       ..sort((a, b) => a.key.compareTo(b.key));
+
+    final total = _calcTotal(cart);
 
     return Card(
       child: Padding(
@@ -319,11 +324,11 @@ class _CartCard extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text('Cart', style: t.titleMedium),
+            Text('購入商品', style: t.titleMedium),
             const SizedBox(height: 8),
             if (entries.isEmpty)
               Text('カートは空です', style: t.bodyMedium)
-            else
+            else ...[
               ListView.separated(
                 shrinkWrap: true,
                 physics: const NeverScrollableScrollPhysics(),
@@ -335,26 +340,75 @@ class _CartCard extends StatelessWidget {
                 ),
                 itemBuilder: (context, i) {
                   final e = entries[i];
-                  final itemKey = e.key;
                   final it = e.value;
+
+                  final title = _pickTitle(it);
+                  final variantLine = _pickVariantLine(it);
+
+                  final price = _yen(it.price);
+                  final qty = it.qty;
+
+                  final img = it.listImage;
+                  final hasImgUrl = _looksLikeUrl(img);
 
                   return ListTile(
                     contentPadding: const EdgeInsets.symmetric(horizontal: 4),
+                    leading: SizedBox(
+                      width: 44,
+                      height: 44,
+                      child: ClipRRect(
+                        borderRadius: BorderRadius.circular(6),
+                        child: hasImgUrl
+                            ? Image.network(
+                                img!,
+                                fit: BoxFit.cover,
+                                errorBuilder: (_, __, ___) => const Icon(
+                                  Icons.image_not_supported_outlined,
+                                ),
+                              )
+                            : const Icon(Icons.inventory_2_outlined),
+                      ),
+                    ),
                     title: Text(
-                      it.modelId,
+                      title,
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                       style: t.bodyMedium,
                     ),
                     subtitle: Text(
-                      'itemKey: $itemKey\ninventoryId: ${it.inventoryId}\nlistId: ${it.listId}\nqty: ${it.qty}',
+                      [
+                        if (variantLine.isNotEmpty) variantLine,
+                        '数量: $qty',
+                        '価格: $price',
+                      ].join('\n'),
                       maxLines: 4,
                       overflow: TextOverflow.ellipsis,
                       style: t.bodySmall,
                     ),
+                    trailing: Text(
+                      price == '-' ? '' : price,
+                      style: t.bodyMedium,
+                    ),
                   );
                 },
               ),
+
+              // ✅ 合計価格行
+              const SizedBox(height: 10),
+              Divider(
+                height: 1,
+                thickness: 1,
+                color: Theme.of(context).dividerColor.withValues(alpha: 0.35),
+              ),
+              const SizedBox(height: 10),
+              Row(
+                children: [
+                  Text('合計価格', style: t.titleSmall),
+                  const Spacer(),
+                  Text(_yen0(total), style: t.titleSmall),
+                ],
+              ),
+            ],
           ],
         ),
       ),

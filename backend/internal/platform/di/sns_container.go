@@ -26,6 +26,7 @@ import (
 
 const (
 	SNSPaymentPath = "/sns/payment" // ✅ official payment endpoint (single source of truth)
+	SNSOrdersPath  = "/sns/orders"  // ✅ official orders endpoint
 )
 
 // ------------------------------------------------------------
@@ -91,6 +92,9 @@ type SNSDeps struct {
 
 	// payment (order context / checkout)
 	Payment http.Handler
+
+	// ✅ NEW: orders (create/get)
+	Order http.Handler
 }
 
 // NewSNSDeps wires SNS handlers.
@@ -226,6 +230,7 @@ func NewSNSDepsWithNameResolverAndOrgHandlers(
 		Preview: nil,
 
 		Payment: nil,
+		Order:   nil,
 	}
 }
 
@@ -254,6 +259,7 @@ func RegisterSNSFromContainer(mux *http.ServeMux, cont *Container) {
 		hitSignIn   hit
 		hitShip     hit
 		hitPay      hit
+		hitOrder    hit
 		hitNameRes  hit
 		hitCatalogQ hit
 		hitCartQ    hit
@@ -332,6 +338,9 @@ func RegisterSNSFromContainer(mux *http.ServeMux, cont *Container) {
 	companyUC := getFieldPtr[*usecase.CompanyUsecase](depsAny, "CompanyUC", "CompanyUsecase")
 	brandUC := getFieldPtr[*usecase.BrandUsecase](depsAny, "BrandUC", "BrandUsecase")
 
+	// ✅ NEW: OrderUsecase -> SNS OrderHandler
+	orderUC := getFieldPtr[*usecase.OrderUsecase](depsAny, "OrderUC", "OrderUsecase", "SNSOrderUC", "SNSOrderUsecase")
+
 	// cartUC（ここは “cart_query 復旧” に必須ではないが、write を生かすため拾えるなら拾う）
 	cartUC := getFieldPtr[*usecase.CartUsecase](depsAny, "CartUC", "CartUsecase")
 	if cartUC == nil {
@@ -379,6 +388,13 @@ func RegisterSNSFromContainer(mux *http.ServeMux, cont *Container) {
 		if avatarUC != nil {
 			snsDeps.Avatar = snshandler.NewAvatarHandler(avatarUC)
 		}
+	}
+	// ✅ NEW: Order
+	if orderUC != nil {
+		snsDeps.Order = snshandler.NewOrderHandler(orderUC)
+		hitOrder = hit{OK: snsDeps.Order != nil, From: "constructed", Name: "snshandler.NewOrderHandler"}
+	} else {
+		hitOrder = hit{OK: false, From: "RouterDeps.field", Name: "OrderUC"}
 	}
 
 	// --------------------------------------------
@@ -436,7 +452,7 @@ func RegisterSNSFromContainer(mux *http.ServeMux, cont *Container) {
 	// --------------------------------------------
 	// 8) Logs (inject result)
 	// --------------------------------------------
-	log.Printf("[sns_container] inject result signIn=%t user=%t ship=%t bill=%t avatar=%t cart=%t preview=%t payment=%t cartUC=%t cartQ=%t previewQ=%t listRepo=%t",
+	log.Printf("[sns_container] inject result signIn=%t user=%t ship=%t bill=%t avatar=%t cart=%t preview=%t payment=%t order=%t cartUC=%t cartQ=%t previewQ=%t listRepo=%t",
 		snsDeps.SignIn != nil,
 		snsDeps.User != nil,
 		snsDeps.ShippingAddress != nil,
@@ -445,6 +461,7 @@ func RegisterSNSFromContainer(mux *http.ServeMux, cont *Container) {
 		snsDeps.Cart != nil,
 		snsDeps.Preview != nil,
 		snsDeps.Payment != nil,
+		snsDeps.Order != nil,
 		cartUC != nil,
 		cartQ != nil,
 		previewQ != nil,
@@ -453,11 +470,12 @@ func RegisterSNSFromContainer(mux *http.ServeMux, cont *Container) {
 
 	// hits (minimal / deterministic)
 	log.Printf("[sns_container] inject hits "+
-		"signIn=%s ship=%s payment=%s cart=%s preview=%s "+
+		"signIn=%s ship=%s payment=%s order=%s cart=%s preview=%s "+
 		"nameResolver=%s catalogQ=%s cartQ=%s previewQ=%s listRepo=%s",
 		hitSignIn.String(),
 		hitShip.String(),
 		hitPay.String(),
+		hitOrder.String(),
 		hitCart.String(),
 		hitPreview.String(),
 		hitNameRes.String(),
@@ -488,12 +506,13 @@ func RegisterSNSFromContainer(mux *http.ServeMux, cont *Container) {
 			snsDeps.BillingAddress = wrap(snsDeps.BillingAddress)
 			snsDeps.Avatar = wrap(snsDeps.Avatar)
 
-			// cart/preview/payment are also protected in your current design
+			// cart/preview/payment/order are protected in your current design
 			snsDeps.Cart = wrap(snsDeps.Cart)
 			snsDeps.Preview = wrap(snsDeps.Preview)
 			snsDeps.Payment = wrap(snsDeps.Payment)
+			snsDeps.Order = wrap(snsDeps.Order)
 
-			log.Printf("[sns_container] user_auth applied: user=%t ship=%t bill=%t avatar=%t cart=%t preview=%t payment=%t",
+			log.Printf("[sns_container] user_auth applied: user=%t ship=%t bill=%t avatar=%t cart=%t preview=%t payment=%t order=%t",
 				snsDeps.User != nil,
 				snsDeps.ShippingAddress != nil,
 				snsDeps.BillingAddress != nil,
@@ -501,6 +520,7 @@ func RegisterSNSFromContainer(mux *http.ServeMux, cont *Container) {
 				snsDeps.Cart != nil,
 				snsDeps.Preview != nil,
 				snsDeps.Payment != nil,
+				snsDeps.Order != nil,
 			)
 		}
 	}
@@ -514,6 +534,7 @@ func RegisterSNSRoutes(mux *http.ServeMux, deps SNSDeps) {
 		return
 	}
 
+	// existing sns register
 	snshttp.Register(mux, snshttp.Deps{
 		List:             deps.List,
 		Inventory:        deps.Inventory,
@@ -547,6 +568,12 @@ func RegisterSNSRoutes(mux *http.ServeMux, deps SNSDeps) {
 	// - Register both exact and trailing-slash variants.
 	safeHandle(mux, SNSPaymentPath, deps.Payment)
 	safeHandle(mux, SNSPaymentPath+"/", deps.Payment)
+
+	// ✅ orders endpoint hard-bind
+	// - Official path is SNSOrdersPath ("/sns/orders")
+	// - Register both exact and trailing-slash variants.
+	safeHandle(mux, SNSOrdersPath, deps.Order)
+	safeHandle(mux, SNSOrdersPath+"/", deps.Order)
 }
 
 // ------------------------------------------------------------

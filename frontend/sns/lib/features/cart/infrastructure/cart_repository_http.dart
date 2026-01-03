@@ -39,29 +39,6 @@ class CartRepositoryHttp {
   }
 
   // ----------------------------
-  // Logging
-  // ----------------------------
-
-  void _log(String msg) {
-    // ✅ release でも確実に出す（「出ない」場合はそもそも呼ばれていないと判断できる）
-    // ignore: avoid_print
-    print('[CartRepositoryHttp] $msg');
-  }
-
-  String _mask(String s) {
-    final t = s.trim();
-    if (t.isEmpty) return '';
-    if (t.length <= 8) return t;
-    return '${t.substring(0, 4)}***${t.substring(t.length - 4)}';
-  }
-
-  String _truncate(String s, {int max = 800}) {
-    final t = s.trim();
-    if (t.length <= max) return t;
-    return '${t.substring(0, max)}...(truncated ${t.length - max} chars)';
-  }
-
-  // ----------------------------
   // Public API (CartDTO only)
   // ----------------------------
 
@@ -71,12 +48,7 @@ class CartRepositoryHttp {
     if (aid.isEmpty) throw ArgumentError('avatarId is required');
 
     final uri = _uri('/sns/cart', qp: {'avatarId': aid});
-    _log('GET $uri avatarId="${_mask(aid)}"');
-
     final res = await _sendAuthed('GET', uri);
-
-    _log('GET $uri -> status=${res.statusCode} bodyLen=${res.body.length}');
-    _log('GET $uri -> body(sample)="${_truncate(res.body)}"');
 
     return _decodeCart(res);
   }
@@ -111,15 +83,7 @@ class CartRepositoryHttp {
     };
     final body = jsonEncode(bodyMap);
 
-    _log(
-      'POST $uri avatarId="${_mask(aid)}" inv="${_mask(invId)}" list="${_mask(lid)}" model="${_mask(mid)}" qty=$qty',
-    );
-
     final res = await _sendAuthed('POST', uri, body: body);
-
-    _log('POST $uri -> status=${res.statusCode} bodyLen=${res.body.length}');
-    _log('POST $uri -> body(sample)="${_truncate(res.body)}"');
-
     return _decodeCart(res);
   }
 
@@ -152,15 +116,7 @@ class CartRepositoryHttp {
     };
     final body = jsonEncode(bodyMap);
 
-    _log(
-      'PUT $uri avatarId="${_mask(aid)}" inv="${_mask(invId)}" list="${_mask(lid)}" model="${_mask(mid)}" qty=$qty',
-    );
-
     final res = await _sendAuthed('PUT', uri, body: body);
-
-    _log('PUT $uri -> status=${res.statusCode} bodyLen=${res.body.length}');
-    _log('PUT $uri -> body(sample)="${_truncate(res.body)}"');
-
     return _decodeCart(res);
   }
 
@@ -190,15 +146,7 @@ class CartRepositoryHttp {
     };
     final body = jsonEncode(bodyMap);
 
-    _log(
-      'DELETE $uri avatarId="${_mask(aid)}" inv="${_mask(invId)}" list="${_mask(lid)}" model="${_mask(mid)}"',
-    );
-
     final res = await _sendAuthed('DELETE', uri, body: body);
-
-    _log('DELETE $uri -> status=${res.statusCode} bodyLen=${res.body.length}');
-    _log('DELETE $uri -> body(sample)="${_truncate(res.body)}"');
-
     return _decodeCart(res);
   }
 
@@ -208,17 +156,7 @@ class CartRepositoryHttp {
     if (aid.isEmpty) throw ArgumentError('avatarId is required');
 
     final uri = _uri('/sns/cart', qp: {'avatarId': aid});
-
-    _log('DELETE $uri (clear) avatarId="${_mask(aid)}"');
-
     final res = await _sendAuthed('DELETE', uri);
-
-    _log(
-      'DELETE $uri (clear) -> status=${res.statusCode} bodyLen=${res.body.length}',
-    );
-    if (res.body.trim().isNotEmpty) {
-      _log('DELETE $uri (clear) -> body(sample)="${_truncate(res.body)}"');
-    }
 
     if (res.statusCode == 204) return;
     _throwHttpError(res);
@@ -259,8 +197,6 @@ class CartRepositoryHttp {
     res = await _sendRaw(method, uri, headers: h1, body: body);
 
     if (res.statusCode != 401) return res;
-
-    _log('401 -> retry with refreshed token. uri=$uri');
 
     final h2 = await _headersJsonAuthed(forceRefreshToken: true);
     return _sendRaw(method, uri, headers: h2, body: body);
@@ -322,53 +258,7 @@ class CartRepositoryHttp {
   CartDTO _decodeCart(http.Response res) {
     if (res.statusCode >= 200 && res.statusCode < 300) {
       final map = _decodeJsonMap(res.body);
-
-      // ✅ 「何を取得したか」が分かるログ（items の形を確定する）
-      final aid = (map['avatarId'] ?? map['id'] ?? '').toString().trim();
-      final itemsRaw = map['items'];
-      final itemsType = itemsRaw == null
-          ? 'null'
-          : itemsRaw.runtimeType.toString();
-
-      _log(
-        'decode cart: avatarId="${_mask(aid)}" keys=${map.keys.toList()} itemsType=$itemsType',
-      );
-
-      if (itemsRaw is Map) {
-        _log('decode cart: items.size=${itemsRaw.length}');
-        if (itemsRaw.isNotEmpty) {
-          final firstKey = itemsRaw.keys.first.toString();
-          final firstVal = itemsRaw[firstKey];
-          _log('decode cart: itemKey(sample)="$firstKey"');
-          _log(
-            'decode cart: itemVal(sample)=${_truncate(jsonEncode(firstVal), max: 600)}',
-          );
-        }
-      } else {
-        _log(
-          'decode cart: items is not Map -> itemsRaw="${_truncate(itemsRaw?.toString() ?? "null")}"',
-        );
-      }
-
-      final dto = CartDTO.fromJson(map);
-
-      _log(
-        'CartDTO built: avatarId="${_mask(dto.avatarId)}" items=${dto.items.length} '
-        'createdAt=${dto.createdAt?.toIso8601String()} updatedAt=${dto.updatedAt?.toIso8601String()} '
-        'expiresAt=${dto.expiresAt?.toIso8601String()}',
-      );
-
-      if (dto.items.isNotEmpty) {
-        final k0 = dto.items.keys.first;
-        final it0 = dto.items[k0]!;
-        _log(
-          'CartDTO item0: key="$k0" inv="${_mask(it0.inventoryId)}" list="${_mask(it0.listId)}" model="${_mask(it0.modelId)}" '
-          'qty=${it0.qty} title="${it0.title}" size="${it0.size}" color="${it0.color}" '
-          'listImage="${it0.listImage}" price=${it0.price} productName="${it0.productName}"',
-        );
-      }
-
-      return dto;
+      return CartDTO.fromJson(map);
     }
 
     _throwHttpError(res);
@@ -394,8 +284,6 @@ class CartRepositoryHttp {
       final s = res.body.trim();
       if (s.isNotEmpty) msg = s;
     }
-
-    _log('HTTP error status=$status body="${_truncate(res.body)}"');
 
     throw CartHttpException(statusCode: status, message: msg);
   }
