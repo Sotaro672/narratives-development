@@ -46,7 +46,6 @@ type RouterDeps struct {
 	BrandUC          *usecase.BrandUsecase
 	CampaignUC       *usecase.CampaignUsecase
 	CompanyUC        *usecase.CompanyUsecase
-	FulfillmentUC    *usecase.FulfillmentUsecase
 	InquiryUC        *usecase.InquiryUsecase
 	InventoryUC      *usecase.InventoryUsecase
 	InvoiceUC        *usecase.InvoiceUsecase

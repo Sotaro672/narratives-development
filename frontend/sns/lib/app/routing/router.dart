@@ -22,7 +22,7 @@ import '../../features/user/presentation/page/user_edit.dart';
 import '../../features/cart/presentation/page/cart.dart';
 
 // ✅ NEW: preview page
-import '../../features/cart/presentation/page/preview.dart';
+import '../../features/preview/presentation/preview.dart';
 
 // ✅ NEW: payment page
 import '../../features/payment/presentation/page/payment.dart';
