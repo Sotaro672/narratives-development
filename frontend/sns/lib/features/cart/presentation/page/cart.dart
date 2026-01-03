@@ -1,4 +1,4 @@
-//frontend\sns\lib\features\cart\presentation\page\cart.dart
+// frontend/sns/lib/features/cart/presentation/page/cart.dart
 import 'dart:convert';
 
 import 'package:flutter/foundation.dart';
@@ -70,6 +70,7 @@ class _CartPageState extends State<CartPage> {
     return '${t.substring(0, 4)}***${t.substring(t.length - 4)}';
   }
 
+  // ✅ dynamic/nullableでも絶対落ちない
   String _s(dynamic v) => (v ?? '').toString().trim();
 
   Widget _thumbPlaceholder() {
@@ -123,8 +124,6 @@ class _CartPageState extends State<CartPage> {
     required String itemKey,
     required CartItemDTO it,
     required bool busy,
-    required Future<void> Function(String itemKey) onInc,
-    required Future<void> Function(String itemKey, int currentQty) onDec,
     required Future<void> Function(String itemKey) onRemove,
   }) {
     final title = _s(it.title);
@@ -135,18 +134,20 @@ class _CartPageState extends State<CartPage> {
 
     final displayTitle = productName.isNotEmpty
         ? productName
-        : (title.isNotEmpty ? title : 'Item');
+        : (title.isNotEmpty ? title : '商品');
 
     final lines = <String>[];
     if (title.isNotEmpty && productName.isNotEmpty) {
       lines.add(title);
     }
+
+    // ✅ ラベルを日本語に
     lines.add(
-      'size: ${size.isEmpty ? '-' : size} / color: ${color.isEmpty ? '-' : color}',
+      'サイズ: ${size.isEmpty ? '-' : size}  色: ${color.isEmpty ? '-' : color}',
     );
-    lines.add('qty: ${it.qty}');
+    lines.add('数量: ${it.qty}点');
     if (it.price != null) {
-      lines.add('price: ${it.price}');
+      lines.add('価格: ${it.price}円');
     }
     final subtitle = lines.join('\n');
 
@@ -185,30 +186,6 @@ class _CartPageState extends State<CartPage> {
                   subtitle,
                   style: TextStyle(color: Colors.grey.shade700, height: 1.35),
                 ),
-                const SizedBox(height: 10),
-                Row(
-                  children: [
-                    IconButton(
-                      onPressed: busy ? null : () => onDec(itemKey, it.qty),
-                      icon: const Icon(Icons.remove_circle_outline),
-                      tooltip: 'Decrease',
-                    ),
-                    Text(
-                      '${it.qty}',
-                      style: const TextStyle(fontWeight: FontWeight.w600),
-                    ),
-                    IconButton(
-                      onPressed: busy ? null : () => onInc(itemKey),
-                      icon: const Icon(Icons.add_circle_outline),
-                      tooltip: 'Increase',
-                    ),
-                    const Spacer(),
-                    Text(
-                      _mask(itemKey),
-                      style: TextStyle(color: Colors.grey.shade500),
-                    ),
-                  ],
-                ),
               ],
             ),
           ),
@@ -216,7 +193,7 @@ class _CartPageState extends State<CartPage> {
           IconButton(
             onPressed: busy ? null : () => onRemove(itemKey),
             icon: const Icon(Icons.close),
-            tooltip: 'Remove',
+            tooltip: '削除',
           ),
         ],
       ),
@@ -225,18 +202,15 @@ class _CartPageState extends State<CartPage> {
 
   @override
   Widget build(BuildContext context) {
-    final aid = _avatarIdFromRoute();
-
     if (_ctrl == null) {
       return const Padding(
         padding: EdgeInsets.fromLTRB(16, 10, 16, 16),
-        child: Text('avatarId is missing in query (?avatarId=...)'),
+        child: Text('avatarId がクエリにありません（?avatarId=...）'),
       );
     }
 
     final r = _ctrl!.buildResult(setState);
 
-    // ✅ 親がScrollViewでもColumnでも落ちないように：自分は ScrollView で完結させる
     return FutureBuilder<CartDTO>(
       future: r.future,
       builder: (context, snap) {
@@ -247,7 +221,6 @@ class _CartPageState extends State<CartPage> {
         final Object? err = snap.hasError ? snap.error : null;
 
         final entries = cart.items.entries.toList();
-        final expiresAt = cart.expiresAt;
 
         if (_dbg) {
           _log(
@@ -261,39 +234,26 @@ class _CartPageState extends State<CartPage> {
           }
         }
 
+        // ✅ タイトル/文言を日本語化 + Clear を右寄せ
         final children = <Widget>[
           Text(
-            'Cart',
+            '商品数: ${entries.length}',
             style: TextStyle(
               fontSize: 22,
               fontWeight: FontWeight.w700,
               color: Colors.grey.shade900,
             ),
           ),
-          const SizedBox(height: 8),
-          Text('avatarId: ${_mask(aid)}'),
-          Text('items: ${entries.length}'),
-          if (expiresAt != null)
-            Text('expiresAt: ${expiresAt.toIso8601String()}'),
           const SizedBox(height: 12),
           Row(
             children: [
-              const Text(
-                'Items',
-                style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
-              ),
               const Spacer(),
-              IconButton(
-                tooltip: 'Reload',
-                onPressed: (loading || r.busy) ? null : r.reload,
-                icon: const Icon(Icons.refresh),
-              ),
               TextButton.icon(
                 onPressed: (loading || r.busy || entries.isEmpty)
                     ? null
                     : r.clear,
                 icon: const Icon(Icons.delete_outline, size: 18),
-                label: const Text('Clear'),
+                label: const Text('空にする'),
               ),
             ],
           ),
@@ -327,7 +287,7 @@ class _CartPageState extends State<CartPage> {
           children.add(
             const Padding(
               padding: EdgeInsets.only(top: 24),
-              child: Center(child: Text('No items in cart.')),
+              child: Center(child: Text('カートは空です')),
             ),
           );
         } else {
@@ -338,8 +298,6 @@ class _CartPageState extends State<CartPage> {
                 itemKey: e.key,
                 it: e.value,
                 busy: r.busy || loading,
-                onInc: r.inc,
-                onDec: r.dec,
                 onRemove: r.remove,
               ),
             );
@@ -360,7 +318,7 @@ class _CartPageState extends State<CartPage> {
                   border: Border.all(color: Colors.orange.shade200),
                 ),
                 child: Text(
-                  'latest fetch failed (showing cached/current): ${err.toString()}',
+                  '最新取得に失敗（表示はキャッシュ/現状のまま）: ${err.toString()}',
                   style: TextStyle(color: Colors.orange.shade900),
                 ),
               ),
