@@ -24,29 +24,19 @@ type CartQueryService interface {
 // PreviewQueryService abstracts preview_query read-model.
 type PreviewQueryService interface {
 	// GetPreview should return a JSON-serializable structure (map / struct / slice).
-	//
-	// NOTE:
-	// preview は実装により (avatarID, itemKey) を要求するケースがある。
-	// そのため handler 側は query/body から itemKey を拾い、2引数/3引数の両方に best-effort で対応する。
 	GetPreview(ctx context.Context, avatarID string, itemKey string) (any, error)
 }
 
 // CartHandler serves SNS cart endpoints.
 // Intended mount examples (router side):
-// - GET    /sns/cart
-// - DELETE /sns/cart
+// - GET    /sns/cart            ✅ unified: read-model (CartDTO) を返す
+// - DELETE /sns/cart            (clear)
 // - POST   /sns/cart/items
 // - PUT    /sns/cart/items
 // - DELETE /sns/cart/items
 //
-// ✅ NEW (Query read-model):
-// - GET    /sns/cart/query?avatarId=...
-// - GET    /sns/preview?avatarId=...&itemKey=...
-//
-// AvatarID resolution policy:
-// - query: ?avatarId=...
-// - header: X-Avatar-Id: ... (Web では CORS preflight 回避のため query/body 推奨)
-// - (optional) body.avatarId (for mutations)
+// NOTE:
+// - /sns/cart/query は廃止（この handler では扱わない）
 type CartHandler struct {
 	uc *usecase.CartUsecase
 
@@ -59,7 +49,7 @@ func NewCartHandler(uc *usecase.CartUsecase) http.Handler {
 	return &CartHandler{uc: uc, cartQuery: nil, previewQuery: nil}
 }
 
-// ✅ NEW: query を注入できる ctor
+// ✅ query を注入できる ctor
 //
 // NOTE:
 // DI 側では *snsquery.SNSCartQuery / *snsquery.SNSPreviewQuery をそのまま渡したいが、
@@ -85,7 +75,7 @@ func (h *CartHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	// IMPORTANT:
 	// router 側で StripPrefix("/sns") や StripPrefix("/sns/cart") をしていると、
-	// ここに入ってくる Path は "/sns/cart/query" ではなく "/cart/query" や "/query" になる。
+	// ここに入ってくる Path は "/sns/cart" ではなく "/cart" や "/" になる。
 	// その揺れを吸収する。
 	path := strings.TrimRight(r.URL.Path, "/")
 	if path == "" {
@@ -123,26 +113,12 @@ func (h *CartHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	switch {
 	// ============================================================
-	// ✅ Query read-model endpoints
-	// ============================================================
-
-	// ====== GET /sns/cart/query  (or /cart/query or /query)
-	case isGET && (hasSuffixAny(path, "/sns/cart/query", "/cart/query") || isAnyExact(path, "/query")):
-		h.handleGetCartQuery(w, r)
-		return
-
-	// ====== GET /sns/preview (or /preview)
-	case isGET && hasSuffixAny(path, "/sns/preview", "/preview"):
-		h.handleGetPreview(w, r)
-		return
-
-	// ============================================================
-	// Legacy / mutation endpoints
+	// ✅ Unified: GET /sns/cart returns read-model DTO
 	// ============================================================
 
 	// ====== GET /sns/cart (or /cart or "/")
 	case isGET && (hasSuffixAny(path, "/sns/cart", "/cart") || isAnyExact(path, "/")):
-		h.handleGet(w, r)
+		h.handleGetUnified(w, r)
 		return
 
 	// ====== DELETE /sns/cart (or /cart or "/")
@@ -164,36 +140,63 @@ func (h *CartHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	case isDEL && (hasSuffixAny(path, "/sns/cart/items", "/cart/items") || isAnyExact(path, "/items")):
 		h.handleRemoveItem(w, r)
 		return
+
+	// ====== (optional) preview
+	case isGET && hasSuffixAny(path, "/sns/preview", "/preview"):
+		h.handleGetPreview(w, r)
+		return
 	}
 
 	writeErr(w, http.StatusNotFound, "not found")
 }
 
 // -------------------------
-// handlers (Query)
+// handlers (Unified GET)
 // -------------------------
 
-func (h *CartHandler) handleGetCartQuery(w http.ResponseWriter, r *http.Request) {
+// handleGetUnified returns CartDTO (read-model) on GET /sns/cart.
+// - If cartQuery is configured: prefer read-model.
+// - If cart doc is missing: return empty cart (200) for stable UX.
+// - If cartQuery is not configured: fallback to legacy response.
+func (h *CartHandler) handleGetUnified(w http.ResponseWriter, r *http.Request) {
 	avatarID := readAvatarID(r, "")
 	if avatarID == "" {
 		writeErr(w, http.StatusBadRequest, "avatarId is required")
 		return
 	}
 
-	if h.cartQuery == nil {
-		// ルーティングはあるのに依存が無い -> misconfig
-		writeErr(w, http.StatusInternalServerError, "cart_query is not configured")
-		return
-	}
+	// ✅ Prefer read-model when available
+	if h.cartQuery != nil {
+		v, err := h.cartQuery.GetCartQuery(r.Context(), avatarID)
+		if err == nil {
+			writeJSON(w, http.StatusOK, v)
+			return
+		}
 
-	v, err := h.cartQuery.GetCartQuery(r.Context(), avatarID)
-	if err != nil {
+		// cart が無いなら “空カート” を 200 で返す（/sns/cart を安定させる）
+		if isNotFoundErr(err) {
+			writeJSON(w, http.StatusOK, map[string]any{
+				"avatarId":  avatarID,
+				"items":     map[string]any{},
+				"createdAt": nil,
+				"updatedAt": nil,
+				"expiresAt": nil,
+			})
+			return
+		}
+
+		// invalid argument 系 / その他は通常通り
 		h.writeQueryErr(w, err)
 		return
 	}
 
-	writeJSON(w, http.StatusOK, v)
+	// ✅ Fallback: legacy (DI misconfig safety)
+	h.handleGet(w, r)
 }
+
+// -------------------------
+// handlers (Preview)
+// -------------------------
 
 func (h *CartHandler) handleGetPreview(w http.ResponseWriter, r *http.Request) {
 	avatarID := readAvatarID(r, "")
@@ -202,7 +205,6 @@ func (h *CartHandler) handleGetPreview(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// ✅ preview_query は itemKey が必須のケースがあるため、query から拾う
 	itemKey := readItemKey(r, "")
 	if itemKey == "" {
 		writeErr(w, http.StatusBadRequest, "itemKey is required")
@@ -224,18 +226,13 @@ func (h *CartHandler) handleGetPreview(w http.ResponseWriter, r *http.Request) {
 }
 
 // writeQueryErr maps typical query errors to HTTP codes.
-// - not found => 404 (UI は空として扱える)
 // - invalid arg => 400
 // - otherwise => 500
+//
+// NOTE: not found は unified GET では 200(empty) にしているため、ここでは 404 に寄せない。
 func (h *CartHandler) writeQueryErr(w http.ResponseWriter, err error) {
 	if err == nil {
 		writeErr(w, http.StatusInternalServerError, "unknown error")
-		return
-	}
-
-	// できるだけ “not found” を 404 に寄せる（UI 側の empty 扱いが楽）
-	if isNotFoundErr(err) {
-		writeErr(w, http.StatusNotFound, "not found")
 		return
 	}
 
@@ -329,7 +326,6 @@ func (h *CartHandler) handleSetItemQty(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// qty can be 0 or negative -> treated as remove
 	c, err := h.uc.SetItemQty(r.Context(), avatarID, invID, listID, modelID, req.Qty)
 	if err != nil {
 		if errors.Is(err, usecase.ErrCartInvalidArgument) || errors.Is(err, cartdom.ErrInvalidCart) {
@@ -390,12 +386,11 @@ func (h *CartHandler) handleClear(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// 204 No Content
 	w.WriteHeader(http.StatusNoContent)
 }
 
 // -------------------------
-// request/response DTO
+// request/response DTO (legacy)
 // -------------------------
 
 type cartItemReq struct {
@@ -410,11 +405,8 @@ type cartItemReq struct {
 }
 
 type cartResponse struct {
-	// ✅ docId=avatarId のため、Cart ドメインから AvatarID を削除してもレスポンスでは返す
-	AvatarID string `json:"avatarId"`
-
-	// ✅ itemKey -> item
-	Items map[string]cartItemDTO `json:"items"`
+	AvatarID string                 `json:"avatarId"`
+	Items    map[string]cartItemDTO `json:"items"`
 
 	CreatedAt string `json:"createdAt"`
 	UpdatedAt string `json:"updatedAt"`
@@ -431,7 +423,6 @@ type cartItemDTO struct {
 func toCartResponse(avatarID string, c *cartdom.Cart) cartResponse {
 	items := map[string]cartItemDTO{}
 	if c != nil && c.Items != nil {
-		// stable copy
 		keys := make([]string, 0, len(c.Items))
 		for k := range c.Items {
 			keys = append(keys, k)
@@ -450,7 +441,6 @@ func toCartResponse(avatarID string, c *cartdom.Cart) cartResponse {
 	}
 
 	if c == nil {
-		// ここに来るのは通常ないが、念のため
 		return cartResponse{
 			AvatarID:  strings.TrimSpace(avatarID),
 			Items:     items,
@@ -474,24 +464,19 @@ func toCartResponse(avatarID string, c *cartdom.Cart) cartResponse {
 // -------------------------
 
 func readAvatarID(r *http.Request, fallback string) string {
-	// query
 	if v := strings.TrimSpace(r.URL.Query().Get("avatarId")); v != "" {
 		return v
 	}
-	// header
 	if v := strings.TrimSpace(r.Header.Get("X-Avatar-Id")); v != "" {
 		return v
 	}
-	// fallback (body)
 	return strings.TrimSpace(fallback)
 }
 
 func readItemKey(r *http.Request, fallback string) string {
-	// query
 	if v := strings.TrimSpace(r.URL.Query().Get("itemKey")); v != "" {
 		return v
 	}
-	// header (optional)
 	if v := strings.TrimSpace(r.Header.Get("X-Item-Key")); v != "" {
 		return v
 	}
@@ -533,7 +518,6 @@ func wrapPreviewQuery(v any) PreviewQueryService {
 
 func (d *dynamicCartQuery) GetCartQuery(ctx context.Context, avatarID string) (any, error) {
 	return callQuery2(d.impl, ctx, avatarID,
-		// candidates (most likely first)
 		"GetCartQuery",
 		"GetByAvatarID",
 		"GetCart",
@@ -544,10 +528,8 @@ func (d *dynamicCartQuery) GetCartQuery(ctx context.Context, avatarID string) (a
 }
 
 func (d *dynamicPreviewQuery) GetPreview(ctx context.Context, avatarID string, itemKey string) (any, error) {
-	// ✅ まず 3引数 (ctx, avatarID, itemKey) を試す
 	if strings.TrimSpace(itemKey) != "" {
 		if v, err := callQuery3(d.impl, ctx, avatarID, itemKey,
-			// candidates (most likely first)
 			"GetPreview",
 			"GetByAvatarIDAndItemKey",
 			"GetByAvatarAndItemKey",
@@ -559,8 +541,6 @@ func (d *dynamicPreviewQuery) GetPreview(ctx context.Context, avatarID string, i
 			return v, nil
 		}
 	}
-
-	// ✅ fallback: 2引数 (ctx, avatarID) を試す（古い実装互換）
 	return callQuery2(d.impl, ctx, avatarID,
 		"GetPreview",
 		"Preview",
@@ -570,9 +550,6 @@ func (d *dynamicPreviewQuery) GetPreview(ctx context.Context, avatarID string, i
 	)
 }
 
-// callQuery2 tries to call one of methods(impl, ctx, avatarID) -> (any-ish, error)
-// Supported signatures (best-effort):
-// - func(context.Context, string) (T, error)
 func callQuery2(impl any, ctx context.Context, avatarID string, methodNames ...string) (any, error) {
 	if impl == nil {
 		return nil, errors.New("query service is nil")
@@ -595,27 +572,18 @@ func callQuery2(impl any, ctx context.Context, avatarID string, methodNames ...s
 		}
 
 		mt := mv.Type()
-		// expect 2 inputs: (context.Context, string)
-		if mt.NumIn() != 2 {
-			continue
-		}
-		// outputs: (T, error)
-		if mt.NumOut() != 2 {
+		if mt.NumIn() != 2 || mt.NumOut() != 2 {
 			continue
 		}
 
-		// in0 should accept context.Context
 		ctxType := reflect.TypeOf((*context.Context)(nil)).Elem()
 		if !mt.In(0).Implements(ctxType) && !ctxType.AssignableTo(mt.In(0)) && !reflect.TypeOf(ctx).AssignableTo(mt.In(0)) {
 			continue
 		}
-
-		// in1 must accept string
 		if mt.In(1).Kind() != reflect.String {
 			continue
 		}
 
-		// out1 must be error
 		errType := reflect.TypeOf((*error)(nil)).Elem()
 		if !mt.Out(1).Implements(errType) {
 			continue
@@ -641,9 +609,6 @@ func callQuery2(impl any, ctx context.Context, avatarID string, methodNames ...s
 	return nil, errors.New("query service method not found")
 }
 
-// callQuery3 tries to call one of methods(impl, ctx, avatarID, itemKey) -> (any-ish, error)
-// Supported signatures (best-effort):
-// - func(context.Context, string, string) (T, error)
 func callQuery3(impl any, ctx context.Context, avatarID string, itemKey string, methodNames ...string) (any, error) {
 	if impl == nil {
 		return nil, errors.New("query service is nil")
@@ -666,27 +631,18 @@ func callQuery3(impl any, ctx context.Context, avatarID string, itemKey string, 
 		}
 
 		mt := mv.Type()
-		// expect 3 inputs: (context.Context, string, string)
-		if mt.NumIn() != 3 {
-			continue
-		}
-		// outputs: (T, error)
-		if mt.NumOut() != 2 {
+		if mt.NumIn() != 3 || mt.NumOut() != 2 {
 			continue
 		}
 
-		// in0 should accept context.Context
 		ctxType := reflect.TypeOf((*context.Context)(nil)).Elem()
 		if !mt.In(0).Implements(ctxType) && !ctxType.AssignableTo(mt.In(0)) && !reflect.TypeOf(ctx).AssignableTo(mt.In(0)) {
 			continue
 		}
-
-		// in1/in2 must accept string
 		if mt.In(1).Kind() != reflect.String || mt.In(2).Kind() != reflect.String {
 			continue
 		}
 
-		// out1 must be error
 		errType := reflect.TypeOf((*error)(nil)).Elem()
 		if !mt.Out(1).Implements(errType) {
 			continue

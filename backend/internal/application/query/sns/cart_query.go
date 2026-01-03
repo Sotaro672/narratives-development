@@ -17,29 +17,15 @@ import (
 	ldom "narratives/internal/domain/list"
 )
 
-// SNSCartQuery resolves (for cart list UI):
-//   - avatarId -> cart (carts/{avatarId})
-//   - cart.items[].listId -> title/listImage
-//   - cart.items[].(listId, modelId) -> price from lists/{listId}.prices[]
-//
-// IMPORTANT: CartDTO returns ONLY (per item):
-//
-//	inventoryId, listId, modelId, title, listImage, price, productName, size, color, qty
-//
-// ✅ NOTE:
-//   - catalog_query.go では ListRepo(ldom.Repository) 経由で List を取得しているため、
-//     Firestore の実データ構造/名揺れを adapter が吸収できている。
-//   - cart_query.go も同じく ListRepo を優先して使うことで、image/price の取りこぼしを防ぐ。
 type SNSCartQuery struct {
 	FS *firestore.Client
 
-	// ✅ NEW: prefer domain repository (same as catalog_query)
+	// ✅ prefer domain repository (same as catalog_query)
 	ListRepo ldom.Repository
 
 	// ✅ optional: inject from DI
 	Resolver *appresolver.NameResolver
 
-	// collection names (override if your firestore schema differs)
 	CartCol              string
 	ListsCol             string // fallback only (when ListRepo is nil)
 	InventoriesCol       string
@@ -49,24 +35,33 @@ type SNSCartQuery struct {
 func NewSNSCartQuery(fs *firestore.Client) *SNSCartQuery {
 	return &SNSCartQuery{
 		FS:                   fs,
-		ListRepo:             nil, // keep backward compatible
+		ListRepo:             nil,
 		Resolver:             nil,
 		CartCol:              "carts",
 		ListsCol:             "lists",
 		InventoriesCol:       "inventories",
-		ProductBlueprintsCol: "productBlueprints",
+		ProductBlueprintsCol: "product_blueprints",
 	}
 }
 
-// ✅ NEW: ctor with ListRepo
 func NewSNSCartQueryWithListRepo(fs *firestore.Client, listRepo ldom.Repository) *SNSCartQuery {
 	q := NewSNSCartQuery(fs)
 	q.ListRepo = listRepo
 	return q
 }
 
-// GetByAvatarID fetches cart document by docId (= avatarId).
-// - If not found, returns ErrNotFound (defined in order_query.go in the same package).
+// ✅ CartHandler 側の CartQueryService（GetCartQuery）に “明示的に” 合わせる。
+// これで reflect 探索に依存せず、GET /sns/cart を read-model に寄せられる。
+type cartQueryPort interface {
+	GetCartQuery(ctx context.Context, avatarID string) (any, error)
+}
+
+var _ cartQueryPort = (*SNSCartQuery)(nil)
+
+func (q *SNSCartQuery) GetCartQuery(ctx context.Context, avatarID string) (any, error) {
+	return q.GetByAvatarID(ctx, avatarID)
+}
+
 func (q *SNSCartQuery) GetByAvatarID(ctx context.Context, avatarID string) (snsdto.CartDTO, error) {
 	if q == nil || q.FS == nil {
 		return snsdto.CartDTO{}, errors.New("sns cart query: firestore client is nil")
@@ -77,48 +72,245 @@ func (q *SNSCartQuery) GetByAvatarID(ctx context.Context, avatarID string) (snsd
 		return snsdto.CartDTO{}, errors.New("avatarId is required")
 	}
 
+	log.Printf("[sns_cart_query_diag] start avatarId=%q fs=%t listRepo=%t resolver=%t cartCol=%q listsCol=%q invCol=%q pbCol=%q",
+		maskUID(avatarID),
+		q.FS != nil,
+		q.ListRepo != nil,
+		q.Resolver != nil,
+		strings.TrimSpace(q.CartCol),
+		strings.TrimSpace(q.ListsCol),
+		strings.TrimSpace(q.InventoriesCol),
+		strings.TrimSpace(q.ProductBlueprintsCol),
+	)
+
 	cartCol := strings.TrimSpace(q.CartCol)
 	if cartCol == "" {
 		cartCol = "carts"
 	}
 
-	// ✅ carts/{avatarId}
 	snap, err := q.FS.Collection(cartCol).Doc(avatarID).Get(ctx)
 	if err != nil {
 		if isFirestoreNotFound(err) {
+			log.Printf("[sns_cart_query_diag] cart doc not found avatarId=%q col=%q", maskUID(avatarID), cartCol)
 			return snsdto.CartDTO{}, ErrNotFound
 		}
+		log.Printf("[sns_cart_query_diag] cart doc get failed avatarId=%q col=%q err=%v", maskUID(avatarID), cartCol, err)
 		return snsdto.CartDTO{}, err
 	}
 	if snap == nil || !snap.Exists() {
+		log.Printf("[sns_cart_query_diag] cart snap missing avatarId=%q col=%q", maskUID(avatarID), cartCol)
 		return snsdto.CartDTO{}, ErrNotFound
 	}
 
-	var c cartdom.Cart
-	if derr := snap.DataTo(&c); derr != nil {
-		log.Printf("[sns_cart_query] DataTo(cart) failed avatarId=%q err=%v", maskUID(avatarID), derr)
-		return snsdto.CartDTO{}, derr
+	// ✅ IMPORTANT:
+	// carts.items のスキーマが過去に変わっている可能性があるため、
+	// DataTo(&cartdom.Cart) は使わず “後方互換パース” する。
+	c, perr := cartFromSnapshotCompat(avatarID, snap)
+	if perr != nil {
+		log.Printf("[sns_cart_query] cart parse failed avatarId=%q err=%v", maskUID(avatarID), perr)
+		return snsdto.CartDTO{}, perr
 	}
 
-	// ✅ Firestore docId (= avatarId) を正として必ず入れる
-	c.ID = avatarID
+	itemN := 0
+	sample := ""
+	if c.Items != nil {
+		itemN = len(c.Items)
+		for _, it := range c.Items {
+			sample = fmt.Sprintf("inv=%q list=%q model=%q qty=%d",
+				maskID(it.InventoryID), maskID(it.ListID), maskID(it.ModelID), it.Qty,
+			)
+			break
+		}
+	}
+	log.Printf("[sns_cart_query_diag] cart loaded avatarId=%q items=%d sample=%s",
+		maskUID(avatarID), itemN, sample,
+	)
 
-	// ✅ listId -> (modelId -> price) AND listId -> (title/listImage)
-	priceIndex, listMetaIndex := q.fetchListIndicesByCart(ctx, &c)
+	priceIndex, listMetaIndex := q.fetchListIndicesByCart(ctx, c)
+	invIndex := q.fetchInventoryIndexByCart(ctx, c)
+	modelIndex := q.fetchModelSimpleIndexByCart(ctx, c)
+	productNameIndex := q.fetchProductNameIndexByCart(ctx, c, invIndex)
 
-	// ✅ inventoryId -> (productBlueprintId, tokenBlueprintId) (best-effort)
-	invIndex := q.fetchInventoryIndexByCart(ctx, &c)
+	out := toCartDTO(c, priceIndex, listMetaIndex, invIndex, modelIndex, productNameIndex)
 
-	// ✅ modelId -> size/color (best-effort)
-	modelIndex := q.fetchModelSimpleIndexByCart(ctx, &c)
-
-	// ✅ productBlueprintId -> productName (best-effort)
-	productNameIndex := q.fetchProductNameIndexByCart(ctx, &c, invIndex)
-
-	out := toCartDTO(&c, priceIndex, listMetaIndex, invIndex, modelIndex, productNameIndex)
+	cover := diagCartDTOMetaCoverage(out)
+	log.Printf("[sns_cart_query_diag] dto built avatarId=%q items=%d title=%d image=%d price=%d size=%d color=%d productName=%d",
+		maskUID(avatarID),
+		cover.Items,
+		cover.WithTitle,
+		cover.WithImage,
+		cover.WithPrice,
+		cover.WithSize,
+		cover.WithColor,
+		cover.WithProductName,
+	)
 
 	log.Printf("[sns_cart_query] get ok avatarId=%q items=%d", maskUID(avatarID), len(out.Items))
 	return out, nil
+}
+
+// ============================================================
+// cart snapshot parsing (backward compatible)
+// ============================================================
+
+// carts doc supported shapes:
+//
+// 1) items: map[itemKey] = {inventoryId, listId, modelId, qty, ...}
+// 2) items: map[itemKey] = qty (legacy)
+//   - in this case ModelID=itemKey, Qty=qty, other IDs empty (will be filtered out later)
+func cartFromSnapshotCompat(avatarID string, snap *firestore.DocumentSnapshot) (*cartdom.Cart, error) {
+	if snap == nil {
+		return nil, errors.New("sns cart query: snapshot is nil")
+	}
+
+	raw := snap.Data()
+	if raw == nil {
+		// empty doc is unusual but handle defensively
+		return &cartdom.Cart{
+			ID:    strings.TrimSpace(avatarID),
+			Items: map[string]cartdom.CartItem{},
+		}, nil
+	}
+
+	c := &cartdom.Cart{
+		ID:    strings.TrimSpace(avatarID),
+		Items: map[string]cartdom.CartItem{},
+	}
+
+	// times (best-effort)
+	if t, ok := raw["createdAt"]; ok {
+		if tt, ok2 := timeAnyToTime(t); ok2 {
+			c.CreatedAt = tt
+		}
+	}
+	if t, ok := raw["updatedAt"]; ok {
+		if tt, ok2 := timeAnyToTime(t); ok2 {
+			c.UpdatedAt = tt
+		}
+	}
+	if t, ok := raw["expiresAt"]; ok {
+		if tt, ok2 := timeAnyToTime(t); ok2 {
+			c.ExpiresAt = tt
+		}
+	}
+
+	// items
+	itemsAny, _ := raw["items"]
+	m, ok := itemsAny.(map[string]any)
+	if !ok || m == nil {
+		return c, nil
+	}
+
+	for k, v := range m {
+		itemKey := strings.TrimSpace(k)
+		if itemKey == "" {
+			continue
+		}
+
+		// new shape: map[string]any
+		if mv, ok := v.(map[string]any); ok {
+			inv := strings.TrimSpace(stringAny(mv["inventoryId"]))
+			lid := strings.TrimSpace(stringAny(mv["listId"]))
+			mid := strings.TrimSpace(stringAny(mv["modelId"]))
+			qty := intAny(mv["qty"])
+
+			if qty <= 0 {
+				continue
+			}
+
+			c.Items[itemKey] = cartdom.CartItem{
+				InventoryID: inv,
+				ListID:      lid,
+				ModelID:     mid,
+				Qty:         qty,
+			}
+			continue
+		}
+
+		// legacy shape: qty only
+		qty := intAny(v)
+		if qty <= 0 {
+			continue
+		}
+		c.Items[itemKey] = cartdom.CartItem{
+			InventoryID: "",
+			ListID:      "",
+			ModelID:     itemKey,
+			Qty:         qty,
+		}
+	}
+
+	return c, nil
+}
+
+func timeAnyToTime(v any) (time.Time, bool) {
+	switch x := v.(type) {
+	case time.Time:
+		if x.IsZero() {
+			return time.Time{}, false
+		}
+		return x.UTC(), true
+	default:
+		// Firestore の Timestamp は Data() だと time.Time で来る想定だが、念のため fmt 経由はしない
+		return time.Time{}, false
+	}
+}
+
+func stringAny(v any) string {
+	if v == nil {
+		return ""
+	}
+	switch x := v.(type) {
+	case string:
+		return x
+	default:
+		return fmt.Sprint(v)
+	}
+}
+
+func intAny(v any) int {
+	if v == nil {
+		return 0
+	}
+	switch x := v.(type) {
+	case int:
+		return x
+	case int8:
+		return int(x)
+	case int16:
+		return int(x)
+	case int32:
+		return int(x)
+	case int64:
+		return int(x)
+	case uint:
+		return int(x)
+	case uint8:
+		return int(x)
+	case uint16:
+		return int(x)
+	case uint32:
+		return int(x)
+	case uint64:
+		return int(x)
+	case float32:
+		return int(x)
+	case float64:
+		return int(x)
+	case string:
+		s := strings.TrimSpace(x)
+		if s == "" {
+			return 0
+		}
+		var n int
+		_, err := fmt.Sscanf(s, "%d", &n)
+		if err != nil {
+			return 0
+		}
+		return n
+	default:
+		return 0
+	}
 }
 
 // ============================================================
@@ -132,7 +324,7 @@ type invParts struct {
 
 type listMeta struct {
 	Title   string
-	ImageID string // lists.imageId (or List.ImageID)
+	ImageID string
 }
 
 type modelSimple struct {
@@ -142,11 +334,11 @@ type modelSimple struct {
 
 func toCartDTO(
 	c *cartdom.Cart,
-	priceIndex map[string]map[string]int, // listId -> (modelId -> price)
-	listMetaIndex map[string]listMeta, // listId -> meta
-	invIndex map[string]invParts, // inventoryId -> parts
-	modelIndex map[string]modelSimple, // modelId -> (size,color)
-	productNameIndex map[string]string, // productBlueprintId -> productName
+	priceIndex map[string]map[string]int,
+	listMetaIndex map[string]listMeta,
+	invIndex map[string]invParts,
+	modelIndex map[string]modelSimple,
+	productNameIndex map[string]string,
 ) snsdto.CartDTO {
 	out := snsdto.CartDTO{
 		AvatarID:  strings.TrimSpace(c.ID),
@@ -173,7 +365,6 @@ func toCartDTO(
 			continue
 		}
 
-		// ✅ mutation 側(inc/dec/remove)に必要な IDs は残す
 		dto := snsdto.CartItemDTO{
 			InventoryID: invID,
 			ListID:      listID,
@@ -181,9 +372,6 @@ func toCartDTO(
 			Qty:         it.Qty,
 		}
 
-		// --------------------------
-		// list meta: title / listImage
-		// --------------------------
 		if listMetaIndex != nil {
 			if lm, ok := listMetaIndex[listID]; ok {
 				if s := strings.TrimSpace(lm.Title); s != "" {
@@ -195,9 +383,6 @@ func toCartDTO(
 			}
 		}
 
-		// --------------------------
-		// price: listId -> modelId
-		// --------------------------
 		if priceIndex != nil {
 			if m, ok := priceIndex[listID]; ok {
 				if p, ok2 := m[modelID]; ok2 {
@@ -207,9 +392,6 @@ func toCartDTO(
 			}
 		}
 
-		// --------------------------
-		// productName: inventoryId -> pbId -> name
-		// --------------------------
 		pbID := ""
 		if invIndex != nil {
 			if parts, ok := invIndex[invID]; ok {
@@ -229,9 +411,6 @@ func toCartDTO(
 			}
 		}
 
-		// --------------------------
-		// modelId -> size/color
-		// --------------------------
 		if modelIndex != nil {
 			if ms, ok := modelIndex[modelID]; ok {
 				if s := strings.TrimSpace(ms.Size); s != "" {
@@ -258,9 +437,7 @@ func toRFC3339Ptr(t time.Time) *string {
 }
 
 // ============================================================
-// list lookup (best-effort)
-// - listId -> prices(modelId->price) and title/imageId
-// ✅ Prefer ListRepo (same normalization path as catalog_query)
+// list lookup
 // ============================================================
 
 func (q *SNSCartQuery) fetchListIndicesByCart(ctx context.Context, c *cartdom.Cart) (map[string]map[string]int, map[string]listMeta) {
@@ -284,16 +461,25 @@ func (q *SNSCartQuery) fetchListIndicesByCart(ctx context.Context, c *cartdom.Ca
 	}
 
 	if len(listIDs) == 0 {
+		log.Printf("[sns_cart_query_diag] listIndex: no listIds in cart")
 		return nil, nil
 	}
 
-	// ✅ 1) Prefer domain repo (catalog_query と同じ経路)
 	if q.ListRepo != nil {
-		return q.fetchListIndicesByCartViaRepo(ctx, listIDs)
+		log.Printf("[sns_cart_query_diag] listIndex: via ListRepo listIds=%d sample=%q", len(listIDs), maskID(listIDs[0]))
+		price, meta := q.fetchListIndicesByCartViaRepo(ctx, listIDs)
+		log.Printf("[sns_cart_query_diag] listIndex: via ListRepo done priceLists=%d metaLists=%d",
+			countMapKeys(price), countMetaKeys(meta),
+		)
+		return price, meta
 	}
 
-	// ✅ 2) Fallback: direct firestore read (legacy)
-	return q.fetchListIndicesByCartViaFirestore(ctx, listIDs)
+	log.Printf("[sns_cart_query_diag] listIndex: via Firestore (ListRepo is nil) listIds=%d sample=%q", len(listIDs), maskID(listIDs[0]))
+	price, meta := q.fetchListIndicesByCartViaFirestore(ctx, listIDs)
+	log.Printf("[sns_cart_query_diag] listIndex: via Firestore done priceLists=%d metaLists=%d",
+		countMapKeys(price), countMetaKeys(meta),
+	)
+	return price, meta
 }
 
 func (q *SNSCartQuery) fetchListIndicesByCartViaRepo(ctx context.Context, listIDs []string) (map[string]map[string]int, map[string]listMeta) {
@@ -304,20 +490,22 @@ func (q *SNSCartQuery) fetchListIndicesByCartViaRepo(ctx context.Context, listID
 	priceOut := map[string]map[string]int{}
 	metaOut := map[string]listMeta{}
 
+	okN := 0
+	errN := 0
 	for _, lid0 := range listIDs {
 		lid := strings.TrimSpace(lid0)
 		if lid == "" {
 			continue
 		}
 
-		// ✅ adapter が名揺れ/構造を吸収して返す “正規化済み List” を使う
 		l, err := q.ListRepo.GetByID(ctx, lid)
 		if err != nil {
-			// best-effort: skip
+			errN++
+			log.Printf("[sns_cart_query_diag] listRepo.GetByID failed listId=%q err=%v", maskID(lid), err)
 			continue
 		}
+		okN++
 
-		// meta
 		mt := listMeta{
 			Title:   strings.TrimSpace(l.Title),
 			ImageID: strings.TrimSpace(l.ImageID),
@@ -326,7 +514,6 @@ func (q *SNSCartQuery) fetchListIndicesByCartViaRepo(ctx context.Context, listID
 			metaOut[lid] = mt
 		}
 
-		// prices
 		if len(l.Prices) > 0 {
 			m := map[string]int{}
 			for _, row := range l.Prices {
@@ -340,7 +527,15 @@ func (q *SNSCartQuery) fetchListIndicesByCartViaRepo(ctx context.Context, listID
 				priceOut[lid] = m
 			}
 		}
+
+		log.Printf("[sns_cart_query_diag] listRepo ok listId=%q title=%t image=%t prices=%d",
+			maskID(lid),
+			strings.TrimSpace(mt.Title) != "",
+			strings.TrimSpace(mt.ImageID) != "",
+			len(priceOut[lid]),
+		)
 	}
+	log.Printf("[sns_cart_query_diag] listRepo summary ok=%d err=%d", okN, errN)
 
 	if len(priceOut) == 0 {
 		priceOut = nil
@@ -351,7 +546,6 @@ func (q *SNSCartQuery) fetchListIndicesByCartViaRepo(ctx context.Context, listID
 	return priceOut, metaOut
 }
 
-// legacy fallback (kept to avoid breaking behavior when ListRepo is not injected)
 func (q *SNSCartQuery) fetchListIndicesByCartViaFirestore(ctx context.Context, listIDs []string) (map[string]map[string]int, map[string]listMeta) {
 	if q == nil || q.FS == nil || len(listIDs) == 0 {
 		return nil, nil
@@ -369,7 +563,7 @@ func (q *SNSCartQuery) fetchListIndicesByCartViaFirestore(ctx context.Context, l
 
 	snaps, err := q.FS.GetAll(ctx, refs)
 	if err != nil {
-		log.Printf("[sns_cart_query] GetAll(lists) failed listIds=%d err=%v", len(refs), err)
+		log.Printf("[sns_cart_query] GetAll(lists) failed col=%q listIds=%d err=%v", listsCol, len(refs), err)
 		return nil, nil
 	}
 
@@ -382,10 +576,10 @@ func (q *SNSCartQuery) fetchListIndicesByCartViaFirestore(ctx context.Context, l
 			lid = strings.TrimSpace(listIDs[i])
 		}
 		if lid == "" || snap == nil || !snap.Exists() {
+			log.Printf("[sns_cart_query_diag] list fs missing listId=%q col=%q exists=%t", maskID(lid), listsCol, snap != nil && snap.Exists())
 			continue
 		}
 
-		// Try struct decode (may fail if firestore schema differs)
 		var l ldom.List
 		if derr := snap.DataTo(&l); derr == nil {
 			mt := listMeta{
@@ -409,10 +603,16 @@ func (q *SNSCartQuery) fetchListIndicesByCartViaFirestore(ctx context.Context, l
 					priceOut[lid] = m
 				}
 			}
+
+			log.Printf("[sns_cart_query_diag] list fs(DataTo) ok listId=%q title=%t image=%t prices=%d",
+				maskID(lid),
+				strings.TrimSpace(mt.Title) != "",
+				strings.TrimSpace(mt.ImageID) != "",
+				len(priceOut[lid]),
+			)
 			continue
 		}
 
-		// Fallback map read
 		m := snap.Data()
 		title := pickString(m, "title", "Title")
 		image := pickString(m, "imageId", "ImageID", "imageID", "ImageId", "image", "Image", "listImage", "ListImage", "imageUrl", "ImageUrl")
@@ -421,7 +621,6 @@ func (q *SNSCartQuery) fetchListIndicesByCartViaFirestore(ctx context.Context, l
 			metaOut[lid] = listMeta{Title: strings.TrimSpace(title), ImageID: strings.TrimSpace(image)}
 		}
 
-		// prices: [{modelId, price}]
 		if raw, ok := m["prices"]; ok {
 			rows, _ := raw.([]any)
 			if len(rows) > 0 {
@@ -445,6 +644,13 @@ func (q *SNSCartQuery) fetchListIndicesByCartViaFirestore(ctx context.Context, l
 				}
 			}
 		}
+
+		log.Printf("[sns_cart_query_diag] list fs(map) ok listId=%q title=%t image=%t prices=%d",
+			maskID(lid),
+			strings.TrimSpace(title) != "",
+			strings.TrimSpace(image) != "",
+			len(priceOut[lid]),
+		)
 	}
 
 	if len(priceOut) == 0 {
@@ -457,8 +663,7 @@ func (q *SNSCartQuery) fetchListIndicesByCartViaFirestore(ctx context.Context, l
 }
 
 // ============================================================
-// inventory lookup (best-effort)
-// - inventoryId -> (productBlueprintId, tokenBlueprintId)
+// inventory lookup
 // ============================================================
 
 func (q *SNSCartQuery) fetchInventoryIndexByCart(ctx context.Context, c *cartdom.Cart) map[string]invParts {
@@ -497,13 +702,12 @@ func (q *SNSCartQuery) fetchInventoryIndexByCart(ctx context.Context, c *cartdom
 
 	snaps, err := q.FS.GetAll(ctx, refs)
 	if err != nil {
-		log.Printf("[sns_cart_query] GetAll(inventories) failed invIds=%d err=%v", len(refs), err)
-		// best-effort: allow parsing from inventoryId (= pb__tb)
+		log.Printf("[sns_cart_query] GetAll(inventories) failed col=%q invIds=%d err=%v", invCol, len(refs), err)
 		return nil
 	}
 
 	out := map[string]invParts{}
-
+	okN := 0
 	for i, snap := range snaps {
 		invID := ""
 		if i >= 0 && i < len(invIDs) {
@@ -517,8 +721,10 @@ func (q *SNSCartQuery) fetchInventoryIndexByCart(ctx context.Context, c *cartdom
 		pb := pickString(m, "productBlueprintId", "productBlueprintID", "ProductBlueprintID", "ProductBlueprintId")
 		tb := pickString(m, "tokenBlueprintId", "tokenBlueprintID", "TokenBlueprintID", "TokenBlueprintId")
 
+		fallbackParsed := false
 		if pb == "" || tb == "" {
 			if p, t, ok := parseInventoryID(invID); ok {
+				fallbackParsed = true
 				if pb == "" {
 					pb = p
 				}
@@ -534,8 +740,14 @@ func (q *SNSCartQuery) fetchInventoryIndexByCart(ctx context.Context, c *cartdom
 			continue
 		}
 
+		okN++
 		out[invID] = invParts{ProductBlueprintID: pb, TokenBlueprintID: tb}
+		log.Printf("[sns_cart_query_diag] inv ok invId=%q pb=%q tb=%q parsedFallback=%t",
+			maskID(invID), maskID(pb), maskID(tb), fallbackParsed,
+		)
 	}
+
+	log.Printf("[sns_cart_query_diag] inv summary invIds=%d resolved=%d col=%q", len(invIDs), okN, invCol)
 
 	if len(out) == 0 {
 		return nil
@@ -544,12 +756,15 @@ func (q *SNSCartQuery) fetchInventoryIndexByCart(ctx context.Context, c *cartdom
 }
 
 // ============================================================
-// model resolver lookup (best-effort)
-// - modelId -> size/color only
+// model resolver lookup
 // ============================================================
 
 func (q *SNSCartQuery) fetchModelSimpleIndexByCart(ctx context.Context, c *cartdom.Cart) map[string]modelSimple {
-	if q == nil || q.Resolver == nil || c == nil || c.Items == nil || len(c.Items) == 0 {
+	if q == nil || c == nil || c.Items == nil || len(c.Items) == 0 {
+		return nil
+	}
+	if q.Resolver == nil {
+		log.Printf("[sns_cart_query_diag] modelIndex: resolver is nil -> skip (size/color will be empty)")
 		return nil
 	}
 
@@ -573,16 +788,22 @@ func (q *SNSCartQuery) fetchModelSimpleIndexByCart(ctx context.Context, c *cartd
 	}
 
 	out := map[string]modelSimple{}
+	okN := 0
+	emptyN := 0
 
 	for _, mid := range modelIDs {
 		mr := q.Resolver.ResolveModelResolved(ctx, mid)
 		sz := strings.TrimSpace(mr.Size)
 		cl := strings.TrimSpace(mr.Color)
 		if sz == "" && cl == "" {
+			emptyN++
 			continue
 		}
+		okN++
 		out[mid] = modelSimple{Size: sz, Color: cl}
 	}
+
+	log.Printf("[sns_cart_query_diag] modelIndex: modelIds=%d resolved=%d empty=%d", len(modelIDs), okN, emptyN)
 
 	if len(out) == 0 {
 		return nil
@@ -591,9 +812,14 @@ func (q *SNSCartQuery) fetchModelSimpleIndexByCart(ctx context.Context, c *cartd
 }
 
 // ============================================================
-// productName lookup (best-effort)
-// - inventoryId -> pbId -> productName
+// productName lookup（ここを強化ログ）
 // ============================================================
+
+type pbDeriveDiag struct {
+	InvID  string
+	PbID   string
+	Source string // invIndex / parseInventoryID
+}
 
 func (q *SNSCartQuery) fetchProductNameIndexByCart(
 	ctx context.Context,
@@ -606,11 +832,14 @@ func (q *SNSCartQuery) fetchProductNameIndexByCart(
 
 	pbCol := strings.TrimSpace(q.ProductBlueprintsCol)
 	if pbCol == "" {
-		pbCol = "productBlueprints"
+		// ✅ repo 側と揃える
+		pbCol = "product_blueprints"
 	}
 
 	pbSeen := map[string]struct{}{}
 	pbIDs := make([]string, 0, 16)
+
+	diags := make([]pbDeriveDiag, 0, 4)
 
 	for _, it := range c.Items {
 		invID := strings.TrimSpace(it.InventoryID)
@@ -619,15 +848,26 @@ func (q *SNSCartQuery) fetchProductNameIndexByCart(
 		}
 
 		pbID := ""
+		src := ""
 		if invIndex != nil {
 			if parts, ok := invIndex[invID]; ok {
 				pbID = strings.TrimSpace(parts.ProductBlueprintID)
+				if pbID != "" {
+					src = "invIndex"
+				}
 			}
 		}
 		if pbID == "" {
 			if p, _, ok := parseInventoryID(invID); ok {
-				pbID = p
+				pbID = strings.TrimSpace(p)
+				if pbID != "" {
+					src = "parseInventoryID"
+				}
 			}
+		}
+
+		if len(diags) < 3 {
+			diags = append(diags, pbDeriveDiag{InvID: invID, PbID: pbID, Source: src})
 		}
 
 		if pbID == "" {
@@ -641,7 +881,22 @@ func (q *SNSCartQuery) fetchProductNameIndexByCart(
 	}
 
 	if len(pbIDs) == 0 {
+		log.Printf("[sns_cart_query_diag] productNameIndex: no pbIds (resolver=%t col=%q)", q.Resolver != nil, pbCol)
+		for _, d := range diags {
+			log.Printf("[sns_cart_query_diag] productNameIndex derive inv=%q pb=%q src=%s",
+				maskID(d.InvID), maskID(d.PbID), d.Source,
+			)
+		}
 		return nil
+	}
+
+	log.Printf("[sns_cart_query_diag] productNameIndex: pbIds=%d sample=%q col=%q resolver=%t",
+		len(pbIDs), maskID(pbIDs[0]), pbCol, q.Resolver != nil,
+	)
+	for _, d := range diags {
+		log.Printf("[sns_cart_query_diag] productNameIndex derive inv=%q pb=%q src=%s",
+			maskID(d.InvID), maskID(d.PbID), d.Source,
+		)
 	}
 
 	refs := make([]*firestore.DocumentRef, 0, len(pbIDs))
@@ -651,16 +906,20 @@ func (q *SNSCartQuery) fetchProductNameIndexByCart(
 
 	snaps, err := q.FS.GetAll(ctx, refs)
 	if err != nil {
-		log.Printf("[sns_cart_query] GetAll(productBlueprints) failed pbIds=%d err=%v", len(refs), err)
-		// fallback: resolver only (best-effort)
+		log.Printf("[sns_cart_query] GetAll(productBlueprints) failed col=%q pbIds=%d err=%v", pbCol, len(refs), err)
+
 		if q.Resolver != nil {
 			out := map[string]string{}
 			for _, id := range pbIDs {
 				name := strings.TrimSpace(q.Resolver.ResolveProductName(ctx, id))
+				log.Printf("[sns_cart_query_diag] productNameIndex resolver-only pb=%q name=%t",
+					maskID(id), name != "",
+				)
 				if name != "" {
 					out[id] = name
 				}
 			}
+			log.Printf("[sns_cart_query_diag] productNameIndex: resolver-only resolved=%d", len(out))
 			if len(out) == 0 {
 				return nil
 			}
@@ -671,28 +930,65 @@ func (q *SNSCartQuery) fetchProductNameIndexByCart(
 
 	out := map[string]string{}
 
+	resolvedFS := 0
+	resolvedResolver := 0
+	miss := 0
+
 	for i, snap := range snaps {
 		pbID := ""
 		if i >= 0 && i < len(pbIDs) {
 			pbID = strings.TrimSpace(pbIDs[i])
 		}
-		if pbID == "" || snap == nil || !snap.Exists() {
+		if pbID == "" {
+			continue
+		}
+
+		exists := snap != nil && snap.Exists()
+		if !exists {
+			miss++
+			log.Printf("[sns_cart_query_diag] productNameIndex miss pb=%q col=%q -> will try resolver=%t",
+				maskID(pbID), pbCol, q.Resolver != nil,
+			)
+
+			if q.Resolver != nil {
+				rn := strings.TrimSpace(q.Resolver.ResolveProductName(ctx, pbID))
+				log.Printf("[sns_cart_query_diag] productNameIndex resolver pb=%q name=%t",
+					maskID(pbID), rn != "",
+				)
+				if rn != "" {
+					out[pbID] = rn
+					resolvedResolver++
+				}
+			}
 			continue
 		}
 
 		m := snap.Data()
 		name := strings.TrimSpace(pickString(m, "productName", "ProductName", "name", "Name"))
-
-		// fallback resolver
-		if name == "" && q.Resolver != nil {
-			name = strings.TrimSpace(q.Resolver.ResolveProductName(ctx, pbID))
-		}
-
-		if name == "" {
+		if name != "" {
+			out[pbID] = name
+			resolvedFS++
+			log.Printf("[sns_cart_query_diag] productNameIndex fs ok pb=%q name=%t", maskID(pbID), true)
 			continue
 		}
-		out[pbID] = name
+
+		if q.Resolver != nil {
+			rn := strings.TrimSpace(q.Resolver.ResolveProductName(ctx, pbID))
+			log.Printf("[sns_cart_query_diag] productNameIndex fs empty -> resolver pb=%q name=%t",
+				maskID(pbID), rn != "",
+			)
+			if rn != "" {
+				out[pbID] = rn
+				resolvedResolver++
+			}
+		} else {
+			log.Printf("[sns_cart_query_diag] productNameIndex fs empty and resolver nil pb=%q", maskID(pbID))
+		}
 	}
+
+	log.Printf("[sns_cart_query_diag] productNameIndex summary pbIds=%d resolved=%d(fs=%d resolver=%d) miss=%d",
+		len(pbIDs), len(out), resolvedFS, resolvedResolver, miss,
+	)
 
 	if len(out) == 0 {
 		return nil
@@ -701,10 +997,77 @@ func (q *SNSCartQuery) fetchProductNameIndexByCart(
 }
 
 // ============================================================
-// shared helpers (package scope; preview_query からも利用)
+// diagnostics helpers
 // ============================================================
 
-// inventoryId is expected: productBlueprintId__tokenBlueprintId
+type cartCover struct {
+	Items           int
+	WithTitle       int
+	WithImage       int
+	WithPrice       int
+	WithSize        int
+	WithColor       int
+	WithProductName int
+}
+
+func diagCartDTOMetaCoverage(dto snsdto.CartDTO) cartCover {
+	c := cartCover{}
+	if dto.Items == nil {
+		return c
+	}
+	c.Items = len(dto.Items)
+	for _, it := range dto.Items {
+		if strings.TrimSpace(it.Title) != "" {
+			c.WithTitle++
+		}
+		if strings.TrimSpace(it.ListImage) != "" {
+			c.WithImage++
+		}
+		if it.Price != nil {
+			c.WithPrice++
+		}
+		if strings.TrimSpace(it.Size) != "" {
+			c.WithSize++
+		}
+		if strings.TrimSpace(it.Color) != "" {
+			c.WithColor++
+		}
+		if strings.TrimSpace(it.ProductName) != "" {
+			c.WithProductName++
+		}
+	}
+	return c
+}
+
+func countMapKeys(m map[string]map[string]int) int {
+	if m == nil {
+		return 0
+	}
+	return len(m)
+}
+
+func countMetaKeys(m map[string]listMeta) int {
+	if m == nil {
+		return 0
+	}
+	return len(m)
+}
+
+func maskID(s string) string {
+	s = strings.TrimSpace(s)
+	if s == "" {
+		return ""
+	}
+	if len(s) <= 6 {
+		return s
+	}
+	return s[:4] + "***" + s[len(s)-2:]
+}
+
+// ============================================================
+// shared helpers
+// ============================================================
+
 func parseInventoryID(inventoryID string) (productBlueprintID string, tokenBlueprintID string, ok bool) {
 	s := strings.TrimSpace(inventoryID)
 	if s == "" {

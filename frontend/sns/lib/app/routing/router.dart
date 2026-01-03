@@ -1,3 +1,4 @@
+//frontend\sns\lib\app\routing\router.dart
 import 'dart:async';
 import 'dart:convert';
 
@@ -197,59 +198,57 @@ GoRouter buildAppRouter() {
         return null;
       }
 
-      // login/createAccount -> サインイン後は from or home に戻す
+      // ✅ login/createAccount -> サインイン後は from or home に戻す
+      // ❌ avatarId 未解決でも avatar_create には飛ばさない
       if (isLoggedIn && (isLoginRoute || isCreateAccountRoute)) {
         final rawFromEncoded = (qp[AppQueryKey.from] ?? '').trim();
         final rawFrom = _decodeFrom(rawFromEncoded);
         final uid = user.uid.trim();
 
+        // best-effort で avatarId は解決して store に入れておく（あれば）
         final resolved = await _ensureAvatarIdResolved(state, uid);
-        if (resolved.isEmpty) {
-          final from = rawFrom.isNotEmpty ? rawFrom : AppRoutePath.home;
-          return Uri(
-            path: AppRoutePath.avatarCreate,
-            queryParameters: {
-              AppQueryKey.from: _encodeFrom(from),
-              AppQueryKey.intent: 'bootstrap',
-            },
-          ).toString();
-        }
 
         if (rawFrom.isNotEmpty) {
-          final fixed = _withAvatarId(rawFrom, resolved);
+          // avatarId が取れた場合のみ付与
+          final fixed = resolved.isNotEmpty
+              ? _withAvatarId(rawFrom, resolved)
+              : rawFrom;
+
+          // from が login を指していたら home へ
           if (Uri.tryParse(fixed)?.path == AppRoutePath.login) {
-            return Uri(
-              path: AppRoutePath.home,
-              queryParameters: {AppQueryKey.avatarId: resolved},
-            ).toString();
+            return resolved.isNotEmpty
+                ? Uri(
+                    path: AppRoutePath.home,
+                    queryParameters: {AppQueryKey.avatarId: resolved},
+                  ).toString()
+                : AppRoutePath.home;
           }
           return fixed;
         }
 
-        return Uri(
-          path: AppRoutePath.home,
-          queryParameters: {AppQueryKey.avatarId: resolved},
-        ).toString();
+        // from が無ければ home
+        return resolved.isNotEmpty
+            ? Uri(
+                path: AppRoutePath.home,
+                queryParameters: {AppQueryKey.avatarId: resolved},
+              ).toString()
+            : AppRoutePath.home;
       }
 
-      // サインイン後：原則「全ページ URL に avatarId を必ず持たせる」
+      // ✅ サインイン後：原則「全ページ URL に avatarId を必ず持たせる」
+      // ❌ avatarId 未解決でも avatar_create には飛ばさない（今回の要件）
       final uid = user.uid.trim();
 
       if (exemptForAvatarId.contains(path)) {
+        // exempt は best-effort で解決だけ試す（あれば store に入る）
         await _ensureAvatarIdResolved(state, uid);
         return null;
       }
 
       final resolved = await _ensureAvatarIdResolved(state, uid);
       if (resolved.isEmpty) {
-        final from = state.uri.toString();
-        return Uri(
-          path: AppRoutePath.avatarCreate,
-          queryParameters: {
-            AppQueryKey.from: _encodeFrom(from),
-            AppQueryKey.intent: 'bootstrap',
-          },
-        ).toString();
+        // ✅ ここで avatar_create へリダイレクトしない
+        return null;
       }
 
       final qpId = (qp[AppQueryKey.avatarId] ?? '').trim();

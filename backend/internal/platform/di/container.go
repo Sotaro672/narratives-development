@@ -23,7 +23,7 @@ import (
 	gcso "narratives/internal/adapters/out/gcs"
 	mailadp "narratives/internal/adapters/out/mail"
 
-	// ✅ SNS handlers（Cart/Payment など）
+	// ✅ SNS handlers（Cart/Payment/ShippingAddress など）
 	snshandler "narratives/internal/adapters/in/http/sns/handler"
 
 	// ★ MintUsecase 移動先
@@ -163,9 +163,10 @@ type Container struct {
 
 	// ✅ SNS handlers（sns_container.go が best-effort で探す対象）
 	// NOTE: Go は field と method の同名を許さないため、field は小文字にする
-	snsSignInHandler  http.Handler
-	snsCartHandler    http.Handler
-	snsPaymentHandler http.Handler
+	snsSignInHandler          http.Handler
+	snsCartHandler            http.Handler
+	snsPaymentHandler         http.Handler
+	snsShippingAddressHandler http.Handler // ✅ 追加
 }
 
 // ========================================
@@ -577,11 +578,13 @@ func NewContainer(ctx context.Context) (*Container, error) {
 	// - SignIn: 既存 handler が未統合でも “存在確認” ができるよう 204 の薄い実装で保持
 	// - Cart: 実装済み handler をそのまま注入
 	// - Payment: ✅ orderQ 注入版に差し替え（/sns/payment を有効化）
+	// - ShippingAddress: ✅ shippingAddress_handler.go を登録
 	snsSignInHandler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusNoContent)
 	})
 	snsCartHandler := snshandler.NewCartHandler(cartUC)
 	snsPaymentHandler := snshandler.NewPaymentHandlerWithOrderQuery(paymentUC, orderQ)
+	snsShippingAddressHandler := snshandler.NewShippingAddressHandler(shippingAddressUC) // ✅ 追加
 
 	// 6. Assemble container
 	return &Container{
@@ -658,9 +661,10 @@ func NewContainer(ctx context.Context) (*Container, error) {
 		NameResolver:     nameResolver,
 
 		// ✅ SNS handlers（private fields）
-		snsSignInHandler:  snsSignInHandler,
-		snsCartHandler:    snsCartHandler,
-		snsPaymentHandler: snsPaymentHandler,
+		snsSignInHandler:          snsSignInHandler,
+		snsCartHandler:            snsCartHandler,
+		snsPaymentHandler:         snsPaymentHandler,
+		snsShippingAddressHandler: snsShippingAddressHandler, // ✅ 追加
 	}, nil
 }
 
@@ -723,6 +727,14 @@ func (c *Container) SNSPaymentHandler() http.Handler {
 		return nil
 	}
 	return c.snsPaymentHandler
+}
+
+// ✅ NEW: shipping address handler getter（sns_container.go が拾う）
+func (c *Container) SNSShippingAddressHandler() http.Handler {
+	if c == nil {
+		return nil
+	}
+	return c.snsShippingAddressHandler
 }
 
 // callOptionalMethod calls obj.<methodName>(arg) when such method exists (best-effort).

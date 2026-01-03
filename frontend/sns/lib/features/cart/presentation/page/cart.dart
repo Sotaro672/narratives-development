@@ -1,7 +1,11 @@
+//frontend\sns\lib\features\cart\presentation\page\cart.dart
+import 'dart:convert';
+
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
-import '../../infrastructure/cart_repository_http.dart';
+import '../hook/use_cart.dart';
 
 class CartPage extends StatefulWidget {
   const CartPage({super.key});
@@ -13,15 +17,23 @@ class CartPage extends StatefulWidget {
 }
 
 class _CartPageState extends State<CartPage> {
-  late final CartRepositoryHttp _repo;
-  late Future<CartQueryDTO> _future;
-
+  UseCartController? _ctrl;
   bool _booted = false;
 
-  @override
-  void initState() {
-    super.initState();
-    _repo = CartRepositoryHttp();
+  bool get _dbg => kDebugMode;
+
+  void _log(String msg) {
+    if (!_dbg) return;
+    // ignore: avoid_print
+    print('[CartPage] $msg');
+  }
+
+  String _prettyJson(dynamic v) {
+    try {
+      return const JsonEncoder.withIndent('  ').convert(v);
+    } catch (_) {
+      return v.toString();
+    }
   }
 
   @override
@@ -30,111 +42,35 @@ class _CartPageState extends State<CartPage> {
     if (_booted) return;
     _booted = true;
 
-    // ✅ Hash URL (#/cart?... ) の query は Uri.base では拾えないため、
-    //   GoRouterState から読む前提でここで初期化する
-    _future = _fetch();
+    final aid = _avatarIdFromRoute();
+    if (aid.isEmpty) {
+      _log('boot abort: avatarId missing');
+      return;
+    }
+
+    _ctrl = UseCartController(avatarId: aid, context: context);
+    _ctrl!.init();
   }
 
   @override
   void dispose() {
-    _repo.dispose();
+    _ctrl?.dispose();
     super.dispose();
   }
 
-  // ----------------------------
-  // routing helpers (go_router)
-  // ----------------------------
-
   String _avatarIdFromRoute() {
-    final qp = GoRouterState.of(context).uri.queryParameters;
-    return (qp['avatarId'] ?? '').trim();
+    final uri = GoRouterState.of(context).uri;
+    return (uri.queryParameters['avatarId'] ?? '').trim();
   }
-
-  // from は現状この page では使っていないが、必要なら同様に取れる
-  // String _fromFromRoute() {
-  //   final qp = GoRouterState.of(context).uri.queryParameters;
-  //   return (qp['from'] ?? '').trim();
-  // }
-
-  Future<CartQueryDTO> _fetch() async {
-    final aid = _avatarIdFromRoute();
-    if (aid.isEmpty) {
-      throw StateError('avatarId is missing in query (?avatarId=...)');
-    }
-    return _repo.fetchCartQuery(avatarId: aid);
-  }
-
-  Future<void> _reload() async {
-    setState(() {
-      _future = _fetch();
-    });
-  }
-
-  // ----------------------------
-  // actions (rows-based)
-  // ----------------------------
-
-  Future<void> _remove(CartQueryRowDTO row) async {
-    final aid = _avatarIdFromRoute();
-    if (aid.isEmpty) return;
-
-    final invId = row.inventoryId.trim();
-    final listId = row.listId.trim();
-    final modelId = row.modelId.trim();
-
-    if (invId.isEmpty || listId.isEmpty || modelId.isEmpty) return;
-
-    await _repo.removeItem(
-      avatarId: aid,
-      inventoryId: invId,
-      listId: listId,
-      modelId: modelId,
-    );
-
-    await _reload();
-  }
-
-  Future<void> _clear() async {
-    final aid = _avatarIdFromRoute();
-    if (aid.isEmpty) return;
-
-    await _repo.clearCart(avatarId: aid);
-    await _reload();
-  }
-
-  // ----------------------------
-  // ui helpers
-  // ----------------------------
 
   String _mask(String s) {
     final t = s.trim();
-    if (t.length <= 6) return t;
-    return '${t.substring(0, 3)}***${t.substring(t.length - 3)}';
+    if (t.isEmpty) return '';
+    if (t.length <= 8) return t;
+    return '${t.substring(0, 4)}***${t.substring(t.length - 4)}';
   }
 
-  String _fmtPrice(int? price) {
-    if (price == null) return '-';
-    return '¥$price';
-  }
-
-  Widget _buildThumb(String? listImage) {
-    final v = (listImage ?? '').trim();
-
-    if (v.startsWith('http://') || v.startsWith('https://')) {
-      return ClipRRect(
-        borderRadius: BorderRadius.circular(8),
-        child: Image.network(
-          v,
-          width: 56,
-          height: 56,
-          fit: BoxFit.cover,
-          errorBuilder: (_, __, ___) => _thumbPlaceholder(),
-        ),
-      );
-    }
-
-    return _thumbPlaceholder();
-  }
+  String _s(dynamic v) => (v ?? '').toString().trim();
 
   Widget _thumbPlaceholder() {
     return Container(
@@ -148,167 +84,295 @@ class _CartPageState extends State<CartPage> {
     );
   }
 
-  // ----------------------------
-  // build
-  // ----------------------------
+  Widget _thumb(String? url) {
+    final u = (url ?? '').trim();
+    if (u.isEmpty || !(u.startsWith('http://') || u.startsWith('https://'))) {
+      return _thumbPlaceholder();
+    }
+
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(8),
+      child: SizedBox(
+        width: 56,
+        height: 56,
+        child: Image.network(
+          u,
+          fit: BoxFit.cover,
+          errorBuilder: (_, __, ___) => _thumbPlaceholder(),
+          loadingBuilder: (context, child, progress) {
+            if (progress == null) return child;
+            return Container(
+              width: 56,
+              height: 56,
+              color: Colors.grey.shade200,
+              child: const Center(
+                child: SizedBox(
+                  width: 18,
+                  height: 18,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                ),
+              ),
+            );
+          },
+        ),
+      ),
+    );
+  }
+
+  Widget _buildItemCard({
+    required String itemKey,
+    required CartItemDTO it,
+    required bool busy,
+    required Future<void> Function(String itemKey) onInc,
+    required Future<void> Function(String itemKey, int currentQty) onDec,
+    required Future<void> Function(String itemKey) onRemove,
+  }) {
+    final title = _s(it.title);
+    final productName = _s(it.productName);
+    final size = _s(it.size);
+    final color = _s(it.color);
+    final listImage = _s(it.listImage);
+
+    final displayTitle = productName.isNotEmpty
+        ? productName
+        : (title.isNotEmpty ? title : 'Item');
+
+    final lines = <String>[];
+    if (title.isNotEmpty && productName.isNotEmpty) {
+      lines.add(title);
+    }
+    lines.add(
+      'size: ${size.isEmpty ? '-' : size} / color: ${color.isEmpty ? '-' : color}',
+    );
+    lines.add('qty: ${it.qty}');
+    if (it.price != null) {
+      lines.add('price: ${it.price}');
+    }
+    final subtitle = lines.join('\n');
+
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: Colors.grey.shade200),
+        boxShadow: [
+          BoxShadow(
+            blurRadius: 10,
+            offset: const Offset(0, 4),
+            color: Colors.black.withValues(alpha: 0.04),
+          ),
+        ],
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          _thumb(listImage),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  displayTitle,
+                  style: const TextStyle(
+                    fontSize: 15,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+                const SizedBox(height: 6),
+                Text(
+                  subtitle,
+                  style: TextStyle(color: Colors.grey.shade700, height: 1.35),
+                ),
+                const SizedBox(height: 10),
+                Row(
+                  children: [
+                    IconButton(
+                      onPressed: busy ? null : () => onDec(itemKey, it.qty),
+                      icon: const Icon(Icons.remove_circle_outline),
+                      tooltip: 'Decrease',
+                    ),
+                    Text(
+                      '${it.qty}',
+                      style: const TextStyle(fontWeight: FontWeight.w600),
+                    ),
+                    IconButton(
+                      onPressed: busy ? null : () => onInc(itemKey),
+                      icon: const Icon(Icons.add_circle_outline),
+                      tooltip: 'Increase',
+                    ),
+                    const Spacer(),
+                    Text(
+                      _mask(itemKey),
+                      style: TextStyle(color: Colors.grey.shade500),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(width: 8),
+          IconButton(
+            onPressed: busy ? null : () => onRemove(itemKey),
+            icon: const Icon(Icons.close),
+            tooltip: 'Remove',
+          ),
+        ],
+      ),
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
-    return FutureBuilder<CartQueryDTO>(
-      future: _future,
+    final aid = _avatarIdFromRoute();
+
+    if (_ctrl == null) {
+      return const Padding(
+        padding: EdgeInsets.fromLTRB(16, 10, 16, 16),
+        child: Text('avatarId is missing in query (?avatarId=...)'),
+      );
+    }
+
+    final r = _ctrl!.buildResult(setState);
+
+    // ✅ 親がScrollViewでもColumnでも落ちないように：自分は ScrollView で完結させる
+    return FutureBuilder<CartDTO>(
+      future: r.future,
       builder: (context, snap) {
         final loading = snap.connectionState == ConnectionState.waiting;
-        final err = snap.hasError ? snap.error : null;
 
-        final dto = snap.data;
-        final rows = dto?.rows ?? const <CartQueryRowDTO>[];
+        // ✅ “絶対に落ちない”：失敗/未完了でも current を使って描画可能にする
+        final CartDTO cart = snap.data ?? r.current;
+        final Object? err = snap.hasError ? snap.error : null;
 
-        final avatarId = _avatarIdFromRoute();
-        final expiresAt = dto?.cart?.expiresAt;
+        final entries = cart.items.entries.toList();
+        final expiresAt = cart.expiresAt;
 
-        return Padding(
+        if (_dbg) {
+          _log(
+            'render: loading=$loading err=${err != null} avatarId="${_mask(cart.avatarId)}" items=${entries.length}',
+          );
+          if (entries.isNotEmpty) {
+            final e0 = entries.first;
+            _log(
+              'item0 key="${_mask(e0.key)}" val=${_prettyJson({"inventoryId": e0.value.inventoryId, "listId": e0.value.listId, "modelId": e0.value.modelId, "qty": e0.value.qty, "title": e0.value.title, "productName": e0.value.productName, "listImage": e0.value.listImage, "price": e0.value.price, "size": e0.value.size, "color": e0.value.color})}',
+            );
+          }
+        }
+
+        final children = <Widget>[
+          Text(
+            'Cart',
+            style: TextStyle(
+              fontSize: 22,
+              fontWeight: FontWeight.w700,
+              color: Colors.grey.shade900,
+            ),
+          ),
+          const SizedBox(height: 8),
+          Text('avatarId: ${_mask(aid)}'),
+          Text('items: ${entries.length}'),
+          if (expiresAt != null)
+            Text('expiresAt: ${expiresAt.toIso8601String()}'),
+          const SizedBox(height: 12),
+          Row(
+            children: [
+              const Text(
+                'Items',
+                style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
+              ),
+              const Spacer(),
+              IconButton(
+                tooltip: 'Reload',
+                onPressed: (loading || r.busy) ? null : r.reload,
+                icon: const Icon(Icons.refresh),
+              ),
+              TextButton.icon(
+                onPressed: (loading || r.busy || entries.isEmpty)
+                    ? null
+                    : r.clear,
+                icon: const Icon(Icons.delete_outline, size: 18),
+                label: const Text('Clear'),
+              ),
+            ],
+          ),
+          const SizedBox(height: 10),
+        ];
+
+        if (loading && entries.isEmpty) {
+          children.add(
+            const Padding(
+              padding: EdgeInsets.only(top: 24),
+              child: Center(child: CircularProgressIndicator()),
+            ),
+          );
+        } else if (err != null && entries.isEmpty) {
+          children.add(
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: Colors.red.shade50,
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: Colors.red.shade200),
+              ),
+              child: Text(
+                err.toString(),
+                style: TextStyle(color: Colors.red.shade800),
+              ),
+            ),
+          );
+        } else if (entries.isEmpty) {
+          children.add(
+            const Padding(
+              padding: EdgeInsets.only(top: 24),
+              child: Center(child: Text('No items in cart.')),
+            ),
+          );
+        } else {
+          for (var i = 0; i < entries.length; i++) {
+            final e = entries[i];
+            children.add(
+              _buildItemCard(
+                itemKey: e.key,
+                it: e.value,
+                busy: r.busy || loading,
+                onInc: r.inc,
+                onDec: r.dec,
+                onRemove: r.remove,
+              ),
+            );
+            if (i != entries.length - 1) {
+              children.add(const SizedBox(height: 10));
+            }
+          }
+
+          if (err != null) {
+            children.add(const SizedBox(height: 14));
+            children.add(
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: Colors.orange.shade50,
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: Colors.orange.shade200),
+                ),
+                child: Text(
+                  'latest fetch failed (showing cached/current): ${err.toString()}',
+                  style: TextStyle(color: Colors.orange.shade900),
+                ),
+              ),
+            );
+          }
+        }
+
+        return SingleChildScrollView(
           padding: const EdgeInsets.fromLTRB(16, 10, 16, 16),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                'Cart',
-                style: TextStyle(
-                  fontSize: 22,
-                  fontWeight: FontWeight.w700,
-                  color: Colors.grey.shade900,
-                ),
-              ),
-              const SizedBox(height: 8),
-              Text('avatarId: ${_mask(avatarId)}'),
-              Text('items: ${rows.length}'),
-              if (expiresAt != null)
-                Text('expiresAt: ${expiresAt.toIso8601String()}'),
-              const SizedBox(height: 18),
-
-              Row(
-                children: [
-                  const Text(
-                    'Items',
-                    style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
-                  ),
-                  const Spacer(),
-                  TextButton.icon(
-                    onPressed: (loading || rows.isEmpty) ? null : _clear,
-                    icon: const Icon(Icons.delete_outline, size: 18),
-                    label: const Text('Clear'),
-                  ),
-                ],
-              ),
-
-              const SizedBox(height: 10),
-
-              if (loading) ...[
-                const Padding(
-                  padding: EdgeInsets.only(top: 24),
-                  child: Center(child: CircularProgressIndicator()),
-                ),
-              ] else if (err != null) ...[
-                Container(
-                  width: double.infinity,
-                  padding: const EdgeInsets.all(12),
-                  decoration: BoxDecoration(
-                    color: Colors.red.shade50,
-                    borderRadius: BorderRadius.circular(12),
-                    border: Border.all(color: Colors.red.shade200),
-                  ),
-                  child: Text(
-                    err.toString(),
-                    style: TextStyle(color: Colors.red.shade800),
-                  ),
-                ),
-              ] else if (rows.isEmpty) ...[
-                const Padding(
-                  padding: EdgeInsets.only(top: 24),
-                  child: Center(child: Text('No items in cart.')),
-                ),
-              ] else ...[
-                Expanded(
-                  child: ListView.separated(
-                    itemCount: rows.length,
-                    separatorBuilder: (_, __) => const SizedBox(height: 10),
-                    itemBuilder: (context, i) {
-                      final r = rows[i];
-
-                      final title = (r.title ?? '').trim();
-                      final productName = (r.productName ?? '').trim();
-                      final size = (r.size ?? '').trim();
-                      final color = (r.color ?? '').trim();
-
-                      final displayTitle = title.isNotEmpty
-                          ? title
-                          : (productName.isNotEmpty ? productName : 'Item');
-
-                      final qty = r.qty;
-
-                      return Container(
-                        padding: const EdgeInsets.all(12),
-                        decoration: BoxDecoration(
-                          color: Colors.white,
-                          borderRadius: BorderRadius.circular(14),
-                          border: Border.all(color: Colors.grey.shade200),
-                          boxShadow: [
-                            BoxShadow(
-                              blurRadius: 10,
-                              offset: const Offset(0, 4),
-                              color: Colors.black.withValues(alpha: 0.04),
-                            ),
-                          ],
-                        ),
-                        child: Row(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            _buildThumb(r.listImage),
-                            const SizedBox(width: 12),
-                            Expanded(
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Text(
-                                    displayTitle,
-                                    style: const TextStyle(
-                                      fontSize: 15,
-                                      fontWeight: FontWeight.w600,
-                                    ),
-                                  ),
-                                  const SizedBox(height: 6),
-                                  Text('price: ${_fmtPrice(r.price)}'),
-                                  const SizedBox(height: 4),
-                                  Text(
-                                    'size: ${size.isEmpty ? '-' : size} / color: ${color.isEmpty ? '-' : color}',
-                                    style: TextStyle(
-                                      color: Colors.grey.shade700,
-                                    ),
-                                  ),
-                                  const SizedBox(height: 6),
-                                  Text(
-                                    'qty: $qty',
-                                    style: TextStyle(
-                                      color: Colors.grey.shade700,
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
-                            const SizedBox(width: 8),
-                            IconButton(
-                              onPressed: () => _remove(r),
-                              icon: const Icon(Icons.close),
-                              tooltip: 'Remove',
-                            ),
-                          ],
-                        ),
-                      );
-                    },
-                  ),
-                ),
-              ],
-            ],
+            children: children,
           ),
         );
       },

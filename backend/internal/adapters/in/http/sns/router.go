@@ -31,11 +31,9 @@ type Deps struct {
 	// ✅ NEW: wallet (tokens)
 	Wallet http.Handler
 
-	// ✅ NEW: cart (write / legacy)
+	// ✅ cart (GET is read-model internally; write routes handled by same handler)
+	// NOTE: CartQuery route is removed; Cart handler must internally dispatch GET /sns/cart to cart_query DTO.
 	Cart http.Handler
-
-	// ✅ NEW: cart read-model (cart_query.go)
-	CartQuery http.Handler
 
 	// ✅ NEW: posts
 	Post http.Handler
@@ -143,29 +141,10 @@ func Register(mux *http.ServeMux, deps Deps) {
 		mux.Handle("/sns/wallet/", deps.Wallet)
 	}
 
-	// ✅ cart query (read-model)
-	if deps.CartQuery != nil {
-		mux.Handle("/sns/cart/query", deps.CartQuery)
-		mux.Handle("/sns/cart/query/", deps.CartQuery)
-	}
-
-	// ✅ cart (GET は read-model に寄せ、items 系は従来 cart に寄せる)
+	// ✅ cart (single handler; GET /sns/cart returns read-model DTO internally)
 	if deps.Cart != nil {
-		combined := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			// GET /sns/cart (or /sns/cart/) だけ cart_query.go を使う
-			if deps.CartQuery != nil &&
-				r.Method == http.MethodGet &&
-				(r.URL.Path == "/sns/cart" || r.URL.Path == "/sns/cart/") {
-				deps.CartQuery.ServeHTTP(w, r)
-				return
-			}
-
-			// /sns/cart/items など更新系は従来どおり
-			deps.Cart.ServeHTTP(w, r)
-		})
-
-		mux.Handle("/sns/cart", combined)
-		mux.Handle("/sns/cart/", combined)
+		mux.Handle("/sns/cart", deps.Cart)
+		mux.Handle("/sns/cart/", deps.Cart)
 	}
 
 	// preview
