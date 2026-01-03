@@ -4,6 +4,7 @@ import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
+import 'package:intl/intl.dart';
 
 import '../hook/use_cart.dart';
 
@@ -21,6 +22,9 @@ class _CartPageState extends State<CartPage> {
   bool _booted = false;
 
   bool get _dbg => kDebugMode;
+
+  // ✅ 価格フォーマッタ（例: 1000 -> 1,000）
+  late final NumberFormat _yenFormatter = NumberFormat.decimalPattern('ja_JP');
 
   void _log(String msg) {
     if (!_dbg) return;
@@ -72,6 +76,25 @@ class _CartPageState extends State<CartPage> {
 
   // ✅ dynamic/nullableでも絶対落ちない
   String _s(dynamic v) => (v ?? '').toString().trim();
+
+  // ✅ 価格を「1,000円」形式にする（null/変換不能は null）
+  String? _formatYen(dynamic price) {
+    if (price == null) return null;
+
+    num? n;
+    if (price is num) {
+      n = price;
+    } else {
+      n = num.tryParse(price.toString());
+    }
+    if (n == null) return null;
+
+    // 小数が来た場合も一応対応（必要なら丸め方はここで調整）
+    if (n is double && n % 1 != 0) {
+      return '${_yenFormatter.format(n)}円';
+    }
+    return '${_yenFormatter.format(n)}円';
+  }
 
   Widget _thumbPlaceholder() {
     return Container(
@@ -146,9 +169,12 @@ class _CartPageState extends State<CartPage> {
       'サイズ: ${size.isEmpty ? '-' : size}  色: ${color.isEmpty ? '-' : color}',
     );
     lines.add('数量: ${it.qty}点');
-    if (it.price != null) {
-      lines.add('価格: ${it.price}円');
+
+    final yen = _formatYen(it.price);
+    if (yen != null) {
+      lines.add('価格: $yen');
     }
+
     final subtitle = lines.join('\n');
 
     return Container(
