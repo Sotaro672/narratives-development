@@ -1,28 +1,31 @@
 // frontend/sns/lib/features/payment/presentation/hook/use_payment.dart
 import '../../infrastructure/payment_repository_http.dart';
 import '../../../cart/infrastructure/cart_repository_http.dart';
+import '../../../order/infrastructure/order_repository_http.dart';
 
 /// PaymentPage の “ロジック側” を集約（データ取得・整形・計算）
-/// - payment.dart には UI/スタイル要素だけを残す
 class UsePaymentController {
   UsePaymentController({
     PaymentRepositoryHttp? paymentRepo,
     CartRepositoryHttp? cartRepo,
+    OrderRepositoryHttp? orderRepo,
   }) : _paymentRepo = paymentRepo ?? PaymentRepositoryHttp(),
-       _cartRepo = cartRepo ?? CartRepositoryHttp();
+       _cartRepo = cartRepo ?? CartRepositoryHttp(),
+       _orderRepo = orderRepo ?? OrderRepositoryHttp();
 
   final PaymentRepositoryHttp _paymentRepo;
   final CartRepositoryHttp _cartRepo;
+  final OrderRepositoryHttp _orderRepo;
 
   void dispose() {
     _paymentRepo.dispose();
     _cartRepo.dispose();
+    _orderRepo.dispose();
   }
 
   Future<PaymentPageVM> load({required String qpAvatarId}) async {
     final ctx = await _paymentRepo.fetchPaymentContext();
 
-    // ✅ Cart は「URLで渡している avatarId（現状 uid）」で引くのが正
     final qpId = qpAvatarId.trim();
     final cartKey = qpId.isNotEmpty
         ? qpId
@@ -32,7 +35,6 @@ class UsePaymentController {
     try {
       rawCart = await _cartRepo.fetchCart(avatarId: cartKey);
     } catch (e) {
-      // 404 は空カート扱い
       if (e is CartHttpException && e.statusCode == 404) {
         rawCart = _emptyCart(cartKey);
       } else {
@@ -54,6 +56,90 @@ class UsePaymentController {
     );
   }
 
+  /// ✅ 支払確定 = Order起票（/sns/orders）
+  /// Items は snapshot: [modelId, inventoryId, qty, price]
+  Future<Map<String, dynamic>> confirmAndCreateOrder(PaymentPageVM vm) async {
+    if (vm.cart.isEmpty) {
+      throw Exception('cart is empty');
+    }
+    if (vm.shipping.isEmpty) {
+      throw Exception('shipping address is empty');
+    }
+    if (vm.billing.isEmpty) {
+      throw Exception('billing is empty');
+    }
+
+    final userId = vm.ctx.userId.trim().isNotEmpty
+        ? vm.ctx.userId.trim()
+        : vm.ctx.uid.trim();
+    if (userId.isEmpty) {
+      throw Exception('userId/uid is empty');
+    }
+
+    final cartId = vm.cartKey.trim().isNotEmpty
+        ? vm.cartKey.trim()
+        : vm.rawCart.avatarId.trim();
+    if (cartId.isEmpty) {
+      throw Exception('cartId is empty');
+    }
+
+    // ✅ items snapshot を作る（key は inventoryId として運用している前提）
+    final items = <Map<String, dynamic>>[];
+    for (final e in vm.rawCart.items.entries) {
+      final invId = e.key.trim();
+      final it = e.value;
+
+      final modelId = it.modelId.trim();
+      final qty = it.qty;
+      final price = it.price;
+
+      if (invId.isEmpty) {
+        throw Exception('inventoryId is empty in cart item key');
+      }
+      if (modelId.isEmpty) {
+        throw Exception('modelId is empty (inventoryId=$invId)');
+      }
+      if (qty <= 0) {
+        throw Exception('qty is invalid (inventoryId=$invId, qty=$qty)');
+      }
+      if (price == null) {
+        throw Exception('price is missing (inventoryId=$invId)');
+      }
+
+      items.add({
+        'modelId': modelId,
+        'inventoryId': invId,
+        'qty': qty,
+        'price': price,
+      });
+    }
+    if (items.isEmpty) {
+      throw Exception('items is empty');
+    }
+
+    final invoiceId = _safeCtxString(vm.ctx, 'invoiceId');
+    final paymentId = _safeCtxString(vm.ctx, 'paymentId');
+    if (invoiceId.isEmpty) {
+      throw Exception('invoiceId is empty');
+    }
+    if (paymentId.isEmpty) {
+      throw Exception('paymentId is empty');
+    }
+
+    final ship = _buildShippingSnapshot(vm.ctx.shippingAddress);
+    final bill = _buildBillingSnapshot(vm.ctx.billingAddress);
+
+    return _orderRepo.createOrder(
+      userId: userId,
+      cartId: cartId,
+      shippingSnapshot: ship,
+      billingSnapshot: bill,
+      items: items,
+      invoiceId: invoiceId,
+      paymentId: paymentId,
+    );
+  }
+
   static CartDTO _emptyCart(String avatarId) {
     return CartDTO(
       avatarId: avatarId,
@@ -62,6 +148,62 @@ class UsePaymentController {
       updatedAt: null,
       expiresAt: null,
     );
+  }
+
+  // ------------------------------------------------------------
+  // Snapshots (for order create)
+  // ------------------------------------------------------------
+
+  Map<String, dynamic> _buildShippingSnapshot(Map<String, dynamic>? m) {
+    if (m == null || m.isEmpty) {
+      throw Exception('shippingAddress is missing');
+    }
+    return <String, dynamic>{
+      'zipCode': _s(m['zipCode']),
+      'state': _s(m['state']),
+      'city': _s(m['city']),
+      'street': _s(m['street']),
+      'street2': _s(m['street2']),
+      'country': _s(m['country']),
+    };
+  }
+
+  Map<String, dynamic> _buildBillingSnapshot(Map<String, dynamic>? m) {
+    if (m == null || m.isEmpty) {
+      throw Exception('billingAddress is missing');
+    }
+
+    final holder = _s(m['cardholderName']);
+    final cardNumber = _s(m['cardNumber']).replaceAll(' ', '');
+    final last4 = cardNumber.isNotEmpty
+        ? (cardNumber.length >= 4
+              ? cardNumber.substring(cardNumber.length - 4)
+              : cardNumber)
+        : '';
+
+    if (last4.isEmpty) {
+      throw Exception('billing last4 is missing');
+    }
+
+    // cardHolderName は domain 的には任意だが、UI 的にはある方が良いのでできれば入れる
+    return <String, dynamic>{'last4': last4, 'cardHolderName': holder};
+  }
+
+  static String _safeCtxString(dynamic ctx, String field) {
+    try {
+      switch (field) {
+        case 'invoiceId':
+          final Object? v = (ctx as dynamic).invoiceId;
+          return (v?.toString() ?? '').trim();
+        case 'paymentId':
+          final Object? v = (ctx as dynamic).paymentId;
+          return (v?.toString() ?? '').trim();
+        default:
+          return '';
+      }
+    } catch (_) {
+      return '';
+    }
   }
 
   // ------------------------------------------------------------
@@ -88,7 +230,6 @@ class UsePaymentController {
       street2,
     ].where((e) => e.trim().isNotEmpty).join(' ');
 
-    // ✅ 「JP」は表示しない（国コードが JP の場合は出さない）
     final line3 = (country.toUpperCase() == 'JP') ? '' : country;
 
     final lines = <String>[
@@ -109,7 +250,6 @@ class UsePaymentController {
       );
     }
 
-    // ✅ fullName 等は拾わない。cardholderName のみ。
     final holder = _s(m['cardholderName']);
     final cardNumberMasked = _maskCardNumber(_s(m['cardNumber']));
 
@@ -211,7 +351,7 @@ class UsePaymentController {
 }
 
 // ============================================================
-// View Models (UI へ渡す “表示用” データ)
+// View Models
 // ============================================================
 
 class PaymentPageVM {
@@ -224,14 +364,10 @@ class PaymentPageVM {
     required this.cart,
   });
 
-  // raw（必要なら後で使えるように残す）
   final PaymentContextDTO ctx;
   final CartDTO rawCart;
-
-  /// どのキーで cart を引いたか（必要ならログ用途）
   final String cartKey;
 
-  // view-ready
   final ShippingCardVM shipping;
   final BillingCardVM billing;
   final CartCardVM cart;

@@ -33,8 +33,6 @@ class _PaymentPageState extends State<PaymentPage> {
   @override
   Widget build(BuildContext context) {
     // ✅ AppShell/AppMain の中で使う前提なので Scaffold は作らない
-    // ✅ AppMain が SingleChildScrollView になる可能性があるため、
-    //    このページ内で ListView を固定で返さない（unbounded 対策）
     return SafeArea(
       child: FutureBuilder<PaymentPageVM>(
         future: _future,
@@ -68,12 +66,9 @@ class _PaymentPageState extends State<PaymentPage> {
             padding: const EdgeInsets.fromLTRB(12, 12, 12, 24),
             child: LayoutBuilder(
               builder: (context, constraints) {
-                // ✅ 高さが bounded の時だけ ListView（スクロールはこの中で完結できる）
                 if (constraints.hasBoundedHeight) {
                   return ListView(children: cards);
                 }
-
-                // ✅ AppMain(SingleChildScrollView) 配下などは unbounded になり得るので Column
                 return Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: cards,
@@ -155,7 +150,6 @@ class _BillingCard extends StatelessWidget {
                 padding: const EdgeInsets.only(bottom: 4),
                 child: Text(vm.cardNumberLine, style: t.bodyMedium),
               ),
-              // ⚠️ cvc は表示しない
             ],
           ],
         ),

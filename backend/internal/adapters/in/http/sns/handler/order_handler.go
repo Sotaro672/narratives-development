@@ -18,33 +18,24 @@ type OrderHandler struct {
 	uc *usecase.OrderUsecase
 }
 
-// NewOrderHandler はHTTPハンドラを初期化します。
 func NewOrderHandler(uc *usecase.OrderUsecase) http.Handler {
 	return &OrderHandler{uc: uc}
 }
 
-// ServeHTTP はHTTPルーティングの入口です。
 func (h *OrderHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 
-	// ルータ実装差分吸収:
-	// - 直マウント: /sns/orders, /sns/orders/{id}
-	// - prefix strip される構成: /orders, /orders/{id}
 	path := r.URL.Path
-
-	// normalize: accept both /sns/orders and /orders
 	switch {
 	case strings.HasPrefix(path, "/sns/orders"):
 		path = strings.TrimPrefix(path, "/sns")
 	case strings.HasPrefix(path, "/orders"):
-		// ok
 	default:
 		w.WriteHeader(http.StatusNotFound)
 		_ = json.NewEncoder(w).Encode(map[string]string{"error": "not_found"})
 		return
 	}
 
-	// now path is like /orders or /orders/{id}
 	switch {
 	case r.Method == http.MethodPost && (path == "/orders" || path == "/orders/"):
 		h.post(w, r)
@@ -71,23 +62,24 @@ type shippingSnapshotRequest struct {
 	Street  string `json:"street"`
 	Street2 string `json:"street2"`
 	Country string `json:"country"`
-	// 互換キーを増やしたい場合は handler ではなく frontend 側を揃える方が安全
 }
 
 type billingSnapshotRequest struct {
-	Last4 string `json:"last4"`
-
-	// JSON キー揺れ吸収（どれかが入っていればOK）
+	Last4          string `json:"last4"`
 	CardHolderName string `json:"cardHolderName"`
-	CardholderName string `json:"cardholderName"`
-	HolderName     string `json:"holderName"`
+}
+
+type orderItemSnapshotRequest struct {
+	ModelID     string `json:"modelId"`
+	InventoryID string `json:"inventoryId"`
+	Qty         int    `json:"qty"`
+	Price       int    `json:"price"`
 }
 
 type createOrderRequest struct {
 	ID string `json:"id"`
 
-	// ⚠️ セキュリティ上、注文の userId は原則「認証済み uid」から確定する。
-	// 互換のため残すが、uid が取れる場合は無視/一致チェックする。
+	// 原則 auth uid を正。uid が取れない構成のみ body.userId を許容。
 	UserID string `json:"userId"`
 
 	CartID string `json:"cartId"`
@@ -95,24 +87,14 @@ type createOrderRequest struct {
 	ShippingSnapshot shippingSnapshotRequest `json:"shippingSnapshot"`
 	BillingSnapshot  billingSnapshotRequest  `json:"billingSnapshot"`
 
-	ListID    string   `json:"listId"`
-	Items     []string `json:"items"`
-	InvoiceID string   `json:"invoiceId"`
-	PaymentID string   `json:"paymentId"`
+	Items     []orderItemSnapshotRequest `json:"items"`
+	InvoiceID string                     `json:"invoiceId"`
+	PaymentID string                     `json:"paymentId"`
 
-	// optional
 	TransferedDate *string `json:"transferedDate"` // RFC3339
-
-	UpdatedBy *string `json:"updatedBy"`
+	UpdatedBy      *string `json:"updatedBy"`
 }
 
-// POST /sns/orders
-//
-// ✅ 住所/カードは order テーブルへスナップショット保存する前提。
-// - shippingSnapshot: 住所スナップショット（そのまま保存）
-// - billingSnapshot: last4 + cardHolderName のみ保存
-//
-// ✅ userId は「認証済み uid」から確定（可能なら req.userId は無視/一致チェック）。
 func (h *OrderHandler) post(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 
@@ -129,8 +111,6 @@ func (h *OrderHandler) post(w http.ResponseWriter, r *http.Request) {
 	authUID := trim(getAuthUID(ctx))
 	bodyUID := trim(req.UserID)
 
-	// uid が取れるなら uid を正として確定。body の userId がある場合は一致チェック。
-	// uid が取れない（開発/未配線）場合のみ body.userId を使用。
 	var userID string
 	switch {
 	case authUID != "":
@@ -141,7 +121,6 @@ func (h *OrderHandler) post(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	case bodyUID != "":
-		// 互換: 認証uidが取れない構成では body.userId を許容（本番では middleware で uid を入れること）
 		userID = bodyUID
 	default:
 		w.WriteHeader(http.StatusUnauthorized)
@@ -149,20 +128,13 @@ func (h *OrderHandler) post(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// required (domain validate で落ちる前に、最低限 handler で落とす)
 	cartID := trim(req.CartID)
-	listID := trim(req.ListID)
 	invoiceID := trim(req.InvoiceID)
 	paymentID := trim(req.PaymentID)
 
 	if cartID == "" {
 		w.WriteHeader(http.StatusBadRequest)
 		_ = json.NewEncoder(w).Encode(map[string]string{"error": "cartId is required"})
-		return
-	}
-	if listID == "" {
-		w.WriteHeader(http.StatusBadRequest)
-		_ = json.NewEncoder(w).Encode(map[string]string{"error": "listId is required"})
 		return
 	}
 	if invoiceID == "" {
@@ -189,40 +161,32 @@ func (h *OrderHandler) post(w http.ResponseWriter, r *http.Request) {
 		Street2: trim(req.ShippingSnapshot.Street2),
 		Country: trim(req.ShippingSnapshot.Country),
 	}
-
-	// shipping は entity 側 validate に任せるが、最低限の空チェック
 	if ship.State == "" && ship.City == "" && ship.Street == "" && ship.Country == "" {
 		w.WriteHeader(http.StatusBadRequest)
 		_ = json.NewEncoder(w).Encode(map[string]string{"error": "shippingSnapshot is required"})
 		return
 	}
 
-	holder := trim(req.BillingSnapshot.CardHolderName)
-	if holder == "" {
-		holder = trim(req.BillingSnapshot.CardholderName)
-	}
-	if holder == "" {
-		holder = trim(req.BillingSnapshot.HolderName)
-	}
-
 	bill := orderdom.BillingSnapshot{
 		Last4:          trim(req.BillingSnapshot.Last4),
-		CardHolderName: holder,
+		CardHolderName: trim(req.BillingSnapshot.CardHolderName),
 	}
-
-	// ✅ 仕様に合わせて last4 / cardHolderName を両方必須
 	if bill.Last4 == "" {
 		w.WriteHeader(http.StatusBadRequest)
 		_ = json.NewEncoder(w).Encode(map[string]string{"error": "billingSnapshot.last4 is required"})
 		return
 	}
-	if strings.TrimSpace(bill.CardHolderName) == "" {
-		w.WriteHeader(http.StatusBadRequest)
-		_ = json.NewEncoder(w).Encode(map[string]string{"error": "billingSnapshot.cardHolderName is required"})
-		return
+
+	items := make([]orderdom.OrderItemSnapshot, 0, len(req.Items))
+	for _, it := range req.Items {
+		items = append(items, orderdom.OrderItemSnapshot{
+			ModelID:     trim(it.ModelID),
+			InventoryID: trim(it.InventoryID),
+			Qty:         it.Qty,
+			Price:       it.Price,
+		})
 	}
 
-	// transferedDate (optional)
 	var td *time.Time
 	if req.TransferedDate != nil && trim(*req.TransferedDate) != "" {
 		t, err := time.Parse(time.RFC3339, trim(*req.TransferedDate))
@@ -243,8 +207,7 @@ func (h *OrderHandler) post(w http.ResponseWriter, r *http.Request) {
 		ShippingSnapshot: ship,
 		BillingSnapshot:  bill,
 
-		ListID:    listID,
-		Items:     req.Items,
+		Items:     items,
 		InvoiceID: invoiceID,
 		PaymentID: paymentID,
 
@@ -262,7 +225,6 @@ func (h *OrderHandler) post(w http.ResponseWriter, r *http.Request) {
 	_ = json.NewEncoder(w).Encode(out)
 }
 
-// GET /sns/orders/{id}
 func (h *OrderHandler) get(w http.ResponseWriter, r *http.Request, id string) {
 	ctx := r.Context()
 
@@ -283,26 +245,15 @@ func (h *OrderHandler) get(w http.ResponseWriter, r *http.Request, id string) {
 }
 
 // ------------------------------------------------------------
-// Auth helpers (best-effort)
+// Auth helpers
 // ------------------------------------------------------------
 
-// getAuthUID tries to read uid injected by middleware into request context.
-// Since this package should not depend on middleware internals, it checks common key patterns.
 func getAuthUID(ctx context.Context) string {
 	if ctx == nil {
 		return ""
 	}
 
-	// Most common patterns in Go codebases:
-	// - ctx.Value("uid") / ctx.Value("userId")
-	// - typed keys (e.g., type ctxKey string) with the same strings
-	keys := []any{
-		"uid",
-		"userId",
-		"firebase_uid",
-		"firebaseUid",
-	}
-
+	keys := []any{"uid", "userId", "firebase_uid", "firebaseUid"}
 	for _, k := range keys {
 		if v := ctx.Value(k); v != nil {
 			if s, ok := v.(string); ok {
@@ -314,7 +265,6 @@ func getAuthUID(ctx context.Context) string {
 		}
 	}
 
-	// Try a little harder: some middlewares use typed string keys.
 	type ctxKey string
 	for _, ks := range []string{"uid", "userId", "firebase_uid", "firebaseUid"} {
 		if v := ctx.Value(ctxKey(ks)); v != nil {
@@ -331,24 +281,23 @@ func getAuthUID(ctx context.Context) string {
 }
 
 // ------------------------------------------------------------
-// エラーハンドリング
+// Error mapping
 // ------------------------------------------------------------
 
 func writeOrderErr(w http.ResponseWriter, err error) {
 	code := http.StatusInternalServerError
 
-	// domain/usecase の sentinel がある前提で可能な限りマップ
 	switch {
 	case errors.Is(err, orderdom.ErrNotFound):
 		code = http.StatusNotFound
 	case errors.Is(err, orderdom.ErrConflict):
 		code = http.StatusConflict
 
-	// 代表的な「入力が悪い」系（増えてもここに足す）
 	case errors.Is(err, orderdom.ErrInvalidID),
 		errors.Is(err, orderdom.ErrInvalidUserID),
 		errors.Is(err, orderdom.ErrInvalidCartID),
-		errors.Is(err, orderdom.ErrInvalidListID),
+		errors.Is(err, orderdom.ErrInvalidShippingAddress),
+		errors.Is(err, orderdom.ErrInvalidBillingAddress),
 		errors.Is(err, orderdom.ErrInvalidItems),
 		errors.Is(err, orderdom.ErrInvalidInvoiceID),
 		errors.Is(err, orderdom.ErrInvalidPaymentID),
@@ -356,10 +305,9 @@ func writeOrderErr(w http.ResponseWriter, err error) {
 		errors.Is(err, orderdom.ErrInvalidCreatedAt),
 		errors.Is(err, orderdom.ErrInvalidUpdatedAt),
 		errors.Is(err, orderdom.ErrInvalidUpdatedBy),
-		errors.Is(err, orderdom.ErrInvalidItemID):
+		errors.Is(err, orderdom.ErrInvalidItemSnapshot):
 		code = http.StatusBadRequest
 	default:
-		// fallback: メッセージから not found を拾う（念のため）
 		msg := strings.ToLower(strings.TrimSpace(err.Error()))
 		if msg == "not_found" || strings.Contains(msg, "not found") || strings.Contains(msg, "not_found") {
 			code = http.StatusNotFound

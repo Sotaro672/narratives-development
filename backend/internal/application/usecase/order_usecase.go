@@ -1,4 +1,4 @@
-// backend\internal\application\usecase\order_usecase.go
+// backend/internal/application/usecase/order_usecase.go
 package usecase
 
 import (
@@ -26,7 +26,6 @@ type OrderRepo interface {
 }
 
 // OrderFilter provides basic filtering for listing orders.
-// NOTE: kept for existing app/usecase call sites; repository adapters should translate as needed.
 type OrderFilter struct {
 	UserID *string
 
@@ -84,12 +83,10 @@ type CreateOrderInput struct {
 	UserID string
 	CartID string
 
-	// ✅ Snapshot (required)
 	ShippingSnapshot orderdom.ShippingSnapshot
-	BillingSnapshot  orderdom.BillingSnapshot // last4 + cardHolderName only
+	BillingSnapshot  orderdom.BillingSnapshot
 
-	ListID    string
-	Items     []string // orderItem primary keys
+	Items     []orderdom.OrderItemSnapshot
 	InvoiceID string
 	PaymentID string
 
@@ -107,7 +104,6 @@ func (u *OrderUsecase) Create(ctx context.Context, in CreateOrderInput) (orderdo
 	}
 	updatedAt := createdAt
 
-	// normalize snapshots (trim)
 	ship := orderdom.ShippingSnapshot{
 		ZipCode: strings.TrimSpace(in.ShippingSnapshot.ZipCode),
 		State:   strings.TrimSpace(in.ShippingSnapshot.State),
@@ -121,14 +117,24 @@ func (u *OrderUsecase) Create(ctx context.Context, in CreateOrderInput) (orderdo
 		CardHolderName: strings.TrimSpace(in.BillingSnapshot.CardHolderName),
 	}
 
+	// normalize items (trim strings)
+	items := make([]orderdom.OrderItemSnapshot, 0, len(in.Items))
+	for _, it := range in.Items {
+		items = append(items, orderdom.OrderItemSnapshot{
+			ModelID:     strings.TrimSpace(it.ModelID),
+			InventoryID: strings.TrimSpace(it.InventoryID),
+			Qty:         it.Qty,
+			Price:       it.Price,
+		})
+	}
+
 	o, err := orderdom.New(
 		strings.TrimSpace(in.ID),
 		strings.TrimSpace(in.UserID),
 		strings.TrimSpace(in.CartID),
 		ship,
 		bill,
-		strings.TrimSpace(in.ListID),
-		in.Items,
+		items,
 		strings.TrimSpace(in.InvoiceID),
 		strings.TrimSpace(in.PaymentID),
 		in.TransferedDate,
@@ -148,20 +154,15 @@ type UpdateOrderInput struct {
 	UserID *string
 	CartID *string
 
-	// ✅ Snapshot updates
 	ShippingSnapshot *orderdom.ShippingSnapshot
 	BillingSnapshot  *orderdom.BillingSnapshot
 
-	ListID         *string
 	InvoiceID      *string
 	PaymentID      *string
 	TransferedDate *time.Time
 	UpdatedBy      *string
 
-	// Items operations (mutually composable)
-	ReplaceItems *[]string
-	AddItem      *string
-	RemoveItem   *string
+	ReplaceItems *[]orderdom.OrderItemSnapshot
 }
 
 func (u *OrderUsecase) Update(ctx context.Context, in UpdateOrderInput) (orderdom.Order, error) {
@@ -172,7 +173,6 @@ func (u *OrderUsecase) Update(ctx context.Context, in UpdateOrderInput) (orderdo
 
 	now := u.now().UTC()
 
-	// Simple field updates + Touch
 	if in.UserID != nil {
 		o.UserID = strings.TrimSpace(*in.UserID)
 		if err := o.Touch(now); err != nil {
@@ -186,7 +186,6 @@ func (u *OrderUsecase) Update(ctx context.Context, in UpdateOrderInput) (orderdo
 		}
 	}
 
-	// ✅ snapshots
 	if in.ShippingSnapshot != nil {
 		s := orderdom.ShippingSnapshot{
 			ZipCode: strings.TrimSpace(in.ShippingSnapshot.ZipCode),
@@ -210,12 +209,6 @@ func (u *OrderUsecase) Update(ctx context.Context, in UpdateOrderInput) (orderdo
 		}
 	}
 
-	if in.ListID != nil {
-		o.ListID = strings.TrimSpace(*in.ListID)
-		if err := o.Touch(now); err != nil {
-			return orderdom.Order{}, err
-		}
-	}
 	if in.InvoiceID != nil {
 		if err := o.UpdateInvoice(strings.TrimSpace(*in.InvoiceID), now); err != nil {
 			return orderdom.Order{}, err
@@ -233,26 +226,23 @@ func (u *OrderUsecase) Update(ctx context.Context, in UpdateOrderInput) (orderdo
 	}
 	if in.UpdatedBy != nil {
 		v := strings.TrimSpace(*in.UpdatedBy)
-		// nil/empty validation is handled by entity.validate() when saved (and/or upstream)
 		o.UpdatedBy = &v
 		if err := o.Touch(now); err != nil {
 			return orderdom.Order{}, err
 		}
 	}
 
-	// Items
 	if in.ReplaceItems != nil {
-		if err := o.ReplaceItems(*in.ReplaceItems, now); err != nil {
-			return orderdom.Order{}, err
+		items := make([]orderdom.OrderItemSnapshot, 0, len(*in.ReplaceItems))
+		for _, it := range *in.ReplaceItems {
+			items = append(items, orderdom.OrderItemSnapshot{
+				ModelID:     strings.TrimSpace(it.ModelID),
+				InventoryID: strings.TrimSpace(it.InventoryID),
+				Qty:         it.Qty,
+				Price:       it.Price,
+			})
 		}
-	}
-	if in.AddItem != nil {
-		if err := o.AddItem(*in.AddItem, now); err != nil {
-			return orderdom.Order{}, err
-		}
-	}
-	if in.RemoveItem != nil {
-		if err := o.RemoveItem(*in.RemoveItem, now); err != nil {
+		if err := o.ReplaceItems(items, now); err != nil {
 			return orderdom.Order{}, err
 		}
 	}

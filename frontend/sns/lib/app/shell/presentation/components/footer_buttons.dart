@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
 import 'package:sns/features/cart/infrastructure/cart_repository_http.dart';
+import 'package:sns/features/payment/presentation/hook/use_payment.dart';
 
 /// ✅ /cart 用：購入する CTA（paymentへ遷移）
 class GoToPaymentButton extends StatelessWidget {
@@ -28,7 +29,6 @@ class GoToPaymentButton extends StatelessWidget {
         onPressed: !canTap
             ? null
             : () {
-                // ✅ CartPage と同じ仕様：payment の from は /cart?avatarId=...
                 final back = Uri(
                   path: '/cart',
                   queryParameters: {'avatarId': aid},
@@ -46,7 +46,7 @@ class GoToPaymentButton extends StatelessWidget {
   }
 }
 
-/// ✅ /payment 用：支払を確定する CTA（現時点はUI導線のみ）
+/// ✅ /payment 用：支払を確定する CTA（Order起票まで実行する）
 class ConfirmPaymentButton extends StatefulWidget {
   const ConfirmPaymentButton({
     super.key,
@@ -70,20 +70,24 @@ class _ConfirmPaymentButtonState extends State<ConfirmPaymentButton> {
     if (!canTap) return;
 
     setState(() => _loading = true);
+
+    final uc = UsePaymentController();
     try {
-      // ✅ ここに実際の「決済確定」API呼び出しを後で追加する想定
-      await Future<void>.delayed(const Duration(milliseconds: 200));
+      // ✅ Footer からでも確定できるように、必要データはここで再取得して Order 起票する
+      final vm = await uc.load(qpAvatarId: aid);
+      await uc.confirmAndCreateOrder(vm);
 
       if (!mounted) return;
       ScaffoldMessenger.of(
         context,
-      ).showSnackBar(const SnackBar(content: Text('支払を確定しました（仮）')));
+      ).showSnackBar(const SnackBar(content: Text('支払を確定しました（注文を作成しました）')));
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(
         context,
       ).showSnackBar(SnackBar(content: Text('確定に失敗しました: $e')));
     } finally {
+      uc.dispose();
       if (mounted) setState(() => _loading = false);
     }
   }
@@ -111,9 +115,6 @@ class _ConfirmPaymentButtonState extends State<ConfirmPaymentButton> {
 }
 
 /// ✅ catalog 用：カートに入れる CTA
-/// ✅ 「model が 1つに絞れたら enabled」
-/// ✅ 在庫 0 は押下不可
-/// ✅ 押下時に CartHandler に add リクエストを投げてから /cart へ遷移する
 class AddToCartButton extends StatefulWidget {
   const AddToCartButton({
     super.key,
@@ -128,7 +129,6 @@ class AddToCartButton extends StatefulWidget {
 
   final String from;
 
-  // ✅ required by backend
   final String inventoryId;
   final String listId;
 
@@ -152,7 +152,6 @@ class _AddToCartButtonState extends State<AddToCartButton> {
     final invId = widget.inventoryId.trim();
     final listId = widget.listId.trim();
 
-    // ✅ 最終ガード（backend 必須フィールドも含める）
     final canTap =
         widget.enabled &&
         !_loading &&
@@ -181,7 +180,6 @@ class _AddToCartButtonState extends State<AddToCartButton> {
 
       if (!mounted) return;
 
-      // ✅ 追加できたら cart へ
       final qp = <String, String>{'from': widget.from, 'avatarId': aid};
       final uri = Uri(path: '/cart', queryParameters: qp);
 
@@ -209,7 +207,6 @@ class _AddToCartButtonState extends State<AddToCartButton> {
     final listId = widget.listId.trim();
     final aid = widget.avatarId.trim();
 
-    // ✅ 最終ガード：enabled が true でも在庫 0 は絶対押下不可
     final canTap =
         widget.enabled &&
         !_loading &&

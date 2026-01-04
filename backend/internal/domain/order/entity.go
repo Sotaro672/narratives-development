@@ -3,7 +3,6 @@ package order
 
 import (
 	"errors"
-	"fmt"
 	"strings"
 	"time"
 )
@@ -26,8 +25,18 @@ type BillingSnapshot struct {
 	CardHolderName string
 }
 
+// OrderItemSnapshot is stored inside Order.Items.
+// Expectation: items are NOT split by listId, and each item is
+// [modelId, inventoryId, qty, price].
+type OrderItemSnapshot struct {
+	ModelID     string `json:"modelId"`
+	InventoryID string `json:"inventoryId"`
+	Qty         int    `json:"qty"`
+	Price       int    `json:"price"`
+}
+
 // ========================================
-// Entity (mirror TS Order)
+// Entity
 // ========================================
 
 type Order struct {
@@ -35,12 +44,10 @@ type Order struct {
 	UserID string
 	CartID string
 
-	// ✅ Snapshot (replace AddressID reference)
 	ShippingSnapshot ShippingSnapshot
 	BillingSnapshot  BillingSnapshot // last4 + cardHolderName only
 
-	ListID         string
-	Items          []string `json:"items"`
+	Items          []OrderItemSnapshot `json:"items"`
 	InvoiceID      string
 	PaymentID      string
 	TransferedDate *time.Time // note: mirrors TS: transferedDate
@@ -58,8 +65,7 @@ type OrderPatch struct {
 	ShippingSnapshot *ShippingSnapshot
 	BillingSnapshot  *BillingSnapshot
 
-	ListID         *string
-	Items          *[]string
+	Items          *[]OrderItemSnapshot
 	InvoiceID      *string
 	PaymentID      *string
 	TransferedDate *time.Time
@@ -74,9 +80,8 @@ var (
 	ErrInvalidID              = errors.New("order: invalid id")
 	ErrInvalidUserID          = errors.New("order: invalid userId")
 	ErrInvalidCartID          = errors.New("order: invalid cartId")
-	ErrInvalidShippingAddress = errors.New("order: invalid shippingSnapshot") // keep name for easier migration
-	ErrInvalidBillingAddress  = errors.New("order: invalid billingSnapshot")  // keep name for easier migration
-	ErrInvalidListID          = errors.New("order: invalid listId")
+	ErrInvalidShippingAddress = errors.New("order: invalid shippingSnapshot")
+	ErrInvalidBillingAddress  = errors.New("order: invalid billingSnapshot")
 	ErrInvalidItems           = errors.New("order: invalid items")
 	ErrInvalidInvoiceID       = errors.New("order: invalid invoiceId")
 	ErrInvalidPaymentID       = errors.New("order: invalid paymentId")
@@ -84,11 +89,12 @@ var (
 	ErrInvalidCreatedAt       = errors.New("order: invalid createdAt")
 	ErrInvalidUpdatedAt       = errors.New("order: invalid updatedAt")
 	ErrInvalidUpdatedBy       = errors.New("order: invalid updatedBy")
-	ErrInvalidItemID          = errors.New("order: invalid item id")
+
+	ErrInvalidItemSnapshot = errors.New("order: invalid item snapshot")
 )
 
 // ========================================
-// Policy (align with orderConstants.ts if any)
+// Policy
 // ========================================
 
 var (
@@ -105,8 +111,7 @@ func New(
 	cartID string,
 	shippingSnapshot ShippingSnapshot,
 	billingSnapshot BillingSnapshot,
-	listID string,
-	items []string,
+	items []OrderItemSnapshot,
 	invoiceID string,
 	paymentID string,
 	transferedDate *time.Time,
@@ -122,8 +127,7 @@ func New(
 		ShippingSnapshot: normalizeShippingSnapshot(shippingSnapshot),
 		BillingSnapshot:  normalizeBillingSnapshot(billingSnapshot),
 
-		ListID:         strings.TrimSpace(listID),
-		Items:          dedupTrim(items),
+		Items:          normalizeItems(items),
 		InvoiceID:      strings.TrimSpace(invoiceID),
 		PaymentID:      strings.TrimSpace(paymentID),
 		TransferedDate: normalizeTimePtr(transferedDate),
@@ -135,56 +139,6 @@ func New(
 		return Order{}, err
 	}
 	return o, nil
-}
-
-func NewFromStringTimes(
-	id string,
-	userID string,
-	cartID string,
-	shippingSnapshot ShippingSnapshot,
-	billingSnapshot BillingSnapshot,
-	listID string,
-	items []string,
-	invoiceID string,
-	paymentID string,
-	transferedDateStr *string,
-	createdAtStr string,
-	updatedAtStr string,
-	updatedBy *string,
-) (Order, error) {
-	ca, err := parseTime(createdAtStr, ErrInvalidCreatedAt)
-	if err != nil {
-		return Order{}, err
-	}
-	ua, err := parseTime(updatedAtStr, ErrInvalidUpdatedAt)
-	if err != nil {
-		return Order{}, err
-	}
-
-	var td *time.Time
-	if transferedDateStr != nil && strings.TrimSpace(*transferedDateStr) != "" {
-		t, err := parseTime(*transferedDateStr, ErrInvalidTransferredDate)
-		if err != nil {
-			return Order{}, err
-		}
-		td = &t
-	}
-
-	return New(
-		id,
-		userID,
-		cartID,
-		shippingSnapshot,
-		billingSnapshot,
-		listID,
-		items,
-		invoiceID,
-		paymentID,
-		td,
-		ca,
-		ua,
-		updatedBy,
-	)
 }
 
 // ========================================
@@ -209,43 +163,17 @@ func (o *Order) SetTransfered(at time.Time, now time.Time) error {
 	return o.Touch(now)
 }
 
-// Backward-compat: keep old method name delegating to new one
+// Backward-compat method name removed from app layer, but keep as alias if referenced.
 func (o *Order) SetTransferred(at time.Time, now time.Time) error {
 	return o.SetTransfered(at, now)
 }
 
-func (o *Order) ReplaceItems(items []string, now time.Time) error {
-	ds := dedupTrim(items)
-	if err := validateItems(ds); err != nil {
+func (o *Order) ReplaceItems(items []OrderItemSnapshot, now time.Time) error {
+	ns := normalizeItems(items)
+	if err := validateItems(ns); err != nil {
 		return err
 	}
-	o.Items = ds
-	return o.Touch(now)
-}
-
-func (o *Order) AddItem(itemID string, now time.Time) error {
-	itemID = strings.TrimSpace(itemID)
-	if itemID == "" {
-		return ErrInvalidItems
-	}
-	if !contains(o.Items, itemID) {
-		o.Items = append(o.Items, itemID)
-	}
-	return o.Touch(now)
-}
-
-func (o *Order) RemoveItem(itemID string, now time.Time) error {
-	itemID = strings.TrimSpace(itemID)
-	if itemID == "" {
-		return ErrInvalidItems
-	}
-	out := o.Items[:0]
-	for _, it := range o.Items {
-		if it != itemID {
-			out = append(out, it)
-		}
-	}
-	o.Items = out
+	o.Items = ns
 	return o.Touch(now)
 }
 
@@ -306,9 +234,6 @@ func (o Order) validate() error {
 	if err := validateBillingSnapshot(o.BillingSnapshot); err != nil {
 		return err
 	}
-	if o.ListID == "" {
-		return ErrInvalidListID
-	}
 	if err := validateItems(o.Items); err != nil {
 		return err
 	}
@@ -324,28 +249,19 @@ func (o Order) validate() error {
 	if o.UpdatedAt.IsZero() {
 		return ErrInvalidUpdatedAt
 	}
-	// Time order
 	if o.UpdatedAt.Before(o.CreatedAt) {
 		return ErrInvalidUpdatedAt
 	}
 	if o.TransferedDate != nil && (o.TransferedDate.IsZero() || o.TransferedDate.Before(o.CreatedAt)) {
 		return ErrInvalidTransferredDate
 	}
-	// UpdatedBy optional but if set must be non-empty
 	if o.UpdatedBy != nil && strings.TrimSpace(*o.UpdatedBy) == "" {
 		return ErrInvalidUpdatedBy
-	}
-	// validate で Items が orderItem の主キー(ID)として妥当か検証します（空文字は不可）。
-	for _, id := range o.Items {
-		if strings.TrimSpace(id) == "" {
-			return ErrInvalidItemID
-		}
 	}
 	return nil
 }
 
 func validateShippingSnapshot(s ShippingSnapshot) error {
-	// 必須（あなたのUI/運用前提に合わせて最小限を必須化）
 	if strings.TrimSpace(s.State) == "" {
 		return ErrInvalidShippingAddress
 	}
@@ -358,19 +274,36 @@ func validateShippingSnapshot(s ShippingSnapshot) error {
 	if strings.TrimSpace(s.Country) == "" {
 		return ErrInvalidShippingAddress
 	}
-	// ZipCode/Street2 は任意（国によってはZipがない/運用で省略あり得る）
 	return nil
 }
 
 func validateBillingSnapshot(b BillingSnapshot) error {
-	// ✅ last4 は必須（billingAddressID 必須だったのと同等の強さ）
-	// cardHolderName は任意（空なら空で良い）
 	last4 := strings.TrimSpace(b.Last4)
 	if last4 == "" {
 		return ErrInvalidBillingAddress
 	}
-	// "4桁" 以外を弾きたいならここで追加
-	// if len(last4) != 4 || !isDigits(last4) { return ErrInvalidBillingAddress }
+	// cardHolderName は任意（空でもOK）
+	return nil
+}
+
+func validateItems(items []OrderItemSnapshot) error {
+	if len(items) < MinItemsRequired {
+		return ErrInvalidItems
+	}
+	for _, it := range items {
+		if strings.TrimSpace(it.ModelID) == "" {
+			return ErrInvalidItemSnapshot
+		}
+		if strings.TrimSpace(it.InventoryID) == "" {
+			return ErrInvalidItemSnapshot
+		}
+		if it.Qty <= 0 {
+			return ErrInvalidItemSnapshot
+		}
+		if it.Price < 0 {
+			return ErrInvalidItemSnapshot
+		}
+	}
 	return nil
 }
 
@@ -394,6 +327,21 @@ func normalizeBillingSnapshot(b BillingSnapshot) BillingSnapshot {
 	return b
 }
 
+func normalizeItems(items []OrderItemSnapshot) []OrderItemSnapshot {
+	out := make([]OrderItemSnapshot, 0, len(items))
+	for _, it := range items {
+		n := OrderItemSnapshot{
+			ModelID:     strings.TrimSpace(it.ModelID),
+			InventoryID: strings.TrimSpace(it.InventoryID),
+			Qty:         it.Qty,
+			Price:       it.Price,
+		}
+		// 空は validateItems で弾くのでここでは落とさない
+		out = append(out, n)
+	}
+	return out
+}
+
 func normalizePtr(p *string) *string {
 	if p == nil {
 		return nil
@@ -414,71 +362,4 @@ func normalizeTimePtr(p *time.Time) *time.Time {
 	}
 	utc := p.UTC()
 	return &utc
-}
-
-func dedupTrim(xs []string) []string {
-	seen := make(map[string]struct{}, len(xs))
-	out := make([]string, 0, len(xs))
-	for _, x := range xs {
-		x = strings.TrimSpace(x)
-		if x == "" {
-			continue
-		}
-		if _, ok := seen[x]; ok {
-			continue
-		}
-		seen[x] = struct{}{}
-		out = append(out, x)
-	}
-	return out
-}
-
-func contains(xs []string, v string) bool {
-	for _, x := range xs {
-		if x == v {
-			return true
-		}
-	}
-	return false
-}
-
-func validateItems(items []string) error {
-	if len(items) < MinItemsRequired {
-		return ErrInvalidItems
-	}
-	for _, it := range items {
-		if strings.TrimSpace(it) == "" {
-			return ErrInvalidItems
-		}
-	}
-	seen := make(map[string]struct{}, len(items))
-	for _, it := range items {
-		if _, ok := seen[it]; ok {
-			return ErrInvalidItems
-		}
-		seen[it] = struct{}{}
-	}
-	return nil
-}
-
-func parseTime(s string, classify error) (time.Time, error) {
-	s = strings.TrimSpace(s)
-	if s == "" {
-		return time.Time{}, classify
-	}
-	if t, err := time.Parse(time.RFC3339, s); err == nil {
-		return t.UTC(), nil
-	}
-	layouts := []string{
-		time.RFC3339Nano,
-		"2006-01-02T15:04:05Z07:00",
-		"2006-01-02 15:04:05",
-		"2006-01-02",
-	}
-	for _, l := range layouts {
-		if t, err := time.Parse(l, s); err == nil {
-			return t.UTC(), nil
-		}
-	}
-	return time.Time{}, fmt.Errorf("%w: cannot parse %q", classify, s)
 }

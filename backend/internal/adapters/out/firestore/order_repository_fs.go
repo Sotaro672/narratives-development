@@ -3,7 +3,6 @@ package firestore
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"strings"
@@ -34,7 +33,7 @@ func (r *OrderRepositoryFS) ordersCol() *firestore.CollectionRef {
 }
 
 // ========================
-// RepositoryPort impl (usecase.OrderRepo)
+// RepositoryPort impl
 // ========================
 
 func (r *OrderRepositoryFS) GetByID(ctx context.Context, id string) (orderdom.Order, error) {
@@ -148,7 +147,7 @@ func (r *OrderRepositoryFS) List(
 	}, nil
 }
 
-// ListByCursor follows the PG behavior: ordered by ID ASC, cursor = last ID.
+// ListByCursor: ordered by ID ASC, cursor = last ID.
 func (r *OrderRepositoryFS) ListByCursor(
 	ctx context.Context,
 	filter uc.OrderFilter,
@@ -294,7 +293,6 @@ func (r *OrderRepositoryFS) Save(ctx context.Context, o orderdom.Order, _ *commo
 	now := time.Now().UTC()
 
 	if id == "" {
-		// Behave like Create with auto ID.
 		if o.CreatedAt.IsZero() {
 			o.CreatedAt = now
 		}
@@ -315,7 +313,6 @@ func (r *OrderRepositoryFS) Save(ctx context.Context, o orderdom.Order, _ *commo
 
 	o.ID = id
 
-	// Preserve CreatedAt if absent by trying to load existing.
 	if o.CreatedAt.IsZero() {
 		if snap, err := r.ordersCol().Doc(id).Get(ctx); err == nil {
 			if existing, err2 := docToOrder(snap); err2 == nil && !existing.CreatedAt.IsZero() {
@@ -415,37 +412,55 @@ func (r *OrderRepositoryFS) Reset(ctx context.Context) error {
 }
 
 // ========================
-// Helpers
+// Helpers (NEW schema only)
 // ========================
 
-// Firestore/encoding/json decode often uses map[string]interface{}.
-// NOTE: any == interface{} in Go, so map[string]any == map[string]interface{} (identical type).
 func asMapAny(v any) map[string]any {
 	if v == nil {
 		return nil
 	}
+	if m, ok := v.(map[string]any); ok {
+		return m
+	}
 	if m, ok := v.(map[string]interface{}); ok {
-		// identical type to map[string]any due to any alias
 		return m
 	}
 	return nil
 }
 
-func mapGetStr(m map[string]any, keys ...string) string {
+func mapGetStr(m map[string]any, key string) string {
 	if m == nil {
 		return ""
 	}
-	for _, k := range keys {
-		if v, ok := m[k]; ok {
-			if s, ok2 := v.(string); ok2 {
-				return strings.TrimSpace(s)
-			}
-			if v != nil {
-				return strings.TrimSpace(fmt.Sprint(v))
-			}
-		}
+	v, ok := m[key]
+	if !ok || v == nil {
+		return ""
 	}
-	return ""
+	if s, ok := v.(string); ok {
+		return strings.TrimSpace(s)
+	}
+	return strings.TrimSpace(fmt.Sprint(v))
+}
+
+func mapGetInt(m map[string]any, key string) int {
+	if m == nil {
+		return 0
+	}
+	v, ok := m[key]
+	if !ok || v == nil {
+		return 0
+	}
+	switch t := v.(type) {
+	case int:
+		return t
+	case int64:
+		return int(t)
+	case float64:
+		return int(t)
+	default:
+		// Firestore decode の揺れがあっても落とさず 0 に寄せる（domain が弾く）
+		return 0
+	}
 }
 
 func decodeShippingSnapshot(v any) (orderdom.ShippingSnapshot, bool) {
@@ -454,12 +469,12 @@ func decodeShippingSnapshot(v any) (orderdom.ShippingSnapshot, bool) {
 		return orderdom.ShippingSnapshot{}, false
 	}
 	return orderdom.ShippingSnapshot{
-		ZipCode: mapGetStr(m, "zipCode", "zip_code", "postalCode", "postal_code"),
-		State:   mapGetStr(m, "state", "prefecture", "region"),
-		City:    mapGetStr(m, "city", "locality"),
-		Street:  mapGetStr(m, "street", "address1", "address_1"),
-		Street2: mapGetStr(m, "street2", "address2", "address_2"),
-		Country: mapGetStr(m, "country", "countryCode", "country_code"),
+		ZipCode: mapGetStr(m, "zipCode"),
+		State:   mapGetStr(m, "state"),
+		City:    mapGetStr(m, "city"),
+		Street:  mapGetStr(m, "street"),
+		Street2: mapGetStr(m, "street2"),
+		Country: mapGetStr(m, "country"),
 	}, true
 }
 
@@ -468,149 +483,137 @@ func decodeBillingSnapshot(v any) (orderdom.BillingSnapshot, bool) {
 	if m == nil {
 		return orderdom.BillingSnapshot{}, false
 	}
-	holder := mapGetStr(m, "cardHolderName", "cardholderName", "holderName", "card_holder_name")
-	last4 := mapGetStr(m, "last4", "cardLast4", "card_last4")
 	return orderdom.BillingSnapshot{
-		Last4:          last4,
-		CardHolderName: holder,
+		Last4:          mapGetStr(m, "last4"),
+		CardHolderName: mapGetStr(m, "cardHolderName"),
 	}, true
 }
 
-// docToOrder converts a Firestore document snapshot to orderdom.Order.
-// NOTE: legacy fields (orderNumber/status/fulfillment/tracking/deleted*) are ignored safely.
+func decodeItems(v any) ([]orderdom.OrderItemSnapshot, bool) {
+	if v == nil {
+		return nil, false
+	}
+
+	switch raw := v.(type) {
+	case []any:
+		out := make([]orderdom.OrderItemSnapshot, 0, len(raw))
+		for _, x := range raw {
+			m := asMapAny(x)
+			if m == nil {
+				out = append(out, orderdom.OrderItemSnapshot{})
+				continue
+			}
+			out = append(out, orderdom.OrderItemSnapshot{
+				ModelID:     strings.TrimSpace(mapGetStr(m, "modelId")),
+				InventoryID: strings.TrimSpace(mapGetStr(m, "inventoryId")),
+				Qty:         mapGetInt(m, "qty"),
+				Price:       mapGetInt(m, "price"),
+			})
+		}
+		return out, true
+	case []map[string]any:
+		out := make([]orderdom.OrderItemSnapshot, 0, len(raw))
+		for _, m := range raw {
+			out = append(out, orderdom.OrderItemSnapshot{
+				ModelID:     strings.TrimSpace(mapGetStr(m, "modelId")),
+				InventoryID: strings.TrimSpace(mapGetStr(m, "inventoryId")),
+				Qty:         mapGetInt(m, "qty"),
+				Price:       mapGetInt(m, "price"),
+			})
+		}
+		return out, true
+	default:
+		return nil, false
+	}
+}
+
+// docToOrder converts a Firestore document snapshot to orderdom.Order (NEW schema only).
 func docToOrder(doc *firestore.DocumentSnapshot) (orderdom.Order, error) {
 	data := doc.Data()
 	if data == nil {
 		return orderdom.Order{}, fmt.Errorf("empty order document: %s", doc.Ref.ID)
 	}
 
-	getStr := func(keys ...string) string {
-		for _, k := range keys {
-			if v, ok := data[k].(string); ok {
-				return strings.TrimSpace(v)
-			}
+	getStr := func(key string) string {
+		if v, ok := data[key].(string); ok {
+			return strings.TrimSpace(v)
+		}
+		if v, ok := data[key]; ok && v != nil {
+			return strings.TrimSpace(fmt.Sprint(v))
 		}
 		return ""
 	}
-	getStrPtr := func(keys ...string) *string {
-		for _, k := range keys {
-			if v, ok := data[k].(string); ok {
-				s := strings.TrimSpace(v)
-				if s != "" {
-					return &s
-				}
+	getStrPtr := func(key string) *string {
+		if v, ok := data[key].(string); ok {
+			s := strings.TrimSpace(v)
+			if s != "" {
+				return &s
 			}
 		}
 		return nil
 	}
-	getTime := func(keys ...string) time.Time {
-		for _, k := range keys {
-			if v, ok := data[k].(time.Time); ok && !v.IsZero() {
-				return v.UTC()
-			}
+	getTime := func(key string) time.Time {
+		if v, ok := data[key].(time.Time); ok && !v.IsZero() {
+			return v.UTC()
 		}
 		return time.Time{}
 	}
-	getTimePtr := func(keys ...string) *time.Time {
-		for _, k := range keys {
-			if v, ok := data[k].(time.Time); ok && !v.IsZero() {
-				t := v.UTC()
-				return &t
-			}
-		}
-		return nil
-	}
-	getItems := func() []string {
-		raw, ok := data["items"]
-		if !ok || raw == nil {
-			return nil
-		}
-		switch vv := raw.(type) {
-		case []interface{}:
-			out := make([]string, 0, len(vv))
-			for _, x := range vv {
-				switch s := x.(type) {
-				case string:
-					out = append(out, s)
-				default:
-					out = append(out, fmt.Sprint(s))
-				}
-			}
-			return out
-		case []string:
-			return vv
-		case string:
-			if vv == "" {
-				return nil
-			}
-			var arr []string
-			if err := json.Unmarshal([]byte(vv), &arr); err == nil {
-				return arr
-			}
+	getTimePtr := func(key string) *time.Time {
+		if v, ok := data[key].(time.Time); ok && !v.IsZero() {
+			t := v.UTC()
+			return &t
 		}
 		return nil
 	}
 
-	// ✅ snapshots (required by domain validation)
+	// required snapshots
 	var ship orderdom.ShippingSnapshot
 	if v, ok := data["shippingSnapshot"]; ok {
 		if s, ok2 := decodeShippingSnapshot(v); ok2 {
 			ship = s
 		}
-	} else if v, ok := data["shipping_snapshot"]; ok {
-		if s, ok2 := decodeShippingSnapshot(v); ok2 {
-			ship = s
-		}
 	}
-
 	var bill orderdom.BillingSnapshot
 	if v, ok := data["billingSnapshot"]; ok {
 		if b, ok2 := decodeBillingSnapshot(v); ok2 {
 			bill = b
 		}
-	} else if v, ok := data["billing_snapshot"]; ok {
-		if b, ok2 := decodeBillingSnapshot(v); ok2 {
-			bill = b
-		}
 	}
 
-	// If snapshots are missing but legacy IDs exist, fail loudly (migration needed).
-	legacyShipID := getStr("shippingAddressId", "shipping_address_id")
-	legacyBillID := getStr("billingAddressId", "billing_address_id")
+	items, ok := decodeItems(data["items"])
+	if !ok {
+		items = nil
+	}
 
+	// Strict: if missing -> error
 	if strings.TrimSpace(ship.State) == "" &&
 		strings.TrimSpace(ship.City) == "" &&
 		strings.TrimSpace(ship.Street) == "" &&
 		strings.TrimSpace(ship.Country) == "" {
-		if legacyShipID != "" {
-			return orderdom.Order{}, fmt.Errorf("order %s: missing shippingSnapshot (legacy shippingAddressId=%q present)", doc.Ref.ID, legacyShipID)
-		}
 		return orderdom.Order{}, fmt.Errorf("order %s: missing shippingSnapshot", doc.Ref.ID)
 	}
-
 	if strings.TrimSpace(bill.Last4) == "" {
-		if legacyBillID != "" {
-			return orderdom.Order{}, fmt.Errorf("order %s: missing billingSnapshot.last4 (legacy billingAddressId=%q present)", doc.Ref.ID, legacyBillID)
-		}
 		return orderdom.Order{}, fmt.Errorf("order %s: missing billingSnapshot.last4", doc.Ref.ID)
+	}
+	if len(items) == 0 {
+		return orderdom.Order{}, fmt.Errorf("order %s: missing items", doc.Ref.ID)
 	}
 
 	return orderdom.Order{
 		ID:     doc.Ref.ID,
-		UserID: getStr("userId", "user_id"),
-		CartID: getStr("cartId", "cart_id"),
+		UserID: getStr("userId"),
+		CartID: getStr("cartId"),
 
 		ShippingSnapshot: ship,
 		BillingSnapshot:  bill,
 
-		ListID:         getStr("listId", "list_id"),
-		Items:          getItems(),
-		InvoiceID:      getStr("invoiceId", "invoice_id"),
-		PaymentID:      getStr("paymentId", "payment_id"),
-		TransferedDate: getTimePtr("transferedDate", "transfered_date"),
-		CreatedAt:      getTime("createdAt", "created_at"),
-		UpdatedAt:      getTime("updatedAt", "updated_at"),
-		UpdatedBy:      getStrPtr("updatedBy", "updated_by"),
+		Items:          items,
+		InvoiceID:      getStr("invoiceId"),
+		PaymentID:      getStr("paymentId"),
+		TransferedDate: getTimePtr("transferedDate"),
+		CreatedAt:      getTime("createdAt"),
+		UpdatedAt:      getTime("updatedAt"),
+		UpdatedBy:      getStrPtr("updatedBy"),
 	}, nil
 }
 
@@ -629,21 +632,26 @@ func orderToDoc(o orderdom.Order) map[string]any {
 		"cardHolderName": strings.TrimSpace(o.BillingSnapshot.CardHolderName),
 	}
 
+	items := make([]map[string]any, 0, len(o.Items))
+	for _, it := range o.Items {
+		items = append(items, map[string]any{
+			"modelId":     strings.TrimSpace(it.ModelID),
+			"inventoryId": strings.TrimSpace(it.InventoryID),
+			"qty":         it.Qty,
+			"price":       it.Price,
+		})
+	}
+
 	m := map[string]any{
 		"userId": strings.TrimSpace(o.UserID),
 		"cartId": strings.TrimSpace(o.CartID),
 
-		// ✅ snapshots
 		"shippingSnapshot": ship,
 		"billingSnapshot":  bill,
 
-		"listId":    strings.TrimSpace(o.ListID),
+		"items":     items,
 		"invoiceId": strings.TrimSpace(o.InvoiceID),
 		"paymentId": strings.TrimSpace(o.PaymentID),
-	}
-
-	if len(o.Items) > 0 {
-		m["items"] = o.Items
 	}
 
 	if o.TransferedDate != nil && !o.TransferedDate.IsZero() {
@@ -665,15 +673,12 @@ func orderToDoc(o orderdom.Order) map[string]any {
 	return m
 }
 
-// matchOrderFilter applies uc.OrderFilter in-memory.
 func matchOrderFilter(o orderdom.Order, f uc.OrderFilter) bool {
 	if f.UserID != nil {
 		if strings.TrimSpace(o.UserID) != strings.TrimSpace(*f.UserID) {
 			return false
 		}
 	}
-
-	// Time ranges
 	if f.CreatedFrom != nil {
 		if o.CreatedAt.IsZero() || o.CreatedAt.Before(f.CreatedFrom.UTC()) {
 			return false
@@ -704,11 +709,9 @@ func matchOrderFilter(o orderdom.Order, f uc.OrderFilter) bool {
 			return false
 		}
 	}
-
 	return true
 }
 
-// applyOrderSort maps common.Sort to Firestore orderBy.
 func applyOrderSort(q firestore.Query, sort common.Sort) firestore.Query {
 	col := strings.ToLower(strings.TrimSpace(string(sort.Column)))
 	var field string
@@ -721,7 +724,6 @@ func applyOrderSort(q firestore.Query, sort common.Sort) firestore.Query {
 	case "transfereddate", "transfered_date":
 		field = "transferedDate"
 	default:
-		// Default: createdAt DESC, id DESC (to match PG default)
 		return q.OrderBy("createdAt", firestore.Desc).
 			OrderBy(firestore.DocumentID, firestore.Desc)
 	}
