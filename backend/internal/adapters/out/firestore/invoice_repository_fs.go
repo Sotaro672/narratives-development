@@ -5,8 +5,8 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"reflect"
 	"strings"
-	"time"
 
 	"cloud.google.com/go/firestore"
 	"google.golang.org/api/iterator"
@@ -14,11 +14,13 @@ import (
 	"google.golang.org/grpc/status"
 
 	fscommon "narratives/internal/adapters/out/firestore/common"
-	usecase "narratives/internal/application/usecase"
-	invdom "narratives/internal/domain/invoice"
+	uc "narratives/internal/application/usecase"
+	common "narratives/internal/domain/common"
+	invoicedom "narratives/internal/domain/invoice"
 )
 
-// InvoiceRepositoryFS implements usecase.InvoiceRepo using Firestore.
+// Firestore implementation of usecase.InvoiceRepo
+// ✅ docId = orderId (Invoice has no ID field)
 type InvoiceRepositoryFS struct {
 	Client *firestore.Client
 }
@@ -27,59 +29,46 @@ func NewInvoiceRepositoryFS(client *firestore.Client) *InvoiceRepositoryFS {
 	return &InvoiceRepositoryFS{Client: client}
 }
 
-func (r *InvoiceRepositoryFS) col() *firestore.CollectionRef {
+func (r *InvoiceRepositoryFS) invoicesCol() *firestore.CollectionRef {
 	return r.Client.Collection("invoices")
 }
 
-func (r *InvoiceRepositoryFS) orderItemInvoiceCol() *firestore.CollectionRef {
-	return r.Client.Collection("order_item_invoices")
-}
+// ========================
+// usecase.InvoiceRepo impl
+// ========================
 
-// Compile-time check: ensure InvoiceRepositoryFS satisfies usecase.InvoiceRepo.
-var _ usecase.InvoiceRepo = (*InvoiceRepositoryFS)(nil)
-
-// =======================
-// Queries (Invoice)
-// =======================
-
-// GetByID は InvoiceRepo インターフェース準拠用。
-// 本実装では orderID をそのままドキュメントIDとして扱う。
-func (r *InvoiceRepositoryFS) GetByID(ctx context.Context, id string) (invdom.Invoice, error) {
-	return r.GetByOrderID(ctx, id)
-}
-
-func (r *InvoiceRepositoryFS) GetByOrderID(ctx context.Context, orderID string) (invdom.Invoice, error) {
+func (r *InvoiceRepositoryFS) GetByOrderID(ctx context.Context, orderID string) (invoicedom.Invoice, error) {
 	if r.Client == nil {
-		return invdom.Invoice{}, errors.New("firestore client is nil")
+		return invoicedom.Invoice{}, errors.New("firestore client is nil")
 	}
 
 	orderID = strings.TrimSpace(orderID)
 	if orderID == "" {
-		return invdom.Invoice{}, invdom.ErrNotFound
+		return invoicedom.Invoice{}, invoicedom.ErrNotFound
 	}
 
-	snap, err := r.col().Doc(orderID).Get(ctx)
+	snap, err := r.invoicesCol().Doc(orderID).Get(ctx)
 	if err != nil {
 		if status.Code(err) == codes.NotFound {
-			return invdom.Invoice{}, invdom.ErrNotFound
+			return invoicedom.Invoice{}, invoicedom.ErrNotFound
 		}
-		return invdom.Invoice{}, err
+		return invoicedom.Invoice{}, err
 	}
 
 	return docToInvoice(snap)
 }
 
-func (r *InvoiceRepositoryFS) Exists(ctx context.Context, id string) (bool, error) {
+func (r *InvoiceRepositoryFS) Exists(ctx context.Context, orderID string) (bool, error) {
 	if r.Client == nil {
 		return false, errors.New("firestore client is nil")
 	}
 
-	orderID := strings.TrimSpace(id)
+	orderID = strings.TrimSpace(orderID)
 	if orderID == "" {
 		return false, nil
 	}
 
-	_, err := r.col().Doc(orderID).Get(ctx)
+	_, err := r.invoicesCol().Doc(orderID).Get(ctx)
 	if err != nil {
 		if status.Code(err) == codes.NotFound {
 			return false, nil
@@ -89,13 +78,141 @@ func (r *InvoiceRepositoryFS) Exists(ctx context.Context, id string) (bool, erro
 	return true, nil
 }
 
-// Count: best-effort via scanning and applying Filter in-memory.
-func (r *InvoiceRepositoryFS) Count(ctx context.Context, filter invdom.Filter) (int, error) {
+func (r *InvoiceRepositoryFS) List(
+	ctx context.Context,
+	filter uc.InvoiceFilter,
+	sort common.Sort,
+	page common.Page,
+) (common.PageResult[invoicedom.Invoice], error) {
+	if r.Client == nil {
+		return common.PageResult[invoicedom.Invoice]{}, errors.New("firestore client is nil")
+	}
+
+	pageNum, perPage, offset := fscommon.NormalizePage(page.Number, page.PerPage, 50, 200)
+
+	q := r.invoicesCol().Query
+	q = applyInvoiceSort(q, sort)
+
+	it := q.Documents(ctx)
+	defer it.Stop()
+
+	var all []invoicedom.Invoice
+	for {
+		doc, err := it.Next()
+		if err == iterator.Done {
+			break
+		}
+		if err != nil {
+			return common.PageResult[invoicedom.Invoice]{}, err
+		}
+
+		inv, err := docToInvoice(doc)
+		if err != nil {
+			return common.PageResult[invoicedom.Invoice]{}, err
+		}
+		if matchInvoiceFilter(inv, filter) {
+			all = append(all, inv)
+		}
+	}
+
+	total := len(all)
+	if total == 0 {
+		return common.PageResult[invoicedom.Invoice]{
+			Items:      []invoicedom.Invoice{},
+			TotalCount: 0,
+			TotalPages: 0,
+			Page:       pageNum,
+			PerPage:    perPage,
+		}, nil
+	}
+
+	if offset > total {
+		offset = total
+	}
+	end := offset + perPage
+	if end > total {
+		end = total
+	}
+
+	return common.PageResult[invoicedom.Invoice]{
+		Items:      all[offset:end],
+		TotalCount: total,
+		TotalPages: fscommon.ComputeTotalPages(total, perPage),
+		Page:       pageNum,
+		PerPage:    perPage,
+	}, nil
+}
+
+func (r *InvoiceRepositoryFS) ListByCursor(
+	ctx context.Context,
+	filter uc.InvoiceFilter,
+	_ common.Sort,
+	cpage common.CursorPage,
+) (common.CursorPageResult[invoicedom.Invoice], error) {
+	if r.Client == nil {
+		return common.CursorPageResult[invoicedom.Invoice]{}, errors.New("firestore client is nil")
+	}
+
+	limit := cpage.Limit
+	if limit <= 0 || limit > 200 {
+		limit = 50
+	}
+
+	q := r.invoicesCol().OrderBy(firestore.DocumentID, firestore.Asc)
+	if after := strings.TrimSpace(cpage.After); after != "" {
+		q = q.StartAfter(after)
+	}
+
+	it := q.Documents(ctx)
+	defer it.Stop()
+
+	var (
+		items []invoicedom.Invoice
+		last  string
+	)
+	for {
+		if len(items) > limit {
+			break
+		}
+		doc, err := it.Next()
+		if err == iterator.Done {
+			break
+		}
+		if err != nil {
+			return common.CursorPageResult[invoicedom.Invoice]{}, err
+		}
+
+		inv, err := docToInvoice(doc)
+		if err != nil {
+			return common.CursorPageResult[invoicedom.Invoice]{}, err
+		}
+		if matchInvoiceFilter(inv, filter) {
+			items = append(items, inv)
+			last = inv.OrderID
+		}
+	}
+
+	var next *string
+	if len(items) > limit {
+		items = items[:limit]
+		if last != "" {
+			next = &last
+		}
+	}
+
+	return common.CursorPageResult[invoicedom.Invoice]{
+		Items:      items,
+		NextCursor: next,
+		Limit:      limit,
+	}, nil
+}
+
+func (r *InvoiceRepositoryFS) Count(ctx context.Context, filter uc.InvoiceFilter) (int, error) {
 	if r.Client == nil {
 		return 0, errors.New("firestore client is nil")
 	}
 
-	it := r.col().Documents(ctx)
+	it := r.invoicesCol().Documents(ctx)
 	defer it.Stop()
 
 	total := 0
@@ -118,632 +235,306 @@ func (r *InvoiceRepositoryFS) Count(ctx context.Context, filter invdom.Filter) (
 	return total, nil
 }
 
-func (r *InvoiceRepositoryFS) List(
-	ctx context.Context,
-	filter invdom.Filter,
-	sort invdom.Sort,
-	page invdom.Page,
-) (invdom.PageResult[invdom.Invoice], error) {
+func (r *InvoiceRepositoryFS) Create(ctx context.Context, inv invoicedom.Invoice) (invoicedom.Invoice, error) {
 	if r.Client == nil {
-		return invdom.PageResult[invdom.Invoice]{}, errors.New("firestore client is nil")
+		return invoicedom.Invoice{}, errors.New("firestore client is nil")
 	}
 
-	pageNum, perPage, _ := fscommon.NormalizePage(page.Number, page.PerPage, 50, 0)
-
-	q := r.col().Query
-	q = applyInvoiceSort(q, sort)
-
-	it := q.Documents(ctx)
-	defer it.Stop()
-
-	var all []invdom.Invoice
-	for {
-		doc, err := it.Next()
-		if err == iterator.Done {
-			break
-		}
-		if err != nil {
-			return invdom.PageResult[invdom.Invoice]{}, err
-		}
-		inv, err := docToInvoice(doc)
-		if err != nil {
-			return invdom.PageResult[invdom.Invoice]{}, err
-		}
-		if matchInvoiceFilter(inv, filter) {
-			all = append(all, inv)
-		}
+	orderID := strings.TrimSpace(inv.OrderID)
+	if orderID == "" {
+		return invoicedom.Invoice{}, errors.New("invoice: invalid orderId")
 	}
+	inv.OrderID = orderID
 
-	total := len(all)
-	if total == 0 {
-		return invdom.PageResult[invdom.Invoice]{
-			Items:      []invdom.Invoice{},
-			TotalCount: 0,
-			TotalPages: 0,
-			Page:       pageNum,
-			PerPage:    perPage,
-		}, nil
-	}
+	data := invoiceToDoc(inv)
 
-	offset := (pageNum - 1) * perPage
-	if offset > total {
-		offset = total
-	}
-	end := offset + perPage
-	if end > total {
-		end = total
-	}
-	items := all[offset:end]
-
-	totalPages := fscommon.ComputeTotalPages(total, perPage)
-
-	return invdom.PageResult[invdom.Invoice]{
-		Items:      items,
-		TotalCount: total,
-		TotalPages: totalPages,
-		Page:       pageNum,
-		PerPage:    perPage,
-	}, nil
-}
-
-func (r *InvoiceRepositoryFS) ListByCursor(
-	ctx context.Context,
-	filter invdom.Filter,
-	_ invdom.Sort,
-	cpage invdom.CursorPage,
-) (invdom.CursorPageResult[invdom.Invoice], error) {
-	if r.Client == nil {
-		return invdom.CursorPageResult[invdom.Invoice]{}, errors.New("firestore client is nil")
-	}
-
-	limit := cpage.Limit
-	if limit <= 0 || limit > 200 {
-		limit = 50
-	}
-
-	// Cursor by orderId ascending.
-	q := r.col().OrderBy("orderId", firestore.Asc)
-
-	it := q.Documents(ctx)
-	defer it.Stop()
-
-	after := strings.TrimSpace(cpage.After)
-	skipping := after != ""
-
-	var (
-		items []invdom.Invoice
-		last  string
-	)
-
-	for {
-		doc, err := it.Next()
-		if err == iterator.Done {
-			break
-		}
-		if err != nil {
-			return invdom.CursorPageResult[invdom.Invoice]{}, err
-		}
-		inv, err := docToInvoice(doc)
-		if err != nil {
-			return invdom.CursorPageResult[invdom.Invoice]{}, err
-		}
-		if !matchInvoiceFilter(inv, filter) {
-			continue
-		}
-
-		if skipping {
-			if inv.OrderID <= after {
-				continue
-			}
-			skipping = false
-		}
-
-		items = append(items, inv)
-		last = inv.OrderID
-
-		if len(items) >= limit+1 {
-			break
-		}
-	}
-
-	var next *string
-	if len(items) > limit {
-		items = items[:limit]
-		next = &last
-	}
-
-	return invdom.CursorPageResult[invdom.Invoice]{
-		Items:      items,
-		NextCursor: next,
-		Limit:      limit,
-	}, nil
-}
-
-// =======================
-// Mutations (InvoiceRepo required methods)
-// =======================
-
-func (r *InvoiceRepositoryFS) Create(ctx context.Context, inv invdom.Invoice) (invdom.Invoice, error) {
-	if r.Client == nil {
-		return invdom.Invoice{}, errors.New("firestore client is nil")
-	}
-
-	id := strings.TrimSpace(inv.OrderID)
-	if id == "" {
-		return invdom.Invoice{}, errors.New("missing orderID")
-	}
-
-	now := time.Now().UTC()
-	if inv.CreatedAt.IsZero() {
-		inv.CreatedAt = now
-	}
-	if inv.UpdatedAt.IsZero() {
-		inv.UpdatedAt = now
-	}
-
-	inv.OrderID = id
-	docRef := r.col().Doc(id)
-
-	data := invoiceToDocData(inv)
-
+	docRef := r.invoicesCol().Doc(orderID)
 	_, err := docRef.Create(ctx, data)
 	if err != nil {
 		if status.Code(err) == codes.AlreadyExists {
-			return invdom.Invoice{}, invdom.ErrConflict
+			return invoicedom.Invoice{}, invoicedom.ErrConflict
 		}
-		return invdom.Invoice{}, err
+		return invoicedom.Invoice{}, err
 	}
 
 	snap, err := docRef.Get(ctx)
 	if err != nil {
-		return invdom.Invoice{}, err
+		return invoicedom.Invoice{}, err
 	}
 	return docToInvoice(snap)
 }
 
-// Save upserts an Invoice. (Matches usecase.InvoiceRepo.Save)
-func (r *InvoiceRepositoryFS) Save(
-	ctx context.Context,
-	inv invdom.Invoice,
-) (invdom.Invoice, error) {
+func (r *InvoiceRepositoryFS) Save(ctx context.Context, inv invoicedom.Invoice, _ *common.SaveOptions) (invoicedom.Invoice, error) {
 	if r.Client == nil {
-		return invdom.Invoice{}, errors.New("firestore client is nil")
+		return invoicedom.Invoice{}, errors.New("firestore client is nil")
 	}
 
-	id := strings.TrimSpace(inv.OrderID)
-	if id == "" {
-		return invdom.Invoice{}, errors.New("missing orderID")
+	orderID := strings.TrimSpace(inv.OrderID)
+	if orderID == "" {
+		return invoicedom.Invoice{}, errors.New("invoice: invalid orderId")
 	}
+	inv.OrderID = orderID
 
-	now := time.Now().UTC()
-	if inv.CreatedAt.IsZero() {
-		inv.CreatedAt = now
-	}
-	if inv.UpdatedAt.IsZero() {
-		inv.UpdatedAt = now
-	}
+	docRef := r.invoicesCol().Doc(orderID)
+	data := invoiceToDoc(inv)
 
-	inv.OrderID = id
-	docRef := r.col().Doc(id)
-
-	data := invoiceToDocData(inv)
-
-	_, err := docRef.Set(ctx, data, firestore.MergeAll)
-	if err != nil {
-		return invdom.Invoice{}, err
+	if _, err := docRef.Set(ctx, data, firestore.MergeAll); err != nil {
+		return invoicedom.Invoice{}, err
 	}
 
 	snap, err := docRef.Get(ctx)
 	if err != nil {
-		return invdom.Invoice{}, err
+		return invoicedom.Invoice{}, err
 	}
 	return docToInvoice(snap)
 }
 
-func (r *InvoiceRepositoryFS) Delete(ctx context.Context, id string) error {
+func (r *InvoiceRepositoryFS) DeleteByOrderID(ctx context.Context, orderID string) error {
 	if r.Client == nil {
 		return errors.New("firestore client is nil")
 	}
 
-	orderID := strings.TrimSpace(id)
+	orderID = strings.TrimSpace(orderID)
 	if orderID == "" {
-		return invdom.ErrNotFound
+		return invoicedom.ErrNotFound
 	}
 
-	_, err := r.col().Doc(orderID).Delete(ctx)
+	_, err := r.invoicesCol().Doc(orderID).Delete(ctx)
 	if err != nil {
 		if status.Code(err) == codes.NotFound {
-			return invdom.ErrNotFound
+			return invoicedom.ErrNotFound
 		}
 		return err
 	}
 	return nil
 }
 
-// =======================
-// Order item level invoices (extra helpers)
-// =======================
-
-func (r *InvoiceRepositoryFS) GetOrderItemInvoiceByOrderItemID(
-	ctx context.Context,
-	orderItemID string,
-) (invdom.OrderItemInvoice, error) {
+func (r *InvoiceRepositoryFS) Reset(ctx context.Context) error {
 	if r.Client == nil {
-		return invdom.OrderItemInvoice{}, errors.New("firestore client is nil")
+		return errors.New("firestore client is nil")
 	}
 
-	orderItemID = strings.TrimSpace(orderItemID)
-	if orderItemID == "" {
-		return invdom.OrderItemInvoice{}, invdom.ErrNotFound
-	}
-
-	q := r.orderItemInvoiceCol().
-		Where("orderItemId", "==", orderItemID).
-		OrderBy("updatedAt", firestore.Desc).
-		Limit(1)
-
-	it := q.Documents(ctx)
+	it := r.invoicesCol().Documents(ctx)
 	defer it.Stop()
 
-	doc, err := it.Next()
-	if err == iterator.Done {
-		return invdom.OrderItemInvoice{}, invdom.ErrNotFound
-	}
-	if err != nil {
-		return invdom.OrderItemInvoice{}, err
-	}
-
-	return docToOrderItemInvoice(doc)
-}
-
-func (r *InvoiceRepositoryFS) ListOrderItemInvoicesByOrderItemIDs(
-	ctx context.Context,
-	orderItemIDs []string,
-) ([]invdom.OrderItemInvoice, error) {
-	if r.Client == nil {
-		return nil, errors.New("firestore client is nil")
-	}
-
-	ids := make([]string, 0, len(orderItemIDs))
-	for _, id := range orderItemIDs {
-		id = strings.TrimSpace(id)
-		if id != "" {
-			ids = append(ids, id)
-		}
-	}
-	if len(ids) == 0 {
-		return []invdom.OrderItemInvoice{}, nil
-	}
-
-	var out []invdom.OrderItemInvoice
-
-	// Firestore "in" は最大 10 要素まで。それ以内ならそのまま問い合わせ。
-	if len(ids) <= 10 {
-		q := r.orderItemInvoiceCol().
-			Where("orderItemId", "in", ids).
-			OrderBy("orderItemId", firestore.Asc).
-			OrderBy("updatedAt", firestore.Desc)
-
-		it := q.Documents(ctx)
-		defer it.Stop()
-
-		for {
-			doc, err := it.Next()
-			if err == iterator.Done {
-				break
-			}
-			if err != nil {
-				return nil, err
-			}
-			oi, err := docToOrderItemInvoice(doc)
-			if err != nil {
-				return nil, err
-			}
-			out = append(out, oi)
-		}
-		return out, nil
-	}
-
-	// 10超の場合は全件走査して id セットでフィルタ
-	idset := make(map[string]struct{}, len(ids))
-	for _, id := range ids {
-		idset[id] = struct{}{}
-	}
-
-	it := r.orderItemInvoiceCol().
-		OrderBy("orderItemId", firestore.Asc).
-		OrderBy("updatedAt", firestore.Desc).
-		Documents(ctx)
-	defer it.Stop()
-
+	var refs []*firestore.DocumentRef
 	for {
 		doc, err := it.Next()
 		if err == iterator.Done {
 			break
 		}
 		if err != nil {
-			return nil, err
+			return err
 		}
-		oi, err := docToOrderItemInvoice(doc)
+		refs = append(refs, doc.Ref)
+	}
+	if len(refs) == 0 {
+		return nil
+	}
+
+	const chunkSize = 400
+	for start := 0; start < len(refs); start += chunkSize {
+		end := start + chunkSize
+		if end > len(refs) {
+			end = len(refs)
+		}
+		chunk := refs[start:end]
+
+		err := r.Client.RunTransaction(ctx, func(ctx context.Context, tx *firestore.Transaction) error {
+			for _, ref := range chunk {
+				if err := tx.Delete(ref); err != nil {
+					return err
+				}
+			}
+			return nil
+		})
 		if err != nil {
-			return nil, err
-		}
-		if _, ok := idset[oi.OrderItemID]; ok {
-			out = append(out, oi)
+			return err
 		}
 	}
-
-	return out, nil
+	return nil
 }
 
-// =======================
+// ========================
 // Helpers
-// =======================
+// ========================
 
-func invoiceToDocData(inv invdom.Invoice) map[string]any {
-	return map[string]any{
-		"orderId":          strings.TrimSpace(inv.OrderID),
-		"subtotal":         inv.Subtotal,
-		"discountAmount":   inv.DiscountAmount,
-		"taxAmount":        inv.TaxAmount,
-		"shippingCost":     inv.ShippingCost,
-		"totalAmount":      inv.TotalAmount,
-		"currency":         strings.TrimSpace(inv.Currency),
-		"createdAt":        inv.CreatedAt.UTC(),
-		"updatedAt":        inv.UpdatedAt.UTC(),
-		"billingAddressId": strings.TrimSpace(inv.BillingAddressID),
-	}
-}
-
-func docToInvoice(doc *firestore.DocumentSnapshot) (invdom.Invoice, error) {
+func docToInvoice(doc *firestore.DocumentSnapshot) (invoicedom.Invoice, error) {
 	data := doc.Data()
 	if data == nil {
-		return invdom.Invoice{}, fmt.Errorf("empty invoice document: %s", doc.Ref.ID)
+		return invoicedom.Invoice{}, fmt.Errorf("empty invoice document: %s", doc.Ref.ID)
 	}
 
-	getStr := func(keys ...string) string {
-		for _, key := range keys {
-			if v, ok := data[key].(string); ok {
-				return strings.TrimSpace(v)
-			}
+	getStr := func(key string) string {
+		if v, ok := data[key].(string); ok {
+			return strings.TrimSpace(v)
+		}
+		if v, ok := data[key]; ok && v != nil {
+			return strings.TrimSpace(fmt.Sprint(v))
 		}
 		return ""
 	}
-	getInt := func(keys ...string) int {
-		for _, key := range keys {
-			if v, ok := data[key]; ok {
-				switch n := v.(type) {
-				case int:
-					return n
-				case int32:
-					return int(n)
-				case int64:
-					return int(n)
-				case float64:
-					return int(n)
-				}
+
+	getInt := func(key string) int {
+		v, ok := data[key]
+		if !ok || v == nil {
+			return 0
+		}
+		switch t := v.(type) {
+		case int:
+			return t
+		case int64:
+			return int(t)
+		case float64:
+			return int(t)
+		default:
+			return 0
+		}
+	}
+
+	getBool := func(key string) bool {
+		v, ok := data[key]
+		if !ok || v == nil {
+			return false
+		}
+		if b, ok := v.(bool); ok {
+			return b
+		}
+		// fallback (rare)
+		s := strings.ToLower(strings.TrimSpace(fmt.Sprint(v)))
+		return s == "true" || s == "1" || s == "yes"
+	}
+
+	// prices
+	var prices []int
+	switch raw := data["prices"].(type) {
+	case []any:
+		prices = make([]int, 0, len(raw))
+		for _, x := range raw {
+			switch t := x.(type) {
+			case int:
+				prices = append(prices, t)
+			case int64:
+				prices = append(prices, int(t))
+			case float64:
+				prices = append(prices, int(t))
+			default:
+				prices = append(prices, 0)
 			}
 		}
-		return 0
-	}
-	getTime := func(keys ...string) (time.Time, bool) {
-		for _, key := range keys {
-			if v, ok := data[key].(time.Time); ok {
-				return v.UTC(), !v.IsZero()
-			}
-		}
-		return time.Time{}, false
+	case []int:
+		prices = raw
+	default:
+		prices = nil
 	}
 
-	var inv invdom.Invoice
-
-	inv.OrderID = getStr("orderId", "order_id")
-	if inv.OrderID == "" {
-		inv.OrderID = doc.Ref.ID
+	inv := invoicedom.Invoice{
+		OrderID:     doc.Ref.ID, // ✅ docId = orderId
+		Prices:      prices,
+		Tax:         getInt("tax"),
+		ShippingFee: getInt("shippingFee"),
+		Paid:        getBool("paid"),
 	}
 
-	inv.Subtotal = getInt("subtotal")
-	inv.DiscountAmount = getInt("discountAmount", "discount_amount")
-	inv.TaxAmount = getInt("taxAmount", "tax_amount")
-	inv.ShippingCost = getInt("shippingCost", "shipping_cost")
-	inv.TotalAmount = getInt("totalAmount", "total_amount")
-	inv.Currency = getStr("currency")
-	inv.BillingAddressID = getStr("billingAddressId", "billing_address_id")
-
-	if t, ok := getTime("createdAt", "created_at"); ok {
-		inv.CreatedAt = t
-	}
-	if t, ok := getTime("updatedAt", "updated_at"); ok {
-		inv.UpdatedAt = t
+	// allow legacy "orderId" field (if stored) but docId wins
+	if oid := strings.TrimSpace(getStr("orderId")); oid != "" {
+		inv.OrderID = oid
 	}
 
-	inv.OrderItemInvoices = nil
-
+	if err := inv.Validate(); err != nil {
+		return invoicedom.Invoice{}, err
+	}
 	return inv, nil
 }
 
-func docToOrderItemInvoice(doc *firestore.DocumentSnapshot) (invdom.OrderItemInvoice, error) {
-	data := doc.Data()
-	if data == nil {
-		return invdom.OrderItemInvoice{}, fmt.Errorf("empty order_item_invoice document: %s", doc.Ref.ID)
+func invoiceToDoc(inv invoicedom.Invoice) map[string]any {
+	prices := make([]int, 0, len(inv.Prices))
+	for _, p := range inv.Prices {
+		prices = append(prices, p)
 	}
 
-	getStr := func(keys ...string) string {
-		for _, key := range keys {
-			if v, ok := data[key].(string); ok {
-				return strings.TrimSpace(v)
-			}
-		}
-		return ""
+	return map[string]any{
+		// keep orderId also (debug/readability). docId is still orderId.
+		"orderId":     strings.TrimSpace(inv.OrderID),
+		"prices":      prices,
+		"tax":         inv.Tax,
+		"shippingFee": inv.ShippingFee,
+		"paid":        inv.Paid,
 	}
-	getInt := func(keys ...string) int {
-		for _, key := range keys {
-			if v, ok := data[key]; ok {
-				switch n := v.(type) {
-				case int:
-					return n
-				case int32:
-					return int(n)
-				case int64:
-					return int(n)
-				case float64:
-					return int(n)
-				}
-			}
-		}
-		return 0
-	}
-	getTime := func(keys ...string) (time.Time, bool) {
-		for _, key := range keys {
-			if v, ok := data[key].(time.Time); ok {
-				return v.UTC(), !v.IsZero()
-			}
-		}
-		return time.Time{}, false
-	}
-
-	var oi invdom.OrderItemInvoice
-
-	oi.ID = getStr("id")
-	if oi.ID == "" {
-		oi.ID = doc.Ref.ID
-	}
-	oi.OrderItemID = getStr("orderItemId", "order_item_id")
-	oi.UnitPrice = getInt("unitPrice", "unit_price")
-	oi.TotalPrice = getInt("totalPrice", "total_price")
-
-	if t, ok := getTime("createdAt", "created_at"); ok {
-		oi.CreatedAt = t
-	}
-	if t, ok := getTime("updatedAt", "updated_at"); ok {
-		oi.UpdatedAt = t
-	}
-
-	return oi, nil
 }
 
-// matchInvoiceFilter applies invdom.Filter in-memory.
-func matchInvoiceFilter(inv invdom.Invoice, f invdom.Filter) bool {
-	// Free text search: orderID or currency
-	if sq := strings.TrimSpace(f.SearchQuery); sq != "" {
-		lq := strings.ToLower(sq)
-		haystack := strings.ToLower(inv.OrderID + " " + inv.Currency)
-		if !strings.Contains(haystack, lq) {
+// matchInvoiceFilter is reflection-based so adapter compiles even if uc.InvoiceFilter shape changes.
+// It tries to apply: OrderID, Paid.
+func matchInvoiceFilter(inv invoicedom.Invoice, f uc.InvoiceFilter) bool {
+	return matchInvoiceFilterAny(inv, any(f))
+}
+
+func matchInvoiceFilterAny(inv invoicedom.Invoice, fv any) bool {
+	if orderID, ok := getFilterString(fv, "OrderID"); ok {
+		if strings.TrimSpace(orderID) != "" && strings.TrimSpace(inv.OrderID) != strings.TrimSpace(orderID) {
 			return false
 		}
 	}
-
-	// OrderID exact
-	if f.OrderID != nil && strings.TrimSpace(*f.OrderID) != "" {
-		if inv.OrderID != strings.TrimSpace(*f.OrderID) {
+	if paidPtr, ok := getFilterBoolPtr(fv, "Paid"); ok && paidPtr != nil {
+		if inv.Paid != *paidPtr {
 			return false
 		}
 	}
-
-	// OrderIDs IN (...)
-	if len(f.OrderIDs) > 0 {
-		found := false
-		for _, id := range f.OrderIDs {
-			if strings.TrimSpace(id) == inv.OrderID {
-				found = true
-				break
-			}
-		}
-		if !found {
-			return false
-		}
-	}
-
-	// Currency
-	if f.Currency != nil && strings.TrimSpace(*f.Currency) != "" {
-		if inv.Currency != strings.TrimSpace(*f.Currency) {
-			return false
-		}
-	}
-
-	// Amount ranges helper
-	inRange := func(v int, min, max *int) bool {
-		if min != nil && v < *min {
-			return false
-		}
-		if max != nil && v > *max {
-			return false
-		}
-		return true
-	}
-
-	if !inRange(inv.Subtotal, f.MinSubtotal, f.MaxSubtotal) {
-		return false
-	}
-	if !inRange(inv.DiscountAmount, f.MinDiscountAmount, f.MaxDiscountAmount) {
-		return false
-	}
-	if !inRange(inv.TaxAmount, f.MinTaxAmount, f.MaxTaxAmount) {
-		return false
-	}
-	if !inRange(inv.ShippingCost, f.MinShippingCost, f.MaxShippingCost) {
-		return false
-	}
-	if !inRange(inv.TotalAmount, f.MinTotalAmount, f.MaxTotalAmount) {
-		return false
-	}
-
-	// Date ranges
-	if f.CreatedFrom != nil && inv.CreatedAt.Before(f.CreatedFrom.UTC()) {
-		return false
-	}
-	if f.CreatedTo != nil && !inv.CreatedAt.Before(f.CreatedTo.UTC()) {
-		return false
-	}
-	if f.UpdatedFrom != nil && inv.UpdatedAt.Before(f.UpdatedFrom.UTC()) {
-		return false
-	}
-	if f.UpdatedTo != nil && !inv.UpdatedAt.Before(f.UpdatedTo.UTC()) {
-		return false
-	}
-
 	return true
 }
 
-func applyInvoiceSort(q firestore.Query, sort invdom.Sort) firestore.Query {
-	col, dir := mapInvoiceSort(sort)
-	if col == "" {
-		// default: updatedAt DESC, orderId DESC
-		return q.OrderBy("updatedAt", firestore.Desc).OrderBy("orderId", firestore.Desc)
+func getFilterBoolPtr(v any, field string) (*bool, bool) {
+	rv := reflect.ValueOf(v)
+	if !rv.IsValid() {
+		return nil, false
 	}
-	return q.OrderBy(col, dir).OrderBy("orderId", firestore.Asc)
+	if rv.Kind() == reflect.Pointer {
+		if rv.IsNil() {
+			return nil, false
+		}
+		rv = rv.Elem()
+	}
+	if rv.Kind() != reflect.Struct {
+		return nil, false
+	}
+	f := rv.FieldByName(field)
+	if !f.IsValid() {
+		f = rv.FieldByName(lowerFirst(field))
+		if !f.IsValid() {
+			return nil, false
+		}
+	}
+
+	if f.Kind() == reflect.Pointer {
+		if f.IsNil() {
+			return nil, true
+		}
+		if b, ok := f.Interface().(*bool); ok {
+			return b, true
+		}
+	}
+	if f.CanInterface() {
+		if b, ok := f.Interface().(bool); ok {
+			return &b, true
+		}
+	}
+	return nil, false
 }
 
-func mapInvoiceSort(sort invdom.Sort) (string, firestore.Direction) {
-	col := strings.ToLower(string(sort.Column))
-	var field string
+func applyInvoiceSort(q firestore.Query, sort common.Sort) firestore.Query {
+	col := strings.ToLower(strings.TrimSpace(string(sort.Column)))
 
+	// entity.go に合わせて orderId のみ（docId相当）
 	switch col {
-	case "orderid", "order_id":
-		field = "orderId"
-	case "subtotal":
-		field = "subtotal"
-	case "discountamount", "discount_amount":
-		field = "discountAmount"
-	case "taxamount", "tax_amount":
-		field = "taxAmount"
-	case "shippingcost", "shipping_cost":
-		field = "shippingCost"
-	case "totalamount", "total_amount":
-		field = "totalAmount"
-	case "currency":
-		field = "currency"
-	case "createdat", "created_at":
-		field = "createdAt"
-	case "updatedat", "updated_at":
-		field = "updatedAt"
+	case "orderid", "order_id", "order":
+		// tie-breakerとして docId
+		dir := firestore.Asc
+		if strings.EqualFold(string(sort.Order), "desc") {
+			dir = firestore.Desc
+		}
+		return q.OrderBy("orderId", dir).OrderBy(firestore.DocumentID, dir)
 	default:
-		return "", firestore.Desc
+		// default: docId desc
+		return q.OrderBy(firestore.DocumentID, firestore.Desc)
 	}
-
-	dir := firestore.Asc
-	if strings.EqualFold(string(sort.Order), "desc") {
-		dir = firestore.Desc
-	}
-	return field, dir
 }

@@ -42,11 +42,11 @@ type OrderItemSnapshot struct {
 type Order struct {
 	ID       string
 	UserID   string
-	AvatarID string // ✅ NEW
+	AvatarID string
 	CartID   string
 
 	ShippingSnapshot ShippingSnapshot
-	BillingSnapshot  BillingSnapshot // last4 + cardHolderName only
+	BillingSnapshot  BillingSnapshot
 
 	Items     []OrderItemSnapshot `json:"items"`
 	CreatedAt time.Time
