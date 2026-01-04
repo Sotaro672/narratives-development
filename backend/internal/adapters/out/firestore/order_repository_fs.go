@@ -418,6 +418,64 @@ func (r *OrderRepositoryFS) Reset(ctx context.Context) error {
 // Helpers
 // ========================
 
+// Firestore/encoding/json decode often uses map[string]interface{}.
+// NOTE: any == interface{} in Go, so map[string]any == map[string]interface{} (identical type).
+func asMapAny(v any) map[string]any {
+	if v == nil {
+		return nil
+	}
+	if m, ok := v.(map[string]interface{}); ok {
+		// identical type to map[string]any due to any alias
+		return m
+	}
+	return nil
+}
+
+func mapGetStr(m map[string]any, keys ...string) string {
+	if m == nil {
+		return ""
+	}
+	for _, k := range keys {
+		if v, ok := m[k]; ok {
+			if s, ok2 := v.(string); ok2 {
+				return strings.TrimSpace(s)
+			}
+			if v != nil {
+				return strings.TrimSpace(fmt.Sprint(v))
+			}
+		}
+	}
+	return ""
+}
+
+func decodeShippingSnapshot(v any) (orderdom.ShippingSnapshot, bool) {
+	m := asMapAny(v)
+	if m == nil {
+		return orderdom.ShippingSnapshot{}, false
+	}
+	return orderdom.ShippingSnapshot{
+		ZipCode: mapGetStr(m, "zipCode", "zip_code", "postalCode", "postal_code"),
+		State:   mapGetStr(m, "state", "prefecture", "region"),
+		City:    mapGetStr(m, "city", "locality"),
+		Street:  mapGetStr(m, "street", "address1", "address_1"),
+		Street2: mapGetStr(m, "street2", "address2", "address_2"),
+		Country: mapGetStr(m, "country", "countryCode", "country_code"),
+	}, true
+}
+
+func decodeBillingSnapshot(v any) (orderdom.BillingSnapshot, bool) {
+	m := asMapAny(v)
+	if m == nil {
+		return orderdom.BillingSnapshot{}, false
+	}
+	holder := mapGetStr(m, "cardHolderName", "cardholderName", "holderName", "card_holder_name")
+	last4 := mapGetStr(m, "last4", "cardLast4", "card_last4")
+	return orderdom.BillingSnapshot{
+		Last4:          last4,
+		CardHolderName: holder,
+	}, true
+}
+
 // docToOrder converts a Firestore document snapshot to orderdom.Order.
 // NOTE: legacy fields (orderNumber/status/fulfillment/tracking/deleted*) are ignored safely.
 func docToOrder(doc *firestore.DocumentSnapshot) (orderdom.Order, error) {
@@ -493,33 +551,95 @@ func docToOrder(doc *firestore.DocumentSnapshot) (orderdom.Order, error) {
 		return nil
 	}
 
+	// ✅ snapshots (required by domain validation)
+	var ship orderdom.ShippingSnapshot
+	if v, ok := data["shippingSnapshot"]; ok {
+		if s, ok2 := decodeShippingSnapshot(v); ok2 {
+			ship = s
+		}
+	} else if v, ok := data["shipping_snapshot"]; ok {
+		if s, ok2 := decodeShippingSnapshot(v); ok2 {
+			ship = s
+		}
+	}
+
+	var bill orderdom.BillingSnapshot
+	if v, ok := data["billingSnapshot"]; ok {
+		if b, ok2 := decodeBillingSnapshot(v); ok2 {
+			bill = b
+		}
+	} else if v, ok := data["billing_snapshot"]; ok {
+		if b, ok2 := decodeBillingSnapshot(v); ok2 {
+			bill = b
+		}
+	}
+
+	// If snapshots are missing but legacy IDs exist, fail loudly (migration needed).
+	legacyShipID := getStr("shippingAddressId", "shipping_address_id")
+	legacyBillID := getStr("billingAddressId", "billing_address_id")
+
+	if strings.TrimSpace(ship.State) == "" &&
+		strings.TrimSpace(ship.City) == "" &&
+		strings.TrimSpace(ship.Street) == "" &&
+		strings.TrimSpace(ship.Country) == "" {
+		if legacyShipID != "" {
+			return orderdom.Order{}, fmt.Errorf("order %s: missing shippingSnapshot (legacy shippingAddressId=%q present)", doc.Ref.ID, legacyShipID)
+		}
+		return orderdom.Order{}, fmt.Errorf("order %s: missing shippingSnapshot", doc.Ref.ID)
+	}
+
+	if strings.TrimSpace(bill.Last4) == "" {
+		if legacyBillID != "" {
+			return orderdom.Order{}, fmt.Errorf("order %s: missing billingSnapshot.last4 (legacy billingAddressId=%q present)", doc.Ref.ID, legacyBillID)
+		}
+		return orderdom.Order{}, fmt.Errorf("order %s: missing billingSnapshot.last4", doc.Ref.ID)
+	}
+
 	return orderdom.Order{
-		ID:                doc.Ref.ID,
-		UserID:            getStr("userId", "user_id"),
-		CartID:            getStr("cartId", "cart_id"),
-		ShippingAddressID: getStr("shippingAddressId", "shipping_address_id"),
-		BillingAddressID:  getStr("billingAddressId", "billing_address_id"),
-		ListID:            getStr("listId", "list_id"),
-		Items:             getItems(),
-		InvoiceID:         getStr("invoiceId", "invoice_id"),
-		PaymentID:         getStr("paymentId", "payment_id"),
-		TransferedDate:    getTimePtr("transferedDate", "transfered_date"),
-		CreatedAt:         getTime("createdAt", "created_at"),
-		UpdatedAt:         getTime("updatedAt", "updated_at"),
-		UpdatedBy:         getStrPtr("updatedBy", "updated_by"),
+		ID:     doc.Ref.ID,
+		UserID: getStr("userId", "user_id"),
+		CartID: getStr("cartId", "cart_id"),
+
+		ShippingSnapshot: ship,
+		BillingSnapshot:  bill,
+
+		ListID:         getStr("listId", "list_id"),
+		Items:          getItems(),
+		InvoiceID:      getStr("invoiceId", "invoice_id"),
+		PaymentID:      getStr("paymentId", "payment_id"),
+		TransferedDate: getTimePtr("transferedDate", "transfered_date"),
+		CreatedAt:      getTime("createdAt", "created_at"),
+		UpdatedAt:      getTime("updatedAt", "updated_at"),
+		UpdatedBy:      getStrPtr("updatedBy", "updated_by"),
 	}, nil
 }
 
 // orderToDoc converts orderdom.Order into a Firestore-storable map.
 func orderToDoc(o orderdom.Order) map[string]any {
+	ship := map[string]any{
+		"zipCode": strings.TrimSpace(o.ShippingSnapshot.ZipCode),
+		"state":   strings.TrimSpace(o.ShippingSnapshot.State),
+		"city":    strings.TrimSpace(o.ShippingSnapshot.City),
+		"street":  strings.TrimSpace(o.ShippingSnapshot.Street),
+		"street2": strings.TrimSpace(o.ShippingSnapshot.Street2),
+		"country": strings.TrimSpace(o.ShippingSnapshot.Country),
+	}
+	bill := map[string]any{
+		"last4":          strings.TrimSpace(o.BillingSnapshot.Last4),
+		"cardHolderName": strings.TrimSpace(o.BillingSnapshot.CardHolderName),
+	}
+
 	m := map[string]any{
-		"userId":            strings.TrimSpace(o.UserID),
-		"cartId":            strings.TrimSpace(o.CartID),
-		"shippingAddressId": strings.TrimSpace(o.ShippingAddressID),
-		"billingAddressId":  strings.TrimSpace(o.BillingAddressID),
-		"listId":            strings.TrimSpace(o.ListID),
-		"invoiceId":         strings.TrimSpace(o.InvoiceID),
-		"paymentId":         strings.TrimSpace(o.PaymentID),
+		"userId": strings.TrimSpace(o.UserID),
+		"cartId": strings.TrimSpace(o.CartID),
+
+		// ✅ snapshots
+		"shippingSnapshot": ship,
+		"billingSnapshot":  bill,
+
+		"listId":    strings.TrimSpace(o.ListID),
+		"invoiceId": strings.TrimSpace(o.InvoiceID),
+		"paymentId": strings.TrimSpace(o.PaymentID),
 	}
 
 	if len(o.Items) > 0 {

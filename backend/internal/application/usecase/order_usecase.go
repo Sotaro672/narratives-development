@@ -1,3 +1,4 @@
+// backend\internal\application\usecase\order_usecase.go
 package usecase
 
 import (
@@ -79,15 +80,18 @@ func (u *OrderUsecase) ListByCursor(ctx context.Context, f OrderFilter, s common
 // =======================
 
 type CreateOrderInput struct {
-	ID                string
-	UserID            string
-	CartID            string
-	ShippingAddressID string
-	BillingAddressID  string
-	ListID            string
-	Items             []string // orderItem primary keys
-	InvoiceID         string
-	PaymentID         string
+	ID     string
+	UserID string
+	CartID string
+
+	// ✅ Snapshot (required)
+	ShippingSnapshot orderdom.ShippingSnapshot
+	BillingSnapshot  orderdom.BillingSnapshot // last4 + cardHolderName only
+
+	ListID    string
+	Items     []string // orderItem primary keys
+	InvoiceID string
+	PaymentID string
 
 	TransferedDate *time.Time // optional
 
@@ -103,12 +107,26 @@ func (u *OrderUsecase) Create(ctx context.Context, in CreateOrderInput) (orderdo
 	}
 	updatedAt := createdAt
 
+	// normalize snapshots (trim)
+	ship := orderdom.ShippingSnapshot{
+		ZipCode: strings.TrimSpace(in.ShippingSnapshot.ZipCode),
+		State:   strings.TrimSpace(in.ShippingSnapshot.State),
+		City:    strings.TrimSpace(in.ShippingSnapshot.City),
+		Street:  strings.TrimSpace(in.ShippingSnapshot.Street),
+		Street2: strings.TrimSpace(in.ShippingSnapshot.Street2),
+		Country: strings.TrimSpace(in.ShippingSnapshot.Country),
+	}
+	bill := orderdom.BillingSnapshot{
+		Last4:          strings.TrimSpace(in.BillingSnapshot.Last4),
+		CardHolderName: strings.TrimSpace(in.BillingSnapshot.CardHolderName),
+	}
+
 	o, err := orderdom.New(
 		strings.TrimSpace(in.ID),
 		strings.TrimSpace(in.UserID),
 		strings.TrimSpace(in.CartID),
-		strings.TrimSpace(in.ShippingAddressID),
-		strings.TrimSpace(in.BillingAddressID),
+		ship,
+		bill,
 		strings.TrimSpace(in.ListID),
 		in.Items,
 		strings.TrimSpace(in.InvoiceID),
@@ -127,15 +145,18 @@ func (u *OrderUsecase) Create(ctx context.Context, in CreateOrderInput) (orderdo
 type UpdateOrderInput struct {
 	ID string
 
-	UserID            *string
-	CartID            *string
-	ShippingAddressID *string
-	BillingAddressID  *string
-	ListID            *string
-	InvoiceID         *string
-	PaymentID         *string
-	TransferedDate    *time.Time
-	UpdatedBy         *string
+	UserID *string
+	CartID *string
+
+	// ✅ Snapshot updates
+	ShippingSnapshot *orderdom.ShippingSnapshot
+	BillingSnapshot  *orderdom.BillingSnapshot
+
+	ListID         *string
+	InvoiceID      *string
+	PaymentID      *string
+	TransferedDate *time.Time
+	UpdatedBy      *string
 
 	// Items operations (mutually composable)
 	ReplaceItems *[]string
@@ -164,16 +185,31 @@ func (u *OrderUsecase) Update(ctx context.Context, in UpdateOrderInput) (orderdo
 			return orderdom.Order{}, err
 		}
 	}
-	if in.ShippingAddressID != nil {
-		if err := o.UpdateShippingAddress(strings.TrimSpace(*in.ShippingAddressID), now); err != nil {
+
+	// ✅ snapshots
+	if in.ShippingSnapshot != nil {
+		s := orderdom.ShippingSnapshot{
+			ZipCode: strings.TrimSpace(in.ShippingSnapshot.ZipCode),
+			State:   strings.TrimSpace(in.ShippingSnapshot.State),
+			City:    strings.TrimSpace(in.ShippingSnapshot.City),
+			Street:  strings.TrimSpace(in.ShippingSnapshot.Street),
+			Street2: strings.TrimSpace(in.ShippingSnapshot.Street2),
+			Country: strings.TrimSpace(in.ShippingSnapshot.Country),
+		}
+		if err := o.UpdateShippingSnapshot(s, now); err != nil {
 			return orderdom.Order{}, err
 		}
 	}
-	if in.BillingAddressID != nil {
-		if err := o.UpdateBillingAddress(strings.TrimSpace(*in.BillingAddressID), now); err != nil {
+	if in.BillingSnapshot != nil {
+		b := orderdom.BillingSnapshot{
+			Last4:          strings.TrimSpace(in.BillingSnapshot.Last4),
+			CardHolderName: strings.TrimSpace(in.BillingSnapshot.CardHolderName),
+		}
+		if err := o.UpdateBillingSnapshot(b, now); err != nil {
 			return orderdom.Order{}, err
 		}
 	}
+
 	if in.ListID != nil {
 		o.ListID = strings.TrimSpace(*in.ListID)
 		if err := o.Touch(now); err != nil {

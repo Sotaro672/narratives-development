@@ -2,11 +2,12 @@
 package handler
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"net/http"
-	"reflect"
 	"strings"
+	"time"
 
 	usecase "narratives/internal/application/usecase"
 	orderdom "narratives/internal/domain/order"
@@ -61,21 +62,57 @@ func (h *OrderHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-// --- POST request shape (minimal) ---
+// --- POST request shape (snapshot-based) ---
+
+type shippingSnapshotRequest struct {
+	ZipCode string `json:"zipCode"`
+	State   string `json:"state"`
+	City    string `json:"city"`
+	Street  string `json:"street"`
+	Street2 string `json:"street2"`
+	Country string `json:"country"`
+	// 互換キーを増やしたい場合は handler ではなく frontend 側を揃える方が安全
+}
+
+type billingSnapshotRequest struct {
+	Last4 string `json:"last4"`
+
+	// JSON キー揺れ吸収（どれかが入っていればOK）
+	CardHolderName string `json:"cardHolderName"`
+	CardholderName string `json:"cardholderName"`
+	HolderName     string `json:"holderName"`
+}
 
 type createOrderRequest struct {
-	AvatarID string `json:"avatarId"`
+	ID string `json:"id"`
+
+	// ⚠️ セキュリティ上、注文の userId は原則「認証済み uid」から確定する。
+	// 互換のため残すが、uid が取れる場合は無視/一致チェックする。
+	UserID string `json:"userId"`
+
+	CartID string `json:"cartId"`
+
+	ShippingSnapshot shippingSnapshotRequest `json:"shippingSnapshot"`
+	BillingSnapshot  billingSnapshotRequest  `json:"billingSnapshot"`
+
+	ListID    string   `json:"listId"`
+	Items     []string `json:"items"`
+	InvoiceID string   `json:"invoiceId"`
+	PaymentID string   `json:"paymentId"`
+
+	// optional
+	TransferedDate *string `json:"transferedDate"` // RFC3339
+
+	UpdatedBy *string `json:"updatedBy"`
 }
 
 // POST /sns/orders
 //
-// ✅ NOTE:
-// OrderUsecase のシグネチャが未提示のため、reflect で一般的な候補にフォールバックします。
-// - Create(ctx, req)
-// - Create(ctx, avatarId)
-// - CreateFromCart(ctx, avatarId)
-// - Place(ctx, req) / Place(ctx, avatarId)
-// 上記が1つも無い場合は 501 を返します。
+// ✅ 住所/カードは order テーブルへスナップショット保存する前提。
+// - shippingSnapshot: 住所スナップショット（そのまま保存）
+// - billingSnapshot: last4 + cardHolderName のみ保存
+//
+// ✅ userId は「認証済み uid」から確定（可能なら req.userId は無視/一致チェック）。
 func (h *OrderHandler) post(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 
@@ -86,65 +123,146 @@ func (h *OrderHandler) post(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	aid := strings.TrimSpace(req.AvatarID)
-	if aid == "" {
-		w.WriteHeader(http.StatusBadRequest)
-		_ = json.NewEncoder(w).Encode(map[string]string{"error": "avatarId is required"})
-		return
-	}
+	trim := func(s string) string { return strings.TrimSpace(s) }
 
-	// --- Try calling usecase methods (reflection-based, compile-safe) ---
-	ucv := reflect.ValueOf(h.uc)
+	// --- Auth UID (best-effort) ---
+	authUID := trim(getAuthUID(ctx))
+	bodyUID := trim(req.UserID)
 
-	// candidates: func(context.Context, <arg>) (<any>, error)
-	candidates := []struct {
-		name string
-		arg  any
-	}{
-		{"Create", req},
-		{"Create", aid},
-		{"CreateFromCart", aid},
-		{"Place", req},
-		{"Place", aid},
-	}
-
-	for _, c := range candidates {
-		m := ucv.MethodByName(c.name)
-		if !m.IsValid() {
-			continue
-		}
-
-		out, ok := callUsecase2Ret(ctx, m, c.arg)
-		if !ok {
-			continue
-		}
-
-		// out: (result, err)
-		if err, _ := out[1].Interface().(error); err != nil {
-			writeOrderErr(w, err)
+	// uid が取れるなら uid を正として確定。body の userId がある場合は一致チェック。
+	// uid が取れない（開発/未配線）場合のみ body.userId を使用。
+	var userID string
+	switch {
+	case authUID != "":
+		userID = authUID
+		if bodyUID != "" && bodyUID != authUID {
+			w.WriteHeader(http.StatusForbidden)
+			_ = json.NewEncoder(w).Encode(map[string]string{"error": "userId_mismatch"})
 			return
 		}
-
-		// result can be any JSON-marshalable value
-		w.WriteHeader(http.StatusCreated)
-		_ = json.NewEncoder(w).Encode(out[0].Interface())
+	case bodyUID != "":
+		// 互換: 認証uidが取れない構成では body.userId を許容（本番では middleware で uid を入れること）
+		userID = bodyUID
+	default:
+		w.WriteHeader(http.StatusUnauthorized)
+		_ = json.NewEncoder(w).Encode(map[string]string{"error": "unauthorized"})
 		return
 	}
 
-	// no compatible method found
-	w.WriteHeader(http.StatusNotImplemented)
-	_ = json.NewEncoder(w).Encode(map[string]string{
-		"error": "order_create_not_implemented_in_usecase",
-	})
+	// required (domain validate で落ちる前に、最低限 handler で落とす)
+	cartID := trim(req.CartID)
+	listID := trim(req.ListID)
+	invoiceID := trim(req.InvoiceID)
+	paymentID := trim(req.PaymentID)
+
+	if cartID == "" {
+		w.WriteHeader(http.StatusBadRequest)
+		_ = json.NewEncoder(w).Encode(map[string]string{"error": "cartId is required"})
+		return
+	}
+	if listID == "" {
+		w.WriteHeader(http.StatusBadRequest)
+		_ = json.NewEncoder(w).Encode(map[string]string{"error": "listId is required"})
+		return
+	}
+	if invoiceID == "" {
+		w.WriteHeader(http.StatusBadRequest)
+		_ = json.NewEncoder(w).Encode(map[string]string{"error": "invoiceId is required"})
+		return
+	}
+	if paymentID == "" {
+		w.WriteHeader(http.StatusBadRequest)
+		_ = json.NewEncoder(w).Encode(map[string]string{"error": "paymentId is required"})
+		return
+	}
+	if len(req.Items) == 0 {
+		w.WriteHeader(http.StatusBadRequest)
+		_ = json.NewEncoder(w).Encode(map[string]string{"error": "items is required"})
+		return
+	}
+
+	ship := orderdom.ShippingSnapshot{
+		ZipCode: trim(req.ShippingSnapshot.ZipCode),
+		State:   trim(req.ShippingSnapshot.State),
+		City:    trim(req.ShippingSnapshot.City),
+		Street:  trim(req.ShippingSnapshot.Street),
+		Street2: trim(req.ShippingSnapshot.Street2),
+		Country: trim(req.ShippingSnapshot.Country),
+	}
+
+	// shipping は entity 側 validate に任せるが、最低限の空チェック
+	if ship.State == "" && ship.City == "" && ship.Street == "" && ship.Country == "" {
+		w.WriteHeader(http.StatusBadRequest)
+		_ = json.NewEncoder(w).Encode(map[string]string{"error": "shippingSnapshot is required"})
+		return
+	}
+
+	holder := trim(req.BillingSnapshot.CardHolderName)
+	if holder == "" {
+		holder = trim(req.BillingSnapshot.CardholderName)
+	}
+	if holder == "" {
+		holder = trim(req.BillingSnapshot.HolderName)
+	}
+
+	bill := orderdom.BillingSnapshot{
+		Last4:          trim(req.BillingSnapshot.Last4),
+		CardHolderName: holder,
+	}
+
+	// ✅ 仕様に合わせて last4 / cardHolderName を両方必須
+	if bill.Last4 == "" {
+		w.WriteHeader(http.StatusBadRequest)
+		_ = json.NewEncoder(w).Encode(map[string]string{"error": "billingSnapshot.last4 is required"})
+		return
+	}
+	if strings.TrimSpace(bill.CardHolderName) == "" {
+		w.WriteHeader(http.StatusBadRequest)
+		_ = json.NewEncoder(w).Encode(map[string]string{"error": "billingSnapshot.cardHolderName is required"})
+		return
+	}
+
+	// transferedDate (optional)
+	var td *time.Time
+	if req.TransferedDate != nil && trim(*req.TransferedDate) != "" {
+		t, err := time.Parse(time.RFC3339, trim(*req.TransferedDate))
+		if err != nil {
+			w.WriteHeader(http.StatusBadRequest)
+			_ = json.NewEncoder(w).Encode(map[string]string{"error": "invalid transferedDate (must be RFC3339)"})
+			return
+		}
+		utc := t.UTC()
+		td = &utc
+	}
+
+	in := usecase.CreateOrderInput{
+		ID:     trim(req.ID),
+		UserID: userID,
+		CartID: cartID,
+
+		ShippingSnapshot: ship,
+		BillingSnapshot:  bill,
+
+		ListID:    listID,
+		Items:     req.Items,
+		InvoiceID: invoiceID,
+		PaymentID: paymentID,
+
+		TransferedDate: td,
+		UpdatedBy:      req.UpdatedBy,
+	}
+
+	out, err := h.uc.Create(ctx, in)
+	if err != nil {
+		writeOrderErr(w, err)
+		return
+	}
+
+	w.WriteHeader(http.StatusCreated)
+	_ = json.NewEncoder(w).Encode(out)
 }
 
 // GET /sns/orders/{id}
-//
-// ✅ NOTE:
-// OrderUsecase のシグネチャが未提示のため、reflect で一般的な候補にフォールバックします。
-// - GetByID(ctx, id)
-// - Get(ctx, id)
-// 上記が1つも無い場合は 501 を返します。
 func (h *OrderHandler) get(w http.ResponseWriter, r *http.Request, id string) {
 	ctx := r.Context()
 
@@ -155,87 +273,93 @@ func (h *OrderHandler) get(w http.ResponseWriter, r *http.Request, id string) {
 		return
 	}
 
-	ucv := reflect.ValueOf(h.uc)
-
-	// candidates: func(context.Context, string) (<any>, error)
-	for _, name := range []string{"GetByID", "Get"} {
-		m := ucv.MethodByName(name)
-		if !m.IsValid() {
-			continue
-		}
-
-		out, ok := callUsecase2Ret(ctx, m, id)
-		if !ok {
-			continue
-		}
-
-		if err, _ := out[1].Interface().(error); err != nil {
-			writeOrderErr(w, err)
-			return
-		}
-
-		_ = json.NewEncoder(w).Encode(out[0].Interface())
+	out, err := h.uc.GetByID(ctx, id)
+	if err != nil {
+		writeOrderErr(w, err)
 		return
 	}
 
-	w.WriteHeader(http.StatusNotImplemented)
-	_ = json.NewEncoder(w).Encode(map[string]string{
-		"error": "order_get_not_implemented_in_usecase",
-	})
+	_ = json.NewEncoder(w).Encode(out)
 }
 
 // ------------------------------------------------------------
-// helpers
+// Auth helpers (best-effort)
 // ------------------------------------------------------------
 
-// callUsecase2Ret tries calling method(ctx, arg) and expects exactly 2 return values: (any, error).
-// It returns (out, true) if it could call with compatible args and shape.
-// It returns (nil, false) if signature mismatch.
-func callUsecase2Ret(ctx any, m reflect.Value, arg any) ([]reflect.Value, bool) {
-	mt := m.Type()
-	if mt.NumIn() != 2 || mt.NumOut() != 2 {
-		return nil, false
+// getAuthUID tries to read uid injected by middleware into request context.
+// Since this package should not depend on middleware internals, it checks common key patterns.
+func getAuthUID(ctx context.Context) string {
+	if ctx == nil {
+		return ""
 	}
 
-	// in[0] should be assignable from ctx
-	ctxv := reflect.ValueOf(ctx)
-	if !ctxv.Type().AssignableTo(mt.In(0)) {
-		// allow interface{}-like
-		if !ctxv.Type().ConvertibleTo(mt.In(0)) {
-			return nil, false
+	// Most common patterns in Go codebases:
+	// - ctx.Value("uid") / ctx.Value("userId")
+	// - typed keys (e.g., type ctxKey string) with the same strings
+	keys := []any{
+		"uid",
+		"userId",
+		"firebase_uid",
+		"firebaseUid",
+	}
+
+	for _, k := range keys {
+		if v := ctx.Value(k); v != nil {
+			if s, ok := v.(string); ok {
+				return strings.TrimSpace(s)
+			}
+			if sp, ok := v.(*string); ok && sp != nil {
+				return strings.TrimSpace(*sp)
+			}
 		}
-		ctxv = ctxv.Convert(mt.In(0))
 	}
 
-	argv := reflect.ValueOf(arg)
-	if !argv.IsValid() {
-		return nil, false
-	}
-	if !argv.Type().AssignableTo(mt.In(1)) {
-		if !argv.Type().ConvertibleTo(mt.In(1)) {
-			return nil, false
+	// Try a little harder: some middlewares use typed string keys.
+	type ctxKey string
+	for _, ks := range []string{"uid", "userId", "firebase_uid", "firebaseUid"} {
+		if v := ctx.Value(ctxKey(ks)); v != nil {
+			if s, ok := v.(string); ok {
+				return strings.TrimSpace(s)
+			}
+			if sp, ok := v.(*string); ok && sp != nil {
+				return strings.TrimSpace(*sp)
+			}
 		}
-		argv = argv.Convert(mt.In(1))
 	}
 
-	// out[1] should be error
-	errType := reflect.TypeOf((*error)(nil)).Elem()
-	if !mt.Out(1).Implements(errType) {
-		return nil, false
-	}
-
-	out := m.Call([]reflect.Value{ctxv, argv})
-	return out, true
+	return ""
 }
 
+// ------------------------------------------------------------
 // エラーハンドリング
+// ------------------------------------------------------------
+
 func writeOrderErr(w http.ResponseWriter, err error) {
 	code := http.StatusInternalServerError
 
-	// NotFound の sentinel が未確定なので、InvalidID だけ厳密に扱い、NotFound は文字列で寄せる
-	if errors.Is(err, orderdom.ErrInvalidID) {
+	// domain/usecase の sentinel がある前提で可能な限りマップ
+	switch {
+	case errors.Is(err, orderdom.ErrNotFound):
+		code = http.StatusNotFound
+	case errors.Is(err, orderdom.ErrConflict):
+		code = http.StatusConflict
+
+	// 代表的な「入力が悪い」系（増えてもここに足す）
+	case errors.Is(err, orderdom.ErrInvalidID),
+		errors.Is(err, orderdom.ErrInvalidUserID),
+		errors.Is(err, orderdom.ErrInvalidCartID),
+		errors.Is(err, orderdom.ErrInvalidListID),
+		errors.Is(err, orderdom.ErrInvalidItems),
+		errors.Is(err, orderdom.ErrInvalidInvoiceID),
+		errors.Is(err, orderdom.ErrInvalidPaymentID),
+		errors.Is(err, orderdom.ErrInvalidTransferredDate),
+		errors.Is(err, orderdom.ErrInvalidCreatedAt),
+		errors.Is(err, orderdom.ErrInvalidUpdatedAt),
+		errors.Is(err, orderdom.ErrInvalidUpdatedBy),
+		errors.Is(err, orderdom.ErrInvalidItemID):
 		code = http.StatusBadRequest
-	} else {
+	default:
+		// fallback: メッセージから not found を拾う（念のため）
 		msg := strings.ToLower(strings.TrimSpace(err.Error()))
 		if msg == "not_found" || strings.Contains(msg, "not found") || strings.Contains(msg, "not_found") {
 			code = http.StatusNotFound

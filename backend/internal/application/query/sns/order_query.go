@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	snsdto "narratives/internal/application/query/sns/dto"
+	appresolver "narratives/internal/application/resolver"
 
 	"cloud.google.com/go/firestore"
 	"google.golang.org/api/iterator"
@@ -20,12 +21,17 @@ import (
 // - uid -> avatarId (avatars where userId == uid)
 // - uid -> shippingAddress / billingAddress (best-effort; multiple shapes supported)
 // - avatarId -> cartItems (via SNSCartQuery; best-effort)
+// - ✅ userId -> fullName (via NameResolver.ResolveMemberName; best-effort)
 type SNSOrderQuery struct {
 	FS *firestore.Client
 
 	// ✅ optional: cart read-model
 	// - if nil, ResolveByUID will create SNSCartQuery(fs) and fetch cart items best-effort
 	CartQ *SNSCartQuery
+
+	// ✅ optional: name resolver (memberId -> "Last First")
+	// - if nil, FullName will be empty
+	NameResolver *appresolver.NameResolver
 
 	// collection names (override if your firestore schema differs)
 	AvatarsCol         string
@@ -43,6 +49,7 @@ func NewSNSOrderQuery(fs *firestore.Client) *SNSOrderQuery {
 	return &SNSOrderQuery{
 		FS:                 fs,
 		CartQ:              nil,
+		NameResolver:       nil,
 		AvatarsCol:         "avatars",
 		ShippingAddressCol: "shippingAddresses",
 		BillingAddressCol:  "billingAddresses",
@@ -62,6 +69,7 @@ type OrderContextDTO struct {
 	UID             string                        `json:"uid"`
 	AvatarID        string                        `json:"avatarId"`
 	UserID          string                        `json:"userId"`
+	FullName        string                        `json:"fullName,omitempty"` // ✅ NEW
 	ShippingAddress map[string]any                `json:"shippingAddress,omitempty"`
 	BillingAddress  map[string]any                `json:"billingAddress,omitempty"`
 	CartItems       map[string]snsdto.CartItemDTO `json:"cartItems,omitempty"`
@@ -116,10 +124,19 @@ func (q *SNSOrderQuery) ResolveByUID(ctx context.Context, uid string) (OrderCont
 	// ✅ cartItems（best-effort）
 	cartItems := q.fetchCartItemsBestEffort(ctx, avatarID)
 
+	// ✅ fullName（best-effort）
+	fullName := ""
+	if q.NameResolver != nil {
+		// NameResolver は memberId を想定。userId と一致していればここで解決できる。
+		// 一致しない運用の場合は空のまま（決済フローを止めない）。
+		fullName = strings.TrimSpace(q.NameResolver.ResolveMemberName(ctx, userID))
+	}
+
 	out := OrderContextDTO{
 		UID:             uid,
 		AvatarID:        avatarID,
 		UserID:          userID,
+		FullName:        fullName,
 		ShippingAddress: ship,
 		BillingAddress:  bill,
 		CartItems:       cartItems,

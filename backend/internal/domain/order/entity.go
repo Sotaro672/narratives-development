@@ -9,38 +9,61 @@ import (
 )
 
 // ========================================
+// Snapshot structs (stored in Order)
+// ========================================
+
+type ShippingSnapshot struct {
+	ZipCode string
+	State   string
+	City    string
+	Street  string
+	Street2 string
+	Country string
+}
+
+type BillingSnapshot struct {
+	Last4          string
+	CardHolderName string
+}
+
+// ========================================
 // Entity (mirror TS Order)
 // ========================================
 
 type Order struct {
-	ID                string
-	UserID            string
-	CartID            string
-	ShippingAddressID string
-	BillingAddressID  string
-	ListID            string
-	Items             []string `json:"items"`
-	InvoiceID         string
-	PaymentID         string
-	TransferedDate    *time.Time // note: mirrors TS: transferedDate
-	CreatedAt         time.Time
-	UpdatedAt         time.Time
-	UpdatedBy         *string
+	ID     string
+	UserID string
+	CartID string
+
+	// ✅ Snapshot (replace AddressID reference)
+	ShippingSnapshot ShippingSnapshot
+	BillingSnapshot  BillingSnapshot // last4 + cardHolderName only
+
+	ListID         string
+	Items          []string `json:"items"`
+	InvoiceID      string
+	PaymentID      string
+	TransferedDate *time.Time // note: mirrors TS: transferedDate
+	CreatedAt      time.Time
+	UpdatedAt      time.Time
+	UpdatedBy      *string
 }
 
 // OrderPatch represents partial updates to Order fields.
 // A nil field means "no change".
 type OrderPatch struct {
-	UserID            *string
-	CartID            *string
-	ShippingAddressID *string
-	BillingAddressID  *string
-	ListID            *string
-	Items             *[]string
-	InvoiceID         *string
-	PaymentID         *string
-	TransferedDate    *time.Time
-	UpdatedBy         *string
+	UserID *string
+	CartID *string
+
+	ShippingSnapshot *ShippingSnapshot
+	BillingSnapshot  *BillingSnapshot
+
+	ListID         *string
+	Items          *[]string
+	InvoiceID      *string
+	PaymentID      *string
+	TransferedDate *time.Time
+	UpdatedBy      *string
 }
 
 // ========================================
@@ -51,8 +74,8 @@ var (
 	ErrInvalidID              = errors.New("order: invalid id")
 	ErrInvalidUserID          = errors.New("order: invalid userId")
 	ErrInvalidCartID          = errors.New("order: invalid cartId")
-	ErrInvalidShippingAddress = errors.New("order: invalid shippingAddressId")
-	ErrInvalidBillingAddress  = errors.New("order: invalid billingAddressId")
+	ErrInvalidShippingAddress = errors.New("order: invalid shippingSnapshot") // keep name for easier migration
+	ErrInvalidBillingAddress  = errors.New("order: invalid billingSnapshot")  // keep name for easier migration
 	ErrInvalidListID          = errors.New("order: invalid listId")
 	ErrInvalidItems           = errors.New("order: invalid items")
 	ErrInvalidInvoiceID       = errors.New("order: invalid invoiceId")
@@ -80,8 +103,8 @@ func New(
 	id string,
 	userID string,
 	cartID string,
-	shippingAddressID string,
-	billingAddressID string,
+	shippingSnapshot ShippingSnapshot,
+	billingSnapshot BillingSnapshot,
 	listID string,
 	items []string,
 	invoiceID string,
@@ -92,19 +115,21 @@ func New(
 	updatedBy *string,
 ) (Order, error) {
 	o := Order{
-		ID:                strings.TrimSpace(id),
-		UserID:            strings.TrimSpace(userID),
-		CartID:            strings.TrimSpace(cartID),
-		ShippingAddressID: strings.TrimSpace(shippingAddressID),
-		BillingAddressID:  strings.TrimSpace(billingAddressID),
-		ListID:            strings.TrimSpace(listID),
-		Items:             dedupTrim(items),
-		InvoiceID:         strings.TrimSpace(invoiceID),
-		PaymentID:         strings.TrimSpace(paymentID),
-		TransferedDate:    normalizeTimePtr(transferedDate),
-		CreatedAt:         createdAt.UTC(),
-		UpdatedAt:         updatedAt.UTC(),
-		UpdatedBy:         normalizePtr(updatedBy),
+		ID:     strings.TrimSpace(id),
+		UserID: strings.TrimSpace(userID),
+		CartID: strings.TrimSpace(cartID),
+
+		ShippingSnapshot: normalizeShippingSnapshot(shippingSnapshot),
+		BillingSnapshot:  normalizeBillingSnapshot(billingSnapshot),
+
+		ListID:         strings.TrimSpace(listID),
+		Items:          dedupTrim(items),
+		InvoiceID:      strings.TrimSpace(invoiceID),
+		PaymentID:      strings.TrimSpace(paymentID),
+		TransferedDate: normalizeTimePtr(transferedDate),
+		CreatedAt:      createdAt.UTC(),
+		UpdatedAt:      updatedAt.UTC(),
+		UpdatedBy:      normalizePtr(updatedBy),
 	}
 	if err := o.validate(); err != nil {
 		return Order{}, err
@@ -116,8 +141,8 @@ func NewFromStringTimes(
 	id string,
 	userID string,
 	cartID string,
-	shippingAddressID string,
-	billingAddressID string,
+	shippingSnapshot ShippingSnapshot,
+	billingSnapshot BillingSnapshot,
 	listID string,
 	items []string,
 	invoiceID string,
@@ -149,8 +174,8 @@ func NewFromStringTimes(
 		id,
 		userID,
 		cartID,
-		shippingAddressID,
-		billingAddressID,
+		shippingSnapshot,
+		billingSnapshot,
 		listID,
 		items,
 		invoiceID,
@@ -224,21 +249,22 @@ func (o *Order) RemoveItem(itemID string, now time.Time) error {
 	return o.Touch(now)
 }
 
-func (o *Order) UpdateShippingAddress(shippingID string, now time.Time) error {
-	shippingID = strings.TrimSpace(shippingID)
-	if shippingID == "" {
-		return ErrInvalidShippingAddress
+// ✅ Replace AddressID update with Snapshot update
+func (o *Order) UpdateShippingSnapshot(s ShippingSnapshot, now time.Time) error {
+	s = normalizeShippingSnapshot(s)
+	if err := validateShippingSnapshot(s); err != nil {
+		return err
 	}
-	o.ShippingAddressID = shippingID
+	o.ShippingSnapshot = s
 	return o.Touch(now)
 }
 
-func (o *Order) UpdateBillingAddress(billingID string, now time.Time) error {
-	billingID = strings.TrimSpace(billingID)
-	if billingID == "" {
-		return ErrInvalidBillingAddress
+func (o *Order) UpdateBillingSnapshot(b BillingSnapshot, now time.Time) error {
+	b = normalizeBillingSnapshot(b)
+	if err := validateBillingSnapshot(b); err != nil {
+		return err
 	}
-	o.BillingAddressID = billingID
+	o.BillingSnapshot = b
 	return o.Touch(now)
 }
 
@@ -274,11 +300,11 @@ func (o Order) validate() error {
 	if o.CartID == "" {
 		return ErrInvalidCartID
 	}
-	if o.ShippingAddressID == "" {
-		return ErrInvalidShippingAddress
+	if err := validateShippingSnapshot(o.ShippingSnapshot); err != nil {
+		return err
 	}
-	if o.BillingAddressID == "" {
-		return ErrInvalidBillingAddress
+	if err := validateBillingSnapshot(o.BillingSnapshot); err != nil {
+		return err
 	}
 	if o.ListID == "" {
 		return ErrInvalidListID
@@ -318,9 +344,55 @@ func (o Order) validate() error {
 	return nil
 }
 
+func validateShippingSnapshot(s ShippingSnapshot) error {
+	// 必須（あなたのUI/運用前提に合わせて最小限を必須化）
+	if strings.TrimSpace(s.State) == "" {
+		return ErrInvalidShippingAddress
+	}
+	if strings.TrimSpace(s.City) == "" {
+		return ErrInvalidShippingAddress
+	}
+	if strings.TrimSpace(s.Street) == "" {
+		return ErrInvalidShippingAddress
+	}
+	if strings.TrimSpace(s.Country) == "" {
+		return ErrInvalidShippingAddress
+	}
+	// ZipCode/Street2 は任意（国によってはZipがない/運用で省略あり得る）
+	return nil
+}
+
+func validateBillingSnapshot(b BillingSnapshot) error {
+	// ✅ last4 は必須（billingAddressID 必須だったのと同等の強さ）
+	// cardHolderName は任意（空なら空で良い）
+	last4 := strings.TrimSpace(b.Last4)
+	if last4 == "" {
+		return ErrInvalidBillingAddress
+	}
+	// "4桁" 以外を弾きたいならここで追加
+	// if len(last4) != 4 || !isDigits(last4) { return ErrInvalidBillingAddress }
+	return nil
+}
+
 // ========================================
 // Helpers
 // ========================================
+
+func normalizeShippingSnapshot(s ShippingSnapshot) ShippingSnapshot {
+	s.ZipCode = strings.TrimSpace(s.ZipCode)
+	s.State = strings.TrimSpace(s.State)
+	s.City = strings.TrimSpace(s.City)
+	s.Street = strings.TrimSpace(s.Street)
+	s.Street2 = strings.TrimSpace(s.Street2)
+	s.Country = strings.TrimSpace(s.Country)
+	return s
+}
+
+func normalizeBillingSnapshot(b BillingSnapshot) BillingSnapshot {
+	b.Last4 = strings.TrimSpace(b.Last4)
+	b.CardHolderName = strings.TrimSpace(b.CardHolderName)
+	return b
+}
 
 func normalizePtr(p *string) *string {
 	if p == nil {

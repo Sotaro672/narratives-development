@@ -11,14 +11,19 @@ import (
 // Filter aligns with entity fields (no LastUpdate).
 type Filter struct {
 	// Exact matches
-	ID                string
-	UserID            string
-	CartID            string
-	ShippingAddressID string
-	BillingAddressID  string
-	ListID            string
-	InvoiceID         string
-	PaymentID         string
+	ID     string
+	UserID string
+	CartID string
+
+	// ✅ Snapshot-based (replaces ShippingAddressID / BillingAddressID)
+	// If nil, it means "no filter".
+	// NOTE: Adapters may choose to support only some fields (e.g., BillingSnapshot.Last4 only).
+	ShippingSnapshot *ShippingSnapshot
+	BillingSnapshot  *BillingSnapshot
+
+	ListID    string
+	InvoiceID string
+	PaymentID string
 
 	// Time ranges
 	CreatedFrom    *time.Time
