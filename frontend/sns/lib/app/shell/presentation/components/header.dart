@@ -81,7 +81,7 @@ class AppHeader extends StatelessWidget {
                   ),
                 ),
                 child: Text(
-                  '← Back',
+                  '←',
                   style: Theme.of(context).textTheme.titleMedium,
                 ),
               )

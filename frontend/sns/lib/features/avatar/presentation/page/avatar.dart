@@ -1,8 +1,11 @@
 // frontend/sns/lib/features/avatar/presentation/page/avatar.dart
+import 'dart:convert';
+
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../../../app/routing/routes.dart';
 import '../../../wallet/infrastructure/wallet_repository_http.dart';
 
 class _ProfileCounts {
@@ -18,6 +21,8 @@ class _ProfileCounts {
   final int followingCount;
   final int tokenCount;
 }
+
+enum _ProfileTab { posts, tokens }
 
 class AvatarPage extends StatefulWidget {
   const AvatarPage({super.key, this.from});
@@ -38,15 +43,21 @@ class _AvatarPageState extends State<AvatarPage> {
   bool _normalizedUrlOnce = false;
   bool _returnedToFromOnce = false;
 
+  _ProfileTab _tab = _ProfileTab.posts;
+
   String s(String? v) => (v ?? '').trim();
+
+  /// ✅ `from` は URL で壊れやすい（Hash + `?` `&` 混在）ので base64url で安全に運ぶ
+  String _encodeFrom(String raw) {
+    final t = raw.trim();
+    if (t.isEmpty) return '';
+    return base64UrlEncode(utf8.encode(t));
+  }
 
   @override
   void initState() {
     super.initState();
-    _walletRepo = WalletRepositoryHttp(
-      // apiBase: 'https://narratives-backend-....run.app', // 必要なら注入
-      // logger: (m) => debugPrint(m),
-    );
+    _walletRepo = WalletRepositoryHttp();
   }
 
   @override
@@ -55,14 +66,9 @@ class _AvatarPageState extends State<AvatarPage> {
     super.dispose();
   }
 
-  String _displayNameFor(User u) {
-    final dn = s(u.displayName);
-    if (dn.isNotEmpty) return dn;
-
-    final email = s(u.email);
-    if (email.isNotEmpty) return email.split('@').first;
-
-    return 'My Profile';
+  // Instagram っぽい「bio」表示欄（現状データ未接続なので placeholder）
+  String _profileBioFor(User u) {
+    return '（プロフィール未設定）';
   }
 
   String _currentUri(BuildContext context) {
@@ -94,7 +100,7 @@ class _AvatarPageState extends State<AvatarPage> {
     final uri = state.uri;
 
     // いまのURLに avatarId があれば何もしない
-    final current = s(uri.queryParameters['avatarId']);
+    final current = s(uri.queryParameters[AppQueryKey.avatarId]);
     if (current == avatarId) {
       _normalizedUrlOnce = true;
       return;
@@ -107,7 +113,7 @@ class _AvatarPageState extends State<AvatarPage> {
       if (!mounted) return;
 
       final fixed = <String, String>{...uri.queryParameters};
-      fixed['avatarId'] = avatarId;
+      fixed[AppQueryKey.avatarId] = avatarId;
 
       // path は現状のまま（/avatar）
       final next = uri.replace(queryParameters: fixed);
@@ -121,7 +127,9 @@ class _AvatarPageState extends State<AvatarPage> {
     if (avatarId.isEmpty) return;
 
     // intent=requireAvatarId のときだけ自動で戻す（通常のプロフィール閲覧では勝手に遷移しない）
-    final intent = s(GoRouterState.of(context).uri.queryParameters['intent']);
+    final intent = s(
+      GoRouterState.of(context).uri.queryParameters[AppQueryKey.intent],
+    );
     if (intent != 'requireAvatarId') return;
 
     final rawFrom = s(widget.from);
@@ -134,7 +142,9 @@ class _AvatarPageState extends State<AvatarPage> {
     if (fromUri.path != '/cart') return;
 
     final qp = <String, String>{...fromUri.queryParameters};
-    qp['avatarId'] = s(qp['avatarId']).isNotEmpty ? qp['avatarId']! : avatarId;
+    qp[AppQueryKey.avatarId] = s(qp[AppQueryKey.avatarId]).isNotEmpty
+        ? qp[AppQueryKey.avatarId]!
+        : avatarId;
 
     final fixedFrom = fromUri.replace(queryParameters: qp).toString();
 
@@ -144,6 +154,20 @@ class _AvatarPageState extends State<AvatarPage> {
       if (!mounted) return;
       context.go(fixedFrom);
     });
+  }
+
+  void _goToAvatarEdit(BuildContext context) {
+    final current = GoRouterState.of(context).uri;
+
+    final qp = <String, String>{
+      AppQueryKey.from: _encodeFrom(current.toString()),
+    };
+
+    final aid = s(current.queryParameters[AppQueryKey.avatarId]);
+    if (aid.isNotEmpty) qp[AppQueryKey.avatarId] = aid;
+
+    final uri = Uri(path: AppRoutePath.avatarEdit, queryParameters: qp);
+    context.go(uri.toString());
   }
 
   Widget _statItem(BuildContext context, String label, int value) {
@@ -163,6 +187,82 @@ class _AvatarPageState extends State<AvatarPage> {
             style: Theme.of(context).textTheme.bodySmall?.copyWith(
               color: Theme.of(context).colorScheme.onSurfaceVariant,
             ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _profileBioBox(BuildContext context, String bio) {
+    final cs = Theme.of(context).colorScheme;
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+      decoration: BoxDecoration(
+        color: cs.surfaceContainerHighest,
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Text(
+        bio.isEmpty ? '（プロフィール未設定）' : bio,
+        style: Theme.of(
+          context,
+        ).textTheme.bodyMedium?.copyWith(color: cs.onSurfaceVariant),
+      ),
+    );
+  }
+
+  Widget _tabBar(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+
+    Widget tabButton({
+      required _ProfileTab tab,
+      required IconData icon,
+      required String semanticsLabel,
+    }) {
+      final selected = _tab == tab;
+
+      return Expanded(
+        child: InkWell(
+          onTap: () {
+            if (_tab == tab) return;
+            setState(() => _tab = tab);
+          },
+          child: Padding(
+            padding: const EdgeInsets.symmetric(vertical: 10),
+            child: Icon(
+              icon,
+              size: 22,
+              color: selected ? cs.onSurface : cs.onSurfaceVariant,
+              semanticLabel: semanticsLabel,
+            ),
+          ),
+        ),
+      );
+    }
+
+    return Container(
+      decoration: BoxDecoration(
+        border: Border(
+          top: BorderSide(color: cs.outlineVariant.withValues(alpha: 0.6)),
+          bottom: BorderSide(color: cs.outlineVariant.withValues(alpha: 0.6)),
+        ),
+      ),
+      child: Row(
+        children: [
+          tabButton(
+            tab: _ProfileTab.posts,
+            icon: Icons.grid_on,
+            semanticsLabel: 'Posts',
+          ),
+          Container(
+            width: 1,
+            height: 24,
+            color: cs.outlineVariant.withValues(alpha: 0.6),
+          ),
+          tabButton(
+            tab: _ProfileTab.tokens,
+            icon: Icons.local_offer_outlined,
+            semanticsLabel: 'Tokens',
           ),
         ],
       ),
@@ -197,6 +297,23 @@ class _AvatarPageState extends State<AvatarPage> {
     );
   }
 
+  Widget _postsPlaceholder(BuildContext context) {
+    return Container(
+      height: 240,
+      alignment: Alignment.center,
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(12),
+        color: Theme.of(context).colorScheme.surfaceContainerHighest,
+      ),
+      child: Text(
+        '（次）ここに投稿グリッドを表示します',
+        style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+          color: Theme.of(context).colorScheme.onSurfaceVariant,
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return StreamBuilder<User?>(
@@ -208,7 +325,7 @@ class _AvatarPageState extends State<AvatarPage> {
           final backTo = _effectiveFrom(context);
           final loginUri = Uri(
             path: '/login',
-            queryParameters: {'from': backTo},
+            queryParameters: {AppQueryKey.from: backTo},
           );
           return Center(
             child: ConstrainedBox(
@@ -255,166 +372,140 @@ class _AvatarPageState extends State<AvatarPage> {
         _maybeReturnToFrom(context, avatarId);
 
         final photoUrl = s(user.photoURL);
-        final name = _displayNameFor(user);
+        final bio = _profileBioFor(user);
 
         return Center(
           child: ConstrainedBox(
             constraints: const BoxConstraints(maxWidth: 560),
             child: SingleChildScrollView(
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  Row(
-                    crossAxisAlignment: CrossAxisAlignment.center,
+              child: FutureBuilder<WalletDTO?>(
+                future: _walletFuture,
+                builder: (context, wsnap) {
+                  final wallet = wsnap.data;
+                  final tokens = wallet?.tokens ?? const <String>[];
+
+                  // 現状は未接続のため 0（AvatarState 連携時に置換）
+                  final postCount = 0;
+                  final followerCount = 0;
+                  final followingCount = 0;
+
+                  final counts = _ProfileCounts(
+                    postCount: postCount,
+                    followerCount: followerCount,
+                    followingCount: followingCount,
+                    tokenCount: tokens.length,
+                  );
+
+                  return Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
-                      CircleAvatar(
-                        radius: 44,
-                        backgroundColor: Theme.of(
-                          context,
-                        ).colorScheme.surfaceContainerHighest,
-                        backgroundImage: photoUrl.isNotEmpty
-                            ? NetworkImage(photoUrl)
-                            : null,
-                        child: photoUrl.isEmpty
-                            ? Icon(
-                                Icons.person,
-                                size: 44,
-                                color: Theme.of(
-                                  context,
-                                ).colorScheme.onSurfaceVariant,
-                              )
-                            : null,
-                      ),
-                      const SizedBox(width: 16),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              name,
-                              style: Theme.of(context).textTheme.titleLarge,
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                            ),
-                            const SizedBox(height: 6),
-                            Text(
-                              'Profile',
-                              style: Theme.of(context).textTheme.bodySmall
-                                  ?.copyWith(
-                                    color: Theme.of(
-                                      context,
-                                    ).colorScheme.onSurfaceVariant,
-                                  ),
-                            ),
-                            const SizedBox(height: 6),
-                            Text(
-                              'avatarId: $avatarId',
-                              style: Theme.of(context).textTheme.bodySmall
-                                  ?.copyWith(
-                                    color: Theme.of(
-                                      context,
-                                    ).colorScheme.onSurfaceVariant,
-                                  ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 14),
-
-                  FutureBuilder<WalletDTO?>(
-                    future: _walletFuture,
-                    builder: (context, wsnap) {
-                      final wallet = wsnap.data;
-                      final tokens = wallet?.tokens ?? const <String>[];
-
-                      // 現状は未接続のため 0（AvatarState 連携時に置換）
-                      final postCount = 0;
-                      final followerCount = 0;
-                      final followingCount = 0;
-
-                      final counts = _ProfileCounts(
-                        postCount: postCount,
-                        followerCount: followerCount,
-                        followingCount: followingCount,
-                        tokenCount: tokens.length,
-                      );
-
-                      return Row(
+                      // ✅ アバター + 右側に stats
+                      Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          _statItem(context, '投稿', counts.postCount),
-                          _statItem(context, 'フォロワー', counts.followerCount),
-                          _statItem(context, 'フォロー中', counts.followingCount),
-                          _statItem(context, 'トークン', counts.tokenCount),
+                          // left: avatar
+                          CircleAvatar(
+                            radius: 44,
+                            backgroundColor: Theme.of(
+                              context,
+                            ).colorScheme.surfaceContainerHighest,
+                            backgroundImage: photoUrl.isNotEmpty
+                                ? NetworkImage(photoUrl)
+                                : null,
+                            child: photoUrl.isEmpty
+                                ? Icon(
+                                    Icons.person,
+                                    size: 44,
+                                    color: Theme.of(
+                                      context,
+                                    ).colorScheme.onSurfaceVariant,
+                                  )
+                                : null,
+                          ),
+                          const SizedBox(width: 16),
+
+                          // right: stats (2 rows)
+                          Expanded(
+                            child: Column(
+                              children: [
+                                Row(
+                                  children: [
+                                    _statItem(context, '投稿', counts.postCount),
+                                    _statItem(
+                                      context,
+                                      'トークン',
+                                      counts.tokenCount,
+                                    ),
+                                  ],
+                                ),
+                                const SizedBox(height: 8),
+                                Row(
+                                  children: [
+                                    _statItem(
+                                      context,
+                                      'フォロー中',
+                                      counts.followingCount,
+                                    ),
+                                    _statItem(
+                                      context,
+                                      'フォロワー',
+                                      counts.followerCount,
+                                    ),
+                                  ],
+                                ),
+                              ],
+                            ),
+                          ),
                         ],
-                      );
-                    },
-                  ),
-
-                  const SizedBox(height: 12),
-                  const Divider(height: 1),
-                  const SizedBox(height: 12),
-
-                  Text(
-                    'Tokens',
-                    style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                      fontWeight: FontWeight.w700,
-                    ),
-                  ),
-                  const SizedBox(height: 8),
-
-                  FutureBuilder<WalletDTO?>(
-                    future: _walletFuture,
-                    builder: (context, wsnap) {
-                      if (wsnap.connectionState == ConnectionState.waiting) {
-                        return const Padding(
-                          padding: EdgeInsets.symmetric(vertical: 8),
-                          child: LinearProgressIndicator(),
-                        );
-                      }
-                      if (wsnap.hasError) {
-                        return Text(
-                          'トークンの取得に失敗しました: ${wsnap.error}',
-                          style: Theme.of(context).textTheme.bodyMedium
-                              ?.copyWith(
-                                color: Theme.of(context).colorScheme.error,
-                              ),
-                        );
-                      }
-                      final wallet = wsnap.data;
-                      final tokens = wallet?.tokens ?? const <String>[];
-                      return _tokenChips(context, tokens);
-                    },
-                  ),
-
-                  const SizedBox(height: 18),
-
-                  Text(
-                    'Posts',
-                    style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                      fontWeight: FontWeight.w700,
-                    ),
-                  ),
-                  const SizedBox(height: 8),
-                  Container(
-                    height: 180,
-                    alignment: Alignment.center,
-                    decoration: BoxDecoration(
-                      borderRadius: BorderRadius.circular(12),
-                      color: Theme.of(
-                        context,
-                      ).colorScheme.surfaceContainerHighest,
-                    ),
-                    child: Text(
-                      '（次）ここに投稿グリッドを表示します',
-                      style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                        color: Theme.of(context).colorScheme.onSurfaceVariant,
                       ),
-                    ),
-                  ),
-                ],
+
+                      const SizedBox(height: 10),
+
+                      // ✅ Profile box + Edit icon button (same row)
+                      Row(
+                        crossAxisAlignment: CrossAxisAlignment.center,
+                        children: [
+                          const SizedBox(width: 88 + 16), // avatar幅 + gap
+                          Expanded(child: _profileBioBox(context, bio)),
+                          const SizedBox(width: 10),
+                          // ✅ 文言なし（アイコンのみ）
+                          IconButton(
+                            tooltip: 'Edit Avatar',
+                            onPressed: () => _goToAvatarEdit(context),
+                            icon: const Icon(Icons.edit_outlined),
+                          ),
+                        ],
+                      ),
+
+                      const SizedBox(height: 14),
+
+                      _tabBar(context),
+
+                      const SizedBox(height: 12),
+
+                      if (_tab == _ProfileTab.tokens) ...[
+                        if (wsnap.connectionState == ConnectionState.waiting)
+                          const Padding(
+                            padding: EdgeInsets.symmetric(vertical: 8),
+                            child: LinearProgressIndicator(),
+                          )
+                        else if (wsnap.hasError)
+                          Text(
+                            'トークンの取得に失敗しました: ${wsnap.error}',
+                            style: Theme.of(context).textTheme.bodyMedium
+                                ?.copyWith(
+                                  color: Theme.of(context).colorScheme.error,
+                                ),
+                          )
+                        else
+                          _tokenChips(context, tokens),
+                      ] else ...[
+                        _postsPlaceholder(context),
+                      ],
+                    ],
+                  );
+                },
               ),
             ),
           ),

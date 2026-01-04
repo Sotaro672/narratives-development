@@ -1,17 +1,19 @@
-//frontend\sns\lib\app\routing\router.dart
+// frontend/sns/lib/app/routing/router.dart
 import 'dart:async';
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:firebase_auth/firebase_auth.dart';
-import 'package:http/http.dart' as http;
 
 import '../shell/presentation/layout/app_shell.dart';
 import '../shell/presentation/components/footer.dart';
 
 // ✅ route defs
 import 'routes.dart';
+
+// ✅ redirect / AvatarIdStore
+import 'navigation.dart';
 
 // pages
 import '../../features/list/presentation/page/list.dart';
@@ -56,109 +58,6 @@ String _decodeFrom(String? v) {
   }
 }
 
-/// ------------------------------------------------------------
-/// ✅ avatarId の “現在値” をアプリ側で保持（URLに無い時の補完に使う）
-class AvatarIdStore extends ChangeNotifier {
-  AvatarIdStore._();
-  static final AvatarIdStore I = AvatarIdStore._();
-
-  String _avatarId = '';
-  String get avatarId => _avatarId;
-
-  // ✅ 1ユーザーにつき1つの in-flight 解決（redirect 連打で多重に叩かない）
-  Future<String?>? _inflight;
-
-  void set(String v) {
-    final next = v.trim();
-    if (next.isEmpty) return;
-    if (next == _avatarId) return;
-    _avatarId = next;
-    notifyListeners();
-  }
-
-  void clear() {
-    if (_avatarId.isEmpty) return;
-    _avatarId = '';
-    _inflight = null;
-    notifyListeners();
-  }
-
-  /// ✅ uid -> avatarId をバックエンドで解決
-  Future<String?> resolveAvatarIdByUserId(String userId) {
-    final uid = userId.trim();
-    if (uid.isEmpty) return Future.value(null);
-
-    // 既に確定しているならそれを返す
-    if (_avatarId.trim().isNotEmpty) {
-      return Future.value(_avatarId.trim());
-    }
-
-    // in-flight があればそれを待つ
-    final running = _inflight;
-    if (running != null) return running;
-
-    final f = _resolve(uid);
-    _inflight = f;
-    return f;
-  }
-
-  Future<String?> _resolve(String userId) async {
-    try {
-      final base = _apiBase();
-      if (base.isEmpty) return null;
-
-      final uri = Uri.parse(
-        base,
-      ).replace(path: '/sns/avatars', queryParameters: {'userId': userId});
-
-      // ✅ 可能なら Authorization を付ける
-      final headers = <String, String>{
-        'Content-Type': 'application/json',
-        'Accept': 'application/json',
-      };
-      try {
-        final u = FirebaseAuth.instance.currentUser;
-        if (u != null) {
-          final raw = await u.getIdToken(false);
-          final token = (raw ?? '').trim();
-          if (token.isNotEmpty) {
-            headers['Authorization'] = 'Bearer $token';
-          }
-        }
-      } catch (_) {}
-
-      final res = await http.get(uri, headers: headers);
-
-      if (res.statusCode == 404) return null;
-      if (res.statusCode < 200 || res.statusCode >= 300) {
-        return null;
-      }
-
-      final jsonBody = jsonDecode(res.body);
-      if (jsonBody is Map<String, dynamic>) {
-        final id = (jsonBody['id'] ?? jsonBody['avatarId'] ?? '')
-            .toString()
-            .trim();
-        if (id.isNotEmpty) {
-          set(id);
-          return id;
-        }
-      }
-      return null;
-    } catch (_) {
-      return null;
-    } finally {
-      _inflight = null;
-    }
-  }
-}
-
-/// ✅ API_BASE を読む（既存設計に合わせる）
-String _apiBase() {
-  const v = String.fromEnvironment('API_BASE');
-  return v.trim();
-}
-
 GoRouter buildRouter({required bool firebaseReady, Object? initError}) {
   if (firebaseReady) return buildAppRouter();
   return buildPublicOnlyRouter(
@@ -174,94 +73,7 @@ GoRouter buildAppRouter() {
   return GoRouter(
     initialLocation: AppRoutePath.home,
     refreshListenable: Listenable.merge([authRefresh, AvatarIdStore.I]),
-    redirect: (context, state) async {
-      final user = FirebaseAuth.instance.currentUser;
-      final isLoggedIn = user != null;
-
-      final path = state.uri.path;
-      final qp = state.uri.queryParameters;
-
-      final isLoginRoute = path == AppRoutePath.login;
-      final isCreateAccountRoute = path == AppRoutePath.createAccount;
-
-      // ✅ サインイン中でも avatarId を要求しないページ
-      final exemptForAvatarId = <String>{
-        AppRoutePath.login,
-        AppRoutePath.createAccount,
-        AppRoutePath.shippingAddress,
-        AppRoutePath.billingAddress,
-        AppRoutePath.avatarCreate,
-      };
-
-      if (!isLoggedIn) {
-        AvatarIdStore.I.clear();
-        return null;
-      }
-
-      // ✅ login/createAccount -> サインイン後は from or home に戻す
-      // ❌ avatarId 未解決でも avatar_create には飛ばさない
-      if (isLoggedIn && (isLoginRoute || isCreateAccountRoute)) {
-        final rawFromEncoded = (qp[AppQueryKey.from] ?? '').trim();
-        final rawFrom = _decodeFrom(rawFromEncoded);
-        final uid = user.uid.trim();
-
-        // best-effort で avatarId は解決して store に入れておく（あれば）
-        final resolved = await _ensureAvatarIdResolved(state, uid);
-
-        if (rawFrom.isNotEmpty) {
-          // avatarId が取れた場合のみ付与
-          final fixed = resolved.isNotEmpty
-              ? _withAvatarId(rawFrom, resolved)
-              : rawFrom;
-
-          // from が login を指していたら home へ
-          if (Uri.tryParse(fixed)?.path == AppRoutePath.login) {
-            return resolved.isNotEmpty
-                ? Uri(
-                    path: AppRoutePath.home,
-                    queryParameters: {AppQueryKey.avatarId: resolved},
-                  ).toString()
-                : AppRoutePath.home;
-          }
-          return fixed;
-        }
-
-        // from が無ければ home
-        return resolved.isNotEmpty
-            ? Uri(
-                path: AppRoutePath.home,
-                queryParameters: {AppQueryKey.avatarId: resolved},
-              ).toString()
-            : AppRoutePath.home;
-      }
-
-      // ✅ サインイン後：原則「全ページ URL に avatarId を必ず持たせる」
-      // ❌ avatarId 未解決でも avatar_create には飛ばさない（今回の要件）
-      final uid = user.uid.trim();
-
-      if (exemptForAvatarId.contains(path)) {
-        // exempt は best-effort で解決だけ試す（あれば store に入る）
-        await _ensureAvatarIdResolved(state, uid);
-        return null;
-      }
-
-      final resolved = await _ensureAvatarIdResolved(state, uid);
-      if (resolved.isEmpty) {
-        // ✅ ここで avatar_create へリダイレクトしない
-        return null;
-      }
-
-      final qpId = (qp[AppQueryKey.avatarId] ?? '').trim();
-      if (qpId != resolved) {
-        final fixed = Map<String, String>.from(qp);
-        fixed[AppQueryKey.avatarId] = resolved;
-
-        final next = state.uri.replace(queryParameters: fixed).toString();
-        if (next != state.uri.toString()) return next;
-      }
-
-      return null;
-    },
+    redirect: appRedirect,
     routes: _routes(firebaseReady: true),
     errorBuilder: (context, state) => AppShell(
       title: 'Not Found',
@@ -271,34 +83,6 @@ GoRouter buildAppRouter() {
       child: Center(child: Text(state.error?.toString() ?? 'Not Found')),
     ),
   );
-}
-
-Future<String> _ensureAvatarIdResolved(GoRouterState state, String uid) async {
-  final qp = state.uri.queryParameters;
-
-  final qpId = (qp[AppQueryKey.avatarId] ?? '').trim();
-  if (qpId.isNotEmpty) {
-    AvatarIdStore.I.set(qpId);
-    return qpId;
-  }
-
-  final storeId = AvatarIdStore.I.avatarId.trim();
-  if (storeId.isNotEmpty) return storeId;
-
-  final resolved = await AvatarIdStore.I.resolveAvatarIdByUserId(uid);
-  return (resolved ?? '').trim();
-}
-
-String _withAvatarId(String raw, String avatarId) {
-  final a = avatarId.trim();
-  if (a.isEmpty) return raw;
-
-  final u = Uri.tryParse(raw);
-  if (u == null) return raw;
-
-  final qp = <String, String>{...u.queryParameters};
-  qp[AppQueryKey.avatarId] = a;
-  return u.replace(queryParameters: qp).toString();
 }
 
 GoRouter buildPublicOnlyRouter({required Object initError}) {
@@ -581,6 +365,7 @@ List<RouteBase> _routes({required bool firebaseReady}) {
             );
           },
         ),
+
         GoRoute(
           path: AppRoutePath.payment,
           name: AppRouteName.payment,
@@ -612,11 +397,35 @@ bool _showBackFor(GoRouterState state) {
   return true;
 }
 
+/// ✅ Headerに表示する「アバター名」
+/// - displayName があればそれ
+/// - 無ければ email の @ より前
+/// - それも無ければ 'My Profile'
+String _avatarNameForHeader() {
+  final u = FirebaseAuth.instance.currentUser;
+  if (u == null) return 'Profile';
+
+  final dn = (u.displayName ?? '').trim();
+  if (dn.isNotEmpty) return dn;
+
+  final email = (u.email ?? '').trim();
+  if (email.isNotEmpty) {
+    final i = email.indexOf('@');
+    if (i > 0) return email.substring(0, i);
+    return email;
+  }
+
+  return 'My Profile';
+}
+
 String? _titleFor(GoRouterState state) {
   final loc = state.uri.path;
   if (loc == AppRoutePath.home) return null;
   if (loc.startsWith('/catalog/')) return 'Catalog';
-  if (loc == AppRoutePath.avatar) return 'Profile';
+
+  // ✅ AvatarPage表示中は 'Profile' ではなく avatarName を表示
+  if (loc == AppRoutePath.avatar) return _avatarNameForHeader();
+
   if (loc == AppRoutePath.cart) return 'Cart';
   if (loc == AppRoutePath.preview) return 'Preview';
   if (loc == AppRoutePath.payment) return 'Payment';
@@ -839,17 +648,7 @@ class _AccountMenuSheet extends StatelessWidget {
           Expanded(
             child: ListView(
               children: [
-                ListTile(
-                  leading: const Icon(Icons.account_circle_outlined),
-                  title: const Text('アバター情報'),
-                  subtitle: const Text('プロフィール編集'),
-                  onTap: () => _go(
-                    context,
-                    AppRoutePath.avatarEdit,
-                    qp: {AppQueryKey.from: _encodeFrom(from)},
-                  ),
-                ),
-                _divider(context),
+                // ✅ 削除: 「アバター情報（プロフィール編集）」は menu から消す
                 ListTile(
                   leading: const Icon(Icons.manage_accounts_outlined),
                   title: const Text('ユーザー情報'),

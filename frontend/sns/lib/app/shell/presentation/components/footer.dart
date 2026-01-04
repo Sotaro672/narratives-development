@@ -138,7 +138,6 @@ class SignedInFooter extends StatelessWidget {
                 children: [
                   _FooterItem(
                     icon: Icons.storefront_outlined,
-                    label: 'Shop',
                     onTap: () {
                       final uri = _buildUriPreserveAvatarId(context, '/');
                       context.go(uri.toString());
@@ -197,7 +196,6 @@ class SignedInFooter extends StatelessWidget {
                             )
                           : _FooterItem(
                               icon: Icons.qr_code_scanner,
-                              label: 'Scan',
                               onTap: () async {
                                 final code = await showModalBottomSheet<String>(
                                   context: context,
@@ -242,33 +240,19 @@ class SignedInFooter extends StatelessWidget {
 }
 
 class _FooterItem extends StatelessWidget {
-  const _FooterItem({
-    required this.icon,
-    required this.label,
-    required this.onTap,
-  });
+  const _FooterItem({required this.icon, required this.onTap});
 
   final IconData icon;
-  final String label;
   final VoidCallback onTap;
 
   @override
   Widget build(BuildContext context) {
-    final t = Theme.of(context).textTheme;
-
     return InkWell(
       borderRadius: BorderRadius.circular(12),
       onTap: onTap,
       child: Padding(
         padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(icon, size: 22),
-            const SizedBox(height: 4),
-            Text(label, style: t.labelSmall),
-          ],
-        ),
+        child: Icon(icon, size: 22),
       ),
     );
   }
@@ -303,19 +287,12 @@ class _AvatarIconButton extends StatelessWidget {
       },
       child: Padding(
         padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            CircleAvatar(
-              radius: 14,
-              backgroundImage: photo.isNotEmpty ? NetworkImage(photo) : null,
-              child: photo.isEmpty
-                  ? Text(initial, style: const TextStyle(fontSize: 12))
-                  : null,
-            ),
-            const SizedBox(height: 4),
-            Text('Avatar', style: Theme.of(context).textTheme.labelSmall),
-          ],
+        child: CircleAvatar(
+          radius: 14,
+          backgroundImage: photo.isNotEmpty ? NetworkImage(photo) : null,
+          child: photo.isEmpty
+              ? Text(initial, style: const TextStyle(fontSize: 12))
+              : null,
         ),
       ),
     );
