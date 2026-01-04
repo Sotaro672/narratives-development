@@ -1,3 +1,4 @@
+// backend/internal/domain/order/repository_port.go
 package order
 
 import (
@@ -8,30 +9,22 @@ import (
 	common "narratives/internal/domain/common"
 )
 
-// Filter aligns with entity fields (no LastUpdate).
+// Filter aligns with entity fields (entity.go as source of truth).
 type Filter struct {
 	// Exact matches
-	ID     string
-	UserID string
-	CartID string
+	ID       string
+	UserID   string
+	AvatarID string
+	CartID   string
 
-	// ✅ Snapshot-based (replaces ShippingAddressID / BillingAddressID)
+	// Snapshot-based (optional)
 	// If nil, it means "no filter".
-	// NOTE: Adapters may choose to support only some fields (e.g., BillingSnapshot.Last4 only).
 	ShippingSnapshot *ShippingSnapshot
 	BillingSnapshot  *BillingSnapshot
 
-	ListID    string
-	InvoiceID string
-	PaymentID string
-
 	// Time ranges
-	CreatedFrom    *time.Time
-	CreatedTo      *time.Time
-	UpdatedFrom    *time.Time
-	UpdatedTo      *time.Time
-	TransferedFrom *time.Time // spelling per TS
-	TransferedTo   *time.Time // spelling per TS
+	CreatedFrom *time.Time
+	CreatedTo   *time.Time
 }
 
 // Sort uses common.Sort; columns are constrained by constants below.
@@ -43,11 +36,9 @@ const (
 	SortDesc SortOrder = common.SortDesc
 )
 
-// Allowed sort columns
+// Allowed sort columns (entity.go only has CreatedAt)
 const (
-	SortByCreatedAt      string = "createdAt"
-	SortByUpdatedAt      string = "updatedAt"
-	SortByTransferedDate string = "transferedDate" // spelling per TS
+	SortByCreatedAt string = "createdAt"
 )
 
 // Paging aliases

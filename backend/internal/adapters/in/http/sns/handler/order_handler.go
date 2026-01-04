@@ -5,9 +5,10 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"io"
+	"log"
 	"net/http"
 	"strings"
-	"time"
 
 	usecase "narratives/internal/application/usecase"
 	orderdom "narratives/internal/domain/order"
@@ -82,24 +83,42 @@ type createOrderRequest struct {
 	// 原則 auth uid を正。uid が取れない構成のみ body.userId を許容。
 	UserID string `json:"userId"`
 
+	// ✅ NEW: Order entity に avatarId が必須になったため受け取る
+	// SNS 側は原則「遷移URL/画面が avatarId を持つ」前提。
+	AvatarID string `json:"avatarId"`
+
 	CartID string `json:"cartId"`
 
 	ShippingSnapshot shippingSnapshotRequest `json:"shippingSnapshot"`
 	BillingSnapshot  billingSnapshotRequest  `json:"billingSnapshot"`
 
-	Items     []orderItemSnapshotRequest `json:"items"`
-	InvoiceID string                     `json:"invoiceId"`
-	PaymentID string                     `json:"paymentId"`
+	Items []orderItemSnapshotRequest `json:"items"`
 
-	TransferedDate *string `json:"transferedDate"` // RFC3339
-	UpdatedBy      *string `json:"updatedBy"`
+	// ✅ order を先に起票するため、invoice/payment は order 作成では受け取らない
+	// InvoiceID string `json:"invoiceId"`
+	// PaymentID string `json:"paymentId"`
 }
 
 func (h *OrderHandler) post(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
+	reqID := _pickReqID(r)
+
+	// ---- read body (so we can log on decode failure) ----
+	const maxBodyLog = 4096
+	bodyBytes, err := io.ReadAll(r.Body)
+	if err != nil {
+		log.Printf("[sns_order] reqId=%s read_body_failed err=%v", reqID, err)
+		w.WriteHeader(http.StatusBadRequest)
+		_ = json.NewEncoder(w).Encode(map[string]string{"error": "invalid_body"})
+		return
+	}
 
 	var req createOrderRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+	if err := json.Unmarshal(bodyBytes, &req); err != nil {
+		log.Printf(
+			"[sns_order] reqId=%s invalid_json err=%v bodyLen=%d bodySample=%q",
+			reqID, err, len(bodyBytes), _sampleBytes(bodyBytes, maxBodyLog),
+		)
 		w.WriteHeader(http.StatusBadRequest)
 		_ = json.NewEncoder(w).Encode(map[string]string{"error": "invalid_json"})
 		return
@@ -111,11 +130,37 @@ func (h *OrderHandler) post(w http.ResponseWriter, r *http.Request) {
 	authUID := trim(getAuthUID(ctx))
 	bodyUID := trim(req.UserID)
 
+	// --- AvatarID (body first, fallback to query param) ---
+	avatarID := trim(req.AvatarID)
+	if avatarID == "" {
+		avatarID = trim(r.URL.Query().Get("avatarId"))
+	}
+
+	// 入口の要約ログ（失敗時の比較用）
+	log.Printf(
+		"[sns_order] reqId=%s in authUid=%q bodyUserId=%q avatarId=%q cartId=%q items=%d ship(state=%t city=%t street=%t country=%t) bill(last4=%t)",
+		reqID,
+		_maskID(authUID),
+		_maskID(bodyUID),
+		_maskID(avatarID),
+		_maskID(trim(req.CartID)),
+		len(req.Items),
+		trim(req.ShippingSnapshot.State) != "",
+		trim(req.ShippingSnapshot.City) != "",
+		trim(req.ShippingSnapshot.Street) != "",
+		trim(req.ShippingSnapshot.Country) != "",
+		trim(req.BillingSnapshot.Last4) != "",
+	)
+
+	// --- Decide userID ---
 	var userID string
 	switch {
 	case authUID != "":
 		userID = authUID
 		if bodyUID != "" && bodyUID != authUID {
+			log.Printf("[sns_order] reqId=%s bad_request reason=userId_mismatch authUid=%q bodyUserId=%q",
+				reqID, _maskID(authUID), _maskID(bodyUID),
+			)
 			w.WriteHeader(http.StatusForbidden)
 			_ = json.NewEncoder(w).Encode(map[string]string{"error": "userId_mismatch"})
 			return
@@ -123,36 +168,36 @@ func (h *OrderHandler) post(w http.ResponseWriter, r *http.Request) {
 	case bodyUID != "":
 		userID = bodyUID
 	default:
+		log.Printf("[sns_order] reqId=%s unauthorized reason=missing_uid", reqID)
 		w.WriteHeader(http.StatusUnauthorized)
 		_ = json.NewEncoder(w).Encode(map[string]string{"error": "unauthorized"})
 		return
 	}
 
-	cartID := trim(req.CartID)
-	invoiceID := trim(req.InvoiceID)
-	paymentID := trim(req.PaymentID)
+	// --- AvatarID required (entity.go の必須前提) ---
+	if avatarID == "" {
+		log.Printf("[sns_order] reqId=%s bad_request reason=missing_avatarId userId=%q", reqID, _maskID(userID))
+		w.WriteHeader(http.StatusBadRequest)
+		_ = json.NewEncoder(w).Encode(map[string]string{"error": "avatarId is required"})
+		return
+	}
 
+	cartID := trim(req.CartID)
 	if cartID == "" {
+		log.Printf("[sns_order] reqId=%s bad_request reason=missing_cartId avatarId=%q userId=%q", reqID, _maskID(avatarID), _maskID(userID))
 		w.WriteHeader(http.StatusBadRequest)
 		_ = json.NewEncoder(w).Encode(map[string]string{"error": "cartId is required"})
 		return
 	}
-	if invoiceID == "" {
-		w.WriteHeader(http.StatusBadRequest)
-		_ = json.NewEncoder(w).Encode(map[string]string{"error": "invoiceId is required"})
-		return
-	}
-	if paymentID == "" {
-		w.WriteHeader(http.StatusBadRequest)
-		_ = json.NewEncoder(w).Encode(map[string]string{"error": "paymentId is required"})
-		return
-	}
+
 	if len(req.Items) == 0 {
+		log.Printf("[sns_order] reqId=%s bad_request reason=missing_items avatarId=%q userId=%q", reqID, _maskID(avatarID), _maskID(userID))
 		w.WriteHeader(http.StatusBadRequest)
 		_ = json.NewEncoder(w).Encode(map[string]string{"error": "items is required"})
 		return
 	}
 
+	// ---- build shipping ----
 	ship := orderdom.ShippingSnapshot{
 		ZipCode: trim(req.ShippingSnapshot.ZipCode),
 		State:   trim(req.ShippingSnapshot.State),
@@ -161,75 +206,107 @@ func (h *OrderHandler) post(w http.ResponseWriter, r *http.Request) {
 		Street2: trim(req.ShippingSnapshot.Street2),
 		Country: trim(req.ShippingSnapshot.Country),
 	}
-	if ship.State == "" && ship.City == "" && ship.Street == "" && ship.Country == "" {
+
+	// entity.go の validateShippingSnapshot: State/City/Street/Country が必須
+	missShipState := ship.State == ""
+	missShipCity := ship.City == ""
+	missShipStreet := ship.Street == ""
+	missShipCountry := ship.Country == ""
+	if missShipState || missShipCity || missShipStreet || missShipCountry {
+		log.Printf("[sns_order] reqId=%s bad_request reason=invalid_shippingSnapshot missing(state=%t city=%t street=%t country=%t) zip=%t avatarId=%q userId=%q",
+			reqID,
+			missShipState,
+			missShipCity,
+			missShipStreet,
+			missShipCountry,
+			ship.ZipCode != "",
+			_maskID(avatarID),
+			_maskID(userID),
+		)
 		w.WriteHeader(http.StatusBadRequest)
-		_ = json.NewEncoder(w).Encode(map[string]string{"error": "shippingSnapshot is required"})
+		_ = json.NewEncoder(w).Encode(map[string]string{"error": "shippingSnapshot is invalid"})
 		return
 	}
 
+	// ---- build billing ----
 	bill := orderdom.BillingSnapshot{
 		Last4:          trim(req.BillingSnapshot.Last4),
 		CardHolderName: trim(req.BillingSnapshot.CardHolderName),
 	}
 	if bill.Last4 == "" {
+		log.Printf("[sns_order] reqId=%s bad_request reason=missing_billing_last4 avatarId=%q userId=%q", reqID, _maskID(avatarID), _maskID(userID))
 		w.WriteHeader(http.StatusBadRequest)
 		_ = json.NewEncoder(w).Encode(map[string]string{"error": "billingSnapshot.last4 is required"})
 		return
 	}
 
+	// ---- items validation (ここが落ちやすいので詳細ログ) ----
+	// entity.go の validateItems: price < 0 はNG（0 はOK）、qty <= 0 はNG
 	items := make([]orderdom.OrderItemSnapshot, 0, len(req.Items))
-	for _, it := range req.Items {
+	for i, it := range req.Items {
+		mid := trim(it.ModelID)
+		iid := trim(it.InventoryID)
+		qty := it.Qty
+		price := it.Price
+
+		if mid == "" || iid == "" || qty <= 0 || price < 0 {
+			log.Printf(
+				"[sns_order] reqId=%s bad_request reason=invalid_item idx=%d modelId=%q inventoryId=%q qty=%d price=%d avatarId=%q userId=%q",
+				reqID,
+				i,
+				_maskID(mid),
+				_maskID(iid),
+				qty,
+				price,
+				_maskID(avatarID),
+				_maskID(userID),
+			)
+			w.WriteHeader(http.StatusBadRequest)
+			_ = json.NewEncoder(w).Encode(map[string]string{"error": "invalid item snapshot"})
+			return
+		}
+
 		items = append(items, orderdom.OrderItemSnapshot{
-			ModelID:     trim(it.ModelID),
-			InventoryID: trim(it.InventoryID),
-			Qty:         it.Qty,
-			Price:       it.Price,
+			ModelID:     mid,
+			InventoryID: iid,
+			Qty:         qty,
+			Price:       price,
 		})
 	}
 
-	var td *time.Time
-	if req.TransferedDate != nil && trim(*req.TransferedDate) != "" {
-		t, err := time.Parse(time.RFC3339, trim(*req.TransferedDate))
-		if err != nil {
-			w.WriteHeader(http.StatusBadRequest)
-			_ = json.NewEncoder(w).Encode(map[string]string{"error": "invalid transferedDate (must be RFC3339)"})
-			return
-		}
-		utc := t.UTC()
-		td = &utc
-	}
-
 	in := usecase.CreateOrderInput{
-		ID:     trim(req.ID),
-		UserID: userID,
-		CartID: cartID,
+		ID:       trim(req.ID),
+		UserID:   userID,
+		AvatarID: avatarID,
+		CartID:   cartID,
 
 		ShippingSnapshot: ship,
 		BillingSnapshot:  bill,
 
-		Items:     items,
-		InvoiceID: invoiceID,
-		PaymentID: paymentID,
-
-		TransferedDate: td,
-		UpdatedBy:      req.UpdatedBy,
+		Items: items,
 	}
 
 	out, err := h.uc.Create(ctx, in)
 	if err != nil {
+		log.Printf("[sns_order] reqId=%s create_failed err=%v userId=%q avatarId=%q cartId=%q items=%d",
+			reqID, err, _maskID(userID), _maskID(avatarID), _maskID(cartID), len(items),
+		)
 		writeOrderErr(w, err)
 		return
 	}
 
+	log.Printf("[sns_order] reqId=%s created ok userId=%q avatarId=%q cartId=%q items=%d", reqID, _maskID(userID), _maskID(avatarID), _maskID(cartID), len(items))
 	w.WriteHeader(http.StatusCreated)
 	_ = json.NewEncoder(w).Encode(out)
 }
 
 func (h *OrderHandler) get(w http.ResponseWriter, r *http.Request, id string) {
 	ctx := r.Context()
+	reqID := _pickReqID(r)
 
 	id = strings.TrimSpace(id)
 	if id == "" {
+		log.Printf("[sns_order] reqId=%s bad_request reason=invalid_id", reqID)
 		w.WriteHeader(http.StatusBadRequest)
 		_ = json.NewEncoder(w).Encode(map[string]string{"error": "invalid id"})
 		return
@@ -237,6 +314,7 @@ func (h *OrderHandler) get(w http.ResponseWriter, r *http.Request, id string) {
 
 	out, err := h.uc.GetByID(ctx, id)
 	if err != nil {
+		log.Printf("[sns_order] reqId=%s get_failed id=%q err=%v", reqID, _maskID(id), err)
 		writeOrderErr(w, err)
 		return
 	}
@@ -287,33 +365,59 @@ func getAuthUID(ctx context.Context) string {
 func writeOrderErr(w http.ResponseWriter, err error) {
 	code := http.StatusInternalServerError
 
-	switch {
-	case errors.Is(err, orderdom.ErrNotFound):
-		code = http.StatusNotFound
-	case errors.Is(err, orderdom.ErrConflict):
-		code = http.StatusConflict
+	msg := strings.ToLower(strings.TrimSpace(err.Error()))
 
-	case errors.Is(err, orderdom.ErrInvalidID),
-		errors.Is(err, orderdom.ErrInvalidUserID),
-		errors.Is(err, orderdom.ErrInvalidCartID),
-		errors.Is(err, orderdom.ErrInvalidShippingAddress),
-		errors.Is(err, orderdom.ErrInvalidBillingAddress),
-		errors.Is(err, orderdom.ErrInvalidItems),
-		errors.Is(err, orderdom.ErrInvalidInvoiceID),
-		errors.Is(err, orderdom.ErrInvalidPaymentID),
-		errors.Is(err, orderdom.ErrInvalidTransferredDate),
-		errors.Is(err, orderdom.ErrInvalidCreatedAt),
-		errors.Is(err, orderdom.ErrInvalidUpdatedAt),
-		errors.Is(err, orderdom.ErrInvalidUpdatedBy),
-		errors.Is(err, orderdom.ErrInvalidItemSnapshot):
+	switch {
+	case errors.Is(err, context.Canceled):
+		code = 499
+	case msg == "not_found" || strings.Contains(msg, "not found") || strings.Contains(msg, "not_found"):
+		code = http.StatusNotFound
+	case strings.Contains(msg, "conflict") || strings.Contains(msg, "already exists"):
+		code = http.StatusConflict
+	case strings.Contains(msg, "invalid") || strings.Contains(msg, "required") || strings.Contains(msg, "missing"):
 		code = http.StatusBadRequest
 	default:
-		msg := strings.ToLower(strings.TrimSpace(err.Error()))
-		if msg == "not_found" || strings.Contains(msg, "not found") || strings.Contains(msg, "not_found") {
-			code = http.StatusNotFound
-		}
 	}
 
 	w.WriteHeader(code)
 	_ = json.NewEncoder(w).Encode(map[string]string{"error": err.Error()})
+}
+
+// ------------------------------------------------------------
+// logging helpers
+// ------------------------------------------------------------
+
+func _pickReqID(r *http.Request) string {
+	if r == nil {
+		return "-"
+	}
+	// Cloud Run / LB / 自前 middleware など、どれかに乗っている想定で複数見る
+	for _, k := range []string{"X-Request-Id", "X-Cloud-Trace-Context", "X-Amzn-Trace-Id"} {
+		if v := strings.TrimSpace(r.Header.Get(k)); v != "" {
+			return v
+		}
+	}
+	return "-"
+}
+
+func _sampleBytes(b []byte, limit int) string {
+	if limit <= 0 || len(b) == 0 {
+		return ""
+	}
+	if len(b) <= limit {
+		return string(b)
+	}
+	return string(b[:limit]) + "...(truncated)"
+}
+
+func _maskID(s string) string {
+	t := strings.TrimSpace(s)
+	if t == "" {
+		return ""
+	}
+	// 先頭4 + 末尾4 だけ残す（長さが短ければ全体）
+	if len(t) <= 10 {
+		return t
+	}
+	return t[:4] + "***" + t[len(t)-4:]
 }

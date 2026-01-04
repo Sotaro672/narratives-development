@@ -27,6 +27,8 @@ class UsePaymentController {
     final ctx = await _paymentRepo.fetchPaymentContext();
 
     final qpId = qpAvatarId.trim();
+
+    // cart fetch key: まず avatarId を優先、無ければ従来互換で uid/userId にフォールバック
     final cartKey = qpId.isNotEmpty
         ? qpId
         : (ctx.userId.trim().isNotEmpty ? ctx.userId.trim() : ctx.uid.trim());
@@ -42,6 +44,13 @@ class UsePaymentController {
       }
     }
 
+    // ✅ Order 起票に渡す avatarId（原則は URL の qpAvatarId）
+    final avatarId = qpId.isNotEmpty
+        ? qpId
+        : (rawCart.avatarId.trim().isNotEmpty
+              ? rawCart.avatarId.trim()
+              : cartKey);
+
     final shipping = _buildShippingVM(ctx.shippingAddress);
     final billing = _buildBillingVM(ctx.billingAddress);
     final cartVm = _buildCartVM(rawCart);
@@ -50,6 +59,7 @@ class UsePaymentController {
       ctx: ctx,
       rawCart: rawCart,
       cartKey: cartKey,
+      avatarId: avatarId,
       shipping: shipping,
       billing: billing,
       cart: cartVm,
@@ -58,6 +68,10 @@ class UsePaymentController {
 
   /// ✅ 支払確定 = Order起票（/sns/orders）
   /// Items は snapshot: [modelId, inventoryId, qty, price]
+  ///
+  /// ✅ 方針変更:
+  /// - Order はまず単独で起票する
+  /// - invoiceId / paymentId をフロント側必須にしない（サーバ側で不要な形に寄せる）
   Future<Map<String, dynamic>> confirmAndCreateOrder(PaymentPageVM vm) async {
     if (vm.cart.isEmpty) {
       throw Exception('cart is empty');
@@ -67,6 +81,12 @@ class UsePaymentController {
     }
     if (vm.billing.isEmpty) {
       throw Exception('billing is empty');
+    }
+
+    // ✅ avatarId は必須（バックエンドで Order.avatarId を保存するため）
+    final avatarId = vm.avatarId.trim();
+    if (avatarId.isEmpty) {
+      throw Exception('avatarId is empty');
     }
 
     final userId = vm.ctx.userId.trim().isNotEmpty
@@ -117,26 +137,18 @@ class UsePaymentController {
       throw Exception('items is empty');
     }
 
-    final invoiceId = _safeCtxString(vm.ctx, 'invoiceId');
-    final paymentId = _safeCtxString(vm.ctx, 'paymentId');
-    if (invoiceId.isEmpty) {
-      throw Exception('invoiceId is empty');
-    }
-    if (paymentId.isEmpty) {
-      throw Exception('paymentId is empty');
-    }
-
     final ship = _buildShippingSnapshot(vm.ctx.shippingAddress);
     final bill = _buildBillingSnapshot(vm.ctx.billingAddress);
 
+    // ✅ invoiceId/paymentId は “現段階では使わない”
+    // （Order単独起票 → OrderId で Invoice/Payment を起票するフローに変更）
     return _orderRepo.createOrder(
       userId: userId,
+      avatarId: avatarId, // ✅ 追加
       cartId: cartId,
       shippingSnapshot: ship,
       billingSnapshot: bill,
       items: items,
-      invoiceId: invoiceId,
-      paymentId: paymentId,
     );
   }
 
@@ -187,23 +199,6 @@ class UsePaymentController {
 
     // cardHolderName は domain 的には任意だが、UI 的にはある方が良いのでできれば入れる
     return <String, dynamic>{'last4': last4, 'cardHolderName': holder};
-  }
-
-  static String _safeCtxString(dynamic ctx, String field) {
-    try {
-      switch (field) {
-        case 'invoiceId':
-          final Object? v = (ctx as dynamic).invoiceId;
-          return (v?.toString() ?? '').trim();
-        case 'paymentId':
-          final Object? v = (ctx as dynamic).paymentId;
-          return (v?.toString() ?? '').trim();
-        default:
-          return '';
-      }
-    } catch (_) {
-      return '';
-    }
   }
 
   // ------------------------------------------------------------
@@ -359,6 +354,7 @@ class PaymentPageVM {
     required this.ctx,
     required this.rawCart,
     required this.cartKey,
+    required this.avatarId,
     required this.shipping,
     required this.billing,
     required this.cart,
@@ -367,6 +363,9 @@ class PaymentPageVM {
   final PaymentContextDTO ctx;
   final CartDTO rawCart;
   final String cartKey;
+
+  // ✅ 追加: backend へ渡す avatarId
+  final String avatarId;
 
   final ShippingCardVM shipping;
   final BillingCardVM billing;

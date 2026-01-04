@@ -28,12 +28,13 @@ class OrderRepositoryHttp {
 
   Future<Map<String, dynamic>> createOrder({
     required String userId,
+    required String avatarId, // ✅ 追加
     required String cartId,
     required Map<String, dynamic> shippingSnapshot,
     required Map<String, dynamic> billingSnapshot,
     required List<Map<String, dynamic>> items, // ✅ snapshot items
-    required String invoiceId,
-    required String paymentId,
+    String? invoiceId, // ✅ optional (order only can be created first)
+    String? paymentId, // ✅ optional
     String? id,
     String? transferedDateRfc3339,
     String? updatedBy,
@@ -44,12 +45,16 @@ class OrderRepositoryHttp {
     final body = <String, dynamic>{
       'id': _s(id),
       'userId': userId.trim(),
+      'avatarId': avatarId.trim(), // ✅ 追加
       'cartId': cartId.trim(),
       'shippingSnapshot': shippingSnapshot,
       'billingSnapshot': billingSnapshot,
       'items': items,
-      'invoiceId': invoiceId.trim(),
-      'paymentId': paymentId.trim(),
+
+      // ✅ only include when present (backend can treat as optional)
+      if (_s(invoiceId).isNotEmpty) 'invoiceId': _s(invoiceId),
+      if (_s(paymentId).isNotEmpty) 'paymentId': _s(paymentId),
+
       if (_s(transferedDateRfc3339).isNotEmpty)
         'transferedDate': _s(transferedDateRfc3339),
       if (_s(updatedBy).isNotEmpty) 'updatedBy': _s(updatedBy),

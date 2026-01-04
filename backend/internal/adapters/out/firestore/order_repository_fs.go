@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"reflect"
 	"strings"
 	"time"
 
@@ -12,6 +13,7 @@ import (
 	"google.golang.org/api/iterator"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
+	"google.golang.org/protobuf/types/known/timestamppb"
 
 	fscommon "narratives/internal/adapters/out/firestore/common"
 	uc "narratives/internal/application/usecase"
@@ -61,6 +63,7 @@ func (r *OrderRepositoryFS) GetByID(ctx context.Context, id string) (orderdom.Or
 	return o, nil
 }
 
+// Exists is optional (dev/testing convenience)
 func (r *OrderRepositoryFS) Exists(ctx context.Context, id string) (bool, error) {
 	if r.Client == nil {
 		return false, errors.New("firestore client is nil")
@@ -250,9 +253,6 @@ func (r *OrderRepositoryFS) Create(ctx context.Context, o orderdom.Order) (order
 	if o.CreatedAt.IsZero() {
 		o.CreatedAt = now
 	}
-	if o.UpdatedAt.IsZero() {
-		o.UpdatedAt = now
-	}
 
 	var docRef *firestore.DocumentRef
 	if id == "" {
@@ -292,12 +292,10 @@ func (r *OrderRepositoryFS) Save(ctx context.Context, o orderdom.Order, _ *commo
 	id := strings.TrimSpace(o.ID)
 	now := time.Now().UTC()
 
+	// upsert (new doc)
 	if id == "" {
 		if o.CreatedAt.IsZero() {
 			o.CreatedAt = now
-		}
-		if o.UpdatedAt.IsZero() {
-			o.UpdatedAt = now
 		}
 		docRef := r.ordersCol().NewDoc()
 		o.ID = docRef.ID
@@ -313,6 +311,7 @@ func (r *OrderRepositoryFS) Save(ctx context.Context, o orderdom.Order, _ *commo
 
 	o.ID = id
 
+	// preserve CreatedAt if missing
 	if o.CreatedAt.IsZero() {
 		if snap, err := r.ordersCol().Doc(id).Get(ctx); err == nil {
 			if existing, err2 := docToOrder(snap); err2 == nil && !existing.CreatedAt.IsZero() {
@@ -322,9 +321,6 @@ func (r *OrderRepositoryFS) Save(ctx context.Context, o orderdom.Order, _ *commo
 	}
 	if o.CreatedAt.IsZero() {
 		o.CreatedAt = now
-	}
-	if o.UpdatedAt.IsZero() {
-		o.UpdatedAt = now
 	}
 
 	docRef := r.ordersCol().Doc(id)
@@ -412,7 +408,7 @@ func (r *OrderRepositoryFS) Reset(ctx context.Context) error {
 }
 
 // ========================
-// Helpers (NEW schema only)
+// Helpers (NEW schema; entity.go as source of truth)
 // ========================
 
 func asMapAny(v any) map[string]any {
@@ -543,30 +539,22 @@ func docToOrder(doc *firestore.DocumentSnapshot) (orderdom.Order, error) {
 		}
 		return ""
 	}
-	getStrPtr := func(key string) *string {
-		if v, ok := data[key].(string); ok {
-			s := strings.TrimSpace(v)
-			if s != "" {
-				return &s
-			}
-		}
-		return nil
-	}
+
 	getTime := func(key string) time.Time {
 		if v, ok := data[key].(time.Time); ok && !v.IsZero() {
 			return v.UTC()
 		}
+		// 念のため protobuf Timestamp も受ける（環境差の吸収）
+		if ts, ok := data[key].(*timestamppb.Timestamp); ok && ts != nil {
+			t := ts.AsTime()
+			if !t.IsZero() {
+				return t.UTC()
+			}
+		}
 		return time.Time{}
 	}
-	getTimePtr := func(key string) *time.Time {
-		if v, ok := data[key].(time.Time); ok && !v.IsZero() {
-			t := v.UTC()
-			return &t
-		}
-		return nil
-	}
 
-	// required snapshots
+	// snapshots
 	var ship orderdom.ShippingSnapshot
 	if v, ok := data["shippingSnapshot"]; ok {
 		if s, ok2 := decodeShippingSnapshot(v); ok2 {
@@ -585,10 +573,24 @@ func docToOrder(doc *firestore.DocumentSnapshot) (orderdom.Order, error) {
 		items = nil
 	}
 
-	// Strict: if missing -> error
-	if strings.TrimSpace(ship.State) == "" &&
-		strings.TrimSpace(ship.City) == "" &&
-		strings.TrimSpace(ship.Street) == "" &&
+	createdAt := getTime("createdAt")
+	if createdAt.IsZero() && !doc.CreateTime.IsZero() {
+		createdAt = doc.CreateTime.UTC()
+	}
+
+	// Strict minimums (entity validate 前に、アダプタとして最低限守る)
+	avatarID := getStr("avatarId")
+	if avatarID == "" {
+		// 旧データ救済（念のため）
+		avatarID = getStr("avatarID")
+	}
+
+	if strings.TrimSpace(avatarID) == "" {
+		return orderdom.Order{}, fmt.Errorf("order %s: missing avatarId", doc.Ref.ID)
+	}
+	if strings.TrimSpace(ship.State) == "" ||
+		strings.TrimSpace(ship.City) == "" ||
+		strings.TrimSpace(ship.Street) == "" ||
 		strings.TrimSpace(ship.Country) == "" {
 		return orderdom.Order{}, fmt.Errorf("order %s: missing shippingSnapshot", doc.Ref.ID)
 	}
@@ -600,24 +602,20 @@ func docToOrder(doc *firestore.DocumentSnapshot) (orderdom.Order, error) {
 	}
 
 	return orderdom.Order{
-		ID:     doc.Ref.ID,
-		UserID: getStr("userId"),
-		CartID: getStr("cartId"),
+		ID:       doc.Ref.ID,
+		UserID:   getStr("userId"),
+		AvatarID: avatarID,
+		CartID:   getStr("cartId"),
 
 		ShippingSnapshot: ship,
 		BillingSnapshot:  bill,
 
-		Items:          items,
-		InvoiceID:      getStr("invoiceId"),
-		PaymentID:      getStr("paymentId"),
-		TransferedDate: getTimePtr("transferedDate"),
-		CreatedAt:      getTime("createdAt"),
-		UpdatedAt:      getTime("updatedAt"),
-		UpdatedBy:      getStrPtr("updatedBy"),
+		Items:     items,
+		CreatedAt: createdAt,
 	}, nil
 }
 
-// orderToDoc converts orderdom.Order into a Firestore-storable map.
+// orderToDoc converts orderdom.Order into a Firestore-storable map (NEW schema only).
 func orderToDoc(o orderdom.Order) map[string]any {
 	ship := map[string]any{
 		"zipCode": strings.TrimSpace(o.ShippingSnapshot.ZipCode),
@@ -643,87 +641,172 @@ func orderToDoc(o orderdom.Order) map[string]any {
 	}
 
 	m := map[string]any{
-		"userId": strings.TrimSpace(o.UserID),
-		"cartId": strings.TrimSpace(o.CartID),
+		"userId":   strings.TrimSpace(o.UserID),
+		"avatarId": strings.TrimSpace(o.AvatarID),
+		"cartId":   strings.TrimSpace(o.CartID),
 
 		"shippingSnapshot": ship,
 		"billingSnapshot":  bill,
 
-		"items":     items,
-		"invoiceId": strings.TrimSpace(o.InvoiceID),
-		"paymentId": strings.TrimSpace(o.PaymentID),
-	}
-
-	if o.TransferedDate != nil && !o.TransferedDate.IsZero() {
-		m["transferedDate"] = o.TransferedDate.UTC()
+		"items": items,
 	}
 
 	if !o.CreatedAt.IsZero() {
 		m["createdAt"] = o.CreatedAt.UTC()
 	}
-	if !o.UpdatedAt.IsZero() {
-		m["updatedAt"] = o.UpdatedAt.UTC()
-	}
-	if o.UpdatedBy != nil {
-		if s := strings.TrimSpace(*o.UpdatedBy); s != "" {
-			m["updatedBy"] = s
-		}
-	}
 
 	return m
 }
 
+// --- filter/sort helpers ---
+
+// matchOrderFilter is reflection-based so adapter compiles even if uc.OrderFilter shape changes.
+// It tries to apply: ID, UserID, AvatarID, CartID, CreatedFrom/CreatedTo.
 func matchOrderFilter(o orderdom.Order, f uc.OrderFilter) bool {
-	if f.UserID != nil {
-		if strings.TrimSpace(o.UserID) != strings.TrimSpace(*f.UserID) {
+	return matchOrderFilterAny(o, any(f))
+}
+
+func matchOrderFilterAny(o orderdom.Order, fv any) bool {
+	// ID
+	if id, ok := getFilterString(fv, "ID"); ok {
+		if strings.TrimSpace(id) != "" && strings.TrimSpace(o.ID) != strings.TrimSpace(id) {
 			return false
 		}
 	}
-	if f.CreatedFrom != nil {
-		if o.CreatedAt.IsZero() || o.CreatedAt.Before(f.CreatedFrom.UTC()) {
+	// UserID
+	if uid, ok := getFilterString(fv, "UserID"); ok {
+		if strings.TrimSpace(uid) != "" && strings.TrimSpace(o.UserID) != strings.TrimSpace(uid) {
 			return false
 		}
 	}
-	if f.CreatedTo != nil {
-		if o.CreatedAt.IsZero() || !o.CreatedAt.Before(f.CreatedTo.UTC()) {
+
+	// AvatarID (filter 側の命名揺れも吸収)
+	if aid, ok := getFilterString(fv, "AvatarID"); ok {
+		if strings.TrimSpace(aid) != "" && strings.TrimSpace(o.AvatarID) != strings.TrimSpace(aid) {
+			return false
+		}
+	} else if aid, ok := getFilterString(fv, "AvatarId"); ok {
+		if strings.TrimSpace(aid) != "" && strings.TrimSpace(o.AvatarID) != strings.TrimSpace(aid) {
 			return false
 		}
 	}
-	if f.UpdatedFrom != nil {
-		if o.UpdatedAt.IsZero() || o.UpdatedAt.Before(f.UpdatedFrom.UTC()) {
+
+	// CartID
+	if cid, ok := getFilterString(fv, "CartID"); ok {
+		if strings.TrimSpace(cid) != "" && strings.TrimSpace(o.CartID) != strings.TrimSpace(cid) {
 			return false
 		}
 	}
-	if f.UpdatedTo != nil {
-		if o.UpdatedAt.IsZero() || !o.UpdatedAt.Before(f.UpdatedTo.UTC()) {
+
+	// CreatedFrom / CreatedTo
+	if from, ok := getFilterTimePtr(fv, "CreatedFrom"); ok && from != nil {
+		if o.CreatedAt.IsZero() || o.CreatedAt.Before(from.UTC()) {
 			return false
 		}
 	}
-	if f.TransferedFrom != nil {
-		if o.TransferedDate == nil || o.TransferedDate.Before(f.TransferedFrom.UTC()) {
+	if to, ok := getFilterTimePtr(fv, "CreatedTo"); ok && to != nil {
+		// "to" は Upper bound exclusive に寄せる（以前の実装踏襲）
+		if o.CreatedAt.IsZero() || !o.CreatedAt.Before(to.UTC()) {
 			return false
 		}
 	}
-	if f.TransferedTo != nil {
-		if o.TransferedDate == nil || !o.TransferedDate.Before(f.TransferedTo.UTC()) {
-			return false
-		}
-	}
+
 	return true
+}
+
+func getFilterString(v any, field string) (string, bool) {
+	rv := reflect.ValueOf(v)
+	if !rv.IsValid() {
+		return "", false
+	}
+	if rv.Kind() == reflect.Pointer {
+		if rv.IsNil() {
+			return "", false
+		}
+		rv = rv.Elem()
+	}
+	if rv.Kind() != reflect.Struct {
+		return "", false
+	}
+	f := rv.FieldByName(field)
+	if !f.IsValid() {
+		// try lowerCamel (e.g., userId / avatarId)
+		f = rv.FieldByName(lowerFirst(field))
+		if !f.IsValid() {
+			return "", false
+		}
+	}
+	// string
+	if f.Kind() == reflect.String {
+		return f.String(), true
+	}
+	// *string
+	if f.Kind() == reflect.Pointer && f.Type().Elem().Kind() == reflect.String {
+		if f.IsNil() {
+			return "", true
+		}
+		return f.Elem().String(), true
+	}
+	return "", false
+}
+
+func getFilterTimePtr(v any, field string) (*time.Time, bool) {
+	rv := reflect.ValueOf(v)
+	if !rv.IsValid() {
+		return nil, false
+	}
+	if rv.Kind() == reflect.Pointer {
+		if rv.IsNil() {
+			return nil, false
+		}
+		rv = rv.Elem()
+	}
+	if rv.Kind() != reflect.Struct {
+		return nil, false
+	}
+	f := rv.FieldByName(field)
+	if !f.IsValid() {
+		f = rv.FieldByName(lowerFirst(field))
+		if !f.IsValid() {
+			return nil, false
+		}
+	}
+
+	// *time.Time
+	if f.Kind() == reflect.Pointer {
+		if f.IsNil() {
+			return nil, true
+		}
+		if t, ok := f.Interface().(*time.Time); ok {
+			return t, true
+		}
+	}
+	// time.Time
+	if f.CanInterface() {
+		if t, ok := f.Interface().(time.Time); ok {
+			return &t, true
+		}
+	}
+	return nil, false
+}
+
+func lowerFirst(s string) string {
+	if s == "" {
+		return s
+	}
+	return strings.ToLower(s[:1]) + s[1:]
 }
 
 func applyOrderSort(q firestore.Query, sort common.Sort) firestore.Query {
 	col := strings.ToLower(strings.TrimSpace(string(sort.Column)))
-	var field string
 
+	// entity.go に合わせて createdAt のみ許可
+	field := ""
 	switch col {
-	case "createdat", "created_at":
+	case "createdat", "created_at", "created":
 		field = "createdAt"
-	case "updatedat", "updated_at":
-		field = "updatedAt"
-	case "transfereddate", "transfered_date":
-		field = "transferedDate"
 	default:
+		// default: newest first
 		return q.OrderBy("createdAt", firestore.Desc).
 			OrderBy(firestore.DocumentID, firestore.Desc)
 	}

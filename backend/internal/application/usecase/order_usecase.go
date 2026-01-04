@@ -3,6 +3,7 @@ package usecase
 
 import (
 	"context"
+	"fmt"
 	"strings"
 	"time"
 
@@ -26,15 +27,14 @@ type OrderRepo interface {
 }
 
 // OrderFilter provides basic filtering for listing orders.
+// ✅ entity.go を正として、CreatedAt のみ
 type OrderFilter struct {
+	ID     string
 	UserID *string
+	CartID *string
 
-	CreatedFrom    *time.Time
-	CreatedTo      *time.Time
-	UpdatedFrom    *time.Time
-	UpdatedTo      *time.Time
-	TransferedFrom *time.Time
-	TransferedTo   *time.Time
+	CreatedFrom *time.Time
+	CreatedTo   *time.Time
 }
 
 // OrderUsecase orchestrates order operations.
@@ -79,21 +79,16 @@ func (u *OrderUsecase) ListByCursor(ctx context.Context, f OrderFilter, s common
 // =======================
 
 type CreateOrderInput struct {
-	ID     string
-	UserID string
-	CartID string
+	ID       string
+	UserID   string
+	AvatarID string
+	CartID   string
 
 	ShippingSnapshot orderdom.ShippingSnapshot
 	BillingSnapshot  orderdom.BillingSnapshot
-
-	Items     []orderdom.OrderItemSnapshot
-	InvoiceID string
-	PaymentID string
-
-	TransferedDate *time.Time // optional
+	Items            []orderdom.OrderItemSnapshot
 
 	CreatedAt *time.Time // optional; defaults to now
-	UpdatedBy *string
 }
 
 func (u *OrderUsecase) Create(ctx context.Context, in CreateOrderInput) (orderdom.Order, error) {
@@ -102,7 +97,12 @@ func (u *OrderUsecase) Create(ctx context.Context, in CreateOrderInput) (orderdo
 	if in.CreatedAt != nil && !in.CreatedAt.IsZero() {
 		createdAt = in.CreatedAt.UTC()
 	}
-	updatedAt := createdAt
+
+	// ✅ IDはdomainで必須。未指定ならここで生成してからNewする。
+	id := strings.TrimSpace(in.ID)
+	if id == "" {
+		id = u.newOrderID(now)
+	}
 
 	ship := orderdom.ShippingSnapshot{
 		ZipCode: strings.TrimSpace(in.ShippingSnapshot.ZipCode),
@@ -128,19 +128,16 @@ func (u *OrderUsecase) Create(ctx context.Context, in CreateOrderInput) (orderdo
 		})
 	}
 
+	// ✅ entity.go の New(...) に合わせる（avatarId を含む）
 	o, err := orderdom.New(
-		strings.TrimSpace(in.ID),
+		id,
 		strings.TrimSpace(in.UserID),
+		strings.TrimSpace(in.AvatarID),
 		strings.TrimSpace(in.CartID),
 		ship,
 		bill,
 		items,
-		strings.TrimSpace(in.InvoiceID),
-		strings.TrimSpace(in.PaymentID),
-		in.TransferedDate,
 		createdAt,
-		updatedAt,
-		in.UpdatedBy,
 	)
 	if err != nil {
 		return orderdom.Order{}, err
@@ -151,16 +148,12 @@ func (u *OrderUsecase) Create(ctx context.Context, in CreateOrderInput) (orderdo
 type UpdateOrderInput struct {
 	ID string
 
-	UserID *string
-	CartID *string
+	UserID   *string
+	AvatarID *string
+	CartID   *string
 
 	ShippingSnapshot *orderdom.ShippingSnapshot
 	BillingSnapshot  *orderdom.BillingSnapshot
-
-	InvoiceID      *string
-	PaymentID      *string
-	TransferedDate *time.Time
-	UpdatedBy      *string
 
 	ReplaceItems *[]orderdom.OrderItemSnapshot
 }
@@ -171,19 +164,19 @@ func (u *OrderUsecase) Update(ctx context.Context, in UpdateOrderInput) (orderdo
 		return orderdom.Order{}, err
 	}
 
-	now := u.now().UTC()
+	// ✅ CreatedAt は entity.go の必須想定。ゼロなら now を補完して整合させる
+	if o.CreatedAt.IsZero() {
+		o.CreatedAt = u.now().UTC()
+	}
 
 	if in.UserID != nil {
 		o.UserID = strings.TrimSpace(*in.UserID)
-		if err := o.Touch(now); err != nil {
-			return orderdom.Order{}, err
-		}
+	}
+	if in.AvatarID != nil {
+		o.AvatarID = strings.TrimSpace(*in.AvatarID)
 	}
 	if in.CartID != nil {
 		o.CartID = strings.TrimSpace(*in.CartID)
-		if err := o.Touch(now); err != nil {
-			return orderdom.Order{}, err
-		}
 	}
 
 	if in.ShippingSnapshot != nil {
@@ -195,39 +188,17 @@ func (u *OrderUsecase) Update(ctx context.Context, in UpdateOrderInput) (orderdo
 			Street2: strings.TrimSpace(in.ShippingSnapshot.Street2),
 			Country: strings.TrimSpace(in.ShippingSnapshot.Country),
 		}
-		if err := o.UpdateShippingSnapshot(s, now); err != nil {
+		if err := o.UpdateShippingSnapshot(s); err != nil {
 			return orderdom.Order{}, err
 		}
 	}
+
 	if in.BillingSnapshot != nil {
 		b := orderdom.BillingSnapshot{
 			Last4:          strings.TrimSpace(in.BillingSnapshot.Last4),
 			CardHolderName: strings.TrimSpace(in.BillingSnapshot.CardHolderName),
 		}
-		if err := o.UpdateBillingSnapshot(b, now); err != nil {
-			return orderdom.Order{}, err
-		}
-	}
-
-	if in.InvoiceID != nil {
-		if err := o.UpdateInvoice(strings.TrimSpace(*in.InvoiceID), now); err != nil {
-			return orderdom.Order{}, err
-		}
-	}
-	if in.PaymentID != nil {
-		if err := o.UpdatePayment(strings.TrimSpace(*in.PaymentID), now); err != nil {
-			return orderdom.Order{}, err
-		}
-	}
-	if in.TransferedDate != nil {
-		if err := o.SetTransfered(in.TransferedDate.UTC(), now); err != nil {
-			return orderdom.Order{}, err
-		}
-	}
-	if in.UpdatedBy != nil {
-		v := strings.TrimSpace(*in.UpdatedBy)
-		o.UpdatedBy = &v
-		if err := o.Touch(now); err != nil {
+		if err := o.UpdateBillingSnapshot(b); err != nil {
 			return orderdom.Order{}, err
 		}
 	}
@@ -242,14 +213,39 @@ func (u *OrderUsecase) Update(ctx context.Context, in UpdateOrderInput) (orderdo
 				Price:       it.Price,
 			})
 		}
-		if err := o.ReplaceItems(items, now); err != nil {
+		if err := o.ReplaceItems(items); err != nil {
 			return orderdom.Order{}, err
 		}
 	}
 
-	return u.repo.Save(ctx, o, nil)
+	// ✅ 最後に New で再検証してから保存（avatarId を含む）
+	checked, err := orderdom.New(
+		strings.TrimSpace(o.ID),
+		strings.TrimSpace(o.UserID),
+		strings.TrimSpace(o.AvatarID),
+		strings.TrimSpace(o.CartID),
+		o.ShippingSnapshot,
+		o.BillingSnapshot,
+		o.Items,
+		o.CreatedAt,
+	)
+	if err != nil {
+		return orderdom.Order{}, err
+	}
+
+	return u.repo.Save(ctx, checked, nil)
 }
 
 func (u *OrderUsecase) Delete(ctx context.Context, id string) error {
 	return u.repo.Delete(ctx, strings.TrimSpace(id))
+}
+
+// ------------------------------------------------------------
+// ID generation
+// ------------------------------------------------------------
+
+// newOrderID generates an order id when client didn't specify one.
+// Firestore auto-idに依存せず、domain.Newの必須ID条件を満たすためにここで採番する。
+func (u *OrderUsecase) newOrderID(t time.Time) string {
+	return fmt.Sprintf("ord_%d", t.UTC().UnixNano())
 }
