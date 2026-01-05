@@ -18,7 +18,7 @@ import (
 	arweaveinfra "narratives/internal/infra/arweave"
 	solanainfra "narratives/internal/infra/solana"
 
-	httpin "narratives/internal/adapters/in/http"
+	httpin "narratives/internal/adapters/in/http/console"
 	fs "narratives/internal/adapters/out/firestore"
 	gcso "narratives/internal/adapters/out/gcs"
 	mailadp "narratives/internal/adapters/out/mail"

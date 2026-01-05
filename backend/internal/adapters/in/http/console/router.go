@@ -22,7 +22,7 @@ import (
 	companyquery "narratives/internal/application/query"
 
 	// ハンドラ群
-	"narratives/internal/adapters/in/http/handlers"
+	handlers "narratives/internal/adapters/in/http/console/handler"
 	"narratives/internal/adapters/in/http/middleware"
 
 	// ✅ SNS router

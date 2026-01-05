@@ -1,4 +1,4 @@
-// backend/internal/adapters/in/http/handlers/mint_handler.go
+// backend\internal\adapters\in\http\console\handler\mint_handler.go
 package handlers
 
 import (

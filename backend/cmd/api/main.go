@@ -13,7 +13,7 @@ import (
 	"syscall"
 	"time"
 
-	httpin "narratives/internal/adapters/in/http"
+	httpin "narratives/internal/adapters/in/http/console"
 	"narratives/internal/adapters/in/http/middleware"
 	"narratives/internal/platform/di"
 )
