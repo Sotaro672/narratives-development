@@ -39,6 +39,8 @@ type Deps struct {
 	Post http.Handler
 
 	// ✅ NEW: payment (order context / checkout)
+	// - GET /sns/payment            -> PaymentHandler.getPaymentContext (normalized to /payment)
+	// - GET /sns/payments/{id}      -> PaymentHandler.get (normalized to /payments/{id})
 	Payment http.Handler
 
 	// ✅ NEW: preview
@@ -159,9 +161,17 @@ func Register(mux *http.ServeMux, deps Deps) {
 		mux.Handle("/sns/posts/", deps.Post)
 	}
 
-	// payment
+	// ✅ payment
+	// PaymentHandler supports:
+	// - GET /sns/payment       -> /payment
+	// - GET /sns/payments/{id} -> /payments/{id}
 	if deps.Payment != nil {
+		// context endpoint
 		mux.Handle("/sns/payment", deps.Payment)
 		mux.Handle("/sns/payment/", deps.Payment)
+
+		// existing payments/{id} route under /sns (so handler's "/payments/{id}" branch is reachable)
+		mux.Handle("/sns/payments", deps.Payment)
+		mux.Handle("/sns/payments/", deps.Payment)
 	}
 }

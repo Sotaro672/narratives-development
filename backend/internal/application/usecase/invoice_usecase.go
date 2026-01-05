@@ -1,3 +1,4 @@
+// backend\internal\application\usecase\invoice_usecase.go
 package usecase
 
 import (
@@ -8,6 +9,7 @@ import (
 
 	common "narratives/internal/domain/common"
 	invoicedom "narratives/internal/domain/invoice"
+	paymentdom "narratives/internal/domain/payment"
 )
 
 // InvoiceRepo is the persistence port required by InvoiceUsecase.
@@ -25,6 +27,11 @@ type InvoiceRepo interface {
 	DeleteByOrderID(ctx context.Context, orderID string) error
 }
 
+// ✅ Payment 起票は PaymentUsecase に寄せる（小さい口だけ定義）
+type PaymentCreator interface {
+	Create(ctx context.Context, in paymentdom.CreatePaymentInput) (*paymentdom.Payment, error)
+}
+
 // InvoiceFilter provides basic filtering for listing invoices.
 type InvoiceFilter struct {
 	OrderID *string
@@ -33,14 +40,16 @@ type InvoiceFilter struct {
 
 // InvoiceUsecase orchestrates invoice operations.
 type InvoiceUsecase struct {
-	repo InvoiceRepo
-	now  func() time.Time
+	repo           InvoiceRepo
+	paymentCreator PaymentCreator
+	now            func() time.Time
 }
 
-func NewInvoiceUsecase(repo InvoiceRepo) *InvoiceUsecase {
+func NewInvoiceUsecase(repo InvoiceRepo, paymentCreator PaymentCreator) *InvoiceUsecase {
 	return &InvoiceUsecase{
-		repo: repo,
-		now:  time.Now,
+		repo:           repo,
+		paymentCreator: paymentCreator,
+		now:            time.Now,
 	}
 }
 
@@ -77,13 +86,18 @@ func (u *InvoiceUsecase) ListByCursor(ctx context.Context, f InvoiceFilter, s co
 // Commands
 // =======================
 
-// ✅ 起票（Create）は「常に paid=false」で作る（paid更新は payment_handler 側の UpdatePaid を使う）
+// ✅ 起票（Create）は「常に paid=false」で作る
 type CreateInvoiceInput struct {
 	OrderID string
 	Prices  []int
 
 	Tax         int
 	ShippingFee int
+
+	// ✅ payment起票に必要な情報（invoice起票と同時に生成する）
+	BillingAddressID string
+	PaymentStatus    paymentdom.PaymentStatus
+	PaymentErrorType *string
 }
 
 func (u *InvoiceUsecase) Create(ctx context.Context, in CreateInvoiceInput) (invoicedom.Invoice, error) {
@@ -104,53 +118,44 @@ func (u *InvoiceUsecase) Create(ctx context.Context, in CreateInvoiceInput) (inv
 		return invoicedom.Invoice{}, err
 	}
 
-	// ✅ ここでは paid を触らない（New の default=false のまま）
+	// ✅ paid は触らない（New の default=false のまま）
 	out, err := u.repo.Create(ctx, inv)
 	if err != nil {
 		log.Printf("[invoice_uc] Create repo.Create failed orderId=%s err=%v", orderID, err)
 		return invoicedom.Invoice{}, err
 	}
 
-	log.Printf("[invoice_uc] Create repo.Create OK orderId=%s paid=%t updatedAt_nil=%t",
-		out.OrderID, out.Paid, out.UpdatedAt == nil,
-	)
-	return out, nil
-}
+	// ✅ payment 起票は PaymentUsecase に委譲（ここでは「依頼」だけ）
+	if u.paymentCreator != nil {
+		billingAddrID := strings.TrimSpace(in.BillingAddressID)
+		if billingAddrID != "" {
+			amount := 0
+			for _, p := range in.Prices {
+				amount += p
+			}
+			amount += in.Tax
+			amount += in.ShippingFee
 
-type UpdateInvoicePaidInput struct {
-	OrderID string
-	Paid    bool
-}
+			st := in.PaymentStatus
+			if strings.TrimSpace(string(st)) == "" {
+				st = paymentdom.PaymentStatusPending
+			}
 
-// ✅ paid の更新はここだけで行う（payment_handler から呼ぶ）
-func (u *InvoiceUsecase) UpdatePaid(ctx context.Context, in UpdateInvoicePaidInput) (invoicedom.Invoice, error) {
-	orderID := strings.TrimSpace(in.OrderID)
-	now := u.now().UTC()
-
-	log.Printf("[invoice_uc] UpdatePaid start orderId=%s paid_to=%t now=%s",
-		orderID, in.Paid, now.Format(time.RFC3339Nano),
-	)
-
-	cur, err := u.repo.GetByOrderID(ctx, orderID)
-	if err != nil {
-		log.Printf("[invoice_uc] UpdatePaid GetByOrderID failed orderId=%s err=%v", orderID, err)
-		return invoicedom.Invoice{}, err
+			_, pErr := u.paymentCreator.Create(ctx, paymentdom.CreatePaymentInput{
+				InvoiceID:        orderID, // ✅ docId=invoiceId (=orderId) 前提
+				BillingAddressID: billingAddrID,
+				Amount:           amount,
+				Status:           st,
+				ErrorType:        in.PaymentErrorType,
+			})
+			if pErr != nil {
+				log.Printf("[invoice_uc] Create payment failed orderId=%s err=%v", orderID, pErr)
+				return invoicedom.Invoice{}, pErr
+			}
+		}
 	}
 
-	// ✅ entity の SetPaid が (bool, time.Time) を要求するため、now を渡す
-	//    updatedAt を「false->true の瞬間だけ」刻むロジックは entity 側に委譲する想定
-	if err := cur.SetPaid(in.Paid, now); err != nil {
-		log.Printf("[invoice_uc] UpdatePaid SetPaid failed orderId=%s err=%v", orderID, err)
-		return invoicedom.Invoice{}, err
-	}
-
-	out, err := u.repo.Save(ctx, cur, nil)
-	if err != nil {
-		log.Printf("[invoice_uc] UpdatePaid Save failed orderId=%s err=%v", orderID, err)
-		return invoicedom.Invoice{}, err
-	}
-
-	log.Printf("[invoice_uc] UpdatePaid OK orderId=%s paid=%t updatedAt_nil=%t",
+	log.Printf("[invoice_uc] Create OK orderId=%s paid=%t updatedAt_nil=%t",
 		out.OrderID, out.Paid, out.UpdatedAt == nil,
 	)
 	return out, nil

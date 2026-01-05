@@ -241,9 +241,12 @@ func isNotFoundInventory(err error) bool {
 	return strings.Contains(msg, "not found")
 }
 
-// upsertStockByModel merges Stock[modelId].Products with productIDs (accumulation).
+// upsertStockByModel merges Stock[modelId].Products with productIDs,
+// sets Accumulation, and keeps/initializes reservation fields (ReservedByOrder/ReservedCount) if they exist.
+//
 // - Stock が map である前提
 // - Products が []string / map[string]bool / map[string]struct{} などでも対応
+// - entity.go の拡張（ReservedByOrder/ReservedCount）に追随
 func upsertStockByModel(m *invdom.Mint, modelID string, productIDs []string) error {
 	if m == nil {
 		return errors.New("mint is nil")
@@ -288,7 +291,9 @@ func upsertStockByModel(m *invdom.Mint, modelID string, productIDs []string) err
 	// 既存の Stock[modelID] があれば、それをベースに「追加マージ」する
 	existing := stock.MapIndex(key)
 
+	// ---- merge product IDs ----
 	mergedSet := map[string]struct{}{}
+
 	// 既存分
 	if existing.IsValid() && existing.Kind() != reflect.Invalid && !(existing.Kind() == reflect.Ptr && existing.IsNil()) {
 		for _, id := range extractProductIDsFromModelStockValue(existing) {
@@ -318,59 +323,141 @@ func upsertStockByModel(m *invdom.Mint, modelID string, productIDs []string) err
 
 	// val を作る（struct の場合は既存を可能な限り維持）
 	var val reflect.Value
-	if existing.IsValid() && existing.Kind() == valType.Kind() && existing.Type() == valType {
-		// 同型なら既存をコピーして維持（他フィールドがあっても壊さない）
+	if existing.IsValid() && existing.Type() == valType {
 		val = existing
 	} else {
 		val = reflect.New(valType).Elem()
 	}
 
-	// val.ModelID = modelID があればセット
-	if val.Kind() == reflect.Struct {
-		f := val.FieldByName("ModelID")
-		if f.IsValid() && f.CanSet() && f.Kind() == reflect.String {
-			f.SetString(modelID)
+	if val.Kind() != reflect.Struct {
+		return errors.New("inventory.Mint.Stock value must be a struct (ModelStock)")
+	}
+
+	// (optional) val.ModelID = modelID があればセット
+	if f := val.FieldByName("ModelID"); f.IsValid() && f.CanSet() && f.Kind() == reflect.String {
+		f.SetString(modelID)
+	}
+
+	// ---- set Products ----
+	if pf := val.FieldByName("Products"); pf.IsValid() && pf.CanSet() {
+		switch pf.Kind() {
+		case reflect.Slice:
+			// []string 想定
+			if pf.Type().Elem().Kind() == reflect.String {
+				s := reflect.MakeSlice(pf.Type(), 0, len(merged))
+				for _, id := range merged {
+					s = reflect.Append(s, reflect.ValueOf(id))
+				}
+				pf.Set(s)
+			}
+		case reflect.Map:
+			// map[string]bool / map[string]struct{} 想定
+			if pf.Type().Key().Kind() == reflect.String {
+				mm := reflect.MakeMapWithSize(pf.Type(), len(merged))
+				for _, id := range merged {
+					var mv reflect.Value
+					switch pf.Type().Elem().Kind() {
+					case reflect.Bool:
+						mv = reflect.ValueOf(true).Convert(pf.Type().Elem())
+					case reflect.Struct:
+						mv = reflect.New(pf.Type().Elem()).Elem() // struct{} など
+					default:
+						mv = reflect.Zero(pf.Type().Elem())
+					}
+					mm.SetMapIndex(reflect.ValueOf(id), mv)
+				}
+				pf.Set(mm)
+			}
 		}
 	}
 
-	// val.Products をセット
-	if val.Kind() == reflect.Struct {
-		pf := val.FieldByName("Products")
-		if pf.IsValid() && pf.CanSet() {
-			switch pf.Kind() {
-			case reflect.Slice:
-				// []string 想定
-				if pf.Type().Elem().Kind() == reflect.String {
-					s := reflect.MakeSlice(pf.Type(), 0, len(merged))
-					for _, id := range merged {
-						s = reflect.Append(s, reflect.ValueOf(id))
-					}
-					pf.Set(s)
+	// ---- set Accumulation = len(products) ----
+	if af := val.FieldByName("Accumulation"); af.IsValid() && af.CanSet() {
+		switch af.Kind() {
+		case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
+			af.SetInt(int64(len(merged)))
+		}
+	}
+
+	// ---- reservation fields (keep existing; init for new) ----
+	// ReservedByOrder: map[string]int
+	var reservedSum int64 = -1
+	if rf := val.FieldByName("ReservedByOrder"); rf.IsValid() && rf.CanSet() && rf.Kind() == reflect.Map {
+		if rf.IsNil() {
+			rf.Set(reflect.MakeMap(rf.Type()))
+		}
+		// best-effort sum
+		if rf.Type().Key().Kind() == reflect.String {
+			var sum int64
+			iter := rf.MapRange()
+			for iter.Next() {
+				v := iter.Value()
+				switch v.Kind() {
+				case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
+					sum += v.Int()
+				case reflect.Float32, reflect.Float64:
+					sum += int64(v.Float())
 				}
-			case reflect.Map:
-				// map[string]bool / map[string]struct{} 想定
-				if pf.Type().Key().Kind() == reflect.String {
-					mm := reflect.MakeMapWithSize(pf.Type(), len(merged))
-					for _, id := range merged {
-						var mv reflect.Value
-						switch pf.Type().Elem().Kind() {
-						case reflect.Bool:
-							mv = reflect.ValueOf(true).Convert(pf.Type().Elem())
-						case reflect.Struct:
-							mv = reflect.New(pf.Type().Elem()).Elem() // struct{} など
-						default:
-							mv = reflect.Zero(pf.Type().Elem())
-						}
-						mm.SetMapIndex(reflect.ValueOf(id), mv)
-					}
-					pf.Set(mm)
-				}
+			}
+			reservedSum = sum
+		}
+	}
+
+	// ReservedCount: int
+	if cf := val.FieldByName("ReservedCount"); cf.IsValid() && cf.CanSet() {
+		switch cf.Kind() {
+		case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
+			if reservedSum >= 0 {
+				cf.SetInt(reservedSum)
 			}
 		}
 	}
 
 	// Stock[modelID] = val
 	stock.SetMapIndex(key, val)
+
+	// ModelIDs に modelID を入れておく（検索補助）
+	_ = upsertModelIDOnMint(m, modelID)
+
+	return nil
+}
+
+// ensure mint.ModelIDs contains modelID (best-effort; keeps reflection style)
+func upsertModelIDOnMint(m *invdom.Mint, modelID string) error {
+	if m == nil {
+		return nil
+	}
+	modelID = strings.TrimSpace(modelID)
+	if modelID == "" {
+		return nil
+	}
+
+	rv := reflect.ValueOf(m)
+	if rv.Kind() != reflect.Ptr || rv.IsNil() {
+		return nil
+	}
+	rv = rv.Elem()
+	if rv.Kind() != reflect.Struct {
+		return nil
+	}
+
+	f := rv.FieldByName("ModelIDs")
+	if !f.IsValid() || !f.CanSet() || f.Kind() != reflect.Slice || f.Type().Elem().Kind() != reflect.String {
+		return nil
+	}
+
+	seen := map[string]struct{}{}
+	for i := 0; i < f.Len(); i++ {
+		s := strings.TrimSpace(f.Index(i).String())
+		if s != "" {
+			seen[s] = struct{}{}
+		}
+	}
+	if _, ok := seen[modelID]; ok {
+		return nil
+	}
+
+	f.Set(reflect.Append(f, reflect.ValueOf(modelID)))
 	return nil
 }
 

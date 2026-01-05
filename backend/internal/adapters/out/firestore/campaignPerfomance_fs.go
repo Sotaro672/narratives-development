@@ -555,13 +555,3 @@ func mapCampaignPerformanceSort(sort cperfdom.Sort) (string, firestore.Direction
 	}
 	return field, dir
 }
-
-func containsString(list []string, v string) bool {
-	v = strings.TrimSpace(v)
-	for _, s := range list {
-		if strings.TrimSpace(s) == v {
-			return true
-		}
-	}
-	return false
-}

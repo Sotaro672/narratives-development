@@ -21,8 +21,9 @@ import (
 	// ★ new: Query services (CompanyProductionQueryService / InventoryQuery / ListCreateQuery / ListManagementQuery / ListDetailQuery)
 	companyquery "narratives/internal/application/query"
 
-	// ハンドラ群
-	handlers "narratives/internal/adapters/in/http/console/handler"
+	// ✅ console handlers（正）
+	consoleHandler "narratives/internal/adapters/in/http/console/handler"
+
 	"narratives/internal/adapters/in/http/middleware"
 
 	// ✅ SNS router
@@ -85,9 +86,8 @@ type RouterDeps struct {
 	ListDetailQuery *companyquery.ListDetailQuery
 
 	// ✅ NEW: ListImage uploader/deleter（/lists/{id}/images/... 用）
-	// - DI で注入できるように router deps に足す
-	ListImageUploader handlers.ListImageUploader
-	ListImageDeleter  handlers.ListImageDeleter
+	ListImageUploader consoleHandler.ListImageUploader
+	ListImageDeleter  consoleHandler.ListImageDeleter
 
 	// ★ NameResolver（ID→名前/型番解決）
 	NameResolver *resolver.NameResolver
@@ -120,7 +120,7 @@ type RouterDeps struct {
 	MessageRepo *msgrepo.MessageRepositoryFS
 
 	// ★ MintRequest の query（productionIds を company 境界で取得する等に使う）
-	MintRequestQueryService handlers.MintRequestQueryService
+	MintRequestQueryService consoleHandler.MintRequestQueryService
 
 	// ✅ SNS buyer-facing handlers set (/sns/** + aliases)
 	SNS snsh.Deps
@@ -154,7 +154,7 @@ func NewRouter(deps RouterDeps) http.Handler {
 	// /auth/bootstrap
 	// ================================
 	if deps.AuthBootstrap != nil && bootstrapMw != nil {
-		bootstrapHandler := handlers.NewAuthBootstrapHandler(deps.AuthBootstrap)
+		bootstrapHandler := consoleHandler.NewAuthBootstrapHandler(deps.AuthBootstrap)
 		var h http.Handler = bootstrapHandler
 		h = bootstrapMw.Handler(h)
 		mux.Handle("/auth/bootstrap", h)
@@ -164,7 +164,7 @@ func NewRouter(deps RouterDeps) http.Handler {
 	// Accounts
 	// ================================
 	if deps.AccountUC != nil {
-		accountH := handlers.NewAccountHandler(deps.AccountUC)
+		accountH := consoleHandler.NewAccountHandler(deps.AccountUC)
 		var h http.Handler = accountH
 		if authMw != nil {
 			h = authMw.Handler(h)
@@ -177,7 +177,7 @@ func NewRouter(deps RouterDeps) http.Handler {
 	// Announcements
 	// ================================
 	if deps.AnnouncementUC != nil {
-		announcementH := handlers.NewAnnouncementHandler(deps.AnnouncementUC)
+		announcementH := consoleHandler.NewAnnouncementHandler(deps.AnnouncementUC)
 		var h http.Handler = announcementH
 		if authMw != nil {
 			h = authMw.Handler(h)
@@ -190,7 +190,7 @@ func NewRouter(deps RouterDeps) http.Handler {
 	// Permissions
 	// ================================
 	if deps.PermissionUC != nil {
-		permissionH := handlers.NewPermissionHandler(deps.PermissionUC)
+		permissionH := consoleHandler.NewPermissionHandler(deps.PermissionUC)
 		var h http.Handler = permissionH
 		if authMw != nil {
 			h = authMw.Handler(h)
@@ -203,7 +203,7 @@ func NewRouter(deps RouterDeps) http.Handler {
 	// Brands
 	// ================================
 	if deps.BrandUC != nil {
-		brandH := handlers.NewBrandHandler(deps.BrandUC)
+		brandH := consoleHandler.NewBrandHandler(deps.BrandUC)
 		var h http.Handler = brandH
 		if authMw != nil {
 			h = authMw.Handler(h)
@@ -216,7 +216,7 @@ func NewRouter(deps RouterDeps) http.Handler {
 	// Companies
 	// ================================
 	if deps.CompanyUC != nil {
-		companyH := handlers.NewCompanyHandler(deps.CompanyUC)
+		companyH := consoleHandler.NewCompanyHandler(deps.CompanyUC)
 		var h http.Handler = companyH
 		if authMw != nil {
 			h = authMw.Handler(h)
@@ -229,7 +229,7 @@ func NewRouter(deps RouterDeps) http.Handler {
 	// Inquiries
 	// ================================
 	if deps.InquiryUC != nil {
-		inquiryH := handlers.NewInquiryHandler(deps.InquiryUC)
+		inquiryH := consoleHandler.NewInquiryHandler(deps.InquiryUC)
 		var h http.Handler = inquiryH
 		if authMw != nil {
 			h = authMw.Handler(h)
@@ -242,9 +242,7 @@ func NewRouter(deps RouterDeps) http.Handler {
 	// Inventories
 	// ================================
 	if deps.InventoryUC != nil {
-		// ✅ Query を注入（nil の場合は /inventory 側が NotImplemented を返す想定）
-		// ✅ listCreateQuery も注入する
-		inventoryH := handlers.NewInventoryHandlerWithListCreateQuery(
+		inventoryH := consoleHandler.NewInventoryHandlerWithListCreateQuery(
 			deps.InventoryUC,
 			deps.InventoryQuery,
 			deps.ListCreateQuery,
@@ -255,11 +253,9 @@ func NewRouter(deps RouterDeps) http.Handler {
 			h = authMw.Handler(h)
 		}
 
-		// CRUD (domain/usecase)
 		mux.Handle("/inventories", h)
 		mux.Handle("/inventories/", h)
 
-		// Query (read-only DTO)
 		mux.Handle("/inventory", h)
 		mux.Handle("/inventory/", h)
 	}
@@ -270,9 +266,8 @@ func NewRouter(deps RouterDeps) http.Handler {
 	if deps.ListUC != nil {
 		var listH http.Handler
 
-		// ✅ ListImage が注入されているなら、必ず AndListImage ctor を使う
 		if deps.ListImageUploader != nil || deps.ListImageDeleter != nil {
-			listH = handlers.NewListHandlerWithQueriesAndListImage(
+			listH = consoleHandler.NewListHandlerWithQueriesAndListImage(
 				deps.ListUC,
 				deps.ListManagementQuery,
 				deps.ListDetailQuery,
@@ -280,14 +275,13 @@ func NewRouter(deps RouterDeps) http.Handler {
 				deps.ListImageDeleter,
 			)
 		} else if deps.ListManagementQuery != nil || deps.ListDetailQuery != nil {
-			// ✅ listManagement / listDetail を分離した Query を注入
-			listH = handlers.NewListHandlerWithQueries(
+			listH = consoleHandler.NewListHandlerWithQueries(
 				deps.ListUC,
 				deps.ListManagementQuery,
 				deps.ListDetailQuery,
 			)
 		} else {
-			listH = handlers.NewListHandler(deps.ListUC)
+			listH = consoleHandler.NewListHandler(deps.ListUC)
 		}
 
 		var h http.Handler = listH
@@ -302,11 +296,11 @@ func NewRouter(deps RouterDeps) http.Handler {
 	// Products（印刷系）
 	// ================================
 	if deps.PrintUC != nil {
-		printH := handlers.NewPrintHandler(
+		printH := consoleHandler.NewPrintHandler(
 			deps.PrintUC,
 			deps.ProductionUC,
 			deps.ModelUC,
-			deps.NameResolver, // ★ NameResolver を注入
+			deps.NameResolver,
 		)
 
 		var h http.Handler = printH
@@ -323,7 +317,7 @@ func NewRouter(deps RouterDeps) http.Handler {
 	// Product Blueprints
 	// ================================
 	if deps.ProductBlueprintUC != nil {
-		pbH := handlers.NewProductBlueprintHandler(
+		pbH := consoleHandler.NewProductBlueprintHandler(
 			deps.ProductBlueprintUC,
 			deps.BrandService,
 			deps.MemberService,
@@ -342,7 +336,7 @@ func NewRouter(deps RouterDeps) http.Handler {
 	// Token Blueprints
 	// ================================
 	if deps.TokenBlueprintUC != nil {
-		tbH := handlers.NewTokenBlueprintHandler(
+		tbH := consoleHandler.NewTokenBlueprintHandler(
 			deps.TokenBlueprintUC,
 			deps.MemberService,
 			deps.BrandService,
@@ -361,7 +355,7 @@ func NewRouter(deps RouterDeps) http.Handler {
 	// Messages
 	// ================================
 	if deps.MessageUC != nil && deps.MessageRepo != nil {
-		messageH := handlers.NewMessageHandler(deps.MessageUC, deps.MessageRepo)
+		messageH := consoleHandler.NewMessageHandler(deps.MessageUC, deps.MessageRepo)
 
 		var h http.Handler = messageH
 		if authMw != nil {
@@ -376,7 +370,7 @@ func NewRouter(deps RouterDeps) http.Handler {
 	// Orders
 	// ================================
 	if deps.OrderUC != nil {
-		orderH := handlers.NewOrderHandler(deps.OrderUC)
+		orderH := consoleHandler.NewOrderHandler(deps.OrderUC)
 
 		var h http.Handler = orderH
 		if authMw != nil {
@@ -391,7 +385,7 @@ func NewRouter(deps RouterDeps) http.Handler {
 	// Wallets
 	// ================================
 	if deps.WalletUC != nil {
-		walletH := handlers.NewWalletHandler(deps.WalletUC)
+		walletH := consoleHandler.NewWalletHandler(deps.WalletUC)
 
 		var h http.Handler = walletH
 		if authMw != nil {
@@ -406,7 +400,7 @@ func NewRouter(deps RouterDeps) http.Handler {
 	// Members
 	// ================================
 	if deps.MemberUC != nil && deps.MemberRepo != nil {
-		memberH := handlers.NewMemberHandler(deps.MemberUC, deps.MemberRepo)
+		memberH := consoleHandler.NewMemberHandler(deps.MemberUC, deps.MemberRepo)
 
 		var h http.Handler = memberH
 		if authMw != nil {
@@ -421,7 +415,7 @@ func NewRouter(deps RouterDeps) http.Handler {
 	// Productions
 	// ================================
 	if deps.ProductionUC != nil && deps.CompanyProductionQueryService != nil {
-		productionH := handlers.NewProductionHandler(
+		productionH := consoleHandler.NewProductionHandler(
 			deps.CompanyProductionQueryService,
 			deps.ProductionUC,
 		)
@@ -439,13 +433,12 @@ func NewRouter(deps RouterDeps) http.Handler {
 	// Models
 	// ================================
 	if deps.ModelUC != nil {
-		modelH := handlers.NewModelHandler(deps.ModelUC)
+		modelH := consoleHandler.NewModelHandler(deps.ModelUC)
 
 		var h http.Handler = modelH
 		if authMw != nil {
 			h = authMw.Handler(h)
 		}
-
 		mux.Handle("/models", h)
 		mux.Handle("/models/", h)
 	}
@@ -454,7 +447,7 @@ func NewRouter(deps RouterDeps) http.Handler {
 	// ⭐ 検品 API（Inspector 用）
 	// ================================
 	if deps.ProductUC != nil && deps.InspectionUC != nil {
-		inspectorH := handlers.NewInspectorHandler(deps.ProductUC, deps.InspectionUC)
+		inspectorH := consoleHandler.NewInspectorHandler(deps.ProductUC, deps.InspectionUC)
 
 		var h http.Handler = inspectorH
 		if authMw != nil {
@@ -470,7 +463,7 @@ func NewRouter(deps RouterDeps) http.Handler {
 	// ⭐ Mint API
 	// ================================
 	if deps.MintUC != nil {
-		mintH := handlers.NewMintHandler(
+		mintH := consoleHandler.NewMintHandler(
 			deps.MintUC,
 			deps.TokenUC,
 			deps.NameResolver,
@@ -479,7 +472,8 @@ func NewRouter(deps RouterDeps) http.Handler {
 			nil,
 		)
 
-		if mh, ok := mintH.(*handlers.MintHandler); ok {
+		// NOTE: concrete type is in consoleHandler package
+		if mh, ok := mintH.(*consoleHandler.MintHandler); ok {
 			mux.HandleFunc("/mint/debug", mh.HandleDebug)
 		}
 
@@ -492,15 +486,7 @@ func NewRouter(deps RouterDeps) http.Handler {
 	}
 
 	// ================================
-	// ✅ SNS buyer-facing routes (/sns/**) + aliases (/users, /shipping-addresses, ...)
-	//
-	// ✅ FIX:
-	// - sns/router.go (snsh.Register) 側が /users 等の alias も登録するため、
-	//   ここで alias を再登録すると ServeMux が panic ("multiple registrations") します。
-	// - したがって、この router.go では
-	//   1) snsh.Register(mux, deps.SNS) を呼ぶだけ
-	//   2) nil handler の場合に限って /sns/* 側に 501 stub を置く
-	//   3) /users 等の alias はここでは一切登録しない（snsh.Register に任せる）
+	// ✅ SNS buyer-facing routes (/sns/**) + aliases
 	// ================================
 	snsh.Register(mux, deps.SNS)
 
@@ -512,9 +498,6 @@ func NewRouter(deps RouterDeps) http.Handler {
 		})
 	}
 
-	// ---- /sns/* stubs (only when nil) ----
-	// NOTE: snsh.Register は nil handler を登録しないため、
-	//       nil のときだけ /sns 側に stub を置くと「404 か未配線か」を切り分けできる。
 	if deps.SNS.User == nil {
 		h := notWired("sns users")
 		mux.Handle("/sns/users", h)
@@ -540,10 +523,6 @@ func NewRouter(deps RouterDeps) http.Handler {
 		mux.Handle("/sns/sign-in", h)
 		mux.Handle("/sns/sign-in/", h)
 	}
-
-	// ✅ IMPORTANT:
-	// alias (/users, /shipping-addresses, /billing-addresses, /avatars, /sign-in) は
-	// snsh.Register 側が rewriteToSNS() を使って登録するので、ここでは登録しない。
 
 	return mux
 }

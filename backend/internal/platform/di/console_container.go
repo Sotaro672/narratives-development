@@ -393,7 +393,12 @@ func NewContainer(ctx context.Context) (*Container, error) {
 	companyUC := uc.NewCompanyUsecase(companyRepo)
 	inquiryUC := uc.NewInquiryUsecase(inquiryRepo, nil, nil)
 	inventoryUC := uc.NewInventoryUsecase(inventoryRepo)
-	invoiceUC := uc.NewInvoiceUsecase(invoiceRepo)
+
+	// ✅ PaymentUsecase を先に作る（InvoiceUsecase が PaymentCreator を要求するため）
+	paymentUC := uc.NewPaymentUsecase(paymentRepo)
+
+	// ✅ InvoiceUsecase は (InvoiceRepo, PaymentCreator) を受け取る
+	invoiceUC := uc.NewInvoiceUsecase(invoiceRepo, paymentUC)
 
 	listUC := uc.NewListUsecaseWithCreator(
 		listRepo,      // ListReader (+ ListLister/ListUpdater)
@@ -412,7 +417,6 @@ func NewContainer(ctx context.Context) (*Container, error) {
 	orderUC := uc.NewOrderUsecase(orderRepo).
 		WithInvoiceUsecase(invoiceUC)
 
-	paymentUC := uc.NewPaymentUsecase(paymentRepo)
 	permissionUC := uc.NewPermissionUsecase(permissionRepo)
 
 	printUC := uc.NewPrintUsecase(

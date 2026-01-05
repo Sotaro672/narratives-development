@@ -1,3 +1,4 @@
+// backend\internal\domain\inventory\repository_port.go
 package inventory
 
 import "context"
@@ -19,7 +20,11 @@ type RepositoryPort interface {
 
 	// atomic upsert
 	// - docId = productBlueprintId__tokenBlueprintId
-	// - stock.<modelId> = { products: map[productId]bool, accumulation: len(products) } を置換
+	// - stock.<modelId> を「物理在庫(products/accumulation) + 引当(reservedByOrder/reservedCount)」込みで置換
+	//
+	// NOTE:
+	// - entity.go を正として、reserved 系は「初期値ゼロ」で必ず存在させる。
+	// - 既存の reserved を維持したい場合は別メソッド（Reserve/Unreserve）を追加するのが安全。
 	UpsertByProductBlueprintAndToken(
 		ctx context.Context,
 		tokenBlueprintID string,

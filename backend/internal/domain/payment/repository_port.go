@@ -1,3 +1,4 @@
+// backend\internal\domain\payment\repository_port.go
 package payment
 
 import (
@@ -10,6 +11,8 @@ import (
 type PaymentMethod string
 
 // CreatePaymentInput - 支払い作成入力（ドメイン契約）
+//
+// ✅ docId = invoiceId のため、ID は受け取らない
 type CreatePaymentInput struct {
 	InvoiceID        string        `json:"invoiceId"`
 	BillingAddressID string        `json:"billingAddressId"`
@@ -19,8 +22,13 @@ type CreatePaymentInput struct {
 }
 
 // UpdatePaymentInput - Payment部分更新（nilは未更新）
+//
+// ✅ docId = invoiceId のため、Update は invoiceId をキーに行う前提。
+//
+//	また、Payment.Entity から ID/UpdatedAt/DeletedAt を削除したため、
+//	フィルタ/更新項目からもそれらに依存する要素を削除。
 type UpdatePaymentInput struct {
-	InvoiceID        *string        `json:"invoiceId,omitempty"`
+	// InvoiceID は docId と同一のため更新不可（必要なら “移設” 扱いで別操作にする）
 	BillingAddressID *string        `json:"billingAddressId,omitempty"`
 	Amount           *int           `json:"amount,omitempty"`
 	Status           *PaymentStatus `json:"status,omitempty"`
@@ -28,8 +36,9 @@ type UpdatePaymentInput struct {
 }
 
 // Filter - 検索条件
+//
+// ✅ entity.go 準拠（Updated/Deleted 系を削除）
 type Filter struct {
-	ID               string
 	InvoiceID        string
 	BillingAddressID string
 	Statuses         []PaymentStatus
@@ -40,13 +49,6 @@ type Filter struct {
 
 	CreatedFrom *time.Time
 	CreatedTo   *time.Time
-	UpdatedFrom *time.Time
-	UpdatedTo   *time.Time
-	DeletedFrom *time.Time
-	DeletedTo   *time.Time
-
-	// nil: 全件, true: 削除済のみ, false: 未削除のみ
-	Deleted *bool
 }
 
 // Sort - 並び順
@@ -59,7 +61,6 @@ type SortColumn string
 
 const (
 	SortByCreatedAt SortColumn = "createdAt"
-	SortByUpdatedAt SortColumn = "updatedAt"
 	SortByAmount    SortColumn = "amount"
 	SortByStatus    SortColumn = "status"
 )
@@ -87,17 +88,20 @@ type PageResult struct {
 }
 
 // RepositoryPort - ドメインのリポジトリ契約
+//
+// ✅ docId = invoiceId を前提に、ID 引数は invoiceId として扱うよう整理。
+//
+//	（互換のため引数名は id のままでも良いが、ここでは明確化のため invoiceId に統一）
 type RepositoryPort interface {
 	// 取得
-	GetByID(ctx context.Context, id string) (*Payment, error)
-	GetByInvoiceID(ctx context.Context, invoiceID string) ([]Payment, error)
+	GetByInvoiceID(ctx context.Context, invoiceID string) (*Payment, error)
 	List(ctx context.Context, filter Filter, sort Sort, page Page) (PageResult, error)
 	Count(ctx context.Context, filter Filter) (int, error)
 
 	// 変更
 	Create(ctx context.Context, in CreatePaymentInput) (*Payment, error)
-	Update(ctx context.Context, id string, patch UpdatePaymentInput) (*Payment, error)
-	Delete(ctx context.Context, id string) error
+	UpdateByInvoiceID(ctx context.Context, invoiceID string, patch UpdatePaymentInput) (*Payment, error)
+	DeleteByInvoiceID(ctx context.Context, invoiceID string) error
 
 	// 開発/テスト補助
 	Reset(ctx context.Context) error

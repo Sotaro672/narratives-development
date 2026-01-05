@@ -344,6 +344,11 @@ func (h *InventoryHandler) GetDetailByIDQueryOrFallback(w http.ResponseWriter, r
 		return
 	}
 
+	// entity.go 準拠: reserved を考慮した “表示用” 合計も返す（fallback のみ）
+	totalAcc := totalAccumulation(m)
+	totalRes := totalReserved(m)
+	totalAvail := totalAvailable(m)
+
 	resp := map[string]any{
 		"inventoryId":        strings.TrimSpace(m.ID),
 		"id":                 strings.TrimSpace(m.ID),
@@ -355,7 +360,12 @@ func (h *InventoryHandler) GetDetailByIDQueryOrFallback(w http.ResponseWriter, r
 		"productBlueprintPatch": map[string]any{},
 		"tokenBlueprintPatch":   map[string]any{}, // ✅ 追加（fallback は空で返す）
 		"rows":                  []any{},
-		"totalStock":            totalProducts(m),
+
+		// 互換のため totalStock を維持しつつ、reserved/available も追加
+		"totalStock":        totalAvail,
+		"totalAccumulation": totalAcc,
+		"totalReserved":     totalRes,
+		"totalAvailable":    totalAvail,
 	}
 
 	writeJSON(w, http.StatusOK, resp)
@@ -478,7 +488,9 @@ func (h *InventoryHandler) List(w http.ResponseWriter, r *http.Request) {
 	switch {
 	case tbID != "" && modelID != "":
 		list, err = h.UC.ListByTokenAndModelID(ctx, tbID, modelID)
+
 	case tbID != "" && pbID != "":
+		// RepositoryPort に「TB+PB」直クエリが無いので PB で絞ってからフィルタ
 		all, e := h.UC.ListByProductBlueprintID(ctx, pbID)
 		if e != nil {
 			err = e
@@ -491,10 +503,13 @@ func (h *InventoryHandler) List(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 		list = tmp
+
 	case tbID != "":
 		list, err = h.UC.ListByTokenBlueprintID(ctx, tbID)
+
 	case modelID != "":
 		list, err = h.UC.ListByModelID(ctx, modelID)
+
 	default:
 		list, err = h.UC.ListByProductBlueprintID(ctx, pbID)
 	}
@@ -607,45 +622,73 @@ func (h *InventoryHandler) Delete(w http.ResponseWriter, r *http.Request) {
 // Helpers
 // ============================================================
 
-func totalProducts(m invdom.Mint) int {
-	if m.Stock == nil {
-		return 0
-	}
+// totalAccumulation: 物理在庫（= Products 数 / Accumulation）
+func totalAccumulation(m invdom.Mint) int {
 	total := 0
 	for _, ms := range m.Stock {
-		total += modelStockLen(ms)
+		total += modelStockAccumulation(ms)
+	}
+	if total < 0 {
+		return 0
 	}
 	return total
 }
 
-func modelStockLen(ms invdom.ModelStock) int {
-	rv := reflect.ValueOf(ms)
-	if !rv.IsValid() {
+// totalReserved: 予約数（= reservedCount / reservedByOrder 合計）
+func totalReserved(m invdom.Mint) int {
+	total := 0
+	for _, ms := range m.Stock {
+		total += modelStockReserved(ms)
+	}
+	if total < 0 {
 		return 0
 	}
+	return total
+}
 
-	if rv.Kind() == reflect.Map {
-		return rv.Len()
+// totalAvailable: 表示用の “引当後在庫” = accumulation - reservedCount
+func totalAvailable(m invdom.Mint) int {
+	total := 0
+	for _, ms := range m.Stock {
+		acc := modelStockAccumulation(ms)
+		res := modelStockReserved(ms)
+		avail := acc - res
+		if avail < 0 {
+			avail = 0
+		}
+		total += avail
 	}
-	if rv.Kind() == reflect.Slice || rv.Kind() == reflect.Array {
-		return rv.Len()
+	if total < 0 {
+		return 0
 	}
-	if rv.Kind() == reflect.Struct {
-		for i := 0; i < rv.NumField(); i++ {
-			f := rv.Field(i)
+	return total
+}
 
-			if f.Kind() == reflect.Map {
-				if f.Type().Key().Kind() == reflect.String {
-					return f.Len()
-				}
-			}
-			if f.Kind() == reflect.Slice || f.Kind() == reflect.Array {
-				return f.Len()
-			}
+func modelStockAccumulation(ms invdom.ModelStock) int {
+	// 正: Accumulation（正規化済み）
+	if ms.Accumulation > 0 {
+		return ms.Accumulation
+	}
+	// 保険: Products の数
+	return len(ms.Products)
+}
+
+func modelStockReserved(ms invdom.ModelStock) int {
+	// 正: ReservedCount（正規化済み）
+	if ms.ReservedCount > 0 {
+		return ms.ReservedCount
+	}
+	// 保険: ReservedByOrder 合計
+	sum := 0
+	for _, n := range ms.ReservedByOrder {
+		if n > 0 {
+			sum += n
 		}
 	}
-
-	return 0
+	if sum < 0 {
+		return 0
+	}
+	return sum
 }
 
 func writeJSON(w http.ResponseWriter, status int, v any) {

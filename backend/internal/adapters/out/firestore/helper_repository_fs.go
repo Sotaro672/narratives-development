@@ -121,3 +121,15 @@ func getFilterString(v any, field string) (string, bool) {
 	}
 	return "", false
 }
+func containsString(xs []string, v string) bool {
+	v = strings.TrimSpace(v)
+	if v == "" || len(xs) == 0 {
+		return false
+	}
+	for _, x := range xs {
+		if strings.TrimSpace(x) == v {
+			return true
+		}
+	}
+	return false
+}

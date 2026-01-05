@@ -10,8 +10,8 @@ import (
 	"cloud.google.com/go/firestore"
 	firebaseauth "firebase.google.com/go/v4/auth"
 
-	snshttp "narratives/internal/adapters/in/http/mall"
-	snshandler "narratives/internal/adapters/in/http/mall/handler"
+	mallhttp "narratives/internal/adapters/in/http/mall"
+	mallHandler "narratives/internal/adapters/in/http/mall/handler"
 	"narratives/internal/adapters/in/http/middleware"
 	outfs "narratives/internal/adapters/out/firestore"
 	snsquery "narratives/internal/application/query/mall"
@@ -57,7 +57,7 @@ func (h hit) String() string {
 	return from + ":" + name
 }
 
-// SNSDeps is a buyer-facing (sns) HTTP dependency set.
+// SNSDeps is a buyer-facing (sns/mall) HTTP dependency set.
 type SNSDeps struct {
 	// Handlers
 	List             http.Handler
@@ -166,13 +166,13 @@ func NewSNSDepsWithNameResolverAndOrgHandlers(
 	var brandHandler http.Handler
 
 	if listUC != nil {
-		listHandler = snshandler.NewSNSListHandler(listUC)
+		listHandler = mallHandler.NewSNSListHandler(listUC)
 	}
 	if invUC != nil {
-		invHandler = snshandler.NewSNSInventoryHandler(invUC)
+		invHandler = mallHandler.NewSNSInventoryHandler(invUC)
 	}
 	if pbUC != nil {
-		pbHandler = snshandler.NewSNSProductBlueprintHandler(pbUC)
+		pbHandler = mallHandler.NewSNSProductBlueprintHandler(pbUC)
 		if nameResolver != nil {
 			setOptionalResolverField(pbHandler, "BrandNameResolver", nameResolver)
 			setOptionalResolverField(pbHandler, "CompanyNameResolver", nameResolver)
@@ -180,20 +180,20 @@ func NewSNSDepsWithNameResolverAndOrgHandlers(
 		}
 	}
 	if modelUC != nil {
-		modelHandler = snshandler.NewSNSModelHandler(modelUC)
+		modelHandler = mallHandler.NewSNSModelHandler(modelUC)
 	}
 	if catalogQ != nil {
-		catalogHandler = snshandler.NewSNSCatalogHandler(catalogQ)
+		catalogHandler = mallHandler.NewSNSCatalogHandler(catalogQ)
 	}
 	if companyUC != nil {
-		companyHandler = snshandler.NewSNSCompanyHandler(companyUC)
+		companyHandler = mallHandler.NewSNSCompanyHandler(companyUC)
 	}
 	if brandUC != nil {
-		brandHandler = snshandler.NewSNSBrandHandler(brandUC)
+		brandHandler = mallHandler.NewSNSBrandHandler(brandUC)
 	}
 
 	if tokenBlueprintUC != nil {
-		tokenBlueprintHandler = snshandler.NewSNSTokenBlueprintHandler(tokenBlueprintUC)
+		tokenBlueprintHandler = mallHandler.NewSNSTokenBlueprintHandler(tokenBlueprintUC)
 		if nameResolver != nil {
 			setOptionalResolverField(tokenBlueprintHandler, "BrandNameResolver", nameResolver)
 			setOptionalResolverField(tokenBlueprintHandler, "CompanyNameResolver", nameResolver)
@@ -235,16 +235,6 @@ func NewSNSDepsWithNameResolverAndOrgHandlers(
 }
 
 // RegisterSNSFromContainer registers SNS routes using *Container.
-//
-// ✅ This version keeps the “minimalized naming variance” policy,
-// but restores cart_query connectivity deterministically:
-//
-//   - /sns/cart (GET) is ALWAYS served by SNSCartQueryHandler when cartQ != nil
-//     (even if cartUC is nil). This prevents 404.
-//   - /sns/cart (non-GET) is served by CartHandlerWithQueries ONLY when cartUC != nil,
-//     otherwise returns 405.
-//
-// listRepo is always constructed from Firestore.
 func RegisterSNSFromContainer(mux *http.ServeMux, cont *Container) {
 	if mux == nil || cont == nil {
 		return
@@ -341,7 +331,7 @@ func RegisterSNSFromContainer(mux *http.ServeMux, cont *Container) {
 	// ✅ NEW: OrderUsecase -> SNS OrderHandler
 	orderUC := getFieldPtr[*usecase.OrderUsecase](depsAny, "OrderUC", "OrderUsecase", "SNSOrderUC", "SNSOrderUsecase")
 
-	// cartUC（ここは “cart_query 復旧” に必須ではないが、write を生かすため拾えるなら拾う）
+	// cartUC（write を生かすため拾えるなら拾う）
 	cartUC := getFieldPtr[*usecase.CartUsecase](depsAny, "CartUC", "CartUsecase")
 	if cartUC == nil {
 		// 最小限の追加：Container に cartUC getter がある場合だけ拾う（名揺れ吸収は増やさない）
@@ -366,33 +356,33 @@ func RegisterSNSFromContainer(mux *http.ServeMux, cont *Container) {
 	snsDeps.Payment = paymentH
 
 	// --------------------------------------------
-	// 6) Construct-fixed handlers (per your prior working log)
+	// 6) Construct-fixed handlers
 	// --------------------------------------------
 	// User
 	{
 		userUC := getFieldPtr[*usecase.UserUsecase](depsAny, "UserUC", "UserUsecase", "SNSUserUC", "SNSUserUsecase")
 		if userUC != nil {
-			snsDeps.User = snshandler.NewUserHandler(userUC)
+			snsDeps.User = mallHandler.NewUserHandler(userUC)
 		}
 	}
 	// Billing
 	{
 		billUC := getFieldPtr[*usecase.BillingAddressUsecase](depsAny, "BillingAddressUC", "BillingAddressUsecase", "SNSBillingAddressUC", "SNSBillingAddressUsecase")
 		if billUC != nil {
-			snsDeps.BillingAddress = snshandler.NewBillingAddressHandler(billUC)
+			snsDeps.BillingAddress = mallHandler.NewBillingAddressHandler(billUC)
 		}
 	}
 	// Avatar
 	{
 		avatarUC := getFieldPtr[*usecase.AvatarUsecase](depsAny, "AvatarUC", "AvatarUsecase", "SNSAvatarUC", "SNSAvatarUsecase")
 		if avatarUC != nil {
-			snsDeps.Avatar = snshandler.NewAvatarHandler(avatarUC)
+			snsDeps.Avatar = mallHandler.NewAvatarHandler(avatarUC)
 		}
 	}
 	// ✅ NEW: Order
 	if orderUC != nil {
-		snsDeps.Order = snshandler.NewOrderHandler(orderUC)
-		hitOrder = hit{OK: snsDeps.Order != nil, From: "constructed", Name: "snshandler.NewOrderHandler"}
+		snsDeps.Order = mallHandler.NewOrderHandler(orderUC)
+		hitOrder = hit{OK: snsDeps.Order != nil, From: "constructed", Name: "mallHandler.NewOrderHandler"}
 	} else {
 		hitOrder = hit{OK: false, From: "RouterDeps.field", Name: "OrderUC"}
 	}
@@ -403,11 +393,11 @@ func RegisterSNSFromContainer(mux *http.ServeMux, cont *Container) {
 	// - If cartQ exists: register /sns/cart GET via SNSCartQueryHandler (prevents 404)
 	// - If cartUC exists: non-GET goes to write handler; else 405
 	if cartQ != nil {
-		qh := snshandler.NewSNSCartQueryHandler(cartQ)
+		qh := mallHandler.NewSNSCartQueryHandler(cartQ)
 
 		var core http.Handler
 		if cartUC != nil {
-			core = snshandler.NewCartHandlerWithQueries(cartUC, cartQ, previewQ)
+			core = mallHandler.NewCartHandlerWithQueries(cartUC, cartQ, previewQ)
 			hitPreview = hit{OK: core != nil, From: "constructed", Name: "CartHandlerWithQueries (as preview)"}
 		}
 
@@ -442,7 +432,7 @@ func RegisterSNSFromContainer(mux *http.ServeMux, cont *Container) {
 		}
 	} else if cartUC != nil {
 		// (rare) cartQ nil but write exists
-		core := snshandler.NewCartHandlerWithQueries(cartUC, nil, previewQ)
+		core := mallHandler.NewCartHandlerWithQueries(cartUC, nil, previewQ)
 		snsDeps.Cart = core
 		snsDeps.Preview = core
 		hitCart = hit{OK: true, From: "constructed", Name: "CartHandlerWithQueries"}
@@ -452,7 +442,7 @@ func RegisterSNSFromContainer(mux *http.ServeMux, cont *Container) {
 	// --------------------------------------------
 	// 8) Logs (inject result)
 	// --------------------------------------------
-	log.Printf("[sns_container] inject result signIn=%t user=%t ship=%t bill=%t avatar=%t cart=%t preview=%t payment=%t order=%t cartUC=%t cartQ=%t previewQ=%t listRepo=%t",
+	log.Printf("[mall_container] inject result signIn=%t user=%t ship=%t bill=%t avatar=%t cart=%t preview=%t payment=%t order=%t cartUC=%t cartQ=%t previewQ=%t listRepo=%t",
 		snsDeps.SignIn != nil,
 		snsDeps.User != nil,
 		snsDeps.ShippingAddress != nil,
@@ -468,8 +458,7 @@ func RegisterSNSFromContainer(mux *http.ServeMux, cont *Container) {
 		listRepo != nil,
 	)
 
-	// hits (minimal / deterministic)
-	log.Printf("[sns_container] inject hits "+
+	log.Printf("[mall_container] inject hits "+
 		"signIn=%s ship=%s payment=%s order=%s cart=%s preview=%s "+
 		"nameResolver=%s catalogQ=%s cartQ=%s previewQ=%s listRepo=%s",
 		hitSignIn.String(),
@@ -491,7 +480,7 @@ func RegisterSNSFromContainer(mux *http.ServeMux, cont *Container) {
 	{
 		userAuth := newUserAuthMiddlewareBestEffort(cont.FirebaseAuth)
 		if userAuth == nil {
-			log.Printf("[sns_container] WARN: user_auth middleware is not available (firebase auth client missing). protected routes may 401.")
+			log.Printf("[mall_container] WARN: user_auth middleware is not available (firebase auth client missing). protected routes may 401.")
 		} else {
 			wrap := func(h http.Handler) http.Handler {
 				if h == nil {
@@ -512,7 +501,7 @@ func RegisterSNSFromContainer(mux *http.ServeMux, cont *Container) {
 			snsDeps.Payment = wrap(snsDeps.Payment)
 			snsDeps.Order = wrap(snsDeps.Order)
 
-			log.Printf("[sns_container] user_auth applied: user=%t ship=%t bill=%t avatar=%t cart=%t preview=%t payment=%t order=%t",
+			log.Printf("[mall_container] user_auth applied: user=%t ship=%t bill=%t avatar=%t cart=%t preview=%t payment=%t order=%t",
 				snsDeps.User != nil,
 				snsDeps.ShippingAddress != nil,
 				snsDeps.BillingAddress != nil,
@@ -534,8 +523,8 @@ func RegisterSNSRoutes(mux *http.ServeMux, deps SNSDeps) {
 		return
 	}
 
-	// existing sns register
-	snshttp.Register(mux, snshttp.Deps{
+	// existing sns/mall register
+	mallhttp.Register(mux, mallhttp.Deps{
 		List:             deps.List,
 		Inventory:        deps.Inventory,
 		ProductBlueprint: deps.ProductBlueprint,
@@ -564,14 +553,10 @@ func RegisterSNSRoutes(mux *http.ServeMux, deps SNSDeps) {
 	})
 
 	// ✅ payment endpoint hard-bind (freeze naming variance)
-	// - Official path is SNSPaymentPath ("/sns/payment")
-	// - Register both exact and trailing-slash variants.
 	safeHandle(mux, SNSPaymentPath, deps.Payment)
 	safeHandle(mux, SNSPaymentPath+"/", deps.Payment)
 
 	// ✅ orders endpoint hard-bind
-	// - Official path is SNSOrdersPath ("/sns/orders")
-	// - Register both exact and trailing-slash variants.
 	safeHandle(mux, SNSOrdersPath, deps.Order)
 	safeHandle(mux, SNSOrdersPath+"/", deps.Order)
 }
@@ -580,11 +565,6 @@ func RegisterSNSRoutes(mux *http.ServeMux, deps SNSDeps) {
 // Middleware builder
 // ------------------------------------------------------------
 
-// newUserAuthMiddlewareBestEffort builds middleware.UserAuthMiddleware from firebaseauth.Client.
-//
-// user_auth.go expects *middleware.FirebaseAuthClient.
-// In your codebase, middleware.FirebaseAuthClient is a type alias of firebaseauth.Client
-// (declared in member_auth.go), so we can pass it directly.
 func newUserAuthMiddlewareBestEffort(fb *firebaseauth.Client) *middleware.UserAuthMiddleware {
 	if fb == nil {
 		return nil
@@ -703,7 +683,6 @@ func getFieldPtr[T any](src any, names ...string) T {
 // Firestore client (minimal; used only for ListRepo)
 // ------------------------------------------------------------
 
-// getFirestoreClientStrict tries a small set of stable places for *firestore.Client.
 func getFirestoreClientStrict(cont *Container, depsAny any) *firestore.Client {
 	// 1) Common Container fields (direct)
 	if cont != nil {

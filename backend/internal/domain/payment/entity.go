@@ -26,29 +26,26 @@ func IsValidStatus(s PaymentStatus) bool {
 }
 
 // Entity (mirror TS Payment)
+//
+// ✅ docId = invoiceId を採用するため:
+// - ID(=docId用) / UpdatedAt / DeletedAt を削除
 type Payment struct {
-	ID               string
 	InvoiceID        string
 	BillingAddressID string
 	Amount           int
 	Status           PaymentStatus
 	ErrorType        *string
 	CreatedAt        time.Time
-	UpdatedAt        time.Time
-	DeletedAt        *time.Time
 }
 
 // Errors
 var (
-	ErrInvalidID               = errors.New("payment: invalid id")
 	ErrInvalidInvoiceID        = errors.New("payment: invalid invoiceId")
 	ErrInvalidBillingAddressID = errors.New("payment: invalid billingAddressId")
 	ErrInvalidAmount           = errors.New("payment: invalid amount")
 	ErrInvalidStatus           = errors.New("payment: invalid status")
 	ErrInvalidErrorType        = errors.New("payment: invalid errorType")
 	ErrInvalidCreatedAt        = errors.New("payment: invalid createdAt")
-	ErrInvalidUpdatedAt        = errors.New("payment: invalid updatedAt")
-	ErrInvalidDeletedAt        = errors.New("payment: invalid deletedAt")
 )
 
 // Policy
@@ -60,23 +57,19 @@ var (
 // Constructors
 
 func New(
-	id, invoiceID, billingAddressID string,
+	invoiceID, billingAddressID string,
 	amount int,
 	status PaymentStatus,
 	errorType *string,
-	createdAt, updatedAt time.Time,
-	deletedAt *time.Time,
+	createdAt time.Time,
 ) (Payment, error) {
 	p := Payment{
-		ID:               strings.TrimSpace(id),
 		InvoiceID:        strings.TrimSpace(invoiceID),
 		BillingAddressID: strings.TrimSpace(billingAddressID),
 		Amount:           amount,
 		Status:           status,
 		ErrorType:        normalizePtr(errorType),
 		CreatedAt:        createdAt.UTC(),
-		UpdatedAt:        updatedAt.UTC(),
-		DeletedAt:        normalizeTimePtr(deletedAt),
 	}
 	if err := p.validate(); err != nil {
 		return Payment{}, err
@@ -85,83 +78,50 @@ func New(
 }
 
 func NewWithNow(
-	id, invoiceID, billingAddressID string,
+	invoiceID, billingAddressID string,
 	amount int,
 	status PaymentStatus,
 	errorType *string,
 	now time.Time,
 ) (Payment, error) {
 	now = now.UTC()
-	return New(id, invoiceID, billingAddressID, amount, status, errorType, now, now, nil)
+	return New(invoiceID, billingAddressID, amount, status, errorType, now)
 }
 
 func NewFromStringTimes(
-	id, invoiceID, billingAddressID string,
+	invoiceID, billingAddressID string,
 	amount int,
 	status PaymentStatus,
 	errorType *string,
-	createdAtStr, updatedAtStr string,
-	deletedAtStr *string,
+	createdAtStr string,
 ) (Payment, error) {
 	ct, err := parseTime(createdAtStr, ErrInvalidCreatedAt)
 	if err != nil {
 		return Payment{}, err
 	}
-	ut, err := parseTime(updatedAtStr, ErrInvalidUpdatedAt)
-	if err != nil {
-		return Payment{}, err
-	}
-	var dt *time.Time
-	if deletedAtStr != nil && strings.TrimSpace(*deletedAtStr) != "" {
-		t, err := parseTime(*deletedAtStr, ErrInvalidDeletedAt)
-		if err != nil {
-			return Payment{}, err
-		}
-		dt = &t
-	}
-	return New(id, invoiceID, billingAddressID, amount, status, errorType, ct, ut, dt)
+	return New(invoiceID, billingAddressID, amount, status, errorType, ct)
 }
 
 // Behavior
 
-func (p *Payment) Touch(now time.Time) error {
-	if now.IsZero() {
-		return ErrInvalidUpdatedAt
-	}
-	p.UpdatedAt = now.UTC()
-	return nil
-}
-
-func (p *Payment) SetStatus(next PaymentStatus, now time.Time) error {
+func (p *Payment) SetStatus(next PaymentStatus) error {
 	if !IsValidStatus(next) {
 		return ErrInvalidStatus
 	}
 	p.Status = next
-	return p.Touch(now)
+	return nil
 }
 
-func (p *Payment) SetErrorType(errType *string, now time.Time) error {
+func (p *Payment) SetErrorType(errType *string) error {
 	et := normalizePtr(errType)
 	// if explicitly provided empty string, it becomes nil (cleared)
 	p.ErrorType = et
-	return p.Touch(now)
-}
-
-func (p *Payment) MarkDeleted(at time.Time, now time.Time) error {
-	if at.IsZero() {
-		return ErrInvalidDeletedAt
-	}
-	utc := at.UTC()
-	p.DeletedAt = &utc
-	return p.Touch(now)
+	return nil
 }
 
 // Validation
 
 func (p Payment) validate() error {
-	if p.ID == "" {
-		return ErrInvalidID
-	}
 	if p.InvoiceID == "" {
 		return ErrInvalidInvoiceID
 	}
@@ -180,12 +140,6 @@ func (p Payment) validate() error {
 	if p.CreatedAt.IsZero() {
 		return ErrInvalidCreatedAt
 	}
-	if p.UpdatedAt.IsZero() || p.UpdatedAt.Before(p.CreatedAt) {
-		return ErrInvalidUpdatedAt
-	}
-	if p.DeletedAt != nil && (p.DeletedAt.IsZero() || p.DeletedAt.Before(p.CreatedAt)) {
-		return ErrInvalidDeletedAt
-	}
 	return nil
 }
 
@@ -200,17 +154,6 @@ func normalizePtr(p *string) *string {
 		return nil
 	}
 	return &v
-}
-
-func normalizeTimePtr(p *time.Time) *time.Time {
-	if p == nil {
-		return nil
-	}
-	if p.IsZero() {
-		return nil
-	}
-	utc := p.UTC()
-	return &utc
 }
 
 func parseTime(s string, classify error) (time.Time, error) {

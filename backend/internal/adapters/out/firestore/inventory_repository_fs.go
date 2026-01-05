@@ -5,7 +5,6 @@ import (
 	"context"
 	"errors"
 	"log"
-	"reflect"
 	"sort"
 	"strings"
 	"time"
@@ -32,23 +31,55 @@ func (r *InventoryRepositoryFS) col() *firestore.CollectionRef {
 	return r.Client.Collection(collectionNameInventories)
 }
 
-// Firestore record shape
-// - stock は Firestore では map[string][]string（modelId -> []productId）で保持する
+// ============================================================
+// Firestore record shape (entity.go 準拠)
+//
+// inventories/{docId}
+// - docId = productBlueprintId__tokenBlueprintId
+//
+// stock: {
+//   "{modelId}": {
+//     products: { "{productId}": true, ... },
+//     accumulation: 123,
+//     reservedByOrder: { "{orderId}": 2, ... },
+//     reservedCount: 3
+//   }
+// }
+// modelIds: ["{modelId}", ...]  // 検索補助
+// ============================================================
+
+type modelStockRecord struct {
+	Products        map[string]bool `firestore:"products"`
+	Accumulation    int             `firestore:"accumulation"`
+	ReservedByOrder map[string]int  `firestore:"reservedByOrder"`
+	ReservedCount   int             `firestore:"reservedCount"`
+}
+
 type inventoryRecord struct {
-	ID                 string              `firestore:"id"`
-	TokenBlueprintID   string              `firestore:"tokenBlueprintId"`
-	ProductBlueprintID string              `firestore:"productBlueprintId"`
-	Stock              map[string][]string `firestore:"stock"`
-	CreatedAt          time.Time           `firestore:"createdAt"`
-	UpdatedAt          time.Time           `firestore:"updatedAt"`
+	ID                 string                      `firestore:"id"`
+	TokenBlueprintID   string                      `firestore:"tokenBlueprintId"`
+	ProductBlueprintID string                      `firestore:"productBlueprintId"`
+	Stock              map[string]modelStockRecord `firestore:"stock"`
+	ModelIDs           []string                    `firestore:"modelIds"`
+	CreatedAt          time.Time                   `firestore:"createdAt"`
+	UpdatedAt          time.Time                   `firestore:"updatedAt"`
 }
 
 func toRecord(m invdom.Mint) inventoryRecord {
+	stock := normalizeStockRecord(stockRecordFromDomain(m.Stock))
+
+	modelIDs := normalizeModelIDs(m.ModelIDs)
+	if len(modelIDs) == 0 {
+		// Stock のキーから補完
+		modelIDs = modelIDsFromStockRecord(stock)
+	}
+
 	return inventoryRecord{
 		ID:                 strings.TrimSpace(m.ID),
 		TokenBlueprintID:   strings.TrimSpace(m.TokenBlueprintID),
 		ProductBlueprintID: strings.TrimSpace(m.ProductBlueprintID),
-		Stock:              normalizeStockRecord(stockRecordFromDomain(m.Stock)),
+		Stock:              stock,
+		ModelIDs:           modelIDs,
 		CreatedAt:          m.CreatedAt,
 		UpdatedAt:          m.UpdatedAt,
 	}
@@ -57,14 +88,22 @@ func toRecord(m invdom.Mint) inventoryRecord {
 func fromRecord(docID string, rec inventoryRecord) invdom.Mint {
 	id := strings.TrimSpace(rec.ID)
 	if id == "" {
-		id = docID
+		id = strings.TrimSpace(docID)
+	}
+
+	stock := normalizeStockRecord(rec.Stock)
+
+	modelIDs := normalizeModelIDs(rec.ModelIDs)
+	if len(modelIDs) == 0 {
+		modelIDs = modelIDsFromStockRecord(stock)
 	}
 
 	out := invdom.Mint{
 		ID:                 id,
 		TokenBlueprintID:   strings.TrimSpace(rec.TokenBlueprintID),
 		ProductBlueprintID: strings.TrimSpace(rec.ProductBlueprintID),
-		Stock:              stockDomainFromRecord(normalizeStockRecord(rec.Stock)),
+		Stock:              stockDomainFromRecord(stock),
+		ModelIDs:           modelIDs,
 		CreatedAt:          rec.CreatedAt,
 		UpdatedAt:          rec.UpdatedAt,
 	}
@@ -110,6 +149,8 @@ func (r *InventoryRepositoryFS) Create(ctx context.Context, m invdom.Mint) (invd
 	}
 
 	doc := r.col().Doc(m.ID)
+
+	// 先に domain を正規化（accumulation/reservedCount 等）
 	rec := toRecord(m)
 	rec.ID = doc.ID
 	m.ID = doc.ID
@@ -117,7 +158,8 @@ func (r *InventoryRepositoryFS) Create(ctx context.Context, m invdom.Mint) (invd
 	if _, err := doc.Set(ctx, rec); err != nil {
 		return invdom.Mint{}, err
 	}
-	return m, nil
+
+	return r.GetByID(ctx, doc.ID)
 }
 
 func (r *InventoryRepositoryFS) GetByID(ctx context.Context, id string) (invdom.Mint, error) {
@@ -143,6 +185,10 @@ func (r *InventoryRepositoryFS) GetByID(ctx context.Context, id string) (invdom.
 }
 
 func (r *InventoryRepositoryFS) Update(ctx context.Context, m invdom.Mint) (invdom.Mint, error) {
+	if r == nil || r.Client == nil {
+		return invdom.Mint{}, errors.New("inventory repo is nil")
+	}
+
 	id := strings.TrimSpace(m.ID)
 	if id == "" {
 		return invdom.Mint{}, invdom.ErrInvalidMintID
@@ -155,6 +201,14 @@ func (r *InventoryRepositoryFS) Update(ctx context.Context, m invdom.Mint) (invd
 	}
 	if m.ProductBlueprintID == "" {
 		return invdom.Mint{}, invdom.ErrInvalidProductBlueprintID
+	}
+
+	// NotFound を返したい場合は存在確認（Set は存在しなくても作れてしまうため）
+	if _, err := r.col().Doc(id).Get(ctx); err != nil {
+		if status.Code(err) == codes.NotFound {
+			return invdom.Mint{}, invdom.ErrNotFound
+		}
+		return invdom.Mint{}, err
 	}
 
 	m.UpdatedAt = time.Now().UTC()
@@ -170,27 +224,21 @@ func (r *InventoryRepositoryFS) Update(ctx context.Context, m invdom.Mint) (invd
 		}
 	}
 
-	// ✅ Firestore Go SDK: MergeAll は map データでのみ使用可能。
-	// ここでは record 全体を Set で上書きする（在庫は常に完全形で保持する前提）。
 	rec := toRecord(m)
 	rec.ID = id
-
-	// NotFound を返したい場合は存在確認（Set は存在しなくても作れてしまうため）
-	if _, err := r.col().Doc(id).Get(ctx); err != nil {
-		if status.Code(err) == codes.NotFound {
-			return invdom.Mint{}, invdom.ErrNotFound
-		}
-		return invdom.Mint{}, err
-	}
 
 	if _, err := r.col().Doc(id).Set(ctx, rec); err != nil {
 		return invdom.Mint{}, err
 	}
 
-	return m, nil
+	return r.GetByID(ctx, id)
 }
 
 func (r *InventoryRepositoryFS) Delete(ctx context.Context, id string) error {
+	if r == nil || r.Client == nil {
+		return errors.New("inventory repo is nil")
+	}
+
 	id = strings.TrimSpace(id)
 	if id == "" {
 		return invdom.ErrInvalidMintID
@@ -211,6 +259,10 @@ func (r *InventoryRepositoryFS) Delete(ctx context.Context, id string) error {
 // ============================================================
 
 func (r *InventoryRepositoryFS) ListByTokenBlueprintID(ctx context.Context, tokenBlueprintID string) ([]invdom.Mint, error) {
+	if r == nil || r.Client == nil {
+		return nil, errors.New("inventory repo is nil")
+	}
+
 	tokenBlueprintID = strings.TrimSpace(tokenBlueprintID)
 	if tokenBlueprintID == "" {
 		return nil, invdom.ErrInvalidTokenBlueprintID
@@ -223,6 +275,10 @@ func (r *InventoryRepositoryFS) ListByTokenBlueprintID(ctx context.Context, toke
 }
 
 func (r *InventoryRepositoryFS) ListByProductBlueprintID(ctx context.Context, productBlueprintID string) ([]invdom.Mint, error) {
+	if r == nil || r.Client == nil {
+		return nil, errors.New("inventory repo is nil")
+	}
+
 	productBlueprintID = strings.TrimSpace(productBlueprintID)
 	if productBlueprintID == "" {
 		return nil, invdom.ErrInvalidProductBlueprintID
@@ -236,6 +292,10 @@ func (r *InventoryRepositoryFS) ListByProductBlueprintID(ctx context.Context, pr
 
 // ListByModelID は Firestore のクエリで stock のキー存在判定ができないため、全件走査でフィルタ
 func (r *InventoryRepositoryFS) ListByModelID(ctx context.Context, modelID string) ([]invdom.Mint, error) {
+	if r == nil || r.Client == nil {
+		return nil, errors.New("inventory repo is nil")
+	}
+
 	modelID = strings.TrimSpace(modelID)
 	if modelID == "" {
 		return nil, invdom.ErrInvalidModelID
@@ -259,6 +319,10 @@ func (r *InventoryRepositoryFS) ListByModelID(ctx context.Context, modelID strin
 }
 
 func (r *InventoryRepositoryFS) ListByTokenAndModelID(ctx context.Context, tokenBlueprintID, modelID string) ([]invdom.Mint, error) {
+	if r == nil || r.Client == nil {
+		return nil, errors.New("inventory repo is nil")
+	}
+
 	tokenBlueprintID = strings.TrimSpace(tokenBlueprintID)
 	modelID = strings.TrimSpace(modelID)
 
@@ -300,7 +364,8 @@ func (r *InventoryRepositoryFS) IncrementAccumulation(ctx context.Context, id st
 
 // ============================================================
 // Upsert (docId = productBlueprintId__tokenBlueprintId)
-// - Stock[modelId] に productId を追記（UNION）
+// - Stock[modelId].Products に productId を追記（UNION）
+// - ReservedByOrder / ReservedCount は保持（この処理では触らない）
 // ============================================================
 
 func (r *InventoryRepositoryFS) UpsertByModelAndToken(
@@ -310,7 +375,6 @@ func (r *InventoryRepositoryFS) UpsertByModelAndToken(
 	modelID string,
 	productIDs []string,
 ) (invdom.Mint, error) {
-
 	start := time.Now()
 
 	if r == nil || r.Client == nil {
@@ -349,16 +413,26 @@ func (r *InventoryRepositoryFS) UpsertByModelAndToken(
 		if err != nil {
 			if status.Code(err) == codes.NotFound {
 				// new record
+				ms := modelStockRecord{
+					Products:        map[string]bool{},
+					ReservedByOrder: map[string]int{},
+				}
+				for _, pid := range ids {
+					ms.Products[pid] = true
+				}
+				ms = normalizeModelStockRecord(ms)
+
 				rec := inventoryRecord{
 					ID:                 docID,
 					TokenBlueprintID:   tbID,
 					ProductBlueprintID: pbID,
-					Stock:              map[string][]string{},
+					Stock:              map[string]modelStockRecord{mID: ms},
+					ModelIDs:           []string{mID},
 					CreatedAt:          now,
 					UpdatedAt:          now,
 				}
-				rec.Stock[mID] = ids
 				rec.Stock = normalizeStockRecord(rec.Stock)
+				rec.ModelIDs = normalizeModelIDs(rec.ModelIDs)
 				return tx.Set(doc, rec)
 			}
 			return err
@@ -371,17 +445,32 @@ func (r *InventoryRepositoryFS) UpsertByModelAndToken(
 
 		stock := rec.Stock
 		if stock == nil {
-			stock = map[string][]string{}
+			stock = map[string]modelStockRecord{}
 		}
 
-		// merge (UNION)
-		existing := stock[mID]
-		merged := normalizeIDs(append(existing, ids...))
-		stock[mID] = merged
+		ms := stock[mID]
+		if ms.Products == nil {
+			ms.Products = map[string]bool{}
+		}
+		// UNION: 既存 products に追加
+		for _, pid := range ids {
+			ms.Products[pid] = true
+		}
+		// reserved は維持しつつ、accumulation/reservedCount を正規化
+		ms = normalizeModelStockRecord(ms)
+		stock[mID] = ms
+
 		stock = normalizeStockRecord(stock)
+
+		modelIDs := normalizeModelIDs(rec.ModelIDs)
+		if !containsString(modelIDs, mID) {
+			modelIDs = append(modelIDs, mID)
+			modelIDs = normalizeModelIDs(modelIDs)
+		}
 
 		updates := []firestore.Update{
 			{Path: "stock", Value: stock},
+			{Path: "modelIds", Value: modelIDs},
 			{Path: "updatedAt", Value: now},
 			{Path: "tokenBlueprintId", Value: tbID},
 			{Path: "productBlueprintId", Value: pbID},
@@ -410,15 +499,16 @@ func (r *InventoryRepositoryFS) UpsertByModelAndToken(
 }
 
 // ============================================================
-// Compatibility method required by inventory.RepositoryPort
+// Method required by inventory.RepositoryPort (repository_port.go 準拠)
 // ============================================================
 
-// UpsertByProductBlueprintAndToken is kept for interface compatibility.
-// It delegates to UpsertByModelAndToken with the canonical docId rule.
+// UpsertByProductBlueprintAndToken
+// - docId = productBlueprintId__tokenBlueprintId
+// - Stock[modelId].Products に productId を追記（UNION）
 func (r *InventoryRepositoryFS) UpsertByProductBlueprintAndToken(
 	ctx context.Context,
-	productBlueprintID string,
 	tokenBlueprintID string,
+	productBlueprintID string,
 	modelID string,
 	productIDs []string,
 ) (invdom.Mint, error) {
@@ -469,23 +559,24 @@ func normalizeIDs(raw []string) []string {
 	return out
 }
 
-// stock record normalizer (trim + remove empty + dedupe + sort)
-func normalizeStockRecord(raw map[string][]string) map[string][]string {
-	if raw == nil {
+func normalizeModelIDs(raw []string) []string {
+	if len(raw) == 0 {
 		return nil
 	}
-	out := map[string][]string{}
-	for modelID, ids := range raw {
-		modelID = strings.TrimSpace(modelID)
-		if modelID == "" {
+	seen := map[string]struct{}{}
+	out := make([]string, 0, len(raw))
+	for _, s := range raw {
+		s = strings.TrimSpace(s)
+		if s == "" {
 			continue
 		}
-		nids := normalizeIDs(ids)
-		if len(nids) == 0 {
+		if _, ok := seen[s]; ok {
 			continue
 		}
-		out[modelID] = nids
+		seen[s] = struct{}{}
+		out = append(out, s)
 	}
+	sort.Strings(out)
 	if len(out) == 0 {
 		return nil
 	}
@@ -504,25 +595,74 @@ func buildInventoryDocIDByProduct(tokenBlueprintID, productBlueprintID string) s
 }
 
 // ------------------------------------------------------------
-// domain <-> record stock conversion
+// record normalizers
 // ------------------------------------------------------------
 
-// domain: map[string]invdom.ModelStock -> record: map[string][]string
-func stockRecordFromDomain(raw map[string]invdom.ModelStock) map[string][]string {
+func normalizeModelStockRecord(ms modelStockRecord) modelStockRecord {
+	// products: key trim + empty drop + 値は常に true で保持
+	prod := map[string]bool{}
+	for pid := range ms.Products {
+		pid = strings.TrimSpace(pid)
+		if pid == "" {
+			continue
+		}
+		prod[pid] = true
+	}
+	if len(prod) == 0 {
+		prod = nil
+	}
+	ms.Products = prod
+
+	// accumulation は products の数を正とする
+	ms.Accumulation = len(ms.Products)
+
+	// reservedByOrder
+	rbo := map[string]int{}
+	var sum int
+	for oid, n := range ms.ReservedByOrder {
+		oid = strings.TrimSpace(oid)
+		if oid == "" {
+			continue
+		}
+		if n <= 0 {
+			continue
+		}
+		rbo[oid] = n
+		sum += n
+	}
+	if len(rbo) == 0 {
+		rbo = nil
+		sum = 0
+	}
+	ms.ReservedByOrder = rbo
+
+	// reservedCount は reservedByOrder の合計を正とする
+	ms.ReservedCount = sum
+
+	return ms
+}
+
+// stock record normalizer (trim key + normalize each modelStock)
+func normalizeStockRecord(raw map[string]modelStockRecord) map[string]modelStockRecord {
 	if raw == nil {
 		return nil
 	}
-	out := map[string][]string{}
+	out := map[string]modelStockRecord{}
 	for modelID, ms := range raw {
 		modelID = strings.TrimSpace(modelID)
 		if modelID == "" {
 			continue
 		}
-		ids := modelStockToIDs(ms)
-		if len(ids) == 0 {
+		nms := normalizeModelStockRecord(ms)
+
+		// S1009: len(nilMap) == 0 なので nil チェック不要
+		hasProducts := len(nms.Products) > 0
+		hasReserved := len(nms.ReservedByOrder) > 0
+		if !hasProducts && !hasReserved {
 			continue
 		}
-		out[modelID] = ids
+
+		out[modelID] = nms
 	}
 	if len(out) == 0 {
 		return nil
@@ -530,22 +670,132 @@ func stockRecordFromDomain(raw map[string]invdom.ModelStock) map[string][]string
 	return out
 }
 
-// record: map[string][]string -> domain: map[string]invdom.ModelStock
-func stockDomainFromRecord(raw map[string][]string) map[string]invdom.ModelStock {
+func modelIDsFromStockRecord(stock map[string]modelStockRecord) []string {
+	if stock == nil {
+		return nil
+	}
+	out := make([]string, 0, len(stock))
+	for k := range stock {
+		k = strings.TrimSpace(k)
+		if k != "" {
+			out = append(out, k)
+		}
+	}
+	return normalizeModelIDs(out)
+}
+
+// ------------------------------------------------------------
+// domain <-> record stock conversion
+// ------------------------------------------------------------
+
+func stockRecordFromDomain(raw map[string]invdom.ModelStock) map[string]modelStockRecord {
 	if raw == nil {
 		return nil
 	}
-	out := map[string]invdom.ModelStock{}
-	for modelID, ids := range raw {
+	out := map[string]modelStockRecord{}
+	for modelID, ms := range raw {
 		modelID = strings.TrimSpace(modelID)
 		if modelID == "" {
 			continue
 		}
-		nids := normalizeIDs(ids)
-		if len(nids) == 0 {
+
+		rec := modelStockRecord{
+			Products:        nil,
+			Accumulation:    0,
+			ReservedByOrder: nil,
+			ReservedCount:   0,
+		}
+
+		// products
+		if ms.Products != nil {
+			rec.Products = map[string]bool{}
+			for pid := range ms.Products {
+				pid = strings.TrimSpace(pid)
+				if pid == "" {
+					continue
+				}
+				rec.Products[pid] = true
+			}
+		}
+
+		// reserved
+		if ms.ReservedByOrder != nil {
+			rec.ReservedByOrder = map[string]int{}
+			for oid, n := range ms.ReservedByOrder {
+				oid = strings.TrimSpace(oid)
+				if oid == "" || n <= 0 {
+					continue
+				}
+				rec.ReservedByOrder[oid] = n
+			}
+		}
+
+		// accumulation/reservedCount は正規化で決める
+		rec = normalizeModelStockRecord(rec)
+
+		// 空なら落とす
+		hasProducts := len(rec.Products) > 0
+		hasReserved := len(rec.ReservedByOrder) > 0
+		if !hasProducts && !hasReserved {
 			continue
 		}
-		out[modelID] = modelStockFromIDs(nids)
+
+		out[modelID] = rec
+	}
+
+	return normalizeStockRecord(out)
+}
+
+func stockDomainFromRecord(raw map[string]modelStockRecord) map[string]invdom.ModelStock {
+	if raw == nil {
+		return nil
+	}
+	out := map[string]invdom.ModelStock{}
+	for modelID, msr := range raw {
+		modelID = strings.TrimSpace(modelID)
+		if modelID == "" {
+			continue
+		}
+		msr = normalizeModelStockRecord(msr)
+
+		var ms invdom.ModelStock
+
+		// products
+		if msr.Products != nil {
+			ms.Products = map[string]bool{}
+			for pid := range msr.Products {
+				pid = strings.TrimSpace(pid)
+				if pid == "" {
+					continue
+				}
+				ms.Products[pid] = true
+			}
+		}
+
+		// accumulation（正規化値）
+		ms.Accumulation = msr.Accumulation
+
+		// reserved
+		if msr.ReservedByOrder != nil {
+			ms.ReservedByOrder = map[string]int{}
+			for oid, n := range msr.ReservedByOrder {
+				oid = strings.TrimSpace(oid)
+				if oid == "" || n <= 0 {
+					continue
+				}
+				ms.ReservedByOrder[oid] = n
+			}
+		}
+		ms.ReservedCount = msr.ReservedCount
+
+		// 空なら落とす
+		hasProducts := len(ms.Products) > 0
+		hasReserved := len(ms.ReservedByOrder) > 0
+		if !hasProducts && !hasReserved {
+			continue
+		}
+
+		out[modelID] = ms
 	}
 	if len(out) == 0 {
 		return nil
@@ -557,178 +807,20 @@ func hasModelStock(stock map[string]invdom.ModelStock, modelID string) bool {
 	if stock == nil {
 		return false
 	}
+	modelID = strings.TrimSpace(modelID)
+	if modelID == "" {
+		return false
+	}
 	ms, ok := stock[modelID]
 	if !ok {
 		return false
 	}
-	return len(modelStockToIDs(ms)) > 0
-}
-
-// ------------------------------------------------------------
-// ModelStock reflection helpers
-// - ModelStock が []string の alias でも、struct{Products []string} でも、map 系でも吸収
-// ------------------------------------------------------------
-
-// ModelStock -> []string（コピーして返す）
-func modelStockToIDs(ms invdom.ModelStock) []string {
-	rv := reflect.ValueOf(ms)
-	if !rv.IsValid() {
-		return nil
+	// products or reserved のいずれかがあれば “存在” とみなす
+	if len(ms.Products) > 0 {
+		return true
 	}
-	if rv.Kind() == reflect.Ptr {
-		if rv.IsNil() {
-			return nil
-		}
-		rv = rv.Elem()
+	if len(ms.ReservedByOrder) > 0 {
+		return true
 	}
-
-	switch rv.Kind() {
-	case reflect.Slice, reflect.Array:
-		out := make([]string, 0, rv.Len())
-		for i := 0; i < rv.Len(); i++ {
-			it := rv.Index(i)
-			if it.Kind() == reflect.String {
-				s := strings.TrimSpace(it.String())
-				if s != "" {
-					out = append(out, s)
-				}
-			}
-		}
-		return normalizeIDs(out)
-
-	case reflect.Map:
-		// map[string]T のキーを productId として扱う
-		if rv.Type().Key().Kind() != reflect.String {
-			return nil
-		}
-		out := make([]string, 0, rv.Len())
-		iter := rv.MapRange()
-		for iter.Next() {
-			s := strings.TrimSpace(iter.Key().String())
-			if s != "" {
-				out = append(out, s)
-			}
-		}
-		return normalizeIDs(out)
-
-	case reflect.Struct:
-		// struct{ Products ... } を探す
-		pf := rv.FieldByName("Products")
-		if pf.IsValid() {
-			switch pf.Kind() {
-			case reflect.Slice, reflect.Array:
-				out := make([]string, 0, pf.Len())
-				for i := 0; i < pf.Len(); i++ {
-					it := pf.Index(i)
-					if it.Kind() == reflect.String {
-						s := strings.TrimSpace(it.String())
-						if s != "" {
-							out = append(out, s)
-						}
-					}
-				}
-				return normalizeIDs(out)
-
-			case reflect.Map:
-				if pf.Type().Key().Kind() != reflect.String {
-					return nil
-				}
-				out := make([]string, 0, pf.Len())
-				iter := pf.MapRange()
-				for iter.Next() {
-					s := strings.TrimSpace(iter.Key().String())
-					if s != "" {
-						out = append(out, s)
-					}
-				}
-				return normalizeIDs(out)
-			}
-		}
-	}
-
-	return nil
-}
-
-// []string -> ModelStock（struct でも slice alias でも詰められるだけ詰める）
-func modelStockFromIDs(ids []string) invdom.ModelStock {
-	var ms invdom.ModelStock
-	ids = normalizeIDs(ids)
-	if len(ids) == 0 {
-		return ms
-	}
-
-	rv := reflect.ValueOf(&ms).Elem()
-	if !rv.IsValid() {
-		return ms
-	}
-
-	// 1) ModelStock 自体が slice/array の alias
-	if rv.Kind() == reflect.Slice {
-		if rv.Type().Elem().Kind() == reflect.String {
-			s := reflect.MakeSlice(rv.Type(), 0, len(ids))
-			for _, id := range ids {
-				s = reflect.Append(s, reflect.ValueOf(id))
-			}
-			rv.Set(s)
-			return ms
-		}
-	}
-
-	// 2) ModelStock 自体が map の alias（キーに productId を入れる）
-	if rv.Kind() == reflect.Map {
-		if rv.Type().Key().Kind() == reflect.String {
-			rv.Set(reflect.MakeMapWithSize(rv.Type(), len(ids)))
-			for _, id := range ids {
-				var v reflect.Value
-				switch rv.Type().Elem().Kind() {
-				case reflect.Bool:
-					v = reflect.ValueOf(true).Convert(rv.Type().Elem())
-				case reflect.Struct:
-					v = reflect.New(rv.Type().Elem()).Elem()
-				default:
-					v = reflect.Zero(rv.Type().Elem())
-				}
-				rv.SetMapIndex(reflect.ValueOf(id), v)
-			}
-			return ms
-		}
-	}
-
-	// 3) struct の Products フィールドへ
-	if rv.Kind() == reflect.Struct {
-		pf := rv.FieldByName("Products")
-		if pf.IsValid() && pf.CanSet() {
-			switch pf.Kind() {
-			case reflect.Slice:
-				if pf.Type().Elem().Kind() == reflect.String {
-					s := reflect.MakeSlice(pf.Type(), 0, len(ids))
-					for _, id := range ids {
-						s = reflect.Append(s, reflect.ValueOf(id))
-					}
-					pf.Set(s)
-					return ms
-				}
-			case reflect.Map:
-				if pf.Type().Key().Kind() == reflect.String {
-					mm := reflect.MakeMapWithSize(pf.Type(), len(ids))
-					for _, id := range ids {
-						var v reflect.Value
-						switch pf.Type().Elem().Kind() {
-						case reflect.Bool:
-							v = reflect.ValueOf(true).Convert(pf.Type().Elem())
-						case reflect.Struct:
-							v = reflect.New(pf.Type().Elem()).Elem()
-						default:
-							v = reflect.Zero(pf.Type().Elem())
-						}
-						mm.SetMapIndex(reflect.ValueOf(id), v)
-					}
-					pf.Set(mm)
-					return ms
-				}
-			}
-		}
-	}
-
-	return ms
+	return false
 }

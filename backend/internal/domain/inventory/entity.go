@@ -20,21 +20,29 @@ var (
 // ModelStock は modelId ごとの在庫を表します。
 // - Products: productId -> true
 // - Accumulation: その model の在庫数（= len(Products)）
+// - ReservedByOrder: orderId -> qty（予約数）
+// - ReservedCount: 予約数合計（= sum(ReservedByOrder)）
 type ModelStock struct {
-	Products     map[string]bool
+	Products map[string]bool
+	// Accumulation は「物理在庫数」。products の件数と整合する想定。
 	Accumulation int
+
+	// ReservedByOrder は「注文による引当」。
+	// 発送時に productId を触れないため、注文時点でここに qty を積む。
+	ReservedByOrder map[string]int
+	ReservedCount   int
 }
 
 // Mint は inventories の 1 ドキュメント（= inventory）を表します。
 // 期待値：
 // - id: productBlueprintId__tokenBlueprintId
-// - stock: modelId ごとに products + accumulation を並列保持
+// - stock: modelId ごとに products + accumulation + reserved を並列保持
 type Mint struct {
 	ID                 string
 	TokenBlueprintID   string
 	ProductBlueprintID string
 
-	// modelId -> { products, accumulation }
+	// modelId -> { products, accumulation, reservedByOrder, reservedCount }
 	Stock map[string]ModelStock
 
 	// クエリ用（Firestore の array-contains などで検索するための補助）
@@ -87,8 +95,13 @@ func NewMint(
 
 	stock := map[string]ModelStock{
 		mID: {
-			Products:     prodMap,
+			Products: prodMap,
+			// Accumulation は物理在庫数（products 件数）
 			Accumulation: len(prodMap),
+
+			// 予約は初期値ゼロ
+			ReservedByOrder: map[string]int{},
+			ReservedCount:   0,
 		},
 	}
 

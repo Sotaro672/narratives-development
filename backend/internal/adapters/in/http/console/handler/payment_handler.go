@@ -143,7 +143,7 @@ func (h *PaymentHandler) get(w http.ResponseWriter, r *http.Request, id string) 
 func writePaymentErr(w http.ResponseWriter, err error) {
 	code := http.StatusInternalServerError
 	switch err {
-	case paymentdom.ErrInvalidID:
+	case paymentdom.ErrInvalidInvoiceID:
 		code = http.StatusBadRequest
 	case paymentdom.ErrNotFound:
 		code = http.StatusNotFound
