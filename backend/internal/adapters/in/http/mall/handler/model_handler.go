@@ -9,7 +9,7 @@ import (
 	"reflect"
 	"strings"
 
-	snsdto "narratives/internal/application/query/sns/dto"
+	snsdto "narratives/internal/application/query/mall/dto"
 	ldom "narratives/internal/domain/list"
 	modeldom "narratives/internal/domain/model"
 )

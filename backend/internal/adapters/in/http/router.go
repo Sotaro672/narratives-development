@@ -1,4 +1,4 @@
-// backend/internal/adapters/in/http/router.go
+// backend\internal\adapters\in\http\router.go
 package httpin
 
 import (
@@ -26,7 +26,7 @@ import (
 	"narratives/internal/adapters/in/http/middleware"
 
 	// ✅ SNS router
-	snsh "narratives/internal/adapters/in/http/sns"
+	snsh "narratives/internal/adapters/in/http/mall"
 
 	resolver "narratives/internal/application/resolver"
 

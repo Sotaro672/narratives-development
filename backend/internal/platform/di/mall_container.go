@@ -1,4 +1,4 @@
-// backend/internal/platform/di/sns_container.go
+// backend\internal\platform\di\mall_container.go
 package di
 
 import (
@@ -10,11 +10,11 @@ import (
 	"cloud.google.com/go/firestore"
 	firebaseauth "firebase.google.com/go/v4/auth"
 
+	snshttp "narratives/internal/adapters/in/http/mall"
+	snshandler "narratives/internal/adapters/in/http/mall/handler"
 	"narratives/internal/adapters/in/http/middleware"
-	snshttp "narratives/internal/adapters/in/http/sns"
-	snshandler "narratives/internal/adapters/in/http/sns/handler"
 	outfs "narratives/internal/adapters/out/firestore"
-	snsquery "narratives/internal/application/query/sns"
+	snsquery "narratives/internal/application/query/mall"
 	appresolver "narratives/internal/application/resolver"
 	usecase "narratives/internal/application/usecase"
 	ldom "narratives/internal/domain/list"

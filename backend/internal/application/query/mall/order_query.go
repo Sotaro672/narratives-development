@@ -1,5 +1,5 @@
-// backend/internal/application/query/sns/order_query.go
-package sns
+// backend\internal\application\query\mall\order_query.go
+package mall
 
 import (
 	"context"
@@ -8,7 +8,7 @@ import (
 	"log"
 	"strings"
 
-	snsdto "narratives/internal/application/query/sns/dto"
+	snsdto "narratives/internal/application/query/mall/dto"
 	appresolver "narratives/internal/application/resolver"
 
 	"cloud.google.com/go/firestore"

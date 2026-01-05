@@ -7,8 +7,8 @@ import (
 	"net/http"
 	"strings"
 
-	snsquery "narratives/internal/application/query/sns"
-	snsdto "narratives/internal/application/query/sns/dto"
+	snsquery "narratives/internal/application/query/mall"
+	snsdto "narratives/internal/application/query/mall/dto"
 )
 
 // SNSCartQueryHandler exposes SNSCartQuery via HTTP.

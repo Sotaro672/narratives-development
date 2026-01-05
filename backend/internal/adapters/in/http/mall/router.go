@@ -1,5 +1,5 @@
-// backend/internal/adapters/in/http/sns/router.go
-package sns
+// backend\internal\adapters\in\http\mall\router.go
+package mall
 
 import "net/http"
 

@@ -1,5 +1,5 @@
-// backend/internal/application/query/sns/cart_query.go
-package sns
+// backend\internal\application\query\mall\cart_query.go
+package mall
 
 import (
 	"context"
@@ -10,7 +10,7 @@ import (
 
 	"cloud.google.com/go/firestore"
 
-	snsdto "narratives/internal/application/query/sns/dto"
+	snsdto "narratives/internal/application/query/mall/dto"
 	appresolver "narratives/internal/application/resolver"
 	cartdom "narratives/internal/domain/cart"
 	ldom "narratives/internal/domain/list"

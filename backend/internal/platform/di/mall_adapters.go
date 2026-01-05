@@ -1,4 +1,4 @@
-// backend/internal/platform/di/sns_adapters.go
+// backend\internal\platform\di\mall_adapters.go
 package di
 
 import (
@@ -9,8 +9,8 @@ import (
 
 	"cloud.google.com/go/firestore"
 
-	snsquery "narratives/internal/application/query/sns"
-	snsdto "narratives/internal/application/query/sns/dto"
+	snsquery "narratives/internal/application/query/mall"
+	snsdto "narratives/internal/application/query/mall/dto"
 	pbdom "narratives/internal/domain/productBlueprint"
 )
 
@@ -101,9 +101,6 @@ func (a *snsCatalogInventoryRepoAdapter) GetByProductAndTokenBlueprintID(ctx con
 
 	methods := []string{
 		"GetByProductAndTokenBlueprintID",
-		"GetByProductAndTokenBlueprintId",
-		"GetByProductAndTokenBlueprintIDs",
-		"GetByProductAndTokenBlueprintIds",
 	}
 	v, err := callRepo(a.repo, methods, ctx, pb, tb)
 	if err != nil {

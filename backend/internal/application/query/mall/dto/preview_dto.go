@@ -1,4 +1,4 @@
-// backend/internal/application/query/sns/dto/preview_dto.go
+// backend\internal\application\query\mall\dto\preview_dto.go
 package dto
 
 type PreviewDTO struct {

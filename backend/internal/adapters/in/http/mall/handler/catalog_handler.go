@@ -6,7 +6,7 @@ import (
 	"net/http"
 	"strings"
 
-	snsquery "narratives/internal/application/query/sns"
+	snsquery "narratives/internal/application/query/mall"
 	ldom "narratives/internal/domain/list"
 )
 

@@ -1,4 +1,4 @@
-// backend\internal\adapters\in\http\sns\handler\billingAddress_handler.go
+// backend\internal\adapters\in\http\mall\handler\billingAddress_handler.go
 package handler
 
 import (

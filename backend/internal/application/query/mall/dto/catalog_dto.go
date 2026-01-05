@@ -1,4 +1,4 @@
-// backend/internal/application/query/sns/dto/catalog_dto.go
+// backend\internal\application\query\mall\dto\catalog_dto.go
 package dto
 
 import (

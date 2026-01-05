@@ -12,7 +12,7 @@ import (
 	"narratives/internal/adapters/in/http/middleware"
 
 	// ✅ uid -> avatarId + addresses
-	snsquery "narratives/internal/application/query/sns"
+	snsquery "narratives/internal/application/query/mall"
 
 	usecase "narratives/internal/application/usecase"
 	paymentdom "narratives/internal/domain/payment"

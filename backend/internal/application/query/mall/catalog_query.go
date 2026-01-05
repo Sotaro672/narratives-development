@@ -1,5 +1,5 @@
-// backend/internal/application/query/sns/catalog_query.go
-package sns
+// backend\internal\application\query\mall\catalog_query.go
+package mall
 
 import (
 	"context"
@@ -10,7 +10,7 @@ import (
 	"sort"
 	"strings"
 
-	snsdto "narratives/internal/application/query/sns/dto"
+	snsdto "narratives/internal/application/query/mall/dto"
 	appresolver "narratives/internal/application/resolver"
 
 	invdom "narratives/internal/domain/inventory"

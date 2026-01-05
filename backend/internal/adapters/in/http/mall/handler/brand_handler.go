@@ -1,4 +1,4 @@
-// backend/internal/adapters/in/http/sns/handler/brand_handler.go
+// backend\internal\adapters\in\http\mall\handler\brand_handler.go
 package handler
 
 import (

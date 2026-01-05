@@ -1,4 +1,4 @@
-// backend/internal/adapters/in/http/sns/handler/cart_handler.go
+// backend\internal\adapters\in\http\mall\handler\cart_handler.go
 package handler
 
 import (

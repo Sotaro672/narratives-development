@@ -1,4 +1,4 @@
-// backend/internal/application/query/sns/dto/cart_dto.go
+// backend\internal\application\query\mall\dto\cart_dto.go
 package dto
 
 // CartDTO is the response shape for SNS cart list UI.

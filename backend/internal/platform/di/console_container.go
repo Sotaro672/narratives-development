@@ -24,7 +24,7 @@ import (
 	mailadp "narratives/internal/adapters/out/mail"
 
 	// ✅ SNS handlers（Cart/Payment/ShippingAddress など）
-	snshandler "narratives/internal/adapters/in/http/sns/handler"
+	snshandler "narratives/internal/adapters/in/http/mall/handler"
 
 	// ★ MintUsecase 移動先
 	mintapp "narratives/internal/application/mint"
@@ -36,7 +36,7 @@ import (
 	companyquery "narratives/internal/application/query"
 
 	// ✅ SNS queries (catalog / order / cart / preview)
-	snsquery "narratives/internal/application/query/sns"
+	snsquery "narratives/internal/application/query/mall"
 
 	resolver "narratives/internal/application/resolver"
 

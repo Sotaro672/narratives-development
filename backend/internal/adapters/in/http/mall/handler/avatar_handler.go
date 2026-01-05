@@ -1,4 +1,4 @@
-// backend/internal/adapters/in/http/sns/handler/avatar_handler.go
+// backend\internal\adapters\in\http\mall\handler\avatar_handler.go
 package handler
 
 import (

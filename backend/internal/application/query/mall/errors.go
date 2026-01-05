@@ -1,5 +1,5 @@
-// backend/internal/application/query/sns/errors.go
-package sns
+// backend\internal\application\query\mall\errors.go
+package mall
 
 import "errors"
 
