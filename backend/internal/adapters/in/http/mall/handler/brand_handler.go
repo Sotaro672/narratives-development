@@ -1,5 +1,5 @@
 // backend\internal\adapters\in\http\mall\handler\brand_handler.go
-package handler
+package mallHandler
 
 import (
 	"encoding/json"

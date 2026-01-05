@@ -1,5 +1,5 @@
 // backend/internal/adapters/in/http/sns/handler/post_handler.go
-package handler
+package mallHandler
 
 import (
 	"crypto/rand"

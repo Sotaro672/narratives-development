@@ -1,5 +1,5 @@
 // backend\internal\adapters\in\http\mall\handler\cart_handler.go
-package handler
+package mallHandler
 
 import (
 	"context"

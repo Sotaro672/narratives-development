@@ -1,5 +1,5 @@
 // backend/internal/adapters/in/http/sns/handler/user_handler.go
-package handler
+package mallHandler
 
 import (
 	"bytes"
