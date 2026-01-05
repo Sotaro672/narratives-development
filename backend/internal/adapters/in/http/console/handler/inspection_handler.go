@@ -1,5 +1,5 @@
-// backend/internal/adapters/in/http/handlers/inspection_handler.go
-package handlers
+// backend\internal\adapters\in\http\console\handler\inspection_handler.go
+package consoleHandler
 
 import (
 	"encoding/json"

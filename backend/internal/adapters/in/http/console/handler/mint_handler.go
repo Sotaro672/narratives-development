@@ -1,5 +1,5 @@
 // backend\internal\adapters\in\http\console\handler\mint_handler.go
-package handlers
+package consoleHandler
 
 import (
 	"context"

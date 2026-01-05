@@ -1,5 +1,5 @@
-// backend/internal/adapters/in/http/handlers/token_handler.go
-package handlers
+// backend\internal\adapters\in\http\console\handler\token_handler.go
+package consoleHandler
 
 import (
 	"net/http"

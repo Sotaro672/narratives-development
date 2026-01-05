@@ -1,5 +1,5 @@
-// backend/internal/adapters/in/http/handlers/tokenBlueprint_handler.go
-package handlers
+// backend\internal\adapters\in\http\console\handler\tokenBlueprint_handler.go
+package consoleHandler
 
 import (
 	"context"

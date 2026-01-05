@@ -1,5 +1,5 @@
-// backend/internal/adapters/in/http/handlers/list_handler.go
-package handlers
+// backend\internal\adapters\in\http\console\handler\list_handler.go
+package consoleHandler
 
 import (
 	"context"

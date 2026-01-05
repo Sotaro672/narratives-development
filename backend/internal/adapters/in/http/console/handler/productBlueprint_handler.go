@@ -1,5 +1,5 @@
-// backend/internal/adapters/in/http/handlers/productBlueprint_handler.go
-package handlers
+// backend\internal\adapters\in\http\console\handler\productBlueprint_handler.go
+package consoleHandler
 
 import (
 	"context"

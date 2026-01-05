@@ -1,4 +1,5 @@
-package handlers
+// backend\internal\adapters\in\http\console\handler\tracking_handler.go
+package consoleHandler
 
 import (
 	"encoding/json"

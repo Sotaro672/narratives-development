@@ -1,5 +1,5 @@
-// backend/internal/adapters/in/http/handlers/wallet_handler.go
-package handlers
+// backend\internal\adapters\in\http\console\handler\wallet_handler.go
+package consoleHandler
 
 import (
 	"encoding/json"

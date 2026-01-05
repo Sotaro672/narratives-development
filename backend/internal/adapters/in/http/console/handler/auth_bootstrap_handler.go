@@ -1,4 +1,5 @@
-package handlers
+// backend\internal\adapters\in\http\console\handler\auth_bootstrap_handler.go
+package consoleHandler
 
 import (
 	"encoding/json"
