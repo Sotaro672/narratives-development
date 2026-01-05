@@ -1,4 +1,3 @@
-// backend/internal/adapters/in/http/handlers/invoice_handler.go
 package handlers
 
 import (
@@ -89,7 +88,9 @@ type createInvoiceRequest struct {
 	Tax         int `json:"tax"`
 	ShippingFee int `json:"shippingFee"`
 
-	// optional; if omitted -> default false (usecase)
+	// NOTE:
+	// paid は将来互換のため受け取るが、起票では常に paid=false とする。
+	// 支払い確定（paid=true）は payment_handler.go から UpdatePaid を呼ぶ。
 	Paid *bool `json:"paid"`
 }
 
@@ -131,12 +132,18 @@ func (h *InvoiceHandler) post(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// ✅ paid は起票では無視（常に false）
+	if req.Paid != nil {
+		log.Printf("[invoice] reqId=%s note=paid_ignored_on_create orderId=%q paid_in=%t",
+			reqID, _invMaskID(orderID), *req.Paid,
+		)
+	}
+
 	in := usecase.CreateInvoiceInput{
 		OrderID:     orderID,
 		Prices:      req.Prices,
 		Tax:         req.Tax,
 		ShippingFee: req.ShippingFee,
-		Paid:        req.Paid, // nil => default false
 	}
 
 	out, err := h.uc.Create(ctx, in)

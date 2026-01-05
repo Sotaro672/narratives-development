@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"reflect"
 	"strings"
+	"time"
 
 	"cloud.google.com/go/firestore"
 	"google.golang.org/api/iterator"
@@ -20,7 +21,7 @@ import (
 )
 
 // Firestore implementation of usecase.InvoiceRepo
-// ✅ docId = orderId (Invoice has no ID field)
+// ✅ docId = orderId（invoice doc内の orderId フィールドは不要）
 type InvoiceRepositoryFS struct {
 	Client *firestore.Client
 }
@@ -188,14 +189,14 @@ func (r *InvoiceRepositoryFS) ListByCursor(
 		}
 		if matchInvoiceFilter(inv, filter) {
 			items = append(items, inv)
-			last = inv.OrderID
+			last = strings.TrimSpace(doc.Ref.ID) // ✅ cursor=docId
 		}
 	}
 
 	var next *string
 	if len(items) > limit {
 		items = items[:limit]
-		if last != "" {
+		if strings.TrimSpace(last) != "" {
 			next = &last
 		}
 	}
@@ -365,16 +366,6 @@ func docToInvoice(doc *firestore.DocumentSnapshot) (invoicedom.Invoice, error) {
 		return invoicedom.Invoice{}, fmt.Errorf("empty invoice document: %s", doc.Ref.ID)
 	}
 
-	getStr := func(key string) string {
-		if v, ok := data[key].(string); ok {
-			return strings.TrimSpace(v)
-		}
-		if v, ok := data[key]; ok && v != nil {
-			return strings.TrimSpace(fmt.Sprint(v))
-		}
-		return ""
-	}
-
 	getInt := func(key string) int {
 		v, ok := data[key]
 		if !ok || v == nil {
@@ -400,9 +391,48 @@ func docToInvoice(doc *firestore.DocumentSnapshot) (invoicedom.Invoice, error) {
 		if b, ok := v.(bool); ok {
 			return b
 		}
-		// fallback (rare)
 		s := strings.ToLower(strings.TrimSpace(fmt.Sprint(v)))
 		return s == "true" || s == "1" || s == "yes"
+	}
+
+	getTimePtr := func(key string) *time.Time {
+		v, ok := data[key]
+		if !ok || v == nil {
+			return nil
+		}
+		switch t := v.(type) {
+		case time.Time:
+			tt := t.UTC()
+			if tt.IsZero() {
+				return nil
+			}
+			return &tt
+		case *time.Time:
+			if t == nil || t.IsZero() {
+				return nil
+			}
+			tt := t.UTC()
+			return &tt
+		case interface{ AsTime() time.Time }:
+			tt := t.AsTime().UTC()
+			if tt.IsZero() {
+				return nil
+			}
+			return &tt
+		default:
+			s := strings.TrimSpace(fmt.Sprint(v))
+			if s == "" {
+				return nil
+			}
+			if tt, err := time.Parse(time.RFC3339, s); err == nil {
+				u := tt.UTC()
+				if u.IsZero() {
+					return nil
+				}
+				return &u
+			}
+			return nil
+		}
 	}
 
 	// prices
@@ -428,17 +458,19 @@ func docToInvoice(doc *firestore.DocumentSnapshot) (invoicedom.Invoice, error) {
 		prices = nil
 	}
 
+	// ✅ docId=orderId を正とする（invoice doc内に orderId は持たない）
+	docID := strings.TrimSpace(doc.Ref.ID)
+	if docID == "" {
+		return invoicedom.Invoice{}, invoicedom.ErrNotFound
+	}
+
 	inv := invoicedom.Invoice{
-		OrderID:     doc.Ref.ID, // ✅ docId = orderId
+		OrderID:     docID,
 		Prices:      prices,
 		Tax:         getInt("tax"),
 		ShippingFee: getInt("shippingFee"),
 		Paid:        getBool("paid"),
-	}
-
-	// allow legacy "orderId" field (if stored) but docId wins
-	if oid := strings.TrimSpace(getStr("orderId")); oid != "" {
-		inv.OrderID = oid
+		UpdatedAt:   getTimePtr("updatedAt"),
 	}
 
 	if err := inv.Validate(); err != nil {
@@ -453,14 +485,20 @@ func invoiceToDoc(inv invoicedom.Invoice) map[string]any {
 		prices = append(prices, p)
 	}
 
-	return map[string]any{
-		// keep orderId also (debug/readability). docId is still orderId.
-		"orderId":     strings.TrimSpace(inv.OrderID),
+	doc := map[string]any{
+		// ✅ orderId は保持しない（docId=orderId のため）
 		"prices":      prices,
 		"tax":         inv.Tax,
 		"shippingFee": inv.ShippingFee,
 		"paid":        inv.Paid,
 	}
+
+	// ✅ paid:false->true の瞬間だけ保持
+	if inv.UpdatedAt != nil && !inv.UpdatedAt.IsZero() {
+		doc["updatedAt"] = inv.UpdatedAt.UTC()
+	}
+
+	return doc
 }
 
 // matchInvoiceFilter is reflection-based so adapter compiles even if uc.InvoiceFilter shape changes.
@@ -524,17 +562,20 @@ func getFilterBoolPtr(v any, field string) (*bool, bool) {
 func applyInvoiceSort(q firestore.Query, sort common.Sort) firestore.Query {
 	col := strings.ToLower(strings.TrimSpace(string(sort.Column)))
 
-	// entity.go に合わせて orderId のみ（docId相当）
+	dir := firestore.Asc
+	if strings.EqualFold(string(sort.Order), "desc") {
+		dir = firestore.Desc
+	}
+
 	switch col {
+	case "updatedat", "updated_at":
+		return q.OrderBy("updatedAt", dir).OrderBy(firestore.DocumentID, dir)
+
 	case "orderid", "order_id", "order":
-		// tie-breakerとして docId
-		dir := firestore.Asc
-		if strings.EqualFold(string(sort.Order), "desc") {
-			dir = firestore.Desc
-		}
-		return q.OrderBy("orderId", dir).OrderBy(firestore.DocumentID, dir)
+		// ✅ orderId フィールドは無いので docId でソート
+		return q.OrderBy(firestore.DocumentID, dir)
+
 	default:
-		// default: docId desc
 		return q.OrderBy(firestore.DocumentID, firestore.Desc)
 	}
 }

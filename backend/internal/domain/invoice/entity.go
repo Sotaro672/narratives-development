@@ -4,6 +4,7 @@ package invoice
 import (
 	"errors"
 	"strings"
+	"time"
 )
 
 type Invoice struct {
@@ -12,10 +13,14 @@ type Invoice struct {
 	Tax         int
 	ShippingFee int
 	Paid        bool
+
+	// ✅ paid が false -> true になった瞬間（=支払い確定時刻）
+	// paid が false のままなら nil のまま
+	UpdatedAt *time.Time
 }
 
 // New creates a new invoice.
-// paid defaults to false (caller may set Paid after New if needed).
+// paid defaults to false.
 func New(orderID string, prices []int, tax int, shippingFee int) (Invoice, error) {
 	inv := Invoice{
 		OrderID:     strings.TrimSpace(orderID),
@@ -23,6 +28,7 @@ func New(orderID string, prices []int, tax int, shippingFee int) (Invoice, error
 		Tax:         tax,
 		ShippingFee: shippingFee,
 		Paid:        false, // ✅ default
+		UpdatedAt:   nil,
 	}
 	if err := inv.Validate(); err != nil {
 		return Invoice{}, err
@@ -49,10 +55,22 @@ func (i Invoice) Validate() error {
 	if i.ShippingFee < 0 {
 		return errors.New("invoice: invalid shippingFee")
 	}
+	if i.UpdatedAt != nil && i.UpdatedAt.IsZero() {
+		return errors.New("invoice: invalid updatedAt")
+	}
 	return nil
 }
 
-func (i *Invoice) SetPaid(paid bool) error {
+// SetPaid updates paid and records UpdatedAt only when false -> true.
+func (i *Invoice) SetPaid(paid bool, at time.Time) error {
+	prev := i.Paid
 	i.Paid = paid
+
+	// ✅ false -> true の瞬間だけ updatedAt を入れる
+	if !prev && paid {
+		t := at.UTC()
+		i.UpdatedAt = &t
+	}
+
 	return i.Validate()
 }

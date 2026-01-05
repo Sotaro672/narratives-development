@@ -1,9 +1,9 @@
-// backend/internal/application/usecase/order_usecase.go
 package usecase
 
 import (
 	"context"
 	"fmt"
+	"log"
 	"strings"
 	"time"
 
@@ -39,8 +39,9 @@ type OrderFilter struct {
 
 // OrderUsecase orchestrates order operations.
 type OrderUsecase struct {
-	repo OrderRepo
-	now  func() time.Time
+	repo      OrderRepo
+	invoiceUC *InvoiceUsecase // ✅ 注文起票直後に invoice 起票するため（paid更新はしない）
+	now       func() time.Time
 }
 
 func NewOrderUsecase(repo OrderRepo) *OrderUsecase {
@@ -48,6 +49,12 @@ func NewOrderUsecase(repo OrderRepo) *OrderUsecase {
 		repo: repo,
 		now:  time.Now,
 	}
+}
+
+// WithInvoiceUsecase enables "create invoice right after order creation".
+func (u *OrderUsecase) WithInvoiceUsecase(invUC *InvoiceUsecase) *OrderUsecase {
+	u.invoiceUC = invUC
+	return u
 }
 
 // =======================
@@ -104,6 +111,10 @@ func (u *OrderUsecase) Create(ctx context.Context, in CreateOrderInput) (orderdo
 		id = u.newOrderID(now)
 	}
 
+	log.Printf("[order_uc] Create start id=%s userId=%s avatarId=%s cartId=%s items=%d",
+		_maskID(id), _maskID(in.UserID), _maskID(in.AvatarID), _maskID(in.CartID), len(in.Items),
+	)
+
 	ship := orderdom.ShippingSnapshot{
 		ZipCode: strings.TrimSpace(in.ShippingSnapshot.ZipCode),
 		State:   strings.TrimSpace(in.ShippingSnapshot.State),
@@ -140,9 +151,52 @@ func (u *OrderUsecase) Create(ctx context.Context, in CreateOrderInput) (orderdo
 		createdAt,
 	)
 	if err != nil {
+		log.Printf("[order_uc] Create domain.New failed id=%s err=%v", _maskID(id), err)
 		return orderdom.Order{}, err
 	}
-	return u.repo.Create(ctx, o)
+
+	created, err := u.repo.Create(ctx, o)
+	if err != nil {
+		log.Printf("[order_uc] Create repo.Create failed id=%s err=%v", _maskID(id), err)
+		return orderdom.Order{}, err
+	}
+	log.Printf("[order_uc] Create repo.Create OK id=%s items=%d", _maskID(created.ID), len(created.Items))
+
+	// ============================================================
+	// ✅ Order作成直後に Invoice を「起票」する（paid は触らない）
+	// - paid 更新は payment_handler -> InvoiceUsecase.UpdatePaid に任せる
+	// ============================================================
+	if u.invoiceUC != nil {
+		prices := make([]int, 0, len(created.Items))
+		for _, it := range created.Items {
+			prices = append(prices, it.Price)
+		}
+
+		log.Printf("[order_uc] Create invoice start orderId=%s prices=%v", _maskID(created.ID), prices)
+
+		_, invErr := u.invoiceUC.Create(ctx, CreateInvoiceInput{
+			OrderID:     created.ID,
+			Prices:      prices,
+			Tax:         0,
+			ShippingFee: 0,
+		})
+		if invErr != nil {
+			log.Printf("[order_uc] Create invoice failed orderId=%s err=%v", _maskID(created.ID), invErr)
+
+			// ✅ 可能ならロールバック（orderだけ残ると後工程が辛いので）
+			if delErr := u.repo.Delete(ctx, created.ID); delErr != nil {
+				log.Printf("[order_uc] Create rollback order delete failed orderId=%s delErr=%v", _maskID(created.ID), delErr)
+			} else {
+				log.Printf("[order_uc] Create rollback order delete OK orderId=%s", _maskID(created.ID))
+			}
+
+			return orderdom.Order{}, invErr
+		}
+
+		log.Printf("[order_uc] Create invoice OK orderId=%s", _maskID(created.ID))
+	}
+
+	return created, nil
 }
 
 type UpdateOrderInput struct {
@@ -245,7 +299,18 @@ func (u *OrderUsecase) Delete(ctx context.Context, id string) error {
 // ------------------------------------------------------------
 
 // newOrderID generates an order id when client didn't specify one.
-// Firestore auto-idに依存せず、domain.Newの必須ID条件を満たすためにここで採番する。
 func (u *OrderUsecase) newOrderID(t time.Time) string {
 	return fmt.Sprintf("ord_%d", t.UTC().UnixNano())
+}
+
+// local mask helper (avoid importing handler helpers here)
+func _maskID(s string) string {
+	t := strings.TrimSpace(s)
+	if t == "" {
+		return ""
+	}
+	if len(t) <= 10 {
+		return t
+	}
+	return t[:4] + "***" + t[len(t)-4:]
 }

@@ -166,7 +166,7 @@ type Container struct {
 	snsSignInHandler          http.Handler
 	snsCartHandler            http.Handler
 	snsPaymentHandler         http.Handler
-	snsShippingAddressHandler http.Handler // ✅ 追加
+	snsShippingAddressHandler http.Handler
 }
 
 // ========================================
@@ -408,7 +408,10 @@ func NewContainer(ctx context.Context) (*Container, error) {
 	messageUC := uc.NewMessageUsecase(messageRepo, nil, nil)
 	modelUC := uc.NewModelUsecase(modelRepo, modelHistoryRepo)
 
-	orderUC := uc.NewOrderUsecase(orderRepo)
+	// ✅ 修正: OrderUsecase は invoiceRepo を受け取る（Order 作成直後に Invoice 起票するため）
+	orderUC := uc.NewOrderUsecase(orderRepo).
+		WithInvoiceUsecase(invoiceUC)
+
 	paymentUC := uc.NewPaymentUsecase(paymentRepo)
 	permissionUC := uc.NewPermissionUsecase(permissionRepo)
 
@@ -564,21 +567,10 @@ func NewContainer(ctx context.Context) (*Container, error) {
 
 	// ============================================================
 	// ✅ SNSOrderQuery（buyer-facing /sns/payment 用）
-	//
-	// PaymentHandler の /sns/payment は orderQ が nil だと 501 を返すため、
-	// ここで order_query.go を DI して handler に注入する。
-	//
-	// NOTE:
-	// - order_query.go の ctor は NewSNSOrderQuery(*firestore.Client) です。
-	// - repo 群を渡すのではなく fsClient を 1 つだけ渡します。
 	// ============================================================
 	orderQ := snsquery.NewSNSOrderQuery(fsClient)
 
 	// ✅ SNS handlers（sns_container.go が拾えるようにコンテナに保持）
-	// - SignIn: 既存 handler が未統合でも “存在確認” ができるよう 204 の薄い実装で保持
-	// - Cart: 実装済み handler をそのまま注入
-	// - Payment: ✅ orderQ 注入版に差し替え（/sns/payment を有効化）
-	// - ShippingAddress: ✅ shippingAddress_handler.go を登録
 	snsSignInHandler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusNoContent)
 	})
