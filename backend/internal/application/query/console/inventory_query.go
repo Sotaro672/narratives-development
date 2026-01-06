@@ -10,7 +10,7 @@ import (
 	"strings"
 	"time"
 
-	querydto "narratives/internal/application/query/dto"
+	querydto "narratives/internal/application/query/console/dto"
 	resolver "narratives/internal/application/resolver"
 	invdom "narratives/internal/domain/inventory"
 	pbdom "narratives/internal/domain/productBlueprint"

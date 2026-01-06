@@ -5,7 +5,7 @@ import (
 	"context"
 	"strings"
 
-	qdto "narratives/internal/application/query/dto"
+	qdto "narratives/internal/application/query/console/dto"
 	inspectiondom "narratives/internal/domain/inspection"
 	mintdom "narratives/internal/domain/mint"
 

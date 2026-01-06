@@ -9,8 +9,8 @@ import (
 	"reflect"
 	"strings"
 
-	invquery "narratives/internal/application/query"
-	querydto "narratives/internal/application/query/dto"
+	invquery "narratives/internal/application/query/console"
+	querydto "narratives/internal/application/query/console/dto"
 	usecase "narratives/internal/application/usecase"
 	invdom "narratives/internal/domain/inventory"
 )

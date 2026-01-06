@@ -10,7 +10,6 @@ import (
 	"time"
 
 	dto "narratives/internal/application/mint/dto"
-	qdto "narratives/internal/application/query/dto"
 	appusecase "narratives/internal/application/usecase"
 	branddom "narratives/internal/domain/brand"
 	inspectiondom "narratives/internal/domain/inspection"
@@ -134,6 +133,7 @@ func (u *MintUsecase) ListMintsByInspectionIDs(
 
 // ============================================================
 // Query: mints(list) を inspectionIds で取得し、名前解決して DTO を組み立てる
+// - /mint/mints?view=list(dafault) が依存
 // ============================================================
 
 func (u *MintUsecase) ListMintListRowsByInspectionIDs(
@@ -156,6 +156,7 @@ func (u *MintUsecase) ListMintListRowsByInspectionIDs(
 		return map[string]dto.MintListRowDTO{}, nil
 	}
 
+	// tokenBlueprintId -> tokenName（任意）
 	tbNameByID := map[string]string{}
 	if u.tbRepo != nil {
 		tbIDSet := map[string]struct{}{}
@@ -276,100 +277,6 @@ func (u *MintUsecase) GetProductBlueprintPatchByID(
 }
 
 // ============================================================
-// Query: model variations -> modelMeta（任意）
-// ============================================================
-
-type modelMetaLister interface {
-	ListModelMetaByIDs(ctx context.Context, modelIDs []string) (map[string]qdto.MintModelMetaEntry, error)
-}
-
-type modelMetaGetter interface {
-	GetModelMetaByID(ctx context.Context, modelID string) (*qdto.MintModelMetaEntry, error)
-}
-
-func (u *MintUsecase) resolveModelMetaByModelIDs(
-	ctx context.Context,
-	modelIDs []string,
-) (map[string]qdto.MintModelMetaEntry, error) {
-
-	if u == nil {
-		return map[string]qdto.MintModelMetaEntry{}, nil
-	}
-	if u.modelRepo == nil {
-		return map[string]qdto.MintModelMetaEntry{}, nil
-	}
-
-	seen := map[string]struct{}{}
-	ids := make([]string, 0, len(modelIDs))
-	for _, id := range modelIDs {
-		s := strings.TrimSpace(id)
-		if s == "" {
-			continue
-		}
-		if _, ok := seen[s]; ok {
-			continue
-		}
-		seen[s] = struct{}{}
-		ids = append(ids, s)
-	}
-	if len(ids) == 0 {
-		return map[string]qdto.MintModelMetaEntry{}, nil
-	}
-	sort.Strings(ids)
-
-	if l, ok := any(u.modelRepo).(modelMetaLister); ok {
-		m, err := l.ListModelMetaByIDs(ctx, ids)
-		if err != nil {
-			return nil, err
-		}
-		if m == nil {
-			return map[string]qdto.MintModelMetaEntry{}, nil
-		}
-		for k, v := range m {
-			if strings.TrimSpace(v.ModelID) == "" {
-				v.ModelID = strings.TrimSpace(k)
-				m[k] = v
-			}
-		}
-		return m, nil
-	}
-
-	if g, ok := any(u.modelRepo).(modelMetaGetter); ok {
-		out := make(map[string]qdto.MintModelMetaEntry, len(ids))
-		for _, id := range ids {
-			ent, err := g.GetModelMetaByID(ctx, id)
-			if err != nil {
-				continue
-			}
-			if ent == nil {
-				continue
-			}
-			v := *ent
-			if strings.TrimSpace(v.ModelID) == "" {
-				v.ModelID = id
-			}
-			out[id] = v
-		}
-		return out, nil
-	}
-
-	return map[string]qdto.MintModelMetaEntry{}, nil
-}
-
-func (u *MintUsecase) ResolveModelMetaFromInspectionBatch(
-	ctx context.Context,
-	batch inspectiondom.InspectionBatch,
-) (map[string]qdto.MintModelMetaEntry, error) {
-
-	modelIDs := make([]string, 0, len(batch.Inspections))
-	for _, it := range batch.Inspections {
-		modelIDs = append(modelIDs, strings.TrimSpace(it.ModelID))
-	}
-
-	return u.resolveModelMetaByModelIDs(ctx, modelIDs)
-}
-
-// ============================================================
 // Query: Brand 一覧（current company）
 // ============================================================
 
@@ -461,41 +368,4 @@ func (u *MintUsecase) ListInspectionBatchesByProductionIDs(
 	sort.Strings(ids)
 
 	return u.inspRepo.ListByProductionID(ctx, ids)
-}
-
-// ============================================================
-// Query: Detail API for GET /mint/inspections/{productionId}
-// ============================================================
-
-func (u *MintUsecase) GetMintRequestDetail(
-	ctx context.Context,
-	productionID string,
-) (inspectiondom.InspectionBatch, error) {
-
-	var empty inspectiondom.InspectionBatch
-
-	if u == nil {
-		return empty, errors.New("mint usecase is nil")
-	}
-
-	pid := strings.TrimSpace(productionID)
-	if pid == "" {
-		return empty, errors.New("productionID is empty")
-	}
-
-	batches, err := u.ListInspectionBatchesByProductionIDs(ctx, []string{pid})
-	if err != nil {
-		return empty, err
-	}
-	if len(batches) == 0 {
-		return empty, inspectiondom.ErrNotFound
-	}
-
-	for _, b := range batches {
-		if strings.TrimSpace(b.ProductionID) == pid {
-			return b, nil
-		}
-	}
-
-	return batches[0], nil
 }

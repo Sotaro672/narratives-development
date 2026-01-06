@@ -1,3 +1,4 @@
+// backend\internal\adapters\out\firestore\model_repository_fs.go
 package firestore
 
 import (
@@ -831,4 +832,41 @@ func modelVariationToDoc(v modeldom.ModelVariation) map[string]any {
 	}
 
 	return m
+}
+
+// ListModelIDsByProductBlueprintID returns model variation IDs for a product blueprint.
+// This is used by ListCreateQuery to build PriceRows independent of inventory stock.
+func (r *ModelRepositoryFS) ListModelIDsByProductBlueprintID(ctx context.Context, productBlueprintID string) ([]string, error) {
+	if r.Client == nil {
+		return nil, errors.New("firestore client is nil")
+	}
+	pbID := strings.TrimSpace(productBlueprintID)
+	if pbID == "" {
+		return nil, modeldom.ErrInvalidBlueprintID
+	}
+
+	vars, err := r.listVariationsByProductBlueprintID(ctx, pbID)
+	if err != nil {
+		return nil, err
+	}
+	if len(vars) == 0 {
+		return []string{}, nil
+	}
+
+	seen := map[string]struct{}{}
+	out := make([]string, 0, len(vars))
+	for _, v := range vars {
+		id := strings.TrimSpace(v.ID)
+		if id == "" {
+			continue
+		}
+		if _, ok := seen[id]; ok {
+			continue
+		}
+		seen[id] = struct{}{}
+		out = append(out, id)
+	}
+
+	sort.Strings(out)
+	return out, nil
 }

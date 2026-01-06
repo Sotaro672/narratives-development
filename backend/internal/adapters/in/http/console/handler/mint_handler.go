@@ -1,4 +1,4 @@
-// backend\internal\adapters\in\http\console\handler\mint_handler.go
+// backend/internal/adapters/in/http/console/handler/mint_handler.go
 package consoleHandler
 
 import (
@@ -23,7 +23,7 @@ import (
 	productionapp "narratives/internal/application/production"
 
 	// ★ NEW: mintRequest 一覧の Query（productionId -> inspection + mint）
-	querydto "narratives/internal/application/query/dto"
+	querydto "narratives/internal/application/query/console/dto"
 
 	usecase "narratives/internal/application/usecase"
 	branddom "narratives/internal/domain/brand"
@@ -40,6 +40,9 @@ type MintRequestQueryService interface {
 	// company 境界付きで、productionId と同 docId の inspection/mint を束ねた DTO を返す
 	// NOTE: requestedBy は mint.CreatedBy に合わせる（DTO 側で担保）
 	ListMintRequestManagementRows(ctx context.Context) ([]querydto.ProductionInspectionMintDTO, error)
+
+	// ✅ detail 用（/mint/inspections/{productionId}）
+	GetMintRequestDetail(ctx context.Context, productionID string) (*querydto.MintRequestDetailDTO, error)
 }
 
 type MintHandler struct {
@@ -228,14 +231,14 @@ func (h *MintHandler) executeMintByInspectionID(w http.ResponseWriter, r *http.R
 
 // ============================================================
 // ★ NEW: GET /mint/inspections/{productionId}
-// - detail 用: MintUsecase.GetMintRequestDetail を呼ぶ
+// - detail 用: MintRequestQueryService.GetMintRequestDetail を呼ぶ
 // ============================================================
 func (h *MintHandler) getMintRequestDetailByProductionID(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 
-	if h.mintUC == nil {
+	if h.mintRequestQS == nil {
 		w.WriteHeader(http.StatusInternalServerError)
-		_ = json.NewEncoder(w).Encode(map[string]string{"error": "mint usecase is not configured"})
+		_ = json.NewEncoder(w).Encode(map[string]string{"error": "mintRequest query service is not configured"})
 		return
 	}
 
@@ -257,7 +260,7 @@ func (h *MintHandler) getMintRequestDetailByProductionID(w http.ResponseWriter, 
 	log.Printf("[mint_handler] /mint/inspections/{productionId} start productionId=%q", productionID)
 
 	start := time.Now()
-	detail, err := h.mintUC.GetMintRequestDetail(ctx, productionID)
+	detail, err := h.mintRequestQS.GetMintRequestDetail(ctx, productionID)
 	elapsed := time.Since(start)
 
 	if err != nil {
@@ -266,7 +269,10 @@ func (h *MintHandler) getMintRequestDetailByProductionID(w http.ResponseWriter, 
 			_ = json.NewEncoder(w).Encode(map[string]string{"error": "companyId is missing"})
 			return
 		}
-		if errors.Is(err, inspectiondom.ErrNotFound) || errors.Is(err, mintdom.ErrNotFound) {
+
+		// QS 側が inspection/mint not found を返すケース
+		if errors.Is(err, inspectiondom.ErrNotFound) || errors.Is(err, mintdom.ErrNotFound) ||
+			strings.Contains(strings.ToLower(err.Error()), "not found") {
 			w.WriteHeader(http.StatusNotFound)
 			_ = json.NewEncoder(w).Encode(map[string]string{"error": "mint request detail not found"})
 			return

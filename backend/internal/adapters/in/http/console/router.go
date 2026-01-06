@@ -19,7 +19,7 @@ import (
 	productionapp "narratives/internal/application/production"
 
 	// ★ new: Query services (CompanyProductionQueryService / InventoryQuery / ListCreateQuery / ListManagementQuery / ListDetailQuery)
-	companyquery "narratives/internal/application/query"
+	companyquery "narratives/internal/application/query/console"
 
 	// ✅ console handlers（正）
 	consoleHandler "narratives/internal/adapters/in/http/console/handler"

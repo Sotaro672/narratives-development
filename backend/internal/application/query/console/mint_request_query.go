@@ -12,7 +12,7 @@ import (
 
 	mintapp "narratives/internal/application/mint"
 	productionapp "narratives/internal/application/production"
-	querydto "narratives/internal/application/query/dto"
+	querydto "narratives/internal/application/query/console/dto"
 	resolver "narratives/internal/application/resolver"
 	mintdom "narratives/internal/domain/mint"
 	modeldom "narratives/internal/domain/model"

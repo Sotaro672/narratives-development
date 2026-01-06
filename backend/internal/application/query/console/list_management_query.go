@@ -1,4 +1,4 @@
-// backend/internal/application/query/list_query.go
+// backend/internal/application/query/console/list_management_query.go
 package query
 
 import (
@@ -7,7 +7,7 @@ import (
 	"strings"
 	"time"
 
-	querydto "narratives/internal/application/query/dto"
+	querydto "narratives/internal/application/query/console/dto"
 	resolver "narratives/internal/application/resolver"
 	listdom "narratives/internal/domain/list"
 	pbpdom "narratives/internal/domain/productBlueprint"
@@ -107,6 +107,8 @@ func NewListManagementQueryWithBrandGetters(
 	}
 }
 
+// 互換: 既存名（Brand + InventoryRows）
+// ※呼び出し側の DI を壊さないため残す
 func NewListManagementQueryWithBrandAndInventoryRows(
 	lister ListLister,
 	nameResolver *resolver.NameResolver,
@@ -117,6 +119,26 @@ func NewListManagementQueryWithBrandAndInventoryRows(
 	q := NewListManagementQueryWithBrandGetters(lister, nameResolver, pbGetter, tbGetter)
 	q.invRows = invRows
 	return q
+}
+
+// ✅ 統合: 旧 list_management_query_ctor.go の ctor をこのファイルに統合
+// ✅ Lists 一覧（listManagement.tsx 用）Query の ctor
+// - company boundary は invRows(ListByCurrentCompany) で作る
+// - brand 解決は pbGetter/tbGetter + nameResolver(brandName) を使う
+func NewListManagementQueryWithBrandInventoryAndInventoryRows(
+	lister ListLister,
+	nameResolver *resolver.NameResolver,
+	pbGetter ProductBlueprintGetter,
+	tbGetter TokenBlueprintGetter,
+	invRows InventoryRowsLister,
+) *ListManagementQuery {
+	return &ListManagementQuery{
+		lister:       lister,
+		nameResolver: nameResolver,
+		pbGetter:     pbGetter,
+		tbGetter:     tbGetter,
+		invRows:      invRows,
+	}
 }
 
 func (q *ListManagementQuery) ListRows(ctx context.Context, filter listdom.Filter, sort listdom.Sort, page listdom.Page) (listdom.PageResult[ListRowDTO], error) {

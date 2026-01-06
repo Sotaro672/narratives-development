@@ -1,3 +1,4 @@
+//frontend\sns\lib\features\list\presentation\page\catalog.dart
 import 'package:flutter/material.dart';
 
 import 'package:sns/app/shell/presentation/state/catalog_selection_store.dart';

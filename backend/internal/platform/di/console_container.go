@@ -33,7 +33,7 @@ import (
 	productionapp "narratives/internal/application/production"
 
 	// ★ CompanyProductionQueryService / MintRequestQueryService / InventoryQuery / ListCreateQuery / ListManagementQuery / ListDetailQuery
-	companyquery "narratives/internal/application/query"
+	companyquery "narratives/internal/application/query/console"
 
 	// ✅ SNS queries (catalog / order / cart / preview)
 	snsquery "narratives/internal/application/query/mall"
@@ -527,8 +527,9 @@ func NewContainer(ctx context.Context) (*Container, error) {
 	)
 
 	// ✅ NEW: ListCreateQuery
-	listCreateQuery := companyquery.NewListCreateQueryWithInventory(
+	listCreateQuery := companyquery.NewListCreateQueryWithInventoryAndModels(
 		inventoryRepo,
+		modelRepo, // ✅ 追加（models/variations の母集団を引く）
 		&pbPatchByIDAdapter{repo: productBlueprintRepo},
 		&tbPatchByIDAdapter{repo: tokenBlueprintRepo},
 		nameResolver,

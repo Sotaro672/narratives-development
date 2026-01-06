@@ -8,7 +8,7 @@ import (
 	"strings"
 
 	productionapp "narratives/internal/application/production"
-	companyquery "narratives/internal/application/query"
+	companyquery "narratives/internal/application/query/console"
 	productbpdom "narratives/internal/domain/productBlueprint"
 	productiondom "narratives/internal/domain/production"
 )

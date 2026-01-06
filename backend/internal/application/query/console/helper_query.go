@@ -1,4 +1,4 @@
-// backend/internal/application/query/list_query_helpers.go
+// backend\internal\application\query\console\helper_query.go
 package query
 
 import (
@@ -7,7 +7,7 @@ import (
 	"reflect"
 	"strings"
 
-	querydto "narratives/internal/application/query/dto"
+	querydto "narratives/internal/application/query/console/dto"
 	listdom "narratives/internal/domain/list"
 )
 

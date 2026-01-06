@@ -13,7 +13,7 @@ import (
 	"strings"
 	"time"
 
-	query "narratives/internal/application/query"
+	query "narratives/internal/application/query/console"
 	usecase "narratives/internal/application/usecase"
 	listdom "narratives/internal/domain/list"
 	listimgdom "narratives/internal/domain/listImage"
