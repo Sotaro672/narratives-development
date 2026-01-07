@@ -15,10 +15,10 @@ import (
 // Routes:
 // - GET /sns/catalog/{listId}
 type SNSCatalogHandler struct {
-	Q *snsquery.SNSCatalogQuery
+	Q *snsquery.CatalogQuery
 }
 
-func NewSNSCatalogHandler(q *snsquery.SNSCatalogQuery) http.Handler {
+func NewSNSCatalogHandler(q *snsquery.CatalogQuery) http.Handler {
 	return &SNSCatalogHandler{Q: q}
 }
 

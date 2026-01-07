@@ -1,4 +1,4 @@
-// backend\internal\adapters\in\http\router.go
+// backend/internal/adapters/in/http/console/router.go
 package httpin
 
 import (
@@ -18,16 +18,13 @@ import (
 	// ★ new: Production 用の新パッケージ
 	productionapp "narratives/internal/application/production"
 
-	// ★ new: Query services (CompanyProductionQueryService / InventoryQuery / ListCreateQuery / ListManagementQuery / ListDetailQuery)
+	// ★ new: Query services
 	companyquery "narratives/internal/application/query/console"
 
 	// ✅ console handlers（正）
 	consoleHandler "narratives/internal/adapters/in/http/console/handler"
 
 	"narratives/internal/adapters/in/http/middleware"
-
-	// ✅ SNS router
-	snsh "narratives/internal/adapters/in/http/mall"
 
 	resolver "narratives/internal/application/resolver"
 
@@ -76,29 +73,29 @@ type RouterDeps struct {
 	// ★ NEW: Inventory detail の read-model assembler（/inventory/...）
 	InventoryQuery *companyquery.InventoryQuery
 
-	// ✅ NEW: listCreate DTO assembler（/inventory/list-create/...）
+	// ✅ NEW: listCreate DTO assembler
 	ListCreateQuery *companyquery.ListCreateQuery
 
-	// ✅ NEW: Lists の read-model assembler（/lists 一覧 DTO）
+	// ✅ NEW: Lists の read-model assembler
 	ListManagementQuery *companyquery.ListManagementQuery
 
-	// ✅ NEW: List detail DTO assembler（/lists/{id} detail DTO）
+	// ✅ NEW: List detail DTO assembler
 	ListDetailQuery *companyquery.ListDetailQuery
 
-	// ✅ NEW: ListImage uploader/deleter（/lists/{id}/images/... 用）
+	// ✅ NEW: ListImage uploader/deleter
 	ListImageUploader consoleHandler.ListImageUploader
 	ListImageDeleter  consoleHandler.ListImageDeleter
 
 	// ★ NameResolver（ID→名前/型番解決）
 	NameResolver *resolver.NameResolver
 
-	// ⭐ Inspector 用 ProductUsecase（/inspector/products/{id}）
+	// ⭐ Inspector 用 ProductUsecase
 	ProductUC *usecase.ProductUsecase
 
 	// ⭐ 検品専用 Usecase（★ moved）
 	InspectionUC *inspectionapp.InspectionUsecase
 
-	// ⭐ Mint 用 Usecase（/mint/inspections など）
+	// ⭐ Mint 用 Usecase
 	MintUC *mintapp.MintUsecase
 
 	// 認証・招待まわり
@@ -119,11 +116,8 @@ type RouterDeps struct {
 	// Message 用の Firestore Repository
 	MessageRepo *msgrepo.MessageRepositoryFS
 
-	// ★ MintRequest の query（productionIds を company 境界で取得する等に使う）
+	// ★ MintRequest の query
 	MintRequestQueryService consoleHandler.MintRequestQueryService
-
-	// ✅ SNS buyer-facing handlers set (/sns/** + aliases)
-	SNS snsh.Deps
 }
 
 func NewRouter(deps RouterDeps) http.Handler {
@@ -261,7 +255,7 @@ func NewRouter(deps RouterDeps) http.Handler {
 	}
 
 	// ================================
-	// ✅ Lists（/lists）
+	// Lists
 	// ================================
 	if deps.ListUC != nil {
 		var listH http.Handler
@@ -444,7 +438,7 @@ func NewRouter(deps RouterDeps) http.Handler {
 	}
 
 	// ================================
-	// ⭐ 検品 API（Inspector 用）
+	// Inspector
 	// ================================
 	if deps.ProductUC != nil && deps.InspectionUC != nil {
 		inspectorH := consoleHandler.NewInspectorHandler(deps.ProductUC, deps.InspectionUC)
@@ -460,7 +454,7 @@ func NewRouter(deps RouterDeps) http.Handler {
 	}
 
 	// ================================
-	// ⭐ Mint API
+	// Mint
 	// ================================
 	if deps.MintUC != nil {
 		mintH := consoleHandler.NewMintHandler(
@@ -472,7 +466,6 @@ func NewRouter(deps RouterDeps) http.Handler {
 			nil,
 		)
 
-		// NOTE: concrete type is in consoleHandler package
 		if mh, ok := mintH.(*consoleHandler.MintHandler); ok {
 			mux.HandleFunc("/mint/debug", mh.HandleDebug)
 		}
@@ -483,45 +476,6 @@ func NewRouter(deps RouterDeps) http.Handler {
 		}
 
 		mux.Handle("/mint/", h)
-	}
-
-	// ================================
-	// ✅ SNS buyer-facing routes (/sns/**) + aliases
-	// ================================
-	snsh.Register(mux, deps.SNS)
-
-	notWired := func(name string) http.Handler {
-		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			w.Header().Set("content-type", "text/plain; charset=utf-8")
-			w.WriteHeader(http.StatusNotImplemented)
-			_, _ = w.Write([]byte("not implemented: " + name + " handler is nil (DI wiring required)"))
-		})
-	}
-
-	if deps.SNS.User == nil {
-		h := notWired("sns users")
-		mux.Handle("/sns/users", h)
-		mux.Handle("/sns/users/", h)
-	}
-	if deps.SNS.ShippingAddress == nil {
-		h := notWired("sns shipping-addresses")
-		mux.Handle("/sns/shipping-addresses", h)
-		mux.Handle("/sns/shipping-addresses/", h)
-	}
-	if deps.SNS.BillingAddress == nil {
-		h := notWired("sns billing-addresses")
-		mux.Handle("/sns/billing-addresses", h)
-		mux.Handle("/sns/billing-addresses/", h)
-	}
-	if deps.SNS.Avatar == nil {
-		h := notWired("sns avatars")
-		mux.Handle("/sns/avatars", h)
-		mux.Handle("/sns/avatars/", h)
-	}
-	if deps.SNS.SignIn == nil {
-		h := notWired("sns sign-in")
-		mux.Handle("/sns/sign-in", h)
-		mux.Handle("/sns/sign-in/", h)
 	}
 
 	return mux

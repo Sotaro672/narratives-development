@@ -2,6 +2,7 @@
 package mall
 
 import (
+	"log"
 	"net/http"
 )
 
@@ -36,94 +37,99 @@ type Deps struct {
 	Order   http.Handler
 }
 
+// handleSafe registers pattern with h.
+// If h is nil, it logs and registers NotFoundHandler instead (so Cloud Run won't crash).
+func handleSafe(mux *http.ServeMux, pattern string, h http.Handler, name string) {
+	if h == nil {
+		log.Printf("[mall.router] WARN: nil handler: %s pattern=%s (registering NotFoundHandler)", name, pattern)
+		h = http.NotFoundHandler()
+	}
+	mux.Handle(pattern, h)
+}
+
 // Register registers buyer-facing routes onto mux (mall only).
 func Register(mux *http.ServeMux, deps Deps) {
 	if mux == nil {
 		return
 	}
 
-	// ✅ NOTE:
-	// 多くの既存ハンドラは /sns/* 前提（NewSNS*Handler）なので、
-	// ルーティングは /mall/* のまま、内部で /sns/* に rewrite して渡す。
-	// Cart/Preview/Payment/Order などは /mall 対応済みのことが多いので rewrite しない。
-
 	// lists
-	mux.Handle("/mall/lists", deps.List)
-	mux.Handle("/mall/lists/", deps.List)
+	handleSafe(mux, "/mall/lists", deps.List, "List")
+	handleSafe(mux, "/mall/lists/", deps.List, "List")
 
 	// inventories
-	mux.Handle("/mall/inventories", deps.Inventory)
-	mux.Handle("/mall/inventories/", deps.Inventory)
+	handleSafe(mux, "/mall/inventories", deps.Inventory, "Inventory")
+	handleSafe(mux, "/mall/inventories/", deps.Inventory, "Inventory")
 
 	// product blueprints
-	mux.Handle("/mall/product-blueprints", deps.ProductBlueprint)
-	mux.Handle("/mall/product-blueprints/", deps.ProductBlueprint)
+	handleSafe(mux, "/mall/product-blueprints", deps.ProductBlueprint, "ProductBlueprint")
+	handleSafe(mux, "/mall/product-blueprints/", deps.ProductBlueprint, "ProductBlueprint")
 
-	// models（Mall対応ハンドラの可能性が高いので rewrite しない）
-	mux.Handle("/mall/models", deps.Model)
-	mux.Handle("/mall/models/", deps.Model)
+	// models
+	handleSafe(mux, "/mall/models", deps.Model, "Model")
+	handleSafe(mux, "/mall/models/", deps.Model, "Model")
 
 	// catalog
-	mux.Handle("/mall/catalog", deps.Catalog)
-	mux.Handle("/mall/catalog/", deps.Catalog)
+	handleSafe(mux, "/mall/catalog", deps.Catalog, "Catalog")
+	handleSafe(mux, "/mall/catalog/", deps.Catalog, "Catalog")
 
 	// token blueprints
-	mux.Handle("/mall/token-blueprints", deps.TokenBlueprint)
-	mux.Handle("/mall/token-blueprints/", deps.TokenBlueprint)
+	handleSafe(mux, "/mall/token-blueprints", deps.TokenBlueprint, "TokenBlueprint")
+	handleSafe(mux, "/mall/token-blueprints/", deps.TokenBlueprint, "TokenBlueprint")
 
 	// companies / brands
-	mux.Handle("/mall/companies", deps.Company)
-	mux.Handle("/mall/companies/", deps.Company)
-	mux.Handle("/mall/brands", deps.Brand)
-	mux.Handle("/mall/brands/", deps.Brand)
+	handleSafe(mux, "/mall/companies", deps.Company, "Company")
+	handleSafe(mux, "/mall/companies/", deps.Company, "Company")
+	handleSafe(mux, "/mall/brands", deps.Brand, "Brand")
+	handleSafe(mux, "/mall/brands/", deps.Brand, "Brand")
 
 	// sign-in
-	mux.Handle("/mall/sign-in", deps.SignIn)
-	mux.Handle("/mall/sign-in/", deps.SignIn)
+	handleSafe(mux, "/mall/sign-in", deps.SignIn, "SignIn")
+	handleSafe(mux, "/mall/sign-in/", deps.SignIn, "SignIn")
 
 	// users
-	mux.Handle("/mall/users", deps.User)
-	mux.Handle("/mall/users/", deps.User)
+	handleSafe(mux, "/mall/users", deps.User, "User")
+	handleSafe(mux, "/mall/users/", deps.User, "User")
 
 	// shipping addresses
-	mux.Handle("/mall/shipping-addresses", deps.ShippingAddress)
-	mux.Handle("/mall/shipping-addresses/", deps.ShippingAddress)
+	handleSafe(mux, "/mall/shipping-addresses", deps.ShippingAddress, "ShippingAddress")
+	handleSafe(mux, "/mall/shipping-addresses/", deps.ShippingAddress, "ShippingAddress")
 
 	// billing addresses
-	mux.Handle("/mall/billing-addresses", deps.BillingAddress)
-	mux.Handle("/mall/billing-addresses/", deps.BillingAddress)
+	handleSafe(mux, "/mall/billing-addresses", deps.BillingAddress, "BillingAddress")
+	handleSafe(mux, "/mall/billing-addresses/", deps.BillingAddress, "BillingAddress")
 
 	// avatars
-	mux.Handle("/mall/avatars", deps.Avatar)
-	mux.Handle("/mall/avatars/", deps.Avatar)
+	handleSafe(mux, "/mall/avatars", deps.Avatar, "Avatar")
+	handleSafe(mux, "/mall/avatars/", deps.Avatar, "Avatar")
 
 	// avatar states
-	mux.Handle("/mall/avatar-states", deps.AvatarState)
-	mux.Handle("/mall/avatar-states/", deps.AvatarState)
+	handleSafe(mux, "/mall/avatar-states", deps.AvatarState, "AvatarState")
+	handleSafe(mux, "/mall/avatar-states/", deps.AvatarState, "AvatarState")
 
-	// ✅ wallet (plural only)
-	mux.Handle("/mall/wallets", deps.Wallet)
-	mux.Handle("/mall/wallets/", deps.Wallet)
+	// wallet (plural only)
+	handleSafe(mux, "/mall/wallets", deps.Wallet, "Wallet")
+	handleSafe(mux, "/mall/wallets/", deps.Wallet, "Wallet")
 
-	// cart（/mall 前提のラッパを DI 側で組んでいるので rewrite しない）
-	mux.Handle("/mall/cart", deps.Cart)
-	mux.Handle("/mall/cart/", deps.Cart)
+	// cart
+	handleSafe(mux, "/mall/cart", deps.Cart, "Cart")
+	handleSafe(mux, "/mall/cart/", deps.Cart, "Cart")
 
-	// preview（同上）
-	mux.Handle("/mall/preview", deps.Preview)
-	mux.Handle("/mall/preview/", deps.Preview)
+	// preview
+	handleSafe(mux, "/mall/preview", deps.Preview, "Preview")
+	handleSafe(mux, "/mall/preview/", deps.Preview, "Preview")
 
 	// posts
-	mux.Handle("/mall/posts", deps.Post)
-	mux.Handle("/mall/posts/", deps.Post)
+	handleSafe(mux, "/mall/posts", deps.Post, "Post")
+	handleSafe(mux, "/mall/posts/", deps.Post, "Post")
 
-	// ✅ payment（PaymentHandler が /mall を自前で normalize するので rewrite しない）
-	mux.Handle("/mall/payment", deps.Payment)
-	mux.Handle("/mall/payment/", deps.Payment)
-	mux.Handle("/mall/payments", deps.Payment)
-	mux.Handle("/mall/payments/", deps.Payment)
+	// payment
+	handleSafe(mux, "/mall/payment", deps.Payment, "Payment")
+	handleSafe(mux, "/mall/payment/", deps.Payment, "Payment")
+	handleSafe(mux, "/mall/payments", deps.Payment, "Payment")
+	handleSafe(mux, "/mall/payments/", deps.Payment, "Payment")
 
-	// orders（Mall対応ハンドラの可能性が高いので rewrite しない）
-	mux.Handle("/mall/orders", deps.Order)
-	mux.Handle("/mall/orders/", deps.Order)
+	// orders
+	handleSafe(mux, "/mall/orders", deps.Order, "Order")
+	handleSafe(mux, "/mall/orders/", deps.Order, "Order")
 }

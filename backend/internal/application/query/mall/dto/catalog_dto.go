@@ -10,7 +10,7 @@ import (
 // DTOs (for catalog.dart)
 // ============================================================
 
-type SNSCatalogDTO struct {
+type CatalogDTO struct {
 	List CatalogListDTO `json:"list"`
 
 	Inventory      *CatalogInventoryDTO `json:"inventory,omitempty"`

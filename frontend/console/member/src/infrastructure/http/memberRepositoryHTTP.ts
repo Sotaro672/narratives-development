@@ -15,60 +15,30 @@ import type {
 } from "../../../../shell/src/shared/types/common/common";
 import type { Member, MemberPatch } from "../../domain/entity/member";
 
-import { getAuthHeaders } from "../../../../shell/src/auth/application/authService";
-
-// ===========================
-// BACKEND BASE URL
-// ===========================
-const ENV_BASE =
-  ((import.meta as any).env?.VITE_BACKEND_BASE_URL as string | undefined)?.replace(
-    /\/+$/,
-    "",
-  ) ?? "";
-
-const FALLBACK_BASE =
-  "https://narratives-backend-871263659099.asia-northeast1.run.app";
-
-const API_BASE = ENV_BASE || FALLBACK_BASE;
-
-function toQuery(params: Record<string, any>) {
-  const sp = new URLSearchParams();
-  Object.entries(params).forEach(([k, v]) => {
-    if (v === undefined || v === null || v === "") return;
-    if (Array.isArray(v)) {
-      v.forEach((x) => sp.append(k, String(x)));
-    } else {
-      sp.set(k, String(v));
-    }
-  });
-  return sp.toString();
-}
-
-async function fetchJSON(input: RequestInfo, init?: RequestInit) {
-  const res = await fetch(input, init);
-  const ct = res.headers.get("content-type") ?? "";
-  if (!ct.includes("application/json")) {
-    const text = await res.text().catch(() => "");
-    throw new Error(`Unexpected content-type: ${ct}\n${text.slice(0, 200)}`);
-  }
-  if (!res.ok) {
-    throw new Error(await res.text().catch(() => `HTTP ${res.status}`));
-  }
-  return res.json();
-}
+// ✅ shared http (shell)
+import { buildConsoleUrl } from "../../../../shell/src/shared/http/apiBase";
+import {
+  getAuthHeaders,
+  getAuthJsonHeaders,
+} from "../../../../shell/src/shared/http/authHeaders";
+import { fetchJSON } from "../../../../shell/src/shared/http/fetchJSON";
+import { withQuery } from "../../../../shell/src/shared/http/queryString";
 
 export class MemberRepositoryHTTP implements MemberRepository {
   async getById(id: string): Promise<Member | null> {
     const headers = await getAuthHeaders();
-    const url = `${API_BASE}/members/${encodeURIComponent(id)}`;
+    const url = buildConsoleUrl(`/members/${encodeURIComponent(id)}`);
+
     const res = await fetch(url, { headers });
     if (res.status === 404) return null;
 
     const ct = res.headers.get("content-type") ?? "";
     if (!ct.includes("application/json")) {
-      throw new Error(`Unexpected content-type: ${ct}`);
+      const text = await res.text().catch(() => "");
+      throw new Error(`Unexpected content-type: ${ct}\n${text.slice(0, 200)}`);
     }
-    if (!res.ok) throw new Error(await res.text());
+    if (!res.ok) throw new Error(await res.text().catch(() => `HTTP ${res.status}`));
+
     return (await res.json()) as Member;
   }
 
@@ -78,7 +48,7 @@ export class MemberRepositoryHTTP implements MemberRepository {
     const pageNumber = page.number && page.number > 0 ? page.number : 1;
     const perPage = page.perPage && page.perPage > 0 ? page.perPage : 50;
 
-    const qs = toQuery({
+    const url = withQuery(buildConsoleUrl("/members"), {
       q: filter?.searchQuery,
       brandIds: filter?.brandIds,
       status: filter?.status,
@@ -88,8 +58,9 @@ export class MemberRepositoryHTTP implements MemberRepository {
       order: "desc",
     });
 
-    const data = await fetchJSON(`${API_BASE}/members?${qs}`, { headers });
+    const data = await fetchJSON<unknown>(url, { headers });
 
+    // backend が配列だけ返すケースにも対応
     if (Array.isArray(data)) {
       return {
         items: data as Member[],
@@ -104,15 +75,14 @@ export class MemberRepositoryHTTP implements MemberRepository {
   }
 
   async create(member: Member): Promise<Member> {
-    const headers = {
-      ...(await getAuthHeaders()),
-      "Content-Type": "application/json",
-    };
-    return (await fetchJSON(`${API_BASE}/members`, {
+    const headers = await getAuthJsonHeaders();
+    const url = buildConsoleUrl("/members");
+
+    return await fetchJSON<Member>(url, {
       method: "POST",
       headers,
       body: JSON.stringify(member),
-    })) as Member;
+    });
   }
 
   async update(id: string, patch: MemberPatch, _opts?: SaveOptions): Promise<Member> {
@@ -128,12 +98,11 @@ export class MemberRepositoryHTTP implements MemberRepository {
     _sort: MemberSort,
     cursorPage: CursorPage,
   ): Promise<CursorPageResult<Member>> {
-    const limit =
-      cursorPage.limit && cursorPage.limit > 0 ? cursorPage.limit : 50;
+    const limit = cursorPage.limit && cursorPage.limit > 0 ? cursorPage.limit : 50;
 
     const page: Page = { number: 1, perPage: limit, totalPages: 1 };
-
     const res = await this.list(page, filter);
+
     return {
       items: res.items,
       nextCursor: null,
@@ -148,6 +117,7 @@ export class MemberRepositoryHTTP implements MemberRepository {
       { number: 1, perPage: 50, totalPages: 1 },
       { searchQuery: email },
     );
+
     const hit = res.items.find(
       (m) => (m.email ?? "").toLowerCase() === email.trim().toLowerCase(),
     );
@@ -178,18 +148,15 @@ export class MemberRepositoryHTTP implements MemberRepository {
 /**
  * ID → 担当者名 解決
  */
-export async function fetchMemberDisplayNameById(
-  memberId: string,
-): Promise<string> {
+export async function fetchMemberDisplayNameById(memberId: string): Promise<string> {
   const trimmed = memberId.trim();
   if (!trimmed) return "-";
 
   try {
     const headers = await getAuthHeaders();
-    const url = `${API_BASE}/members/${encodeURIComponent(trimmed)}`;
+    const url = buildConsoleUrl(`/members/${encodeURIComponent(trimmed)}`);
 
     const res = await fetch(url, { headers });
-
     if (res.status === 404) return trimmed;
 
     const ct = res.headers.get("content-type") ?? "";

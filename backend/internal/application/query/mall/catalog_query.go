@@ -1,4 +1,4 @@
-// backend\internal\application\query\mall\catalog_query.go
+// backend/internal/application/query/mall/catalog_query.go
 package mall
 
 import (
@@ -7,10 +7,9 @@ import (
 	"fmt"
 	"log"
 	"reflect"
-	"sort"
 	"strings"
 
-	snsdto "narratives/internal/application/query/mall/dto"
+	dto "narratives/internal/application/query/mall/dto"
 	appresolver "narratives/internal/application/resolver"
 
 	invdom "narratives/internal/domain/inventory"
@@ -24,22 +23,15 @@ import (
 // Ports (minimal contracts for this query)
 // ============================================================
 
-// InventoryRepository returns already-shaped buyer-facing inventory DTO.
-// ✅ stock(products) を含んだ shape を返す前提
+// InventoryRepository returns domain inventory mint.
+// - outfs.InventoryRepositoryFS is expected to satisfy this.
 type InventoryRepository interface {
-	GetByID(ctx context.Context, id string) (*snsdto.CatalogInventoryDTO, error)
-	GetByProductAndTokenBlueprintID(ctx context.Context, productBlueprintID, tokenBlueprintID string) (*snsdto.CatalogInventoryDTO, error)
-}
-
-// ✅ OPTIONAL: Stock の “key集合” を domain Mint.Stock(=Products) から復元するための追加口
-// - 既存実装を壊さないため、InventoryRepo が実装している場合だけ利用する
-type InventoryMintStockSource interface {
-	GetMintByID(ctx context.Context, id string) (invdom.Mint, error)
-	GetMintByProductAndTokenBlueprintID(ctx context.Context, productBlueprintID, tokenBlueprintID string) (invdom.Mint, error)
+	GetByID(ctx context.Context, id string) (invdom.Mint, error)
+	GetByProductAndTokenBlueprintID(ctx context.Context, productBlueprintID, tokenBlueprintID string) (invdom.Mint, error)
 }
 
 type ProductBlueprintRepository interface {
-	GetByID(ctx context.Context, id string) (*pbdom.ProductBlueprint, error)
+	GetByID(ctx context.Context, id string) (pbdom.ProductBlueprint, error)
 }
 
 // ✅ NEW: tokenBlueprint patch getter (buyer-facing minimal info)
@@ -51,7 +43,7 @@ type TokenBlueprintPatchRepository interface {
 // Query
 // ============================================================
 
-type SNSCatalogQuery struct {
+type CatalogQuery struct {
 	ListRepo ldom.Repository
 
 	InventoryRepo InventoryRepository
@@ -64,13 +56,13 @@ type SNSCatalogQuery struct {
 	NameResolver *appresolver.NameResolver
 }
 
-func NewSNSCatalogQuery(
+func NewCatalogQuery(
 	listRepo ldom.Repository,
 	invRepo InventoryRepository,
 	productRepo ProductBlueprintRepository,
 	modelRepo modeldom.RepositoryPort,
-) *SNSCatalogQuery {
-	return &SNSCatalogQuery{
+) *CatalogQuery {
+	return &CatalogQuery{
 		ListRepo:      listRepo,
 		InventoryRepo: invRepo,
 		ProductRepo:   productRepo,
@@ -81,14 +73,14 @@ func NewSNSCatalogQuery(
 }
 
 // ✅ NEW: ctor with tokenBlueprint patch getter
-func NewSNSCatalogQueryWithTokenBlueprintPatch(
+func NewCatalogQueryWithTokenBlueprintPatch(
 	listRepo ldom.Repository,
 	invRepo InventoryRepository,
 	productRepo ProductBlueprintRepository,
 	tokenRepo TokenBlueprintPatchRepository,
 	modelRepo modeldom.RepositoryPort,
-) *SNSCatalogQuery {
-	return &SNSCatalogQuery{
+) *CatalogQuery {
+	return &CatalogQuery{
 		ListRepo:      listRepo,
 		InventoryRepo: invRepo,
 		ProductRepo:   productRepo,
@@ -99,14 +91,14 @@ func NewSNSCatalogQueryWithTokenBlueprintPatch(
 }
 
 // ✅ NEW: ctor with name resolver (brand/company)
-func NewSNSCatalogQueryWithNameResolver(
+func NewCatalogQueryWithNameResolver(
 	listRepo ldom.Repository,
 	invRepo InventoryRepository,
 	productRepo ProductBlueprintRepository,
 	modelRepo modeldom.RepositoryPort,
 	nameResolver *appresolver.NameResolver,
-) *SNSCatalogQuery {
-	return &SNSCatalogQuery{
+) *CatalogQuery {
+	return &CatalogQuery{
 		ListRepo:      listRepo,
 		InventoryRepo: invRepo,
 		ProductRepo:   productRepo,
@@ -117,15 +109,15 @@ func NewSNSCatalogQueryWithNameResolver(
 }
 
 // ✅ NEW: ctor with tokenBlueprint patch + name resolver
-func NewSNSCatalogQueryWithTokenBlueprintPatchAndNameResolver(
+func NewCatalogQueryWithTokenBlueprintPatchAndNameResolver(
 	listRepo ldom.Repository,
 	invRepo InventoryRepository,
 	productRepo ProductBlueprintRepository,
 	tokenRepo TokenBlueprintPatchRepository,
 	modelRepo modeldom.RepositoryPort,
 	nameResolver *appresolver.NameResolver,
-) *SNSCatalogQuery {
-	return &SNSCatalogQuery{
+) *CatalogQuery {
+	return &CatalogQuery{
 		ListRepo:      listRepo,
 		InventoryRepo: invRepo,
 		ProductRepo:   productRepo,
@@ -138,36 +130,36 @@ func NewSNSCatalogQueryWithTokenBlueprintPatchAndNameResolver(
 // GetByListID builds catalog payload by listId.
 // - list must be status=listing, otherwise ErrNotFound.
 // - inventory/product/model/tokenBlueprint are best-effort; failures populate "*Error" fields.
-func (q *SNSCatalogQuery) GetByListID(ctx context.Context, listID string) (snsdto.SNSCatalogDTO, error) {
+func (q *CatalogQuery) GetByListID(ctx context.Context, listID string) (dto.CatalogDTO, error) {
 	if q == nil || q.ListRepo == nil {
-		return snsdto.SNSCatalogDTO{}, errors.New("sns catalog query: list repo is nil")
+		return dto.CatalogDTO{}, errors.New("catalog query: list repo is nil")
 	}
 
 	listID = strings.TrimSpace(listID)
 	if listID == "" {
-		return snsdto.SNSCatalogDTO{}, ldom.ErrNotFound
+		return dto.CatalogDTO{}, ldom.ErrNotFound
 	}
 
-	log.Printf("[sns_catalog] GetByListID start listId=%q", listID)
+	log.Printf("[catalog] GetByListID start listId=%q", listID)
 
 	l, err := q.ListRepo.GetByID(ctx, listID)
 	if err != nil {
-		log.Printf("[sns_catalog] list getById error listId=%q err=%q", listID, err.Error())
-		return snsdto.SNSCatalogDTO{}, err
+		log.Printf("[catalog] list getById error listId=%q err=%q", listID, err.Error())
+		return dto.CatalogDTO{}, err
 	}
 	if l.Status != ldom.StatusListing {
-		log.Printf("[sns_catalog] list not listing listId=%q status=%q", listID, fmt.Sprint(l.Status))
-		return snsdto.SNSCatalogDTO{}, ldom.ErrNotFound
+		log.Printf("[catalog] list not listing listId=%q status=%q", listID, fmt.Sprint(l.Status))
+		return dto.CatalogDTO{}, ldom.ErrNotFound
 	}
 
-	out := snsdto.SNSCatalogDTO{
+	out := dto.CatalogDTO{
 		List: toCatalogListDTO(l),
 	}
 
 	// ------------------------------------------------------------
 	// Inventory (prefer inventoryId; fallback to pb/tb query)
 	// ------------------------------------------------------------
-	var invDTO *snsdto.CatalogInventoryDTO
+	var invDTO *dto.CatalogInventoryDTO
 
 	var invID string
 	var pbID string
@@ -175,56 +167,47 @@ func (q *SNSCatalogQuery) GetByListID(ctx context.Context, listID string) (snsdt
 
 	if q.InventoryRepo == nil {
 		out.InventoryError = "inventory repo is nil"
-		log.Printf("[sns_catalog] inventory repo is nil listId=%q", listID)
+		log.Printf("[catalog] inventory repo is nil listId=%q", listID)
 	} else {
 		invID = strings.TrimSpace(out.List.InventoryID)
 		pbID = strings.TrimSpace(out.List.ProductBlueprintID)
 		tbID = strings.TrimSpace(out.List.TokenBlueprintID)
 
 		log.Printf(
-			"[sns_catalog] inventory linkage listId=%q inventoryId=%q pbId=%q tbId=%q",
+			"[catalog] inventory linkage listId=%q inventoryId=%q pbId=%q tbId=%q",
 			listID, invID, pbID, tbID,
 		)
 
 		switch {
 		case invID != "":
-			v, e := q.InventoryRepo.GetByID(ctx, invID)
+			m, e := q.InventoryRepo.GetByID(ctx, invID)
 			if e != nil {
 				out.InventoryError = e.Error()
-				log.Printf("[sns_catalog] inventory getById error listId=%q invId=%q err=%q", listID, invID, e.Error())
+				log.Printf("[catalog] inventory getById error listId=%q invId=%q err=%q", listID, invID, e.Error())
 			} else {
+				v := toCatalogInventoryDTOFromMint(m)
 				normalizeInventoryStock(v)
 				invDTO = v
 				out.Inventory = v
-				log.Printf("[sns_catalog] inventory getById ok listId=%q invId=%q stockKeys=%d", listID, invID, stockKeyCount(v.Stock))
+				log.Printf("[catalog] inventory getById ok listId=%q invId=%q stockKeys=%d", listID, invID, stockKeyCount(v.Stock))
 			}
 
 		case pbID != "" && tbID != "":
-			v, e := q.InventoryRepo.GetByProductAndTokenBlueprintID(ctx, pbID, tbID)
+			m, e := q.InventoryRepo.GetByProductAndTokenBlueprintID(ctx, pbID, tbID)
 			if e != nil {
 				out.InventoryError = e.Error()
-				log.Printf("[sns_catalog] inventory getByPbTb error listId=%q pbId=%q tbId=%q err=%q", listID, pbID, tbID, e.Error())
+				log.Printf("[catalog] inventory getByPbTb error listId=%q pbId=%q tbId=%q err=%q", listID, pbID, tbID, e.Error())
 			} else {
+				v := toCatalogInventoryDTOFromMint(m)
 				normalizeInventoryStock(v)
 				invDTO = v
 				out.Inventory = v
-				log.Printf("[sns_catalog] inventory getByPbTb ok listId=%q pbId=%q tbId=%q stockKeys=%d", listID, pbID, tbID, stockKeyCount(v.Stock))
+				log.Printf("[catalog] inventory getByPbTb ok listId=%q pbId=%q tbId=%q stockKeys=%d", listID, pbID, tbID, stockKeyCount(v.Stock))
 			}
 
 		default:
 			out.InventoryError = "inventory linkage is missing (inventoryId or productBlueprintId+tokenBlueprintId)"
-			log.Printf("[sns_catalog] inventory linkage missing listId=%q", listID)
-		}
-	}
-
-	// ✅ NEW: inventory.Stock が空なら、domain Mint.Stock から「modelId の集合(key)」を復元して埋める
-	// - InventoryRepo が InventoryMintStockSource を実装している場合のみ有効
-	if invDTO != nil {
-		before := stockKeyCount(invDTO.Stock)
-		ensureInventoryStockKeysFromMintIfNeeded(ctx, q.InventoryRepo, invDTO, invID, pbID, tbID)
-		after := stockKeyCount(invDTO.Stock)
-		if after != before {
-			log.Printf("[sns_catalog] inventory stockKeys restored from mint listId=%q before=%d after=%d", listID, before, after)
+			log.Printf("[catalog] inventory linkage missing listId=%q", listID)
 		}
 	}
 
@@ -240,36 +223,33 @@ func (q *SNSCatalogQuery) GetByListID(ctx context.Context, listID string) (snsdt
 
 	if q.ProductRepo == nil {
 		out.ProductBlueprintError = "product repo is nil"
-		log.Printf("[sns_catalog] product repo is nil listId=%q", listID)
+		log.Printf("[catalog] product repo is nil listId=%q", listID)
 	} else if resolvedPBID == "" {
 		out.ProductBlueprintError = "productBlueprintId is empty"
-		log.Printf("[sns_catalog] productBlueprintId is empty listId=%q", listID)
+		log.Printf("[catalog] productBlueprintId is empty listId=%q", listID)
 	} else {
 		pb, e := q.ProductRepo.GetByID(ctx, resolvedPBID)
 		if e != nil {
 			out.ProductBlueprintError = e.Error()
-			log.Printf("[sns_catalog] product getById error listId=%q pbId=%q err=%q", listID, resolvedPBID, e.Error())
-		} else if pb != nil {
-			dto := toCatalogProductBlueprintDTO(pb)
+			log.Printf("[catalog] product getById error listId=%q pbId=%q err=%q", listID, resolvedPBID, e.Error())
+		} else {
+			pbDTO := toCatalogProductBlueprintDTO(&pb)
 
 			// ✅ resolve brandName/companyName (best-effort)
 			if q.NameResolver != nil {
-				fillProductBlueprintNames(ctx, q.NameResolver, &dto)
+				fillProductBlueprintNames(ctx, q.NameResolver, &pbDTO)
 			}
 
-			out.ProductBlueprint = &dto
+			out.ProductBlueprint = &pbDTO
 			log.Printf(
-				"[sns_catalog] product getById ok listId=%q pbId=%q brandId=%q companyId=%q brandName=%q companyName=%q",
+				"[catalog] product getById ok listId=%q pbId=%q brandId=%q companyId=%q brandName=%q companyName=%q",
 				listID,
 				resolvedPBID,
-				strings.TrimSpace(dto.BrandID),
-				strings.TrimSpace(dto.CompanyID),
-				getStringFieldBestEffort(dto, "BrandName"),
-				getStringFieldBestEffort(dto, "CompanyName"),
+				strings.TrimSpace(pbDTO.BrandID),
+				strings.TrimSpace(pbDTO.CompanyID),
+				getStringFieldBestEffort(pbDTO, "BrandName"),
+				getStringFieldBestEffort(pbDTO, "CompanyName"),
 			)
-		} else {
-			out.ProductBlueprintError = "productBlueprint is nil"
-			log.Printf("[sns_catalog] product is nil listId=%q pbId=%q", listID, resolvedPBID)
 		}
 	}
 
@@ -283,7 +263,7 @@ func (q *SNSCatalogQuery) GetByListID(ctx context.Context, listID string) (snsdt
 		}
 	}
 
-	log.Printf("[sns_catalog] tokenBlueprint resolve listId=%q resolvedTbId=%q (list.tbId=%q inv.tbId=%q)",
+	log.Printf("[catalog] tokenBlueprint resolve listId=%q resolvedTbId=%q (list.tbId=%q inv.tbId=%q)",
 		listID,
 		resolvedTBID,
 		strings.TrimSpace(out.List.TokenBlueprintID),
@@ -299,33 +279,31 @@ func (q *SNSCatalogQuery) GetByListID(ctx context.Context, listID string) (snsdt
 		// linkage が無いケースと区別したいので、ID がある時だけエラーにする
 		if resolvedTBID != "" {
 			out.TokenBlueprintError = "tokenBlueprint repo is nil"
-			log.Printf("[sns_catalog] tokenBlueprint repo is nil listId=%q tbId=%q", listID, resolvedTBID)
+			log.Printf("[catalog] tokenBlueprint repo is nil listId=%q tbId=%q", listID, resolvedTBID)
 		} else {
-			log.Printf("[sns_catalog] tokenBlueprint skip (tbId empty & repo nil) listId=%q", listID)
+			log.Printf("[catalog] tokenBlueprint skip (tbId empty & repo nil) listId=%q", listID)
 		}
 	} else if resolvedTBID == "" {
 		out.TokenBlueprintError = "tokenBlueprintId is empty"
-		log.Printf("[sns_catalog] tokenBlueprintId is empty listId=%q", listID)
+		log.Printf("[catalog] tokenBlueprintId is empty listId=%q", listID)
 	} else {
-		log.Printf("[sns_catalog] tokenBlueprint getPatchById start listId=%q tbId=%q", listID, resolvedTBID)
+		log.Printf("[catalog] tokenBlueprint getPatchById start listId=%q tbId=%q", listID, resolvedTBID)
 
 		patch, e := q.TokenRepo.GetPatchByID(ctx, resolvedTBID)
 		if e != nil {
 			out.TokenBlueprintError = e.Error()
-			log.Printf("[sns_catalog] tokenBlueprint getPatchById error listId=%q tbId=%q err=%q", listID, resolvedTBID, e.Error())
+			log.Printf("[catalog] tokenBlueprint getPatchById error listId=%q tbId=%q err=%q", listID, resolvedTBID, e.Error())
 		} else {
 			p := patch
 
-			// ✅ NEW: token patch にも brandName/companyName を補完して「画面へ渡す」
-			// - /sns/token-blueprints/{id}/patch 側で埋められていないケースでも、
-			//   catalog 側で埋めて返せるようにする。
+			// token patch にも brandName/companyName を補完（best-effort）
 			if q.NameResolver != nil {
 				fillTokenBlueprintPatchNames(ctx, q.NameResolver, &p)
 			}
 
 			out.TokenBlueprint = &p
 			log.Printf(
-				"[sns_catalog] tokenBlueprint getPatchById ok listId=%q tbId=%q name=%q symbol=%q brandId=%q brandName=%q companyId=%q companyName=%q minted=%s hasIconUrl=%t",
+				"[catalog] tokenBlueprint getPatchById ok listId=%q tbId=%q name=%q symbol=%q brandId=%q brandName=%q companyId=%q companyName=%q minted=%s hasIconUrl=%t",
 				listID,
 				resolvedTBID,
 				ptrStr(p.Name),
@@ -346,10 +324,10 @@ func (q *SNSCatalogQuery) GetByListID(ctx context.Context, listID string) (snsdt
 	// ------------------------------------------------------------
 	if q.ModelRepo == nil {
 		out.ModelVariationsError = "model repo is nil"
-		log.Printf("[sns_catalog] model repo is nil listId=%q", listID)
+		log.Printf("[catalog] model repo is nil listId=%q", listID)
 	} else if resolvedPBID == "" {
 		out.ModelVariationsError = "productBlueprintId is empty (skip model fetch)"
-		log.Printf("[sns_catalog] model skip (pbId empty) listId=%q", listID)
+		log.Printf("[catalog] model skip (pbId empty) listId=%q", listID)
 	} else {
 		deletedFalse := false
 
@@ -366,9 +344,9 @@ func (q *SNSCatalogQuery) GetByListID(ctx context.Context, listID string) (snsdt
 		)
 		if e != nil {
 			out.ModelVariationsError = e.Error()
-			log.Printf("[sns_catalog] model listVariations error listId=%q pbId=%q err=%q", listID, resolvedPBID, e.Error())
+			log.Printf("[catalog] model listVariations error listId=%q pbId=%q err=%q", listID, resolvedPBID, e.Error())
 		} else {
-			items := make([]snsdto.CatalogModelVariationDTO, 0, len(res.Items))
+			items := make([]dto.CatalogModelVariationDTO, 0, len(res.Items))
 
 			// 1) まず metadata で items を作る
 			for _, it := range res.Items {
@@ -385,18 +363,18 @@ func (q *SNSCatalogQuery) GetByListID(ctx context.Context, listID string) (snsdt
 					continue
 				}
 
-				dto, ok := toCatalogModelVariationDTOAny(mv)
+				mvDTO, ok := toCatalogModelVariationDTOAny(mv)
 				if !ok {
-					dto = snsdto.CatalogModelVariationDTO{
+					mvDTO = dto.CatalogModelVariationDTO{
 						ID:           strings.TrimSpace(modelID),
 						Measurements: map[string]int{}, // ✅ {} を保証
 					}
 				}
-				if dto.Measurements == nil {
-					dto.Measurements = map[string]int{}
+				if mvDTO.Measurements == nil {
+					mvDTO.Measurements = map[string]int{}
 				}
 
-				items = append(items, dto)
+				items = append(items, mvDTO)
 			}
 
 			// 2) その後、同じ items に stock(products) を追記
@@ -404,7 +382,7 @@ func (q *SNSCatalogQuery) GetByListID(ctx context.Context, listID string) (snsdt
 
 			out.ModelVariations = items
 			log.Printf(
-				"[sns_catalog] model variations ok(list unified) listId=%q pbId=%q items=%d stockKeys=%d",
+				"[catalog] model variations ok(list unified) listId=%q pbId=%q items=%d stockKeys=%d",
 				listID,
 				resolvedPBID,
 				len(items),
@@ -418,7 +396,7 @@ func (q *SNSCatalogQuery) GetByListID(ctx context.Context, listID string) (snsdt
 		}
 	}
 
-	log.Printf("[sns_catalog] GetByListID done listId=%q invErr=%q pbErr=%q tbErr=%q modelErr=%q",
+	log.Printf("[catalog] GetByListID done listId=%q invErr=%q pbErr=%q tbErr=%q modelErr=%q",
 		listID,
 		strings.TrimSpace(out.InventoryError),
 		strings.TrimSpace(out.ProductBlueprintError),
@@ -433,20 +411,19 @@ func (q *SNSCatalogQuery) GetByListID(ctx context.Context, listID string) (snsdt
 // name resolving (productBlueprint -> brandName/companyName)
 // ============================================================
 
-func fillProductBlueprintNames(ctx context.Context, r *appresolver.NameResolver, dto *snsdto.CatalogProductBlueprintDTO) {
-	if r == nil || dto == nil {
+func fillProductBlueprintNames(ctx context.Context, r *appresolver.NameResolver, dtoPB *dto.CatalogProductBlueprintDTO) {
+	if r == nil || dtoPB == nil {
 		return
 	}
 
-	brandID := strings.TrimSpace(dto.BrandID)
-	companyID := strings.TrimSpace(dto.CompanyID)
+	brandID := strings.TrimSpace(dtoPB.BrandID)
+	companyID := strings.TrimSpace(dtoPB.CompanyID)
 
 	// BrandName
 	if brandID != "" {
 		bn := strings.TrimSpace(r.ResolveBrandName(ctx, brandID))
 		if bn != "" {
-			// DTO に BrandName フィールドがある場合だけセット（無い場合でもコンパイルは通る）
-			setStringFieldBestEffort(dto, "BrandName", bn)
+			setStringFieldBestEffort(dtoPB, "BrandName", bn)
 		}
 	}
 
@@ -454,12 +431,12 @@ func fillProductBlueprintNames(ctx context.Context, r *appresolver.NameResolver,
 	if companyID != "" {
 		cn := strings.TrimSpace(r.ResolveCompanyName(ctx, companyID))
 		if cn != "" {
-			setStringFieldBestEffort(dto, "CompanyName", cn)
+			setStringFieldBestEffort(dtoPB, "CompanyName", cn)
 		}
 	}
 }
 
-// ✅ NEW: tokenBlueprint patch -> brandName/companyName
+// tokenBlueprint patch -> brandName/companyName
 func fillTokenBlueprintPatchNames(ctx context.Context, r *appresolver.NameResolver, p *tbdom.Patch) {
 	if r == nil || p == nil {
 		return
@@ -485,11 +462,6 @@ func fillTokenBlueprintPatchNames(ctx context.Context, r *appresolver.NameResolv
 	}
 }
 
-// setStringFieldBestEffort sets either:
-// - field string
-// - field *string
-// if the exported field exists.
-// (DTO に該当フィールドが無くても安全に no-op)
 func setStringFieldBestEffort(target any, fieldName string, value string) {
 	value = strings.TrimSpace(value)
 	if value == "" {
@@ -524,7 +496,6 @@ func setStringFieldBestEffort(target any, fieldName string, value string) {
 	}
 }
 
-// getStringFieldBestEffort reads either string or *string field (exported), else "".
 func getStringFieldBestEffort(target any, fieldName string) string {
 	rv := reflect.ValueOf(target)
 	if !rv.IsValid() {
@@ -561,15 +532,11 @@ func getStringFieldBestEffort(target any, fieldName string) string {
 // inventory stock helpers (keys + products safety)
 // ============================================================
 
-// normalizeInventoryStock ensures:
-// - Stock map is non-nil (if empty, keep nil OK)
-// - each stock[modelId].Products is non-nil (so JSON includes {} not null when needed)
-func normalizeInventoryStock(inv *snsdto.CatalogInventoryDTO) {
+func normalizeInventoryStock(inv *dto.CatalogInventoryDTO) {
 	if inv == nil {
 		return
 	}
 	if inv.Stock == nil {
-		// nil のままでもOK（keys count は 0）
 		return
 	}
 	for k, v := range inv.Stock {
@@ -584,128 +551,19 @@ func normalizeInventoryStock(inv *snsdto.CatalogInventoryDTO) {
 	}
 }
 
-func ensureInventoryStockKeysFromMintIfNeeded(
-	ctx context.Context,
-	invRepo InventoryRepository,
-	invDTO *snsdto.CatalogInventoryDTO,
-	invID, pbID, tbID string,
-) {
-	if invRepo == nil || invDTO == nil {
-		return
-	}
-
-	// 既に key が入っているなら何もしない
-	if stockKeyCount(invDTO.Stock) > 0 {
-		return
-	}
-
-	src, ok := invRepo.(InventoryMintStockSource)
-	if !ok {
-		return
-	}
-
-	// mint を取りに行けるなら取り、Stock の key(modelId) を復元
-	var mint invdom.Mint
-	var err error
-
-	invID = strings.TrimSpace(invID)
-	pbID = strings.TrimSpace(pbID)
-	tbID = strings.TrimSpace(tbID)
-
-	switch {
-	case invID != "":
-		mint, err = src.GetMintByID(ctx, invID)
-	case pbID != "" && tbID != "":
-		mint, err = src.GetMintByProductAndTokenBlueprintID(ctx, pbID, tbID)
-	default:
-		return
-	}
-	if err != nil {
-		return
-	}
-
-	keys := ExtractStockModelIDsFromMint(mint)
-	if len(keys) == 0 {
-		return
-	}
-	if invDTO.Stock == nil {
-		invDTO.Stock = map[string]snsdto.CatalogInventoryModelStockDTO{}
-	}
-
-	// value は products empty で良い（フロントは key数も products も扱える）
-	for _, modelID := range keys {
-		m := strings.TrimSpace(modelID)
-		if m == "" {
-			continue
-		}
-		if _, exists := invDTO.Stock[m]; !exists {
-			invDTO.Stock[m] = snsdto.CatalogInventoryModelStockDTO{Products: map[string]bool{}}
-		}
-	}
-
-	normalizeInventoryStock(invDTO)
-}
-
-// ExtractStockModelIDsFromMint extracts modelId keys by reading Mint.Stock map keys.
-func ExtractStockModelIDsFromMint(m invdom.Mint) []string {
-	rv := reflect.ValueOf(m)
-	if !rv.IsValid() {
-		return nil
-	}
-	if rv.Kind() == reflect.Pointer {
-		if rv.IsNil() {
-			return nil
-		}
-		rv = rv.Elem()
-	}
-	if rv.Kind() != reflect.Struct {
-		return nil
-	}
-
-	stock := rv.FieldByName("Stock")
-	if !stock.IsValid() {
-		return nil
-	}
-	if stock.Kind() == reflect.Pointer {
-		if stock.IsNil() {
-			return nil
-		}
-		stock = stock.Elem()
-	}
-	if stock.Kind() != reflect.Map {
-		return nil
-	}
-	if stock.Type().Key().Kind() != reflect.String {
-		return nil
-	}
-
-	keys := make([]string, 0, stock.Len())
-	iter := stock.MapRange()
-	for iter.Next() {
-		k := strings.TrimSpace(iter.Key().String())
-		if k == "" {
-			continue
-		}
-		keys = append(keys, k)
-	}
-
-	sort.Strings(keys)
-	return keys
-}
-
-func stockKeyCount(stock map[string]snsdto.CatalogInventoryModelStockDTO) int {
+func stockKeyCount(stock map[string]dto.CatalogInventoryModelStockDTO) int {
 	return len(stock)
 }
 
 // attachStockToModelVariations merges inv.Stock[modelId].Products into modelVariations items.
 // Also sets StockKeys (= number of model keys in inventory stock map).
-func attachStockToModelVariations(items *[]snsdto.CatalogModelVariationDTO, inv *snsdto.CatalogInventoryDTO) {
+func attachStockToModelVariations(items *[]dto.CatalogModelVariationDTO, inv *dto.CatalogInventoryDTO) {
 	if items == nil || len(*items) == 0 {
 		return
 	}
 
 	stockKeys := 0
-	var stock map[string]snsdto.CatalogInventoryModelStockDTO
+	var stock map[string]dto.CatalogInventoryModelStockDTO
 
 	if inv != nil {
 		stock = inv.Stock
@@ -721,7 +579,6 @@ func attachStockToModelVariations(items *[]snsdto.CatalogModelVariationDTO, inv 
 		}
 
 		if s, ok := stock[id]; ok {
-			// nil を避けたい場合は空map化
 			if s.Products != nil {
 				(*items)[i].Products = s.Products
 			} else {
@@ -735,8 +592,8 @@ func attachStockToModelVariations(items *[]snsdto.CatalogModelVariationDTO, inv 
 // mappers
 // ============================================================
 
-func toCatalogListDTO(l ldom.List) snsdto.CatalogListDTO {
-	return snsdto.CatalogListDTO{
+func toCatalogListDTO(l ldom.List) dto.CatalogListDTO {
+	return dto.CatalogListDTO{
 		ID:          strings.TrimSpace(l.ID),
 		Title:       strings.TrimSpace(l.Title),
 		Description: strings.TrimSpace(l.Description),
@@ -745,14 +602,13 @@ func toCatalogListDTO(l ldom.List) snsdto.CatalogListDTO {
 
 		InventoryID: strings.TrimSpace(l.InventoryID),
 
-		// ✅ list 側のフィールド名が ProductBlueprintID / ProductBlueprintId など揺れても拾う
 		ProductBlueprintID: pickStringField(l, "ProductBlueprintID", "ProductBlueprintId", "productBlueprintId"),
 		TokenBlueprintID:   pickStringField(l, "TokenBlueprintID", "TokenBlueprintId", "tokenBlueprintId"),
 	}
 }
 
-func toCatalogProductBlueprintDTO(pb *pbdom.ProductBlueprint) snsdto.CatalogProductBlueprintDTO {
-	out := snsdto.CatalogProductBlueprintDTO{
+func toCatalogProductBlueprintDTO(pb *pbdom.ProductBlueprint) dto.CatalogProductBlueprintDTO {
+	out := dto.CatalogProductBlueprintDTO{
 		ID:          strings.TrimSpace(pb.ID),
 		ProductName: strings.TrimSpace(pb.ProductName),
 		BrandID:     strings.TrimSpace(pb.BrandID),
@@ -772,24 +628,114 @@ func toCatalogProductBlueprintDTO(pb *pbdom.ProductBlueprint) snsdto.CatalogProd
 	return out
 }
 
+// Mint -> CatalogInventoryDTO (best-effort reflection; signature drift tolerant)
+func toCatalogInventoryDTOFromMint(m invdom.Mint) *dto.CatalogInventoryDTO {
+	// id/pbId/tbId best-effort
+	id := pickStringField(m, "ID", "Id", "InventoryID", "InventoryId", "inventoryId")
+	pbID := pickStringField(m, "ProductBlueprintID", "ProductBlueprintId", "productBlueprintId")
+	tbID := pickStringField(m, "TokenBlueprintID", "TokenBlueprintId", "tokenBlueprintId")
+
+	out := &dto.CatalogInventoryDTO{
+		ID:                 strings.TrimSpace(id),
+		ProductBlueprintID: strings.TrimSpace(pbID),
+		TokenBlueprintID:   strings.TrimSpace(tbID),
+		Stock:              map[string]dto.CatalogInventoryModelStockDTO{},
+	}
+
+	// Stock: map[modelId]something{Products: map[productId]bool}
+	rv := reflect.ValueOf(m)
+	if rv.IsValid() && rv.Kind() == reflect.Pointer {
+		if rv.IsNil() {
+			return out
+		}
+		rv = rv.Elem()
+	}
+	if !rv.IsValid() || rv.Kind() != reflect.Struct {
+		return out
+	}
+
+	sf := rv.FieldByName("Stock")
+	if !sf.IsValid() {
+		return out
+	}
+	if sf.Kind() == reflect.Pointer {
+		if sf.IsNil() {
+			return out
+		}
+		sf = sf.Elem()
+	}
+	if sf.Kind() != reflect.Map || sf.Type().Key().Kind() != reflect.String {
+		return out
+	}
+
+	iter := sf.MapRange()
+	for iter.Next() {
+		modelID := strings.TrimSpace(iter.Key().String())
+		if modelID == "" {
+			continue
+		}
+
+		products := map[string]bool{}
+
+		v := iter.Value()
+		if v.IsValid() && v.Kind() == reflect.Pointer {
+			if !v.IsNil() {
+				v = v.Elem()
+			}
+		}
+
+		// try field "Products"
+		if v.IsValid() && v.Kind() == reflect.Struct {
+			pf := v.FieldByName("Products")
+			if pf.IsValid() {
+				if pf.Kind() == reflect.Pointer {
+					if !pf.IsNil() {
+						pf = pf.Elem()
+					}
+				}
+				if pf.IsValid() && pf.Kind() == reflect.Map && pf.Type().Key().Kind() == reflect.String {
+					it2 := pf.MapRange()
+					for it2.Next() {
+						pid := strings.TrimSpace(it2.Key().String())
+						if pid == "" {
+							continue
+						}
+						// value kind: bool/number -> bool
+						bv := it2.Value()
+						if bv.Kind() == reflect.Bool {
+							products[pid] = bv.Bool()
+						} else {
+							products[pid] = true
+						}
+					}
+				}
+			}
+		}
+
+		out.Stock[modelID] = dto.CatalogInventoryModelStockDTO{Products: products}
+	}
+
+	return out
+}
+
 // toCatalogModelVariationDTOAny converts *any* ModelVariation-like struct into DTO by reflection.
-func toCatalogModelVariationDTOAny(v any) (snsdto.CatalogModelVariationDTO, bool) {
+func toCatalogModelVariationDTOAny(v any) (dto.CatalogModelVariationDTO, bool) {
 	if v == nil {
-		return snsdto.CatalogModelVariationDTO{}, false
+		return dto.CatalogModelVariationDTO{}, false
 	}
 
 	rv := reflect.ValueOf(v)
 	if !rv.IsValid() {
-		return snsdto.CatalogModelVariationDTO{}, false
+		return dto.CatalogModelVariationDTO{}, false
 	}
 	if rv.Kind() == reflect.Pointer {
 		if rv.IsNil() {
-			return snsdto.CatalogModelVariationDTO{}, false
+			return dto.CatalogModelVariationDTO{}, false
 		}
 		rv = rv.Elem()
 	}
 	if rv.Kind() != reflect.Struct {
-		return snsdto.CatalogModelVariationDTO{}, false
+		return dto.CatalogModelVariationDTO{}, false
 	}
 
 	// strings
@@ -798,27 +744,24 @@ func toCatalogModelVariationDTOAny(v any) (snsdto.CatalogModelVariationDTO, bool
 		id = pickStringField(rv.Interface(), "ID", "Id", "ModelID", "ModelId", "modelId")
 	}
 	if strings.TrimSpace(id) == "" {
-		return snsdto.CatalogModelVariationDTO{}, false
+		return dto.CatalogModelVariationDTO{}, false
 	}
 
 	pbID := pickStringField(rv.Interface(), "ProductBlueprintID", "ProductBlueprintId", "productBlueprintId")
 	modelNumber := pickStringField(rv.Interface(), "ModelNumber", "modelNumber")
 	size := pickStringField(rv.Interface(), "Size", "size")
 
-	dto := snsdto.CatalogModelVariationDTO{
+	out := dto.CatalogModelVariationDTO{
 		ID:                 strings.TrimSpace(id),
 		ProductBlueprintID: strings.TrimSpace(pbID),
 		ModelNumber:        strings.TrimSpace(modelNumber),
 		Size:               strings.TrimSpace(size),
 
-		// ✅ CatalogColor 統合
 		ColorName: "",
 		ColorRGB:  0,
 
-		// ✅ JSONで null を避けたいので常に non-nil
 		Measurements: map[string]int{},
 
-		// ✅ 後段で埋める
 		Products:  nil,
 		StockKeys: 0,
 	}
@@ -833,37 +776,36 @@ func toCatalogModelVariationDTOAny(v any) (snsdto.CatalogModelVariationDTO, bool
 		if c.IsValid() && c.Kind() == reflect.Struct {
 			nf := c.FieldByName("Name")
 			if nf.IsValid() && nf.Kind() == reflect.String {
-				dto.ColorName = strings.TrimSpace(nf.String())
+				out.ColorName = strings.TrimSpace(nf.String())
 			}
 			rf := c.FieldByName("RGB")
 			if rf.IsValid() {
-				dto.ColorRGB = toInt(rf)
+				out.ColorRGB = toInt(rf)
 			}
 		}
 	}
 
-	// measurements: map[string]int (or map[string]any/number)
+	// measurements
 	if m := rv.FieldByName("Measurements"); m.IsValid() {
 		if m.Kind() == reflect.Map && m.Type().Key().Kind() == reflect.String {
-			out := make(map[string]int)
+			mp := make(map[string]int)
 			iter := m.MapRange()
 			for iter.Next() {
 				k := strings.TrimSpace(iter.Key().String())
 				if k == "" {
 					continue
 				}
-				out[k] = toInt(iter.Value())
+				mp[k] = toInt(iter.Value())
 			}
-			// ✅ len==0 でも {} を返せるように代入（nilにしない）
-			dto.Measurements = out
+			out.Measurements = mp
 		}
 	}
 
-	if dto.Measurements == nil {
-		dto.Measurements = map[string]int{}
+	if out.Measurements == nil {
+		out.Measurements = map[string]int{}
 	}
 
-	return dto, true
+	return out, true
 }
 
 // ============================================================
@@ -902,12 +844,10 @@ func pickProductIDTagType(pb *pbdom.ProductBlueprint) string {
 		return ""
 	}
 
-	// 1) 直下フィールド
 	if s := pickStringField(*pb, "ProductIDTagType", "ProductIdTagType", "productIdTagType"); s != "" {
 		return s
 	}
 
-	// 2) ネスト: ProductIDTag / ProductIdTag の中の Type
 	rv := reflect.ValueOf(pb)
 	if rv.Kind() == reflect.Pointer {
 		if rv.IsNil() {
@@ -943,7 +883,6 @@ func pickProductIDTagType(pb *pbdom.ProductBlueprint) string {
 	return ""
 }
 
-// extractID tries common field names (ID/Id/ModelID/ModelId) by reflection.
 func extractID(v any) string {
 	if v == nil {
 		return ""
@@ -976,7 +915,6 @@ func extractID(v any) string {
 	return ""
 }
 
-// toInt converts common numeric kinds into int (best-effort).
 func toInt(v reflect.Value) int {
 	if !v.IsValid() {
 		return 0
