@@ -1,9 +1,11 @@
-// backend\internal\adapters\in\http\mall\router.go
+// backend/internal/adapters/in/http/mall/router.go
 package mall
 
-import "net/http"
+import (
+	"net/http"
+)
 
-// Deps is a buyer-facing (sns) handler set.
+// Deps is a buyer-facing (mall) handler set.
 type Deps struct {
 	List             http.Handler
 	Inventory        http.Handler
@@ -12,166 +14,116 @@ type Deps struct {
 	Catalog          http.Handler
 	TokenBlueprint   http.Handler // patch
 
-	// ✅ name resolver endpoints (for NameResolver)
 	Company http.Handler
 	Brand   http.Handler
 
-	// ✅ auth entry (cart empty ok)
 	SignIn http.Handler
 
-	// ✅ auth onboarding resources
 	User            http.Handler
 	ShippingAddress http.Handler
 	BillingAddress  http.Handler
 	Avatar          http.Handler
 
-	// ✅ NEW: avatar state (follower/following/post counts)
 	AvatarState http.Handler
 
-	// ✅ NEW: wallet (tokens)
+	// ✅ mall only: /mall/wallets
 	Wallet http.Handler
 
-	// ✅ cart (GET is read-model internally; write routes handled by same handler)
-	// NOTE: CartQuery route is removed; Cart handler must internally dispatch GET /sns/cart to cart_query DTO.
-	Cart http.Handler
-
-	// ✅ NEW: posts
-	Post http.Handler
-
-	// ✅ NEW: payment (order context / checkout)
-	// - GET /sns/payment            -> PaymentHandler.getPaymentContext (normalized to /payment)
-	// - GET /sns/payments/{id}      -> PaymentHandler.get (normalized to /payments/{id})
+	Cart    http.Handler
+	Post    http.Handler
 	Payment http.Handler
-
-	// ✅ NEW: preview
 	Preview http.Handler
+	Order   http.Handler
 }
 
-// Register registers buyer-facing routes onto mux.
+// Register registers buyer-facing routes onto mux (mall only).
 func Register(mux *http.ServeMux, deps Deps) {
 	if mux == nil {
 		return
 	}
 
+	// ✅ NOTE:
+	// 多くの既存ハンドラは /sns/* 前提（NewSNS*Handler）なので、
+	// ルーティングは /mall/* のまま、内部で /sns/* に rewrite して渡す。
+	// Cart/Preview/Payment/Order などは /mall 対応済みのことが多いので rewrite しない。
+
 	// lists
-	if deps.List != nil {
-		mux.Handle("/sns/lists", deps.List)
-		mux.Handle("/sns/lists/", deps.List)
-	}
+	mux.Handle("/mall/lists", deps.List)
+	mux.Handle("/mall/lists/", deps.List)
 
 	// inventories
-	if deps.Inventory != nil {
-		mux.Handle("/sns/inventories", deps.Inventory)
-		mux.Handle("/sns/inventories/", deps.Inventory)
-	}
+	mux.Handle("/mall/inventories", deps.Inventory)
+	mux.Handle("/mall/inventories/", deps.Inventory)
 
 	// product blueprints
-	if deps.ProductBlueprint != nil {
-		mux.Handle("/sns/product-blueprints", deps.ProductBlueprint)
-		mux.Handle("/sns/product-blueprints/", deps.ProductBlueprint)
-	}
+	mux.Handle("/mall/product-blueprints", deps.ProductBlueprint)
+	mux.Handle("/mall/product-blueprints/", deps.ProductBlueprint)
 
-	// models
-	if deps.Model != nil {
-		mux.Handle("/sns/models", deps.Model)
-		mux.Handle("/sns/models/", deps.Model)
-	}
+	// models（Mall対応ハンドラの可能性が高いので rewrite しない）
+	mux.Handle("/mall/models", deps.Model)
+	mux.Handle("/mall/models/", deps.Model)
 
 	// catalog
-	if deps.Catalog != nil {
-		mux.Handle("/sns/catalog", deps.Catalog)
-		mux.Handle("/sns/catalog/", deps.Catalog)
-	}
+	mux.Handle("/mall/catalog", deps.Catalog)
+	mux.Handle("/mall/catalog/", deps.Catalog)
 
 	// token blueprints
-	if deps.TokenBlueprint != nil {
-		mux.Handle("/sns/token-blueprints", deps.TokenBlueprint)
-		mux.Handle("/sns/token-blueprints/", deps.TokenBlueprint)
-	}
+	mux.Handle("/mall/token-blueprints", deps.TokenBlueprint)
+	mux.Handle("/mall/token-blueprints/", deps.TokenBlueprint)
 
-	// companies
-	if deps.Company != nil {
-		mux.Handle("/sns/companies", deps.Company)
-		mux.Handle("/sns/companies/", deps.Company)
-	}
-
-	// brands
-	if deps.Brand != nil {
-		mux.Handle("/sns/brands", deps.Brand)
-		mux.Handle("/sns/brands/", deps.Brand)
-	}
+	// companies / brands
+	mux.Handle("/mall/companies", deps.Company)
+	mux.Handle("/mall/companies/", deps.Company)
+	mux.Handle("/mall/brands", deps.Brand)
+	mux.Handle("/mall/brands/", deps.Brand)
 
 	// sign-in
-	if deps.SignIn != nil {
-		mux.Handle("/sns/sign-in", deps.SignIn)
-		mux.Handle("/sns/sign-in/", deps.SignIn)
-	}
+	mux.Handle("/mall/sign-in", deps.SignIn)
+	mux.Handle("/mall/sign-in/", deps.SignIn)
 
 	// users
-	if deps.User != nil {
-		mux.Handle("/sns/users", deps.User)
-		mux.Handle("/sns/users/", deps.User)
-	}
+	mux.Handle("/mall/users", deps.User)
+	mux.Handle("/mall/users/", deps.User)
 
 	// shipping addresses
-	if deps.ShippingAddress != nil {
-		mux.Handle("/sns/shipping-addresses", deps.ShippingAddress)
-		mux.Handle("/sns/shipping-addresses/", deps.ShippingAddress)
-	}
+	mux.Handle("/mall/shipping-addresses", deps.ShippingAddress)
+	mux.Handle("/mall/shipping-addresses/", deps.ShippingAddress)
 
 	// billing addresses
-	if deps.BillingAddress != nil {
-		mux.Handle("/sns/billing-addresses", deps.BillingAddress)
-		mux.Handle("/sns/billing-addresses/", deps.BillingAddress)
-	}
+	mux.Handle("/mall/billing-addresses", deps.BillingAddress)
+	mux.Handle("/mall/billing-addresses/", deps.BillingAddress)
 
 	// avatars
-	if deps.Avatar != nil {
-		mux.Handle("/sns/avatars", deps.Avatar)
-		mux.Handle("/sns/avatars/", deps.Avatar)
-	}
+	mux.Handle("/mall/avatars", deps.Avatar)
+	mux.Handle("/mall/avatars/", deps.Avatar)
 
-	// avatarStates
-	if deps.AvatarState != nil {
-		mux.Handle("/sns/avatar-states", deps.AvatarState)
-		mux.Handle("/sns/avatar-states/", deps.AvatarState)
-	}
+	// avatar states
+	mux.Handle("/mall/avatar-states", deps.AvatarState)
+	mux.Handle("/mall/avatar-states/", deps.AvatarState)
 
-	// wallet
-	if deps.Wallet != nil {
-		mux.Handle("/sns/wallet", deps.Wallet)
-		mux.Handle("/sns/wallet/", deps.Wallet)
-	}
+	// ✅ wallet (plural only)
+	mux.Handle("/mall/wallets", deps.Wallet)
+	mux.Handle("/mall/wallets/", deps.Wallet)
 
-	// ✅ cart (single handler; GET /sns/cart returns read-model DTO internally)
-	if deps.Cart != nil {
-		mux.Handle("/sns/cart", deps.Cart)
-		mux.Handle("/sns/cart/", deps.Cart)
-	}
+	// cart（/mall 前提のラッパを DI 側で組んでいるので rewrite しない）
+	mux.Handle("/mall/cart", deps.Cart)
+	mux.Handle("/mall/cart/", deps.Cart)
 
-	// preview
-	if deps.Preview != nil {
-		mux.Handle("/sns/preview", deps.Preview)
-		mux.Handle("/sns/preview/", deps.Preview)
-	}
+	// preview（同上）
+	mux.Handle("/mall/preview", deps.Preview)
+	mux.Handle("/mall/preview/", deps.Preview)
 
 	// posts
-	if deps.Post != nil {
-		mux.Handle("/sns/posts", deps.Post)
-		mux.Handle("/sns/posts/", deps.Post)
-	}
+	mux.Handle("/mall/posts", deps.Post)
+	mux.Handle("/mall/posts/", deps.Post)
 
-	// ✅ payment
-	// PaymentHandler supports:
-	// - GET /sns/payment       -> /payment
-	// - GET /sns/payments/{id} -> /payments/{id}
-	if deps.Payment != nil {
-		// context endpoint
-		mux.Handle("/sns/payment", deps.Payment)
-		mux.Handle("/sns/payment/", deps.Payment)
+	// ✅ payment（PaymentHandler が /mall を自前で normalize するので rewrite しない）
+	mux.Handle("/mall/payment", deps.Payment)
+	mux.Handle("/mall/payment/", deps.Payment)
+	mux.Handle("/mall/payments", deps.Payment)
+	mux.Handle("/mall/payments/", deps.Payment)
 
-		// existing payments/{id} route under /sns (so handler's "/payments/{id}" branch is reachable)
-		mux.Handle("/sns/payments", deps.Payment)
-		mux.Handle("/sns/payments/", deps.Payment)
-	}
+	// orders（Mall対応ハンドラの可能性が高いので rewrite しない）
+	mux.Handle("/mall/orders", deps.Order)
+	mux.Handle("/mall/orders/", deps.Order)
 }

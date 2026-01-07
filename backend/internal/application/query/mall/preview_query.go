@@ -24,7 +24,7 @@ import (
 //   - tbId -> tokenName + brandId/companyId/iconUrl
 //   - modelId -> modelNumber/size/color/rgb
 //   - (brandId/companyId) -> brandName/companyName via NameResolver
-type SNSPreviewQuery struct {
+type PreviewQuery struct {
 	FS *firestore.Client
 
 	// ✅ optional: inject from DI
@@ -37,8 +37,8 @@ type SNSPreviewQuery struct {
 	TokenBlueprintsCol   string
 }
 
-func NewSNSPreviewQuery(fs *firestore.Client) *SNSPreviewQuery {
-	return &SNSPreviewQuery{
+func NewPreviewQuery(fs *firestore.Client) *PreviewQuery {
+	return &PreviewQuery{
 		FS:                   fs,
 		Resolver:             nil,
 		CartCol:              "carts",
@@ -50,7 +50,7 @@ func NewSNSPreviewQuery(fs *firestore.Client) *SNSPreviewQuery {
 }
 
 // GetByAvatarIDAndItemKey resolves a single cart item preview by (avatarId, itemKey).
-func (q *SNSPreviewQuery) GetByAvatarIDAndItemKey(ctx context.Context, avatarID string, itemKey string) (snsdto.PreviewDTO, error) {
+func (q *PreviewQuery) GetByAvatarIDAndItemKey(ctx context.Context, avatarID string, itemKey string) (snsdto.PreviewDTO, error) {
 	if q == nil || q.FS == nil {
 		return snsdto.PreviewDTO{}, errors.New("sns preview query: firestore client is nil")
 	}
@@ -192,7 +192,7 @@ func (q *SNSPreviewQuery) GetByAvatarIDAndItemKey(ctx context.Context, avatarID 
 // internal helpers
 // ============================================================
 
-func (q *SNSPreviewQuery) fillListFields(ctx context.Context, out *snsdto.PreviewDTO, listID string, modelID string) {
+func (q *PreviewQuery) fillListFields(ctx context.Context, out *snsdto.PreviewDTO, listID string, modelID string) {
 	if q == nil || q.FS == nil || out == nil {
 		return
 	}
@@ -240,7 +240,7 @@ func (q *SNSPreviewQuery) fillListFields(ctx context.Context, out *snsdto.Previe
 	}
 }
 
-func (q *SNSPreviewQuery) resolvePBAndTBByInventory(ctx context.Context, inventoryID string) (string, string) {
+func (q *PreviewQuery) resolvePBAndTBByInventory(ctx context.Context, inventoryID string) (string, string) {
 	invID := strings.TrimSpace(inventoryID)
 	if invID == "" {
 		return "", ""
@@ -285,7 +285,7 @@ func (q *SNSPreviewQuery) resolvePBAndTBByInventory(ctx context.Context, invento
 	return "", ""
 }
 
-func (q *SNSPreviewQuery) fillProductFields(ctx context.Context, out *snsdto.PreviewDTO, productBlueprintID string) {
+func (q *PreviewQuery) fillProductFields(ctx context.Context, out *snsdto.PreviewDTO, productBlueprintID string) {
 	if q == nil || q.FS == nil || out == nil {
 		return
 	}
@@ -319,7 +319,7 @@ func (q *SNSPreviewQuery) fillProductFields(ctx context.Context, out *snsdto.Pre
 	}
 }
 
-func (q *SNSPreviewQuery) fillTokenFields(ctx context.Context, out *snsdto.PreviewDTO, tokenBlueprintID string) {
+func (q *PreviewQuery) fillTokenFields(ctx context.Context, out *snsdto.PreviewDTO, tokenBlueprintID string) {
 	if q == nil || q.FS == nil || out == nil {
 		return
 	}
@@ -376,9 +376,9 @@ func (q *SNSPreviewQuery) fillTokenFields(ctx context.Context, out *snsdto.Previ
 }
 
 // (optional) for debug formatting only
-func (q *SNSPreviewQuery) String() string {
+func (q *PreviewQuery) String() string {
 	if q == nil {
-		return "SNSPreviewQuery(nil)"
+		return "PreviewQuery(nil)"
 	}
-	return fmt.Sprintf("SNSPreviewQuery(cart=%q lists=%q inv=%q pb=%q tb=%q)", q.CartCol, q.ListsCol, q.InventoriesCol, q.ProductBlueprintsCol, q.TokenBlueprintsCol)
+	return fmt.Sprintf("PreviewQuery(cart=%q lists=%q inv=%q pb=%q tb=%q)", q.CartCol, q.ListsCol, q.InventoriesCol, q.ProductBlueprintsCol, q.TokenBlueprintsCol)
 }

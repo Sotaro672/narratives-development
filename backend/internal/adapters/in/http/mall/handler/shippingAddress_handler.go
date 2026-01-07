@@ -1,11 +1,10 @@
-// backend\internal\adapters\in\http\sns\handler\shippingAddress_handler.go
+// backend\internal\adapters\in\http\mall\handler\shippingAddress_handler.go
 package mallHandler
 
 import (
 	"bytes"
 	"encoding/json"
 	"io"
-	"log"
 	"net/http"
 	"strings"
 	"time"
@@ -26,19 +25,18 @@ func NewShippingAddressHandler(uc *usecase.ShippingAddressUsecase) http.Handler 
 
 // ServeHTTP はHTTPルーティングの入口です。
 func (h *ShippingAddressHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	// ✅ user_handler と同様: 入口ログ
-	trace := r.Header.Get("X-Cloud-Trace-Context")
-	log.Printf("[sns_shipping_address_handler] enter method=%s path=%s trace=%q contentType=%q contentLen=%d",
-		r.Method, r.URL.Path, trace, r.Header.Get("Content-Type"), r.ContentLength)
-
 	w.Header().Set("Content-Type", "application/json")
 
 	// ✅ 末尾スラッシュを吸収
 	path := strings.TrimSuffix(r.URL.Path, "/")
 
-	// ✅ /sns プレフィックスを吸収（/sns/shipping-addresses -> /shipping-addresses）
-	if strings.HasPrefix(path, "/sns/") {
-		path = strings.TrimPrefix(path, "/sns")
+	// ✅ mall のみ受付（/mall/shipping-addresses -> /shipping-addresses）
+	if strings.HasPrefix(path, "/mall/") {
+		path = strings.TrimPrefix(path, "/mall")
+	} else {
+		w.WriteHeader(http.StatusNotFound)
+		_ = json.NewEncoder(w).Encode(map[string]string{"error": "not_found"})
+		return
 	}
 
 	switch {
@@ -68,7 +66,6 @@ func (h *ShippingAddressHandler) ServeHTTP(w http.ResponseWriter, r *http.Reques
 		return
 
 	default:
-		log.Printf("[sns_shipping_address_handler] not_found method=%s path=%s (raw=%s)", r.Method, path, r.URL.Path)
 		w.WriteHeader(http.StatusNotFound)
 		_ = json.NewEncoder(w).Encode(map[string]string{"error": "not_found"})
 		return
@@ -81,21 +78,17 @@ func (h *ShippingAddressHandler) get(w http.ResponseWriter, r *http.Request, id 
 
 	id = strings.TrimSpace(id)
 	if id == "" {
-		log.Printf("[sns_shipping_address_handler] get bad_request empty_id")
 		w.WriteHeader(http.StatusBadRequest)
 		_ = json.NewEncoder(w).Encode(map[string]string{"error": "invalid id"})
 		return
 	}
 
-	log.Printf("[sns_shipping_address_handler] get start id=%q", id)
 	addr, err := h.uc.GetByID(ctx, id)
 	if err != nil {
-		log.Printf("[sns_shipping_address_handler] get failed id=%q err=%v", id, err)
 		writeShippingAddressErr(w, err)
 		return
 	}
 
-	log.Printf("[sns_shipping_address_handler] get ok id=%q userId=%q", id, strings.TrimSpace(addr.UserID))
 	_ = json.NewEncoder(w).Encode(addr)
 }
 
@@ -103,22 +96,18 @@ func (h *ShippingAddressHandler) get(w http.ResponseWriter, r *http.Request, id 
 func (h *ShippingAddressHandler) post(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 
-	// ✅ user_handler と同様: raw body を先に読む（400原因を残す）
 	raw, readErr := io.ReadAll(r.Body)
 	if readErr != nil {
-		log.Printf("[sns_shipping_address_handler] post read body failed err=%v", readErr)
 		w.WriteHeader(http.StatusBadRequest)
 		_ = json.NewEncoder(w).Encode(map[string]string{"error": "invalid body"})
 		return
 	}
 	r.Body = io.NopCloser(bytes.NewReader(raw))
 
-	log.Printf("[sns_shipping_address_handler] post raw body len=%d head=%q", len(raw), headString(raw, 300))
-
 	// frontend/sns の入力欄に合わせる（zipCode/state/city/street/street2）
 	// ✅ docId=UID 統一: id(=uid) を必須にする
 	type createReq struct {
-		ID      string  `json:"id"` // ✅ 追加: docId = UID
+		ID      string  `json:"id"` // ✅ docId = UID
 		UserID  string  `json:"userId"`
 		ZipCode string  `json:"zipCode"`
 		State   string  `json:"state"`
@@ -130,7 +119,6 @@ func (h *ShippingAddressHandler) post(w http.ResponseWriter, r *http.Request) {
 
 	var req createReq
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		log.Printf("[sns_shipping_address_handler] post decode failed err=%v bodyHead=%q", err, headString(raw, 300))
 		w.WriteHeader(http.StatusBadRequest)
 		_ = json.NewEncoder(w).Encode(map[string]string{"error": "invalid json"})
 		return
@@ -139,7 +127,6 @@ func (h *ShippingAddressHandler) post(w http.ResponseWriter, r *http.Request) {
 	id := strings.TrimSpace(req.ID)
 	if id == "" {
 		// ✅ docId=UID 統一方針: id が無い POST は許可しない（Firestore自動採番をさせない）
-		log.Printf("[sns_shipping_address_handler] post bad_request missing id (docId=uid required)")
 		w.WriteHeader(http.StatusBadRequest)
 		_ = json.NewEncoder(w).Encode(map[string]string{"error": "invalid id"})
 		return
@@ -159,17 +146,6 @@ func (h *ShippingAddressHandler) post(w http.ResponseWriter, r *http.Request) {
 
 	now := time.Now().UTC()
 
-	log.Printf("[sns_shipping_address_handler] post parsed id=%q userId=%q zip=%q state=%q city=%q street=%q street2=%q country=%q",
-		id,
-		strings.TrimSpace(req.UserID),
-		strings.TrimSpace(req.ZipCode),
-		strings.TrimSpace(req.State),
-		strings.TrimSpace(req.City),
-		strings.TrimSpace(req.Street),
-		strings.TrimSpace(street2),
-		strings.TrimSpace(country),
-	)
-
 	// ✅ ID を docId(=UID) で固定
 	ent, err := shadom.NewWithNow(
 		id, // ✅ id=UID
@@ -183,24 +159,19 @@ func (h *ShippingAddressHandler) post(w http.ResponseWriter, r *http.Request) {
 		now,
 	)
 	if err != nil {
-		log.Printf("[sns_shipping_address_handler] post domain.NewWithNow failed id=%q err=%v", id, err)
 		writeShippingAddressErr(w, err)
 		return
 	}
 
 	// ✅ docId=UID: Create は「同じIDが既にあると Conflict」になる。
 	//    住所は “upsert” が自然なので Save に寄せる（既存なら更新、無ければ作成）。
-	log.Printf("[sns_shipping_address_handler] post usecase.Save(upsert) start id=%q", id)
 	saved, err := h.uc.Save(ctx, ent)
 	if err != nil {
-		log.Printf("[sns_shipping_address_handler] post usecase.Save(upsert) failed id=%q err=%v", id, err)
 		writeShippingAddressErr(w, err)
 		return
 	}
 
-	// 「作れた/更新できた」の判定を厳密にするには Usecase から返す必要があるので、
-	// ここでは Created を返さず 200 に統一してもいいが、互換のため 201 で返す。
-	log.Printf("[sns_shipping_address_handler] post ok id=%q userId=%q", strings.TrimSpace(saved.ID), strings.TrimSpace(saved.UserID))
+	// 互換のため 201 で返す（厳密な Created/Updated 判定は Usecase 側が必要）
 	w.WriteHeader(http.StatusCreated)
 	_ = json.NewEncoder(w).Encode(saved)
 }
@@ -211,7 +182,6 @@ func (h *ShippingAddressHandler) patch(w http.ResponseWriter, r *http.Request, i
 
 	id = strings.TrimSpace(id)
 	if id == "" {
-		log.Printf("[sns_shipping_address_handler] patch bad_request empty_id")
 		w.WriteHeader(http.StatusBadRequest)
 		_ = json.NewEncoder(w).Encode(map[string]string{"error": "invalid id"})
 		return
@@ -219,13 +189,11 @@ func (h *ShippingAddressHandler) patch(w http.ResponseWriter, r *http.Request, i
 
 	raw, readErr := io.ReadAll(r.Body)
 	if readErr != nil {
-		log.Printf("[sns_shipping_address_handler] patch read body failed id=%q err=%v", id, readErr)
 		w.WriteHeader(http.StatusBadRequest)
 		_ = json.NewEncoder(w).Encode(map[string]string{"error": "invalid body"})
 		return
 	}
 	r.Body = io.NopCloser(bytes.NewReader(raw))
-	log.Printf("[sns_shipping_address_handler] patch raw body id=%q len=%d head=%q", id, len(raw), headString(raw, 300))
 
 	// 部分更新（null/未指定は現状維持）
 	type patchReq struct {
@@ -240,54 +208,43 @@ func (h *ShippingAddressHandler) patch(w http.ResponseWriter, r *http.Request, i
 
 	var req patchReq
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		log.Printf("[sns_shipping_address_handler] patch decode failed id=%q err=%v bodyHead=%q", id, err, headString(raw, 300))
 		w.WriteHeader(http.StatusBadRequest)
 		_ = json.NewEncoder(w).Encode(map[string]string{"error": "invalid json"})
 		return
 	}
 
-	// ✅ docId=UID 統一: PATCH は「存在すれば更新・無ければ作成」でもよい（フロントの POST→PATCH 移行対策）
-	// まず Get を試し、NotFound なら “新規として組み立てて Save”
+	// ✅ docId=UID 統一: PATCH は「存在すれば更新・無ければ作成」でもよい
 	current, err := h.uc.GetByID(ctx, id)
 	if err != nil {
 		if err == shadom.ErrNotFound {
 			// upsert-create path
-			log.Printf("[sns_shipping_address_handler] patch get not_found -> upsert create id=%q", id)
-
-			// PATCH だけで作る場合は、必須フィールドが揃ってないと domain が弾く。
-			// ここでは「全部必須」扱いにして、足りないなら 400。
-			need := func(p *string, name string) (string, bool) {
+			need := func(p *string) (string, bool) {
 				if p == nil {
-					log.Printf("[sns_shipping_address_handler] patch bad_request missing %s for create id=%q", name, id)
 					return "", false
 				}
 				s := strings.TrimSpace(*p)
-				if s == "" {
-					log.Printf("[sns_shipping_address_handler] patch bad_request empty %s for create id=%q", name, id)
-					return "", false
-				}
-				return s, true
+				return s, s != ""
 			}
 
-			zip, ok := need(req.ZipCode, "zipCode")
+			zip, ok := need(req.ZipCode)
 			if !ok {
 				w.WriteHeader(http.StatusBadRequest)
 				_ = json.NewEncoder(w).Encode(map[string]string{"error": "invalid zipCode"})
 				return
 			}
-			state, ok := need(req.State, "state")
+			state, ok := need(req.State)
 			if !ok {
 				w.WriteHeader(http.StatusBadRequest)
 				_ = json.NewEncoder(w).Encode(map[string]string{"error": "invalid state"})
 				return
 			}
-			city, ok := need(req.City, "city")
+			city, ok := need(req.City)
 			if !ok {
 				w.WriteHeader(http.StatusBadRequest)
 				_ = json.NewEncoder(w).Encode(map[string]string{"error": "invalid city"})
 				return
 			}
-			street, ok := need(req.Street, "street")
+			street, ok := need(req.Street)
 			if !ok {
 				w.WriteHeader(http.StatusBadRequest)
 				_ = json.NewEncoder(w).Encode(map[string]string{"error": "invalid street"})
@@ -298,6 +255,7 @@ func (h *ShippingAddressHandler) patch(w http.ResponseWriter, r *http.Request, i
 			if req.Street2 != nil {
 				street2 = strings.TrimSpace(*req.Street2)
 			}
+
 			country := "JP"
 			if req.Country != nil {
 				if c := strings.TrimSpace(*req.Country); c != "" {
@@ -305,13 +263,11 @@ func (h *ShippingAddressHandler) patch(w http.ResponseWriter, r *http.Request, i
 				}
 			}
 
-			// userId は domain 的に必須な可能性が高いので、無ければ 400
 			userID := ""
 			if req.UserID != nil {
 				userID = strings.TrimSpace(*req.UserID)
 			}
 			if userID == "" {
-				log.Printf("[sns_shipping_address_handler] patch bad_request missing userId for create id=%q", id)
 				w.WriteHeader(http.StatusBadRequest)
 				_ = json.NewEncoder(w).Encode(map[string]string{"error": "invalid userId"})
 				return
@@ -330,25 +286,20 @@ func (h *ShippingAddressHandler) patch(w http.ResponseWriter, r *http.Request, i
 				now,
 			)
 			if derr != nil {
-				log.Printf("[sns_shipping_address_handler] patch domain.NewWithNow failed id=%q err=%v", id, derr)
 				writeShippingAddressErr(w, derr)
 				return
 			}
 
-			log.Printf("[sns_shipping_address_handler] patch usecase.Save(upsert-create) start id=%q", id)
 			saved, serr := h.uc.Save(ctx, ent)
 			if serr != nil {
-				log.Printf("[sns_shipping_address_handler] patch usecase.Save(upsert-create) failed id=%q err=%v", id, serr)
 				writeShippingAddressErr(w, serr)
 				return
 			}
 
-			log.Printf("[sns_shipping_address_handler] patch ok (created) id=%q userId=%q", strings.TrimSpace(saved.ID), strings.TrimSpace(saved.UserID))
 			_ = json.NewEncoder(w).Encode(saved)
 			return
 		}
 
-		log.Printf("[sns_shipping_address_handler] patch get failed id=%q err=%v", id, err)
 		writeShippingAddressErr(w, err)
 		return
 	}
@@ -393,20 +344,16 @@ func (h *ShippingAddressHandler) patch(w http.ResponseWriter, r *http.Request, i
 		country,
 		time.Now().UTC(),
 	); err != nil {
-		log.Printf("[sns_shipping_address_handler] patch domain.UpdateFromForm failed id=%q err=%v", id, err)
 		writeShippingAddressErr(w, err)
 		return
 	}
 
-	log.Printf("[sns_shipping_address_handler] patch usecase.Save start id=%q", id)
 	saved, err := h.uc.Save(ctx, current)
 	if err != nil {
-		log.Printf("[sns_shipping_address_handler] patch usecase.Save failed id=%q err=%v", id, err)
 		writeShippingAddressErr(w, err)
 		return
 	}
 
-	log.Printf("[sns_shipping_address_handler] patch ok id=%q userId=%q", strings.TrimSpace(saved.ID), strings.TrimSpace(saved.UserID))
 	_ = json.NewEncoder(w).Encode(saved)
 }
 
@@ -416,20 +363,16 @@ func (h *ShippingAddressHandler) del(w http.ResponseWriter, r *http.Request, id 
 
 	id = strings.TrimSpace(id)
 	if id == "" {
-		log.Printf("[sns_shipping_address_handler] delete bad_request empty_id")
 		w.WriteHeader(http.StatusBadRequest)
 		_ = json.NewEncoder(w).Encode(map[string]string{"error": "invalid id"})
 		return
 	}
 
-	log.Printf("[sns_shipping_address_handler] delete start id=%q", id)
 	if err := h.uc.Delete(ctx, id); err != nil {
-		log.Printf("[sns_shipping_address_handler] delete failed id=%q err=%v", id, err)
 		writeShippingAddressErr(w, err)
 		return
 	}
 
-	log.Printf("[sns_shipping_address_handler] delete ok id=%q", id)
 	w.WriteHeader(http.StatusNoContent)
 }
 

@@ -16,7 +16,7 @@ import (
 	ldom "narratives/internal/domain/list"
 )
 
-type SNSCartQuery struct {
+type CartQuery struct {
 	FS *firestore.Client
 
 	// ✅ prefer domain repository (same as catalog_query)
@@ -31,8 +31,8 @@ type SNSCartQuery struct {
 	ProductBlueprintsCol string
 }
 
-func NewSNSCartQuery(fs *firestore.Client) *SNSCartQuery {
-	return &SNSCartQuery{
+func NewCartQuery(fs *firestore.Client) *CartQuery {
+	return &CartQuery{
 		FS:                   fs,
 		ListRepo:             nil,
 		Resolver:             nil,
@@ -43,8 +43,8 @@ func NewSNSCartQuery(fs *firestore.Client) *SNSCartQuery {
 	}
 }
 
-func NewSNSCartQueryWithListRepo(fs *firestore.Client, listRepo ldom.Repository) *SNSCartQuery {
-	q := NewSNSCartQuery(fs)
+func NewCartQueryWithListRepo(fs *firestore.Client, listRepo ldom.Repository) *CartQuery {
+	q := NewCartQuery(fs)
 	q.ListRepo = listRepo
 	return q
 }
@@ -55,13 +55,13 @@ type cartQueryPort interface {
 	GetCartQuery(ctx context.Context, avatarID string) (any, error)
 }
 
-var _ cartQueryPort = (*SNSCartQuery)(nil)
+var _ cartQueryPort = (*CartQuery)(nil)
 
-func (q *SNSCartQuery) GetCartQuery(ctx context.Context, avatarID string) (any, error) {
+func (q *CartQuery) GetCartQuery(ctx context.Context, avatarID string) (any, error) {
 	return q.GetByAvatarID(ctx, avatarID)
 }
 
-func (q *SNSCartQuery) GetByAvatarID(ctx context.Context, avatarID string) (snsdto.CartDTO, error) {
+func (q *CartQuery) GetByAvatarID(ctx context.Context, avatarID string) (snsdto.CartDTO, error) {
 	if q == nil || q.FS == nil {
 		return snsdto.CartDTO{}, errors.New("sns cart query: firestore client is nil")
 	}
@@ -395,7 +395,7 @@ func toRFC3339Ptr(t time.Time) *string {
 // list lookup
 // ============================================================
 
-func (q *SNSCartQuery) fetchListIndicesByCart(ctx context.Context, c *cartdom.Cart) (map[string]map[string]int, map[string]listMeta) {
+func (q *CartQuery) fetchListIndicesByCart(ctx context.Context, c *cartdom.Cart) (map[string]map[string]int, map[string]listMeta) {
 	if q == nil || c == nil || c.Items == nil || len(c.Items) == 0 {
 		return nil, nil
 	}
@@ -428,7 +428,7 @@ func (q *SNSCartQuery) fetchListIndicesByCart(ctx context.Context, c *cartdom.Ca
 	return price, meta
 }
 
-func (q *SNSCartQuery) fetchListIndicesByCartViaRepo(ctx context.Context, listIDs []string) (map[string]map[string]int, map[string]listMeta) {
+func (q *CartQuery) fetchListIndicesByCartViaRepo(ctx context.Context, listIDs []string) (map[string]map[string]int, map[string]listMeta) {
 	if q == nil || q.ListRepo == nil || len(listIDs) == 0 {
 		return nil, nil
 	}
@@ -479,7 +479,7 @@ func (q *SNSCartQuery) fetchListIndicesByCartViaRepo(ctx context.Context, listID
 	return priceOut, metaOut
 }
 
-func (q *SNSCartQuery) fetchListIndicesByCartViaFirestore(ctx context.Context, listIDs []string) (map[string]map[string]int, map[string]listMeta) {
+func (q *CartQuery) fetchListIndicesByCartViaFirestore(ctx context.Context, listIDs []string) (map[string]map[string]int, map[string]listMeta) {
 	if q == nil || q.FS == nil || len(listIDs) == 0 {
 		return nil, nil
 	}
@@ -583,7 +583,7 @@ func (q *SNSCartQuery) fetchListIndicesByCartViaFirestore(ctx context.Context, l
 // inventory lookup
 // ============================================================
 
-func (q *SNSCartQuery) fetchInventoryIndexByCart(ctx context.Context, c *cartdom.Cart) map[string]invParts {
+func (q *CartQuery) fetchInventoryIndexByCart(ctx context.Context, c *cartdom.Cart) map[string]invParts {
 	if q == nil || q.FS == nil || c == nil || c.Items == nil || len(c.Items) == 0 {
 		return nil
 	}
@@ -666,7 +666,7 @@ func (q *SNSCartQuery) fetchInventoryIndexByCart(ctx context.Context, c *cartdom
 // model resolver lookup
 // ============================================================
 
-func (q *SNSCartQuery) fetchModelSimpleIndexByCart(ctx context.Context, c *cartdom.Cart) map[string]modelSimple {
+func (q *CartQuery) fetchModelSimpleIndexByCart(ctx context.Context, c *cartdom.Cart) map[string]modelSimple {
 	if q == nil || c == nil || c.Items == nil || len(c.Items) == 0 {
 		return nil
 	}
@@ -715,7 +715,7 @@ func (q *SNSCartQuery) fetchModelSimpleIndexByCart(ctx context.Context, c *cartd
 // productName lookup
 // ============================================================
 
-func (q *SNSCartQuery) fetchProductNameIndexByCart(
+func (q *CartQuery) fetchProductNameIndexByCart(
 	ctx context.Context,
 	c *cartdom.Cart,
 	invIndex map[string]invParts,

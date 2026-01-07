@@ -1,4 +1,4 @@
-// backend\internal\adapters\in\http\sns\handler\inventory_handler.go
+// backend/internal/adapters/in/http/mall/handler/inventory_handler.go
 package mallHandler
 
 import (
@@ -12,44 +12,44 @@ import (
 	invdom "narratives/internal/domain/inventory"
 )
 
-// SNSInventoryHandler serves buyer-facing inventory endpoints (read-only).
+// MallInventoryHandler serves buyer-facing inventory endpoints (read-only).
 //
 // Routes (read-only):
-// - GET /sns/inventories?productBlueprintId=...&tokenBlueprintId=...
-// - GET /sns/inventories/{id}
+// - GET /mall/inventories?productBlueprintId=...&tokenBlueprintId=...
+// - GET /mall/inventories/{id}
 //
 // NOTE:
 // - inventories の docId は "productBlueprintId__tokenBlueprintId" を想定。
-// - SNS は companyId 境界を持たない（公開・購入客向け）ため、クエリは極力パラメータで完結させる。
-type SNSInventoryHandler struct {
+// - mall は companyId 境界を持たない（公開・購入客向け）ため、クエリは極力パラメータで完結させる。
+type MallInventoryHandler struct {
 	uc *usecase.InventoryUsecase
 }
 
-func NewSNSInventoryHandler(uc *usecase.InventoryUsecase) http.Handler {
-	return &SNSInventoryHandler{uc: uc}
+func NewMallInventoryHandler(uc *usecase.InventoryUsecase) http.Handler {
+	return &MallInventoryHandler{uc: uc}
 }
 
 // ------------------------------
-// Response DTOs (SNS)
+// Response DTOs (mall)
 // ------------------------------
 
-type SnsInventoryModelStock struct {
+type MallInventoryModelStock struct {
 	Products map[string]bool `json:"products"`
 }
 
-type SnsInventoryResponse struct {
-	ID                 string                            `json:"id"`
-	TokenBlueprintID   string                            `json:"tokenBlueprintId"`
-	ProductBlueprintID string                            `json:"productBlueprintId"`
-	ModelIDs           []string                          `json:"modelIds"`
-	Stock              map[string]SnsInventoryModelStock `json:"stock"`
+type MallInventoryResponse struct {
+	ID                 string                             `json:"id"`
+	TokenBlueprintID   string                             `json:"tokenBlueprintId"`
+	ProductBlueprintID string                             `json:"productBlueprintId"`
+	ModelIDs           []string                           `json:"modelIds"`
+	Stock              map[string]MallInventoryModelStock `json:"stock"`
 }
 
 // ------------------------------
 // http.Handler
 // ------------------------------
 
-func (h *SNSInventoryHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+func (h *MallInventoryHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 
 	if h == nil || h.uc == nil {
@@ -65,15 +65,15 @@ func (h *SNSInventoryHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	// GET /sns/inventories (query by pb/tb)
-	if path == "/sns/inventories" {
+	// GET /mall/inventories (query by pb/tb)
+	if path == "/mall/inventories" {
 		h.getByQuery(w, r)
 		return
 	}
 
-	// GET /sns/inventories/{id}
-	if strings.HasPrefix(path, "/sns/inventories/") {
-		rest := strings.TrimPrefix(path, "/sns/inventories/")
+	// GET /mall/inventories/{id}
+	if strings.HasPrefix(path, "/mall/inventories/") {
+		rest := strings.TrimPrefix(path, "/mall/inventories/")
 		parts := strings.Split(rest, "/")
 		id := strings.TrimSpace(parts[0])
 		if id == "" {
@@ -97,7 +97,7 @@ func (h *SNSInventoryHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) 
 // GET handlers
 // ------------------------------
 
-func (h *SNSInventoryHandler) getByQuery(w http.ResponseWriter, r *http.Request) {
+func (h *MallInventoryHandler) getByQuery(w http.ResponseWriter, r *http.Request) {
 	q := r.URL.Query()
 	pb := strings.TrimSpace(q.Get("productBlueprintId"))
 	tb := strings.TrimSpace(q.Get("tokenBlueprintId"))
@@ -112,7 +112,7 @@ func (h *SNSInventoryHandler) getByQuery(w http.ResponseWriter, r *http.Request)
 	h.getByID(w, r, id)
 }
 
-func (h *SNSInventoryHandler) getByID(w http.ResponseWriter, r *http.Request, id string) {
+func (h *MallInventoryHandler) getByID(w http.ResponseWriter, r *http.Request, id string) {
 	ctx := r.Context()
 
 	m, err := h.uc.GetByID(ctx, strings.TrimSpace(id))
@@ -121,11 +121,11 @@ func (h *SNSInventoryHandler) getByID(w http.ResponseWriter, r *http.Request, id
 			notFound(w)
 			return
 		}
-		writeInvErr(w, err)
+		writeMallInvErr(w, err)
 		return
 	}
 
-	writeJSON(w, http.StatusOK, toSnsInventoryResponse(m))
+	writeJSON(w, http.StatusOK, toMallInventoryResponse(m))
 }
 
 // ------------------------------
@@ -134,11 +134,11 @@ func (h *SNSInventoryHandler) getByID(w http.ResponseWriter, r *http.Request, id
 
 // ✅ accumulation は返さない。stock.products (productId set) のみを返す。
 // ✅ inventory.Stock の実データ表現差（slice/map/struct）を吸収して products を作る。
-func toSnsInventoryResponse(m invdom.Mint) SnsInventoryResponse {
+func toMallInventoryResponse(m invdom.Mint) MallInventoryResponse {
 	// modelId -> []productId（重複除去済み） を抽出
 	byModel := countStockByModel(m)
 
-	stock := make(map[string]SnsInventoryModelStock, len(byModel))
+	stock := make(map[string]MallInventoryModelStock, len(byModel))
 	modelIDs := make([]string, 0, len(byModel))
 
 	for modelID, ids := range byModel {
@@ -157,7 +157,7 @@ func toSnsInventoryResponse(m invdom.Mint) SnsInventoryResponse {
 			products[id] = true
 		}
 
-		stock[modelID] = SnsInventoryModelStock{
+		stock[modelID] = MallInventoryModelStock{
 			Products: products,
 		}
 	}
@@ -170,7 +170,7 @@ func toSnsInventoryResponse(m invdom.Mint) SnsInventoryResponse {
 		finalModelIDs = modelIDs
 	}
 
-	return SnsInventoryResponse{
+	return MallInventoryResponse{
 		ID:                 strings.TrimSpace(m.ID),
 		TokenBlueprintID:   strings.TrimSpace(m.TokenBlueprintID),
 		ProductBlueprintID: strings.TrimSpace(m.ProductBlueprintID),
@@ -345,7 +345,7 @@ func extractStringIDs(v reflect.Value) []string {
 // Error mapping
 // ------------------------------
 
-func writeInvErr(w http.ResponseWriter, err error) {
+func writeMallInvErr(w http.ResponseWriter, err error) {
 	code := http.StatusInternalServerError
 
 	switch {

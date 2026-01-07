@@ -1,4 +1,4 @@
-// backend\internal\application\usecase\invoice_usecase.go
+// backend/internal/application/usecase/invoice_usecase.go
 package usecase
 
 import (
@@ -9,7 +9,6 @@ import (
 
 	common "narratives/internal/domain/common"
 	invoicedom "narratives/internal/domain/invoice"
-	paymentdom "narratives/internal/domain/payment"
 )
 
 // InvoiceRepo is the persistence port required by InvoiceUsecase.
@@ -27,11 +26,6 @@ type InvoiceRepo interface {
 	DeleteByOrderID(ctx context.Context, orderID string) error
 }
 
-// ✅ Payment 起票は PaymentUsecase に寄せる（小さい口だけ定義）
-type PaymentCreator interface {
-	Create(ctx context.Context, in paymentdom.CreatePaymentInput) (*paymentdom.Payment, error)
-}
-
 // InvoiceFilter provides basic filtering for listing invoices.
 type InvoiceFilter struct {
 	OrderID *string
@@ -40,16 +34,14 @@ type InvoiceFilter struct {
 
 // InvoiceUsecase orchestrates invoice operations.
 type InvoiceUsecase struct {
-	repo           InvoiceRepo
-	paymentCreator PaymentCreator
-	now            func() time.Time
+	repo InvoiceRepo
+	now  func() time.Time
 }
 
-func NewInvoiceUsecase(repo InvoiceRepo, paymentCreator PaymentCreator) *InvoiceUsecase {
+func NewInvoiceUsecase(repo InvoiceRepo) *InvoiceUsecase {
 	return &InvoiceUsecase{
-		repo:           repo,
-		paymentCreator: paymentCreator,
-		now:            time.Now,
+		repo: repo,
+		now:  time.Now,
 	}
 }
 
@@ -93,13 +85,11 @@ type CreateInvoiceInput struct {
 
 	Tax         int
 	ShippingFee int
-
-	// ✅ payment起票に必要な情報（invoice起票と同時に生成する）
-	BillingAddressID string
-	PaymentStatus    paymentdom.PaymentStatus
-	PaymentErrorType *string
 }
 
+// NOTE:
+// 支払（payment）は外部決済APIのレスポンス（webhook/callback等）を確認した後に別ユースケースで起票/更新する。
+// InvoiceUsecase は invoice の起票のみを責務とする。
 func (u *InvoiceUsecase) Create(ctx context.Context, in CreateInvoiceInput) (invoicedom.Invoice, error) {
 	orderID := strings.TrimSpace(in.OrderID)
 
@@ -123,36 +113,6 @@ func (u *InvoiceUsecase) Create(ctx context.Context, in CreateInvoiceInput) (inv
 	if err != nil {
 		log.Printf("[invoice_uc] Create repo.Create failed orderId=%s err=%v", orderID, err)
 		return invoicedom.Invoice{}, err
-	}
-
-	// ✅ payment 起票は PaymentUsecase に委譲（ここでは「依頼」だけ）
-	if u.paymentCreator != nil {
-		billingAddrID := strings.TrimSpace(in.BillingAddressID)
-		if billingAddrID != "" {
-			amount := 0
-			for _, p := range in.Prices {
-				amount += p
-			}
-			amount += in.Tax
-			amount += in.ShippingFee
-
-			st := in.PaymentStatus
-			if strings.TrimSpace(string(st)) == "" {
-				st = paymentdom.PaymentStatusPending
-			}
-
-			_, pErr := u.paymentCreator.Create(ctx, paymentdom.CreatePaymentInput{
-				InvoiceID:        orderID, // ✅ docId=invoiceId (=orderId) 前提
-				BillingAddressID: billingAddrID,
-				Amount:           amount,
-				Status:           st,
-				ErrorType:        in.PaymentErrorType,
-			})
-			if pErr != nil {
-				log.Printf("[invoice_uc] Create payment failed orderId=%s err=%v", orderID, pErr)
-				return invoicedom.Invoice{}, pErr
-			}
-		}
 	}
 
 	log.Printf("[invoice_uc] Create OK orderId=%s paid=%t updatedAt_nil=%t",

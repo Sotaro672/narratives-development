@@ -43,9 +43,9 @@ func (h *SNSCompanyHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	path := strings.TrimSuffix(r.URL.Path, "/")
 
-	// GET /sns/companies/{id}
-	if strings.HasPrefix(path, "/sns/companies/") {
-		id := strings.TrimSpace(strings.TrimPrefix(path, "/sns/companies/"))
+	// GET /mall/companies/{id}
+	if strings.HasPrefix(path, "/mall/companies/") {
+		id := strings.TrimSpace(strings.TrimPrefix(path, "/mall/companies/"))
 		h.get(w, r, id)
 		return
 	}

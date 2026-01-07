@@ -81,7 +81,7 @@ type snsCatalogInventoryRepoAdapter struct {
 	repo any
 }
 
-func (a *snsCatalogInventoryRepoAdapter) GetByID(ctx context.Context, id string) (*snsdto.SNSCatalogInventoryDTO, error) {
+func (a *snsCatalogInventoryRepoAdapter) GetByID(ctx context.Context, id string) (*snsdto.CatalogInventoryDTO, error) {
 	if a == nil || a.repo == nil {
 		return nil, errors.New("sns catalog inventory repo: repo is nil")
 	}
@@ -92,7 +92,7 @@ func (a *snsCatalogInventoryRepoAdapter) GetByID(ctx context.Context, id string)
 	return toSNSCatalogInventoryDTO(v)
 }
 
-func (a *snsCatalogInventoryRepoAdapter) GetByProductAndTokenBlueprintID(ctx context.Context, productBlueprintID, tokenBlueprintID string) (*snsdto.SNSCatalogInventoryDTO, error) {
+func (a *snsCatalogInventoryRepoAdapter) GetByProductAndTokenBlueprintID(ctx context.Context, productBlueprintID, tokenBlueprintID string) (*snsdto.CatalogInventoryDTO, error) {
 	if a == nil || a.repo == nil {
 		return nil, errors.New("sns catalog inventory repo: repo is nil")
 	}
@@ -174,7 +174,7 @@ func callRepo(repo any, methodNames []string, args ...any) (any, error) {
 	return nil, errors.New("method not found on repo")
 }
 
-func toSNSCatalogInventoryDTO(v any) (*snsdto.SNSCatalogInventoryDTO, error) {
+func toSNSCatalogInventoryDTO(v any) (*snsdto.CatalogInventoryDTO, error) {
 	if v == nil {
 		return nil, errors.New("inventory is nil")
 	}
@@ -210,7 +210,7 @@ func toSNSCatalogInventoryDTO(v any) (*snsdto.SNSCatalogInventoryDTO, error) {
 	pbID := getStr("ProductBlueprintID", "ProductBlueprintId", "productBlueprintId")
 	tbID := getStr("TokenBlueprintID", "TokenBlueprintId", "tokenBlueprintId")
 
-	stock := map[string]snsdto.SNSCatalogInventoryModelStockDTO{}
+	stock := map[string]snsdto.CatalogInventoryModelStockDTO{}
 
 	var sf reflect.Value
 	for _, n := range []string{"Stock", "Stocks", "stock"} {
@@ -248,7 +248,7 @@ func toSNSCatalogInventoryDTO(v any) (*snsdto.SNSCatalogInventoryDTO, error) {
 						products[pid] = true
 					}
 
-					stock[modelID] = snsdto.SNSCatalogInventoryModelStockDTO{
+					stock[modelID] = snsdto.CatalogInventoryModelStockDTO{
 						Products: products,
 					}
 				}
@@ -272,14 +272,14 @@ func toSNSCatalogInventoryDTO(v any) (*snsdto.SNSCatalogInventoryDTO, error) {
 						continue
 					}
 					if _, ok := stock[modelID]; !ok {
-						stock[modelID] = snsdto.SNSCatalogInventoryModelStockDTO{Products: map[string]bool{}}
+						stock[modelID] = snsdto.CatalogInventoryModelStockDTO{Products: map[string]bool{}}
 					}
 				}
 			}
 		}
 	}
 
-	return &snsdto.SNSCatalogInventoryDTO{
+	return &snsdto.CatalogInventoryDTO{
 		ID:                 id,
 		ProductBlueprintID: pbID,
 		TokenBlueprintID:   tbID,

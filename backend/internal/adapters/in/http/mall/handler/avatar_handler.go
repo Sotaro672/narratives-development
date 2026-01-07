@@ -1,4 +1,4 @@
-// backend\internal\adapters\in\http\mall\handler\avatar_handler.go
+// backend/internal/adapters/in/http/mall/handler/avatar_handler.go
 package mallHandler
 
 import (
@@ -24,86 +24,124 @@ import (
 	avataricon "narratives/internal/domain/avatarIcon"
 )
 
-// AvatarHandler は /avatars 関連のエンドポイントを担当します。
-// 新しい usecase.AvatarUsecase を利用します。
+// AvatarHandler handles ONLY mall buyer-facing endpoints.
+//
+// Routes (mall only):
+// - POST   /mall/avatars
+// - GET    /mall/avatars/{id}
+// - PATCH  /mall/avatars/{id}
+// - PUT    /mall/avatars/{id}
+// - DELETE /mall/avatars/{id}
+//
+// Extensions:
+// - POST /mall/avatars/{id}/wallet
+// - POST /mall/avatars/{id}/icon-upload-url
+// - POST /mall/avatars/{id}/icon
 type AvatarHandler struct {
 	uc *uc.AvatarUsecase
 }
 
-// NewAvatarHandler はHTTPハンドラを初期化します。
+// NewAvatarHandler initializes handler.
 func NewAvatarHandler(avatarUC *uc.AvatarUsecase) http.Handler {
 	return &AvatarHandler{uc: avatarUC}
 }
 
-// ServeHTTP はHTTPルーティングの入口です。
+// ServeHTTP routes requests (mall path only).
 func (h *AvatarHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 
-	// 元のパス（末尾 / を落とす）
+	// normalize path (drop trailing slash)
 	path0 := strings.TrimSuffix(r.URL.Path, "/")
 
-	// ✅ /sns/avatars にも対応するため /sns を剥がして /avatars 系に正規化する
-	// - /sns/avatars        -> /avatars
-	// - /sns/avatars/{id}   -> /avatars/{id}
-	// - /avatars            -> /avatars (そのまま)
-	if strings.HasPrefix(path0, "/sns/") {
-		path0 = strings.TrimPrefix(path0, "/sns")
-		if path0 == "" {
-			path0 = "/"
-		}
-	}
-
 	switch {
-	case r.Method == http.MethodGet && path0 == "/avatars":
-		// 現行の AvatarUsecase は一覧取得を提供しないため 501 で返す
+	// ------------------------------------------------------------
+	// /mall/avatars (list not supported)
+	// ------------------------------------------------------------
+	case r.Method == http.MethodGet && path0 == "/mall/avatars":
+		// current AvatarUsecase doesn't provide listing
 		w.WriteHeader(http.StatusNotImplemented)
 		_ = json.NewEncoder(w).Encode(map[string]string{"error": "not_implemented"})
+		return
 
-	case r.Method == http.MethodPost && path0 == "/avatars":
+	// POST /mall/avatars
+	case r.Method == http.MethodPost && path0 == "/mall/avatars":
 		h.post(w, r)
+		return
 
-	case r.Method == http.MethodGet && strings.HasPrefix(path0, "/avatars/"):
-		id := strings.TrimPrefix(path0, "/avatars/")
-		h.get(w, r, id)
+	// ------------------------------------------------------------
+	// subroutes MUST be checked before /mall/avatars/{id}
+	// ------------------------------------------------------------
 
-	// ✅ NEW: wallet open endpoint
-	// POST /avatars/{id}/wallet
-	case r.Method == http.MethodPost && strings.HasPrefix(path0, "/avatars/") && strings.HasSuffix(path0, "/wallet"):
-		id := strings.TrimSuffix(strings.TrimPrefix(path0, "/avatars/"), "/wallet")
+	// POST /mall/avatars/{id}/wallet
+	case r.Method == http.MethodPost && strings.HasPrefix(path0, "/mall/avatars/") && strings.HasSuffix(path0, "/wallet"):
+		id, ok := extractIDFromSubroute(path0, "/mall/avatars/", "/wallet")
+		if !ok {
+			notFound(w)
+			return
+		}
 		h.openWallet(w, r, id)
+		return
 
-	// ✅ NEW: avatar icon upload-url endpoint (B案)
-	// POST /avatars/{id}/icon-upload-url
-	// - GCS Signed URL を発行してクライアントが PUT アップロードできるようにする
-	case r.Method == http.MethodPost && strings.HasPrefix(path0, "/avatars/") && strings.HasSuffix(path0, "/icon-upload-url"):
-		id := strings.TrimSuffix(strings.TrimPrefix(path0, "/avatars/"), "/icon-upload-url")
+	// POST /mall/avatars/{id}/icon-upload-url
+	case r.Method == http.MethodPost && strings.HasPrefix(path0, "/mall/avatars/") && strings.HasSuffix(path0, "/icon-upload-url"):
+		id, ok := extractIDFromSubroute(path0, "/mall/avatars/", "/icon-upload-url")
+		if !ok {
+			notFound(w)
+			return
+		}
 		h.issueIconUploadURL(w, r, id)
+		return
 
-	// ✅ NEW: avatar icon register/replace endpoint
-	// POST /avatars/{id}/icon
-	// - 事前にクライアントが GCS にアップロード済みの object を「登録」する
-	// - 既存アイコンがあれば best-effort で削除（usecase側）
-	case r.Method == http.MethodPost && strings.HasPrefix(path0, "/avatars/") && strings.HasSuffix(path0, "/icon"):
-		id := strings.TrimSuffix(strings.TrimPrefix(path0, "/avatars/"), "/icon")
+	// POST /mall/avatars/{id}/icon
+	case r.Method == http.MethodPost && strings.HasPrefix(path0, "/mall/avatars/") && strings.HasSuffix(path0, "/icon"):
+		id, ok := extractIDFromSubroute(path0, "/mall/avatars/", "/icon")
+		if !ok {
+			notFound(w)
+			return
+		}
 		h.replaceIcon(w, r, id)
+		return
 
-	case (r.Method == http.MethodPatch || r.Method == http.MethodPut) && strings.HasPrefix(path0, "/avatars/"):
-		id := strings.TrimPrefix(path0, "/avatars/")
+	// ------------------------------------------------------------
+	// /mall/avatars/{id}
+	// ------------------------------------------------------------
+	case r.Method == http.MethodGet && strings.HasPrefix(path0, "/mall/avatars/"):
+		id, ok := extractIDFromPath(path0, "/mall/avatars/")
+		if !ok {
+			notFound(w)
+			return
+		}
+		h.get(w, r, id)
+		return
+
+	case (r.Method == http.MethodPatch || r.Method == http.MethodPut) && strings.HasPrefix(path0, "/mall/avatars/"):
+		id, ok := extractIDFromPath(path0, "/mall/avatars/")
+		if !ok {
+			notFound(w)
+			return
+		}
 		h.update(w, r, id)
+		return
 
-	case r.Method == http.MethodDelete && strings.HasPrefix(path0, "/avatars/"):
-		id := strings.TrimPrefix(path0, "/avatars/")
+	case r.Method == http.MethodDelete && strings.HasPrefix(path0, "/mall/avatars/"):
+		id, ok := extractIDFromPath(path0, "/mall/avatars/")
+		if !ok {
+			notFound(w)
+			return
+		}
 		h.delete(w, r, id)
+		return
 
 	default:
 		w.WriteHeader(http.StatusNotFound)
 		_ = json.NewEncoder(w).Encode(map[string]string{"error": "not_found"})
+		return
 	}
 }
 
 // -----------------------------------------------------------------------------
-// GET /avatars/{id}
-// aggregate=1|true を付けると Avatar + State + Icons の集約を返します。
+// GET /mall/avatars/{id}
+// aggregate=1|true -> Avatar + State + Icons aggregate
 // -----------------------------------------------------------------------------
 func (h *AvatarHandler) get(w http.ResponseWriter, r *http.Request, id string) {
 	ctx := r.Context()
@@ -114,7 +152,7 @@ func (h *AvatarHandler) get(w http.ResponseWriter, r *http.Request, id string) {
 		return
 	}
 
-	log.Printf("[sns_avatar_handler] GET /avatars/%s aggregate=%q\n", id, r.URL.Query().Get("aggregate"))
+	log.Printf("[mall_avatar_handler] GET /mall/avatars/%s aggregate=%q\n", id, r.URL.Query().Get("aggregate"))
 
 	q := r.URL.Query()
 	agg := strings.EqualFold(q.Get("aggregate"), "1") || strings.EqualFold(q.Get("aggregate"), "true")
@@ -126,7 +164,6 @@ func (h *AvatarHandler) get(w http.ResponseWriter, r *http.Request, id string) {
 			return
 		}
 
-		// ✅ avatar icon を保持できているか確認（Aggregate の Icons / AvatarIcon を観測）
 		iconsCount := len(data.Icons)
 		hasAvatarIconField := data.Avatar.AvatarIcon != nil && strings.TrimSpace(*data.Avatar.AvatarIcon) != ""
 		sampleIconURL := ""
@@ -134,7 +171,7 @@ func (h *AvatarHandler) get(w http.ResponseWriter, r *http.Request, id string) {
 			sampleIconURL = data.Icons[0].URL
 		}
 		log.Printf(
-			"[sns_avatar_handler] GET /avatars/%s aggregate ok iconsCount=%d avatar.avatarIcon_set=%t icons_sample_url=%q\n",
+			"[mall_avatar_handler] GET /mall/avatars/%s aggregate ok iconsCount=%d avatar.avatarIcon_set=%t icons_sample_url=%q\n",
 			id,
 			iconsCount,
 			hasAvatarIconField,
@@ -151,10 +188,9 @@ func (h *AvatarHandler) get(w http.ResponseWriter, r *http.Request, id string) {
 		return
 	}
 
-	// ✅ avatar icon を保持できているか確認（avatars.avatarIcon フィールドを観測）
 	hasAvatarIconField := avatar.AvatarIcon != nil && strings.TrimSpace(*avatar.AvatarIcon) != ""
 	log.Printf(
-		"[sns_avatar_handler] GET /avatars/%s ok avatar.avatarIcon_set=%t avatar.avatarIcon=%q\n",
+		"[mall_avatar_handler] GET /mall/avatars/%s ok avatar.avatarIcon_set=%t avatar.avatarIcon=%q\n",
 		id,
 		hasAvatarIconField,
 		ptrStr(avatar.AvatarIcon),
@@ -164,7 +200,7 @@ func (h *AvatarHandler) get(w http.ResponseWriter, r *http.Request, id string) {
 }
 
 // -----------------------------------------------------------------------------
-// POST /avatars
+// POST /mall/avatars
 // -----------------------------------------------------------------------------
 func (h *AvatarHandler) post(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
@@ -193,7 +229,7 @@ func (h *AvatarHandler) post(w http.ResponseWriter, r *http.Request) {
 	}
 
 	log.Printf(
-		"[sns_avatar_handler] POST /avatars request userId=%q userUid=%q avatarName=%q avatarIcon=%q profile_len=%d externalLink=%q\n",
+		"[mall_avatar_handler] POST /mall/avatars request userId=%q userUid=%q avatarName=%q avatarIcon=%q profile_len=%d externalLink=%q\n",
 		in.UserID,
 		maskUID(in.UserUID), // shared
 		in.AvatarName,
@@ -204,15 +240,14 @@ func (h *AvatarHandler) post(w http.ResponseWriter, r *http.Request) {
 
 	created, err := h.uc.Create(ctx, in)
 	if err != nil {
-		log.Printf("[sns_avatar_handler] POST /avatars error=%v\n", err)
+		log.Printf("[mall_avatar_handler] POST /mall/avatars error=%v\n", err)
 		writeAvatarErr(w, err)
 		return
 	}
 
-	// ✅ avatar icon を保持できているか確認（作成直後の avatar.avatarIcon を観測）
 	hasAvatarIconField := created.AvatarIcon != nil && strings.TrimSpace(*created.AvatarIcon) != ""
 	log.Printf(
-		"[sns_avatar_handler] POST /avatars ok avatarId=%q walletAddress=%q avatar.avatarIcon_set=%t avatar.avatarIcon=%q\n",
+		"[mall_avatar_handler] POST /mall/avatars ok avatarId=%q walletAddress=%q avatar.avatarIcon_set=%t avatar.avatarIcon=%q\n",
 		created.ID,
 		ptrStr(created.WalletAddress),
 		hasAvatarIconField,
@@ -224,7 +259,7 @@ func (h *AvatarHandler) post(w http.ResponseWriter, r *http.Request) {
 }
 
 // -----------------------------------------------------------------------------
-// POST /avatars/{id}/wallet
+// POST /mall/avatars/{id}/wallet
 // -----------------------------------------------------------------------------
 func (h *AvatarHandler) openWallet(w http.ResponseWriter, r *http.Request, id string) {
 	ctx := r.Context()
@@ -235,17 +270,17 @@ func (h *AvatarHandler) openWallet(w http.ResponseWriter, r *http.Request, id st
 		return
 	}
 
-	log.Printf("[sns_avatar_handler] POST /avatars/%s/wallet request\n", id)
+	log.Printf("[mall_avatar_handler] POST /mall/avatars/%s/wallet request\n", id)
 
-	// すでに walletAddress があるなら衝突扱い
+	// conflict if already opened
 	a, err := h.uc.GetByID(ctx, id)
 	if err != nil {
-		log.Printf("[sns_avatar_handler] POST /avatars/%s/wallet get error=%v\n", id, err)
+		log.Printf("[mall_avatar_handler] POST /mall/avatars/%s/wallet get error=%v\n", id, err)
 		writeAvatarErr(w, err)
 		return
 	}
 	if a.WalletAddress != nil && strings.TrimSpace(*a.WalletAddress) != "" {
-		log.Printf("[sns_avatar_handler] POST /avatars/%s/wallet conflict walletAddress=%q\n", id, ptrStr(a.WalletAddress))
+		log.Printf("[mall_avatar_handler] POST /mall/avatars/%s/wallet conflict walletAddress=%q\n", id, ptrStr(a.WalletAddress))
 		w.WriteHeader(http.StatusConflict)
 		_ = json.NewEncoder(w).Encode(map[string]string{"error": "wallet already opened"})
 		return
@@ -253,28 +288,24 @@ func (h *AvatarHandler) openWallet(w http.ResponseWriter, r *http.Request, id st
 
 	updated, err := h.uc.OpenWallet(ctx, id)
 	if err != nil {
-		log.Printf("[sns_avatar_handler] POST /avatars/%s/wallet error=%v\n", id, err)
+		log.Printf("[mall_avatar_handler] POST /mall/avatars/%s/wallet error=%v\n", id, err)
 		writeAvatarErr(w, err)
 		return
 	}
 
-	log.Printf(
-		"[sns_avatar_handler] POST /avatars/%s/wallet ok walletAddress=%q\n",
-		id,
-		ptrStr(updated.WalletAddress),
-	)
+	log.Printf("[mall_avatar_handler] POST /mall/avatars/%s/wallet ok walletAddress=%q\n", id, ptrStr(updated.WalletAddress))
 	_ = json.NewEncoder(w).Encode(updated)
 }
 
 // -----------------------------------------------------------------------------
-// POST /avatars/{id}/icon-upload-url
-// - GCS Signed URL を発行（PUT 用）
-// - 返り値の bucket/objectPath を使って、次に POST /avatars/{id}/icon で登録する
+// POST /mall/avatars/{id}/icon-upload-url
+// - issues GCS Signed URL (PUT)
+// - client then registers via POST /mall/avatars/{id}/icon
 // -----------------------------------------------------------------------------
 //
-// ✅ Cloud Run 対応:
-// - 以前: JSON鍵ファイル (GCS_SIGNER_CREDENTIALS / GOOGLE_APPLICATION_CREDENTIALS) が必須だった
-// - 変更後: 鍵ファイルが無い場合は IAM Credentials API (signBlob) で署名する
+// Cloud Run:
+// - if key file exists (GCS_SIGNER_CREDENTIALS/GOOGLE_APPLICATION_CREDENTIALS) -> use keyfile signing
+// - else use IAM Credentials API (signBlob) (requires roles/iam.serviceAccountTokenCreator)
 func (h *AvatarHandler) issueIconUploadURL(w http.ResponseWriter, r *http.Request, id string) {
 	ctx := r.Context()
 
@@ -302,7 +333,7 @@ func (h *AvatarHandler) issueIconUploadURL(w http.ResponseWriter, r *http.Reques
 		mimeType = "application/octet-stream"
 	}
 
-	// bucket は固定（必要なら env で差し替え）
+	// bucket
 	bucket := strings.TrimSpace(os.Getenv("AVATAR_ICON_BUCKET"))
 	if bucket == "" {
 		bucket = "narratives-development_avatar_icon"
@@ -313,17 +344,17 @@ func (h *AvatarHandler) issueIconUploadURL(w http.ResponseWriter, r *http.Reques
 	ext := guessExt(fileName, mimeType)
 	objectPath := fmt.Sprintf("%s/%s%s", id, oid, ext)
 
-	// 署名者 email（Cloud Run の場合これが必須）
+	// signer email (Cloud Run)
 	signerEmail := strings.TrimSpace(os.Getenv("AVATAR_ICON_SIGNER_EMAIL"))
 	if signerEmail == "" {
-		// 互換: 既存の env を流用
+		// compatibility: reuse existing envs
 		signerEmail = strings.TrimSpace(os.Getenv("TOKEN_ICON_SIGNER_EMAIL"))
 	}
 	if signerEmail == "" {
 		signerEmail = strings.TrimSpace(os.Getenv("GCS_SIGNER_EMAIL"))
 	}
 
-	// ローカル開発: JSON鍵ファイルがあればそれを使う（従来方式）
+	// local: key file signing if present
 	credPath := strings.TrimSpace(os.Getenv("GCS_SIGNER_CREDENTIALS"))
 	if credPath == "" {
 		credPath = strings.TrimSpace(os.Getenv("GOOGLE_APPLICATION_CREDENTIALS"))
@@ -332,13 +363,12 @@ func (h *AvatarHandler) issueIconUploadURL(w http.ResponseWriter, r *http.Reques
 	exp := time.Now().Add(15 * time.Minute)
 
 	// ------------------------------------------------------------
-	// A) 鍵ファイル署名（ローカル用）
+	// A) keyfile signing (local)
 	// ------------------------------------------------------------
 	if credPath != "" {
 		email, pk, err := loadServiceAccountKey(credPath)
 		if err != nil {
-			log.Printf("[sns_avatar_handler] POST /avatars/%s/icon-upload-url load key error=%v credPath=%q\n", id, err, credPath)
-			// 鍵ファイルが壊れている等は致命的なので 500
+			log.Printf("[mall_avatar_handler] POST /mall/avatars/%s/icon-upload-url load key error=%v credPath=%q\n", id, err, credPath)
 			w.WriteHeader(http.StatusInternalServerError)
 			_ = json.NewEncoder(w).Encode(map[string]string{"error": "failed to load signer key"})
 			return
@@ -352,14 +382,14 @@ func (h *AvatarHandler) issueIconUploadURL(w http.ResponseWriter, r *http.Reques
 			ContentType:    mimeType,
 		})
 		if err != nil {
-			log.Printf("[sns_avatar_handler] POST /avatars/%s/icon-upload-url sign (keyfile) error=%v\n", id, err)
+			log.Printf("[mall_avatar_handler] POST /mall/avatars/%s/icon-upload-url sign (keyfile) error=%v\n", id, err)
 			w.WriteHeader(http.StatusInternalServerError)
 			_ = json.NewEncoder(w).Encode(map[string]string{"error": "failed to sign url"})
 			return
 		}
 
 		log.Printf(
-			"[sns_avatar_handler] POST /avatars/%s/icon-upload-url ok (keyfile) bucket=%q objectPath=%q mimeType=%q size=%v\n",
+			"[mall_avatar_handler] POST /mall/avatars/%s/icon-upload-url ok (keyfile) bucket=%q objectPath=%q mimeType=%q size=%v\n",
 			id, bucket, objectPath, mimeType, body.Size,
 		)
 
@@ -374,11 +404,10 @@ func (h *AvatarHandler) issueIconUploadURL(w http.ResponseWriter, r *http.Reques
 	}
 
 	// ------------------------------------------------------------
-	// B) IAM Credentials API で署名（Cloud Run 用）
+	// B) IAM Credentials signing (Cloud Run)
 	// ------------------------------------------------------------
 	if signerEmail == "" {
-		// ここに来るのは「鍵ファイルが無い」かつ「署名者メールも無い」ケース
-		log.Printf("[sns_avatar_handler] POST /avatars/%s/icon-upload-url missing signer email (set AVATAR_ICON_SIGNER_EMAIL)\n", id)
+		log.Printf("[mall_avatar_handler] POST /mall/avatars/%s/icon-upload-url missing signer email (set AVATAR_ICON_SIGNER_EMAIL)\n", id)
 		w.WriteHeader(http.StatusInternalServerError)
 		_ = json.NewEncoder(w).Encode(map[string]string{"error": "missing signer email (set AVATAR_ICON_SIGNER_EMAIL)"})
 		return
@@ -389,21 +418,19 @@ func (h *AvatarHandler) issueIconUploadURL(w http.ResponseWriter, r *http.Reques
 		Method:         http.MethodPut,
 		Expires:        exp,
 		ContentType:    mimeType,
-
-		// ✅ Cloud Run: SignBytes を IAM Credentials API で実装
 		SignBytes: func(b []byte) ([]byte, error) {
 			return signBytesWithIAM(ctx, signerEmail, b)
 		},
 	})
 	if err != nil {
-		log.Printf("[sns_avatar_handler] POST /avatars/%s/icon-upload-url sign (iam) error=%v signer=%q bucket=%q objectPath=%q\n", id, err, signerEmail, bucket, objectPath)
+		log.Printf("[mall_avatar_handler] POST /mall/avatars/%s/icon-upload-url sign (iam) error=%v signer=%q bucket=%q objectPath=%q\n", id, err, signerEmail, bucket, objectPath)
 		w.WriteHeader(http.StatusInternalServerError)
 		_ = json.NewEncoder(w).Encode(map[string]string{"error": "failed to sign url"})
 		return
 	}
 
 	log.Printf(
-		"[sns_avatar_handler] POST /avatars/%s/icon-upload-url ok (iam) signer=%q bucket=%q objectPath=%q mimeType=%q size=%v\n",
+		"[mall_avatar_handler] POST /mall/avatars/%s/icon-upload-url ok (iam) signer=%q bucket=%q objectPath=%q mimeType=%q size=%v\n",
 		id, signerEmail, bucket, objectPath, mimeType, body.Size,
 	)
 
@@ -416,10 +443,7 @@ func (h *AvatarHandler) issueIconUploadURL(w http.ResponseWriter, r *http.Reques
 	})
 }
 
-// signBytesWithIAM signs bytes by calling IAM Credentials API SignBlob.
-// - 呼び出し主体: Cloud Run runtime SA（Workload Identity）
-// - 署名対象SA: signerEmail（例: narratives-backend-sa@...）
-// 必要権限: 呼び出し主体が「署名対象SA」に対して roles/iam.serviceAccountTokenCreator
+// signBytesWithIAM signs bytes via IAM Credentials API SignBlob.
 func signBytesWithIAM(ctx context.Context, signerEmail string, payload []byte) ([]byte, error) {
 	c, err := credentials.NewIamCredentialsClient(ctx)
 	if err != nil {
@@ -439,7 +463,7 @@ func signBytesWithIAM(ctx context.Context, signerEmail string, payload []byte) (
 }
 
 // -----------------------------------------------------------------------------
-// POST /avatars/{id}/icon  (既存)
+// POST /mall/avatars/{id}/icon
 // -----------------------------------------------------------------------------
 func (h *AvatarHandler) replaceIcon(w http.ResponseWriter, r *http.Request, id string) {
 	ctx := r.Context()
@@ -456,7 +480,7 @@ func (h *AvatarHandler) replaceIcon(w http.ResponseWriter, r *http.Request, id s
 		FileName   *string `json:"fileName,omitempty"`
 		Size       *int64  `json:"size,omitempty"`
 
-		// 既存クライアントが avatarIcon 1本で送ってくる場合の救済
+		// compatibility: client may send gs://... in avatarIcon
 		AvatarIcon *string `json:"avatarIcon,omitempty"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
@@ -468,7 +492,7 @@ func (h *AvatarHandler) replaceIcon(w http.ResponseWriter, r *http.Request, id s
 	bucket := strings.TrimSpace(ptrStr(body.Bucket))
 	obj := strings.TrimSpace(ptrStr(body.ObjectPath))
 
-	// avatarIcon が gs://... なら bucket/object に分解して優先
+	// if avatarIcon is gs://..., parse and override
 	if v := strings.TrimSpace(ptrStr(body.AvatarIcon)); v != "" {
 		if b, o, ok := avataricon.ParseGCSURL(v); ok {
 			bucket = b
@@ -493,7 +517,7 @@ func (h *AvatarHandler) replaceIcon(w http.ResponseWriter, r *http.Request, id s
 	}
 
 	log.Printf(
-		"[sns_avatar_handler] POST /avatars/%s/icon request bucket=%q objectPath=%q fileName=%q size=%v\n",
+		"[mall_avatar_handler] POST /mall/avatars/%s/icon request bucket=%q objectPath=%q fileName=%q size=%v\n",
 		id,
 		in.Bucket,
 		in.ObjectPath,
@@ -503,12 +527,12 @@ func (h *AvatarHandler) replaceIcon(w http.ResponseWriter, r *http.Request, id s
 
 	ic, err := h.uc.ReplaceAvatarIcon(ctx, id, in)
 	if err != nil {
-		log.Printf("[sns_avatar_handler] POST /avatars/%s/icon error=%v\n", id, err)
+		log.Printf("[mall_avatar_handler] POST /mall/avatars/%s/icon error=%v\n", id, err)
 		writeAvatarErr(w, err)
 		return
 	}
 
-	// ✅ UI 表示のため、avatars.avatarIcon も最新URLへ更新（best-effort）
+	// best-effort: also patch avatars.avatarIcon for UI
 	updatedAvatarIcon := ""
 	if strings.TrimSpace(ic.URL) != "" {
 		url := strings.TrimSpace(ic.URL)
@@ -516,10 +540,9 @@ func (h *AvatarHandler) replaceIcon(w http.ResponseWriter, r *http.Request, id s
 		updatedAvatarIcon = url
 	}
 
-	// ✅ avatar icon を保持できているか確認
 	hasURL := strings.TrimSpace(ic.URL) != ""
 	log.Printf(
-		"[sns_avatar_handler] POST /avatars/%s/icon ok iconId=%q url_set=%t url=%q avatar_patch_avatarIcon=%q\n",
+		"[mall_avatar_handler] POST /mall/avatars/%s/icon ok iconId=%q url_set=%t url=%q avatar_patch_avatarIcon=%q\n",
 		id,
 		ic.ID,
 		hasURL,
@@ -531,7 +554,7 @@ func (h *AvatarHandler) replaceIcon(w http.ResponseWriter, r *http.Request, id s
 }
 
 // -----------------------------------------------------------------------------
-// PATCH/PUT /avatars/{id}  (既存)
+// PATCH/PUT /mall/avatars/{id}
 // -----------------------------------------------------------------------------
 func (h *AvatarHandler) update(w http.ResponseWriter, r *http.Request, id string) {
 	ctx := r.Context()
@@ -550,7 +573,7 @@ func (h *AvatarHandler) update(w http.ResponseWriter, r *http.Request, id string
 	}
 
 	if _, ok := raw["walletAddress"]; ok {
-		log.Printf("[sns_avatar_handler] PATCH/PUT /avatars/%s rejected: walletAddress field is not allowed\n", id)
+		log.Printf("[mall_avatar_handler] PATCH/PUT /mall/avatars/%s rejected: walletAddress field is not allowed\n", id)
 		w.WriteHeader(http.StatusBadRequest)
 		_ = json.NewEncoder(w).Encode(map[string]string{"error": "walletAddress is not allowed in update"})
 		return
@@ -562,7 +585,7 @@ func (h *AvatarHandler) update(w http.ResponseWriter, r *http.Request, id string
 		_ = json.NewEncoder(w).Encode(map[string]string{"error": "invalid json"})
 		return
 	}
-	log.Printf("[sns_avatar_handler] PATCH/PUT /avatars/%s raw=%q\n", id, headString(bs, 300))
+	log.Printf("[mall_avatar_handler] PATCH/PUT /mall/avatars/%s raw=%q\n", id, headString(bs, 300))
 
 	var body struct {
 		AvatarName   *string `json:"avatarName,omitempty"`
@@ -584,7 +607,7 @@ func (h *AvatarHandler) update(w http.ResponseWriter, r *http.Request, id string
 	}
 
 	log.Printf(
-		"[sns_avatar_handler] PATCH/PUT /avatars/%s request avatarName=%q avatarIcon=%q profile_len=%d externalLink=%q\n",
+		"[mall_avatar_handler] PATCH/PUT /mall/avatars/%s request avatarName=%q avatarIcon=%q profile_len=%d externalLink=%q\n",
 		id,
 		ptrStr(patch.AvatarName),
 		ptrStr(patch.AvatarIcon),
@@ -594,14 +617,14 @@ func (h *AvatarHandler) update(w http.ResponseWriter, r *http.Request, id string
 
 	updated, err := h.uc.Update(ctx, id, patch)
 	if err != nil {
-		log.Printf("[sns_avatar_handler] PATCH/PUT /avatars/%s error=%v\n", id, err)
+		log.Printf("[mall_avatar_handler] PATCH/PUT /mall/avatars/%s error=%v\n", id, err)
 		writeAvatarErr(w, err)
 		return
 	}
 
 	hasAvatarIconField := updated.AvatarIcon != nil && strings.TrimSpace(*updated.AvatarIcon) != ""
 	log.Printf(
-		"[sns_avatar_handler] PATCH/PUT /avatars/%s ok avatar.avatarIcon_set=%t avatar.avatarIcon=%q\n",
+		"[mall_avatar_handler] PATCH/PUT /mall/avatars/%s ok avatar.avatarIcon_set=%t avatar.avatarIcon=%q\n",
 		id,
 		hasAvatarIconField,
 		ptrStr(updated.AvatarIcon),
@@ -611,7 +634,7 @@ func (h *AvatarHandler) update(w http.ResponseWriter, r *http.Request, id string
 }
 
 // -----------------------------------------------------------------------------
-// DELETE /avatars/{id}  (既存)
+// DELETE /mall/avatars/{id}
 // -----------------------------------------------------------------------------
 func (h *AvatarHandler) delete(w http.ResponseWriter, r *http.Request, id string) {
 	ctx := r.Context()
@@ -622,20 +645,20 @@ func (h *AvatarHandler) delete(w http.ResponseWriter, r *http.Request, id string
 		return
 	}
 
-	log.Printf("[sns_avatar_handler] DELETE /avatars/%s request\n", id)
+	log.Printf("[mall_avatar_handler] DELETE /mall/avatars/%s request\n", id)
 
 	if err := h.uc.Delete(ctx, id); err != nil {
-		log.Printf("[sns_avatar_handler] DELETE /avatars/%s error=%v\n", id, err)
+		log.Printf("[mall_avatar_handler] DELETE /mall/avatars/%s error=%v\n", id, err)
 		writeAvatarErr(w, err)
 		return
 	}
 
-	log.Printf("[sns_avatar_handler] DELETE /avatars/%s ok\n", id)
+	log.Printf("[mall_avatar_handler] DELETE /mall/avatars/%s ok\n", id)
 	w.WriteHeader(http.StatusNoContent)
 }
 
 // -----------------------------------------------------------------------------
-// エラーハンドリング（既存）
+// Error handling
 // -----------------------------------------------------------------------------
 func writeAvatarErr(w http.ResponseWriter, err error) {
 	code := http.StatusInternalServerError
@@ -679,6 +702,55 @@ func hasErrNotFound(err error) bool {
 }
 
 // -----------------------------------------------------------------------------
+// helpers (path parsing)
+// -----------------------------------------------------------------------------
+
+// extractIDFromPath extracts {id} from "/mall/avatars/{id}" (no subroutes allowed).
+func extractIDFromPath(path0 string, prefix string) (string, bool) {
+	if !strings.HasPrefix(path0, prefix) {
+		return "", false
+	}
+	rest := strings.TrimPrefix(path0, prefix)
+	rest = strings.TrimSpace(rest)
+	if rest == "" {
+		return "", false
+	}
+	parts := strings.Split(rest, "/")
+	id := strings.TrimSpace(parts[0])
+	if id == "" {
+		return "", false
+	}
+	if len(parts) > 1 {
+		// subroute exists -> not this endpoint
+		return "", false
+	}
+	return id, true
+}
+
+// extractIDFromSubroute extracts {id} from "/mall/avatars/{id}<suffix>".
+// Example: prefix="/mall/avatars/", suffix="/wallet" => "/mall/avatars/abc/wallet" -> "abc"
+func extractIDFromSubroute(path0 string, prefix string, suffix string) (string, bool) {
+	if !strings.HasPrefix(path0, prefix) || !strings.HasSuffix(path0, suffix) {
+		return "", false
+	}
+	rest := strings.TrimPrefix(path0, prefix)
+	rest = strings.TrimSuffix(rest, suffix)
+	rest = strings.Trim(rest, "/")
+	if rest == "" {
+		return "", false
+	}
+	parts := strings.Split(rest, "/")
+	id := strings.TrimSpace(parts[0])
+	if id == "" {
+		return "", false
+	}
+	if len(parts) > 1 {
+		return "", false
+	}
+	return id, true
+}
+
+// -----------------------------------------------------------------------------
 // helpers (upload-url)
 // -----------------------------------------------------------------------------
 func newObjectID() string {
@@ -688,7 +760,6 @@ func newObjectID() string {
 }
 
 func guessExt(fileName string, mimeType string) string {
-	// fileName の拡張子を優先（.png 等）
 	ext := strings.ToLower(path.Ext(strings.TrimSpace(fileName)))
 	if ext != "" && len(ext) <= 10 {
 		return ext

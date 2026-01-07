@@ -1,10 +1,9 @@
-// backend/internal/platform/di/container.go
+// backend\internal\platform\di\console_container.go
 package di
 
 import (
 	"context"
 	"log"
-	"net/http"
 	"os"
 	"reflect"
 	"strings"
@@ -23,9 +22,6 @@ import (
 	gcso "narratives/internal/adapters/out/gcs"
 	mailadp "narratives/internal/adapters/out/mail"
 
-	// ✅ SNS handlers（Cart/Payment/ShippingAddress など）
-	snshandler "narratives/internal/adapters/in/http/mall/handler"
-
 	// ★ MintUsecase 移動先
 	mintapp "narratives/internal/application/mint"
 
@@ -34,9 +30,6 @@ import (
 
 	// ★ CompanyProductionQueryService / MintRequestQueryService / InventoryQuery / ListCreateQuery / ListManagementQuery / ListDetailQuery
 	companyquery "narratives/internal/application/query/console"
-
-	// ✅ SNS queries (catalog / order / cart / preview)
-	snsquery "narratives/internal/application/query/mall"
 
 	resolver "narratives/internal/application/resolver"
 
@@ -110,7 +103,7 @@ type Container struct {
 	UserUC             *uc.UserUsecase
 	WalletUC           *uc.WalletUsecase
 
-	// ✅ NEW: Cart / Post
+	// ✅ Cart / Post
 	CartUC *uc.CartUsecase
 	PostUC *uc.PostUsecase
 
@@ -131,13 +124,6 @@ type Container struct {
 
 	// ✅ NEW: list detail DTO（GET /lists/{id}）= listDetail.tsx 用
 	ListDetailQuery *companyquery.ListDetailQuery
-
-	// ✅ NEW: SNS catalog query（/sns/catalog/{listId}）
-	SNSCatalogQ *snsquery.SNSCatalogQuery
-
-	// ✅ NEW: SNS cart / preview queries（/sns/cart, /sns/preview）
-	SNSCartQ    *snsquery.SNSCartQuery
-	SNSPreviewQ *snsquery.SNSPreviewQuery
 
 	// ★ 検品アプリ用 ProductUsecase（/inspector/products/{id}）
 	ProductUC *uc.ProductUsecase
@@ -160,13 +146,6 @@ type Container struct {
 
 	// ★ NameResolver（ID→名前/型番解決用）
 	NameResolver *resolver.NameResolver
-
-	// ✅ SNS handlers（sns_container.go が best-effort で探す対象）
-	// NOTE: Go は field と method の同名を許さないため、field は小文字にする
-	snsSignInHandler          http.Handler
-	snsCartHandler            http.Handler
-	snsPaymentHandler         http.Handler
-	snsShippingAddressHandler http.Handler
 }
 
 // ========================================
@@ -276,7 +255,7 @@ func NewContainer(ctx context.Context) (*Container, error) {
 	userRepo := fs.NewUserRepositoryFS(fsClient)
 	walletRepo := fs.NewWalletRepositoryFS(fsClient)
 
-	// ✅ NEW: Cart / Post repositories
+	// ✅ Cart / Post repositories
 	cartRepo := fs.NewCartRepositoryFS(fsClient)
 	postRepo := fs.NewPostRepositoryFS(fsClient)
 
@@ -397,8 +376,8 @@ func NewContainer(ctx context.Context) (*Container, error) {
 	// ✅ PaymentUsecase を先に作る（InvoiceUsecase が PaymentCreator を要求するため）
 	paymentUC := uc.NewPaymentUsecase(paymentRepo)
 
-	// ✅ InvoiceUsecase は (InvoiceRepo, PaymentCreator) を受け取る
-	invoiceUC := uc.NewInvoiceUsecase(invoiceRepo, paymentUC)
+	// ✅ InvoiceUsecase
+	invoiceUC := uc.NewInvoiceUsecase(invoiceRepo)
 
 	listUC := uc.NewListUsecaseWithCreator(
 		listRepo,      // ListReader (+ ListLister/ListUpdater)
@@ -413,7 +392,7 @@ func NewContainer(ctx context.Context) (*Container, error) {
 	messageUC := uc.NewMessageUsecase(messageRepo, nil, nil)
 	modelUC := uc.NewModelUsecase(modelRepo, modelHistoryRepo)
 
-	// ✅ 修正: OrderUsecase は invoiceRepo を受け取る（Order 作成直後に Invoice 起票するため）
+	// ✅ OrderUsecase（Order 作成直後に Invoice 起票するため）
 	orderUC := uc.NewOrderUsecase(orderRepo).
 		WithInvoiceUsecase(invoiceUC)
 
@@ -497,7 +476,7 @@ func NewContainer(ctx context.Context) (*Container, error) {
 	userUC := uc.NewUserUsecase(userRepo)
 	walletUC := uc.NewWalletUsecase(walletRepo)
 
-	// ✅ NEW: Cart / Post usecases
+	// ✅ Cart / Post usecases
 	cartUC := uc.NewCartUsecase(cartRepo)
 	postUC := uc.NewPostUsecase(postRepo, postImageRepo)
 
@@ -529,13 +508,13 @@ func NewContainer(ctx context.Context) (*Container, error) {
 	// ✅ NEW: ListCreateQuery
 	listCreateQuery := companyquery.NewListCreateQueryWithInventoryAndModels(
 		inventoryRepo,
-		modelRepo, // ✅ 追加（models/variations の母集団を引く）
+		modelRepo,
 		&pbPatchByIDAdapter{repo: productBlueprintRepo},
 		&tbPatchByIDAdapter{repo: tokenBlueprintRepo},
 		nameResolver,
 	)
 
-	// ✅ NEW: ListManagementQuery（/lists 一覧 = listManagement.tsx 用）
+	// ✅ NEW: ListManagementQuery
 	listManagementQuery := companyquery.NewListManagementQueryWithBrandInventoryAndInventoryRows(
 		listRepo,
 		nameResolver,
@@ -544,7 +523,7 @@ func NewContainer(ctx context.Context) (*Container, error) {
 		inventoryQuery,
 	)
 
-	// ✅ NEW: ListDetailQuery（/lists/{id} = listDetail.tsx 用）
+	// ✅ NEW: ListDetailQuery
 	listDetailQuery := companyquery.NewListDetailQueryWithBrandInventoryAndInventoryRows(
 		listRepo,
 		nameResolver,
@@ -553,35 +532,6 @@ func NewContainer(ctx context.Context) (*Container, error) {
 		inventoryQuery,
 		inventoryQuery,
 	)
-
-	// ✅ NEW: SNSCatalogQuery（buyer-facing /sns/catalog/{listId} 用）
-	snsCatalogQ := snsquery.NewSNSCatalogQuery(
-		listRepoFS,
-		&snsCatalogInventoryRepoAdapter{repo: inventoryRepo},
-		&snsCatalogProductBlueprintRepoAdapter{repo: productBlueprintRepo},
-		modelRepo,
-	)
-
-	// ✅ NEW: SNSCartQuery（buyer-facing /sns/cart 用）
-	snsCartQ := snsquery.NewSNSCartQuery(fsClient)
-	snsCartQ.Resolver = nameResolver
-
-	// ✅ NEW: SNSPreviewQuery（buyer-facing /sns/preview 用）
-	snsPreviewQ := snsquery.NewSNSPreviewQuery(fsClient)
-	snsPreviewQ.Resolver = nameResolver
-
-	// ============================================================
-	// ✅ SNSOrderQuery（buyer-facing /sns/payment 用）
-	// ============================================================
-	orderQ := snsquery.NewSNSOrderQuery(fsClient)
-
-	// ✅ SNS handlers（sns_container.go が拾えるようにコンテナに保持）
-	snsSignInHandler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.WriteHeader(http.StatusNoContent)
-	})
-	snsCartHandler := snshandler.NewCartHandler(cartUC)
-	snsPaymentHandler := snshandler.NewPaymentHandlerWithOrderQuery(paymentUC, orderQ)
-	snsShippingAddressHandler := snshandler.NewShippingAddressHandler(shippingAddressUC) // ✅ 追加
 
 	// 6. Assemble container
 	return &Container{
@@ -640,10 +590,6 @@ func NewContainer(ctx context.Context) (*Container, error) {
 		ListManagementQuery: listManagementQuery,
 		ListDetailQuery:     listDetailQuery,
 
-		SNSCatalogQ: snsCatalogQ,
-		SNSCartQ:    snsCartQ,
-		SNSPreviewQ: snsPreviewQ,
-
 		ProductUC:    productUC,
 		InspectionUC: inspectionUC,
 
@@ -656,82 +602,7 @@ func NewContainer(ctx context.Context) (*Container, error) {
 
 		MintAuthorityKey: mintKey,
 		NameResolver:     nameResolver,
-
-		// ✅ SNS handlers（private fields）
-		snsSignInHandler:          snsSignInHandler,
-		snsCartHandler:            snsCartHandler,
-		snsPaymentHandler:         snsPaymentHandler,
-		snsShippingAddressHandler: snsShippingAddressHandler, // ✅ 追加
 	}, nil
-}
-
-// ✅ sns_container.go から reflection で呼ばれる想定の getter
-func (c *Container) SNSCatalogQuery() *snsquery.SNSCatalogQuery {
-	if c == nil {
-		return nil
-	}
-	return c.SNSCatalogQ
-}
-
-func (c *Container) SNSCartQuery() *snsquery.SNSCartQuery {
-	if c == nil {
-		return nil
-	}
-	return c.SNSCartQ
-}
-
-func (c *Container) SNSPreviewQuery() *snsquery.SNSPreviewQuery {
-	if c == nil {
-		return nil
-	}
-	return c.SNSPreviewQ
-}
-
-// ✅ sns_container.go から取得される想定（best-effort）
-func (c *Container) CartUsecase() *uc.CartUsecase {
-	if c == nil {
-		return nil
-	}
-	return c.CartUC
-}
-
-// ✅ post を DI に入れたので getter も用意（sns 側で参照する場合に備える）
-func (c *Container) PostUsecase() *uc.PostUsecase {
-	if c == nil {
-		return nil
-	}
-	return c.PostUC
-}
-
-// ✅ sns_container.go が「handler」として拾えるメソッド群
-// NOTE: field と method の同名を避けるため field は小文字、method はこの名前を維持
-func (c *Container) SNSSignInHandler() http.Handler {
-	if c == nil {
-		return nil
-	}
-	return c.snsSignInHandler
-}
-
-func (c *Container) SNSCartHandler() http.Handler {
-	if c == nil {
-		return nil
-	}
-	return c.snsCartHandler
-}
-
-func (c *Container) SNSPaymentHandler() http.Handler {
-	if c == nil {
-		return nil
-	}
-	return c.snsPaymentHandler
-}
-
-// ✅ NEW: shipping address handler getter（sns_container.go が拾う）
-func (c *Container) SNSShippingAddressHandler() http.Handler {
-	if c == nil {
-		return nil
-	}
-	return c.snsShippingAddressHandler
 }
 
 // callOptionalMethod calls obj.<methodName>(arg) when such method exists (best-effort).

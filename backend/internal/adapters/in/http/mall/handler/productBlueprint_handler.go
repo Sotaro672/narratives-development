@@ -13,8 +13,8 @@ import (
 
 // SNSProductBlueprintHandler serves buyer-facing productBlueprint endpoints (read-only).
 //
-// Routes (read-only):
-// - GET /sns/product-blueprints/{id}
+// ✅ Routes (read-only):
+// - GET /mall/product-blueprints/{id}
 //
 // NOTE:
 // - buyer に不要/秘匿したいフィールド（assigneeId, created/updated/deleted/expire 系）は返さない。
@@ -42,7 +42,7 @@ func NewSNSProductBlueprintHandlerWithNameResolver(uc productBlueprintGetter, na
 }
 
 // ------------------------------
-// Response DTOs (SNS)
+// Response DTOs (Mall)
 // ------------------------------
 
 // ✅ buyer 向け: assignee / created / updated / deleted / expire は返さない
@@ -85,9 +85,9 @@ func (h *SNSProductBlueprintHandler) ServeHTTP(w http.ResponseWriter, r *http.Re
 		return
 	}
 
-	// GET /sns/product-blueprints/{id}
-	if strings.HasPrefix(path, "/sns/product-blueprints/") {
-		rest := strings.TrimPrefix(path, "/sns/product-blueprints/")
+	// ✅ mall only: GET /mall/product-blueprints/{id}
+	if strings.HasPrefix(path, "/mall/product-blueprints/") {
+		rest := strings.TrimPrefix(path, "/mall/product-blueprints/")
 		parts := strings.Split(rest, "/")
 		id := strings.TrimSpace(parts[0])
 		if id == "" {
@@ -108,7 +108,7 @@ func (h *SNSProductBlueprintHandler) ServeHTTP(w http.ResponseWriter, r *http.Re
 func (h *SNSProductBlueprintHandler) getByID(w http.ResponseWriter, r *http.Request, id string) {
 	ctx := r.Context()
 
-	log.Printf("[sns_productBlueprint] getById start id=%q resolverBrand=%t resolverCompany=%t",
+	log.Printf("[mall_productBlueprint] getById start id=%q resolverBrand=%t resolverCompany=%t",
 		strings.TrimSpace(id),
 		h.BrandNameResolver != nil,
 		h.CompanyNameResolver != nil,
@@ -132,7 +132,7 @@ func (h *SNSProductBlueprintHandler) getByID(w http.ResponseWriter, r *http.Requ
 
 	resp := toSnsProductBlueprintResponse(ctx, p, h.BrandNameResolver, h.CompanyNameResolver)
 
-	log.Printf("[sns_productBlueprint] ok id=%q productName=%q brandId=%q brandName=%q companyId=%q companyName=%q",
+	log.Printf("[mall_productBlueprint] ok id=%q productName=%q brandId=%q brandName=%q companyId=%q companyName=%q",
 		resp.ID,
 		resp.ProductName,
 		resp.BrandID,

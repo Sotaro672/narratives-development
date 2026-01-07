@@ -1,9 +1,9 @@
-// backend/internal/application/usecase/cart_usecase.go
 package usecase
 
 import (
 	"context"
 	"errors"
+	"reflect"
 	"strings"
 	"time"
 
@@ -180,6 +180,88 @@ func (uc *CartUsecase) Clear(ctx context.Context, avatarID string) error {
 		return ErrCartInvalidArgument
 	}
 	return uc.repo.DeleteByAvatarID(ctx, aid)
+}
+
+// ✅ NEW: EmptyItems empties cart.items but keeps the cart doc.
+// - payment 成功後など「カートは残すが中身を空にする」用途
+// - cart が存在しない場合は空のカートを作って Upsert（冪等）
+func (uc *CartUsecase) EmptyItems(ctx context.Context, avatarID string) error {
+	aid := strings.TrimSpace(avatarID)
+	if aid == "" {
+		return ErrCartInvalidArgument
+	}
+
+	now := uc.clock.Now()
+
+	c, err := uc.repo.GetByAvatarID(ctx, aid)
+	if err != nil {
+		return err
+	}
+
+	// absent -> create empty and upsert (idempotent)
+	if c == nil {
+		newCart, err := cartdom.NewCart(aid, nil, now)
+		if err != nil {
+			return err
+		}
+		return uc.repo.Upsert(ctx, newCart)
+	}
+
+	// best-effort: clear Items field (map/slice), set UpdatedAt if exists
+	if ok := clearCartItemsBestEffort(c, now); !ok {
+		// fallback: recreate empty cart (schema-safe)
+		newCart, err := cartdom.NewCart(aid, nil, now)
+		if err != nil {
+			return err
+		}
+		return uc.repo.Upsert(ctx, newCart)
+	}
+
+	return uc.repo.Upsert(ctx, c)
+}
+
+// clearCartItemsBestEffort tries to set:
+// - cart.Items = empty (map/slice)
+// - cart.UpdatedAt = &now (if exists and settable)
+// Returns true if it changed something.
+func clearCartItemsBestEffort(cart any, now time.Time) bool {
+	if cart == nil {
+		return false
+	}
+
+	rv := reflect.ValueOf(cart)
+	if !rv.IsValid() || rv.Kind() != reflect.Pointer || rv.IsNil() {
+		return false
+	}
+	ev := rv.Elem()
+	if !ev.IsValid() || ev.Kind() != reflect.Struct {
+		return false
+	}
+
+	changed := false
+
+	// Items (map/slice)
+	if f := ev.FieldByName("Items"); f.IsValid() && f.CanSet() {
+		switch f.Kind() {
+		case reflect.Map:
+			f.Set(reflect.MakeMap(f.Type()))
+			changed = true
+		case reflect.Slice:
+			f.Set(reflect.MakeSlice(f.Type(), 0, 0))
+			changed = true
+		}
+	}
+
+	// UpdatedAt *time.Time (optional)
+	if f := ev.FieldByName("UpdatedAt"); f.IsValid() && f.CanSet() {
+		if f.Kind() == reflect.Pointer && f.Type().Elem() == reflect.TypeOf(time.Time{}) {
+			t := now.UTC()
+			f.Set(reflect.ValueOf(&t))
+			changed = true
+		}
+	}
+
+	return changed
 }
 
 // ✅ Ordered フィールド廃止により MarkOrdered は usecase からも削除。

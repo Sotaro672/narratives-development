@@ -117,32 +117,32 @@ func (h *CartHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	// ============================================================
 
 	// ====== GET /sns/cart (or /cart or "/")
-	case isGET && (hasSuffixAny(path, "/sns/cart", "/cart") || isAnyExact(path, "/")):
+	case isGET && (hasSuffixAny(path, "/mall/cart", "/cart") || isAnyExact(path, "/")):
 		h.handleGetUnified(w, r)
 		return
 
 	// ====== DELETE /sns/cart (or /cart or "/")
-	case isDEL && (hasSuffixAny(path, "/sns/cart", "/cart") || isAnyExact(path, "/")):
+	case isDEL && (hasSuffixAny(path, "/mall/cart", "/cart") || isAnyExact(path, "/")):
 		h.handleClear(w, r)
 		return
 
 	// ====== POST /sns/cart/items (or /cart/items or /items)
-	case isPOST && (hasSuffixAny(path, "/sns/cart/items", "/cart/items") || isAnyExact(path, "/items")):
+	case isPOST && (hasSuffixAny(path, "/mall/cart/items", "/cart/items") || isAnyExact(path, "/items")):
 		h.handleAddItem(w, r)
 		return
 
 	// ====== PUT /sns/cart/items (or /cart/items or /items)
-	case isPUT && (hasSuffixAny(path, "/sns/cart/items", "/cart/items") || isAnyExact(path, "/items")):
+	case isPUT && (hasSuffixAny(path, "/mall/cart/items", "/cart/items") || isAnyExact(path, "/items")):
 		h.handleSetItemQty(w, r)
 		return
 
 	// ====== DELETE /sns/cart/items (or /cart/items or /items)
-	case isDEL && (hasSuffixAny(path, "/sns/cart/items", "/cart/items") || isAnyExact(path, "/items")):
+	case isDEL && (hasSuffixAny(path, "/mall/cart/items", "/cart/items") || isAnyExact(path, "/items")):
 		h.handleRemoveItem(w, r)
 		return
 
 	// ====== (optional) preview
-	case isGET && hasSuffixAny(path, "/sns/preview", "/preview"):
+	case isGET && hasSuffixAny(path, "/mall/preview", "/preview"):
 		h.handleGetPreview(w, r)
 		return
 	}

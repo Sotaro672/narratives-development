@@ -5,7 +5,6 @@ import (
 	"bytes"
 	"encoding/json"
 	"io"
-	"log"
 	"net/http"
 	"strings"
 	"time"
@@ -26,18 +25,14 @@ func NewUserHandler(uc *usecase.UserUsecase) http.Handler {
 
 // ServeHTTP はHTTPルーティングの入口です。
 func (h *UserHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	trace := r.Header.Get("X-Cloud-Trace-Context")
-	log.Printf("[sns_user_handler] enter method=%s path=%s trace=%q contentType=%q contentLen=%d",
-		r.Method, r.URL.Path, trace, r.Header.Get("Content-Type"), r.ContentLength)
-
 	w.Header().Set("Content-Type", "application/json")
 
 	// ✅ 末尾スラッシュを吸収
 	path := strings.TrimSuffix(r.URL.Path, "/")
 
-	// ✅ /sns プレフィックスを吸収（/sns/users -> /users）
-	if strings.HasPrefix(path, "/sns/") {
-		path = strings.TrimPrefix(path, "/sns")
+	// ✅ /mall プレフィックスを吸収（/mall/users -> /users）
+	if strings.HasPrefix(path, "/mall/") {
+		path = strings.TrimPrefix(path, "/mall")
 	}
 
 	switch {
@@ -65,7 +60,6 @@ func (h *UserHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 
 	default:
-		log.Printf("[sns_user_handler] not_found method=%s path=%s (raw=%s)", r.Method, path, r.URL.Path)
 		w.WriteHeader(http.StatusNotFound)
 		_ = json.NewEncoder(w).Encode(map[string]string{"error": "not_found"})
 		return
@@ -78,20 +72,16 @@ func (h *UserHandler) get(w http.ResponseWriter, r *http.Request, id string) {
 
 	id = strings.TrimSpace(id)
 	if id == "" {
-		log.Printf("[sns_user_handler] get bad_request empty_id")
 		w.WriteHeader(http.StatusBadRequest)
 		_ = json.NewEncoder(w).Encode(map[string]string{"error": "invalid id"})
 		return
 	}
 
-	log.Printf("[sns_user_handler] get start id=%q", id)
 	u, err := h.uc.GetByID(ctx, id)
 	if err != nil {
-		log.Printf("[sns_user_handler] get failed id=%q err=%v", id, err)
 		writeUserErr(w, err)
 		return
 	}
-	log.Printf("[sns_user_handler] get ok id=%q", id)
 	_ = json.NewEncoder(w).Encode(u)
 }
 
@@ -105,13 +95,11 @@ func (h *UserHandler) post(w http.ResponseWriter, r *http.Request) {
 
 	raw, readErr := io.ReadAll(r.Body)
 	if readErr != nil {
-		log.Printf("[sns_user_handler] post read body failed err=%v", readErr)
 		w.WriteHeader(http.StatusBadRequest)
 		_ = json.NewEncoder(w).Encode(map[string]string{"error": "invalid body"})
 		return
 	}
 	r.Body = io.NopCloser(bytes.NewReader(raw))
-	log.Printf("[sns_user_handler] post raw body len=%d head=%q", len(raw), headString(raw, 300))
 
 	// snake_case / camelCase 両対応の入力
 	type postBody struct {
@@ -139,7 +127,6 @@ func (h *UserHandler) post(w http.ResponseWriter, r *http.Request) {
 
 	var b postBody
 	if err := json.NewDecoder(r.Body).Decode(&b); err != nil {
-		log.Printf("[sns_user_handler] post decode failed err=%v bodyHead=%q", err, headString(raw, 300))
 		w.WriteHeader(http.StatusBadRequest)
 		_ = json.NewEncoder(w).Encode(map[string]string{"error": "invalid json"})
 		return
@@ -151,7 +138,6 @@ func (h *UserHandler) post(w http.ResponseWriter, r *http.Request) {
 		id = strings.TrimSpace(b.UserID)
 	}
 	if id == "" {
-		log.Printf("[sns_user_handler] post bad_request empty_id")
 		w.WriteHeader(http.StatusBadRequest)
 		_ = json.NewEncoder(w).Encode(map[string]string{"error": "invalid id"})
 		return
@@ -217,18 +203,12 @@ func (h *UserHandler) post(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	log.Printf("[sns_user_handler] post parsed id=%q firstName=%v lastName=%v createdAt=%s updatedAt=%s deletedAt=%s",
-		id, sPtr(in.FirstName), sPtr(in.LastName),
-		createdAt.Format(time.RFC3339Nano), updatedAt.Format(time.RFC3339Nano), deletedAt.Format(time.RFC3339Nano))
-
 	// 既存判定（201/200 のため）
 	existed := true
 	if _, err := h.uc.GetByID(ctx, id); err != nil {
 		if err == userdom.ErrNotFound {
 			existed = false
 		} else {
-			// Firestore/ctx 系のエラーの可能性もあるのでここで落とす
-			log.Printf("[sns_user_handler] post precheck GetByID failed id=%q err=%v", id, err)
 			writeUserErr(w, err)
 			return
 		}
@@ -246,25 +226,20 @@ func (h *UserHandler) post(w http.ResponseWriter, r *http.Request) {
 		deletedAt,
 	)
 	if err != nil {
-		log.Printf("[sns_user_handler] post domain.New failed id=%q err=%v", id, err)
 		writeUserErr(w, err)
 		return
 	}
 
 	// ✅ Create ではなく Save（Upsert）に寄せる
-	log.Printf("[sns_user_handler] post usecase.Save start id=%q existed=%v", id, existed)
 	u, err := h.uc.Save(ctx, v)
 	if err != nil {
-		log.Printf("[sns_user_handler] post usecase.Save failed id=%q err=%v", id, err)
 		writeUserErr(w, err)
 		return
 	}
 
 	if existed {
-		log.Printf("[sns_user_handler] post ok (updated) id=%q", u.ID)
 		w.WriteHeader(http.StatusOK)
 	} else {
-		log.Printf("[sns_user_handler] post ok (created) id=%q", u.ID)
 		w.WriteHeader(http.StatusCreated)
 	}
 	_ = json.NewEncoder(w).Encode(u)
@@ -276,7 +251,6 @@ func (h *UserHandler) patch(w http.ResponseWriter, r *http.Request, id string) {
 
 	id = strings.TrimSpace(id)
 	if id == "" {
-		log.Printf("[sns_user_handler] patch bad_request empty_id")
 		w.WriteHeader(http.StatusBadRequest)
 		_ = json.NewEncoder(w).Encode(map[string]string{"error": "invalid id"})
 		return
@@ -284,18 +258,14 @@ func (h *UserHandler) patch(w http.ResponseWriter, r *http.Request, id string) {
 
 	raw, readErr := io.ReadAll(r.Body)
 	if readErr != nil {
-		log.Printf("[sns_user_handler] patch read body failed id=%q err=%v", id, readErr)
 		w.WriteHeader(http.StatusBadRequest)
 		_ = json.NewEncoder(w).Encode(map[string]string{"error": "invalid body"})
 		return
 	}
 	r.Body = io.NopCloser(bytes.NewReader(raw))
 
-	log.Printf("[sns_user_handler] patch raw body id=%q len=%d head=%q", id, len(raw), headString(raw, 300))
-
 	var in userdom.UpdateUserInput
 	if err := json.NewDecoder(r.Body).Decode(&in); err != nil {
-		log.Printf("[sns_user_handler] patch decode failed id=%q err=%v bodyHead=%q", id, err, headString(raw, 300))
 		w.WriteHeader(http.StatusBadRequest)
 		_ = json.NewEncoder(w).Encode(map[string]string{"error": "invalid json"})
 		return
@@ -313,17 +283,12 @@ func (h *UserHandler) patch(w http.ResponseWriter, r *http.Request, id string) {
 		v.DeletedAt = in.DeletedAt.UTC()
 	}
 
-	log.Printf("[sns_user_handler] patch usecase.Save start id=%q firstName=%v lastName=%v",
-		id, sPtr(in.FirstName), sPtr(in.LastName))
-
 	u, err := h.uc.Save(ctx, v)
 	if err != nil {
-		log.Printf("[sns_user_handler] patch usecase.Save failed id=%q err=%v", id, err)
 		writeUserErr(w, err)
 		return
 	}
 
-	log.Printf("[sns_user_handler] patch ok id=%q", id)
 	_ = json.NewEncoder(w).Encode(u)
 }
 
@@ -333,20 +298,16 @@ func (h *UserHandler) delete(w http.ResponseWriter, r *http.Request, id string) 
 
 	id = strings.TrimSpace(id)
 	if id == "" {
-		log.Printf("[sns_user_handler] delete bad_request empty_id")
 		w.WriteHeader(http.StatusBadRequest)
 		_ = json.NewEncoder(w).Encode(map[string]string{"error": "invalid id"})
 		return
 	}
 
-	log.Printf("[sns_user_handler] delete start id=%q", id)
 	if err := h.uc.Delete(ctx, id); err != nil {
-		log.Printf("[sns_user_handler] delete failed id=%q err=%v", id, err)
 		writeUserErr(w, err)
 		return
 	}
 
-	log.Printf("[sns_user_handler] delete ok id=%q", id)
 	_ = json.NewEncoder(w).Encode(map[string]string{"status": "ok"})
 }
 
@@ -363,11 +324,4 @@ func writeUserErr(w http.ResponseWriter, err error) {
 	}
 	w.WriteHeader(code)
 	_ = json.NewEncoder(w).Encode(map[string]string{"error": err.Error()})
-}
-
-func sPtr(p *string) string {
-	if p == nil {
-		return "<nil>"
-	}
-	return strings.TrimSpace(*p)
 }

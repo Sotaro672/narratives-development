@@ -4,7 +4,6 @@ package mallHandler
 import (
 	"context"
 	"errors"
-	"log"
 	"net/http"
 	"reflect"
 	"strings"
@@ -17,7 +16,7 @@ type ImageURLResolver interface {
 	ResolveForResponse(storedObjectPath string, storedIconURL string) string
 }
 
-type SNSTokenBlueprintHandler struct {
+type MallTokenBlueprintHandler struct {
 	Repo any
 
 	BrandNameResolver   any
@@ -27,12 +26,12 @@ type SNSTokenBlueprintHandler struct {
 	ImageResolver ImageURLResolver
 }
 
-func NewSNSTokenBlueprintHandler(repo any) http.Handler {
-	return &SNSTokenBlueprintHandler{Repo: repo}
+func NewMallTokenBlueprintHandler(repo any) http.Handler {
+	return &MallTokenBlueprintHandler{Repo: repo}
 }
 
-func NewSNSTokenBlueprintHandlerWithNameResolver(repo any, nameResolver any) http.Handler {
-	return &SNSTokenBlueprintHandler{
+func NewMallTokenBlueprintHandlerWithNameResolver(repo any, nameResolver any) http.Handler {
+	return &MallTokenBlueprintHandler{
 		Repo:                repo,
 		BrandNameResolver:   nameResolver,
 		CompanyNameResolver: nameResolver,
@@ -40,12 +39,12 @@ func NewSNSTokenBlueprintHandlerWithNameResolver(repo any, nameResolver any) htt
 }
 
 // ✅ 推奨: NameResolver + ImageURLResolver を注入
-func NewSNSTokenBlueprintHandlerWithNameAndImageResolver(
+func NewMallTokenBlueprintHandlerWithNameAndImageResolver(
 	repo any,
 	nameResolver any,
 	imageResolver ImageURLResolver,
 ) http.Handler {
-	return &SNSTokenBlueprintHandler{
+	return &MallTokenBlueprintHandler{
 		Repo:                repo,
 		BrandNameResolver:   nameResolver,
 		CompanyNameResolver: nameResolver,
@@ -53,28 +52,22 @@ func NewSNSTokenBlueprintHandlerWithNameAndImageResolver(
 	}
 }
 
-func (h *SNSTokenBlueprintHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+func (h *MallTokenBlueprintHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	if h == nil {
-		internalError(w, "sns tokenBlueprint handler is nil")
+		internalError(w, "mall tokenBlueprint handler is nil")
 		return
 	}
 
-	log.Printf("[sns_tokenBlueprint] request method=%s path=%s rawQuery=%q", r.Method, r.URL.Path, r.URL.RawQuery)
-
 	if r.Method != http.MethodGet {
-		log.Printf("[sns_tokenBlueprint] method not allowed method=%s path=%s", r.Method, r.URL.Path)
 		methodNotAllowed(w)
 		return
 	}
 
 	id, ok := parseTokenBlueprintPatchPath(r.URL.Path)
 	if !ok {
-		log.Printf("[sns_tokenBlueprint] not found (path mismatch) path=%s", r.URL.Path)
 		notFound(w)
 		return
 	}
-
-	log.Printf("[sns_tokenBlueprint] parsed patch path ok tokenBlueprintId=%q", id)
 
 	patch, err := h.getPatchByID(r.Context(), id)
 	if err != nil {
@@ -83,37 +76,19 @@ func (h *SNSTokenBlueprintHandler) ServeHTTP(w http.ResponseWriter, r *http.Requ
 			msg = "failed to get tokenBlueprint patch"
 		}
 
-		log.Printf("[sns_tokenBlueprint] getPatch error tokenBlueprintId=%q err=%q", id, msg)
-
 		if isNotFoundError(err) {
-			log.Printf("[sns_tokenBlueprint] respond 404 tokenBlueprintId=%q", id)
 			writeJSON(w, http.StatusNotFound, map[string]string{"error": msg})
 			return
 		}
-		log.Printf("[sns_tokenBlueprint] respond 500 tokenBlueprintId=%q", id)
+
 		internalError(w, msg)
 		return
 	}
 
-	log.Printf(
-		"[sns_tokenBlueprint] ok tokenBlueprintId=%q name=%q symbol=%q brandId=%q brandName=%q companyId=%q companyName=%q minted=%s hasIconUrl=%t iconUrl=%q",
-		id,
-		ptrStr(patch.Name),
-		ptrStr(patch.Symbol),
-		ptrStr(patch.BrandID),
-		ptrStr(patch.BrandName),
-		ptrStr(patch.CompanyID),
-		ptrStr(patch.CompanyName),
-		ptrBoolStr(patch.Minted),
-		strings.TrimSpace(ptrStr(patch.IconURL)) != "",
-		ptrStr(patch.IconURL),
-	)
-
-	log.Printf("[sns_tokenBlueprint] respond 200 tokenBlueprintId=%q", id)
 	writeJSON(w, http.StatusOK, patch)
 }
 
-func (h *SNSTokenBlueprintHandler) getPatchByID(ctx context.Context, id string) (tbdom.Patch, error) {
+func (h *MallTokenBlueprintHandler) getPatchByID(ctx context.Context, id string) (tbdom.Patch, error) {
 	id = strings.TrimSpace(id)
 	if id == "" {
 		return tbdom.Patch{}, errors.New("tokenBlueprint id is empty")
@@ -121,14 +96,6 @@ func (h *SNSTokenBlueprintHandler) getPatchByID(ctx context.Context, id string) 
 	if h.Repo == nil {
 		return tbdom.Patch{}, errors.New("tokenBlueprint repo is nil")
 	}
-
-	// ✅ 注入確認ログ（ここが重要）
-	log.Printf(
-		"[sns_tokenBlueprint] injected? brandResolver=%t(%T) companyResolver=%t(%T) imageResolver=%t(%T)",
-		h.BrandNameResolver != nil, h.BrandNameResolver,
-		h.CompanyNameResolver != nil, h.CompanyNameResolver,
-		h.ImageResolver != nil, h.ImageResolver,
-	)
 
 	v, err := callAny(h.Repo, []string{"GetByID", "GetById"}, ctx, id)
 	if err != nil {
@@ -138,72 +105,39 @@ func (h *SNSTokenBlueprintHandler) getPatchByID(ctx context.Context, id string) 
 		return tbdom.Patch{}, errors.New("tokenBlueprint is nil")
 	}
 
-	log.Printf("[sns_tokenBlueprint] repo returned type=%T", v)
-
-	log.Printf(
-		"[sns_tokenBlueprint] icon candidates(raw): IconID=%q IconUrl=%q iconUrl=%q TokenIconURL=%q TokenIconUrl=%q IconObjectPath=%q IconPath=%q IconStoragePath=%q",
-		ptrStr(pickStringPtrField(v, "IconID", "IconId", "iconId")),
-		ptrStr(pickStringPtrField(v, "IconUrl")),
-		ptrStr(pickStringPtrField(v, "iconUrl")),
-		ptrStr(pickStringPtrField(v, "TokenIconURL")),
-		ptrStr(pickStringPtrField(v, "TokenIconUrl")),
-		ptrStr(pickStringPtrField(v, "IconObjectPath")),
-		ptrStr(pickStringPtrField(v, "IconPath")),
-		ptrStr(pickStringPtrField(v, "IconStoragePath")),
-	)
-
 	patch := toPatchBestEffort(v)
 
-	// ✅ IconURL 補完（必ず試す + “空だった理由” をログ）
-	if strings.TrimSpace(ptrStr(patch.IconURL)) == "" {
-		if h.ImageResolver == nil {
-			log.Printf("[sns_tokenBlueprint] iconUrl resolve skipped: ImageResolver is nil")
-		} else {
-			// 1) objectPath/iconId があればそれを使う
-			obj := pickStringPtrFieldDeep(
-				v,
-				"IconID", "IconId", "iconId",
-				"IconObjectPath", "IconPath", "IconStoragePath", "IconGcsPath", "IconGCSPath",
-				"Icon", "TokenIcon",
-			)
+	// ✅ IconURL 補完（必ず試す）
+	if strings.TrimSpace(ptrStr(patch.IconURL)) == "" && h.ImageResolver != nil {
+		// 1) objectPath/iconId があればそれを使う
+		obj := pickStringPtrFieldDeep(
+			v,
+			"IconID", "IconId", "iconId",
+			"IconObjectPath", "IconPath", "IconStoragePath", "IconGcsPath", "IconGCSPath",
+			"Icon", "TokenIcon",
+		)
 
-			objStr := strings.TrimSpace(ptrStr(obj))
-			if objStr != "" {
-				u := strings.TrimSpace(h.ImageResolver.ResolveForResponse(objStr, ""))
-				log.Printf("[sns_tokenBlueprint] iconUrl resolve try objectPath=%q -> %q", objStr, u)
-				if u != "" {
-					patch.IconURL = strPtr(u)
-				}
+		objStr := strings.TrimSpace(ptrStr(obj))
+		if objStr != "" {
+			u := strings.TrimSpace(h.ImageResolver.ResolveForResponse(objStr, ""))
+			if u != "" {
+				patch.IconURL = strPtr(u)
 			}
+		}
 
-			// 2) まだ空なら固定パス "{id}/icon"
-			if strings.TrimSpace(ptrStr(patch.IconURL)) == "" {
-				fixed := strings.Trim(strings.TrimSpace(id), "/") + "/icon"
-				u := strings.TrimSpace(h.ImageResolver.ResolveForResponse(fixed, ""))
-				log.Printf("[sns_tokenBlueprint] iconUrl resolve try fixed objectPath=%q -> %q", fixed, u)
-				if u != "" {
-					patch.IconURL = strPtr(u)
-				}
+		// 2) まだ空なら固定パス "{id}/icon"
+		if strings.TrimSpace(ptrStr(patch.IconURL)) == "" {
+			fixed := strings.Trim(strings.TrimSpace(id), "/") + "/icon"
+			u := strings.TrimSpace(h.ImageResolver.ResolveForResponse(fixed, ""))
+			if u != "" {
+				patch.IconURL = strPtr(u)
 			}
 		}
 	}
 
-	log.Printf(
-		"[sns_tokenBlueprint] mapped patch iconUrl=%q has=%t",
-		ptrStr(patch.IconURL),
-		strings.TrimSpace(ptrStr(patch.IconURL)) != "",
-	)
-
 	// ============================================================
 	// ✅ companyId / companyName の期待値を満たすための補完ロジック
 	// ============================================================
-
-	// 0) companyId が tokenBlueprint から取れたかログ
-	log.Printf(
-		"[sns_tokenBlueprint] mapped ids: brandId=%q companyId=%q",
-		ptrStr(patch.BrandID),
-		ptrStr(patch.CompanyID),
-	)
 
 	// 1) companyId が空なら、brandId から companyId を補完する（resolver 経由）
 	if strings.TrimSpace(ptrStr(patch.CompanyID)) == "" && strings.TrimSpace(ptrStr(patch.BrandID)) != "" {
@@ -217,9 +151,6 @@ func (h *SNSTokenBlueprintHandler) getPatchByID(ctx context.Context, id string) 
 
 		if cid, ok := resolveCompanyIDFromBrandBestEffort(ctx, res, brandID); ok {
 			patch.CompanyID = strPtr(cid)
-			log.Printf("[sns_tokenBlueprint] derived companyId from brandId brandId=%q -> companyId=%q", brandID, cid)
-		} else {
-			log.Printf("[sns_tokenBlueprint] derive companyId from brandId failed brandId=%q resolver=%T", brandID, res)
 		}
 	}
 
@@ -232,9 +163,6 @@ func (h *SNSTokenBlueprintHandler) getPatchByID(ctx context.Context, id string) 
 	if patch.BrandName == nil && patch.BrandID != nil && strings.TrimSpace(*patch.BrandID) != "" {
 		if name, ok := resolveBrandNameBestEffort(ctx, h.BrandNameResolver, strings.TrimSpace(*patch.BrandID)); ok {
 			patch.BrandName = strPtr(name)
-			log.Printf("[sns_tokenBlueprint] brandName resolved brandId=%q -> %q", strings.TrimSpace(*patch.BrandID), name)
-		} else {
-			log.Printf("[sns_tokenBlueprint] brandName resolve failed brandId=%q resolver=%T", strings.TrimSpace(*patch.BrandID), h.BrandNameResolver)
 		}
 	}
 
@@ -247,26 +175,15 @@ func (h *SNSTokenBlueprintHandler) getPatchByID(ctx context.Context, id string) 
 	if patch.CompanyName == nil && patch.CompanyID != nil && strings.TrimSpace(*patch.CompanyID) != "" {
 		if name, ok := resolveCompanyNameBestEffort(ctx, h.CompanyNameResolver, strings.TrimSpace(*patch.CompanyID)); ok {
 			patch.CompanyName = strPtr(name)
-			log.Printf("[sns_tokenBlueprint] companyName resolved companyId=%q -> %q", strings.TrimSpace(*patch.CompanyID), name)
-		} else {
-			log.Printf("[sns_tokenBlueprint] companyName resolve failed companyId=%q resolver=%T", strings.TrimSpace(*patch.CompanyID), h.CompanyNameResolver)
 		}
 	}
-
-	log.Printf(
-		"[sns_tokenBlueprint] final patch: brandId=%q brandName=%q companyId=%q companyName=%q",
-		ptrStr(patch.BrandID),
-		ptrStr(patch.BrandName),
-		ptrStr(patch.CompanyID),
-		ptrStr(patch.CompanyName),
-	)
 
 	return patch, nil
 }
 
 func parseTokenBlueprintPatchPath(path string) (id string, ok bool) {
 	p := strings.TrimSuffix(strings.TrimSpace(path), "/")
-	const prefix = "/sns/token-blueprints/"
+	const prefix = "/mall/token-blueprints/"
 	const suffix = "/patch"
 	if !strings.HasPrefix(p, prefix) || !strings.HasSuffix(p, suffix) {
 		return "", false
@@ -428,16 +345,6 @@ func strPtr(s string) *string {
 	return &x
 }
 
-func ptrBoolStr(b *bool) string {
-	if b == nil {
-		return "(nil)"
-	}
-	if *b {
-		return "true"
-	}
-	return "false"
-}
-
 func resolveBrandNameBestEffort(ctx context.Context, resolver any, brandID string) (string, bool) {
 	if resolver == nil {
 		return "", false
@@ -506,8 +413,7 @@ func resolveCompanyNameBestEffort(ctx context.Context, resolver any, companyID s
 	return "", false
 }
 
-// ✅ NEW: brandId から companyId を解決する（NameResolver に ResolveBrandCompanyID を追加した前提）
-// 返り値: (companyId, ok)
+// ✅ brandId から companyId を解決する（NameResolver に ResolveBrandCompanyID を追加した前提）
 func resolveCompanyIDFromBrandBestEffort(ctx context.Context, resolver any, brandID string) (string, bool) {
 	if resolver == nil {
 		return "", false
@@ -518,8 +424,8 @@ func resolveCompanyIDFromBrandBestEffort(ctx context.Context, resolver any, bran
 	}
 
 	for _, m := range []string{
-		"ResolveBrandCompanyID", // ✅ 追加した正攻法
-		"ResolveBrandCompanyId", // 揺れ
+		"ResolveBrandCompanyID",
+		"ResolveBrandCompanyId",
 		"ResolveCompanyIDByBrandID",
 		"ResolveCompanyIdByBrandId",
 		"CompanyIDByBrandID",

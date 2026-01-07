@@ -11,23 +11,23 @@ import (
 // ============================================================
 
 type SNSCatalogDTO struct {
-	List SNSCatalogListDTO `json:"list"`
+	List CatalogListDTO `json:"list"`
 
-	Inventory      *SNSCatalogInventoryDTO `json:"inventory,omitempty"`
-	InventoryError string                  `json:"inventoryError,omitempty"`
+	Inventory      *CatalogInventoryDTO `json:"inventory,omitempty"`
+	InventoryError string               `json:"inventoryError,omitempty"`
 
-	ProductBlueprint      *SNSCatalogProductBlueprintDTO `json:"productBlueprint,omitempty"`
-	ProductBlueprintError string                         `json:"productBlueprintError,omitempty"`
+	ProductBlueprint      *CatalogProductBlueprintDTO `json:"productBlueprint,omitempty"`
+	ProductBlueprintError string                      `json:"productBlueprintError,omitempty"`
 
 	// ✅ tokenBlueprint patch
 	TokenBlueprint      *tbdom.Patch `json:"tokenBlueprint,omitempty"`
 	TokenBlueprintError string       `json:"tokenBlueprintError,omitempty"`
 
-	ModelVariations      []SNSCatalogModelVariationDTO `json:"modelVariations,omitempty"`
-	ModelVariationsError string                        `json:"modelVariationsError,omitempty"`
+	ModelVariations      []CatalogModelVariationDTO `json:"modelVariations,omitempty"`
+	ModelVariationsError string                     `json:"modelVariationsError,omitempty"`
 }
 
-type SNSCatalogListDTO struct {
+type CatalogListDTO struct {
 	ID          string              `json:"id"`
 	Title       string              `json:"title"`
 	Description string              `json:"description"`
@@ -41,11 +41,11 @@ type SNSCatalogListDTO struct {
 }
 
 // ✅ inventory stock model value (same shape as SNS inventory response)
-type SNSCatalogInventoryModelStockDTO struct {
+type CatalogInventoryModelStockDTO struct {
 	Products map[string]bool `json:"products,omitempty"`
 }
 
-type SNSCatalogInventoryDTO struct {
+type CatalogInventoryDTO struct {
 	ID                 string `json:"id"`
 	ProductBlueprintID string `json:"productBlueprintId"`
 	TokenBlueprintID   string `json:"tokenBlueprintId"`
@@ -54,10 +54,10 @@ type SNSCatalogInventoryDTO struct {
 	ModelIDs []string `json:"modelIds,omitempty"`
 
 	// ✅ stock (key=modelId)
-	Stock map[string]SNSCatalogInventoryModelStockDTO `json:"stock,omitempty"`
+	Stock map[string]CatalogInventoryModelStockDTO `json:"stock,omitempty"`
 }
 
-type SNSCatalogProductBlueprintDTO struct {
+type CatalogProductBlueprintDTO struct {
 	ID               string   `json:"id"`
 	ProductName      string   `json:"productName"`
 	BrandID          string   `json:"brandId"`
@@ -73,7 +73,7 @@ type SNSCatalogProductBlueprintDTO struct {
 	ProductIDTagType string   `json:"productIdTagType"`
 }
 
-type SNSCatalogModelVariationDTO struct {
+type CatalogModelVariationDTO struct {
 	ID                 string `json:"id"`
 	ProductBlueprintID string `json:"productBlueprintId"`
 	ModelNumber        string `json:"modelNumber"`

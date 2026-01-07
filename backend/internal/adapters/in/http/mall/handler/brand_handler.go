@@ -40,8 +40,8 @@ func (h *SNSBrandHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	path := strings.TrimSuffix(r.URL.Path, "/")
 
 	// GET /sns/brands/{id}
-	if strings.HasPrefix(path, "/sns/brands/") {
-		id := strings.TrimSpace(strings.TrimPrefix(path, "/sns/brands/"))
+	if strings.HasPrefix(path, "/mall/brands/") {
+		id := strings.TrimSpace(strings.TrimPrefix(path, "/mall/brands/"))
 		h.get(w, r, id)
 		return
 	}

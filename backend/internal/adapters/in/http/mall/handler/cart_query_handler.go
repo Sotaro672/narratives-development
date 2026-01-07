@@ -14,15 +14,15 @@ import (
 // SNSCartQueryHandler exposes SNSCartQuery via HTTP.
 // - GET /sns/cart/query?avatarId=...
 // - (router 側で振り分ければ) GET /sns/cart?avatarId=... も同じレスポンスで返せる
-type SNSCartQueryHandler struct {
-	Q *snsquery.SNSCartQuery
+type CartQueryHandler struct {
+	Q *snsquery.CartQuery
 }
 
-func NewSNSCartQueryHandler(q *snsquery.SNSCartQuery) http.Handler {
-	return &SNSCartQueryHandler{Q: q}
+func NewCartQueryHandler(q *snsquery.CartQuery) http.Handler {
+	return &CartQueryHandler{Q: q}
 }
 
-func (h *SNSCartQueryHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+func (h *CartQueryHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	if h == nil || h.Q == nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]any{
 			"error": "sns cart query handler: query is nil",

@@ -1,4 +1,4 @@
-// backend\internal\platform\di\mall_container.go
+// backend/internal/platform/di/mall_container.go
 package di
 
 import (
@@ -10,33 +10,29 @@ import (
 	"cloud.google.com/go/firestore"
 	firebaseauth "firebase.google.com/go/v4/auth"
 
-	mallhttp "narratives/internal/adapters/in/http/mall"
+	mall "narratives/internal/adapters/in/http/mall"
 	mallHandler "narratives/internal/adapters/in/http/mall/handler"
+	mallwebhook "narratives/internal/adapters/in/http/mall/webhook"
 	"narratives/internal/adapters/in/http/middleware"
 	outfs "narratives/internal/adapters/out/firestore"
-	snsquery "narratives/internal/application/query/mall"
+	mallquery "narratives/internal/application/query/mall"
 	appresolver "narratives/internal/application/resolver"
 	usecase "narratives/internal/application/usecase"
 	ldom "narratives/internal/domain/list"
 )
 
-// ------------------------------------------------------------
-// ✅ Route name constants (freeze naming variance)
-// ------------------------------------------------------------
-
 const (
-	SNSPaymentPath = "/sns/payment" // ✅ official payment endpoint (single source of truth)
-	SNSOrdersPath  = "/sns/orders"  // ✅ official orders endpoint
+	StripeWebhookPath = "/mall/webhooks/stripe"
 )
 
 // ------------------------------------------------------------
-// Hit tracing (minimal / deterministic)
+// Hit tracing
 // ------------------------------------------------------------
 
 type hit struct {
 	OK   bool
-	From string // "Container.method" / "RouterDeps.field" / "constructed"
-	Name string // method/field/ctor name
+	From string
+	Name string
 }
 
 func (h hit) String() string {
@@ -57,54 +53,43 @@ func (h hit) String() string {
 	return from + ":" + name
 }
 
-// SNSDeps is a buyer-facing (sns/mall) HTTP dependency set.
+// SNSDeps (kept for compatibility with existing wiring)
 type SNSDeps struct {
-	// Handlers
 	List             http.Handler
 	Inventory        http.Handler
 	ProductBlueprint http.Handler
 	Model            http.Handler
 	Catalog          http.Handler
+	TokenBlueprint   http.Handler
 
-	TokenBlueprint http.Handler // patch
-
-	// name resolver endpoints
 	Company http.Handler
 	Brand   http.Handler
 
-	// auth entry (cart empty ok)
 	SignIn http.Handler
 
-	// auth onboarding resources
 	User            http.Handler
 	ShippingAddress http.Handler
 	BillingAddress  http.Handler
 	Avatar          http.Handler
 
-	// optional (currently may be nil)
 	AvatarState http.Handler
 	Wallet      http.Handler
 	Post        http.Handler
 
-	// cart/preview
 	Cart    http.Handler
 	Preview http.Handler
 
-	// payment (order context / checkout)
 	Payment http.Handler
-
-	// ✅ NEW: orders (create/get)
-	Order http.Handler
+	Order   http.Handler
 }
 
-// NewSNSDeps wires SNS handlers.
 func NewSNSDeps(
 	listUC *usecase.ListUsecase,
 	invUC *usecase.InventoryUsecase,
 	pbUC *usecase.ProductBlueprintUsecase,
 	modelUC *usecase.ModelUsecase,
 	tokenBlueprintUC *usecase.TokenBlueprintUsecase,
-	catalogQ *snsquery.SNSCatalogQuery,
+	catalogQ *mallquery.SNSCatalogQuery,
 ) SNSDeps {
 	return NewSNSDepsWithNameResolver(
 		listUC,
@@ -112,7 +97,7 @@ func NewSNSDeps(
 		pbUC,
 		modelUC,
 		tokenBlueprintUC,
-		nil, // nameResolver
+		nil,
 		catalogQ,
 	)
 }
@@ -124,7 +109,7 @@ func NewSNSDepsWithNameResolver(
 	modelUC *usecase.ModelUsecase,
 	tokenBlueprintUC *usecase.TokenBlueprintUsecase,
 	nameResolver *appresolver.NameResolver,
-	catalogQ *snsquery.SNSCatalogQuery,
+	catalogQ *mallquery.SNSCatalogQuery,
 ) SNSDeps {
 	return NewSNSDepsWithNameResolverAndOrgHandlers(
 		listUC,
@@ -150,7 +135,7 @@ func NewSNSDepsWithNameResolverAndOrgHandlers(
 	brandUC *usecase.BrandUsecase,
 
 	nameResolver *appresolver.NameResolver,
-	catalogQ *snsquery.SNSCatalogQuery,
+	catalogQ *mallquery.SNSCatalogQuery,
 ) SNSDeps {
 	if catalogQ != nil && nameResolver != nil && catalogQ.NameResolver == nil {
 		catalogQ.NameResolver = nameResolver
@@ -166,10 +151,10 @@ func NewSNSDepsWithNameResolverAndOrgHandlers(
 	var brandHandler http.Handler
 
 	if listUC != nil {
-		listHandler = mallHandler.NewSNSListHandler(listUC)
+		listHandler = mallHandler.NewMallListHandler(listUC)
 	}
 	if invUC != nil {
-		invHandler = mallHandler.NewSNSInventoryHandler(invUC)
+		invHandler = mallHandler.NewMallInventoryHandler(invUC)
 	}
 	if pbUC != nil {
 		pbHandler = mallHandler.NewSNSProductBlueprintHandler(pbUC)
@@ -180,7 +165,7 @@ func NewSNSDepsWithNameResolverAndOrgHandlers(
 		}
 	}
 	if modelUC != nil {
-		modelHandler = mallHandler.NewSNSModelHandler(modelUC)
+		modelHandler = mallHandler.NewMallModelHandler(modelUC)
 	}
 	if catalogQ != nil {
 		catalogHandler = mallHandler.NewSNSCatalogHandler(catalogQ)
@@ -193,7 +178,7 @@ func NewSNSDepsWithNameResolverAndOrgHandlers(
 	}
 
 	if tokenBlueprintUC != nil {
-		tokenBlueprintHandler = mallHandler.NewSNSTokenBlueprintHandler(tokenBlueprintUC)
+		tokenBlueprintHandler = mallHandler.NewMallTokenBlueprintHandler(tokenBlueprintUC)
 		if nameResolver != nil {
 			setOptionalResolverField(tokenBlueprintHandler, "BrandNameResolver", nameResolver)
 			setOptionalResolverField(tokenBlueprintHandler, "CompanyNameResolver", nameResolver)
@@ -215,41 +200,23 @@ func NewSNSDepsWithNameResolverAndOrgHandlers(
 
 		Company: companyHandler,
 		Brand:   brandHandler,
-
-		SignIn:          nil,
-		User:            nil,
-		ShippingAddress: nil,
-		BillingAddress:  nil,
-		Avatar:          nil,
-
-		AvatarState: nil,
-		Wallet:      nil,
-		Post:        nil,
-
-		Cart:    nil,
-		Preview: nil,
-
-		Payment: nil,
-		Order:   nil,
 	}
 }
 
-// RegisterSNSFromContainer registers SNS routes using *Container.
-func RegisterSNSFromContainer(mux *http.ServeMux, cont *Container) {
+// RegisterMallFromContainer registers mall routes onto mux using *Container.
+func RegisterMallFromContainer(mux *http.ServeMux, cont *Container) {
 	if mux == nil || cont == nil {
 		return
 	}
 
 	depsAny := any(cont.RouterDeps())
 
-	// --------------------------------------------
-	// 1) Direct Container.method (fixed names)
-	// --------------------------------------------
 	var (
 		hitSignIn   hit
 		hitShip     hit
 		hitPay      hit
 		hitOrder    hit
+		hitWallet   hit
 		hitNameRes  hit
 		hitCatalogQ hit
 		hitCartQ    hit
@@ -258,67 +225,114 @@ func RegisterSNSFromContainer(mux *http.ServeMux, cont *Container) {
 
 		hitCart    hit
 		hitPreview hit
+
+		hitStripeWH hit
 	)
 
-	// Queries / resolver (direct)
-	nameResolver := cont.SNSNameResolver()
-	hitNameRes = hit{OK: nameResolver != nil, From: "Container.method", Name: "SNSNameResolver"}
+	// --------------------------------------------------------
+	// Core clients
+	// --------------------------------------------------------
+	fsClient := getFirestoreClientStrict(cont, depsAny)
 
-	catalogQ := cont.SNSCatalogQuery()
-	hitCatalogQ = hit{OK: catalogQ != nil, From: "Container.method", Name: "SNSCatalogQuery"}
+	// --------------------------------------------------------
+	// Resolver
+	// --------------------------------------------------------
+	nameResolver := getFieldPtr[*appresolver.NameResolver](depsAny, "NameResolver")
 
-	cartQ := cont.SNSCartQuery()
-	hitCartQ = hit{OK: cartQ != nil, From: "Container.method", Name: "SNSCartQuery"}
+	hitNameRes = hit{OK: nameResolver != nil, From: "RouterDeps.field/Container.field", Name: "NameResolver"}
 
-	previewQ := cont.SNSPreviewQuery()
-	hitPrevQ = hit{OK: previewQ != nil, From: "Container.method", Name: "SNSPreviewQuery"}
+	// --------------------------------------------------------
+	// Queries (mall_container.go owns them; no Container methods)
+	// --------------------------------------------------------
+	var catalogQ *mallquery.SNSCatalogQuery
+	var cartQ *mallquery.CartQuery
+	var previewQ *mallquery.PreviewQuery
+	var orderQAny any
 
-	// Handlers (direct per your log)
-	signInH := cont.SNSSignInHandler()
-	hitSignIn = hit{OK: signInH != nil, From: "Container.method", Name: "SNSSignInHandler"}
+	// Catalog query needs several repos; build best-effort when Firestore is available.
+	if fsClient != nil {
+		// These constructors exist in outfs (same as container.go wiring).
+		listRepoFS := outfs.NewListRepositoryFS(fsClient)
+		invRepo := outfs.NewInventoryRepositoryFS(fsClient)
+		pbRepo := outfs.NewProductBlueprintRepositoryFS(fsClient)
+		modelRepo := outfs.NewModelRepositoryFS(fsClient)
 
-	shipH := cont.SNSShippingAddressHandler()
-	hitShip = hit{OK: shipH != nil, From: "Container.method", Name: "SNSShippingAddressHandler"}
+		// NOTE: adapter types are expected to exist in package di (they are already used in container.go).
+		catalogQ = mallquery.NewSNSCatalogQuery(
+			listRepoFS,
+			&snsCatalogInventoryRepoAdapter{repo: invRepo},
+			&snsCatalogProductBlueprintRepoAdapter{repo: pbRepo},
+			modelRepo,
+		)
+		if catalogQ != nil && nameResolver != nil && catalogQ.NameResolver == nil {
+			catalogQ.NameResolver = nameResolver
+		}
 
-	paymentH := cont.SNSPaymentHandler()
-	hitPay = hit{OK: paymentH != nil, From: "Container.method", Name: "SNSPaymentHandler"}
+		cartQ = mallquery.NewCartQuery(fsClient)
+		if cartQ != nil && nameResolver != nil && cartQ.Resolver == nil {
+			cartQ.Resolver = nameResolver
+		}
 
-	// --------------------------------------------
-	// 2) ListRepo: always construct from Firestore
-	// --------------------------------------------
+		previewQ = mallquery.NewPreviewQuery(fsClient)
+		if previewQ != nil && nameResolver != nil && previewQ.Resolver == nil {
+			previewQ.Resolver = nameResolver
+		}
+
+		// Payment context uses order query.
+		orderQAny = mallquery.NewOrderQuery(fsClient)
+	}
+
+	hitCatalogQ = hit{OK: catalogQ != nil, From: "constructed", Name: "mallquery.NewSNSCatalogQuery"}
+	hitCartQ = hit{OK: cartQ != nil, From: "constructed", Name: "mallquery.NewCartQuery"}
+	hitPrevQ = hit{OK: previewQ != nil, From: "constructed", Name: "mallquery.NewPreviewQuery"}
+
+	// If something else already provides an order query, prefer it (best-effort).
+	if orderQAny == nil {
+		orderQAny = getOrderQueryBestEffort(cont, depsAny)
+	}
+
+	// --------------------------------------------------------
+	// Direct handlers (mall_container.go owns them; no Container methods)
+	// --------------------------------------------------------
+	// sign-in: currently a noop (204). Replace with real impl when needed.
+	signInH := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusNoContent)
+	})
+	hitSignIn = hit{OK: signInH != nil, From: "constructed", Name: "sign-in 204"}
+
+	// shipping address
+	var shipH http.Handler
+	{
+		shipUC := getFieldPtr[*usecase.ShippingAddressUsecase](depsAny, "ShippingAddressUC", "ShippingAddressUsecase")
+		if shipUC != nil {
+			shipH = mallHandler.NewShippingAddressHandler(shipUC)
+		}
+	}
+	hitShip = hit{OK: shipH != nil, From: "constructed", Name: "mallHandler.NewShippingAddressHandler"}
+
+	// --------------------------------------------------------
+	// listRepo (for CartQuery/List name join etc.)
+	// --------------------------------------------------------
 	var listRepo ldom.Repository
 	{
-		fs := getFirestoreClientStrict(cont, depsAny)
-		if fs != nil {
-			listRepo = outfs.NewListRepositoryFS(fs)
+		if fsClient != nil {
+			listRepo = outfs.NewListRepositoryFS(fsClient)
 		}
 		hitListRepo = hit{OK: listRepo != nil, From: "constructed", Name: "outfs.NewListRepositoryFS"}
 	}
 
-	// --------------------------------------------
-	// 3) Inject resolver/repo into queries (fixed)
-	// --------------------------------------------
-	if catalogQ != nil && nameResolver != nil && catalogQ.NameResolver == nil {
-		catalogQ.NameResolver = nameResolver
-	}
-	if cartQ != nil && nameResolver != nil && cartQ.Resolver == nil {
-		cartQ.Resolver = nameResolver
-	}
+	// Inject to queries where applicable
 	if cartQ != nil && listRepo != nil && cartQ.ListRepo == nil {
 		cartQ.ListRepo = listRepo
 	}
-	if previewQ != nil && nameResolver != nil && previewQ.Resolver == nil {
-		previewQ.Resolver = nameResolver
-	}
 	if previewQ != nil && listRepo != nil {
-		// field may not exist → safe via reflection
 		setOptionalResolverField(previewQ, "ListRepo", listRepo)
 		setOptionalResolverField(previewQ, "ListRepository", listRepo)
 	}
 
-	// --------------------------------------------
-	// 4) Core usecases (RouterDeps.field)
-	// --------------------------------------------
+	// --------------------------------------------------------
+	// Usecases (from RouterDeps)
+	// --------------------------------------------------------
 	listUC := getFieldPtr[*usecase.ListUsecase](depsAny, "ListUC", "ListUsecase")
 	invUC := getFieldPtr[*usecase.InventoryUsecase](depsAny, "InventoryUC", "InventoryUsecase")
 	pbUC := getFieldPtr[*usecase.ProductBlueprintUsecase](depsAny, "ProductBlueprintUC", "ProductBlueprintUsecase")
@@ -328,58 +342,65 @@ func RegisterSNSFromContainer(mux *http.ServeMux, cont *Container) {
 	companyUC := getFieldPtr[*usecase.CompanyUsecase](depsAny, "CompanyUC", "CompanyUsecase")
 	brandUC := getFieldPtr[*usecase.BrandUsecase](depsAny, "BrandUC", "BrandUsecase")
 
-	// ✅ NEW: OrderUsecase -> SNS OrderHandler
-	orderUC := getFieldPtr[*usecase.OrderUsecase](depsAny, "OrderUC", "OrderUsecase", "SNSOrderUC", "SNSOrderUsecase")
+	orderUC := getFieldPtr[*usecase.OrderUsecase](depsAny, "OrderUC", "OrderUsecase")
+	invoiceUC := getFieldPtr[*usecase.InvoiceUsecase](depsAny, "InvoiceUC", "InvoiceUsecase")
+	paymentUC := getFieldPtr[*usecase.PaymentUsecase](depsAny, "PaymentUC", "PaymentUsecase")
+	walletUC := getFieldPtr[*usecase.WalletUsecase](depsAny, "WalletUC", "WalletUsecase")
 
-	// cartUC（write を生かすため拾えるなら拾う）
 	cartUC := getFieldPtr[*usecase.CartUsecase](depsAny, "CartUC", "CartUsecase")
-	if cartUC == nil {
-		// 最小限の追加：Container に cartUC getter がある場合だけ拾う（名揺れ吸収は増やさない）
-		if x, ok := any(cont).(interface{ CartUsecase() *usecase.CartUsecase }); ok {
-			cartUC = x.CartUsecase()
-		} else if x, ok := any(cont).(interface{ GetCartUsecase() *usecase.CartUsecase }); ok {
-			cartUC = x.GetCartUsecase()
-		}
-	}
 
-	// --------------------------------------------
-	// 5) Build base deps (list/inv/pb/model/token/catalog/org)
-	// --------------------------------------------
+	// --------------------------------------------------------
+	// Base deps (REST handlers)
+	// --------------------------------------------------------
 	snsDeps := NewSNSDepsWithNameResolverAndOrgHandlers(
 		listUC, invUC, pbUC, modelUC, tokenBlueprintUC,
 		companyUC, brandUC, nameResolver, catalogQ,
 	)
 
-	// Set direct handlers
 	snsDeps.SignIn = signInH
 	snsDeps.ShippingAddress = shipH
-	snsDeps.Payment = paymentH
 
-	// --------------------------------------------
-	// 6) Construct-fixed handlers
-	// --------------------------------------------
 	// User
 	{
-		userUC := getFieldPtr[*usecase.UserUsecase](depsAny, "UserUC", "UserUsecase", "SNSUserUC", "SNSUserUsecase")
+		userUC := getFieldPtr[*usecase.UserUsecase](depsAny, "UserUC", "UserUsecase")
 		if userUC != nil {
 			snsDeps.User = mallHandler.NewUserHandler(userUC)
 		}
 	}
+
 	// Billing
 	{
-		billUC := getFieldPtr[*usecase.BillingAddressUsecase](depsAny, "BillingAddressUC", "BillingAddressUsecase", "SNSBillingAddressUC", "SNSBillingAddressUsecase")
+		billUC := getFieldPtr[*usecase.BillingAddressUsecase](depsAny, "BillingAddressUC", "BillingAddressUsecase")
 		if billUC != nil {
 			snsDeps.BillingAddress = mallHandler.NewBillingAddressHandler(billUC)
 		}
 	}
+
 	// Avatar
 	{
-		avatarUC := getFieldPtr[*usecase.AvatarUsecase](depsAny, "AvatarUC", "AvatarUsecase", "SNSAvatarUC", "SNSAvatarUsecase")
+		avatarUC := getFieldPtr[*usecase.AvatarUsecase](depsAny, "AvatarUC", "AvatarUsecase")
 		if avatarUC != nil {
 			snsDeps.Avatar = mallHandler.NewAvatarHandler(avatarUC)
 		}
 	}
-	// ✅ NEW: Order
+
+	// Wallet
+	if walletUC != nil {
+		snsDeps.Wallet = mallHandler.NewWalletHandler(walletUC)
+		hitWallet = hit{OK: snsDeps.Wallet != nil, From: "constructed", Name: "mallHandler.NewWalletHandler"}
+	} else {
+		hitWallet = hit{OK: false, From: "RouterDeps.field", Name: "WalletUC"}
+	}
+
+	// Payment (with order query)
+	if paymentUC != nil {
+		snsDeps.Payment = mallHandler.NewPaymentHandlerWithOrderQuery(paymentUC, orderQAny)
+		hitPay = hit{OK: snsDeps.Payment != nil, From: "constructed", Name: "mallHandler.NewPaymentHandlerWithOrderQuery"}
+	} else {
+		hitPay = hit{OK: false, From: "RouterDeps.field", Name: "PaymentUC"}
+	}
+
+	// Order
 	if orderUC != nil {
 		snsDeps.Order = mallHandler.NewOrderHandler(orderUC)
 		hitOrder = hit{OK: snsDeps.Order != nil, From: "constructed", Name: "mallHandler.NewOrderHandler"}
@@ -387,13 +408,9 @@ func RegisterSNSFromContainer(mux *http.ServeMux, cont *Container) {
 		hitOrder = hit{OK: false, From: "RouterDeps.field", Name: "OrderUC"}
 	}
 
-	// --------------------------------------------
-	// 7) ✅ Cart Query connectivity restore (always-on for GET)
-	// --------------------------------------------
-	// - If cartQ exists: register /sns/cart GET via SNSCartQueryHandler (prevents 404)
-	// - If cartUC exists: non-GET goes to write handler; else 405
+	// Cart/Preview
 	if cartQ != nil {
-		qh := mallHandler.NewSNSCartQueryHandler(cartQ)
+		qh := mallHandler.NewCartQueryHandler(cartQ)
 
 		var core http.Handler
 		if cartUC != nil {
@@ -404,34 +421,28 @@ func RegisterSNSFromContainer(mux *http.ServeMux, cont *Container) {
 		snsDeps.Cart = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			p := r.URL.Path
 
-			// GET -> read-model
 			if r.Method == http.MethodGet {
-				// /sns/cart , /sns/cart/ , (if mux routes here) /sns/cart/query*
-				if p == "/sns/cart" || p == "/sns/cart/" || strings.HasPrefix(p, "/sns/cart/query") {
+				if p == "/mall/cart" || p == "/mall/cart/" || strings.HasPrefix(p, "/mall/cart/query") {
 					qh.ServeHTTP(w, r)
 					return
 				}
 			}
 
-			// non-GET -> write handler if available
 			if core != nil {
 				core.ServeHTTP(w, r)
 				return
 			}
 
-			// write not supported in this config
 			w.Header().Set("Allow", http.MethodGet)
 			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 		})
 
-		hitCart = hit{OK: snsDeps.Cart != nil, From: "constructed", Name: "wrapped(GET->SNSCartQueryHandler, else->CartHandler/405)"}
+		hitCart = hit{OK: snsDeps.Cart != nil, From: "constructed", Name: "wrapped(GET->CartQueryHandler, else->CartHandler/405)"}
 
-		// Preview route is optional; keep it only when we have core
 		if core != nil {
 			snsDeps.Preview = core
 		}
 	} else if cartUC != nil {
-		// (rare) cartQ nil but write exists
 		core := mallHandler.NewCartHandlerWithQueries(cartUC, nil, previewQ)
 		snsDeps.Cart = core
 		snsDeps.Preview = core
@@ -439,44 +450,7 @@ func RegisterSNSFromContainer(mux *http.ServeMux, cont *Container) {
 		hitPreview = hit{OK: true, From: "constructed", Name: "CartHandlerWithQueries (as preview)"}
 	}
 
-	// --------------------------------------------
-	// 8) Logs (inject result)
-	// --------------------------------------------
-	log.Printf("[mall_container] inject result signIn=%t user=%t ship=%t bill=%t avatar=%t cart=%t preview=%t payment=%t order=%t cartUC=%t cartQ=%t previewQ=%t listRepo=%t",
-		snsDeps.SignIn != nil,
-		snsDeps.User != nil,
-		snsDeps.ShippingAddress != nil,
-		snsDeps.BillingAddress != nil,
-		snsDeps.Avatar != nil,
-		snsDeps.Cart != nil,
-		snsDeps.Preview != nil,
-		snsDeps.Payment != nil,
-		snsDeps.Order != nil,
-		cartUC != nil,
-		cartQ != nil,
-		previewQ != nil,
-		listRepo != nil,
-	)
-
-	log.Printf("[mall_container] inject hits "+
-		"signIn=%s ship=%s payment=%s order=%s cart=%s preview=%s "+
-		"nameResolver=%s catalogQ=%s cartQ=%s previewQ=%s listRepo=%s",
-		hitSignIn.String(),
-		hitShip.String(),
-		hitPay.String(),
-		hitOrder.String(),
-		hitCart.String(),
-		hitPreview.String(),
-		hitNameRes.String(),
-		hitCatalogQ.String(),
-		hitCartQ.String(),
-		hitPrevQ.String(),
-		hitListRepo.String(),
-	)
-
-	// --------------------------------------------
-	// 9) Apply user_auth where needed (existing behavior)
-	// --------------------------------------------
+	// user_auth
 	{
 		userAuth := newUserAuthMiddlewareBestEffort(cont.FirebaseAuth)
 		if userAuth == nil {
@@ -489,76 +463,135 @@ func RegisterSNSFromContainer(mux *http.ServeMux, cont *Container) {
 				return userAuth.Handler(h)
 			}
 
-			// buyer-auth required
 			snsDeps.User = wrap(snsDeps.User)
 			snsDeps.ShippingAddress = wrap(snsDeps.ShippingAddress)
 			snsDeps.BillingAddress = wrap(snsDeps.BillingAddress)
 			snsDeps.Avatar = wrap(snsDeps.Avatar)
+			snsDeps.Wallet = wrap(snsDeps.Wallet)
 
-			// cart/preview/payment/order are protected in your current design
 			snsDeps.Cart = wrap(snsDeps.Cart)
 			snsDeps.Preview = wrap(snsDeps.Preview)
 			snsDeps.Payment = wrap(snsDeps.Payment)
 			snsDeps.Order = wrap(snsDeps.Order)
-
-			log.Printf("[mall_container] user_auth applied: user=%t ship=%t bill=%t avatar=%t cart=%t preview=%t payment=%t order=%t",
-				snsDeps.User != nil,
-				snsDeps.ShippingAddress != nil,
-				snsDeps.BillingAddress != nil,
-				snsDeps.Avatar != nil,
-				snsDeps.Cart != nil,
-				snsDeps.Preview != nil,
-				snsDeps.Payment != nil,
-				snsDeps.Order != nil,
-			)
 		}
 	}
 
-	RegisterSNSRoutes(mux, snsDeps)
-}
-
-// RegisterSNSRoutes registers buyer-facing routes onto mux.
-func RegisterSNSRoutes(mux *http.ServeMux, deps SNSDeps) {
-	if mux == nil {
-		return
-	}
-
-	// existing sns/mall register
-	mallhttp.Register(mux, mallhttp.Deps{
-		List:             deps.List,
-		Inventory:        deps.Inventory,
-		ProductBlueprint: deps.ProductBlueprint,
-		Model:            deps.Model,
-		Catalog:          deps.Catalog,
-
-		TokenBlueprint: deps.TokenBlueprint,
-
-		Company: deps.Company,
-		Brand:   deps.Brand,
-
-		SignIn: deps.SignIn,
-
-		User:            deps.User,
-		ShippingAddress: deps.ShippingAddress,
-		BillingAddress:  deps.BillingAddress,
-		Avatar:          deps.Avatar,
-
-		AvatarState: deps.AvatarState,
-		Wallet:      deps.Wallet,
-		Cart:        deps.Cart,
-		Preview:     deps.Preview,
-		Post:        deps.Post,
-
-		Payment: deps.Payment,
+	// routes
+	mall.Register(mux, mall.Deps{
+		List:             snsDeps.List,
+		Inventory:        snsDeps.Inventory,
+		ProductBlueprint: snsDeps.ProductBlueprint,
+		Model:            snsDeps.Model,
+		Catalog:          snsDeps.Catalog,
+		TokenBlueprint:   snsDeps.TokenBlueprint,
+		Company:          snsDeps.Company,
+		Brand:            snsDeps.Brand,
+		SignIn:           snsDeps.SignIn,
+		User:             snsDeps.User,
+		ShippingAddress:  snsDeps.ShippingAddress,
+		BillingAddress:   snsDeps.BillingAddress,
+		Avatar:           snsDeps.Avatar,
+		AvatarState:      snsDeps.AvatarState,
+		Wallet:           snsDeps.Wallet,
+		Cart:             snsDeps.Cart,
+		Post:             snsDeps.Post,
+		Payment:          snsDeps.Payment,
+		Preview:          snsDeps.Preview,
+		Order:            snsDeps.Order,
 	})
 
-	// ✅ payment endpoint hard-bind (freeze naming variance)
-	safeHandle(mux, SNSPaymentPath, deps.Payment)
-	safeHandle(mux, SNSPaymentPath+"/", deps.Payment)
+	// logs
+	log.Printf("[mall_container] inject hits "+
+		"signIn=%s ship=%s payment=%s order=%s wallet=%s cart=%s preview=%s "+
+		"nameResolver=%s catalogQ=%s cartQ=%s previewQ=%s listRepo=%s orderQ=%t",
+		hitSignIn.String(),
+		hitShip.String(),
+		hitPay.String(),
+		hitOrder.String(),
+		hitWallet.String(),
+		hitCart.String(),
+		hitPreview.String(),
+		hitNameRes.String(),
+		hitCatalogQ.String(),
+		hitCartQ.String(),
+		hitPrevQ.String(),
+		hitListRepo.String(),
+		orderQAny != nil,
+	)
 
-	// ✅ orders endpoint hard-bind
-	safeHandle(mux, SNSOrdersPath, deps.Order)
-	safeHandle(mux, SNSOrdersPath+"/", deps.Order)
+	// webhook (no user_auth)
+	if invoiceUC != nil && paymentUC != nil {
+		stripeWH := mallwebhook.NewStripeWebhookHandler(invoiceUC, paymentUC)
+		hitStripeWH = hit{OK: stripeWH != nil, From: "constructed", Name: "mallwebhook.NewStripeWebhookHandler"}
+
+		// ✅ エラー発見優先: safeHandle せず、そのまま登録（重複時は panic）
+		mux.Handle(StripeWebhookPath, stripeWH)
+		mux.Handle(StripeWebhookPath+"/", stripeWH)
+
+		log.Printf("[mall_container] webhook registered stripe=%s paths=%s,%s",
+			hitStripeWH.String(), StripeWebhookPath, StripeWebhookPath+"/",
+		)
+	} else {
+		hitStripeWH = hit{OK: false, From: "RouterDeps.field", Name: "InvoiceUC/PaymentUC"}
+		log.Printf("[mall_container] webhook NOT registered stripe=%s (missing InvoiceUC or PaymentUC)", hitStripeWH.String())
+	}
+}
+
+// ------------------------------------------------------------
+// order query getter (best-effort, type-mismatch safe)
+// ------------------------------------------------------------
+
+func getOrderQueryBestEffort(cont *Container, depsAny any) any {
+	// 1) Container methods (reflect)
+	if cont != nil {
+		rv := reflect.ValueOf(cont)
+		if rv.IsValid() {
+			for _, name := range []string{
+				"SNSOrderQuery",
+				"MallOrderQuery",
+				"OrderQuery",
+				"SNSOrderQueryService",
+			} {
+				m := rv.MethodByName(name)
+				if m.IsValid() && m.Type().NumIn() == 0 && m.Type().NumOut() == 1 {
+					out := m.Call(nil)
+					if len(out) == 1 && out[0].IsValid() && !out[0].IsNil() {
+						return out[0].Interface()
+					}
+				}
+			}
+		}
+	}
+
+	// 2) RouterDeps fields (reflect)
+	if depsAny != nil {
+		rv := reflect.ValueOf(depsAny)
+		if rv.Kind() == reflect.Interface && !rv.IsNil() {
+			rv = rv.Elem()
+		}
+		if rv.Kind() == reflect.Pointer && !rv.IsNil() {
+			rv = rv.Elem()
+		}
+		if rv.IsValid() && rv.Kind() == reflect.Struct {
+			for _, n := range []string{
+				"OrderQ",
+				"SNSOrderQuery",
+				"OrderQuery",
+				"SNSOrderQueryService",
+			} {
+				f := rv.FieldByName(n)
+				if !f.IsValid() || !f.CanInterface() {
+					continue
+				}
+				v := f.Interface()
+				if v != nil {
+					return v
+				}
+			}
+		}
+	}
+
+	return nil
 }
 
 // ------------------------------------------------------------
@@ -570,26 +603,6 @@ func newUserAuthMiddlewareBestEffort(fb *firebaseauth.Client) *middleware.UserAu
 		return nil
 	}
 	return &middleware.UserAuthMiddleware{FirebaseAuth: fb}
-}
-
-// ------------------------------------------------------------
-// ServeMux safe handle (avoid panic on duplicate registration)
-// ------------------------------------------------------------
-
-func safeHandle(mux *http.ServeMux, pattern string, h http.Handler) {
-	if mux == nil || h == nil {
-		return
-	}
-	pattern = strings.TrimSpace(pattern)
-	if pattern == "" {
-		return
-	}
-	defer func() {
-		if r := recover(); r != nil {
-			// already registered: ignore
-		}
-	}()
-	mux.Handle(pattern, h)
 }
 
 // ------------------------------------------------------------
@@ -680,7 +693,7 @@ func getFieldPtr[T any](src any, names ...string) T {
 }
 
 // ------------------------------------------------------------
-// Firestore client (minimal; used only for ListRepo)
+// Firestore client (minimal; used for repos/queries)
 // ------------------------------------------------------------
 
 func getFirestoreClientStrict(cont *Container, depsAny any) *firestore.Client {

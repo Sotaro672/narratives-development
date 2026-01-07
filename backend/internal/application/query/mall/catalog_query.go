@@ -27,8 +27,8 @@ import (
 // InventoryRepository returns already-shaped buyer-facing inventory DTO.
 // ✅ stock(products) を含んだ shape を返す前提
 type InventoryRepository interface {
-	GetByID(ctx context.Context, id string) (*snsdto.SNSCatalogInventoryDTO, error)
-	GetByProductAndTokenBlueprintID(ctx context.Context, productBlueprintID, tokenBlueprintID string) (*snsdto.SNSCatalogInventoryDTO, error)
+	GetByID(ctx context.Context, id string) (*snsdto.CatalogInventoryDTO, error)
+	GetByProductAndTokenBlueprintID(ctx context.Context, productBlueprintID, tokenBlueprintID string) (*snsdto.CatalogInventoryDTO, error)
 }
 
 // ✅ OPTIONAL: Stock の “key集合” を domain Mint.Stock(=Products) から復元するための追加口
@@ -167,7 +167,7 @@ func (q *SNSCatalogQuery) GetByListID(ctx context.Context, listID string) (snsdt
 	// ------------------------------------------------------------
 	// Inventory (prefer inventoryId; fallback to pb/tb query)
 	// ------------------------------------------------------------
-	var invDTO *snsdto.SNSCatalogInventoryDTO
+	var invDTO *snsdto.CatalogInventoryDTO
 
 	var invID string
 	var pbID string
@@ -368,7 +368,7 @@ func (q *SNSCatalogQuery) GetByListID(ctx context.Context, listID string) (snsdt
 			out.ModelVariationsError = e.Error()
 			log.Printf("[sns_catalog] model listVariations error listId=%q pbId=%q err=%q", listID, resolvedPBID, e.Error())
 		} else {
-			items := make([]snsdto.SNSCatalogModelVariationDTO, 0, len(res.Items))
+			items := make([]snsdto.CatalogModelVariationDTO, 0, len(res.Items))
 
 			// 1) まず metadata で items を作る
 			for _, it := range res.Items {
@@ -387,7 +387,7 @@ func (q *SNSCatalogQuery) GetByListID(ctx context.Context, listID string) (snsdt
 
 				dto, ok := toCatalogModelVariationDTOAny(mv)
 				if !ok {
-					dto = snsdto.SNSCatalogModelVariationDTO{
+					dto = snsdto.CatalogModelVariationDTO{
 						ID:           strings.TrimSpace(modelID),
 						Measurements: map[string]int{}, // ✅ {} を保証
 					}
@@ -433,7 +433,7 @@ func (q *SNSCatalogQuery) GetByListID(ctx context.Context, listID string) (snsdt
 // name resolving (productBlueprint -> brandName/companyName)
 // ============================================================
 
-func fillProductBlueprintNames(ctx context.Context, r *appresolver.NameResolver, dto *snsdto.SNSCatalogProductBlueprintDTO) {
+func fillProductBlueprintNames(ctx context.Context, r *appresolver.NameResolver, dto *snsdto.CatalogProductBlueprintDTO) {
 	if r == nil || dto == nil {
 		return
 	}
@@ -564,7 +564,7 @@ func getStringFieldBestEffort(target any, fieldName string) string {
 // normalizeInventoryStock ensures:
 // - Stock map is non-nil (if empty, keep nil OK)
 // - each stock[modelId].Products is non-nil (so JSON includes {} not null when needed)
-func normalizeInventoryStock(inv *snsdto.SNSCatalogInventoryDTO) {
+func normalizeInventoryStock(inv *snsdto.CatalogInventoryDTO) {
 	if inv == nil {
 		return
 	}
@@ -587,7 +587,7 @@ func normalizeInventoryStock(inv *snsdto.SNSCatalogInventoryDTO) {
 func ensureInventoryStockKeysFromMintIfNeeded(
 	ctx context.Context,
 	invRepo InventoryRepository,
-	invDTO *snsdto.SNSCatalogInventoryDTO,
+	invDTO *snsdto.CatalogInventoryDTO,
 	invID, pbID, tbID string,
 ) {
 	if invRepo == nil || invDTO == nil {
@@ -629,7 +629,7 @@ func ensureInventoryStockKeysFromMintIfNeeded(
 		return
 	}
 	if invDTO.Stock == nil {
-		invDTO.Stock = map[string]snsdto.SNSCatalogInventoryModelStockDTO{}
+		invDTO.Stock = map[string]snsdto.CatalogInventoryModelStockDTO{}
 	}
 
 	// value は products empty で良い（フロントは key数も products も扱える）
@@ -639,7 +639,7 @@ func ensureInventoryStockKeysFromMintIfNeeded(
 			continue
 		}
 		if _, exists := invDTO.Stock[m]; !exists {
-			invDTO.Stock[m] = snsdto.SNSCatalogInventoryModelStockDTO{Products: map[string]bool{}}
+			invDTO.Stock[m] = snsdto.CatalogInventoryModelStockDTO{Products: map[string]bool{}}
 		}
 	}
 
@@ -693,19 +693,19 @@ func ExtractStockModelIDsFromMint(m invdom.Mint) []string {
 	return keys
 }
 
-func stockKeyCount(stock map[string]snsdto.SNSCatalogInventoryModelStockDTO) int {
+func stockKeyCount(stock map[string]snsdto.CatalogInventoryModelStockDTO) int {
 	return len(stock)
 }
 
 // attachStockToModelVariations merges inv.Stock[modelId].Products into modelVariations items.
 // Also sets StockKeys (= number of model keys in inventory stock map).
-func attachStockToModelVariations(items *[]snsdto.SNSCatalogModelVariationDTO, inv *snsdto.SNSCatalogInventoryDTO) {
+func attachStockToModelVariations(items *[]snsdto.CatalogModelVariationDTO, inv *snsdto.CatalogInventoryDTO) {
 	if items == nil || len(*items) == 0 {
 		return
 	}
 
 	stockKeys := 0
-	var stock map[string]snsdto.SNSCatalogInventoryModelStockDTO
+	var stock map[string]snsdto.CatalogInventoryModelStockDTO
 
 	if inv != nil {
 		stock = inv.Stock
@@ -735,8 +735,8 @@ func attachStockToModelVariations(items *[]snsdto.SNSCatalogModelVariationDTO, i
 // mappers
 // ============================================================
 
-func toCatalogListDTO(l ldom.List) snsdto.SNSCatalogListDTO {
-	return snsdto.SNSCatalogListDTO{
+func toCatalogListDTO(l ldom.List) snsdto.CatalogListDTO {
+	return snsdto.CatalogListDTO{
 		ID:          strings.TrimSpace(l.ID),
 		Title:       strings.TrimSpace(l.Title),
 		Description: strings.TrimSpace(l.Description),
@@ -751,8 +751,8 @@ func toCatalogListDTO(l ldom.List) snsdto.SNSCatalogListDTO {
 	}
 }
 
-func toCatalogProductBlueprintDTO(pb *pbdom.ProductBlueprint) snsdto.SNSCatalogProductBlueprintDTO {
-	out := snsdto.SNSCatalogProductBlueprintDTO{
+func toCatalogProductBlueprintDTO(pb *pbdom.ProductBlueprint) snsdto.CatalogProductBlueprintDTO {
+	out := snsdto.CatalogProductBlueprintDTO{
 		ID:          strings.TrimSpace(pb.ID),
 		ProductName: strings.TrimSpace(pb.ProductName),
 		BrandID:     strings.TrimSpace(pb.BrandID),
@@ -773,23 +773,23 @@ func toCatalogProductBlueprintDTO(pb *pbdom.ProductBlueprint) snsdto.SNSCatalogP
 }
 
 // toCatalogModelVariationDTOAny converts *any* ModelVariation-like struct into DTO by reflection.
-func toCatalogModelVariationDTOAny(v any) (snsdto.SNSCatalogModelVariationDTO, bool) {
+func toCatalogModelVariationDTOAny(v any) (snsdto.CatalogModelVariationDTO, bool) {
 	if v == nil {
-		return snsdto.SNSCatalogModelVariationDTO{}, false
+		return snsdto.CatalogModelVariationDTO{}, false
 	}
 
 	rv := reflect.ValueOf(v)
 	if !rv.IsValid() {
-		return snsdto.SNSCatalogModelVariationDTO{}, false
+		return snsdto.CatalogModelVariationDTO{}, false
 	}
 	if rv.Kind() == reflect.Pointer {
 		if rv.IsNil() {
-			return snsdto.SNSCatalogModelVariationDTO{}, false
+			return snsdto.CatalogModelVariationDTO{}, false
 		}
 		rv = rv.Elem()
 	}
 	if rv.Kind() != reflect.Struct {
-		return snsdto.SNSCatalogModelVariationDTO{}, false
+		return snsdto.CatalogModelVariationDTO{}, false
 	}
 
 	// strings
@@ -798,14 +798,14 @@ func toCatalogModelVariationDTOAny(v any) (snsdto.SNSCatalogModelVariationDTO, b
 		id = pickStringField(rv.Interface(), "ID", "Id", "ModelID", "ModelId", "modelId")
 	}
 	if strings.TrimSpace(id) == "" {
-		return snsdto.SNSCatalogModelVariationDTO{}, false
+		return snsdto.CatalogModelVariationDTO{}, false
 	}
 
 	pbID := pickStringField(rv.Interface(), "ProductBlueprintID", "ProductBlueprintId", "productBlueprintId")
 	modelNumber := pickStringField(rv.Interface(), "ModelNumber", "modelNumber")
 	size := pickStringField(rv.Interface(), "Size", "size")
 
-	dto := snsdto.SNSCatalogModelVariationDTO{
+	dto := snsdto.CatalogModelVariationDTO{
 		ID:                 strings.TrimSpace(id),
 		ProductBlueprintID: strings.TrimSpace(pbID),
 		ModelNumber:        strings.TrimSpace(modelNumber),

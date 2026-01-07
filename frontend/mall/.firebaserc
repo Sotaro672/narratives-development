@@ -1,0 +1,15 @@
+{
+  "projects": {
+    "default": "narratives-development-26c2d"
+  },
+  "targets": {
+    "narratives-development-26c2d": {
+      "hosting": {
+        "sns": [
+          "narratives-development-mall"
+        ]
+      }
+    }
+  },
+  "etags": {}
+}

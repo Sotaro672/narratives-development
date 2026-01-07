@@ -34,8 +34,8 @@ func (h *BillingAddressHandler) ServeHTTP(w http.ResponseWriter, r *http.Request
 	path := strings.TrimSuffix(r.URL.Path, "/")
 
 	// ✅ /sns プレフィックス吸収（/sns/billing-addresses -> /billing-addresses）
-	if strings.HasPrefix(path, "/sns/") {
-		path = strings.TrimPrefix(path, "/sns")
+	if strings.HasPrefix(path, "/mall/") {
+		path = strings.TrimPrefix(path, "/mall")
 	}
 
 	// ✅ user_handler と同等の入口ログ

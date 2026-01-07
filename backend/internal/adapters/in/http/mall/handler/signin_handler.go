@@ -1,9 +1,8 @@
-// backend/internal/adapters/in/http/sns/handler/signin_handler.go
+// backend\internal\adapters\in\http\mall\handler\signin_handler.go
 package mallHandler
 
 import (
 	"encoding/json"
-	"log"
 	"net/http"
 	"strings"
 	"time"
@@ -13,7 +12,7 @@ import (
 )
 
 // SignInHandler is buyer-facing onboarding entry.
-// - POST /sns/sign-in
+// - POST /mall/sign-in
 // - Requires BootstrapAuthMiddleware (Firebase token verified)
 // - Ensures user exists (id = uid), returns user.
 type SignInHandler struct {
@@ -32,6 +31,14 @@ func (h *SignInHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// ✅ mall のみ受付（/mall/sign-in のみ。末尾スラッシュは吸収）
+	path := strings.TrimSuffix(strings.TrimSpace(r.URL.Path), "/")
+	if path != "/mall/sign-in" {
+		w.WriteHeader(http.StatusNotFound)
+		_ = json.NewEncoder(w).Encode(map[string]string{"error": "not_found"})
+		return
+	}
+
 	if r.Method != http.MethodPost {
 		w.WriteHeader(http.StatusMethodNotAllowed)
 		_ = json.NewEncoder(w).Encode(map[string]string{"error": "method_not_allowed"})
@@ -43,7 +50,6 @@ func (h *SignInHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	uid := getUIDFromContext(ctx)
 	if strings.TrimSpace(uid) == "" {
 		// bootstrap mw が付いていない/失敗している
-		log.Printf("[sns_signin] missing uid in context path=%s", r.URL.Path)
 		w.WriteHeader(http.StatusUnauthorized)
 		_ = json.NewEncoder(w).Encode(map[string]string{"error": "unauthorized"})
 		return
@@ -52,7 +58,6 @@ func (h *SignInHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	// 既存ユーザーなら返す
 	u, err := h.uc.GetByID(ctx, uid)
 	if err == nil {
-		log.Printf("[sns_signin] ok existing uid=%s", uid)
 		_ = json.NewEncoder(w).Encode(map[string]any{
 			"status":  "ok",
 			"created": false,
@@ -69,7 +74,6 @@ func (h *SignInHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		now, now, now,
 	)
 	if derr != nil {
-		log.Printf("[sns_signin] domain new failed uid=%s err=%v", uid, derr)
 		w.WriteHeader(http.StatusBadRequest)
 		_ = json.NewEncoder(w).Encode(map[string]string{"error": derr.Error()})
 		return
@@ -77,13 +81,11 @@ func (h *SignInHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	created, cerr := h.uc.Create(ctx, v)
 	if cerr != nil {
-		log.Printf("[sns_signin] create failed uid=%s err=%v", uid, cerr)
 		w.WriteHeader(http.StatusInternalServerError)
 		_ = json.NewEncoder(w).Encode(map[string]string{"error": cerr.Error()})
 		return
 	}
 
-	log.Printf("[sns_signin] ok created uid=%s", uid)
 	_ = json.NewEncoder(w).Encode(map[string]any{
 		"status":  "ok",
 		"created": true,

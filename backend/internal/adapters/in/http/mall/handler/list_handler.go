@@ -1,10 +1,9 @@
-// backend/internal/adapters/in/http/sns/handler/list_handler.go
+// backend/internal/adapters/in/http/mall/handler/list_handler.go
 package mallHandler
 
 import (
 	"encoding/json"
 	"errors"
-	"log"
 	"net/http"
 	"strings"
 
@@ -12,56 +11,55 @@ import (
 	ldom "narratives/internal/domain/list"
 )
 
-// SNSListHandler serves buyer-facing list endpoints.
-// Only returns: title, description, image(url), prices (+ optional inventory/product/token ids).
+// MallListHandler serves buyer-facing list endpoints.
 //
 // Routes:
-// - GET /sns/lists
-// - GET /sns/lists/{id}
-type SNSListHandler struct {
+// - GET /mall/lists
+// - GET /mall/lists/{id}
+type MallListHandler struct {
 	uc *usecase.ListUsecase
 }
 
-func NewSNSListHandler(uc *usecase.ListUsecase) http.Handler {
-	return &SNSListHandler{uc: uc}
+func NewMallListHandler(uc *usecase.ListUsecase) http.Handler {
+	return &MallListHandler{uc: uc}
 }
 
 // ------------------------------
-// Response DTOs (SNS)
+// Response DTOs (Mall buyer-facing)
 // ------------------------------
 
-type SnsListItem struct {
+type MallListItem struct {
 	ID          string              `json:"id"`
 	Title       string              `json:"title"`
 	Description string              `json:"description"`
 	Image       string              `json:"image"` // URL
 	Prices      []ldom.ListPriceRow `json:"prices"`
 
-	// ✅ optional (catalog で inventory を引くための補助)
+	// optional (catalog で inventory を引くための補助)
 	InventoryID        string `json:"inventoryId,omitempty"`
 	ProductBlueprintID string `json:"productBlueprintId,omitempty"`
 	TokenBlueprintID   string `json:"tokenBlueprintId,omitempty"`
 }
 
-type SnsListIndexResponse struct {
-	Items      []SnsListItem `json:"items"`
-	TotalCount int           `json:"totalCount"`
-	TotalPages int           `json:"totalPages"`
-	Page       int           `json:"page"`
-	PerPage    int           `json:"perPage"`
+type MallListIndexResponse struct {
+	Items      []MallListItem `json:"items"`
+	TotalCount int            `json:"totalCount"`
+	TotalPages int            `json:"totalPages"`
+	Page       int            `json:"page"`
+	PerPage    int            `json:"perPage"`
 }
 
 // ------------------------------
 // http.Handler
 // ------------------------------
 
-func (h *SNSListHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+func (h *MallListHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 
 	path := strings.TrimSuffix(strings.TrimSpace(r.URL.Path), "/")
 
-	// GET /sns/lists
-	if path == "/sns/lists" {
+	// GET /mall/lists
+	if path == "/mall/lists" {
 		if r.Method != http.MethodGet {
 			methodNotAllowed(w)
 			return
@@ -70,9 +68,9 @@ func (h *SNSListHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// GET /sns/lists/{id}
-	if strings.HasPrefix(path, "/sns/lists/") {
-		rest := strings.TrimPrefix(path, "/sns/lists/")
+	// GET /mall/lists/{id}
+	if strings.HasPrefix(path, "/mall/lists/") {
+		rest := strings.TrimPrefix(path, "/mall/lists/")
 		parts := strings.Split(rest, "/")
 		id := strings.TrimSpace(parts[0])
 		if id == "" {
@@ -95,10 +93,10 @@ func (h *SNSListHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 }
 
 // ------------------------------
-// GET /sns/lists
+// GET /mall/lists
 // ------------------------------
 
-func (h *SNSListHandler) listIndex(w http.ResponseWriter, r *http.Request) {
+func (h *MallListHandler) listIndex(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 
 	if h == nil || h.uc == nil {
@@ -117,7 +115,7 @@ func (h *SNSListHandler) listIndex(w http.ResponseWriter, r *http.Request) {
 	}
 	page := ldom.Page{Number: pageNum, PerPage: perPage}
 
-	// SNS: public-only safety filter
+	// buyer-facing safety filter: listing & not deleted
 	var f ldom.Filter
 	{
 		st := ldom.StatusListing
@@ -127,45 +125,21 @@ func (h *SNSListHandler) listIndex(w http.ResponseWriter, r *http.Request) {
 	}
 	sort := ldom.Sort{} // default
 
-	log.Printf(`[sns_list] request GET /sns/lists page=%d perPage=%d`, pageNum, perPage)
-
 	result, err := h.uc.List(ctx, f, sort, page)
 	if err != nil {
-		log.Printf(`[sns_list] response GET /sns/lists error=%q`, err.Error())
 		writeListErr(w, err)
 		return
 	}
 
-	items := make([]SnsListItem, 0, len(result.Items))
-	var loggedSample bool
-
+	items := make([]MallListItem, 0, len(result.Items))
 	for _, l := range result.Items {
 		if !isPublicListing(l.Status) {
 			continue
 		}
-		dto := toSnsListItem(l)
-		items = append(items, dto)
-
-		// ✅ フロントへ返す DTO shape をサンプルで1件だけログ
-		if !loggedSample {
-			minPrice, maxPrice := minMaxPrice(dto.Prices)
-			log.Printf(
-				`[sns_list] dto sample id=%q title=%q invId=%q pbId=%q tbId=%q prices=%d priceMin=%d priceMax=%d image=%q`,
-				dto.ID,
-				dto.Title,
-				dto.InventoryID,
-				dto.ProductBlueprintID,
-				dto.TokenBlueprintID,
-				len(dto.Prices),
-				minPrice,
-				maxPrice,
-				dto.Image,
-			)
-			loggedSample = true
-		}
+		items = append(items, toMallListItem(l))
 	}
 
-	resp := SnsListIndexResponse{
+	resp := MallListIndexResponse{
 		Items:      items,
 		TotalCount: result.TotalCount,
 		TotalPages: result.TotalPages,
@@ -173,24 +147,14 @@ func (h *SNSListHandler) listIndex(w http.ResponseWriter, r *http.Request) {
 		PerPage:    perPage,
 	}
 
-	// ✅ 返す直前に summary をログ（payload全量は重いので件数中心）
-	log.Printf(
-		`[sns_list] response GET /sns/lists items=%d total=%d totalPages=%d page=%d perPage=%d`,
-		len(resp.Items),
-		resp.TotalCount,
-		resp.TotalPages,
-		resp.Page,
-		resp.PerPage,
-	)
-
 	writeJSON(w, http.StatusOK, resp)
 }
 
 // ------------------------------
-// GET /sns/lists/{id}
+// GET /mall/lists/{id}
 // ------------------------------
 
-func (h *SNSListHandler) get(w http.ResponseWriter, r *http.Request, id string) {
+func (h *MallListHandler) get(w http.ResponseWriter, r *http.Request, id string) {
 	ctx := r.Context()
 
 	if h == nil || h.uc == nil {
@@ -198,44 +162,23 @@ func (h *SNSListHandler) get(w http.ResponseWriter, r *http.Request, id string) 
 		return
 	}
 
-	log.Printf(`[sns_list] request GET /sns/lists/{id} id=%q`, id)
-
 	l, err := h.uc.GetByID(ctx, id)
 	if err != nil {
 		if errors.Is(err, ldom.ErrNotFound) {
-			log.Printf(`[sns_list] response GET /sns/lists/{id} notFound id=%q`, id)
 			notFound(w)
 			return
 		}
-		log.Printf(`[sns_list] response GET /sns/lists/{id} error id=%q err=%q`, id, err.Error())
 		writeListErr(w, err)
 		return
 	}
 
-	// public-only safety
+	// buyer-facing safety
 	if !isPublicListing(l.Status) {
-		log.Printf(`[sns_list] response GET /sns/lists/{id} notPublic id=%q status=%q`, id, string(l.Status))
 		notFound(w)
 		return
 	}
 
-	dto := toSnsListItem(l)
-	minPrice, maxPrice := minMaxPrice(dto.Prices)
-
-	// ✅ フロントへ返す DTO をログ（1件なので詳細OK）
-	log.Printf(
-		`[sns_list] dto item id=%q title=%q invId=%q pbId=%q tbId=%q prices=%d priceMin=%d priceMax=%d image=%q`,
-		dto.ID,
-		dto.Title,
-		dto.InventoryID,
-		dto.ProductBlueprintID,
-		dto.TokenBlueprintID,
-		len(dto.Prices),
-		minPrice,
-		maxPrice,
-		dto.Image,
-	)
-
+	dto := toMallListItem(l)
 	writeJSON(w, http.StatusOK, dto)
 }
 
@@ -243,10 +186,10 @@ func (h *SNSListHandler) get(w http.ResponseWriter, r *http.Request, id string) 
 // Mapping
 // ------------------------------
 
-func toSnsListItem(l ldom.List) SnsListItem {
+func toMallListItem(l ldom.List) MallListItem {
 	invID, pbID, tbID := extractInventoryAndBlueprintIDs(l)
 
-	return SnsListItem{
+	return MallListItem{
 		ID:          strings.TrimSpace(l.ID),
 		Title:       strings.TrimSpace(l.Title),
 		Description: strings.TrimSpace(l.Description),
@@ -315,30 +258,4 @@ func writeListErr(w http.ResponseWriter, err error) {
 	}
 
 	writeJSON(w, code, map[string]string{"error": err.Error()})
-}
-
-// ------------------------------
-// logging helpers
-// ------------------------------
-
-// minMaxPrice returns (min, max). If no prices, returns (0, 0).
-func minMaxPrice(rows []ldom.ListPriceRow) (int, int) {
-	if len(rows) == 0 {
-		return 0, 0
-	}
-	min := int(^uint(0) >> 1) // max int
-	max := 0
-	for _, r := range rows {
-		p := int(r.Price)
-		if p < min {
-			min = p
-		}
-		if p > max {
-			max = p
-		}
-	}
-	if min == int(^uint(0)>>1) {
-		min = 0
-	}
-	return min, max
 }

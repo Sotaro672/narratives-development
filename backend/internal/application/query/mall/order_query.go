@@ -1,4 +1,4 @@
-// backend\internal\application\query\mall\order_query.go
+// backend/internal/application/query/mall/order_query.go
 package mall
 
 import (
@@ -8,7 +8,7 @@ import (
 	"log"
 	"strings"
 
-	snsdto "narratives/internal/application/query/mall/dto"
+	dto "narratives/internal/application/query/mall/dto"
 	appresolver "narratives/internal/application/resolver"
 
 	"cloud.google.com/go/firestore"
@@ -17,19 +17,19 @@ import (
 	"google.golang.org/grpc/status"
 )
 
-// SNSOrderQuery resolves:
+// OrderQuery resolves (mall buyer flow):
 // - uid -> avatarId (avatars where userId == uid)
 // - uid -> shippingAddress / billingAddress (best-effort; multiple shapes supported)
 // - avatarId -> cartItems (via SNSCartQuery; best-effort)
-// - ✅ userId -> fullName (via NameResolver.ResolveMemberName; best-effort)
-type SNSOrderQuery struct {
+// - userId -> fullName (via NameResolver.ResolveMemberName; best-effort)
+type OrderQuery struct {
 	FS *firestore.Client
 
-	// ✅ optional: cart read-model
+	// optional: cart read-model
 	// - if nil, ResolveByUID will create SNSCartQuery(fs) and fetch cart items best-effort
-	CartQ *SNSCartQuery
+	CartQ *CartQuery
 
-	// ✅ optional: name resolver (memberId -> "Last First")
+	// optional: name resolver (memberId -> "Last First")
 	// - if nil, FullName will be empty
 	NameResolver *appresolver.NameResolver
 
@@ -45,8 +45,12 @@ type SNSOrderQuery struct {
 	AddressUserIDField string
 }
 
-func NewSNSOrderQuery(fs *firestore.Client) *SNSOrderQuery {
-	return &SNSOrderQuery{
+// ✅ Backward-compat: keep old exported name used by handlers/DI.
+// NOTE: type alias so methods on OrderQuery are available.
+type SNSOrderQuery = OrderQuery
+
+func NewOrderQuery(fs *firestore.Client) *OrderQuery {
+	return &OrderQuery{
 		FS:                 fs,
 		CartQ:              nil,
 		NameResolver:       nil,
@@ -58,30 +62,39 @@ func NewSNSOrderQuery(fs *firestore.Client) *SNSOrderQuery {
 	}
 }
 
-func NewSNSOrderQueryWithCartQuery(fs *firestore.Client, cartQ *SNSCartQuery) *SNSOrderQuery {
-	q := NewSNSOrderQuery(fs)
+func NewOrderQueryWithCartQuery(fs *firestore.Client, cartQ *CartQuery) *OrderQuery {
+	q := NewOrderQuery(fs)
 	q.CartQ = cartQ
 	return q
 }
 
+// ✅ Backward-compat constructors
+func NewSNSOrderQuery(fs *firestore.Client) *SNSOrderQuery {
+	return NewOrderQuery(fs)
+}
+
+func NewSNSOrderQueryWithCartQuery(fs *firestore.Client, cartQ *CartQuery) *SNSOrderQuery {
+	return NewOrderQueryWithCartQuery(fs, cartQ)
+}
+
 // OrderContextDTO is a minimal buyer-facing payload for payment/order flow.
 type OrderContextDTO struct {
-	UID             string                        `json:"uid"`
-	AvatarID        string                        `json:"avatarId"`
-	UserID          string                        `json:"userId"`
-	FullName        string                        `json:"fullName,omitempty"` // ✅ NEW
-	ShippingAddress map[string]any                `json:"shippingAddress,omitempty"`
-	BillingAddress  map[string]any                `json:"billingAddress,omitempty"`
-	CartItems       map[string]snsdto.CartItemDTO `json:"cartItems,omitempty"`
-	Debug           map[string]string             `json:"debug,omitempty"` // optional
+	UID             string                     `json:"uid"`
+	AvatarID        string                     `json:"avatarId"`
+	UserID          string                     `json:"userId"`
+	FullName        string                     `json:"fullName,omitempty"`
+	ShippingAddress map[string]any             `json:"shippingAddress,omitempty"`
+	BillingAddress  map[string]any             `json:"billingAddress,omitempty"`
+	CartItems       map[string]dto.CartItemDTO `json:"cartItems,omitempty"`
+	Debug           map[string]string          `json:"debug,omitempty"`
 }
 
 // ResolveAvatarIDByUID resolves uid -> avatarId only.
 // - Intended for middleware use.
 // - If not found, returns ErrNotFound.
-func (q *SNSOrderQuery) ResolveAvatarIDByUID(ctx context.Context, uid string) (string, error) {
+func (q *OrderQuery) ResolveAvatarIDByUID(ctx context.Context, uid string) (string, error) {
 	if q == nil || q.FS == nil {
-		return "", errors.New("sns order query: firestore client is nil")
+		return "", errors.New("mall order query: firestore client is nil")
 	}
 	uid = strings.TrimSpace(uid)
 	if uid == "" {
@@ -97,9 +110,9 @@ func (q *SNSOrderQuery) ResolveAvatarIDByUID(ctx context.Context, uid string) (s
 
 // ResolveByUID resolves uid -> avatarId and addresses (+ cart items).
 // - If avatar is not found, returns ErrNotFound.
-func (q *SNSOrderQuery) ResolveByUID(ctx context.Context, uid string) (OrderContextDTO, error) {
+func (q *OrderQuery) ResolveByUID(ctx context.Context, uid string) (OrderContextDTO, error) {
 	if q == nil || q.FS == nil {
-		return OrderContextDTO{}, errors.New("sns order query: firestore client is nil")
+		return OrderContextDTO{}, errors.New("mall order query: firestore client is nil")
 	}
 
 	uid = strings.TrimSpace(uid)
@@ -121,10 +134,10 @@ func (q *SNSOrderQuery) ResolveByUID(ctx context.Context, uid string) (OrderCont
 	ship := q.fetchAddressBestEffort(ctx, q.ShippingAddressCol, userID)
 	bill := q.fetchAddressBestEffort(ctx, q.BillingAddressCol, userID)
 
-	// ✅ cartItems（best-effort）
+	// cartItems（best-effort）
 	cartItems := q.fetchCartItemsBestEffort(ctx, avatarID)
 
-	// ✅ fullName（best-effort）
+	// fullName（best-effort）
 	fullName := ""
 	if q.NameResolver != nil {
 		// NameResolver は memberId を想定。userId と一致していればここで解決できる。
@@ -148,7 +161,7 @@ func (q *SNSOrderQuery) ResolveByUID(ctx context.Context, uid string) (OrderCont
 // uid -> avatarId
 // ------------------------------------------------------------
 
-func (q *SNSOrderQuery) resolveAvatarIDByUID(ctx context.Context, uid string) (avatarID string, userID string, err error) {
+func (q *OrderQuery) resolveAvatarIDByUID(ctx context.Context, uid string) (avatarID string, userID string, err error) {
 	col := strings.TrimSpace(q.AvatarsCol)
 	if col == "" {
 		col = "avatars"
@@ -158,12 +171,10 @@ func (q *SNSOrderQuery) resolveAvatarIDByUID(ctx context.Context, uid string) (a
 		userField = "userId"
 	}
 
-	// avatars where userId == uid LIMIT 1
 	iter := q.FS.Collection(col).
 		Where(userField, "==", uid).
 		Limit(1).
 		Documents(ctx)
-
 	defer iter.Stop()
 
 	doc, err := iter.Next()
@@ -187,7 +198,7 @@ func (q *SNSOrderQuery) resolveAvatarIDByUID(ctx context.Context, uid string) (a
 		return "", "", ErrNotFound
 	}
 
-	log.Printf("[sns_order_query] resolveAvatarIDByUID ok uid=%q avatarId=%q userId=%q", maskUID(uid), aid, maskUID(u))
+	log.Printf("[mall_order_query] resolveAvatarIDByUID ok uid=%q avatarId=%q userId=%q", maskUID(uid), aid, maskUID(u))
 	return aid, u, nil
 }
 
@@ -195,7 +206,7 @@ func (q *SNSOrderQuery) resolveAvatarIDByUID(ctx context.Context, uid string) (a
 // avatarId -> cartItems (best-effort)
 // ------------------------------------------------------------
 
-func (q *SNSOrderQuery) fetchCartItemsBestEffort(ctx context.Context, avatarID string) map[string]snsdto.CartItemDTO {
+func (q *OrderQuery) fetchCartItemsBestEffort(ctx context.Context, avatarID string) map[string]dto.CartItemDTO {
 	if q == nil || q.FS == nil {
 		return nil
 	}
@@ -207,22 +218,22 @@ func (q *SNSOrderQuery) fetchCartItemsBestEffort(ctx context.Context, avatarID s
 	cq := q.CartQ
 	if cq == nil {
 		// ListRepo / Resolver は nil のまま（必要なら DI 側で CartQ を注入）
-		cq = NewSNSCartQuery(q.FS)
+		cq = NewCartQuery(q.FS)
 	}
 
-	dto, err := cq.GetByAvatarID(ctx, avatarID)
+	cartDTO, err := cq.GetByAvatarID(ctx, avatarID)
 	if err != nil {
 		// carts/{avatarId} が無いケースは “空” 扱い（決済フローを止めない）
 		if errors.Is(err, ErrNotFound) {
-			return map[string]snsdto.CartItemDTO{}
+			return map[string]dto.CartItemDTO{}
 		}
 		return nil
 	}
 
-	if dto.Items == nil {
-		return map[string]snsdto.CartItemDTO{}
+	if cartDTO.Items == nil {
+		return map[string]dto.CartItemDTO{}
 	}
-	return dto.Items
+	return cartDTO.Items
 }
 
 // ------------------------------------------------------------
@@ -235,7 +246,7 @@ func (q *SNSOrderQuery) fetchCartItemsBestEffort(ctx context.Context, avatarID s
 // 2) Query where userId == {userId} LIMIT 1
 //
 // If not found -> nil
-func (q *SNSOrderQuery) fetchAddressBestEffort(ctx context.Context, colName string, userID string) map[string]any {
+func (q *OrderQuery) fetchAddressBestEffort(ctx context.Context, colName string, userID string) map[string]any {
 	colName = strings.TrimSpace(colName)
 	if colName == "" {
 		return nil
@@ -252,8 +263,7 @@ func (q *SNSOrderQuery) fetchAddressBestEffort(ctx context.Context, colName stri
 		return normalizeMapAny(snap.Data())
 	}
 	if err != nil && !isFirestoreNotFound(err) {
-		// Firestore error other than NotFound: keep best-effort (log and fallback to query)
-		log.Printf("[sns_order_query] address doc get error col=%q userId=%q err=%v", colName, maskUID(userID), err)
+		log.Printf("[mall_order_query] address doc get error col=%q userId=%q err=%v", colName, maskUID(userID), err)
 	}
 
 	// (2) query style: where userId == ...
@@ -273,8 +283,7 @@ func (q *SNSOrderQuery) fetchAddressBestEffort(ctx context.Context, colName stri
 		if qerr == iterator.Done {
 			return nil
 		}
-		// other errors: best-effort nil
-		log.Printf("[sns_order_query] address query error col=%q userId=%q err=%v", colName, maskUID(userID), qerr)
+		log.Printf("[mall_order_query] address query error col=%q userId=%q err=%v", colName, maskUID(userID), qerr)
 		return nil
 	}
 	if doc == nil {
@@ -288,16 +297,13 @@ func (q *SNSOrderQuery) fetchAddressBestEffort(ctx context.Context, colName stri
 // ------------------------------------------------------------
 
 // isFirestoreNotFound checks Firestore NotFound safely.
-// ✅ replaces nonexistent firestore.IsNotFound
 func isFirestoreNotFound(err error) bool {
 	if err == nil {
 		return false
 	}
-	// Firestore returns gRPC status codes
 	if status.Code(err) == codes.NotFound {
 		return true
 	}
-	// some layers wrap; be tolerant
 	msg := strings.ToLower(err.Error())
 	return strings.Contains(msg, "not found") || strings.Contains(msg, "not_found")
 }
@@ -306,7 +312,6 @@ func normalizeMapAny(m map[string]any) map[string]any {
 	if m == nil {
 		return nil
 	}
-	// shallow copy to avoid accidental mutation across callers
 	out := make(map[string]any, len(m))
 	for k, v := range m {
 		out[k] = v

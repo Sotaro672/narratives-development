@@ -34,9 +34,9 @@ func (h *SNSCatalogHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	path := strings.TrimSuffix(r.URL.Path, "/")
 
-	// detail: /sns/catalog/{listId}
-	if strings.HasPrefix(path, "/sns/catalog/") {
-		listID := strings.TrimSpace(strings.TrimPrefix(path, "/sns/catalog/"))
+	// detail: /mall/catalog/{listId}
+	if strings.HasPrefix(path, "/mall/catalog/") {
+		listID := strings.TrimSpace(strings.TrimPrefix(path, "/mall/catalog/"))
 		if listID == "" {
 			notFound(w)
 			return

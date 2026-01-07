@@ -212,8 +212,8 @@ func main() {
 			_, _ = w.Write([]byte("ok"))
 		})
 
-		// SNS routes (best-effort) — register first so it wins over "/"
-		di.RegisterSNSFromContainer(fullMux, cont)
+		// Mall routes (best-effort) — register first so it wins over "/"
+		di.RegisterMallFromContainer(fullMux, cont)
 
 		// Console/Admin routes
 		router := httpin.NewRouter(deps)
