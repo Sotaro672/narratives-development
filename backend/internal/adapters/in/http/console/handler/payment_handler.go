@@ -12,7 +12,7 @@ import (
 	"narratives/internal/adapters/in/http/middleware"
 
 	// ✅ uid -> avatarId + addresses
-	snsquery "narratives/internal/application/query/mall"
+	mallquery "narratives/internal/application/query/mall"
 
 	usecase "narratives/internal/application/usecase"
 	paymentdom "narratives/internal/domain/payment"
@@ -20,10 +20,10 @@ import (
 
 // PaymentHandler handles:
 // - GET /payments/{id} (existing)
-// - GET /sns/payment   (NEW: resolve uid -> avatarId + addresses)
+// - GET /mall/payment   (NEW: resolve uid -> avatarId + addresses)
 type PaymentHandler struct {
 	uc     *usecase.PaymentUsecase
-	orderQ *snsquery.SNSOrderQuery
+	orderQ *mallquery.OrderQuery
 }
 
 // NewPaymentHandler initializes handler (existing behavior only).
@@ -31,8 +31,8 @@ func NewPaymentHandler(uc *usecase.PaymentUsecase) http.Handler {
 	return &PaymentHandler{uc: uc, orderQ: nil}
 }
 
-// ✅ NEW: inject order query (for /sns/payment).
-func NewPaymentHandlerWithOrderQuery(uc *usecase.PaymentUsecase, orderQ *snsquery.SNSOrderQuery) http.Handler {
+// ✅ NEW: inject order query (for /mall/payment).
+func NewPaymentHandlerWithOrderQuery(uc *usecase.PaymentUsecase, orderQ *mallquery.OrderQuery) http.Handler {
 	return &PaymentHandler{uc: uc, orderQ: orderQ}
 }
 
@@ -49,18 +49,18 @@ func (h *PaymentHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	// normalize path (drop trailing slash)
 	path0 := strings.TrimSuffix(r.URL.Path, "/")
 
-	// ✅ support /sns/*
-	// - /sns/payment     -> /payment
-	// - /sns/payments/xx -> /payments/xx
-	if strings.HasPrefix(path0, "/sns/") {
-		path0 = strings.TrimPrefix(path0, "/sns")
+	// ✅ support /mall/*
+	// - /mall/payment     -> /payment
+	// - /mall/payments/xx -> /payments/xx
+	if strings.HasPrefix(path0, "/mall/") {
+		path0 = strings.TrimPrefix(path0, "/mall")
 		if path0 == "" {
 			path0 = "/"
 		}
 	}
 
 	switch {
-	// ✅ NEW: GET /sns/payment  (normalized to /payment)
+	// ✅ NEW: GET /mall/payment  (normalized to /payment)
 	case r.Method == http.MethodGet && path0 == "/payment":
 		h.getPaymentContext(w, r)
 
@@ -76,7 +76,7 @@ func (h *PaymentHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 }
 
 // ------------------------------------------------------------
-// NEW: GET /sns/payment  (uid -> avatarId + shipping/billing)
+// NEW: GET /mall/payment  (uid -> avatarId + shipping/billing)
 // ------------------------------------------------------------
 func (h *PaymentHandler) getPaymentContext(w http.ResponseWriter, r *http.Request) {
 	if h == nil || h.orderQ == nil {
@@ -97,13 +97,13 @@ func (h *PaymentHandler) getPaymentContext(w http.ResponseWriter, r *http.Reques
 	out, err := h.orderQ.ResolveByUID(ctx, uid)
 	if err != nil {
 		// uid に紐づく avatar が無い / まだ onboarding 未完了
-		if errors.Is(err, snsquery.ErrNotFound) {
+		if errors.Is(err, mallquery.ErrNotFound) {
 			w.WriteHeader(http.StatusNotFound)
 			_ = json.NewEncoder(w).Encode(map[string]string{"error": "not_found"})
 			return
 		}
 
-		log.Printf("[payment_handler] GET /sns/payment error uid=%q err=%v", maskUID(uid), err)
+		log.Printf("[payment_handler] GET /mall/payment error uid=%q err=%v", maskUID(uid), err)
 		w.WriteHeader(http.StatusInternalServerError)
 		_ = json.NewEncoder(w).Encode(map[string]string{"error": "internal_error"})
 		return

@@ -3,7 +3,7 @@
     "origin": [
       "https://narratives.jp",
       "https://narratives-console-dev.web.app",
-      "https://narratives-development-sns.web.app"
+      "https://narratives-development-mall.web.app"
     ],
     "method": ["GET", "HEAD", "OPTIONS", "PUT"],
     "responseHeader": [

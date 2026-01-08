@@ -46,7 +46,7 @@ dev_dependencies:
 flutter:
   uses-material-design: true
 
-  # ✅ Custom fonts (place files under: frontend/sns/assets/fonts/)
+  # ✅ Custom fonts (place files under: frontend/mall/assets/fonts/)
   fonts:
     - family: NotoSansJP
       fonts:

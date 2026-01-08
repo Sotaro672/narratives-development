@@ -1,4 +1,4 @@
-// frontend/sns/lib/firebase_options.dart
+// frontend\mall\lib\firebase_options.dart
 //
 // Generated-like template for FlutterFire.
 // Project: narratives-development-26c2d
@@ -32,7 +32,7 @@ class DefaultFirebaseOptions {
   }
 
   // ------------------------------------------------------------
-  // Web (registered: sns (web))
+  // Web (registered: mall (web))
 
   static const FirebaseOptions web = FirebaseOptions(
     apiKey: 'AIzaSyDTetB8PcVlSHhXbItMZv2thd5lY4d5nIQ',
@@ -68,7 +68,8 @@ class DefaultFirebaseOptions {
     messagingSenderId: '871263659099',
     projectId: 'narratives-development-26c2d',
     storageBucket: 'narratives-development-26c2d.firebasestorage.app',
-    iosClientId: '871263659099-q23c2p66nmlqgho9r0sfm6bjnjbi5msa.apps.googleusercontent.com',
+    iosClientId:
+        '871263659099-q23c2p66nmlqgho9r0sfm6bjnjbi5msa.apps.googleusercontent.com',
     iosBundleId: 'com.example.sns',
   );
 
@@ -83,7 +84,8 @@ class DefaultFirebaseOptions {
     messagingSenderId: '871263659099',
     projectId: 'narratives-development-26c2d',
     storageBucket: 'narratives-development-26c2d.firebasestorage.app',
-    iosClientId: '871263659099-q23c2p66nmlqgho9r0sfm6bjnjbi5msa.apps.googleusercontent.com',
+    iosClientId:
+        '871263659099-q23c2p66nmlqgho9r0sfm6bjnjbi5msa.apps.googleusercontent.com',
     iosBundleId: 'com.example.sns',
   );
 

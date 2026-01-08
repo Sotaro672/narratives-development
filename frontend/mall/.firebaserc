@@ -5,7 +5,7 @@
   "targets": {
     "narratives-development-26c2d": {
       "hosting": {
-        "sns": [
+        "mall": [
           "narratives-development-mall"
         ]
       }

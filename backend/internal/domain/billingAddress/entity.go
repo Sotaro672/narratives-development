@@ -9,9 +9,9 @@ import (
 	"time"
 )
 
-// BillingAddress エンティティ（SNSアプリの billing_address.dart の入力欄に準拠）
+// BillingAddress エンティティ（Mallアプリの billing_address.dart の入力欄に準拠）
 //
-// frontend/sns/lib/features/auth/presentation/page/billing_address.dart
+// frontend/mall/lib/features/auth/presentation/page/billing_address.dart
 // - クレジットカード番号: cardNumber
 // - 契約者名義: cardholderName
 // - 裏の3桁コード: cvc

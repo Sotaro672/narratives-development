@@ -47,7 +47,6 @@ type OrderQuery struct {
 
 // ✅ Backward-compat: keep old exported name used by handlers/DI.
 // NOTE: type alias so methods on OrderQuery are available.
-type SNSOrderQuery = OrderQuery
 
 func NewOrderQuery(fs *firestore.Client) *OrderQuery {
 	return &OrderQuery{
@@ -69,11 +68,11 @@ func NewOrderQueryWithCartQuery(fs *firestore.Client, cartQ *CartQuery) *OrderQu
 }
 
 // ✅ Backward-compat constructors
-func NewSNSOrderQuery(fs *firestore.Client) *SNSOrderQuery {
+func NewMallOrderQuery(fs *firestore.Client) *OrderQuery {
 	return NewOrderQuery(fs)
 }
 
-func NewSNSOrderQueryWithCartQuery(fs *firestore.Client, cartQ *CartQuery) *SNSOrderQuery {
+func NewMallOrderQueryWithCartQuery(fs *firestore.Client, cartQ *CartQuery) *OrderQuery {
 	return NewOrderQueryWithCartQuery(fs, cartQ)
 }
 

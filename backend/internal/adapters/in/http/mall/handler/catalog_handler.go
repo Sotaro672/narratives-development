@@ -1,4 +1,4 @@
-// backend/internal/adapters/in/http/sns/handler/catalog_handler.go
+// backend\internal\adapters\in\http\mall\handler\catalog_handler.go
 package mallHandler
 
 import (
@@ -6,23 +6,23 @@ import (
 	"net/http"
 	"strings"
 
-	snsquery "narratives/internal/application/query/mall"
+	mallquery "narratives/internal/application/query/mall"
 	ldom "narratives/internal/domain/list"
 )
 
-// SNSCatalogHandler serves buyer-facing catalog endpoint.
+// MallCatalogHandler serves buyer-facing catalog endpoint.
 //
 // Routes:
-// - GET /sns/catalog/{listId}
-type SNSCatalogHandler struct {
-	Q *snsquery.CatalogQuery
+// - GET /mall/catalog/{listId}
+type MallCatalogHandler struct {
+	Q *mallquery.CatalogQuery
 }
 
-func NewSNSCatalogHandler(q *snsquery.CatalogQuery) http.Handler {
-	return &SNSCatalogHandler{Q: q}
+func NewMallCatalogHandler(q *mallquery.CatalogQuery) http.Handler {
+	return &MallCatalogHandler{Q: q}
 }
 
-func (h *SNSCatalogHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+func (h *MallCatalogHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	if h == nil || h.Q == nil {
 		internalError(w, "catalog handler is not ready")
 		return
@@ -57,6 +57,6 @@ func (h *SNSCatalogHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// (future) /sns/catalog index not implemented
+	// (future) /mall/catalog index not implemented
 	notFound(w)
 }

@@ -15,7 +15,7 @@ import (
 	badom "narratives/internal/domain/billingAddress"
 )
 
-const billingHandlerTag = "[sns_billing_address_handler]"
+const billingHandlerTag = "[mall_billing_address_handler]"
 
 // BillingAddressHandler は /billing-addresses 関連のエンドポイントを担当します。
 type BillingAddressHandler struct {
@@ -33,7 +33,7 @@ func (h *BillingAddressHandler) ServeHTTP(w http.ResponseWriter, r *http.Request
 
 	path := strings.TrimSuffix(r.URL.Path, "/")
 
-	// ✅ /sns プレフィックス吸収（/sns/billing-addresses -> /billing-addresses）
+	// ✅ /mall プレフィックス吸収（/mall/billing-addresses -> /billing-addresses）
 	if strings.HasPrefix(path, "/mall/") {
 		path = strings.TrimPrefix(path, "/mall")
 	}
@@ -43,7 +43,7 @@ func (h *BillingAddressHandler) ServeHTTP(w http.ResponseWriter, r *http.Request
 		"%s enter method=%s path=%s trace=%q contentType=%q contentLen=%d",
 		billingHandlerTag,
 		strings.ToUpper(r.Method),
-		r.URL.Path, // 元のパス（/sns/...）を残す
+		r.URL.Path, // 元のパス（/mall/...）を残す
 		r.Header.Get("X-Cloud-Trace-Context"),
 		r.Header.Get("Content-Type"),
 		r.ContentLength,

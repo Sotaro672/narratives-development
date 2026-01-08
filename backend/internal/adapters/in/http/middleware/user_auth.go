@@ -11,7 +11,7 @@ import (
 
 // UserAuthMiddleware verifies Firebase ID token (buyer/user side) and stores uid/email in context.
 // - Does NOT require MemberRepo / companyId.
-// - Intended for SNS onboarding endpoints (/sns/users, /sns/shipping-addresses, /sns/billing-addresses, etc.)
+// - Intended for Mall onboarding endpoints (/mall/users, /mall/shipping-addresses, /mall/billing-addresses, etc.)
 type UserAuthMiddleware struct {
 	FirebaseAuth *FirebaseAuthClient
 }
@@ -99,23 +99,6 @@ func (m *UserAuthMiddleware) Handler(next http.Handler) http.Handler {
 		}
 		if fullName != "" {
 			ctx = context.WithValue(ctx, ctxKeyFullName, fullName)
-		}
-
-		// ------------------------------------------------------------
-		// legacy string keys for compatibility
-		// ------------------------------------------------------------
-		ctx = withLegacyStringKey(ctx, "uid", uid)
-		ctx = withLegacyStringKey(ctx, "userId", uid)
-		ctx = withLegacyStringKey(ctx, "userID", uid)
-		ctx = withLegacyStringKey(ctx, "currentUserId", uid)
-		ctx = withLegacyStringKey(ctx, "currentUserID", uid)
-
-		if email != "" {
-			ctx = withLegacyStringKey(ctx, "email", email)
-		}
-		if fullName != "" {
-			ctx = withLegacyStringKey(ctx, "fullName", fullName)
-			ctx = withLegacyStringKey(ctx, "name", fullName)
 		}
 
 		next.ServeHTTP(w, r.WithContext(ctx))

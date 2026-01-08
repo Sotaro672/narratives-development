@@ -10,19 +10,19 @@ import (
 	branddom "narratives/internal/domain/brand"
 )
 
-// SNSBrandHandler serves buyer-facing brand endpoint.
+// MallBrandHandler serves buyer-facing brand endpoint.
 //
 // Route:
-// - GET /sns/brands/{id}
-type SNSBrandHandler struct {
+// - GET /mall/brands/{id}
+type MallBrandHandler struct {
 	uc *usecase.BrandUsecase
 }
 
-func NewSNSBrandHandler(uc *usecase.BrandUsecase) http.Handler {
-	return &SNSBrandHandler{uc: uc}
+func NewMallBrandHandler(uc *usecase.BrandUsecase) http.Handler {
+	return &MallBrandHandler{uc: uc}
 }
 
-func (h *SNSBrandHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+func (h *MallBrandHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 
 	if h == nil || h.uc == nil {
@@ -39,7 +39,7 @@ func (h *SNSBrandHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	path := strings.TrimSuffix(r.URL.Path, "/")
 
-	// GET /sns/brands/{id}
+	// GET /mall/brands/{id}
 	if strings.HasPrefix(path, "/mall/brands/") {
 		id := strings.TrimSpace(strings.TrimPrefix(path, "/mall/brands/"))
 		h.get(w, r, id)
@@ -51,8 +51,8 @@ func (h *SNSBrandHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	_ = json.NewEncoder(w).Encode(map[string]string{"error": "not_found"})
 }
 
-// ---- GET /sns/brands/{id} ----
-func (h *SNSBrandHandler) get(w http.ResponseWriter, r *http.Request, id string) {
+// ---- GET /mall/brands/{id} ----
+func (h *MallBrandHandler) get(w http.ResponseWriter, r *http.Request, id string) {
 	ctx := r.Context()
 
 	id = strings.TrimSpace(id)
@@ -64,14 +64,14 @@ func (h *SNSBrandHandler) get(w http.ResponseWriter, r *http.Request, id string)
 
 	brand, err := h.uc.GetByID(ctx, id)
 	if err != nil {
-		writeSNSBrandErr(w, err)
+		writeMallBrandErr(w, err)
 		return
 	}
 
 	_ = json.NewEncoder(w).Encode(brand)
 }
 
-func writeSNSBrandErr(w http.ResponseWriter, err error) {
+func writeMallBrandErr(w http.ResponseWriter, err error) {
 	code := http.StatusInternalServerError
 	switch err {
 	case branddom.ErrInvalidID:

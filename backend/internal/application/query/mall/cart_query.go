@@ -10,7 +10,7 @@ import (
 
 	"cloud.google.com/go/firestore"
 
-	snsdto "narratives/internal/application/query/mall/dto"
+	malldto "narratives/internal/application/query/mall/dto"
 	appresolver "narratives/internal/application/resolver"
 	cartdom "narratives/internal/domain/cart"
 	ldom "narratives/internal/domain/list"
@@ -50,7 +50,7 @@ func NewCartQueryWithListRepo(fs *firestore.Client, listRepo ldom.Repository) *C
 }
 
 // ✅ CartHandler 側の CartQueryService（GetCartQuery）に “明示的に” 合わせる。
-// これで reflect 探索に依存せず、GET /sns/cart を read-model に寄せられる。
+// これで reflect 探索に依存せず、GET /mall/cart を read-model に寄せられる。
 type cartQueryPort interface {
 	GetCartQuery(ctx context.Context, avatarID string) (any, error)
 }
@@ -61,14 +61,14 @@ func (q *CartQuery) GetCartQuery(ctx context.Context, avatarID string) (any, err
 	return q.GetByAvatarID(ctx, avatarID)
 }
 
-func (q *CartQuery) GetByAvatarID(ctx context.Context, avatarID string) (snsdto.CartDTO, error) {
+func (q *CartQuery) GetByAvatarID(ctx context.Context, avatarID string) (malldto.CartDTO, error) {
 	if q == nil || q.FS == nil {
-		return snsdto.CartDTO{}, errors.New("sns cart query: firestore client is nil")
+		return malldto.CartDTO{}, errors.New("mall cart query: firestore client is nil")
 	}
 
 	avatarID = strings.TrimSpace(avatarID)
 	if avatarID == "" {
-		return snsdto.CartDTO{}, errors.New("avatarId is required")
+		return malldto.CartDTO{}, errors.New("avatarId is required")
 	}
 
 	cartCol := strings.TrimSpace(q.CartCol)
@@ -79,20 +79,18 @@ func (q *CartQuery) GetByAvatarID(ctx context.Context, avatarID string) (snsdto.
 	snap, err := q.FS.Collection(cartCol).Doc(avatarID).Get(ctx)
 	if err != nil {
 		if isFirestoreNotFound(err) {
-			return snsdto.CartDTO{}, ErrNotFound
+			return malldto.CartDTO{}, ErrNotFound
 		}
-		return snsdto.CartDTO{}, err
+		return malldto.CartDTO{}, err
 	}
 	if snap == nil || !snap.Exists() {
-		return snsdto.CartDTO{}, ErrNotFound
+		return malldto.CartDTO{}, ErrNotFound
 	}
 
-	// ✅ IMPORTANT:
-	// carts.items のスキーマが過去に変わっている可能性があるため、
-	// DataTo(&cartdom.Cart) は使わず “後方互換パース” する。
-	c, perr := cartFromSnapshotCompat(avatarID, snap)
+	// ✅ carts.items は現行スキーマのみ対応（legacy は削除）
+	c, perr := cartFromSnapshot(avatarID, snap)
 	if perr != nil {
-		return snsdto.CartDTO{}, perr
+		return malldto.CartDTO{}, perr
 	}
 
 	priceIndex, listMetaIndex := q.fetchListIndicesByCart(ctx, c)
@@ -105,17 +103,14 @@ func (q *CartQuery) GetByAvatarID(ctx context.Context, avatarID string) (snsdto.
 }
 
 // ============================================================
-// cart snapshot parsing (backward compatible)
+// cart snapshot parsing (current schema only)
 // ============================================================
 
-// carts doc supported shapes:
-//
-// 1) items: map[itemKey] = {inventoryId, listId, modelId, qty, ...}
-// 2) items: map[itemKey] = qty (legacy)
-//   - in this case ModelID=itemKey, Qty=qty, other IDs empty (will be filtered out later)
-func cartFromSnapshotCompat(avatarID string, snap *firestore.DocumentSnapshot) (*cartdom.Cart, error) {
+// carts doc supported shape:
+// - items: map[itemKey] = {inventoryId, listId, modelId, qty, ...}
+func cartFromSnapshot(avatarID string, snap *firestore.DocumentSnapshot) (*cartdom.Cart, error) {
 	if snap == nil {
-		return nil, errors.New("sns cart query: snapshot is nil")
+		return nil, errors.New("mall cart query: snapshot is nil")
 	}
 
 	raw := snap.Data()
@@ -162,35 +157,24 @@ func cartFromSnapshotCompat(avatarID string, snap *firestore.DocumentSnapshot) (
 			continue
 		}
 
-		// new shape: map[string]any
-		if mv, ok := v.(map[string]any); ok {
-			inv := strings.TrimSpace(stringAny(mv["inventoryId"]))
-			lid := strings.TrimSpace(stringAny(mv["listId"]))
-			mid := strings.TrimSpace(stringAny(mv["modelId"]))
-			qty := intAny(mv["qty"])
-
-			if qty <= 0 {
-				continue
-			}
-
-			c.Items[itemKey] = cartdom.CartItem{
-				InventoryID: inv,
-				ListID:      lid,
-				ModelID:     mid,
-				Qty:         qty,
-			}
+		mv, ok := v.(map[string]any)
+		if !ok || mv == nil {
+			// ✅ legacy は削除：map 以外は無視
 			continue
 		}
 
-		// legacy shape: qty only
-		qty := intAny(v)
+		inv := strings.TrimSpace(stringAny(mv["inventoryId"]))
+		lid := strings.TrimSpace(stringAny(mv["listId"]))
+		mid := strings.TrimSpace(stringAny(mv["modelId"]))
+		qty := intAny(mv["qty"])
 		if qty <= 0 {
 			continue
 		}
+
 		c.Items[itemKey] = cartdom.CartItem{
-			InventoryID: "",
-			ListID:      "",
-			ModelID:     itemKey,
+			InventoryID: inv,
+			ListID:      lid,
+			ModelID:     mid,
 			Qty:         qty,
 		}
 	}
@@ -294,10 +278,10 @@ func toCartDTO(
 	invIndex map[string]invParts,
 	modelIndex map[string]modelSimple,
 	productNameIndex map[string]string,
-) snsdto.CartDTO {
-	out := snsdto.CartDTO{
+) malldto.CartDTO {
+	out := malldto.CartDTO{
 		AvatarID:  strings.TrimSpace(c.ID),
-		Items:     map[string]snsdto.CartItemDTO{},
+		Items:     map[string]malldto.CartItemDTO{},
 		CreatedAt: toRFC3339Ptr(c.CreatedAt),
 		UpdatedAt: toRFC3339Ptr(c.UpdatedAt),
 		ExpiresAt: toRFC3339Ptr(c.ExpiresAt),
@@ -320,7 +304,7 @@ func toCartDTO(
 			continue
 		}
 
-		dto := snsdto.CartItemDTO{
+		item := malldto.CartItemDTO{
 			InventoryID: invID,
 			ListID:      listID,
 			ModelID:     modelID,
@@ -330,10 +314,10 @@ func toCartDTO(
 		if listMetaIndex != nil {
 			if lm, ok := listMetaIndex[listID]; ok {
 				if s := strings.TrimSpace(lm.Title); s != "" {
-					dto.Title = s
+					item.Title = s
 				}
 				if s := strings.TrimSpace(lm.ImageID); s != "" {
-					dto.ListImage = s
+					item.ListImage = s
 				}
 			}
 		}
@@ -342,7 +326,7 @@ func toCartDTO(
 			if m, ok := priceIndex[listID]; ok {
 				if p, ok2 := m[modelID]; ok2 {
 					pp := p
-					dto.Price = &pp
+					item.Price = &pp
 				}
 			}
 		}
@@ -361,7 +345,7 @@ func toCartDTO(
 		if pbID != "" && productNameIndex != nil {
 			if name, ok := productNameIndex[pbID]; ok {
 				if s := strings.TrimSpace(name); s != "" {
-					dto.ProductName = s
+					item.ProductName = s
 				}
 			}
 		}
@@ -369,15 +353,15 @@ func toCartDTO(
 		if modelIndex != nil {
 			if ms, ok := modelIndex[modelID]; ok {
 				if s := strings.TrimSpace(ms.Size); s != "" {
-					dto.Size = s
+					item.Size = s
 				}
 				if s := strings.TrimSpace(ms.Color); s != "" {
-					dto.Color = s
+					item.Color = s
 				}
 			}
 		}
 
-		out.Items[key] = dto
+		out.Items[key] = item
 	}
 
 	return out
@@ -829,104 +813,4 @@ func (q *CartQuery) fetchProductNameIndexByCart(
 		return nil
 	}
 	return out
-}
-
-// ============================================================
-// shared helpers
-// ============================================================
-
-func parseInventoryID(inventoryID string) (productBlueprintID string, tokenBlueprintID string, ok bool) {
-	s := strings.TrimSpace(inventoryID)
-	if s == "" {
-		return "", "", false
-	}
-
-	parts := strings.Split(s, "__")
-	if len(parts) != 2 {
-		return "", "", false
-	}
-
-	pb := strings.TrimSpace(parts[0])
-	tb := strings.TrimSpace(parts[1])
-	if pb == "" || tb == "" {
-		return "", "", false
-	}
-	return pb, tb, true
-}
-
-func pickString(m map[string]any, keys ...string) string {
-	if m == nil {
-		return ""
-	}
-	for _, k := range keys {
-		k = strings.TrimSpace(k)
-		if k == "" {
-			continue
-		}
-		if v, ok := m[k]; ok {
-			s := strings.TrimSpace(fmt.Sprint(v))
-			if s != "" {
-				return s
-			}
-		}
-	}
-	return ""
-}
-
-func pickAny(m map[string]any, keys ...string) any {
-	if m == nil {
-		return nil
-	}
-	for _, k := range keys {
-		k = strings.TrimSpace(k)
-		if k == "" {
-			continue
-		}
-		if v, ok := m[k]; ok {
-			return v
-		}
-	}
-	return nil
-}
-
-func asIntAny(v any) (int, bool) {
-	if v == nil {
-		return 0, false
-	}
-	switch x := v.(type) {
-	case int:
-		return x, true
-	case int8:
-		return int(x), true
-	case int16:
-		return int(x), true
-	case int32:
-		return int(x), true
-	case int64:
-		return int(x), true
-	case uint:
-		return int(x), true
-	case uint8:
-		return int(x), true
-	case uint16:
-		return int(x), true
-	case uint32:
-		return int(x), true
-	case uint64:
-		return int(x), true
-	case float32:
-		return int(x), true
-	case float64:
-		return int(x), true
-	case string:
-		s := strings.TrimSpace(x)
-		if s == "" {
-			return 0, false
-		}
-		var n int
-		_, err := fmt.Sscanf(s, "%d", &n)
-		return n, err == nil
-	default:
-		return 0, false
-	}
 }

@@ -1,4 +1,4 @@
-// backend/internal/adapters/in/http/sns/handler/productBlueprint_handler.go
+// backend\internal\adapters\in\http\mall\handler\productBlueprint_handler.go
 package mallHandler
 
 import (
@@ -11,7 +11,7 @@ import (
 	pbdom "narratives/internal/domain/productBlueprint"
 )
 
-// SNSProductBlueprintHandler serves buyer-facing productBlueprint endpoints (read-only).
+// MallProductBlueprintHandler serves buyer-facing productBlueprint endpoints (read-only).
 //
 // ✅ Routes (read-only):
 // - GET /mall/product-blueprints/{id}
@@ -20,7 +20,7 @@ import (
 // - buyer に不要/秘匿したいフィールド（assigneeId, created/updated/deleted/expire 系）は返さない。
 // - 論理削除（DeletedAt != nil）の場合は 404 扱いにする。
 // - deletedAt / deletedBy は “拾わない” (= 返さない)。ただし DeletedAt による公開遮断はする。
-type SNSProductBlueprintHandler struct {
+type MallProductBlueprintHandler struct {
 	uc productBlueprintGetter
 
 	// ✅ NEW: name resolver injection (best-effort)
@@ -28,13 +28,13 @@ type SNSProductBlueprintHandler struct {
 	CompanyNameResolver any
 }
 
-func NewSNSProductBlueprintHandler(uc productBlueprintGetter) http.Handler {
-	return &SNSProductBlueprintHandler{uc: uc}
+func NewMallProductBlueprintHandler(uc productBlueprintGetter) http.Handler {
+	return &MallProductBlueprintHandler{uc: uc}
 }
 
 // ✅ optional ctor: NameResolver を明示注入したい場合
-func NewSNSProductBlueprintHandlerWithNameResolver(uc productBlueprintGetter, nameResolver any) http.Handler {
-	return &SNSProductBlueprintHandler{
+func NewMallProductBlueprintHandlerWithNameResolver(uc productBlueprintGetter, nameResolver any) http.Handler {
+	return &MallProductBlueprintHandler{
 		uc:                  uc,
 		BrandNameResolver:   nameResolver,
 		CompanyNameResolver: nameResolver,
@@ -46,7 +46,7 @@ func NewSNSProductBlueprintHandlerWithNameResolver(uc productBlueprintGetter, na
 // ------------------------------
 
 // ✅ buyer 向け: assignee / created / updated / deleted / expire は返さない
-type SnsProductBlueprintResponse struct {
+type MallProductBlueprintResponse struct {
 	ID string `json:"id"`
 
 	ProductName string         `json:"productName"`
@@ -59,17 +59,21 @@ type SnsProductBlueprintResponse struct {
 	Material    string         `json:"material"`
 	Weight      float64        `json:"weight"`
 
-	QualityAssurance []string        `json:"qualityAssurance"`
-	ProductIdTag     SnsProductIDTag `json:"productIdTag"`
+	QualityAssurance []string         `json:"qualityAssurance"`
+	ProductIdTag     MallProductIDTag `json:"productIdTag"`
 
 	Printed bool `json:"printed"`
+}
+
+type MallProductIDTag struct {
+	Type string `json:"type"`
 }
 
 // ------------------------------
 // http.Handler
 // ------------------------------
 
-func (h *SNSProductBlueprintHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+func (h *MallProductBlueprintHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 
 	if h == nil || h.uc == nil {
@@ -105,7 +109,7 @@ func (h *SNSProductBlueprintHandler) ServeHTTP(w http.ResponseWriter, r *http.Re
 	notFound(w)
 }
 
-func (h *SNSProductBlueprintHandler) getByID(w http.ResponseWriter, r *http.Request, id string) {
+func (h *MallProductBlueprintHandler) getByID(w http.ResponseWriter, r *http.Request, id string) {
 	ctx := r.Context()
 
 	log.Printf("[mall_productBlueprint] getById start id=%q resolverBrand=%t resolverCompany=%t",
@@ -124,13 +128,13 @@ func (h *SNSProductBlueprintHandler) getByID(w http.ResponseWriter, r *http.Requ
 		return
 	}
 
-	// SNS public safety: 論理削除は見せない
+	// Mall public safety: 論理削除は見せない
 	if p.DeletedAt != nil {
 		notFound(w)
 		return
 	}
 
-	resp := toSnsProductBlueprintResponse(ctx, p, h.BrandNameResolver, h.CompanyNameResolver)
+	resp := toMallProductBlueprintResponse(ctx, p, h.BrandNameResolver, h.CompanyNameResolver)
 
 	log.Printf("[mall_productBlueprint] ok id=%q productName=%q brandId=%q brandName=%q companyId=%q companyName=%q",
 		resp.ID,
@@ -148,12 +152,12 @@ func (h *SNSProductBlueprintHandler) getByID(w http.ResponseWriter, r *http.Requ
 // Mapping
 // ------------------------------
 
-func toSnsProductBlueprintResponse(
+func toMallProductBlueprintResponse(
 	ctx context.Context,
 	p pbdom.ProductBlueprint,
 	brandNameResolver any,
 	companyNameResolver any,
-) SnsProductBlueprintResponse {
+) MallProductBlueprintResponse {
 	pbID := strings.TrimSpace(p.ID)
 	productName := strings.TrimSpace(p.ProductName)
 	companyID := strings.TrimSpace(p.CompanyID)
@@ -174,7 +178,7 @@ func toSnsProductBlueprintResponse(
 		}
 	}
 
-	return SnsProductBlueprintResponse{
+	return MallProductBlueprintResponse{
 		ID:               pbID,
 		ProductName:      productName,
 		CompanyID:        companyID,
@@ -186,7 +190,7 @@ func toSnsProductBlueprintResponse(
 		Material:         strings.TrimSpace(p.Material),
 		Weight:           p.Weight,
 		QualityAssurance: append([]string{}, p.QualityAssurance...),
-		ProductIdTag: SnsProductIDTag{
+		ProductIdTag: MallProductIDTag{
 			Type: strings.TrimSpace(p.ProductIdTag.Type),
 		},
 		Printed: p.Printed,

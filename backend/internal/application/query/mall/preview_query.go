@@ -10,19 +10,19 @@ import (
 
 	"cloud.google.com/go/firestore"
 
-	snsdto "narratives/internal/application/query/mall/dto"
+	malldto "narratives/internal/application/query/mall/dto"
 	appresolver "narratives/internal/application/resolver"
 	cartdom "narratives/internal/domain/cart"
 	tbdom "narratives/internal/domain/tokenBlueprint"
 )
 
-// SNSPreviewQuery resolves (for item preview UI):
+// MallPreviewQuery resolves (for item preview UI):
 //   - avatarId + itemKey -> cart.items[itemKey] (inventoryId/listId/modelId/qty)
 //   - listId -> title/listImage + price(modelId)
 //   - inventoryId -> pbId/tbId (inventories or parse pb__tb)
 //   - pbId -> productName + brandId/companyId
 //   - tbId -> tokenName + brandId/companyId/iconUrl
-//   - modelId -> modelNumber/size/color/rgb
+//   - modelId -> modelNumber/size/color/rgb (via NameResolver)
 //   - (brandId/companyId) -> brandName/companyName via NameResolver
 type PreviewQuery struct {
 	FS *firestore.Client
@@ -44,21 +44,21 @@ func NewPreviewQuery(fs *firestore.Client) *PreviewQuery {
 		CartCol:              "carts",
 		ListsCol:             "lists",
 		InventoriesCol:       "inventories",
-		ProductBlueprintsCol: "productBlueprints",
-		TokenBlueprintsCol:   "tokenBlueprints",
+		ProductBlueprintsCol: "product_blueprints",
+		TokenBlueprintsCol:   "token_blueprints",
 	}
 }
 
 // GetByAvatarIDAndItemKey resolves a single cart item preview by (avatarId, itemKey).
-func (q *PreviewQuery) GetByAvatarIDAndItemKey(ctx context.Context, avatarID string, itemKey string) (snsdto.PreviewDTO, error) {
+func (q *PreviewQuery) GetByAvatarIDAndItemKey(ctx context.Context, avatarID string, itemKey string) (malldto.PreviewDTO, error) {
 	if q == nil || q.FS == nil {
-		return snsdto.PreviewDTO{}, errors.New("sns preview query: firestore client is nil")
+		return malldto.PreviewDTO{}, errors.New("mall preview query: firestore client is nil")
 	}
 
 	avatarID = strings.TrimSpace(avatarID)
 	itemKey = strings.TrimSpace(itemKey)
 	if avatarID == "" || itemKey == "" {
-		return snsdto.PreviewDTO{}, errors.New("avatarId and itemKey are required")
+		return malldto.PreviewDTO{}, errors.New("avatarId and itemKey are required")
 	}
 
 	cartCol := strings.TrimSpace(q.CartCol)
@@ -70,34 +70,34 @@ func (q *PreviewQuery) GetByAvatarIDAndItemKey(ctx context.Context, avatarID str
 	snap, err := q.FS.Collection(cartCol).Doc(avatarID).Get(ctx)
 	if err != nil {
 		if isFirestoreNotFound(err) {
-			return snsdto.PreviewDTO{}, ErrNotFound
+			return malldto.PreviewDTO{}, ErrNotFound
 		}
-		return snsdto.PreviewDTO{}, err
+		return malldto.PreviewDTO{}, err
 	}
 	if snap == nil || !snap.Exists() {
-		return snsdto.PreviewDTO{}, ErrNotFound
+		return malldto.PreviewDTO{}, ErrNotFound
 	}
 
 	var c cartdom.Cart
 	if derr := snap.DataTo(&c); derr != nil {
-		log.Printf("[sns_preview_query] DataTo(cart) failed avatarId=%q err=%v", maskUID(avatarID), derr)
-		return snsdto.PreviewDTO{}, derr
+		log.Printf("[mall_preview_query] DataTo(cart) failed avatarId=%q err=%v", maskUID(avatarID), derr)
+		return malldto.PreviewDTO{}, derr
 	}
 	c.ID = avatarID
 
 	if c.Items == nil {
-		return snsdto.PreviewDTO{}, ErrNotFound
+		return malldto.PreviewDTO{}, ErrNotFound
 	}
 	it, ok := c.Items[itemKey]
 	if !ok {
-		return snsdto.PreviewDTO{}, ErrNotFound
+		return malldto.PreviewDTO{}, ErrNotFound
 	}
 
 	invID := strings.TrimSpace(it.InventoryID)
 	listID := strings.TrimSpace(it.ListID)
 	modelID := strings.TrimSpace(it.ModelID)
 
-	out := snsdto.PreviewDTO{
+	out := malldto.PreviewDTO{
 		AvatarID:    avatarID,
 		ItemKey:     itemKey,
 		InventoryID: invID,
@@ -135,7 +135,7 @@ func (q *PreviewQuery) GetByAvatarIDAndItemKey(ctx context.Context, avatarID str
 	}
 
 	// --------------------------
-	// model resolved
+	// model resolved (via Resolver)
 	// --------------------------
 	if q.Resolver != nil && modelID != "" {
 		mr := q.Resolver.ResolveModelResolved(ctx, modelID)
@@ -184,7 +184,7 @@ func (q *PreviewQuery) GetByAvatarIDAndItemKey(ctx context.Context, avatarID str
 		}
 	}
 
-	log.Printf("[sns_preview_query] get ok avatarId=%q itemKey=%q", maskUID(avatarID), itemKey)
+	log.Printf("[mall_preview_query] get ok avatarId=%q itemKey=%q", maskUID(avatarID), itemKey)
 	return out, nil
 }
 
@@ -192,7 +192,7 @@ func (q *PreviewQuery) GetByAvatarIDAndItemKey(ctx context.Context, avatarID str
 // internal helpers
 // ============================================================
 
-func (q *PreviewQuery) fillListFields(ctx context.Context, out *snsdto.PreviewDTO, listID string, modelID string) {
+func (q *PreviewQuery) fillListFields(ctx context.Context, out *malldto.PreviewDTO, listID string, modelID string) {
 	if q == nil || q.FS == nil || out == nil {
 		return
 	}
@@ -285,7 +285,7 @@ func (q *PreviewQuery) resolvePBAndTBByInventory(ctx context.Context, inventoryI
 	return "", ""
 }
 
-func (q *PreviewQuery) fillProductFields(ctx context.Context, out *snsdto.PreviewDTO, productBlueprintID string) {
+func (q *PreviewQuery) fillProductFields(ctx context.Context, out *malldto.PreviewDTO, productBlueprintID string) {
 	if q == nil || q.FS == nil || out == nil {
 		return
 	}
@@ -296,7 +296,7 @@ func (q *PreviewQuery) fillProductFields(ctx context.Context, out *snsdto.Previe
 
 	pbCol := strings.TrimSpace(q.ProductBlueprintsCol)
 	if pbCol == "" {
-		pbCol = "productBlueprints"
+		pbCol = "product_blueprints"
 	}
 
 	snap, err := q.FS.Collection(pbCol).Doc(pbID).Get(ctx)
@@ -319,7 +319,7 @@ func (q *PreviewQuery) fillProductFields(ctx context.Context, out *snsdto.Previe
 	}
 }
 
-func (q *PreviewQuery) fillTokenFields(ctx context.Context, out *snsdto.PreviewDTO, tokenBlueprintID string) {
+func (q *PreviewQuery) fillTokenFields(ctx context.Context, out *malldto.PreviewDTO, tokenBlueprintID string) {
 	if q == nil || q.FS == nil || out == nil {
 		return
 	}
@@ -330,7 +330,7 @@ func (q *PreviewQuery) fillTokenFields(ctx context.Context, out *snsdto.PreviewD
 
 	tbCol := strings.TrimSpace(q.TokenBlueprintsCol)
 	if tbCol == "" {
-		tbCol = "tokenBlueprints"
+		tbCol = "token_blueprints"
 	}
 
 	snap, err := q.FS.Collection(tbCol).Doc(tbID).Get(ctx)
@@ -380,5 +380,8 @@ func (q *PreviewQuery) String() string {
 	if q == nil {
 		return "PreviewQuery(nil)"
 	}
-	return fmt.Sprintf("PreviewQuery(cart=%q lists=%q inv=%q pb=%q tb=%q)", q.CartCol, q.ListsCol, q.InventoriesCol, q.ProductBlueprintsCol, q.TokenBlueprintsCol)
+	return fmt.Sprintf(
+		"PreviewQuery(cart=%q lists=%q inv=%q pb=%q tb=%q)",
+		q.CartCol, q.ListsCol, q.InventoriesCol, q.ProductBlueprintsCol, q.TokenBlueprintsCol,
+	)
 }

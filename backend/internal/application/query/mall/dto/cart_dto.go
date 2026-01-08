@@ -1,7 +1,7 @@
 // backend\internal\application\query\mall\dto\cart_dto.go
 package dto
 
-// CartDTO is the response shape for SNS cart list UI.
+// CartDTO is the response shape for Mall cart list UI.
 // NOTE: cart_query returns ONLY minimal fields required for cart screen.
 type CartDTO struct {
 	AvatarID string                 `json:"avatarId"`

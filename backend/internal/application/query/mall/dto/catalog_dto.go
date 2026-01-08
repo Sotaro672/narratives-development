@@ -40,7 +40,7 @@ type CatalogListDTO struct {
 	TokenBlueprintID   string `json:"tokenBlueprintId,omitempty"`
 }
 
-// ✅ inventory stock model value (same shape as SNS inventory response)
+// ✅ inventory stock model value (same shape as Mall inventory response)
 type CatalogInventoryModelStockDTO struct {
 	Products map[string]bool `json:"products,omitempty"`
 }

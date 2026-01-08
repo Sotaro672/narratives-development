@@ -104,7 +104,7 @@ func (h *ShippingAddressHandler) post(w http.ResponseWriter, r *http.Request) {
 	}
 	r.Body = io.NopCloser(bytes.NewReader(raw))
 
-	// frontend/sns の入力欄に合わせる（zipCode/state/city/street/street2）
+	// frontend/mall の入力欄に合わせる（zipCode/state/city/street/street2）
 	// ✅ docId=UID 統一: id(=uid) を必須にする
 	type createReq struct {
 		ID      string  `json:"id"` // ✅ docId = UID

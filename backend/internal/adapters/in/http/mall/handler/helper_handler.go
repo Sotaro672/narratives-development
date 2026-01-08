@@ -1,4 +1,4 @@
-// backend/internal/adapters/in/http/sns/handler/helper_handler.go
+// backend\internal\adapters\in\http\mall\handler\helper_handler.go
 package mallHandler
 
 import (
@@ -17,14 +17,9 @@ import (
 // Shared types (avoid DuplicateDecl in same package)
 // ============================================================
 
-// productBlueprintGetter: SNS handlers 用（read-only）
+// productBlueprintGetter: Mall handlers 用（read-only）
 type productBlueprintGetter interface {
 	GetByID(ctx context.Context, id string) (pbdom.ProductBlueprint, error)
-}
-
-// SnsProductIDTag: 複数 handler で共通利用
-type SnsProductIDTag struct {
-	Type string `json:"type"`
 }
 
 // ============================================================

@@ -1,4 +1,4 @@
-// backend\internal\adapters\in\http\sns\handler\cart_query_handler.go
+// backend\internal\adapters\in\http\mall\handler\cart_query_handler.go
 package mallHandler
 
 import (
@@ -7,25 +7,25 @@ import (
 	"net/http"
 	"strings"
 
-	snsquery "narratives/internal/application/query/mall"
-	snsdto "narratives/internal/application/query/mall/dto"
+	mallquery "narratives/internal/application/query/mall"
+	malldto "narratives/internal/application/query/mall/dto"
 )
 
-// SNSCartQueryHandler exposes SNSCartQuery via HTTP.
-// - GET /sns/cart/query?avatarId=...
-// - (router 側で振り分ければ) GET /sns/cart?avatarId=... も同じレスポンスで返せる
+// MallCartQueryHandler exposes CartQuery via HTTP.
+// - GET /mall/cart/query?avatarId=...
+// - (router 側で振り分ければ) GET /mall/cart?avatarId=... も同じレスポンスで返せる
 type CartQueryHandler struct {
-	Q *snsquery.CartQuery
+	Q *mallquery.CartQuery
 }
 
-func NewCartQueryHandler(q *snsquery.CartQuery) http.Handler {
+func NewCartQueryHandler(q *mallquery.CartQuery) http.Handler {
 	return &CartQueryHandler{Q: q}
 }
 
 func (h *CartQueryHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	if h == nil || h.Q == nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]any{
-			"error": "sns cart query handler: query is nil",
+			"error": "mall cart query handler: query is nil",
 		})
 		return
 	}
@@ -54,16 +54,16 @@ func (h *CartQueryHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	dto, err := h.Q.GetByAvatarID(r.Context(), aid)
 	if err != nil {
 		// ✅ carts/{avatarId} が無い場合でも “空カートで 200” にする（UI を白画面にしない）
-		if errors.Is(err, snsquery.ErrNotFound) {
-			empty := snsdto.CartDTO{
+		if errors.Is(err, mallquery.ErrNotFound) {
+			empty := malldto.CartDTO{
 				AvatarID: aid,
-				Items:    map[string]snsdto.CartItemDTO{},
+				Items:    map[string]malldto.CartItemDTO{},
 			}
 			writeJSON(w, http.StatusOK, empty)
 			return
 		}
 
-		log.Printf("[sns_cart_query_handler] error path=%s avatarId=%q err=%v", r.URL.Path, maskUIDLite(aid), err)
+		log.Printf("[mall_cart_query_handler] error path=%s avatarId=%q err=%v", r.URL.Path, maskUIDLite(aid), err)
 		writeJSON(w, http.StatusInternalServerError, map[string]any{
 			"error": err.Error(),
 		})

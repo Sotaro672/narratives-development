@@ -24,7 +24,7 @@ import (
 // - GET /mall/payment  (resolve uid -> avatarId + addresses)
 type PaymentHandler struct {
 	uc     *usecase.PaymentUsecase
-	orderQ any // ✅ accept any (sns/mall) and call ResolveByUID via reflection
+	orderQ any // ✅ accept any (mall) and call ResolveByUID via reflection
 }
 
 // NewPaymentHandler initializes handler (existing behavior only).

@@ -1,4 +1,4 @@
-// frontend/sns/lib/app/routing/routes.dart
+// frontend\mall\lib\app\routing\routes.dart
 
 class AppRouteName {
   static const home = 'home';

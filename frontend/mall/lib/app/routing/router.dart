@@ -1,4 +1,4 @@
-// frontend/sns/lib/app/routing/router.dart
+// frontend\mall\lib\app\routing\router.dart
 import 'dart:async';
 import 'dart:convert';
 

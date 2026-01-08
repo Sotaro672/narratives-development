@@ -1,4 +1,4 @@
-// backend/internal/adapters/in/http/sns/handler/model_handler.go
+// backend\internal\adapters\in\http\mall\handler\model_handler.go
 package mallHandler
 
 import (
@@ -8,7 +8,7 @@ import (
 	"reflect"
 	"strings"
 
-	snsdto "narratives/internal/application/query/mall/dto"
+	malldto "narratives/internal/application/query/mall/dto"
 	ldom "narratives/internal/domain/list"
 	modeldom "narratives/internal/domain/model"
 )
@@ -16,7 +16,7 @@ import (
 // MallCatalogQuery is the minimal contract to serve /mall/catalog/{listId}.
 // NOTE: We keep this as an interface here to avoid tight coupling.
 // The concrete implementation is:
-// - backend/internal/application/query/mall/catalog_query.go  (MallCatalogQuery / SNSCatalogQuery)
+// - backend/internal/application/query/mall/catalog_query.go  (MallCatalogQuery / MallCatalogQuery)
 type MallCatalogQuery interface {
 	GetByListID(ctx context.Context, listID string) (any, error)
 }
@@ -191,7 +191,7 @@ func (h *MallModelHandler) handleListByProductBlueprintID(w http.ResponseWriter,
 		// ✅ buyer-facing DTO へ変換（lowerCamel）
 		dto, ok := toMallModelVariationDTOAny(mv)
 		if !ok {
-			dto = snsdto.CatalogModelVariationDTO{
+			dto = malldto.CatalogModelVariationDTO{
 				ID:                 strings.TrimSpace(modelID),
 				ProductBlueprintID: strings.TrimSpace(pbID),
 				ModelNumber:        "",
@@ -232,7 +232,7 @@ func (h *MallModelHandler) handleGetByID(w http.ResponseWriter, r *http.Request,
 
 	dto, ok := toMallModelVariationDTOAny(mv)
 	if !ok {
-		dto = snsdto.CatalogModelVariationDTO{
+		dto = malldto.CatalogModelVariationDTO{
 			ID:                 strings.TrimSpace(id),
 			ProductBlueprintID: "",
 			ModelNumber:        "",
@@ -314,36 +314,36 @@ func extractID(v any) string {
 // (Color integrated: ColorName/ColorRGB)
 // ------------------------------------------------------------
 
-func toMallModelVariationDTOAny(v any) (snsdto.CatalogModelVariationDTO, bool) {
+func toMallModelVariationDTOAny(v any) (malldto.CatalogModelVariationDTO, bool) {
 	if v == nil {
-		return snsdto.CatalogModelVariationDTO{}, false
+		return malldto.CatalogModelVariationDTO{}, false
 	}
 
 	rv := reflect.ValueOf(v)
 	if !rv.IsValid() {
-		return snsdto.CatalogModelVariationDTO{}, false
+		return malldto.CatalogModelVariationDTO{}, false
 	}
 	if rv.Kind() == reflect.Pointer {
 		if rv.IsNil() {
-			return snsdto.CatalogModelVariationDTO{}, false
+			return malldto.CatalogModelVariationDTO{}, false
 		}
 		rv = rv.Elem()
 	}
 	if rv.Kind() != reflect.Struct {
-		return snsdto.CatalogModelVariationDTO{}, false
+		return malldto.CatalogModelVariationDTO{}, false
 	}
 
 	// strings
 	id := pickStringField(rv.Interface(), "ID", "Id", "ModelID", "ModelId", "modelId")
 	if strings.TrimSpace(id) == "" {
-		return snsdto.CatalogModelVariationDTO{}, false
+		return malldto.CatalogModelVariationDTO{}, false
 	}
 
 	pbID := pickStringField(rv.Interface(), "ProductBlueprintID", "ProductBlueprintId", "productBlueprintId")
 	modelNumber := pickStringField(rv.Interface(), "ModelNumber", "modelNumber")
 	size := pickStringField(rv.Interface(), "Size", "size")
 
-	dto := snsdto.CatalogModelVariationDTO{
+	dto := malldto.CatalogModelVariationDTO{
 		ID:                 strings.TrimSpace(id),
 		ProductBlueprintID: strings.TrimSpace(pbID),
 		ModelNumber:        strings.TrimSpace(modelNumber),

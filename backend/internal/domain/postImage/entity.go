@@ -22,7 +22,7 @@ const DefaultBucket = "narratives-development-posts"
 // - バケットが public ならこの URL でアクセスできます
 const PublicBaseURL = "https://storage.googleapis.com/"
 
-// PostImage is a public image object metadata for a post (SNS).
+// PostImage is a public image object metadata for a post (Mall).
 //
 // Storage policy (recommended):
 // - bucket: narratives-development-posts (single bucket)

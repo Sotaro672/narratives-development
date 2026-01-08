@@ -19,6 +19,7 @@ import (
 
 	consoleDI "narratives/internal/platform/di/console"
 	mallDI "narratives/internal/platform/di/mall"
+	shared "narratives/internal/platform/di/shared"
 )
 
 // atomicHandler allows swapping the underlying handler at runtime safely.
@@ -176,6 +177,7 @@ func main() {
 		}
 
 		// Close DI resources AFTER server shutdown (best-effort)
+		// NOTE: console container owns shared.Infra; mall container shares the same infra (no separate close needed).
 		if v := contHolder.Load(); v != nil {
 			if cont, ok := v.(*consoleDI.Container); ok && cont != nil {
 				log.Printf("[boot] closing container resources...")
@@ -206,12 +208,18 @@ func main() {
 		initCtx, cancel := context.WithTimeout(ctx, 2*time.Minute)
 		defer cancel()
 
-		// ✅ IMPORTANT:
-		// DO NOT pass &shared.Infra{} (it is "non-nil but empty" and causes nil deref later).
-		// Pass nil so consoleDI.NewContainer can initialize shared infra internally.
-		cont, err := consoleDI.NewContainer(initCtx, nil)
+		// 1) shared infra (one instance; shared by console & mall)
+		infra, err := shared.NewInfra(initCtx)
 		if err != nil {
-			log.Printf("[boot] WARN: di init failed: %v (serving /healthz only)", err)
+			log.Printf("[boot] WARN: shared infra init failed: %v (serving /healthz only)", err)
+			return
+		}
+
+		// 2) console container (required)
+		cont, err := consoleDI.NewContainer(initCtx, infra)
+		if err != nil {
+			_ = infra.Close()
+			log.Printf("[boot] WARN: console di init failed: %v (serving /healthz only)", err)
 			return
 		}
 
@@ -238,16 +246,18 @@ func main() {
 			_, _ = w.Write([]byte("ok"))
 		})
 
-		// Mall routes (best-effort)
-		// NOTE: if RegisterMallFromContainer expects a mall container, this is logically suspicious,
-		// but we keep it as-is because your current code compiles/runs with it.
-		mallDI.RegisterMallFromContainer(fullMux, cont)
+		// 3) mall container (best-effort; separated DI)
+		if mallCont, err := mallDI.NewContainer(initCtx, infra); err != nil {
+			log.Printf("[boot] WARN: mall di init failed: %v (mall routes disabled)", err)
+		} else {
+			mallDI.Register(fullMux, mallCont)
+			log.Printf("[boot] mall routes registered")
+		}
 
-		// Console/Admin routes
+		// 4) console/admin routes
 		router := httpin.NewRouter(deps)
 
-		// ✅ Option2: mount console under /console AND keep backward compatibility.
-		// - /console/* -> strip "/console" then route as if "/members", "/product-blueprints", etc.
+		// mount console under /console AND keep backward compatibility.
 		fullMux.Handle("/console/", http.StripPrefix("/console", router))
 		fullMux.Handle("/console", http.RedirectHandler("/console/", http.StatusPermanentRedirect))
 

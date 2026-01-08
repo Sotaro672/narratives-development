@@ -6,7 +6,6 @@ import (
 	"errors"
 	"net/http"
 	"reflect"
-	"sort"
 	"strings"
 
 	usecase "narratives/internal/application/usecase"
@@ -27,32 +26,33 @@ type PreviewQueryService interface {
 	GetPreview(ctx context.Context, avatarID string, itemKey string) (any, error)
 }
 
-// CartHandler serves SNS cart endpoints.
+// CartHandler serves Mall cart endpoints.
 // Intended mount examples (router side):
-// - GET    /sns/cart            ✅ unified: read-model (CartDTO) を返す
-// - DELETE /sns/cart            (clear)
-// - POST   /sns/cart/items
-// - PUT    /sns/cart/items
-// - DELETE /sns/cart/items
+// - GET    /mall/cart            ✅ unified: read-model (CartDTO) を返す
+// - DELETE /mall/cart            (clear)
+// - POST   /mall/cart/items
+// - PUT    /mall/cart/items
+// - DELETE /mall/cart/items
 //
 // NOTE:
-// - /sns/cart/query は廃止（この handler では扱わない）
+// - /mall/cart/query は廃止（この handler では扱わない）
 type CartHandler struct {
 	uc *usecase.CartUsecase
 
-	// ✅ read-model queries (optional but recommended)
+	// ✅ read-model queries (required)
 	cartQuery    CartQueryService
 	previewQuery PreviewQueryService
 }
 
 func NewCartHandler(uc *usecase.CartUsecase) http.Handler {
+	// legacy を廃止したため、query 未注入の handler は “未構成” 扱いにする
 	return &CartHandler{uc: uc, cartQuery: nil, previewQuery: nil}
 }
 
 // ✅ query を注入できる ctor
 //
 // NOTE:
-// DI 側では *snsquery.SNSCartQuery / *snsquery.SNSPreviewQuery をそのまま渡したいが、
+// DI 側では *mallquery.MallCartQuery / *mallquery.MallPreviewQuery をそのまま渡したいが、
 // それらがこの package の interface を直接実装していないケースがある。
 // そこで引数は `any` とし、ここで “best-effort adapter” を噛ませる。
 func NewCartHandlerWithQueries(
@@ -74,8 +74,8 @@ func (h *CartHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// IMPORTANT:
-	// router 側で StripPrefix("/sns") や StripPrefix("/sns/cart") をしていると、
-	// ここに入ってくる Path は "/sns/cart" ではなく "/cart" や "/" になる。
+	// router 側で StripPrefix("/mall") や StripPrefix("/mall/cart") をしていると、
+	// ここに入ってくる Path は "/mall/cart" ではなく "/cart" や "/" になる。
 	// その揺れを吸収する。
 	path := strings.TrimRight(r.URL.Path, "/")
 	if path == "" {
@@ -101,7 +101,7 @@ func (h *CartHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return false
 	}
 
-	// exact matcher (StripPrefix("/sns/cart") の場合、/sns/cart は "/" になる)
+	// exact matcher (StripPrefix("/mall/cart") の場合、/mall/cart は "/" になる)
 	isAnyExact := func(p string, exacts ...string) bool {
 		for _, e := range exacts {
 			if p == e {
@@ -113,30 +113,30 @@ func (h *CartHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	switch {
 	// ============================================================
-	// ✅ Unified: GET /sns/cart returns read-model DTO
+	// ✅ Unified: GET /mall/cart returns read-model DTO
 	// ============================================================
 
-	// ====== GET /sns/cart (or /cart or "/")
+	// ====== GET /mall/cart (or /cart or "/")
 	case isGET && (hasSuffixAny(path, "/mall/cart", "/cart") || isAnyExact(path, "/")):
 		h.handleGetUnified(w, r)
 		return
 
-	// ====== DELETE /sns/cart (or /cart or "/")
+	// ====== DELETE /mall/cart (or /cart or "/")
 	case isDEL && (hasSuffixAny(path, "/mall/cart", "/cart") || isAnyExact(path, "/")):
 		h.handleClear(w, r)
 		return
 
-	// ====== POST /sns/cart/items (or /cart/items or /items)
+	// ====== POST /mall/cart/items (or /cart/items or /items)
 	case isPOST && (hasSuffixAny(path, "/mall/cart/items", "/cart/items") || isAnyExact(path, "/items")):
 		h.handleAddItem(w, r)
 		return
 
-	// ====== PUT /sns/cart/items (or /cart/items or /items)
+	// ====== PUT /mall/cart/items (or /cart/items or /items)
 	case isPUT && (hasSuffixAny(path, "/mall/cart/items", "/cart/items") || isAnyExact(path, "/items")):
 		h.handleSetItemQty(w, r)
 		return
 
-	// ====== DELETE /sns/cart/items (or /cart/items or /items)
+	// ====== DELETE /mall/cart/items (or /cart/items or /items)
 	case isDEL && (hasSuffixAny(path, "/mall/cart/items", "/cart/items") || isAnyExact(path, "/items")):
 		h.handleRemoveItem(w, r)
 		return
@@ -154,10 +154,9 @@ func (h *CartHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 // handlers (Unified GET)
 // -------------------------
 
-// handleGetUnified returns CartDTO (read-model) on GET /sns/cart.
-// - If cartQuery is configured: prefer read-model.
+// handleGetUnified returns CartDTO (read-model) on GET /mall/cart.
+// - cartQuery is required.
 // - If cart doc is missing: return empty cart (200) for stable UX.
-// - If cartQuery is not configured: fallback to legacy response.
 func (h *CartHandler) handleGetUnified(w http.ResponseWriter, r *http.Request) {
 	avatarID := readAvatarID(r, "")
 	if avatarID == "" {
@@ -165,33 +164,30 @@ func (h *CartHandler) handleGetUnified(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// ✅ Prefer read-model when available
-	if h.cartQuery != nil {
-		v, err := h.cartQuery.GetCartQuery(r.Context(), avatarID)
-		if err == nil {
-			writeJSON(w, http.StatusOK, v)
-			return
-		}
-
-		// cart が無いなら “空カート” を 200 で返す（/sns/cart を安定させる）
-		if isNotFoundErr(err) {
-			writeJSON(w, http.StatusOK, map[string]any{
-				"avatarId":  avatarID,
-				"items":     map[string]any{},
-				"createdAt": nil,
-				"updatedAt": nil,
-				"expiresAt": nil,
-			})
-			return
-		}
-
-		// invalid argument 系 / その他は通常通り
-		h.writeQueryErr(w, err)
+	if h.cartQuery == nil {
+		writeErr(w, http.StatusInternalServerError, "cart_query is not configured")
 		return
 	}
 
-	// ✅ Fallback: legacy (DI misconfig safety)
-	h.handleGet(w, r)
+	v, err := h.cartQuery.GetCartQuery(r.Context(), avatarID)
+	if err == nil {
+		writeJSON(w, http.StatusOK, v)
+		return
+	}
+
+	// cart が無いなら “空カート” を 200 で返す（/mall/cart を安定させる）
+	if isNotFoundErr(err) {
+		writeJSON(w, http.StatusOK, map[string]any{
+			"avatarId":  avatarID,
+			"items":     map[string]any{},
+			"createdAt": nil,
+			"updatedAt": nil,
+			"expiresAt": nil,
+		})
+		return
+	}
+
+	h.writeQueryErr(w, err)
 }
 
 // -------------------------
@@ -258,24 +254,8 @@ func isNotFoundErr(err error) bool {
 }
 
 // -------------------------
-// handlers (Legacy / mutations)
+// handlers (mutations)
 // -------------------------
-
-func (h *CartHandler) handleGet(w http.ResponseWriter, r *http.Request) {
-	avatarID := readAvatarID(r, "")
-	if avatarID == "" {
-		writeErr(w, http.StatusBadRequest, "avatarId is required")
-		return
-	}
-
-	c, err := h.uc.GetOrCreate(r.Context(), avatarID)
-	if err != nil {
-		writeErr(w, http.StatusInternalServerError, err.Error())
-		return
-	}
-
-	writeJSON(w, http.StatusOK, toCartResponse(avatarID, c))
-}
 
 func (h *CartHandler) handleAddItem(w http.ResponseWriter, r *http.Request) {
 	var req cartItemReq
@@ -295,7 +275,7 @@ func (h *CartHandler) handleAddItem(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	c, err := h.uc.AddItem(r.Context(), avatarID, invID, listID, modelID, req.Qty)
+	_, err := h.uc.AddItem(r.Context(), avatarID, invID, listID, modelID, req.Qty)
 	if err != nil {
 		if errors.Is(err, usecase.ErrCartInvalidArgument) || errors.Is(err, cartdom.ErrInvalidCart) {
 			writeErr(w, http.StatusBadRequest, err.Error())
@@ -305,7 +285,7 @@ func (h *CartHandler) handleAddItem(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	writeJSON(w, http.StatusOK, toCartResponse(avatarID, c))
+	h.respondCartDTO(w, r, avatarID)
 }
 
 func (h *CartHandler) handleSetItemQty(w http.ResponseWriter, r *http.Request) {
@@ -326,7 +306,7 @@ func (h *CartHandler) handleSetItemQty(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	c, err := h.uc.SetItemQty(r.Context(), avatarID, invID, listID, modelID, req.Qty)
+	_, err := h.uc.SetItemQty(r.Context(), avatarID, invID, listID, modelID, req.Qty)
 	if err != nil {
 		if errors.Is(err, usecase.ErrCartInvalidArgument) || errors.Is(err, cartdom.ErrInvalidCart) {
 			writeErr(w, http.StatusBadRequest, err.Error())
@@ -336,7 +316,7 @@ func (h *CartHandler) handleSetItemQty(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	writeJSON(w, http.StatusOK, toCartResponse(avatarID, c))
+	h.respondCartDTO(w, r, avatarID)
 }
 
 func (h *CartHandler) handleRemoveItem(w http.ResponseWriter, r *http.Request) {
@@ -357,7 +337,7 @@ func (h *CartHandler) handleRemoveItem(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	c, err := h.uc.RemoveItem(r.Context(), avatarID, invID, listID, modelID)
+	_, err := h.uc.RemoveItem(r.Context(), avatarID, invID, listID, modelID)
 	if err != nil {
 		if errors.Is(err, usecase.ErrCartInvalidArgument) || errors.Is(err, cartdom.ErrInvalidCart) {
 			writeErr(w, http.StatusBadRequest, err.Error())
@@ -367,7 +347,7 @@ func (h *CartHandler) handleRemoveItem(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	writeJSON(w, http.StatusOK, toCartResponse(avatarID, c))
+	h.respondCartDTO(w, r, avatarID)
 }
 
 func (h *CartHandler) handleClear(w http.ResponseWriter, r *http.Request) {
@@ -386,11 +366,39 @@ func (h *CartHandler) handleClear(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	w.WriteHeader(http.StatusNoContent)
+	// clear 後も UI は CartDTO を欲しがるため、空カート（または query 結果）を返す
+	h.respondCartDTO(w, r, avatarID)
+}
+
+func (h *CartHandler) respondCartDTO(w http.ResponseWriter, r *http.Request, avatarID string) {
+	if h.cartQuery == nil {
+		writeErr(w, http.StatusInternalServerError, "cart_query is not configured")
+		return
+	}
+
+	v, err := h.cartQuery.GetCartQuery(r.Context(), avatarID)
+	if err == nil {
+		writeJSON(w, http.StatusOK, v)
+		return
+	}
+
+	// query が not found なら空カートで安定化
+	if isNotFoundErr(err) {
+		writeJSON(w, http.StatusOK, map[string]any{
+			"avatarId":  avatarID,
+			"items":     map[string]any{},
+			"createdAt": nil,
+			"updatedAt": nil,
+			"expiresAt": nil,
+		})
+		return
+	}
+
+	h.writeQueryErr(w, err)
 }
 
 // -------------------------
-// request/response DTO (legacy)
+// request DTO
 // -------------------------
 
 type cartItemReq struct {
@@ -402,61 +410,6 @@ type cartItemReq struct {
 	ItemKey      string `json:"itemKey"` // optional (future use)
 	LegacyModel  string `json:"-"`       // unused; keep for forward compatibility if needed
 	LegacyListID string `json:"-"`       // unused
-}
-
-type cartResponse struct {
-	AvatarID string                 `json:"avatarId"`
-	Items    map[string]cartItemDTO `json:"items"`
-
-	CreatedAt string `json:"createdAt"`
-	UpdatedAt string `json:"updatedAt"`
-	ExpiresAt string `json:"expiresAt"`
-}
-
-type cartItemDTO struct {
-	InventoryID string `json:"inventoryId"`
-	ListID      string `json:"listId"`
-	ModelID     string `json:"modelId"`
-	Qty         int    `json:"qty"`
-}
-
-func toCartResponse(avatarID string, c *cartdom.Cart) cartResponse {
-	items := map[string]cartItemDTO{}
-	if c != nil && c.Items != nil {
-		keys := make([]string, 0, len(c.Items))
-		for k := range c.Items {
-			keys = append(keys, k)
-		}
-		sort.Strings(keys)
-
-		for _, k := range keys {
-			it := c.Items[k]
-			items[k] = cartItemDTO{
-				InventoryID: strings.TrimSpace(it.InventoryID),
-				ListID:      strings.TrimSpace(it.ListID),
-				ModelID:     strings.TrimSpace(it.ModelID),
-				Qty:         it.Qty,
-			}
-		}
-	}
-
-	if c == nil {
-		return cartResponse{
-			AvatarID:  strings.TrimSpace(avatarID),
-			Items:     items,
-			CreatedAt: "",
-			UpdatedAt: "",
-			ExpiresAt: "",
-		}
-	}
-
-	return cartResponse{
-		AvatarID:  strings.TrimSpace(avatarID),
-		Items:     items,
-		CreatedAt: toRFC3339(c.CreatedAt),
-		UpdatedAt: toRFC3339(c.UpdatedAt),
-		ExpiresAt: toRFC3339(c.ExpiresAt),
-	}
 }
 
 // -------------------------

@@ -1,4 +1,4 @@
-// backend/internal/adapters/in/http/sns/handler/order_handler.go
+// backend\internal\adapters\in\http\mall\handler\order_handler.go
 package mallHandler
 
 import (

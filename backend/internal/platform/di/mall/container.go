@@ -4,931 +4,193 @@ package mall
 import (
 	"context"
 	"errors"
-	"fmt"
 	"log"
-	"net/http"
-	"reflect"
-	"strings"
 
-	"cloud.google.com/go/firestore"
-	firebaseauth "firebase.google.com/go/v4/auth"
-
-	mallhttp "narratives/internal/adapters/in/http/mall"
-	mallhandler "narratives/internal/adapters/in/http/mall/handler"
-	mallwebhook "narratives/internal/adapters/in/http/mall/webhook"
-	"narratives/internal/adapters/in/http/middleware"
-	outfs "narratives/internal/adapters/out/firestore"
+	// inbound (query + resolver types)
 	mallquery "narratives/internal/application/query/mall"
 	appresolver "narratives/internal/application/resolver"
 	usecase "narratives/internal/application/usecase"
-	invdom "narratives/internal/domain/inventory"
-	ldom "narratives/internal/domain/list"
-	pbdom "narratives/internal/domain/productBlueprint"
 
-	consoleDI "narratives/internal/platform/di/console"
+	// outbound
+	outfs "narratives/internal/adapters/out/firestore"
+	mallfs "narratives/internal/adapters/out/firestore/mall"
+	gcso "narratives/internal/adapters/out/gcs"
+
+	// domains
+	ldom "narratives/internal/domain/list"
+
+	shared "narratives/internal/platform/di/shared"
 )
 
 const (
 	StripeWebhookPath = "/mall/webhooks/stripe"
 )
 
-// ------------------------------------------------------------
-// Hit tracing
-// ------------------------------------------------------------
+// Container is Mall DI container.
+// Pure DI: build deps only. No routing branching, no reflection tricks.
+type Container struct {
+	Infra *shared.Infra
 
-type hit struct {
-	OK   bool
-	From string
-	Name string
+	// Usecases (mall-facing)
+	ListUC            *usecase.ListUsecase
+	ShippingAddressUC *usecase.ShippingAddressUsecase
+	BillingAddressUC  *usecase.BillingAddressUsecase
+	UserUC            *usecase.UserUsecase
+	WalletUC          *usecase.WalletUsecase
+	CartUC            *usecase.CartUsecase
+	PaymentUC         *usecase.PaymentUsecase
+	OrderUC           *usecase.OrderUsecase
+	InvoiceUC         *usecase.InvoiceUsecase
+
+	// Optional resolver (for query enrich)
+	NameResolver *appresolver.NameResolver
+
+	// Queries (mall-facing)
+	CatalogQ *mallquery.CatalogQuery
+	CartQ    *mallquery.CartQuery
+	PreviewQ *mallquery.PreviewQuery
+	OrderQ   any
+
+	// Repos sometimes needed by queries/joins
+	ListRepo ldom.Repository
 }
 
-func (h hit) String() string {
-	if !h.OK {
-		return "(nil)"
-	}
-	from := strings.TrimSpace(h.From)
-	name := strings.TrimSpace(h.Name)
-	if from == "" && name == "" {
-		return "(ok)"
-	}
-	if from == "" {
-		return name
-	}
-	if name == "" {
-		return from
-	}
-	return from + ":" + name
-}
-
-// MallDeps (kept for compatibility with existing wiring)
-type MallDeps struct {
-	List             http.Handler
-	Inventory        http.Handler
-	ProductBlueprint http.Handler
-	Model            http.Handler
-	Catalog          http.Handler
-	TokenBlueprint   http.Handler
-
-	Company http.Handler
-	Brand   http.Handler
-
-	SignIn http.Handler
-
-	User            http.Handler
-	ShippingAddress http.Handler
-	BillingAddress  http.Handler
-	Avatar          http.Handler
-
-	AvatarState http.Handler
-	Wallet      http.Handler
-	Post        http.Handler
-
-	Cart    http.Handler
-	Preview http.Handler
-
-	Payment http.Handler
-	Order   http.Handler
-}
-
-func NewMallDeps(
-	listUC *usecase.ListUsecase,
-	invUC *usecase.InventoryUsecase,
-	pbUC *usecase.ProductBlueprintUsecase,
-	modelUC *usecase.ModelUsecase,
-	tokenBlueprintUC *usecase.TokenBlueprintUsecase,
-	catalogQ *mallquery.CatalogQuery,
-) MallDeps {
-	return NewMallDepsWithNameResolver(
-		listUC,
-		invUC,
-		pbUC,
-		modelUC,
-		tokenBlueprintUC,
-		nil,
-		catalogQ,
-	)
-}
-
-func NewMallDepsWithNameResolver(
-	listUC *usecase.ListUsecase,
-	invUC *usecase.InventoryUsecase,
-	pbUC *usecase.ProductBlueprintUsecase,
-	modelUC *usecase.ModelUsecase,
-	tokenBlueprintUC *usecase.TokenBlueprintUsecase,
-	nameResolver *appresolver.NameResolver,
-	catalogQ *mallquery.CatalogQuery,
-) MallDeps {
-	return NewMallDepsWithNameResolverAndOrgHandlers(
-		listUC,
-		invUC,
-		pbUC,
-		modelUC,
-		tokenBlueprintUC,
-		nil,
-		nil,
-		nameResolver,
-		catalogQ,
-	)
-}
-
-func NewMallDepsWithNameResolverAndOrgHandlers(
-	listUC *usecase.ListUsecase,
-	invUC *usecase.InventoryUsecase,
-	pbUC *usecase.ProductBlueprintUsecase,
-	modelUC *usecase.ModelUsecase,
-	tokenBlueprintUC *usecase.TokenBlueprintUsecase,
-
-	companyUC *usecase.CompanyUsecase,
-	brandUC *usecase.BrandUsecase,
-
-	nameResolver *appresolver.NameResolver,
-	catalogQ *mallquery.CatalogQuery,
-) MallDeps {
-	if catalogQ != nil && nameResolver != nil && catalogQ.NameResolver == nil {
-		catalogQ.NameResolver = nameResolver
-	}
-
-	var listHandler http.Handler
-	var invHandler http.Handler
-	var pbHandler http.Handler
-	var modelHandler http.Handler
-	var catalogHandler http.Handler
-	var tokenBlueprintHandler http.Handler
-	var companyHandler http.Handler
-	var brandHandler http.Handler
-
-	if listUC != nil {
-		listHandler = mallhandler.NewMallListHandler(listUC)
-	}
-	if invUC != nil {
-		invHandler = mallhandler.NewMallInventoryHandler(invUC)
-	}
-	if pbUC != nil {
-		// NOTE: 既存のハンドラ名が NewSNS* でも、mall 側で利用しているためここでは改名しない。
-		pbHandler = mallhandler.NewSNSProductBlueprintHandler(pbUC)
-		if nameResolver != nil {
-			setOptionalResolverField(pbHandler, "BrandNameResolver", nameResolver)
-			setOptionalResolverField(pbHandler, "CompanyNameResolver", nameResolver)
-			setOptionalResolverField(pbHandler, "NameResolver", nameResolver)
+func NewContainer(ctx context.Context, infra *shared.Infra) (*Container, error) {
+	// shared infra
+	if infra == nil {
+		var err error
+		infra, err = shared.NewInfra(ctx)
+		if err != nil {
+			return nil, err
 		}
 	}
-	if modelUC != nil {
-		modelHandler = mallhandler.NewMallModelHandler(modelUC)
-	}
-	if catalogQ != nil {
-		// NOTE: 既存のハンドラ名が NewSNS* でも、mall 側で利用しているためここでは改名しない。
-		catalogHandler = mallhandler.NewSNSCatalogHandler(catalogQ)
-	}
-	if companyUC != nil {
-		companyHandler = mallhandler.NewSNSCompanyHandler(companyUC)
-	}
-	if brandUC != nil {
-		brandHandler = mallhandler.NewSNSBrandHandler(brandUC)
+	if infra == nil {
+		return nil, errors.New("di.mall: shared infra is nil")
 	}
 
-	if tokenBlueprintUC != nil {
-		tokenBlueprintHandler = mallhandler.NewMallTokenBlueprintHandler(tokenBlueprintUC)
-		if nameResolver != nil {
-			setOptionalResolverField(tokenBlueprintHandler, "BrandNameResolver", nameResolver)
-			setOptionalResolverField(tokenBlueprintHandler, "CompanyNameResolver", nameResolver)
-			setOptionalResolverField(tokenBlueprintHandler, "NameResolver", nameResolver)
-		}
-		imgResolver := appresolver.NewImageURLResolver("")
-		setOptionalResolverField(tokenBlueprintHandler, "ImageResolver", imgResolver)
-		setOptionalResolverField(tokenBlueprintHandler, "ImageURLResolver", imgResolver)
-		setOptionalResolverField(tokenBlueprintHandler, "IconURLResolver", imgResolver)
+	// required clients
+	fsClient := infra.Firestore
+	if fsClient == nil {
+		return nil, errors.New("di.mall: infra.Firestore is nil")
+	}
+	gcsClient := infra.GCS
+	if gcsClient == nil {
+		return nil, errors.New("di.mall: infra.GCS is nil")
 	}
 
-	return MallDeps{
-		List:             listHandler,
-		Inventory:        invHandler,
-		ProductBlueprint: pbHandler,
-		Model:            modelHandler,
-		Catalog:          catalogHandler,
-		TokenBlueprint:   tokenBlueprintHandler,
+	c := &Container{Infra: infra}
 
-		Company: companyHandler,
-		Brand:   brandHandler,
-	}
-}
+	// --------------------------------------------------------
+	// Firestore repositories
+	// --------------------------------------------------------
+	shippingAddressRepo := outfs.NewShippingAddressRepositoryFS(fsClient)
+	billingAddressRepo := outfs.NewBillingAddressRepositoryFS(fsClient)
+	userRepo := outfs.NewUserRepositoryFS(fsClient)
+	walletRepo := outfs.NewWalletRepositoryFS(fsClient)
 
-// RegisterMallFromContainer registers mall routes onto mux using *console.Container.
-func RegisterMallFromContainer(mux *http.ServeMux, cont *consoleDI.Container) {
-	if mux == nil || cont == nil {
-		return
-	}
+	cartRepo := outfs.NewCartRepositoryFS(fsClient)
+	paymentRepo := outfs.NewPaymentRepositoryFS(fsClient)
+	orderRepo := outfs.NewOrderRepositoryFS(fsClient)
+	invoiceRepo := outfs.NewInvoiceRepositoryFS(fsClient)
 
-	depsAny := any(cont.RouterDeps())
+	// List repo
+	listRepoFS := outfs.NewListRepositoryFS(fsClient)
+	c.ListRepo = listRepoFS
 
-	var (
-		hitSignIn   hit
-		hitShip     hit
-		hitPay      hit
-		hitOrder    hit
-		hitWallet   hit
-		hitNameRes  hit
-		hitCatalogQ hit
-		hitCartQ    hit
-		hitPrevQ    hit
-		hitListRepo hit
+	// List repo for usecase ports (console側と同じ変換を使う)
+	listRepoForUC := outfs.NewListRepositoryForUsecase(listRepoFS)
 
-		hitCart    hit
-		hitPreview hit
+	// --------------------------------------------------------
+	// GCS repositories (ListUsecase needs image ports)
+	// --------------------------------------------------------
+	listImageRepo := gcso.NewListImageRepositoryGCS(gcsClient, infra.ListImageBucket)
 
-		hitStripeWH hit
+	// ✅ ListPatcher は di/mall/adapter.go から分離済み
+	// -> backend/internal/adapters/out/firestore/mall/list_patcher_repo.go
+	listPatcher := mallfs.NewListPatcherRepo(fsClient)
+
+	// --------------------------------------------------------
+	// Usecases
+	// --------------------------------------------------------
+	c.ListUC = usecase.NewListUsecase(
+		listRepoForUC, // ListReader
+		listPatcher,   // ListPatcher
+		listImageRepo, // ListImageReader
+		listImageRepo, // ListImageByIDReader
+		listImageRepo, // ListImageObjectSaver (+ SignedURLIssuer)
 	)
 
-	// --------------------------------------------------------
-	// Core clients
-	// --------------------------------------------------------
-	fsClient := getFirestoreClientStrict(cont, depsAny)
+	c.ShippingAddressUC = usecase.NewShippingAddressUsecase(shippingAddressRepo)
+	c.BillingAddressUC = usecase.NewBillingAddressUsecase(billingAddressRepo)
+	c.UserUC = usecase.NewUserUsecase(userRepo)
+	c.WalletUC = usecase.NewWalletUsecase(walletRepo)
+
+	c.CartUC = usecase.NewCartUsecase(cartRepo)
+	c.PaymentUC = usecase.NewPaymentUsecase(paymentRepo)
+	c.InvoiceUC = usecase.NewInvoiceUsecase(invoiceRepo)
+	c.OrderUC = usecase.NewOrderUsecase(orderRepo).WithInvoiceUsecase(c.InvoiceUC)
 
 	// --------------------------------------------------------
-	// Resolver
+	// NameResolver (optional but useful for mall queries)
 	// --------------------------------------------------------
-	nameResolver := getFieldPtr[*appresolver.NameResolver](depsAny, "NameResolver")
-	hitNameRes = hit{OK: nameResolver != nil, From: "RouterDeps.field/Container.field", Name: "NameResolver"}
+	{
+		brandRepo := outfs.NewBrandRepositoryFS(fsClient)
+		companyRepo := outfs.NewCompanyRepositoryFS(fsClient)
+		productBlueprintRepo := outfs.NewProductBlueprintRepositoryFS(fsClient)
+		memberRepo := outfs.NewMemberRepositoryFS(fsClient)
+		modelRepo := outfs.NewModelRepositoryFS(fsClient)
+		tokenBlueprintRepo := outfs.NewTokenBlueprintRepositoryFS(fsClient)
+
+		// tokenBlueprintNameRepoAdapter は di/mall/adapter.go に存在
+		tbNameRepo := &tokenBlueprintNameRepoAdapter{repo: tokenBlueprintRepo}
+
+		c.NameResolver = appresolver.NewNameResolver(
+			brandRepo,
+			companyRepo,
+			productBlueprintRepo,
+			memberRepo,
+			modelRepo,
+			tbNameRepo,
+		)
+	}
 
 	// --------------------------------------------------------
-	// Queries (mall/container.go owns them; no Container methods)
+	// Queries (mall-facing)
 	// --------------------------------------------------------
-	var catalogQ *mallquery.CatalogQuery
-	var cartQ *mallquery.CartQuery
-	var previewQ *mallquery.PreviewQuery
-	var orderQAny any
+	{
+		// ✅ CatalogQuery の InventoryRepository は outfs.InventoryRepositoryFS では満たせない
+		// → out/firestore/mall の adapter (InventoryRepoForMallQuery) を使う
+		invRepo := mallfs.NewInventoryRepoForMallQuery(fsClient)
 
-	if fsClient != nil {
-		listRepoFS := outfs.NewListRepositoryFS(fsClient)
-
-		// ✅ Adapter: mallquery.InventoryRepository expects inventory.Mint return types
-		baseInvRepo := outfs.NewInventoryRepositoryFS(fsClient)
-		invRepo := &catalogInventoryRepoAdapter{base: baseInvRepo}
-
-		// ✅ Adapter: mallquery.ProductBlueprintRepository expects value return (not *T)
-		basePBRepo := outfs.NewProductBlueprintRepositoryFS(fsClient)
-		pbRepo := &catalogProductBlueprintRepoAdapter{base: basePBRepo}
-
+		pbRepo := outfs.NewProductBlueprintRepositoryFS(fsClient)
 		modelRepo := outfs.NewModelRepositoryFS(fsClient)
 
-		catalogQ = mallquery.NewCatalogQuery(
-			listRepoFS,
-			invRepo,
-			pbRepo,
-			modelRepo,
-		)
-		if catalogQ != nil && nameResolver != nil && catalogQ.NameResolver == nil {
-			catalogQ.NameResolver = nameResolver
+		c.CatalogQ = mallquery.NewCatalogQuery(listRepoFS, invRepo, pbRepo, modelRepo)
+
+		c.CartQ = mallquery.NewCartQuery(fsClient)
+		c.PreviewQ = mallquery.NewPreviewQuery(fsClient)
+		c.OrderQ = mallquery.NewOrderQuery(fsClient)
+
+		// light injection (no reflection)
+		if c.CatalogQ != nil && c.NameResolver != nil && c.CatalogQ.NameResolver == nil {
+			c.CatalogQ.NameResolver = c.NameResolver
 		}
-
-		cartQ = mallquery.NewCartQuery(fsClient)
-		if cartQ != nil && nameResolver != nil && cartQ.Resolver == nil {
-			cartQ.Resolver = nameResolver
+		if c.CartQ != nil && c.NameResolver != nil && c.CartQ.Resolver == nil {
+			c.CartQ.Resolver = c.NameResolver
 		}
-
-		previewQ = mallquery.NewPreviewQuery(fsClient)
-		if previewQ != nil && nameResolver != nil && previewQ.Resolver == nil {
-			previewQ.Resolver = nameResolver
+		if c.CartQ != nil && c.ListRepo != nil && c.CartQ.ListRepo == nil {
+			c.CartQ.ListRepo = c.ListRepo
 		}
-
-		orderQAny = mallquery.NewOrderQuery(fsClient)
-	}
-
-	hitCatalogQ = hit{OK: catalogQ != nil, From: "constructed", Name: "mallquery.NewCatalogQuery"}
-	hitCartQ = hit{OK: cartQ != nil, From: "constructed", Name: "mallquery.NewCartQuery"}
-	hitPrevQ = hit{OK: previewQ != nil, From: "constructed", Name: "mallquery.NewPreviewQuery"}
-
-	// Prefer existing order query if any
-	if orderQAny == nil {
-		orderQAny = getOrderQueryBestEffort(cont, depsAny)
-	}
-
-	// --------------------------------------------------------
-	// Direct handlers (mall/container.go owns them; no Container methods)
-	// --------------------------------------------------------
-	signInH := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.WriteHeader(http.StatusNoContent)
-	})
-	hitSignIn = hit{OK: signInH != nil, From: "constructed", Name: "sign-in 204"}
-
-	// shipping address
-	var shipH http.Handler
-	{
-		shipUC := getFieldPtr[*usecase.ShippingAddressUsecase](depsAny, "ShippingAddressUC", "ShippingAddressUsecase")
-		if shipUC != nil {
-			shipH = mallhandler.NewShippingAddressHandler(shipUC)
+		if c.PreviewQ != nil && c.NameResolver != nil && c.PreviewQ.Resolver == nil {
+			c.PreviewQ.Resolver = c.NameResolver
 		}
 	}
-	hitShip = hit{OK: shipH != nil, From: "constructed", Name: "mallhandler.NewShippingAddressHandler"}
 
-	// --------------------------------------------------------
-	// listRepo (for CartQuery/List name join etc.)
-	// --------------------------------------------------------
-	var listRepo ldom.Repository
-	{
-		if fsClient != nil {
-			listRepo = outfs.NewListRepositoryFS(fsClient)
-		}
-		hitListRepo = hit{OK: listRepo != nil, From: "constructed", Name: "outfs.NewListRepositoryFS"}
-	}
-
-	if cartQ != nil && listRepo != nil && cartQ.ListRepo == nil {
-		cartQ.ListRepo = listRepo
-	}
-	if previewQ != nil && listRepo != nil {
-		setOptionalResolverField(previewQ, "ListRepo", listRepo)
-		setOptionalResolverField(previewQ, "ListRepository", listRepo)
-	}
-
-	// --------------------------------------------------------
-	// Usecases (from RouterDeps)
-	// --------------------------------------------------------
-	listUC := getFieldPtr[*usecase.ListUsecase](depsAny, "ListUC", "ListUsecase")
-	invUC := getFieldPtr[*usecase.InventoryUsecase](depsAny, "InventoryUC", "InventoryUsecase")
-	pbUC := getFieldPtr[*usecase.ProductBlueprintUsecase](depsAny, "ProductBlueprintUC", "ProductBlueprintUsecase")
-	modelUC := getFieldPtr[*usecase.ModelUsecase](depsAny, "ModelUC", "ModelUsecase")
-	tokenBlueprintUC := getFieldPtr[*usecase.TokenBlueprintUsecase](depsAny, "TokenBlueprintUC", "TokenBlueprintUsecase")
-
-	companyUC := getFieldPtr[*usecase.CompanyUsecase](depsAny, "CompanyUC", "CompanyUsecase")
-	brandUC := getFieldPtr[*usecase.BrandUsecase](depsAny, "BrandUC", "BrandUsecase")
-
-	orderUC := getFieldPtr[*usecase.OrderUsecase](depsAny, "OrderUC", "OrderUsecase")
-	invoiceUC := getFieldPtr[*usecase.InvoiceUsecase](depsAny, "InvoiceUC", "InvoiceUsecase")
-	paymentUC := getFieldPtr[*usecase.PaymentUsecase](depsAny, "PaymentUC", "PaymentUsecase")
-	walletUC := getFieldPtr[*usecase.WalletUsecase](depsAny, "WalletUC", "WalletUsecase")
-
-	cartUC := getFieldPtr[*usecase.CartUsecase](depsAny, "CartUC", "CartUsecase")
-
-	// --------------------------------------------------------
-	// Base deps (REST handlers)
-	// --------------------------------------------------------
-	mallDeps := NewMallDepsWithNameResolverAndOrgHandlers(
-		listUC, invUC, pbUC, modelUC, tokenBlueprintUC,
-		companyUC, brandUC, nameResolver, catalogQ,
+	log.Printf("[di.mall] container built (firestore=%t gcs=%t firebaseAuth=%t)",
+		c.Infra.Firestore != nil,
+		c.Infra.GCS != nil,
+		c.Infra.FirebaseAuth != nil,
 	)
 
-	mallDeps.SignIn = signInH
-	mallDeps.ShippingAddress = shipH
-
-	// User
-	{
-		userUC := getFieldPtr[*usecase.UserUsecase](depsAny, "UserUC", "UserUsecase")
-		if userUC != nil {
-			mallDeps.User = mallhandler.NewUserHandler(userUC)
-		}
-	}
-
-	// Billing
-	{
-		billUC := getFieldPtr[*usecase.BillingAddressUsecase](depsAny, "BillingAddressUC", "BillingAddressUsecase")
-		if billUC != nil {
-			mallDeps.BillingAddress = mallhandler.NewBillingAddressHandler(billUC)
-		}
-	}
-
-	// Avatar
-	{
-		avatarUC := getFieldPtr[*usecase.AvatarUsecase](depsAny, "AvatarUC", "AvatarUsecase")
-		if avatarUC != nil {
-			mallDeps.Avatar = mallhandler.NewAvatarHandler(avatarUC)
-		}
-	}
-
-	// Wallet
-	if walletUC != nil {
-		mallDeps.Wallet = mallhandler.NewWalletHandler(walletUC)
-		hitWallet = hit{OK: mallDeps.Wallet != nil, From: "constructed", Name: "mallhandler.NewWalletHandler"}
-	} else {
-		hitWallet = hit{OK: false, From: "RouterDeps.field", Name: "WalletUC"}
-	}
-
-	// Payment (with order query)
-	if paymentUC != nil {
-		mallDeps.Payment = mallhandler.NewPaymentHandlerWithOrderQuery(paymentUC, orderQAny)
-		hitPay = hit{OK: mallDeps.Payment != nil, From: "constructed", Name: "mallhandler.NewPaymentHandlerWithOrderQuery"}
-	} else {
-		hitPay = hit{OK: false, From: "RouterDeps.field", Name: "PaymentUC"}
-	}
-
-	// Order
-	if orderUC != nil {
-		mallDeps.Order = mallhandler.NewOrderHandler(orderUC)
-		hitOrder = hit{OK: mallDeps.Order != nil, From: "constructed", Name: "mallhandler.NewOrderHandler"}
-	} else {
-		hitOrder = hit{OK: false, From: "RouterDeps.field", Name: "OrderUC"}
-	}
-
-	// Cart/Preview
-	if cartQ != nil {
-		qh := mallhandler.NewCartQueryHandler(cartQ)
-
-		var core http.Handler
-		if cartUC != nil {
-			core = mallhandler.NewCartHandlerWithQueries(cartUC, cartQ, previewQ)
-			hitPreview = hit{OK: core != nil, From: "constructed", Name: "CartHandlerWithQueries (as preview)"}
-		}
-
-		mallDeps.Cart = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			p := r.URL.Path
-
-			if r.Method == http.MethodGet {
-				if p == "/mall/cart" || p == "/mall/cart/" || strings.HasPrefix(p, "/mall/cart/query") {
-					qh.ServeHTTP(w, r)
-					return
-				}
-			}
-
-			if core != nil {
-				core.ServeHTTP(w, r)
-				return
-			}
-
-			w.Header().Set("Allow", http.MethodGet)
-			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
-		})
-
-		hitCart = hit{OK: mallDeps.Cart != nil, From: "constructed", Name: "wrapped(GET->CartQueryHandler, else->CartHandler/405)"}
-
-		if core != nil {
-			mallDeps.Preview = core
-		}
-	} else if cartUC != nil {
-		core := mallhandler.NewCartHandlerWithQueries(cartUC, nil, previewQ)
-		mallDeps.Cart = core
-		mallDeps.Preview = core
-		hitCart = hit{OK: true, From: "constructed", Name: "CartHandlerWithQueries"}
-		hitPreview = hit{OK: true, From: "constructed", Name: "CartHandlerWithQueries (as preview)"}
-	}
-
-	// user_auth
-	{
-		fbClient := getFirebaseAuthClientStrict(cont, depsAny)
-		userAuth := newUserAuthMiddlewareBestEffort(fbClient)
-		if userAuth == nil {
-			log.Printf("[mall_container] WARN: user_auth middleware is not available (firebase auth client missing). protected routes may 401.")
-		} else {
-			wrap := func(h http.Handler) http.Handler {
-				if h == nil {
-					return nil
-				}
-				return userAuth.Handler(h)
-			}
-
-			mallDeps.User = wrap(mallDeps.User)
-			mallDeps.ShippingAddress = wrap(mallDeps.ShippingAddress)
-			mallDeps.BillingAddress = wrap(mallDeps.BillingAddress)
-			mallDeps.Avatar = wrap(mallDeps.Avatar)
-			mallDeps.Wallet = wrap(mallDeps.Wallet)
-
-			mallDeps.Cart = wrap(mallDeps.Cart)
-			mallDeps.Preview = wrap(mallDeps.Preview)
-			mallDeps.Payment = wrap(mallDeps.Payment)
-			mallDeps.Order = wrap(mallDeps.Order)
-		}
-	}
-
-	// routes
-	mallhttp.Register(mux, mallhttp.Deps{
-		List:             mallDeps.List,
-		Inventory:        mallDeps.Inventory,
-		ProductBlueprint: mallDeps.ProductBlueprint,
-		Model:            mallDeps.Model,
-		Catalog:          mallDeps.Catalog,
-		TokenBlueprint:   mallDeps.TokenBlueprint,
-
-		Company: mallDeps.Company,
-		Brand:   mallDeps.Brand,
-
-		SignIn: mallDeps.SignIn,
-
-		User:            mallDeps.User,
-		ShippingAddress: mallDeps.ShippingAddress,
-		BillingAddress:  mallDeps.BillingAddress,
-		Avatar:          mallDeps.Avatar,
-		AvatarState:     mallDeps.AvatarState,
-		Wallet:          mallDeps.Wallet,
-
-		Cart:    mallDeps.Cart,
-		Post:    mallDeps.Post,
-		Payment: mallDeps.Payment,
-		Preview: mallDeps.Preview,
-		Order:   mallDeps.Order,
-	})
-
-	// logs
-	log.Printf("[mall_container] inject hits "+
-		"signIn=%s ship=%s payment=%s order=%s wallet=%s cart=%s preview=%s "+
-		"nameResolver=%s catalogQ=%s cartQ=%s previewQ=%s listRepo=%s orderQ=%t",
-		hitSignIn.String(),
-		hitShip.String(),
-		hitPay.String(),
-		hitOrder.String(),
-		hitWallet.String(),
-		hitCart.String(),
-		hitPreview.String(),
-		hitNameRes.String(),
-		hitCatalogQ.String(),
-		hitCartQ.String(),
-		hitPrevQ.String(),
-		hitListRepo.String(),
-		orderQAny != nil,
-	)
-
-	// webhook (no user_auth)
-	if invoiceUC != nil && paymentUC != nil {
-		stripeWH := mallwebhook.NewStripeWebhookHandler(invoiceUC, paymentUC)
-		hitStripeWH = hit{OK: stripeWH != nil, From: "constructed", Name: "mallwebhook.NewStripeWebhookHandler"}
-
-		mux.Handle(StripeWebhookPath, stripeWH)
-		mux.Handle(StripeWebhookPath+"/", stripeWH)
-
-		log.Printf("[mall_container] webhook registered stripe=%s paths=%s,%s",
-			hitStripeWH.String(), StripeWebhookPath, StripeWebhookPath+"/",
-		)
-	} else {
-		hitStripeWH = hit{OK: false, From: "RouterDeps.field", Name: "InvoiceUC/PaymentUC"}
-		log.Printf("[mall_container] webhook NOT registered stripe=%s (missing InvoiceUC or PaymentUC)", hitStripeWH.String())
-	}
-}
-
-// ------------------------------------------------------------
-// Repo adapters for mallquery.NewCatalogQuery (signature fixes)
-// ------------------------------------------------------------
-
-type catalogInventoryRepoAdapter struct {
-	base any // usually *outfs.InventoryRepositoryFS
-}
-
-// mallquery.InventoryRepository wants inventory.Mint (NOT DTO)
-func (a *catalogInventoryRepoAdapter) GetByID(ctx context.Context, id string) (invdom.Mint, error) {
-	if a == nil || a.base == nil {
-		return invdom.Mint{}, errors.New("catalogInventoryRepoAdapter: base is nil")
-	}
-
-	v, err := callRepo(a.base,
-		[]string{"GetByID", "GetById", "GetMintByID", "GetMintById"},
-		ctx,
-		strings.TrimSpace(id),
-	)
-	if err != nil {
-		return invdom.Mint{}, err
-	}
-	if v == nil {
-		return invdom.Mint{}, errors.New("mint is nil")
-	}
-
-	switch m := v.(type) {
-	case invdom.Mint:
-		return m, nil
-	case *invdom.Mint:
-		if m == nil {
-			return invdom.Mint{}, errors.New("mint is nil")
-		}
-		return *m, nil
-	default:
-		rv := reflect.ValueOf(v)
-		if rv.IsValid() && rv.Kind() == reflect.Pointer && !rv.IsNil() {
-			if x, ok := rv.Interface().(*invdom.Mint); ok && x != nil {
-				return *x, nil
-			}
-		}
-		return invdom.Mint{}, fmt.Errorf("unexpected mint type: %T", v)
-	}
-}
-
-// If mallquery.InventoryRepository requires this, implement it here.
-func (a *catalogInventoryRepoAdapter) GetByProductAndTokenBlueprintID(ctx context.Context, productBlueprintID, tokenBlueprintID string) (invdom.Mint, error) {
-	if a == nil || a.base == nil {
-		return invdom.Mint{}, errors.New("catalogInventoryRepoAdapter: base is nil")
-	}
-
-	pbID := strings.TrimSpace(productBlueprintID)
-	tbID := strings.TrimSpace(tokenBlueprintID)
-
-	v, err := callRepo(a.base,
-		[]string{
-			"GetByProductAndTokenBlueprintID",
-			"GetByProductAndTokenBlueprintId",
-			"GetMintByProductAndTokenBlueprintID",
-			"GetMintByProductAndTokenBlueprintId",
-		},
-		ctx,
-		pbID,
-		tbID,
-	)
-	if err != nil {
-		return invdom.Mint{}, err
-	}
-	if v == nil {
-		return invdom.Mint{}, errors.New("mint is nil")
-	}
-
-	switch m := v.(type) {
-	case invdom.Mint:
-		return m, nil
-	case *invdom.Mint:
-		if m == nil {
-			return invdom.Mint{}, errors.New("mint is nil")
-		}
-		return *m, nil
-	default:
-		rv := reflect.ValueOf(v)
-		if rv.IsValid() && rv.Kind() == reflect.Pointer && !rv.IsNil() {
-			if x, ok := rv.Interface().(*invdom.Mint); ok && x != nil {
-				return *x, nil
-			}
-		}
-		return invdom.Mint{}, fmt.Errorf("unexpected mint type: %T", v)
-	}
-}
-
-type catalogProductBlueprintRepoAdapter struct {
-	base any // usually *outfs.ProductBlueprintRepositoryFS
-}
-
-// mallquery.ProductBlueprintRepository wants value (NOT *T)
-func (a *catalogProductBlueprintRepoAdapter) GetByID(ctx context.Context, id string) (pbdom.ProductBlueprint, error) {
-	if a == nil || a.base == nil {
-		return pbdom.ProductBlueprint{}, errors.New("catalogProductBlueprintRepoAdapter: base is nil")
-	}
-
-	v, err := callRepo(a.base,
-		[]string{"GetByID", "GetById"},
-		ctx,
-		strings.TrimSpace(id),
-	)
-	if err != nil {
-		return pbdom.ProductBlueprint{}, err
-	}
-	if v == nil {
-		return pbdom.ProductBlueprint{}, errors.New("productBlueprint is nil")
-	}
-
-	switch pb := v.(type) {
-	case pbdom.ProductBlueprint:
-		return pb, nil
-	case *pbdom.ProductBlueprint:
-		if pb == nil {
-			return pbdom.ProductBlueprint{}, errors.New("productBlueprint is nil")
-		}
-		return *pb, nil
-	default:
-		rv := reflect.ValueOf(v)
-		if rv.IsValid() && rv.Kind() == reflect.Pointer && !rv.IsNil() {
-			if x, ok := rv.Interface().(*pbdom.ProductBlueprint); ok && x != nil {
-				return *x, nil
-			}
-		}
-		return pbdom.ProductBlueprint{}, fmt.Errorf("unexpected productBlueprint type: %T", v)
-	}
-}
-
-// ------------------------------------------------------------
-// order query getter (best-effort, type-mismatch safe)
-// ------------------------------------------------------------
-
-func getOrderQueryBestEffort(cont *consoleDI.Container, depsAny any) any {
-	// 1) Container methods (reflect)
-	if cont != nil {
-		rv := reflect.ValueOf(cont)
-		if rv.IsValid() {
-			for _, name := range []string{
-				"MallOrderQuery",
-				"OrderQuery",
-				"OrderQueryService",
-			} {
-				m := rv.MethodByName(name)
-				if m.IsValid() && m.Type().NumIn() == 0 && m.Type().NumOut() == 1 {
-					out := m.Call(nil)
-					if len(out) == 1 && out[0].IsValid() && !out[0].IsNil() {
-						return out[0].Interface()
-					}
-				}
-			}
-		}
-	}
-
-	// 2) RouterDeps fields (reflect)
-	if depsAny != nil {
-		rv := reflect.ValueOf(depsAny)
-		if rv.Kind() == reflect.Interface && !rv.IsNil() {
-			rv = rv.Elem()
-		}
-		if rv.Kind() == reflect.Pointer && !rv.IsNil() {
-			rv = rv.Elem()
-		}
-		if rv.IsValid() && rv.Kind() == reflect.Struct {
-			for _, n := range []string{
-				"OrderQ",
-				"MallOrderQuery",
-				"OrderQuery",
-				"OrderQueryService",
-			} {
-				f := rv.FieldByName(n)
-				if !f.IsValid() || !f.CanInterface() {
-					continue
-				}
-				v := f.Interface()
-				if v != nil {
-					return v
-				}
-			}
-		}
-	}
-
-	return nil
-}
-
-// ------------------------------------------------------------
-// Middleware builder
-// ------------------------------------------------------------
-
-func newUserAuthMiddlewareBestEffort(fb *firebaseauth.Client) *middleware.UserAuthMiddleware {
-	if fb == nil {
-		return nil
-	}
-	return &middleware.UserAuthMiddleware{FirebaseAuth: fb}
-}
-
-// ------------------------------------------------------------
-// Reflection helpers
-// ------------------------------------------------------------
-
-func setOptionalResolverField(target any, fieldName string, value any) {
-	if target == nil || value == nil || strings.TrimSpace(fieldName) == "" {
-		return
-	}
-
-	rv := reflect.ValueOf(target)
-	if !rv.IsValid() {
-		return
-	}
-	if rv.Kind() == reflect.Interface && !rv.IsNil() {
-		rv = rv.Elem()
-	}
-	if rv.Kind() == reflect.Pointer {
-		if rv.IsNil() {
-			return
-		}
-		rv = rv.Elem()
-	}
-	if rv.Kind() != reflect.Struct {
-		return
-	}
-
-	f := rv.FieldByName(fieldName)
-	if !f.IsValid() || !f.CanSet() {
-		return
-	}
-
-	vv := reflect.ValueOf(value)
-	if !vv.IsValid() {
-		return
-	}
-
-	if vv.Type().AssignableTo(f.Type()) {
-		f.Set(vv)
-		return
-	}
-	if f.Kind() == reflect.Interface && vv.Type().Implements(f.Type()) {
-		f.Set(vv)
-		return
-	}
-}
-
-func getFieldPtr[T any](src any, names ...string) T {
-	var zero T
-	if src == nil {
-		return zero
-	}
-
-	rv := reflect.ValueOf(src)
-	if !rv.IsValid() {
-		return zero
-	}
-	if rv.Kind() == reflect.Interface && !rv.IsNil() {
-		rv = rv.Elem()
-	}
-	if rv.Kind() == reflect.Pointer {
-		if rv.IsNil() {
-			return zero
-		}
-		rv = rv.Elem()
-	}
-	if rv.Kind() != reflect.Struct {
-		return zero
-	}
-
-	for _, n := range names {
-		n = strings.TrimSpace(n)
-		if n == "" {
-			continue
-		}
-		f := rv.FieldByName(n)
-		if !f.IsValid() || !f.CanInterface() {
-			continue
-		}
-		if v, ok := f.Interface().(T); ok {
-			return v
-		}
-	}
-
-	return zero
-}
-
-// ------------------------------------------------------------
-// Firestore client (minimal; used for repos/queries)
-// ------------------------------------------------------------
-
-func getFirestoreClientStrict(cont *consoleDI.Container, depsAny any) *firestore.Client {
-	// 1) Container fields
-	if cont != nil {
-		rv := reflect.ValueOf(cont)
-		if rv.IsValid() && rv.Kind() == reflect.Pointer && !rv.IsNil() {
-			rv = rv.Elem()
-		}
-		if rv.IsValid() && rv.Kind() == reflect.Struct {
-			for _, n := range []string{"Firestore", "FirestoreClient", "Client"} {
-				f := rv.FieldByName(n)
-				if !f.IsValid() || !f.CanInterface() {
-					continue
-				}
-				if fsClient, ok := f.Interface().(*firestore.Client); ok && fsClient != nil {
-					return fsClient
-				}
-			}
-		}
-	}
-
-	// 2) RouterDeps fields
-	if depsAny != nil {
-		rv := reflect.ValueOf(depsAny)
-		if rv.Kind() == reflect.Interface && !rv.IsNil() {
-			rv = rv.Elem()
-		}
-		if rv.Kind() == reflect.Pointer && !rv.IsNil() {
-			rv = rv.Elem()
-		}
-		if rv.IsValid() && rv.Kind() == reflect.Struct {
-			for _, n := range []string{"Firestore", "FirestoreClient", "Client"} {
-				f := rv.FieldByName(n)
-				if !f.IsValid() || !f.CanInterface() {
-					continue
-				}
-				if fsClient, ok := f.Interface().(*firestore.Client); ok && fsClient != nil {
-					return fsClient
-				}
-			}
-		}
-	}
-
-	return nil
-}
-
-// ------------------------------------------------------------
-// Firebase Auth client (best-effort; mirrors Firestore getter)
-// ------------------------------------------------------------
-
-func getFirebaseAuthClientStrict(cont *consoleDI.Container, depsAny any) *firebaseauth.Client {
-	// 1) Container fields
-	if cont != nil {
-		rv := reflect.ValueOf(cont)
-		if rv.IsValid() && rv.Kind() == reflect.Pointer && !rv.IsNil() {
-			rv = rv.Elem()
-		}
-		if rv.IsValid() && rv.Kind() == reflect.Struct {
-			for _, n := range []string{"FirebaseAuth", "FirebaseAuthClient", "Auth", "AuthClient"} {
-				f := rv.FieldByName(n)
-				if !f.IsValid() || !f.CanInterface() {
-					continue
-				}
-				if c, ok := f.Interface().(*firebaseauth.Client); ok && c != nil {
-					return c
-				}
-			}
-		}
-	}
-
-	// 2) RouterDeps fields
-	if depsAny != nil {
-		rv := reflect.ValueOf(depsAny)
-		if rv.Kind() == reflect.Interface && !rv.IsNil() {
-			rv = rv.Elem()
-		}
-		if rv.Kind() == reflect.Pointer && !rv.IsNil() {
-			rv = rv.Elem()
-		}
-		if rv.IsValid() && rv.Kind() == reflect.Struct {
-			for _, n := range []string{"FirebaseAuth", "FirebaseAuthClient", "Auth", "AuthClient"} {
-				f := rv.FieldByName(n)
-				if !f.IsValid() || !f.CanInterface() {
-					continue
-				}
-				if c, ok := f.Interface().(*firebaseauth.Client); ok && c != nil {
-					return c
-				}
-			}
-		}
-	}
-
-	return nil
+	return c, nil
 }

@@ -1,4 +1,4 @@
-// backend/internal/adapters/in/http/sns/handler/user_handler.go
+// backend\internal\adapters\in\http\mall\handler\user_handler.go
 package mallHandler
 
 import (

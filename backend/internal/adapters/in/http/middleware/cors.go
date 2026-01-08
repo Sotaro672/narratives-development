@@ -14,9 +14,9 @@ func CORS(next http.Handler) http.Handler {
 		"http://localhost:5173":                        true, // ローカル dev (Vite)
 		"http://127.0.0.1:5173":                        true, // ローカル dev
 
-		// ✅ SNS (buyer-facing)
-		"https://narratives-development-sns.web.app":         true,
-		"https://narratives-development-sns.firebaseapp.com": true,
+		// ✅ Mall (buyer-facing)
+		"https://narratives-development-mall.web.app":         true,
+		"https://narratives-development-mall.firebaseapp.com": true,
 	}
 
 	allowedHeaders := strings.Join([]string{

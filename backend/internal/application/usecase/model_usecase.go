@@ -34,7 +34,7 @@ type ModelHistoryRepo interface {
 // ModelUsecase
 // ------------------------------------------------------------
 //
-// ✅ SNS handler から model.RepositoryPort として渡したいので、
+// ✅ Mall handler から model.RepositoryPort として渡したいので、
 //   ModelUsecase 自体が modeldom.RepositoryPort を実装する（= repo に委譲する）
 // ------------------------------------------------------------
 

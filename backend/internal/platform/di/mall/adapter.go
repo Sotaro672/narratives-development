@@ -7,21 +7,12 @@ import (
 	"strings"
 	"time"
 
-	"cloud.google.com/go/firestore"
-
-	fs "narratives/internal/adapters/out/firestore"
-	companydom "narratives/internal/domain/company"
 	inspectiondom "narratives/internal/domain/inspection"
-	listdom "narratives/internal/domain/list"
-	memdom "narratives/internal/domain/member"
-	modeldom "narratives/internal/domain/model"
 	productdom "narratives/internal/domain/product"
 	productbpdom "narratives/internal/domain/productBlueprint"
 	tbdom "narratives/internal/domain/tokenBlueprint"
 
 	avatarstate "narratives/internal/domain/avatarState"
-
-	mallquerydto "narratives/internal/application/query/mall/dto"
 )
 
 //
@@ -29,44 +20,15 @@ import (
 // mall CatalogQuery 用アダプタ（型ズレ吸収）
 // ========================================
 //
-// mallquery.InventoryRepository が DTO を返すため、
-// outfs.InventoryRepositoryFS を直接渡せない（wrong type for GetByID）。
-// → Firestore から DTO を直接 DataTo する実装で吸収する。
-//
-
-type mallCatalogInventoryRepoAdapter struct {
-	Client *firestore.Client
-}
-
-func (a *mallCatalogInventoryRepoAdapter) GetByID(
-	ctx context.Context,
-	id string,
-) (*mallquerydto.CatalogInventoryDTO, error) {
-	if a == nil || a.Client == nil {
-		return nil, errors.New("mallCatalogInventoryRepoAdapter: client is nil")
-	}
-	id = strings.TrimSpace(id)
-	if id == "" {
-		return nil, errors.New("mallCatalogInventoryRepoAdapter: id is empty")
-	}
-
-	// NOTE: コレクション名は一般的な "inventories" を採用。
-	// 実データが異なる場合はここだけ差し替えてください。
-	snap, err := a.Client.Collection("inventories").Doc(id).Get(ctx)
-	if err != nil {
-		return nil, err
-	}
-
-	var dto mallquerydto.CatalogInventoryDTO
-	if err := snap.DataTo(&dto); err != nil {
-		return nil, err
-	}
-	return &dto, nil
-}
-
-//
-// mallquery.ProductBlueprintRepository は GetByID が *ProductBlueprint を返す。
-// outfs.ProductBlueprintRepositoryFS は値を返すため、ポインタ化する薄いアダプタを挟む。
+// NOTE:
+// - mallCatalogInventoryRepoAdapter は Firestore直読みの out adapter として分離しました。
+//   -> backend/internal/adapters/out/firestore/mall/catalog_inventory_repo.go
+// - mallquery.InventoryRepository(Mint返却) は Firestore直読みの out adapter として分離しました。
+//   -> backend/internal/adapters/out/firestore/mall/inventory_repo_for_mallquery.go
+// - listPatcherAdapter は Firestore-backed out adapter として分離しました。
+//   -> backend/internal/adapters/out/firestore/mall/list_patcher_repo.go
+// - productQueryRepoAdapter は Firestore-backed out adapter として分離しました。
+//   -> backend/internal/adapters/out/firestore/mall/product_query_repo.go
 //
 
 type mallCatalogProductBlueprintRepoAdapter struct {
@@ -98,103 +60,6 @@ func (a *mallCatalogProductBlueprintRepoAdapter) ListIDsByCompany(
 		return nil, errors.New("mallCatalogProductBlueprintRepoAdapter: repo is nil")
 	}
 	return a.repo.ListIDsByCompany(ctx, strings.TrimSpace(companyID))
-}
-
-//
-// ========================================
-// auth.BootstrapService 用アダプタ
-// ========================================
-//
-
-// memdom.Repository → auth.MemberRepository
-type authMemberRepoAdapter struct {
-	repo memdom.Repository
-}
-
-func (a *authMemberRepoAdapter) Save(ctx context.Context, m *memdom.Member) error {
-	if m == nil {
-		return errors.New("authMemberRepoAdapter.Save: nil member")
-	}
-	saved, err := a.repo.Save(ctx, *m, nil)
-	if err != nil {
-		return err
-	}
-	*m = saved
-	return nil
-}
-
-func (a *authMemberRepoAdapter) GetByID(ctx context.Context, id string) (*memdom.Member, error) {
-	v, err := a.repo.GetByID(ctx, id)
-	if err != nil {
-		return nil, err
-	}
-	return &v, nil
-}
-
-// CompanyRepositoryFS → auth.CompanyRepository
-type authCompanyRepoAdapter struct {
-	repo *fs.CompanyRepositoryFS
-}
-
-func (a *authCompanyRepoAdapter) NewID(ctx context.Context) (string, error) {
-	if a.repo == nil || a.repo.Client == nil {
-		return "", errors.New("authCompanyRepoAdapter.NewID: repo or client is nil")
-	}
-	doc := a.repo.Client.Collection("companies").NewDoc()
-	return doc.ID, nil
-}
-
-func (a *authCompanyRepoAdapter) Save(ctx context.Context, c *companydom.Company) error {
-	if c == nil {
-		return errors.New("authCompanyRepoAdapter.Save: nil company")
-	}
-	saved, err := a.repo.Save(ctx, *c, nil)
-	if err != nil {
-		return err
-	}
-	*c = saved
-	return nil
-}
-
-//
-// ========================================
-// InvitationTokenRepository 用アダプタ
-// ========================================
-//
-
-type invitationTokenRepoAdapter struct {
-	fsRepo *fs.InvitationTokenRepositoryFS
-}
-
-func (a *invitationTokenRepoAdapter) ResolveInvitationInfoByToken(
-	ctx context.Context,
-	token string,
-) (memdom.InvitationInfo, error) {
-	if a.fsRepo == nil {
-		return memdom.InvitationInfo{}, errors.New("invitationTokenRepoAdapter.ResolveInvitationInfoByToken: fsRepo is nil")
-	}
-
-	it, err := a.fsRepo.FindByToken(ctx, token)
-	if err != nil {
-		return memdom.InvitationInfo{}, err
-	}
-
-	return memdom.InvitationInfo{
-		MemberID:         it.MemberID,
-		CompanyID:        it.CompanyID,
-		AssignedBrandIDs: it.AssignedBrandIDs,
-		Permissions:      it.Permissions,
-	}, nil
-}
-
-func (a *invitationTokenRepoAdapter) CreateInvitationToken(
-	ctx context.Context,
-	info memdom.InvitationInfo,
-) (string, error) {
-	if a.fsRepo == nil {
-		return "", errors.New("invitationTokenRepoAdapter.CreateInvitationToken: fsRepo is nil")
-	}
-	return a.fsRepo.CreateInvitationToken(ctx, info)
 }
 
 // ========================================
@@ -248,67 +113,12 @@ func (a *inspectionProductRepoAdapter) UpdateInspectionResult(
 }
 
 // ========================================
-// ProductUsecase 用 ProductQueryRepo アダプタ
-// ========================================
-type productQueryRepoAdapter struct {
-	productRepo          *fs.ProductRepositoryFS
-	modelRepo            *fs.ModelRepositoryFS
-	productionRepo       *fs.ProductionRepositoryFS
-	productBlueprintRepo *fs.ProductBlueprintRepositoryFS
-}
-
-func (a *productQueryRepoAdapter) GetProductByID(
-	ctx context.Context,
-	productID string,
-) (productdom.Product, error) {
-	if a == nil || a.productRepo == nil {
-		return productdom.Product{}, errors.New("productQueryRepoAdapter: productRepo is nil")
-	}
-	return a.productRepo.GetByID(ctx, productID)
-}
-
-func (a *productQueryRepoAdapter) GetModelByID(
-	ctx context.Context,
-	modelID string,
-) (modeldom.ModelVariation, error) {
-	if a == nil || a.modelRepo == nil {
-		return modeldom.ModelVariation{}, errors.New("productQueryRepoAdapter: modelRepo is nil")
-	}
-	mv, err := a.modelRepo.GetModelVariationByID(ctx, modelID)
-	if err != nil {
-		return modeldom.ModelVariation{}, err
-	}
-	if mv == nil {
-		return modeldom.ModelVariation{}, errors.New("productQueryRepoAdapter: modelRepo returned nil model variation")
-	}
-	return *mv, nil
-}
-
-func (a *productQueryRepoAdapter) GetProductionByID(
-	ctx context.Context,
-	productionID string,
-) (interface{}, error) {
-	if a == nil || a.productionRepo == nil {
-		return nil, errors.New("productQueryRepoAdapter: productionRepo is nil")
-	}
-	return a.productionRepo.GetByID(ctx, productionID)
-}
-
-func (a *productQueryRepoAdapter) GetProductBlueprintByID(
-	ctx context.Context,
-	bpID string,
-) (productbpdom.ProductBlueprint, error) {
-	if a == nil || a.productBlueprintRepo == nil {
-		return productbpdom.ProductBlueprint{}, errors.New("productQueryRepoAdapter: productBlueprintRepo is nil")
-	}
-	return a.productBlueprintRepo.GetByID(ctx, bpID)
-}
-
-// ========================================
 // NameResolver 用 TokenBlueprint アダプタ
 // ========================================
 type tokenBlueprintNameRepoAdapter struct {
-	repo *fs.TokenBlueprintRepositoryFS
+	repo interface {
+		GetByID(ctx context.Context, id string) (*tbdom.TokenBlueprint, error)
+	}
 }
 
 func (a *tokenBlueprintNameRepoAdapter) GetByID(
@@ -318,7 +128,7 @@ func (a *tokenBlueprintNameRepoAdapter) GetByID(
 	if a == nil || a.repo == nil {
 		return tbdom.TokenBlueprint{}, errors.New("tokenBlueprintNameRepoAdapter: repo is nil")
 	}
-	tb, err := a.repo.GetByID(ctx, id)
+	tb, err := a.repo.GetByID(ctx, strings.TrimSpace(id))
 	if err != nil {
 		return tbdom.TokenBlueprint{}, err
 	}
@@ -355,11 +165,17 @@ type pbQueryRepoAdapter struct {
 }
 
 func (a *pbQueryRepoAdapter) ListIDsByCompany(ctx context.Context, companyID string) ([]string, error) {
-	return a.repo.ListIDsByCompany(ctx, companyID)
+	if a == nil || a.repo == nil {
+		return nil, errors.New("pbQueryRepoAdapter: repo is nil")
+	}
+	return a.repo.ListIDsByCompany(ctx, strings.TrimSpace(companyID))
 }
 
 func (a *pbQueryRepoAdapter) GetByID(ctx context.Context, id string) (productbpdom.ProductBlueprint, error) {
-	return a.repo.GetByID(ctx, id)
+	if a == nil || a.repo == nil {
+		return productbpdom.ProductBlueprint{}, errors.New("pbQueryRepoAdapter: repo is nil")
+	}
+	return a.repo.GetByID(ctx, strings.TrimSpace(id))
 }
 
 type pbIDsByCompanyAdapter struct {
@@ -369,7 +185,10 @@ type pbIDsByCompanyAdapter struct {
 }
 
 func (a *pbIDsByCompanyAdapter) ListIDsByCompanyID(ctx context.Context, companyID string) ([]string, error) {
-	return a.repo.ListIDsByCompany(ctx, companyID)
+	if a == nil || a.repo == nil {
+		return nil, errors.New("pbIDsByCompanyAdapter: repo is nil")
+	}
+	return a.repo.ListIDsByCompany(ctx, strings.TrimSpace(companyID))
 }
 
 type pbPatchByIDAdapter struct {
@@ -379,7 +198,10 @@ type pbPatchByIDAdapter struct {
 }
 
 func (a *pbPatchByIDAdapter) GetPatchByID(ctx context.Context, id string) (productbpdom.Patch, error) {
-	return a.repo.GetPatchByID(ctx, id)
+	if a == nil || a.repo == nil {
+		return productbpdom.Patch{}, errors.New("pbPatchByIDAdapter: repo is nil")
+	}
+	return a.repo.GetPatchByID(ctx, strings.TrimSpace(id))
 }
 
 type tbGetterAdapter struct {
@@ -392,7 +214,7 @@ func (a *tbGetterAdapter) GetByID(ctx context.Context, id string) (tbdom.TokenBl
 	if a == nil || a.repo == nil {
 		return tbdom.TokenBlueprint{}, errors.New("tokenBlueprint getter adapter is nil")
 	}
-	tb, err := a.repo.GetByID(ctx, id)
+	tb, err := a.repo.GetByID(ctx, strings.TrimSpace(id))
 	if err != nil {
 		return tbdom.TokenBlueprint{}, err
 	}
@@ -400,36 +222,6 @@ func (a *tbGetterAdapter) GetByID(ctx context.Context, id string) (tbdom.TokenBl
 		return tbdom.TokenBlueprint{}, errors.New("tokenBlueprint not found")
 	}
 	return *tb, nil
-}
-
-// ============================================================
-// ✅ Adapter: ListRepositoryFS -> usecase.ListPatcher
-// ============================================================
-type listPatcherAdapter struct {
-	repo interface {
-		Update(ctx context.Context, id string, patch listdom.ListPatch) (listdom.List, error)
-	}
-}
-
-func (a *listPatcherAdapter) UpdateImageID(
-	ctx context.Context,
-	listID string,
-	imageID string,
-	now time.Time,
-	updatedBy *string,
-) (listdom.List, error) {
-	listID = strings.TrimSpace(listID)
-	imageID = strings.TrimSpace(imageID)
-	if listID == "" {
-		return listdom.List{}, listdom.ErrNotFound
-	}
-
-	patch := listdom.ListPatch{
-		ImageID:   &imageID,
-		UpdatedAt: &now,
-		UpdatedBy: updatedBy,
-	}
-	return a.repo.Update(ctx, listID, patch)
 }
 
 // ============================================================

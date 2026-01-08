@@ -1,4 +1,4 @@
-// backend/internal/adapters/in/http/sns/handler/company_handler.go
+// backend\internal\adapters\in\http\mall\handler\company_handler.go
 package mallHandler
 
 import (
@@ -10,20 +10,20 @@ import (
 	companydom "narratives/internal/domain/company"
 )
 
-// SNSCompanyHandler serves buyer-facing company endpoint.
+// MallCompanyHandler serves buyer-facing company endpoint.
 //
 // Route:
-// - GET /sns/companies/{id}
-type SNSCompanyHandler struct {
+// - GET /mall/companies/{id}
+type MallCompanyHandler struct {
 	uc *usecase.CompanyUsecase
 }
 
-func NewSNSCompanyHandler(uc *usecase.CompanyUsecase) http.Handler {
-	return &SNSCompanyHandler{uc: uc}
+func NewMallCompanyHandler(uc *usecase.CompanyUsecase) http.Handler {
+	return &MallCompanyHandler{uc: uc}
 }
 
-func (h *SNSCompanyHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	// NOTE: sns/handler では共通 helper（writeJSON/notFound/methodNotAllowed/internalError 等）が
+func (h *MallCompanyHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	// NOTE: mall/handler では共通 helper（writeJSON/notFound/methodNotAllowed/internalError 等）が
 	// 既にある前提の設計が多いので、ここでは重複定義しない。
 	// ただし、この handler 単体でも動くように最低限の JSON はここで返す。
 
@@ -55,8 +55,8 @@ func (h *SNSCompanyHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	_ = json.NewEncoder(w).Encode(map[string]string{"error": "not_found"})
 }
 
-// ---- GET /sns/companies/{id} ----
-func (h *SNSCompanyHandler) get(w http.ResponseWriter, r *http.Request, id string) {
+// ---- GET /mall/companies/{id} ----
+func (h *MallCompanyHandler) get(w http.ResponseWriter, r *http.Request, id string) {
 	ctx := r.Context()
 
 	id = strings.TrimSpace(id)
@@ -68,14 +68,14 @@ func (h *SNSCompanyHandler) get(w http.ResponseWriter, r *http.Request, id strin
 
 	company, err := h.uc.GetByID(ctx, id)
 	if err != nil {
-		writeSNSCompanyErr(w, err)
+		writeMallCompanyErr(w, err)
 		return
 	}
 
 	_ = json.NewEncoder(w).Encode(company)
 }
 
-func writeSNSCompanyErr(w http.ResponseWriter, err error) {
+func writeMallCompanyErr(w http.ResponseWriter, err error) {
 	code := http.StatusInternalServerError
 	switch err {
 	case companydom.ErrInvalidID:

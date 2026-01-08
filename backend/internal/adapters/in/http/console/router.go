@@ -99,25 +99,15 @@ type RouterDeps struct {
 	MintUC *mintapp.MintUsecase
 
 	// 認証・招待まわり
-	AuthBootstrap     *authuc.BootstrapService
-	InvitationQuery   usecase.InvitationQueryPort
-	InvitationCommand usecase.InvitationCommandPort
-
-	// Firebase / MemberRepo
-	FirebaseAuth *firebaseauth.Client
-	MemberRepo   memdom.Repository
-
-	// ★ member.Service（表示名解決用）
-	MemberService *memdom.Service
-
-	// ★ brand.Service（ブランド名解決用）
-	BrandService *branddom.Service
-
-	// Message 用の Firestore Repository
-	MessageRepo *msgrepo.MessageRepositoryFS
-
-	// ★ MintRequest の query
-	MintRequestQueryService consoleHandler.MintRequestQueryService
+	AuthBootstrap           *authuc.BootstrapService
+	InvitationQuery         usecase.InvitationQueryPort
+	InvitationCommand       usecase.InvitationCommandPort
+	FirebaseAuth            *firebaseauth.Client // Firebase / MemberRepo
+	MemberRepo              memdom.Repository
+	MemberService           *memdom.Service                        // ★ member.Service（表示名解決用）
+	BrandService            *branddom.Service                      // ★ brand.Service（ブランド名解決用）
+	MessageRepo             *msgrepo.MessageRepositoryFS           // Message 用の Firestore Repository
+	MintRequestQueryService consoleHandler.MintRequestQueryService // ★ MintRequest の query
 }
 
 func NewRouter(deps RouterDeps) http.Handler {

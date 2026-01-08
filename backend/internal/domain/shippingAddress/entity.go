@@ -7,9 +7,9 @@ import (
 	"time"
 )
 
-// ShippingAddress エンティティ（SNSアプリの配送先入力欄に準拠）
+// ShippingAddress エンティティ（Mallアプリの配送先入力欄に準拠）
 //
-// frontend/sns/lib/features/auth/presentation/page/shipping_address.dart
+// frontend/mall/lib/features/auth/presentation/page/shipping_address.dart
 // - 郵便番号: zipCode
 // - 都道府県: state
 // - 市区町村: city
