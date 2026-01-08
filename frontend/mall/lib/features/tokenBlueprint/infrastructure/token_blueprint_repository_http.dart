@@ -10,9 +10,7 @@ class TokenBlueprintRepositoryHttp {
   TokenBlueprintRepositoryHttp({http.Client? client, String? apiBase})
     : _client = client ?? http.Client(),
       _apiBase = _normalizeBaseUrl(
-        (apiBase ?? '').trim().isNotEmpty
-            ? apiBase!.trim()
-            : resolveSnsApiBase(),
+        (apiBase ?? '').trim().isNotEmpty ? apiBase!.trim() : resolveApiBase(),
       ) {
     if (_apiBase.trim().isEmpty) {
       throw StateError(

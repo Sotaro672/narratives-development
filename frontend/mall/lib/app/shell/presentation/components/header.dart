@@ -61,7 +61,7 @@ class AppHeader extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final t = (title ?? '').trim();
-    final titleText = t.isNotEmpty ? t : 'sns';
+    final titleText = t.isNotEmpty ? t : 'mall';
 
     return Material(
       color: Theme.of(context).cardColor,

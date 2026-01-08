@@ -2,44 +2,135 @@
 package mall
 
 import (
+	"encoding/json"
 	"log"
 	"net/http"
 
 	mallhttp "narratives/internal/adapters/in/http/mall"
 	mallhandler "narratives/internal/adapters/in/http/mall/handler"
 	mallwebhook "narratives/internal/adapters/in/http/mall/webhook"
+	"narratives/internal/adapters/in/http/middleware"
 )
+
+// notImplemented returns a non-nil handler (so deps are never nil) for endpoints
+// that are not wired yet.
+func notImplemented(name string) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusNotImplemented)
+		_ = json.NewEncoder(w).Encode(map[string]string{
+			"error": "not_implemented",
+			"name":  name,
+		})
+	})
+}
+
+// requireUserAuth wraps handler with UserAuthMiddleware (fail-closed).
+// If middleware is not initialized, it returns 503 so the bug is obvious.
+func requireUserAuth(mw *middleware.UserAuthMiddleware, h http.Handler, name string) http.Handler {
+	if h == nil {
+		h = http.NotFoundHandler()
+	}
+	if mw == nil || mw.FirebaseAuth == nil {
+		log.Printf("[mall.register] ERROR: UserAuthMiddleware is not initialized (endpoint=%s). returning 503", name)
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusServiceUnavailable)
+			_ = json.NewEncoder(w).Encode(map[string]string{
+				"error": "user_auth_not_initialized",
+				"name":  name,
+			})
+		})
+	}
+	return mw.Handler(h)
+}
 
 // Register registers mall routes onto mux.
 // Pure DI: construct handlers and pass into mall router.Register.
 // - No method/path branching here
-// - No auth middleware wrapping here
-// - Nil handlers are OK: mall router will register NotFoundHandler for nil deps
+// - ✅ deps must be non-nil for all handlers (no nil in deps)
+// - ✅ UserAuthMiddleware is applied to ALL user-authenticated endpoints (user系全部)
 func Register(mux *http.ServeMux, cont *Container) {
 	if mux == nil || cont == nil {
 		return
 	}
 
+	// ------------------------------------------------------------
+	// Auth middleware (buyer/user side)
+	// ------------------------------------------------------------
+	var userAuthMW *middleware.UserAuthMiddleware
+	if cont.Infra != nil && cont.Infra.FirebaseAuth != nil {
+		userAuthMW = &middleware.UserAuthMiddleware{
+			FirebaseAuth: cont.Infra.FirebaseAuth,
+		}
+	} else {
+		// fail-closed in requireUserAuth
+		log.Printf("[mall.register] WARN: cont.Infra or cont.Infra.FirebaseAuth is nil (user auth will return 503 on protected endpoints)")
+		userAuthMW = &middleware.UserAuthMiddleware{FirebaseAuth: nil}
+	}
+
 	// ----------------------------
 	// Handlers (construct only)
 	// ----------------------------
-	var (
-		listH   http.Handler
-		userH   http.Handler
-		shipH   http.Handler
-		billH   http.Handler
-		walletH http.Handler
-		cartH   http.Handler
-		prevH   http.Handler
-		payH    http.Handler
-		orderH  http.Handler
-	)
+	// ✅ default to non-nil for all handlers
+	listH := notImplemented("List")
+	invH := notImplemented("Inventory")
+	pbH := notImplemented("ProductBlueprint")
+	modelH := notImplemented("Model")
+	catalogH := notImplemented("Catalog")
+	tbH := notImplemented("TokenBlueprint")
+	companyH := notImplemented("Company")
+	brandH := notImplemented("Brand")
 
-	// ✅ Lists: this is the one that was 501 when not wired
+	// user-authenticated
+	userH := notImplemented("User")
+	shipH := notImplemented("ShippingAddress")
+	billH := notImplemented("BillingAddress")
+	avatarH := notImplemented("Avatar")
+	avatarStateH := notImplemented("AvatarState")
+	walletH := notImplemented("Wallet")
+	cartH := notImplemented("Cart")
+	prevH := notImplemented("Preview")
+	payH := notImplemented("Payment")
+	orderH := notImplemented("Order")
+	meAvatarH := notImplemented("MeAvatar") // ✅ /mall/me/avatar
+
+	// ✅ Lists (public)
 	if cont.ListUC != nil {
 		listH = mallhandler.NewMallListHandler(cont.ListUC)
 	}
 
+	// ✅ Catalog (public)
+	if cont.CatalogQ != nil {
+		catalogH = mallhandler.NewMallCatalogHandler(cont.CatalogQ)
+	}
+
+	// ✅ Inventory (public read-only)
+	if cont.InventoryUC != nil {
+		invH = mallhandler.NewMallInventoryHandler(cont.InventoryUC)
+	}
+
+	// ✅ TokenBlueprint (public patch)
+	if cont.TokenBlueprintRepo != nil {
+		if cont.NameResolver != nil {
+			if cont.TokenIconURLResolver != nil {
+				tbH = mallhandler.NewMallTokenBlueprintHandlerWithNameAndImageResolver(
+					cont.TokenBlueprintRepo,
+					cont.NameResolver,
+					cont.TokenIconURLResolver,
+				)
+			} else {
+				tbH = mallhandler.NewMallTokenBlueprintHandlerWithNameResolver(
+					cont.TokenBlueprintRepo,
+					cont.NameResolver,
+				)
+			}
+		} else {
+			tbH = mallhandler.NewMallTokenBlueprintHandler(cont.TokenBlueprintRepo)
+		}
+	}
+
+	// ✅ Core authenticated resources (user side)
 	if cont.UserUC != nil {
 		userH = mallhandler.NewUserHandler(cont.UserUC)
 	}
@@ -53,18 +144,21 @@ func Register(mux *http.ServeMux, cont *Container) {
 		walletH = mallhandler.NewWalletHandler(cont.WalletUC)
 	}
 
-	// Cart / Preview
+	// ✅ /mall/me/avatar (uid -> avatarId)
+	if cont.MeAvatarRepo != nil {
+		meAvatarH = mallhandler.NewMeAvatarHandler(cont.MeAvatarRepo)
+	}
+
+	// ✅ Cart / Preview (authenticated)
 	if cont.CartUC != nil {
-		// this handler is expected to support both cart + preview behaviors via injected queries
 		cartH = mallhandler.NewCartHandlerWithQueries(cont.CartUC, cont.CartQ, cont.PreviewQ)
 		prevH = cartH
 	} else if cont.CartQ != nil {
-		// read-only fallback
 		cartH = mallhandler.NewCartQueryHandler(cont.CartQ)
-		// preview remains nil
+		// preview remains notImplemented (non-nil)
 	}
 
-	// Payment / Order
+	// ✅ Payment / Order (authenticated)
 	if cont.PaymentUC != nil {
 		payH = mallhandler.NewPaymentHandlerWithOrderQuery(cont.PaymentUC, cont.OrderQ)
 	}
@@ -73,40 +167,66 @@ func Register(mux *http.ServeMux, cont *Container) {
 	}
 
 	// SignIn: keep a stable no-op endpoint (client convenience)
+	// NOTE: 認証チェックは不要（ただの疎通・互換のため）
 	signInH := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusNoContent)
 	})
+
+	// ------------------------------------------------------------
+	// ✅ Apply UserAuthMiddleware to ALL user-authenticated handlers
+	// ------------------------------------------------------------
+	userH = requireUserAuth(userAuthMW, userH, "User")
+	shipH = requireUserAuth(userAuthMW, shipH, "ShippingAddress")
+	billH = requireUserAuth(userAuthMW, billH, "BillingAddress")
+	avatarH = requireUserAuth(userAuthMW, avatarH, "Avatar")
+	avatarStateH = requireUserAuth(userAuthMW, avatarStateH, "AvatarState")
+	walletH = requireUserAuth(userAuthMW, walletH, "Wallet")
+	meAvatarH = requireUserAuth(userAuthMW, meAvatarH, "MeAvatar")
+
+	// cart/preview は同一 handler を共有するケースがあるので、二重wrapしない
+	cartWrapped := requireUserAuth(userAuthMW, cartH, "Cart")
+	cartH = cartWrapped
+	if prevH == cartH {
+		prevH = cartWrapped
+	} else {
+		prevH = requireUserAuth(userAuthMW, prevH, "Preview")
+	}
+
+	payH = requireUserAuth(userAuthMW, payH, "Payment")
+	orderH = requireUserAuth(userAuthMW, orderH, "Order")
 
 	// ----------------------------
 	// Router deps
 	// ----------------------------
 	deps := mallhttp.Deps{
-		// public browsing
+		// public
 		List: listH,
 
-		// keep nil unless you wire them
-		Inventory:        nil,
-		ProductBlueprint: nil,
-		Model:            nil,
-		Catalog:          nil,
-		TokenBlueprint:   nil,
+		Inventory:        invH,
+		ProductBlueprint: pbH,
+		Model:            modelH,
+		Catalog:          catalogH,
+		TokenBlueprint:   tbH,
 
-		Company: nil,
-		Brand:   nil,
+		Company: companyH,
+		Brand:   brandH,
 
 		SignIn: signInH,
 
+		// authenticated (user系)
 		User:            userH,
 		ShippingAddress: shipH,
 		BillingAddress:  billH,
-		Avatar:          nil,
-		AvatarState:     nil,
-		Wallet:          walletH,
+
+		Avatar:      avatarH,
+		MeAvatar:    meAvatarH,
+		AvatarState: avatarStateH,
+
+		Wallet: walletH,
 
 		Cart:    cartH,
 		Preview: prevH,
 
-		Post:    nil,
 		Payment: payH,
 		Order:   orderH,
 	}

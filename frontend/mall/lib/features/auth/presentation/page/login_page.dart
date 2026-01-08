@@ -69,7 +69,7 @@ class _LoginPageState extends State<LoginPage> {
                       crossAxisAlignment: CrossAxisAlignment.stretch,
                       children: [
                         Text(
-                          'sns',
+                          'mall',
                           textAlign: TextAlign.center,
                           style: Theme.of(context).textTheme.headlineSmall,
                         ),

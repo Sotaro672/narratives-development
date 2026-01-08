@@ -35,8 +35,12 @@ class WalletDTO {
     return <String>[];
   }
 
-  factory WalletDTO.fromJson(Map<String, dynamic> j) {
-    // 名揺れ吸収を少しだけ（backend 側が変わっても落ちないように）
+  /// ✅ backend が avatarId を返さない可能性があるので、
+  ///    呼び出し側で補完できるようにする
+  factory WalletDTO.fromJson(
+    Map<String, dynamic> j, {
+    String fallbackAvatarId = '',
+  }) {
     dynamic pickAny(List<String> keys) {
       for (final k in keys) {
         if (j.containsKey(k)) return j[k];
@@ -44,7 +48,11 @@ class WalletDTO {
       return null;
     }
 
-    final avatarId = s(pickAny(const ['avatarId', 'AvatarID', 'AvatarId']));
+    var avatarId = s(pickAny(const ['avatarId', 'AvatarID', 'AvatarId']));
+    if (avatarId.isEmpty) {
+      avatarId = fallbackAvatarId.trim();
+    }
+
     final walletAddress = s(
       pickAny(const ['walletAddress', 'WalletAddress', 'address', 'Address']),
     );
@@ -105,7 +113,7 @@ class WalletRepositoryHttp {
        _base = _normalizeBase(
          (baseUrl ?? '').trim().isNotEmpty
              ? baseUrl!.trim()
-             : resolveSnsApiBase(),
+             : resolveApiBase(), // ← もし resolveMallApiBase() があるなら差し替え推奨
        ) {
     if (_base.trim().isEmpty) {
       throw Exception(
@@ -121,13 +129,14 @@ class WalletRepositoryHttp {
 
   final void Function(String s)? logger;
 
-  // ✅ release でもログを出したい場合: --dart-define=ENABLE_HTTP_LOG=true
   static const bool _envHttpLog = bool.fromEnvironment(
     'ENABLE_HTTP_LOG',
     defaultValue: false,
   );
 
   bool get _logEnabled => kDebugMode || _envHttpLog;
+
+  int? _lastStatusCode;
 
   void dispose() {
     _client.close();
@@ -155,14 +164,13 @@ class WalletRepositoryHttp {
     return Uri.parse('$_base$p').replace(queryParameters: query);
   }
 
-  Future<Map<String, String>> _authHeaders() async {
+  Future<Map<String, String>> _authHeaders({bool forceRefresh = false}) async {
     final headers = <String, String>{};
 
     try {
       final user = _auth.currentUser;
       if (user != null) {
-        // まずは通常トークン
-        final token = await user.getIdToken(false);
+        final token = await user.getIdToken(forceRefresh);
         final t = (token ?? '').toString().trim();
         if (t.isNotEmpty) headers['Authorization'] = 'Bearer $t';
       }
@@ -173,75 +181,59 @@ class WalletRepositoryHttp {
     return headers;
   }
 
-  Future<Map<String, String>> _authHeadersForceRefresh() async {
-    final headers = <String, String>{};
-
-    try {
-      final user = _auth.currentUser;
-      if (user != null) {
-        final token = await user.getIdToken(true);
-        final t = (token ?? '').toString().trim();
-        if (t.isNotEmpty) headers['Authorization'] = 'Bearer $t';
-      }
-    } catch (e) {
-      _log('[WalletRepositoryHttp] token refresh error: $e');
-    }
-
-    return headers;
-  }
-
   // ------------------------------------------------------------
-  // API
+  // API (strict)
   // ------------------------------------------------------------
 
-  /// avatarId から Wallet を取得（トークン一覧表示用）
-  ///
-  /// ✅ エンドポイント未確定のため、候補を順に試します。
-  /// - GET /mall/wallet?avatarId=...
-  /// - GET /mall/wallets?avatarId=...
+  /// ✅ 確定版:
   /// - GET /mall/wallets/{avatarId}
-  ///
-  /// 成功条件: 2xx + JSON
-  Future<WalletDTO?> fetchByAvatarId(String avatarId) async {
-    final aid = (avatarId).trim();
+  /// - (optional) ?walletAddress=...  ※初回作成だけ
+  Future<WalletDTO?> fetchByAvatarId(
+    String avatarId, {
+    String? walletAddressForCreate,
+  }) async {
+    final aid = avatarId.trim();
     if (aid.isEmpty) return null;
 
-    final baseHeaders = <String, String>{
-      'Accept': 'application/json',
-      ...await _authHeaders(),
-    };
+    final query = <String, String>{};
+    final wa = (walletAddressForCreate ?? '').trim();
+    if (wa.isNotEmpty) {
+      query['walletAddress'] = wa;
+    }
 
-    final candidates = <Uri>[
-      _uri('/mall/wallet', {'avatarId': aid}),
-      _uri('/mall/wallets', {'avatarId': aid}),
-      _uri('/mall/wallets/$aid'),
-    ];
+    final uri = _uri('/mall/wallets/$aid', query.isEmpty ? null : query);
 
-    for (final uri in candidates) {
-      // 1st try
-      final dto = await _tryGetWallet(uri, headers: baseHeaders);
-      if (dto != null) return dto;
+    // first try
+    final dto = await _tryGetWallet(
+      uri,
+      headers: <String, String>{
+        'Accept': 'application/json',
+        ...await _authHeaders(forceRefresh: false),
+      },
+      fallbackAvatarId: aid,
+    );
+    if (dto != null) return dto;
 
-      // If 401, retry once with refreshed token
-      // （_tryGetWallet 内部で 401 を判定して null を返す）
-      if (_lastStatusCode == 401) {
-        final retryHeaders = <String, String>{
+    // if 401 -> retry with refreshed token
+    if (_lastStatusCode == 401) {
+      final dto2 = await _tryGetWallet(
+        uri,
+        headers: <String, String>{
           'Accept': 'application/json',
-          ...await _authHeadersForceRefresh(),
-        };
-        final dto2 = await _tryGetWallet(uri, headers: retryHeaders);
-        if (dto2 != null) return dto2;
-      }
+          ...await _authHeaders(forceRefresh: true),
+        },
+        fallbackAvatarId: aid,
+      );
+      if (dto2 != null) return dto2;
     }
 
     return null;
   }
 
-  int? _lastStatusCode;
-
   Future<WalletDTO?> _tryGetWallet(
     Uri uri, {
     required Map<String, String> headers,
+    required String fallbackAvatarId,
   }) async {
     try {
       _log('[WalletRepositoryHttp] GET $uri');
@@ -271,14 +263,14 @@ class WalletRepositoryHttp {
 
       final decoded = jsonDecode(body);
 
-      // パターンA: { wallet: {...} }
       if (decoded is Map<String, dynamic>) {
+        // pattern A: { wallet: {...} }
         final w = decoded['wallet'];
         if (w is Map<String, dynamic>) {
-          return WalletDTO.fromJson(w);
+          return WalletDTO.fromJson(w, fallbackAvatarId: fallbackAvatarId);
         }
-        // パターンB: 直で { avatarId, walletAddress, tokens... }
-        return WalletDTO.fromJson(decoded);
+        // pattern B: direct wallet object
+        return WalletDTO.fromJson(decoded, fallbackAvatarId: fallbackAvatarId);
       }
 
       _log(
@@ -290,7 +282,4 @@ class WalletRepositoryHttp {
       return null;
     }
   }
-
-  // （必要になったら）将来、確定エンドポイント向けの strict 実装を追加できます
-  // Future<WalletDTO> getByAvatarIdStrict(...) ...
 }

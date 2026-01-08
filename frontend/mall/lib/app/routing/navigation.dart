@@ -6,6 +6,7 @@ import 'package:go_router/go_router.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:http/http.dart' as http;
 
+import '../config/api_base.dart';
 import 'routes.dart';
 
 /// ------------------------------------------------------------
@@ -35,65 +36,91 @@ class AvatarIdStore extends ChangeNotifier {
     notifyListeners();
   }
 
-  /// ✅ uid -> avatarId をバックエンドで解決
-  Future<String?> resolveAvatarIdByUserId(String userId) {
-    final uid = userId.trim();
-    if (uid.isEmpty) return Future.value(null);
-
+  /// ✅ /mall/me/avatar で「自分の avatarId(docId)」を解決する（uid を query に入れない）
+  Future<String?> resolveMyAvatarId() {
     // 既に確定しているならそれを返す
-    if (_avatarId.trim().isNotEmpty) {
-      return Future.value(_avatarId.trim());
-    }
+    if (_avatarId.trim().isNotEmpty) return Future.value(_avatarId.trim());
 
     // in-flight があればそれを待つ
     final running = _inflight;
     if (running != null) return running;
 
-    final f = _resolve(uid);
+    final f = _resolveMe();
     _inflight = f;
     return f;
   }
 
-  Future<String?> _resolve(String userId) async {
+  Future<String?> _resolveMe() async {
     try {
-      final base = _apiBase();
+      // ✅ single source of truth: app/config/api_base.dart
+      final base = resolveApiBase().trim();
       if (base.isEmpty) return null;
 
-      final uri = Uri.parse(
-        base,
-      ).replace(path: '/mall/avatars', queryParameters: {'userId': userId});
+      final b = Uri.tryParse(base);
+      if (b == null || !b.hasScheme || !b.hasAuthority) return null;
 
-      // ✅ 可能なら Authorization を付ける
+      // ✅ base の path を壊さず join する（replace(path:'/...') で潰さない）
+      final uri = b.replace(
+        path: _joinPaths(b.path, '/mall/me/avatar'),
+        queryParameters: null,
+        fragment: null,
+      );
+
+      // ✅ Authorization を付ける（必須）
       final headers = <String, String>{
         'Content-Type': 'application/json',
         'Accept': 'application/json',
       };
 
-      try {
-        final u = FirebaseAuth.instance.currentUser;
-        if (u != null) {
-          final String? raw = await u.getIdToken(false);
-          final token = (raw ?? '').trim();
-          if (token.isNotEmpty) {
-            headers['Authorization'] = 'Bearer $token';
-          }
-        }
-      } catch (_) {}
+      final u = FirebaseAuth.instance.currentUser;
+      if (u == null) return null;
 
-      final res = await http.get(uri, headers: headers);
+      Future<String?> getToken(bool forceRefresh) async {
+        final String? raw = await u.getIdToken(forceRefresh);
+        final token = (raw ?? '').trim();
+        return token.isEmpty ? null : token;
+      }
+
+      // まず通常取得（軽量）
+      String? token = await getToken(false);
+      if (token == null) return null;
+
+      headers['Authorization'] = 'Bearer $token';
+
+      http.Response res = await http.get(uri, headers: headers);
+
+      // ✅ 401/403 のときだけ強制更新して 1 回だけリトライ
+      if (res.statusCode == 401 || res.statusCode == 403) {
+        token = await getToken(true);
+        if (token == null) return null;
+        headers['Authorization'] = 'Bearer $token';
+        res = await http.get(uri, headers: headers);
+      }
 
       if (res.statusCode == 404) return null;
       if (res.statusCode < 200 || res.statusCode >= 300) return null;
 
-      final jsonBody = jsonDecode(res.body);
+      // ✅ wrapper 吸収: {data:{avatarId:"..."}} を許容
+      final body = res.body.trim();
+      if (body.isEmpty) return null;
+
+      final jsonBody = jsonDecode(body);
+      Map<String, dynamic>? m;
       if (jsonBody is Map<String, dynamic>) {
-        final id = (jsonBody['id'] ?? jsonBody['avatarId'] ?? '')
-            .toString()
-            .trim();
-        if (id.isNotEmpty) {
-          set(id);
-          return id;
-        }
+        m = jsonBody;
+      } else if (jsonBody is Map) {
+        m = jsonBody.cast<String, dynamic>();
+      }
+      if (m == null) return null;
+
+      final data = (m['data'] is Map)
+          ? (m['data'] as Map).cast<String, dynamic>()
+          : m;
+
+      final id = (data['avatarId'] ?? '').toString().trim();
+      if (id.isNotEmpty) {
+        set(id);
+        return id;
       }
       return null;
     } catch (_) {
@@ -104,18 +131,13 @@ class AvatarIdStore extends ChangeNotifier {
   }
 }
 
-/// ✅ API_BASE を読む（既存設計に合わせる）
-String _apiBase() {
-  const v = String.fromEnvironment('API_BASE');
-  return v.trim();
-}
-
+/// ------------------------------------------------------------
 /// ✅ URLの query を「必ず avatarId を1つだけ」に正規化して返す
 Map<String, String> _normalizedQueryWithSingleAvatarId(
   GoRouterState state,
   String resolvedAvatarId,
 ) {
-  final all = state.uri.queryParametersAll; // ここが重要（複数keyに対応）
+  final all = state.uri.queryParametersAll; // 複数keyに対応
   final out = <String, String>{};
 
   all.forEach((k, vals) {
@@ -132,22 +154,32 @@ Map<String, String> _normalizedQueryWithSingleAvatarId(
   return out;
 }
 
-Future<String> _ensureAvatarIdResolved(GoRouterState state, String uid) async {
-  // ✅ まず URL から拾う（重複してても最後を採用）
+/// ✅ サインイン後に avatarId を確実に解決する
+///
+/// - URLの avatarId は「信用しない」（uid が入っている事故を防ぐ）
+/// - store があればそれを使う
+/// - 最終的に /mall/me/avatar で解決
+Future<String> _ensureAvatarIdResolved(GoRouterState state) async {
+  // 1) store があればそれを採用（最優先）
+  final storeId = AvatarIdStore.I.avatarId.trim();
+  if (storeId.isNotEmpty) return storeId;
+
+  // 2) URL の avatarId は “候補” として一時的に見るが、確定はしない
   final all = state.uri.queryParametersAll;
   final list = all[AppQueryKey.avatarId] ?? const <String>[];
   final qpId = (list.isNotEmpty ? list.last : '').trim();
 
-  if (qpId.isNotEmpty) {
-    AvatarIdStore.I.set(qpId);
-    return qpId;
-  }
+  // qpId が入っていても set しない（uid混入を防ぐ）
+  // ただし、/mall/me/avatar が取れない時の “保険” として最後に使えるよう保持
+  final qpCandidate = qpId;
 
-  final storeId = AvatarIdStore.I.avatarId.trim();
-  if (storeId.isNotEmpty) return storeId;
+  // 3) サーバで確定（uid->avatarId の正規解）
+  final resolved = await AvatarIdStore.I.resolveMyAvatarId();
+  final id = (resolved ?? '').trim();
+  if (id.isNotEmpty) return id;
 
-  final resolved = await AvatarIdStore.I.resolveAvatarIdByUserId(uid);
-  return (resolved ?? '').trim();
+  // 4) どうしても取れない場合だけ URL 候補を使う
+  return qpCandidate;
 }
 
 /// ------------------------------------------------------------
@@ -174,16 +206,17 @@ Future<String?> appRedirect(BuildContext context, GoRouterState state) async {
     AppRoutePath.avatarCreate,
   };
 
-  final uid = user.uid.trim();
-
   // ============================================================
   // ✅ ログイン直後（/login に居る状態でログイン状態になった瞬間）は
   // 必ず avatarId を解決して home(list.dart) へ `?avatarId=...` を付けて遷移
   // ============================================================
   if (isLoginRoute) {
-    final resolved = await _ensureAvatarIdResolved(state, uid);
+    final resolved = await _ensureAvatarIdResolved(state);
 
     if (resolved.isNotEmpty) {
+      // store にも確定値を入れる
+      AvatarIdStore.I.set(resolved);
+
       return Uri(
         path: AppRoutePath.home,
         queryParameters: {AppQueryKey.avatarId: resolved},
@@ -196,20 +229,29 @@ Future<String?> appRedirect(BuildContext context, GoRouterState state) async {
 
   // ✅ create_account(/create-account) は、ログイン状態になっても強制遷移しない
   if (isCreateAccountRoute) {
-    await _ensureAvatarIdResolved(state, uid); // best-effort
+    final resolved = await _ensureAvatarIdResolved(state); // best-effort
+    if (resolved.isNotEmpty) {
+      AvatarIdStore.I.set(resolved);
+    }
     return null;
   }
 
   // ✅ exempt は best-effort で解決だけ試す（あれば store に入る）
   if (exemptForAvatarId.contains(path)) {
-    await _ensureAvatarIdResolved(state, uid);
+    final resolved = await _ensureAvatarIdResolved(state);
+    if (resolved.isNotEmpty) {
+      AvatarIdStore.I.set(resolved);
+    }
     return null;
   }
 
   // ✅ サインイン後：原則「全ページ URL に avatarId を必ず持たせる」
   // ❌ avatarId 未解決でも avatar_create には飛ばさない（既存要件維持）
-  final resolved = await _ensureAvatarIdResolved(state, uid);
+  final resolved = await _ensureAvatarIdResolved(state);
   if (resolved.isEmpty) return null;
+
+  // store に確定値を入れる
+  AvatarIdStore.I.set(resolved);
 
   // ✅ ここで「avatarIdが複数付いていても」必ず1つに正規化する
   final normalized = _normalizedQueryWithSingleAvatarId(state, resolved);
@@ -217,4 +259,16 @@ Future<String?> appRedirect(BuildContext context, GoRouterState state) async {
 
   if (next != state.uri.toString()) return next;
   return null;
+}
+
+/// ------------------------------------------------------------
+/// Helpers
+String _joinPaths(String a, String b) {
+  final aa = a.trim();
+  final bb = b.trim();
+  if (aa.isEmpty || aa == '/') return bb.startsWith('/') ? bb : '/$bb';
+  if (bb.isEmpty || bb == '/') return aa;
+  if (aa.endsWith('/') && bb.startsWith('/')) return aa + bb.substring(1);
+  if (!aa.endsWith('/') && !bb.startsWith('/')) return '$aa/$bb';
+  return aa + bb;
 }

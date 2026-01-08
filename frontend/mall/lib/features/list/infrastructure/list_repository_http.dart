@@ -140,7 +140,7 @@ class ListRepositoryHttp {
 
   final http.Client _client;
 
-  String get _base => resolveSnsApiBase();
+  String get _base => resolveApiBase();
 
   Uri _uri(String path, [Map<String, String>? query]) {
     final p = path.startsWith('/') ? path : '/$path';

@@ -1,7 +1,7 @@
 // frontend\mall\lib\features\auth\application\billing_address_service.dart
 import 'package:firebase_auth/firebase_auth.dart';
 
-import '../../billingAddress/infrastructure/billing_address_repository_http.dart';
+import '../../billingAddress/infrastructure/repository_http.dart';
 
 class BillingAddressSaveResult {
   BillingAddressSaveResult({

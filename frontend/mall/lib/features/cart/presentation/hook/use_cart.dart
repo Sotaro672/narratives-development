@@ -4,12 +4,11 @@ import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
-import '../../infrastructure/cart_repository_http.dart';
+import '../../infrastructure/repository_http.dart';
 
 // ✅ cart.dart から DTO 型を使えるようにする（repository を直接 import しなくてよくなる）
 // NOTE: export は「型だけ」に限定（HTTP 実装や例外型を不用意に public にしない）
-export '../../infrastructure/cart_repository_http.dart'
-    show CartDTO, CartItemDTO;
+export '../../infrastructure/repository_http.dart' show CartDTO, CartItemDTO;
 
 typedef SetStateFn = void Function(VoidCallback fn);
 

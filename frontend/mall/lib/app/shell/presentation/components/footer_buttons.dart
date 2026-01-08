@@ -2,7 +2,7 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
-import 'package:mall/features/cart/infrastructure/cart_repository_http.dart';
+import 'package:mall/features/cart/infrastructure/repository_http.dart';
 import 'package:mall/features/payment/presentation/hook/use_payment.dart';
 
 /// ✅ /cart 用：購入する CTA（paymentへ遷移）

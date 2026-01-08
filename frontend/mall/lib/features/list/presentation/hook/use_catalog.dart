@@ -423,7 +423,7 @@ class CatalogRepositoryHttp {
 
   /// ✅ app/config/api_base.dart の解決ロジックを使う（重複排除）
   static Uri _buildUri(String path) {
-    final base = resolveSnsApiBase().replaceAll(RegExp(r'\/+$'), '');
+    final base = resolveApiBase().replaceAll(RegExp(r'\/+$'), '');
     final p = path.startsWith('/') ? path : '/$path';
     return Uri.parse('$base$p');
   }

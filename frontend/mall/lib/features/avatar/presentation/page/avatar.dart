@@ -81,17 +81,19 @@ class _AvatarPageState extends State<AvatarPage> {
     return _currentUri(context);
   }
 
-  // 暫定: avatarId = Firebase UID（本来は選択中 avatarId を使う）
-  String _resolveAvatarId(User user) {
-    return s(user.uid);
+  /// ✅ avatarId は「URLの query (?avatarId=...)」を唯一の正とする
+  String _resolveAvatarIdFromUrl(BuildContext context) {
+    final uri = GoRouterState.of(context).uri;
+    return s(uri.queryParameters[AppQueryKey.avatarId]);
   }
 
-  void _kickoffLoads(User user) {
-    final avatarId = _resolveAvatarId(user);
+  void _kickoffLoads(String avatarId) {
+    if (avatarId.isEmpty) return;
     _walletFuture ??= _walletRepo.fetchByAvatarId(avatarId);
   }
 
   /// ✅ /avatar の URL に avatarId を必ず載せる（Header/Cart が拾えるようにする）
+  /// NOTE: ここでは「既に avatarId が分かっている」時だけ正規化する
   void _ensureAvatarIdInUrl(BuildContext context, String avatarId) {
     if (_normalizedUrlOnce) return;
     if (avatarId.isEmpty) return;
@@ -314,6 +316,52 @@ class _AvatarPageState extends State<AvatarPage> {
     );
   }
 
+  Widget _missingAvatarIdView(BuildContext context) {
+    final backTo = _effectiveFrom(context);
+    return Center(
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 560),
+        child: Padding(
+          padding: const EdgeInsets.all(16),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Icon(Icons.info_outline, size: 40),
+              const SizedBox(height: 12),
+              Text(
+                'avatarId が URL にありません',
+                style: Theme.of(context).textTheme.titleLarge,
+                textAlign: TextAlign.center,
+              ),
+              const SizedBox(height: 8),
+              Text(
+                'この画面は ?avatarId=... を前提に動作します。\n例: /avatar?avatarId=2HFB0TWMMm8QCl6wBfu6',
+                textAlign: TextAlign.center,
+                style: Theme.of(context).textTheme.bodyMedium,
+              ),
+              const SizedBox(height: 16),
+              ElevatedButton.icon(
+                onPressed: () {
+                  // ひとまず編集へ（作成/選択導線が別にあるならそこへ差し替え推奨）
+                  final qp = <String, String>{
+                    AppQueryKey.from: _encodeFrom(backTo),
+                  };
+                  final uri = Uri(
+                    path: AppRoutePath.avatarEdit,
+                    queryParameters: qp,
+                  );
+                  context.go(uri.toString());
+                },
+                icon: const Icon(Icons.edit_outlined),
+                label: const Text('アバター編集へ'),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return StreamBuilder<User?>(
@@ -359,13 +407,17 @@ class _AvatarPageState extends State<AvatarPage> {
           );
         }
 
-        // ✅ avatarId（暫定: uid）を確定
-        final avatarId = _resolveAvatarId(user);
+        // ✅ avatarId は URL から取る（user.uid は使わない）
+        final avatarId = _resolveAvatarIdFromUrl(context);
 
-        // ✅ Wallet 等の読み込み開始
-        _kickoffLoads(user);
+        if (avatarId.isEmpty) {
+          return _missingAvatarIdView(context);
+        }
 
-        // ✅ 重要：/avatar URL に avatarId を載せる（Header / Cart が拾える）
+        // ✅ Wallet 等の読み込み開始（avatarId がある時だけ）
+        _kickoffLoads(avatarId);
+
+        // ✅ /avatar URL に avatarId を載せる（既にあるので基本は何もしない）
         _ensureAvatarIdInUrl(context, avatarId);
 
         // ✅ cart -> avatar (intent=requireAvatarId) で来た場合だけ、from に avatarId を付けて戻す

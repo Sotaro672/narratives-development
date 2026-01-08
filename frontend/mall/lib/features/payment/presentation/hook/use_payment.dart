@@ -1,6 +1,6 @@
 // frontend\mall\lib\features\payment\presentation\hook\use_payment.dart
-import '../../infrastructure/payment_repository_http.dart';
-import '../../../cart/infrastructure/cart_repository_http.dart';
+import '../../infrastructure/repository_http.dart';
+import '../../../cart/infrastructure/repository_http.dart';
 import '../../../order/infrastructure/order_repository_http.dart';
 
 /// PaymentPage の “ロジック側” を集約（データ取得・整形・計算）

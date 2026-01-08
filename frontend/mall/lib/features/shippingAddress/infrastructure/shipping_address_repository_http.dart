@@ -168,7 +168,7 @@ class ShippingAddressRepositoryHttp {
     // ✅ baseUrl 優先。無ければ共通 resolver を使う（fallback あり）
     final resolvedRaw = (baseUrl ?? '').trim().isNotEmpty
         ? baseUrl!.trim()
-        : resolveSnsApiBase().trim();
+        : resolveApiBase().trim();
 
     if (resolvedRaw.isEmpty) {
       throw Exception(

@@ -156,7 +156,7 @@ class UserRepositoryHttp {
       _dio = dio ?? Dio() {
     final resolvedRaw = (baseUrl ?? '').trim().isNotEmpty
         ? baseUrl!.trim()
-        : resolveSnsApiBase().trim();
+        : resolveApiBase().trim();
 
     if (resolvedRaw.isEmpty) {
       throw Exception(

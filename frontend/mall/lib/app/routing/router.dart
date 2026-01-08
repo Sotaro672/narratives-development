@@ -32,12 +32,16 @@ import '../../features/payment/presentation/page/payment.dart';
 // ✅ MallListItem 型
 import '../../features/list/infrastructure/list_repository_http.dart';
 
-// auth pages
-import '../../features/auth/presentation/page/login_page.dart';
-import '../../features/auth/presentation/page/create_account.dart';
-import '../../features/auth/presentation/page/shipping_address.dart';
-import '../../features/auth/presentation/page/billing_address.dart';
-import '../../features/auth/presentation/page/avatar_create.dart';
+// auth pages（✅ alias で確実に解決させる）
+import '../../features/auth/presentation/page/login_page.dart' as auth_login;
+import '../../features/auth/presentation/page/create_account.dart'
+    as auth_create;
+import '../../features/auth/presentation/page/shipping_address.dart'
+    as auth_ship;
+import '../../features/auth/presentation/page/billing_address.dart'
+    as auth_bill;
+import '../../features/auth/presentation/page/avatar_create.dart'
+    as auth_avatar;
 
 /// ------------------------------------------------------------
 /// ✅ `from` は URL で壊れやすい（Hash + `?` `&` 混在）ので base64url で安全に運ぶ
@@ -66,14 +70,19 @@ GoRouter buildRouter({required bool firebaseReady, Object? initError}) {
 }
 
 GoRouter buildAppRouter() {
+  // ✅ Web の “初期復元” も拾いやすい
   final authRefresh = GoRouterRefreshStream(
-    FirebaseAuth.instance.authStateChanges(),
+    FirebaseAuth.instance.userChanges(),
   );
 
   return GoRouter(
     initialLocation: AppRoutePath.home,
     refreshListenable: Listenable.merge([authRefresh, AvatarIdStore.I]),
-    redirect: appRedirect,
+
+    // ✅ async redirect
+    redirect: (context, state) async => appRedirect(context, state),
+
+    debugLogDiagnostics: true,
     routes: _routes(firebaseReady: true),
     errorBuilder: (context, state) => AppShell(
       title: 'Not Found',
@@ -88,6 +97,7 @@ GoRouter buildAppRouter() {
 GoRouter buildPublicOnlyRouter({required Object initError}) {
   return GoRouter(
     initialLocation: AppRoutePath.home,
+    debugLogDiagnostics: true,
     routes: [
       GoRoute(
         path: AppRoutePath.login,
@@ -208,7 +218,10 @@ List<RouteBase> _routes({required bool firebaseReady}) {
         final from = _decodeFrom(state.uri.queryParameters[AppQueryKey.from]);
         final intent = state.uri.queryParameters[AppQueryKey.intent];
         return NoTransitionPage(
-          child: LoginPage(from: from.isEmpty ? null : from, intent: intent),
+          child: auth_login.LoginPage(
+            from: from.isEmpty ? null : from,
+            intent: intent,
+          ),
         );
       },
     ),
@@ -219,7 +232,7 @@ List<RouteBase> _routes({required bool firebaseReady}) {
         final from = _decodeFrom(state.uri.queryParameters[AppQueryKey.from]);
         final intent = state.uri.queryParameters[AppQueryKey.intent];
         return NoTransitionPage(
-          child: CreateAccountPage(
+          child: auth_create.CreateAccountPage(
             from: from.isEmpty ? null : from,
             intent: intent,
           ),
@@ -232,7 +245,7 @@ List<RouteBase> _routes({required bool firebaseReady}) {
       pageBuilder: (context, state) {
         final qp = state.uri.queryParameters;
         return NoTransitionPage(
-          child: ShippingAddressPage(
+          child: auth_ship.ShippingAddressPage(
             mode: qp[AppQueryKey.mode],
             oobCode: qp[AppQueryKey.oobCode],
             continueUrl: qp[AppQueryKey.continueUrl],
@@ -249,7 +262,7 @@ List<RouteBase> _routes({required bool firebaseReady}) {
       pageBuilder: (context, state) {
         final from = _decodeFrom(state.uri.queryParameters[AppQueryKey.from]);
         return NoTransitionPage(
-          child: BillingAddressPage(from: from.isEmpty ? null : from),
+          child: auth_bill.BillingAddressPage(from: from.isEmpty ? null : from),
         );
       },
     ),
@@ -259,7 +272,7 @@ List<RouteBase> _routes({required bool firebaseReady}) {
       pageBuilder: (context, state) {
         final from = _decodeFrom(state.uri.queryParameters[AppQueryKey.from]);
         return NoTransitionPage(
-          child: AvatarCreatePage(from: from.isEmpty ? null : from),
+          child: auth_avatar.AvatarCreatePage(from: from.isEmpty ? null : from),
         );
       },
     ),
@@ -327,7 +340,7 @@ List<RouteBase> _routes({required bool firebaseReady}) {
           },
         ),
 
-        // ✅ FIX: CartPage は URL から読む前提（引数注入しない）
+        // ✅ CartPage は URL から読む前提（引数注入しない）
         GoRoute(
           path: AppRoutePath.cart,
           name: AppRouteName.cart,
@@ -648,7 +661,6 @@ class _AccountMenuSheet extends StatelessWidget {
           Expanded(
             child: ListView(
               children: [
-                // ✅ 削除: 「アバター情報（プロフィール編集）」は menu から消す
                 ListTile(
                   leading: const Icon(Icons.manage_accounts_outlined),
                   title: const Text('ユーザー情報'),

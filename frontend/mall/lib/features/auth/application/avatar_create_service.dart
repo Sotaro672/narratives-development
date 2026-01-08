@@ -3,7 +3,7 @@ import 'package:flutter/foundation.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:http/http.dart' as http;
 import 'package:web/web.dart' as web;
-import '../../avatar/infrastructure/avatar_repository_http.dart';
+import '../../avatar/infrastructure/repository_http.dart';
 
 class PickIconResult {
   const PickIconResult({
@@ -280,7 +280,6 @@ class AvatarCreateService {
       final created = await _repo.create(
         request: CreateAvatarRequest(
           userId: uid,
-          userUid: uid,
           avatarName: avatarName,
           avatarIcon: null,
           profile: profile.isEmpty ? null : profile,

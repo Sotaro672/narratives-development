@@ -131,7 +131,7 @@ class ProductBlueprintRepositoryHttp {
     }
 
     final b = _normalizeBaseUrl(
-      (baseUrl ?? '').trim().isNotEmpty ? baseUrl!.trim() : resolveSnsApiBase(),
+      (baseUrl ?? '').trim().isNotEmpty ? baseUrl!.trim() : resolveApiBase(),
     );
 
     final uri = Uri.parse('$b/mall/product-blueprints/$id');

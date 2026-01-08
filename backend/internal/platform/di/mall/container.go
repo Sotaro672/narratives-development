@@ -5,16 +5,22 @@ import (
 	"context"
 	"errors"
 	"log"
+	"os"
+	"strings"
 
 	// inbound (query + resolver types)
 	mallquery "narratives/internal/application/query/mall"
 	appresolver "narratives/internal/application/resolver"
 	usecase "narratives/internal/application/usecase"
 
+	// inbound (for ImageURLResolver interface type)
+	mallhandler "narratives/internal/adapters/in/http/mall/handler"
+
 	// outbound
 	outfs "narratives/internal/adapters/out/firestore"
 	mallfs "narratives/internal/adapters/out/firestore/mall"
 	gcso "narratives/internal/adapters/out/gcs"
+	gcscommon "narratives/internal/adapters/out/gcs/common"
 
 	// domains
 	ldom "narratives/internal/domain/list"
@@ -23,7 +29,8 @@ import (
 )
 
 const (
-	StripeWebhookPath = "/mall/webhooks/stripe"
+	StripeWebhookPath        = "/mall/webhooks/stripe"
+	defaultTokenIconBucketDI = "narratives-development_token_icon" // tokenIcon_repository_gcs.go と同じ既定値
 )
 
 // Container is Mall DI container.
@@ -42,6 +49,19 @@ type Container struct {
 	OrderUC           *usecase.OrderUsecase
 	InvoiceUC         *usecase.InvoiceUsecase
 
+	// ✅ Inventory (buyer-facing, read-only)
+	InventoryUC *usecase.InventoryUsecase
+
+	// ✅ TokenBlueprint (buyer-facing patch handler 用に repo を保持)
+	TokenBlueprintRepo any
+
+	// ✅ Token Icon public URL resolver（objectPath -> public URL）
+	// 命名は TokenIcon に寄せる
+	TokenIconURLResolver mallhandler.ImageURLResolver
+
+	// ✅ 互換: 旧命名を参照している箇所があっても落ちないように残す
+	TokenImageURLResolver mallhandler.ImageURLResolver
+
 	// Optional resolver (for query enrich)
 	NameResolver *appresolver.NameResolver
 
@@ -53,6 +73,9 @@ type Container struct {
 
 	// Repos sometimes needed by queries/joins
 	ListRepo ldom.Repository
+
+	// ✅ /mall/me/avatar 用: uid -> avatarId を解決するRepo
+	MeAvatarRepo *mallfs.MeAvatarRepo
 }
 
 func NewContainer(ctx context.Context, infra *shared.Infra) (*Container, error) {
@@ -93,6 +116,16 @@ func NewContainer(ctx context.Context, infra *shared.Infra) (*Container, error) 
 	orderRepo := outfs.NewOrderRepositoryFS(fsClient)
 	invoiceRepo := outfs.NewInvoiceRepositoryFS(fsClient)
 
+	// ✅ Inventory (usecase)
+	inventoryRepo := outfs.NewInventoryRepositoryFS(fsClient)
+
+	// ✅ TokenBlueprint repo（handler に渡す & NameResolver にも使う）
+	tokenBlueprintRepo := outfs.NewTokenBlueprintRepositoryFS(fsClient)
+	c.TokenBlueprintRepo = tokenBlueprintRepo
+
+	// ✅ /mall/me/avatar 用 Repo（uid -> avatarId）
+	c.MeAvatarRepo = mallfs.NewMeAvatarRepo(fsClient)
+
 	// List repo
 	listRepoFS := outfs.NewListRepositoryFS(fsClient)
 	c.ListRepo = listRepoFS
@@ -106,18 +139,17 @@ func NewContainer(ctx context.Context, infra *shared.Infra) (*Container, error) 
 	listImageRepo := gcso.NewListImageRepositoryGCS(gcsClient, infra.ListImageBucket)
 
 	// ✅ ListPatcher は di/mall/adapter.go から分離済み
-	// -> backend/internal/adapters/out/firestore/mall/list_patcher_repo.go
 	listPatcher := mallfs.NewListPatcherRepo(fsClient)
 
 	// --------------------------------------------------------
 	// Usecases
 	// --------------------------------------------------------
 	c.ListUC = usecase.NewListUsecase(
-		listRepoForUC, // ListReader
-		listPatcher,   // ListPatcher
-		listImageRepo, // ListImageReader
-		listImageRepo, // ListImageByIDReader
-		listImageRepo, // ListImageObjectSaver (+ SignedURLIssuer)
+		listRepoForUC,
+		listPatcher,
+		listImageRepo,
+		listImageRepo,
+		listImageRepo,
 	)
 
 	c.ShippingAddressUC = usecase.NewShippingAddressUsecase(shippingAddressRepo)
@@ -130,6 +162,18 @@ func NewContainer(ctx context.Context, infra *shared.Infra) (*Container, error) 
 	c.InvoiceUC = usecase.NewInvoiceUsecase(invoiceRepo)
 	c.OrderUC = usecase.NewOrderUsecase(orderRepo).WithInvoiceUsecase(c.InvoiceUC)
 
+	// ✅ InventoryUsecase（read-only handler が GetByID を呼ぶ想定）
+	c.InventoryUC = usecase.NewInventoryUsecase(inventoryRepo)
+
+	// --------------------------------------------------------
+	// TokenIcon URL Resolver (objectPath -> publicURL)
+	// --------------------------------------------------------
+	{
+		b := strings.TrimSpace(os.Getenv("TOKEN_ICON_BUCKET"))
+		// 空なら tokenIcon_repository_gcs.go のデフォルトに寄せる
+		c.TokenIconURLResolver = tokenIconURLResolver{bucket: b}
+	}
+
 	// --------------------------------------------------------
 	// NameResolver (optional but useful for mall queries)
 	// --------------------------------------------------------
@@ -139,7 +183,6 @@ func NewContainer(ctx context.Context, infra *shared.Infra) (*Container, error) 
 		productBlueprintRepo := outfs.NewProductBlueprintRepositoryFS(fsClient)
 		memberRepo := outfs.NewMemberRepositoryFS(fsClient)
 		modelRepo := outfs.NewModelRepositoryFS(fsClient)
-		tokenBlueprintRepo := outfs.NewTokenBlueprintRepositoryFS(fsClient)
 
 		// tokenBlueprintNameRepoAdapter は di/mall/adapter.go に存在
 		tbNameRepo := &tokenBlueprintNameRepoAdapter{repo: tokenBlueprintRepo}
@@ -158,8 +201,7 @@ func NewContainer(ctx context.Context, infra *shared.Infra) (*Container, error) 
 	// Queries (mall-facing)
 	// --------------------------------------------------------
 	{
-		// ✅ CatalogQuery の InventoryRepository は outfs.InventoryRepositoryFS では満たせない
-		// → out/firestore/mall の adapter (InventoryRepoForMallQuery) を使う
+		// CatalogQuery の InventoryRepository は out/firestore/mall の adapter を使う
 		invRepo := mallfs.NewInventoryRepoForMallQuery(fsClient)
 
 		pbRepo := outfs.NewProductBlueprintRepositoryFS(fsClient)
@@ -171,7 +213,7 @@ func NewContainer(ctx context.Context, infra *shared.Infra) (*Container, error) 
 		c.PreviewQ = mallquery.NewPreviewQuery(fsClient)
 		c.OrderQ = mallquery.NewOrderQuery(fsClient)
 
-		// light injection (no reflection)
+		// light injection
 		if c.CatalogQ != nil && c.NameResolver != nil && c.CatalogQ.NameResolver == nil {
 			c.CatalogQ.NameResolver = c.NameResolver
 		}
@@ -186,11 +228,52 @@ func NewContainer(ctx context.Context, infra *shared.Infra) (*Container, error) 
 		}
 	}
 
-	log.Printf("[di.mall] container built (firestore=%t gcs=%t firebaseAuth=%t)",
+	log.Printf("[di.mall] container built (firestore=%t gcs=%t firebaseAuth=%t meAvatarRepo=%t inventoryUC=%t tokenBlueprintRepo=%t tokenIconResolver=%t)",
 		c.Infra.Firestore != nil,
 		c.Infra.GCS != nil,
 		c.Infra.FirebaseAuth != nil,
+		c.MeAvatarRepo != nil,
+		c.InventoryUC != nil,
+		c.TokenBlueprintRepo != nil,
+		c.TokenIconURLResolver != nil,
 	)
 
 	return c, nil
+}
+
+// tokenIconURLResolver resolves icon URL from stored objectPath (or URL).
+type tokenIconURLResolver struct {
+	bucket string
+}
+
+func (r tokenIconURLResolver) ResolveForResponse(storedObjectPath string, storedIconURL string) string {
+	if u := strings.TrimSpace(storedIconURL); u != "" {
+		return u
+	}
+	p := strings.TrimSpace(storedObjectPath)
+	if p == "" {
+		return ""
+	}
+
+	// already a public URL
+	if strings.HasPrefix(p, "http://") || strings.HasPrefix(p, "https://") {
+		return p
+	}
+
+	// gs://bucket/object -> public URL
+	if b, obj, ok := gcscommon.ParseGCSURL(p); ok {
+		return gcscommon.GCSPublicURL(b, obj, defaultTokenIconBucketDI)
+	}
+
+	// treat as objectPath within token icon bucket
+	b := strings.TrimSpace(r.bucket)
+	if b == "" {
+		b = strings.TrimSpace(os.Getenv("TOKEN_ICON_BUCKET"))
+	}
+	if b == "" {
+		b = defaultTokenIconBucketDI
+	}
+
+	p = strings.TrimLeft(p, "/")
+	return gcscommon.GCSPublicURL(b, p, defaultTokenIconBucketDI)
 }
