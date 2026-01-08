@@ -1,4 +1,4 @@
-// frontend/sns/lib/features/home/presentation/page/home_page.dart
+// frontend\mall\lib\features\list\presentation\page\list.dart
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
@@ -15,7 +15,7 @@ class HomePage extends StatefulWidget {
 
 class _HomePageState extends State<HomePage> {
   late final ListRepositoryHttp _repo;
-  late Future<SnsListIndexResponse> _future;
+  late Future<MallListIndexResponse> _future;
 
   @override
   void initState() {
@@ -46,7 +46,7 @@ class _HomePageState extends State<HomePage> {
         // ✅ 見出し行（SNS + refresh）を削除して、ヘッダーっぽい行スペースを消す
 
         // ✅ 本文（一覧）
-        FutureBuilder<SnsListIndexResponse>(
+        FutureBuilder<MallListIndexResponse>(
           future: _future,
           builder: (context, snap) {
             if (snap.connectionState == ConnectionState.waiting) {
@@ -93,11 +93,11 @@ class _HomePageState extends State<HomePage> {
 class _ListCard extends StatelessWidget {
   const _ListCard({required this.item});
 
-  final SnsListItem item;
+  final MallListItem item;
 
   String _safeUrl(String raw) => Uri.encodeFull(raw.trim());
 
-  String _priceText(List<SnsListPriceRow> rows) {
+  String _priceText(List<MallListPriceRow> rows) {
     if (rows.isEmpty) return '';
     final prices = rows.map((e) => e.price).toList()..sort();
     final min = prices.first;

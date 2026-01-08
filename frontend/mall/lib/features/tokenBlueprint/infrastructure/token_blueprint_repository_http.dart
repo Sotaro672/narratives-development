@@ -1,4 +1,4 @@
-// frontend/sns/lib/features/tokenBlueprint/infrastructure/token_blueprint_repository_http.dart
+// frontend\mall\lib\features\tokenBlueprint\infrastructure\token_blueprint_repository_http.dart
 import 'dart:convert';
 
 import 'package:http/http.dart' as http;
@@ -78,7 +78,7 @@ class TokenBlueprintRepositoryHttp {
     }
 
     // 1) primary: /patch
-    final u1 = Uri.parse('$_apiBase/sns/token-blueprints/$id/patch');
+    final u1 = Uri.parse('$_apiBase/mall/token-blueprints/$id/patch');
     final r1 = await _client.get(u1, headers: _jsonHeaders());
 
     if (r1.statusCode == 200) {
@@ -88,7 +88,7 @@ class TokenBlueprintRepositoryHttp {
 
     // 404 の時だけ fallback
     if (r1.statusCode == 404) {
-      final u2 = Uri.parse('$_apiBase/sns/token-blueprints/$id');
+      final u2 = Uri.parse('$_apiBase/mall/token-blueprints/$id');
       final r2 = await _client.get(u2, headers: _jsonHeaders());
 
       if (r2.statusCode == 200) {

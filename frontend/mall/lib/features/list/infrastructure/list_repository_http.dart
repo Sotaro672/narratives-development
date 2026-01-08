@@ -1,30 +1,19 @@
-// frontend/sns/lib/features/list/infrastructure/list_repository_http.dart
+// frontend\mall\lib\features\list\infrastructure\list_repository_http.dart
 import 'dart:convert';
 
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 
-/// SNS buyer-facing API base URL.
-///
-/// Priority:
-/// 1) --dart-define=API_BASE_URL=https://...
-/// 2) (fallback) Cloud Run default (edit as needed)
-const String _fallbackBaseUrl =
-    'https://narratives-backend-871263659099.asia-northeast1.run.app';
+// ✅ API_BASE 解決ロジック（single source of truth）
+import '../../../app/config/api_base.dart';
 
-/// ✅ backend has migrated sns -> mall (legacy removed)
+/// Mall buyer-facing API prefix.
 const String _apiPrefix = '/mall';
 
-String _resolveApiBase() {
-  const fromDefine = String.fromEnvironment('API_BASE_URL');
-  final base = (fromDefine.isNotEmpty ? fromDefine : _fallbackBaseUrl).trim();
-  return base.endsWith('/') ? base.substring(0, base.length - 1) : base;
-}
-
-/// Buyer-facing item (minimum fields needed by SNS).
+/// Buyer-facing item (minimum fields needed by Mall).
 @immutable
-class SnsListItem {
-  const SnsListItem({
+class MallListItem {
+  const MallListItem({
     required this.id,
     required this.title,
     required this.description,
@@ -45,7 +34,7 @@ class SnsListItem {
   final String image;
 
   /// prices: [{modelId, price}, ...]
-  final List<SnsListPriceRow> prices;
+  final List<MallListPriceRow> prices;
 
   /// Optional: inventory doc id (e.g. productBlueprintId__tokenBlueprintId)
   final String inventoryId;
@@ -54,16 +43,16 @@ class SnsListItem {
   final String productBlueprintId;
   final String tokenBlueprintId;
 
-  factory SnsListItem.fromJson(Map<String, dynamic> json) {
+  factory MallListItem.fromJson(Map<String, dynamic> json) {
     final pricesRaw = (json['prices'] as List?) ?? const [];
     final prices = pricesRaw
         .whereType<Map>()
-        .map((m) => SnsListPriceRow.fromJson(m.cast<String, dynamic>()))
+        .map((m) => MallListPriceRow.fromJson(m.cast<String, dynamic>()))
         .toList();
 
     String s(dynamic v) => (v ?? '').toString().trim();
 
-    return SnsListItem(
+    return MallListItem(
       id: s(json['id']),
       title: s(json['title']),
       description: s(json['description']),
@@ -79,13 +68,13 @@ class SnsListItem {
 }
 
 @immutable
-class SnsListPriceRow {
-  const SnsListPriceRow({required this.modelId, required this.price});
+class MallListPriceRow {
+  const MallListPriceRow({required this.modelId, required this.price});
 
   final String modelId;
   final int price;
 
-  factory SnsListPriceRow.fromJson(Map<String, dynamic> json) {
+  factory MallListPriceRow.fromJson(Map<String, dynamic> json) {
     final modelId = (json['modelId'] ?? '').toString().trim();
 
     final rawPrice = json['price'];
@@ -98,14 +87,14 @@ class SnsListPriceRow {
       price = int.tryParse(rawPrice.trim()) ?? 0;
     }
 
-    return SnsListPriceRow(modelId: modelId, price: price);
+    return MallListPriceRow(modelId: modelId, price: price);
   }
 }
 
-/// Index response shape from backend SNS handler.
+/// Index response shape from backend Mall handler.
 @immutable
-class SnsListIndexResponse {
-  const SnsListIndexResponse({
+class MallListIndexResponse {
+  const MallListIndexResponse({
     required this.items,
     required this.totalCount,
     required this.totalPages,
@@ -113,17 +102,17 @@ class SnsListIndexResponse {
     required this.perPage,
   });
 
-  final List<SnsListItem> items;
+  final List<MallListItem> items;
   final int totalCount;
   final int totalPages;
   final int page;
   final int perPage;
 
-  factory SnsListIndexResponse.fromJson(Map<String, dynamic> json) {
+  factory MallListIndexResponse.fromJson(Map<String, dynamic> json) {
     final itemsRaw = (json['items'] as List?) ?? const [];
     final items = itemsRaw
         .whereType<Map>()
-        .map((m) => SnsListItem.fromJson(m.cast<String, dynamic>()))
+        .map((m) => MallListItem.fromJson(m.cast<String, dynamic>()))
         .toList();
 
     int asInt(dynamic v, {int def = 0}) {
@@ -133,7 +122,7 @@ class SnsListIndexResponse {
       return def;
     }
 
-    return SnsListIndexResponse(
+    return MallListIndexResponse(
       items: items,
       totalCount: asInt(json['totalCount']),
       totalPages: asInt(json['totalPages']),
@@ -151,14 +140,14 @@ class ListRepositoryHttp {
 
   final http.Client _client;
 
-  String get _base => _resolveApiBase();
+  String get _base => resolveSnsApiBase();
 
   Uri _uri(String path, [Map<String, String>? query]) {
     final p = path.startsWith('/') ? path : '/$path';
     return Uri.parse('$_base$p').replace(queryParameters: query);
   }
 
-  Future<SnsListIndexResponse> fetchLists({
+  Future<MallListIndexResponse> fetchLists({
     int page = 1,
     int perPage = 20,
   }) async {
@@ -183,12 +172,18 @@ class ListRepositoryHttp {
 
     final decoded = jsonDecode(body);
     if (decoded is! Map<String, dynamic>) {
-      throw FormatException('Invalid JSON shape (expected object)');
+      throw const FormatException('Invalid JSON shape (expected object)');
     }
-    return SnsListIndexResponse.fromJson(decoded);
+
+    // wrapper 吸収: {data:{...}} を許容（将来の変更に強くする）
+    final data = (decoded['data'] is Map)
+        ? (decoded['data'] as Map).cast<String, dynamic>()
+        : decoded;
+
+    return MallListIndexResponse.fromJson(data);
   }
 
-  Future<SnsListItem> fetchListById(String id) async {
+  Future<MallListItem> fetchListById(String id) async {
     final listId = id.trim();
     if (listId.isEmpty) {
       throw ArgumentError('id is required');
@@ -212,9 +207,15 @@ class ListRepositoryHttp {
 
     final decoded = jsonDecode(body);
     if (decoded is! Map<String, dynamic>) {
-      throw FormatException('Invalid JSON shape (expected object)');
+      throw const FormatException('Invalid JSON shape (expected object)');
     }
-    return SnsListItem.fromJson(decoded);
+
+    // wrapper 吸収: {data:{...}} を許容
+    final data = (decoded['data'] is Map)
+        ? (decoded['data'] as Map).cast<String, dynamic>()
+        : decoded;
+
+    return MallListItem.fromJson(data);
   }
 
   void dispose() {
@@ -226,6 +227,9 @@ class ListRepositoryHttp {
       final decoded = jsonDecode(body);
       if (decoded is Map && decoded['error'] != null) {
         return decoded['error'].toString();
+      }
+      if (decoded is Map && decoded['message'] != null) {
+        return decoded['message'].toString();
       }
     } catch (_) {
       // ignore

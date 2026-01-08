@@ -29,7 +29,7 @@ class UseCartResult {
 
   final String avatarId;
 
-  /// Source of truth: GET /sns/cart?avatarId=...
+  /// Source of truth: GET /mall/cart?avatarId=...
   final Future<CartDTO> future;
 
   /// ✅ “今のカート” を常に保持（FutureBuilder を使わない UI でも落ちない）

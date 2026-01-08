@@ -14,7 +14,7 @@ class CatalogPage extends StatefulWidget {
   const CatalogPage({super.key, required this.listId, this.initialItem});
 
   final String listId;
-  final SnsListItem? initialItem;
+  final MallListItem? initialItem;
 
   @override
   State<CatalogPage> createState() => _CatalogPageState();

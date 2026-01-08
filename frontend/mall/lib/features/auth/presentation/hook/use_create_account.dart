@@ -1,4 +1,4 @@
-// frontend/sns/lib/features/auth/presentation/hook/use_create_account.dart
+// frontend\mall\lib\features\auth\presentation\hook\use_create_account.dart
 import 'package:flutter/material.dart';
 
 import '../../application/create_account_service.dart';

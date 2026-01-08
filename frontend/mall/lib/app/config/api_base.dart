@@ -1,5 +1,4 @@
-// frontend/sns/lib/app/config/api_base.dart
-
+// frontend\mall\lib\app\config\api_base.dart
 const String _fallbackBaseUrl =
     'https://narratives-backend-871263659099.asia-northeast1.run.app';
 

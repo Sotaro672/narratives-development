@@ -1,4 +1,4 @@
-// frontend/sns/lib/features/shippingAddress/infrastructure/shipping_address_repository_http.dart
+// frontend/mall/lib/features/shippingAddress/infrastructure/shipping_address_repository_http.dart
 import 'dart:convert';
 
 import 'package:flutter/foundation.dart';
@@ -79,7 +79,7 @@ class ShippingAddress {
 
 /// ✅ Upsert body (create/update)
 /// - docId = Firebase UID
-/// - backend: PATCH /sns/shipping-addresses/{id} does upsert
+/// - backend: PATCH /mall/shipping-addresses/{id} does upsert
 class UpsertShippingAddressInput {
   UpsertShippingAddressInput({
     required this.id, // ✅ uid (docId)
@@ -180,10 +180,12 @@ class ShippingAddressRepositoryHttp {
 
     // ✅ baseUrl に /sns が含まれる注入も許容
     // - baseUrl が ".../sns" の場合: 以降の path は "shipping-addresses/..." にする
-    // - baseUrl が domain だけの場合: 以降の path は "sns/shipping-addresses/..." にする
+    // - baseUrl が domain だけの場合: 以降の path は "mall/shipping-addresses/..." にする
     final b = Uri.parse(normalized);
     final basePath = b.path.replaceAll(RegExp(r'\/+$'), '');
-    _pathPrefix = basePath.endsWith('/sns') || basePath == '/sns' ? '' : 'sns';
+    _pathPrefix = basePath.endsWith('/mall') || basePath == '/mall'
+        ? ''
+        : 'mall';
 
     _dio.options = BaseOptions(
       baseUrl: normalized,
@@ -339,7 +341,7 @@ class ShippingAddressRepositoryHttp {
     return getById(uid);
   }
 
-  /// GET /sns/shipping-addresses/{id}
+  /// GET /mall/shipping-addresses/{id}
   Future<ShippingAddress> getById(String id) async {
     final s = id.trim();
     if (s.isEmpty) {
@@ -362,7 +364,7 @@ class ShippingAddressRepositoryHttp {
   }
 
   /// ✅ UPSERT (create/update) for "my" shipping address
-  /// - backend 仕様に合わせて PATCH /sns/shipping-addresses/{uid} を基本にする
+  /// - backend 仕様に合わせて PATCH /mall/shipping-addresses/{uid} を基本にする
   Future<ShippingAddress> upsertMine(UpsertShippingAddressInput inData) async {
     final uid = _requireUid();
 
@@ -400,7 +402,7 @@ class ShippingAddressRepositoryHttp {
     return upsertMine(inData);
   }
 
-  /// PATCH /sns/shipping-addresses/{id}
+  /// PATCH /mall/shipping-addresses/{id}
   Future<ShippingAddress> updateMine(UpdateShippingAddressInput inData) async {
     final uid = _requireUid();
 
@@ -418,7 +420,7 @@ class ShippingAddressRepositoryHttp {
     return update(uid, fixed);
   }
 
-  /// PATCH /sns/shipping-addresses/{id}
+  /// PATCH /mall/shipping-addresses/{id}
   Future<ShippingAddress> update(
     String id,
     UpdateShippingAddressInput inData,
@@ -449,7 +451,7 @@ class ShippingAddressRepositoryHttp {
     }
   }
 
-  /// DELETE /sns/shipping-addresses/{id}
+  /// DELETE /mall/shipping-addresses/{id}
   Future<void> delete(String id) async {
     final s = id.trim();
     if (s.isEmpty) {

@@ -1,12 +1,15 @@
-// frontend/sns/lib/features/productBlueprint/infrastructure/product_bluleprint_repository_http.dart
+// frontend/mall/lib/features/productBlueprint/infrastructure/product_blueprint_repository_http.dart
 import 'dart:convert';
 
 import 'package:http/http.dart' as http;
 
-/// SNS productBlueprint response
+// ✅ API_BASE 解決ロジック（single source of truth）
+import '../../../app/config/api_base.dart';
+
+/// Mall productBlueprint response
 /// backend: GET /mall/product-blueprints/{id}
-class SnsProductBlueprintResponse {
-  SnsProductBlueprintResponse({
+class MallProductBlueprintResponse {
+  MallProductBlueprintResponse({
     required this.id,
     required this.productName,
     required this.companyId,
@@ -44,7 +47,7 @@ class SnsProductBlueprintResponse {
 
   final bool printed;
 
-  factory SnsProductBlueprintResponse.fromJson(Map<String, dynamic> j) {
+  factory MallProductBlueprintResponse.fromJson(Map<String, dynamic> j) {
     String s(dynamic v) => (v ?? '').toString().trim();
 
     final qaRaw = j['qualityAssurance'];
@@ -79,7 +82,7 @@ class SnsProductBlueprintResponse {
       tagType = s(j['productIdTag_type']); // 念のため
     }
 
-    return SnsProductBlueprintResponse(
+    return MallProductBlueprintResponse(
       id: s(j['id']),
       productName: s(j['productName']),
       companyId: s(j['companyId']),
@@ -107,15 +110,6 @@ class ProductBlueprintRepositoryHttp {
     _client.close();
   }
 
-  static String _resolveApiBase() {
-    // ✅ 他リポジトリと統一: API_BASE_URL
-    const env = String.fromEnvironment('API_BASE_URL');
-    final s = env.trim();
-    if (s.isNotEmpty) return s;
-
-    return 'https://narratives-backend-871263659099.asia-northeast1.run.app';
-  }
-
   static String _normalizeBaseUrl(String s) {
     s = s.trim();
     if (s.isEmpty) return s;
@@ -127,7 +121,7 @@ class ProductBlueprintRepositoryHttp {
 
   Map<String, String> _jsonHeaders() => const {'Accept': 'application/json'};
 
-  Future<SnsProductBlueprintResponse> fetchProductBlueprintById(
+  Future<MallProductBlueprintResponse> fetchProductBlueprintById(
     String productBlueprintId, {
     String? baseUrl,
   }) async {
@@ -137,10 +131,9 @@ class ProductBlueprintRepositoryHttp {
     }
 
     final b = _normalizeBaseUrl(
-      (baseUrl ?? '').trim().isNotEmpty ? baseUrl!.trim() : _resolveApiBase(),
+      (baseUrl ?? '').trim().isNotEmpty ? baseUrl!.trim() : resolveSnsApiBase(),
     );
 
-    // ✅ /sns -> /mall
     final uri = Uri.parse('$b/mall/product-blueprints/$id');
 
     final res = await _client.get(uri, headers: _jsonHeaders());
@@ -160,14 +153,14 @@ class ProductBlueprintRepositoryHttp {
       final m = decoded.cast<String, dynamic>();
       final data = m['data'];
       if (data is Map<String, dynamic>) {
-        return SnsProductBlueprintResponse.fromJson(data);
+        return MallProductBlueprintResponse.fromJson(data);
       }
       if (data is Map) {
-        return SnsProductBlueprintResponse.fromJson(
+        return MallProductBlueprintResponse.fromJson(
           Map<String, dynamic>.from(data),
         );
       }
-      return SnsProductBlueprintResponse.fromJson(m);
+      return MallProductBlueprintResponse.fromJson(m);
     }
 
     throw const FormatException('invalid json shape (expected object)');

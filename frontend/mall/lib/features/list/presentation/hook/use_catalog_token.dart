@@ -1,4 +1,4 @@
-// frontend/sns/lib/features/home/presentation/hook/use_catalog_token.dart
+// frontend\mall\lib\features\list\presentation\hook\use_catalog_token.dart
 import '../../../tokenBlueprint/infrastructure/token_blueprint_repository_http.dart';
 
 /// TokenCard 用の “token blueprint patch 解決” 専用 hook

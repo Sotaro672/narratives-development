@@ -1,4 +1,4 @@
-// frontend\sns\lib\features\avatar\infrastructure\avatar_repository_http.dart
+// frontend\mall\lib\features\avatar\infrastructure\avatar_repository_http.dart
 import 'dart:convert';
 
 import 'package:flutter/foundation.dart';
@@ -11,16 +11,16 @@ import '../../../app/config/api_base.dart';
 /// Simple HTTP repository for SNS avatar endpoints.
 ///
 /// Back-end handler spec (sns):
-/// - POST   /sns/avatars
-/// - PATCH  /sns/avatars/{id}
-/// - DELETE /sns/avatars/{id}
-/// - GET    /sns/avatars/{id}
-/// - GET    /sns/avatars/{id}?aggregate=1|true  (Avatar + State + Icons)
-/// - POST   /sns/avatars/{id}/wallet            (open wallet)
-/// - POST   /sns/avatars/{id}/icon              (register/replace icon)
+/// - POST   /mall/avatars
+/// - PATCH  /mall/avatars/{id}
+/// - DELETE /mall/avatars/{id}
+/// - GET    /mall/avatars/{id}
+/// - GET    /mall/avatars/{id}?aggregate=1|true  (Avatar + State + Icons)
+/// - POST   /mall/avatars/{id}/wallet            (open wallet)
+/// - POST   /mall/avatars/{id}/icon              (register/replace icon)
 ///
 /// ✅ SignedURL (B案 /avatars 配下に寄せる):
-/// - POST   /sns/avatars/{id}/icon-upload-url   (issue signed upload url)
+/// - POST   /mall/avatars/{id}/icon-upload-url   (issue signed upload url)
 ///
 /// NOTE:
 /// - Authorization: Firebase ID token (Bearer)
@@ -254,12 +254,12 @@ class AvatarRepositoryHttp {
   // Public API
   // ---------------------------------------------------------------------------
 
-  /// GET /sns/avatars/{id}
+  /// GET /mall/avatars/{id}
   Future<AvatarDTO> getById({required String id}) async {
     final rid = id.trim();
     if (rid.isEmpty) throw ArgumentError('id is empty');
 
-    final uri = _uri('/sns/avatars/$rid');
+    final uri = _uri('/mall/avatars/$rid');
     final res = await _sendAuthed('GET', uri);
 
     if (res.statusCode < 200 || res.statusCode >= 300) {
@@ -270,12 +270,12 @@ class AvatarRepositoryHttp {
     return AvatarDTO.fromJson(decoded);
   }
 
-  /// GET /sns/avatars/{id}?aggregate=1
+  /// GET /mall/avatars/{id}?aggregate=1
   Future<AvatarAggregateDTO> getAggregate({required String id}) async {
     final rid = id.trim();
     if (rid.isEmpty) throw ArgumentError('id is empty');
 
-    final uri = _uri('/sns/avatars/$rid', const {'aggregate': '1'});
+    final uri = _uri('/mall/avatars/$rid', const {'aggregate': '1'});
     final res = await _sendAuthed('GET', uri);
 
     if (res.statusCode < 200 || res.statusCode >= 300) {
@@ -286,9 +286,9 @@ class AvatarRepositoryHttp {
     return AvatarAggregateDTO.fromJson(decoded);
   }
 
-  /// POST /sns/avatars
+  /// POST /mall/avatars
   Future<AvatarDTO> create({required CreateAvatarRequest request}) async {
-    final uri = _uri('/sns/avatars');
+    final uri = _uri('/mall/avatars');
     final payload = request.toJson();
 
     final res = await _sendAuthed('POST', uri, jsonBody: payload);
@@ -306,7 +306,7 @@ class AvatarRepositoryHttp {
   // ✅ NEW: Signed upload URL for avatar icon (B案)
   // ---------------------------------------------------------------------------
 
-  /// POST /sns/avatars/{id}/icon-upload-url
+  /// POST /mall/avatars/{id}/icon-upload-url
   Future<AvatarIconUploadUrlDTO> issueAvatarIconUploadUrl({
     required String avatarId,
     required String fileName,
@@ -322,7 +322,7 @@ class AvatarRepositoryHttp {
     final mt = mimeType.trim();
     if (mt.isEmpty) throw ArgumentError('mimeType is empty');
 
-    final uri = _uri('/sns/avatars/$aid/icon-upload-url');
+    final uri = _uri('/mall/avatars/$aid/icon-upload-url');
     final payload = <String, dynamic>{
       'fileName': fn,
       'mimeType': mt,
@@ -382,14 +382,14 @@ class AvatarRepositoryHttp {
     }
   }
 
-  /// POST /sns/avatars/{id}/wallet
+  /// POST /mall/avatars/{id}/wallet
   ///
   /// ✅ Open wallet for existing avatar (server will set walletAddress).
   Future<AvatarDTO> openWallet({required String id}) async {
     final rid = id.trim();
     if (rid.isEmpty) throw ArgumentError('id is empty');
 
-    final uri = _uri('/sns/avatars/$rid/wallet');
+    final uri = _uri('/mall/avatars/$rid/wallet');
 
     final res = await _sendAuthed(
       'POST',
@@ -410,7 +410,7 @@ class AvatarRepositoryHttp {
     return AvatarDTO.fromJson(decoded);
   }
 
-  /// POST /sns/avatars/{id}/icon
+  /// POST /mall/avatars/{id}/icon
   ///
   /// ✅ 事前に GCS にアップロード済みの object を AvatarIcon として登録（置換）
   Future<AvatarIconDTO> replaceAvatarIcon({
@@ -424,7 +424,7 @@ class AvatarRepositoryHttp {
     final rid = avatarId.trim();
     if (rid.isEmpty) throw ArgumentError('avatarId is empty');
 
-    final uri = _uri('/sns/avatars/$rid/icon');
+    final uri = _uri('/mall/avatars/$rid/icon');
 
     final payload = <String, dynamic>{};
 
@@ -458,7 +458,7 @@ class AvatarRepositoryHttp {
     return AvatarIconDTO.fromJson(decoded);
   }
 
-  /// PATCH /sns/avatars/{id}
+  /// PATCH /mall/avatars/{id}
   ///
   /// backend が upsert 的な挙動をして 200/201 でもOK。
   /// body が空なら GET で取り直す（将来の 204/空返却対策）。
@@ -469,7 +469,7 @@ class AvatarRepositoryHttp {
     final rid = id.trim();
     if (rid.isEmpty) throw ArgumentError('id is empty');
 
-    final uri = _uri('/sns/avatars/$rid');
+    final uri = _uri('/mall/avatars/$rid');
     final payload = request.toJson();
 
     final res = await _sendAuthed('PATCH', uri, jsonBody: payload);
@@ -486,12 +486,12 @@ class AvatarRepositoryHttp {
     return AvatarDTO.fromJson(decoded);
   }
 
-  /// DELETE /sns/avatars/{id}
+  /// DELETE /mall/avatars/{id}
   Future<void> delete({required String id}) async {
     final rid = id.trim();
     if (rid.isEmpty) throw ArgumentError('id is empty');
 
-    final uri = _uri('/sns/avatars/$rid');
+    final uri = _uri('/mall/avatars/$rid');
     final res = await _sendAuthed('DELETE', uri);
 
     if (res.statusCode < 200 || res.statusCode >= 300) {

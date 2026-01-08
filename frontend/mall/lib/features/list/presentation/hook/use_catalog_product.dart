@@ -18,7 +18,7 @@ class UseCatalogProduct {
     required String productBlueprintId,
 
     /// すでに上位（catalog DTO 等）で取れている場合はこれを渡す
-    required SnsProductBlueprintResponse? initial,
+    required MallProductBlueprintResponse? initial,
 
     /// すでに上位（catalog DTO 等）で確定しているエラーがある場合はこれを渡す
     required String? initialError,
@@ -79,6 +79,6 @@ class CatalogProductResult {
     required this.productBlueprintError,
   });
 
-  final SnsProductBlueprintResponse? productBlueprint;
+  final MallProductBlueprintResponse? productBlueprint;
   final String? productBlueprintError;
 }

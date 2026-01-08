@@ -1,4 +1,4 @@
-// frontend/sns/lib/features/cart/infrastructure/cart_repository_http.dart
+// frontend\mall\lib\features\cart\infrastructure\cart_repository_http.dart
 import 'dart:convert';
 
 import 'package:firebase_auth/firebase_auth.dart';

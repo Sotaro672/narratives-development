@@ -1,4 +1,4 @@
-// frontend/sns/lib/features/wallet/infrastructure/wallet_repository_http.dart
+// frontend\mall\lib\features\wallet\infrastructure\wallet_repository_http.dart
 import 'dart:convert';
 
 import 'package:flutter/foundation.dart';
@@ -197,9 +197,9 @@ class WalletRepositoryHttp {
   /// avatarId から Wallet を取得（トークン一覧表示用）
   ///
   /// ✅ エンドポイント未確定のため、候補を順に試します。
-  /// - GET /sns/wallet?avatarId=...
-  /// - GET /sns/wallets?avatarId=...
-  /// - GET /sns/wallets/{avatarId}
+  /// - GET /mall/wallet?avatarId=...
+  /// - GET /mall/wallets?avatarId=...
+  /// - GET /mall/wallets/{avatarId}
   ///
   /// 成功条件: 2xx + JSON
   Future<WalletDTO?> fetchByAvatarId(String avatarId) async {
@@ -212,9 +212,9 @@ class WalletRepositoryHttp {
     };
 
     final candidates = <Uri>[
-      _uri('/sns/wallet', {'avatarId': aid}),
-      _uri('/sns/wallets', {'avatarId': aid}),
-      _uri('/sns/wallets/$aid'),
+      _uri('/mall/wallet', {'avatarId': aid}),
+      _uri('/mall/wallets', {'avatarId': aid}),
+      _uri('/mall/wallets/$aid'),
     ];
 
     for (final uri in candidates) {

@@ -1,4 +1,4 @@
-// frontend/sns/lib/features/payment/presentation/page/payment.dart
+// frontend\mall\lib\features\payment\presentation\page\payment.dart
 import 'package:flutter/material.dart';
 
 import '../hook/use_payment.dart';

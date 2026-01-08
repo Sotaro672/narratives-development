@@ -1,11 +1,11 @@
-// frontend/sns/lib/features/payment/infrastructure/payment_repository_http.dart
+// frontend\mall\lib\features\payment\infrastructure\payment_repository_http.dart
 import 'dart:convert';
 
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:http/http.dart' as http;
 
-// ✅ API_BASE 解決ロジックは既存と揃える（inventory と同様）
-import '../../inventory/infrastructure/inventory_repository_http.dart';
+// ✅ API_BASE 解決ロジックは共通（single source of truth）
+import '../../../app/config/api_base.dart';
 
 /// PaymentRepositoryHttp
 /// - Backend の order_query.go（uid -> avatarId / shipping / billing）を叩いて
@@ -18,14 +18,13 @@ import '../../inventory/infrastructure/inventory_repository_http.dart';
 class PaymentRepositoryHttp {
   PaymentRepositoryHttp({http.Client? client, String? apiBase})
     : _client = client ?? http.Client(),
-      // ✅ 他と統一: API_BASE_URL
-      _apiBase = (apiBase ?? const String.fromEnvironment('API_BASE_URL'))
-          .trim();
+      // ✅ 明示 override がなければ、共通 resolver を使う
+      _apiBase = (apiBase ?? '').trim();
 
   final http.Client _client;
 
   /// Optional override. If empty, resolveSnsApiBase() will be used.
-  /// NOTE: 関数名は sns だが、実体が API_BASE_URL を解決できれば問題ない。
+  /// NOTE: 関数名は sns だが、実体が API_BASE_URL / API_BASE / fallback を解決する。
   final String _apiBase;
 
   void dispose() {
@@ -40,7 +39,6 @@ class PaymentRepositoryHttp {
   Future<PaymentContextDTO> fetchPaymentContext() async {
     final token = await _requireFirebaseIdToken();
 
-    // ✅ /sns -> /mall
     final uri = _uri('/mall/payment');
     final headers = _headersJsonAuth(token);
 
@@ -118,7 +116,6 @@ class PaymentRepositoryHttp {
     final base = (_apiBase.isNotEmpty ? _apiBase : resolveSnsApiBase()).trim();
 
     if (base.isEmpty) {
-      // ✅ 他と統一: API_BASE_URL
       throw StateError(
         'API_BASE_URL is not set (use --dart-define=API_BASE_URL=https://...)',
       );

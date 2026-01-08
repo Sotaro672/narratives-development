@@ -1,6 +1,6 @@
-// frontend/sns/lib/di/container.dart
+// frontend/mall/lib/di/container.dart
 //
-// SNS app DI container (minimal, feature-first).
+// Mall app DI container (minimal, feature-first).
 // - Centralizes API_BASE resolution (with fallback)
 // - Creates repositories/services with shared FirebaseAuth + http.Client
 // - Provides a single place to dispose resources
@@ -124,9 +124,9 @@ class AppContainer {
   // API_BASE resolution
   // ----------------------------
 
-  // ✅ SNS app should talk to /sns/* endpoints.
+  // ✅ Mall app should talk to /mall/* endpoints.
   static const String _fallbackBaseUrl =
-      'https://narratives-backend-871263659099.asia-northeast1.run.app/sns';
+      'https://narratives-backend-871263659099.asia-northeast1.run.app/mall';
 
   static String _resolveApiBase() {
     const fromDefine = String.fromEnvironment('API_BASE', defaultValue: '');

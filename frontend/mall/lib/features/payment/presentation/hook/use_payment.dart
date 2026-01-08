@@ -1,4 +1,4 @@
-// frontend/sns/lib/features/payment/presentation/hook/use_payment.dart
+// frontend\mall\lib\features\payment\presentation\hook\use_payment.dart
 import '../../infrastructure/payment_repository_http.dart';
 import '../../../cart/infrastructure/cart_repository_http.dart';
 import '../../../order/infrastructure/order_repository_http.dart';
@@ -66,7 +66,7 @@ class UsePaymentController {
     );
   }
 
-  /// ✅ 支払確定 = Order起票（/sns/orders）
+  /// ✅ 支払確定 = Order起票（/mall/orders）
   /// Items は snapshot: [modelId, inventoryId, qty, price]
   ///
   /// ✅ 方針変更:

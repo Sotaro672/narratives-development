@@ -1,4 +1,4 @@
-// frontend/sns/lib/main.dart
+// frontend\mall\lib\main.dart
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 

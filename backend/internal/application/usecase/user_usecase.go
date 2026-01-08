@@ -94,7 +94,7 @@ func (u *UserUsecase) Delete(ctx context.Context, id string) error {
 // Patch は handler 側で「部分フィールドだけ入った userdom.User を作って Save」しないための補助です。
 // - 現在値を GetByID で読み、入力で指定されたものだけ上書きし、UpdatedAt を更新して Save します。
 //
-// ※ userdom.UpdateUserInput が domain 側に存在する前提（あなたの sns/user_handler.go が使用している型）
+// ※ userdom.UpdateUserInput が domain 側に存在する前提（あなたの mall/user_handler.go が使用している型）
 func (u *UserUsecase) Patch(ctx context.Context, id string, in userdom.UpdateUserInput) (userdom.User, error) {
 	if err := u.ensureRepo(); err != nil {
 		return userdom.User{}, err

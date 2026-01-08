@@ -1,4 +1,4 @@
-// frontend/sns/lib/features/auth/presentation/hook/use_shipping_address.dart
+// frontend\mall\lib\features\auth\presentation\hook\use_shipping_address.dart
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 

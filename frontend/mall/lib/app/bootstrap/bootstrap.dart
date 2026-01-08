@@ -1,4 +1,4 @@
-// frontend/sns/lib/app/bootstrap/bootstrap.dart
+// frontend\mall\lib\app\bootstrap\bootstrap.dart
 import 'package:flutter/widgets.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:go_router/go_router.dart';

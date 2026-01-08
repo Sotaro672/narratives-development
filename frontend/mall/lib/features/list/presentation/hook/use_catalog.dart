@@ -1,4 +1,4 @@
-// frontend/sns/lib/features/list/presentation/hook/use_catalog.dart
+// frontend\mall\lib\features\list\presentation\hook\use_catalog.dart
 import 'dart:convert';
 import 'package:http/http.dart' as http;
 
@@ -6,6 +6,7 @@ import '../../../inventory/infrastructure/inventory_repository_http.dart';
 import '../../infrastructure/list_repository_http.dart';
 import '../../../productBlueprint/infrastructure/product_blueprint_repository_http.dart';
 import '../../../tokenBlueprint/infrastructure/token_blueprint_repository_http.dart';
+import '../../../../app/config/api_base.dart';
 
 import 'use_catalog_inventory.dart';
 import 'use_catalog_product.dart';
@@ -66,7 +67,7 @@ class UseCatalog {
 
     // 1) try catalog endpoint first
     try {
-      _log('try catalog endpoint: GET /sns/catalog/$id');
+      _log('try catalog endpoint: GET /mall/catalog/$id');
       final dto = await _catalogRepo.fetchCatalogByListId(id);
 
       _log(
@@ -103,7 +104,7 @@ class UseCatalog {
         initialError: dto.productBlueprintError,
       );
 
-      // ✅ models（catalog DTO優先 / 無ければ /sns/models で補完）
+      // ✅ models（catalog DTO優先 / 無ければ /mall/models で補完）
       final modelsRes = await _inventory.loadModels(
         invRepo: _invRepo,
         productBlueprintId: pbId,
@@ -152,7 +153,7 @@ class UseCatalog {
     // inventory
     final invId = legacyInvId;
 
-    SnsInventoryResponse? inv;
+    MallInventoryResponse? inv;
     String? invErr;
 
     if (invId.isEmpty) {
@@ -188,7 +189,7 @@ class UseCatalog {
       initialError: null,
     );
 
-    // ✅ models (/sns/models)
+    // ✅ models (/mall/models)
     final modelsRes = await _inventory.loadModels(
       invRepo: _invRepo,
       productBlueprintId: pbId,
@@ -214,12 +215,12 @@ class UseCatalog {
   }
 
   CatalogState _buildState({
-    required SnsListItem list,
-    required SnsInventoryResponse? inventory,
+    required MallListItem list,
+    required MallInventoryResponse? inventory,
     required String? inventoryError,
-    required SnsProductBlueprintResponse? productBlueprint,
+    required MallProductBlueprintResponse? productBlueprint,
     required String? productBlueprintError,
-    required List<SnsModelVariationDTO>? modelVariations,
+    required List<MallModelVariationDTO>? modelVariations,
     required String? modelVariationsError,
     required TokenBlueprintPatch? tokenBlueprintPatch,
     required String? tokenBlueprintError,
@@ -280,7 +281,7 @@ class UseCatalog {
 
   static String _safeUrl(String raw) => Uri.encodeFull(raw.trim());
 
-  static String _priceText(List<SnsListPriceRow> rows) {
+  static String _priceText(List<MallListPriceRow> rows) {
     if (rows.isEmpty) return '';
     final prices = rows.map((e) => e.price).toList()..sort();
     final min = prices.first;
@@ -317,7 +318,7 @@ class CatalogState {
     required this.measurementTable, // ✅ NEW
   });
 
-  final SnsListItem list;
+  final MallListItem list;
 
   final String priceText;
 
@@ -325,13 +326,13 @@ class CatalogState {
   final String imageUrlEncoded;
   final bool hasImage;
 
-  final SnsInventoryResponse? inventory;
+  final MallInventoryResponse? inventory;
   final String? inventoryError;
 
-  final SnsProductBlueprintResponse? productBlueprint;
+  final MallProductBlueprintResponse? productBlueprint;
   final String? productBlueprintError;
 
-  final List<SnsModelVariationDTO>? modelVariations;
+  final List<MallModelVariationDTO>? modelVariations;
   final String? modelVariationsError;
 
   final String productBlueprintId;
@@ -349,11 +350,11 @@ class CatalogState {
 }
 
 // ============================================================
-// CatalogRepositoryHttp + DTO (matches backend SNSCatalogDTO)
+// CatalogRepositoryHttp + DTO (matches backend MallCatalogDTO)
 // ============================================================
 
-class SnsCatalogDTO {
-  const SnsCatalogDTO({
+class MallCatalogDTO {
+  const MallCatalogDTO({
     required this.list,
     required this.inventory,
     required this.inventoryError,
@@ -363,15 +364,15 @@ class SnsCatalogDTO {
     required this.modelVariationsError,
   });
 
-  final SnsListItem list;
+  final MallListItem list;
 
-  final SnsInventoryResponse? inventory;
+  final MallInventoryResponse? inventory;
   final String? inventoryError;
 
-  final SnsProductBlueprintResponse? productBlueprint;
+  final MallProductBlueprintResponse? productBlueprint;
   final String? productBlueprintError;
 
-  final List<SnsModelVariationDTO>? modelVariations;
+  final List<MallModelVariationDTO>? modelVariations;
   final String? modelVariationsError;
 
   static String? _asNonEmptyString(dynamic v) {
@@ -379,21 +380,21 @@ class SnsCatalogDTO {
     return s.isEmpty ? null : s;
   }
 
-  factory SnsCatalogDTO.fromJson(Map<String, dynamic> json) {
+  factory MallCatalogDTO.fromJson(Map<String, dynamic> json) {
     final listJson =
         (json['list'] as Map?)?.cast<String, dynamic>() ?? const {};
     final invJson = (json['inventory'] as Map?)?.cast<String, dynamic>();
     final pbJson = (json['productBlueprint'] as Map?)?.cast<String, dynamic>();
     final mvJson = json['modelVariations'];
 
-    return SnsCatalogDTO(
-      list: SnsListItem.fromJson(listJson),
+    return MallCatalogDTO(
+      list: MallListItem.fromJson(listJson),
       inventory: invJson != null
-          ? SnsInventoryResponse.fromJson(invJson)
+          ? MallInventoryResponse.fromJson(invJson)
           : null,
       inventoryError: _asNonEmptyString(json['inventoryError']),
       productBlueprint: pbJson != null
-          ? SnsProductBlueprintResponse.fromJson(pbJson)
+          ? MallProductBlueprintResponse.fromJson(pbJson)
           : null,
       productBlueprintError: _asNonEmptyString(json['productBlueprintError']),
       modelVariations: (mvJson is List)
@@ -401,7 +402,7 @@ class SnsCatalogDTO {
                 .whereType<Map>()
                 .map(
                   (e) =>
-                      SnsModelVariationDTO.fromJson(e.cast<String, dynamic>()),
+                      MallModelVariationDTO.fromJson(e.cast<String, dynamic>()),
                 )
                 .toList()
           : null,
@@ -420,21 +421,20 @@ class CatalogRepositoryHttp {
     _client.close();
   }
 
-  /// ✅ inventory_repository_http.dart の解決ロジックを使う（重複排除）
+  /// ✅ app/config/api_base.dart の解決ロジックを使う（重複排除）
   static Uri _buildUri(String path) {
-    // resolveSnsApiBase() is defined in inventory_repository_http.dart
     final base = resolveSnsApiBase().replaceAll(RegExp(r'\/+$'), '');
     final p = path.startsWith('/') ? path : '/$path';
     return Uri.parse('$base$p');
   }
 
-  Future<SnsCatalogDTO> fetchCatalogByListId(String listId) async {
+  Future<MallCatalogDTO> fetchCatalogByListId(String listId) async {
     final id = listId.trim();
     if (id.isEmpty) {
       throw Exception('catalog: listId is empty');
     }
 
-    final uri = _buildUri('/sns/catalog/$id');
+    final uri = _buildUri('/mall/catalog/$id');
     final res = await _client.get(uri, headers: {'accept': 'application/json'});
 
     if (res.statusCode < 200 || res.statusCode >= 300) {
@@ -446,6 +446,12 @@ class CatalogRepositoryHttp {
       throw Exception('catalog: invalid json (not an object)');
     }
 
-    return SnsCatalogDTO.fromJson(jsonObj.cast<String, dynamic>());
+    // wrapper 吸収: {data:{...}} を許容
+    final root = jsonObj.cast<String, dynamic>();
+    final data = (root['data'] is Map)
+        ? (root['data'] as Map).cast<String, dynamic>()
+        : root;
+
+    return MallCatalogDTO.fromJson(data);
   }
 }

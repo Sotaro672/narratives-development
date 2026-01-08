@@ -1,4 +1,4 @@
-// frontend/sns/lib/features/billingAddress/infrastructure/billing_address_repository_http.dart
+// frontend\mall\lib\features\billingAddress\infrastructure\billing_address_repository_http.dart
 import 'dart:convert';
 
 import 'package:flutter/foundation.dart';

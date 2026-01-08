@@ -1,4 +1,4 @@
-// frontend/sns/lib/features/user/infrastructure/user_repository_http.dart
+// frontend/mall/lib/features/user/infrastructure/user_repository_http.dart
 import 'dart:async';
 import 'dart:convert';
 
@@ -265,7 +265,7 @@ class UserRepositoryHttp {
   // API
   // ----------------------------
 
-  /// GET /sns/users/{id}
+  /// GET /mall/users/{id}
   Future<UserDTO> getById(String id) async {
     final trimmed = id.trim();
     if (trimmed.isEmpty) {
@@ -285,7 +285,7 @@ class UserRepositoryHttp {
     }
   }
 
-  /// POST /sns/users
+  /// POST /mall/users
   Future<UserDTO> create(CreateUserBody body) async {
     if (body.id.trim().isEmpty) {
       throw ArgumentError('id is empty');
@@ -305,7 +305,7 @@ class UserRepositoryHttp {
     }
   }
 
-  /// PATCH /sns/users/{id}
+  /// PATCH /mall/users/{id}
   Future<UserDTO> update(String id, UpdateUserBody body) async {
     final trimmed = id.trim();
     if (trimmed.isEmpty) {
@@ -326,7 +326,7 @@ class UserRepositoryHttp {
     }
   }
 
-  /// DELETE /sns/users/{id}
+  /// DELETE /mall/users/{id}
   Future<void> delete(String id) async {
     final trimmed = id.trim();
     if (trimmed.isEmpty) {

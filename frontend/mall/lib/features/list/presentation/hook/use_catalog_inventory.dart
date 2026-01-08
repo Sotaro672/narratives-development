@@ -1,4 +1,4 @@
-// frontend/sns/lib/features/home/presentation/hook/use_catalog_inventory.dart
+// frontend\mall\lib\features\list\presentation\hook\use_catalog_inventory.dart
 import '../../../inventory/infrastructure/inventory_repository_http.dart';
 import '../../infrastructure/list_repository_http.dart';
 
@@ -35,7 +35,7 @@ class CatalogInventoryComputed {
 class UseCatalogModelsResult {
   const UseCatalogModelsResult({required this.models, required this.error});
 
-  final List<SnsModelVariationDTO>? models;
+  final List<MallModelVariationDTO>? models;
   final String? error;
 }
 
@@ -50,7 +50,7 @@ class UseCatalogInventory {
   Future<UseCatalogModelsResult> loadModels({
     required InventoryRepositoryHttp invRepo,
     required String productBlueprintId,
-    List<SnsModelVariationDTO>? initial,
+    List<MallModelVariationDTO>? initial,
     String? initialError,
   }) async {
     final pbId = productBlueprintId.trim();
@@ -83,16 +83,16 @@ class UseCatalogInventory {
   }
 
   CatalogInventoryComputed compute({
-    required SnsInventoryResponse? inventory,
-    required List<SnsModelVariationDTO>? modelVariations,
+    required MallInventoryResponse? inventory,
+    required List<MallModelVariationDTO>? modelVariations,
 
     /// ✅ NEW: list.prices を渡して modelId -> price を結合
-    required List<SnsListPriceRow> prices,
+    required List<MallListPriceRow> prices,
   }) {
     final inv = inventory;
 
     // modelId -> meta
-    final modelMap = <String, SnsModelVariationDTO>{};
+    final modelMap = <String, MallModelVariationDTO>{};
     final modelIds = <String>[];
 
     if (modelVariations != null) {
@@ -168,7 +168,7 @@ class UseCatalogInventory {
     return CatalogInventoryComputed(totalStock: total, modelStockRows: rows);
   }
 
-  static int _stockCount(SnsInventoryModelStock s) {
+  static int _stockCount(MallInventoryModelStock s) {
     if (s.products.isEmpty) return 0;
     var n = 0;
     for (final v in s.products.values) {
@@ -178,7 +178,7 @@ class UseCatalogInventory {
   }
 
   static int _totalStock(
-    SnsInventoryResponse inv,
+    MallInventoryResponse inv,
     List<CatalogModelStockRow> rows,
   ) {
     var sum = 0;
@@ -188,7 +188,7 @@ class UseCatalogInventory {
     return sum;
   }
 
-  static String _modelLabel(SnsModelVariationDTO v) {
+  static String _modelLabel(MallModelVariationDTO v) {
     final parts = <String>[];
     if (v.modelNumber.trim().isNotEmpty) parts.add(v.modelNumber.trim());
     if (v.size.trim().isNotEmpty) parts.add(v.size.trim());

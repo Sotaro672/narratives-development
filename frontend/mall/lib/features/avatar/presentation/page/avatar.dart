@@ -1,4 +1,4 @@
-// frontend/sns/lib/features/avatar/presentation/page/avatar.dart
+// frontend\mall\lib\features\avatar\presentation\page\avatar.dart
 import 'dart:convert';
 
 import 'package:firebase_auth/firebase_auth.dart';

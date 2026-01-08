@@ -1,4 +1,4 @@
-// frontend/sns/lib/core/ui/theme/app_theme.dart
+// frontend\mall\lib\core\ui\theme\app_theme.dart
 import 'package:flutter/material.dart';
 
 class AppTheme {

@@ -1,47 +1,25 @@
-// frontend/sns/lib/features/inventory/infrastructure/inventory_repository_http.dart
+// frontend\mall\lib\features\inventory\infrastructure\inventory_repository_http.dart
 import 'dart:convert';
 
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 
-/// Buyer-facing API base URL.
-///
-/// Priority:
-/// 1) --dart-define=API_BASE_URL=https://...
-/// 2) --dart-define=API_BASE=https://...      (backward compatible)
-/// 3) fallback
-const String _fallbackBaseUrl =
-    'https://narratives-backend-871263659099.asia-northeast1.run.app';
-
-/// ✅ Public so other repositories can reuse the exact same logic.
-String resolveSnsApiBase() => _resolveApiBase();
-
-String _resolveApiBase() {
-  const fromDefineUrl = String.fromEnvironment('API_BASE_URL');
-  const fromDefine = String.fromEnvironment('API_BASE');
-
-  final raw =
-      (fromDefineUrl.trim().isNotEmpty
-              ? fromDefineUrl
-              : (fromDefine.trim().isNotEmpty ? fromDefine : _fallbackBaseUrl))
-          .trim();
-
-  return raw.endsWith('/') ? raw.substring(0, raw.length - 1) : raw;
-}
+// ✅ use shared resolution logic (single source of truth)
+import '../../../app/config/api_base.dart';
 
 // ============================================================
 // Inventory DTOs
 // ============================================================
 
 @immutable
-class SnsInventoryModelStock {
-  const SnsInventoryModelStock({required this.products});
+class MallInventoryModelStock {
+  const MallInventoryModelStock({required this.products});
 
   /// productId -> true
   /// ※ backend が products を返さない（stockKeys only）場合は空になる
   final Map<String, bool> products;
 
-  factory SnsInventoryModelStock.fromJson(Map<String, dynamic> json) {
+  factory MallInventoryModelStock.fromJson(Map<String, dynamic> json) {
     final rawProducts = json['products'];
     final Map<String, bool> products = {};
     if (rawProducts is Map) {
@@ -52,13 +30,13 @@ class SnsInventoryModelStock {
         products[k] = v == true;
       }
     }
-    return SnsInventoryModelStock(products: products);
+    return MallInventoryModelStock(products: products);
   }
 }
 
 @immutable
-class SnsInventoryResponse {
-  const SnsInventoryResponse({
+class MallInventoryResponse {
+  const MallInventoryResponse({
     required this.id,
     required this.tokenBlueprintId,
     required this.productBlueprintId,
@@ -81,9 +59,9 @@ class SnsInventoryResponse {
 
   /// modelId -> stock detail（products）
   /// - backend が stockKeys-only の場合は、キーだけ拾って空 products を入れる
-  final Map<String, SnsInventoryModelStock> stock;
+  final Map<String, MallInventoryModelStock> stock;
 
-  factory SnsInventoryResponse.fromJson(Map<String, dynamic> json) {
+  factory MallInventoryResponse.fromJson(Map<String, dynamic> json) {
     String s(dynamic v) => (v ?? '').toString().trim();
 
     final id = s(json['id']);
@@ -95,7 +73,7 @@ class SnsInventoryResponse {
     // -------------------------
     // stock / stockKeys
     // -------------------------
-    final Map<String, SnsInventoryModelStock> stock = {};
+    final Map<String, MallInventoryModelStock> stock = {};
     final List<String> stockKeys = [];
 
     final stockRaw = json['stock'];
@@ -108,12 +86,12 @@ class SnsInventoryResponse {
 
         final v = e.value;
         if (v is Map) {
-          stock[modelId] = SnsInventoryModelStock.fromJson(
+          stock[modelId] = MallInventoryModelStock.fromJson(
             v.cast<String, dynamic>(),
           );
         } else {
           // stockKeys-only（value が bool/int など）でもキーだけ拾って空の products を入れる
-          stock[modelId] = const SnsInventoryModelStock(products: {});
+          stock[modelId] = const MallInventoryModelStock(products: {});
         }
       }
     } else if (stockRaw is List) {
@@ -122,7 +100,7 @@ class SnsInventoryResponse {
         final modelId = v.toString().trim();
         if (modelId.isEmpty) continue;
         stockKeys.add(modelId);
-        stock[modelId] = const SnsInventoryModelStock(products: {});
+        stock[modelId] = const MallInventoryModelStock(products: {});
       }
     }
 
@@ -143,7 +121,7 @@ class SnsInventoryResponse {
         ? _uniqPreserveOrder(modelIds)
         : normalizedStockKeys;
 
-    return SnsInventoryResponse(
+    return MallInventoryResponse(
       id: id,
       tokenBlueprintId: tb,
       productBlueprintId: pb,
@@ -171,8 +149,8 @@ class SnsInventoryResponse {
 // ============================================================
 
 @immutable
-class SnsModelVariationDTO {
-  const SnsModelVariationDTO({
+class MallModelVariationDTO {
+  const MallModelVariationDTO({
     required this.id,
     required this.productBlueprintId,
     required this.modelNumber,
@@ -205,7 +183,7 @@ class SnsModelVariationDTO {
     return int.tryParse(s) ?? 0;
   }
 
-  factory SnsModelVariationDTO.fromJson(Map<String, dynamic> json) {
+  factory MallModelVariationDTO.fromJson(Map<String, dynamic> json) {
     String s(dynamic v) => (v ?? '').toString().trim();
 
     final id = s(json['id'] ?? json['ID']);
@@ -235,7 +213,7 @@ class SnsModelVariationDTO {
       }
     }
 
-    return SnsModelVariationDTO(
+    return MallModelVariationDTO(
       id: id,
       productBlueprintId: pb,
       modelNumber: mn,
@@ -248,20 +226,20 @@ class SnsModelVariationDTO {
 }
 
 @immutable
-class _SnsModelItemDTO {
-  const _SnsModelItemDTO({required this.modelId, required this.metadata});
+class _MallModelItemDTO {
+  const _MallModelItemDTO({required this.modelId, required this.metadata});
 
   final String modelId;
-  final SnsModelVariationDTO metadata;
+  final MallModelVariationDTO metadata;
 
-  factory _SnsModelItemDTO.fromJson(Map<String, dynamic> json) {
+  factory _MallModelItemDTO.fromJson(Map<String, dynamic> json) {
     final modelId = (json['modelId'] ?? '').toString().trim();
     final metaRaw = json['metadata'];
 
     // ✅ metadata は Map でも、すでに flatten 済みの shape を想定
     final meta = (metaRaw is Map)
-        ? SnsModelVariationDTO.fromJson(metaRaw.cast<String, dynamic>())
-        : SnsModelVariationDTO(
+        ? MallModelVariationDTO.fromJson(metaRaw.cast<String, dynamic>())
+        : MallModelVariationDTO(
             id: modelId,
             productBlueprintId: '',
             modelNumber: '',
@@ -274,7 +252,7 @@ class _SnsModelItemDTO {
     // id が空なら modelId で補完
     final fixed = (meta.id.trim().isNotEmpty)
         ? meta
-        : SnsModelVariationDTO(
+        : MallModelVariationDTO(
             id: modelId,
             productBlueprintId: meta.productBlueprintId,
             modelNumber: meta.modelNumber,
@@ -284,13 +262,13 @@ class _SnsModelItemDTO {
             measurements: meta.measurements,
           );
 
-    return _SnsModelItemDTO(modelId: modelId, metadata: fixed);
+    return _MallModelItemDTO(modelId: modelId, metadata: fixed);
   }
 }
 
 @immutable
-class _SnsModelListResponseDTO {
-  const _SnsModelListResponseDTO({
+class _MallModelListResponseDTO {
+  const _MallModelListResponseDTO({
     required this.items,
     required this.totalCount,
     required this.totalPages,
@@ -298,19 +276,19 @@ class _SnsModelListResponseDTO {
     required this.perPage,
   });
 
-  final List<_SnsModelItemDTO> items;
+  final List<_MallModelItemDTO> items;
   final int totalCount;
   final int totalPages;
   final int page;
   final int perPage;
 
-  factory _SnsModelListResponseDTO.fromJson(Map<String, dynamic> json) {
+  factory _MallModelListResponseDTO.fromJson(Map<String, dynamic> json) {
     final itemsRaw = json['items'];
-    final items = <_SnsModelItemDTO>[];
+    final items = <_MallModelItemDTO>[];
     if (itemsRaw is List) {
       for (final v in itemsRaw) {
         if (v is Map) {
-          items.add(_SnsModelItemDTO.fromJson(v.cast<String, dynamic>()));
+          items.add(_MallModelItemDTO.fromJson(v.cast<String, dynamic>()));
         }
       }
     }
@@ -318,7 +296,7 @@ class _SnsModelListResponseDTO {
     int asInt(dynamic v) =>
         (v is num) ? v.toInt() : int.tryParse(v.toString()) ?? 0;
 
-    return _SnsModelListResponseDTO(
+    return _MallModelListResponseDTO(
       items: items,
       totalCount: asInt(json['totalCount']),
       totalPages: asInt(json['totalPages']),
@@ -338,7 +316,8 @@ class InventoryRepositoryHttp {
 
   final http.Client _client;
 
-  String get _base => _resolveApiBase();
+  // ✅ base url is resolved from shared config
+  String get _base => resolveSnsApiBase();
 
   Uri _uri(String path, [Map<String, String>? query]) {
     final p = path.startsWith('/') ? path : '/$path';
@@ -346,7 +325,7 @@ class InventoryRepositoryHttp {
   }
 
   /// GET /mall/inventories/{id}
-  Future<SnsInventoryResponse> fetchInventoryById(String id) async {
+  Future<MallInventoryResponse> fetchInventoryById(String id) async {
     final invId = id.trim();
     if (invId.isEmpty) {
       throw ArgumentError('id is required');
@@ -360,7 +339,7 @@ class InventoryRepositoryHttp {
 
     final body = res.body;
     if (res.statusCode < 200 || res.statusCode >= 300) {
-      throw SnsHttpException(
+      throw MallHttpException(
         statusCode: res.statusCode,
         message: _extractError(body) ?? 'request failed',
         url: uri.toString(),
@@ -376,13 +355,13 @@ class InventoryRepositoryHttp {
     final m = decoded.cast<String, dynamic>();
     final data = m['data'];
     if (data is Map) {
-      return SnsInventoryResponse.fromJson(data.cast<String, dynamic>());
+      return MallInventoryResponse.fromJson(data.cast<String, dynamic>());
     }
-    return SnsInventoryResponse.fromJson(m);
+    return MallInventoryResponse.fromJson(m);
   }
 
   /// GET /mall/inventories?productBlueprintId=...&tokenBlueprintId=...
-  Future<SnsInventoryResponse> fetchInventoryByQuery({
+  Future<MallInventoryResponse> fetchInventoryByQuery({
     required String productBlueprintId,
     required String tokenBlueprintId,
   }) async {
@@ -406,7 +385,7 @@ class InventoryRepositoryHttp {
 
     final body = res.body;
     if (res.statusCode < 200 || res.statusCode >= 300) {
-      throw SnsHttpException(
+      throw MallHttpException(
         statusCode: res.statusCode,
         message: _extractError(body) ?? 'request failed',
         url: uri.toString(),
@@ -422,13 +401,13 @@ class InventoryRepositoryHttp {
     final m = decoded.cast<String, dynamic>();
     final data = m['data'];
     if (data is Map) {
-      return SnsInventoryResponse.fromJson(data.cast<String, dynamic>());
+      return MallInventoryResponse.fromJson(data.cast<String, dynamic>());
     }
-    return SnsInventoryResponse.fromJson(m);
+    return MallInventoryResponse.fromJson(m);
   }
 
   /// ✅ GET /mall/models?productBlueprintId=...   (buyer-facing)
-  Future<List<SnsModelVariationDTO>> fetchModelsByProductBlueprintId(
+  Future<List<MallModelVariationDTO>> fetchModelsByProductBlueprintId(
     String productBlueprintId, {
     int page = 1,
     int perPage = 200,
@@ -454,7 +433,7 @@ class InventoryRepositoryHttp {
 
     final body = res.body;
     if (res.statusCode < 200 || res.statusCode >= 300) {
-      throw SnsHttpException(
+      throw MallHttpException(
         statusCode: res.statusCode,
         message: _extractError(body) ?? 'request failed',
         url: uri.toString(),
@@ -472,7 +451,7 @@ class InventoryRepositoryHttp {
         ? (root['data'] as Map).cast<String, dynamic>()
         : root;
 
-    final dto = _SnsModelListResponseDTO.fromJson(unwrapped);
+    final dto = _MallModelListResponseDTO.fromJson(unwrapped);
     return dto.items.map((it) => it.metadata).toList();
   }
 
@@ -497,8 +476,8 @@ class InventoryRepositoryHttp {
 }
 
 @immutable
-class SnsHttpException implements Exception {
-  const SnsHttpException({
+class MallHttpException implements Exception {
+  const MallHttpException({
     required this.statusCode,
     required this.message,
     required this.url,
@@ -509,5 +488,5 @@ class SnsHttpException implements Exception {
   final String url;
 
   @override
-  String toString() => 'SnsHttpException($statusCode) $message ($url)';
+  String toString() => 'MallHttpException($statusCode) $message ($url)';
 }

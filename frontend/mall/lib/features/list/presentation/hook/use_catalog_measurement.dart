@@ -1,4 +1,4 @@
-// frontend/sns/lib/features/list/presentation/hook/use_catalog_measurement.dart
+// frontend\mall\lib\features\list\presentation\hook\use_catalog_measurement.dart
 
 /// 1行（サイズ×採寸値）
 class CatalogMeasurementRowVM {
@@ -128,7 +128,7 @@ class UseCatalogMeasurement {
 
   static String _s(dynamic v) => (v ?? '').toString().trim();
 
-  /// /sns/models の item 形式: { modelId, metadata: {...} } を剥がす
+  /// /mall/models の item 形式: { modelId, metadata: {...} } を剥がす
   static dynamic _unwrapMetadata(dynamic raw) {
     if (raw == null) return null;
 

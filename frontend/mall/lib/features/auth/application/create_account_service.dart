@@ -1,4 +1,4 @@
-// frontend/sns/lib/features/auth/application/create_account_service.dart
+// frontend/mall/lib/features/auth/application/create_account_service.dart
 import 'package:firebase_auth/firebase_auth.dart';
 
 class CreateAccountResult {

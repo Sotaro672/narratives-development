@@ -1,4 +1,4 @@
-// backend/internal/adapters/in/http/sns/handler/post_handler.go
+// backend/internal/adapters/in/http/mall/handler/post_handler.go
 package mallHandler
 
 import (
@@ -16,10 +16,10 @@ import (
 // PostHandler serves SNS post-related endpoints (currently: post images on GCS).
 //
 // Intended mount examples (router side):
-// - POST   /sns/posts/prefix                 (ensure GCS prefix placeholder)
-// - POST   /sns/posts/images                 (multipart upload -> GCS Put)
-// - GET    /sns/posts/images                 (list objects under prefix)
-// - DELETE /sns/posts/images                 (delete object or by prefix)
+// - POST   /mall/posts/prefix                 (ensure GCS prefix placeholder)
+// - POST   /mall/posts/images                 (multipart upload -> GCS Put)
+// - GET    /mall/posts/images                 (list objects under prefix)
+// - DELETE /mall/posts/images                 (delete object or by prefix)
 //
 // Storage policy (single bucket):
 // - bucket: narratives-development-posts
@@ -45,23 +45,23 @@ func (h *PostHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	path := strings.TrimRight(r.URL.Path, "/")
 
 	switch {
-	// ====== POST /sns/posts/prefix
-	case strings.HasSuffix(path, "/sns/posts/prefix") && r.Method == http.MethodPost:
+	// ====== POST /mall/posts/prefix
+	case strings.HasSuffix(path, "/mall/posts/prefix") && r.Method == http.MethodPost:
 		h.handleEnsurePrefix(w, r)
 		return
 
-	// ====== POST /sns/posts/images  (multipart upload)
-	case strings.HasSuffix(path, "/sns/posts/images") && r.Method == http.MethodPost:
+	// ====== POST /mall/posts/images  (multipart upload)
+	case strings.HasSuffix(path, "/mall/posts/images") && r.Method == http.MethodPost:
 		h.handleUploadPostImage(w, r)
 		return
 
-	// ====== GET /sns/posts/images
-	case strings.HasSuffix(path, "/sns/posts/images") && r.Method == http.MethodGet:
+	// ====== GET /mall/posts/images
+	case strings.HasSuffix(path, "/mall/posts/images") && r.Method == http.MethodGet:
 		h.handleListPostImages(w, r)
 		return
 
-	// ====== DELETE /sns/posts/images
-	case strings.HasSuffix(path, "/sns/posts/images") && r.Method == http.MethodDelete:
+	// ====== DELETE /mall/posts/images
+	case strings.HasSuffix(path, "/mall/posts/images") && r.Method == http.MethodDelete:
 		h.handleDeletePostImages(w, r)
 		return
 	}
@@ -70,7 +70,7 @@ func (h *PostHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 }
 
 // --------------------------------------------------
-// POST /sns/posts/prefix
+// POST /mall/posts/prefix
 // --------------------------------------------------
 
 type ensurePrefixReq struct {
@@ -110,7 +110,7 @@ func (h *PostHandler) handleEnsurePrefix(w http.ResponseWriter, r *http.Request)
 }
 
 // --------------------------------------------------
-// POST /sns/posts/images (multipart upload)
+// POST /mall/posts/images (multipart upload)
 // --------------------------------------------------
 
 const (
@@ -204,7 +204,7 @@ func (h *PostHandler) handleUploadPostImage(w http.ResponseWriter, r *http.Reque
 }
 
 // --------------------------------------------------
-// GET /sns/posts/images
+// GET /mall/posts/images
 // --------------------------------------------------
 
 func (h *PostHandler) handleListPostImages(w http.ResponseWriter, r *http.Request) {
@@ -254,7 +254,7 @@ func (h *PostHandler) handleListPostImages(w http.ResponseWriter, r *http.Reques
 }
 
 // --------------------------------------------------
-// DELETE /sns/posts/images
+// DELETE /mall/posts/images
 // --------------------------------------------------
 
 func (h *PostHandler) handleDeletePostImages(w http.ResponseWriter, r *http.Request) {

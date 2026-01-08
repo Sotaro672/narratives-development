@@ -1,4 +1,4 @@
-// frontend/sns/lib/features/auth/application/billing_address_service.dart
+// frontend\mall\lib\features\auth\application\billing_address_service.dart
 import 'package:firebase_auth/firebase_auth.dart';
 
 import '../../billingAddress/infrastructure/billing_address_repository_http.dart';
@@ -96,7 +96,7 @@ class BillingAddressService {
     return true;
   }
 
-  /// ✅ 実処理: uid を docId として PATCH /sns/billing-addresses/{uid}
+  /// ✅ 実処理: uid を docId として PATCH /mall/billing-addresses/{uid}
   Future<BillingAddressSaveResult> save({
     required String cardNumberRaw,
     required String holderRaw,

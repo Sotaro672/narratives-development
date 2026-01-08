@@ -29,7 +29,7 @@ import '../../features/preview/presentation/preview.dart';
 // ✅ NEW: payment page
 import '../../features/payment/presentation/page/payment.dart';
 
-// ✅ SnsListItem 型
+// ✅ MallListItem 型
 import '../../features/list/infrastructure/list_repository_http.dart';
 
 // auth pages
@@ -182,7 +182,7 @@ GoRouter buildPublicOnlyRouter({required Object initError}) {
             builder: (context, state) {
               final listId = state.pathParameters['listId'] ?? '';
               final extra = state.extra;
-              final initialItem = extra is SnsListItem ? extra : null;
+              final initialItem = extra is MallListItem ? extra : null;
               return CatalogPage(listId: listId, initialItem: initialItem);
             },
           ),
@@ -310,7 +310,7 @@ List<RouteBase> _routes({required bool firebaseReady}) {
           builder: (context, state) {
             final listId = state.pathParameters['listId'] ?? '';
             final extra = state.extra;
-            final initialItem = extra is SnsListItem ? extra : null;
+            final initialItem = extra is MallListItem ? extra : null;
             return CatalogPage(listId: listId, initialItem: initialItem);
           },
         ),

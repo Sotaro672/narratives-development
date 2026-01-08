@@ -1,4 +1,4 @@
-// frontend/sns/lib/features/list/presentation/components/catalog_measurement.dart
+// frontend\mall\lib\features\list\presentation\components\catalog_measurement.dart
 import 'package:flutter/material.dart';
 
 import '../hook/use_catalog_measurement.dart';

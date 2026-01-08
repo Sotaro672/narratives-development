@@ -1,4 +1,4 @@
-// frontend/sns/lib/app/shell/presentation/components/footer_buttons.dart
+// frontend\mall\lib\app\shell\presentation\components\footer_buttons.dart
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 

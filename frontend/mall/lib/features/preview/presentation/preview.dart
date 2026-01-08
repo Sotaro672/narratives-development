@@ -1,4 +1,4 @@
-// frontend/sns/lib/features/cart/presentation/page/preview.dart
+// frontend\mall\lib\features\preview\presentation\preview.dart
 import 'package:flutter/material.dart';
 
 /// Preview page (buyer-facing).

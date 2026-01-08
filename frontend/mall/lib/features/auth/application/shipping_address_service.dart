@@ -1,4 +1,4 @@
-// frontend/sns/lib/features/auth/application/shipping_address_service.dart
+// frontend\mall\lib\features\auth\application\shipping_address_service.dart
 import 'dart:convert';
 
 import 'package:flutter/foundation.dart';

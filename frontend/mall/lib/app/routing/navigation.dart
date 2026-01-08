@@ -1,4 +1,4 @@
-// frontend\sns\lib\app\routing\navigation.dart
+// frontend\mall\lib\app\routing\navigation.dart
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
@@ -61,7 +61,7 @@ class AvatarIdStore extends ChangeNotifier {
 
       final uri = Uri.parse(
         base,
-      ).replace(path: '/sns/avatars', queryParameters: {'userId': userId});
+      ).replace(path: '/mall/avatars', queryParameters: {'userId': userId});
 
       // ✅ 可能なら Authorization を付ける
       final headers = <String, String>{

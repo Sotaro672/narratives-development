@@ -1,4 +1,4 @@
-// frontend/sns/lib/app/shell/presentation/layout/app_shell.dart
+// frontend\mall\lib\app\shell\presentation\layout\app_shell.dart
 import 'package:flutter/material.dart';
 
 import '../components/footer.dart';
