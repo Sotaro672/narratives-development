@@ -16,23 +16,27 @@ import (
 	mallquery "narratives/internal/application/query/mall"
 
 	usecase "narratives/internal/application/usecase"
-	paymentdom "narratives/internal/domain/payment"
 )
 
-// PaymentHandler handles:
-// - GET /payments/{id} (existing)
-// - GET /mall/payment  (resolve uid -> avatarId + addresses)
+// PaymentHandler handles ONLY:
+// - GET /mall/me/payment  ✅ (uid -> avatarId + shipping/billing + etc via order query)
+//
+// IMPORTANT:
+// - /mall/payment は存在しない（受けない）
+// - /payments/{id} もここでは受けない
 type PaymentHandler struct {
-	uc     *usecase.PaymentUsecase
-	orderQ any // ✅ accept any (mall) and call ResolveByUID via reflection
+	uc *usecase.PaymentUsecase // 互換のため残す（現状は未使用でもOK）
+	// ✅ accept any (mall) and call ResolveByUID via reflection
+	orderQ any
 }
 
-// NewPaymentHandler initializes handler (existing behavior only).
+// NewPaymentHandler initializes handler.
+// NOTE: /mall/me/payment を使うなら orderQ が必須（NewPaymentHandlerWithOrderQuery 推奨）
 func NewPaymentHandler(uc *usecase.PaymentUsecase) http.Handler {
 	return &PaymentHandler{uc: uc, orderQ: nil}
 }
 
-// ✅ NEW: inject order query (for /mall/payment).
+// ✅ inject order query (for /mall/me/payment).
 func NewPaymentHandlerWithOrderQuery(uc *usecase.PaymentUsecase, orderQ any) http.Handler {
 	return &PaymentHandler{uc: uc, orderQ: orderQ}
 }
@@ -49,10 +53,13 @@ func (h *PaymentHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	// normalize path (drop trailing slash)
 	path0 := strings.TrimSuffix(r.URL.Path, "/")
+	if path0 == "" {
+		path0 = "/"
+	}
 
-	// ✅ support /mall/*
-	// - /mall/payment     -> /payment
-	// - /mall/payments/xx -> /payments/xx
+	// ✅ support /mall/* mounts:
+	// - /mall/me/payment -> /me/payment
+	// - if router already stripped "/mall", it may already be "/me/payment"
 	if strings.HasPrefix(path0, "/mall/") {
 		path0 = strings.TrimPrefix(path0, "/mall")
 		if path0 == "" {
@@ -61,15 +68,9 @@ func (h *PaymentHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 
 	switch {
-	// ✅ NEW: GET /mall/payment  (normalized to /payment)
-	case r.Method == http.MethodGet && path0 == "/payment":
+	// ✅ ONLY: GET /mall/me/payment (normalized to /me/payment)
+	case r.Method == http.MethodGet && path0 == "/me/payment":
 		h.getPaymentContext(w, r)
-		return
-
-	// existing: GET /payments/{id}
-	case r.Method == http.MethodGet && strings.HasPrefix(path0, "/payments/"):
-		id := strings.TrimPrefix(path0, "/payments/")
-		h.get(w, r, id)
 		return
 
 	default:
@@ -80,7 +81,7 @@ func (h *PaymentHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 }
 
 // ------------------------------------------------------------
-// NEW: GET /mall/payment  (uid -> avatarId + shipping/billing)
+// GET /mall/me/payment  (uid -> avatarId + shipping/billing)
 // ------------------------------------------------------------
 func (h *PaymentHandler) getPaymentContext(w http.ResponseWriter, r *http.Request) {
 	if h == nil || h.orderQ == nil {
@@ -138,7 +139,7 @@ func callResolveByUID(orderQ any, ctx context.Context, uid string) (any, error) 
 	}
 
 	// arg check
-	if m.Type().NumIn() != 2 {
+	if m.Type().NumIn() != 2 || m.Type().NumOut() != 2 {
 		return nil, errors.New("order_query_invalid_signature")
 	}
 
@@ -167,44 +168,4 @@ func isNotFoundLike(err error) bool {
 	return strings.Contains(msg, "not_found") ||
 		strings.Contains(msg, "not found") ||
 		strings.Contains(msg, "404")
-}
-
-// ------------------------------------------------------------
-// existing: GET /payments/{id}
-// ------------------------------------------------------------
-func (h *PaymentHandler) get(w http.ResponseWriter, r *http.Request, id string) {
-	if h == nil || h.uc == nil {
-		w.WriteHeader(http.StatusServiceUnavailable)
-		_ = json.NewEncoder(w).Encode(map[string]string{"error": "payment_usecase_not_initialized"})
-		return
-	}
-
-	ctx := r.Context()
-
-	id = strings.TrimSpace(id)
-	if id == "" {
-		w.WriteHeader(http.StatusBadRequest)
-		_ = json.NewEncoder(w).Encode(map[string]string{"error": "invalid id"})
-		return
-	}
-
-	p, err := h.uc.GetByID(ctx, id)
-	if err != nil {
-		writePaymentErr(w, err)
-		return
-	}
-	_ = json.NewEncoder(w).Encode(p)
-}
-
-// error handling (existing)
-func writePaymentErr(w http.ResponseWriter, err error) {
-	code := http.StatusInternalServerError
-	switch err {
-	case paymentdom.ErrInvalidInvoiceID:
-		code = http.StatusBadRequest
-	case paymentdom.ErrNotFound:
-		code = http.StatusNotFound
-	}
-	w.WriteHeader(code)
-	_ = json.NewEncoder(w).Encode(map[string]string{"error": err.Error()})
 }

@@ -28,14 +28,14 @@ type PreviewQueryService interface {
 
 // CartHandler serves Mall cart endpoints.
 // Intended mount examples (router side):
-// - GET    /mall/cart            ✅ unified: read-model (CartDTO) を返す
-// - DELETE /mall/cart            (clear)
-// - POST   /mall/cart/items
-// - PUT    /mall/cart/items
-// - DELETE /mall/cart/items
+// - GET    /mall/me/cart            ✅ unified: read-model (CartDTO) を返す
+// - DELETE /mall/me/cart            (clear)
+// - POST   /mall/me/cart/items
+// - PUT    /mall/me/cart/items
+// - DELETE /mall/me/cart/items
 //
 // NOTE:
-// - /mall/cart/query は廃止（この handler では扱わない）
+// - /mall/me/cart/query は廃止（この handler では扱わない）
 type CartHandler struct {
 	uc *usecase.CartUsecase
 
@@ -74,8 +74,8 @@ func (h *CartHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// IMPORTANT:
-	// router 側で StripPrefix("/mall") や StripPrefix("/mall/cart") をしていると、
-	// ここに入ってくる Path は "/mall/cart" ではなく "/cart" や "/" になる。
+	// router 側で StripPrefix("/mall") や StripPrefix("/mall/me/cart") をしていると、
+	// ここに入ってくる Path は "/mall/me/cart" ではなく "/cart" や "/" になる。
 	// その揺れを吸収する。
 	path := strings.TrimRight(r.URL.Path, "/")
 	if path == "" {
@@ -101,7 +101,7 @@ func (h *CartHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return false
 	}
 
-	// exact matcher (StripPrefix("/mall/cart") の場合、/mall/cart は "/" になる)
+	// exact matcher (StripPrefix("/mall/me/cart") の場合、/mall/me/cart は "/" になる)
 	isAnyExact := func(p string, exacts ...string) bool {
 		for _, e := range exacts {
 			if p == e {
@@ -113,31 +113,31 @@ func (h *CartHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	switch {
 	// ============================================================
-	// ✅ Unified: GET /mall/cart returns read-model DTO
+	// ✅ Unified: GET /mall/me/cart returns read-model DTO
 	// ============================================================
 
-	// ====== GET /mall/cart (or /cart or "/")
-	case isGET && (hasSuffixAny(path, "/mall/cart", "/cart") || isAnyExact(path, "/")):
+	// ====== GET /mall/me/cart (or /cart or "/")
+	case isGET && (hasSuffixAny(path, "/mall/me/cart", "/cart") || isAnyExact(path, "/")):
 		h.handleGetUnified(w, r)
 		return
 
-	// ====== DELETE /mall/cart (or /cart or "/")
-	case isDEL && (hasSuffixAny(path, "/mall/cart", "/cart") || isAnyExact(path, "/")):
+	// ====== DELETE /mall/me/cart (or /cart or "/")
+	case isDEL && (hasSuffixAny(path, "/mall/me/cart", "/cart") || isAnyExact(path, "/")):
 		h.handleClear(w, r)
 		return
 
-	// ====== POST /mall/cart/items (or /cart/items or /items)
-	case isPOST && (hasSuffixAny(path, "/mall/cart/items", "/cart/items") || isAnyExact(path, "/items")):
+	// ====== POST /mall/me/cart/items (or /cart/items or /items)
+	case isPOST && (hasSuffixAny(path, "/mall/me/cart/items", "/cart/items") || isAnyExact(path, "/items")):
 		h.handleAddItem(w, r)
 		return
 
-	// ====== PUT /mall/cart/items (or /cart/items or /items)
-	case isPUT && (hasSuffixAny(path, "/mall/cart/items", "/cart/items") || isAnyExact(path, "/items")):
+	// ====== PUT /mall/me/cart/items (or /cart/items or /items)
+	case isPUT && (hasSuffixAny(path, "/mall/me/cart/items", "/cart/items") || isAnyExact(path, "/items")):
 		h.handleSetItemQty(w, r)
 		return
 
-	// ====== DELETE /mall/cart/items (or /cart/items or /items)
-	case isDEL && (hasSuffixAny(path, "/mall/cart/items", "/cart/items") || isAnyExact(path, "/items")):
+	// ====== DELETE /mall/me/cart/items (or /cart/items or /items)
+	case isDEL && (hasSuffixAny(path, "/mall/me/cart/items", "/cart/items") || isAnyExact(path, "/items")):
 		h.handleRemoveItem(w, r)
 		return
 
@@ -154,7 +154,7 @@ func (h *CartHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 // handlers (Unified GET)
 // -------------------------
 
-// handleGetUnified returns CartDTO (read-model) on GET /mall/cart.
+// handleGetUnified returns CartDTO (read-model) on GET /mall/me/cart.
 // - cartQuery is required.
 // - If cart doc is missing: return empty cart (200) for stable UX.
 func (h *CartHandler) handleGetUnified(w http.ResponseWriter, r *http.Request) {
@@ -175,7 +175,7 @@ func (h *CartHandler) handleGetUnified(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// cart が無いなら “空カート” を 200 で返す（/mall/cart を安定させる）
+	// cart が無いなら “空カート” を 200 で返す（/mall/mecart を安定させる）
 	if isNotFoundErr(err) {
 		writeJSON(w, http.StatusOK, map[string]any{
 			"avatarId":  avatarID,

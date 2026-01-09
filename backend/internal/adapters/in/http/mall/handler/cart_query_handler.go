@@ -12,8 +12,8 @@ import (
 )
 
 // MallCartQueryHandler exposes CartQuery via HTTP.
-// - GET /mall/cart/query?avatarId=...
-// - (router 側で振り分ければ) GET /mall/cart?avatarId=... も同じレスポンスで返せる
+// - GET /mall/me/cart/query?avatarId=...
+// - (router 側で振り分ければ) GET /mall/me/cart?avatarId=... も同じレスポンスで返せる
 type CartQueryHandler struct {
 	Q *mallquery.CartQuery
 }

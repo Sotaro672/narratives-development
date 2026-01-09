@@ -27,7 +27,7 @@ class PaymentRepositoryHttp {
 
   /// ✅ uid -> avatarId / shipping / billing を backend 側で解決して返してもらう
   Future<PaymentContextDTO> fetchPaymentContext() async {
-    final data = await _api.getJsonAuth('/mall/payment');
+    final data = await _api.getJsonAuth('/mall/me/payment');
     return PaymentContextDTO.fromJson(data);
   }
 }

@@ -12,11 +12,11 @@ export 'api.dart' show CartHttpException;
 /// Buyer-facing Cart repository (HTTP).
 ///
 /// Backend endpoints (CartHandler):
-/// - GET    /mall/cart?avatarId=...
-/// - POST   /mall/cart/items           body: {avatarId, inventoryId, listId, modelId, qty}
-/// - PUT    /mall/cart/items           body: {avatarId, inventoryId, listId, modelId, qty}
-/// - DELETE /mall/cart/items           body: {avatarId, inventoryId, listId, modelId}
-/// - DELETE /mall/cart?avatarId=...
+/// - GET    /mall/me/cart?avatarId=...
+/// - POST   /mall/me/cart/items           body: {avatarId, inventoryId, listId, modelId, qty}
+/// - PUT    /mall/me/cart/items           body: {avatarId, inventoryId, listId, modelId, qty}
+/// - DELETE /mall/me/cart/items           body: {avatarId, inventoryId, listId, modelId}
+/// - DELETE /mall/me/cart?avatarId=...
 ///
 /// NOTE:
 /// - Web(CORS) ではカスタムヘッダ（例: x-avatar-id）を送ると preflight が走り、
@@ -36,18 +36,18 @@ class CartRepositoryHttp {
   // Public API (CartDTO only)
   // ----------------------------
 
-  /// GET /mall/cart?avatarId=...
+  /// GET /mall/me/cart?avatarId=...
   Future<CartDTO> fetchCart({required String avatarId}) async {
     final aid = avatarId.trim();
     if (aid.isEmpty) throw ArgumentError('avatarId is required');
 
-    final uri = _api.uri('/mall/cart', qp: {'avatarId': aid});
+    final uri = _api.uri('/mall/me/cart', qp: {'avatarId': aid});
     final res = await _api.sendAuthed('GET', uri);
 
     return _decodeCart(res);
   }
 
-  /// POST /mall/cart/items
+  /// POST /mall/me/cart/items
   Future<CartDTO> addItem({
     required String avatarId,
     required String inventoryId,
@@ -67,7 +67,7 @@ class CartRepositoryHttp {
     if (qty <= 0) throw ArgumentError('qty must be >= 1');
 
     // ✅ body only (no avatarId in query)
-    final uri = _api.uri('/mall/cart/items');
+    final uri = _api.uri('/mall/me/cart/items');
     final bodyMap = <String, dynamic>{
       'avatarId': aid,
       'inventoryId': invId,
@@ -80,7 +80,7 @@ class CartRepositoryHttp {
     return _decodeCart(res);
   }
 
-  /// PUT /mall/cart/items
+  /// PUT /mall/me/cart/items
   /// - qty <= 0 is treated as remove by backend.
   Future<CartDTO> setItemQty({
     required String avatarId,
@@ -99,7 +99,7 @@ class CartRepositoryHttp {
     if (lid.isEmpty) throw ArgumentError('listId is required');
     if (mid.isEmpty) throw ArgumentError('modelId is required');
 
-    final uri = _api.uri('/mall/cart/items');
+    final uri = _api.uri('/mall/me/cart/items');
     final bodyMap = <String, dynamic>{
       'avatarId': aid,
       'inventoryId': invId,
@@ -112,7 +112,7 @@ class CartRepositoryHttp {
     return _decodeCart(res);
   }
 
-  /// DELETE /mall/cart/items
+  /// DELETE /mall/me/cart/items
   Future<CartDTO> removeItem({
     required String avatarId,
     required String inventoryId,
@@ -129,7 +129,7 @@ class CartRepositoryHttp {
     if (lid.isEmpty) throw ArgumentError('listId is required');
     if (mid.isEmpty) throw ArgumentError('modelId is required');
 
-    final uri = _api.uri('/mall/cart/items');
+    final uri = _api.uri('/mall/me/cart/items');
     final bodyMap = <String, dynamic>{
       'avatarId': aid,
       'inventoryId': invId,
@@ -141,12 +141,12 @@ class CartRepositoryHttp {
     return _decodeCart(res);
   }
 
-  /// DELETE /mall/cart?avatarId=...
+  /// DELETE /mall/me/cart?avatarId=...
   Future<void> clearCart({required String avatarId}) async {
     final aid = avatarId.trim();
     if (aid.isEmpty) throw ArgumentError('avatarId is required');
 
-    final uri = _api.uri('/mall/cart', qp: {'avatarId': aid});
+    final uri = _api.uri('/mall/me/cart', qp: {'avatarId': aid});
     final res = await _api.sendAuthed('DELETE', uri);
 
     if (res.statusCode == 204) return;
@@ -304,7 +304,7 @@ class CartItemDTO {
   final String modelId;
   final int qty;
 
-  // ✅ backend が /mall/cart で返してくる（表示用）
+  // ✅ backend が /mall/me/cart で返してくる（表示用）
   final String? title;
   final String? size;
   final String? color;

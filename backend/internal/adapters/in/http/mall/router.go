@@ -129,8 +129,6 @@ func Register(mux *http.ServeMux, deps Deps) {
 	handleSafe(mux, "/mall/me/billing-addresses/", deps.BillingAddress, "BillingAddress(me)")
 
 	// avatars
-	handleSafe(mux, "/mall/avatars", deps.Avatar, "Avatar")
-	handleSafe(mux, "/mall/avatars/", deps.Avatar, "Avatar")
 	handleSafe(mux, "/mall/me/avatars", deps.Avatar, "Avatar(me)")
 	handleSafe(mux, "/mall/me/avatars/", deps.Avatar, "Avatar(me)")
 
@@ -139,20 +137,14 @@ func Register(mux *http.ServeMux, deps Deps) {
 	handleSafe(mux, "/mall/me/avatar/", deps.MeAvatar, "MeAvatar")
 
 	// avatar states
-	handleSafe(mux, "/mall/avatar-states", deps.AvatarState, "AvatarState")
-	handleSafe(mux, "/mall/avatar-states/", deps.AvatarState, "AvatarState")
 	handleSafe(mux, "/mall/me/avatar-states", deps.AvatarState, "AvatarState(me)")
 	handleSafe(mux, "/mall/me/avatar-states/", deps.AvatarState, "AvatarState(me)")
 
 	// wallet (plural only)
-	handleSafe(mux, "/mall/wallets", deps.Wallet, "Wallet")
-	handleSafe(mux, "/mall/wallets/", deps.Wallet, "Wallet")
 	handleSafe(mux, "/mall/me/wallets", deps.Wallet, "Wallet(me)")
 	handleSafe(mux, "/mall/me/wallets/", deps.Wallet, "Wallet(me)")
 
 	// cart
-	handleSafe(mux, "/mall/cart", deps.Cart, "Cart")
-	handleSafe(mux, "/mall/cart/", deps.Cart, "Cart")
 	handleSafe(mux, "/mall/me/cart", deps.Cart, "Cart(me)")
 	handleSafe(mux, "/mall/me/cart/", deps.Cart, "Cart(me)")
 
@@ -163,18 +155,12 @@ func Register(mux *http.ServeMux, deps Deps) {
 	handleSafe(mux, "/mall/me/preview/", deps.Preview, "Preview(me)")
 
 	// payment
-	handleSafe(mux, "/mall/payment", deps.Payment, "Payment")
-	handleSafe(mux, "/mall/payment/", deps.Payment, "Payment")
-	handleSafe(mux, "/mall/payments", deps.Payment, "Payment")
-	handleSafe(mux, "/mall/payments/", deps.Payment, "Payment")
 	handleSafe(mux, "/mall/me/payment", deps.Payment, "Payment(me)")
 	handleSafe(mux, "/mall/me/payment/", deps.Payment, "Payment(me)")
 	handleSafe(mux, "/mall/me/payments", deps.Payment, "Payment(me)")
 	handleSafe(mux, "/mall/me/payments/", deps.Payment, "Payment(me)")
 
 	// orders
-	handleSafe(mux, "/mall/orders", deps.Order, "Order")
-	handleSafe(mux, "/mall/orders/", deps.Order, "Order")
 	handleSafe(mux, "/mall/me/orders", deps.Order, "Order(me)")
 	handleSafe(mux, "/mall/me/orders/", deps.Order, "Order(me)")
 }

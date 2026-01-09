@@ -50,7 +50,7 @@ func NewCartQueryWithListRepo(fs *firestore.Client, listRepo ldom.Repository) *C
 }
 
 // ✅ CartHandler 側の CartQueryService（GetCartQuery）に “明示的に” 合わせる。
-// これで reflect 探索に依存せず、GET /mall/cart を read-model に寄せられる。
+// これで reflect 探索に依存せず、GET /mall/me/cart を read-model に寄せられる。
 type cartQueryPort interface {
 	GetCartQuery(ctx context.Context, avatarID string) (any, error)
 }

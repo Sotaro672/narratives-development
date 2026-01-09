@@ -1,9 +1,9 @@
-// backend/internal/adapters/in/http/mall/handler/wallet_handler.go
 package mallHandler
 
 import (
 	"encoding/json"
 	"errors"
+	"log"
 	"net/http"
 	"strings"
 
@@ -11,84 +11,118 @@ import (
 	walletdom "narratives/internal/domain/wallet"
 )
 
-// WalletHandler は /wallets 関連のエンドポイントを担当します。
-type WalletHandler struct {
-	uc *usecase.WalletUsecase
+// MallWalletHandler handles mall buyer-facing wallet endpoints.
+//
+// Routes (mall):
+// - GET /mall/me/wallet
+// - GET /mall/me/wallets (compat)
+//
+// NOTE:
+// - WalletUsecase.SyncWalletTokens(ctx, avatarID, addr) requires addr for create.
+// - For /mall/me/wallet, we try to resolve addr from Avatar.walletAddress.
+type MallWalletHandler struct {
+	walletUC *usecase.WalletUsecase
+	avatarUC *usecase.AvatarUsecase
 }
 
-// NewWalletHandler はHTTPハンドラを初期化します。
-func NewWalletHandler(uc *usecase.WalletUsecase) http.Handler {
-	return &WalletHandler{uc: uc}
+func NewMallWalletHandler(walletUC *usecase.WalletUsecase, avatarUC *usecase.AvatarUsecase) http.Handler {
+	return &MallWalletHandler{walletUC: walletUC, avatarUC: avatarUC}
 }
 
-// ServeHTTP はHTTPルーティングの入口です。
-func (h *WalletHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+func (h *MallWalletHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 
-	// ✅ 末尾スラッシュを吸収
-	path := strings.TrimSuffix(r.URL.Path, "/")
-
-	// ✅ /mall プレフィックスを吸収（/mall/wallets -> /wallets）
-	if strings.HasPrefix(path, "/mall/") {
-		path = strings.TrimPrefix(path, "/mall")
-		if path == "" {
-			path = "/"
-		}
-	}
+	// normalize path (drop trailing slash)
+	path0 := strings.TrimSuffix(r.URL.Path, "/")
 
 	switch {
-	// GET /wallets/{wallet_address}?avatarId={avatarId}
-	case r.Method == http.MethodGet && strings.HasPrefix(path, "/wallets/"):
-		walletAddress := strings.TrimPrefix(path, "/wallets/")
-		h.get(w, r, walletAddress)
+	case r.Method == http.MethodGet && (path0 == "/mall/me/wallet" || path0 == "/mall/me/wallets"):
+		h.getMe(w, r)
 		return
-
 	default:
-		w.WriteHeader(http.StatusNotFound)
-		_ = json.NewEncoder(w).Encode(map[string]string{"error": "not_found"})
+		notFound(w)
 		return
 	}
 }
 
-// GET /wallets/{wallet_address}?avatarId={avatarId}
-func (h *WalletHandler) get(w http.ResponseWriter, r *http.Request, walletAddress string) {
+// GET /mall/me/wallet
+func (h *MallWalletHandler) getMe(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 
-	if h == nil || h.uc == nil {
+	if h == nil || h.walletUC == nil {
 		w.WriteHeader(http.StatusInternalServerError)
 		_ = json.NewEncoder(w).Encode(map[string]string{"error": "wallet usecase not configured"})
 		return
 	}
 
-	walletAddress = strings.TrimSpace(walletAddress)
-	if walletAddress == "" {
-		w.WriteHeader(http.StatusBadRequest)
-		_ = json.NewEncoder(w).Encode(map[string]string{"error": "invalid wallet_address"})
+	// ✅ avatarId を auth context から取得（なければ uid を使う）
+	avatarID := strings.TrimSpace(getCtxString(ctx, "avatarId"))
+	if avatarID == "" {
+		avatarID = strings.TrimSpace(getCtxString(ctx, "uid"))
+	}
+	if avatarID == "" {
+		w.WriteHeader(http.StatusUnauthorized)
+		_ = json.NewEncoder(w).Encode(map[string]string{"error": "unauthorized"})
 		return
 	}
 
-	// ✅ 新シグネチャ対応:
-	// SyncWalletTokens(ctx, avatarId, walletAddress)
-	// - docId=avatarId の永続化設計のため、可能なら avatarId を渡す。
-	// - /wallets/{address} だけでは avatarId が分からないので query で受ける（互換のため未指定は空文字でOK）。
-	avatarID := strings.TrimSpace(r.URL.Query().Get("avatarId"))
+	// ✅ addr を avatar から解決（未作成時の create に必要）
+	addr := ""
+	if h.avatarUC != nil {
+		if a, err := h.avatarUC.GetByID(ctx, avatarID); err == nil {
+			if a.WalletAddress != nil {
+				addr = strings.TrimSpace(*a.WalletAddress)
+			}
+		} else {
+			// avatar が無い/引けない場合でも、wallet 側が既存なら動く可能性があるので続行
+			log.Printf("[mall_wallet_handler] /mall/me/wallet avatar lookup failed avatarId=%q err=%v\n", maskID(avatarID), err)
+		}
+	}
 
-	wallet, err := h.uc.SyncWalletTokens(ctx, avatarID, walletAddress)
+	log.Printf("[mall_wallet_handler] GET /mall/me/wallet avatarId=%q addr_set=%t\n", maskID(avatarID), addr != "")
+
+	wallet, err := h.walletUC.SyncWalletTokens(ctx, avatarID, addr)
 	if err != nil {
-		writeWalletErr(w, err)
+		writeMallWalletErr(w, err)
 		return
 	}
 
-	_ = json.NewEncoder(w).Encode(wallet)
+	_ = json.NewEncoder(w).Encode(map[string]any{"wallet": wallet})
 }
 
-// エラーハンドリング
-func writeWalletErr(w http.ResponseWriter, err error) {
+func writeMallWalletErr(w http.ResponseWriter, err error) {
 	code := http.StatusInternalServerError
+
 	switch {
 	case errors.Is(err, walletdom.ErrNotFound):
 		code = http.StatusNotFound
 	}
+
+	// usecase 側の validation error は 400 に寄せる（文字列ベースの最低限）
+	if err != nil {
+		msg := strings.ToLower(err.Error())
+		if strings.Contains(msg, "avatarid is empty") ||
+			strings.Contains(msg, "walletaddress is required") ||
+			strings.Contains(msg, "walletaddress is empty") {
+			code = http.StatusBadRequest
+		}
+	}
+
 	w.WriteHeader(code)
 	_ = json.NewEncoder(w).Encode(map[string]string{"error": err.Error()})
+}
+
+// ctx.Value は interface{} なので string のみ拾う（既存ミドルウェアに合わせる）
+func getCtxString(ctx interface{ Value(any) any }, key string) string {
+	v := ctx.Value(key)
+	s, _ := v.(string)
+	return s
+}
+
+func maskID(s string) string {
+	t := strings.TrimSpace(s)
+	if len(t) <= 8 {
+		return t
+	}
+	return t[:4] + "***" + t[len(t)-4:]
 }
