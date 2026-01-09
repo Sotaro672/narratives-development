@@ -7,7 +7,7 @@ import 'package:http/http.dart' as http;
 import '../app/config/api_base.dart';
 
 import '../features/user/infrastructure/user_repository_http.dart';
-import '../features/shippingAddress/infrastructure/shipping_address_repository_http.dart';
+import '../features/shippingAddress/infrastructure/repository_http.dart';
 import '../features/auth/application/shipping_address_service.dart';
 
 class AppContainer {

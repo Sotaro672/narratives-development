@@ -23,7 +23,9 @@ type Deps struct {
 	User            http.Handler
 	ShippingAddress http.Handler
 	BillingAddress  http.Handler
-	Avatar          http.Handler
+
+	// ✅ /mall/avatars (POST create) + /mall/avatars/{id} (GET/PATCH/DELETE)
+	Avatar http.Handler
 
 	// ✅ /mall/me/avatar (resolve avatarId by current user uid)
 	MeAvatar http.Handler
@@ -50,8 +52,6 @@ func handleSafe(mux *http.ServeMux, pattern string, h http.Handler, name string)
 }
 
 // Register registers buyer-facing routes onto mux (mall only).
-// ✅ Registers BOTH with and without /mall/me prefix for all routes.
-// ✅ Post routes are removed.
 func Register(mux *http.ServeMux, deps Deps) {
 	if mux == nil {
 		return
@@ -129,6 +129,15 @@ func Register(mux *http.ServeMux, deps Deps) {
 	handleSafe(mux, "/mall/me/billing-addresses/", deps.BillingAddress, "BillingAddress(me)")
 
 	// avatars
+	// ✅ Account creation / avatar CRUD entry (NO /me prefix)
+	// - POST   /mall/avatars
+	// - GET    /mall/avatars/{id}
+	// - PATCH  /mall/avatars/{id}
+	// - DELETE /mall/avatars/{id}
+	handleSafe(mux, "/mall/avatars", deps.Avatar, "Avatar")
+	handleSafe(mux, "/mall/avatars/", deps.Avatar, "Avatar")
+
+	// ✅ /me prefix (caller intent: authenticated user scope)
 	handleSafe(mux, "/mall/me/avatars", deps.Avatar, "Avatar(me)")
 	handleSafe(mux, "/mall/me/avatars/", deps.Avatar, "Avatar(me)")
 

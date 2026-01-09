@@ -1,6 +1,7 @@
-// frontend\mall\lib\features\auth\presentation\hook\use_create_account.dart
+// frontend/mall/lib/features/auth/presentation/hook/use_create_account.dart
 import 'package:flutter/material.dart';
 
+import '../../../../di/container.dart';
 import '../../application/create_account_service.dart';
 
 /// CreateAccountPage の状態/処理をまとめる（Flutter では ChangeNotifier で hook 風にする）
@@ -9,7 +10,7 @@ class UseCreateAccount extends ChangeNotifier {
     required this.from,
     required this.intent,
     CreateAccountService? service,
-  }) : _service = service ?? CreateAccountService();
+  }) : _service = service ?? CreateAccountService(auth: AppContainer.I.auth);
 
   /// Optional: where to go after signup (e.g. /catalog/xxx)
   final String? from;
@@ -37,9 +38,7 @@ class UseCreateAccount extends ChangeNotifier {
   // ------------------------------------------------------------
 
   bool get isEmailValid => _service.isEmailValid(emailCtrl.text);
-
   bool get isPasswordValid => _service.isPasswordValid(passCtrl.text);
-
   bool get isPasswordMatch =>
       _service.isPasswordMatch(passCtrl.text, pass2Ctrl.text);
 
@@ -47,11 +46,9 @@ class UseCreateAccount extends ChangeNotifier {
       !loading && agree && isEmailValid && isPasswordValid && isPasswordMatch;
 
   String loginBackTo() => _service.loginBackTo(from: from, intent: intent);
-
   String topMessage() => _service.topMessage(intent: intent);
 
   void onChanged() {
-    // ✅ 入力変更時に古いメッセージを消して混乱を防ぐ
     if (error != null || sentMessage != null) {
       error = null;
       sentMessage = null;
@@ -61,7 +58,6 @@ class UseCreateAccount extends ChangeNotifier {
 
   void setAgree(bool v) {
     agree = v;
-    // ✅ チェック変更時も古いメッセージを消す
     if (error != null || sentMessage != null) {
       error = null;
       sentMessage = null;
@@ -74,15 +70,12 @@ class UseCreateAccount extends ChangeNotifier {
   // ------------------------------------------------------------
 
   Future<void> createAndSendVerification() async {
-    // ✅ 二重送信防止（UIのボタンdisableに加え、ロジックでもガード）
     if (loading) return;
 
     error = null;
     sentMessage = null;
     loading = true;
     _safeNotify();
-
-    bool finished = false;
 
     try {
       final res = await _service.createAndSendVerification(
@@ -99,24 +92,15 @@ class UseCreateAccount extends ChangeNotifier {
       } else {
         error = res.error ?? '不明なエラーが発生しました。';
       }
-      finished = true;
     } catch (e) {
       if (_disposed) return;
       error = '不明なエラー: $e';
-      finished = true;
     } finally {
-      // ❌ finally で return しない（lint回避）
       if (!_disposed) {
         loading = false;
         _safeNotify();
-      } else {
-        // disposed 済みなら何もしない
       }
     }
-
-    // finished はデバッグ用途の名残（将来ログに使うなら残せる）
-    // ignore: unused_local_variable
-    finished = finished;
   }
 
   // ------------------------------------------------------------
@@ -133,6 +117,9 @@ class UseCreateAccount extends ChangeNotifier {
   @override
   void dispose() {
     _disposed = true;
+    try {
+      _service.dispose();
+    } catch (_) {}
     emailCtrl.dispose();
     passCtrl.dispose();
     pass2Ctrl.dispose();

@@ -1,4 +1,4 @@
-// frontend/mall/lib/features/shippingAddress/infrastructure/shipping_address_repository_http.dart
+// frontend\mall\lib\features\shippingAddress\infrastructure\repository_http.dart
 import 'dart:convert';
 
 import 'package:flutter/foundation.dart';
@@ -179,8 +179,8 @@ class ShippingAddressRepositoryHttp {
     final normalized = resolvedRaw.replaceAll(RegExp(r'\/+$'), '');
 
     // ✅ baseUrl に /mall が含まれる注入も許容
-    // - baseUrl が ".../mall" の場合: 以降の path は "shipping-addresses/..." にする
-    // - baseUrl が domain だけの場合: 以降の path は "mall/shipping-addresses/..." にする
+    // - baseUrl が ".../mall" の場合: 以降の path は "/shipping-addresses/..." にする
+    // - baseUrl が domain だけの場合: 以降の path は "/mall/shipping-addresses/..." にする
     final b = Uri.parse(normalized);
     final basePath = b.path.replaceAll(RegExp(r'\/+$'), '');
     _pathPrefix = basePath.endsWith('/mall') || basePath == '/mall'
@@ -322,13 +322,22 @@ class ShippingAddressRepositoryHttp {
   // path helpers
   // ------------------------------------------------------------
 
+  /// ✅ IMPORTANT:
+  /// Dio の baseUrl が `https://host`（末尾スラッシュ無し）の場合でも、
+  /// ここで返す path を必ず `/...` にして URL 結合事故（hostmall...）を防ぐ。
   String _p(String path) {
-    var p = path.trim();
-    if (p.startsWith('/')) p = p.substring(1);
-    if (p.isEmpty) return p;
+    var raw = path.trim();
+    if (raw.isEmpty) return raw;
 
-    if (_pathPrefix.isEmpty) return p;
-    return '$_pathPrefix/$p';
+    // remove leading slashes for safe concat
+    raw = raw.replaceAll(RegExp(r'^/+'), '');
+
+    if (_pathPrefix.isEmpty) {
+      return '/$raw';
+    }
+
+    final prefix = _pathPrefix.replaceAll(RegExp(r'^/+|/+$'), '');
+    return '/$prefix/$raw';
   }
 
   // ------------------------------------------------------------

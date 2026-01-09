@@ -5,8 +5,10 @@ import 'package:flutter/foundation.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:http/http.dart' as http;
 
+import '../../../app/config/api_base.dart';
+
 import '../../user/infrastructure/user_repository_http.dart';
-import '../../shippingAddress/infrastructure/shipping_address_repository_http.dart';
+import '../../shippingAddress/infrastructure/repository_http.dart';
 
 class VerifyEmailState {
   const VerifyEmailState({
@@ -71,16 +73,17 @@ class ShippingAddressService {
     http.Client? httpClient,
     UserRepositoryHttp? userRepo,
     ShippingAddressRepositoryHttp? shipRepo,
+
+    /// ✅ baseUrl は「ルート」(SNS/Mall 名を含めない) を渡す想定
+    /// 例: https://...run.app
     String? baseUrl,
   }) : _auth = auth ?? FirebaseAuth.instance,
        _http = httpClient ?? http.Client(),
-       _baseUrl = (baseUrl ?? _resolveApiBase()).trim(),
+       _baseUrl = _normalizeBaseUrl((baseUrl ?? resolveApiBase()).trim()),
        _userRepo = userRepo,
        _shipRepo = shipRepo {
-    // repo が未注入なら baseUrl で作る
-    final b = _baseUrl.endsWith('/')
-        ? _baseUrl.substring(0, _baseUrl.length - 1)
-        : _baseUrl;
+    // repo が未注入なら baseUrl で作る（repo 側が /mall/... を付与する想定）
+    final b = _baseUrl;
     _userRepoInst = _userRepo ?? UserRepositoryHttp(baseUrl: b);
     _shipRepoInst = _shipRepo ?? ShippingAddressRepositoryHttp(baseUrl: b);
   }
@@ -88,6 +91,7 @@ class ShippingAddressService {
   final FirebaseAuth _auth;
   final http.Client _http;
 
+  /// ✅ ルートURL（末尾スラッシュなし）
   final String _baseUrl;
 
   final UserRepositoryHttp? _userRepo;
@@ -96,21 +100,18 @@ class ShippingAddressService {
   late final UserRepositoryHttp _userRepoInst;
   late final ShippingAddressRepositoryHttp _shipRepoInst;
 
-  static const String _fallbackBaseUrl =
-      'https://narratives-backend-871263659099.asia-northeast1.run.app';
-
-  static String _resolveApiBase() {
-    const fromDefine = String.fromEnvironment('API_BASE_URL');
-    final base = (fromDefine.isNotEmpty ? fromDefine : _fallbackBaseUrl).trim();
-    return base.endsWith('/') ? base.substring(0, base.length - 1) : base;
-  }
-
   void dispose() {
-    // repo は自前で作った場合のみ dispose したいが、
-    // 現状判定が難しいので “必ず dispose” 方針にする（repo 側が安全に実装されている前提）。
-    _userRepoInst.dispose();
-    _shipRepoInst.dispose();
-    _http.close();
+    // repo は自前で作った場合のみ dispose したいが判定が難しいので、
+    // repo 側が安全に dispose 実装されている前提で “必ず dispose” に寄せる。
+    try {
+      _userRepoInst.dispose();
+    } catch (_) {}
+    try {
+      _shipRepoInst.dispose();
+    } catch (_) {}
+    try {
+      _http.close();
+    } catch (_) {}
   }
 
   String s(String? v) => (v ?? '').trim();
@@ -356,6 +357,10 @@ class ShippingAddressService {
       // ----------------------------
       // 2) upsert shipping address (required)
       // ----------------------------
+      //
+      // ✅ avatarId は未確定なので使わない。
+      // ✅ uid だけで保存できる /mall/shipping-addresses（= “mall/shippingAddress” 相当）を叩く前提。
+      //
       log('[ShippingAddress] upsert shippingAddress uid=$uid');
 
       final saved = await upsertShippingAddress(
@@ -382,7 +387,11 @@ class ShippingAddressService {
     }
   }
 
-  /// ✅ docId=uid 前提の upsert（PATCH 1回で作成/更新）
+  /// ✅ docId=uid 前提の upsert（avatarId 不要）
+  ///
+  /// 期待値:
+  /// - backend は /mall/shipping-addresses を受ける
+  /// - body に id=userId=uid を入れて docId として扱う（Upsert）
   Future<ShippingAddress> upsertShippingAddress({
     required String uid,
     required String zip7,
@@ -391,13 +400,11 @@ class ShippingAddressService {
     required String addr1,
     required String addr2,
   }) async {
-    // repo 側で uid 強制されるが、ここでも明示する（ログと意図の明確化）
     log(
       '[ShippingAddress] upsertShippingAddress '
       'id(uid)=$uid zip=$zip7 state="$pref" city="$city" street="$addr1" street2="$addr2"',
     );
 
-    // ✅ CreateShippingAddressInput は廃止済み
     // ✅ UpsertShippingAddressInput を使う（id=userId=uid）
     return await _shipRepoInst.create(
       UpsertShippingAddressInput(
@@ -411,5 +418,16 @@ class ShippingAddressService {
         country: 'JP',
       ),
     );
+  }
+
+  // ------------------------------------------------------------
+  // helpers
+  // ------------------------------------------------------------
+
+  static String _normalizeBaseUrl(String v) {
+    final s = v.trim();
+    if (s.isEmpty) return '';
+    // normalize: remove trailing slashes
+    return s.replaceAll(RegExp(r'\/+$'), '');
   }
 }
