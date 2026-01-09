@@ -2,7 +2,7 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
-/// Minimal public header for SNS (no-auth).
+/// Minimal public header for Mall (no-auth).
 /// - Back button (optional) ※ showBack のみで制御
 /// - Title (optional)
 /// - Right-side actions (optional)  ← Sign in / Sign out は router 側から渡す

@@ -1,4 +1,4 @@
-//frontend\sns\lib\features\cart\presentation\hook\use_cart.dart
+//frontend\mall\lib\features\cart\presentation\hook\use_cart.dart
 import 'dart:convert';
 
 import 'package:flutter/foundation.dart';

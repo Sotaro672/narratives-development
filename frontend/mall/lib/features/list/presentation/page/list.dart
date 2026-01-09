@@ -43,7 +43,7 @@ class _HomePageState extends State<HomePage> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        // ✅ 見出し行（SNS + refresh）を削除して、ヘッダーっぽい行スペースを消す
+        // ✅ 見出し行（Mall + refresh）を削除して、ヘッダーっぽい行スペースを消す
 
         // ✅ 本文（一覧）
         FutureBuilder<MallListIndexResponse>(

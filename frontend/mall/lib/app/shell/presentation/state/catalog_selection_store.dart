@@ -1,4 +1,4 @@
-// frontend\sns\lib\app\shell\presentation\state\catalog_selection_store.dart
+// frontend\mall\lib\app\shell\presentation\state\catalog_selection_store.dart
 import 'package:flutter/foundation.dart';
 
 @immutable

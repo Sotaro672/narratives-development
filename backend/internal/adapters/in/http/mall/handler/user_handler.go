@@ -1,4 +1,3 @@
-// backend\internal\adapters\in\http\mall\handler\user_handler.go
 package mallHandler
 
 import (
@@ -8,6 +7,9 @@ import (
 	"net/http"
 	"strings"
 	"time"
+
+	// ✅ buyer auth context (uid)
+	"narratives/internal/adapters/in/http/middleware"
 
 	usecase "narratives/internal/application/usecase"
 	userdom "narratives/internal/domain/user"
@@ -27,6 +29,12 @@ func NewUserHandler(uc *usecase.UserUsecase) http.Handler {
 func (h *UserHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 
+	// ✅ Allow CORS preflight
+	if r.Method == http.MethodOptions {
+		w.WriteHeader(http.StatusNoContent)
+		return
+	}
+
 	// ✅ 末尾スラッシュを吸収
 	path := strings.TrimSuffix(r.URL.Path, "/")
 
@@ -36,6 +44,18 @@ func (h *UserHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 
 	switch {
+	// ============================================================
+	// ✅ NEW: GET /mall/me/user  (= /me/user)
+	// - uid を docID として users/{uid} を自動作成(Upsert)して返す
+	// ============================================================
+	case r.Method == http.MethodGet && path == "/me/user":
+		h.getMe(w, r)
+		return
+
+	// ============================================================
+	// existing
+	// ============================================================
+
 	// GET /users/{id}
 	case r.Method == http.MethodGet && strings.HasPrefix(path, "/users/"):
 		id := strings.TrimPrefix(path, "/users/")
@@ -64,6 +84,68 @@ func (h *UserHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		_ = json.NewEncoder(w).Encode(map[string]string{"error": "not_found"})
 		return
 	}
+}
+
+// ============================================================
+// ✅ NEW: GET /mall/me/user
+// - Firebase の uid を使って users/{uid} を返す
+// - 無ければ “空の user” を作って 200 で返す（フロント安定化）
+// ============================================================
+func (h *UserHandler) getMe(w http.ResponseWriter, r *http.Request) {
+	if h == nil || h.uc == nil {
+		w.WriteHeader(http.StatusServiceUnavailable)
+		_ = json.NewEncoder(w).Encode(map[string]string{"error": "user_usecase_not_initialized"})
+		return
+	}
+
+	uid, ok := middleware.CurrentUserUID(r)
+	if !ok || strings.TrimSpace(uid) == "" {
+		w.WriteHeader(http.StatusUnauthorized)
+		_ = json.NewEncoder(w).Encode(map[string]string{"error": "unauthorized"})
+		return
+	}
+	uid = strings.TrimSpace(uid)
+
+	ctx := r.Context()
+
+	// 既存があればそれを返す
+	if u, err := h.uc.GetByID(ctx, uid); err == nil {
+		w.WriteHeader(http.StatusOK)
+		_ = json.NewEncoder(w).Encode(u)
+		return
+	}
+
+	// 無ければ “空の user” を作成して返す
+	now := time.Now().UTC()
+	createdAt := now
+	updatedAt := now
+
+	// ドメイン仕様：deletedAt は NOT NULL 相当（ゼロ禁止）なので createdAt を入れておく
+	deletedAt := createdAt
+
+	v, err := userdom.New(
+		uid,
+		nil, // firstName
+		nil, // firstNameKana
+		nil, // lastNameKana
+		nil, // lastName
+		createdAt,
+		updatedAt,
+		deletedAt,
+	)
+	if err != nil {
+		writeUserErr(w, err)
+		return
+	}
+
+	u, err := h.uc.Save(ctx, v)
+	if err != nil {
+		writeUserErr(w, err)
+		return
+	}
+
+	w.WriteHeader(http.StatusOK)
+	_ = json.NewEncoder(w).Encode(u)
 }
 
 // GET /users/{id}

@@ -47,7 +47,7 @@ class DefaultFirebaseOptions {
   // ------------------------------------------------------------
 
   // ------------------------------------------------------------
-  // Android (registered: com.example.sns)
+  // Android (registered: com.example.mall)
 
   static const FirebaseOptions android = FirebaseOptions(
     apiKey: 'AIzaSyAYGIzM85qj1k-hQ2sdFGyaLNr2zENJ42w',

@@ -1,4 +1,4 @@
-//frontend\sns\lib\features\list\presentation\page\catalog.dart
+//frontend\mall\lib\features\list\presentation\page\catalog.dart
 import 'package:flutter/material.dart';
 
 import 'package:mall/app/shell/presentation/state/catalog_selection_store.dart';

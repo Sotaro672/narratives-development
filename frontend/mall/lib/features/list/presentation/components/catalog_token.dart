@@ -1,4 +1,4 @@
-//frontend\sns\lib\features\home\presentation\components\catalog_token.dart
+//frontend\mall\lib\features\home\presentation\components\catalog_token.dart
 import 'package:flutter/material.dart';
 
 import '../../../tokenBlueprint/infrastructure/token_blueprint_repository_http.dart'

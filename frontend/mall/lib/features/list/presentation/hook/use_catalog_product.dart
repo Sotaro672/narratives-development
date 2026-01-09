@@ -1,4 +1,4 @@
-//frontend\sns\lib\features\home\presentation\hook\use_catalog_product.dart
+//frontend\mall\lib\features\home\presentation\hook\use_catalog_product.dart
 import '../../../productBlueprint/infrastructure/product_blueprint_repository_http.dart';
 
 /// ProductCard 用の “product blueprint 解決” 専用 hook

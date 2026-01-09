@@ -1,4 +1,4 @@
-//frontend\sns\lib\features\home\presentation\components\catalog_product.dart
+//frontend\mall\lib\features\list\presentation\components\catalog_product.dart
 import 'package:flutter/material.dart';
 
 /// ProductBlueprint の型定義がこのファイルから直接参照できないため、
@@ -78,7 +78,7 @@ class CatalogProductCard extends StatelessWidget {
               _KeyValueRow(label: '商品名', value: _s(pb.productName)),
               const SizedBox(height: 6),
 
-              // ✅ 名前解決結果（SNS側で付与される想定）
+              // ✅ 名前解決結果（Mall側で付与される想定）
               _KeyValueRow(label: '会社名', value: _s(pb.companyName)),
               const SizedBox(height: 6),
               _KeyValueRow(label: 'ブランド名', value: _s(pb.brandName)),

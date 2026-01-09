@@ -1,18 +1,10 @@
 // frontend/mall/lib/di/container.dart
-//
-// Mall app DI container (minimal, feature-first).
-// - Centralizes API_BASE resolution (with fallback)
-// - Creates repositories/services with shared FirebaseAuth + http.Client
-// - Provides a single place to dispose resources
-//
-// NOTE:
-// Your repositories currently add their own Dio interceptors internally.
-// To avoid duplicate interceptors, this container does NOT share a single Dio instance.
-// Instead it shares baseUrl/auth and lets each repository manage its own Dio safely.
 
 import 'package:flutter/foundation.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:http/http.dart' as http;
+
+import '../app/config/api_base.dart';
 
 import '../features/user/infrastructure/user_repository_http.dart';
 import '../features/shippingAddress/infrastructure/shipping_address_repository_http.dart';
@@ -26,7 +18,7 @@ class AppContainer {
     UserRepositoryHttp? userRepo,
     ShippingAddressRepositoryHttp? shippingRepo,
     ShippingAddressService? shippingService,
-  }) : apiBase = _normalizeBaseUrl(_ensureSnsBase(apiBase)),
+  }) : apiBase = _normalizeBaseUrl(_ensureMallBase(apiBase)),
        auth = auth ?? FirebaseAuth.instance,
        httpClient = httpClient ?? http.Client(),
        _userRepoOverride = userRepo,
@@ -56,7 +48,7 @@ class AppContainer {
   // ----------------------------
   // Public deps
   // ----------------------------
-  final String apiBase; // <-- ends with /sns
+  final String apiBase; // <-- ends with /mall
   final FirebaseAuth auth;
   final http.Client httpClient;
 
@@ -124,16 +116,11 @@ class AppContainer {
   // API_BASE resolution
   // ----------------------------
 
-  // ✅ Mall app should talk to /mall/* endpoints.
-  static const String _fallbackBaseUrl =
-      'https://narratives-backend-871263659099.asia-northeast1.run.app/mall';
-
+  /// ✅ Uses common resolver that does NOT include "/sns" or "/mall".
+  /// We append "/mall" here to make the intent explicit.
   static String _resolveApiBase() {
-    const fromDefine = String.fromEnvironment('API_BASE', defaultValue: '');
-    final v = fromDefine.trim();
-    if (v.isNotEmpty) return _normalizeBaseUrl(_ensureSnsBase(v));
-
-    return _normalizeBaseUrl(_fallbackBaseUrl);
+    final root = resolveApiBase(); // e.g. https://...run.app
+    return _normalizeBaseUrl(_ensureMallBase(root));
   }
 
   static String _normalizeBaseUrl(String v) {
@@ -142,14 +129,14 @@ class AppContainer {
     return s.endsWith('/') ? s.substring(0, s.length - 1) : s;
   }
 
-  /// Ensure base URL ends with "/sns".
-  /// - If user passes root "...run.app", we convert to "...run.app/sns".
-  /// - If user already passes ".../sns", keep as-is.
-  static String _ensureSnsBase(String base) {
+  /// Ensure base URL ends with "/mall".
+  /// - If user passes root "...run.app", we convert to "...run.app/mall".
+  /// - If user already passes ".../mall", keep as-is.
+  static String _ensureMallBase(String base) {
     final b = _normalizeBaseUrl(base);
     if (b.isEmpty) return b;
-    if (b.endsWith('/sns')) return b;
-    return '$b/sns';
+    if (b.endsWith('/mall')) return b;
+    return '$b/mall';
   }
 
   // ----------------------------

@@ -25,18 +25,12 @@ class UseCreateAccount extends ChangeNotifier {
 
   bool agree = false;
   bool loading = false;
+
+  /// ✅ エラー表示（UIへ必ず出す）
   String? error;
 
   /// ✅ 認証メール送信後に画面内へ表示するメッセージ
   String? sentMessage;
-
-  @override
-  void dispose() {
-    emailCtrl.dispose();
-    passCtrl.dispose();
-    pass2Ctrl.dispose();
-    super.dispose();
-  }
 
   // ------------------------------------------------------------
   // computed (delegate)
@@ -57,12 +51,22 @@ class UseCreateAccount extends ChangeNotifier {
   String topMessage() => _service.topMessage(intent: intent);
 
   void onChanged() {
-    notifyListeners();
+    // ✅ 入力変更時に古いメッセージを消して混乱を防ぐ
+    if (error != null || sentMessage != null) {
+      error = null;
+      sentMessage = null;
+    }
+    _safeNotify();
   }
 
   void setAgree(bool v) {
     agree = v;
-    notifyListeners();
+    // ✅ チェック変更時も古いメッセージを消す
+    if (error != null || sentMessage != null) {
+      error = null;
+      sentMessage = null;
+    }
+    _safeNotify();
   }
 
   // ------------------------------------------------------------
@@ -70,24 +74,68 @@ class UseCreateAccount extends ChangeNotifier {
   // ------------------------------------------------------------
 
   Future<void> createAndSendVerification() async {
+    // ✅ 二重送信防止（UIのボタンdisableに加え、ロジックでもガード）
+    if (loading) return;
+
     error = null;
-    sentMessage = null; // ✅ 再送などで古い成功メッセージを消す
+    sentMessage = null;
     loading = true;
-    notifyListeners();
+    _safeNotify();
 
-    final res = await _service.createAndSendVerification(
-      emailRaw: emailCtrl.text,
-      pass: passCtrl.text,
-      pass2: pass2Ctrl.text,
-      agree: agree,
-    );
+    bool finished = false;
 
-    loading = false;
-    if (res.ok) {
-      sentMessage = res.sentMessage;
-    } else {
-      error = res.error;
+    try {
+      final res = await _service.createAndSendVerification(
+        emailRaw: emailCtrl.text,
+        pass: passCtrl.text,
+        pass2: pass2Ctrl.text,
+        agree: agree,
+      );
+
+      if (_disposed) return;
+
+      if (res.ok) {
+        sentMessage = res.sentMessage;
+      } else {
+        error = res.error ?? '不明なエラーが発生しました。';
+      }
+      finished = true;
+    } catch (e) {
+      if (_disposed) return;
+      error = '不明なエラー: $e';
+      finished = true;
+    } finally {
+      // ❌ finally で return しない（lint回避）
+      if (!_disposed) {
+        loading = false;
+        _safeNotify();
+      } else {
+        // disposed 済みなら何もしない
+      }
     }
+
+    // finished はデバッグ用途の名残（将来ログに使うなら残せる）
+    // ignore: unused_local_variable
+    finished = finished;
+  }
+
+  // ------------------------------------------------------------
+  // lifecycle guard
+  // ------------------------------------------------------------
+
+  bool _disposed = false;
+
+  void _safeNotify() {
+    if (_disposed) return;
     notifyListeners();
+  }
+
+  @override
+  void dispose() {
+    _disposed = true;
+    emailCtrl.dispose();
+    passCtrl.dispose();
+    pass2Ctrl.dispose();
+    super.dispose();
   }
 }

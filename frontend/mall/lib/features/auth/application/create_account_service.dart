@@ -21,13 +21,8 @@ class CreateAccountService {
 
   String s(String v) => v.trim();
 
-  // ------------------------------------------------------------
-  // validation helpers
-  // ------------------------------------------------------------
-
   bool isEmailValid(String emailRaw) {
     final email = s(emailRaw);
-    // ざっくり判定（厳密でなくてOK）
     return email.isNotEmpty && email.contains('@') && email.contains('.');
   }
 
@@ -50,10 +45,6 @@ class CreateAccountService {
     final uri = Uri(path: '/login', queryParameters: qp.isEmpty ? null : qp);
     return uri.toString();
   }
-
-  // ------------------------------------------------------------
-  // main action
-  // ------------------------------------------------------------
 
   Future<CreateAccountResult> createAndSendVerification({
     required String emailRaw,
@@ -87,12 +78,16 @@ class CreateAccountService {
         return const CreateAccountResult.failure('アカウント作成後にユーザー情報が取得できませんでした。');
       }
 
-      // ✅ 認証メール送信
       await user.sendEmailVerification();
+
+      // ✅ ここが最重要：
+      // Firebase は createUserWithEmailAndPassword 直後にログイン状態になる。
+      // そのままだとアプリが /mall/me/* を叩き始めて 404 になりやすいので、必ずサインアウトする。
+      await _auth.signOut();
 
       return const CreateAccountResult.success(
         '認証メールを送信しました。受信ボックスを確認してください。\n'
-        '認証メールからアカウント作成を続行してください。',
+        'メールの認証が終わったら、この画面に戻ってサインインしてください。',
       );
     } on FirebaseAuthException catch (e) {
       return CreateAccountResult.failure(_friendlyAuthError(e));

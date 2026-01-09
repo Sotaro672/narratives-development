@@ -2,7 +2,7 @@
 const String _fallbackBaseUrl =
     'https://narratives-backend-871263659099.asia-northeast1.run.app';
 
-/// ✅ Common API base resolver (SNS/Mallなどの名前を含めない)
+/// ✅ Common API base resolver
 /// Priority:
 /// 1) --dart-define=API_BASE_URL=https://...
 /// 2) --dart-define=API_BASE=https://...      (backward compatible)
@@ -10,7 +10,6 @@ const String _fallbackBaseUrl =
 String resolveApiBase() => _resolveApiBase();
 
 /// ✅ Optional: Mall 側の呼び出し意図を明確にしたい場合の別名
-/// （中身は同じ。`resolveSnsApiBase()` は提供しない）
 String resolveMallApiBase() => _resolveApiBase();
 
 String _resolveApiBase() {

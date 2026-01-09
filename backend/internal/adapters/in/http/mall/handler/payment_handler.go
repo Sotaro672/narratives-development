@@ -159,13 +159,3 @@ func callResolveByUID(orderQ any, ctx context.Context, uid string) (any, error) 
 
 	return outs[0].Interface(), err
 }
-
-func isNotFoundLike(err error) bool {
-	if err == nil {
-		return false
-	}
-	msg := strings.ToLower(strings.TrimSpace(err.Error()))
-	return strings.Contains(msg, "not_found") ||
-		strings.Contains(msg, "not found") ||
-		strings.Contains(msg, "404")
-}

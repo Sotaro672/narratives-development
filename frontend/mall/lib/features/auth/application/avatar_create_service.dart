@@ -1,4 +1,4 @@
-// frontend\sns\lib\features\auth\application\avatar_create_service.dart
+// frontend\mall\lib\features\auth\application\avatar_create_service.dart
 import 'package:flutter/foundation.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:http/http.dart' as http;

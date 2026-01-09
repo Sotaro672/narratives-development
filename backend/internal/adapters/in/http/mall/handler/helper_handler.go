@@ -166,3 +166,18 @@ func readJSON(r *http.Request, dst any) error {
 	dec.DisallowUnknownFields()
 	return dec.Decode(dst)
 }
+
+func isNotFoundLike(err error) bool {
+	if err == nil {
+		return false
+	}
+	// errors.Is で拾えるケースもあるので一応入れておく
+	if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+		return false
+	}
+	msg := strings.ToLower(strings.TrimSpace(err.Error()))
+	return strings.Contains(msg, "not_found") ||
+		strings.Contains(msg, "not found") ||
+		strings.Contains(msg, "404") ||
+		strings.Contains(msg, "avatar_not_found_for_uid")
+}

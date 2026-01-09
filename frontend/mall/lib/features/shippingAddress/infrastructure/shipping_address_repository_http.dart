@@ -8,7 +8,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 // ✅ 共通 resolver を使う（fallback/環境変数名のブレを防ぐ）
 import '../../../app/config/api_base.dart';
 
-/// Domain-ish model for SNS shipping address (matches backend shippingAddress.entity.go)
+/// Domain-ish model for Mall shipping address (matches backend shippingAddress.entity.go)
 class ShippingAddress {
   ShippingAddress({
     required this.id,
@@ -178,8 +178,8 @@ class ShippingAddressRepositoryHttp {
 
     final normalized = resolvedRaw.replaceAll(RegExp(r'\/+$'), '');
 
-    // ✅ baseUrl に /sns が含まれる注入も許容
-    // - baseUrl が ".../sns" の場合: 以降の path は "shipping-addresses/..." にする
+    // ✅ baseUrl に /mall が含まれる注入も許容
+    // - baseUrl が ".../mall" の場合: 以降の path は "shipping-addresses/..." にする
     // - baseUrl が domain だけの場合: 以降の path は "mall/shipping-addresses/..." にする
     final b = Uri.parse(normalized);
     final basePath = b.path.replaceAll(RegExp(r'\/+$'), '');
@@ -274,7 +274,7 @@ class ShippingAddressRepositoryHttp {
   final FirebaseAuth _auth;
   final CancelToken _cancelToken = CancelToken();
 
-  late final String _pathPrefix; // '' or 'sns'
+  late final String _pathPrefix;
 
   // ✅ release でもログを出したい場合: --dart-define=ENABLE_HTTP_LOG=true
   static const bool _envHttpLog = bool.fromEnvironment(
@@ -332,7 +332,7 @@ class ShippingAddressRepositoryHttp {
   }
 
   // ------------------------------------------------------------
-  // API (SNS)
+  // API (ShippingAddress)
   // ------------------------------------------------------------
 
   /// ✅ Get "my" shipping address (docId = uid)

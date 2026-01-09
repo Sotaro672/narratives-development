@@ -1,4 +1,4 @@
-//frontend\sns\lib\features\list\presentation\components\catalog_inventory.dart
+//frontend\mall\lib\features\list\presentation\components\catalog_inventory.dart
 import 'package:flutter/material.dart';
 
 class CatalogInventoryCard extends StatefulWidget {

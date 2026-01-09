@@ -1,4 +1,4 @@
-//frontend\sns\lib\features\model\infrastructure\model_repository_http.dart
+//frontend\mall\lib\features\model\infrastructure\model_repository_http.dart
 import 'dart:convert';
 
 import 'package:http/http.dart' as http;
@@ -36,7 +36,6 @@ class ModelRepositoryHTTP {
     return base.endsWith('/') ? base.substring(0, base.length - 1) : base;
   }
 
-  /// ✅ backend migrated sns -> mall (legacy removed)
   static const String _apiPrefix = '/mall';
 
   static Uri _buildUri(String path, [Map<String, String>? query]) {
@@ -104,7 +103,7 @@ class ModelRepositoryHTTP {
 }
 
 // ============================================================
-// DTOs (must match backend Catalog/SNSModelVariationDTO shape)
+// DTOs (must match backend Catalog/ModelVariationDTO shape)
 // ============================================================
 
 class ModelVariationDTO {

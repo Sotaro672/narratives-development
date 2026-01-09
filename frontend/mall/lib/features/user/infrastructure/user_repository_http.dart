@@ -28,7 +28,6 @@ class UserDTO {
   final String? lastNameKana;
   final String? lastName;
 
-  /// Backend が ISO8601 を返しても、DateTime を返しても吸収するため any で受ける
   final DateTime? createdAt;
   final DateTime? updatedAt;
   final DateTime? deletedAt;
@@ -147,9 +146,9 @@ class UpdateUserBody {
   };
 }
 
-/// SNS Flutter 用 UserRepository (HTTP)
+/// Mall Flutter 用 UserRepository (HTTP)
 /// - API_BASE/API_BASE_URL/fallback を共通 resolver で吸収
-/// - baseUrl が ".../sns" 注入でも動くように prefix を自動調整
+/// - baseUrl が ".../mall" 注入でも動くように prefix を自動調整
 class UserRepositoryHttp {
   UserRepositoryHttp({Dio? dio, FirebaseAuth? auth, String? baseUrl})
     : _auth = auth ?? FirebaseAuth.instance,
@@ -166,10 +165,12 @@ class UserRepositoryHttp {
 
     final normalized = resolvedRaw.replaceAll(RegExp(r'\/+$'), '');
 
-    // ✅ baseUrl に /sns が含まれる注入も許容
     final b = Uri.parse(normalized);
     final basePath = b.path.replaceAll(RegExp(r'\/+$'), '');
-    _pathPrefix = basePath.endsWith('/sns') || basePath == '/sns' ? '' : 'sns';
+    // ✅ baseUrl が /mall を含むなら prefix 不要。含まないなら /mall を付ける。
+    _pathPrefix = (basePath == '/mall' || basePath.endsWith('/mall'))
+        ? ''
+        : 'mall';
 
     _dio.options = BaseOptions(
       baseUrl: normalized,
@@ -182,7 +183,6 @@ class UserRepositoryHttp {
       },
     );
 
-    // ✅ Request/Response logger + Firebase token injector + 401 retry
     _dio.interceptors.add(
       InterceptorsWrapper(
         onRequest: (options, handler) async {
@@ -190,7 +190,7 @@ class UserRepositoryHttp {
             final u = _auth.currentUser;
             if (u != null) {
               final token = await u.getIdToken(false);
-              final t = (token ?? '').toString().trim();
+              final t = token.toString().trim();
               if (t.isNotEmpty) {
                 options.headers['Authorization'] = 'Bearer $t';
               }
@@ -210,7 +210,6 @@ class UserRepositoryHttp {
           _logDioError(e);
           _logFailureSummary(e);
 
-          // ✅ 401 のときは 1 回だけ forceRefreshToken=true でリトライ
           final status = e.response?.statusCode;
           final alreadyRetried = e.requestOptions.extra['__retried401'] == true;
 
@@ -219,7 +218,7 @@ class UserRepositoryHttp {
               final u = _auth.currentUser;
               if (u != null) {
                 final token = await u.getIdToken(true);
-                final t = (token ?? '').toString().trim();
+                final t = token.toString().trim();
                 if (t.isNotEmpty) {
                   final opts = e.requestOptions;
                   opts.extra['__retried401'] = true;
@@ -236,7 +235,6 @@ class UserRepositoryHttp {
               }
             } catch (ex) {
               _log('[UserRepositoryHttp] 401 retry failed: $ex');
-              // fallthrough
             }
           }
 
@@ -252,7 +250,7 @@ class UserRepositoryHttp {
   final FirebaseAuth _auth;
   final CancelToken _cancelToken = CancelToken();
 
-  late final String _pathPrefix; // '' or 'sns'
+  late final String _pathPrefix; // '' or 'mall'
 
   void dispose() {
     if (!_cancelToken.isCancelled) {
@@ -345,7 +343,6 @@ class UserRepositoryHttp {
   // helpers
   // ----------------------------
 
-  /// Web/Release でもログを出したい場合用（`--dart-define=ENABLE_HTTP_LOG=true`）
   static const bool _envHttpLog = bool.fromEnvironment(
     'ENABLE_HTTP_LOG',
     defaultValue: false,
@@ -369,9 +366,7 @@ class UserRepositoryHttp {
         final decoded = jsonDecode(v);
         if (decoded is Map<String, dynamic>) return decoded;
         if (decoded is Map) return Map<String, dynamic>.from(decoded);
-      } catch (_) {
-        // ignore
-      }
+      } catch (_) {}
     }
     throw Exception(
       'Invalid response body: expected object, got ${v.runtimeType}',
@@ -387,23 +382,19 @@ class UserRepositoryHttp {
       msg += ' (status=$status)';
     }
 
-    // backend が {"error": "..."} を返す想定
     try {
       if (data is Map && data['error'] != null) {
         msg += ': ${data['error']}';
         return Exception(msg);
       }
       if (data is String) {
-        // JSON文字列の {"error": "..."} も吸収
         final decoded = jsonDecode(data);
         if (decoded is Map && decoded['error'] != null) {
           msg += ': ${decoded['error']}';
           return Exception(msg);
         }
       }
-    } catch (_) {
-      // ignore
-    }
+    } catch (_) {}
 
     if (data != null) {
       msg += ': $data';
@@ -431,7 +422,6 @@ class UserRepositoryHttp {
     final method = o.method.toUpperCase();
     final url = o.uri.toString();
 
-    // Authorization は伏せる
     final headers = <String, dynamic>{};
     o.headers.forEach((k, v) {
       if (k.toLowerCase() == 'authorization') {
