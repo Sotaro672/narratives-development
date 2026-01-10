@@ -19,7 +19,7 @@ $ErrorActionPreference = "Stop"
 
 function Write-Step($msg) { Write-Host "== $msg ==" -ForegroundColor Cyan }
 function Write-Ok($msg)   { Write-Host "OK: $msg" -ForegroundColor Green }
-function Write-Warn($msg) { Write-Host "!! $msg" -ForegroundColor Yellow }
+function Write-Warn($msg) { Write-Host "!! $msg ==" -ForegroundColor Yellow }
 
 function Normalize-EnvValue([string]$v) {
   if ($null -eq $v) { return "" }
@@ -240,7 +240,10 @@ $AllowedKeys = @(
   "GCS_SIGNER_EMAIL",
 
   # ✅ NEW: Avatar icon signer email
-  "AVATAR_ICON_SIGNER_EMAIL"
+  "AVATAR_ICON_SIGNER_EMAIL",
+
+  # ✅ NEW: checkout self-callback base URL
+  "SELF_BASE_URL"
 )
 
 # まず必ずセットするもの（GOOGLE_CLOUD_PROJECT はランタイムで参照しがち）
@@ -283,6 +286,26 @@ if (-not $envMap.ContainsKey("AVATAR_ICON_SIGNER_EMAIL")) {
     $envMap["AVATAR_ICON_SIGNER_EMAIL"] = $envMap["TOKEN_ICON_SIGNER_EMAIL"]
   } else {
     $envMap["AVATAR_ICON_SIGNER_EMAIL"] = $RunServiceAccount
+  }
+}
+
+# ✅ NEW: SELF_BASE_URL（/mall/me/invoices の checkout に必須）
+# - .env に無ければ Cloud Run の service URL から自動解決（既に service が存在する前提）
+if (-not $envMap.ContainsKey("SELF_BASE_URL") -or [string]::IsNullOrWhiteSpace($envMap["SELF_BASE_URL"])) {
+  try {
+    $selfUrl = (gcloud run services describe $ServiceName `
+      --region $Region `
+      --project $ProjectId `
+      --format "value(status.url)" 2>$null).Trim()
+
+    if ($selfUrl) {
+      $envMap["SELF_BASE_URL"] = $selfUrl.TrimEnd("/")
+      Write-Ok "SELF_BASE_URL resolved from Cloud Run: $($envMap["SELF_BASE_URL"])"
+    } else {
+      Write-Warn "SELF_BASE_URL could not be resolved (service url empty). Please set it in .env."
+    }
+  } catch {
+    Write-Warn "Failed to resolve SELF_BASE_URL from Cloud Run. Please set it in .env."
   }
 }
 

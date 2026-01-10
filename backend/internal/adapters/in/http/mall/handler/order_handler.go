@@ -16,7 +16,6 @@ import (
 )
 
 // OrderHandler handles /mall/me/orders (GET/POST) and /mall/me/orders/{id} (GET).
-// ✅ legacy /mall/orders is removed (returns 404).
 type OrderHandler struct {
 	uc *usecase.OrderUsecase
 }

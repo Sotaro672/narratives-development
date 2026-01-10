@@ -21,6 +21,7 @@ import (
 	mallfs "narratives/internal/adapters/out/firestore/mall"
 	gcso "narratives/internal/adapters/out/gcs"
 	gcscommon "narratives/internal/adapters/out/gcs/common"
+	httpout "narratives/internal/adapters/out/http"
 
 	// ✅ Solana wallet service
 	solanainfra "narratives/internal/infra/solana"
@@ -53,6 +54,9 @@ type Container struct {
 	OrderUC           *usecase.OrderUsecase
 	InvoiceUC         *usecase.InvoiceUsecase
 
+	// ✅ A: invoice起票直後に webhook を叩く（自己呼び出し）オーケストレーション
+	CheckoutUC *usecase.CheckoutUsecase
+
 	// ✅ Inventory (buyer-facing, read-only)
 	InventoryUC *usecase.InventoryUsecase
 
@@ -61,9 +65,6 @@ type Container struct {
 
 	// ✅ Token Icon public URL resolver（objectPath -> public URL）
 	TokenIconURLResolver mallhandler.ImageURLResolver
-
-	// ✅ 互換: 旧命名
-	TokenImageURLResolver mallhandler.ImageURLResolver
 
 	// Optional resolver (for query enrich)
 	NameResolver *appresolver.NameResolver
@@ -174,6 +175,24 @@ func NewContainer(ctx context.Context, infra *shared.Infra) (*Container, error) 
 	avatarWalletSvc := solanainfra.NewAvatarWalletService(projectID)
 
 	// --------------------------------------------------------
+	// ✅ A: Self webhook trigger client (outbound)
+	// --------------------------------------------------------
+	// Cloud Run / local の自分自身の base URL を指定する
+	// 例:
+	//   SELF_BASE_URL=https://xxxxx.asia-northeast1.run.app
+	//   SELF_BASE_URL=http://localhost:8080
+	//
+	// NOTE:
+	// - 未設定でも Mall 全体は起動させる（CheckoutUC だけ無効化）
+	// - /mall/me/invoices の POST は cont.CheckoutUC が nil の場合 500/503 になる想定（handler 側で制御）
+	selfBaseURL := strings.TrimSpace(os.Getenv("SELF_BASE_URL"))
+	selfBaseURL = strings.TrimRight(selfBaseURL, "/")
+	selfBaseURLConfigured := selfBaseURL != ""
+	if !selfBaseURLConfigured {
+		log.Printf("[di.mall] WARN: SELF_BASE_URL is empty; CheckoutUC (A flow) will be disabled")
+	}
+
+	// --------------------------------------------------------
 	// Usecases
 	// --------------------------------------------------------
 
@@ -202,9 +221,20 @@ func NewContainer(ctx context.Context, infra *shared.Infra) (*Container, error) 
 	c.WalletUC = usecase.NewWalletUsecase(walletRepo)
 
 	c.CartUC = usecase.NewCartUsecase(cartRepo)
-	c.PaymentUC = usecase.NewPaymentUsecase(paymentRepo)
+
+	// ✅ payment 起票後に invoice.paid=true を立てるため invoiceRepo を注入
+	c.PaymentUC = usecase.NewPaymentUsecase(paymentRepo).WithInvoiceRepoForPayment(invoiceRepo)
+
 	c.InvoiceUC = usecase.NewInvoiceUsecase(invoiceRepo)
 	c.OrderUC = usecase.NewOrderUsecase(orderRepo).WithInvoiceUsecase(c.InvoiceUC)
+
+	// ✅ A: invoice起票直後に webhook を叩く（自己呼び出し）オーケストレーション
+	if selfBaseURLConfigured {
+		stripeTrigger := httpout.NewStripeWebhookClient(selfBaseURL)
+		c.CheckoutUC = usecase.NewCheckoutUsecase(c.InvoiceUC, stripeTrigger)
+	} else {
+		c.CheckoutUC = nil
+	}
 
 	c.InventoryUC = usecase.NewInventoryUsecase(inventoryRepo)
 
@@ -214,7 +244,6 @@ func NewContainer(ctx context.Context, infra *shared.Infra) (*Container, error) 
 	{
 		b := strings.TrimSpace(os.Getenv("TOKEN_ICON_BUCKET"))
 		c.TokenIconURLResolver = tokenIconURLResolver{bucket: b}
-		c.TokenImageURLResolver = c.TokenIconURLResolver // 互換
 	}
 
 	// --------------------------------------------------------
@@ -271,7 +300,7 @@ func NewContainer(ctx context.Context, infra *shared.Infra) (*Container, error) 
 	}
 
 	log.Printf(
-		"[di.mall] container built (firestore=%t gcs=%t firebaseAuth=%t avatarUC=%t avatarWalletSvc=%t cartUC=%t cartRepo=%t meAvatarRepo=%t inventoryUC=%t tokenBlueprintRepo=%t tokenIconResolver=%t)",
+		"[di.mall] container built (firestore=%t gcs=%t firebaseAuth=%t avatarUC=%t avatarWalletSvc=%t cartUC=%t cartRepo=%t paymentUC=%t invoiceUC=%t checkoutUC=%t meAvatarRepo=%t inventoryUC=%t tokenBlueprintRepo=%t tokenIconResolver=%t selfBaseURL=%t)",
 		c.Infra.Firestore != nil,
 		c.Infra.GCS != nil,
 		c.Infra.FirebaseAuth != nil,
@@ -279,10 +308,14 @@ func NewContainer(ctx context.Context, infra *shared.Infra) (*Container, error) 
 		avatarWalletSvc != nil,
 		c.CartUC != nil,
 		c.CartRepo != nil,
+		c.PaymentUC != nil,
+		c.InvoiceUC != nil,
+		c.CheckoutUC != nil,
 		c.MeAvatarRepo != nil,
 		c.InventoryUC != nil,
 		c.TokenBlueprintRepo != nil,
 		c.TokenIconURLResolver != nil,
+		selfBaseURLConfigured,
 	)
 
 	return c, nil

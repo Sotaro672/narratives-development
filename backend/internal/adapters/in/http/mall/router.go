@@ -39,6 +39,9 @@ type Deps struct {
 	Payment http.Handler
 	Preview http.Handler
 	Order   http.Handler
+
+	// ✅ invoices (buyer-facing)
+	Invoice http.Handler
 }
 
 // handleSafe registers pattern with h.
@@ -176,6 +179,10 @@ func Register(mux *http.ServeMux, deps Deps) {
 	handleSafe(mux, "/mall/me/payment/", deps.Payment, "Payment(me)")
 	handleSafe(mux, "/mall/me/payments", deps.Payment, "Payment(me)")
 	handleSafe(mux, "/mall/me/payments/", deps.Payment, "Payment(me)")
+
+	// invoices
+	handleSafe(mux, "/mall/me/invoices", deps.Invoice, "Invoice(me)")
+	handleSafe(mux, "/mall/me/invoices/", deps.Invoice, "Invoice(me)")
 
 	// orders
 	handleSafe(mux, "/mall/me/orders", deps.Order, "Order(me)")

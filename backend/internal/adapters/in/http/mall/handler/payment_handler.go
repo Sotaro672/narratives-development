@@ -9,57 +9,37 @@ import (
 	"reflect"
 	"strings"
 
-	// ✅ buyer auth context (uid)
 	"narratives/internal/adapters/in/http/middleware"
-
-	// keep for sentinel check if available
 	mallquery "narratives/internal/application/query/mall"
-
 	usecase "narratives/internal/application/usecase"
 )
 
-// PaymentHandler handles ONLY:
-// - GET /mall/me/payment  ✅ (uid -> avatarId + shipping/billing + etc via order query)
-//
-// IMPORTANT:
-// - /mall/payment は存在しない（受けない）
-// - /payments/{id} もここでは受けない
 type PaymentHandler struct {
-	uc *usecase.PaymentUsecase // 互換のため残す（現状は未使用でもOK）
-	// ✅ accept any (mall) and call ResolveByUID via reflection
+	uc     *usecase.PaymentUsecase
 	orderQ any
 }
 
-// NewPaymentHandler initializes handler.
-// NOTE: /mall/me/payment を使うなら orderQ が必須（NewPaymentHandlerWithOrderQuery 推奨）
 func NewPaymentHandler(uc *usecase.PaymentUsecase) http.Handler {
 	return &PaymentHandler{uc: uc, orderQ: nil}
 }
 
-// ✅ inject order query (for /mall/me/payment).
 func NewPaymentHandlerWithOrderQuery(uc *usecase.PaymentUsecase, orderQ any) http.Handler {
 	return &PaymentHandler{uc: uc, orderQ: orderQ}
 }
 
-// ServeHTTP routes requests.
 func (h *PaymentHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 
-	// ✅ Allow CORS preflight
 	if r.Method == http.MethodOptions {
 		w.WriteHeader(http.StatusNoContent)
 		return
 	}
 
-	// normalize path (drop trailing slash)
 	path0 := strings.TrimSuffix(r.URL.Path, "/")
 	if path0 == "" {
 		path0 = "/"
 	}
 
-	// ✅ support /mall/* mounts:
-	// - /mall/me/payment -> /me/payment
-	// - if router already stripped "/mall", it may already be "/me/payment"
 	if strings.HasPrefix(path0, "/mall/") {
 		path0 = strings.TrimPrefix(path0, "/mall")
 		if path0 == "" {
@@ -68,11 +48,9 @@ func (h *PaymentHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 
 	switch {
-	// ✅ ONLY: GET /mall/me/payment (normalized to /me/payment)
 	case r.Method == http.MethodGet && path0 == "/me/payment":
 		h.getPaymentContext(w, r)
 		return
-
 	default:
 		w.WriteHeader(http.StatusNotFound)
 		_ = json.NewEncoder(w).Encode(map[string]string{"error": "not_found"})
@@ -80,9 +58,6 @@ func (h *PaymentHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-// ------------------------------------------------------------
-// GET /mall/me/payment  (uid -> avatarId + shipping/billing)
-// ------------------------------------------------------------
 func (h *PaymentHandler) getPaymentContext(w http.ResponseWriter, r *http.Request) {
 	if h == nil || h.orderQ == nil {
 		w.WriteHeader(http.StatusNotImplemented)
@@ -97,23 +72,73 @@ func (h *PaymentHandler) getPaymentContext(w http.ResponseWriter, r *http.Reques
 		return
 	}
 
-	ctx := r.Context()
-
-	out, err := callResolveByUID(h.orderQ, ctx, uid)
+	out, err := callResolveByUID(h.orderQ, r.Context(), uid)
 	if err != nil {
-		// best-effort not found mapping
 		if errors.Is(err, mallquery.ErrNotFound) || isNotFoundLike(err) {
 			w.WriteHeader(http.StatusNotFound)
 			_ = json.NewEncoder(w).Encode(map[string]string{"error": "not_found"})
 			return
 		}
-
 		w.WriteHeader(http.StatusInternalServerError)
 		_ = json.NewEncoder(w).Encode(map[string]string{"error": "internal_error"})
 		return
 	}
 
+	// ✅ Go struct のままだと BillingAddressID 等になりがちなので、
+	//    map化して lowerCamel のキーを補う（フロント互換）
+	m, convOK := toMap(out)
+	if convOK {
+		alias(m, "BillingAddressID", "billingAddressId")
+		alias(m, "ShippingAddressID", "shippingAddressId")
+		alias(m, "InvoiceID", "invoiceId")
+		alias(m, "OrderID", "orderId")
+		alias(m, "AvatarID", "avatarId")
+		alias(m, "UserID", "userId")
+		alias(m, "CreatedAt", "createdAt")
+		alias(m, "UpdatedAt", "updatedAt")
+
+		// もし "billingAddressID" という中途半端camelが来るケースも吸収
+		alias(m, "billingAddressID", "billingAddressId")
+		alias(m, "shippingAddressID", "shippingAddressId")
+		alias(m, "invoiceID", "invoiceId")
+		alias(m, "orderID", "orderId")
+		alias(m, "avatarID", "avatarId")
+		alias(m, "userID", "userId")
+
+		_ = json.NewEncoder(w).Encode(m)
+		return
+	}
+
+	// fallback
 	_ = json.NewEncoder(w).Encode(out)
+}
+
+func toMap(v any) (map[string]any, bool) {
+	b, err := json.Marshal(v)
+	if err != nil {
+		return nil, false
+	}
+	var m map[string]any
+	if err := json.Unmarshal(b, &m); err != nil {
+		return nil, false
+	}
+	return m, true
+}
+
+func alias(m map[string]any, from, to string) {
+	if m == nil {
+		return
+	}
+	// すでに期待キーがあり、値も入っているなら何もしない
+	if v, ok := m[to]; ok {
+		if s, ok2 := v.(string); ok2 && strings.TrimSpace(s) != "" {
+			return
+		}
+	}
+	// 元キーがあればコピー
+	if v, ok := m[from]; ok {
+		m[to] = v
+	}
 }
 
 func callResolveByUID(orderQ any, ctx context.Context, uid string) (any, error) {
@@ -126,10 +151,8 @@ func callResolveByUID(orderQ any, ctx context.Context, uid string) (any, error) 
 		return nil, errors.New("order_query_not_initialized")
 	}
 
-	// ResolveByUID(ctx, uid)
 	m := rv.MethodByName("ResolveByUID")
 	if !m.IsValid() {
-		// try pointer receiver
 		if rv.Kind() != reflect.Pointer && rv.CanAddr() {
 			m = rv.Addr().MethodByName("ResolveByUID")
 		}
@@ -138,7 +161,6 @@ func callResolveByUID(orderQ any, ctx context.Context, uid string) (any, error) 
 		return nil, errors.New("order_query_missing_method_ResolveByUID")
 	}
 
-	// arg check
 	if m.Type().NumIn() != 2 || m.Type().NumOut() != 2 {
 		return nil, errors.New("order_query_invalid_signature")
 	}

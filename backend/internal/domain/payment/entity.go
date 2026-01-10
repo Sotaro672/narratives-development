@@ -1,4 +1,4 @@
-// backend\internal\domain\payment\entity.go
+// backend/internal/domain/payment/entity.go
 package payment
 
 import (
@@ -13,6 +13,13 @@ type PaymentStatus string
 
 // Optional policy: if empty, any non-empty status is accepted.
 var AllowedStatuses = map[PaymentStatus]struct{}{}
+
+// ✅ Front に「status を必須にしない」方針に合わせて、未指定時はこの値に寄せる
+const (
+	StatusPending PaymentStatus = "pending"
+)
+
+var DefaultStatus = StatusPending
 
 func IsValidStatus(s PaymentStatus) bool {
 	if s == "" {
@@ -29,9 +36,12 @@ func IsValidStatus(s PaymentStatus) bool {
 //
 // ✅ docId = invoiceId を採用するため:
 // - ID(=docId用) / UpdatedAt / DeletedAt を削除
+//
+// ✅ Front に合わせる変更点:
+// - BillingAddressID は「チェックアウト開始前は未確定」になり得るため任意（空を許可）
 type Payment struct {
 	InvoiceID        string
-	BillingAddressID string
+	BillingAddressID string // optional
 	Amount           int
 	Status           PaymentStatus
 	ErrorType        *string
@@ -40,12 +50,13 @@ type Payment struct {
 
 // Errors
 var (
-	ErrInvalidInvoiceID        = errors.New("payment: invalid invoiceId")
-	ErrInvalidBillingAddressID = errors.New("payment: invalid billingAddressId")
-	ErrInvalidAmount           = errors.New("payment: invalid amount")
-	ErrInvalidStatus           = errors.New("payment: invalid status")
-	ErrInvalidErrorType        = errors.New("payment: invalid errorType")
-	ErrInvalidCreatedAt        = errors.New("payment: invalid createdAt")
+	ErrInvalidInvoiceID = errors.New("payment: invalid invoiceId")
+	// ErrInvalidBillingAddressID は「空を許可」する方針のため通常は使わない（将来、必須化する場合に復活）
+	// ErrInvalidBillingAddressID = errors.New("payment: invalid billingAddressId")
+	ErrInvalidAmount    = errors.New("payment: invalid amount")
+	ErrInvalidStatus    = errors.New("payment: invalid status")
+	ErrInvalidErrorType = errors.New("payment: invalid errorType")
+	ErrInvalidCreatedAt = errors.New("payment: invalid createdAt")
 )
 
 // Policy
@@ -63,11 +74,20 @@ func New(
 	errorType *string,
 	createdAt time.Time,
 ) (Payment, error) {
+	invoiceID = strings.TrimSpace(invoiceID)
+	billingAddressID = strings.TrimSpace(billingAddressID)
+
+	// ✅ status はフロント必須にしない：未指定ならデフォルトを入れる
+	st := status
+	if strings.TrimSpace(string(st)) == "" {
+		st = DefaultStatus
+	}
+
 	p := Payment{
-		InvoiceID:        strings.TrimSpace(invoiceID),
-		BillingAddressID: strings.TrimSpace(billingAddressID),
+		InvoiceID:        invoiceID,
+		BillingAddressID: billingAddressID, // empty allowed
 		Amount:           amount,
-		Status:           status,
+		Status:           st,
 		ErrorType:        normalizePtr(errorType),
 		CreatedAt:        createdAt.UTC(),
 	}
@@ -112,6 +132,19 @@ func (p *Payment) SetStatus(next PaymentStatus) error {
 	return nil
 }
 
+// ✅ checkout 後に確定できるように setter を用意（空も許可）
+func (p *Payment) SetBillingAddressID(billingAddressID string) {
+	p.BillingAddressID = strings.TrimSpace(billingAddressID)
+}
+
+func (p *Payment) SetAmount(amount int) error {
+	if amount < MinAmount || (MaxAmount > 0 && amount > MaxAmount) {
+		return ErrInvalidAmount
+	}
+	p.Amount = amount
+	return nil
+}
+
 func (p *Payment) SetErrorType(errType *string) error {
 	et := normalizePtr(errType)
 	// if explicitly provided empty string, it becomes nil (cleared)
@@ -125,21 +158,26 @@ func (p Payment) validate() error {
 	if p.InvoiceID == "" {
 		return ErrInvalidInvoiceID
 	}
-	if p.BillingAddressID == "" {
-		return ErrInvalidBillingAddressID
-	}
+
+	// ✅ BillingAddressID は空を許可（フロント必須にしない）
+	// if p.BillingAddressID == "" { return ErrInvalidBillingAddressID }
+
 	if p.Amount < MinAmount || (MaxAmount > 0 && p.Amount > MaxAmount) {
 		return ErrInvalidAmount
 	}
+
 	if !IsValidStatus(p.Status) {
 		return ErrInvalidStatus
 	}
+
 	if p.ErrorType != nil && strings.TrimSpace(*p.ErrorType) == "" {
 		return ErrInvalidErrorType
 	}
+
 	if p.CreatedAt.IsZero() {
 		return ErrInvalidCreatedAt
 	}
+
 	return nil
 }
 

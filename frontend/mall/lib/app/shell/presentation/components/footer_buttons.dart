@@ -5,6 +5,8 @@ import 'package:go_router/go_router.dart';
 import 'package:mall/features/cart/infrastructure/repository_http.dart';
 import 'package:mall/features/payment/presentation/hook/use_payment.dart';
 
+import 'package:mall/features/invoice/infrastructure/invoice_repository_http.dart';
+
 /// ✅ /cart 用：購入する CTA（paymentへ遷移）
 class GoToPaymentButton extends StatelessWidget {
   const GoToPaymentButton({
@@ -64,6 +66,26 @@ class ConfirmPaymentButton extends StatefulWidget {
 class _ConfirmPaymentButtonState extends State<ConfirmPaymentButton> {
   bool _loading = false;
 
+  static String _s(dynamic v) => (v ?? '').toString().trim();
+
+  static String _pickBillingAddressId(Map<String, dynamic>? billingAddress) {
+    if (billingAddress == null || billingAddress.isEmpty) return '';
+
+    // backend / firestore の名揺れ吸収
+    final candidates = [
+      billingAddress['billingAddressId'],
+      billingAddress['id'],
+      billingAddress['billingId'],
+      billingAddress['addressId'],
+    ];
+
+    for (final c in candidates) {
+      final s = _s(c);
+      if (s.isNotEmpty) return s;
+    }
+    return '';
+  }
+
   Future<void> _confirm() async {
     final aid = widget.avatarId.trim();
     final canTap = widget.enabled && !_loading && aid.isNotEmpty;
@@ -72,21 +94,58 @@ class _ConfirmPaymentButtonState extends State<ConfirmPaymentButton> {
     setState(() => _loading = true);
 
     final uc = UsePaymentController();
+    final invRepo = InvoiceRepositoryHttp();
+
     try {
       // ✅ Footer からでも確定できるように、必要データはここで再取得して Order 起票する
       final vm = await uc.load(qpAvatarId: aid);
-      await uc.confirmAndCreateOrder(vm);
+
+      // ✅ confirmAndCreateOrder が orderId(String) を返す前提
+      final orderId = (await uc.confirmAndCreateOrder(vm)).trim();
+      if (orderId.isEmpty) {
+        throw Exception('orderId is empty');
+      }
+
+      // ✅ backend が要求する billingAddressId を Map から拾う
+      final billingAddressId = _pickBillingAddressId(vm.ctx.billingAddress);
+      if (billingAddressId.isEmpty) {
+        throw Exception('billingAddressId is missing in payment context');
+      }
+
+      // ✅ backend が要求する prices を作る（各明細の line total を送る）
+      final prices = <int>[];
+      for (final e in vm.rawCart.items.entries) {
+        final it = e.value;
+        final p = it.price ?? 0;
+        final q = it.qty;
+        if (p > 0 && q > 0) {
+          prices.add(p * q);
+        }
+      }
+      if (prices.isEmpty) {
+        throw Exception('prices is empty');
+      }
+
+      // ✅ /mall/me/invoices へ checkout 開始（billingAddressId & prices 必須）
+      await invRepo.startCheckout(
+        orderId: orderId,
+        billingAddressId: billingAddressId,
+        prices: prices,
+        tax: 0,
+        shipping: 0,
+      );
 
       if (!mounted) return;
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text('支払を確定しました（注文を作成しました）')));
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('支払を確定しました（チェックアウトを開始しました）')),
+      );
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(
         context,
       ).showSnackBar(SnackBar(content: Text('確定に失敗しました: $e')));
     } finally {
+      invRepo.dispose();
       uc.dispose();
       if (mounted) setState(() => _loading = false);
     }

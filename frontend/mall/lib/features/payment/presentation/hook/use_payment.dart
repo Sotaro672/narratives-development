@@ -1,4 +1,4 @@
-// frontend\mall\lib\features\payment\presentation\hook\use_payment.dart
+// frontend/mall/lib/features/payment/presentation/hook/use_payment.dart
 import '../../infrastructure/repository_http.dart';
 import '../../../cart/infrastructure/repository_http.dart';
 import '../../../order/infrastructure/order_repository_http.dart';
@@ -69,10 +69,8 @@ class UsePaymentController {
   /// ✅ 支払確定 = Order起票（/mall/orders）
   /// Items は snapshot: [modelId, inventoryId, qty, price]
   ///
-  /// ✅ 方針変更:
-  /// - Order はまず単独で起票する
-  /// - invoiceId / paymentId をフロント側必須にしない（サーバ側で不要な形に寄せる）
-  Future<Map<String, dynamic>> confirmAndCreateOrder(PaymentPageVM vm) async {
+  /// ✅ パターンA: orderId(String) を返す
+  Future<String> confirmAndCreateOrder(PaymentPageVM vm) async {
     if (vm.cart.isEmpty) {
       throw Exception('cart is empty');
     }
@@ -113,19 +111,6 @@ class UsePaymentController {
       final qty = it.qty;
       final price = it.price;
 
-      if (invId.isEmpty) {
-        throw Exception('inventoryId is empty in cart item key');
-      }
-      if (modelId.isEmpty) {
-        throw Exception('modelId is empty (inventoryId=$invId)');
-      }
-      if (qty <= 0) {
-        throw Exception('qty is invalid (inventoryId=$invId, qty=$qty)');
-      }
-      if (price == null) {
-        throw Exception('price is missing (inventoryId=$invId)');
-      }
-
       items.add({
         'modelId': modelId,
         'inventoryId': invId,
@@ -133,23 +118,43 @@ class UsePaymentController {
         'price': price,
       });
     }
-    if (items.isEmpty) {
-      throw Exception('items is empty');
-    }
+    if (items.isEmpty) throw Exception('items is empty');
 
     final ship = _buildShippingSnapshot(vm.ctx.shippingAddress);
     final bill = _buildBillingSnapshot(vm.ctx.billingAddress);
 
-    // ✅ invoiceId/paymentId は “現段階では使わない”
-    // （Order単独起票 → OrderId で Invoice/Payment を起票するフローに変更）
-    return _orderRepo.createOrder(
+    final res = await _orderRepo.createOrder(
       userId: userId,
-      avatarId: avatarId, // ✅ 追加
+      avatarId: avatarId,
       cartId: cartId,
       shippingSnapshot: ship,
       billingSnapshot: bill,
       items: items,
     );
+
+    // ✅ backendの返却揺れを吸収（あなたの例は "ID"）
+    final orderId = _extractOrderId(res);
+    if (orderId.isEmpty) {
+      throw Exception('orderId is missing in createOrder response: $res');
+    }
+    return orderId;
+  }
+
+  static String _extractOrderId(dynamic res) {
+    if (res == null) return '';
+    if (res is String) return res.trim();
+
+    if (res is Map) {
+      final v1 = (res['orderId'] ?? '').toString().trim();
+      if (v1.isNotEmpty) return v1;
+
+      final v2 = (res['id'] ?? '').toString().trim();
+      if (v2.isNotEmpty) return v2;
+
+      final v3 = (res['ID'] ?? '').toString().trim();
+      if (v3.isNotEmpty) return v3;
+    }
+    return '';
   }
 
   static CartDTO _emptyCart(String avatarId) {
@@ -197,7 +202,6 @@ class UsePaymentController {
       throw Exception('billing last4 is missing');
     }
 
-    // cardHolderName は domain 的には任意だが、UI 的にはある方が良いのでできれば入れる
     return <String, dynamic>{'last4': last4, 'cardHolderName': holder};
   }
 
@@ -224,7 +228,6 @@ class UsePaymentController {
       street,
       street2,
     ].where((e) => e.trim().isNotEmpty).join(' ');
-
     final line3 = (country.toUpperCase() == 'JP') ? '' : country;
 
     final lines = <String>[
@@ -304,11 +307,7 @@ class UsePaymentController {
 
   static String _s(dynamic v) => (v ?? '').toString().trim();
 
-  static String _yen(int? v) {
-    if (v == null) return '-';
-    return '¥$v';
-  }
-
+  static String _yen(int? v) => (v == null) ? '-' : '¥$v';
   static String _yen0(int v) => '¥$v';
 
   static bool _looksLikeUrl(String? s) {
@@ -364,7 +363,7 @@ class PaymentPageVM {
   final CartDTO rawCart;
   final String cartKey;
 
-  // ✅ 追加: backend へ渡す avatarId
+  // ✅ backend へ渡す avatarId
   final String avatarId;
 
   final ShippingCardVM shipping;

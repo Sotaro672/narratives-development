@@ -93,6 +93,7 @@ func Register(mux *http.ServeMux, cont *Container) {
 	prevH := notImplemented("Preview")
 	payH := notImplemented("Payment")
 	orderH := notImplemented("Order")
+	invoiceH := notImplemented("Invoice")
 	meAvatarH := notImplemented("MeAvatar") // ✅ /mall/me/avatar
 
 	// ✅ Lists (public)
@@ -173,6 +174,18 @@ func Register(mux *http.ServeMux, cont *Container) {
 		orderH = mallhandler.NewOrderHandler(cont.OrderUC)
 	}
 
+	// ✅ Invoice (authenticated)
+	// A案採用: invoice_handler.go 側で /mall/me/invoices と /mall/me/invoices/{id} を判定する前提。
+	//
+	// - POST /mall/me/invoices        : invoice起票 + (A) webhook自己呼び出し
+	// - GET  /mall/me/invoices/{id}   : invoice取得（id は orderId/invoiceId を想定）
+	//
+	// NOTE:
+	// - CheckoutUC が nil の場合、POST は handler 側で 503/500 を返す想定（GETは動く）
+	if cont.InvoiceUC != nil {
+		invoiceH = mallhandler.NewInvoiceHandler(cont.InvoiceUC, cont.CheckoutUC)
+	}
+
 	// SignIn: keep a stable no-op endpoint (client convenience)
 	// NOTE: 認証チェックは不要（ただの疎通・互換のため）
 	signInH := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -201,6 +214,9 @@ func Register(mux *http.ServeMux, cont *Container) {
 
 	payH = requireUserAuth(userAuthMW, payH, "Payment")
 	orderH = requireUserAuth(userAuthMW, orderH, "Order")
+
+	// ✅ invoices
+	invoiceH = requireUserAuth(userAuthMW, invoiceH, "Invoice")
 
 	// ----------------------------
 	// Router deps
@@ -236,6 +252,8 @@ func Register(mux *http.ServeMux, cont *Container) {
 
 		Payment: payH,
 		Order:   orderH,
+
+		Invoice: invoiceH,
 	}
 
 	mallhttp.Register(mux, deps)
