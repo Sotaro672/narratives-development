@@ -4,6 +4,7 @@ package firestore
 import (
 	"context"
 	"errors"
+	"fmt"
 	"log"
 	"sort"
 	"strings"
@@ -348,6 +349,140 @@ func (r *InventoryRepositoryFS) ListByTokenAndModelID(ctx context.Context, token
 		}
 	}
 	return out, nil
+}
+
+// ============================================================
+// Reservation operations (for payment/order finalize)
+// - stock[modelId].reservedByOrder[orderId] = qty
+// - reservedCount is normalized as SUM(reservedByOrder)
+// - idempotent: if already same qty, no-op
+// - safety: reservedCount must not exceed accumulation
+// ============================================================
+
+func (r *InventoryRepositoryFS) ReserveByOrder(
+	ctx context.Context,
+	inventoryID string,
+	modelID string,
+	orderID string,
+	qty int,
+) error {
+	start := time.Now()
+
+	if r == nil || r.Client == nil {
+		return errors.New("inventory repo is nil")
+	}
+
+	inventoryID = strings.TrimSpace(inventoryID)
+	modelID = strings.TrimSpace(modelID)
+	orderID = strings.TrimSpace(orderID)
+
+	if inventoryID == "" {
+		return invdom.ErrInvalidMintID
+	}
+	if modelID == "" {
+		return invdom.ErrInvalidModelID
+	}
+	if orderID == "" {
+		return errors.New("inventory repo: orderID is empty")
+	}
+	if qty <= 0 {
+		return errors.New("inventory repo: qty must be > 0")
+	}
+
+	doc := r.col().Doc(inventoryID)
+	now := time.Now().UTC()
+
+	log.Printf(
+		"[inventory_repo_fs] ReserveByOrder start inventoryId=%q modelId=%q orderId=%q qty=%d",
+		inventoryID, modelID, orderID, qty,
+	)
+
+	err := r.Client.RunTransaction(ctx, func(ctx context.Context, tx *firestore.Transaction) error {
+		snap, err := tx.Get(doc)
+		if err != nil {
+			if status.Code(err) == codes.NotFound {
+				return invdom.ErrNotFound
+			}
+			return err
+		}
+
+		var rec inventoryRecord
+		if err := snap.DataTo(&rec); err != nil {
+			return err
+		}
+
+		stock := rec.Stock
+		if stock == nil {
+			stock = map[string]modelStockRecord{}
+		}
+
+		ms, ok := stock[modelID]
+		if !ok {
+			// model の stock が無い（= そもそも該当モデルが在庫に存在しない）
+			return fmt.Errorf("inventory repo: model stock not found modelId=%s", modelID)
+		}
+
+		// ensure map
+		if ms.ReservedByOrder == nil {
+			ms.ReservedByOrder = map[string]int{}
+		}
+
+		// idempotent: already reserved with same qty -> no-op (still OK)
+		if existing, ok := ms.ReservedByOrder[orderID]; ok && existing == qty {
+			return nil
+		}
+
+		// set/overwrite then normalize (reservedCount recalculated)
+		ms.ReservedByOrder[orderID] = qty
+		ms = normalizeModelStockRecord(ms)
+
+		// safety: reserved must not exceed stock (accumulation is normalized as len(products))
+		if ms.ReservedCount > ms.Accumulation {
+			return fmt.Errorf(
+				"inventory repo: insufficient stock (modelId=%s accumulation=%d reservedCount=%d orderId=%s qty=%d)",
+				modelID, ms.Accumulation, ms.ReservedCount, orderID, qty,
+			)
+		}
+
+		stock[modelID] = ms
+		stock = normalizeStockRecord(stock)
+
+		// ensure modelIds contains modelID (best-effort)
+		modelIDs := normalizeModelIDs(rec.ModelIDs)
+		found := false
+		for _, x := range modelIDs {
+			if x == modelID {
+				found = true
+				break
+			}
+		}
+		if !found {
+			modelIDs = append(modelIDs, modelID)
+			modelIDs = normalizeModelIDs(modelIDs)
+		}
+
+		updates := []firestore.Update{
+			{Path: "stock", Value: stock},
+			{Path: "modelIds", Value: modelIDs},
+			{Path: "updatedAt", Value: now},
+		}
+
+		return tx.Update(doc, updates)
+	})
+	if err != nil {
+		log.Printf(
+			"[inventory_repo_fs] ReserveByOrder error inventoryId=%q modelId=%q orderId=%q qty=%d err=%v elapsed=%s",
+			inventoryID, modelID, orderID, qty, err, time.Since(start),
+		)
+		return err
+	}
+
+	log.Printf(
+		"[inventory_repo_fs] ReserveByOrder done inventoryId=%q modelId=%q orderId=%q qty=%d elapsed=%s",
+		inventoryID, modelID, orderID, qty, time.Since(start),
+	)
+
+	return nil
 }
 
 // ============================================================

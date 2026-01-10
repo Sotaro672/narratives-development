@@ -222,10 +222,12 @@ func NewContainer(ctx context.Context, infra *shared.Infra) (*Container, error) 
 	c.CartUC = usecase.NewCartUsecase(cartRepo)
 
 	// ✅ payment 起票後に invoice.paid=true を立てるため invoiceRepo を注入
+	// ✅ paid と同タイミングで cart clear / inventory reserve を行う（best-effort）
 	c.PaymentUC = usecase.NewPaymentUsecase(paymentRepo).
 		WithInvoiceRepoForPayment(invoiceRepo).
 		WithCartRepoForPayment(cartRepo).
-		WithOrderRepoForPayment(orderRepo)
+		WithOrderRepoForPayment(orderRepo).
+		WithInventoryRepoForPayment(inventoryRepo)
 
 	c.InvoiceUC = usecase.NewInvoiceUsecase(invoiceRepo)
 	c.OrderUC = usecase.NewOrderUsecase(orderRepo)

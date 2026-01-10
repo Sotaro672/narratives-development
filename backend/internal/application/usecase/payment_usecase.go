@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"log"
 	"reflect"
+	"sort"
 	"strings"
 	"time"
 
@@ -45,13 +46,23 @@ type CartRepoForPayment interface {
 	Clear(ctx context.Context, cartID string) error
 }
 
+// ✅ Inventory reserve の最小ポート（PaymentUsecase 側）
+// payment paid と同タイミングで reservedByOrder / reservedCount を更新する
+type InventoryRepoForPayment interface {
+	// ReserveByOrder sets:
+	// - stock[modelId].reservedByOrder[orderId] = qty
+	// - reservedCount = sum(reservedByOrder) (repo側で正規化)
+	ReserveByOrder(ctx context.Context, inventoryID string, modelID string, orderID string, qty int) error
+}
+
 // PaymentUsecase orchestrates payment operations.
 type PaymentUsecase struct {
-	repo        PaymentRepo
-	invoiceRepo InvoiceRepoForPayment
-	cartRepo    CartRepoForPayment
+	repo          PaymentRepo
+	invoiceRepo   InvoiceRepoForPayment
+	cartRepo      CartRepoForPayment
+	inventoryRepo InventoryRepoForPayment
 
-	// ✅ order から cartId/avatarId を拾うため（型に依存しないよう any + reflection）
+	// ✅ order から cartId/avatarId/items を拾うため（型に依存しないよう any + reflection）
 	orderRepo any
 
 	now func() time.Time
@@ -73,6 +84,12 @@ func (u *PaymentUsecase) WithInvoiceRepoForPayment(repo InvoiceRepoForPayment) *
 // ✅ optional injection: paid 時に cart を空にしたい場合に注入する
 func (u *PaymentUsecase) WithCartRepoForPayment(repo CartRepoForPayment) *PaymentUsecase {
 	u.cartRepo = repo
+	return u
+}
+
+// ✅ optional injection: paid 時に inventory の reservedByOrder / reservedCount を更新したい場合に注入する
+func (u *PaymentUsecase) WithInventoryRepoForPayment(repo InventoryRepoForPayment) *PaymentUsecase {
+	u.inventoryRepo = repo
 	return u
 }
 
@@ -126,6 +143,19 @@ func (u *PaymentUsecase) Create(ctx context.Context, in paymentdom.CreatePayment
 		return p, nil
 	}
 
+	orderID := strings.TrimSpace(p.InvoiceID) // invoiceId == orderId 前提
+
+	// ✅ order を 1 回だけ best-effort で取得（inventory reserve / cartId 解決に使う）
+	var orderAny any
+	if u.orderRepo != nil && orderID != "" && (u.inventoryRepo != nil || u.cartRepo != nil) {
+		o, getErr := callOrderGetByIDBestEffort(u.orderRepo, ctx, orderID)
+		if getErr != nil {
+			log.Printf("[payment_uc] WARN: order fetch failed orderId=%s err=%v", maskID(orderID), getErr)
+		} else {
+			orderAny = o
+		}
+	}
+
 	// ✅ 1) invoice.paid=true を立てる（best-effort）
 	if u.invoiceRepo != nil {
 		if mkErr := u.markInvoicePaid(ctx, p.InvoiceID); mkErr != nil {
@@ -133,9 +163,38 @@ func (u *PaymentUsecase) Create(ctx context.Context, in paymentdom.CreatePayment
 		}
 	}
 
-	// ✅ 2) cart を空にする（best-effort）
+	// ✅ 2) inventory reserve（best-effort）
+	// cart を空にするのと同じタイミングで、
+	// stock[modelId].reservedByOrder[orderId]=qty を入れ、reservedCount を加算（repoで正規化）
+	if u.inventoryRepo != nil && orderAny != nil && orderID != "" {
+		items := extractOrderItemsBestEffort(orderAny)
+		if len(items) == 0 {
+			log.Printf("[payment_uc] WARN: no order items (skip reserve) orderId=%s", maskID(orderID))
+		} else {
+			agg := aggregateReserveItems(items)
+			for _, it := range agg {
+				invID := normalizeInventoryDocIDBestEffort(it.InventoryID)
+				if invID == "" || it.ModelID == "" || it.Qty <= 0 {
+					continue
+				}
+				if rErr := u.inventoryRepo.ReserveByOrder(ctx, invID, it.ModelID, orderID, it.Qty); rErr != nil {
+					log.Printf(
+						"[payment_uc] WARN: inventory reserve failed inventoryId=%s modelId=%s orderId=%s qty=%d err=%v",
+						maskID(invID), maskID(it.ModelID), maskID(orderID), it.Qty, rErr,
+					)
+				} else {
+					log.Printf(
+						"[payment_uc] inventory reserved inventoryId=%s modelId=%s orderId=%s qty=%d",
+						maskID(invID), maskID(it.ModelID), maskID(orderID), it.Qty,
+					)
+				}
+			}
+		}
+	}
+
+	// ✅ 3) cart を空にする（best-effort）
 	if u.cartRepo != nil {
-		cartID := u.resolveCartIDBestEffort(ctx, p, p.InvoiceID)
+		cartID := u.resolveCartIDBestEffort(ctx, p, p.InvoiceID, orderAny)
 		if strings.TrimSpace(cartID) == "" {
 			log.Printf("[payment_uc] WARN: cartId empty (skip clear) invoiceId=%s", maskID(p.InvoiceID))
 		} else {
@@ -207,9 +266,10 @@ func (u *PaymentUsecase) markInvoicePaid(ctx context.Context, invoiceID string) 
 
 // resolveCartIDBestEffort priority:
 // 1) payment.CartID / payment.AvatarID が取れればそれ
-// 2) orderRepo から order を取得し、order.CartID -> order.AvatarID の順で使う
-// 3) それも無ければ ""（skip）
-func (u *PaymentUsecase) resolveCartIDBestEffort(ctx context.Context, payment *paymentdom.Payment, invoiceID string) string {
+// 2) orderAny があれば order.CartID -> order.AvatarID の順で使う
+// 3) orderRepo から order を取得し、order.CartID -> order.AvatarID の順で使う
+// 4) それも無ければ ""（skip）
+func (u *PaymentUsecase) resolveCartIDBestEffort(ctx context.Context, payment *paymentdom.Payment, invoiceID string, orderAny any) string {
 	// 1) payment から拾う（将来 Payment に cartId を入れた場合に効く）
 	if payment != nil {
 		if s := getStringFieldBestEffort(payment, "CartID", "CartId", "cartId"); s != "" {
@@ -221,7 +281,17 @@ func (u *PaymentUsecase) resolveCartIDBestEffort(ctx context.Context, payment *p
 		}
 	}
 
-	// 2) order から拾う（今回の主解）
+	// 2) 既に取れている order を使う
+	if orderAny != nil {
+		if s := getStringFieldBestEffort(orderAny, "CartID", "CartId", "cartId"); s != "" {
+			return s
+		}
+		if s := getStringFieldBestEffort(orderAny, "AvatarID", "AvatarId", "avatarId"); s != "" {
+			return s
+		}
+	}
+
+	// 3) orderRepo から拾う
 	if u.orderRepo == nil {
 		return ""
 	}
@@ -291,6 +361,126 @@ func setInvoicePaidBestEffort(inv any, now time.Time) bool {
 	}
 
 	return changed
+}
+
+// ------------------------------------------------------------
+// inventory reserve helpers
+// ------------------------------------------------------------
+
+type reserveItem struct {
+	InventoryID string
+	ModelID     string
+	Qty         int
+}
+
+func extractOrderItemsBestEffort(orderAny any) []reserveItem {
+	if orderAny == nil {
+		return nil
+	}
+
+	// order.Items (slice/array) を探す
+	sv, ok := getSliceFieldBestEffort(orderAny, "Items", "items")
+	if !ok {
+		return nil
+	}
+
+	out := make([]reserveItem, 0, sv.Len())
+	for i := 0; i < sv.Len(); i++ {
+		el := sv.Index(i)
+		if !el.IsValid() {
+			continue
+		}
+		if el.Kind() == reflect.Pointer {
+			if el.IsNil() {
+				continue
+			}
+			el = el.Elem()
+		}
+
+		// struct / map の両対応
+		var invID, modelID string
+		var qty int
+
+		switch el.Kind() {
+		case reflect.Struct:
+			invID = getStringFieldFromValueBestEffort(el, "InventoryID", "InventoryId", "inventoryId")
+			modelID = getStringFieldFromValueBestEffort(el, "ModelID", "ModelId", "modelId")
+			qty = getIntFieldFromValueBestEffort(el, "Qty", "qty", "Quantity", "quantity")
+		case reflect.Map:
+			// map[string]any
+			invID = getStringMapValueBestEffort(el, "inventoryId", "inventoryID", "InventoryID", "InventoryId")
+			modelID = getStringMapValueBestEffort(el, "modelId", "modelID", "ModelID", "ModelId")
+			qty = getIntMapValueBestEffort(el, "qty", "Qty", "quantity", "Quantity")
+		default:
+			continue
+		}
+
+		invID = strings.TrimSpace(invID)
+		modelID = strings.TrimSpace(modelID)
+		if qty <= 0 || invID == "" || modelID == "" {
+			continue
+		}
+
+		out = append(out, reserveItem{InventoryID: invID, ModelID: modelID, Qty: qty})
+	}
+
+	return out
+}
+
+func aggregateReserveItems(items []reserveItem) []reserveItem {
+	if len(items) == 0 {
+		return nil
+	}
+
+	type key struct {
+		Inv string
+		Mdl string
+	}
+	m := map[key]int{}
+	for _, it := range items {
+		inv := strings.TrimSpace(it.InventoryID)
+		mdl := strings.TrimSpace(it.ModelID)
+		if inv == "" || mdl == "" || it.Qty <= 0 {
+			continue
+		}
+		m[key{Inv: inv, Mdl: mdl}] += it.Qty
+	}
+
+	out := make([]reserveItem, 0, len(m))
+	for k, q := range m {
+		if q <= 0 {
+			continue
+		}
+		out = append(out, reserveItem{InventoryID: k.Inv, ModelID: k.Mdl, Qty: q})
+	}
+
+	// stable order for logs (optional)
+	sort.Slice(out, func(i, j int) bool {
+		if out[i].InventoryID == out[j].InventoryID {
+			return out[i].ModelID < out[j].ModelID
+		}
+		return out[i].InventoryID < out[j].InventoryID
+	})
+
+	return out
+}
+
+// cart/order/items で使っている inventoryId が
+//
+//	product__token__list__model
+//
+// のように肥大化しているケースがあるため、docId(product__token) に正規化する。
+func normalizeInventoryDocIDBestEffort(inventoryID string) string {
+	inventoryID = strings.TrimSpace(inventoryID)
+	if inventoryID == "" {
+		return ""
+	}
+
+	parts := strings.Split(inventoryID, "__")
+	if len(parts) >= 2 {
+		return strings.TrimSpace(parts[0]) + "__" + strings.TrimSpace(parts[1])
+	}
+	return inventoryID
 }
 
 // ------------------------------------------------------------
@@ -404,6 +594,186 @@ func getStringFieldBestEffort(v any, fieldNames ...string) string {
 	}
 
 	return ""
+}
+
+func getSliceFieldBestEffort(v any, fieldNames ...string) (reflect.Value, bool) {
+	if v == nil {
+		return reflect.Value{}, false
+	}
+	rv := reflect.ValueOf(v)
+	if !rv.IsValid() {
+		return reflect.Value{}, false
+	}
+	if rv.Kind() == reflect.Pointer {
+		if rv.IsNil() {
+			return reflect.Value{}, false
+		}
+		rv = rv.Elem()
+	}
+	if !rv.IsValid() || rv.Kind() != reflect.Struct {
+		return reflect.Value{}, false
+	}
+
+	for _, name := range fieldNames {
+		f := rv.FieldByName(name)
+		if !f.IsValid() {
+			continue
+		}
+		if f.Kind() == reflect.Slice || f.Kind() == reflect.Array {
+			return f, true
+		}
+	}
+	return reflect.Value{}, false
+}
+
+func getStringFieldFromValueBestEffort(rv reflect.Value, fieldNames ...string) string {
+	if !rv.IsValid() || rv.Kind() != reflect.Struct {
+		return ""
+	}
+	for _, name := range fieldNames {
+		f := rv.FieldByName(name)
+		if !f.IsValid() {
+			continue
+		}
+		if f.Kind() == reflect.String {
+			return strings.TrimSpace(f.String())
+		}
+		if f.Kind() == reflect.Pointer && f.Type().Elem().Kind() == reflect.String && !f.IsNil() {
+			return strings.TrimSpace(f.Elem().String())
+		}
+		if f.CanInterface() {
+			s := strings.TrimSpace(fmt.Sprint(f.Interface()))
+			if s != "" && s != "<nil>" {
+				return s
+			}
+		}
+	}
+	return ""
+}
+
+func getIntFieldFromValueBestEffort(rv reflect.Value, fieldNames ...string) int {
+	if !rv.IsValid() || rv.Kind() != reflect.Struct {
+		return 0
+	}
+	for _, name := range fieldNames {
+		f := rv.FieldByName(name)
+		if !f.IsValid() {
+			continue
+		}
+		switch f.Kind() {
+		case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
+			return int(f.Int())
+		case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64:
+			return int(f.Uint())
+		case reflect.Float32, reflect.Float64:
+			return int(f.Float())
+		}
+		if f.CanInterface() {
+			// very last resort
+			if n, ok := parseIntFromAny(f.Interface()); ok {
+				return n
+			}
+		}
+	}
+	return 0
+}
+
+func getStringMapValueBestEffort(mv reflect.Value, keys ...string) string {
+	if !mv.IsValid() || mv.Kind() != reflect.Map {
+		return ""
+	}
+	for _, k := range keys {
+		kv := reflect.ValueOf(k)
+		v := mv.MapIndex(kv)
+		if !v.IsValid() {
+			continue
+		}
+		if v.Kind() == reflect.Interface {
+			if v.IsNil() {
+				continue
+			}
+			v = v.Elem()
+		}
+		if v.Kind() == reflect.String {
+			s := strings.TrimSpace(v.String())
+			if s != "" && s != "<nil>" {
+				return s
+			}
+			continue
+		}
+		if v.CanInterface() {
+			s := strings.TrimSpace(fmt.Sprint(v.Interface()))
+			if s != "" && s != "<nil>" {
+				return s
+			}
+		}
+	}
+	return ""
+}
+
+func getIntMapValueBestEffort(mv reflect.Value, keys ...string) int {
+	if !mv.IsValid() || mv.Kind() != reflect.Map {
+		return 0
+	}
+	for _, k := range keys {
+		kv := reflect.ValueOf(k)
+		v := mv.MapIndex(kv)
+		if !v.IsValid() {
+			continue
+		}
+		if v.Kind() == reflect.Interface {
+			if v.IsNil() {
+				continue
+			}
+			v = v.Elem()
+		}
+		if v.CanInterface() {
+			if n, ok := parseIntFromAny(v.Interface()); ok {
+				return n
+			}
+		}
+	}
+	return 0
+}
+
+func parseIntFromAny(v any) (int, bool) {
+	switch x := v.(type) {
+	case int:
+		return x, true
+	case int32:
+		return int(x), true
+	case int64:
+		return int(x), true
+	case uint:
+		return int(x), true
+	case uint32:
+		return int(x), true
+	case uint64:
+		return int(x), true
+	case float32:
+		return int(x), true
+	case float64:
+		return int(x), true
+	case string:
+		s := strings.TrimSpace(x)
+		if s == "" {
+			return 0, false
+		}
+		// allow "1.0" etc
+		var n int
+		_, err := fmt.Sscanf(s, "%d", &n)
+		if err == nil {
+			return n, true
+		}
+		var f float64
+		_, err2 := fmt.Sscanf(s, "%f", &f)
+		if err2 == nil {
+			return int(f), true
+		}
+		return 0, false
+	default:
+		return 0, false
+	}
 }
 
 func maskID(id string) string {
