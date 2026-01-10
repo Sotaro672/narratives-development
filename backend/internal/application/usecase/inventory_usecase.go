@@ -21,11 +21,10 @@ func NewInventoryUsecase(repo invdom.RepositoryPort) *InventoryUsecase {
 }
 
 // ============================================================
-// Upsert entry (NEW / no legacy)
+// Upsert entry from Mint by Model
 // ============================================================
 //
 // - mint から在庫へ反映する唯一の入口
-// - docId は「productBlueprintId__tokenBlueprintId」に統一（旧式互換なし）
 // - 在庫の蓄積は Stock（modelId -> {Products: ...}）で表現する前提
 func (uc *InventoryUsecase) UpsertFromMintByModel(
 	ctx context.Context,

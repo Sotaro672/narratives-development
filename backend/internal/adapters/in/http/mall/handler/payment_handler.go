@@ -203,6 +203,25 @@ func (h *PaymentHandler) postPayments(w http.ResponseWriter, r *http.Request) {
 	paySetStringFieldBestEffort(&in, req.BillingAddressID, "BillingAddressID", "BillingAddressId", "billingAddressId")
 	paySetIntFieldBestEffort(&in, req.Amount, "Amount", "Total", "TotalAmount")
 
+	// ✅ cartId (= avatarId) を best-effort で注入（paid 化で cart を空にするため）
+	// - carts の docId は avatarId 前提なので、avatarId をそのまま cartId として扱う。
+	{
+		aid := ""
+		// nilness が「h はここで non-nil」と判断するため、h != nil の条件は不要
+		if h.orderQ != nil {
+			ctxAny, qerr := payCallResolveByUID(h.orderQ, r.Context(), uid)
+			if qerr == nil {
+				if qm, ok := payToMap(ctxAny); ok {
+					aid = strings.TrimSpace(payPickString(qm, "avatarId", "AvatarID", "AvatarId"))
+				}
+			}
+		}
+		if aid != "" {
+			paySetStringFieldBestEffort(&in, aid, "CartID", "CartId", "cartId")
+			paySetStringFieldBestEffort(&in, aid, "AvatarID", "AvatarId", "avatarId")
+		}
+	}
+
 	// dev default: if caller did not provide status, set "paid" best-effort
 	// (PaymentUsecase marks invoice paid when created payment has paid/succeeded status)
 	if req.Status == "" {
@@ -492,18 +511,6 @@ func paySetStatusFieldBestEffort(ptr any, status string, fieldNames ...string) {
 
 		// alias type (e.g. type PaymentStatus string)
 		if f.Kind() == reflect.String && f.Type().ConvertibleTo(reflect.TypeOf("")) {
-			f.SetString(status)
-			return
-		}
-
-		// named string type (common for enums)
-		if f.Kind() == reflect.String {
-			f.SetString(status)
-			return
-		}
-
-		// fallback: if it's a defined type whose underlying kind is string
-		if f.Kind() == reflect.String {
 			f.SetString(status)
 			return
 		}

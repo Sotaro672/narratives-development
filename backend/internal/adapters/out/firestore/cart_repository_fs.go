@@ -1,4 +1,4 @@
-// backend\internal\adapters\out\firestore\cart_repository_fs.go
+// backend/internal/adapters/out/firestore/cart_repository_fs.go
 package firestore
 
 import (
@@ -121,6 +121,48 @@ func (r *CartRepositoryFS) DeleteByAvatarID(ctx context.Context, avatarID string
 	}
 
 	_, err := r.col().Doc(aid).Delete(ctx)
+	return err
+}
+
+// Clear empties cart items by docId (= avatarId / cartId).
+// - items を空にして updatedAt を更新する
+// - doc が存在しない場合は、空カートを作って成功扱いにする（冪等）
+func (r *CartRepositoryFS) Clear(ctx context.Context, cartID string) error {
+	if r == nil || r.Client == nil {
+		return errors.New("cart_repository_fs: firestore client is nil")
+	}
+
+	id := strings.TrimSpace(cartID)
+	if id == "" {
+		return errors.New("cart_repository_fs: cartID is empty")
+	}
+
+	now := time.Now().UTC()
+
+	// try update first
+	_, err := r.col().Doc(id).Update(ctx, []firestore.Update{
+		{Path: "items", Value: map[string]any{}},
+		{Path: "updatedAt", Value: now},
+	})
+	if err == nil {
+		return nil
+	}
+
+	// If missing, create a new empty cart doc (idempotent behavior).
+	if status.Code(err) == codes.NotFound {
+		// expiresAt は TTL 運用のために一応入れておく（未使用なら TTL 設定側で無視されるだけ）
+		expiresAt := now.Add(30 * 24 * time.Hour)
+
+		doc := cartDoc{
+			Items:     map[string]cartItemDoc{},
+			CreatedAt: now,
+			UpdatedAt: now,
+			ExpiresAt: expiresAt,
+		}
+		_, setErr := r.col().Doc(id).Set(ctx, doc)
+		return setErr
+	}
+
 	return err
 }
 
