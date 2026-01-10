@@ -22,6 +22,9 @@ import (
 	gcso "narratives/internal/adapters/out/gcs"
 	gcscommon "narratives/internal/adapters/out/gcs/common"
 
+	// ✅ Solana wallet service
+	solanainfra "narratives/internal/infra/solana"
+
 	// domains
 	ldom "narratives/internal/domain/list"
 
@@ -39,6 +42,7 @@ type Container struct {
 	Infra *shared.Infra
 
 	// Usecases (mall-facing)
+	AvatarUC          *usecase.AvatarUsecase // ✅ /mall/avatars 用
 	ListUC            *usecase.ListUsecase
 	ShippingAddressUC *usecase.ShippingAddressUsecase
 	BillingAddressUC  *usecase.BillingAddressUsecase
@@ -56,10 +60,9 @@ type Container struct {
 	TokenBlueprintRepo any
 
 	// ✅ Token Icon public URL resolver（objectPath -> public URL）
-	// 命名は TokenIcon に寄せる
 	TokenIconURLResolver mallhandler.ImageURLResolver
 
-	// ✅ 互換: 旧命名を参照している箇所があっても落ちないように残す
+	// ✅ 互換: 旧命名
 	TokenImageURLResolver mallhandler.ImageURLResolver
 
 	// Optional resolver (for query enrich)
@@ -71,11 +74,14 @@ type Container struct {
 	PreviewQ *mallquery.PreviewQuery
 	OrderQ   any
 
-	// Repos sometimes needed by queries/joins
+	// Repos sometimes needed by handlers/queries/joins
 	ListRepo ldom.Repository
 
 	// ✅ /mall/me/avatar 用: uid -> avatarId を解決するRepo
 	MeAvatarRepo *mallfs.MeAvatarRepo
+
+	// ✅ 追加: Avatar作成時に「空カートを作る」等で handler が repo を直接必要とするケースに備える
+	CartRepo any
 }
 
 func NewContainer(ctx context.Context, infra *shared.Infra) (*Container, error) {
@@ -89,6 +95,11 @@ func NewContainer(ctx context.Context, infra *shared.Infra) (*Container, error) 
 	}
 	if infra == nil {
 		return nil, errors.New("di.mall: shared infra is nil")
+	}
+
+	// ✅ IMPORTANT: console と同様に Config は必須（projectID 解決に必要）
+	if infra.Config == nil {
+		return nil, errors.New("di.mall: shared infra config is nil")
 	}
 
 	// required clients
@@ -106,6 +117,9 @@ func NewContainer(ctx context.Context, infra *shared.Infra) (*Container, error) 
 	// --------------------------------------------------------
 	// Firestore repositories
 	// --------------------------------------------------------
+	avatarRepo := outfs.NewAvatarRepositoryFS(fsClient)
+	avatarStateRepo := outfs.NewAvatarStateRepositoryFS(fsClient)
+
 	shippingAddressRepo := outfs.NewShippingAddressRepositoryFS(fsClient)
 	billingAddressRepo := outfs.NewBillingAddressRepositoryFS(fsClient)
 	userRepo := outfs.NewUserRepositoryFS(fsClient)
@@ -116,34 +130,64 @@ func NewContainer(ctx context.Context, infra *shared.Infra) (*Container, error) 
 	orderRepo := outfs.NewOrderRepositoryFS(fsClient)
 	invoiceRepo := outfs.NewInvoiceRepositoryFS(fsClient)
 
-	// ✅ Inventory (usecase)
+	// handler 側に注入できるように保持
+	c.CartRepo = cartRepo
+
+	// Inventory
 	inventoryRepo := outfs.NewInventoryRepositoryFS(fsClient)
 
-	// ✅ TokenBlueprint repo（handler に渡す & NameResolver にも使う）
+	// TokenBlueprint
 	tokenBlueprintRepo := outfs.NewTokenBlueprintRepositoryFS(fsClient)
 	c.TokenBlueprintRepo = tokenBlueprintRepo
 
-	// ✅ /mall/me/avatar 用 Repo（uid -> avatarId）
+	// /mall/me/avatar 用 Repo（uid -> avatarId）
 	c.MeAvatarRepo = mallfs.NewMeAvatarRepo(fsClient)
 
 	// List repo
 	listRepoFS := outfs.NewListRepositoryFS(fsClient)
 	c.ListRepo = listRepoFS
 
-	// List repo for usecase ports (console側と同じ変換を使う)
+	// List repo for usecase ports
 	listRepoForUC := outfs.NewListRepositoryForUsecase(listRepoFS)
 
 	// --------------------------------------------------------
-	// GCS repositories (ListUsecase needs image ports)
+	// GCS repositories
 	// --------------------------------------------------------
 	listImageRepo := gcso.NewListImageRepositoryGCS(gcsClient, infra.ListImageBucket)
 
-	// ✅ ListPatcher は di/mall/adapter.go から分離済み
+	// AvatarIcon (GCS)
+	avatarIconRepo := gcso.NewAvatarIconRepositoryGCS(gcsClient, "")
+
+	// ListPatcher
 	listPatcher := mallfs.NewListPatcherRepo(fsClient)
+
+	// --------------------------------------------------------
+	// ✅ Solana wallet service (AvatarWalletService)
+	// --------------------------------------------------------
+	projectID := strings.TrimSpace(infra.Config.FirestoreProjectID)
+	if projectID == "" {
+		projectID = strings.TrimSpace(os.Getenv("FIRESTORE_PROJECT_ID"))
+	}
+	if projectID == "" {
+		projectID = strings.TrimSpace(os.Getenv("GOOGLE_CLOUD_PROJECT"))
+	}
+	avatarWalletSvc := solanainfra.NewAvatarWalletService(projectID)
 
 	// --------------------------------------------------------
 	// Usecases
 	// --------------------------------------------------------
+
+	// ✅ AvatarUsecase: cartRepo / walletRepo / walletSvc を必ず注入（500解消）
+	c.AvatarUC = usecase.NewAvatarUsecase(
+		avatarRepo,
+		avatarStateRepo,
+		avatarIconRepo, // AvatarIconRepo
+		avatarIconRepo, // AvatarIconObjectStoragePort
+	).
+		WithCartRepo(cartRepo).
+		WithWalletRepo(walletRepo).
+		WithWalletService(avatarWalletSvc)
+
 	c.ListUC = usecase.NewListUsecase(
 		listRepoForUC,
 		listPatcher,
@@ -162,7 +206,6 @@ func NewContainer(ctx context.Context, infra *shared.Infra) (*Container, error) 
 	c.InvoiceUC = usecase.NewInvoiceUsecase(invoiceRepo)
 	c.OrderUC = usecase.NewOrderUsecase(orderRepo).WithInvoiceUsecase(c.InvoiceUC)
 
-	// ✅ InventoryUsecase（read-only handler が GetByID を呼ぶ想定）
 	c.InventoryUC = usecase.NewInventoryUsecase(inventoryRepo)
 
 	// --------------------------------------------------------
@@ -170,8 +213,8 @@ func NewContainer(ctx context.Context, infra *shared.Infra) (*Container, error) 
 	// --------------------------------------------------------
 	{
 		b := strings.TrimSpace(os.Getenv("TOKEN_ICON_BUCKET"))
-		// 空なら tokenIcon_repository_gcs.go のデフォルトに寄せる
 		c.TokenIconURLResolver = tokenIconURLResolver{bucket: b}
+		c.TokenImageURLResolver = c.TokenIconURLResolver // 互換
 	}
 
 	// --------------------------------------------------------
@@ -201,7 +244,6 @@ func NewContainer(ctx context.Context, infra *shared.Infra) (*Container, error) 
 	// Queries (mall-facing)
 	// --------------------------------------------------------
 	{
-		// CatalogQuery の InventoryRepository は out/firestore/mall の adapter を使う
 		invRepo := mallfs.NewInventoryRepoForMallQuery(fsClient)
 
 		pbRepo := outfs.NewProductBlueprintRepositoryFS(fsClient)
@@ -228,10 +270,15 @@ func NewContainer(ctx context.Context, infra *shared.Infra) (*Container, error) 
 		}
 	}
 
-	log.Printf("[di.mall] container built (firestore=%t gcs=%t firebaseAuth=%t meAvatarRepo=%t inventoryUC=%t tokenBlueprintRepo=%t tokenIconResolver=%t)",
+	log.Printf(
+		"[di.mall] container built (firestore=%t gcs=%t firebaseAuth=%t avatarUC=%t avatarWalletSvc=%t cartUC=%t cartRepo=%t meAvatarRepo=%t inventoryUC=%t tokenBlueprintRepo=%t tokenIconResolver=%t)",
 		c.Infra.Firestore != nil,
 		c.Infra.GCS != nil,
 		c.Infra.FirebaseAuth != nil,
+		c.AvatarUC != nil,
+		avatarWalletSvc != nil,
+		c.CartUC != nil,
+		c.CartRepo != nil,
 		c.MeAvatarRepo != nil,
 		c.InventoryUC != nil,
 		c.TokenBlueprintRepo != nil,

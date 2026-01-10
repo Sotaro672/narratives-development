@@ -13,7 +13,7 @@ import (
 	shadom "narratives/internal/domain/shippingAddress"
 )
 
-// ShippingAddressHandler は /shipping-addresses 関連のエンドポイントを担当します。
+// ShippingAddressHandler は /mall/shipping-addresses 関連のエンドポイントを担当します。
 type ShippingAddressHandler struct {
 	uc *usecase.ShippingAddressUsecase
 }
@@ -27,41 +27,32 @@ func NewShippingAddressHandler(uc *usecase.ShippingAddressUsecase) http.Handler 
 func (h *ShippingAddressHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 
-	// ✅ 末尾スラッシュを吸収
+	// ✅ 末尾スラッシュを吸収（/mall/... 前提で扱う）
 	path := strings.TrimSuffix(r.URL.Path, "/")
 
-	// ✅ mall のみ受付（/mall/shipping-addresses -> /shipping-addresses）
-	if strings.HasPrefix(path, "/mall/") {
-		path = strings.TrimPrefix(path, "/mall")
-	} else {
-		w.WriteHeader(http.StatusNotFound)
-		_ = json.NewEncoder(w).Encode(map[string]string{"error": "not_found"})
-		return
-	}
-
 	switch {
-	// GET /shipping-addresses/{id}
-	case r.Method == http.MethodGet && strings.HasPrefix(path, "/shipping-addresses/"):
-		id := strings.TrimPrefix(path, "/shipping-addresses/")
+	// GET /mall/shipping-addresses/{id}
+	case r.Method == http.MethodGet && strings.HasPrefix(path, "/mall/shipping-addresses/"):
+		id := strings.TrimPrefix(path, "/mall/shipping-addresses/")
 		h.get(w, r, id)
 		return
 
-	// POST /shipping-addresses
-	// ✅ docId=UID 統一方針では本来 PUT /shipping-addresses/{id} が望ましいが、
+	// POST /mall/shipping-addresses
+	// ✅ docId=UID 統一方針では本来 PUT /mall/shipping-addresses/{id} が望ましいが、
 	//    互換のため POST も残す（ただし id 必須）
-	case r.Method == http.MethodPost && path == "/shipping-addresses":
+	case r.Method == http.MethodPost && path == "/mall/shipping-addresses":
 		h.post(w, r)
 		return
 
-	// PATCH /shipping-addresses/{id}
-	case r.Method == http.MethodPatch && strings.HasPrefix(path, "/shipping-addresses/"):
-		id := strings.TrimPrefix(path, "/shipping-addresses/")
+	// PATCH /mall/shipping-addresses/{id}
+	case r.Method == http.MethodPatch && strings.HasPrefix(path, "/mall/shipping-addresses/"):
+		id := strings.TrimPrefix(path, "/mall/shipping-addresses/")
 		h.patch(w, r, id)
 		return
 
-	// DELETE /shipping-addresses/{id}
-	case r.Method == http.MethodDelete && strings.HasPrefix(path, "/shipping-addresses/"):
-		id := strings.TrimPrefix(path, "/shipping-addresses/")
+	// DELETE /mall/shipping-addresses/{id}
+	case r.Method == http.MethodDelete && strings.HasPrefix(path, "/mall/shipping-addresses/"):
+		id := strings.TrimPrefix(path, "/mall/shipping-addresses/")
 		h.del(w, r, id)
 		return
 
@@ -72,7 +63,7 @@ func (h *ShippingAddressHandler) ServeHTTP(w http.ResponseWriter, r *http.Reques
 	}
 }
 
-// GET /shipping-addresses/{id}
+// GET /mall/shipping-addresses/{id}
 func (h *ShippingAddressHandler) get(w http.ResponseWriter, r *http.Request, id string) {
 	ctx := r.Context()
 
@@ -92,7 +83,7 @@ func (h *ShippingAddressHandler) get(w http.ResponseWriter, r *http.Request, id 
 	_ = json.NewEncoder(w).Encode(addr)
 }
 
-// POST /shipping-addresses
+// POST /mall/shipping-addresses
 func (h *ShippingAddressHandler) post(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 
@@ -163,8 +154,7 @@ func (h *ShippingAddressHandler) post(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// ✅ docId=UID: Create は「同じIDが既にあると Conflict」になる。
-	//    住所は “upsert” が自然なので Save に寄せる（既存なら更新、無ければ作成）。
+	// ✅ docId=UID: 住所は “upsert” が自然なので Save に寄せる
 	saved, err := h.uc.Save(ctx, ent)
 	if err != nil {
 		writeShippingAddressErr(w, err)
@@ -176,7 +166,7 @@ func (h *ShippingAddressHandler) post(w http.ResponseWriter, r *http.Request) {
 	_ = json.NewEncoder(w).Encode(saved)
 }
 
-// PATCH /shipping-addresses/{id}
+// PATCH /mall/shipping-addresses/{id}
 func (h *ShippingAddressHandler) patch(w http.ResponseWriter, r *http.Request, id string) {
 	ctx := r.Context()
 
@@ -357,7 +347,7 @@ func (h *ShippingAddressHandler) patch(w http.ResponseWriter, r *http.Request, i
 	_ = json.NewEncoder(w).Encode(saved)
 }
 
-// DELETE /shipping-addresses/{id}
+// DELETE /mall/shipping-addresses/{id}
 func (h *ShippingAddressHandler) del(w http.ResponseWriter, r *http.Request, id string) {
 	ctx := r.Context()
 

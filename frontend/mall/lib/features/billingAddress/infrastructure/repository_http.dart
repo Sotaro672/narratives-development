@@ -26,16 +26,12 @@ class BillingAddressRepositoryHttp {
 
   final ApiClient _api;
 
-  // ---------------------------------------------------------------------------
-  // Public API
-  // ---------------------------------------------------------------------------
-
   /// GET /mall/billing-addresses/{id}
   Future<BillingAddressDTO> getById({required String id}) async {
     final rid = id.trim();
     if (rid.isEmpty) throw ArgumentError('id is empty');
 
-    final uri = _api.uri('/mall/billing-addresses/$rid');
+    final uri = _api.uri('billing-addresses/$rid');
     final res = await _api.sendAuthed('GET', uri);
 
     _api.ensureSuccess(res, uri);
@@ -46,9 +42,6 @@ class BillingAddressRepositoryHttp {
   }
 
   /// POST /mall/billing-addresses
-  ///
-  /// NOTE:
-  /// - userId は原則 server 側で uid から決める想定（送らない）
   Future<BillingAddressDTO> create({
     required String cardNumber,
     required String cardholderName,
@@ -60,7 +53,7 @@ class BillingAddressRepositoryHttp {
       cvc: cvc,
     );
 
-    final uri = _api.uri('/mall/billing-addresses');
+    final uri = _api.uri('billing-addresses');
 
     final body = payload.toJson();
     final res = await _api.sendAuthed(
@@ -78,9 +71,6 @@ class BillingAddressRepositoryHttp {
   }
 
   /// PATCH /mall/billing-addresses/{id}
-  ///
-  /// ✅ backend が upsert 挙動 (200/201) でもOK。
-  /// ただし body が空のケースに備えて、空なら GET で取り直す。
   Future<BillingAddressDTO> update({
     required String id,
     String? cardNumber,
@@ -96,7 +86,7 @@ class BillingAddressRepositoryHttp {
       cvc: cvc,
     );
 
-    final uri = _api.uri('/mall/billing-addresses/$rid');
+    final uri = _api.uri('billing-addresses/$rid');
     final body = payload.toJson();
 
     final res = await _api.sendAuthed(
@@ -122,7 +112,7 @@ class BillingAddressRepositoryHttp {
     final rid = id.trim();
     if (rid.isEmpty) throw ArgumentError('id is empty');
 
-    final uri = _api.uri('/mall/billing-addresses/$rid');
+    final uri = _api.uri('billing-addresses/$rid');
     final res = await _api.sendAuthed('DELETE', uri);
 
     _api.ensureSuccess(res, uri);
@@ -163,12 +153,6 @@ class BillingAddressRepositoryHttp {
 // DTOs / Requests
 // -----------------------------------------------------------------------------
 
-/// Mirrors backend billingAddress entity (client-safe).
-///
-/// ✅ IMPORTANT:
-/// - client は生カード番号 / 生CVC を扱わない前提。
-/// - backend が `cardNumberMasked` / `cvcMasked` を返さない場合は空文字にします
-///   （生値 `cardNumber` / `cvc` へのフォールバックはしない）。
 @immutable
 class BillingAddressDTO {
   const BillingAddressDTO({
@@ -183,15 +167,9 @@ class BillingAddressDTO {
 
   final String id;
   final String userId;
-
-  /// Backend should NOT return raw card number.
   final String cardNumberMasked;
-
   final String cardholderName;
-
-  /// Backend should NOT return raw CVC.
   final String cvcMasked;
-
   final DateTime createdAt;
   final DateTime updatedAt;
 
@@ -218,7 +196,6 @@ class BillingAddressDTO {
   }
 }
 
-/// POST body
 @immutable
 class CreateBillingAddressRequest {
   CreateBillingAddressRequest({
@@ -240,7 +217,6 @@ class CreateBillingAddressRequest {
   };
 }
 
-/// PATCH body (partial update)
 @immutable
 class UpdateBillingAddressRequest {
   UpdateBillingAddressRequest({
@@ -258,7 +234,6 @@ class UpdateBillingAddressRequest {
   Map<String, dynamic> toJson() {
     final m = <String, dynamic>{};
 
-    // NOTE: 空文字は送らない（消去仕様が必要なら別途決める）
     if (cardNumber != null && cardNumber!.isNotEmpty) {
       m['cardNumber'] = cardNumber;
     }

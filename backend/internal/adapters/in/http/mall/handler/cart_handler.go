@@ -4,57 +4,39 @@ package mallHandler
 import (
 	"context"
 	"errors"
+	"log"
 	"net/http"
 	"reflect"
 	"strings"
+	"time"
 
 	usecase "narratives/internal/application/usecase"
 	cartdom "narratives/internal/domain/cart"
 )
 
 // CartQueryService abstracts cart_query read-model.
-// Return type is intentionally `any` to avoid tight coupling to query DTO package.
-// (UI側は raw を扱える設計なので JSON をそのまま返すのが最も安全)
 type CartQueryService interface {
-	// GetCartQuery should return a JSON-serializable structure (map / struct / slice).
 	GetCartQuery(ctx context.Context, avatarID string) (any, error)
 }
 
 // PreviewQueryService abstracts preview_query read-model.
 type PreviewQueryService interface {
-	// GetPreview should return a JSON-serializable structure (map / struct / slice).
 	GetPreview(ctx context.Context, avatarID string, itemKey string) (any, error)
 }
 
 // CartHandler serves Mall cart endpoints.
-// Intended mount examples (router side):
-// - GET    /mall/me/cart            ✅ unified: read-model (CartDTO) を返す
-// - DELETE /mall/me/cart            (clear)
-// - POST   /mall/me/cart/items
-// - PUT    /mall/me/cart/items
-// - DELETE /mall/me/cart/items
-//
-// NOTE:
-// - /mall/me/cart/query は廃止（この handler では扱わない）
 type CartHandler struct {
 	uc *usecase.CartUsecase
 
-	// ✅ read-model queries (required)
+	// read-model queries (required for unified GET)
 	cartQuery    CartQueryService
 	previewQuery PreviewQueryService
 }
 
 func NewCartHandler(uc *usecase.CartUsecase) http.Handler {
-	// legacy を廃止したため、query 未注入の handler は “未構成” 扱いにする
 	return &CartHandler{uc: uc, cartQuery: nil, previewQuery: nil}
 }
 
-// ✅ query を注入できる ctor
-//
-// NOTE:
-// DI 側では *mallquery.MallCartQuery / *mallquery.MallPreviewQuery をそのまま渡したいが、
-// それらがこの package の interface を直接実装していないケースがある。
-// そこで引数は `any` とし、ここで “best-effort adapter” を噛ませる。
 func NewCartHandlerWithQueries(
 	uc *usecase.CartUsecase,
 	cartQuery any,
@@ -68,18 +50,36 @@ func NewCartHandlerWithQueries(
 }
 
 func (h *CartHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	if h.uc == nil {
-		writeErr(w, http.StatusInternalServerError, "cart handler is not configured")
-		return
-	}
-
-	// IMPORTANT:
-	// router 側で StripPrefix("/mall") や StripPrefix("/mall/me/cart") をしていると、
-	// ここに入ってくる Path は "/mall/me/cart" ではなく "/cart" や "/" になる。
-	// その揺れを吸収する。
-	path := strings.TrimRight(r.URL.Path, "/")
+	// ---- request entry log (always) ----
+	start := time.Now()
+	rawPath := r.URL.Path
+	path := strings.TrimRight(rawPath, "/")
 	if path == "" {
 		path = "/"
+	}
+
+	avatarFromQ := strings.TrimSpace(r.URL.Query().Get("avatarId"))
+	avatarFromH := strings.TrimSpace(r.Header.Get("X-Avatar-Id"))
+	avatarID := readAvatarID(r, "")
+
+	log.Printf(
+		"[mall_cart_handler] enter method=%s rawPath=%q path=%q query=%q avatarId(q)=%q avatarId(h)=%q avatarId(resolved)=%q configured(uc=%t cartQuery=%t previewQuery=%t)\n",
+		r.Method,
+		rawPath,
+		path,
+		r.URL.RawQuery,
+		avatarFromQ,
+		avatarFromH,
+		avatarID,
+		h.uc != nil,
+		h.cartQuery != nil,
+		h.previewQuery != nil,
+	)
+
+	if h.uc == nil {
+		log.Printf("[mall_cart_handler] exit status=500 reason=cart handler uc is nil elapsed=%s\n", time.Since(start))
+		writeErr(w, http.StatusInternalServerError, "cart handler is not configured")
+		return
 	}
 
 	isGET := r.Method == http.MethodGet
@@ -87,7 +87,6 @@ func (h *CartHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	isPOST := r.Method == http.MethodPost
 	isPUT := r.Method == http.MethodPut
 
-	// suffix matcher (複数候補のどれかに一致したら true)
 	hasSuffixAny := func(p string, suffixes ...string) bool {
 		for _, s := range suffixes {
 			s = strings.TrimSpace(s)
@@ -101,7 +100,6 @@ func (h *CartHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return false
 	}
 
-	// exact matcher (StripPrefix("/mall/me/cart") の場合、/mall/me/cart は "/" になる)
 	isAnyExact := func(p string, exacts ...string) bool {
 		for _, e := range exacts {
 			if p == e {
@@ -112,41 +110,38 @@ func (h *CartHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 
 	switch {
-	// ============================================================
-	// ✅ Unified: GET /mall/me/cart returns read-model DTO
-	// ============================================================
-
-	// ====== GET /mall/me/cart (or /cart or "/")
+	// Unified GET
 	case isGET && (hasSuffixAny(path, "/mall/me/cart", "/cart") || isAnyExact(path, "/")):
-		h.handleGetUnified(w, r)
+		h.handleGetUnified(w, r, start)
 		return
 
-	// ====== DELETE /mall/me/cart (or /cart or "/")
+	// Clear
 	case isDEL && (hasSuffixAny(path, "/mall/me/cart", "/cart") || isAnyExact(path, "/")):
-		h.handleClear(w, r)
+		h.handleClear(w, r, start)
 		return
 
-	// ====== POST /mall/me/cart/items (or /cart/items or /items)
+	// Add item
 	case isPOST && (hasSuffixAny(path, "/mall/me/cart/items", "/cart/items") || isAnyExact(path, "/items")):
-		h.handleAddItem(w, r)
+		h.handleAddItem(w, r, start)
 		return
 
-	// ====== PUT /mall/me/cart/items (or /cart/items or /items)
+	// Set qty
 	case isPUT && (hasSuffixAny(path, "/mall/me/cart/items", "/cart/items") || isAnyExact(path, "/items")):
-		h.handleSetItemQty(w, r)
+		h.handleSetItemQty(w, r, start)
 		return
 
-	// ====== DELETE /mall/me/cart/items (or /cart/items or /items)
+	// Remove item
 	case isDEL && (hasSuffixAny(path, "/mall/me/cart/items", "/cart/items") || isAnyExact(path, "/items")):
-		h.handleRemoveItem(w, r)
+		h.handleRemoveItem(w, r, start)
 		return
 
-	// ====== (optional) preview
+	// Preview
 	case isGET && hasSuffixAny(path, "/mall/preview", "/preview"):
-		h.handleGetPreview(w, r)
+		h.handleGetPreview(w, r, start)
 		return
 	}
 
+	log.Printf("[mall_cart_handler] exit status=404 reason=not found method=%s path=%q elapsed=%s\n", r.Method, path, time.Since(start))
 	writeErr(w, http.StatusNotFound, "not found")
 }
 
@@ -154,29 +149,35 @@ func (h *CartHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 // handlers (Unified GET)
 // -------------------------
 
-// handleGetUnified returns CartDTO (read-model) on GET /mall/me/cart.
-// - cartQuery is required.
-// - If cart doc is missing: return empty cart (200) for stable UX.
-func (h *CartHandler) handleGetUnified(w http.ResponseWriter, r *http.Request) {
+func (h *CartHandler) handleGetUnified(w http.ResponseWriter, r *http.Request, start time.Time) {
 	avatarID := readAvatarID(r, "")
 	if avatarID == "" {
+		log.Printf("[mall_cart_handler] GET unified exit status=400 reason=avatarId missing rawQuery=%q\n", r.URL.RawQuery)
 		writeErr(w, http.StatusBadRequest, "avatarId is required")
 		return
 	}
 
 	if h.cartQuery == nil {
+		log.Printf("[mall_cart_handler] GET unified exit status=500 reason=cartQuery nil avatarId=%q\n", avatarID)
 		writeErr(w, http.StatusInternalServerError, "cart_query is not configured")
 		return
 	}
 
+	log.Printf("[mall_cart_handler] GET unified call cartQuery avatarId=%q queryImpl=%T\n", avatarID, h.cartQuery)
+
 	v, err := h.cartQuery.GetCartQuery(r.Context(), avatarID)
 	if err == nil {
+		log.Printf("[mall_cart_handler] GET unified ok status=200 avatarId=%q elapsed=%s\n", avatarID, time.Since(start))
 		writeJSON(w, http.StatusOK, v)
 		return
 	}
 
-	// cart が無いなら “空カート” を 200 で返す（/mall/mecart を安定させる）
-	if isNotFoundErr(err) {
+	nf := isNotFoundErr(err)
+	log.Printf("[mall_cart_handler] GET unified cartQuery error avatarId=%q notFound=%t err=%v\n", avatarID, nf, err)
+
+	if nf {
+		// empty cart (stable UX)
+		log.Printf("[mall_cart_handler] GET unified return empty-cart status=200 avatarId=%q elapsed=%s\n", avatarID, time.Since(start))
 		writeJSON(w, http.StatusOK, map[string]any{
 			"avatarId":  avatarID,
 			"items":     map[string]any{},
@@ -187,6 +188,7 @@ func (h *CartHandler) handleGetUnified(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	log.Printf("[mall_cart_handler] GET unified exit status=500 avatarId=%q elapsed=%s\n", avatarID, time.Since(start))
 	h.writeQueryErr(w, err)
 }
 
@@ -194,51 +196,51 @@ func (h *CartHandler) handleGetUnified(w http.ResponseWriter, r *http.Request) {
 // handlers (Preview)
 // -------------------------
 
-func (h *CartHandler) handleGetPreview(w http.ResponseWriter, r *http.Request) {
+func (h *CartHandler) handleGetPreview(w http.ResponseWriter, r *http.Request, start time.Time) {
 	avatarID := readAvatarID(r, "")
 	if avatarID == "" {
+		log.Printf("[mall_cart_handler] GET preview exit status=400 reason=avatarId missing rawQuery=%q\n", r.URL.RawQuery)
 		writeErr(w, http.StatusBadRequest, "avatarId is required")
 		return
 	}
 
 	itemKey := readItemKey(r, "")
 	if itemKey == "" {
+		log.Printf("[mall_cart_handler] GET preview exit status=400 reason=itemKey missing avatarId=%q rawQuery=%q\n", avatarID, r.URL.RawQuery)
 		writeErr(w, http.StatusBadRequest, "itemKey is required")
 		return
 	}
 
 	if h.previewQuery == nil {
+		log.Printf("[mall_cart_handler] GET preview exit status=500 reason=previewQuery nil avatarId=%q\n", avatarID)
 		writeErr(w, http.StatusInternalServerError, "preview_query is not configured")
 		return
 	}
 
+	log.Printf("[mall_cart_handler] GET preview call previewQuery avatarId=%q itemKey=%q queryImpl=%T\n", avatarID, itemKey, h.previewQuery)
+
 	v, err := h.previewQuery.GetPreview(r.Context(), avatarID, itemKey)
 	if err != nil {
+		log.Printf("[mall_cart_handler] GET preview error avatarId=%q itemKey=%q err=%v elapsed=%s\n", avatarID, itemKey, err, time.Since(start))
 		h.writeQueryErr(w, err)
 		return
 	}
 
+	log.Printf("[mall_cart_handler] GET preview ok status=200 avatarId=%q itemKey=%q elapsed=%s\n", avatarID, itemKey, time.Since(start))
 	writeJSON(w, http.StatusOK, v)
 }
 
-// writeQueryErr maps typical query errors to HTTP codes.
-// - invalid arg => 400
-// - otherwise => 500
-//
-// NOTE: not found は unified GET では 200(empty) にしているため、ここでは 404 に寄せない。
 func (h *CartHandler) writeQueryErr(w http.ResponseWriter, err error) {
 	if err == nil {
 		writeErr(w, http.StatusInternalServerError, "unknown error")
 		return
 	}
 
-	// invalid argument 系
 	if errors.Is(err, usecase.ErrCartInvalidArgument) || errors.Is(err, cartdom.ErrInvalidCart) {
 		writeErr(w, http.StatusBadRequest, err.Error())
 		return
 	}
 
-	// fallback
 	writeErr(w, http.StatusInternalServerError, err.Error())
 }
 
@@ -257,9 +259,10 @@ func isNotFoundErr(err error) bool {
 // handlers (mutations)
 // -------------------------
 
-func (h *CartHandler) handleAddItem(w http.ResponseWriter, r *http.Request) {
+func (h *CartHandler) handleAddItem(w http.ResponseWriter, r *http.Request, start time.Time) {
 	var req cartItemReq
 	if err := readJSON(r, &req); err != nil {
+		log.Printf("[mall_cart_handler] POST add-item exit status=400 reason=invalid json err=%v\n", err)
 		writeErr(w, http.StatusBadRequest, "invalid json body")
 		return
 	}
@@ -270,13 +273,17 @@ func (h *CartHandler) handleAddItem(w http.ResponseWriter, r *http.Request) {
 	listID := strings.TrimSpace(req.ListID)
 	modelID := strings.TrimSpace(req.ModelID)
 
+	log.Printf("[mall_cart_handler] POST add-item request avatarId=%q invID=%q listID=%q modelID=%q qty=%d\n", avatarID, invID, listID, modelID, req.Qty)
+
 	if avatarID == "" || invID == "" || listID == "" || modelID == "" || req.Qty <= 0 {
+		log.Printf("[mall_cart_handler] POST add-item exit status=400 reason=missing fields avatarId=%q invID=%q listID=%q modelID=%q qty=%d\n", avatarID, invID, listID, modelID, req.Qty)
 		writeErr(w, http.StatusBadRequest, "avatarId, inventoryId, listId, modelId, qty(>=1) are required")
 		return
 	}
 
 	_, err := h.uc.AddItem(r.Context(), avatarID, invID, listID, modelID, req.Qty)
 	if err != nil {
+		log.Printf("[mall_cart_handler] POST add-item uc error avatarId=%q err=%v\n", avatarID, err)
 		if errors.Is(err, usecase.ErrCartInvalidArgument) || errors.Is(err, cartdom.ErrInvalidCart) {
 			writeErr(w, http.StatusBadRequest, err.Error())
 			return
@@ -285,12 +292,14 @@ func (h *CartHandler) handleAddItem(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	h.respondCartDTO(w, r, avatarID)
+	log.Printf("[mall_cart_handler] POST add-item uc ok avatarId=%q -> respond cartDTO\n", avatarID)
+	h.respondCartDTO(w, r, avatarID, start)
 }
 
-func (h *CartHandler) handleSetItemQty(w http.ResponseWriter, r *http.Request) {
+func (h *CartHandler) handleSetItemQty(w http.ResponseWriter, r *http.Request, start time.Time) {
 	var req cartItemReq
 	if err := readJSON(r, &req); err != nil {
+		log.Printf("[mall_cart_handler] PUT set-qty exit status=400 reason=invalid json err=%v\n", err)
 		writeErr(w, http.StatusBadRequest, "invalid json body")
 		return
 	}
@@ -301,13 +310,17 @@ func (h *CartHandler) handleSetItemQty(w http.ResponseWriter, r *http.Request) {
 	listID := strings.TrimSpace(req.ListID)
 	modelID := strings.TrimSpace(req.ModelID)
 
+	log.Printf("[mall_cart_handler] PUT set-qty request avatarId=%q invID=%q listID=%q modelID=%q qty=%d\n", avatarID, invID, listID, modelID, req.Qty)
+
 	if avatarID == "" || invID == "" || listID == "" || modelID == "" {
+		log.Printf("[mall_cart_handler] PUT set-qty exit status=400 reason=missing fields avatarId=%q invID=%q listID=%q modelID=%q\n", avatarID, invID, listID, modelID)
 		writeErr(w, http.StatusBadRequest, "avatarId, inventoryId, listId, modelId are required")
 		return
 	}
 
 	_, err := h.uc.SetItemQty(r.Context(), avatarID, invID, listID, modelID, req.Qty)
 	if err != nil {
+		log.Printf("[mall_cart_handler] PUT set-qty uc error avatarId=%q err=%v\n", avatarID, err)
 		if errors.Is(err, usecase.ErrCartInvalidArgument) || errors.Is(err, cartdom.ErrInvalidCart) {
 			writeErr(w, http.StatusBadRequest, err.Error())
 			return
@@ -316,12 +329,14 @@ func (h *CartHandler) handleSetItemQty(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	h.respondCartDTO(w, r, avatarID)
+	log.Printf("[mall_cart_handler] PUT set-qty uc ok avatarId=%q -> respond cartDTO\n", avatarID)
+	h.respondCartDTO(w, r, avatarID, start)
 }
 
-func (h *CartHandler) handleRemoveItem(w http.ResponseWriter, r *http.Request) {
+func (h *CartHandler) handleRemoveItem(w http.ResponseWriter, r *http.Request, start time.Time) {
 	var req cartItemReq
 	if err := readJSON(r, &req); err != nil {
+		log.Printf("[mall_cart_handler] DELETE remove-item exit status=400 reason=invalid json err=%v\n", err)
 		writeErr(w, http.StatusBadRequest, "invalid json body")
 		return
 	}
@@ -332,13 +347,17 @@ func (h *CartHandler) handleRemoveItem(w http.ResponseWriter, r *http.Request) {
 	listID := strings.TrimSpace(req.ListID)
 	modelID := strings.TrimSpace(req.ModelID)
 
+	log.Printf("[mall_cart_handler] DELETE remove-item request avatarId=%q invID=%q listID=%q modelID=%q\n", avatarID, invID, listID, modelID)
+
 	if avatarID == "" || invID == "" || listID == "" || modelID == "" {
+		log.Printf("[mall_cart_handler] DELETE remove-item exit status=400 reason=missing fields avatarId=%q invID=%q listID=%q modelID=%q\n", avatarID, invID, listID, modelID)
 		writeErr(w, http.StatusBadRequest, "avatarId, inventoryId, listId, modelId are required")
 		return
 	}
 
 	_, err := h.uc.RemoveItem(r.Context(), avatarID, invID, listID, modelID)
 	if err != nil {
+		log.Printf("[mall_cart_handler] DELETE remove-item uc error avatarId=%q err=%v\n", avatarID, err)
 		if errors.Is(err, usecase.ErrCartInvalidArgument) || errors.Is(err, cartdom.ErrInvalidCart) {
 			writeErr(w, http.StatusBadRequest, err.Error())
 			return
@@ -347,17 +366,22 @@ func (h *CartHandler) handleRemoveItem(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	h.respondCartDTO(w, r, avatarID)
+	log.Printf("[mall_cart_handler] DELETE remove-item uc ok avatarId=%q -> respond cartDTO\n", avatarID)
+	h.respondCartDTO(w, r, avatarID, start)
 }
 
-func (h *CartHandler) handleClear(w http.ResponseWriter, r *http.Request) {
+func (h *CartHandler) handleClear(w http.ResponseWriter, r *http.Request, start time.Time) {
 	avatarID := readAvatarID(r, "")
 	if avatarID == "" {
+		log.Printf("[mall_cart_handler] DELETE clear exit status=400 reason=avatarId missing rawQuery=%q\n", r.URL.RawQuery)
 		writeErr(w, http.StatusBadRequest, "avatarId is required")
 		return
 	}
 
+	log.Printf("[mall_cart_handler] DELETE clear request avatarId=%q\n", avatarID)
+
 	if err := h.uc.Clear(r.Context(), avatarID); err != nil {
+		log.Printf("[mall_cart_handler] DELETE clear uc error avatarId=%q err=%v\n", avatarID, err)
 		if errors.Is(err, usecase.ErrCartInvalidArgument) {
 			writeErr(w, http.StatusBadRequest, err.Error())
 			return
@@ -366,24 +390,31 @@ func (h *CartHandler) handleClear(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// clear 後も UI は CartDTO を欲しがるため、空カート（または query 結果）を返す
-	h.respondCartDTO(w, r, avatarID)
+	log.Printf("[mall_cart_handler] DELETE clear uc ok avatarId=%q -> respond cartDTO\n", avatarID)
+	h.respondCartDTO(w, r, avatarID, start)
 }
 
-func (h *CartHandler) respondCartDTO(w http.ResponseWriter, r *http.Request, avatarID string) {
+func (h *CartHandler) respondCartDTO(w http.ResponseWriter, r *http.Request, avatarID string, start time.Time) {
 	if h.cartQuery == nil {
+		log.Printf("[mall_cart_handler] respondCartDTO exit status=500 reason=cartQuery nil avatarId=%q\n", avatarID)
 		writeErr(w, http.StatusInternalServerError, "cart_query is not configured")
 		return
 	}
 
+	log.Printf("[mall_cart_handler] respondCartDTO call cartQuery avatarId=%q queryImpl=%T\n", avatarID, h.cartQuery)
+
 	v, err := h.cartQuery.GetCartQuery(r.Context(), avatarID)
 	if err == nil {
+		log.Printf("[mall_cart_handler] respondCartDTO ok status=200 avatarId=%q elapsed=%s\n", avatarID, time.Since(start))
 		writeJSON(w, http.StatusOK, v)
 		return
 	}
 
-	// query が not found なら空カートで安定化
-	if isNotFoundErr(err) {
+	nf := isNotFoundErr(err)
+	log.Printf("[mall_cart_handler] respondCartDTO cartQuery error avatarId=%q notFound=%t err=%v\n", avatarID, nf, err)
+
+	if nf {
+		log.Printf("[mall_cart_handler] respondCartDTO return empty-cart status=200 avatarId=%q elapsed=%s\n", avatarID, time.Since(start))
 		writeJSON(w, http.StatusOK, map[string]any{
 			"avatarId":  avatarID,
 			"items":     map[string]any{},
@@ -394,6 +425,7 @@ func (h *CartHandler) respondCartDTO(w http.ResponseWriter, r *http.Request, ava
 		return
 	}
 
+	log.Printf("[mall_cart_handler] respondCartDTO exit status=500 avatarId=%q elapsed=%s\n", avatarID, time.Since(start))
 	h.writeQueryErr(w, err)
 }
 
@@ -407,9 +439,9 @@ type cartItemReq struct {
 	ListID       string `json:"listId"`
 	ModelID      string `json:"modelId"`
 	Qty          int    `json:"qty"`
-	ItemKey      string `json:"itemKey"` // optional (future use)
-	LegacyModel  string `json:"-"`       // unused; keep for forward compatibility if needed
-	LegacyListID string `json:"-"`       // unused
+	ItemKey      string `json:"itemKey"`
+	LegacyModel  string `json:"-"`
+	LegacyListID string `json:"-"`
 }
 
 // -------------------------
@@ -446,8 +478,14 @@ func writeErr(w http.ResponseWriter, status int, msg string) {
 // best-effort adapters (DI 互換)
 // -------------------------
 
-type dynamicCartQuery struct{ impl any }
-type dynamicPreviewQuery struct{ impl any }
+type dynamicCartQuery struct {
+	impl          any
+	lastMethodHit string
+}
+type dynamicPreviewQuery struct {
+	impl          any
+	lastMethodHit string
+}
 
 func wrapCartQuery(v any) CartQueryService {
 	if v == nil {
@@ -470,7 +508,7 @@ func wrapPreviewQuery(v any) PreviewQueryService {
 }
 
 func (d *dynamicCartQuery) GetCartQuery(ctx context.Context, avatarID string) (any, error) {
-	return callQuery2(d.impl, ctx, avatarID,
+	v, hit, err := callQuery2WithHit(d.impl, ctx, avatarID,
 		"GetCartQuery",
 		"GetByAvatarID",
 		"GetCart",
@@ -478,11 +516,16 @@ func (d *dynamicCartQuery) GetCartQuery(ctx context.Context, avatarID string) (a
 		"Query",
 		"Fetch",
 	)
+	if hit != "" {
+		d.lastMethodHit = hit
+	}
+	log.Printf("[mall_cart_handler] dynamicCartQuery call avatarId=%q impl=%T hit=%q err=%v\n", avatarID, d.impl, d.lastMethodHit, err)
+	return v, err
 }
 
 func (d *dynamicPreviewQuery) GetPreview(ctx context.Context, avatarID string, itemKey string) (any, error) {
 	if strings.TrimSpace(itemKey) != "" {
-		if v, err := callQuery3(d.impl, ctx, avatarID, itemKey,
+		if v, hit, err := callQuery3WithHit(d.impl, ctx, avatarID, itemKey,
 			"GetPreview",
 			"GetByAvatarIDAndItemKey",
 			"GetByAvatarAndItemKey",
@@ -491,26 +534,35 @@ func (d *dynamicPreviewQuery) GetPreview(ctx context.Context, avatarID string, i
 			"Query",
 			"Fetch",
 		); err == nil {
+			if hit != "" {
+				d.lastMethodHit = hit
+			}
+			log.Printf("[mall_cart_handler] dynamicPreviewQuery call3 avatarId=%q itemKey=%q impl=%T hit=%q\n", avatarID, itemKey, d.impl, d.lastMethodHit)
 			return v, nil
 		}
 	}
-	return callQuery2(d.impl, ctx, avatarID,
+	v, hit, err := callQuery2WithHit(d.impl, ctx, avatarID,
 		"GetPreview",
 		"Preview",
 		"Get",
 		"Query",
 		"Fetch",
 	)
+	if hit != "" {
+		d.lastMethodHit = hit
+	}
+	log.Printf("[mall_cart_handler] dynamicPreviewQuery call2 avatarId=%q impl=%T hit=%q err=%v\n", avatarID, d.impl, d.lastMethodHit, err)
+	return v, err
 }
 
-func callQuery2(impl any, ctx context.Context, avatarID string, methodNames ...string) (any, error) {
+func callQuery2WithHit(impl any, ctx context.Context, avatarID string, methodNames ...string) (any, string, error) {
 	if impl == nil {
-		return nil, errors.New("query service is nil")
+		return nil, "", errors.New("query service is nil")
 	}
 
 	rv := reflect.ValueOf(impl)
 	if !rv.IsValid() {
-		return nil, errors.New("query service is invalid")
+		return nil, "", errors.New("query service is invalid")
 	}
 
 	for _, name := range methodNames {
@@ -556,20 +608,20 @@ func callQuery2(impl any, ctx context.Context, avatarID string, methodNames ...s
 			}
 		}
 
-		return out[0].Interface(), e
+		return out[0].Interface(), name, e
 	}
 
-	return nil, errors.New("query service method not found")
+	return nil, "", errors.New("query service method not found")
 }
 
-func callQuery3(impl any, ctx context.Context, avatarID string, itemKey string, methodNames ...string) (any, error) {
+func callQuery3WithHit(impl any, ctx context.Context, avatarID string, itemKey string, methodNames ...string) (any, string, error) {
 	if impl == nil {
-		return nil, errors.New("query service is nil")
+		return nil, "", errors.New("query service is nil")
 	}
 
 	rv := reflect.ValueOf(impl)
 	if !rv.IsValid() {
-		return nil, errors.New("query service is invalid")
+		return nil, "", errors.New("query service is invalid")
 	}
 
 	for _, name := range methodNames {
@@ -615,8 +667,8 @@ func callQuery3(impl any, ctx context.Context, avatarID string, itemKey string, 
 			}
 		}
 
-		return out[0].Interface(), e
+		return out[0].Interface(), name, e
 	}
 
-	return nil, errors.New("query service method not found")
+	return nil, "", errors.New("query service method not found")
 }

@@ -1,5 +1,4 @@
 // frontend/mall/lib/features/avatar/infrastructure/avatar_repository_http.dart
-
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 import 'package:firebase_auth/firebase_auth.dart';
@@ -22,8 +21,7 @@ import 'api.dart';
 ///
 /// NOTE (重要):
 /// - Firestore 側は「docID = avatarId」「フィールド userId = Firebase uid」を保持する設計
-///   （avatar_repository_fs.go の Create() は a.ID が空なら NewDoc()）
-/// - firebaseUid は保存しない（不要）
+/// - ただし Create API は互換のため userUid も受け取る（現状の handler/usecase が期待）
 /// - Authorization: Firebase ID token (Bearer)
 class AvatarRepositoryHttp {
   AvatarRepositoryHttp({
@@ -75,6 +73,7 @@ class AvatarRepositoryHttp {
   /// NOTE:
   /// - Firestore は docID を NewDoc() で採番する（a.ID が空の場合）
   /// - userId はフィールドとして保存される（= Firebase uid を入れる想定）
+  /// - userUid は互換/検証のため送る（現状の backend が期待）
   Future<AvatarDTO> create({required CreateAvatarRequest request}) async {
     final uri = _api.uri('/mall/avatars');
     final payload = request.toJson();
@@ -564,12 +563,13 @@ class AvatarAggregateDTO {
 /// POST body
 ///
 /// NOTE:
-/// - backend は firebaseUid を保存しない
-/// - Firestore の userId フィールドには Firebase uid を入れる想定
+/// - backend の現状が userUid を期待しているため送る
+/// - userId には Firebase uid を入れる期待値
 @immutable
 class CreateAvatarRequest {
   const CreateAvatarRequest({
     required this.userId,
+    required this.userUid, // ✅ 追加
     required this.avatarName,
     this.avatarIcon,
     this.profile,
@@ -578,6 +578,9 @@ class CreateAvatarRequest {
 
   /// Firestore field userId（Firebase uid を入れる想定）
   final String userId;
+
+  /// 互換/検証用（現状 backend が期待）
+  final String userUid; // ✅ 追加
 
   final String avatarName;
 
@@ -590,6 +593,7 @@ class CreateAvatarRequest {
   Map<String, dynamic> toJson() {
     final m = <String, dynamic>{
       'userId': userId.trim(),
+      'userUid': userUid.trim(), // ✅ 追加
       'avatarName': avatarName.trim(),
     };
 

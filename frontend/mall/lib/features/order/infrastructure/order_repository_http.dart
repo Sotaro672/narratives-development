@@ -5,7 +5,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:http/http.dart' as http;
 
 /// Orders API client (buyer-facing)
-/// - POST /mall/orders
+/// - POST /mall/me/orders
 class OrderRepositoryHttp {
   OrderRepositoryHttp({http.Client? client, String? apiBase})
     : _client = client ?? http.Client(),
@@ -51,7 +51,11 @@ class OrderRepositoryHttp {
     String? transferedDateRfc3339,
     String? updatedBy,
   }) async {
-    final uri = _uri('/mall/orders');
+    // ✅ POST target: /mall/me/orders
+    final uri = _uri('/mall/me/orders');
+
+    // /mall/me/orders is auth-required on backend, but we keep this "optional" header builder.
+    // If token is missing, backend will return 401.
     final headers = await _headersJsonAuthOptional();
 
     final body = <String, dynamic>{

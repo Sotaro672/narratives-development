@@ -1,4 +1,4 @@
-// frontend\mall\lib\features\auth\application\avatar_create_service.dart
+// frontend/mall/lib/features/auth/application/avatar_create_service.dart
 import 'package:flutter/foundation.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:http/http.dart' as http;
@@ -277,9 +277,11 @@ class AvatarCreateService {
       );
 
       // (1) ✅ まず Avatar を作成（アイコンなし）
+      // ✅ 期待値: userId=userUid=Firebase uid
       final created = await _repo.create(
         request: CreateAvatarRequest(
           userId: uid,
+          userUid: uid, // ✅ 追加（handler/usecase が期待）
           avatarName: avatarName,
           avatarIcon: null,
           profile: profile.isEmpty ? null : profile,

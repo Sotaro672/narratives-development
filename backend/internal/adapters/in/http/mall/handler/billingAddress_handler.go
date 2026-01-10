@@ -17,7 +17,7 @@ import (
 
 const billingHandlerTag = "[mall_billing_address_handler]"
 
-// BillingAddressHandler は /billing-addresses 関連のエンドポイントを担当します。
+// BillingAddressHandler は /mall/billing-addresses 関連のエンドポイントを担当します。
 type BillingAddressHandler struct {
 	uc *usecase.BillingAddressUsecase
 }
@@ -33,50 +33,45 @@ func (h *BillingAddressHandler) ServeHTTP(w http.ResponseWriter, r *http.Request
 
 	path := strings.TrimSuffix(r.URL.Path, "/")
 
-	// ✅ /mall プレフィックス吸収（/mall/billing-addresses -> /billing-addresses）
-	if strings.HasPrefix(path, "/mall/") {
-		path = strings.TrimPrefix(path, "/mall")
-	}
-
 	// ✅ user_handler と同等の入口ログ
 	log.Printf(
 		"%s enter method=%s path=%s trace=%q contentType=%q contentLen=%d",
 		billingHandlerTag,
 		strings.ToUpper(r.Method),
-		r.URL.Path, // 元のパス（/mall/...）を残す
+		r.URL.Path,
 		r.Header.Get("X-Cloud-Trace-Context"),
 		r.Header.Get("Content-Type"),
 		r.ContentLength,
 	)
 
 	switch {
-	// GET /billing-addresses/{id}
-	case r.Method == http.MethodGet && strings.HasPrefix(path, "/billing-addresses/"):
-		id := strings.TrimPrefix(path, "/billing-addresses/")
+	// GET /mall/billing-addresses/{id}
+	case r.Method == http.MethodGet && strings.HasPrefix(path, "/mall/billing-addresses/"):
+		id := strings.TrimPrefix(path, "/mall/billing-addresses/")
 		h.get(w, r, id)
 		return
 
-	// POST /billing-addresses
-	case r.Method == http.MethodPost && path == "/billing-addresses":
+	// POST /mall/billing-addresses
+	case r.Method == http.MethodPost && path == "/mall/billing-addresses":
 		h.post(w, r)
 		return
 
-	// PATCH /billing-addresses/{id}
+	// PATCH /mall/billing-addresses/{id}
 	// ✅ shipping_address と同様に「PATCH で Upsert」へ寄せる
-	case r.Method == http.MethodPatch && strings.HasPrefix(path, "/billing-addresses/"):
-		id := strings.TrimPrefix(path, "/billing-addresses/")
+	case r.Method == http.MethodPatch && strings.HasPrefix(path, "/mall/billing-addresses/"):
+		id := strings.TrimPrefix(path, "/mall/billing-addresses/")
 		h.patch(w, r, id)
 		return
 
-	// PUT /billing-addresses/{id}
-	case r.Method == http.MethodPut && strings.HasPrefix(path, "/billing-addresses/"):
-		id := strings.TrimPrefix(path, "/billing-addresses/")
+	// PUT /mall/billing-addresses/{id}
+	case r.Method == http.MethodPut && strings.HasPrefix(path, "/mall/billing-addresses/"):
+		id := strings.TrimPrefix(path, "/mall/billing-addresses/")
 		h.put(w, r, id)
 		return
 
-	// DELETE /billing-addresses/{id}
-	case r.Method == http.MethodDelete && strings.HasPrefix(path, "/billing-addresses/"):
-		id := strings.TrimPrefix(path, "/billing-addresses/")
+	// DELETE /mall/billing-addresses/{id}
+	case r.Method == http.MethodDelete && strings.HasPrefix(path, "/mall/billing-addresses/"):
+		id := strings.TrimPrefix(path, "/mall/billing-addresses/")
 		h.delete(w, r, id)
 		return
 
@@ -87,7 +82,7 @@ func (h *BillingAddressHandler) ServeHTTP(w http.ResponseWriter, r *http.Request
 	}
 }
 
-// GET /billing-addresses/{id}
+// GET /mall/billing-addresses/{id}
 func (h *BillingAddressHandler) get(w http.ResponseWriter, r *http.Request, id string) {
 	ctx := r.Context()
 
@@ -106,11 +101,11 @@ func (h *BillingAddressHandler) get(w http.ResponseWriter, r *http.Request, id s
 	_ = json.NewEncoder(w).Encode(addr)
 }
 
-// POST /billing-addresses
+// POST /mall/billing-addresses
 func (h *BillingAddressHandler) post(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 
-	// ✅ raw body をログしてから decode（user/shipping と同粒度）
+	// ✅ raw body をログしてから decode
 	raw, head, err := readBodyWithHead(r, 220)
 	if err != nil {
 		w.WriteHeader(http.StatusBadRequest)
@@ -145,8 +140,8 @@ func (h *BillingAddressHandler) post(w http.ResponseWriter, r *http.Request) {
 	_ = json.NewEncoder(w).Encode(created)
 }
 
-// PATCH /billing-addresses/{id}
-// ✅ shipping_address と同じ：PATCH=Upsert（not_found のとき create）
+// PATCH /mall/billing-addresses/{id}
+// ✅ PATCH=Upsert（not_found のとき create）
 func (h *BillingAddressHandler) patch(w http.ResponseWriter, r *http.Request, id string) {
 	ctx := r.Context()
 
@@ -165,7 +160,6 @@ func (h *BillingAddressHandler) patch(w http.ResponseWriter, r *http.Request, id
 	}
 	log.Printf("%s patch raw body id=%q len=%d head=%q", billingHandlerTag, id, len(raw), head)
 
-	// PATCH は UpdateInput（部分更新）を受ける
 	var in badom.UpdateBillingAddressInput
 	if err := json.NewDecoder(bytes.NewReader(raw)).Decode(&in); err != nil {
 		w.WriteHeader(http.StatusBadRequest)
@@ -186,7 +180,7 @@ func (h *BillingAddressHandler) patch(w http.ResponseWriter, r *http.Request, id
 	if errors.Is(err, badom.ErrNotFound) {
 		log.Printf("%s patch get not_found -> upsert create id=%q", billingHandlerTag, id)
 
-		// ✅ Create 入力に変換（id は指定できない設計なので、userId は body か id を採用）
+		// ✅ Create 入力に変換（UpdateInput に userId が無いので id を採用）
 		userID := pickUserIDForUpsert(id, in)
 
 		createIn := badom.CreateBillingAddressInput{
@@ -196,7 +190,6 @@ func (h *BillingAddressHandler) patch(w http.ResponseWriter, r *http.Request, id
 			CVC:            pickPtr(in.CVC),
 		}
 
-		// createdAt/updatedAt はポインタなので、必要ならここで付与（なければ repo が now を使う）
 		now := time.Now().UTC()
 		createIn.CreatedAt = &now
 		createIn.UpdatedAt = &now
@@ -223,12 +216,10 @@ func (h *BillingAddressHandler) patch(w http.ResponseWriter, r *http.Request, id
 		return
 	}
 
-	// その他エラー
 	writeBillingAddressErr(w, err)
 }
 
-// PUT /billing-addresses/{id}
-// ✅ PUT は従来通り update として扱う（Upsert はしない）
+// PUT /mall/billing-addresses/{id}
 func (h *BillingAddressHandler) put(w http.ResponseWriter, r *http.Request, id string) {
 	ctx := r.Context()
 
@@ -265,7 +256,7 @@ func (h *BillingAddressHandler) put(w http.ResponseWriter, r *http.Request, id s
 	_ = json.NewEncoder(w).Encode(updated)
 }
 
-// DELETE /billing-addresses/{id}
+// DELETE /mall/billing-addresses/{id}
 func (h *BillingAddressHandler) delete(w http.ResponseWriter, r *http.Request, id string) {
 	ctx := r.Context()
 
@@ -326,8 +317,7 @@ func readBodyWithHead(r *http.Request, headN int) (raw []byte, head string, err 
 		return nil, "", err
 	}
 
-	h := string(b)
-	h = strings.TrimSpace(h)
+	h := strings.TrimSpace(string(b))
 	if headN <= 0 {
 		headN = 200
 	}
@@ -337,7 +327,6 @@ func readBodyWithHead(r *http.Request, headN int) (raw []byte, head string, err 
 	return b, h, nil
 }
 
-// UpdateInput の ptr を string に落とす（nil のとき ""）
 func pickPtr(p *string) string {
 	if p == nil {
 		return ""
@@ -345,13 +334,10 @@ func pickPtr(p *string) string {
 	return strings.TrimSpace(*p)
 }
 
-// upsert-create 時の userId 決定：body に userId が無い型なので、まず id を採用。
-// ※ 将来 UpdateBillingAddressInput に UserID を追加したらここで優先できる
 func pickUserIDForUpsert(id string, _ badom.UpdateBillingAddressInput) string {
 	return strings.TrimSpace(id)
 }
 
-// cardNumber/cvc はログで伏せる
 func maskCard(v string) string {
 	s := strings.TrimSpace(v)
 	if s == "" {

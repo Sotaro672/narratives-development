@@ -140,11 +140,15 @@ func Register(mux *http.ServeMux, cont *Container) {
 	if cont.BillingAddressUC != nil {
 		billH = mallhandler.NewBillingAddressHandler(cont.BillingAddressUC)
 	}
+
+	// ✅ Avatar（/mall/avatars）← これが無いと [mall_avatar_handler] が出ない
+	if cont.AvatarUC != nil {
+		avatarH = mallhandler.NewAvatarHandler(cont.AvatarUC)
+	}
+
+	// ✅ Wallet（AvatarUC を渡せるなら渡す：nil 固定をやめる）
 	if cont.WalletUC != nil {
-		// ✅ FIX:
-		// Container に AvatarUC が無いので、2nd arg は nil を渡す（コンパイルを通す）。
-		// もし handler 側で AvatarUsecase が必須になったら、Container に追加してここで渡してください。
-		walletH = mallhandler.NewMallWalletHandler(cont.WalletUC, nil)
+		walletH = mallhandler.NewMallWalletHandler(cont.WalletUC, cont.AvatarUC)
 	}
 
 	// ✅ /mall/me/avatar (uid -> avatarId)

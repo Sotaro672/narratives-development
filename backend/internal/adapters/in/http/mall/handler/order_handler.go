@@ -1,4 +1,4 @@
-// backend\internal\adapters\in\http\mall\handler\order_handler.go
+// backend/internal/adapters/in/http/mall/handler/order_handler.go
 package mallHandler
 
 import (
@@ -6,14 +6,17 @@ import (
 	"encoding/json"
 	"errors"
 	"io"
+	"log"
 	"net/http"
 	"strings"
 
+	"narratives/internal/adapters/in/http/middleware"
 	usecase "narratives/internal/application/usecase"
 	orderdom "narratives/internal/domain/order"
 )
 
-// OrderHandler は /mall/orders 関連のエンドポイントを担当します（GET/POST）。
+// OrderHandler handles /mall/me/orders (GET/POST) and /mall/me/orders/{id} (GET).
+// ✅ legacy /mall/orders is removed (returns 404).
 type OrderHandler struct {
 	uc *usecase.OrderUsecase
 }
@@ -25,26 +28,30 @@ func NewOrderHandler(uc *usecase.OrderUsecase) http.Handler {
 func (h *OrderHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 
-	path := strings.TrimSuffix(r.URL.Path, "/")
-
-	switch {
-	case strings.HasPrefix(path, "/mall/orders"):
-		path = strings.TrimPrefix(path, "/mall")
-	case strings.HasPrefix(path, "/orders"):
-	default:
-		w.WriteHeader(http.StatusNotFound)
-		_ = json.NewEncoder(w).Encode(map[string]string{"error": "not_found"})
+	// Preflight
+	if r.Method == http.MethodOptions {
+		w.WriteHeader(http.StatusNoContent)
 		return
 	}
 
+	path := strings.TrimSuffix(r.URL.Path, "/")
+
 	switch {
-	case r.Method == http.MethodPost && path == "/orders":
-		h.post(w, r)
+	// ✅ /mall/me/orders POST (auth required)
+	case r.Method == http.MethodPost && path == "/mall/me/orders":
+		h.post(w, r, true /* requireAuth */)
 		return
 
-	case r.Method == http.MethodGet && strings.HasPrefix(path, "/orders/"):
-		id := strings.TrimPrefix(path, "/orders/")
+	// ✅ GET: /mall/me/orders/{id}
+	case r.Method == http.MethodGet && strings.HasPrefix(path, "/mall/me/orders/"):
+		id := strings.TrimPrefix(path, "/mall/me/orders/")
 		h.get(w, r, id)
+		return
+
+	// ✅ Explicitly deny legacy /mall/orders (404)
+	case strings.HasPrefix(path, "/mall/orders"):
+		w.WriteHeader(http.StatusNotFound)
+		_ = json.NewEncoder(w).Encode(map[string]string{"error": "not_found"})
 		return
 
 	default:
@@ -80,11 +87,10 @@ type orderItemSnapshotRequest struct {
 type createOrderRequest struct {
 	ID string `json:"id"`
 
-	// 原則 auth uid を正。uid が取れない構成のみ body.userId を許容。
+	// 原則 auth uid を正。uid が取れない構成のみ body.userId を許容（/mall/me/orders は許容しない）
 	UserID string `json:"userId"`
 
-	// ✅ NEW: Order entity に avatarId が必須になったため受け取る
-	// Mall 側は原則「遷移URL/画面が avatarId を持つ」前提。
+	// Order entity requires avatarId
 	AvatarID string `json:"avatarId"`
 
 	CartID string `json:"cartId"`
@@ -93,16 +99,11 @@ type createOrderRequest struct {
 	BillingSnapshot  billingSnapshotRequest  `json:"billingSnapshot"`
 
 	Items []orderItemSnapshotRequest `json:"items"`
-
-	// ✅ order を先に起票するため、invoice/payment は order 作成では受け取らない
-	// InvoiceID string `json:"invoiceId"`
-	// PaymentID string `json:"paymentId"`
 }
 
-func (h *OrderHandler) post(w http.ResponseWriter, r *http.Request) {
+func (h *OrderHandler) post(w http.ResponseWriter, r *http.Request, requireAuth bool) {
 	ctx := r.Context()
 
-	// ---- read body ----
 	bodyBytes, err := io.ReadAll(r.Body)
 	if err != nil {
 		w.WriteHeader(http.StatusBadRequest)
@@ -119,14 +120,21 @@ func (h *OrderHandler) post(w http.ResponseWriter, r *http.Request) {
 
 	trim := func(s string) string { return strings.TrimSpace(s) }
 
-	// --- Auth UID (best-effort) ---
-	authUID := trim(getAuthUID(ctx))
+	// ✅ Auth UID: middleware helper を正として使う（Context key mismatch を根絶）
+	authUID, ok := middleware.CurrentUserUID(r)
+	if !ok {
+		authUID = ""
+	}
 	bodyUID := trim(req.UserID)
 
-	// --- AvatarID (body first, fallback to query param) ---
-	avatarID := trim(req.AvatarID)
-	if avatarID == "" {
-		avatarID = trim(r.URL.Query().Get("avatarId"))
+	// 一時ログ（原因切り分け用）
+	log.Printf(`[order.post] requireAuth=%v authUID=%q bodyUID=%q`, requireAuth, authUID, bodyUID)
+
+	// /mall/me/orders は auth 必須（body.userId 代替は禁止）
+	if requireAuth && authUID == "" {
+		w.WriteHeader(http.StatusUnauthorized)
+		_ = json.NewEncoder(w).Encode(map[string]string{"error": "unauthorized"})
+		return
 	}
 
 	// --- Decide userID ---
@@ -134,20 +142,25 @@ func (h *OrderHandler) post(w http.ResponseWriter, r *http.Request) {
 	switch {
 	case authUID != "":
 		userID = authUID
+		// auth が取れているのに body.userId が別UIDなら拒否（改ざん対策）
 		if bodyUID != "" && bodyUID != authUID {
 			w.WriteHeader(http.StatusForbidden)
 			_ = json.NewEncoder(w).Encode(map[string]string{"error": "userId_mismatch"})
 			return
 		}
-	case bodyUID != "":
-		userID = bodyUID
+
+	// ✅ legacy path removed: never accept bodyUID fallback
 	default:
 		w.WriteHeader(http.StatusUnauthorized)
 		_ = json.NewEncoder(w).Encode(map[string]string{"error": "unauthorized"})
 		return
 	}
 
-	// --- AvatarID required (entity.go の必須前提) ---
+	// --- AvatarID required (body first, fallback to query param) ---
+	avatarID := trim(req.AvatarID)
+	if avatarID == "" {
+		avatarID = trim(r.URL.Query().Get("avatarId"))
+	}
 	if avatarID == "" {
 		w.WriteHeader(http.StatusBadRequest)
 		_ = json.NewEncoder(w).Encode(map[string]string{"error": "avatarId is required"})
@@ -176,8 +189,6 @@ func (h *OrderHandler) post(w http.ResponseWriter, r *http.Request) {
 		Street2: trim(req.ShippingSnapshot.Street2),
 		Country: trim(req.ShippingSnapshot.Country),
 	}
-
-	// entity.go の validateShippingSnapshot: State/City/Street/Country が必須
 	if ship.State == "" || ship.City == "" || ship.Street == "" || ship.Country == "" {
 		w.WriteHeader(http.StatusBadRequest)
 		_ = json.NewEncoder(w).Encode(map[string]string{"error": "shippingSnapshot is invalid"})
@@ -196,7 +207,6 @@ func (h *OrderHandler) post(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// ---- items validation ----
-	// entity.go の validateItems: price < 0 はNG（0 はOK）、qty <= 0 はNG
 	items := make([]orderdom.OrderItemSnapshot, 0, len(req.Items))
 	for _, it := range req.Items {
 		mid := trim(it.ModelID)
@@ -260,48 +270,11 @@ func (h *OrderHandler) get(w http.ResponseWriter, r *http.Request, id string) {
 }
 
 // ------------------------------------------------------------
-// Auth helpers
-// ------------------------------------------------------------
-
-func getAuthUID(ctx context.Context) string {
-	if ctx == nil {
-		return ""
-	}
-
-	keys := []any{"uid", "userId", "firebase_uid", "firebaseUid"}
-	for _, k := range keys {
-		if v := ctx.Value(k); v != nil {
-			if s, ok := v.(string); ok {
-				return strings.TrimSpace(s)
-			}
-			if sp, ok := v.(*string); ok && sp != nil {
-				return strings.TrimSpace(*sp)
-			}
-		}
-	}
-
-	type ctxKey string
-	for _, ks := range []string{"uid", "userId", "firebase_uid", "firebaseUid"} {
-		if v := ctx.Value(ctxKey(ks)); v != nil {
-			if s, ok := v.(string); ok {
-				return strings.TrimSpace(s)
-			}
-			if sp, ok := v.(*string); ok && sp != nil {
-				return strings.TrimSpace(*sp)
-			}
-		}
-	}
-
-	return ""
-}
-
-// ------------------------------------------------------------
 // Error mapping
 // ------------------------------------------------------------
 
 func writeOrderErr(w http.ResponseWriter, err error) {
 	code := http.StatusInternalServerError
-
 	msg := strings.ToLower(strings.TrimSpace(err.Error()))
 
 	switch {

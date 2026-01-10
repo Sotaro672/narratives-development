@@ -4,6 +4,7 @@ package usecase
 import (
 	"context"
 	"errors"
+	"log"
 	"strings"
 	"time"
 
@@ -19,6 +20,7 @@ import (
 // ----------------------------------------
 
 var (
+	// ✅ userUid を avatar.UserID に保存する前提のため、userUid は必須
 	ErrInvalidUserUID             = errors.New("avatar: invalid userUid")
 	ErrAvatarWalletAlreadyOpened  = errors.New("avatar: wallet already opened")
 	ErrAvatarWalletServiceMissing = errors.New("avatar: wallet service not configured")
@@ -60,8 +62,11 @@ type WalletRepo interface {
 	Save(ctx context.Context, avatarID string, w walletdom.Wallet) error
 }
 
-// ✅ Cart 永続化ポート（avatar 作成と同時に cart レコードも起票する）
+// ✅ Cart 永続化ポート
 // - carts コレクションは docId=avatarId を期待値とする
+// NOTE:
+// - Create() で “空カート” を起票し、docId=avatarId を確実に用意する（本件の原因切り分けのため）
+// - cascade delete 等にも使う
 type CartRepo interface {
 	Upsert(ctx context.Context, c *cartdom.Cart) error
 	DeleteByAvatarID(ctx context.Context, avatarID string) error
@@ -88,10 +93,10 @@ type AvatarUsecase struct {
 
 	// wallet
 	walletSvc  AvatarWalletService
-	walletRepo WalletRepo // ✅ NEW
+	walletRepo WalletRepo // ✅ required for Create
 
 	// cart
-	cartRepo CartRepo // ✅ NEW
+	cartRepo CartRepo
 
 	now func() time.Time
 }
@@ -185,12 +190,15 @@ func (u *AvatarUsecase) GetAggregate(ctx context.Context, id string) (AvatarAggr
 // =======================
 
 // CreateAvatarInput は avatar_create.dart の入力を正とした作成入力です。
-// ※ アイコンは「画像そのもの」ではなく、アップロード後の AvatarIcon（URL/Path統一）を受け取る想定です。
+//
+// ✅ IMPORTANT (期待値):
+// - avatar テーブルの userId フィールドには userUid を保存する（userId=userUid）
+// - 互換のため userId が送られてきても、保存には userUid を優先する
 type CreateAvatarInput struct {
+	// legacy / optional (client compatibility)
 	UserID string `json:"userId"`
 
-	// ✅ firebaseUid ではなく userUid へ移譲（認証主体の UID）
-	// NOTE: Avatar ドメインには保持しない（必要なら上位の auth context / user domain で管理）。
+	// ✅ auth principal uid (MUST)
 	UserUID string `json:"userUid"`
 
 	AvatarName   string  `json:"avatarName"`
@@ -200,29 +208,23 @@ type CreateAvatarInput struct {
 }
 
 // Create は /avatars POST 用の作成コマンドです。
-// ✅ 期待値:
-// - avatar 作成と同時に AvatarState を作成する（avatarState doc を確実に用意する）。※ docId=avatarId
-// - avatar 作成と同時に cart テーブル（carts）も起票する（空カート）。※ docId=avatarId
-// - avatar 作成と同時に Solana wallet を開設し、秘密鍵は Secret Manager に保存される。
-// - さらに wallet テーブル（wallets）も docId=avatarId で起票する（avatarId フィールドは保存しない）。
-// - 開設できなかった場合はエラーを返す（= 作成処理は成功扱いにしない）。
-// - narratives-development_avatar_icon に <avatarDocId>/ の “入れ物” を作成する（画像が空でも）。
+// ✅ 期待値（現仕様）:
+// - avatar 作成と同時に AvatarState を作成する（avatarState docId=avatarId を確実に用意）
+// - avatar 作成と同時に “空カート” を起票する（carts docId=avatarId を確実に用意）
+// - avatar 作成と同時に Solana wallet を開設し、秘密鍵は Secret Manager に保存される
+// - wallet テーブル（wallets）も docId=avatarId で起票する
+// - icons bucket に <avatarId>/ の “入れ物” を best-effort で作成する
 func (u *AvatarUsecase) Create(ctx context.Context, in CreateAvatarInput) (avatardom.Avatar, error) {
 	if u.avRepo == nil {
 		return avatardom.Avatar{}, errors.New("avatar repo not configured")
 	}
 
-	// ✅ avatarState は「同時作成したい」ので Create では必須
+	// ✅ avatarState は同時作成したいので必須
 	if u.stRepo == nil {
 		return avatardom.Avatar{}, errors.New("avatarState repo not configured")
 	}
 
-	// ✅ cart は「同時作成したい」ので Create では必須
-	if u.cartRepo == nil {
-		return avatardom.Avatar{}, errors.New("cart repo not configured")
-	}
-
-	// ✅ walletSvc は Create では必須（期待値）
+	// ✅ walletSvc は Create では必須
 	if u.walletSvc == nil {
 		return avatardom.Avatar{}, ErrAvatarWalletServiceMissing
 	}
@@ -232,12 +234,18 @@ func (u *AvatarUsecase) Create(ctx context.Context, in CreateAvatarInput) (avata
 		return avatardom.Avatar{}, errors.New("wallet repo not configured")
 	}
 
-	userID := strings.TrimSpace(in.UserID)
-	if userID == "" {
-		return avatardom.Avatar{}, avatardom.ErrInvalidUserID
+	// ✅ cart も同時起票したい（docId=avatarId を保証する）
+	if u.cartRepo == nil {
+		return avatardom.Avatar{}, errors.New("cart repo not configured")
 	}
 
+	// ✅ 保存する userId は userUid（期待値: userId=userUid）
 	userUID := strings.TrimSpace(in.UserUID)
+	if userUID == "" {
+		// 互換: 旧クライアントが userUid を送らず userId のみ送る可能性がある場合に備える
+		// ※ ただし期待値は userUid なので、最終的に空ならエラー
+		userUID = strings.TrimSpace(in.UserID)
+	}
 	if userUID == "" {
 		return avatardom.Avatar{}, ErrInvalidUserUID
 	}
@@ -249,10 +257,11 @@ func (u *AvatarUsecase) Create(ctx context.Context, in CreateAvatarInput) (avata
 
 	now := u.now().UTC()
 
-	// entity.go のフィールドに合わせる（firebaseUid は保持しない）
+	// ✅ entity.go に合わせる
+	// - Avatar.UserID には userUid を保存する
 	a := avatardom.Avatar{
 		// ID は実装側で採番可（空で渡す）
-		UserID:       userID,
+		UserID:       userUID,
 		AvatarName:   name,
 		AvatarIcon:   trimPtr(in.AvatarIcon),
 		Profile:      trimPtr(in.Profile),
@@ -274,17 +283,13 @@ func (u *AvatarUsecase) Create(ctx context.Context, in CreateAvatarInput) (avata
 
 	rollback := func() {
 		// best-effort cleanup
-		if u.cartRepo != nil {
-			_ = u.cartRepo.DeleteByAvatarID(ctx, avatarID)
-		}
 		if u.avRepo != nil {
 			_ = u.avRepo.Delete(ctx, avatarID)
 		}
-		// AvatarState / Wallet は削除ポートが無いのでここでは触らない（必要なら後日追加）
+		// AvatarState / Wallet / Cart は削除ポートが無いのでここでは触らない（必要なら後日追加）
 	}
 
-	// ✅ AvatarState doc を「同時作成」(strict)
-	// - wallet を開く前に作る（失敗時に wallet/secret を作らないため）
+	// ✅ AvatarState doc を同時作成 (strict)
 	zero := int64(0)
 	as, aerr := avatarstate.New(
 		avatarID, // id (=avatarId, docId)
@@ -303,27 +308,20 @@ func (u *AvatarUsecase) Create(ctx context.Context, in CreateAvatarInput) (avata
 		return avatardom.Avatar{}, err
 	}
 
-	// ✅ Cart doc を「同時作成」(strict)
-	cartRow, cerr := cartdom.NewCart(avatarID, nil, now)
+	// ✅ Cart doc を同時作成 (strict): docId=avatarId
+	// - items は空でOK
+	cart, cerr := cartdom.NewCart(avatarID, nil, now)
 	if cerr != nil {
 		rollback()
 		return avatardom.Avatar{}, cerr
 	}
-	if cartRow == nil {
-		rollback()
-		return avatardom.Avatar{}, errors.New("cart: NewCart returned nil")
-	}
-
-	// ✅ FIX: Firestore carts は docId=avatarId を必須とするため、必ず ID に入れる
-	// cart_repository_fs のエラー:
-	//   "Upsert requires docId (avatarId)"
-	// を確実に潰す。
-	cartRow.ID = avatarID
-
-	if err := u.cartRepo.Upsert(ctx, cartRow); err != nil {
+	log.Printf(`[avatar_uc] cart upsert start avatarId=%q`, avatarID)
+	if err := u.cartRepo.Upsert(ctx, cart); err != nil {
+		log.Printf(`[avatar_uc] cart upsert fail avatarId=%q err=%v`, avatarID, err)
 		rollback()
 		return avatardom.Avatar{}, err
 	}
+	log.Printf(`[avatar_uc] cart upsert ok avatarId=%q`, avatarID)
 
 	// ✅ Wallet open (strict)
 	w, werr := u.walletSvc.OpenAvatarWallet(ctx, avatarID)
@@ -365,8 +363,6 @@ func (u *AvatarUsecase) Create(ctx context.Context, in CreateAvatarInput) (avata
 	if u.objStore != nil {
 		_ = u.objStore.EnsurePrefix(ctx, "narratives-development_avatar_icon", avatarID+"/")
 	}
-
-	_ = userUID // NOTE: 現状は保持しない。必要なら auth/handler 層で整合チェックに利用。
 
 	return created, nil
 }
@@ -563,7 +559,7 @@ func (u *AvatarUsecase) DeleteAvatarCascade(ctx context.Context, avatarID string
 		}
 	}
 
-	// cart: best-effort delete
+	// cart: best-effort delete (optional)
 	if u.cartRepo != nil {
 		_ = u.cartRepo.DeleteByAvatarID(ctx, avatarID)
 	}

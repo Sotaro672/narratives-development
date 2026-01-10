@@ -1,0 +1,61 @@
+# ----------------------------
+# OS / Editor
+# ----------------------------
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+*.swp
+*.tmp
+
+# ----------------------------
+# Git
+# ----------------------------
+.git/
+.gitignore
+
+# ----------------------------
+# Build outputs / caches
+# ----------------------------
+bin/
+out/
+dist/
+build/
+tmp/
+temp/
+.cache/
+**/*.log
+
+# ----------------------------
+# Test outputs
+# ----------------------------
+coverage/
+**/*.out
+**/*.test
+
+# ----------------------------
+# Node / Frontend artifacts (もし backend 配下に紛れ込んでいたら致命傷なので強めに除外)
+# ----------------------------
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# ----------------------------
+# Terraform / IaC / local secrets (必要なければ)
+# ----------------------------
+*.tfstate
+*.tfstate.*
+.terraform/
+.env
+.env.*
+**/*secret*
+**/*credentials*
+**/*key*.json
+
+# ----------------------------
+# Large misc (必要に応じて)
+# ----------------------------
+**/*.zip
+**/*.tar
+**/*.tgz

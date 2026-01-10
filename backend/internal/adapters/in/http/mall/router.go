@@ -154,6 +154,14 @@ func Register(mux *http.ServeMux, deps Deps) {
 	handleSafe(mux, "/mall/me/wallets/", deps.Wallet, "Wallet(me)")
 
 	// cart
+	// ✅ cart new/create entry (NO /me prefix) - for "new cart registration"
+	// - POST   /mall/cart
+	// - GET    /mall/cart
+	// (handler 側で user auth 必須にする想定)
+	handleSafe(mux, "/mall/cart", deps.Cart, "Cart")
+	handleSafe(mux, "/mall/cart/", deps.Cart, "Cart")
+
+	// ✅ /me prefix (authenticated user scope)
 	handleSafe(mux, "/mall/me/cart", deps.Cart, "Cart(me)")
 	handleSafe(mux, "/mall/me/cart/", deps.Cart, "Cart(me)")
 
