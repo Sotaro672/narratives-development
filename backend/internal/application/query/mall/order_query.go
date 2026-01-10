@@ -245,6 +245,10 @@ func (q *OrderQuery) fetchCartItemsBestEffort(ctx context.Context, avatarID stri
 // 2) Query where userId == {userId} LIMIT 1
 //
 // If not found -> nil
+//
+// ✅ Patch: return Firestore docID as well (without changing existing schema):
+//   - Put doc ID into returned map as "id" and "addressId" if they don't already exist.
+//     This lets frontend pick billingAddressId/shippingAddressId deterministically.
 func (q *OrderQuery) fetchAddressBestEffort(ctx context.Context, colName string, userID string) map[string]any {
 	colName = strings.TrimSpace(colName)
 	if colName == "" {
@@ -259,7 +263,9 @@ func (q *OrderQuery) fetchAddressBestEffort(ctx context.Context, colName string,
 	docRef := q.FS.Collection(colName).Doc(userID)
 	snap, err := docRef.Get(ctx)
 	if err == nil && snap != nil && snap.Exists() {
-		return normalizeMapAny(snap.Data())
+		out := normalizeMapAny(snap.Data())
+		// doc style: docId == userId
+		return attachDocID(out, userID)
 	}
 	if err != nil && !isFirestoreNotFound(err) {
 		log.Printf("[mall_order_query] address doc get error col=%q userId=%q err=%v", colName, maskUID(userID), err)
@@ -288,7 +294,12 @@ func (q *OrderQuery) fetchAddressBestEffort(ctx context.Context, colName string,
 	if doc == nil {
 		return nil
 	}
-	return normalizeMapAny(doc.Data())
+
+	out := normalizeMapAny(doc.Data())
+	if doc.Ref != nil {
+		return attachDocID(out, doc.Ref.ID)
+	}
+	return out
 }
 
 // ------------------------------------------------------------
@@ -316,6 +327,27 @@ func normalizeMapAny(m map[string]any) map[string]any {
 		out[k] = v
 	}
 	return out
+}
+
+// attachDocID injects docID into map if not present.
+// - We intentionally do NOT overwrite if the document already has those keys.
+// - We set both "id" and "addressId" to maximize compatibility with existing frontends.
+func attachDocID(m map[string]any, docID string) map[string]any {
+	if m == nil {
+		return nil
+	}
+	docID = strings.TrimSpace(docID)
+	if docID == "" {
+		return m
+	}
+
+	if _, ok := m["id"]; !ok {
+		m["id"] = docID
+	}
+	if _, ok := m["addressId"]; !ok {
+		m["addressId"] = docID
+	}
+	return m
 }
 
 // avoid logging raw uid

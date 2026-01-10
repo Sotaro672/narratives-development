@@ -5,6 +5,8 @@ import (
 	"encoding/json"
 	"log"
 	"net/http"
+	"os"
+	"strings"
 
 	mallhttp "narratives/internal/adapters/in/http/mall"
 	mallhandler "narratives/internal/adapters/in/http/mall/handler"
@@ -175,15 +177,11 @@ func Register(mux *http.ServeMux, cont *Container) {
 	}
 
 	// ✅ Invoice (authenticated)
-	// A案採用: invoice_handler.go 側で /mall/me/invoices と /mall/me/invoices/{id} を判定する前提。
-	//
-	// - POST /mall/me/invoices        : invoice起票 + (A) webhook自己呼び出し
-	// - GET  /mall/me/invoices/{id}   : invoice取得（id は orderId/invoiceId を想定）
-	//
-	// NOTE:
-	// - CheckoutUC が nil の場合、POST は handler 側で 503/500 を返す想定（GETは動く）
+	// ✅ 責務分離後: NewInvoiceHandler は InvoiceUsecase のみ受け取る
+	// - POST /mall/me/invoices : invoice 起票のみ
+	// - payment 起票は /mall/me/payment 側
 	if cont.InvoiceUC != nil {
-		invoiceH = mallhandler.NewInvoiceHandler(cont.InvoiceUC, cont.CheckoutUC)
+		invoiceH = mallhandler.NewInvoiceHandler(cont.InvoiceUC)
 	}
 
 	// SignIn: keep a stable no-op endpoint (client convenience)
@@ -262,8 +260,15 @@ func Register(mux *http.ServeMux, cont *Container) {
 	// ----------------------------
 	// Webhooks (no auth)
 	// ----------------------------
-	if cont.InvoiceUC != nil && cont.PaymentUC != nil {
-		stripeWH := mallwebhook.NewStripeWebhookHandler(cont.InvoiceUC, cont.PaymentUC)
+	// Stripe webhook: PaymentUsecase + signing secret(string) が必要
+	if cont.PaymentUC != nil {
+		secret := strings.TrimSpace(os.Getenv("STRIPE_WEBHOOK_SECRET"))
+		if secret == "" {
+			log.Printf("[boot] mall stripe webhook NOT registered: STRIPE_WEBHOOK_SECRET is empty")
+			return
+		}
+
+		stripeWH := mallwebhook.NewStripeWebhookHandler(cont.PaymentUC, secret)
 		mux.Handle(StripeWebhookPath, stripeWH)
 		mux.Handle(StripeWebhookPath+"/", stripeWH)
 		log.Printf("[boot] mall stripe webhook registered path=%s", StripeWebhookPath)

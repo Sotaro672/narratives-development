@@ -1,3 +1,4 @@
+// backend\internal\application\usecase\order_usecase.go
 package usecase
 
 import (
@@ -38,10 +39,14 @@ type OrderFilter struct {
 }
 
 // OrderUsecase orchestrates order operations.
+//
+// ✅ 方針（責務分離 / 素直にする）
+// - /mall/me/orders は Order テーブル起票のみ
+// - Invoice 起票は /mall/me/invoices の責務
+// - Payment 起票は /mall/me/payment(s) の責務
 type OrderUsecase struct {
-	repo      OrderRepo
-	invoiceUC *InvoiceUsecase // ✅ 注文起票直後に invoice 起票するため（paid更新はしない）
-	now       func() time.Time
+	repo OrderRepo
+	now  func() time.Time
 }
 
 func NewOrderUsecase(repo OrderRepo) *OrderUsecase {
@@ -49,12 +54,6 @@ func NewOrderUsecase(repo OrderRepo) *OrderUsecase {
 		repo: repo,
 		now:  time.Now,
 	}
-}
-
-// WithInvoiceUsecase enables "create invoice right after order creation".
-func (u *OrderUsecase) WithInvoiceUsecase(invUC *InvoiceUsecase) *OrderUsecase {
-	u.invoiceUC = invUC
-	return u
 }
 
 // =======================
@@ -162,40 +161,7 @@ func (u *OrderUsecase) Create(ctx context.Context, in CreateOrderInput) (orderdo
 	}
 	log.Printf("[order_uc] Create repo.Create OK id=%s items=%d", _maskID(created.ID), len(created.Items))
 
-	// ============================================================
-	// ✅ Order作成直後に Invoice を「起票」する（paid は触らない）
-	// - paid 更新は payment_handler -> InvoiceUsecase.UpdatePaid に任せる
-	// ============================================================
-	if u.invoiceUC != nil {
-		prices := make([]int, 0, len(created.Items))
-		for _, it := range created.Items {
-			prices = append(prices, it.Price)
-		}
-
-		log.Printf("[order_uc] Create invoice start orderId=%s prices=%v", _maskID(created.ID), prices)
-
-		_, invErr := u.invoiceUC.Create(ctx, CreateInvoiceInput{
-			OrderID:     created.ID,
-			Prices:      prices,
-			Tax:         0,
-			ShippingFee: 0,
-		})
-		if invErr != nil {
-			log.Printf("[order_uc] Create invoice failed orderId=%s err=%v", _maskID(created.ID), invErr)
-
-			// ✅ 可能ならロールバック（orderだけ残ると後工程が辛いので）
-			if delErr := u.repo.Delete(ctx, created.ID); delErr != nil {
-				log.Printf("[order_uc] Create rollback order delete failed orderId=%s delErr=%v", _maskID(created.ID), delErr)
-			} else {
-				log.Printf("[order_uc] Create rollback order delete OK orderId=%s", _maskID(created.ID))
-			}
-
-			return orderdom.Order{}, invErr
-		}
-
-		log.Printf("[order_uc] Create invoice OK orderId=%s", _maskID(created.ID))
-	}
-
+	// ✅ ここでは Invoice / Payment を作らない（責務分離）
 	return created, nil
 }
 

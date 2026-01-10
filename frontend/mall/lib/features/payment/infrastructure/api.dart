@@ -40,6 +40,46 @@ class PaymentApi {
     final res = await client.get(uri, headers: headers);
 
     if (res.statusCode >= 200 && res.statusCode < 300) {
+      // 204 等の空レスポンスを許容
+      if (res.body.trim().isEmpty) return <String, dynamic>{};
+
+      final m = decodeJsonMap(res.body);
+
+      // wrapper 吸収: {data:{...}} を許容
+      final data = (m['data'] is Map)
+          ? (m['data'] as Map).cast<String, dynamic>()
+          : m;
+
+      return data;
+    }
+
+    throwHttpError(res);
+    throw StateError('unreachable');
+  }
+
+  /// ✅ POST (auth + JSON) helper
+  /// - 2xx: JSON を返す場合は Map で返す
+  /// - 204: {} を返す
+  /// - wrapper {data:{...}} を吸収
+  Future<Map<String, dynamic>> postJsonAuth(
+    String path,
+    Map<String, dynamic> body, {
+    Map<String, String>? qp,
+  }) async {
+    final token = await requireFirebaseIdToken();
+    final uri = buildUri(path, qp: qp);
+    final headers = headersJsonAuth(token);
+
+    final res = await client.post(
+      uri,
+      headers: headers,
+      body: jsonEncode(body),
+    );
+
+    if (res.statusCode >= 200 && res.statusCode < 300) {
+      // 204 No Content 等
+      if (res.body.trim().isEmpty) return <String, dynamic>{};
+
       final m = decodeJsonMap(res.body);
 
       // wrapper 吸収: {data:{...}} を許容
@@ -129,6 +169,8 @@ class PaymentApi {
       queryParameters: (qp == null || qp.isEmpty) ? null : qp,
       fragment: b.fragment.isEmpty ? null : b.fragment,
     );
+    // Note: Uri(...) の port は int? ではなく int なので
+    // b.hasPort ? b.port : null が IDE で警告になる場合は削ってOKです（DartのSDK差分）。
   }
 
   String joinPaths(String a, String b) {

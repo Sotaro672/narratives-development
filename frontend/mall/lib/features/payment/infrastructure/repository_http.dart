@@ -1,16 +1,10 @@
-// frontend\mall\lib\features\payment\infrastructure\repository_http.dart
 import 'package:http/http.dart' as http;
 
 import 'api.dart';
 
 /// PaymentRepositoryHttp
-/// - Backend の order_query.go（uid -> avatarId / shipping / billing）を叩いて
-///   payment 画面が必要なコンテキストをまとめて取得する。
-///
-/// 想定エンドポイント:
-/// - GET /mall/payment
-///   Authorization: `Bearer <Firebase ID token>`
-///   -> { uid, avatarId, userId, shippingAddress?, billingAddress? }
+/// - Backend の /mall/me/payment を叩いて payment 画面が必要なコンテキストを取得
+/// - Case A（責務分離）では /mall/me/payments で payment 起票を行う
 class PaymentRepositoryHttp {
   PaymentRepositoryHttp({http.Client? client, String? apiBase})
     : _api = PaymentApi(client: client, apiBase: apiBase);
@@ -29,6 +23,30 @@ class PaymentRepositoryHttp {
   Future<PaymentContextDTO> fetchPaymentContext() async {
     final data = await _api.getJsonAuth('/mall/me/payment');
     return PaymentContextDTO.fromJson(data);
+  }
+
+  /// ✅ Case A: /mall/me/payments で payment 起票（+ dev では backend 側で自己 webhook する想定）
+  ///
+  /// Backend 側の受け口が:
+  /// - POST /mall/me/payments
+  /// body: { invoiceId, billingAddressId, amount }
+  /// を想定。
+  ///
+  /// 204 を返す実装でも動くように、戻り値は Map を返す（空なら {}）
+  Future<Map<String, dynamic>> startPayment({
+    required String invoiceId,
+    required String billingAddressId,
+    required int amount,
+  }) async {
+    final body = <String, dynamic>{
+      'invoiceId': invoiceId.trim(),
+      'billingAddressId': billingAddressId.trim(),
+      'amount': amount,
+    };
+
+    // ここで postJsonAuth を使う（PaymentApi に追加済み前提）
+    final data = await _api.postJsonAuth('/mall/me/payments', body);
+    return data;
   }
 }
 

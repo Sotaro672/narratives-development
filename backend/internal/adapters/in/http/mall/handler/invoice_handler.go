@@ -14,28 +14,22 @@ import (
 	invoicedom "narratives/internal/domain/invoice"
 )
 
-// InvoiceHandler handles /mall/me/invoices endpoints (A案).
+// InvoiceHandler handles /mall/me/invoices endpoints.
 //
-// Routes:
-// - POST /mall/me/invoices              : creates invoice + triggers mock payment webhook (A flow)
-// - GET  /mall/me/invoices/{orderId}    : get invoice by orderId
-// - GET  /mall/me/invoices?orderId=...  : get invoice by orderId
+// ✅ 責務分離（採用方針）
+// - POST /mall/me/invoices : invoice テーブル起票のみ（checkout/webhook はしない）
+// - GET  /mall/me/invoices/{orderId} : get invoice by orderId
+// - GET  /mall/me/invoices?orderId=... : get invoice by orderId
 //
-// A flow:
-//
-//	invoice -> (self) /mall/webhooks/stripe -> payment -> invoice.paid=true
-//	- POST uses CheckoutUsecase (orchestration)
-//	- GET uses InvoiceUsecase (read)
+// NOTE:
+// - payment 起票は /mall/me/payment 側の責務
+// - SELF_BASE_URL / CheckoutUsecase は不要
 type InvoiceHandler struct {
-	invoiceUC  *usecase.InvoiceUsecase
-	checkoutUC *usecase.CheckoutUsecase
+	invoiceUC *usecase.InvoiceUsecase
 }
 
-func NewInvoiceHandler(invoiceUC *usecase.InvoiceUsecase, checkoutUC *usecase.CheckoutUsecase) http.Handler {
-	return &InvoiceHandler{
-		invoiceUC:  invoiceUC,
-		checkoutUC: checkoutUC,
-	}
+func NewInvoiceHandler(invoiceUC *usecase.InvoiceUsecase) http.Handler {
+	return &InvoiceHandler{invoiceUC: invoiceUC}
 }
 
 func (h *InvoiceHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
@@ -51,22 +45,30 @@ func (h *InvoiceHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		_mInvWriteJSONError(w, http.StatusInternalServerError, "invoice usecase is not configured")
 		return
 	}
-	// checkoutUC は POST でのみ必須。GET は invoiceUC のみで動く。
 
-	path := strings.TrimSpace(r.URL.Path)
-	path = strings.TrimSuffix(path, "/")
+	// normalize path (drop trailing slash)
+	path0 := strings.TrimSpace(r.URL.Path)
+	path0 = strings.TrimSuffix(path0, "/")
+	if path0 == "" {
+		path0 = "/"
+	}
 
-	const base = "/mall/me/invoices"
+	// ✅ support /mall/* mounts:
+	// - /mall/me/invoices -> /me/invoices
+	// - if router already stripped "/mall", it may already be "/me/invoices"
+	if strings.HasPrefix(path0, "/mall/") {
+		path0 = strings.TrimPrefix(path0, "/mall")
+		if path0 == "" {
+			path0 = "/"
+		}
+	}
 
-	// /mall/me/invoices
-	if path == base {
+	const base = "/me/invoices"
+
+	// /me/invoices
+	if path0 == base {
 		switch r.Method {
 		case http.MethodPost:
-			if h.checkoutUC == nil {
-				// A: SELF_BASE_URL 未設定などで CheckoutUC が無効化されているケース
-				_mInvWriteJSONError(w, http.StatusServiceUnavailable, "checkout is disabled (SELF_BASE_URL not configured)")
-				return
-			}
 			h.post(w, r)
 			return
 
@@ -85,9 +87,9 @@ func (h *InvoiceHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	// /mall/me/invoices/{orderId}
-	if strings.HasPrefix(path, base+"/") {
-		orderID := strings.TrimSpace(strings.TrimPrefix(path, base+"/"))
+	// /me/invoices/{orderId}
+	if strings.HasPrefix(path0, base+"/") {
+		orderID := strings.TrimSpace(strings.TrimPrefix(path0, base+"/"))
 		if orderID == "" || strings.Contains(orderID, "/") {
 			_mInvWriteJSONError(w, http.StatusBadRequest, "invalid orderId")
 			return
@@ -117,7 +119,7 @@ type createInvoiceRequest struct {
 	Tax         int `json:"tax"`
 	ShippingFee int `json:"shippingFee"`
 
-	// ✅ A: webhook を叩くために必須
+	// ✅ 互換のため受け取ってもよいが、invoice 起票の責務では使わない（payment 側で使う）
 	BillingAddressID string `json:"billingAddressId"`
 
 	// optional (dev/test)
@@ -125,7 +127,6 @@ type createInvoiceRequest struct {
 
 	// NOTE:
 	// paid は将来互換のため受け取るが、起票では常に paid=false。
-	// 支払い確定（paid=true）は webhook -> payment 起票 -> PaymentUsecase が invoiceRepo 経由で立てる。
 	Paid *bool `json:"paid"`
 }
 
@@ -158,16 +159,11 @@ func (h *InvoiceHandler) post(w http.ResponseWriter, r *http.Request) {
 		_mInvWriteJSONError(w, http.StatusBadRequest, "orderId is required")
 		return
 	}
+
+	// ✅ invoice 起票には prices が必須（order から再計算したい場合は InvoiceUsecase 側で吸収）
 	if len(req.Prices) == 0 {
 		log.Printf("[mall/invoice] reqId=%s bad_request reason=missing_prices orderId=%q", reqID, _mInvMaskID(orderID))
 		_mInvWriteJSONError(w, http.StatusBadRequest, "prices is required")
-		return
-	}
-
-	billingAddrID := strings.TrimSpace(req.BillingAddressID)
-	if billingAddrID == "" {
-		log.Printf("[mall/invoice] reqId=%s bad_request reason=missing_billingAddressId orderId=%q", reqID, _mInvMaskID(orderID))
-		_mInvWriteJSONError(w, http.StatusBadRequest, "billingAddressId is required")
 		return
 	}
 
@@ -178,37 +174,26 @@ func (h *InvoiceHandler) post(w http.ResponseWriter, r *http.Request) {
 		)
 	}
 
-	out, cErr := h.checkoutUC.CreateInvoiceAndTriggerPayment(ctx, usecase.CreateInvoiceAndTriggerPaymentInput{
-		OrderID:          orderID,
-		Prices:           req.Prices,
-		Tax:              req.Tax,
-		ShippingFee:      req.ShippingFee,
-		BillingAddressID: billingAddrID,
-		Amount:           req.Amount,
+	// ✅ billingAddressId は invoice 起票の責務では使わない（payment 側に渡す）
+	if strings.TrimSpace(req.BillingAddressID) != "" {
+		log.Printf("[mall/invoice] reqId=%s note=billingAddressId_ignored_on_invoice_create orderId=%q",
+			reqID, _mInvMaskID(orderID),
+		)
+	}
+
+	out, cErr := h.invoiceUC.Create(ctx, usecase.CreateInvoiceInput{
+		OrderID:     orderID,
+		Prices:      req.Prices,
+		Tax:         req.Tax,
+		ShippingFee: req.ShippingFee,
 	})
 	if cErr != nil {
-		// 重要：invoice は作れている可能性がある（Aの設計）
-		// その場合は 201 で返しつつ warning を付ける（クライアント運用が楽）
-		if strings.TrimSpace(out.OrderID) != "" {
-			log.Printf("[mall/invoice] reqId=%s created_with_warning orderId=%q warn=%v",
-				reqID, _mInvMaskID(out.OrderID), cErr,
-			)
-			w.WriteHeader(http.StatusCreated)
-			_ = json.NewEncoder(w).Encode(map[string]any{
-				"invoice": out,
-				"warning": cErr.Error(),
-			})
-			return
-		}
-
 		log.Printf("[mall/invoice] reqId=%s create_failed err=%v orderId=%q prices=%d", reqID, cErr, _mInvMaskID(orderID), len(req.Prices))
 		_mInvWriteInvoiceErr(w, cErr)
 		return
 	}
 
-	log.Printf("[mall/invoice] reqId=%s created ok orderId=%q paid=%t (payment will mark paid via webhook)",
-		reqID, _mInvMaskID(out.OrderID), out.Paid,
-	)
+	log.Printf("[mall/invoice] reqId=%s created ok orderId=%q paid=%t", reqID, _mInvMaskID(out.OrderID), out.Paid)
 	w.WriteHeader(http.StatusCreated)
 	_ = json.NewEncoder(w).Encode(out)
 }
@@ -256,9 +241,10 @@ func _mInvWriteInvoiceErr(w http.ResponseWriter, err error) {
 	case strings.Contains(msg, "invalid") || strings.Contains(msg, "required") || strings.Contains(msg, "missing"):
 		code = http.StatusBadRequest
 	default:
-		// checkout: webhook trigger failed -> 500
+		// keep 500
 	}
 
+	w.Header().Set("Content-Type", "application/json; charset=utf-8")
 	w.WriteHeader(code)
 	_ = json.NewEncoder(w).Encode(map[string]string{"error": err.Error()})
 }

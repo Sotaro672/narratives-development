@@ -6,6 +6,8 @@ import 'package:mall/features/cart/infrastructure/repository_http.dart';
 import 'package:mall/features/payment/presentation/hook/use_payment.dart';
 
 import 'package:mall/features/invoice/infrastructure/invoice_repository_http.dart';
+// ✅ Case A（責務分離）: /mall/me/payments を叩く
+import 'package:mall/features/payment/infrastructure/repository_http.dart';
 
 /// ✅ /cart 用：購入する CTA（paymentへ遷移）
 class GoToPaymentButton extends StatelessWidget {
@@ -48,7 +50,7 @@ class GoToPaymentButton extends StatelessWidget {
   }
 }
 
-/// ✅ /payment 用：支払を確定する CTA（Order起票まで実行する）
+/// ✅ /payment 用：支払を確定する CTA（Order -> Invoice -> Payment を起票する）
 class ConfirmPaymentButton extends StatefulWidget {
   const ConfirmPaymentButton({
     super.key,
@@ -93,8 +95,11 @@ class _ConfirmPaymentButtonState extends State<ConfirmPaymentButton> {
 
     setState(() => _loading = true);
 
-    final uc = UsePaymentController();
+    // ✅ FIX: UsePaymentController は存在しないため、use_payment.dart の実体に合わせて UsePayment を使う
+    final uc = UsePayment();
+
     final invRepo = InvoiceRepositoryHttp();
+    final payRepo = PaymentRepositoryHttp();
 
     try {
       // ✅ Footer からでも確定できるように、必要データはここで再取得して Order 起票する
@@ -106,8 +111,18 @@ class _ConfirmPaymentButtonState extends State<ConfirmPaymentButton> {
         throw Exception('orderId is empty');
       }
 
-      // ✅ backend が要求する billingAddressId を Map から拾う
-      final billingAddressId = _pickBillingAddressId(vm.ctx.billingAddress);
+      // ✅ billingAddressId は ctx のフィールドを最優先（payment.dart の payload に存在）
+      var billingAddressId = '';
+      try {
+        // ignore: avoid_dynamic_calls
+        billingAddressId = _s((vm.ctx as dynamic).billingAddressId);
+      } catch (_) {
+        billingAddressId = '';
+      }
+      if (billingAddressId.isEmpty) {
+        // fallback（Map 内に id が入っている実装もあるため）
+        billingAddressId = _pickBillingAddressId(vm.ctx.billingAddress);
+      }
       if (billingAddressId.isEmpty) {
         throw Exception('billingAddressId is missing in payment context');
       }
@@ -126,18 +141,32 @@ class _ConfirmPaymentButtonState extends State<ConfirmPaymentButton> {
         throw Exception('prices is empty');
       }
 
-      // ✅ /mall/me/invoices へ checkout 開始（billingAddressId & prices 必須）
+      // ✅ tax / shipping は現状 0（将来 UI で入れるならここを更新）
+      const tax = 0;
+      const shipping = 0;
+
+      // 1) /mall/me/invoices : invoice 起票
+      // NOTE: 現状メソッド名は startCheckout のままでも OK（中身が POST /mall/me/invoices であれば）
       await invRepo.startCheckout(
         orderId: orderId,
         billingAddressId: billingAddressId,
         prices: prices,
-        tax: 0,
-        shipping: 0,
+        tax: tax,
+        shipping: shipping,
+      );
+
+      // 2) /mall/me/payments : payment 起票（+ dev では自己 webhook trigger をここに寄せる想定）
+      final amount = prices.fold<int>(0, (a, b) => a + b) + tax + shipping;
+
+      await payRepo.startPayment(
+        invoiceId: orderId, // invoice docId=orderId 前提
+        billingAddressId: billingAddressId,
+        amount: amount,
       );
 
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('支払を確定しました（チェックアウトを開始しました）')),
+        const SnackBar(content: Text('支払を確定しました（invoice/payment を起票しました）')),
       );
     } catch (e) {
       if (!mounted) return;
@@ -146,6 +175,7 @@ class _ConfirmPaymentButtonState extends State<ConfirmPaymentButton> {
       ).showSnackBar(SnackBar(content: Text('確定に失敗しました: $e')));
     } finally {
       invRepo.dispose();
+      payRepo.dispose();
       uc.dispose();
       if (mounted) setState(() => _loading = false);
     }

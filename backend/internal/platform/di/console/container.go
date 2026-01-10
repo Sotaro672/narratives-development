@@ -336,7 +336,7 @@ func NewContainer(ctx context.Context, infra *shared.Infra) (*Container, error) 
 	modelUC := uc.NewModelUsecase(modelRepo, modelHistoryRepo)
 
 	// OrderUsecase（Order 作成直後に Invoice 起票するため）
-	orderUC := uc.NewOrderUsecase(orderRepo).WithInvoiceUsecase(invoiceUC)
+	orderUC := uc.NewOrderUsecase(orderRepo)
 
 	permissionUC := uc.NewPermissionUsecase(permissionRepo)
 

@@ -1,7 +1,7 @@
 // frontend/console/product/src/infrastructure/repository/productRepositoryHTTP.ts
 
 import { auth } from "../../../../shell/src/auth/infrastructure/config/firebaseClient";
-import { API_BASE as BACKEND_API_BASE } from "../../../../production/src/infrastructure/http/productionRepositoryHTTP";
+import { API_BASE } from "../../../../production/src/infrastructure/http/productionRepositoryHTTP";
 
 /* ---------------------------------------------------------
  * 共通: Firebase ID トークン取得
@@ -24,7 +24,7 @@ export async function createProductHTTP(payload: {
 }): Promise<void> {
   const token = await getIdTokenOrThrow();
 
-  const res = await fetch(`${BACKEND_API_BASE}/products`, {
+  const res = await fetch(`${API_BASE}/products`, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
@@ -68,7 +68,7 @@ export async function createPrintLogsHTTP(
 
   const token = await getIdTokenOrThrow();
 
-  const res = await fetch(`${BACKEND_API_BASE}/products/print-logs`, {
+  const res = await fetch(`${API_BASE}/products/print-logs`, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
@@ -102,7 +102,7 @@ export async function fetchPrintLogsByProductionId(
   const safeId = encodeURIComponent(id);
 
   const res = await fetch(
-    `${BACKEND_API_BASE}/products/print-logs?productionId=${safeId}`,
+    `${API_BASE}/products/print-logs?productionId=${safeId}`,
     {
       method: "GET",
       headers: {
@@ -140,7 +140,7 @@ export async function fetchProductsByProductionId(
   const safeId = encodeURIComponent(id);
 
   const res = await fetch(
-    `${BACKEND_API_BASE}/products?productionId=${safeId}`,
+    `${API_BASE}/products?productionId=${safeId}`,
     {
       method: "GET",
       headers: {

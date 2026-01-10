@@ -4,8 +4,8 @@ import '../../../cart/infrastructure/repository_http.dart';
 import '../../../order/infrastructure/order_repository_http.dart';
 
 /// PaymentPage の “ロジック側” を集約（データ取得・整形・計算）
-class UsePaymentController {
-  UsePaymentController({
+class UsePayment {
+  UsePayment({
     PaymentRepositoryHttp? paymentRepo,
     CartRepositoryHttp? cartRepo,
     OrderRepositoryHttp? orderRepo,

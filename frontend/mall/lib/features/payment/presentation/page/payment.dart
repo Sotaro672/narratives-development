@@ -14,14 +14,20 @@ class PaymentPage extends StatefulWidget {
 }
 
 class _PaymentPageState extends State<PaymentPage> {
-  late final UsePaymentController _uc;
+  late final UsePayment _uc;
   late Future<PaymentPageVM> _future;
 
   @override
   void initState() {
     super.initState();
-    _uc = UsePaymentController();
-    _future = _uc.load(qpAvatarId: widget.avatarId);
+    _uc = UsePayment();
+    _future = _load();
+  }
+
+  Future<PaymentPageVM> _load() async {
+    // UsePayment.load の戻り型が何であっても吸収できるように “raw” として受ける
+    final raw = await _uc.load(qpAvatarId: widget.avatarId);
+    return PaymentPageVM.fromAny(raw);
   }
 
   @override
@@ -80,6 +86,303 @@ class _PaymentPageState extends State<PaymentPage> {
       ),
     );
   }
+}
+
+// ------------------------------------------------------------
+// ViewModels (this page is self-contained)
+// ------------------------------------------------------------
+
+class PaymentPageVM {
+  PaymentPageVM({
+    required this.billing,
+    required this.shipping,
+    required this.cart,
+  });
+
+  final BillingCardVM billing;
+  final ShippingCardVM shipping;
+  final CartCardVM cart;
+
+  static String _s(dynamic v) => (v ?? '').toString().trim();
+
+  static int _i(dynamic v) {
+    if (v is int) return v;
+    if (v is double) return v.toInt();
+    return int.tryParse(_s(v)) ?? 0;
+  }
+
+  static Map<String, dynamic>? _mapAny(dynamic v) {
+    if (v == null) return null;
+    if (v is Map<String, dynamic>) return v;
+    if (v is Map) return v.cast<String, dynamic>();
+    return null;
+  }
+
+  static String _pick(Map<String, dynamic> m, List<String> keys) {
+    for (final k in keys) {
+      final s = _s(m[k]);
+      if (s.isNotEmpty) return s;
+    }
+    return '';
+  }
+
+  static List<String> _addressLines(Map<String, dynamic>? m) {
+    if (m == null || m.isEmpty) return const [];
+
+    // よくある住所キーの名揺れを吸収
+    final postal = _pick(m, ['postalCode', 'zip', 'zipCode']);
+    final pref = _pick(m, ['prefecture', 'state', 'region']);
+    final city = _pick(m, ['city', 'municipality']);
+    final line1 = _pick(m, ['address1', 'line1', 'street1', 'address']);
+    final line2 = _pick(m, ['address2', 'line2', 'street2']);
+
+    final name = _pick(m, [
+      'name',
+      'fullName',
+      'recipientName',
+      'holderName',
+      'billingName',
+      'shippingName',
+    ]);
+    final phone = _pick(m, ['phone', 'tel', 'phoneNumber']);
+
+    final lines = <String>[];
+    if (name.isNotEmpty) lines.add(name);
+
+    final addrTop = [
+      if (postal.isNotEmpty) '〒$postal',
+      if (pref.isNotEmpty) pref,
+      if (city.isNotEmpty) city,
+    ].join(' ');
+    if (addrTop.trim().isNotEmpty) lines.add(addrTop.trim());
+
+    final addrMid = [line1, line2].where((e) => e.trim().isNotEmpty).join(' ');
+    if (addrMid.trim().isNotEmpty) lines.add(addrMid.trim());
+
+    if (phone.isNotEmpty) lines.add('TEL: $phone');
+
+    // 最低限 “空ではない” 判定を成立させる
+    if (lines.isEmpty) {
+      // 何かしら入ってるはずなのでダンプ用に代表値を置く
+      final id = _pick(m, [
+        'id',
+        'billingAddressId',
+        'shippingAddressId',
+        'addressId',
+      ]);
+      if (id.isNotEmpty) lines.add('id: $id');
+    }
+    return lines;
+  }
+
+  static PaymentPageVM fromAny(dynamic raw) {
+    // raw.ctx.shippingAddress / raw.ctx.billingAddress を想定（無ければ直下を探す）
+    Map<String, dynamic>? shippingMap;
+    Map<String, dynamic>? billingMap;
+    dynamic rawCart;
+
+    try {
+      // ignore: avoid_dynamic_calls
+      final ctx = (raw as dynamic).ctx;
+      // ignore: avoid_dynamic_calls
+      shippingMap = _mapAny(ctx.shippingAddress);
+      // ignore: avoid_dynamic_calls
+      billingMap = _mapAny(ctx.billingAddress);
+      // ignore: avoid_dynamic_calls
+      rawCart = (raw as dynamic).rawCart;
+    } catch (_) {
+      // fallback: raw 自体が map 形式の可能性もある
+      final rm = _mapAny(raw) ?? <String, dynamic>{};
+      shippingMap = _mapAny(rm['shippingAddress']);
+      billingMap = _mapAny(rm['billingAddress']);
+      rawCart = rm['cart'] ?? rm['rawCart'];
+    }
+
+    final shippingLines = _addressLines(shippingMap);
+    final billingLines = _addressLines(billingMap);
+
+    final shippingVM = ShippingCardVM(lines: shippingLines);
+    final billingVM = BillingCardVM.fromLines(billingLines);
+
+    // cart
+    final items = <CartItemVM>[];
+    var total = 0;
+
+    dynamic itemsAny;
+    try {
+      // ignore: avoid_dynamic_calls
+      itemsAny = (rawCart as dynamic).items;
+    } catch (_) {
+      final m = _mapAny(rawCart);
+      itemsAny = m?['items'];
+    }
+
+    if (itemsAny is Map) {
+      for (final e in itemsAny.entries) {
+        final it = e.value;
+
+        String title = '';
+        String imageUrl = ''; // ✅ nullable で持たない（! や null 比較を不要にする）
+        int qty = 0;
+        int unit = 0;
+
+        String productName = '';
+        String size = '';
+        String color = '';
+
+        try {
+          // ignore: avoid_dynamic_calls
+          title = _s(it.title);
+          // ignore: avoid_dynamic_calls
+          imageUrl = _s(it.listImage);
+          // ignore: avoid_dynamic_calls
+          unit = _i(it.price);
+          // ignore: avoid_dynamic_calls
+          qty = _i(it.qty);
+
+          // ignore: avoid_dynamic_calls
+          productName = _s(it.productName);
+          // ignore: avoid_dynamic_calls
+          size = _s(it.size);
+          // ignore: avoid_dynamic_calls
+          color = _s(it.color);
+        } catch (_) {
+          final im = _mapAny(it) ?? <String, dynamic>{};
+          title = _s(im['title']);
+          imageUrl = _s(im['listImage']);
+          if (imageUrl.isEmpty) imageUrl = _s(im['imageUrl']);
+          unit = _i(im['price']);
+          qty = _i(im['qty']);
+
+          productName = _s(im['productName']);
+          size = _s(im['size']);
+          color = _s(im['color']);
+        }
+
+        if (title.isEmpty) title = '(no title)';
+        if (qty <= 0) qty = 1;
+
+        final lineTotal = unit * qty;
+        if (lineTotal > 0) total += lineTotal;
+
+        final subtitle = <String>[];
+        if (productName.isNotEmpty) subtitle.add(productName);
+
+        final sc = <String>[
+          if (size.isNotEmpty) 'size: $size',
+          if (color.isNotEmpty) 'color: $color',
+          'qty: $qty',
+        ].join(' / ');
+        if (sc.trim().isNotEmpty) subtitle.add(sc);
+
+        final cleanedImg = imageUrl.trim();
+
+        items.add(
+          CartItemVM(
+            title: title,
+            subtitleLines: subtitle,
+            imageUrl: cleanedImg.isNotEmpty ? cleanedImg : null,
+            trailingPrice: _yen(lineTotal),
+          ),
+        );
+      }
+    }
+
+    final cartVM = CartCardVM(items: items, total: total);
+
+    return PaymentPageVM(
+      billing: billingVM,
+      shipping: shippingVM,
+      cart: cartVM,
+    );
+  }
+
+  static String _yen(int n) {
+    if (n <= 0) return '¥0';
+    final s = n.toString();
+    final buf = StringBuffer();
+    for (int i = 0; i < s.length; i++) {
+      final idxFromEnd = s.length - i;
+      buf.write(s[i]);
+      if (idxFromEnd > 1 && idxFromEnd % 3 == 1) {
+        buf.write(',');
+      }
+    }
+    return '¥${buf.toString()}';
+  }
+}
+
+class ShippingCardVM {
+  const ShippingCardVM({required this.lines});
+  final List<String> lines;
+  bool get isEmpty => lines.isEmpty;
+}
+
+class BillingCardVM {
+  const BillingCardVM({
+    required this.holderLine,
+    required this.cardNumberLine,
+    required this.isEmpty,
+  });
+
+  final String holderLine;
+  final String cardNumberLine;
+  final bool isEmpty;
+
+  factory BillingCardVM.fromLines(List<String> lines) {
+    if (lines.isEmpty) {
+      return const BillingCardVM(
+        holderLine: '',
+        cardNumberLine: '(empty)',
+        isEmpty: true,
+      );
+    }
+    // “カード情報”はまだ無い想定なので、住所の先頭を holderLine に流用
+    final holder = lines.first;
+    final rest = lines.skip(1).join(' / ').trim();
+    final line2 = rest.isEmpty ? '決済: (未設定 / 開発中)' : rest;
+    return BillingCardVM(
+      holderLine: holder,
+      cardNumberLine: line2,
+      isEmpty: false,
+    );
+  }
+}
+
+class CartCardVM {
+  const CartCardVM({required this.items, required this.total});
+  final List<CartItemVM> items;
+  final int total;
+
+  bool get isEmpty => items.isEmpty;
+
+  String get totalLine {
+    // PaymentPageVM の表示ロジックに合わせて ¥ + 3桁カンマ
+    final s = total.toString();
+    final buf = StringBuffer();
+    for (int i = 0; i < s.length; i++) {
+      final idxFromEnd = s.length - i;
+      buf.write(s[i]);
+      if (idxFromEnd > 1 && idxFromEnd % 3 == 1) {
+        buf.write(',');
+      }
+    }
+    return '¥${buf.toString()}';
+  }
+}
+
+class CartItemVM {
+  const CartItemVM({
+    required this.title,
+    required this.subtitleLines,
+    required this.imageUrl,
+    required this.trailingPrice,
+  });
+
+  final String title;
+  final List<String> subtitleLines;
+  final String? imageUrl;
+  final String trailingPrice;
 }
 
 // ------------------------------------------------------------
@@ -188,9 +491,8 @@ class _CartCard extends StatelessWidget {
                 ),
                 itemBuilder: (context, i) {
                   final it = vm.items[i];
-
-                  final hasImgUrl =
-                      it.imageUrl != null && it.imageUrl!.isNotEmpty;
+                  final img = it.imageUrl;
+                  final hasImgUrl = (img ?? '').isNotEmpty;
 
                   return ListTile(
                     contentPadding: const EdgeInsets.symmetric(horizontal: 4),
@@ -201,7 +503,7 @@ class _CartCard extends StatelessWidget {
                         borderRadius: BorderRadius.circular(6),
                         child: hasImgUrl
                             ? Image.network(
-                                it.imageUrl!,
+                                img!,
                                 fit: BoxFit.cover,
                                 errorBuilder: (_, __, ___) => const Icon(
                                   Icons.image_not_supported_outlined,

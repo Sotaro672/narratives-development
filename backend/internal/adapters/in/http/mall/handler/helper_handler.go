@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"net/http"
+	"reflect"
 	"strconv"
 	"strings"
 	"time"
@@ -180,4 +181,26 @@ func isNotFoundLike(err error) bool {
 		strings.Contains(msg, "not found") ||
 		strings.Contains(msg, "404") ||
 		strings.Contains(msg, "avatar_not_found_for_uid")
+}
+func toInt(v reflect.Value) int {
+	if !v.IsValid() {
+		return 0
+	}
+	if v.Kind() == reflect.Pointer {
+		if v.IsNil() {
+			return 0
+		}
+		v = v.Elem()
+	}
+
+	switch v.Kind() {
+	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
+		return int(v.Int())
+	case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64, reflect.Uintptr:
+		return int(v.Uint())
+	case reflect.Float32, reflect.Float64:
+		return int(v.Float())
+	default:
+		return 0
+	}
 }

@@ -54,8 +54,8 @@ type Container struct {
 	OrderUC           *usecase.OrderUsecase
 	InvoiceUC         *usecase.InvoiceUsecase
 
-	// ✅ A: invoice起票直後に webhook を叩く（自己呼び出し）オーケストレーション
-	CheckoutUC *usecase.CheckoutUsecase
+	// ✅ Case A: /mall/me/payments で payment 起票後に（必要なら）webhook を叩くオーケストレーション
+	PaymentFlowUC *usecase.PaymentFlowUsecase
 
 	// ✅ Inventory (buyer-facing, read-only)
 	InventoryUC *usecase.InventoryUsecase
@@ -175,7 +175,7 @@ func NewContainer(ctx context.Context, infra *shared.Infra) (*Container, error) 
 	avatarWalletSvc := solanainfra.NewAvatarWalletService(projectID)
 
 	// --------------------------------------------------------
-	// ✅ A: Self webhook trigger client (outbound)
+	// ✅ Case A: Self webhook trigger client (outbound)
 	// --------------------------------------------------------
 	// Cloud Run / local の自分自身の base URL を指定する
 	// 例:
@@ -183,13 +183,12 @@ func NewContainer(ctx context.Context, infra *shared.Infra) (*Container, error) 
 	//   SELF_BASE_URL=http://localhost:8080
 	//
 	// NOTE:
-	// - 未設定でも Mall 全体は起動させる（CheckoutUC だけ無効化）
-	// - /mall/me/invoices の POST は cont.CheckoutUC が nil の場合 500/503 になる想定（handler 側で制御）
+	// - 未設定でも Mall 全体は起動させる（PaymentFlowUC だけ "trigger=nil" で動かす/無効化できる）
 	selfBaseURL := strings.TrimSpace(os.Getenv("SELF_BASE_URL"))
 	selfBaseURL = strings.TrimRight(selfBaseURL, "/")
 	selfBaseURLConfigured := selfBaseURL != ""
 	if !selfBaseURLConfigured {
-		log.Printf("[di.mall] WARN: SELF_BASE_URL is empty; CheckoutUC (A flow) will be disabled")
+		log.Printf("[di.mall] WARN: SELF_BASE_URL is empty; webhook trigger will be disabled (PaymentFlowUC will still exist if PaymentUC exists)")
 	}
 
 	// --------------------------------------------------------
@@ -226,14 +225,20 @@ func NewContainer(ctx context.Context, infra *shared.Infra) (*Container, error) 
 	c.PaymentUC = usecase.NewPaymentUsecase(paymentRepo).WithInvoiceRepoForPayment(invoiceRepo)
 
 	c.InvoiceUC = usecase.NewInvoiceUsecase(invoiceRepo)
-	c.OrderUC = usecase.NewOrderUsecase(orderRepo).WithInvoiceUsecase(c.InvoiceUC)
+	c.OrderUC = usecase.NewOrderUsecase(orderRepo)
 
-	// ✅ A: invoice起票直後に webhook を叩く（自己呼び出し）オーケストレーション
-	if selfBaseURLConfigured {
-		stripeTrigger := httpout.NewStripeWebhookClient(selfBaseURL)
-		c.CheckoutUC = usecase.NewCheckoutUsecase(c.InvoiceUC, stripeTrigger)
+	// ✅ Case A: PaymentFlowUsecase（payment起票 + 必要なら webhook trigger）
+	// - NewPaymentFlowUsecase は "PaymentUsecase" を取る（InvoiceUsecaseではない）
+	// - selfBaseURL が無い場合は trigger=nil（＝外部から webhook が来る運用/または dev で trigger しない）
+	if c.PaymentUC != nil {
+		if selfBaseURLConfigured {
+			stripeTrigger := httpout.NewStripeWebhookClient(selfBaseURL)
+			c.PaymentFlowUC = usecase.NewPaymentFlowUsecase(c.PaymentUC, stripeTrigger)
+		} else {
+			c.PaymentFlowUC = usecase.NewPaymentFlowUsecase(c.PaymentUC, nil)
+		}
 	} else {
-		c.CheckoutUC = nil
+		c.PaymentFlowUC = nil
 	}
 
 	c.InventoryUC = usecase.NewInventoryUsecase(inventoryRepo)
@@ -300,7 +305,7 @@ func NewContainer(ctx context.Context, infra *shared.Infra) (*Container, error) 
 	}
 
 	log.Printf(
-		"[di.mall] container built (firestore=%t gcs=%t firebaseAuth=%t avatarUC=%t avatarWalletSvc=%t cartUC=%t cartRepo=%t paymentUC=%t invoiceUC=%t checkoutUC=%t meAvatarRepo=%t inventoryUC=%t tokenBlueprintRepo=%t tokenIconResolver=%t selfBaseURL=%t)",
+		"[di.mall] container built (firestore=%t gcs=%t firebaseAuth=%t avatarUC=%t avatarWalletSvc=%t cartUC=%t cartRepo=%t paymentUC=%t paymentFlowUC=%t invoiceUC=%t meAvatarRepo=%t inventoryUC=%t tokenBlueprintRepo=%t tokenIconResolver=%t selfBaseURL=%t)",
 		c.Infra.Firestore != nil,
 		c.Infra.GCS != nil,
 		c.Infra.FirebaseAuth != nil,
@@ -309,8 +314,8 @@ func NewContainer(ctx context.Context, infra *shared.Infra) (*Container, error) 
 		c.CartUC != nil,
 		c.CartRepo != nil,
 		c.PaymentUC != nil,
+		c.PaymentFlowUC != nil,
 		c.InvoiceUC != nil,
-		c.CheckoutUC != nil,
 		c.MeAvatarRepo != nil,
 		c.InventoryUC != nil,
 		c.TokenBlueprintRepo != nil,
