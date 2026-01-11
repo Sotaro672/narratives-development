@@ -1,3 +1,4 @@
+// backend\internal\domain\product\product.go
 package product
 
 import (

@@ -37,8 +37,14 @@ type Deps struct {
 
 	Cart    http.Handler
 	Payment http.Handler
-	Preview http.Handler
-	Order   http.Handler
+
+	// ✅ Preview routes are intentionally split:
+	// - /mall/preview     : public (no auth) for pre-login scanner
+	// - /mall/me/preview  : authenticated for post-login scanner
+	Preview   http.Handler
+	PreviewMe http.Handler
+
+	Order http.Handler
 
 	// ✅ invoices (buyer-facing)
 	Invoice http.Handler
@@ -168,11 +174,13 @@ func Register(mux *http.ServeMux, deps Deps) {
 	handleSafe(mux, "/mall/me/cart", deps.Cart, "Cart(me)")
 	handleSafe(mux, "/mall/me/cart/", deps.Cart, "Cart(me)")
 
-	// preview
+	// ✅ preview
+	// - /mall/preview      : public (no auth) for pre-login scanner
+	// - /mall/me/preview   : authenticated for post-login scanner
 	handleSafe(mux, "/mall/preview", deps.Preview, "Preview")
 	handleSafe(mux, "/mall/preview/", deps.Preview, "Preview")
-	handleSafe(mux, "/mall/me/preview", deps.Preview, "Preview(me)")
-	handleSafe(mux, "/mall/me/preview/", deps.Preview, "Preview(me)")
+	handleSafe(mux, "/mall/me/preview", deps.PreviewMe, "Preview(me)")
+	handleSafe(mux, "/mall/me/preview/", deps.PreviewMe, "Preview(me)")
 
 	// payment
 	handleSafe(mux, "/mall/me/payment", deps.Payment, "Payment(me)")

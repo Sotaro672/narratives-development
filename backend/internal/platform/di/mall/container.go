@@ -8,6 +8,8 @@ import (
 	"os"
 	"strings"
 
+	"cloud.google.com/go/firestore"
+
 	// inbound (query + resolver types)
 	mallquery "narratives/internal/application/query/mall"
 	appresolver "narratives/internal/application/resolver"
@@ -28,6 +30,7 @@ import (
 
 	// domains
 	ldom "narratives/internal/domain/list"
+	productdom "narratives/internal/domain/product"
 
 	shared "narratives/internal/platform/di/shared"
 )
@@ -177,13 +180,6 @@ func NewContainer(ctx context.Context, infra *shared.Infra) (*Container, error) 
 	// --------------------------------------------------------
 	// ✅ Case A: Self webhook trigger client (outbound)
 	// --------------------------------------------------------
-	// Cloud Run / local の自分自身の base URL を指定する
-	// 例:
-	//   SELF_BASE_URL=https://xxxxx.asia-northeast1.run.app
-	//   SELF_BASE_URL=http://localhost:8080
-	//
-	// NOTE:
-	// - 未設定でも Mall 全体は起動させる（PaymentFlowUC だけ "trigger=nil" で動かす/無効化できる）
 	selfBaseURL := strings.TrimSpace(os.Getenv("SELF_BASE_URL"))
 	selfBaseURL = strings.TrimRight(selfBaseURL, "/")
 	selfBaseURLConfigured := selfBaseURL != ""
@@ -233,8 +229,6 @@ func NewContainer(ctx context.Context, infra *shared.Infra) (*Container, error) 
 	c.OrderUC = usecase.NewOrderUsecase(orderRepo)
 
 	// ✅ Case A: PaymentFlowUsecase（payment起票 + 必要なら webhook trigger）
-	// - NewPaymentFlowUsecase は "PaymentUsecase" を取る（InvoiceUsecaseではない）
-	// - selfBaseURL が無い場合は trigger=nil（＝外部から webhook が来る運用/または dev で trigger しない）
 	if c.PaymentUC != nil {
 		if selfBaseURLConfigured {
 			stripeTrigger := httpout.NewStripeWebhookClient(selfBaseURL)
@@ -291,7 +285,11 @@ func NewContainer(ctx context.Context, infra *shared.Infra) (*Container, error) 
 		c.CatalogQ = mallquery.NewCatalogQuery(listRepoFS, invRepo, pbRepo, modelRepo)
 
 		c.CartQ = mallquery.NewCartQuery(fsClient)
-		c.PreviewQ = mallquery.NewPreviewQuery(fsClient)
+
+		// ✅ ここが今回の修正点:
+		// - NewPreviewQuery は ProductReader を要求するので、Firestore直渡しではなく adapter を渡す
+		c.PreviewQ = mallquery.NewPreviewQuery(previewProductReaderFS{fs: fsClient})
+
 		c.OrderQ = mallquery.NewOrderQuery(fsClient)
 
 		// light injection
@@ -304,13 +302,13 @@ func NewContainer(ctx context.Context, infra *shared.Infra) (*Container, error) 
 		if c.CartQ != nil && c.ListRepo != nil && c.CartQ.ListRepo == nil {
 			c.CartQ.ListRepo = c.ListRepo
 		}
-		if c.PreviewQ != nil && c.NameResolver != nil && c.PreviewQ.Resolver == nil {
-			c.PreviewQ.Resolver = c.NameResolver
-		}
+
+		// ✅ PreviewQ は preview_handler.go の要件が「productId -> modelId」なので
+		// NameResolver の注入（Resolver フィールド）は行わない（そもそも存在しない）
 	}
 
 	log.Printf(
-		"[di.mall] container built (firestore=%t gcs=%t firebaseAuth=%t avatarUC=%t avatarWalletSvc=%t cartUC=%t cartRepo=%t paymentUC=%t paymentFlowUC=%t invoiceUC=%t meAvatarRepo=%t inventoryUC=%t tokenBlueprintRepo=%t tokenIconResolver=%t selfBaseURL=%t)",
+		"[di.mall] container built (firestore=%t gcs=%t firebaseAuth=%t avatarUC=%t avatarWalletSvc=%t cartUC=%t cartRepo=%t paymentUC=%t paymentFlowUC=%t invoiceUC=%t meAvatarRepo=%t inventoryUC=%t tokenBlueprintRepo=%t tokenIconResolver=%t selfBaseURL=%t previewQ=%t)",
 		c.Infra.Firestore != nil,
 		c.Infra.GCS != nil,
 		c.Infra.FirebaseAuth != nil,
@@ -326,9 +324,47 @@ func NewContainer(ctx context.Context, infra *shared.Infra) (*Container, error) 
 		c.TokenBlueprintRepo != nil,
 		c.TokenIconURLResolver != nil,
 		selfBaseURLConfigured,
+		c.PreviewQ != nil,
 	)
 
 	return c, nil
+}
+
+// ------------------------------------------------------------
+// PreviewQuery: ProductReader adapter (Firestore -> domain.Product)
+// ------------------------------------------------------------
+
+// previewProductReaderFS implements mallquery.ProductReader
+// by reading a product document from Firestore.
+//
+// NOTE: collection 名は "products" を前提にしています。
+// もし実際の保存先が異なる場合は、この1箇所だけ直せば PreviewQuery は動き続けます。
+type previewProductReaderFS struct {
+	fs *firestore.Client
+}
+
+func (r previewProductReaderFS) GetByID(ctx context.Context, productID string) (productdom.Product, error) {
+	if r.fs == nil {
+		return productdom.Product{}, mallquery.ErrPreviewQueryNotConfigured
+	}
+	id := strings.TrimSpace(productID)
+	if id == "" {
+		return productdom.Product{}, mallquery.ErrInvalidProductID
+	}
+
+	doc, err := r.fs.Collection("products").Doc(id).Get(ctx)
+	if err != nil {
+		return productdom.Product{}, err
+	}
+
+	var p productdom.Product
+	if err := doc.DataTo(&p); err != nil {
+		return productdom.Product{}, err
+	}
+
+	// Firestore doc id を優先して上書き
+	p.ID = doc.Ref.ID
+	return p, nil
 }
 
 // tokenIconURLResolver resolves icon URL from stored objectPath (or URL).

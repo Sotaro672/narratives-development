@@ -50,8 +50,8 @@ func requireUserAuth(mw *middleware.UserAuthMiddleware, h http.Handler, name str
 // Register registers mall routes onto mux.
 // Pure DI: construct handlers and pass into mall router.Register.
 // - No method/path branching here
-// - ✅ deps must be non-nil for all handlers (no nil in deps)
-// - ✅ UserAuthMiddleware is applied to ALL user-authenticated endpoints (user系全部)
+// - deps must be non-nil for all handlers (no nil in deps)
+// - UserAuthMiddleware is applied to ALL user-authenticated endpoints (user系全部)
 func Register(mux *http.ServeMux, cont *Container) {
 	if mux == nil || cont == nil {
 		return
@@ -74,7 +74,7 @@ func Register(mux *http.ServeMux, cont *Container) {
 	// ----------------------------
 	// Handlers (construct only)
 	// ----------------------------
-	// ✅ default to non-nil for all handlers
+	// default to non-nil for all handlers
 	listH := notImplemented("List")
 	invH := notImplemented("Inventory")
 	pbH := notImplemented("ProductBlueprint")
@@ -92,28 +92,33 @@ func Register(mux *http.ServeMux, cont *Container) {
 	avatarStateH := notImplemented("AvatarState")
 	walletH := notImplemented("Wallet")
 	cartH := notImplemented("Cart")
-	prevH := notImplemented("Preview")
 	payH := notImplemented("Payment")
 	orderH := notImplemented("Order")
 	invoiceH := notImplemented("Invoice")
-	meAvatarH := notImplemented("MeAvatar") // ✅ /mall/me/avatar
+	meAvatarH := notImplemented("MeAvatar")
 
-	// ✅ Lists (public)
+	// Preview split:
+	// - /mall/preview     : public (no auth)
+	// - /mall/me/preview  : authenticated
+	previewPublicH := notImplemented("PreviewPublic")
+	previewMeH := notImplemented("PreviewMe")
+
+	// Lists (public)
 	if cont.ListUC != nil {
 		listH = mallhandler.NewMallListHandler(cont.ListUC)
 	}
 
-	// ✅ Catalog (public)
+	// Catalog (public)
 	if cont.CatalogQ != nil {
 		catalogH = mallhandler.NewMallCatalogHandler(cont.CatalogQ)
 	}
 
-	// ✅ Inventory (public read-only)
+	// Inventory (public read-only)
 	if cont.InventoryUC != nil {
 		invH = mallhandler.NewMallInventoryHandler(cont.InventoryUC)
 	}
 
-	// ✅ TokenBlueprint (public patch)
+	// TokenBlueprint (public patch)
 	if cont.TokenBlueprintRepo != nil {
 		if cont.NameResolver != nil {
 			if cont.TokenIconURLResolver != nil {
@@ -133,7 +138,7 @@ func Register(mux *http.ServeMux, cont *Container) {
 		}
 	}
 
-	// ✅ Core authenticated resources (user side)
+	// Core authenticated resources (user side)
 	if cont.UserUC != nil {
 		userH = mallhandler.NewUserHandler(cont.UserUC)
 	}
@@ -144,31 +149,29 @@ func Register(mux *http.ServeMux, cont *Container) {
 		billH = mallhandler.NewBillingAddressHandler(cont.BillingAddressUC)
 	}
 
-	// ✅ Avatar（/mall/avatars）← これが無いと [mall_avatar_handler] が出ない
+	// Avatar（/mall/avatars）
 	if cont.AvatarUC != nil {
 		avatarH = mallhandler.NewAvatarHandler(cont.AvatarUC)
 	}
 
-	// ✅ Wallet（AvatarUC を渡せるなら渡す：nil 固定をやめる）
+	// Wallet
 	if cont.WalletUC != nil {
 		walletH = mallhandler.NewMallWalletHandler(cont.WalletUC, cont.AvatarUC)
 	}
 
-	// ✅ /mall/me/avatar (uid -> avatarId)
+	// /mall/me/avatar (uid -> avatarId)
 	if cont.MeAvatarRepo != nil {
 		meAvatarH = mallhandler.NewMeAvatarHandler(cont.MeAvatarRepo)
 	}
 
-	// ✅ Cart / Preview (authenticated)
+	// Cart (authenticated)
 	if cont.CartUC != nil {
 		cartH = mallhandler.NewCartHandlerWithQueries(cont.CartUC, cont.CartQ, cont.PreviewQ)
-		prevH = cartH
 	} else if cont.CartQ != nil {
 		cartH = mallhandler.NewCartQueryHandler(cont.CartQ)
-		// preview remains notImplemented (non-nil)
 	}
 
-	// ✅ Payment / Order (authenticated)
+	// Payment / Order (authenticated)
 	if cont.PaymentUC != nil {
 		payH = mallhandler.NewPaymentHandlerWithOrderQuery(cont.PaymentUC, cont.OrderQ)
 	}
@@ -176,12 +179,21 @@ func Register(mux *http.ServeMux, cont *Container) {
 		orderH = mallhandler.NewOrderHandler(cont.OrderUC)
 	}
 
-	// ✅ Invoice (authenticated)
-	// ✅ 責務分離後: NewInvoiceHandler は InvoiceUsecase のみ受け取る
-	// - POST /mall/me/invoices : invoice 起票のみ
-	// - payment 起票は /mall/me/payment 側
+	// Invoice (authenticated)
 	if cont.InvoiceUC != nil {
 		invoiceH = mallhandler.NewInvoiceHandler(cont.InvoiceUC)
+	}
+
+	// ------------------------------------------------------------
+	// Preview handler wiring (split)
+	// 前提:
+	// - cont.PreviewQ が存在
+	// - handler.NewPreviewHandler(cont.PreviewQ) が /mall/preview 用
+	// - handler.NewPreviewMeHandler(cont.PreviewQ) が /mall/me/preview 用
+	// ------------------------------------------------------------
+	if cont.PreviewQ != nil {
+		previewPublicH = mallhandler.NewPreviewHandler(cont.PreviewQ)
+		previewMeH = mallhandler.NewPreviewMeHandler(cont.PreviewQ)
 	}
 
 	// SignIn: keep a stable no-op endpoint (client convenience)
@@ -191,7 +203,7 @@ func Register(mux *http.ServeMux, cont *Container) {
 	})
 
 	// ------------------------------------------------------------
-	// ✅ Apply UserAuthMiddleware to ALL user-authenticated handlers
+	// Apply UserAuthMiddleware to ALL user-authenticated handlers
 	// ------------------------------------------------------------
 	userH = requireUserAuth(userAuthMW, userH, "User")
 	shipH = requireUserAuth(userAuthMW, shipH, "ShippingAddress")
@@ -201,24 +213,22 @@ func Register(mux *http.ServeMux, cont *Container) {
 	walletH = requireUserAuth(userAuthMW, walletH, "Wallet")
 	meAvatarH = requireUserAuth(userAuthMW, meAvatarH, "MeAvatar")
 
-	// cart/preview は同一 handler を共有するケースがあるので、二重wrapしない
-	cartWrapped := requireUserAuth(userAuthMW, cartH, "Cart")
-	cartH = cartWrapped
-	if prevH == cartH {
-		prevH = cartWrapped
-	} else {
-		prevH = requireUserAuth(userAuthMW, prevH, "Preview")
-	}
+	// cart は auth（/mall/cart も含めて auth にする運用）
+	cartH = requireUserAuth(userAuthMW, cartH, "Cart")
+
+	// /mall/me/preview は auth
+	previewMeH = requireUserAuth(userAuthMW, previewMeH, "Preview(me)")
 
 	payH = requireUserAuth(userAuthMW, payH, "Payment")
 	orderH = requireUserAuth(userAuthMW, orderH, "Order")
-
-	// ✅ invoices
-	invoiceH = requireUserAuth(userAuthMW, invoiceH, "Invoice")
+	invoiceH = requireUserAuth(userAuthMW, invoiceH, "Invoice") // invoices
 
 	// ----------------------------
 	// Router deps
 	// ----------------------------
+	// ✅ 直し方A:
+	// router.go 側に PreviewMe を追加し、/mall/me/preview は deps.PreviewMe に向ける。
+	// これにより mux.Handle の二重登録（後勝ち差し替え）を完全に排除する。
 	deps := mallhttp.Deps{
 		// public
 		List: listH,
@@ -238,19 +248,18 @@ func Register(mux *http.ServeMux, cont *Container) {
 		User:            userH,
 		ShippingAddress: shipH,
 		BillingAddress:  billH,
+		Avatar:          avatarH,
+		MeAvatar:        meAvatarH,
+		AvatarState:     avatarStateH,
+		Wallet:          walletH,
+		Cart:            cartH,
 
-		Avatar:      avatarH,
-		MeAvatar:    meAvatarH,
-		AvatarState: avatarStateH,
-
-		Wallet: walletH,
-
-		Cart:    cartH,
-		Preview: prevH,
+		//preview split
+		Preview:   previewPublicH, // /mall/preview (public)
+		PreviewMe: previewMeH,     // /mall/me/preview (auth)
 
 		Payment: payH,
 		Order:   orderH,
-
 		Invoice: invoiceH,
 	}
 
