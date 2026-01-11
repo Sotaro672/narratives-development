@@ -62,6 +62,27 @@ String _decodeFrom(String? v) {
   }
 }
 
+/// ✅ /:productId が “固定パス” と衝突した時の安全弁（念のため）
+/// - go_router は静的ルートの方が優先されるので基本不要だが、
+///   appRedirect 側などで弾かれるのを避ける意図でも利用できる。
+bool _isReservedTopSegment(String seg) {
+  const reserved = <String>{
+    'login',
+    'create-account',
+    'shipping-address',
+    'billing-address',
+    'avatar-create',
+    'avatar-edit',
+    'avatar',
+    'user-edit',
+    'cart',
+    'preview',
+    'payment',
+    'catalog',
+  };
+  return reserved.contains(seg);
+}
+
 GoRouter buildRouter({required bool firebaseReady, Object? initError}) {
   if (firebaseReady) return buildAppRouter();
   return buildPublicOnlyRouter(
@@ -358,22 +379,59 @@ List<RouteBase> _routes({required bool firebaseReady}) {
           },
         ),
 
+        // ✅ /preview（従来通り） + ?productId= を受けられるようにしておく
         GoRoute(
           path: AppRoutePath.preview,
           name: AppRouteName.preview,
           pageBuilder: (context, state) {
             final qp = state.uri.queryParameters;
+
             final qpAvatarId = (qp[AppQueryKey.avatarId] ?? '').trim();
             final avatarId = qpAvatarId.isNotEmpty
                 ? qpAvatarId
                 : AvatarIdStore.I.avatarId;
+
             final from = _decodeFrom(qp[AppQueryKey.from]);
 
+            // ✅ 追加: productId（無ければ空）
+            final productId = (qp[AppQueryKey.productId] ?? '').trim();
+
             return NoTransitionPage(
-              key: ValueKey('preview-$avatarId'),
+              key: ValueKey('preview-$avatarId-$productId'),
               child: PreviewPage(
                 avatarId: avatarId,
+                productId: productId.isEmpty ? null : productId,
                 from: from.isEmpty ? null : from,
+              ),
+            );
+          },
+        ),
+
+        // ✅ ★追加★ QR入口: https://narratives.jp/{productId}
+        // - 静的ルート（/catalog など）の方が優先されるため基本衝突しない
+        // - それでも念のため reserved は弾く（挙動が読めなくなるのを防ぐ）
+        GoRoute(
+          path: AppRoutePath.qrProduct,
+          name: AppRouteName.qrProduct,
+          pageBuilder: (context, state) {
+            final productId = (state.pathParameters['productId'] ?? '').trim();
+
+            // 念のため：固定パスっぽいものはここでは扱わない
+            if (productId.isEmpty || _isReservedTopSegment(productId)) {
+              return const NoTransitionPage(child: HomePage());
+            }
+
+            final avatarId = AvatarIdStore.I.avatarId;
+            final from = state.uri.toString(); // 復帰用に “今のURL” を保持
+
+            return NoTransitionPage(
+              key: ValueKey('qr-preview-$productId-$avatarId'),
+              child: PreviewPage(
+                avatarId: avatarId,
+                productId: productId,
+                from: from,
+                // intent を使うならここで渡す（PreviewPage 側が対応していれば）
+                // intent: 'qr',
               ),
             );
           },
@@ -440,7 +498,15 @@ String? _titleFor(GoRouterState state) {
   if (loc == AppRoutePath.avatar) return _avatarNameForHeader();
 
   if (loc == AppRoutePath.cart) return 'Cart';
+
+  // ✅ /preview と /{productId}（入口）は Preview 表示
   if (loc == AppRoutePath.preview) return 'Preview';
+  if (state.uri.pathSegments.length == 1 &&
+      state.uri.pathSegments.first.isNotEmpty &&
+      !_isReservedTopSegment(state.uri.pathSegments.first)) {
+    return 'Preview';
+  }
+
   if (loc == AppRoutePath.payment) return 'Payment';
   if (loc == AppRoutePath.avatarEdit) return 'Edit Avatar';
   if (loc == AppRoutePath.userEdit) return 'Account';

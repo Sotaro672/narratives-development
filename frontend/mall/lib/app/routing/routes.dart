@@ -12,6 +12,9 @@ class AppRouteName {
   // ✅ NEW: preview
   static const preview = 'preview';
 
+  // ✅ NEW: QR入口（https://narratives.jp/{productId}）
+  static const qrProduct = 'qrProduct';
+
   static const login = 'login';
   static const createAccount = 'createAccount';
   static const shippingAddress = 'shippingAddress';
@@ -33,6 +36,9 @@ class AppRoutePath {
   // ✅ NEW: preview
   static const preview = '/preview';
 
+  // ✅ NEW: QR入口（トップ1階層が productId）
+  static const qrProduct = '/:productId';
+
   static const login = '/login';
   static const createAccount = '/create-account';
   static const shippingAddress = '/shipping-address';
@@ -46,6 +52,10 @@ class AppQueryKey {
   static const from = 'from';
   static const intent = 'intent';
   static const avatarId = 'avatarId';
+
+  // ✅ NEW: preview 用 productId
+  static const productId = 'productId';
+
   static const tab = 'tab';
   static const mode = 'mode';
   static const oobCode = 'oobCode';

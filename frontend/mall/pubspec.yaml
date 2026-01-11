@@ -11,6 +11,10 @@ dependencies:
   flutter:
     sdk: flutter
 
+  # ✅ Needed for usePathUrlStrategy() on Flutter Web
+  flutter_web_plugins:
+    sdk: flutter
+
   cupertino_icons: ^1.0.8
 
   # Routing (Navigator 2.0 / URL-based)

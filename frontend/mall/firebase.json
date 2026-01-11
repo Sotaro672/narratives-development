@@ -1,1 +1,31 @@
-{"hosting":[{"target":"mall","public":"build/web","ignore":["firebase.json","**/.*","**/node_modules/**"],"rewrites":[{"source":"**","destination":"/index.html"}]}],"flutter":{"platforms":{"android":{"default":{"projectId":"narratives-development-26c2d","appId":"1:871263659099:android:172407550c4ba2748d4b7e","fileOutput":"android/app/google-services.json"}},"dart":{"lib/firebase_options.dart":{"projectId":"narratives-development-26c2d","configurations":{"web":"1:871263659099:web:0d4bbdc36e59d7ed8d4b7e"}}}}}}
+{
+  "hosting": [
+    {
+      "target": "mall",
+      "public": "build/web",
+      "ignore": ["firebase.json", "**/.*", "**/node_modules/**"],
+      "rewrites": [
+        { "source": "**", "destination": "/index.html" }
+      ]
+    }
+  ],
+  "flutter": {
+    "platforms": {
+      "android": {
+        "default": {
+          "projectId": "narratives-development-26c2d",
+          "appId": "1:871263659099:android:172407550c4ba2748d4b7e",
+          "fileOutput": "android/app/google-services.json"
+        }
+      },
+      "dart": {
+        "lib/firebase_options.dart": {
+          "projectId": "narratives-development-26c2d",
+          "configurations": {
+            "web": "1:871263659099:web:0d4bbdc36e59d7ed8d4b7e"
+          }
+        }
+      }
+    }
+  }
+}
