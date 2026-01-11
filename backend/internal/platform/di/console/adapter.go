@@ -7,20 +7,15 @@ import (
 	"strings"
 	"time"
 
-	"cloud.google.com/go/firestore"
-
 	fs "narratives/internal/adapters/out/firestore"
 	companydom "narratives/internal/domain/company"
 	inspectiondom "narratives/internal/domain/inspection"
 	listdom "narratives/internal/domain/list"
 	memdom "narratives/internal/domain/member"
-	mintdom "narratives/internal/domain/mint"
 	modeldom "narratives/internal/domain/model"
 	productdom "narratives/internal/domain/product"
 	productbpdom "narratives/internal/domain/productBlueprint"
 	tbdom "narratives/internal/domain/tokenBlueprint"
-
-	avatarstate "narratives/internal/domain/avatarState"
 )
 
 //
@@ -89,11 +84,6 @@ func (a *authCompanyRepoAdapter) Save(ctx context.Context, c *companydom.Company
 // InvitationTokenRepository 用アダプタ
 // ========================================
 //
-// Firestore 実装 (*fs.InvitationTokenRepositoryFS) を
-// usecase.InvitationTokenRepository に合わせてラップする。
-//   - ResolveInvitationInfoByToken
-//   - CreateInvitationToken
-//
 
 type invitationTokenRepoAdapter struct {
 	fsRepo *fs.InvitationTokenRepositoryFS
@@ -121,8 +111,7 @@ func (a *invitationTokenRepoAdapter) ResolveInvitationInfoByToken(
 	}, nil
 }
 
-// CreateInvitationToken は InvitationInfo を受け取り、
-// Firestore 側に招待トークンを作成して token 文字列を返します。
+// CreateInvitationToken は InvitationInfo を受け取り、Firestore 側に招待トークンを作成して token 文字列を返します。
 func (a *invitationTokenRepoAdapter) CreateInvitationToken(
 	ctx context.Context,
 	info memdom.InvitationInfo,
@@ -136,10 +125,7 @@ func (a *invitationTokenRepoAdapter) CreateInvitationToken(
 // ========================================
 // productBlueprint ドメインサービス用アダプタ
 // ========================================
-//
-// fs.ProductBlueprintRepositoryFS（= domain/productBlueprint.Repository 実装）を
-// productBlueprint.Service が期待する ReaderRepository（GetByID + ListIDsByCompany）に
-// 合わせるための薄いアダプタです。
+
 type productBlueprintDomainRepoAdapter struct {
 	repo interface {
 		GetByID(ctx context.Context, id string) (productbpdom.ProductBlueprint, error)
@@ -157,7 +143,7 @@ func (a *productBlueprintDomainRepoAdapter) GetByID(
 	return a.repo.GetByID(ctx, strings.TrimSpace(id))
 }
 
-// ★追加: companyId → productBlueprintIds を repo に委譲
+// companyId → productBlueprintIds を repo に委譲
 func (a *productBlueprintDomainRepoAdapter) ListIDsByCompany(
 	ctx context.Context,
 	companyID string,
@@ -171,16 +157,7 @@ func (a *productBlueprintDomainRepoAdapter) ListIDsByCompany(
 // ========================================
 // inspection 用: products.UpdateInspectionResult アダプタ
 // ========================================
-//
-// usecase.ProductInspectionRepo が期待する
-//
-//	UpdateInspectionResult(ctx, productID string, result inspection.InspectionResult)
-//
-// を、ProductRepositoryFS が持つ
-//
-//	UpdateInspectionResult(ctx, productID string, result product.InspectionResult)
-//
-// に橋渡しする。
+
 type inspectionProductRepoAdapter struct {
 	repo interface {
 		UpdateInspectionResult(ctx context.Context, productID string, result productdom.InspectionResult) error
@@ -201,12 +178,7 @@ func (a *inspectionProductRepoAdapter) UpdateInspectionResult(
 // ========================================
 // ProductUsecase 用 ProductQueryRepo アダプタ
 // ========================================
-//
-// 既存の Firestore Repository 群を束ねて usecase.ProductQueryRepo を実装します。
-// - productRepo          → products 取得
-// - modelRepo            → model variations 取得
-// - productionRepo       → productions 取得
-// - productBlueprintRepo → product_blueprints 取得
+
 type productQueryRepoAdapter struct {
 	productRepo          *fs.ProductRepositoryFS
 	modelRepo            *fs.ModelRepositoryFS
@@ -264,13 +236,7 @@ func (a *productQueryRepoAdapter) GetProductBlueprintByID(
 // ========================================
 // NameResolver 用 TokenBlueprint アダプタ
 // ========================================
-//
-// fs.TokenBlueprintRepositoryFS は GetByID が (*TokenBlueprint, error)
-// を返すため、NameResolver が期待する
-//
-//	GetByID(ctx, id) (tokenBlueprint.TokenBlueprint, error)
-//
-// に合わせる薄いアダプタです。
+
 type tokenBlueprintNameRepoAdapter struct {
 	repo *fs.TokenBlueprintRepositoryFS
 }
@@ -295,12 +261,7 @@ func (a *tokenBlueprintNameRepoAdapter) GetByID(
 // ========================================
 // InventoryQuery 用 TokenBlueprint Patch アダプタ
 // ========================================
-//
-// InventoryQuery が期待する tokenBlueprintPatchReader:
-//
-//	GetPatchByID(ctx, id) (tokenBlueprint.Patch, error)
-//
-// を TokenBlueprintRepositoryFS に委譲する薄いアダプタです。
+
 type tbPatchByIDAdapter struct {
 	repo interface {
 		GetPatchByID(ctx context.Context, id string) (tbdom.Patch, error)
@@ -324,7 +285,7 @@ func (a *tbPatchByIDAdapter) GetPatchByID(ctx context.Context, id string) (tbdom
 type pbQueryRepoAdapter struct {
 	repo interface {
 		ListIDsByCompany(ctx context.Context, companyID string) ([]string, error)
-		GetByID(ctx context.Context, id string) (productbpdom.ProductBlueprint, error) // ★ value 戻り
+		GetByID(ctx context.Context, id string) (productbpdom.ProductBlueprint, error) // value 戻り
 	}
 }
 
@@ -358,8 +319,7 @@ func (a *pbPatchByIDAdapter) GetPatchByID(ctx context.Context, id string) (produ
 	return a.repo.GetPatchByID(ctx, id)
 }
 
-// ✅ tbGetterAdapter adapts TokenBlueprintRepositoryFS (pointer return) to query.TokenBlueprintGetter (value return).
-// ListQuery は TokenBlueprintGetter に「値」を要求するが、Firestore repo は「ポインタ」を返すため変換する。
+// tbGetterAdapter adapts TokenBlueprintRepositoryFS (pointer return) to query.TokenBlueprintGetter (value return).
 type tbGetterAdapter struct {
 	repo interface {
 		GetByID(ctx context.Context, id string) (*tbdom.TokenBlueprint, error)
@@ -381,8 +341,9 @@ func (a *tbGetterAdapter) GetByID(ctx context.Context, id string) (tbdom.TokenBl
 }
 
 // ============================================================
-// ✅ Adapter: ListRepositoryFS -> usecase.ListPatcher
+// Adapter: ListRepositoryFS -> usecase.ListPatcher
 // ============================================================
+
 type listPatcherAdapter struct {
 	repo interface {
 		Update(ctx context.Context, id string, patch listdom.ListPatch) (listdom.List, error)
@@ -408,144 +369,4 @@ func (a *listPatcherAdapter) UpdateImageID(
 		UpdatedBy: updatedBy,
 	}
 	return a.repo.Update(ctx, listID, patch)
-}
-
-// ============================================================
-// Adapter: MintRepositoryFS -> mintdom.MintRepository (Update補完)
-// ============================================================
-
-type mintRepoWithUpdate struct {
-	*fs.MintRepositoryFS
-	Client *firestore.Client
-}
-
-func (r *mintRepoWithUpdate) Update(ctx context.Context, m mintdom.Mint) (mintdom.Mint, error) {
-	if r == nil || r.Client == nil {
-		return mintdom.Mint{}, errors.New("mint repo is nil")
-	}
-
-	id := strings.TrimSpace(m.ID)
-	if id == "" {
-		return mintdom.Mint{}, errors.New("mint id is empty")
-	}
-	m.ID = id
-
-	type mintRecord struct {
-		ID                string            `firestore:"id"`
-		BrandID           string            `firestore:"brandId"`
-		TokenBlueprintID  string            `firestore:"tokenBlueprintId"`
-		Products          map[string]string `firestore:"products"`
-		CreatedAt         time.Time         `firestore:"createdAt"`
-		CreatedBy         string            `firestore:"createdBy"`
-		MintedAt          *time.Time        `firestore:"mintedAt"`
-		Minted            bool              `firestore:"minted"`
-		ScheduledBurnDate *time.Time        `firestore:"scheduledBurnDate"`
-	}
-
-	rec := mintRecord{
-		ID:                id,
-		BrandID:           strings.TrimSpace(m.BrandID),
-		TokenBlueprintID:  strings.TrimSpace(m.TokenBlueprintID),
-		Products:          m.Products,
-		CreatedAt:         m.CreatedAt,
-		CreatedBy:         strings.TrimSpace(m.CreatedBy),
-		MintedAt:          m.MintedAt,
-		Minted:            m.Minted,
-		ScheduledBurnDate: m.ScheduledBurnDate,
-	}
-
-	_, err := r.Client.Collection("mints").Doc(id).Set(ctx, rec, firestore.MergeAll)
-	if err != nil {
-		return mintdom.Mint{}, err
-	}
-	return m, nil
-}
-
-// ============================================================
-// Adapters (DI layer) to absorb signature drift
-// ============================================================
-
-// ---- AvatarState adapter ----
-
-type avatarStateGetter interface {
-	GetByAvatarID(ctx context.Context, avatarID string) (avatarstate.AvatarState, error)
-}
-
-// new (expected) signature
-type avatarStateUpserterV2 interface {
-	Upsert(ctx context.Context, s avatarstate.AvatarState) (avatarstate.AvatarState, error)
-}
-
-// old signature
-type avatarStateUpserterV1 interface {
-	Upsert(ctx context.Context, avatarID string) error
-}
-
-type avatarStateRepoAdapter struct {
-	repo any
-}
-
-func (a *avatarStateRepoAdapter) GetByAvatarID(ctx context.Context, avatarID string) (avatarstate.AvatarState, error) {
-	if a == nil || a.repo == nil {
-		return avatarstate.AvatarState{}, errors.New("avatarState repo not configured")
-	}
-	g, ok := a.repo.(avatarStateGetter)
-	if !ok {
-		return avatarstate.AvatarState{}, errors.New("avatarState repo missing GetByAvatarID")
-	}
-	return g.GetByAvatarID(ctx, avatarID)
-}
-
-func (a *avatarStateRepoAdapter) Upsert(ctx context.Context, s avatarstate.AvatarState) (avatarstate.AvatarState, error) {
-	if a == nil || a.repo == nil {
-		return avatarstate.AvatarState{}, errors.New("avatarState repo not configured")
-	}
-
-	// Prefer correct signature
-	if v2, ok := a.repo.(avatarStateUpserterV2); ok {
-		return v2.Upsert(ctx, s)
-	}
-
-	// Fallback: old signature Upsert(ctx, avatarID) error
-	if v1, ok := a.repo.(avatarStateUpserterV1); ok {
-		aid := strings.TrimSpace(s.ID)
-		if aid == "" {
-			return avatarstate.AvatarState{}, errors.New("avatarState upsert: id is empty")
-		}
-		if err := v1.Upsert(ctx, aid); err != nil {
-			return avatarstate.AvatarState{}, err
-		}
-		return a.GetByAvatarID(ctx, aid)
-	}
-
-	return avatarstate.AvatarState{}, errors.New("avatarState repo missing Upsert")
-}
-
-// ---- PostImage adapter ----
-
-// expected signature (usecase.PostImageRepo)
-type postImageIssuerV2 interface {
-	IssueSignedUploadURL(ctx context.Context, avatarID, fileName, contentType string, expiresIn time.Duration) (string, string, string, error)
-}
-
-// old signature
-type postImageIssuerV1 interface {
-	IssueSignedUploadURL(ctx context.Context, avatarID, fileName, contentType string, expiresIn time.Duration) (string, error)
-}
-
-type postImageRepoAdapter struct {
-	repo any
-}
-
-func (a *postImageRepoAdapter) IssueSignedUploadURL(ctx context.Context, avatarID, fileName, contentType string, expiresIn time.Duration) (string, string, string, error) {
-	if a == nil || a.repo == nil {
-		return "", "", "", errors.New("postImage repo not configured")
-	}
-	if v2, ok := a.repo.(postImageIssuerV2); ok {
-		return v2.IssueSignedUploadURL(ctx, avatarID, fileName, contentType, expiresIn)
-	}
-	if _, ok := a.repo.(postImageIssuerV1); ok {
-		return "", "", "", errors.New("postImage repo has legacy IssueSignedUploadURL signature; expected (uploadURL, publicURL, objectPath, error)")
-	}
-	return "", "", "", errors.New("postImage repo missing IssueSignedUploadURL")
 }

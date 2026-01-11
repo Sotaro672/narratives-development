@@ -19,17 +19,6 @@ import (
 // ========================================
 // mall CatalogQuery 用アダプタ（型ズレ吸収）
 // ========================================
-//
-// NOTE:
-// - mallCatalogInventoryRepoAdapter は Firestore直読みの out adapter として分離しました。
-//   -> backend/internal/adapters/out/firestore/mall/catalog_inventory_repo.go
-// - mallquery.InventoryRepository(Mint返却) は Firestore直読みの out adapter として分離しました。
-//   -> backend/internal/adapters/out/firestore/mall/inventory_repo_for_mallquery.go
-// - listPatcherAdapter は Firestore-backed out adapter として分離しました。
-//   -> backend/internal/adapters/out/firestore/mall/list_patcher_repo.go
-// - productQueryRepoAdapter は Firestore-backed out adapter として分離しました。
-//   -> backend/internal/adapters/out/firestore/mall/product_query_repo.go
-//
 
 type mallCatalogProductBlueprintRepoAdapter struct {
 	repo interface {

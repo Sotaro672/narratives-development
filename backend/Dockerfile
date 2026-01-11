@@ -11,9 +11,18 @@ RUN go mod download
 # App sources
 COPY . .
 
+# ------------------------------------------------------------
+# Build target switching
+#  - default: ./cmd/api (backward compatible)
+#  - console: ./cmd/console
+#  - mall:    ./cmd/mall
+# ------------------------------------------------------------
+ARG BUILD_TARGET=./cmd/api
+
 # Build static binary for Linux/amd64
 ENV CGO_ENABLED=0 GOOS=linux GOARCH=amd64
-RUN go build -ldflags="-s -w" -o /server ./cmd/api
+RUN echo "== Building target: ${BUILD_TARGET} ==" && \
+    go build -ldflags="-s -w" -o /server ${BUILD_TARGET}
 
 # ─────────────────────────────────────────────
 # Runtime image (distroless, non-root)
@@ -24,7 +33,7 @@ COPY --from=builder /server /server
 
 # Default envs (本番では Cloud Run 側で上書き)
 ENV PORT=8080 \
-    ARWEAVE_BASE_URL="" 
+    ARWEAVE_BASE_URL=""
 
 USER nonroot:nonroot
 EXPOSE 8080

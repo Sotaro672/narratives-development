@@ -176,9 +176,8 @@ func NewContainer(ctx context.Context, infra *shared.Infra) (*Container, error) 
 	announcementRepo := fs.NewAnnouncementRepositoryFS(fsClient)
 	avatarRepo := fs.NewAvatarRepositoryFS(fsClient)
 
-	// AvatarState repo（Firestore実装）を usecase 互換（Upsert 揺れ吸収）
-	avatarStateRepoFS := fs.NewAvatarStateRepositoryFS(fsClient)
-	avatarStateRepo := &avatarStateRepoAdapter{repo: avatarStateRepoFS}
+	// AvatarState repo（Firestore実装）
+	avatarStateRepo := fs.NewAvatarStateRepositoryFS(fsClient)
 
 	billingAddressRepo := fs.NewBillingAddressRepositoryFS(fsClient)
 	brandRepo := fs.NewBrandRepositoryFS(fsClient)
@@ -196,12 +195,8 @@ func NewContainer(ctx context.Context, infra *shared.Infra) (*Container, error) 
 	messageRepo := fs.NewMessageRepositoryFS(fsClient)
 	modelRepo := fs.NewModelRepositoryFS(fsClient)
 
-	// MintRepositoryFS（Update未実装分は mintRepoWithUpdate で補完）
-	mintRepoFS := fs.NewMintRepositoryFS(fsClient)
-	mintRepo := &mintRepoWithUpdate{
-		MintRepositoryFS: mintRepoFS,
-		Client:           fsClient,
-	}
+	// MintRepositoryFS（Update は firestore 側に実装済み）
+	mintRepo := fs.NewMintRepositoryFS(fsClient)
 
 	orderRepo := fs.NewOrderRepositoryFS(fsClient)
 	paymentRepo := fs.NewPaymentRepositoryFS(fsClient)
@@ -218,7 +213,6 @@ func NewContainer(ctx context.Context, infra *shared.Infra) (*Container, error) 
 
 	// Cart / Post repositories
 	cartRepo := fs.NewCartRepositoryFS(fsClient)
-	postRepo := fs.NewPostRepositoryFS(fsClient)
 
 	printLogRepo := fs.NewPrintLogRepositoryFS(fsClient)
 	inspectionRepo := fs.NewInspectionRepositoryFS(fsClient)
@@ -263,9 +257,6 @@ func NewContainer(ctx context.Context, infra *shared.Infra) (*Container, error) 
 	tokenContentsRepo := gcso.NewTokenContentsRepositoryGCS(gcsClient, infra.TokenContentsBucket)
 	listImageRepo := gcso.NewListImageRepositoryGCS(gcsClient, infra.ListImageBucket)
 	avatarIconRepo := gcso.NewAvatarIconRepositoryGCS(gcsClient, infra.AvatarIconBucket)
-
-	postImageRepoGCS := gcso.NewPostImageRepositoryGCS(gcsClient, infra.PostImageBucket)
-	postImageRepo := &postImageRepoAdapter{repo: postImageRepoGCS}
 
 	// ListPatcher adapter（imageId 更新専用）
 	listPatcher := &listPatcherAdapter{repo: listRepoFS}
@@ -406,7 +397,6 @@ func NewContainer(ctx context.Context, infra *shared.Infra) (*Container, error) 
 
 	// Cart / Post usecases
 	cartUC := uc.NewCartUsecase(cartRepo)
-	postUC := uc.NewPostUsecase(postRepo, postImageRepo)
 
 	// Invitation mailer + services
 	invitationMailer := mailadp.NewInvitationMailerWithSendGrid(companySvc, brandSvc)
@@ -519,7 +509,6 @@ func NewContainer(ctx context.Context, infra *shared.Infra) (*Container, error) 
 		WalletUC:           walletUC,
 
 		CartUC: cartUC,
-		PostUC: postUC,
 
 		CompanyProductionQueryService: companyProductionQueryService,
 		MintRequestQueryService:       mintRequestQueryService,
