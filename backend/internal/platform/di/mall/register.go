@@ -166,7 +166,7 @@ func Register(mux *http.ServeMux, cont *Container) {
 
 	// Cart (authenticated)
 	if cont.CartUC != nil {
-		cartH = mallhandler.NewCartHandlerWithQueries(cont.CartUC, cont.CartQ, cont.PreviewQ)
+		cartH = mallhandler.NewCartHandlerWithQueries(cont.CartUC, cont.CartQ)
 	} else if cont.CartQ != nil {
 		cartH = mallhandler.NewCartQueryHandler(cont.CartQ)
 	}

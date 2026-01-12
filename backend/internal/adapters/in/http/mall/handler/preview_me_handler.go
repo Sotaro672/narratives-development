@@ -1,4 +1,3 @@
-// backend/internal/adapters/in/http/mall/handler/preview_me_handler.go
 package mallHandler
 
 import (
@@ -34,7 +33,6 @@ func (h *PreviewMeHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if r.Method != http.MethodGet {
-		log.Printf("[mall.preview.me] method_not_allowed method=%s path=%s", r.Method, r.URL.Path)
 		writeJSON(w, http.StatusMethodNotAllowed, map[string]any{
 			"error": "method not allowed",
 		})
@@ -42,7 +40,6 @@ func (h *PreviewMeHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if h.q == nil {
-		log.Printf("[mall.preview.me] ERROR: preview query not configured path=%s", r.URL.Path)
 		writeJSON(w, http.StatusInternalServerError, map[string]any{
 			"error": "preview query not configured",
 		})
@@ -50,23 +47,7 @@ func (h *PreviewMeHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// ✅ /mall/me/preview は認証前提（通常は middleware で検証される）
-	// ただし、万一 middleware 未適用でも分かりやすく落とす
 	auth := strings.TrimSpace(r.Header.Get("Authorization"))
-	// 秘密情報を出さない：存在と prefix のみ
-	authPrefix := ""
-	if auth != "" {
-		parts := strings.SplitN(auth, " ", 2)
-		authPrefix = strings.TrimSpace(parts[0])
-	}
-	log.Printf(
-		"[mall.preview.me] incoming method=%s path=%s rawQuery=%q hasAuth=%t authPrefix=%q",
-		r.Method,
-		r.URL.Path,
-		r.URL.RawQuery,
-		auth != "",
-		authPrefix,
-	)
-
 	if auth == "" {
 		writeJSON(w, http.StatusUnauthorized, map[string]any{
 			"error": "authorization header is required",
@@ -74,23 +55,11 @@ func (h *PreviewMeHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	productIDQuery := strings.TrimSpace(r.URL.Query().Get("productId"))
-	productIDPath := ""
-	if productIDQuery == "" {
-		// 互換: /mall/me/preview/{productId}
-		productIDPath = extractLastPathSegment(r.URL.Path, "/mall/me/preview")
-	}
-	productID := productIDQuery
+	productID := strings.TrimSpace(r.URL.Query().Get("productId"))
 	if productID == "" {
-		productID = productIDPath
+		// 互換: /mall/me/preview/{productId}
+		productID = extractLastPathSegment(r.URL.Path, "/mall/me/preview")
 	}
-
-	log.Printf(
-		"[mall.preview.me] parsed productId query=%q path=%q resolved=%q",
-		productIDQuery,
-		productIDPath,
-		productID,
-	)
 
 	if productID == "" {
 		writeJSON(w, http.StatusBadRequest, map[string]any{
@@ -99,17 +68,26 @@ func (h *PreviewMeHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	log.Printf("[mall.preview.me] resolving modelId productId=%q", productID)
+	// ✅ 入口ログ
+	authPrefix := ""
+	if len(auth) > 12 {
+		authPrefix = auth[:12]
+	} else {
+		authPrefix = auth
+	}
+	log.Printf(
+		`[mall.preview.me] incoming method=%s path=%s rawQuery=%q hasAuth=%t authPrefix=%q`,
+		r.Method,
+		r.URL.Path,
+		r.URL.RawQuery,
+		auth != "",
+		authPrefix,
+	)
+
+	log.Printf(`[mall.preview.me] resolving modelId productId=%q`, productID)
 
 	modelID, err := h.q.ResolveModelIDByProductID(r.Context(), productID)
 	if err != nil {
-		log.Printf(
-			"[mall.preview.me] resolve failed productId=%q err=%T %v",
-			productID,
-			err,
-			err,
-		)
-
 		if isNotFound(err) {
 			writeJSON(w, http.StatusNotFound, map[string]any{
 				"error":     "not found",
@@ -131,16 +109,45 @@ func (h *PreviewMeHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	modelNumber, size, colorName, rgb, err := h.q.ResolveModelMetaByModelID(r.Context(), modelID)
+	if err != nil {
+		if isNotFound(err) {
+			writeJSON(w, http.StatusNotFound, map[string]any{
+				"error":     "model not found",
+				"productId": productID,
+				"modelId":   modelID,
+			})
+			return
+		}
+		if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+			writeJSON(w, http.StatusRequestTimeout, map[string]any{
+				"error":     "request canceled",
+				"productId": productID,
+				"modelId":   modelID,
+			})
+			return
+		}
+		writeJSON(w, http.StatusInternalServerError, map[string]any{
+			"error":     "resolve model meta failed",
+			"productId": productID,
+			"modelId":   modelID,
+		})
+		return
+	}
+
 	log.Printf(
-		"[mall.preview.me] resolve OK productId=%q modelId=%q",
-		productID,
-		strings.TrimSpace(modelID),
+		`[mall.preview.me] resolved productId=%q modelId=%q modelNumber=%q size=%q color=%q rgb=%q`,
+		productID, modelID, modelNumber, size, colorName, rgb,
 	)
 
 	writeJSON(w, http.StatusOK, map[string]any{
 		"data": map[string]any{
-			"productId": productID,
-			"modelId":   modelID,
+			"productId":   productID,
+			"modelId":     modelID,
+			"modelNumber": modelNumber,
+			"size":        size,
+			"color":       colorName,
+			"rgb":         rgb, // ✅ int のまま返す
 		},
 	})
 }

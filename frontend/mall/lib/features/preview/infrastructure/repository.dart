@@ -6,23 +6,76 @@ import 'package:http/http.dart' as http;
 // ✅ API_BASE 解決ロジック（single source of truth）
 import '../../../app/config/api_base.dart';
 
-/// Preview response (minimal DTO).
+/// Preview response DTO.
 ///
 /// backend (想定):
 /// - GET /mall/preview?productId=...         (public / QR entry)
 /// - GET /mall/me/preview?productId=...      (authenticated scope)
 ///
-/// まずは productId と modelId だけ取得できればOK。
+/// まずは productId と modelId + 表示用メタ（型番/サイズ/色/RGB）を取得できればOK。
 class MallPreviewResponse {
-  MallPreviewResponse({required this.productId, required this.modelId});
+  MallPreviewResponse({
+    required this.productId,
+    required this.modelId,
+    this.modelNumber = '',
+    this.size = '',
+    this.color = '',
+    this.rgb = 0,
+    this.measurements,
+  });
 
   /// Product ID（= QR の {productId}）
   final String productId;
 
-  /// Model ID（= 製造モデル）
+  /// Model ID（= 製造モデル / variationId 想定）
   final String modelId;
 
+  /// 型番（例: "ABC-123"）
+  final String modelNumber;
+
+  /// サイズ（例: "M"）
+  final String size;
+
+  /// 色名（例: "Navy"）
+  final String color;
+
+  /// RGB（0xRRGGBB を想定した int）
+  final int rgb;
+
+  /// 任意: 計測値
+  final Map<String, int>? measurements;
+
   static String _s(dynamic v) => (v ?? '').toString().trim();
+
+  static int _i(dynamic v) {
+    if (v == null) return 0;
+    if (v is int) return v;
+    if (v is num) return v.toInt();
+    final s = v.toString().trim();
+    if (s.isEmpty) return 0;
+
+    // "0xRRGGBB" も許容（念のため）
+    if (s.startsWith('0x') || s.startsWith('0X')) {
+      return int.tryParse(s.substring(2), radix: 16) ?? 0;
+    }
+    return int.tryParse(s) ?? 0;
+  }
+
+  static Map<String, int>? _measurements(dynamic v) {
+    if (v == null) return null;
+    if (v is Map<String, int>) return v;
+
+    if (v is Map) {
+      final out = <String, int>{};
+      v.forEach((k, val) {
+        final key = _s(k);
+        if (key.isEmpty) return;
+        out[key] = _i(val);
+      });
+      return out.isEmpty ? null : out;
+    }
+    return null;
+  }
 
   /// wrapper/ネスト揺れを best-effort で吸収して DTO 化
   factory MallPreviewResponse.fromJson(Map<String, dynamic> j) {
@@ -57,11 +110,39 @@ class MallPreviewResponse {
     if (modelIdRaw.isEmpty && pm != null) {
       modelIdRaw = _s(pm['modelId']);
     }
-    if (modelIdRaw.isEmpty) {
-      modelIdRaw = _s(j['model_id']); // 念のため
+
+    // ---- meta: modelNumber / size / color / rgb ----
+    var modelNumberRaw = _s(j['modelNumber']);
+    if (modelNumberRaw.isEmpty && pm != null) {
+      modelNumberRaw = _s(pm['modelNumber']);
     }
 
-    return MallPreviewResponse(productId: productId, modelId: modelIdRaw);
+    var sizeRaw = _s(j['size']);
+    if (sizeRaw.isEmpty && pm != null) {
+      sizeRaw = _s(pm['size']);
+    }
+
+    var colorRaw = _s(j['color']);
+    if (colorRaw.isEmpty && pm != null) {
+      colorRaw = _s(pm['color']);
+    }
+
+    var rgbRaw = _i(j['rgb']);
+    if (rgbRaw == 0 && pm != null) {
+      rgbRaw = _i(pm['rgb']);
+    }
+
+    final measurementsRaw = _measurements(j['measurements']);
+
+    return MallPreviewResponse(
+      productId: productId,
+      modelId: modelIdRaw,
+      modelNumber: modelNumberRaw,
+      size: sizeRaw,
+      color: colorRaw,
+      rgb: rgbRaw,
+      measurements: measurementsRaw,
+    );
   }
 }
 

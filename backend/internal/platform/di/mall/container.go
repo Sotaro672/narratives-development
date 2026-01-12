@@ -280,6 +280,8 @@ func NewContainer(ctx context.Context, infra *shared.Infra) (*Container, error) 
 		invRepo := mallfs.NewInventoryRepoForMallQuery(fsClient)
 
 		pbRepo := outfs.NewProductBlueprintRepositoryFS(fsClient)
+
+		// ✅ outfs.NewModelRepositoryFS は GetModelVariationByID を持つ想定（PreviewQuery の ModelVariationReader を満たす）
 		modelRepo := outfs.NewModelRepositoryFS(fsClient)
 
 		c.CatalogQ = mallquery.NewCatalogQuery(listRepoFS, invRepo, pbRepo, modelRepo)
@@ -287,8 +289,13 @@ func NewContainer(ctx context.Context, infra *shared.Infra) (*Container, error) 
 		c.CartQ = mallquery.NewCartQuery(fsClient)
 
 		// ✅ ここが今回の修正点:
-		// - NewPreviewQuery は ProductReader を要求するので、Firestore直渡しではなく adapter を渡す
-		c.PreviewQ = mallquery.NewPreviewQuery(previewProductReaderFS{fs: fsClient})
+		// - NewPreviewQuery は (ProductReader, ModelVariationReader) の2引数が必要
+		// - ProductReader は Firestore直渡しではなく adapter を渡す
+		// - ModelVariationReader は outfs.NewModelRepositoryFS をそのまま渡す（構造的に満たす）
+		c.PreviewQ = mallquery.NewPreviewQuery(
+			previewProductReaderFS{fs: fsClient},
+			modelRepo,
+		)
 
 		c.OrderQ = mallquery.NewOrderQuery(fsClient)
 
@@ -303,7 +310,7 @@ func NewContainer(ctx context.Context, infra *shared.Infra) (*Container, error) 
 			c.CartQ.ListRepo = c.ListRepo
 		}
 
-		// ✅ PreviewQ は preview_handler.go の要件が「productId -> modelId」なので
+		// ✅ PreviewQ は preview_handler.go の要件が「productId -> modelId(+meta)」なので
 		// NameResolver の注入（Resolver フィールド）は行わない（そもそも存在しない）
 	}
 

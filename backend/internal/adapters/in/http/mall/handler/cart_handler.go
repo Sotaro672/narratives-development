@@ -19,33 +19,25 @@ type CartQueryService interface {
 	GetCartQuery(ctx context.Context, avatarID string) (any, error)
 }
 
-// PreviewQueryService abstracts preview_query read-model.
-type PreviewQueryService interface {
-	GetPreview(ctx context.Context, avatarID string, itemKey string) (any, error)
-}
-
 // CartHandler serves Mall cart endpoints.
 type CartHandler struct {
 	uc *usecase.CartUsecase
 
 	// read-model queries (required for unified GET)
-	cartQuery    CartQueryService
-	previewQuery PreviewQueryService
+	cartQuery CartQueryService
 }
 
 func NewCartHandler(uc *usecase.CartUsecase) http.Handler {
-	return &CartHandler{uc: uc, cartQuery: nil, previewQuery: nil}
+	return &CartHandler{uc: uc, cartQuery: nil}
 }
 
 func NewCartHandlerWithQueries(
 	uc *usecase.CartUsecase,
 	cartQuery any,
-	previewQuery any,
 ) http.Handler {
 	return &CartHandler{
-		uc:           uc,
-		cartQuery:    wrapCartQuery(cartQuery),
-		previewQuery: wrapPreviewQuery(previewQuery),
+		uc:        uc,
+		cartQuery: wrapCartQuery(cartQuery),
 	}
 }
 
@@ -63,7 +55,7 @@ func (h *CartHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	avatarID := readAvatarID(r, "")
 
 	log.Printf(
-		"[mall_cart_handler] enter method=%s rawPath=%q path=%q query=%q avatarId(q)=%q avatarId(h)=%q avatarId(resolved)=%q configured(uc=%t cartQuery=%t previewQuery=%t)\n",
+		"[mall_cart_handler] enter method=%s rawPath=%q path=%q query=%q avatarId(q)=%q avatarId(h)=%q avatarId(resolved)=%q configured(uc=%t cartQuery=%t)\n",
 		r.Method,
 		rawPath,
 		path,
@@ -73,7 +65,6 @@ func (h *CartHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		avatarID,
 		h.uc != nil,
 		h.cartQuery != nil,
-		h.previewQuery != nil,
 	)
 
 	if h.uc == nil {
@@ -134,11 +125,6 @@ func (h *CartHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	case isDEL && (hasSuffixAny(path, "/mall/me/cart/items", "/cart/items") || isAnyExact(path, "/items")):
 		h.handleRemoveItem(w, r, start)
 		return
-
-	// Preview
-	case isGET && hasSuffixAny(path, "/mall/preview", "/preview"):
-		h.handleGetPreview(w, r, start)
-		return
 	}
 
 	log.Printf("[mall_cart_handler] exit status=404 reason=not found method=%s path=%q elapsed=%s\n", r.Method, path, time.Since(start))
@@ -190,44 +176,6 @@ func (h *CartHandler) handleGetUnified(w http.ResponseWriter, r *http.Request, s
 
 	log.Printf("[mall_cart_handler] GET unified exit status=500 avatarId=%q elapsed=%s\n", avatarID, time.Since(start))
 	h.writeQueryErr(w, err)
-}
-
-// -------------------------
-// handlers (Preview)
-// -------------------------
-
-func (h *CartHandler) handleGetPreview(w http.ResponseWriter, r *http.Request, start time.Time) {
-	avatarID := readAvatarID(r, "")
-	if avatarID == "" {
-		log.Printf("[mall_cart_handler] GET preview exit status=400 reason=avatarId missing rawQuery=%q\n", r.URL.RawQuery)
-		writeErr(w, http.StatusBadRequest, "avatarId is required")
-		return
-	}
-
-	itemKey := readItemKey(r, "")
-	if itemKey == "" {
-		log.Printf("[mall_cart_handler] GET preview exit status=400 reason=itemKey missing avatarId=%q rawQuery=%q\n", avatarID, r.URL.RawQuery)
-		writeErr(w, http.StatusBadRequest, "itemKey is required")
-		return
-	}
-
-	if h.previewQuery == nil {
-		log.Printf("[mall_cart_handler] GET preview exit status=500 reason=previewQuery nil avatarId=%q\n", avatarID)
-		writeErr(w, http.StatusInternalServerError, "preview_query is not configured")
-		return
-	}
-
-	log.Printf("[mall_cart_handler] GET preview call previewQuery avatarId=%q itemKey=%q queryImpl=%T\n", avatarID, itemKey, h.previewQuery)
-
-	v, err := h.previewQuery.GetPreview(r.Context(), avatarID, itemKey)
-	if err != nil {
-		log.Printf("[mall_cart_handler] GET preview error avatarId=%q itemKey=%q err=%v elapsed=%s\n", avatarID, itemKey, err, time.Since(start))
-		h.writeQueryErr(w, err)
-		return
-	}
-
-	log.Printf("[mall_cart_handler] GET preview ok status=200 avatarId=%q itemKey=%q elapsed=%s\n", avatarID, itemKey, time.Since(start))
-	writeJSON(w, http.StatusOK, v)
 }
 
 func (h *CartHandler) writeQueryErr(w http.ResponseWriter, err error) {
@@ -458,16 +406,6 @@ func readAvatarID(r *http.Request, fallback string) string {
 	return strings.TrimSpace(fallback)
 }
 
-func readItemKey(r *http.Request, fallback string) string {
-	if v := strings.TrimSpace(r.URL.Query().Get("itemKey")); v != "" {
-		return v
-	}
-	if v := strings.TrimSpace(r.Header.Get("X-Item-Key")); v != "" {
-		return v
-	}
-	return strings.TrimSpace(fallback)
-}
-
 func writeErr(w http.ResponseWriter, status int, msg string) {
 	writeJSON(w, status, map[string]any{
 		"error": msg,
@@ -482,10 +420,6 @@ type dynamicCartQuery struct {
 	impl          any
 	lastMethodHit string
 }
-type dynamicPreviewQuery struct {
-	impl          any
-	lastMethodHit string
-}
 
 func wrapCartQuery(v any) CartQueryService {
 	if v == nil {
@@ -495,16 +429,6 @@ func wrapCartQuery(v any) CartQueryService {
 		return s
 	}
 	return &dynamicCartQuery{impl: v}
-}
-
-func wrapPreviewQuery(v any) PreviewQueryService {
-	if v == nil {
-		return nil
-	}
-	if s, ok := v.(PreviewQueryService); ok {
-		return s
-	}
-	return &dynamicPreviewQuery{impl: v}
 }
 
 func (d *dynamicCartQuery) GetCartQuery(ctx context.Context, avatarID string) (any, error) {
@@ -520,38 +444,6 @@ func (d *dynamicCartQuery) GetCartQuery(ctx context.Context, avatarID string) (a
 		d.lastMethodHit = hit
 	}
 	log.Printf("[mall_cart_handler] dynamicCartQuery call avatarId=%q impl=%T hit=%q err=%v\n", avatarID, d.impl, d.lastMethodHit, err)
-	return v, err
-}
-
-func (d *dynamicPreviewQuery) GetPreview(ctx context.Context, avatarID string, itemKey string) (any, error) {
-	if strings.TrimSpace(itemKey) != "" {
-		if v, hit, err := callQuery3WithHit(d.impl, ctx, avatarID, itemKey,
-			"GetPreview",
-			"GetByAvatarIDAndItemKey",
-			"GetByAvatarAndItemKey",
-			"Preview",
-			"Get",
-			"Query",
-			"Fetch",
-		); err == nil {
-			if hit != "" {
-				d.lastMethodHit = hit
-			}
-			log.Printf("[mall_cart_handler] dynamicPreviewQuery call3 avatarId=%q itemKey=%q impl=%T hit=%q\n", avatarID, itemKey, d.impl, d.lastMethodHit)
-			return v, nil
-		}
-	}
-	v, hit, err := callQuery2WithHit(d.impl, ctx, avatarID,
-		"GetPreview",
-		"Preview",
-		"Get",
-		"Query",
-		"Fetch",
-	)
-	if hit != "" {
-		d.lastMethodHit = hit
-	}
-	log.Printf("[mall_cart_handler] dynamicPreviewQuery call2 avatarId=%q impl=%T hit=%q err=%v\n", avatarID, d.impl, d.lastMethodHit, err)
 	return v, err
 }
 
@@ -595,65 +487,6 @@ func callQuery2WithHit(impl any, ctx context.Context, avatarID string, methodNam
 		}
 
 		out := mv.Call([]reflect.Value{reflect.ValueOf(ctx), reflect.ValueOf(avatarID)})
-		if len(out) != 2 {
-			continue
-		}
-
-		var e error
-		if !out[1].IsNil() {
-			if ee, ok := out[1].Interface().(error); ok {
-				e = ee
-			} else {
-				e = errors.New("unknown error")
-			}
-		}
-
-		return out[0].Interface(), name, e
-	}
-
-	return nil, "", errors.New("query service method not found")
-}
-
-func callQuery3WithHit(impl any, ctx context.Context, avatarID string, itemKey string, methodNames ...string) (any, string, error) {
-	if impl == nil {
-		return nil, "", errors.New("query service is nil")
-	}
-
-	rv := reflect.ValueOf(impl)
-	if !rv.IsValid() {
-		return nil, "", errors.New("query service is invalid")
-	}
-
-	for _, name := range methodNames {
-		name = strings.TrimSpace(name)
-		if name == "" {
-			continue
-		}
-
-		mv := rv.MethodByName(name)
-		if !mv.IsValid() {
-			continue
-		}
-
-		mt := mv.Type()
-		if mt.NumIn() != 3 || mt.NumOut() != 2 {
-			continue
-		}
-
-		ctxType := reflect.TypeOf((*context.Context)(nil)).Elem()
-		if !mt.In(0).Implements(ctxType) && !ctxType.AssignableTo(mt.In(0)) && !reflect.TypeOf(ctx).AssignableTo(mt.In(0)) {
-			continue
-		}
-		if mt.In(1).Kind() != reflect.String || mt.In(2).Kind() != reflect.String {
-			continue
-		}
-
-		errType := reflect.TypeOf((*error)(nil)).Elem()
-		if !mt.Out(1).Implements(errType) {
-			continue
-		}
-
-		out := mv.Call([]reflect.Value{reflect.ValueOf(ctx), reflect.ValueOf(avatarID), reflect.ValueOf(itemKey)})
 		if len(out) != 2 {
 			continue
 		}
