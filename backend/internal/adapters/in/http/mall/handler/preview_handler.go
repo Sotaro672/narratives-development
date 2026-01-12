@@ -13,7 +13,7 @@ import (
 
 // ✅ 組み立て用（DI）前提:
 // backend/internal/application/query/mall/preview_query.go が提供する Query を注入して使う想定。
-// この handler は「productId → model info（型番/サイズ/色/RGB/measurements）」を返す。
+// この handler は「productId → model info（型番/サイズ/色/RGB/measurements + productBlueprintPatch）」を返す。
 //
 // 想定エンドポイント:
 // - GET /mall/preview?productId=...
@@ -92,6 +92,8 @@ func (h *PreviewHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	info, err := h.q.ResolveModelInfoByProductID(r.Context(), productID)
 	if err != nil {
+		log.Printf("[mall.preview.me] ResolveModelInfoByProductID failed: %v", err)
+
 		if isNotFound(err) {
 			writeJSON(w, http.StatusNotFound, map[string]any{
 				"error":     "not found",
@@ -121,11 +123,19 @@ func (h *PreviewHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 
 	log.Printf(
-		`[mall.preview] resolved productId=%q modelId=%q modelNumber=%q size=%q color=%q rgb=%d measurements=%v`,
-		info.ProductID, info.ModelID, info.ModelNumber, info.Size, info.Color, info.RGB, info.Measurements,
+		`[mall.preview] resolved productId=%q modelId=%q modelNumber=%q size=%q color=%q rgb=%d measurements=%v productBlueprintId=%q productBlueprintPatch=%v`,
+		info.ProductID,
+		info.ModelID,
+		info.ModelNumber,
+		info.Size,
+		info.Color,
+		info.RGB,
+		info.Measurements,
+		info.ProductBlueprintID,
+		info.ProductBlueprintPatch,
 	)
 
-	// ✅ measurements も含めてそのまま返す（omitemptyなので空なら出ない）
+	// ✅ info をそのまま返す（productBlueprintPatch も data に含まれる）
 	writeJSON(w, http.StatusOK, map[string]any{
 		"data": info,
 	})

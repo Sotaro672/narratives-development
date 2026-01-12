@@ -124,6 +124,13 @@ type Repository interface {
 	//   MintRequest 一覧などで「ID → 名前」の名前解決だけを行いたいときに使用。
 	GetProductNameByID(ctx context.Context, id string) (string, error)
 
+	// ★ 追加: modelId(=variationId想定) から productBlueprintId を取得するヘルパ
+	//   例: Mall 側で modelId しか分からない状況から ProductBlueprint を引きたい場合に使用。
+	//
+	//   - 見つからない場合は error を返す想定（NotFound 等）
+	//   - 実装側では（可能なら）投影（productBlueprintId フィールドのみ取得）で効率化する。
+	GetIDByModelID(ctx context.Context, modelID string) (string, error)
+
 	// ★ 追加: productBlueprintId から Patch 相当の情報を取得するヘルパ
 	//   既存レコードを編集フォームに流し込む用途などで、
 	//   現在の値を Patch 形式（ポインタ付き）で受け取りたいときに使用。

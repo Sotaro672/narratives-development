@@ -70,6 +70,132 @@ func (r *ProductBlueprintRepositoryFS) GetByID(ctx context.Context, id string) (
 	return docToProductBlueprint(snap)
 }
 
+// ★ 追加: modelId(=variationId想定) から productBlueprintId を取得するヘルパ
+//
+// mall.PreviewQuery が要求する ProductBlueprintReader を満たすために追加。
+// ※ どのコレクション/フィールドで紐付けているかが実装・データに依存するため、best-effort で探索します。
+//
+// 探索順:
+// 1) product_blueprints を modelId/variationId 系フィールドで Where 検索
+// 2) models / model_variations の doc(modelID) を見て productBlueprintId 系フィールドを読む
+func (r *ProductBlueprintRepositoryFS) GetIDByModelID(ctx context.Context, modelID string) (string, error) {
+	if r.Client == nil {
+		return "", errors.New("firestore client is nil")
+	}
+
+	modelID = strings.TrimSpace(modelID)
+	if modelID == "" {
+		return "", pbdom.ErrNotFound
+	}
+
+	// 1) product_blueprints 側に modelId / variationId を持っているケース
+	//    （スキーマ揺れに耐えるため候補を順に試す）
+	candidateFields := []string{
+		"modelId",
+		"modelID",
+		"variationId",
+		"variationID",
+		"modelVariationId",
+		"model_variation_id",
+		"model_variationId",
+	}
+
+	for _, f := range candidateFields {
+		iter := r.col().Where(f, "==", modelID).Limit(1).Documents(ctx)
+		snap, err := iter.Next()
+		iter.Stop()
+
+		if err == iterator.Done {
+			continue
+		}
+		if err != nil {
+			// Where に対して "no index" 等が起きる可能性があるが、
+			// 次候補にフォールバックできるように、ここでは即 return しない。
+			// ただし context error はそのまま返す。
+			if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+				return "", err
+			}
+			continue
+		}
+		if snap != nil {
+			// 基本は docID を blueprintId として扱う
+			return strings.TrimSpace(snap.Ref.ID), nil
+		}
+	}
+
+	// 2) models / model_variations 側に productBlueprintId を持っているケース
+	//    docID=modelID で直接取れる前提の best-effort。
+	collections := []string{
+		"models",
+		"model_variations",
+		"modelVariations",
+	}
+
+	readPBIDFromDoc := func(col string) (string, bool, error) {
+		doc, err := r.Client.Collection(col).Doc(modelID).Get(ctx)
+		if err != nil {
+			if status.Code(err) == codes.NotFound {
+				return "", false, nil
+			}
+			return "", false, err
+		}
+		data := doc.Data()
+		if data == nil {
+			return "", false, nil
+		}
+
+		getStr := func(keys ...string) string {
+			for _, k := range keys {
+				if v, ok := data[k]; ok && v != nil {
+					if s, ok := v.(string); ok && strings.TrimSpace(s) != "" {
+						return strings.TrimSpace(s)
+					}
+				}
+			}
+			return ""
+		}
+
+		pbID := getStr(
+			"productBlueprintId",
+			"product_blueprint_id",
+			"productBlueprintID",
+			"product_blueprintId",
+		)
+		if pbID != "" {
+			return pbID, true, nil
+		}
+
+		// たまにネストしているケース（例: productBlueprint: {id: "..."}）も拾う
+		if v, ok := data["productBlueprint"]; ok && v != nil {
+			if m, ok := v.(map[string]any); ok {
+				if idv, ok := m["id"]; ok {
+					if s, ok := idv.(string); ok && strings.TrimSpace(s) != "" {
+						return strings.TrimSpace(s), true, nil
+					}
+				}
+			}
+		}
+
+		return "", false, nil
+	}
+
+	for _, col := range collections {
+		pbID, ok, err := readPBIDFromDoc(col)
+		if err != nil {
+			if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+				return "", err
+			}
+			// 次へフォールバック
+			continue
+		}
+		if ok && strings.TrimSpace(pbID) != "" {
+			return strings.TrimSpace(pbID), nil
+		}
+	}
+
+	return "", pbdom.ErrNotFound
+}
+
 // ★ 追加: productBlueprintId から productName だけを取得するヘルパ
 // usecase.mintProductBlueprintRepo / productBlueprint.Repository の
 // GetProductNameByID を満たすための薄いラッパ。

@@ -1,4 +1,4 @@
-// backend/internal/application/query/mint_request_query_service.go
+// backend\internal\application\query\console\mint_request_query.go
 package query
 
 import (

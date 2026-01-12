@@ -9,6 +9,8 @@ import (
 	"strings"
 
 	"cloud.google.com/go/firestore"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 
 	// inbound (query + resolver types)
 	mallquery "narratives/internal/application/query/mall"
@@ -31,6 +33,7 @@ import (
 	// domains
 	ldom "narratives/internal/domain/list"
 	productdom "narratives/internal/domain/product"
+	pbdom "narratives/internal/domain/productBlueprint"
 
 	shared "narratives/internal/platform/di/shared"
 )
@@ -279,23 +282,34 @@ func NewContainer(ctx context.Context, infra *shared.Infra) (*Container, error) 
 	{
 		invRepo := mallfs.NewInventoryRepoForMallQuery(fsClient)
 
-		pbRepo := outfs.NewProductBlueprintRepositoryFS(fsClient)
+		// ✅ ProductBlueprint repo（CatalogQuery でも使う）
+		pbRepoFS := outfs.NewProductBlueprintRepositoryFS(fsClient)
 
 		// ✅ outfs.NewModelRepositoryFS は GetModelVariationByID を持つ想定（PreviewQuery の ModelVariationReader を満たす）
 		modelRepo := outfs.NewModelRepositoryFS(fsClient)
 
-		c.CatalogQ = mallquery.NewCatalogQuery(listRepoFS, invRepo, pbRepo, modelRepo)
+		c.CatalogQ = mallquery.NewCatalogQuery(listRepoFS, invRepo, pbRepoFS, modelRepo)
 
 		c.CartQ = mallquery.NewCartQuery(fsClient)
 
-		// ✅ ここが今回の修正点:
-		// - NewPreviewQuery は (ProductReader, ModelVariationReader) の2引数が必要
-		// - ProductReader は Firestore直渡しではなく adapter を渡す
-		// - ModelVariationReader は outfs.NewModelRepositoryFS をそのまま渡す（構造的に満たす）
+		// ✅ PreviewQuery 用 ProductBlueprintReader を用意（pbRepoFS は GetIDByModelID を持たないため adapter が必要）
+		pbReader := previewProductBlueprintReaderFS{
+			fs: fsClient,
+			pb: pbRepoFS,
+		}
+
+		// ✅ PreviewQuery 本体
 		c.PreviewQ = mallquery.NewPreviewQuery(
 			previewProductReaderFS{fs: fsClient},
 			modelRepo,
+			pbReader,
 		)
+
+		// ✅ tokens/{productId} を preview で返したいので TokenRepo を注入（optional）
+		// NOTE: preview_query.go の TokenInfo は OnChainTxSignature フィールド名なのでそれに合わせる
+		if c.PreviewQ != nil {
+			c.PreviewQ.TokenRepo = previewTokenReaderFS{fs: fsClient}
+		}
 
 		c.OrderQ = mallquery.NewOrderQuery(fsClient)
 
@@ -310,7 +324,7 @@ func NewContainer(ctx context.Context, infra *shared.Infra) (*Container, error) 
 			c.CartQ.ListRepo = c.ListRepo
 		}
 
-		// ✅ PreviewQ は preview_handler.go の要件が「productId -> modelId(+meta)」なので
+		// ✅ PreviewQ は preview_handler.go の要件が「productId -> model info (+token info)」なので
 		// NameResolver の注入（Resolver フィールド）は行わない（そもそも存在しない）
 	}
 
@@ -372,6 +386,139 @@ func (r previewProductReaderFS) GetByID(ctx context.Context, productID string) (
 	// Firestore doc id を優先して上書き
 	p.ID = doc.Ref.ID
 	return p, nil
+}
+
+// ------------------------------------------------------------
+// PreviewQuery: ProductBlueprintReader adapter
+// - pbRepoFS は GetIDByModelID を持たないため、ここで補う
+// ------------------------------------------------------------
+
+// previewProductBlueprintReaderFS implements mallquery.ProductBlueprintReader.
+type previewProductBlueprintReaderFS struct {
+	fs *firestore.Client
+	pb interface {
+		GetByID(ctx context.Context, id string) (pbdom.ProductBlueprint, error)
+		GetPatchByID(ctx context.Context, id string) (pbdom.Patch, error)
+	}
+}
+
+// GetIDByModelID resolves productBlueprintId from modelId.
+// NOTE: "models/{modelId}" に productBlueprintId がある前提です。
+//
+//	フィールド名は productBlueprintId / productBlueprintID / product_blueprint_id を許容します。
+func (r previewProductBlueprintReaderFS) GetIDByModelID(ctx context.Context, modelID string) (string, error) {
+	if r.fs == nil {
+		return "", mallquery.ErrPreviewQueryNotConfigured
+	}
+	id := strings.TrimSpace(modelID)
+	if id == "" {
+		return "", mallquery.ErrInvalidModelID
+	}
+
+	snap, err := r.fs.Collection("models").Doc(id).Get(ctx)
+	if err != nil {
+		// model が無い場合は上位で "resolved productBlueprintId is empty" に落ちるのでもOK
+		return "", err
+	}
+
+	data := snap.Data()
+	if data == nil {
+		return "", nil
+	}
+
+	for _, k := range []string{"productBlueprintId", "productBlueprintID", "product_blueprint_id"} {
+		if v, ok := data[k]; ok {
+			if s, ok := v.(string); ok {
+				s = strings.TrimSpace(s)
+				if s != "" {
+					return s, nil
+				}
+			}
+		}
+	}
+
+	return "", nil
+}
+
+func (r previewProductBlueprintReaderFS) GetPatchByID(ctx context.Context, id string) (pbdom.Patch, error) {
+	if r.pb == nil {
+		return pbdom.Patch{}, mallquery.ErrPreviewQueryNotConfigured
+	}
+	return r.pb.GetPatchByID(ctx, id)
+}
+
+func (r previewProductBlueprintReaderFS) GetByID(ctx context.Context, id string) (pbdom.ProductBlueprint, error) {
+	if r.pb == nil {
+		return pbdom.ProductBlueprint{}, mallquery.ErrPreviewQueryNotConfigured
+	}
+	return r.pb.GetByID(ctx, id)
+}
+
+// ------------------------------------------------------------
+// PreviewQuery: TokenReader adapter (Firestore tokens/{productId})
+// ------------------------------------------------------------
+
+type previewTokenReaderFS struct {
+	fs *firestore.Client
+}
+
+// GetByProductID reads tokens/{productId} and maps to mallquery.TokenInfo.
+// - token が存在しない（未mint）なら (nil, nil) を返す
+func (r previewTokenReaderFS) GetByProductID(ctx context.Context, productID string) (*mallquery.TokenInfo, error) {
+	if r.fs == nil {
+		return nil, mallquery.ErrPreviewQueryNotConfigured
+	}
+	pid := strings.TrimSpace(productID)
+	if pid == "" {
+		return nil, mallquery.ErrInvalidProductID
+	}
+
+	snap, err := r.fs.Collection("tokens").Doc(pid).Get(ctx)
+	if err != nil {
+		if status.Code(err) == codes.NotFound {
+			return nil, nil
+		}
+		return nil, err
+	}
+
+	raw := snap.Data()
+	if raw == nil {
+		return nil, nil
+	}
+
+	getStr := func(keys ...string) string {
+		for _, k := range keys {
+			if v, ok := raw[k]; ok {
+				if s, ok := v.(string); ok {
+					s = strings.TrimSpace(s)
+					if s != "" {
+						return s
+					}
+				}
+			}
+		}
+		return ""
+	}
+
+	out := &mallquery.TokenInfo{
+		ProductID:        pid,
+		BrandID:          getStr("brandId", "brandID"),
+		TokenBlueprintID: getStr("tokenBlueprintId", "tokenBlueprintID"),
+		MintAddress:      getStr("mintAddress", "mint_address"),
+		OnChainTxSignature: getStr(
+			"onChainTxSignature",
+			"onchainTxSignature",
+			"txSignature",
+			"signature",
+		),
+	}
+
+	// Firestore に productId が保存されている場合は優先（ただし docID と一致する想定）
+	if p2 := getStr("productId", "productID"); p2 != "" {
+		out.ProductID = p2
+	}
+
+	return out, nil
 }
 
 // tokenIconURLResolver resolves icon URL from stored objectPath (or URL).

@@ -82,6 +82,9 @@ func (h *PreviewMeHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	info, err := h.q.ResolveModelInfoByProductID(r.Context(), productID)
 	if err != nil {
+		// ✅ 追加: どのエラーで落ちているかを Cloud Run ログで特定する
+		log.Printf("[mall.preview.me] ResolveModelInfoByProductID failed: %v", err)
+
 		if isNotFound(err) {
 			writeJSON(w, http.StatusNotFound, map[string]any{
 				"error":     "not found",
@@ -110,11 +113,21 @@ func (h *PreviewMeHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// ✅ productBlueprintPatch も含めてログに出す（確認用）
 	log.Printf(
-		`[mall.preview.me] resolved productId=%q modelId=%q modelNumber=%q size=%q color=%q rgb=%d measurements=%v`,
-		info.ProductID, info.ModelID, info.ModelNumber, info.Size, info.Color, info.RGB, info.Measurements,
+		`[mall.preview.me] resolved productId=%q modelId=%q modelNumber=%q size=%q color=%q rgb=%d measurements=%v productBlueprintId=%q productBlueprintPatch=%v`,
+		info.ProductID,
+		info.ModelID,
+		info.ModelNumber,
+		info.Size,
+		info.Color,
+		info.RGB,
+		info.Measurements,
+		info.ProductBlueprintID,
+		info.ProductBlueprintPatch,
 	)
 
+	// ✅ info をそのまま返す（productBlueprintPatch も data に含まれる）
 	writeJSON(w, http.StatusOK, map[string]any{
 		"data": info,
 	})

@@ -22,6 +22,8 @@ class MallPreviewResponse {
     this.color = '',
     this.rgb = 0,
     this.measurements,
+    this.productBlueprintPatch,
+    this.token, // ✅ NEW
   });
 
   /// Product ID（= QR の {productId}）
@@ -44,6 +46,13 @@ class MallPreviewResponse {
 
   /// 任意: 計測値（採寸）
   final Map<String, int>? measurements;
+
+  /// ✅ NEW: productBlueprintPatch 全体（JSONそのまま）
+  /// - backend の data.productBlueprintPatch をそのまま保持する
+  final Map<String, dynamic>? productBlueprintPatch;
+
+  /// ✅ NEW: tokens/{productId}（あれば）
+  final MallTokenInfo? token;
 
   static String _s(dynamic v) => (v ?? '').toString().trim();
 
@@ -74,6 +83,20 @@ class MallPreviewResponse {
       });
       return out.isEmpty ? null : out;
     }
+    return null;
+  }
+
+  static Map<String, dynamic>? _jsonObject(dynamic v) {
+    if (v == null) return null;
+    if (v is Map<String, dynamic>) return v;
+    if (v is Map) return Map<String, dynamic>.from(v);
+    return null;
+  }
+
+  static MallTokenInfo? _token(dynamic v) {
+    if (v == null) return null;
+    if (v is Map<String, dynamic>) return MallTokenInfo.fromJson(v);
+    if (v is Map) return MallTokenInfo.fromJson(Map<String, dynamic>.from(v));
     return null;
   }
 
@@ -137,6 +160,15 @@ class MallPreviewResponse {
         _measurements(j['measurements']) ??
         (pm != null ? _measurements(pm['measurements']) : null);
 
+    // ✅ productBlueprintPatch は「直下」or「product内」どちらでも拾う
+    final productBlueprintPatchRaw =
+        _jsonObject(j['productBlueprintPatch']) ??
+        (pm != null ? _jsonObject(pm['productBlueprintPatch']) : null);
+
+    // ✅ token は「直下 token」or「product内 token」どちらでも拾う
+    final tokenRaw =
+        _token(j['token']) ?? (pm != null ? _token(pm['token']) : null);
+
     return MallPreviewResponse(
       productId: productId,
       modelId: modelIdRaw,
@@ -145,8 +177,56 @@ class MallPreviewResponse {
       color: colorRaw,
       rgb: rgbRaw,
       measurements: measurementsRaw,
+      productBlueprintPatch: productBlueprintPatchRaw,
+      token: tokenRaw,
     );
   }
+}
+
+/// ✅ NEW: tokens/{productId} の最小ビュー
+class MallTokenInfo {
+  MallTokenInfo({
+    required this.productId,
+    this.brandId = '',
+    this.tokenBlueprintId = '',
+    this.mintAddress = '',
+    this.onChainTxSignature = '',
+  });
+
+  final String productId;
+  final String brandId;
+  final String tokenBlueprintId;
+  final String mintAddress;
+  final String onChainTxSignature;
+
+  static String _s(dynamic v) => (v ?? '').toString().trim();
+
+  factory MallTokenInfo.fromJson(Map<String, dynamic> j) {
+    // wrapper 吸収: {data:{...}} が混ざっても耐える
+    final maybeData = j['data'];
+    if (maybeData is Map<String, dynamic>) {
+      return MallTokenInfo.fromJson(maybeData);
+    }
+    if (maybeData is Map) {
+      return MallTokenInfo.fromJson(Map<String, dynamic>.from(maybeData));
+    }
+
+    return MallTokenInfo(
+      productId: _s(j['productId']),
+      brandId: _s(j['brandId']),
+      tokenBlueprintId: _s(j['tokenBlueprintId']),
+      mintAddress: _s(j['mintAddress']),
+      onChainTxSignature: _s(j['onChainTxSignature']),
+    );
+  }
+
+  Map<String, dynamic> toJson() => {
+    'productId': productId,
+    'brandId': brandId,
+    'tokenBlueprintId': tokenBlueprintId,
+    'mintAddress': mintAddress,
+    'onChainTxSignature': onChainTxSignature,
+  };
 }
 
 class PreviewRepositoryHttp {

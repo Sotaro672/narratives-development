@@ -1,4 +1,6 @@
 // frontend/mall/lib/features/preview/presentation/preview.dart
+import 'dart:convert';
+
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 
@@ -118,7 +120,9 @@ class _PreviewPageState extends State<PreviewPage> {
         ' size=${r.size.isEmpty ? "-" : r.size}'
         ' color=${r.color.isEmpty ? "-" : r.color}'
         ' rgb=${r.rgb}'
-        ' measurements=${r.measurements}',
+        ' measurements=${r.measurements}'
+        ' productBlueprintPatch=${r.productBlueprintPatch}'
+        ' token=${r.token?.toJson()}',
       );
       return r;
     }
@@ -140,7 +144,9 @@ class _PreviewPageState extends State<PreviewPage> {
       ' size=${r.size.isEmpty ? "-" : r.size}'
       ' color=${r.color.isEmpty ? "-" : r.color}'
       ' rgb=${r.rgb}'
-      ' measurements=${r.measurements}',
+      ' measurements=${r.measurements}'
+      ' productBlueprintPatch=${r.productBlueprintPatch}'
+      ' token=${r.token?.toJson()}',
     );
     return r;
   }
@@ -149,6 +155,14 @@ class _PreviewPageState extends State<PreviewPage> {
   Color _rgbToColor(int rgb) {
     final v = rgb & 0xFFFFFF;
     return Color(0xFF000000 | v);
+  }
+
+  String _prettyJson(dynamic v) {
+    try {
+      return const JsonEncoder.withIndent('  ').convert(v);
+    } catch (_) {
+      return (v ?? '').toString();
+    }
   }
 
   @override
@@ -226,6 +240,10 @@ class _PreviewPageState extends State<PreviewPage> {
                   final colorName = (data?.color ?? '').trim();
                   final rgb = data?.rgb ?? 0;
                   final measurements = data?.measurements;
+                  final productBlueprintPatch = data?.productBlueprintPatch;
+
+                  // ✅ NEW: token info
+                  final token = data?.token;
 
                   // ✅ rgb -> Color（表示用スウォッチ）
                   final swatch = _rgbToColor(rgb);
@@ -256,12 +274,45 @@ class _PreviewPageState extends State<PreviewPage> {
                     );
                   }).toList();
 
+                  final pbPatchPretty =
+                      (productBlueprintPatch == null ||
+                          productBlueprintPatch.isEmpty)
+                      ? ''
+                      : _prettyJson(productBlueprintPatch);
+
+                  // ✅ token pretty（JSON表示したい場合に備える）
+                  final tokenPretty = (token == null)
+                      ? ''
+                      : _prettyJson(token.toJson());
+
                   return Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       // ✅ タイトルを「商品情報」に変更
                       Text('商品情報', style: t.titleSmall),
                       const SizedBox(height: 8),
+
+                      // ✅ 型番の上に productBlueprintPatch の全容を表示
+                      if (pbPatchPretty.isNotEmpty) ...[
+                        Text('productBlueprintPatch', style: t.bodySmall),
+                        const SizedBox(height: 6),
+                        Container(
+                          width: double.infinity,
+                          padding: const EdgeInsets.all(10),
+                          decoration: BoxDecoration(
+                            border: border,
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          child: Text(
+                            pbPatchPretty,
+                            style:
+                                (t.bodySmall ?? const TextStyle(fontSize: 12))
+                                    .copyWith(fontFamily: 'monospace'),
+                          ),
+                        ),
+                        const SizedBox(height: 10),
+                      ],
+
                       Text(
                         '型番: ${modelNumber.isEmpty ? '-' : modelNumber}',
                         style: t.bodySmall,
@@ -305,6 +356,56 @@ class _PreviewPageState extends State<PreviewPage> {
                           runSpacing: 8,
                           children: measurementChips,
                         ),
+                      ],
+
+                      // ✅ NEW: token 情報を「モデル情報の下」に表示
+                      const SizedBox(height: 14),
+                      Text('Token 情報', style: t.titleSmall),
+                      const SizedBox(height: 8),
+
+                      if (token == null) ...[
+                        Text('未Mint（token情報なし）', style: t.bodySmall),
+                      ] else ...[
+                        Text(
+                          'brandId: ${token.brandId.isEmpty ? '-' : token.brandId}',
+                          style: t.bodySmall,
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          'tokenBlueprintId: ${token.tokenBlueprintId.isEmpty ? '-' : token.tokenBlueprintId}',
+                          style: t.bodySmall,
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          'mintAddress: ${token.mintAddress.isEmpty ? '-' : token.mintAddress}',
+                          style: t.bodySmall,
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          'onChainTxSignature: ${token.onChainTxSignature.isEmpty ? '-' : token.onChainTxSignature}',
+                          style: t.bodySmall,
+                        ),
+
+                        // ✅ 長いので JSON も折りたたみ風に表示（必要なければ消してOK）
+                        if (tokenPretty.isNotEmpty) ...[
+                          const SizedBox(height: 10),
+                          Text('token (raw)', style: t.bodySmall),
+                          const SizedBox(height: 6),
+                          Container(
+                            width: double.infinity,
+                            padding: const EdgeInsets.all(10),
+                            decoration: BoxDecoration(
+                              border: border,
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                            child: Text(
+                              tokenPretty,
+                              style:
+                                  (t.bodySmall ?? const TextStyle(fontSize: 12))
+                                      .copyWith(fontFamily: 'monospace'),
+                            ),
+                          ),
+                        ],
                       ],
                     ],
                   );
