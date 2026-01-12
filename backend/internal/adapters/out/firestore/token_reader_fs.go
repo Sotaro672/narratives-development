@@ -39,6 +39,8 @@ func (r *TokenReaderFS) GetByProductID(ctx context.Context, productID string) (*
 	}
 
 	raw := snap.Data()
+
+	// ✅ docID=productId 前提なので、ProductID はまず引数由来で固定
 	out := &mallquery.TokenInfo{
 		ProductID: id,
 	}
@@ -47,14 +49,21 @@ func (r *TokenReaderFS) GetByProductID(ctx context.Context, productID string) (*
 	if v, ok := raw["brandId"].(string); ok {
 		out.BrandID = strings.TrimSpace(v)
 	}
-	if v, ok := raw["tokenBlueprintId"].(string); ok {
-		out.TokenBlueprintID = strings.TrimSpace(v)
-	}
 	if v, ok := raw["mintAddress"].(string); ok {
 		out.MintAddress = strings.TrimSpace(v)
 	}
 
-	// ✅ 命名統一: TokenInfo 側は OnChainTxSignature にするのがおすすめ
+	// ✅ A案: tokens にキャッシュする
+	if v, ok := raw["toAddress"].(string); ok {
+		out.ToAddress = strings.TrimSpace(v)
+	}
+	if v, ok := raw["metadataUri"].(string); ok {
+		out.MetadataURI = strings.TrimSpace(v)
+	} else if v, ok := raw["metadataURI"].(string); ok { // 念のため
+		out.MetadataURI = strings.TrimSpace(v)
+	}
+
+	// ✅ 命名揺れ吸収: onChainTxSignature 系
 	if v, ok := raw["onChainTxSignature"].(string); ok {
 		out.OnChainTxSignature = strings.TrimSpace(v)
 	} else if v, ok := raw["onchainTxSignature"].(string); ok {
@@ -65,10 +74,8 @@ func (r *TokenReaderFS) GetByProductID(ctx context.Context, productID string) (*
 		out.OnChainTxSignature = strings.TrimSpace(v)
 	}
 
-	// Firestore 側に productId が入っている場合はそれを優先
-	if v, ok := raw["productId"].(string); ok && strings.TrimSpace(v) != "" {
-		out.ProductID = strings.TrimSpace(v)
-	}
+	// ✅ 方針: productId は tokens に保存しないので、上書きはしない
+	// （互換目的で読みたいならここで raw["productId"] を読むが、DTOに存在しないなら不要）
 
 	return out, nil
 }

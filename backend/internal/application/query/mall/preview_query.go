@@ -6,6 +6,7 @@ import (
 	"errors"
 	"strings"
 
+	sharedquery "narratives/internal/application/query/shared"
 	modeldom "narratives/internal/domain/model"
 	productdom "narratives/internal/domain/product"
 	pbdom "narratives/internal/domain/productBlueprint"
@@ -65,14 +66,32 @@ type TokenReader interface {
 // ------------------------------------------------------------
 
 // TokenInfo is a minimal view for token doc (tokens/{productId}) used by preview.
-// Firestore の token doc に存在するキー（brandId, tokenBlueprintId, mintAddress, onChainTxSignature 等）を返す想定。
+//
+// ✅ 方針:
+// - docID=productId（既存）
+// - tokens には mintAddress / onChainTxSignature / mintedAt / brandId を保存
+// - 体感速度向上のため、toAddress / metadataUri を tokens にキャッシュして即表示に使う
+// - productId / tokenBlueprintId は Firestore に保存しない（必要なら docID や別経路で解決）
+//
+// NOTE:
+// - ProductID は API レスポンスとしては便利なので残す（docID から注入する想定）
+// - MintedAt は handler 側で timestamp を string 化する方針ならここを string のままでOK
 type TokenInfo struct {
-	ProductID        string `json:"productId"`
-	BrandID          string `json:"brandId,omitempty"`
-	TokenBlueprintID string `json:"tokenBlueprintId,omitempty"`
+	// docID (=productId) をレスポンスに含める用途
+	ProductID string `json:"productId"`
 
+	BrandID string `json:"brandId,omitempty"`
+
+	// ✅ Off-chain cache (for faster UI)
+	ToAddress   string `json:"toAddress,omitempty"`
+	MetadataURI string `json:"metadataUri,omitempty"`
+
+	// On-chain results
 	MintAddress        string `json:"mintAddress,omitempty"`
 	OnChainTxSignature string `json:"onChainTxSignature,omitempty"`
+
+	// mintedAt は UI で表示したいことが多いので返す（不要なら削ってOK）
+	MintedAt string `json:"mintedAt,omitempty"`
 }
 
 // PreviewModelInfo is what preview.dart eventually wants to display.
@@ -95,6 +114,9 @@ type PreviewModelInfo struct {
 
 	// ✅ tokens/{productId}（あれば）
 	Token *TokenInfo `json:"token,omitempty"`
+
+	// ✅ owner_resolve_query.go のみを使う（A案）
+	Owner *sharedquery.OwnerResolveResult `json:"owner,omitempty"`
 }
 
 // ------------------------------------------------------------
@@ -110,13 +132,16 @@ type PreviewQuery struct {
 
 	// ✅ Optional: tokens/{productId} を読む（nil なら token は返さない）
 	TokenRepo TokenReader
+
+	// ✅ Optional: tokens.toAddress -> owner を解決（nil なら owner は返さない）
+	OwnerResolveQ *sharedquery.OwnerResolveQuery
 }
 
 // NewPreviewQuery constructs PreviewQuery.
 //
 // ✅ NOTE:
 // - DI(container.go) 側が 3 引数で呼ぶ想定に合わせてこちらを「正」とする。
-// - TokenRepo は optional（後から q.TokenRepo = ... で注入可能）
+// - TokenRepo / OwnerResolveQ は optional（後から注入可能）
 // - PB を返す前提のため ProductBlueprintRepo は必須（ResolveModelInfoByProductID で参照）
 func NewPreviewQuery(
 	productRepo ProductReader,
@@ -128,6 +153,7 @@ func NewPreviewQuery(
 		ModelRepo:            modelRepo,
 		ProductBlueprintRepo: pbRepo,
 		TokenRepo:            nil,
+		OwnerResolveQ:        nil,
 	}
 }
 
@@ -144,6 +170,7 @@ func NewPreviewQueryWithToken(
 		ModelRepo:            modelRepo,
 		ProductBlueprintRepo: pbRepo,
 		TokenRepo:            tokenRepo,
+		OwnerResolveQ:        nil,
 	}
 }
 
@@ -156,6 +183,7 @@ func NewPreviewQueryLite(productRepo ProductReader, modelRepo ModelVariationRead
 		ModelRepo:            modelRepo,
 		ProductBlueprintRepo: nil,
 		TokenRepo:            nil,
+		OwnerResolveQ:        nil,
 	}
 }
 
@@ -225,6 +253,7 @@ func (q *PreviewQuery) ResolveModelMetaByModelID(
 // (modelNumber/size/color/rgb/measurements) from productId,
 // and additionally resolves productBlueprintId + (productBlueprint entity + patch) by modelId.
 // and optionally resolves tokens/{productId} if TokenRepo is configured.
+// and optionally resolves owner (tokens.toAddress -> avatarId/brandId) if OwnerResolveQ is configured.
 //
 // handler 側でこのDTOをそのまま返す形にしてOK。
 func (q *PreviewQuery) ResolveModelInfoByProductID(
@@ -297,14 +326,25 @@ func (q *PreviewQuery) ResolveModelInfoByProductID(
 	out.ProductBlueprintPatch = &patch
 
 	// ✅ tokens/{productId}（存在すれば付与）
-	// - TokenRepo が nil の場合は無視（preview は PB までで成立）
-	// - token が未作成（未mint）なら nil を返す実装を想定
 	if q.TokenRepo != nil {
 		tok, err := q.TokenRepo.GetByProductID(ctx, id)
 		if err != nil {
 			return nil, err
 		}
 		out.Token = tok
+
+		// ✅ owner 解決（preview/preview_me 経由でのみ叩く運用）
+		// - token が無い / toAddress が無い / OwnerResolveQ が無い場合は何もしない
+		if q.OwnerResolveQ != nil && tok != nil {
+			addr := strings.TrimSpace(tok.ToAddress)
+			if addr != "" {
+				res, rerr := q.OwnerResolveQ.Resolve(ctx, addr)
+				if rerr == nil && res != nil {
+					out.Owner = res
+				}
+				// rerr は preview を壊さない（owner は付加情報のため）
+			}
+		}
 	}
 
 	return out, nil

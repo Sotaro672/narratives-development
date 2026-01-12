@@ -9,11 +9,13 @@ import (
 	"strings"
 
 	"cloud.google.com/go/firestore"
+	"google.golang.org/api/iterator"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
 	// inbound (query + resolver types)
 	mallquery "narratives/internal/application/query/mall"
+	sharedquery "narratives/internal/application/query/shared"
 	appresolver "narratives/internal/application/resolver"
 	usecase "narratives/internal/application/usecase"
 
@@ -41,6 +43,10 @@ import (
 const (
 	StripeWebhookPath        = "/mall/webhooks/stripe"
 	defaultTokenIconBucketDI = "narratives-development_token_icon" // tokenIcon_repository_gcs.go と同じ既定値
+
+	// owner-resolve query (walletAddress -> brandId / avatarId)
+	defaultBrandsCollection  = "brands"
+	defaultAvatarsCollection = "avatars"
 )
 
 // Container is Mall DI container.
@@ -80,6 +86,9 @@ type Container struct {
 	CartQ    *mallquery.CartQuery
 	PreviewQ *mallquery.PreviewQuery
 	OrderQ   any
+
+	// ✅ Shared query: walletAddress(toAddress) -> brandId / avatarId
+	OwnerResolveQ *sharedquery.OwnerResolveQuery
 
 	// Repos sometimes needed by handlers/queries/joins
 	ListRepo ldom.Repository
@@ -306,7 +315,6 @@ func NewContainer(ctx context.Context, infra *shared.Infra) (*Container, error) 
 		)
 
 		// ✅ tokens/{productId} を preview で返したいので TokenRepo を注入（optional）
-		// NOTE: preview_query.go の TokenInfo は OnChainTxSignature フィールド名なのでそれに合わせる
 		if c.PreviewQ != nil {
 			c.PreviewQ.TokenRepo = previewTokenReaderFS{fs: fsClient}
 		}
@@ -323,13 +331,33 @@ func NewContainer(ctx context.Context, infra *shared.Infra) (*Container, error) 
 		if c.CartQ != nil && c.ListRepo != nil && c.CartQ.ListRepo == nil {
 			c.CartQ.ListRepo = c.ListRepo
 		}
+	}
 
-		// ✅ PreviewQ は preview_handler.go の要件が「productId -> model info (+token info)」なので
-		// NameResolver の注入（Resolver フィールド）は行わない（そもそも存在しない）
+	// --------------------------------------------------------
+	// ✅ Shared Query: OwnerResolve (walletAddress/toAddress -> brandId / avatarId)
+	// --------------------------------------------------------
+	{
+		brandsCol := strings.TrimSpace(os.Getenv("BRANDS_COLLECTION"))
+		if brandsCol == "" {
+			brandsCol = defaultBrandsCollection
+		}
+		avatarsCol := strings.TrimSpace(os.Getenv("AVATARS_COLLECTION"))
+		if avatarsCol == "" {
+			avatarsCol = defaultAvatarsCollection
+		}
+
+		// ✅ sharedquery の interface は "Find..." メソッドを要求している
+		brandReader := brandWalletAddressReaderFS{fs: fsClient, col: brandsCol}
+		avatarReader := avatarWalletAddressReaderFS{fs: fsClient, col: avatarsCol}
+
+		// ✅ ここが今回のエラー原因:
+		// NewOwnerResolveQuery は (avatarReader, brandReader) の順で受け取る定義
+		// （= 第1引数: AvatarWalletAddressReader / 第2引数: BrandWalletAddressReader）
+		c.OwnerResolveQ = sharedquery.NewOwnerResolveQuery(avatarReader, brandReader)
 	}
 
 	log.Printf(
-		"[di.mall] container built (firestore=%t gcs=%t firebaseAuth=%t avatarUC=%t avatarWalletSvc=%t cartUC=%t cartRepo=%t paymentUC=%t paymentFlowUC=%t invoiceUC=%t meAvatarRepo=%t inventoryUC=%t tokenBlueprintRepo=%t tokenIconResolver=%t selfBaseURL=%t previewQ=%t)",
+		"[di.mall] container built (firestore=%t gcs=%t firebaseAuth=%t avatarUC=%t avatarWalletSvc=%t cartUC=%t cartRepo=%t paymentUC=%t paymentFlowUC=%t invoiceUC=%t meAvatarRepo=%t inventoryUC=%t tokenBlueprintRepo=%t tokenIconResolver=%t selfBaseURL=%t previewQ=%t ownerResolveQ=%t)",
 		c.Infra.Firestore != nil,
 		c.Infra.GCS != nil,
 		c.Infra.FirebaseAuth != nil,
@@ -346,6 +374,7 @@ func NewContainer(ctx context.Context, infra *shared.Infra) (*Container, error) 
 		c.TokenIconURLResolver != nil,
 		selfBaseURLConfigured,
 		c.PreviewQ != nil,
+		c.OwnerResolveQ != nil,
 	)
 
 	return c, nil
@@ -500,11 +529,17 @@ func (r previewTokenReaderFS) GetByProductID(ctx context.Context, productID stri
 		return ""
 	}
 
+	// ✅ TokenInfo から TokenBlueprintID は削除済み前提
+	// ✅ A案: tokens 側に toAddress / metadataUri をキャッシュしている前提
 	out := &mallquery.TokenInfo{
-		ProductID:        pid,
-		BrandID:          getStr("brandId", "brandID"),
-		TokenBlueprintID: getStr("tokenBlueprintId", "tokenBlueprintID"),
-		MintAddress:      getStr("mintAddress", "mint_address"),
+		ProductID: pid,
+		BrandID:   getStr("brandId", "brandID"),
+
+		MintAddress: getStr("mintAddress", "mint_address"),
+
+		ToAddress:   getStr("toAddress", "to_address"),
+		MetadataURI: getStr("metadataUri", "metadataURI", "metadata_uri"),
+
 		OnChainTxSignature: getStr(
 			"onChainTxSignature",
 			"onchainTxSignature",
@@ -513,12 +548,87 @@ func (r previewTokenReaderFS) GetByProductID(ctx context.Context, productID stri
 		),
 	}
 
-	// Firestore に productId が保存されている場合は優先（ただし docID と一致する想定）
-	if p2 := getStr("productId", "productID"); p2 != "" {
-		out.ProductID = p2
+	return out, nil
+}
+
+// ------------------------------------------------------------
+// ✅ SharedQuery OwnerResolve: walletAddress readers (Firestore)
+// ------------------------------------------------------------
+
+// brandWalletAddressReaderFS implements sharedquery.BrandWalletAddressReader.
+type brandWalletAddressReaderFS struct {
+	fs  *firestore.Client
+	col string
+}
+
+func (r brandWalletAddressReaderFS) FindBrandIDByWalletAddress(ctx context.Context, walletAddress string) (string, error) {
+	if r.fs == nil {
+		return "", sharedquery.ErrOwnerResolveNotConfigured
+	}
+	addr := strings.TrimSpace(walletAddress)
+	if addr == "" {
+		return "", sharedquery.ErrInvalidWalletAddress
 	}
 
-	return out, nil
+	col := strings.TrimSpace(r.col)
+	if col == "" {
+		col = defaultBrandsCollection
+	}
+
+	it := r.fs.Collection(col).
+		Where("walletAddress", "==", addr).
+		Limit(1).
+		Documents(ctx)
+
+	doc, err := it.Next()
+	if err != nil {
+		if err == iterator.Done {
+			return "", nil
+		}
+		return "", err
+	}
+	if doc == nil || doc.Ref == nil {
+		return "", nil
+	}
+	return strings.TrimSpace(doc.Ref.ID), nil
+}
+
+// avatarWalletAddressReaderFS implements sharedquery.AvatarWalletAddressReader.
+type avatarWalletAddressReaderFS struct {
+	fs  *firestore.Client
+	col string
+}
+
+func (r avatarWalletAddressReaderFS) FindAvatarIDByWalletAddress(ctx context.Context, walletAddress string) (string, error) {
+	if r.fs == nil {
+		return "", sharedquery.ErrOwnerResolveNotConfigured
+	}
+	addr := strings.TrimSpace(walletAddress)
+	if addr == "" {
+		return "", sharedquery.ErrInvalidWalletAddress
+	}
+
+	col := strings.TrimSpace(r.col)
+	if col == "" {
+		col = defaultAvatarsCollection
+	}
+
+	it := r.fs.Collection(col).
+		Where("walletAddress", "==", addr).
+		Limit(1).
+		Documents(ctx)
+
+	doc, err := it.Next()
+	if err != nil {
+		if err == iterator.Done {
+			return "", nil
+		}
+		return "", err
+	}
+	if doc == nil || doc.Ref == nil {
+		return "", nil
+	}
+	return strings.TrimSpace(doc.Ref.ID), nil
 }
 
 // tokenIconURLResolver resolves icon URL from stored objectPath (or URL).

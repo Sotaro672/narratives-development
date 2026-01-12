@@ -52,6 +52,11 @@ func requireUserAuth(mw *middleware.UserAuthMiddleware, h http.Handler, name str
 // - No method/path branching here
 // - deps must be non-nil for all handlers (no nil in deps)
 // - UserAuthMiddleware is applied to ALL user-authenticated endpoints (user系全部)
+//
+// ✅ 方針変更（今回）:
+// - owner resolve は「preview / preview_me ハンドラー内部からのみ」呼ばれる。
+// - そのため /mall/owners/resolve 等の独立エンドポイントは Mall Router には登録しない。
+// - DI では OwnerResolveHandler を生成せず、router deps へも渡さない。
 func Register(mux *http.ServeMux, cont *Container) {
 	if mux == nil || cont == nil {
 		return
@@ -186,14 +191,19 @@ func Register(mux *http.ServeMux, cont *Container) {
 
 	// ------------------------------------------------------------
 	// Preview handler wiring (split)
-	// 前提:
-	// - cont.PreviewQ が存在
-	// - handler.NewPreviewHandler(cont.PreviewQ) が /mall/preview 用
-	// - handler.NewPreviewMeHandler(cont.PreviewQ) が /mall/me/preview 用
 	// ------------------------------------------------------------
+	// ✅ owner resolve は「preview / preview_me ハンドラー内部からのみ」呼ぶ前提。
+	// ✅ WithOwner を使って OwnerResolveQ を Preview ハンドラーへ注入する。
 	if cont.PreviewQ != nil {
-		previewPublicH = mallhandler.NewPreviewHandler(cont.PreviewQ)
-		previewMeH = mallhandler.NewPreviewMeHandler(cont.PreviewQ)
+		if cont.OwnerResolveQ != nil {
+			previewPublicH = mallhandler.NewPreviewHandlerWithOwner(cont.PreviewQ, cont.OwnerResolveQ)
+			previewMeH = mallhandler.NewPreviewMeHandlerWithOwner(cont.PreviewQ, cont.OwnerResolveQ)
+			log.Printf("[mall.register] preview handlers wired WITH owner-resolve query")
+		} else {
+			previewPublicH = mallhandler.NewPreviewHandler(cont.PreviewQ)
+			previewMeH = mallhandler.NewPreviewMeHandler(cont.PreviewQ)
+			log.Printf("[mall.register] preview handlers wired WITHOUT owner-resolve query (OwnerResolveQ is nil)")
+		}
 	}
 
 	// SignIn: keep a stable no-op endpoint (client convenience)
@@ -226,9 +236,9 @@ func Register(mux *http.ServeMux, cont *Container) {
 	// ----------------------------
 	// Router deps
 	// ----------------------------
-	// ✅ 直し方A:
-	// router.go 側に PreviewMe を追加し、/mall/me/preview は deps.PreviewMe に向ける。
-	// これにより mux.Handle の二重登録（後勝ち差し替え）を完全に排除する。
+	// ✅ owner resolve endpoint は公開しない方針なので deps.OwnerResolve は設定しない。
+	// router.go に /mall/owners/resolve が残っている場合でも、
+	// deps.OwnerResolve が notImplemented になるようにしておく（呼ばれたら 501 が返る）。
 	deps := mallhttp.Deps{
 		// public
 		List: listH,
@@ -254,9 +264,12 @@ func Register(mux *http.ServeMux, cont *Container) {
 		Wallet:          walletH,
 		Cart:            cartH,
 
-		//preview split
+		// preview split
 		Preview:   previewPublicH, // /mall/preview (public)
 		PreviewMe: previewMeH,     // /mall/me/preview (auth)
+
+		// owner resolve is intentionally NOT exposed as an endpoint
+		OwnerResolve: notImplemented("OwnerResolve(endpoint_disabled)"),
 
 		Payment: payH,
 		Order:   orderH,

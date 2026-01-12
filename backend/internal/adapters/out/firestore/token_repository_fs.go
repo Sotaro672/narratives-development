@@ -59,7 +59,6 @@ func NewMintRequestPortFS(
 	tokenBlueprintsColName string,
 	brandsColName string,
 ) *MintRequestPortFS {
-
 	return &MintRequestPortFS{
 		client:             client,
 		mintsCol:           client.Collection(mintsColName),
@@ -151,10 +150,6 @@ func (p *MintRequestPortFS) LoadForMinting(
 
 	// ★ 重要: minted=false でも mintedAt/署名が入っている「不整合状態」を検知したら
 	// その場で minted=true に修復して、以降は "already minted" 扱いにする。
-	//
-	// これを入れないと:
-	// - MintRepositoryFS 側で Validate が落ちる（inconsistent minted/mintedAt）
-	// - MintUsecase が mint をロードできず 500 になる
 	if !m.Minted && hasMintedEvidence(raw) {
 		// best-effort repair（失敗しても read は止めない）
 		_, _ = p.mintsCol.Doc(mintID).Update(ctx, []firestore.Update{
@@ -178,7 +173,6 @@ func (p *MintRequestPortFS) LoadForMinting(
 	}
 
 	// 1-2) products は「配列（productId一覧）」のみ対応する
-	// ※ map[productId]"" / map[productId]mintAddress 形式は廃止（互換コード削除）
 	productIDs := make([]string, 0)
 
 	if v, ok := raw["products"]; ok {
@@ -324,7 +318,10 @@ func (p *MintRequestPortFS) MarkAsMinted(
 }
 
 // MarkProductsAsMinted は「1商品=1Mint」でミントした結果を Firestore に反映します。
-// - tokens コレクションに [productId, mintAddress] を 1:1 で保存（★これは残す）
+// - tokens コレクションに [productId, mintAddress] を 1:1 で保存（docID=productId）
+// - tokens には productId フィールドは保存しない（docID が productId なので不要）
+// - tokens には tokenBlueprintId は保存しない（metadataURI を保存するため不要）
+// - tokens に toAddress / metadataUri をキャッシュとして保存する（体感高速化）
 // - mints/{id} 自体も minted=true に更新（代表の MintResult を利用。ただし mintAddress は保存しない）
 func (p *MintRequestPortFS) MarkProductsAsMinted(
 	ctx context.Context,
@@ -334,6 +331,7 @@ func (p *MintRequestPortFS) MarkProductsAsMinted(
 	if p == nil || p.client == nil || p.mintsCol == nil || p.tokensCol == nil {
 		return fmt.Errorf("MintRequestPortFS is not initialized (tokensCol may be nil)")
 	}
+
 	mintID := strings.TrimSpace(id)
 	if mintID == "" {
 		return fmt.Errorf("mint id is empty")
@@ -342,7 +340,7 @@ func (p *MintRequestPortFS) MarkProductsAsMinted(
 		return fmt.Errorf("no minted results provided")
 	}
 
-	// 対応する mints/{id} を再取得して、brandId / tokenBlueprintId 等を参照
+	// mints/{id} を再取得して brandId / tokenBlueprintId を参照
 	mintSnap, err := p.mintsCol.Doc(mintID).Get(ctx)
 	if err != nil {
 		if status.Code(err) == codes.NotFound {
@@ -354,6 +352,55 @@ func (p *MintRequestPortFS) MarkProductsAsMinted(
 	var m mintDoc
 	if err := mintSnap.DataTo(&m); err != nil {
 		return fmt.Errorf("decode mint %s in MarkProductsAsMinted: %w", mintID, err)
+	}
+
+	brandID := strings.TrimSpace(m.BrandID)
+	if brandID == "" {
+		return fmt.Errorf("mint %s has empty brandId in MarkProductsAsMinted", mintID)
+	}
+	tbID := strings.TrimSpace(m.TokenBlueprintID)
+	if tbID == "" {
+		return fmt.Errorf("mint %s has empty tokenBlueprintId in MarkProductsAsMinted", mintID)
+	}
+
+	// ✅ cache: toAddress を brands/{brandId} から取得
+	if p.brandsCol == nil {
+		return fmt.Errorf("brandsCol is nil in MintRequestPortFS")
+	}
+	brandSnap, err := p.brandsCol.Doc(brandID).Get(ctx)
+	if err != nil {
+		if status.Code(err) == codes.NotFound {
+			return fmt.Errorf("brand %s not found for mint %s", brandID, mintID)
+		}
+		return fmt.Errorf("get brand %s in MarkProductsAsMinted: %w", brandID, err)
+	}
+	var b brandDoc
+	if err := brandSnap.DataTo(&b); err != nil {
+		return fmt.Errorf("decode brand %s in MarkProductsAsMinted: %w", brandID, err)
+	}
+	toAddress := strings.TrimSpace(b.WalletAddress)
+	if toAddress == "" {
+		return fmt.Errorf("brand %s has empty walletAddress (toAddress) in MarkProductsAsMinted", brandID)
+	}
+
+	// ✅ cache: metadataUri を token_blueprints/{tokenBlueprintId} から取得（A案）
+	if p.tokenBlueprintsCol == nil {
+		return fmt.Errorf("tokenBlueprintsCol is nil in MintRequestPortFS")
+	}
+	tbSnap, err := p.tokenBlueprintsCol.Doc(tbID).Get(ctx)
+	if err != nil {
+		if status.Code(err) == codes.NotFound {
+			return fmt.Errorf("tokenBlueprint %s not found for mint %s", tbID, mintID)
+		}
+		return fmt.Errorf("get tokenBlueprint %s in MarkProductsAsMinted: %w", tbID, err)
+	}
+	var tb tokenBlueprintDoc
+	if err := tbSnap.DataTo(&tb); err != nil {
+		return fmt.Errorf("decode tokenBlueprint %s in MarkProductsAsMinted: %w", tbID, err)
+	}
+	metadataURI := strings.TrimSpace(tb.MetadataURI)
+	if metadataURI == "" {
+		return fmt.Errorf("tokenBlueprint %s has empty metadataUri in MarkProductsAsMinted", tbID)
 	}
 
 	// 代表として最後の MintResult を利用
@@ -370,7 +417,7 @@ func (p *MintRequestPortFS) MarkProductsAsMinted(
 	// ★ tokens upsert と mint の minted 更新を batch でまとめて atomic にする
 	batch := p.client.Batch()
 
-	// tokens: 1 productId = 1 token（docID=productId）
+	// tokens: docID=productId
 	for _, mt := range minted {
 		productID := strings.TrimSpace(mt.ProductID)
 		if productID == "" {
@@ -383,12 +430,23 @@ func (p *MintRequestPortFS) MarkProductsAsMinted(
 		docID := productID
 
 		data := map[string]interface{}{
-			"brandId":            strings.TrimSpace(m.BrandID),
-			"tokenBlueprintId":   strings.TrimSpace(m.TokenBlueprintID),
-			"productId":          productID,
-			"mintAddress":        strings.TrimSpace(mt.Result.MintAddress), // ★ tokens には mintAddress を保存（削除しない）
+			// ✅ brandId は残す（ブランドでの絞り込み等）
+			"brandId": strings.TrimSpace(m.BrandID),
+
+			// ✅ productId / tokenBlueprintId は保存しない
+			// "productId": productID,
+			// "tokenBlueprintId": strings.TrimSpace(m.TokenBlueprintID),
+
+			// ✅ mintAddress は保持
+			"mintAddress": strings.TrimSpace(mt.Result.MintAddress),
+
+			// ✅ onChainTxSignature / mintedAt は従来どおり
 			"onChainTxSignature": strings.TrimSpace(mt.Result.Signature),
 			"mintedAt":           firestore.ServerTimestamp,
+
+			// ✅ 体感高速化: Firestore 側にキャッシュ
+			"toAddress":   toAddress,
+			"metadataUri": metadataURI,
 		}
 
 		batch.Set(p.tokensCol.Doc(docID), data, firestore.MergeAll)

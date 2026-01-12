@@ -6,6 +6,42 @@ import 'package:http/http.dart' as http;
 // ✅ API_BASE 解決ロジック（single source of truth）
 import '../../../app/config/api_base.dart';
 
+/// ✅ owner-resolve response DTO.
+///
+/// backend (想定):
+/// - GET /mall/owner-resolve?walletAddress=...     (public)
+/// - GET /mall/me/owner-resolve?walletAddress=...  (auth)
+///
+/// 返却例（どちらでも許容）:
+/// - { "brandId": "...", "avatarId": "..." }
+/// - { "data": { "brandId": "...", "avatarId": "..." } }
+class MallOwnerInfo {
+  MallOwnerInfo({this.brandId = '', this.avatarId = ''});
+
+  final String brandId;
+  final String avatarId;
+
+  static String _s(dynamic v) => (v ?? '').toString().trim();
+
+  factory MallOwnerInfo.fromJson(Map<String, dynamic> j) {
+    // wrapper 吸収: {data:{...}} を許容
+    final maybeData = j['data'];
+    if (maybeData is Map<String, dynamic>) {
+      return MallOwnerInfo.fromJson(maybeData);
+    }
+    if (maybeData is Map) {
+      return MallOwnerInfo.fromJson(Map<String, dynamic>.from(maybeData));
+    }
+
+    return MallOwnerInfo(
+      brandId: _s(j['brandId']),
+      avatarId: _s(j['avatarId']),
+    );
+  }
+
+  Map<String, dynamic> toJson() => {'brandId': brandId, 'avatarId': avatarId};
+}
+
 /// Preview response DTO.
 ///
 /// backend (想定):
@@ -23,7 +59,8 @@ class MallPreviewResponse {
     this.rgb = 0,
     this.measurements,
     this.productBlueprintPatch,
-    this.token, // ✅ NEW
+    this.token, // ✅ token info (tokens/{productId})
+    this.owner, // ✅ owner resolve result (walletAddress -> brandId/avatarId)
   });
 
   /// Product ID（= QR の {productId}）
@@ -47,12 +84,15 @@ class MallPreviewResponse {
   /// 任意: 計測値（採寸）
   final Map<String, int>? measurements;
 
-  /// ✅ NEW: productBlueprintPatch 全体（JSONそのまま）
+  /// productBlueprintPatch 全体（JSONそのまま）
   /// - backend の data.productBlueprintPatch をそのまま保持する
   final Map<String, dynamic>? productBlueprintPatch;
 
-  /// ✅ NEW: tokens/{productId}（あれば）
+  /// ✅ tokens/{productId}（あれば）
   final MallTokenInfo? token;
+
+  /// ✅ owner resolve result（あれば）
+  final MallOwnerInfo? owner;
 
   static String _s(dynamic v) => (v ?? '').toString().trim();
 
@@ -97,6 +137,13 @@ class MallPreviewResponse {
     if (v == null) return null;
     if (v is Map<String, dynamic>) return MallTokenInfo.fromJson(v);
     if (v is Map) return MallTokenInfo.fromJson(Map<String, dynamic>.from(v));
+    return null;
+  }
+
+  static MallOwnerInfo? _owner(dynamic v) {
+    if (v == null) return null;
+    if (v is Map<String, dynamic>) return MallOwnerInfo.fromJson(v);
+    if (v is Map) return MallOwnerInfo.fromJson(Map<String, dynamic>.from(v));
     return null;
   }
 
@@ -169,6 +216,10 @@ class MallPreviewResponse {
     final tokenRaw =
         _token(j['token']) ?? (pm != null ? _token(pm['token']) : null);
 
+    // ✅ owner は「直下 owner」or「product内 owner」どちらでも拾う
+    final ownerRaw =
+        _owner(j['owner']) ?? (pm != null ? _owner(pm['owner']) : null);
+
     return MallPreviewResponse(
       productId: productId,
       modelId: modelIdRaw,
@@ -179,25 +230,44 @@ class MallPreviewResponse {
       measurements: measurementsRaw,
       productBlueprintPatch: productBlueprintPatchRaw,
       token: tokenRaw,
+      owner: ownerRaw,
     );
   }
 }
 
-/// ✅ NEW: tokens/{productId} の最小ビュー
+/// ✅ tokens/{productId} の最小ビュー（backend TokenInfo に追随）
+///
+/// 方針:
+/// - docID=productId（既存）
+/// - tokens には mintAddress / onChainTxSignature / mintedAt / brandId を保存
+/// - 体感速度向上のため、toAddress / metadataUri を tokens にキャッシュして即表示に使う
+/// - productId / tokenBlueprintId は Firestore に保存しない（productId は docID で十分）
 class MallTokenInfo {
   MallTokenInfo({
     required this.productId,
     this.brandId = '',
-    this.tokenBlueprintId = '',
+    this.toAddress = '',
+    this.metadataUri = '',
     this.mintAddress = '',
     this.onChainTxSignature = '',
+    this.mintedAt = '',
   });
 
+  /// docID (=productId) をレスポンスに含める用途
   final String productId;
+
   final String brandId;
-  final String tokenBlueprintId;
+
+  /// ✅ Off-chain cache (for faster UI)
+  final String toAddress;
+  final String metadataUri;
+
+  /// On-chain results
   final String mintAddress;
   final String onChainTxSignature;
+
+  /// mintedAt（RFC3339 など、backend側の整形に依存）
+  final String mintedAt;
 
   static String _s(dynamic v) => (v ?? '').toString().trim();
 
@@ -214,18 +284,22 @@ class MallTokenInfo {
     return MallTokenInfo(
       productId: _s(j['productId']),
       brandId: _s(j['brandId']),
-      tokenBlueprintId: _s(j['tokenBlueprintId']),
+      toAddress: _s(j['toAddress']),
+      metadataUri: _s(j['metadataUri']),
       mintAddress: _s(j['mintAddress']),
       onChainTxSignature: _s(j['onChainTxSignature']),
+      mintedAt: _s(j['mintedAt']),
     );
   }
 
   Map<String, dynamic> toJson() => {
     'productId': productId,
     'brandId': brandId,
-    'tokenBlueprintId': tokenBlueprintId,
+    'toAddress': toAddress,
+    'metadataUri': metadataUri,
     'mintAddress': mintAddress,
     'onChainTxSignature': onChainTxSignature,
+    'mintedAt': mintedAt,
   };
 }
 
@@ -249,6 +323,82 @@ class PreviewRepositoryHttp {
   }
 
   Map<String, String> _jsonHeaders() => const {'Accept': 'application/json'};
+
+  /// ✅ Public owner resolve
+  /// GET /mall/owner-resolve?walletAddress=...
+  Future<MallOwnerInfo?> fetchOwnerResolvePublic(
+    String walletAddress, {
+    String? baseUrl,
+  }) async {
+    final addr = walletAddress.trim();
+    if (addr.isEmpty) return null;
+
+    final resolvedBase = (baseUrl ?? '').trim().isNotEmpty
+        ? baseUrl!.trim()
+        : resolveApiBase();
+    final b = _normalizeBaseUrl(resolvedBase);
+
+    final uri = Uri.parse(
+      '$b/mall/owner-resolve',
+    ).replace(queryParameters: {'walletAddress': addr});
+
+    final res = await _client.get(uri, headers: _jsonHeaders());
+
+    if (res.statusCode < 200 || res.statusCode >= 300) {
+      throw HttpException(
+        'fetchOwnerResolvePublic failed: ${res.statusCode}',
+        url: uri.toString(),
+        body: res.body,
+      );
+    }
+
+    final decoded = jsonDecode(res.body);
+    if (decoded is Map) {
+      return MallOwnerInfo.fromJson(decoded.cast<String, dynamic>());
+    }
+    throw const FormatException('invalid json shape (expected object)');
+  }
+
+  /// ✅ Authenticated owner resolve
+  /// GET /mall/me/owner-resolve?walletAddress=...
+  Future<MallOwnerInfo?> fetchOwnerResolveMe(
+    String walletAddress, {
+    String? baseUrl,
+    Map<String, String>? headers,
+  }) async {
+    final addr = walletAddress.trim();
+    if (addr.isEmpty) return null;
+
+    final resolvedBase = (baseUrl ?? '').trim().isNotEmpty
+        ? baseUrl!.trim()
+        : resolveApiBase();
+    final b = _normalizeBaseUrl(resolvedBase);
+
+    final uri = Uri.parse(
+      '$b/mall/me/owner-resolve',
+    ).replace(queryParameters: {'walletAddress': addr});
+
+    final mergedHeaders = <String, String>{
+      ..._jsonHeaders(),
+      if (headers != null) ...headers,
+    };
+
+    final res = await _client.get(uri, headers: mergedHeaders);
+
+    if (res.statusCode < 200 || res.statusCode >= 300) {
+      throw HttpException(
+        'fetchOwnerResolveMe failed: ${res.statusCode}',
+        url: uri.toString(),
+        body: res.body,
+      );
+    }
+
+    final decoded = jsonDecode(res.body);
+    if (decoded is Map) {
+      return MallOwnerInfo.fromJson(decoded.cast<String, dynamic>());
+    }
+    throw const FormatException('invalid json shape (expected object)');
+  }
 
   /// ✅ Public preview (QR entry)
   /// GET /mall/preview?productId=...
@@ -281,10 +431,39 @@ class PreviewRepositoryHttp {
     }
 
     final decoded = jsonDecode(res.body);
-    if (decoded is Map) {
-      return MallPreviewResponse.fromJson(decoded.cast<String, dynamic>());
+    if (decoded is! Map) {
+      throw const FormatException('invalid json shape (expected object)');
     }
-    throw const FormatException('invalid json shape (expected object)');
+
+    final preview = MallPreviewResponse.fromJson(
+      decoded.cast<String, dynamic>(),
+    );
+
+    // ✅ owner resolve を追加で叩く（best-effort）
+    // public では token.toAddress が取れている場合に /mall/owner-resolve を呼ぶ
+    final toAddr = (preview.token?.toAddress ?? '').trim();
+    if (toAddr.isNotEmpty) {
+      try {
+        final owner = await fetchOwnerResolvePublic(toAddr, baseUrl: b);
+        return MallPreviewResponse(
+          productId: preview.productId,
+          modelId: preview.modelId,
+          modelNumber: preview.modelNumber,
+          size: preview.size,
+          color: preview.color,
+          rgb: preview.rgb,
+          measurements: preview.measurements,
+          productBlueprintPatch: preview.productBlueprintPatch,
+          token: preview.token,
+          owner: owner,
+        );
+      } catch (_) {
+        // best-effort: owner が取れなくても preview は返す
+        return preview;
+      }
+    }
+
+    return preview;
   }
 
   /// ✅ Authenticated preview (user scope)
@@ -324,10 +503,43 @@ class PreviewRepositoryHttp {
     }
 
     final decoded = jsonDecode(res.body);
-    if (decoded is Map) {
-      return MallPreviewResponse.fromJson(decoded.cast<String, dynamic>());
+    if (decoded is! Map) {
+      throw const FormatException('invalid json shape (expected object)');
     }
-    throw const FormatException('invalid json shape (expected object)');
+
+    final preview = MallPreviewResponse.fromJson(
+      decoded.cast<String, dynamic>(),
+    );
+
+    // ✅ owner resolve を追加で叩く（best-effort）
+    // me では token.toAddress が取れている場合に /mall/me/owner-resolve を呼ぶ
+    final toAddr = (preview.token?.toAddress ?? '').trim();
+    if (toAddr.isNotEmpty) {
+      try {
+        final owner = await fetchOwnerResolveMe(
+          toAddr,
+          baseUrl: b,
+          headers: headers,
+        );
+        return MallPreviewResponse(
+          productId: preview.productId,
+          modelId: preview.modelId,
+          modelNumber: preview.modelNumber,
+          size: preview.size,
+          color: preview.color,
+          rgb: preview.rgb,
+          measurements: preview.measurements,
+          productBlueprintPatch: preview.productBlueprintPatch,
+          token: preview.token,
+          owner: owner,
+        );
+      } catch (_) {
+        // best-effort: owner が取れなくても preview は返す
+        return preview;
+      }
+    }
+
+    return preview;
   }
 }
 

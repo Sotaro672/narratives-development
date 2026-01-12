@@ -2,7 +2,9 @@
 package httpin
 
 import (
+	"encoding/json"
 	"net/http"
+	"strings"
 
 	firebaseauth "firebase.google.com/go/v4/auth"
 
@@ -20,6 +22,9 @@ import (
 
 	// ★ new: Query services
 	companyquery "narratives/internal/application/query/console"
+
+	// ✅ shared owner resolve query (wallet -> avatarId/brandId)
+	sharedquery "narratives/internal/application/query/shared"
 
 	// ✅ console handlers（正）
 	consoleHandler "narratives/internal/adapters/in/http/console/handler"
@@ -85,6 +90,9 @@ type RouterDeps struct {
 	// ✅ NEW: ListImage uploader/deleter
 	ListImageUploader consoleHandler.ListImageUploader
 	ListImageDeleter  consoleHandler.ListImageDeleter
+
+	// ✅ walletAddress(toAddress) -> (avatarId or brandId)
+	OwnerResolveQ *sharedquery.OwnerResolveQuery
 
 	// ★ NameResolver（ID→名前/型番解決）
 	NameResolver *resolver.NameResolver
@@ -466,6 +474,67 @@ func NewRouter(deps RouterDeps) http.Handler {
 		}
 
 		mux.Handle("/mint/", h)
+	}
+
+	// ================================
+	// ✅ Owner resolve (walletAddress/toAddress -> avatarId or brandId)
+	// - console でも使う想定なので auth を掛ける
+	//
+	// GET /owners/resolve?walletAddress=...
+	// GET /owners/resolve?toAddress=...
+	// GET /owners/resolve?address=...
+	// ================================
+	if deps.OwnerResolveQ != nil {
+		ownerResolve := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			q := r.URL.Query()
+			addr := strings.TrimSpace(q.Get("walletAddress"))
+			if addr == "" {
+				addr = strings.TrimSpace(q.Get("toAddress"))
+			}
+			if addr == "" {
+				addr = strings.TrimSpace(q.Get("address"))
+			}
+			if addr == "" {
+				w.Header().Set("Content-Type", "application/json; charset=utf-8")
+				w.WriteHeader(http.StatusBadRequest)
+				_ = json.NewEncoder(w).Encode(map[string]any{
+					"error": "walletAddress (or toAddress/address) is required",
+				})
+				return
+			}
+
+			res, err := deps.OwnerResolveQ.Resolve(r.Context(), addr)
+			if err != nil {
+				w.Header().Set("Content-Type", "application/json; charset=utf-8")
+				// best-effort: invalid -> 400, not found -> 404, else 500
+				switch err {
+				case sharedquery.ErrInvalidWalletAddress:
+					w.WriteHeader(http.StatusBadRequest)
+				case sharedquery.ErrOwnerNotFound:
+					w.WriteHeader(http.StatusNotFound)
+				case sharedquery.ErrOwnerResolveNotConfigured:
+					w.WriteHeader(http.StatusServiceUnavailable)
+				default:
+					w.WriteHeader(http.StatusInternalServerError)
+				}
+				_ = json.NewEncoder(w).Encode(map[string]any{
+					"error": err.Error(),
+				})
+				return
+			}
+
+			w.Header().Set("Content-Type", "application/json; charset=utf-8")
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"data": res,
+			})
+		})
+
+		var h http.Handler = ownerResolve
+		if authMw != nil {
+			h = authMw.Handler(h)
+		}
+		mux.Handle("/owners/resolve", h)
+		mux.Handle("/owners/resolve/", h)
 	}
 
 	return mux

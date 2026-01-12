@@ -1,4 +1,4 @@
-// backend\internal\adapters\in\http\mall\handler\preview_me_handler.go
+// backend/internal/adapters/in/http/mall/handler/preview_me_handler.go
 package mallHandler
 
 import (
@@ -7,14 +7,22 @@ import (
 	"log"
 	"net/http"
 	"strings"
+
+	sharedquery "narratives/internal/application/query/shared"
 )
 
 type PreviewMeHandler struct {
-	q PreviewQuery
+	q      PreviewQuery
+	ownerQ *sharedquery.OwnerResolveQuery // optional (DIで注入できるように)
 }
 
 func NewPreviewMeHandler(q PreviewQuery) http.Handler {
-	return &PreviewMeHandler{q: q}
+	return &PreviewMeHandler{q: q, ownerQ: nil}
+}
+
+// ✅ DI(register.go) から呼ぶ想定の constructor（owner resolve を handler 側でもbest-effortで付与できる）
+func NewPreviewMeHandlerWithOwner(q PreviewQuery, ownerQ *sharedquery.OwnerResolveQuery) http.Handler {
+	return &PreviewMeHandler{q: q, ownerQ: ownerQ}
 }
 
 func (h *PreviewMeHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
@@ -33,7 +41,7 @@ func (h *PreviewMeHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if h.q == nil {
+	if h == nil || h.q == nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]any{
 			"error": "preview query not configured",
 		})
@@ -82,7 +90,6 @@ func (h *PreviewMeHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	info, err := h.q.ResolveModelInfoByProductID(r.Context(), productID)
 	if err != nil {
-		// ✅ 追加: どのエラーで落ちているかを Cloud Run ログで特定する
 		log.Printf("[mall.preview.me] ResolveModelInfoByProductID failed: %v", err)
 
 		if isNotFound(err) {
@@ -113,9 +120,38 @@ func (h *PreviewMeHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// ✅ productBlueprintPatch も含めてログに出す（確認用）
+	// ------------------------------------------------------------
+	// ✅ owner resolve (best-effort)
+	// - PreviewQuery 側で owner を付与している可能性があるが、
+	//   DI で ownerQ が注入されている場合は handler 側でも補完する。
+	// - token.toAddress が取れた時のみ試す（空ならスキップ）
+	// ------------------------------------------------------------
+	if info.Owner == nil && h.ownerQ != nil && info.Token != nil {
+		addr := strings.TrimSpace(info.Token.ToAddress)
+		if addr != "" {
+			res, rerr := h.ownerQ.Resolve(r.Context(), addr)
+			if rerr == nil {
+				info.Owner = res
+				oid := strings.TrimSpace(res.AvatarID)
+				if oid == "" {
+					oid = strings.TrimSpace(res.BrandID)
+				}
+				log.Printf(`[mall.preview.me] owner resolved walletAddress=%q ownerType=%q id=%q`, res.WalletAddress, res.OwnerType, oid)
+			} else if errors.Is(rerr, sharedquery.ErrOwnerNotFound) || errors.Is(rerr, sharedquery.ErrInvalidWalletAddress) {
+				// not fatal
+				log.Printf(`[mall.preview.me] owner resolve skipped walletAddress=%q err=%v`, addr, rerr)
+			} else if errors.Is(rerr, context.Canceled) || errors.Is(rerr, context.DeadlineExceeded) {
+				log.Printf(`[mall.preview.me] owner resolve canceled walletAddress=%q err=%v`, addr, rerr)
+			} else if errors.Is(rerr, sharedquery.ErrOwnerResolveNotConfigured) {
+				log.Printf(`[mall.preview.me] owner resolve not configured walletAddress=%q err=%v`, addr, rerr)
+			} else {
+				log.Printf(`[mall.preview.me] owner resolve failed walletAddress=%q err=%v`, addr, rerr)
+			}
+		}
+	}
+
 	log.Printf(
-		`[mall.preview.me] resolved productId=%q modelId=%q modelNumber=%q size=%q color=%q rgb=%d measurements=%v productBlueprintId=%q productBlueprintPatch=%v`,
+		`[mall.preview.me] resolved productId=%q modelId=%q modelNumber=%q size=%q color=%q rgb=%d measurements=%v productBlueprintId=%q productBlueprintPatch=%v token=%t owner=%t`,
 		info.ProductID,
 		info.ModelID,
 		info.ModelNumber,
@@ -125,9 +161,11 @@ func (h *PreviewMeHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		info.Measurements,
 		info.ProductBlueprintID,
 		info.ProductBlueprintPatch,
+		info.Token != nil,
+		info.Owner != nil,
 	)
 
-	// ✅ info をそのまま返す（productBlueprintPatch も data に含まれる）
+	// ✅ info をそのまま返す（owner を含む）
 	writeJSON(w, http.StatusOK, map[string]any{
 		"data": info,
 	})

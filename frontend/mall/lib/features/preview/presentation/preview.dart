@@ -58,7 +58,6 @@ class _PreviewPageState extends State<PreviewPage> {
       ' from=${from.isEmpty ? "-" : from}',
     );
 
-    // 追加で「次フレームで context/route を見たい」場合（必要なら）
     WidgetsBinding.instance.addPostFrameCallback((_) {
       final routeName = ModalRoute.of(context)?.settings.name;
       debugPrint('[PreviewPage] route=${routeName ?? "-"} uri=${Uri.base}');
@@ -74,7 +73,6 @@ class _PreviewPageState extends State<PreviewPage> {
   void didUpdateWidget(covariant PreviewPage oldWidget) {
     super.didUpdateWidget(oldWidget);
 
-    // ✅ クエリやパラメータ更新で widget が差し替わった時も追跡できるように
     if (oldWidget.avatarId != widget.avatarId ||
         oldWidget.productId != widget.productId ||
         oldWidget.from != widget.from) {
@@ -89,7 +87,6 @@ class _PreviewPageState extends State<PreviewPage> {
         ' from=${from.isEmpty ? "-" : from}',
       );
 
-      // ✅ productId が更新されたら取り直す
       if (productId.isNotEmpty) {
         setState(() {
           _previewFuture = _loadPreview(productId);
@@ -122,7 +119,8 @@ class _PreviewPageState extends State<PreviewPage> {
         ' rgb=${r.rgb}'
         ' measurements=${r.measurements}'
         ' productBlueprintPatch=${r.productBlueprintPatch}'
-        ' token=${r.token?.toJson()}',
+        ' token=${r.token?.toJson()}'
+        ' owner=${r.owner?.toJson()}',
       );
       return r;
     }
@@ -146,7 +144,8 @@ class _PreviewPageState extends State<PreviewPage> {
       ' rgb=${r.rgb}'
       ' measurements=${r.measurements}'
       ' productBlueprintPatch=${r.productBlueprintPatch}'
-      ' token=${r.token?.toJson()}',
+      ' token=${r.token?.toJson()}'
+      ' owner=${r.owner?.toJson()}',
     );
     return r;
   }
@@ -163,6 +162,19 @@ class _PreviewPageState extends State<PreviewPage> {
     } catch (_) {
       return (v ?? '').toString();
     }
+  }
+
+  String _ownerLabel(MallOwnerInfo? owner) {
+    if (owner == null) return '-';
+
+    final brandId = (owner.brandId).trim();
+    final avatarId = (owner.avatarId).trim();
+
+    // 表示優先: brandId -> avatarId
+    if (brandId.isNotEmpty) return brandId;
+    if (avatarId.isNotEmpty) return avatarId;
+
+    return '-';
   }
 
   @override
@@ -184,7 +196,6 @@ class _PreviewPageState extends State<PreviewPage> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  // ✅ 「プレビュー」文字を削除
                   const SizedBox(height: 2),
                   Text(
                     '商品ID: ${productId.isEmpty ? '-' : productId}',
@@ -242,8 +253,12 @@ class _PreviewPageState extends State<PreviewPage> {
                   final measurements = data?.measurements;
                   final productBlueprintPatch = data?.productBlueprintPatch;
 
-                  // ✅ NEW: token info
+                  // ✅ token info
                   final token = data?.token;
+
+                  // ✅ owner info
+                  final owner = data?.owner;
+                  final ownerId = _ownerLabel(owner);
 
                   // ✅ rgb -> Color（表示用スウォッチ）
                   final swatch = _rgbToColor(rgb);
@@ -259,7 +274,6 @@ class _PreviewPageState extends State<PreviewPage> {
                           .toList()
                         ..sort((a, b) => a.key.compareTo(b.key));
 
-                  // ✅ 各採寸を横並びにする（折り返しあり）
                   final measurementChips = measurementEntries.map((e) {
                     return Container(
                       padding: const EdgeInsets.symmetric(
@@ -280,7 +294,7 @@ class _PreviewPageState extends State<PreviewPage> {
                       ? ''
                       : _prettyJson(productBlueprintPatch);
 
-                  // ✅ token pretty（JSON表示したい場合に備える）
+                  // ✅ token pretty
                   final tokenPretty = (token == null)
                       ? ''
                       : _prettyJson(token.toJson());
@@ -288,11 +302,13 @@ class _PreviewPageState extends State<PreviewPage> {
                   return Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      // ✅ タイトルを「商品情報」に変更
                       Text('商品情報', style: t.titleSmall),
                       const SizedBox(height: 8),
 
-                      // ✅ 型番の上に productBlueprintPatch の全容を表示
+                      // ✅ owner 表示（要求: 所有者：{検索結果id}）
+                      Text('所有者: $ownerId', style: t.bodySmall),
+                      const SizedBox(height: 10),
+
                       if (pbPatchPretty.isNotEmpty) ...[
                         Text('productBlueprintPatch', style: t.bodySmall),
                         const SizedBox(height: 6),
@@ -346,7 +362,6 @@ class _PreviewPageState extends State<PreviewPage> {
                         ],
                       ),
 
-                      // ✅ 採寸（measurements）を Column 内に配置し、各採寸は横並び
                       if (measurementChips.isNotEmpty) ...[
                         const SizedBox(height: 10),
                         Text('採寸', style: t.bodySmall),
@@ -358,7 +373,6 @@ class _PreviewPageState extends State<PreviewPage> {
                         ),
                       ],
 
-                      // ✅ NEW: token 情報を「モデル情報の下」に表示
                       const SizedBox(height: 14),
                       Text('Token 情報', style: t.titleSmall),
                       const SizedBox(height: 8),
@@ -371,11 +385,19 @@ class _PreviewPageState extends State<PreviewPage> {
                           style: t.bodySmall,
                         ),
                         const SizedBox(height: 4),
+
+                        // ✅ A案: キャッシュを表示（体感高速化の根拠になる）
                         Text(
-                          'tokenBlueprintId: ${token.tokenBlueprintId.isEmpty ? '-' : token.tokenBlueprintId}',
+                          'toAddress: ${token.toAddress.isEmpty ? '-' : token.toAddress}',
                           style: t.bodySmall,
                         ),
                         const SizedBox(height: 4),
+                        Text(
+                          'metadataUri: ${token.metadataUri.isEmpty ? '-' : token.metadataUri}',
+                          style: t.bodySmall,
+                        ),
+                        const SizedBox(height: 4),
+
                         Text(
                           'mintAddress: ${token.mintAddress.isEmpty ? '-' : token.mintAddress}',
                           style: t.bodySmall,
@@ -386,7 +408,13 @@ class _PreviewPageState extends State<PreviewPage> {
                           style: t.bodySmall,
                         ),
 
-                        // ✅ 長いので JSON も折りたたみ風に表示（必要なければ消してOK）
+                        // ✅ mintedAt（APIが返していれば表示）
+                        const SizedBox(height: 4),
+                        Text(
+                          'mintedAt: ${token.mintedAt.isEmpty ? '-' : token.mintedAt}',
+                          style: t.bodySmall,
+                        ),
+
                         if (tokenPretty.isNotEmpty) ...[
                           const SizedBox(height: 10),
                           Text('token (raw)', style: t.bodySmall),

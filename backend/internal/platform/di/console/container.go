@@ -17,6 +17,10 @@ import (
 	gcso "narratives/internal/adapters/out/gcs"
 	mailadp "narratives/internal/adapters/out/mail"
 
+	// ✅ shared owner resolve query (wallet -> avatarId/brandId)
+	sharedfs "narratives/internal/adapters/out/firestore/shared"
+	sharedquery "narratives/internal/application/query/shared"
+
 	// shared infra (Firestore/FirebaseAuth/GCS/MintKey/ArweaveUploader/buckets)
 	shared "narratives/internal/platform/di/shared"
 
@@ -104,6 +108,9 @@ type Container struct {
 	ListManagementQuery           *companyquery.ListManagementQuery
 	ListDetailQuery               *companyquery.ListDetailQuery
 
+	// ✅ shared owner resolve query (wallet -> avatarId/brandId)
+	OwnerResolveQ *sharedquery.OwnerResolveQuery
+
 	// Inspector / Mint
 	ProductUC    *uc.ProductUsecase
 	InspectionUC *inspectionapp.InspectionUsecase
@@ -148,10 +155,7 @@ func NewContainer(ctx context.Context, infra *shared.Infra) (*Container, error) 
 	gcsClient := infra.GCS
 	cfg := infra.Config
 
-	// ここで必ず落とす（panicにしない）
-	// Cloud Run では goroutine panic = プロセス終了 = PORT listen できずデプロイ失敗
 	if fsClient == nil {
-		// 切り分けログ（秘密情報は出さない）
 		projectID := strings.TrimSpace(cfg.FirestoreProjectID)
 		if projectID == "" {
 			projectID = strings.TrimSpace(os.Getenv("FIRESTORE_PROJECT_ID"))
@@ -160,7 +164,6 @@ func NewContainer(ctx context.Context, infra *shared.Infra) (*Container, error) 
 			projectID = strings.TrimSpace(os.Getenv("GOOGLE_CLOUD_PROJECT"))
 		}
 		hasCredFile := strings.TrimSpace(os.Getenv("GOOGLE_APPLICATION_CREDENTIALS")) != ""
-
 		log.Printf("[di.console] ERROR: infra.Firestore is nil (projectID=%q, GOOGLE_APPLICATION_CREDENTIALS_set=%t)", projectID, hasCredFile)
 		return nil, fmt.Errorf("shared infra firestore client is nil (projectID=%q). shared.NewInfra likely failed to initialize Firestore client", projectID)
 	}
@@ -176,7 +179,6 @@ func NewContainer(ctx context.Context, infra *shared.Infra) (*Container, error) 
 	announcementRepo := fs.NewAnnouncementRepositoryFS(fsClient)
 	avatarRepo := fs.NewAvatarRepositoryFS(fsClient)
 
-	// AvatarState repo（Firestore実装）
 	avatarStateRepo := fs.NewAvatarStateRepositoryFS(fsClient)
 
 	billingAddressRepo := fs.NewBillingAddressRepositoryFS(fsClient)
@@ -187,7 +189,6 @@ func NewContainer(ctx context.Context, infra *shared.Infra) (*Container, error) 
 	inventoryRepo := fs.NewInventoryRepositoryFS(fsClient)
 	invoiceRepo := fs.NewInvoiceRepositoryFS(fsClient)
 
-	// List (Firestore)
 	listRepoFS := fs.NewListRepositoryFS(fsClient)
 	listRepo := fs.NewListRepositoryForUsecase(listRepoFS)
 
@@ -195,7 +196,6 @@ func NewContainer(ctx context.Context, infra *shared.Infra) (*Container, error) 
 	messageRepo := fs.NewMessageRepositoryFS(fsClient)
 	modelRepo := fs.NewModelRepositoryFS(fsClient)
 
-	// MintRepositoryFS（Update は firestore 側に実装済み）
 	mintRepo := fs.NewMintRepositoryFS(fsClient)
 
 	orderRepo := fs.NewOrderRepositoryFS(fsClient)
@@ -211,7 +211,6 @@ func NewContainer(ctx context.Context, infra *shared.Infra) (*Container, error) 
 	userRepo := fs.NewUserRepositoryFS(fsClient)
 	walletRepo := fs.NewWalletRepositoryFS(fsClient)
 
-	// Cart / Post repositories
 	cartRepo := fs.NewCartRepositoryFS(fsClient)
 
 	printLogRepo := fs.NewPrintLogRepositoryFS(fsClient)
@@ -220,11 +219,18 @@ func NewContainer(ctx context.Context, infra *shared.Infra) (*Container, error) 
 	productBlueprintHistoryRepo := fs.NewProductBlueprintHistoryRepositoryFS(fsClient)
 	modelHistoryRepo := fs.NewModelHistoryRepositoryFS(fsClient)
 
-	// Invitation token repo + adapter
 	invitationTokenFSRepo := fs.NewInvitationTokenRepositoryFS(fsClient)
 	invitationTokenUCRepo := &invitationTokenRepoAdapter{
 		fsRepo: invitationTokenFSRepo,
 	}
+
+	// =========================================================
+	// ✅ shared OwnerResolveQuery (wallet -> avatarId / brandId)
+	// - OwnerResolveQuery は (string, error) を要求するので AddressReaderFS を使う
+	// =========================================================
+	avatarAddrReader := sharedfs.NewAvatarWalletAddressReaderFS(fsClient, "avatars")
+	brandAddrReader := sharedfs.NewBrandWalletAddressReaderFS(fsClient, "brands")
+	ownerResolveQ := sharedquery.NewOwnerResolveQuery(avatarAddrReader, brandAddrReader)
 
 	// =========================================================
 	// Domain services
@@ -233,7 +239,6 @@ func NewContainer(ctx context.Context, infra *shared.Infra) (*Container, error) 
 	brandSvc := branddom.NewService(brandRepo)
 	memberSvc := memdom.NewService(memberRepo)
 
-	// productBlueprint.Service（ProductName / BrandID 解決用）
 	pbDomainRepo := &productBlueprintDomainRepoAdapter{repo: productBlueprintRepo}
 	pbSvc := pbdom.NewService(pbDomainRepo)
 
@@ -258,15 +263,11 @@ func NewContainer(ctx context.Context, infra *shared.Infra) (*Container, error) 
 	listImageRepo := gcso.NewListImageRepositoryGCS(gcsClient, infra.ListImageBucket)
 	avatarIconRepo := gcso.NewAvatarIconRepositoryGCS(gcsClient, infra.AvatarIconBucket)
 
-	// ListPatcher adapter（imageId 更新専用）
 	listPatcher := &listPatcherAdapter{repo: listRepoFS}
 
 	// =========================================================
 	// 5. Application-layer usecases
 	// =========================================================
-
-	// TokenUsecase
-	// ★ fsClient が nil だとここで panic していたので、上で必須チェック済み
 	mintRequestPort := fs.NewMintRequestPortFS(
 		fsClient,
 		"mints",
@@ -285,21 +286,18 @@ func NewContainer(ctx context.Context, infra *shared.Infra) (*Container, error) 
 	accountUC := uc.NewAccountUsecase(accountRepo)
 	announcementUC := uc.NewAnnouncementUsecase(announcementRepo, nil, nil)
 
-	// Solana wallet services
 	brandWalletSvc := solanainfra.NewBrandWalletService(cfg.FirestoreProjectID)
 	avatarWalletSvc := solanainfra.NewAvatarWalletService(cfg.FirestoreProjectID)
 
-	// AvatarUsecase
 	avatarUC := uc.NewAvatarUsecase(
 		avatarRepo,
 		avatarStateRepo,
-		avatarIconRepo, // AvatarIconRepo
-		avatarIconRepo, // AvatarIconObjectStoragePort
+		avatarIconRepo,
+		avatarIconRepo,
 	).
 		WithWalletService(avatarWalletSvc).
 		WithWalletRepo(walletRepo)
 
-	// optional: avatar 作成時に cart を同時起票する実装に備え best-effort 注入
 	callOptionalMethod(avatarUC, "WithCartRepo", cartRepo)
 
 	billingAddressUC := uc.NewBillingAddressUsecase(billingAddressRepo)
@@ -309,24 +307,22 @@ func NewContainer(ctx context.Context, infra *shared.Infra) (*Container, error) 
 	inquiryUC := uc.NewInquiryUsecase(inquiryRepo, nil, nil)
 	inventoryUC := uc.NewInventoryUsecase(inventoryRepo)
 
-	// PaymentUsecase を先に作る（InvoiceUsecase が PaymentCreator を要求するため）
 	paymentUC := uc.NewPaymentUsecase(paymentRepo)
 	invoiceUC := uc.NewInvoiceUsecase(invoiceRepo)
 
 	listUC := uc.NewListUsecaseWithCreator(
-		listRepo,      // ListReader (+ ListLister/ListUpdater)
-		listRepo,      // ListCreator
-		listPatcher,   // ListPatcher
-		listImageRepo, // ListImageReader
-		listImageRepo, // ListImageByIDReader
-		listImageRepo, // ListImageObjectSaver (+ SignedURLIssuer)
+		listRepo,
+		listRepo,
+		listPatcher,
+		listImageRepo,
+		listImageRepo,
+		listImageRepo,
 	)
 
 	memberUC := uc.NewMemberUsecase(memberRepo)
 	messageUC := uc.NewMessageUsecase(messageRepo, nil, nil)
 	modelUC := uc.NewModelUsecase(modelRepo, modelHistoryRepo)
 
-	// OrderUsecase（Order 作成直後に Invoice 起票するため）
 	orderUC := uc.NewOrderUsecase(orderRepo)
 
 	permissionUC := uc.NewPermissionUsecase(permissionRepo)
@@ -395,10 +391,8 @@ func NewContainer(ctx context.Context, infra *shared.Infra) (*Container, error) 
 	userUC := uc.NewUserUsecase(userRepo)
 	walletUC := uc.NewWalletUsecase(walletRepo)
 
-	// Cart / Post usecases
 	cartUC := uc.NewCartUsecase(cartRepo)
 
-	// Invitation mailer + services
 	invitationMailer := mailadp.NewInvitationMailerWithSendGrid(companySvc, brandSvc)
 	invitationQueryUC := uc.NewInvitationService(invitationTokenUCRepo, memberRepo)
 	invitationCommandUC := uc.NewInvitationCommandService(
@@ -407,7 +401,6 @@ func NewContainer(ctx context.Context, infra *shared.Infra) (*Container, error) 
 		invitationMailer,
 	)
 
-	// auth/bootstrap service
 	authBootstrapSvc := &authuc.BootstrapService{
 		Members: &authMemberRepoAdapter{repo: memberRepo},
 		Companies: &authCompanyRepoAdapter{
@@ -517,13 +510,17 @@ func NewContainer(ctx context.Context, infra *shared.Infra) (*Container, error) 
 		ListCreateQuery:     listCreateQuery,
 		ListManagementQuery: listManagementQuery,
 		ListDetailQuery:     listDetailQuery,
-		ProductUC:           productUC,
-		InspectionUC:        inspectionUC,
-		MintUC:              mintUC,
-		InvitationQuery:     invitationQueryUC,
-		InvitationCommand:   invitationCommandUC,
-		AuthBootstrap:       authBootstrapSvc,
-		NameResolver:        nameResolver,
+
+		// ✅ NEW
+		OwnerResolveQ: ownerResolveQ,
+
+		ProductUC:         productUC,
+		InspectionUC:      inspectionUC,
+		MintUC:            mintUC,
+		InvitationQuery:   invitationQueryUC,
+		InvitationCommand: invitationCommandUC,
+		AuthBootstrap:     authBootstrapSvc,
+		NameResolver:      nameResolver,
 	}, nil
 }
 
@@ -585,11 +582,13 @@ func (c *Container) RouterDeps() httpin.RouterDeps {
 		NameResolver:  c.NameResolver,
 
 		MessageRepo: c.MessageRepo,
+
+		// ✅ owner resolve query
+		OwnerResolveQ: c.OwnerResolveQ,
 	}
 }
 
 func (c *Container) Close() error {
-	// IMPORTANT: shared infra owns clients; close it once at app shutdown.
 	if c != nil && c.Infra != nil {
 		return c.Infra.Close()
 	}
@@ -622,7 +621,6 @@ func callOptionalMethod(obj any, methodName string, arg any) {
 	m.Call([]reflect.Value{av})
 }
 
-// --- small sanity log helper (optional)
 func init() {
 	log.Printf("[di.console] container package loaded")
 }

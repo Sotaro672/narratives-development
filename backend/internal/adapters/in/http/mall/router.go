@@ -44,6 +44,10 @@ type Deps struct {
 	Preview   http.Handler
 	PreviewMe http.Handler
 
+	// ✅ NEW: owner resolve (walletAddress/toAddress -> avatarId or brandId)
+	// - /mall/owners/resolve : public OK (tokenの所有者表示など)
+	OwnerResolve http.Handler
+
 	Order http.Handler
 
 	// ✅ invoices (buyer-facing)
@@ -181,6 +185,13 @@ func Register(mux *http.ServeMux, deps Deps) {
 	handleSafe(mux, "/mall/preview/", deps.Preview, "Preview")
 	handleSafe(mux, "/mall/me/preview", deps.PreviewMe, "Preview(me)")
 	handleSafe(mux, "/mall/me/preview/", deps.PreviewMe, "Preview(me)")
+
+	// ✅ NEW: owner resolve (walletAddress/toAddress -> avatarId or brandId)
+	// - /mall/owners/resolve?walletAddress=...
+	// - /mall/owners/resolve?toAddress=...
+	// - /mall/owners/resolve?address=...
+	handleSafe(mux, "/mall/owners/resolve", deps.OwnerResolve, "OwnerResolve")
+	handleSafe(mux, "/mall/owners/resolve/", deps.OwnerResolve, "OwnerResolve")
 
 	// payment
 	handleSafe(mux, "/mall/me/payment", deps.Payment, "Payment(me)")
