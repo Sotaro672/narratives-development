@@ -117,7 +117,8 @@ class _PreviewPageState extends State<PreviewPage> {
         ' modelNumber=${r.modelNumber.isEmpty ? "-" : r.modelNumber}'
         ' size=${r.size.isEmpty ? "-" : r.size}'
         ' color=${r.color.isEmpty ? "-" : r.color}'
-        ' rgb=${r.rgb}',
+        ' rgb=${r.rgb}'
+        ' measurements=${r.measurements}',
       );
       return r;
     }
@@ -138,15 +139,10 @@ class _PreviewPageState extends State<PreviewPage> {
       ' modelNumber=${r.modelNumber.isEmpty ? "-" : r.modelNumber}'
       ' size=${r.size.isEmpty ? "-" : r.size}'
       ' color=${r.color.isEmpty ? "-" : r.color}'
-      ' rgb=${r.rgb}',
+      ' rgb=${r.rgb}'
+      ' measurements=${r.measurements}',
     );
     return r;
-  }
-
-  String _rgbHex(int rgb) {
-    // 0xRRGGBB を期待（負や異常値も念のためマスク）
-    final v = rgb & 0xFFFFFF;
-    return '0x${v.toRadixString(16).padLeft(6, '0').toUpperCase()}';
   }
 
   /// ✅ int(0xRRGGBB) -> Flutter Color(0xAARRGGBB)
@@ -154,8 +150,6 @@ class _PreviewPageState extends State<PreviewPage> {
     final v = rgb & 0xFFFFFF;
     return Color(0xFF000000 | v);
   }
-
-  bool _isLight(Color c) => c.computeLuminance() > 0.6;
 
   @override
   Widget build(BuildContext context) {
@@ -176,8 +170,8 @@ class _PreviewPageState extends State<PreviewPage> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text('プレビュー', style: t.titleMedium),
-                  const SizedBox(height: 8),
+                  // ✅ 「プレビュー」文字を削除
+                  const SizedBox(height: 2),
                   Text(
                     '商品ID: ${productId.isEmpty ? '-' : productId}',
                     style: t.bodySmall,
@@ -227,34 +221,47 @@ class _PreviewPageState extends State<PreviewPage> {
 
                   final data = snap.data;
 
-                  final modelId = (data?.modelId ?? '').trim();
                   final modelNumber = (data?.modelNumber ?? '').trim();
                   final size = (data?.size ?? '').trim();
                   final colorName = (data?.color ?? '').trim();
                   final rgb = data?.rgb ?? 0;
+                  final measurements = data?.measurements;
 
+                  // ✅ rgb -> Color（表示用スウォッチ）
                   final swatch = _rgbToColor(rgb);
-                  final hex = _rgbHex(rgb);
 
                   final border = Border.all(
                     color: Theme.of(context).dividerColor,
                     width: 1,
                   );
 
-                  final textOnSwatch = _isLight(swatch)
-                      ? Colors.black
-                      : Colors.white;
+                  final measurementEntries =
+                      (measurements ?? {}).entries
+                          .where((e) => e.key.trim().isNotEmpty)
+                          .toList()
+                        ..sort((a, b) => a.key.compareTo(b.key));
+
+                  // ✅ 各採寸を横並びにする（折り返しあり）
+                  final measurementChips = measurementEntries.map((e) {
+                    return Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 10,
+                        vertical: 6,
+                      ),
+                      decoration: BoxDecoration(
+                        border: border,
+                        borderRadius: BorderRadius.circular(999),
+                      ),
+                      child: Text('${e.key}: ${e.value}', style: t.bodySmall),
+                    );
+                  }).toList();
 
                   return Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text('取得結果', style: t.titleSmall),
+                      // ✅ タイトルを「商品情報」に変更
+                      Text('商品情報', style: t.titleSmall),
                       const SizedBox(height: 8),
-                      Text(
-                        'モデルID: ${modelId.isEmpty ? '-' : modelId}',
-                        style: t.bodySmall,
-                      ),
-                      const SizedBox(height: 4),
                       Text(
                         '型番: ${modelNumber.isEmpty ? '-' : modelNumber}',
                         style: t.bodySmall,
@@ -265,17 +272,16 @@ class _PreviewPageState extends State<PreviewPage> {
                         style: t.bodySmall,
                       ),
                       const SizedBox(height: 4),
-                      Text(
-                        '色名: ${colorName.isEmpty ? '-' : colorName}',
-                        style: t.bodySmall,
-                      ),
-                      const SizedBox(height: 8),
-
-                      // ✅ rgb “値” ではなく “色” で表示（+補助情報で hex は残す）
                       Row(
                         crossAxisAlignment: CrossAxisAlignment.center,
                         children: [
-                          Text('RGB:', style: t.bodySmall),
+                          Flexible(
+                            child: Text(
+                              '色名: ${colorName.isEmpty ? '-' : colorName}',
+                              style: t.bodySmall,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
                           const SizedBox(width: 8),
                           Container(
                             width: 18,
@@ -286,29 +292,20 @@ class _PreviewPageState extends State<PreviewPage> {
                               border: border,
                             ),
                           ),
-                          const SizedBox(width: 8),
-                          Text(hex, style: t.bodySmall),
-                          const SizedBox(width: 10),
-                          Container(
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 8,
-                              vertical: 3,
-                            ),
-                            decoration: BoxDecoration(
-                              color: swatch,
-                              borderRadius: BorderRadius.circular(999),
-                              border: border,
-                            ),
-                            child: Text(
-                              colorName.isEmpty ? ' ' : colorName,
-                              style:
-                                  (t.labelSmall ??
-                                          const TextStyle(fontSize: 12))
-                                      .copyWith(color: textOnSwatch),
-                            ),
-                          ),
                         ],
                       ),
+
+                      // ✅ 採寸（measurements）を Column 内に配置し、各採寸は横並び
+                      if (measurementChips.isNotEmpty) ...[
+                        const SizedBox(height: 10),
+                        Text('採寸', style: t.bodySmall),
+                        const SizedBox(height: 6),
+                        Wrap(
+                          spacing: 8,
+                          runSpacing: 8,
+                          children: measurementChips,
+                        ),
+                      ],
                     ],
                   );
                 },

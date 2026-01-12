@@ -1,3 +1,4 @@
+// backend\internal\adapters\in\http\mall\handler\preview_handler.go
 package mallHandler
 
 import (
@@ -6,11 +7,13 @@ import (
 	"log"
 	"net/http"
 	"strings"
+
+	mallQuery "narratives/internal/application/query/mall"
 )
 
 // ✅ 組み立て用（DI）前提:
 // backend/internal/application/query/mall/preview_query.go が提供する Query を注入して使う想定。
-// この handler は「productId → modelId (+ model meta)」を返す最小実装。
+// この handler は「productId → model info（型番/サイズ/色/RGB/measurements）」を返す。
 //
 // 想定エンドポイント:
 // - GET /mall/preview?productId=...
@@ -18,14 +21,8 @@ import (
 // 互換で以下も吸収:
 // - GET /mall/preview/{productId}
 type PreviewQuery interface {
-	ResolveModelIDByProductID(ctx context.Context, productID string) (string, error)
-
-	// ✅ NEW: modelId から表示用メタを取る
-	// ※ model.Color.RGB は int が正なので、ここも int で統一する
-	ResolveModelMetaByModelID(
-		ctx context.Context,
-		modelID string,
-	) (modelNumber string, size string, colorName string, rgb int, err error)
+	// ✅ 推奨: productId から表示用情報を一括で返す（measurements を含む）
+	ResolveModelInfoByProductID(ctx context.Context, productID string) (*mallQuery.PreviewModelInfo, error)
 }
 
 type PreviewHandler struct {
@@ -91,9 +88,9 @@ func (h *PreviewHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		authPrefix,
 	)
 
-	log.Printf(`[mall.preview] resolving modelId productId=%q`, productID)
+	log.Printf(`[mall.preview] resolving model info productId=%q`, productID)
 
-	modelID, err := h.q.ResolveModelIDByProductID(r.Context(), productID)
+	info, err := h.q.ResolveModelInfoByProductID(r.Context(), productID)
 	if err != nil {
 		if isNotFound(err) {
 			writeJSON(w, http.StatusNotFound, map[string]any{
@@ -115,48 +112,22 @@ func (h *PreviewHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		})
 		return
 	}
-
-	// ✅ NEW: model meta（型番/サイズ/色/RGB）を追加で引く
-	modelNumber, size, colorName, rgb, err := h.q.ResolveModelMetaByModelID(r.Context(), modelID)
-	if err != nil {
-		if isNotFound(err) {
-			writeJSON(w, http.StatusNotFound, map[string]any{
-				"error":     "model not found",
-				"productId": productID,
-				"modelId":   modelID,
-			})
-			return
-		}
-		if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
-			writeJSON(w, http.StatusRequestTimeout, map[string]any{
-				"error":     "request canceled",
-				"productId": productID,
-				"modelId":   modelID,
-			})
-			return
-		}
+	if info == nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]any{
-			"error":     "resolve model meta failed",
+			"error":     "resolve failed (nil result)",
 			"productId": productID,
-			"modelId":   modelID,
 		})
 		return
 	}
 
 	log.Printf(
-		`[mall.preview] resolved productId=%q modelId=%q modelNumber=%q size=%q color=%q rgb=%d`,
-		productID, modelID, modelNumber, size, colorName, rgb,
+		`[mall.preview] resolved productId=%q modelId=%q modelNumber=%q size=%q color=%q rgb=%d measurements=%v`,
+		info.ProductID, info.ModelID, info.ModelNumber, info.Size, info.Color, info.RGB, info.Measurements,
 	)
 
+	// ✅ measurements も含めてそのまま返す（omitemptyなので空なら出ない）
 	writeJSON(w, http.StatusOK, map[string]any{
-		"data": map[string]any{
-			"productId":   productID,
-			"modelId":     modelID,
-			"modelNumber": modelNumber,
-			"size":        size,
-			"color":       colorName,
-			"rgb":         rgb, // ✅ int のまま返す
-		},
+		"data": info,
 	})
 }
 

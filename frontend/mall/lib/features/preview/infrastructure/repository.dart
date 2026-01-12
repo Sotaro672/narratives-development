@@ -42,7 +42,7 @@ class MallPreviewResponse {
   /// RGB（0xRRGGBB を想定した int）
   final int rgb;
 
-  /// 任意: 計測値
+  /// 任意: 計測値（採寸）
   final Map<String, int>? measurements;
 
   static String _s(dynamic v) => (v ?? '').toString().trim();
@@ -132,7 +132,10 @@ class MallPreviewResponse {
       rgbRaw = _i(pm['rgb']);
     }
 
-    final measurementsRaw = _measurements(j['measurements']);
+    // ✅ measurements は「直下」or「product内」どちらでも拾う
+    final measurementsRaw =
+        _measurements(j['measurements']) ??
+        (pm != null ? _measurements(pm['measurements']) : null);
 
     return MallPreviewResponse(
       productId: productId,
