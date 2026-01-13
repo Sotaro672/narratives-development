@@ -24,7 +24,7 @@ import '../../features/user/presentation/page/user_edit.dart';
 import '../../features/cart/presentation/page/cart.dart';
 
 // ✅ NEW: preview page
-import '../../features/preview/presentation/preview.dart';
+import '../../features/preview/presentation/page/preview.dart';
 
 // ✅ NEW: payment page
 import '../../features/payment/presentation/page/payment.dart';

@@ -66,16 +66,6 @@ type TokenReader interface {
 // ------------------------------------------------------------
 
 // TokenInfo is a minimal view for token doc (tokens/{productId}) used by preview.
-//
-// ✅ 方針:
-// - docID=productId（既存）
-// - tokens には mintAddress / onChainTxSignature / mintedAt / brandId を保存
-// - 体感速度向上のため、toAddress / metadataUri を tokens にキャッシュして即表示に使う
-// - productId / tokenBlueprintId は Firestore に保存しない（必要なら docID や別経路で解決）
-//
-// NOTE:
-// - ProductID は API レスポンスとしては便利なので残す（docID から注入する想定）
-// - MintedAt は handler 側で timestamp を string 化する方針ならここを string のままでOK
 type TokenInfo struct {
 	// docID (=productId) をレスポンスに含める用途
 	ProductID string `json:"productId"`
@@ -174,22 +164,7 @@ func NewPreviewQueryWithToken(
 	}
 }
 
-// NewPreviewQueryLite constructs PreviewQuery without ProductBlueprintRepo.
-// 互換用途（テストや最小構成など）に残す。
-// NOTE: ResolveModelInfoByProductID は ProductBlueprintRepo が必須なので、この Lite では呼べません。
-func NewPreviewQueryLite(productRepo ProductReader, modelRepo ModelVariationReader) *PreviewQuery {
-	return &PreviewQuery{
-		ProductRepo:          productRepo,
-		ModelRepo:            modelRepo,
-		ProductBlueprintRepo: nil,
-		TokenRepo:            nil,
-		OwnerResolveQ:        nil,
-	}
-}
-
 // ResolveModelIDByProductID resolves modelId from productId.
-//
-// このメソッドは handler 側 interface（PreviewQuery）互換のために必須です。
 func (q *PreviewQuery) ResolveModelIDByProductID(
 	ctx context.Context,
 	productID string,
@@ -217,8 +192,6 @@ func (q *PreviewQuery) ResolveModelIDByProductID(
 }
 
 // ResolveModelMetaByModelID resolves model metadata from modelId.
-//
-// handler 側（旧interface互換）のため残す。
 // model.Color.RGB は int が正なので、戻り値も int で返します。
 func (q *PreviewQuery) ResolveModelMetaByModelID(
 	ctx context.Context,
@@ -254,8 +227,6 @@ func (q *PreviewQuery) ResolveModelMetaByModelID(
 // and additionally resolves productBlueprintId + (productBlueprint entity + patch) by modelId.
 // and optionally resolves tokens/{productId} if TokenRepo is configured.
 // and optionally resolves owner (tokens.toAddress -> avatarId/brandId) if OwnerResolveQ is configured.
-//
-// handler 側でこのDTOをそのまま返す形にしてOK。
 func (q *PreviewQuery) ResolveModelInfoByProductID(
 	ctx context.Context,
 	productID string,
@@ -333,8 +304,7 @@ func (q *PreviewQuery) ResolveModelInfoByProductID(
 		}
 		out.Token = tok
 
-		// ✅ owner 解決（preview/preview_me 経由でのみ叩く運用）
-		// - token が無い / toAddress が無い / OwnerResolveQ が無い場合は何もしない
+		// ✅ owner 解決（token が無い / toAddress が無い / OwnerResolveQ が無い場合は何もしない）
 		if q.OwnerResolveQ != nil && tok != nil {
 			addr := strings.TrimSpace(tok.ToAddress)
 			if addr != "" {

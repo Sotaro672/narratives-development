@@ -9,6 +9,9 @@ import (
 	"strings"
 
 	sharedquery "narratives/internal/application/query/shared"
+
+	// ✅ avatarId を context から取得する
+	"narratives/internal/adapters/in/http/middleware"
 )
 
 type PreviewMeHandler struct {
@@ -57,6 +60,9 @@ func (h *PreviewMeHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// ✅ AvatarContextMiddleware が入っていればここで取れる（best-effort）
+	avatarID, _ := middleware.CurrentAvatarID(r)
+
 	productID := strings.TrimSpace(r.URL.Query().Get("productId"))
 	if productID == "" {
 		// 互換: /mall/me/preview/{productId}
@@ -78,15 +84,16 @@ func (h *PreviewMeHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		authPrefix = auth
 	}
 	log.Printf(
-		`[mall.preview.me] incoming method=%s path=%s rawQuery=%q hasAuth=%t authPrefix=%q`,
+		`[mall.preview.me] incoming method=%s path=%s rawQuery=%q hasAuth=%t authPrefix=%q avatarId=%q`,
 		r.Method,
 		r.URL.Path,
 		r.URL.RawQuery,
 		auth != "",
 		authPrefix,
+		avatarID,
 	)
 
-	log.Printf(`[mall.preview.me] resolving model info productId=%q`, productID)
+	log.Printf(`[mall.preview.me] resolving model info productId=%q avatarId=%q`, productID, avatarID)
 
 	info, err := h.q.ResolveModelInfoByProductID(r.Context(), productID)
 	if err != nil {
@@ -96,6 +103,7 @@ func (h *PreviewMeHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			writeJSON(w, http.StatusNotFound, map[string]any{
 				"error":     "not found",
 				"productId": productID,
+				"avatarId":  avatarID,
 			})
 			return
 		}
@@ -103,12 +111,14 @@ func (h *PreviewMeHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			writeJSON(w, http.StatusRequestTimeout, map[string]any{
 				"error":     "request canceled",
 				"productId": productID,
+				"avatarId":  avatarID,
 			})
 			return
 		}
 		writeJSON(w, http.StatusInternalServerError, map[string]any{
 			"error":     "resolve failed",
 			"productId": productID,
+			"avatarId":  avatarID,
 		})
 		return
 	}
@@ -116,6 +126,7 @@ func (h *PreviewMeHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusInternalServerError, map[string]any{
 			"error":     "resolve failed (nil result)",
 			"productId": productID,
+			"avatarId":  avatarID,
 		})
 		return
 	}
@@ -151,7 +162,8 @@ func (h *PreviewMeHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 
 	log.Printf(
-		`[mall.preview.me] resolved productId=%q modelId=%q modelNumber=%q size=%q color=%q rgb=%d measurements=%v productBlueprintId=%q productBlueprintPatch=%v token=%t owner=%t`,
+		`[mall.preview.me] resolved avatarId=%q productId=%q modelId=%q modelNumber=%q size=%q color=%q rgb=%d measurements=%v productBlueprintId=%q productBlueprintPatch=%v token=%t owner=%t`,
+		avatarID,
 		info.ProductID,
 		info.ModelID,
 		info.ModelNumber,
@@ -165,8 +177,9 @@ func (h *PreviewMeHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		info.Owner != nil,
 	)
 
-	// ✅ info をそのまま返す（owner を含む）
+	// ✅ avatarId も一緒に返す（PreviewModelInfo にフィールド追加しない方針）
 	writeJSON(w, http.StatusOK, map[string]any{
-		"data": info,
+		"data":     info,
+		"avatarId": avatarID,
 	})
 }

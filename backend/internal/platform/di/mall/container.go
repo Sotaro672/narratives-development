@@ -85,7 +85,15 @@ type Container struct {
 	CatalogQ *mallquery.CatalogQuery
 	CartQ    *mallquery.CartQuery
 	PreviewQ *mallquery.PreviewQuery
-	OrderQ   any
+
+	// ✅ 方針A: any をやめて具体型で持つ（ResolveAvatarIDByUID を満たすことをコンパイル時に保証）
+	OrderQ *mallquery.OrderQuery
+
+	// ✅ NEW: purchased orders (paid=true & items.transfer=false) -> (modelId, tokenBlueprintId) list
+	OrderPurchasedQ *mallquery.OrderPurchasedQuery
+
+	// ✅ NEW: verify scanned pair (preview) matches purchased pair
+	OrderScanVerifyQ *mallquery.OrderScanVerifyQuery
 
 	// ✅ Shared query: walletAddress(toAddress) -> brandId / avatarId
 	OwnerResolveQ *sharedquery.OwnerResolveQuery
@@ -319,7 +327,15 @@ func NewContainer(ctx context.Context, infra *shared.Infra) (*Container, error) 
 			c.PreviewQ.TokenRepo = previewTokenReaderFS{fs: fsClient}
 		}
 
+		// ✅ 方針A: any ではなく *mallquery.OrderQuery を保持
 		c.OrderQ = mallquery.NewOrderQuery(fsClient)
+
+		// ✅ NEW: OrderPurchasedQuery
+		// - avatarId を受け、paid=true & items.transfer=false の (modelId, tokenBlueprintId) を返す Query
+		c.OrderPurchasedQ = mallquery.NewOrderPurchasedQuery(fsClient)
+
+		// ✅ NEW: OrderScanVerifyQuery (PurchasedQ + PreviewQ を合成)
+		c.OrderScanVerifyQ = mallquery.NewOrderScanVerifyQuery(c.OrderPurchasedQ, c.PreviewQ)
 
 		// light injection
 		if c.CatalogQ != nil && c.NameResolver != nil && c.CatalogQ.NameResolver == nil {
@@ -350,14 +366,13 @@ func NewContainer(ctx context.Context, infra *shared.Infra) (*Container, error) 
 		brandReader := brandWalletAddressReaderFS{fs: fsClient, col: brandsCol}
 		avatarReader := avatarWalletAddressReaderFS{fs: fsClient, col: avatarsCol}
 
-		// ✅ ここが今回のエラー原因:
-		// NewOwnerResolveQuery は (avatarReader, brandReader) の順で受け取る定義
+		// ✅ NewOwnerResolveQuery は (avatarReader, brandReader) の順で受け取る定義
 		// （= 第1引数: AvatarWalletAddressReader / 第2引数: BrandWalletAddressReader）
 		c.OwnerResolveQ = sharedquery.NewOwnerResolveQuery(avatarReader, brandReader)
 	}
 
 	log.Printf(
-		"[di.mall] container built (firestore=%t gcs=%t firebaseAuth=%t avatarUC=%t avatarWalletSvc=%t cartUC=%t cartRepo=%t paymentUC=%t paymentFlowUC=%t invoiceUC=%t meAvatarRepo=%t inventoryUC=%t tokenBlueprintRepo=%t tokenIconResolver=%t selfBaseURL=%t previewQ=%t ownerResolveQ=%t)",
+		"[di.mall] container built (firestore=%t gcs=%t firebaseAuth=%t avatarUC=%t avatarWalletSvc=%t cartUC=%t cartRepo=%t paymentUC=%t paymentFlowUC=%t invoiceUC=%t meAvatarRepo=%t inventoryUC=%t tokenBlueprintRepo=%t tokenIconResolver=%t selfBaseURL=%t previewQ=%t ownerResolveQ=%t orderPurchasedQ=%t orderScanVerifyQ=%t)",
 		c.Infra.Firestore != nil,
 		c.Infra.GCS != nil,
 		c.Infra.FirebaseAuth != nil,
@@ -375,6 +390,8 @@ func NewContainer(ctx context.Context, infra *shared.Infra) (*Container, error) 
 		selfBaseURLConfigured,
 		c.PreviewQ != nil,
 		c.OwnerResolveQ != nil,
+		c.OrderPurchasedQ != nil,
+		c.OrderScanVerifyQ != nil,
 	)
 
 	return c, nil

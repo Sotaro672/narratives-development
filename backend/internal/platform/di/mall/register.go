@@ -47,6 +47,27 @@ func requireUserAuth(mw *middleware.UserAuthMiddleware, h http.Handler, name str
 	return mw.Handler(h)
 }
 
+// requireAvatarContext wraps handler with AvatarContextMiddleware (fail-closed).
+// This middleware resolves uid -> avatarId and stores it into request context.
+// If resolver is not initialized, it returns 503 so the bug is obvious.
+func requireAvatarContext(mw *middleware.AvatarContextMiddleware, h http.Handler, name string) http.Handler {
+	if h == nil {
+		h = http.NotFoundHandler()
+	}
+	if mw == nil || mw.Resolver == nil {
+		log.Printf("[mall.register] ERROR: AvatarContextMiddleware is not initialized (endpoint=%s). returning 503", name)
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusServiceUnavailable)
+			_ = json.NewEncoder(w).Encode(map[string]string{
+				"error": "avatar_context_not_initialized",
+				"name":  name,
+			})
+		})
+	}
+	return mw.Handler(h)
+}
+
 // Register registers mall routes onto mux.
 // Pure DI: construct handlers and pass into mall router.Register.
 // - No method/path branching here
@@ -74,6 +95,22 @@ func Register(mux *http.ServeMux, cont *Container) {
 		// fail-closed in requireUserAuth
 		log.Printf("[mall.register] WARN: cont.Infra or cont.Infra.FirebaseAuth is nil (user auth will return 503 on protected endpoints)")
 		userAuthMW = &middleware.UserAuthMiddleware{FirebaseAuth: nil}
+	}
+
+	// ------------------------------------------------------------
+	// Avatar context middleware (uid -> avatarId)
+	// ------------------------------------------------------------
+	// ✅ A案: OrderQ を resolver として使う（OrderQuery が ResolveAvatarIDByUID を持つ前提）
+	var avatarCtxMW *middleware.AvatarContextMiddleware
+	if cont.OrderQ != nil {
+		avatarCtxMW = &middleware.AvatarContextMiddleware{
+			Resolver:      cont.OrderQ,
+			AllowExplicit: false,
+		}
+	} else {
+		// fail-closed in requireAvatarContext
+		log.Printf("[mall.register] WARN: cont.OrderQ is nil (avatar context will return 503 on endpoints requiring avatarId)")
+		avatarCtxMW = &middleware.AvatarContextMiddleware{Resolver: nil, AllowExplicit: false}
 	}
 
 	// ----------------------------
@@ -226,8 +263,9 @@ func Register(mux *http.ServeMux, cont *Container) {
 	// cart は auth（/mall/cart も含めて auth にする運用）
 	cartH = requireUserAuth(userAuthMW, cartH, "Cart")
 
-	// /mall/me/preview は auth
+	// /mall/me/preview は auth + avatar context（uid -> avatarId）
 	previewMeH = requireUserAuth(userAuthMW, previewMeH, "Preview(me)")
+	previewMeH = requireAvatarContext(avatarCtxMW, previewMeH, "Preview(me):AvatarContext")
 
 	payH = requireUserAuth(userAuthMW, payH, "Payment")
 	orderH = requireUserAuth(userAuthMW, orderH, "Order")
@@ -266,7 +304,7 @@ func Register(mux *http.ServeMux, cont *Container) {
 
 		// preview split
 		Preview:   previewPublicH, // /mall/preview (public)
-		PreviewMe: previewMeH,     // /mall/me/preview (auth)
+		PreviewMe: previewMeH,     // /mall/me/preview (auth + avatar context)
 
 		// owner resolve is intentionally NOT exposed as an endpoint
 		OwnerResolve: notImplemented("OwnerResolve(endpoint_disabled)"),

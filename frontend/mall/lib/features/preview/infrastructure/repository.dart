@@ -6,15 +6,6 @@ import 'package:http/http.dart' as http;
 // ✅ API_BASE 解決ロジック（single source of truth）
 import '../../../app/config/api_base.dart';
 
-/// ✅ owner-resolve response DTO.
-///
-/// backend (想定):
-/// - GET /mall/owner-resolve?walletAddress=...     (public)
-/// - GET /mall/me/owner-resolve?walletAddress=...  (auth)
-///
-/// 返却例（どちらでも許容）:
-/// - { "brandId": "...", "avatarId": "..." }
-/// - { "data": { "brandId": "...", "avatarId": "..." } }
 class MallOwnerInfo {
   MallOwnerInfo({this.brandId = '', this.avatarId = ''});
 
@@ -24,7 +15,6 @@ class MallOwnerInfo {
   static String _s(dynamic v) => (v ?? '').toString().trim();
 
   factory MallOwnerInfo.fromJson(Map<String, dynamic> j) {
-    // wrapper 吸収: {data:{...}} を許容
     final maybeData = j['data'];
     if (maybeData is Map<String, dynamic>) {
       return MallOwnerInfo.fromJson(maybeData);
@@ -42,13 +32,133 @@ class MallOwnerInfo {
   Map<String, dynamic> toJson() => {'brandId': brandId, 'avatarId': avatarId};
 }
 
-/// Preview response DTO.
-///
-/// backend (想定):
-/// - GET /mall/preview?productId=...         (public / QR entry)
-/// - GET /mall/me/preview?productId=...      (authenticated scope)
-///
-/// まずは productId と modelId + 表示用メタ（型番/サイズ/色/RGB）を取得できればOK。
+class MallModelTokenPair {
+  MallModelTokenPair({this.modelId = '', this.tokenBlueprintId = ''});
+
+  final String modelId;
+  final String tokenBlueprintId;
+
+  static String _s(dynamic v) => (v ?? '').toString().trim();
+
+  factory MallModelTokenPair.fromJson(Map<String, dynamic> j) {
+    return MallModelTokenPair(
+      modelId: _s(j['modelId']),
+      tokenBlueprintId: _s(j['tokenBlueprintId']),
+    );
+  }
+
+  Map<String, dynamic> toJson() => {
+    'modelId': modelId,
+    'tokenBlueprintId': tokenBlueprintId,
+  };
+}
+
+class MallScanVerifyResponse {
+  MallScanVerifyResponse({
+    required this.avatarId,
+    required this.productId,
+    required this.scannedModelId,
+    required this.scannedTokenBlueprintId,
+    required this.purchasedPairs,
+    required this.matched,
+    this.match,
+  });
+
+  final String avatarId;
+  final String productId;
+
+  final String scannedModelId;
+  final String scannedTokenBlueprintId;
+
+  final List<MallModelTokenPair> purchasedPairs;
+
+  final bool matched;
+  final MallModelTokenPair? match;
+
+  static String _s(dynamic v) => (v ?? '').toString().trim();
+
+  static bool _b(dynamic v) {
+    if (v == null) {
+      return false;
+    }
+    if (v is bool) {
+      return v;
+    }
+    if (v is num) {
+      return v != 0;
+    }
+    final s = v.toString().trim().toLowerCase();
+    return s == 'true' || s == '1' || s == 'yes';
+  }
+
+  static List<MallModelTokenPair> _pairs(dynamic v) {
+    if (v == null) {
+      return <MallModelTokenPair>[];
+    }
+    if (v is! List) {
+      return <MallModelTokenPair>[];
+    }
+
+    return v
+        .map((e) {
+          if (e is Map<String, dynamic>) {
+            return MallModelTokenPair.fromJson(e);
+          }
+          if (e is Map) {
+            return MallModelTokenPair.fromJson(Map<String, dynamic>.from(e));
+          }
+          return null;
+        })
+        .whereType<MallModelTokenPair>()
+        .toList();
+  }
+
+  static MallModelTokenPair? _pair(dynamic v) {
+    if (v == null) {
+      return null;
+    }
+    if (v is Map<String, dynamic>) {
+      return MallModelTokenPair.fromJson(v);
+    }
+    if (v is Map) {
+      return MallModelTokenPair.fromJson(Map<String, dynamic>.from(v));
+    }
+    return null;
+  }
+
+  factory MallScanVerifyResponse.fromJson(Map<String, dynamic> j) {
+    final maybeData = j['data'];
+    if (maybeData is Map<String, dynamic>) {
+      return MallScanVerifyResponse.fromJson(maybeData);
+    }
+    if (maybeData is Map) {
+      return MallScanVerifyResponse.fromJson(
+        Map<String, dynamic>.from(maybeData),
+      );
+    }
+
+    return MallScanVerifyResponse(
+      avatarId: _s(j['avatarId']),
+      productId: _s(j['productId']),
+      scannedModelId: _s(j['scannedModelId']),
+      scannedTokenBlueprintId: _s(j['scannedTokenBlueprintId']),
+      purchasedPairs: _pairs(j['purchasedPairs']),
+      matched: _b(j['matched']),
+      match: _pair(j['match']),
+    );
+  }
+
+  Map<String, dynamic> toJson() => {
+    'avatarId': avatarId,
+    'productId': productId,
+    'scannedModelId': scannedModelId,
+    'scannedTokenBlueprintId': scannedTokenBlueprintId,
+    'purchasedPairs': purchasedPairs.map((e) => e.toJson()).toList(),
+    'matched': matched,
+    'match': match?.toJson(),
+  };
+}
+
 class MallPreviewResponse {
   MallPreviewResponse({
     required this.productId,
@@ -59,51 +169,41 @@ class MallPreviewResponse {
     this.rgb = 0,
     this.measurements,
     this.productBlueprintPatch,
-    this.token, // ✅ token info (tokens/{productId})
-    this.owner, // ✅ owner resolve result (walletAddress -> brandId/avatarId)
+    this.token,
+    this.owner,
   });
 
-  /// Product ID（= QR の {productId}）
   final String productId;
-
-  /// Model ID（= 製造モデル / variationId 想定）
   final String modelId;
 
-  /// 型番（例: "ABC-123"）
   final String modelNumber;
-
-  /// サイズ（例: "M"）
   final String size;
-
-  /// 色名（例: "Navy"）
   final String color;
-
-  /// RGB（0xRRGGBB を想定した int）
   final int rgb;
 
-  /// 任意: 計測値（採寸）
   final Map<String, int>? measurements;
-
-  /// productBlueprintPatch 全体（JSONそのまま）
-  /// - backend の data.productBlueprintPatch をそのまま保持する
   final Map<String, dynamic>? productBlueprintPatch;
 
-  /// ✅ tokens/{productId}（あれば）
   final MallTokenInfo? token;
-
-  /// ✅ owner resolve result（あれば）
   final MallOwnerInfo? owner;
 
   static String _s(dynamic v) => (v ?? '').toString().trim();
 
   static int _i(dynamic v) {
-    if (v == null) return 0;
-    if (v is int) return v;
-    if (v is num) return v.toInt();
+    if (v == null) {
+      return 0;
+    }
+    if (v is int) {
+      return v;
+    }
+    if (v is num) {
+      return v.toInt();
+    }
     final s = v.toString().trim();
-    if (s.isEmpty) return 0;
+    if (s.isEmpty) {
+      return 0;
+    }
 
-    // "0xRRGGBB" も許容（念のため）
     if (s.startsWith('0x') || s.startsWith('0X')) {
       return int.tryParse(s.substring(2), radix: 16) ?? 0;
     }
@@ -111,45 +211,70 @@ class MallPreviewResponse {
   }
 
   static Map<String, int>? _measurements(dynamic v) {
-    if (v == null) return null;
-    if (v is Map<String, int>) return v;
+    if (v == null) {
+      return null;
+    }
+    if (v is Map<String, int>) {
+      return v;
+    }
 
     if (v is Map) {
       final out = <String, int>{};
       v.forEach((k, val) {
         final key = _s(k);
-        if (key.isEmpty) return;
+        if (key.isEmpty) {
+          return;
+        }
         out[key] = _i(val);
       });
-      return out.isEmpty ? null : out;
+      if (out.isEmpty) {
+        return null;
+      }
+      return out;
     }
     return null;
   }
 
   static Map<String, dynamic>? _jsonObject(dynamic v) {
-    if (v == null) return null;
-    if (v is Map<String, dynamic>) return v;
-    if (v is Map) return Map<String, dynamic>.from(v);
+    if (v == null) {
+      return null;
+    }
+    if (v is Map<String, dynamic>) {
+      return v;
+    }
+    if (v is Map) {
+      return Map<String, dynamic>.from(v);
+    }
     return null;
   }
 
   static MallTokenInfo? _token(dynamic v) {
-    if (v == null) return null;
-    if (v is Map<String, dynamic>) return MallTokenInfo.fromJson(v);
-    if (v is Map) return MallTokenInfo.fromJson(Map<String, dynamic>.from(v));
+    if (v == null) {
+      return null;
+    }
+    if (v is Map<String, dynamic>) {
+      return MallTokenInfo.fromJson(v);
+    }
+    if (v is Map) {
+      return MallTokenInfo.fromJson(Map<String, dynamic>.from(v));
+    }
     return null;
   }
 
   static MallOwnerInfo? _owner(dynamic v) {
-    if (v == null) return null;
-    if (v is Map<String, dynamic>) return MallOwnerInfo.fromJson(v);
-    if (v is Map) return MallOwnerInfo.fromJson(Map<String, dynamic>.from(v));
+    if (v == null) {
+      return null;
+    }
+    if (v is Map<String, dynamic>) {
+      return MallOwnerInfo.fromJson(v);
+    }
+    if (v is Map) {
+      return MallOwnerInfo.fromJson(Map<String, dynamic>.from(v));
+    }
     return null;
   }
 
-  /// wrapper/ネスト揺れを best-effort で吸収して DTO 化
   factory MallPreviewResponse.fromJson(Map<String, dynamic> j) {
-    // wrapper 吸収: {data:{...}} を許容
     final maybeData = j['data'];
     if (maybeData is Map<String, dynamic>) {
       return MallPreviewResponse.fromJson(maybeData);
@@ -158,15 +283,18 @@ class MallPreviewResponse {
       return MallPreviewResponse.fromJson(Map<String, dynamic>.from(maybeData));
     }
 
-    // product がネストして返るケース（previewがproductを内包する設計になりがち）
     final prod = j['product'];
-    final Map<String, dynamic>? pm = (prod is Map<String, dynamic>)
-        ? prod
-        : (prod is Map ? Map<String, dynamic>.from(prod) : null);
+    final Map<String, dynamic>? pm;
+    if (prod is Map<String, dynamic>) {
+      pm = prod;
+    } else if (prod is Map) {
+      pm = Map<String, dynamic>.from(prod);
+    } else {
+      pm = null;
+    }
 
-    // ---- productId ----
     final productIdRaw = _s(j['productId']);
-    final idRaw = _s(j['id']); // 返却が product そのものだった場合に備える
+    final idRaw = _s(j['id']);
     final nestedProductIdRaw = pm != null
         ? (_s(pm['id']).isNotEmpty ? _s(pm['id']) : _s(pm['productId']))
         : '';
@@ -174,14 +302,11 @@ class MallPreviewResponse {
         ? productIdRaw
         : (nestedProductIdRaw.isNotEmpty ? nestedProductIdRaw : idRaw);
 
-    // ---- modelId ----
-    // 想定: 直下に modelId または product.modelId
     var modelIdRaw = _s(j['modelId']);
     if (modelIdRaw.isEmpty && pm != null) {
       modelIdRaw = _s(pm['modelId']);
     }
 
-    // ---- meta: modelNumber / size / color / rgb ----
     var modelNumberRaw = _s(j['modelNumber']);
     if (modelNumberRaw.isEmpty && pm != null) {
       modelNumberRaw = _s(pm['modelNumber']);
@@ -202,21 +327,17 @@ class MallPreviewResponse {
       rgbRaw = _i(pm['rgb']);
     }
 
-    // ✅ measurements は「直下」or「product内」どちらでも拾う
     final measurementsRaw =
         _measurements(j['measurements']) ??
         (pm != null ? _measurements(pm['measurements']) : null);
 
-    // ✅ productBlueprintPatch は「直下」or「product内」どちらでも拾う
     final productBlueprintPatchRaw =
         _jsonObject(j['productBlueprintPatch']) ??
         (pm != null ? _jsonObject(pm['productBlueprintPatch']) : null);
 
-    // ✅ token は「直下 token」or「product内 token」どちらでも拾う
     final tokenRaw =
         _token(j['token']) ?? (pm != null ? _token(pm['token']) : null);
 
-    // ✅ owner は「直下 owner」or「product内 owner」どちらでも拾う
     final ownerRaw =
         _owner(j['owner']) ?? (pm != null ? _owner(pm['owner']) : null);
 
@@ -235,13 +356,6 @@ class MallPreviewResponse {
   }
 }
 
-/// ✅ tokens/{productId} の最小ビュー（backend TokenInfo に追随）
-///
-/// 方針:
-/// - docID=productId（既存）
-/// - tokens には mintAddress / onChainTxSignature / mintedAt / brandId を保存
-/// - 体感速度向上のため、toAddress / metadataUri を tokens にキャッシュして即表示に使う
-/// - productId / tokenBlueprintId は Firestore に保存しない（productId は docID で十分）
 class MallTokenInfo {
   MallTokenInfo({
     required this.productId,
@@ -253,26 +367,21 @@ class MallTokenInfo {
     this.mintedAt = '',
   });
 
-  /// docID (=productId) をレスポンスに含める用途
   final String productId;
 
   final String brandId;
 
-  /// ✅ Off-chain cache (for faster UI)
   final String toAddress;
   final String metadataUri;
 
-  /// On-chain results
   final String mintAddress;
   final String onChainTxSignature;
 
-  /// mintedAt（RFC3339 など、backend側の整形に依存）
   final String mintedAt;
 
   static String _s(dynamic v) => (v ?? '').toString().trim();
 
   factory MallTokenInfo.fromJson(Map<String, dynamic> j) {
-    // wrapper 吸収: {data:{...}} が混ざっても耐える
     final maybeData = j['data'];
     if (maybeData is Map<String, dynamic>) {
       return MallTokenInfo.fromJson(maybeData);
@@ -315,7 +424,9 @@ class PreviewRepositoryHttp {
 
   static String _normalizeBaseUrl(String s) {
     var v = s.trim();
-    if (v.isEmpty) return v;
+    if (v.isEmpty) {
+      return v;
+    }
     while (v.endsWith('/')) {
       v = v.substring(0, v.length - 1);
     }
@@ -324,14 +435,19 @@ class PreviewRepositoryHttp {
 
   Map<String, String> _jsonHeaders() => const {'Accept': 'application/json'};
 
-  /// ✅ Public owner resolve
-  /// GET /mall/owner-resolve?walletAddress=...
+  Map<String, String> _jsonPostHeaders() => const {
+    'Accept': 'application/json',
+    'Content-Type': 'application/json',
+  };
+
   Future<MallOwnerInfo?> fetchOwnerResolvePublic(
     String walletAddress, {
     String? baseUrl,
   }) async {
     final addr = walletAddress.trim();
-    if (addr.isEmpty) return null;
+    if (addr.isEmpty) {
+      return null;
+    }
 
     final resolvedBase = (baseUrl ?? '').trim().isNotEmpty
         ? baseUrl!.trim()
@@ -359,15 +475,15 @@ class PreviewRepositoryHttp {
     throw const FormatException('invalid json shape (expected object)');
   }
 
-  /// ✅ Authenticated owner resolve
-  /// GET /mall/me/owner-resolve?walletAddress=...
   Future<MallOwnerInfo?> fetchOwnerResolveMe(
     String walletAddress, {
     String? baseUrl,
     Map<String, String>? headers,
   }) async {
     final addr = walletAddress.trim();
-    if (addr.isEmpty) return null;
+    if (addr.isEmpty) {
+      return null;
+    }
 
     final resolvedBase = (baseUrl ?? '').trim().isNotEmpty
         ? baseUrl!.trim()
@@ -378,10 +494,10 @@ class PreviewRepositoryHttp {
       '$b/mall/me/owner-resolve',
     ).replace(queryParameters: {'walletAddress': addr});
 
-    final mergedHeaders = <String, String>{
-      ..._jsonHeaders(),
-      if (headers != null) ...headers,
-    };
+    final mergedHeaders = <String, String>{..._jsonHeaders()};
+    if (headers != null) {
+      mergedHeaders.addAll(headers);
+    }
 
     final res = await _client.get(uri, headers: mergedHeaders);
 
@@ -400,8 +516,6 @@ class PreviewRepositoryHttp {
     throw const FormatException('invalid json shape (expected object)');
   }
 
-  /// ✅ Public preview (QR entry)
-  /// GET /mall/preview?productId=...
   Future<MallPreviewResponse> fetchPreviewByProductId(
     String productId, {
     String? baseUrl,
@@ -439,8 +553,6 @@ class PreviewRepositoryHttp {
       decoded.cast<String, dynamic>(),
     );
 
-    // ✅ owner resolve を追加で叩く（best-effort）
-    // public では token.toAddress が取れている場合に /mall/owner-resolve を呼ぶ
     final toAddr = (preview.token?.toAddress ?? '').trim();
     if (toAddr.isNotEmpty) {
       try {
@@ -458,7 +570,6 @@ class PreviewRepositoryHttp {
           owner: owner,
         );
       } catch (_) {
-        // best-effort: owner が取れなくても preview は返す
         return preview;
       }
     }
@@ -466,8 +577,6 @@ class PreviewRepositoryHttp {
     return preview;
   }
 
-  /// ✅ Authenticated preview (user scope)
-  /// GET /mall/me/preview?productId=...
   Future<MallPreviewResponse> fetchMyPreviewByProductId(
     String productId, {
     String? baseUrl,
@@ -487,10 +596,10 @@ class PreviewRepositoryHttp {
       '$b/mall/me/preview',
     ).replace(queryParameters: {'productId': id});
 
-    final mergedHeaders = <String, String>{
-      ..._jsonHeaders(),
-      if (headers != null) ...headers,
-    };
+    final mergedHeaders = <String, String>{..._jsonHeaders()};
+    if (headers != null) {
+      mergedHeaders.addAll(headers);
+    }
 
     final res = await _client.get(uri, headers: mergedHeaders);
 
@@ -511,8 +620,6 @@ class PreviewRepositoryHttp {
       decoded.cast<String, dynamic>(),
     );
 
-    // ✅ owner resolve を追加で叩く（best-effort）
-    // me では token.toAddress が取れている場合に /mall/me/owner-resolve を呼ぶ
     final toAddr = (preview.token?.toAddress ?? '').trim();
     if (toAddr.isNotEmpty) {
       try {
@@ -534,12 +641,58 @@ class PreviewRepositoryHttp {
           owner: owner,
         );
       } catch (_) {
-        // best-effort: owner が取れなくても preview は返す
         return preview;
       }
     }
 
     return preview;
+  }
+
+  Future<MallScanVerifyResponse> verifyScanPurchasedByAvatarId({
+    required String avatarId,
+    required String productId,
+    String? baseUrl,
+    Map<String, String>? headers,
+  }) async {
+    final aid = avatarId.trim();
+    final pid = productId.trim();
+    if (aid.isEmpty) {
+      throw ArgumentError('avatarId is empty');
+    }
+    if (pid.isEmpty) {
+      throw ArgumentError('productId is empty');
+    }
+
+    final resolvedBase = (baseUrl ?? '').trim().isNotEmpty
+        ? baseUrl!.trim()
+        : resolveApiBase();
+    final b = _normalizeBaseUrl(resolvedBase);
+
+    final uri = Uri.parse('$b/mall/me/orders/scan/verify');
+
+    final mergedHeaders = <String, String>{..._jsonPostHeaders()};
+    if (headers != null) {
+      mergedHeaders.addAll(headers);
+    }
+
+    final body = jsonEncode({'avatarId': aid, 'productId': pid});
+
+    final res = await _client.post(uri, headers: mergedHeaders, body: body);
+
+    if (res.statusCode < 200 || res.statusCode >= 300) {
+      throw HttpException(
+        'verifyScanPurchasedByAvatarId failed: ${res.statusCode}',
+        url: uri.toString(),
+        body: res.body,
+      );
+    }
+
+    final decoded = jsonDecode(res.body);
+    if (decoded is! Map) {
+      throw const FormatException('invalid json shape (expected object)');
+    }
+
+    return MallScanVerifyResponse.fromJson(decoded.cast<String, dynamic>());
   }
 }
 
