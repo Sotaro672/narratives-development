@@ -1,4 +1,4 @@
-// backend\internal\application\usecase\order_usecase.go
+// backend/internal/application/usecase/order_usecase.go
 package usecase
 
 import (
@@ -127,15 +127,20 @@ func (u *OrderUsecase) Create(ctx context.Context, in CreateOrderInput) (orderdo
 		CardHolderName: strings.TrimSpace(in.BillingSnapshot.CardHolderName),
 	}
 
-	// normalize items (trim strings)
+	// normalize items (trim strings) + ✅ item-level defaults
 	items := make([]orderdom.OrderItemSnapshot, 0, len(in.Items))
 	for _, it := range in.Items {
-		items = append(items, orderdom.OrderItemSnapshot{
+		n := orderdom.OrderItemSnapshot{
 			ModelID:     strings.TrimSpace(it.ModelID),
 			InventoryID: strings.TrimSpace(it.InventoryID),
 			Qty:         it.Qty,
 			Price:       it.Price,
-		})
+
+			// ✅ item-level transfer state defaults
+			Transferred:   false,
+			TransferredAt: nil,
+		}
+		items = append(items, n)
 	}
 
 	// ✅ entity.go の New(...) に合わせる（avatarId を含む）
@@ -153,6 +158,9 @@ func (u *OrderUsecase) Create(ctx context.Context, in CreateOrderInput) (orderdo
 		log.Printf("[order_uc] Create domain.New failed id=%s err=%v", _maskID(id), err)
 		return orderdom.Order{}, err
 	}
+
+	// ✅ 起票時は必ず paid=false（orderレベル）
+	o.Paid = false
 
 	created, err := u.repo.Create(ctx, o)
 	if err != nil {
@@ -224,6 +232,7 @@ func (u *OrderUsecase) Update(ctx context.Context, in UpdateOrderInput) (orderdo
 	}
 
 	if in.ReplaceItems != nil {
+		// ✅ items 置換時は item-level transfer state を安全に初期化
 		items := make([]orderdom.OrderItemSnapshot, 0, len(*in.ReplaceItems))
 		for _, it := range *in.ReplaceItems {
 			items = append(items, orderdom.OrderItemSnapshot{
@@ -231,6 +240,9 @@ func (u *OrderUsecase) Update(ctx context.Context, in UpdateOrderInput) (orderdo
 				InventoryID: strings.TrimSpace(it.InventoryID),
 				Qty:         it.Qty,
 				Price:       it.Price,
+
+				Transferred:   false,
+				TransferredAt: nil,
 			})
 		}
 		if err := o.ReplaceItems(items); err != nil {
@@ -251,6 +263,15 @@ func (u *OrderUsecase) Update(ctx context.Context, in UpdateOrderInput) (orderdo
 	)
 	if err != nil {
 		return orderdom.Order{}, err
+	}
+
+	// ✅ order-level paid は維持（checked は New により Paid=false 初期化される可能性があるため反映）
+	checked.Paid = o.Paid
+
+	// ✅ item-level transfer state を維持（ReplaceItems が無い場合）
+	// New() が items をコピーしている想定だが、念のため checked に o.Items を反映
+	if in.ReplaceItems == nil {
+		checked.Items = o.Items
 	}
 
 	return u.repo.Save(ctx, checked, nil)

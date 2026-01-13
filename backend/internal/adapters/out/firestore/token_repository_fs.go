@@ -320,7 +320,7 @@ func (p *MintRequestPortFS) MarkAsMinted(
 // MarkProductsAsMinted は「1商品=1Mint」でミントした結果を Firestore に反映します。
 // - tokens コレクションに [productId, mintAddress] を 1:1 で保存（docID=productId）
 // - tokens には productId フィールドは保存しない（docID が productId なので不要）
-// - tokens には tokenBlueprintId は保存しない（metadataURI を保存するため不要）
+// - ✅ tokens には tokenBlueprintId を保存する（商品型特定に必要）
 // - tokens に toAddress / metadataUri をキャッシュとして保存する（体感高速化）
 // - mints/{id} 自体も minted=true に更新（代表の MintResult を利用。ただし mintAddress は保存しない）
 func (p *MintRequestPortFS) MarkProductsAsMinted(
@@ -433,9 +433,8 @@ func (p *MintRequestPortFS) MarkProductsAsMinted(
 			// ✅ brandId は残す（ブランドでの絞り込み等）
 			"brandId": strings.TrimSpace(m.BrandID),
 
-			// ✅ productId / tokenBlueprintId は保存しない
-			// "productId": productID,
-			// "tokenBlueprintId": strings.TrimSpace(m.TokenBlueprintID),
+			// ✅ NEW: tokenBlueprintId は保存する（商品型特定に必要）
+			"tokenBlueprintId": strings.TrimSpace(m.TokenBlueprintID),
 
 			// ✅ mintAddress は保持
 			"mintAddress": strings.TrimSpace(mt.Result.MintAddress),

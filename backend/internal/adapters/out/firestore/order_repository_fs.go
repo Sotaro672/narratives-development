@@ -5,7 +5,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"reflect"
+	"log"
 	"strings"
 	"time"
 
@@ -13,7 +13,6 @@ import (
 	"google.golang.org/api/iterator"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
-	"google.golang.org/protobuf/types/known/timestamppb"
 
 	fscommon "narratives/internal/adapters/out/firestore/common"
 	uc "narratives/internal/application/usecase"
@@ -56,7 +55,7 @@ func (r *OrderRepositoryFS) GetByID(ctx context.Context, id string) (orderdom.Or
 		return orderdom.Order{}, err
 	}
 
-	o, err := docToOrder(snap)
+	o, err := docToOrder(snap) // ✅ order_mapper_fs.go を利用
 	if err != nil {
 		return orderdom.Order{}, err
 	}
@@ -97,7 +96,7 @@ func (r *OrderRepositoryFS) List(
 	pageNum, perPage, offset := fscommon.NormalizePage(page.Number, page.PerPage, 50, 200)
 
 	q := r.ordersCol().Query
-	q = applyOrderSort(q, sort)
+	q = applyOrderSort(q, sort) // ✅ order_query_fs.go に存在するものを利用
 
 	it := q.Documents(ctx)
 	defer it.Stop()
@@ -116,7 +115,7 @@ func (r *OrderRepositoryFS) List(
 		if err != nil {
 			return common.PageResult[orderdom.Order]{}, err
 		}
-		if matchOrderFilter(o, filter) {
+		if matchOrderFilter(o, filter) { // ✅ order_query_fs.go に存在するものを利用
 			all = append(all, o)
 		}
 	}
@@ -179,7 +178,7 @@ func (r *OrderRepositoryFS) ListByCursor(
 		last  string
 	)
 	for {
-		if len(items) > limit {
+		if len(items) >= limit {
 			break
 		}
 		doc, err := it.Next()
@@ -201,11 +200,8 @@ func (r *OrderRepositoryFS) ListByCursor(
 	}
 
 	var next *string
-	if len(items) > limit {
-		items = items[:limit]
-		if last != "" {
-			next = &last
-		}
+	if last != "" && len(items) == limit {
+		next = &last
 	}
 
 	return common.CursorPageResult[orderdom.Order]{
@@ -254,6 +250,15 @@ func (r *OrderRepositoryFS) Create(ctx context.Context, o orderdom.Order) (order
 		o.CreatedAt = now
 	}
 
+	// ✅ 起票時は必ず paid=false（orderレベル）
+	o.Paid = false
+
+	// ✅ item-level transferred defaults（安全側で初期化）
+	for i := range o.Items {
+		o.Items[i].Transferred = false
+		o.Items[i].TransferredAt = nil
+	}
+
 	var docRef *firestore.DocumentRef
 	if id == "" {
 		docRef = r.ordersCol().NewDoc()
@@ -263,7 +268,7 @@ func (r *OrderRepositoryFS) Create(ctx context.Context, o orderdom.Order) (order
 		o.ID = id
 	}
 
-	data := orderToDoc(o)
+	data := orderToDoc(o) // ✅ mapper を利用（item transferred を含む）
 
 	_, err := docRef.Create(ctx, data)
 	if err != nil {
@@ -297,6 +302,16 @@ func (r *OrderRepositoryFS) Save(ctx context.Context, o orderdom.Order, _ *commo
 		if o.CreatedAt.IsZero() {
 			o.CreatedAt = now
 		}
+
+		// ✅ upsert(new) も起票扱い: paid=false
+		o.Paid = false
+
+		// ✅ item defaults
+		for i := range o.Items {
+			o.Items[i].Transferred = false
+			o.Items[i].TransferredAt = nil
+		}
+
 		docRef := r.ordersCol().NewDoc()
 		o.ID = docRef.ID
 		if _, err := docRef.Set(ctx, orderToDoc(o)); err != nil {
@@ -404,374 +419,179 @@ func (r *OrderRepositoryFS) Reset(ctx context.Context) error {
 		}
 	}
 
+	log.Printf("[order_repo_fs] Reset OK deleted=%d", len(refs))
 	return nil
 }
 
-// ========================
-// Helpers (NEW schema; entity.go as source of truth)
-// ========================
+// ============================================================
+// ✅ Transfer flow helpers (item-level transferred)
+// ============================================================
 
-func asMapAny(v any) map[string]any {
-	if v == nil {
-		return nil
-	}
-	if m, ok := v.(map[string]any); ok {
-		return m
-	}
-	if m, ok := v.(map[string]interface{}); ok {
-		return m
-	}
-	return nil
-}
-
-func mapGetStr(m map[string]any, key string) string {
-	if m == nil {
-		return ""
-	}
-	v, ok := m[key]
-	if !ok || v == nil {
-		return ""
-	}
-	if s, ok := v.(string); ok {
-		return strings.TrimSpace(s)
-	}
-	return strings.TrimSpace(fmt.Sprint(v))
-}
-
-func mapGetInt(m map[string]any, key string) int {
-	if m == nil {
-		return 0
-	}
-	v, ok := m[key]
-	if !ok || v == nil {
-		return 0
-	}
-	switch t := v.(type) {
-	case int:
-		return t
-	case int64:
-		return int(t)
-	case float64:
-		return int(t)
-	default:
-		// Firestore decode の揺れがあっても落とさず 0 に寄せる（domain が弾く）
-		return 0
-	}
-}
-
-func decodeShippingSnapshot(v any) (orderdom.ShippingSnapshot, bool) {
-	m := asMapAny(v)
-	if m == nil {
-		return orderdom.ShippingSnapshot{}, false
-	}
-	return orderdom.ShippingSnapshot{
-		ZipCode: mapGetStr(m, "zipCode"),
-		State:   mapGetStr(m, "state"),
-		City:    mapGetStr(m, "city"),
-		Street:  mapGetStr(m, "street"),
-		Street2: mapGetStr(m, "street2"),
-		Country: mapGetStr(m, "country"),
-	}, true
-}
-
-func decodeBillingSnapshot(v any) (orderdom.BillingSnapshot, bool) {
-	m := asMapAny(v)
-	if m == nil {
-		return orderdom.BillingSnapshot{}, false
-	}
-	return orderdom.BillingSnapshot{
-		Last4:          mapGetStr(m, "last4"),
-		CardHolderName: mapGetStr(m, "cardHolderName"),
-	}, true
-}
-
-func decodeItems(v any) ([]orderdom.OrderItemSnapshot, bool) {
-	if v == nil {
-		return nil, false
+// ListPaidUntransferredByAvatarID returns orders where:
+// - avatarId == avatarID
+// - paid == true
+// - and (in application-side check) at least one item has transferred == false
+//
+// NOTE: Firestore cannot filter "array element has field == false" without restructuring data.
+// So we fetch paid orders by avatarId and then filter in memory.
+func (r *OrderRepositoryFS) ListPaidUntransferredByAvatarID(ctx context.Context, avatarID string, limit int) ([]orderdom.Order, error) {
+	if r.Client == nil {
+		return nil, errors.New("firestore client is nil")
 	}
 
-	switch raw := v.(type) {
-	case []any:
-		out := make([]orderdom.OrderItemSnapshot, 0, len(raw))
-		for _, x := range raw {
-			m := asMapAny(x)
-			if m == nil {
-				out = append(out, orderdom.OrderItemSnapshot{})
-				continue
-			}
-			out = append(out, orderdom.OrderItemSnapshot{
-				ModelID:     strings.TrimSpace(mapGetStr(m, "modelId")),
-				InventoryID: strings.TrimSpace(mapGetStr(m, "inventoryId")),
-				Qty:         mapGetInt(m, "qty"),
-				Price:       mapGetInt(m, "price"),
-			})
-		}
-		return out, true
-	case []map[string]any:
-		out := make([]orderdom.OrderItemSnapshot, 0, len(raw))
-		for _, m := range raw {
-			out = append(out, orderdom.OrderItemSnapshot{
-				ModelID:     strings.TrimSpace(mapGetStr(m, "modelId")),
-				InventoryID: strings.TrimSpace(mapGetStr(m, "inventoryId")),
-				Qty:         mapGetInt(m, "qty"),
-				Price:       mapGetInt(m, "price"),
-			})
-		}
-		return out, true
-	default:
-		return nil, false
-	}
-}
-
-// docToOrder converts a Firestore document snapshot to orderdom.Order (NEW schema only).
-func docToOrder(doc *firestore.DocumentSnapshot) (orderdom.Order, error) {
-	data := doc.Data()
-	if data == nil {
-		return orderdom.Order{}, fmt.Errorf("empty order document: %s", doc.Ref.ID)
-	}
-
-	getStr := func(key string) string {
-		if v, ok := data[key].(string); ok {
-			return strings.TrimSpace(v)
-		}
-		if v, ok := data[key]; ok && v != nil {
-			return strings.TrimSpace(fmt.Sprint(v))
-		}
-		return ""
-	}
-
-	getTime := func(key string) time.Time {
-		if v, ok := data[key].(time.Time); ok && !v.IsZero() {
-			return v.UTC()
-		}
-		// 念のため protobuf Timestamp も受ける（環境差の吸収）
-		if ts, ok := data[key].(*timestamppb.Timestamp); ok && ts != nil {
-			t := ts.AsTime()
-			if !t.IsZero() {
-				return t.UTC()
-			}
-		}
-		return time.Time{}
-	}
-
-	// snapshots
-	var ship orderdom.ShippingSnapshot
-	if v, ok := data["shippingSnapshot"]; ok {
-		if s, ok2 := decodeShippingSnapshot(v); ok2 {
-			ship = s
-		}
-	}
-	var bill orderdom.BillingSnapshot
-	if v, ok := data["billingSnapshot"]; ok {
-		if b, ok2 := decodeBillingSnapshot(v); ok2 {
-			bill = b
-		}
-	}
-
-	items, ok := decodeItems(data["items"])
-	if !ok {
-		items = nil
-	}
-
-	createdAt := getTime("createdAt")
-	if createdAt.IsZero() && !doc.CreateTime.IsZero() {
-		createdAt = doc.CreateTime.UTC()
-	}
-
-	// Strict minimums (entity validate 前に、アダプタとして最低限守る)
-	avatarID := getStr("avatarId")
+	avatarID = strings.TrimSpace(avatarID)
 	if avatarID == "" {
-		// 旧データ救済（念のため）
-		avatarID = getStr("avatarID")
+		return []orderdom.Order{}, nil
 	}
 
-	if strings.TrimSpace(avatarID) == "" {
-		return orderdom.Order{}, fmt.Errorf("order %s: missing avatarId", doc.Ref.ID)
-	}
-	if strings.TrimSpace(ship.State) == "" ||
-		strings.TrimSpace(ship.City) == "" ||
-		strings.TrimSpace(ship.Street) == "" ||
-		strings.TrimSpace(ship.Country) == "" {
-		return orderdom.Order{}, fmt.Errorf("order %s: missing shippingSnapshot", doc.Ref.ID)
-	}
-	if strings.TrimSpace(bill.Last4) == "" {
-		return orderdom.Order{}, fmt.Errorf("order %s: missing billingSnapshot.last4", doc.Ref.ID)
-	}
-	if len(items) == 0 {
-		return orderdom.Order{}, fmt.Errorf("order %s: missing items", doc.Ref.ID)
+	if limit <= 0 || limit > 200 {
+		limit = 50
 	}
 
-	return orderdom.Order{
-		ID:       doc.Ref.ID,
-		UserID:   getStr("userId"),
-		AvatarID: avatarID,
-		CartID:   getStr("cartId"),
+	q := r.ordersCol().
+		Where("avatarId", "==", avatarID).
+		Where("paid", "==", true).
+		OrderBy("createdAt", firestore.Desc).
+		OrderBy(firestore.DocumentID, firestore.Desc).
+		Limit(limit)
 
-		ShippingSnapshot: ship,
-		BillingSnapshot:  bill,
+	it := q.Documents(ctx)
+	defer it.Stop()
 
-		Items:     items,
-		CreatedAt: createdAt,
-	}, nil
+	out := make([]orderdom.Order, 0, 10)
+	for {
+		doc, err := it.Next()
+		if err == iterator.Done {
+			break
+		}
+		if err != nil {
+			return nil, err
+		}
+		o, err := docToOrder(doc)
+		if err != nil {
+			return nil, err
+		}
+
+		// in-memory filter: at least one item not transferred
+		if hasUntransferredItem(o) {
+			out = append(out, o)
+		}
+	}
+	return out, nil
 }
 
-// orderToDoc converts orderdom.Order into a Firestore-storable map (NEW schema only).
-func orderToDoc(o orderdom.Order) map[string]any {
-	ship := map[string]any{
-		"zipCode": strings.TrimSpace(o.ShippingSnapshot.ZipCode),
-		"state":   strings.TrimSpace(o.ShippingSnapshot.State),
-		"city":    strings.TrimSpace(o.ShippingSnapshot.City),
-		"street":  strings.TrimSpace(o.ShippingSnapshot.Street),
-		"street2": strings.TrimSpace(o.ShippingSnapshot.Street2),
-		"country": strings.TrimSpace(o.ShippingSnapshot.Country),
-	}
-	bill := map[string]any{
-		"last4":          strings.TrimSpace(o.BillingSnapshot.Last4),
-		"cardHolderName": strings.TrimSpace(o.BillingSnapshot.CardHolderName),
-	}
-
-	items := make([]map[string]any, 0, len(o.Items))
+func hasUntransferredItem(o orderdom.Order) bool {
 	for _, it := range o.Items {
-		items = append(items, map[string]any{
-			"modelId":     strings.TrimSpace(it.ModelID),
-			"inventoryId": strings.TrimSpace(it.InventoryID),
-			"qty":         it.Qty,
-			"price":       it.Price,
-		})
+		if !it.Transferred {
+			return true
+		}
 	}
-
-	m := map[string]any{
-		"userId":   strings.TrimSpace(o.UserID),
-		"avatarId": strings.TrimSpace(o.AvatarID),
-		"cartId":   strings.TrimSpace(o.CartID),
-
-		"shippingSnapshot": ship,
-		"billingSnapshot":  bill,
-
-		"items": items,
-	}
-
-	if !o.CreatedAt.IsZero() {
-		m["createdAt"] = o.CreatedAt.UTC()
-	}
-
-	return m
+	return false
 }
 
-// --- filter/sort helpers ---
+// LockTransferItem atomically checks eligibility and sets item-level:
+// - items[itemIndex].transferred = true
+// - items[itemIndex].transferredAt = now
+//
+// Eligibility:
+// - paid == true
+// - item exists
+// - items[itemIndex].transferred == false
+func (r *OrderRepositoryFS) LockTransferItem(ctx context.Context, orderID string, itemIndex int, now time.Time) error {
+	if r.Client == nil {
+		return errors.New("firestore client is nil")
+	}
+	orderID = strings.TrimSpace(orderID)
+	if orderID == "" {
+		return orderdom.ErrNotFound
+	}
+	if itemIndex < 0 {
+		return fmt.Errorf("invalid itemIndex: %d", itemIndex)
+	}
+	if now.IsZero() {
+		now = time.Now().UTC()
+	}
 
-// matchOrderFilter is reflection-based so adapter compiles even if uc.OrderFilter shape changes.
-// It tries to apply: ID, UserID, AvatarID, CartID, CreatedFrom/CreatedTo.
-func matchOrderFilter(o orderdom.Order, f uc.OrderFilter) bool {
-	return matchOrderFilterAny(o, any(f))
+	docRef := r.ordersCol().Doc(orderID)
+
+	return r.Client.RunTransaction(ctx, func(ctx context.Context, tx *firestore.Transaction) error {
+		snap, err := tx.Get(docRef)
+		if err != nil {
+			if status.Code(err) == codes.NotFound {
+				return orderdom.ErrNotFound
+			}
+			return err
+		}
+
+		paid, _ := mapGetBool(snap.Data(), "paid")
+		if !paid {
+			return fmt.Errorf("order %s: not paid", orderID)
+		}
+
+		o, err := docToOrder(snap)
+		if err != nil {
+			return err
+		}
+
+		if itemIndex >= len(o.Items) {
+			return fmt.Errorf("order %s: itemIndex out of range: %d", orderID, itemIndex)
+		}
+		if o.Items[itemIndex].Transferred {
+			return fmt.Errorf("order %s: item already transferred (idx=%d)", orderID, itemIndex)
+		}
+
+		o.Items[itemIndex].Transferred = true
+		t := now.UTC()
+		o.Items[itemIndex].TransferredAt = &t
+
+		updates := []firestore.Update{
+			{Path: "items", Value: orderToDoc(o)["items"]},
+		}
+		return tx.Update(docRef, updates)
+	})
 }
 
-func matchOrderFilterAny(o orderdom.Order, fv any) bool {
-	// ID
-	if id, ok := getFilterString(fv, "ID"); ok {
-		if strings.TrimSpace(id) != "" && strings.TrimSpace(o.ID) != strings.TrimSpace(id) {
-			return false
-		}
+// UnlockTransferItem rolls back item-level lock by setting:
+// - items[itemIndex].transferred = false
+// - items[itemIndex].transferredAt deleted (nil)
+func (r *OrderRepositoryFS) UnlockTransferItem(ctx context.Context, orderID string, itemIndex int) error {
+	if r.Client == nil {
+		return errors.New("firestore client is nil")
 	}
-	// UserID
-	if uid, ok := getFilterString(fv, "UserID"); ok {
-		if strings.TrimSpace(uid) != "" && strings.TrimSpace(o.UserID) != strings.TrimSpace(uid) {
-			return false
-		}
+	orderID = strings.TrimSpace(orderID)
+	if orderID == "" {
+		return orderdom.ErrNotFound
 	}
-
-	// AvatarID (filter 側の命名揺れも吸収)
-	if aid, ok := getFilterString(fv, "AvatarID"); ok {
-		if strings.TrimSpace(aid) != "" && strings.TrimSpace(o.AvatarID) != strings.TrimSpace(aid) {
-			return false
-		}
-	} else if aid, ok := getFilterString(fv, "AvatarId"); ok {
-		if strings.TrimSpace(aid) != "" && strings.TrimSpace(o.AvatarID) != strings.TrimSpace(aid) {
-			return false
-		}
+	if itemIndex < 0 {
+		return fmt.Errorf("invalid itemIndex: %d", itemIndex)
 	}
 
-	// CartID
-	if cid, ok := getFilterString(fv, "CartID"); ok {
-		if strings.TrimSpace(cid) != "" && strings.TrimSpace(o.CartID) != strings.TrimSpace(cid) {
-			return false
-		}
-	}
+	docRef := r.ordersCol().Doc(orderID)
 
-	// CreatedFrom / CreatedTo
-	if from, ok := getFilterTimePtr(fv, "CreatedFrom"); ok && from != nil {
-		if o.CreatedAt.IsZero() || o.CreatedAt.Before(from.UTC()) {
-			return false
+	return r.Client.RunTransaction(ctx, func(ctx context.Context, tx *firestore.Transaction) error {
+		snap, err := tx.Get(docRef)
+		if err != nil {
+			if status.Code(err) == codes.NotFound {
+				return orderdom.ErrNotFound
+			}
+			return err
 		}
-	}
-	if to, ok := getFilterTimePtr(fv, "CreatedTo"); ok && to != nil {
-		// "to" は Upper bound exclusive に寄せる（以前の実装踏襲）
-		if o.CreatedAt.IsZero() || !o.CreatedAt.Before(to.UTC()) {
-			return false
+
+		o, err := docToOrder(snap)
+		if err != nil {
+			return err
 		}
-	}
 
-	return true
-}
-
-func getFilterTimePtr(v any, field string) (*time.Time, bool) {
-	rv := reflect.ValueOf(v)
-	if !rv.IsValid() {
-		return nil, false
-	}
-	if rv.Kind() == reflect.Pointer {
-		if rv.IsNil() {
-			return nil, false
+		if itemIndex >= len(o.Items) {
+			return fmt.Errorf("order %s: itemIndex out of range: %d", orderID, itemIndex)
 		}
-		rv = rv.Elem()
-	}
-	if rv.Kind() != reflect.Struct {
-		return nil, false
-	}
-	f := rv.FieldByName(field)
-	if !f.IsValid() {
-		f = rv.FieldByName(lowerFirst(field))
-		if !f.IsValid() {
-			return nil, false
+
+		o.Items[itemIndex].Transferred = false
+		o.Items[itemIndex].TransferredAt = nil
+
+		updates := []firestore.Update{
+			{Path: "items", Value: orderToDoc(o)["items"]},
 		}
-	}
-
-	// *time.Time
-	if f.Kind() == reflect.Pointer {
-		if f.IsNil() {
-			return nil, true
-		}
-		if t, ok := f.Interface().(*time.Time); ok {
-			return t, true
-		}
-	}
-	// time.Time
-	if f.CanInterface() {
-		if t, ok := f.Interface().(time.Time); ok {
-			return &t, true
-		}
-	}
-	return nil, false
-}
-
-func applyOrderSort(q firestore.Query, sort common.Sort) firestore.Query {
-	col := strings.ToLower(strings.TrimSpace(string(sort.Column)))
-
-	// entity.go に合わせて createdAt のみ許可
-	field := ""
-	switch col {
-	case "createdat", "created_at", "created":
-		field = "createdAt"
-	default:
-		// default: newest first
-		return q.OrderBy("createdAt", firestore.Desc).
-			OrderBy(firestore.DocumentID, firestore.Desc)
-	}
-
-	dir := firestore.Desc
-	if strings.EqualFold(string(sort.Order), "asc") {
-		dir = firestore.Asc
-	}
-
-	return q.OrderBy(field, dir).OrderBy(firestore.DocumentID, dir)
+		return tx.Update(docRef, updates)
+	})
 }

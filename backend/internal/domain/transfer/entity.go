@@ -1,295 +1,244 @@
-// backend\internal\domain\transfer\entity.go
+// backend/internal/domain/transfer/entity.go
 package transfer
 
 import (
 	"errors"
-	"fmt"
 	"strings"
 	"time"
 )
 
-// TransferStatus ...
-type TransferStatus string
+/*
+責任と機能:
+- Token transfer（移転申請/実行）の結果を永続化するためのドメインエンティティ。
+- カスタマーサポート/監査/再実行のために、成功/失敗・エラー種別・tx署名・対象識別子を保持する。
+- docId は productId を推奨（要件: 1 order に複数商品があるため、item単位で追えるようにする）。
+  ただし同一 productId で複数回試行があり得るため、Attempt（連番）も保持して一意性/履歴性を担保する。
+*/
+
+type Status string
 
 const (
-	StatusFulfilled TransferStatus = "fulfilled"
-	StatusRequested TransferStatus = "requested"
-	StatusError     TransferStatus = "error"
+	StatusPending   Status = "pending"
+	StatusSucceeded Status = "succeeded"
+	StatusFailed    Status = "failed"
 )
 
-func IsValidStatus(s TransferStatus) bool {
-	switch s {
-	case StatusFulfilled, StatusRequested, StatusError:
-		return true
-	default:
-		return false
-	}
-}
-
-// TransferErrorType ...
-type TransferErrorType string
+type ErrorType string
 
 const (
-	ErrTypeInsufficientBalance TransferErrorType = "insufficient_balance"
-	ErrTypeInvalidAddress      TransferErrorType = "invalid_address"
-	ErrTypeNetworkError        TransferErrorType = "network_error"
-	ErrTypeTimeout             TransferErrorType = "timeout"
-	ErrTypeUnknown             TransferErrorType = "unknown"
+	// Common
+	ErrorTypeUnknown ErrorType = "unknown"
+	ErrorTypeInvalid ErrorType = "invalid"
+
+	// Eligibility / business rules
+	ErrorTypeNotPaid            ErrorType = "not_paid"
+	ErrorTypeAlreadyTransferred ErrorType = "already_transferred"
+	ErrorTypeOrderNotFound      ErrorType = "order_not_found"
+	ErrorTypeItemNotFound       ErrorType = "item_not_found"
+	ErrorTypeMismatch           ErrorType = "mismatch" // scanned info mismatch etc
+
+	// Dependencies
+	ErrorTypeBrandWalletNotFound ErrorType = "brand_wallet_not_found"
+	ErrorTypeSecretNotFound      ErrorType = "secret_not_found"
+	ErrorTypeSecretAccessDenied  ErrorType = "secret_access_denied"
+	ErrorTypeSecretInvalid       ErrorType = "secret_invalid"
+
+	// Blockchain / execution
+	ErrorTypeTransferRejected ErrorType = "transfer_rejected"
+	ErrorTypeTransferTimeout  ErrorType = "transfer_timeout"
+	ErrorTypeTransferFailed   ErrorType = "transfer_failed"
 )
 
-func IsValidErrorType(t TransferErrorType) bool {
-	switch t {
-	case ErrTypeInsufficientBalance, ErrTypeInvalidAddress, ErrTypeNetworkError, ErrTypeTimeout, ErrTypeUnknown:
-		return true
-	default:
-		return false
-	}
-}
+var (
+	ErrInvalidID              = errors.New("transfer: invalid id")
+	ErrInvalidProductID       = errors.New("transfer: invalid productId")
+	ErrInvalidOrderID         = errors.New("transfer: invalid orderId")
+	ErrInvalidAvatarID        = errors.New("transfer: invalid avatarId")
+	ErrInvalidToWalletAddress = errors.New("transfer: invalid toWalletAddress")
+	ErrInvalidStatus          = errors.New("transfer: invalid status")
+	ErrInvalidCreatedAt       = errors.New("transfer: invalid createdAt")
+)
 
-// Transfer
+// Transfer represents one attempt of token transfer for a specific product item.
 type Transfer struct {
-	ID            string
-	MintAddress   string
-	FromAddress   string
-	ToAddress     string
-	RequestedAt   time.Time
-	TransferredAt *time.Time
-	Status        TransferStatus
-	ErrorType     *TransferErrorType
+	// ID is the document id (recommended: productId).
+	// If your persistence needs strict uniqueness per attempt, use ID=productId and Attempt to separate attempts.
+	ID string `json:"id"`
+
+	// Attempt is a monotonically increasing number for the same ID (productId).
+	// First attempt should be 1.
+	Attempt int `json:"attempt"`
+
+	// Identifiers
+	ProductID string `json:"productId"`
+	OrderID   string `json:"orderId"`
+	AvatarID  string `json:"avatarId"`
+
+	// Destination / execution
+	ToWalletAddress string  `json:"toWalletAddress"`
+	TxSignature     *string `json:"txSignature,omitempty"`
+
+	// Result
+	Status    Status     `json:"status"`
+	ErrorType *ErrorType `json:"errorType,omitempty"`
+	ErrorMsg  *string    `json:"errorMsg,omitempty"`
+
+	// Timestamps
+	CreatedAt time.Time  `json:"createdAt"`
+	UpdatedAt *time.Time `json:"updatedAt,omitempty"`
 }
 
-// Errors
-var (
-	ErrInvalidID            = errors.New("transfer: invalid id")
-	ErrInvalidMintAddress   = errors.New("transfer: invalid mintAddress")
-	ErrInvalidFromAddress   = errors.New("transfer: invalid fromAddress")
-	ErrInvalidToAddress     = errors.New("transfer: invalid toAddress")
-	ErrInvalidRequestedAt   = errors.New("transfer: invalid requestedAt")
-	ErrInvalidTransferredAt = errors.New("transfer: invalid transferredAt")
-	ErrInvalidStatus        = errors.New("transfer: invalid status")
-	ErrInvalidErrorType     = errors.New("transfer: invalid errorType")
-	ErrInvalidTransition    = errors.New("transfer: invalid status transition")
-	ErrIncoherentState      = errors.New("transfer: incoherent fields for status")
-)
+// TransferPatch represents partial updates.
+// A nil field means "no change".
+type TransferPatch struct {
+	Status      *Status
+	ErrorType   *ErrorType
+	ErrorMsg    *string
+	TxSignature *string
 
-var (
-	Base58MinLen       = 32
-	Base58MaxLen       = 44
-	base58Alphabet     = "123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz"
-	allowedTransitions = map[TransferStatus]map[TransferStatus]struct{}{
-		StatusRequested: {StatusFulfilled: {}, StatusError: {}},
-		StatusError:     {StatusRequested: {}},
-		StatusFulfilled: {},
-	}
-)
+	UpdatedAt *time.Time
+}
 
-// Constructors
-
-func New(
-	id, mintAddress, fromAddress, toAddress string,
-	requestedAt time.Time,
-	transferredAt *time.Time,
-	status TransferStatus,
-	errorType *TransferErrorType,
+// NewPending creates a new Transfer in pending status.
+// id and productId are both required; recommended: id == productId.
+func NewPending(
+	id string,
+	attempt int,
+	productID string,
+	orderID string,
+	avatarID string,
+	toWalletAddress string,
+	createdAt time.Time,
 ) (Transfer, error) {
-	if status == "" {
-		status = StatusRequested
+	t := Transfer{
+		ID:        strings.TrimSpace(id),
+		Attempt:   attempt,
+		ProductID: strings.TrimSpace(productID),
+		OrderID:   strings.TrimSpace(orderID),
+		AvatarID:  strings.TrimSpace(avatarID),
+
+		ToWalletAddress: strings.TrimSpace(toWalletAddress),
+
+		Status:      StatusPending,
+		ErrorType:   nil,
+		ErrorMsg:    nil,
+		TxSignature: nil,
+
+		CreatedAt: createdAt.UTC(),
+		UpdatedAt: nil,
 	}
-	tr := Transfer{
-		ID:            strings.TrimSpace(id),
-		MintAddress:   strings.TrimSpace(mintAddress),
-		FromAddress:   strings.TrimSpace(fromAddress),
-		ToAddress:     strings.TrimSpace(toAddress),
-		RequestedAt:   requestedAt.UTC(),
-		TransferredAt: normalizeTimePtr(transferredAt),
-		Status:        status,
-		ErrorType:     normalizeErrorTypePtr(errorType),
-	}
-	if err := tr.validate(); err != nil {
+
+	if err := t.validate(); err != nil {
 		return Transfer{}, err
 	}
-	return tr, nil
+	return t, nil
 }
 
-func NewFromStringTimes(
-	id, mintAddress, fromAddress, toAddress string,
-	requestedAtStr string,
-	transferredAtStr *string,
-	status TransferStatus,
-	errorType *TransferErrorType,
-) (Transfer, error) {
-	req, err := parseTime(requestedAtStr, ErrInvalidRequestedAt)
-	if err != nil {
-		return Transfer{}, err
+// MarkSucceeded marks transfer as succeeded and stores tx signature.
+func (t *Transfer) MarkSucceeded(txSig string, at time.Time) error {
+	if t == nil {
+		return nil
 	}
-	var trAt *time.Time
-	if transferredAtStr != nil && strings.TrimSpace(*transferredAtStr) != "" {
-		t, err := parseTime(*transferredAtStr, ErrInvalidTransferredAt)
-		if err != nil {
-			return Transfer{}, err
-		}
-		trAt = &t
+	txSig = strings.TrimSpace(txSig)
+	if txSig == "" {
+		return errors.New("transfer: txSignature is empty")
 	}
-	return New(id, mintAddress, fromAddress, toAddress, req, trAt, status, errorType)
-}
+	t.Status = StatusSucceeded
+	t.TxSignature = &txSig
+	t.ErrorType = nil
+	t.ErrorMsg = nil
 
-// Behavior
-
-func (t *Transfer) SetStatus(next TransferStatus, _ time.Time) error {
-	if !IsValidStatus(next) {
-		return ErrInvalidStatus
-	}
-	if !transitionAllowed(t.Status, next) {
-		return ErrInvalidTransition
-	}
-	switch next {
-	case StatusRequested:
-		t.ErrorType = nil
-		t.TransferredAt = nil
-	case StatusFulfilled:
-		if t.TransferredAt == nil || t.TransferredAt.IsZero() {
-			return ErrInvalidTransferredAt
-		}
-		t.ErrorType = nil
-	case StatusError:
-		if t.ErrorType == nil || !IsValidErrorType(*t.ErrorType) {
-			return ErrInvalidErrorType
-		}
-		t.TransferredAt = nil
-	}
-	t.Status = next
+	u := at.UTC()
+	t.UpdatedAt = &u
 	return nil
 }
 
-func (t *Transfer) MarkFulfilled(at time.Time) error {
-	if at.IsZero() {
-		return ErrInvalidTransferredAt
+// MarkFailed marks transfer as failed with error type and message (optional).
+func (t *Transfer) MarkFailed(errType ErrorType, msg string, at time.Time) error {
+	if t == nil {
+		return nil
 	}
-	utc := at.UTC()
-	t.TransferredAt = &utc
-	return t.SetStatus(StatusFulfilled, utc)
-}
-
-func (t *Transfer) MarkError(errType TransferErrorType) error {
-	if !IsValidErrorType(errType) {
-		return ErrInvalidErrorType
+	et := errType
+	if strings.TrimSpace(string(et)) == "" {
+		et = ErrorTypeUnknown
 	}
-	t.ErrorType = &errType
-	return t.SetStatus(StatusError, time.Now().UTC())
+	t.Status = StatusFailed
+	t.ErrorType = &et
+
+	m := strings.TrimSpace(msg)
+	if m == "" {
+		t.ErrorMsg = nil
+	} else {
+		t.ErrorMsg = &m
+	}
+
+	u := at.UTC()
+	t.UpdatedAt = &u
+	return nil
 }
 
-func (t *Transfer) Retry() error {
-	t.ErrorType = nil
-	t.TransferredAt = nil
-	return t.SetStatus(StatusRequested, time.Now().UTC())
+// ApplyPatch applies partial updates (for repositories/usecases).
+func (t *Transfer) ApplyPatch(p TransferPatch) {
+	if t == nil {
+		return
+	}
+	if p.Status != nil {
+		t.Status = *p.Status
+	}
+	if p.ErrorType != nil {
+		et := *p.ErrorType
+		t.ErrorType = &et
+	}
+	if p.ErrorMsg != nil {
+		m := strings.TrimSpace(*p.ErrorMsg)
+		if m == "" {
+			t.ErrorMsg = nil
+		} else {
+			t.ErrorMsg = &m
+		}
+	}
+	if p.TxSignature != nil {
+		s := strings.TrimSpace(*p.TxSignature)
+		if s == "" {
+			t.TxSignature = nil
+		} else {
+			t.TxSignature = &s
+		}
+	}
+	if p.UpdatedAt != nil && !p.UpdatedAt.IsZero() {
+		u := p.UpdatedAt.UTC()
+		t.UpdatedAt = &u
+	}
 }
 
-// Validation
-
+// validate enforces domain invariants.
 func (t Transfer) validate() error {
-	if t.ID == "" {
+	if strings.TrimSpace(t.ID) == "" {
 		return ErrInvalidID
 	}
-	if !isValidBase58(t.MintAddress) {
-		return ErrInvalidMintAddress
+	if strings.TrimSpace(t.ProductID) == "" {
+		return ErrInvalidProductID
 	}
-	if !isValidBase58(t.FromAddress) {
-		return ErrInvalidFromAddress
+	if strings.TrimSpace(t.OrderID) == "" {
+		return ErrInvalidOrderID
 	}
-	if !isValidBase58(t.ToAddress) {
-		return ErrInvalidToAddress
+	if strings.TrimSpace(t.AvatarID) == "" {
+		return ErrInvalidAvatarID
 	}
-	if t.RequestedAt.IsZero() {
-		return ErrInvalidRequestedAt
+	if strings.TrimSpace(t.ToWalletAddress) == "" {
+		return ErrInvalidToWalletAddress
 	}
-	if !IsValidStatus(t.Status) {
-		return ErrInvalidStatus
+	if t.Attempt <= 0 {
+		return errors.New("transfer: attempt must be >= 1")
 	}
 	switch t.Status {
-	case StatusRequested:
-		if t.ErrorType != nil || t.TransferredAt != nil {
-			return ErrIncoherentState
-		}
-	case StatusFulfilled:
-		if t.ErrorType != nil {
-			return ErrIncoherentState
-		}
-		if t.TransferredAt == nil || t.TransferredAt.IsZero() || t.TransferredAt.Before(t.RequestedAt) {
-			return ErrInvalidTransferredAt
-		}
-	case StatusError:
-		if t.ErrorType == nil || !IsValidErrorType(*t.ErrorType) {
-			return ErrInvalidErrorType
-		}
-		if t.TransferredAt != nil {
-			return ErrIncoherentState
-		}
+	case StatusPending, StatusSucceeded, StatusFailed:
+		// ok
+	default:
+		return ErrInvalidStatus
+	}
+	if t.CreatedAt.IsZero() {
+		return ErrInvalidCreatedAt
 	}
 	return nil
-}
-
-// Helpers (unchanged)
-
-func transitionAllowed(from, to TransferStatus) bool {
-	if m, ok := allowedTransitions[from]; ok {
-		_, ok := m[to]
-		return ok
-	}
-	return false
-}
-
-func isValidBase58(s string) bool {
-	s = strings.TrimSpace(s)
-	if s == "" {
-		return false
-	}
-	if len(s) < Base58MinLen || (Base58MaxLen > 0 && len(s) > Base58MaxLen) {
-		return false
-	}
-	for i := 0; i < len(s); i++ {
-		if !strings.ContainsRune(base58Alphabet, rune(s[i])) {
-			return false
-		}
-	}
-	return true
-}
-
-func normalizeTimePtr(p *time.Time) *time.Time {
-	if p == nil || p.IsZero() {
-		return nil
-	}
-	u := p.UTC()
-	return &u
-}
-
-func normalizeErrorTypePtr(p *TransferErrorType) *TransferErrorType {
-	if p == nil {
-		return nil
-	}
-	if !IsValidErrorType(*p) {
-		return nil
-	}
-	v := *p
-	return &v
-}
-
-func parseTime(s string, classify error) (time.Time, error) {
-	s = strings.TrimSpace(s)
-	if s == "" {
-		return time.Time{}, classify
-	}
-	if t, err := time.Parse(time.RFC3339, s); err == nil {
-		return t.UTC(), nil
-	}
-	for _, l := range []string{
-		time.RFC3339Nano,
-		"2006-01-02T15:04:05Z07:00",
-		"2006-01-02 15:04:05",
-		"2006-01-02",
-	} {
-		if t, err := time.Parse(l, s); err == nil {
-			return t.UTC(), nil
-		}
-	}
-	return time.Time{}, fmt.Errorf("%w: cannot parse %q", classify, s)
 }

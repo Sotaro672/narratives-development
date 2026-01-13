@@ -1,121 +1,71 @@
-// backend\internal\domain\transfer\repository_port.go
+// backend/internal/domain/transfer/repository_port.go
 package transfer
 
 import (
 	"context"
-	"errors"
-	"time"
+
+	common "narratives/internal/domain/common"
 )
 
-// ========================================
-// Create/Update inputs (contract only)
-// ========================================
-
-type CreateTransferInput struct {
-	MintAddress string    `json:"mintAddress"`
-	FromAddress string    `json:"fromAddress"`
-	ToAddress   string    `json:"toAddress"`
-	RequestedAt time.Time `json:"requestedAt"` // usually now (UTC)
-}
-
-type UpdateTransferInput struct {
-	Status        *TransferStatus    `json:"status,omitempty"`        // requested | fulfilled | error
-	ErrorType     *TransferErrorType `json:"errorType,omitempty"`     // when status=error
-	TransferredAt *time.Time         `json:"transferredAt,omitempty"` // when status=fulfilled
-}
-
-// ========================================
-// Query contracts (filters/sort/paging)
-// ========================================
+/*
+責任と機能:
+- Transfer エンティティの永続化に必要な最小ポート（RepositoryPort）を定義する。
+- カスタマーサポート/監査/再実行を想定し、以下を満たす:
+  - productId（= docId 推奨）単位で最新状態を取得できる
+  - 同一 productId に対する複数試行（Attempt）を扱える
+  - 一覧/件数取得ができる（管理画面/CS用途）
+- Firestore 実装では docId=productId とし、
+  Attempt はサブコレクション or 配列 or 別ドキュメント（id=productId__attemptN）などで実装してよい。
+  （このポートは実装方式に依存しない）
+*/
 
 type Filter struct {
-	// identifiers
-	ID          string
-	MintAddress string
-	FromAddress string
-	ToAddress   string
+	// docId (recommended: productId)
+	ID        *string
+	ProductID *string
+	OrderID   *string
+	AvatarID  *string
 
-	// status/error
-	Statuses   []TransferStatus
-	ErrorTypes []TransferErrorType
-	HasError   *bool // nil: all, true: only errors, false: only non-errors
+	// Status filter
+	Status *Status
 
-	// time ranges
-	RequestedFrom  *time.Time
-	RequestedTo    *time.Time
-	TransferedFrom *time.Time
-	TransferedTo   *time.Time
+	// ErrorType filter
+	ErrorType *ErrorType
 }
 
 type Sort struct {
-	Column SortColumn
-	Order  SortOrder
+	// Field: "createdAt" | "updatedAt" | "id" | "productId" | ...
+	Field string
+	Desc  bool
 }
 
-type SortColumn string
-
-const (
-	SortByRequestedAt  SortColumn = "requestedAt"
-	SortByTransferedAt SortColumn = "transferedAt"
-	SortByStatus       SortColumn = "status"
-)
-
-type SortOrder string
-
-const (
-	SortAsc  SortOrder = "asc"
-	SortDesc SortOrder = "desc"
-)
-
-type Page struct {
-	Number  int
-	PerPage int
-}
-
-type PageResult struct {
-	Items      []Transfer
-	TotalCount int
-	TotalPages int
-	Page       int
-	PerPage    int
-}
-
-// ========================================
-// Repository Port (interfaces only)
-// ========================================
-
+// RepositoryPort defines persistence behavior required by domain/usecase.
 type RepositoryPort interface {
-	// Generic queries
-	GetByID(ctx context.Context, id string) (*Transfer, error)
-	List(ctx context.Context, filter Filter, sort Sort, page Page) (PageResult, error)
+	// Reads
+	GetLatestByProductID(ctx context.Context, productID string) (*Transfer, error)
+	GetByProductIDAndAttempt(ctx context.Context, productID string, attempt int) (*Transfer, error)
+
+	// History
+	ListByProductID(ctx context.Context, productID string) ([]Transfer, error)
+
+	// Generic list/count
+	List(ctx context.Context, filter Filter, sort Sort, page common.Page) (common.PageResult[Transfer], error)
 	Count(ctx context.Context, filter Filter) (int, error)
 
-	// Mutations
-	Create(ctx context.Context, in CreateTransferInput) (*Transfer, error)
-	Update(ctx context.Context, id string, in UpdateTransferInput) (*Transfer, error)
-	Delete(ctx context.Context, id string) error
+	// Writes
+	// CreateAttempt creates a new Transfer attempt for the product.
+	// It should allocate next Attempt (>=1) atomically (repo responsibility).
+	CreateAttempt(ctx context.Context, t Transfer) (*Transfer, error)
 
-	// Transaction boundary (optional)
-	WithTx(ctx context.Context, fn func(ctx context.Context) error) error
+	// Save overwrites/merges the Transfer identified by (productId, attempt).
+	Save(ctx context.Context, t Transfer, opts *common.SaveOptions) (*Transfer, error)
 
-	// Maintenance (optional)
+	// Patch applies partial update to a specific attempt.
+	Patch(ctx context.Context, productID string, attempt int, patch TransferPatch, opts *common.SaveOptions) (*Transfer, error)
+
+	// Delete is optional (mainly for dev/test); production may disallow.
+	Delete(ctx context.Context, productID string, attempt int) error
+
+	// Dev/Test
 	Reset(ctx context.Context) error
-
-	// Convenience methods (for existing service compatibility)
-	GetAllTransfers(ctx context.Context) ([]*Transfer, error)
-	GetTransferByID(ctx context.Context, id string) (*Transfer, error)
-	GetTransfersByFromAddress(ctx context.Context, fromAddress string) ([]*Transfer, error)
-	GetTransfersByToAddress(ctx context.Context, toAddress string) ([]*Transfer, error)
-	GetTransfersByMintAddress(ctx context.Context, mintAddress string) ([]*Transfer, error)
-	GetTransfersByStatus(ctx context.Context, status string) ([]*Transfer, error)
-	CreateTransfer(ctx context.Context, in CreateTransferInput) (*Transfer, error)
-	UpdateTransfer(ctx context.Context, id string, in UpdateTransferInput) (*Transfer, error)
-	DeleteTransfer(ctx context.Context, id string) error
-	ResetTransfers(ctx context.Context) error
 }
-
-// Common repository errors (contract)
-var (
-	ErrNotFound = errors.New("transfer: not found")
-	ErrConflict = errors.New("transfer: conflict")
-)

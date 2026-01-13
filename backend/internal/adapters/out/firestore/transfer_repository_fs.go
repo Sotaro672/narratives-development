@@ -4,7 +4,8 @@ package firestore
 import (
 	"context"
 	"errors"
-	"sort"
+	"fmt"
+	"log"
 	"strings"
 	"time"
 
@@ -13,14 +14,25 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
-	dbcommon "narratives/internal/adapters/out/firestore/common"
-	trdom "narratives/internal/domain/transfer"
+	fscommon "narratives/internal/adapters/out/firestore/common"
+	common "narratives/internal/domain/common"
+	transferdom "narratives/internal/domain/transfer"
 )
 
-// =====================================================
-// Firestore Transfer Repository
-// (Firestore 実装; 旧 PG 実装と互換のメソッドも提供)
-// =====================================================
+/*
+責任と機能:
+- transfer.RepositoryPort の Firestore 実装。
+- コレクション設計（推奨）:
+  - transfers/{productId}                      : メタ（latestAttempt など、最新状態の参照用）
+  - transfers/{productId}/attempts/{attemptId} : 試行履歴（attemptId は "att_000001" のような文字列）
+- CreateAttempt は Transaction で latestAttempt をインクリメントし、
+  attempts に新規 attempt ドキュメントを作成して、meta を更新する（排他・一意性担保）。
+- Patch/Save は attempts/{attemptId} を更新し、必要なら meta の最新状態も更新する。
+
+注意:
+- helper_repository_fs.go に asInt が既にある前提で、このファイルでは asInt を再定義しない。
+- asInt のシグネチャは「int を1つだけ返す」前提で使う（2戻り値では受けない）。
+*/
 
 type TransferRepositoryFS struct {
 	Client *firestore.Client
@@ -30,630 +42,750 @@ func NewTransferRepositoryFS(client *firestore.Client) *TransferRepositoryFS {
 	return &TransferRepositoryFS{Client: client}
 }
 
-func (r *TransferRepositoryFS) col() *firestore.CollectionRef {
+func (r *TransferRepositoryFS) transfersCol() *firestore.CollectionRef {
 	return r.Client.Collection("transfers")
 }
 
-// =====================================================
-// RepositoryPort 相当メソッド
-// =====================================================
-
-// GetByID returns a Transfer by ID.
-func (r *TransferRepositoryFS) GetByID(ctx context.Context, id string) (*trdom.Transfer, error) {
-	if r.Client == nil {
-		return nil, errors.New("firestore client is nil")
-	}
-
-	id = strings.TrimSpace(id)
-	if id == "" {
-		return nil, trdom.ErrNotFound
-	}
-
-	snap, err := r.col().Doc(id).Get(ctx)
-	if status.Code(err) == codes.NotFound {
-		return nil, trdom.ErrNotFound
-	}
-	if err != nil {
-		return nil, err
-	}
-
-	tr, err := docToTransfer(snap)
-	if err != nil {
-		return nil, err
-	}
-	return &tr, nil
+func (r *TransferRepositoryFS) transferDoc(productID string) *firestore.DocumentRef {
+	return r.transfersCol().Doc(productID)
 }
 
-// List applies Filter/Sort/Page semantics in-memory over transfers collection.
-// （Firestore の制約回避のため、一旦取得してメモリ上で絞り込み/ソート/ページング）
-func (r *TransferRepositoryFS) List(
-	ctx context.Context,
-	filter trdom.Filter,
-	sortOpt trdom.Sort,
-	page trdom.Page,
-) (trdom.PageResult, error) {
-	if r.Client == nil {
-		return trdom.PageResult{}, errors.New("firestore client is nil")
+func (r *TransferRepositoryFS) attemptsCol(productID string) *firestore.CollectionRef {
+	return r.transferDoc(productID).Collection("attempts")
+}
+
+func (r *TransferRepositoryFS) attemptDoc(productID string, attempt int) *firestore.DocumentRef {
+	return r.attemptsCol(productID).Doc(attemptDocID(attempt))
+}
+
+var (
+	errTransferNotFound = errors.New("transfer: not found")
+)
+
+// ============================================================
+// RepositoryPort impl
+// ============================================================
+
+func (r *TransferRepositoryFS) GetLatestByProductID(ctx context.Context, productID string) (*transferdom.Transfer, error) {
+	if r == nil || r.Client == nil {
+		return nil, errors.New("firestore client is nil")
+	}
+	productID = strings.TrimSpace(productID)
+	if productID == "" {
+		return nil, errTransferNotFound
 	}
 
-	it := r.col().Documents(ctx)
+	// meta を見て latestAttempt が取れれば、それを優先
+	metaSnap, err := r.transferDoc(productID).Get(ctx)
+	if err == nil && metaSnap != nil && metaSnap.Exists() {
+		la := asInt(metaSnap.Data()["latestAttempt"])
+		if la > 0 {
+			return r.GetByProductIDAndAttempt(ctx, productID, la)
+		}
+	}
+
+	// meta が無い/壊れている場合は attempts を createdAt desc で 1 件取る
+	it := r.attemptsCol(productID).
+		OrderBy("createdAt", firestore.Desc).
+		Limit(1).
+		Documents(ctx)
 	defer it.Stop()
 
-	var all []trdom.Transfer
+	doc, nerr := it.Next()
+	if nerr == iterator.Done {
+		return nil, errTransferNotFound
+	}
+	if nerr != nil {
+		return nil, nerr
+	}
+
+	t, derr := docToTransfer(doc, productID)
+	if derr != nil {
+		return nil, derr
+	}
+	return &t, nil
+}
+
+func (r *TransferRepositoryFS) GetByProductIDAndAttempt(ctx context.Context, productID string, attempt int) (*transferdom.Transfer, error) {
+	if r == nil || r.Client == nil {
+		return nil, errors.New("firestore client is nil")
+	}
+	productID = strings.TrimSpace(productID)
+	if productID == "" || attempt <= 0 {
+		return nil, errTransferNotFound
+	}
+
+	snap, err := r.attemptDoc(productID, attempt).Get(ctx)
+	if err != nil {
+		if status.Code(err) == codes.NotFound {
+			return nil, errTransferNotFound
+		}
+		return nil, err
+	}
+
+	t, err := docToTransfer(snap, productID)
+	if err != nil {
+		return nil, err
+	}
+	return &t, nil
+}
+
+func (r *TransferRepositoryFS) ListByProductID(ctx context.Context, productID string) ([]transferdom.Transfer, error) {
+	if r == nil || r.Client == nil {
+		return nil, errors.New("firestore client is nil")
+	}
+	productID = strings.TrimSpace(productID)
+	if productID == "" {
+		return []transferdom.Transfer{}, nil
+	}
+
+	it := r.attemptsCol(productID).
+		OrderBy("attempt", firestore.Asc).
+		Documents(ctx)
+	defer it.Stop()
+
+	out := make([]transferdom.Transfer, 0, 8)
 	for {
 		doc, err := it.Next()
-		if errors.Is(err, iterator.Done) {
+		if err == iterator.Done {
 			break
 		}
 		if err != nil {
-			return trdom.PageResult{}, err
+			return nil, err
 		}
-		tr, err := docToTransfer(doc)
+		t, derr := docToTransfer(doc, productID)
+		if derr != nil {
+			return nil, derr
+		}
+		out = append(out, t)
+	}
+	return out, nil
+}
+
+func (r *TransferRepositoryFS) List(ctx context.Context, filter transferdom.Filter, sort transferdom.Sort, page common.Page) (common.PageResult[transferdom.Transfer], error) {
+	if r == nil || r.Client == nil {
+		return common.PageResult[transferdom.Transfer]{}, errors.New("firestore client is nil")
+	}
+
+	pageNum, perPage, offset := fscommon.NormalizePage(page.Number, page.PerPage, 50, 200)
+
+	// cross-product list は collectionGroup("attempts") を使う
+	q := r.Client.CollectionGroup("attempts").Query
+
+	// ---- filter ----
+	if filter.ID != nil && strings.TrimSpace(*filter.ID) != "" {
+		q = q.Where("productId", "==", strings.TrimSpace(*filter.ID))
+	}
+	if filter.ProductID != nil && strings.TrimSpace(*filter.ProductID) != "" {
+		q = q.Where("productId", "==", strings.TrimSpace(*filter.ProductID))
+	}
+	if filter.OrderID != nil && strings.TrimSpace(*filter.OrderID) != "" {
+		q = q.Where("orderId", "==", strings.TrimSpace(*filter.OrderID))
+	}
+	if filter.AvatarID != nil && strings.TrimSpace(*filter.AvatarID) != "" {
+		q = q.Where("avatarId", "==", strings.TrimSpace(*filter.AvatarID))
+	}
+	if filter.Status != nil && strings.TrimSpace(string(*filter.Status)) != "" {
+		q = q.Where("status", "==", strings.TrimSpace(string(*filter.Status)))
+	}
+	if filter.ErrorType != nil && strings.TrimSpace(string(*filter.ErrorType)) != "" {
+		q = q.Where("errorType", "==", strings.TrimSpace(string(*filter.ErrorType)))
+	}
+
+	// ---- sort ----
+	field := strings.TrimSpace(sort.Field)
+	if field == "" {
+		field = "createdAt"
+	}
+	dir := firestore.Asc
+	if sort.Desc {
+		dir = firestore.Desc
+	}
+	q = q.OrderBy(field, dir).OrderBy("productId", firestore.Asc).OrderBy("attempt", firestore.Asc)
+
+	// ---- page ----
+	q = q.Offset(offset).Limit(perPage)
+
+	it := q.Documents(ctx)
+	defer it.Stop()
+
+	items := make([]transferdom.Transfer, 0, perPage)
+	for {
+		doc, err := it.Next()
+		if err == iterator.Done {
+			break
+		}
 		if err != nil {
-			return trdom.PageResult{}, err
+			return common.PageResult[transferdom.Transfer]{}, err
 		}
-		if matchTransferFilter(tr, filter) {
-			all = append(all, tr)
+
+		pid := ""
+		if v := doc.Data()["productId"]; v != nil {
+			if s, ok := v.(string); ok {
+				pid = strings.TrimSpace(s)
+			}
 		}
+		t, derr := docToTransfer(doc, pid)
+		if derr != nil {
+			return common.PageResult[transferdom.Transfer]{}, derr
+		}
+		items = append(items, t)
 	}
 
-	// sort
-	sortTransfers(all, sortOpt)
-
-	// paging
-	pageNum, perPage, offset := dbcommon.NormalizePage(page.Number, page.PerPage, 50, 200)
-	total := len(all)
-
-	if offset > total {
-		offset = total
+	total, cerr := r.Count(ctx, filter)
+	if cerr != nil {
+		return common.PageResult[transferdom.Transfer]{}, cerr
 	}
-	end := offset + perPage
-	if end > total {
-		end = total
-	}
-	paged := all[offset:end]
 
-	return trdom.PageResult{
-		Items:      paged,
+	return common.PageResult[transferdom.Transfer]{
+		Items:      items,
 		TotalCount: total,
-		TotalPages: dbcommon.ComputeTotalPages(total, perPage),
+		TotalPages: fscommon.ComputeTotalPages(total, perPage),
 		Page:       pageNum,
 		PerPage:    perPage,
 	}, nil
 }
 
-// Count counts transfers matching filter (in-memory, same 条件 as List).
-func (r *TransferRepositoryFS) Count(ctx context.Context, filter trdom.Filter) (int, error) {
-	if r.Client == nil {
+func (r *TransferRepositoryFS) Count(ctx context.Context, filter transferdom.Filter) (int, error) {
+	if r == nil || r.Client == nil {
 		return 0, errors.New("firestore client is nil")
 	}
 
-	it := r.col().Documents(ctx)
-	defer it.Stop()
+	q := r.Client.CollectionGroup("attempts").Query
 
-	count := 0
-	for {
-		doc, err := it.Next()
-		if errors.Is(err, iterator.Done) {
-			break
-		}
-		if err != nil {
-			return 0, err
-		}
-		tr, err := docToTransfer(doc)
-		if err != nil {
-			return 0, err
-		}
-		if matchTransferFilter(tr, filter) {
-			count++
-		}
+	if filter.ID != nil && strings.TrimSpace(*filter.ID) != "" {
+		q = q.Where("productId", "==", strings.TrimSpace(*filter.ID))
 	}
-	return count, nil
-}
-
-// Create inserts a new Transfer (status="requested", no errorType, no transferredAt).
-func (r *TransferRepositoryFS) Create(ctx context.Context, in trdom.CreateTransferInput) (*trdom.Transfer, error) {
-	if r.Client == nil {
-		return nil, errors.New("firestore client is nil")
+	if filter.ProductID != nil && strings.TrimSpace(*filter.ProductID) != "" {
+		q = q.Where("productId", "==", strings.TrimSpace(*filter.ProductID))
 	}
-
-	ref := r.col().NewDoc()
-	data := map[string]any{
-		"mintAddress": strings.TrimSpace(in.MintAddress),
-		"fromAddress": strings.TrimSpace(in.FromAddress),
-		"toAddress":   strings.TrimSpace(in.ToAddress),
-		"requestedAt": in.RequestedAt.UTC(),
-		"status":      "requested", // PG版と同じ初期値
+	if filter.OrderID != nil && strings.TrimSpace(*filter.OrderID) != "" {
+		q = q.Where("orderId", "==", strings.TrimSpace(*filter.OrderID))
 	}
-
-	if _, err := ref.Create(ctx, data); err != nil {
-		if status.Code(err) == codes.AlreadyExists {
-			return nil, trdom.ErrConflict
-		}
-		return nil, err
+	if filter.AvatarID != nil && strings.TrimSpace(*filter.AvatarID) != "" {
+		q = q.Where("avatarId", "==", strings.TrimSpace(*filter.AvatarID))
 	}
-
-	snap, err := ref.Get(ctx)
-	if err != nil {
-		return nil, err
+	if filter.Status != nil && strings.TrimSpace(string(*filter.Status)) != "" {
+		q = q.Where("status", "==", strings.TrimSpace(string(*filter.Status)))
 	}
-
-	tr, err := docToTransfer(snap)
-	if err != nil {
-		return nil, err
+	if filter.ErrorType != nil && strings.TrimSpace(string(*filter.ErrorType)) != "" {
+		q = q.Where("errorType", "==", strings.TrimSpace(string(*filter.ErrorType)))
 	}
-	return &tr, nil
-}
-
-// Update partially updates a Transfer by ID.
-func (r *TransferRepositoryFS) Update(ctx context.Context, id string, in trdom.UpdateTransferInput) (*trdom.Transfer, error) {
-	if r.Client == nil {
-		return nil, errors.New("firestore client is nil")
-	}
-
-	id = strings.TrimSpace(id)
-	if id == "" {
-		return nil, trdom.ErrNotFound
-	}
-
-	ref := r.col().Doc(id)
-
-	// ensure exists
-	if _, err := ref.Get(ctx); status.Code(err) == codes.NotFound {
-		return nil, trdom.ErrNotFound
-	} else if err != nil {
-		return nil, err
-	}
-
-	var updates []firestore.Update
-
-	// status
-	if in.Status != nil {
-		updates = append(updates, firestore.Update{
-			Path:  "status",
-			Value: strings.TrimSpace(string(*in.Status)),
-		})
-	}
-
-	// errorType: empty => delete
-	if in.ErrorType != nil {
-		v := strings.TrimSpace(string(*in.ErrorType))
-		if v == "" {
-			updates = append(updates, firestore.Update{
-				Path:  "errorType",
-				Value: firestore.Delete,
-			})
-		} else {
-			updates = append(updates, firestore.Update{
-				Path:  "errorType",
-				Value: v,
-			})
-		}
-	}
-
-	// transferredAt: zero => delete
-	if in.TransferredAt != nil {
-		if in.TransferredAt.IsZero() {
-			updates = append(updates, firestore.Update{
-				Path:  "transferredAt",
-				Value: firestore.Delete,
-			})
-		} else {
-			updates = append(updates, firestore.Update{
-				Path:  "transferredAt",
-				Value: in.TransferredAt.UTC(),
-			})
-		}
-	}
-
-	if len(updates) == 0 {
-		// no change -> reload
-		return r.GetByID(ctx, id)
-	}
-
-	if _, err := ref.Update(ctx, updates); err != nil {
-		if status.Code(err) == codes.NotFound {
-			return nil, trdom.ErrNotFound
-		}
-		if status.Code(err) == codes.AlreadyExists {
-			return nil, trdom.ErrConflict
-		}
-		return nil, err
-	}
-
-	return r.GetByID(ctx, id)
-}
-
-// Delete removes a Transfer by ID.
-func (r *TransferRepositoryFS) Delete(ctx context.Context, id string) error {
-	if r.Client == nil {
-		return errors.New("firestore client is nil")
-	}
-
-	id = strings.TrimSpace(id)
-	if id == "" {
-		return trdom.ErrNotFound
-	}
-
-	ref := r.col().Doc(id)
-	if _, err := ref.Get(ctx); status.Code(err) == codes.NotFound {
-		return trdom.ErrNotFound
-	} else if err != nil {
-		return err
-	}
-
-	if _, err := ref.Delete(ctx); err != nil {
-		return err
-	}
-	return nil
-}
-
-// WithTx: simple wrapper; if strict multi-doc Tx needed, use Client.RunTransaction.
-func (r *TransferRepositoryFS) WithTx(ctx context.Context, fn func(ctx context.Context) error) error {
-	if r.Client == nil {
-		return errors.New("firestore client is nil")
-	}
-	return fn(ctx)
-}
-
-// Reset: delete all transfers (dev/test use).
-func (r *TransferRepositoryFS) Reset(ctx context.Context) error {
-	if r.Client == nil {
-		return errors.New("firestore client is nil")
-	}
-	it := r.col().Documents(ctx)
-	var refs []*firestore.DocumentRef
-	for {
-		doc, err := it.Next()
-		if errors.Is(err, iterator.Done) {
-			break
-		}
-		if err != nil {
-			return err
-		}
-		refs = append(refs, doc.Ref)
-	}
-	if len(refs) == 0 {
-		return nil
-	}
-	const chunkSize = 400
-	for i := 0; i < len(refs); i += chunkSize {
-		end := i + chunkSize
-		if end > len(refs) {
-			end = len(refs)
-		}
-		if err := r.Client.RunTransaction(ctx, func(ctx context.Context, tx *firestore.Transaction) error {
-			for _, ref := range refs[i:end] {
-				if err := tx.Delete(ref); err != nil {
-					return err
-				}
-			}
-			return nil
-		}); err != nil {
-			return err
-		}
-	}
-	return nil
-}
-
-// =====================================================
-// Compatibility methods (旧 TransferRepositoryPG と同名)
-// =====================================================
-
-func (r *TransferRepositoryFS) GetAllTransfers(ctx context.Context) ([]*trdom.Transfer, error) {
-	if r.Client == nil {
-		return nil, errors.New("firestore client is nil")
-	}
-
-	it := r.col().
-		OrderBy("requestedAt", firestore.Desc).
-		OrderBy(firestore.DocumentID, firestore.Desc).
-		Documents(ctx)
-	defer it.Stop()
-
-	var out []*trdom.Transfer
-	for {
-		doc, err := it.Next()
-		if errors.Is(err, iterator.Done) {
-			break
-		}
-		if err != nil {
-			return nil, err
-		}
-		tr, err := docToTransfer(doc)
-		if err != nil {
-			return nil, err
-		}
-		tt := tr
-		out = append(out, &tt)
-	}
-	return out, nil
-}
-
-func (r *TransferRepositoryFS) GetTransferByID(ctx context.Context, id string) (*trdom.Transfer, error) {
-	return r.GetByID(ctx, id)
-}
-
-func (r *TransferRepositoryFS) GetTransfersByFromAddress(ctx context.Context, fromAddress string) ([]*trdom.Transfer, error) {
-	return r.getTransfersByField(ctx, "fromAddress", strings.TrimSpace(fromAddress))
-}
-
-func (r *TransferRepositoryFS) GetTransfersByToAddress(ctx context.Context, toAddress string) ([]*trdom.Transfer, error) {
-	return r.getTransfersByField(ctx, "toAddress", strings.TrimSpace(toAddress))
-}
-
-func (r *TransferRepositoryFS) GetTransfersByMintAddress(ctx context.Context, mintAddress string) ([]*trdom.Transfer, error) {
-	return r.getTransfersByField(ctx, "mintAddress", strings.TrimSpace(mintAddress))
-}
-
-func (r *TransferRepositoryFS) GetTransfersByStatus(ctx context.Context, status string) ([]*trdom.Transfer, error) {
-	return r.getTransfersByField(ctx, "status", strings.TrimSpace(status))
-}
-
-func (r *TransferRepositoryFS) CreateTransfer(ctx context.Context, in trdom.CreateTransferInput) (*trdom.Transfer, error) {
-	return r.Create(ctx, in)
-}
-
-func (r *TransferRepositoryFS) UpdateTransfer(ctx context.Context, id string, in trdom.UpdateTransferInput) (*trdom.Transfer, error) {
-	return r.Update(ctx, id, in)
-}
-
-func (r *TransferRepositoryFS) DeleteTransfer(ctx context.Context, id string) error {
-	return r.Delete(ctx, id)
-}
-
-func (r *TransferRepositoryFS) ResetTransfers(ctx context.Context) error {
-	return r.Reset(ctx)
-}
-
-func (r *TransferRepositoryFS) getTransfersByField(ctx context.Context, field, val string) ([]*trdom.Transfer, error) {
-	if r.Client == nil {
-		return nil, errors.New("firestore client is nil")
-	}
-
-	val = strings.TrimSpace(val)
-	if val == "" {
-		return []*trdom.Transfer{}, nil
-	}
-
-	q := r.col().
-		Where(field, "==", val).
-		OrderBy("requestedAt", firestore.Desc).
-		OrderBy(firestore.DocumentID, firestore.Desc)
 
 	it := q.Documents(ctx)
 	defer it.Stop()
 
-	var out []*trdom.Transfer
+	total := 0
 	for {
-		doc, err := it.Next()
-		if errors.Is(err, iterator.Done) {
+		_, err := it.Next()
+		if err == iterator.Done {
 			break
 		}
 		if err != nil {
-			return nil, err
+			return 0, err
 		}
-		tr, err := docToTransfer(doc)
-		if err != nil {
-			return nil, err
-		}
-		tt := tr
-		out = append(out, &tt)
+		total++
 	}
-	return out, nil
+	return total, nil
 }
 
-// =====================================================
-// Helpers: Firestore -> Domain
-// =====================================================
-
-func docToTransfer(doc *firestore.DocumentSnapshot) (trdom.Transfer, error) {
-	data := doc.Data()
-	if data == nil {
-		return trdom.Transfer{}, trdom.ErrNotFound
+func (r *TransferRepositoryFS) CreateAttempt(ctx context.Context, t transferdom.Transfer) (*transferdom.Transfer, error) {
+	if r == nil || r.Client == nil {
+		return nil, errors.New("firestore client is nil")
 	}
 
-	getStr := func(keys ...string) string {
-		for _, k := range keys {
-			if v, ok := data[k].(string); ok {
-				return strings.TrimSpace(v)
+	productID := strings.TrimSpace(t.ProductID)
+	if productID == "" {
+		return nil, transferdom.ErrInvalidProductID
+	}
+
+	// 推奨: ID == productId
+	if strings.TrimSpace(t.ID) == "" {
+		t.ID = productID
+	}
+
+	now := time.Now().UTC()
+	if t.CreatedAt.IsZero() {
+		t.CreatedAt = now
+	}
+
+	metaRef := r.transferDoc(productID)
+
+	var created transferdom.Transfer
+
+	err := r.Client.RunTransaction(ctx, func(ctx context.Context, tx *firestore.Transaction) error {
+		latestAttempt := 0
+		metaSnap, merr := tx.Get(metaRef)
+		if merr == nil && metaSnap != nil && metaSnap.Exists() {
+			latestAttempt = asInt(metaSnap.Data()["latestAttempt"])
+		} else if merr != nil && status.Code(merr) != codes.NotFound {
+			return merr
+		}
+
+		next := latestAttempt + 1
+		if next <= 0 {
+			next = 1
+		}
+
+		t.Attempt = next
+		u := now
+		t.UpdatedAt = &u
+
+		attemptRef := r.attemptDoc(productID, next)
+
+		if err := tx.Create(attemptRef, transferToDoc(t)); err != nil {
+			if status.Code(err) == codes.AlreadyExists {
+				return fmt.Errorf("transfer attempt already exists productId=%s attempt=%d", productID, next)
+			}
+			return err
+		}
+
+		meta := map[string]any{
+			"productId":     productID,
+			"latestAttempt": next,
+			"latestStatus":  string(t.Status),
+			"latestErrorType": func() any {
+				if t.ErrorType == nil {
+					return nil
+				}
+				return string(*t.ErrorType)
+			}(),
+			"latestUpdatedAt": now,
+			"createdAt": func() time.Time {
+				if metaSnap != nil && metaSnap.Exists() {
+					if v := metaSnap.Data()["createdAt"]; v != nil {
+						if tt, ok := v.(time.Time); ok && !tt.IsZero() {
+							return tt.UTC()
+						}
+					}
+				}
+				return t.CreatedAt.UTC()
+			}(),
+		}
+
+		if err := tx.Set(metaRef, meta, firestore.MergeAll); err != nil {
+			return err
+		}
+
+		created = t
+		return nil
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	return &created, nil
+}
+
+func (r *TransferRepositoryFS) Save(ctx context.Context, t transferdom.Transfer, _ *common.SaveOptions) (*transferdom.Transfer, error) {
+	if r == nil || r.Client == nil {
+		return nil, errors.New("firestore client is nil")
+	}
+
+	productID := strings.TrimSpace(t.ProductID)
+	if productID == "" {
+		return nil, transferdom.ErrInvalidProductID
+	}
+	if t.Attempt <= 0 {
+		return nil, errors.New("transfer: invalid attempt")
+	}
+	if strings.TrimSpace(t.ID) == "" {
+		t.ID = productID
+	}
+
+	now := time.Now().UTC()
+	u := now
+	t.UpdatedAt = &u
+	if t.CreatedAt.IsZero() {
+		t.CreatedAt = now
+	}
+
+	metaRef := r.transferDoc(productID)
+	attemptRef := r.attemptDoc(productID, t.Attempt)
+
+	err := r.Client.RunTransaction(ctx, func(ctx context.Context, tx *firestore.Transaction) error {
+		if err := tx.Set(attemptRef, transferToDoc(t), firestore.MergeAll); err != nil {
+			return err
+		}
+
+		latestAttempt := 0
+		metaSnap, merr := tx.Get(metaRef)
+		if merr == nil && metaSnap != nil && metaSnap.Exists() {
+			latestAttempt = asInt(metaSnap.Data()["latestAttempt"])
+		} else if merr != nil && status.Code(merr) != codes.NotFound {
+			return merr
+		}
+
+		if t.Attempt >= latestAttempt {
+			meta := map[string]any{
+				"productId":     productID,
+				"latestAttempt": t.Attempt,
+				"latestStatus":  string(t.Status),
+				"latestErrorType": func() any {
+					if t.ErrorType == nil {
+						return nil
+					}
+					return string(*t.ErrorType)
+				}(),
+				"latestUpdatedAt": now,
+			}
+			if err := tx.Set(metaRef, meta, firestore.MergeAll); err != nil {
+				return err
 			}
 		}
-		return ""
+		return nil
+	})
+	if err != nil {
+		return nil, err
 	}
-	getTimePtr := func(keys ...string) *time.Time {
-		for _, k := range keys {
-			if v, ok := data[k].(time.Time); ok {
-				t := v.UTC()
-				return &t
+
+	out := t
+	return &out, nil
+}
+
+func (r *TransferRepositoryFS) Patch(ctx context.Context, productID string, attempt int, patch transferdom.TransferPatch, _ *common.SaveOptions) (*transferdom.Transfer, error) {
+	if r == nil || r.Client == nil {
+		return nil, errors.New("firestore client is nil")
+	}
+	productID = strings.TrimSpace(productID)
+	if productID == "" {
+		return nil, transferdom.ErrInvalidProductID
+	}
+	if attempt <= 0 {
+		return nil, errors.New("transfer: invalid attempt")
+	}
+
+	now := time.Now().UTC()
+	if patch.UpdatedAt == nil || patch.UpdatedAt.IsZero() {
+		patch.UpdatedAt = &now
+	}
+
+	metaRef := r.transferDoc(productID)
+	attemptRef := r.attemptDoc(productID, attempt)
+
+	var updated *transferdom.Transfer
+
+	err := r.Client.RunTransaction(ctx, func(ctx context.Context, tx *firestore.Transaction) error {
+		snap, err := tx.Get(attemptRef)
+		if err != nil {
+			if status.Code(err) == codes.NotFound {
+				return errTransferNotFound
+			}
+			return err
+		}
+
+		updates := make([]firestore.Update, 0, 8)
+
+		if patch.Status != nil {
+			updates = append(updates, firestore.Update{Path: "status", Value: string(*patch.Status)})
+		}
+		if patch.ErrorType != nil {
+			updates = append(updates, firestore.Update{Path: "errorType", Value: string(*patch.ErrorType)})
+		}
+		if patch.ErrorMsg != nil {
+			m := strings.TrimSpace(*patch.ErrorMsg)
+			if m == "" {
+				updates = append(updates, firestore.Update{Path: "errorMsg", Value: firestore.Delete})
+			} else {
+				updates = append(updates, firestore.Update{Path: "errorMsg", Value: m})
+			}
+		}
+		if patch.TxSignature != nil {
+			s := strings.TrimSpace(*patch.TxSignature)
+			if s == "" {
+				updates = append(updates, firestore.Update{Path: "txSignature", Value: firestore.Delete})
+			} else {
+				updates = append(updates, firestore.Update{Path: "txSignature", Value: s})
+			}
+		}
+		if patch.UpdatedAt != nil && !patch.UpdatedAt.IsZero() {
+			updates = append(updates, firestore.Update{Path: "updatedAt", Value: patch.UpdatedAt.UTC()})
+		}
+
+		if len(updates) > 0 {
+			if err := tx.Update(attemptRef, updates); err != nil {
+				return err
+			}
+		}
+
+		latestAttempt := 0
+		metaSnap, merr := tx.Get(metaRef)
+		if merr == nil && metaSnap != nil && metaSnap.Exists() {
+			latestAttempt = asInt(metaSnap.Data()["latestAttempt"])
+		} else if merr != nil && status.Code(merr) != codes.NotFound {
+			return merr
+		}
+
+		if attempt >= latestAttempt {
+			metaUpdates := map[string]any{
+				"productId":       productID,
+				"latestAttempt":   attempt,
+				"latestUpdatedAt": patch.UpdatedAt.UTC(),
+			}
+			if patch.Status != nil {
+				metaUpdates["latestStatus"] = string(*patch.Status)
+			}
+			if patch.ErrorType != nil {
+				metaUpdates["latestErrorType"] = string(*patch.ErrorType)
+			}
+			if err := tx.Set(metaRef, metaUpdates, firestore.MergeAll); err != nil {
+				return err
+			}
+		}
+
+		t, derr := docToTransfer(snap, productID)
+		if derr != nil {
+			return derr
+		}
+		t.ApplyPatch(patch)
+		updated = &t
+
+		return nil
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	return updated, nil
+}
+
+func (r *TransferRepositoryFS) Delete(ctx context.Context, productID string, attempt int) error {
+	if r == nil || r.Client == nil {
+		return errors.New("firestore client is nil")
+	}
+	productID = strings.TrimSpace(productID)
+	if productID == "" || attempt <= 0 {
+		return errTransferNotFound
+	}
+
+	_, err := r.attemptDoc(productID, attempt).Delete(ctx)
+	if err != nil {
+		if status.Code(err) == codes.NotFound {
+			return errTransferNotFound
+		}
+		return err
+	}
+	return nil
+}
+
+// Reset deletes all transfers (meta + attempts). (dev/test only)
+func (r *TransferRepositoryFS) Reset(ctx context.Context) error {
+	if r == nil || r.Client == nil {
+		return errors.New("firestore client is nil")
+	}
+
+	ait := r.Client.CollectionGroup("attempts").Documents(ctx)
+	defer ait.Stop()
+
+	var attemptRefs []*firestore.DocumentRef
+	for {
+		doc, err := ait.Next()
+		if err == iterator.Done {
+			break
+		}
+		if err != nil {
+			return err
+		}
+		attemptRefs = append(attemptRefs, doc.Ref)
+	}
+
+	mit := r.transfersCol().Documents(ctx)
+	defer mit.Stop()
+
+	var metaRefs []*firestore.DocumentRef
+	for {
+		doc, err := mit.Next()
+		if err == iterator.Done {
+			break
+		}
+		if err != nil {
+			return err
+		}
+		metaRefs = append(metaRefs, doc.Ref)
+	}
+
+	const chunkSize = 400
+
+	delChunk := func(refs []*firestore.DocumentRef) error {
+		for start := 0; start < len(refs); start += chunkSize {
+			end := start + chunkSize
+			if end > len(refs) {
+				end = len(refs)
+			}
+			chunk := refs[start:end]
+
+			err := r.Client.RunTransaction(ctx, func(ctx context.Context, tx *firestore.Transaction) error {
+				for _, ref := range chunk {
+					if err := tx.Delete(ref); err != nil {
+						return err
+					}
+				}
+				return nil
+			})
+			if err != nil {
+				return err
 			}
 		}
 		return nil
 	}
-	getTimeVal := func(keys ...string) time.Time {
-		if t := getTimePtr(keys...); t != nil {
-			return *t
+
+	if err := delChunk(attemptRefs); err != nil {
+		return err
+	}
+	if err := delChunk(metaRefs); err != nil {
+		return err
+	}
+
+	log.Printf("[transfer_repo_fs] Reset OK deletedAttempts=%d deletedMeta=%d", len(attemptRefs), len(metaRefs))
+	return nil
+}
+
+// ============================================================
+// Mapping
+// ============================================================
+
+func attemptDocID(attempt int) string {
+	if attempt < 0 {
+		attempt = 0
+	}
+	return fmt.Sprintf("att_%06d", attempt)
+}
+
+func transferToDoc(t transferdom.Transfer) map[string]any {
+	m := map[string]any{
+		"id":        strings.TrimSpace(t.ID),
+		"productId": strings.TrimSpace(t.ProductID),
+		"orderId":   strings.TrimSpace(t.OrderID),
+		"avatarId":  strings.TrimSpace(t.AvatarID),
+
+		"attempt": t.Attempt,
+
+		"toWalletAddress": strings.TrimSpace(t.ToWalletAddress),
+
+		"status": string(t.Status),
+	}
+
+	if t.TxSignature != nil && strings.TrimSpace(*t.TxSignature) != "" {
+		m["txSignature"] = strings.TrimSpace(*t.TxSignature)
+	}
+	if t.ErrorType != nil && strings.TrimSpace(string(*t.ErrorType)) != "" {
+		m["errorType"] = strings.TrimSpace(string(*t.ErrorType))
+	}
+	if t.ErrorMsg != nil && strings.TrimSpace(*t.ErrorMsg) != "" {
+		m["errorMsg"] = strings.TrimSpace(*t.ErrorMsg)
+	}
+
+	if !t.CreatedAt.IsZero() {
+		m["createdAt"] = t.CreatedAt.UTC()
+	}
+	if t.UpdatedAt != nil && !t.UpdatedAt.IsZero() {
+		m["updatedAt"] = t.UpdatedAt.UTC()
+	}
+
+	return m
+}
+
+func docToTransfer(doc *firestore.DocumentSnapshot, fallbackProductID string) (transferdom.Transfer, error) {
+	data := doc.Data()
+	if data == nil {
+		return transferdom.Transfer{}, fmt.Errorf("empty transfer doc: %s", doc.Ref.Path)
+	}
+
+	getStr := func(key string) string {
+		if v, ok := data[key].(string); ok {
+			return strings.TrimSpace(v)
+		}
+		if v, ok := data[key]; ok && v != nil {
+			return strings.TrimSpace(fmt.Sprint(v))
+		}
+		return ""
+	}
+	getTime := func(key string) time.Time {
+		if v, ok := data[key].(time.Time); ok && !v.IsZero() {
+			return v.UTC()
 		}
 		return time.Time{}
 	}
-	getStatus := func(key string) trdom.TransferStatus {
-		if v, ok := data[key].(string); ok {
-			return trdom.TransferStatus(strings.TrimSpace(v))
+	getTimePtr := func(key string) *time.Time {
+		t := getTime(key)
+		if t.IsZero() {
+			return nil
 		}
-		return ""
+		tt := t.UTC()
+		return &tt
 	}
-	getErrType := func(keys ...string) *trdom.TransferErrorType {
-		for _, k := range keys {
-			if v, ok := data[k].(string); ok {
-				s := strings.TrimSpace(v)
-				if s != "" {
-					et := trdom.TransferErrorType(s)
-					return &et
-				}
+
+	productID := getStr("productId")
+	if productID == "" {
+		productID = strings.TrimSpace(fallbackProductID)
+		if productID == "" {
+			if doc.Ref.Parent != nil && doc.Ref.Parent.Parent != nil {
+				productID = strings.TrimSpace(doc.Ref.Parent.Parent.ID)
 			}
-		}
-		return nil
-	}
-
-	return trdom.Transfer{
-		ID:            strings.TrimSpace(doc.Ref.ID),
-		MintAddress:   getStr("mintAddress", "mint_address"),
-		FromAddress:   getStr("fromAddress", "from_address"),
-		ToAddress:     getStr("toAddress", "to_address"),
-		RequestedAt:   getTimeVal("requestedAt", "requested_at"),
-		TransferredAt: getTimePtr("transferredAt", "transferred_at"),
-		Status:        getStatus("status"),
-		ErrorType:     getErrType("errorType", "error_type"),
-	}, nil
-}
-
-// =====================================================
-// Helpers: Filter / Sort
-// =====================================================
-
-func matchTransferFilter(t trdom.Transfer, f trdom.Filter) bool {
-	// ID
-	if v := strings.TrimSpace(f.ID); v != "" && t.ID != v {
-		return false
-	}
-	// MintAddress
-	if v := strings.TrimSpace(f.MintAddress); v != "" && t.MintAddress != v {
-		return false
-	}
-	// FromAddress
-	if v := strings.TrimSpace(f.FromAddress); v != "" && t.FromAddress != v {
-		return false
-	}
-	// ToAddress
-	if v := strings.TrimSpace(f.ToAddress); v != "" && t.ToAddress != v {
-		return false
-	}
-
-	// Statuses
-	if len(f.Statuses) > 0 {
-		match := false
-		for _, s := range f.Statuses {
-			if t.Status == s {
-				match = true
-				break
-			}
-		}
-		if !match {
-			return false
 		}
 	}
 
-	// ErrorTypes
-	if len(f.ErrorTypes) > 0 {
-		match := false
-		for _, et := range f.ErrorTypes {
-			if t.ErrorType != nil && *t.ErrorType == et {
-				match = true
-				break
+	attempt := asInt(data["attempt"])
+	if attempt <= 0 {
+		if strings.HasPrefix(doc.Ref.ID, "att_") {
+			var n int
+			_, _ = fmt.Sscanf(doc.Ref.ID, "att_%d", &n)
+			if n > 0 {
+				attempt = n
 			}
 		}
-		if !match {
-			return false
-		}
 	}
 
-	// HasError
-	if f.HasError != nil {
-		if *f.HasError && t.ErrorType == nil {
-			return false
-		}
-		if !*f.HasError && t.ErrorType != nil {
-			return false
-		}
+	createdAt := getTime("createdAt")
+	if createdAt.IsZero() && !doc.CreateTime.IsZero() {
+		createdAt = doc.CreateTime.UTC()
+	}
+	updatedAt := getTimePtr("updatedAt")
+
+	st := transferdom.Status(strings.TrimSpace(getStr("status")))
+	if st == "" {
+		st = transferdom.StatusPending
 	}
 
-	// RequestedAt range
-	if f.RequestedFrom != nil && t.RequestedAt.Before(f.RequestedFrom.UTC()) {
-		return false
-	}
-	if f.RequestedTo != nil && !t.RequestedAt.Before(f.RequestedTo.UTC()) {
-		return false
+	var et *transferdom.ErrorType
+	if s := strings.TrimSpace(getStr("errorType")); s != "" {
+		x := transferdom.ErrorType(s)
+		et = &x
 	}
 
-	// TransferredAt range
-	if f.TransferedFrom != nil {
-		if t.TransferredAt == nil || t.TransferredAt.Before(f.TransferedFrom.UTC()) {
-			return false
-		}
-	}
-	if f.TransferedTo != nil {
-		if t.TransferredAt == nil || !t.TransferredAt.Before(f.TransferedTo.UTC()) {
-			return false
-		}
+	var em *string
+	if s := strings.TrimSpace(getStr("errorMsg")); s != "" {
+		x := s
+		em = &x
 	}
 
-	return true
-}
-
-func sortTransfers(items []trdom.Transfer, s trdom.Sort) {
-	// default: requestedAt DESC, id DESC
-	col := strings.ToLower(strings.TrimSpace(string(s.Column)))
-	dir := strings.ToUpper(strings.TrimSpace(string(s.Order)))
-	if dir != "ASC" && dir != "DESC" {
-		dir = "DESC"
-	}
-	asc := dir == "ASC"
-
-	less := func(i, j int) bool {
-		a, b := items[i], items[j]
-
-		switch col {
-		case "requestedat", "requested_at":
-			if a.RequestedAt.Equal(b.RequestedAt) {
-				if asc {
-					return a.ID < b.ID
-				}
-				return a.ID > b.ID
-			}
-			if asc {
-				return a.RequestedAt.Before(b.RequestedAt)
-			}
-			return a.RequestedAt.After(b.RequestedAt)
-
-		case "transferredat", "transferred_at":
-			var at, bt time.Time
-			if a.TransferredAt != nil {
-				at = *a.TransferredAt
-			}
-			if b.TransferredAt != nil {
-				bt = *b.TransferredAt
-			}
-			if at.Equal(bt) {
-				if asc {
-					return a.ID < b.ID
-				}
-				return a.ID > b.ID
-			}
-			if asc {
-				return at.Before(bt)
-			}
-			return at.After(bt)
-
-		case "status":
-			if a.Status == b.Status {
-				if asc {
-					return a.ID < b.ID
-				}
-				return a.ID > b.ID
-			}
-			if asc {
-				return string(a.Status) < string(b.Status)
-			}
-			return string(a.Status) > string(b.Status)
-
-		default:
-			// fallback to requestedAt DESC, id DESC
-			if a.RequestedAt.Equal(b.RequestedAt) {
-				return a.ID > b.ID
-			}
-			return a.RequestedAt.After(b.RequestedAt)
-		}
+	var tx *string
+	if s := strings.TrimSpace(getStr("txSignature")); s != "" {
+		x := s
+		tx = &x
 	}
 
-	sort.SliceStable(items, less)
+	t := transferdom.Transfer{
+		ID:        strings.TrimSpace(getStr("id")),
+		Attempt:   attempt,
+		ProductID: productID,
+		OrderID:   strings.TrimSpace(getStr("orderId")),
+		AvatarID:  strings.TrimSpace(getStr("avatarId")),
+
+		ToWalletAddress: strings.TrimSpace(getStr("toWalletAddress")),
+		TxSignature:     tx,
+
+		Status:    st,
+		ErrorType: et,
+		ErrorMsg:  em,
+
+		CreatedAt: createdAt,
+		UpdatedAt: updatedAt,
+	}
+
+	if strings.TrimSpace(t.ID) == "" {
+		t.ID = t.ProductID
+	}
+
+	return t, nil
 }
