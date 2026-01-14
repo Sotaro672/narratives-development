@@ -72,6 +72,10 @@ type TokenInfo struct {
 
 	BrandID string `json:"brandId,omitempty"`
 
+	// ✅ NEW: tokenBlueprintId (tokens/{productId}.tokenBlueprintId)
+	// order_scan_verify_query.go が scannedTokenBlueprintId を作るために使う
+	TokenBlueprintID string `json:"tokenBlueprintId,omitempty"`
+
 	// ✅ Off-chain cache (for faster UI)
 	ToAddress   string `json:"toAddress,omitempty"`
 	MetadataURI string `json:"metadataUri,omitempty"`

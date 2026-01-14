@@ -145,6 +145,9 @@ func Register(mux *http.ServeMux, cont *Container) {
 	previewPublicH := notImplemented("PreviewPublic")
 	previewMeH := notImplemented("PreviewMe")
 
+	// ✅ NEW: /mall/me/orders/scan/verify (POST)
+	orderScanVerifyH := notImplemented("OrderScanVerify")
+
 	// Lists (public)
 	if cont.ListUC != nil {
 		listH = mallhandler.NewMallListHandler(cont.ListUC)
@@ -243,6 +246,19 @@ func Register(mux *http.ServeMux, cont *Container) {
 		}
 	}
 
+	// ------------------------------------------------------------
+	// ✅ NEW: Order scan verify wiring
+	// POST /mall/me/orders/scan/verify
+	// - auth required
+	// - avatar context required (uid -> avatarId)
+	// ------------------------------------------------------------
+	if cont.OrderScanVerifyQ != nil {
+		orderScanVerifyH = mallhandler.NewOrderScanVerifyHandler(cont.OrderScanVerifyQ)
+		log.Printf("[mall.register] order scan verify handler wired (OrderScanVerifyQ=%t)", cont.OrderScanVerifyQ != nil)
+	} else {
+		log.Printf("[mall.register] WARN: OrderScanVerifyQ is nil (order scan verify will return 501)")
+	}
+
 	// SignIn: keep a stable no-op endpoint (client convenience)
 	// NOTE: 認証チェックは不要（ただの疎通・互換のため）
 	signInH := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -264,8 +280,13 @@ func Register(mux *http.ServeMux, cont *Container) {
 	cartH = requireUserAuth(userAuthMW, cartH, "Cart")
 
 	// /mall/me/preview は auth + avatar context（uid -> avatarId）
-	previewMeH = requireUserAuth(userAuthMW, previewMeH, "Preview(me)")
+	// ✅ 正しい順序: まず AvatarContext を内側に仕込み、最後に UserAuth を外側にする
 	previewMeH = requireAvatarContext(avatarCtxMW, previewMeH, "Preview(me):AvatarContext")
+	previewMeH = requireUserAuth(userAuthMW, previewMeH, "Preview(me)")
+
+	// ✅ /mall/me/orders/scan/verify は auth + avatar context（uid -> avatarId）
+	orderScanVerifyH = requireAvatarContext(avatarCtxMW, orderScanVerifyH, "OrderScanVerify(me):AvatarContext")
+	orderScanVerifyH = requireUserAuth(userAuthMW, orderScanVerifyH, "OrderScanVerify(me)")
 
 	payH = requireUserAuth(userAuthMW, payH, "Payment")
 	orderH = requireUserAuth(userAuthMW, orderH, "Order")
@@ -305,6 +326,9 @@ func Register(mux *http.ServeMux, cont *Container) {
 		// preview split
 		Preview:   previewPublicH, // /mall/preview (public)
 		PreviewMe: previewMeH,     // /mall/me/preview (auth + avatar context)
+
+		// ✅ NEW: scan verify
+		OrderScanVerify: orderScanVerifyH, // POST /mall/me/orders/scan/verify
 
 		// owner resolve is intentionally NOT exposed as an endpoint
 		OwnerResolve: notImplemented("OwnerResolve(endpoint_disabled)"),

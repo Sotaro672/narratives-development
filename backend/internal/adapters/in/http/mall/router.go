@@ -44,6 +44,10 @@ type Deps struct {
 	Preview   http.Handler
 	PreviewMe http.Handler
 
+	// ✅ NEW: order scan verify (authenticated)
+	// - POST /mall/me/orders/scan/verify
+	OrderScanVerify http.Handler
+
 	// ✅ NEW: owner resolve (walletAddress/toAddress -> avatarId or brandId)
 	// - /mall/owners/resolve : public OK (tokenの所有者表示など)
 	OwnerResolve http.Handler
@@ -142,15 +146,8 @@ func Register(mux *http.ServeMux, deps Deps) {
 	handleSafe(mux, "/mall/me/billing-addresses/", deps.BillingAddress, "BillingAddress(me)")
 
 	// avatars
-	// ✅ Account creation / avatar CRUD entry (NO /me prefix)
-	// - POST   /mall/avatars
-	// - GET    /mall/avatars/{id}
-	// - PATCH  /mall/avatars/{id}
-	// - DELETE /mall/avatars/{id}
 	handleSafe(mux, "/mall/avatars", deps.Avatar, "Avatar")
 	handleSafe(mux, "/mall/avatars/", deps.Avatar, "Avatar")
-
-	// ✅ /me prefix (caller intent: authenticated user scope)
 	handleSafe(mux, "/mall/me/avatars", deps.Avatar, "Avatar(me)")
 	handleSafe(mux, "/mall/me/avatars/", deps.Avatar, "Avatar(me)")
 
@@ -167,29 +164,23 @@ func Register(mux *http.ServeMux, deps Deps) {
 	handleSafe(mux, "/mall/me/wallets/", deps.Wallet, "Wallet(me)")
 
 	// cart
-	// ✅ cart new/create entry (NO /me prefix) - for "new cart registration"
-	// - POST   /mall/cart
-	// - GET    /mall/cart
-	// (handler 側で user auth 必須にする想定)
 	handleSafe(mux, "/mall/cart", deps.Cart, "Cart")
 	handleSafe(mux, "/mall/cart/", deps.Cart, "Cart")
-
-	// ✅ /me prefix (authenticated user scope)
 	handleSafe(mux, "/mall/me/cart", deps.Cart, "Cart(me)")
 	handleSafe(mux, "/mall/me/cart/", deps.Cart, "Cart(me)")
 
 	// ✅ preview
-	// - /mall/preview      : public (no auth) for pre-login scanner
-	// - /mall/me/preview   : authenticated for post-login scanner
 	handleSafe(mux, "/mall/preview", deps.Preview, "Preview")
 	handleSafe(mux, "/mall/preview/", deps.Preview, "Preview")
 	handleSafe(mux, "/mall/me/preview", deps.PreviewMe, "Preview(me)")
 	handleSafe(mux, "/mall/me/preview/", deps.PreviewMe, "Preview(me)")
 
+	// ✅ NEW: order scan verify (authenticated)
+	// - POST /mall/me/orders/scan/verify
+	handleSafe(mux, "/mall/me/orders/scan/verify", deps.OrderScanVerify, "OrderScanVerify(me)")
+	handleSafe(mux, "/mall/me/orders/scan/verify/", deps.OrderScanVerify, "OrderScanVerify(me)")
+
 	// ✅ NEW: owner resolve (walletAddress/toAddress -> avatarId or brandId)
-	// - /mall/owners/resolve?walletAddress=...
-	// - /mall/owners/resolve?toAddress=...
-	// - /mall/owners/resolve?address=...
 	handleSafe(mux, "/mall/owners/resolve", deps.OwnerResolve, "OwnerResolve")
 	handleSafe(mux, "/mall/owners/resolve/", deps.OwnerResolve, "OwnerResolve")
 

@@ -1,4 +1,4 @@
-// frontend/mall/lib/features/preview/presentation/preview.dart
+// frontend/mall/lib/features/preview/presentation/page/preview.dart
 import 'dart:convert';
 
 import 'package:firebase_auth/firebase_auth.dart';
@@ -11,7 +11,9 @@ import '../../infrastructure/repository.dart';
 /// - /mall/preview     : ログイン前ユーザーがスキャンした時に叩く（public）
 /// - /mall/me/preview  : ログイン後ユーザーがスキャンした時に叩く（auth）
 ///
-/// 現時点ではまず productId -> modelId を表示できればOK。
+/// ✅ 自動verify採用:
+/// - ログイン中 + avatarId/productId が揃っている場合、
+///   preview取得と並行して /mall/me/orders/scan/verify を自動で叩く。
 class PreviewPage extends StatefulWidget {
   const PreviewPage({
     super.key,
@@ -36,15 +38,18 @@ class _PreviewPageState extends State<PreviewPage> {
   String get _avatarId => widget.avatarId.trim();
   String get _productId => (widget.productId ?? '').trim();
 
-  late final PreviewRepositoryHttp _repo;
+  late final PreviewRepositoryHttp _previewRepo;
+  late final ScanVerifyRepositoryHttp _scanVerifyRepo;
 
   Future<MallPreviewResponse?>? _previewFuture;
+  Future<MallScanVerifyResponse?>? _verifyFuture;
 
   @override
   void initState() {
     super.initState();
 
-    _repo = PreviewRepositoryHttp();
+    _previewRepo = PreviewRepositoryHttp();
+    _scanVerifyRepo = ScanVerifyRepositoryHttp();
 
     // ✅ ページ到達ログ（QRスキャンで遷移してきたかの確認に使う）
     final avatarId = _avatarId;
@@ -66,6 +71,12 @@ class _PreviewPageState extends State<PreviewPage> {
     // ✅ productId がある場合のみ preview を取りに行く
     if (productId.isNotEmpty) {
       _previewFuture = _loadPreview(productId);
+
+      // ✅ 自動verify（ログイン中のみ）
+      _verifyFuture = _autoVerifyIfNeeded(
+        avatarId: avatarId,
+        productId: productId,
+      );
     }
   }
 
@@ -90,6 +101,10 @@ class _PreviewPageState extends State<PreviewPage> {
       if (productId.isNotEmpty) {
         setState(() {
           _previewFuture = _loadPreview(productId);
+          _verifyFuture = _autoVerifyIfNeeded(
+            avatarId: avatarId,
+            productId: productId,
+          );
         });
       }
     }
@@ -97,7 +112,8 @@ class _PreviewPageState extends State<PreviewPage> {
 
   @override
   void dispose() {
-    _repo.dispose();
+    _previewRepo.dispose();
+    _scanVerifyRepo.dispose();
     super.dispose();
   }
 
@@ -110,7 +126,7 @@ class _PreviewPageState extends State<PreviewPage> {
     // ログイン前 -> public
     if (user == null) {
       debugPrint('[PreviewPage] calling PUBLIC /mall/preview productId=$id');
-      final r = await _repo.fetchPreviewByProductId(id);
+      final r = await _previewRepo.fetchPreviewByProductId(id);
       debugPrint(
         '[PreviewPage] PUBLIC response productId=${r.productId} modelId=${r.modelId}'
         ' modelNumber=${r.modelNumber.isEmpty ? "-" : r.modelNumber}'
@@ -126,16 +142,17 @@ class _PreviewPageState extends State<PreviewPage> {
     }
 
     // ログイン後 -> me
-    final token = await user.getIdToken();
+    final token = (await user.getIdToken()) ?? '';
 
     debugPrint(
-      '[PreviewPage] calling ME /mall/me/preview productId=$id tokenLen=${token?.length ?? 0}',
+      '[PreviewPage] calling ME /mall/me/preview productId=$id tokenLen=${token.length}',
     );
 
-    final r = await _repo.fetchMyPreviewByProductId(
+    final r = await _previewRepo.fetchMyPreviewByProductId(
       id,
-      headers: {'Authorization': 'Bearer ${token ?? ''}'},
+      headers: {'Authorization': 'Bearer $token'},
     );
+
     debugPrint(
       '[PreviewPage] ME response productId=${r.productId} modelId=${r.modelId}'
       ' modelNumber=${r.modelNumber.isEmpty ? "-" : r.modelNumber}'
@@ -147,6 +164,36 @@ class _PreviewPageState extends State<PreviewPage> {
       ' token=${r.token?.toJson()}'
       ' owner=${r.owner?.toJson()}',
     );
+
+    return r;
+  }
+
+  /// ✅ 自動verify（ログイン中のみ）
+  Future<MallScanVerifyResponse?> _autoVerifyIfNeeded({
+    required String avatarId,
+    required String productId,
+  }) async {
+    final aid = avatarId.trim();
+    final pid = productId.trim();
+
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null) return null;
+    if (aid.isEmpty || pid.isEmpty) return null;
+
+    final token = (await user.getIdToken()) ?? '';
+
+    debugPrint(
+      '[PreviewPage] calling AUTO VERIFY /mall/me/orders/scan/verify'
+      ' avatarId=$aid productId=$pid tokenLen=${token.length}',
+    );
+
+    final r = await _scanVerifyRepo.verifyScanPurchasedByAvatarId(
+      avatarId: aid,
+      productId: pid,
+      headers: {'Authorization': 'Bearer $token'},
+    );
+
+    debugPrint('[PreviewPage] AUTO VERIFY response: ${r.toJson()}');
     return r;
   }
 
@@ -167,14 +214,38 @@ class _PreviewPageState extends State<PreviewPage> {
   String _ownerLabel(MallOwnerInfo? owner) {
     if (owner == null) return '-';
 
-    final brandId = (owner.brandId).trim();
-    final avatarId = (owner.avatarId).trim();
+    final brandId = owner.brandId.trim();
+    final avatarId = owner.avatarId.trim();
 
     // 表示優先: brandId -> avatarId
     if (brandId.isNotEmpty) return brandId;
     if (avatarId.isNotEmpty) return avatarId;
 
     return '-';
+  }
+
+  Widget _verifyBadge(BuildContext context, MallScanVerifyResponse r) {
+    final t = Theme.of(context).textTheme;
+
+    final matched = r.matched;
+    final match = r.match;
+
+    final label = matched ? '購入済み（一致）' : '未購入（不一致）';
+    final detail = match == null
+        ? '-'
+        : 'modelId=${match.modelId.isEmpty ? "-" : match.modelId}, '
+              'tokenBlueprintId=${match.tokenBlueprintId.isEmpty ? "-" : match.tokenBlueprintId}';
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text('Verify', style: t.titleSmall),
+        const SizedBox(height: 8),
+        Text(label, style: t.bodySmall),
+        const SizedBox(height: 4),
+        Text(detail, style: t.bodySmall),
+      ],
+    );
   }
 
   @override
@@ -184,6 +255,7 @@ class _PreviewPageState extends State<PreviewPage> {
     final from = (widget.from ?? '').trim();
 
     final t = Theme.of(context).textTheme;
+    final border = Border.all(color: Theme.of(context).dividerColor, width: 1);
 
     return Padding(
       padding: const EdgeInsets.fromLTRB(12, 12, 12, 20),
@@ -213,6 +285,10 @@ class _PreviewPageState extends State<PreviewPage> {
             ),
           ),
           const SizedBox(height: 12),
+
+          // ----------------------------
+          // Preview
+          // ----------------------------
           Card(
             child: Padding(
               padding: const EdgeInsets.all(14),
@@ -245,28 +321,25 @@ class _PreviewPageState extends State<PreviewPage> {
                   }
 
                   final data = snap.data;
+                  if (data == null) {
+                    return Text('プレビューが空です。', style: t.bodySmall);
+                  }
 
-                  final modelNumber = (data?.modelNumber ?? '').trim();
-                  final size = (data?.size ?? '').trim();
-                  final colorName = (data?.color ?? '').trim();
-                  final rgb = data?.rgb ?? 0;
-                  final measurements = data?.measurements;
-                  final productBlueprintPatch = data?.productBlueprintPatch;
+                  final modelNumber = data.modelNumber.trim();
+                  final size = data.size.trim();
+                  final colorName = data.color.trim();
+                  final rgb = data.rgb;
+                  final measurements = data.measurements;
+                  final productBlueprintPatch = data.productBlueprintPatch;
 
                   // ✅ token info
-                  final token = data?.token;
+                  final token = data.token;
 
                   // ✅ owner info
-                  final owner = data?.owner;
-                  final ownerId = _ownerLabel(owner);
+                  final ownerId = _ownerLabel(data.owner);
 
                   // ✅ rgb -> Color（表示用スウォッチ）
                   final swatch = _rgbToColor(rgb);
-
-                  final border = Border.all(
-                    color: Theme.of(context).dividerColor,
-                    width: 1,
-                  );
 
                   final measurementEntries =
                       (measurements ?? {}).entries
@@ -294,7 +367,6 @@ class _PreviewPageState extends State<PreviewPage> {
                       ? ''
                       : _prettyJson(productBlueprintPatch);
 
-                  // ✅ token pretty
                   final tokenPretty = (token == null)
                       ? ''
                       : _prettyJson(token.toJson());
@@ -385,8 +457,6 @@ class _PreviewPageState extends State<PreviewPage> {
                           style: t.bodySmall,
                         ),
                         const SizedBox(height: 4),
-
-                        // ✅ A案: キャッシュを表示（体感高速化の根拠になる）
                         Text(
                           'toAddress: ${token.toAddress.isEmpty ? '-' : token.toAddress}',
                           style: t.bodySmall,
@@ -397,7 +467,6 @@ class _PreviewPageState extends State<PreviewPage> {
                           style: t.bodySmall,
                         ),
                         const SizedBox(height: 4),
-
                         Text(
                           'mintAddress: ${token.mintAddress.isEmpty ? '-' : token.mintAddress}',
                           style: t.bodySmall,
@@ -407,14 +476,11 @@ class _PreviewPageState extends State<PreviewPage> {
                           'onChainTxSignature: ${token.onChainTxSignature.isEmpty ? '-' : token.onChainTxSignature}',
                           style: t.bodySmall,
                         ),
-
-                        // ✅ mintedAt（APIが返していれば表示）
                         const SizedBox(height: 4),
                         Text(
                           'mintedAt: ${token.mintedAt.isEmpty ? '-' : token.mintedAt}',
                           style: t.bodySmall,
                         ),
-
                         if (tokenPretty.isNotEmpty) ...[
                           const SizedBox(height: 10),
                           Text('token (raw)', style: t.bodySmall),
@@ -437,6 +503,55 @@ class _PreviewPageState extends State<PreviewPage> {
                       ],
                     ],
                   );
+                },
+              ),
+            ),
+          ),
+
+          const SizedBox(height: 12),
+
+          // ----------------------------
+          // Verify (auto)
+          // ----------------------------
+          Card(
+            child: Padding(
+              padding: const EdgeInsets.all(14),
+              child: FutureBuilder<MallScanVerifyResponse?>(
+                future: _verifyFuture,
+                builder: (context, snap) {
+                  if (snap.connectionState == ConnectionState.none &&
+                      snap.data == null &&
+                      snap.error == null) {
+                    return Text('Verify は未実行です。', style: t.bodySmall);
+                  }
+
+                  if (snap.connectionState == ConnectionState.waiting) {
+                    return const Row(
+                      children: [
+                        SizedBox(
+                          width: 16,
+                          height: 16,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        ),
+                        SizedBox(width: 10),
+                        Text('購入照合（Verify）を確認しています...'),
+                      ],
+                    );
+                  }
+
+                  if (snap.hasError) {
+                    return Text(
+                      'Verify に失敗しました: ${snap.error}',
+                      style: t.bodySmall,
+                    );
+                  }
+
+                  final r = snap.data;
+                  if (r == null) {
+                    return Text('Verify は未実行です。', style: t.bodySmall);
+                  }
+
+                  return _verifyBadge(context, r);
                 },
               ),
             ),

@@ -16,14 +16,18 @@ import (
 /*
 責任と機能:
 - avatarId を起点に「購入済み(paid=true)」の orders を検索し、
-  items 内の「未transfer(transfer=false 相当)」の productId を抽出する。
-- product テーブル(products/{productId})から modelId を取得する。
-- token テーブル(tokens/{productId})から tokenBlueprintId を取得する。
-- 上記を組み合わせて「modelId と tokenBlueprintId の組み合わせ」を返す。
+  items 内の「未transfer(transfer=false 相当)」の (modelId, tokenBlueprintId) を抽出して返す。
 
-前提（今回の方針）:
-- products/{productId} に modelId がある
-- tokens/{productId} に tokenBlueprintId がある（docId = productId）
+今回の実データ前提（あなたの orders.items の形）:
+- items[*].modelId が入っている（productId は無い）
+- items[*].inventoryId が入っており、以下の shape:
+    "<productBlueprintId>__<tokenBlueprintId>__<...>__<modelId>"
+  → tokenBlueprintId は 2つめのセグメント（index=1）
+
+そのため、この Query は:
+- productId で products/tokens を引きに行かない
+- modelId は items[*].modelId をそのまま使う
+- tokenBlueprintId は inventoryId の2セグメント目から取り出す
 */
 
 var (
@@ -34,24 +38,21 @@ var (
 type OrderPurchasedQuery struct {
 	FS *firestore.Client
 
-	OrdersCol   string
-	ProductsCol string
-	TokensCol   string
+	OrdersCol string
 
 	now func() time.Time
 }
 
 func NewOrderPurchasedQuery(fs *firestore.Client) *OrderPurchasedQuery {
 	return &OrderPurchasedQuery{
-		FS:          fs,
-		OrdersCol:   "orders",
-		ProductsCol: "products",
-		TokensCol:   "tokens",
-		now:         time.Now,
+		FS:        fs,
+		OrdersCol: "orders",
+		now:       time.Now,
 	}
 }
 
 // PurchasedPair is a resolved (modelId, tokenBlueprintId) pair derived from an eligible order item.
+// NOTE: ProductID は互換のため残す（実データに無ければ空）。
 type PurchasedPair struct {
 	OrderID          string `json:"orderId"`
 	ProductID        string `json:"productId"`
@@ -60,7 +61,7 @@ type PurchasedPair struct {
 }
 
 // Result is the query output.
-// - Pairs は orderId/productId 単位で返す（同一 modelId/tokenBlueprintId が複数回出る可能性あり）
+// - Pairs は orderId 単位で返す（同一 modelId/tokenBlueprintId が複数回出る可能性あり）
 type OrderPurchasedResult struct {
 	AvatarID string          `json:"avatarId"`
 	Pairs    []PurchasedPair `json:"pairs"`
@@ -71,7 +72,9 @@ type OrderPurchasedResult struct {
 // - paid == true
 // and filters items by:
 // - transfer/transferred == false
-// then resolves modelId and tokenBlueprintId using products/tokens tables.
+// then derives:
+// - modelId from items[*].modelId
+// - tokenBlueprintId from items[*].inventoryId (2nd segment)
 func (q *OrderPurchasedQuery) ListEligiblePairsByAvatarID(ctx context.Context, avatarID string) (OrderPurchasedResult, error) {
 	if q == nil || q.FS == nil {
 		return OrderPurchasedResult{}, ErrOrderPurchasedQueryNotConfigured
@@ -86,17 +89,9 @@ func (q *OrderPurchasedQuery) ListEligiblePairsByAvatarID(ctx context.Context, a
 	if ordersCol == "" {
 		ordersCol = "orders"
 	}
-	productsCol := strings.TrimSpace(q.ProductsCol)
-	if productsCol == "" {
-		productsCol = "products"
-	}
-	tokensCol := strings.TrimSpace(q.TokensCol)
-	if tokensCol == "" {
-		tokensCol = "tokens"
-	}
 
 	start := time.Now()
-	log.Printf("[order_purchased_query] start avatarId=%s ordersCol=%q productsCol=%q tokensCol=%q", mask(aid), ordersCol, productsCol, tokensCol)
+	log.Printf("[order_purchased_query] start avatarId=%s ordersCol=%q", mask(aid), ordersCol)
 
 	// 1) orders where avatarId == aid AND paid == true
 	it := q.FS.Collection(ordersCol).
@@ -105,22 +100,16 @@ func (q *OrderPurchasedQuery) ListEligiblePairsByAvatarID(ctx context.Context, a
 		Documents(ctx)
 	defer it.Stop()
 
-	// cache to reduce reads
-	modelByProduct := map[string]string{}
-	tbByProduct := map[string]string{}
-
 	var (
-		pairs              []PurchasedPair
-		ordersScanned      int
-		ordersWithItems    int
-		itemsScanned       int
-		itemsEligible      int
-		itemsMissingPID    int
-		itemsNotEligible   int
-		productsFetched    int
-		tokensFetched      int
-		productResolveFail int
-		tokenResolveFail   int
+		pairs                   []PurchasedPair
+		ordersScanned           int
+		ordersWithItems         int
+		itemsScanned            int
+		itemsEligible           int
+		itemsNotEligible        int
+		itemsMissingModelID     int
+		itemsMissingInventoryID int
+		pairsAdded              int
 	)
 
 	for {
@@ -175,59 +164,36 @@ func (q *OrderPurchasedQuery) ListEligiblePairsByAvatarID(ctx context.Context, a
 				continue
 			}
 
-			pid := strings.TrimSpace(getString(m, "productId", "productID", "product_id"))
-			if pid == "" {
-				itemsMissingPID++
-				log.Printf("[order_purchased_query] WARN: eligible item missing productId orderId=%s", mask(orderID))
+			// ✅ modelId is required (productId is NOT used in your real data)
+			modelID := strings.TrimSpace(getString(m, "modelId", "modelID", "model_id"))
+			if modelID == "" {
+				itemsMissingModelID++
+				log.Printf("[order_purchased_query] WARN: eligible item missing modelId orderId=%s", mask(orderID))
 				continue
 			}
+
+			// ✅ tokenBlueprintId is derived from inventoryId (2nd segment)
+			invID := strings.TrimSpace(getString(m, "inventoryId", "inventoryID", "inventory_id"))
+			if invID == "" {
+				itemsMissingInventoryID++
+				log.Printf("[order_purchased_query] WARN: eligible item missing inventoryId orderId=%s modelId=%s", mask(orderID), mask(modelID))
+				continue
+			}
+
+			tbID := strings.TrimSpace(tokenBlueprintIDFromInventoryID(invID))
+			if tbID == "" {
+				itemsMissingInventoryID++
+				log.Printf("[order_purchased_query] WARN: tokenBlueprintId not derivable from inventoryId orderId=%s modelId=%s inventoryId=%s",
+					mask(orderID), mask(modelID), mask(invID))
+				continue
+			}
+
+			// optional (compat): productId may not exist in real data
+			pid := strings.TrimSpace(getString(m, "productId", "productID", "product_id"))
 
 			itemsEligible++
-			log.Printf("[order_purchased_query] eligible item orderId=%s productId=%s", mask(orderID), mask(pid))
-
-			// 3) product -> modelId
-			modelID, ok := modelByProduct[pid]
-			if !ok {
-				mid, rerr := q.resolveModelIDByProductID(ctx, productsCol, pid)
-				if rerr != nil {
-					productResolveFail++
-					log.Printf("[order_purchased_query] WARN: resolve modelId failed orderId=%s productId=%s err=%v", mask(orderID), mask(pid), rerr)
-					continue
-				}
-				modelID = mid
-				modelByProduct[pid] = modelID
-				productsFetched++
-				log.Printf("[order_purchased_query] resolved modelId orderId=%s productId=%s modelId=%s (fetched)", mask(orderID), mask(pid), mask(modelID))
-			} else {
-				log.Printf("[order_purchased_query] resolved modelId orderId=%s productId=%s modelId=%s (cache)", mask(orderID), mask(pid), mask(modelID))
-			}
-			if strings.TrimSpace(modelID) == "" {
-				productResolveFail++
-				log.Printf("[order_purchased_query] WARN: modelId empty after resolve orderId=%s productId=%s", mask(orderID), mask(pid))
-				continue
-			}
-
-			// 4) token -> tokenBlueprintId (docId = productId)
-			tbID, ok := tbByProduct[pid]
-			if !ok {
-				tbid, rerr := q.resolveTokenBlueprintIDByProductID(ctx, tokensCol, pid)
-				if rerr != nil {
-					tokenResolveFail++
-					log.Printf("[order_purchased_query] WARN: resolve tokenBlueprintId failed orderId=%s productId=%s err=%v", mask(orderID), mask(pid), rerr)
-					continue
-				}
-				tbID = tbid
-				tbByProduct[pid] = tbID
-				tokensFetched++
-				log.Printf("[order_purchased_query] resolved tokenBlueprintId orderId=%s productId=%s tokenBlueprintId=%s (fetched)", mask(orderID), mask(pid), mask(tbID))
-			} else {
-				log.Printf("[order_purchased_query] resolved tokenBlueprintId orderId=%s productId=%s tokenBlueprintId=%s (cache)", mask(orderID), mask(pid), mask(tbID))
-			}
-			if strings.TrimSpace(tbID) == "" {
-				tokenResolveFail++
-				log.Printf("[order_purchased_query] WARN: tokenBlueprintId empty after resolve orderId=%s productId=%s", mask(orderID), mask(pid))
-				continue
-			}
+			log.Printf("[order_purchased_query] eligible item orderId=%s modelId=%s tokenBlueprintId=%s productId=%s",
+				mask(orderID), mask(modelID), mask(tbID), mask(pid))
 
 			p := PurchasedPair{
 				OrderID:          orderID,
@@ -236,27 +202,25 @@ func (q *OrderPurchasedQuery) ListEligiblePairsByAvatarID(ctx context.Context, a
 				TokenBlueprintID: tbID,
 			}
 			pairs = append(pairs, p)
+			pairsAdded++
 
-			log.Printf("[order_purchased_query] pair added orderId=%s productId=%s modelId=%s tokenBlueprintId=%s",
-				mask(orderID), mask(pid), mask(modelID), mask(tbID))
+			log.Printf("[order_purchased_query] pair added orderId=%s modelId=%s tokenBlueprintId=%s productId=%s",
+				mask(orderID), mask(modelID), mask(tbID), mask(pid))
 		}
 	}
 
 	elapsed := time.Since(start)
 	log.Printf(
-		"[order_purchased_query] done avatarId=%s ordersScanned=%d ordersWithItems=%d itemsScanned=%d itemsEligible=%d itemsNotEligible=%d itemsMissingProductId=%d pairs=%d productsFetched=%d tokensFetched=%d productResolveFail=%d tokenResolveFail=%d elapsed=%s",
+		"[order_purchased_query] done avatarId=%s ordersScanned=%d ordersWithItems=%d itemsScanned=%d itemsEligible=%d itemsNotEligible=%d itemsMissingModelId=%d itemsMissingInventoryId=%d pairs=%d elapsed=%s",
 		mask(aid),
 		ordersScanned,
 		ordersWithItems,
 		itemsScanned,
 		itemsEligible,
 		itemsNotEligible,
-		itemsMissingPID,
+		itemsMissingModelID,
+		itemsMissingInventoryID,
 		len(pairs),
-		productsFetched,
-		tokensFetched,
-		productResolveFail,
-		tokenResolveFail,
 		elapsed.String(),
 	)
 
@@ -267,57 +231,27 @@ func (q *OrderPurchasedQuery) ListEligiblePairsByAvatarID(ctx context.Context, a
 }
 
 // ------------------------------------------------------------
-// Resolvers (Firestore)
-// ------------------------------------------------------------
-
-func (q *OrderPurchasedQuery) resolveModelIDByProductID(ctx context.Context, productsCol string, productID string) (string, error) {
-	pid := strings.TrimSpace(productID)
-	if pid == "" {
-		return "", errors.New("productId is empty")
-	}
-
-	snap, err := q.FS.Collection(productsCol).Doc(pid).Get(ctx)
-	if err != nil {
-		return "", err
-	}
-	raw := snap.Data()
-	if raw == nil {
-		return "", fmt.Errorf("product doc is empty (productId=%s)", pid)
-	}
-
-	modelID := strings.TrimSpace(getString(raw, "modelId", "modelID", "model_id"))
-	if modelID == "" {
-		return "", fmt.Errorf("modelId not found in product (productId=%s)", pid)
-	}
-	return modelID, nil
-}
-
-func (q *OrderPurchasedQuery) resolveTokenBlueprintIDByProductID(ctx context.Context, tokensCol string, productID string) (string, error) {
-	pid := strings.TrimSpace(productID)
-	if pid == "" {
-		return "", errors.New("productId is empty")
-	}
-
-	// tokens/{productId}
-	snap, err := q.FS.Collection(tokensCol).Doc(pid).Get(ctx)
-	if err != nil {
-		return "", err
-	}
-	raw := snap.Data()
-	if raw == nil {
-		return "", fmt.Errorf("token doc is empty (productId=%s)", pid)
-	}
-
-	tbID := strings.TrimSpace(getString(raw, "tokenBlueprintId", "tokenBlueprintID", "token_blueprint_id"))
-	if tbID == "" {
-		return "", fmt.Errorf("tokenBlueprintId not found in token (productId=%s)", pid)
-	}
-	return tbID, nil
-}
-
-// ------------------------------------------------------------
 // Helpers
 // ------------------------------------------------------------
+
+// tokenBlueprintIDFromInventoryID derives tokenBlueprintId from inventoryId.
+// Expected shape: "<productBlueprintId>__<tokenBlueprintId>__...__<modelId>"
+func tokenBlueprintIDFromInventoryID(inventoryID string) string {
+	s := strings.TrimSpace(inventoryID)
+	if s == "" {
+		return ""
+	}
+	parts := strings.Split(s, "__")
+	if len(parts) < 2 {
+		return ""
+	}
+	// ✅ tokenBlueprintId is the 2nd segment
+	tb := strings.TrimSpace(parts[1])
+	if tb == "" {
+		return ""
+	}
+	return tb
+}
 
 // isItemUntransferred checks item transfer flag.
 // Accepts both shapes:

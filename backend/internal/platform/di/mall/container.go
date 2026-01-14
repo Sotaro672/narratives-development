@@ -323,8 +323,9 @@ func NewContainer(ctx context.Context, infra *shared.Infra) (*Container, error) 
 		)
 
 		// ✅ tokens/{productId} を preview で返したいので TokenRepo を注入（optional）
+		// ★修正点: previewTokenReaderFS ではなく TokenReaderFS を注入する（rawログや tokenBlueprintId 読み取りが反映される）
 		if c.PreviewQ != nil {
-			c.PreviewQ.TokenRepo = previewTokenReaderFS{fs: fsClient}
+			c.PreviewQ.TokenRepo = outfs.NewTokenReaderFS(fsClient)
 		}
 
 		// ✅ 方針A: any ではなく *mallquery.OrderQuery を保持

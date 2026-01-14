@@ -12,16 +12,16 @@ import (
 
 /*
 責任と機能:
-- preview_query.go のスキャン結果（= productId から解決した modelId と productBlueprintId）と、
+- preview_query.go のスキャン結果（= productId から解決した modelId と tokenBlueprintId）と、
   order_purchased_query.go の検索結果（= avatarId の購入済み(paid=true)かつ items.transfer=false の (modelId, tokenBlueprintId) 集合）を突合する。
 - 一致判定:
   - scannedModelId と scannedTokenBlueprintId が、purchasedPairs のどれか1つと完全一致すれば OK。
 - Firestore への直接依存は持たず、既存 Query を合成して検証する（Query Orchestration）。
 
-注意:
-- 直近の方針変更により、tokenBlueprintId は tokens/{productId}.tokenBlueprintId から取る。
-- preview_query.go 側の productBlueprintId は「見た目表示用」であり、検証では tokenBlueprintId を使う方が正しい。
-  そのため、この Query は preview の tokens も参照して scannedTokenBlueprintId を構成する。
+今回の修正ポイント（あなたの要件）:
+- scannedModelId は products/{productId}.modelId（= PreviewQ が productId から解決する modelId）を使う
+- scannedTokenBlueprintId は tokens/{productId}.tokenBlueprintId（docId=productId）を使う
+- productBlueprintId への fallback は廃止（ここがズレの原因だったため）
 */
 
 var (
@@ -44,6 +44,9 @@ type PurchasedPairsProvider interface {
 }
 
 // ScanResultProvider is the minimal interface we need from preview_query.go.
+// IMPORTANT:
+// - PreviewModelInfo.Token は tokens/{productId} 由来の情報を含むこと（docId=productId）
+// - TokenInfo に TokenBlueprintID が載っていること（= tokens/{productId}.tokenBlueprintId）
 type ScanResultProvider interface {
 	ResolveModelInfoByProductID(ctx context.Context, productID string) (*PreviewModelInfo, error)
 }
@@ -81,12 +84,25 @@ type VerifyResult struct {
 	Match   *ModelTokenPair `json:"match,omitempty"`
 }
 
+// ✅ A案: handler 側の ScanVerifyQuery interface に合わせるためのメソッドを追加
+// - 実体は VerifyMatch を呼ぶ薄いアダプタ
+func (q *OrderScanVerifyQuery) VerifyScanPurchasedByAvatarID(ctx context.Context, avatarID string, productID string) (VerifyResult, error) {
+	return q.VerifyMatch(ctx, VerifyInput{
+		AvatarID:  avatarID,
+		ProductID: productID,
+	})
+}
+
 // VerifyMatch verifies whether the scanned pair exists in purchased(untransferred) pairs.
 func (q *OrderScanVerifyQuery) VerifyMatch(ctx context.Context, in VerifyInput) (VerifyResult, error) {
 	start := time.Now()
 
 	if q == nil || q.PurchasedQ == nil || q.PreviewQ == nil {
-		log.Printf("[order_scan_verify_query] ERROR: not configured purchasedQ=%t previewQ=%t", q != nil && q.PurchasedQ != nil, q != nil && q.PreviewQ != nil)
+		log.Printf(
+			"[order_scan_verify_query] ERROR: not configured purchasedQ=%t previewQ=%t",
+			q != nil && q.PurchasedQ != nil,
+			q != nil && q.PreviewQ != nil,
+		)
 		return VerifyResult{}, ErrOrderScanVerifyQueryNotConfigured
 	}
 
@@ -104,7 +120,7 @@ func (q *OrderScanVerifyQuery) VerifyMatch(ctx context.Context, in VerifyInput) 
 
 	log.Printf("[order_scan_verify_query] start avatarId=%s productId=%s", mask(avatarID), mask(productID))
 
-	// 1) scan side: productId -> modelId (+ tokenBlueprintId from tokens/{productId} via PreviewModelInfo.Token)
+	// 1) scan side: productId -> modelId + tokenBlueprintId(tokes/{productId}.tokenBlueprintId)
 	info, err := q.PreviewQ.ResolveModelInfoByProductID(ctx, productID)
 	if err != nil {
 		log.Printf("[order_scan_verify_query] ERROR: preview resolve failed avatarId=%s productId=%s err=%v", mask(avatarID), mask(productID), err)
@@ -121,24 +137,37 @@ func (q *OrderScanVerifyQuery) VerifyMatch(ctx context.Context, in VerifyInput) 
 		return VerifyResult{}, fmt.Errorf("order_scan_verify_query: scanned modelId is empty")
 	}
 
-	// ✅ tokenBlueprintId は token テーブル由来を正とする（preview側は TokenRepo 注入済み前提）
+	// ✅ token must exist (tokens/{productId} が存在する or TokenRepo 注入されている)
 	if info.Token == nil {
-		log.Printf("[order_scan_verify_query] ERROR: token not found (preview TokenRepo not injected or tokens/{productId} missing) avatarId=%s productId=%s modelId=%s",
-			mask(avatarID), mask(productID), mask(scannedModelID))
+		log.Printf(
+			"[order_scan_verify_query] ERROR: token not found (tokens/{productId} missing or PreviewQ.TokenRepo not injected) avatarId=%s productId=%s modelId=%s",
+			mask(avatarID),
+			mask(productID),
+			mask(scannedModelID),
+		)
 		return VerifyResult{}, ErrOrderScanVerifyTokenNotFound
 	}
 
-	// NOTE:
-	// 本来は tokens/{productId}.tokenBlueprintId を TokenInfo に載せて scannedTBID を構成するべき。
-	// ただし現状 TokenInfo に TokenBlueprintID が無いので、暫定的に productBlueprintId を fallback として使用する。
-	scannedTBID := strings.TrimSpace(info.ProductBlueprintID)
+	// ✅ scanned tokenBlueprintId is tokens/{productId}.tokenBlueprintId (docId=productId)
+	// NOTE: TokenInfo に TokenBlueprintID が載っている前提
+	scannedTBID := strings.TrimSpace(info.Token.TokenBlueprintID)
 
-	log.Printf("[order_scan_verify_query] scanned avatarId=%s productId=%s modelId=%s tokenBlueprintId=%s (fallback=productBlueprintId) tokenPresent=%t",
-		mask(avatarID), mask(productID), mask(scannedModelID), mask(scannedTBID), info.Token != nil)
+	log.Printf(
+		"[order_scan_verify_query] scanned avatarId=%s productId=%s modelId=%s tokenBlueprintId=%s (from tokens/{productId}) tokenPresent=%t",
+		mask(avatarID),
+		mask(productID),
+		mask(scannedModelID),
+		mask(scannedTBID),
+		info.Token != nil,
+	)
 
 	if scannedTBID == "" {
-		log.Printf("[order_scan_verify_query] ERROR: scanned tokenBlueprintId empty avatarId=%s productId=%s modelId=%s",
-			mask(avatarID), mask(productID), mask(scannedModelID))
+		log.Printf(
+			"[order_scan_verify_query] ERROR: scanned tokenBlueprintId empty (tokens/{productId}.tokenBlueprintId missing) avatarId=%s productId=%s modelId=%s",
+			mask(avatarID),
+			mask(productID),
+			mask(scannedModelID),
+		)
 		return VerifyResult{}, ErrOrderScanVerifyTokenBlueprintEmpty
 	}
 
@@ -191,11 +220,24 @@ func (q *OrderScanVerifyQuery) VerifyMatch(ctx context.Context, in VerifyInput) 
 	elapsed := time.Since(start)
 
 	if match != nil {
-		log.Printf("[order_scan_verify_query] MATCHED avatarId=%s productId=%s scanned(modelId=%s tokenBlueprintId=%s) elapsed=%s",
-			mask(avatarID), mask(productID), mask(scannedModelID), mask(scannedTBID), elapsed.String())
+		log.Printf(
+			"[order_scan_verify_query] MATCHED avatarId=%s productId=%s scanned(modelId=%s tokenBlueprintId=%s) elapsed=%s",
+			mask(avatarID),
+			mask(productID),
+			mask(scannedModelID),
+			mask(scannedTBID),
+			elapsed.String(),
+		)
 	} else {
-		log.Printf("[order_scan_verify_query] NOT_MATCHED avatarId=%s productId=%s scanned(modelId=%s tokenBlueprintId=%s) purchasedPairs=%d elapsed=%s",
-			mask(avatarID), mask(productID), mask(scannedModelID), mask(scannedTBID), len(outPairs), elapsed.String())
+		log.Printf(
+			"[order_scan_verify_query] NOT_MATCHED avatarId=%s productId=%s scanned(modelId=%s tokenBlueprintId=%s) purchasedPairs=%d elapsed=%s",
+			mask(avatarID),
+			mask(productID),
+			mask(scannedModelID),
+			mask(scannedTBID),
+			len(outPairs),
+			elapsed.String(),
+		)
 	}
 
 	out := VerifyResult{
