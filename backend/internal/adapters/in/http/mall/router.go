@@ -48,6 +48,10 @@ type Deps struct {
 	// - POST /mall/me/orders/scan/verify
 	OrderScanVerify http.Handler
 
+	// ✅ NEW: order scan transfer (authenticated)
+	// - POST /mall/me/orders/scan/transfer
+	OrderScanTransfer http.Handler
+
 	// ✅ NEW: owner resolve (walletAddress/toAddress -> avatarId or brandId)
 	// - /mall/owners/resolve : public OK (tokenの所有者表示など)
 	OwnerResolve http.Handler
@@ -179,6 +183,11 @@ func Register(mux *http.ServeMux, deps Deps) {
 	// - POST /mall/me/orders/scan/verify
 	handleSafe(mux, "/mall/me/orders/scan/verify", deps.OrderScanVerify, "OrderScanVerify(me)")
 	handleSafe(mux, "/mall/me/orders/scan/verify/", deps.OrderScanVerify, "OrderScanVerify(me)")
+
+	// ✅ NEW: order scan transfer (authenticated)
+	// - POST /mall/me/orders/scan/transfer
+	handleSafe(mux, "/mall/me/orders/scan/transfer", deps.OrderScanTransfer, "OrderScanTransfer(me)")
+	handleSafe(mux, "/mall/me/orders/scan/transfer/", deps.OrderScanTransfer, "OrderScanTransfer(me)")
 
 	// ✅ NEW: owner resolve (walletAddress/toAddress -> avatarId or brandId)
 	handleSafe(mux, "/mall/owners/resolve", deps.OwnerResolve, "OwnerResolve")

@@ -426,3 +426,86 @@ class MallTokenInfo {
     'mintedAt': mintedAt,
   };
 }
+
+class MallScanTransferResponse {
+  MallScanTransferResponse({
+    required this.avatarId,
+    required this.productId,
+    required this.matched,
+    this.txSignature,
+    this.fromWallet,
+    this.toWallet,
+    this.updatedToAddress,
+  });
+
+  final String avatarId;
+  final String productId;
+
+  final bool matched;
+
+  // Transfer result
+  final String? txSignature;
+
+  // Optional debug/info
+  final String? fromWallet;
+  final String? toWallet;
+
+  // tokens/{productId}.toAddress updated?
+  final bool? updatedToAddress;
+
+  static String _s(dynamic v) => (v ?? '').toString().trim();
+
+  static bool _b(dynamic v) {
+    if (v == null) {
+      return false;
+    }
+    if (v is bool) {
+      return v;
+    }
+    if (v is num) {
+      return v != 0;
+    }
+    final s = v.toString().trim().toLowerCase();
+    return s == 'true' || s == '1' || s == 'yes';
+  }
+
+  static bool? _bNullable(dynamic v) {
+    if (v == null) {
+      return null;
+    }
+    return _b(v);
+  }
+
+  factory MallScanTransferResponse.fromJson(Map<String, dynamic> j) {
+    // unwrap { data: ... } if exists (same pattern as other models)
+    final maybeData = j['data'];
+    if (maybeData is Map<String, dynamic>) {
+      return MallScanTransferResponse.fromJson(maybeData);
+    }
+    if (maybeData is Map) {
+      return MallScanTransferResponse.fromJson(
+        Map<String, dynamic>.from(maybeData),
+      );
+    }
+
+    return MallScanTransferResponse(
+      avatarId: _s(j['avatarId']),
+      productId: _s(j['productId']),
+      matched: _b(j['matched']),
+      txSignature: _s(j['txSignature']).isEmpty ? null : _s(j['txSignature']),
+      fromWallet: _s(j['fromWallet']).isEmpty ? null : _s(j['fromWallet']),
+      toWallet: _s(j['toWallet']).isEmpty ? null : _s(j['toWallet']),
+      updatedToAddress: _bNullable(j['updatedToAddress']),
+    );
+  }
+
+  Map<String, dynamic> toJson() => {
+    'avatarId': avatarId,
+    'productId': productId,
+    'matched': matched,
+    'txSignature': txSignature,
+    'fromWallet': fromWallet,
+    'toWallet': toWallet,
+    'updatedToAddress': updatedToAddress,
+  };
+}

@@ -3,9 +3,8 @@ package firestore
 
 import (
 	"context"
-	"fmt"
-	"log"
 	"strings"
+	"time"
 
 	"cloud.google.com/go/firestore"
 	"google.golang.org/grpc/codes"
@@ -20,6 +19,17 @@ type TokenReaderFS struct {
 
 func NewTokenReaderFS(client *firestore.Client) *TokenReaderFS {
 	return &TokenReaderFS{Client: client}
+}
+
+// Firestore tokens collection DTO（実データのフィールド名を正として固定）
+type tokenDoc struct {
+	BrandID            string    `firestore:"brandId"`
+	MetadataURI        string    `firestore:"metadataUri"`
+	MintAddress        string    `firestore:"mintAddress"`
+	MintedAt           time.Time `firestore:"mintedAt"` // timestamp
+	OnChainTxSignature string    `firestore:"onChainTxSignature"`
+	ToAddress          string    `firestore:"toAddress"`
+	TokenBlueprintID   string    `firestore:"tokenBlueprintId"`
 }
 
 // preview_query.go の mall.TokenReader を満たす
@@ -40,104 +50,30 @@ func (r *TokenReaderFS) GetByProductID(ctx context.Context, productID string) (*
 		return nil, err
 	}
 
-	raw := snap.Data()
-	if raw == nil {
-		// doc はあるが中身が無いケースは token無し相当として扱う
-		log.Printf(`[token_reader_fs] tokens/%s raw=nil`, mask(id))
+	// doc はあるが中身が無いケースは token無し相当として扱う
+	if snap.Data() == nil {
 		return nil, nil
 	}
 
-	// ✅ DEBUG: raw を出す（型も確認できるように）
-	// Firestore の map は value が interface{} なので %+v で十分に形が見える。
-	log.Printf(`[token_reader_fs] tokens/%s raw=%+v`, mask(id), raw)
-	// keyごとの型も見たい時用（必要なら活かしてください）
-	for k, v := range raw {
-		log.Printf(`[token_reader_fs] tokens/%s raw[%s]=%T %v`, mask(id), k, v, v)
+	var d tokenDoc
+	if err := snap.DataTo(&d); err != nil {
+		return nil, err
 	}
 
-	// ✅ docID=productId 前提なので、ProductID はまず引数由来で固定
 	out := &mallquery.TokenInfo{
-		ProductID: id,
+		ProductID:          id,
+		BrandID:            strings.TrimSpace(d.BrandID),
+		TokenBlueprintID:   strings.TrimSpace(d.TokenBlueprintID),
+		MintAddress:        strings.TrimSpace(d.MintAddress),
+		ToAddress:          strings.TrimSpace(d.ToAddress),
+		MetadataURI:        strings.TrimSpace(d.MetadataURI),
+		OnChainTxSignature: strings.TrimSpace(d.OnChainTxSignature),
 	}
 
-	// map から柔軟に読む（Firestoreがスキーマレスなので）
-	if v, ok := raw["brandId"].(string); ok {
-		out.BrandID = strings.TrimSpace(v)
-	} else if v, ok := raw["brandID"].(string); ok {
-		out.BrandID = strings.TrimSpace(v)
+	// mintedAt は Firestore timestamp（time.Time）として受け、文字列に落とす（DTOがstring前提のため）
+	if !d.MintedAt.IsZero() {
+		out.MintedAt = d.MintedAt.UTC().Format(time.RFC3339Nano)
 	}
-
-	// ✅ tokenBlueprintId を拾う（命名揺れ吸収）
-	if v, ok := raw["tokenBlueprintId"].(string); ok {
-		out.TokenBlueprintID = strings.TrimSpace(v)
-	} else if v, ok := raw["tokenBlueprintID"].(string); ok {
-		out.TokenBlueprintID = strings.TrimSpace(v)
-	} else if v, ok := raw["token_blueprint_id"].(string); ok {
-		out.TokenBlueprintID = strings.TrimSpace(v)
-	}
-
-	if v, ok := raw["mintAddress"].(string); ok {
-		out.MintAddress = strings.TrimSpace(v)
-	} else if v, ok := raw["mint_address"].(string); ok {
-		out.MintAddress = strings.TrimSpace(v)
-	}
-
-	// ✅ A案: tokens にキャッシュする
-	if v, ok := raw["toAddress"].(string); ok {
-		out.ToAddress = strings.TrimSpace(v)
-	} else if v, ok := raw["to_address"].(string); ok {
-		out.ToAddress = strings.TrimSpace(v)
-	}
-
-	if v, ok := raw["metadataUri"].(string); ok {
-		out.MetadataURI = strings.TrimSpace(v)
-	} else if v, ok := raw["metadataURI"].(string); ok {
-		out.MetadataURI = strings.TrimSpace(v)
-	} else if v, ok := raw["metadata_uri"].(string); ok {
-		out.MetadataURI = strings.TrimSpace(v)
-	}
-
-	// ✅ 命名揺れ吸収: onChainTxSignature 系
-	if v, ok := raw["onChainTxSignature"].(string); ok {
-		out.OnChainTxSignature = strings.TrimSpace(v)
-	} else if v, ok := raw["onchainTxSignature"].(string); ok {
-		out.OnChainTxSignature = strings.TrimSpace(v)
-	} else if v, ok := raw["txSignature"].(string); ok {
-		out.OnChainTxSignature = strings.TrimSpace(v)
-	} else if v, ok := raw["signature"].(string); ok {
-		out.OnChainTxSignature = strings.TrimSpace(v)
-	}
-
-	// mintedAt（任意）
-	// Firestore の timestamp のことが多いので、string以外も吸収してログで確認できるようにする
-	if v, ok := raw["mintedAt"].(string); ok {
-		out.MintedAt = strings.TrimSpace(v)
-	} else if v, ok := raw["minted_at"].(string); ok {
-		out.MintedAt = strings.TrimSpace(v)
-	} else if v, ok := raw["mintedAt"]; ok && v != nil {
-		// 文字列で取れない場合は fmt.Sprint で落とす（デバッグ用。必要ならDTO側をtimestamp対応に変更）
-		out.MintedAt = strings.TrimSpace(fmt.Sprint(v))
-	}
-
-	log.Printf(
-		`[token_reader_fs] tokens/%s mapped brandId=%q tokenBlueprintId=%q toAddress=%q mintAddress=%q`,
-		mask(id),
-		mask(out.BrandID),
-		mask(out.TokenBlueprintID),
-		mask(out.ToAddress),
-		mask(out.MintAddress),
-	)
 
 	return out, nil
-}
-
-func mask(s string) string {
-	t := strings.TrimSpace(s)
-	if t == "" {
-		return ""
-	}
-	if len(t) <= 10 {
-		return t
-	}
-	return t[:4] + "***" + t[len(t)-4:]
 }

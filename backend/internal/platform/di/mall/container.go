@@ -4,11 +4,16 @@ package mall
 import (
 	"context"
 	"errors"
+	"fmt"
 	"log"
 	"os"
 	"strings"
+	"time"
 
 	"cloud.google.com/go/firestore"
+	secretmanager "cloud.google.com/go/secretmanager/apiv1"
+	secretmanagerpb "cloud.google.com/go/secretmanager/apiv1/secretmanagerpb"
+
 	"google.golang.org/api/iterator"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -29,7 +34,7 @@ import (
 	gcscommon "narratives/internal/adapters/out/gcs/common"
 	httpout "narratives/internal/adapters/out/http"
 
-	// ✅ Solana wallet service
+	// ✅ Solana infra (TokenTransferExecutorSolana etc.)
 	solanainfra "narratives/internal/infra/solana"
 
 	// domains
@@ -65,6 +70,10 @@ type Container struct {
 	PaymentUC         *usecase.PaymentUsecase
 	OrderUC           *usecase.OrderUsecase
 	InvoiceUC         *usecase.InvoiceUsecase
+
+	// ✅ NEW: order scan transfer usecase
+	// register.go は cont.TransferUC を参照するため、この名前に統一する
+	TransferUC *usecase.TransferUsecase
 
 	// ✅ Case A: /mall/me/payments で payment 起票後に（必要なら）webhook を叩くオーケストレーション
 	PaymentFlowUC *usecase.PaymentFlowUsecase
@@ -323,7 +332,6 @@ func NewContainer(ctx context.Context, infra *shared.Infra) (*Container, error) 
 		)
 
 		// ✅ tokens/{productId} を preview で返したいので TokenRepo を注入（optional）
-		// ★修正点: previewTokenReaderFS ではなく TokenReaderFS を注入する（rawログや tokenBlueprintId 読み取りが反映される）
 		if c.PreviewQ != nil {
 			c.PreviewQ.TokenRepo = outfs.NewTokenReaderFS(fsClient)
 		}
@@ -332,7 +340,6 @@ func NewContainer(ctx context.Context, infra *shared.Infra) (*Container, error) 
 		c.OrderQ = mallquery.NewOrderQuery(fsClient)
 
 		// ✅ NEW: OrderPurchasedQuery
-		// - avatarId を受け、paid=true & items.transfer=false の (modelId, tokenBlueprintId) を返す Query
 		c.OrderPurchasedQ = mallquery.NewOrderPurchasedQuery(fsClient)
 
 		// ✅ NEW: OrderScanVerifyQuery (PurchasedQ + PreviewQ を合成)
@@ -368,17 +375,90 @@ func NewContainer(ctx context.Context, infra *shared.Infra) (*Container, error) 
 		avatarReader := avatarWalletAddressReaderFS{fs: fsClient, col: avatarsCol}
 
 		// ✅ NewOwnerResolveQuery は (avatarReader, brandReader) の順で受け取る定義
-		// （= 第1引数: AvatarWalletAddressReader / 第2引数: BrandWalletAddressReader）
 		c.OwnerResolveQ = sharedquery.NewOwnerResolveQuery(avatarReader, brandReader)
 	}
 
+	// --------------------------------------------------------
+	// ✅ TransferUsecase wiring (order scan verified -> brand->avatar transfer)
+	// --------------------------------------------------------
+	{
+		// 0) ScanVerifier: OrderScanVerifyQuery -> usecase.ScanVerifier
+		var scanVerifier usecase.ScanVerifier
+		if c.OrderScanVerifyQ != nil {
+			scanVerifier = mallquery.NewScanVerifierAdapter(c.OrderScanVerifyQ)
+		} else {
+			scanVerifier = nil
+		}
+
+		// 1) OrderRepoForTransfer (orders item lock/mark)
+		//    - outfs/transfer_repository_fs.go で NewOrderRepoForTransferFS を提供している前提
+		var orderRepoForTransfer usecase.OrderRepoForTransfer = outfs.NewOrderRepoForTransferFS(fsClient)
+
+		// 2) TokenResolver / TokenOwnerUpdater (Firestore tokens/{productId})
+		var tokenResolver usecase.TokenResolver = &tokenResolverFS{fs: fsClient, col: "tokens"}
+		var tokenOwnerUpdater usecase.TokenOwnerUpdater = &tokenOwnerUpdaterFS{fs: fsClient, col: "tokens"}
+
+		// 3) BrandWalletResolver / AvatarWalletResolver
+		brandRepo := outfs.NewBrandRepositoryFS(fsClient)
+		var walletResolver usecase.BrandWalletResolver = outfs.NewWalletResolverRepoFS(brandRepo, walletRepo)
+		// same concrete impl also satisfies AvatarWalletResolver
+		var avatarWalletResolver usecase.AvatarWalletResolver = walletResolver.(usecase.AvatarWalletResolver)
+
+		// 4) WalletSecretProvider (Secret Manager)
+		//    - secret name rule (configurable):
+		//      projects/<projectID>/secrets/<prefix><walletAddress>/versions/latest
+		//    - payload format: JSON int array string "[1,2,...]" (executor が対応)
+		var secrets usecase.WalletSecretProvider = nil
+		sm, smErr := secretmanager.NewClient(ctx)
+		if smErr != nil {
+			log.Printf("[di.mall] WARN: secretmanager.NewClient failed: %v (TransferUC will be nil)", smErr)
+		} else {
+			secretPrefix := strings.TrimSpace(os.Getenv("SOLANA_WALLET_SECRET_PREFIX"))
+			if secretPrefix == "" {
+				secretPrefix = "solana-wallet-" // default (override recommended)
+			}
+			if strings.TrimSpace(projectID) == "" {
+				log.Printf("[di.mall] WARN: projectID is empty; SecretManager signer provider disabled (TransferUC will be nil)")
+			} else {
+				secrets = &walletSecretProviderSM{
+					sm:            sm,
+					projectID:     projectID,
+					secretPrefix:  secretPrefix,
+					version:       "latest",
+					requirePrefix: true,
+				}
+			}
+		}
+
+		// 5) TokenTransferExecutor (Solana)
+		//    - RPC URL resolves from SOLANA_RPC_URL if empty
+		var executor usecase.TokenTransferExecutor = solanainfra.NewTokenTransferExecutorSolana("")
+
+		// 6) Build TransferUC only when truly conditional deps exist
+		//    NOTE: tokenResolver/orderRepo/executor はここで必ず構築できる（fsClient が必須のため）
+		if scanVerifier != nil && secrets != nil {
+			c.TransferUC = usecase.NewTransferUsecase(
+				scanVerifier,
+				orderRepoForTransfer,
+				tokenResolver,
+				tokenOwnerUpdater,
+				walletResolver,       // BrandWalletResolver
+				avatarWalletResolver, // AvatarWalletResolver
+				secrets,
+				executor,
+			)
+		} else {
+			// keep nil (safe)
+			c.TransferUC = nil
+		}
+	}
+
 	log.Printf(
-		"[di.mall] container built (firestore=%t gcs=%t firebaseAuth=%t avatarUC=%t avatarWalletSvc=%t cartUC=%t cartRepo=%t paymentUC=%t paymentFlowUC=%t invoiceUC=%t meAvatarRepo=%t inventoryUC=%t tokenBlueprintRepo=%t tokenIconResolver=%t selfBaseURL=%t previewQ=%t ownerResolveQ=%t orderPurchasedQ=%t orderScanVerifyQ=%t)",
+		"[di.mall] container built (firestore=%t gcs=%t firebaseAuth=%t avatarUC=%t cartUC=%t cartRepo=%t paymentUC=%t paymentFlowUC=%t invoiceUC=%t meAvatarRepo=%t inventoryUC=%t tokenBlueprintRepo=%t tokenIconResolver=%t selfBaseURL=%t previewQ=%t ownerResolveQ=%t orderPurchasedQ=%t orderScanVerifyQ=%t transferUC=%t)",
 		c.Infra.Firestore != nil,
 		c.Infra.GCS != nil,
 		c.Infra.FirebaseAuth != nil,
 		c.AvatarUC != nil,
-		avatarWalletSvc != nil,
 		c.CartUC != nil,
 		c.CartRepo != nil,
 		c.PaymentUC != nil,
@@ -393,6 +473,7 @@ func NewContainer(ctx context.Context, infra *shared.Infra) (*Container, error) 
 		c.OwnerResolveQ != nil,
 		c.OrderPurchasedQ != nil,
 		c.OrderScanVerifyQ != nil,
+		c.TransferUC != nil,
 	)
 
 	return c, nil
@@ -499,74 +580,6 @@ func (r previewProductBlueprintReaderFS) GetByID(ctx context.Context, id string)
 		return pbdom.ProductBlueprint{}, mallquery.ErrPreviewQueryNotConfigured
 	}
 	return r.pb.GetByID(ctx, id)
-}
-
-// ------------------------------------------------------------
-// PreviewQuery: TokenReader adapter (Firestore tokens/{productId})
-// ------------------------------------------------------------
-
-type previewTokenReaderFS struct {
-	fs *firestore.Client
-}
-
-// GetByProductID reads tokens/{productId} and maps to mallquery.TokenInfo.
-// - token が存在しない（未mint）なら (nil, nil) を返す
-func (r previewTokenReaderFS) GetByProductID(ctx context.Context, productID string) (*mallquery.TokenInfo, error) {
-	if r.fs == nil {
-		return nil, mallquery.ErrPreviewQueryNotConfigured
-	}
-	pid := strings.TrimSpace(productID)
-	if pid == "" {
-		return nil, mallquery.ErrInvalidProductID
-	}
-
-	snap, err := r.fs.Collection("tokens").Doc(pid).Get(ctx)
-	if err != nil {
-		if status.Code(err) == codes.NotFound {
-			return nil, nil
-		}
-		return nil, err
-	}
-
-	raw := snap.Data()
-	if raw == nil {
-		return nil, nil
-	}
-
-	getStr := func(keys ...string) string {
-		for _, k := range keys {
-			if v, ok := raw[k]; ok {
-				if s, ok := v.(string); ok {
-					s = strings.TrimSpace(s)
-					if s != "" {
-						return s
-					}
-				}
-			}
-		}
-		return ""
-	}
-
-	// ✅ TokenInfo から TokenBlueprintID は削除済み前提
-	// ✅ A案: tokens 側に toAddress / metadataUri をキャッシュしている前提
-	out := &mallquery.TokenInfo{
-		ProductID: pid,
-		BrandID:   getStr("brandId", "brandID"),
-
-		MintAddress: getStr("mintAddress", "mint_address"),
-
-		ToAddress:   getStr("toAddress", "to_address"),
-		MetadataURI: getStr("metadataUri", "metadataURI", "metadata_uri"),
-
-		OnChainTxSignature: getStr(
-			"onChainTxSignature",
-			"onchainTxSignature",
-			"txSignature",
-			"signature",
-		),
-	}
-
-	return out, nil
 }
 
 // ------------------------------------------------------------
@@ -684,4 +697,161 @@ func (r tokenIconURLResolver) ResolveForResponse(storedObjectPath string, stored
 
 	p = strings.TrimLeft(p, "/")
 	return gcscommon.GCSPublicURL(b, p, defaultTokenIconBucketDI)
+}
+
+// ============================================================
+// Transfer: minimal Firestore ports
+// ============================================================
+
+var (
+	errTokenResolverNotConfigured  = errors.New("di.mall: tokenResolverFS not configured")
+	errTokenDocNotFound            = errors.New("di.mall: token doc not found")
+	errSecretProviderNotConfigured = errors.New("di.mall: walletSecretProviderSM not configured")
+)
+
+// tokenResolverFS implements usecase.TokenResolver by reading tokens/{productId}.
+type tokenResolverFS struct {
+	fs  *firestore.Client
+	col string // default "tokens"
+}
+
+func (r *tokenResolverFS) ResolveTokenByProductID(ctx context.Context, productID string) (usecase.TokenForTransfer, error) {
+	if r == nil || r.fs == nil {
+		return usecase.TokenForTransfer{}, errTokenResolverNotConfigured
+	}
+	pid := strings.TrimSpace(productID)
+	if pid == "" {
+		return usecase.TokenForTransfer{}, errors.New("tokenResolverFS: productId is empty")
+	}
+	col := strings.TrimSpace(r.col)
+	if col == "" {
+		col = "tokens"
+	}
+
+	snap, err := r.fs.Collection(col).Doc(pid).Get(ctx)
+	if err != nil {
+		if status.Code(err) == codes.NotFound {
+			return usecase.TokenForTransfer{}, errTokenDocNotFound
+		}
+		return usecase.TokenForTransfer{}, err
+	}
+	raw := snap.Data()
+	if raw == nil {
+		return usecase.TokenForTransfer{}, errTokenDocNotFound
+	}
+
+	getStr := func(keys ...string) string {
+		for _, k := range keys {
+			if v, ok := raw[k]; ok {
+				if s, ok := v.(string); ok {
+					s = strings.TrimSpace(s)
+					if s != "" {
+						return s
+					}
+				}
+			}
+		}
+		return ""
+	}
+
+	return usecase.TokenForTransfer{
+		ProductID: pid,
+		BrandID:   getStr("brandId", "brandID"),
+		MintAddress: getStr(
+			"mintAddress",
+			"mint_address",
+		),
+		TokenBlueprintID: getStr(
+			"tokenBlueprintId",
+			"tokenBlueprintID",
+			"token_blueprint_id",
+		),
+		ToAddress: getStr("toAddress", "to_address"),
+	}, nil
+}
+
+// tokenOwnerUpdaterFS implements usecase.TokenOwnerUpdater by updating tokens/{productId}.toAddress.
+type tokenOwnerUpdaterFS struct {
+	fs  *firestore.Client
+	col string // default "tokens"
+}
+
+func (r *tokenOwnerUpdaterFS) UpdateToAddressByProductID(ctx context.Context, productID string, newToAddress string, now time.Time, txSignature string) error {
+	if r == nil || r.fs == nil {
+		return errTokenResolverNotConfigured
+	}
+	pid := strings.TrimSpace(productID)
+	if pid == "" {
+		return errors.New("tokenOwnerUpdaterFS: productId is empty")
+	}
+	addr := strings.TrimSpace(newToAddress)
+	if addr == "" {
+		return errors.New("tokenOwnerUpdaterFS: newToAddress is empty")
+	}
+	col := strings.TrimSpace(r.col)
+	if col == "" {
+		col = "tokens"
+	}
+	if now.IsZero() {
+		now = time.Now().UTC()
+	}
+	now = now.UTC()
+
+	ref := r.fs.Collection(col).Doc(pid)
+
+	// best-effort merge update
+	_, err := ref.Set(ctx, map[string]any{
+		"toAddress":       addr,
+		"updatedAt":       now,
+		"lastTxSignature": strings.TrimSpace(txSignature),
+		"ownerUpdatedAt":  now,
+	}, firestore.MergeAll)
+	return err
+}
+
+// walletSecretProviderSM implements usecase.WalletSecretProvider using Secret Manager.
+type walletSecretProviderSM struct {
+	sm            *secretmanager.Client
+	projectID     string
+	secretPrefix  string
+	version       string
+	requirePrefix bool
+}
+
+func (p *walletSecretProviderSM) GetSigner(ctx context.Context, walletAddress string) (any, error) {
+	if p == nil || p.sm == nil {
+		return nil, errSecretProviderNotConfigured
+	}
+	addr := strings.TrimSpace(walletAddress)
+	if addr == "" {
+		return nil, errors.New("walletSecretProviderSM: walletAddress is empty")
+	}
+	prj := strings.TrimSpace(p.projectID)
+	if prj == "" {
+		return nil, errors.New("walletSecretProviderSM: projectID is empty")
+	}
+
+	prefix := strings.TrimSpace(p.secretPrefix)
+	if p.requirePrefix && prefix == "" {
+		return nil, errors.New("walletSecretProviderSM: SOLANA_WALLET_SECRET_PREFIX is empty")
+	}
+	ver := strings.TrimSpace(p.version)
+	if ver == "" {
+		ver = "latest"
+	}
+
+	// secret id = <prefix><walletAddress>
+	secretID := prefix + addr
+
+	name := fmt.Sprintf("projects/%s/secrets/%s/versions/%s", prj, secretID, ver)
+	resp, err := p.sm.AccessSecretVersion(ctx, &secretmanagerpb.AccessSecretVersionRequest{Name: name})
+	if err != nil {
+		return nil, fmt.Errorf("walletSecretProviderSM: AccessSecretVersion failed (%s): %w", name, err)
+	}
+	if resp == nil || resp.Payload == nil {
+		return nil, fmt.Errorf("walletSecretProviderSM: empty payload (%s)", name)
+	}
+
+	// executor は "string(JSON int array)" を受け取れるので、そのまま string で返す
+	return strings.TrimSpace(string(resp.Payload.Data)), nil
 }

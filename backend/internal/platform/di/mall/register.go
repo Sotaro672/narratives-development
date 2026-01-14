@@ -2,6 +2,7 @@
 package mall
 
 import (
+	"context"
 	"encoding/json"
 	"log"
 	"net/http"
@@ -12,6 +13,7 @@ import (
 	mallhandler "narratives/internal/adapters/in/http/mall/handler"
 	mallwebhook "narratives/internal/adapters/in/http/mall/webhook"
 	"narratives/internal/adapters/in/http/middleware"
+	"narratives/internal/application/usecase"
 )
 
 // notImplemented returns a non-nil handler (so deps are never nil) for endpoints
@@ -68,16 +70,44 @@ func requireAvatarContext(mw *middleware.AvatarContextMiddleware, h http.Handler
 	return mw.Handler(h)
 }
 
+// transferHTTPAdapter adapts application/usecase.TransferUsecase to HTTP handler's required interface.
+type transferHTTPAdapter struct {
+	uc *usecase.TransferUsecase
+}
+
+func (a transferHTTPAdapter) TransferByScanPurchasedByAvatarID(ctx context.Context, avatarID, productID string) (*mallhandler.ScanTransferResult, error) {
+	if a.uc == nil {
+		return nil, usecase.ErrTransferNotConfigured
+	}
+
+	out, err := a.uc.TransferToAvatarByVerifiedScan(ctx, usecase.TransferByVerifiedScanInput{
+		AvatarID:  avatarID,
+		ProductID: productID,
+	})
+	if err != nil {
+		// matched=false を 200 で返したい場合はここで吸収
+		if err == usecase.ErrTransferNotMatched {
+			return &mallhandler.ScanTransferResult{
+				AvatarID:  avatarID,
+				ProductID: productID,
+				Matched:   false,
+			}, nil
+		}
+		return nil, err
+	}
+
+	return &mallhandler.ScanTransferResult{
+		AvatarID:         avatarID,
+		ProductID:        productID,
+		Matched:          true,
+		TxSignature:      strings.TrimSpace(out.TxSignature),
+		FromWallet:       strings.TrimSpace(out.FromWallet),
+		ToWallet:         strings.TrimSpace(out.ToWallet),
+		UpdatedToAddress: true, // TransferUsecase 内で UpdateToAddressByProductID を実行済み想定
+	}, nil
+}
+
 // Register registers mall routes onto mux.
-// Pure DI: construct handlers and pass into mall router.Register.
-// - No method/path branching here
-// - deps must be non-nil for all handlers (no nil in deps)
-// - UserAuthMiddleware is applied to ALL user-authenticated endpoints (user系全部)
-//
-// ✅ 方針変更（今回）:
-// - owner resolve は「preview / preview_me ハンドラー内部からのみ」呼ばれる。
-// - そのため /mall/owners/resolve 等の独立エンドポイントは Mall Router には登録しない。
-// - DI では OwnerResolveHandler を生成せず、router deps へも渡さない。
 func Register(mux *http.ServeMux, cont *Container) {
 	if mux == nil || cont == nil {
 		return
@@ -92,7 +122,6 @@ func Register(mux *http.ServeMux, cont *Container) {
 			FirebaseAuth: cont.Infra.FirebaseAuth,
 		}
 	} else {
-		// fail-closed in requireUserAuth
 		log.Printf("[mall.register] WARN: cont.Infra or cont.Infra.FirebaseAuth is nil (user auth will return 503 on protected endpoints)")
 		userAuthMW = &middleware.UserAuthMiddleware{FirebaseAuth: nil}
 	}
@@ -100,7 +129,6 @@ func Register(mux *http.ServeMux, cont *Container) {
 	// ------------------------------------------------------------
 	// Avatar context middleware (uid -> avatarId)
 	// ------------------------------------------------------------
-	// ✅ A案: OrderQ を resolver として使う（OrderQuery が ResolveAvatarIDByUID を持つ前提）
 	var avatarCtxMW *middleware.AvatarContextMiddleware
 	if cont.OrderQ != nil {
 		avatarCtxMW = &middleware.AvatarContextMiddleware{
@@ -108,7 +136,6 @@ func Register(mux *http.ServeMux, cont *Container) {
 			AllowExplicit: false,
 		}
 	} else {
-		// fail-closed in requireAvatarContext
 		log.Printf("[mall.register] WARN: cont.OrderQ is nil (avatar context will return 503 on endpoints requiring avatarId)")
 		avatarCtxMW = &middleware.AvatarContextMiddleware{Resolver: nil, AllowExplicit: false}
 	}
@@ -116,7 +143,6 @@ func Register(mux *http.ServeMux, cont *Container) {
 	// ----------------------------
 	// Handlers (construct only)
 	// ----------------------------
-	// default to non-nil for all handlers
 	listH := notImplemented("List")
 	invH := notImplemented("Inventory")
 	pbH := notImplemented("ProductBlueprint")
@@ -126,7 +152,6 @@ func Register(mux *http.ServeMux, cont *Container) {
 	companyH := notImplemented("Company")
 	brandH := notImplemented("Brand")
 
-	// user-authenticated
 	userH := notImplemented("User")
 	shipH := notImplemented("ShippingAddress")
 	billH := notImplemented("BillingAddress")
@@ -139,14 +164,11 @@ func Register(mux *http.ServeMux, cont *Container) {
 	invoiceH := notImplemented("Invoice")
 	meAvatarH := notImplemented("MeAvatar")
 
-	// Preview split:
-	// - /mall/preview     : public (no auth)
-	// - /mall/me/preview  : authenticated
 	previewPublicH := notImplemented("PreviewPublic")
 	previewMeH := notImplemented("PreviewMe")
 
-	// ✅ NEW: /mall/me/orders/scan/verify (POST)
 	orderScanVerifyH := notImplemented("OrderScanVerify")
+	orderScanTransferH := notImplemented("OrderScanTransfer")
 
 	// Lists (public)
 	if cont.ListUC != nil {
@@ -232,8 +254,6 @@ func Register(mux *http.ServeMux, cont *Container) {
 	// ------------------------------------------------------------
 	// Preview handler wiring (split)
 	// ------------------------------------------------------------
-	// ✅ owner resolve は「preview / preview_me ハンドラー内部からのみ」呼ぶ前提。
-	// ✅ WithOwner を使って OwnerResolveQ を Preview ハンドラーへ注入する。
 	if cont.PreviewQ != nil {
 		if cont.OwnerResolveQ != nil {
 			previewPublicH = mallhandler.NewPreviewHandlerWithOwner(cont.PreviewQ, cont.OwnerResolveQ)
@@ -247,20 +267,34 @@ func Register(mux *http.ServeMux, cont *Container) {
 	}
 
 	// ------------------------------------------------------------
-	// ✅ NEW: Order scan verify wiring
-	// POST /mall/me/orders/scan/verify
-	// - auth required
-	// - avatar context required (uid -> avatarId)
+	// Order scan verify wiring
 	// ------------------------------------------------------------
 	if cont.OrderScanVerifyQ != nil {
 		orderScanVerifyH = mallhandler.NewOrderScanVerifyHandler(cont.OrderScanVerifyQ)
-		log.Printf("[mall.register] order scan verify handler wired (OrderScanVerifyQ=%t)", cont.OrderScanVerifyQ != nil)
+		log.Printf("[mall.register] order scan verify handler wired")
 	} else {
 		log.Printf("[mall.register] WARN: OrderScanVerifyQ is nil (order scan verify will return 501)")
 	}
 
-	// SignIn: keep a stable no-op endpoint (client convenience)
-	// NOTE: 認証チェックは不要（ただの疎通・互換のため）
+	// ------------------------------------------------------------
+	// Order scan transfer wiring
+	// ------------------------------------------------------------
+	// ✅ TransferUsecase は Container 側で生成して持たせる（register.go は配線だけ）
+	if cont.TransferUC != nil {
+		httpUC := transferHTTPAdapter{uc: cont.TransferUC}
+
+		// anti-spoof を handler 内でもやりたいなら WithResolver
+		if cont.OrderQ != nil {
+			orderScanTransferH = mallhandler.NewTransferHandlerWithResolver(httpUC, cont.OrderQ)
+		} else {
+			orderScanTransferH = mallhandler.NewTransferHandler(httpUC)
+		}
+		log.Printf("[mall.register] order scan transfer handler wired (TransferUC=%t)", cont.TransferUC != nil)
+	} else {
+		log.Printf("[mall.register] WARN: TransferUC is nil (order scan transfer will return 501)")
+	}
+
+	// SignIn: keep a stable no-op endpoint
 	signInH := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusNoContent)
 	})
@@ -275,31 +309,25 @@ func Register(mux *http.ServeMux, cont *Container) {
 	avatarStateH = requireUserAuth(userAuthMW, avatarStateH, "AvatarState")
 	walletH = requireUserAuth(userAuthMW, walletH, "Wallet")
 	meAvatarH = requireUserAuth(userAuthMW, meAvatarH, "MeAvatar")
-
-	// cart は auth（/mall/cart も含めて auth にする運用）
 	cartH = requireUserAuth(userAuthMW, cartH, "Cart")
 
-	// /mall/me/preview は auth + avatar context（uid -> avatarId）
-	// ✅ 正しい順序: まず AvatarContext を内側に仕込み、最後に UserAuth を外側にする
 	previewMeH = requireAvatarContext(avatarCtxMW, previewMeH, "Preview(me):AvatarContext")
 	previewMeH = requireUserAuth(userAuthMW, previewMeH, "Preview(me)")
 
-	// ✅ /mall/me/orders/scan/verify は auth + avatar context（uid -> avatarId）
 	orderScanVerifyH = requireAvatarContext(avatarCtxMW, orderScanVerifyH, "OrderScanVerify(me):AvatarContext")
 	orderScanVerifyH = requireUserAuth(userAuthMW, orderScanVerifyH, "OrderScanVerify(me)")
 
+	orderScanTransferH = requireAvatarContext(avatarCtxMW, orderScanTransferH, "OrderScanTransfer(me):AvatarContext")
+	orderScanTransferH = requireUserAuth(userAuthMW, orderScanTransferH, "OrderScanTransfer(me)")
+
 	payH = requireUserAuth(userAuthMW, payH, "Payment")
 	orderH = requireUserAuth(userAuthMW, orderH, "Order")
-	invoiceH = requireUserAuth(userAuthMW, invoiceH, "Invoice") // invoices
+	invoiceH = requireUserAuth(userAuthMW, invoiceH, "Invoice")
 
 	// ----------------------------
 	// Router deps
 	// ----------------------------
-	// ✅ owner resolve endpoint は公開しない方針なので deps.OwnerResolve は設定しない。
-	// router.go に /mall/owners/resolve が残っている場合でも、
-	// deps.OwnerResolve が notImplemented になるようにしておく（呼ばれたら 501 が返る）。
 	deps := mallhttp.Deps{
-		// public
 		List: listH,
 
 		Inventory:        invH,
@@ -313,7 +341,6 @@ func Register(mux *http.ServeMux, cont *Container) {
 
 		SignIn: signInH,
 
-		// authenticated (user系)
 		User:            userH,
 		ShippingAddress: shipH,
 		BillingAddress:  billH,
@@ -323,19 +350,15 @@ func Register(mux *http.ServeMux, cont *Container) {
 		Wallet:          walletH,
 		Cart:            cartH,
 
-		// preview split
-		Preview:   previewPublicH, // /mall/preview (public)
-		PreviewMe: previewMeH,     // /mall/me/preview (auth + avatar context)
+		Preview:   previewPublicH,
+		PreviewMe: previewMeH,
 
-		// ✅ NEW: scan verify
-		OrderScanVerify: orderScanVerifyH, // POST /mall/me/orders/scan/verify
-
-		// owner resolve is intentionally NOT exposed as an endpoint
-		OwnerResolve: notImplemented("OwnerResolve(endpoint_disabled)"),
-
-		Payment: payH,
-		Order:   orderH,
-		Invoice: invoiceH,
+		OrderScanVerify:   orderScanVerifyH,
+		OrderScanTransfer: orderScanTransferH,
+		OwnerResolve:      notImplemented("OwnerResolve(endpoint_disabled)"),
+		Payment:           payH,
+		Order:             orderH,
+		Invoice:           invoiceH,
 	}
 
 	mallhttp.Register(mux, deps)
@@ -344,7 +367,6 @@ func Register(mux *http.ServeMux, cont *Container) {
 	// ----------------------------
 	// Webhooks (no auth)
 	// ----------------------------
-	// Stripe webhook: PaymentUsecase + signing secret(string) が必要
 	if cont.PaymentUC != nil {
 		secret := strings.TrimSpace(os.Getenv("STRIPE_WEBHOOK_SECRET"))
 		if secret == "" {
