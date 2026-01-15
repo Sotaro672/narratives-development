@@ -84,21 +84,7 @@ class _PreviewPageState extends State<PreviewPage> {
     _scanTransferRepo = ScanTransferRepositoryHttp();
     _meAvatarRepo = MeAvatarRepositoryHttp();
 
-    final incomingAvatarId = _incomingAvatarId;
     final productId = _productId;
-    final from = (widget.from ?? '').trim();
-
-    debugPrint(
-      '[PreviewPage] mounted'
-      ' productId=${productId.isEmpty ? "-" : productId}'
-      ' incomingAvatarId=${incomingAvatarId.isEmpty ? "-" : incomingAvatarId}'
-      ' from=${from.isEmpty ? "-" : from}',
-    );
-
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      final routeName = ModalRoute.of(context)?.settings.name;
-      debugPrint('[PreviewPage] route=${routeName ?? "-"} uri=${Uri.base}');
-    });
 
     if (productId.isNotEmpty) {
       _previewFuture = _loadPreview(productId);
@@ -113,16 +99,7 @@ class _PreviewPageState extends State<PreviewPage> {
     if (oldWidget.avatarId != widget.avatarId ||
         oldWidget.productId != widget.productId ||
         oldWidget.from != widget.from) {
-      final incomingAvatarId = _incomingAvatarId;
       final productId = _productId;
-      final from = (widget.from ?? '').trim();
-
-      debugPrint(
-        '[PreviewPage] updated'
-        ' productId=${productId.isEmpty ? "-" : productId}'
-        ' incomingAvatarId=${incomingAvatarId.isEmpty ? "-" : incomingAvatarId}'
-        ' from=${from.isEmpty ? "-" : from}',
-      );
 
       setState(() {
         _previewFuture = productId.isNotEmpty ? _loadPreview(productId) : null;
@@ -168,42 +145,15 @@ class _PreviewPageState extends State<PreviewPage> {
     final user = FirebaseAuth.instance.currentUser;
 
     if (user == null) {
-      debugPrint('[PreviewPage] calling PUBLIC /mall/preview productId=$id');
       final r = await _previewRepo.fetchPreviewByProductId(id);
-      debugPrint(
-        '[PreviewPage] PUBLIC response productId=${r.productId} modelId=${r.modelId}'
-        ' modelNumber=${r.modelNumber.isEmpty ? "-" : r.modelNumber}'
-        ' size=${r.size.isEmpty ? "-" : r.size}'
-        ' color=${r.color.isEmpty ? "-" : r.color}'
-        ' rgb=${r.rgb}'
-        ' measurements=${r.measurements}'
-        ' productBlueprintPatch=${r.productBlueprintPatch}'
-        ' token=${r.token?.toJson()}'
-        ' owner=${r.owner?.toJson()}',
-      );
       return r;
     }
 
     final token = await _idTokenOrEmpty(user);
-    debugPrint(
-      '[PreviewPage] calling ME /mall/me/preview productId=$id tokenLen=${token.length}',
-    );
 
     final r = await _previewRepo.fetchMyPreviewByProductId(
       id,
       headers: {'Authorization': 'Bearer $token'},
-    );
-
-    debugPrint(
-      '[PreviewPage] ME response productId=${r.productId} modelId=${r.modelId}'
-      ' modelNumber=${r.modelNumber.isEmpty ? "-" : r.modelNumber}'
-      ' size=${r.size.isEmpty ? "-" : r.size}'
-      ' color=${r.color.isEmpty ? "-" : r.color}'
-      ' rgb=${r.rgb}'
-      ' measurements=${r.measurements}'
-      ' productBlueprintPatch=${r.productBlueprintPatch}'
-      ' token=${r.token?.toJson()}'
-      ' owner=${r.owner?.toJson()}',
     );
 
     return r;
@@ -244,18 +194,11 @@ class _PreviewPageState extends State<PreviewPage> {
     try {
       final token = await _idTokenOrEmpty(user);
 
-      debugPrint(
-        '[PreviewPage] calling ME AVATAR /mall/me/avatar tokenLen=${token.length}',
-      );
-
       final r = await _meAvatarRepo.fetchMeAvatar(
         headers: {'Authorization': 'Bearer $token'},
       );
 
       final meAvatarId = r.avatarId.trim();
-      debugPrint(
-        '[PreviewPage] ME AVATAR response avatarId=$meAvatarId raw=${r.toJson()}',
-      );
 
       if (mounted) {
         setState(() {
@@ -263,7 +206,6 @@ class _PreviewPageState extends State<PreviewPage> {
         });
       }
     } catch (e) {
-      debugPrint('[PreviewPage] ME AVATAR failed: $e');
       if (mounted) {
         setState(() {
           _meAvatarError = e;
@@ -302,18 +244,11 @@ class _PreviewPageState extends State<PreviewPage> {
     try {
       final token = await _idTokenOrEmpty(user);
 
-      debugPrint(
-        '[PreviewPage] calling AUTO VERIFY /mall/me/orders/scan/verify'
-        ' avatarId=$meAvatarId productId=$productId tokenLen=${token.length}',
-      );
-
       final r = await _scanVerifyRepo.verifyScanPurchasedByAvatarId(
         avatarId: meAvatarId,
         productId: productId,
         headers: {'Authorization': 'Bearer $token'},
       );
-
-      debugPrint('[PreviewPage] AUTO VERIFY response: ${r.toJson()}');
 
       if (mounted) {
         setState(() {
@@ -323,7 +258,6 @@ class _PreviewPageState extends State<PreviewPage> {
 
       await _maybeAutoTransfer();
     } catch (e) {
-      debugPrint('[PreviewPage] AUTO VERIFY failed: $e');
       if (mounted) {
         setState(() {
           _verifyError = e;
@@ -361,18 +295,11 @@ class _PreviewPageState extends State<PreviewPage> {
     try {
       final token = await _idTokenOrEmpty(user);
 
-      debugPrint(
-        '[PreviewPage] calling AUTO TRANSFER /mall/me/orders/scan/transfer'
-        ' avatarId=$meAvatarId productId=$productId tokenLen=${token.length}',
-      );
-
       final r = await _scanTransferRepo.transferScanPurchasedByAvatarId(
         avatarId: meAvatarId,
         productId: productId,
         headers: {'Authorization': 'Bearer $token'},
       );
-
-      debugPrint('[PreviewPage] AUTO TRANSFER response: ${r.toJson()}');
 
       if (mounted) {
         setState(() {
@@ -380,7 +307,6 @@ class _PreviewPageState extends State<PreviewPage> {
         });
       }
     } catch (e) {
-      debugPrint('[PreviewPage] AUTO TRANSFER failed: $e');
       if (mounted) {
         setState(() {
           _transferError = e;

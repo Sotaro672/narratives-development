@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"strconv"
 	"strings"
 	"time"
 
@@ -15,6 +16,7 @@ import (
 	"github.com/blocto/solana-go-sdk/client"
 	"github.com/blocto/solana-go-sdk/common"
 	ata "github.com/blocto/solana-go-sdk/program/associated_token_account"
+	"github.com/blocto/solana-go-sdk/program/metaplex/token_metadata"
 	"github.com/blocto/solana-go-sdk/program/system"
 	"github.com/blocto/solana-go-sdk/program/token"
 	"github.com/blocto/solana-go-sdk/rpc"
@@ -57,9 +59,29 @@ func (c *MintClient) PublicKey(ctx context.Context) (string, error) {
 	return hex.EncodeToString(c.key.PublicKey), nil
 }
 
+func sellerFeeBpsFromEnv() uint16 {
+	// 例: "500" = 5%
+	// 未設定なら 0（ロイヤリティなし）にしておく
+	v := strings.TrimSpace(os.Getenv("SOLANA_SELLER_FEE_BPS"))
+	if v == "" {
+		return 0
+	}
+	n, err := strconv.Atoi(v)
+	if err != nil || n < 0 || n > 10000 {
+		log.Printf("[narratives-mint] invalid SOLANA_SELLER_FEE_BPS=%q -> fallback 0", v)
+		return 0
+	}
+	return uint16(n)
+}
+
 // MintToken は tokendom.MintAuthorityWalletPort インターフェースの実装です。
 // Solana devnet 上で、1 つの新規 Mint アカウントを作成し、指定ウォレット宛てに
 // Amount 枚（NFT なら通常 1）のトークンをミントします。
+//
+// 重要:
+//   - Explorer に表示させるため、Metaplex Token Metadata (CreateMetadataAccountV3) と
+//     MasterEdition (CreateMasterEditionV3) を同一トランザクションで作成します。
+//   - これにより mintAddress から導出される metadata PDA が必ず存在します。
 func (c *MintClient) MintToken(
 	ctx context.Context,
 	params tokendom.MintParams,
@@ -68,34 +90,47 @@ func (c *MintClient) MintToken(
 		return nil, fmt.Errorf("mint client is not initialized (missing mint authority key)")
 	}
 
-	if params.ToAddress == "" {
+	to := strings.TrimSpace(params.ToAddress)
+	if to == "" {
 		return nil, fmt.Errorf("ToAddress is empty")
 	}
-	if params.Name == "" || params.Symbol == "" {
+
+	name := strings.TrimSpace(params.Name)
+	symbol := strings.TrimSpace(params.Symbol)
+	if name == "" || symbol == "" {
 		return nil, fmt.Errorf("token name or symbol is empty")
 	}
+
+	metadataURI := strings.TrimSpace(params.MetadataURI)
+	if metadataURI == "" {
+		return nil, fmt.Errorf("MetadataURI is empty")
+	}
+
 	amount := params.Amount
 	if amount == 0 {
 		amount = 1
 	}
 
+	// NFT 的運用（1商品=1Mint）前提なら amount=1 を推奨
+	// ただし既存仕様を壊さないため、ここでは強制せずログのみ
+	if amount != 1 {
+		log.Printf("[narratives-mint] warning: mint amount is %d (NFT-like tokens typically use 1)", amount)
+	}
+
 	// ------------------------------------------------------------
 	// 1) Solana RPC クライアント (devnet)
 	// ------------------------------------------------------------
-	rpcURL := os.Getenv("SOLANA_RPC_URL")
-	if strings.TrimSpace(rpcURL) == "" {
-		// 環境変数未設定なら devnet のデフォルトを使う
+	rpcURL := strings.TrimSpace(os.Getenv("SOLANA_RPC_URL"))
+	if rpcURL == "" {
 		rpcURL = rpc.DevnetRPCEndpoint
 	}
 	cl := client.NewClient(rpcURL)
 
-	log.Printf("[narratives-mint] MintToken start rpc=%s to=%s amount=%d metadata=%s name=%s symbol=%s",
-		rpcURL, params.ToAddress, amount, params.MetadataURI, params.Name, params.Symbol)
+	log.Printf("[narratives-mint] MintToken start rpc=%s to=%s amount=%d name=%s symbol=%s uri=%s",
+		rpcURL, to, amount, name, symbol, metadataURI)
 
 	// ------------------------------------------------------------
 	// 2) ミント権限ウォレット（fee payer）を復元
-	//    MintAuthorityKey.PrivateKey は ed25519.PrivateKey ([]byte, 64 bytes 想定)
-	//    MintAuthorityKey.PublicKey は ed25519.PublicKey ([]byte, 32 bytes 想定)
 	// ------------------------------------------------------------
 	if len(c.key.PrivateKey) == 0 {
 		return nil, fmt.Errorf("mint authority private key is empty")
@@ -111,13 +146,36 @@ func (c *MintClient) MintToken(
 	log.Printf("[narratives-mint] fee payer pubkey=%s", feePayer.PublicKey.ToBase58())
 
 	// 受取人のウォレットアドレス (base58 → PublicKey)
-	recipientPub := common.PublicKeyFromString(params.ToAddress)
+	recipientPub := common.PublicKeyFromString(to)
 
 	// ------------------------------------------------------------
 	// 3) 新しい Mint アカウントを作成
 	// ------------------------------------------------------------
 	mintAccount := types.NewAccount()
 	log.Printf("[narratives-mint] new mint pubkey=%s", mintAccount.PublicKey.ToBase58())
+
+	// Associated Token Account (ATA)
+	ataPubkey, _, err := common.FindAssociatedTokenAddress(recipientPub, mintAccount.PublicKey)
+	if err != nil {
+		return nil, fmt.Errorf("failed to derive ATA: %w", err)
+	}
+	log.Printf("[narratives-mint] ATA=%s", ataPubkey.ToBase58())
+
+	// Metadata / MasterEdition PDA（mint から決定される）
+	metadataPubkey, err := token_metadata.GetTokenMetaPubkey(mintAccount.PublicKey)
+	if err != nil {
+		return nil, fmt.Errorf("GetTokenMetaPubkey: %w", err)
+	}
+	masterEditionPubkey, err := token_metadata.GetMasterEdition(mintAccount.PublicKey)
+	if err != nil {
+		return nil, fmt.Errorf("GetMasterEdition: %w", err)
+	}
+
+	log.Printf("[narratives-mint] derived PDA: mint=%s metadata=%s masterEdition=%s",
+		mintAccount.PublicKey.ToBase58(),
+		metadataPubkey.ToBase58(),
+		masterEditionPubkey.ToBase58(),
+	)
 
 	// RentExempt に必要な lamports を取得
 	mintRent, err := cl.GetMinimumBalanceForRentExemption(ctx, token.MintAccountSize)
@@ -131,18 +189,11 @@ func (c *MintClient) MintToken(
 		return nil, fmt.Errorf("failed to get latest blockhash: %w", err)
 	}
 
-	// ------------------------------------------------------------
-	// 4) Associated Token Account (ATA) アドレス計算
-	//    nft_mint.go と同じく FindAssociatedTokenAddress を利用
-	// ------------------------------------------------------------
-	ataPubkey, _, err := common.FindAssociatedTokenAddress(recipientPub, mintAccount.PublicKey)
-	if err != nil {
-		return nil, fmt.Errorf("failed to derive ATA: %w", err)
-	}
-	log.Printf("[narratives-mint] ATA=%s", ataPubkey.ToBase58())
+	// MasterEdition MaxSupply（1商品=1Mint の運用なら 1 を推奨）
+	maxSupply := uint64(1)
 
 	// ------------------------------------------------------------
-	// 5) トランザクションの Instruction 群を組み立て
+	// 4) トランザクションの Instruction 群を組み立て
 	// ------------------------------------------------------------
 	instructions := []types.Instruction{
 		// 1) Mint アカウント作成
@@ -153,14 +204,40 @@ func (c *MintClient) MintToken(
 			Space:    token.MintAccountSize,
 			Owner:    common.TokenProgramID,
 		}),
-		// 2) Mint 初期化 (decimals=0 の NFT 的トークン)
+		// 2) Mint 初期化 (decimals=0)
 		token.InitializeMint(token.InitializeMintParam{
 			Decimals:   0,
 			Mint:       mintAccount.PublicKey,
 			MintAuth:   feePayer.PublicKey,
 			FreezeAuth: &feePayer.PublicKey,
 		}),
-		// 3) 受取人用 ATA 作成
+		// 3) Metaplex Metadata アカウント作成（これが無いと Explorer は Unknown Token になりやすい）
+		token_metadata.CreateMetadataAccountV3(
+			token_metadata.CreateMetadataAccountV3Param{
+				Metadata:                metadataPubkey,
+				Mint:                    mintAccount.PublicKey,
+				MintAuthority:           feePayer.PublicKey,
+				UpdateAuthority:         feePayer.PublicKey,
+				Payer:                   feePayer.PublicKey,
+				UpdateAuthorityIsSigner: true,
+				IsMutable:               true,
+				Data: token_metadata.DataV2{
+					Name:                 name,
+					Symbol:               symbol,
+					Uri:                  metadataURI,
+					SellerFeeBasisPoints: sellerFeeBpsFromEnv(),
+					Creators: &[]token_metadata.Creator{
+						{
+							Address:  feePayer.PublicKey,
+							Verified: true,
+							Share:    100,
+						},
+					},
+				},
+				CollectionDetails: nil,
+			},
+		),
+		// 4) 受取人用 ATA 作成
 		ata.CreateAssociatedTokenAccount(
 			ata.CreateAssociatedTokenAccountParam{
 				Funder:                 feePayer.PublicKey,
@@ -169,17 +246,29 @@ func (c *MintClient) MintToken(
 				AssociatedTokenAccount: ataPubkey,
 			},
 		),
-		// 4) MintTo でミント実行
+		// 5) MintTo でミント実行
 		token.MintTo(token.MintToParam{
 			Mint:   mintAccount.PublicKey,
 			To:     ataPubkey,
 			Auth:   feePayer.PublicKey,
 			Amount: amount,
 		}),
+		// 6) MasterEdition v3 作成（NFT 的運用をするなら推奨）
+		token_metadata.CreateMasterEditionV3(
+			token_metadata.CreateMasterEditionParam{
+				Edition:         masterEditionPubkey,
+				Mint:            mintAccount.PublicKey,
+				UpdateAuthority: feePayer.PublicKey,
+				MintAuthority:   feePayer.PublicKey,
+				Metadata:        metadataPubkey,
+				Payer:           feePayer.PublicKey,
+				MaxSupply:       &maxSupply,
+			},
+		),
 	}
 
 	// ------------------------------------------------------------
-	// 6) メッセージ & トランザクション作成
+	// 5) メッセージ & トランザクション作成
 	// ------------------------------------------------------------
 	msg := types.NewMessage(types.NewMessageParam{
 		FeePayer:        feePayer.PublicKey,
@@ -190,8 +279,8 @@ func (c *MintClient) MintToken(
 	tx, err := types.NewTransaction(types.NewTransactionParam{
 		Message: msg,
 		Signers: []types.Account{
-			feePayer,    // fee payer & mint authority
-			mintAccount, // 新規 mint アカウント
+			feePayer,
+			mintAccount,
 		},
 	})
 	if err != nil {
@@ -199,7 +288,7 @@ func (c *MintClient) MintToken(
 	}
 
 	// ------------------------------------------------------------
-	// 7) トランザクション送信
+	// 6) トランザクション送信
 	// ------------------------------------------------------------
 	sig, err := cl.SendTransaction(ctx, tx)
 	if err != nil {
@@ -207,14 +296,41 @@ func (c *MintClient) MintToken(
 	}
 	log.Printf("[narratives-mint] tx sent sig=%s", sig)
 
-	// オプション: ある程度確定するまで軽く待つ（本番ではきちんとステータス確認した方が良い）
+	// 簡易 wait（本番は confirmed/finalized の明示チェック推奨）
 	ctxWait, cancel := context.WithTimeout(ctx, 30*time.Second)
 	defer cancel()
 	_, _ = cl.GetSignatureStatuses(ctxWait, []string{sig})
 
+	// 送信後に metadata PDA の存在を（best-effortで）確認してログに出す
+	// ※ SDK の戻り型差異がある場合はここだけ調整してください（意図は「存在確認」）
+	// 送信後に metadata PDA の存在を（best-effortで）確認してログに出す
+	info, ierr := cl.GetAccountInfo(ctx, metadataPubkey.ToBase58())
+	if ierr != nil {
+		log.Printf("[narratives-mint] metadata account fetch error: metadata=%s err=%v", metadataPubkey.ToBase58(), ierr)
+	} else {
+		// AccountInfo が値型で返るため nil 判定は不可。data 長や owner をログに出す。
+		log.Printf("[narratives-mint] metadata account fetched: metadata=%s lamports=%d owner=%s dataLen=%d",
+			metadataPubkey.ToBase58(),
+			info.Lamports,
+			info.Owner,
+			len(info.Data),
+		)
+	}
+
+	log.Printf(
+		"[narratives-mint] minted token (with metaplex metadata): mint=%s sig=%s owner=%s name=%s symbol=%s uri=%s metadata=%s",
+		mintAccount.PublicKey.ToBase58(),
+		sig,
+		to,
+		name,
+		symbol,
+		metadataURI,
+		metadataPubkey.ToBase58(),
+	)
+
 	return &tokendom.MintResult{
 		Signature:   sig,
 		MintAddress: mintAccount.PublicKey.ToBase58(),
-		Slot:        0, // 必要なら GetSlot などで取得して詰める
+		Slot:        0,
 	}, nil
 }

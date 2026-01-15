@@ -2,6 +2,7 @@
   "dependencies": {
     "@irys/upload": "^0.0.15",
     "@irys/upload-ethereum": "^0.0.16",
+    "@solana/web3.js": "^1.98.4",
     "body-parser": "^2.2.1",
     "dotenv": "^17.2.3",
     "express": "^5.2.1",

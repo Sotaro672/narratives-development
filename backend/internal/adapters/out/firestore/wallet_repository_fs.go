@@ -78,12 +78,11 @@ func (r *WalletRepositoryFS) GetByAvatarID(ctx context.Context, avatarID string)
 		return walletdom.Wallet{}, walletdom.ErrInvalidWalletAddress
 	}
 
-	// Status が空なら active をデフォルト（新仕様上の防御）
+	// Status が空なら active をデフォルト
 	if strings.TrimSpace(d.Status) == "" {
 		d.Status = string(walletdom.StatusActive)
 	}
 
-	// 旧仕様互換のための補完は削除：lastUpdatedAt は必須
 	if d.LastUpdatedAt.IsZero() {
 		return walletdom.Wallet{}, ErrInvalidLastUpdatedAt
 	}
@@ -101,8 +100,6 @@ func (r *WalletRepositoryFS) GetByAvatarID(ctx context.Context, avatarID string)
 }
 
 // GetByAddress は walletAddress で取得します。
-// ✅ 新仕様では docId ではないため、where(walletAddress==addr) で引きます。
-// ❌ 旧仕様(docId=walletAddress)の互換読取は削除。
 func (r *WalletRepositoryFS) GetByAddress(ctx context.Context, addr string) (walletdom.Wallet, error) {
 	if r == nil || r.Client == nil {
 		return walletdom.Wallet{}, errors.New("wallet_repository_fs: firestore client is nil")
@@ -129,12 +126,11 @@ func (r *WalletRepositoryFS) GetByAddress(ctx context.Context, addr string) (wal
 		return walletdom.Wallet{}, err
 	}
 
-	// Status が空なら active をデフォルト（新仕様上の防御）
+	// Status が空なら active をデフォルト
 	if strings.TrimSpace(d.Status) == "" {
 		d.Status = string(walletdom.StatusActive)
 	}
 
-	// 旧仕様互換のための補完は削除：lastUpdatedAt は必須
 	if d.LastUpdatedAt.IsZero() {
 		return walletdom.Wallet{}, ErrInvalidLastUpdatedAt
 	}
@@ -152,7 +148,6 @@ func (r *WalletRepositoryFS) GetByAddress(ctx context.Context, addr string) (wal
 }
 
 // Save は Wallet を Firestore に保存（upsert）します。
-// ✅ 新仕様: docId = avatarId / avatarId field is not stored
 func (r *WalletRepositoryFS) Save(ctx context.Context, avatarID string, w walletdom.Wallet) error {
 	if r == nil || r.Client == nil {
 		return errors.New("wallet_repository_fs: firestore client is nil")
@@ -171,7 +166,7 @@ func (r *WalletRepositoryFS) Save(ctx context.Context, avatarID string, w wallet
 	now := time.Now().UTC()
 	last := w.LastUpdatedAt
 	if last.IsZero() {
-		// 保存側はドメインがゼロを許していても必ず埋める（新仕様として必須化）
+		// 保存側はドメインがゼロを許していても必ず埋める
 		last = now
 	}
 

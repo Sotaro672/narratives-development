@@ -143,111 +143,9 @@ func (u *MintUsecase) SetInventoryUpserter(up InventoryUpserter) {
 	u.inventoryUC = up
 }
 
-// production から ProductBlueprintID を（存在すれば）取り出す
-// ※ prodRepo の具体型に依存しないため、GetByID/Get を reflect で試す
-func (u *MintUsecase) resolveProductBlueprintIDFromProduction(ctx context.Context, productionID string) string {
-	if u == nil || u.prodRepo == nil {
-		return ""
-	}
-
-	call := func(methodName string) (any, error) {
-		rv := reflect.ValueOf(u.prodRepo)
-		m := rv.MethodByName(methodName)
-		if !m.IsValid() {
-			return nil, errors.New("method not found: " + methodName)
-		}
-		out := m.Call([]reflect.Value{reflect.ValueOf(ctx), reflect.ValueOf(productionID)})
-		if len(out) != 2 {
-			return nil, errors.New("unexpected return values from " + methodName)
-		}
-		if !out[1].IsNil() {
-			if err, ok := out[1].Interface().(error); ok {
-				return nil, err
-			}
-			return nil, errors.New("non-error type returned as error")
-		}
-		return out[0].Interface(), nil
-	}
-
-	var prod any
-	if p, err := call("GetByID"); err == nil {
-		prod = p
-	} else if p, err := call("Get"); err == nil {
-		prod = p
-	} else {
-		return ""
-	}
-
-	v := reflect.ValueOf(prod)
-	if v.Kind() == reflect.Ptr {
-		v = v.Elem()
-	}
-	if v.Kind() != reflect.Struct {
-		return ""
-	}
-
-	for _, name := range []string{"ProductBlueprintID", "ProductBlueprintId"} {
-		f := v.FieldByName(name)
-		if !f.IsValid() {
-			continue
-		}
-		if f.Kind() == reflect.String {
-			return strings.TrimSpace(f.String())
-		}
-		if f.Kind() == reflect.Ptr && !f.IsNil() && f.Elem().Kind() == reflect.String {
-			return strings.TrimSpace(f.Elem().String())
-		}
-	}
-
-	return ""
-}
-
-// inspection batch を productionId から 1件取得（互換）
-func (u *MintUsecase) loadInspectionBatchByProductionID(ctx context.Context, productionID string) (*inspectiondom.InspectionBatch, error) {
-	if u == nil || u.inspRepo == nil {
-		return nil, errors.New("inspection repo is nil")
-	}
-
-	pid := strings.TrimSpace(productionID)
-	if pid == "" {
-		return nil, errors.New("productionID is empty")
-	}
-
-	// 1) GetByProductionID があれば最優先
-	if getter, ok := any(u.inspRepo).(interface {
-		GetByProductionID(ctx context.Context, productionID string) (inspectiondom.InspectionBatch, error)
-	}); ok {
-		b, err := getter.GetByProductionID(ctx, pid)
-		if err != nil {
-			return nil, err
-		}
-		return &b, nil
-	}
-
-	// 2) ListByProductionID のみでもOK
-	if lister, ok := any(u.inspRepo).(interface {
-		ListByProductionID(ctx context.Context, productionIDs []string) ([]inspectiondom.InspectionBatch, error)
-	}); ok {
-		list, err := lister.ListByProductionID(ctx, []string{pid})
-		if err != nil {
-			return nil, err
-		}
-		if len(list) == 0 {
-			return nil, inspectiondom.ErrNotFound
-		}
-		// productionId 一致を優先
-		for i := range list {
-			if strings.TrimSpace(list[i].ProductionID) == pid {
-				b := list[i]
-				return &b, nil
-			}
-		}
-		b := list[0]
-		return &b, nil
-	}
-
-	return nil, errors.New("inspection repo does not support GetByProductionID/ListByProductionID")
-}
+// NOTE:
+// - resolveProductBlueprintIDFromProduction は product_blueprint_resolver.go に分離済み
+// - loadInspectionBatchByProductionID は inspection_batch_loader.go に分離済み
 
 // ============================================================
 // ★ 修復: POST /mint/requests/{mintRequestId}/mint 用
@@ -421,6 +319,7 @@ func (u *MintUsecase) MintFromMintRequest(ctx context.Context, mintRequestID str
 
 			// Policy A: docId を必ず mintRequestId に揃える
 			m.ID = mintRequestID
+			// setIfExistsString は mint_result_mapper.go 側の共通関数を利用（DuplicateDecl 回避）
 			setIfExistsString(&m, "InspectionID", mintRequestID)
 
 			m.Minted = true
@@ -455,6 +354,7 @@ func (u *MintUsecase) MintFromMintRequest(ctx context.Context, mintRequestID str
 	if u.inventoryUC == nil {
 		log.Printf("[mint_usecase] MintFromMintRequest inventoryUC is nil -> skip inventory upsert mintRequestId=%q", mintRequestID)
 	} else {
+		// resolveProductBlueprintIDFromProduction は product_blueprint_resolver.go に分離済み
 		pbID := strings.TrimSpace(u.resolveProductBlueprintIDFromProduction(ctx, mintRequestID))
 
 		log.Printf(
@@ -463,13 +363,12 @@ func (u *MintUsecase) MintFromMintRequest(ctx context.Context, mintRequestID str
 		)
 
 		if tbID == "" || pbID == "" || len(passedProductIDs) == 0 {
-			// ★ 修正: 末尾の余計な ',' を削除（expected 1 expression 対応）
 			log.Printf(
 				"[mint_usecase] MintFromMintRequest inventory upsert(by-model) skip reason=missing_fields mintRequestId=%q tbID=%q pbID=%q products=%d",
 				mintRequestID, tbID, pbID, len(passedProductIDs),
 			)
 		} else {
-			// inspection から modelId を引いて、modelId ごとに productId を束ねる
+			// loadInspectionBatchByProductionID は inspection_batch_loader.go に分離済み
 			batch, berr := u.loadInspectionBatchByProductionID(ctx, mintRequestID)
 			if berr != nil || batch == nil {
 				log.Printf(
@@ -640,6 +539,7 @@ func (u *MintUsecase) UpdateRequestInfo(
 
 	// ★ Policy A: docId = productionId（必ず揃える）
 	mintEntity.ID = pid
+	// setIfExistsString は mint_result_mapper.go 側の共通関数を利用（DuplicateDecl 回避）
 	setIfExistsString(&mintEntity, "InspectionID", pid)
 
 	// minted は request 作成時は必ず false（念のため）
@@ -797,54 +697,6 @@ func normalizeIDs(raw []string) []string {
 	}
 	sort.Strings(out)
 	return out
-}
-
-func setIfExistsString(target any, fieldName string, value string) {
-	rv := reflect.ValueOf(target)
-	if !rv.IsValid() {
-		return
-	}
-	if rv.Kind() == reflect.Ptr {
-		if rv.IsNil() {
-			return
-		}
-		rv = rv.Elem()
-	}
-	if rv.Kind() != reflect.Struct {
-		return
-	}
-	f := rv.FieldByName(fieldName)
-	if !f.IsValid() || !f.CanSet() || f.Kind() != reflect.String {
-		return
-	}
-	f.SetString(strings.TrimSpace(value))
-}
-
-func getIfExistsString(target any, fieldName string) string {
-	rv := reflect.ValueOf(target)
-	if !rv.IsValid() {
-		return ""
-	}
-	if rv.Kind() == reflect.Ptr {
-		if rv.IsNil() {
-			return ""
-		}
-		rv = rv.Elem()
-	}
-	if rv.Kind() != reflect.Struct {
-		return ""
-	}
-	f := rv.FieldByName(fieldName)
-	if !f.IsValid() {
-		return ""
-	}
-	if f.Kind() == reflect.String {
-		return strings.TrimSpace(f.String())
-	}
-	if f.Kind() == reflect.Ptr && !f.IsNil() && f.Elem().Kind() == reflect.String {
-		return strings.TrimSpace(f.Elem().String())
-	}
-	return ""
 }
 
 func isNotFoundErr(err error) bool {
