@@ -134,6 +134,15 @@ func (e *TokenTransferExecutorSolana) ExecuteTransfer(ctx context.Context, in us
 		return usecase.ExecuteTransferResult{}, fmt.Errorf("token_transfer_executor: derive to ATA failed: %w", err)
 	}
 
+	// ✅ 追加：導出したATAをフルでログ出し（調査用）
+	log.Printf("[token_transfer_executor] mint=%s fromOwner=%s toOwner=%s fromATA=%s toATA=%s",
+		mintAddr,
+		fromOwner.ToBase58(),
+		toOwner.ToBase58(),
+		fromATA.ToBase58(),
+		toATA.ToBase58(),
+	)
+
 	log.Printf(
 		"[token_transfer_executor] start productId=%s avatarId=%s brandId=%s mint=%s amount=%d from=%s to=%s",
 		maskShort(in.ProductID),
@@ -159,6 +168,9 @@ func (e *TokenTransferExecutorSolana) ExecuteTransfer(ctx context.Context, in us
 		return usecase.ExecuteTransferResult{}, fmt.Errorf("token_transfer_executor: check to ATA failed: %w", err)
 	}
 
+	// ✅ 追加：存在判定の結果ログ（調査用）
+	log.Printf("[token_transfer_executor] exists: fromATA=%t toATA=%t", fromExists, toExists)
+
 	// 2) build instructions
 	ins := make([]types.Instruction, 0, 3)
 
@@ -181,6 +193,9 @@ func (e *TokenTransferExecutorSolana) ExecuteTransfer(ctx context.Context, in us
 		Auth:   fromOwner,
 		Amount: amt,
 	}))
+
+	// ✅ 追加：命令数とATA作成有無のログ（調査用）
+	log.Printf("[token_transfer_executor] instruction_count=%d will_create_ata=%t", len(ins), !toExists)
 
 	// 3) recent blockhash
 	latest, err := e.RPC.GetLatestBlockhash(rpcCtx)
@@ -258,19 +273,53 @@ func (e *TokenTransferExecutorSolana) accountExists(ctx context.Context, address
 		return false, nil
 	}
 
-	_, err := e.RPC.GetAccountInfo(ctx, addr)
-	if err == nil {
-		return true, nil
+	info, err := e.RPC.GetAccountInfo(ctx, addr)
+	if err != nil {
+		msg := strings.ToLower(err.Error())
+		if strings.Contains(msg, "not found") ||
+			strings.Contains(msg, "could not find account") ||
+			strings.Contains(msg, "invalid param") ||
+			strings.Contains(msg, "account does not exist") {
+			return false, nil
+		}
+		return false, err
 	}
 
-	msg := strings.ToLower(err.Error())
-	if strings.Contains(msg, "not found") ||
-		strings.Contains(msg, "could not find account") ||
-		strings.Contains(msg, "invalid param") ||
-		strings.Contains(msg, "account does not exist") {
+	// ✅ IMPORTANT:
+	// blocto SDK's GetAccountInfo returns a struct. In some cases, "not found" can be expressed
+	// as a zero-value struct with err=nil. Treat it as "not exists".
+	if isZeroAccountInfo(info) {
 		return false, nil
 	}
-	return false, err
+
+	return true, nil
+}
+
+func isZeroAccountInfo(info client.AccountInfo) bool {
+	// Heuristic: an existing account cannot have lamports=0 and empty owner and empty data simultaneously.
+	// (Lamports can be 0 only if account is not really present or has been reclaimed.)
+	if info.Lamports != 0 {
+		return false
+	}
+	if !isZeroPublicKey(info.Owner) {
+		return false
+	}
+	if len(info.Data) != 0 {
+		return false
+	}
+	if info.Executable {
+		return false
+	}
+	if info.RentEpoch != 0 {
+		return false
+	}
+	return true
+}
+
+func isZeroPublicKey(pk common.PublicKey) bool {
+	// common.PublicKey is a fixed-size byte array type; compare against zero value.
+	var z common.PublicKey
+	return pk == z
 }
 
 // normalizeToAccount converts signerAny to blocto types.Account.

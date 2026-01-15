@@ -5,9 +5,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"log"
 	"strings"
-	"time"
 )
 
 /*
@@ -95,14 +93,7 @@ func (q *OrderScanVerifyQuery) VerifyScanPurchasedByAvatarID(ctx context.Context
 
 // VerifyMatch verifies whether the scanned pair exists in purchased(untransferred) pairs.
 func (q *OrderScanVerifyQuery) VerifyMatch(ctx context.Context, in VerifyInput) (VerifyResult, error) {
-	start := time.Now()
-
 	if q == nil || q.PurchasedQ == nil || q.PreviewQ == nil {
-		log.Printf(
-			"[order_scan_verify_query] ERROR: not configured purchasedQ=%t previewQ=%t",
-			q != nil && q.PurchasedQ != nil,
-			q != nil && q.PreviewQ != nil,
-		)
 		return VerifyResult{}, ErrOrderScanVerifyQueryNotConfigured
 	}
 
@@ -110,75 +101,42 @@ func (q *OrderScanVerifyQuery) VerifyMatch(ctx context.Context, in VerifyInput) 
 	productID := strings.TrimSpace(in.ProductID)
 
 	if avatarID == "" {
-		log.Printf("[order_scan_verify_query] ERROR: avatarId empty")
 		return VerifyResult{}, ErrOrderScanVerifyAvatarIDEmpty
 	}
 	if productID == "" {
-		log.Printf("[order_scan_verify_query] ERROR: productId empty avatarId=%s", mask(avatarID))
 		return VerifyResult{}, ErrOrderScanVerifyProductIDEmpty
 	}
 
-	log.Printf("[order_scan_verify_query] start avatarId=%s productId=%s", mask(avatarID), mask(productID))
-
-	// 1) scan side: productId -> modelId + tokenBlueprintId(tokes/{productId}.tokenBlueprintId)
+	// 1) scan side: productId -> modelId + tokenBlueprintId(tokens/{productId}.tokenBlueprintId)
 	info, err := q.PreviewQ.ResolveModelInfoByProductID(ctx, productID)
 	if err != nil {
-		log.Printf("[order_scan_verify_query] ERROR: preview resolve failed avatarId=%s productId=%s err=%v", mask(avatarID), mask(productID), err)
 		return VerifyResult{}, fmt.Errorf("order_scan_verify_query: preview resolve failed: %w", err)
 	}
 	if info == nil {
-		log.Printf("[order_scan_verify_query] ERROR: preview resolve returned nil avatarId=%s productId=%s", mask(avatarID), mask(productID))
 		return VerifyResult{}, fmt.Errorf("order_scan_verify_query: preview resolve returned nil")
 	}
 
 	scannedModelID := strings.TrimSpace(info.ModelID)
 	if scannedModelID == "" {
-		log.Printf("[order_scan_verify_query] ERROR: scanned modelId empty avatarId=%s productId=%s", mask(avatarID), mask(productID))
 		return VerifyResult{}, fmt.Errorf("order_scan_verify_query: scanned modelId is empty")
 	}
 
-	// ✅ token must exist (tokens/{productId} が存在する or TokenRepo 注入されている)
+	// token must exist (tokens/{productId} が存在する or TokenRepo 注入されている)
 	if info.Token == nil {
-		log.Printf(
-			"[order_scan_verify_query] ERROR: token not found (tokens/{productId} missing or PreviewQ.TokenRepo not injected) avatarId=%s productId=%s modelId=%s",
-			mask(avatarID),
-			mask(productID),
-			mask(scannedModelID),
-		)
 		return VerifyResult{}, ErrOrderScanVerifyTokenNotFound
 	}
 
-	// ✅ scanned tokenBlueprintId is tokens/{productId}.tokenBlueprintId (docId=productId)
-	// NOTE: TokenInfo に TokenBlueprintID が載っている前提
+	// scanned tokenBlueprintId is tokens/{productId}.tokenBlueprintId (docId=productId)
 	scannedTBID := strings.TrimSpace(info.Token.TokenBlueprintID)
-
-	log.Printf(
-		"[order_scan_verify_query] scanned avatarId=%s productId=%s modelId=%s tokenBlueprintId=%s (from tokens/{productId}) tokenPresent=%t",
-		mask(avatarID),
-		mask(productID),
-		mask(scannedModelID),
-		mask(scannedTBID),
-		info.Token != nil,
-	)
-
 	if scannedTBID == "" {
-		log.Printf(
-			"[order_scan_verify_query] ERROR: scanned tokenBlueprintId empty (tokens/{productId}.tokenBlueprintId missing) avatarId=%s productId=%s modelId=%s",
-			mask(avatarID),
-			mask(productID),
-			mask(scannedModelID),
-		)
 		return VerifyResult{}, ErrOrderScanVerifyTokenBlueprintEmpty
 	}
 
 	// 2) purchased side: avatarId -> paid orders -> items.transfer=false -> (modelId,tbId)
 	purchased, err := q.PurchasedQ.ListEligiblePairsByAvatarID(ctx, avatarID)
 	if err != nil {
-		log.Printf("[order_scan_verify_query] ERROR: purchased query failed avatarId=%s err=%v", mask(avatarID), err)
 		return VerifyResult{}, fmt.Errorf("order_scan_verify_query: purchased pairs resolve failed: %w", err)
 	}
-
-	log.Printf("[order_scan_verify_query] purchased rawPairs=%d avatarId=%s", len(purchased.Pairs), mask(avatarID))
 
 	// 3) dedup to []ModelTokenPair
 	seen := map[string]struct{}{}
@@ -197,15 +155,6 @@ func (q *OrderScanVerifyQuery) VerifyMatch(ctx context.Context, in VerifyInput) 
 		outPairs = append(outPairs, ModelTokenPair{ModelID: mid, TokenBlueprintID: tbid})
 	}
 
-	log.Printf("[order_scan_verify_query] purchased dedupPairs=%d avatarId=%s", len(outPairs), mask(avatarID))
-	for i, p := range outPairs {
-		if i >= 30 {
-			log.Printf("[order_scan_verify_query] purchased pairs truncated shown=30 total=%d avatarId=%s", len(outPairs), mask(avatarID))
-			break
-		}
-		log.Printf("[order_scan_verify_query] purchased[%d] modelId=%s tokenBlueprintId=%s", i, mask(p.ModelID), mask(p.TokenBlueprintID))
-	}
-
 	// 4) match
 	var match *ModelTokenPair
 	for i := range outPairs {
@@ -217,30 +166,7 @@ func (q *OrderScanVerifyQuery) VerifyMatch(ctx context.Context, in VerifyInput) 
 		}
 	}
 
-	elapsed := time.Since(start)
-
-	if match != nil {
-		log.Printf(
-			"[order_scan_verify_query] MATCHED avatarId=%s productId=%s scanned(modelId=%s tokenBlueprintId=%s) elapsed=%s",
-			mask(avatarID),
-			mask(productID),
-			mask(scannedModelID),
-			mask(scannedTBID),
-			elapsed.String(),
-		)
-	} else {
-		log.Printf(
-			"[order_scan_verify_query] NOT_MATCHED avatarId=%s productId=%s scanned(modelId=%s tokenBlueprintId=%s) purchasedPairs=%d elapsed=%s",
-			mask(avatarID),
-			mask(productID),
-			mask(scannedModelID),
-			mask(scannedTBID),
-			len(outPairs),
-			elapsed.String(),
-		)
-	}
-
-	out := VerifyResult{
+	return VerifyResult{
 		AvatarID:                avatarID,
 		ProductID:               productID,
 		ScannedModelID:          scannedModelID,
@@ -248,17 +174,5 @@ func (q *OrderScanVerifyQuery) VerifyMatch(ctx context.Context, in VerifyInput) 
 		PurchasedPairs:          outPairs,
 		Matched:                 match != nil,
 		Match:                   match,
-	}
-	return out, nil
-}
-
-func mask(s string) string {
-	t := strings.TrimSpace(s)
-	if t == "" {
-		return ""
-	}
-	if len(t) <= 10 {
-		return t
-	}
-	return t[:4] + "***" + t[len(t)-4:]
+	}, nil
 }

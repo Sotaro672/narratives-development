@@ -305,3 +305,14 @@ func getString(m map[string]any, keys ...string) string {
 	}
 	return ""
 }
+
+func mask(s string) string {
+	t := strings.TrimSpace(s)
+	if t == "" {
+		return ""
+	}
+	if len(t) <= 10 {
+		return t
+	}
+	return t[:4] + "***" + t[len(t)-4:]
+}

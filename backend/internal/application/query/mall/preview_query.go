@@ -90,9 +90,8 @@ type TokenInfo struct {
 
 // PreviewModelInfo is what preview.dart eventually wants to display.
 type PreviewModelInfo struct {
-	ProductID string `json:"productId"`
-	ModelID   string `json:"modelId"`
-
+	ProductID    string         `json:"productId"`
+	ModelID      string         `json:"modelId"`
 	ModelNumber  string         `json:"modelNumber"`
 	Size         string         `json:"size"`
 	Color        string         `json:"color"`
