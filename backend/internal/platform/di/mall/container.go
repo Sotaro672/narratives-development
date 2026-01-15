@@ -6,7 +6,6 @@ import (
 	"errors"
 	"fmt"
 	"log"
-	"os"
 	"strings"
 	"time"
 
@@ -34,8 +33,9 @@ import (
 	gcscommon "narratives/internal/adapters/out/gcs/common"
 	httpout "narratives/internal/adapters/out/http"
 
-	// ✅ Solana infra (TokenTransferExecutorSolana etc.)
+	// Solana infra
 	solanainfra "narratives/internal/infra/solana"
+	solanaplatform "narratives/internal/infra/solana"
 
 	// domains
 	ldom "narratives/internal/domain/list"
@@ -173,9 +173,15 @@ func NewContainer(ctx context.Context, infra *shared.Infra) (*Container, error) 
 	// Inventory
 	inventoryRepo := outfs.NewInventoryRepositoryFS(fsClient)
 
-	// TokenBlueprint
+	// TokenBlueprint (tokenBlueprint domain)
 	tokenBlueprintRepo := outfs.NewTokenBlueprintRepositoryFS(fsClient)
 	c.TokenBlueprintRepo = tokenBlueprintRepo
+
+	// ProductBlueprint (productBlueprint domain) - shared for queries/resolvers
+	productBlueprintRepoFS := outfs.NewProductBlueprintRepositoryFS(fsClient)
+
+	// Shared instance for queries/resolvers (avoid duplication)
+	modelRepoFS := outfs.NewModelRepositoryFS(fsClient)
 
 	// /mall/me/avatar 用 Repo（uid -> avatarId）
 	c.MeAvatarRepo = mallfs.NewMeAvatarRepo(fsClient)
@@ -200,25 +206,10 @@ func NewContainer(ctx context.Context, infra *shared.Infra) (*Container, error) 
 
 	// --------------------------------------------------------
 	// ✅ Solana wallet service (AvatarWalletService)
+	//   projectID 解決は shared.Infra に委譲済み
 	// --------------------------------------------------------
-	projectID := strings.TrimSpace(infra.Config.FirestoreProjectID)
-	if projectID == "" {
-		projectID = strings.TrimSpace(os.Getenv("FIRESTORE_PROJECT_ID"))
-	}
-	if projectID == "" {
-		projectID = strings.TrimSpace(os.Getenv("GOOGLE_CLOUD_PROJECT"))
-	}
+	projectID := strings.TrimSpace(infra.ProjectID)
 	avatarWalletSvc := solanainfra.NewAvatarWalletService(projectID)
-
-	// --------------------------------------------------------
-	// ✅ Case A: Self webhook trigger client (outbound)
-	// --------------------------------------------------------
-	selfBaseURL := strings.TrimSpace(os.Getenv("SELF_BASE_URL"))
-	selfBaseURL = strings.TrimRight(selfBaseURL, "/")
-	selfBaseURLConfigured := selfBaseURL != ""
-	if !selfBaseURLConfigured {
-		log.Printf("[di.mall] WARN: SELF_BASE_URL is empty; webhook trigger will be disabled (PaymentFlowUC will still exist if PaymentUC exists)")
-	}
 
 	// --------------------------------------------------------
 	// Usecases
@@ -246,7 +237,11 @@ func NewContainer(ctx context.Context, infra *shared.Infra) (*Container, error) 
 	c.ShippingAddressUC = usecase.NewShippingAddressUsecase(shippingAddressRepo)
 	c.BillingAddressUC = usecase.NewBillingAddressUsecase(billingAddressRepo)
 	c.UserUC = usecase.NewUserUsecase(userRepo)
-	c.WalletUC = usecase.NewWalletUsecase(walletRepo)
+
+	// ✅ WalletUsecase + OnchainReader (devnet default)
+	// - SOLANA_RPC_ENDPOINT があればそれを優先し、無ければ devnet を使用
+	onchainReader := solanaplatform.NewOnchainWalletReaderDevnet()
+	c.WalletUC = usecase.NewWalletUsecase(walletRepo).WithOnchainReader(onchainReader)
 
 	c.CartUC = usecase.NewCartUsecase(cartRepo)
 
@@ -261,26 +256,29 @@ func NewContainer(ctx context.Context, infra *shared.Infra) (*Container, error) 
 	c.InvoiceUC = usecase.NewInvoiceUsecase(invoiceRepo)
 	c.OrderUC = usecase.NewOrderUsecase(orderRepo)
 
+	// --------------------------------------------------------
 	// ✅ Case A: PaymentFlowUsecase（payment起票 + 必要なら webhook trigger）
-	if c.PaymentUC != nil {
-		if selfBaseURLConfigured {
-			stripeTrigger := httpout.NewStripeWebhookClient(selfBaseURL)
-			c.PaymentFlowUC = usecase.NewPaymentFlowUsecase(c.PaymentUC, stripeTrigger)
-		} else {
-			c.PaymentFlowUC = usecase.NewPaymentFlowUsecase(c.PaymentUC, nil)
-		}
+	//   SelfBaseURL 解決は shared.Infra に委譲済み
+	//   NOTE: PaymentUC は常に構築される前提のため nil 分岐を削除
+	// --------------------------------------------------------
+	selfBaseURL := strings.TrimSpace(infra.SelfBaseURL)
+	selfBaseURLConfigured := selfBaseURL != ""
+
+	if selfBaseURLConfigured {
+		stripeTrigger := httpout.NewStripeWebhookClient(selfBaseURL)
+		c.PaymentFlowUC = usecase.NewPaymentFlowUsecase(c.PaymentUC, stripeTrigger)
 	} else {
-		c.PaymentFlowUC = nil
+		c.PaymentFlowUC = usecase.NewPaymentFlowUsecase(c.PaymentUC, nil)
 	}
 
 	c.InventoryUC = usecase.NewInventoryUsecase(inventoryRepo)
 
 	// --------------------------------------------------------
 	// TokenIcon URL Resolver (objectPath -> publicURL)
+	//   bucket 解決は shared.Infra に委譲済み
 	// --------------------------------------------------------
 	{
-		b := strings.TrimSpace(os.Getenv("TOKEN_ICON_BUCKET"))
-		c.TokenIconURLResolver = tokenIconURLResolver{bucket: b}
+		c.TokenIconURLResolver = tokenIconURLResolver{bucket: strings.TrimSpace(infra.TokenIconBucket)}
 	}
 
 	// --------------------------------------------------------
@@ -289,9 +287,7 @@ func NewContainer(ctx context.Context, infra *shared.Infra) (*Container, error) 
 	{
 		brandRepo := outfs.NewBrandRepositoryFS(fsClient)
 		companyRepo := outfs.NewCompanyRepositoryFS(fsClient)
-		productBlueprintRepo := outfs.NewProductBlueprintRepositoryFS(fsClient)
 		memberRepo := outfs.NewMemberRepositoryFS(fsClient)
-		modelRepo := outfs.NewModelRepositoryFS(fsClient)
 
 		// tokenBlueprintNameRepoAdapter は di/mall/adapter.go に存在
 		tbNameRepo := &tokenBlueprintNameRepoAdapter{repo: tokenBlueprintRepo}
@@ -299,9 +295,9 @@ func NewContainer(ctx context.Context, infra *shared.Infra) (*Container, error) 
 		c.NameResolver = appresolver.NewNameResolver(
 			brandRepo,
 			companyRepo,
-			productBlueprintRepo,
+			productBlueprintRepoFS,
 			memberRepo,
-			modelRepo,
+			modelRepoFS,
 			tbNameRepo,
 		)
 	}
@@ -312,26 +308,20 @@ func NewContainer(ctx context.Context, infra *shared.Infra) (*Container, error) 
 	{
 		invRepo := mallfs.NewInventoryRepoForMallQuery(fsClient)
 
-		// ✅ ProductBlueprint repo（CatalogQuery でも使う）
-		pbRepoFS := outfs.NewProductBlueprintRepositoryFS(fsClient)
-
-		// ✅ outfs.NewModelRepositoryFS は GetModelVariationByID を持つ想定（PreviewQuery の ModelVariationReader を満たす）
-		modelRepo := outfs.NewModelRepositoryFS(fsClient)
-
-		c.CatalogQ = mallquery.NewCatalogQuery(listRepoFS, invRepo, pbRepoFS, modelRepo)
+		c.CatalogQ = mallquery.NewCatalogQuery(listRepoFS, invRepo, productBlueprintRepoFS, modelRepoFS)
 
 		c.CartQ = mallquery.NewCartQuery(fsClient)
 
 		// ✅ PreviewQuery 用 ProductBlueprintReader を用意（pbRepoFS は GetIDByModelID を持たないため adapter が必要）
 		pbReader := previewProductBlueprintReaderFS{
 			fs: fsClient,
-			pb: pbRepoFS,
+			pb: productBlueprintRepoFS,
 		}
 
 		// ✅ PreviewQuery 本体
 		c.PreviewQ = mallquery.NewPreviewQuery(
 			previewProductReaderFS{fs: fsClient},
-			modelRepo,
+			modelRepoFS,
 			pbReader,
 		)
 
@@ -363,18 +353,12 @@ func NewContainer(ctx context.Context, infra *shared.Infra) (*Container, error) 
 
 	// --------------------------------------------------------
 	// ✅ Shared Query: OwnerResolve (walletAddress/toAddress -> brandId / avatarId)
+	//   collection 名解決は shared.Infra に委譲済み
 	// --------------------------------------------------------
 	{
-		brandsCol := strings.TrimSpace(os.Getenv("BRANDS_COLLECTION"))
-		if brandsCol == "" {
-			brandsCol = defaultBrandsCollection
-		}
-		avatarsCol := strings.TrimSpace(os.Getenv("AVATARS_COLLECTION"))
-		if avatarsCol == "" {
-			avatarsCol = defaultAvatarsCollection
-		}
+		brandsCol := strings.TrimSpace(infra.BrandsCollection)
+		avatarsCol := strings.TrimSpace(infra.AvatarsCollection)
 
-		// ✅ sharedquery の interface は "Find..." メソッドを要求している
 		brandReader := brandWalletAddressReaderFS{fs: fsClient, col: brandsCol}
 		avatarReader := avatarWalletAddressReaderFS{fs: fsClient, col: avatarsCol}
 
@@ -384,6 +368,7 @@ func NewContainer(ctx context.Context, infra *shared.Infra) (*Container, error) 
 
 	// --------------------------------------------------------
 	// ✅ TransferUsecase wiring (order scan verified -> brand->avatar transfer)
+	//   SecretManager client / prefix 解決は shared.Infra に委譲済み
 	// --------------------------------------------------------
 	{
 		// 0) ScanVerifier: OrderScanVerifyQuery -> usecase.ScanVerifier
@@ -395,7 +380,6 @@ func NewContainer(ctx context.Context, infra *shared.Infra) (*Container, error) 
 		}
 
 		// 1) OrderRepoForTransfer (orders item lock/mark)
-		//    - outfs/transfer_repository_fs.go で NewOrderRepoForTransferFS を提供している前提
 		var orderRepoForTransfer usecase.OrderRepoForTransfer = outfs.NewOrderRepoForTransferFS(fsClient)
 
 		// 2) TokenResolver / TokenOwnerUpdater (Firestore tokens/{productId})
@@ -409,27 +393,17 @@ func NewContainer(ctx context.Context, infra *shared.Infra) (*Container, error) 
 		var avatarWalletResolver usecase.AvatarWalletResolver = walletResolver.(usecase.AvatarWalletResolver)
 
 		// 4) WalletSecretProvider (Secret Manager) - Design B
-		//    - secret name rule:
-		//      projects/<project-number>/secrets/brand-wallet-<brandId>/versions/latest
-		//    - payload format: JSON int array string "[1,2,...]" (executor が対応)
 		var secrets usecase.WalletSecretProvider = nil
-		sm, smErr := secretmanager.NewClient(ctx)
-		if smErr != nil {
-			log.Printf("[di.mall] WARN: secretmanager.NewClient failed: %v (TransferUC will be nil)", smErr)
-		} else {
-			if strings.TrimSpace(projectID) == "" {
-				log.Printf("[di.mall] WARN: projectID is empty; SecretManager signer provider disabled (TransferUC will be nil)")
-			} else {
-				brandSecretPrefix := strings.TrimSpace(os.Getenv("BRAND_WALLET_SECRET_PREFIX"))
-				if brandSecretPrefix == "" {
-					brandSecretPrefix = defaultBrandWalletSecretPrefix
-				}
-				secrets = &brandWalletSecretProviderSM{
-					sm:           sm,
-					projectID:    projectID,
-					secretPrefix: brandSecretPrefix,
-					version:      "latest",
-				}
+		if infra.SecretManager != nil && strings.TrimSpace(infra.ProjectID) != "" {
+			secretPrefix := strings.TrimSpace(infra.BrandWalletSecretPrefix)
+			if secretPrefix == "" {
+				secretPrefix = defaultBrandWalletSecretPrefix
+			}
+			secrets = &brandWalletSecretProviderSM{
+				sm:           infra.SecretManager,
+				projectID:    strings.TrimSpace(infra.ProjectID),
+				secretPrefix: secretPrefix,
+				version:      "latest",
 			}
 		}
 
@@ -438,7 +412,6 @@ func NewContainer(ctx context.Context, infra *shared.Infra) (*Container, error) 
 		var executor usecase.TokenTransferExecutor = solanainfra.NewTokenTransferExecutorSolana("")
 
 		// 6) Build TransferUC only when truly conditional deps exist
-		//    NOTE: tokenResolver/orderRepo/executor はここで必ず構築できる（fsClient が必須のため）
 		if scanVerifier != nil && secrets != nil {
 			c.TransferUC = usecase.NewTransferUsecase(
 				scanVerifier,
@@ -666,6 +639,7 @@ func (r avatarWalletAddressReaderFS) FindAvatarIDByWalletAddress(ctx context.Con
 }
 
 // tokenIconURLResolver resolves icon URL from stored objectPath (or URL).
+// NOTE: bucket は DI 時に確定させ、実行時に env を参照しない。
 type tokenIconURLResolver struct {
 	bucket string
 }
@@ -691,9 +665,6 @@ func (r tokenIconURLResolver) ResolveForResponse(storedObjectPath string, stored
 
 	// treat as objectPath within token icon bucket
 	b := strings.TrimSpace(r.bucket)
-	if b == "" {
-		b = strings.TrimSpace(os.Getenv("TOKEN_ICON_BUCKET"))
-	}
 	if b == "" {
 		b = defaultTokenIconBucketDI
 	}

@@ -107,6 +107,56 @@ func (a transferHTTPAdapter) TransferByScanPurchasedByAvatarID(ctx context.Conte
 	}, nil
 }
 
+// ------------------------------------------------------------
+// ✅ MeAvatar DI adapter
+// ------------------------------------------------------------
+
+// legacy interface that your current firestore mall.MeAvatarRepo likely implements
+type meAvatarLegacyRepo interface {
+	ResolveAvatarIDByUID(ctx context.Context, uid string) (string, error)
+}
+
+// optional extended interface (if/when MeAvatarRepo implements it)
+type meAvatarExtendedRepo interface {
+	ResolveAvatarByUID(ctx context.Context, uid string) (avatarId string, walletAddress string, err error)
+	ResolveAvatarIDByUID(ctx context.Context, uid string) (string, error)
+}
+
+// adapter that always satisfies mallhandler.MeAvatarService expected by NewMeAvatarHandler
+type meAvatarServiceAdapter struct {
+	legacy   meAvatarLegacyRepo
+	extended meAvatarExtendedRepo
+}
+
+// ResolveAvatarByUID returns avatarId + walletAddress.
+// - If extended repo is available, use it.
+// - Else fallback to legacy (walletAddress="").
+func (a meAvatarServiceAdapter) ResolveAvatarByUID(ctx context.Context, uid string) (string, string, error) {
+	if a.extended != nil {
+		return a.extended.ResolveAvatarByUID(ctx, uid)
+	}
+	if a.legacy == nil {
+		// Let handler treat it as internal error/not found depending on implementation.
+		return "", "", usecase.ErrTransferNotConfigured
+	}
+	id, err := a.legacy.ResolveAvatarIDByUID(ctx, uid)
+	if err != nil {
+		return "", "", err
+	}
+	return strings.TrimSpace(id), "", nil
+}
+
+// ResolveAvatarIDByUID is legacy passthrough (used as fallback by handler too).
+func (a meAvatarServiceAdapter) ResolveAvatarIDByUID(ctx context.Context, uid string) (string, error) {
+	if a.extended != nil {
+		return a.extended.ResolveAvatarIDByUID(ctx, uid)
+	}
+	if a.legacy == nil {
+		return "", usecase.ErrTransferNotConfigured
+	}
+	return a.legacy.ResolveAvatarIDByUID(ctx, uid)
+}
+
 // Register registers mall routes onto mux.
 func Register(mux *http.ServeMux, cont *Container) {
 	if mux == nil || cont == nil {
@@ -226,9 +276,23 @@ func Register(mux *http.ServeMux, cont *Container) {
 		walletH = mallhandler.NewMallWalletHandler(cont.WalletUC, cont.AvatarUC)
 	}
 
-	// /mall/me/avatar (uid -> avatarId)
+	// /mall/me/avatar (uid -> avatarId + walletAddress)
 	if cont.MeAvatarRepo != nil {
-		meAvatarH = mallhandler.NewMeAvatarHandler(cont.MeAvatarRepo)
+		// Try extended first; fallback to legacy.
+		var ext meAvatarExtendedRepo
+		if v, ok := any(cont.MeAvatarRepo).(meAvatarExtendedRepo); ok {
+			ext = v
+		}
+
+		var leg meAvatarLegacyRepo
+		if v, ok := any(cont.MeAvatarRepo).(meAvatarLegacyRepo); ok {
+			leg = v
+		}
+
+		meAvatarH = mallhandler.NewMeAvatarHandler(meAvatarServiceAdapter{
+			legacy:   leg,
+			extended: ext,
+		})
 	}
 
 	// Cart (authenticated)

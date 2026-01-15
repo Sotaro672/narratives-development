@@ -1,3 +1,4 @@
+// backend\internal\adapters\in\http\mall\handler\wallet_handler.go
 package mallHandler
 
 import (
@@ -14,12 +15,11 @@ import (
 // MallWalletHandler handles mall buyer-facing wallet endpoints.
 //
 // Routes (mall):
-// - GET /mall/me/wallet
-// - GET /mall/me/wallets (compat)
+// - GET /mall/me/wallets   (canonical)
 //
 // NOTE:
 // - WalletUsecase.SyncWalletTokens(ctx, avatarID, addr) requires addr for create.
-// - For /mall/me/wallet, we try to resolve addr from Avatar.walletAddress.
+// - For /mall/me/wallets, we try to resolve addr from Avatar.walletAddress.
 type MallWalletHandler struct {
 	walletUC *usecase.WalletUsecase
 	avatarUC *usecase.AvatarUsecase
@@ -36,8 +36,9 @@ func (h *MallWalletHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	path0 := strings.TrimSuffix(r.URL.Path, "/")
 
 	switch {
-	case r.Method == http.MethodGet && (path0 == "/mall/me/wallet" || path0 == "/mall/me/wallets"):
-		h.getMe(w, r)
+	// canonical: plural only
+	case r.Method == http.MethodGet && path0 == "/mall/me/wallets":
+		h.getMeWallets(w, r)
 		return
 	default:
 		notFound(w)
@@ -45,8 +46,8 @@ func (h *MallWalletHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-// GET /mall/me/wallet
-func (h *MallWalletHandler) getMe(w http.ResponseWriter, r *http.Request) {
+// GET /mall/me/wallets
+func (h *MallWalletHandler) getMeWallets(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 
 	if h == nil || h.walletUC == nil {
@@ -75,11 +76,11 @@ func (h *MallWalletHandler) getMe(w http.ResponseWriter, r *http.Request) {
 			}
 		} else {
 			// avatar が無い/引けない場合でも、wallet 側が既存なら動く可能性があるので続行
-			log.Printf("[mall_wallet_handler] /mall/me/wallet avatar lookup failed avatarId=%q err=%v\n", maskID(avatarID), err)
+			log.Printf("[mall_wallet_handler] /mall/me/wallets avatar lookup failed avatarId=%q err=%v\n", maskID(avatarID), err)
 		}
 	}
 
-	log.Printf("[mall_wallet_handler] GET /mall/me/wallet avatarId=%q addr_set=%t\n", maskID(avatarID), addr != "")
+	log.Printf("[mall_wallet_handler] GET /mall/me/wallets avatarId=%q addr_set=%t\n", maskID(avatarID), addr != "")
 
 	wallet, err := h.walletUC.SyncWalletTokens(ctx, avatarID, addr)
 	if err != nil {
@@ -87,7 +88,8 @@ func (h *MallWalletHandler) getMe(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	_ = json.NewEncoder(w).Encode(map[string]any{"wallet": wallet})
+	// wallets を正として返却（現状は 1 avatar = 1 wallet 前提）
+	_ = json.NewEncoder(w).Encode(map[string]any{"wallets": []walletdom.Wallet{wallet}})
 }
 
 func writeMallWalletErr(w http.ResponseWriter, err error) {

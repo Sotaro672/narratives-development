@@ -228,18 +228,23 @@ class _AvatarPageState extends State<AvatarPage> {
     final me = await (_meAvatarFuture ??= _fetchMeAvatar());
     if (me == null) return null;
 
-    // ✅ async gap の後に context を触らない（警告対策）
     final urlAid = urlAvatarId.trim();
     final effectiveAid = urlAid.isNotEmpty ? urlAid : me.avatarId;
 
-    // walletAddress が me/avatar に含まれていなければ wallet は読めない（= tokens は空表示）
+    // ✅ 新仕様: /mall/me/wallets/{walletAddress}?avatarId={avatarId}
     final addr = me.walletAddress.trim();
-    if (addr.isEmpty) return null;
+    if (addr.isEmpty) {
+      // me/avatar が walletAddress を返さない場合、ここでは取得できないので null
+      // （必要なら、旧 /mall/me/wallets を叩くフォールバックを別途実装）
+      return null;
+    }
 
-    return _walletRepo.fetchByWalletAddress(
+    final wallet = await _walletRepo.fetchByWalletAddress(
       avatarId: effectiveAid,
       walletAddress: addr,
     );
+
+    return wallet;
   }
 
   /// ✅ /avatar の URL に avatarId を必ず載せる（Header/Cart が拾えるようにする）

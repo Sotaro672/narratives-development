@@ -10,23 +10,33 @@ import (
 	"strings"
 
 	"cloud.google.com/go/firestore"
+	secretmanager "cloud.google.com/go/secretmanager/apiv1"
 	"cloud.google.com/go/storage"
 
 	firebase "firebase.google.com/go/v4"
 	firebaseauth "firebase.google.com/go/v4/auth"
 	"google.golang.org/api/option"
 
+	uc "narratives/internal/application/usecase"
 	arweaveinfra "narratives/internal/infra/arweave"
 	appcfg "narratives/internal/infra/config"
 	solanainfra "narratives/internal/infra/solana"
+)
 
-	uc "narratives/internal/application/usecase"
+const (
+	// Default collection names for owner resolve (walletAddress -> brandId / avatarId).
+	defaultBrandsCollection  = "brands"
+	defaultAvatarsCollection = "avatars"
+
+	// Default Secret Manager secret name prefix for brand signer secrets.
+	// secretId = <prefix><brandId>
+	defaultBrandWalletSecretPrefix = "brand-wallet-"
 )
 
 // Infra is shared runtime infrastructure for DI.
-// - owns external clients (Firestore/FirebaseAuth/GCS)
+// - owns external clients (Firestore/FirebaseAuth/GCS/SecretManager)
 // - owns cross-cutting infra services (mint authority key, optional arweave uploader)
-// - owns bucket names resolved from env/config
+// - owns env/config-resolved runtime settings (bucket names, base URLs, collection names)
 //
 // IMPORTANT:
 // Infra must NOT depend on console/mall routers, handlers, or queries.
@@ -35,27 +45,32 @@ type Infra struct {
 	Config    *appcfg.Config
 	ProjectID string
 
-	// Clients
-	Firestore    *firestore.Client
-	GCS          *storage.Client
-	FirebaseApp  *firebase.App
-	FirebaseAuth *firebaseauth.Client
+	// Clients (owned; Close-managed)
+	Firestore     *firestore.Client
+	GCS           *storage.Client
+	FirebaseApp   *firebase.App
+	FirebaseAuth  *firebaseauth.Client
+	SecretManager *secretmanager.Client
 
 	// Cross-cutting infra
 	MintAuthorityKey *solanainfra.MintAuthorityKey
 	ArweaveUploader  uc.ArweaveUploader
 
-	// Buckets (resolved once)
-	TokenIconBucket     string
-	TokenContentsBucket string
-	ListImageBucket     string
-	AvatarIconBucket    string
-	PostImageBucket     string
+	// Runtime settings (resolved once)
+	SelfBaseURL             string // used by PaymentFlow (self webhook trigger)
+	BrandsCollection        string // used by OwnerResolve query
+	AvatarsCollection       string // used by OwnerResolve query
+	BrandWalletSecretPrefix string // used by Transfer signer provider (Design B)
+	TokenIconBucket         string
+	TokenContentsBucket     string
+	ListImageBucket         string
+	AvatarIconBucket        string
+	PostImageBucket         string
 }
 
 // NewInfra initializes shared infra.
 // Firestore/GCS are strict (return error).
-// Firebase/Auth and MintAuthorityKey are best-effort (warn + continue).
+// Firebase/Auth, SecretManager and MintAuthorityKey are best-effort (warn + continue).
 func NewInfra(ctx context.Context) (*Infra, error) {
 	cfg := appcfg.Load()
 	if cfg == nil {
@@ -64,7 +79,7 @@ func NewInfra(ctx context.Context) (*Infra, error) {
 
 	projectID := resolveProjectID(cfg)
 	if projectID == "" {
-		// ここが空だと Firestore/NewApp とも不安定になるため、必ず error にする
+		// If empty, Firestore/NewApp become unstable; treat as hard error.
 		return nil, errors.New("shared.infra: projectID is empty (set FIRESTORE_PROJECT_ID or GOOGLE_CLOUD_PROJECT)")
 	}
 
@@ -73,7 +88,12 @@ func NewInfra(ctx context.Context) (*Infra, error) {
 		ProjectID: projectID,
 	}
 
-	// credentials file (optional; mainly for local dev)
+	// Resolve runtime settings once (env/config)
+	inf.SelfBaseURL = resolveSelfBaseURL()
+	inf.BrandsCollection, inf.AvatarsCollection = resolveOwnerResolveCollections()
+	inf.BrandWalletSecretPrefix = resolveBrandWalletSecretPrefix()
+
+	// Credentials file (optional; mainly for local dev)
 	credFile := strings.TrimSpace(cfg.FirestoreCredentialsFile)
 	if credFile == "" {
 		credFile = strings.TrimSpace(cfg.GCPCreds) // GOOGLE_APPLICATION_CREDENTIALS
@@ -94,7 +114,26 @@ func NewInfra(ctx context.Context) (*Infra, error) {
 		log.Printf("[shared.infra] Arweave HTTPUploader not configured (ARWEAVE_BASE_URL empty)")
 	}
 
-	// 2) Optional: Solana mint authority key (Secret Manager)
+	// 2) Optional: Secret Manager client (used by Transfer signer provider etc.)
+	{
+		var sm *secretmanager.Client
+		var err error
+		if len(clientOpts) > 0 {
+			sm, err = secretmanager.NewClient(ctx, clientOpts...)
+		} else {
+			sm, err = secretmanager.NewClient(ctx)
+		}
+		if err != nil {
+			log.Printf("[shared.infra] WARN: secretmanager.NewClient failed: %v (SecretManager-dependent features may be disabled)", err)
+			sm = nil
+		}
+		inf.SecretManager = sm
+	}
+
+	// 3) Optional: Solana mint authority key (Secret Manager)
+	// NOTE: This loader may create its own SM client internally; we keep it as-is
+	// to avoid wider signature changes. If you want to reuse inf.SecretManager,
+	// adjust solanainfra.LoadMintAuthorityKey to accept a client.
 	{
 		mintKey, err := solanainfra.LoadMintAuthorityKey(
 			ctx,
@@ -108,7 +147,7 @@ func NewInfra(ctx context.Context) (*Infra, error) {
 		inf.MintAuthorityKey = mintKey
 	}
 
-	// 3) Firestore (strict)
+	// 4) Firestore (strict)
 	{
 		var fsClient *firestore.Client
 		var err error
@@ -124,7 +163,7 @@ func NewInfra(ctx context.Context) (*Infra, error) {
 		log.Printf("[shared.infra] Firestore connected project=%s", inf.ProjectID)
 	}
 
-	// 4) GCS (strict)
+	// 5) GCS (strict)
 	{
 		var gcsClient *storage.Client
 		var err error
@@ -141,7 +180,7 @@ func NewInfra(ctx context.Context) (*Infra, error) {
 		log.Printf("[shared.infra] GCS storage client initialized")
 	}
 
-	// 5) Firebase App/Auth (best-effort)
+	// 6) Firebase App/Auth (best-effort)
 	{
 		var fbApp *firebase.App
 		var err error
@@ -167,16 +206,16 @@ func NewInfra(ctx context.Context) (*Infra, error) {
 		}
 	}
 
-	// 6) Buckets (resolve once)
+	// 7) Buckets (resolve once)
 	// Token buckets
 	inf.TokenIconBucket = strings.TrimSpace(cfg.TokenIconBucket)
 	if inf.TokenIconBucket == "" {
-		// ここは “空のまま進むと後で失敗が分かりづらい” ので明示的に WARN
+		// Warn early to avoid silent failures later.
 		log.Printf("[shared.infra] WARN: TOKEN_ICON_BUCKET is empty (token icon features may fail)")
 	}
 	inf.TokenContentsBucket = strings.TrimSpace(cfg.TokenContentsBucket)
 	if inf.TokenContentsBucket == "" {
-		// 既存互換: env fallback + default
+		// Backward compatibility: env fallback + default
 		inf.TokenContentsBucket = getenvOrDefault("TOKEN_CONTENTS_BUCKET", "narratives-development-token")
 	}
 	if inf.TokenContentsBucket == "" {
@@ -184,8 +223,8 @@ func NewInfra(ctx context.Context) (*Infra, error) {
 	}
 
 	// List images bucket:
-	// deploy-backend.ps1 は LIST_BUCKET を渡しているため、まず LIST_BUCKET を見る。
-	// 旧名 LIST_IMAGE_BUCKET がある場合も拾う。
+	// deploy-backend.ps1 passes LIST_BUCKET, so check LIST_BUCKET first.
+	// Also accept legacy LIST_IMAGE_BUCKET.
 	inf.ListImageBucket = strings.TrimSpace(os.Getenv("LIST_BUCKET"))
 	if inf.ListImageBucket == "" {
 		inf.ListImageBucket = strings.TrimSpace(os.Getenv("LIST_IMAGE_BUCKET"))
@@ -198,7 +237,7 @@ func NewInfra(ctx context.Context) (*Infra, error) {
 	inf.AvatarIconBucket = getenvOrDefault("AVATAR_ICON_BUCKET", "narratives-development_avatar_icon")
 	inf.PostImageBucket = getenvOrDefault("POST_IMAGE_BUCKET", "narratives-development-posts")
 
-	// Final sanity (panic 防止のための最終チェック)
+	// Final sanity checks (panic prevention)
 	if inf.Firestore == nil {
 		_ = inf.Close()
 		return nil, errors.New("shared.infra: firestore client is nil after initialization (unexpected)")
@@ -221,16 +260,19 @@ func (i *Infra) Close() error {
 	if i.GCS != nil {
 		_ = i.GCS.Close()
 	}
+	if i.SecretManager != nil {
+		_ = i.SecretManager.Close()
+	}
 	return nil
 }
 
 func resolveProjectID(cfg *appcfg.Config) string {
-	// 優先順位:
-	// 1) cfg.FirestoreProjectID（config.Load で解決済み想定）
+	// Priority:
+	// 1) cfg.FirestoreProjectID (resolved by config.Load)
 	// 2) FIRESTORE_PROJECT_ID
 	// 3) GCP_PROJECT_ID
-	// 4) GOOGLE_CLOUD_PROJECT（Cloud Run ではこれが入ってることが多い）
-	// 5) FIREBASE_PROJECT_ID（保険）
+	// 4) GOOGLE_CLOUD_PROJECT (often set in Cloud Run)
+	// 5) FIREBASE_PROJECT_ID (fallback)
 	if cfg != nil {
 		if v := strings.TrimSpace(cfg.FirestoreProjectID); v != "" {
 			return v
@@ -251,6 +293,32 @@ func resolveProjectID(cfg *appcfg.Config) string {
 	return ""
 }
 
+func resolveSelfBaseURL() string {
+	u := strings.TrimSpace(os.Getenv("SELF_BASE_URL"))
+	u = strings.TrimRight(u, "/")
+	return u
+}
+
+func resolveOwnerResolveCollections() (brandsCol string, avatarsCol string) {
+	brandsCol = strings.TrimSpace(os.Getenv("BRANDS_COLLECTION"))
+	if brandsCol == "" {
+		brandsCol = defaultBrandsCollection
+	}
+	avatarsCol = strings.TrimSpace(os.Getenv("AVATARS_COLLECTION"))
+	if avatarsCol == "" {
+		avatarsCol = defaultAvatarsCollection
+	}
+	return brandsCol, avatarsCol
+}
+
+func resolveBrandWalletSecretPrefix() string {
+	p := strings.TrimSpace(os.Getenv("BRAND_WALLET_SECRET_PREFIX"))
+	if p == "" {
+		p = defaultBrandWalletSecretPrefix
+	}
+	return p
+}
+
 func getenvOrDefault(key, def string) string {
 	v := strings.TrimSpace(os.Getenv(key))
 	if v == "" {
@@ -260,12 +328,12 @@ func getenvOrDefault(key, def string) string {
 }
 
 func redactPath(p string) string {
-	// ログにパス全文を出さない（Windows/Unix 両対応の軽いマスク）
+	// Do not log full path (Windows/Unix compatible light masking)
 	p = strings.TrimSpace(p)
 	if p == "" {
 		return ""
 	}
-	// 最後の要素だけ残す
+	// Keep only the last segment
 	p = strings.ReplaceAll(p, "\\", "/")
 	parts := strings.Split(p, "/")
 	if len(parts) == 0 {

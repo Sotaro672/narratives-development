@@ -57,7 +57,9 @@ class WalletDTO {
     var walletAddress = s(
       pickAny(const ['walletAddress', 'WalletAddress', 'address', 'Address']),
     );
-    if (walletAddress.isEmpty) walletAddress = fallbackWalletAddress.trim();
+    if (walletAddress.isEmpty) {
+      walletAddress = fallbackWalletAddress.trim();
+    }
 
     final lastUpdatedAt = s(
       pickAny(const [
@@ -124,15 +126,12 @@ class WalletRepositoryHttp {
   // API
   // ------------------------------------------------------------
 
-  /// ✅ 唯一のGET:
-  /// GET /mall/wallets/{walletAddress}?avatarId={avatarId}
-  ///
-  /// - /mall/me/wallet は存在しないので呼ばない
-  /// - /mall/wallets/{avatarId} 互換も廃止（呼ばない）
+  /// ✅ canonical (new):
+  /// GET /mall/me/wallets/{walletAddress}?avatarId={avatarId}
   ///
   /// NOTE:
-  /// - walletAddress は avatar doc などから呼び出し側が解決して渡す
-  /// - avatarId は docId=avatarId の同期/保存のために query で渡す（usecase仕様）
+  /// - walletAddress は呼び出し側が解決して渡す（/mall/me/avatar 等）
+  /// - avatarId は URL query で渡す（usecase / handler 側で必要なら利用）
   Future<WalletDTO?> fetchByWalletAddress({
     required String avatarId,
     required String walletAddress,
@@ -141,7 +140,7 @@ class WalletRepositoryHttp {
     final addr = walletAddress.trim();
     if (aid.isEmpty || addr.isEmpty) return null;
 
-    final uri = _api.uri('/mall/wallets/$addr', <String, String>{
+    final uri = _api.uri('/mall/me/wallets/$addr', <String, String>{
       'avatarId': aid,
     });
 
@@ -161,6 +160,11 @@ class WalletRepositoryHttp {
         url: uri.toString(),
         body: res.body,
       );
+    }
+
+    if (res.statusCode == 401) {
+      _log('[WalletRepositoryHttp] 401 unauthorized url=$uri');
+      return null;
     }
 
     if (res.statusCode == 404) {
@@ -202,6 +206,18 @@ class WalletRepositoryHttp {
       decoded,
       fallbackAvatarId: aid,
       fallbackWalletAddress: addr,
+    );
+  }
+
+  /// Backward-compatible alias:
+  /// - 旧コードが fetchMeWallet() などを呼ぶ場合のために残す（必要なければ削除可）
+  Future<WalletDTO?> fetchMeWallet({
+    required String avatarId,
+    required String walletAddress,
+  }) {
+    return fetchByWalletAddress(
+      avatarId: avatarId,
+      walletAddress: walletAddress,
     );
   }
 }
