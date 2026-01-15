@@ -427,15 +427,20 @@ class MallTokenInfo {
   };
 }
 
+/// ✅ NEW: response model for
+/// POST /mall/me/orders/scan/transfer
+///
+/// Backend returns:
+/// { "data": { avatarId, productId, matched, txSignature?, fromWallet?, toWallet?, updatedToAddress? } }
 class MallScanTransferResponse {
   MallScanTransferResponse({
     required this.avatarId,
     required this.productId,
     required this.matched,
-    this.txSignature,
-    this.fromWallet,
-    this.toWallet,
-    this.updatedToAddress,
+    this.txSignature = '',
+    this.fromWallet = '',
+    this.toWallet = '',
+    this.updatedToAddress = false,
   });
 
   final String avatarId;
@@ -444,36 +449,23 @@ class MallScanTransferResponse {
   final bool matched;
 
   // Transfer result
-  final String? txSignature;
+  final String txSignature;
 
   // Optional debug/info
-  final String? fromWallet;
-  final String? toWallet;
+  final String fromWallet;
+  final String toWallet;
 
   // tokens/{productId}.toAddress updated?
-  final bool? updatedToAddress;
+  final bool updatedToAddress;
 
   static String _s(dynamic v) => (v ?? '').toString().trim();
 
   static bool _b(dynamic v) {
-    if (v == null) {
-      return false;
-    }
-    if (v is bool) {
-      return v;
-    }
-    if (v is num) {
-      return v != 0;
-    }
+    if (v == null) return false;
+    if (v is bool) return v;
+    if (v is num) return v != 0;
     final s = v.toString().trim().toLowerCase();
     return s == 'true' || s == '1' || s == 'yes';
-  }
-
-  static bool? _bNullable(dynamic v) {
-    if (v == null) {
-      return null;
-    }
-    return _b(v);
   }
 
   factory MallScanTransferResponse.fromJson(Map<String, dynamic> j) {
@@ -492,10 +484,10 @@ class MallScanTransferResponse {
       avatarId: _s(j['avatarId']),
       productId: _s(j['productId']),
       matched: _b(j['matched']),
-      txSignature: _s(j['txSignature']).isEmpty ? null : _s(j['txSignature']),
-      fromWallet: _s(j['fromWallet']).isEmpty ? null : _s(j['fromWallet']),
-      toWallet: _s(j['toWallet']).isEmpty ? null : _s(j['toWallet']),
-      updatedToAddress: _bNullable(j['updatedToAddress']),
+      txSignature: _s(j['txSignature']),
+      fromWallet: _s(j['fromWallet']),
+      toWallet: _s(j['toWallet']),
+      updatedToAddress: _b(j['updatedToAddress']),
     );
   }
 

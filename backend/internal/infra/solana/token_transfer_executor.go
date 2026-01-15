@@ -27,6 +27,9 @@ var (
 	ErrTokenTransferInvalidSigner   = errors.New("token_transfer_executor: invalid signer type")
 	ErrTokenTransferInvalidPrivKey  = errors.New("token_transfer_executor: invalid private key bytes")
 	ErrTokenTransferSourceAtaAbsent = errors.New("token_transfer_executor: source ATA not found")
+
+	// ✅ Safety: if FromWalletAddress is provided, it must match signer public key.
+	ErrTokenTransferSignerWalletMismatch = errors.New("token_transfer_executor: signer public key does not match fromWalletAddress")
 )
 
 const (
@@ -70,6 +73,14 @@ func (e *TokenTransferExecutorSolana) ExecuteTransfer(ctx context.Context, in us
 		return usecase.ExecuteTransferResult{}, ErrTokenTransferNotConfigured
 	}
 
+	// best-effort timeout wrapper (do not override caller cancellation)
+	rpcCtx := ctx
+	if e.Timeout > 0 {
+		var cancel context.CancelFunc
+		rpcCtx, cancel = context.WithTimeout(ctx, e.Timeout)
+		defer cancel()
+	}
+
 	toWallet := strings.TrimSpace(in.ToWalletAddress)
 	if toWallet == "" {
 		return usecase.ExecuteTransferResult{}, ErrTokenTransferToWalletEmpty
@@ -97,6 +108,19 @@ func (e *TokenTransferExecutorSolana) ExecuteTransfer(ctx context.Context, in us
 		return usecase.ExecuteTransferResult{}, err
 	}
 
+	// ✅ Safety: if FromWalletAddress is provided, ensure it matches signer pubkey
+	fromWalletAddr := strings.TrimSpace(in.FromWalletAddress)
+	if fromWalletAddr != "" {
+		if fromAcc.PublicKey.ToBase58() != fromWalletAddr {
+			return usecase.ExecuteTransferResult{}, fmt.Errorf(
+				"%w: signer=%s fromWalletAddress=%s",
+				ErrTokenTransferSignerWalletMismatch,
+				maskShort(fromAcc.PublicKey.ToBase58()),
+				maskShort(fromWalletAddr),
+			)
+		}
+	}
+
 	mint := common.PublicKeyFromString(mintAddr)
 	toOwner := common.PublicKeyFromString(toWallet)
 
@@ -122,7 +146,7 @@ func (e *TokenTransferExecutorSolana) ExecuteTransfer(ctx context.Context, in us
 	)
 
 	// 1) existence checks
-	fromExists, err := e.accountExists(ctx, fromATA.ToBase58())
+	fromExists, err := e.accountExists(rpcCtx, fromATA.ToBase58())
 	if err != nil {
 		return usecase.ExecuteTransferResult{}, fmt.Errorf("token_transfer_executor: check from ATA failed: %w", err)
 	}
@@ -130,7 +154,7 @@ func (e *TokenTransferExecutorSolana) ExecuteTransfer(ctx context.Context, in us
 		return usecase.ExecuteTransferResult{}, ErrTokenTransferSourceAtaAbsent
 	}
 
-	toExists, err := e.accountExists(ctx, toATA.ToBase58())
+	toExists, err := e.accountExists(rpcCtx, toATA.ToBase58())
 	if err != nil {
 		return usecase.ExecuteTransferResult{}, fmt.Errorf("token_transfer_executor: check to ATA failed: %w", err)
 	}
@@ -159,7 +183,7 @@ func (e *TokenTransferExecutorSolana) ExecuteTransfer(ctx context.Context, in us
 	}))
 
 	// 3) recent blockhash
-	latest, err := e.RPC.GetLatestBlockhash(ctx)
+	latest, err := e.RPC.GetLatestBlockhash(rpcCtx)
 	if err != nil {
 		return usecase.ExecuteTransferResult{}, fmt.Errorf("token_transfer_executor: GetLatestBlockhash: %w", err)
 	}
@@ -178,7 +202,7 @@ func (e *TokenTransferExecutorSolana) ExecuteTransfer(ctx context.Context, in us
 	}
 
 	// 5) send
-	sig, err := e.RPC.SendTransaction(ctx, tx)
+	sig, err := e.RPC.SendTransaction(rpcCtx, tx)
 	if err != nil {
 		return usecase.ExecuteTransferResult{}, fmt.Errorf("token_transfer_executor: SendTransaction: %w", err)
 	}

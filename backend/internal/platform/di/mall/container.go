@@ -52,6 +52,10 @@ const (
 	// owner-resolve query (walletAddress -> brandId / avatarId)
 	defaultBrandsCollection  = "brands"
 	defaultAvatarsCollection = "avatars"
+
+	// ✅ Design B (brand signer): SecretManager secret name prefix
+	// secretId = brand-wallet-<brandId>
+	defaultBrandWalletSecretPrefix = "brand-wallet-"
 )
 
 // Container is Mall DI container.
@@ -404,28 +408,27 @@ func NewContainer(ctx context.Context, infra *shared.Infra) (*Container, error) 
 		// same concrete impl also satisfies AvatarWalletResolver
 		var avatarWalletResolver usecase.AvatarWalletResolver = walletResolver.(usecase.AvatarWalletResolver)
 
-		// 4) WalletSecretProvider (Secret Manager)
-		//    - secret name rule (configurable):
-		//      projects/<projectID>/secrets/<prefix><walletAddress>/versions/latest
+		// 4) WalletSecretProvider (Secret Manager) - Design B
+		//    - secret name rule:
+		//      projects/<project-number>/secrets/brand-wallet-<brandId>/versions/latest
 		//    - payload format: JSON int array string "[1,2,...]" (executor が対応)
 		var secrets usecase.WalletSecretProvider = nil
 		sm, smErr := secretmanager.NewClient(ctx)
 		if smErr != nil {
 			log.Printf("[di.mall] WARN: secretmanager.NewClient failed: %v (TransferUC will be nil)", smErr)
 		} else {
-			secretPrefix := strings.TrimSpace(os.Getenv("SOLANA_WALLET_SECRET_PREFIX"))
-			if secretPrefix == "" {
-				secretPrefix = "solana-wallet-" // default (override recommended)
-			}
 			if strings.TrimSpace(projectID) == "" {
 				log.Printf("[di.mall] WARN: projectID is empty; SecretManager signer provider disabled (TransferUC will be nil)")
 			} else {
-				secrets = &walletSecretProviderSM{
-					sm:            sm,
-					projectID:     projectID,
-					secretPrefix:  secretPrefix,
-					version:       "latest",
-					requirePrefix: true,
+				brandSecretPrefix := strings.TrimSpace(os.Getenv("BRAND_WALLET_SECRET_PREFIX"))
+				if brandSecretPrefix == "" {
+					brandSecretPrefix = defaultBrandWalletSecretPrefix
+				}
+				secrets = &brandWalletSecretProviderSM{
+					sm:           sm,
+					projectID:    projectID,
+					secretPrefix: brandSecretPrefix,
+					version:      "latest",
 				}
 			}
 		}
@@ -706,7 +709,7 @@ func (r tokenIconURLResolver) ResolveForResponse(storedObjectPath string, stored
 var (
 	errTokenResolverNotConfigured  = errors.New("di.mall: tokenResolverFS not configured")
 	errTokenDocNotFound            = errors.New("di.mall: token doc not found")
-	errSecretProviderNotConfigured = errors.New("di.mall: walletSecretProviderSM not configured")
+	errSecretProviderNotConfigured = errors.New("di.mall: brandWalletSecretProviderSM not configured")
 )
 
 // tokenResolverFS implements usecase.TokenResolver by reading tokens/{productId}.
@@ -809,47 +812,51 @@ func (r *tokenOwnerUpdaterFS) UpdateToAddressByProductID(ctx context.Context, pr
 	return err
 }
 
-// walletSecretProviderSM implements usecase.WalletSecretProvider using Secret Manager.
-type walletSecretProviderSM struct {
-	sm            *secretmanager.Client
-	projectID     string
-	secretPrefix  string
-	version       string
-	requirePrefix bool
+// ============================================================
+// ✅ Design B: Brand signer provider (Secret Manager)
+//   secretId = <prefix><brandId>
+//   e.g. brand-wallet-kABgyAQRtbvxqA8SxBTS
+// ============================================================
+
+type brandWalletSecretProviderSM struct {
+	sm           *secretmanager.Client
+	projectID    string
+	secretPrefix string
+	version      string
 }
 
-func (p *walletSecretProviderSM) GetSigner(ctx context.Context, walletAddress string) (any, error) {
+func (p *brandWalletSecretProviderSM) GetBrandSigner(ctx context.Context, brandID string) (any, error) {
 	if p == nil || p.sm == nil {
 		return nil, errSecretProviderNotConfigured
 	}
-	addr := strings.TrimSpace(walletAddress)
-	if addr == "" {
-		return nil, errors.New("walletSecretProviderSM: walletAddress is empty")
+	bid := strings.TrimSpace(brandID)
+	if bid == "" {
+		return nil, errors.New("brandWalletSecretProviderSM: brandID is empty")
 	}
 	prj := strings.TrimSpace(p.projectID)
 	if prj == "" {
-		return nil, errors.New("walletSecretProviderSM: projectID is empty")
+		return nil, errors.New("brandWalletSecretProviderSM: projectID is empty")
 	}
 
 	prefix := strings.TrimSpace(p.secretPrefix)
-	if p.requirePrefix && prefix == "" {
-		return nil, errors.New("walletSecretProviderSM: SOLANA_WALLET_SECRET_PREFIX is empty")
+	if prefix == "" {
+		prefix = defaultBrandWalletSecretPrefix
 	}
 	ver := strings.TrimSpace(p.version)
 	if ver == "" {
 		ver = "latest"
 	}
 
-	// secret id = <prefix><walletAddress>
-	secretID := prefix + addr
+	// secret id = <prefix><brandId>
+	secretID := prefix + bid
 
 	name := fmt.Sprintf("projects/%s/secrets/%s/versions/%s", prj, secretID, ver)
 	resp, err := p.sm.AccessSecretVersion(ctx, &secretmanagerpb.AccessSecretVersionRequest{Name: name})
 	if err != nil {
-		return nil, fmt.Errorf("walletSecretProviderSM: AccessSecretVersion failed (%s): %w", name, err)
+		return nil, fmt.Errorf("brandWalletSecretProviderSM: AccessSecretVersion failed (%s): %w", name, err)
 	}
 	if resp == nil || resp.Payload == nil {
-		return nil, fmt.Errorf("walletSecretProviderSM: empty payload (%s)", name)
+		return nil, fmt.Errorf("brandWalletSecretProviderSM: empty payload (%s)", name)
 	}
 
 	// executor は "string(JSON int array)" を受け取れるので、そのまま string で返す

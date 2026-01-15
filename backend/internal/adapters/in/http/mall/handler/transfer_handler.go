@@ -164,6 +164,15 @@ func (h *TransferHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	out, err := h.uc.TransferByScanPurchasedByAvatarID(r.Context(), avatarID, productID)
 	if err != nil {
+		// ✅ Added: log concrete error type/value to pinpoint failing step
+		log.Printf(
+			"[mall.order.scan.transfer] ERROR uid=%q avatarId=%q productId=%q err=%T %v",
+			maskUID(uid),
+			maskUID(avatarID),
+			maskUID(productID),
+			err, err,
+		)
+
 		if isNotFoundLike(err) {
 			writeJSON(w, http.StatusNotFound, map[string]any{
 				"error":     "not found",

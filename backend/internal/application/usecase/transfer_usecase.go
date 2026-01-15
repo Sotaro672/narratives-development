@@ -16,6 +16,10 @@ package usecase
 - tokens/{productId}.toAddress が “今の owner” を表す運用なら、
   転送前に toAddress が brand wallet と一致しているか（または空）を検証するのが安全。
   （すでに別 owner の可能性があるのに転送してしまう事故を避ける）
+
+設計B:
+- brand の signer は walletAddress ではなく brandId(=docId) をキーに SecretManager から取得する。
+  例: projects/<project>/secrets/brand-wallet-<brandId>/versions/latest
 */
 
 import (
@@ -98,9 +102,10 @@ type AvatarWalletResolver interface {
 	ResolveAvatarWalletAddress(ctx context.Context, avatarID string) (string, error)
 }
 
-// WalletSecretProvider provides a signing capability for a walletAddress.
+// WalletSecretProvider provides a signing capability for a brand.
+// ✅ 設計B: brandId(=docId) をキーに SecretManager から signer を取得する。
 type WalletSecretProvider interface {
-	GetSigner(ctx context.Context, walletAddress string) (any, error)
+	GetBrandSigner(ctx context.Context, brandID string) (any, error)
 }
 
 // TokenTransferExecutor executes transfer using signers.
@@ -217,7 +222,7 @@ type TransferByVerifiedScanResult struct {
 // 3) lock(item単位)
 // 4) brand wallet / avatar wallet を解決
 // 5) (optional) token.toAddress が brand wallet を指しているか検証（誤転送防止）
-// 6) brand signer を取得
+// 6) brand signer を取得（設計B: brandId で取得）
 // 7) mintAddress を brand → avatar へ transfer (amount=1)
 // 8) orders item を transferred=true で確定更新
 // 9) tokens/{productId}.toAddress を avatar wallet に更新（今の owner を正にする）
@@ -368,9 +373,13 @@ func (u *TransferUsecase) TransferToAvatarByVerifiedScan(ctx context.Context, in
 	}
 
 	// 6) signer（送付元=brand は必須）
-	fromSigner, err := u.secrets.GetSigner(ctx, fromWallet)
+	// ✅ 設計B: brandId(=docId) をキーに signer を取得する
+	fromSigner, err := u.secrets.GetBrandSigner(ctx, brandID)
 	if err != nil {
-		return TransferByVerifiedScanResult{}, fmt.Errorf("transfer_uc: get brand signer failed wallet=%s: %w", _mask(fromWallet), err)
+		return TransferByVerifiedScanResult{}, fmt.Errorf(
+			"transfer_uc: get brand signer failed brandId=%s wallet=%s: %w",
+			_mask(brandID), _mask(fromWallet), err,
+		)
 	}
 
 	// 受領側 signer は通常不要（必要なら取得して executor に渡す）

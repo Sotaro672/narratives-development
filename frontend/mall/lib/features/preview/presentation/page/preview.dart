@@ -3,7 +3,9 @@ import 'dart:convert';
 
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
+import 'package:http/http.dart' as http;
 
+import '../../../../app/config/api_base.dart'; // ✅ resolveMallApiBase()
 import '../../infrastructure/repository.dart';
 
 /// Preview page (buyer-facing).
@@ -11,9 +13,10 @@ import '../../infrastructure/repository.dart';
 /// - /mall/preview     : ログイン前ユーザーがスキャンした時に叩く（public）
 /// - /mall/me/preview  : ログイン後ユーザーがスキャンした時に叩く（auth）
 ///
-/// ✅ 自動verify採用:
-/// - ログイン中 + avatarId/productId が揃っている場合、
-///   preview取得と並行して /mall/me/orders/scan/verify を自動で叩く。
+/// ✅ 正攻法:
+/// - ログイン中は URL 等で渡ってきた avatarId を信用せず、
+///   /mall/me/avatar で自分の avatarId を解決してから verify/transfer を行う。
+/// - verify.matched == true の場合のみ transfer を自動実行（多重実行防止あり）
 class PreviewPage extends StatefulWidget {
   const PreviewPage({
     super.key,
@@ -22,10 +25,10 @@ class PreviewPage extends StatefulWidget {
     this.from,
   });
 
+  /// URL等から渡ってきた avatarId（表示用/デバッグ用）
   final String avatarId;
 
-  /// ✅ QR入口（https://narratives.jp/{productId}）や
-  /// ✅ /preview?productId=... から渡される商品ID
+  /// QR入口（https://narratives.jp/{productId}）や /preview?productId=... から渡される商品ID
   final String? productId;
 
   final String? from;
@@ -35,14 +38,42 @@ class PreviewPage extends StatefulWidget {
 }
 
 class _PreviewPageState extends State<PreviewPage> {
-  String get _avatarId => widget.avatarId.trim();
+  String get _incomingAvatarId => widget.avatarId.trim();
   String get _productId => (widget.productId ?? '').trim();
 
   late final PreviewRepositoryHttp _previewRepo;
   late final ScanVerifyRepositoryHttp _scanVerifyRepo;
+  late final ScanTransferRepositoryHttp _scanTransferRepo;
+  late final MeAvatarRepositoryHttp _meAvatarRepo;
 
   Future<MallPreviewResponse?>? _previewFuture;
-  Future<MallScanVerifyResponse?>? _verifyFuture;
+
+  // me avatar -> verify -> transfer の順に進めるため、結果は State に保持する
+  String? _meAvatarId; // 解決できたときだけ入る
+  MallScanVerifyResponse? _verifyResult;
+  MallScanTransferResponse? _transferResult;
+
+  Object? _meAvatarError;
+  Object? _verifyError;
+  Object? _transferError;
+
+  bool _busyMe = false;
+  bool _busyVerify = false;
+  bool _busyTransfer = false;
+
+  // 多重実行防止（verify/transfer）
+  bool _transferTriggered = false;
+
+  /// firebase_auth の環境差（getIdToken() が String? 扱いになる等）を吸収して
+  /// 常に non-null の String を返す
+  Future<String> _idTokenOrEmpty(User user) async {
+    try {
+      final t = await user.getIdToken();
+      return (t ?? '').toString();
+    } catch (_) {
+      return '';
+    }
+  }
 
   @override
   void initState() {
@@ -50,16 +81,17 @@ class _PreviewPageState extends State<PreviewPage> {
 
     _previewRepo = PreviewRepositoryHttp();
     _scanVerifyRepo = ScanVerifyRepositoryHttp();
+    _scanTransferRepo = ScanTransferRepositoryHttp();
+    _meAvatarRepo = MeAvatarRepositoryHttp();
 
-    // ✅ ページ到達ログ（QRスキャンで遷移してきたかの確認に使う）
-    final avatarId = _avatarId;
+    final incomingAvatarId = _incomingAvatarId;
     final productId = _productId;
     final from = (widget.from ?? '').trim();
 
     debugPrint(
       '[PreviewPage] mounted'
       ' productId=${productId.isEmpty ? "-" : productId}'
-      ' avatarId=${avatarId.isEmpty ? "-" : avatarId}'
+      ' incomingAvatarId=${incomingAvatarId.isEmpty ? "-" : incomingAvatarId}'
       ' from=${from.isEmpty ? "-" : from}',
     );
 
@@ -68,15 +100,9 @@ class _PreviewPageState extends State<PreviewPage> {
       debugPrint('[PreviewPage] route=${routeName ?? "-"} uri=${Uri.base}');
     });
 
-    // ✅ productId がある場合のみ preview を取りに行く
     if (productId.isNotEmpty) {
       _previewFuture = _loadPreview(productId);
-
-      // ✅ 自動verify（ログイン中のみ）
-      _verifyFuture = _autoVerifyIfNeeded(
-        avatarId: avatarId,
-        productId: productId,
-      );
+      _kickAuthFlowIfNeeded();
     }
   }
 
@@ -87,25 +113,38 @@ class _PreviewPageState extends State<PreviewPage> {
     if (oldWidget.avatarId != widget.avatarId ||
         oldWidget.productId != widget.productId ||
         oldWidget.from != widget.from) {
-      final avatarId = _avatarId;
+      final incomingAvatarId = _incomingAvatarId;
       final productId = _productId;
       final from = (widget.from ?? '').trim();
 
       debugPrint(
         '[PreviewPage] updated'
         ' productId=${productId.isEmpty ? "-" : productId}'
-        ' avatarId=${avatarId.isEmpty ? "-" : avatarId}'
+        ' incomingAvatarId=${incomingAvatarId.isEmpty ? "-" : incomingAvatarId}'
         ' from=${from.isEmpty ? "-" : from}',
       );
 
+      setState(() {
+        _previewFuture = productId.isNotEmpty ? _loadPreview(productId) : null;
+
+        // 状態リセット（商品が変わったらやり直す想定）
+        _meAvatarId = null;
+        _verifyResult = null;
+        _transferResult = null;
+
+        _meAvatarError = null;
+        _verifyError = null;
+        _transferError = null;
+
+        _busyMe = false;
+        _busyVerify = false;
+        _busyTransfer = false;
+
+        _transferTriggered = false;
+      });
+
       if (productId.isNotEmpty) {
-        setState(() {
-          _previewFuture = _loadPreview(productId);
-          _verifyFuture = _autoVerifyIfNeeded(
-            avatarId: avatarId,
-            productId: productId,
-          );
-        });
+        _kickAuthFlowIfNeeded();
       }
     }
   }
@@ -114,16 +153,20 @@ class _PreviewPageState extends State<PreviewPage> {
   void dispose() {
     _previewRepo.dispose();
     _scanVerifyRepo.dispose();
+    _scanTransferRepo.dispose();
+    _meAvatarRepo.dispose();
     super.dispose();
   }
 
+  // ----------------------------
+  // Preview
+  // ----------------------------
   Future<MallPreviewResponse?> _loadPreview(String productId) async {
     final id = productId.trim();
     if (id.isEmpty) return null;
 
     final user = FirebaseAuth.instance.currentUser;
 
-    // ログイン前 -> public
     if (user == null) {
       debugPrint('[PreviewPage] calling PUBLIC /mall/preview productId=$id');
       final r = await _previewRepo.fetchPreviewByProductId(id);
@@ -141,9 +184,7 @@ class _PreviewPageState extends State<PreviewPage> {
       return r;
     }
 
-    // ログイン後 -> me
-    final token = (await user.getIdToken()) ?? '';
-
+    final token = await _idTokenOrEmpty(user);
     debugPrint(
       '[PreviewPage] calling ME /mall/me/preview productId=$id tokenLen=${token.length}',
     );
@@ -168,36 +209,195 @@ class _PreviewPageState extends State<PreviewPage> {
     return r;
   }
 
-  /// ✅ 自動verify（ログイン中のみ）
-  Future<MallScanVerifyResponse?> _autoVerifyIfNeeded({
-    required String avatarId,
-    required String productId,
-  }) async {
-    final aid = avatarId.trim();
-    final pid = productId.trim();
+  // ----------------------------
+  // Auth Flow (me avatar -> verify -> transfer)
+  // ----------------------------
+  Future<void> _kickAuthFlowIfNeeded() async {
+    final productId = _productId;
+    if (productId.isEmpty) return;
 
     final user = FirebaseAuth.instance.currentUser;
-    if (user == null) return null;
-    if (aid.isEmpty || pid.isEmpty) return null;
+    if (user == null) return;
 
-    final token = (await user.getIdToken()) ?? '';
+    // すでに me avatar が取れてるなら次へ
+    final current = (_meAvatarId ?? '').trim();
+    if (current.isNotEmpty) {
+      await _verifyAndMaybeTransfer();
+      return;
+    }
 
-    debugPrint(
-      '[PreviewPage] calling AUTO VERIFY /mall/me/orders/scan/verify'
-      ' avatarId=$aid productId=$pid tokenLen=${token.length}',
-    );
-
-    final r = await _scanVerifyRepo.verifyScanPurchasedByAvatarId(
-      avatarId: aid,
-      productId: pid,
-      headers: {'Authorization': 'Bearer $token'},
-    );
-
-    debugPrint('[PreviewPage] AUTO VERIFY response: ${r.toJson()}');
-    return r;
+    await _resolveMeAvatarId();
+    await _verifyAndMaybeTransfer();
   }
 
-  /// ✅ int(0xRRGGBB) -> Flutter Color(0xAARRGGBB)
+  Future<void> _resolveMeAvatarId() async {
+    if (_busyMe) return;
+
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null) return;
+
+    setState(() {
+      _busyMe = true;
+      _meAvatarError = null;
+    });
+
+    try {
+      final token = await _idTokenOrEmpty(user);
+
+      debugPrint(
+        '[PreviewPage] calling ME AVATAR /mall/me/avatar tokenLen=${token.length}',
+      );
+
+      final r = await _meAvatarRepo.fetchMeAvatar(
+        headers: {'Authorization': 'Bearer $token'},
+      );
+
+      final meAvatarId = r.avatarId.trim();
+      debugPrint(
+        '[PreviewPage] ME AVATAR response avatarId=$meAvatarId raw=${r.toJson()}',
+      );
+
+      if (mounted) {
+        setState(() {
+          _meAvatarId = meAvatarId.isEmpty ? null : meAvatarId;
+        });
+      }
+    } catch (e) {
+      debugPrint('[PreviewPage] ME AVATAR failed: $e');
+      if (mounted) {
+        setState(() {
+          _meAvatarError = e;
+        });
+      }
+    } finally {
+      if (mounted) {
+        setState(() {
+          _busyMe = false;
+        });
+      }
+    }
+  }
+
+  Future<void> _verifyAndMaybeTransfer() async {
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null) return;
+
+    final productId = _productId.trim();
+    final meAvatarId = (_meAvatarId ?? '').trim();
+    if (productId.isEmpty || meAvatarId.isEmpty) return;
+
+    // verify が完了済みなら transfer 判定だけやる
+    if (_verifyResult != null) {
+      await _maybeAutoTransfer();
+      return;
+    }
+
+    if (_busyVerify) return;
+
+    setState(() {
+      _busyVerify = true;
+      _verifyError = null;
+    });
+
+    try {
+      final token = await _idTokenOrEmpty(user);
+
+      debugPrint(
+        '[PreviewPage] calling AUTO VERIFY /mall/me/orders/scan/verify'
+        ' avatarId=$meAvatarId productId=$productId tokenLen=${token.length}',
+      );
+
+      final r = await _scanVerifyRepo.verifyScanPurchasedByAvatarId(
+        avatarId: meAvatarId,
+        productId: productId,
+        headers: {'Authorization': 'Bearer $token'},
+      );
+
+      debugPrint('[PreviewPage] AUTO VERIFY response: ${r.toJson()}');
+
+      if (mounted) {
+        setState(() {
+          _verifyResult = r;
+        });
+      }
+
+      await _maybeAutoTransfer();
+    } catch (e) {
+      debugPrint('[PreviewPage] AUTO VERIFY failed: $e');
+      if (mounted) {
+        setState(() {
+          _verifyError = e;
+        });
+      }
+    } finally {
+      if (mounted) {
+        setState(() {
+          _busyVerify = false;
+        });
+      }
+    }
+  }
+
+  Future<void> _maybeAutoTransfer() async {
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null) return;
+
+    final productId = _productId.trim();
+    final meAvatarId = (_meAvatarId ?? '').trim();
+    final verify = _verifyResult;
+
+    if (productId.isEmpty || meAvatarId.isEmpty || verify == null) return;
+    if (!verify.matched) return;
+
+    // ✅ 多重実行防止
+    if (_transferTriggered || _transferResult != null || _busyTransfer) return;
+    _transferTriggered = true;
+
+    setState(() {
+      _busyTransfer = true;
+      _transferError = null;
+    });
+
+    try {
+      final token = await _idTokenOrEmpty(user);
+
+      debugPrint(
+        '[PreviewPage] calling AUTO TRANSFER /mall/me/orders/scan/transfer'
+        ' avatarId=$meAvatarId productId=$productId tokenLen=${token.length}',
+      );
+
+      final r = await _scanTransferRepo.transferScanPurchasedByAvatarId(
+        avatarId: meAvatarId,
+        productId: productId,
+        headers: {'Authorization': 'Bearer $token'},
+      );
+
+      debugPrint('[PreviewPage] AUTO TRANSFER response: ${r.toJson()}');
+
+      if (mounted) {
+        setState(() {
+          _transferResult = r;
+        });
+      }
+    } catch (e) {
+      debugPrint('[PreviewPage] AUTO TRANSFER failed: $e');
+      if (mounted) {
+        setState(() {
+          _transferError = e;
+        });
+      }
+    } finally {
+      if (mounted) {
+        setState(() {
+          _busyTransfer = false;
+        });
+      }
+    }
+  }
+
+  // ----------------------------
+  // UI helpers
+  // ----------------------------
   Color _rgbToColor(int rgb) {
     final v = rgb & 0xFFFFFF;
     return Color(0xFF000000 | v);
@@ -217,7 +417,6 @@ class _PreviewPageState extends State<PreviewPage> {
     final brandId = owner.brandId.trim();
     final avatarId = owner.avatarId.trim();
 
-    // 表示優先: brandId -> avatarId
     if (brandId.isNotEmpty) return brandId;
     if (avatarId.isNotEmpty) return avatarId;
 
@@ -226,6 +425,7 @@ class _PreviewPageState extends State<PreviewPage> {
 
   Widget _verifyBadge(BuildContext context, MallScanVerifyResponse r) {
     final t = Theme.of(context).textTheme;
+    final bodySmall = t.bodySmall ?? const TextStyle(fontSize: 12);
 
     final matched = r.matched;
     final match = r.match;
@@ -241,20 +441,55 @@ class _PreviewPageState extends State<PreviewPage> {
       children: [
         Text('Verify', style: t.titleSmall),
         const SizedBox(height: 8),
-        Text(label, style: t.bodySmall),
+        Text(label, style: bodySmall),
         const SizedBox(height: 4),
-        Text(detail, style: t.bodySmall),
+        Text(detail, style: bodySmall),
+      ],
+    );
+  }
+
+  Widget _transferBadge(BuildContext context, MallScanTransferResponse r) {
+    final t = Theme.of(context).textTheme;
+
+    // ✅ nullableをここで確定させる（以降 copyWith を安全に呼べる）
+    final bodySmall = t.bodySmall ?? const TextStyle(fontSize: 12);
+    final monoSmall = bodySmall.copyWith(fontFamily: 'monospace');
+
+    final ok = r.matched;
+    final label = ok ? 'Transfer 実行済み' : 'Transfer 失敗（不一致）';
+
+    final lines = <String>[];
+
+    final detail = lines.join('\n');
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text('Transfer', style: t.titleSmall),
+        const SizedBox(height: 8),
+        Text(label, style: bodySmall),
+        const SizedBox(height: 6),
+        if (detail.isNotEmpty)
+          Text(detail, style: monoSmall)
+        else
+          Text('-', style: bodySmall),
       ],
     );
   }
 
   @override
   Widget build(BuildContext context) {
-    final avatarId = _avatarId;
+    final incomingAvatarId = _incomingAvatarId;
+    final meAvatarId = (_meAvatarId ?? '').trim();
     final productId = _productId;
     final from = (widget.from ?? '').trim();
 
     final t = Theme.of(context).textTheme;
+
+    // ✅ nullableをここで確定させる（copyWithを安全に）
+    final bodySmall = t.bodySmall ?? const TextStyle(fontSize: 12);
+    final monoSmall = bodySmall.copyWith(fontFamily: 'monospace');
+
     final border = Border.all(color: Theme.of(context).dividerColor, width: 1);
 
     return Padding(
@@ -275,20 +510,30 @@ class _PreviewPageState extends State<PreviewPage> {
                   ),
                   const SizedBox(height: 4),
                   Text(
-                    'アバターID: ${avatarId.isEmpty ? '-' : avatarId}',
+                    'incoming avatarId(URL): ${incomingAvatarId.isEmpty ? '-' : incomingAvatarId}',
+                    style: t.bodySmall,
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    'me avatarId(API): ${meAvatarId.isEmpty ? '-' : meAvatarId}',
                     style: t.bodySmall,
                   ),
                   const SizedBox(height: 4),
                   Text('遷移元: ${from.isEmpty ? '-' : from}', style: t.bodySmall),
+                  const SizedBox(height: 10),
+                  if (_busyMe) Text('me avatar 解決中...', style: t.bodySmall),
+                  if (_meAvatarError != null)
+                    Text(
+                      'me avatar 解決に失敗: $_meAvatarError',
+                      style: t.bodySmall,
+                    ),
                 ],
               ),
             ),
           ),
           const SizedBox(height: 12),
 
-          // ----------------------------
           // Preview
-          // ----------------------------
           Card(
             child: Padding(
               padding: const EdgeInsets.all(14),
@@ -332,13 +577,8 @@ class _PreviewPageState extends State<PreviewPage> {
                   final measurements = data.measurements;
                   final productBlueprintPatch = data.productBlueprintPatch;
 
-                  // ✅ token info
                   final token = data.token;
-
-                  // ✅ owner info
                   final ownerId = _ownerLabel(data.owner);
-
-                  // ✅ rgb -> Color（表示用スウォッチ）
                   final swatch = _rgbToColor(rgb);
 
                   final measurementEntries =
@@ -367,7 +607,7 @@ class _PreviewPageState extends State<PreviewPage> {
                       ? ''
                       : _prettyJson(productBlueprintPatch);
 
-                  final tokenPretty = (token == null)
+                  final tokenPretty = token == null
                       ? ''
                       : _prettyJson(token.toJson());
 
@@ -376,8 +616,6 @@ class _PreviewPageState extends State<PreviewPage> {
                     children: [
                       Text('商品情報', style: t.titleSmall),
                       const SizedBox(height: 8),
-
-                      // ✅ owner 表示（要求: 所有者：{検索結果id}）
                       Text('所有者: $ownerId', style: t.bodySmall),
                       const SizedBox(height: 10),
 
@@ -391,12 +629,7 @@ class _PreviewPageState extends State<PreviewPage> {
                             border: border,
                             borderRadius: BorderRadius.circular(8),
                           ),
-                          child: Text(
-                            pbPatchPretty,
-                            style:
-                                (t.bodySmall ?? const TextStyle(fontSize: 12))
-                                    .copyWith(fontFamily: 'monospace'),
-                          ),
+                          child: Text(pbPatchPretty, style: monoSmall),
                         ),
                         const SizedBox(height: 10),
                       ],
@@ -492,12 +725,7 @@ class _PreviewPageState extends State<PreviewPage> {
                               border: border,
                               borderRadius: BorderRadius.circular(8),
                             ),
-                            child: Text(
-                              tokenPretty,
-                              style:
-                                  (t.bodySmall ?? const TextStyle(fontSize: 12))
-                                      .copyWith(fontFamily: 'monospace'),
-                            ),
+                            child: Text(tokenPretty, style: monoSmall),
                           ),
                         ],
                       ],
@@ -510,22 +738,13 @@ class _PreviewPageState extends State<PreviewPage> {
 
           const SizedBox(height: 12),
 
-          // ----------------------------
           // Verify (auto)
-          // ----------------------------
           Card(
             child: Padding(
               padding: const EdgeInsets.all(14),
-              child: FutureBuilder<MallScanVerifyResponse?>(
-                future: _verifyFuture,
-                builder: (context, snap) {
-                  if (snap.connectionState == ConnectionState.none &&
-                      snap.data == null &&
-                      snap.error == null) {
-                    return Text('Verify は未実行です。', style: t.bodySmall);
-                  }
-
-                  if (snap.connectionState == ConnectionState.waiting) {
+              child: Builder(
+                builder: (context) {
+                  if (_busyVerify) {
                     return const Row(
                       children: [
                         SizedBox(
@@ -539,14 +758,14 @@ class _PreviewPageState extends State<PreviewPage> {
                     );
                   }
 
-                  if (snap.hasError) {
+                  if (_verifyError != null) {
                     return Text(
-                      'Verify に失敗しました: ${snap.error}',
+                      'Verify に失敗しました: $_verifyError',
                       style: t.bodySmall,
                     );
                   }
 
-                  final r = snap.data;
+                  final r = _verifyResult;
                   if (r == null) {
                     return Text('Verify は未実行です。', style: t.bodySmall);
                   }
@@ -556,8 +775,111 @@ class _PreviewPageState extends State<PreviewPage> {
               ),
             ),
           ),
+
+          const SizedBox(height: 12),
+
+          // Transfer (auto)
+          Card(
+            child: Padding(
+              padding: const EdgeInsets.all(14),
+              child: Builder(
+                builder: (context) {
+                  if (_busyTransfer) {
+                    return const Row(
+                      children: [
+                        SizedBox(
+                          width: 16,
+                          height: 16,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        ),
+                        SizedBox(width: 10),
+                        Text('Transfer を実行しています...'),
+                      ],
+                    );
+                  }
+
+                  if (_transferError != null) {
+                    return Text(
+                      'Transfer に失敗しました: $_transferError',
+                      style: t.bodySmall,
+                    );
+                  }
+
+                  final r = _transferResult;
+                  if (r == null) {
+                    final v = _verifyResult;
+                    if (v == null) {
+                      return Text('Transfer は未実行です。', style: t.bodySmall);
+                    }
+                    if (!v.matched) {
+                      return Text(
+                        '未購入（Verify不一致）のため Transfer しません。',
+                        style: t.bodySmall,
+                      );
+                    }
+                    return Text('Transfer 実行待ちです。', style: t.bodySmall);
+                  }
+
+                  return _transferBadge(context, r);
+                },
+              ),
+            ),
+          ),
         ],
       ),
     );
+  }
+}
+
+/// /mall/me/avatar 用（このファイル内で完結させるための最小実装）
+class MeAvatarRepositoryHttp {
+  MeAvatarRepositoryHttp({http.Client? client})
+    : _client = client ?? http.Client();
+
+  final http.Client _client;
+
+  void dispose() {
+    _client.close();
+  }
+
+  /// GET /mall/me/avatar
+  Future<MallOwnerInfo> fetchMeAvatar({
+    String? baseUrl,
+    Map<String, String>? headers,
+  }) async {
+    final base = (baseUrl ?? '').trim();
+
+    // ✅ resolveApiBase() ではなく resolveMallApiBase()
+    final resolvedBase = base.isNotEmpty ? base : resolveMallApiBase();
+
+    final b = normalizeBaseUrl(resolvedBase);
+    final uri = Uri.parse('$b/mall/me/avatar');
+
+    final mergedHeaders = <String, String>{...jsonHeaders()};
+    if (headers != null) mergedHeaders.addAll(headers);
+
+    final auth = (mergedHeaders['Authorization'] ?? '').trim();
+    if (auth.isEmpty) {
+      throw ArgumentError(
+        'Authorization header is required for /mall/me/avatar',
+      );
+    }
+
+    final res = await _client.get(uri, headers: mergedHeaders);
+
+    if (res.statusCode < 200 || res.statusCode >= 300) {
+      throw HttpException(
+        'fetchMeAvatar failed: ${res.statusCode}',
+        url: uri.toString(),
+        body: res.body,
+      );
+    }
+
+    final decoded = jsonDecode(res.body);
+    if (decoded is! Map) {
+      throw const FormatException('invalid json shape (expected object)');
+    }
+
+    return MallOwnerInfo.fromJson(decoded.cast<String, dynamic>());
   }
 }
