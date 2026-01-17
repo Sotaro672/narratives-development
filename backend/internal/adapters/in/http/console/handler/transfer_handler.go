@@ -194,12 +194,9 @@ func (h *TransferHandler) handleGetAttempt(w http.ResponseWriter, r *http.Reques
 func (h *TransferHandler) handleList(w http.ResponseWriter, r *http.Request) {
 	q := r.URL.Query()
 
-	// filters
+	// filters (entity.go を正: id フィルタは廃止)
 	var f transferdom.Filter
 
-	if s := strings.TrimSpace(q.Get("id")); s != "" {
-		f.ID = &s
-	}
 	if s := strings.TrimSpace(q.Get("productId")); s != "" {
 		f.ProductID = &s
 	}
@@ -208,6 +205,9 @@ func (h *TransferHandler) handleList(w http.ResponseWriter, r *http.Request) {
 	}
 	if s := strings.TrimSpace(q.Get("avatarId")); s != "" {
 		f.AvatarID = &s
+	}
+	if s := strings.TrimSpace(q.Get("mintAddress")); s != "" {
+		f.MintAddress = &s
 	}
 
 	if s := strings.TrimSpace(q.Get("status")); s != "" {
@@ -235,8 +235,8 @@ func (h *TransferHandler) handleList(w http.ResponseWriter, r *http.Request) {
 	perPage := parseIntLoose(q.Get("perPage"), 50)
 	p := common.Page{Number: pageNum, PerPage: perPage}
 
-	log.Printf("[console.transfer] list productId=%q orderId=%q avatarId=%q status=%q errorType=%q page=%d perPage=%d sort=%s desc=%t",
-		derefStr(f.ProductID), derefStr(f.OrderID), derefStr(f.AvatarID),
+	log.Printf("[console.transfer] list productId=%q orderId=%q avatarId=%q mint=%q status=%q errorType=%q page=%d perPage=%d sort=%s desc=%t",
+		derefStr(f.ProductID), derefStr(f.OrderID), derefStr(f.AvatarID), derefStr(f.MintAddress),
 		func() string {
 			if f.Status == nil {
 				return ""

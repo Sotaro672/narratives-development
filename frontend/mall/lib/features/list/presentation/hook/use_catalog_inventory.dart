@@ -1,4 +1,4 @@
-// frontend\mall\lib\features\list\presentation\hook\use_catalog_inventory.dart
+// frontend/mall/lib/features/list/presentation/hook/use_catalog_inventory.dart
 import '../../../inventory/infrastructure/inventory_repository_http.dart';
 import '../../infrastructure/list_repository_http.dart';
 
@@ -6,7 +6,7 @@ class CatalogModelStockRow {
   const CatalogModelStockRow({
     required this.modelId,
     required this.label,
-    required this.stockCount,
+    required this.stockCount, // ✅ availableStock (= accumulation - reservedCount)
     required this.price,
     required this.rgb,
     required this.size,
@@ -15,7 +15,10 @@ class CatalogModelStockRow {
 
   final String modelId;
   final String label;
+
+  /// ✅ availableStock
   final int stockCount;
+
   final int? price;
   final int? rgb;
   final String? size;
@@ -24,7 +27,7 @@ class CatalogModelStockRow {
 
 class CatalogInventoryComputed {
   const CatalogInventoryComputed({
-    required this.totalStock,
+    required this.totalStock, // ✅ total availableStock
     required this.modelStockRows,
   });
 
@@ -86,7 +89,7 @@ class UseCatalogInventory {
     required MallInventoryResponse? inventory,
     required List<MallModelVariationDTO>? modelVariations,
 
-    /// ✅ NEW: list.prices を渡して modelId -> price を結合
+    /// ✅ list.prices を渡して modelId -> price を結合
     required List<MallListPriceRow> prices,
   }) {
     final inv = inventory;
@@ -104,21 +107,16 @@ class UseCatalogInventory {
       }
     }
 
-    // fallback: models が無いなら inventory 側の keys
+    // models が無いなら inventory 側の modelIds を使う（旧式互換は不要なので stockKeys fallback は不要）
     if (modelIds.isEmpty && inv != null) {
       modelIds.addAll(
         inv.modelIds.map((e) => e.trim()).where((e) => e.isNotEmpty),
       );
-      if (modelIds.isEmpty) {
-        modelIds.addAll(
-          inv.stockKeys.map((e) => e.trim()).where((e) => e.isNotEmpty),
-        );
-      }
     }
 
     final uniqModelIds = _uniqPreserveOrder(modelIds);
 
-    // ✅ priceMap
+    // priceMap: modelId -> price
     final priceMap = <String, int>{};
     for (final row in prices) {
       final mid = row.modelId.trim();
@@ -132,17 +130,14 @@ class UseCatalogInventory {
       final label = meta != null ? _modelLabel(meta) : modelId;
 
       final stock = inv?.stock[modelId];
-      final count = stock != null ? _stockCount(stock) : 0;
+      final count = stock != null ? _availableStock(stock) : 0; // ✅ HERE
 
-      // ✅ attach price (may be null if not found)
       final price = priceMap[modelId];
 
-      // ✅ attach rgb (meta.colorRGB). 0/負数は「無し」とみなす
       final int? rgb = (meta != null && meta.colorRGB > 0)
           ? meta.colorRGB
           : null;
 
-      // ✅ attach size / colorName
       final s = (meta?.size ?? '').trim();
       final String? size = s.isNotEmpty ? s : null;
 
@@ -164,23 +159,19 @@ class UseCatalogInventory {
 
     rows.sort((a, b) => a.label.compareTo(b.label));
 
-    final total = (inv == null) ? null : _totalStock(inv, rows);
+    final total = (inv == null) ? null : _totalAvailableStock(rows);
     return CatalogInventoryComputed(totalStock: total, modelStockRows: rows);
   }
 
-  static int _stockCount(MallInventoryModelStock s) {
-    if (s.products.isEmpty) return 0;
-    var n = 0;
-    for (final v in s.products.values) {
-      if (v == true) n++;
-    }
-    return n;
+  /// ✅ availableStock = accumulation - reservedCount
+  static int _availableStock(MallInventoryModelStock s) {
+    final a = s.accumulation;
+    final r = s.reservedCount;
+    final v = a - r;
+    return v < 0 ? 0 : v;
   }
 
-  static int _totalStock(
-    MallInventoryResponse inv,
-    List<CatalogModelStockRow> rows,
-  ) {
+  static int _totalAvailableStock(List<CatalogModelStockRow> rows) {
     var sum = 0;
     for (final r in rows) {
       sum += r.stockCount;

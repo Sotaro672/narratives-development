@@ -1,4 +1,4 @@
-// backend\internal\adapters\out\firestore\transfer_repository_fs.go
+// backend/internal/adapters/out/firestore/transfer_repository_fs.go
 package firestore
 
 import (
@@ -6,6 +6,8 @@ import (
 	"errors"
 	"log"
 	"os"
+	"reflect"
+	"strconv"
 	"strings"
 	"time"
 
@@ -16,6 +18,7 @@ import (
 
 	usecase "narratives/internal/application/usecase"
 	orderdom "narratives/internal/domain/order"
+	transferdom "narratives/internal/domain/transfer"
 )
 
 // ============================================================
@@ -156,9 +159,6 @@ func (r *OrderRepoForTransferFS) ListPaidByAvatarID(ctx context.Context, avatarI
 		out = append(out, o)
 	}
 
-	// NOTE:
-	// Usecase側でも o.Paid をチェックしているが、
-	// ここで Paid を推定しておくと探索が成功する。
 	return out, nil
 }
 
@@ -317,7 +317,6 @@ func (r *OrderRepoForTransferFS) UnlockTransferItem(ctx context.Context, orderID
 }
 
 // MarkTransferredItem marks an item as transferred and clears lock fields.
-// Your current item schema lacks transferred/transferredAt -> we add them.
 func (r *OrderRepoForTransferFS) MarkTransferredItem(ctx context.Context, orderID string, itemModelID string, at time.Time) error {
 	if r == nil || r.Client == nil {
 		return ErrOrderRepoNotConfigured
@@ -398,15 +397,13 @@ func (r *OrderRepoForTransferFS) MarkTransferredItem(ctx context.Context, orderI
 }
 
 // ------------------------------------------------------------
-// Helpers
+// Helpers (OrderRepoForTransferFS)
 // ------------------------------------------------------------
 
 func inferPaidFromOrder(raw map[string]any) bool {
-	// ✅ your order has billingSnapshot when paid (based on your shown doc)
 	if bs, ok := raw["billingSnapshot"].(map[string]any); ok && bs != nil && len(bs) > 0 {
 		return true
 	}
-	// if you later add explicit status/payment fields, extend here
 	return false
 }
 
@@ -513,4 +510,262 @@ func maskShort(s string) string {
 		return t
 	}
 	return t[:4] + "***" + t[len(t)-4:]
+}
+
+// ============================================================
+// TransferRepo (Firestore)
+// - implements usecase.TransferRepo
+//
+// このUsecaseは「transfer テーブルの起票・更新」が必須。
+// ここで transfers を永続化する。
+// ============================================================
+
+var (
+	ErrTransferRepoNotConfigured = errors.New("transfer_repo_fs: not configured")
+	ErrInvalidTransferProductID  = errors.New("transfer_repo_fs: productId is empty")
+	ErrInvalidTransferAttempt    = errors.New("transfer_repo_fs: attempt is invalid")
+)
+
+type TransferRepositoryFS struct {
+	Client *firestore.Client
+
+	// TransfersCollection defaults to "transfers"
+	TransfersCollection string
+
+	// AttemptCountersCollection defaults to "transferAttemptCounters"
+	AttemptCountersCollection string
+}
+
+var _ usecase.TransferRepo = (*TransferRepositoryFS)(nil)
+
+// NewTransferRepositoryFS is referenced from DI as outfs.NewTransferRepositoryFS(...).
+func NewTransferRepositoryFS(client *firestore.Client) *TransferRepositoryFS {
+	return &TransferRepositoryFS{
+		Client:                    client,
+		TransfersCollection:       "",
+		AttemptCountersCollection: "",
+	}
+}
+
+func (r *TransferRepositoryFS) transfersCol() *firestore.CollectionRef {
+	col := strings.TrimSpace(r.TransfersCollection)
+	if col == "" {
+		col = strings.TrimSpace(os.Getenv("TRANSFERS_COLLECTION"))
+	}
+	if col == "" {
+		col = "transfers"
+	}
+	return r.Client.Collection(col)
+}
+
+func (r *TransferRepositoryFS) countersCol() *firestore.CollectionRef {
+	col := strings.TrimSpace(r.AttemptCountersCollection)
+	if col == "" {
+		col = strings.TrimSpace(os.Getenv("TRANSFER_ATTEMPT_COUNTERS_COLLECTION"))
+	}
+	if col == "" {
+		col = "transferAttemptCounters"
+	}
+	return r.Client.Collection(col)
+}
+
+// transferDocID returns flat doc id: "<productId>__<attempt>".
+func (r *TransferRepositoryFS) transferDocID(productID string, attempt int) string {
+	return strings.TrimSpace(productID) + "__" + strconv.Itoa(attempt)
+}
+
+func (r *TransferRepositoryFS) counterDoc(productID string) *firestore.DocumentRef {
+	return r.countersCol().Doc(productID)
+}
+
+// NextAttempt returns the next monotonically increasing attempt number for a productId.
+// 実装: transferAttemptCounters/{productId}.nextAttempt をトランザクションで採番する。
+func (r *TransferRepositoryFS) NextAttempt(ctx context.Context, productID string) (int, error) {
+	if r == nil || r.Client == nil {
+		return 0, ErrTransferRepoNotConfigured
+	}
+	pid := strings.TrimSpace(productID)
+	if pid == "" {
+		return 0, ErrInvalidTransferProductID
+	}
+
+	ref := r.counterDoc(pid)
+
+	var out int
+
+	err := r.Client.RunTransaction(ctx, func(ctx context.Context, tx *firestore.Transaction) error {
+		snap, err := tx.Get(ref)
+		if err != nil {
+			if status.Code(err) == codes.NotFound {
+				// first attempt => 1, and set nextAttempt=2
+				out = 1
+				now := time.Now().UTC()
+				return tx.Set(ref, map[string]any{
+					"productId":     pid,
+					"nextAttempt":   int64(2),
+					"updatedAt":     now,
+					"initializedAt": now,
+				}, firestore.MergeAll)
+			}
+			return err
+		}
+
+		raw := snap.Data()
+		var next int64 = 1
+		if raw != nil {
+			switch v := raw["nextAttempt"].(type) {
+			case int64:
+				next = v
+			case int:
+				next = int64(v)
+			case float64:
+				next = int64(v)
+			}
+		}
+		if next <= 0 {
+			next = 1
+		}
+
+		out = int(next)
+
+		return tx.Set(ref, map[string]any{
+			"productId":   pid,
+			"nextAttempt": next + 1,
+			"updatedAt":   time.Now().UTC(),
+		}, firestore.MergeAll)
+	})
+
+	if err != nil {
+		return 0, err
+	}
+	return out, nil
+}
+
+// Create creates a new transfer attempt record (typically pending).
+//
+// ✅ entity.go を正とする（ID フィールドを削除した前提）:
+// - docId は productId + "__" + attempt
+// - productId は Transfer.ProductID から取得する
+// - attempt は Transfer.Attempt から取得する
+//
+// ✅ Firestore: MergeAll cannot be used with struct data (Set with MergeAll + struct はNG)。
+// Create を使う（存在する場合は AlreadyExists で落ちるので、二重起票検知にもなる）。
+func (r *TransferRepositoryFS) Create(ctx context.Context, t transferdom.Transfer) error {
+	if r == nil || r.Client == nil {
+		return ErrTransferRepoNotConfigured
+	}
+
+	// entity.go 正: ProductID / Attempt を素直に使う
+	pid := strings.TrimSpace(firstStringField(t, "ProductID", "ProductId", "productId"))
+	if pid == "" {
+		return ErrInvalidTransferProductID
+	}
+	attempt := firstIntField(t, "Attempt", "attempt")
+	if attempt <= 0 {
+		return ErrInvalidTransferAttempt
+	}
+
+	docID := r.transferDocID(pid, attempt)
+
+	_, err := r.transfersCol().Doc(docID).Create(ctx, t)
+	return err
+}
+
+// Update updates an existing transfer attempt record by (productId, attempt).
+// Update は patch 指定フィールドのみ merge 更新する。
+func (r *TransferRepositoryFS) Update(ctx context.Context, productID string, attempt int, p transferdom.TransferPatch) error {
+	if r == nil || r.Client == nil {
+		return ErrTransferRepoNotConfigured
+	}
+	pid := strings.TrimSpace(productID)
+	if pid == "" {
+		return ErrInvalidTransferProductID
+	}
+	if attempt <= 0 {
+		return ErrInvalidTransferAttempt
+	}
+
+	update := map[string]any{
+		"updatedAt": time.Now().UTC(),
+	}
+
+	// TransferUsecase が参照しているフィールドに合わせて更新
+	if p.Status != nil {
+		update["status"] = *p.Status
+	}
+	if p.TxSignature != nil {
+		update["txSignature"] = strings.TrimSpace(*p.TxSignature)
+	}
+	if p.ErrorType != nil {
+		update["errorType"] = *p.ErrorType
+	}
+	if p.ErrorMsg != nil {
+		update["errorMsg"] = strings.TrimSpace(*p.ErrorMsg)
+	}
+
+	// ✅ NEW: mintAddress patch (entity.go で MintAddress を追加した前提)
+	if p.MintAddress != nil {
+		update["mintAddress"] = strings.TrimSpace(*p.MintAddress)
+	}
+
+	docID := r.transferDocID(pid, attempt)
+	_, err := r.transfersCol().Doc(docID).Set(ctx, update, firestore.MergeAll)
+	return err
+}
+
+// ------------------------------------------------------------
+// Helpers (TransferRepositoryFS)
+// ------------------------------------------------------------
+
+func firstStringField(v any, names ...string) string {
+	rv := reflect.ValueOf(v)
+	if rv.Kind() == reflect.Pointer {
+		rv = rv.Elem()
+	}
+	if rv.Kind() != reflect.Struct {
+		return ""
+	}
+	for _, name := range names {
+		f := rv.FieldByName(name)
+		if !f.IsValid() {
+			continue
+		}
+		if f.Kind() != reflect.String {
+			continue
+		}
+		s := strings.TrimSpace(f.String())
+		if s != "" {
+			return s
+		}
+	}
+	return ""
+}
+
+func firstIntField(v any, names ...string) int {
+	rv := reflect.ValueOf(v)
+	if rv.Kind() == reflect.Pointer {
+		rv = rv.Elem()
+	}
+	if rv.Kind() != reflect.Struct {
+		return 0
+	}
+	for _, name := range names {
+		f := rv.FieldByName(name)
+		if !f.IsValid() {
+			continue
+		}
+		switch f.Kind() {
+		case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
+			n := int(f.Int())
+			if n > 0 {
+				return n
+			}
+		case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64:
+			n := int(f.Uint())
+			if n > 0 {
+				return n
+			}
+		}
+	}
+	return 0
 }

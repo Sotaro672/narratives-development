@@ -36,6 +36,9 @@ type ScanTransferResult struct {
 
 	// tokens/{productId}.toAddress updated?
 	UpdatedToAddress bool `json:"updatedToAddress,omitempty"`
+
+	// ✅ NEW: moved mintAddress
+	MintAddress string `json:"mintAddress,omitempty"`
 }
 
 // TransferHandler handles:
@@ -216,14 +219,21 @@ func (h *TransferHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		out.ProductID = productID
 	}
 
+	// normalize optional fields
+	out.TxSignature = strings.TrimSpace(out.TxSignature)
+	out.FromWallet = strings.TrimSpace(out.FromWallet)
+	out.ToWallet = strings.TrimSpace(out.ToWallet)
+	out.MintAddress = strings.TrimSpace(out.MintAddress)
+
 	log.Printf(
-		`[mall.order.scan.transfer] ok uid=%q avatarId=%q productId=%q matched=%t tx=%q updatedToAddress=%t`,
+		`[mall.order.scan.transfer] ok uid=%q avatarId=%q productId=%q matched=%t tx=%q updatedToAddress=%t mint=%q`,
 		maskUID(uid),
 		maskUID(out.AvatarID),
 		maskUID(out.ProductID),
 		out.Matched,
 		maskUID(out.TxSignature),
 		out.UpdatedToAddress,
+		maskUID(out.MintAddress),
 	)
 
 	writeJSON(w, http.StatusOK, map[string]any{

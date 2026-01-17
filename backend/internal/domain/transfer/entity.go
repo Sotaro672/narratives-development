@@ -11,8 +11,13 @@ import (
 責任と機能:
 - Token transfer（移転申請/実行）の結果を永続化するためのドメインエンティティ。
 - カスタマーサポート/監査/再実行のために、成功/失敗・エラー種別・tx署名・対象識別子を保持する。
-- docId は productId を推奨（要件: 1 order に複数商品があるため、item単位で追えるようにする）。
-  ただし同一 productId で複数回試行があり得るため、Attempt（連番）も保持して一意性/履歴性を担保する。
+- docId は "<productId>__<attempt>" のフラット保存を想定（repo側で組み立てる）。
+  そのため entity 内での "ID" フィールドは不要。
+- 同一 productId で複数回試行があり得るため、Attempt（連番）も保持して履歴性を担保する。
+
+方針:
+- NewPending の引数順を "attempt -> productId -> ..." に統一し、呼び出し側の型不一致を防ぐ。
+  （usecase 側で attempt(int) を先に渡せるようにする）
 */
 
 type Status string
@@ -35,7 +40,7 @@ const (
 	ErrorTypeAlreadyTransferred ErrorType = "already_transferred"
 	ErrorTypeOrderNotFound      ErrorType = "order_not_found"
 	ErrorTypeItemNotFound       ErrorType = "item_not_found"
-	ErrorTypeMismatch           ErrorType = "mismatch" // scanned info mismatch etc
+	ErrorTypeMismatch           ErrorType = "mismatch"
 
 	// Dependencies
 	ErrorTypeBrandWalletNotFound ErrorType = "brand_wallet_not_found"
@@ -50,29 +55,27 @@ const (
 )
 
 var (
-	ErrInvalidID              = errors.New("transfer: invalid id")
 	ErrInvalidProductID       = errors.New("transfer: invalid productId")
 	ErrInvalidOrderID         = errors.New("transfer: invalid orderId")
 	ErrInvalidAvatarID        = errors.New("transfer: invalid avatarId")
 	ErrInvalidToWalletAddress = errors.New("transfer: invalid toWalletAddress")
+	ErrInvalidMintAddress     = errors.New("transfer: invalid mintAddress")
 	ErrInvalidStatus          = errors.New("transfer: invalid status")
 	ErrInvalidCreatedAt       = errors.New("transfer: invalid createdAt")
 )
 
 // Transfer represents one attempt of token transfer for a specific product item.
 type Transfer struct {
-	// ID is the document id (recommended: productId).
-	// If your persistence needs strict uniqueness per attempt, use ID=productId and Attempt to separate attempts.
-	ID string `json:"id"`
-
-	// Attempt is a monotonically increasing number for the same ID (productId).
-	// First attempt should be 1.
+	// Attempt is a monotonically increasing number for the same ProductID.
 	Attempt int `json:"attempt"`
 
 	// Identifiers
 	ProductID string `json:"productId"`
 	OrderID   string `json:"orderId"`
 	AvatarID  string `json:"avatarId"`
+
+	// Token info (audit)
+	MintAddress string `json:"mintAddress"`
 
 	// Destination / execution
 	ToWalletAddress string  `json:"toWalletAddress"`
@@ -84,38 +87,41 @@ type Transfer struct {
 	ErrorMsg  *string    `json:"errorMsg,omitempty"`
 
 	// Timestamps
-	CreatedAt time.Time  `json:"createdAt"`
-	UpdatedAt *time.Time `json:"updatedAt,omitempty"`
+	CreatedAt time.Time `json:"createdAt"`
 }
 
 // TransferPatch represents partial updates.
 // A nil field means "no change".
 type TransferPatch struct {
-	Status      *Status
-	ErrorType   *ErrorType
-	ErrorMsg    *string
-	TxSignature *string
-
-	UpdatedAt *time.Time
+	Status       *Status
+	ErrorType    *ErrorType
+	ErrorMsg     *string
+	TxSignature  *string
+	MintAddress  *string
+	ToWalletAddr *string // optional: allow patching destination if needed
 }
 
 // NewPending creates a new Transfer in pending status.
-// id and productId are both required; recommended: id == productId.
+//
+// NOTE:
+// 引数順を "attempt -> productId -> ..." に統一することで、usecase 側の呼び出しを自然にし、
+// 型不一致（attempt を string 扱い等）を防ぐ。
 func NewPending(
-	id string,
 	attempt int,
 	productID string,
 	orderID string,
 	avatarID string,
 	toWalletAddress string,
+	mintAddress string,
 	createdAt time.Time,
 ) (Transfer, error) {
 	t := Transfer{
-		ID:        strings.TrimSpace(id),
 		Attempt:   attempt,
 		ProductID: strings.TrimSpace(productID),
 		OrderID:   strings.TrimSpace(orderID),
 		AvatarID:  strings.TrimSpace(avatarID),
+
+		MintAddress: strings.TrimSpace(mintAddress),
 
 		ToWalletAddress: strings.TrimSpace(toWalletAddress),
 
@@ -125,7 +131,6 @@ func NewPending(
 		TxSignature: nil,
 
 		CreatedAt: createdAt.UTC(),
-		UpdatedAt: nil,
 	}
 
 	if err := t.validate(); err != nil {
@@ -135,7 +140,7 @@ func NewPending(
 }
 
 // MarkSucceeded marks transfer as succeeded and stores tx signature.
-func (t *Transfer) MarkSucceeded(txSig string, at time.Time) error {
+func (t *Transfer) MarkSucceeded(txSig string) error {
 	if t == nil {
 		return nil
 	}
@@ -147,14 +152,11 @@ func (t *Transfer) MarkSucceeded(txSig string, at time.Time) error {
 	t.TxSignature = &txSig
 	t.ErrorType = nil
 	t.ErrorMsg = nil
-
-	u := at.UTC()
-	t.UpdatedAt = &u
 	return nil
 }
 
 // MarkFailed marks transfer as failed with error type and message (optional).
-func (t *Transfer) MarkFailed(errType ErrorType, msg string, at time.Time) error {
+func (t *Transfer) MarkFailed(errType ErrorType, msg string) error {
 	if t == nil {
 		return nil
 	}
@@ -171,9 +173,6 @@ func (t *Transfer) MarkFailed(errType ErrorType, msg string, at time.Time) error
 	} else {
 		t.ErrorMsg = &m
 	}
-
-	u := at.UTC()
-	t.UpdatedAt = &u
 	return nil
 }
 
@@ -205,17 +204,22 @@ func (t *Transfer) ApplyPatch(p TransferPatch) {
 			t.TxSignature = &s
 		}
 	}
-	if p.UpdatedAt != nil && !p.UpdatedAt.IsZero() {
-		u := p.UpdatedAt.UTC()
-		t.UpdatedAt = &u
+	if p.MintAddress != nil {
+		s := strings.TrimSpace(*p.MintAddress)
+		if s != "" {
+			t.MintAddress = s
+		}
+	}
+	if p.ToWalletAddr != nil {
+		s := strings.TrimSpace(*p.ToWalletAddr)
+		if s != "" {
+			t.ToWalletAddress = s
+		}
 	}
 }
 
 // validate enforces domain invariants.
 func (t Transfer) validate() error {
-	if strings.TrimSpace(t.ID) == "" {
-		return ErrInvalidID
-	}
 	if strings.TrimSpace(t.ProductID) == "" {
 		return ErrInvalidProductID
 	}
@@ -227,6 +231,9 @@ func (t Transfer) validate() error {
 	}
 	if strings.TrimSpace(t.ToWalletAddress) == "" {
 		return ErrInvalidToWalletAddress
+	}
+	if strings.TrimSpace(t.MintAddress) == "" {
+		return ErrInvalidMintAddress
 	}
 	if t.Attempt <= 0 {
 		return errors.New("transfer: attempt must be >= 1")

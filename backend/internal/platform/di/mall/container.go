@@ -386,6 +386,10 @@ func NewContainer(ctx context.Context, infra *shared.Infra) (*Container, error) 
 		var tokenResolver usecase.TokenResolver = &tokenResolverFS{fs: fsClient, col: "tokens"}
 		var tokenOwnerUpdater usecase.TokenOwnerUpdater = &tokenOwnerUpdaterFS{fs: fsClient, col: "tokens"}
 
+		// ✅ 2.5) TransferRepo (Firestore transfers)
+		// NOTE: outfs.NewTransferRepositoryFS は通常 nil を返さないため、nil-check は不要
+		var transferRepo usecase.TransferRepo = outfs.NewTransferRepositoryFS(fsClient)
+
 		// 3) BrandWalletResolver / AvatarWalletResolver
 		brandRepo := outfs.NewBrandRepositoryFS(fsClient)
 		var walletResolver usecase.BrandWalletResolver = outfs.NewWalletResolverRepoFS(brandRepo, walletRepo)
@@ -412,12 +416,14 @@ func NewContainer(ctx context.Context, infra *shared.Infra) (*Container, error) 
 		var executor usecase.TokenTransferExecutor = solanainfra.NewTokenTransferExecutorSolana("")
 
 		// 6) Build TransferUC only when truly conditional deps exist
+		// ✅ transferRepo はコンストラクタが nil を返さない前提のため、tautological check を排除
 		if scanVerifier != nil && secrets != nil {
 			c.TransferUC = usecase.NewTransferUsecase(
 				scanVerifier,
 				orderRepoForTransfer,
 				tokenResolver,
 				tokenOwnerUpdater,
+				transferRepo,         // ✅ TransferRepo を追加
 				walletResolver,       // BrandWalletResolver
 				avatarWalletResolver, // AvatarWalletResolver
 				secrets,

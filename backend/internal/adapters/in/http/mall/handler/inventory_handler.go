@@ -33,8 +33,10 @@ func NewMallInventoryHandler(uc *usecase.InventoryUsecase) http.Handler {
 // Response DTOs (mall)
 // ------------------------------
 
+// ✅ products map は廃止し、accumulation / reservedCount を返す
 type MallInventoryModelStock struct {
-	Products map[string]bool `json:"products"`
+	Accumulation  int `json:"accumulation"`
+	ReservedCount int `json:"reservedCount"`
 }
 
 type MallInventoryResponse struct {
@@ -132,39 +134,43 @@ func (h *MallInventoryHandler) getByID(w http.ResponseWriter, r *http.Request, i
 // Mapping
 // ------------------------------
 
-// ✅ accumulation は返さない。stock.products (productId set) のみを返す。
-// ✅ inventory.Stock の実データ表現差（slice/map/struct）を吸収して products を作る。
+// ✅ products は返さない。
+// ✅ accumulation / reservedCount を返す。
+// ✅ inventory.Stock の実データ表現差（struct/ptr/any）を吸収して数値を作る。
 func toMallInventoryResponse(m invdom.Mint) MallInventoryResponse {
-	// modelId -> []productId（重複除去済み） を抽出
-	byModel := countStockByModel(m)
+	byModel := extractStockNumbersByModel(m)
 
 	stock := make(map[string]MallInventoryModelStock, len(byModel))
 	modelIDs := make([]string, 0, len(byModel))
 
-	for modelID, ids := range byModel {
+	for modelID, nums := range byModel {
 		modelID = strings.TrimSpace(modelID)
 		if modelID == "" {
 			continue
 		}
 		modelIDs = append(modelIDs, modelID)
 
-		products := make(map[string]bool, len(ids))
-		for _, id := range ids {
-			id = strings.TrimSpace(id)
-			if id == "" {
-				continue
-			}
-			products[id] = true
+		acc := nums.Accumulation
+		rc := nums.ReservedCount
+
+		// ✅ 最低限の整合: reservedCount が負になるケースは 0 に丸める
+		if rc < 0 {
+			rc = 0
+		}
+		// ✅ accumulation が負になるケースは 0 に丸める
+		if acc < 0 {
+			acc = 0
 		}
 
 		stock[modelID] = MallInventoryModelStock{
-			Products: products,
+			Accumulation:  acc,
+			ReservedCount: rc,
 		}
 	}
 
 	sort.Strings(modelIDs)
 
-	// 既存の m.ModelIDs があれば尊重（空なら count 結果を採用）
+	// 既存の m.ModelIDs があれば尊重（空なら抽出結果を採用）
 	finalModelIDs := m.ModelIDs
 	if len(finalModelIDs) == 0 {
 		finalModelIDs = modelIDs
@@ -174,23 +180,27 @@ func toMallInventoryResponse(m invdom.Mint) MallInventoryResponse {
 		ID:                 strings.TrimSpace(m.ID),
 		TokenBlueprintID:   strings.TrimSpace(m.TokenBlueprintID),
 		ProductBlueprintID: strings.TrimSpace(m.ProductBlueprintID),
-		ModelIDs:           finalModelIDs,
+		ModelIDs:           append([]string{}, finalModelIDs...),
 		Stock:              stock,
 	}
 }
 
 // ------------------------------
-// countStockByModel
+// extractStockNumbersByModel
 // ------------------------------
-//
+
+type modelStockNumbers struct {
+	Accumulation  int
+	ReservedCount int
+}
+
 // inventory.Stock の実データが以下どれでも動くように、reflection で吸収します。
-// - stock[modelId] = []string (Firestore: array of productIds)
-// - stock[modelId] = map[string]bool (productId set)
-// - stock[modelId] = struct{ Products ... }（Products が slice/map のどちらでも）
-//
-// 返り値: modelId -> productIds（重複除去済み）
-func countStockByModel(m invdom.Mint) map[string][]string {
-	out := map[string][]string{}
+// - stock[modelId] = struct{ Accumulation, ReservedCount, Products, ... }
+// - stock[modelId] = *struct{ ... }
+// - stock[modelId] = map[string]any など（accumulation/reservedCount を含む）
+// - stock[modelId] = []string / map[string]bool など旧表現（accumulation=件数, reservedCount=0）
+func extractStockNumbersByModel(m invdom.Mint) map[string]modelStockNumbers {
+	out := map[string]modelStockNumbers{}
 
 	rv := reflect.ValueOf(m)
 	if !rv.IsValid() {
@@ -233,111 +243,148 @@ func countStockByModel(m invdom.Mint) map[string][]string {
 			continue
 		}
 
-		ids := extractProductIDsFromStockValue(v)
-		if len(ids) == 0 {
-			out[modelID] = []string{}
-			continue
-		}
-
-		// dedupe
-		seen := map[string]struct{}{}
-		buf := make([]string, 0, len(ids))
-		for _, id := range ids {
-			id = strings.TrimSpace(id)
-			if id == "" {
-				continue
-			}
-			if _, ok := seen[id]; ok {
-				continue
-			}
-			seen[id] = struct{}{}
-			buf = append(buf, id)
-		}
-		sort.Strings(buf)
-		out[modelID] = buf
+		nums := extractNumbersFromStockValue(v)
+		out[modelID] = nums
 	}
 
 	return out
 }
 
-func extractProductIDsFromStockValue(v reflect.Value) []string {
-	if !v.IsValid() {
-		return nil
-	}
-	if v.Kind() == reflect.Interface && !v.IsNil() {
-		v = v.Elem()
-	}
-	if v.Kind() == reflect.Ptr {
-		if v.IsNil() {
-			return nil
+func extractNumbersFromStockValue(v reflect.Value) modelStockNumbers {
+	v = derefValue(v)
+
+	// 1) struct なら Accumulation/ReservedCount を読む（無ければ fallback）
+	if v.IsValid() && v.Kind() == reflect.Struct {
+		acc := readIntField(v, "Accumulation", "accumulation")
+		rc := readIntField(v, "ReservedCount", "reservedCount")
+
+		// struct に数値が無いケースは products から件数を推定
+		if acc == 0 {
+			if pf := v.FieldByName("Products"); pf.IsValid() {
+				n := countIDsFromAny(pf)
+				if n > 0 {
+					acc = n
+				}
+			}
 		}
-		v = v.Elem()
+
+		return modelStockNumbers{
+			Accumulation:  acc,
+			ReservedCount: rc,
+		}
 	}
 
-	// struct { Products: ... } を吸収
-	if v.Kind() == reflect.Struct {
-		pf := v.FieldByName("Products")
-		if pf.IsValid() {
-			return extractStringIDs(pf)
+	// 2) map ならキーから読む（accumulation/reservedCount）or products 件数
+	if v.IsValid() && v.Kind() == reflect.Map && v.Type().Key().Kind() == reflect.String {
+		acc := 0
+		rc := 0
+
+		// accumulation
+		if vv := v.MapIndex(reflect.ValueOf("accumulation")); vv.IsValid() {
+			acc = toInt(derefValue(vv))
+		}
+		// reservedCount
+		if vv := v.MapIndex(reflect.ValueOf("reservedCount")); vv.IsValid() {
+			rc = toInt(derefValue(vv))
+		}
+
+		// products fallback
+		if acc == 0 {
+			if vv := v.MapIndex(reflect.ValueOf("products")); vv.IsValid() {
+				n := countIDsFromAny(vv)
+				if n > 0 {
+					acc = n
+				}
+			}
+		}
+
+		return modelStockNumbers{
+			Accumulation:  acc,
+			ReservedCount: rc,
 		}
 	}
 
-	// map/slice が直接入ってるケースを吸収
-	return extractStringIDs(v)
+	// 3) 旧表現: []string / map[string]bool を件数として扱う
+	n := countIDsFromAny(v)
+	return modelStockNumbers{
+		Accumulation:  n,
+		ReservedCount: 0,
+	}
 }
 
-func extractStringIDs(v reflect.Value) []string {
+func derefValue(v reflect.Value) reflect.Value {
 	if !v.IsValid() {
-		return nil
+		return v
 	}
 	if v.Kind() == reflect.Interface && !v.IsNil() {
 		v = v.Elem()
 	}
 	if v.Kind() == reflect.Ptr {
 		if v.IsNil() {
-			return nil
+			return reflect.Value{}
 		}
 		v = v.Elem()
+	}
+	return v
+}
+
+func readIntField(v reflect.Value, names ...string) int {
+	if !v.IsValid() || v.Kind() != reflect.Struct {
+		return 0
+	}
+	for _, name := range names {
+		f := v.FieldByName(name)
+		if !f.IsValid() {
+			continue
+		}
+		f = derefValue(f)
+		if !f.IsValid() {
+			continue
+		}
+		return toInt(f)
+	}
+	return 0
+}
+
+func countIDsFromAny(v reflect.Value) int {
+	v = derefValue(v)
+	if !v.IsValid() {
+		return 0
 	}
 
 	switch v.Kind() {
 	case reflect.Slice, reflect.Array:
-		out := make([]string, 0, v.Len())
+		n := 0
 		for i := 0; i < v.Len(); i++ {
-			e := v.Index(i)
-			if e.Kind() == reflect.Interface && !e.IsNil() {
-				e = e.Elem()
-			}
-			if e.Kind() == reflect.String {
-				s := strings.TrimSpace(e.String())
-				if s != "" {
-					out = append(out, s)
+			e := derefValue(v.Index(i))
+			if e.IsValid() && e.Kind() == reflect.String {
+				if strings.TrimSpace(e.String()) != "" {
+					n++
 				}
 			}
 		}
-		return out
+		return n
 
 	case reflect.Map:
-		// map[string]bool / map[string]struct{} / map[string]any などは key を productId とみなす
+		// map[string]bool / map[string]any は key を ID とみなす
 		if v.Type().Key().Kind() != reflect.String {
-			return nil
+			return 0
 		}
-		out := make([]string, 0, v.Len())
+		n := 0
 		iter := v.MapRange()
 		for iter.Next() {
 			k := iter.Key()
 			if k.Kind() != reflect.String {
 				continue
 			}
-			s := strings.TrimSpace(k.String())
-			if s != "" {
-				out = append(out, s)
+			if strings.TrimSpace(k.String()) != "" {
+				n++
 			}
 		}
-		return out
+		return n
 
 	default:
-		return nil
+		return 0
 	}
 }
 

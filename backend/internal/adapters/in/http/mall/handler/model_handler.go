@@ -1,4 +1,4 @@
-// backend\internal\adapters\in\http\mall\handler\model_handler.go
+// backend/internal/adapters/in/http/mall/handler/model_handler.go
 package mallHandler
 
 import (
@@ -16,7 +16,7 @@ import (
 // MallCatalogQuery is the minimal contract to serve /mall/catalog/{listId}.
 // NOTE: We keep this as an interface here to avoid tight coupling.
 // The concrete implementation is:
-// - backend/internal/application/query/mall/catalog_query.go  (MallCatalogQuery / MallCatalogQuery)
+// - backend/internal/application/query/mall/catalog_query.go
 type MallCatalogQuery interface {
 	GetByListID(ctx context.Context, listID string) (any, error)
 }
@@ -39,7 +39,7 @@ type MallCatalogQuery interface {
 type MallModelHandler struct {
 	Repo modeldom.RepositoryPort
 
-	// ✅ optional: catalog DTO builder
+	// optional: catalog DTO builder
 	Catalog MallCatalogQuery
 }
 
@@ -47,7 +47,7 @@ func NewMallModelHandler(repo modeldom.RepositoryPort) http.Handler {
 	return &MallModelHandler{Repo: repo, Catalog: nil}
 }
 
-// ✅ use this when you also want to serve /mall/catalog/{listId}
+// use this when you also want to serve /mall/catalog/{listId}
 func NewMallModelHandlerWithCatalog(repo modeldom.RepositoryPort, catalog MallCatalogQuery) http.Handler {
 	return &MallModelHandler{Repo: repo, Catalog: catalog}
 }
@@ -183,12 +183,12 @@ func (h *MallModelHandler) handleListByProductBlueprintID(w http.ResponseWriter,
 
 		mv, err := h.Repo.GetModelVariationByID(r.Context(), modelID)
 		if err != nil {
-			// 1件でも失敗したら全体を失敗にする（必要ならここは「欠損許容」に変更可）
+			// 1件でも失敗したら全体を失敗にする（必要なら「欠損許容」に変更可）
 			internalError(w, err.Error())
 			return
 		}
 
-		// ✅ buyer-facing DTO へ変換（lowerCamel）
+		// buyer-facing DTO へ変換（lowerCamel）
 		dto, ok := toMallModelVariationDTOAny(mv)
 		if !ok {
 			dto = malldto.CatalogModelVariationDTO{
@@ -198,8 +198,7 @@ func (h *MallModelHandler) handleListByProductBlueprintID(w http.ResponseWriter,
 				Size:               "",
 				ColorName:          "",
 				ColorRGB:           0,
-				Measurements:       map[string]int{}, // ✅ 空でも出す（null回避）
-				Products:           nil,
+				Measurements:       map[string]int{}, // 空でも出す（null回避）
 				StockKeys:          0,
 			}
 		}
@@ -209,7 +208,7 @@ func (h *MallModelHandler) handleListByProductBlueprintID(w http.ResponseWriter,
 
 		items = append(items, mallModelItem{
 			ModelID:  modelID,
-			Metadata: dto, // ✅ DTO を metadata に載せる
+			Metadata: dto,
 		})
 	}
 
@@ -240,7 +239,6 @@ func (h *MallModelHandler) handleGetByID(w http.ResponseWriter, r *http.Request,
 			ColorName:          "",
 			ColorRGB:           0,
 			Measurements:       map[string]int{},
-			Products:           nil,
 			StockKeys:          0,
 		}
 	}
@@ -250,7 +248,7 @@ func (h *MallModelHandler) handleGetByID(w http.ResponseWriter, r *http.Request,
 
 	writeJSON(w, http.StatusOK, mallModelItem{
 		ModelID:  id,
-		Metadata: dto, // ✅ DTO
+		Metadata: dto,
 	})
 }
 
@@ -349,15 +347,14 @@ func toMallModelVariationDTOAny(v any) (malldto.CatalogModelVariationDTO, bool) 
 		ModelNumber:        strings.TrimSpace(modelNumber),
 		Size:               strings.TrimSpace(size),
 
-		// ✅ Color integrated
+		// Color integrated
 		ColorName: "",
 		ColorRGB:  0,
 
-		// ✅ always non-nil map for JSON (avoid null)
+		// always non-nil map for JSON (avoid null)
 		Measurements: map[string]int{},
 
-		// stock-related fields are not served by /mall/models, but keep zero-values
-		Products:  nil,
+		// stock-related fields are not served by /mall/models, keep zero-value
 		StockKeys: 0,
 	}
 
@@ -392,7 +389,6 @@ func toMallModelVariationDTOAny(v any) (malldto.CatalogModelVariationDTO, bool) 
 				}
 				out[k] = toInt(iter.Value())
 			}
-			// ✅ keep non-nil (len==0 ok)
 			dto.Measurements = out
 		}
 	}

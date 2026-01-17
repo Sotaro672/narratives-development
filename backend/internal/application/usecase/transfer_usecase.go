@@ -9,6 +9,8 @@ package usecase
 - 競合（二重処理）を防ぐために、order の item 単位で transfer lock を取得してから処理する。
 - transfer 成功後に orders/{orderId} の該当 item の transferred/transferredAt を更新する。
 - さらに tokens/{productId}.toAddress を「今の owner (= avatar wallet)」として必ず更新する。
+- さらに transfer テーブル（transfer domain）を起票し、成功/失敗・tx署名・エラー種別を永続化する。
+- さらに transfer テーブルに移譲した mintAddress を保存する（監査/CS/復旧用）。
 - 外部依存（Firestore/SecretManager/Solana/TokenOperation 等）は Port(interface) に閉じ込め、
   Usecase は「手順（オーケストレーション）」のみを担う。
 
@@ -20,6 +22,12 @@ package usecase
 設計B:
 - brand の signer は walletAddress ではなく brandId(=docId) をキーに SecretManager から取得する。
   例: projects/<project>/secrets/brand-wallet-<brandId>/versions/latest
+
+Transfer テーブル起票:
+- lock 取得後、wallet 解決後に pending を起票する（toWalletAddress が必須のため）。
+- pending 起票時点で mintAddress も保存しておく（失敗時も対象mintを追える）。
+- on-chain transfer 成功後に succeeded(txSignature) に更新する。
+- その後の off-chain 更新（orders/tokens）が失敗した場合は failed に更新し、txSignature を保持して復旧可能にする。
 */
 
 import (
@@ -31,6 +39,7 @@ import (
 	"time"
 
 	orderdom "narratives/internal/domain/order"
+	transferdom "narratives/internal/domain/transfer"
 )
 
 // ============================================================
@@ -92,6 +101,18 @@ type TokenOwnerUpdater interface {
 	UpdateToAddressByProductID(ctx context.Context, productID string, newToAddress string, now time.Time, txSignature string) error
 }
 
+// TransferRepo persists transfer attempts (pending/succeeded/failed).
+type TransferRepo interface {
+	// NextAttempt returns the next monotonically increasing attempt number for a productId.
+	NextAttempt(ctx context.Context, productID string) (int, error)
+
+	// Create creates a new transfer attempt record (typically pending).
+	Create(ctx context.Context, t transferdom.Transfer) error
+
+	// Update updates an existing transfer attempt record by (productId, attempt).
+	Update(ctx context.Context, productID string, attempt int, p transferdom.TransferPatch) error
+}
+
 // BrandWalletResolver resolves brand walletAddress by brandId.
 type BrandWalletResolver interface {
 	ResolveBrandWalletAddress(ctx context.Context, brandID string) (string, error)
@@ -124,7 +145,7 @@ type ExecuteTransferInput struct {
 
 	// token info
 	MintAddress string
-	Amount      uint64 // ✅ NEW: SPL transfer amount（NFT想定=1）
+	Amount      uint64 // SPL transfer amount（NFT想定=1）
 
 	// wallets
 	FromWalletAddress string // brand wallet
@@ -144,10 +165,11 @@ type ExecuteTransferResult struct {
 // ============================================================
 
 type TransferUsecase struct {
-	verifier    ScanVerifier
-	orderRepo   OrderRepoForTransfer
-	tokenRepo   TokenResolver
-	tokenUpdate TokenOwnerUpdater
+	verifier     ScanVerifier
+	orderRepo    OrderRepoForTransfer
+	tokenRepo    TokenResolver
+	tokenUpdate  TokenOwnerUpdater
+	transferRepo TransferRepo
 
 	brandWallet  BrandWalletResolver
 	avatarWallet AvatarWalletResolver
@@ -163,6 +185,7 @@ func NewTransferUsecase(
 	orderRepo OrderRepoForTransfer,
 	tokenRepo TokenResolver,
 	tokenUpdate TokenOwnerUpdater,
+	transferRepo TransferRepo,
 	brandWallet BrandWalletResolver,
 	avatarWallet AvatarWalletResolver,
 	secrets WalletSecretProvider,
@@ -173,6 +196,7 @@ func NewTransferUsecase(
 		orderRepo:    orderRepo,
 		tokenRepo:    tokenRepo,
 		tokenUpdate:  tokenUpdate,
+		transferRepo: transferRepo,
 		brandWallet:  brandWallet,
 		avatarWallet: avatarWallet,
 		secrets:      secrets,
@@ -221,18 +245,21 @@ type TransferByVerifiedScanResult struct {
 // 2) orders を avatarId + paid=true で検索し、未移転 item を特定（modelId + tokenBlueprintId で厳密一致）
 // 3) lock(item単位)
 // 4) brand wallet / avatar wallet を解決
+// 4.5) transfer(PENDING) 起票（attempt採番→pending作成）※ mintAddress も保存
 // 5) (optional) token.toAddress が brand wallet を指しているか検証（誤転送防止）
 // 6) brand signer を取得（設計B: brandId で取得）
 // 7) mintAddress を brand → avatar へ transfer (amount=1)
+// 7.5) transfer(SUCCEEDED) 更新（txSignature）
 // 8) orders item を transferred=true で確定更新
 // 9) tokens/{productId}.toAddress を avatar wallet に更新（今の owner を正にする）
-// 10) 失敗時は unlock（best-effort）
-func (u *TransferUsecase) TransferToAvatarByVerifiedScan(ctx context.Context, in TransferByVerifiedScanInput) (TransferByVerifiedScanResult, error) {
+// 10) 失敗時は transfer(FAILED) 更新 + unlock（best-effort）
+func (u *TransferUsecase) TransferToAvatarByVerifiedScan(ctx context.Context, in TransferByVerifiedScanInput) (res TransferByVerifiedScanResult, retErr error) {
 	if u == nil ||
 		u.verifier == nil ||
 		u.orderRepo == nil ||
 		u.tokenRepo == nil ||
 		u.tokenUpdate == nil ||
+		u.transferRepo == nil ||
 		u.brandWallet == nil ||
 		u.avatarWallet == nil ||
 		u.secrets == nil ||
@@ -332,7 +359,27 @@ func (u *TransferUsecase) TransferToAvatarByVerifiedScan(ctx context.Context, in
 	}
 
 	locked := true
+
+	// transfer record info (created after wallets resolved)
+	transferAttempt := 0
+	transferCreated := false
+
+	// best-effort unlock + (if created) best-effort mark failed
 	defer func() {
+		if retErr != nil && transferCreated {
+			et := transferdom.ErrorTypeUnknown
+			msg := strings.TrimSpace(retErr.Error())
+			st := transferdom.StatusFailed
+			p := transferdom.TransferPatch{
+				Status:    &st,
+				ErrorType: &et,
+				ErrorMsg:  &msg,
+			}
+			if uerr := u.transferRepo.Update(context.Background(), productID, transferAttempt, p); uerr != nil {
+				log.Printf("[transfer_uc] WARN: transfer update failed (defer) productId=%s attempt=%d err=%v", _mask(productID), transferAttempt, uerr)
+			}
+		}
+
 		// 失敗時に best-effort unlock
 		if locked {
 			if uerr := u.orderRepo.UnlockTransferItem(context.Background(), targetOrderID, targetModelID); uerr != nil {
@@ -360,22 +407,82 @@ func (u *TransferUsecase) TransferToAvatarByVerifiedScan(ctx context.Context, in
 		return TransferByVerifiedScanResult{}, ErrTransferToWalletEmpty
 	}
 
+	// 4.5) ✅ create transfer record (PENDING) + store mintAddress
+	attempt, err := u.transferRepo.NextAttempt(ctx, productID)
+	if err != nil {
+		return TransferByVerifiedScanResult{}, fmt.Errorf("transfer_uc: next attempt failed productId=%s: %w", _mask(productID), err)
+	}
+
+	// entity.go を正: NewPending は (attempt, productId, orderId, avatarId, toWallet, mintAddress, createdAt) などに更新されている前提
+	tr, err := transferdom.NewPending(
+		attempt,       // attempt
+		productID,     // productId
+		targetOrderID, // orderId
+		avatarID,      // avatarId
+		toWallet,      // toWalletAddress
+		mint,          // mintAddress ✅ NEW
+		now,           // createdAt
+	)
+	if err != nil {
+		return TransferByVerifiedScanResult{}, fmt.Errorf("transfer_uc: build transfer entity failed productId=%s attempt=%d: %w", _mask(productID), attempt, err)
+	}
+	if err := u.transferRepo.Create(ctx, tr); err != nil {
+		return TransferByVerifiedScanResult{}, fmt.Errorf("transfer_uc: create transfer failed productId=%s attempt=%d: %w", _mask(productID), attempt, err)
+	}
+	transferAttempt = attempt
+	transferCreated = true
+
+	// helper: mark failed (best-effort)
+	markFailed := func(et transferdom.ErrorType, msg string, txSig *string) {
+		if !transferCreated {
+			return
+		}
+		st := transferdom.StatusFailed
+		m := strings.TrimSpace(msg)
+		p := transferdom.TransferPatch{
+			Status:    &st,
+			ErrorType: &et,
+			ErrorMsg:  &m,
+		}
+		if txSig != nil {
+			s := strings.TrimSpace(*txSig)
+			p.TxSignature = &s
+		}
+		if uerr := u.transferRepo.Update(context.Background(), productID, transferAttempt, p); uerr != nil {
+			log.Printf("[transfer_uc] WARN: transfer markFailed update failed productId=%s attempt=%d err=%v", _mask(productID), transferAttempt, uerr)
+		}
+	}
+
+	// helper: mark succeeded (best-effort)
+	markSucceeded := func(txSig string) {
+		if !transferCreated {
+			return
+		}
+		st := transferdom.StatusSucceeded
+		s := strings.TrimSpace(txSig)
+		p := transferdom.TransferPatch{
+			Status:      &st,
+			TxSignature: &s,
+		}
+		if uerr := u.transferRepo.Update(context.Background(), productID, transferAttempt, p); uerr != nil {
+			log.Printf("[transfer_uc] WARN: transfer markSucceeded update failed productId=%s attempt=%d err=%v", _mask(productID), transferAttempt, uerr)
+		}
+	}
+
 	// 5) ✅ safety: token current owner check (best-effort but recommended)
-	// 運用上 tokens.toAddress が必ず「今の owner」なら、
-	// ここが brand wallet と一致していない場合は誤転送リスクが高いので止める。
-	//
-	// ただし legacy で空のケースもあり得るので、空は許容（= キャッシュ未整備）。
 	if currentOwner != "" && currentOwner != fromWallet {
-		return TransferByVerifiedScanResult{}, fmt.Errorf(
-			"%w: productId=%s tokenOwner=%s expectedBrandWallet=%s",
-			ErrTransferOwnerMismatch, _mask(productID), _mask(currentOwner), _mask(fromWallet),
+		msg := fmt.Sprintf("productId=%s tokenOwner=%s expectedBrandWallet=%s",
+			_mask(productID), _mask(currentOwner), _mask(fromWallet),
 		)
+		markFailed(transferdom.ErrorTypeMismatch, msg, nil)
+		return TransferByVerifiedScanResult{}, fmt.Errorf("%w: %s", ErrTransferOwnerMismatch, msg)
 	}
 
 	// 6) signer（送付元=brand は必須）
-	// ✅ 設計B: brandId(=docId) をキーに signer を取得する
 	fromSigner, err := u.secrets.GetBrandSigner(ctx, brandID)
 	if err != nil {
+		msg := fmt.Sprintf("get brand signer failed brandId=%s wallet=%s: %v", _mask(brandID), _mask(fromWallet), err)
+		markFailed(transferdom.ErrorTypeSecretInvalid, msg, nil)
 		return TransferByVerifiedScanResult{}, fmt.Errorf(
 			"transfer_uc: get brand signer failed brandId=%s wallet=%s: %w",
 			_mask(brandID), _mask(fromWallet), err,
@@ -394,7 +501,7 @@ func (u *TransferUsecase) TransferToAvatarByVerifiedScan(ctx context.Context, in
 		TokenBlueprintID: scannedTBID,
 
 		MintAddress: mint,
-		Amount:      1, // ✅ NFT想定
+		Amount:      1, // NFT想定
 
 		FromWalletAddress: fromWallet,
 		ToWalletAddress:   toWallet,
@@ -403,6 +510,10 @@ func (u *TransferUsecase) TransferToAvatarByVerifiedScan(ctx context.Context, in
 		ToSigner:   toSigner,
 	})
 	if err != nil {
+		msg := fmt.Sprintf("execute transfer failed orderId=%s modelId=%s mint=%s: %v",
+			_mask(targetOrderID), _mask(targetModelID), _mask(mint), err,
+		)
+		markFailed(transferdom.ErrorTypeTransferFailed, msg, nil)
 		return TransferByVerifiedScanResult{}, fmt.Errorf(
 			"transfer_uc: execute transfer failed orderId=%s modelId=%s mint=%s: %w",
 			_mask(targetOrderID), _mask(targetModelID), _mask(mint), err,
@@ -411,18 +522,28 @@ func (u *TransferUsecase) TransferToAvatarByVerifiedScan(ctx context.Context, in
 
 	tx := strings.TrimSpace(execOut.TxSignature)
 
+	// 7.5) ✅ update transfer record -> SUCCEEDED (txSignature)
+	// （mintAddress は pending 起票時に保存済み）
+	markSucceeded(tx)
+
 	// 8) mark transferred true (item単位)
 	if err := u.orderRepo.MarkTransferredItem(ctx, targetOrderID, targetModelID, now); err != nil {
-		// transfer 自体は成功しているので、ここは重要（要リカバリ）
+		msg := fmt.Sprintf("mark transferred failed orderId=%s modelId=%s tx=%s: %v",
+			_mask(targetOrderID), _mask(targetModelID), _mask(tx), err,
+		)
+		markFailed(transferdom.ErrorTypeUnknown, msg, &tx)
 		return TransferByVerifiedScanResult{}, fmt.Errorf(
 			"transfer_uc: mark transferred failed orderId=%s modelId=%s tx=%s: %w",
 			_mask(targetOrderID), _mask(targetModelID), _mask(tx), err,
 		)
 	}
 
-	// 9) ✅ update tokens/{productId}.toAddress = avatar wallet (今の owner)
+	// 9) ✅ update tokens/{productId}.toAddress = avatar wallet
 	if err := u.tokenUpdate.UpdateToAddressByProductID(ctx, productID, toWallet, now, tx); err != nil {
-		// transfer は成功 & order も transferred 済みなので、ここも重要（要リカバリ）
+		msg := fmt.Sprintf("update token owner failed productId=%s to=%s tx=%s: %v",
+			_mask(productID), _mask(toWallet), _mask(tx), err,
+		)
+		markFailed(transferdom.ErrorTypeUnknown, msg, &tx)
 		return TransferByVerifiedScanResult{}, fmt.Errorf(
 			"transfer_uc: update token owner failed productId=%s to=%s tx=%s: %w",
 			_mask(productID), _mask(toWallet), _mask(tx), err,
@@ -432,7 +553,7 @@ func (u *TransferUsecase) TransferToAvatarByVerifiedScan(ctx context.Context, in
 	locked = false
 
 	log.Printf(
-		"[transfer_uc] OK productId=%s orderId=%s avatarId=%s brandId=%s modelId=%s tokenBlueprintId=%s mint=%s fromWallet=%s toWallet=%s tx=%s",
+		"[transfer_uc] OK productId=%s orderId=%s avatarId=%s brandId=%s modelId=%s tokenBlueprintId=%s mint=%s fromWallet=%s toWallet=%s tx=%s attempt=%d",
 		_mask(productID),
 		_mask(targetOrderID),
 		_mask(avatarID),
@@ -443,6 +564,7 @@ func (u *TransferUsecase) TransferToAvatarByVerifiedScan(ctx context.Context, in
 		_mask(fromWallet),
 		_mask(toWallet),
 		_mask(tx),
+		transferAttempt,
 	)
 
 	return TransferByVerifiedScanResult{

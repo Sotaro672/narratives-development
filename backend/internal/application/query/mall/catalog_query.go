@@ -23,8 +23,6 @@ import (
 // Ports (minimal contracts for this query)
 // ============================================================
 
-// InventoryRepository returns domain inventory mint.
-// - outfs.InventoryRepositoryFS is expected to satisfy this.
 type InventoryRepository interface {
 	GetByID(ctx context.Context, id string) (invdom.Mint, error)
 	GetByProductAndTokenBlueprintID(ctx context.Context, productBlueprintID, tokenBlueprintID string) (invdom.Mint, error)
@@ -34,7 +32,6 @@ type ProductBlueprintRepository interface {
 	GetByID(ctx context.Context, id string) (pbdom.ProductBlueprint, error)
 }
 
-// ✅ NEW: tokenBlueprint patch getter (buyer-facing minimal info)
 type TokenBlueprintPatchRepository interface {
 	GetPatchByID(ctx context.Context, id string) (tbdom.Patch, error)
 }
@@ -48,11 +45,10 @@ type CatalogQuery struct {
 
 	InventoryRepo InventoryRepository
 	ProductRepo   ProductBlueprintRepository
-	TokenRepo     TokenBlueprintPatchRepository // ✅ NEW (optional)
+	TokenRepo     TokenBlueprintPatchRepository
 
 	ModelRepo modeldom.RepositoryPort
 
-	// ✅ OPTIONAL: name resolver (brand/company) for display fields
 	NameResolver *appresolver.NameResolver
 }
 
@@ -66,13 +62,12 @@ func NewCatalogQuery(
 		ListRepo:      listRepo,
 		InventoryRepo: invRepo,
 		ProductRepo:   productRepo,
-		TokenRepo:     nil, // keep backward compatible
+		TokenRepo:     nil,
 		ModelRepo:     modelRepo,
-		NameResolver:  nil, // keep backward compatible
+		NameResolver:  nil,
 	}
 }
 
-// ✅ NEW: ctor with tokenBlueprint patch getter
 func NewCatalogQueryWithTokenBlueprintPatch(
 	listRepo ldom.Repository,
 	invRepo InventoryRepository,
@@ -86,11 +81,10 @@ func NewCatalogQueryWithTokenBlueprintPatch(
 		ProductRepo:   productRepo,
 		TokenRepo:     tokenRepo,
 		ModelRepo:     modelRepo,
-		NameResolver:  nil, // keep backward compatible
+		NameResolver:  nil,
 	}
 }
 
-// ✅ NEW: ctor with name resolver (brand/company)
 func NewCatalogQueryWithNameResolver(
 	listRepo ldom.Repository,
 	invRepo InventoryRepository,
@@ -108,7 +102,6 @@ func NewCatalogQueryWithNameResolver(
 	}
 }
 
-// ✅ NEW: ctor with tokenBlueprint patch + name resolver
 func NewCatalogQueryWithTokenBlueprintPatchAndNameResolver(
 	listRepo ldom.Repository,
 	invRepo InventoryRepository,
@@ -127,9 +120,6 @@ func NewCatalogQueryWithTokenBlueprintPatchAndNameResolver(
 	}
 }
 
-// GetByListID builds catalog payload by listId.
-// - list must be status=listing, otherwise ErrNotFound.
-// - inventory/product/model/tokenBlueprint are best-effort; failures populate "*Error" fields.
 func (q *CatalogQuery) GetByListID(ctx context.Context, listID string) (dto.CatalogDTO, error) {
 	if q == nil || q.ListRepo == nil {
 		return dto.CatalogDTO{}, errors.New("catalog query: list repo is nil")
@@ -172,6 +162,18 @@ func (q *CatalogQuery) GetByListID(ctx context.Context, listID string) (dto.Cata
 		invID = strings.TrimSpace(out.List.InventoryID)
 		pbID = strings.TrimSpace(out.List.ProductBlueprintID)
 		tbID = strings.TrimSpace(out.List.TokenBlueprintID)
+
+		// list 側が空でも inventoryId が pb__tb なら復元（ログで pbId/tbId が空だった対策）
+		if (pbID == "" || tbID == "") && invID != "" {
+			if p, t, ok := splitInventoryID(invID); ok {
+				if pbID == "" {
+					pbID = p
+				}
+				if tbID == "" {
+					tbID = t
+				}
+			}
+		}
 
 		log.Printf(
 			"[catalog] inventory linkage listId=%q inventoryId=%q pbId=%q tbId=%q",
@@ -235,7 +237,6 @@ func (q *CatalogQuery) GetByListID(ctx context.Context, listID string) (dto.Cata
 		} else {
 			pbDTO := toCatalogProductBlueprintDTO(&pb)
 
-			// ✅ resolve brandName/companyName (best-effort)
 			if q.NameResolver != nil {
 				fillProductBlueprintNames(ctx, q.NameResolver, &pbDTO)
 			}
@@ -275,11 +276,10 @@ func (q *CatalogQuery) GetByListID(ctx context.Context, listID string) (dto.Cata
 		}(),
 	)
 
+	// best-effort: TokenRepo が nil なら “エラーを立てない”
 	if q.TokenRepo == nil {
-		// linkage が無いケースと区別したいので、ID がある時だけエラーにする
 		if resolvedTBID != "" {
-			out.TokenBlueprintError = "tokenBlueprint repo is nil"
-			log.Printf("[catalog] tokenBlueprint repo is nil listId=%q tbId=%q", listID, resolvedTBID)
+			log.Printf("[catalog] tokenBlueprint repo is nil (best-effort) listId=%q tbId=%q", listID, resolvedTBID)
 		} else {
 			log.Printf("[catalog] tokenBlueprint skip (tbId empty & repo nil) listId=%q", listID)
 		}
@@ -296,7 +296,6 @@ func (q *CatalogQuery) GetByListID(ctx context.Context, listID string) (dto.Cata
 		} else {
 			p := patch
 
-			// token patch にも brandName/companyName を補完（best-effort）
 			if q.NameResolver != nil {
 				fillTokenBlueprintPatchNames(ctx, q.NameResolver, &p)
 			}
@@ -320,7 +319,6 @@ func (q *CatalogQuery) GetByListID(ctx context.Context, listID string) (dto.Cata
 
 	// ------------------------------------------------------------
 	// Models (UNIFIED)
-	// pbId -> modelId list -> modelmetadata -> attach stock(products)
 	// ------------------------------------------------------------
 	if q.ModelRepo == nil {
 		out.ModelVariationsError = "model repo is nil"
@@ -348,7 +346,6 @@ func (q *CatalogQuery) GetByListID(ctx context.Context, listID string) (dto.Cata
 		} else {
 			items := make([]dto.CatalogModelVariationDTO, 0, len(res.Items))
 
-			// 1) まず metadata で items を作る
 			for _, it := range res.Items {
 				modelID := extractID(it)
 				if modelID == "" {
@@ -367,7 +364,7 @@ func (q *CatalogQuery) GetByListID(ctx context.Context, listID string) (dto.Cata
 				if !ok {
 					mvDTO = dto.CatalogModelVariationDTO{
 						ID:           strings.TrimSpace(modelID),
-						Measurements: map[string]int{}, // ✅ {} を保証
+						Measurements: map[string]int{},
 					}
 				}
 				if mvDTO.Measurements == nil {
@@ -377,7 +374,6 @@ func (q *CatalogQuery) GetByListID(ctx context.Context, listID string) (dto.Cata
 				items = append(items, mvDTO)
 			}
 
-			// 2) その後、同じ items に stock(products) を追記
 			attachStockToModelVariations(&items, invDTO)
 
 			out.ModelVariations = items
@@ -408,7 +404,7 @@ func (q *CatalogQuery) GetByListID(ctx context.Context, listID string) (dto.Cata
 }
 
 // ============================================================
-// name resolving (productBlueprint -> brandName/companyName)
+// name resolving
 // ============================================================
 
 func fillProductBlueprintNames(ctx context.Context, r *appresolver.NameResolver, dtoPB *dto.CatalogProductBlueprintDTO) {
@@ -419,7 +415,6 @@ func fillProductBlueprintNames(ctx context.Context, r *appresolver.NameResolver,
 	brandID := strings.TrimSpace(dtoPB.BrandID)
 	companyID := strings.TrimSpace(dtoPB.CompanyID)
 
-	// BrandName
 	if brandID != "" {
 		bn := strings.TrimSpace(r.ResolveBrandName(ctx, brandID))
 		if bn != "" {
@@ -427,7 +422,6 @@ func fillProductBlueprintNames(ctx context.Context, r *appresolver.NameResolver,
 		}
 	}
 
-	// CompanyName
 	if companyID != "" {
 		cn := strings.TrimSpace(r.ResolveCompanyName(ctx, companyID))
 		if cn != "" {
@@ -436,7 +430,6 @@ func fillProductBlueprintNames(ctx context.Context, r *appresolver.NameResolver,
 	}
 }
 
-// tokenBlueprint patch -> brandName/companyName
 func fillTokenBlueprintPatchNames(ctx context.Context, r *appresolver.NameResolver, p *tbdom.Patch) {
 	if r == nil || p == nil {
 		return
@@ -445,7 +438,6 @@ func fillTokenBlueprintPatchNames(ctx context.Context, r *appresolver.NameResolv
 	brandID := strings.TrimSpace(ptrStr(p.BrandID))
 	companyID := strings.TrimSpace(ptrStr(p.CompanyID))
 
-	// brandName (only if empty)
 	if brandID != "" && strings.TrimSpace(ptrStr(p.BrandName)) == "" {
 		if bn := strings.TrimSpace(r.ResolveBrandName(ctx, brandID)); bn != "" {
 			s := bn
@@ -453,7 +445,6 @@ func fillTokenBlueprintPatchNames(ctx context.Context, r *appresolver.NameResolv
 		}
 	}
 
-	// companyName (only if empty)
 	if companyID != "" && strings.TrimSpace(ptrStr(p.CompanyName)) == "" {
 		if cn := strings.TrimSpace(r.ResolveCompanyName(ctx, companyID)); cn != "" {
 			s := cn
@@ -529,62 +520,45 @@ func getStringFieldBestEffort(target any, fieldName string) string {
 }
 
 // ============================================================
-// inventory stock helpers (keys + products safety)
+// inventory stock helpers
 // ============================================================
 
 func normalizeInventoryStock(inv *dto.CatalogInventoryDTO) {
-	if inv == nil {
+	if inv == nil || inv.Stock == nil {
 		return
 	}
-	if inv.Stock == nil {
-		return
-	}
+
+	// Stock map のキー正規化と、nil map 回避のみ
+	// ※ Products は廃止（Accumulation/ReservedCount を使う）
+	norm := make(map[string]dto.CatalogInventoryModelStockDTO, len(inv.Stock))
 	for k, v := range inv.Stock {
 		m := strings.TrimSpace(k)
 		if m == "" {
 			continue
 		}
-		if v.Products == nil {
-			v.Products = map[string]bool{}
-			inv.Stock[k] = v
-		}
+		norm[m] = v
 	}
+	inv.Stock = norm
 }
 
 func stockKeyCount(stock map[string]dto.CatalogInventoryModelStockDTO) int {
 	return len(stock)
 }
 
-// attachStockToModelVariations merges inv.Stock[modelId].Products into modelVariations items.
-// Also sets StockKeys (= number of model keys in inventory stock map).
+// attachStockToModelVariations sets StockKeys only.
+// NOTE: ModelVariationDTO no longer carries Products.
 func attachStockToModelVariations(items *[]dto.CatalogModelVariationDTO, inv *dto.CatalogInventoryDTO) {
 	if items == nil || len(*items) == 0 {
 		return
 	}
 
 	stockKeys := 0
-	var stock map[string]dto.CatalogInventoryModelStockDTO
-
 	if inv != nil {
-		stock = inv.Stock
 		stockKeys = stockKeyCount(inv.Stock)
 	}
 
 	for i := range *items {
 		(*items)[i].StockKeys = stockKeys
-
-		id := strings.TrimSpace((*items)[i].ID)
-		if id == "" || stock == nil {
-			continue
-		}
-
-		if s, ok := stock[id]; ok {
-			if s.Products != nil {
-				(*items)[i].Products = s.Products
-			} else {
-				(*items)[i].Products = map[string]bool{}
-			}
-		}
 	}
 }
 
@@ -628,97 +602,48 @@ func toCatalogProductBlueprintDTO(pb *pbdom.ProductBlueprint) dto.CatalogProduct
 	return out
 }
 
-// Mint -> CatalogInventoryDTO (best-effort reflection; signature drift tolerant)
+// Mint -> CatalogInventoryDTO（domain を正とする。旧互換は削除）
 func toCatalogInventoryDTOFromMint(m invdom.Mint) *dto.CatalogInventoryDTO {
-	// id/pbId/tbId best-effort
-	id := pickStringField(m, "ID", "Id", "InventoryID", "InventoryId", "inventoryId")
-	pbID := pickStringField(m, "ProductBlueprintID", "ProductBlueprintId", "productBlueprintId")
-	tbID := pickStringField(m, "TokenBlueprintID", "TokenBlueprintId", "tokenBlueprintId")
-
 	out := &dto.CatalogInventoryDTO{
-		ID:                 strings.TrimSpace(id),
-		ProductBlueprintID: strings.TrimSpace(pbID),
-		TokenBlueprintID:   strings.TrimSpace(tbID),
+		ID:                 strings.TrimSpace(m.ID),
+		ProductBlueprintID: strings.TrimSpace(m.ProductBlueprintID),
+		TokenBlueprintID:   strings.TrimSpace(m.TokenBlueprintID),
+		ModelIDs:           append([]string{}, m.ModelIDs...),
 		Stock:              map[string]dto.CatalogInventoryModelStockDTO{},
 	}
 
-	// Stock: map[modelId]something{Products: map[productId]bool}
-	rv := reflect.ValueOf(m)
-	if rv.IsValid() && rv.Kind() == reflect.Pointer {
-		if rv.IsNil() {
-			return out
-		}
-		rv = rv.Elem()
-	}
-	if !rv.IsValid() || rv.Kind() != reflect.Struct {
+	if m.Stock == nil {
 		return out
 	}
 
-	sf := rv.FieldByName("Stock")
-	if !sf.IsValid() {
-		return out
-	}
-	if sf.Kind() == reflect.Pointer {
-		if sf.IsNil() {
-			return out
-		}
-		sf = sf.Elem()
-	}
-	if sf.Kind() != reflect.Map || sf.Type().Key().Kind() != reflect.String {
-		return out
-	}
-
-	iter := sf.MapRange()
-	for iter.Next() {
-		modelID := strings.TrimSpace(iter.Key().String())
-		if modelID == "" {
+	// 期待する domain 側の表現:
+	// m.Stock[modelId] has fields: Accumulation, ReservedCount (and/or legacy Products)
+	// ここでは "availableStock = accumulation - reservedCount" をフロントで計算できるよう、
+	// Accumulation / ReservedCount を DTO に詰める。
+	for modelID, ms := range m.Stock {
+		mid := strings.TrimSpace(modelID)
+		if mid == "" {
 			continue
 		}
 
-		products := map[string]bool{}
+		a := pickIntField(ms, "Accumulation", "accumulation", "Count", "count")
+		r := pickIntField(ms, "ReservedCount", "reservedCount", "Reserved", "reserved")
 
-		v := iter.Value()
-		if v.IsValid() && v.Kind() == reflect.Pointer {
-			if !v.IsNil() {
-				v = v.Elem()
-			}
+		out.Stock[mid] = dto.CatalogInventoryModelStockDTO{
+			Accumulation:  a,
+			ReservedCount: r,
 		}
-
-		// try field "Products"
-		if v.IsValid() && v.Kind() == reflect.Struct {
-			pf := v.FieldByName("Products")
-			if pf.IsValid() {
-				if pf.Kind() == reflect.Pointer {
-					if !pf.IsNil() {
-						pf = pf.Elem()
-					}
-				}
-				if pf.IsValid() && pf.Kind() == reflect.Map && pf.Type().Key().Kind() == reflect.String {
-					it2 := pf.MapRange()
-					for it2.Next() {
-						pid := strings.TrimSpace(it2.Key().String())
-						if pid == "" {
-							continue
-						}
-						// value kind: bool/number -> bool
-						bv := it2.Value()
-						if bv.Kind() == reflect.Bool {
-							products[pid] = bv.Bool()
-						} else {
-							products[pid] = true
-						}
-					}
-				}
-			}
-		}
-
-		out.Stock[modelID] = dto.CatalogInventoryModelStockDTO{Products: products}
 	}
 
 	return out
 }
 
+// ============================================================
+// model variation mapper (restore: toCatalogModelVariationDTOAny)
+// ============================================================
+
 // toCatalogModelVariationDTOAny converts *any* ModelVariation-like struct into DTO by reflection.
+// It is tolerant to field-name drift and guarantees non-nil Measurements on success.
 func toCatalogModelVariationDTOAny(v any) (dto.CatalogModelVariationDTO, bool) {
 	if v == nil {
 		return dto.CatalogModelVariationDTO{}, false
@@ -739,10 +664,7 @@ func toCatalogModelVariationDTOAny(v any) (dto.CatalogModelVariationDTO, bool) {
 	}
 
 	// strings
-	id := pickStringField(v, "ID", "Id", "ModelID", "ModelId", "modelId")
-	if id == "" {
-		id = pickStringField(rv.Interface(), "ID", "Id", "ModelID", "ModelId", "modelId")
-	}
+	id := pickStringField(rv.Interface(), "ID", "Id", "ModelID", "ModelId", "modelId")
 	if strings.TrimSpace(id) == "" {
 		return dto.CatalogModelVariationDTO{}, false
 	}
@@ -762,32 +684,52 @@ func toCatalogModelVariationDTOAny(v any) (dto.CatalogModelVariationDTO, bool) {
 
 		Measurements: map[string]int{},
 
-		Products:  nil,
 		StockKeys: 0,
 	}
 
-	// color: Color.{Name,RGB}
-	if c := rv.FieldByName("Color"); c.IsValid() {
-		if c.Kind() == reflect.Pointer {
-			if !c.IsNil() {
-				c = c.Elem()
+	// color: Color.{Name,RGB} or flattened ColorName/ColorRGB
+	if s := pickStringField(rv.Interface(), "ColorName", "colorName"); s != "" {
+		out.ColorName = strings.TrimSpace(s)
+	}
+
+	// flattened rgb variants
+	if f := rv.FieldByName("ColorRGB"); f.IsValid() {
+		out.ColorRGB = toInt(f)
+	} else if f := rv.FieldByName("ColorRgb"); f.IsValid() {
+		out.ColorRGB = toInt(f)
+	} else if f := rv.FieldByName("RGB"); f.IsValid() {
+		out.ColorRGB = toInt(f)
+	} else if f := rv.FieldByName("Rgb"); f.IsValid() {
+		out.ColorRGB = toInt(f)
+	} else {
+		// nested Color struct
+		if c := rv.FieldByName("Color"); c.IsValid() {
+			if c.Kind() == reflect.Pointer {
+				if !c.IsNil() {
+					c = c.Elem()
+				}
 			}
-		}
-		if c.IsValid() && c.Kind() == reflect.Struct {
-			nf := c.FieldByName("Name")
-			if nf.IsValid() && nf.Kind() == reflect.String {
-				out.ColorName = strings.TrimSpace(nf.String())
-			}
-			rf := c.FieldByName("RGB")
-			if rf.IsValid() {
-				out.ColorRGB = toInt(rf)
+			if c.IsValid() && c.Kind() == reflect.Struct {
+				nf := c.FieldByName("Name")
+				if nf.IsValid() && nf.Kind() == reflect.String {
+					out.ColorName = strings.TrimSpace(nf.String())
+				}
+				rf := c.FieldByName("RGB")
+				if rf.IsValid() {
+					out.ColorRGB = toInt(rf)
+				}
 			}
 		}
 	}
 
-	// measurements
+	// measurements: map[string]int
 	if m := rv.FieldByName("Measurements"); m.IsValid() {
-		if m.Kind() == reflect.Map && m.Type().Key().Kind() == reflect.String {
+		if m.Kind() == reflect.Pointer {
+			if !m.IsNil() {
+				m = m.Elem()
+			}
+		}
+		if m.IsValid() && m.Kind() == reflect.Map && m.Type().Key().Kind() == reflect.String {
 			mp := make(map[string]int)
 			iter := m.MapRange()
 			for iter.Next() {
@@ -837,6 +779,31 @@ func pickStringField(v any, fieldNames ...string) string {
 		}
 	}
 	return ""
+}
+
+func pickIntField(v any, fieldNames ...string) int {
+	rv := reflect.ValueOf(v)
+	if !rv.IsValid() {
+		return 0
+	}
+	if rv.Kind() == reflect.Pointer {
+		if rv.IsNil() {
+			return 0
+		}
+		rv = rv.Elem()
+	}
+	if !rv.IsValid() || rv.Kind() != reflect.Struct {
+		return 0
+	}
+
+	for _, name := range fieldNames {
+		f := rv.FieldByName(name)
+		if !f.IsValid() {
+			continue
+		}
+		return toInt(f)
+	}
+	return 0
 }
 
 func pickProductIDTagType(pb *pbdom.ProductBlueprint) string {
@@ -939,7 +906,7 @@ func toInt(v reflect.Value) int {
 }
 
 // ============================================================
-// log helpers (avoid nil pointer noise)
+// util
 // ============================================================
 
 func ptrStr(s *string) string {
@@ -957,4 +924,22 @@ func ptrBoolStr(b *bool) string {
 		return "true"
 	}
 	return "false"
+}
+
+// invID = "{pb}__{tb}" を前提に split
+func splitInventoryID(invID string) (pbID string, tbID string, ok bool) {
+	invID = strings.TrimSpace(invID)
+	if invID == "" {
+		return "", "", false
+	}
+	parts := strings.SplitN(invID, "__", 2)
+	if len(parts) != 2 {
+		return "", "", false
+	}
+	pb := strings.TrimSpace(parts[0])
+	tb := strings.TrimSpace(parts[1])
+	if pb == "" || tb == "" {
+		return "", "", false
+	}
+	return pb, tb, true
 }

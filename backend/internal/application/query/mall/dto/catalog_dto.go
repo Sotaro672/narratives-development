@@ -1,4 +1,4 @@
-// backend\internal\application\query\mall\dto\catalog_dto.go
+// backend/internal/application/query/mall/dto/catalog_dto.go
 package dto
 
 import (
@@ -19,7 +19,7 @@ type CatalogDTO struct {
 	ProductBlueprint      *CatalogProductBlueprintDTO `json:"productBlueprint,omitempty"`
 	ProductBlueprintError string                      `json:"productBlueprintError,omitempty"`
 
-	// ✅ tokenBlueprint patch
+	// tokenBlueprint patch
 	TokenBlueprint      *tbdom.Patch `json:"tokenBlueprint,omitempty"`
 	TokenBlueprintError string       `json:"tokenBlueprintError,omitempty"`
 
@@ -40,9 +40,15 @@ type CatalogListDTO struct {
 	TokenBlueprintID   string `json:"tokenBlueprintId,omitempty"`
 }
 
-// ✅ inventory stock model value (same shape as Mall inventory response)
+// ============================================================
+// Inventory DTOs (handler-aligned; NO legacy compatibility)
+// - products is removed
+// - availableStock is computed on frontend as (accumulation - reservedCount)
+// ============================================================
+
 type CatalogInventoryModelStockDTO struct {
-	Products map[string]bool `json:"products,omitempty"`
+	Accumulation  int `json:"accumulation"`
+	ReservedCount int `json:"reservedCount"`
 }
 
 type CatalogInventoryDTO struct {
@@ -50,12 +56,16 @@ type CatalogInventoryDTO struct {
 	ProductBlueprintID string `json:"productBlueprintId"`
 	TokenBlueprintID   string `json:"tokenBlueprintId"`
 
-	// (optional) inventory handler has this; keep it compatible
+	// keep: inventory handler also returns modelIds
 	ModelIDs []string `json:"modelIds,omitempty"`
 
-	// ✅ stock (key=modelId)
+	// stock (key=modelId)
 	Stock map[string]CatalogInventoryModelStockDTO `json:"stock,omitempty"`
 }
+
+// ============================================================
+// ProductBlueprint DTO
+// ============================================================
 
 type CatalogProductBlueprintDTO struct {
 	ID               string   `json:"id"`
@@ -73,22 +83,23 @@ type CatalogProductBlueprintDTO struct {
 	ProductIDTagType string   `json:"productIdTagType"`
 }
 
+// ============================================================
+// ModelVariation DTO
+// - products is removed (NO legacy compatibility)
+// ============================================================
+
 type CatalogModelVariationDTO struct {
 	ID                 string `json:"id"`
 	ProductBlueprintID string `json:"productBlueprintId"`
 	ModelNumber        string `json:"modelNumber"`
 	Size               string `json:"size"`
 
-	// ✅ CatalogColor を統合
 	ColorName string `json:"colorName"`
 	ColorRGB  int    `json:"colorRGB"`
 
-	// ✅ emptyでも {} を返す（catalog_query 側で非nil化する）
+	// emptyでも {} を返す（catalog_query 側で非nil化する）
 	Measurements map[string]int `json:"measurements"`
 
-	// ✅ NEW: modelごとのstock（inventory.stock[modelId].products を移植）
-	Products map[string]bool `json:"products,omitempty"`
-
-	// ✅ 既存: 在庫の「model種類数」（必要なら残す）
+	// 在庫の「model種類数」（必要なら残す）
 	StockKeys int `json:"stockKeys,omitempty"`
 }

@@ -1,4 +1,4 @@
-// frontend\mall\lib\features\inventory\infrastructure\inventory_repository_http.dart
+// frontend/mall/lib/features/inventory/infrastructure/inventory_repository_http.dart
 import 'dart:convert';
 
 import 'package:flutter/foundation.dart';
@@ -8,29 +8,43 @@ import 'package:http/http.dart' as http;
 import '../../../app/config/api_base.dart';
 
 // ============================================================
-// Inventory DTOs
+// Inventory DTOs (MATCHES backend mall inventory handler)
 // ============================================================
 
 @immutable
 class MallInventoryModelStock {
-  const MallInventoryModelStock({required this.products});
+  const MallInventoryModelStock({
+    required this.accumulation,
+    required this.reservedCount,
+  });
 
-  /// productId -> true
-  /// ※ backend が products を返さない（stockKeys only）場合は空になる
-  final Map<String, bool> products;
+  /// ✅ backend: stock.{modelId}.accumulation
+  final int accumulation;
+
+  /// ✅ backend: stock.{modelId}.reservedCount
+  final int reservedCount;
+
+  static int _toInt(dynamic v) {
+    if (v == null) return 0;
+    if (v is int) return v;
+    if (v is double) return v.toInt();
+    if (v is num) return v.toInt();
+    final s = v.toString().trim();
+    if (s.isEmpty) return 0;
+    return int.tryParse(s) ?? 0;
+  }
 
   factory MallInventoryModelStock.fromJson(Map<String, dynamic> json) {
-    final rawProducts = json['products'];
-    final Map<String, bool> products = {};
-    if (rawProducts is Map) {
-      for (final e in rawProducts.entries) {
-        final k = e.key.toString().trim();
-        final v = e.value;
-        if (k.isEmpty) continue;
-        products[k] = v == true;
-      }
-    }
-    return MallInventoryModelStock(products: products);
+    return MallInventoryModelStock(
+      accumulation: _toInt(json['accumulation']),
+      reservedCount: _toInt(json['reservedCount']),
+    );
+  }
+
+  /// ✅ UIで使う: availableStock = accumulation - reservedCount
+  int get availableStock {
+    final v = accumulation - reservedCount;
+    return v < 0 ? 0 : v;
   }
 }
 
@@ -41,7 +55,6 @@ class MallInventoryResponse {
     required this.tokenBlueprintId,
     required this.productBlueprintId,
     required this.modelIds,
-    required this.stockKeys,
     required this.stock,
   });
 
@@ -49,40 +62,36 @@ class MallInventoryResponse {
   final String tokenBlueprintId;
   final String productBlueprintId;
 
-  /// UI が “モデル一覧” 表示に使う想定
-  /// - backend が modelIds を返さない場合は stockKeys から補完する
+  /// ✅ backend: modelIds
   final List<String> modelIds;
 
-  /// ✅ stockKeys（modelId の集合）
-  /// - backend が stockKeys-only を返す場合もここが埋まる
-  final List<String> stockKeys;
-
-  /// modelId -> stock detail（products）
-  /// - backend が stockKeys-only の場合は、キーだけ拾って空 products を入れる
+  /// ✅ backend: stock (modelId -> {accumulation,reservedCount,...})
   final Map<String, MallInventoryModelStock> stock;
 
   factory MallInventoryResponse.fromJson(Map<String, dynamic> json) {
     String s(dynamic v) => (v ?? '').toString().trim();
 
     final id = s(json['id']);
+    final tb = s(json['tokenBlueprintId']);
+    final pb = s(json['productBlueprintId']);
 
-    // ✅ server-side field-name variance absorption
-    final tb = s(json['tokenBlueprintId'] ?? json['tokenBlueprintID']);
-    final pb = s(json['productBlueprintId'] ?? json['productBlueprintID']);
+    // modelIds
+    final modelIds = <String>[];
+    final modelIdsRaw = json['modelIds'];
+    if (modelIdsRaw is List) {
+      for (final v in modelIdsRaw) {
+        final t = v.toString().trim();
+        if (t.isNotEmpty) modelIds.add(t);
+      }
+    }
 
-    // -------------------------
-    // stock / stockKeys
-    // -------------------------
+    // stock
     final Map<String, MallInventoryModelStock> stock = {};
-    final List<String> stockKeys = [];
-
     final stockRaw = json['stock'];
     if (stockRaw is Map) {
       for (final e in stockRaw.entries) {
         final modelId = e.key.toString().trim();
         if (modelId.isEmpty) continue;
-
-        stockKeys.add(modelId);
 
         final v = e.value;
         if (v is Map) {
@@ -90,62 +99,27 @@ class MallInventoryResponse {
             v.cast<String, dynamic>(),
           );
         } else {
-          // stockKeys-only（value が bool/int など）でもキーだけ拾って空の products を入れる
-          stock[modelId] = const MallInventoryModelStock(products: {});
+          // handler と一致しない形は「旧式互換」扱いなので、ここではゼロ固定
+          stock[modelId] = const MallInventoryModelStock(
+            accumulation: 0,
+            reservedCount: 0,
+          );
         }
       }
-    } else if (stockRaw is List) {
-      // 念のため: stock が配列で返るケース
-      for (final v in stockRaw) {
-        final modelId = v.toString().trim();
-        if (modelId.isEmpty) continue;
-        stockKeys.add(modelId);
-        stock[modelId] = const MallInventoryModelStock(products: {});
-      }
     }
-
-    final normalizedStockKeys = _uniqPreserveOrder(stockKeys);
-
-    // -------------------------
-    // modelIds（なければ stockKeys から補完）
-    // -------------------------
-    final modelIdsRaw = json['modelIds'] ?? json['modelIDs'];
-    final modelIds = <String>[];
-    if (modelIdsRaw is List) {
-      for (final v in modelIdsRaw) {
-        final t = v.toString().trim();
-        if (t.isNotEmpty) modelIds.add(t);
-      }
-    }
-    final normalizedModelIds = modelIds.isNotEmpty
-        ? _uniqPreserveOrder(modelIds)
-        : normalizedStockKeys;
 
     return MallInventoryResponse(
       id: id,
       tokenBlueprintId: tb,
       productBlueprintId: pb,
-      modelIds: normalizedModelIds,
-      stockKeys: normalizedStockKeys,
+      modelIds: modelIds,
       stock: stock,
     );
-  }
-
-  static List<String> _uniqPreserveOrder(List<String> xs) {
-    final seen = <String>{};
-    final out = <String>[];
-    for (final x in xs) {
-      final t = x.trim();
-      if (t.isEmpty) continue;
-      if (seen.add(t)) out.add(t);
-    }
-    return out;
   }
 }
 
 // ============================================================
 // Models DTOs (/mall/models)
-// - backend log: dto.keys=[id productBlueprintId modelNumber size colorName colorRGB measurements]
 // ============================================================
 
 @immutable
@@ -165,10 +139,7 @@ class MallModelVariationDTO {
   final String modelNumber;
   final String size;
 
-  /// ✅ flattened (catalogcolor を統合した形)
   final String colorName;
-
-  /// ✅ backend: colorRGB (int)
   final int colorRGB;
 
   final Map<String, int> measurements;
@@ -186,25 +157,16 @@ class MallModelVariationDTO {
   factory MallModelVariationDTO.fromJson(Map<String, dynamic> json) {
     String s(dynamic v) => (v ?? '').toString().trim();
 
-    final id = s(json['id'] ?? json['ID']);
-    final pb = s(json['productBlueprintId'] ?? json['productBlueprintID']);
+    final id = s(json['id']);
+    final pb = s(json['productBlueprintId']);
     final mn = s(json['modelNumber']);
     final sz = s(json['size']);
 
-    final cn = s(json['colorName'] ?? json['ColorName']);
-
-    // ✅ backend uses "colorRGB" (but tolerate variants)
-    final rgb = _toInt(
-      json['colorRGB'] ??
-          json['colorRgb'] ??
-          json['ColorRGB'] ??
-          json['ColorRgb'] ??
-          json['rgb'],
-    );
+    final cn = s(json['colorName']);
+    final rgb = _toInt(json['colorRGB']);
 
     final Map<String, int> measurements = {};
-    final m =
-        json['measurements'] ?? json['Measurements'] ?? json['measurement'];
+    final m = json['measurements'];
     if (m is Map) {
       for (final e in m.entries) {
         final k = e.key.toString().trim();
@@ -236,7 +198,6 @@ class _MallModelItemDTO {
     final modelId = (json['modelId'] ?? '').toString().trim();
     final metaRaw = json['metadata'];
 
-    // ✅ metadata は Map でも、すでに flatten 済みの shape を想定
     final meta = (metaRaw is Map)
         ? MallModelVariationDTO.fromJson(metaRaw.cast<String, dynamic>())
         : MallModelVariationDTO(
@@ -249,7 +210,6 @@ class _MallModelItemDTO {
             measurements: const {},
           );
 
-    // id が空なら modelId で補完
     final fixed = (meta.id.trim().isNotEmpty)
         ? meta
         : MallModelVariationDTO(
@@ -316,7 +276,6 @@ class InventoryRepositoryHttp {
 
   final http.Client _client;
 
-  // ✅ base url is resolved from shared config
   String get _base => resolveApiBase();
 
   Uri _uri(String path, [Map<String, String>? query]) {
@@ -397,7 +356,6 @@ class InventoryRepositoryHttp {
       throw const FormatException('Invalid JSON shape (expected object)');
     }
 
-    // wrapper 吸収: {data:{...}} を許容
     final m = decoded.cast<String, dynamic>();
     final data = m['data'];
     if (data is Map) {
@@ -406,7 +364,7 @@ class InventoryRepositoryHttp {
     return MallInventoryResponse.fromJson(m);
   }
 
-  /// ✅ GET /mall/models?productBlueprintId=...   (buyer-facing)
+  /// GET /mall/models?productBlueprintId=...
   Future<List<MallModelVariationDTO>> fetchModelsByProductBlueprintId(
     String productBlueprintId, {
     int page = 1,
@@ -445,7 +403,6 @@ class InventoryRepositoryHttp {
       throw const FormatException('Invalid JSON shape (expected object)');
     }
 
-    // wrapper 吸収: {data:{...}} を許容
     final root = decoded.cast<String, dynamic>();
     final unwrapped = (root['data'] is Map)
         ? (root['data'] as Map).cast<String, dynamic>()

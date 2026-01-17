@@ -1,4 +1,4 @@
-//frontend\mall\lib\features\list\presentation\page\catalog.dart
+// frontend/mall/lib/features/list/presentation/page/catalog.dart
 import 'package:flutter/material.dart';
 
 import 'package:mall/app/shell/presentation/state/catalog_selection_store.dart';
@@ -92,7 +92,8 @@ class _CatalogPageState extends State<CatalogPage> {
         final pb = vm?.productBlueprint;
         final pbErr = vm?.productBlueprintError;
 
-        final totalStock = vm?.totalStock;
+        // ✅ availableStock (= accumulation - reservedCount の合計)
+        final availableStock = vm?.totalStock;
 
         final tbPatch = vm?.tokenBlueprintPatch;
         final tbErr = vm?.tokenBlueprintError;
@@ -147,6 +148,16 @@ class _CatalogPageState extends State<CatalogPage> {
                               priceText,
                               style: Theme.of(context).textTheme.titleMedium,
                             ),
+
+                          // ✅ NEW: availableStock 表示
+                          const SizedBox(height: 6),
+                          Text(
+                            availableStock != null
+                                ? '在庫（Available）: $availableStock'
+                                : '在庫（Available）: -',
+                            style: Theme.of(context).textTheme.bodyMedium,
+                          ),
+
                           const SizedBox(height: 10),
                           if (list.description.trim().isNotEmpty)
                             Text(
@@ -174,7 +185,7 @@ class _CatalogPageState extends State<CatalogPage> {
               CatalogInventoryCard(
                 productBlueprintId: pbId,
                 tokenBlueprintId: tbId,
-                totalStock: totalStock,
+                totalStock: availableStock, // ✅ availableStock を渡す
                 inventory: inv,
                 inventoryError: invErr,
                 modelStockRows: vm?.modelStockRows,
