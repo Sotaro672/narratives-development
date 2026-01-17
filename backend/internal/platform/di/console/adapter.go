@@ -277,7 +277,7 @@ func (a *tbPatchByIDAdapter) GetPatchByID(ctx context.Context, id string) (tbdom
 
 //
 // ========================================
-// Query / List 用アダプタ（container.go から移譲）
+// Query / List 用アダプタ
 // ========================================
 //
 

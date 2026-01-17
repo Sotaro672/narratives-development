@@ -1,7 +1,10 @@
 // backend/internal/domain/inventory/repository_port.go
 package inventory
 
-import "context"
+import (
+	"context"
+	"time"
+)
 
 // RepositoryPort is output port for inventories persistence.
 type RepositoryPort interface {
@@ -47,5 +50,49 @@ type RepositoryPort interface {
 		modelID string,
 		orderID string,
 		qty int,
+	) error
+
+	// ------------------------------------------------------------
+	// ✅ NEW: Transfer settlement (FireStore transfers data aligned)
+	// ------------------------------------------------------------
+
+	// ApplyTransferResult atomically updates inventory stock after a successful transfer.
+	//
+	// Firestore transfer doc (example):
+	//   docId: "<productId>__<attempt>"
+	//   fields:
+	//     - ProductID (string)
+	//     - OrderID (string)
+	//     - Status (string "pending"/"succeeded"/"failed")  ※ または patch で "status"
+	//     - txSignature (string)                             ※ patch で "txSignature"
+	//     - updatedAt (timestamp)
+	//
+	// Inventory update goal:
+	// - Find the inventory document that contains the productId in Stock[*].Products
+	// - Remove productId from Stock[modelId].Products
+	// - Decrement reservation for orderId:
+	//   - If ReservedByOrder[orderId] exists:
+	//       - subtract removedCount (usually 1)
+	//       - if result <= 0, delete the key
+	// - Normalize:
+	//   - Stock[modelId].Accumulation = len(Products)
+	//   - Stock[modelId].ReservedCount = SUM(ReservedByOrder)
+	//
+	// Contract:
+	// - Must be transactional (Firestore transaction recommended).
+	// - Must be idempotent:
+	//   - If productId is not present, do nothing and return nil.
+	// - The repository can resolve inventoryID by scanning inventories,
+	//   or you may implement a stronger index later.
+	//
+	// Params:
+	// - productID: transfer.ProductID
+	// - orderID:   transfer.OrderID
+	// - now:       use transfer.updatedAt (or time.Now().UTC()) for audit/updatedAt
+	ApplyTransferResult(
+		ctx context.Context,
+		productID string,
+		orderID string,
+		now time.Time,
 	) error
 }

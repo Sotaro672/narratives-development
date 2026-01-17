@@ -9,6 +9,7 @@ import (
 	"os"
 	"reflect"
 	"strings"
+	"time"
 
 	httpin "narratives/internal/adapters/in/http/console"
 	solanainfra "narratives/internal/infra/solana"
@@ -186,7 +187,12 @@ func NewContainer(ctx context.Context, infra *shared.Infra) (*Container, error) 
 	campaignRepo := fs.NewCampaignRepositoryFS(fsClient)
 	companyRepo := fs.NewCompanyRepositoryFS(fsClient)
 	inquiryRepo := fs.NewInquiryRepositoryFS(fsClient)
+
+	// Inventory repo (Firestore)
 	inventoryRepo := fs.NewInventoryRepositoryFS(fsClient)
+	// ✅ Adapter: inventory.RepositoryPort に追加された ApplyTransferResult を満たす
+	inventoryRepoForUC := &inventoryRepoTransferResultAdapter{InventoryRepositoryFS: inventoryRepo}
+
 	invoiceRepo := fs.NewInvoiceRepositoryFS(fsClient)
 
 	listRepoFS := fs.NewListRepositoryFS(fsClient)
@@ -305,7 +311,9 @@ func NewContainer(ctx context.Context, infra *shared.Infra) (*Container, error) 
 	campaignUC := uc.NewCampaignUsecase(campaignRepo, nil, nil, nil)
 	companyUC := uc.NewCompanyUsecase(companyRepo)
 	inquiryUC := uc.NewInquiryUsecase(inquiryRepo, nil, nil)
-	inventoryUC := uc.NewInventoryUsecase(inventoryRepo)
+
+	// ✅ FIX: inventoryRepoForUC を渡す（ApplyTransferResult を満たす）
+	inventoryUC := uc.NewInventoryUsecase(inventoryRepoForUC)
 
 	paymentUC := uc.NewPaymentUsecase(paymentRepo)
 	invoiceUC := uc.NewInvoiceUsecase(invoiceRepo)
@@ -426,7 +434,7 @@ func NewContainer(ctx context.Context, infra *shared.Infra) (*Container, error) 
 	mintRequestQueryService.SetModelRepo(modelRepo)
 
 	inventoryQuery := companyquery.NewInventoryQueryWithTokenBlueprintPatch(
-		inventoryRepo,
+		inventoryRepoForUC, // ✅ interfaceを満たす側を渡しておく
 		&pbIDsByCompanyAdapter{repo: productBlueprintRepo},
 		&pbPatchByIDAdapter{repo: productBlueprintRepo},
 		&tbPatchByIDAdapter{repo: tokenBlueprintRepo},
@@ -434,7 +442,7 @@ func NewContainer(ctx context.Context, infra *shared.Infra) (*Container, error) 
 	)
 
 	listCreateQuery := companyquery.NewListCreateQueryWithInventoryAndModels(
-		inventoryRepo,
+		inventoryRepoForUC, // ✅ interfaceを満たす側を渡しておく
 		modelRepo,
 		&pbPatchByIDAdapter{repo: productBlueprintRepo},
 		&tbPatchByIDAdapter{repo: tokenBlueprintRepo},
@@ -623,4 +631,43 @@ func callOptionalMethod(obj any, methodName string, arg any) {
 
 func init() {
 	log.Printf("[di.console] container package loaded")
+}
+
+// ============================================================
+// ✅ Adapter: fs.InventoryRepositoryFS に ApplyTransferResult を付与
+// - inventory.RepositoryPort が要求する ApplyTransferResult の戻り値は error
+// - 既存実装 ReleaseReservationAfterTransfer が (int, error) を返すため、
+//   removedCount はログ用途に消費して error のみ返す
+// ============================================================
+
+type inventoryRepoTransferResultAdapter struct {
+	*fs.InventoryRepositoryFS
+}
+
+// ApplyTransferResult updates inventory after transfer by removing productId and decrementing reservation for orderId.
+func (a *inventoryRepoTransferResultAdapter) ApplyTransferResult(
+	ctx context.Context,
+	productID string,
+	orderID string,
+	now time.Time,
+) error {
+	if a == nil || a.InventoryRepositoryFS == nil {
+		return errors.New("inventory repo adapter is nil")
+	}
+
+	removed, err := a.InventoryRepositoryFS.ReleaseReservationAfterTransfer(ctx, productID, orderID, now)
+	if err != nil {
+		return err
+	}
+
+	// best-effort log (removed can be 0 on idempotent re-run)
+	log.Printf(
+		"[inventory_repo_adapter] ApplyTransferResult ok productId=%q orderId=%q removed=%d at=%s",
+		strings.TrimSpace(productID),
+		strings.TrimSpace(orderID),
+		removed,
+		now.UTC().Format(time.RFC3339),
+	)
+
+	return nil
 }

@@ -342,6 +342,211 @@ func (r *InventoryRepositoryFS) ListByTokenAndModelID(ctx context.Context, token
 }
 
 // ============================================================
+// ✅ Transfer後の解放（追加）
+// - stock[modelId].products から productId を削除
+// - reservedByOrder[orderId] を削除件数分だけ減算（<=0はキー削除）
+// - accumulation/reservedCount を正規化
+//
+// Contract:
+// - transaction-safe
+// - idempotent（無ければ removed=0, nil）
+// - removedCount は通常 1 だが、重複等に備えて int を返す
+// ============================================================
+
+// ApplyTransferResult implements invdom.RepositoryPort.
+// TransferUsecase 内から「on-chain 成功後の inventory 解放」を呼び出すための統一エントリです。
+func (r *InventoryRepositoryFS) ApplyTransferResult(
+	ctx context.Context,
+	productID string,
+	orderID string,
+	now time.Time,
+) error {
+	if r == nil || r.Client == nil {
+		return errors.New("inventory repo is nil")
+	}
+	_, err := r.ReleaseReservationAfterTransfer(ctx, productID, orderID, now)
+	return err
+}
+
+func (r *InventoryRepositoryFS) ReleaseReservationAfterTransfer(
+	ctx context.Context,
+	productID string,
+	orderID string,
+	now time.Time,
+) (removedCount int, err error) {
+	start := time.Now()
+
+	if r == nil || r.Client == nil {
+		return 0, errors.New("inventory repo is nil")
+	}
+
+	pid := strings.TrimSpace(productID)
+	oid := strings.TrimSpace(orderID)
+	if pid == "" {
+		return 0, errors.New("inventory repo: productID is empty")
+	}
+	if oid == "" {
+		return 0, errors.New("inventory repo: orderID is empty")
+	}
+	if now.IsZero() {
+		now = time.Now().UTC()
+	}
+	now = now.UTC()
+
+	// 1) productId を含む inventory doc + modelId を探索（現スキーマ上、逆引きインデックスが無いため）
+	docRef, modelID, findErr := r.findInventoryDocByProductID(ctx, pid)
+	if findErr != nil {
+		return 0, findErr
+	}
+	if docRef == nil || strings.TrimSpace(modelID) == "" {
+		// idempotent: 見つからないなら no-op
+		return 0, nil
+	}
+
+	log.Printf(
+		"[inventory_repo_fs] ReleaseReservationAfterTransfer start inventoryId=%q modelId=%q productId=%q orderId=%q",
+		docRef.ID, modelID, pid, oid,
+	)
+
+	err = r.Client.RunTransaction(ctx, func(ctx context.Context, tx *firestore.Transaction) error {
+		snap, err := tx.Get(docRef)
+		if err != nil {
+			if status.Code(err) == codes.NotFound {
+				return invdom.ErrNotFound
+			}
+			return err
+		}
+
+		var rec inventoryRecord
+		if err := snap.DataTo(&rec); err != nil {
+			return err
+		}
+
+		stock := rec.Stock
+		if stock == nil {
+			return nil // no-op
+		}
+
+		ms, ok := stock[modelID]
+		if !ok {
+			return nil // no-op
+		}
+
+		// products から pid を削除
+		removed := 0
+		if len(ms.Products) > 0 {
+			newProducts := make([]string, 0, len(ms.Products))
+			for _, x := range ms.Products {
+				x = strings.TrimSpace(x)
+				if x == "" {
+					continue
+				}
+				if x == pid {
+					removed++
+					continue
+				}
+				newProducts = append(newProducts, x)
+			}
+			ms.Products = newProducts
+		}
+
+		// idempotent: 既に無いなら no-op
+		if removed == 0 {
+			return nil
+		}
+
+		// reservedByOrder[orderId] を removed 分減算
+		if ms.ReservedByOrder == nil {
+			ms.ReservedByOrder = map[string]int{}
+		}
+		cur := ms.ReservedByOrder[oid]
+		cur = cur - removed
+		if cur <= 0 {
+			delete(ms.ReservedByOrder, oid)
+		} else {
+			ms.ReservedByOrder[oid] = cur
+		}
+
+		// 正規化（accumulation / reservedCount / 空map等）
+		ms = normalizeModelStockRecord(ms)
+		stock[modelID] = ms
+
+		// 空になった model を drop
+		stock = normalizeStockRecord(stock)
+
+		// modelIds も stock から再生成（不整合を防ぐ）
+		modelIDs := modelIDsFromStockRecord(stock)
+
+		updates := []firestore.Update{
+			{Path: "stock", Value: stock},
+			{Path: "modelIds", Value: modelIDs},
+			{Path: "updatedAt", Value: now},
+		}
+
+		removedCount = removed
+		return tx.Update(docRef, updates)
+	})
+
+	if err != nil {
+		log.Printf(
+			"[inventory_repo_fs] ReleaseReservationAfterTransfer error productId=%q orderId=%q err=%v elapsed=%s",
+			pid, oid, err, time.Since(start),
+		)
+		return 0, err
+	}
+
+	log.Printf(
+		"[inventory_repo_fs] ReleaseReservationAfterTransfer done productId=%q orderId=%q removed=%d elapsed=%s",
+		pid, oid, removedCount, time.Since(start),
+	)
+
+	return removedCount, nil
+}
+
+func (r *InventoryRepositoryFS) findInventoryDocByProductID(ctx context.Context, productID string) (*firestore.DocumentRef, string, error) {
+	if r == nil || r.Client == nil {
+		return nil, "", errors.New("inventory repo is nil")
+	}
+	pid := strings.TrimSpace(productID)
+	if pid == "" {
+		return nil, "", errors.New("inventory repo: productID is empty")
+	}
+
+	iter := r.col().Documents(ctx)
+	defer iter.Stop()
+
+	for {
+		snap, err := iter.Next()
+		if err != nil {
+			if errors.Is(err, iterator.Done) {
+				break
+			}
+			return nil, "", err
+		}
+
+		var rec inventoryRecord
+		if err := snap.DataTo(&rec); err != nil {
+			return nil, "", err
+		}
+		if rec.Stock == nil {
+			continue
+		}
+
+		for modelID, ms := range rec.Stock {
+			modelID = strings.TrimSpace(modelID)
+			if modelID == "" {
+				continue
+			}
+			if containsString(ms.Products, pid) {
+				return snap.Ref, modelID, nil
+			}
+		}
+	}
+
+	return nil, "", nil
+}
+
+// ============================================================
 // Reservation operations
 // ============================================================
 

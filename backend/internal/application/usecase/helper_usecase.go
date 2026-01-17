@@ -53,3 +53,16 @@ func normalizeSlicePtr(xs *[]string) *[]string {
 
 // 追加: 任意型のポインタを返すユーティリティ
 func ptr[T any](v T) *T { return &v }
+
+// 追加: ログ用マスク（usecase 内で共通利用）
+// NOTE: 既に transfer_usecase.go にある _mask と同一実装にしてください。
+func _mask(s string) string {
+	t := strings.TrimSpace(s)
+	if t == "" {
+		return ""
+	}
+	if len(t) <= 10 {
+		return t
+	}
+	return t[:4] + "***" + t[len(t)-4:]
+}

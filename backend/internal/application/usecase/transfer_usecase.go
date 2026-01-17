@@ -11,8 +11,12 @@ package usecase
 - さらに tokens/{productId}.toAddress を「今の owner (= avatar wallet)」として必ず更新する。
 - さらに transfer テーブル（transfer domain）を起票し、成功/失敗・tx署名・エラー種別を永続化する。
 - さらに transfer テーブルに移譲した mintAddress を保存する（監査/CS/復旧用）。
-- 外部依存（Firestore/SecretManager/Solana/TokenOperation 等）は Port(interface) に閉じ込め、
-  Usecase は「手順（オーケストレーション）」のみを担う。
+
+✅ 統合（transfered_uc の責務を transfer_uc に統合）:
+- on-chain transfer 成功後に inventory 側の「予約」と「在庫保持」を解放する（best-effort）。
+  - inventory.stock[*].products から productId を削除
+  - inventory.stock[*].reservedByOrder から orderId を減算/削除
+  - 正規化: accumulation / reservedCount
 
 重要:
 - tokens/{productId}.toAddress が “今の owner” を表す運用なら、
@@ -28,6 +32,10 @@ Transfer テーブル起票:
 - pending 起票時点で mintAddress も保存しておく（失敗時も対象mintを追える）。
 - on-chain transfer 成功後に succeeded(txSignature) に更新する。
 - その後の off-chain 更新（orders/tokens）が失敗した場合は failed に更新し、txSignature を保持して復旧可能にする。
+
+Inventory cleanup（統合後）:
+- inventory 更新は on-chain を巻き戻せないため、原則 best-effort（WARNログ）とする。
+  ※厳密にしたい場合は fail-fast に切り替え可能。
 */
 
 import (
@@ -38,6 +46,7 @@ import (
 	"strings"
 	"time"
 
+	invdom "narratives/internal/domain/inventory"
 	orderdom "narratives/internal/domain/order"
 	transferdom "narratives/internal/domain/transfer"
 )
@@ -177,6 +186,10 @@ type TransferUsecase struct {
 	secrets  WalletSecretProvider
 	executor TokenTransferExecutor
 
+	// ✅ NEW (transfered_uc 統合): inventory cleanup port
+	// - optional injection (WithInventoryRepo)
+	inv invdom.RepositoryPort
+
 	now func() time.Time
 }
 
@@ -203,6 +216,15 @@ func NewTransferUsecase(
 		executor:     executor,
 		now:          time.Now,
 	}
+}
+
+// WithInventoryRepo injects inventory.RepositoryPort for post-transfer cleanup.
+// This is optional to keep backward compatibility in DI wiring.
+func (u *TransferUsecase) WithInventoryRepo(inv invdom.RepositoryPort) *TransferUsecase {
+	if u != nil {
+		u.inv = inv
+	}
+	return u
 }
 
 var (
@@ -252,6 +274,7 @@ type TransferByVerifiedScanResult struct {
 // 7.5) transfer(SUCCEEDED) 更新（txSignature）
 // 8) orders item を transferred=true で確定更新
 // 9) tokens/{productId}.toAddress を avatar wallet に更新（今の owner を正にする）
+// 9.5) ✅ inventory cleanup（transfered_uc 統合; best-effort）
 // 10) 失敗時は transfer(FAILED) 更新 + unlock（best-effort）
 func (u *TransferUsecase) TransferToAvatarByVerifiedScan(ctx context.Context, in TransferByVerifiedScanInput) (res TransferByVerifiedScanResult, retErr error) {
 	if u == nil ||
@@ -550,6 +573,24 @@ func (u *TransferUsecase) TransferToAvatarByVerifiedScan(ctx context.Context, in
 		)
 	}
 
+	// 9.5) ✅ inventory cleanup after transfer (transfered_uc 統合; best-effort)
+	// NOTE:
+	// - inv.RepositoryPort.ApplyTransferResult(ctx, productID, orderID, now time.Time) error
+	// - modelID は repo 側で productID から特定する想定
+	if u.inv != nil {
+		if err := u.inv.ApplyTransferResult(ctx, productID, targetOrderID, now); err != nil {
+			log.Printf(
+				"[transfer_uc] WARN inventory cleanup failed productId=%s orderId=%s modelId=%s err=%v",
+				_mask(productID), _mask(targetOrderID), _mask(targetModelID), err,
+			)
+		} else {
+			log.Printf(
+				"[transfer_uc] OK inventory cleanup productId=%s orderId=%s modelId=%s",
+				_mask(productID), _mask(targetOrderID), _mask(targetModelID),
+			)
+		}
+	}
+
 	locked = false
 
 	log.Printf(
@@ -625,15 +666,4 @@ func extractTokenBlueprintIDFromInventoryID(inventoryID string) string {
 		return ""
 	}
 	return strings.TrimSpace(parts[1])
-}
-
-func _mask(s string) string {
-	t := strings.TrimSpace(s)
-	if t == "" {
-		return ""
-	}
-	if len(t) <= 10 {
-		return t
-	}
-	return t[:4] + "***" + t[len(t)-4:]
 }

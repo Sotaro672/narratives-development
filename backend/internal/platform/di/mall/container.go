@@ -75,11 +75,10 @@ type Container struct {
 	OrderUC           *usecase.OrderUsecase
 	InvoiceUC         *usecase.InvoiceUsecase
 
-	// ✅ NEW: order scan transfer usecase
-	// register.go は cont.TransferUC を参照するため、この名前に統一する
+	// ✅ order scan transfer usecase
 	TransferUC *usecase.TransferUsecase
 
-	// ✅ Case A: /mall/me/payments で payment 起票後に（必要なら）webhook を叩くオーケストレーション
+	// ✅ Case A: payment起票後に（必要なら）webhook trigger
 	PaymentFlowUC *usecase.PaymentFlowUsecase
 
 	// ✅ Inventory (buyer-facing, read-only)
@@ -99,13 +98,13 @@ type Container struct {
 	CartQ    *mallquery.CartQuery
 	PreviewQ *mallquery.PreviewQuery
 
-	// ✅ 方針A: any をやめて具体型で持つ（ResolveAvatarIDByUID を満たすことをコンパイル時に保証）
+	// ✅ any をやめて具体型で持つ
 	OrderQ *mallquery.OrderQuery
 
-	// ✅ NEW: purchased orders (paid=true & items.transfer=false) -> (modelId, tokenBlueprintId) list
+	// ✅ purchased orders
 	OrderPurchasedQ *mallquery.OrderPurchasedQuery
 
-	// ✅ NEW: verify scanned pair (preview) matches purchased pair
+	// ✅ verify scanned pair
 	OrderScanVerifyQ *mallquery.OrderScanVerifyQuery
 
 	// ✅ Shared query: walletAddress(toAddress) -> brandId / avatarId
@@ -117,7 +116,7 @@ type Container struct {
 	// ✅ /mall/me/avatar 用: uid -> avatarId を解決するRepo
 	MeAvatarRepo *mallfs.MeAvatarRepo
 
-	// ✅ 追加: Avatar作成時に「空カートを作る」等で handler が repo を直接必要とするケースに備える
+	// ✅ handler が repo を直接必要とするケースに備える
 	CartRepo any
 }
 
@@ -134,7 +133,7 @@ func NewContainer(ctx context.Context, infra *shared.Infra) (*Container, error) 
 		return nil, errors.New("di.mall: shared infra is nil")
 	}
 
-	// ✅ IMPORTANT: console と同様に Config は必須（projectID 解決に必要）
+	// ✅ IMPORTANT: Config は必須（projectID 解決に必要）
 	if infra.Config == nil {
 		return nil, errors.New("di.mall: shared infra config is nil")
 	}
@@ -170,8 +169,10 @@ func NewContainer(ctx context.Context, infra *shared.Infra) (*Container, error) 
 	// handler 側に注入できるように保持
 	c.CartRepo = cartRepo
 
-	// Inventory
+	// Inventory (Firestore)
 	inventoryRepo := outfs.NewInventoryRepositoryFS(fsClient)
+	// ✅ inventory.RepositoryPort を満たすための adapter（ApplyTransferResult を追加）
+	inventoryRepoForUC := &inventoryRepoTransferResultAdapter{InventoryRepositoryFS: inventoryRepo}
 
 	// TokenBlueprint (tokenBlueprint domain)
 	tokenBlueprintRepo := outfs.NewTokenBlueprintRepositoryFS(fsClient)
@@ -215,12 +216,12 @@ func NewContainer(ctx context.Context, infra *shared.Infra) (*Container, error) 
 	// Usecases
 	// --------------------------------------------------------
 
-	// ✅ AvatarUsecase: cartRepo / walletRepo / walletSvc を必ず注入（500解消）
+	// ✅ AvatarUsecase: cartRepo / walletRepo / walletSvc を必ず注入
 	c.AvatarUC = usecase.NewAvatarUsecase(
 		avatarRepo,
 		avatarStateRepo,
-		avatarIconRepo, // AvatarIconRepo
-		avatarIconRepo, // AvatarIconObjectStoragePort
+		avatarIconRepo,
+		avatarIconRepo,
 	).
 		WithCartRepo(cartRepo).
 		WithWalletRepo(walletRepo).
@@ -239,7 +240,6 @@ func NewContainer(ctx context.Context, infra *shared.Infra) (*Container, error) 
 	c.UserUC = usecase.NewUserUsecase(userRepo)
 
 	// ✅ WalletUsecase + OnchainReader (devnet default)
-	// - SOLANA_RPC_ENDPOINT があればそれを優先し、無ければ devnet を使用
 	onchainReader := solanaplatform.NewOnchainWalletReaderDevnet()
 	c.WalletUC = usecase.NewWalletUsecase(walletRepo).WithOnchainReader(onchainReader)
 
@@ -251,15 +251,13 @@ func NewContainer(ctx context.Context, infra *shared.Infra) (*Container, error) 
 		WithInvoiceRepoForPayment(invoiceRepo).
 		WithCartRepoForPayment(cartRepo).
 		WithOrderRepoForPayment(orderRepo).
-		WithInventoryRepoForPayment(inventoryRepo)
+		WithInventoryRepoForPayment(inventoryRepoForUC)
 
 	c.InvoiceUC = usecase.NewInvoiceUsecase(invoiceRepo)
 	c.OrderUC = usecase.NewOrderUsecase(orderRepo)
 
 	// --------------------------------------------------------
 	// ✅ Case A: PaymentFlowUsecase（payment起票 + 必要なら webhook trigger）
-	//   SelfBaseURL 解決は shared.Infra に委譲済み
-	//   NOTE: PaymentUC は常に構築される前提のため nil 分岐を削除
 	// --------------------------------------------------------
 	selfBaseURL := strings.TrimSpace(infra.SelfBaseURL)
 	selfBaseURLConfigured := selfBaseURL != ""
@@ -271,11 +269,11 @@ func NewContainer(ctx context.Context, infra *shared.Infra) (*Container, error) 
 		c.PaymentFlowUC = usecase.NewPaymentFlowUsecase(c.PaymentUC, nil)
 	}
 
-	c.InventoryUC = usecase.NewInventoryUsecase(inventoryRepo)
+	// ✅ FIX: inventoryRepoForUC を渡す（ApplyTransferResult を満たす）
+	c.InventoryUC = usecase.NewInventoryUsecase(inventoryRepoForUC)
 
 	// --------------------------------------------------------
 	// TokenIcon URL Resolver (objectPath -> publicURL)
-	//   bucket 解決は shared.Infra に委譲済み
 	// --------------------------------------------------------
 	{
 		c.TokenIconURLResolver = tokenIconURLResolver{bucket: strings.TrimSpace(infra.TokenIconBucket)}
@@ -309,34 +307,26 @@ func NewContainer(ctx context.Context, infra *shared.Infra) (*Container, error) 
 		invRepo := mallfs.NewInventoryRepoForMallQuery(fsClient)
 
 		c.CatalogQ = mallquery.NewCatalogQuery(listRepoFS, invRepo, productBlueprintRepoFS, modelRepoFS)
-
 		c.CartQ = mallquery.NewCartQuery(fsClient)
 
-		// ✅ PreviewQuery 用 ProductBlueprintReader を用意（pbRepoFS は GetIDByModelID を持たないため adapter が必要）
+		// ✅ PreviewQuery 用 ProductBlueprintReader
 		pbReader := previewProductBlueprintReaderFS{
 			fs: fsClient,
 			pb: productBlueprintRepoFS,
 		}
 
-		// ✅ PreviewQuery 本体
 		c.PreviewQ = mallquery.NewPreviewQuery(
 			previewProductReaderFS{fs: fsClient},
 			modelRepoFS,
 			pbReader,
 		)
 
-		// ✅ tokens/{productId} を preview で返したいので TokenRepo を注入（optional）
 		if c.PreviewQ != nil {
 			c.PreviewQ.TokenRepo = outfs.NewTokenReaderFS(fsClient)
 		}
 
-		// ✅ 方針A: any ではなく *mallquery.OrderQuery を保持
 		c.OrderQ = mallquery.NewOrderQuery(fsClient)
-
-		// ✅ NEW: OrderPurchasedQuery
 		c.OrderPurchasedQ = mallquery.NewOrderPurchasedQuery(fsClient)
-
-		// ✅ NEW: OrderScanVerifyQuery (PurchasedQ + PreviewQ を合成)
 		c.OrderScanVerifyQ = mallquery.NewOrderScanVerifyQuery(c.OrderPurchasedQ, c.PreviewQ)
 
 		// light injection
@@ -352,8 +342,7 @@ func NewContainer(ctx context.Context, infra *shared.Infra) (*Container, error) 
 	}
 
 	// --------------------------------------------------------
-	// ✅ Shared Query: OwnerResolve (walletAddress/toAddress -> brandId / avatarId)
-	//   collection 名解決は shared.Infra に委譲済み
+	// ✅ Shared Query: OwnerResolve
 	// --------------------------------------------------------
 	{
 		brandsCol := strings.TrimSpace(infra.BrandsCollection)
@@ -362,13 +351,11 @@ func NewContainer(ctx context.Context, infra *shared.Infra) (*Container, error) 
 		brandReader := brandWalletAddressReaderFS{fs: fsClient, col: brandsCol}
 		avatarReader := avatarWalletAddressReaderFS{fs: fsClient, col: avatarsCol}
 
-		// ✅ NewOwnerResolveQuery は (avatarReader, brandReader) の順で受け取る定義
 		c.OwnerResolveQ = sharedquery.NewOwnerResolveQuery(avatarReader, brandReader)
 	}
 
 	// --------------------------------------------------------
 	// ✅ TransferUsecase wiring (order scan verified -> brand->avatar transfer)
-	//   SecretManager client / prefix 解決は shared.Infra に委譲済み
 	// --------------------------------------------------------
 	{
 		// 0) ScanVerifier: OrderScanVerifyQuery -> usecase.ScanVerifier
@@ -379,24 +366,22 @@ func NewContainer(ctx context.Context, infra *shared.Infra) (*Container, error) 
 			scanVerifier = nil
 		}
 
-		// 1) OrderRepoForTransfer (orders item lock/mark)
+		// 1) OrderRepoForTransfer
 		var orderRepoForTransfer usecase.OrderRepoForTransfer = outfs.NewOrderRepoForTransferFS(fsClient)
 
-		// 2) TokenResolver / TokenOwnerUpdater (Firestore tokens/{productId})
+		// 2) TokenResolver / TokenOwnerUpdater
 		var tokenResolver usecase.TokenResolver = &tokenResolverFS{fs: fsClient, col: "tokens"}
 		var tokenOwnerUpdater usecase.TokenOwnerUpdater = &tokenOwnerUpdaterFS{fs: fsClient, col: "tokens"}
 
-		// ✅ 2.5) TransferRepo (Firestore transfers)
-		// NOTE: outfs.NewTransferRepositoryFS は通常 nil を返さないため、nil-check は不要
+		// 2.5) TransferRepo
 		var transferRepo usecase.TransferRepo = outfs.NewTransferRepositoryFS(fsClient)
 
 		// 3) BrandWalletResolver / AvatarWalletResolver
 		brandRepo := outfs.NewBrandRepositoryFS(fsClient)
 		var walletResolver usecase.BrandWalletResolver = outfs.NewWalletResolverRepoFS(brandRepo, walletRepo)
-		// same concrete impl also satisfies AvatarWalletResolver
 		var avatarWalletResolver usecase.AvatarWalletResolver = walletResolver.(usecase.AvatarWalletResolver)
 
-		// 4) WalletSecretProvider (Secret Manager) - Design B
+		// 4) WalletSecretProvider (Secret Manager)
 		var secrets usecase.WalletSecretProvider = nil
 		if infra.SecretManager != nil && strings.TrimSpace(infra.ProjectID) != "" {
 			secretPrefix := strings.TrimSpace(infra.BrandWalletSecretPrefix)
@@ -412,25 +397,24 @@ func NewContainer(ctx context.Context, infra *shared.Infra) (*Container, error) 
 		}
 
 		// 5) TokenTransferExecutor (Solana)
-		//    - RPC URL resolves from SOLANA_RPC_URL if empty
 		var executor usecase.TokenTransferExecutor = solanainfra.NewTokenTransferExecutorSolana("")
 
 		// 6) Build TransferUC only when truly conditional deps exist
-		// ✅ transferRepo はコンストラクタが nil を返さない前提のため、tautological check を排除
 		if scanVerifier != nil && secrets != nil {
 			c.TransferUC = usecase.NewTransferUsecase(
 				scanVerifier,
 				orderRepoForTransfer,
 				tokenResolver,
 				tokenOwnerUpdater,
-				transferRepo,         // ✅ TransferRepo を追加
-				walletResolver,       // BrandWalletResolver
-				avatarWalletResolver, // AvatarWalletResolver
+				transferRepo,
+				walletResolver,
+				avatarWalletResolver,
 				secrets,
 				executor,
-			)
+			).
+				// ✅ 統合方針: transfer 成功後の inventory cleanup も TransferUC 内で実行する
+				WithInventoryRepo(inventoryRepoForUC)
 		} else {
-			// keep nil (safe)
 			c.TransferUC = nil
 		}
 	}
@@ -465,11 +449,6 @@ func NewContainer(ctx context.Context, infra *shared.Infra) (*Container, error) 
 // PreviewQuery: ProductReader adapter (Firestore -> domain.Product)
 // ------------------------------------------------------------
 
-// previewProductReaderFS implements mallquery.ProductReader
-// by reading a product document from Firestore.
-//
-// NOTE: collection 名は "products" を前提にしています。
-// もし実際の保存先が異なる場合は、この1箇所だけ直せば PreviewQuery は動き続けます。
 type previewProductReaderFS struct {
 	fs *firestore.Client
 }
@@ -493,17 +472,14 @@ func (r previewProductReaderFS) GetByID(ctx context.Context, productID string) (
 		return productdom.Product{}, err
 	}
 
-	// Firestore doc id を優先して上書き
 	p.ID = doc.Ref.ID
 	return p, nil
 }
 
 // ------------------------------------------------------------
 // PreviewQuery: ProductBlueprintReader adapter
-// - pbRepoFS は GetIDByModelID を持たないため、ここで補う
 // ------------------------------------------------------------
 
-// previewProductBlueprintReaderFS implements mallquery.ProductBlueprintReader.
 type previewProductBlueprintReaderFS struct {
 	fs *firestore.Client
 	pb interface {
@@ -512,10 +488,6 @@ type previewProductBlueprintReaderFS struct {
 	}
 }
 
-// GetIDByModelID resolves productBlueprintId from modelId.
-// NOTE: "models/{modelId}" に productBlueprintId がある前提です。
-//
-//	フィールド名は productBlueprintId / productBlueprintID / product_blueprint_id を許容します。
 func (r previewProductBlueprintReaderFS) GetIDByModelID(ctx context.Context, modelID string) (string, error) {
 	if r.fs == nil {
 		return "", mallquery.ErrPreviewQueryNotConfigured
@@ -527,7 +499,6 @@ func (r previewProductBlueprintReaderFS) GetIDByModelID(ctx context.Context, mod
 
 	snap, err := r.fs.Collection("models").Doc(id).Get(ctx)
 	if err != nil {
-		// model が無い場合は上位で "resolved productBlueprintId is empty" に落ちるのでもOK
 		return "", err
 	}
 
@@ -568,7 +539,6 @@ func (r previewProductBlueprintReaderFS) GetByID(ctx context.Context, id string)
 // ✅ SharedQuery OwnerResolve: walletAddress readers (Firestore)
 // ------------------------------------------------------------
 
-// brandWalletAddressReaderFS implements sharedquery.BrandWalletAddressReader.
 type brandWalletAddressReaderFS struct {
 	fs  *firestore.Client
 	col string
@@ -606,7 +576,6 @@ func (r brandWalletAddressReaderFS) FindBrandIDByWalletAddress(ctx context.Conte
 	return strings.TrimSpace(doc.Ref.ID), nil
 }
 
-// avatarWalletAddressReaderFS implements sharedquery.AvatarWalletAddressReader.
 type avatarWalletAddressReaderFS struct {
 	fs  *firestore.Client
 	col string
@@ -645,7 +614,6 @@ func (r avatarWalletAddressReaderFS) FindAvatarIDByWalletAddress(ctx context.Con
 }
 
 // tokenIconURLResolver resolves icon URL from stored objectPath (or URL).
-// NOTE: bucket は DI 時に確定させ、実行時に env を参照しない。
 type tokenIconURLResolver struct {
 	bucket string
 }
@@ -659,17 +627,14 @@ func (r tokenIconURLResolver) ResolveForResponse(storedObjectPath string, stored
 		return ""
 	}
 
-	// already a public URL
 	if strings.HasPrefix(p, "http://") || strings.HasPrefix(p, "https://") {
 		return p
 	}
 
-	// gs://bucket/object -> public URL
 	if b, obj, ok := gcscommon.ParseGCSURL(p); ok {
 		return gcscommon.GCSPublicURL(b, obj, defaultTokenIconBucketDI)
 	}
 
-	// treat as objectPath within token icon bucket
 	b := strings.TrimSpace(r.bucket)
 	if b == "" {
 		b = defaultTokenIconBucketDI
@@ -689,10 +654,9 @@ var (
 	errSecretProviderNotConfigured = errors.New("di.mall: brandWalletSecretProviderSM not configured")
 )
 
-// tokenResolverFS implements usecase.TokenResolver by reading tokens/{productId}.
 type tokenResolverFS struct {
 	fs  *firestore.Client
-	col string // default "tokens"
+	col string
 }
 
 func (r *tokenResolverFS) ResolveTokenByProductID(ctx context.Context, productID string) (usecase.TokenForTransfer, error) {
@@ -750,10 +714,9 @@ func (r *tokenResolverFS) ResolveTokenByProductID(ctx context.Context, productID
 	}, nil
 }
 
-// tokenOwnerUpdaterFS implements usecase.TokenOwnerUpdater by updating tokens/{productId}.toAddress.
 type tokenOwnerUpdaterFS struct {
 	fs  *firestore.Client
-	col string // default "tokens"
+	col string
 }
 
 func (r *tokenOwnerUpdaterFS) UpdateToAddressByProductID(ctx context.Context, productID string, newToAddress string, now time.Time, txSignature string) error {
@@ -779,7 +742,6 @@ func (r *tokenOwnerUpdaterFS) UpdateToAddressByProductID(ctx context.Context, pr
 
 	ref := r.fs.Collection(col).Doc(pid)
 
-	// best-effort merge update
 	_, err := ref.Set(ctx, map[string]any{
 		"toAddress":       addr,
 		"updatedAt":       now,
@@ -791,8 +753,6 @@ func (r *tokenOwnerUpdaterFS) UpdateToAddressByProductID(ctx context.Context, pr
 
 // ============================================================
 // ✅ Design B: Brand signer provider (Secret Manager)
-//   secretId = <prefix><brandId>
-//   e.g. brand-wallet-kABgyAQRtbvxqA8SxBTS
 // ============================================================
 
 type brandWalletSecretProviderSM struct {
@@ -824,9 +784,7 @@ func (p *brandWalletSecretProviderSM) GetBrandSigner(ctx context.Context, brandI
 		ver = "latest"
 	}
 
-	// secret id = <prefix><brandId>
 	secretID := prefix + bid
-
 	name := fmt.Sprintf("projects/%s/secrets/%s/versions/%s", prj, secretID, ver)
 	resp, err := p.sm.AccessSecretVersion(ctx, &secretmanagerpb.AccessSecretVersionRequest{Name: name})
 	if err != nil {
@@ -836,6 +794,39 @@ func (p *brandWalletSecretProviderSM) GetBrandSigner(ctx context.Context, brandI
 		return nil, fmt.Errorf("brandWalletSecretProviderSM: empty payload (%s)", name)
 	}
 
-	// executor は "string(JSON int array)" を受け取れるので、そのまま string で返す
 	return strings.TrimSpace(string(resp.Payload.Data)), nil
+}
+
+// ============================================================
+// ✅ Adapter: outfs.InventoryRepositoryFS に ApplyTransferResult を付与
+// ============================================================
+
+type inventoryRepoTransferResultAdapter struct {
+	*outfs.InventoryRepositoryFS
+}
+
+func (a *inventoryRepoTransferResultAdapter) ApplyTransferResult(
+	ctx context.Context,
+	productID string,
+	orderID string,
+	now time.Time,
+) error {
+	if a == nil || a.InventoryRepositoryFS == nil {
+		return errors.New("inventory repo adapter is nil")
+	}
+
+	removed, err := a.InventoryRepositoryFS.ReleaseReservationAfterTransfer(ctx, productID, orderID, now)
+	if err != nil {
+		return err
+	}
+
+	log.Printf(
+		"[inventory_repo_adapter.mall] ApplyTransferResult ok productId=%q orderId=%q removed=%d at=%s",
+		strings.TrimSpace(productID),
+		strings.TrimSpace(orderID),
+		removed,
+		now.UTC().Format(time.RFC3339),
+	)
+
+	return nil
 }
