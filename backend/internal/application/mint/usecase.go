@@ -225,8 +225,35 @@ func (u *MintUsecase) MintFromMintRequest(ctx context.Context, mintRequestID str
 	}
 	log.Printf("[mint_usecase] MintFromMintRequest actorId=%q mintRequestId=%q", actorID, mintRequestID)
 
-	// 0) 二重mint防止
+	// tokenBlueprintId は必須（以後の TB 更新・inventory 反映に必要）
+	tbID := strings.TrimSpace(mintEnt.TokenBlueprintID)
+	if tbID == "" {
+		log.Printf("[mint_usecase] MintFromMintRequest abort reason=empty_tokenBlueprintId mintRequestId=%q elapsed=%s", mintRequestID, time.Since(start))
+		return nil, errors.New("tokenBlueprintID is empty on mint")
+	}
+
+	// productBlueprintId は必須（inventory docId に必要）
+	// resolveProductBlueprintIDFromProduction は product_blueprint_resolver.go に分離済み
+	pbID := strings.TrimSpace(u.resolveProductBlueprintIDFromProduction(ctx, mintRequestID))
+	if pbID == "" {
+		log.Printf("[mint_usecase] MintFromMintRequest abort reason=empty_productBlueprintId mintRequestId=%q tokenBlueprintId=%q elapsed=%s", mintRequestID, tbID, time.Since(start))
+		return nil, errors.New("productBlueprintID is empty (cannot upsert inventory)")
+	}
+
+	// passedProducts が空なら何もする意味が無いのでエラー（期待値：後続の在庫が増えないのは異常）
+	if len(passedProductIDs) == 0 {
+		log.Printf("[mint_usecase] MintFromMintRequest abort reason=no_passed_products mintRequestId=%q tokenBlueprintId=%q productBlueprintId=%q elapsed=%s",
+			mintRequestID, tbID, pbID, time.Since(start),
+		)
+		return nil, errors.New("no passed products for this mint request")
+	}
+
+	// 0) 二重mint防止（ただし inventory upsert は必ず実行する）
+	var result *tokendom.MintResult
+	var onchainErr error
+
 	if mintEnt.Minted {
+		// オンチェーンはスキップ、ただし inventory 反映は行う
 		existing := u.mintResultMapper.FromMint(*mintEnt)
 		log.Printf(
 			"[mint_usecase] MintFromMintRequest skip onchain reason=already_minted mintRequestId=%q signature=%q mintAddress=%q elapsed=%s",
@@ -245,51 +272,48 @@ func (u *MintUsecase) MintFromMintRequest(ctx context.Context, mintRequestID str
 			}(),
 			time.Since(start),
 		)
-		return existing, nil
-	}
+		result = existing
+	} else {
+		// 2) オンチェーンミント実行
+		log.Printf("[mint_usecase] MintFromMintRequest onchain mint start mintRequestId=%q", mintRequestID)
 
-	// 2) オンチェーンミント実行
-	log.Printf("[mint_usecase] MintFromMintRequest onchain mint start mintRequestId=%q", mintRequestID)
+		onchainStart := time.Now()
+		result, onchainErr = u.tokenMinter.MintFromMintRequest(ctx, mintRequestID)
+		onchainElapsed := time.Since(onchainStart)
 
-	onchainStart := time.Now()
-	result, err := u.tokenMinter.MintFromMintRequest(ctx, mintRequestID)
-	onchainElapsed := time.Since(onchainStart)
+		if onchainErr != nil {
+			log.Printf(
+				"[mint_usecase] MintFromMintRequest onchain mint error mintRequestId=%q err=%v elapsed=%s totalElapsed=%s",
+				mintRequestID, onchainErr, onchainElapsed, time.Since(start),
+			)
+			return nil, onchainErr
+		}
 
-	if err != nil {
 		log.Printf(
-			"[mint_usecase] MintFromMintRequest onchain mint error mintRequestId=%q err=%v elapsed=%s totalElapsed=%s",
-			mintRequestID, err, onchainElapsed, time.Since(start),
+			"[mint_usecase] MintFromMintRequest onchain mint ok mintRequestId=%q elapsed=%s signature=%q mintAddress=%q slot=%d",
+			mintRequestID,
+			onchainElapsed,
+			func() string {
+				if result == nil {
+					return ""
+				}
+				return strings.TrimSpace(result.Signature)
+			}(),
+			func() string {
+				if result == nil {
+					return ""
+				}
+				return strings.TrimSpace(result.MintAddress)
+			}(),
+			func() uint64 {
+				if result == nil {
+					return 0
+				}
+				return result.Slot
+			}(),
 		)
-		return nil, err
-	}
 
-	log.Printf(
-		"[mint_usecase] MintFromMintRequest onchain mint ok mintRequestId=%q elapsed=%s signature=%q mintAddress=%q slot=%d",
-		mintRequestID,
-		onchainElapsed,
-		func() string {
-			if result == nil {
-				return ""
-			}
-			return strings.TrimSpace(result.Signature)
-		}(),
-		func() string {
-			if result == nil {
-				return ""
-			}
-			return strings.TrimSpace(result.MintAddress)
-		}(),
-		func() uint64 {
-			if result == nil {
-				return 0
-			}
-			return result.Slot
-		}(),
-	)
-
-	// 3) TokenBlueprint minted=true（未mint の場合のみ）
-	tbID := strings.TrimSpace(mintEnt.TokenBlueprintID)
-	if tbID != "" {
+		// 3) TokenBlueprint minted=true（未mint の場合のみ）
 		tbStart := time.Now()
 		errTB := u.markTokenBlueprintMinted(ctx, tbID, actorID)
 		tbElapsed := time.Since(tbStart)
@@ -305,157 +329,151 @@ func (u *MintUsecase) MintFromMintRequest(ctx context.Context, mintRequestID str
 				tbID, actorID, tbElapsed,
 			)
 		}
-	} else {
-		log.Printf("[mint_usecase] MintFromMintRequest skip markTokenBlueprintMinted reason=empty_tokenBlueprintId")
-	}
 
-	// 4) mints 側 minted/mintedAt + onchain結果を更新（失敗してもログだけ）
-	if u.mintRepo != nil {
-		if updater, ok := any(u.mintRepo).(interface {
-			Update(ctx context.Context, m mintdom.Mint) (mintdom.Mint, error)
-		}); ok {
-			now := time.Now().UTC()
-			m := *mintEnt
+		// 4) mints 側 minted/mintedAt + onchain結果を更新（失敗してもログだけ）
+		if u.mintRepo != nil {
+			if updater, ok := any(u.mintRepo).(interface {
+				Update(ctx context.Context, m mintdom.Mint) (mintdom.Mint, error)
+			}); ok {
+				now := time.Now().UTC()
+				m := *mintEnt
 
-			// Policy A: docId を必ず mintRequestId に揃える
-			m.ID = mintRequestID
-			// setIfExistsString は mint_result_mapper.go 側の共通関数を利用（DuplicateDecl 回避）
-			setIfExistsString(&m, "InspectionID", mintRequestID)
+				// Policy A: docId を必ず mintRequestId に揃える
+				m.ID = mintRequestID
+				// setIfExistsString は mint_result_mapper.go 側の共通関数を利用（DuplicateDecl 回避）
+				setIfExistsString(&m, "InspectionID", mintRequestID)
 
-			m.Minted = true
-			m.MintedAt = &now
+				m.Minted = true
+				m.MintedAt = &now
 
-			// ★ 署名/アドレスのフィールド揺れ吸収は Mapper に隔離
-			_ = u.mintResultMapper.ApplyOnchainResult(&m, result)
+				// ★ 署名/アドレスのフィールド揺れ吸収は Mapper に隔離
+				_ = u.mintResultMapper.ApplyOnchainResult(&m, result)
 
-			updStart := time.Now()
-			updated, errUpd := updater.Update(ctx, m)
-			updElapsed := time.Since(updStart)
+				updStart := time.Now()
+				updated, errUpd := updater.Update(ctx, m)
+				updElapsed := time.Since(updStart)
 
-			if errUpd != nil {
-				log.Printf(
-					"[mint_usecase] MintFromMintRequest mintRepo.Update error mintRequestId=%q err=%v elapsed=%s",
-					mintRequestID, errUpd, updElapsed,
-				)
+				if errUpd != nil {
+					log.Printf(
+						"[mint_usecase] MintFromMintRequest mintRepo.Update error mintRequestId=%q err=%v elapsed=%s",
+						mintRequestID, errUpd, updElapsed,
+					)
+				} else {
+					log.Printf(
+						"[mint_usecase] MintFromMintRequest mintRepo.Update ok mintRequestId=%q minted=%t mintedAt=%v elapsed=%s",
+						mintRequestID, updated.Minted, updated.MintedAt, updElapsed,
+					)
+				}
 			} else {
-				log.Printf(
-					"[mint_usecase] MintFromMintRequest mintRepo.Update ok mintRequestId=%q minted=%t mintedAt=%v elapsed=%s",
-					mintRequestID, updated.Minted, updated.MintedAt, updElapsed,
-				)
+				log.Printf("[mint_usecase] MintFromMintRequest skip mintRepo.Update reason=no_update_method")
 			}
 		} else {
-			log.Printf("[mint_usecase] MintFromMintRequest skip mintRepo.Update reason=no_update_method")
+			log.Printf("[mint_usecase] MintFromMintRequest skip mintRepo.Update reason=mintRepo_nil")
 		}
-	} else {
-		log.Printf("[mint_usecase] MintFromMintRequest skip mintRepo.Update reason=mintRepo_nil")
 	}
 
 	// 5) inventories Upsert（modelId ごとに UpsertFromMintByModel）
+	// ✅ 期待値: productBlueprintId/tokenBlueprintId は必須。空ならスキップではなくエラーを返す。
 	if u.inventoryUC == nil {
-		log.Printf("[mint_usecase] MintFromMintRequest inventoryUC is nil -> skip inventory upsert mintRequestId=%q", mintRequestID)
-	} else {
-		// resolveProductBlueprintIDFromProduction は product_blueprint_resolver.go に分離済み
-		pbID := strings.TrimSpace(u.resolveProductBlueprintIDFromProduction(ctx, mintRequestID))
-
-		log.Printf(
-			"[mint_usecase] MintFromMintRequest inventory upsert(by-model) start mintRequestId=%q tokenBlueprintId=%q productBlueprintId=%q passedProducts=%d",
-			mintRequestID, tbID, pbID, len(passedProductIDs),
-		)
-
-		if tbID == "" || pbID == "" || len(passedProductIDs) == 0 {
-			log.Printf(
-				"[mint_usecase] MintFromMintRequest inventory upsert(by-model) skip reason=missing_fields mintRequestId=%q tbID=%q pbID=%q products=%d",
-				mintRequestID, tbID, pbID, len(passedProductIDs),
-			)
-		} else {
-			// loadInspectionBatchByProductionID は inspection_batch_loader.go に分離済み
-			batch, berr := u.loadInspectionBatchByProductionID(ctx, mintRequestID)
-			if berr != nil || batch == nil {
-				log.Printf(
-					"[mint_usecase] MintFromMintRequest inventory upsert(by-model) skip reason=inspection_load_failed mintRequestId=%q err=%v",
-					mintRequestID, berr,
-				)
-			} else {
-				passedSet := make(map[string]struct{}, len(passedProductIDs))
-				for _, p := range passedProductIDs {
-					passedSet[p] = struct{}{}
-				}
-
-				byModel := map[string][]string{}
-				for _, it := range batch.Inspections {
-					pid := strings.TrimSpace(it.ProductID)
-					if pid == "" {
-						continue
-					}
-					if _, ok := passedSet[pid]; !ok {
-						continue
-					}
-					mid := strings.TrimSpace(it.ModelID)
-					if mid == "" {
-						// modelId がないデータは upsert できない（docId 方針に合わない）
-						continue
-					}
-					byModel[mid] = append(byModel[mid], pid)
-				}
-
-				modelIDs := make([]string, 0, len(byModel))
-				for mid := range byModel {
-					modelIDs = append(modelIDs, mid)
-				}
-				sort.Strings(modelIDs)
-
-				if len(modelIDs) == 0 {
-					log.Printf(
-						"[mint_usecase] MintFromMintRequest inventory upsert(by-model) skip reason=no_model_groups mintRequestId=%q passed=%d inspections=%d",
-						mintRequestID, len(passedProductIDs), len(batch.Inspections),
-					)
-				} else {
-					for _, mid := range modelIDs {
-						pids := normalizeIDs(byModel[mid])
-						if len(pids) == 0 {
-							continue
-						}
-
-						invStart := time.Now()
-						invEnt, invErr := u.inventoryUC.UpsertFromMintByModel(ctx, tbID, pbID, mid, pids)
-						invElapsed := time.Since(invStart)
-
-						if invErr != nil {
-							log.Printf(
-								"[mint_usecase] MintFromMintRequest inventory upsert(by-model) error mintRequestId=%q tokenBlueprintId=%q productBlueprintId=%q modelId=%q products=%d err=%v elapsed=%s",
-								mintRequestID, tbID, pbID, mid, len(pids), invErr, invElapsed,
-							)
-							continue
-						}
-
-						// ★ 修正点: inventory.Mint に Accumulation/Products が無いので Stock[modelId] から件数を出す
-						productsCount := len(pids) // fallback
-						accumulation := len(pids)  // fallback
-
-						if invEnt.Stock != nil {
-							if ms, ok := invEnt.Stock[mid]; ok {
-								productsCount = len(ms.Products)
-								accumulation = productsCount
-							}
-						}
-
-						log.Printf(
-							"[mint_usecase] MintFromMintRequest inventory upsert(by-model) ok inventoryId=%q modelId=%q accumulation=%d products=%d elapsed=%s",
-							strings.TrimSpace(invEnt.ID),
-							mid,
-							accumulation,
-							productsCount,
-							invElapsed,
-						)
-					}
-				}
-			}
-		}
+		log.Printf("[mint_usecase] MintFromMintRequest abort reason=inventoryUC_nil mintRequestId=%q elapsed=%s", mintRequestID, time.Since(start))
+		return nil, errors.New("inventory usecase is nil (cannot upsert inventory)")
 	}
 
 	log.Printf(
-		"[mint_usecase] MintFromMintRequest done mintRequestId=%q elapsed=%s result_nil=%t",
-		mintRequestID, time.Since(start), result == nil,
+		"[mint_usecase] MintFromMintRequest inventory upsert(by-model) start mintRequestId=%q tokenBlueprintId=%q productBlueprintId=%q passedProducts=%d",
+		mintRequestID, tbID, pbID, len(passedProductIDs),
+	)
+
+	// loadInspectionBatchByProductionID は inspection_batch_loader.go に分離済み
+	batch, berr := u.loadInspectionBatchByProductionID(ctx, mintRequestID)
+	if berr != nil || batch == nil {
+		log.Printf(
+			"[mint_usecase] MintFromMintRequest abort reason=inspection_load_failed mintRequestId=%q err=%v elapsed=%s",
+			mintRequestID, berr, time.Since(start),
+		)
+		if berr != nil {
+			return nil, berr
+		}
+		return nil, errors.New("inspection batch is nil")
+	}
+
+	passedSet := make(map[string]struct{}, len(passedProductIDs))
+	for _, p := range passedProductIDs {
+		passedSet[p] = struct{}{}
+	}
+
+	byModel := map[string][]string{}
+	for _, it := range batch.Inspections {
+		pid := strings.TrimSpace(it.ProductID)
+		if pid == "" {
+			continue
+		}
+		if _, ok := passedSet[pid]; !ok {
+			continue
+		}
+		mid := strings.TrimSpace(it.ModelID)
+		if mid == "" {
+			// modelId がないデータは upsert できない
+			continue
+		}
+		byModel[mid] = append(byModel[mid], pid)
+	}
+
+	modelIDs := make([]string, 0, len(byModel))
+	for mid := range byModel {
+		modelIDs = append(modelIDs, mid)
+	}
+	sort.Strings(modelIDs)
+
+	if len(modelIDs) == 0 {
+		log.Printf(
+			"[mint_usecase] MintFromMintRequest abort reason=no_model_groups mintRequestId=%q passed=%d inspections=%d elapsed=%s",
+			mintRequestID, len(passedProductIDs), len(batch.Inspections), time.Since(start),
+		)
+		return nil, errors.New("no model groups found from inspection batch for passed products")
+	}
+
+	for _, mid := range modelIDs {
+		pids := normalizeIDs(byModel[mid])
+		if len(pids) == 0 {
+			continue
+		}
+
+		invStart := time.Now()
+		invEnt, invErr := u.inventoryUC.UpsertFromMintByModel(ctx, tbID, pbID, mid, pids)
+		invElapsed := time.Since(invStart)
+
+		if invErr != nil {
+			log.Printf(
+				"[mint_usecase] MintFromMintRequest inventory upsert(by-model) error mintRequestId=%q tokenBlueprintId=%q productBlueprintId=%q modelId=%q products=%d err=%v elapsed=%s",
+				mintRequestID, tbID, pbID, mid, len(pids), invErr, invElapsed,
+			)
+			return nil, invErr
+		}
+
+		productsCount := len(pids) // fallback
+		accumulation := len(pids)  // fallback
+
+		if invEnt.Stock != nil {
+			if ms, ok := invEnt.Stock[mid]; ok {
+				productsCount = len(ms.Products)
+				accumulation = productsCount
+			}
+		}
+
+		log.Printf(
+			"[mint_usecase] MintFromMintRequest inventory upsert(by-model) ok inventoryId=%q modelId=%q accumulation=%d products=%d elapsed=%s",
+			strings.TrimSpace(invEnt.ID),
+			mid,
+			accumulation,
+			productsCount,
+			invElapsed,
+		)
+	}
+
+	log.Printf(
+		"[mint_usecase] MintFromMintRequest done mintRequestId=%q elapsed=%s result_nil=%t onchain_err_nil=%t",
+		mintRequestID, time.Since(start), result == nil, onchainErr == nil,
 	)
 
 	return result, nil

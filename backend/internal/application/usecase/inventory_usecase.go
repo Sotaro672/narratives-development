@@ -26,6 +26,10 @@ func NewInventoryUsecase(repo invdom.RepositoryPort) *InventoryUsecase {
 //
 // - mint から在庫へ反映する唯一の入口
 // - 在庫の蓄積は Stock（modelId -> {Products: ...}）で表現する前提
+//
+// ✅ 修正方針:
+//   - 既存 model の追加反映が反射経由の Get->merge->Update で失敗し得るため、
+//     repo の atomic upsert（transaction + UNION）に委譲する。
 func (uc *InventoryUsecase) UpsertFromMintByModel(
 	ctx context.Context,
 	tokenBlueprintID string,
@@ -56,7 +60,7 @@ func (uc *InventoryUsecase) UpsertFromMintByModel(
 		return invdom.Mint{}, invdom.ErrInvalidProducts
 	}
 
-	// ✅ docId をここで確定（repo 側の sanitize と揃える）
+	// docId をここで確定（repo 側の sanitize と揃える）
 	inventoryID := buildInventoryID(pbID, tbID)
 
 	log.Printf(
@@ -64,53 +68,17 @@ func (uc *InventoryUsecase) UpsertFromMintByModel(
 		inventoryID, tbID, pbID, mID, len(ids),
 	)
 
-	// 1) 既存取得
-	current, err := uc.repo.GetByID(ctx, inventoryID)
+	// ✅ repo の atomic upsert に委譲（既存 model でも UNION で確実に追記される）
+	updated, err := uc.repo.UpsertByProductBlueprintAndToken(ctx, tbID, pbID, mID, ids)
 	if err != nil {
-		// ✅ NotFound の判定を堅牢化（inventory not found を取りこぼさない）
-		if isNotFoundInventory(err) {
-			// 2) 新規作成
-			var m invdom.Mint
-			setStringFieldIfExists(&m, "ID", inventoryID)
-			setStringFieldIfExists(&m, "TokenBlueprintID", tbID)
-			setStringFieldIfExists(&m, "ProductBlueprintID", pbID)
-
-			// Stock[modelId] を構築してセット（※「蓄積」なので追加マージ）
-			if err := upsertStockByModel(&m, mID, ids); err != nil {
-				return invdom.Mint{}, err
-			}
-
-			created, cerr := uc.repo.Create(ctx, m)
-			if cerr != nil {
-				log.Printf("[inventory_uc] UpsertFromMintByModel create error inventoryId=%q err=%v", inventoryID, cerr)
-				return invdom.Mint{}, cerr
-			}
-
-			log.Printf("[inventory_uc] UpsertFromMintByModel create ok inventoryId=%q", inventoryID)
-			return created, nil
-		}
-
-		log.Printf("[inventory_uc] UpsertFromMintByModel GetByID error inventoryId=%q err=%v", inventoryID, err)
+		log.Printf(
+			"[inventory_uc] UpsertFromMintByModel upsert error inventoryId=%q tokenBlueprintId=%q productBlueprintId=%q modelId=%q err=%v",
+			inventoryID, tbID, pbID, mID, err,
+		)
 		return invdom.Mint{}, err
 	}
 
-	// 3) 既存更新
-	// 念のためID/TB/PBを揃える
-	setStringFieldIfExists(&current, "ID", inventoryID)
-	setStringFieldIfExists(&current, "TokenBlueprintID", tbID)
-	setStringFieldIfExists(&current, "ProductBlueprintID", pbID)
-
-	if err := upsertStockByModel(&current, mID, ids); err != nil {
-		return invdom.Mint{}, err
-	}
-
-	updated, uerr := uc.repo.Update(ctx, current)
-	if uerr != nil {
-		log.Printf("[inventory_uc] UpsertFromMintByModel update error inventoryId=%q err=%v", inventoryID, uerr)
-		return invdom.Mint{}, uerr
-	}
-
-	log.Printf("[inventory_uc] UpsertFromMintByModel update ok inventoryId=%q", inventoryID)
+	log.Printf("[inventory_uc] UpsertFromMintByModel upsert ok inventoryId=%q", inventoryID)
 	return updated, nil
 }
 
@@ -126,11 +94,6 @@ type ReserveByOrderItem struct {
 
 // ReserveByOrder adds (orderID -> qty) into Stock[modelId].ReservedByOrder
 // and updates ReservedCount accordingly.
-//
-// Intended timing:
-// - payment 起票/確定（paid/succeeded）
-// - invoice.paid=true に更新
-// - then ReserveByOrder(orderID, items)
 func (uc *InventoryUsecase) ReserveByOrder(ctx context.Context, orderID string, items []ReserveByOrderItem) error {
 	if uc == nil || uc.repo == nil {
 		return errors.New("inventory usecase/repo is nil")
@@ -278,22 +241,6 @@ func normalizeIDs(raw []string) []string {
 	}
 	sort.Strings(out)
 	return out
-}
-
-// isNotFoundInventory: repo が返す NotFound を取りこぼさないためのヘルパ
-func isNotFoundInventory(err error) bool {
-	if err == nil {
-		return false
-	}
-	if errors.Is(err, invdom.ErrNotFound) {
-		return true
-	}
-	// 念のため文字列も見る（"inventory not found" など）
-	msg := strings.ToLower(strings.TrimSpace(err.Error()))
-	if msg == "" {
-		return false
-	}
-	return strings.Contains(msg, "not found")
 }
 
 // reserveStockByModelOrder updates reservation fields on Stock[modelID]:
@@ -463,304 +410,6 @@ func applyReserveToModelStockValue(stockStruct reflect.Value, orderID string, qt
 		return errors.New("inventory reserve: reservation fields not found on model stock")
 	}
 	return nil
-}
-
-// upsertStockByModel merges Stock[modelId].Products with productIDs,
-// sets Accumulation, and keeps/initializes reservation fields (ReservedByOrder/ReservedCount) if they exist.
-//
-// - Stock が map である前提
-// - Products が []string / map[string]bool / map[string]struct{} などでも対応
-// - entity.go の拡張（ReservedByOrder/ReservedCount）に追随
-func upsertStockByModel(m *invdom.Mint, modelID string, productIDs []string) error {
-	if m == nil {
-		return errors.New("mint is nil")
-	}
-	modelID = strings.TrimSpace(modelID)
-	if modelID == "" {
-		return invdom.ErrInvalidModelID
-	}
-
-	add := normalizeIDs(productIDs)
-	if len(add) == 0 {
-		return invdom.ErrInvalidProducts
-	}
-
-	rv := reflect.ValueOf(m)
-	if rv.Kind() != reflect.Ptr || rv.IsNil() {
-		return errors.New("mint must be a non-nil pointer")
-	}
-	rv = rv.Elem()
-	if rv.Kind() != reflect.Struct {
-		return errors.New("mint must be a struct")
-	}
-
-	stock := rv.FieldByName("Stock")
-	if !stock.IsValid() || !stock.CanSet() {
-		return errors.New("inventory.Mint.Stock is missing or cannot be set")
-	}
-	if stock.Kind() != reflect.Map {
-		return errors.New("inventory.Mint.Stock must be a map")
-	}
-
-	// Stock map を初期化
-	if stock.IsNil() {
-		stock.Set(reflect.MakeMap(stock.Type()))
-	}
-
-	key := reflect.ValueOf(modelID)
-	if key.Type() != stock.Type().Key() {
-		return errors.New("inventory.Mint.Stock key type is not string")
-	}
-
-	// 既存の Stock[modelID] があれば、それをベースに「追加マージ」する
-	existing := stock.MapIndex(key)
-
-	// ---- merge product IDs ----
-	mergedSet := map[string]struct{}{}
-
-	// 既存分
-	if existing.IsValid() && existing.Kind() != reflect.Invalid && !(existing.Kind() == reflect.Ptr && existing.IsNil()) {
-		for _, id := range extractProductIDsFromModelStockValue(existing) {
-			id = strings.TrimSpace(id)
-			if id == "" {
-				continue
-			}
-			mergedSet[id] = struct{}{}
-		}
-	}
-	// 追加分
-	for _, id := range add {
-		id = strings.TrimSpace(id)
-		if id == "" {
-			continue
-		}
-		mergedSet[id] = struct{}{}
-	}
-
-	merged := make([]string, 0, len(mergedSet))
-	for id := range mergedSet {
-		merged = append(merged, id)
-	}
-	sort.Strings(merged)
-
-	valType := stock.Type().Elem()
-
-	// val を作る（struct の場合は既存を可能な限り維持）
-	var val reflect.Value
-	if existing.IsValid() && existing.Type() == valType {
-		val = existing
-	} else {
-		val = reflect.New(valType).Elem()
-	}
-
-	if val.Kind() != reflect.Struct {
-		return errors.New("inventory.Mint.Stock value must be a struct (ModelStock)")
-	}
-
-	// (optional) val.ModelID = modelID があればセット
-	if f := val.FieldByName("ModelID"); f.IsValid() && f.CanSet() && f.Kind() == reflect.String {
-		f.SetString(modelID)
-	}
-
-	// ---- set Products ----
-	if pf := val.FieldByName("Products"); pf.IsValid() && pf.CanSet() {
-		switch pf.Kind() {
-		case reflect.Slice:
-			// []string 想定
-			if pf.Type().Elem().Kind() == reflect.String {
-				s := reflect.MakeSlice(pf.Type(), 0, len(merged))
-				for _, id := range merged {
-					s = reflect.Append(s, reflect.ValueOf(id))
-				}
-				pf.Set(s)
-			}
-		case reflect.Map:
-			// map[string]bool / map[string]struct{} 想定
-			if pf.Type().Key().Kind() == reflect.String {
-				mm := reflect.MakeMapWithSize(pf.Type(), len(merged))
-				for _, id := range merged {
-					var mv reflect.Value
-					switch pf.Type().Elem().Kind() {
-					case reflect.Bool:
-						mv = reflect.ValueOf(true).Convert(pf.Type().Elem())
-					case reflect.Struct:
-						mv = reflect.New(pf.Type().Elem()).Elem() // struct{} など
-					default:
-						mv = reflect.Zero(pf.Type().Elem())
-					}
-					mm.SetMapIndex(reflect.ValueOf(id), mv)
-				}
-				pf.Set(mm)
-			}
-		}
-	}
-
-	// ---- set Accumulation = len(products) ----
-	if af := val.FieldByName("Accumulation"); af.IsValid() && af.CanSet() {
-		switch af.Kind() {
-		case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
-			af.SetInt(int64(len(merged)))
-		}
-	}
-
-	// ---- reservation fields (keep existing; init for new) ----
-	// ReservedByOrder: map[string]int
-	var reservedSum int64 = -1
-	if rf := val.FieldByName("ReservedByOrder"); rf.IsValid() && rf.CanSet() && rf.Kind() == reflect.Map {
-		if rf.IsNil() {
-			rf.Set(reflect.MakeMap(rf.Type()))
-		}
-		// best-effort sum
-		if rf.Type().Key().Kind() == reflect.String {
-			var sum int64
-			iter := rf.MapRange()
-			for iter.Next() {
-				v := iter.Value()
-				switch v.Kind() {
-				case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
-					sum += v.Int()
-				case reflect.Float32, reflect.Float64:
-					sum += int64(v.Float())
-				}
-			}
-			reservedSum = sum
-		}
-	}
-
-	// ReservedCount: int
-	if cf := val.FieldByName("ReservedCount"); cf.IsValid() && cf.CanSet() {
-		switch cf.Kind() {
-		case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
-			if reservedSum >= 0 {
-				cf.SetInt(reservedSum)
-			}
-		}
-	}
-
-	// Stock[modelID] = val
-	stock.SetMapIndex(key, val)
-
-	// ModelIDs に modelID を入れておく（検索補助）
-	_ = upsertModelIDOnMint(m, modelID)
-
-	return nil
-}
-
-// ensure mint.ModelIDs contains modelID (best-effort; keeps reflection style)
-func upsertModelIDOnMint(m *invdom.Mint, modelID string) error {
-	if m == nil {
-		return nil
-	}
-	modelID = strings.TrimSpace(modelID)
-	if modelID == "" {
-		return nil
-	}
-
-	rv := reflect.ValueOf(m)
-	if rv.Kind() != reflect.Ptr || rv.IsNil() {
-		return nil
-	}
-	rv = rv.Elem()
-	if rv.Kind() != reflect.Struct {
-		return nil
-	}
-
-	f := rv.FieldByName("ModelIDs")
-	if !f.IsValid() || !f.CanSet() || f.Kind() != reflect.Slice || f.Type().Elem().Kind() != reflect.String {
-		return nil
-	}
-
-	seen := map[string]struct{}{}
-	for i := 0; i < f.Len(); i++ {
-		s := strings.TrimSpace(f.Index(i).String())
-		if s != "" {
-			seen[s] = struct{}{}
-		}
-	}
-	if _, ok := seen[modelID]; ok {
-		return nil
-	}
-
-	f.Set(reflect.Append(f, reflect.ValueOf(modelID)))
-	return nil
-}
-
-// extractProductIDsFromModelStockValue reads Products from a model-stock value (struct) into []string.
-func extractProductIDsFromModelStockValue(v reflect.Value) []string {
-	if !v.IsValid() {
-		return nil
-	}
-	if v.Kind() == reflect.Ptr {
-		if v.IsNil() {
-			return nil
-		}
-		v = v.Elem()
-	}
-	if v.Kind() != reflect.Struct {
-		return nil
-	}
-
-	pf := v.FieldByName("Products")
-	if !pf.IsValid() {
-		return nil
-	}
-
-	switch pf.Kind() {
-	case reflect.Slice:
-		if pf.Type().Elem().Kind() != reflect.String {
-			return nil
-		}
-		out := make([]string, 0, pf.Len())
-		for i := 0; i < pf.Len(); i++ {
-			s := strings.TrimSpace(pf.Index(i).String())
-			if s != "" {
-				out = append(out, s)
-			}
-		}
-		return out
-
-	case reflect.Map:
-		if pf.Type().Key().Kind() != reflect.String {
-			return nil
-		}
-		out := make([]string, 0, pf.Len())
-		iter := pf.MapRange()
-		for iter.Next() {
-			k := iter.Key()
-			if k.Kind() != reflect.String {
-				continue
-			}
-			s := strings.TrimSpace(k.String())
-			if s != "" {
-				out = append(out, s)
-			}
-		}
-		return out
-
-	default:
-		return nil
-	}
-}
-
-func setStringFieldIfExists(target any, fieldName string, value string) {
-	rv := reflect.ValueOf(target)
-	if !rv.IsValid() {
-		return
-	}
-	if rv.Kind() == reflect.Ptr {
-		if rv.IsNil() {
-			return
-		}
-		rv = rv.Elem()
-	}
-	if rv.Kind() != reflect.Struct {
-		return
-	}
-	f := rv.FieldByName(fieldName)
-	if !f.IsValid() || !f.CanSet() || f.Kind() != reflect.String {
-		return
-	}
-	f.SetString(strings.TrimSpace(value))
 }
 
 func getStringFieldIfExists(target any, fieldName string) string {

@@ -1,4 +1,4 @@
-// backend\internal\domain\inventory\entity.go
+// backend/internal/domain/inventory/entity.go
 package inventory
 
 import (
@@ -18,12 +18,12 @@ var (
 )
 
 // ModelStock は modelId ごとの在庫を表します。
-// - Products: productId -> true
+// - Products: productId の配列（重複なし・ソート済み）
 // - Accumulation: その model の在庫数（= len(Products)）
 // - ReservedByOrder: orderId -> qty（予約数）
 // - ReservedCount: 予約数合計（= sum(ReservedByOrder)）
 type ModelStock struct {
-	Products map[string]bool
+	Products []string
 	// Accumulation は「物理在庫数」。products の件数と整合する想定。
 	Accumulation int
 
@@ -35,7 +35,7 @@ type ModelStock struct {
 
 // Mint は inventories の 1 ドキュメント（= inventory）を表します。
 // 期待値：
-// - id: productBlueprintId__tokenBlueprintId
+// - docId: productBlueprintId__tokenBlueprintId
 // - stock: modelId ごとに products + accumulation + reserved を並列保持
 type Mint struct {
 	ID                 string
@@ -87,19 +87,11 @@ func NewMint(
 		now = time.Now().UTC()
 	}
 
-	// productId -> true
-	prodMap := make(map[string]bool, len(ps))
-	for _, pid := range ps {
-		prodMap[pid] = true
-	}
-
 	stock := map[string]ModelStock{
 		mID: {
-			Products: prodMap,
-			// Accumulation は物理在庫数（products 件数）
-			Accumulation: len(prodMap),
+			Products:     ps,
+			Accumulation: len(ps),
 
-			// 予約は初期値ゼロ
 			ReservedByOrder: map[string]int{},
 			ReservedCount:   0,
 		},

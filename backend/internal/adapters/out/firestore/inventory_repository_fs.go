@@ -33,31 +33,34 @@ func (r *InventoryRepositoryFS) col() *firestore.CollectionRef {
 }
 
 // ============================================================
-// Firestore record shape (entity.go 準拠)
+// Firestore record shape (entity.go 準拠・互換なし)
 //
 // inventories/{docId}
 // - docId = productBlueprintId__tokenBlueprintId
 //
 // stock: {
 //   "{modelId}": {
-//     products: { "{productId}": true, ... },
+//     products: ["{productId}", ...],
 //     accumulation: 123,
 //     reservedByOrder: { "{orderId}": 2, ... },
 //     reservedCount: 3
 //   }
 // }
-// modelIds: ["{modelId}", ...]  // 検索補助
+// modelIds: ["{modelId}", ...]
+//
+// NOTE:
+// - 旧式（products を map で持つ）との互換は削除。
+// - docId と同値の冗長フィールド "id" は廃止（持たない）。
 // ============================================================
 
 type modelStockRecord struct {
-	Products        map[string]bool `firestore:"products"`
-	Accumulation    int             `firestore:"accumulation"`
-	ReservedByOrder map[string]int  `firestore:"reservedByOrder"`
-	ReservedCount   int             `firestore:"reservedCount"`
+	Products        []string       `firestore:"products"`
+	Accumulation    int            `firestore:"accumulation"`
+	ReservedByOrder map[string]int `firestore:"reservedByOrder"`
+	ReservedCount   int            `firestore:"reservedCount"`
 }
 
 type inventoryRecord struct {
-	ID                 string                      `firestore:"id"`
 	TokenBlueprintID   string                      `firestore:"tokenBlueprintId"`
 	ProductBlueprintID string                      `firestore:"productBlueprintId"`
 	Stock              map[string]modelStockRecord `firestore:"stock"`
@@ -71,12 +74,10 @@ func toRecord(m invdom.Mint) inventoryRecord {
 
 	modelIDs := normalizeModelIDs(m.ModelIDs)
 	if len(modelIDs) == 0 {
-		// Stock のキーから補完
 		modelIDs = modelIDsFromStockRecord(stock)
 	}
 
 	return inventoryRecord{
-		ID:                 strings.TrimSpace(m.ID),
 		TokenBlueprintID:   strings.TrimSpace(m.TokenBlueprintID),
 		ProductBlueprintID: strings.TrimSpace(m.ProductBlueprintID),
 		Stock:              stock,
@@ -87,11 +88,6 @@ func toRecord(m invdom.Mint) inventoryRecord {
 }
 
 func fromRecord(docID string, rec inventoryRecord) invdom.Mint {
-	id := strings.TrimSpace(rec.ID)
-	if id == "" {
-		id = strings.TrimSpace(docID)
-	}
-
 	stock := normalizeStockRecord(rec.Stock)
 
 	modelIDs := normalizeModelIDs(rec.ModelIDs)
@@ -100,7 +96,7 @@ func fromRecord(docID string, rec inventoryRecord) invdom.Mint {
 	}
 
 	out := invdom.Mint{
-		ID:                 id,
+		ID:                 strings.TrimSpace(docID),
 		TokenBlueprintID:   strings.TrimSpace(rec.TokenBlueprintID),
 		ProductBlueprintID: strings.TrimSpace(rec.ProductBlueprintID),
 		Stock:              stockDomainFromRecord(stock),
@@ -109,7 +105,6 @@ func fromRecord(docID string, rec inventoryRecord) invdom.Mint {
 		UpdatedAt:          rec.UpdatedAt,
 	}
 
-	// CreatedAt が壊れているケースの保険
 	if out.CreatedAt.IsZero() {
 		out.CreatedAt = out.UpdatedAt
 	}
@@ -151,9 +146,7 @@ func (r *InventoryRepositoryFS) Create(ctx context.Context, m invdom.Mint) (invd
 
 	doc := r.col().Doc(m.ID)
 
-	// 先に domain を正規化（accumulation/reservedCount 等）
 	rec := toRecord(m)
-	rec.ID = doc.ID
 	m.ID = doc.ID
 
 	if _, err := doc.Set(ctx, rec); err != nil {
@@ -204,7 +197,6 @@ func (r *InventoryRepositoryFS) Update(ctx context.Context, m invdom.Mint) (invd
 		return invdom.Mint{}, invdom.ErrInvalidProductBlueprintID
 	}
 
-	// NotFound を返したい場合は存在確認（Set は存在しなくても作れてしまうため）
 	if _, err := r.col().Doc(id).Get(ctx); err != nil {
 		if status.Code(err) == codes.NotFound {
 			return invdom.Mint{}, invdom.ErrNotFound
@@ -226,7 +218,6 @@ func (r *InventoryRepositoryFS) Update(ctx context.Context, m invdom.Mint) (invd
 	}
 
 	rec := toRecord(m)
-	rec.ID = id
 
 	if _, err := r.col().Doc(id).Set(ctx, rec); err != nil {
 		return invdom.Mint{}, err
@@ -291,7 +282,6 @@ func (r *InventoryRepositoryFS) ListByProductBlueprintID(ctx context.Context, pr
 	return readAllInventoryDocs(iter)
 }
 
-// ListByModelID は Firestore のクエリで stock のキー存在判定ができないため、全件走査でフィルタ
 func (r *InventoryRepositoryFS) ListByModelID(ctx context.Context, modelID string) ([]invdom.Mint, error) {
 	if r == nil || r.Client == nil {
 		return nil, errors.New("inventory repo is nil")
@@ -352,11 +342,7 @@ func (r *InventoryRepositoryFS) ListByTokenAndModelID(ctx context.Context, token
 }
 
 // ============================================================
-// Reservation operations (for payment/order finalize)
-// - stock[modelId].reservedByOrder[orderId] = qty
-// - reservedCount is normalized as SUM(reservedByOrder)
-// - idempotent: if already same qty, no-op
-// - safety: reservedCount must not exceed accumulation
+// Reservation operations
 // ============================================================
 
 func (r *InventoryRepositoryFS) ReserveByOrder(
@@ -418,25 +404,20 @@ func (r *InventoryRepositoryFS) ReserveByOrder(
 
 		ms, ok := stock[modelID]
 		if !ok {
-			// model の stock が無い（= そもそも該当モデルが在庫に存在しない）
 			return fmt.Errorf("inventory repo: model stock not found modelId=%s", modelID)
 		}
 
-		// ensure map
 		if ms.ReservedByOrder == nil {
 			ms.ReservedByOrder = map[string]int{}
 		}
 
-		// idempotent: already reserved with same qty -> no-op (still OK)
 		if existing, ok := ms.ReservedByOrder[orderID]; ok && existing == qty {
 			return nil
 		}
 
-		// set/overwrite then normalize (reservedCount recalculated)
 		ms.ReservedByOrder[orderID] = qty
 		ms = normalizeModelStockRecord(ms)
 
-		// safety: reserved must not exceed stock (accumulation is normalized as len(products))
 		if ms.ReservedCount > ms.Accumulation {
 			return fmt.Errorf(
 				"inventory repo: insufficient stock (modelId=%s accumulation=%d reservedCount=%d orderId=%s qty=%d)",
@@ -447,16 +428,8 @@ func (r *InventoryRepositoryFS) ReserveByOrder(
 		stock[modelID] = ms
 		stock = normalizeStockRecord(stock)
 
-		// ensure modelIds contains modelID (best-effort)
 		modelIDs := normalizeModelIDs(rec.ModelIDs)
-		found := false
-		for _, x := range modelIDs {
-			if x == modelID {
-				found = true
-				break
-			}
-		}
-		if !found {
+		if !containsString(modelIDs, modelID) {
 			modelIDs = append(modelIDs, modelID)
 			modelIDs = normalizeModelIDs(modelIDs)
 		}
@@ -489,7 +462,6 @@ func (r *InventoryRepositoryFS) ReserveByOrder(
 // Accumulation operations (deprecated)
 // ============================================================
 
-// Accumulation は廃止方針のため、互換のためだけに残す（呼ばれたらエラー）
 func (r *InventoryRepositoryFS) IncrementAccumulation(ctx context.Context, id string, delta int) (invdom.Mint, error) {
 	_ = ctx
 	_ = id
@@ -498,9 +470,9 @@ func (r *InventoryRepositoryFS) IncrementAccumulation(ctx context.Context, id st
 }
 
 // ============================================================
-// Upsert (docId = productBlueprintId__tokenBlueprintId)
+// Upsert
 // - Stock[modelId].Products に productId を追記（UNION）
-// - ReservedByOrder / ReservedCount は保持（この処理では触らない）
+// - ReservedByOrder / ReservedCount は保持
 // ============================================================
 
 func (r *InventoryRepositoryFS) UpsertByModelAndToken(
@@ -534,7 +506,7 @@ func (r *InventoryRepositoryFS) UpsertByModelAndToken(
 		return invdom.Mint{}, invdom.ErrInvalidProducts
 	}
 
-	docID := buildInventoryDocIDByProduct(tbID, pbID) // productBlueprintId__tokenBlueprintId
+	docID := buildInventoryDocIDByProduct(tbID, pbID)
 	doc := r.col().Doc(docID)
 	now := time.Now().UTC()
 
@@ -547,18 +519,13 @@ func (r *InventoryRepositoryFS) UpsertByModelAndToken(
 		snap, err := tx.Get(doc)
 		if err != nil {
 			if status.Code(err) == codes.NotFound {
-				// new record
 				ms := modelStockRecord{
-					Products:        map[string]bool{},
+					Products:        ids,
 					ReservedByOrder: map[string]int{},
-				}
-				for _, pid := range ids {
-					ms.Products[pid] = true
 				}
 				ms = normalizeModelStockRecord(ms)
 
 				rec := inventoryRecord{
-					ID:                 docID,
 					TokenBlueprintID:   tbID,
 					ProductBlueprintID: pbID,
 					Stock:              map[string]modelStockRecord{mID: ms},
@@ -585,16 +552,14 @@ func (r *InventoryRepositoryFS) UpsertByModelAndToken(
 
 		ms := stock[mID]
 		if ms.Products == nil {
-			ms.Products = map[string]bool{}
+			ms.Products = []string{}
 		}
-		// UNION: 既存 products に追加
-		for _, pid := range ids {
-			ms.Products[pid] = true
-		}
-		// reserved は維持しつつ、accumulation/reservedCount を正規化
+
+		merged := unionStrings(ms.Products, ids)
+		ms.Products = merged
+
 		ms = normalizeModelStockRecord(ms)
 		stock[mID] = ms
-
 		stock = normalizeStockRecord(stock)
 
 		modelIDs := normalizeModelIDs(rec.ModelIDs)
@@ -609,7 +574,6 @@ func (r *InventoryRepositoryFS) UpsertByModelAndToken(
 			{Path: "updatedAt", Value: now},
 			{Path: "tokenBlueprintId", Value: tbID},
 			{Path: "productBlueprintId", Value: pbID},
-			{Path: "id", Value: docID},
 		}
 
 		return tx.Update(doc, updates)
@@ -633,13 +597,6 @@ func (r *InventoryRepositoryFS) UpsertByModelAndToken(
 	return out, nil
 }
 
-// ============================================================
-// Method required by inventory.RepositoryPort (repository_port.go 準拠)
-// ============================================================
-
-// UpsertByProductBlueprintAndToken
-// - docId = productBlueprintId__tokenBlueprintId
-// - Stock[modelId].Products に productId を追記（UNION）
 func (r *InventoryRepositoryFS) UpsertByProductBlueprintAndToken(
 	ctx context.Context,
 	tokenBlueprintID string,
@@ -718,8 +675,6 @@ func normalizeModelIDs(raw []string) []string {
 	return out
 }
 
-// docId = productBlueprintId__tokenBlueprintId（期待値どおりの順序）
-// NOTE: 引数順は (tokenBlueprintID, productBlueprintID) だが、出力は product__token
 func buildInventoryDocIDByProduct(tokenBlueprintID, productBlueprintID string) string {
 	sanitize := func(s string) string {
 		s = strings.TrimSpace(s)
@@ -734,24 +689,13 @@ func buildInventoryDocIDByProduct(tokenBlueprintID, productBlueprintID string) s
 // ------------------------------------------------------------
 
 func normalizeModelStockRecord(ms modelStockRecord) modelStockRecord {
-	// products: key trim + empty drop + 値は常に true で保持
-	prod := map[string]bool{}
-	for pid := range ms.Products {
-		pid = strings.TrimSpace(pid)
-		if pid == "" {
-			continue
-		}
-		prod[pid] = true
+	ms.Products = normalizeIDs(ms.Products)
+	if len(ms.Products) == 0 {
+		ms.Products = nil
 	}
-	if len(prod) == 0 {
-		prod = nil
-	}
-	ms.Products = prod
 
-	// accumulation は products の数を正とする
 	ms.Accumulation = len(ms.Products)
 
-	// reservedByOrder
 	rbo := map[string]int{}
 	var sum int
 	for oid, n := range ms.ReservedByOrder {
@@ -770,14 +714,11 @@ func normalizeModelStockRecord(ms modelStockRecord) modelStockRecord {
 		sum = 0
 	}
 	ms.ReservedByOrder = rbo
-
-	// reservedCount は reservedByOrder の合計を正とする
 	ms.ReservedCount = sum
 
 	return ms
 }
 
-// stock record normalizer (trim key + normalize each modelStock)
 func normalizeStockRecord(raw map[string]modelStockRecord) map[string]modelStockRecord {
 	if raw == nil {
 		return nil
@@ -790,7 +731,6 @@ func normalizeStockRecord(raw map[string]modelStockRecord) map[string]modelStock
 		}
 		nms := normalizeModelStockRecord(ms)
 
-		// S1009: len(nilMap) == 0 なので nil チェック不要
 		hasProducts := len(nms.Products) > 0
 		hasReserved := len(nms.ReservedByOrder) > 0
 		if !hasProducts && !hasReserved {
@@ -841,19 +781,10 @@ func stockRecordFromDomain(raw map[string]invdom.ModelStock) map[string]modelSto
 			ReservedCount:   0,
 		}
 
-		// products
-		if ms.Products != nil {
-			rec.Products = map[string]bool{}
-			for pid := range ms.Products {
-				pid = strings.TrimSpace(pid)
-				if pid == "" {
-					continue
-				}
-				rec.Products[pid] = true
-			}
+		if len(ms.Products) > 0 {
+			rec.Products = normalizeIDs(ms.Products)
 		}
 
-		// reserved
 		if ms.ReservedByOrder != nil {
 			rec.ReservedByOrder = map[string]int{}
 			for oid, n := range ms.ReservedByOrder {
@@ -865,10 +796,8 @@ func stockRecordFromDomain(raw map[string]invdom.ModelStock) map[string]modelSto
 			}
 		}
 
-		// accumulation/reservedCount は正規化で決める
 		rec = normalizeModelStockRecord(rec)
 
-		// 空なら落とす
 		hasProducts := len(rec.Products) > 0
 		hasReserved := len(rec.ReservedByOrder) > 0
 		if !hasProducts && !hasReserved {
@@ -895,22 +824,9 @@ func stockDomainFromRecord(raw map[string]modelStockRecord) map[string]invdom.Mo
 
 		var ms invdom.ModelStock
 
-		// products
-		if msr.Products != nil {
-			ms.Products = map[string]bool{}
-			for pid := range msr.Products {
-				pid = strings.TrimSpace(pid)
-				if pid == "" {
-					continue
-				}
-				ms.Products[pid] = true
-			}
-		}
-
-		// accumulation（正規化値）
+		ms.Products = normalizeIDs(msr.Products)
 		ms.Accumulation = msr.Accumulation
 
-		// reserved
 		if msr.ReservedByOrder != nil {
 			ms.ReservedByOrder = map[string]int{}
 			for oid, n := range msr.ReservedByOrder {
@@ -923,7 +839,6 @@ func stockDomainFromRecord(raw map[string]modelStockRecord) map[string]invdom.Mo
 		}
 		ms.ReservedCount = msr.ReservedCount
 
-		// 空なら落とす
 		hasProducts := len(ms.Products) > 0
 		hasReserved := len(ms.ReservedByOrder) > 0
 		if !hasProducts && !hasReserved {
@@ -950,7 +865,6 @@ func hasModelStock(stock map[string]invdom.ModelStock, modelID string) bool {
 	if !ok {
 		return false
 	}
-	// products or reserved のいずれかがあれば “存在” とみなす
 	if len(ms.Products) > 0 {
 		return true
 	}
@@ -958,4 +872,28 @@ func hasModelStock(stock map[string]invdom.ModelStock, modelID string) bool {
 		return true
 	}
 	return false
+}
+
+func unionStrings(a []string, b []string) []string {
+	set := map[string]struct{}{}
+	for _, s := range a {
+		s = strings.TrimSpace(s)
+		if s == "" {
+			continue
+		}
+		set[s] = struct{}{}
+	}
+	for _, s := range b {
+		s = strings.TrimSpace(s)
+		if s == "" {
+			continue
+		}
+		set[s] = struct{}{}
+	}
+	out := make([]string, 0, len(set))
+	for k := range set {
+		out = append(out, k)
+	}
+	sort.Strings(out)
+	return out
 }

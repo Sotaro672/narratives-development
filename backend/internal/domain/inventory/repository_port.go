@@ -1,4 +1,4 @@
-// backend\internal\domain\inventory\repository_port.go
+// backend/internal/domain/inventory/repository_port.go
 package inventory
 
 import "context"
@@ -18,13 +18,15 @@ type RepositoryPort interface {
 	ListByModelID(ctx context.Context, modelID string) ([]Mint, error)
 	ListByTokenAndModelID(ctx context.Context, tokenBlueprintID, modelID string) ([]Mint, error)
 
-	// atomic upsert
+	// atomic upsert (for mint -> inventory reflection)
 	// - docId = productBlueprintId__tokenBlueprintId
-	// - stock.<modelId> を「物理在庫(products/accumulation) + 引当(reservedByOrder/reservedCount)」込みで置換
+	// - Stock[modelId].Products に productId を追記（UNION / add-only）
+	// - Accumulation は Products の件数と整合するように正規化（= len(Products)）
+	// - ReservedByOrder / ReservedCount は既存値を維持（この処理では触らない）
 	//
 	// NOTE:
-	// - entity.go を正として、reserved 系は「初期値ゼロ」で必ず存在させる。
-	// - 既存の reserved を維持したい場合は別メソッド（Reserve/Unreserve）を追加するのが安全。
+	// - reserved 系の更新は、競合を避けるためトランザクションで行う専用操作
+	//   （例: ReserveByOrder / UnreserveByOrder）に寄せること。
 	UpsertByProductBlueprintAndToken(
 		ctx context.Context,
 		tokenBlueprintID string,
@@ -32,4 +34,18 @@ type RepositoryPort interface {
 		modelID string,
 		productIDs []string,
 	) (Mint, error)
+
+	// ReserveByOrder atomically updates reservation fields for a given model in an inventory document.
+	// - Stock[modelId].ReservedByOrder[orderId] = qty (set/overwrite; idempotent)
+	// - ReservedCount is normalized as SUM(ReservedByOrder)
+	//
+	// NOTE:
+	// - This operation must be transactional to avoid lost updates with concurrent upserts.
+	ReserveByOrder(
+		ctx context.Context,
+		inventoryID string,
+		modelID string,
+		orderID string,
+		qty int,
+	) error
 }
