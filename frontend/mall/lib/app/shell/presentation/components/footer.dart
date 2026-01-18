@@ -1,4 +1,6 @@
 // frontend\mall\lib\app\shell\presentation\components\footer.dart
+import 'dart:convert';
+
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:firebase_auth/firebase_auth.dart';
@@ -8,6 +10,9 @@ import '../state/catalog_selection_store.dart';
 
 // ✅ NEW: 3 buttons extracted
 import 'footer_buttons.dart';
+
+// ✅ routing constants
+import '../../../routing/routes.dart';
 
 /// Minimal footer widget (layout primitive).
 class AppFooter extends StatelessWidget {
@@ -86,7 +91,7 @@ class SignedInFooter extends StatelessWidget {
 
   String _currentAvatarIdOrEmpty(BuildContext context) {
     final qp = GoRouterState.of(context).uri.queryParameters;
-    return (qp['avatarId'] ?? '').trim();
+    return (qp[AppQueryKey.avatarId] ?? '').trim();
   }
 
   /// ✅ 現在URLの avatarId を必要に応じて引き継ぐ
@@ -99,12 +104,114 @@ class SignedInFooter extends StatelessWidget {
     final merged = <String, String>{...(qp ?? {})};
 
     // keep avatarId if not explicitly provided
-    if (!merged.containsKey('avatarId')) {
-      final aid = (current.queryParameters['avatarId'] ?? '').trim();
-      if (aid.isNotEmpty) merged['avatarId'] = aid;
+    if (!merged.containsKey(AppQueryKey.avatarId)) {
+      final aid = (current.queryParameters[AppQueryKey.avatarId] ?? '').trim();
+      if (aid.isNotEmpty) merged[AppQueryKey.avatarId] = aid;
     }
 
     return Uri(path: path, queryParameters: merged.isEmpty ? null : merged);
+  }
+
+  /// ------------------------------------------------------------
+  /// ✅ `from` は URL で壊れやすい（Hash + `?` `&` 混在）ので base64url で安全に運ぶ
+  String _encodeFrom(String raw) {
+    final s = raw.trim();
+    if (s.isEmpty) return '';
+    return base64UrlEncode(utf8.encode(s));
+  }
+
+  /// ------------------------------------------------------------
+  /// ✅ /:productId が固定パスと衝突しないように除外（scan時の安全弁）
+  bool _isReservedTopSegment(String seg) {
+    const reserved = <String>{
+      'login',
+      'create-account',
+      'shipping-address',
+      'billing-address',
+      'avatar-create',
+      'avatar-edit',
+      'avatar',
+      'user-edit',
+      'cart',
+      'preview',
+      'payment',
+      'catalog',
+    };
+    return reserved.contains(seg);
+  }
+
+  /// ------------------------------------------------------------
+  /// ✅ QRでスキャンした文字列を「アプリ内遷移先URI」に正規化して返す
+  ///
+  /// 想定入力：
+  /// - https://narratives.jp/{productId}
+  /// - https://narratives.jp/preview?productId=...
+  /// - /preview?productId=...
+  /// - {productId}（生IDだけ）
+  Uri? _normalizeScannedToAppUri(
+    String raw, {
+    required String currentFrom,
+    required String avatarId,
+  }) {
+    final s = raw.trim();
+    if (s.isEmpty) return null;
+
+    Uri? u;
+
+    // 1) まず Uri として解釈
+    try {
+      u = Uri.parse(s);
+    } catch (_) {
+      u = null;
+    }
+
+    // 2) scheme が無い & / でもない場合は「生 productId」とみなす
+    if (u == null || (u.scheme.isEmpty && !s.startsWith('/'))) {
+      final pid = s;
+      if (pid.isEmpty) return null;
+      if (_isReservedTopSegment(pid)) return null;
+
+      final qp = <String, String>{
+        if (avatarId.trim().isNotEmpty) AppQueryKey.avatarId: avatarId.trim(),
+        // どこから来たか（戻る用）
+        AppQueryKey.from: _encodeFrom(currentFrom),
+      };
+      return Uri(path: '/$pid', queryParameters: qp);
+    }
+
+    // 3) https://... の場合は path/query だけ抽出してアプリ内遷移にする
+    final isHttp = u.scheme == 'http' || u.scheme == 'https';
+    final path = (isHttp ? u.path : u.path).trim().isEmpty ? '/' : u.path;
+
+    // fragment はルーティングを壊しやすいので捨てる
+    final extracted = Uri(
+      path: path.startsWith('/') ? path : '/$path',
+      queryParameters: u.queryParameters.isEmpty ? null : u.queryParameters,
+    );
+
+    // 4) パスがトップ1階層（= /{something}）の場合、reserved は弾く
+    final segs = extracted.pathSegments;
+    if (segs.length == 1) {
+      final top = (segs.first).trim();
+      if (top.isNotEmpty && _isReservedTopSegment(top)) {
+        return null;
+      }
+    }
+
+    // 5) avatarId / from を付与（既に付いていれば尊重）
+    final merged = <String, String>{...extracted.queryParameters};
+
+    if (!merged.containsKey(AppQueryKey.avatarId) &&
+        avatarId.trim().isNotEmpty) {
+      merged[AppQueryKey.avatarId] = avatarId.trim();
+    }
+
+    // from は「現在画面」を入れる（PreviewPageの戻り用途）
+    if (!merged.containsKey(AppQueryKey.from)) {
+      merged[AppQueryKey.from] = _encodeFrom(currentFrom);
+    }
+
+    return extracted.replace(queryParameters: merged.isEmpty ? null : merged);
   }
 
   @override
@@ -149,7 +256,7 @@ class SignedInFooter extends StatelessWidget {
                   // - catalog: カートに入れる
                   // - cart: 購入する（paymentへ）
                   // - payment: 支払を確定する
-                  // - other: Scan
+                  // - other: Scan（スキャンしたURLへ遷移＝Previewへ）
                   Expanded(
                     child: Center(
                       child: isCatalog
@@ -207,19 +314,25 @@ class SignedInFooter extends StatelessWidget {
                                 if (!context.mounted) return;
                                 if (code == null || code.trim().isEmpty) return;
 
-                                await showDialog<void>(
-                                  context: context,
-                                  builder: (_) => AlertDialog(
-                                    title: const Text('Scanned'),
-                                    content: Text(code),
-                                    actions: [
-                                      TextButton(
-                                        onPressed: () => Navigator.pop(context),
-                                        child: const Text('OK'),
-                                      ),
-                                    ],
-                                  ),
+                                final target = _normalizeScannedToAppUri(
+                                  code,
+                                  currentFrom: from,
+                                  avatarId: avatarId,
                                 );
+
+                                if (target == null) {
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                    const SnackBar(
+                                      content: Text(
+                                        'スキャン結果が無効です（Previewに遷移できません）',
+                                      ),
+                                    ),
+                                  );
+                                  return;
+                                }
+
+                                // ✅ 期待値: スキャンしたURLを以て preview へ遷移
+                                context.go(target.toString());
                               },
                             ),
                     ),

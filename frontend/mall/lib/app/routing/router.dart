@@ -407,9 +407,30 @@ List<RouteBase> _routes({required bool firebaseReady}) {
           },
         ),
 
-        // ✅ ★追加★ QR入口: https://narratives.jp/{productId}
-        // - 静的ルート（/catalog など）の方が優先されるため基本衝突しない
-        // - それでも念のため reserved は弾く（挙動が読めなくなるのを防ぐ）
+        // ✅ /payment
+        GoRoute(
+          path: AppRoutePath.payment,
+          name: AppRouteName.payment,
+          pageBuilder: (context, state) {
+            final qp = state.uri.queryParameters;
+            final qpAvatarId = (qp[AppQueryKey.avatarId] ?? '').trim();
+            final avatarId = qpAvatarId.isNotEmpty
+                ? qpAvatarId
+                : AvatarIdStore.I.avatarId;
+            final from = _decodeFrom(qp[AppQueryKey.from]);
+
+            return NoTransitionPage(
+              key: ValueKey('payment-$avatarId'),
+              child: PaymentPage(
+                avatarId: avatarId,
+                from: from.isEmpty ? null : from,
+              ),
+            );
+          },
+        ),
+
+        // ✅ ★移動（重要）★ QR入口: https://narratives.jp/{productId}
+        // - これが /payment など固定パスを食わないように “最後” に置く
         GoRoute(
           path: AppRoutePath.qrProduct,
           name: AppRouteName.qrProduct,
@@ -432,27 +453,6 @@ List<RouteBase> _routes({required bool firebaseReady}) {
                 from: from,
                 // intent を使うならここで渡す（PreviewPage 側が対応していれば）
                 // intent: 'qr',
-              ),
-            );
-          },
-        ),
-
-        GoRoute(
-          path: AppRoutePath.payment,
-          name: AppRouteName.payment,
-          pageBuilder: (context, state) {
-            final qp = state.uri.queryParameters;
-            final qpAvatarId = (qp[AppQueryKey.avatarId] ?? '').trim();
-            final avatarId = qpAvatarId.isNotEmpty
-                ? qpAvatarId
-                : AvatarIdStore.I.avatarId;
-            final from = _decodeFrom(qp[AppQueryKey.from]);
-
-            return NoTransitionPage(
-              key: ValueKey('payment-$avatarId'),
-              child: PaymentPage(
-                avatarId: avatarId,
-                from: from.isEmpty ? null : from,
               ),
             );
           },

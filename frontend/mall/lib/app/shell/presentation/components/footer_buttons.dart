@@ -78,7 +78,6 @@ class _ConfirmPaymentButtonState extends State<ConfirmPaymentButton> {
       billingAddress['billingAddressId'],
       billingAddress['id'],
       billingAddress['billingId'],
-      billingAddress['addressId'],
     ];
 
     for (final c in candidates) {
