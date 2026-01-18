@@ -13,6 +13,7 @@ import (
 var ErrAvatarNotFoundForUID = errors.New("avatar_not_found_for_uid")
 
 // MeAvatarRepo resolves avatarId(docId) by Firebase UID.
+//
 // NOTE:
 // 既存データ/実装差分により、UID が入っているフィールド名が揺れる可能性があるため、
 // userId / userUid / userUID を順に探索する（OR クエリの代替）。
@@ -24,6 +25,59 @@ func NewMeAvatarRepo(client *firestore.Client) *MeAvatarRepo {
 	return &MeAvatarRepo{Client: client}
 }
 
+// ResolveAvatarByUID resolves avatarId(docId) + walletAddress by Firebase UID.
+// This is the "extended" API required by /mall/me/avatar and AvatarContextMiddleware.
+func (r *MeAvatarRepo) ResolveAvatarByUID(ctx context.Context, uid string) (string, string, error) {
+	if r == nil || r.Client == nil {
+		return "", "", errors.New("me_avatar_repo: firestore client is nil")
+	}
+
+	u := strings.TrimSpace(uid)
+	if u == "" {
+		return "", "", errors.New("me_avatar_repo: uid is empty")
+	}
+
+	// ✅ UID が格納されていそうなフィールド名を順に探索
+	tryFields := []string{"userId", "userUid", "userUID"}
+
+	var lastErr error
+	for _, field := range tryFields {
+		doc, err := r.resolveDocByField(ctx, field, u)
+		if err == nil && doc != nil {
+			avatarId := strings.TrimSpace(doc.Ref.ID) // ✅ docId が avatarId
+			if avatarId == "" {
+				return "", "", ErrAvatarNotFoundForUID
+			}
+
+			// walletAddress は実データ上 "walletAddress"
+			walletAddress := ""
+			if v, err := doc.DataAt("walletAddress"); err == nil {
+				if s, ok := v.(string); ok {
+					walletAddress = strings.TrimSpace(s)
+				}
+			}
+
+			// walletAddress が空でも avatarId は返す（既存データ互換）
+			return avatarId, walletAddress, nil
+		}
+
+		if errors.Is(err, ErrAvatarNotFoundForUID) {
+			lastErr = err
+			continue
+		}
+		if err != nil {
+			return "", "", err
+		}
+	}
+
+	if lastErr == nil {
+		lastErr = ErrAvatarNotFoundForUID
+	}
+	return "", "", lastErr
+}
+
+// ResolveAvatarIDByUID resolves only avatarId(docId) by Firebase UID.
+// Kept for backward compatibility.
 func (r *MeAvatarRepo) ResolveAvatarIDByUID(ctx context.Context, uid string) (string, error) {
 	if r == nil || r.Client == nil {
 		return "", errors.New("me_avatar_repo: firestore client is nil")
@@ -35,17 +89,21 @@ func (r *MeAvatarRepo) ResolveAvatarIDByUID(ctx context.Context, uid string) (st
 	}
 
 	// ✅ UID が格納されていそうなフィールド名を順に探索
-	// - userId   : 旧実装/別概念で UID を入れていたケース
-	// - userUid  : API(AvatarHandler) が送っている Firebase UID の名前
-	// - userUID  : 名寄せ揺れ（大文字混在）
 	tryFields := []string{"userId", "userUid", "userUID"}
 
+	var lastErr error
 	for _, field := range tryFields {
-		avatarId, err := r.resolveByField(ctx, field, u)
-		if err == nil && strings.TrimSpace(avatarId) != "" {
-			return strings.TrimSpace(avatarId), nil
+		doc, err := r.resolveDocByField(ctx, field, u)
+		if err == nil && doc != nil {
+			avatarId := strings.TrimSpace(doc.Ref.ID) // ✅ docId が avatarId
+			if avatarId == "" {
+				return "", ErrAvatarNotFoundForUID
+			}
+			return avatarId, nil
 		}
+
 		if errors.Is(err, ErrAvatarNotFoundForUID) {
+			lastErr = err
 			continue
 		}
 		if err != nil {
@@ -53,10 +111,17 @@ func (r *MeAvatarRepo) ResolveAvatarIDByUID(ctx context.Context, uid string) (st
 		}
 	}
 
-	return "", ErrAvatarNotFoundForUID
+	if lastErr == nil {
+		lastErr = ErrAvatarNotFoundForUID
+	}
+	return "", lastErr
 }
 
-func (r *MeAvatarRepo) resolveByField(ctx context.Context, field string, uid string) (string, error) {
+func (r *MeAvatarRepo) resolveDocByField(ctx context.Context, field string, uid string) (*firestore.DocumentSnapshot, error) {
+	if r == nil || r.Client == nil {
+		return nil, errors.New("me_avatar_repo: firestore client is nil")
+	}
+
 	iter := r.Client.Collection("avatars").
 		Where(field, "==", uid).
 		Limit(1).
@@ -65,15 +130,14 @@ func (r *MeAvatarRepo) resolveByField(ctx context.Context, field string, uid str
 
 	doc, err := iter.Next()
 	if err == iterator.Done {
-		return "", ErrAvatarNotFoundForUID
+		return nil, ErrAvatarNotFoundForUID
 	}
 	if err != nil {
-		return "", err
+		return nil, err
 	}
 
-	avatarId := strings.TrimSpace(doc.Ref.ID) // ✅ docId が avatarId
-	if avatarId == "" {
-		return "", ErrAvatarNotFoundForUID
+	if doc == nil || doc.Ref == nil || strings.TrimSpace(doc.Ref.ID) == "" {
+		return nil, ErrAvatarNotFoundForUID
 	}
-	return avatarId, nil
+	return doc, nil
 }

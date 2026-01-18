@@ -1,4 +1,4 @@
-// backend\internal\adapters\in\http\mall\handler\wallet_handler.go
+// backend/internal/adapters/in/http/mall/handler/wallet_handler.go
 package mallHandler
 
 import (
@@ -10,23 +10,26 @@ import (
 
 	usecase "narratives/internal/application/usecase"
 	walletdom "narratives/internal/domain/wallet"
+
+	"narratives/internal/adapters/in/http/middleware"
 )
 
 // MallWalletHandler handles mall buyer-facing wallet endpoints.
 //
-// Routes (mall):
-// - GET /mall/me/wallets   (canonical)
+// ✅ Routes (mall) - NEW ONLY (legacy removed):
+// - GET  /mall/me/wallets
+// - POST /mall/me/wallets/sync
 //
-// NOTE:
-// - WalletUsecase.SyncWalletTokens(ctx, avatarID, addr) requires addr for create.
-// - For /mall/me/wallets, we try to resolve addr from Avatar.walletAddress.
+// Contract assumptions (new only):
+//   - uid is provided by UserAuthMiddleware in request context.
+//   - avatarId + walletAddress are provided by AvatarContextMiddleware in request context.
+//   - walletAddress is NOT accepted from client (not in path/query/body).
 type MallWalletHandler struct {
 	walletUC *usecase.WalletUsecase
-	avatarUC *usecase.AvatarUsecase
 }
 
-func NewMallWalletHandler(walletUC *usecase.WalletUsecase, avatarUC *usecase.AvatarUsecase) http.Handler {
-	return &MallWalletHandler{walletUC: walletUC, avatarUC: avatarUC}
+func NewMallWalletHandler(walletUC *usecase.WalletUsecase) http.Handler {
+	return &MallWalletHandler{walletUC: walletUC}
 }
 
 func (h *MallWalletHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
@@ -36,10 +39,16 @@ func (h *MallWalletHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	path0 := strings.TrimSuffix(r.URL.Path, "/")
 
 	switch {
-	// canonical: plural only
+	// ✅ read-only view (should NOT sync implicitly)
 	case r.Method == http.MethodGet && path0 == "/mall/me/wallets":
 		h.getMeWallets(w, r)
 		return
+
+	// ✅ explicit sync endpoint
+	case r.Method == http.MethodPost && path0 == "/mall/me/wallets/sync":
+		h.syncMeWallets(w, r)
+		return
+
 	default:
 		notFound(w)
 		return
@@ -47,42 +56,30 @@ func (h *MallWalletHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 }
 
 // GET /mall/me/wallets
+// - returns persisted wallet snapshot (no RPC call here)
 func (h *MallWalletHandler) getMeWallets(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 
-	if h == nil || h.walletUC == nil {
-		w.WriteHeader(http.StatusInternalServerError)
+	if h == nil || h.walletUC == nil || h.walletUC.WalletRepo == nil {
+		w.WriteHeader(http.StatusServiceUnavailable)
 		_ = json.NewEncoder(w).Encode(map[string]string{"error": "wallet usecase not configured"})
 		return
 	}
 
-	// ✅ avatarId を auth context から取得（なければ uid を使う）
-	avatarID := strings.TrimSpace(getCtxString(ctx, "avatarId"))
-	if avatarID == "" {
-		avatarID = strings.TrimSpace(getCtxString(ctx, "uid"))
-	}
-	if avatarID == "" {
+	// ✅ typed-key context getter (fixes mismatch with AvatarContextMiddleware)
+	avatarID, ok := middleware.CurrentAvatarID(r)
+	avatarID = strings.TrimSpace(avatarID)
+	if !ok || avatarID == "" {
 		w.WriteHeader(http.StatusUnauthorized)
 		_ = json.NewEncoder(w).Encode(map[string]string{"error": "unauthorized"})
 		return
 	}
 
-	// ✅ addr を avatar から解決（未作成時の create に必要）
-	addr := ""
-	if h.avatarUC != nil {
-		if a, err := h.avatarUC.GetByID(ctx, avatarID); err == nil {
-			if a.WalletAddress != nil {
-				addr = strings.TrimSpace(*a.WalletAddress)
-			}
-		} else {
-			// avatar が無い/引けない場合でも、wallet 側が既存なら動く可能性があるので続行
-			log.Printf("[mall_wallet_handler] /mall/me/wallets avatar lookup failed avatarId=%q err=%v\n", maskID(avatarID), err)
-		}
-	}
+	uid, _ := middleware.CurrentUserUID(r)
+	log.Printf("[mall_wallet_handler] GET /mall/me/wallets uid=%q avatarId=%q", maskID(uid), maskID(avatarID))
 
-	log.Printf("[mall_wallet_handler] GET /mall/me/wallets avatarId=%q addr_set=%t\n", maskID(avatarID), addr != "")
-
-	wallet, err := h.walletUC.SyncWalletTokens(ctx, avatarID, addr)
+	// read persisted wallet only (no legacy address resolution)
+	wallet, err := h.walletUC.WalletRepo.GetByAvatarID(ctx, avatarID)
 	if err != nil {
 		writeMallWalletErr(w, err)
 		return
@@ -92,33 +89,54 @@ func (h *MallWalletHandler) getMeWallets(w http.ResponseWriter, r *http.Request)
 	_ = json.NewEncoder(w).Encode(map[string]any{"wallets": []walletdom.Wallet{wallet}})
 }
 
+// POST /mall/me/wallets/sync
+// - runs on-chain RPC via WalletUsecase.SyncWalletTokens and returns updated wallet
+func (h *MallWalletHandler) syncMeWallets(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+
+	if h == nil || h.walletUC == nil {
+		w.WriteHeader(http.StatusServiceUnavailable)
+		_ = json.NewEncoder(w).Encode(map[string]string{"error": "wallet usecase not configured"})
+		return
+	}
+
+	// ✅ typed-key context getter (fixes mismatch with AvatarContextMiddleware)
+	avatarID, ok := middleware.CurrentAvatarID(r)
+	avatarID = strings.TrimSpace(avatarID)
+	if !ok || avatarID == "" {
+		w.WriteHeader(http.StatusUnauthorized)
+		_ = json.NewEncoder(w).Encode(map[string]string{"error": "unauthorized"})
+		return
+	}
+
+	uid, _ := middleware.CurrentUserUID(r)
+	log.Printf("[mall_wallet_handler] POST /mall/me/wallets/sync uid=%q avatarId=%q", maskID(uid), maskID(avatarID))
+
+	wallet, err := h.walletUC.SyncWalletTokens(ctx, avatarID)
+	if err != nil {
+		writeMallWalletErr(w, err)
+		return
+	}
+
+	_ = json.NewEncoder(w).Encode(map[string]any{"wallets": []walletdom.Wallet{wallet}})
+}
+
 func writeMallWalletErr(w http.ResponseWriter, err error) {
 	code := http.StatusInternalServerError
 
 	switch {
 	case errors.Is(err, walletdom.ErrNotFound):
 		code = http.StatusNotFound
-	}
-
-	// usecase 側の validation error は 400 に寄せる（文字列ベースの最低限）
-	if err != nil {
-		msg := strings.ToLower(err.Error())
-		if strings.Contains(msg, "avatarid is empty") ||
-			strings.Contains(msg, "walletaddress is required") ||
-			strings.Contains(msg, "walletaddress is empty") {
-			code = http.StatusBadRequest
-		}
+	case errors.Is(err, usecase.ErrWalletSyncAvatarIDEmpty),
+		errors.Is(err, usecase.ErrWalletSyncWalletAddressEmpty):
+		code = http.StatusBadRequest
+	case errors.Is(err, usecase.ErrWalletSyncOnchainNotConfigured),
+		errors.Is(err, usecase.ErrWalletUsecaseNotConfigured):
+		code = http.StatusServiceUnavailable
 	}
 
 	w.WriteHeader(code)
 	_ = json.NewEncoder(w).Encode(map[string]string{"error": err.Error()})
-}
-
-// ctx.Value は interface{} なので string のみ拾う（既存ミドルウェアに合わせる）
-func getCtxString(ctx interface{ Value(any) any }, key string) string {
-	v := ctx.Value(key)
-	s, _ := v.(string)
-	return s
 }
 
 func maskID(s string) string {

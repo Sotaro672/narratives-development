@@ -1,24 +1,20 @@
-// backend\internal\adapters\in\http\mall\handler\avatar_me_handler.go
+// backend/internal/adapters/in/http/mall/handler/avatar_me_handler.go
 package mallHandler
 
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"strings"
 
 	"narratives/internal/adapters/in/http/middleware"
 )
 
-// ✅ DI で差し替えしやすいように interface を最小にする
-// 旧: ResolveAvatarIDByUID のみ
-// 新: ResolveAvatarByUID (avatarId + walletAddress) を追加
+// MeAvatarService resolves (avatarId, walletAddress) by Firebase uid.
+// Policy A: walletAddress must be sourced from Avatar document (server-side truth).
 type MeAvatarService interface {
-	// ✅ new (preferred)
 	ResolveAvatarByUID(ctx context.Context, uid string) (avatarId string, walletAddress string, err error)
-
-	// ✅ legacy fallback (optional)
-	ResolveAvatarIDByUID(ctx context.Context, uid string) (string, error)
 }
 
 type MeAvatarHandler struct {
@@ -38,23 +34,15 @@ func (h *MeAvatarHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 
 	path := strings.TrimSuffix(strings.TrimSpace(r.URL.Path), "/")
-
-	// /mall/me/avatar を想定（保険で /mall/avatar も許可）
-	if path != "/mall/me/avatar" && path != "/mall/avatar" {
+	if path != "/mall/me/avatar" {
 		w.WriteHeader(http.StatusNotFound)
 		_ = json.NewEncoder(w).Encode(map[string]string{"error": "not_found"})
 		return
 	}
+
 	if r.Method != http.MethodGet {
 		w.WriteHeader(http.StatusMethodNotAllowed)
 		_ = json.NewEncoder(w).Encode(map[string]string{"error": "method_not_allowed"})
-		return
-	}
-
-	uid, ok := middleware.CurrentUserUID(r)
-	if !ok || strings.TrimSpace(uid) == "" {
-		w.WriteHeader(http.StatusUnauthorized)
-		_ = json.NewEncoder(w).Encode(map[string]string{"error": "unauthorized: missing uid"})
 		return
 	}
 
@@ -64,29 +52,28 @@ func (h *MeAvatarHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	uid, ok := middleware.CurrentUserUID(r)
 	uid = strings.TrimSpace(uid)
+	if !ok || uid == "" {
+		w.WriteHeader(http.StatusUnauthorized)
+		_ = json.NewEncoder(w).Encode(map[string]string{"error": "unauthorized: missing uid"})
+		return
+	}
 
-	// ------------------------------------------------------------
-	// ✅ preferred: avatarId + walletAddress
-	// ------------------------------------------------------------
 	avatarId, walletAddress, err := h.Svc.ResolveAvatarByUID(r.Context(), uid)
 	if err != nil {
-		// fallback to legacy method if implemented and new method failed due to non-implemented wiring etc.
-		legacyID, legacyErr := h.Svc.ResolveAvatarIDByUID(r.Context(), uid)
-		if legacyErr == nil && strings.TrimSpace(legacyID) != "" {
-			_ = json.NewEncoder(w).Encode(map[string]string{
-				"avatarId": strings.TrimSpace(legacyID),
-				// walletAddress is unknown in legacy path
-				"walletAddress": "",
-			})
-			return
-		}
-
 		if isNotFoundLike(err) {
 			w.WriteHeader(http.StatusNotFound)
 			_ = json.NewEncoder(w).Encode(map[string]string{"error": "avatar_not_found_for_uid"})
 			return
 		}
+		// ctx canceled etc.
+		if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+			w.WriteHeader(http.StatusRequestTimeout)
+			_ = json.NewEncoder(w).Encode(map[string]string{"error": "request_timeout"})
+			return
+		}
+
 		w.WriteHeader(http.StatusInternalServerError)
 		_ = json.NewEncoder(w).Encode(map[string]string{"error": "internal_error"})
 		return
@@ -101,8 +88,16 @@ func (h *MeAvatarHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// ✅ New contract: walletAddress is required by frontend.
+	// If avatar exists but wallet not initialized yet, return 409 (client should guide user to setup).
+	if walletAddress == "" {
+		w.WriteHeader(http.StatusConflict)
+		_ = json.NewEncoder(w).Encode(map[string]string{"error": "wallet_address_not_initialized"})
+		return
+	}
+
 	_ = json.NewEncoder(w).Encode(map[string]string{
 		"avatarId":      avatarId,
-		"walletAddress": walletAddress, // 空でもOK（wallet未設定）
+		"walletAddress": walletAddress,
 	})
 }

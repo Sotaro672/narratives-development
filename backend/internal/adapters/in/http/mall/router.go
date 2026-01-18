@@ -32,7 +32,14 @@ type Deps struct {
 
 	AvatarState http.Handler
 
-	// ✅ mall only: /mall/wallets
+	// ✅ mall only: /mall/me/wallets
+	// Contract (new only; legacy removed):
+	// - GET  /mall/me/wallets        : return { wallets: [ wallet ] }
+	// - POST /mall/me/wallets/sync   : sync on-chain -> persist -> return { wallets: [ wallet ] }
+	//
+	// NOTE:
+	// - avatarId is derived from AvatarContextMiddleware (uid -> avatarId) and NOT from query/path.
+	// - walletAddress is derived from wallet doc (docId=avatarId) and NOT from query/path.
 	Wallet http.Handler
 
 	Cart    http.Handler
@@ -163,7 +170,16 @@ func Register(mux *http.ServeMux, deps Deps) {
 	handleSafe(mux, "/mall/me/avatar-states", deps.AvatarState, "AvatarState(me)")
 	handleSafe(mux, "/mall/me/avatar-states/", deps.AvatarState, "AvatarState(me)")
 
-	// wallet (plural only)
+	// ------------------------------------------------------------
+	// ✅ Wallet (new contract only; legacy removed)
+	// - GET  /mall/me/wallets
+	// - POST /mall/me/wallets/sync
+	//
+	// NOTE:
+	// - We intentionally register only the base path and the trailing-slash
+	//   prefix. /mall/me/wallets/sync is matched by the "/mall/me/wallets/"
+	//   pattern and handled inside the Wallet handler.
+	// ------------------------------------------------------------
 	handleSafe(mux, "/mall/me/wallets", deps.Wallet, "Wallet(me)")
 	handleSafe(mux, "/mall/me/wallets/", deps.Wallet, "Wallet(me)")
 

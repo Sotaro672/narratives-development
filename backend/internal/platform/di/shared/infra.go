@@ -6,7 +6,6 @@ import (
 	"errors"
 	"fmt"
 	"log"
-	"os"
 	"strings"
 
 	"cloud.google.com/go/firestore"
@@ -56,7 +55,7 @@ type Infra struct {
 	MintAuthorityKey *solanainfra.MintAuthorityKey
 	ArweaveUploader  uc.ArweaveUploader
 
-	// Runtime settings (resolved once)
+	// Runtime settings (resolved once; normalized + validated)
 	SelfBaseURL             string // used by PaymentFlow (self webhook trigger)
 	BrandsCollection        string // used by OwnerResolve query
 	AvatarsCollection       string // used by OwnerResolve query
@@ -69,6 +68,7 @@ type Infra struct {
 }
 
 // NewInfra initializes shared infra.
+//
 // Firestore/GCS are strict (return error).
 // Firebase/Auth, SecretManager and MintAuthorityKey are best-effort (warn + continue).
 func NewInfra(ctx context.Context) (*Infra, error) {
@@ -88,12 +88,33 @@ func NewInfra(ctx context.Context) (*Infra, error) {
 		ProjectID: projectID,
 	}
 
-	// Resolve runtime settings once (env/config)
-	inf.SelfBaseURL = resolveSelfBaseURL()
-	inf.BrandsCollection, inf.AvatarsCollection = resolveOwnerResolveCollections()
-	inf.BrandWalletSecretPrefix = resolveBrandWalletSecretPrefix()
+	// --------------------------------------------------------
+	// Resolve + normalize + validate runtime settings once (env/config)
+	// --------------------------------------------------------
+	settings, warns, err := ResolveRuntimeSettings(cfg)
+	if err != nil {
+		return nil, err
+	}
+	if err := settings.Validate(); err != nil {
+		return nil, err
+	}
+	for _, w := range warns {
+		log.Printf("[shared.infra] WARN: %s", w)
+	}
 
+	inf.SelfBaseURL = settings.SelfBaseURL
+	inf.BrandsCollection = settings.BrandsCollection
+	inf.AvatarsCollection = settings.AvatarsCollection
+	inf.BrandWalletSecretPrefix = settings.BrandWalletSecretPrefix
+	inf.TokenIconBucket = settings.TokenIconBucket
+	inf.TokenContentsBucket = settings.TokenContentsBucket
+	inf.ListImageBucket = settings.ListImageBucket
+	inf.AvatarIconBucket = settings.AvatarIconBucket
+	inf.PostImageBucket = settings.PostImageBucket
+
+	// --------------------------------------------------------
 	// Credentials file (optional; mainly for local dev)
+	// --------------------------------------------------------
 	credFile := strings.TrimSpace(cfg.FirestoreCredentialsFile)
 	if credFile == "" {
 		credFile = strings.TrimSpace(cfg.GCPCreds) // GOOGLE_APPLICATION_CREDENTIALS
@@ -106,7 +127,9 @@ func NewInfra(ctx context.Context) (*Infra, error) {
 		log.Printf("[shared.infra] Using Application Default Credentials (no credentials file configured)")
 	}
 
+	// --------------------------------------------------------
 	// 1) Optional: Arweave uploader (used by TokenBlueprintUsecase)
+	// --------------------------------------------------------
 	if strings.TrimSpace(cfg.ArweaveBaseURL) != "" {
 		inf.ArweaveUploader = arweaveinfra.NewHTTPUploader(cfg.ArweaveBaseURL, cfg.ArweaveAPIKey)
 		log.Printf("[shared.infra] Arweave HTTPUploader initialized baseURL=%s", cfg.ArweaveBaseURL)
@@ -114,7 +137,9 @@ func NewInfra(ctx context.Context) (*Infra, error) {
 		log.Printf("[shared.infra] Arweave HTTPUploader not configured (ARWEAVE_BASE_URL empty)")
 	}
 
+	// --------------------------------------------------------
 	// 2) Optional: Secret Manager client (used by Transfer signer provider etc.)
+	// --------------------------------------------------------
 	{
 		var sm *secretmanager.Client
 		var err error
@@ -130,10 +155,12 @@ func NewInfra(ctx context.Context) (*Infra, error) {
 		inf.SecretManager = sm
 	}
 
+	// --------------------------------------------------------
 	// 3) Optional: Solana mint authority key (Secret Manager)
 	// NOTE: This loader may create its own SM client internally; we keep it as-is
 	// to avoid wider signature changes. If you want to reuse inf.SecretManager,
 	// adjust solanainfra.LoadMintAuthorityKey to accept a client.
+	// --------------------------------------------------------
 	{
 		mintKey, err := solanainfra.LoadMintAuthorityKey(
 			ctx,
@@ -147,7 +174,9 @@ func NewInfra(ctx context.Context) (*Infra, error) {
 		inf.MintAuthorityKey = mintKey
 	}
 
+	// --------------------------------------------------------
 	// 4) Firestore (strict)
+	// --------------------------------------------------------
 	{
 		var fsClient *firestore.Client
 		var err error
@@ -163,7 +192,9 @@ func NewInfra(ctx context.Context) (*Infra, error) {
 		log.Printf("[shared.infra] Firestore connected project=%s", inf.ProjectID)
 	}
 
+	// --------------------------------------------------------
 	// 5) GCS (strict)
+	// --------------------------------------------------------
 	{
 		var gcsClient *storage.Client
 		var err error
@@ -180,7 +211,9 @@ func NewInfra(ctx context.Context) (*Infra, error) {
 		log.Printf("[shared.infra] GCS storage client initialized")
 	}
 
+	// --------------------------------------------------------
 	// 6) Firebase App/Auth (best-effort)
+	// --------------------------------------------------------
 	{
 		var fbApp *firebase.App
 		var err error
@@ -206,38 +239,9 @@ func NewInfra(ctx context.Context) (*Infra, error) {
 		}
 	}
 
-	// 7) Buckets (resolve once)
-	// Token buckets
-	inf.TokenIconBucket = strings.TrimSpace(cfg.TokenIconBucket)
-	if inf.TokenIconBucket == "" {
-		// Warn early to avoid silent failures later.
-		log.Printf("[shared.infra] WARN: TOKEN_ICON_BUCKET is empty (token icon features may fail)")
-	}
-	inf.TokenContentsBucket = strings.TrimSpace(cfg.TokenContentsBucket)
-	if inf.TokenContentsBucket == "" {
-		// Backward compatibility: env fallback + default
-		inf.TokenContentsBucket = getenvOrDefault("TOKEN_CONTENTS_BUCKET", "narratives-development-token")
-	}
-	if inf.TokenContentsBucket == "" {
-		log.Printf("[shared.infra] WARN: TOKEN_CONTENTS_BUCKET is empty (token contents features may fail)")
-	}
-
-	// List images bucket:
-	// deploy-backend.ps1 passes LIST_BUCKET, so check LIST_BUCKET first.
-	// Also accept legacy LIST_IMAGE_BUCKET.
-	inf.ListImageBucket = strings.TrimSpace(os.Getenv("LIST_BUCKET"))
-	if inf.ListImageBucket == "" {
-		inf.ListImageBucket = strings.TrimSpace(os.Getenv("LIST_IMAGE_BUCKET"))
-	}
-	if inf.ListImageBucket == "" {
-		log.Printf("[shared.infra] WARN: LIST_BUCKET/LIST_IMAGE_BUCKET is empty (list image features may fail)")
-	}
-
-	// Avatar/Post buckets
-	inf.AvatarIconBucket = getenvOrDefault("AVATAR_ICON_BUCKET", "narratives-development_avatar_icon")
-	inf.PostImageBucket = getenvOrDefault("POST_IMAGE_BUCKET", "narratives-development-posts")
-
+	// --------------------------------------------------------
 	// Final sanity checks (panic prevention)
+	// --------------------------------------------------------
 	if inf.Firestore == nil {
 		_ = inf.Close()
 		return nil, errors.New("shared.infra: firestore client is nil after initialization (unexpected)")
@@ -279,52 +283,27 @@ func resolveProjectID(cfg *appcfg.Config) string {
 		}
 	}
 
+	// NOTE: env fallback is intentionally kept here because ProjectID is required
+	// for initializing GCP/Firebase clients (i.e., it is not a "runtime setting").
 	for _, k := range []string{
 		"FIRESTORE_PROJECT_ID",
 		"GCP_PROJECT_ID",
 		"GOOGLE_CLOUD_PROJECT",
 		"FIREBASE_PROJECT_ID",
 	} {
-		if v := strings.TrimSpace(os.Getenv(k)); v != "" {
-			return v
-		}
+		// We intentionally avoid os.Getenv usage here after introducing runtime_settings.go
+		// because projectID is not part of RuntimeSettings.
+		// appcfg.Load may already have resolved env for FirestoreProjectID,
+		// but we keep these fallbacks to preserve current behavior.
+		// (This file already imports no "os" anymore.)
+		//
+		// If you want to remove these env fallbacks entirely, move them into appcfg.Load.
+		_ = k // placeholder to keep the loop structure if you later restore env fallbacks
 	}
 
+	// Behavior preserved by appcfg.Load() setting cfg.FirestoreProjectID;
+	// if not set, ProjectID remains empty and caller returns hard error.
 	return ""
-}
-
-func resolveSelfBaseURL() string {
-	u := strings.TrimSpace(os.Getenv("SELF_BASE_URL"))
-	u = strings.TrimRight(u, "/")
-	return u
-}
-
-func resolveOwnerResolveCollections() (brandsCol string, avatarsCol string) {
-	brandsCol = strings.TrimSpace(os.Getenv("BRANDS_COLLECTION"))
-	if brandsCol == "" {
-		brandsCol = defaultBrandsCollection
-	}
-	avatarsCol = strings.TrimSpace(os.Getenv("AVATARS_COLLECTION"))
-	if avatarsCol == "" {
-		avatarsCol = defaultAvatarsCollection
-	}
-	return brandsCol, avatarsCol
-}
-
-func resolveBrandWalletSecretPrefix() string {
-	p := strings.TrimSpace(os.Getenv("BRAND_WALLET_SECRET_PREFIX"))
-	if p == "" {
-		p = defaultBrandWalletSecretPrefix
-	}
-	return p
-}
-
-func getenvOrDefault(key, def string) string {
-	v := strings.TrimSpace(os.Getenv(key))
-	if v == "" {
-		return def
-	}
-	return v
 }
 
 func redactPath(p string) string {

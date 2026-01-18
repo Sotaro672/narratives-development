@@ -1,4 +1,3 @@
-// frontend/mall/lib/features/wallet/infrastructure/api.dart
 import 'dart:convert';
 
 import 'package:flutter/foundation.dart';
@@ -157,10 +156,55 @@ class MallAuthedApi {
     return res2;
   }
 
+  /// POST with Firebase Authorization.
+  /// - If 401, retry once with forceRefresh=true.
+  ///
+  /// NOTE:
+  /// - bodyJson は null の場合、空 body を送る（sync endpoint などに対応）
+  /// - headers は必要最低限に固定し、token はログに出さない
+  Future<http.Response> postAuthed(
+    Uri uri, {
+    Map<String, dynamic>? bodyJson,
+  }) async {
+    String? bodyStr;
+    if (bodyJson != null) {
+      bodyStr = jsonEncode(bodyJson);
+    }
+
+    // first try
+    final h1 = <String, String>{
+      'Accept': 'application/json',
+      ...await _authHeaders(forceRefresh: false),
+      if (bodyStr != null) 'Content-Type': 'application/json',
+    };
+    _logRequest('POST', uri, headers: h1, body: bodyStr);
+
+    final res1 = await _client.post(uri, headers: h1, body: bodyStr);
+    _lastStatusCode = res1.statusCode;
+    _logResponse('POST', uri, res1.statusCode, res1.body);
+
+    if (res1.statusCode != 401) return res1;
+
+    // retry
+    final h2 = <String, String>{
+      'Accept': 'application/json',
+      ...await _authHeaders(forceRefresh: true),
+      if (bodyStr != null) 'Content-Type': 'application/json',
+    };
+    _logRequest('POST', uri, headers: h2, body: bodyStr);
+
+    final res2 = await _client.post(uri, headers: h2, body: bodyStr);
+    _lastStatusCode = res2.statusCode;
+    _logResponse('POST', uri, res2.statusCode, res2.body);
+
+    return res2;
+  }
+
   void _logRequest(
     String method,
     Uri uri, {
     required Map<String, String> headers,
+    String? body,
   }) {
     if (!_logEnabled) return;
 
@@ -173,8 +217,12 @@ class MallAuthedApi {
       }
     });
 
+    final bodyInfo = (body == null || body.trim().isEmpty)
+        ? ''
+        : ' body=${_truncate(body, 800)}';
+
     _log(
-      '[MallAuthedApi] request method=$method url=$uri headers=${jsonEncode(safeHeaders)}',
+      '[MallAuthedApi] request method=$method url=$uri headers=${jsonEncode(safeHeaders)}$bodyInfo',
     );
   }
 

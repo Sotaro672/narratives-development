@@ -1,3 +1,4 @@
+// frontend/mall/lib/features/preview/infrastructure/scan_transfer_repository_http.dart
 import 'dart:convert';
 
 import 'package:http/http.dart' as http;
@@ -16,23 +17,26 @@ class ScanTransferRepositoryHttp {
     _client.close();
   }
 
+  String _pickAuth(Map<String, String> h) {
+    // absorb "Authorization" vs "authorization"
+    final a1 = (h['Authorization'] ?? '').trim();
+    if (a1.isNotEmpty) return a1;
+    final a2 = (h['authorization'] ?? '').trim();
+    if (a2.isNotEmpty) return a2;
+    return '';
+  }
+
   /// POST /mall/me/orders/scan/transfer
   ///
-  /// IMPORTANT:
-  /// - Authorization header is REQUIRED by backend handler.
-  /// - Body: { avatarId, productId }
-  Future<MallScanTransferResponse> transferScanPurchasedByAvatarId({
-    required String avatarId,
+  /// NEW CONTRACT:
+  /// - Authorization header is REQUIRED
+  /// - Body: { productId } only
+  Future<MallScanTransferResponse> transferScanPurchased({
     required String productId,
     String? baseUrl,
     Map<String, String>? headers,
   }) async {
-    final aid = avatarId.trim();
     final pid = productId.trim();
-
-    if (aid.isEmpty) {
-      throw ArgumentError('avatarId is empty');
-    }
     if (pid.isEmpty) {
       throw ArgumentError('productId is empty');
     }
@@ -44,25 +48,27 @@ class ScanTransferRepositoryHttp {
 
     final uri = Uri.parse('$b/mall/me/orders/scan/transfer');
 
-    // JSON headers + caller headers (Authorization should be in caller headers)
+    // Base JSON headers + caller headers
     final mergedHeaders = <String, String>{...jsonPostHeaders()};
     if (headers != null) {
       mergedHeaders.addAll(headers);
     }
 
-    // Backend requires Authorization header.
-    final auth = (mergedHeaders['Authorization'] ?? '').trim();
+    // Ensure Authorization exists and normalize key to "Authorization"
+    final auth = _pickAuth(mergedHeaders);
     if (auth.isEmpty) {
       throw ArgumentError('Authorization header is required for transfer');
     }
+    mergedHeaders['Authorization'] = auth;
 
-    final body = jsonEncode({'avatarId': aid, 'productId': pid});
+    // ✅ body must be productId only
+    final body = jsonEncode({'productId': pid});
 
     final res = await _client.post(uri, headers: mergedHeaders, body: body);
 
     if (res.statusCode < 200 || res.statusCode >= 300) {
       throw HttpException(
-        'transferScanPurchasedByAvatarId failed: ${res.statusCode}',
+        'transferScanPurchased failed: ${res.statusCode}',
         url: uri.toString(),
         body: res.body,
       );
@@ -73,6 +79,30 @@ class ScanTransferRepositoryHttp {
       throw const FormatException('invalid json shape (expected object)');
     }
 
-    return MallScanTransferResponse.fromJson(decoded.cast<String, dynamic>());
+    // absorb both shapes:
+    // 1) { "data": { ... } }
+    // 2) { ... }
+    final root = decoded.cast<String, dynamic>();
+    final data = root['data'];
+    if (data is Map) {
+      return MallScanTransferResponse.fromJson(data.cast<String, dynamic>());
+    }
+    return MallScanTransferResponse.fromJson(root);
+  }
+
+  @Deprecated(
+    'avatarId is resolved on server; use transferScanPurchased(productId: ...) instead.',
+  )
+  Future<MallScanTransferResponse> transferScanPurchasedByAvatarId({
+    required String avatarId,
+    required String productId,
+    String? baseUrl,
+    Map<String, String>? headers,
+  }) async {
+    return transferScanPurchased(
+      productId: productId,
+      baseUrl: baseUrl,
+      headers: headers,
+    );
   }
 }

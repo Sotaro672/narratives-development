@@ -56,6 +56,8 @@ func requireAvatarContext(mw *middleware.AvatarContextMiddleware, h http.Handler
 	if h == nil {
 		h = http.NotFoundHandler()
 	}
+	// NOTE:
+	// AvatarContextMiddleware now requires Resolver (AvatarResolver) to be non-nil.
 	if mw == nil || mw.Resolver == nil {
 		log.Printf("[mall.register] ERROR: AvatarContextMiddleware is not initialized (endpoint=%s). returning 503", name)
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -108,15 +110,13 @@ func (a transferHTTPAdapter) TransferByScanPurchasedByAvatarID(ctx context.Conte
 }
 
 // ------------------------------------------------------------
-// ✅ MeAvatar DI adapter
+// ✅ MeAvatar DI adapter (NO legacy repo)
 // ------------------------------------------------------------
 
-// legacy interface that your current firestore mall.MeAvatarRepo likely implements
-type meAvatarLegacyRepo interface {
-	ResolveAvatarIDByUID(ctx context.Context, uid string) (string, error)
-}
-
-// optional extended interface (if/when MeAvatarRepo implements it)
+// Only extended interface is allowed now.
+// (ResolveAvatarIDByUID is kept as optional for handler fallback wiring,
+//
+//	but we do NOT accept a legacy-only repo in DI anymore.)
 type meAvatarExtendedRepo interface {
 	ResolveAvatarByUID(ctx context.Context, uid string) (avatarId string, walletAddress string, err error)
 	ResolveAvatarIDByUID(ctx context.Context, uid string) (string, error)
@@ -124,37 +124,42 @@ type meAvatarExtendedRepo interface {
 
 // adapter that always satisfies mallhandler.MeAvatarService expected by NewMeAvatarHandler
 type meAvatarServiceAdapter struct {
-	legacy   meAvatarLegacyRepo
 	extended meAvatarExtendedRepo
 }
 
 // ResolveAvatarByUID returns avatarId + walletAddress.
-// - If extended repo is available, use it.
-// - Else fallback to legacy (walletAddress="").
+// - Uses only extended repo. No legacy fallback at DI layer.
 func (a meAvatarServiceAdapter) ResolveAvatarByUID(ctx context.Context, uid string) (string, string, error) {
-	if a.extended != nil {
-		return a.extended.ResolveAvatarByUID(ctx, uid)
-	}
-	if a.legacy == nil {
-		// Let handler treat it as internal error/not found depending on implementation.
+	if a.extended == nil {
 		return "", "", usecase.ErrTransferNotConfigured
 	}
-	id, err := a.legacy.ResolveAvatarIDByUID(ctx, uid)
-	if err != nil {
-		return "", "", err
-	}
-	return strings.TrimSpace(id), "", nil
+	return a.extended.ResolveAvatarByUID(ctx, uid)
 }
 
-// ResolveAvatarIDByUID is legacy passthrough (used as fallback by handler too).
+// ResolveAvatarIDByUID is passthrough (used only if handler decides to fallback).
 func (a meAvatarServiceAdapter) ResolveAvatarIDByUID(ctx context.Context, uid string) (string, error) {
-	if a.extended != nil {
-		return a.extended.ResolveAvatarIDByUID(ctx, uid)
-	}
-	if a.legacy == nil {
+	if a.extended == nil {
 		return "", usecase.ErrTransferNotConfigured
 	}
-	return a.legacy.ResolveAvatarIDByUID(ctx, uid)
+	return a.extended.ResolveAvatarIDByUID(ctx, uid)
+}
+
+// ------------------------------------------------------------
+// ✅ AvatarResolver adapter
+// ------------------------------------------------------------
+//
+// AvatarContextMiddleware は AvatarResolver(ResolveAvatarByUID) を要求するように更新済み。
+// しかし cont.OrderQ はそれを実装していないため、ここで uid -> avatarId(+walletAddress) を提供する
+// 専用 resolver を DI から組み立てる。
+type avatarResolverAdapter struct {
+	me meAvatarExtendedRepo
+}
+
+func (a avatarResolverAdapter) ResolveAvatarByUID(ctx context.Context, uid string) (string, string, error) {
+	if a.me == nil {
+		return "", "", usecase.ErrTransferNotConfigured
+	}
+	return a.me.ResolveAvatarByUID(ctx, uid)
 }
 
 // Register registers mall routes onto mux.
@@ -177,17 +182,26 @@ func Register(mux *http.ServeMux, cont *Container) {
 	}
 
 	// ------------------------------------------------------------
-	// Avatar context middleware (uid -> avatarId)
+	// Avatar context middleware (uid -> avatarId (+walletAddress))
 	// ------------------------------------------------------------
 	var avatarCtxMW *middleware.AvatarContextMiddleware
-	if cont.OrderQ != nil {
-		avatarCtxMW = &middleware.AvatarContextMiddleware{
-			Resolver:      cont.OrderQ,
-			AllowExplicit: false,
+	{
+		var ext meAvatarExtendedRepo
+		if cont.MeAvatarRepo != nil {
+			if v, ok := any(cont.MeAvatarRepo).(meAvatarExtendedRepo); ok {
+				ext = v
+			}
 		}
-	} else {
-		log.Printf("[mall.register] WARN: cont.OrderQ is nil (avatar context will return 503 on endpoints requiring avatarId)")
-		avatarCtxMW = &middleware.AvatarContextMiddleware{Resolver: nil, AllowExplicit: false}
+
+		if ext != nil {
+			avatarCtxMW = &middleware.AvatarContextMiddleware{
+				Resolver: avatarResolverAdapter{me: ext},
+				// NOTE: AllowExplicit は middleware 側から削除済み（anti-spoof 一本化）。
+			}
+		} else {
+			log.Printf("[mall.register] WARN: cont.MeAvatarRepo does not implement meAvatarExtendedRepo (avatar context will return 503 on endpoints requiring avatarId)")
+			avatarCtxMW = &middleware.AvatarContextMiddleware{Resolver: nil}
+		}
 	}
 
 	// ----------------------------
@@ -271,28 +285,24 @@ func Register(mux *http.ServeMux, cont *Container) {
 		avatarH = mallhandler.NewAvatarHandler(cont.AvatarUC)
 	}
 
-	// Wallet
+	// ✅ Wallet（旧式互換削除: AvatarUC は渡さない）
 	if cont.WalletUC != nil {
-		walletH = mallhandler.NewMallWalletHandler(cont.WalletUC, cont.AvatarUC)
+		walletH = mallhandler.NewMallWalletHandler(cont.WalletUC)
 	}
 
 	// /mall/me/avatar (uid -> avatarId + walletAddress)
 	if cont.MeAvatarRepo != nil {
-		// Try extended first; fallback to legacy.
 		var ext meAvatarExtendedRepo
 		if v, ok := any(cont.MeAvatarRepo).(meAvatarExtendedRepo); ok {
 			ext = v
 		}
-
-		var leg meAvatarLegacyRepo
-		if v, ok := any(cont.MeAvatarRepo).(meAvatarLegacyRepo); ok {
-			leg = v
+		if ext != nil {
+			meAvatarH = mallhandler.NewMeAvatarHandler(meAvatarServiceAdapter{
+				extended: ext,
+			})
+		} else {
+			log.Printf("[mall.register] WARN: cont.MeAvatarRepo does not implement meAvatarExtendedRepo (MeAvatar will return 501)")
 		}
-
-		meAvatarH = mallhandler.NewMeAvatarHandler(meAvatarServiceAdapter{
-			legacy:   leg,
-			extended: ext,
-		})
 	}
 
 	// Cart (authenticated)
@@ -343,16 +353,11 @@ func Register(mux *http.ServeMux, cont *Container) {
 	// ------------------------------------------------------------
 	// Order scan transfer wiring
 	// ------------------------------------------------------------
-	// ✅ TransferUsecase は Container 側で生成して持たせる（register.go は配線だけ）
+	// ✅ Option A: anti-spoof は AvatarContextMiddleware に一本化済みなので
+	// handler 側の WithResolver は呼ばない。
 	if cont.TransferUC != nil {
 		httpUC := transferHTTPAdapter{uc: cont.TransferUC}
-
-		// anti-spoof を handler 内でもやりたいなら WithResolver
-		if cont.OrderQ != nil {
-			orderScanTransferH = mallhandler.NewTransferHandlerWithResolver(httpUC, cont.OrderQ)
-		} else {
-			orderScanTransferH = mallhandler.NewTransferHandler(httpUC)
-		}
+		orderScanTransferH = mallhandler.NewTransferHandler(httpUC)
 		log.Printf("[mall.register] order scan transfer handler wired (TransferUC=%t)", cont.TransferUC != nil)
 	} else {
 		log.Printf("[mall.register] WARN: TransferUC is nil (order scan transfer will return 501)")
@@ -364,14 +369,19 @@ func Register(mux *http.ServeMux, cont *Container) {
 	})
 
 	// ------------------------------------------------------------
-	// Apply UserAuthMiddleware to ALL user-authenticated handlers
+	// Apply UserAuthMiddleware / AvatarContextMiddleware
 	// ------------------------------------------------------------
 	userH = requireUserAuth(userAuthMW, userH, "User")
 	shipH = requireUserAuth(userAuthMW, shipH, "ShippingAddress")
 	billH = requireUserAuth(userAuthMW, billH, "BillingAddress")
 	avatarH = requireUserAuth(userAuthMW, avatarH, "Avatar")
 	avatarStateH = requireUserAuth(userAuthMW, avatarStateH, "AvatarState")
+
+	// ✅ Wallet は同期APIで avatarId が必須なので AvatarContext を通す
+	walletH = requireAvatarContext(avatarCtxMW, walletH, "Wallet:AvatarContext")
 	walletH = requireUserAuth(userAuthMW, walletH, "Wallet")
+
+	// ✅ /mall/me/avatar は uid だけで動く想定（AvatarContext は不要）
 	meAvatarH = requireUserAuth(userAuthMW, meAvatarH, "MeAvatar")
 	cartH = requireUserAuth(userAuthMW, cartH, "Cart")
 

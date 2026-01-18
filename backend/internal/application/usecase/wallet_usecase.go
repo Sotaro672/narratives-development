@@ -12,8 +12,8 @@ import (
 
 // ✅ usecase が必要とするIFをここで定義する（domain の Repository に依存しない）
 type WalletRepository interface {
+	// docId=avatarId
 	GetByAvatarID(ctx context.Context, avatarID string) (walletdom.Wallet, error)
-	GetByAddress(ctx context.Context, addr string) (walletdom.Wallet, error) // 互換 or 逆引き用途
 	Save(ctx context.Context, avatarID string, w walletdom.Wallet) error
 }
 
@@ -22,12 +22,15 @@ type OnchainWalletReader interface {
 }
 
 // WalletUsecase は Wallet 同期ユースケース
+// - 「同期API（案A）」を前提に、同期対象 wallet は既に存在することを要求する
+// - 旧式互換（avatar から addr を拾って create する等）は行わない
 type WalletUsecase struct {
 	WalletRepo    WalletRepository
-	OnchainReader OnchainWalletReader // DI で未設定の場合は nil
+	OnchainReader OnchainWalletReader // 必須（同期APIとして使うなら）
 }
 
 // コンストラクタ（DI コンテナの呼び出しに合わせて 1 引数）
+// OnchainReader は WithOnchainReader で差し込む（nil のまま同期を呼ぶとエラー）
 func NewWalletUsecase(walletRepo WalletRepository) *WalletUsecase {
 	return &WalletUsecase{
 		WalletRepo:    walletRepo,
@@ -37,70 +40,64 @@ func NewWalletUsecase(walletRepo WalletRepository) *WalletUsecase {
 
 // 任意: OnchainReader を後から差し込むためのセッター
 func (uc *WalletUsecase) WithOnchainReader(r OnchainWalletReader) *WalletUsecase {
-	uc.OnchainReader = r
+	if uc != nil {
+		uc.OnchainReader = r
+	}
 	return uc
 }
 
-// ✅ docId=avatarId 前提に合わせる
-// - avatarID は必須
-// - addr は「新規作成時 or 不整合修正時」に使う（空なら既存Walletから採用）
-func (uc *WalletUsecase) SyncWalletTokens(ctx context.Context, avatarID string, addr string) (walletdom.Wallet, error) {
+var (
+	ErrWalletUsecaseNotConfigured     = errors.New("wallet usecase: not configured")
+	ErrWalletSyncAvatarIDEmpty        = errors.New("wallet usecase: avatarID is empty")
+	ErrWalletSyncOnchainNotConfigured = errors.New("wallet usecase: onchain reader not configured")
+	ErrWalletSyncWalletAddressEmpty   = errors.New("wallet usecase: walletAddress is empty")
+)
+
+// SyncWalletTokens:
+// - docId=avatarId の wallet を取得
+// - wallet.walletAddress を owner として devnet RPC から token mints を取得
+// - wallet.tokens を on-chain に合わせて置き換え、保存
+//
+// NOTE:
+// - wallet が存在しない場合は ErrNotFound を返す（この usecase は create しない）
+// - addr を handler から受け取らない（旧式互換排除）
+// - replace は冪等
+func (uc *WalletUsecase) SyncWalletTokens(ctx context.Context, avatarID string) (walletdom.Wallet, error) {
 	if uc == nil || uc.WalletRepo == nil {
-		return walletdom.Wallet{}, errors.New("wallet usecase: repo not configured")
+		return walletdom.Wallet{}, ErrWalletUsecaseNotConfigured
+	}
+	if uc.OnchainReader == nil {
+		return walletdom.Wallet{}, ErrWalletSyncOnchainNotConfigured
 	}
 
 	aid := strings.TrimSpace(avatarID)
 	if aid == "" {
-		return walletdom.Wallet{}, errors.New("wallet usecase: avatarID is empty")
+		return walletdom.Wallet{}, ErrWalletSyncAvatarIDEmpty
 	}
 
-	// 1) まず avatarID で Wallet を取る（docId=avatarId）
+	// 1) docId=avatarId で wallet を取得（存在が前提）
 	w, err := uc.WalletRepo.GetByAvatarID(ctx, aid)
 	if err != nil {
-		// NotFound なら作る（addr 必須）
-		if !errors.Is(err, walletdom.ErrNotFound) {
-			return walletdom.Wallet{}, err
-		}
-
-		a := strings.TrimSpace(addr)
-		if a == "" {
-			return walletdom.Wallet{}, errors.New("wallet usecase: walletAddress is required for create")
-		}
-
-		now := time.Now().UTC()
-		w, err = walletdom.NewFull(a, nil, now, walletdom.StatusActive)
-		if err != nil {
-			return walletdom.Wallet{}, err
-		}
-		// 保存（docId=avatarId）
-		if err := uc.WalletRepo.Save(ctx, aid, w); err != nil {
-			return walletdom.Wallet{}, err
-		}
-	} else {
-		// 既存がある場合、addr が空なら既存を採用
-		if strings.TrimSpace(addr) == "" {
-			addr = w.WalletAddress
-		}
+		return walletdom.Wallet{}, err
 	}
 
-	// 2) OnchainReader があれば mint 一覧で同期
-	if uc.OnchainReader != nil {
-		a := strings.TrimSpace(addr)
-		if a == "" {
-			// 既存Walletにも addr が無いのは不正
-			return walletdom.Wallet{}, errors.New("wallet usecase: walletAddress is empty")
-		}
-
-		mints, err := uc.OnchainReader.ListOwnedTokenMints(ctx, a)
-		if err != nil {
-			return walletdom.Wallet{}, err
-		}
-		if err := w.ReplaceTokens(mints, time.Now().UTC()); err != nil {
-			return walletdom.Wallet{}, err
-		}
+	addr := strings.TrimSpace(w.WalletAddress)
+	if addr == "" {
+		return walletdom.Wallet{}, ErrWalletSyncWalletAddressEmpty
 	}
 
-	// 3) 永続化（更新）
+	// 2) on-chain から mint 一覧を取得
+	mints, err := uc.OnchainReader.ListOwnedTokenMints(ctx, addr)
+	if err != nil {
+		return walletdom.Wallet{}, err
+	}
+
+	// 3) 置換して保存
+	now := time.Now().UTC()
+	if err := w.ReplaceTokens(mints, now); err != nil {
+		return walletdom.Wallet{}, err
+	}
+
 	if err := uc.WalletRepo.Save(ctx, aid, w); err != nil {
 		return walletdom.Wallet{}, err
 	}

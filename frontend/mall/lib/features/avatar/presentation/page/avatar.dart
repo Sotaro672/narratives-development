@@ -1,4 +1,4 @@
-// frontend\mall\lib\features\avatar\presentation\page\avatar.dart
+//frontend\mall\lib\features\avatar\presentation\page\avatar.dart
 import 'dart:convert';
 
 import 'package:firebase_auth/firebase_auth.dart';
@@ -8,6 +8,7 @@ import 'package:http/http.dart' as http;
 
 import '../../../../app/routing/routes.dart';
 import '../../../wallet/infrastructure/repository_http.dart';
+import '../../../wallet/infrastructure/wallet_dto.dart';
 import '../../../../app/config/api_base.dart';
 
 class _ProfileCounts {
@@ -53,11 +54,11 @@ class _AvatarPageState extends State<AvatarPage> {
   bool _normalizedUrlOnce = false;
   bool _returnedToFromOnce = false;
 
-  _ProfileTab _tab = _ProfileTab.posts;
+  _ProfileTab _tab = _ProfileTab.tokens; // ✅ tokens をデフォルト表示
 
   String s(String? v) => (v ?? '').trim();
 
-  /// ✅ `from` は URL で壊れやすい（Hash + `?` `&` 混在）ので base64url で安全に運ぶ
+  /// ✅ `from` は URL で壊れやすいので base64url で安全に運ぶ
   String _encodeFrom(String raw) {
     final t = raw.trim();
     if (t.isEmpty) return '';
@@ -76,7 +77,6 @@ class _AvatarPageState extends State<AvatarPage> {
     super.dispose();
   }
 
-  // Instagram っぽい「bio」表示欄（現状データ未接続なので placeholder）
   String _profileBioFor(User u) {
     return '（プロフィール未設定）';
   }
@@ -91,15 +91,12 @@ class _AvatarPageState extends State<AvatarPage> {
     return _currentUri(context);
   }
 
-  /// ✅ avatarId は「URLの query (?avatarId=...)」を唯一の正とする（あれば優先）
+  /// ✅ avatarId は URL の query (?avatarId=...) を正とする（あれば）
   String _resolveAvatarIdFromUrl(BuildContext context) {
     final uri = GoRouterState.of(context).uri;
     return s(uri.queryParameters[AppQueryKey.avatarId]);
   }
 
-  // -----------------------------
-  // /mall/me/avatar のみで解決
-  // -----------------------------
   String _normalizeBase(String base) {
     var b = base.trim();
     while (b.endsWith('/')) {
@@ -150,7 +147,6 @@ class _AvatarPageState extends State<AvatarPage> {
   Future<_MeAvatar?> _fetchMeAvatar() async {
     final uri = _uri('/mall/me/avatar');
 
-    // token
     final token1 = await _getIdToken(forceRefresh: false);
     final headers1 = <String, String>{'Accept': 'application/json'};
     if (token1 != null) headers1['Authorization'] = 'Bearer $token1';
@@ -163,7 +159,6 @@ class _AvatarPageState extends State<AvatarPage> {
     }
 
     if (res.statusCode == 401) {
-      // retry with refreshed token
       final token2 = await _getIdToken(forceRefresh: true);
       final headers2 = <String, String>{'Accept': 'application/json'};
       if (token2 != null) headers2['Authorization'] = 'Bearer $token2';
@@ -175,21 +170,13 @@ class _AvatarPageState extends State<AvatarPage> {
       }
     }
 
-    if (res.statusCode < 200 || res.statusCode >= 300) {
-      return null;
-    }
+    if (res.statusCode < 200 || res.statusCode >= 300) return null;
 
     final decoded = _unwrapData(_decodeObject(res.body));
 
-    // 形揺れ吸収：
-    // 1) { avatarId: "...", walletAddress: "..." }
-    // 2) { avatar: { id/avatarId/walletAddress... } }
-    // 3) { me: { ... } }
     Map<String, dynamic> root = decoded;
-
     final avatarObj = decoded['avatar'];
     if (avatarObj is Map) root = Map<String, dynamic>.from(avatarObj);
-
     final meObj = decoded['me'];
     if (meObj is Map) root = Map<String, dynamic>.from(meObj);
 
@@ -200,7 +187,6 @@ class _AvatarPageState extends State<AvatarPage> {
       'id',
       'ID',
     ]);
-
     final walletAddress = _pickString(root, const [
       'walletAddress',
       'WalletAddress',
@@ -208,10 +194,10 @@ class _AvatarPageState extends State<AvatarPage> {
       'Address',
     ]);
 
-    if (avatarId.trim().isEmpty) {
-      // me/avatar は最低 avatarId を返してほしいので、無ければ null
-      return null;
-    }
+    if (avatarId.trim().isEmpty) return null;
+
+    // ✅ あなたの現状方針に合わせて walletAddress も必須
+    if (walletAddress.trim().isEmpty) return null;
 
     return _MeAvatar(
       avatarId: avatarId.trim(),
@@ -231,24 +217,12 @@ class _AvatarPageState extends State<AvatarPage> {
     final urlAid = urlAvatarId.trim();
     final effectiveAid = urlAid.isNotEmpty ? urlAid : me.avatarId;
 
-    // ✅ 新仕様: /mall/me/wallets/{walletAddress}?avatarId={avatarId}
-    final addr = me.walletAddress.trim();
-    if (addr.isEmpty) {
-      // me/avatar が walletAddress を返さない場合、ここでは取得できないので null
-      // （必要なら、旧 /mall/me/wallets を叩くフォールバックを別途実装）
-      return null;
-    }
+    if (effectiveAid.trim().isEmpty) return null;
 
-    final wallet = await _walletRepo.fetchByWalletAddress(
-      avatarId: effectiveAid,
-      walletAddress: addr,
-    );
-
-    return wallet;
+    // ✅ ログと同じ挙動：sync → fetch で最新を表示
+    return _walletRepo.syncAndFetchMeWallet();
   }
 
-  /// ✅ /avatar の URL に avatarId を必ず載せる（Header/Cart が拾えるようにする）
-  /// NOTE: ここでは「avatarId が分かった」時だけ正規化する
   void _ensureAvatarIdInUrl(BuildContext context, String avatarId) {
     if (_normalizedUrlOnce) return;
     if (avatarId.isEmpty) return;
@@ -275,7 +249,6 @@ class _AvatarPageState extends State<AvatarPage> {
     });
   }
 
-  /// ✅ 「cart から avatarId 必須で飛ばされた」ケースだけ、from に avatarId を付与して戻す
   void _maybeReturnToFrom(BuildContext context, String avatarId) {
     if (_returnedToFromOnce) return;
     if (avatarId.isEmpty) return;
@@ -440,12 +413,14 @@ class _AvatarPageState extends State<AvatarPage> {
     return Wrap(
       spacing: 8,
       runSpacing: 8,
-      children: tokens.map((m) {
-        return Chip(
-          label: Text(shortMint(m)),
-          visualDensity: VisualDensity.compact,
-        );
-      }).toList(),
+      children: tokens
+          .map(
+            (m) => Chip(
+              label: Text(shortMint(m)),
+              visualDensity: VisualDensity.compact,
+            ),
+          )
+          .toList(),
     );
   }
 
@@ -485,7 +460,7 @@ class _AvatarPageState extends State<AvatarPage> {
               ),
               const SizedBox(height: 8),
               const Text(
-                'サインイン状態、または /mall/me/avatar の応答を確認してください。',
+                'サインイン状態、または /mall/me/avatar の応答（avatarId・walletAddress）を確認してください。',
                 textAlign: TextAlign.center,
               ),
               const SizedBox(height: 16),
@@ -510,6 +485,9 @@ class _AvatarPageState extends State<AvatarPage> {
     );
   }
 
+  // ============================================================
+  // ✅ 差分検知 →（必要なら backend 同期）→ wallet 再取得
+  // ============================================================
   @override
   Widget build(BuildContext context) {
     return StreamBuilder<User?>(
@@ -555,10 +533,7 @@ class _AvatarPageState extends State<AvatarPage> {
           );
         }
 
-        // ✅ URL avatarId を async 前に一度だけ確定して渡す（context跨ぎ警告対策）
         final urlAvatarId = _resolveAvatarIdFromUrl(context);
-
-        // ✅ このページは /mall/me/avatar を唯一の真実として扱う
         _kickoffLoads(urlAvatarId: urlAvatarId);
 
         final photoUrl = s(user.photoURL);
@@ -597,14 +572,10 @@ class _AvatarPageState extends State<AvatarPage> {
                       final wallet = wsnap.data;
                       final tokens = wallet?.tokens ?? const <String>[];
 
-                      final postCount = 0;
-                      final followerCount = 0;
-                      final followingCount = 0;
-
                       final counts = _ProfileCounts(
-                        postCount: postCount,
-                        followerCount: followerCount,
-                        followingCount: followingCount,
+                        postCount: 0,
+                        followerCount: 0,
+                        followingCount: 0,
                         tokenCount: tokens.length,
                       );
 

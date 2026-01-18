@@ -9,6 +9,7 @@ package usecase
 - 競合（二重処理）を防ぐために、order の item 単位で transfer lock を取得してから処理する。
 - transfer 成功後に orders/{orderId} の該当 item の transferred/transferredAt を更新する。
 - さらに tokens/{productId}.toAddress を「今の owner (= avatar wallet)」として必ず更新する。
+- ✅ NEW: transfer 成功後に wallet テーブル（avatar wallet）を更新し、items に mintAddress を追加する（冪等）。
 - さらに transfer テーブル（transfer domain）を起票し、成功/失敗・tx署名・エラー種別を永続化する。
 - さらに transfer テーブルに移譲した mintAddress を保存する（監査/CS/復旧用）。
 
@@ -31,7 +32,7 @@ Transfer テーブル起票:
 - lock 取得後、wallet 解決後に pending を起票する（toWalletAddress が必須のため）。
 - pending 起票時点で mintAddress も保存しておく（失敗時も対象mintを追える）。
 - on-chain transfer 成功後に succeeded(txSignature) に更新する。
-- その後の off-chain 更新（orders/tokens）が失敗した場合は failed に更新し、txSignature を保持して復旧可能にする。
+- その後の off-chain 更新（orders/tokens/wallet）が失敗した場合は failed に更新し、txSignature を保持して復旧可能にする。
 
 Inventory cleanup（統合後）:
 - inventory 更新は on-chain を巻き戻せないため、原則 best-effort（WARNログ）とする。
@@ -110,6 +111,16 @@ type TokenOwnerUpdater interface {
 	UpdateToAddressByProductID(ctx context.Context, productID string, newToAddress string, now time.Time, txSignature string) error
 }
 
+// WalletItemUpdater updates wallet table items for avatar.
+// ✅ NEW: transfer 完了条件に wallet.items 更新を含める（fail-fast）
+type WalletItemUpdater interface {
+	// AddMintToAvatarWalletItems ensures mintAddress exists in wallet.items (dedup / idempotent).
+	// Implementations:
+	// - Firestore: arrayUnion(mintAddress)
+	// - RDB: normalized wallet_items with UNIQUE(wallet_id, mint_address)
+	AddMintToAvatarWalletItems(ctx context.Context, avatarID string, mintAddress string, now time.Time, txSignature string) error
+}
+
 // TransferRepo persists transfer attempts (pending/succeeded/failed).
 type TransferRepo interface {
 	// NextAttempt returns the next monotonically increasing attempt number for a productId.
@@ -178,6 +189,7 @@ type TransferUsecase struct {
 	orderRepo    OrderRepoForTransfer
 	tokenRepo    TokenResolver
 	tokenUpdate  TokenOwnerUpdater
+	walletUpdate WalletItemUpdater
 	transferRepo TransferRepo
 
 	brandWallet  BrandWalletResolver
@@ -198,6 +210,7 @@ func NewTransferUsecase(
 	orderRepo OrderRepoForTransfer,
 	tokenRepo TokenResolver,
 	tokenUpdate TokenOwnerUpdater,
+	walletUpdate WalletItemUpdater,
 	transferRepo TransferRepo,
 	brandWallet BrandWalletResolver,
 	avatarWallet AvatarWalletResolver,
@@ -209,6 +222,7 @@ func NewTransferUsecase(
 		orderRepo:    orderRepo,
 		tokenRepo:    tokenRepo,
 		tokenUpdate:  tokenUpdate,
+		walletUpdate: walletUpdate,
 		transferRepo: transferRepo,
 		brandWallet:  brandWallet,
 		avatarWallet: avatarWallet,
@@ -274,6 +288,7 @@ type TransferByVerifiedScanResult struct {
 // 7.5) transfer(SUCCEEDED) 更新（txSignature）
 // 8) orders item を transferred=true で確定更新
 // 9) tokens/{productId}.toAddress を avatar wallet に更新（今の owner を正にする）
+// 9.25) ✅ wallet テーブル（avatar wallet）の items に mintAddress を追加（冪等; fail-fast）
 // 9.5) ✅ inventory cleanup（transfered_uc 統合; best-effort）
 // 10) 失敗時は transfer(FAILED) 更新 + unlock（best-effort）
 func (u *TransferUsecase) TransferToAvatarByVerifiedScan(ctx context.Context, in TransferByVerifiedScanInput) (res TransferByVerifiedScanResult, retErr error) {
@@ -282,6 +297,7 @@ func (u *TransferUsecase) TransferToAvatarByVerifiedScan(ctx context.Context, in
 		u.orderRepo == nil ||
 		u.tokenRepo == nil ||
 		u.tokenUpdate == nil ||
+		u.walletUpdate == nil ||
 		u.transferRepo == nil ||
 		u.brandWallet == nil ||
 		u.avatarWallet == nil ||
@@ -571,6 +587,15 @@ func (u *TransferUsecase) TransferToAvatarByVerifiedScan(ctx context.Context, in
 			"transfer_uc: update token owner failed productId=%s to=%s tx=%s: %w",
 			_mask(productID), _mask(toWallet), _mask(tx), err,
 		)
+	}
+
+	// 9.25) ✅ update wallet table items (avatar wallet) - idempotent, fail-fast
+	if err := u.walletUpdate.AddMintToAvatarWalletItems(ctx, avatarID, mint, now, tx); err != nil {
+		msg := fmt.Sprintf("update wallet items failed avatarId=%s mint=%s tx=%s: %v",
+			_mask(avatarID), _mask(mint), _mask(tx), err,
+		)
+		markFailed(transferdom.ErrorTypeUnknown, msg, &tx)
+		return TransferByVerifiedScanResult{}, fmt.Errorf("transfer_uc: %s", msg)
 	}
 
 	// 9.5) ✅ inventory cleanup after transfer (transfered_uc 統合; best-effort)

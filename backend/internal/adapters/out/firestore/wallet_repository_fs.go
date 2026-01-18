@@ -32,6 +32,7 @@ func (r *WalletRepositoryFS) col() *firestore.CollectionRef {
 var (
 	ErrInvalidAvatarID      = errors.New("wallet_repository_fs: invalid avatarId")
 	ErrInvalidLastUpdatedAt = errors.New("wallet_repository_fs: lastUpdatedAt is required")
+	ErrInvalidMintAddress   = errors.New("wallet_repository_fs: invalid mintAddress")
 )
 
 // Firestore 上のスキーマ用 DTO
@@ -184,4 +185,50 @@ func (r *WalletRepositoryFS) Save(ctx context.Context, avatarID string, w wallet
 
 	_, err := r.col().Doc(aid).Set(ctx, d)
 	return err
+}
+
+// AddMintToAvatarWalletItems は avatar wallet の tokens 配列に mintAddress を冪等追加します。
+// - Firestore の arrayUnion を使うことで、重複追加を防ぎ、並行更新にも強くします。
+// - lastUpdatedAt も更新します。
+// - txSignature は本スキーマに保存先が無いため、この実装では永続化しません（呼び出し側で別途監査する想定）。
+//
+// 期待スキーマ:
+// - wallets/{avatarId}.tokens: []string
+// - wallets/{avatarId}.lastUpdatedAt: timestamp
+func (r *WalletRepositoryFS) AddMintToAvatarWalletItems(ctx context.Context, avatarID string, mintAddress string, now time.Time, txSignature string) error {
+	if r == nil || r.Client == nil {
+		return errors.New("wallet_repository_fs: firestore client is nil")
+	}
+
+	aid := strings.TrimSpace(avatarID)
+	if aid == "" {
+		return ErrInvalidAvatarID
+	}
+
+	mint := strings.TrimSpace(mintAddress)
+	if mint == "" {
+		return ErrInvalidMintAddress
+	}
+
+	at := now
+	if at.IsZero() {
+		at = time.Now().UTC()
+	} else {
+		at = at.UTC()
+	}
+
+	// ✅ arrayUnion により冪等（dedup） + 競合耐性（ロストアップデート回避）
+	_, err := r.col().Doc(aid).Update(ctx, []firestore.Update{
+		{Path: "tokens", Value: firestore.ArrayUnion(mint)},
+		{Path: "lastUpdatedAt", Value: at},
+	})
+	if err != nil {
+		// ドキュメントが無い場合は NotFound として扱う（walletAddress が無いと生成できないため）
+		if status.Code(err) == codes.NotFound {
+			return walletdom.ErrNotFound
+		}
+		return err
+	}
+
+	return nil
 }

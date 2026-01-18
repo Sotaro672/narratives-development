@@ -43,19 +43,18 @@ type ScanTransferResult struct {
 
 // TransferHandler handles:
 // POST /mall/me/orders/scan/transfer
+//
+// ✅ Option A: anti-spoof を AvatarContextMiddleware に一本化する。
+// - handler は uid->avatarId resolver を持たない
+// - avatarId は request context からのみ取得する（body の avatarId は使わない）
 type TransferHandler struct {
-	uc       ScanTransferUsecase
-	resolver middleware.AvatarIDResolver // optional anti-spoof: uid -> avatarId
+	uc ScanTransferUsecase
 }
 
-// NewTransferHandler creates handler without uid->avatarId validation.
+// NewTransferHandler creates handler.
+// NOTE: This handler assumes AvatarContextMiddleware is enabled for this route.
 func NewTransferHandler(uc ScanTransferUsecase) http.Handler {
-	return &TransferHandler{uc: uc, resolver: nil}
-}
-
-// NewTransferHandlerWithResolver creates handler with uid->avatarId validation.
-func NewTransferHandlerWithResolver(uc ScanTransferUsecase, r middleware.AvatarIDResolver) http.Handler {
-	return &TransferHandler{uc: uc, resolver: r}
+	return &TransferHandler{uc: uc}
 }
 
 func (h *TransferHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
@@ -94,8 +93,8 @@ func (h *TransferHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Body: productId only (avatarId is taken from context)
 	var body struct {
-		AvatarID  string `json:"avatarId"`
 		ProductID string `json:"productId"`
 	}
 	if err := readJSON(r, &body); err != nil {
@@ -103,60 +102,23 @@ func (h *TransferHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	bodyAvatarID := strings.TrimSpace(body.AvatarID)
 	productID := strings.TrimSpace(body.ProductID)
 	if productID == "" {
 		badRequest(w, "productId is required")
 		return
 	}
 
-	// Prefer avatarId from context if AvatarContextMiddleware is enabled.
-	ctxAvatarID, _ := middleware.CurrentAvatarID(r)
-
-	avatarID := ""
-	switch {
-	case strings.TrimSpace(ctxAvatarID) != "" && bodyAvatarID != "":
-		// both present -> must match
-		if strings.TrimSpace(ctxAvatarID) != bodyAvatarID {
-			writeJSON(w, http.StatusForbidden, map[string]any{
-				"error":         "avatarId mismatch (context vs body)",
-				"contextAvatar": strings.TrimSpace(ctxAvatarID),
-				"bodyAvatar":    bodyAvatarID,
-			})
-			return
-		}
-		avatarID = strings.TrimSpace(ctxAvatarID)
-
-	case strings.TrimSpace(ctxAvatarID) != "":
-		avatarID = strings.TrimSpace(ctxAvatarID)
-
-	default:
-		avatarID = bodyAvatarID
-	}
-
-	if avatarID == "" {
-		badRequest(w, "avatarId is required")
+	// ✅ avatarId is resolved and stored by AvatarContextMiddleware (required)
+	avatarID, ok := middleware.CurrentAvatarID(r)
+	if !ok || strings.TrimSpace(avatarID) == "" {
+		// This should not happen if requireAvatarContext is wired.
+		// Treat as service misconfiguration to make the bug obvious.
+		writeJSON(w, http.StatusServiceUnavailable, map[string]any{
+			"error": "avatar_context_missing",
+		})
 		return
 	}
-
-	// Optional anti-spoof: validate uid -> avatarId
-	if h.resolver != nil {
-		resolved, err := h.resolver.ResolveAvatarIDByUID(r.Context(), uid)
-		if err != nil {
-			writeJSON(w, http.StatusNotFound, map[string]any{
-				"error": "avatar_not_found_for_uid",
-			})
-			return
-		}
-		resolved = strings.TrimSpace(resolved)
-		if resolved == "" || resolved != avatarID {
-			writeJSON(w, http.StatusForbidden, map[string]any{
-				"error":    "avatarId does not belong to current uid",
-				"avatarId": avatarID,
-			})
-			return
-		}
-	}
+	avatarID = strings.TrimSpace(avatarID)
 
 	log.Printf(
 		`[mall.order.scan.transfer] incoming uid=%q avatarId=%q productId=%q`,

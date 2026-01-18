@@ -17,6 +17,10 @@ import '../../infrastructure/repository.dart';
 /// - ログイン中は URL 等で渡ってきた avatarId を信用せず、
 ///   /mall/me/avatar で自分の avatarId を解決してから verify/transfer を行う。
 /// - verify.matched == true の場合のみ transfer を自動実行（多重実行防止あり）
+///
+/// NOTE:
+/// - transferScanPurchasedByAvatarId は deprecated（avatarId は server 側で解決する前提）
+/// - 本ファイルでは transfer は transferScanPurchased(productId: ...) を使用する
 class PreviewPage extends StatefulWidget {
   const PreviewPage({
     super.key,
@@ -295,8 +299,9 @@ class _PreviewPageState extends State<PreviewPage> {
     try {
       final token = await _idTokenOrEmpty(user);
 
-      final r = await _scanTransferRepo.transferScanPurchasedByAvatarId(
-        avatarId: meAvatarId,
+      // ✅ deprecated を使わない：avatarId は server 側で解決される前提
+      // POST /mall/me/orders/scan/transfer には { productId } だけを送る想定の API
+      final r = await _scanTransferRepo.transferScanPurchased(
         productId: productId,
         headers: {'Authorization': 'Bearer $token'},
       );
@@ -385,6 +390,12 @@ class _PreviewPageState extends State<PreviewPage> {
     final label = ok ? 'Transfer 実行済み' : 'Transfer 失敗（不一致）';
 
     final lines = <String>[];
+
+    // 必要ならここで詳細を追加してください（例）
+    // if (r.txSignature.isNotEmpty) lines.add('tx=${r.txSignature}');
+    // if (r.fromWallet.isNotEmpty) lines.add('from=${r.fromWallet}');
+    // if (r.toWallet.isNotEmpty) lines.add('to=${r.toWallet}');
+    // if (r.mintAddress.isNotEmpty) lines.add('mint=${r.mintAddress}');
 
     final detail = lines.join('\n');
 
@@ -782,7 +793,9 @@ class MeAvatarRepositoryHttp {
     final uri = Uri.parse('$b/mall/me/avatar');
 
     final mergedHeaders = <String, String>{...jsonHeaders()};
-    if (headers != null) mergedHeaders.addAll(headers);
+    if (headers != null) {
+      mergedHeaders.addAll(headers);
+    }
 
     final auth = (mergedHeaders['Authorization'] ?? '').trim();
     if (auth.isEmpty) {

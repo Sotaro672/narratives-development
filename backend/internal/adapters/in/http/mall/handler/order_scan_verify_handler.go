@@ -11,7 +11,7 @@ import (
 
 	mallquery "narratives/internal/application/query/mall"
 
-	// uid / avatarId を取る
+	// uid / avatarId を取る（avatarId は AvatarContextMiddleware が詰める前提）
 	"narratives/internal/adapters/in/http/middleware"
 )
 
@@ -28,21 +28,18 @@ type ScanVerifyQuery interface {
 
 // OrderScanVerifyHandler handles:
 // POST /mall/me/orders/scan/verify
+//
+// ✅ Option A: anti-spoof を AvatarContextMiddleware に一本化する。
+// - handler は uid->avatarId resolver を持たない
+// - avatarId は request context からのみ取得する（body の avatarId は使わない）
 type OrderScanVerifyHandler struct {
-	q        ScanVerifyQuery
-	resolver middleware.AvatarIDResolver // optional: uid -> avatarId (anti-spoof)
+	q ScanVerifyQuery
 }
 
-// NewOrderScanVerifyHandler creates handler without uid->avatarId validation.
-// (Use WithResolver version if you want to prevent spoofing strictly.)
+// NewOrderScanVerifyHandler creates handler.
+// NOTE: This handler assumes AvatarContextMiddleware is enabled for this route.
 func NewOrderScanVerifyHandler(q ScanVerifyQuery) http.Handler {
-	return &OrderScanVerifyHandler{q: q, resolver: nil}
-}
-
-// NewOrderScanVerifyHandlerWithResolver creates handler with uid->avatarId validation.
-// Pass cont.OrderQ if it implements middleware.AvatarIDResolver.
-func NewOrderScanVerifyHandlerWithResolver(q ScanVerifyQuery, r middleware.AvatarIDResolver) http.Handler {
-	return &OrderScanVerifyHandler{q: q, resolver: r}
+	return &OrderScanVerifyHandler{q: q}
 }
 
 func (h *OrderScanVerifyHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
@@ -85,8 +82,8 @@ func (h *OrderScanVerifyHandler) ServeHTTP(w http.ResponseWriter, r *http.Reques
 		return
 	}
 
+	// Body: productId only (avatarId is taken from context)
 	var body struct {
-		AvatarID  string `json:"avatarId"`
 		ProductID string `json:"productId"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
@@ -96,7 +93,6 @@ func (h *OrderScanVerifyHandler) ServeHTTP(w http.ResponseWriter, r *http.Reques
 		return
 	}
 
-	bodyAvatarID := strings.TrimSpace(body.AvatarID)
 	productID := strings.TrimSpace(body.ProductID)
 	if productID == "" {
 		writeJSON(w, http.StatusBadRequest, map[string]any{
@@ -105,56 +101,17 @@ func (h *OrderScanVerifyHandler) ServeHTTP(w http.ResponseWriter, r *http.Reques
 		return
 	}
 
-	// Prefer avatarId from context if AvatarContextMiddleware is enabled.
-	ctxAvatarID, _ := middleware.CurrentAvatarID(r)
-
-	avatarID := ""
-	switch {
-	case strings.TrimSpace(ctxAvatarID) != "" && bodyAvatarID != "":
-		// both present -> must match
-		if strings.TrimSpace(ctxAvatarID) != bodyAvatarID {
-			writeJSON(w, http.StatusForbidden, map[string]any{
-				"error":         "avatarId mismatch (context vs body)",
-				"contextAvatar": strings.TrimSpace(ctxAvatarID),
-				"bodyAvatar":    bodyAvatarID,
-			})
-			return
-		}
-		avatarID = strings.TrimSpace(ctxAvatarID)
-
-	case strings.TrimSpace(ctxAvatarID) != "":
-		avatarID = strings.TrimSpace(ctxAvatarID)
-
-	default:
-		avatarID = bodyAvatarID
-	}
-
-	if avatarID == "" {
-		writeJSON(w, http.StatusBadRequest, map[string]any{
-			"error": "avatarId is required",
+	// ✅ avatarId is resolved and stored by AvatarContextMiddleware (required)
+	avatarID, ok := middleware.CurrentAvatarID(r)
+	if !ok || strings.TrimSpace(avatarID) == "" {
+		// This should not happen if requireAvatarContext is wired.
+		// Treat as service misconfiguration to make the bug obvious.
+		writeJSON(w, http.StatusServiceUnavailable, map[string]any{
+			"error": "avatar_context_missing",
 		})
 		return
 	}
-
-	// Optional anti-spoof: validate uid -> avatarId
-	if h.resolver != nil {
-		resolved, err := h.resolver.ResolveAvatarIDByUID(r.Context(), uid)
-		if err != nil {
-			// uid に avatar が無い/解決不能
-			writeJSON(w, http.StatusNotFound, map[string]any{
-				"error": "avatar_not_found_for_uid",
-			})
-			return
-		}
-		resolved = strings.TrimSpace(resolved)
-		if resolved == "" || resolved != avatarID {
-			writeJSON(w, http.StatusForbidden, map[string]any{
-				"error":    "avatarId does not belong to current uid",
-				"avatarId": avatarID,
-			})
-			return
-		}
-	}
+	avatarID = strings.TrimSpace(avatarID)
 
 	log.Printf(
 		`[mall.order.scan.verify] incoming uid=%q avatarId=%q productId=%q`,
@@ -163,7 +120,6 @@ func (h *OrderScanVerifyHandler) ServeHTTP(w http.ResponseWriter, r *http.Reques
 		productID,
 	)
 
-	// ✅ A案: value 戻り値
 	out, err := h.q.VerifyScanPurchasedByAvatarID(r.Context(), avatarID, productID)
 	if err != nil {
 		if isNotFound(err) {

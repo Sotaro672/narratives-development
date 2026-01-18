@@ -397,6 +397,10 @@ func NewContainer(ctx context.Context, infra *shared.Infra) (*Container, error) 
 	tokenOperationUC := uc.NewTokenOperationUsecase(tokenOperationRepo)
 	trackingUC := uc.NewTrackingUsecase(trackingRepo)
 	userUC := uc.NewUserUsecase(userRepo)
+
+	// ✅ WalletUsecase: 現行のコンストラクタは (walletRepo) のみ
+	// Console 側では on-chain 同期が必要になったタイミングで、
+	// di 側で uc.NewWalletUsecase(walletRepo).WithOnchainReader(...) を追加する。
 	walletUC := uc.NewWalletUsecase(walletRepo)
 
 	cartUC := uc.NewCartUsecase(cartRepo)

@@ -3,8 +3,6 @@ package solana
 import (
 	"context"
 	"fmt"
-	"time"
-
 	"strings"
 )
 
@@ -27,7 +25,7 @@ func NewOnchainWalletReaderDevnet() *OnchainWalletReaderImpl {
 // a deduplicated list of mint addresses.
 //
 // Behavior notes:
-//   - Uses getTokenAccountsByOwner with programId=Tokenkeg... and encoding=jsonParsed. :contentReference[oaicite:6]{index=6}
+//   - Uses getTokenAccountsByOwner with programId=Tokenkeg... and encoding=jsonParsed.
 //   - Filters out zero-balance token accounts (Amount == "0") to match "walletが持つtoken" の直感に寄せる
 //     (必要ならこの条件は外せます)
 func (r *OnchainWalletReaderImpl) ListOwnedTokenMints(ctx context.Context, walletAddress string) ([]string, error) {
@@ -68,6 +66,5 @@ func (r *OnchainWalletReaderImpl) ListOwnedTokenMints(ctx context.Context, walle
 		out = append(out, mint)
 	}
 
-	_ = time.Now() // (keep import if you later add logging/metrics; otherwise remove)
 	return out, nil
 }
