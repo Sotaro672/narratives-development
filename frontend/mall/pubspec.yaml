@@ -17,6 +17,9 @@ dependencies:
 
   cupertino_icons: ^1.0.8
 
+  # ✅ Hooks (for HookWidget / useMemoized / useFuture)
+  flutter_hooks: ^0.20.5
+
   # Routing (Navigator 2.0 / URL-based)
   # NOTE: go_router 17.0.1 requires Dart >= 3.9, so we pin 17.0.0 for Dart 3.8.1
   go_router: 17.0.0

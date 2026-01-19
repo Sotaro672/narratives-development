@@ -1,301 +1,235 @@
-//frontend\mall\lib\features\avatar\presentation\page\avatar.dart
+// frontend\mall\lib\features\avatar\presentation\page\avatar.dart
 import 'dart:convert';
 
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_hooks/flutter_hooks.dart';
 import 'package:go_router/go_router.dart';
-import 'package:http/http.dart' as http;
-
+import '../model/avatar_vm.dart';
 import '../../../../app/routing/routes.dart';
-import '../../../wallet/infrastructure/repository_http.dart';
-import '../../../wallet/infrastructure/wallet_dto.dart';
-import '../../../../app/config/api_base.dart';
+import '../hook/use_avatar.dart';
 
-class _ProfileCounts {
-  const _ProfileCounts({
-    required this.postCount,
-    required this.followerCount,
-    required this.followingCount,
-    required this.tokenCount,
-  });
-
-  final int postCount;
-  final int followerCount;
-  final int followingCount;
-  final int tokenCount;
-}
-
-enum _ProfileTab { posts, tokens }
-
-class _MeAvatar {
-  const _MeAvatar({required this.avatarId, required this.walletAddress});
-
-  final String avatarId;
-  final String walletAddress;
-}
-
-class AvatarPage extends StatefulWidget {
+class AvatarPage extends HookWidget {
   const AvatarPage({super.key, this.from});
 
-  /// ✅ router.dart から渡される「遷移元」
+  /// router.dart から渡される「遷移元」
   final String? from;
 
   @override
-  State<AvatarPage> createState() => _AvatarPageState();
+  Widget build(BuildContext context) {
+    final vm = useAvatarVm(context, from: from);
+
+    // -------------------------
+    // Signed-out view
+    // -------------------------
+    if (vm.user == null) {
+      return Center(
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 560),
+          child: Padding(
+            padding: const EdgeInsets.all(16),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Icon(Icons.lock_outline, size: 40),
+                const SizedBox(height: 12),
+                Text(
+                  'Sign in required',
+                  style: Theme.of(context).textTheme.titleLarge,
+                  textAlign: TextAlign.center,
+                ),
+                const SizedBox(height: 8),
+                const Text(
+                  'プロフィールを表示するにはサインインが必要です。',
+                  textAlign: TextAlign.center,
+                ),
+                const SizedBox(height: 16),
+                ElevatedButton(
+                  onPressed: () => context.go(vm.loginUri.toString()),
+                  child: const Text('Sign in'),
+                ),
+              ],
+            ),
+          ),
+        ),
+      );
+    }
+
+    // -------------------------
+    // MeAvatar loading / error -> missing view
+    // -------------------------
+    if (vm.meAvatarSnap.connectionState == ConnectionState.waiting) {
+      return const Center(child: CircularProgressIndicator());
+    }
+
+    final me = vm.meAvatarSnap.data;
+    if (me == null || me.avatarId.trim().isEmpty) {
+      return _MissingMeAvatarView(
+        backTo: vm.backTo,
+        onGoEdit: () {
+          // router.dart と同じルールで from を encode
+          final qp = <String, String>{
+            AppQueryKey.from: base64UrlEncode(utf8.encode(vm.backTo.trim())),
+          };
+          final uri = Uri(path: AppRoutePath.avatarEdit, queryParameters: qp);
+          context.go(uri.toString());
+        },
+      );
+    }
+
+    // -------------------------
+    // Normal profile view
+    // -------------------------
+    final user = vm.user!;
+    final photoUrl = vm.photoUrl;
+    final bio = vm.bio;
+
+    return Center(
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 560),
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+          child: _AvatarProfileBody(
+            user: user,
+            photoUrl: photoUrl,
+            bio: bio,
+            counts: vm.counts,
+            tab: vm.tab,
+            onTabChange: vm.setTab,
+            walletSnap: vm.walletSnap,
+            tokens: vm.tokens,
+            onEdit: vm.goToAvatarEdit,
+          ),
+        ),
+      ),
+    );
+  }
 }
 
-class _AvatarPageState extends State<AvatarPage> {
-  late final WalletRepositoryHttp _walletRepo;
+// ============================================================
+// Style-only widgets
+// ============================================================
 
-  Future<_MeAvatar?>? _meAvatarFuture;
-  Future<WalletDTO?>? _walletFuture;
+class _AvatarProfileBody extends StatelessWidget {
+  const _AvatarProfileBody({
+    required this.user,
+    required this.photoUrl,
+    required this.bio,
+    required this.counts,
+    required this.tab,
+    required this.onTabChange,
+    required this.walletSnap,
+    required this.tokens,
+    required this.onEdit,
+  });
 
-  // ✅ URL 正規化・自動戻りの多重実行防止
-  bool _normalizedUrlOnce = false;
-  bool _returnedToFromOnce = false;
+  final User user;
+  final String photoUrl;
+  final String bio;
 
-  _ProfileTab _tab = _ProfileTab.tokens; // ✅ tokens をデフォルト表示
+  final ProfileCounts counts;
+  final ProfileTab tab;
+  final void Function(ProfileTab next) onTabChange;
 
-  String s(String? v) => (v ?? '').trim();
+  final AsyncSnapshot walletSnap;
+  final List<String> tokens;
 
-  /// ✅ `from` は URL で壊れやすいので base64url で安全に運ぶ
-  String _encodeFrom(String raw) {
-    final t = raw.trim();
-    if (t.isEmpty) return '';
-    return base64UrlEncode(utf8.encode(t));
-  }
+  final VoidCallback onEdit;
 
   @override
-  void initState() {
-    super.initState();
-    _walletRepo = WalletRepositoryHttp();
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            CircleAvatar(
+              radius: 44,
+              backgroundColor: Theme.of(
+                context,
+              ).colorScheme.surfaceContainerHighest,
+              backgroundImage: photoUrl.isNotEmpty
+                  ? NetworkImage(photoUrl)
+                  : null,
+              child: photoUrl.isEmpty
+                  ? Icon(
+                      Icons.person,
+                      size: 44,
+                      color: Theme.of(context).colorScheme.onSurfaceVariant,
+                    )
+                  : null,
+            ),
+            const SizedBox(width: 16),
+            Expanded(
+              child: Column(
+                children: [
+                  Row(
+                    children: [
+                      _StatItem(label: '投稿', value: counts.postCount),
+                      _StatItem(label: 'トークン', value: counts.tokenCount),
+                    ],
+                  ),
+                  const SizedBox(height: 8),
+                  Row(
+                    children: [
+                      _StatItem(label: 'フォロー中', value: counts.followingCount),
+                      _StatItem(label: 'フォロワー', value: counts.followerCount),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 10),
+        Row(
+          crossAxisAlignment: CrossAxisAlignment.center,
+          children: [
+            const SizedBox(width: 88 + 16),
+            Expanded(child: _ProfileBioBox(bio: bio)),
+            const SizedBox(width: 10),
+            IconButton(
+              tooltip: 'Edit Avatar',
+              onPressed: onEdit,
+              icon: const Icon(Icons.edit_outlined),
+            ),
+          ],
+        ),
+        const SizedBox(height: 14),
+        _TabBar(tab: tab, onChange: onTabChange),
+        const SizedBox(height: 12),
+        if (tab == ProfileTab.tokens) ...[
+          if (walletSnap.connectionState == ConnectionState.waiting)
+            const Padding(
+              padding: EdgeInsets.symmetric(vertical: 8),
+              child: LinearProgressIndicator(),
+            )
+          else if (walletSnap.hasError)
+            Text(
+              'トークンの取得に失敗しました: ${walletSnap.error}',
+              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                color: Theme.of(context).colorScheme.error,
+              ),
+            )
+          else
+            _TokenChips(tokens: tokens),
+        ] else ...[
+          const _PostsPlaceholder(),
+        ],
+      ],
+    );
   }
+}
+
+class _StatItem extends StatelessWidget {
+  const _StatItem({required this.label, required this.value});
+
+  final String label;
+  final int value;
 
   @override
-  void dispose() {
-    _walletRepo.dispose();
-    super.dispose();
-  }
-
-  String _profileBioFor(User u) {
-    return '（プロフィール未設定）';
-  }
-
-  String _currentUri(BuildContext context) {
-    return GoRouterState.of(context).uri.toString();
-  }
-
-  String _effectiveFrom(BuildContext context) {
-    final v = s(widget.from);
-    if (v.isNotEmpty) return v;
-    return _currentUri(context);
-  }
-
-  /// ✅ avatarId は URL の query (?avatarId=...) を正とする（あれば）
-  String _resolveAvatarIdFromUrl(BuildContext context) {
-    final uri = GoRouterState.of(context).uri;
-    return s(uri.queryParameters[AppQueryKey.avatarId]);
-  }
-
-  String _normalizeBase(String base) {
-    var b = base.trim();
-    while (b.endsWith('/')) {
-      b = b.substring(0, b.length - 1);
-    }
-    return b;
-  }
-
-  Uri _uri(String path, [Map<String, String>? query]) {
-    final base = _normalizeBase(resolveMallApiBase());
-    final p = path.startsWith('/') ? path : '/$path';
-    return Uri.parse('$base$p').replace(queryParameters: query);
-  }
-
-  Future<String?> _getIdToken({bool forceRefresh = false}) async {
-    final u = FirebaseAuth.instance.currentUser;
-    if (u == null) return null;
-    final t = await u.getIdToken(forceRefresh);
-    final token = (t ?? '').toString().trim();
-    return token.isEmpty ? null : token;
-  }
-
-  Map<String, dynamic> _decodeObject(String body) {
-    final b = body.trim();
-    if (b.isEmpty) throw const FormatException('Empty response body');
-    final decoded = jsonDecode(b);
-    if (decoded is Map<String, dynamic>) return decoded;
-    if (decoded is Map) return Map<String, dynamic>.from(decoded);
-    throw const FormatException('Invalid JSON shape (expected object)');
-  }
-
-  Map<String, dynamic> _unwrapData(Map<String, dynamic> decoded) {
-    final data = decoded['data'];
-    if (data is Map<String, dynamic>) return data;
-    if (data is Map) return Map<String, dynamic>.from(data);
-    return decoded;
-  }
-
-  String _pickString(Map<String, dynamic> j, List<String> keys) {
-    for (final k in keys) {
-      if (!j.containsKey(k)) continue;
-      final v = (j[k] ?? '').toString().trim();
-      if (v.isNotEmpty) return v;
-    }
-    return '';
-  }
-
-  Future<_MeAvatar?> _fetchMeAvatar() async {
-    final uri = _uri('/mall/me/avatar');
-
-    final token1 = await _getIdToken(forceRefresh: false);
-    final headers1 = <String, String>{'Accept': 'application/json'};
-    if (token1 != null) headers1['Authorization'] = 'Bearer $token1';
-
-    http.Response res;
-    try {
-      res = await http.get(uri, headers: headers1);
-    } catch (_) {
-      return null;
-    }
-
-    if (res.statusCode == 401) {
-      final token2 = await _getIdToken(forceRefresh: true);
-      final headers2 = <String, String>{'Accept': 'application/json'};
-      if (token2 != null) headers2['Authorization'] = 'Bearer $token2';
-
-      try {
-        res = await http.get(uri, headers: headers2);
-      } catch (_) {
-        return null;
-      }
-    }
-
-    if (res.statusCode < 200 || res.statusCode >= 300) return null;
-
-    final decoded = _unwrapData(_decodeObject(res.body));
-
-    Map<String, dynamic> root = decoded;
-    final avatarObj = decoded['avatar'];
-    if (avatarObj is Map) root = Map<String, dynamic>.from(avatarObj);
-    final meObj = decoded['me'];
-    if (meObj is Map) root = Map<String, dynamic>.from(meObj);
-
-    final avatarId = _pickString(root, const [
-      'avatarId',
-      'AvatarID',
-      'AvatarId',
-      'id',
-      'ID',
-    ]);
-    final walletAddress = _pickString(root, const [
-      'walletAddress',
-      'WalletAddress',
-      'address',
-      'Address',
-    ]);
-
-    if (avatarId.trim().isEmpty) return null;
-
-    // ✅ あなたの現状方針に合わせて walletAddress も必須
-    if (walletAddress.trim().isEmpty) return null;
-
-    return _MeAvatar(
-      avatarId: avatarId.trim(),
-      walletAddress: walletAddress.trim(),
-    );
-  }
-
-  void _kickoffLoads({required String urlAvatarId}) {
-    _meAvatarFuture ??= _fetchMeAvatar();
-    _walletFuture ??= _loadWallet(urlAvatarId: urlAvatarId);
-  }
-
-  Future<WalletDTO?> _loadWallet({required String urlAvatarId}) async {
-    final me = await (_meAvatarFuture ??= _fetchMeAvatar());
-    if (me == null) return null;
-
-    final urlAid = urlAvatarId.trim();
-    final effectiveAid = urlAid.isNotEmpty ? urlAid : me.avatarId;
-
-    if (effectiveAid.trim().isEmpty) return null;
-
-    // ✅ ログと同じ挙動：sync → fetch で最新を表示
-    return _walletRepo.syncAndFetchMeWallet();
-  }
-
-  void _ensureAvatarIdInUrl(BuildContext context, String avatarId) {
-    if (_normalizedUrlOnce) return;
-    if (avatarId.isEmpty) return;
-
-    final state = GoRouterState.of(context);
-    final uri = state.uri;
-
-    final current = s(uri.queryParameters[AppQueryKey.avatarId]);
-    if (current == avatarId) {
-      _normalizedUrlOnce = true;
-      return;
-    }
-
-    _normalizedUrlOnce = true;
-
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!mounted) return;
-
-      final fixed = <String, String>{...uri.queryParameters};
-      fixed[AppQueryKey.avatarId] = avatarId;
-
-      final next = uri.replace(queryParameters: fixed);
-      context.go(next.toString());
-    });
-  }
-
-  void _maybeReturnToFrom(BuildContext context, String avatarId) {
-    if (_returnedToFromOnce) return;
-    if (avatarId.isEmpty) return;
-
-    final intent = s(
-      GoRouterState.of(context).uri.queryParameters[AppQueryKey.intent],
-    );
-    if (intent != 'requireAvatarId') return;
-
-    final rawFrom = s(widget.from);
-    if (rawFrom.isEmpty) return;
-
-    final fromUri = Uri.tryParse(rawFrom);
-    if (fromUri == null) return;
-
-    if (fromUri.path != '/cart') return;
-
-    final qp = <String, String>{...fromUri.queryParameters};
-    qp[AppQueryKey.avatarId] = s(qp[AppQueryKey.avatarId]).isNotEmpty
-        ? qp[AppQueryKey.avatarId]!
-        : avatarId;
-
-    final fixedFrom = fromUri.replace(queryParameters: qp).toString();
-
-    _returnedToFromOnce = true;
-
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!mounted) return;
-      context.go(fixedFrom);
-    });
-  }
-
-  void _goToAvatarEdit(BuildContext context) {
-    final current = GoRouterState.of(context).uri;
-
-    final qp = <String, String>{
-      AppQueryKey.from: _encodeFrom(current.toString()),
-    };
-
-    final aid = s(current.queryParameters[AppQueryKey.avatarId]);
-    if (aid.isNotEmpty) qp[AppQueryKey.avatarId] = aid;
-
-    final uri = Uri(path: AppRoutePath.avatarEdit, queryParameters: qp);
-    context.go(uri.toString());
-  }
-
-  Widget _statItem(BuildContext context, String label, int value) {
+  Widget build(BuildContext context) {
     return Expanded(
       child: Column(
         mainAxisSize: MainAxisSize.min,
@@ -317,8 +251,15 @@ class _AvatarPageState extends State<AvatarPage> {
       ),
     );
   }
+}
 
-  Widget _profileBioBox(BuildContext context, String bio) {
+class _ProfileBioBox extends StatelessWidget {
+  const _ProfileBioBox({required this.bio});
+
+  final String bio;
+
+  @override
+  Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
     return Container(
       width: double.infinity,
@@ -335,22 +276,30 @@ class _AvatarPageState extends State<AvatarPage> {
       ),
     );
   }
+}
 
-  Widget _tabBar(BuildContext context) {
+class _TabBar extends StatelessWidget {
+  const _TabBar({required this.tab, required this.onChange});
+
+  final ProfileTab tab;
+  final void Function(ProfileTab next) onChange;
+
+  @override
+  Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
 
     Widget tabButton({
-      required _ProfileTab tab,
+      required ProfileTab target,
       required IconData icon,
       required String semanticsLabel,
     }) {
-      final selected = _tab == tab;
+      final selected = tab == target;
 
       return Expanded(
         child: InkWell(
           onTap: () {
-            if (_tab == tab) return;
-            setState(() => _tab = tab);
+            if (tab == target) return;
+            onChange(target);
           },
           child: Padding(
             padding: const EdgeInsets.symmetric(vertical: 10),
@@ -375,7 +324,7 @@ class _AvatarPageState extends State<AvatarPage> {
       child: Row(
         children: [
           tabButton(
-            tab: _ProfileTab.posts,
+            target: ProfileTab.posts,
             icon: Icons.grid_on,
             semanticsLabel: 'Posts',
           ),
@@ -385,7 +334,7 @@ class _AvatarPageState extends State<AvatarPage> {
             color: cs.outlineVariant.withValues(alpha: 0.6),
           ),
           tabButton(
-            tab: _ProfileTab.tokens,
+            target: ProfileTab.tokens,
             icon: Icons.local_offer_outlined,
             semanticsLabel: 'Tokens',
           ),
@@ -393,8 +342,15 @@ class _AvatarPageState extends State<AvatarPage> {
       ),
     );
   }
+}
 
-  Widget _tokenChips(BuildContext context, List<String> tokens) {
+class _TokenChips extends StatelessWidget {
+  const _TokenChips({required this.tokens});
+
+  final List<String> tokens;
+
+  @override
+  Widget build(BuildContext context) {
     if (tokens.isEmpty) {
       return Text(
         'トークンはまだありません。',
@@ -423,8 +379,13 @@ class _AvatarPageState extends State<AvatarPage> {
           .toList(),
     );
   }
+}
 
-  Widget _postsPlaceholder(BuildContext context) {
+class _PostsPlaceholder extends StatelessWidget {
+  const _PostsPlaceholder();
+
+  @override
+  Widget build(BuildContext context) {
     return Container(
       height: 240,
       alignment: Alignment.center,
@@ -440,9 +401,16 @@ class _AvatarPageState extends State<AvatarPage> {
       ),
     );
   }
+}
 
-  Widget _missingMeAvatarView(BuildContext context) {
-    final backTo = _effectiveFrom(context);
+class _MissingMeAvatarView extends StatelessWidget {
+  const _MissingMeAvatarView({required this.backTo, required this.onGoEdit});
+
+  final String backTo;
+  final VoidCallback onGoEdit;
+
+  @override
+  Widget build(BuildContext context) {
     return Center(
       child: ConstrainedBox(
         constraints: const BoxConstraints(maxWidth: 560),
@@ -465,16 +433,7 @@ class _AvatarPageState extends State<AvatarPage> {
               ),
               const SizedBox(height: 16),
               ElevatedButton.icon(
-                onPressed: () {
-                  final qp = <String, String>{
-                    AppQueryKey.from: _encodeFrom(backTo),
-                  };
-                  final uri = Uri(
-                    path: AppRoutePath.avatarEdit,
-                    queryParameters: qp,
-                  );
-                  context.go(uri.toString());
-                },
+                onPressed: onGoEdit,
                 icon: const Icon(Icons.edit_outlined),
                 label: const Text('アバター編集へ'),
               ),
@@ -482,214 +441,6 @@ class _AvatarPageState extends State<AvatarPage> {
           ),
         ),
       ),
-    );
-  }
-
-  // ============================================================
-  // ✅ 差分検知 →（必要なら backend 同期）→ wallet 再取得
-  // ============================================================
-  @override
-  Widget build(BuildContext context) {
-    return StreamBuilder<User?>(
-      stream: FirebaseAuth.instance.userChanges(),
-      builder: (context, snap) {
-        final user = FirebaseAuth.instance.currentUser ?? snap.data;
-
-        if (user == null) {
-          final backTo = _effectiveFrom(context);
-          final loginUri = Uri(
-            path: '/login',
-            queryParameters: {AppQueryKey.from: backTo},
-          );
-          return Center(
-            child: ConstrainedBox(
-              constraints: const BoxConstraints(maxWidth: 560),
-              child: Padding(
-                padding: const EdgeInsets.all(16),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    const Icon(Icons.lock_outline, size: 40),
-                    const SizedBox(height: 12),
-                    Text(
-                      'Sign in required',
-                      style: Theme.of(context).textTheme.titleLarge,
-                      textAlign: TextAlign.center,
-                    ),
-                    const SizedBox(height: 8),
-                    const Text(
-                      'プロフィールを表示するにはサインインが必要です。',
-                      textAlign: TextAlign.center,
-                    ),
-                    const SizedBox(height: 16),
-                    ElevatedButton(
-                      onPressed: () => context.go(loginUri.toString()),
-                      child: const Text('Sign in'),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-          );
-        }
-
-        final urlAvatarId = _resolveAvatarIdFromUrl(context);
-        _kickoffLoads(urlAvatarId: urlAvatarId);
-
-        final photoUrl = s(user.photoURL);
-        final bio = _profileBioFor(user);
-
-        return FutureBuilder<_MeAvatar?>(
-          future: _meAvatarFuture,
-          builder: (context, msnap) {
-            if (msnap.connectionState == ConnectionState.waiting) {
-              return const Center(child: CircularProgressIndicator());
-            }
-
-            final me = msnap.data;
-            if (me == null || me.avatarId.trim().isEmpty) {
-              return _missingMeAvatarView(context);
-            }
-
-            final effectiveAid = urlAvatarId.trim().isNotEmpty
-                ? urlAvatarId.trim()
-                : me.avatarId;
-
-            _ensureAvatarIdInUrl(context, effectiveAid);
-            _maybeReturnToFrom(context, effectiveAid);
-
-            return Center(
-              child: ConstrainedBox(
-                constraints: const BoxConstraints(maxWidth: 560),
-                child: SingleChildScrollView(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 16,
-                    vertical: 16,
-                  ),
-                  child: FutureBuilder<WalletDTO?>(
-                    future: _walletFuture,
-                    builder: (context, wsnap) {
-                      final wallet = wsnap.data;
-                      final tokens = wallet?.tokens ?? const <String>[];
-
-                      final counts = _ProfileCounts(
-                        postCount: 0,
-                        followerCount: 0,
-                        followingCount: 0,
-                        tokenCount: tokens.length,
-                      );
-
-                      return Column(
-                        crossAxisAlignment: CrossAxisAlignment.stretch,
-                        children: [
-                          Row(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              CircleAvatar(
-                                radius: 44,
-                                backgroundColor: Theme.of(
-                                  context,
-                                ).colorScheme.surfaceContainerHighest,
-                                backgroundImage: photoUrl.isNotEmpty
-                                    ? NetworkImage(photoUrl)
-                                    : null,
-                                child: photoUrl.isEmpty
-                                    ? Icon(
-                                        Icons.person,
-                                        size: 44,
-                                        color: Theme.of(
-                                          context,
-                                        ).colorScheme.onSurfaceVariant,
-                                      )
-                                    : null,
-                              ),
-                              const SizedBox(width: 16),
-                              Expanded(
-                                child: Column(
-                                  children: [
-                                    Row(
-                                      children: [
-                                        _statItem(
-                                          context,
-                                          '投稿',
-                                          counts.postCount,
-                                        ),
-                                        _statItem(
-                                          context,
-                                          'トークン',
-                                          counts.tokenCount,
-                                        ),
-                                      ],
-                                    ),
-                                    const SizedBox(height: 8),
-                                    Row(
-                                      children: [
-                                        _statItem(
-                                          context,
-                                          'フォロー中',
-                                          counts.followingCount,
-                                        ),
-                                        _statItem(
-                                          context,
-                                          'フォロワー',
-                                          counts.followerCount,
-                                        ),
-                                      ],
-                                    ),
-                                  ],
-                                ),
-                              ),
-                            ],
-                          ),
-                          const SizedBox(height: 10),
-                          Row(
-                            crossAxisAlignment: CrossAxisAlignment.center,
-                            children: [
-                              const SizedBox(width: 88 + 16),
-                              Expanded(child: _profileBioBox(context, bio)),
-                              const SizedBox(width: 10),
-                              IconButton(
-                                tooltip: 'Edit Avatar',
-                                onPressed: () => _goToAvatarEdit(context),
-                                icon: const Icon(Icons.edit_outlined),
-                              ),
-                            ],
-                          ),
-                          const SizedBox(height: 14),
-                          _tabBar(context),
-                          const SizedBox(height: 12),
-                          if (_tab == _ProfileTab.tokens) ...[
-                            if (wsnap.connectionState ==
-                                ConnectionState.waiting)
-                              const Padding(
-                                padding: EdgeInsets.symmetric(vertical: 8),
-                                child: LinearProgressIndicator(),
-                              )
-                            else if (wsnap.hasError)
-                              Text(
-                                'トークンの取得に失敗しました: ${wsnap.error}',
-                                style: Theme.of(context).textTheme.bodyMedium
-                                    ?.copyWith(
-                                      color: Theme.of(
-                                        context,
-                                      ).colorScheme.error,
-                                    ),
-                              )
-                            else
-                              _tokenChips(context, tokens),
-                          ] else ...[
-                            _postsPlaceholder(context),
-                          ],
-                        ],
-                      );
-                    },
-                  ),
-                ),
-              ),
-            );
-          },
-        );
-      },
     );
   }
 }

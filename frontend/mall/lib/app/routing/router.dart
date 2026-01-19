@@ -356,6 +356,7 @@ List<RouteBase> _routes({required bool firebaseReady}) {
               state.uri.queryParameters[AppQueryKey.from],
             );
             return NoTransitionPage(
+              // ✅ ここは必ず「Widgetインスタンス」を渡す（AvatarPage()）
               child: AvatarPage(from: from.isEmpty ? null : from),
             );
           },
