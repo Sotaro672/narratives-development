@@ -22,11 +22,12 @@ import (
 // MallWalletHandler handles mall buyer-facing wallet endpoints.
 //
 // ✅ Routes (mall) - NEW ONLY (legacy removed):
-// - GET     /mall/me/wallets
-// - POST    /mall/me/wallets/sync
-// - GET     /mall/me/wallets/tokens/resolve?mintAddress=...
-// - OPTIONS /mall/me/wallets/metadata/proxy?url=...
-// - GET     /mall/me/wallets/metadata/proxy?url=...   (CORS avoidance; fetch metadata JSON)
+//   - GET     /mall/me/wallets
+//   - POST    /mall/me/wallets/sync
+//   - GET     /mall/me/wallets/tokens/resolve?mintAddress=...
+//     -> returns { productId, brandId, brandName, productBlueprintId, productName, metadataUri, mintAddress }
+//   - OPTIONS /mall/me/wallets/metadata/proxy?url=...
+//   - GET     /mall/me/wallets/metadata/proxy?url=...   (CORS avoidance; fetch metadata JSON)
 //
 // Contract assumptions (new only):
 //   - uid is provided by UserAuthMiddleware in request context.
@@ -74,7 +75,7 @@ func (h *MallWalletHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		h.syncMeWallets(w, r)
 		return
 
-	// ✅ resolve token by mintAddress
+	// ✅ resolve token by mintAddress (+ brandName + productName)
 	case r.Method == http.MethodGet && path0 == "/mall/me/wallets/tokens/resolve":
 		h.resolveTokenByMintAddress(w, r)
 		return
@@ -155,7 +156,7 @@ func (h *MallWalletHandler) syncMeWallets(w http.ResponseWriter, r *http.Request
 }
 
 // GET /mall/me/wallets/tokens/resolve?mintAddress=...
-// - returns: { productId, brandId, metadataUri, mintAddress }
+// - returns: { productId, brandId, brandName, productBlueprintId, productName, metadataUri, mintAddress }
 func (h *MallWalletHandler) resolveTokenByMintAddress(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 
@@ -188,17 +189,20 @@ func (h *MallWalletHandler) resolveTokenByMintAddress(w http.ResponseWriter, r *
 		maskID(mintAddress),
 	)
 
-	res, err := h.walletUC.ResolveTokenByMintAddress(ctx, mintAddress)
+	res, err := h.walletUC.ResolveTokenByMintAddressWithBrandName(ctx, mintAddress)
 	if err != nil {
 		writeMallWalletErr(w, err)
 		return
 	}
 
 	_ = json.NewEncoder(w).Encode(map[string]any{
-		"productId":   strings.TrimSpace(res.ProductID),
-		"brandId":     strings.TrimSpace(res.BrandID),
-		"metadataUri": strings.TrimSpace(res.MetadataURI),
-		"mintAddress": strings.TrimSpace(res.MintAddress),
+		"productId":          strings.TrimSpace(res.ProductID),
+		"brandId":            strings.TrimSpace(res.BrandID),
+		"brandName":          strings.TrimSpace(res.BrandName),
+		"productBlueprintId": strings.TrimSpace(res.ProductBlueprintID),
+		"productName":        strings.TrimSpace(res.ProductName),
+		"metadataUri":        strings.TrimSpace(res.MetadataURI),
+		"mintAddress":        strings.TrimSpace(res.MintAddress),
 	})
 }
 
@@ -365,15 +369,22 @@ func writeMallWalletErr(w http.ResponseWriter, err error) {
 		code = http.StatusNotFound
 	case errors.Is(err, tokendom.ErrNotFound):
 		code = http.StatusNotFound
+
 	case errors.Is(err, usecase.ErrWalletSyncAvatarIDEmpty),
 		errors.Is(err, usecase.ErrWalletSyncWalletAddressEmpty):
 		code = http.StatusBadRequest
+
 	case errors.Is(err, usecase.ErrMintAddressEmpty),
 		errors.Is(err, tokendom.ErrInvalidMintAddress):
 		code = http.StatusBadRequest
+
 	case errors.Is(err, usecase.ErrWalletSyncOnchainNotConfigured),
 		errors.Is(err, usecase.ErrWalletUsecaseNotConfigured),
-		errors.Is(err, usecase.ErrWalletTokenQueryNotConfigured):
+		errors.Is(err, usecase.ErrWalletTokenQueryNotConfigured),
+		errors.Is(err, usecase.ErrWalletBrandNameNotConfigured),
+		errors.Is(err, usecase.ErrWalletProductReaderNotConfigured),
+		errors.Is(err, usecase.ErrWalletModelProductBlueprintNotConfigured),
+		errors.Is(err, usecase.ErrWalletProductBlueprintReaderNotConfigured):
 		code = http.StatusServiceUnavailable
 	}
 

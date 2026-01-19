@@ -11,8 +11,6 @@ import (
 	secretmanager "cloud.google.com/go/secretmanager/apiv1"
 	secretmanagerpb "cloud.google.com/go/secretmanager/apiv1/secretmanagerpb"
 	"google.golang.org/api/iterator"
-	"google.golang.org/grpc/codes"
-	"google.golang.org/grpc/status"
 
 	// inbound (query + resolver types)
 	mallquery "narratives/internal/application/query/mall"
@@ -33,6 +31,7 @@ import (
 	solanaplatform "narratives/internal/infra/solana"
 
 	// domains
+	branddom "narratives/internal/domain/brand"
 	ldom "narratives/internal/domain/list"
 	tokendom "narratives/internal/domain/token"
 
@@ -146,6 +145,9 @@ func NewContainer(ctx context.Context, infra *shared.Infra) (*Container, error) 
 	userRepo := outfs.NewUserRepositoryFS(fsClient)
 	walletRepo := outfs.NewWalletRepositoryFS(fsClient)
 
+	// ✅ reuse across WalletUsecase / NameResolver
+	brandRepo := outfs.NewBrandRepositoryFS(fsClient)
+
 	cartRepo := outfs.NewCartRepositoryFS(fsClient)
 	paymentRepo := outfs.NewPaymentRepositoryFS(fsClient)
 	orderRepo := outfs.NewOrderRepositoryFS(fsClient)
@@ -229,13 +231,35 @@ func NewContainer(ctx context.Context, infra *shared.Infra) (*Container, error) 
 	// - NewWalletUsecase は 1 引数（WalletRepository）
 	// - OnchainReader は WithOnchainReader で注入
 	// - TokenQuery は WithTokenQuery で注入（mintAddress -> productId/docId, brandId, metadataUri）
+	// - BrandNameResolver / productName 解決系も注入（ResolveTokenByMintAddressWithBrandName を拡張して productName まで返す前提）
 	// ========================================================
 	onchainReader := solanaplatform.NewOnchainWalletReaderDevnet()
-	tokenQuery := newTokenQueryFS(fsClient) // ✅ NEW
+	tokenQuery := newTokenQueryFS(fsClient)
 
+	// ✅ brandId -> brandName
+	brandSvc := branddom.NewService(brandRepo)
+
+	// ✅ productId -> product(modelId)
+	// previewProductReaderFS は di/mall/adapter.go に存在（Firestore直読み）
+	prodReader := previewProductReaderFS{fs: fsClient}
+
+	// ✅ modelId -> productBlueprintId
+	// previewProductBlueprintReaderFS は di/mall/adapter.go に存在（Firestore直読み）
+	pbReaderForModel := previewProductBlueprintReaderFS{
+		fs: fsClient,
+		pb: productBlueprintRepoFS,
+	}
+	modelPBResolver := modelPBIDResolverAdapter{r: pbReaderForModel}
+
+	// ✅ productBlueprintId -> productName
+	// productBlueprintRepoFS が読み取りを満たす前提で注入
 	c.WalletUC = usecase.NewWalletUsecase(walletRepo).
 		WithOnchainReader(onchainReader).
-		WithTokenQuery(tokenQuery) // ✅ NEW
+		WithTokenQuery(tokenQuery).
+		WithBrandNameResolver(brandSvc).
+		WithProductReader(prodReader).
+		WithModelProductBlueprintIDResolver(modelPBResolver).
+		WithProductBlueprintReader(productBlueprintRepoFS)
 
 	c.CartUC = usecase.NewCartUsecase(cartRepo)
 
@@ -283,7 +307,6 @@ func NewContainer(ctx context.Context, infra *shared.Infra) (*Container, error) 
 	// NameResolver (optional but useful for mall queries)
 	// --------------------------------------------------------
 	{
-		brandRepo := outfs.NewBrandRepositoryFS(fsClient)
 		companyRepo := outfs.NewCompanyRepositoryFS(fsClient)
 		memberRepo := outfs.NewMemberRepositoryFS(fsClient)
 
@@ -378,7 +401,6 @@ func NewContainer(ctx context.Context, infra *shared.Infra) (*Container, error) 
 		var transferRepo usecase.TransferRepo = outfs.NewTransferRepositoryFS(fsClient)
 
 		// 3) BrandWalletResolver / AvatarWalletResolver
-		brandRepo := outfs.NewBrandRepositoryFS(fsClient)
 		var walletResolver usecase.BrandWalletResolver = outfs.NewWalletResolverRepoFS(brandRepo, walletRepo)
 		var avatarWalletResolver usecase.AvatarWalletResolver = walletResolver.(usecase.AvatarWalletResolver)
 
@@ -555,16 +577,11 @@ func (q *tokenQueryFS) ResolveTokenByMintAddress(
 
 	brandID = strings.TrimSpace(brandID)
 	metadataURI = strings.TrimSpace(metadataURI)
+
 	// Firestore では docID が productId（あなたの設計前提）
 	productID := strings.TrimSpace(doc.Ref.ID)
 	if productID == "" {
 		return tokendom.ResolveTokenByMintAddressResult{}, errors.New("resolved productId is empty")
-	}
-
-	// brandId / metadataUri が必須でない運用ならここは緩めてください。
-	// 現状の実データ前提では入っている想定。
-	if status.Code(nil) == codes.OK {
-		// no-op: keep imports used (codes is used elsewhere already)
 	}
 
 	return tokendom.ResolveTokenByMintAddressResult{
@@ -573,4 +590,21 @@ func (q *tokenQueryFS) ResolveTokenByMintAddress(
 		BrandID:     brandID,
 		MetadataURI: metadataURI,
 	}, nil
+}
+
+// ============================================================
+// ✅ Adapter: modelId -> productBlueprintId (usecase port)
+// ============================================================
+
+type modelPBIDResolverAdapter struct {
+	r interface {
+		GetIDByModelID(ctx context.Context, modelID string) (string, error)
+	}
+}
+
+func (a modelPBIDResolverAdapter) GetProductBlueprintIDByModelID(ctx context.Context, modelID string) (string, error) {
+	if a.r == nil {
+		return "", errors.New("modelPBIDResolverAdapter: resolver is nil")
+	}
+	return a.r.GetIDByModelID(ctx, strings.TrimSpace(modelID))
 }

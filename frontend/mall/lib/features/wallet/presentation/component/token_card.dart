@@ -27,6 +27,10 @@ class TokenCard extends StatelessWidget {
 
     final failed = !isLoading && (!resolvedOk || (resolvedOk && !metadataOk));
 
+    // ✅ ID ではなく「name」を表示する（label は出さない）
+    final productName = (resolved?.productName ?? '').trim();
+    final brandName = (resolved?.brandName ?? '').trim();
+
     return Card(
       elevation: 0,
       color: cs.surfaceContainerHighest,
@@ -48,23 +52,15 @@ class TokenCard extends StatelessWidget {
               ),
             ] else ...[
               // -------------------------
-              // resolve 側（productId / brandId）
+              // resolve 側（productName / brandName）
+              //  - value のみ表示（label 非表示）
               // -------------------------
-              _kv(
+              _valueOnly(
                 context,
-                label: 'productId',
-                value: resolved!.productId.trim().isEmpty
-                    ? '（空）'
-                    : resolved!.productId,
+                value: productName.isEmpty ? '（空）' : productName,
               ),
               const SizedBox(height: 6),
-              _kv(
-                context,
-                label: 'brandId',
-                value: resolved!.brandId.trim().isEmpty
-                    ? '（空）'
-                    : resolved!.brandId,
-              ),
+              _valueOnly(context, value: brandName.isEmpty ? '（空）' : brandName),
 
               // metadataUri は非表示（要求により）
               // -------------------------
@@ -73,8 +69,9 @@ class TokenCard extends StatelessWidget {
               if (metadata != null) ...[
                 const SizedBox(height: 10),
 
+                // name は label なしで value だけ
                 if (metadata!.name.trim().isNotEmpty) ...[
-                  _kv(context, label: 'name', value: metadata!.name),
+                  _valueOnly(context, value: metadata!.name),
                   const SizedBox(height: 6),
                 ],
 
@@ -136,33 +133,17 @@ class TokenCard extends StatelessWidget {
     );
   }
 
-  Widget _kv(
-    BuildContext context, {
-    required String label,
-    required String value,
-  }) {
+  // ✅ label を出さず value だけ表示する表示部品
+  Widget _valueOnly(BuildContext context, {required String value}) {
     final cs = Theme.of(context).colorScheme;
     final v = value.trim();
 
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(
-          label,
-          style: Theme.of(context).textTheme.labelMedium?.copyWith(
-            color: cs.onSurfaceVariant,
-            fontWeight: FontWeight.w600,
-          ),
-        ),
-        const SizedBox(height: 2),
-        Text(
-          v.isEmpty ? '（空）' : v,
-          style: Theme.of(context).textTheme.bodySmall?.copyWith(
-            color: cs.onSurface,
-            fontWeight: FontWeight.w600,
-          ),
-        ),
-      ],
+    return Text(
+      v.isEmpty ? '（空）' : v,
+      style: Theme.of(context).textTheme.bodySmall?.copyWith(
+        color: cs.onSurface,
+        fontWeight: FontWeight.w600,
+      ),
     );
   }
 }

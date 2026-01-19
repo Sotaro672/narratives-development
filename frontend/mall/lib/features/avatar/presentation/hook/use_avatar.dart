@@ -1,16 +1,22 @@
+// frontend/mall/lib/features/avatar/presentation/hook/use_avatar.dart
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_hooks/flutter_hooks.dart';
 
-import '../../../../app/routing/routes.dart';
-import '../../../wallet/infrastructure/repository_http.dart';
-import '../../../wallet/infrastructure/token_metadata_dto.dart';
-import '../../../wallet/infrastructure/token_resolve_dto.dart';
-import '../../../wallet/infrastructure/wallet_dto.dart';
-import '../../infrastructure/avatar_api_client.dart';
-import '../model/avatar_vm.dart';
-import '../navigation/avatar_navigation.dart';
-import '../model/me_avatar.dart';
+import 'package:mall/app/routing/routes.dart';
+
+// ✅ prefix を付けて、WalletRepositoryHttp だけを参照する
+import 'package:mall/features/wallet/infrastructure/repository_http.dart'
+    as wallet_api;
+
+import 'package:mall/features/wallet/infrastructure/token_metadata_dto.dart';
+import 'package:mall/features/wallet/infrastructure/token_resolve_dto.dart';
+import 'package:mall/features/wallet/infrastructure/wallet_dto.dart';
+
+import 'package:mall/features/avatar/infrastructure/avatar_api_client.dart';
+import 'package:mall/features/avatar/presentation/model/avatar_vm.dart';
+import 'package:mall/features/avatar/presentation/navigation/avatar_navigation.dart';
+import 'package:mall/features/avatar/presentation/model/me_avatar.dart';
 
 AvatarVm useAvatarVm(BuildContext context, {String? from}) {
   String s(String? v) => (v ?? '').trim();
@@ -18,7 +24,7 @@ AvatarVm useAvatarVm(BuildContext context, {String? from}) {
   // ---------------------------
   // Repository / Client lifecycle
   // ---------------------------
-  final walletRepo = useMemoized(() => WalletRepositoryHttp());
+  final walletRepo = useMemoized(() => wallet_api.WalletRepositoryHttp());
   useEffect(() {
     return () => walletRepo.dispose();
   }, [walletRepo]);
@@ -55,7 +61,7 @@ AvatarVm useAvatarVm(BuildContext context, {String? from}) {
     final effectiveAid = urlAid.isNotEmpty ? urlAid : me.avatarId;
     if (effectiveAid.trim().isEmpty) return null;
 
-    // ✅ ログと同じ挙動：sync → fetch で最新を表示
+    // ✅ sync → fetch
     return walletRepo.syncAndFetchMeWallet();
   }, [urlAvatarId, meAvatarFuture, walletRepo]);
   final walletSnap = useFuture<WalletDTO?>(walletFuture);
@@ -79,7 +85,6 @@ AvatarVm useAvatarVm(BuildContext context, {String? from}) {
       if (seen.add(m)) uniq.add(m);
     }
 
-    // 並列 resolve（失敗は握りつぶし、取れたものだけ map に入れる）
     final results = await Future.wait<TokenResolveDTO?>(
       uniq.map((m) async {
         try {
@@ -94,8 +99,6 @@ AvatarVm useAvatarVm(BuildContext context, {String? from}) {
     for (var i = 0; i < uniq.length; i++) {
       final dto = results[i];
       if (dto == null) continue;
-
-      // キーは request mint を優先
       out[uniq[i]] = dto;
     }
     return out;
@@ -178,7 +181,6 @@ AvatarVm useAvatarVm(BuildContext context, {String? from}) {
   // ---------------------------
   final tokens = walletSnap.data?.tokens ?? const <String>[];
 
-  // ✅ useFuture の snapshot.data は null になり得るので default を必ず入れる
   final resolvedTokens = resolvedSnap.data ?? const <String, TokenResolveDTO>{};
   final tokenMetadatas =
       metadataSnap.data ?? const <String, TokenMetadataDTO>{};
