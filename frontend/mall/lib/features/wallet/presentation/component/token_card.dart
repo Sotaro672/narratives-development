@@ -1,57 +1,31 @@
 // frontend/mall/lib/features/wallet/presentation/component/token_card.dart
 import 'package:flutter/material.dart';
 
+import '../../infrastructure/token_metadata_dto.dart';
 import '../../infrastructure/token_resolve_dto.dart';
 
 class TokenCard extends StatelessWidget {
-  const TokenCard({super.key, required this.mintAddress, this.resolved});
+  const TokenCard({
+    super.key,
+    required this.mintAddress,
+    this.resolved,
+    this.metadata,
+    this.isLoading = false,
+  });
 
-  /// On-chain mint address (base58)
   final String mintAddress;
-
-  /// Resolved view from Firestore (tokens collection) by mintAddress.
-  /// If null, the card shows mintAddress only.
   final TokenResolveDTO? resolved;
+  final TokenMetadataDTO? metadata;
+  final bool isLoading;
 
   @override
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
 
-    final mint = mintAddress.trim();
-    final productId = resolved?.productId.trim() ?? '';
-    final brandId = resolved?.brandId.trim() ?? '';
-    final metadataUri = resolved?.metadataUri.trim() ?? '';
+    final resolvedOk = resolved != null;
+    final metadataOk = metadata != null;
 
-    Widget kv({required String k, required String v, bool strong = false}) {
-      if (v.trim().isEmpty) return const SizedBox.shrink();
-      return Padding(
-        padding: const EdgeInsets.only(top: 8),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              k,
-              style: Theme.of(context).textTheme.labelMedium?.copyWith(
-                color: cs.onSurfaceVariant,
-                fontWeight: FontWeight.w600,
-              ),
-            ),
-            const SizedBox(height: 6),
-            Text(
-              v,
-              style:
-                  (strong
-                          ? Theme.of(context).textTheme.bodyMedium
-                          : Theme.of(context).textTheme.bodySmall)
-                      ?.copyWith(
-                        fontWeight: strong ? FontWeight.w700 : FontWeight.w500,
-                        color: strong ? null : cs.onSurfaceVariant,
-                      ),
-            ),
-          ],
-        ),
-      );
-    }
+    final failed = !isLoading && (!resolvedOk || (resolvedOk && !metadataOk));
 
     return Card(
       elevation: 0,
@@ -59,25 +33,136 @@ class TokenCard extends StatelessWidget {
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
       child: Padding(
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-        child: Row(
+        child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Icon(Icons.local_offer_outlined, color: cs.onSurfaceVariant),
-            const SizedBox(width: 10),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  kv(k: 'mintAddress', v: mint, strong: true),
-                  kv(k: 'productId', v: productId),
-                  kv(k: 'brandId', v: brandId),
-                  kv(k: 'metadataUri', v: metadataUri),
-                ],
+            if (isLoading) ...[
+              const LinearProgressIndicator(),
+            ] else if (failed) ...[
+              Text(
+                'データが取得できませんでした。',
+                style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                  color: cs.error,
+                  fontWeight: FontWeight.w600,
+                ),
               ),
-            ),
+            ] else ...[
+              // -------------------------
+              // resolve 側（productId / brandId）
+              // -------------------------
+              _kv(
+                context,
+                label: 'productId',
+                value: resolved!.productId.trim().isEmpty
+                    ? '（空）'
+                    : resolved!.productId,
+              ),
+              const SizedBox(height: 6),
+              _kv(
+                context,
+                label: 'brandId',
+                value: resolved!.brandId.trim().isEmpty
+                    ? '（空）'
+                    : resolved!.brandId,
+              ),
+
+              // metadataUri は非表示（要求により）
+              // -------------------------
+              // metadata 側（metadataUri の中身）
+              // -------------------------
+              if (metadata != null) ...[
+                const SizedBox(height: 10),
+
+                if (metadata!.name.trim().isNotEmpty) ...[
+                  _kv(context, label: 'name', value: metadata!.name),
+                  const SizedBox(height: 6),
+                ],
+
+                // ✅ image を画像として表示
+                if (metadata!.image.trim().isNotEmpty) ...[
+                  const SizedBox(height: 6),
+                  _imageBox(context, metadata!.image),
+                  const SizedBox(height: 6),
+                ],
+              ],
+            ],
           ],
         ),
       ),
+    );
+  }
+
+  Widget _imageBox(BuildContext context, String url) {
+    final cs = Theme.of(context).colorScheme;
+    final u = url.trim();
+
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(10),
+      child: AspectRatio(
+        aspectRatio: 1, // 正方形（必要なら 16/9 等に変更）
+        child: Image.network(
+          u,
+          fit: BoxFit.cover,
+          // 読み込み中の表示
+          loadingBuilder: (context, child, loadingProgress) {
+            if (loadingProgress == null) return child;
+            return Container(
+              color: cs.surface,
+              alignment: Alignment.center,
+              child: const SizedBox(
+                width: 20,
+                height: 20,
+                child: CircularProgressIndicator(strokeWidth: 2),
+              ),
+            );
+          },
+          // 失敗時の表示
+          errorBuilder: (context, error, stackTrace) {
+            return Container(
+              color: cs.surface,
+              alignment: Alignment.center,
+              padding: const EdgeInsets.all(12),
+              child: Text(
+                '画像を読み込めませんでした。',
+                style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                  color: cs.onSurfaceVariant,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            );
+          },
+        ),
+      ),
+    );
+  }
+
+  Widget _kv(
+    BuildContext context, {
+    required String label,
+    required String value,
+  }) {
+    final cs = Theme.of(context).colorScheme;
+    final v = value.trim();
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          label,
+          style: Theme.of(context).textTheme.labelMedium?.copyWith(
+            color: cs.onSurfaceVariant,
+            fontWeight: FontWeight.w600,
+          ),
+        ),
+        const SizedBox(height: 2),
+        Text(
+          v.isEmpty ? '（空）' : v,
+          style: Theme.of(context).textTheme.bodySmall?.copyWith(
+            color: cs.onSurface,
+            fontWeight: FontWeight.w600,
+          ),
+        ),
+      ],
     );
   }
 }

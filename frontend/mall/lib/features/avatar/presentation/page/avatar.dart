@@ -1,4 +1,3 @@
-// frontend/mall/lib/features/avatar/presentation/page/avatar.dart
 import 'dart:convert';
 
 import 'package:firebase_auth/firebase_auth.dart';
@@ -7,6 +6,7 @@ import 'package:flutter_hooks/flutter_hooks.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../../app/routing/routes.dart';
+import '../../../wallet/infrastructure/token_metadata_dto.dart';
 import '../../../wallet/infrastructure/token_resolve_dto.dart';
 import '../../../wallet/presentation/component/token_card.dart';
 import '../hook/use_avatar.dart';
@@ -70,7 +70,6 @@ class AvatarPage extends HookWidget {
       return _MissingMeAvatarView(
         backTo: vm.backTo,
         onGoEdit: () {
-          // router.dart と同じルールで from を encode
           final qp = <String, String>{
             AppQueryKey.from: base64UrlEncode(utf8.encode(vm.backTo.trim())),
           };
@@ -102,6 +101,7 @@ class AvatarPage extends HookWidget {
             walletSnap: vm.walletSnap,
             tokens: vm.tokens,
             resolvedTokens: vm.resolvedTokens,
+            tokenMetadatas: vm.tokenMetadatas,
             onEdit: vm.goToAvatarEdit,
           ),
         ),
@@ -125,6 +125,7 @@ class _AvatarProfileBody extends StatelessWidget {
     required this.walletSnap,
     required this.tokens,
     required this.resolvedTokens,
+    required this.tokenMetadatas,
     required this.onEdit,
   });
 
@@ -139,8 +140,8 @@ class _AvatarProfileBody extends StatelessWidget {
   final AsyncSnapshot walletSnap;
   final List<String> tokens;
 
-  /// mintAddress -> resolved info
   final Map<String, TokenResolveDTO> resolvedTokens;
+  final Map<String, TokenMetadataDTO> tokenMetadatas;
 
   final VoidCallback onEdit;
 
@@ -221,7 +222,11 @@ class _AvatarProfileBody extends StatelessWidget {
               ),
             )
           else
-            _TokenCards(tokens: tokens, resolvedTokens: resolvedTokens),
+            _TokenCards(
+              tokens: tokens,
+              resolvedTokens: resolvedTokens,
+              tokenMetadatas: tokenMetadatas,
+            ),
         ] else ...[
           const _PostsPlaceholder(),
         ],
@@ -353,10 +358,15 @@ class _TabBar extends StatelessWidget {
 }
 
 class _TokenCards extends StatelessWidget {
-  const _TokenCards({required this.tokens, required this.resolvedTokens});
+  const _TokenCards({
+    required this.tokens,
+    required this.resolvedTokens,
+    required this.tokenMetadatas,
+  });
 
   final List<String> tokens;
   final Map<String, TokenResolveDTO> resolvedTokens;
+  final Map<String, TokenMetadataDTO> tokenMetadatas;
 
   @override
   Widget build(BuildContext context) {
@@ -377,7 +387,12 @@ class _TokenCards extends StatelessWidget {
             builder: (context) {
               final m = raw.trim();
               final resolved = resolvedTokens[m];
-              return TokenCard(mintAddress: m, resolved: resolved);
+              final meta = tokenMetadatas[m];
+              return TokenCard(
+                mintAddress: m,
+                resolved: resolved,
+                metadata: meta,
+              );
             },
           ),
           const SizedBox(height: 10),

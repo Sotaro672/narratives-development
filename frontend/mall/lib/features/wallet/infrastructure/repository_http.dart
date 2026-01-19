@@ -5,6 +5,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:http/http.dart' as http;
 
 import '../../../app/config/api_base.dart';
+import 'token_metadata_dto.dart';
 import 'token_resolve_dto.dart';
 import 'wallet_dto.dart';
 
@@ -36,9 +37,13 @@ class WalletRepositoryHttp {
 
   Future<String?> _getIdToken({bool forceRefresh = false}) async {
     final u = FirebaseAuth.instance.currentUser;
-    if (u == null) return null;
+    if (u == null) {
+      return null;
+    }
+
+    // getIdToken は環境/バージョン差で String? 扱いになることがあるため null-safe にする
     final t = await u.getIdToken(forceRefresh);
-    final token = (t ?? '').toString().trim();
+    final token = (t ?? '').trim();
     return token.isEmpty ? null : token;
   }
 
@@ -73,24 +78,17 @@ class WalletRepositoryHttp {
 
     // 2) {"wallet":{...}}
     final w = decoded['wallet'];
-    if (w is Map<String, dynamic>) {
-      return WalletDTO.fromJson(w);
-    }
-    if (w is Map) {
-      return WalletDTO.fromJson(Map<String, dynamic>.from(w));
-    }
+    if (w is Map<String, dynamic>) return WalletDTO.fromJson(w);
+    if (w is Map) return WalletDTO.fromJson(Map<String, dynamic>.from(w));
 
     // 3) 直下が wallet オブジェクト
-    // （avatarId or walletAddress or tokens があれば wallet とみなす）
     final hasAnyKey =
         decoded.containsKey('walletAddress') ||
         decoded.containsKey('WalletAddress') ||
         decoded.containsKey('tokens') ||
         decoded.containsKey('tokenMints');
 
-    if (hasAnyKey) {
-      return WalletDTO.fromJson(decoded);
-    }
+    if (hasAnyKey) return WalletDTO.fromJson(decoded);
 
     return null;
   }
@@ -153,7 +151,6 @@ class WalletRepositoryHttp {
       res = await http.post(uri, headers: headers2, body: jsonEncode({}));
     }
 
-    // 失敗時は呼び出し側で再取得してエラー表示したいので例外にする
     if (res.statusCode < 200 || res.statusCode >= 300) {
       throw Exception('sync failed: ${res.statusCode} ${res.body}');
     }
@@ -172,14 +169,6 @@ class WalletRepositoryHttp {
   ///
   /// Backend:
   /// - GET /mall/me/wallets/tokens/resolve?mintAddress=...
-  ///
-  /// Response (expected):
-  /// {
-  ///   "productId": "...",     // docId in tokens collection
-  ///   "brandId": "...",
-  ///   "metadataUri": "...",
-  ///   "mintAddress": "..."
-  /// }
   Future<TokenResolveDTO?> resolveTokenByMintAddress(String mintAddress) async {
     final m = mintAddress.trim();
     if (m.isEmpty) return null;
@@ -207,11 +196,46 @@ class WalletRepositoryHttp {
       res = await http.get(uri, headers: headers2);
     }
 
-    if (res.statusCode < 200 || res.statusCode >= 300) {
-      return null;
-    }
+    if (res.statusCode < 200 || res.statusCode >= 300) return null;
 
     final decoded = _unwrapData(_decodeObject(res.body));
     return TokenResolveDTO.fromJson(decoded);
+  }
+
+  /// Fetch token metadata JSON via backend proxy to avoid CORS.
+  ///
+  /// Backend (example):
+  /// - GET /mall/me/wallets/metadata/proxy?url=https://... (metadataUri)
+  ///
+  /// Proxy response should be a JSON object of the metadata itself.
+  Future<TokenMetadataDTO?> fetchTokenMetadata(String metadataUri) async {
+    final url = metadataUri.trim();
+    if (url.isEmpty) return null;
+
+    final uri = _uriWithQuery('/mall/me/wallets/metadata/proxy', {'url': url});
+
+    // 1st try
+    final token1 = await _getIdToken(forceRefresh: false);
+    final headers1 = <String, String>{'Accept': 'application/json'};
+    if (token1 != null) {
+      headers1['Authorization'] = 'Bearer $token1';
+    }
+
+    http.Response res = await http.get(uri, headers: headers1);
+
+    // retry 401
+    if (res.statusCode == 401) {
+      final token2 = await _getIdToken(forceRefresh: true);
+      final headers2 = <String, String>{'Accept': 'application/json'};
+      if (token2 != null) {
+        headers2['Authorization'] = 'Bearer $token2';
+      }
+      res = await http.get(uri, headers: headers2);
+    }
+
+    if (res.statusCode < 200 || res.statusCode >= 300) return null;
+
+    final decoded = _unwrapData(_decodeObject(res.body));
+    return TokenMetadataDTO.fromJson(decoded);
   }
 }

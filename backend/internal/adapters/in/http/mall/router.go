@@ -34,12 +34,11 @@ type Deps struct {
 
 	// ✅ mall only: /mall/me/wallets
 	// Contract (new only; legacy removed):
-	// - GET  /mall/me/wallets        : return { wallets: [ wallet ] }
-	// - POST /mall/me/wallets/sync   : sync on-chain -> persist -> return { wallets: [ wallet ] }
-	//
-	// NOTE:
-	// - avatarId is derived from AvatarContextMiddleware (uid -> avatarId) and NOT from query/path.
-	// - walletAddress is derived from wallet doc (docId=avatarId) and NOT from query/path.
+	// - GET     /mall/me/wallets
+	// - POST    /mall/me/wallets/sync
+	// - GET     /mall/me/wallets/tokens/resolve?mintAddress=...
+	// - OPTIONS /mall/me/wallets/metadata/proxy?url=...
+	// - GET     /mall/me/wallets/metadata/proxy?url=...   (CORS avoidance; inside Wallet handler)
 	Wallet http.Handler
 
 	Cart    http.Handler
@@ -172,13 +171,15 @@ func Register(mux *http.ServeMux, deps Deps) {
 
 	// ------------------------------------------------------------
 	// ✅ Wallet (new contract only; legacy removed)
-	// - GET  /mall/me/wallets
-	// - POST /mall/me/wallets/sync
+	// - GET     /mall/me/wallets
+	// - POST    /mall/me/wallets/sync
+	// - GET     /mall/me/wallets/tokens/resolve?mintAddress=...
+	// - OPTIONS /mall/me/wallets/metadata/proxy?url=...
+	// - GET     /mall/me/wallets/metadata/proxy?url=...
 	//
 	// NOTE:
 	// - We intentionally register only the base path and the trailing-slash
-	//   prefix. /mall/me/wallets/sync is matched by the "/mall/me/wallets/"
-	//   pattern and handled inside the Wallet handler.
+	//   prefix. subpaths are handled inside the Wallet handler.
 	// ------------------------------------------------------------
 	handleSafe(mux, "/mall/me/wallets", deps.Wallet, "Wallet(me)")
 	handleSafe(mux, "/mall/me/wallets/", deps.Wallet, "Wallet(me)")
@@ -196,16 +197,14 @@ func Register(mux *http.ServeMux, deps Deps) {
 	handleSafe(mux, "/mall/me/preview/", deps.PreviewMe, "Preview(me)")
 
 	// ✅ NEW: order scan verify (authenticated)
-	// - POST /mall/me/orders/scan/verify
 	handleSafe(mux, "/mall/me/orders/scan/verify", deps.OrderScanVerify, "OrderScanVerify(me)")
 	handleSafe(mux, "/mall/me/orders/scan/verify/", deps.OrderScanVerify, "OrderScanVerify(me)")
 
 	// ✅ NEW: order scan transfer (authenticated)
-	// - POST /mall/me/orders/scan/transfer
 	handleSafe(mux, "/mall/me/orders/scan/transfer", deps.OrderScanTransfer, "OrderScanTransfer(me)")
 	handleSafe(mux, "/mall/me/orders/scan/transfer/", deps.OrderScanTransfer, "OrderScanTransfer(me)")
 
-	// ✅ NEW: owner resolve (walletAddress/toAddress -> avatarId or brandId)
+	// ✅ NEW: owner resolve (public OK)
 	handleSafe(mux, "/mall/owners/resolve", deps.OwnerResolve, "OwnerResolve")
 	handleSafe(mux, "/mall/owners/resolve/", deps.OwnerResolve, "OwnerResolve")
 

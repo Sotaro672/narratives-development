@@ -1,7 +1,7 @@
-// frontend/mall/lib/features/avatar/presentation/model/avatar_vm.dart
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 
+import '../../../wallet/infrastructure/token_metadata_dto.dart';
 import '../../../wallet/infrastructure/token_resolve_dto.dart';
 import '../../../wallet/infrastructure/wallet_dto.dart';
 import 'me_avatar.dart';
@@ -30,6 +30,7 @@ class AvatarVm {
     required this.walletSnap,
     required this.tokens,
     required this.resolvedTokens,
+    required this.tokenMetadatas,
     required this.counts,
     required this.tab,
     required this.setTab,
@@ -50,8 +51,12 @@ class AvatarVm {
   final List<String> tokens;
 
   /// mintAddress -> resolved info (productId/docId, brandId, metadataUri, etc.)
-  /// - resolve 未完了/失敗は entry が無い（or null）
+  /// - resolve 未完了/失敗は entry が無い
   final Map<String, TokenResolveDTO> resolvedTokens;
+
+  /// mintAddress -> token metadata (proxy fetched)
+  /// - metadata 未取得/失敗は entry が無い
+  final Map<String, TokenMetadataDTO> tokenMetadatas;
 
   final ProfileCounts counts;
 

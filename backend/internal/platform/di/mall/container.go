@@ -6,7 +6,6 @@ import (
 	"errors"
 	"log"
 	"strings"
-	"time"
 
 	"cloud.google.com/go/firestore"
 	secretmanager "cloud.google.com/go/secretmanager/apiv1"
@@ -495,40 +494,6 @@ func (p *brandWalletSecretProviderSM) GetBrandSigner(ctx context.Context, brandI
 }
 
 // ============================================================
-// ✅ Adapter: outfs.InventoryRepositoryFS に ApplyTransferResult を付与
-// ============================================================
-
-type inventoryRepoTransferResultAdapter struct {
-	*outfs.InventoryRepositoryFS
-}
-
-func (a *inventoryRepoTransferResultAdapter) ApplyTransferResult(
-	ctx context.Context,
-	productID string,
-	orderID string,
-	now time.Time,
-) error {
-	if a == nil || a.InventoryRepositoryFS == nil {
-		return errors.New("inventory repo adapter is nil")
-	}
-
-	removed, err := a.InventoryRepositoryFS.ReleaseReservationAfterTransfer(ctx, productID, orderID, now)
-	if err != nil {
-		return err
-	}
-
-	log.Printf(
-		"[inventory_repo_adapter.mall] ApplyTransferResult ok productId=%q orderId=%q removed=%d at=%s",
-		strings.TrimSpace(productID),
-		strings.TrimSpace(orderID),
-		removed,
-		now.UTC().Format(time.RFC3339),
-	)
-
-	return nil
-}
-
-// ============================================================
 // ✅ NEW: TokenQueryFS (mintAddress -> productId(docId), brandId, metadataUri)
 //   - outfs.NewTokenQueryFS(...) が無い前提で、DI側に最小実装を置く
 // ============================================================
@@ -590,17 +555,6 @@ func (q *tokenQueryFS) ResolveTokenByMintAddress(
 
 	brandID = strings.TrimSpace(brandID)
 	metadataURI = strings.TrimSpace(metadataURI)
-
-	// 参考: 旧データ互換で metadataUri のキーゆれがある場合に備えるならここで吸収可能
-	if metadataURI == "" {
-		if v, ok := raw["metadataURI"].(string); ok {
-			metadataURI = strings.TrimSpace(v)
-		}
-		if v, ok := raw["metadataUrl"].(string); ok {
-			metadataURI = strings.TrimSpace(v)
-		}
-	}
-
 	// Firestore では docID が productId（あなたの設計前提）
 	productID := strings.TrimSpace(doc.Ref.ID)
 	if productID == "" {

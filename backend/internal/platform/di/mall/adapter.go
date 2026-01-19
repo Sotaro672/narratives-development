@@ -4,6 +4,7 @@ package mall
 import (
 	"context"
 	"errors"
+	"log"
 	"strings"
 	"time"
 
@@ -16,6 +17,8 @@ import (
 	mallquery "narratives/internal/application/query/mall"
 	sharedquery "narratives/internal/application/query/shared"
 	usecase "narratives/internal/application/usecase"
+
+	outfs "narratives/internal/adapters/out/firestore"
 
 	avatarstate "narratives/internal/domain/avatarState"
 	inspectiondom "narratives/internal/domain/inspection"
@@ -496,6 +499,40 @@ func (r *tokenOwnerUpdaterFS) UpdateToAddressByProductID(ctx context.Context, pr
 		"ownerUpdatedAt":  now,
 	}, firestore.MergeAll)
 	return err
+}
+
+// ============================================================
+// ✅ InventoryUsecase 用: ApplyTransferResult アダプタ（container.go から移譲）
+// ============================================================
+
+type inventoryRepoTransferResultAdapter struct {
+	*outfs.InventoryRepositoryFS
+}
+
+func (a *inventoryRepoTransferResultAdapter) ApplyTransferResult(
+	ctx context.Context,
+	productID string,
+	orderID string,
+	now time.Time,
+) error {
+	if a == nil || a.InventoryRepositoryFS == nil {
+		return errors.New("inventory repo adapter is nil")
+	}
+
+	removed, err := a.InventoryRepositoryFS.ReleaseReservationAfterTransfer(ctx, productID, orderID, now)
+	if err != nil {
+		return err
+	}
+
+	log.Printf(
+		"[inventory_repo_adapter.mall] ApplyTransferResult ok productId=%q orderId=%q removed=%d at=%s",
+		strings.TrimSpace(productID),
+		strings.TrimSpace(orderID),
+		removed,
+		now.UTC().Format(time.RFC3339),
+	)
+
+	return nil
 }
 
 // ============================================================

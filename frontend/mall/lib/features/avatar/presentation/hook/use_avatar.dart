@@ -1,10 +1,10 @@
-// frontend/mall/lib/features/avatar/presentation/hook/use_avatar.dart
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_hooks/flutter_hooks.dart';
 
 import '../../../../app/routing/routes.dart';
 import '../../../wallet/infrastructure/repository_http.dart';
+import '../../../wallet/infrastructure/token_metadata_dto.dart';
 import '../../../wallet/infrastructure/token_resolve_dto.dart';
 import '../../../wallet/infrastructure/wallet_dto.dart';
 import '../../infrastructure/avatar_api_client.dart';
@@ -44,13 +44,10 @@ AvatarVm useAvatarVm(BuildContext context, {String? from}) {
   // ---------------------------
   final urlAvatarId = resolveAvatarIdFromUrl(context);
 
-  final Future<MeAvatar?>? meAvatarFuture = useMemoized(
-    () => apiClient.fetchMeAvatar(),
-    const [],
-  );
+  final meAvatarFuture = useMemoized(() => apiClient.fetchMeAvatar(), const []);
   final meAvatarSnap = useFuture<MeAvatar?>(meAvatarFuture);
 
-  final Future<WalletDTO?>? walletFuture = useMemoized(() async {
+  final walletFuture = useMemoized(() async {
     final me = await meAvatarFuture;
     if (me == null) return null;
 
@@ -64,49 +61,80 @@ AvatarVm useAvatarVm(BuildContext context, {String? from}) {
   final walletSnap = useFuture<WalletDTO?>(walletFuture);
 
   // ---------------------------
-  // ✅ Resolve tokens by mintAddress (Firestore tokens lookup)
+  // ✅ Resolve tokens by mintAddress
   // ---------------------------
-  final Future<Map<String, TokenResolveDTO>>? resolveFuture = useMemoized(
-    () async {
-      final w = await walletFuture;
-      final mints = (w?.tokens ?? const <String>[])
-          .map((e) => e.trim())
-          .where((e) => e.isNotEmpty)
-          .toList();
+  final resolveFuture = useMemoized(() async {
+    final w = await walletFuture;
+    final mints = (w?.tokens ?? const <String>[])
+        .map((e) => e.trim())
+        .where((e) => e.isNotEmpty)
+        .toList();
 
-      if (mints.isEmpty) return <String, TokenResolveDTO>{};
+    if (mints.isEmpty) return <String, TokenResolveDTO>{};
 
-      // 重複排除（順序維持）
-      final seen = <String>{};
-      final uniq = <String>[];
-      for (final m in mints) {
-        if (seen.add(m)) uniq.add(m);
-      }
+    // 重複排除（順序維持）
+    final seen = <String>{};
+    final uniq = <String>[];
+    for (final m in mints) {
+      if (seen.add(m)) uniq.add(m);
+    }
 
-      // 並列 resolve（失敗は握りつぶし、取れたものだけ map に入れる）
-      final results = await Future.wait<TokenResolveDTO?>(
-        uniq.map((m) async {
-          try {
-            return await walletRepo.resolveTokenByMintAddress(m);
-          } catch (_) {
-            return null;
-          }
-        }),
-      );
+    // 並列 resolve（失敗は握りつぶし、取れたものだけ map に入れる）
+    final results = await Future.wait<TokenResolveDTO?>(
+      uniq.map((m) async {
+        try {
+          return await walletRepo.resolveTokenByMintAddress(m);
+        } catch (_) {
+          return null;
+        }
+      }),
+    );
 
-      final out = <String, TokenResolveDTO>{};
-      for (var i = 0; i < uniq.length; i++) {
-        final dto = results[i];
-        if (dto == null) continue;
+    final out = <String, TokenResolveDTO>{};
+    for (var i = 0; i < uniq.length; i++) {
+      final dto = results[i];
+      if (dto == null) continue;
 
-        // DTO 側の mintAddress とキーがズレても困るので、キーは request mint を優先
-        out[uniq[i]] = dto;
-      }
-      return out;
-    },
-    [walletFuture, walletRepo],
-  );
+      // キーは request mint を優先
+      out[uniq[i]] = dto;
+    }
+    return out;
+  }, [walletFuture, walletRepo]);
   final resolvedSnap = useFuture<Map<String, TokenResolveDTO>>(resolveFuture);
+
+  // ---------------------------
+  // ✅ Fetch token metadata via proxy (CORS avoid)
+  // ---------------------------
+  final metadataFuture = useMemoized(() async {
+    final resolved = await resolveFuture;
+    if (resolved.isEmpty) return <String, TokenMetadataDTO>{};
+
+    final entries = resolved.entries
+        .map((e) => MapEntry(e.key.trim(), e.value))
+        .where((e) => e.key.isNotEmpty && e.value.metadataUri.trim().isNotEmpty)
+        .toList();
+
+    if (entries.isEmpty) return <String, TokenMetadataDTO>{};
+
+    final results = await Future.wait<TokenMetadataDTO?>(
+      entries.map((e) async {
+        try {
+          return await walletRepo.fetchTokenMetadata(e.value.metadataUri);
+        } catch (_) {
+          return null;
+        }
+      }),
+    );
+
+    final out = <String, TokenMetadataDTO>{};
+    for (var i = 0; i < entries.length; i++) {
+      final dto = results[i];
+      if (dto == null) continue;
+      out[entries[i].key] = dto; // key = mintAddress
+    }
+    return out;
+  }, [resolveFuture, walletRepo]);
+  final metadataSnap = useFuture<Map<String, TokenMetadataDTO>>(metadataFuture);
 
   // ---------------------------
   // URL normalize + auto-return
@@ -149,7 +177,11 @@ AvatarVm useAvatarVm(BuildContext context, {String? from}) {
   // View-derived fields
   // ---------------------------
   final tokens = walletSnap.data?.tokens ?? const <String>[];
+
+  // ✅ useFuture の snapshot.data は null になり得るので default を必ず入れる
   final resolvedTokens = resolvedSnap.data ?? const <String, TokenResolveDTO>{};
+  final tokenMetadatas =
+      metadataSnap.data ?? const <String, TokenMetadataDTO>{};
 
   final counts = ProfileCounts(
     postCount: 0,
@@ -160,9 +192,6 @@ AvatarVm useAvatarVm(BuildContext context, {String? from}) {
 
   final backTo = effectiveFrom(context, from: from);
 
-  // NOTE:
-  // router.dart は /login の from を「生URL」で受け取る前提になっているため
-  // ここでは encodeFrom は使わず、従来どおり backTo をそのまま渡す。
   final loginUri = Uri(
     path: '/login',
     queryParameters: {AppQueryKey.from: backTo},
@@ -183,6 +212,7 @@ AvatarVm useAvatarVm(BuildContext context, {String? from}) {
     walletSnap: walletSnap,
     tokens: tokens,
     resolvedTokens: resolvedTokens,
+    tokenMetadatas: tokenMetadatas,
     counts: counts,
     tab: tabState.value,
     setTab: (next) => tabState.value = next,
