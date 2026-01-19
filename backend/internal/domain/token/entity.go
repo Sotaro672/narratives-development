@@ -1,6 +1,8 @@
 // backend/internal/domain/token/entity.go
 package token
 
+import "errors"
+
 // MintParams は、Solana 上でトークン/NFT をミントする際に
 // MintAuthorityWalletPort に渡す最小限のパラメータです。
 //
@@ -33,3 +35,24 @@ type MintResult struct {
 	// オプション: どのスロットで確定したかなど
 	Slot uint64
 }
+
+// ============================================================
+// ✅ NEW: ResolveTokenByMintAddressResult
+// ============================================================
+//
+// Firestore の tokens コレクションを mintAddress で逆引きした結果。
+// productId は "docId" を正とする（= 1 token doc が 1 product に紐づく想定）。
+type ResolveTokenByMintAddressResult struct {
+	ProductID   string
+	BrandID     string
+	MetadataURI string
+	MintAddress string
+}
+
+var (
+	// ✅ TokenQuery が「mintAddress で見つからない」時に返す
+	ErrNotFound = errors.New("token: not found")
+
+	// ✅ TokenQuery が「mintAddress が不正」時に返す
+	ErrInvalidMintAddress = errors.New("token: invalid mintAddress")
+)

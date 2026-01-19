@@ -11,27 +11,40 @@ import (
 // Mint 権限ウォレット用ポート
 // ============================================================
 
-// MintAuthorityWalletPort は、システムが保持する「ミント権限ウォレット」を
-// ドメイン層から抽象化するポートです。
 type MintAuthorityWalletPort interface {
-	// ミント権限ウォレットの公開鍵（アドレス表示用など）
 	PublicKey(ctx context.Context) (string, error)
-
-	// 実際にミントを実行する
 	MintToken(ctx context.Context, params MintParams) (*MintResult, error)
 }
 
 // ============================================================
 // TokenBlueprint リポジトリ用ポート
 // ============================================================
-//
-// TokenUsecase から見た「TokenBlueprint の minted 状態を更新するための最小インターフェース」。
-// 具体実装（Firestore など）は adapters/out 側で tbdom.RepositoryPort を満たす形で実装し、
-// そのサブセットとしてこのポートも満たす想定です。
-type TokenBlueprintRepositoryPort interface {
-	// 指定 ID の TokenBlueprint を取得
-	GetByID(ctx context.Context, id string) (*tbdom.TokenBlueprint, error)
 
-	// minted 状態などを更新
+type TokenBlueprintRepositoryPort interface {
+	GetByID(ctx context.Context, id string) (*tbdom.TokenBlueprint, error)
 	Update(ctx context.Context, id string, input tbdom.UpdateTokenBlueprintInput) (*tbdom.TokenBlueprint, error)
+}
+
+// ============================================================
+// Token query port (mintAddress -> productId(docId) + brandId + metadataUri)
+// ============================================================
+//
+// Firestore 実データ（tokens/{docId}）の前提:
+// - docId = productId
+// - fields: brandId, tokenBlueprintId, mintAddress, metadataUri, ...
+//
+// 本ポートは mintAddress をキーに tokens を検索し、以下を返す:
+// - productId (= docId)
+// - brandId
+// - metadataUri（"中身"＝そのまま URI 文字列）
+//
+// ※ metadata の JSON 本体（URI の先の内容）まで取得したい場合は、
+//    別途 HTTP fetch 用ポートを設ける（このポートには含めない）のが推奨です。
+
+// TokenQueryPort は mintAddress から tokens を逆引きする read-model 用ポートです。
+type TokenQueryPort interface {
+	ResolveTokenByMintAddress(
+		ctx context.Context,
+		mintAddress string,
+	) (ResolveTokenByMintAddressResult, error)
 }

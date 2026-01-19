@@ -1,13 +1,16 @@
-// frontend\mall\lib\features\avatar\presentation\page\avatar.dart
+// frontend/mall/lib/features/avatar/presentation/page/avatar.dart
 import 'dart:convert';
 
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_hooks/flutter_hooks.dart';
 import 'package:go_router/go_router.dart';
-import '../model/avatar_vm.dart';
+
 import '../../../../app/routing/routes.dart';
+import '../../../wallet/infrastructure/token_resolve_dto.dart';
+import '../../../wallet/presentation/component/token_card.dart';
 import '../hook/use_avatar.dart';
+import '../model/avatar_vm.dart';
 
 class AvatarPage extends HookWidget {
   const AvatarPage({super.key, this.from});
@@ -98,6 +101,7 @@ class AvatarPage extends HookWidget {
             onTabChange: vm.setTab,
             walletSnap: vm.walletSnap,
             tokens: vm.tokens,
+            resolvedTokens: vm.resolvedTokens,
             onEdit: vm.goToAvatarEdit,
           ),
         ),
@@ -120,6 +124,7 @@ class _AvatarProfileBody extends StatelessWidget {
     required this.onTabChange,
     required this.walletSnap,
     required this.tokens,
+    required this.resolvedTokens,
     required this.onEdit,
   });
 
@@ -133,6 +138,9 @@ class _AvatarProfileBody extends StatelessWidget {
 
   final AsyncSnapshot walletSnap;
   final List<String> tokens;
+
+  /// mintAddress -> resolved info
+  final Map<String, TokenResolveDTO> resolvedTokens;
 
   final VoidCallback onEdit;
 
@@ -213,7 +221,7 @@ class _AvatarProfileBody extends StatelessWidget {
               ),
             )
           else
-            _TokenChips(tokens: tokens),
+            _TokenCards(tokens: tokens, resolvedTokens: resolvedTokens),
         ] else ...[
           const _PostsPlaceholder(),
         ],
@@ -344,10 +352,11 @@ class _TabBar extends StatelessWidget {
   }
 }
 
-class _TokenChips extends StatelessWidget {
-  const _TokenChips({required this.tokens});
+class _TokenCards extends StatelessWidget {
+  const _TokenCards({required this.tokens, required this.resolvedTokens});
 
   final List<String> tokens;
+  final Map<String, TokenResolveDTO> resolvedTokens;
 
   @override
   Widget build(BuildContext context) {
@@ -360,23 +369,20 @@ class _TokenChips extends StatelessWidget {
       );
     }
 
-    String shortMint(String m) {
-      final t = m.trim();
-      if (t.length <= 12) return t;
-      return '${t.substring(0, 6)}…${t.substring(t.length - 4)}';
-    }
-
-    return Wrap(
-      spacing: 8,
-      runSpacing: 8,
-      children: tokens
-          .map(
-            (m) => Chip(
-              label: Text(shortMint(m)),
-              visualDensity: VisualDensity.compact,
-            ),
-          )
-          .toList(),
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        for (final raw in tokens) ...[
+          Builder(
+            builder: (context) {
+              final m = raw.trim();
+              final resolved = resolvedTokens[m];
+              return TokenCard(mintAddress: m, resolved: resolved);
+            },
+          ),
+          const SizedBox(height: 10),
+        ],
+      ],
     );
   }
 }

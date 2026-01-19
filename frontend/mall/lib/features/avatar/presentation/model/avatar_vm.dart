@@ -2,6 +2,7 @@
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 
+import '../../../wallet/infrastructure/token_resolve_dto.dart';
 import '../../../wallet/infrastructure/wallet_dto.dart';
 import 'me_avatar.dart';
 
@@ -28,6 +29,7 @@ class AvatarVm {
     required this.meAvatarSnap,
     required this.walletSnap,
     required this.tokens,
+    required this.resolvedTokens,
     required this.counts,
     required this.tab,
     required this.setTab,
@@ -44,7 +46,13 @@ class AvatarVm {
   final AsyncSnapshot<MeAvatar?> meAvatarSnap;
   final AsyncSnapshot<WalletDTO?> walletSnap;
 
+  /// wallet.tokens (mintAddress list)
   final List<String> tokens;
+
+  /// mintAddress -> resolved info (productId/docId, brandId, metadataUri, etc.)
+  /// - resolve 未完了/失敗は entry が無い（or null）
+  final Map<String, TokenResolveDTO> resolvedTokens;
+
   final ProfileCounts counts;
 
   final ProfileTab tab;

@@ -1,10 +1,11 @@
-// frontend\mall\lib\features\wallet\infrastructure\repository_http.dart
+// frontend/mall/lib/features/wallet/infrastructure/repository_http.dart
 import 'dart:convert';
 
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:http/http.dart' as http;
 
 import '../../../app/config/api_base.dart';
+import 'token_resolve_dto.dart';
 import 'wallet_dto.dart';
 
 class WalletRepositoryHttp {
@@ -24,6 +25,13 @@ class WalletRepositoryHttp {
     final base = _normalizeBase(resolveMallApiBase());
     final p = path.startsWith('/') ? path : '/$path';
     return Uri.parse('$base$p');
+  }
+
+  Uri _uriWithQuery(String path, Map<String, String> queryParameters) {
+    final base = _normalizeBase(resolveMallApiBase());
+    final p = path.startsWith('/') ? path : '/$path';
+    final u = Uri.parse('$base$p');
+    return u.replace(queryParameters: queryParameters);
   }
 
   Future<String?> _getIdToken({bool forceRefresh = false}) async {
@@ -158,5 +166,52 @@ class WalletRepositoryHttp {
       // sync が失敗しても、現状の wallet を表示したいので握りつぶす
     }
     return fetchMeWallet();
+  }
+
+  /// Resolve token information from a mint address.
+  ///
+  /// Backend:
+  /// - GET /mall/me/wallets/tokens/resolve?mintAddress=...
+  ///
+  /// Response (expected):
+  /// {
+  ///   "productId": "...",     // docId in tokens collection
+  ///   "brandId": "...",
+  ///   "metadataUri": "...",
+  ///   "mintAddress": "..."
+  /// }
+  Future<TokenResolveDTO?> resolveTokenByMintAddress(String mintAddress) async {
+    final m = mintAddress.trim();
+    if (m.isEmpty) return null;
+
+    final uri = _uriWithQuery('/mall/me/wallets/tokens/resolve', {
+      'mintAddress': m,
+    });
+
+    // 1st try
+    final token1 = await _getIdToken(forceRefresh: false);
+    final headers1 = <String, String>{'Accept': 'application/json'};
+    if (token1 != null) {
+      headers1['Authorization'] = 'Bearer $token1';
+    }
+
+    http.Response res = await http.get(uri, headers: headers1);
+
+    // retry 401
+    if (res.statusCode == 401) {
+      final token2 = await _getIdToken(forceRefresh: true);
+      final headers2 = <String, String>{'Accept': 'application/json'};
+      if (token2 != null) {
+        headers2['Authorization'] = 'Bearer $token2';
+      }
+      res = await http.get(uri, headers: headers2);
+    }
+
+    if (res.statusCode < 200 || res.statusCode >= 300) {
+      return null;
+    }
+
+    final decoded = _unwrapData(_decodeObject(res.body));
+    return TokenResolveDTO.fromJson(decoded);
   }
 }

@@ -8,10 +8,10 @@ import (
 	"net/http"
 	"strings"
 
-	usecase "narratives/internal/application/usecase"
-	walletdom "narratives/internal/domain/wallet"
-
 	"narratives/internal/adapters/in/http/middleware"
+	usecase "narratives/internal/application/usecase"
+	tokendom "narratives/internal/domain/token"
+	walletdom "narratives/internal/domain/wallet"
 )
 
 // MallWalletHandler handles mall buyer-facing wallet endpoints.
@@ -19,6 +19,7 @@ import (
 // ✅ Routes (mall) - NEW ONLY (legacy removed):
 // - GET  /mall/me/wallets
 // - POST /mall/me/wallets/sync
+// - GET  /mall/me/wallets/tokens/resolve?mintAddress=...
 //
 // Contract assumptions (new only):
 //   - uid is provided by UserAuthMiddleware in request context.
@@ -49,6 +50,11 @@ func (h *MallWalletHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		h.syncMeWallets(w, r)
 		return
 
+	// ✅ resolve token by mintAddress
+	case r.Method == http.MethodGet && path0 == "/mall/me/wallets/tokens/resolve":
+		h.resolveTokenByMintAddress(w, r)
+		return
+
 	default:
 		notFound(w)
 		return
@@ -66,7 +72,6 @@ func (h *MallWalletHandler) getMeWallets(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
-	// ✅ typed-key context getter (fixes mismatch with AvatarContextMiddleware)
 	avatarID, ok := middleware.CurrentAvatarID(r)
 	avatarID = strings.TrimSpace(avatarID)
 	if !ok || avatarID == "" {
@@ -78,19 +83,16 @@ func (h *MallWalletHandler) getMeWallets(w http.ResponseWriter, r *http.Request)
 	uid, _ := middleware.CurrentUserUID(r)
 	log.Printf("[mall_wallet_handler] GET /mall/me/wallets uid=%q avatarId=%q", maskID(uid), maskID(avatarID))
 
-	// read persisted wallet only (no legacy address resolution)
 	wallet, err := h.walletUC.WalletRepo.GetByAvatarID(ctx, avatarID)
 	if err != nil {
 		writeMallWalletErr(w, err)
 		return
 	}
 
-	// wallets を正として返却（現状は 1 avatar = 1 wallet 前提）
 	_ = json.NewEncoder(w).Encode(map[string]any{"wallets": []walletdom.Wallet{wallet}})
 }
 
 // POST /mall/me/wallets/sync
-// - runs on-chain RPC via WalletUsecase.SyncWalletTokens and returns updated wallet
 func (h *MallWalletHandler) syncMeWallets(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 
@@ -100,7 +102,6 @@ func (h *MallWalletHandler) syncMeWallets(w http.ResponseWriter, r *http.Request
 		return
 	}
 
-	// ✅ typed-key context getter (fixes mismatch with AvatarContextMiddleware)
 	avatarID, ok := middleware.CurrentAvatarID(r)
 	avatarID = strings.TrimSpace(avatarID)
 	if !ok || avatarID == "" {
@@ -121,17 +122,81 @@ func (h *MallWalletHandler) syncMeWallets(w http.ResponseWriter, r *http.Request
 	_ = json.NewEncoder(w).Encode(map[string]any{"wallets": []walletdom.Wallet{wallet}})
 }
 
+// GET /mall/me/wallets/tokens/resolve?mintAddress=...
+// - returns: { productId, brandId, metadataUri, mintAddress }
+func (h *MallWalletHandler) resolveTokenByMintAddress(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+
+	if h == nil || h.walletUC == nil {
+		w.WriteHeader(http.StatusServiceUnavailable)
+		_ = json.NewEncoder(w).Encode(map[string]string{"error": "wallet usecase not configured"})
+		return
+	}
+
+	// auth context check (same rule as other /mall/me/* endpoints)
+	avatarID, ok := middleware.CurrentAvatarID(r)
+	avatarID = strings.TrimSpace(avatarID)
+	if !ok || avatarID == "" {
+		w.WriteHeader(http.StatusUnauthorized)
+		_ = json.NewEncoder(w).Encode(map[string]string{"error": "unauthorized"})
+		return
+	}
+
+	mintAddress := strings.TrimSpace(r.URL.Query().Get("mintAddress"))
+	if mintAddress == "" {
+		w.WriteHeader(http.StatusBadRequest)
+		_ = json.NewEncoder(w).Encode(map[string]string{"error": "mintAddress is required"})
+		return
+	}
+
+	uid, _ := middleware.CurrentUserUID(r)
+	log.Printf(
+		"[mall_wallet_handler] GET /mall/me/wallets/tokens/resolve uid=%q avatarId=%q mint=%q",
+		maskID(uid),
+		maskID(avatarID),
+		maskID(mintAddress),
+	)
+
+	res, err := h.walletUC.ResolveTokenByMintAddress(ctx, mintAddress)
+	if err != nil {
+		writeMallWalletErr(w, err)
+		return
+	}
+
+	_ = json.NewEncoder(w).Encode(map[string]any{
+		"productId":   strings.TrimSpace(res.ProductID),
+		"brandId":     strings.TrimSpace(res.BrandID),
+		"metadataUri": strings.TrimSpace(res.MetadataURI),
+		"mintAddress": strings.TrimSpace(res.MintAddress),
+	})
+}
+
 func writeMallWalletErr(w http.ResponseWriter, err error) {
 	code := http.StatusInternalServerError
 
 	switch {
+	// ✅ wallet not found
 	case errors.Is(err, walletdom.ErrNotFound):
 		code = http.StatusNotFound
+
+	// ✅ token not found (mintAddress -> token doc not found)
+	case errors.Is(err, tokendom.ErrNotFound):
+		code = http.StatusNotFound
+
+	// Sync: bad request
 	case errors.Is(err, usecase.ErrWalletSyncAvatarIDEmpty),
 		errors.Is(err, usecase.ErrWalletSyncWalletAddressEmpty):
 		code = http.StatusBadRequest
+
+	// Resolve: bad request
+	case errors.Is(err, usecase.ErrMintAddressEmpty),
+		errors.Is(err, tokendom.ErrInvalidMintAddress):
+		code = http.StatusBadRequest
+
+	// Not configured
 	case errors.Is(err, usecase.ErrWalletSyncOnchainNotConfigured),
-		errors.Is(err, usecase.ErrWalletUsecaseNotConfigured):
+		errors.Is(err, usecase.ErrWalletUsecaseNotConfigured),
+		errors.Is(err, usecase.ErrWalletTokenQueryNotConfigured):
 		code = http.StatusServiceUnavailable
 	}
 

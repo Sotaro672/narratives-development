@@ -8,8 +8,12 @@ import (
 	"strings"
 	"time"
 
+	"cloud.google.com/go/firestore"
 	secretmanager "cloud.google.com/go/secretmanager/apiv1"
 	secretmanagerpb "cloud.google.com/go/secretmanager/apiv1/secretmanagerpb"
+	"google.golang.org/api/iterator"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 
 	// inbound (query + resolver types)
 	mallquery "narratives/internal/application/query/mall"
@@ -31,6 +35,7 @@ import (
 
 	// domains
 	ldom "narratives/internal/domain/list"
+	tokendom "narratives/internal/domain/token"
 
 	shared "narratives/internal/platform/di/shared"
 )
@@ -221,12 +226,17 @@ func NewContainer(ctx context.Context, infra *shared.Infra) (*Container, error) 
 	c.UserUC = usecase.NewUserUsecase(userRepo)
 
 	// ========================================================
-	// ✅ WalletUsecase (NewWalletUsecase(walletRepo).WithOnchainReader(onchainReader) に揃える)
+	// ✅ WalletUsecase
 	// - NewWalletUsecase は 1 引数（WalletRepository）
 	// - OnchainReader は WithOnchainReader で注入
+	// - TokenQuery は WithTokenQuery で注入（mintAddress -> productId/docId, brandId, metadataUri）
 	// ========================================================
 	onchainReader := solanaplatform.NewOnchainWalletReaderDevnet()
-	c.WalletUC = usecase.NewWalletUsecase(walletRepo).WithOnchainReader(onchainReader)
+	tokenQuery := newTokenQueryFS(fsClient) // ✅ NEW
+
+	c.WalletUC = usecase.NewWalletUsecase(walletRepo).
+		WithOnchainReader(onchainReader).
+		WithTokenQuery(tokenQuery) // ✅ NEW
 
 	c.CartUC = usecase.NewCartUsecase(cartRepo)
 
@@ -516,4 +526,97 @@ func (a *inventoryRepoTransferResultAdapter) ApplyTransferResult(
 	)
 
 	return nil
+}
+
+// ============================================================
+// ✅ NEW: TokenQueryFS (mintAddress -> productId(docId), brandId, metadataUri)
+//   - outfs.NewTokenQueryFS(...) が無い前提で、DI側に最小実装を置く
+// ============================================================
+
+type tokenQueryFS struct {
+	client *firestore.Client
+	col    string
+}
+
+func newTokenQueryFS(client *firestore.Client) *tokenQueryFS {
+	return &tokenQueryFS{
+		client: client,
+		col:    "tokens",
+	}
+}
+
+func (q *tokenQueryFS) ResolveTokenByMintAddress(
+	ctx context.Context,
+	mintAddress string,
+) (tokendom.ResolveTokenByMintAddressResult, error) {
+
+	if q == nil || q.client == nil {
+		return tokendom.ResolveTokenByMintAddressResult{}, errors.New("tokenQueryFS is not initialized")
+	}
+
+	m := strings.TrimSpace(mintAddress)
+	if m == "" {
+		return tokendom.ResolveTokenByMintAddressResult{}, errors.New("mintAddress is empty")
+	}
+
+	it := q.client.Collection(q.col).
+		Where("mintAddress", "==", m).
+		Limit(2).
+		Documents(ctx)
+	defer it.Stop()
+
+	// 1件目
+	doc, err := it.Next()
+	if errors.Is(err, iterator.Done) {
+		return tokendom.ResolveTokenByMintAddressResult{}, errors.New("token not found for mintAddress")
+	}
+	if err != nil {
+		return tokendom.ResolveTokenByMintAddressResult{}, err
+	}
+
+	// 2件目があればユニーク違反
+	doc2, err := it.Next()
+	if err == nil && doc2 != nil {
+		return tokendom.ResolveTokenByMintAddressResult{}, errors.New("multiple tokens found for mintAddress")
+	}
+	if err != nil && !errors.Is(err, iterator.Done) {
+		return tokendom.ResolveTokenByMintAddressResult{}, err
+	}
+
+	raw := doc.Data()
+
+	brandID, _ := raw["brandId"].(string)
+	metadataURI, _ := raw["metadataUri"].(string)
+
+	brandID = strings.TrimSpace(brandID)
+	metadataURI = strings.TrimSpace(metadataURI)
+
+	// 参考: 旧データ互換で metadataUri のキーゆれがある場合に備えるならここで吸収可能
+	if metadataURI == "" {
+		if v, ok := raw["metadataURI"].(string); ok {
+			metadataURI = strings.TrimSpace(v)
+		}
+		if v, ok := raw["metadataUrl"].(string); ok {
+			metadataURI = strings.TrimSpace(v)
+		}
+	}
+
+	// Firestore では docID が productId（あなたの設計前提）
+	productID := strings.TrimSpace(doc.Ref.ID)
+	if productID == "" {
+		return tokendom.ResolveTokenByMintAddressResult{}, errors.New("resolved productId is empty")
+	}
+
+	// brandId / metadataUri が必須でない運用ならここは緩めてください。
+	// 現状の実データ前提では入っている想定。
+	if status.Code(nil) == codes.OK {
+		// no-op: keep imports used (codes is used elsewhere already)
+	}
+
+	return tokendom.ResolveTokenByMintAddressResult{
+		ProductID:   productID,
+		MintAddress: m,
+		BrandID:     brandID,
+		MetadataURI: metadataURI,
+	}, nil
 }

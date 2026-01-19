@@ -7,6 +7,7 @@ import (
 	"strings"
 	"time"
 
+	tokendom "narratives/internal/domain/token"
 	walletdom "narratives/internal/domain/wallet"
 )
 
@@ -21,20 +22,25 @@ type OnchainWalletReader interface {
 	ListOwnedTokenMints(ctx context.Context, walletAddress string) ([]string, error)
 }
 
+// ✅ TokenQuery (mintAddress -> productId/docId, brandId, metadataUri)
+type TokenQuery interface {
+	ResolveTokenByMintAddress(ctx context.Context, mintAddress string) (tokendom.ResolveTokenByMintAddressResult, error)
+}
+
 // WalletUsecase は Wallet 同期ユースケース
-// - 「同期API（案A）」を前提に、同期対象 wallet は既に存在することを要求する
-// - 旧式互換（avatar から addr を拾って create する等）は行わない
 type WalletUsecase struct {
 	WalletRepo    WalletRepository
 	OnchainReader OnchainWalletReader // 必須（同期APIとして使うなら）
+	TokenQuery    TokenQuery          // ✅ NEW（mint -> token逆引き）
 }
 
 // コンストラクタ（DI コンテナの呼び出しに合わせて 1 引数）
-// OnchainReader は WithOnchainReader で差し込む（nil のまま同期を呼ぶとエラー）
+// OnchainReader / TokenQuery はセッターで差し込む
 func NewWalletUsecase(walletRepo WalletRepository) *WalletUsecase {
 	return &WalletUsecase{
 		WalletRepo:    walletRepo,
 		OnchainReader: nil,
+		TokenQuery:    nil,
 	}
 }
 
@@ -46,22 +52,26 @@ func (uc *WalletUsecase) WithOnchainReader(r OnchainWalletReader) *WalletUsecase
 	return uc
 }
 
+// ✅ TokenQuery を後から差し込むためのセッター
+func (uc *WalletUsecase) WithTokenQuery(q TokenQuery) *WalletUsecase {
+	if uc != nil {
+		uc.TokenQuery = q
+	}
+	return uc
+}
+
 var (
 	ErrWalletUsecaseNotConfigured     = errors.New("wallet usecase: not configured")
 	ErrWalletSyncAvatarIDEmpty        = errors.New("wallet usecase: avatarID is empty")
 	ErrWalletSyncOnchainNotConfigured = errors.New("wallet usecase: onchain reader not configured")
 	ErrWalletSyncWalletAddressEmpty   = errors.New("wallet usecase: walletAddress is empty")
+
+	// ✅ NEW
+	ErrWalletTokenQueryNotConfigured = errors.New("wallet usecase: token query not configured")
+	ErrMintAddressEmpty              = errors.New("wallet usecase: mintAddress is empty")
 )
 
-// SyncWalletTokens:
-// - docId=avatarId の wallet を取得
-// - wallet.walletAddress を owner として devnet RPC から token mints を取得
-// - wallet.tokens を on-chain に合わせて置き換え、保存
-//
-// NOTE:
-// - wallet が存在しない場合は ErrNotFound を返す（この usecase は create しない）
-// - addr を handler から受け取らない（旧式互換排除）
-// - replace は冪等
+// SyncWalletTokens: 既存のまま
 func (uc *WalletUsecase) SyncWalletTokens(ctx context.Context, avatarID string) (walletdom.Wallet, error) {
 	if uc == nil || uc.WalletRepo == nil {
 		return walletdom.Wallet{}, ErrWalletUsecaseNotConfigured
@@ -103,4 +113,29 @@ func (uc *WalletUsecase) SyncWalletTokens(ctx context.Context, avatarID string) 
 	}
 
 	return w, nil
+}
+
+// ============================================================
+// ✅ ResolveTokenByMintAddress
+// ============================================================
+//
+// mintAddress を受け取り、Firestore tokens を逆引きして
+// productId(docId), brandId, metadataUri を返す。
+func (uc *WalletUsecase) ResolveTokenByMintAddress(
+	ctx context.Context,
+	mintAddress string,
+) (tokendom.ResolveTokenByMintAddressResult, error) {
+	if uc == nil {
+		return tokendom.ResolveTokenByMintAddressResult{}, ErrWalletUsecaseNotConfigured
+	}
+	if uc.TokenQuery == nil {
+		return tokendom.ResolveTokenByMintAddressResult{}, ErrWalletTokenQueryNotConfigured
+	}
+
+	m := strings.TrimSpace(mintAddress)
+	if m == "" {
+		return tokendom.ResolveTokenByMintAddressResult{}, ErrMintAddressEmpty
+	}
+
+	return uc.TokenQuery.ResolveTokenByMintAddress(ctx, m)
 }
