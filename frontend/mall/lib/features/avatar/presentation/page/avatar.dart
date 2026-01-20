@@ -1,3 +1,4 @@
+//frontend\mall\lib\features\avatar\presentation\page\avatar.dart
 import 'dart:convert';
 
 import 'package:firebase_auth/firebase_auth.dart';
@@ -102,6 +103,8 @@ class AvatarPage extends HookWidget {
             tokens: vm.tokens,
             resolvedTokens: vm.resolvedTokens,
             tokenMetadatas: vm.tokenMetadatas,
+            isTokensLoading: vm.isTokensLoading,
+            tokenLoadingByMint: vm.tokenLoadingByMint,
             onEdit: vm.goToAvatarEdit,
           ),
         ),
@@ -126,6 +129,8 @@ class _AvatarProfileBody extends StatelessWidget {
     required this.tokens,
     required this.resolvedTokens,
     required this.tokenMetadatas,
+    required this.isTokensLoading,
+    required this.tokenLoadingByMint,
     required this.onEdit,
   });
 
@@ -142,6 +147,9 @@ class _AvatarProfileBody extends StatelessWidget {
 
   final Map<String, TokenResolveDTO> resolvedTokens;
   final Map<String, TokenMetadataDTO> tokenMetadatas;
+
+  final bool isTokensLoading;
+  final Map<String, bool> tokenLoadingByMint;
 
   final VoidCallback onEdit;
 
@@ -209,12 +217,7 @@ class _AvatarProfileBody extends StatelessWidget {
         _TabBar(tab: tab, onChange: onTabChange),
         const SizedBox(height: 12),
         if (tab == ProfileTab.tokens) ...[
-          if (walletSnap.connectionState == ConnectionState.waiting)
-            const Padding(
-              padding: EdgeInsets.symmetric(vertical: 8),
-              child: LinearProgressIndicator(),
-            )
-          else if (walletSnap.hasError)
+          if (walletSnap.hasError)
             Text(
               'トークンの取得に失敗しました: ${walletSnap.error}',
               style: Theme.of(context).textTheme.bodyMedium?.copyWith(
@@ -226,6 +229,8 @@ class _AvatarProfileBody extends StatelessWidget {
               tokens: tokens,
               resolvedTokens: resolvedTokens,
               tokenMetadatas: tokenMetadatas,
+              isTokensLoading: isTokensLoading,
+              tokenLoadingByMint: tokenLoadingByMint,
             ),
         ] else ...[
           const _PostsPlaceholder(),
@@ -362,42 +367,98 @@ class _TokenCards extends StatelessWidget {
     required this.tokens,
     required this.resolvedTokens,
     required this.tokenMetadatas,
+    required this.isTokensLoading,
+    required this.tokenLoadingByMint,
   });
 
   final List<String> tokens;
   final Map<String, TokenResolveDTO> resolvedTokens;
   final Map<String, TokenMetadataDTO> tokenMetadatas;
 
+  /// ✅ tokens が空の時でも skeleton を出すための全体ロード状態
+  final bool isTokensLoading;
+
+  /// ✅ mint ごとのロード状態
+  final Map<String, bool> tokenLoadingByMint;
+
   @override
   Widget build(BuildContext context) {
-    if (tokens.isEmpty) {
-      return Text(
-        'トークンはまだありません。',
-        style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-          color: Theme.of(context).colorScheme.onSurfaceVariant,
-        ),
-      );
-    }
+    // ✅ 固定高さにしてグリッド整合性を保つ（現状の高さ + 文字列1行分）
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        const crossAxisCount = 3;
+        const spacing = 10.0;
 
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        for (final raw in tokens) ...[
-          Builder(
-            builder: (context) {
-              final m = raw.trim();
-              final resolved = resolvedTokens[m];
-              final meta = tokenMetadatas[m];
-              return TokenCard(
-                mintAddress: m,
-                resolved: resolved,
-                metadata: meta,
-              );
-            },
+        final itemWidth =
+            (constraints.maxWidth - spacing * (crossAxisCount - 1)) /
+            crossAxisCount;
+
+        // 既存: childAspectRatio: 0.82 -> height = width / 0.82
+        final baseHeight = itemWidth / 0.82;
+
+        // ✅ 文字列1行分だけ増やす（フォントサイズに追従）
+        final fs = Theme.of(context).textTheme.bodySmall?.fontSize ?? 12.0;
+        final oneLine = fs * 1.35;
+        final extra = oneLine + 4;
+
+        final fixedHeight = baseHeight + extra;
+
+        // ✅ tokens が空でも、ロード中なら skeleton を出す
+        if (tokens.isEmpty) {
+          if (isTokensLoading) {
+            return GridView.builder(
+              shrinkWrap: true,
+              physics: const NeverScrollableScrollPhysics(),
+              gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                crossAxisCount: crossAxisCount,
+                crossAxisSpacing: spacing,
+                mainAxisSpacing: spacing,
+                mainAxisExtent: fixedHeight, // ✅ 高さ固定 + 1行
+              ),
+              itemCount: 6,
+              itemBuilder: (context, index) {
+                return const TokenCard(mintAddress: '', isLoading: true);
+              },
+            );
+          }
+
+          return Text(
+            'トークンはまだありません。',
+            style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+              color: Theme.of(context).colorScheme.onSurfaceVariant,
+            ),
+          );
+        }
+
+        // ✅ 3列グリッド表示（カード高さ固定）
+        return GridView.builder(
+          shrinkWrap: true,
+          physics: const NeverScrollableScrollPhysics(),
+          gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+            crossAxisCount: crossAxisCount,
+            crossAxisSpacing: spacing,
+            mainAxisSpacing: spacing,
+            mainAxisExtent: fixedHeight, // ✅ 高さ固定 + 1行
           ),
-          const SizedBox(height: 10),
-        ],
-      ],
+          itemCount: tokens.length,
+          itemBuilder: (context, index) {
+            final m = tokens[index].trim();
+
+            final resolved = resolvedTokens[m];
+            final meta = tokenMetadatas[m];
+
+            // ✅ mint 単位のロード判定（案A）
+            final loading = (tokenLoadingByMint[m] ?? isTokensLoading);
+
+            return TokenCard(
+              mintAddress: m,
+              resolved: resolved,
+              metadata: meta,
+              isLoading: loading,
+            );
+          },
+        );
+      },
     );
   }
 }

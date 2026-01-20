@@ -1,10 +1,12 @@
 // frontend/mall/lib/features/wallet/presentation/component/token_card.dart
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 
 import '../../infrastructure/token_metadata_dto.dart';
 import '../../infrastructure/token_resolve_dto.dart';
 
-class TokenCard extends StatelessWidget {
+class TokenCard extends StatefulWidget {
   const TokenCard({
     super.key,
     required this.mintAddress,
@@ -19,73 +21,232 @@ class TokenCard extends StatelessWidget {
   final bool isLoading;
 
   @override
+  State<TokenCard> createState() => _TokenCardState();
+}
+
+class _TokenCardState extends State<TokenCard> {
+  static const _timeout = Duration(seconds: 30);
+
+  Timer? _timer;
+  bool _timedOut = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _syncTimer();
+  }
+
+  @override
+  void didUpdateWidget(covariant TokenCard oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.isLoading != widget.isLoading) {
+      _syncTimer(resetTimeoutWhenLoaded: true);
+    }
+  }
+
+  void _syncTimer({bool resetTimeoutWhenLoaded = false}) {
+    if (!widget.isLoading) {
+      _timer?.cancel();
+      _timer = null;
+
+      if (resetTimeoutWhenLoaded && _timedOut) {
+        setState(() => _timedOut = false);
+      }
+      return;
+    }
+
+    if (_timer == null && !_timedOut) {
+      _timer = Timer(_timeout, () {
+        if (!mounted) return;
+        setState(() => _timedOut = true);
+      });
+    }
+  }
+
+  @override
+  void dispose() {
+    _timer?.cancel();
+    super.dispose();
+  }
+
+  String _s(dynamic v) => (v == null ? '' : v.toString()).trim();
+
+  @override
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
 
-    final resolvedOk = resolved != null;
-    final metadataOk = metadata != null;
+    final resolvedOk = widget.resolved != null;
+    final metadataOk = widget.metadata != null;
 
-    final failed = !isLoading && (!resolvedOk || (resolvedOk && !metadataOk));
+    // ✅ 失敗表示は「ロード終了後」だけ（ロード中は skeleton）
+    final failed = !widget.isLoading && (!resolvedOk || !metadataOk);
 
-    // ✅ ID ではなく「name」を表示する（label は出さない）
-    final productName = (resolved?.productName ?? '').trim();
-    final brandName = (resolved?.brandName ?? '').trim();
+    // ✅ ただしロードが30秒続いたらタイムアウト失敗（カード内表示）
+    final timeoutFailed = widget.isLoading && _timedOut;
 
     return Card(
       elevation: 0,
       color: cs.surfaceContainerHighest,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
       child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            if (isLoading) ...[
-              const LinearProgressIndicator(),
-            ] else if (failed) ...[
-              Text(
-                'データが取得できませんでした。',
-                style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                  color: cs.error,
-                  fontWeight: FontWeight.w600,
+        padding: const EdgeInsets.all(10),
+        child: LayoutBuilder(
+          builder: (context, constraints) {
+            // カード内の固定レイアウトを組む（画像サイズは残りに合わせる）
+            if (timeoutFailed) {
+              return _fixedCenterMessage(context, 'データを取得できませんでした。');
+            }
+
+            if (widget.isLoading) {
+              return _fixedSkeleton(context, constraints.maxHeight);
+            }
+
+            if (failed) {
+              return _fixedCenterMessage(context, 'データを取得できませんでした。');
+            }
+
+            final brandName = _s(widget.resolved?.brandName);
+            final tokenName = _s(widget.metadata?.name);
+            final productName = _s(widget.resolved?.productName);
+            final imageUrl = _s(widget.metadata?.image);
+
+            // ---- 固定レイアウト（テキスト領域を先に確保し、画像は残り）----
+            final titleStyle = Theme.of(context).textTheme.titleSmall?.copyWith(
+              color: cs.onSurface,
+              fontWeight: FontWeight.w700,
+              fontSize: 12.5,
+              height: 1.1,
+            );
+
+            final subStyle = Theme.of(context).textTheme.bodySmall?.copyWith(
+              color: cs.onSurfaceVariant,
+              fontWeight: FontWeight.w700,
+              fontSize: 11.5,
+              height: 1.1,
+            );
+
+            // brand(1行) + token(1行) + product(2行) を想定して高さ見積もり
+            final titleLineH =
+                ((titleStyle?.fontSize ?? 12.5) * (titleStyle?.height ?? 1.1));
+            final subLineH =
+                ((subStyle?.fontSize ?? 11.5) * (subStyle?.height ?? 1.1));
+
+            const gap1 = 6.0;
+            const gap2 = 6.0;
+            const gap3 = 4.0;
+
+            final reservedTextHeight =
+                titleLineH + // brandName (1)
+                gap1 +
+                titleLineH + // tokenName (1)
+                gap3 +
+                (subLineH * 2) + // productName (2 lines)
+                gap2;
+
+            // 画像は「残り」 (最低値も確保)
+            final imageH = (constraints.maxHeight - reservedTextHeight).clamp(
+              56.0,
+              9999.0,
+            );
+
+            return Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                _textLine(
+                  context,
+                  brandName.isEmpty ? '（brandName）' : brandName,
+                  style: titleStyle,
+                  maxLines: 1,
                 ),
-              ),
-            ] else ...[
-              // -------------------------
-              // resolve 側（productName / brandName）
-              //  - value のみ表示（label 非表示）
-              // -------------------------
-              _valueOnly(
-                context,
-                value: productName.isEmpty ? '（空）' : productName,
-              ),
-              const SizedBox(height: 6),
-              _valueOnly(context, value: brandName.isEmpty ? '（空）' : brandName),
+                const SizedBox(height: gap1),
 
-              // metadataUri は非表示（要求により）
-              // -------------------------
-              // metadata 側（metadataUri の中身）
-              // -------------------------
-              if (metadata != null) ...[
-                const SizedBox(height: 10),
+                SizedBox(height: imageH, child: _imageBox(context, imageUrl)),
 
-                // name は label なしで value だけ
-                if (metadata!.name.trim().isNotEmpty) ...[
-                  _valueOnly(context, value: metadata!.name),
-                  const SizedBox(height: 6),
-                ],
+                const SizedBox(height: gap2),
 
-                // ✅ image を画像として表示
-                if (metadata!.image.trim().isNotEmpty) ...[
-                  const SizedBox(height: 6),
-                  _imageBox(context, metadata!.image),
-                  const SizedBox(height: 6),
-                ],
+                _textLine(
+                  context,
+                  tokenName.isEmpty ? '（token name）' : tokenName,
+                  style: titleStyle,
+                  maxLines: 1,
+                ),
+                const SizedBox(height: gap3),
+
+                _textLine(
+                  context,
+                  productName.isEmpty ? '（productName）' : productName,
+                  style: subStyle,
+                  maxLines: 2, // ✅ +1行分はここに使う
+                ),
               ],
-            ],
-          ],
+            );
+          },
         ),
       ),
+    );
+  }
+
+  Widget _fixedCenterMessage(BuildContext context, String msg) {
+    final cs = Theme.of(context).colorScheme;
+    return SizedBox.expand(
+      child: Center(
+        child: Text(
+          msg,
+          textAlign: TextAlign.center,
+          style: Theme.of(context).textTheme.bodySmall?.copyWith(
+            color: cs.error,
+            fontWeight: FontWeight.w700,
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _fixedSkeleton(BuildContext context, double maxH) {
+    final cs = Theme.of(context).colorScheme;
+    final base = cs.surface;
+    final br = BorderRadius.circular(10);
+
+    Widget box({required double h}) {
+      return Container(
+        height: h,
+        decoration: BoxDecoration(color: base, borderRadius: br),
+      );
+    }
+
+    // 固定高さの枠内で skeleton を構成（タイムアウトまで常に同サイズ）
+    return SizedBox.expand(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          box(h: 14),
+          const SizedBox(height: 6),
+          Expanded(
+            child: Container(
+              decoration: BoxDecoration(color: base, borderRadius: br),
+            ),
+          ),
+          const SizedBox(height: 6),
+          box(h: 14),
+          const SizedBox(height: 4),
+          box(h: 12),
+        ],
+      ),
+    );
+  }
+
+  Widget _textLine(
+    BuildContext context,
+    String value, {
+    required TextStyle? style,
+    required int maxLines,
+  }) {
+    return Text(
+      value.trim().isEmpty ? '（空）' : value.trim(),
+      maxLines: maxLines,
+      overflow: TextOverflow.ellipsis,
+      softWrap: true,
+      style: style,
     );
   }
 
@@ -95,54 +256,46 @@ class TokenCard extends StatelessWidget {
 
     return ClipRRect(
       borderRadius: BorderRadius.circular(10),
-      child: AspectRatio(
-        aspectRatio: 1, // 正方形（必要なら 16/9 等に変更）
-        child: Image.network(
-          u,
-          fit: BoxFit.cover,
-          // 読み込み中の表示
-          loadingBuilder: (context, child, loadingProgress) {
-            if (loadingProgress == null) return child;
-            return Container(
-              color: cs.surface,
-              alignment: Alignment.center,
-              child: const SizedBox(
-                width: 20,
-                height: 20,
-                child: CircularProgressIndicator(strokeWidth: 2),
-              ),
-            );
-          },
-          // 失敗時の表示
-          errorBuilder: (context, error, stackTrace) {
-            return Container(
-              color: cs.surface,
-              alignment: Alignment.center,
-              padding: const EdgeInsets.all(12),
-              child: Text(
-                '画像を読み込めませんでした。',
-                style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                  color: cs.onSurfaceVariant,
-                  fontWeight: FontWeight.w600,
+      child: Container(
+        color: cs.surface,
+        child: u.isEmpty
+            ? Center(
+                child: Text(
+                  'no image',
+                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                    color: cs.onSurfaceVariant,
+                    fontWeight: FontWeight.w600,
+                  ),
                 ),
+              )
+            : Image.network(
+                u,
+                fit: BoxFit.cover,
+                loadingBuilder: (context, child, loadingProgress) {
+                  if (loadingProgress == null) return child;
+                  return const Center(
+                    child: SizedBox(
+                      width: 20,
+                      height: 20,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    ),
+                  );
+                },
+                errorBuilder: (context, error, stackTrace) {
+                  return Center(
+                    child: Padding(
+                      padding: const EdgeInsets.all(12),
+                      child: Text(
+                        '画像を読み込めませんでした。',
+                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                          color: cs.onSurfaceVariant,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ),
+                  );
+                },
               ),
-            );
-          },
-        ),
-      ),
-    );
-  }
-
-  // ✅ label を出さず value だけ表示する表示部品
-  Widget _valueOnly(BuildContext context, {required String value}) {
-    final cs = Theme.of(context).colorScheme;
-    final v = value.trim();
-
-    return Text(
-      v.isEmpty ? '（空）' : v,
-      style: Theme.of(context).textTheme.bodySmall?.copyWith(
-        color: cs.onSurface,
-        fontWeight: FontWeight.w600,
       ),
     );
   }

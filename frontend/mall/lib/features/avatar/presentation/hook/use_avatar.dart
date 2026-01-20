@@ -1,4 +1,3 @@
-// frontend/mall/lib/features/avatar/presentation/hook/use_avatar.dart
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_hooks/flutter_hooks.dart';
@@ -185,6 +184,26 @@ AvatarVm useAvatarVm(BuildContext context, {String? from}) {
   final tokenMetadatas =
       metadataSnap.data ?? const <String, TokenMetadataDTO>{};
 
+  // ✅ 全体ロード状態（tokens が空の時の skeleton 用にも使う）
+  final isTokensLoading =
+      walletSnap.connectionState == ConnectionState.waiting ||
+      resolvedSnap.connectionState == ConnectionState.waiting ||
+      metadataSnap.connectionState == ConnectionState.waiting;
+
+  // ✅ mint ごとのロード状態
+  // - ここが「案A」の中核
+  final tokenLoadingByMint = <String, bool>{};
+  for (final raw in tokens) {
+    final m = raw.trim();
+    if (m.isEmpty) continue;
+
+    final hasResolved = resolvedTokens.containsKey(m);
+    final hasMeta = tokenMetadatas.containsKey(m);
+
+    // まだ全体が進行中、または mint 単位で未取得なら loading 扱い
+    tokenLoadingByMint[m] = isTokensLoading || !hasResolved || !hasMeta;
+  }
+
   final counts = ProfileCounts(
     postCount: 0,
     followerCount: 0,
@@ -215,6 +234,8 @@ AvatarVm useAvatarVm(BuildContext context, {String? from}) {
     tokens: tokens,
     resolvedTokens: resolvedTokens,
     tokenMetadatas: tokenMetadatas,
+    isTokensLoading: isTokensLoading,
+    tokenLoadingByMint: tokenLoadingByMint,
     counts: counts,
     tab: tabState.value,
     setTab: (next) => tabState.value = next,

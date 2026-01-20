@@ -31,6 +31,8 @@ class AvatarVm {
     required this.tokens,
     required this.resolvedTokens,
     required this.tokenMetadatas,
+    required this.isTokensLoading,
+    required this.tokenLoadingByMint,
     required this.counts,
     required this.tab,
     required this.setTab,
@@ -57,6 +59,13 @@ class AvatarVm {
   /// mintAddress -> token metadata (proxy fetched)
   /// - metadata 未取得/失敗は entry が無い
   final Map<String, TokenMetadataDTO> tokenMetadatas;
+
+  /// ✅ tokens タブ全体としてロード中か（tokens が空の時にも skeleton を出す用途）
+  final bool isTokensLoading;
+
+  /// ✅ mintAddress -> loading
+  /// - true の間は TokenCard が failure を出さず skeleton を出す
+  final Map<String, bool> tokenLoadingByMint;
 
   final ProfileCounts counts;
 
