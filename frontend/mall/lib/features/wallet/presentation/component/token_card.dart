@@ -1,8 +1,11 @@
 // frontend/mall/lib/features/wallet/presentation/component/token_card.dart
 import 'dart:async';
+import 'dart:convert';
 
 import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
 
+import '../../../../app/routing/routes.dart';
 import '../../infrastructure/token_metadata_dto.dart';
 import '../../infrastructure/token_resolve_dto.dart';
 
@@ -71,6 +74,55 @@ class _TokenCardState extends State<TokenCard> {
 
   String _s(dynamic v) => (v == null ? '' : v.toString()).trim();
 
+  String _encodeFrom(String raw) {
+    final s = raw.trim();
+    if (s.isEmpty) return '';
+    return base64UrlEncode(utf8.encode(s));
+  }
+
+  /// ✅ URL肥大化の根本原因：from の中に from が入れ子になる
+  /// →「現在URLから from を必ず除去してから」from を作る
+  ///
+  /// ✅ 追加（セキュリティ要件）:
+  /// - avatarId / mintAddress を URL に残したくないので、from にも入れない
+  String _sanitizedCurrentLocationForFrom(BuildContext context) {
+    final uri = GoRouterState.of(context).uri;
+
+    // queryParameters は「最後の値」しか取れないが、from入れ子の抑止には十分
+    final qp = Map<String, String>.from(uri.queryParameters);
+
+    // ★最重要★
+    qp.remove(AppQueryKey.from);
+
+    // ✅ セキュリティ: URLに出したくないキーは from にも残さない
+    qp.remove(AppQueryKey.avatarId);
+    qp.remove(AppQueryKey.mintAddress);
+
+    // 余計な fragment がある場合も外す
+    final sanitized = uri.replace(
+      queryParameters: qp.isEmpty ? null : qp,
+      fragment: null,
+    );
+    return sanitized.toString();
+  }
+
+  void _openContents(BuildContext context) {
+    final mint = widget.mintAddress.trim();
+    if (mint.isEmpty) return;
+
+    // ✅ from は「戻り先」用途のみ。入れ子＆機微情報を除去した URL を base64 化する
+    final sanitizedFrom = _sanitizedCurrentLocationForFrom(context);
+    final from = _encodeFrom(sanitizedFrom);
+
+    // ✅ mintAddress は URL に出さない（router 側は extra を読む）
+    // ✅ avatarId も URL に出さない（navigation.dart が store で保持）
+    context.pushNamed(
+      AppRouteName.walletContents,
+      queryParameters: {if (from.isNotEmpty) AppQueryKey.from: from},
+      extra: mint,
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
@@ -78,109 +130,111 @@ class _TokenCardState extends State<TokenCard> {
     final resolvedOk = widget.resolved != null;
     final metadataOk = widget.metadata != null;
 
-    // ✅ 失敗表示は「ロード終了後」だけ（ロード中は skeleton）
     final failed = !widget.isLoading && (!resolvedOk || !metadataOk);
-
-    // ✅ ただしロードが30秒続いたらタイムアウト失敗（カード内表示）
     final timeoutFailed = widget.isLoading && _timedOut;
+
+    final canTap = !widget.isLoading && !failed && !timeoutFailed;
 
     return Card(
       elevation: 0,
       color: cs.surfaceContainerHighest,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-      child: Padding(
-        padding: const EdgeInsets.all(10),
-        child: LayoutBuilder(
-          builder: (context, constraints) {
-            // カード内の固定レイアウトを組む（画像サイズは残りに合わせる）
-            if (timeoutFailed) {
-              return _fixedCenterMessage(context, 'データを取得できませんでした。');
-            }
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          borderRadius: BorderRadius.circular(12),
+          onTap: canTap ? () => _openContents(context) : null,
+          child: Padding(
+            padding: const EdgeInsets.all(10),
+            child: LayoutBuilder(
+              builder: (context, constraints) {
+                if (timeoutFailed) {
+                  return _fixedCenterMessage(context, 'データを取得できませんでした。');
+                }
 
-            if (widget.isLoading) {
-              return _fixedSkeleton(context, constraints.maxHeight);
-            }
+                if (widget.isLoading) {
+                  return _fixedSkeleton(context, constraints.maxHeight);
+                }
 
-            if (failed) {
-              return _fixedCenterMessage(context, 'データを取得できませんでした。');
-            }
+                if (failed) {
+                  return _fixedCenterMessage(context, 'データを取得できませんでした。');
+                }
 
-            final brandName = _s(widget.resolved?.brandName);
-            final tokenName = _s(widget.metadata?.name);
-            final productName = _s(widget.resolved?.productName);
-            final imageUrl = _s(widget.metadata?.image);
+                final brandName = _s(widget.resolved?.brandName);
+                final tokenName = _s(widget.metadata?.name);
+                final productName = _s(widget.resolved?.productName);
+                final imageUrl = _s(widget.metadata?.image);
 
-            // ---- 固定レイアウト（テキスト領域を先に確保し、画像は残り）----
-            final titleStyle = Theme.of(context).textTheme.titleSmall?.copyWith(
-              color: cs.onSurface,
-              fontWeight: FontWeight.w700,
-              fontSize: 12.5,
-              height: 1.1,
-            );
+                final titleStyle = Theme.of(context).textTheme.titleSmall
+                    ?.copyWith(
+                      color: cs.onSurface,
+                      fontWeight: FontWeight.w700,
+                      fontSize: 12.5,
+                      height: 1.1,
+                    );
 
-            final subStyle = Theme.of(context).textTheme.bodySmall?.copyWith(
-              color: cs.onSurfaceVariant,
-              fontWeight: FontWeight.w700,
-              fontSize: 11.5,
-              height: 1.1,
-            );
+                final subStyle = Theme.of(context).textTheme.bodySmall
+                    ?.copyWith(
+                      color: cs.onSurfaceVariant,
+                      fontWeight: FontWeight.w700,
+                      fontSize: 11.5,
+                      height: 1.1,
+                    );
 
-            // brand(1行) + token(1行) + product(2行) を想定して高さ見積もり
-            final titleLineH =
-                ((titleStyle?.fontSize ?? 12.5) * (titleStyle?.height ?? 1.1));
-            final subLineH =
-                ((subStyle?.fontSize ?? 11.5) * (subStyle?.height ?? 1.1));
+                final titleLineH =
+                    ((titleStyle?.fontSize ?? 12.5) *
+                    (titleStyle?.height ?? 1.1));
+                final subLineH =
+                    ((subStyle?.fontSize ?? 11.5) * (subStyle?.height ?? 1.1));
 
-            const gap1 = 6.0;
-            const gap2 = 6.0;
-            const gap3 = 4.0;
+                const gap1 = 6.0;
+                const gap2 = 6.0;
+                const gap3 = 4.0;
 
-            final reservedTextHeight =
-                titleLineH + // brandName (1)
-                gap1 +
-                titleLineH + // tokenName (1)
-                gap3 +
-                (subLineH * 2) + // productName (2 lines)
-                gap2;
+                final reservedTextHeight =
+                    titleLineH +
+                    gap1 +
+                    titleLineH +
+                    gap3 +
+                    (subLineH * 2) +
+                    gap2;
 
-            // 画像は「残り」 (最低値も確保)
-            final imageH = (constraints.maxHeight - reservedTextHeight).clamp(
-              56.0,
-              9999.0,
-            );
+                final imageH = (constraints.maxHeight - reservedTextHeight)
+                    .clamp(56.0, 9999.0);
 
-            return Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                _textLine(
-                  context,
-                  brandName.isEmpty ? '（brandName）' : brandName,
-                  style: titleStyle,
-                  maxLines: 1,
-                ),
-                const SizedBox(height: gap1),
-
-                SizedBox(height: imageH, child: _imageBox(context, imageUrl)),
-
-                const SizedBox(height: gap2),
-
-                _textLine(
-                  context,
-                  tokenName.isEmpty ? '（token name）' : tokenName,
-                  style: titleStyle,
-                  maxLines: 1,
-                ),
-                const SizedBox(height: gap3),
-
-                _textLine(
-                  context,
-                  productName.isEmpty ? '（productName）' : productName,
-                  style: subStyle,
-                  maxLines: 2, // ✅ +1行分はここに使う
-                ),
-              ],
-            );
-          },
+                return Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    _textLine(
+                      context,
+                      brandName.isEmpty ? '（brandName）' : brandName,
+                      style: titleStyle,
+                      maxLines: 1,
+                    ),
+                    const SizedBox(height: gap1),
+                    SizedBox(
+                      height: imageH,
+                      child: _imageBox(context, imageUrl),
+                    ),
+                    const SizedBox(height: gap2),
+                    _textLine(
+                      context,
+                      tokenName.isEmpty ? '（token name）' : tokenName,
+                      style: titleStyle,
+                      maxLines: 1,
+                    ),
+                    const SizedBox(height: gap3),
+                    _textLine(
+                      context,
+                      productName.isEmpty ? '（productName）' : productName,
+                      style: subStyle,
+                      maxLines: 2,
+                    ),
+                  ],
+                );
+              },
+            ),
+          ),
         ),
       ),
     );
@@ -214,7 +268,6 @@ class _TokenCardState extends State<TokenCard> {
       );
     }
 
-    // 固定高さの枠内で skeleton を構成（タイムアウトまで常に同サイズ）
     return SizedBox.expand(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,

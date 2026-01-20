@@ -11,6 +11,10 @@ import 'routes.dart';
 
 /// ------------------------------------------------------------
 /// ✅ avatarId の “現在値” をアプリ側で保持（URLに無い時の補完に使う）
+///
+/// 重要（セキュリティ要件）:
+/// - avatarId を URL に出さない方針のため、redirect で query へ注入しない。
+/// - 代わりに AvatarIdStore に保持し、必要な画面で store から参照する。
 class AvatarIdStore extends ChangeNotifier {
   AvatarIdStore._();
   static final AvatarIdStore I = AvatarIdStore._();
@@ -132,28 +136,6 @@ class AvatarIdStore extends ChangeNotifier {
 }
 
 /// ------------------------------------------------------------
-/// ✅ URLの query を「必ず avatarId を1つだけ」に正規化して返す
-Map<String, String> _normalizedQueryWithSingleAvatarId(
-  GoRouterState state,
-  String resolvedAvatarId,
-) {
-  final all = state.uri.queryParametersAll; // 複数keyに対応
-  final out = <String, String>{};
-
-  all.forEach((k, vals) {
-    if (vals.isEmpty) return;
-
-    // avatarId は一旦捨てる（最後に必ず1個だけ入れる）
-    if (k == AppQueryKey.avatarId) return;
-
-    // 同名キーが複数ある場合は「最後」を採用（安定させる）
-    out[k] = vals.last;
-  });
-
-  out[AppQueryKey.avatarId] = resolvedAvatarId.trim();
-  return out;
-}
-
 /// ✅ サインイン後に avatarId を確実に解決する
 ///
 /// - URLの avatarId は「信用しない」（uid が入っている事故を防ぐ）
@@ -184,6 +166,10 @@ Future<String> _ensureAvatarIdResolved(GoRouterState state) async {
 
 /// ------------------------------------------------------------
 /// ✅ redirect 本体（router.dart から呼ぶ）
+///
+/// セキュリティ要件:
+/// - avatarId を URL に注入しない
+/// - 代わりに store へ保存のみ行う
 Future<String?> appRedirect(BuildContext context, GoRouterState state) async {
   final user = FirebaseAuth.instance.currentUser;
 
@@ -207,23 +193,15 @@ Future<String?> appRedirect(BuildContext context, GoRouterState state) async {
   };
 
   // ============================================================
-  // ✅ ログイン直後（/login に居る状態でログイン状態になった瞬間）は
-  // 必ず avatarId を解決して home(list.dart) へ `?avatarId=...` を付けて遷移
+  // ✅ ログイン直後（/login に居る状態でログイン状態になった瞬間）
+  // - avatarId は解決して store に入れる（best-effort）
+  // - URL へ avatarId を付けずに home へ遷移（URL伸長/露出を防ぐ）
   // ============================================================
   if (isLoginRoute) {
     final resolved = await _ensureAvatarIdResolved(state);
-
     if (resolved.isNotEmpty) {
-      // store にも確定値を入れる
       AvatarIdStore.I.set(resolved);
-
-      return Uri(
-        path: AppRoutePath.home,
-        queryParameters: {AppQueryKey.avatarId: resolved},
-      ).toString();
     }
-
-    // 取れない場合は従来通り home（ただし強制 avatar_create はしない）
     return AppRoutePath.home;
   }
 
@@ -245,19 +223,14 @@ Future<String?> appRedirect(BuildContext context, GoRouterState state) async {
     return null;
   }
 
-  // ✅ サインイン後：原則「全ページ URL に avatarId を必ず持たせる」
+  // ✅ サインイン後：avatarId は store に確保するが、URLは改変しない
   // ❌ avatarId 未解決でも avatar_create には飛ばさない（既存要件維持）
   final resolved = await _ensureAvatarIdResolved(state);
-  if (resolved.isEmpty) return null;
+  if (resolved.isNotEmpty) {
+    AvatarIdStore.I.set(resolved);
+  }
 
-  // store に確定値を入れる
-  AvatarIdStore.I.set(resolved);
-
-  // ✅ ここで「avatarIdが複数付いていても」必ず1つに正規化する
-  final normalized = _normalizedQueryWithSingleAvatarId(state, resolved);
-  final next = state.uri.replace(queryParameters: normalized).toString();
-
-  if (next != state.uri.toString()) return next;
+  // ✅ URL は触らない（avatarId を query に入れない / 正規化しない）
   return null;
 }
 

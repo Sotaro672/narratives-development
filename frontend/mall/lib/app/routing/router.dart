@@ -22,12 +22,9 @@ import '../../features/avatar/presentation/page/avatar.dart';
 import '../../features/avatar/presentation/page/avatar_edit.dart';
 import '../../features/user/presentation/page/user_edit.dart';
 import '../../features/cart/presentation/page/cart.dart';
-
-// ✅ NEW: preview page
 import '../../features/preview/presentation/page/preview.dart';
-
-// ✅ NEW: payment page
 import '../../features/payment/presentation/page/payment.dart';
+import '../../features/wallet/presentation/page/contents.dart';
 
 // ✅ MallListItem 型
 import '../../features/list/infrastructure/list_repository_http.dart';
@@ -62,9 +59,44 @@ String _decodeFrom(String? v) {
   }
 }
 
+/// ------------------------------------------------------------
+/// ✅ from 用に「URLが伸び続ける」事故を防ぐ
+/// - from 自体を query から除外
+/// - query の重複キーは最後を採用して 1 個に正規化
+/// - avatarId / mintAddress を URL に残さない（セキュリティ要件）
+String _sanitizeLocationForFrom(Uri uri) {
+  final all = uri.queryParametersAll;
+  final out = <String, String>{};
+
+  all.forEach((k, vals) {
+    if (vals.isEmpty) return;
+
+    // ✅ from は入れ子にすると URL が伸び続けるので落とす
+    if (k == AppQueryKey.from) return;
+
+    // ✅ セキュリティ: URLに出したくないものは from にも入れない
+    if (k == AppQueryKey.avatarId) return;
+    if (k == AppQueryKey.mintAddress) return;
+
+    // 同名が複数ある場合は最後を採用
+    out[k] = vals.last;
+  });
+
+  final normalized = uri.replace(queryParameters: out.isEmpty ? null : out);
+  return normalized.toString();
+}
+
+/// ✅ from の値として渡された「/avatar?...」等も一応 sanitize（防御的）
+String _sanitizeFromValue(String raw) {
+  final s = raw.trim();
+  if (s.isEmpty) return '';
+  final u = Uri.tryParse(s);
+  if (u == null) return s;
+  return _sanitizeLocationForFrom(u);
+}
+
+/// ------------------------------------------------------------
 /// ✅ /:productId が “固定パス” と衝突した時の安全弁（念のため）
-/// - go_router は静的ルートの方が優先されるので基本不要だが、
-///   appRedirect 側などで弾かれるのを避ける意図でも利用できる。
 bool _isReservedTopSegment(String seg) {
   const reserved = <String>{
     'login',
@@ -79,6 +111,9 @@ bool _isReservedTopSegment(String seg) {
     'preview',
     'payment',
     'catalog',
+
+    // ✅ wallet contents
+    'wallet',
   };
   return reserved.contains(seg);
 }
@@ -91,7 +126,6 @@ GoRouter buildRouter({required bool firebaseReady, Object? initError}) {
 }
 
 GoRouter buildAppRouter() {
-  // ✅ Web の “初期復元” も拾いやすい
   final authRefresh = GoRouterRefreshStream(
     FirebaseAuth.instance.userChanges(),
   );
@@ -99,10 +133,7 @@ GoRouter buildAppRouter() {
   return GoRouter(
     initialLocation: AppRoutePath.home,
     refreshListenable: Listenable.merge([authRefresh, AvatarIdStore.I]),
-
-    // ✅ async redirect
     redirect: (context, state) async => appRedirect(context, state),
-
     debugLogDiagnostics: true,
     routes: _routes(firebaseReady: true),
     errorBuilder: (context, state) => AppShell(
@@ -180,6 +211,15 @@ GoRouter buildPublicOnlyRouter({required Object initError}) {
         pageBuilder: (context, state) =>
             NoTransitionPage(child: _FirebaseInitErrorPage(error: initError)),
       ),
+
+      // ✅ wallet contents（public-only時はエラーページ）
+      GoRoute(
+        path: AppRoutePath.walletContents,
+        name: AppRouteName.walletContents,
+        pageBuilder: (context, state) =>
+            NoTransitionPage(child: _FirebaseInitErrorPage(error: initError)),
+      ),
+
       GoRoute(
         path: AppRoutePath.userEdit,
         name: AppRouteName.userEdit,
@@ -317,6 +357,8 @@ List<RouteBase> _routes({required bool firebaseReady}) {
         );
       },
     ),
+
+    // ✅ ShellRoute 配下に置くことで header/footer が必ず出る
     ShellRoute(
       builder: (context, state, child) {
         return AppShell(
@@ -356,49 +398,70 @@ List<RouteBase> _routes({required bool firebaseReady}) {
               state.uri.queryParameters[AppQueryKey.from],
             );
             return NoTransitionPage(
-              // ✅ ここは必ず「Widgetインスタンス」を渡す（AvatarPage()）
               child: AvatarPage(from: from.isEmpty ? null : from),
             );
           },
         ),
 
-        // ✅ CartPage は URL から読む前提（引数注入しない）
+        // ✅ wallet token contents（Shell内）
+        //
+        // セキュリティ要件:
+        // - mintAddress を URL に出さない方針に移行するため、
+        //   この画面は URL query から mintAddress を受け取らない。
+        // - 画面遷移は `extra` で mintAddress を渡す（TokenCard 側で対応）。
         GoRoute(
-          path: AppRoutePath.cart,
-          name: AppRouteName.cart,
+          path: AppRoutePath.walletContents,
+          name: AppRouteName.walletContents,
           pageBuilder: (context, state) {
-            final qp = state.uri.queryParameters;
-            final qpAvatarId = (qp[AppQueryKey.avatarId] ?? '').trim();
-            final avatarId = qpAvatarId.isNotEmpty
-                ? qpAvatarId
-                : AvatarIdStore.I.avatarId;
+            // ✅ mintAddress は extra で受け取る（必須）
+            final extra = state.extra;
+            final mint = (extra is String ? extra : '').trim();
+            if (mint.isEmpty) {
+              return const NoTransitionPage(
+                child: Center(child: Text('mintAddress is required.')),
+              );
+            }
+
+            // ✅ from は query から受けても良いが、入れ子事故を防ぐため sanitize
+            final decodedFrom = _decodeFrom(
+              state.uri.queryParameters[AppQueryKey.from],
+            );
+            final safeFrom = _sanitizeFromValue(decodedFrom);
 
             return NoTransitionPage(
-              key: ValueKey('cart-$avatarId'),
-              child: const CartPage(),
+              key: ValueKey('wallet-contents-$mint'),
+              child: WalletContentsPage(
+                mintAddress: mint,
+                from: safeFrom.isEmpty ? null : safeFrom,
+              ),
             );
           },
         ),
 
-        // ✅ /preview（従来通り） + ?productId= を受けられるようにしておく
+        GoRoute(
+          path: AppRoutePath.cart,
+          name: AppRouteName.cart,
+          pageBuilder: (context, state) {
+            return const NoTransitionPage(
+              key: ValueKey('cart'),
+              child: CartPage(),
+            );
+          },
+        ),
+
         GoRoute(
           path: AppRoutePath.preview,
           name: AppRouteName.preview,
           pageBuilder: (context, state) {
             final qp = state.uri.queryParameters;
-
-            final qpAvatarId = (qp[AppQueryKey.avatarId] ?? '').trim();
-            final avatarId = qpAvatarId.isNotEmpty
-                ? qpAvatarId
-                : AvatarIdStore.I.avatarId;
-
             final from = _decodeFrom(qp[AppQueryKey.from]);
-
-            // ✅ 追加: productId（無ければ空）
             final productId = (qp[AppQueryKey.productId] ?? '').trim();
 
+            // ✅ avatarId は URL から取らない（store から使う）
+            final avatarId = AvatarIdStore.I.avatarId;
+
             return NoTransitionPage(
-              key: ValueKey('preview-$avatarId-$productId'),
+              key: ValueKey('preview-$productId'),
               child: PreviewPage(
                 avatarId: avatarId,
                 productId: productId.isEmpty ? null : productId,
@@ -408,20 +471,18 @@ List<RouteBase> _routes({required bool firebaseReady}) {
           },
         ),
 
-        // ✅ /payment
         GoRoute(
           path: AppRoutePath.payment,
           name: AppRouteName.payment,
           pageBuilder: (context, state) {
-            final qp = state.uri.queryParameters;
-            final qpAvatarId = (qp[AppQueryKey.avatarId] ?? '').trim();
-            final avatarId = qpAvatarId.isNotEmpty
-                ? qpAvatarId
-                : AvatarIdStore.I.avatarId;
-            final from = _decodeFrom(qp[AppQueryKey.from]);
+            // ✅ avatarId は URL から取らない（store から使う）
+            final avatarId = AvatarIdStore.I.avatarId;
+            final from = _decodeFrom(
+              state.uri.queryParameters[AppQueryKey.from],
+            );
 
             return NoTransitionPage(
-              key: ValueKey('payment-$avatarId'),
+              key: ValueKey('payment'),
               child: PaymentPage(
                 avatarId: avatarId,
                 from: from.isEmpty ? null : from,
@@ -430,30 +491,28 @@ List<RouteBase> _routes({required bool firebaseReady}) {
           },
         ),
 
-        // ✅ ★移動（重要）★ QR入口: https://narratives.jp/{productId}
-        // - これが /payment など固定パスを食わないように “最後” に置く
         GoRoute(
           path: AppRoutePath.qrProduct,
           name: AppRouteName.qrProduct,
           pageBuilder: (context, state) {
             final productId = (state.pathParameters['productId'] ?? '').trim();
 
-            // 念のため：固定パスっぽいものはここでは扱わない
             if (productId.isEmpty || _isReservedTopSegment(productId)) {
               return const NoTransitionPage(child: HomePage());
             }
 
+            // ✅ avatarId は URL から取らない（store から使う）
             final avatarId = AvatarIdStore.I.avatarId;
-            final from = state.uri.toString(); // 復帰用に “今のURL” を保持
+
+            // ✅ FIX: from は sanitize した URL を使う（入れ子防止 + 機微情報除去）
+            final from = _sanitizeLocationForFrom(state.uri);
 
             return NoTransitionPage(
-              key: ValueKey('qr-preview-$productId-$avatarId'),
+              key: ValueKey('qr-preview-$productId'),
               child: PreviewPage(
                 avatarId: avatarId,
                 productId: productId,
                 from: from,
-                // intent を使うならここで渡す（PreviewPage 側が対応していれば）
-                // intent: 'qr',
               ),
             );
           },
@@ -469,10 +528,6 @@ bool _showBackFor(GoRouterState state) {
   return true;
 }
 
-/// ✅ Headerに表示する「アバター名」
-/// - displayName があればそれ
-/// - 無ければ email の @ より前
-/// - それも無ければ 'My Profile'
 String _avatarNameForHeader() {
   final u = FirebaseAuth.instance.currentUser;
   if (u == null) return 'Profile';
@@ -495,12 +550,9 @@ String? _titleFor(GoRouterState state) {
   if (loc == AppRoutePath.home) return null;
   if (loc.startsWith('/catalog/')) return 'Catalog';
 
-  // ✅ AvatarPage表示中は 'Profile' ではなく avatarName を表示
   if (loc == AppRoutePath.avatar) return _avatarNameForHeader();
-
   if (loc == AppRoutePath.cart) return 'Cart';
 
-  // ✅ /preview と /{productId}（入口）は Preview 表示
   if (loc == AppRoutePath.preview) return 'Preview';
   if (state.uri.pathSegments.length == 1 &&
       state.uri.pathSegments.first.isNotEmpty &&
@@ -509,14 +561,15 @@ String? _titleFor(GoRouterState state) {
   }
 
   if (loc == AppRoutePath.payment) return 'Payment';
+  if (loc == AppRoutePath.walletContents) return 'Token';
+
   if (loc == AppRoutePath.avatarEdit) return 'Edit Avatar';
   if (loc == AppRoutePath.userEdit) return 'Account';
   return null;
 }
 
 String _resolveAvatarIdForHeader(GoRouterState state) {
-  final qpId = (state.uri.queryParameters[AppQueryKey.avatarId] ?? '').trim();
-  if (qpId.isNotEmpty) return qpId;
+  // ✅ URL からは取らない（セキュリティ要件）
   return AvatarIdStore.I.avatarId;
 }
 
@@ -537,13 +590,15 @@ List<Widget> _headerActionsFor(
       path == AppRoutePath.avatarEdit ||
       path == AppRoutePath.userEdit ||
       path == AppRoutePath.preview ||
-      path == AppRoutePath.payment) {
+      path == AppRoutePath.payment ||
+      path == AppRoutePath.walletContents) {
     return const [];
   }
 
   if (!allowLogin) return const [];
 
-  final from = state.uri.toString();
+  // ✅ from は sanitize して “伸び続けるURL” を止める（機微情報も除外）
+  final from = _sanitizeLocationForFrom(state.uri);
   final avatarId = _resolveAvatarIdForHeader(state);
 
   if (!firebaseReady) {
@@ -625,15 +680,7 @@ class _HeaderCartButton extends StatelessWidget {
       tooltip: 'Cart',
       icon: const Icon(Icons.shopping_cart_outlined),
       onPressed: () {
-        final id = avatarId.trim().isNotEmpty
-            ? avatarId.trim()
-            : AvatarIdStore.I.avatarId;
-
         final qp = <String, String>{AppQueryKey.from: _encodeFrom(from)};
-        if (id.trim().isNotEmpty) {
-          qp[AppQueryKey.avatarId] = id;
-        }
-
         context.goNamed(AppRouteName.cart, queryParameters: qp);
       },
     );

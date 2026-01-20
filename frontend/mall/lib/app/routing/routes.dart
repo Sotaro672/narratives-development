@@ -12,6 +12,9 @@ class AppRouteName {
   // ✅ NEW: preview
   static const preview = 'preview';
 
+  // ✅ NEW: wallet contents（TokenCard押下で遷移させる先）
+  static const walletContents = 'walletContents';
+
   // ✅ NEW: QR入口（https://narratives.jp/{productId}）
   static const qrProduct = 'qrProduct';
 
@@ -36,6 +39,9 @@ class AppRoutePath {
   // ✅ NEW: preview
   static const preview = '/preview';
 
+  // ✅ NEW: wallet contents（固定パスにして衝突回避）
+  static const walletContents = '/wallet';
+
   // ✅ NEW: QR入口（トップ1階層が productId）
   static const qrProduct = '/:productId';
 
@@ -55,6 +61,9 @@ class AppQueryKey {
 
   // ✅ NEW: preview 用 productId
   static const productId = 'productId';
+
+  // ✅ NEW: wallet contents で使用する（想定）
+  static const mintAddress = 'mintAddress';
 
   static const tab = 'tab';
   static const mode = 'mode';
