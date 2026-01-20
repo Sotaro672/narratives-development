@@ -4,6 +4,7 @@ import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
+import '../../../../app/routing/navigation.dart';
 import '../../infrastructure/repository_http.dart';
 
 // ✅ cart.dart から DTO 型を使えるようにする（repository を直接 import しなくてよくなる）
@@ -26,6 +27,7 @@ class UseCartResult {
     required this.clear,
   });
 
+  /// ✅ Source of truth: AvatarIdStore（URL からは読まない）
   final String avatarId;
 
   /// Source of truth: GET /mall/me/cart?avatarId=...
@@ -54,11 +56,15 @@ class UseCartResult {
 /// - Exposes state + handlers only
 ///
 /// ✅ This file handles ONLY CartDTO / CartItemDTO.
+/// ✅ avatarId は URL ではなく AvatarIdStore から解決する。
 class UseCartController {
-  UseCartController({required this.avatarId, required this.context});
+  UseCartController({required this.context, String? avatarId})
+    : _initialAvatarId = (avatarId ?? '').trim();
 
-  final String avatarId;
   final BuildContext context;
+
+  /// 任意：呼び出し側が明示的に渡したい場合のみ使用（URL由来は不可推奨）
+  final String _initialAvatarId;
 
   late final CartRepositoryHttp _repo;
 
@@ -85,8 +91,12 @@ class UseCartController {
     }
   }
 
-  CartDTO _emptyCart() => CartDTO(
-    avatarId: avatarId.trim(),
+  /// ✅ 実際に API 呼び出しに使う avatarId（AvatarIdStore で確定した値）
+  String _avatarId = '';
+  String get avatarId => _avatarId;
+
+  CartDTO _emptyCart(String aid) => CartDTO(
+    avatarId: aid.trim(),
     items: const {},
     createdAt: null,
     updatedAt: null,
@@ -114,18 +124,50 @@ class UseCartController {
 
   bool busy = false;
 
+  /// ✅ AvatarIdStore から avatarId を確定する（URLは使わない）
+  Future<String> _ensureAvatarId() async {
+    // 1) 呼び出し側から明示的に渡されたもの（URL由来でない前提）
+    final a0 = _initialAvatarId.trim();
+    if (a0.isNotEmpty) {
+      AvatarIdStore.I.set(a0);
+      return a0;
+    }
+
+    // 2) 既に store にあるならそれ
+    final storeId = AvatarIdStore.I.avatarId.trim();
+    if (storeId.isNotEmpty) return storeId;
+
+    // 3) サーバで /mall/me/avatar を叩いて解決
+    final resolved = await AvatarIdStore.I.resolveMyAvatarId();
+    final a1 = (resolved ?? '').trim();
+    if (a1.isNotEmpty) {
+      AvatarIdStore.I.set(a1);
+      return a1;
+    }
+
+    return '';
+  }
+
   void init() {
     _repo = CartRepositoryHttp();
 
-    final aid = avatarId.trim();
-    current = aid.isEmpty ? _emptyCart() : _emptyCart();
+    // init 時点では empty を入れておく（落ちない）
+    current = _emptyCart('');
+    future = Future.value(current);
 
-    _log('init avatarId="${_mask(avatarId)}"');
+    _log('init (avatarId will be resolved from AvatarIdStore)');
 
-    // ✅ future をセット（成功したら current にも反映）
-    future = _repo
-        .fetchCart(avatarId: avatarId)
-        .then((c) {
+    // ✅ future を「avatarId 解決 -> fetchCart」チェーンにする
+    future = _ensureAvatarId()
+        .then((aid) async {
+          _avatarId = aid.trim();
+          if (_avatarId.isEmpty) {
+            current = _emptyCart('');
+            return current;
+          }
+
+          // 初回取得
+          final c = await _repo.fetchCart(avatarId: _avatarId);
           current = c;
           return c;
         })
@@ -195,12 +237,37 @@ class UseCartController {
         });
   }
 
+  Future<void> _ensureReadyIfNeeded(SetStateFn setState) async {
+    if (_avatarId.trim().isNotEmpty) return;
+
+    final aid = await _ensureAvatarId();
+    if (!context.mounted) return;
+
+    if (aid.trim().isEmpty) {
+      // 取れない場合は empty のまま
+      setState(() {
+        _avatarId = '';
+        current = _emptyCart('');
+        future = Future.value(current);
+      });
+      return;
+    }
+
+    setState(() {
+      _avatarId = aid.trim();
+    });
+  }
+
   Future<void> reload(SetStateFn setState) async {
     _log('reload');
 
+    await _ensureReadyIfNeeded(setState);
+    final aid = _avatarId.trim();
+    if (aid.isEmpty) return;
+
     setState(() {
       future = _repo
-          .fetchCart(avatarId: avatarId)
+          .fetchCart(avatarId: aid)
           .then((c) {
             current = c;
             return c;
@@ -246,12 +313,16 @@ class UseCartController {
 
   Future<void> inc(SetStateFn setState, String itemKey) async {
     await _withBusy(setState, () async {
+      await _ensureReadyIfNeeded(setState);
+      final aid = _avatarId.trim();
+      if (aid.isEmpty) return;
+
       final base = await future; // ✅ 失敗しても future は current を返す
       final it = _getItemFromKey(base, itemKey);
       if (it == null) return;
 
       final c = await _repo.addItem(
-        avatarId: avatarId,
+        avatarId: aid,
         inventoryId: it.inventoryId,
         listId: it.listId,
         modelId: it.modelId,
@@ -270,6 +341,10 @@ class UseCartController {
 
   Future<void> dec(SetStateFn setState, String itemKey, int currentQty) async {
     await _withBusy(setState, () async {
+      await _ensureReadyIfNeeded(setState);
+      final aid = _avatarId.trim();
+      if (aid.isEmpty) return;
+
       final next = currentQty - 1;
 
       final base = await future;
@@ -277,7 +352,7 @@ class UseCartController {
       if (it == null) return;
 
       final c = await _repo.setItemQty(
-        avatarId: avatarId,
+        avatarId: aid,
         inventoryId: it.inventoryId,
         listId: it.listId,
         modelId: it.modelId,
@@ -296,12 +371,16 @@ class UseCartController {
 
   Future<void> remove(SetStateFn setState, String itemKey) async {
     await _withBusy(setState, () async {
+      await _ensureReadyIfNeeded(setState);
+      final aid = _avatarId.trim();
+      if (aid.isEmpty) return;
+
       final base = await future;
       final it = _getItemFromKey(base, itemKey);
       if (it == null) return;
 
       final c = await _repo.removeItem(
-        avatarId: avatarId,
+        avatarId: aid,
         inventoryId: it.inventoryId,
         listId: it.listId,
         modelId: it.modelId,
@@ -339,15 +418,23 @@ class UseCartController {
     if (ok != true) return;
 
     await _withBusy(setState, () async {
-      await _repo.clearCart(avatarId: avatarId);
+      await _ensureReadyIfNeeded(setState);
+      final aid = _avatarId.trim();
+      if (aid.isEmpty) return;
+
+      await _repo.clearCart(avatarId: aid);
       if (!context.mounted) return;
       await reload(setState);
     });
   }
 
   UseCartResult buildResult(SetStateFn setState) {
+    final aid = _avatarId.trim().isNotEmpty
+        ? _avatarId.trim()
+        : AvatarIdStore.I.avatarId.trim();
+
     return UseCartResult(
-      avatarId: avatarId,
+      avatarId: aid,
       future: future,
       current: current,
       busy: busy,

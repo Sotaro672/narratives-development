@@ -3,9 +3,9 @@ import 'dart:convert';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
-import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 
+import '../../../../app/routing/navigation.dart';
 import '../hook/use_cart.dart';
 
 class CartPage extends StatefulWidget {
@@ -46,13 +46,17 @@ class _CartPageState extends State<CartPage> {
     if (_booted) return;
     _booted = true;
 
-    final aid = _avatarIdFromRoute();
+    // ✅ URL から avatarId を読まない（セキュリティ要件）
+    // ✅ AvatarIdStore から直接利用する
+    final aid = AvatarIdStore.I.avatarId.trim();
     if (aid.isEmpty) {
-      _log('boot abort: avatarId missing');
-      return;
+      _log('boot: AvatarIdStore.avatarId is empty -> init controller anyway');
+    } else {
+      _log('boot: avatarId from store="${_mask(aid)}"');
     }
 
-    _ctrl = UseCartController(avatarId: aid, context: context);
+    // ✅ UseCartController は AvatarIdStore で解決するので、avatarId を渡さない
+    _ctrl = UseCartController(context: context);
     _ctrl!.init();
   }
 
@@ -60,11 +64,6 @@ class _CartPageState extends State<CartPage> {
   void dispose() {
     _ctrl?.dispose();
     super.dispose();
-  }
-
-  String _avatarIdFromRoute() {
-    final uri = GoRouterState.of(context).uri;
-    return (uri.queryParameters['avatarId'] ?? '').trim();
   }
 
   String _mask(String s) {
@@ -90,9 +89,6 @@ class _CartPageState extends State<CartPage> {
     if (n == null) return null;
 
     // 小数が来た場合も一応対応（必要なら丸め方はここで調整）
-    if (n is double && n % 1 != 0) {
-      return '${_yenFormatter.format(n)}円';
-    }
     return '${_yenFormatter.format(n)}円';
   }
 
@@ -228,14 +224,19 @@ class _CartPageState extends State<CartPage> {
 
   @override
   Widget build(BuildContext context) {
+    // ✅ controller は必ず init する（avatarId は store で解決する）
     if (_ctrl == null) {
       return const Padding(
         padding: EdgeInsets.fromLTRB(16, 10, 16, 16),
-        child: Text('avatarId がクエリにありません（?avatarId=...）'),
+        child: Center(child: CircularProgressIndicator()),
       );
     }
 
     final r = _ctrl!.buildResult(setState);
+
+    // ✅ avatarId 未解決のときは「読み込み中」扱いで UI を出す
+    //   （router 側の redirect が解決してくれるケースもあるため、ここでは落とさない）
+    final storeAId = AvatarIdStore.I.avatarId.trim();
 
     return FutureBuilder<CartDTO>(
       future: r.future,
@@ -250,7 +251,9 @@ class _CartPageState extends State<CartPage> {
 
         if (_dbg) {
           _log(
-            'render: loading=$loading err=${err != null} avatarId="${_mask(cart.avatarId)}" items=${entries.length}',
+            'render: loading=$loading err=${err != null} '
+            'storeAvatarId="${_mask(storeAId)}" cartAvatarId="${_mask(cart.avatarId)}" '
+            'items=${entries.length}',
           );
           if (entries.isNotEmpty) {
             final e0 = entries.first;
@@ -260,7 +263,6 @@ class _CartPageState extends State<CartPage> {
           }
         }
 
-        // ✅ タイトル/文言を日本語化 + Clear を右寄せ
         final children = <Widget>[
           Text(
             '商品数: ${entries.length}',
@@ -286,7 +288,22 @@ class _CartPageState extends State<CartPage> {
           const SizedBox(height: 10),
         ];
 
-        if (loading && entries.isEmpty) {
+        // ✅ avatarId 未解決時は案内を出す（白紙にしない）
+        if (storeAId.isEmpty && entries.isEmpty && loading) {
+          children.add(
+            const Padding(
+              padding: EdgeInsets.only(top: 24),
+              child: Center(child: CircularProgressIndicator()),
+            ),
+          );
+          children.add(const SizedBox(height: 12));
+          children.add(
+            Text(
+              'カート情報を取得しています…',
+              style: TextStyle(color: Colors.grey.shade700),
+            ),
+          );
+        } else if (loading && entries.isEmpty) {
           children.add(
             const Padding(
               padding: EdgeInsets.only(top: 24),
