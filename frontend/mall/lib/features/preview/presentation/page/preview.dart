@@ -8,19 +8,9 @@ import 'package:http/http.dart' as http;
 import '../../../../app/config/api_base.dart'; // ✅ resolveMallApiBase()
 import '../../infrastructure/repository.dart';
 
-/// Preview page (buyer-facing).
-///
-/// - /mall/preview     : ログイン前ユーザーがスキャンした時に叩く（public）
-/// - /mall/me/preview  : ログイン後ユーザーがスキャンした時に叩く（auth）
-///
-/// ✅ 正攻法:
-/// - ログイン中は URL 等で渡ってきた avatarId を信用せず、
-///   /mall/me/avatar で自分の avatarId を解決してから verify/transfer を行う。
-/// - verify.matched == true の場合のみ transfer を自動実行（多重実行防止あり）
-///
-/// NOTE:
-/// - transferScanPurchasedByAvatarId は deprecated（avatarId は server 側で解決する前提）
-/// - 本ファイルでは transfer は transferScanPurchased(productId: ...) を使用する
+// ✅ WalletContentsPage のカードを Preview 側で再利用する
+import '../../../wallet/presentation/page/contents.dart';
+
 class PreviewPage extends StatefulWidget {
   const PreviewPage({
     super.key,
@@ -42,7 +32,6 @@ class PreviewPage extends StatefulWidget {
 }
 
 class _PreviewPageState extends State<PreviewPage> {
-  String get _incomingAvatarId => widget.avatarId.trim();
   String get _productId => (widget.productId ?? '').trim();
 
   late final PreviewRepositoryHttp _previewRepo;
@@ -56,10 +45,6 @@ class _PreviewPageState extends State<PreviewPage> {
   String? _meAvatarId; // 解決できたときだけ入る
   MallScanVerifyResponse? _verifyResult;
   MallScanTransferResponse? _transferResult;
-
-  Object? _meAvatarError;
-  Object? _verifyError;
-  Object? _transferError;
 
   bool _busyMe = false;
   bool _busyVerify = false;
@@ -112,10 +97,6 @@ class _PreviewPageState extends State<PreviewPage> {
         _meAvatarId = null;
         _verifyResult = null;
         _transferResult = null;
-
-        _meAvatarError = null;
-        _verifyError = null;
-        _transferError = null;
 
         _busyMe = false;
         _busyVerify = false;
@@ -192,7 +173,6 @@ class _PreviewPageState extends State<PreviewPage> {
 
     setState(() {
       _busyMe = true;
-      _meAvatarError = null;
     });
 
     try {
@@ -209,12 +189,8 @@ class _PreviewPageState extends State<PreviewPage> {
           _meAvatarId = meAvatarId.isEmpty ? null : meAvatarId;
         });
       }
-    } catch (e) {
-      if (mounted) {
-        setState(() {
-          _meAvatarError = e;
-        });
-      }
+    } catch (_) {
+      // UI で表示しないため握りつぶします（必要なら logger を入れてください）
     } finally {
       if (mounted) {
         setState(() {
@@ -242,7 +218,6 @@ class _PreviewPageState extends State<PreviewPage> {
 
     setState(() {
       _busyVerify = true;
-      _verifyError = null;
     });
 
     try {
@@ -261,12 +236,8 @@ class _PreviewPageState extends State<PreviewPage> {
       }
 
       await _maybeAutoTransfer();
-    } catch (e) {
-      if (mounted) {
-        setState(() {
-          _verifyError = e;
-        });
-      }
+    } catch (_) {
+      // UI で表示しないため握りつぶします（必要なら logger を入れてください）
     } finally {
       if (mounted) {
         setState(() {
@@ -293,7 +264,6 @@ class _PreviewPageState extends State<PreviewPage> {
 
     setState(() {
       _busyTransfer = true;
-      _transferError = null;
     });
 
     try {
@@ -311,12 +281,8 @@ class _PreviewPageState extends State<PreviewPage> {
           _transferResult = r;
         });
       }
-    } catch (e) {
-      if (mounted) {
-        setState(() {
-          _transferError = e;
-        });
-      }
+    } catch (_) {
+      // UI で表示しないため握りつぶします（必要なら logger を入れてください）
     } finally {
       if (mounted) {
         setState(() {
@@ -342,6 +308,32 @@ class _PreviewPageState extends State<PreviewPage> {
     }
   }
 
+  String _toInlineString(dynamic v) {
+    if (v == null) return '-';
+    if (v is String) {
+      final s = v.trim();
+      return s.isEmpty ? '-' : s;
+    }
+    if (v is num || v is bool) return v.toString();
+    return _prettyJson(v);
+  }
+
+  List<String> _pbPatchToLines(dynamic patch) {
+    if (patch == null) return const [];
+
+    if (patch is Map<String, dynamic>) {
+      final keys = patch.keys.toList()..sort();
+      return keys.map((k) => '$k: ${_toInlineString(patch[k])}').toList();
+    }
+    if (patch is Map) {
+      final m = Map<String, dynamic>.from(patch);
+      final keys = m.keys.toList()..sort();
+      return keys.map((k) => '$k: ${_toInlineString(m[k])}').toList();
+    }
+
+    return [_toInlineString(patch)];
+  }
+
   String _ownerLabel(MallOwnerInfo? owner) {
     if (owner == null) return '-';
 
@@ -354,79 +346,19 @@ class _PreviewPageState extends State<PreviewPage> {
     return '-';
   }
 
-  Widget _verifyBadge(BuildContext context, MallScanVerifyResponse r) {
-    final t = Theme.of(context).textTheme;
-    final bodySmall = t.bodySmall ?? const TextStyle(fontSize: 12);
-
-    final matched = r.matched;
-    final match = r.match;
-
-    final label = matched ? '購入済み（一致）' : '未購入（不一致）';
-    final detail = match == null
-        ? '-'
-        : 'modelId=${match.modelId.isEmpty ? "-" : match.modelId}, '
-              'tokenBlueprintId=${match.tokenBlueprintId.isEmpty ? "-" : match.tokenBlueprintId}';
-
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text('Verify', style: t.titleSmall),
-        const SizedBox(height: 8),
-        Text(label, style: bodySmall),
-        const SizedBox(height: 4),
-        Text(detail, style: bodySmall),
-      ],
-    );
-  }
-
-  Widget _transferBadge(BuildContext context, MallScanTransferResponse r) {
-    final t = Theme.of(context).textTheme;
-
-    // ✅ nullableをここで確定させる（以降 copyWith を安全に呼べる）
-    final bodySmall = t.bodySmall ?? const TextStyle(fontSize: 12);
-    final monoSmall = bodySmall.copyWith(fontFamily: 'monospace');
-
-    final ok = r.matched;
-    final label = ok ? 'Transfer 実行済み' : 'Transfer 失敗（不一致）';
-
-    final lines = <String>[];
-
-    // 必要ならここで詳細を追加してください（例）
-    // if (r.txSignature.isNotEmpty) lines.add('tx=${r.txSignature}');
-    // if (r.fromWallet.isNotEmpty) lines.add('from=${r.fromWallet}');
-    // if (r.toWallet.isNotEmpty) lines.add('to=${r.toWallet}');
-    // if (r.mintAddress.isNotEmpty) lines.add('mint=${r.mintAddress}');
-
-    final detail = lines.join('\n');
-
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text('Transfer', style: t.titleSmall),
-        const SizedBox(height: 8),
-        Text(label, style: bodySmall),
-        const SizedBox(height: 6),
-        if (detail.isNotEmpty)
-          Text(detail, style: monoSmall)
-        else
-          Text('-', style: bodySmall),
-      ],
-    );
+  String _withCm(dynamic v) {
+    final s = (v ?? '').toString().trim();
+    if (s.isEmpty) return '-';
+    if (RegExp(r'\s*cm$', caseSensitive: false).hasMatch(s)) return s;
+    return '${s}cm';
   }
 
   @override
   Widget build(BuildContext context) {
-    final incomingAvatarId = _incomingAvatarId;
-    final meAvatarId = (_meAvatarId ?? '').trim();
     final productId = _productId;
-    final from = (widget.from ?? '').trim();
-
     final t = Theme.of(context).textTheme;
 
-    // ✅ nullableをここで確定させる（copyWithを安全に）
     final bodySmall = t.bodySmall ?? const TextStyle(fontSize: 12);
-    final monoSmall = bodySmall.copyWith(fontFamily: 'monospace');
-
     final border = Border.all(color: Theme.of(context).dividerColor, width: 1);
 
     return Padding(
@@ -434,43 +366,7 @@ class _PreviewPageState extends State<PreviewPage> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Card(
-            child: Padding(
-              padding: const EdgeInsets.all(14),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const SizedBox(height: 2),
-                  Text(
-                    '商品ID: ${productId.isEmpty ? '-' : productId}',
-                    style: t.bodySmall,
-                  ),
-                  const SizedBox(height: 4),
-                  Text(
-                    'incoming avatarId(URL): ${incomingAvatarId.isEmpty ? '-' : incomingAvatarId}',
-                    style: t.bodySmall,
-                  ),
-                  const SizedBox(height: 4),
-                  Text(
-                    'me avatarId(API): ${meAvatarId.isEmpty ? '-' : meAvatarId}',
-                    style: t.bodySmall,
-                  ),
-                  const SizedBox(height: 4),
-                  Text('遷移元: ${from.isEmpty ? '-' : from}', style: t.bodySmall),
-                  const SizedBox(height: 10),
-                  if (_busyMe) Text('me avatar 解決中...', style: t.bodySmall),
-                  if (_meAvatarError != null)
-                    Text(
-                      'me avatar 解決に失敗: $_meAvatarError',
-                      style: t.bodySmall,
-                    ),
-                ],
-              ),
-            ),
-          ),
-          const SizedBox(height: 12),
-
-          // Preview
+          // Preview（商品情報のみ表示）
           Card(
             child: Padding(
               padding: const EdgeInsets.all(14),
@@ -512,9 +408,16 @@ class _PreviewPageState extends State<PreviewPage> {
                   final colorName = data.color.trim();
                   final rgb = data.rgb;
                   final measurements = data.measurements;
-                  final productBlueprintPatch = data.productBlueprintPatch;
 
+                  final productBlueprintPatch = data.productBlueprintPatch;
+                  final pbLines = _pbPatchToLines(productBlueprintPatch);
+
+                  // ✅ Token情報表示はしないが、WalletContentsPage を出すため mintAddress は保持
                   final token = data.token;
+                  final mintAddress = token == null
+                      ? ''
+                      : token.mintAddress.trim();
+
                   final ownerId = _ownerLabel(data.owner);
                   final swatch = _rgbToColor(rgb);
 
@@ -524,30 +427,6 @@ class _PreviewPageState extends State<PreviewPage> {
                           .toList()
                         ..sort((a, b) => a.key.compareTo(b.key));
 
-                  final measurementChips = measurementEntries.map((e) {
-                    return Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 10,
-                        vertical: 6,
-                      ),
-                      decoration: BoxDecoration(
-                        border: border,
-                        borderRadius: BorderRadius.circular(999),
-                      ),
-                      child: Text('${e.key}: ${e.value}', style: t.bodySmall),
-                    );
-                  }).toList();
-
-                  final pbPatchPretty =
-                      (productBlueprintPatch == null ||
-                          productBlueprintPatch.isEmpty)
-                      ? ''
-                      : _prettyJson(productBlueprintPatch);
-
-                  final tokenPretty = token == null
-                      ? ''
-                      : _prettyJson(token.toJson());
-
                   return Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
@@ -556,7 +435,7 @@ class _PreviewPageState extends State<PreviewPage> {
                       Text('所有者: $ownerId', style: t.bodySmall),
                       const SizedBox(height: 10),
 
-                      if (pbPatchPretty.isNotEmpty) ...[
+                      if (pbLines.isNotEmpty) ...[
                         Text('productBlueprintPatch', style: t.bodySmall),
                         const SizedBox(height: 6),
                         Container(
@@ -566,7 +445,17 @@ class _PreviewPageState extends State<PreviewPage> {
                             border: border,
                             borderRadius: BorderRadius.circular(8),
                           ),
-                          child: Text(pbPatchPretty, style: monoSmall),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: pbLines
+                                .map(
+                                  (line) => Padding(
+                                    padding: const EdgeInsets.only(bottom: 4),
+                                    child: Text(line, style: bodySmall),
+                                  ),
+                                )
+                                .toList(),
+                          ),
                         ),
                         const SizedBox(height: 10),
                       ],
@@ -604,67 +493,37 @@ class _PreviewPageState extends State<PreviewPage> {
                         ],
                       ),
 
-                      if (measurementChips.isNotEmpty) ...[
+                      if (measurementEntries.isNotEmpty) ...[
                         const SizedBox(height: 10),
                         Text('採寸', style: t.bodySmall),
                         const SizedBox(height: 6),
-                        Wrap(
-                          spacing: 8,
-                          runSpacing: 8,
-                          children: measurementChips,
+                        Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: measurementEntries.map((e) {
+                            return Padding(
+                              padding: const EdgeInsets.only(bottom: 4),
+                              child: Text(
+                                '${e.key}: ${_withCm(e.value)}',
+                                style: t.bodySmall,
+                              ),
+                            );
+                          }).toList(),
                         ),
                       ],
 
-                      const SizedBox(height: 14),
-                      Text('Token 情報', style: t.titleSmall),
-                      const SizedBox(height: 8),
-
-                      if (token == null) ...[
-                        Text('未Mint（token情報なし）', style: t.bodySmall),
-                      ] else ...[
-                        Text(
-                          'brandId: ${token.brandId.isEmpty ? '-' : token.brandId}',
-                          style: t.bodySmall,
+                      // ✅ Preview埋め込み時の期待値:
+                      // - productName ボタンは出さない
+                      // - tokenName を押下可能にし、contents.dart へ遷移
+                      if (mintAddress.isNotEmpty) ...[
+                        const SizedBox(height: 12),
+                        WalletContentsPage(
+                          mintAddress: mintAddress,
+                          productId: productId,
+                          brandId: token?.brandId.trim(),
+                          from: widget.from,
+                          enableProductLink: false,
+                          enableTokenNameLink: true,
                         ),
-                        const SizedBox(height: 4),
-                        Text(
-                          'toAddress: ${token.toAddress.isEmpty ? '-' : token.toAddress}',
-                          style: t.bodySmall,
-                        ),
-                        const SizedBox(height: 4),
-                        Text(
-                          'metadataUri: ${token.metadataUri.isEmpty ? '-' : token.metadataUri}',
-                          style: t.bodySmall,
-                        ),
-                        const SizedBox(height: 4),
-                        Text(
-                          'mintAddress: ${token.mintAddress.isEmpty ? '-' : token.mintAddress}',
-                          style: t.bodySmall,
-                        ),
-                        const SizedBox(height: 4),
-                        Text(
-                          'onChainTxSignature: ${token.onChainTxSignature.isEmpty ? '-' : token.onChainTxSignature}',
-                          style: t.bodySmall,
-                        ),
-                        const SizedBox(height: 4),
-                        Text(
-                          'mintedAt: ${token.mintedAt.isEmpty ? '-' : token.mintedAt}',
-                          style: t.bodySmall,
-                        ),
-                        if (tokenPretty.isNotEmpty) ...[
-                          const SizedBox(height: 10),
-                          Text('token (raw)', style: t.bodySmall),
-                          const SizedBox(height: 6),
-                          Container(
-                            width: double.infinity,
-                            padding: const EdgeInsets.all(10),
-                            decoration: BoxDecoration(
-                              border: border,
-                              borderRadius: BorderRadius.circular(8),
-                            ),
-                            child: Text(tokenPretty, style: monoSmall),
-                          ),
-                        ],
                       ],
                     ],
                   );
@@ -673,95 +532,7 @@ class _PreviewPageState extends State<PreviewPage> {
             ),
           ),
 
-          const SizedBox(height: 12),
-
-          // Verify (auto)
-          Card(
-            child: Padding(
-              padding: const EdgeInsets.all(14),
-              child: Builder(
-                builder: (context) {
-                  if (_busyVerify) {
-                    return const Row(
-                      children: [
-                        SizedBox(
-                          width: 16,
-                          height: 16,
-                          child: CircularProgressIndicator(strokeWidth: 2),
-                        ),
-                        SizedBox(width: 10),
-                        Text('購入照合（Verify）を確認しています...'),
-                      ],
-                    );
-                  }
-
-                  if (_verifyError != null) {
-                    return Text(
-                      'Verify に失敗しました: $_verifyError',
-                      style: t.bodySmall,
-                    );
-                  }
-
-                  final r = _verifyResult;
-                  if (r == null) {
-                    return Text('Verify は未実行です。', style: t.bodySmall);
-                  }
-
-                  return _verifyBadge(context, r);
-                },
-              ),
-            ),
-          ),
-
-          const SizedBox(height: 12),
-
-          // Transfer (auto)
-          Card(
-            child: Padding(
-              padding: const EdgeInsets.all(14),
-              child: Builder(
-                builder: (context) {
-                  if (_busyTransfer) {
-                    return const Row(
-                      children: [
-                        SizedBox(
-                          width: 16,
-                          height: 16,
-                          child: CircularProgressIndicator(strokeWidth: 2),
-                        ),
-                        SizedBox(width: 10),
-                        Text('Transfer を実行しています...'),
-                      ],
-                    );
-                  }
-
-                  if (_transferError != null) {
-                    return Text(
-                      'Transfer に失敗しました: $_transferError',
-                      style: t.bodySmall,
-                    );
-                  }
-
-                  final r = _transferResult;
-                  if (r == null) {
-                    final v = _verifyResult;
-                    if (v == null) {
-                      return Text('Transfer は未実行です。', style: t.bodySmall);
-                    }
-                    if (!v.matched) {
-                      return Text(
-                        '未購入（Verify不一致）のため Transfer しません。',
-                        style: t.bodySmall,
-                      );
-                    }
-                    return Text('Transfer 実行待ちです。', style: t.bodySmall);
-                  }
-
-                  return _transferBadge(context, r);
-                },
-              ),
-            ),
-          ),
+          // ✅ 「Verify」「Transfer」カードは非表示（削除済み）
         ],
       ),
     );

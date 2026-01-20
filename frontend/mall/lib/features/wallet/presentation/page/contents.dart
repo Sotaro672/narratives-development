@@ -1,17 +1,15 @@
-// frontend\mall\lib\features\wallet\presentation\page\contents.dart
+// frontend/mall/lib/features/wallet/presentation/page/contents.dart
 import 'package:flutter/material.dart';
-import 'package:go_router/go_router.dart';
+import 'package:flutter_hooks/flutter_hooks.dart';
 
-import '../../../../app/routing/navigation.dart'; // ✅ AvatarIdStore
-import '../../infrastructure/repository_http.dart'; // ✅ WalletRepositoryHttp
-import '../../infrastructure/token_metadata_dto.dart';
-import '../../infrastructure/token_resolve_dto.dart';
+import '../hook/use_contents.dart';
 
 /// Wallet token detail page (destination from TokenCard tap).
 ///
-/// ✅ mintAddress だけ渡されても、ここで TokenResolveDTO / TokenMetadataDTO を取得して埋める。
-/// ✅ metadata は CORS 回避のため backend の /metadata/proxy 経由（repository 内部）で取得する。
-class WalletContentsPage extends StatefulWidget {
+/// NOTE:
+/// - header側が `?from=` を読んで戻るので、このWidget自身は戻るUIを持たない
+/// - 取得/補完ロジックは hook 側に集約（このファイルは見た目＝スタイル中心）
+class WalletContentsPage extends HookWidget {
   const WalletContentsPage({
     super.key,
     required this.mintAddress,
@@ -22,6 +20,12 @@ class WalletContentsPage extends StatefulWidget {
     this.tokenName,
     this.imageUrl,
     this.from,
+
+    /// ✅ Preview 埋め込み時:
+    /// - productName はリンクにしない
+    /// - tokenName を押下可能にし、contents.dart（本ページ）へ遷移させる
+    this.enableProductLink = true,
+    this.enableTokenNameLink = false,
   });
 
   /// mint address (token identifier) - ✅ required
@@ -44,142 +48,193 @@ class WalletContentsPage extends StatefulWidget {
   final String? imageUrl;
 
   /// optional return path (decoded, plain string)
-  /// NOTE:
-  /// - header側が `?from=` を読んで戻るので、このWidget自身は戻るUIを持たない
   final String? from;
 
-  @override
-  State<WalletContentsPage> createState() => _WalletContentsPageState();
-}
+  /// productName をリンク（previewへ遷移）にするか
+  final bool enableProductLink;
 
-class _WalletContentsPageState extends State<WalletContentsPage> {
-  final WalletRepositoryHttp _repo = WalletRepositoryHttp();
-
-  bool _loading = false;
-  String? _error;
-
-  TokenResolveDTO? _resolved;
-  TokenMetadataDTO? _metadata;
-
-  String _s(String? v) => (v ?? '').trim();
+  /// tokenName をリンク（contentsへ遷移）にするか
+  final bool enableTokenNameLink;
 
   @override
-  void initState() {
-    super.initState();
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
 
-    final mint = widget.mintAddress.trim();
-    if (mint.isEmpty) {
-      _error = 'mintAddress is required.';
-      return;
+    final vm = useWalletContentsViewModel(
+      mintAddress: mintAddress,
+      productId: productId,
+      brandId: brandId,
+      brandName: brandName,
+      productName: productName,
+      tokenName: tokenName,
+      imageUrl: imageUrl,
+      from: from,
+    );
+
+    final children = <Widget>[];
+
+    if (vm.loading) {
+      children.add(
+        const Padding(
+          padding: EdgeInsets.only(bottom: 10),
+          child: Row(
+            children: [
+              SizedBox(
+                width: 18,
+                height: 18,
+                child: CircularProgressIndicator(strokeWidth: 2),
+              ),
+              SizedBox(width: 10),
+              Text('読み込み中…'),
+            ],
+          ),
+        ),
+      );
     }
 
-    // 画面引数で十分埋まっていれば通信しない
-    final hasPrefill =
-        _s(widget.productId).isNotEmpty ||
-        _s(widget.brandId).isNotEmpty ||
-        _s(widget.brandName).isNotEmpty ||
-        _s(widget.productName).isNotEmpty ||
-        _s(widget.tokenName).isNotEmpty ||
-        _s(widget.imageUrl).isNotEmpty;
-
-    if (!hasPrefill) {
-      _load();
-      return;
+    final errText = vm.error.trim();
+    if (errText.isNotEmpty) {
+      children.add(
+        Container(
+          width: double.infinity,
+          padding: const EdgeInsets.all(12),
+          decoration: BoxDecoration(
+            color: Colors.red.shade50,
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: Colors.red.shade200),
+          ),
+          child: Text(errText, style: TextStyle(color: Colors.red.shade800)),
+        ),
+      );
+      children.add(const SizedBox(height: 12));
     }
 
-    // 重要項目が欠けるなら補完ロード
-    final missing =
-        _s(widget.brandName).isEmpty ||
-        _s(widget.productName).isEmpty ||
-        _s(widget.tokenName).isEmpty ||
-        _s(widget.imageUrl).isEmpty;
+    children.add(
+      _Card(
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            _smallIcon(context, vm.imageUrl),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start, // ✅ 左寄せ
+                children: [
+                  if (vm.brandName.isNotEmpty)
+                    Text(
+                      vm.brandName,
+                      style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                        fontWeight: FontWeight.w700,
+                      ),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    )
+                  else
+                    Text(
+                      '（brandName 未取得）',
+                      style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                        color: cs.onSurfaceVariant,
+                      ),
+                    ),
+                  const SizedBox(height: 6),
 
-    if (missing) _load();
-  }
+                  // ✅ tokenName を押下可能（Preview埋め込み時の期待値）
+                  if (vm.tokenName.isNotEmpty)
+                    (enableTokenNameLink
+                        ? TextButton(
+                            onPressed: () => vm.openContents(context),
+                            style: TextButton.styleFrom(
+                              padding: EdgeInsets.zero,
+                              minimumSize: const Size(0, 0),
+                              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                              alignment: Alignment.centerLeft,
+                            ),
+                            child: Text(
+                              vm.tokenName,
+                              style: Theme.of(context).textTheme.bodyLarge
+                                  ?.copyWith(
+                                    fontWeight: FontWeight.w700,
+                                    decoration: TextDecoration.underline,
+                                  ),
+                              maxLines: 2,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          )
+                        : Text(
+                            vm.tokenName,
+                            style: Theme.of(context).textTheme.bodyLarge
+                                ?.copyWith(fontWeight: FontWeight.w700),
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                          ))
+                  else
+                    Text(
+                      '（トークン名 未取得）',
+                      style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                        color: cs.onSurfaceVariant,
+                      ),
+                    ),
 
-  @override
-  void dispose() {
-    _repo.dispose();
-    super.dispose();
-  }
+                  const SizedBox(height: 6),
 
-  Future<void> _load() async {
-    if (_loading) return;
+                  // ✅ Preview埋め込み時は productName ボタンを出さない（期待値）
+                  if (vm.productName.isNotEmpty)
+                    (enableProductLink
+                        ? TextButton(
+                            onPressed: vm.productId.isEmpty
+                                ? null
+                                : () => vm.goPreviewByProductId(
+                                    context,
+                                    vm.productId,
+                                  ),
+                            style: TextButton.styleFrom(
+                              padding: EdgeInsets.zero,
+                              minimumSize: const Size(0, 0),
+                              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                              alignment: Alignment.centerLeft,
+                            ),
+                            child: Text(
+                              vm.productName,
+                              maxLines: 2,
+                              overflow: TextOverflow.ellipsis,
+                              style: Theme.of(context).textTheme.bodyMedium
+                                  ?.copyWith(
+                                    fontWeight: FontWeight.w700,
+                                    decoration: TextDecoration.underline,
+                                  ),
+                            ),
+                          )
+                        : Text(
+                            vm.productName,
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                            style: Theme.of(context).textTheme.bodyMedium
+                                ?.copyWith(fontWeight: FontWeight.w700),
+                          ))
+                  else
+                    Text(
+                      '（productName 未取得）',
+                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                        color: cs.onSurfaceVariant,
+                      ),
+                    ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
 
-    setState(() {
-      _loading = true;
-      _error = null;
-    });
-
-    try {
-      final mint = widget.mintAddress.trim();
-      if (mint.isEmpty) {
-        _setErr('mintAddress is required.');
-        return;
-      }
-
-      // ✅ avatarId は URL ではなく store から解決（期待値）
-      final avatarId = (await AvatarIdStore.I.resolveMyAvatarId() ?? '').trim();
-      if (avatarId.isEmpty) {
-        _setErr('avatarId could not be resolved.');
-        return;
-      }
-
-      // 1) resolve（product/brand/metadataUri 等）
-      final resolved = await _repo.resolveTokenByMintAddress(mint);
-      if (resolved == null) {
-        _setErr('Failed to resolve token by mintAddress.');
-        return;
-      }
-
-      // 2) metadata（proxy 経由は repository が担保）
-      TokenMetadataDTO? meta;
-      final metaUri = resolved.metadataUri.trim();
-      if (metaUri.isNotEmpty) {
-        meta = await _repo.fetchTokenMetadata(metaUri);
-      }
-
-      if (!mounted) {
-        _resolved = resolved;
-        _metadata = meta;
-        return;
-      }
-
-      setState(() {
-        _resolved = resolved;
-        _metadata = meta;
-      });
-    } catch (e) {
-      _setErr(e.toString());
-    } finally {
-      if (mounted) {
-        setState(() => _loading = false);
-      } else {
-        _loading = false;
-      }
-    }
-  }
-
-  void _setErr(String msg) {
-    final m = msg.trim();
-    if (!mounted) {
-      _error = m;
-      return;
-    }
-    setState(() => _error = m);
-  }
-
-  String _firstNonEmpty(List<String?> xs) {
-    for (final v in xs) {
-      final s = _s(v);
-      if (s.isNotEmpty) return s;
-    }
-    return '';
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: children,
+    );
   }
 
   Widget _smallIcon(BuildContext context, String url) {
     final cs = Theme.of(context).colorScheme;
-    const double size = 56; // ✅ YouTubeチャンネルアイコン相当のサイズ感
+    const double size = 56;
 
     final u = url.trim();
     return ClipRRect(
@@ -214,162 +269,6 @@ class _WalletContentsPageState extends State<WalletContentsPage> {
                 },
               ),
       ),
-    );
-  }
-
-  void _goPreviewByProductId(BuildContext context, String productId) {
-    final pid = productId.trim();
-    if (pid.isEmpty) return;
-
-    // ✅ narratives.jp/{productId} = preview.dart（router.dart の /:productId を踏む）
-    // ※ URL に avatarId / mintAddress を載せない（redirect が必要なら補完する）
-    context.go('/$pid');
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final cs = Theme.of(context).colorScheme;
-
-    final resolved = _resolved;
-    final meta = _metadata;
-
-    // ① Widget引数 → ② resolved → ③ metadata の順で埋める
-    // NOTE: productId/brandId/mintAddress は保持するが画面表示はしない
-    final pid = _firstNonEmpty([widget.productId, resolved?.productId]);
-
-    final bname = _firstNonEmpty([widget.brandName, resolved?.brandName]);
-    final pname = _firstNonEmpty([widget.productName, resolved?.productName]);
-
-    final tname = _firstNonEmpty([widget.tokenName, meta?.name]);
-    final img = _firstNonEmpty([widget.imageUrl, meta?.image]);
-
-    final children = <Widget>[];
-
-    if (_loading) {
-      children.add(
-        Padding(
-          padding: const EdgeInsets.only(bottom: 10),
-          child: Row(
-            children: const [
-              SizedBox(
-                width: 18,
-                height: 18,
-                child: CircularProgressIndicator(strokeWidth: 2),
-              ),
-              SizedBox(width: 10),
-              Text('読み込み中…'),
-            ],
-          ),
-        ),
-      );
-    }
-
-    final errText = (_error ?? '').trim();
-    if (errText.isNotEmpty) {
-      children.add(
-        Container(
-          width: double.infinity,
-          padding: const EdgeInsets.all(12),
-          decoration: BoxDecoration(
-            color: Colors.red.shade50,
-            borderRadius: BorderRadius.circular(12),
-            border: Border.all(color: Colors.red.shade200),
-          ),
-          child: Text(errText, style: TextStyle(color: Colors.red.shade800)),
-        ),
-      );
-      children.add(const SizedBox(height: 12));
-    }
-
-    children.add(
-      _Card(
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            _smallIcon(context, img),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start, // ✅ 左寄せ
-                children: [
-                  if (bname.isNotEmpty)
-                    Text(
-                      bname,
-                      style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                        fontWeight: FontWeight.w700,
-                      ),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                    )
-                  else
-                    Text(
-                      '（brandName 未取得）',
-                      style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                        color: cs.onSurfaceVariant,
-                      ),
-                    ),
-
-                  const SizedBox(height: 6),
-
-                  if (tname.isNotEmpty)
-                    Text(
-                      tname,
-                      style: Theme.of(context).textTheme.bodyLarge?.copyWith(
-                        fontWeight: FontWeight.w700,
-                      ),
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
-                    )
-                  else
-                    Text(
-                      '（トークン名 未取得）',
-                      style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                        color: cs.onSurfaceVariant,
-                      ),
-                    ),
-
-                  const SizedBox(height: 6),
-
-                  // ✅ productName をボタン化して、カード内の左側へ配置
-                  if (pname.isNotEmpty)
-                    TextButton(
-                      onPressed: pid.isEmpty
-                          ? null
-                          : () => _goPreviewByProductId(context, pid),
-                      style: TextButton.styleFrom(
-                        padding: EdgeInsets.zero,
-                        minimumSize: const Size(0, 0),
-                        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                        alignment: Alignment.centerLeft,
-                      ),
-                      child: Text(
-                        pname,
-                        maxLines: 2,
-                        overflow: TextOverflow.ellipsis,
-                        style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                          fontWeight: FontWeight.w700,
-                          decoration: TextDecoration.underline,
-                        ),
-                      ),
-                    )
-                  else
-                    Text(
-                      '（productName 未取得）',
-                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                        color: cs.onSurfaceVariant,
-                      ),
-                    ),
-                ],
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: children,
     );
   }
 }

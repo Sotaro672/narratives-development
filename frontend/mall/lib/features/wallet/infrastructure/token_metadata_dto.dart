@@ -1,3 +1,4 @@
+//frontend\mall\lib\features\wallet\infrastructure\token_metadata_dto.dart
 class TokenMetadataAttributeDTO {
   const TokenMetadataAttributeDTO({
     required this.traitType,
