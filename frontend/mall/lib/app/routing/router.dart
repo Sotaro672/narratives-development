@@ -28,6 +28,10 @@ import '../../features/wallet/presentation/page/contents.dart';
 // ✅ MallListItem 型
 import '../../features/list/infrastructure/list_repository_http.dart';
 
+// ✅ cart repository (for header badge)
+import '../../features/cart/infrastructure/repository_http.dart'
+    show CartRepositoryHttp, CartDTO, CartHttpException;
+
 // auth pages（✅ alias で確実に解決させる）
 import '../../features/auth/presentation/page/login_page.dart' as auth_login;
 import '../../features/auth/presentation/page/create_account.dart'
@@ -350,10 +354,6 @@ List<RouteBase> _routes({required bool firebaseReady}) {
         ),
 
         // ✅ wallet token contents（Shell内）
-        //
-        // セキュリティ要件:
-        // - mintAddress を URL に出さない方針のため、query から受け取らない。
-        // - 画面遷移は `extra` で mintAddress を渡す（TokenCard 側で対応）。
         GoRoute(
           path: AppRoutePath.walletContents,
           name: AppRouteName.walletContents,
@@ -586,23 +586,126 @@ class _HeaderSignInButton extends StatelessWidget {
   }
 }
 
-class _HeaderCartButton extends StatelessWidget {
+class _HeaderCartButton extends StatefulWidget {
   const _HeaderCartButton({required this.returnTo, required this.avatarId});
+
   final String returnTo;
 
-  // NOTE: 現状 router.dart では avatarId は使っていないが、
-  // 呼び出し側（header の出し分け等）で必要な場合があるため温存。
+  // NOTE: 旧実装では avatarId は未使用だったが、
+  // バッジ表示のために使用する
   final String avatarId;
 
   @override
+  State<_HeaderCartButton> createState() => _HeaderCartButtonState();
+}
+
+class _HeaderCartButtonState extends State<_HeaderCartButton> {
+  CartRepositoryHttp? _repo;
+  Future<int>? _futureQty;
+
+  static String _s(dynamic v) => (v ?? '').toString().trim();
+
+  @override
+  void initState() {
+    super.initState();
+    _repo = CartRepositoryHttp();
+    _futureQty = _loadTotalQty();
+  }
+
+  @override
+  void didUpdateWidget(covariant _HeaderCartButton oldWidget) {
+    super.didUpdateWidget(oldWidget);
+
+    // avatarId が変わったら取り直す
+    if (_s(oldWidget.avatarId) != _s(widget.avatarId)) {
+      _futureQty = _loadTotalQty();
+    }
+  }
+
+  @override
+  void dispose() {
+    _repo?.dispose();
+    super.dispose();
+  }
+
+  Future<int> _loadTotalQty() async {
+    final aid = _s(widget.avatarId);
+
+    // ログイン前 / avatarId 未解決ならバッジなし（0扱い）
+    final loggedIn = FirebaseAuth.instance.currentUser != null;
+    if (!loggedIn || aid.isEmpty) return 0;
+
+    try {
+      final CartDTO c = await _repo!.fetchCart(avatarId: aid);
+
+      // ✅ “アイテム数” は qty 合計で表示（行数ではなく点数）
+      final totalQty = c.items.values.fold<int>(0, (sum, it) => sum + it.qty);
+      return totalQty < 0 ? 0 : totalQty;
+    } catch (e) {
+      // 404 は空カート扱い
+      if (e is CartHttpException && e.statusCode == 404) return 0;
+
+      // それ以外は fail-open（バッジ無し）
+      return 0;
+    }
+  }
+
+  String _badgeText(int n) {
+    if (n <= 0) return '';
+    if (n > 99) return '99+';
+    return n.toString();
+  }
+
+  @override
   Widget build(BuildContext context) {
-    return IconButton(
-      tooltip: 'Cart',
-      icon: const Icon(Icons.shopping_cart_outlined),
-      onPressed: () {
-        // ✅ Pattern B: cart 遷移前に戻り先を Store に保存
-        _captureReturnToForInternalNav(returnTo);
-        context.goNamed(AppRouteName.cart);
+    return FutureBuilder<int>(
+      future: _futureQty,
+      builder: (context, snap) {
+        final qty = (snap.data ?? 0);
+        final text = _badgeText(qty);
+        final showBadge = text.isNotEmpty;
+
+        return Stack(
+          clipBehavior: Clip.none,
+          children: [
+            IconButton(
+              tooltip: 'Cart',
+              icon: const Icon(Icons.shopping_cart_outlined),
+              onPressed: () {
+                // ✅ Pattern B: cart 遷移前に戻り先を Store に保存
+                _captureReturnToForInternalNav(widget.returnTo);
+                context.goNamed(AppRouteName.cart);
+              },
+            ),
+
+            if (showBadge)
+              Positioned(
+                right: 6,
+                top: 6,
+                child: Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 6,
+                    vertical: 2,
+                  ),
+                  decoration: BoxDecoration(
+                    color: Theme.of(context).colorScheme.error,
+                    borderRadius: BorderRadius.circular(999),
+                  ),
+                  constraints: const BoxConstraints(minWidth: 18),
+                  child: Text(
+                    text,
+                    textAlign: TextAlign.center,
+                    style: const TextStyle(
+                      fontSize: 11,
+                      height: 1.1,
+                      color: Colors.white,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                ),
+              ),
+          ],
+        );
       },
     );
   }

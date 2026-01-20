@@ -7,7 +7,7 @@ import '../../infrastructure/list_repository_http.dart';
 class HomePage extends StatefulWidget {
   const HomePage({super.key});
 
-  static const String pageName = 'home';
+  static const String pageName = 'list';
 
   @override
   State<HomePage> createState() => _HomePageState();

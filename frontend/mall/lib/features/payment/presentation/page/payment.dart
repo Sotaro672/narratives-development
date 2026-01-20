@@ -199,10 +199,10 @@ class PaymentPageVM {
     }
 
     final shippingLines = _addressLines(shippingMap);
-    final billingLines = _addressLines(billingMap);
-
     final shippingVM = ShippingCardVM(lines: shippingLines);
-    final billingVM = BillingCardVM.fromLines(billingLines);
+
+    // ✅ use_payment.dart が保持している billingAddress を優先表示（カード名義/カード番号）
+    final billingVM = BillingCardVM.fromBillingAddressMap(billingMap);
 
     // cart
     final items = <CartItemVM>[];
@@ -329,6 +329,73 @@ class BillingCardVM {
   final String cardNumberLine;
   final bool isEmpty;
 
+  // ✅ use_payment.dart が保持している billingAddress(Map) からカード表示用VMを生成
+  factory BillingCardVM.fromBillingAddressMap(Map<String, dynamic>? m) {
+    if (m == null || m.isEmpty) {
+      return const BillingCardVM(
+        holderLine: '',
+        cardNumberLine: '(empty)',
+        isEmpty: true,
+      );
+    }
+
+    String s(dynamic v) => (v ?? '').toString().trim();
+
+    // use_payment.dart と一致するキー
+    final holder = s(m['cardholderName']);
+    final rawNumber = s(m['cardNumber']);
+
+    // 将来/揺れ対策: サーバが last4 を直接返す場合にも対応
+    final last4 = s(m['last4']);
+
+    String maskCardNumber(String raw, {String last4Fallback = ''}) {
+      final cleaned = raw.replaceAll(' ', '').trim();
+      if (cleaned.isNotEmpty) {
+        final last = cleaned.length >= 4
+            ? cleaned.substring(cleaned.length - 4)
+            : cleaned;
+        return '**** **** **** $last';
+      }
+      if (last4Fallback.isNotEmpty) {
+        return '**** **** **** $last4Fallback';
+      }
+      return '';
+    }
+
+    final masked = maskCardNumber(rawNumber, last4Fallback: last4);
+
+    // カード情報があればカード表示を採用
+    final hasCardInfo = holder.isNotEmpty || masked.isNotEmpty;
+    if (hasCardInfo) {
+      return BillingCardVM(
+        isEmpty: false,
+        holderLine: holder.isNotEmpty ? 'カード名義: $holder' : '',
+        cardNumberLine: masked.isNotEmpty ? 'カード番号: $masked' : 'カード番号: (未設定)',
+      );
+    }
+
+    // カード情報が無い場合は従来どおり住所lines表示へフォールバック
+    final lines = PaymentPageVM._addressLines(m);
+    if (lines.isEmpty) {
+      return const BillingCardVM(
+        holderLine: '',
+        cardNumberLine: '(empty)',
+        isEmpty: true,
+      );
+    }
+
+    final holderLine = lines.first;
+    final rest = lines.skip(1).join(' / ').trim();
+    final line2 = rest.isEmpty ? '決済: (未設定 / 開発中)' : rest;
+
+    return BillingCardVM(
+      holderLine: holderLine,
+      cardNumberLine: line2,
+      isEmpty: false,
+    );
+  }
+
+  // 互換: 既存の lines から生成するAPIも残す（他で参照されている可能性に備える）
   factory BillingCardVM.fromLines(List<String> lines) {
     if (lines.isEmpty) {
       return const BillingCardVM(

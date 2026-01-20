@@ -30,6 +30,10 @@ class UseCartResult {
     required this.dec,
     required this.remove,
     required this.clear,
+    // ✅ added (Pattern A): derived cart stats
+    required this.isEmpty,
+    required this.itemCount,
+    required this.totalQty,
   });
 
   /// ✅ Source of truth: AvatarIdStore（URL からは読まない）
@@ -61,6 +65,19 @@ class UseCartResult {
   final Future<void> Function(String itemKey) remove;
 
   final Future<void> Function() clear;
+
+  // ------------------------------------------------------------
+  // ✅ Derived fields for UI (Pattern A)
+  // ------------------------------------------------------------
+
+  /// ✅ カートが空か（qty=0 の混入にも強い）
+  final bool isEmpty;
+
+  /// ✅ 行数（items map のエントリ数）
+  final int itemCount;
+
+  /// ✅ 数量合計（Σ qty）
+  final int totalQty;
 }
 
 /// Hook-like controller for CartPage.
@@ -329,7 +346,7 @@ class UseCartController {
           .catchError((e, st) {
             _log('reload fetchCart ERROR: $e');
             if (_dbg) _log('stack:\n$st');
-            // ✅ 失敗しても落とさない（current は維持）
+            // ✅ 失敗しても落ちない（current は維持）
             return current;
           });
     });
@@ -511,6 +528,14 @@ class UseCartController {
         ? _avatarId.trim()
         : AvatarIdStore.I.avatarId.trim();
 
+    // ✅ Derived stats (Pattern A)
+    final itemCount = current.items.length;
+    final totalQty = current.items.values.fold<int>(
+      0,
+      (sum, it) => sum + it.qty,
+    );
+    final isEmpty = itemCount == 0 || totalQty <= 0;
+
     return UseCartResult(
       avatarId: aid,
       future: future,
@@ -523,6 +548,10 @@ class UseCartController {
       dec: (itemKey, currentQty) => dec(setState, itemKey, currentQty),
       remove: (itemKey) => remove(setState, itemKey),
       clear: () => clear(setState),
+      // ✅ added
+      isEmpty: isEmpty,
+      itemCount: itemCount,
+      totalQty: totalQty,
     );
   }
 }

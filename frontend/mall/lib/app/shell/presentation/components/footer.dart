@@ -15,6 +15,9 @@ import '../../../routing/navigation.dart';
 // ✅ NEW: 3 buttons extracted
 import 'footer_buttons.dart';
 
+// ✅ Cart (Pattern A stats): use_cart controller/result
+import 'package:mall/features/cart/presentation/hook/use_cart.dart';
+
 /// Minimal footer widget (layout primitive).
 class AppFooter extends StatelessWidget {
   const AppFooter({
@@ -67,8 +70,17 @@ class AppFooter extends StatelessWidget {
 /// - `avatarId` を URL query に入れない／URL から読まない
 /// - 戻り先は NavStore に保持する
 /// - avatarId は AvatarIdStore（= app state）を参照する
-class SignedInFooter extends StatelessWidget {
+///
+/// ✅ 方針B：/cart のときだけ UseCartController を参照して「購入する」押下可否を決める
+class SignedInFooter extends StatefulWidget {
   const SignedInFooter({super.key});
+
+  @override
+  State<SignedInFooter> createState() => _SignedInFooterState();
+}
+
+class _SignedInFooterState extends State<SignedInFooter> {
+  UseCartController? _cartUc;
 
   bool _isCatalogPath(BuildContext context) {
     final path = GoRouterState.of(context).uri.path;
@@ -178,6 +190,24 @@ class SignedInFooter extends StatelessWidget {
     return extracted.replace(queryParameters: merged.isEmpty ? null : merged);
   }
 
+  void _syncCartControllerIfNeeded(bool isCart) {
+    // /cart に入ったら init、離れたら dispose（このファイルで完結）
+    if (isCart && _cartUc == null) {
+      _cartUc = UseCartController(context: context);
+      _cartUc!.init();
+    } else if (!isCart && _cartUc != null) {
+      _cartUc!.dispose();
+      _cartUc = null;
+    }
+  }
+
+  @override
+  void dispose() {
+    _cartUc?.dispose();
+    _cartUc = null;
+    super.dispose();
+  }
+
   @override
   Widget build(BuildContext context) {
     return StreamBuilder<User?>(
@@ -190,6 +220,9 @@ class SignedInFooter extends StatelessWidget {
         final isCatalog = _isCatalogPath(context);
         final isCart = _isCartPath(context);
         final isPayment = _isPaymentPath(context);
+
+        // ✅ /cart のときだけ cart controller を生かす
+        _syncCartControllerIfNeeded(isCart);
 
         final listId = isCatalog ? _catalogListIdOrEmpty(context) : '';
 
@@ -221,7 +254,7 @@ class SignedInFooter extends StatelessWidget {
 
                   // ✅ 中央：
                   // - catalog: カートに入れる
-                  // - cart: 購入する（paymentへ）
+                  // - cart: 購入する（paymentへ）※ cart=0 のときは押下不可
                   // - payment: 支払を確定する
                   // - other: Scan（スキャンしたURLへ遷移）
                   Expanded(
@@ -248,9 +281,6 @@ class SignedInFooter extends StatelessWidget {
                                     stock > 0;
 
                                 return AddToCartButton(
-                                  // Pattern B: from は URL に載せない。戻り先は store で持つ。
-                                  // ※ AddToCartButton 側が from をまだ要求する場合は、
-                                  //    footer_buttons.dart 側も Pattern B に合わせて改修してください。
                                   inventoryId: invId,
                                   listId: listId,
                                   avatarId: avatarId,
@@ -261,9 +291,10 @@ class SignedInFooter extends StatelessWidget {
                               },
                             )
                           : isCart
-                          ? GoToPaymentButton(
+                          // ✅ /cart のときだけ cart を参照して enabled を決める
+                          ? _CartAwareGoToPaymentButton(
                               avatarId: avatarId,
-                              enabled: avatarId.isNotEmpty,
+                              controller: _cartUc,
                             )
                           : isPayment
                           ? ConfirmPaymentButton(
@@ -281,7 +312,9 @@ class SignedInFooter extends StatelessWidget {
                                 );
 
                                 if (!context.mounted) return;
-                                if (code == null || code.trim().isEmpty) return;
+                                if (code == null || code.trim().isEmpty) {
+                                  return;
+                                }
 
                                 final target = _normalizeScannedToAppUri(code);
                                 if (target == null) {
@@ -317,6 +350,45 @@ class SignedInFooter extends StatelessWidget {
             ),
           ),
         );
+      },
+    );
+  }
+}
+
+/// ✅ /cart 専用：UseCartController を参照して「購入する」押下可否を決める
+class _CartAwareGoToPaymentButton extends StatelessWidget {
+  const _CartAwareGoToPaymentButton({
+    required this.avatarId,
+    required this.controller,
+  });
+
+  final String avatarId;
+  final UseCartController? controller;
+
+  @override
+  Widget build(BuildContext context) {
+    final aid = avatarId.trim();
+
+    // controller が無い（= /cart 以外）ケースは防御的に disabled
+    final uc = controller;
+    if (uc == null) {
+      return GoToPaymentButton(avatarId: aid, enabled: false);
+    }
+
+    // ✅ FutureBuilder で初回 fetch 完了を拾い、cart=0 のときは disabled にする
+    return FutureBuilder<CartDTO>(
+      future: uc.future,
+      builder: (context, snap) {
+        // snap.data は未使用でも良いが、Future の完了で再描画させるために FutureBuilder を使う
+        final _ = snap.data; // ignore: unused_local_variable
+
+        // Pattern A: buildResult() から派生値を取り出して押下可否を決める
+        final res = uc.buildResult((fn) {});
+        final cartNotEmpty = !res.isEmpty;
+
+        final enabled = aid.isNotEmpty && cartNotEmpty;
+
+        return GoToPaymentButton(avatarId: aid, enabled: enabled);
       },
     );
   }
