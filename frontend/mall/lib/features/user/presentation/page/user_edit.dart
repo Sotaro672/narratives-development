@@ -1,15 +1,17 @@
-//frontend\mall\lib\features\user\presentation\page\user_edit.dart
+// frontend\mall\lib\features\user\presentation\page\user_edit.dart
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 
 import '../../../../app/shell/presentation/components/header.dart';
+import '../../../../app/routing/navigation.dart';
 
 class UserEditPage extends StatefulWidget {
-  const UserEditPage({super.key, this.from});
+  const UserEditPage({super.key, this.tab});
 
-  /// optional back route (もし router から渡したい場合用)
-  final String? from;
+  /// 初期表示タブ（router から渡す）
+  /// 例: 'email', 'password'
+  final String? tab;
 
   @override
   State<UserEditPage> createState() => _UserEditPageState();
@@ -39,11 +41,11 @@ class _UserEditPageState extends State<UserEditPage> {
 
   String _s(String? v) => (v ?? '').trim();
 
+  /// Pattern B: URL の from を使わず、NavStore の returnTo を優先して戻る
+  /// - returnTo が無ければ /avatar にフォールバック
   String _backTo(BuildContext context) {
-    // ✅ router から渡されなくても、URL query (?from=...) から拾える
-    final qpFrom = GoRouterState.of(context).uri.queryParameters['from'];
-    final f = _s(widget.from ?? qpFrom);
-    if (f.isNotEmpty) return f;
+    final to = NavStore.I.consumeReturnTo().trim();
+    if (to.isNotEmpty) return to;
     return '/avatar';
   }
 
@@ -94,10 +96,19 @@ class _UserEditPageState extends State<UserEditPage> {
       if (!mounted) return;
       setState(() => _msg = e.toString());
     } finally {
-      // ✅ finally で return しない（lint回避）
       if (mounted) {
         setState(() => _saving = false);
       }
+    }
+  }
+
+  int _initialTabIndex() {
+    switch (_s(widget.tab)) {
+      case 'password':
+        return 1;
+      case 'email':
+      default:
+        return 0;
     }
   }
 
@@ -109,115 +120,199 @@ class _UserEditPageState extends State<UserEditPage> {
     final email = _s(user?.email);
     final uid = _s(user?.uid);
 
-    return Scaffold(
-      body: SafeArea(
-        child: Column(
-          children: [
-            AppHeader(
-              title: 'Account',
-              showBack: true,
-              backTo: _backTo(context),
-              actions: const [],
-              onTapTitle: () => context.go('/'),
-            ),
-            Expanded(
-              child: Center(
-                child: ConstrainedBox(
-                  constraints: const BoxConstraints(maxWidth: 560),
-                  child: SingleChildScrollView(
-                    padding: const EdgeInsets.all(16),
+    return DefaultTabController(
+      length: 2,
+      initialIndex: _initialTabIndex(),
+      child: Scaffold(
+        body: SafeArea(
+          child: Column(
+            children: [
+              AppHeader(
+                title: 'Account',
+                showBack: true,
+                backTo: _backTo(context),
+                actions: const [],
+                onTapTitle: () => context.go('/'),
+              ),
+              const Material(
+                child: TabBar(
+                  tabs: [
+                    Tab(text: 'Email'),
+                    Tab(text: 'Password'),
+                  ],
+                ),
+              ),
+              Expanded(
+                child: TabBarView(
+                  children: [
+                    _ProfileTab(
+                      displayNameCtrl: _displayNameCtrl,
+                      photoUrlCtrl: _photoUrlCtrl,
+                      saving: _saving,
+                      msg: _msg,
+                      photoUrl: photoUrl,
+                      email: email,
+                      uid: uid,
+                      onSave: _save,
+                    ),
+                    _PasswordTab(msg: _msg),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// ------------------------------------------------------------
+/// 既存の「ユーザー情報編集」UI を Email タブ側（ここでは Profile として）に配置
+class _ProfileTab extends StatelessWidget {
+  const _ProfileTab({
+    required this.displayNameCtrl,
+    required this.photoUrlCtrl,
+    required this.saving,
+    required this.msg,
+    required this.photoUrl,
+    required this.email,
+    required this.uid,
+    required this.onSave,
+  });
+
+  final TextEditingController displayNameCtrl;
+  final TextEditingController photoUrlCtrl;
+  final bool saving;
+  final String? msg;
+
+  final String photoUrl;
+  final String email;
+  final String uid;
+
+  final Future<void> Function() onSave;
+
+  @override
+  Widget build(BuildContext context) {
+    return Center(
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 560),
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.all(16),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Row(
+                children: [
+                  CircleAvatar(
+                    radius: 28,
+                    backgroundImage: photoUrl.isNotEmpty
+                        ? NetworkImage(photoUrl)
+                        : null,
+                    child: photoUrl.isEmpty ? const Icon(Icons.person) : null,
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
                     child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Row(
-                          children: [
-                            CircleAvatar(
-                              radius: 28,
-                              backgroundImage: photoUrl.isNotEmpty
-                                  ? NetworkImage(photoUrl)
-                                  : null,
-                              child: photoUrl.isEmpty
-                                  ? const Icon(Icons.person)
-                                  : null,
-                            ),
-                            const SizedBox(width: 12),
-                            Expanded(
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Text(
-                                    email.isNotEmpty ? email : 'signed-in',
-                                    style: Theme.of(
-                                      context,
-                                    ).textTheme.titleMedium,
-                                  ),
-                                  const SizedBox(height: 2),
-                                  Text(
-                                    'uid: ${uid.isNotEmpty ? uid : '-'}',
-                                    style: Theme.of(
-                                      context,
-                                    ).textTheme.bodySmall,
-                                  ),
-                                ],
-                              ),
-                            ),
-                          ],
+                        Text(
+                          email.isNotEmpty ? email : 'signed-in',
+                          style: Theme.of(context).textTheme.titleMedium,
                         ),
-                        const SizedBox(height: 16),
-
-                        TextField(
-                          controller: _displayNameCtrl,
-                          decoration: const InputDecoration(
-                            labelText: 'displayName（任意）',
-                            border: OutlineInputBorder(),
-                          ),
+                        const SizedBox(height: 2),
+                        Text(
+                          'uid: ${uid.isNotEmpty ? uid : '-'}',
+                          style: Theme.of(context).textTheme.bodySmall,
                         ),
-                        const SizedBox(height: 12),
-
-                        TextField(
-                          controller: _photoUrlCtrl,
-                          decoration: const InputDecoration(
-                            labelText: 'photoURL（任意）',
-                            hintText: 'https://...',
-                            border: OutlineInputBorder(),
-                          ),
-                        ),
-                        const SizedBox(height: 16),
-
-                        ElevatedButton(
-                          onPressed: _saving ? null : _save,
-                          child: _saving
-                              ? const SizedBox(
-                                  width: 18,
-                                  height: 18,
-                                  child: CircularProgressIndicator(
-                                    strokeWidth: 2,
-                                  ),
-                                )
-                              : const Text('保存'),
-                        ),
-
-                        if ((_msg ?? '').trim().isNotEmpty) ...[
-                          const SizedBox(height: 12),
-                          Container(
-                            padding: const EdgeInsets.all(12),
-                            decoration: BoxDecoration(
-                              color: Theme.of(context)
-                                  .colorScheme
-                                  .surfaceContainerHighest
-                                  .withValues(alpha: 0.55),
-                              borderRadius: BorderRadius.circular(12),
-                            ),
-                            child: Text(_msg!),
-                          ),
-                        ],
                       ],
                     ),
                   ),
+                ],
+              ),
+              const SizedBox(height: 16),
+              TextField(
+                controller: displayNameCtrl,
+                decoration: const InputDecoration(
+                  labelText: 'displayName（任意）',
+                  border: OutlineInputBorder(),
                 ),
               ),
-            ),
-          ],
+              const SizedBox(height: 12),
+              TextField(
+                controller: photoUrlCtrl,
+                decoration: const InputDecoration(
+                  labelText: 'photoURL（任意）',
+                  hintText: 'https://...',
+                  border: OutlineInputBorder(),
+                ),
+              ),
+              const SizedBox(height: 16),
+              ElevatedButton(
+                onPressed: saving ? null : () => onSave(),
+                child: saving
+                    ? const SizedBox(
+                        width: 18,
+                        height: 18,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      )
+                    : const Text('保存'),
+              ),
+              if ((msg ?? '').trim().isNotEmpty) ...[
+                const SizedBox(height: 12),
+                Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: Theme.of(context).colorScheme.surfaceContainerHighest
+                        .withValues(alpha: 0.55),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Text(msg!),
+                ),
+              ],
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// ------------------------------------------------------------
+/// Password タブ（既存の PasswordUpdateBody などがあるなら差し替えてください）
+class _PasswordTab extends StatelessWidget {
+  const _PasswordTab({required this.msg});
+  final String? msg;
+
+  @override
+  Widget build(BuildContext context) {
+    return Center(
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 560),
+        child: Padding(
+          padding: const EdgeInsets.all(16),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Text('Password', style: Theme.of(context).textTheme.titleMedium),
+              const SizedBox(height: 8),
+              const Text(
+                'ここにパスワード変更UI（既存の password_update_body.dart 等）を配置してください。',
+              ),
+              if ((msg ?? '').trim().isNotEmpty) ...[
+                const SizedBox(height: 12),
+                Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: Theme.of(context).colorScheme.surfaceContainerHighest
+                        .withValues(alpha: 0.55),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Text(msg!),
+                ),
+              ],
+            ],
+          ),
         ),
       ),
     );

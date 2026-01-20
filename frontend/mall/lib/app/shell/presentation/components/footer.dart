@@ -1,6 +1,4 @@
 // frontend\mall\lib\app\shell\presentation\components\footer.dart
-import 'dart:convert';
-
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:firebase_auth/firebase_auth.dart';
@@ -8,11 +6,14 @@ import 'package:mobile_scanner/mobile_scanner.dart';
 
 import '../state/catalog_selection_store.dart';
 
-// ✅ NEW: 3 buttons extracted
-import 'footer_buttons.dart';
-
 // ✅ routing constants
 import '../../../routing/routes.dart';
+
+// ✅ Pattern B stores (no URL-based navigation state)
+import '../../../routing/navigation.dart';
+
+// ✅ NEW: 3 buttons extracted
+import 'footer_buttons.dart';
 
 /// Minimal footer widget (layout primitive).
 class AppFooter extends StatelessWidget {
@@ -60,6 +61,12 @@ class AppFooter extends StatelessWidget {
 
 /// Signed-in footer (Shop / Scan(or AddToCart) / AvatarIcon)
 /// - Shows ONLY when FirebaseAuth.currentUser != null
+///
+/// Pattern B:
+/// - `from` を URL query に入れない
+/// - `avatarId` を URL query に入れない／URL から読まない
+/// - 戻り先は NavStore に保持する
+/// - avatarId は AvatarIdStore（= app state）を参照する
 class SignedInFooter extends StatelessWidget {
   const SignedInFooter({super.key});
 
@@ -70,15 +77,18 @@ class SignedInFooter extends StatelessWidget {
 
   bool _isCartPath(BuildContext context) {
     final path = GoRouterState.of(context).uri.path;
-    return path == '/cart';
+    return path == AppRoutePath.cart;
   }
 
   bool _isPaymentPath(BuildContext context) {
     final path = GoRouterState.of(context).uri.path;
-    return path == '/payment';
+    return path == AppRoutePath.payment;
   }
 
-  String _currentUriString(BuildContext context) {
+  String _currentLocationForReturnTo(BuildContext context) {
+    // ✅ Pattern B: URL query を前提にしない。
+    // 戻り先は「現在の location」を store に保持するだけ（URLへは出さない）。
+    // 既に query が付いている場合でも、ここで保持するのは store 内だけなのでOK。
     return GoRouterState.of(context).uri.toString();
   }
 
@@ -87,37 +97,6 @@ class SignedInFooter extends StatelessWidget {
     final parts = path.split('/');
     if (parts.length >= 3 && parts[1] == 'catalog') return parts[2];
     return '';
-  }
-
-  String _currentAvatarIdOrEmpty(BuildContext context) {
-    final qp = GoRouterState.of(context).uri.queryParameters;
-    return (qp[AppQueryKey.avatarId] ?? '').trim();
-  }
-
-  /// ✅ 現在URLの avatarId を必要に応じて引き継ぐ
-  Uri _buildUriPreserveAvatarId(
-    BuildContext context,
-    String path, {
-    Map<String, String>? qp,
-  }) {
-    final current = GoRouterState.of(context).uri;
-    final merged = <String, String>{...(qp ?? {})};
-
-    // keep avatarId if not explicitly provided
-    if (!merged.containsKey(AppQueryKey.avatarId)) {
-      final aid = (current.queryParameters[AppQueryKey.avatarId] ?? '').trim();
-      if (aid.isNotEmpty) merged[AppQueryKey.avatarId] = aid;
-    }
-
-    return Uri(path: path, queryParameters: merged.isEmpty ? null : merged);
-  }
-
-  /// ------------------------------------------------------------
-  /// ✅ `from` は URL で壊れやすい（Hash + `?` `&` 混在）ので base64url で安全に運ぶ
-  String _encodeFrom(String raw) {
-    final s = raw.trim();
-    if (s.isEmpty) return '';
-    return base64UrlEncode(utf8.encode(s));
   }
 
   /// ------------------------------------------------------------
@@ -136,6 +115,7 @@ class SignedInFooter extends StatelessWidget {
       'preview',
       'payment',
       'catalog',
+      'wallet',
     };
     return reserved.contains(seg);
   }
@@ -143,16 +123,10 @@ class SignedInFooter extends StatelessWidget {
   /// ------------------------------------------------------------
   /// ✅ QRでスキャンした文字列を「アプリ内遷移先URI」に正規化して返す
   ///
-  /// 想定入力：
-  /// - https://narratives.jp/{productId}
-  /// - https://narratives.jp/preview?productId=...
-  /// - /preview?productId=...
-  /// - {productId}（生IDだけ）
-  Uri? _normalizeScannedToAppUri(
-    String raw, {
-    required String currentFrom,
-    required String avatarId,
-  }) {
+  /// Pattern B:
+  /// - `from` / `avatarId` を query に付与しない
+  /// - 既に含まれていた場合も削除する
+  Uri? _normalizeScannedToAppUri(String raw) {
     final s = raw.trim();
     if (s.isEmpty) return null;
 
@@ -167,49 +141,39 @@ class SignedInFooter extends StatelessWidget {
 
     // 2) scheme が無い & / でもない場合は「生 productId」とみなす
     if (u == null || (u.scheme.isEmpty && !s.startsWith('/'))) {
-      final pid = s;
+      final pid = s.trim();
       if (pid.isEmpty) return null;
       if (_isReservedTopSegment(pid)) return null;
-
-      final qp = <String, String>{
-        if (avatarId.trim().isNotEmpty) AppQueryKey.avatarId: avatarId.trim(),
-        // どこから来たか（戻る用）
-        AppQueryKey.from: _encodeFrom(currentFrom),
-      };
-      return Uri(path: '/$pid', queryParameters: qp);
+      return Uri(path: '/$pid');
     }
 
-    // 3) https://... の場合は path/query だけ抽出してアプリ内遷移にする
+    // 3) http(s) の場合は path/query だけ抽出してアプリ内遷移にする
     final isHttp = u.scheme == 'http' || u.scheme == 'https';
-    final path = (isHttp ? u.path : u.path).trim().isEmpty ? '/' : u.path;
-
-    // fragment はルーティングを壊しやすいので捨てる
     final extracted = Uri(
-      path: path.startsWith('/') ? path : '/$path',
-      queryParameters: u.queryParameters.isEmpty ? null : u.queryParameters,
+      path: (u.path.trim().isEmpty
+          ? '/'
+          : (u.path.startsWith('/') ? u.path : '/${u.path}')),
+      queryParameters: isHttp
+          ? (u.queryParameters.isEmpty ? null : u.queryParameters)
+          : (u.queryParameters.isEmpty ? null : u.queryParameters),
+      fragment: null, // ✅ fragment は捨てる（ルーティング破壊回避）
     );
 
     // 4) パスがトップ1階層（= /{something}）の場合、reserved は弾く
     final segs = extracted.pathSegments;
     if (segs.length == 1) {
-      final top = (segs.first).trim();
+      final top = segs.first.trim();
       if (top.isNotEmpty && _isReservedTopSegment(top)) {
         return null;
       }
     }
 
-    // 5) avatarId / from を付与（既に付いていれば尊重）
+    // 5) Pattern B: URL state を持ち込まない（from/avatarId/mintAddress 等を除去）
     final merged = <String, String>{...extracted.queryParameters};
 
-    if (!merged.containsKey(AppQueryKey.avatarId) &&
-        avatarId.trim().isNotEmpty) {
-      merged[AppQueryKey.avatarId] = avatarId.trim();
-    }
-
-    // from は「現在画面」を入れる（PreviewPageの戻り用途）
-    if (!merged.containsKey(AppQueryKey.from)) {
-      merged[AppQueryKey.from] = _encodeFrom(currentFrom);
-    }
+    merged.remove(AppQueryKey.from);
+    merged.remove(AppQueryKey.avatarId);
+    merged.remove(AppQueryKey.mintAddress);
 
     return extracted.replace(queryParameters: merged.isEmpty ? null : merged);
   }
@@ -221,18 +185,19 @@ class SignedInFooter extends StatelessWidget {
       stream: FirebaseAuth.instance.userChanges(),
       builder: (context, snap) {
         final user = FirebaseAuth.instance.currentUser ?? snap.data;
-
         if (user == null) return const SizedBox.shrink();
 
         final isCatalog = _isCatalogPath(context);
         final isCart = _isCartPath(context);
         final isPayment = _isPaymentPath(context);
 
-        final from = _currentUriString(context);
         final listId = isCatalog ? _catalogListIdOrEmpty(context) : '';
 
-        // ✅ いまURLに avatarId があれば引き継ぐ（footer 遷移で消さない）
-        final avatarId = _currentAvatarIdOrEmpty(context);
+        // ✅ Pattern B: avatarId は URL から読まない（store を参照）
+        final avatarId = AvatarIdStore.I.avatarId.trim();
+
+        // ✅ Pattern B: 戻り先は store に保持（URLへは出さない）
+        final returnTo = _currentLocationForReturnTo(context);
 
         return Material(
           color: Theme.of(context).cardColor,
@@ -243,11 +208,13 @@ class SignedInFooter extends StatelessWidget {
               padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 10),
               child: Row(
                 children: [
+                  // ✅ Shop (Home)
                   _FooterItem(
                     icon: Icons.storefront_outlined,
                     onTap: () {
-                      final uri = _buildUriPreserveAvatarId(context, '/');
-                      context.go(uri.toString());
+                      // Home は戻り先にする必要は基本無いが、念のため現在地は保持しておく
+                      NavStore.I.setReturnTo(returnTo);
+                      context.go(AppRoutePath.home);
                     },
                   ),
                   const SizedBox(width: 8),
@@ -256,7 +223,7 @@ class SignedInFooter extends StatelessWidget {
                   // - catalog: カートに入れる
                   // - cart: 購入する（paymentへ）
                   // - payment: 支払を確定する
-                  // - other: Scan（スキャンしたURLへ遷移＝Previewへ）
+                  // - other: Scan（スキャンしたURLへ遷移）
                   Expanded(
                     child: Center(
                       child: isCatalog
@@ -281,7 +248,9 @@ class SignedInFooter extends StatelessWidget {
                                     stock > 0;
 
                                 return AddToCartButton(
-                                  from: from,
+                                  // Pattern B: from は URL に載せない。戻り先は store で持つ。
+                                  // ※ AddToCartButton 側が from をまだ要求する場合は、
+                                  //    footer_buttons.dart 側も Pattern B に合わせて改修してください。
                                   inventoryId: invId,
                                   listId: listId,
                                   avatarId: avatarId,
@@ -294,12 +263,12 @@ class SignedInFooter extends StatelessWidget {
                           : isCart
                           ? GoToPaymentButton(
                               avatarId: avatarId,
-                              enabled: avatarId.trim().isNotEmpty,
+                              enabled: avatarId.isNotEmpty,
                             )
                           : isPayment
                           ? ConfirmPaymentButton(
                               avatarId: avatarId,
-                              enabled: avatarId.trim().isNotEmpty,
+                              enabled: avatarId.isNotEmpty,
                             )
                           : _FooterItem(
                               icon: Icons.qr_code_scanner,
@@ -314,24 +283,19 @@ class SignedInFooter extends StatelessWidget {
                                 if (!context.mounted) return;
                                 if (code == null || code.trim().isEmpty) return;
 
-                                final target = _normalizeScannedToAppUri(
-                                  code,
-                                  currentFrom: from,
-                                  avatarId: avatarId,
-                                );
-
+                                final target = _normalizeScannedToAppUri(code);
                                 if (target == null) {
                                   ScaffoldMessenger.of(context).showSnackBar(
                                     const SnackBar(
-                                      content: Text(
-                                        'スキャン結果が無効です（Previewに遷移できません）',
-                                      ),
+                                      content: Text('スキャン結果が無効です（遷移できません）'),
                                     ),
                                   );
                                   return;
                                 }
 
-                                // ✅ 期待値: スキャンしたURLを以て preview へ遷移
+                                // ✅ Pattern B: 戻り先は store へ
+                                NavStore.I.setReturnTo(returnTo);
+
                                 context.go(target.toString());
                               },
                             ),
@@ -340,8 +304,14 @@ class SignedInFooter extends StatelessWidget {
 
                   const SizedBox(width: 8),
 
-                  // ✅ Avatar は /avatar へ（avatarId を引き継ぐ）
-                  _AvatarIconButton(user: user, from: from, avatarId: avatarId),
+                  // ✅ Avatar: /avatar へ（query なし）
+                  _AvatarIconButton(
+                    user: user,
+                    onTap: () {
+                      NavStore.I.setReturnTo(returnTo);
+                      context.go(AppRoutePath.avatar);
+                    },
+                  ),
                 ],
               ),
             ),
@@ -372,15 +342,10 @@ class _FooterItem extends StatelessWidget {
 }
 
 class _AvatarIconButton extends StatelessWidget {
-  const _AvatarIconButton({
-    required this.user,
-    required this.from,
-    required this.avatarId,
-  });
+  const _AvatarIconButton({required this.user, required this.onTap});
 
   final User user;
-  final String from;
-  final String avatarId;
+  final VoidCallback onTap;
 
   @override
   Widget build(BuildContext context) {
@@ -390,14 +355,7 @@ class _AvatarIconButton extends StatelessWidget {
 
     return InkWell(
       borderRadius: BorderRadius.circular(999),
-      onTap: () {
-        final qp = <String, String>{
-          'from': from,
-          if (avatarId.trim().isNotEmpty) 'avatarId': avatarId.trim(),
-        };
-        final uri = Uri(path: '/avatar', queryParameters: qp);
-        context.go(uri.toString());
-      },
+      onTap: onTap,
       child: Padding(
         padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
         child: CircleAvatar(

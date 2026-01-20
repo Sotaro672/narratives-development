@@ -2,6 +2,9 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
+import 'package:mall/app/routing/routes.dart';
+import 'package:mall/app/routing/navigation.dart';
+
 import 'package:mall/features/cart/infrastructure/repository_http.dart';
 import 'package:mall/features/payment/presentation/hook/use_payment.dart';
 
@@ -10,6 +13,10 @@ import 'package:mall/features/invoice/infrastructure/invoice_repository_http.dar
 import 'package:mall/features/payment/infrastructure/repository_http.dart';
 
 /// ✅ /cart 用：購入する CTA（paymentへ遷移）
+///
+/// Pattern B:
+/// - URL に avatarId / from を付けない
+/// - avatarId は AvatarIdStore から読む（Storeが空なら押下不可）
 class GoToPaymentButton extends StatelessWidget {
   const GoToPaymentButton({
     super.key,
@@ -33,17 +40,9 @@ class GoToPaymentButton extends StatelessWidget {
         onPressed: !canTap
             ? null
             : () {
-                final back = Uri(
-                  path: '/cart',
-                  queryParameters: {'avatarId': aid},
-                ).toString();
-
-                final uri = Uri(
-                  path: '/payment',
-                  queryParameters: {'avatarId': aid, 'from': back},
-                );
-
-                context.go(uri.toString());
+                // ✅ Pattern B: 戻り先を store に保持（cart -> payment）
+                NavStore.I.setReturnTo(AppRoutePath.cart);
+                context.go(AppRoutePath.payment);
               },
       ),
     );
@@ -94,23 +93,20 @@ class _ConfirmPaymentButtonState extends State<ConfirmPaymentButton> {
 
     setState(() => _loading = true);
 
-    // ✅ FIX: UsePaymentController は存在しないため、use_payment.dart の実体に合わせて UsePayment を使う
     final uc = UsePayment();
 
     final invRepo = InvoiceRepositoryHttp();
     final payRepo = PaymentRepositoryHttp();
 
     try {
-      // ✅ Footer からでも確定できるように、必要データはここで再取得して Order 起票する
+      // ✅ avatarId は store で解決済み前提（ここでは qp で渡さない）
       final vm = await uc.load(qpAvatarId: aid);
 
-      // ✅ confirmAndCreateOrder が orderId(String) を返す前提
       final orderId = (await uc.confirmAndCreateOrder(vm)).trim();
       if (orderId.isEmpty) {
         throw Exception('orderId is empty');
       }
 
-      // ✅ billingAddressId は ctx のフィールドを最優先（payment.dart の payload に存在）
       var billingAddressId = '';
       try {
         // ignore: avoid_dynamic_calls
@@ -119,14 +115,12 @@ class _ConfirmPaymentButtonState extends State<ConfirmPaymentButton> {
         billingAddressId = '';
       }
       if (billingAddressId.isEmpty) {
-        // fallback（Map 内に id が入っている実装もあるため）
         billingAddressId = _pickBillingAddressId(vm.ctx.billingAddress);
       }
       if (billingAddressId.isEmpty) {
         throw Exception('billingAddressId is missing in payment context');
       }
 
-      // ✅ backend が要求する prices を作る（各明細の line total を送る）
       final prices = <int>[];
       for (final e in vm.rawCart.items.entries) {
         final it = e.value;
@@ -140,12 +134,9 @@ class _ConfirmPaymentButtonState extends State<ConfirmPaymentButton> {
         throw Exception('prices is empty');
       }
 
-      // ✅ tax / shipping は現状 0（将来 UI で入れるならここを更新）
       const tax = 0;
       const shipping = 0;
 
-      // 1) /mall/me/invoices : invoice 起票
-      // NOTE: 現状メソッド名は startCheckout のままでも OK（中身が POST /mall/me/invoices であれば）
       await invRepo.startCheckout(
         orderId: orderId,
         billingAddressId: billingAddressId,
@@ -154,7 +145,6 @@ class _ConfirmPaymentButtonState extends State<ConfirmPaymentButton> {
         shipping: shipping,
       );
 
-      // 2) /mall/me/payments : payment 起票（+ dev では自己 webhook trigger をここに寄せる想定）
       final amount = prices.fold<int>(0, (a, b) => a + b) + tax + shipping;
 
       await payRepo.startPayment(
@@ -167,6 +157,8 @@ class _ConfirmPaymentButtonState extends State<ConfirmPaymentButton> {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('支払を確定しました（invoice/payment を起票しました）')),
       );
+
+      // ✅ Pattern B: 支払い完了後の戻り先が必要なら NavStore を利用（ここでは遷移しない）
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(
@@ -203,10 +195,14 @@ class _ConfirmPaymentButtonState extends State<ConfirmPaymentButton> {
 }
 
 /// ✅ catalog 用：カートに入れる CTA
+///
+/// Pattern B:
+/// - `from` を URL に載せないので引数から削除
+/// - 遷移先 /cart も query なし
+/// - 戻り先は NavStore に保持（catalog -> cart）
 class AddToCartButton extends StatefulWidget {
   const AddToCartButton({
     super.key,
-    required this.from,
     required this.inventoryId,
     required this.listId,
     required this.avatarId,
@@ -214,8 +210,6 @@ class AddToCartButton extends StatefulWidget {
     required this.modelId,
     required this.stockCount,
   });
-
-  final String from;
 
   final String inventoryId;
   final String listId;
@@ -268,14 +262,17 @@ class _AddToCartButtonState extends State<AddToCartButton> {
 
       if (!mounted) return;
 
-      final qp = <String, String>{'from': widget.from, 'avatarId': aid};
-      final uri = Uri(path: '/cart', queryParameters: qp);
-
       ScaffoldMessenger.of(
         context,
       ).showSnackBar(const SnackBar(content: Text('カートに追加しました')));
 
-      context.go(uri.toString());
+      // ✅ Pattern B: 戻り先を store に保持（catalog -> cart）
+      // catalog の “正確な” location が必要なら、呼び出し側 footer.dart で setReturnTo を
+      // 実行してからこのボタンを表示する運用に寄せるのが最も安全。
+      NavStore.I.setReturnTo(GoRouterState.of(context).uri.toString());
+
+      // ✅ query なし
+      context.go(AppRoutePath.cart);
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(

@@ -1,20 +1,16 @@
 // frontend\mall\lib\app\shell\presentation\components\header.dart
-import 'dart:convert';
-
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../routing/routes.dart';
+import '../../../routing/navigation.dart';
 
-/// Minimal public header for Mall (no-auth).
-/// - Back button (optional) ※ showBack のみで制御
-/// - Title (optional)
-/// - Right-side actions (optional)
+/// Minimal header for Mall.
 ///
-/// ✅ Back behavior (final expectation):
-/// 1) If canPop() => pop() (return to previous screen; best for wallet->avatar list)
-/// 2) Else if current URL has ?from=... => go(decoded from) (direct link case)
-/// 3) Else => go(backTo)
+/// Pattern B:
+/// - URL の `from` には依存しない（decode/restore しない）
+/// - 戻り先は「履歴(pop)」を最優先し、履歴がなければ NavStore の returnTo を使う
+/// - それもなければ backTo へ
 class AppHeader extends StatelessWidget {
   const AppHeader({
     super.key,
@@ -23,15 +19,11 @@ class AppHeader extends StatelessWidget {
     this.onTapTitle,
     this.actions,
 
-    /// Fallback destination when no history and no `from`.
-    this.backTo = '/',
+    /// Fallback destination when no history and no NavStore returnTo.
+    this.backTo = AppRoutePath.home,
 
     /// If true, back uses pop first when possible.
     this.preferPop = true,
-
-    /// If true, when navigating to backTo, preserve selected query keys.
-    /// NOTE: security requirement suggests keeping this empty by default.
-    this.preserveQueryKeys = const <String>[],
   });
 
   final String? title;
@@ -45,60 +37,29 @@ class AppHeader extends StatelessWidget {
   /// Optional action widgets on the right side.
   final List<Widget>? actions;
 
-  /// Fallback destination when there is no history and no `from`.
+  /// Fallback destination when there is no history and no NavStore returnTo.
   final String backTo;
 
   /// Prefer pop() over go() when possible.
   final bool preferPop;
 
-  /// Preserve selected query keys when navigating to backTo.
-  final List<String> preserveQueryKeys;
-
-  String _decodeFrom(String? v) {
-    final s = (v ?? '').trim();
-    if (s.isEmpty) return '';
-    // base64url でない場合も混在するので、失敗したらそのまま返す
-    try {
-      return utf8.decode(base64Url.decode(s));
-    } catch (_) {
-      return s;
-    }
-  }
-
-  Uri _mergePreserveQuery(BuildContext context, String to) {
-    final current = GoRouterState.of(context).uri;
-    final dest = Uri.parse(to);
-
-    final merged = <String, String>{...dest.queryParameters};
-
-    for (final k in preserveQueryKeys) {
-      if (merged.containsKey(k)) continue;
-      final v = (current.queryParameters[k] ?? '').trim();
-      if (v.isNotEmpty) merged[k] = v;
-    }
-
-    return dest.replace(queryParameters: merged.isEmpty ? null : merged);
-  }
-
   void _handleBack(BuildContext context) {
-    // 1) pop 優先（wallet->avatar token list を確実に戻す）
+    // 1) pop 優先（履歴がある遷移は確実に戻す）
     if (preferPop && context.canPop()) {
       context.pop();
       return;
     }
 
-    // 2) 直リンク等で履歴が無い場合: from を優先
-    final current = GoRouterState.of(context).uri;
-    final decodedFrom = _decodeFrom(current.queryParameters[AppQueryKey.from]);
-    final f = decodedFrom.trim();
-    if (f.isNotEmpty) {
-      context.go(f);
+    // 2) NavStore の returnTo を使う（Pattern B のナビ状態）
+    final rt = NavStore.I.consumeReturnTo().trim();
+    if (rt.isNotEmpty) {
+      context.go(rt);
       return;
     }
 
     // 3) 最後に backTo
-    final uri = _mergePreserveQuery(context, backTo);
-    context.go(uri.toString());
+    final b = backTo.trim().isNotEmpty ? backTo.trim() : AppRoutePath.home;
+    context.go(b);
   }
 
   @override

@@ -1,6 +1,5 @@
 // frontend\mall\lib\app\routing\router.dart
 import 'dart:async';
-import 'dart:convert';
 
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
@@ -12,7 +11,7 @@ import '../shell/presentation/components/footer.dart';
 // ✅ route defs
 import 'routes.dart';
 
-// ✅ redirect / AvatarIdStore
+// ✅ redirect / stores
 import 'navigation.dart';
 
 // pages
@@ -41,58 +40,21 @@ import '../../features/auth/presentation/page/avatar_create.dart'
     as auth_avatar;
 
 /// ------------------------------------------------------------
-/// ✅ `from` は URL で壊れやすい（Hash + `?` `&` 混在）ので base64url で安全に運ぶ
-String _encodeFrom(String raw) {
-  final s = raw.trim();
-  if (s.isEmpty) return '';
-  return base64UrlEncode(utf8.encode(s));
-}
-
-String _decodeFrom(String? v) {
-  final s = (v ?? '').trim();
-  if (s.isEmpty) return '';
-  // 既存の「生 from」も混在するので、失敗したらそのまま返す
+/// ✅ Pattern B: URL の `from` 制御を廃止し、narratives.jp 内で navigation state を保持する
+/// - 戻り先は `navigation.dart` 側の Store（例: NavStore）に保存する
+/// - このファイルでは `from` query の decode/encode/sanitize を一切行わない
+///
+/// NOTE:
+/// - ここでは `NavStore.I.setReturnTo(String location)` / `consumeReturnTo()` のような
+///   API が `navigation.dart` に存在する想定で呼び出しています。
+/// - まだ未実装の場合は `navigation.dart` に追加してください。
+void _captureReturnToForInternalNav(String location) {
   try {
-    return utf8.decode(base64Url.decode(s));
+    // navigation.dart 側で実装する（Listenable でも可）
+    NavStore.I.setReturnTo(location);
   } catch (_) {
-    return s;
+    // fail-open（遷移自体は止めない）
   }
-}
-
-/// ------------------------------------------------------------
-/// ✅ from 用に「URLが伸び続ける」事故を防ぐ
-/// - from 自体を query から除外
-/// - query の重複キーは最後を採用して 1 個に正規化
-/// - avatarId / mintAddress を URL に残さない（セキュリティ要件）
-String _sanitizeLocationForFrom(Uri uri) {
-  final all = uri.queryParametersAll;
-  final out = <String, String>{};
-
-  all.forEach((k, vals) {
-    if (vals.isEmpty) return;
-
-    // ✅ from は入れ子にすると URL が伸び続けるので落とす
-    if (k == AppQueryKey.from) return;
-
-    // ✅ セキュリティ: URLに出したくないものは from にも入れない
-    if (k == AppQueryKey.avatarId) return;
-    if (k == AppQueryKey.mintAddress) return;
-
-    // 同名が複数ある場合は最後を採用
-    out[k] = vals.last;
-  });
-
-  final normalized = uri.replace(queryParameters: out.isEmpty ? null : out);
-  return normalized.toString();
-}
-
-/// ✅ from の値として渡された「/avatar?...」等も一応 sanitize（防御的）
-String _sanitizeFromValue(String raw) {
-  final s = raw.trim();
-  if (s.isEmpty) return '';
-  final u = Uri.tryParse(s);
-  if (u == null) return s;
-  return _sanitizeLocationForFrom(u);
 }
 
 /// ------------------------------------------------------------
@@ -132,7 +94,12 @@ GoRouter buildAppRouter() {
 
   return GoRouter(
     initialLocation: AppRoutePath.home,
-    refreshListenable: Listenable.merge([authRefresh, AvatarIdStore.I]),
+    // ✅ NavStore を Listenable にする場合は merge に追加可能
+    refreshListenable: Listenable.merge([
+      authRefresh,
+      AvatarIdStore.I,
+      // NavStore.I, // <- navigation.dart 側で Listenable を実装したら有効化
+    ]),
     redirect: (context, state) async => appRedirect(context, state),
     debugLogDiagnostics: true,
     routes: _routes(firebaseReady: true),
@@ -276,27 +243,20 @@ List<RouteBase> _routes({required bool firebaseReady}) {
       path: AppRoutePath.login,
       name: AppRouteName.login,
       pageBuilder: (context, state) {
-        final from = _decodeFrom(state.uri.queryParameters[AppQueryKey.from]);
         final intent = state.uri.queryParameters[AppQueryKey.intent];
-        return NoTransitionPage(
-          child: auth_login.LoginPage(
-            from: from.isEmpty ? null : from,
-            intent: intent,
-          ),
-        );
+
+        // ✅ Pattern B: login 後の戻り先は NavStore が保持する
+        // - このページへ遷移する直前に header/button/redirect で setReturnTo する
+        return NoTransitionPage(child: auth_login.LoginPage(intent: intent));
       },
     ),
     GoRoute(
       path: AppRoutePath.createAccount,
       name: AppRouteName.createAccount,
       pageBuilder: (context, state) {
-        final from = _decodeFrom(state.uri.queryParameters[AppQueryKey.from]);
         final intent = state.uri.queryParameters[AppQueryKey.intent];
         return NoTransitionPage(
-          child: auth_create.CreateAccountPage(
-            from: from.isEmpty ? null : from,
-            intent: intent,
-          ),
+          child: auth_create.CreateAccountPage(intent: intent),
         );
       },
     ),
@@ -311,7 +271,6 @@ List<RouteBase> _routes({required bool firebaseReady}) {
             oobCode: qp[AppQueryKey.oobCode],
             continueUrl: qp[AppQueryKey.continueUrl],
             lang: qp[AppQueryKey.lang],
-            from: _decodeFrom(qp[AppQueryKey.from]),
             intent: qp[AppQueryKey.intent],
           ),
         );
@@ -321,39 +280,31 @@ List<RouteBase> _routes({required bool firebaseReady}) {
       path: AppRoutePath.billingAddress,
       name: AppRouteName.billingAddress,
       pageBuilder: (context, state) {
-        final from = _decodeFrom(state.uri.queryParameters[AppQueryKey.from]);
-        return NoTransitionPage(
-          child: auth_bill.BillingAddressPage(from: from.isEmpty ? null : from),
-        );
+        return const NoTransitionPage(child: auth_bill.BillingAddressPage());
       },
     ),
     GoRoute(
       path: AppRoutePath.avatarCreate,
       name: AppRouteName.avatarCreate,
       pageBuilder: (context, state) {
-        final from = _decodeFrom(state.uri.queryParameters[AppQueryKey.from]);
-        return NoTransitionPage(
-          child: auth_avatar.AvatarCreatePage(from: from.isEmpty ? null : from),
-        );
+        return const NoTransitionPage(child: auth_avatar.AvatarCreatePage());
       },
     ),
     GoRoute(
       path: AppRoutePath.avatarEdit,
       name: AppRouteName.avatarEdit,
       pageBuilder: (context, state) {
-        final from = _decodeFrom(state.uri.queryParameters[AppQueryKey.from]);
-        return NoTransitionPage(
-          child: AvatarEditPage(from: from.isEmpty ? null : from),
-        );
+        return const NoTransitionPage(child: AvatarEditPage());
       },
     ),
     GoRoute(
       path: AppRoutePath.userEdit,
       name: AppRouteName.userEdit,
       pageBuilder: (context, state) {
-        final from = _decodeFrom(state.uri.queryParameters[AppQueryKey.from]);
+        // ✅ URL から tab だけは取る（UI タブ制御は URL でも問題ない）
+        // - ただし「戻り先」は NavStore に寄せる
         return NoTransitionPage(
-          child: UserEditPage(from: from.isEmpty ? null : from),
+          child: UserEditPage(tab: state.uri.queryParameters[AppQueryKey.tab]),
         );
       },
     ),
@@ -394,26 +345,19 @@ List<RouteBase> _routes({required bool firebaseReady}) {
           path: AppRoutePath.avatar,
           name: AppRouteName.avatar,
           pageBuilder: (context, state) {
-            final from = _decodeFrom(
-              state.uri.queryParameters[AppQueryKey.from],
-            );
-            return NoTransitionPage(
-              child: AvatarPage(from: from.isEmpty ? null : from),
-            );
+            return const NoTransitionPage(child: AvatarPage());
           },
         ),
 
         // ✅ wallet token contents（Shell内）
         //
         // セキュリティ要件:
-        // - mintAddress を URL に出さない方針に移行するため、
-        //   この画面は URL query から mintAddress を受け取らない。
+        // - mintAddress を URL に出さない方針のため、query から受け取らない。
         // - 画面遷移は `extra` で mintAddress を渡す（TokenCard 側で対応）。
         GoRoute(
           path: AppRoutePath.walletContents,
           name: AppRouteName.walletContents,
           pageBuilder: (context, state) {
-            // ✅ mintAddress は extra で受け取る（必須）
             final extra = state.extra;
             final mint = (extra is String ? extra : '').trim();
             if (mint.isEmpty) {
@@ -422,18 +366,9 @@ List<RouteBase> _routes({required bool firebaseReady}) {
               );
             }
 
-            // ✅ from は query から受けても良いが、入れ子事故を防ぐため sanitize
-            final decodedFrom = _decodeFrom(
-              state.uri.queryParameters[AppQueryKey.from],
-            );
-            final safeFrom = _sanitizeFromValue(decodedFrom);
-
             return NoTransitionPage(
               key: ValueKey('wallet-contents-$mint'),
-              child: WalletContentsPage(
-                mintAddress: mint,
-                from: safeFrom.isEmpty ? null : safeFrom,
-              ),
+              child: WalletContentsPage(mintAddress: mint),
             );
           },
         ),
@@ -454,7 +389,6 @@ List<RouteBase> _routes({required bool firebaseReady}) {
           name: AppRouteName.preview,
           pageBuilder: (context, state) {
             final qp = state.uri.queryParameters;
-            final from = _decodeFrom(qp[AppQueryKey.from]);
             final productId = (qp[AppQueryKey.productId] ?? '').trim();
 
             // ✅ avatarId は URL から取らない（store から使う）
@@ -465,7 +399,6 @@ List<RouteBase> _routes({required bool firebaseReady}) {
               child: PreviewPage(
                 avatarId: avatarId,
                 productId: productId.isEmpty ? null : productId,
-                from: from.isEmpty ? null : from,
               ),
             );
           },
@@ -477,16 +410,10 @@ List<RouteBase> _routes({required bool firebaseReady}) {
           pageBuilder: (context, state) {
             // ✅ avatarId は URL から取らない（store から使う）
             final avatarId = AvatarIdStore.I.avatarId;
-            final from = _decodeFrom(
-              state.uri.queryParameters[AppQueryKey.from],
-            );
 
             return NoTransitionPage(
-              key: ValueKey('payment'),
-              child: PaymentPage(
-                avatarId: avatarId,
-                from: from.isEmpty ? null : from,
-              ),
+              key: const ValueKey('payment'),
+              child: PaymentPage(avatarId: avatarId),
             );
           },
         ),
@@ -504,16 +431,10 @@ List<RouteBase> _routes({required bool firebaseReady}) {
             // ✅ avatarId は URL から取らない（store から使う）
             final avatarId = AvatarIdStore.I.avatarId;
 
-            // ✅ FIX: from は sanitize した URL を使う（入れ子防止 + 機微情報除去）
-            final from = _sanitizeLocationForFrom(state.uri);
-
+            // ✅ Pattern B: from を URL に詰めず、戻り先は Store に任せる
             return NoTransitionPage(
               key: ValueKey('qr-preview-$productId'),
-              child: PreviewPage(
-                avatarId: avatarId,
-                productId: productId,
-                from: from,
-              ),
+              child: PreviewPage(avatarId: avatarId, productId: productId),
             );
           },
         ),
@@ -597,46 +518,37 @@ List<Widget> _headerActionsFor(
 
   if (!allowLogin) return const [];
 
-  // ✅ from は sanitize して “伸び続けるURL” を止める（機微情報も除外）
-  final from = _sanitizeLocationForFrom(state.uri);
   final avatarId = _resolveAvatarIdForHeader(state);
+  final returnTo = state.uri.toString();
 
   if (!firebaseReady) {
-    final loginUri = Uri(
-      path: AppRoutePath.login,
-      queryParameters: {AppQueryKey.from: _encodeFrom(from)},
-    );
     if (isHome) {
       return [
-        _HeaderCartButton(from: from, avatarId: avatarId),
-        _HeaderSignInButton(to: loginUri.toString()),
+        _HeaderCartButton(returnTo: returnTo, avatarId: avatarId),
+        _HeaderSignInButton(to: AppRoutePath.login, returnTo: returnTo),
       ];
     }
-    return [_HeaderSignInButton(to: loginUri.toString())];
+    return [_HeaderSignInButton(to: AppRoutePath.login, returnTo: returnTo)];
   }
 
   final isLoggedIn = FirebaseAuth.instance.currentUser != null;
 
   if (!isLoggedIn) {
-    final loginUri = Uri(
-      path: AppRoutePath.login,
-      queryParameters: {AppQueryKey.from: _encodeFrom(from)},
-    );
     if (isHome) {
       return [
-        _HeaderCartButton(from: from, avatarId: avatarId),
-        _HeaderSignInButton(to: loginUri.toString()),
+        _HeaderCartButton(returnTo: returnTo, avatarId: avatarId),
+        _HeaderSignInButton(to: AppRoutePath.login, returnTo: returnTo),
       ];
     }
-    return [_HeaderSignInButton(to: loginUri.toString())];
+    return [_HeaderSignInButton(to: AppRoutePath.login, returnTo: returnTo)];
   }
 
   if (isAvatar) {
-    return [_HeaderHamburgerMenuButton(from: from)];
+    return [_HeaderHamburgerMenuButton(returnTo: returnTo)];
   }
 
   if (isHome) {
-    return [_HeaderCartButton(from: from, avatarId: avatarId)];
+    return [_HeaderCartButton(returnTo: returnTo, avatarId: avatarId)];
   }
 
   return const [];
@@ -657,21 +569,29 @@ class GoRouterRefreshStream extends ChangeNotifier {
 }
 
 class _HeaderSignInButton extends StatelessWidget {
-  const _HeaderSignInButton({required this.to});
+  const _HeaderSignInButton({required this.to, required this.returnTo});
   final String to;
+  final String returnTo;
 
   @override
   Widget build(BuildContext context) {
     return TextButton(
-      onPressed: () => context.go(to),
+      onPressed: () {
+        // ✅ Pattern B: login 遷移前に戻り先を Store に保存
+        _captureReturnToForInternalNav(returnTo);
+        context.go(to);
+      },
       child: const Text('Sign in'),
     );
   }
 }
 
 class _HeaderCartButton extends StatelessWidget {
-  const _HeaderCartButton({required this.from, required this.avatarId});
-  final String from;
+  const _HeaderCartButton({required this.returnTo, required this.avatarId});
+  final String returnTo;
+
+  // NOTE: 現状 router.dart では avatarId は使っていないが、
+  // 呼び出し側（header の出し分け等）で必要な場合があるため温存。
   final String avatarId;
 
   @override
@@ -680,16 +600,17 @@ class _HeaderCartButton extends StatelessWidget {
       tooltip: 'Cart',
       icon: const Icon(Icons.shopping_cart_outlined),
       onPressed: () {
-        final qp = <String, String>{AppQueryKey.from: _encodeFrom(from)};
-        context.goNamed(AppRouteName.cart, queryParameters: qp);
+        // ✅ Pattern B: cart 遷移前に戻り先を Store に保存
+        _captureReturnToForInternalNav(returnTo);
+        context.goNamed(AppRouteName.cart);
       },
     );
   }
 }
 
 class _HeaderHamburgerMenuButton extends StatelessWidget {
-  const _HeaderHamburgerMenuButton({required this.from});
-  final String from;
+  const _HeaderHamburgerMenuButton({required this.returnTo});
+  final String returnTo;
 
   @override
   Widget build(BuildContext context) {
@@ -705,7 +626,7 @@ class _HeaderHamburgerMenuButton extends StatelessWidget {
           shape: const RoundedRectangleBorder(
             borderRadius: BorderRadius.vertical(top: Radius.circular(18)),
           ),
-          builder: (_) => _AccountMenuSheet(from: from),
+          builder: (_) => _AccountMenuSheet(returnTo: returnTo),
         );
       },
     );
@@ -713,11 +634,15 @@ class _HeaderHamburgerMenuButton extends StatelessWidget {
 }
 
 class _AccountMenuSheet extends StatelessWidget {
-  const _AccountMenuSheet({required this.from});
-  final String from;
+  const _AccountMenuSheet({required this.returnTo});
+  final String returnTo;
 
   void _go(BuildContext context, String path, {Map<String, String>? qp}) {
     Navigator.pop(context);
+
+    // ✅ Pattern B: メニュー遷移前に戻り先を Store に保存
+    _captureReturnToForInternalNav(returnTo);
+
     final uri = Uri(path: path, queryParameters: qp);
     context.go(uri.toString());
   }
@@ -779,11 +704,7 @@ class _AccountMenuSheet extends StatelessWidget {
                   leading: const Icon(Icons.manage_accounts_outlined),
                   title: const Text('ユーザー情報'),
                   subtitle: const Text('ユーザー編集'),
-                  onTap: () => _go(
-                    context,
-                    AppRoutePath.userEdit,
-                    qp: {AppQueryKey.from: _encodeFrom(from)},
-                  ),
+                  onTap: () => _go(context, AppRoutePath.userEdit),
                 ),
                 _divider(context),
                 ListTile(
@@ -794,7 +715,6 @@ class _AccountMenuSheet extends StatelessWidget {
                     context,
                     AppRoutePath.shippingAddress,
                     qp: {
-                      AppQueryKey.from: _encodeFrom(from),
                       AppQueryKey.intent: 'settings',
                       AppQueryKey.mode: 'edit',
                     },
@@ -805,11 +725,7 @@ class _AccountMenuSheet extends StatelessWidget {
                   leading: const Icon(Icons.receipt_long_outlined),
                   title: const Text('支払情報'),
                   subtitle: const Text('Billing address'),
-                  onTap: () => _go(
-                    context,
-                    AppRoutePath.billingAddress,
-                    qp: {AppQueryKey.from: _encodeFrom(from)},
-                  ),
+                  onTap: () => _go(context, AppRoutePath.billingAddress),
                 ),
                 _divider(context),
                 ListTile(
@@ -819,10 +735,7 @@ class _AccountMenuSheet extends StatelessWidget {
                   onTap: () => _go(
                     context,
                     AppRoutePath.userEdit,
-                    qp: {
-                      AppQueryKey.from: _encodeFrom(from),
-                      AppQueryKey.tab: 'email',
-                    },
+                    qp: {AppQueryKey.tab: 'email'},
                   ),
                 ),
                 _divider(context),
@@ -833,10 +746,7 @@ class _AccountMenuSheet extends StatelessWidget {
                   onTap: () => _go(
                     context,
                     AppRoutePath.userEdit,
-                    qp: {
-                      AppQueryKey.from: _encodeFrom(from),
-                      AppQueryKey.tab: 'password',
-                    },
+                    qp: {AppQueryKey.tab: 'password'},
                   ),
                 ),
                 _divider(context),

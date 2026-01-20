@@ -1,10 +1,13 @@
-//frontend\mall\lib\features\cart\presentation\hook\use_cart.dart
+// frontend\mall\lib\features\cart\presentation\hook\use_cart.dart
 import 'dart:convert';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 
 import '../../../../app/routing/navigation.dart';
+import '../../../../app/routing/routes.dart';
 import '../../infrastructure/repository_http.dart';
 
 // ✅ cart.dart から DTO 型を使えるようにする（repository を直接 import しなくてよくなる）
@@ -20,6 +23,8 @@ class UseCartResult {
     required this.future,
     required this.current,
     required this.busy,
+    required this.needsSignIn,
+    required this.needsAvatar,
     required this.reload,
     required this.inc,
     required this.dec,
@@ -30,7 +35,8 @@ class UseCartResult {
   /// ✅ Source of truth: AvatarIdStore（URL からは読まない）
   final String avatarId;
 
-  /// Source of truth: GET /mall/me/cart?avatarId=...
+  /// Source of truth: GET /mall/me/cart (server resolves me)
+  /// ※ 実装上 avatarId を query で渡していても、UI側は store をソースにする
   final Future<CartDTO> future;
 
   /// ✅ “今のカート” を常に保持（FutureBuilder を使わない UI でも落ちない）
@@ -39,6 +45,12 @@ class UseCartResult {
   final CartDTO current;
 
   final bool busy;
+
+  /// ✅ ルーティング側で /login へ送るためのヒント（controller 側で強制遷移しない）
+  final bool needsSignIn;
+
+  /// ✅ サインイン済みだが avatarId が解決できない（/mall/me/avatar が空など）
+  final bool needsAvatar;
 
   /// Reload cart (re-fetch)
   final Future<void> Function() reload;
@@ -64,6 +76,7 @@ class UseCartController {
   final BuildContext context;
 
   /// 任意：呼び出し側が明示的に渡したい場合のみ使用（URL由来は不可推奨）
+  /// Pattern B では基本的に未使用（移行期の互換用）。
   final String _initialAvatarId;
 
   late final CartRepositoryHttp _repo;
@@ -95,6 +108,10 @@ class UseCartController {
   String _avatarId = '';
   String get avatarId => _avatarId;
 
+  /// ✅ 状態ヒント（UI が適切な導線を出すため）
+  bool needsSignIn = false;
+  bool needsAvatar = false;
+
   CartDTO _emptyCart(String aid) => CartDTO(
     avatarId: aid.trim(),
     items: const {},
@@ -124,27 +141,54 @@ class UseCartController {
 
   bool busy = false;
 
+  bool _looksLikeDocId(String v) {
+    // Firestore docId を想定した緩いチェック（過剰な弾きはしない）
+    final s = v.trim();
+    if (s.isEmpty) return false;
+    if (s.length < 10 || s.length > 64) return false;
+    // URL 由来の混入（/ や ? や &）は弾く
+    if (s.contains('/') || s.contains('?') || s.contains('&')) return false;
+    return true;
+  }
+
   /// ✅ AvatarIdStore から avatarId を確定する（URLは使わない）
   Future<String> _ensureAvatarId() async {
-    // 1) 呼び出し側から明示的に渡されたもの（URL由来でない前提）
-    final a0 = _initialAvatarId.trim();
-    if (a0.isNotEmpty) {
-      AvatarIdStore.I.set(a0);
-      return a0;
+    // 0) サインイン確認（ここで判定して UI にヒントを返す）
+    final u = FirebaseAuth.instance.currentUser;
+    if (u == null) {
+      needsSignIn = true;
+      needsAvatar = false;
+      return '';
+    }
+    needsSignIn = false;
+
+    // 1) store にあるならそれ（最優先）
+    final storeId = AvatarIdStore.I.avatarId.trim();
+    if (storeId.isNotEmpty) {
+      needsAvatar = false;
+      return storeId;
     }
 
-    // 2) 既に store にあるならそれ
-    final storeId = AvatarIdStore.I.avatarId.trim();
-    if (storeId.isNotEmpty) return storeId;
+    // 2) 互換：呼び出し側が明示的に渡したもの
+    // - Pattern B 的には基本禁止だが、移行期の保険として「store が空」の時だけ許可
+    final a0 = _initialAvatarId.trim();
+    if (a0.isNotEmpty && _looksLikeDocId(a0)) {
+      AvatarIdStore.I.set(a0);
+      needsAvatar = false;
+      return a0;
+    }
 
     // 3) サーバで /mall/me/avatar を叩いて解決
     final resolved = await AvatarIdStore.I.resolveMyAvatarId();
     final a1 = (resolved ?? '').trim();
     if (a1.isNotEmpty) {
       AvatarIdStore.I.set(a1);
+      needsAvatar = false;
       return a1;
     }
 
+    // サインイン済みだが avatarId が取れない
+    needsAvatar = true;
     return '';
   }
 
@@ -161,22 +205,24 @@ class UseCartController {
     future = _ensureAvatarId()
         .then((aid) async {
           _avatarId = aid.trim();
+
           if (_avatarId.isEmpty) {
+            // 取れない場合でも UI を落とさない
             current = _emptyCart('');
             return current;
           }
 
-          // 初回取得
           final c = await _repo.fetchCart(avatarId: _avatarId);
           current = c;
           return c;
         })
-        .catchError((_) {
-          // ✅ 失敗しても UI を落とさない（current は empty のまま）
+        .catchError((e, st) {
+          _log('init fetchCart ERROR: $e');
+          if (_dbg) _log('stack:\n$st');
           return current;
         });
 
-    _attachDebugLogging();
+    _logFutureOnce(future, label: 'init');
   }
 
   void dispose() {
@@ -184,11 +230,11 @@ class UseCartController {
     _repo.dispose();
   }
 
-  void _attachDebugLogging() {
-    future
+  void _logFutureOnce(Future<CartDTO> f, {required String label}) {
+    f
         .then((c) {
           _log(
-            'cart OK: avatarId="${_mask(c.avatarId)}" items=${c.items.length} '
+            '$label cart OK: avatarId="${_mask(c.avatarId)}" items=${c.items.length} '
             'createdAt=${c.createdAt?.toIso8601String()} '
             'updatedAt=${c.updatedAt?.toIso8601String()} '
             'expiresAt=${c.expiresAt?.toIso8601String()}',
@@ -198,11 +244,11 @@ class UseCartController {
             final k0 = c.items.keys.first;
             final it0 = c.items[k0]!;
             _log(
-              'cart item0: key="$k0" inv="${it0.inventoryId}" list="${it0.listId}" model="${it0.modelId}" '
+              '$label cart item0: key="$k0" inv="${it0.inventoryId}" list="${it0.listId}" model="${it0.modelId}" '
               'qty=${it0.qty} title="${it0.title}" size="${it0.size}" color="${it0.color}"',
             );
           } else {
-            _log('cart items empty');
+            _log('$label cart items empty');
           }
 
           if (_dbg) {
@@ -227,12 +273,12 @@ class UseCartController {
                       },
                     },
             };
-            _log('cart sample(json)=\n${_prettyJson(sample)}');
+            _log('$label cart sample(json)=\n${_prettyJson(sample)}');
           }
         })
         .catchError((e, st) {
-          _log('cart ERROR: $e');
-          _log('stack:\n$st');
+          _log('$label cart ERROR: $e');
+          if (_dbg) _log('stack:\n$st');
           return null;
         });
   }
@@ -258,6 +304,14 @@ class UseCartController {
     });
   }
 
+  /// ✅ UI で必要なら使える：サインイン誘導
+  /// - controller が強制遷移すると責務が混ざるので、ここでは helper として用意するだけ
+  void goToLoginIfNeeded() {
+    if (!needsSignIn) return;
+    NavStore.I.setReturnTo(AppRoutePath.cart);
+    if (context.mounted) context.go(AppRoutePath.login);
+  }
+
   Future<void> reload(SetStateFn setState) async {
     _log('reload');
 
@@ -272,13 +326,15 @@ class UseCartController {
             current = c;
             return c;
           })
-          .catchError((_) {
+          .catchError((e, st) {
+            _log('reload fetchCart ERROR: $e');
+            if (_dbg) _log('stack:\n$st');
             // ✅ 失敗しても落とさない（current は維持）
             return current;
           });
     });
 
-    _attachDebugLogging();
+    _logFutureOnce(future, label: 'reload');
   }
 
   Future<void> _withBusy(
@@ -317,7 +373,8 @@ class UseCartController {
       final aid = _avatarId.trim();
       if (aid.isEmpty) return;
 
-      final base = await future; // ✅ 失敗しても future は current を返す
+      // ✅ future ではなく current をベースにする（race を減らす）
+      final base = current;
       final it = _getItemFromKey(base, itemKey);
       if (it == null) return;
 
@@ -335,7 +392,7 @@ class UseCartController {
         future = Future.value(c);
       });
 
-      _attachDebugLogging();
+      _logFutureOnce(future, label: 'inc');
     });
   }
 
@@ -345,11 +402,31 @@ class UseCartController {
       final aid = _avatarId.trim();
       if (aid.isEmpty) return;
 
-      final next = currentQty - 1;
-
-      final base = await future;
+      // ✅ future ではなく current をベースにする（race を減らす）
+      final base = current;
       final it = _getItemFromKey(base, itemKey);
       if (it == null) return;
+
+      final next = currentQty - 1;
+
+      // ✅ 0 以下になったら remove に寄せる（負値を送らない）
+      if (next <= 0) {
+        final c = await _repo.removeItem(
+          avatarId: aid,
+          inventoryId: it.inventoryId,
+          listId: it.listId,
+          modelId: it.modelId,
+        );
+        if (!context.mounted) return;
+
+        setState(() {
+          current = c;
+          future = Future.value(c);
+        });
+
+        _logFutureOnce(future, label: 'dec->remove');
+        return;
+      }
 
       final c = await _repo.setItemQty(
         avatarId: aid,
@@ -365,7 +442,7 @@ class UseCartController {
         future = Future.value(c);
       });
 
-      _attachDebugLogging();
+      _logFutureOnce(future, label: 'dec');
     });
   }
 
@@ -375,7 +452,8 @@ class UseCartController {
       final aid = _avatarId.trim();
       if (aid.isEmpty) return;
 
-      final base = await future;
+      // ✅ future ではなく current をベースにする（race を減らす）
+      final base = current;
       final it = _getItemFromKey(base, itemKey);
       if (it == null) return;
 
@@ -392,7 +470,7 @@ class UseCartController {
         future = Future.value(c);
       });
 
-      _attachDebugLogging();
+      _logFutureOnce(future, label: 'remove');
     });
   }
 
@@ -438,6 +516,8 @@ class UseCartController {
       future: future,
       current: current,
       busy: busy,
+      needsSignIn: needsSignIn,
+      needsAvatar: needsAvatar,
       reload: () => reload(setState),
       inc: (itemKey) => inc(setState, itemKey),
       dec: (itemKey, currentQty) => dec(setState, itemKey, currentQty),

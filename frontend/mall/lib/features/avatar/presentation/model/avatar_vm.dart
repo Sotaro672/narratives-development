@@ -1,3 +1,4 @@
+// frontend\mall\lib\features\avatar\presentation\model\avatar_vm.dart
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 
@@ -22,6 +23,9 @@ class ProfileCounts {
 
 enum ProfileTab { posts, tokens }
 
+/// Pattern B:
+/// - URL `from` を廃止し、戻り先は NavStore で管理する
+/// - よって `backTo` / `loginUri` は ViewModel から削除する
 class AvatarVm {
   const AvatarVm({
     required this.authSnap,
@@ -36,8 +40,6 @@ class AvatarVm {
     required this.counts,
     required this.tab,
     required this.setTab,
-    required this.backTo,
-    required this.loginUri,
     required this.photoUrl,
     required this.bio,
     required this.goToAvatarEdit,
@@ -71,9 +73,6 @@ class AvatarVm {
 
   final ProfileTab tab;
   final void Function(ProfileTab next) setTab;
-
-  final String backTo;
-  final Uri loginUri;
 
   final String photoUrl;
   final String bio;

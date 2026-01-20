@@ -1,11 +1,10 @@
-//frontend\mall\lib\features\avatar\presentation\page\avatar.dart
-import 'dart:convert';
-
+// frontend\mall\lib\features\avatar\presentation\page\avatar.dart
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_hooks/flutter_hooks.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../../../app/routing/navigation.dart';
 import '../../../../app/routing/routes.dart';
 import '../../../wallet/infrastructure/token_metadata_dto.dart';
 import '../../../wallet/infrastructure/token_resolve_dto.dart';
@@ -14,14 +13,12 @@ import '../hook/use_avatar.dart';
 import '../model/avatar_vm.dart';
 
 class AvatarPage extends HookWidget {
-  const AvatarPage({super.key, this.from});
-
-  /// router.dart から渡される「遷移元」
-  final String? from;
+  const AvatarPage({super.key});
 
   @override
   Widget build(BuildContext context) {
-    final vm = useAvatarVm(context, from: from);
+    // ✅ Pattern B: `from` は URL で受け取らない
+    final vm = useAvatarVm(context);
 
     // -------------------------
     // Signed-out view
@@ -49,7 +46,11 @@ class AvatarPage extends HookWidget {
                 ),
                 const SizedBox(height: 16),
                 ElevatedButton(
-                  onPressed: () => context.go(vm.loginUri.toString()),
+                  onPressed: () {
+                    // ✅ Pattern B: 戻り先を Store に保存して login へ
+                    NavStore.I.setReturnTo(AppRoutePath.avatar);
+                    context.go(AppRoutePath.login);
+                  },
                   child: const Text('Sign in'),
                 ),
               ],
@@ -69,13 +70,12 @@ class AvatarPage extends HookWidget {
     final me = vm.meAvatarSnap.data;
     if (me == null || me.avatarId.trim().isEmpty) {
       return _MissingMeAvatarView(
-        backTo: vm.backTo,
+        backTo: AppRoutePath.avatar,
         onGoEdit: () {
-          final qp = <String, String>{
-            AppQueryKey.from: base64UrlEncode(utf8.encode(vm.backTo.trim())),
-          };
-          final uri = Uri(path: AppRoutePath.avatarEdit, queryParameters: qp);
-          context.go(uri.toString());
+          // ✅ Pattern B: query に `from` を詰めない
+          // 戻り先は Store に保存してから遷移する
+          NavStore.I.setReturnTo(AppRoutePath.avatar);
+          context.go(AppRoutePath.avatarEdit);
         },
       );
     }
@@ -105,7 +105,11 @@ class AvatarPage extends HookWidget {
             tokenMetadatas: vm.tokenMetadatas,
             isTokensLoading: vm.isTokensLoading,
             tokenLoadingByMint: vm.tokenLoadingByMint,
-            onEdit: vm.goToAvatarEdit,
+            onEdit: () {
+              // ✅ Pattern B: 編集へ行く前に戻り先を Store に保存
+              NavStore.I.setReturnTo(AppRoutePath.avatar);
+              vm.goToAvatarEdit();
+            },
           ),
         ),
       ),

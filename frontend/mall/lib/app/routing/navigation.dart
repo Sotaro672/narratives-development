@@ -10,6 +10,101 @@ import '../config/api_base.dart';
 import 'routes.dart';
 
 /// ------------------------------------------------------------
+/// ✅ Pattern B: URL の `from` 制御を廃止し、narratives.jp 内で navigation state を保持する
+///
+/// - 戻り先は NavStore に保持（URL query には載せない）
+/// - login 完了後は NavStore の returnTo があればそこへ復帰、無ければ home
+/// - セキュリティ: returnTo は「内部パスのみ」許可（外部 URL / スキーム付きは拒否）
+/// - ループ防止: login/create-account 等の auth ルートを returnTo として保存しない
+class NavStore extends ChangeNotifier {
+  NavStore._();
+  static final NavStore I = NavStore._();
+
+  String _returnTo = '';
+  String get returnTo => _returnTo;
+
+  /// ✅ 戻り先を保存（内部パスのみ / ループになるパスは禁止）
+  void setReturnTo(String location) {
+    final safe = _sanitizeInternalLocation(location);
+    if (safe.isEmpty) return;
+
+    // ループ防止: auth 系や導線系を戻り先にしない
+    if (_isDisallowedReturnPath(safe)) return;
+
+    if (safe == _returnTo) return;
+    _returnTo = safe;
+    notifyListeners();
+  }
+
+  /// ✅ 取り出したらクリア（one-shot）
+  ///
+  /// Pattern B では呼び出し側が `.trim()` したくなるため、
+  /// null を返さず String を返す（空文字=無し）。
+  String consumeReturnTo() {
+    final v = _returnTo.trim();
+    _returnTo = '';
+    if (v.isNotEmpty) notifyListeners();
+    return v;
+  }
+
+  void clear() {
+    if (_returnTo.isEmpty) return;
+    _returnTo = '';
+    notifyListeners();
+  }
+
+  /// ----------------------------------------------------------
+  /// Helpers
+  ///
+  /// - 内部パスのみ許容:
+  ///   - "/cart", "/avatar", "/preview?x=y" のような相対パスはOK
+  ///   - "https://evil.com" や "javascript:..." は拒否
+  ///
+  /// NOTE:
+  /// - GoRouter の location には query を含む文字列が来ることがあるため、
+  ///   ここでは "Uri.tryParse" で解析し、authority/scheme があるものは弾く。
+  static String _sanitizeInternalLocation(String raw) {
+    final s = raw.trim();
+    if (s.isEmpty) return '';
+
+    final u = Uri.tryParse(s);
+
+    // parse できない場合は「/ から始まる」ものだけ許容
+    if (u == null) {
+      return s.startsWith('/') ? s : '';
+    }
+
+    // 外部URL（scheme/authorityあり）は拒否
+    if (u.hasScheme || u.hasAuthority) return '';
+
+    // path が空の場合は拒否
+    final path = u.path.trim();
+    if (path.isEmpty || !path.startsWith('/')) return '';
+
+    // fragment は不要なので落とす
+    final normalized = u.replace(fragment: null);
+    return normalized.toString();
+  }
+
+  static bool _isDisallowedReturnPath(String location) {
+    // location は "/path?query" 形式を想定
+    final u = Uri.tryParse(location);
+    final path = (u?.path ?? location).trim();
+
+    // auth 系・初期導線は戻り先にしない
+    const disallowed = <String>{
+      AppRoutePath.login,
+      AppRoutePath.createAccount,
+      AppRoutePath.shippingAddress,
+      AppRoutePath.billingAddress,
+      AppRoutePath.avatarCreate,
+    };
+
+    return disallowed.contains(path);
+  }
+}
+
+/// ------------------------------------------------------------
 /// ✅ avatarId の “現在値” をアプリ側で保持（URLに無い時の補完に使う）
 ///
 /// 重要（セキュリティ要件）:
@@ -167,14 +262,22 @@ Future<String> _ensureAvatarIdResolved(GoRouterState state) async {
 /// ------------------------------------------------------------
 /// ✅ redirect 本体（router.dart から呼ぶ）
 ///
+/// Pattern B:
+/// - `from` query を使わず、NavStore に returnTo を保持する
+/// - login 完了後は NavStore の returnTo に復帰（なければ home）
+///
 /// セキュリティ要件:
 /// - avatarId を URL に注入しない
 /// - 代わりに store へ保存のみ行う
 Future<String?> appRedirect(BuildContext context, GoRouterState state) async {
   final user = FirebaseAuth.instance.currentUser;
 
+  // ------------------------------------------------------------
+  // 未ログイン
+  // - avatarId / nav state をクリア
   if (user == null) {
     AvatarIdStore.I.clear();
+    NavStore.I.clear();
     return null;
   }
 
@@ -195,13 +298,21 @@ Future<String?> appRedirect(BuildContext context, GoRouterState state) async {
   // ============================================================
   // ✅ ログイン直後（/login に居る状態でログイン状態になった瞬間）
   // - avatarId は解決して store に入れる（best-effort）
-  // - URL へ avatarId を付けずに home へ遷移（URL伸長/露出を防ぐ）
+  // - Pattern B: returnTo があればそこへ復帰。無ければ home。
   // ============================================================
   if (isLoginRoute) {
     final resolved = await _ensureAvatarIdResolved(state);
     if (resolved.isNotEmpty) {
       AvatarIdStore.I.set(resolved);
     }
+
+    // ✅ 1) returnTo があれば復帰（consume は String を返す）
+    final to = NavStore.I.consumeReturnTo().trim();
+    if (to.isNotEmpty) {
+      return to;
+    }
+
+    // ✅ 2) なければ home
     return AppRoutePath.home;
   }
 
