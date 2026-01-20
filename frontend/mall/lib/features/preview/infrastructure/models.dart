@@ -2,10 +2,21 @@
 import 'dart:convert';
 
 class MallOwnerInfo {
-  MallOwnerInfo({this.brandId = '', this.avatarId = ''});
+  MallOwnerInfo({
+    this.brandId = '',
+    this.avatarId = '',
+    this.brandName = '',
+    this.avatarName = '',
+  });
 
   final String brandId;
   final String avatarId;
+
+  // ✅ NEW: resolved display names (best-effort)
+  // - ownerType=brand のとき brandName が入る想定
+  // - ownerType=avatar のとき avatarName が入る想定
+  final String brandName;
+  final String avatarName;
 
   static String _s(dynamic v) => (v ?? '').toString().trim();
 
@@ -21,10 +32,17 @@ class MallOwnerInfo {
     return MallOwnerInfo(
       brandId: _s(j['brandId']),
       avatarId: _s(j['avatarId']),
+      brandName: _s(j['brandName']),
+      avatarName: _s(j['avatarName']),
     );
   }
 
-  Map<String, dynamic> toJson() => {'brandId': brandId, 'avatarId': avatarId};
+  Map<String, dynamic> toJson() => {
+    'brandId': brandId,
+    'avatarId': avatarId,
+    'brandName': brandName,
+    'avatarName': avatarName,
+  };
 }
 
 class MallModelTokenPair {

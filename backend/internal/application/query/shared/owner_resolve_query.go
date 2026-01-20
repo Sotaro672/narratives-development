@@ -1,4 +1,4 @@
-// backend\internal\application\query\shared\owner_resolve_query.go
+// backend/internal/application/query/shared/owner_resolve_query.go
 package shared
 
 import (
@@ -35,6 +35,18 @@ type BrandWalletAddressReader interface {
 	FindBrandIDByWalletAddress(ctx context.Context, walletAddress string) (string, error)
 }
 
+// AvatarNameReader resolves avatarName by avatarId.
+// ✅ brand.Service.GetNameByID と同じ思想で導入する port。
+type AvatarNameReader interface {
+	GetNameByID(ctx context.Context, avatarID string) (string, error)
+}
+
+// BrandNameReader resolves brandName by brandId.
+// ✅ brand.Service.GetNameByID と同じ思想で導入する port。
+type BrandNameReader interface {
+	GetNameByID(ctx context.Context, brandID string) (string, error)
+}
+
 // ------------------------------------------------------------
 // DTO
 // ------------------------------------------------------------
@@ -56,6 +68,10 @@ type OwnerResolveResult struct {
 	// Only one of them is expected to be set.
 	BrandID  string `json:"brandId,omitempty"`
 	AvatarID string `json:"avatarId,omitempty"`
+
+	// ✅ NEW: resolved display names (non-fatal if empty)
+	BrandName  string `json:"brandName,omitempty"`
+	AvatarName string `json:"avatarName,omitempty"`
 }
 
 // ------------------------------------------------------------
@@ -72,23 +88,32 @@ type OwnerResolveResult struct {
 type OwnerResolveQuery struct {
 	AvatarRepo AvatarWalletAddressReader
 	BrandRepo  BrandWalletAddressReader
+
+	// ✅ NEW: ID -> Name（nil 許容 / Resolve は継続）
+	AvatarName AvatarNameReader
+	BrandName  BrandNameReader
 }
 
 // NewOwnerResolveQuery constructs OwnerResolveQuery.
 // AvatarRepo / BrandRepo はどちらも nil 許容だが、Resolve には最低1つ必要。
+// AvatarName / BrandName は nil でも Resolve は動作する（名前は埋めない）。
 func NewOwnerResolveQuery(
 	avatarRepo AvatarWalletAddressReader,
 	brandRepo BrandWalletAddressReader,
+	avatarName AvatarNameReader,
+	brandName BrandNameReader,
 ) *OwnerResolveQuery {
 	return &OwnerResolveQuery{
 		AvatarRepo: avatarRepo,
 		BrandRepo:  brandRepo,
+		AvatarName: avatarName,
+		BrandName:  brandName,
 	}
 }
 
 // Resolve resolves owner by wallet address.
-// - avatar が見つかれば avatar を返す
-// - 見つからなければ brand を返す
+// - avatar が見つかれば avatar を返す（+ 可能なら avatarName も埋める）
+// - 見つからなければ brand を返す（+ 可能なら brandName も埋める）
 // - どちらも見つからなければ ErrOwnerNotFound
 func (q *OwnerResolveQuery) Resolve(
 	ctx context.Context,
@@ -111,11 +136,20 @@ func (q *OwnerResolveQuery) Resolve(
 		}
 		avatarID = strings.TrimSpace(avatarID)
 		if avatarID != "" {
-			return &OwnerResolveResult{
+			res := &OwnerResolveResult{
 				WalletAddress: addr,
 				OwnerType:     OwnerTypeAvatar,
 				AvatarID:      avatarID,
-			}, nil
+			}
+
+			// ✅ optional: avatarId -> avatarName
+			if q.AvatarName != nil {
+				if name, err := q.AvatarName.GetNameByID(ctx, avatarID); err == nil {
+					res.AvatarName = strings.TrimSpace(name)
+				}
+			}
+
+			return res, nil
 		}
 	}
 
@@ -127,11 +161,20 @@ func (q *OwnerResolveQuery) Resolve(
 		}
 		brandID = strings.TrimSpace(brandID)
 		if brandID != "" {
-			return &OwnerResolveResult{
+			res := &OwnerResolveResult{
 				WalletAddress: addr,
 				OwnerType:     OwnerTypeBrand,
 				BrandID:       brandID,
-			}, nil
+			}
+
+			// ✅ optional: brandId -> brandName
+			if q.BrandName != nil {
+				if name, err := q.BrandName.GetNameByID(ctx, brandID); err == nil {
+					res.BrandName = strings.TrimSpace(name)
+				}
+			}
+
+			return res, nil
 		}
 	}
 

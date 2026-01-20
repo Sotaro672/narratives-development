@@ -35,6 +35,7 @@ import (
 	authuc "narratives/internal/application/usecase/auth"
 
 	// domains
+	avatardom "narratives/internal/domain/avatar"
 	branddom "narratives/internal/domain/brand"
 	companydom "narratives/internal/domain/company"
 	memdom "narratives/internal/domain/member"
@@ -231,14 +232,6 @@ func NewContainer(ctx context.Context, infra *shared.Infra) (*Container, error) 
 	}
 
 	// =========================================================
-	// ✅ shared OwnerResolveQuery (wallet -> avatarId / brandId)
-	// - OwnerResolveQuery は (string, error) を要求するので AddressReaderFS を使う
-	// =========================================================
-	avatarAddrReader := sharedfs.NewAvatarWalletAddressReaderFS(fsClient, "avatars")
-	brandAddrReader := sharedfs.NewBrandWalletAddressReaderFS(fsClient, "brands")
-	ownerResolveQ := sharedquery.NewOwnerResolveQuery(avatarAddrReader, brandAddrReader)
-
-	// =========================================================
 	// Domain services
 	// =========================================================
 	companySvc := companydom.NewService(companyRepo)
@@ -247,6 +240,25 @@ func NewContainer(ctx context.Context, infra *shared.Infra) (*Container, error) 
 
 	pbDomainRepo := &productBlueprintDomainRepoAdapter{repo: productBlueprintRepo}
 	pbSvc := pbdom.NewService(pbDomainRepo)
+
+	// =========================================================
+	// ✅ shared OwnerResolveQuery (wallet -> avatarId / brandId)
+	// - NewOwnerResolveQuery が NameReader を追加で要求するようになったため、
+	//   console 側も avatarName / brandName 解決ポートを注入する
+	// =========================================================
+	avatarAddrReader := sharedfs.NewAvatarWalletAddressReaderFS(fsClient, "avatars")
+	brandAddrReader := sharedfs.NewBrandWalletAddressReaderFS(fsClient, "brands")
+
+	// ✅ avatarId -> avatarName
+	avatarNameReader := avatarNameReaderAdapter{repo: avatarRepo}
+
+	// ✅ brandId -> brandName は branddom.Service が GetNameByID を持つ前提
+	ownerResolveQ := sharedquery.NewOwnerResolveQuery(
+		avatarAddrReader,
+		brandAddrReader,
+		avatarNameReader,
+		brandSvc,
+	)
 
 	// =========================================================
 	// NameResolver
@@ -674,4 +686,29 @@ func (a *inventoryRepoTransferResultAdapter) ApplyTransferResult(
 	)
 
 	return nil
+}
+
+// ============================================================
+// ✅ Adapter: avatarId -> avatarName (sharedquery.AvatarNameReader)
+// - sharedquery.NewOwnerResolveQuery に渡すための最小実装
+// ============================================================
+
+type avatarNameReaderAdapter struct {
+	repo interface {
+		GetByID(ctx context.Context, id string) (avatardom.Avatar, error)
+	}
+}
+
+func (a avatarNameReaderAdapter) GetNameByID(ctx context.Context, avatarID string) (string, error) {
+	id := strings.TrimSpace(avatarID)
+	if id == "" {
+		return "", errors.New("avatarNameReaderAdapter: avatarID is empty")
+	}
+
+	av, err := a.repo.GetByID(ctx, id)
+	if err != nil {
+		return "", err
+	}
+
+	return strings.TrimSpace(av.AvatarName), nil
 }

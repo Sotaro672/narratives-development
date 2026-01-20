@@ -31,6 +31,7 @@ import (
 	solanaplatform "narratives/internal/infra/solana"
 
 	// domains
+	avatardom "narratives/internal/domain/avatar"
 	branddom "narratives/internal/domain/brand"
 	ldom "narratives/internal/domain/list"
 	tokendom "narratives/internal/domain/token"
@@ -374,7 +375,18 @@ func NewContainer(ctx context.Context, infra *shared.Infra) (*Container, error) 
 		brandReader := brandWalletAddressReaderFS{fs: fsClient, col: brandsCol}
 		avatarReader := avatarWalletAddressReaderFS{fs: fsClient, col: avatarsCol}
 
-		c.OwnerResolveQ = sharedquery.NewOwnerResolveQuery(avatarReader, brandReader)
+		// ✅ NEW: avatarId -> avatarName (GetNameByID)
+		avatarName := avatarNameReaderAdapter{repo: avatarRepo}
+
+		// ✅ FIX: NewOwnerResolveQuery now requires 4 args
+		// - AvatarWalletAddressReader, BrandWalletAddressReader
+		// - AvatarNameReader, BrandNameReader
+		c.OwnerResolveQ = sharedquery.NewOwnerResolveQuery(
+			avatarReader,
+			brandReader,
+			avatarName,
+			brandSvc,
+		)
 	}
 
 	// --------------------------------------------------------
@@ -607,4 +619,28 @@ func (a modelPBIDResolverAdapter) GetProductBlueprintIDByModelID(ctx context.Con
 		return "", errors.New("modelPBIDResolverAdapter: resolver is nil")
 	}
 	return a.r.GetIDByModelID(ctx, strings.TrimSpace(modelID))
+}
+
+// ============================================================
+// ✅ Adapter: avatarId -> avatarName (sharedquery.AvatarNameReader)
+// ============================================================
+
+type avatarNameReaderAdapter struct {
+	repo interface {
+		GetByID(ctx context.Context, id string) (avatardom.Avatar, error)
+	}
+}
+
+func (a avatarNameReaderAdapter) GetNameByID(ctx context.Context, avatarID string) (string, error) {
+	id := strings.TrimSpace(avatarID)
+	if id == "" {
+		return "", errors.New("avatarNameReaderAdapter: avatarID is empty")
+	}
+
+	av, err := a.repo.GetByID(ctx, id)
+	if err != nil {
+		return "", err
+	}
+
+	return strings.TrimSpace(av.AvatarName), nil
 }

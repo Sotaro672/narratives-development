@@ -108,7 +108,11 @@ type PreviewModelInfo struct {
 	// ✅ tokens/{productId}（あれば）
 	Token *TokenInfo `json:"token,omitempty"`
 
-	// ✅ owner_resolve_query.go のみを使う（A案）
+	// ✅ owner_resolve_query.go を使って owner を解決して返す
+	//
+	// 期待値:
+	// - ownerType=avatar の場合: avatarId + avatarName が埋まる（brandId/brandName は空）
+	// - ownerType=brand  の場合: brandId  + brandName  が埋まる（avatarId/avatarName は空）
 	Owner *sharedquery.OwnerResolveResult `json:"owner,omitempty"`
 }
 
@@ -127,6 +131,7 @@ type PreviewQuery struct {
 	TokenRepo TokenReader
 
 	// ✅ Optional: tokens.toAddress -> owner を解決（nil なら owner は返さない）
+	// owner_resolve_query 側で「avatarName / brandName」も解決して DTO に載せる想定
 	OwnerResolveQ *sharedquery.OwnerResolveQuery
 }
 
@@ -229,7 +234,7 @@ func (q *PreviewQuery) ResolveModelMetaByModelID(
 // (modelNumber/size/color/rgb/measurements) from productId,
 // and additionally resolves productBlueprintId + (productBlueprint entity + patch) by modelId.
 // and optionally resolves tokens/{productId} if TokenRepo is configured.
-// and optionally resolves owner (tokens.toAddress -> avatarId/brandId) if OwnerResolveQ is configured.
+// and optionally resolves owner (tokens.toAddress -> avatarId/brandId + (avatarName/brandName)) if OwnerResolveQ is configured.
 func (q *PreviewQuery) ResolveModelInfoByProductID(
 	ctx context.Context,
 	productID string,
@@ -308,14 +313,29 @@ func (q *PreviewQuery) ResolveModelInfoByProductID(
 		out.Token = tok
 
 		// ✅ owner 解決（token が無い / toAddress が無い / OwnerResolveQ が無い場合は何もしない）
+		// 期待値:
+		// - OwnerResolveQ.Resolve が avatarName / brandName を埋めて返す
+		// - preview は owner 解決失敗で壊さない（付加情報のため best-effort）
 		if q.OwnerResolveQ != nil && tok != nil {
 			addr := strings.TrimSpace(tok.ToAddress)
 			if addr != "" {
 				res, rerr := q.OwnerResolveQ.Resolve(ctx, addr)
 				if rerr == nil && res != nil {
+					// ✅ 片側だけを返す（画面側が迷わないように）
+					switch res.OwnerType {
+					case sharedquery.OwnerTypeAvatar:
+						res.BrandID = ""
+						// res.BrandName が存在する実装の場合も空に揃える（DTO側のomitemptyで落ちる想定）
+						res.BrandName = ""
+					case sharedquery.OwnerTypeBrand:
+						res.AvatarID = ""
+						res.AvatarName = ""
+					default:
+						// unknown はそのまま
+					}
 					out.Owner = res
 				}
-				// rerr は preview を壊さない（owner は付加情報のため）
+				// rerr は握りつぶす（owner は付加情報）
 			}
 		}
 	}

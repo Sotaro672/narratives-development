@@ -1,18 +1,11 @@
 // frontend/mall/lib/features/preview/presentation/page/preview.dart
-import 'dart:convert';
-
-import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
-import 'package:http/http.dart' as http;
 
-import '../../../../app/config/api_base.dart'; // ✅ resolveMallApiBase()
-import '../../infrastructure/repository.dart';
-
-// ✅ productBlueprintPatch DTO
 import '../../infrastructure/product_blueprint_patch_dto.dart';
-
-// ✅ WalletContentsPage のカードを Preview 側で再利用する
 import '../../../wallet/presentation/page/contents.dart';
+
+// ✅ NEW: logic moved to hook
+import '../hook/use_preview.dart';
 
 class PreviewPage extends StatefulWidget {
   const PreviewPage({
@@ -35,53 +28,17 @@ class PreviewPage extends StatefulWidget {
 }
 
 class _PreviewPageState extends State<PreviewPage> {
-  String get _productId => (widget.productId ?? '').trim();
-
-  late final PreviewRepositoryHttp _previewRepo;
-  late final ScanVerifyRepositoryHttp _scanVerifyRepo;
-  late final ScanTransferRepositoryHttp _scanTransferRepo;
-  late final MeAvatarRepositoryHttp _meAvatarRepo;
-
-  Future<MallPreviewResponse?>? _previewFuture;
-
-  // me avatar -> verify -> transfer の順に進めるため、結果は State に保持する
-  String? _meAvatarId; // 解決できたときだけ入る
-  MallScanVerifyResponse? _verifyResult;
-  MallScanTransferResponse? _transferResult;
-
-  bool _busyMe = false;
-  bool _busyVerify = false;
-  bool _busyTransfer = false;
-
-  // 多重実行防止（verify/transfer）
-  bool _transferTriggered = false;
-
-  /// firebase_auth の環境差（getIdToken() が String? 扱いになる等）を吸収して
-  /// 常に non-null の String を返す
-  Future<String> _idTokenOrEmpty(User user) async {
-    try {
-      final t = await user.getIdToken();
-      return (t ?? '').toString();
-    } catch (_) {
-      return '';
-    }
-  }
+  late final UsePreviewController _c;
 
   @override
   void initState() {
     super.initState();
-
-    _previewRepo = PreviewRepositoryHttp();
-    _scanVerifyRepo = ScanVerifyRepositoryHttp();
-    _scanTransferRepo = ScanTransferRepositoryHttp();
-    _meAvatarRepo = MeAvatarRepositoryHttp();
-
-    final productId = _productId;
-
-    if (productId.isNotEmpty) {
-      _previewFuture = _loadPreview(productId);
-      _kickAuthFlowIfNeeded();
-    }
+    _c = UsePreviewController();
+    _c.init(
+      avatarId: widget.avatarId,
+      productId: widget.productId,
+      from: widget.from,
+    );
   }
 
   @override
@@ -91,228 +48,27 @@ class _PreviewPageState extends State<PreviewPage> {
     if (oldWidget.avatarId != widget.avatarId ||
         oldWidget.productId != widget.productId ||
         oldWidget.from != widget.from) {
-      final productId = _productId;
-
-      setState(() {
-        _previewFuture = productId.isNotEmpty ? _loadPreview(productId) : null;
-
-        // 状態リセット（商品が変わったらやり直す想定）
-        _meAvatarId = null;
-        _verifyResult = null;
-        _transferResult = null;
-
-        _busyMe = false;
-        _busyVerify = false;
-        _busyTransfer = false;
-
-        _transferTriggered = false;
-      });
-
-      if (productId.isNotEmpty) {
-        _kickAuthFlowIfNeeded();
-      }
+      _c.update(
+        avatarId: widget.avatarId,
+        productId: widget.productId,
+        from: widget.from,
+      );
+      setState(() {}); // keep rebuild behavior
     }
   }
 
   @override
   void dispose() {
-    _previewRepo.dispose();
-    _scanVerifyRepo.dispose();
-    _scanTransferRepo.dispose();
-    _meAvatarRepo.dispose();
+    _c.dispose();
     super.dispose();
   }
 
   // ----------------------------
-  // Preview
-  // ----------------------------
-  Future<MallPreviewResponse?> _loadPreview(String productId) async {
-    final id = productId.trim();
-    if (id.isEmpty) return null;
-
-    final user = FirebaseAuth.instance.currentUser;
-
-    if (user == null) {
-      final r = await _previewRepo.fetchPreviewByProductId(id);
-      return r;
-    }
-
-    final token = await _idTokenOrEmpty(user);
-
-    final r = await _previewRepo.fetchMyPreviewByProductId(
-      id,
-      headers: {'Authorization': 'Bearer $token'},
-    );
-
-    return r;
-  }
-
-  // ----------------------------
-  // Auth Flow (me avatar -> verify -> transfer)
-  // ----------------------------
-  Future<void> _kickAuthFlowIfNeeded() async {
-    final productId = _productId;
-    if (productId.isEmpty) return;
-
-    final user = FirebaseAuth.instance.currentUser;
-    if (user == null) return;
-
-    // すでに me avatar が取れてるなら次へ
-    final current = (_meAvatarId ?? '').trim();
-    if (current.isNotEmpty) {
-      await _verifyAndMaybeTransfer();
-      return;
-    }
-
-    await _resolveMeAvatarId();
-    await _verifyAndMaybeTransfer();
-  }
-
-  Future<void> _resolveMeAvatarId() async {
-    if (_busyMe) return;
-
-    final user = FirebaseAuth.instance.currentUser;
-    if (user == null) return;
-
-    setState(() {
-      _busyMe = true;
-    });
-
-    try {
-      final token = await _idTokenOrEmpty(user);
-
-      final r = await _meAvatarRepo.fetchMeAvatar(
-        headers: {'Authorization': 'Bearer $token'},
-      );
-
-      final meAvatarId = r.avatarId.trim();
-
-      if (mounted) {
-        setState(() {
-          _meAvatarId = meAvatarId.isEmpty ? null : meAvatarId;
-        });
-      }
-    } catch (_) {
-      // UI で表示しないため握りつぶします（必要なら logger を入れてください）
-    } finally {
-      if (mounted) {
-        setState(() {
-          _busyMe = false;
-        });
-      }
-    }
-  }
-
-  Future<void> _verifyAndMaybeTransfer() async {
-    final user = FirebaseAuth.instance.currentUser;
-    if (user == null) return;
-
-    final productId = _productId.trim();
-    final meAvatarId = (_meAvatarId ?? '').trim();
-    if (productId.isEmpty || meAvatarId.isEmpty) return;
-
-    // verify が完了済みなら transfer 判定だけやる
-    if (_verifyResult != null) {
-      await _maybeAutoTransfer();
-      return;
-    }
-
-    if (_busyVerify) return;
-
-    setState(() {
-      _busyVerify = true;
-    });
-
-    try {
-      final token = await _idTokenOrEmpty(user);
-
-      final r = await _scanVerifyRepo.verifyScanPurchasedByAvatarId(
-        avatarId: meAvatarId,
-        productId: productId,
-        headers: {'Authorization': 'Bearer $token'},
-      );
-
-      if (mounted) {
-        setState(() {
-          _verifyResult = r;
-        });
-      }
-
-      await _maybeAutoTransfer();
-    } catch (_) {
-      // UI で表示しないため握りつぶします（必要なら logger を入れてください）
-    } finally {
-      if (mounted) {
-        setState(() {
-          _busyVerify = false;
-        });
-      }
-    }
-  }
-
-  Future<void> _maybeAutoTransfer() async {
-    final user = FirebaseAuth.instance.currentUser;
-    if (user == null) return;
-
-    final productId = _productId.trim();
-    final meAvatarId = (_meAvatarId ?? '').trim();
-    final verify = _verifyResult;
-
-    if (productId.isEmpty || meAvatarId.isEmpty || verify == null) return;
-    if (!verify.matched) return;
-
-    // ✅ 多重実行防止
-    if (_transferTriggered || _transferResult != null || _busyTransfer) return;
-    _transferTriggered = true;
-
-    setState(() {
-      _busyTransfer = true;
-    });
-
-    try {
-      final token = await _idTokenOrEmpty(user);
-
-      // ✅ deprecated を使わない：avatarId は server 側で解決される前提
-      // POST /mall/me/orders/scan/transfer には { productId } だけを送る想定の API
-      final r = await _scanTransferRepo.transferScanPurchased(
-        productId: productId,
-        headers: {'Authorization': 'Bearer $token'},
-      );
-
-      if (mounted) {
-        setState(() {
-          _transferResult = r;
-        });
-      }
-    } catch (_) {
-      // UI で表示しないため握りつぶします（必要なら logger を入れてください）
-    } finally {
-      if (mounted) {
-        setState(() {
-          _busyTransfer = false;
-        });
-      }
-    }
-  }
-
-  // ----------------------------
-  // UI helpers
+  // UI helpers (style-only / view-only)
   // ----------------------------
   Color _rgbToColor(int rgb) {
     final v = rgb & 0xFFFFFF;
     return Color(0xFF000000 | v);
-  }
-
-  String _ownerLabel(MallOwnerInfo? owner) {
-    if (owner == null) return '-';
-
-    final brandId = owner.brandId.trim();
-    final avatarId = owner.avatarId.trim();
-
-    if (brandId.isNotEmpty) return brandId;
-    if (avatarId.isNotEmpty) return avatarId;
-
-    return '-';
   }
 
   String _withCm(dynamic v) {
@@ -338,16 +94,11 @@ class _PreviewPageState extends State<PreviewPage> {
     return false;
   }
 
-  /// DTO のキーを日本語ラベルへ変換（要望分のみ）
-  ///
-  /// - productName -> 商品名
-  /// - productIdTag.Type -> 商品タグ（末尾キーが Type の時は親キーも見る）
+  /// DTO のキーを日本語ラベルへ変換（現在使われているもののみ）
   String _jpLabelForPatchKey(String key) {
     final k = key.trim();
     if (k.isEmpty) return '';
 
-    // ✅ productIdTag.Type 専用（flatten でも対応）
-    // 例: "productIdTag.Type" / "x.productIdTag.Type"
     if (k.endsWith('productIdTag.Type') || k.contains('productIdTag.Type')) {
       return '商品タグ';
     }
@@ -365,11 +116,9 @@ class _PreviewPageState extends State<PreviewPage> {
     final hit = exact[k];
     if (hit != null) return hit;
 
-    // flatten 対応（末尾キー）
     final tail = k.split('.').last;
     final tailNoIndex = tail.replaceAll(RegExp(r'\[\d+\]'), '');
 
-    // ✅ 末尾が Type の場合は 1つ上のキーも見る
     if (tailNoIndex == 'Type') {
       final parts = k.split('.');
       if (parts.length >= 2) {
@@ -384,12 +133,12 @@ class _PreviewPageState extends State<PreviewPage> {
     final hit2 = exact[tailNoIndex];
     if (hit2 != null) return hit2;
 
-    return k;
+    return '';
   }
 
   @override
   Widget build(BuildContext context) {
-    final productId = _productId;
+    final productId = _c.productId;
     final t = Theme.of(context).textTheme;
 
     final bodySmall = t.bodySmall ?? const TextStyle(fontSize: 12);
@@ -400,12 +149,11 @@ class _PreviewPageState extends State<PreviewPage> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          // Preview（商品情報のみ表示）
           Card(
             child: Padding(
               padding: const EdgeInsets.all(14),
-              child: FutureBuilder<MallPreviewResponse?>(
-                future: _previewFuture,
+              child: FutureBuilder(
+                future: _c.previewFuture,
                 builder: (context, snap) {
                   if (productId.isEmpty) {
                     return const Text('商品ID が無いため、プレビューを取得しません。');
@@ -432,7 +180,7 @@ class _PreviewPageState extends State<PreviewPage> {
                     );
                   }
 
-                  final data = snap.data;
+                  final data = _c.previewDataFromSnapshot(snap.data);
                   if (data == null) {
                     return Text('プレビューが空です。', style: t.bodySmall);
                   }
@@ -443,19 +191,17 @@ class _PreviewPageState extends State<PreviewPage> {
                   final rgb = data.rgb;
                   final measurements = data.measurements;
 
-                  // ✅ productBlueprintPatch を DTO に組み上げる
                   final pbPatchDto = ProductBlueprintPatchDTO.fromJson(
                     data.productBlueprintPatch,
                   );
                   final pbItems = pbPatchDto.items;
 
-                  // ✅ Token情報表示はしないが、WalletContentsPage を出すため mintAddress は保持
                   final token = data.token;
                   final mintAddress = token == null
                       ? ''
                       : token.mintAddress.trim();
 
-                  final ownerId = _ownerLabel(data.owner);
+                  final ownerLabel = _c.ownerLabel(data.owner);
                   final swatch = _rgbToColor(rgb);
 
                   final measurementEntries =
@@ -469,10 +215,9 @@ class _PreviewPageState extends State<PreviewPage> {
                     children: [
                       Text('商品情報', style: t.titleSmall),
                       const SizedBox(height: 8),
-                      Text('所有者: $ownerId', style: t.bodySmall),
+                      Text('所有者: $ownerLabel', style: t.bodySmall),
                       const SizedBox(height: 10),
 
-                      // ✅ assigneeId 行は削除（非表示キーはスキップ）
                       if (pbItems.isNotEmpty) ...[
                         ...pbItems.expand((it) {
                           if (_shouldHidePatchKey(it.key)) {
@@ -547,9 +292,6 @@ class _PreviewPageState extends State<PreviewPage> {
                         ),
                       ],
 
-                      // ✅ Preview埋め込み時の期待値:
-                      // - productName ボタンは出さない
-                      // - tokenName を押下可能にし、contents.dart へ遷移
                       if (mintAddress.isNotEmpty) ...[
                         const SizedBox(height: 12),
                         WalletContentsPage(
@@ -567,65 +309,8 @@ class _PreviewPageState extends State<PreviewPage> {
               ),
             ),
           ),
-
-          // ✅ 「Verify」「Transfer」カードは非表示（削除済み）
         ],
       ),
     );
-  }
-}
-
-/// /mall/me/avatar 用（このファイル内で完結させるための最小実装）
-class MeAvatarRepositoryHttp {
-  MeAvatarRepositoryHttp({http.Client? client})
-    : _client = client ?? http.Client();
-
-  final http.Client _client;
-
-  void dispose() {
-    _client.close();
-  }
-
-  /// GET /mall/me/avatar
-  Future<MallOwnerInfo> fetchMeAvatar({
-    String? baseUrl,
-    Map<String, String>? headers,
-  }) async {
-    final base = (baseUrl ?? '').trim();
-
-    // ✅ resolveApiBase() ではなく resolveMallApiBase()
-    final resolvedBase = base.isNotEmpty ? base : resolveMallApiBase();
-
-    final b = normalizeBaseUrl(resolvedBase);
-    final uri = Uri.parse('$b/mall/me/avatar');
-
-    final mergedHeaders = <String, String>{...jsonHeaders()};
-    if (headers != null) {
-      mergedHeaders.addAll(headers);
-    }
-
-    final auth = (mergedHeaders['Authorization'] ?? '').trim();
-    if (auth.isEmpty) {
-      throw ArgumentError(
-        'Authorization header is required for /mall/me/avatar',
-      );
-    }
-
-    final res = await _client.get(uri, headers: mergedHeaders);
-
-    if (res.statusCode < 200 || res.statusCode >= 300) {
-      throw HttpException(
-        'fetchMeAvatar failed: ${res.statusCode}',
-        url: uri.toString(),
-        body: res.body,
-      );
-    }
-
-    final decoded = jsonDecode(res.body);
-    if (decoded is! Map) {
-      throw const FormatException('invalid json shape (expected object)');
-    }
-
-    return MallOwnerInfo.fromJson(decoded.cast<String, dynamic>());
   }
 }
