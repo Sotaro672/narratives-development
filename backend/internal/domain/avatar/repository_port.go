@@ -20,7 +20,7 @@ import (
 // - Website      → ExternalLink
 // - FirebaseUID  を追加
 type AvatarPatch struct {
-	FirebaseUID   *string    `json:"firebaseUid,omitempty"`
+	UserID        string     `json:"userId"`
 	AvatarName    *string    `json:"avatarName,omitempty"`
 	AvatarIcon    *string    `json:"avatarIcon,omitempty"`
 	WalletAddress *string    `json:"walletAddress,omitempty"`
@@ -34,7 +34,6 @@ func (p *AvatarPatch) Sanitize() {
 	if p == nil {
 		return
 	}
-	p.FirebaseUID = normalizePtr(p.FirebaseUID)
 	p.AvatarName = normalizePtr(p.AvatarName)
 	p.AvatarIcon = normalizePtr(p.AvatarIcon)
 	p.WalletAddress = normalizePtr(p.WalletAddress)

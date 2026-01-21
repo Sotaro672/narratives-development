@@ -1,4 +1,4 @@
-//frontend\mall\lib\features\avatar\presentation\vm\avatar_form_vm.dart
+// frontend\mall\lib\features\avatar\presentation\vm\avatar_form_vm.dart
 import 'dart:async';
 import 'dart:typed_data';
 
@@ -44,7 +44,7 @@ class AvatarFormVm extends ChangeNotifier {
   /// edit の場合に「既存情報をフォームへ反映」する。
   ///
   /// - 二重ロードを防止（_initialLoaded）
-  /// - 取得できたフィールドだけをプレフィル（空文字なら上書きしない）
+  /// - 取得できたフィールドだけをプレフィル（null/空文字なら上書きしない）
   /// - API が avatarId しか返さない場合でも安全に動作（上書きしない）
   Future<void> loadInitialIfNeeded() async {
     if (mode != AvatarFormMode.edit) return;
@@ -57,24 +57,34 @@ class AvatarFormVm extends ChangeNotifier {
 
     try {
       // ✅ edit プレフィル用 API（なければ avatarId だけ返ってきても OK）
-      final profile = await _apiClient.fetchMyAvatarProfile();
-      if (profile == null || profile.avatarId.trim().isEmpty) {
+      final dto = await _apiClient.fetchMyAvatarProfile();
+      if (dto == null || dto.avatarId.trim().isEmpty) {
         // avatar が無い -> edit できない（ページ側で create へ誘導しても良い）
         return;
       }
 
-      // ✅ 空文字は上書きしない（API未整備でも既存入力を壊さない）
-      if (profile.name.trim().isNotEmpty) {
-        nameCtrl.text = profile.name.trim();
-      }
-      if (profile.profile.trim().isNotEmpty) {
-        profileCtrl.text = profile.profile.trim();
-      }
-      if (profile.link.trim().isNotEmpty) {
-        linkCtrl.text = profile.link.trim();
+      // ✅ dto は "MeAvatar"（avatar patch 全体）として扱う前提
+      // - dto.avatarName (nullable でも安全に)
+      // - dto.profile (nullable)
+      // - dto.externalLink (nullable)
+      // - dto.avatarIcon (nullable)
+
+      final avatarName = (dto.avatarName ?? '').trim();
+      if (avatarName.isNotEmpty) {
+        nameCtrl.text = avatarName;
       }
 
-      // iconUrl は bytes で扱っているため、ここでは未反映（必要なら別途実装）
+      final profile = (dto.profile ?? '').trim();
+      if (profile.isNotEmpty) {
+        profileCtrl.text = profile;
+      }
+
+      final link = (dto.externalLink ?? '').trim();
+      if (link.isNotEmpty) {
+        linkCtrl.text = link;
+      }
+
+      // avatarIcon は bytes で扱っているため、ここでは未反映（必要なら別途実装）
       _initialLoaded = true;
     } catch (_) {
       // fail-open
@@ -136,9 +146,21 @@ class AvatarFormVm extends ChangeNotifier {
       // TODO: ここで create / update API を呼ぶ
       // 例:
       // if (mode == AvatarFormMode.create) {
-      //   await _apiClient.createAvatar(name: name, profile: profile, link: link, ...);
+      //   await _apiClient.createAvatar(
+      //     avatarName: name,
+      //     profile: profile.isEmpty ? null : profile,
+      //     externalLink: link.isEmpty ? null : link,
+      //     avatarIconBytes: iconBytes,
+      //     avatarIconFileName: iconFileName,
+      //   );
       // } else {
-      //   await _apiClient.updateAvatar(name: name, profile: profile, link: link, ...);
+      //   await _apiClient.updateAvatar(
+      //     avatarName: name,
+      //     profile: profile.isEmpty ? null : profile,
+      //     externalLink: link.isEmpty ? null : link,
+      //     avatarIconBytes: iconBytes,
+      //     avatarIconFileName: iconFileName,
+      //   );
       // }
 
       // 暫定: 成功扱い

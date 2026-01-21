@@ -22,6 +22,7 @@ import (
 	uc "narratives/internal/application/usecase"
 	avatardom "narratives/internal/domain/avatar"
 	avataricon "narratives/internal/domain/avatarIcon"
+	avatarstate "narratives/internal/domain/avatarState"
 )
 
 // AvatarHandler handles ONLY mall buyer-facing endpoints.
@@ -140,6 +141,81 @@ func (h *AvatarHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 }
 
 // -----------------------------------------------------------------------------
+// DTOs (Mall response) - ✅ avatarId に寄せる
+// -----------------------------------------------------------------------------
+
+// avatarResponse is the mall-facing Avatar DTO.
+// It normalizes the ID field name to "avatarId" (absolute schema).
+type avatarResponse struct {
+	AvatarID string `json:"avatarId"`
+	UserID   string `json:"userId"`
+
+	AvatarName string `json:"avatarName"`
+
+	// URL/gs://.../path (optional)
+	AvatarIcon *string `json:"avatarIcon,omitempty"`
+
+	AvatarState   avatarstate.AvatarState `json:"avatarState"`
+	WalletAddress *string                 `json:"walletAddress,omitempty"`
+	Profile       *string                 `json:"profile,omitempty"`
+	ExternalLink  *string                 `json:"externalLink,omitempty"`
+	CreatedAt     time.Time               `json:"createdAt"`
+	UpdatedAt     time.Time               `json:"updatedAt"`
+	DeletedAt     *time.Time              `json:"deletedAt,omitempty"`
+}
+
+func toAvatarResponse(a avatardom.Avatar) avatarResponse {
+	return avatarResponse{
+		AvatarID:      strings.TrimSpace(a.ID),
+		UserID:        strings.TrimSpace(a.UserID),
+		AvatarName:    strings.TrimSpace(a.AvatarName),
+		AvatarIcon:    a.AvatarIcon,
+		AvatarState:   a.AvatarState,
+		WalletAddress: a.WalletAddress,
+		Profile:       a.Profile,
+		ExternalLink:  a.ExternalLink,
+		CreatedAt:     a.CreatedAt,
+		UpdatedAt:     a.UpdatedAt,
+		DeletedAt:     a.DeletedAt,
+	}
+}
+
+// avatarIconResponse is the mall-facing icon DTO.
+// It normalizes "avatarId" and keeps other fields stable.
+type avatarIconResponse struct {
+	ID       string  `json:"id"`
+	AvatarID *string `json:"avatarId,omitempty"`
+	URL      string  `json:"url"`
+	FileName *string `json:"fileName,omitempty"`
+	Size     *int64  `json:"size,omitempty"`
+}
+
+func toAvatarIconResponse(icon avataricon.AvatarIcon, knownAvatarID string) avatarIconResponse {
+	aid := strings.TrimSpace(knownAvatarID)
+	var aidPtr *string
+	if aid != "" {
+		aidPtr = &aid
+	}
+
+	// NOTE: icon struct field names are not shown here; we rely on those used in this handler (ID/URL/FileName/Size).
+	// If avataricon.AvatarIcon already has AvatarID, it can be wired later; for now, we guarantee avatarId via knownAvatarID.
+	return avatarIconResponse{
+		ID:       strings.TrimSpace(icon.ID),
+		AvatarID: aidPtr,
+		URL:      strings.TrimSpace(icon.URL),
+		FileName: trimPtr(icon.FileName),
+		Size:     icon.Size,
+	}
+}
+
+// avatarAggregateResponse is the mall-facing aggregate DTO.
+type avatarAggregateResponse struct {
+	Avatar avatarResponse       `json:"avatar"`
+	State  any                  `json:"state,omitempty"` // pass-through (already expected to be "avatarId" in domain)
+	Icons  []avatarIconResponse `json:"icons"`
+}
+
+// -----------------------------------------------------------------------------
 // GET /mall/avatars/{id}
 // aggregate=1|true -> Avatar + State + Icons aggregate
 // -----------------------------------------------------------------------------
@@ -178,7 +254,18 @@ func (h *AvatarHandler) get(w http.ResponseWriter, r *http.Request, id string) {
 			sampleIconURL,
 		)
 
-		_ = json.NewEncoder(w).Encode(data)
+		icons := make([]avatarIconResponse, 0, len(data.Icons))
+		for _, ic := range data.Icons {
+			icons = append(icons, toAvatarIconResponse(ic, id))
+		}
+
+		out := avatarAggregateResponse{
+			Avatar: toAvatarResponse(data.Avatar),
+			State:  data.State, // pass-through
+			Icons:  icons,
+		}
+
+		_ = json.NewEncoder(w).Encode(out)
 		return
 	}
 
@@ -196,7 +283,7 @@ func (h *AvatarHandler) get(w http.ResponseWriter, r *http.Request, id string) {
 		ptrStr(avatar.AvatarIcon),
 	)
 
-	_ = json.NewEncoder(w).Encode(avatar)
+	_ = json.NewEncoder(w).Encode(toAvatarResponse(avatar))
 }
 
 // -----------------------------------------------------------------------------
@@ -255,7 +342,7 @@ func (h *AvatarHandler) post(w http.ResponseWriter, r *http.Request) {
 	)
 
 	w.WriteHeader(http.StatusCreated)
-	_ = json.NewEncoder(w).Encode(created)
+	_ = json.NewEncoder(w).Encode(toAvatarResponse(created))
 }
 
 // -----------------------------------------------------------------------------
@@ -294,7 +381,7 @@ func (h *AvatarHandler) openWallet(w http.ResponseWriter, r *http.Request, id st
 	}
 
 	log.Printf("[mall_avatar_handler] POST /mall/avatars/%s/wallet ok walletAddress=%q\n", id, ptrStr(updated.WalletAddress))
-	_ = json.NewEncoder(w).Encode(updated)
+	_ = json.NewEncoder(w).Encode(toAvatarResponse(updated))
 }
 
 // -----------------------------------------------------------------------------
@@ -550,7 +637,7 @@ func (h *AvatarHandler) replaceIcon(w http.ResponseWriter, r *http.Request, id s
 		updatedAvatarIcon,
 	)
 
-	_ = json.NewEncoder(w).Encode(ic)
+	_ = json.NewEncoder(w).Encode(toAvatarIconResponse(ic, id))
 }
 
 // -----------------------------------------------------------------------------
@@ -630,7 +717,7 @@ func (h *AvatarHandler) update(w http.ResponseWriter, r *http.Request, id string
 		ptrStr(updated.AvatarIcon),
 	)
 
-	_ = json.NewEncoder(w).Encode(updated)
+	_ = json.NewEncoder(w).Encode(toAvatarResponse(updated))
 }
 
 // -----------------------------------------------------------------------------

@@ -3,6 +3,7 @@ import 'package:flutter/foundation.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:http/http.dart' as http;
 import 'package:web/web.dart' as web;
+
 import '../../avatar/infrastructure/repository_http.dart';
 
 class PickIconResult {
@@ -98,6 +99,8 @@ class AvatarCreateService {
       await input.onChange.first;
 
       final files = input.files;
+
+      // ✅ web.FileList には isEmpty が無いので length で判定する
       if (files == null || files.length == 0) return null;
 
       final f = files.item(0);
@@ -194,29 +197,16 @@ class AvatarCreateService {
     return 'application/octet-stream';
   }
 
-  bool _isHttpUrl(String v) {
-    final u = s(v);
-    if (u.isEmpty) return false;
-    return u.startsWith('http://') || u.startsWith('https://');
-  }
-
-  /// ✅ FirebaseAuth の displayName / photoURL を同期
-  Future<void> _syncAuthProfile({
+  /// ✅ FirebaseAuth の displayName を同期（photoURL は絶対正スキーマ外なので扱わない）
+  Future<void> _syncAuthDisplayName({
     required User user,
     required String avatarName,
-    String? photoUrl,
   }) async {
     try {
       final name = s(avatarName);
       if (name.isNotEmpty && s(user.displayName) != name) {
         await user.updateDisplayName(name);
         _log('auth profile updated displayName="$name"');
-      }
-
-      final p = s(photoUrl);
-      if (p.isNotEmpty && s(user.photoURL) != p) {
-        await user.updatePhotoURL(p);
-        _log('auth profile updated photoURL="$p"');
       }
 
       // ✅ userChanges() へ反映（Web でも安定させる）
@@ -242,10 +232,10 @@ class AvatarCreateService {
         return AvatarCreateResult(ok: false, message: 'サインインが必要です。');
       }
 
-      // ✅ 認証主体 UID
-      final uid = user.uid.trim();
-      if (uid.isEmpty) {
-        return AvatarCreateResult(ok: false, message: 'uid が取得できませんでした。');
+      // ✅ 認証主体 UID（= absolute schema の userId）
+      final userId = user.uid.trim();
+      if (userId.isEmpty) {
+        return AvatarCreateResult(ok: false, message: 'userId が取得できませんでした。');
       }
 
       final avatarName = s(avatarNameRaw);
@@ -271,17 +261,15 @@ class AvatarCreateService {
       final size = hasIcon ? bytes.lengthInBytes : 0;
 
       _log(
-        'avatar save start uid=$uid name="$avatarName" '
-        'profileLen=${profile.length} link="${link.isEmpty ? "-" : link}" '
+        'avatar save start userId=$userId avatarName="$avatarName" '
+        'profileLen=${profile.length} externalLink="${link.isEmpty ? "-" : link}" '
         'hasIcon=$hasIcon iconBytesLen=$size file="$fileName" mime="$mimeType"',
       );
 
       // (1) ✅ まず Avatar を作成（アイコンなし）
-      // ✅ 期待値: userId=userUid=Firebase uid
       final created = await _repo.create(
         request: CreateAvatarRequest(
-          userId: uid,
-          userUid: uid, // ✅ 追加（handler/usecase が期待）
+          userId: userId,
           avatarName: avatarName,
           avatarIcon: null,
           profile: profile.isEmpty ? null : profile,
@@ -289,19 +277,19 @@ class AvatarCreateService {
         ),
       );
 
-      final avatarId = s(created.id);
+      // ✅ AvatarDTO は絶対正スキーマで avatarId を持つ（id は使わない）
+      final avatarId = s(created.avatarId);
       if (avatarId.isEmpty) {
         return AvatarCreateResult(ok: false, message: 'avatarId が取得できませんでした。');
       }
 
-      _log('avatar create ok avatarId=$avatarId uid=$uid');
+      _log('avatar create ok avatarId=$avatarId userId=$userId');
 
-      // ✅ まず「表示名」は確定できるので先に同期（email表示を防ぐ）
-      await _syncAuthProfile(user: user, avatarName: avatarName);
+      // ✅ 表示名だけは FirebaseAuth に同期（email表示を防ぐ）
+      await _syncAuthDisplayName(user: user, avatarName: avatarName);
 
       // (2) ✅ アイコンがあれば：署名付きURL→PUTアップロード→/avatars/{id}/icon 登録
       if (hasIcon) {
-        // 2-1) 署名付きURLを発行（/avatars 配下に寄せる）
         final signed = await _repo.issueAvatarIconUploadUrl(
           avatarId: avatarId,
           fileName: fileName,
@@ -336,7 +324,6 @@ class AvatarCreateService {
           'expiresAt="${expiresAt.isEmpty ? "-" : expiresAt}" uploadUrl="$short"',
         );
 
-        // 2-2) PUT アップロード（署名と一致する Content-Type を必ず付ける）
         await _repo.uploadToSignedUrl(
           uploadUrl: uploadUrl,
           bytes: bytes,
@@ -345,8 +332,7 @@ class AvatarCreateService {
 
         _log('icon upload ok bytes=$size');
 
-        // 2-3) /avatars/{id}/icon 登録（置換）
-        final avatarIconCompat = gsUrl.isNotEmpty
+        final avatarIcon = gsUrl.isNotEmpty
             ? gsUrl
             : 'gs://$bucket/$objectPath';
 
@@ -356,29 +342,17 @@ class AvatarCreateService {
           objectPath: objectPath,
           fileName: fileName,
           size: size,
-          avatarIcon: avatarIconCompat,
+          avatarIcon: avatarIcon,
         );
-
-        final iconUrl = s(icon.url);
 
         _log(
-          'icon register ok avatarId=$avatarId iconId="${s(icon.id)}" url="${iconUrl.isEmpty ? "-" : iconUrl}"',
-        );
-
-        // ✅ photoURL を FirebaseAuth に同期（footer/AvatarPage はここを見る）
-        // - icon.url が空なら https://storage.googleapis.com/<bucket>/<objectPath> をfallback
-        final photoUrl = _isHttpUrl(iconUrl)
-            ? iconUrl
-            : 'https://storage.googleapis.com/$bucket/$objectPath';
-
-        await _syncAuthProfile(
-          user: user,
-          avatarName: avatarName,
-          photoUrl: photoUrl,
+          'icon register ok avatarId=$avatarId iconId="${s(icon.id)}" '
+          'url="${s(icon.url).isEmpty ? "-" : s(icon.url)}" '
+          'avatarIcon="$avatarIcon"',
         );
       }
 
-      _log('avatar save done avatarId=$avatarId uid=$uid');
+      _log('avatar save done avatarId=$avatarId userId=$userId');
 
       return AvatarCreateResult(
         ok: true,

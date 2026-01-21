@@ -68,13 +68,52 @@ class AvatarPage extends HookWidget {
       return const Center(child: CircularProgressIndicator());
     }
 
+    // ✅ Missing 判定の前に error を表示できるようにする
+    if (vm.meAvatarSnap.hasError) {
+      return Center(
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 560),
+          child: Padding(
+            padding: const EdgeInsets.all(16),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Icon(Icons.error_outline, size: 40),
+                const SizedBox(height: 12),
+                Text(
+                  'アバター情報の取得でエラーが発生しました',
+                  style: Theme.of(context).textTheme.titleLarge,
+                  textAlign: TextAlign.center,
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  '${vm.meAvatarSnap.error}',
+                  textAlign: TextAlign.center,
+                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                    color: Theme.of(context).colorScheme.error,
+                  ),
+                ),
+                const SizedBox(height: 16),
+                ElevatedButton.icon(
+                  onPressed: () {
+                    NavStore.I.setReturnTo(AppRoutePath.avatar);
+                    context.go(AppRoutePath.avatarEdit);
+                  },
+                  icon: const Icon(Icons.edit_outlined),
+                  label: const Text('アバター編集へ'),
+                ),
+              ],
+            ),
+          ),
+        ),
+      );
+    }
+
     final me = vm.meAvatarSnap.data;
     if (me == null || me.avatarId.trim().isEmpty) {
       return _MissingMeAvatarView(
         backTo: AppRoutePath.avatar,
         onGoEdit: () {
-          // ✅ Pattern B: query に `from` を詰めない
-          // 戻り先は Store に保存してから遷移する
           NavStore.I.setReturnTo(AppRoutePath.avatar);
           context.go(AppRoutePath.avatarEdit);
         },
@@ -85,8 +124,11 @@ class AvatarPage extends HookWidget {
     // Normal profile view
     // -------------------------
     final user = vm.user!;
-    final photoUrl = vm.photoUrl;
-    final bio = vm.bio;
+
+    // ✅ 取得元を MeAvatar(=patch) に寄せる（互換なし）
+    final icon = (me.avatarIcon ?? '').trim();
+    final prof = (me.profile ?? '').trim();
+    final link = (me.externalLink ?? '').trim();
 
     return Center(
       child: ConstrainedBox(
@@ -95,8 +137,9 @@ class AvatarPage extends HookWidget {
           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
           child: _AvatarProfileBody(
             user: user,
-            photoUrl: photoUrl,
-            bio: bio,
+            avatarIcon: icon.isEmpty ? null : icon,
+            profile: prof.isEmpty ? null : prof,
+            externalLink: link.isEmpty ? null : link,
             counts: vm.counts,
             tab: vm.tab,
             onTabChange: vm.setTab,
@@ -107,7 +150,6 @@ class AvatarPage extends HookWidget {
             isTokensLoading: vm.isTokensLoading,
             tokenLoadingByMint: vm.tokenLoadingByMint,
             onEdit: () {
-              // ✅ Pattern B: 編集へ行く前に戻り先を Store に保存
               NavStore.I.setReturnTo(AppRoutePath.avatar);
               vm.goToAvatarEdit();
             },
@@ -125,8 +167,9 @@ class AvatarPage extends HookWidget {
 class _AvatarProfileBody extends StatelessWidget {
   const _AvatarProfileBody({
     required this.user,
-    required this.photoUrl,
-    required this.bio,
+    required this.avatarIcon,
+    required this.profile,
+    required this.externalLink,
     required this.counts,
     required this.tab,
     required this.onTabChange,
@@ -140,8 +183,15 @@ class _AvatarProfileBody extends StatelessWidget {
   });
 
   final User user;
-  final String photoUrl;
-  final String bio;
+
+  /// ✅ Backend/Firestore 正規キー: avatarIcon（nullable）
+  final String? avatarIcon;
+
+  /// ✅ Backend/Firestore 正規キー: profile（nullable）
+  final String? profile;
+
+  /// ✅ Backend/Firestore 正規キー: externalLink（nullable）
+  final String? externalLink;
 
   final ProfileCounts counts;
   final ProfileTab tab;
@@ -160,6 +210,10 @@ class _AvatarProfileBody extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final icon = (avatarIcon ?? '').trim();
+    final prof = (profile ?? '').trim();
+    final link = (externalLink ?? '').trim();
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
@@ -171,10 +225,8 @@ class _AvatarProfileBody extends StatelessWidget {
               backgroundColor: Theme.of(
                 context,
               ).colorScheme.surfaceContainerHighest,
-              backgroundImage: photoUrl.isNotEmpty
-                  ? NetworkImage(photoUrl)
-                  : null,
-              child: photoUrl.isEmpty
+              backgroundImage: icon.isNotEmpty ? NetworkImage(icon) : null,
+              child: icon.isEmpty
                   ? Icon(
                       Icons.person,
                       size: 44,
@@ -204,12 +256,23 @@ class _AvatarProfileBody extends StatelessWidget {
             ),
           ],
         ),
+
+        // ✅ profile / externalLink を表示
         const SizedBox(height: 10),
         Row(
-          crossAxisAlignment: CrossAxisAlignment.center,
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             const SizedBox(width: 88 + 16),
-            Expanded(child: _ProfileBioBox(bio: bio)),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  _ProfileBox(profile: prof),
+                  const SizedBox(height: 8),
+                  _ExternalLinkBox(url: link),
+                ],
+              ),
+            ),
             const SizedBox(width: 10),
             IconButton(
               tooltip: 'Edit Avatar',
@@ -218,6 +281,7 @@ class _AvatarProfileBody extends StatelessWidget {
             ),
           ],
         ),
+
         const SizedBox(height: 14),
         _TabBar(tab: tab, onChange: onTabChange),
         const SizedBox(height: 12),
@@ -276,10 +340,10 @@ class _StatItem extends StatelessWidget {
   }
 }
 
-class _ProfileBioBox extends StatelessWidget {
-  const _ProfileBioBox({required this.bio});
+class _ProfileBox extends StatelessWidget {
+  const _ProfileBox({required this.profile});
 
-  final String bio;
+  final String profile;
 
   @override
   Widget build(BuildContext context) {
@@ -292,10 +356,69 @@ class _ProfileBioBox extends StatelessWidget {
         borderRadius: BorderRadius.circular(12),
       ),
       child: Text(
-        bio.isEmpty ? '（プロフィール未設定）' : bio,
+        profile.isEmpty ? '（プロフィール未設定）' : profile,
         style: Theme.of(
           context,
         ).textTheme.bodyMedium?.copyWith(color: cs.onSurfaceVariant),
+      ),
+    );
+  }
+}
+
+class _ExternalLinkBox extends StatelessWidget {
+  const _ExternalLinkBox({required this.url});
+
+  final String url;
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+
+    if (url.trim().isEmpty) {
+      return Container(
+        width: double.infinity,
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+        decoration: BoxDecoration(
+          color: cs.surfaceContainerHighest,
+          borderRadius: BorderRadius.circular(12),
+        ),
+        child: Text(
+          '（外部リンク未設定）',
+          style: Theme.of(
+            context,
+          ).textTheme.bodyMedium?.copyWith(color: cs.onSurfaceVariant),
+        ),
+      );
+    }
+
+    return InkWell(
+      onTap: () {
+        // ✅ 本格的なリンク起動は url_launcher 等に寄せる想定。
+        // ここでは「表示されること」を優先して UI に出す。
+      },
+      child: Container(
+        width: double.infinity,
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+        decoration: BoxDecoration(
+          color: cs.surfaceContainerHighest,
+          borderRadius: BorderRadius.circular(12),
+        ),
+        child: Row(
+          children: [
+            Icon(Icons.link, size: 18, color: cs.onSurfaceVariant),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Text(
+                url.trim(),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: Theme.of(
+                  context,
+                ).textTheme.bodyMedium?.copyWith(color: cs.onSurfaceVariant),
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }

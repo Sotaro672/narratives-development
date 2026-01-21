@@ -18,6 +18,12 @@ import 'footer_buttons.dart';
 // ✅ Cart (Pattern A stats): use_cart controller/result
 import 'package:mall/features/cart/presentation/hook/use_cart.dart';
 
+// ✅ Avatar API client (absolute schema)
+import 'package:mall/features/avatar/infrastructure/avatar_api_client.dart';
+
+// ✅ MeAvatar model (now carries avatar patch fields)
+import 'package:mall/features/avatar/presentation/model/me_avatar.dart';
+
 /// Minimal footer widget (layout primitive).
 class AppFooter extends StatelessWidget {
   const AppFooter({
@@ -211,7 +217,7 @@ class _SignedInFooterState extends State<SignedInFooter> {
   @override
   Widget build(BuildContext context) {
     return StreamBuilder<User?>(
-      // ✅ photoURL/displayName 更新も拾う
+      // ✅ auth state だけを見る（avatarIcon は backend の正規キーを参照する）
       stream: FirebaseAuth.instance.userChanges(),
       builder: (context, snap) {
         final user = FirebaseAuth.instance.currentUser ?? snap.data;
@@ -232,123 +238,151 @@ class _SignedInFooterState extends State<SignedInFooter> {
         // ✅ Pattern B: 戻り先は store に保持（URLへは出さない）
         final returnTo = _currentLocationForReturnTo(context);
 
-        return Material(
-          color: Theme.of(context).cardColor,
-          elevation: 0,
-          child: SafeArea(
-            top: false,
-            child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 10),
-              child: Row(
-                children: [
-                  // ✅ Shop (Home)
-                  _FooterItem(
-                    icon: Icons.storefront_outlined,
-                    onTap: () {
-                      // Home は戻り先にする必要は基本無いが、念のため現在地は保持しておく
-                      NavStore.I.setReturnTo(returnTo);
-                      context.go(AppRoutePath.home);
-                    },
+        // ✅ Absolute schema: /mall/me/avatar は MeAvatar(=patch全体) を返す前提
+        final avatarProfileFuture = Future<MeAvatar?>.microtask(() async {
+          final api = AvatarApiClient();
+          try {
+            return await api.fetchMyAvatarProfile(); // => MeAvatar?
+          } finally {
+            api.dispose();
+          }
+        });
+
+        return FutureBuilder<MeAvatar?>(
+          future: avatarProfileFuture,
+          builder: (context, profileSnap) {
+            final avatarIcon = profileSnap.data?.avatarIcon;
+
+            return Material(
+              color: Theme.of(context).cardColor,
+              elevation: 0,
+              child: SafeArea(
+                top: false,
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 18,
+                    vertical: 10,
                   ),
-                  const SizedBox(width: 8),
+                  child: Row(
+                    children: [
+                      // ✅ Shop (Home)
+                      _FooterItem(
+                        icon: Icons.storefront_outlined,
+                        onTap: () {
+                          // Home は戻り先にする必要は基本無いが、念のため現在地は保持しておく
+                          NavStore.I.setReturnTo(returnTo);
+                          context.go(AppRoutePath.home);
+                        },
+                      ),
+                      const SizedBox(width: 8),
 
-                  // ✅ 中央：
-                  // - catalog: カートに入れる
-                  // - cart: 購入する（paymentへ）※ cart=0 のときは押下不可
-                  // - payment: 支払を確定する
-                  // - other: Scan（スキャンしたURLへ遷移）
-                  Expanded(
-                    child: Center(
-                      child: isCatalog
-                          ? ValueListenableBuilder<CatalogSelection>(
-                              valueListenable: CatalogSelectionStore.notifier,
-                              builder: (context, sel, _) {
-                                final sameList =
-                                    sel.listId.trim() == listId.trim();
+                      // ✅ 中央：
+                      // - catalog: カートに入れる
+                      // - cart: 購入する（paymentへ）※ cart=0 のときは押下不可
+                      // - payment: 支払を確定する
+                      // - other: Scan（スキャンしたURLへ遷移）
+                      Expanded(
+                        child: Center(
+                          child: isCatalog
+                              ? ValueListenableBuilder<CatalogSelection>(
+                                  valueListenable:
+                                      CatalogSelectionStore.notifier,
+                                  builder: (context, sel, _) {
+                                    final sameList =
+                                        sel.listId.trim() == listId.trim();
 
-                                final mid = (sel.modelId ?? '').trim();
-                                final stock = sel.stockCount ?? 0;
+                                    final mid = (sel.modelId ?? '').trim();
+                                    final stock = sel.stockCount ?? 0;
 
-                                // ✅ backend が必須にした inventoryId/listId を揃える
-                                final invId = sel.inventoryId.trim();
+                                    // ✅ backend が必須にした inventoryId/listId を揃える
+                                    final invId = sel.inventoryId.trim();
 
-                                // ✅ 在庫 0 は押下不可 + 必須IDが揃っていること
-                                final enabled =
-                                    sameList &&
-                                    invId.isNotEmpty &&
-                                    listId.trim().isNotEmpty &&
-                                    mid.isNotEmpty &&
-                                    stock > 0;
+                                    // ✅ 在庫 0 は押下不可 + 必須IDが揃っていること
+                                    final enabled =
+                                        sameList &&
+                                        invId.isNotEmpty &&
+                                        listId.trim().isNotEmpty &&
+                                        mid.isNotEmpty &&
+                                        stock > 0;
 
-                                return AddToCartButton(
-                                  inventoryId: invId,
-                                  listId: listId,
+                                    return AddToCartButton(
+                                      inventoryId: invId,
+                                      listId: listId,
+                                      avatarId: avatarId,
+                                      enabled: enabled,
+                                      modelId: sel.modelId,
+                                      stockCount: sel.stockCount,
+                                    );
+                                  },
+                                )
+                              : isCart
+                              // ✅ /cart のときだけ cart を参照して enabled を決める
+                              ? _CartAwareGoToPaymentButton(
                                   avatarId: avatarId,
-                                  enabled: enabled,
-                                  modelId: sel.modelId,
-                                  stockCount: sel.stockCount,
-                                );
-                              },
-                            )
-                          : isCart
-                          // ✅ /cart のときだけ cart を参照して enabled を決める
-                          ? _CartAwareGoToPaymentButton(
-                              avatarId: avatarId,
-                              controller: _cartUc,
-                            )
-                          : isPayment
-                          ? ConfirmPaymentButton(
-                              avatarId: avatarId,
-                              enabled: avatarId.isNotEmpty,
-                            )
-                          : _FooterItem(
-                              icon: Icons.qr_code_scanner,
-                              onTap: () async {
-                                final code = await showModalBottomSheet<String>(
-                                  context: context,
-                                  isScrollControlled: true,
-                                  backgroundColor: Colors.black,
-                                  builder: (_) => const _QrScanSheet(),
-                                );
+                                  controller: _cartUc,
+                                )
+                              : isPayment
+                              ? ConfirmPaymentButton(
+                                  avatarId: avatarId,
+                                  enabled: avatarId.isNotEmpty,
+                                )
+                              : _FooterItem(
+                                  icon: Icons.qr_code_scanner,
+                                  onTap: () async {
+                                    final code =
+                                        await showModalBottomSheet<String>(
+                                          context: context,
+                                          isScrollControlled: true,
+                                          backgroundColor: Colors.black,
+                                          builder: (_) => const _QrScanSheet(),
+                                        );
 
-                                if (!context.mounted) return;
-                                if (code == null || code.trim().isEmpty) {
-                                  return;
-                                }
+                                    if (!context.mounted) return;
+                                    if (code == null || code.trim().isEmpty) {
+                                      return;
+                                    }
 
-                                final target = _normalizeScannedToAppUri(code);
-                                if (target == null) {
-                                  ScaffoldMessenger.of(context).showSnackBar(
-                                    const SnackBar(
-                                      content: Text('スキャン結果が無効です（遷移できません）'),
-                                    ),
-                                  );
-                                  return;
-                                }
+                                    final target = _normalizeScannedToAppUri(
+                                      code,
+                                    );
+                                    if (target == null) {
+                                      ScaffoldMessenger.of(
+                                        context,
+                                      ).showSnackBar(
+                                        const SnackBar(
+                                          content: Text('スキャン結果が無効です（遷移できません）'),
+                                        ),
+                                      );
+                                      return;
+                                    }
 
-                                // ✅ Pattern B: 戻り先は store へ
-                                NavStore.I.setReturnTo(returnTo);
+                                    // ✅ Pattern B: 戻り先は store へ
+                                    NavStore.I.setReturnTo(returnTo);
 
-                                context.go(target.toString());
-                              },
-                            ),
-                    ),
+                                    context.go(target.toString());
+                                  },
+                                ),
+                        ),
+                      ),
+
+                      const SizedBox(width: 8),
+
+                      // ✅ Avatar: /avatar へ（query なし）
+                      _AvatarIconButton(
+                        avatarIcon: avatarIcon,
+                        fallbackText:
+                            (user.displayName ?? user.email ?? user.uid).trim(),
+                        onTap: () {
+                          NavStore.I.setReturnTo(returnTo);
+                          context.go(AppRoutePath.avatar);
+                        },
+                      ),
+                    ],
                   ),
-
-                  const SizedBox(width: 8),
-
-                  // ✅ Avatar: /avatar へ（query なし）
-                  _AvatarIconButton(
-                    user: user,
-                    onTap: () {
-                      NavStore.I.setReturnTo(returnTo);
-                      context.go(AppRoutePath.avatar);
-                    },
-                  ),
-                ],
+                ),
               ),
-            ),
-          ),
+            );
+          },
         );
       },
     );
@@ -379,7 +413,6 @@ class _CartAwareGoToPaymentButton extends StatelessWidget {
     return FutureBuilder<CartDTO>(
       future: uc.future,
       builder: (context, snap) {
-        // snap.data は未使用でも良いが、Future の完了で再描画させるために FutureBuilder を使う
         final _ = snap.data; // ignore: unused_local_variable
 
         // Pattern A: buildResult() から派生値を取り出して押下可否を決める
@@ -414,15 +447,28 @@ class _FooterItem extends StatelessWidget {
 }
 
 class _AvatarIconButton extends StatelessWidget {
-  const _AvatarIconButton({required this.user, required this.onTap});
+  const _AvatarIconButton({
+    required this.avatarIcon,
+    required this.fallbackText,
+    required this.onTap,
+  });
 
-  final User user;
+  /// ✅ absolute schema: avatarIcon
+  final String? avatarIcon;
+
+  final String fallbackText;
   final VoidCallback onTap;
+
+  bool _isHttpUrl(String? v) {
+    final s = (v ?? '').trim();
+    if (s.isEmpty) return false;
+    return s.startsWith('http://') || s.startsWith('https://');
+  }
 
   @override
   Widget build(BuildContext context) {
-    final photo = (user.photoURL ?? '').trim();
-    final fallback = (user.displayName ?? user.email ?? user.uid).trim();
+    final icon = (avatarIcon ?? '').trim();
+    final fallback = fallbackText.trim();
     final initial = fallback.isNotEmpty ? fallback[0].toUpperCase() : '?';
 
     return InkWell(
@@ -432,8 +478,9 @@ class _AvatarIconButton extends StatelessWidget {
         padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
         child: CircleAvatar(
           radius: 14,
-          backgroundImage: photo.isNotEmpty ? NetworkImage(photo) : null,
-          child: photo.isEmpty
+          // ✅ NetworkImage は http(s) のみ（gs:// や相対pathは表示不可なので fallback）
+          backgroundImage: _isHttpUrl(icon) ? NetworkImage(icon) : null,
+          child: !_isHttpUrl(icon)
               ? Text(initial, style: const TextStyle(fontSize: 12))
               : null,
         ),

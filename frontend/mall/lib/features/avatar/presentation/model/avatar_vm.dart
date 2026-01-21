@@ -40,8 +40,8 @@ class AvatarVm {
     required this.counts,
     required this.tab,
     required this.setTab,
-    required this.photoUrl,
-    required this.bio,
+    required this.avatarIcon,
+    required this.profile,
     required this.goToAvatarEdit,
   });
 
@@ -74,8 +74,14 @@ class AvatarVm {
   final ProfileTab tab;
   final void Function(ProfileTab next) setTab;
 
-  final String photoUrl;
-  final String bio;
+  /// ✅ Backend/Firestore 正規キー: avatarIcon
+  /// - 例: "https://..." / "gs://bucket/..." / "avatars/..."
+  /// - 未設定なら null
+  final String? avatarIcon;
+
+  /// ✅ Backend/Firestore 正規キー: profile
+  /// - 未設定なら null
+  final String? profile;
 
   final VoidCallback goToAvatarEdit;
 }

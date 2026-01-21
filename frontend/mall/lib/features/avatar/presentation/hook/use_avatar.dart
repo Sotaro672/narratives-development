@@ -23,8 +23,6 @@ import 'package:mall/app/routing/navigation.dart';
 /// - URL から avatarId を読まない / URL に avatarId を入れない
 /// - 戻り先制御は NavStore 側（router.dart / 各ページのUI側）で行う
 AvatarVm useAvatarVm(BuildContext context) {
-  String s(String? v) => (v ?? '').trim();
-
   // ---------------------------
   // Repository / Client lifecycle
   // ---------------------------
@@ -32,9 +30,6 @@ AvatarVm useAvatarVm(BuildContext context) {
   useEffect(() {
     return () => walletRepo.dispose();
   }, [walletRepo]);
-
-  // ❌ const AvatarApiClient() は不可（MallAuthedApi を内部で new するため）
-  final apiClient = useMemoized(() => AvatarApiClient(), const []);
 
   // ---------------------------
   // Auth stream
@@ -45,6 +40,12 @@ AvatarVm useAvatarVm(BuildContext context) {
   );
   final user = FirebaseAuth.instance.currentUser ?? authSnap.data;
 
+  // ✅ user が変わったら apiClient を作り直す（内部で token を掴む/キャッシュする実装でも安全に）
+  final apiClient = useMemoized(() => AvatarApiClient(), [user?.uid]);
+  useEffect(() {
+    return () => apiClient.dispose();
+  }, [apiClient]);
+
   // ---------------------------
   // Tab state
   // ---------------------------
@@ -53,28 +54,41 @@ AvatarVm useAvatarVm(BuildContext context) {
   // ---------------------------
   // Data loads
   // ---------------------------
-  final meAvatarFuture = useMemoized(() => apiClient.fetchMeAvatar(), const []);
+  // ✅ /mall/me/avatar（MeAvatar=patch全体）
+  // ✅ user が変わったら取り直す
+  final meAvatarFuture = useMemoized(() async {
+    // サインアウト直後などで user が null のときは叩かない（無駄なI/O/不整合回避）
+    if (user == null) return null;
+    // ✅ /mall/me/avatar は「avatar patch 全体」を返す前提に統一
+    return apiClient.fetchMyAvatarProfile();
+  }, [apiClient, user?.uid]);
   final meAvatarSnap = useFuture<MeAvatar?>(meAvatarFuture);
 
   // ✅ Wallet は「自分のウォレット」をサーバ側で解決する前提
   // - URL avatarId は使わない
   // - meAvatar が取れない/空のときは wallet を読まない（無駄なI/O回避）
+  //
+  // 重要: meAvatarFuture を await する形だと、初回 Future 固定の影響を受けやすい。
+  //       meAvatarSnap.data に基づいて walletFuture を作り直す。
+  final meAvatarId = (meAvatarSnap.data?.avatarId ?? '').trim();
+
   final walletFuture = useMemoized(() async {
-    final me = await meAvatarFuture;
-    if (me == null) return null;
-    if (me.avatarId.trim().isEmpty) return null;
+    if (user == null) return null;
+    if (meAvatarId.isEmpty) return null;
 
     // ✅ sync → fetch
     return walletRepo.syncAndFetchMeWallet();
-  }, [meAvatarFuture, walletRepo]);
+  }, [walletRepo, user?.uid, meAvatarId]);
   final walletSnap = useFuture<WalletDTO?>(walletFuture);
 
   // ---------------------------
   // ✅ Resolve tokens by mintAddress
   // ---------------------------
+  // walletSnap.data を基準に作り直す（Future の固定参照を避ける）
+  final tokensFromWallet = walletSnap.data?.tokens ?? const <String>[];
+
   final resolveFuture = useMemoized(() async {
-    final w = await walletFuture;
-    final mints = (w?.tokens ?? const <String>[])
+    final mints = tokensFromWallet
         .map((e) => e.trim())
         .where((e) => e.isNotEmpty)
         .toList();
@@ -105,7 +119,7 @@ AvatarVm useAvatarVm(BuildContext context) {
       out[uniq[i]] = dto;
     }
     return out;
-  }, [walletFuture, walletRepo]);
+  }, [walletRepo, user?.uid, tokensFromWallet.join(',')]); // tokens の変化で再計算
   final resolvedSnap = useFuture<Map<String, TokenResolveDTO>>(resolveFuture);
 
   // ---------------------------
@@ -139,7 +153,7 @@ AvatarVm useAvatarVm(BuildContext context) {
       out[entries[i].key] = dto; // key = mintAddress
     }
     return out;
-  }, [resolveFuture, walletRepo]);
+  }, [walletRepo, user?.uid, resolveFuture]);
   final metadataSnap = useFuture<Map<String, TokenMetadataDTO>>(metadataFuture);
 
   // ---------------------------
@@ -150,7 +164,7 @@ AvatarVm useAvatarVm(BuildContext context) {
   // ---------------------------
   // View-derived fields
   // ---------------------------
-  final tokens = walletSnap.data?.tokens ?? const <String>[];
+  final tokens = tokensFromWallet;
 
   final resolvedTokens = resolvedSnap.data ?? const <String, TokenResolveDTO>{};
   final tokenMetadatas =
@@ -182,13 +196,10 @@ AvatarVm useAvatarVm(BuildContext context) {
     tokenCount: tokens.length,
   );
 
-  final photoUrl = user == null ? '' : s(user.photoURL);
-
-  String profileBioFor(User u) {
-    return '（プロフィール未設定）';
-  }
-
-  final bio = user == null ? '（プロフィール未設定）' : profileBioFor(user);
+  // ✅ 絶対正スキーマ: avatarIcon / profile / externalLink
+  final me = meAvatarSnap.data;
+  final avatarIcon = me?.avatarIcon;
+  final profile = me?.profile;
 
   return AvatarVm(
     authSnap: authSnap,
@@ -203,8 +214,8 @@ AvatarVm useAvatarVm(BuildContext context) {
     counts: counts,
     tab: tabState.value,
     setTab: (next) => tabState.value = next,
-    photoUrl: photoUrl,
-    bio: bio,
+    avatarIcon: avatarIcon,
+    profile: profile,
     goToAvatarEdit: goToAvatarEditHandler,
   );
 }

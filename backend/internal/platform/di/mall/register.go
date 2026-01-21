@@ -8,12 +8,14 @@ import (
 	"net/http"
 	"os"
 	"strings"
+	"time"
 
 	mallhttp "narratives/internal/adapters/in/http/mall"
 	mallhandler "narratives/internal/adapters/in/http/mall/handler"
 	mallwebhook "narratives/internal/adapters/in/http/mall/webhook"
 	"narratives/internal/adapters/in/http/middleware"
 	"narratives/internal/application/usecase"
+	avatardom "narratives/internal/domain/avatar"
 )
 
 // notImplemented returns a non-nil handler (so deps are never nil) for endpoints
@@ -122,9 +124,94 @@ type meAvatarExtendedRepo interface {
 	ResolveAvatarIDByUID(ctx context.Context, uid string) (string, error)
 }
 
+// Avatar getter (AvatarUsecase has GetByID; we keep it as an interface to avoid tight coupling)
+type avatarGetter interface {
+	GetByID(ctx context.Context, id string) (avatardom.Avatar, error)
+}
+
 // adapter that always satisfies mallhandler.MeAvatarService expected by NewMeAvatarHandler
 type meAvatarServiceAdapter struct {
 	extended meAvatarExtendedRepo
+	avatarUC avatarGetter // optional; if set, we can populate avatar fields into patch
+}
+
+func trimPtr(p *string) *string {
+	if p == nil {
+		return nil
+	}
+	s := strings.TrimSpace(*p)
+	if s == "" {
+		return nil
+	}
+	return &s
+}
+
+func strPtrTrim(s string) *string {
+	t := strings.TrimSpace(s)
+	if t == "" {
+		return nil
+	}
+	return &t
+}
+
+// ResolveAvatarPatchByUID returns avatarId + AvatarPatch (full patch payload for frontend).
+// - First resolve (avatarId, walletAddress) via extended repo
+// - Then (best-effort) fetch avatar entity to fill avatarName/avatarIcon/profile/externalLink/userId/deletedAt
+func (a meAvatarServiceAdapter) ResolveAvatarPatchByUID(ctx context.Context, uid string) (string, avatardom.AvatarPatch, error) {
+	if a.extended == nil {
+		return "", avatardom.AvatarPatch{}, usecase.ErrTransferNotConfigured
+	}
+
+	avatarId, walletAddress, err := a.extended.ResolveAvatarByUID(ctx, uid)
+	if err != nil {
+		return "", avatardom.AvatarPatch{}, err
+	}
+
+	avatarId = strings.TrimSpace(avatarId)
+	walletAddress = strings.TrimSpace(walletAddress)
+
+	// Base patch (at minimum walletAddress is required by current frontend policy)
+	base := avatardom.AvatarPatch{
+		UserID:        "", // filled if avatarUC is available
+		AvatarName:    nil,
+		AvatarIcon:    nil,
+		WalletAddress: strPtrTrim(walletAddress),
+		Profile:       nil,
+		ExternalLink:  nil,
+		DeletedAt:     nil,
+	}
+
+	// If we cannot fetch avatar, still return base patch.
+	if a.avatarUC == nil || avatarId == "" {
+		return avatarId, base, nil
+	}
+
+	av, gerr := a.avatarUC.GetByID(ctx, avatarId)
+	if gerr != nil {
+		// best-effort: still return base patch + avatarId
+		return avatarId, base, nil
+	}
+
+	// Populate patch from avatar entity
+	patch := avatardom.AvatarPatch{
+		UserID:        strings.TrimSpace(av.UserID),
+		AvatarName:    strPtrTrim(av.AvatarName),
+		AvatarIcon:    trimPtr(av.AvatarIcon),
+		WalletAddress: trimPtr(av.WalletAddress),
+		Profile:       trimPtr(av.Profile),
+		ExternalLink:  trimPtr(av.ExternalLink),
+		DeletedAt:     av.DeletedAt,
+	}
+
+	// Ensure walletAddress is at least the resolved one (server truth)
+	if patch.WalletAddress == nil {
+		patch.WalletAddress = strPtrTrim(walletAddress)
+	}
+
+	// Normalize
+	patch.Sanitize()
+
+	return avatarId, patch, nil
 }
 
 // ResolveAvatarByUID returns avatarId + walletAddress.
@@ -290,15 +377,21 @@ func Register(mux *http.ServeMux, cont *Container) {
 		walletH = mallhandler.NewMallWalletHandler(cont.WalletUC)
 	}
 
-	// /mall/me/avatar (uid -> avatarId + walletAddress)
+	// /mall/me/avatar (uid -> avatarId + avatar patch)
 	if cont.MeAvatarRepo != nil {
 		var ext meAvatarExtendedRepo
 		if v, ok := any(cont.MeAvatarRepo).(meAvatarExtendedRepo); ok {
 			ext = v
 		}
 		if ext != nil {
+			var getter avatarGetter
+			if cont.AvatarUC != nil {
+				getter = cont.AvatarUC
+			}
+
 			meAvatarH = mallhandler.NewMeAvatarHandler(meAvatarServiceAdapter{
 				extended: ext,
+				avatarUC: getter,
 			})
 		} else {
 			log.Printf("[mall.register] WARN: cont.MeAvatarRepo does not implement meAvatarExtendedRepo (MeAvatar will return 501)")
@@ -454,3 +547,8 @@ func Register(mux *http.ServeMux, cont *Container) {
 		log.Printf("[boot] mall stripe webhook registered path=%s", StripeWebhookPath)
 	}
 }
+
+// NOTE:
+// This file already imports time; keep it even if not referenced elsewhere.
+// Some builds may trim it if unused in future edits.
+var _ = time.RFC3339
