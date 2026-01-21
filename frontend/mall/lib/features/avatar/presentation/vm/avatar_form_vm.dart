@@ -1,8 +1,8 @@
 //frontend\mall\lib\features\avatar\presentation\vm\avatar_form_vm.dart
 import 'dart:async';
+import 'dart:typed_data';
 
 import 'package:file_picker/file_picker.dart';
-import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
 import '../../infrastructure/avatar_api_client.dart';
@@ -11,9 +11,8 @@ enum AvatarFormMode { create, edit }
 
 class AvatarFormVm extends ChangeNotifier {
   AvatarFormVm({required this.mode, AvatarApiClient? apiClient})
-    : _apiClient = apiClient ?? const AvatarApiClient() {
-    // ここで初期値を入れても良いが、edit の初期ロードがあるため loadInitial を用意
-  }
+    // ❌ const AvatarApiClient() は不可（MallAuthedApi 統一後）
+    : _apiClient = apiClient ?? AvatarApiClient();
 
   final AvatarFormMode mode;
   final AvatarApiClient _apiClient;
@@ -29,6 +28,9 @@ class AvatarFormVm extends ChangeNotifier {
 
   // ui state
   bool saving = false;
+  bool loadingInitial = false;
+  bool _initialLoaded = false;
+
   String? msg;
   bool isSuccessMessage = false;
 
@@ -40,21 +42,45 @@ class AvatarFormVm extends ChangeNotifier {
   String _s(String? v) => (v ?? '').trim();
 
   /// edit の場合に「既存情報をフォームへ反映」する。
-  /// 現状の API 仕様がこのスレッドでは不明なため、
-  /// まずは fetchMeAvatar() が成功することだけ確認し、空なら no-op にしています。
+  ///
+  /// - 二重ロードを防止（_initialLoaded）
+  /// - 取得できたフィールドだけをプレフィル（空文字なら上書きしない）
+  /// - API が avatarId しか返さない場合でも安全に動作（上書きしない）
   Future<void> loadInitialIfNeeded() async {
     if (mode != AvatarFormMode.edit) return;
+    if (_initialLoaded) return;
+
+    loadingInitial = true;
+    msg = null;
+    isSuccessMessage = false;
+    notifyListeners();
 
     try {
-      // NOTE: ここでプロフィール詳細（name/bio/link/iconUrl 等）を取れるAPIがあるなら置換してください。
-      // 現状は me avatar の存在チェックのみ。
-      final me = await _apiClient.fetchMeAvatar();
-      if (me == null || _s(me.avatarId).isEmpty) {
-        // avatar が無い -> edit できない。ページ側で create へ誘導しても良い
+      // ✅ edit プレフィル用 API（なければ avatarId だけ返ってきても OK）
+      final profile = await _apiClient.fetchMyAvatarProfile();
+      if (profile == null || profile.avatarId.trim().isEmpty) {
+        // avatar が無い -> edit できない（ページ側で create へ誘導しても良い）
         return;
       }
+
+      // ✅ 空文字は上書きしない（API未整備でも既存入力を壊さない）
+      if (profile.name.trim().isNotEmpty) {
+        nameCtrl.text = profile.name.trim();
+      }
+      if (profile.profile.trim().isNotEmpty) {
+        profileCtrl.text = profile.profile.trim();
+      }
+      if (profile.link.trim().isNotEmpty) {
+        linkCtrl.text = profile.link.trim();
+      }
+
+      // iconUrl は bytes で扱っているため、ここでは未反映（必要なら別途実装）
+      _initialLoaded = true;
     } catch (_) {
       // fail-open
+    } finally {
+      loadingInitial = false;
+      notifyListeners();
     }
   }
 
@@ -92,26 +118,35 @@ class AvatarFormVm extends ChangeNotifier {
   }
 
   /// 保存（create/edit 共通）
+  ///
   /// ここでは「API 未確定」なため、I/O 部分は差し替えやすい骨格のみ実装。
   Future<bool> save() async {
     if (!canSave) return false;
 
     saving = true;
     msg = null;
+    isSuccessMessage = false;
     notifyListeners();
 
     try {
+      final name = nameCtrl.text.trim();
+      final profile = profileCtrl.text.trim();
+      final link = linkCtrl.text.trim();
+
+      // TODO: ここで create / update API を呼ぶ
       // 例:
       // if (mode == AvatarFormMode.create) {
-      //   await _apiClient.createAvatar(...);
+      //   await _apiClient.createAvatar(name: name, profile: profile, link: link, ...);
       // } else {
-      //   await _apiClient.updateAvatar(...);
+      //   await _apiClient.updateAvatar(name: name, profile: profile, link: link, ...);
       // }
-      //
-      // iconBytes のアップロードは次ステップで実装予定なら、ここでは保持だけでもOK
 
       // 暫定: 成功扱い
       await Future<void>.delayed(const Duration(milliseconds: 250));
+
+      // 近い将来の API 呼び出し用（未使用lint回避）
+      // ignore: unused_local_variable
+      final _ = (name, profile, link);
 
       isSuccessMessage = true;
       msg = mode == AvatarFormMode.create ? 'アバターを保存しました。' : 'アバターを更新しました。';

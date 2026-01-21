@@ -346,6 +346,30 @@ Future<String?> appRedirect(BuildContext context, GoRouterState state) async {
 }
 
 /// ------------------------------------------------------------
+/// ✅ Pattern B: 画面遷移ヘルパ
+///
+/// - URL query に `from` を載せない
+/// - 代わりに NavStore に "returnTo" を保存してから遷移する
+///
+/// これにより、feature 側（use_avatar.dart 等）は
+/// `goToAvatarEdit(context)` のみ呼べばよくなる。
+void goToAvatarEdit(BuildContext context) {
+  // 現在地（query含む）を returnTo として保存（URLには付けない）
+  final current = GoRouterState.of(context).uri.toString();
+  NavStore.I.setReturnTo(current);
+
+  context.go(AppRoutePath.avatarEdit);
+}
+
+/// create へ遷移（必要なら使う）
+void goToAvatarCreate(BuildContext context) {
+  final current = GoRouterState.of(context).uri.toString();
+  NavStore.I.setReturnTo(current);
+
+  context.go(AppRoutePath.avatarCreate);
+}
+
+/// ------------------------------------------------------------
 /// Helpers
 String _joinPaths(String a, String b) {
   final aa = a.trim();

@@ -1,7 +1,6 @@
 //frontend\mall\lib\features\avatar\presentation\component\avatar_form.dart
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
-
 import '../vm/avatar_form_vm.dart';
 
 class AvatarForm extends StatelessWidget {
@@ -13,18 +12,24 @@ class AvatarForm extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final saving = vm.saving;
+    final loadingInitial = vm.loadingInitial;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
+        if (loadingInitial) ...[
+          const Center(child: CircularProgressIndicator()),
+          const SizedBox(height: 16),
+        ],
+
         // ✅ 「アバター情報を登録してください」のカードは削除
         Text('アバターアイコン画像', style: Theme.of(context).textTheme.titleMedium),
         const SizedBox(height: 8),
         _IconPickerCard(
           bytes: vm.iconBytes,
           fileName: vm.iconFileName,
-          onPick: saving ? null : vm.pickIcon,
-          onClear: saving ? null : vm.clearIcon,
+          onPick: (saving || loadingInitial) ? null : vm.pickIcon,
+          onClear: (saving || loadingInitial) ? null : vm.clearIcon,
         ),
         const SizedBox(height: 16),
 
@@ -33,6 +38,7 @@ class AvatarForm extends StatelessWidget {
         TextField(
           controller: vm.nameCtrl,
           textInputAction: TextInputAction.next,
+          enabled: !(saving || loadingInitial),
           decoration: const InputDecoration(
             labelText: 'アバター名',
             border: OutlineInputBorder(),
@@ -47,6 +53,7 @@ class AvatarForm extends StatelessWidget {
         TextField(
           controller: vm.profileCtrl,
           maxLines: 4,
+          enabled: !(saving || loadingInitial),
           decoration: const InputDecoration(
             labelText: 'プロフィール',
             border: OutlineInputBorder(),
@@ -60,6 +67,7 @@ class AvatarForm extends StatelessWidget {
         TextField(
           controller: vm.linkCtrl,
           keyboardType: TextInputType.url,
+          enabled: !(saving || loadingInitial),
           decoration: const InputDecoration(
             labelText: '外部リンク（任意）',
             border: OutlineInputBorder(),
@@ -69,8 +77,10 @@ class AvatarForm extends StatelessWidget {
         const SizedBox(height: 20),
 
         ElevatedButton(
-          onPressed: vm.canSave ? onSave : null,
-          child: vm.saving
+          onPressed: (saving || loadingInitial)
+              ? null
+              : (vm.canSave ? onSave : null),
+          child: saving
               ? const SizedBox(
                   width: 18,
                   height: 18,

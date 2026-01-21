@@ -1,42 +1,56 @@
 // frontend\mall\lib\features\avatar\infrastructure\avatar_api_client.dart
 import 'dart:convert';
 
-import 'package:firebase_auth/firebase_auth.dart';
 import 'package:http/http.dart' as http;
 
-import '../../../app/config/api_base.dart';
 import '../presentation/model/me_avatar.dart';
+import 'api.dart';
+
+/// ✅ Edit 画面プレフィル用 DTO
+class MeAvatarProfileDto {
+  const MeAvatarProfileDto({
+    required this.avatarId,
+    required this.name,
+    required this.profile,
+    required this.link,
+    required this.iconUrl,
+  });
+
+  final String avatarId;
+  final String name;
+  final String profile;
+  final String link;
+  final String iconUrl;
+
+  static String _s(Object? v) => (v ?? '').toString().trim();
+
+  factory MeAvatarProfileDto.fromJson(Map<String, dynamic> j) {
+    // server のキー揺れも吸収
+    String pick(List<String> keys) {
+      for (final k in keys) {
+        if (!j.containsKey(k)) continue;
+        final v = _s(j[k]);
+        if (v.isNotEmpty) return v;
+      }
+      return '';
+    }
+
+    return MeAvatarProfileDto(
+      avatarId: pick(const ['avatarId', 'AvatarID', 'AvatarId', 'id', 'ID']),
+      name: pick(const ['name', 'displayName', 'avatarName', 'AvatarName']),
+      profile: pick(const ['profile', 'bio', 'description', 'Profile', 'Bio']),
+      link: pick(const ['link', 'url', 'externalLink', 'Link', 'URL']),
+      iconUrl: pick(const ['iconUrl', 'iconURL', 'avatarIconUrl', 'photoUrl']),
+    );
+  }
+}
 
 class AvatarApiClient {
-  const AvatarApiClient({http.Client? client}) : _client = client;
+  AvatarApiClient({http.Client? client}) : _api = MallAuthedApi(client: client);
 
-  final http.Client? _client;
+  final MallAuthedApi _api;
 
-  http.Client get _http => _client ?? http.Client();
-
-  String _s(String? v) => (v ?? '').trim();
-
-  String _normalizeBase(String base) {
-    var b = base.trim();
-    while (b.endsWith('/')) {
-      b = b.substring(0, b.length - 1);
-    }
-    return b;
-  }
-
-  Uri _uri(String path, [Map<String, String>? query]) {
-    final base = _normalizeBase(resolveMallApiBase());
-    final p = path.startsWith('/') ? path : '/$path';
-    return Uri.parse('$base$p').replace(queryParameters: query);
-  }
-
-  Future<String?> _getIdToken({bool forceRefresh = false}) async {
-    final u = FirebaseAuth.instance.currentUser;
-    if (u == null) return null;
-    final t = await u.getIdToken(forceRefresh);
-    final token = _s(t?.toString());
-    return token.isEmpty ? null : token;
-  }
+  String _s(Object? v) => (v ?? '').toString().trim();
 
   Map<String, dynamic> _decodeObject(String body) {
     final b = body.trim();
@@ -48,52 +62,42 @@ class AvatarApiClient {
   }
 
   Map<String, dynamic> _unwrapData(Map<String, dynamic> decoded) {
-    final data = decoded['data'];
-    if (data is Map<String, dynamic>) return data;
-    if (data is Map) return Map<String, dynamic>.from(data);
-    return decoded;
+    return _api.unwrapData(decoded);
   }
 
   String _pickString(Map<String, dynamic> j, List<String> keys) {
     for (final k in keys) {
       if (!j.containsKey(k)) continue;
-      final v = _s(j[k]?.toString());
+      final v = _s(j[k]);
       if (v.isNotEmpty) return v;
     }
     return '';
   }
 
-  Future<MeAvatar?> fetchMeAvatar() async {
-    final endpoint = _uri('/mall/me/avatar');
-
-    // 1st attempt (cached token)
-    final token1 = await _getIdToken(forceRefresh: false);
-    final headers1 = <String, String>{'Accept': 'application/json'};
-    if (token1 != null) headers1['Authorization'] = 'Bearer $token1';
-
+  Future<Map<String, dynamic>?> _getAuthedJson(String path) async {
+    final uri = _api.uri(path);
     http.Response res;
     try {
-      res = await _http.get(endpoint, headers: headers1);
+      res = await _api.sendAuthed('GET', uri, jsonBody: null);
     } catch (_) {
       return null;
     }
 
-    // retry once on 401 (force refresh)
-    if (res.statusCode == 401) {
-      final token2 = await _getIdToken(forceRefresh: true);
-      final headers2 = <String, String>{'Accept': 'application/json'};
-      if (token2 != null) headers2['Authorization'] = 'Bearer $token2';
-
-      try {
-        res = await _http.get(endpoint, headers: headers2);
-      } catch (_) {
-        return null;
-      }
-    }
-
+    if (res.statusCode == 404) return null;
     if (res.statusCode < 200 || res.statusCode >= 300) return null;
 
-    final decoded = _unwrapData(_decodeObject(res.body));
+    try {
+      final decoded = _decodeObject(res.body);
+      return _unwrapData(decoded);
+    } catch (_) {
+      return null;
+    }
+  }
+
+  /// ✅ 既存：me avatar（avatarId + walletAddress）
+  Future<MeAvatar?> fetchMeAvatar() async {
+    final decoded = await _getAuthedJson('/mall/me/avatar');
+    if (decoded == null) return null;
 
     // allow multiple shapes: { avatar: {...} } / { me: {...} } / root object
     Map<String, dynamic> root = decoded;
@@ -121,5 +125,36 @@ class AvatarApiClient {
     if (walletAddress.isEmpty) return null;
 
     return MeAvatar(avatarId: avatarId, walletAddress: walletAddress);
+  }
+
+  /// ✅ NEW：edit プレフィル用（name/profile/link/iconUrl を取りたい）
+  ///
+  /// 前提:
+  /// - まず /mall/me/avatar を叩き、レスポンス内に profile 情報があればそれを読む。
+  /// - profile 情報が無ければ、同じデータソースで “追加フィールド” が返るように
+  ///   backend を拡張するのが理想（このメソッドはそのまま使えます）。
+  ///
+  /// NOTE:
+  /// - APIが avatarId しか返さない場合でも、このメソッドは avatarId だけ入った DTO を返すので、
+  ///   VM側で「空なら上書きしない」実装と相性が良いです。
+  Future<MeAvatarProfileDto?> fetchMyAvatarProfile() async {
+    final decoded = await _getAuthedJson('/mall/me/avatar');
+    if (decoded == null) return null;
+
+    // allow multiple shapes: { avatar: {...} } / { me: {...} } / root object
+    Map<String, dynamic> root = decoded;
+    final avatarObj = decoded['avatar'];
+    if (avatarObj is Map) root = Map<String, dynamic>.from(avatarObj);
+    final meObj = decoded['me'];
+    if (meObj is Map) root = Map<String, dynamic>.from(meObj);
+
+    final dto = MeAvatarProfileDto.fromJson(root);
+    if (dto.avatarId.trim().isEmpty) return null;
+
+    return dto;
+  }
+
+  void dispose() {
+    _api.dispose();
   }
 }

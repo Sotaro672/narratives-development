@@ -13,8 +13,10 @@ import 'package:mall/features/wallet/infrastructure/wallet_dto.dart';
 
 import 'package:mall/features/avatar/infrastructure/avatar_api_client.dart';
 import 'package:mall/features/avatar/presentation/model/avatar_vm.dart';
-import 'package:mall/features/avatar/presentation/navigation/avatar_navigation.dart';
 import 'package:mall/features/avatar/presentation/model/me_avatar.dart';
+
+// ✅ Pattern B: navigation helpers are centralized here
+import 'package:mall/app/routing/navigation.dart';
 
 /// Pattern B:
 /// - URL の `from` を廃止
@@ -31,7 +33,8 @@ AvatarVm useAvatarVm(BuildContext context) {
     return () => walletRepo.dispose();
   }, [walletRepo]);
 
-  final apiClient = useMemoized(() => const AvatarApiClient(), const []);
+  // ❌ const AvatarApiClient() は不可（MallAuthedApi を内部で new するため）
+  final apiClient = useMemoized(() => AvatarApiClient(), const []);
 
   // ---------------------------
   // Auth stream
