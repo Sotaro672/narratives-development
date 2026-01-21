@@ -2,6 +2,8 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../../../app/routing/routes.dart';
+import '../../../../app/shell/presentation/components/app_fixed_extent_grid.dart';
 import '../../infrastructure/list_repository_http.dart';
 
 class HomePage extends StatefulWidget {
@@ -17,6 +19,11 @@ class _HomePageState extends State<HomePage> {
   late final ListRepositoryHttp _repo;
   late Future<MallListIndexResponse> _future;
 
+  // ✅ route change hook: listen to routeInformationProvider (ChangeNotifier)
+  GoRouteInformationProvider? _rip;
+  String? _lastPath;
+  bool _routeReloadGuard = false;
+
   @override
   void initState() {
     super.initState();
@@ -25,7 +32,55 @@ class _HomePageState extends State<HomePage> {
   }
 
   @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+
+    final router = GoRouter.of(context);
+    final rip = router.routeInformationProvider;
+
+    if (_rip != rip) {
+      _rip?.removeListener(_onRouteChanged);
+      _rip = rip;
+      _lastPath = rip.value.uri.path;
+      _rip!.addListener(_onRouteChanged);
+    }
+  }
+
+  void _onRouteChanged() {
+    final rip = _rip;
+    if (rip == null) {
+      return;
+    }
+
+    final path = rip.value.uri.path;
+    final prev = _lastPath;
+    _lastPath = path;
+
+    final isHome = path == AppRoutePath.home;
+    final wasHome = prev == AppRoutePath.home;
+
+    if (isHome && !wasHome) {
+      if (_routeReloadGuard) {
+        return;
+      }
+      _routeReloadGuard = true;
+
+      Future.microtask(() async {
+        if (!mounted) {
+          return;
+        }
+        try {
+          await _reload();
+        } finally {
+          _routeReloadGuard = false;
+        }
+      });
+    }
+  }
+
+  @override
   void dispose() {
+    _rip?.removeListener(_onRouteChanged);
     _repo.dispose();
     super.dispose();
   }
@@ -38,14 +93,10 @@ class _HomePageState extends State<HomePage> {
 
   @override
   Widget build(BuildContext context) {
-    // ✅ Scaffold は AppShell 側で持つ前提
-    //    ここでは「中身」だけを返す
+    // ✅ Scaffold は AppShell 側で持つ前提（ここでは中身だけ）
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        // ✅ 見出し行（Mall + refresh）を削除して、ヘッダーっぽい行スペースを消す
-
-        // ✅ 本文（一覧）
         FutureBuilder<MallListIndexResponse>(
           future: _future,
           builder: (context, snap) {
@@ -69,17 +120,20 @@ class _HomePageState extends State<HomePage> {
               );
             }
 
-            // ✅ AppShell(AppMain) がスクロールを持つ前提なので、
-            //    ここでは shrinkWrap で ListView を使う
+            // ✅ 期待値: list item を「3個1列（3列グリッド）」で表示
             return RefreshIndicator(
               onRefresh: _reload,
-              child: ListView.builder(
+              child: AppFixedExtentGrid(
+                crossAxisCount: 3,
+                spacing: 10,
+                childAspectRatio: 0.82, // ✅ token と同じ（スマホ幅前提）
+                extraTextLines: 1, // ✅ token と同じ（最低限の増分）
                 shrinkWrap: true,
                 physics: const AlwaysScrollableScrollPhysics(),
                 padding: const EdgeInsets.only(bottom: 12),
                 itemCount: items.length,
                 itemBuilder: (context, i) {
-                  return _ListCard(item: items[i]);
+                  return _ListGridCard(item: items[i]);
                 },
               ),
             );
@@ -90,138 +144,168 @@ class _HomePageState extends State<HomePage> {
   }
 }
 
-class _ListCard extends StatelessWidget {
-  const _ListCard({required this.item});
+class _ListGridCard extends StatelessWidget {
+  const _ListGridCard({required this.item});
 
   final MallListItem item;
 
-  String _safeUrl(String raw) => Uri.encodeFull(raw.trim());
+  String _safeUrl(String raw) {
+    final s = raw.trim();
+    final uri = Uri.tryParse(s);
+    return (uri ?? Uri()).toString();
+  }
 
   String _priceText(List<MallListPriceRow> rows) {
-    if (rows.isEmpty) return '';
+    if (rows.isEmpty) {
+      return '';
+    }
     final prices = rows.map((e) => e.price).toList()..sort();
     final min = prices.first;
     final max = prices.last;
-    if (min == max) return '¥$min';
+    if (min == max) {
+      return '¥$min';
+    }
     return '¥$min 〜 ¥$max';
   }
 
   @override
   Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+
     final imageUrl = item.image.trim();
     final hasImage = imageUrl.isNotEmpty;
+
+    final title = item.title.isNotEmpty ? item.title : '(no title)';
     final price = _priceText(item.prices);
 
+    // ✅ token_card と同様に「高さ固定グリッド」内で崩れないよう、
+    //    LayoutBuilder で残り高さを画像に割り当てる
     return Card(
-      margin: const EdgeInsets.only(bottom: 12),
+      elevation: 0,
+      color: cs.surfaceContainerHighest,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
       clipBehavior: Clip.antiAlias,
-      child: InkWell(
-        onTap: () {
-          // ✅ go_router で遷移（ShellRoute(AppShell) が必ず効く）
-          context.pushNamed(
-            'catalog',
-            pathParameters: {'listId': item.id},
-            extra: item, // Catalog 側で initialItem として使いたい場合
-          );
-        },
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            // -------- image --------
-            AspectRatio(
-              aspectRatio: 16 / 9,
-              child: hasImage
-                  ? Image.network(
-                      _safeUrl(imageUrl),
-                      fit: BoxFit.cover,
-                      errorBuilder: (context, err, st) {
-                        return _ImageFallback(
-                          label: 'image failed',
-                          detail: err.toString(),
-                        );
-                      },
-                      loadingBuilder: (context, child, progress) {
-                        if (progress == null) return child;
-                        return const Center(child: CircularProgressIndicator());
-                      },
-                    )
-                  : const _ImageFallback(label: 'no image'),
-            ),
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          borderRadius: BorderRadius.circular(12),
+          onTap: () {
+            context.pushNamed(
+              AppRouteName.catalog,
+              pathParameters: {'listId': item.id},
+              extra: item,
+            );
+          },
+          child: Padding(
+            padding: const EdgeInsets.all(10),
+            child: LayoutBuilder(
+              builder: (context, constraints) {
+                final titleStyle = Theme.of(context).textTheme.titleSmall
+                    ?.copyWith(
+                      color: cs.onSurface,
+                      fontWeight: FontWeight.w700,
+                      fontSize: 12.5,
+                      height: 1.1,
+                    );
 
-            // -------- content --------
-            Padding(
-              padding: const EdgeInsets.all(12),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    item.title.isNotEmpty ? item.title : '(no title)',
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
-                    style: Theme.of(context).textTheme.titleMedium,
-                  ),
-                  const SizedBox(height: 6),
-                  if (item.description.trim().isNotEmpty)
-                    Text(
-                      item.description.trim(),
-                      maxLines: 3,
-                      overflow: TextOverflow.ellipsis,
-                      style: Theme.of(context).textTheme.bodyMedium,
-                    ),
-                  const SizedBox(height: 10),
-                  Row(
-                    children: [
-                      if (price.isNotEmpty)
-                        Text(
-                          price,
-                          style: Theme.of(context).textTheme.titleSmall,
+                final subStyle = Theme.of(context).textTheme.bodySmall
+                    ?.copyWith(
+                      color: cs.onSurfaceVariant,
+                      fontWeight: FontWeight.w700,
+                      fontSize: 11.5,
+                      height: 1.1,
+                    );
+
+                final titleLineH =
+                    ((titleStyle?.fontSize ?? 12.5) *
+                    (titleStyle?.height ?? 1.1));
+                final subLineH =
+                    ((subStyle?.fontSize ?? 11.5) * (subStyle?.height ?? 1.1));
+
+                const gap1 = 6.0;
+                const gap2 = 6.0;
+
+                // title(1行) + gap + price(1行) + gap
+                final reservedTextHeight = titleLineH + gap1 + subLineH + gap2;
+
+                final imageH = (constraints.maxHeight - reservedTextHeight)
+                    .clamp(56.0, 9999.0);
+
+                return Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    SizedBox(
+                      height: imageH,
+                      child: ClipRRect(
+                        borderRadius: BorderRadius.circular(10),
+                        child: Container(
+                          color: cs.surface,
+                          child: hasImage
+                              ? Image.network(
+                                  _safeUrl(imageUrl),
+                                  fit: BoxFit.cover,
+                                  loadingBuilder:
+                                      (context, child, loadingProgress) {
+                                        if (loadingProgress == null) {
+                                          return child;
+                                        }
+                                        return const Center(
+                                          child: SizedBox(
+                                            width: 20,
+                                            height: 20,
+                                            child: CircularProgressIndicator(
+                                              strokeWidth: 2,
+                                            ),
+                                          ),
+                                        );
+                                      },
+                                  errorBuilder: (context, error, stackTrace) {
+                                    return Center(
+                                      child: Text(
+                                        'no image',
+                                        style: Theme.of(context)
+                                            .textTheme
+                                            .bodySmall
+                                            ?.copyWith(
+                                              color: cs.onSurfaceVariant,
+                                              fontWeight: FontWeight.w600,
+                                            ),
+                                      ),
+                                    );
+                                  },
+                                )
+                              : Center(
+                                  child: Text(
+                                    'no image',
+                                    style: Theme.of(context).textTheme.bodySmall
+                                        ?.copyWith(
+                                          color: cs.onSurfaceVariant,
+                                          fontWeight: FontWeight.w600,
+                                        ),
+                                  ),
+                                ),
                         ),
-                      const Spacer(),
-                      Text(
-                        'items: ${item.prices.length}',
-                        style: Theme.of(context).textTheme.labelMedium,
                       ),
-                    ],
-                  ),
-                ],
-              ),
+                    ),
+                    const SizedBox(height: gap2),
+                    Text(
+                      title,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: titleStyle,
+                    ),
+                    const SizedBox(height: gap1),
+                    Text(
+                      price.isEmpty ? '—' : price,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: subStyle,
+                    ),
+                  ],
+                );
+              },
             ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class _ImageFallback extends StatelessWidget {
-  const _ImageFallback({required this.label, this.detail});
-
-  final String label;
-  final String? detail;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      color: Theme.of(context).colorScheme.surfaceContainerHighest,
-      padding: const EdgeInsets.all(12),
-      child: Center(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const Icon(Icons.image_not_supported_outlined, size: 36),
-            const SizedBox(height: 8),
-            Text(label),
-            if (detail != null) ...[
-              const SizedBox(height: 6),
-              Text(
-                detail!,
-                textAlign: TextAlign.center,
-                maxLines: 3,
-                overflow: TextOverflow.ellipsis,
-                style: Theme.of(context).textTheme.labelSmall,
-              ),
-            ],
-          ],
+          ),
         ),
       ),
     );

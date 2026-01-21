@@ -6,6 +6,7 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../../app/routing/routes.dart';
+import '../../../../app/shell/presentation/components/app_grid_card.dart';
 import '../../infrastructure/token_metadata_dto.dart';
 import '../../infrastructure/token_resolve_dto.dart';
 
@@ -125,8 +126,6 @@ class _TokenCardState extends State<TokenCard> {
 
   @override
   Widget build(BuildContext context) {
-    final cs = Theme.of(context).colorScheme;
-
     final resolvedOk = widget.resolved != null;
     final metadataOk = widget.metadata != null;
 
@@ -135,107 +134,90 @@ class _TokenCardState extends State<TokenCard> {
 
     final canTap = !widget.isLoading && !failed && !timeoutFailed;
 
-    return Card(
-      elevation: 0,
-      color: cs.surfaceContainerHighest,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-      child: Material(
-        color: Colors.transparent,
-        child: InkWell(
-          borderRadius: BorderRadius.circular(12),
-          onTap: canTap ? () => _openContents(context) : null,
-          child: Padding(
-            padding: const EdgeInsets.all(10),
-            child: LayoutBuilder(
-              builder: (context, constraints) {
-                if (timeoutFailed) {
-                  return _fixedCenterMessage(context, 'データを取得できませんでした。');
-                }
+    return AppGridCard(
+      // TokenCard は grid で使う前提なので margin は呼び出し側が付ける想定
+      onTap: canTap ? () => _openContents(context) : null,
+      padding: const EdgeInsets.all(10),
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          if (timeoutFailed) {
+            return _fixedCenterMessage(context, 'データを取得できませんでした。');
+          }
 
-                if (widget.isLoading) {
-                  return _fixedSkeleton(context, constraints.maxHeight);
-                }
+          if (widget.isLoading) {
+            return _fixedSkeleton(context, constraints.maxHeight);
+          }
 
-                if (failed) {
-                  return _fixedCenterMessage(context, 'データを取得できませんでした。');
-                }
+          if (failed) {
+            return _fixedCenterMessage(context, 'データを取得できませんでした。');
+          }
 
-                final brandName = _s(widget.resolved?.brandName);
-                final tokenName = _s(widget.metadata?.name);
-                final productName = _s(widget.resolved?.productName);
-                final imageUrl = _s(widget.metadata?.image);
+          final brandName = _s(widget.resolved?.brandName);
+          final tokenName = _s(widget.metadata?.name);
+          final productName = _s(widget.resolved?.productName);
+          final imageUrl = _s(widget.metadata?.image);
 
-                final titleStyle = Theme.of(context).textTheme.titleSmall
-                    ?.copyWith(
-                      color: cs.onSurface,
-                      fontWeight: FontWeight.w700,
-                      fontSize: 12.5,
-                      height: 1.1,
-                    );
+          final cs = Theme.of(context).colorScheme;
 
-                final subStyle = Theme.of(context).textTheme.bodySmall
-                    ?.copyWith(
-                      color: cs.onSurfaceVariant,
-                      fontWeight: FontWeight.w700,
-                      fontSize: 11.5,
-                      height: 1.1,
-                    );
+          final titleStyle = Theme.of(context).textTheme.titleSmall?.copyWith(
+            color: cs.onSurface,
+            fontWeight: FontWeight.w700,
+            fontSize: 12.5,
+            height: 1.1,
+          );
 
-                final titleLineH =
-                    ((titleStyle?.fontSize ?? 12.5) *
-                    (titleStyle?.height ?? 1.1));
-                final subLineH =
-                    ((subStyle?.fontSize ?? 11.5) * (subStyle?.height ?? 1.1));
+          final subStyle = Theme.of(context).textTheme.bodySmall?.copyWith(
+            color: cs.onSurfaceVariant,
+            fontWeight: FontWeight.w700,
+            fontSize: 11.5,
+            height: 1.1,
+          );
 
-                const gap1 = 6.0;
-                const gap2 = 6.0;
-                const gap3 = 4.0;
+          final titleLineH =
+              ((titleStyle?.fontSize ?? 12.5) * (titleStyle?.height ?? 1.1));
+          final subLineH =
+              ((subStyle?.fontSize ?? 11.5) * (subStyle?.height ?? 1.1));
 
-                final reservedTextHeight =
-                    titleLineH +
-                    gap1 +
-                    titleLineH +
-                    gap3 +
-                    (subLineH * 2) +
-                    gap2;
+          const gap1 = 6.0;
+          const gap2 = 6.0;
+          const gap3 = 4.0;
 
-                final imageH = (constraints.maxHeight - reservedTextHeight)
-                    .clamp(56.0, 9999.0);
+          final reservedTextHeight =
+              titleLineH + gap1 + titleLineH + gap3 + (subLineH * 2) + gap2;
 
-                return Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    _textLine(
-                      context,
-                      brandName.isEmpty ? '（brandName）' : brandName,
-                      style: titleStyle,
-                      maxLines: 1,
-                    ),
-                    const SizedBox(height: gap1),
-                    SizedBox(
-                      height: imageH,
-                      child: _imageBox(context, imageUrl),
-                    ),
-                    const SizedBox(height: gap2),
-                    _textLine(
-                      context,
-                      tokenName.isEmpty ? '（token name）' : tokenName,
-                      style: titleStyle,
-                      maxLines: 1,
-                    ),
-                    const SizedBox(height: gap3),
-                    _textLine(
-                      context,
-                      productName.isEmpty ? '（productName）' : productName,
-                      style: subStyle,
-                      maxLines: 2,
-                    ),
-                  ],
-                );
-              },
-            ),
-          ),
-        ),
+          final imageH = (constraints.maxHeight - reservedTextHeight).clamp(
+            56.0,
+            9999.0,
+          );
+
+          return Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              _textLine(
+                context,
+                brandName.isEmpty ? '（brandName）' : brandName,
+                style: titleStyle,
+                maxLines: 1,
+              ),
+              const SizedBox(height: gap1),
+              SizedBox(height: imageH, child: _imageBox(context, imageUrl)),
+              const SizedBox(height: gap2),
+              _textLine(
+                context,
+                tokenName.isEmpty ? '（token name）' : tokenName,
+                style: titleStyle,
+                maxLines: 1,
+              ),
+              const SizedBox(height: gap3),
+              _textLine(
+                context,
+                productName.isEmpty ? '（productName）' : productName,
+                style: subStyle,
+                maxLines: 2,
+              ),
+            ],
+          );
+        },
       ),
     );
   }

@@ -6,6 +6,7 @@ import 'package:go_router/go_router.dart';
 
 import '../../../../app/routing/navigation.dart';
 import '../../../../app/routing/routes.dart';
+import '../../../../app/shell/presentation/components/app_fixed_extent_grid.dart';
 import '../../../wallet/infrastructure/token_metadata_dto.dart';
 import '../../../wallet/infrastructure/token_resolve_dto.dart';
 import '../../../wallet/presentation/component/token_card.dart';
@@ -320,7 +321,9 @@ class _TabBar extends StatelessWidget {
       return Expanded(
         child: InkWell(
           onTap: () {
-            if (tab == target) return;
+            if (tab == target) {
+              return;
+            }
             onChange(target);
           },
           child: Padding(
@@ -387,80 +390,54 @@ class _TokenCards extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // ✅ 固定高さにしてグリッド整合性を保つ（現状の高さ + 文字列1行分）
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        const crossAxisCount = 3;
-        const spacing = 10.0;
-
-        final itemWidth =
-            (constraints.maxWidth - spacing * (crossAxisCount - 1)) /
-            crossAxisCount;
-
-        // 既存: childAspectRatio: 0.82 -> height = width / 0.82
-        final baseHeight = itemWidth / 0.82;
-
-        // ✅ 文字列1行分だけ増やす（フォントサイズに追従）
-        final fs = Theme.of(context).textTheme.bodySmall?.fontSize ?? 12.0;
-        final oneLine = fs * 1.35;
-        final extra = oneLine + 4;
-
-        final fixedHeight = baseHeight + extra;
-
-        // ✅ tokens が空でも、ロード中なら skeleton を出す
-        if (tokens.isEmpty) {
-          if (isTokensLoading) {
-            return GridView.builder(
-              shrinkWrap: true,
-              physics: const NeverScrollableScrollPhysics(),
-              gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-                crossAxisCount: crossAxisCount,
-                crossAxisSpacing: spacing,
-                mainAxisSpacing: spacing,
-                mainAxisExtent: fixedHeight, // ✅ 高さ固定 + 1行
-              ),
-              itemCount: 6,
-              itemBuilder: (context, index) {
-                return const TokenCard(mintAddress: '', isLoading: true);
-              },
-            );
-          }
-
-          return Text(
-            'トークンはまだありません。',
-            style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-              color: Theme.of(context).colorScheme.onSurfaceVariant,
-            ),
-          );
-        }
-
-        // ✅ 3列グリッド表示（カード高さ固定）
-        return GridView.builder(
+    // ✅ tokens が空でも、ロード中なら skeleton を出す
+    if (tokens.isEmpty) {
+      if (isTokensLoading) {
+        return AppFixedExtentGrid(
+          crossAxisCount: 3,
+          spacing: 10,
+          childAspectRatio: 0.82,
+          extraTextLines: 1,
           shrinkWrap: true,
           physics: const NeverScrollableScrollPhysics(),
-          gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-            crossAxisCount: crossAxisCount,
-            crossAxisSpacing: spacing,
-            mainAxisSpacing: spacing,
-            mainAxisExtent: fixedHeight, // ✅ 高さ固定 + 1行
-          ),
-          itemCount: tokens.length,
+          itemCount: 6,
           itemBuilder: (context, index) {
-            final m = tokens[index].trim();
-
-            final resolved = resolvedTokens[m];
-            final meta = tokenMetadatas[m];
-
-            // ✅ mint 単位のロード判定（案A）
-            final loading = (tokenLoadingByMint[m] ?? isTokensLoading);
-
-            return TokenCard(
-              mintAddress: m,
-              resolved: resolved,
-              metadata: meta,
-              isLoading: loading,
-            );
+            return const TokenCard(mintAddress: '', isLoading: true);
           },
+        );
+      }
+
+      return Text(
+        'トークンはまだありません。',
+        style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+          color: Theme.of(context).colorScheme.onSurfaceVariant,
+        ),
+      );
+    }
+
+    // ✅ 3列グリッド表示（カード高さ固定）
+    return AppFixedExtentGrid(
+      crossAxisCount: 3,
+      spacing: 10,
+      childAspectRatio: 0.82,
+      extraTextLines: 1,
+      shrinkWrap: true,
+      physics: const NeverScrollableScrollPhysics(),
+      itemCount: tokens.length,
+      itemBuilder: (context, index) {
+        final m = tokens[index].trim();
+
+        final resolved = resolvedTokens[m];
+        final meta = tokenMetadatas[m];
+
+        // ✅ mint 単位のロード判定（案A）
+        final loading = (tokenLoadingByMint[m] ?? isTokensLoading);
+
+        return TokenCard(
+          mintAddress: m,
+          resolved: resolved,
+          metadata: meta,
+          isLoading: loading,
         );
       },
     );
