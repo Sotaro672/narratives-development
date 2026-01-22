@@ -1,10 +1,8 @@
 // frontend/console/tokenOperation/src/presentation/pages/tokenOperationDetail.tsx
-
-import * as React from "react";
 import PageStyle from "../../../../shell/src/layout/PageStyle/PageStyle";
 import AdminCard from "../../../../admin/src/presentation/components/AdminCard";
 import TokenBlueprintCard from "../../../../tokenBlueprint/src/presentation/components/tokenBlueprintCard";
-import TokenContentsCard from "../../../../tokenContents/src/presentation/components/tokenContentsCard";
+import TokenContentsCard from "../../../../tokenBlueprint/src/presentation/components/tokenContentsCard";
 import { useTokenOperationDetail } from "../hook/useTokenOperationDetail";
 
 export default function TokenOperationDetail() {
@@ -38,6 +36,36 @@ export default function TokenOperationDetail() {
     );
   }
 
+  /**
+   * TokenContentsCard は images 互換を廃止したため、contents(GCSTokenContent[]) を渡す。
+   *
+   * 現時点では blueprint.contentFiles の型が環境によって
+   * - string[]（ID 配列）
+   * - ContentFile[]（{ id, name, type, url, size }）
+   * の両方になり得るため、表示できるものだけ（url を持つ object）を抽出して渡す。
+   *
+   * NOTE:
+   * - string[] のみの場合は、ここでは URL を復元できないので空表示になります。
+   *   （将来的に「ID → TokenContents を List/Get して contents を構築」するのが正道です）
+   */
+  const contents = Array.isArray((blueprint as any)?.contentFiles)
+    ? (blueprint as any).contentFiles
+        .map((x: any) => {
+          if (!x || typeof x !== "object") return null;
+          const url = x.url != null ? String(x.url).trim() : "";
+          if (!url) return null;
+
+          return {
+            id: String(x.id ?? "").trim(),
+            name: String(x.name ?? "").trim(),
+            type: String(x.type ?? "").trim(),
+            url,
+            size: Number(x.size ?? 0) || 0,
+          };
+        })
+        .filter(Boolean)
+    : [];
+
   return (
     <PageStyle layout="grid-2" title={title} onBack={onBack} onSave={handleSave}>
       {/* 左カラム：トークン設計＋コンテンツ */}
@@ -45,12 +73,12 @@ export default function TokenOperationDetail() {
         <TokenBlueprintCard vm={cardVm} handlers={cardHandlers} />
 
         <div style={{ marginTop: 16 }}>
-          {/* TokenContentsCard: TokenBlueprint.contentFiles（ID配列）と連動させる想定 */}
-          <TokenContentsCard mode="edit" images={blueprint.contentFiles ?? []} />
+          {/* TokenContentsCard: contents(GCSTokenContent[]) を渡す */}
+          <TokenContentsCard mode="edit" contents={contents} />
         </div>
       </div>
 
-      {/* 右カラム：管理情報（現状モック） */}
+      {/* 右カラム：管理情報 */}
       <AdminCard
         title="管理情報"
         assigneeName={assignee}

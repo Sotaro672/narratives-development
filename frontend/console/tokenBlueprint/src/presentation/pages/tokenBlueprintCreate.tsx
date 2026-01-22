@@ -2,7 +2,7 @@
 import PageStyle from "../../../../shell/src/layout/PageStyle/PageStyle";
 import AdminCard from "../../../../admin/src/presentation/components/AdminCard";
 import TokenBlueprintCard from "../components/tokenBlueprintCard";
-import TokenContentsCard from "../../../../tokenContents/src/presentation/components/tokenContentsCard";
+import TokenContentsCard from "../components/tokenContentsCard";
 
 import { useTokenBlueprintCreate } from "../hook/useTokenBlueprintCreate";
 import { useTokenBlueprintCard } from "../hook/useTokenBlueprintCard";
@@ -24,7 +24,6 @@ export default function TokenBlueprintCreate() {
   } = useTokenBlueprintCreate();
 
   // TokenBlueprintCard 用の ViewModel / Handlers を構築
-  // ★ selectedIconFile を受け取り、onSave に渡す
   const { vm, handlers, selectedIconFile } = useTokenBlueprintCard({
     initialTokenBlueprint,
     initialBurnAt: "",
@@ -38,14 +37,15 @@ export default function TokenBlueprintCreate() {
       title="トークン設計を作成"
       onBack={onBack}
       onSave={() => {
-        // ★ initialTokenBlueprint は上書きしない
-        // ★ iconFile を一緒に渡す（ここが抜けていたため service に届かなかった）
+        // ★ Partial<TokenBlueprint> に存在しないフィールド（iconId 等）は入れない
+        // ★ contentFiles は TokenBlueprint 型上は string[] 想定（shared/types/tokenBlueprint.ts に準拠）
         const input: Partial<TokenBlueprint> & { iconFile?: File | null } = {
           name: vm.name,
           symbol: vm.symbol,
           brandId: vm.brandId,
           description: vm.description,
-          iconId: null,
+
+          // TokenBlueprint の定義に合わせる（ID配列）
           contentFiles: [],
 
           // ★ 追加: hook が保持している File を渡す
@@ -75,7 +75,20 @@ export default function TokenBlueprintCreate() {
         <TokenBlueprintCard vm={vm} handlers={handlers} />
 
         <div style={{ marginTop: 16 }}>
-          <TokenContentsCard images={[]} />
+          {/* 方針A: 呼び出し側で onUploadClick を配線する */}
+          <TokenContentsCard
+            mode="edit"
+            contents={[]}
+            onUploadClick={() => {
+              // ここは後続で「file picker → upload → contents 更新」に接続する想定。
+              // 現段階では「押下できる」ことの確認用。
+              // eslint-disable-next-line no-console
+              console.log(
+                "[TokenBlueprintCreate.page] TokenContentsCard upload clicked",
+              );
+              alert("ファイル追加（未接続）");
+            }}
+          />
         </div>
       </div>
 

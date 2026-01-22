@@ -1,4 +1,4 @@
-// frontend/tokenContents/src/presentation/components/tokenContentsCard.tsx
+// frontend/console/tokenBlueprint/src/presentation/components/tokenContentsCard.tsx
 import * as React from "react";
 import {
   FileText,
@@ -16,100 +16,93 @@ import {
 } from "../../../../shell/src/shared/ui/card";
 import { Button } from "../../../../shell/src/shared/ui/button";
 
-import { MOCK_TOKEN_CONTENTS } from "../../infrastructure/mockdata/mockdata";
 import type { GCSTokenContent } from "../../../../shell/src/shared/types/tokenContents";
-import "../styles/tokenContents.css";
+import "../styles/tokenBlueprint.css";
 
 type Mode = "edit" | "view";
 
 type TokenContentsCardProps = {
   /**
    * 表示するコンテンツ一覧。
-   * 未指定の場合は MOCK_TOKEN_CONTENTS を使用。
+   * 未指定の場合は空表示。
    */
   contents?: GCSTokenContent[];
-  /**
-   * 互換用: 画像URL配列として渡された場合も扱えるようにしておく。
-   * 新規実装では contents の利用を推奨。
-   */
-  images?: string[];
+
   /** 表示モード（edit: 追加/削除可, view: 閲覧専用）。既定: "edit" */
   mode?: Mode;
+
+  /**
+   * edit モードで「ファイル追加」を押した時のハンドラ（任意）。
+   * 未指定なら何もしない（alert は出さない）。
+   */
+  onUploadClick?: () => void;
+
+  /**
+   * edit モードで削除したい時のハンドラ（任意）。
+   * 未指定なら UI 内で items を削除するだけ（サーバ反映は呼び出し側で実装）。
+   */
+  onDelete?: (item: GCSTokenContent, index: number) => void | Promise<void>;
 };
 
 export default function TokenContentsCard({
   contents,
-  images,
   mode = "edit",
+  onUploadClick,
+  onDelete,
 }: TokenContentsCardProps) {
   const isEditMode = mode === "edit";
 
-  // 初期リストを props / モックから構築（GCSTokenContent[] に正規化）
-  const [items, setItems] = React.useState<GCSTokenContent[]>(() => {
-    if (contents && contents.length > 0) {
-      return contents;
-    }
-    if (images) {
-      return images.map((url, i) => ({
-        id: `image_${i + 1}`,
-        name: `image_${i + 1}`,
-        type: "image",
-        url,
-        size: 0,
-      }));
-    }
-    return MOCK_TOKEN_CONTENTS;
-  });
+  // props から表示用 items を構築（GCSTokenContent[] に正規化）
+  const derivedItems = React.useMemo<GCSTokenContent[]>(() => {
+    if (contents && contents.length > 0) return contents;
+    return [];
+  }, [contents]);
 
+  // UI 内での削除（onDelete 未指定でも動作するようにローカル state を持つ）
+  const [items, setItems] = React.useState<GCSTokenContent[]>(derivedItems);
   const [index, setIndex] = React.useState(0);
 
   // 外部 props の変化に追従
   React.useEffect(() => {
-    if (contents && contents.length > 0) {
-      setItems(contents);
-      setIndex(0);
-      return;
-    }
-    if (images) {
-      const mapped = images.map((url, i) => ({
-        id: `image_${i + 1}`,
-        name: `image_${i + 1}`,
-        type: "image" as const,
-        url,
-        size: 0,
-      }));
-      setItems(mapped);
-      setIndex(0);
-      return;
-    }
-    setItems(MOCK_TOKEN_CONTENTS);
+    setItems(derivedItems);
     setIndex(0);
-  }, [contents, images]);
+  }, [derivedItems]);
 
-  const hasImages = items.length > 0;
+  const hasItems = items.length > 0;
 
   const prev = () => {
-    if (!hasImages) return;
+    if (!hasItems) return;
     setIndex((i) => (i - 1 + items.length) % items.length);
   };
 
   const next = () => {
-    if (!hasImages) return;
+    if (!hasItems) return;
     setIndex((i) => (i + 1) % items.length);
   };
 
   const handleUpload = () => {
     if (!isEditMode) return;
-    alert("コンテンツファイルの追加（モック）");
+    onUploadClick?.();
   };
 
-  const handleDelete = (targetIndex: number) => {
+  const handleDelete = async (targetIndex: number) => {
     if (!isEditMode) return;
-    setItems((prev) => {
-      if (prev.length === 0) return prev;
 
-      const nextItems = prev.filter((_, i) => i !== targetIndex);
+    const target = items[targetIndex];
+    if (!target) return;
 
+    // 1) 呼び出し側に通知（任意）
+    if (onDelete) {
+      await onDelete(target, targetIndex);
+    }
+
+    // 2) UI から除去（ローカル）
+    setItems((prevItems) => {
+      if (prevItems.length === 0) return prevItems;
+
+      const nextItems = prevItems.filter((_, i) => i !== targetIndex);
+
+      // index 調整
       if (nextItems.length === 0) {
         setIndex(0);
       } else if (targetIndex === index || targetIndex < index) {
@@ -141,6 +134,8 @@ export default function TokenContentsCard({
             type="button"
             className="token-contents-card__add-btn"
             onClick={handleUpload}
+            disabled={!onUploadClick}
+            title={!onUploadClick ? "アップロード処理が未接続です" : undefined}
           >
             <Upload className="token-contents-card__add-btn-icon" />
             ファイル追加
@@ -149,7 +144,7 @@ export default function TokenContentsCard({
       </CardHeader>
 
       <CardContent>
-        {/* メイン画像カルーセル */}
+        {/* メイン表示（カルーセル） */}
         <div className="token-contents-card__viewer">
           {/* 左矢印 */}
           <button
@@ -157,26 +152,27 @@ export default function TokenContentsCard({
             className="token-contents-card__nav token-contents-card__nav--left"
             onClick={prev}
             aria-label="前のコンテンツ"
-            disabled={!hasImages}
+            disabled={!hasItems}
           >
             <ChevronLeft className="token-contents-card__nav-icon" />
           </button>
 
-          {/* 中央イメージスロット */}
+          {/* 中央スロット */}
           <div className="token-contents-card__image-slot">
-            {hasImages ? (
+            {hasItems ? (
               <div className="token-contents-card__image-main-wrap">
                 <img
                   src={items[index].url}
                   alt={items[index].name || `コンテンツ ${index + 1}`}
                   className="token-contents-card__image"
                 />
-                {/* 編集モード時のみメイン画像に削除アイコン表示 */}
+
+                {/* 編集モード時のみ削除 */}
                 {isEditMode && (
                   <button
                     type="button"
                     className="token-contents-card__delete-btn"
-                    onClick={() => handleDelete(index)}
+                    onClick={() => void handleDelete(index)}
                     aria-label="このコンテンツを削除"
                   >
                     <Trash2 className="token-contents-card__delete-icon" />
@@ -196,14 +192,14 @@ export default function TokenContentsCard({
             className="token-contents-card__nav token-contents-card__nav--right"
             onClick={next}
             aria-label="次のコンテンツ"
-            disabled={!hasImages}
+            disabled={!hasItems}
           >
             <ChevronRight className="token-contents-card__nav-icon" />
           </button>
         </div>
 
         {/* サムネイル一覧 */}
-        {hasImages && items.length > 1 && (
+        {hasItems && items.length > 1 && (
           <div className="token-contents-card__thumbs">
             {items.map((item, i) => (
               <div
@@ -225,12 +221,12 @@ export default function TokenContentsCard({
                   />
                 </button>
 
-                {/* 編集モード時のみサムネイルにも削除アイコン表示 */}
+                {/* 編集モード時のみ削除 */}
                 {isEditMode && (
                   <button
                     type="button"
                     className="token-contents-card__thumb-delete-btn"
-                    onClick={() => handleDelete(i)}
+                    onClick={() => void handleDelete(i)}
                     aria-label={`コンテンツ ${i + 1} を削除`}
                   >
                     <Trash2 className="token-contents-card__thumb-delete-icon" />

@@ -36,7 +36,6 @@ export function useTokenBlueprintCreate() {
 
   /**
    * ★ onSave が受け取る input は UI 実装に依存するため、File を運べるよう拡張して受ける
-   * - TokenBlueprintCard 側で `iconFile` を載せて onSave に渡せるようにしておく（まだなら後で hook 側を更新）
    */
   type SaveInput = Partial<TokenBlueprint> & { iconFile?: File | null };
 
@@ -52,7 +51,9 @@ export function useTokenBlueprintCreate() {
 
       const iconFile = input.iconFile ?? null;
 
-      // --- 必須項目不足による 400 BadRequest を防止 ---
+      // entity.go（= shared TokenBlueprint 型）を正として:
+      // - iconId は CreateTokenBlueprintInput には含めない（作成時に渡さない）
+      // - contentFiles は string[]（ID配列）として扱う
       const payload: CreateTokenBlueprintInput = {
         name: input.name?.trim() ?? "",
         symbol: input.symbol?.trim() ?? "",
@@ -60,18 +61,15 @@ export function useTokenBlueprintCreate() {
         description: input.description?.trim() ?? "",
         assigneeId: assignee,
         companyId,
-        createdBy: memberId, // ★ currentMember.id をそのまま渡す
+        createdBy: memberId,
 
-        // ★ create 時点は基本 null（objectPath は後から付く）
-        iconId: null,
-
-        contentFiles: input.contentFiles ?? [],
+        // contentFiles: UI側は string[] を渡す（空なら []）
+        contentFiles: Array.isArray(input.contentFiles) ? input.contentFiles : [],
 
         // ★ UI が File を持っている場合だけ渡す
         iconFile,
       };
 
-      // ログ（service 層に入る前に「File が乗っているか」を確認する）
       // eslint-disable-next-line no-console
       console.log(
         "[TokenBlueprintCreate] payload to createTokenBlueprintWithOptionalIcon:",
@@ -108,6 +106,9 @@ export function useTokenBlueprintCreate() {
   );
 
   // --- TokenBlueprint 初期値（companyId を含む） ---
+  // entity.go（= shared TokenBlueprint 型）を正として:
+  // - iconId は optional だが、ここで持たせたいなら「型に存在する」のでOK（ただし input/DTO には渡さない）
+  // - ただし今は TS エラーになっているので、Partial<TokenBlueprint> に存在しないと解釈されている前提で削除する
   const initialTokenBlueprint: Partial<TokenBlueprint> = {
     id: "",
     name: "",
@@ -115,10 +116,9 @@ export function useTokenBlueprintCreate() {
     brandId: "",
     description: "",
     companyId,
-    iconId: null,
     contentFiles: [],
     assigneeId: assignee,
-    createdBy: memberId, // ★ 初期値にも currentMember.id を設定
+    createdBy: memberId,
     createdAt,
     updatedBy: memberId,
     updatedAt: createdAt,
