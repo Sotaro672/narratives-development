@@ -1,4 +1,4 @@
-// backend\internal\adapters\in\http\mall\handler\tokenBlueprint_handler.go
+// backend/internal/adapters/in/http/mall/handler/tokenBlueprint_handler.go
 package mallHandler
 
 import (
@@ -20,9 +20,9 @@ type MallTokenBlueprintHandler struct {
 	Repo any
 
 	BrandNameResolver   any
-	CompanyNameResolver any
+	CompanyNameResolver any // NOTE: tbdom.Patch には CompanyName が無いので実質未使用
 
-	// ✅ icon url resolver (objectPath -> public URL)
+	// icon url resolver (objectPath -> public URL)
 	ImageResolver ImageURLResolver
 }
 
@@ -38,7 +38,7 @@ func NewMallTokenBlueprintHandlerWithNameResolver(repo any, nameResolver any) ht
 	}
 }
 
-// ✅ 推奨: NameResolver + ImageURLResolver を注入
+// 推奨: NameResolver + ImageURLResolver を注入
 func NewMallTokenBlueprintHandlerWithNameAndImageResolver(
 	repo any,
 	nameResolver any,
@@ -105,10 +105,12 @@ func (h *MallTokenBlueprintHandler) getPatchByID(ctx context.Context, id string)
 		return tbdom.Patch{}, errors.New("tokenBlueprint is nil")
 	}
 
-	patch := toPatchBestEffort(v)
+	patch := toPatchBestEffort(v, id)
 
-	// ✅ IconURL 補完（必ず試す）
-	if strings.TrimSpace(ptrStr(patch.IconURL)) == "" && h.ImageResolver != nil {
+	// ============================================================
+	// IconURL 補完（Patch は string なので "" 判定）
+	// ============================================================
+	if strings.TrimSpace(patch.IconURL) == "" && h.ImageResolver != nil {
 		// 1) objectPath/iconId があればそれを使う
 		obj := pickStringPtrFieldDeep(
 			v,
@@ -117,64 +119,46 @@ func (h *MallTokenBlueprintHandler) getPatchByID(ctx context.Context, id string)
 			"Icon", "TokenIcon",
 		)
 
-		objStr := strings.TrimSpace(ptrStr(obj))
+		objStr := strings.TrimSpace(derefStr(obj))
 		if objStr != "" {
 			u := strings.TrimSpace(h.ImageResolver.ResolveForResponse(objStr, ""))
 			if u != "" {
-				patch.IconURL = strPtr(u)
+				patch.IconURL = u
 			}
 		}
 
 		// 2) まだ空なら固定パス "{id}/icon"
-		if strings.TrimSpace(ptrStr(patch.IconURL)) == "" {
+		if strings.TrimSpace(patch.IconURL) == "" {
 			fixed := strings.Trim(strings.TrimSpace(id), "/") + "/icon"
 			u := strings.TrimSpace(h.ImageResolver.ResolveForResponse(fixed, ""))
 			if u != "" {
-				patch.IconURL = strPtr(u)
+				patch.IconURL = u
 			}
 		}
 	}
 
 	// ============================================================
-	// ✅ companyId / companyName の期待値を満たすための補完ロジック
+	// companyId / brandName の補完（Patch は値型）
 	// ============================================================
 
 	// 1) companyId が空なら、brandId から companyId を補完する（resolver 経由）
-	if strings.TrimSpace(ptrStr(patch.CompanyID)) == "" && strings.TrimSpace(ptrStr(patch.BrandID)) != "" {
-		brandID := strings.TrimSpace(ptrStr(patch.BrandID))
+	if strings.TrimSpace(patch.CompanyID) == "" && strings.TrimSpace(patch.BrandID) != "" {
+		brandID := strings.TrimSpace(patch.BrandID)
 
-		// まず BrandNameResolver を優先（無ければ CompanyNameResolver）
 		res := h.BrandNameResolver
 		if res == nil {
 			res = h.CompanyNameResolver
 		}
 
 		if cid, ok := resolveCompanyIDFromBrandBestEffort(ctx, res, brandID); ok {
-			patch.CompanyID = strPtr(cid)
+			patch.CompanyID = strings.TrimSpace(cid)
 		}
 	}
 
 	// 2) fill BrandName (optional)
-	if patch.BrandName == nil {
-		if bn := pickStringPtrField(v, "BrandName", "brandName"); bn != nil && strings.TrimSpace(*bn) != "" {
-			patch.BrandName = trimPtr(bn)
-		}
-	}
-	if patch.BrandName == nil && patch.BrandID != nil && strings.TrimSpace(*patch.BrandID) != "" {
-		if name, ok := resolveBrandNameBestEffort(ctx, h.BrandNameResolver, strings.TrimSpace(*patch.BrandID)); ok {
-			patch.BrandName = strPtr(name)
-		}
-	}
-
-	// 3) fill CompanyName (optional)
-	if patch.CompanyName == nil {
-		if cn := pickStringPtrField(v, "CompanyName", "companyName"); cn != nil && strings.TrimSpace(*cn) != "" {
-			patch.CompanyName = trimPtr(cn)
-		}
-	}
-	if patch.CompanyName == nil && patch.CompanyID != nil && strings.TrimSpace(*patch.CompanyID) != "" {
-		if name, ok := resolveCompanyNameBestEffort(ctx, h.CompanyNameResolver, strings.TrimSpace(*patch.CompanyID)); ok {
-			patch.CompanyName = strPtr(name)
+	if strings.TrimSpace(patch.BrandName) == "" && strings.TrimSpace(patch.BrandID) != "" {
+		if name, ok := resolveBrandNameBestEffort(ctx, h.BrandNameResolver, strings.TrimSpace(patch.BrandID)); ok {
+			patch.BrandName = strings.TrimSpace(name)
 		}
 	}
 
@@ -196,13 +180,18 @@ func parseTokenBlueprintPatchPath(path string) (id string, ok bool) {
 	return inner, true
 }
 
-func toPatchBestEffort(tb any) tbdom.Patch {
+// toPatchBestEffort converts arbitrary TokenBlueprint-like struct into tbdom.Patch (value types).
+// entity.go（TokenBlueprint）を正として、Patch のフィールド名・型に合わせて組み立てる。
+func toPatchBestEffort(tb any, id string) tbdom.Patch {
+	// TokenBlueprint 側のフィールド候補
 	name := pickStringPtrField(tb, "Name", "name")
 	symbol := pickStringPtrField(tb, "Symbol", "symbol")
 	brandID := pickStringPtrField(tb, "BrandID", "BrandId", "brandId")
 	companyID := pickStringPtrField(tb, "CompanyID", "CompanyId", "companyId")
 	desc := pickStringPtrField(tb, "Description", "description")
 
+	// iconUrl は “URL” が埋まっているケースもあるが、基本は objectPath(iconId) から resolver で生成する想定。
+	// ここでは既存データ/構造体に iconUrl があれば拾う。
 	iconURL := pickStringPtrFieldDeep(
 		tb,
 		"IconURL", "IconUrl", "iconUrl",
@@ -212,16 +201,24 @@ func toPatchBestEffort(tb any) tbdom.Patch {
 		"Icon", "TokenIcon",
 	)
 
+	metadataURI := pickStringPtrField(tb, "MetadataURI", "MetadataUri", "metadataUri")
+
 	minted := pickBoolPtrField(tb, "Minted", "minted")
 
+	// BrandName を直接持っている構造体もあるので拾う（なければ後段で resolver）
+	brandName := pickStringPtrField(tb, "BrandName", "brandName")
+
 	return tbdom.Patch{
-		Name:        trimPtr(name),
-		Symbol:      trimPtr(symbol),
-		BrandID:     trimPtr(brandID),
-		CompanyID:   trimPtr(companyID),
-		Description: trimPtr(desc),
-		IconURL:     trimPtr(iconURL),
-		Minted:      minted,
+		ID:          strings.TrimSpace(id),
+		TokenName:   strings.TrimSpace(derefStr(name)),
+		Symbol:      strings.TrimSpace(derefStr(symbol)),
+		BrandID:     strings.TrimSpace(derefStr(brandID)),
+		BrandName:   strings.TrimSpace(derefStr(brandName)),
+		CompanyID:   strings.TrimSpace(derefStr(companyID)),
+		Description: strings.TrimSpace(derefStr(desc)),
+		Minted:      derefBool(minted),
+		MetadataURI: strings.TrimSpace(derefStr(metadataURI)),
+		IconURL:     strings.TrimSpace(derefStr(iconURL)),
 	}
 }
 
@@ -245,16 +242,26 @@ func pickStringPtrField(v any, names ...string) *string {
 		if !f.IsValid() {
 			continue
 		}
+		// *string
 		if f.Kind() == reflect.Pointer {
 			if f.IsNil() {
 				continue
 			}
-			f = f.Elem()
+			if f.Elem().Kind() == reflect.String {
+				s := strings.TrimSpace(f.Elem().String())
+				if s == "" {
+					continue
+				}
+				x := s
+				return &x
+			}
+			continue
 		}
+		// string
 		if f.Kind() == reflect.String {
 			s := strings.TrimSpace(f.String())
 			if s == "" {
-				return nil
+				continue
 			}
 			x := s
 			return &x
@@ -326,12 +333,18 @@ func pickBoolPtrField(v any, names ...string) *bool {
 		if !f.IsValid() {
 			continue
 		}
+		// *bool
 		if f.Kind() == reflect.Pointer {
 			if f.IsNil() {
 				continue
 			}
-			f = f.Elem()
+			if f.Elem().Kind() == reflect.Bool {
+				b := f.Elem().Bool()
+				return &b
+			}
+			continue
 		}
+		// bool
 		if f.Kind() == reflect.Bool {
 			b := f.Bool()
 			return &b
@@ -340,9 +353,18 @@ func pickBoolPtrField(v any, names ...string) *bool {
 	return nil
 }
 
-func strPtr(s string) *string {
-	x := s
-	return &x
+func derefStr(p *string) string {
+	if p == nil {
+		return ""
+	}
+	return strings.TrimSpace(*p)
+}
+
+func derefBool(p *bool) bool {
+	if p == nil {
+		return false
+	}
+	return *p
 }
 
 func resolveBrandNameBestEffort(ctx context.Context, resolver any, brandID string) (string, bool) {
@@ -379,41 +401,7 @@ func resolveBrandNameBestEffort(ctx context.Context, resolver any, brandID strin
 	return "", false
 }
 
-func resolveCompanyNameBestEffort(ctx context.Context, resolver any, companyID string) (string, bool) {
-	if resolver == nil {
-		return "", false
-	}
-	companyID = strings.TrimSpace(companyID)
-	if companyID == "" {
-		return "", false
-	}
-
-	for _, m := range []string{
-		"ResolveCompanyName",
-		"GetCompanyNameByID",
-		"GetCompanyNameById",
-		"CompanyNameByID",
-		"CompanyNameById",
-	} {
-		s, ok := callStringWithCtxAndID(resolver, m, ctx, companyID)
-		if ok {
-			return s, true
-		}
-	}
-
-	if v, err := callAny(resolver, []string{"GetByID", "GetById"}, ctx, companyID); err == nil && v != nil {
-		if s := pickStringPtrField(v, "Name", "name", "CompanyName", "companyName"); s != nil {
-			t := strings.TrimSpace(*s)
-			if t != "" {
-				return t, true
-			}
-		}
-	}
-
-	return "", false
-}
-
-// ✅ brandId から companyId を解決する（NameResolver に ResolveBrandCompanyID を追加した前提）
+// brandId から companyId を解決する（resolver に ResolveBrandCompanyID 等がある前提）
 func resolveCompanyIDFromBrandBestEffort(ctx context.Context, resolver any, brandID string) (string, bool) {
 	if resolver == nil {
 		return "", false

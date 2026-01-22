@@ -455,13 +455,13 @@ func NewRouter(deps RouterDeps) http.Handler {
 	// Mint
 	// ================================
 	if deps.MintUC != nil {
+		// ✅ NewMintHandler の現行シグネチャに合わせる
+		// want: (MintUsecase, NameResolver, ProductionUsecase, MintRequestQueryService)
 		mintH := consoleHandler.NewMintHandler(
 			deps.MintUC,
-			deps.TokenUC,
 			deps.NameResolver,
 			deps.ProductionUC,
 			deps.MintRequestQueryService,
-			nil,
 		)
 
 		if mh, ok := mintH.(*consoleHandler.MintHandler); ok {

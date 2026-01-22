@@ -276,8 +276,6 @@ func NewContainer(ctx context.Context, infra *shared.Infra) (*Container, error) 
 	// =========================================================
 	// GCS repositories
 	// =========================================================
-	tokenIconRepo := gcso.NewTokenIconRepositoryGCS(gcsClient, infra.TokenIconBucket)
-	tokenContentsRepo := gcso.NewTokenContentsRepositoryGCS(gcsClient, infra.TokenContentsBucket)
 	listImageRepo := gcso.NewListImageRepositoryGCS(gcsClient, infra.ListImageBucket)
 	avatarIconRepo := gcso.NewAvatarIconRepositoryGCS(gcsClient, infra.AvatarIconBucket)
 
@@ -396,14 +394,15 @@ func NewContainer(ctx context.Context, infra *shared.Infra) (*Container, error) 
 
 	shippingAddressUC := uc.NewShippingAddressUsecase(shippingAddressRepo)
 
-	tokenMetadataBuilder := uc.NewTokenMetadataBuilder()
+	// =========================================================
+	// ✅ TokenBlueprintUsecase (現行シグネチャへ削ぎ落とし)
+	// - NewTokenMetadataBuilder は存在しないため削除
+	// - tokenContentsRepo / tokenIconRepo / ArweaveUploader 注入は廃止（後方互換削除）
+	// - 現行: NewTokenBlueprintUsecase(tokenBlueprintRepo, memberSvc)
+	// =========================================================
 	tokenBlueprintUC := uc.NewTokenBlueprintUsecase(
 		tokenBlueprintRepo,
-		tokenContentsRepo,
-		tokenIconRepo,
 		memberSvc,
-		infra.ArweaveUploader,
-		tokenMetadataBuilder,
 	)
 
 	tokenOperationUC := uc.NewTokenOperationUsecase(tokenOperationRepo)

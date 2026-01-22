@@ -346,3 +346,42 @@ func itoa(n int) string {
 
 // dummy ref to keep imported package in this helpers file minimal
 var _ = querydto.InventoryDetailDTO{}
+
+func getStringFieldAny(v any, names ...string) string {
+	rv := reflect.ValueOf(v)
+	if !rv.IsValid() {
+		return ""
+	}
+	if rv.Kind() == reflect.Pointer {
+		if rv.IsNil() {
+			return ""
+		}
+		rv = rv.Elem()
+	}
+	if rv.Kind() != reflect.Struct {
+		return ""
+	}
+
+	for _, n := range names {
+		f := rv.FieldByName(n)
+		if !f.IsValid() {
+			continue
+		}
+
+		switch f.Kind() {
+		case reflect.String:
+			return strings.TrimSpace(f.String())
+
+		case reflect.Pointer:
+			if f.IsNil() {
+				continue
+			}
+			fe := f.Elem()
+			if fe.IsValid() && fe.Kind() == reflect.String {
+				return strings.TrimSpace(fe.String())
+			}
+		}
+	}
+
+	return ""
+}

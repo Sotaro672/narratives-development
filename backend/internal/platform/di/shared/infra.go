@@ -16,8 +16,6 @@ import (
 	firebaseauth "firebase.google.com/go/v4/auth"
 	"google.golang.org/api/option"
 
-	uc "narratives/internal/application/usecase"
-	arweaveinfra "narratives/internal/infra/arweave"
 	appcfg "narratives/internal/infra/config"
 	solanainfra "narratives/internal/infra/solana"
 )
@@ -53,7 +51,6 @@ type Infra struct {
 
 	// Cross-cutting infra
 	MintAuthorityKey *solanainfra.MintAuthorityKey
-	ArweaveUploader  uc.ArweaveUploader
 
 	// Runtime settings (resolved once; normalized + validated)
 	SelfBaseURL             string // used by PaymentFlow (self webhook trigger)
@@ -125,16 +122,6 @@ func NewInfra(ctx context.Context) (*Infra, error) {
 		log.Printf("[shared.infra] Using credentials file for GCP clients: %s", redactPath(credFile))
 	} else {
 		log.Printf("[shared.infra] Using Application Default Credentials (no credentials file configured)")
-	}
-
-	// --------------------------------------------------------
-	// 1) Optional: Arweave uploader (used by TokenBlueprintUsecase)
-	// --------------------------------------------------------
-	if strings.TrimSpace(cfg.ArweaveBaseURL) != "" {
-		inf.ArweaveUploader = arweaveinfra.NewHTTPUploader(cfg.ArweaveBaseURL, cfg.ArweaveAPIKey)
-		log.Printf("[shared.infra] Arweave HTTPUploader initialized baseURL=%s", cfg.ArweaveBaseURL)
-	} else {
-		log.Printf("[shared.infra] Arweave HTTPUploader not configured (ARWEAVE_BASE_URL empty)")
 	}
 
 	// --------------------------------------------------------

@@ -1,4 +1,4 @@
-// backend/internal/application/query/list_create_query.go
+// backend/internal/application/query/console/list_create_query.go
 package query
 
 import (
@@ -18,7 +18,7 @@ import (
 // - pbId から: productName / brandName
 // - tbId から: tokenName / brandName
 //
-// ✅ FIX (今回):
+// ✅ FIX:
 // - PriceRows の母集団を「inventory.Stock」ではなく「models(variations)」にできるようにする。
 //   -> 在庫が 0 / inventory.Stock に存在しない modelId でも、PriceRows に行を出せる。
 //   -> stock は inventory があれば反映、無ければ 0 で返す。
@@ -137,15 +137,12 @@ func (q *ListCreateQuery) GetByInventoryIDWithListImage(
 
 	if q.pbPatchRepo != nil {
 		if patch, err := q.pbPatchRepo.GetPatchByID(ctx, pbID); err == nil {
-			brandID := ""
-			if patch.BrandID != nil {
-				brandID = strings.TrimSpace(*patch.BrandID)
-			}
+			brandID := strings.TrimSpace(getStringFieldAny(patch, "BrandID", "BrandId", "brandId"))
 			if brandID != "" && q.nameResolver != nil {
 				productBrandName = strings.TrimSpace(q.nameResolver.ResolveBrandName(ctx, brandID))
 			}
-			if productBrandName == "" && patch.BrandName != nil {
-				productBrandName = strings.TrimSpace(*patch.BrandName)
+			if productBrandName == "" {
+				productBrandName = strings.TrimSpace(getStringFieldAny(patch, "BrandName", "brandName"))
 			}
 		}
 	}
@@ -162,15 +159,12 @@ func (q *ListCreateQuery) GetByInventoryIDWithListImage(
 
 	if q.tbPatchRepo != nil {
 		if patch, err := q.tbPatchRepo.GetPatchByID(ctx, tbID); err == nil {
-			brandID := ""
-			if patch.BrandID != nil {
-				brandID = strings.TrimSpace(*patch.BrandID)
-			}
+			brandID := strings.TrimSpace(getStringFieldAny(patch, "BrandID", "BrandId", "brandId"))
 			if brandID != "" && q.nameResolver != nil {
 				tokenBrandName = strings.TrimSpace(q.nameResolver.ResolveBrandName(ctx, brandID))
 			}
-			if tokenBrandName == "" && patch.BrandName != nil {
-				tokenBrandName = strings.TrimSpace(*patch.BrandName)
+			if tokenBrandName == "" {
+				tokenBrandName = strings.TrimSpace(getStringFieldAny(patch, "BrandName", "brandName"))
 			}
 		}
 	}
@@ -236,15 +230,12 @@ func (q *ListCreateQuery) GetByIDsWithListImage(
 
 	if q.pbPatchRepo != nil {
 		if patch, err := q.pbPatchRepo.GetPatchByID(ctx, pbID); err == nil {
-			brandID := ""
-			if patch.BrandID != nil {
-				brandID = strings.TrimSpace(*patch.BrandID)
-			}
+			brandID := strings.TrimSpace(getStringFieldAny(patch, "BrandID", "BrandId", "brandId"))
 			if brandID != "" && q.nameResolver != nil {
 				productBrandName = strings.TrimSpace(q.nameResolver.ResolveBrandName(ctx, brandID))
 			}
-			if productBrandName == "" && patch.BrandName != nil {
-				productBrandName = strings.TrimSpace(*patch.BrandName)
+			if productBrandName == "" {
+				productBrandName = strings.TrimSpace(getStringFieldAny(patch, "BrandName", "brandName"))
 			}
 		}
 	}
@@ -261,15 +252,12 @@ func (q *ListCreateQuery) GetByIDsWithListImage(
 
 	if q.tbPatchRepo != nil {
 		if patch, err := q.tbPatchRepo.GetPatchByID(ctx, tbID); err == nil {
-			brandID := ""
-			if patch.BrandID != nil {
-				brandID = strings.TrimSpace(*patch.BrandID)
-			}
+			brandID := strings.TrimSpace(getStringFieldAny(patch, "BrandID", "BrandId", "brandId"))
 			if brandID != "" && q.nameResolver != nil {
 				tokenBrandName = strings.TrimSpace(q.nameResolver.ResolveBrandName(ctx, brandID))
 			}
-			if tokenBrandName == "" && patch.BrandName != nil {
-				tokenBrandName = strings.TrimSpace(*patch.BrandName)
+			if tokenBrandName == "" {
+				tokenBrandName = strings.TrimSpace(getStringFieldAny(patch, "BrandName", "brandName"))
 			}
 		}
 	}

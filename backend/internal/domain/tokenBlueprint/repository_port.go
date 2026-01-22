@@ -1,3 +1,4 @@
+// backend\internal\domain\tokenBlueprint\repository_port.go
 package tokenBlueprint
 
 import (
@@ -9,40 +10,54 @@ import (
 // ===============================
 // Create 用入力
 // ===============================
+//
+// entity.go 正:
+// - iconId は存在しない（保持しない）
+// - contentFiles は []ContentFile（embedded）
+// - minted は create 時は常に false（入力として持たせても repo 側で無視/固定化して良い）
+// - metadataUri は任意
 type CreateTokenBlueprintInput struct {
-	Name         string     `json:"name"`
-	Symbol       string     `json:"symbol"`
-	BrandID      string     `json:"brandId"`
-	CompanyID    string     `json:"companyId"`
-	Description  string     `json:"description"`
-	IconID       *string    `json:"iconId,omitempty"`
-	ContentFiles []string   `json:"contentFiles"`
-	AssigneeID   string     `json:"assigneeId"`
-	Minted       bool       `json:"minted"` // ★ boolean に変更（create時は常に false を想定）
-	CreatedAt    *time.Time `json:"createdAt,omitempty"`
-	CreatedBy    string     `json:"createdBy"`
-	UpdatedAt    *time.Time `json:"updatedAt,omitempty"`
-	UpdatedBy    string     `json:"updatedBy"`
+	Name        string `json:"name"`
+	Symbol      string `json:"symbol"`
+	BrandID     string `json:"brandId"`
+	CompanyID   string `json:"companyId"`
+	Description string `json:"description,omitempty"`
+
+	ContentFiles []ContentFile `json:"contentFiles"`
+	AssigneeID   string        `json:"assigneeId"`
+
+	CreatedAt *time.Time `json:"createdAt,omitempty"`
+	CreatedBy string     `json:"createdBy"`
+	UpdatedAt *time.Time `json:"updatedAt,omitempty"`
+	UpdatedBy string     `json:"updatedBy"`
+
+	MetadataURI string `json:"metadataUri,omitempty"`
 }
 
 // ===============================
 // Update 用入力
 // ===============================
+//
+// entity.go 正:
+// - iconId は存在しない
+// - contentFiles は []ContentFile の全置換
+// - minted は bool
+// - metadataUri は任意
 type UpdateTokenBlueprintInput struct {
-	Name         *string    `json:"name,omitempty"`
-	Symbol       *string    `json:"symbol,omitempty"`
-	BrandID      *string    `json:"brandId,omitempty"`
-	Description  *string    `json:"description,omitempty"`
-	IconID       *string    `json:"iconId,omitempty"`
-	ContentFiles *[]string  `json:"contentFiles,omitempty"`
-	AssigneeID   *string    `json:"assigneeId,omitempty"`
-	Minted       *bool      `json:"minted,omitempty"` // ★ boolean に変更
-	UpdatedAt    *time.Time `json:"updatedAt,omitempty"`
-	UpdatedBy    *string    `json:"updatedBy,omitempty"`
-	DeletedAt    *time.Time `json:"deletedAt,omitempty"`
-	DeletedBy    *string    `json:"deletedBy,omitempty"`
+	Name        *string `json:"name,omitempty"`
+	Symbol      *string `json:"symbol,omitempty"`
+	BrandID     *string `json:"brandId,omitempty"`
+	Description *string `json:"description,omitempty"`
 
-	// ★ 追加: metadataUri 用のポインタフィールド
+	ContentFiles *[]ContentFile `json:"contentFiles,omitempty"` // 全置換
+	AssigneeID   *string        `json:"assigneeId,omitempty"`
+	Minted       *bool          `json:"minted,omitempty"`
+
+	UpdatedAt *time.Time `json:"updatedAt,omitempty"`
+	UpdatedBy *string    `json:"updatedBy,omitempty"`
+	DeletedAt *time.Time `json:"deletedAt,omitempty"`
+	DeletedBy *string    `json:"deletedBy,omitempty"`
+
 	MetadataURI *string `json:"metadataUri,omitempty"`
 }
 
@@ -50,24 +65,29 @@ type UpdateTokenBlueprintInput struct {
 // Patch（表示用）
 // ===============================
 //
-// TokenBlueprintCard に表示するための最小情報。
-// - inventory/detail 側の ViewModel に埋め込む用途を想定
-// - 取得できない項目は nil のままでも OK（フロントで "" へフォールバック可能）
+// entity.go 正に寄せる:
+// - Patch は read-model 用の最小情報（string/bool を基本）
+// - icon は objectPath 規約＋metadata解決で返すため、ここでは IconURL だけを保持（任意）
+// - metadataUri を含める
 type Patch struct {
-	Name        *string `json:"name,omitempty"`
-	Symbol      *string `json:"symbol,omitempty"`
-	BrandID     *string `json:"brandId,omitempty"`
-	BrandName   *string `json:"brandName,omitempty"`
-	CompanyID   *string `json:"companyId,omitempty"`
-	CompanyName *string `json:"companyName,omitempty"`
-	Description *string `json:"description,omitempty"`
-	IconURL     *string `json:"iconUrl,omitempty"`
-	Minted      *bool   `json:"minted,omitempty"`
+	ID          string `json:"id"`
+	TokenName   string `json:"tokenName"`
+	Symbol      string `json:"symbol"`
+	BrandID     string `json:"brandId"`
+	BrandName   string `json:"brandName"`
+	CompanyID   string `json:"companyId"`
+	Description string `json:"description"`
+	Minted      bool   `json:"minted"`
+	MetadataURI string `json:"metadataUri"`
+	IconURL     string `json:"iconUrl,omitempty"`
 }
 
 // ===============================
 // Filter（検索条件）
 // ===============================
+//
+// entity.go 正:
+// - iconId が無いので HasIcon は廃止
 type Filter struct {
 	IDs         []string
 	BrandIDs    []string
@@ -77,7 +97,6 @@ type Filter struct {
 
 	NameLike   string
 	SymbolLike string
-	HasIcon    *bool
 
 	CreatedFrom *time.Time
 	CreatedTo   *time.Time
@@ -108,6 +127,9 @@ type RepositoryPort interface {
 	// 単体取得
 	GetByID(ctx context.Context, id string) (*TokenBlueprint, error)
 
+	// ★ Patch 取得（read-model 用）
+	GetPatchByID(ctx context.Context, id string) (Patch, error)
+
 	// ★ ID → Name の高速解決
 	GetNameByID(ctx context.Context, id string) (string, error)
 
@@ -129,7 +151,7 @@ type RepositoryPort interface {
 	IsSymbolUnique(ctx context.Context, symbol string, excludeID string) (bool, error)
 	IsNameUnique(ctx context.Context, name string, excludeID string) (bool, error)
 
-	// ストレージ
+	// ストレージ（方針Aでは icon は signed URL を使う想定だが、Port は残す）
 	UploadIcon(ctx context.Context, fileName, contentType string, r io.Reader) (url string, err error)
 	UploadContentFile(ctx context.Context, fileName, contentType string, r io.Reader) (url string, err error)
 
@@ -151,7 +173,6 @@ func ListByBrandID(
 	brandID string,
 	page Page,
 ) (PageResult, error) {
-
 	f := Filter{
 		BrandIDs: []string{brandID},
 	}
@@ -175,7 +196,7 @@ func ListMintedNotYet(
 
 	items := []TokenBlueprint{}
 	for _, tb := range result.Items {
-		if !tb.Minted { // false = notYet
+		if !tb.Minted {
 			items = append(items, tb)
 		}
 	}
@@ -203,7 +224,7 @@ func ListMintedCompleted(
 
 	items := []TokenBlueprint{}
 	for _, tb := range result.Items {
-		if tb.Minted { // true = minted
+		if tb.Minted {
 			items = append(items, tb)
 		}
 	}

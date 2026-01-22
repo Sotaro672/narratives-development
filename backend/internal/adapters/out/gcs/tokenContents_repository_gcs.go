@@ -22,6 +22,10 @@ import (
 // - Metadata is derived from GCS Object attributes/metadata.
 // - One GCS object represents one TokenContent.
 // - Object name is used as ID (id == objectPath).
+//
+// NOTE (no backward-compat):
+// - This repository treats IDs as *object paths* within the configured bucket.
+// - It does NOT accept gs://... or https://storage.googleapis.com/... URLs as IDs/inputs.
 type TokenContentsRepositoryGCS struct {
 	Client *storage.Client
 	Bucket string
@@ -49,14 +53,19 @@ func (r *TokenContentsRepositoryGCS) bucket() string {
 	return b
 }
 
+// rejectURL enforces "no backward-compat" policy.
+func rejectURL(s string) bool {
+	s = strings.TrimSpace(strings.ToLower(s))
+	return strings.HasPrefix(s, "gs://") || strings.HasPrefix(s, "http://") || strings.HasPrefix(s, "https://")
+}
+
 // ========================
 // RepositoryPort impl
 // ========================
 
 // GetByID:
-// - id is treated as either:
-//   - GCS URL (gs:// or https://storage.googleapis.com/...), or
-//   - object path within default bucket.
+// - id must be an object path within configured bucket.
+// - URL forms (gs://..., https://...) are rejected.
 func (r *TokenContentsRepositoryGCS) GetByID(ctx context.Context, id string) (*tcdom.TokenContent, error) {
 	if r.Client == nil {
 		return nil, errors.New("TokenContentsRepositoryGCS: nil storage client")
@@ -66,16 +75,12 @@ func (r *TokenContentsRepositoryGCS) GetByID(ctx context.Context, id string) (*t
 	if id == "" {
 		return nil, tcdom.ErrNotFound
 	}
-
-	var bucket, objectPath string
-	if b, obj, ok := gcscommon.ParseGCSURL(id); ok {
-		bucket, objectPath = b, obj
-	} else {
-		bucket = r.bucket()
-		objectPath = id
+	if rejectURL(id) {
+		return nil, fmt.Errorf("TokenContentsRepositoryGCS.GetByID: URL-form id is not supported (pass object path only)")
 	}
 
-	objectPath = strings.TrimLeft(strings.TrimSpace(objectPath), "/")
+	bucket := r.bucket()
+	objectPath := strings.TrimLeft(strings.TrimSpace(id), "/")
 	if objectPath == "" {
 		return nil, tcdom.ErrNotFound
 	}
@@ -163,6 +168,7 @@ func (r *TokenContentsRepositoryGCS) Count(ctx context.Context, filter tcdom.Fil
 	if r.Client == nil {
 		return 0, errors.New("TokenContentsRepositoryGCS: nil storage client")
 	}
+
 	bucket := r.bucket()
 	it := r.Client.Bucket(bucket).Objects(ctx, &storage.Query{})
 
@@ -185,27 +191,23 @@ func (r *TokenContentsRepositoryGCS) Count(ctx context.Context, filter tcdom.Fil
 
 // Create:
 // - Assumes the object is already uploaded to GCS.
-// - in.URL should point to that object (GCS URL or path).
+// - in.URL must be an object path (NOT a URL).
 // - Updates object metadata (name/type/size) and returns the TokenContent.
 func (r *TokenContentsRepositoryGCS) Create(ctx context.Context, in tcdom.CreateTokenContentInput) (*tcdom.TokenContent, error) {
 	if r.Client == nil {
 		return nil, errors.New("TokenContentsRepositoryGCS: nil storage client")
 	}
 
-	url := strings.TrimSpace(in.URL)
-	if url == "" {
-		return nil, fmt.Errorf("TokenContentsRepositoryGCS.Create: empty URL (expected GCS object URL or path)")
+	raw := strings.TrimSpace(in.URL)
+	if raw == "" {
+		return nil, fmt.Errorf("TokenContentsRepositoryGCS.Create: empty URL (expected object path)")
+	}
+	if rejectURL(raw) {
+		return nil, fmt.Errorf("TokenContentsRepositoryGCS.Create: URL-form input is not supported (pass object path only)")
 	}
 
-	var bucket, objectPath string
-	if b, obj, ok := gcscommon.ParseGCSURL(url); ok {
-		bucket, objectPath = b, obj
-	} else {
-		bucket = r.bucket()
-		objectPath = url
-	}
-
-	objectPath = strings.TrimLeft(strings.TrimSpace(objectPath), "/")
+	bucket := r.bucket()
+	objectPath := strings.TrimLeft(strings.TrimSpace(raw), "/")
 	if objectPath == "" {
 		return nil, fmt.Errorf("TokenContentsRepositoryGCS.Create: empty objectPath")
 	}
@@ -251,6 +253,7 @@ func (r *TokenContentsRepositoryGCS) Create(ctx context.Context, in tcdom.Create
 
 // Update:
 // - Updates metadata on the corresponding GCS object for given id.
+// - id must be an object path (NOT a URL).
 func (r *TokenContentsRepositoryGCS) Update(ctx context.Context, id string, in tcdom.UpdateTokenContentInput) (*tcdom.TokenContent, error) {
 	if r.Client == nil {
 		return nil, errors.New("TokenContentsRepositoryGCS: nil storage client")
@@ -260,15 +263,12 @@ func (r *TokenContentsRepositoryGCS) Update(ctx context.Context, id string, in t
 	if id == "" {
 		return nil, tcdom.ErrNotFound
 	}
-
-	var bucket, objectPath string
-	if b, obj, ok := gcscommon.ParseGCSURL(id); ok {
-		bucket, objectPath = b, obj
-	} else {
-		bucket = r.bucket()
-		objectPath = id
+	if rejectURL(id) {
+		return nil, fmt.Errorf("TokenContentsRepositoryGCS.Update: URL-form id is not supported (pass object path only)")
 	}
-	objectPath = strings.TrimLeft(strings.TrimSpace(objectPath), "/")
+
+	bucket := r.bucket()
+	objectPath := strings.TrimLeft(strings.TrimSpace(id), "/")
 	if objectPath == "" {
 		return nil, tcdom.ErrNotFound
 	}
@@ -319,11 +319,13 @@ func (r *TokenContentsRepositoryGCS) Update(ctx context.Context, id string, in t
 
 	setStr("name", in.Name)
 	setType(in.Type)
+
+	// Optional override (normally derived). Keep for compatibility with higher layers.
 	setStr("url", in.URL)
+
 	setInt64("size", in.Size)
 
 	if len(meta) == 0 {
-		// nothing to update -> return current
 		tc := buildTokenContentFromAttrs(bucket, attrs)
 		return &tc, nil
 	}
@@ -340,7 +342,7 @@ func (r *TokenContentsRepositoryGCS) Update(ctx context.Context, id string, in t
 }
 
 // Delete removes the underlying GCS object.
-// id can be a GCS URL or object path.
+// id must be an object path (NOT a URL).
 func (r *TokenContentsRepositoryGCS) Delete(ctx context.Context, id string) error {
 	if r.Client == nil {
 		return errors.New("TokenContentsRepositoryGCS: nil storage client")
@@ -350,15 +352,12 @@ func (r *TokenContentsRepositoryGCS) Delete(ctx context.Context, id string) erro
 	if id == "" {
 		return tcdom.ErrNotFound
 	}
-
-	var bucket, objectPath string
-	if b, obj, ok := gcscommon.ParseGCSURL(id); ok {
-		bucket, objectPath = b, obj
-	} else {
-		bucket = r.bucket()
-		objectPath = id
+	if rejectURL(id) {
+		return fmt.Errorf("TokenContentsRepositoryGCS.Delete: URL-form id is not supported (pass object path only)")
 	}
-	objectPath = strings.TrimLeft(strings.TrimSpace(objectPath), "/")
+
+	bucket := r.bucket()
+	objectPath := strings.TrimLeft(strings.TrimSpace(id), "/")
 	if objectPath == "" {
 		return tcdom.ErrNotFound
 	}
@@ -396,10 +395,11 @@ func (r *TokenContentsRepositoryGCS) UploadContent(ctx context.Context, fileName
 		err = cerr
 	}
 	if err != nil {
-		_ = r.Client.Bucket(bucket).Object(objectPath).Delete(ctx) // best-effort cleanup
+		_ = r.Client.Bucket(bucket).Object(objectPath).Delete(ctx)
 		return "", 0, err
 	}
 
+	// ✅ FIX: gcscommon.GCSPublicURL is (bucket, objectPath, defaultBucket)
 	publicURL := gcscommon.GCSPublicURL(bucket, objectPath, defaultTokenContentsBucket)
 	return publicURL, n, nil
 }
@@ -427,7 +427,6 @@ func (r *TokenContentsRepositoryGCS) GetStats(ctx context.Context) (tcdom.TokenC
 
 		tc := buildTokenContentFromAttrs(bucket, attrs)
 
-		// Deleted 無視（仕様により必要なら判定追加）
 		stats.TotalCount++
 		stats.TotalSize += tc.Size
 
@@ -450,7 +449,6 @@ func (r *TokenContentsRepositoryGCS) GetStats(ctx context.Context) (tcdom.TokenC
 
 // Reset:
 //   - Deletes all objects in the configured bucket.
-//     (Use carefully; mainly for testing parity with PG implementation.)
 func (r *TokenContentsRepositoryGCS) Reset(ctx context.Context) error {
 	if r.Client == nil {
 		return errors.New("TokenContentsRepositoryGCS: nil storage client")
@@ -479,7 +477,6 @@ func (r *TokenContentsRepositoryGCS) Reset(ctx context.Context) error {
 
 // WithTx:
 // - GCS にはトランザクションがないため、そのまま fn を呼び出す。
-// - usecase 側との互換性のためのダミー実装。
 func (r *TokenContentsRepositoryGCS) WithTx(ctx context.Context, fn func(ctx context.Context) error) error {
 	if fn == nil {
 		return nil
@@ -503,10 +500,8 @@ func buildTokenContentFromAttrs(bucket string, attrs *storage.ObjectAttrs) tcdom
 		return strings.TrimSpace(meta[key])
 	}
 
-	// ID: object path as-is
 	id := name
 
-	// Name: metadata.name or fallback to object base name
 	tcName := getMeta("name")
 	if tcName == "" {
 		tcName = name
@@ -515,19 +510,17 @@ func buildTokenContentFromAttrs(bucket string, attrs *storage.ObjectAttrs) tcdom
 		}
 	}
 
-	// Type: metadata.type
 	var ctype tcdom.ContentType
 	if t := getMeta("type"); t != "" {
 		ctype = tcdom.ContentType(t)
 	}
 
-	// URL: metadata.url or public URL from bucket/object
 	url := getMeta("url")
 	if url == "" {
+		// ✅ FIX: gcscommon.GCSPublicURL is (bucket, objectPath, defaultBucket)
 		url = gcscommon.GCSPublicURL(bucket, name, defaultTokenContentsBucket)
 	}
 
-	// Size: metadata.size or attrs.Size
 	var size int64
 	if sz, ok := gcscommon.ParseInt64Meta(meta, "size"); ok {
 		size = sz
@@ -546,7 +539,6 @@ func buildTokenContentFromAttrs(bucket string, attrs *storage.ObjectAttrs) tcdom
 
 // matchTokenContentFilter applies tcdom.Filter to a TokenContent.
 func matchTokenContentFilter(tc tcdom.TokenContent, f tcdom.Filter) bool {
-	// IDs
 	if len(f.IDs) > 0 {
 		ok := false
 		for _, id := range f.IDs {
@@ -560,7 +552,6 @@ func matchTokenContentFilter(tc tcdom.TokenContent, f tcdom.Filter) bool {
 		}
 	}
 
-	// Types
 	if len(f.Types) > 0 {
 		ok := false
 		for _, t := range f.Types {
@@ -574,7 +565,6 @@ func matchTokenContentFilter(tc tcdom.TokenContent, f tcdom.Filter) bool {
 		}
 	}
 
-	// NameLike
 	if v := strings.TrimSpace(f.NameLike); v != "" {
 		lv := strings.ToLower(v)
 		if !strings.Contains(strings.ToLower(tc.Name), lv) {
@@ -582,7 +572,6 @@ func matchTokenContentFilter(tc tcdom.TokenContent, f tcdom.Filter) bool {
 		}
 	}
 
-	// Size range
 	if f.SizeMin != nil && tc.Size < *f.SizeMin {
 		return false
 	}
@@ -593,7 +582,7 @@ func matchTokenContentFilter(tc tcdom.TokenContent, f tcdom.Filter) bool {
 	return true
 }
 
-// applyTokenContentSort: in-memory sort equivalent of buildTCOrderBy.
+// applyTokenContentSort: in-memory sort.
 func applyTokenContentSort(items []tcdom.TokenContent, s tcdom.Sort) {
 	if len(items) <= 1 {
 		return
@@ -602,12 +591,10 @@ func applyTokenContentSort(items []tcdom.TokenContent, s tcdom.Sort) {
 	col := strings.ToLower(strings.TrimSpace(string(s.Column)))
 	dir := strings.ToUpper(strings.TrimSpace(string(s.Order)))
 	if dir != "ASC" && dir != "DESC" {
-		// Default (PG互換): updated_at DESC, id DESC
 		dir = "DESC"
 		col = "id"
 	}
 
-	// SA4006 fix: declare and assign in switch
 	var less func(i, j int) bool
 
 	switch col {
@@ -626,8 +613,8 @@ func applyTokenContentSort(items []tcdom.TokenContent, s tcdom.Sort) {
 
 	for i := 0; i < len(items)-1; i++ {
 		for j := i + 1; j < len(items); j++ {
-			swap := less(j, i) // ASC: swap if items[j] < items[i]
-			if dir == "DESC" { // DESC: swap if items[i] < items[j]
+			swap := less(j, i)
+			if dir == "DESC" {
 				swap = less(i, j)
 			}
 			if swap {
@@ -637,7 +624,6 @@ func applyTokenContentSort(items []tcdom.TokenContent, s tcdom.Sort) {
 	}
 }
 
-// humanBytes: same helper as PG版 for stats formatting.
 func humanBytes(b int64) string {
 	const unit = int64(1024)
 	if b < unit {

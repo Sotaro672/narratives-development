@@ -19,64 +19,53 @@ import (
 	mintapp "narratives/internal/application/mint"
 	mintdto "narratives/internal/application/mint/dto"
 
-	// ★ productionIds 自動解決用
+	// productionIds 自動解決用
 	productionapp "narratives/internal/application/production"
 
-	// ★ NEW: mintRequest 一覧の Query（productionId -> inspection + mint）
+	// mintRequest 一覧の Query（productionId -> inspection + mint）
 	querydto "narratives/internal/application/query/console/dto"
 
-	usecase "narratives/internal/application/usecase"
 	branddom "narratives/internal/domain/brand"
 	inspectiondom "narratives/internal/domain/inspection"
-	invdom "narratives/internal/domain/inventory"
 	mintdom "narratives/internal/domain/mint"
 	pbpdom "narratives/internal/domain/productBlueprint"
 	tbdom "narratives/internal/domain/tokenBlueprint"
 )
 
-// ★ NEW: handler が依存する最小 query IF
-// - 実装は backend/internal/application/query/* に置く想定
+// handler が依存する最小 query IF
 type MintRequestQueryService interface {
 	// company 境界付きで、productionId と同 docId の inspection/mint を束ねた DTO を返す
 	// NOTE: requestedBy は mint.CreatedBy に合わせる（DTO 側で担保）
 	ListMintRequestManagementRows(ctx context.Context) ([]querydto.ProductionInspectionMintDTO, error)
 
-	// ✅ detail 用（/mint/inspections/{productionId}）
+	// detail 用（/mint/inspections/{productionId}）
 	GetMintRequestDetail(ctx context.Context, productionID string) (*querydto.MintRequestDetailDTO, error)
 }
 
 type MintHandler struct {
 	mintUC       *mintapp.MintUsecase
-	tokenUC      *usecase.TokenUsecase
 	nameResolver *resolver.NameResolver
 
-	// ★ /mint/inspections に productionIds が来ない場合に productions から自動生成する
+	// /mint/inspections に productionIds が来ない場合に productions から自動生成する
 	productionUC *productionapp.ProductionUsecase
 
-	// ★ NEW: /mint/requests 用 Query
+	// /mint/requests 用 Query
 	mintRequestQS MintRequestQueryService
 }
 
 func NewMintHandler(
 	mintUC *mintapp.MintUsecase,
-	tokenUC *usecase.TokenUsecase,
 	nameResolver *resolver.NameResolver,
 	productionUC *productionapp.ProductionUsecase,
-	mintRequestQS MintRequestQueryService, // ★ 追加
-	inventoryRepo invdom.RepositoryPort, // ★ 互換のため引数は残す（DI側変更を最小化）
+	mintRequestQS MintRequestQueryService,
 ) http.Handler {
-	// ★ NameResolver は MintUsecase 側に保持（既存constructorは壊さない）
+	// NameResolver は MintUsecase 側に保持
 	if mintUC != nil {
 		mintUC.SetNameResolver(nameResolver)
-		// NOTE:
-		// MintUsecase には SetInventoryRepo が存在しないため、ここでは注入しない。
-		// inventories 連携は DI(container) 側で mintUC.SetInventoryUsecase(...) により注入する。
-		_ = inventoryRepo // 互換のため未使用にしておく
 	}
 
 	return &MintHandler{
 		mintUC:        mintUC,
-		tokenUC:       tokenUC, // 互換のため保持（mint 実行は mintUC 経由に変更）
 		nameResolver:  nameResolver,
 		productionUC:  productionUC,
 		mintRequestQS: mintRequestQS,
@@ -98,7 +87,7 @@ func (h *MintHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		h.HandleDebug(w, r)
 		return
 
-	// ★ NEW: GET /mint/requests（mintRequest 管理一覧を 1shot で返す）
+	// GET /mint/requests（mintRequest 管理一覧を 1shot で返す）
 	case r.Method == http.MethodGet && r.URL.Path == "/mint/requests":
 		h.listMintRequestsByCurrentCompany(w, r)
 		return
@@ -108,8 +97,7 @@ func (h *MintHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		h.listInspectionsByProductionIDs(w, r)
 		return
 
-	// ★ NEW: GET /mint/inspections/{productionId}
-	// - detail 用（1件返す）
+	// GET /mint/inspections/{productionId} (detail)
 	case r.Method == http.MethodGet &&
 		strings.HasPrefix(r.URL.Path, "/mint/inspections/") &&
 		!strings.HasSuffix(r.URL.Path, "/request"):
@@ -121,9 +109,7 @@ func (h *MintHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		h.listMintsByInspectionIDs(w, r)
 		return
 
-	// ★ NEW: POST /mint/mints/{inspectionId}/execute
-	// - productionId=inspectionId=docId の前提で mint 実行トリガーに使える
-	// - 既存の MintFromMintRequest を流用する（mintRequestId として同じIDを渡す）
+	// POST /mint/mints/{inspectionId}/execute
 	case r.Method == http.MethodPost &&
 		strings.HasPrefix(r.URL.Path, "/mint/mints/") &&
 		strings.HasSuffix(r.URL.Path, "/execute"):
@@ -172,9 +158,7 @@ func (h *MintHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 }
 
 // ============================================================
-// ★ NEW: POST /mint/mints/{inspectionId}/execute
-// - MintFromMintRequest を流用して mint 実行する
-// - 現状の設計（mintRequestId=inspectionId=productionId）に合わせている
+// POST /mint/mints/{inspectionId}/execute
 // ============================================================
 func (h *MintHandler) executeMintByInspectionID(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
@@ -230,8 +214,7 @@ func (h *MintHandler) executeMintByInspectionID(w http.ResponseWriter, r *http.R
 }
 
 // ============================================================
-// ★ NEW: GET /mint/inspections/{productionId}
-// - detail 用: MintRequestQueryService.GetMintRequestDetail を呼ぶ
+// GET /mint/inspections/{productionId}
 // ============================================================
 func (h *MintHandler) getMintRequestDetailByProductionID(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
@@ -270,7 +253,6 @@ func (h *MintHandler) getMintRequestDetailByProductionID(w http.ResponseWriter, 
 			return
 		}
 
-		// QS 側が inspection/mint not found を返すケース
 		if errors.Is(err, inspectiondom.ErrNotFound) || errors.Is(err, mintdom.ErrNotFound) ||
 			strings.Contains(strings.ToLower(err.Error()), "not found") {
 			w.WriteHeader(http.StatusNotFound)
@@ -294,7 +276,7 @@ func (h *MintHandler) getMintRequestDetailByProductionID(w http.ResponseWriter, 
 }
 
 // ============================================================
-// ★ NEW: GET /mint/requests
+// GET /mint/requests
 // ============================================================
 func (h *MintHandler) listMintRequestsByCurrentCompany(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
@@ -539,7 +521,7 @@ func (h *MintHandler) listMintsByInspectionIDs(w http.ResponseWriter, r *http.Re
 
 	log.Printf("[mint_handler] /mint/mints inspectionIds len=%d sample[0..4]=%v view=%s", len(ids), ids[:min(5, len(ids))], view)
 
-	// ★ view=list: Usecase 側で tokenName/createdByName を解決した DTO を返す
+	// view=list: Usecase 側で tokenName/createdByName を解決した DTO を返す
 	if view != "dto" {
 		start := time.Now()
 		out, err := h.mintUC.ListMintListRowsByInspectionIDs(ctx, ids)
@@ -564,7 +546,7 @@ func (h *MintHandler) listMintsByInspectionIDs(w http.ResponseWriter, r *http.Re
 		return
 	}
 
-	// ★ view=dto: 詳細フィールドを返しつつ、createdByName/tokenName も入れる
+	// view=dto: 詳細フィールドを返しつつ、createdByName/tokenName も入れる
 	start := time.Now()
 	mintsByInspectionID, err := h.mintUC.ListMintsByInspectionIDs(ctx, ids)
 	elapsed := time.Since(start)
@@ -591,8 +573,7 @@ func (h *MintHandler) listMintsByInspectionIDs(w http.ResponseWriter, r *http.Re
 	for inspectionID, m := range mintsByInspectionID {
 		iid := strings.TrimSpace(inspectionID)
 
-		// ★ handler 側は products を []string のみ返す方針
-		// - entity 側が map[string]string のままでも、ここでは一切変換しない/触らない
+		// handler 側は products を []string のみ返す方針（常に空）
 		products := []string{}
 
 		var createdAt *string
@@ -632,7 +613,7 @@ func (h *MintHandler) listMintsByInspectionIDs(w http.ResponseWriter, r *http.Re
 			"brandId":           strings.TrimSpace(m.BrandID),
 			"tokenBlueprintId":  strings.TrimSpace(m.TokenBlueprintID),
 			"tokenName":         tokenName,
-			"products":          products, // ★ []string only（常に空）
+			"products":          products,
 			"createdBy":         createdBy,
 			"createdByName":     createdByName,
 			"createdAt":         createdAt,
@@ -647,8 +628,7 @@ func (h *MintHandler) listMintsByInspectionIDs(w http.ResponseWriter, r *http.Re
 
 // ============================================================
 // GET /mint/mints/{id}
-// - handler は products を []string のみ返す（変換しない）
-// - MintUsecase に GetMintByID が無いので、既存の ListMintsByInspectionIDs を使用
+// - handler は products を []string のみ返す（常に空）
 // ============================================================
 func (h *MintHandler) getMintByID(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
@@ -720,7 +700,7 @@ func (h *MintHandler) getMintByID(w http.ResponseWriter, r *http.Request) {
 		"brandId":           strings.TrimSpace(mintEntity.BrandID),
 		"tokenBlueprintId":  strings.TrimSpace(mintEntity.TokenBlueprintID),
 		"tokenName":         tokenName,
-		"products":          []string{}, // ★ []string only（常に空）
+		"products":          []string{},
 		"createdBy":         createdBy,
 		"createdByName":     createdByName,
 		"createdAt":         createdAt,
@@ -808,7 +788,7 @@ func (h *MintHandler) updateRequestInfo(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	// ✅ panic を握ってスタックを必ず出す（原因確定用）
+	// panic を握ってスタックを必ず出す（原因確定用）
 	defer func() {
 		if rec := recover(); rec != nil {
 			log.Printf(
@@ -820,7 +800,7 @@ func (h *MintHandler) updateRequestInfo(w http.ResponseWriter, r *http.Request) 
 		}
 	}()
 
-	// ✅ body を生で読む（Decode 後だと読めない）
+	// body を生で読む（Decode 後だと読めない）
 	raw, _ := io.ReadAll(r.Body)
 	log.Printf(
 		"[mint_handler] /mint/inspections/{productionId}/request rawBody productionId=%q body=%s",
@@ -845,7 +825,7 @@ func (h *MintHandler) updateRequestInfo(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	// ✅ scheduledBurnDate の “値” を出す（ポインタアドレスじゃなく）
+	// scheduledBurnDate の “値” を出す（ポインタアドレスじゃなく）
 	sbd := "<nil>"
 	if body.ScheduledBurnDate != nil {
 		sbd = strings.TrimSpace(*body.ScheduledBurnDate)
@@ -953,12 +933,13 @@ func (h *MintHandler) listBrandsForCurrentCompany(w http.ResponseWriter, r *http
 
 // ============================================================
 // GET /mint/token_blueprints?brandId=...
+// - tokenBlueprint は iconUrl を保持しない（entity.go 正）
+// - よって iconUrl は返さない（後方互換削除）
 // ============================================================
 type tokenBlueprintForMintResponse struct {
-	ID      string `json:"id"`
-	Name    string `json:"name"`
-	Symbol  string `json:"symbol"`
-	IconURL string `json:"iconUrl"`
+	ID     string `json:"id"`
+	Name   string `json:"name"`
+	Symbol string `json:"symbol"`
 }
 
 func (h *MintHandler) listTokenBlueprintsByBrand(w http.ResponseWriter, r *http.Request) {
@@ -1009,10 +990,9 @@ func (h *MintHandler) listTokenBlueprintsByBrand(w http.ResponseWriter, r *http.
 	items := make([]tokenBlueprintForMintResponse, 0, len(result.Items))
 	for _, tb := range result.Items {
 		items = append(items, tokenBlueprintForMintResponse{
-			ID:      tb.ID,
-			Name:    tb.Name,
-			Symbol:  tb.Symbol,
-			IconURL: tb.IconURL,
+			ID:     strings.TrimSpace(tb.ID),
+			Name:   strings.TrimSpace(tb.Name),
+			Symbol: strings.TrimSpace(tb.Symbol),
 		})
 	}
 
@@ -1074,8 +1054,6 @@ func sampleFirstValue[V any](m map[string]V) any {
 	return m[k]
 }
 
-// ============================================================
 // keep imports referenced in some builds
-// ============================================================
 var _ = mintdto.MintListRowDTO{}
 var _ = context.Canceled

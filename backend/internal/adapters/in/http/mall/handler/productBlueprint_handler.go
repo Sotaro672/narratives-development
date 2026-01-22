@@ -1,4 +1,4 @@
-// backend\internal\adapters\in\http\mall\handler\productBlueprint_handler.go
+// backend/internal/adapters/in/http/mall/handler/productBlueprint_handler.go
 package mallHandler
 
 import (
@@ -8,6 +8,8 @@ import (
 	"net/http"
 	"strings"
 
+	branddom "narratives/internal/domain/brand"
+	companydom "narratives/internal/domain/company"
 	pbdom "narratives/internal/domain/productBlueprint"
 )
 
@@ -23,21 +25,26 @@ import (
 type MallProductBlueprintHandler struct {
 	uc productBlueprintGetter
 
-	// ✅ NEW: name resolver injection (best-effort)
-	BrandNameResolver   any
-	CompanyNameResolver any
+	// ✅ Name resolvers (type-safe)
+	brandSvc   *branddom.Service
+	companySvc *companydom.Service
 }
 
+// NewMallProductBlueprintHandler constructs handler without name resolution.
 func NewMallProductBlueprintHandler(uc productBlueprintGetter) http.Handler {
 	return &MallProductBlueprintHandler{uc: uc}
 }
 
-// ✅ optional ctor: NameResolver を明示注入したい場合
-func NewMallProductBlueprintHandlerWithNameResolver(uc productBlueprintGetter, nameResolver any) http.Handler {
+// NewMallProductBlueprintHandlerWithServices injects Brand/Company services for best-effort name resolution.
+func NewMallProductBlueprintHandlerWithServices(
+	uc productBlueprintGetter,
+	brandSvc *branddom.Service,
+	companySvc *companydom.Service,
+) http.Handler {
 	return &MallProductBlueprintHandler{
-		uc:                  uc,
-		BrandNameResolver:   nameResolver,
-		CompanyNameResolver: nameResolver,
+		uc:         uc,
+		brandSvc:   brandSvc,
+		companySvc: companySvc,
 	}
 }
 
@@ -112,10 +119,10 @@ func (h *MallProductBlueprintHandler) ServeHTTP(w http.ResponseWriter, r *http.R
 func (h *MallProductBlueprintHandler) getByID(w http.ResponseWriter, r *http.Request, id string) {
 	ctx := r.Context()
 
-	log.Printf("[mall_productBlueprint] getById start id=%q resolverBrand=%t resolverCompany=%t",
+	log.Printf("[mall_productBlueprint] getById start id=%q brandSvc=%t companySvc=%t",
 		strings.TrimSpace(id),
-		h.BrandNameResolver != nil,
-		h.CompanyNameResolver != nil,
+		h.brandSvc != nil,
+		h.companySvc != nil,
 	)
 
 	p, err := h.uc.GetByID(ctx, strings.TrimSpace(id))
@@ -134,7 +141,7 @@ func (h *MallProductBlueprintHandler) getByID(w http.ResponseWriter, r *http.Req
 		return
 	}
 
-	resp := toMallProductBlueprintResponse(ctx, p, h.BrandNameResolver, h.CompanyNameResolver)
+	resp := h.toMallProductBlueprintResponse(ctx, p)
 
 	log.Printf("[mall_productBlueprint] ok id=%q productName=%q brandId=%q brandName=%q companyId=%q companyName=%q",
 		resp.ID,
@@ -152,12 +159,7 @@ func (h *MallProductBlueprintHandler) getByID(w http.ResponseWriter, r *http.Req
 // Mapping
 // ------------------------------
 
-func toMallProductBlueprintResponse(
-	ctx context.Context,
-	p pbdom.ProductBlueprint,
-	brandNameResolver any,
-	companyNameResolver any,
-) MallProductBlueprintResponse {
+func (h *MallProductBlueprintHandler) toMallProductBlueprintResponse(ctx context.Context, p pbdom.ProductBlueprint) MallProductBlueprintResponse {
 	pbID := strings.TrimSpace(p.ID)
 	productName := strings.TrimSpace(p.ProductName)
 	companyID := strings.TrimSpace(p.CompanyID)
@@ -167,13 +169,14 @@ func toMallProductBlueprintResponse(
 	brandName := ""
 	companyName := ""
 
-	if brandID != "" && brandNameResolver != nil {
-		if s, ok := resolveBrandNameBestEffort(ctx, brandNameResolver, brandID); ok {
+	if brandID != "" && h != nil && h.brandSvc != nil {
+		if s, err := h.brandSvc.GetNameByID(ctx, brandID); err == nil {
 			brandName = strings.TrimSpace(s)
 		}
 	}
-	if companyID != "" && companyNameResolver != nil {
-		if s, ok := resolveCompanyNameBestEffort(ctx, companyNameResolver, companyID); ok {
+	if companyID != "" && h != nil && h.companySvc != nil {
+		// best-effort: not-found は握りつぶして空にする
+		if s, ok, err := h.companySvc.TryGetCompanyName(ctx, companyID); err == nil && ok {
 			companyName = strings.TrimSpace(s)
 		}
 	}
@@ -182,9 +185,9 @@ func toMallProductBlueprintResponse(
 		ID:               pbID,
 		ProductName:      productName,
 		CompanyID:        companyID,
-		CompanyName:      companyName, // ✅ NEW
+		CompanyName:      companyName,
 		BrandID:          brandID,
-		BrandName:        brandName, // ✅ NEW
+		BrandName:        brandName,
 		ItemType:         p.ItemType,
 		Fit:              strings.TrimSpace(p.Fit),
 		Material:         strings.TrimSpace(p.Material),

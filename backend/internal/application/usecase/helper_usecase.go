@@ -42,15 +42,6 @@ func trimPtr(p *string) *string {
 	return &v
 }
 
-// 追加: *[]string を重複排除＋トリムして返す（nil 可）
-func normalizeSlicePtr(xs *[]string) *[]string {
-	if xs == nil {
-		return nil
-	}
-	clean := dedupStrings(*xs)
-	return &clean
-}
-
 // 追加: 任意型のポインタを返すユーティリティ
 func ptr[T any](v T) *T { return &v }
 

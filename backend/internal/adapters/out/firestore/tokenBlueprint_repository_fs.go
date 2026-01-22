@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"reflect"
 	"strings"
 	"time"
 
@@ -63,11 +62,8 @@ func (r *TokenBlueprintRepositoryFS) GetByID(ctx context.Context, id string) (*t
 	return &tb, nil
 }
 
-// ✅ NEW: GetPatchByID returns a lightweight Patch used by read-models (e.g. Inventory detail).
-// - 実装は Firestore から必要最小限を読み出し、tbdom.Patch に詰める。
-// - Patch のフィールド名が将来変わっても壊れにくいよう、reflect で「存在するフィールドだけ」セットする。
-// - ★重要: Patch 側が string / *string のどちらでも値が入るように「両方セット」する
-// ✅ NEW: GetPatchByID returns a lightweight Patch used by read-models (e.g. Inventory detail).
+// GetPatchByID returns a lightweight Patch used by read-models.
+// NOTE: entity.go を正とし、名揺れ吸収・旧データ互換（reflect / any / iconId 等）は削除。
 func (r *TokenBlueprintRepositoryFS) GetPatchByID(ctx context.Context, id string) (tbdom.Patch, error) {
 	if r.Client == nil {
 		return tbdom.Patch{}, errors.New("firestore client is nil")
@@ -87,72 +83,31 @@ func (r *TokenBlueprintRepositoryFS) GetPatchByID(ctx context.Context, id string
 	}
 
 	// Patch 用に最低限だけ読む（TokenBlueprint 全体に依存しない）
+	// entity.go 正: iconId は存在しない / minted は bool / metadataUri は string
 	var raw struct {
-		Name        string  `firestore:"name"`
-		Symbol      string  `firestore:"symbol"`
-		BrandID     string  `firestore:"brandId"`
-		CompanyID   string  `firestore:"companyId"`
-		Description string  `firestore:"description"`
-		IconID      *string `firestore:"iconId"`
-		MetadataURI string  `firestore:"metadataUri"`
-		Minted      any     `firestore:"minted"` // bool / string / nil 想定
+		Name        string `firestore:"name"`
+		Symbol      string `firestore:"symbol"`
+		BrandID     string `firestore:"brandId"`
+		CompanyID   string `firestore:"companyId"`
+		Description string `firestore:"description"`
+		MetadataURI string `firestore:"metadataUri"`
+		Minted      bool   `firestore:"minted"`
 	}
 	if err := snap.DataTo(&raw); err != nil {
 		return tbdom.Patch{}, err
 	}
 
-	// minted 旧データ互換
-	var mintedBool bool
-	switch v := raw.Minted.(type) {
-	case bool:
-		mintedBool = v
-	case string:
-		mintedBool = strings.TrimSpace(v) == "minted"
-	case nil:
-		mintedBool = false
-	default:
-		mintedBool = false
-	}
-
 	trim := func(s string) string { return strings.TrimSpace(s) }
 
-	// ★ 先に patch を作る（これが無いと undefined: patch になる）
-	patch := tbdom.Patch{}
-
-	// ★ Patch が string / *string どちらでも入るように両方セットする
-	setBoth := func(names []string, v string) {
-		v = trim(v)
-		// string フィールドがあれば入る
-		setPatchString(&patch, names, v)
-		// *string フィールドがあれば入る（v=="" は nil にしたいので弾く）
-		if v != "" {
-			setPatchPtrString(&patch, names, v)
-		}
-	}
-
-	// id
-	setPatchString(&patch, []string{"ID", "TokenBlueprintID"}, trim(id))
-
-	// name/symbol
-	setBoth([]string{"Name", "TokenName", "TokenBlueprintName"}, raw.Name)
-	setBoth([]string{"Symbol"}, raw.Symbol)
-
-	// ★重要: list_create_query.go は patch.BrandID(*string) を参照するので必ず入れる
-	setBoth([]string{"BrandID", "BrandId"}, raw.BrandID)
-	setBoth([]string{"CompanyID", "CompanyId"}, raw.CompanyID)
-
-	// description / metadataUri / minted
-	setBoth([]string{"Description"}, raw.Description)
-	setPatchBool(&patch, []string{"Minted"}, mintedBool)
-	setBoth([]string{"MetadataURI", "MetadataUrl", "MetadataURL"}, raw.MetadataURI)
-
-	// iconId は *string / string どちらでも入れられるようにする
-	if raw.IconID != nil {
-		v := trim(*raw.IconID)
-		if v != "" {
-			setPatchPtrString(&patch, []string{"IconID", "IconId"}, v)
-			setPatchString(&patch, []string{"IconID", "IconId"}, v)
-		}
+	patch := tbdom.Patch{
+		ID:          trim(id),
+		TokenName:   trim(raw.Name),
+		Symbol:      trim(raw.Symbol),
+		BrandID:     trim(raw.BrandID),
+		CompanyID:   trim(raw.CompanyID),
+		Description: trim(raw.Description),
+		Minted:      raw.Minted,
+		MetadataURI: trim(raw.MetadataURI),
 	}
 
 	return patch, nil
@@ -255,7 +210,6 @@ func (r *TokenBlueprintRepositoryFS) List(
 }
 
 // ListByCompanyID: companyId で限定した一覧取得。
-// ★修正: Firestore の Where で companyId を確実に絞る（in-memory 全走査をやめる）
 func (r *TokenBlueprintRepositoryFS) ListByCompanyID(
 	ctx context.Context,
 	companyID string,
@@ -278,7 +232,6 @@ func (r *TokenBlueprintRepositoryFS) ListByCompanyID(
 		}, nil
 	}
 
-	// companyId を Firestore クエリで確実に絞る（minted は絞らない）
 	baseQ := r.col().
 		Where("companyId", "==", cid).
 		OrderBy("createdAt", firestore.Desc).
@@ -390,19 +343,18 @@ func (r *TokenBlueprintRepositoryFS) Create(ctx context.Context, in tbdom.Create
 
 	now := time.Now().UTC()
 
-	// CreatedAt は nil の場合のみ now を使う
 	createdAt := now
 	if in.CreatedAt != nil && !in.CreatedAt.IsZero() {
 		createdAt = in.CreatedAt.UTC()
 	}
 
-	files := sanitizeStrings(in.ContentFiles)
-
-	var iconID *string
-	if in.IconID != nil {
-		if v := strings.TrimSpace(*in.IconID); v != "" {
-			iconID = &v
-		}
+	// entity.go 正: ContentFiles は []ContentFile（embedded）
+	// NOTE: CreateTokenBlueprintInput.ContentFiles が「[]ContentFile」になったため、間接参照はしない。
+	var contentFiles []tbdom.ContentFile
+	if in.ContentFiles != nil {
+		contentFiles = sanitizeContentFiles(in.ContentFiles)
+	} else {
+		contentFiles = []tbdom.ContentFile{}
 	}
 
 	// minted は create 時は必ず false
@@ -414,19 +366,15 @@ func (r *TokenBlueprintRepositoryFS) Create(ctx context.Context, in tbdom.Create
 		"name":         strings.TrimSpace(in.Name),
 		"symbol":       strings.TrimSpace(in.Symbol),
 		"brandId":      strings.TrimSpace(in.BrandID),
-		"companyId":    strings.TrimSpace(in.CompanyID), // ★ companyId
+		"companyId":    strings.TrimSpace(in.CompanyID),
 		"description":  strings.TrimSpace(in.Description),
-		"contentFiles": files,
+		"contentFiles": toFSContentFiles(contentFiles),
 		"assigneeId":   strings.TrimSpace(in.AssigneeID),
-		"minted":       minted, // ★ minted を bool で Firestore に保存
+		"minted":       minted,
 		"createdAt":    createdAt,
 		"deletedAt":    nil,
 		"deletedBy":    nil,
-		// "metadataUri" は create 時点では未設定（Publish 時に付与）
-	}
-
-	if iconID != nil {
-		data["iconId"] = *iconID
+		"metadataUri":  strings.TrimSpace(in.MetadataURI), // 空でもOK
 	}
 
 	if s := strings.TrimSpace(in.CreatedBy); s != "" {
@@ -435,8 +383,6 @@ func (r *TokenBlueprintRepositoryFS) Create(ctx context.Context, in tbdom.Create
 	if s := strings.TrimSpace(in.UpdatedBy); s != "" {
 		data["updatedBy"] = s
 	}
-
-	// ★ UpdatedAt は入力がある場合のみ保存する
 	if in.UpdatedAt != nil && !in.UpdatedAt.IsZero() {
 		data["updatedAt"] = in.UpdatedAt.UTC()
 	}
@@ -498,9 +444,8 @@ func (r *TokenBlueprintRepositoryFS) Update(
 	setStr("brandId", in.BrandID)
 	setStr("description", in.Description)
 	setStr("assigneeId", in.AssigneeID)
-	// companyId は現状更新しない想定（必要ならここに追加）
 
-	// ★ metadataUri の更新
+	// metadataUri
 	if in.MetadataURI != nil {
 		updates = append(updates, firestore.Update{
 			Path:  "metadataUri",
@@ -508,7 +453,7 @@ func (r *TokenBlueprintRepositoryFS) Update(
 		})
 	}
 
-	// minted フィールド更新（bool）
+	// minted (bool)
 	if in.Minted != nil {
 		updates = append(updates, firestore.Update{
 			Path:  "minted",
@@ -516,28 +461,14 @@ func (r *TokenBlueprintRepositoryFS) Update(
 		})
 	}
 
-	// iconId (empty => null)
-	if in.IconID != nil {
-		v := strings.TrimSpace(*in.IconID)
-		if v == "" {
-			updates = append(updates, firestore.Update{
-				Path:  "iconId",
-				Value: nil,
-			})
-		} else {
-			updates = append(updates, firestore.Update{
-				Path:  "iconId",
-				Value: v,
-			})
-		}
-	}
+	// entity.go 正: iconId は存在しないため更新しない
 
-	// contentFiles
+	// contentFiles (embedded)
 	if in.ContentFiles != nil {
-		files := sanitizeStrings(*in.ContentFiles)
+		files := sanitizeContentFiles(*in.ContentFiles)
 		updates = append(updates, firestore.Update{
 			Path:  "contentFiles",
-			Value: files,
+			Value: toFSContentFiles(files),
 		})
 	}
 
@@ -607,7 +538,6 @@ func (r *TokenBlueprintRepositoryFS) Update(
 	}
 
 	if len(updates) == 0 {
-		// no-op
 		snap, err := ref.Get(ctx)
 		if err != nil {
 			if status.Code(err) == codes.NotFound {
@@ -742,7 +672,6 @@ func (r *TokenBlueprintRepositoryFS) WithTx(ctx context.Context, fn func(ctx con
 	if r.Client == nil {
 		return errors.New("firestore client is nil")
 	}
-	// For more complex cases, adapt fn to use RunTransaction.
 	return fn(ctx)
 }
 
@@ -794,46 +723,31 @@ func (r *TokenBlueprintRepositoryFS) Reset(ctx context.Context) error {
 // ========================================
 
 func docToTokenBlueprint(doc *firestore.DocumentSnapshot) (tbdom.TokenBlueprint, error) {
+	// entity.go 正: iconId 無し / contentFiles は embedded / minted は bool
 	var raw struct {
-		Name         string     `firestore:"name"`
-		Symbol       string     `firestore:"symbol"`
-		BrandID      string     `firestore:"brandId"`
-		CompanyID    string     `firestore:"companyId"` // ★ companyId
-		Description  string     `firestore:"description"`
-		IconID       *string    `firestore:"iconId"`
-		ContentFiles []string   `firestore:"contentFiles"`
-		AssigneeID   string     `firestore:"assigneeId"`
-		Minted       any        `firestore:"minted"` // ★ minted: bool or 旧 string
-		CreatedAt    time.Time  `firestore:"createdAt"`
-		CreatedBy    string     `firestore:"createdBy"`
-		UpdatedAt    time.Time  `firestore:"updatedAt"`
-		UpdatedBy    string     `firestore:"updatedBy"`
-		DeletedAt    *time.Time `firestore:"deletedAt"`
-		DeletedBy    *string    `firestore:"deletedBy"`
-		// ★ Arweave metadata URI
-		MetadataURI string `firestore:"metadataUri"`
+		Name         string           `firestore:"name"`
+		Symbol       string           `firestore:"symbol"`
+		BrandID      string           `firestore:"brandId"`
+		CompanyID    string           `firestore:"companyId"`
+		Description  string           `firestore:"description"`
+		ContentFiles []map[string]any `firestore:"contentFiles"`
+		AssigneeID   string           `firestore:"assigneeId"`
+		Minted       bool             `firestore:"minted"`
+		CreatedAt    time.Time        `firestore:"createdAt"`
+		CreatedBy    string           `firestore:"createdBy"`
+		UpdatedAt    time.Time        `firestore:"updatedAt"`
+		UpdatedBy    string           `firestore:"updatedBy"`
+		DeletedAt    *time.Time       `firestore:"deletedAt"`
+		DeletedBy    *string          `firestore:"deletedBy"`
+		MetadataURI  string           `firestore:"metadataUri"`
 	}
-
 	if err := doc.DataTo(&raw); err != nil {
 		return tbdom.TokenBlueprint{}, err
 	}
 
-	// minted 互換
-	var mintedBool bool
-	switch v := raw.Minted.(type) {
-	case bool:
-		mintedBool = v
-	case string:
-		switch strings.TrimSpace(v) {
-		case "minted":
-			mintedBool = true
-		default:
-			mintedBool = false
-		}
-	case nil:
-		mintedBool = false
-	default:
-		mintedBool = false
+	files, err := fromFSContentFiles(raw.ContentFiles)
+	if err != nil {
+		return tbdom.TokenBlueprint{}, err
 	}
 
 	tb := tbdom.TokenBlueprint{
@@ -843,9 +757,9 @@ func docToTokenBlueprint(doc *firestore.DocumentSnapshot) (tbdom.TokenBlueprint,
 		BrandID:      strings.TrimSpace(raw.BrandID),
 		CompanyID:    strings.TrimSpace(raw.CompanyID),
 		Description:  strings.TrimSpace(raw.Description),
-		ContentFiles: sanitizeStrings(raw.ContentFiles),
+		ContentFiles: files,
 		AssigneeID:   strings.TrimSpace(raw.AssigneeID),
-		Minted:       mintedBool,
+		Minted:       raw.Minted,
 		CreatedAt:    raw.CreatedAt.UTC(),
 		CreatedBy:    strings.TrimSpace(raw.CreatedBy),
 		UpdatedAt:    raw.UpdatedAt.UTC(),
@@ -853,11 +767,6 @@ func docToTokenBlueprint(doc *firestore.DocumentSnapshot) (tbdom.TokenBlueprint,
 		MetadataURI:  strings.TrimSpace(raw.MetadataURI),
 	}
 
-	if raw.IconID != nil {
-		if v := strings.TrimSpace(*raw.IconID); v != "" {
-			tb.IconID = &v
-		}
-	}
 	if raw.DeletedAt != nil && !raw.DeletedAt.IsZero() {
 		t := raw.DeletedAt.UTC()
 		tb.DeletedAt = &t
@@ -872,6 +781,7 @@ func docToTokenBlueprint(doc *firestore.DocumentSnapshot) (tbdom.TokenBlueprint,
 }
 
 // matchTBFilter applies tbdom.Filter in-memory.
+// entity.go 正: HasIcon は無意味（iconId が無い）なので削除。
 func matchTBFilter(tb tbdom.TokenBlueprint, f tbdom.Filter) bool {
 	trim := func(s string) string { return strings.TrimSpace(s) }
 
@@ -915,16 +825,6 @@ func matchTBFilter(tb tbdom.TokenBlueprint, f tbdom.Filter) bool {
 		}
 	}
 
-	if f.HasIcon != nil {
-		has := tb.IconID != nil && trim(*tb.IconID) != ""
-		if *f.HasIcon && !has {
-			return false
-		}
-		if !*f.HasIcon && has {
-			return false
-		}
-	}
-
 	if f.CreatedFrom != nil && tb.CreatedAt.Before(f.CreatedFrom.UTC()) {
 		return false
 	}
@@ -941,75 +841,119 @@ func matchTBFilter(tb tbdom.TokenBlueprint, f tbdom.Filter) bool {
 	return true
 }
 
-func sanitizeStrings(xs []string) []string {
-	out := make([]string, 0, len(xs))
+func sanitizeContentFiles(xs []tbdom.ContentFile) []tbdom.ContentFile {
+	out := make([]tbdom.ContentFile, 0, len(xs))
 	seen := make(map[string]struct{}, len(xs))
-	for _, v := range xs {
-		v = strings.TrimSpace(v)
-		if v == "" {
+
+	for _, f := range xs {
+		// defaults
+		f.ID = strings.TrimSpace(f.ID)
+		f.Name = strings.TrimSpace(f.Name)
+		f.ObjectPath = strings.TrimSpace(f.ObjectPath)
+		f.ContentType = strings.TrimSpace(f.ContentType)
+		f.CreatedBy = strings.TrimSpace(f.CreatedBy)
+		f.UpdatedBy = strings.TrimSpace(f.UpdatedBy)
+
+		if f.ID == "" {
 			continue
 		}
-		if _, ok := seen[v]; ok {
+		if _, ok := seen[f.ID]; ok {
 			continue
 		}
-		seen[v] = struct{}{}
-		out = append(out, v)
+		seen[f.ID] = struct{}{}
+		out = append(out, f)
+	}
+
+	return out
+}
+
+// Firestore へ保存する contentFiles の表現（map に落とす）
+func toFSContentFiles(xs []tbdom.ContentFile) []map[string]any {
+	out := make([]map[string]any, 0, len(xs))
+	for _, f := range xs {
+		m := map[string]any{
+			"id":          strings.TrimSpace(f.ID),
+			"name":        strings.TrimSpace(f.Name),
+			"type":        string(f.Type),
+			"contentType": strings.TrimSpace(f.ContentType),
+			"size":        f.Size,
+			"objectPath":  strings.TrimSpace(f.ObjectPath),
+			"visibility":  string(f.Visibility),
+			"createdAt":   f.CreatedAt,
+			"createdBy":   strings.TrimSpace(f.CreatedBy),
+			"updatedAt":   f.UpdatedAt,
+			"updatedBy":   strings.TrimSpace(f.UpdatedBy),
+		}
+		out = append(out, m)
 	}
 	return out
 }
 
-// ========================================
-// Patch setters (reflect-based; tolerate Patch schema changes)
-// ========================================
+// Firestore から読み出した contentFiles を domain 型へ戻す
+func fromFSContentFiles(xs []map[string]any) ([]tbdom.ContentFile, error) {
+	out := make([]tbdom.ContentFile, 0, len(xs))
 
-func setPatchString(p *tbdom.Patch, names []string, v string) {
-	if p == nil {
-		return
-	}
-	rv := reflect.ValueOf(p).Elem()
-	for _, name := range names {
-		f := rv.FieldByName(name)
-		if !f.IsValid() || !f.CanSet() {
-			continue
-		}
-		if f.Kind() == reflect.String {
-			f.SetString(v)
-			return
-		}
-	}
-}
+	for _, m := range xs {
+		var f tbdom.ContentFile
 
-func setPatchBool(p *tbdom.Patch, names []string, v bool) {
-	if p == nil {
-		return
-	}
-	rv := reflect.ValueOf(p).Elem()
-	for _, name := range names {
-		f := rv.FieldByName(name)
-		if !f.IsValid() || !f.CanSet() {
-			continue
+		if v, ok := m["id"].(string); ok {
+			f.ID = strings.TrimSpace(v)
 		}
-		if f.Kind() == reflect.Bool {
-			f.SetBool(v)
-			return
+		if v, ok := m["name"].(string); ok {
+			f.Name = strings.TrimSpace(v)
 		}
-	}
-}
+		if v, ok := m["type"].(string); ok {
+			f.Type = tbdom.ContentFileType(strings.TrimSpace(v))
+		}
+		if v, ok := m["contentType"].(string); ok {
+			f.ContentType = strings.TrimSpace(v)
+		}
+		if v, ok := m["objectPath"].(string); ok {
+			f.ObjectPath = strings.TrimSpace(v)
+		}
+		if v, ok := m["visibility"].(string); ok {
+			f.Visibility = tbdom.ContentVisibility(strings.TrimSpace(v))
+		}
 
-func setPatchPtrString(p *tbdom.Patch, names []string, v string) {
-	if p == nil {
-		return
-	}
-	rv := reflect.ValueOf(p).Elem()
-	for _, name := range names {
-		f := rv.FieldByName(name)
-		if !f.IsValid() || !f.CanSet() {
-			continue
+		// size は Firestore で int64 / int / float64 等になり得るので、厳格に拾う
+		switch v := m["size"].(type) {
+		case int64:
+			f.Size = v
+		case int:
+			f.Size = int64(v)
+		case float64:
+			f.Size = int64(v)
+		case nil:
+			f.Size = 0
+		default:
+			return nil, fmt.Errorf("contentFiles.size: unexpected type %T", m["size"])
 		}
-		if f.Kind() == reflect.Pointer && f.Type().Elem().Kind() == reflect.String {
-			s := v
-			f.Set(reflect.ValueOf(&s))
-			return
+
+		if v, ok := m["createdBy"].(string); ok {
+			f.CreatedBy = strings.TrimSpace(v)
 		}
+		if v, ok := m["updatedBy"].(string); ok {
+			f.UpdatedBy = strings.TrimSpace(v)
+		}
+
+		if v, ok := m["createdAt"].(time.Time); ok {
+			f.CreatedAt = v.UTC()
+		}
+		if v, ok := m["updatedAt"].(time.Time); ok {
+			f.UpdatedAt = v.UTC()
+		}
+
+		// domain validation（entity.go を正）
+		if strings.TrimSpace(string(f.Visibility)) == "" {
+			f.Visibility = tbdom.VisibilityPrivate
+		}
+		if err := f.Validate(); err != nil {
+			return nil, err
+		}
+
+		out = append(out, f)
 	}
+
+	// dedup
+	return sanitizeContentFiles(out), nil
 }

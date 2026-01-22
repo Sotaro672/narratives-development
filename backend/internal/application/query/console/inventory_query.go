@@ -1,4 +1,4 @@
-// backend/internal/application/query/inventory_query.go
+// backend/internal/application/query/console/inventory_query.go
 package query
 
 import (
@@ -292,23 +292,18 @@ func (q *InventoryQuery) GetTokenBlueprintPatchByID(ctx context.Context, tokenBl
 	}
 
 	// brand name resolve（可能なら埋める）
-	hasBrandID := patch.BrandID != nil && strings.TrimSpace(*patch.BrandID) != ""
-	brandID := ""
-	if patch.BrandID != nil {
-		brandID = strings.TrimSpace(*patch.BrandID)
-	}
-
+	brandID := strings.TrimSpace(getStringFieldAny(patch, "BrandID", "BrandId", "brandId"))
 	brandName := strings.TrimSpace(q.resolveBrandName(ctx, brandID))
 
 	setOK := false
-	if hasBrandID && brandName != "" {
-		patch.BrandName = &brandName
+	if brandID != "" && brandName != "" {
+		setStringFieldAny(&patch, brandName, "BrandName", "brandName")
 		setOK = true
 	}
 
 	log.Printf(
-		"[inventory_query][GetTokenBlueprintPatchByID] brand resolve tbId=%q hasBrandId=%t brandId=%q brandName=%q setOK=%t",
-		tbID, hasBrandID, brandID, brandName, setOK,
+		"[inventory_query][GetTokenBlueprintPatchByID] brand resolve tbId=%q brandId=%q brandName=%q setOK=%t",
+		tbID, brandID, brandName, setOK,
 	)
 
 	return &patch, nil
@@ -362,28 +357,21 @@ func (q *InventoryQuery) GetDetailByID(ctx context.Context, inventoryID string) 
 	if q.pbPatchRepo != nil {
 		pbPatch, e := q.pbPatchRepo.GetPatchByID(ctx, pbID) // value
 		if e == nil {
-			// ✅ ここが重要：Patch の BrandID/BrandName が「*string」前提で直接扱う
-			hasBrandID := pbPatch.BrandID != nil && strings.TrimSpace(*pbPatch.BrandID) != ""
-			brandID := ""
-			if pbPatch.BrandID != nil {
-				brandID = strings.TrimSpace(*pbPatch.BrandID)
-			}
-
+			brandID := strings.TrimSpace(getStringFieldAny(pbPatch, "BrandID", "BrandId", "brandId"))
 			brandName := strings.TrimSpace(q.resolveBrandName(ctx, brandID))
 
 			setOK := false
-			if hasBrandID && brandName != "" {
-				// Patch に BrandName フィールド（*string）がある前提
-				pbPatch.BrandName = &brandName
+			if brandID != "" && brandName != "" {
+				setStringFieldAny(&pbPatch, brandName, "BrandName", "brandName")
 				setOK = true
 			}
 
 			log.Printf(
-				"[inventory_query][GetDetailByID] patch brand resolve pbId=%q hasBrandId=%t brandId=%q brandName=%q setOK=%t",
-				pbID, hasBrandID, brandID, brandName, setOK,
+				"[inventory_query][GetDetailByID] patch brand resolve pbId=%q brandId=%q brandName=%q setOK=%t",
+				pbID, brandID, brandName, setOK,
 			)
 
-			pbPatchPtr = &pbPatch // ✅ *Patch に合わせてアドレスを渡す
+			pbPatchPtr = &pbPatch
 		} else {
 			log.Printf("[inventory_query][GetDetailByID] WARN GetPatchByID failed pbId=%q err=%v", pbID, e)
 			pbPatchPtr = nil
@@ -641,4 +629,49 @@ func modelStockLen(ms invdom.ModelStock) int {
 	}
 
 	return 0
+}
+
+// ============================================================
+// Patch field helpers (string / *string 揺れ吸収)
+// ============================================================
+
+func setStringFieldAny(target any, value string, names ...string) bool {
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return false
+	}
+
+	rv := reflect.ValueOf(target)
+	if !rv.IsValid() {
+		return false
+	}
+	if rv.Kind() != reflect.Pointer || rv.IsNil() {
+		return false
+	}
+	rv = rv.Elem()
+	if !rv.IsValid() || rv.Kind() != reflect.Struct {
+		return false
+	}
+
+	for _, n := range names {
+		f := rv.FieldByName(n)
+		if !f.IsValid() || !f.CanSet() {
+			continue
+		}
+
+		switch f.Kind() {
+		case reflect.String:
+			f.SetString(value)
+			return true
+
+		case reflect.Pointer:
+			if f.Type().Elem().Kind() == reflect.String {
+				s := value
+				f.Set(reflect.ValueOf(&s))
+				return true
+			}
+		}
+	}
+
+	return false
 }
