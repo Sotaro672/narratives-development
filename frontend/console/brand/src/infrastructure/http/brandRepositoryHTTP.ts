@@ -1,4 +1,5 @@
 // frontend/console/brand/src/infrastructure/http/brandRepositoryHTTP.ts
+
 import type { Brand, BrandPatch } from "../../domain/entity/brand";
 import { auth } from "../../../../shell/src/auth/infrastructure/config/firebaseClient";
 
@@ -75,10 +76,7 @@ async function httpRequest<T>(input: string, init: RequestInit = {}): Promise<T>
 
   if (!res.ok) {
     throw new Error(
-      `[BrandRepositoryHTTP] ${res.status} ${res.statusText} :: ${text?.slice(
-        0,
-        300,
-      )}`,
+      `[BrandRepositoryHTTP] ${res.status} ${res.statusText} :: ${text?.slice(0, 300)}`,
     );
   }
 
@@ -199,12 +197,14 @@ export class BrandRepositoryHTTP {
   }
 
   // List
-  async list(options: {
-    filter?: BrandFilter;
-    sort?: BrandSort;
-    page?: PageParams["page"];
-    perPage?: PageParams["perPage"];
-  } = {}): Promise<PageResult<Brand>> {
+  async list(
+    options: {
+      filter?: BrandFilter;
+      sort?: BrandSort;
+      page?: PageParams["page"];
+      perPage?: PageParams["perPage"];
+    } = {},
+  ): Promise<PageResult<Brand>> {
     const { filter = {}, sort = {}, page, perPage } = options;
     const params = new URLSearchParams();
 
@@ -308,5 +308,38 @@ export async function fetchBrandNameById(brandId: string): Promise<string> {
     });
     // 失敗時は ID をそのまま表示するか、空文字にするかは運用ポリシー次第
     return id;
+  }
+}
+
+/**
+ * ★ 追加：current company の brand 一覧取得（tokenBlueprint 側が期待する export）
+ *
+ * - Company スコープは backend が認可/絞り込みする想定
+ * - backend が companyId クエリを要求する場合は引数で渡せるようにしている
+ */
+export async function fetchBrandsForCurrentCompany(params?: {
+  companyId?: string;
+  perPage?: number;
+}): Promise<{ id: string; name: string }[]> {
+  const perPage = params?.perPage ?? 200;
+  const companyId = String(params?.companyId ?? "").trim();
+
+  try {
+    const res = await brandRepositoryHTTP.list({
+      filter: companyId ? { companyId } : {},
+      perPage,
+      page: 1,
+    });
+
+    return (res.items ?? []).map((b) => ({
+      id: String((b as any)?.id ?? "").trim(),
+      name: String((b as any)?.name ?? "").trim(),
+    }));
+  } catch (err) {
+    console.warn("[fetchBrandsForCurrentCompany] failed to list brands", {
+      companyId,
+      err,
+    });
+    return [];
   }
 }
