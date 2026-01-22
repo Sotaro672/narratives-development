@@ -4,6 +4,7 @@ package mall
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"log"
 	"net/http"
 	"os"
@@ -124,15 +125,16 @@ type meAvatarExtendedRepo interface {
 	ResolveAvatarIDByUID(ctx context.Context, uid string) (string, error)
 }
 
-// Avatar getter (AvatarUsecase has GetByID; we keep it as an interface to avoid tight coupling)
-type avatarGetter interface {
+// Avatar usecase port (Get + Update). Required for PATCH(/mall/me/avatar).
+type avatarUsecasePort interface {
 	GetByID(ctx context.Context, id string) (avatardom.Avatar, error)
+	Update(ctx context.Context, id string, patch avatardom.AvatarPatch) (avatardom.Avatar, error)
 }
 
 // adapter that always satisfies mallhandler.MeAvatarService expected by NewMeAvatarHandler
 type meAvatarServiceAdapter struct {
 	extended meAvatarExtendedRepo
-	avatarUC avatarGetter // optional; if set, we can populate avatar fields into patch
+	avatarUC avatarUsecasePort // optional for GET; required for PATCH
 }
 
 func trimPtr(p *string) *string {
@@ -183,12 +185,14 @@ func (a meAvatarServiceAdapter) ResolveAvatarPatchByUID(ctx context.Context, uid
 
 	// If we cannot fetch avatar, still return base patch.
 	if a.avatarUC == nil || avatarId == "" {
+		base.Sanitize()
 		return avatarId, base, nil
 	}
 
 	av, gerr := a.avatarUC.GetByID(ctx, avatarId)
 	if gerr != nil {
 		// best-effort: still return base patch + avatarId
+		base.Sanitize()
 		return avatarId, base, nil
 	}
 
@@ -208,10 +212,65 @@ func (a meAvatarServiceAdapter) ResolveAvatarPatchByUID(ctx context.Context, uid
 		patch.WalletAddress = strPtrTrim(walletAddress)
 	}
 
+	patch.Sanitize()
+	return avatarId, patch, nil
+}
+
+// UpdateAvatarPatchByUID applies patch to "me" avatar resolved from uid (anti-spoof).
+// - Resolve uid -> avatarId (+walletAddress)
+// - Update avatar doc (requires avatarUC.Update)
+// - Return updated patch payload (same shape as GET)
+func (a meAvatarServiceAdapter) UpdateAvatarPatchByUID(ctx context.Context, uid string, patch avatardom.AvatarPatch) (string, avatardom.AvatarPatch, error) {
+	if a.extended == nil {
+		return "", avatardom.AvatarPatch{}, usecase.ErrTransferNotConfigured
+	}
+	if a.avatarUC == nil {
+		return "", avatardom.AvatarPatch{}, errors.New("avatar usecase not configured")
+	}
+
+	avatarId, walletAddress, err := a.extended.ResolveAvatarByUID(ctx, uid)
+	if err != nil {
+		return "", avatardom.AvatarPatch{}, err
+	}
+
+	avatarId = strings.TrimSpace(avatarId)
+	walletAddress = strings.TrimSpace(walletAddress)
+	if avatarId == "" {
+		// treat as not found-like; handler side will map if it wants
+		return "", avatardom.AvatarPatch{}, avatardom.ErrInvalidID
+	}
+
+	// Anti-spoof: client cannot update these via /mall/me/avatar
+	patch.UserID = ""
+	patch.WalletAddress = nil
+	patch.DeletedAt = nil
+
 	// Normalize
 	patch.Sanitize()
 
-	return avatarId, patch, nil
+	updated, uerr := a.avatarUC.Update(ctx, avatarId, patch)
+	if uerr != nil {
+		return "", avatardom.AvatarPatch{}, uerr
+	}
+
+	// Build response patch from updated entity
+	out := avatardom.AvatarPatch{
+		UserID:        strings.TrimSpace(updated.UserID),
+		AvatarName:    strPtrTrim(updated.AvatarName),
+		AvatarIcon:    trimPtr(updated.AvatarIcon),
+		WalletAddress: trimPtr(updated.WalletAddress),
+		Profile:       trimPtr(updated.Profile),
+		ExternalLink:  trimPtr(updated.ExternalLink),
+		DeletedAt:     updated.DeletedAt,
+	}
+
+	// Ensure walletAddress is at least the resolved one (server truth)
+	if out.WalletAddress == nil {
+		out.WalletAddress = strPtrTrim(walletAddress)
+	}
+
+	out.Sanitize()
+	return avatarId, out, nil
 }
 
 // ResolveAvatarByUID returns avatarId + walletAddress.
@@ -377,22 +436,30 @@ func Register(mux *http.ServeMux, cont *Container) {
 		walletH = mallhandler.NewMallWalletHandler(cont.WalletUC)
 	}
 
-	// /mall/me/avatar (uid -> avatarId + avatar patch)
+	// /mall/me/avatar (uid -> avatarId + avatar patch, and PATCH update)
 	if cont.MeAvatarRepo != nil {
 		var ext meAvatarExtendedRepo
 		if v, ok := any(cont.MeAvatarRepo).(meAvatarExtendedRepo); ok {
 			ext = v
 		}
 		if ext != nil {
-			var getter avatarGetter
+			var avuc avatarUsecasePort
 			if cont.AvatarUC != nil {
-				getter = cont.AvatarUC
+				avuc = cont.AvatarUC
 			}
 
-			meAvatarH = mallhandler.NewMeAvatarHandler(meAvatarServiceAdapter{
-				extended: ext,
-				avatarUC: getter,
-			})
+			// NOTE:
+			// - GET は avatarUC が nil でも動く（best-effort）
+			// - PATCH は avatarUC.Update が必要
+			//   -> ここでは cont.AvatarUC が無ければ 501 のままにする
+			if avuc != nil {
+				meAvatarH = mallhandler.NewMeAvatarHandler(meAvatarServiceAdapter{
+					extended: ext,
+					avatarUC: avuc,
+				})
+			} else {
+				log.Printf("[mall.register] WARN: cont.AvatarUC is nil (MeAvatar PATCH requires AvatarUC.Update; MeAvatar will return 501)")
+			}
 		} else {
 			log.Printf("[mall.register] WARN: cont.MeAvatarRepo does not implement meAvatarExtendedRepo (MeAvatar will return 501)")
 		}

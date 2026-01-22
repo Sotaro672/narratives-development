@@ -32,7 +32,6 @@ import (
 // - GET    /mall/avatars/{id}
 // - PATCH  /mall/avatars/{id}
 // - PUT    /mall/avatars/{id}
-// - DELETE /mall/avatars/{id}
 //
 // Extensions:
 // - POST /mall/avatars/{id}/wallet
@@ -122,15 +121,6 @@ func (h *AvatarHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		h.update(w, r, id)
-		return
-
-	case r.Method == http.MethodDelete && strings.HasPrefix(path0, "/mall/avatars/"):
-		id, ok := extractIDFromPath(path0, "/mall/avatars/")
-		if !ok {
-			notFound(w)
-			return
-		}
-		h.delete(w, r, id)
 		return
 
 	default:
@@ -718,30 +708,6 @@ func (h *AvatarHandler) update(w http.ResponseWriter, r *http.Request, id string
 	)
 
 	_ = json.NewEncoder(w).Encode(toAvatarResponse(updated))
-}
-
-// -----------------------------------------------------------------------------
-// DELETE /mall/avatars/{id}
-// -----------------------------------------------------------------------------
-func (h *AvatarHandler) delete(w http.ResponseWriter, r *http.Request, id string) {
-	ctx := r.Context()
-	id = strings.TrimSpace(id)
-	if id == "" {
-		w.WriteHeader(http.StatusBadRequest)
-		_ = json.NewEncoder(w).Encode(map[string]string{"error": "invalid id"})
-		return
-	}
-
-	log.Printf("[mall_avatar_handler] DELETE /mall/avatars/%s request\n", id)
-
-	if err := h.uc.Delete(ctx, id); err != nil {
-		log.Printf("[mall_avatar_handler] DELETE /mall/avatars/%s error=%v\n", id, err)
-		writeAvatarErr(w, err)
-		return
-	}
-
-	log.Printf("[mall_avatar_handler] DELETE /mall/avatars/%s ok\n", id)
-	w.WriteHeader(http.StatusNoContent)
 }
 
 // -----------------------------------------------------------------------------

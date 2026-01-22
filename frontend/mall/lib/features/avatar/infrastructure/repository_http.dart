@@ -14,10 +14,10 @@ import 'api.dart';
 /// - GET    /mall/avatars/{id}
 /// - GET    /mall/avatars/{id}?aggregate=1|true  (Avatar + State + Icons)
 /// - POST   /mall/avatars/{id}/wallet            (open wallet)
-/// - POST   /mall/avatars/{id}/icon              (register/replace icon)
 ///
-/// ✅ SignedURL (B案 /avatars 配下に寄せる):
+/// ✅ SignedURL:
 /// - POST   /mall/avatars/{id}/icon-upload-url   (issue signed upload url)
+/// - PUT    (upload to signed url)
 ///
 /// NOTE (重要):
 /// - Firestore 側は「docID = avatarId」「フィールド userId = Firebase uid」を保持する設計
@@ -27,10 +27,14 @@ import 'api.dart';
 /// - avatarId
 /// - userId
 /// - avatarName
-/// - avatarIcon (nullable)
+/// - avatarIcon (nullable)  ※最終的に https://... を保存する方針
 /// - profile (nullable)
 /// - externalLink (nullable)
 /// - walletAddress (nullable) ※更新は /wallet のみ（PATCHでは禁止）
+///
+/// ✅ 方針 (A):
+/// - 画像は別API（signed url 発行 + PUT）でアップロード
+/// - 戻ってきた https://... を PATCH (/mall/avatars/{id}) で保存
 class AvatarRepositoryHttp {
   AvatarRepositoryHttp({
     http.Client? client,
@@ -85,22 +89,33 @@ class AvatarRepositoryHttp {
     final uri = _api.uri('/mall/avatars');
     final payload = request.toJson();
 
-    final res = await _api.sendAuthed('POST', uri, jsonBody: payload);
+    final res = await _api.sendAuthed(
+      'POST',
+      uri,
+      jsonBody: payload,
+      allowEmptyBody: true,
+    );
 
     if (res.statusCode < 200 || res.statusCode >= 300) {
       _api.throwHttpError(res, uri);
     }
 
-    // body が空なら GET で取り直すのが理想だが、avatarId が無いのでここでは例外
+    if (res.body.trim().isEmpty) {
+      throw const FormatException('Empty response body (expected AvatarDTO)');
+    }
+
     final decoded = _api.unwrapData(_api.decodeObject(res.body));
     return AvatarDTO.fromJson(decoded);
   }
 
   // ---------------------------------------------------------------------------
-  // ✅ Signed upload URL for avatar icon (B案)
+  // ✅ Signed upload URL for avatar icon (A方針)
   // ---------------------------------------------------------------------------
 
   /// POST /mall/avatars/{id}/icon-upload-url
+  ///
+  /// 返却される signed URL に PUT してアップロードし、
+  /// 最終的に生成できる public https URL を PATCH で avatarIcon に保存する運用。
   Future<AvatarIconUploadUrlDTO> issueAvatarIconUploadUrl({
     required String avatarId,
     required String fileName,
@@ -144,6 +159,50 @@ class AvatarRepositoryHttp {
     contentType: contentType,
   );
 
+  /// ✅ helper: bucket/objectPath から public https URL を生成
+  ///
+  String publicHttpsUrlFromBucketObject({
+    required String bucket,
+    required String objectPath,
+  }) {
+    final b = bucket.trim();
+    final op = objectPath.trim();
+    if (b.isEmpty || op.isEmpty) return '';
+    // objectPath は "/" を含むため Uri.encodeComponent は使わずにセグメント単位でエンコード
+    final encoded = op.split('/').map(Uri.encodeComponent).join('/');
+    return 'https://storage.googleapis.com/$b/$encoded';
+  }
+
+  /// ✅ A方針のワンストップ: 署名URL発行 → PUT → public https URL を返す
+  ///
+  /// 返ってきた URL をそのまま update(PATCH) の avatarIcon に渡して保存する。
+  Future<String> uploadAvatarIconAndGetPublicUrl({
+    required String avatarId,
+    required String fileName,
+    required String mimeType,
+    required Uint8List bytes,
+  }) async {
+    final dto = await issueAvatarIconUploadUrl(
+      avatarId: avatarId,
+      fileName: fileName,
+      mimeType: mimeType,
+      size: bytes.lengthInBytes,
+    );
+
+    await uploadToSignedUrl(
+      uploadUrl: dto.uploadUrl,
+      bytes: bytes,
+      contentType: mimeType,
+    );
+
+    final url = publicHttpsUrlFromBucketObject(
+      bucket: dto.bucket,
+      objectPath: dto.objectPath,
+    );
+
+    return url.trim();
+  }
+
   /// POST /mall/avatars/{id}/wallet
   ///
   /// ✅ Open wallet for existing avatar (server will set walletAddress).
@@ -172,59 +231,11 @@ class AvatarRepositoryHttp {
     return AvatarDTO.fromJson(decoded);
   }
 
-  /// POST /mall/avatars/{id}/icon
-  ///
-  /// ✅ 事前に GCS にアップロード済みの object を AvatarIcon として登録（置換）
-  Future<AvatarIconDTO> replaceAvatarIcon({
-    required String avatarId,
-    String? bucket,
-    String? objectPath,
-    String? fileName,
-    int? size,
-    String? avatarIcon,
-  }) async {
-    final rid = avatarId.trim();
-    if (rid.isEmpty) throw ArgumentError('avatarId is empty');
-
-    final uri = _api.uri('/mall/avatars/$rid/icon');
-
-    final payload = <String, dynamic>{};
-
-    final b = (bucket ?? '').trim();
-    if (b.isNotEmpty) payload['bucket'] = b;
-
-    final op = (objectPath ?? '').trim();
-    if (op.isNotEmpty) payload['objectPath'] = op;
-
-    final fn = (fileName ?? '').trim();
-    if (fn.isNotEmpty) payload['fileName'] = fn;
-
-    if (size != null) payload['size'] = size;
-
-    // 互換入力として受ける（backend が gs://... を parse できる想定）
-    final ai = (avatarIcon ?? '').trim();
-    if (ai.isNotEmpty) payload['avatarIcon'] = ai;
-
-    final res = await _api.sendAuthed('POST', uri, jsonBody: payload);
-
-    if (res.statusCode < 200 || res.statusCode >= 300) {
-      _api.throwHttpError(res, uri);
-    }
-
-    if (res.body.trim().isEmpty) {
-      throw const FormatException(
-        'Empty response body (expected AvatarIconDTO)',
-      );
-    }
-
-    final decoded = _api.unwrapData(_api.decodeObject(res.body));
-    return AvatarIconDTO.fromJson(decoded);
-  }
-
   /// PATCH /mall/avatars/{id}
   ///
   /// NOTE:
   /// - walletAddress は backend 側で update 禁止（/wallet でのみ更新）
+  /// - avatarIcon は https://... を保存する方針（方針A）
   Future<AvatarDTO> update({
     required String id,
     required UpdateAvatarRequest request,
@@ -235,7 +246,12 @@ class AvatarRepositoryHttp {
     final uri = _api.uri('/mall/avatars/$rid');
     final payload = request.toJson();
 
-    final res = await _api.sendAuthed('PATCH', uri, jsonBody: payload);
+    final res = await _api.sendAuthed(
+      'PATCH',
+      uri,
+      jsonBody: payload,
+      allowEmptyBody: true,
+    );
 
     if (res.statusCode < 200 || res.statusCode >= 300) {
       _api.throwHttpError(res, uri);
@@ -268,7 +284,7 @@ class AvatarRepositoryHttp {
 }
 
 // -----------------------------------------------------------------------------
-// DTOs / Requests (絶対正スキーマ準拠・互換吸収なし)
+// DTOs / Requests (絶対正スキーマ準拠)
 // -----------------------------------------------------------------------------
 
 String _s(Object? v) => (v ?? '').toString().trim();
@@ -342,7 +358,7 @@ class AvatarDTO {
 
   final String avatarName;
 
-  /// Optional: URL/gs://path
+  /// Optional: https://... (方針A)
   final String? avatarIcon;
 
   final String? profile;
@@ -495,7 +511,7 @@ class CreateAvatarRequest {
 
   final String avatarName;
 
-  /// Optional: URL/gs://path
+  /// Optional: https://... (推奨)
   final String? avatarIcon;
 
   final String? profile;
@@ -528,6 +544,7 @@ class CreateAvatarRequest {
 /// - 値が "x": 更新
 ///
 /// ✅ 絶対正: walletAddress は PATCH では送らない（/wallet のみ）
+/// ✅ 方針A: avatarIcon は https://... を保存する
 @immutable
 class UpdateAvatarRequest {
   const UpdateAvatarRequest({

@@ -156,7 +156,7 @@ class AvatarCreateService {
   }
 
   // ============================
-  // Save (create avatar + upload icon + register icon)
+  // Save (create avatar + upload icon + PATCH avatarIcon=https://...)
   // ============================
 
   String _extFromMime(String mime) {
@@ -266,7 +266,7 @@ class AvatarCreateService {
         'hasIcon=$hasIcon iconBytesLen=$size file="$fileName" mime="$mimeType"',
       );
 
-      // (1) ✅ まず Avatar を作成（アイコンなし）
+      // (1) ✅ まず Avatar を作成（アイコンURLは後で PATCH）
       final created = await _repo.create(
         request: CreateAvatarRequest(
           userId: userId,
@@ -277,7 +277,6 @@ class AvatarCreateService {
         ),
       );
 
-      // ✅ AvatarDTO は絶対正スキーマで avatarId を持つ（id は使わない）
       final avatarId = s(created.avatarId);
       if (avatarId.isEmpty) {
         return AvatarCreateResult(ok: false, message: 'avatarId が取得できませんでした。');
@@ -288,7 +287,7 @@ class AvatarCreateService {
       // ✅ 表示名だけは FirebaseAuth に同期（email表示を防ぐ）
       await _syncAuthDisplayName(user: user, avatarName: avatarName);
 
-      // (2) ✅ アイコンがあれば：署名付きURL→PUTアップロード→/avatars/{id}/icon 登録
+      // (2) ✅ アイコンがあれば：署名付きURL→PUTアップロード→https URL を PATCH 保存（方針A）
       if (hasIcon) {
         final signed = await _repo.issueAvatarIconUploadUrl(
           avatarId: avatarId,
@@ -300,7 +299,6 @@ class AvatarCreateService {
         final uploadUrl = s(signed.uploadUrl);
         final bucket = s(signed.bucket);
         final objectPath = s(signed.objectPath);
-        final gsUrl = s(signed.gsUrl);
         final expiresAt = s(signed.expiresAt);
 
         if (uploadUrl.isEmpty || bucket.isEmpty || objectPath.isEmpty) {
@@ -332,24 +330,33 @@ class AvatarCreateService {
 
         _log('icon upload ok bytes=$size');
 
-        final avatarIcon = gsUrl.isNotEmpty
-            ? gsUrl
-            : 'gs://$bucket/$objectPath';
-
-        final icon = await _repo.replaceAvatarIcon(
-          avatarId: avatarId,
+        // ✅ public https URL を生成し、avatarIcon として PATCH で保存する
+        final httpsUrl = _repo.publicHttpsUrlFromBucketObject(
           bucket: bucket,
           objectPath: objectPath,
-          fileName: fileName,
-          size: size,
-          avatarIcon: avatarIcon,
         );
 
-        _log(
-          'icon register ok avatarId=$avatarId iconId="${s(icon.id)}" '
-          'url="${s(icon.url).isEmpty ? "-" : s(icon.url)}" '
-          'avatarIcon="$avatarIcon"',
+        if (httpsUrl.isEmpty) {
+          _log(
+            'icon https url build failed avatarId=$avatarId bucket="$bucket" objectPath="$objectPath"',
+          );
+          return AvatarCreateResult(
+            ok: false,
+            message: 'アイコンURLの生成に失敗しました。',
+            createdAvatarId: avatarId,
+          );
+        }
+
+        _log('icon https url built avatarId=$avatarId url="$httpsUrl"');
+
+        await _repo.update(
+          id: avatarId,
+          request: UpdateAvatarRequest(
+            avatarIcon: httpsUrl, // ✅ 方針A: https://... を保存
+          ),
         );
+
+        _log('icon url patch ok avatarId=$avatarId');
       }
 
       _log('avatar save done avatarId=$avatarId userId=$userId');
