@@ -59,7 +59,8 @@ func (m *AuthMiddleware) Handler(next http.Handler) http.Handler {
 			return
 		}
 
-		log.Printf("[auth] bearer token received (len=%d)", len(idToken))
+		// ✅ debug: token length / request path
+		log.Printf("[auth] bearer token received (len=%d) path=%s", len(idToken), r.URL.Path)
 
 		// Firebase ID トークン検証
 		token, err := m.FirebaseAuth.VerifyIDToken(r.Context(), idToken)
@@ -89,10 +90,28 @@ func (m *AuthMiddleware) Handler(next http.Handler) http.Handler {
 		// companyId は「member.CompanyID」優先。ただし空なら repo 拡張から回収を試みる。
 		companyID := strings.TrimSpace(member.CompanyID)
 
+		// ✅ debug: primary resolve result
+		log.Printf(
+			"[auth] resolved (primary) uid=%s memberOK=%v memberID=%s companyId=%q",
+			uid,
+			memberOK,
+			strings.TrimSpace(member.ID),
+			companyID,
+		)
+
 		if companyID == "" {
+			// ✅ debug: try optional extension
 			if r2, ok := any(m.MemberRepo).(MemberCompanyIDReader); ok {
 				if cid, e := r2.GetCompanyIDByFirebaseUID(r.Context(), uid); e == nil {
 					companyID = strings.TrimSpace(cid)
+
+					log.Printf(
+						"[auth] resolved (repo-ext) uid=%s memberOK(beforePlaceholder)=%v companyId=%q",
+						uid,
+						memberOK,
+						companyID,
+					)
+
 					// member が取れていない場合でも、最低限 ctx に積めるように placeholder を作る
 					if !memberOK && companyID != "" {
 						member = memdom.Member{
@@ -100,8 +119,14 @@ func (m *AuthMiddleware) Handler(next http.Handler) http.Handler {
 							CompanyID: companyID,
 						}
 						memberOK = true
+
+						log.Printf("[auth] placeholder member created uid=%s companyId=%q", uid, companyID)
 					}
+				} else {
+					log.Printf("[auth] repo-ext GetCompanyIDByFirebaseUID failed uid=%s err=%v", uid, e)
 				}
+			} else {
+				log.Printf("[auth] repo-ext not implemented uid=%s", uid)
 			}
 		}
 
@@ -109,9 +134,11 @@ func (m *AuthMiddleware) Handler(next http.Handler) http.Handler {
 		if strings.TrimSpace(companyID) == "" {
 			// member が取れていないなら "member not found" に寄せる
 			if !memberOK {
+				log.Printf("[auth] forbidden: member not found uid=%s", uid)
 				http.Error(w, "member not found", http.StatusForbidden)
 				return
 			}
+			log.Printf("[auth] forbidden: companyId not resolved uid=%s memberID=%s", uid, strings.TrimSpace(member.ID))
 			http.Error(w, "companyId not resolved for current user", http.StatusForbidden)
 			return
 		}
@@ -138,6 +165,7 @@ func (m *AuthMiddleware) Handler(next http.Handler) http.Handler {
 				ctx = context.WithValue(ctx, ctxKeyFullName, strings.TrimSpace(fullName))
 			}
 		} else {
+			log.Printf("[auth] internal error: member not found after resolve uid=%s", uid)
 			returnErr(w, errors.New("member not found"))
 			return
 		}
@@ -154,6 +182,15 @@ func (m *AuthMiddleware) Handler(next http.Handler) http.Handler {
 		// companyId 格納（必須）
 		ctx = usecase.WithCompanyID(ctx, companyID)
 		ctx = context.WithValue(ctx, ctxKeyCompanyID, companyID)
+
+		// ✅ debug: final resolved values
+		log.Printf(
+			"[auth] context set uid=%s memberID=%s companyId=%q path=%s",
+			uid,
+			strings.TrimSpace(member.ID),
+			companyID,
+			r.URL.Path,
+		)
 
 		next.ServeHTTP(w, r.WithContext(ctx))
 	})

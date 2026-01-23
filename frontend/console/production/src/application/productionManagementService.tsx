@@ -9,16 +9,26 @@ import { listProductionsHTTP } from "../infrastructure/query/productionQuery";
 /** ソートキー */
 export type SortKey = "printedAt" | "createdAt" | "totalQuantity" | null;
 
-/** 一覧表示用に totalQuantity などを付与した行型（内部用） */
-export type ProductionRow = Production & {
+/**
+ * 一覧表示用に totalQuantity などを付与した行型（内部用）
+ * - Production の assigneeId 等が string | null | undefined になり得るため、
+ *   Omit で除外してここで string に確定させる（TS2322/TS2345 対策）
+ */
+export type ProductionRow = Omit<
+  Production,
+  "assigneeId" | "assigneeName" | "productName" | "brandName"
+> & {
   totalQuantity: number;
-  assigneeName?: string;
 
   /** backend から受け取る productName（なければ fallback で ID を使う） */
-  productName?: string;
+  productName: string;
 
   /** backend から受け取る brandName（なければ空文字） */
-  brandName?: string;
+  brandName: string;
+
+  /** UI では常に string として扱う */
+  assigneeId: string;
+  assigneeName: string;
 };
 
 /** 画面表示用の行型 */
@@ -78,6 +88,11 @@ export async function loadProductionRows(): Promise<ProductionRow[]> {
     const productName =
       asNonEmptyString(raw.productName ?? raw.ProductName) || blueprintId;
 
+    // ✅ UI 内部表現では string に正規化して持つ
+    const assigneeId = asString(raw.assigneeId ?? raw.AssigneeID ?? "");
+    const assigneeName = asString(raw.assigneeName ?? raw.AssigneeName ?? "");
+    const brandName = asString(raw.brandName ?? raw.BrandName ?? "");
+
     const row: ProductionRow = {
       ...(raw as Production),
 
@@ -85,11 +100,10 @@ export async function loadProductionRows(): Promise<ProductionRow[]> {
       productBlueprintId: blueprintId,
 
       productName,
-      brandName: asString(raw.brandName ?? raw.BrandName ?? ""),
+      brandName,
 
-      // ✅ string | null | undefined を潰して必ず string にする
-      assigneeId: asString(raw.assigneeId ?? raw.AssigneeID ?? ""),
-      assigneeName: asString(raw.assigneeName ?? raw.AssigneeName ?? ""),
+      assigneeId,
+      assigneeName,
 
       status: (raw.status ?? raw.Status ?? "") as ProductionStatus,
       printedAt: (raw.printedAt ?? raw.PrintedAt ?? null) as any,
@@ -159,15 +173,14 @@ export function buildRowsView(params: {
   const view = data.map<ProductionRowView>((p) => ({
     id: p.id,
     productBlueprintId: p.productBlueprintId,
-    productName: p.productName ?? "",
-    // ✅ ProductionRow.assigneeId は string に正規化済み
+    productName: p.productName,
     assigneeId: p.assigneeId,
-    assigneeName: p.assigneeName ?? "",
+    assigneeName: p.assigneeName,
     status: p.status,
     totalQuantity: p.totalQuantity,
     printedAtLabel: formatDate((p as any).printedAt ?? null),
     createdAtLabel: formatDate((p as any).createdAt ?? null),
-    brandName: p.brandName ?? "",
+    brandName: p.brandName,
   }));
 
   return view;

@@ -4,9 +4,11 @@ package consoleHandler
 import (
 	"encoding/json"
 	"errors"
+	"log"
 	"net/http"
 	"strings"
 
+	"narratives/internal/adapters/in/http/middleware"
 	productionapp "narratives/internal/application/production"
 	companyquery "narratives/internal/application/query/console"
 	productbpdom "narratives/internal/domain/productBlueprint"
@@ -34,6 +36,13 @@ func NewProductionHandler(
 
 func (h *ProductionHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
+
+	// ✅ debug: request basics + companyId(from middleware ctxKey)
+	if cid, ok := middleware.CompanyID(r); ok {
+		log.Printf("[productions] request method=%s path=%s companyId=%q", r.Method, r.URL.Path, cid)
+	} else {
+		log.Printf("[productions] request method=%s path=%s companyId=<missing>", r.Method, r.URL.Path)
+	}
 
 	switch {
 
@@ -73,18 +82,29 @@ func (h *ProductionHandler) list(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 
 	if h.query == nil {
+		log.Printf("[productions] list: query service is nil")
 		w.WriteHeader(http.StatusInternalServerError)
 		_ = json.NewEncoder(w).Encode(map[string]string{"error": "query service is nil"})
 		return
 	}
 
+	// ✅ debug: log companyId again at handler entry (to catch ctx mismatch early)
+	if cid, ok := middleware.CompanyID(r); ok {
+		log.Printf("[productions] list: start companyId=%q", cid)
+	} else {
+		log.Printf("[productions] list: start companyId=<missing>")
+	}
+
 	// ★ QueryService（company境界付き）を使用
 	rows, err := h.query.ListProductionsWithAssigneeName(ctx)
 	if err != nil {
+		// ✅ debug: classify error
+		log.Printf("[productions] list: query error=%v", err)
 		writeProductionErr(w, err)
 		return
 	}
 
+	log.Printf("[productions] list: success rows=%d", len(rows))
 	_ = json.NewEncoder(w).Encode(rows)
 }
 
@@ -95,6 +115,7 @@ func (h *ProductionHandler) get(w http.ResponseWriter, r *http.Request, id strin
 	ctx := r.Context()
 
 	if h.uc == nil {
+		log.Printf("[productions] get: usecase is nil")
 		w.WriteHeader(http.StatusInternalServerError)
 		_ = json.NewEncoder(w).Encode(map[string]string{"error": "usecase is nil"})
 		return
@@ -102,13 +123,17 @@ func (h *ProductionHandler) get(w http.ResponseWriter, r *http.Request, id strin
 
 	id = strings.TrimSpace(id)
 	if id == "" {
+		log.Printf("[productions] get: invalid id (empty)")
 		w.WriteHeader(http.StatusBadRequest)
 		_ = json.NewEncoder(w).Encode(map[string]string{"error": "invalid id"})
 		return
 	}
 
+	log.Printf("[productions] get: start id=%q", id)
+
 	p, err := h.uc.GetByID(ctx, id)
 	if err != nil {
+		log.Printf("[productions] get: error id=%q err=%v", id, err)
 		writeProductionErr(w, err)
 		return
 	}
@@ -124,6 +149,7 @@ func (h *ProductionHandler) post(w http.ResponseWriter, r *http.Request) {
 	defer r.Body.Close()
 
 	if h.uc == nil {
+		log.Printf("[productions] post: usecase is nil")
 		w.WriteHeader(http.StatusInternalServerError)
 		_ = json.NewEncoder(w).Encode(map[string]string{"error": "usecase is nil"})
 		return
@@ -131,13 +157,17 @@ func (h *ProductionHandler) post(w http.ResponseWriter, r *http.Request) {
 
 	var req productiondom.Production
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		log.Printf("[productions] post: invalid json err=%v", err)
 		w.WriteHeader(http.StatusBadRequest)
 		_ = json.NewEncoder(w).Encode(map[string]string{"error": "invalid json"})
 		return
 	}
 
+	log.Printf("[productions] post: start")
+
 	p, err := h.uc.Create(ctx, req)
 	if err != nil {
+		log.Printf("[productions] post: error err=%v", err)
 		writeProductionErr(w, err)
 		return
 	}
@@ -154,6 +184,7 @@ func (h *ProductionHandler) update(w http.ResponseWriter, r *http.Request, id st
 	defer r.Body.Close()
 
 	if h.uc == nil {
+		log.Printf("[productions] update: usecase is nil")
 		w.WriteHeader(http.StatusInternalServerError)
 		_ = json.NewEncoder(w).Encode(map[string]string{"error": "usecase is nil"})
 		return
@@ -161,6 +192,7 @@ func (h *ProductionHandler) update(w http.ResponseWriter, r *http.Request, id st
 
 	id = strings.TrimSpace(id)
 	if id == "" {
+		log.Printf("[productions] update: invalid id (empty)")
 		w.WriteHeader(http.StatusBadRequest)
 		_ = json.NewEncoder(w).Encode(map[string]string{"error": "invalid id"})
 		return
@@ -168,6 +200,7 @@ func (h *ProductionHandler) update(w http.ResponseWriter, r *http.Request, id st
 
 	var req productiondom.Production
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		log.Printf("[productions] update: invalid json id=%q err=%v", id, err)
 		w.WriteHeader(http.StatusBadRequest)
 		_ = json.NewEncoder(w).Encode(map[string]string{"error": "invalid json"})
 		return
@@ -176,8 +209,11 @@ func (h *ProductionHandler) update(w http.ResponseWriter, r *http.Request, id st
 	// パスの ID を優先
 	req.ID = id
 
+	log.Printf("[productions] update: start id=%q", id)
+
 	p, err := h.uc.Update(ctx, id, req)
 	if err != nil {
+		log.Printf("[productions] update: error id=%q err=%v", id, err)
 		writeProductionErr(w, err)
 		return
 	}
@@ -192,6 +228,7 @@ func (h *ProductionHandler) delete(w http.ResponseWriter, r *http.Request, id st
 	ctx := r.Context()
 
 	if h.uc == nil {
+		log.Printf("[productions] delete: usecase is nil")
 		w.WriteHeader(http.StatusInternalServerError)
 		_ = json.NewEncoder(w).Encode(map[string]string{"error": "usecase is nil"})
 		return
@@ -199,12 +236,16 @@ func (h *ProductionHandler) delete(w http.ResponseWriter, r *http.Request, id st
 
 	id = strings.TrimSpace(id)
 	if id == "" {
+		log.Printf("[productions] delete: invalid id (empty)")
 		w.WriteHeader(http.StatusBadRequest)
 		_ = json.NewEncoder(w).Encode(map[string]string{"error": "invalid id"})
 		return
 	}
 
+	log.Printf("[productions] delete: start id=%q", id)
+
 	if err := h.uc.Delete(ctx, id); err != nil {
+		log.Printf("[productions] delete: error id=%q err=%v", id, err)
 		writeProductionErr(w, err)
 		return
 	}
@@ -230,6 +271,9 @@ func writeProductionErr(w http.ResponseWriter, err error) {
 	} else if errors.Is(err, productbpdom.ErrInvalidID) {
 		code = http.StatusBadRequest
 	}
+
+	// ✅ debug: final error response
+	log.Printf("[productions] respond error status=%d err=%v", code, err)
 
 	w.WriteHeader(code)
 	_ = json.NewEncoder(w).Encode(map[string]string{"error": err.Error()})

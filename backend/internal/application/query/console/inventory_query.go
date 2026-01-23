@@ -12,6 +12,8 @@ import (
 
 	querydto "narratives/internal/application/query/console/dto"
 	resolver "narratives/internal/application/resolver"
+	usecase "narratives/internal/application/usecase"
+
 	invdom "narratives/internal/domain/inventory"
 	pbdom "narratives/internal/domain/productBlueprint"
 	tbdom "narratives/internal/domain/tokenBlueprint"
@@ -70,7 +72,8 @@ func (q *InventoryQuery) ListByCurrentCompany(ctx context.Context) ([]querydto.I
 		return nil, errors.New("inventory query repositories are not configured")
 	}
 
-	companyID := companyIDFromContext(ctx)
+	// ✅ 方針A: usecase の companyId getter を唯一の真実として利用する
+	companyID := usecase.CompanyIDFromContext(ctx)
 	if strings.TrimSpace(companyID) == "" {
 		return nil, errors.New("companyId is missing in context")
 	}

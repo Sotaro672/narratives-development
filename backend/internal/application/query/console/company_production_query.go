@@ -1,3 +1,4 @@
+// backend/internal/application/query/console/company_production_query.go
 package query
 
 import (
@@ -7,8 +8,8 @@ import (
 
 	dto "narratives/internal/application/production/dto"
 	resolver "narratives/internal/application/resolver"
+	usecase "narratives/internal/application/usecase"
 
-	memberdom "narratives/internal/domain/member"
 	productbpdom "narratives/internal/domain/productBlueprint"
 	productiondom "narratives/internal/domain/production"
 )
@@ -190,7 +191,8 @@ func (s *CompanyProductionQueryService) ListProductionsWithAssigneeName(
 func (s *CompanyProductionQueryService) listProductionsByCurrentCompany(
 	ctx context.Context,
 ) ([]productiondom.Production, error) {
-	cid := strings.TrimSpace(companyIDFromContext(ctx))
+	// ✅ 方針A: usecase の companyId getter を唯一の真実として利用する
+	cid := strings.TrimSpace(usecase.CompanyIDFromContext(ctx))
 	if cid == "" {
 		// ★ companyId 無しの list を絶対禁止（全社漏洩の根本対策）
 		return nil, productbpdom.ErrInvalidCompanyID
@@ -248,40 +250,4 @@ func (s *CompanyProductionQueryService) listProductionsByCurrentCompany(
 func extractBrandIDFromProductBlueprint(pb productbpdom.ProductBlueprint) string {
 	// value case
 	return strings.TrimSpace(pb.BrandID)
-}
-
-// ============================================================
-// Context helper
-// ============================================================
-
-// companyIDFromContext extracts companyId from context.
-// It tries common string keys and then falls back to currentMember.
-func companyIDFromContext(ctx context.Context) string {
-	if ctx == nil {
-		return ""
-	}
-
-	// 1) common string keys
-	for _, k := range []string{"companyId", "companyID", "company_id"} {
-		if v := ctx.Value(k); v != nil {
-			if s, ok := v.(string); ok {
-				if t := strings.TrimSpace(s); t != "" {
-					return t
-				}
-			}
-		}
-	}
-
-	// 2) currentMember ( *memberdom.Member )
-	for _, k := range []string{"currentMember", "member"} {
-		if v := ctx.Value(k); v != nil {
-			if m, ok := v.(*memberdom.Member); ok && m != nil {
-				if t := strings.TrimSpace(m.CompanyID); t != "" {
-					return t
-				}
-			}
-		}
-	}
-
-	return ""
 }

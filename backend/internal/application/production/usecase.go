@@ -9,8 +9,8 @@ import (
 
 	dto "narratives/internal/application/production/dto"
 	resolver "narratives/internal/application/resolver"
+	usecase "narratives/internal/application/usecase"
 
-	memberdom "narratives/internal/domain/member"
 	productbpdom "narratives/internal/domain/productBlueprint"
 	productiondom "narratives/internal/domain/production"
 )
@@ -97,7 +97,8 @@ func (u *ProductionUsecase) Exists(ctx context.Context, id string) (bool, error)
 // - companyId が空なら、絶対に repo 側の一覧取得を呼ばない（全社漏洩を防ぐ）
 // - companyId から productBlueprintIds を引き、ListByProductBlueprintID のみ使用する
 func (u *ProductionUsecase) listByCurrentCompany(ctx context.Context) ([]productiondom.Production, error) {
-	cid := strings.TrimSpace(companyIDFromContext(ctx))
+	// ✅ 方針A: usecase の companyId getter を唯一の真実として利用する
+	cid := strings.TrimSpace(usecase.CompanyIDFromContext(ctx))
 	if cid == "" {
 		// companyId を持たないユーザーは一覧取得不可（全件漏洩の根本対策）
 		return nil, productbpdom.ErrInvalidCompanyID
@@ -384,52 +385,4 @@ func (u *ProductionUsecase) Update(
 
 func (u *ProductionUsecase) Delete(ctx context.Context, id string) error {
 	return u.repo.Delete(ctx, strings.TrimSpace(id))
-}
-
-// ============================================================
-// Context helpers
-// ============================================================
-
-// companyIDFromContext は認証ミドルウェアが context に載せた companyId を取り出します。
-// - キー実装が揺れても落ちないように、複数候補を試します。
-// - companyId が見つからなければ "" を返します。
-func companyIDFromContext(ctx context.Context) string {
-	if ctx == nil {
-		return ""
-	}
-
-	// 1) まずはよくあるキー（string）で取得
-	for _, k := range []string{"companyId", "companyID", "company_id"} {
-		if v := ctx.Value(k); v != nil {
-			if s, ok := v.(string); ok {
-				if t := strings.TrimSpace(s); t != "" {
-					return t
-				}
-			}
-		}
-	}
-
-	// 2) currentMember を積んでいるケース（*memberdom.Member）
-	for _, k := range []string{"currentMember", "member"} {
-		if v := ctx.Value(k); v != nil {
-			if m, ok := v.(*memberdom.Member); ok && m != nil {
-				if t := strings.TrimSpace(m.CompanyID); t != "" {
-					return t
-				}
-			}
-		}
-	}
-
-	// 3) 値型 memberdom.Member を積んでいるケースにも対応（念のため）
-	for _, k := range []string{"currentMember", "member"} {
-		if v := ctx.Value(k); v != nil {
-			if m, ok := v.(memberdom.Member); ok {
-				if t := strings.TrimSpace(m.CompanyID); t != "" {
-					return t
-				}
-			}
-		}
-	}
-
-	return ""
 }
